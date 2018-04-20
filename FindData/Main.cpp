@@ -30,9 +30,10 @@ using std::string;
 
 struct MatchInfo
 {
-	string mFileName;
+	string        mFileName;
+	unsigned long mOffset;
 
-	MatchInfo(const string& inString) : mFileName(inString) {}
+	MatchInfo(const string& inString, unsigned long inOffset) : mFileName(inString), mOffset(inOffset) {}
 };
 
 struct FileName
@@ -48,6 +49,7 @@ class FileData
 	string        mFileName;
 	string        mFullPath;
 	unsigned long mFileSize;
+	unsigned long mBufferSize;
 	const char*   mpData;
 
 private:
@@ -74,8 +76,14 @@ private:
 			return false;
 		}
 		
-		//Allocate buffer
-		mpData = new char[mFileSize];
+		//Allocate bufferA
+		if( mBufferSize < mFileSize )
+		{
+			delete[] mpData;
+
+			mpData      = new char[mFileSize];
+			mBufferSize = mFileSize;
+		}
 
 		//read in data
 		fread((void*)mpData, sizeof(char), mFileSize, pFile);
@@ -100,7 +108,7 @@ private:
 	}
 
 public:
-	FileData() : mFileSize(0), mpData(nullptr) {}
+	FileData() : mFileSize(0), mBufferSize(0), mpData(nullptr) {}
 
 	~FileData()
 	{
@@ -108,7 +116,7 @@ public:
 		delete[] mpData;
 		mpData = nullptr;
 	}
-
+	
 	bool InitializeFileData(const FileName& inFileData)
 	{
 		mFileName = inFileData.mFileName;
@@ -125,9 +133,11 @@ public:
 		return OpenFile(mFullPath.c_str());
 	}
 
-	bool DoesThisFileContain(const FileData& otherFile)
+	bool DoesThisFileContain(const FileData& otherFile, unsigned long& outOffset)
 	{
 		printf("Scanning within: %s \n", mFileName.c_str());
+
+		outOffset = 0;
 
 		if( otherFile.mFileSize > mFileSize )
 		{
@@ -141,6 +151,7 @@ public:
 		{
 			if( IsDataTheSame(mpData + currentOffset, otherFile.mpData, otherFile.mFileSize) )
 			{
+				outOffset = currentOffset;
 				return true;
 			}
 
@@ -191,20 +202,21 @@ void FindAllFilesWithinDirectory(const string& inDirectoryPath, vector<FileName>
 
 void FindDataWithinFiles(const vector<FileName>& inFileNames, const FileData& inFileData, vector<MatchInfo>& outMatches)
 {
+	FileData currentFile;
 	const size_t numFiles = inFileNames.size();
 	for(size_t i = 0; i < numFiles; ++i)
-	{
-		FileData currentFile;
+	{	
 		const bool bResult = currentFile.InitializeFileData( inFileNames[i] );
 		if( !bResult )
 		{
 			continue;
 		}
 
-		const bool bFoundData = currentFile.DoesThisFileContain(inFileData);
+		unsigned long foundOffset = 0;
+		const bool bFoundData = currentFile.DoesThisFileContain(inFileData, foundOffset);
 		if( bFoundData )
 		{
-			outMatches.push_back( std::move(MatchInfo(inFileNames[i].mFileName)) );			
+			outMatches.push_back( std::move(MatchInfo(inFileNames[i].mFileName, foundOffset)) );
 		}
 	}
 }
@@ -213,7 +225,7 @@ void PrintMatches(const vector<MatchInfo>& inInfo)
 {
 	for(const MatchInfo& info : inInfo)
 	{
-		printf("Found a match: %s \n", info.mFileName.c_str());
+		printf("Found a match in %s @0x%08x\n", info.mFileName.c_str(), info.mOffset);
 	}	
 }
 
