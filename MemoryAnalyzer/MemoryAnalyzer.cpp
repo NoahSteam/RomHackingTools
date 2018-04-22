@@ -49,7 +49,8 @@ void FindDataWithinMemoryFile(const FileName& inFileName, const FileData& inFile
 	printf("Looking for: %s [%0.2f%%]\n", inFileName.mFileName.c_str(), inPercentage);
 
 	unsigned long foundOffset = 0;
-	if( FileData::Async_DoesThisFileContain(inFileData, currentFile, foundOffset) )	
+	//if( FileData::Async_DoesThisFileContain(inFileData, currentFile, foundOffset) )	
+	if( inFileData.DoesThisFileContain(currentFile, foundOffset) )	
 	{
 		outMatch.mbFoundMatch = true;
 		outMatch.mFileName    = inFileName.mFileName;
@@ -61,7 +62,7 @@ void FindDataWithinMemoryFile(const FileName& inFileName, const FileData& inFile
 
 void FindDataWithinMemoryFiles(const vector<FileName>& inFileNames, const FileData& inFileData, vector<MatchInfo>& outMatches)
 {
-	const unsigned int numThreadsSupported = std::thread::hardware_concurrency() > 1 ? std::thread::hardware_concurrency() - 1 : 0;
+	const unsigned int numThreadsSupported = std::thread::hardware_concurrency() > 1 ? std::thread::hardware_concurrency() - 1 : 1;
 	GAvailableThreads = numThreadsSupported;
 
 	vector<MatchInfo> matchInfos;
@@ -107,9 +108,16 @@ void FindDataWithinMemoryFiles(const vector<FileName>& inFileNames, const FileDa
 
 void PrintMatches(const vector<MatchInfo>& inInfo)
 {
-	for (const MatchInfo& info : inInfo)
+	if( inInfo.size() )
 	{
-		printf("Found a match in %s @0x%08x\n", info.mFileName.c_str(), info.mOffset);
+		for (const MatchInfo& info : inInfo)
+		{
+			printf("Found a match in %s @0x%08x\n", info.mFileName.c_str(), info.mOffset);
+		}
+	}
+	else
+	{
+		printf("No matches found\n");
 	}
 }
 
@@ -139,5 +147,6 @@ int main(int argc, char *argv[])
 	vector<MatchInfo> matches;
 	FindDataWithinMemoryFiles(fileNames, dataFile, matches);
 
+	//Output matches
 	PrintMatches(matches);
 }

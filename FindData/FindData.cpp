@@ -54,10 +54,17 @@ void FindDataWithinFiles(const vector<FileName>& inFileNames, const FileData& in
 
 void PrintMatches(const vector<MatchInfo>& inInfo)
 {
-	for(const MatchInfo& info : inInfo)
+	if( inInfo.size() )
 	{
-		printf("Found a match in %s @0x%08x\n", info.mFileName.c_str(), info.mOffset);
-	}	
+		for(const MatchInfo& info : inInfo)
+		{
+			printf("Found a match in %s @0x%08x\n", info.mFileName.c_str(), info.mOffset);
+		}
+	}
+	else
+	{
+		printf("No matches found");
+	}
 }
 
 int main(int argc, char *argv[])
