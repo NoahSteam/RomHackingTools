@@ -37,7 +37,7 @@ public:
 
 	bool InitializeFileData(const FileName& inFileData);
 	bool InitializeFileData(const char* pFileName, const char* pFullPath);
-	bool DoesThisFileContain(const FileData& otherFile, unsigned long& outOffset) const;
+	bool DoesThisFileContain(const FileData& otherFile, std::vector<unsigned long>& outOffsets, bool bFindMultiple) const;
 };
 
 void FindAllFilesWithinDirectory(const std::string& inDirectoryPath, std::vector<FileName>& outFileNames);

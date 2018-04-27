@@ -43,11 +43,14 @@ void FindDataWithinFiles(const vector<FileName>& inFileNames, const FileData& in
 
 		printf("Scanning within: %s \n", inFileNames[i].mFileName.c_str());
 
-		unsigned long foundOffset = 0;
-		const bool bFoundData = currentFile.DoesThisFileContain(inFileData, foundOffset);
+		vector<unsigned long> foundOffsets;
+		const bool bFoundData = currentFile.DoesThisFileContain(inFileData, foundOffsets, true);
 		if( bFoundData )
 		{
-			outMatches.push_back( std::move(MatchInfo(inFileNames[i].mFileName, foundOffset)) );
+			for(unsigned long offset : foundOffsets)
+			{
+				outMatches.push_back( std::move(MatchInfo(inFileNames[i].mFileName, offset)) );
+			}
 		}
 	}
 }
