@@ -48,13 +48,12 @@ void FindDataWithinMemoryFile(const FileName& inFileName, const FileData& inFile
 
 	printf("Looking for: %s [%0.2f%%]\n", inFileName.mFileName.c_str(), inPercentage);
 
-	unsigned long foundOffset = 0;
-	//if( FileData::Async_DoesThisFileContain(inFileData, currentFile, foundOffset) )	
-	if( inFileData.DoesThisFileContain(currentFile, foundOffset) )	
+	vector<unsigned long> foundOffsets;
+	if( inFileData.DoesThisFileContain(currentFile, foundOffsets, false) )
 	{
 		outMatch.mbFoundMatch = true;
 		outMatch.mFileName    = inFileName.mFileName;
-		outMatch.mOffset      = foundOffset;
+		outMatch.mOffset      = foundOffsets[0];
 	}
 
 	++GAvailableThreads;

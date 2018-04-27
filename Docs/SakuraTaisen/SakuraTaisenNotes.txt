@@ -14,7 +14,10 @@
 Found a match in 0100.BIN @0x00204000
 Found a match in 0100FCE.BIN @0x00251000
 Found a match in 0100KNJ.BIN @0x05c03000
-Found a match in 0100TBL.BIN @0x00224000
+
+Found a match in 0100TBL.BIN @0x00224000 <----Text (check out @0x000017d8 for "... ... ... ... ... ... ... ...") 
+                                                              Loaded at 0x002257d8
+
 Found a match in ADVSE1 @0x05a54040
 Found a match in NC3250.BIN @0x002d8000
 Found a match in NCOBJ.BIN @0x0028d2a0
@@ -24,10 +27,12 @@ Found a match in TMAP1H.BIN @0x05e11800
 Found a match in TMAP2AH.BIN @0x05e23000
 Found a match in TMAPSP.BIN @0x00244000
 
-0100KNJ.BIN is full font sheet (16x16 characters at 4pp 127byte blocks)
+0100KNJ.BIN is full font sheet (16x16 characters at 4pp 128byte blocks)
 NC3250.BIN contains the palettes @410 512bytes
 BG2250.BIN has palettes @a250 512 bytes
 Sakura and Icatall.bin has palettes at 59ad2 and 6000. 256 bytes
 KABE00.BIN palettes @0x00000180
 WALL1.BIN palettes @0x00000180
 MINICOOK.BIN palettes @0x0007a130
+
+-Text strings are stored as indices into font sheet in RowXColumn format. (Row*16+Column)*128 gets you the character.
