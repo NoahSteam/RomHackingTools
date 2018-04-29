@@ -51,7 +51,7 @@ struct SakuraString
 
 struct SakuraTextFile
 {
-	FileNameContainer             mFileName;
+	FileNameContainer    mFileName;
 	vector<SakuraString> mLines;
 
 private:
@@ -347,13 +347,63 @@ void DumpSakuraText(const vector<FileNameContainer>& inAllFiles, const string& i
 	DumpExtractedSakuraText(sakuraTextFiles, inOutputDir);
 }
 
+void ExtractText(const string& inSearchDirectory, const string& inFontSheetDirectory, const string& inOutDirectory)
+{
+	//Find all files within the requested directory
+	vector<FileNameContainer> allFiles;
+	FindAllFilesWithinDirectory(inSearchDirectory, allFiles);
+
+	//Find all files in the font sheet directory
+	vector<FileNameContainer> fontSheetDirectoryFiles;
+	FindAllFilesWithinDirectory(inFontSheetDirectory, fontSheetDirectoryFiles);
+	
+	//Find all the font sheet files
+	vector<FileNameContainer> fontSheetFiles;
+	GetAllFilesOfType(fontSheetDirectoryFiles, ".bmp", fontSheetFiles);
+
+	//Find all the text files
+	vector<FileNameContainer> textFiles;
+	GetAllFilesOfType(allFiles, "TBL.BIN", textFiles);
+
+	//There needs to be a font sheet for every text file 
+	if( textFiles.size() != fontSheetFiles.size() )
+	{
+		printf("ExtractText: There need to be the same amount of sakura text files as font sheets");
+		return;
+	}
+
+	//Extract the text
+	vector<SakuraTextFile> sakuraTextFiles;
+	FindAllSakuraText(textFiles, sakuraTextFiles);
+
+	//Write out bitmaps for all of the lines found in the sakura text files
+	const size_t numFiles = sakuraTextFiles.size();
+	for(size_t i = 0; i < numFiles; ++i)
+	{
+		const FileNameContainer& fontSheet = fontSheetFiles[i];
+		const SakuraTextFile& sakuraText   = sakuraTextFiles[i];
+		
+		const string fontSheetNumber = fontSheet.mNoExtension.substr(0, fontSheet.mNoExtension.size() - 3);
+		const string sakuraFileNum   = sakuraText.mFileName.mNoExtension.substr(0, sakuraText.mFileName.mNoExtension.size() - 3);
+
+		if( sakuraFileNum != fontSheetNumber )
+		{
+			printf("ExtractText: Font sheet and text file mistmatch. %s %s", fontSheet.mNoExtension.c_str(), sakuraText.mFileName.mNoExtension.c_str());
+			return;
+		}
+
+		//Todo
+		//for(const SakurTextFile& )
+	}
+}
+
 void PrintHelp()
 {
 	printf("usage: SakuraTaisen [command]\n");
 	printf("Commands:\n");
-	printf("ExtractRawText dataFileDirectory outDirectory\n");
-	printf("ExtractFontSheets dataFileDirectory paletteFileName outDirectory");
-	printf("ExtractText dataFileDirectory fontSheetDirectory outDirectory");
+	printf("ExtractRawText rootSakuraTaisenDirectory outDirectory\n");
+	printf("ExtractFontSheets rootSakuraTaisenDirectory paletteFileName outDirectory");
+	printf("ExtractText rootSakuraTaisenDirectory fontSheetDirectory outDirectory");
 }
 
 int main(int argc, char *argv[])
@@ -388,9 +438,13 @@ int main(int argc, char *argv[])
 
 		ExtractAllFontSheets(allFiles, paletteFileName, outDirectory);
 	}
-	else if( command == string("ExtractText" ))
+	else if( command == string("ExtractText" ) && argc == 5 )
 	{
+		const string searchDirectory   =  string(argv[2]);
+		const string fontSheetDirectory = string(argv[3]);
+		const string outDirectory       = string(argv[4]) + string("\\");
 
+		ExtractText(searchDirectory, fontSheetDirectory, outDirectory);
 	}
 	else
 	{

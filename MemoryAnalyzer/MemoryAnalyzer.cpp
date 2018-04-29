@@ -36,7 +36,7 @@ using std::list;
 
 int GAvailableThreads = 0;
 
-void FindDataWithinMemoryFile(const FileName& inFileName, const FileData& inFileData, MatchInfo& outMatch, float inPercentage)
+void FindDataWithinMemoryFile(const FileNameContainer& inFileName, const FileData& inFileData, MatchInfo& outMatch, float inPercentage)
 {	
 	FileData currentFile;
 	
@@ -59,7 +59,7 @@ void FindDataWithinMemoryFile(const FileName& inFileName, const FileData& inFile
 	++GAvailableThreads;
 }
 
-void FindDataWithinMemoryFiles(const vector<FileName>& inFileNames, const FileData& inFileData, vector<MatchInfo>& outMatches)
+void FindDataWithinMemoryFiles(const vector<FileNameContainer>& inFileNames, const FileData& inFileData, vector<MatchInfo>& outMatches)
 {
 	const unsigned int numThreadsSupported = std::thread::hardware_concurrency() > 1 ? std::thread::hardware_concurrency() - 1 : 1;
 	GAvailableThreads = numThreadsSupported;
@@ -139,7 +139,7 @@ int main(int argc, char *argv[])
 	}
 
 	//Find all files within the requested directory
-	vector<FileName> fileNames;
+	vector<FileNameContainer> fileNames;
 	FindAllFilesWithinDirectory(string(pSearchDirectory), fileNames);
 
 	//Find which files have the data passed in
