@@ -8,7 +8,7 @@
 using std::string;
 using std::vector;
 
-void FindAllFilesWithinDirectory(const string& inDirectoryPath, vector<FileName>& outFileNames)
+void FindAllFilesWithinDirectory(const string& inDirectoryPath, vector<FileNameContainer>& outFileNames)
 {
 	WIN32_FIND_DATA fileData;
 
@@ -38,7 +38,7 @@ void FindAllFilesWithinDirectory(const string& inDirectoryPath, vector<FileName>
 		else
 		{
 			string filePath = currentPath + string(fileData.cFileName);
-			outFileNames.push_back(std::move(FileName(fileData.cFileName, filePath.c_str())));
+			outFileNames.push_back(std::move(FileNameContainer(fileData.cFileName, filePath.c_str())));
 		}
 
 		if (!FindNextFile(result, &fileData))
@@ -56,12 +56,12 @@ FileData::~FileData()
 	mpData = nullptr;
 }
 
-bool FileData::OpenFile(const char* pFileName)
+bool FileData::ReadInFileData(const char* pFileName)
 {
 	//Open file in read-binary mode
 	FILE* pFile = nullptr;
 	errno_t errorValue = fopen_s(&pFile, pFileName, "rb");
-	if (errorValue)
+	if( errorValue )
 	{
 		printf("Unable to open file: %s.  Error code: %i \n", pFileName, errorValue);
 		return false;
@@ -72,7 +72,7 @@ bool FileData::OpenFile(const char* pFileName)
 	mFileSize = ftell(pFile);
 	fseek(pFile, 0, SEEK_SET); //reset to the start of the file
 
-	if (!mFileSize)
+	if( !mFileSize )
 	{
 
 		printf("No data found within file: %s \n", pFileName);
@@ -80,7 +80,7 @@ bool FileData::OpenFile(const char* pFileName)
 	}
 
 	//Allocate bufferA
-	if (mBufferSize < mFileSize)
+	if( mBufferSize < mFileSize )
 	{
 		delete[] mpData;
 
@@ -110,12 +110,12 @@ bool FileData::IsDataTheSame(const char* pData1, const char* pData2, const unsig
 	return true;
 }
 
-bool FileData::InitializeFileData(const FileName& inFileData)
+bool FileData::InitializeFileData(const FileNameContainer& inFileData)
 {
 	mFileName = inFileData.mFileName;
 	mFullPath = inFileData.mFullPath;
 
-	return OpenFile(mFullPath.c_str());
+	return ReadInFileData(mFullPath.c_str());
 }
 
 bool FileData::InitializeFileData(const char* pFileName, const char* pFullPath)
@@ -123,7 +123,7 @@ bool FileData::InitializeFileData(const char* pFileName, const char* pFullPath)
 	mFileName = pFileName;
 	mFullPath = pFullPath;
 
-	return OpenFile(mFullPath.c_str());
+	return ReadInFileData(mFullPath.c_str());
 }
 
 bool FileData::DoesThisFileContain(const FileData& otherFile, vector<unsigned long>& outOffsets, bool bFindMultiple) const
@@ -152,4 +152,76 @@ bool FileData::DoesThisFileContain(const FileData& otherFile, vector<unsigned lo
 	}
 
 	return outOffsets.size() > 0;
+}
+
+//////////////////////////////
+//        FileWriter        //
+//////////////////////////////
+FileWriter::~FileWriter()
+{
+	Close();
+}
+
+bool FileWriter::OpenFileForWrite(const string& inFileName)
+{
+	mFileName = inFileName;
+
+	errno_t errorValue = fopen_s(&mpFileHandle, mFileName.c_str(), "wb");
+	if( errorValue )
+	{
+		printf("Unable to create file: %s.  Error code: %i \n", mFileName.c_str(), errorValue);
+		return false;
+	}
+
+	return true;
+}
+
+bool FileWriter::WriteData(const void* pInData, unsigned long inDataSize)
+{
+	if( !mpFileHandle )
+	{
+		return false;
+	}
+
+	const unsigned long numElemsWritten = (unsigned long)fwrite(pInData, sizeof(char), inDataSize, mpFileHandle);
+	mDataSize                          += numElemsWritten*sizeof(char);
+
+	return numElemsWritten == inDataSize;
+}
+void FileWriter::Close()
+{
+	if( mpFileHandle )
+	{
+		fclose(mpFileHandle);
+	}
+
+	mpFileHandle = nullptr;
+	mDataSize    = 0;
+}
+////////////////////////////////
+//        BitmapWriter        //
+////////////////////////////////
+bool BitmapWriter::CreateBitmap(const string& inFileName, int inWidth, int inHeight, int bitsPerPixel, const char* pInColorData, int inColorDataSize, const char* pInPaletteData, int inPaletteSize) const
+{	
+	FileWriter outFile;
+	if( !outFile.OpenFileForWrite(inFileName) )
+	{
+		return false;
+	}
+
+	BitmapData::FileHeader fileHeader;
+	const int fileSize          = sizeof(BitmapData::FileHeader) + sizeof(BitmapData::InfoHeader) + inColorDataSize + inPaletteSize;
+	const int offsetToColorData = sizeof(BitmapData::FileHeader) + sizeof(BitmapData::InfoHeader) + inPaletteSize;	
+	fileHeader.Initialize(fileSize, offsetToColorData);
+
+	BitmapData::InfoHeader infoHeader;
+	infoHeader.Initialize(inWidth, inHeight, bitsPerPixel);
+	
+	outFile.WriteData(&fileHeader, sizeof(fileHeader));
+	outFile.WriteData(&infoHeader, sizeof(infoHeader));
+
+	outFile.WriteData(pInPaletteData, inPaletteSize);
+	outFile.WriteData(pInColorData, inColorDataSize);
+
+	return true;
 }

@@ -29,7 +29,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 using std::vector;
 using std::string;
 
-void FindDataWithinFiles(const vector<FileName>& inFileNames, const FileData& inFileData, vector<MatchInfo>& outMatches)
+void FindDataWithinFiles(const vector<FileNameContainer>& inFileNames, const FileData& inFileData, vector<MatchInfo>& outMatches)
 {
 	FileData currentFile;
 	const size_t numFiles = inFileNames.size();
@@ -89,7 +89,7 @@ int main(int argc, char *argv[])
 	}
 
 	//Find all files within the requested directory
-	vector<FileName> fileNames;
+	vector<FileNameContainer> fileNames;
 	FindAllFilesWithinDirectory( string(pSearchDirectory), fileNames);
 
 	//Find which files have the data passed in

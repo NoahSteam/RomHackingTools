@@ -51,7 +51,7 @@ struct SakuraString
 
 struct SakuraTextFile
 {
-	FileName             mFileName;
+	FileNameContainer             mFileName;
 	vector<SakuraString> mLines;
 
 private:
@@ -60,7 +60,7 @@ private:
 	char* mpBuffer;
 
 public:
-	SakuraTextFile(const FileName& fileName) : mFileName(fileName), mFileSize(0), mpFile(nullptr), mpBuffer(nullptr){}
+	SakuraTextFile(const FileNameContainer& fileName) : mFileName(fileName), mFileSize(0), mpFile(nullptr), mpBuffer(nullptr){}
 
 	~SakuraTextFile()
 	{
@@ -169,9 +169,9 @@ public:
 	}
 };
 
-void FindAllSakuraText(const vector<FileName>& inFiles, vector<SakuraTextFile>& outText)
+void FindAllSakuraText(const vector<FileNameContainer>& inFiles, vector<SakuraTextFile>& outText)
 {
-	for(const FileName& fileName : inFiles)
+	for(const FileNameContainer& fileName : inFiles)
 	{
 		printf("Extracting: %s\n", fileName.mFileName.c_str());
 
@@ -188,11 +188,11 @@ void FindAllSakuraText(const vector<FileName>& inFiles, vector<SakuraTextFile>& 
 	}
 }
 
-void GetAllTextFiles(const vector<FileName>& allFiles, vector<FileName>& outFiles)
+void GetAllFilesOfType(const vector<FileNameContainer>& allFiles, const char* pInFileType, vector<FileNameContainer>& outFiles)
 {
-	const string validTextFile("TBL.BIN");
+	const string validTextFile(pInFileType);
 
-	for(const FileName& fileName : allFiles)
+	for(const FileNameContainer& fileName : allFiles)
 	{
 		std::size_t found = fileName.mFileName.find(validTextFile);
 		if (found != std::string::npos)
@@ -208,9 +208,7 @@ void DumpExtractedSakuraText(const vector<SakuraTextFile>& inSakuraTextFiles, co
 
 	for(const SakuraTextFile& textFile : inSakuraTextFiles)
 	{
-		const size_t lastIndex   = textFile.mFileName.mFileName.find_last_of(".");
-		const string rawName     = textFile.mFileName.mFileName.substr(0, lastIndex);
-		const string outFileName = outDirectory + rawName + txt;
+		const string outFileName = outDirectory + textFile.mFileName.mNoExtension + txt;
 
 		FILE* pOutFile     = nullptr;
 		errno_t errorValue = fopen_s(&pOutFile, outFileName.c_str(), "w");
@@ -236,27 +234,168 @@ void DumpExtractedSakuraText(const vector<SakuraTextFile>& inSakuraTextFiles, co
 	}
 }
 
-int main(int argc, char *argv[])
+bool ExtractFontSheetAsBitmap(const FileNameContainer& inFileNameContainer, const string& outFileName, const FileData& paletteData)
 {
-	if (argc != 3)
+	FileData fontSheet;
+	if( !fontSheet.InitializeFileData(inFileNameContainer) )
 	{
-		printf("usage: SakuraTaisen [dataFileDirectory outDirectory]\n");
-		return 1;
+		return false;
 	}
 
-	const char* pSearchDirectory = argv[1];	
-	const char* pOutDirectory    = argv[2];
+	printf("Extracting: %s", inFileNameContainer.mFileName.c_str());
 
-	//Find all files within the requested directory
-	vector<FileName> allFiles;
-	FindAllFilesWithinDirectory(string(pSearchDirectory), allFiles);
+	const int tileDimX          = 16;
+	const int tileDimY          = 16;
+	const int tileBytes         = (tileDimX*tileDimY)/2; //4bits per pixel, so only half the amount of bytes as pixels
+	const int tilesPerRow       = 256;
+	const int bytesPerTile      = 128;
+	const int bytesPerTileRow   = bytesPerTile*tilesPerRow;
+	const int numRows           = (int)ceil( fontSheet.GetDataSize() / (float)bytesPerTileRow);
+	const int numColumns        = numRows > 0 ? tilesPerRow : fontSheet.GetDataSize()/bytesPerTileRow;
+	const int imageHeight       = -numRows*tileDimY;
+	const int imageWidth        = numColumns*tileDimX;
+	
+	//Create 32bit palette from the 16 bit(5:5:5 bgr) palette in SakuraTaisen
+	const int paletteSize              = paletteData.GetDataSize();
+	const int numColorInPalette        = paletteSize/3;
+	const int numBytesIn32BitPalette   = numColorInPalette*4;
+	char* p32BitPalette                = new char[numBytesIn32BitPalette];
+	const char* pPaletteData           = paletteData.GetData();
+	const float full5BitValue          = (float)0x1f;
+	for(int i = 0, origIdx = 0; i < numBytesIn32BitPalette; i += 4, origIdx += 2)
+	{
+		unsigned short color = ((pPaletteData[origIdx] << 8) + (unsigned char)pPaletteData[origIdx+1]);
+		
+		//Ugly conversion of 5bit values to 8bit.  Probably a better way to do this.
+		//Masking the r,g,b components and then bringing the result into a [0,255] range.
+		p32BitPalette[i]   = (char)floor( ( ((color & 0x001f)/full5BitValue) * 255.f) + 0.5f);
+		p32BitPalette[i+1] = (char)floor( ( ( ((color & 0x03E0) >> 5)/full5BitValue) * 255.f) + 0.5f);
+		p32BitPalette[i+2] = (char)floor( ( ( ((color & 0x7C00) >> 10)/full5BitValue) * 255.f) + 0.5f);
+		p32BitPalette[i+3] = 0;
+	}
 
-	vector<FileName> textFiles;
-	GetAllTextFiles(allFiles, textFiles);
+	//Allocate space for tiled data
+	int numTiles                     = fontSheet.GetDataSize()/tileBytes;
+	int currTileRow                  = 0;
+	int currTileCol                  = 0;
+	const int bytesInEachTilesWidth  = 8;
+	const int numTiledBytes          = (numRows*bytesPerTileRow) + numColumns*bytesInEachTilesWidth;
+	char* pOutTiledData              = new char[numTiledBytes];
+	const int bytesPerHorizontalLine = bytesInEachTilesWidth*numColumns;
+
+	memset(pOutTiledData, 0, numTiledBytes);
+
+	//File in data
+	for(int tileIndex = 0; tileIndex < numTiles; ++tileIndex)
+	{
+		const char* pTile = fontSheet.GetData() + tileIndex*tileBytes;
+		char* pOutTile    = pOutTiledData + currTileRow*bytesPerHorizontalLine*tileDimY + currTileCol*bytesInEachTilesWidth;
+		int tilePixel = 0;
+		for(int r = 0; r < tileDimY; ++r)
+		{
+			for(int c = 0; c < bytesInEachTilesWidth; ++c)
+			{
+				pOutTile[r*bytesPerHorizontalLine + c] = pTile[tilePixel++];
+			}
+		}
+
+		++currTileCol;
+		if( currTileCol >= numColumns )
+		{
+			currTileCol = 0;
+			++currTileRow;
+		}
+	}
+
+	BitmapWriter fontBitmap;
+	fontBitmap.CreateBitmap(outFileName, imageWidth, imageHeight, 4, pOutTiledData, numTiledBytes, p32BitPalette, numBytesIn32BitPalette);
+
+	delete[] p32BitPalette;
+	delete[] pOutTiledData;
+
+	return true;
+}
+
+void ExtractAllFontSheets(const vector<FileNameContainer>& inAllFiles, const string& inPaletteFileName, const string& outDir)
+{
+	FileData paletteFile;
+	if( !paletteFile.InitializeFileData(inPaletteFileName.c_str(), inPaletteFileName.c_str()) )
+	{
+		return;
+	}
+
+	vector<FileNameContainer> textFiles;
+	GetAllFilesOfType(inAllFiles, "KNJ.BIN", textFiles);
+
+	const string bmpExtension(".bmp");
+	string outFileName;
+	for(const FileNameContainer& fileNameInfo : textFiles)
+	{
+		outFileName = outDir + fileNameInfo.mNoExtension + bmpExtension;
+		ExtractFontSheetAsBitmap(fileNameInfo, outFileName, paletteFile);
+	}
+}
+
+void DumpSakuraText(const vector<FileNameContainer>& inAllFiles, const string& inOutputDir)
+{
+	vector<FileNameContainer> textFiles;
+	GetAllFilesOfType(inAllFiles, "TBL.BIN", textFiles);
 
 	vector<SakuraTextFile> sakuraTextFiles;
 	FindAllSakuraText(textFiles, sakuraTextFiles);
 
-	string outDirectory = string(pOutDirectory) + string("\\");
-	DumpExtractedSakuraText(sakuraTextFiles, outDirectory);
+	DumpExtractedSakuraText(sakuraTextFiles, inOutputDir);
+}
+
+void PrintHelp()
+{
+	printf("usage: SakuraTaisen [command]\n");
+	printf("Commands:\n");
+	printf("ExtractRawText dataFileDirectory outDirectory\n");
+	printf("ExtractFontSheets dataFileDirectory paletteFileName outDirectory");
+	printf("ExtractText dataFileDirectory fontSheetDirectory outDirectory");
+}
+
+int main(int argc, char *argv[])
+{
+	if(argc == 1)
+	{
+		PrintHelp();
+		return 1;
+	}
+
+	const string command(argv[1]);
+	if( command == string("ExtractRawText") && argc == 4 )
+	{
+		const char*  pSearchDirectory = argv[2];	
+		const string outDirectory     = string(argv[3]) + string("\\");
+
+		//Find all files within the requested directory
+		vector<FileNameContainer> allFiles;
+		FindAllFilesWithinDirectory(string(pSearchDirectory), allFiles);
+
+		DumpSakuraText(allFiles, outDirectory);
+	}
+	else if( command == string("ExtractFontSheets") && argc == 5 )
+	{
+		const char*  pSearchDirectory = argv[2];
+		const string paletteFileName  = string(argv[3]);
+		const string outDirectory     = string(argv[4]) + string("\\");
+
+		//Find all files within the requested directory
+		vector<FileNameContainer> allFiles;
+		FindAllFilesWithinDirectory(string(pSearchDirectory), allFiles);
+
+		ExtractAllFontSheets(allFiles, paletteFileName, outDirectory);
+	}
+	else if( command == string("ExtractText" ))
+	{
+
+	}
+	else
+	{
+		PrintHelp();
+	}
+
+	return 1;
 }
