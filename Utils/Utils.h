@@ -127,8 +127,29 @@ struct BitmapData
 
 class BitmapWriter
 {
-public:	
-	bool CreateBitmap(const std::string& inFileName, int width, int height, int bitsPerPixel, const char* pColorData, int dataSize, const char* pPaletteData, int paletteSize) const;
+	struct BulkColorData
+	{
+		const char*   pData;
+		unsigned long size;
+
+		BulkColorData(const char* pInData, unsigned long inSize) : pData(pInData), size(inSize){}
+	};
+
+	FileWriter                 mOutFile;
+	std::vector<BulkColorData> mColorData;
+	const char*                mpPaletteData = nullptr;
+	int                        mPaletteSize  = 0;
+	int                        mBitsPerPixel = 0;
+	int                        mWidth        = 0;
+	int                        mHeight       = 0;
+
+	unsigned long GetColorDataSize() const;
+	
+public:
+	bool CreateBitmap(const std::string& inFileName, int width, int height, int bitsPerPixel, const char* pPaletteData, int paletteSize);
+	void WriteData(const char* pColorData, int dataSize);
+	void Close();
 };
 
 void FindAllFilesWithinDirectory(const std::string& inDirectoryPath, std::vector<FileNameContainer>& outFileNames);
+bool CreateDirectoryHelper(const std::string& dirName);

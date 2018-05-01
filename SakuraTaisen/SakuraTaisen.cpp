@@ -30,6 +30,72 @@ using std::vector;
 using std::string;
 using std::list;
 
+class SakuraFontTile
+{
+	char* mpData;
+
+public:
+	SakuraFontTile(const char* pInData, int dataSize)
+	{
+		mpData = new char[dataSize];
+		memcpy(mpData, pInData, dataSize);
+	}
+
+	SakuraFontTile(SakuraFontTile&& other) : mpData(other.mpData)
+	{
+		other.mpData = nullptr;
+	}
+
+	SakuraFontTile& operator=(SakuraFontTile&& other)
+	{
+		if (this != &other)
+		{
+			delete mpData;
+			mpData       = other.mpData;
+			other.mpData = nullptr;
+		}
+
+		return *this;
+	}
+
+	~SakuraFontTile()
+	{
+		delete[] mpData;
+		mpData = nullptr;
+	}
+};
+
+class SakuraFontSheet
+{
+	vector<SakuraFontTile> mCharacterTiles;
+
+public:
+	bool CreateFontSheet(const FileNameContainer& inFileNameInfo)
+	{
+		FileData fontFile;
+		if( !fontFile.InitializeFileData(inFileNameInfo) )
+		{
+			return false;
+		}
+
+		const int numBytesPerTile = 128;
+		if( fontFile.GetDataSize() % 128 != 0 )
+		{
+			printf("CreateFontSheet: Invalid size for file %s", inFileNameInfo.mFileName.c_str());
+			return false;
+		}
+
+		const char* pFontSheetData = fontFile.GetData();
+		const int numTilesInFile   = fontFile.GetDataSize() / numBytesPerTile;
+		for(int currTile = 0; currTile < numTilesInFile; ++currTile)
+		{
+			mCharacterTiles.push_back( SakuraFontTile(&pFontSheetData[currTile*numBytesPerTile], numBytesPerTile) );
+		}
+
+		return true;
+	}
+};
+
 struct SakuraString
 {
 	struct SakuraChar
@@ -56,7 +122,7 @@ struct SakuraTextFile
 
 private:
 	long  mFileSize;
-	FILE* mpFile;	
+	FILE* mpFile;
 	char* mpBuffer;
 
 public:
@@ -242,7 +308,7 @@ bool ExtractFontSheetAsBitmap(const FileNameContainer& inFileNameContainer, cons
 		return false;
 	}
 
-	printf("Extracting: %s", inFileNameContainer.mFileName.c_str());
+	printf("Extracting: %s\n", inFileNameContainer.mFileName.c_str());
 
 	const int tileDimX          = 16;
 	const int tileDimY          = 16;
@@ -308,7 +374,12 @@ bool ExtractFontSheetAsBitmap(const FileNameContainer& inFileNameContainer, cons
 	}
 
 	BitmapWriter fontBitmap;
-	fontBitmap.CreateBitmap(outFileName, imageWidth, imageHeight, 4, pOutTiledData, numTiledBytes, p32BitPalette, numBytesIn32BitPalette);
+	if( fontBitmap.CreateBitmap(outFileName, imageWidth, imageHeight, 4, p32BitPalette, numBytesIn32BitPalette) )
+	{
+		fontBitmap.WriteData(pOutTiledData, numTiledBytes);
+		fontBitmap.Close();
+	}
+	
 
 	delete[] p32BitPalette;
 	delete[] pOutTiledData;
@@ -347,26 +418,22 @@ void DumpSakuraText(const vector<FileNameContainer>& inAllFiles, const string& i
 	DumpExtractedSakuraText(sakuraTextFiles, inOutputDir);
 }
 
-void ExtractText(const string& inSearchDirectory, const string& inFontSheetDirectory, const string& inOutDirectory)
+void ExtractText(const string& inSearchDirectory, const string& inOutputDirectory)
 {
 	//Find all files within the requested directory
 	vector<FileNameContainer> allFiles;
 	FindAllFilesWithinDirectory(inSearchDirectory, allFiles);
 
-	//Find all files in the font sheet directory
-	vector<FileNameContainer> fontSheetDirectoryFiles;
-	FindAllFilesWithinDirectory(inFontSheetDirectory, fontSheetDirectoryFiles);
-	
 	//Find all the font sheet files
-	vector<FileNameContainer> fontSheetFiles;
-	GetAllFilesOfType(fontSheetDirectoryFiles, ".bmp", fontSheetFiles);
+	vector<FileNameContainer> fontFiles;
+	GetAllFilesOfType(allFiles, "KNJ.BIN", fontFiles);
 
 	//Find all the text files
 	vector<FileNameContainer> textFiles;
 	GetAllFilesOfType(allFiles, "TBL.BIN", textFiles);
 
 	//There needs to be a font sheet for every text file 
-	if( textFiles.size() != fontSheetFiles.size() )
+	if( textFiles.size() != fontFiles.size() )
 	{
 		printf("ExtractText: There need to be the same amount of sakura text files as font sheets");
 		return;
@@ -380,20 +447,34 @@ void ExtractText(const string& inSearchDirectory, const string& inFontSheetDirec
 	const size_t numFiles = sakuraTextFiles.size();
 	for(size_t i = 0; i < numFiles; ++i)
 	{
-		const FileNameContainer& fontSheet = fontSheetFiles[i];
-		const SakuraTextFile& sakuraText   = sakuraTextFiles[i];
+		const FileNameContainer& fontSheetName = fontFiles[i];
+		const SakuraTextFile& sakuraText       = sakuraTextFiles[i];
 		
-		const string fontSheetNumber = fontSheet.mNoExtension.substr(0, fontSheet.mNoExtension.size() - 3);
+		const string fontSheetNumber = fontSheetName.mNoExtension.substr(0, fontSheetName.mNoExtension.size() - 3);
 		const string sakuraFileNum   = sakuraText.mFileName.mNoExtension.substr(0, sakuraText.mFileName.mNoExtension.size() - 3);
 
 		if( sakuraFileNum != fontSheetNumber )
 		{
-			printf("ExtractText: Font sheet and text file mistmatch. %s %s", fontSheet.mNoExtension.c_str(), sakuraText.mFileName.mNoExtension.c_str());
+			printf("ExtractText: Font sheet and text file mistmatch. %s %s", fontSheetName.mNoExtension.c_str(), sakuraText.mFileName.mNoExtension.c_str());
 			return;
 		}
+		
+		//Create output directory for this file
+		string fileOutputDir = inOutputDirectory + sakuraText.mFileName.mNoExtension + string("\\");
+		if( !CreateDirectoryHelper(fileOutputDir) )
+		{
+			continue;
+		}
 
-		//Todo
-		//for(const SakurTextFile& )
+		//Create font sheet
+		SakuraFontSheet sakuraFontSheet;
+		sakuraFontSheet.CreateFontSheet(fontSheetName);
+
+		//Dump out the dialog for each line
+		for(const SakuraString& sakuraString : sakuraText.mLines)
+		{
+			
+		}
 	}
 }
 
@@ -402,8 +483,8 @@ void PrintHelp()
 	printf("usage: SakuraTaisen [command]\n");
 	printf("Commands:\n");
 	printf("ExtractRawText rootSakuraTaisenDirectory outDirectory\n");
-	printf("ExtractFontSheets rootSakuraTaisenDirectory paletteFileName outDirectory");
-	printf("ExtractText rootSakuraTaisenDirectory fontSheetDirectory outDirectory");
+	printf("ExtractFontSheets rootSakuraTaisenDirectory paletteFileName outDirectory\n");
+	printf("ExtractText rootSakuraTaisenDirectory outDirectory\n");
 }
 
 int main(int argc, char *argv[])
@@ -438,13 +519,12 @@ int main(int argc, char *argv[])
 
 		ExtractAllFontSheets(allFiles, paletteFileName, outDirectory);
 	}
-	else if( command == string("ExtractText" ) && argc == 5 )
+	else if( command == string("ExtractText" ) && argc == 4 )
 	{
 		const string searchDirectory   =  string(argv[2]);
-		const string fontSheetDirectory = string(argv[3]);
-		const string outDirectory       = string(argv[4]) + string("\\");
+		const string outDirectory       = string(argv[3]) + string("\\");
 
-		ExtractText(searchDirectory, fontSheetDirectory, outDirectory);
+		ExtractText(searchDirectory, outDirectory);
 	}
 	else
 	{

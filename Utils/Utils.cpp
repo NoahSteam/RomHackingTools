@@ -46,6 +46,18 @@ void FindAllFilesWithinDirectory(const string& inDirectoryPath, vector<FileNameC
 	}
 }
 
+bool CreateDirectoryHelper(const std::string& dirName)
+{
+	if( CreateDirectory(dirName.c_str(), NULL) || ERROR_ALREADY_EXISTS == GetLastError() )
+	{
+		return true;
+	}
+	
+	printf("Unable to create directory: %s", dirName.c_str());
+
+	return false;
+}
+
 ////////////////////////////
 //        FileData        //
 ////////////////////////////
@@ -201,27 +213,63 @@ void FileWriter::Close()
 ////////////////////////////////
 //        BitmapWriter        //
 ////////////////////////////////
-bool BitmapWriter::CreateBitmap(const string& inFileName, int inWidth, int inHeight, int bitsPerPixel, const char* pInColorData, int inColorDataSize, const char* pInPaletteData, int inPaletteSize) const
+bool BitmapWriter::CreateBitmap(const string& inFileName, int inWidth, int inHeight, int bitsPerPixel, const char* pInPaletteData, int inPaletteSize)
 {	
-	FileWriter outFile;
-	if( !outFile.OpenFileForWrite(inFileName) )
+	if( !mOutFile.OpenFileForWrite(inFileName) )
 	{
 		return false;
 	}
 
+	mpPaletteData = pInPaletteData;
+	mPaletteSize  = inPaletteSize;
+	mWidth        = inWidth;
+	mHeight       = inHeight;
+	mBitsPerPixel = bitsPerPixel;
+	
+	return true;
+}
+
+void BitmapWriter::WriteData(const char* pColorData, int dataSize)
+{
+	mColorData.push_back( BulkColorData(pColorData, dataSize) );
+}
+
+void BitmapWriter::Close()
+{
+	const unsigned long colorDataSize = GetColorDataSize();
+
 	BitmapData::FileHeader fileHeader;
-	const int fileSize          = sizeof(BitmapData::FileHeader) + sizeof(BitmapData::InfoHeader) + inColorDataSize + inPaletteSize;
-	const int offsetToColorData = sizeof(BitmapData::FileHeader) + sizeof(BitmapData::InfoHeader) + inPaletteSize;	
+	const int fileSize          = sizeof(BitmapData::FileHeader) + sizeof(BitmapData::InfoHeader) + colorDataSize + mPaletteSize;
+	const int offsetToColorData = sizeof(BitmapData::FileHeader) + sizeof(BitmapData::InfoHeader) + mPaletteSize;
 	fileHeader.Initialize(fileSize, offsetToColorData);
 
 	BitmapData::InfoHeader infoHeader;
-	infoHeader.Initialize(inWidth, inHeight, bitsPerPixel);
-	
-	outFile.WriteData(&fileHeader, sizeof(fileHeader));
-	outFile.WriteData(&infoHeader, sizeof(infoHeader));
+	infoHeader.Initialize(mWidth, mHeight, mBitsPerPixel);
 
-	outFile.WriteData(pInPaletteData, inPaletteSize);
-	outFile.WriteData(pInColorData, inColorDataSize);
+	mOutFile.WriteData(&fileHeader, sizeof(fileHeader));
+	mOutFile.WriteData(&infoHeader, sizeof(infoHeader));
 
-	return true;
+	if( mpPaletteData )
+	{
+		mOutFile.WriteData(mpPaletteData, mPaletteSize);
+	}
+
+	for(const BulkColorData& colorData : mColorData)
+	{
+		mOutFile.WriteData(colorData.pData, colorData.size);
+	}
+
+	mOutFile.Close();
+}
+
+unsigned long BitmapWriter::GetColorDataSize() const
+{
+	unsigned long totalSize = 0;
+
+	for(const BulkColorData& colorData : mColorData)
+	{
+		totalSize += colorData.size;
+	}
+
+	return totalSize;
 }
