@@ -234,6 +234,30 @@ void BitmapWriter::WriteData(const char* pColorData, int dataSize)
 	mColorData.push_back( BulkColorData(pColorData, dataSize) );
 }
 
+void BitmapWriter::AddTile(const char* pColorData, int dataSize, int x, int y, int width, int height, int rowStride)
+{
+	char* pTileData = new char[dataSize];
+
+	if( x*y > dataSize )
+	{
+		printf("BitmapWriter::AddTile: Invalid tile size");
+		return;
+	}
+
+	for(int y = 0; y < height; ++y)
+	{
+		for(x = 0; x < width; ++x)
+		{
+			pTileData[x*y] = pColorData[x*y];
+		}
+	}
+
+	//Write out the tile
+	WriteData(pTileData, dataSize);
+
+	delete[] pTileData;
+}
+
 void BitmapWriter::Close()
 {
 	const unsigned long colorDataSize = GetColorDataSize();

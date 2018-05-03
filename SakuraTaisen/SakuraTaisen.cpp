@@ -63,6 +63,30 @@ public:
 		delete[] mpData;
 		mpData = nullptr;
 	}
+
+	const char* GetFontTileData() const
+	{
+		return mpData;
+	}
+};
+
+struct SakuraString
+{
+	struct SakuraChar
+	{
+		SakuraChar() : mRow(0), mColumn(0){}
+		SakuraChar(unsigned char inRow, unsigned char inColumn) : mRow(inRow), mColumn(inColumn){}
+
+		unsigned char mRow;
+		unsigned char mColumn;
+	};
+
+	vector<SakuraChar> mChars;
+
+	void AddChar(char row, char column)
+	{
+		mChars.push_back( std::move(SakuraChar(row, column)) );
+	}
 };
 
 class SakuraFontSheet
@@ -94,24 +118,16 @@ public:
 
 		return true;
 	}
-};
 
-struct SakuraString
-{
-	struct SakuraChar
+	const char* GetCharacterTile(const SakuraString::SakuraChar& sakuraChar)
 	{
-		SakuraChar() : mRow(0), mColumn(0){}
-		SakuraChar(unsigned char inRow, unsigned char inColumn) : mRow(inRow), mColumn(inColumn){}
+		const int tileIndex = sakuraChar.mColumn + sakuraChar.mRow*256;
+		return tileIndex < mCharacterTiles.size() ? mCharacterTiles[tileIndex].GetFontTileData() : nullptr;
+	}
 
-		unsigned char mRow;
-		unsigned char mColumn;
-	};
-
-	vector<SakuraChar> mChars;
-
-	void AddChar(char row, char column)
+	unsigned long GetTileSizeInBytes() const
 	{
-		mChars.push_back( std::move(SakuraChar(row, column)) );
+		return 128;
 	}
 };
 
@@ -418,8 +434,15 @@ void DumpSakuraText(const vector<FileNameContainer>& inAllFiles, const string& i
 	DumpExtractedSakuraText(sakuraTextFiles, inOutputDir);
 }
 
-void ExtractText(const string& inSearchDirectory, const string& inOutputDirectory)
+void ExtractText(const string& inSearchDirectory, const string& inPaletteFileName, const string& inOutputDirectory)
 {
+	//Get the palette
+	FileData paletteFile;
+	if( !paletteFile.InitializeFileData(inPaletteFileName.c_str(), inPaletteFileName.c_str()) )
+	{
+		return;
+	}
+
 	//Find all files within the requested directory
 	vector<FileNameContainer> allFiles;
 	FindAllFilesWithinDirectory(inSearchDirectory, allFiles);
@@ -441,7 +464,9 @@ void ExtractText(const string& inSearchDirectory, const string& inOutputDirector
 
 	//Extract the text
 	vector<SakuraTextFile> sakuraTextFiles;
-	FindAllSakuraText(textFiles, sakuraTextFiles);
+	FindAllSakuraText(textFiles, sakuraTextFiles);	
+
+	const string extension(".bmp");
 
 	//Write out bitmaps for all of the lines found in the sakura text files
 	const size_t numFiles = sakuraTextFiles.size();
@@ -471,9 +496,27 @@ void ExtractText(const string& inSearchDirectory, const string& inOutputDirector
 		sakuraFontSheet.CreateFontSheet(fontSheetName);
 
 		//Dump out the dialog for each line
+		int stringIndex   = 0;
+		const int tileDim = 16;
 		for(const SakuraString& sakuraString : sakuraText.mLines)
 		{
-			
+			string bitmapName = fileOutputDir + std::to_string(stringIndex) + extension;
+			BitmapWriter sakuraStringBmp;
+			sakuraStringBmp.CreateBitmap(bitmapName, (int)sakuraString.mChars.size()*tileDim, tileDim, 4, paletteFile.GetData(), paletteFile.GetDataSize());
+
+			int charIndex = 0;
+			for(const SakuraString::SakuraChar& sakuraChar : sakuraString.mChars)
+			{
+				const char* pData = sakuraFontSheet.GetCharacterTile(sakuraChar);
+
+				sakuraStringBmp.WriteData(pData, sakuraFontSheet.GetTileSizeInBytes());
+
+				++charIndex;
+			}
+
+			sakuraStringBmp.Close();
+
+			++stringIndex;
 		}
 	}
 }
@@ -484,7 +527,7 @@ void PrintHelp()
 	printf("Commands:\n");
 	printf("ExtractRawText rootSakuraTaisenDirectory outDirectory\n");
 	printf("ExtractFontSheets rootSakuraTaisenDirectory paletteFileName outDirectory\n");
-	printf("ExtractText rootSakuraTaisenDirectory outDirectory\n");
+	printf("ExtractText rootSakuraTaisenDirectory paletteFileName, outDirectory\n");
 }
 
 int main(int argc, char *argv[])
@@ -519,12 +562,13 @@ int main(int argc, char *argv[])
 
 		ExtractAllFontSheets(allFiles, paletteFileName, outDirectory);
 	}
-	else if( command == string("ExtractText" ) && argc == 4 )
+	else if( command == string("ExtractText" ) && argc == 5 )
 	{
 		const string searchDirectory   =  string(argv[2]);
-		const string outDirectory       = string(argv[3]) + string("\\");
+		const string paletteFileName   =  string(argv[3]);
+		const string outDirectory      = string(argv[4]) + string("\\");
 
-		ExtractText(searchDirectory, outDirectory);
+		ExtractText(searchDirectory, paletteFileName, outDirectory);
 	}
 	else
 	{

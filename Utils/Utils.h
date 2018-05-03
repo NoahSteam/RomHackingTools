@@ -148,6 +148,7 @@ class BitmapWriter
 public:
 	bool CreateBitmap(const std::string& inFileName, int width, int height, int bitsPerPixel, const char* pPaletteData, int paletteSize);
 	void WriteData(const char* pColorData, int dataSize);
+	void AddTile(const char* pColorData, int dataSize, int x, int y, int width, int height, int rowStride);
 	void Close();
 };
 
