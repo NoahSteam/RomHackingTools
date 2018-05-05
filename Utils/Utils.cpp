@@ -2,6 +2,7 @@
 #include <windows.h>
 #include <vector>
 #include <string>
+#include <assert.h>
 
 #include "Utils.h"
 
@@ -210,90 +211,94 @@ void FileWriter::Close()
 	mpFileHandle = nullptr;
 	mDataSize    = 0;
 }
+
 ////////////////////////////////
 //        BitmapWriter        //
 ////////////////////////////////
-bool BitmapWriter::CreateBitmap(const string& inFileName, int inWidth, int inHeight, int bitsPerPixel, const char* pInPaletteData, int inPaletteSize)
+bool BitmapWriter::CreateBitmap(const string& inFileName, int inWidth, int inHeight, int bitsPerPixel, const char* pInColorData, int inColorSize, const char* pInPaletteData, int inPaletteSize)
 {	
-	if( !mOutFile.OpenFileForWrite(inFileName) )
+	FileWriter outFile;
+	if( !outFile.OpenFileForWrite(inFileName) )
 	{
 		return false;
 	}
 
-	mpPaletteData = pInPaletteData;
-	mPaletteSize  = inPaletteSize;
-	mWidth        = inWidth;
-	mHeight       = inHeight;
-	mBitsPerPixel = bitsPerPixel;
-	
-	return true;
-}
-
-void BitmapWriter::WriteData(const char* pColorData, int dataSize)
-{
-	mColorData.push_back( BulkColorData(pColorData, dataSize) );
-}
-
-void BitmapWriter::AddTile(const char* pColorData, int dataSize, int x, int y, int width, int height, int rowStride)
-{
-	char* pTileData = new char[dataSize];
-
-	if( x*y > dataSize )
-	{
-		printf("BitmapWriter::AddTile: Invalid tile size");
-		return;
-	}
-
-	for(int y = 0; y < height; ++y)
-	{
-		for(x = 0; x < width; ++x)
-		{
-			pTileData[x*y] = pColorData[x*y];
-		}
-	}
-
-	//Write out the tile
-	WriteData(pTileData, dataSize);
-
-	delete[] pTileData;
-}
-
-void BitmapWriter::Close()
-{
-	const unsigned long colorDataSize = GetColorDataSize();
-
 	BitmapData::FileHeader fileHeader;
-	const int fileSize          = sizeof(BitmapData::FileHeader) + sizeof(BitmapData::InfoHeader) + colorDataSize + mPaletteSize;
-	const int offsetToColorData = sizeof(BitmapData::FileHeader) + sizeof(BitmapData::InfoHeader) + mPaletteSize;
+	const int fileSize          = sizeof(BitmapData::FileHeader) + sizeof(BitmapData::InfoHeader) + inColorSize + inPaletteSize;
+	const int offsetToColorData = sizeof(BitmapData::FileHeader) + sizeof(BitmapData::InfoHeader) + inPaletteSize;
 	fileHeader.Initialize(fileSize, offsetToColorData);
 
 	BitmapData::InfoHeader infoHeader;
-	infoHeader.Initialize(mWidth, mHeight, mBitsPerPixel);
+	infoHeader.Initialize(inWidth, inHeight, bitsPerPixel);
 
-	mOutFile.WriteData(&fileHeader, sizeof(fileHeader));
-	mOutFile.WriteData(&infoHeader, sizeof(infoHeader));
+	outFile.WriteData(&fileHeader, sizeof(fileHeader));
+	outFile.WriteData(&infoHeader, sizeof(infoHeader));
 
-	if( mpPaletteData )
+	if( pInPaletteData )
 	{
-		mOutFile.WriteData(mpPaletteData, mPaletteSize);
+		outFile.WriteData(pInPaletteData, inPaletteSize);
 	}
 
-	for(const BulkColorData& colorData : mColorData)
-	{
-		mOutFile.WriteData(colorData.pData, colorData.size);
-	}
+	outFile.WriteData(pInColorData, inColorSize);
+	
+	outFile.Close();
 
-	mOutFile.Close();
+	return true;
 }
 
-unsigned long BitmapWriter::GetColorDataSize() const
+/////////////////////////////////
+//        BitmapSurface        //
+/////////////////////////////////
+BitmapSurface::~BitmapSurface()
 {
-	unsigned long totalSize = 0;
+	delete[] mpBuffer;
+	mpBuffer    = nullptr;
+	mBufferSize = 0;
+}
 
-	for(const BulkColorData& colorData : mColorData)
+bool BitmapSurface::CreateSurface(int width, int height, EBitsPerPixel bitsPerPixel, const char* pPalette, int paletteSize)
+{
+	const int numPixels = width*height;
+	const int numBytes  = bitsPerPixel == kBPP_4 ? numPixels*4 : numPixels;
+	mBytesPerRow        = bitsPerPixel == kBPP_4 ? width/2 : width;
+
+	mWidth        = width;
+	mHeight       = height;
+	mBitsPerPixel = bitsPerPixel;
+
+	mpBuffer    = new char[numBytes];
+	mBufferSize = numBytes;
+
+	mpPalette    = pPalette;
+	mPaletteSize = paletteSize;
+
+	memset(mpBuffer, 0, numBytes);
+
+	return true;
+}
+
+void BitmapSurface::AddTile(const char* pInData, int dataSize, int inX, int inY, int width, int height)
+{
+	const int startX = inX/2;
+	const int offset = (inY*mBytesPerRow + startX);
+	char* pOutData   = mpBuffer + offset;
+
+	assert(offset < mBufferSize);
+	int inDataOffset = 0;
+	for(int y = 0; y < height; ++y)
 	{
-		totalSize += colorData.size;
-	}
+		for(int x = 0; x < 8; ++x)
+		{
+			assert( offset + y*mBytesPerRow + x + startX < mBufferSize );
 
-	return totalSize;
+			pOutData[y*mBytesPerRow + x + startX] = pInData[inDataOffset++];
+		}
+	}
+}
+
+bool BitmapSurface::WriteToFile(const std::string& fileName)
+{
+	BitmapWriter bitmap;
+
+	return bitmap.CreateBitmap(fileName, mWidth, -mHeight, mBitsPerPixel, mpBuffer, mBufferSize, mpPalette, mPaletteSize);
 }

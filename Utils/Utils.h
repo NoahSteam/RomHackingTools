@@ -97,7 +97,7 @@ struct BitmapData
 		int   mNumColors;
 		int   mNumImportantColors;
 
-		void Initialize(int width, int height, int bitCount)
+		void Initialize(int width, int height, short bitCount)
 		{
 			mInfoHeaderSize     = sizeof(InfoHeader);
 			mImageWidth         = width;
@@ -127,29 +127,34 @@ struct BitmapData
 
 class BitmapWriter
 {
-	struct BulkColorData
-	{
-		const char*   pData;
-		unsigned long size;
+public:
+	bool CreateBitmap(const std::string& inFileName, int width, int height, int bitsPerPixel, const char* pInColorData, int inColorSize, const char* pPaletteData, int paletteSize);
+};
 
-		BulkColorData(const char* pInData, unsigned long inSize) : pData(pInData), size(inSize){}
+class BitmapSurface
+{
+public:
+	enum EBitsPerPixel : int
+	{
+		kBPP_4 = 4
 	};
 
-	FileWriter                 mOutFile;
-	std::vector<BulkColorData> mColorData;
-	const char*                mpPaletteData = nullptr;
-	int                        mPaletteSize  = 0;
-	int                        mBitsPerPixel = 0;
-	int                        mWidth        = 0;
-	int                        mHeight       = 0;
+private:
+	int           mWidth        = 0;
+	int           mHeight       = 0;
+	int           mBufferSize   = 0;
+	int           mBytesPerRow  = 0;
+	EBitsPerPixel mBitsPerPixel = kBPP_4;
+	char*         mpBuffer      = nullptr;
+	const char*   mpPalette     = nullptr;
+	int           mPaletteSize  = 0;
 
-	unsigned long GetColorDataSize() const;
-	
 public:
-	bool CreateBitmap(const std::string& inFileName, int width, int height, int bitsPerPixel, const char* pPaletteData, int paletteSize);
-	void WriteData(const char* pColorData, int dataSize);
-	void AddTile(const char* pColorData, int dataSize, int x, int y, int width, int height, int rowStride);
-	void Close();
+	~BitmapSurface();
+
+	bool CreateSurface(int width, int height, EBitsPerPixel bitsPerPixel, const char* pPalette, int paletteSize);
+	void AddTile(const char* pData, int dataSize, int x, int y, int width, int height);
+	bool WriteToFile(const std::string& fileName);
 };
 
 void FindAllFilesWithinDirectory(const std::string& inDirectoryPath, std::vector<FileNameContainer>& outFileNames);

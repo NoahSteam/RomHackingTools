@@ -25,6 +25,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include <string>
 #include <list>
 #include "..\Utils\Utils.h"
+#include <assert.h>
 
 using std::vector;
 using std::string;
@@ -120,9 +121,13 @@ public:
 	}
 
 	const char* GetCharacterTile(const SakuraString::SakuraChar& sakuraChar)
-	{
-		const int tileIndex = sakuraChar.mColumn + sakuraChar.mRow*256;
-		return tileIndex < mCharacterTiles.size() ? mCharacterTiles[tileIndex].GetFontTileData() : nullptr;
+	{	
+		//const int tileIndex = (sakuraChar.mColumn-1) + sakuraChar.mRow*256;
+		const int tileIndex = (sakuraChar.mColumn + sakuraChar.mRow*256) - 1;
+		assert(tileIndex >= 0);
+		assert(tileIndex < (int)mCharacterTiles.size());
+
+		return tileIndex < (int)mCharacterTiles.size() ? mCharacterTiles[tileIndex].GetFontTileData() : nullptr;
 	}
 
 	unsigned long GetTileSizeInBytes() const
@@ -137,9 +142,9 @@ struct SakuraTextFile
 	vector<SakuraString> mLines;
 
 private:
-	long  mFileSize;
-	FILE* mpFile;
-	char* mpBuffer;
+	unsigned long mFileSize;
+	FILE*         mpFile;
+	char*         mpBuffer;
 
 public:
 	SakuraTextFile(const FileNameContainer& fileName) : mFileName(fileName), mFileSize(0), mpFile(nullptr), mpBuffer(nullptr){}
@@ -181,7 +186,7 @@ public:
 		return true;
 	}
 
-	bool FindNextSakuraString(long &inOutLocation)
+	bool FindNextSakuraString(unsigned long &inOutLocation)
 	{
 		while( inOutLocation + 6 < mFileSize )
 		{
@@ -205,14 +210,14 @@ public:
 
 	void ReadInText()
 	{
-		long currentLocation = 0;
+		unsigned long currentLocation = 0;
 		bool bNextStringFound = FindNextSakuraString(currentLocation);
 
 		while( bNextStringFound && currentLocation < mFileSize )
 		{
-			long nextStringLocation = currentLocation;
-			bNextStringFound        = FindNextSakuraString(nextStringLocation);
-			const long endOfString  = bNextStringFound ? nextStringLocation - 6 : mFileSize;
+			unsigned long nextStringLocation = currentLocation;
+			bNextStringFound                 = FindNextSakuraString(nextStringLocation);
+			const unsigned long endOfString  = bNextStringFound ? nextStringLocation - 6 : mFileSize;
 
 			SakuraString newLineOfText;
 			bool bWasValidString = false;
@@ -325,7 +330,7 @@ bool ExtractFontSheetAsBitmap(const FileNameContainer& inFileNameContainer, cons
 	}
 
 	printf("Extracting: %s\n", inFileNameContainer.mFileName.c_str());
-
+	
 	const int tileDimX          = 16;
 	const int tileDimY          = 16;
 	const int tileBytes         = (tileDimX*tileDimY)/2; //4bits per pixel, so only half the amount of bytes as pixels
@@ -334,12 +339,12 @@ bool ExtractFontSheetAsBitmap(const FileNameContainer& inFileNameContainer, cons
 	const int bytesPerTileRow   = bytesPerTile*tilesPerRow;
 	const int numRows           = (int)ceil( fontSheet.GetDataSize() / (float)bytesPerTileRow);
 	const int numColumns        = numRows > 0 ? tilesPerRow : fontSheet.GetDataSize()/bytesPerTileRow;
-	const int imageHeight       = -numRows*tileDimY;
+	const int imageHeight       = numRows*tileDimY;
 	const int imageWidth        = numColumns*tileDimX;
 	
 	//Create 32bit palette from the 16 bit(5:5:5 bgr) palette in SakuraTaisen
 	const int paletteSize              = paletteData.GetDataSize();
-	const int numColorInPalette        = paletteSize/3;
+	const int numColorInPalette        = paletteSize/2;
 	const int numBytesIn32BitPalette   = numColorInPalette*4;
 	char* p32BitPalette                = new char[numBytesIn32BitPalette];
 	const char* pPaletteData           = paletteData.GetData();
@@ -361,28 +366,29 @@ bool ExtractFontSheetAsBitmap(const FileNameContainer& inFileNameContainer, cons
 	int currTileRow                  = 0;
 	int currTileCol                  = 0;
 	const int bytesInEachTilesWidth  = 8;
-	const int numTiledBytes          = (numRows*bytesPerTileRow) + numColumns*bytesInEachTilesWidth;
+	const int numTiledBytes          = (numRows*bytesPerTileRow);// + numColumns*bytesInEachTilesWidth;
 	char* pOutTiledData              = new char[numTiledBytes];
 	const int bytesPerHorizontalLine = bytesInEachTilesWidth*numColumns;
 
 	memset(pOutTiledData, 0, numTiledBytes);
 
-	//File in data
+	//Fill in data
 	for(int tileIndex = 0; tileIndex < numTiles; ++tileIndex)
 	{
-		const char* pTile = fontSheet.GetData() + tileIndex*tileBytes;
-		char* pOutTile    = pOutTiledData + currTileRow*bytesPerHorizontalLine*tileDimY + currTileCol*bytesInEachTilesWidth;
-		int tilePixel = 0;
+		const char* pTile       = fontSheet.GetData() + tileIndex*tileBytes;
+		const int outTileOffset = currTileRow*bytesPerHorizontalLine*tileDimY + currTileCol*bytesInEachTilesWidth;
+		char* pOutTile          = pOutTiledData + outTileOffset;
+		int tilePixel           = 0;
 		for(int r = 0; r < tileDimY; ++r)
 		{
 			for(int c = 0; c < bytesInEachTilesWidth; ++c)
 			{
+				assert(outTileOffset + r*bytesPerHorizontalLine + c < numTiledBytes);
 				pOutTile[r*bytesPerHorizontalLine + c] = pTile[tilePixel++];
 			}
 		}
 
-		++currTileCol;
-		if( currTileCol >= numColumns )
+		if( ++currTileCol >= numColumns )
 		{
 			currTileCol = 0;
 			++currTileRow;
@@ -390,12 +396,7 @@ bool ExtractFontSheetAsBitmap(const FileNameContainer& inFileNameContainer, cons
 	}
 
 	BitmapWriter fontBitmap;
-	if( fontBitmap.CreateBitmap(outFileName, imageWidth, imageHeight, 4, p32BitPalette, numBytesIn32BitPalette) )
-	{
-		fontBitmap.WriteData(pOutTiledData, numTiledBytes);
-		fontBitmap.Close();
-	}
-	
+	fontBitmap.CreateBitmap(outFileName, imageWidth, -imageHeight, 4, pOutTiledData, numTiledBytes, p32BitPalette, numBytesIn32BitPalette);	
 
 	delete[] p32BitPalette;
 	delete[] pOutTiledData;
@@ -437,10 +438,29 @@ void DumpSakuraText(const vector<FileNameContainer>& inAllFiles, const string& i
 void ExtractText(const string& inSearchDirectory, const string& inPaletteFileName, const string& inOutputDirectory)
 {
 	//Get the palette
-	FileData paletteFile;
-	if( !paletteFile.InitializeFileData(inPaletteFileName.c_str(), inPaletteFileName.c_str()) )
+	FileData paletteData;
+	if( !paletteData.InitializeFileData(inPaletteFileName.c_str(), inPaletteFileName.c_str()) )
 	{
 		return;
+	}
+
+	//Create 32bit palette from the 16 bit(5:5:5 bgr) palette in SakuraTaisen
+	const int paletteSize              = paletteData.GetDataSize();
+	const int numColorInPalette        = paletteSize/2;
+	const int numBytesIn32BitPalette   = numColorInPalette*4;
+	char* p32BitPalette                = new char[numBytesIn32BitPalette];
+	const char* pPaletteData           = paletteData.GetData();
+	const float full5BitValue          = (float)0x1f;
+	for(int i = 0, origIdx = 0; i < numBytesIn32BitPalette; i += 4, origIdx += 2)
+	{
+		unsigned short color = ((pPaletteData[origIdx] << 8) + (unsigned char)pPaletteData[origIdx+1]);
+
+		//Ugly conversion of 5bit values to 8bit.  Probably a better way to do this.
+		//Masking the r,g,b components and then bringing the result into a [0,255] range.
+		p32BitPalette[i]   = (char)floor( ( ((color & 0x001f)/full5BitValue) * 255.f) + 0.5f);
+		p32BitPalette[i+1] = (char)floor( ( ( ((color & 0x03E0) >> 5)/full5BitValue) * 255.f) + 0.5f);
+		p32BitPalette[i+2] = (char)floor( ( ( ((color & 0x7C00) >> 10)/full5BitValue) * 255.f) + 0.5f);
+		p32BitPalette[i+3] = 0;
 	}
 
 	//Find all files within the requested directory
@@ -459,6 +479,8 @@ void ExtractText(const string& inSearchDirectory, const string& inPaletteFileNam
 	if( textFiles.size() != fontFiles.size() )
 	{
 		printf("ExtractText: There need to be the same amount of sakura text files as font sheets");
+
+		delete[] p32BitPalette;
 		return;
 	}
 
@@ -469,7 +491,7 @@ void ExtractText(const string& inSearchDirectory, const string& inPaletteFileNam
 	const string extension(".bmp");
 
 	//Write out bitmaps for all of the lines found in the sakura text files
-	const size_t numFiles = sakuraTextFiles.size();
+	const size_t numFiles = 1;//sakuraTextFiles.size();
 	for(size_t i = 0; i < numFiles; ++i)
 	{
 		const FileNameContainer& fontSheetName = fontFiles[i];
@@ -499,26 +521,38 @@ void ExtractText(const string& inSearchDirectory, const string& inPaletteFileNam
 		int stringIndex   = 0;
 		const int tileDim = 16;
 		for(const SakuraString& sakuraString : sakuraText.mLines)
-		{
-			string bitmapName = fileOutputDir + std::to_string(stringIndex) + extension;
-			BitmapWriter sakuraStringBmp;
-			sakuraStringBmp.CreateBitmap(bitmapName, (int)sakuraString.mChars.size()*tileDim, tileDim, 4, paletteFile.GetData(), paletteFile.GetDataSize());
+		{	
+			if( sakuraString.mChars.size() > 256 )
+			{
+				continue;
+			}
 
+			BitmapSurface sakuraStringBmp;
+			sakuraStringBmp.CreateSurface((int)(sakuraString.mChars.size() + 1)*tileDim, tileDim, BitmapSurface::EBitsPerPixel::kBPP_4, p32BitPalette, numBytesIn32BitPalette);
+	
 			int charIndex = 0;
 			for(const SakuraString::SakuraChar& sakuraChar : sakuraString.mChars)
 			{
+				if(sakuraChar.mRow > 3)
+				{
+					break;
+				}
+
 				const char* pData = sakuraFontSheet.GetCharacterTile(sakuraChar);
 
-				sakuraStringBmp.WriteData(pData, sakuraFontSheet.GetTileSizeInBytes());
+				sakuraStringBmp.AddTile(pData, sakuraFontSheet.GetTileSizeInBytes(), charIndex*16, 0, tileDim, tileDim);
 
 				++charIndex;
 			}
-
-			sakuraStringBmp.Close();
+			
+			const string bitmapName = fileOutputDir + std::to_string(stringIndex) + extension;
+			sakuraStringBmp.WriteToFile(bitmapName);
 
 			++stringIndex;
 		}
 	}
+
+	delete[] p32BitPalette;
 }
 
 void PrintHelp()
@@ -527,7 +561,7 @@ void PrintHelp()
 	printf("Commands:\n");
 	printf("ExtractRawText rootSakuraTaisenDirectory outDirectory\n");
 	printf("ExtractFontSheets rootSakuraTaisenDirectory paletteFileName outDirectory\n");
-	printf("ExtractText rootSakuraTaisenDirectory paletteFileName, outDirectory\n");
+	printf("ExtractText rootSakuraTaisenDirectory paletteFileName outDirectory\n");
 }
 
 int main(int argc, char *argv[])
