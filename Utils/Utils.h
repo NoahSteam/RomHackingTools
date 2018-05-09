@@ -47,6 +47,22 @@ public:
 	unsigned long GetDataSize() const {return mBufferSize;}
 };
 
+class TextFileData
+{
+public:
+	struct TextLine
+	{
+		std::vector<std::string> mWords;
+	};
+
+	FileNameContainer     mFileNameInfo;
+	std::vector<TextLine> mLines;
+
+	TextFileData(const FileNameContainer& inFileNameInfo) : mFileNameInfo(inFileNameInfo){}
+
+	bool InitializeTextFile();
+};
+
 class FileWriter
 {
 	FILE*         mpFileHandle = nullptr;
@@ -56,9 +72,37 @@ class FileWriter
 public:
 	~FileWriter();
 
+	bool  OpenFileForWrite(const std::string& outFileName);
+	bool  WriteData(const void* pData, unsigned long size);
+	void  Close();	
+};
+
+class TextFileWriter
+{
+	FILE*       mpFileHandle = nullptr;
+	std::string mFileName;
+
+public:
+	~TextFileWriter();
+
 	bool OpenFileForWrite(const std::string& outFileName);
-	bool WriteData(const void* pData, unsigned long size);
+	void WriteString(const std::string& inString);
 	void Close();
+	FILE* GetFileHandle() { return mpFileHandle; }
+};
+
+class PaletteData
+{
+	char* mpPaletteData      = nullptr;
+	int   mNumBytesInPalette = 0; 
+
+public:
+	~PaletteData();
+
+	void        CreateFrom15BitData(const char* pInData, int inSize);
+	bool        CreateFrom32BitData(const char* pInData, int inSize);
+	const char* GetData() const {return mpPaletteData;}
+	int         GetSize() const {return mNumBytesInPalette;}
 };
 
 struct BitmapData
@@ -115,8 +159,14 @@ struct BitmapData
 
 	struct ColorData
 	{
-		int  mSizeInBytes;
-		int* mpBGR;
+		int  mSizeInBytes = 0;
+		char* mpRGBA      = nullptr;
+
+		~ColorData()
+		{
+			delete[] mpRGBA;
+			mpRGBA = nullptr;
+		}
 	};
 
 	FileHeader mFileHeader;
@@ -129,6 +179,14 @@ class BitmapWriter
 {
 public:
 	bool CreateBitmap(const std::string& inFileName, int width, int height, int bitsPerPixel, const char* pInColorData, int inColorSize, const char* pPaletteData, int paletteSize);
+};
+
+class BitmapReader
+{
+public:
+	BitmapData mBitmapData;
+
+	bool ReadBitmap(const std::string& inFileName);
 };
 
 class BitmapSurface
@@ -155,6 +213,28 @@ public:
 	bool CreateSurface(int width, int height, EBitsPerPixel bitsPerPixel, const char* pPalette, int paletteSize);
 	void AddTile(const char* pData, int dataSize, int x, int y, int width, int height);
 	bool WriteToFile(const std::string& fileName);
+};
+
+class TileExtractor
+{
+public:
+	struct Tile
+	{
+		char*  mpTile          = nullptr;
+		unsigned int mTileSize = 0;
+		unsigned int mX        = 0;
+		unsigned int mY        = 0;
+
+		~Tile()
+		{
+			delete[] mpTile;
+			mpTile = nullptr;
+		}
+	};
+
+	std::vector<Tile> mTiles;
+
+	bool ExtractTiles(unsigned int tileDimX, unsigned int tileDimY, const BitmapReader& inBitmap);
 };
 
 void FindAllFilesWithinDirectory(const std::string& inDirectoryPath, std::vector<FileNameContainer>& outFileNames);

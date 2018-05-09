@@ -1,0 +1,12 @@
+-Color Bank can give 16, 64, 128, 256 colors
+-VPD2 color palette is selected from a color bank, and a palette code is used to select the desired color from this palette.
+
+-When in Color Bank mode, a pixel is represented by 16 bits.  This constains MSB, Priority, Color Bank, Palette Code(index)
+
+... is 3rd character in kanji table
+
+1c4453f is first line of text  in sakura4
+
+ExtractText d:\Rizwan\SakuraWars\Disc1 d:\Rizwan\SakuraWars\ExtractedFontSheets\Palette.bin d:\Rizwan\SakuraWars\ExtractedTextImages
+ExtractFontSheets d:\Rizwan\SakuraWars\Test d:\Rizwan\SakuraWars\TranslatedFontSheets\OutPalette.bin d:\Rizwan\SakuraWars\Test
+PatchPalettes d:\Rizwan\SakuraWars\Disc1 d:\Rizwan\SakuraWars\OriginalFontPalette.bin d:\Rizwan\SakuraWars\TranslatedFontSheets\NewFontPalette.bin d:\Rizwan\SakuraWars\PatchedPalettes

@@ -24,12 +24,112 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include <vector>
 #include <string>
 #include <list>
+#include <map>
 #include "..\Utils\Utils.h"
 #include <assert.h>
 
 using std::vector;
 using std::string;
 using std::list;
+using std::map;
+
+class SakuraTranslationTable
+{
+	map<char, short> mTranslationTable;
+
+public:
+	SakuraTranslationTable()
+	{
+		mTranslationTable['A']  = 1;
+		mTranslationTable['B']  = 2;
+		mTranslationTable['C']  = 3;
+		mTranslationTable['D']  = 4;
+		mTranslationTable['E']  = 5;
+		mTranslationTable['F']  = 6;
+		mTranslationTable['G']  = 7;
+		mTranslationTable['H']  = 8;
+		mTranslationTable['I']  = 9;
+		mTranslationTable['J']  = 10;
+		mTranslationTable['K']  = 11;
+		mTranslationTable['L']  = 12;
+		mTranslationTable['M']  = 13;
+		mTranslationTable['N']  = 14;
+		mTranslationTable['O']  = 15;
+		mTranslationTable['P']  = 16;
+		mTranslationTable['Q']  = 17;
+		mTranslationTable['R']  = 18;
+		mTranslationTable['S']  = 19;
+		mTranslationTable['T']  = 20;
+		mTranslationTable['U']  = 21;
+		mTranslationTable['V']  = 22;
+		mTranslationTable['W']  = 23;
+		mTranslationTable['X']  = 24;
+		mTranslationTable['Y']  = 25;
+		mTranslationTable['Z']  = 26;
+		mTranslationTable['a']  = 27;
+		mTranslationTable['b']  = 28;
+		mTranslationTable['c']  = 29;
+		mTranslationTable['d']  = 30;
+		mTranslationTable['e']  = 31;
+		mTranslationTable['f']  = 32;
+		mTranslationTable['g']  = 33;
+		mTranslationTable['h']  = 34;
+		mTranslationTable['i']  = 35;
+		mTranslationTable['j']  = 36;
+		mTranslationTable['k']  = 37;
+		mTranslationTable['l']  = 38;
+		mTranslationTable['m']  = 39;
+		mTranslationTable['n']  = 40;
+		mTranslationTable['o']  = 41;
+		mTranslationTable['p']  = 42;
+		mTranslationTable['q']  = 43;
+		mTranslationTable['r']  = 44;
+		mTranslationTable['s']  = 45;
+		mTranslationTable['t']  = 46;
+		mTranslationTable['u']  = 47;
+		mTranslationTable['v']  = 48;
+		mTranslationTable['w']  = 49;
+		mTranslationTable['x']  = 50;
+		mTranslationTable['y']  = 51;
+		mTranslationTable['z']  = 52;
+		mTranslationTable['.']  = 53;
+		mTranslationTable['@']  = 54;
+		mTranslationTable['!']  = 55;
+		mTranslationTable['?']  = 56;
+		mTranslationTable[',']  = 57;
+		mTranslationTable['\''] = 58;
+		mTranslationTable[' ']  = 59;
+		mTranslationTable['-']  = 59; //Todo, add this into the table
+		mTranslationTable['\n'] = 0x0a0d;
+	}
+
+	const short GetIndex(char inChar) const
+	{
+		assert( mTranslationTable.find(inChar) != mTranslationTable.end() );
+		
+		return mTranslationTable.find(inChar)->second;
+	}
+};
+const SakuraTranslationTable GTranslationLookupTable;
+
+class SakuraStringLookUpValue
+{
+public:
+	vector<short> mValuesForEachChar;
+
+	SakuraStringLookUpValue(const string& inString)
+	{
+		for(string::const_iterator iter = inString.begin(); iter != inString.end(); ++iter)
+		{
+			if( *iter == '\n' )
+			{
+				continue;
+			}
+
+			mValuesForEachChar.push_back( GTranslationLookupTable.GetIndex(*iter) );
+		}
+	}
+};
 
 class SakuraFontTile
 {
@@ -76,17 +176,79 @@ struct SakuraString
 	struct SakuraChar
 	{
 		SakuraChar() : mRow(0), mColumn(0){}
-		SakuraChar(unsigned char inRow, unsigned char inColumn) : mRow(inRow), mColumn(inColumn){}
+		SakuraChar(unsigned char inRow, unsigned char inColumn) : mRow(inRow), mColumn(inColumn)
+		{
+			mIndex = (inRow << 8) + inColumn;
+			assert(mIndex > 0);
+		}
 
-		unsigned char mRow;
-		unsigned char mColumn;
+		bool IsNewLine() const
+		{
+			return mIndex == NewLine;
+		}
+
+		unsigned char    mRow;
+		unsigned char    mColumn;
+		unsigned short   mIndex;
+		static const int NewLine = 0x0A0D;		
 	};
 
 	vector<SakuraChar> mChars;
+	static const int   MaxCharsPerLine = 15;
 
-	void AddChar(char row, char column)
+	bool AddChar(char row, char column)
 	{
+		if( row == 0 && column == 0 )
+		{
+			return false; 
+		}
+
 		mChars.push_back( std::move(SakuraChar(row, column)) );
+
+		return true;
+	}
+
+	int GetNumberOfLines() const
+	{
+		int numLines = 1;
+		for(const SakuraChar& sakuraChar : mChars)
+		{
+			if( sakuraChar.mIndex == SakuraChar::NewLine )
+			{
+				++numLines;
+			}
+		}
+
+		return numLines;
+	}
+
+	int GetMaxCharactersInLine() const
+	{
+		int maxCharacters = 0;
+		int currCount     = 0;
+		for(const SakuraChar& sakuraChar : mChars)
+		{
+			if( sakuraChar.mIndex == SakuraChar::NewLine )
+			{
+				if( currCount > maxCharacters )
+				{
+					maxCharacters = currCount;
+				}
+
+				currCount = 0;
+			}
+			else
+			{
+				++currCount;
+			}			
+		}
+
+		if( currCount > maxCharacters )
+		{
+			maxCharacters = currCount;
+		}
+
+		return maxCharacters;
 	}
 };
 
@@ -122,8 +284,7 @@ public:
 
 	const char* GetCharacterTile(const SakuraString::SakuraChar& sakuraChar)
 	{	
-		//const int tileIndex = (sakuraChar.mColumn-1) + sakuraChar.mRow*256;
-		const int tileIndex = (sakuraChar.mColumn + sakuraChar.mRow*256) - 1;
+		const int tileIndex = sakuraChar.mIndex - 1;
 		assert(tileIndex >= 0);
 		assert(tileIndex < (int)mCharacterTiles.size());
 
@@ -202,6 +363,13 @@ public:
 				return true;
 			}
 
+			if( mpBuffer[inOutLocation + 0] == 0 && 
+				mpBuffer[inOutLocation + 1] == 0 && 
+				mpBuffer[inOutLocation + 2] != 0 )
+			{
+				return false;
+			}
+
 			++inOutLocation;
 		}
 
@@ -212,18 +380,22 @@ public:
 	{
 		unsigned long currentLocation = 0;
 		bool bNextStringFound = FindNextSakuraString(currentLocation);
+		bool bLastStringFound = false;
 
-		while( bNextStringFound && currentLocation < mFileSize )
+		while( bNextStringFound && !bLastStringFound && currentLocation < mFileSize )
 		{
 			unsigned long nextStringLocation = currentLocation;
 			bNextStringFound                 = FindNextSakuraString(nextStringLocation);
 			const unsigned long endOfString  = bNextStringFound ? nextStringLocation - 6 : mFileSize;
 
 			SakuraString newLineOfText;
-			bool bWasValidString = false;
+			bool bWasValidString  = false;
 			while(currentLocation + 1 < endOfString )
 			{
-				newLineOfText.AddChar( mpBuffer[currentLocation], mpBuffer[currentLocation+1] );
+				if( !newLineOfText.AddChar(mpBuffer[currentLocation], mpBuffer[currentLocation + 1]) )
+				{
+					break;
+				}
 				currentLocation += 2;
 				bWasValidString = true;
 
@@ -321,7 +493,7 @@ void DumpExtractedSakuraText(const vector<SakuraTextFile>& inSakuraTextFiles, co
 	}
 }
 
-bool ExtractFontSheetAsBitmap(const FileNameContainer& inFileNameContainer, const string& outFileName, const FileData& paletteData)
+bool ExtractFontSheetAsBitmap(const FileNameContainer& inFileNameContainer, const string& outFileName, const FileData& inPaletteFile)
 {
 	FileData fontSheet;
 	if( !fontSheet.InitializeFileData(inFileNameContainer) )
@@ -334,7 +506,7 @@ bool ExtractFontSheetAsBitmap(const FileNameContainer& inFileNameContainer, cons
 	const int tileDimX          = 16;
 	const int tileDimY          = 16;
 	const int tileBytes         = (tileDimX*tileDimY)/2; //4bits per pixel, so only half the amount of bytes as pixels
-	const int tilesPerRow       = 256;
+	const int tilesPerRow       = 255;
 	const int bytesPerTile      = 128;
 	const int bytesPerTileRow   = bytesPerTile*tilesPerRow;
 	const int numRows           = (int)ceil( fontSheet.GetDataSize() / (float)bytesPerTileRow);
@@ -343,23 +515,8 @@ bool ExtractFontSheetAsBitmap(const FileNameContainer& inFileNameContainer, cons
 	const int imageWidth        = numColumns*tileDimX;
 	
 	//Create 32bit palette from the 16 bit(5:5:5 bgr) palette in SakuraTaisen
-	const int paletteSize              = paletteData.GetDataSize();
-	const int numColorInPalette        = paletteSize/2;
-	const int numBytesIn32BitPalette   = numColorInPalette*4;
-	char* p32BitPalette                = new char[numBytesIn32BitPalette];
-	const char* pPaletteData           = paletteData.GetData();
-	const float full5BitValue          = (float)0x1f;
-	for(int i = 0, origIdx = 0; i < numBytesIn32BitPalette; i += 4, origIdx += 2)
-	{
-		unsigned short color = ((pPaletteData[origIdx] << 8) + (unsigned char)pPaletteData[origIdx+1]);
-		
-		//Ugly conversion of 5bit values to 8bit.  Probably a better way to do this.
-		//Masking the r,g,b components and then bringing the result into a [0,255] range.
-		p32BitPalette[i]   = (char)floor( ( ((color & 0x001f)/full5BitValue) * 255.f) + 0.5f);
-		p32BitPalette[i+1] = (char)floor( ( ( ((color & 0x03E0) >> 5)/full5BitValue) * 255.f) + 0.5f);
-		p32BitPalette[i+2] = (char)floor( ( ( ((color & 0x7C00) >> 10)/full5BitValue) * 255.f) + 0.5f);
-		p32BitPalette[i+3] = 0;
-	}
+	PaletteData paletteData;
+	paletteData.CreateFrom15BitData(inPaletteFile.GetData(), inPaletteFile.GetDataSize());
 
 	//Allocate space for tiled data
 	int numTiles                     = fontSheet.GetDataSize()/tileBytes;
@@ -396,9 +553,8 @@ bool ExtractFontSheetAsBitmap(const FileNameContainer& inFileNameContainer, cons
 	}
 
 	BitmapWriter fontBitmap;
-	fontBitmap.CreateBitmap(outFileName, imageWidth, -imageHeight, 4, pOutTiledData, numTiledBytes, p32BitPalette, numBytesIn32BitPalette);	
+	fontBitmap.CreateBitmap(outFileName, imageWidth, -imageHeight, 4, pOutTiledData, numTiledBytes, paletteData.GetData(), paletteData.GetSize());	
 
-	delete[] p32BitPalette;
 	delete[] pOutTiledData;
 
 	return true;
@@ -438,30 +594,15 @@ void DumpSakuraText(const vector<FileNameContainer>& inAllFiles, const string& i
 void ExtractText(const string& inSearchDirectory, const string& inPaletteFileName, const string& inOutputDirectory)
 {
 	//Get the palette
-	FileData paletteData;
-	if( !paletteData.InitializeFileData(inPaletteFileName.c_str(), inPaletteFileName.c_str()) )
+	FileData paletteFile;
+	if( !paletteFile.InitializeFileData(inPaletteFileName.c_str(), inPaletteFileName.c_str()) )
 	{
 		return;
 	}
 
-	//Create 32bit palette from the 16 bit(5:5:5 bgr) palette in SakuraTaisen
-	const int paletteSize              = paletteData.GetDataSize();
-	const int numColorInPalette        = paletteSize/2;
-	const int numBytesIn32BitPalette   = numColorInPalette*4;
-	char* p32BitPalette                = new char[numBytesIn32BitPalette];
-	const char* pPaletteData           = paletteData.GetData();
-	const float full5BitValue          = (float)0x1f;
-	for(int i = 0, origIdx = 0; i < numBytesIn32BitPalette; i += 4, origIdx += 2)
-	{
-		unsigned short color = ((pPaletteData[origIdx] << 8) + (unsigned char)pPaletteData[origIdx+1]);
-
-		//Ugly conversion of 5bit values to 8bit.  Probably a better way to do this.
-		//Masking the r,g,b components and then bringing the result into a [0,255] range.
-		p32BitPalette[i]   = (char)floor( ( ((color & 0x001f)/full5BitValue) * 255.f) + 0.5f);
-		p32BitPalette[i+1] = (char)floor( ( ( ((color & 0x03E0) >> 5)/full5BitValue) * 255.f) + 0.5f);
-		p32BitPalette[i+2] = (char)floor( ( ( ((color & 0x7C00) >> 10)/full5BitValue) * 255.f) + 0.5f);
-		p32BitPalette[i+3] = 0;
-	}
+	//Create 32bit palette data
+	PaletteData paletteData;
+	paletteData.CreateFrom15BitData(paletteFile.GetData(), paletteFile.GetDataSize());
 
 	//Find all files within the requested directory
 	vector<FileNameContainer> allFiles;
@@ -480,7 +621,6 @@ void ExtractText(const string& inSearchDirectory, const string& inPaletteFileNam
 	{
 		printf("ExtractText: There need to be the same amount of sakura text files as font sheets");
 
-		delete[] p32BitPalette;
 		return;
 	}
 
@@ -491,7 +631,7 @@ void ExtractText(const string& inSearchDirectory, const string& inPaletteFileNam
 	const string extension(".bmp");
 
 	//Write out bitmaps for all of the lines found in the sakura text files
-	const size_t numFiles = 1;//sakuraTextFiles.size();
+	const size_t numFiles = sakuraTextFiles.size();
 	for(size_t i = 0; i < numFiles; ++i)
 	{
 		const FileNameContainer& fontSheetName = fontFiles[i];
@@ -522,25 +662,30 @@ void ExtractText(const string& inSearchDirectory, const string& inPaletteFileNam
 		const int tileDim = 16;
 		for(const SakuraString& sakuraString : sakuraText.mLines)
 		{	
-			if( sakuraString.mChars.size() > 256 )
+			if( sakuraString.mChars.size() > 255 )
 			{
 				continue;
 			}
 
+			const int numSakuraLines = sakuraString.GetNumberOfLines();			
+
 			BitmapSurface sakuraStringBmp;
-			sakuraStringBmp.CreateSurface((int)(sakuraString.mChars.size() + 1)*tileDim, tileDim, BitmapSurface::EBitsPerPixel::kBPP_4, p32BitPalette, numBytesIn32BitPalette);
+			sakuraStringBmp.CreateSurface( SakuraString::MaxCharsPerLine*tileDim, tileDim*numSakuraLines, BitmapSurface::EBitsPerPixel::kBPP_4, paletteData.GetData(), paletteData.GetSize());
 	
 			int charIndex = 0;
+			int currRow = 0;
 			for(const SakuraString::SakuraChar& sakuraChar : sakuraString.mChars)
 			{
-				if(sakuraChar.mRow > 3)
+				if( sakuraChar.IsNewLine() )
 				{
-					break;
+					++currRow;
+					charIndex = 0;
+					continue;
 				}
 
 				const char* pData = sakuraFontSheet.GetCharacterTile(sakuraChar);
 
-				sakuraStringBmp.AddTile(pData, sakuraFontSheet.GetTileSizeInBytes(), charIndex*16, 0, tileDim, tileDim);
+				sakuraStringBmp.AddTile(pData, sakuraFontSheet.GetTileSizeInBytes(), charIndex*16, currRow*16, tileDim, tileDim);
 
 				++charIndex;
 			}
@@ -551,8 +696,278 @@ void ExtractText(const string& inSearchDirectory, const string& inPaletteFileNam
 			++stringIndex;
 		}
 	}
+}
 
-	delete[] p32BitPalette;
+void CreateTranslatedFontSheet(const string& inTranslatedFontSheet, const string& outPath)
+{
+	//Read in translated font sheet
+	BitmapReader origTranslatedBmp;
+	if( !origTranslatedBmp.ReadBitmap(inTranslatedFontSheet) )
+	{
+		return;
+	}
+
+	TileExtractor tileExtractor;
+	if( !tileExtractor.ExtractTiles(16, 16, origTranslatedBmp) )
+	{
+		return;
+	}
+
+	//Convert it to the SakuraTaisen format
+	PaletteData sakuraPalette;
+	sakuraPalette.CreateFrom32BitData(origTranslatedBmp.mBitmapData.mPaletteData.mpRGBA, origTranslatedBmp.mBitmapData.mPaletteData.mSizeInBytes);
+
+	const string outPaletteName = outPath + string("OutPalette.BIN");
+	const string outTableName   = outPath + string("TranslatedKNJ.BIN");
+
+	//Ouptut the palette
+	FileWriter outPalette;
+	if( !outPalette.OpenFileForWrite(outPaletteName) )
+	{
+		return;
+	}
+	outPalette.WriteData(sakuraPalette.GetData(), sakuraPalette.GetSize());
+
+	//Write out the SakuraTaisen TBL file
+	FileWriter outTable;
+	outTable.OpenFileForWrite(outTableName);
+	for(const TileExtractor::Tile& tile : tileExtractor.mTiles)
+	{
+		outTable.WriteData(tile.mpTile, tile.mTileSize);
+	}
+}
+
+void ConvertTranslatedText(const string& inTextDir, const string& outDir)
+{
+	//Find all files within the requested directory
+	vector<FileNameContainer> allFiles;
+	FindAllFilesWithinDirectory(inTextDir, allFiles);
+
+	//Grab all text files
+	vector<FileNameContainer> textFiles;
+	GetAllFilesOfType(allFiles, ".txt", textFiles);
+
+	const short spaceLookupValue   = GTranslationLookupTable.GetIndex(' ');
+	const short newLineLookupValue = GTranslationLookupTable.GetIndex('\n');
+	const short spaceIndex         = ((spaceLookupValue&0xff00) << 16) + (spaceLookupValue&0x00ff);
+	const short newLineIndex       = ((newLineLookupValue&0xff00) << 16) + (newLineLookupValue&0x00ff);
+
+	//Parse all text files
+	for(const FileNameContainer& fileInfo : textFiles)
+	{
+		//Parse file
+		TextFileData fileData(fileInfo);
+		fileData.InitializeTextFile();
+
+		const string outFileName = outDir + fileInfo.mNoExtension + string("_TranslatedCodes.txt");
+		TextFileWriter outFile;
+		if( !outFile.OpenFileForWrite(outFileName) )
+		{
+			continue;
+		}
+
+		//Go through each line
+		const int maxCharsPerLine = 15;
+		const int maxLines        = 3;
+		int charCount             = 0;
+		int sakuraLineCount       = 0;
+		int lineIndex             = 1;
+		for(const TextFileData::TextLine& line : fileData.mLines)
+		{
+			printf("Writing out codes for: %s\n", fileInfo.mFileName.c_str());
+
+			//Now each word
+			const int numWords = (int)line.mWords.size();
+			for(int wordIndex = 0; wordIndex < numWords; ++wordIndex)
+			{
+				const std::string& word = line.mWords[wordIndex];
+				const SakuraStringLookUpValue lookUpValues(word);
+		
+				if(word.size() >= maxCharsPerLine)
+				{
+					printf("In %s, unable to write word: %s because it is longer than the max characters allowed per line[%i]", fileInfo.mNoExtension.c_str(), word.c_str(), maxCharsPerLine);
+					break;
+				}
+
+				//Add a new line if needed
+				if( word.size() + charCount >= maxCharsPerLine )
+				{
+					charCount = 0;
+					++sakuraLineCount;
+					if(sakuraLineCount == maxLines)
+					{
+						printf("In %s, unable to write line #%i because only %i lines are allowed", fileInfo.mNoExtension.c_str(), lineIndex, maxLines);
+
+						break;
+					}
+					fprintf(outFile.GetFileHandle(), "%02x%02x ", newLineIndex&0xff00, newLineIndex&0x00ff);					
+				}
+
+				//Print look up values for each character in the word
+				for(const short lookUpValue : lookUpValues.mValuesForEachChar)
+				{
+					fprintf(outFile.GetFileHandle(), "%02x%02x ", lookUpValue&0xff00, lookUpValue&0x00ff);
+					++charCount;
+				}
+
+				//Add a new line if needed
+				if( word.size() + charCount >= maxCharsPerLine )
+				{
+					charCount = 0;
+					++sakuraLineCount;
+					fprintf(outFile.GetFileHandle(), "%02x%02x ", newLineIndex&0xff00, newLineIndex&0x00ff);					
+				}
+				//Insert space
+				else if(wordIndex + 1 < numWords)
+				{
+					fprintf(outFile.GetFileHandle(), "%02x%02x ", spaceIndex&0xff00, spaceIndex&0x00ff);
+				}
+			}
+
+			//Newline after all the words in a line
+			fprintf(outFile.GetFileHandle(), "\n");
+
+			++lineIndex;
+		}
+	}
+}
+
+void PatchKNJ(const string& rootDirectory, const string& newKNJ, const string& outDir)
+{
+	//Find all files within the requested directory
+	vector<FileNameContainer> allFiles;
+	FindAllFilesWithinDirectory(string(rootDirectory), allFiles);
+
+	//Get all knj files
+	vector<FileNameContainer> knjFiles;
+	GetAllFilesOfType(allFiles, "KNJ.BIN", knjFiles);
+
+	//Load patched file
+	FileData newFileData;
+	if( !newFileData.InitializeFileData(newKNJ.c_str(), newKNJ.c_str()) )
+	{
+		return;
+	}
+
+	//Patch original files
+	string outFileName;
+	for(const FileNameContainer& knj : knjFiles)
+	{
+		FileData fileToPatch;
+		if( !fileToPatch.InitializeFileData(knj) )
+		{
+			continue;
+		}
+
+		printf("Patching %s \n", knj.mNoExtension.c_str());
+
+		outFileName = outDir + knj.mFileName;
+
+		FileWriter patchedFile;
+		if( patchedFile.OpenFileForWrite(outFileName) )
+		{
+			patchedFile.WriteData(newFileData.GetData(), newFileData.GetDataSize());
+		}
+		else
+		{
+			printf("Unable to patch: %s \n", knj.mNoExtension.c_str());
+		}
+	}
+}
+
+void PatchPalettes(const string& rootDirectory, const string& originalPalette, const string& newPalette, const string& outDir)
+{
+	//Find all files within the requested directory
+	vector<FileNameContainer> allFiles;
+	FindAllFilesWithinDirectory(string(rootDirectory), allFiles);
+
+	//Load original data
+	FileData origData;
+	if( !origData.InitializeFileData(originalPalette.c_str(), originalPalette.c_str()) )
+	{
+		printf("Unable to patch palettes because original palette not found.\n");
+		return;
+	}
+	
+	//Load new palette data
+	FileData newPaletteData;
+	if( !newPaletteData.InitializeFileData(newPalette.c_str(), newPalette.c_str()) )
+	{
+		printf("Unable to patch palettes because new palette not found.\n");
+		return;
+	}
+
+	vector<FileNameContainer> foundFiles;
+
+	//Go trhough all files in the SakuraTaisen directory searching for palette data
+	for(const FileNameContainer& sakuraFile : allFiles)
+	{
+		printf("Searching within: %s\n", sakuraFile.mNoExtension.c_str());
+
+		FileData sakuraFileData;
+		if( sakuraFileData.InitializeFileData(sakuraFile) )
+		{
+			vector<unsigned long> offsets;
+			sakuraFileData.DoesThisFileContain(origData, offsets, true);
+
+			//If palette data was found, write out new file
+			if( offsets.size() )
+			{
+				foundFiles.push_back(sakuraFile);
+
+				const string& outFileName = outDir + sakuraFile.mFileName;
+				FileWriter outFile;
+				if( !outFile.OpenFileForWrite(outFileName) )
+				{
+					printf("Unable to create patched file: %s \n", outFileName.c_str());
+					continue;
+				}
+
+				//Write out patched data
+				unsigned long origSakuraOffset = 0;
+				unsigned long totalWritten = 0;
+				for(size_t offsetIndex = 0; offsetIndex < offsets.size(); ++offsetIndex)
+				{
+					unsigned long nextOffset = offsets[offsetIndex];
+
+					assert( origSakuraOffset < sakuraFileData.GetDataSize());
+					assert( origSakuraOffset < nextOffset );
+					outFile.WriteData(sakuraFileData.GetData() + origSakuraOffset, nextOffset - origSakuraOffset);
+					outFile.WriteData(newPaletteData.GetData(), newPaletteData.GetDataSize());
+
+					totalWritten += (nextOffset - origSakuraOffset) + 32;
+
+					origSakuraOffset = nextOffset + newPaletteData.GetDataSize();					
+				}
+
+				//Write out remaining porition of the file
+				if( origSakuraOffset < sakuraFileData.GetDataSize() )
+				{
+					outFile.WriteData(sakuraFileData.GetData() + origSakuraOffset, sakuraFileData.GetDataSize() - origSakuraOffset);
+
+					totalWritten += sakuraFileData.GetDataSize() - origSakuraOffset;
+				}				
+
+				outFile.Close();
+
+				FileData patchedFile;
+				if( !patchedFile.InitializeFileData(outFileName.c_str(), outFileName.c_str()) )
+				{
+					printf("Unable to verify patched file size: %s\n", outFileName.c_str());
+				}
+				assert(patchedFile.GetDataSize() == sakuraFileData.GetDataSize());
+				if( patchedFile.GetDataSize() != sakuraFileData.GetDataSize() )
+				{
+					printf("Patched file size is incorrect: %s\n", outFileName.c_str());
+				}
+			}
+		}
+	}
+
+	for(const FileNameContainer& patchedFile : foundFiles)
+	{
+		printf("Patched: %s\n", patchedFile.mFileName.c_str());
+	}
 }
 
 void PrintHelp()
@@ -562,6 +977,10 @@ void PrintHelp()
 	printf("ExtractRawText rootSakuraTaisenDirectory outDirectory\n");
 	printf("ExtractFontSheets rootSakuraTaisenDirectory paletteFileName outDirectory\n");
 	printf("ExtractText rootSakuraTaisenDirectory paletteFileName outDirectory\n");
+	printf("CreateTranslatedFontSheets translatedFontSheet outDirectory\n");
+	printf("ConvertTranslatedText translatedTextDir outDirectory\n");
+	printf("PatchGameKNJ rootSakuraTaisenDirectory newKNJ outDirectory\n");
+	printf("PatchPalettes rootSakuraTaisenDirectory originalPalette newPalette outDirectory\n");
 }
 
 int main(int argc, char *argv[])
@@ -598,11 +1017,42 @@ int main(int argc, char *argv[])
 	}
 	else if( command == string("ExtractText" ) && argc == 5 )
 	{
-		const string searchDirectory   =  string(argv[2]);
-		const string paletteFileName   =  string(argv[3]);
+		const string searchDirectory   = string(argv[2]);
+		const string paletteFileName   = string(argv[3]);
 		const string outDirectory      = string(argv[4]) + string("\\");
 
 		ExtractText(searchDirectory, paletteFileName, outDirectory);
+	}
+	else if (command == "CreateTranslatedFontSheets" && argc == 4 )
+	{
+		const string translatedFontSheet = string(argv[2]);
+		const string outDirectory        = string(argv[3]) + string("\\");
+
+		CreateTranslatedFontSheet(translatedFontSheet, outDirectory);
+	}
+	else if (command == "ConvertTranslatedText" && argc == 4 )
+	{
+		const string translatedTextDir = string(argv[2]);
+		const string outDirectory      = string(argv[3]) + string("\\");
+
+		ConvertTranslatedText(translatedTextDir, outDirectory);
+	}
+	else if( command == "PatchGameKNJ" && argc == 5 )
+	{
+		const string searchDirectory = string(argv[2]);
+		const string newKNJ          = string(argv[3]);
+		const string outDir          = string(argv[4]) + string("\\");
+
+		PatchKNJ(searchDirectory, newKNJ, outDir);
+	}
+	else if( command == "PatchPalettes" && argc == 6 )
+	{
+		const string searchDirectory = string(argv[2]);
+		const string origPalette     = string(argv[3]);
+		const string newPalette      = string(argv[4]);
+		const string outDir          = string(argv[5]) + string("\\");
+
+		PatchPalettes(searchDirectory, origPalette, newPalette, outDir);
 	}
 	else
 	{
