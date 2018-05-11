@@ -297,15 +297,38 @@ public:
 	}
 };
 
+static bool FindNextSakuraString(const char* pBuffer, unsigned long &inOutLocation, const unsigned long fileSize)
+{
+	while( inOutLocation + 6 < fileSize )
+	{
+		if (pBuffer[inOutLocation + 0] == 0 &&
+			pBuffer[inOutLocation + 1] == 0 &&
+			pBuffer[inOutLocation + 2] == 0 &&
+			pBuffer[inOutLocation + 3] == 0 &&
+			pBuffer[inOutLocation + 4] == 0 &&
+			pBuffer[inOutLocation + 5] == 0
+			)
+		{
+			inOutLocation += 6;
+			return true;
+		}
+
+		++inOutLocation;
+	}
+
+	return false;
+}
+
 struct SakuraTextFile
 {
 	FileNameContainer    mFileName;
 	vector<SakuraString> mLines;
 
 private:
-	unsigned long mFileSize;
-	FILE*         mpFile;
-	char*         mpBuffer;
+	unsigned long       mFileSize;
+	FILE*               mpFile;
+	char*               mpBuffer;
+	vector<const char*> mDataSegments;
 
 public:
 	SakuraTextFile(const FileNameContainer& fileName) : mFileName(fileName), mFileSize(0), mpFile(nullptr), mpBuffer(nullptr){}
@@ -363,13 +386,14 @@ public:
 				return true;
 			}
 
+			/*
 			if( mpBuffer[inOutLocation + 0] == 0 && 
 				mpBuffer[inOutLocation + 1] == 0 && 
 				mpBuffer[inOutLocation + 2] != 0 )
 			{
 				return false;
 			}
-
+			*/
 			++inOutLocation;
 		}
 
@@ -404,6 +428,13 @@ public:
 					break;
 				}
 			}
+
+			//Add data segment
+			assert(nextStringLocation > currentLocation);
+			const unsigned long dataSize = nextStringLocation - currentLocation;
+			char* pDataSegment           = new char[dataSize];
+			memcpy(pDataSegment, mpBuffer + currentLocation, dataSize);
+			mDataSegments.push_back(pDataSegment);
 
 			currentLocation = nextStringLocation;
 
@@ -970,6 +1001,63 @@ void PatchPalettes(const string& rootDirectory, const string& originalPalette, c
 	}
 }
 
+void InsertText(const string& rootSakuraTaisenDirectory, const string& translatedTextDirectory, const string& outDirectory)
+{
+	//Find all translated text files
+	vector<FileNameContainer> translatedTextFiles;
+	FindAllFilesWithinDirectory(string(translatedTextDirectory), translatedTextFiles);
+	if( !translatedTextFiles.size() )
+	{
+		return;
+	}
+
+	//Find all files within the requested directory
+	vector<FileNameContainer> allFiles;
+	FindAllFilesWithinDirectory(rootSakuraTaisenDirectory, allFiles);
+	
+	//Get all files containing dialog
+	vector<FileNameContainer> textFiles;
+	GetAllFilesOfType(inAllFiles, "TBL.BIN", textFiles);
+
+	//Extract the text
+	vector<SakuraTextFile> sakuraTextFiles;
+	FindAllSakuraText(textFiles, sakuraTextFiles);
+
+	//Insert text
+	for(const SakuraTextFile& sakuraFile : sakuraTextFiles)
+	{
+		//Search for the corresponding translated file name
+		for(const FileNameContainer& translatedFileName : translatedTextFiles)
+		{
+			if( translatedFileName.mNoExtension == sakuraFile.mFileName.mNoExtension )
+			{
+				//Open translated text file
+				TextFileData translatedFile(translatedFileName);
+				if( !translatedFile.InitializeTextFile() )
+				{
+					break;
+				}
+
+				//Create output file
+				const string outFileName = outDirectory + sakuraFile.mFileName.mFileName;
+				FileWriter outFile;
+				if( !outFile.OpenFileForWrite(outFileName) )
+				{
+					break;
+				}
+
+				//Make sure we have the correct amount of lines
+				if( sakuraFile.mLines.size() > translatedFile.mLines.size() )
+				{
+					printf("Unable to translate file: %s because the translation has too many lines.\n", translatedFileName.mNoExtension.c_str());
+				}
+
+				break;
+			}
+		}
+	}
+}
+
 void PrintHelp()
 {
 	printf("usage: SakuraTaisen [command]\n");
@@ -981,6 +1069,7 @@ void PrintHelp()
 	printf("ConvertTranslatedText translatedTextDir outDirectory\n");
 	printf("PatchGameKNJ rootSakuraTaisenDirectory newKNJ outDirectory\n");
 	printf("PatchPalettes rootSakuraTaisenDirectory originalPalette newPalette outDirectory\n");
+	printf("InsertText rootSakuraTaisenDirectory translatedText outDirectory\n");
 }
 
 int main(int argc, char *argv[])
@@ -1053,6 +1142,14 @@ int main(int argc, char *argv[])
 		const string outDir          = string(argv[5]) + string("\\");
 
 		PatchPalettes(searchDirectory, origPalette, newPalette, outDir);
+	}
+	else if( command == "InsertText" && argc == 5 )
+	{
+		const string searchDirectory = string(argv[2]);
+		const string translatedText  = string(argv[3]);
+		const string outDir          = string(argv[4]) + string("\\");
+
+		InsertText(searchDirectory, translatedText, outDir);
 	}
 	else
 	{
