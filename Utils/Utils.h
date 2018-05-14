@@ -103,6 +103,7 @@ public:
 	bool        CreateFrom32BitData(const char* pInData, int inSize);
 	const char* GetData() const {return mpPaletteData;}
 	int         GetSize() const {return mNumBytesInPalette;}
+	void        SetValue(int index, unsigned short value);
 };
 
 struct BitmapData

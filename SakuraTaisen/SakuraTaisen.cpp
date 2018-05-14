@@ -817,6 +817,32 @@ void CreateTranslatedFontSheet(const string& inTranslatedFontSheet, const string
 	PaletteData sakuraPalette;
 	sakuraPalette.CreateFrom32BitData(origTranslatedBmp.mBitmapData.mPaletteData.mpRGBA, origTranslatedBmp.mBitmapData.mPaletteData.mSizeInBytes);
 
+	//Fix up palette
+	//First index needs to have the transparent color, in our case that's white
+	int indexOfAlphaColor = -1;
+	const unsigned short alphaColor = 0xff7f; //In little endian order
+	for(int i = 0; i < 16; ++i)
+	{
+		assert(i*2 < sakuraPalette.GetSize());
+
+		const unsigned short color = *((short*)(sakuraPalette.GetData() + i*2));
+		if( color == alphaColor )
+		{
+			const unsigned short oldColor0 = *((unsigned short*)sakuraPalette.GetData());
+			sakuraPalette.SetValue(0, alphaColor);
+			sakuraPalette.SetValue(i, oldColor0);
+			indexOfAlphaColor = i;
+			break;
+		}
+	}
+
+	if( indexOfAlphaColor == -1 )
+	{
+		printf("Alpha Color not found.  Palette will not be correct. \n");
+		indexOfAlphaColor = 0;
+	}
+
+
 	const string outPaletteName = outPath + string("OutPalette.BIN");
 	const string outTableName   = outPath + string("TranslatedKNJ.BIN");
 
@@ -833,21 +859,27 @@ void CreateTranslatedFontSheet(const string& inTranslatedFontSheet, const string
 	outTable.OpenFileForWrite(outTableName);
 	for(TileExtractor::Tile& tile : tileExtractor.mTiles)
 	{
-		for(unsigned int i = 0; i < tile.mTileSize; i+=2)
+		for(unsigned int i = 0; i < tile.mTileSize; i++)
 		{
-			const int pixel1 = (tile.mpTile[i] & 0xF0) >> 4; 
-			const int pixel2 = (tile.mpTile[i+1] & 0x0F);
+			const unsigned short paletteIndex1 = (tile.mpTile[i] & 0xF0) >> 4; 
+			const unsigned short paletteIndex2 = (tile.mpTile[i] & 0x0F);
 			
-			const unsigned short color1 = *((short*)(sakuraPalette.GetData() + pixel1*2));
-			const unsigned short color2 = *((short*)(sakuraPalette.GetData() + pixel2*2));
-
-			if( color1 == 0xFF7F )
+			if( paletteIndex1 == 0 )
 			{
-		//		tile.mpTile[i] = 0;
+				tile.mpTile[i] = (indexOfAlphaColor << 4) + paletteIndex2;
 			}
-			if( color2 == 0xFF7F )
+			else if( paletteIndex1 == indexOfAlphaColor )
 			{
-			//	tile.mpTile[i+1] = 0;
+				tile.mpTile[i] = (char)paletteIndex2;
+			}
+
+			if( paletteIndex2 == 0 )
+			{
+				tile.mpTile[i] = (tile.mpTile[i]&0xF0) + indexOfAlphaColor;
+			}
+			else if( paletteIndex2 == indexOfAlphaColor )
+			{
+				tile.mpTile[i] = tile.mpTile[i]&0xF0;
 			}
 		}
 

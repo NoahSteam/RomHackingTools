@@ -364,6 +364,13 @@ bool PaletteData::CreateFrom32BitData(const char* pInPaletteData, int inPaletteS
 	return true;
 }
 
+void PaletteData::SetValue(int index, unsigned short value)
+{
+	assert(index*2 + 1 < mNumBytesInPalette);
+
+	memcpy(mpPaletteData + index*2, &value, sizeof(value));
+}
+
 ////////////////////////////////
 //        BitmapWriter        //
 ////////////////////////////////
@@ -550,8 +557,8 @@ bool TileExtractor::ExtractTiles(unsigned int tileWidth, unsigned int tileHeight
 					assert(tilePixelY*numBytesPerTileWidth + tilePixelX < numBytesPerTile);
 					assert(linearDataIndex + linearY*stride + tilePixelX < (unsigned int)inBitmap.mBitmapData.mColorData.mSizeInBytes);
 
-					const unsigned char linearColorValue = pLinearData[linearDataIndex + linearY*stride + tilePixelX];					
-					mTiles[currTile].mpTile[tilePixelY*numBytesPerTileWidth + tilePixelX] = linearColorValue == 0xff ? 0 : linearColorValue;
+					const unsigned char linearColorValue = pLinearData[linearDataIndex + linearY*stride + tilePixelX];
+					mTiles[currTile].mpTile[tilePixelY*numBytesPerTileWidth + tilePixelX] = linearColorValue;
 				}
 			}
 
