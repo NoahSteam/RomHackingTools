@@ -151,7 +151,7 @@ public:
 	{
 		if (this != &other)
 		{
-			delete mpData;
+			delete[] mpData;
 			mpData       = other.mpData;
 			other.mpData = nullptr;
 		}
@@ -181,6 +181,13 @@ struct SakuraString
 			mIndex = (inRow << 8) + inColumn;
 			assert(mIndex > 0);
 		}
+		
+		SakuraChar(unsigned short inIndex)
+		{
+			mRow    = (inIndex & 0xff00) >> 8;
+			mColumn = (inIndex & 0x00ff);
+			mIndex  = inIndex;
+		}
 
 		bool IsNewLine() const
 		{
@@ -206,6 +213,15 @@ struct SakuraString
 		mChars.push_back( std::move(SakuraChar(row, column)) );
 
 		return true;
+	}
+
+	void AddString(const string& inString)
+	{
+		for(string::const_iterator iter = inString.begin(); iter != inString.end(); ++iter)
+		{
+			const unsigned short value = GTranslationLookupTable.GetIndex(*iter);
+			mChars.push_back( std::move(SakuraChar(value)) );
+		}
 	}
 
 	int GetNumberOfLines() const
@@ -250,6 +266,19 @@ struct SakuraString
 
 		return maxCharacters;
 	}
+
+	void GetDataArray(vector<unsigned short>& outData) const
+	{
+		outData.clear();
+
+		for(const SakuraChar& sakuraChar : mChars)
+		{
+			//Change endianness so that it gets written in big endian order
+			const short valueBE = ((sakuraChar.mIndex&0xff00) >> 8) + ((sakuraChar.mIndex & 0x00ff) << 8);
+
+			outData.push_back(valueBE);
+		}
+	}
 };
 
 class SakuraFontSheet
@@ -276,7 +305,7 @@ public:
 		const int numTilesInFile   = fontFile.GetDataSize() / numBytesPerTile;
 		for(int currTile = 0; currTile < numTilesInFile; ++currTile)
 		{
-			mCharacterTiles.push_back( SakuraFontTile(&pFontSheetData[currTile*numBytesPerTile], numBytesPerTile) );
+			mCharacterTiles.push_back( std::move(SakuraFontTile(&pFontSheetData[currTile*numBytesPerTile], numBytesPerTile)) );
 		}
 
 		return true;
@@ -297,44 +326,82 @@ public:
 	}
 };
 
-static bool FindNextSakuraString(const char* pBuffer, unsigned long &inOutLocation, const unsigned long fileSize)
-{
-	while( inOutLocation + 6 < fileSize )
-	{
-		if (pBuffer[inOutLocation + 0] == 0 &&
-			pBuffer[inOutLocation + 1] == 0 &&
-			pBuffer[inOutLocation + 2] == 0 &&
-			pBuffer[inOutLocation + 3] == 0 &&
-			pBuffer[inOutLocation + 4] == 0 &&
-			pBuffer[inOutLocation + 5] == 0
-			)
-		{
-			inOutLocation += 6;
-			return true;
-		}
-
-		++inOutLocation;
-	}
-
-	return false;
-}
-
 struct SakuraTextFile
 {
-	FileNameContainer    mFileName;
-	vector<SakuraString> mLines;
+	struct SakuraDataSegment
+	{
+		char*  pData;
+		size_t dataSize;
+
+		SakuraDataSegment(char* pInData, size_t inSize) : pData(pInData), dataSize(inSize) {}
+
+		SakuraDataSegment(SakuraDataSegment&& rhs) : pData(rhs.pData), dataSize(rhs.dataSize)
+		{
+			rhs.pData = nullptr;
+		}
+
+		SakuraDataSegment& operator=(SakuraDataSegment&& rhs)
+		{
+			if( this != &rhs )
+			{
+				delete[] pData;
+				pData     = rhs.pData;
+				dataSize  = rhs.dataSize;
+				rhs.pData = nullptr;
+			}
+
+			return *this;
+		}
+		
+		~SakuraDataSegment()
+		{
+			delete[] pData;
+			pData = nullptr;
+		}
+	};
+
+	FileNameContainer         mFileName;
+	vector<SakuraString>      mLines;
+	vector<SakuraDataSegment> mDataSegments;
 
 private:
 	unsigned long       mFileSize;
 	FILE*               mpFile;
 	char*               mpBuffer;
-	vector<const char*> mDataSegments;
 
 public:
 	SakuraTextFile(const FileNameContainer& fileName) : mFileName(fileName), mFileSize(0), mpFile(nullptr), mpBuffer(nullptr){}
 
+	SakuraTextFile(SakuraTextFile&& rhs) : mFileName(std::move(rhs.mFileName)), mLines(std::move(rhs.mLines)), mDataSegments(std::move(rhs.mDataSegments)), mFileSize(rhs.mFileSize), 
+		                                   mpFile(rhs.mpFile), mpBuffer(std::move(rhs.mpBuffer))
+	{
+		rhs.mpBuffer = nullptr;
+		rhs.mpFile   = nullptr;
+	}
+
+	SakuraTextFile& operator=(SakuraTextFile&& rhs)
+	{
+		mFileName     = std::move(rhs.mFileName);
+		mLines        = std::move(rhs.mLines);
+		mDataSegments = std::move(rhs.mDataSegments);
+		mFileSize     = rhs.mFileSize;
+		mpFile        = rhs.mpFile;
+		mpBuffer      = std::move(rhs.mpBuffer);
+
+		rhs.mpFile    = nullptr;
+		rhs.mpBuffer  = nullptr;
+	}
+
 	~SakuraTextFile()
 	{
+		for(size_t i = 0; i < mDataSegments.size(); ++i)
+		{
+			delete[] mDataSegments[i].pData;
+
+			mDataSegments[i].pData = nullptr;
+		}
+		mDataSegments.clear();
+
 		Close();
 	}
 
@@ -402,15 +469,17 @@ public:
 
 	void ReadInText()
 	{
-		unsigned long currentLocation = 0;
+		unsigned long currentLocation   = 0;
+		unsigned long dataStartLocation = 0;
 		bool bNextStringFound = FindNextSakuraString(currentLocation);
 		bool bLastStringFound = false;
 
 		while( bNextStringFound && !bLastStringFound && currentLocation < mFileSize )
 		{
-			unsigned long nextStringLocation = currentLocation;
-			bNextStringFound                 = FindNextSakuraString(nextStringLocation);
-			const unsigned long endOfString  = bNextStringFound ? nextStringLocation - 6 : mFileSize;
+			unsigned long nextStringLocation   = currentLocation;
+			bNextStringFound                   = FindNextSakuraString(nextStringLocation);
+			const unsigned long endOfString    = bNextStringFound ? nextStringLocation - 6 : mFileSize;
+			const unsigned long stringStartLoc = currentLocation;
 
 			SakuraString newLineOfText;
 			bool bWasValidString  = false;
@@ -430,13 +499,14 @@ public:
 			}
 
 			//Add data segment
-			assert(nextStringLocation > currentLocation);
-			const unsigned long dataSize = nextStringLocation - currentLocation;
+			assert(stringStartLoc > dataStartLocation);
+			const unsigned long dataSize = stringStartLoc - dataStartLocation;
 			char* pDataSegment           = new char[dataSize];
-			memcpy(pDataSegment, mpBuffer + currentLocation, dataSize);
-			mDataSegments.push_back(pDataSegment);
+			memcpy(pDataSegment, mpBuffer + dataStartLocation, dataSize);
+			mDataSegments.push_back( std::move(SakuraDataSegment(pDataSegment, dataSize)) );
 
-			currentLocation = nextStringLocation;
+			dataStartLocation = currentLocation;
+			currentLocation   = nextStringLocation;			
 
 			if( bWasValidString )
 			{
@@ -455,7 +525,7 @@ public:
 		delete[] mpBuffer;
 
 		mpBuffer = nullptr;
-		mpFile  = nullptr;
+		mpFile   = nullptr;
 	}
 };
 
@@ -472,9 +542,8 @@ void FindAllSakuraText(const vector<FileNameContainer>& inFiles, vector<SakuraTe
 		}
 
 		sakuraFile.ReadInText();
-		sakuraFile.Close();
 
-		outText.push_back( std::move(sakuraFile) );
+		outText.push_back( std::move(sakuraFile) );		
 	}
 }
 
@@ -762,8 +831,26 @@ void CreateTranslatedFontSheet(const string& inTranslatedFontSheet, const string
 	//Write out the SakuraTaisen TBL file
 	FileWriter outTable;
 	outTable.OpenFileForWrite(outTableName);
-	for(const TileExtractor::Tile& tile : tileExtractor.mTiles)
+	for(TileExtractor::Tile& tile : tileExtractor.mTiles)
 	{
+		for(unsigned int i = 0; i < tile.mTileSize; i+=2)
+		{
+			const int pixel1 = (tile.mpTile[i] & 0xF0) >> 4; 
+			const int pixel2 = (tile.mpTile[i+1] & 0x0F);
+			
+			const unsigned short color1 = *((short*)(sakuraPalette.GetData() + pixel1*2));
+			const unsigned short color2 = *((short*)(sakuraPalette.GetData() + pixel2*2));
+
+			if( color1 == 0xFF7F )
+			{
+		//		tile.mpTile[i] = 0;
+			}
+			if( color2 == 0xFF7F )
+			{
+			//	tile.mpTile[i+1] = 0;
+			}
+		}
+
 		outTable.WriteData(tile.mpTile, tile.mTileSize);
 	}
 }
@@ -1017,7 +1104,7 @@ void InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 	
 	//Get all files containing dialog
 	vector<FileNameContainer> textFiles;
-	GetAllFilesOfType(inAllFiles, "TBL.BIN", textFiles);
+	GetAllFilesOfType(allFiles, "TBL.BIN", textFiles);
 
 	//Extract the text
 	vector<SakuraTextFile> sakuraTextFiles;
@@ -1047,9 +1134,61 @@ void InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 				}
 
 				//Make sure we have the correct amount of lines
-				if( sakuraFile.mLines.size() > translatedFile.mLines.size() )
+				if( sakuraFile.mLines.size() < translatedFile.mLines.size() )
 				{
 					printf("Unable to translate file: %s because the translation has too many lines.\n", translatedFileName.mNoExtension.c_str());
+					break;
+				}
+
+				//Get converted lines of text				
+				vector<SakuraString> translatedLines;
+				for(const TextFileData::TextLine& textLine : translatedFile.mLines)
+				{
+					SakuraString translatedString;
+					for(const string& word : textLine.mWords)
+					{
+						translatedString.AddString(word);
+					}
+
+					translatedLines.push_back( std::move(translatedString) );
+				}
+
+				//Fill out everything else with "Untranslated"
+				SakuraString translatedSakuraString;
+				translatedSakuraString.AddString( string("Untranslated") );
+				const size_t untranslatedCount = sakuraFile.mLines.size() - translatedFile.mLines.size();
+				for(size_t i = 0; i < untranslatedCount; ++i)
+				{
+					translatedLines.push_back( translatedSakuraString );
+				}
+
+				//Output data
+				const size_t numDataSegments    = sakuraFile.mDataSegments.size();
+				const size_t numTranslatedLines = translatedLines.size();
+				size_t dataIndex                = 0;
+				size_t translationIndex         = 0;
+				while(1)
+				{
+					if( dataIndex < numDataSegments )
+					{						
+						outFile.WriteData(sakuraFile.mDataSegments[dataIndex].pData, sakuraFile.mDataSegments[dataIndex].dataSize);
+					}
+
+					if( translationIndex < numTranslatedLines )
+					{
+						vector<unsigned short> translationData;
+						translatedLines[dataIndex].GetDataArray(translationData);
+
+						outFile.WriteData(translationData.data(), translationData.size()*sizeof(short));
+					}
+
+					++dataIndex;
+					++translationIndex;
+
+					if( dataIndex >= numDataSegments && translationIndex >= numTranslatedLines )
+					{
+						break;
+					}
 				}
 
 				break;

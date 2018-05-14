@@ -354,7 +354,7 @@ bool PaletteData::CreateFrom32BitData(const char* pInPaletteData, int inPaletteS
 		const unsigned char b = (unsigned char)floor( ((unsigned char)(pInPaletteData[i+2])/255.f)*31.f + 0.5f);
 
 		//Swap byte order so data is written in big endian order
-		unsigned short outColor = (b << 10) + (g << 5) + r;
+		unsigned short outColor = (r << 10) + (g << 5) + b;
 		std::reverse((char*)&outColor, ((char*)&outColor + 2));
 
 		//copy data over to the palette
@@ -550,7 +550,8 @@ bool TileExtractor::ExtractTiles(unsigned int tileWidth, unsigned int tileHeight
 					assert(tilePixelY*numBytesPerTileWidth + tilePixelX < numBytesPerTile);
 					assert(linearDataIndex + linearY*stride + tilePixelX < (unsigned int)inBitmap.mBitmapData.mColorData.mSizeInBytes);
 
-					mTiles[currTile].mpTile[tilePixelY*numBytesPerTileWidth + tilePixelX] = pLinearData[linearDataIndex + linearY*stride + tilePixelX];
+					const unsigned char linearColorValue = pLinearData[linearDataIndex + linearY*stride + tilePixelX];					
+					mTiles[currTile].mpTile[tilePixelY*numBytesPerTileWidth + tilePixelX] = linearColorValue == 0xff ? 0 : linearColorValue;
 				}
 			}
 

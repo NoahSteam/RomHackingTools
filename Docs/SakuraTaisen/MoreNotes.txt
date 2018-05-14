@@ -9,4 +9,7 @@
 
 ExtractText d:\Rizwan\SakuraWars\Disc1 d:\Rizwan\SakuraWars\ExtractedFontSheets\Palette.bin d:\Rizwan\SakuraWars\ExtractedTextImages
 ExtractFontSheets d:\Rizwan\SakuraWars\Test d:\Rizwan\SakuraWars\TranslatedFontSheets\OutPalette.bin d:\Rizwan\SakuraWars\Test
-PatchPalettes d:\Rizwan\SakuraWars\Disc1 d:\Rizwan\SakuraWars\OriginalFontPalette.bin d:\Rizwan\SakuraWars\TranslatedFontSheets\NewFontPalette.bin d:\Rizwan\SakuraWars\PatchedPalettes
+PatchPalettes d:\Rizwan\SakuraWars\Disc1 d:\Rizwan\SakuraWars\OriginalFontPalette.bin d:\Rizwan\SakuraWars\TranslatedFontSheets\OutPalette.BIN d:\Rizwan\SakuraWars\PatchedPalettes
+InsertText d:\Rizwan\SakuraWars\Disc1 d:\Rizwan\SakuraWars\TranslatedText d:\Rizwan\SakuraWars\TranslatedTBL
+ExtractRawText d:\Rizwan\SakuraWars\TranslatedTBL d:\Rizwan\SakuraWars\TranslatedTBL
+CreateTranslatedFontSheets d:\Rizwan\SakuraWars\TranslatedFontSheets\256x256.bmp d:\Rizwan\SakuraWars\TranslatedFontSheets
