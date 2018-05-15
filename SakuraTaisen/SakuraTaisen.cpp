@@ -40,66 +40,66 @@ class SakuraTranslationTable
 public:
 	SakuraTranslationTable()
 	{
-		mTranslationTable['A']  = 1;
-		mTranslationTable['B']  = 2;
-		mTranslationTable['C']  = 3;
-		mTranslationTable['D']  = 4;
-		mTranslationTable['E']  = 5;
-		mTranslationTable['F']  = 6;
-		mTranslationTable['G']  = 7;
-		mTranslationTable['H']  = 8;
-		mTranslationTable['I']  = 9;
-		mTranslationTable['J']  = 10;
-		mTranslationTable['K']  = 11;
-		mTranslationTable['L']  = 12;
-		mTranslationTable['M']  = 13;
-		mTranslationTable['N']  = 14;
-		mTranslationTable['O']  = 15;
-		mTranslationTable['P']  = 16;
-		mTranslationTable['Q']  = 17;
-		mTranslationTable['R']  = 18;
-		mTranslationTable['S']  = 19;
-		mTranslationTable['T']  = 20;
-		mTranslationTable['U']  = 21;
-		mTranslationTable['V']  = 22;
-		mTranslationTable['W']  = 23;
-		mTranslationTable['X']  = 24;
-		mTranslationTable['Y']  = 25;
-		mTranslationTable['Z']  = 26;
-		mTranslationTable['a']  = 27;
-		mTranslationTable['b']  = 28;
-		mTranslationTable['c']  = 29;
-		mTranslationTable['d']  = 30;
-		mTranslationTable['e']  = 31;
-		mTranslationTable['f']  = 32;
-		mTranslationTable['g']  = 33;
-		mTranslationTable['h']  = 34;
-		mTranslationTable['i']  = 35;
-		mTranslationTable['j']  = 36;
-		mTranslationTable['k']  = 37;
-		mTranslationTable['l']  = 38;
-		mTranslationTable['m']  = 39;
-		mTranslationTable['n']  = 40;
-		mTranslationTable['o']  = 41;
-		mTranslationTable['p']  = 42;
-		mTranslationTable['q']  = 43;
-		mTranslationTable['r']  = 44;
-		mTranslationTable['s']  = 45;
-		mTranslationTable['t']  = 46;
-		mTranslationTable['u']  = 47;
-		mTranslationTable['v']  = 48;
-		mTranslationTable['w']  = 49;
-		mTranslationTable['x']  = 50;
-		mTranslationTable['y']  = 51;
-		mTranslationTable['z']  = 52;
-		mTranslationTable['.']  = 53;
-		mTranslationTable['@']  = 54;
-		mTranslationTable['!']  = 55;
-		mTranslationTable['?']  = 56;
-		mTranslationTable[',']  = 57;
-		mTranslationTable['\''] = 58;
-		mTranslationTable[' ']  = 59;
-		mTranslationTable['-']  = 59; //Todo, add this into the table
+		mTranslationTable['A']  = 66;
+		mTranslationTable['B']  = 67;
+		mTranslationTable['C']  = 68;
+		mTranslationTable['D']  = 69;
+		mTranslationTable['E']  = 70;
+		mTranslationTable['F']  = 71;
+		mTranslationTable['G']  = 72;
+		mTranslationTable['H']  = 73;
+		mTranslationTable['I']  = 74;
+		mTranslationTable['J']  = 75;
+		mTranslationTable['K']  = 76;
+		mTranslationTable['L']  = 77;
+		mTranslationTable['M']  = 78;
+		mTranslationTable['N']  = 79;
+		mTranslationTable['O']  = 80;
+		mTranslationTable['P']  = 81;
+		mTranslationTable['Q']  = 82;
+		mTranslationTable['R']  = 83;
+		mTranslationTable['S']  = 84;
+		mTranslationTable['T']  = 85;
+		mTranslationTable['U']  = 86;
+		mTranslationTable['V']  = 87;
+		mTranslationTable['W']  = 88;
+		mTranslationTable['X']  = 89;
+		mTranslationTable['Y']  = 90;
+		mTranslationTable['Z']  = 91;
+		mTranslationTable['a']  = 98;
+		mTranslationTable['b']  = 99;
+		mTranslationTable['c']  = 100;
+		mTranslationTable['d']  = 101;
+		mTranslationTable['e']  = 102;
+		mTranslationTable['f']  = 103;
+		mTranslationTable['g']  = 104;
+		mTranslationTable['h']  = 105;
+		mTranslationTable['i']  = 106;
+		mTranslationTable['j']  = 107;
+		mTranslationTable['k']  = 108;
+		mTranslationTable['l']  = 109;
+		mTranslationTable['m']  = 110;
+		mTranslationTable['n']  = 111;
+		mTranslationTable['o']  = 112;
+		mTranslationTable['p']  = 113;
+		mTranslationTable['q']  = 114;
+		mTranslationTable['r']  = 115;
+		mTranslationTable['s']  = 116;
+		mTranslationTable['t']  = 117;
+		mTranslationTable['u']  = 118;
+		mTranslationTable['v']  = 119;
+		mTranslationTable['w']  = 120;
+		mTranslationTable['x']  = 121;
+		mTranslationTable['y']  = 122;
+		mTranslationTable['z']  = 123;
+		mTranslationTable['.']  = 47;
+		mTranslationTable['@']  = 134;
+		mTranslationTable['!']  = 34;
+		mTranslationTable['?']  = 64;
+		mTranslationTable[',']  = 45;
+		mTranslationTable['\''] = 96;
+		mTranslationTable[' ']  = 33;
+		mTranslationTable['-']  = 46; //Todo, add this into the table
 		mTranslationTable['\n'] = 0x0a0d;
 	}
 
@@ -866,7 +866,7 @@ void CreateTranslatedFontSheet(const string& inTranslatedFontSheet, const string
 			
 			if( paletteIndex1 == 0 )
 			{
-				tile.mpTile[i] = (indexOfAlphaColor << 4) + paletteIndex2;
+				tile.mpTile[i] = (char)((indexOfAlphaColor << 4) + paletteIndex2);
 			}
 			else if( paletteIndex1 == indexOfAlphaColor )
 			{
@@ -875,7 +875,7 @@ void CreateTranslatedFontSheet(const string& inTranslatedFontSheet, const string
 
 			if( paletteIndex2 == 0 )
 			{
-				tile.mpTile[i] = (tile.mpTile[i]&0xF0) + indexOfAlphaColor;
+				tile.mpTile[i] = (char)((tile.mpTile[i]&0xF0) + indexOfAlphaColor);
 			}
 			else if( paletteIndex2 == indexOfAlphaColor )
 			{
