@@ -11,7 +11,7 @@
 0006C680
 
 //DialogAll1.bin
-Found a match in 0100.BIN @0x00204000
+Found a match in 0100.BIN    @0x00204000
 Found a match in 0100FCE.BIN @0x00251000
 Found a match in 0100KNJ.BIN @0x05c03000
 
@@ -36,3 +36,15 @@ WALL1.BIN palettes @0x00000180
 MINICOOK.BIN palettes @0x0007a130
 
 -Text strings are stored as indices into font sheet in RowXColumn format. (Row*16+Column)*128 gets you the character.
+
+Search for this in LWRam: (the 0513 is a reference to the second line of text)
+271404B3
+271504DE
+27160504
+27170513 
+
+-Num[k+1] - Num[k] = length of string k
+00df 00e0 00e1 00bb 00e2 00e3 00e4 004b 00e5 002b 00e6 00e7 00 00 00
+
+Start counting from:
+9C430053 to figure out which word you are on, including this number.  Each string has this 4byte data associated with it.
