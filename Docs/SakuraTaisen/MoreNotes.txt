@@ -13,3 +13,6 @@ PatchPalettes d:\Rizwan\SakuraWars\Disc1 d:\Rizwan\SakuraWars\OriginalFontPalett
 InsertText d:\Rizwan\SakuraWars\Disc1 d:\Rizwan\SakuraWars\TranslatedText d:\Rizwan\SakuraWars\TranslatedTBL
 ExtractRawText d:\Rizwan\SakuraWars\TranslatedTBL d:\Rizwan\SakuraWars\TranslatedTBL
 CreateTranslatedFontSheets d:\Rizwan\SakuraWars\TranslatedFontSheets\256x256.bmp d:\Rizwan\SakuraWars\TranslatedFontSheets
+
+ExtractRawText a:\SakuraTaisen\Disc1\ a:\SakuraTaisen\ExtractedData\ExtractedText
+InsertText a:\SakuraWars\Disc1 a:\SakuraWars\PatchedData\TranslatedText a:\SakuraWars\PatchedData\TranslatedTBL

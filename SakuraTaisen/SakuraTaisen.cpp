@@ -334,7 +334,15 @@ struct SakuraTextFile
 		char*  pData;
 		size_t dataSize;
 
-		SakuraDataSegment(char* pInData, size_t inSize) : pData(pInData), dataSize(inSize) {}
+		SakuraDataSegment() : pData(nullptr), dataSize(0){}
+
+		SakuraDataSegment(char* pInData, size_t inSize)
+		{
+			dataSize = inSize;
+			pData    = new char[dataSize];
+			
+			memcpy(pData, pInData, dataSize);
+		}
 
 		SakuraDataSegment(SakuraDataSegment&& rhs) : pData(rhs.pData), dataSize(rhs.dataSize)
 		{
@@ -361,9 +369,24 @@ struct SakuraTextFile
 		}
 	};
 
+	struct SakuraStringInfo
+	{
+		unsigned int   mFullValue;
+		unsigned short mUnknown;
+		unsigned short mOffsetFromPrevString;
+
+		SakuraStringInfo(unsigned short inFirst, unsigned short inSecond) : mUnknown(inFirst), mOffsetFromPrevString(inSecond)
+		{
+			mFullValue = (inFirst << 16) + inSecond;
+		}
+	};
+
 	FileNameContainer         mFileName;
 	vector<SakuraString>      mLines;
+	SakuraDataSegment         mHeader;
+	SakuraDataSegment         mFooter;
 	vector<SakuraDataSegment> mDataSegments;
+	vector<SakuraStringInfo>  mStringInfoArray;
 
 private:
 	unsigned long       mFileSize;
@@ -373,7 +396,7 @@ private:
 public:
 	SakuraTextFile(const FileNameContainer& fileName) : mFileName(fileName), mFileSize(0), mpFile(nullptr), mpBuffer(nullptr){}
 
-	SakuraTextFile(SakuraTextFile&& rhs) : mFileName(std::move(rhs.mFileName)), mLines(std::move(rhs.mLines)), mDataSegments(std::move(rhs.mDataSegments)), mFileSize(rhs.mFileSize), 
+	SakuraTextFile(SakuraTextFile&& rhs) : mFileName(std::move(rhs.mFileName)), mLines(std::move(rhs.mLines)), mDataSegments(std::move(rhs.mDataSegments)), mStringInfoArray(std::move(rhs.mStringInfoArray)), mFileSize(rhs.mFileSize),
 		                                   mpFile(rhs.mpFile), mpBuffer(std::move(rhs.mpBuffer))
 	{
 		rhs.mpBuffer = nullptr;
@@ -382,15 +405,16 @@ public:
 
 	SakuraTextFile& operator=(SakuraTextFile&& rhs)
 	{
-		mFileName     = std::move(rhs.mFileName);
-		mLines        = std::move(rhs.mLines);
-		mDataSegments = std::move(rhs.mDataSegments);
-		mFileSize     = rhs.mFileSize;
-		mpFile        = rhs.mpFile;
-		mpBuffer      = std::move(rhs.mpBuffer);
-
-		rhs.mpFile    = nullptr;
-		rhs.mpBuffer  = nullptr;
+		mFileName        = std::move(rhs.mFileName);
+		mLines           = std::move(rhs.mLines);
+		mDataSegments    = std::move(rhs.mDataSegments);
+		mStringInfoArray = std::move(rhs.mStringInfoArray);
+		mFileSize        = rhs.mFileSize;
+		mpFile           = rhs.mpFile;
+		mpBuffer         = std::move(rhs.mpBuffer);
+					     
+		rhs.mpFile       = nullptr;
+		rhs.mpBuffer     = nullptr;
 	}
 
 	~SakuraTextFile()
@@ -443,76 +467,8 @@ public:
 		ParseHeader();
 		ParseStrings();
 		ParseFooter();
-	}
 
-	bool FindNextSakuraString(unsigned long &inOutLocation)
-	{
-		while( inOutLocation + 6 < mFileSize )
-		{
-			if (mpBuffer[inOutLocation + 0] == 0 &&
-				mpBuffer[inOutLocation + 1] == 0 &&
-				mpBuffer[inOutLocation + 2] == 0 &&
-				mpBuffer[inOutLocation + 3] == 0 &&
-				mpBuffer[inOutLocation + 4] == 0 &&
-				mpBuffer[inOutLocation + 5] == 0
-				)
-			{
-				inOutLocation += 6;
-				return true;
-			}
-
-			++inOutLocation;
-		}
-
-		return false;
-	}
-
-	void ReadInTextOld()
-	{
-		unsigned long currentLocation   = 0;
-		unsigned long dataStartLocation = 0;
-		bool bNextStringFound = FindNextSakuraString(currentLocation);
-		bool bLastStringFound = false;
-
-		while( bNextStringFound && !bLastStringFound && currentLocation < mFileSize )
-		{
-			unsigned long nextStringLocation   = currentLocation;
-			bNextStringFound                   = FindNextSakuraString(nextStringLocation);
-			const unsigned long endOfString    = bNextStringFound ? nextStringLocation - 6 : mFileSize;
-			const unsigned long stringStartLoc = currentLocation;
-
-			SakuraString newLineOfText;
-			bool bWasValidString  = false;
-			while(currentLocation + 1 < endOfString )
-			{
-				if( !newLineOfText.AddChar(mpBuffer[currentLocation], mpBuffer[currentLocation + 1]) )
-				{
-					break;
-				}
-				currentLocation += 2;
-				bWasValidString = true;
-
-				if(currentLocation > nextStringLocation)
-				{
-					break;
-				}
-			}
-
-			//Add data segment
-			assert(stringStartLoc > dataStartLocation);
-			const unsigned long dataSize = stringStartLoc - dataStartLocation;
-			char* pDataSegment           = new char[dataSize];
-			memcpy(pDataSegment, mpBuffer + dataStartLocation, dataSize);
-			mDataSegments.push_back( std::move(SakuraDataSegment(pDataSegment, dataSize)) );
-
-			dataStartLocation = currentLocation;
-			currentLocation   = nextStringLocation;
-
-			if( bWasValidString )
-			{
-				mLines.push_back(newLineOfText);
-			}
-		}
+		assert( mStringInfoArray.size() <= mLines.size() && (mLines.size() - mStringInfoArray.size() <= 1) );
 	}
 
 	void Close()
@@ -531,23 +487,31 @@ public:
 private:
 	void ParseHeader()
 	{
-		const unsigned short startTextBlock = SwapByteOrder( *((unsigned short*)mpBuffer) ) * 2;
-		const unsigned long dataSize        = startTextBlock;
-		char* pDataSegment                  = new char[dataSize];
-		memcpy(pDataSegment, mpBuffer, dataSize);
-		mDataSegments.push_back( std::move(SakuraDataSegment(pDataSegment, dataSize)) );
+		//First two bytes are the offset that will take us to the strings.  So 0-offset is the header.
+		const unsigned short dataSize = SwapByteOrder( *((unsigned short*)mpBuffer) ) * 2;
+		mHeader = std::move(SakuraDataSegment(mpBuffer, dataSize));
+
+		assert(dataSize%4 == 0);
+
+		const unsigned int* pDWordBuffer = (unsigned int*)(mpBuffer) + 1;
+		const int numStrings = (dataSize/4 - 1); //First four bytes are just for offset info
+		for(int i = 0; i < numStrings; ++i)
+		{
+			const unsigned int stringInfo = SwapByteOrder(pDWordBuffer[i]);
+			const unsigned short first    = (stringInfo & 0xffff0000) >> 16;
+			const unsigned short second   = (stringInfo & 0x0000ffff);
+
+			mStringInfoArray.push_back( std::move(SakuraStringInfo(first, second)) );
+		}
 	}
 
 	void ParseFooter()
 	{
-		const unsigned short endTextBlock   = SwapByteOrder( *((unsigned short*)(mpBuffer + 2)) ) * 2;
-		const unsigned long dataSize        = mFileSize - endTextBlock + 1;
-		char* pDataSegment                  = new char[dataSize];
-		memcpy(pDataSegment, mpBuffer + endTextBlock, dataSize);
-		mDataSegments.push_back( std::move(SakuraDataSegment(pDataSegment, dataSize)) );
+		//Second two bytes are the offset that will take us to the footer
+		const unsigned short dataSize = SwapByteOrder( *((unsigned short*)(mpBuffer + 2)) ) * 2;
+		mFooter = std::move(SakuraDataSegment(mpBuffer, dataSize));
 	}
 
-	//TODO: Alloc memory for data segments
 	void ParseStrings()
 	{
 		const unsigned long startTextBlock = SwapByteOrder( *((unsigned short*)mpBuffer) ) * 2;
@@ -567,6 +531,7 @@ private:
 			while( 1 )
 			{
 				currValue = pWordBuffer[currentIndex];
+
 				if(currValue != 0 && currValue != 0xffff )
 				{
 					break;
@@ -621,6 +586,30 @@ private:
 	}
 };
 
+struct SakuraTextFileFixedHeader
+{
+	vector<unsigned int> mStringInfo;
+
+	void CreateFixedHeader(const vector<SakuraTextFile::SakuraStringInfo>& inInfo, const vector<SakuraString>& inStrings)
+	{
+		//All TBL files start with these two entries
+		mStringInfo.push_back( inInfo[0].mFullValue );
+		mStringInfo.push_back( inInfo[1].mFullValue );
+
+		unsigned short prevValue = inInfo[1].mOffsetFromPrevString;
+		const size_t numEntries  = inInfo.size() - 2;
+		for(size_t i = 0; i < numEntries; ++i)
+		{
+			const unsigned short newSecondValue = (unsigned short)inStrings[i].mChars.size() + prevValue;
+			const unsigned int   newValue       = ((unsigned int)(inInfo[i+2].mUnknown) << 16) + (unsigned int)newSecondValue;
+			prevValue                           = newSecondValue;
+
+			mStringInfo.push_back(newValue);
+		}
+	}
+};
+
+
 void FindAllSakuraText(const vector<FileNameContainer>& inFiles, vector<SakuraTextFile>& outText)
 {
 	for(const FileNameContainer& fileName : inFiles)
@@ -635,7 +624,7 @@ void FindAllSakuraText(const vector<FileNameContainer>& inFiles, vector<SakuraTe
 
 		sakuraFile.ReadInText();
 
-		outText.push_back( std::move(sakuraFile) );		
+		outText.push_back( std::move(sakuraFile) );
 	}
 }
 
@@ -669,10 +658,9 @@ void DumpExtractedSakuraText(const vector<SakuraTextFile>& inSakuraTextFiles, co
 			continue;
 		}
 
+		printf("Dumping text for: %s\n", textFile.mFileName.mFileName.c_str());
 		for(const SakuraString& sakuraString : textFile.mLines)
 		{
-			printf("Dumping text for: %s\n", textFile.mFileName.mFileName.c_str());
-
 			for(const SakuraString::SakuraChar& sakuraChar : sakuraString.mChars)
 			{
 				fprintf(pOutFile, "%02x%02x ", sakuraChar.mRow, sakuraChar.mColumn);
@@ -1264,7 +1252,7 @@ void InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 					break;
 				}
 
-				//Get converted lines of text				
+				//Get converted lines of text	
 				vector<SakuraString> translatedLines;
 				for(const TextFileData::TextLine& textLine : translatedFile.mLines)
 				{
@@ -1285,6 +1273,12 @@ void InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 				{
 					translatedLines.push_back( translatedSakuraString );
 				}
+
+				SakuraTextFileFixedHeader fixedHeader;
+				fixedHeader.CreateFixedHeader(sakuraFile.mStringInfoArray, translatedLines);
+
+				//Write header
+				outFile.WriteData(sakuraFile.mHeader.pData, sakuraFile.mHeader.dataSize);
 
 				//Output data
 				const size_t numDataSegments    = sakuraFile.mDataSegments.size();
@@ -1314,6 +1308,9 @@ void InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 						break;
 					}
 				}
+
+				//Write footer
+				outFile.WriteData(sakuraFile.mFooter.pData, sakuraFile.mFooter.dataSize);
 
 				break;
 			}
