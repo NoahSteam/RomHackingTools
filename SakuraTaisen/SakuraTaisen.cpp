@@ -33,6 +33,7 @@ using std::string;
 using std::list;
 using std::map;
 
+
 class SakuraTranslationTable
 {
 	map<char, short> mTranslationTable;
@@ -437,6 +438,13 @@ public:
 		return true;
 	}
 
+	void ReadInText()
+	{
+		ParseHeader();
+		ParseStrings();
+		ParseFooter();
+	}
+
 	bool FindNextSakuraString(unsigned long &inOutLocation)
 	{
 		while( inOutLocation + 6 < mFileSize )
@@ -453,21 +461,13 @@ public:
 				return true;
 			}
 
-			/*
-			if( mpBuffer[inOutLocation + 0] == 0 && 
-				mpBuffer[inOutLocation + 1] == 0 && 
-				mpBuffer[inOutLocation + 2] != 0 )
-			{
-				return false;
-			}
-			*/
 			++inOutLocation;
 		}
 
 		return false;
 	}
 
-	void ReadInText()
+	void ReadInTextOld()
 	{
 		unsigned long currentLocation   = 0;
 		unsigned long dataStartLocation = 0;
@@ -506,7 +506,7 @@ public:
 			mDataSegments.push_back( std::move(SakuraDataSegment(pDataSegment, dataSize)) );
 
 			dataStartLocation = currentLocation;
-			currentLocation   = nextStringLocation;			
+			currentLocation   = nextStringLocation;
 
 			if( bWasValidString )
 			{
@@ -526,6 +526,98 @@ public:
 
 		mpBuffer = nullptr;
 		mpFile   = nullptr;
+	}
+
+private:
+	void ParseHeader()
+	{
+		const unsigned short startTextBlock = SwapByteOrder( *((unsigned short*)mpBuffer) ) * 2;
+		const unsigned long dataSize        = startTextBlock;
+		char* pDataSegment                  = new char[dataSize];
+		memcpy(pDataSegment, mpBuffer, dataSize);
+		mDataSegments.push_back( std::move(SakuraDataSegment(pDataSegment, dataSize)) );
+	}
+
+	void ParseFooter()
+	{
+		const unsigned short endTextBlock   = SwapByteOrder( *((unsigned short*)(mpBuffer + 2)) ) * 2;
+		const unsigned long dataSize        = mFileSize - endTextBlock + 1;
+		char* pDataSegment                  = new char[dataSize];
+		memcpy(pDataSegment, mpBuffer + endTextBlock, dataSize);
+		mDataSegments.push_back( std::move(SakuraDataSegment(pDataSegment, dataSize)) );
+	}
+
+	//TODO: Alloc memory for data segments
+	void ParseStrings()
+	{
+		const unsigned long startTextBlock = SwapByteOrder( *((unsigned short*)mpBuffer) ) * 2;
+		const unsigned long endTextBlock   = SwapByteOrder( *((unsigned short*)(mpBuffer + 2)) ) * 2;
+		unsigned short*      pWordBuffer   = (unsigned short*)(mpBuffer + startTextBlock);
+		const unsigned long numEntries     = (endTextBlock - startTextBlock)/2;
+
+		assert(endTextBlock > startTextBlock);
+		assert( ((endTextBlock - startTextBlock) % 2) == 0 );
+
+		unsigned long currentIndex = 0;
+		while(currentIndex < numEntries)
+		{
+			//Leading 0s
+			unsigned long startIndex = currentIndex;
+			unsigned short currValue  = 0;
+			while( 1 )
+			{
+				currValue = pWordBuffer[currentIndex];
+				if(currValue != 0 && currValue != 0xffff )
+				{
+					break;
+				}
+				++currentIndex;
+			}
+			if( currentIndex > startIndex )
+			{
+				const unsigned long numLeadingZeros = currentIndex - startIndex;
+				mDataSegments.push_back( std::move(SakuraDataSegment((char*)&pWordBuffer[startIndex], numLeadingZeros*sizeof(short))) );
+			}
+
+			//String
+			SakuraString newLineOfText;
+			while(1)
+			{
+				currValue = pWordBuffer[currentIndex];
+				if( currValue == 0 )
+				{
+					break;
+				}
+
+				//Convert to big endian
+				currValue = SwapByteOrder(currValue);
+
+				newLineOfText.AddChar((currValue&0xff00) >> 8, currValue&0x00ff);
+				++currentIndex;
+			}
+			mLines.push_back(newLineOfText);
+
+			//End zeros
+			startIndex = currentIndex;
+			while( 1 )
+			{
+				currValue = pWordBuffer[currentIndex];
+				if(currValue != 0 && currValue != 0xffff )
+				{
+					break;
+				}
+				++currentIndex;
+
+				if( currentIndex == numEntries )
+				{
+					break;
+				}
+			}
+
+			const unsigned long numEndingZeroes = currentIndex - startIndex;
+			assert( (long)numEndingZeroes );
+			mDataSegments.push_back( std::move(SakuraDataSegment((char*)&pWordBuffer[startIndex], numEndingZeroes*sizeof(short))) );
+		}
 	}
 };
 

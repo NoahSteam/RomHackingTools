@@ -48,3 +48,6 @@ Search for this in LWRam: (the 0513 is a reference to the second line of text)
 
 Start counting from:
 9C430053 to figure out which word you are on, including this number.  Each string has this 4byte data associated with it.
+
+-First 2bytes are the offset at which strings start.  The value has to be multiplied by 2.
+-Second 2bytes * 2 are the end of the text string block.

@@ -1,5 +1,17 @@
 #pragma once
 
+template<typename T>
+T SwapByteOrder(const T inData)
+{
+	T reversedValue = inData;
+
+	const size_t numBytes = sizeof(inData);
+	std::reverse((char*)&reversedValue, ((char*)&reversedValue + numBytes));
+
+	return reversedValue;
+}
+
+
 struct MatchInfo
 {
 	std::string   mFileName;
