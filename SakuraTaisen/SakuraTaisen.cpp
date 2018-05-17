@@ -396,7 +396,8 @@ private:
 public:
 	SakuraTextFile(const FileNameContainer& fileName) : mFileName(fileName), mFileSize(0), mpFile(nullptr), mpBuffer(nullptr){}
 
-	SakuraTextFile(SakuraTextFile&& rhs) : mFileName(std::move(rhs.mFileName)), mLines(std::move(rhs.mLines)), mDataSegments(std::move(rhs.mDataSegments)), mStringInfoArray(std::move(rhs.mStringInfoArray)), mFileSize(rhs.mFileSize),
+	SakuraTextFile(SakuraTextFile&& rhs) : mFileName(std::move(rhs.mFileName)), mLines(std::move(rhs.mLines)), mHeader(std::move(rhs.mHeader)), mFooter(std::move(rhs.mFooter)), 
+		                                   mDataSegments(std::move(rhs.mDataSegments)), mStringInfoArray(std::move(rhs.mStringInfoArray)), mFileSize(rhs.mFileSize),
 		                                   mpFile(rhs.mpFile), mpBuffer(std::move(rhs.mpBuffer))
 	{
 		rhs.mpBuffer = nullptr;
@@ -409,10 +410,12 @@ public:
 		mLines           = std::move(rhs.mLines);
 		mDataSegments    = std::move(rhs.mDataSegments);
 		mStringInfoArray = std::move(rhs.mStringInfoArray);
+		mHeader          = std::move(rhs.mHeader);
+		mFooter          = std::move(rhs.mFooter);
 		mFileSize        = rhs.mFileSize;
 		mpFile           = rhs.mpFile;
 		mpBuffer         = std::move(rhs.mpBuffer);
-					     
+		
 		rhs.mpFile       = nullptr;
 		rhs.mpBuffer     = nullptr;
 	}
@@ -509,7 +512,7 @@ private:
 	{
 		//Second two bytes are the offset that will take us to the footer
 		const unsigned short dataSize = SwapByteOrder( *((unsigned short*)(mpBuffer + 2)) ) * 2;
-		mFooter = std::move(SakuraDataSegment(mpBuffer, dataSize));
+		mFooter = std::move(SakuraDataSegment(mpBuffer + dataSize, mFileSize - dataSize));
 	}
 
 	void ParseStrings()
@@ -588,24 +591,46 @@ private:
 
 struct SakuraTextFileFixedHeader
 {
+	unsigned short mOffsetToTable;
+	unsigned short mTableEnd;
 	vector<unsigned int> mStringInfo;
 
-	void CreateFixedHeader(const vector<SakuraTextFile::SakuraStringInfo>& inInfo, const vector<SakuraString>& inStrings)
+	void CreateFixedHeader(const vector<SakuraTextFile::SakuraStringInfo>& inInfo, const SakuraTextFile& inSakuraFile, const vector<SakuraString>& inStrings)
 	{
 		//All TBL files start with these two entries
-		mStringInfo.push_back( inInfo[0].mFullValue );
-		mStringInfo.push_back( inInfo[1].mFullValue );
+		mStringInfo.push_back( SwapByteOrder(inInfo[0].mFullValue) );
+		mStringInfo.push_back( SwapByteOrder(inInfo[1].mFullValue) );
 
 		unsigned short prevValue = inInfo[1].mOffsetFromPrevString;
 		const size_t numEntries  = inInfo.size() - 2;
 		for(size_t i = 0; i < numEntries; ++i)
 		{
-			const unsigned short newSecondValue = (unsigned short)inStrings[i].mChars.size() + prevValue;
+			const unsigned short trailingZeroes = inSakuraFile.mDataSegments.size() > i + 1 ? (unsigned short)(inSakuraFile.mDataSegments[i+1].dataSize)/2 : 0;
+			const unsigned short newSecondValue = (unsigned short)inStrings[i].mChars.size() + trailingZeroes + prevValue;
 			const unsigned int   newValue       = ((unsigned int)(inInfo[i+2].mUnknown) << 16) + (unsigned int)newSecondValue;
 			prevValue                           = newSecondValue;
 
-			mStringInfo.push_back(newValue);
+			mStringInfo.push_back( SwapByteOrder(newValue) );
 		}
+
+		//Figure out text table size
+		unsigned long stringTableSize = 0;
+		for(const SakuraTextFile::SakuraDataSegment& segment : inSakuraFile.mDataSegments)
+		{
+			stringTableSize += segment.dataSize;
+		}
+
+		for(const SakuraString& sakuraString : inStrings)
+		{
+			stringTableSize += sakuraString.mChars.size()*2;
+		}
+		//Done figuring out table size
+		
+		assert(stringTableSize <= 0xffff);
+		mOffsetToTable = SwapByteOrder( ((unsigned short*)inSakuraFile.mHeader.pData)[0] );
+		mTableEnd      = (unsigned short)((mOffsetToTable*2 + (unsigned short)stringTableSize) / 2);
+
+		assert( (mOffsetToTable + (unsigned short)stringTableSize)%2 == 0 );
 	}
 };
 
@@ -1275,10 +1300,15 @@ void InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 				}
 
 				SakuraTextFileFixedHeader fixedHeader;
-				fixedHeader.CreateFixedHeader(sakuraFile.mStringInfoArray, translatedLines);
+				fixedHeader.CreateFixedHeader(sakuraFile.mStringInfoArray, sakuraFile, translatedLines);
 
 				//Write header
-				outFile.WriteData(sakuraFile.mHeader.pData, sakuraFile.mHeader.dataSize);
+				const unsigned short bigEndianOffsetToTable = SwapByteOrder(fixedHeader.mOffsetToTable);
+				const unsigned short bigEndianTableEnd      = SwapByteOrder(fixedHeader.mTableEnd);
+				outFile.WriteData(&bigEndianOffsetToTable, sizeof(bigEndianOffsetToTable));
+				outFile.WriteData(&bigEndianTableEnd, sizeof(bigEndianTableEnd));
+				outFile.WriteData(&fixedHeader.mStringInfo[0], fixedHeader.mStringInfo.size()*sizeof(fixedHeader.mStringInfo[0]));
+				//outFile.WriteData(sakuraFile.mHeader.pData, sakuraFile.mHeader.dataSize);
 
 				//Output data
 				const size_t numDataSegments    = sakuraFile.mDataSegments.size();
