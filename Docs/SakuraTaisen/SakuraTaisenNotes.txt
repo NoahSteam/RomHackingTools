@@ -51,3 +51,5 @@ Start counting from:
 
 -First 2bytes are the offset at which strings start.  The value has to be multiplied by 2.
 -Second 2bytes * 2 are the end of the text string block.
+
+StringInfo: mOffsetFromPrevString = prevStringOffset + stringLength + 3  

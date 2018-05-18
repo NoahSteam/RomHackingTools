@@ -314,9 +314,13 @@ public:
 
 	const char* GetCharacterTile(const SakuraString::SakuraChar& sakuraChar)
 	{	
-		const int tileIndex = sakuraChar.mIndex - 1;
+		int tileIndex = sakuraChar.mIndex - 1;
 		assert(tileIndex >= 0);
-		assert(tileIndex < (int)mCharacterTiles.size());
+		//assert(tileIndex < (int)mCharacterTiles.size());
+		if( tileIndex >= (int)mCharacterTiles.size() )
+		{
+			tileIndex = 0;
+		}
 
 		return tileIndex < (int)mCharacterTiles.size() ? mCharacterTiles[tileIndex].GetFontTileData() : nullptr;
 	}
@@ -599,9 +603,8 @@ struct SakuraTextFileFixedHeader
 	{
 		//All TBL files start with these two entries
 		mStringInfo.push_back( SwapByteOrder(inInfo[0].mFullValue) );
-		mStringInfo.push_back( SwapByteOrder(inInfo[1].mFullValue) );
-
-		unsigned short prevValue = inInfo[1].mOffsetFromPrevString;
+		
+		unsigned short prevValue = 0;
 		const size_t numEntries  = inInfo.size() - 2;
 		for(size_t i = 0; i < numEntries; ++i)
 		{
@@ -670,10 +673,12 @@ void GetAllFilesOfType(const vector<FileNameContainer>& allFiles, const char* pI
 void DumpExtractedSakuraText(const vector<SakuraTextFile>& inSakuraTextFiles, const string& outDirectory)
 {
 	const string txt(".txt");
+	const string info("_StringInfo");
 
 	for(const SakuraTextFile& textFile : inSakuraTextFiles)
 	{
 		const string outFileName = outDirectory + textFile.mFileName.mNoExtension + txt;
+		const string infoFileName = outDirectory + textFile.mFileName.mNoExtension + info + txt;
 
 		FILE* pOutFile     = nullptr;
 		errno_t errorValue = fopen_s(&pOutFile, outFileName.c_str(), "w");
@@ -683,18 +688,34 @@ void DumpExtractedSakuraText(const vector<SakuraTextFile>& inSakuraTextFiles, co
 			continue;
 		}
 
+		FILE* pOutInfoFile = nullptr;
+		errorValue = fopen_s(&pOutInfoFile, infoFileName.c_str(), "w");
+		if (errorValue)
+		{
+			printf("Unable to open out info file: %s.  Error code: %i \n", outFileName.c_str(), errorValue);
+			continue;
+		}
+
 		printf("Dumping text for: %s\n", textFile.mFileName.mFileName.c_str());
 		for(const SakuraString& sakuraString : textFile.mLines)
 		{
+			fprintf(pOutFile, "Len: %i. Data: ", sakuraString.mChars.size());
+
 			for(const SakuraString::SakuraChar& sakuraChar : sakuraString.mChars)
 			{
 				fprintf(pOutFile, "%02x%02x ", sakuraChar.mRow, sakuraChar.mColumn);
 			}
 
 			fprintf(pOutFile, "\n");
-		}		
+		}
+
+		for(const SakuraTextFile::SakuraStringInfo& stringInfo : textFile.mStringInfoArray)
+		{
+			fprintf(pOutInfoFile, "%02x %02x %i\n", stringInfo.mUnknown, stringInfo.mOffsetFromPrevString, stringInfo.mOffsetFromPrevString);
+		}
 
 		fclose(pOutFile);
+		fclose(pOutInfoFile);
 	}
 }
 
@@ -865,34 +886,36 @@ void ExtractText(const string& inSearchDirectory, const string& inPaletteFileNam
 		//Dump out the dialog for each line
 		int stringIndex   = 0;
 		const int tileDim = 16;
-		for(const SakuraString& sakuraString : sakuraText.mLines)
+		for(size_t lineIndex = 0; sakuraText.mLines.size(); ++lineIndex)
 		{	
+			const SakuraString& sakuraString = sakuraText.mLines[lineIndex];
 			if( sakuraString.mChars.size() > 255 )
 			{
 				continue;
 			}
 
-			const int numSakuraLines = sakuraString.GetNumberOfLines();			
+			const int numSakuraLines = sakuraString.GetNumberOfLines();
 
 			BitmapSurface sakuraStringBmp;
 			sakuraStringBmp.CreateSurface( SakuraString::MaxCharsPerLine*tileDim, tileDim*numSakuraLines, BitmapSurface::EBitsPerPixel::kBPP_4, paletteData.GetData(), paletteData.GetSize());
 	
-			int charIndex = 0;
 			int currRow = 0;
-			for(const SakuraString::SakuraChar& sakuraChar : sakuraString.mChars)
+			int currCol = 0;
+			for(size_t charIndex = 0; charIndex < sakuraString.mChars.size(); ++charIndex)
 			{
+				const SakuraString::SakuraChar& sakuraChar = sakuraString.mChars[charIndex];
 				if( sakuraChar.IsNewLine() )
 				{
 					++currRow;
-					charIndex = 0;
+					currCol = 0;
 					continue;
 				}
 
 				const char* pData = sakuraFontSheet.GetCharacterTile(sakuraChar);
 
-				sakuraStringBmp.AddTile(pData, sakuraFontSheet.GetTileSizeInBytes(), charIndex*16, currRow*16, tileDim, tileDim);
+				sakuraStringBmp.AddTile(pData, sakuraFontSheet.GetTileSizeInBytes(), currCol*16, currRow*16, tileDim, tileDim);
 
-				++charIndex;
+				++currCol;
 			}
 			
 			const string bitmapName = fileOutputDir + std::to_string(stringIndex) + extension;
@@ -1373,7 +1396,7 @@ int main(int argc, char *argv[])
 	const string command(argv[1]);
 	if( command == string("ExtractRawText") && argc == 4 )
 	{
-		const char*  pSearchDirectory = argv[2];	
+		const char*  pSearchDirectory = argv[2];
 		const string outDirectory     = string(argv[3]) + string("\\");
 
 		//Find all files within the requested directory
