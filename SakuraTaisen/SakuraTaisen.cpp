@@ -139,11 +139,12 @@ struct SakuraString
 		unsigned char    mRow;
 		unsigned char    mColumn;
 		unsigned short   mIndex;
-		static const int NewLine = 0x0A0D;		
+		static const int NewLine = 0x0A0D;
 	};
 
 	vector<SakuraChar> mChars;
-	static const int   MaxCharsPerLine = 15;
+	static const int   MaxCharsPerLine     = 15;
+	unsigned short     mOffsetToStringData = 0;
 
 	bool AddChar(unsigned short index)
 	{
@@ -166,11 +167,16 @@ struct SakuraString
 
 	void AddString(const string& inString)
 	{
+		mChars.push_back( std::move(SakuraChar(0)) );
+		mChars.push_back( std::move(SakuraChar(0)) );
+
 		for(string::const_iterator iter = inString.begin(); iter != inString.end(); ++iter)
 		{
 			const unsigned short value = GTranslationLookupTable.GetIndex(*iter);
 			mChars.push_back( std::move(SakuraChar(value)) );
 		}
+
+		mOffsetToStringData = 2;
 	}
 
 	int GetNumberOfLines() const
@@ -423,7 +429,7 @@ public:
 		ParseStrings();
 		ParseFooter();
 
-		assert( mStringInfoArray.size() <= mLines.size() && (mLines.size() - mStringInfoArray.size() <= 1) );
+		assert( mStringInfoArray.size() == mLines.size() );
 	}
 
 	void Close()
@@ -468,6 +474,47 @@ private:
 	}
 
 	void ParseStrings()
+	{
+		const size_t numStrings = mStringInfoArray.size();
+
+		for(size_t i = 0; i < numStrings; ++i)
+		{
+			const unsigned int offsetToString = mStringInfoArray[i].mOffsetFromPrevString*2 + mHeader.dataSize;
+			assert(offsetToString < mFileSize);
+
+			SakuraString newLineOfText;
+			unsigned short* pWordBuffer = (unsigned short*)&mpBuffer[offsetToString];
+			bool bNonZeroValueFound     = false;
+			int currentIndex            = 0;
+			int offsetToStringData      = 0;
+			while(1)
+			{
+				unsigned short currValue = pWordBuffer[currentIndex++];
+				currValue                = SwapByteOrder(currValue);  //Convert to big endian
+				
+				if( currValue != 0 )
+				{
+					bNonZeroValueFound = true;
+				}
+				else if( currValue == 0 && !bNonZeroValueFound )
+				{
+					offsetToStringData++;
+				}
+
+				newLineOfText.AddChar(currValue);
+
+				if( currValue == 0 && bNonZeroValueFound )
+				{
+					break;
+				}
+			}
+
+			newLineOfText.mOffsetToStringData = mStringInfoArray[i].mUnknown >= 0xC351 ? 2 : offsetToStringData;
+			mLines.push_back(newLineOfText);
+		}
+	}
+
+	void ParseStringsOld()
 	{
 		const unsigned long startTextBlock = SwapByteOrder( *((unsigned short*)mpBuffer) ) * 2;
 		const unsigned long endTextBlock   = SwapByteOrder( *((unsigned short*)(mpBuffer + 2)) ) * 2;
@@ -833,14 +880,19 @@ void ExtractText(const string& inSearchDirectory, const string& inPaletteFileNam
 			continue;
 		}
 
+		printf("Dumping dialog for: %s\n", sakuraText.mFileName.mNoExtension.c_str());
+
 		//Create font sheet
 		SakuraFontSheet sakuraFontSheet;
-		sakuraFontSheet.CreateFontSheet(fontSheetName);
+		if( !sakuraFontSheet.CreateFontSheet(fontSheetName) )
+		{
+			continue;
+		}
 
 		//Dump out the dialog for each line
 		int stringIndex   = 0;
 		const int tileDim = 16;
-		for(size_t lineIndex = 0; sakuraText.mLines.size(); ++lineIndex)
+		for(size_t lineIndex = 0; lineIndex < sakuraText.mLines.size(); ++lineIndex)
 		{	
 			const SakuraString& sakuraString = sakuraText.mLines[lineIndex];
 			if( sakuraString.mChars.size() > 255 )
@@ -855,9 +907,14 @@ void ExtractText(const string& inSearchDirectory, const string& inPaletteFileNam
 	
 			int currRow = 0;
 			int currCol = 0;
-			for(size_t charIndex = 0; charIndex < sakuraString.mChars.size(); ++charIndex)
+			for(size_t charIndex = sakuraString.mOffsetToStringData; charIndex < sakuraString.mChars.size(); ++charIndex)
 			{
 				const SakuraString::SakuraChar& sakuraChar = sakuraString.mChars[charIndex];
+				if( sakuraChar.mIndex == 0 )
+				{
+					continue;
+				}
+
 				if( sakuraChar.IsNewLine() )
 				{
 					++currRow;
