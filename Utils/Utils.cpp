@@ -184,6 +184,7 @@ bool TextFileData::InitializeTextFile()
 	static char buffer[bufferSize];
 	memset(buffer, 0, bufferSize);
 
+	const string space(" ");
 	char* pToken = nullptr;
 	while( fgets(buffer, bufferSize, pFile) != nullptr )
 	{
@@ -196,6 +197,7 @@ bool TextFileData::InitializeTextFile()
 		while(pToken != NULL)
 		{
 			newLineOfText.mWords.push_back(pToken);
+			newLineOfText.mFullLine += string(pToken) + space;
 
 			pToken = strtok_s(NULL, pDelim, &pContext);
 		}

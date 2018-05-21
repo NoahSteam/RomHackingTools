@@ -36,79 +36,20 @@ using std::map;
 
 class SakuraTranslationTable
 {
-	map<char, short> mTranslationTable;
-
 public:
-	SakuraTranslationTable()
+	const unsigned short GetIndex(char inChar) const
 	{
-		mTranslationTable['A']  = 66;
-		mTranslationTable['B']  = 67;
-		mTranslationTable['C']  = 68;
-		mTranslationTable['D']  = 69;
-		mTranslationTable['E']  = 70;
-		mTranslationTable['F']  = 71;
-		mTranslationTable['G']  = 72;
-		mTranslationTable['H']  = 73;
-		mTranslationTable['I']  = 74;
-		mTranslationTable['J']  = 75;
-		mTranslationTable['K']  = 76;
-		mTranslationTable['L']  = 77;
-		mTranslationTable['M']  = 78;
-		mTranslationTable['N']  = 79;
-		mTranslationTable['O']  = 80;
-		mTranslationTable['P']  = 81;
-		mTranslationTable['Q']  = 82;
-		mTranslationTable['R']  = 83;
-		mTranslationTable['S']  = 84;
-		mTranslationTable['T']  = 85;
-		mTranslationTable['U']  = 86;
-		mTranslationTable['V']  = 87;
-		mTranslationTable['W']  = 88;
-		mTranslationTable['X']  = 89;
-		mTranslationTable['Y']  = 90;
-		mTranslationTable['Z']  = 91;
-		mTranslationTable['a']  = 98;
-		mTranslationTable['b']  = 99;
-		mTranslationTable['c']  = 100;
-		mTranslationTable['d']  = 101;
-		mTranslationTable['e']  = 102;
-		mTranslationTable['f']  = 103;
-		mTranslationTable['g']  = 104;
-		mTranslationTable['h']  = 105;
-		mTranslationTable['i']  = 106;
-		mTranslationTable['j']  = 107;
-		mTranslationTable['k']  = 108;
-		mTranslationTable['l']  = 109;
-		mTranslationTable['m']  = 110;
-		mTranslationTable['n']  = 111;
-		mTranslationTable['o']  = 112;
-		mTranslationTable['p']  = 113;
-		mTranslationTable['q']  = 114;
-		mTranslationTable['r']  = 115;
-		mTranslationTable['s']  = 116;
-		mTranslationTable['t']  = 117;
-		mTranslationTable['u']  = 118;
-		mTranslationTable['v']  = 119;
-		mTranslationTable['w']  = 120;
-		mTranslationTable['x']  = 121;
-		mTranslationTable['y']  = 122;
-		mTranslationTable['z']  = 123;
-		mTranslationTable['.']  = 47;
-		mTranslationTable['@']  = 134;
-		mTranslationTable['!']  = 34;
-		mTranslationTable['?']  = 64;
-		mTranslationTable[',']  = 45;
-		mTranslationTable['\''] = 96;
-		mTranslationTable[' ']  = 33;
-		mTranslationTable['-']  = 46; //Todo, add this into the table
-		mTranslationTable['\n'] = 0x0a0d;
-	}
-
-	const short GetIndex(char inChar) const
-	{
-		assert( mTranslationTable.find(inChar) != mTranslationTable.end() );
+		if( inChar == '@' )
+		{
+			return 134;
+		}
 		
-		return mTranslationTable.find(inChar)->second;
+		if( inChar == '\n' )
+		{
+			return 0x0a0d;
+		}
+		
+		return inChar + 1;
 	}
 };
 const SakuraTranslationTable GTranslationLookupTable;
@@ -203,6 +144,13 @@ struct SakuraString
 
 	vector<SakuraChar> mChars;
 	static const int   MaxCharsPerLine = 15;
+
+	bool AddChar(unsigned short index)
+	{
+		mChars.push_back( std::move(SakuraChar(index)) );
+
+		return true;
+	}
 
 	bool AddChar(char row, char column)
 	{
@@ -601,16 +549,16 @@ struct SakuraTextFileFixedHeader
 
 	void CreateFixedHeader(const vector<SakuraTextFile::SakuraStringInfo>& inInfo, const SakuraTextFile& inSakuraFile, const vector<SakuraString>& inStrings)
 	{
-		//All TBL files start with these two entries
+		//All TBL files start with this entries
 		mStringInfo.push_back( SwapByteOrder(inInfo[0].mFullValue) );
 		
 		unsigned short prevValue = 0;
-		const size_t numEntries  = inInfo.size() - 2;
+		const size_t numEntries  = inInfo.size() - 1;
 		for(size_t i = 0; i < numEntries; ++i)
 		{
-			const unsigned short trailingZeroes = inSakuraFile.mDataSegments.size() > i + 1 ? (unsigned short)(inSakuraFile.mDataSegments[i+1].dataSize)/2 : 0;
+			const unsigned short trailingZeroes = (unsigned short)(inSakuraFile.mDataSegments[i+1].dataSize)/2;
 			const unsigned short newSecondValue = (unsigned short)inStrings[i].mChars.size() + trailingZeroes + prevValue;
-			const unsigned int   newValue       = ((unsigned int)(inInfo[i+2].mUnknown) << 16) + (unsigned int)newSecondValue;
+			const unsigned int   newValue       = ((unsigned int)(inInfo[i+1].mUnknown) << 16) + (unsigned int)newSecondValue;
 			prevValue                           = newSecondValue;
 
 			mStringInfo.push_back( SwapByteOrder(newValue) );
@@ -675,6 +623,7 @@ void DumpExtractedSakuraText(const vector<SakuraTextFile>& inSakuraTextFiles, co
 	const string txt(".txt");
 	const string info("_StringInfo");
 
+	int fileNum = 0;
 	for(const SakuraTextFile& textFile : inSakuraTextFiles)
 	{
 		const string outFileName = outDirectory + textFile.mFileName.mNoExtension + txt;
@@ -697,6 +646,7 @@ void DumpExtractedSakuraText(const vector<SakuraTextFile>& inSakuraTextFiles, co
 		}
 
 		printf("Dumping text for: %s\n", textFile.mFileName.mFileName.c_str());
+		int lineNum = 0;
 		for(const SakuraString& sakuraString : textFile.mLines)
 		{
 			fprintf(pOutFile, "Len: %i. Data: ", sakuraString.mChars.size());
@@ -706,16 +656,20 @@ void DumpExtractedSakuraText(const vector<SakuraTextFile>& inSakuraTextFiles, co
 				fprintf(pOutFile, "%02x%02x ", sakuraChar.mRow, sakuraChar.mColumn);
 			}
 
+			++lineNum;
 			fprintf(pOutFile, "\n");
 		}
 
-		for(const SakuraTextFile::SakuraStringInfo& stringInfo : textFile.mStringInfoArray)
+		for(size_t i = 0; i < textFile.mStringInfoArray.size(); ++i)
 		{
-			fprintf(pOutInfoFile, "%02x %02x %i\n", stringInfo.mUnknown, stringInfo.mOffsetFromPrevString, stringInfo.mOffsetFromPrevString);
+			const SakuraTextFile::SakuraStringInfo& stringInfo = textFile.mStringInfoArray[i];
+			const int diffFromPrev = i == 0 ? 0 : stringInfo.mOffsetFromPrevString - textFile.mStringInfoArray[i-1].mOffsetFromPrevString;
+			fprintf(pOutInfoFile, "%02x %02x %i DiffFromPrev: %i\n", stringInfo.mUnknown, stringInfo.mOffsetFromPrevString, stringInfo.mOffsetFromPrevString, diffFromPrev);
 		}
 
 		fclose(pOutFile);
 		fclose(pOutInfoFile);
+		++fileNum;
 	}
 }
 
@@ -1086,6 +1040,14 @@ void ConvertTranslatedText(const string& inTextDir, const string& outDir)
 				{
 					fprintf(outFile.GetFileHandle(), "%02x%02x ", lookUpValue&0xff00, lookUpValue&0x00ff);
 					++charCount;
+
+					//Add a new line if needed
+					if( charCount + 1 >= maxCharsPerLine )
+					{
+						charCount = 0;
+						++sakuraLineCount;
+						fprintf(outFile.GetFileHandle(), "%02x%02x ", newLineIndex&0xff00, newLineIndex&0x00ff);					
+					}
 				}
 
 				//Add a new line if needed
@@ -1250,6 +1212,24 @@ void PatchPalettes(const string& rootDirectory, const string& originalPalette, c
 
 void InsertText(const string& rootSakuraTaisenDirectory, const string& translatedTextDirectory, const string& outDirectory)
 {
+#define IncrementLine()\
+    ++currLine;\
+    charCount = 0;\
+    if( currLine > maxLines ) \
+	{\
+		printf("Unable to fully insert line because it is longer than %i characters: %s\n", maxLines*maxCharsPerLine, textLine.mFullLine.c_str());\
+		bFailedToAddLine = true;\
+		break;\
+	}\
+    translatedString.AddChar( GTranslationLookupTable.GetIndex('\n') );
+
+	//Insert new line if needed
+#define ConditionallyAddNewLine()\
+	if( word.size() + charCount > maxCharsPerLine )\
+	{\
+		IncrementLine()\
+	}
+
 	//Find all translated text files
 	vector<FileNameContainer> translatedTextFiles;
 	FindAllFilesWithinDirectory(string(translatedTextDirectory), translatedTextFiles);
@@ -1300,14 +1280,66 @@ void InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 					break;
 				}
 
-				//Get converted lines of text	
-				vector<SakuraString> translatedLines;
+				//Get converted lines of text
+				const int maxCharsPerLine = 15;
+				const int maxLines = 3;
+				vector<SakuraString> translatedLines;				
 				for(const TextFileData::TextLine& textLine : translatedFile.mLines)
-				{
+				{	
+					int charCount         = 0;
+					int currLine          = 1;
+					const size_t numWords = textLine.mWords.size();
 					SakuraString translatedString;
-					for(const string& word : textLine.mWords)
+					for(size_t wordIndex = 0; wordIndex < numWords; ++wordIndex)
 					{
-						translatedString.AddString(word);
+						const string& word = textLine.mWords[wordIndex];
+						bool bFailedToAddLine = false;
+
+						if( word.size() > maxCharsPerLine )
+						{
+							printf("Unable to insert word because it is longer than %i characters: %s\n", maxCharsPerLine, word.c_str());
+							continue;
+						}
+
+						//Insert new line if needed
+						ConditionallyAddNewLine();
+
+						//Add the word
+						const size_t numLettersInWord = word.size();
+						if( word.size() + charCount > maxCharsPerLine )
+						{
+							IncrementLine();
+						}
+
+						const char* pWord = word.c_str();
+						for(size_t letterIndex = 0; letterIndex < numLettersInWord; ++letterIndex)
+						{
+							translatedString.AddChar( GTranslationLookupTable.GetIndex(pWord[letterIndex]) );
+							++charCount;												
+						}
+
+						//bFailedToAddLine is set inside ConditionallyAddNewLine
+						if( bFailedToAddLine )
+						{
+							break;
+						}
+
+						//Add sapce
+						if( wordIndex + 1 < numWords )
+						{
+							//Insert new line if needed
+							if( word.size() + charCount > maxCharsPerLine )
+							{
+								ConditionallyAddNewLine();
+							}
+							else //Otherwise add a space
+							{
+								translatedString.AddChar( GTranslationLookupTable.GetIndex(' ') );
+								++charCount;
+
+								ConditionallyAddNewLine();
+							}
+						}
 					}
 
 					translatedLines.push_back( std::move(translatedString) );

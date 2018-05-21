@@ -65,6 +65,7 @@ public:
 	struct TextLine
 	{
 		std::vector<std::string> mWords;
+		std::string              mFullLine;
 	};
 
 	FileNameContainer     mFileNameInfo;
