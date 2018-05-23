@@ -603,8 +603,8 @@ struct SakuraTextFileFixedHeader
 		const size_t numEntries  = inInfo.size() - 1;
 		for(size_t i = 0; i < numEntries; ++i)
 		{
-			const unsigned short trailingZeroes = (unsigned short)(inSakuraFile.mDataSegments[i+1].dataSize)/2;
-			const unsigned short newSecondValue = (unsigned short)inStrings[i].mChars.size() + trailingZeroes + prevValue;
+			//const unsigned short trailingZeroes = (unsigned short)(inSakuraFile.mDataSegments[i+1].dataSize)/2;
+			const unsigned short newSecondValue = (unsigned short)inStrings[i].mChars.size() + prevValue; //+ trailingZeros;
 			const unsigned int   newValue       = ((unsigned int)(inInfo[i+1].mUnknown) << 16) + (unsigned int)newSecondValue;
 			prevValue                           = newSecondValue;
 
@@ -730,11 +730,11 @@ bool ExtractFontSheetAsBitmap(const FileNameContainer& inFileNameContainer, cons
 
 	printf("Extracting: %s\n", inFileNameContainer.mFileName.c_str());
 	
-	const int tileDimX          = 16;
-	const int tileDimY          = 16;
+	const int tileDimX          = 8;//16;
+	const int tileDimY          = 8;//16;
 	const int tileBytes         = (tileDimX*tileDimY)/2; //4bits per pixel, so only half the amount of bytes as pixels
 	const int tilesPerRow       = 255;
-	const int bytesPerTile      = 128;
+	const int bytesPerTile      = tileBytes;
 	const int bytesPerTileRow   = bytesPerTile*tilesPerRow;
 	const int numRows           = (int)ceil( fontSheet.GetDataSize() / (float)bytesPerTileRow);
 	const int numColumns        = numRows > 0 ? tilesPerRow : fontSheet.GetDataSize()/bytesPerTileRow;
@@ -749,7 +749,7 @@ bool ExtractFontSheetAsBitmap(const FileNameContainer& inFileNameContainer, cons
 	int numTiles                     = fontSheet.GetDataSize()/tileBytes;
 	int currTileRow                  = 0;
 	int currTileCol                  = 0;
-	const int bytesInEachTilesWidth  = 8;
+	const int bytesInEachTilesWidth  = tileDimX/2;
 	const int numTiledBytes          = (numRows*bytesPerTileRow);// + numColumns*bytesInEachTilesWidth;
 	char* pOutTiledData              = new char[numTiledBytes];
 	const int bytesPerHorizontalLine = bytesInEachTilesWidth*numColumns;
@@ -947,7 +947,7 @@ void CreateTranslatedFontSheet(const string& inTranslatedFontSheet, const string
 	}
 
 	TileExtractor tileExtractor;
-	if( !tileExtractor.ExtractTiles(16, 16, origTranslatedBmp) )
+	if( !tileExtractor.ExtractTiles(8, 8, origTranslatedBmp) )
 	{
 		return;
 	}
@@ -1205,7 +1205,7 @@ void PatchPalettes(const string& rootDirectory, const string& originalPalette, c
 		if( sakuraFileData.InitializeFileData(sakuraFile) )
 		{
 			vector<unsigned long> offsets;
-			sakuraFileData.DoesThisFileContain(origData, offsets, true);
+			sakuraFileData.DoesThisFileContain(origData, &offsets, true);
 
 			//If palette data was found, write out new file
 			if( offsets.size() )
@@ -1234,7 +1234,7 @@ void PatchPalettes(const string& rootDirectory, const string& originalPalette, c
 
 					totalWritten += (nextOffset - origSakuraOffset) + 32;
 
-					origSakuraOffset = nextOffset + newPaletteData.GetDataSize();					
+					origSakuraOffset = nextOffset + newPaletteData.GetDataSize();
 				}
 
 				//Write out remaining porition of the file
@@ -1338,15 +1338,23 @@ void InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 				}
 
 				//Get converted lines of text
-				const int maxCharsPerLine = 15;
-				const int maxLines = 3;
-				vector<SakuraString> translatedLines;				
-				for(const TextFileData::TextLine& textLine : translatedFile.mLines)
+				const int maxCharsPerLine       = 15;
+				const int maxLines              = 3;
+				const size_t numTranslatedLines = translatedFile.mLines.size();
+				vector<SakuraString> translatedLines;
+				for(size_t translatedLineIndex = 0; translatedLineIndex < numTranslatedLines; ++translatedLineIndex)
 				{	
+					const TextFileData::TextLine& textLine = translatedFile.mLines[translatedLineIndex];
 					int charCount         = 0;
 					int currLine          = 1;
 					const size_t numWords = textLine.mWords.size();
 					SakuraString translatedString;
+
+					for(unsigned short initialZeroes = 0; initialZeroes < sakuraFile.mLines[translatedLineIndex].mOffsetToStringData; ++initialZeroes)
+					{
+						translatedString.AddChar(0);
+					}
+
 					for(size_t wordIndex = 0; wordIndex < numWords; ++wordIndex)
 					{
 						const string& word = textLine.mWords[wordIndex];
@@ -1372,7 +1380,7 @@ void InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 						for(size_t letterIndex = 0; letterIndex < numLettersInWord; ++letterIndex)
 						{
 							translatedString.AddChar( GTranslationLookupTable.GetIndex(pWord[letterIndex]) );
-							++charCount;												
+							++charCount;
 						}
 
 						//bFailedToAddLine is set inside ConditionallyAddNewLine
@@ -1399,12 +1407,16 @@ void InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 						}
 					}
 
+					translatedString.AddChar(0);
 					translatedLines.push_back( std::move(translatedString) );
 				}
 
 				//Fill out everything else with "Untranslated"
 				SakuraString translatedSakuraString;
+				translatedSakuraString.AddChar(0);
+				translatedSakuraString.AddChar(0);
 				translatedSakuraString.AddString( string("Untranslated") );
+				translatedSakuraString.AddChar(0);
 				const size_t untranslatedCount = sakuraFile.mLines.size() - translatedFile.mLines.size();
 				for(size_t i = 0; i < untranslatedCount; ++i)
 				{
@@ -1424,17 +1436,17 @@ void InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 
 				//Output data
 				const size_t numDataSegments    = sakuraFile.mDataSegments.size();
-				const size_t numTranslatedLines = translatedLines.size();
 				size_t dataIndex                = 0;
 				size_t translationIndex         = 0;
+				const size_t numInsertedLines   = translatedLines.size();
 				while(1)
 				{
 					if( dataIndex < numDataSegments )
-					{						
+					{
 						outFile.WriteData(sakuraFile.mDataSegments[dataIndex].pData, sakuraFile.mDataSegments[dataIndex].dataSize);
 					}
 
-					if( translationIndex < numTranslatedLines )
+					if( translationIndex < numInsertedLines )
 					{
 						vector<unsigned short> translationData;
 						translatedLines[dataIndex].GetDataArray(translationData);
@@ -1445,7 +1457,7 @@ void InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 					++dataIndex;
 					++translationIndex;
 
-					if( dataIndex >= numDataSegments && translationIndex >= numTranslatedLines )
+					if( dataIndex >= numDataSegments && translationIndex >= numInsertedLines )
 					{
 						break;
 					}
@@ -1457,6 +1469,107 @@ void InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 				break;
 			}
 		}
+	}
+}
+
+void FindDuplicateText(const string& dialogDirectory, const string& outFileName)
+{
+	TextFileWriter outFile;
+	if( !outFile.OpenFileForWrite(outFileName) )
+	{
+		return;
+	}
+
+	//Find all translated text files
+	vector<FileNameContainer> dialogFiles;
+	FindAllFilesWithinDirectory(dialogDirectory, dialogFiles);
+	if( !dialogFiles.size() )
+	{
+		return;
+	}
+
+	struct MatchingInfo
+	{
+		vector<const FileNameContainer*> matches;
+	};
+	map<const FileNameContainer*, MatchingInfo> matchingInfo;
+
+	const size_t numDialogFiles = dialogFiles.size();
+	for(size_t currFileIndex = 0; currFileIndex < numDialogFiles; ++currFileIndex)
+	{
+		const FileNameContainer& currFileInfo = dialogFiles[currFileIndex];
+
+		FileData currFileData;
+		if( !currFileData.InitializeFileData(currFileInfo) )
+		{
+			continue;
+		}
+
+		printf("Searching through %s\n", currFileInfo.mFullPath.c_str());
+
+		//Compare with every other file
+		for(size_t secondaryFileIndex = currFileIndex + 1; secondaryFileIndex < numDialogFiles; ++secondaryFileIndex)
+		{
+			const FileNameContainer& secondFileInfo = dialogFiles[secondaryFileIndex];
+
+			map<const FileNameContainer*, MatchingInfo>::const_iterator existingMatch = matchingInfo.find(&secondFileInfo);
+			if( existingMatch != matchingInfo.end() )
+			{
+				bool bPairFound = false;
+				const size_t numMatches = existingMatch->second.matches.size();
+				for(size_t i = 0; i < numMatches; ++i)
+				{
+					if(existingMatch->second.matches[i] == &secondFileInfo )
+					{
+						bPairFound = true;
+						break;
+					}
+				}
+
+				if( bPairFound )
+				{
+					break;
+				}
+			}
+
+			FILE* pSecondFile = nullptr;
+			const errno_t errorValue = fopen_s(&pSecondFile, secondFileInfo.mFullPath.c_str(), "rb");
+			if( errorValue )
+			{
+				continue;
+			}
+
+			//Figure out the file size by
+			fseek(pSecondFile, 0, SEEK_END);
+			const unsigned long secondFileSize = ftell(pSecondFile);
+			fseek(pSecondFile, 0, SEEK_SET);
+			
+			//Close the file
+			fclose(pSecondFile);
+
+			//If the file sizes are the same, then compare the data
+			if( secondFileSize == currFileData.GetDataSize() )
+			{
+				FileData secondFileData;
+				if( secondFileData.InitializeFileData(secondFileInfo) && currFileData.DoesThisFileContain(secondFileData, nullptr, false) )
+				{
+					matchingInfo[&currFileInfo].matches.push_back(&secondFileInfo);
+				}
+			}
+		}
+	}
+
+
+	for(map<const FileNameContainer*, MatchingInfo>::const_iterator iter = matchingInfo.begin(); iter != matchingInfo.end(); ++iter)
+	{
+		fprintf(outFile.GetFileHandle(), "Matches For: %s\n", iter->first->mFullPath.c_str());
+
+		for(size_t i = 0; i < iter->second.matches.size(); ++i)
+		{
+			fprintf(outFile.GetFileHandle(), "%s\n", iter->second.matches[i]->mFullPath.c_str());
+		}
+
+		printf("----------------\n");
 	}
 }
 
@@ -1472,6 +1585,7 @@ void PrintHelp()
 	printf("PatchGameKNJ rootSakuraTaisenDirectory newKNJ outDirectory\n");
 	printf("PatchPalettes rootSakuraTaisenDirectory originalPalette newPalette outDirectory\n");
 	printf("InsertText rootSakuraTaisenDirectory translatedText outDirectory\n");
+	printf("FindDuplicateText dialogDirectory outFile\n");
 }
 
 int main(int argc, char *argv[])
@@ -1552,6 +1666,13 @@ int main(int argc, char *argv[])
 		const string outDir          = string(argv[4]) + string("\\");
 
 		InsertText(searchDirectory, translatedText, outDir);
+	}
+	else if( command == "FindDuplicateText"  && argc == 4 )
+	{
+		const string searchDirectory = string(argv[2]);
+		const string outputFile      = string(argv[3]);
+
+		FindDuplicateText(searchDirectory, outputFile);
 	}
 	else
 	{

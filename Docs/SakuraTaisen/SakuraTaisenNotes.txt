@@ -53,3 +53,7 @@ Start counting from:
 -Second 2bytes * 2 are the end of the text string block.
 
 StringInfo: mOffsetFromPrevString = prevStringOffset + stringLength + 3  
+
+//Tile Size
+@ 0x06014410
+0210 -> convert to 0108

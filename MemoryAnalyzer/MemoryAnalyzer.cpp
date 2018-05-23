@@ -49,7 +49,7 @@ void FindDataWithinMemoryFile(const FileNameContainer& inFileName, const FileDat
 	printf("Looking for: %s [%0.2f%%]\n", inFileName.mFileName.c_str(), inPercentage);
 
 	vector<unsigned long> foundOffsets;
-	if( inFileData.DoesThisFileContain(currentFile, foundOffsets, false) )
+	if( inFileData.DoesThisFileContain(currentFile, &foundOffsets, false) )
 	{
 		outMatch.mbFoundMatch = true;
 		outMatch.mFileName    = inFileName.mFileName;

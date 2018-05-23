@@ -53,7 +53,7 @@ public:
 	
 	bool InitializeFileData(const FileNameContainer& inFileData);
 	bool InitializeFileData(const char* pFileName, const char* pFullPath);
-	bool DoesThisFileContain(const FileData& otherFile, std::vector<unsigned long>& outOffsets, bool bFindMultiple) const;
+	bool DoesThisFileContain(const FileData& otherFile, std::vector<unsigned long>* pOutOffsets, bool bFindMultiple) const;
 
 	const char*   GetData() const {return mpData;}
 	unsigned long GetDataSize() const {return mBufferSize;}

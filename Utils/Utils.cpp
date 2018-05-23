@@ -139,7 +139,7 @@ bool FileData::InitializeFileData(const char* pFileName, const char* pFullPath)
 	return ReadInFileData(mFullPath.c_str());
 }
 
-bool FileData::DoesThisFileContain(const FileData& otherFile, vector<unsigned long>& outOffsets, bool bFindMultiple) const
+bool FileData::DoesThisFileContain(const FileData& otherFile, vector<unsigned long>* pOutOffsets, bool bFindMultiple) const
 {	
 	if( otherFile.mFileSize > mFileSize )
 	{
@@ -153,7 +153,10 @@ bool FileData::DoesThisFileContain(const FileData& otherFile, vector<unsigned lo
 	{
 		if( IsDataTheSame(mpData + currentOffset, otherFile.mpData, otherFile.mFileSize) )
 		{
-			outOffsets.push_back(currentOffset);
+			if( pOutOffsets )
+			{
+				pOutOffsets->push_back(currentOffset);
+			}
 
 			if( !bFindMultiple )
 			{
@@ -164,7 +167,7 @@ bool FileData::DoesThisFileContain(const FileData& otherFile, vector<unsigned lo
 		++currentOffset;
 	}
 
-	return outOffsets.size() > 0;
+	return pOutOffsets ? pOutOffsets->size() > 0 : false;
 }
 
 //////////////////////////////

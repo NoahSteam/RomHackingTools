@@ -44,7 +44,7 @@ void FindDataWithinFiles(const vector<FileNameContainer>& inFileNames, const Fil
 		printf("Scanning within: %s \n", inFileNames[i].mFileName.c_str());
 
 		vector<unsigned long> foundOffsets;
-		const bool bFoundData = currentFile.DoesThisFileContain(inFileData, foundOffsets, true);
+		const bool bFoundData = currentFile.DoesThisFileContain(inFileData, &foundOffsets, true);
 		if( bFoundData )
 		{
 			for(unsigned long offset : foundOffsets)
