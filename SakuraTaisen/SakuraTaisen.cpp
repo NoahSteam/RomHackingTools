@@ -486,7 +486,7 @@ private:
 			unsigned short* pWordBuffer = (unsigned short*)&mpBuffer[offsetToString];
 			bool bNonZeroValueFound     = false;
 			int currentIndex            = 0;
-			int offsetToStringData      = 0;
+			unsigned short offsetToStringData = 0;
 			while(1)
 			{
 				unsigned short currValue = pWordBuffer[currentIndex++];
