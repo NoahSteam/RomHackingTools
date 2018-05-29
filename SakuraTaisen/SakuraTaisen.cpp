@@ -33,6 +33,8 @@ using std::string;
 using std::list;
 using std::map;
 
+const unsigned char OutTileDimensionX = 8;  //MUST BE DIVISIBLE BY 8
+const unsigned char OutTileDimensionY = 12;
 
 class SakuraTranslationTable
 {
@@ -41,7 +43,7 @@ public:
 	{
 		if( inChar == '@' )
 		{
-			return 134;
+			return 133;
 		}
 		
 		if( inChar == '\n' )
@@ -947,7 +949,7 @@ void CreateTranslatedFontSheet(const string& inTranslatedFontSheet, const string
 	}
 
 	TileExtractor tileExtractor;
-	if( !tileExtractor.ExtractTiles(8, 8, 16, 16, origTranslatedBmp) )
+	if( !tileExtractor.ExtractTiles(OutTileDimensionX, OutTileDimensionY, 16, 16, origTranslatedBmp) )
 	{
 		return;
 	}
@@ -1057,7 +1059,7 @@ void ConvertTranslatedText(const string& inTextDir, const string& outDir)
 
 		//Go through each line
 		const int maxCharsPerLine = 30;
-		const int maxLines        = 6;
+		const int maxLines        = 4;
 		int charCount             = 0;
 		int sakuraLineCount       = 0;
 		int lineIndex             = 1;
@@ -1339,7 +1341,7 @@ void InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 
 				//Get converted lines of text
 				const int maxCharsPerLine       = 30;
-				const int maxLines              = 6;
+				const int maxLines              = 4;
 				const size_t numTranslatedLines = translatedFile.mLines.size();
 				vector<SakuraString> translatedLines;
 				for(size_t translatedLineIndex = 0; translatedLineIndex < numTranslatedLines; ++translatedLineIndex)
@@ -1573,6 +1575,43 @@ void FindDuplicateText(const string& dialogDirectory, const string& outFileName)
 	}
 }
 
+void FixupSakura(const string& rootDir)
+{
+	const string filePath = rootDir + string("SAKURA");
+	FILE* pFile = nullptr;
+	errno_t errorValue = fopen_s(&pFile, filePath.c_str(), "r+b");
+	if( errorValue )
+	{
+		printf("Unable to open SAKURA.  Error: %i\n", errorValue);
+		return;
+	}
+
+	const unsigned short tileSize  = (OutTileDimensionY << 8) + (OutTileDimensionX/8);
+
+	const int offsetTileDim       = 0x0001040A;
+	const int offsetTileSpacingX  = 0x000104e5;
+	const int offsetTileSpacingY  = 0x000104D7;
+	const int offsetTileSpacingX2 = 0x00010747;
+	const int offsetTileSpacingY2 = 0x00010733;
+
+	fseek(pFile, offsetTileSpacingX, SEEK_SET);
+	fwrite(&OutTileDimensionX, sizeof(OutTileDimensionX), 1, pFile);
+
+	fseek(pFile, offsetTileSpacingY, SEEK_SET);
+	fwrite(&OutTileDimensionY, sizeof(OutTileDimensionY), 1, pFile);
+
+	fseek(pFile, offsetTileSpacingX2, SEEK_SET);
+	fwrite(&OutTileDimensionX, sizeof(OutTileDimensionX), 1, pFile);
+
+	fseek(pFile, offsetTileSpacingY2, SEEK_SET);
+	fwrite(&OutTileDimensionY, sizeof(OutTileDimensionY), 1, pFile);
+
+	fseek(pFile, offsetTileDim, SEEK_SET);
+	fwrite(&tileSize, sizeof(tileSize), 1, pFile);
+
+	fclose(pFile);
+}
+
 void PrintHelp()
 {
 	printf("usage: SakuraTaisen [command]\n");
@@ -1658,6 +1697,8 @@ int main(int argc, char *argv[])
 		const string outDir          = string(argv[5]) + string("\\");
 
 		PatchPalettes(searchDirectory, origPalette, newPalette, outDir);
+
+		FixupSakura(outDir);
 	}
 	else if( command == "InsertText" && argc == 5 )
 	{

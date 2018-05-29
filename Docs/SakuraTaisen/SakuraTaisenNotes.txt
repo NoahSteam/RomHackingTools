@@ -65,10 +65,11 @@ StringInfo: mOffsetFromPrevString = prevStringOffset + stringLength + 3
 060144e5 is the spacing size
 
 This lives in SAKURA:
- 0x000104e4 for X
- 0x000104D8 for Y
+ 0x000104e5 for X
+ 0x000104D7 for Y
  0x00010746 for X
  0x00010733 for Y
  
  Sprite drawing code in SAKURA:
  00010404
+ 0001040A is sprite size (2 bytes).  X/8, Y
