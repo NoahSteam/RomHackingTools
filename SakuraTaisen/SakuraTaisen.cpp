@@ -947,7 +947,7 @@ void CreateTranslatedFontSheet(const string& inTranslatedFontSheet, const string
 	}
 
 	TileExtractor tileExtractor;
-	if( !tileExtractor.ExtractTiles(8, 8, origTranslatedBmp) )
+	if( !tileExtractor.ExtractTiles(8, 8, 16, 16, origTranslatedBmp) )
 	{
 		return;
 	}
@@ -993,7 +993,7 @@ void CreateTranslatedFontSheet(const string& inTranslatedFontSheet, const string
 	}
 	outPalette.WriteData(sakuraPalette.GetData(), sakuraPalette.GetSize());
 
-	//Write out the SakuraTaisen TBL file
+	//Write out the SakuraTaisen KNJ file
 	FileWriter outTable;
 	outTable.OpenFileForWrite(outTableName);
 	for(TileExtractor::Tile& tile : tileExtractor.mTiles)
@@ -1056,8 +1056,8 @@ void ConvertTranslatedText(const string& inTextDir, const string& outDir)
 		}
 
 		//Go through each line
-		const int maxCharsPerLine = 15;
-		const int maxLines        = 3;
+		const int maxCharsPerLine = 30;
+		const int maxLines        = 6;
 		int charCount             = 0;
 		int sakuraLineCount       = 0;
 		int lineIndex             = 1;
@@ -1338,8 +1338,8 @@ void InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 				}
 
 				//Get converted lines of text
-				const int maxCharsPerLine       = 15;
-				const int maxLines              = 3;
+				const int maxCharsPerLine       = 30;
+				const int maxLines              = 6;
 				const size_t numTranslatedLines = translatedFile.mLines.size();
 				vector<SakuraString> translatedLines;
 				for(size_t translatedLineIndex = 0; translatedLineIndex < numTranslatedLines; ++translatedLineIndex)

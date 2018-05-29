@@ -515,31 +515,37 @@ bool BitmapSurface::WriteToFile(const std::string& fileName)
 /////////////////////////////////
 //        TileExtractor        //
 /////////////////////////////////
-bool TileExtractor::ExtractTiles(unsigned int tileWidth, unsigned int tileHeight, const BitmapReader& inBitmap)
+bool TileExtractor::ExtractTiles(unsigned int inTileWidth, unsigned int inTileHeight, unsigned int outTileWidth, unsigned int outTileHeight, const BitmapReader& inBitmap)
 {
+	if( inTileWidth > outTileWidth || inTileHeight > outTileHeight )
+	{
+		printf("Can't extract tiles.  Invalid tile sizes\n");
+		return false;
+	}
+
 	if( inBitmap.mBitmapData.mInfoHeader.mBitCount != 4 )
 	{
-		printf("Can't extract tiles.  Only 4 bit paletted bitmaps supported");
+		printf("Can't extract tiles.  Only 4 bit paletted bitmaps supported\n");
 		return false;
 	}
 
-	if( inBitmap.mBitmapData.mInfoHeader.mImageWidth % tileWidth != 0 || inBitmap.mBitmapData.mInfoHeader.mImageHeight % tileHeight != 0 )
+	if( inBitmap.mBitmapData.mInfoHeader.mImageWidth % inTileWidth != 0 || inBitmap.mBitmapData.mInfoHeader.mImageHeight % inTileHeight != 0 )
 	{
-		printf("Can't extract tiles.  Only 4 bit paletted bitmaps supported");
+		printf("Can't extract tiles.  Only 4 bit paletted bitmaps supported\n");
 		return false;
 	}
 
-	const unsigned int numRows    = (abs(inBitmap.mBitmapData.mInfoHeader.mImageHeight)/tileHeight);
-	const unsigned int numColumns = (inBitmap.mBitmapData.mInfoHeader.mImageWidth/tileWidth);
+	const unsigned int numRows    = (abs(inBitmap.mBitmapData.mInfoHeader.mImageHeight)/inTileHeight);
+	const unsigned int numColumns = (inBitmap.mBitmapData.mInfoHeader.mImageWidth/inTileWidth);
 	const unsigned int numTiles   = numRows * numColumns;
 	const char* pLinearData       = inBitmap.mBitmapData.mColorData.mpRGBA;
 	
 	//Allocate tiles
 	mTiles.resize(numTiles);
 
-	const unsigned int numBytesPerTileWidth = tileWidth/2;
+	const unsigned int numBytesPerTileWidth = inTileWidth/2;
 	const unsigned int stride               = numBytesPerTileWidth*numColumns;
-	const unsigned int numBytesPerTile      = (tileWidth*tileHeight)/2; //4bits per pixel
+	const unsigned int numBytesPerTile      = (outTileWidth*outTileHeight)/2;//(inTileWidth*inTileHeight)/2; //4bits per pixel
 	unsigned int currTile                   = 0;
 
 	//Bitmaps are stored upside down, so start form the bottom
@@ -551,13 +557,14 @@ bool TileExtractor::ExtractTiles(unsigned int tileWidth, unsigned int tileHeight
 			mTiles[currTile].mTileSize = numBytesPerTile;
 			mTiles[currTile].mX        = x;
 			mTiles[currTile].mY        = y;
+			memset(mTiles[currTile].mpTile, 0, numBytesPerTile);
 
-			unsigned int linearDataIndex = y*stride*tileHeight + x*numBytesPerTileWidth;
-			for(unsigned int tilePixelY = 0; tilePixelY < tileHeight; ++tilePixelY)
+			unsigned int linearDataIndex = y*stride*inTileHeight + x*numBytesPerTileWidth;
+			for(unsigned int tilePixelY = 0; tilePixelY < inTileHeight; ++tilePixelY)
 			{
 				for(unsigned int tilePixelX = 0; tilePixelX < numBytesPerTileWidth; ++tilePixelX)
 				{
-					const unsigned int linearY = tileHeight - tilePixelY - 1;
+					const unsigned int linearY = inTileHeight - tilePixelY - 1;
 					assert( (int)linearY >= 0 );
 					assert(tilePixelY*numBytesPerTileWidth + tilePixelX < numBytesPerTile);
 					assert(linearDataIndex + linearY*stride + tilePixelX < (unsigned int)inBitmap.mBitmapData.mColorData.mSizeInBytes);

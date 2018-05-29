@@ -248,7 +248,7 @@ public:
 
 	std::vector<Tile> mTiles;
 
-	bool ExtractTiles(unsigned int tileDimX, unsigned int tileDimY, const BitmapReader& inBitmap);
+	bool ExtractTiles(unsigned int inTileDimX, unsigned int inTileDimY, unsigned int outTileDimX, unsigned int outTileDimY, const BitmapReader& inBitmap);
 };
 
 void FindAllFilesWithinDirectory(const std::string& inDirectoryPath, std::vector<FileNameContainer>& outFileNames);

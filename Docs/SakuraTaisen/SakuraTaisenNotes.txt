@@ -57,3 +57,18 @@ StringInfo: mOffsetFromPrevString = prevStringOffset + stringLength + 3
 //Tile Size
 @ 0x06014410
 0210 -> convert to 0108
+
+06001F7A has the dimensions of the sprite (0108, 0210, etc.)
+06001F7C has coordinate x
+06006e0e writes to 06065e7C the x position of the text sprite
+
+060144e5 is the spacing size
+
+This lives in SAKURA:
+ 0x000104e4 for X
+ 0x000104D8 for Y
+ 0x00010746 for X
+ 0x00010733 for Y
+ 
+ Sprite drawing code in SAKURA:
+ 00010404
