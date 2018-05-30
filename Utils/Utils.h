@@ -28,10 +28,18 @@ struct FileNameContainer
 	{
 		const size_t lastIndex = mFileName.find_last_of(".");
 		mNoExtension           = mFileName.substr(0, lastIndex);
+
+		const char sep = '\\';
+		size_t i = mFullPath.rfind(sep, mFullPath.length());
+		if( i != std::string::npos )
+		{
+			 mPathOnly = mFullPath.substr(0, i);
+		}
 	}
 
 	std::string mFileName;
 	std::string mFullPath;
+	std::string mPathOnly;
 	std::string mNoExtension;
 };
 

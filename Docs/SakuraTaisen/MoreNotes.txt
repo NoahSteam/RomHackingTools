@@ -22,7 +22,9 @@ ExtractFontSheets a:\SakuraTaisen\PatchedData\TranslatedFontSheet A:\SakuraTaise
 ExtractRawText a:\SakuraTaisen\Disc1\ a:\SakuraTaisen\ExtractedData\ExtractedText
 ExtractText a:\SakuraTaisen\Disc1 a:\SakuraTaisen\ExtractedData\FontSheets\Palette.bin a:\SakuraTaisen\ExtractedData\Dialog
 InsertText a:\SakuraTaisen\Disc1 a:\SakuraTaisen\PatchedData\TranslatedText a:\SakuraTaisen\PatchedData\TranslatedTBL
-CreateTranslatedFontSheets A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\8x8.bmp a:\SakuraTaisen\PatchedData\TranslatedFontSheet
+CreateTranslatedFontSheets A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\8x12.bmp a:\SakuraTaisen\PatchedData\TranslatedFontSheet
 PatchPalettes a:\SakuraTaisen\Disc1 A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\Palette.bin A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\OutPalette.BIN a:\SakuraTaisen\PatchedData\Palettes
 PatchGameKNJ a:\SakuraTaisen\Disc1 A:\SakuraTaisen\PatchedData\TranslatedFontSheet\TranslatedKNJ.BIN a:\SakuraTaisen\PatchedData\KNJ
 FindDuplicateText a:\SakuraTaisen\ExtractedData\Dialog\ a:\SakuraTaisen\ExtractedData\Dialog\Duplicates.txt
+
+PatchGame a:\SakuraTaisen\Disc1 a:\SakuraTaisen\Disc1_Translated a:\SakuraTaisen\PatchedData\TranslatedText A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\8x12.bmp A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\Palette.bin

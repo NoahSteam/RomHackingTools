@@ -33,8 +33,13 @@ using std::string;
 using std::list;
 using std::map;
 
-const unsigned char OutTileDimensionX = 8;  //MUST BE DIVISIBLE BY 8
-const unsigned char OutTileDimensionY = 12;
+const unsigned char OutTileSpacingX = 8;  //MUST BE DIVISIBLE BY 8
+const unsigned char OutTileSpacingY = 12;
+const string PatchedPaletteName("PatchedPalette.BIN");
+const string PatchedKNJName("PatchedKNJ.BIN");
+const string Disc1("\\Disc1");
+const string Disc2("\\Disc2");
+const string Seperators("\\");
 
 class SakuraTranslationTable
 {
@@ -43,7 +48,7 @@ public:
 	{
 		if( inChar == '@' )
 		{
-			return 133;
+			return '…' + 1;
 		}
 		
 		if( inChar == '\n' )
@@ -341,7 +346,7 @@ struct SakuraTextFile
 		}
 	};
 
-	FileNameContainer         mFileName;
+	FileNameContainer         mFileNameInfo;
 	vector<SakuraString>      mLines;
 	SakuraDataSegment         mHeader;
 	SakuraDataSegment         mFooter;
@@ -354,9 +359,9 @@ private:
 	char*               mpBuffer;
 
 public:
-	SakuraTextFile(const FileNameContainer& fileName) : mFileName(fileName), mFileSize(0), mpFile(nullptr), mpBuffer(nullptr){}
+	SakuraTextFile(const FileNameContainer& fileName) : mFileNameInfo(fileName), mFileSize(0), mpFile(nullptr), mpBuffer(nullptr){}
 
-	SakuraTextFile(SakuraTextFile&& rhs) : mFileName(std::move(rhs.mFileName)), mLines(std::move(rhs.mLines)), mHeader(std::move(rhs.mHeader)), mFooter(std::move(rhs.mFooter)), 
+	SakuraTextFile(SakuraTextFile&& rhs) : mFileNameInfo(std::move(rhs.mFileNameInfo)), mLines(std::move(rhs.mLines)), mHeader(std::move(rhs.mHeader)), mFooter(std::move(rhs.mFooter)), 
 		                                   mDataSegments(std::move(rhs.mDataSegments)), mStringInfoArray(std::move(rhs.mStringInfoArray)), mFileSize(rhs.mFileSize),
 		                                   mpFile(rhs.mpFile), mpBuffer(std::move(rhs.mpBuffer))
 	{
@@ -366,7 +371,7 @@ public:
 
 	SakuraTextFile& operator=(SakuraTextFile&& rhs)
 	{
-		mFileName        = std::move(rhs.mFileName);
+		mFileNameInfo        = std::move(rhs.mFileNameInfo);
 		mLines           = std::move(rhs.mLines);
 		mDataSegments    = std::move(rhs.mDataSegments);
 		mStringInfoArray = std::move(rhs.mStringInfoArray);
@@ -397,10 +402,10 @@ public:
 	{
 		//Open file in read-binary mode
 		mpFile = nullptr;
-		errno_t errorValue = fopen_s(&mpFile, mFileName.mFullPath.c_str(), "rb");
+		errno_t errorValue = fopen_s(&mpFile, mFileNameInfo.mFullPath.c_str(), "rb");
 		if (errorValue)
 		{
-			printf("Unable to open file: %s.  Error code: %i \n", mFileName.mFileName.c_str(), errorValue);
+			printf("Unable to open file: %s.  Error code: %i \n", mFileNameInfo.mFileName.c_str(), errorValue);
 			return false;
 		}
 
@@ -416,7 +421,7 @@ public:
 		size_t numBytesRead = fread_s(mpBuffer, mFileSize, sizeof(char), mFileSize, mpFile);
 		if( numBytesRead != mFileSize )
 		{
-			printf("Unable to read all of file: %s.\n", mFileName.mFileName.c_str());
+			printf("Unable to read all of file: %s.\n", mFileNameInfo.mFileName.c_str());
 
 			Close();
 			return false;
@@ -675,8 +680,8 @@ void DumpExtractedSakuraText(const vector<SakuraTextFile>& inSakuraTextFiles, co
 	int fileNum = 0;
 	for(const SakuraTextFile& textFile : inSakuraTextFiles)
 	{
-		const string outFileName = outDirectory + textFile.mFileName.mNoExtension + txt;
-		const string infoFileName = outDirectory + textFile.mFileName.mNoExtension + info + txt;
+		const string outFileName = outDirectory + textFile.mFileNameInfo.mNoExtension + txt;
+		const string infoFileName = outDirectory + textFile.mFileNameInfo.mNoExtension + info + txt;
 
 		FILE* pOutFile     = nullptr;
 		errno_t errorValue = fopen_s(&pOutFile, outFileName.c_str(), "w");
@@ -694,7 +699,7 @@ void DumpExtractedSakuraText(const vector<SakuraTextFile>& inSakuraTextFiles, co
 			continue;
 		}
 
-		printf("Dumping text for: %s\n", textFile.mFileName.mFileName.c_str());
+		printf("Dumping text for: %s\n", textFile.mFileNameInfo.mFileName.c_str());
 		int lineNum = 0;
 		for(const SakuraString& sakuraString : textFile.mLines)
 		{
@@ -732,8 +737,8 @@ bool ExtractFontSheetAsBitmap(const FileNameContainer& inFileNameContainer, cons
 
 	printf("Extracting: %s\n", inFileNameContainer.mFileName.c_str());
 	
-	const int tileDimX          = 8;//16;
-	const int tileDimY          = 8;//16;
+	const int tileDimX          = 16;
+	const int tileDimY          = 16;
 	const int tileBytes         = (tileDimX*tileDimY)/2; //4bits per pixel, so only half the amount of bytes as pixels
 	const int tilesPerRow       = 255;
 	const int bytesPerTile      = tileBytes;
@@ -867,22 +872,22 @@ void ExtractText(const string& inSearchDirectory, const string& inPaletteFileNam
 		const SakuraTextFile& sakuraText       = sakuraTextFiles[i];
 		
 		const string fontSheetNumber = fontSheetName.mNoExtension.substr(0, fontSheetName.mNoExtension.size() - 3);
-		const string sakuraFileNum   = sakuraText.mFileName.mNoExtension.substr(0, sakuraText.mFileName.mNoExtension.size() - 3);
+		const string sakuraFileNum   = sakuraText.mFileNameInfo.mNoExtension.substr(0, sakuraText.mFileNameInfo.mNoExtension.size() - 3);
 
 		if( sakuraFileNum != fontSheetNumber )
 		{
-			printf("ExtractText: Font sheet and text file mistmatch. %s %s", fontSheetName.mNoExtension.c_str(), sakuraText.mFileName.mNoExtension.c_str());
+			printf("ExtractText: Font sheet and text file mistmatch. %s %s", fontSheetName.mNoExtension.c_str(), sakuraText.mFileNameInfo.mNoExtension.c_str());
 			return;
 		}
 		
 		//Create output directory for this file
-		string fileOutputDir = inOutputDirectory + sakuraText.mFileName.mNoExtension + string("\\");
+		string fileOutputDir = inOutputDirectory + sakuraText.mFileNameInfo.mNoExtension + string("\\");
 		if( !CreateDirectoryHelper(fileOutputDir) )
 		{
 			continue;
 		}
 
-		printf("Dumping dialog for: %s\n", sakuraText.mFileName.mNoExtension.c_str());
+		printf("Dumping dialog for: %s\n", sakuraText.mFileNameInfo.mNoExtension.c_str());
 
 		//Create font sheet
 		SakuraFontSheet sakuraFontSheet;
@@ -939,19 +944,19 @@ void ExtractText(const string& inSearchDirectory, const string& inPaletteFileNam
 	}
 }
 
-void CreateTranslatedFontSheet(const string& inTranslatedFontSheet, const string& outPath)
+bool CreateTranslatedFontSheet(const string& inTranslatedFontSheet, const string& outPath)
 {
 	//Read in translated font sheet
 	BitmapReader origTranslatedBmp;
 	if( !origTranslatedBmp.ReadBitmap(inTranslatedFontSheet) )
 	{
-		return;
+		return false;
 	}
 
 	TileExtractor tileExtractor;
-	if( !tileExtractor.ExtractTiles(OutTileDimensionX, OutTileDimensionY, 16, 16, origTranslatedBmp) )
+	if( !tileExtractor.ExtractTiles(16, 16, 16, 16, origTranslatedBmp) )
 	{
-		return;
+		return false;
 	}
 
 	//Convert it to the SakuraTaisen format
@@ -984,14 +989,14 @@ void CreateTranslatedFontSheet(const string& inTranslatedFontSheet, const string
 	}
 
 
-	const string outPaletteName = outPath + string("OutPalette.BIN");
-	const string outTableName   = outPath + string("TranslatedKNJ.BIN");
+	const string outPaletteName = outPath + PatchedPaletteName;
+	const string outTableName   = outPath + PatchedKNJName;
 
 	//Ouptut the palette
 	FileWriter outPalette;
 	if( !outPalette.OpenFileForWrite(outPaletteName) )
 	{
-		return;
+		return false;
 	}
 	outPalette.WriteData(sakuraPalette.GetData(), sakuraPalette.GetSize());
 
@@ -1026,6 +1031,10 @@ void CreateTranslatedFontSheet(const string& inTranslatedFontSheet, const string
 
 		outTable.WriteData(tile.mpTile, tile.mTileSize);
 	}
+
+	printf("CreateTranslatedFontSheet Succeeded.\n");
+
+	return true;
 }
 
 void ConvertTranslatedText(const string& inTextDir, const string& outDir)
@@ -1131,7 +1140,7 @@ void ConvertTranslatedText(const string& inTextDir, const string& outDir)
 	}
 }
 
-void PatchKNJ(const string& rootDirectory, const string& newKNJ, const string& outDir)
+bool PatchKNJ(const string& rootDirectory, const string& newKNJ, const string& outDir)
 {
 	//Find all files within the requested directory
 	vector<FileNameContainer> allFiles;
@@ -1145,7 +1154,7 @@ void PatchKNJ(const string& rootDirectory, const string& newKNJ, const string& o
 	FileData newFileData;
 	if( !newFileData.InitializeFileData(newKNJ.c_str(), newKNJ.c_str()) )
 	{
-		return;
+		return false;
 	}
 
 	//Patch original files
@@ -1172,9 +1181,13 @@ void PatchKNJ(const string& rootDirectory, const string& newKNJ, const string& o
 			printf("Unable to patch: %s \n", knj.mNoExtension.c_str());
 		}
 	}
+
+	printf("PatchKNJ Succeeded.\n");
+
+	return true;
 }
 
-void PatchPalettes(const string& rootDirectory, const string& originalPalette, const string& newPalette, const string& outDir)
+bool PatchPalettes(const string& rootDirectory, const string& originalPalette, const string& newPalette, const string& inOutputDir, bool bOutputToCorrespondingDirectory = false)
 {
 	//Find all files within the requested directory
 	vector<FileNameContainer> allFiles;
@@ -1185,7 +1198,7 @@ void PatchPalettes(const string& rootDirectory, const string& originalPalette, c
 	if( !origData.InitializeFileData(originalPalette.c_str(), originalPalette.c_str()) )
 	{
 		printf("Unable to patch palettes because original palette not found.\n");
-		return;
+		return false;
 	}
 	
 	//Load new palette data
@@ -1193,9 +1206,9 @@ void PatchPalettes(const string& rootDirectory, const string& originalPalette, c
 	if( !newPaletteData.InitializeFileData(newPalette.c_str(), newPalette.c_str()) )
 	{
 		printf("Unable to patch palettes because new palette not found.\n");
-		return;
+		return false;
 	}
-
+	
 	vector<FileNameContainer> foundFiles;
 
 	//Go trhough all files in the SakuraTaisen directory searching for palette data
@@ -1214,12 +1227,39 @@ void PatchPalettes(const string& rootDirectory, const string& originalPalette, c
 			{
 				foundFiles.push_back(sakuraFile);
 
-				const string& outFileName = outDir + sakuraFile.mFileName;
+				string outFileName;
+				if( bOutputToCorrespondingDirectory )
+				{
+					const char sep = '\\';
+					size_t lastSepIndex = sakuraFile.mPathOnly.rfind(sep, sakuraFile.mPathOnly.length());
+					if( lastSepIndex != std::string::npos )
+					{
+						const string subDir = sakuraFile.mPathOnly.substr(lastSepIndex, sakuraFile.mPathOnly.size());
+						if( subDir == Disc1 || subDir == Disc2 )
+						{
+							outFileName = inOutputDir + Seperators + sakuraFile.mFileName;
+						}
+						else
+						{
+							outFileName = inOutputDir + subDir + Seperators + sakuraFile.mFileName;
+						}
+					}
+					else
+					{
+						printf("Unable to find output path for %s\n", sakuraFile.mFullPath.c_str());
+						return false;
+					}
+				}
+				else
+				{
+					outFileName = inOutputDir + sakuraFile.mFileName;
+				}
+				
 				FileWriter outFile;
 				if( !outFile.OpenFileForWrite(outFileName) )
 				{
 					printf("Unable to create patched file: %s \n", outFileName.c_str());
-					continue;
+					return false;
 				}
 
 				//Write out patched data
@@ -1245,7 +1285,7 @@ void PatchPalettes(const string& rootDirectory, const string& originalPalette, c
 					outFile.WriteData(sakuraFileData.GetData() + origSakuraOffset, sakuraFileData.GetDataSize() - origSakuraOffset);
 
 					totalWritten += sakuraFileData.GetDataSize() - origSakuraOffset;
-				}				
+				}
 
 				outFile.Close();
 
@@ -1267,9 +1307,13 @@ void PatchPalettes(const string& rootDirectory, const string& originalPalette, c
 	{
 		printf("Patched: %s\n", patchedFile.mFileName.c_str());
 	}
+
+	printf("PatchPalettes Succeeded\n");
+
+	return true;
 }
 
-void InsertText(const string& rootSakuraTaisenDirectory, const string& translatedTextDirectory, const string& outDirectory)
+bool InsertText(const string& rootSakuraTaisenDirectory, const string& translatedTextDirectory, const string& outDirectory, bool bOutputToCorrespondingDirectory = false)
 {
 #define IncrementLine()\
     ++currLine;\
@@ -1294,7 +1338,7 @@ void InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 	FindAllFilesWithinDirectory(string(translatedTextDirectory), translatedTextFiles);
 	if( !translatedTextFiles.size() )
 	{
-		return;
+		return false;
 	}
 
 	//Find all files within the requested directory
@@ -1315,7 +1359,7 @@ void InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 		//Search for the corresponding translated file name
 		for(const FileNameContainer& translatedFileName : translatedTextFiles)
 		{
-			if( translatedFileName.mNoExtension == sakuraFile.mFileName.mNoExtension )
+			if( translatedFileName.mNoExtension == sakuraFile.mFileNameInfo.mNoExtension )
 			{
 				//Open translated text file
 				TextFileData translatedFile(translatedFileName);
@@ -1323,9 +1367,37 @@ void InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 				{
 					break;
 				}
+				
+				//Figure out output file name
+				string outFileName;
+				if( bOutputToCorrespondingDirectory )
+				{
+					const char sep = '\\';
+					size_t lastSepIndex = sakuraFile.mFileNameInfo.mPathOnly.rfind(sep, sakuraFile.mFileNameInfo.mPathOnly.length());
+					if( lastSepIndex != std::string::npos )
+					{
+						const string subDir = sakuraFile.mFileNameInfo.mPathOnly.substr(lastSepIndex, sakuraFile.mFileNameInfo.mPathOnly.size());
+						if( subDir == Disc1 || subDir == Disc2 )
+						{
+							outFileName = outDirectory + Seperators + sakuraFile.mFileNameInfo.mFileName;
+						}
+						else
+						{
+							outFileName = outDirectory + subDir + Seperators + sakuraFile.mFileNameInfo.mFileName;
+						}
+					}
+					else
+					{
+						printf("Unable to find output path for %s\n", sakuraFile.mFileNameInfo.mFullPath.c_str());
+						return false;
+					}
+				}
+				else
+				{
+					outFileName = outDirectory + sakuraFile.mFileNameInfo.mFileName;
+				}
 
 				//Create output file
-				const string outFileName = outDirectory + sakuraFile.mFileName.mFileName;
 				FileWriter outFile;
 				if( !outFile.OpenFileForWrite(outFileName) )
 				{
@@ -1472,6 +1544,10 @@ void InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 			}
 		}
 	}
+
+	printf("InsertText Succeeded\n");
+
+	return true;
 }
 
 void FindDuplicateText(const string& dialogDirectory, const string& outFileName)
@@ -1575,7 +1651,7 @@ void FindDuplicateText(const string& dialogDirectory, const string& outFileName)
 	}
 }
 
-void FixupSakura(const string& rootDir)
+bool FixupSakura(const string& rootDir)
 {
 	const string filePath = rootDir + string("SAKURA");
 	FILE* pFile = nullptr;
@@ -1583,33 +1659,99 @@ void FixupSakura(const string& rootDir)
 	if( errorValue )
 	{
 		printf("Unable to open SAKURA.  Error: %i\n", errorValue);
-		return;
+		return false;
 	}
 
-	const unsigned short tileSize  = (OutTileDimensionY << 8) + (OutTileDimensionX/8);
+	//const unsigned short tileSize  = (OutTileSpacingY << 8) + (OutTileSpacingX/8);
 
-	const int offsetTileDim       = 0x0001040A;
+	//const int offsetTileDim     = 0x0001040A;
 	const int offsetTileSpacingX  = 0x000104e5;
 	const int offsetTileSpacingY  = 0x000104D7;
 	const int offsetTileSpacingX2 = 0x00010747;
 	const int offsetTileSpacingY2 = 0x00010733;
 
 	fseek(pFile, offsetTileSpacingX, SEEK_SET);
-	fwrite(&OutTileDimensionX, sizeof(OutTileDimensionX), 1, pFile);
+	fwrite(&OutTileSpacingX, sizeof(OutTileSpacingX), 1, pFile);
 
 	fseek(pFile, offsetTileSpacingY, SEEK_SET);
-	fwrite(&OutTileDimensionY, sizeof(OutTileDimensionY), 1, pFile);
+	fwrite(&OutTileSpacingY, sizeof(OutTileSpacingY), 1, pFile);
 
 	fseek(pFile, offsetTileSpacingX2, SEEK_SET);
-	fwrite(&OutTileDimensionX, sizeof(OutTileDimensionX), 1, pFile);
+	fwrite(&OutTileSpacingX, sizeof(OutTileSpacingX), 1, pFile);
 
 	fseek(pFile, offsetTileSpacingY2, SEEK_SET);
-	fwrite(&OutTileDimensionY, sizeof(OutTileDimensionY), 1, pFile);
+	fwrite(&OutTileSpacingY, sizeof(OutTileSpacingY), 1, pFile);
 
-	fseek(pFile, offsetTileDim, SEEK_SET);
-	fwrite(&tileSize, sizeof(tileSize), 1, pFile);
+	//fseek(pFile, offsetTileDim, SEEK_SET);
+	//fwrite(&tileSize, sizeof(tileSize), 1, pFile);
 
 	fclose(pFile);
+
+	printf("FixupSakura Succeeded.\n");
+
+	return true;
+}
+
+bool PatchGame(const string& rootSakuraTaisenDirectory, const string& patchedSakuraTaisenDirectory, const string& translatedTextDirectory, const string& fontSheetFileName, const string& originalPaletteFileName)
+{
+	char buffer[MAX_PATH];
+	const DWORD dwRet = GetCurrentDirectory(MAX_PATH, buffer);
+	if( !dwRet )
+	{
+		printf("Cannot patch game.  Could not find current directory.  Error: (%d)\n", GetLastError());
+		return false;
+	}
+
+	//Create temp work directory
+	const string tempDir = string(buffer) + string("\\Temp\\");
+	if( !CreateDirectoryHelper(tempDir) )
+	{
+		printf("Cannot patch game.  Could not create temp work directory.  Error: (%d)\n", GetLastError());
+		return false;
+	}
+
+	//Step 1
+	if( !CreateTranslatedFontSheet(fontSheetFileName, tempDir) )
+	{
+		printf("CreateTranslatedFontSheet failed.  Patch unsuccessful.\n");
+		return false;
+	}
+
+	//Step2
+	const string newPaletteFileName = tempDir + PatchedPaletteName; //Created by CreateTranslatedFontSheet
+	if( !PatchPalettes(rootSakuraTaisenDirectory, originalPaletteFileName, newPaletteFileName, patchedSakuraTaisenDirectory, true) )
+	{
+		printf("PatchPalettes failed.  Patch unsuccessful.\n");
+		return false;
+	}
+
+	//Step 3
+	if( !FixupSakura(patchedSakuraTaisenDirectory) )
+	{
+		printf("FixupSakura failed.  Patch unsuccessful.\n");
+		return false;
+	}
+
+
+	//Step 4
+	const string translatedKNJPath = tempDir + PatchedKNJName; //Created by CreateTranslatedFontSheet
+	const string patchedKNJPath    = patchedSakuraTaisenDirectory + string("SAKURA1\\");
+	if( !PatchKNJ(rootSakuraTaisenDirectory, translatedKNJPath, patchedKNJPath) )
+	{
+		printf("PatchKNJ failed.  Patch unsuccessful.\n");
+		return false;
+	}
+
+	//Step 5
+	if( !InsertText(rootSakuraTaisenDirectory, translatedTextDirectory, patchedSakuraTaisenDirectory, true) )
+	{
+		printf("PatchKNJ failed.  Patch unsuccessful.\n");
+		return false;
+	}
+
+	printf("Patching Successful!\n");
+
+	return true;
 }
 
 void PrintHelp()
@@ -1625,6 +1767,7 @@ void PrintHelp()
 	printf("PatchPalettes rootSakuraTaisenDirectory originalPalette newPalette outDirectory\n");
 	printf("InsertText rootSakuraTaisenDirectory translatedText outDirectory\n");
 	printf("FindDuplicateText dialogDirectory outFile\n");
+	printf("PatchGame rootSakuraTaisenDirectory patchedSakuraTaisenDirectory translatedTextDirectory fontSheet originalPalette");
 }
 
 int main(int argc, char *argv[])
@@ -1639,7 +1782,7 @@ int main(int argc, char *argv[])
 	if( command == string("ExtractRawText") && argc == 4 )
 	{
 		const char*  pSearchDirectory = argv[2];
-		const string outDirectory     = string(argv[3]) + string("\\");
+		const string outDirectory     = string(argv[3]) + Seperators;
 
 		//Find all files within the requested directory
 		vector<FileNameContainer> allFiles;
@@ -1651,7 +1794,7 @@ int main(int argc, char *argv[])
 	{
 		const char*  pSearchDirectory = argv[2];
 		const string paletteFileName  = string(argv[3]);
-		const string outDirectory     = string(argv[4]) + string("\\");
+		const string outDirectory     = string(argv[4]) + Seperators;
 
 		//Find all files within the requested directory
 		vector<FileNameContainer> allFiles;
@@ -1663,21 +1806,21 @@ int main(int argc, char *argv[])
 	{
 		const string searchDirectory   = string(argv[2]);
 		const string paletteFileName   = string(argv[3]);
-		const string outDirectory      = string(argv[4]) + string("\\");
+		const string outDirectory      = string(argv[4]) + Seperators;
 
 		ExtractText(searchDirectory, paletteFileName, outDirectory);
 	}
 	else if (command == "CreateTranslatedFontSheets" && argc == 4 )
 	{
 		const string translatedFontSheet = string(argv[2]);
-		const string outDirectory        = string(argv[3]) + string("\\");
+		const string outDirectory        = string(argv[3]) + Seperators;
 
 		CreateTranslatedFontSheet(translatedFontSheet, outDirectory);
 	}
 	else if (command == "ConvertTranslatedText" && argc == 4 )
 	{
 		const string translatedTextDir = string(argv[2]);
-		const string outDirectory      = string(argv[3]) + string("\\");
+		const string outDirectory      = string(argv[3]) + Seperators;
 
 		ConvertTranslatedText(translatedTextDir, outDirectory);
 	}
@@ -1685,7 +1828,7 @@ int main(int argc, char *argv[])
 	{
 		const string searchDirectory = string(argv[2]);
 		const string newKNJ          = string(argv[3]);
-		const string outDir          = string(argv[4]) + string("\\");
+		const string outDir          = string(argv[4]) + Seperators;
 
 		PatchKNJ(searchDirectory, newKNJ, outDir);
 	}
@@ -1694,7 +1837,7 @@ int main(int argc, char *argv[])
 		const string searchDirectory = string(argv[2]);
 		const string origPalette     = string(argv[3]);
 		const string newPalette      = string(argv[4]);
-		const string outDir          = string(argv[5]) + string("\\");
+		const string outDir          = string(argv[5]) + Seperators;
 
 		PatchPalettes(searchDirectory, origPalette, newPalette, outDir);
 
@@ -1704,7 +1847,7 @@ int main(int argc, char *argv[])
 	{
 		const string searchDirectory = string(argv[2]);
 		const string translatedText  = string(argv[3]);
-		const string outDir          = string(argv[4]) + string("\\");
+		const string outDir          = string(argv[4]) + Seperators;
 
 		InsertText(searchDirectory, translatedText, outDir);
 	}
@@ -1714,6 +1857,16 @@ int main(int argc, char *argv[])
 		const string outputFile      = string(argv[3]);
 
 		FindDuplicateText(searchDirectory, outputFile);
+	}
+	else if( command == "PatchGame" && argc == 7 )
+	{
+		const string rootSakuraTaisenDirectory    = string(argv[2]) + Seperators;
+		const string patchedSakuraTaisenDirectory = string(argv[3]) + Seperators;
+		const string translatedTextDirectory      = string(argv[4]);
+		const string fontSheet                    = string(argv[5]);
+		const string originalPalette              = string(argv[6]);
+
+		PatchGame(rootSakuraTaisenDirectory, patchedSakuraTaisenDirectory, translatedTextDirectory, fontSheet, originalPalette);
 	}
 	else
 	{
