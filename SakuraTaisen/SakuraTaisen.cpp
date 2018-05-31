@@ -48,7 +48,7 @@ public:
 	{
 		if( inChar == '@' )
 		{
-			return '…' + 1;
+			return 'u' + 16 + 1;//'…' + 1;
 		}
 		
 		if( inChar == '\n' )
@@ -936,7 +936,7 @@ void ExtractText(const string& inSearchDirectory, const string& inPaletteFileNam
 				++currCol;
 			}
 			
-			const string bitmapName = fileOutputDir + std::to_string(stringIndex) + extension;
+			const string bitmapName = fileOutputDir + std::to_string(stringIndex + 1) + extension;
 			sakuraStringBmp.WriteToFile(bitmapName);
 
 			++stringIndex;
@@ -1436,7 +1436,7 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 
 						if( word.size() > maxCharsPerLine )
 						{
-							printf("Unable to insert word because it is longer than %i characters: %s\n", maxCharsPerLine, word.c_str());
+							printf("Unable to insert word because it is longer than %i characters: %s[%i]\n", maxCharsPerLine, word.c_str(), word.size());
 							continue;
 						}
 

@@ -185,7 +185,9 @@ bool TextFileData::InitializeTextFile()
 	
 	static const int bufferSize = 1024*1024;
 	static char buffer[bufferSize];
+	static char fixedString[bufferSize];
 	memset(buffer, 0, bufferSize);
+	memset(fixedString, 0, bufferSize);
 
 	const string space(" ");
 	char* pToken = nullptr;
@@ -195,12 +197,29 @@ bool TextFileData::InitializeTextFile()
 		char *pNextToken   = nullptr;;
 		char* pContext     = nullptr;
 		const char* pDelim = " \n";
-
+		
 		pToken = strtok_s(buffer, pDelim, &pContext);
 		while(pToken != NULL)
 		{
-			newLineOfText.mWords.push_back(pToken);
-			newLineOfText.mFullLine += string(pToken) + space;
+			//Hack to fix up unicode value of '…'.  '…' is replaced with '@'
+			memset(fixedString, 0, bufferSize);
+			const size_t tokenLen = strlen(pToken);
+			for(size_t t = 0, f = 0; t < tokenLen; t)
+			{
+				if( pToken[t] == -30 )
+				{
+					t += 3;
+
+					fixedString[f++] = '@';
+				}
+				else
+				{
+					fixedString[f++] = pToken[t++];
+				}
+			}
+
+			newLineOfText.mWords.push_back(fixedString);
+			newLineOfText.mFullLine += string(fixedString) + space;
 
 			pToken = strtok_s(NULL, pDelim, &pContext);
 		}

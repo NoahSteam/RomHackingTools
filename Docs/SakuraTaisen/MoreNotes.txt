@@ -16,6 +16,7 @@ CreateTranslatedFontSheets D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Da
 ExtractRawText d:\Rizwan\SakuraWars\Disc1 d:\Rizwan\SakuraWars\ExtractedText
 ExtractRawText d:\Rizwan\SakuraWars\TranslatedTBL d:\Rizwan\SakuraWars\ExtractedTranslatedText
 PatchGameKNJ d:\Rizwan\SakuraWars\Disc1 d:\Rizwan\SakuraWars\TranslatedFontSheets\TranslatedKNJ.BIN d:\Rizwan\SakuraWars\TranslatedKNJ
+PatchGame d:\Rizwan\SakuraWars\Disc1 d:\Rizwan\SakuraWars\Disc1_Translated D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\TranslatedText D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\8x12.bmp D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\Palette.bin
 
 ExtractFontSheets a:\SakuraTaisen\Disc1\ a:\SakuraTaisen\ExtractedData\FontSheets\Palette.bin a:\SakuraTaisen\ExtractedData\FontSheets
 ExtractFontSheets a:\SakuraTaisen\PatchedData\TranslatedFontSheet A:\SakuraTaisen\PatchedData\TranslatedFontSheet\OutPalette.BIN a:\SakuraTaisen\PatchedData\TranslatedFontSheet
@@ -26,5 +27,4 @@ CreateTranslatedFontSheets A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\8x12.
 PatchPalettes a:\SakuraTaisen\Disc1 A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\Palette.bin A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\OutPalette.BIN a:\SakuraTaisen\PatchedData\Palettes
 PatchGameKNJ a:\SakuraTaisen\Disc1 A:\SakuraTaisen\PatchedData\TranslatedFontSheet\TranslatedKNJ.BIN a:\SakuraTaisen\PatchedData\KNJ
 FindDuplicateText a:\SakuraTaisen\ExtractedData\Dialog\ a:\SakuraTaisen\ExtractedData\Dialog\Duplicates.txt
-
 PatchGame a:\SakuraTaisen\Disc1 a:\SakuraTaisen\Disc1_Translated a:\SakuraTaisen\PatchedData\TranslatedText A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\8x12.bmp A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\Palette.bin
