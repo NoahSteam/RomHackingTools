@@ -40,6 +40,7 @@ const string PatchedKNJName("PatchedKNJ.BIN");
 const string Disc1("\\Disc1");
 const string Disc2("\\Disc2");
 const string Seperators("\\");
+const unsigned short SpecialDialogIndicator = 0xC351;
 
 class SakuraTranslationTable
 {
@@ -172,16 +173,26 @@ struct SakuraString
 		return true;
 	}
 
-	void AddString(const string& inString)
+	void AddString(const string& inString, unsigned short specialValue = 0)
 	{
-		mChars.push_back( std::move(SakuraChar(0)) );
-		mChars.push_back( std::move(SakuraChar(0)) );
+		if( specialValue )
+		{
+			mChars.push_back( std::move(SakuraChar(specialValue)) );
+			mChars.push_back( std::move(SakuraChar(0)) );
+		}
+		else
+		{
+			mChars.push_back( std::move(SakuraChar(0)) );
+			mChars.push_back( std::move(SakuraChar(0)) );
+		}
 
 		for(string::const_iterator iter = inString.begin(); iter != inString.end(); ++iter)
 		{
 			const unsigned short value = GTranslationLookupTable.GetIndex(*iter);
 			mChars.push_back( std::move(SakuraChar(value)) );
 		}
+
+		mChars.push_back( std::move(SakuraChar(0)) );
 
 		mOffsetToStringData = 2;
 	}
@@ -371,7 +382,7 @@ public:
 
 	SakuraTextFile& operator=(SakuraTextFile&& rhs)
 	{
-		mFileNameInfo        = std::move(rhs.mFileNameInfo);
+		mFileNameInfo    = std::move(rhs.mFileNameInfo);
 		mLines           = std::move(rhs.mLines);
 		mDataSegments    = std::move(rhs.mDataSegments);
 		mStringInfoArray = std::move(rhs.mStringInfoArray);
@@ -494,6 +505,23 @@ private:
 			bool bNonZeroValueFound     = false;
 			int currentIndex            = 0;
 			unsigned short offsetToStringData = 0;
+
+			//The dialog starting at 0xC531 has a special starting tag instead of the usual 00 00
+			if( mStringInfoArray[i].mUnknown == SpecialDialogIndicator )
+			{
+				//First byte
+				unsigned short currValue = pWordBuffer[currentIndex++];
+				currValue                = SwapByteOrder(currValue);  //Convert to big endian
+				newLineOfText.AddChar(currValue);
+
+				//Second byte
+				currValue = pWordBuffer[currentIndex++];
+				currValue = SwapByteOrder(currValue);  //Convert to big endian
+				newLineOfText.AddChar(currValue);
+
+				assert(currValue == 0);
+			}
+
 			while(1)
 			{
 				unsigned short currValue = pWordBuffer[currentIndex++];
@@ -516,81 +544,8 @@ private:
 				}
 			}
 
-			newLineOfText.mOffsetToStringData = mStringInfoArray[i].mUnknown >= 0xC351 ? 2 : offsetToStringData;
+			newLineOfText.mOffsetToStringData = mStringInfoArray[i].mUnknown >= SpecialDialogIndicator ? 2 : offsetToStringData;
 			mLines.push_back(newLineOfText);
-		}
-	}
-
-	void ParseStringsOld()
-	{
-		const unsigned long startTextBlock = SwapByteOrder( *((unsigned short*)mpBuffer) ) * 2;
-		const unsigned long endTextBlock   = SwapByteOrder( *((unsigned short*)(mpBuffer + 2)) ) * 2;
-		unsigned short*      pWordBuffer   = (unsigned short*)(mpBuffer + startTextBlock);
-		const unsigned long numEntries     = (endTextBlock - startTextBlock)/2;
-
-		assert(endTextBlock > startTextBlock);
-		assert( ((endTextBlock - startTextBlock) % 2) == 0 );
-
-		unsigned long currentIndex = 0;
-		while(currentIndex < numEntries)
-		{
-			//Leading 0s
-			unsigned long startIndex = currentIndex;
-			unsigned short currValue  = 0;
-			while( 1 )
-			{
-				currValue = pWordBuffer[currentIndex];
-
-				if(currValue != 0 && currValue != 0xffff )
-				{
-					break;
-				}
-				++currentIndex;
-			}
-			if( currentIndex > startIndex )
-			{
-				const unsigned long numLeadingZeros = currentIndex - startIndex;
-				mDataSegments.push_back( std::move(SakuraDataSegment((char*)&pWordBuffer[startIndex], numLeadingZeros*sizeof(short))) );
-			}
-
-			//String
-			SakuraString newLineOfText;
-			while(1)
-			{
-				currValue = pWordBuffer[currentIndex];
-				if( currValue == 0 )
-				{
-					break;
-				}
-
-				//Convert to big endian
-				currValue = SwapByteOrder(currValue);
-
-				newLineOfText.AddChar((currValue&0xff00) >> 8, currValue&0x00ff);
-				++currentIndex;
-			}
-			mLines.push_back(newLineOfText);
-
-			//End zeros
-			startIndex = currentIndex;
-			while( 1 )
-			{
-				currValue = pWordBuffer[currentIndex];
-				if(currValue != 0 && currValue != 0xffff )
-				{
-					break;
-				}
-				++currentIndex;
-
-				if( currentIndex == numEntries )
-				{
-					break;
-				}
-			}
-
-			const unsigned long numEndingZeroes = currentIndex - startIndex;
-			assert( (long)numEndingZeroes );
-			mDataSegments.push_back( std::move(SakuraDataSegment((char*)&pWordBuffer[startIndex], numEndingZeroes*sizeof(short))) );
 		}
 	}
 };
@@ -631,7 +586,7 @@ struct SakuraTextFileFixedHeader
 		}
 		//Done figuring out table size
 		
-		assert(stringTableSize <= 0xffff);
+		assert(stringTableSize/2 <= 0xffff);
 		mOffsetToTable = SwapByteOrder( ((unsigned short*)inSakuraFile.mHeader.pData)[0] );
 		mTableEnd      = (unsigned short)((mOffsetToTable*2 + (unsigned short)stringTableSize) / 2);
 
@@ -917,7 +872,7 @@ void ExtractText(const string& inSearchDirectory, const string& inPaletteFileNam
 			for(size_t charIndex = sakuraString.mOffsetToStringData; charIndex < sakuraString.mChars.size(); ++charIndex)
 			{
 				const SakuraString::SakuraChar& sakuraChar = sakuraString.mChars[charIndex];
-				if( sakuraChar.mIndex == 0 )
+				if( sakuraChar.mIndex == 0 || sakuraChar.mIndex > 255*3)
 				{
 					continue;
 				}
@@ -1336,10 +1291,6 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 	//Find all translated text files
 	vector<FileNameContainer> translatedTextFiles;
 	FindAllFilesWithinDirectory(string(translatedTextDirectory), translatedTextFiles);
-	if( !translatedTextFiles.size() )
-	{
-		return false;
-	}
 
 	//Find all files within the requested directory
 	vector<FileNameContainer> allFiles;
@@ -1356,193 +1307,249 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 	//Insert text
 	for(const SakuraTextFile& sakuraFile : sakuraTextFiles)
 	{
+		printf("Inserting text for: %s\n", sakuraFile.mFileNameInfo.mFileName.c_str());
+
+		//Figure out output file name
+		string outFileName;
+		if( bOutputToCorrespondingDirectory )
+		{
+			const char sep = '\\';
+			size_t lastSepIndex = sakuraFile.mFileNameInfo.mPathOnly.rfind(sep, sakuraFile.mFileNameInfo.mPathOnly.length());
+			if( lastSepIndex != std::string::npos )
+			{
+				const string subDir = sakuraFile.mFileNameInfo.mPathOnly.substr(lastSepIndex, sakuraFile.mFileNameInfo.mPathOnly.size());
+				if( subDir == Disc1 || subDir == Disc2 )
+				{
+					outFileName = outDirectory + Seperators + sakuraFile.mFileNameInfo.mFileName;
+				}
+				else
+				{
+					outFileName = outDirectory + subDir + Seperators + sakuraFile.mFileNameInfo.mFileName;
+				}
+			}
+			else
+			{
+				printf("Unable to find output path for %s\n", sakuraFile.mFileNameInfo.mFullPath.c_str());
+				return false;
+			}
+		}
+		else
+		{
+			outFileName = outDirectory + sakuraFile.mFileNameInfo.mFileName;
+		}
+
+		//Create output file
+		FileWriter outFile;
+		if( !outFile.OpenFileForWrite(outFileName) )
+		{
+			printf("Unable to open the output file %s.\n", outFileName.c_str());
+
+			return false;
+		}
+
 		//Search for the corresponding translated file name
+		const FileNameContainer* pMatchingTranslatedFileName = nullptr;
 		for(const FileNameContainer& translatedFileName : translatedTextFiles)
 		{
 			if( translatedFileName.mNoExtension == sakuraFile.mFileNameInfo.mNoExtension )
 			{
-				//Open translated text file
-				TextFileData translatedFile(translatedFileName);
-				if( !translatedFile.InitializeTextFile() )
+				pMatchingTranslatedFileName = &translatedFileName;
+				break;
+			}
+		}
+
+		vector<SakuraString> translatedLines;
+		if( pMatchingTranslatedFileName )
+		{
+			//Open translated text file
+			TextFileData translatedFile(*pMatchingTranslatedFileName);
+			if( !translatedFile.InitializeTextFile() )
+			{
+				printf("Unable to open the translation file %s.\n", pMatchingTranslatedFileName->mFullPath.c_str());
+				return false;
+			}
+
+			//Make sure we have the correct amount of lines
+			if( sakuraFile.mLines.size() < translatedFile.mLines.size() )
+			{
+				printf("Unable to translate file: %s because the translation has too many lines.\n", pMatchingTranslatedFileName->mNoExtension.c_str());
+				return false;
+			}
+
+			//Get converted lines of text
+			const int maxCharsPerLine       = 30;
+			const int maxLines              = 4;
+			const size_t numTranslatedLines = translatedFile.mLines.size();
+			for(size_t translatedLineIndex = 0; translatedLineIndex < numTranslatedLines; ++translatedLineIndex)
+			{	
+				const TextFileData::TextLine& textLine = translatedFile.mLines[translatedLineIndex];
+				int charCount         = 0;
+				int currLine          = 1;
+				const size_t numWords = textLine.mWords.size();
+				SakuraString translatedString;
+
+				//Lines starting with the indicator 0xC351 have a special two byte value instead of the usual 00 00
+				if( sakuraFile.mStringInfoArray[translatedLineIndex].mUnknown == SpecialDialogIndicator )
 				{
-					break;
-				}
-				
-				//Figure out output file name
-				string outFileName;
-				if( bOutputToCorrespondingDirectory )
-				{
-					const char sep = '\\';
-					size_t lastSepIndex = sakuraFile.mFileNameInfo.mPathOnly.rfind(sep, sakuraFile.mFileNameInfo.mPathOnly.length());
-					if( lastSepIndex != std::string::npos )
-					{
-						const string subDir = sakuraFile.mFileNameInfo.mPathOnly.substr(lastSepIndex, sakuraFile.mFileNameInfo.mPathOnly.size());
-						if( subDir == Disc1 || subDir == Disc2 )
-						{
-							outFileName = outDirectory + Seperators + sakuraFile.mFileNameInfo.mFileName;
-						}
-						else
-						{
-							outFileName = outDirectory + subDir + Seperators + sakuraFile.mFileNameInfo.mFileName;
-						}
-					}
-					else
-					{
-						printf("Unable to find output path for %s\n", sakuraFile.mFileNameInfo.mFullPath.c_str());
-						return false;
-					}
+					translatedString.AddChar( sakuraFile.mLines[translatedLineIndex].mChars[0].mIndex );
+					translatedString.AddChar(0);
 				}
 				else
 				{
-					outFileName = outDirectory + sakuraFile.mFileNameInfo.mFileName;
-				}
-
-				//Create output file
-				FileWriter outFile;
-				if( !outFile.OpenFileForWrite(outFileName) )
-				{
-					break;
-				}
-
-				//Make sure we have the correct amount of lines
-				if( sakuraFile.mLines.size() < translatedFile.mLines.size() )
-				{
-					printf("Unable to translate file: %s because the translation has too many lines.\n", translatedFileName.mNoExtension.c_str());
-					break;
-				}
-
-				//Get converted lines of text
-				const int maxCharsPerLine       = 30;
-				const int maxLines              = 4;
-				const size_t numTranslatedLines = translatedFile.mLines.size();
-				vector<SakuraString> translatedLines;
-				for(size_t translatedLineIndex = 0; translatedLineIndex < numTranslatedLines; ++translatedLineIndex)
-				{	
-					const TextFileData::TextLine& textLine = translatedFile.mLines[translatedLineIndex];
-					int charCount         = 0;
-					int currLine          = 1;
-					const size_t numWords = textLine.mWords.size();
-					SakuraString translatedString;
-
 					for(unsigned short initialZeroes = 0; initialZeroes < sakuraFile.mLines[translatedLineIndex].mOffsetToStringData; ++initialZeroes)
 					{
 						translatedString.AddChar(0);
 					}
-
-					for(size_t wordIndex = 0; wordIndex < numWords; ++wordIndex)
-					{
-						const string& word = textLine.mWords[wordIndex];
-						bool bFailedToAddLine = false;
-
-						if( word.size() > maxCharsPerLine )
-						{
-							printf("Unable to insert word because it is longer than %i characters: %s[%i]\n", maxCharsPerLine, word.c_str(), word.size());
-							continue;
-						}
-
-						//Insert new line if needed
-						ConditionallyAddNewLine();
-
-						//Add the word
-						const size_t numLettersInWord = word.size();
-						if( word.size() + charCount > maxCharsPerLine )
-						{
-							IncrementLine();
-						}
-
-						const char* pWord = word.c_str();
-						for(size_t letterIndex = 0; letterIndex < numLettersInWord; ++letterIndex)
-						{
-							translatedString.AddChar( GTranslationLookupTable.GetIndex(pWord[letterIndex]) );
-							++charCount;
-						}
-
-						//bFailedToAddLine is set inside ConditionallyAddNewLine
-						if( bFailedToAddLine )
-						{
-							break;
-						}
-
-						//Add sapce
-						if( wordIndex + 1 < numWords )
-						{
-							//Insert new line if needed
-							if( word.size() + charCount > maxCharsPerLine )
-							{
-								ConditionallyAddNewLine();
-							}
-							else //Otherwise add a space
-							{
-								translatedString.AddChar( GTranslationLookupTable.GetIndex(' ') );
-								++charCount;
-
-								ConditionallyAddNewLine();
-							}
-						}
-					}
-
-					translatedString.AddChar(0);
-					translatedLines.push_back( std::move(translatedString) );
 				}
 
-				//Fill out everything else with "Untranslated"
-				SakuraString translatedSakuraString;
-				translatedSakuraString.AddChar(0);
-				translatedSakuraString.AddChar(0);
-				translatedSakuraString.AddString( string("Untranslated") );
-				translatedSakuraString.AddChar(0);
-				const size_t untranslatedCount = sakuraFile.mLines.size() - translatedFile.mLines.size();
-				for(size_t i = 0; i < untranslatedCount; ++i)
+				for(size_t wordIndex = 0; wordIndex < numWords; ++wordIndex)
 				{
-					translatedLines.push_back( translatedSakuraString );
-				}
+					const string& word = textLine.mWords[wordIndex];
+					bool bFailedToAddLine = false;
 
-				SakuraTextFileFixedHeader fixedHeader;
-				fixedHeader.CreateFixedHeader(sakuraFile.mStringInfoArray, sakuraFile, translatedLines);
-
-				//Write header
-				const unsigned short bigEndianOffsetToTable = SwapByteOrder(fixedHeader.mOffsetToTable);
-				const unsigned short bigEndianTableEnd      = SwapByteOrder(fixedHeader.mTableEnd);
-				outFile.WriteData(&bigEndianOffsetToTable, sizeof(bigEndianOffsetToTable));
-				outFile.WriteData(&bigEndianTableEnd, sizeof(bigEndianTableEnd));
-				outFile.WriteData(&fixedHeader.mStringInfo[0], fixedHeader.mStringInfo.size()*sizeof(fixedHeader.mStringInfo[0]));
-				//outFile.WriteData(sakuraFile.mHeader.pData, sakuraFile.mHeader.dataSize);
-
-				//Output data
-				const size_t numDataSegments    = sakuraFile.mDataSegments.size();
-				size_t dataIndex                = 0;
-				size_t translationIndex         = 0;
-				const size_t numInsertedLines   = translatedLines.size();
-				while(1)
-				{
-					if( dataIndex < numDataSegments )
+					if( word.size() > maxCharsPerLine )
 					{
-						outFile.WriteData(sakuraFile.mDataSegments[dataIndex].pData, sakuraFile.mDataSegments[dataIndex].dataSize);
+						printf("Unable to insert word because it is longer than %i characters: %s[%i]\n", maxCharsPerLine, word.c_str(), word.size());
+						continue;
 					}
 
-					if( translationIndex < numInsertedLines )
-					{
-						vector<unsigned short> translationData;
-						translatedLines[dataIndex].GetDataArray(translationData);
+					//Insert new line if needed
+					ConditionallyAddNewLine();
 
-						outFile.WriteData(translationData.data(), translationData.size()*sizeof(short));
+					//Add the word
+					const size_t numLettersInWord = word.size();
+					if( word.size() + charCount > maxCharsPerLine )
+					{
+						IncrementLine();
 					}
 
-					++dataIndex;
-					++translationIndex;
+					const char* pWord = word.c_str();
+					for(size_t letterIndex = 0; letterIndex < numLettersInWord; ++letterIndex)
+					{
+						translatedString.AddChar( GTranslationLookupTable.GetIndex(pWord[letterIndex]) );
+						++charCount;
+					}
 
-					if( dataIndex >= numDataSegments && translationIndex >= numInsertedLines )
+					//bFailedToAddLine is set inside ConditionallyAddNewLine
+					if( bFailedToAddLine )
 					{
 						break;
 					}
+
+					//Add sapce
+					if( wordIndex + 1 < numWords )
+					{
+						//Insert new line if needed
+						if( word.size() + charCount > maxCharsPerLine )
+						{
+							ConditionallyAddNewLine();
+						}
+						else //Otherwise add a space
+						{
+							translatedString.AddChar( GTranslationLookupTable.GetIndex(' ') );
+							++charCount;
+
+							ConditionallyAddNewLine();
+						}
+					}
 				}
 
-				//Write footer
-				outFile.WriteData(sakuraFile.mFooter.pData, sakuraFile.mFooter.dataSize);
+				translatedString.AddChar(0);
+				translatedLines.push_back( std::move(translatedString) );
+			}
 
+			//Fill out everything else with "Untranslated"
+			const string baseUntranslatedString = sakuraFile.mFileNameInfo.mFileName + string("\nLineNum: ");
+			const size_t untranslatedCount = sakuraFile.mLines.size() - translatedFile.mLines.size();
+			for(size_t i = 0; i < untranslatedCount; ++i)
+			{
+				const string untranslatedString = baseUntranslatedString + std::to_string(i + translatedFile.mLines.size() + 1);
+
+				SakuraString translatedSakuraString;
+
+				//Lines starting with the indicator 0xC351 have a special two byte value instead of the usual 00 00
+				const size_t currSakuraStringIndex = i + translatedFile.mLines.size();
+				if( sakuraFile.mStringInfoArray[currSakuraStringIndex].mUnknown == SpecialDialogIndicator )
+				{
+					translatedSakuraString.AddString( untranslatedString, sakuraFile.mLines[currSakuraStringIndex].mChars[0].mIndex);
+				}
+				else
+				{
+					translatedSakuraString.AddString( untranslatedString );
+				}
+				
+				
+				translatedLines.push_back( translatedSakuraString );
+			}
+
+		}//if(pMatchingTranslatedFileName)
+		else
+		{
+			//Fill out everything else with "Untranslated"
+			const string baseUntranslatedString = sakuraFile.mFileNameInfo.mFileName + string("\nLineNum: ");
+			for(size_t i = 0; i < sakuraFile.mLines.size(); ++i)
+			{
+				const string untranslatedString = baseUntranslatedString + std::to_string(i + 1);
+
+				SakuraString translatedSakuraString;
+				
+				//Lines starting with the indicator 0xC351 have a special two byte value instead of the usual 00 00
+				if( sakuraFile.mStringInfoArray[i].mUnknown == SpecialDialogIndicator )
+				{
+					translatedSakuraString.AddString( untranslatedString, sakuraFile.mLines[i].mChars[0].mIndex);
+				}
+				else
+				{
+					translatedSakuraString.AddString( untranslatedString );
+				}
+
+				translatedLines.push_back( translatedSakuraString );
+			}
+		}
+		
+		SakuraTextFileFixedHeader fixedHeader;
+		fixedHeader.CreateFixedHeader(sakuraFile.mStringInfoArray, sakuraFile, translatedLines);
+
+		//Write header
+		const unsigned short bigEndianOffsetToTable = SwapByteOrder(fixedHeader.mOffsetToTable);
+		const unsigned short bigEndianTableEnd      = SwapByteOrder(fixedHeader.mTableEnd);
+		outFile.WriteData(&bigEndianOffsetToTable, sizeof(bigEndianOffsetToTable));
+		outFile.WriteData(&bigEndianTableEnd, sizeof(bigEndianTableEnd));
+		outFile.WriteData(&fixedHeader.mStringInfo[0], fixedHeader.mStringInfo.size()*sizeof(fixedHeader.mStringInfo[0]));
+		//outFile.WriteData(sakuraFile.mHeader.pData, sakuraFile.mHeader.dataSize);
+
+		//Output data
+		const size_t numDataSegments    = sakuraFile.mDataSegments.size();
+		size_t dataIndex                = 0;
+		size_t translationIndex         = 0;
+		const size_t numInsertedLines   = translatedLines.size();
+		while(1)
+		{
+			if( dataIndex < numDataSegments )
+			{
+				outFile.WriteData(sakuraFile.mDataSegments[dataIndex].pData, sakuraFile.mDataSegments[dataIndex].dataSize);
+			}
+
+			if( translationIndex < numInsertedLines )
+			{
+				vector<unsigned short> translationData;
+				translatedLines[dataIndex].GetDataArray(translationData);
+
+				outFile.WriteData(translationData.data(), translationData.size()*sizeof(short));
+			}
+
+			++dataIndex;
+			++translationIndex;
+
+			if( dataIndex >= numDataSegments && translationIndex >= numInsertedLines )
+			{
 				break;
 			}
 		}
+
+		//Write footer
+		outFile.WriteData(sakuraFile.mFooter.pData, sakuraFile.mFooter.dataSize);
+		
 	}
 
 	printf("InsertText Succeeded\n");
@@ -1745,7 +1752,7 @@ bool PatchGame(const string& rootSakuraTaisenDirectory, const string& patchedSak
 	//Step 5
 	if( !InsertText(rootSakuraTaisenDirectory, translatedTextDirectory, patchedSakuraTaisenDirectory, true) )
 	{
-		printf("PatchKNJ failed.  Patch unsuccessful.\n");
+		printf("Insert Text failed.  Patch unsuccessful.\n");
 		return false;
 	}
 
