@@ -25,6 +25,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include <string>
 #include <list>
 #include <map>
+#include <algorithm>
 #include "..\Utils\Utils.h"
 #include <assert.h>
 
@@ -872,15 +873,16 @@ void ExtractText(const string& inSearchDirectory, const string& inPaletteFileNam
 			for(size_t charIndex = sakuraString.mOffsetToStringData; charIndex < sakuraString.mChars.size(); ++charIndex)
 			{
 				const SakuraString::SakuraChar& sakuraChar = sakuraString.mChars[charIndex];
-				if( sakuraChar.mIndex == 0 || sakuraChar.mIndex > 255*3)
-				{
-					continue;
-				}
 
 				if( sakuraChar.IsNewLine() )
 				{
 					++currRow;
 					currCol = 0;
+					continue;
+				}
+
+				if( sakuraChar.mIndex == 0 || sakuraChar.mIndex > 255*3)
+				{
 					continue;
 				}
 
@@ -1304,6 +1306,8 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 	vector<SakuraTextFile> sakuraTextFiles;
 	FindAllSakuraText(textFiles, sakuraTextFiles);
 
+	const string UntranslatedEnglishString("Untranslated");
+
 	//Insert text
 	for(const SakuraTextFile& sakuraFile : sakuraTextFiles)
 	{
@@ -1376,7 +1380,7 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 				return false;
 			}
 
-			//Get converted lines of text
+			//Get converted lines of text			
 			const int maxCharsPerLine       = 30;
 			const int maxLines              = 4;
 			const size_t numTranslatedLines = translatedFile.mLines.size();
@@ -1387,6 +1391,29 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 				int currLine          = 1;
 				const size_t numWords = textLine.mWords.size();
 				SakuraString translatedString;
+				
+				//If untranslated, then write out the file and line number
+				if( textLine.mWords.size() == 1 && textLine.mWords[0] == UntranslatedEnglishString )
+				{
+					const string baseUntranslatedString = sakuraFile.mFileNameInfo.mFileName + string("\nLineNum: ");
+					const string untranslatedString = baseUntranslatedString + std::to_string(translatedLineIndex);
+
+					SakuraString translatedSakuraString;
+
+					//Lines starting with the indicator 0xC351 have a special two byte value instead of the usual 00 00
+					const size_t currSakuraStringIndex = translatedLineIndex;
+					if( sakuraFile.mStringInfoArray[currSakuraStringIndex].mUnknown == SpecialDialogIndicator )
+					{
+						translatedSakuraString.AddString( untranslatedString, sakuraFile.mLines[currSakuraStringIndex].mChars[0].mIndex);
+					}
+					else
+					{
+						translatedSakuraString.AddString( untranslatedString );
+					}
+
+					translatedLines.push_back( translatedSakuraString );				
+					continue;
+				}
 
 				//Lines starting with the indicator 0xC351 have a special two byte value instead of the usual 00 00
 				if( sakuraFile.mStringInfoArray[translatedLineIndex].mUnknown == SpecialDialogIndicator )
@@ -1476,8 +1503,7 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 				else
 				{
 					translatedSakuraString.AddString( untranslatedString );
-				}
-				
+				}				
 				
 				translatedLines.push_back( translatedSakuraString );
 			}
@@ -1663,7 +1689,7 @@ bool FixupSakura(const string& rootDir)
 	const string filePath = rootDir + string("SAKURA");
 	FILE* pFile = nullptr;
 	errno_t errorValue = fopen_s(&pFile, filePath.c_str(), "r+b");
-	if( errorValue )
+	if (errorValue)
 	{
 		printf("Unable to open SAKURA.  Error: %i\n", errorValue);
 		return false;
@@ -1672,8 +1698,8 @@ bool FixupSakura(const string& rootDir)
 	//const unsigned short tileSize  = (OutTileSpacingY << 8) + (OutTileSpacingX/8);
 
 	//const int offsetTileDim     = 0x0001040A;
-	const int offsetTileSpacingX  = 0x000104e5;
-	const int offsetTileSpacingY  = 0x000104D7;
+	const int offsetTileSpacingX = 0x000104e5;
+	const int offsetTileSpacingY = 0x000104D7;
 	const int offsetTileSpacingX2 = 0x00010747;
 	const int offsetTileSpacingY2 = 0x00010733;
 
@@ -1695,6 +1721,286 @@ bool FixupSakura(const string& rootDir)
 	fclose(pFile);
 
 	printf("FixupSakura Succeeded.\n");
+
+	return true;
+}
+
+struct DialogOrder
+{
+	map<unsigned short, int> idAndOrder;
+	map<int, unsigned short> orderAndId;
+};
+
+bool FindDialogOrder(const string& rootSakuraTaisenDirectory, map<string, DialogOrder>& outOrder)
+{
+	//Find all files
+	vector<FileNameContainer> sakuraTaisenFiles;
+	FindAllFilesWithinDirectory(rootSakuraTaisenDirectory, sakuraTaisenFiles);
+	if (!sakuraTaisenFiles.size())
+	{
+		return false;
+	}
+
+	//Find all dialog files
+	vector<FileNameContainer> tableFiles;
+	GetAllFilesOfType(sakuraTaisenFiles, "TBL.BIN", tableFiles);
+
+	for (const FileNameContainer& tableFileName : tableFiles)
+	{
+		const size_t lastIndex = tableFileName.mFileName.find_first_of("TBL");
+		const string infoFileName = tableFileName.mFileName.substr(0, lastIndex) + string(".BIN");
+		const string infoFileFullPath = tableFileName.mPathOnly + Seperators + infoFileName;
+
+		printf("Parsing %s\n", infoFileName.c_str());
+
+		FileNameContainer infoFileNameInfo(infoFileName.c_str(), infoFileFullPath.c_str());
+		FileData infoData;
+		if (!infoData.InitializeFileData(infoFileNameInfo))
+		{
+			continue;
+		}
+
+		//Search for 228000
+		const unsigned char* pData = (const unsigned char*)infoData.GetData();
+		unsigned long index = 0;
+		int appearance = 0;
+		while (index + 5 < infoData.GetDataSize())
+		{
+			if (pData[index] == 0x22 && pData[index + 1] == 0x80 && pData[index + 2] == 0x00)
+			{
+				unsigned short id = pData[index + 4] + (pData[index + 3] << 8);
+				outOrder[infoFileNameInfo.mNoExtension].idAndOrder[id]         = appearance;
+				outOrder[infoFileNameInfo.mNoExtension].orderAndId[appearance] = id;
+
+				++appearance;
+				index += 5;
+			}
+
+			++index;
+		}
+	}
+
+	return true;
+}
+
+
+void OutputDialogOrder(const string& rootSakuraTaisenDirectory, const string& outputDirectory)
+{
+	map<string, DialogOrder> dialogOrder;
+	FindDialogOrder(rootSakuraTaisenDirectory, dialogOrder);
+
+	for(map<string, DialogOrder>::const_iterator iter = dialogOrder.begin(); iter != dialogOrder.end(); ++iter)
+	{
+		const string outFileName = outputDirectory + iter->first + string("_DialogOrder.txt");
+		TextFileWriter outFile;
+		if( !outFile.OpenFileForWrite(outFileName) )
+		{
+			continue;
+		}
+
+		for(map<int, unsigned short>::const_iterator secondIter = iter->second.orderAndId.begin(); secondIter != iter->second.orderAndId.end(); ++secondIter)
+		{
+			if(secondIter->second >> 8 == 0x9C)
+			{
+				continue;
+			}
+			fprintf(outFile.GetFileHandle(), "%02x\n", secondIter->second);
+		}
+	}	
+}
+
+bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sakura1Directory)
+{
+	vector<FileNameContainer> imageFiles;
+	FindAllFilesWithinDirectory(dialogImageDirectory, imageFiles);
+
+	vector<FileNameContainer> allSakura1Files;
+	FindAllFilesWithinDirectory(sakura1Directory, allSakura1Files);
+
+	//Find all dialog files
+	vector<FileNameContainer> tableFiles;
+	GetAllFilesOfType(allSakura1Files, "TBL.BIN", tableFiles);
+
+	//Parse the TBL files
+	vector<SakuraTextFile> sakuraTextFiles;
+	FindAllSakuraText(tableFiles, sakuraTextFiles);
+
+	//Create map of table file name to the file (0100TBL => 0100TBL file)
+	map<string, const SakuraTextFile*> sakuraTableFileMap;
+	for(const SakuraTextFile& sakuraFile : sakuraTextFiles)
+	{
+		sakuraTableFileMap[sakuraFile.mFileNameInfo.mNoExtension] = &sakuraFile;
+	}
+
+	//Seperate all files into their own directories
+	map<string, vector<FileNameContainer>> directoryMap;
+	for(const FileNameContainer& imageFileNameInfo : imageFiles)
+	{
+		const size_t lastOf = imageFileNameInfo.mPathOnly.find_last_of('\\');
+		const string leaf = imageFileNameInfo.mPathOnly.substr(lastOf+1);
+		if( lastOf != string::npos && leaf.size() > 0 )
+		{
+			directoryMap[leaf].push_back(imageFileNameInfo);
+		}
+	}
+
+	const string htmlHeader("<html><head><style>table{border-collapse: collapse;} table, th, td {border: 1px solid black;}</style><script type=\"text/javascript\">");
+
+	//Create html files for each directory
+	static char buffer[2048];
+	const string outputDirectory = dialogImageDirectory + string("..\\..\\Translation\\");
+	if( !CreateDirectoryHelper(outputDirectory) )
+	{
+		printf("Unable to create translation directory %s.  Error: (%d)\n", outputDirectory.c_str(), GetLastError());
+		return false;
+	}
+
+	//Sort bmp files from smallest to greatest (001.bmp -> 999.bmp)
+	for(map<string, vector<FileNameContainer>>::iterator iter = directoryMap.begin(); iter != directoryMap.end(); ++iter)
+	{
+		std::sort(iter->second.begin(), iter->second.end());		
+	}
+	
+	//Find dialog order info
+	map<string, DialogOrder> dialogOrder;
+	if( !FindDialogOrder(sakura1Directory, dialogOrder) )
+	{
+		printf("Unable to find dialog files(0100.BIN, 0101.BIN, etc.) in directory: %s", sakura1Directory.c_str());
+		return false;
+	}
+
+	for(map<string, vector<FileNameContainer>>::const_iterator iter = directoryMap.begin(); iter != directoryMap.end(); ++iter)
+	{
+		printf("Creating html file for %s\n", iter->first.c_str());
+
+		//Find sakura file for this dialog
+		const string tblFileName = iter->first;
+		map<string, const SakuraTextFile*>::const_iterator sakuraFileIter = sakuraTableFileMap.find(tblFileName);
+		if( sakuraFileIter == sakuraTableFileMap.end() )
+		{
+			printf("Unable to find corresponding sakura file for: %s", tblFileName.c_str());
+			continue;
+		}
+
+		if( iter->second.size() != sakuraFileIter->second->mStringInfoArray.size() )
+		{
+			printf("Unable to create html file for %s.  StringInfo to dialog file count mismatch.", tblFileName.c_str());
+			continue;
+		}
+
+		const string htmlFileName = outputDirectory + iter->first + string(".html");
+		
+		TextFileWriter htmlFile;
+		if( !htmlFile.OpenFileForWrite(htmlFileName) )
+		{
+			printf("Unable to create an html file: %s", htmlFileName.c_str());
+			continue;
+		}
+
+		//Common header stuff
+		htmlFile.WriteString(htmlHeader);
+		
+		//SaveEdit function
+		htmlFile.WriteString("function SaveEdits()\n{\n");
+		htmlFile.WriteString("var editElems = {\n");
+		for(const FileNameContainer& fileNameInfo : iter->second)
+		{
+			const char* pVarSuffix = fileNameInfo.mNoExtension.c_str();
+
+			//var editElems
+			snprintf(buffer, 2048, "'edit_%s': document.getElementById(\"edit_%s\").innerHTML,\n", pVarSuffix, pVarSuffix);
+			htmlFile.WriteString(string(buffer));
+		}
+		htmlFile.WriteString("};\n");
+		htmlFile.WriteString("localStorage.setItem('userEdits', JSON.stringify(editElems));\n");
+
+		//End SaveEdit function
+		htmlFile.WriteString("}\n\n");
+		htmlFile.WriteString("function CheckEdits(){\n");
+			htmlFile.WriteString("var userEdits = localStorage.getItem('userEdits');\n");
+			htmlFile.WriteString("if(userEdits){\n");
+			htmlFile.WriteString("userEdits = JSON.parse(userEdits);\n");
+				htmlFile.WriteString("for(var elementId in userEdits){\n");
+					htmlFile.WriteString("if( document.getElementById(elementId) )\n");
+					htmlFile.WriteString("document.getElementById(elementId).innerHTML = userEdits[elementId];");
+					htmlFile.WriteString("}\n");
+				htmlFile.WriteString("}\n");	
+		
+		//End CheckEdit function
+		htmlFile.WriteString("}\n\n");
+
+		//FixOnChangeEditableElements - A function that saves the data whenever input happens
+		htmlFile.WriteString("function FixOnChangeEditableElements()\n{\n");		
+			htmlFile.WriteString("var tags = document.querySelectorAll('[contenteditable=true][onChange]');//(requires FF 3.1+, Safari 3.1+, IE8+)\n");
+			htmlFile.WriteString("for (var i=tags.length-1; i>=0; i--) if (typeof(tags[i].onblur)!='function')\n{\n");			
+			htmlFile.WriteString("tags[i].onfocus = function()\n{\n");
+			htmlFile.WriteString("this.data_orig=this.innerHTML;\n};\n");				
+				htmlFile.WriteString("tags[i].onblur = function()\n{\n");				
+					htmlFile.WriteString("if( this.innerHTML != this.data_orig)\n");
+						htmlFile.WriteString("this.onchange();\n");
+					htmlFile.WriteString("delete this.data_orig;\n};\n}\n}\n");
+
+		//Startup function
+		htmlFile.WriteString("function OnStartup()\n{\n");
+			htmlFile.WriteString("CheckEdits();\n");
+			htmlFile.WriteString("FixOnChangeEditableElements();\n}\n");
+		
+		htmlFile.WriteString("</script>\n</head>\n\n");
+		htmlFile.WriteString("<body onload=\"OnStartup()\">\n");
+		fprintf(htmlFile.GetFileHandle(), "<article><header align=\"center\"><h1>Dialog For %s</h1></header></article>\n", iter->first.c_str());
+		htmlFile.WriteString("<br><input align=\"center\" type=\"button\" value=\"Save Changes\" onclick=\"SaveEdits()\"/>\n\n<br><br>");
+
+		//Write table
+		htmlFile.WriteString("<table>\n");
+			htmlFile.WriteString("\t<tr>\n");
+				htmlFile.WriteString("\t<th>#</th>\n");
+				htmlFile.WriteString("\t<th>Japanese</th>\n");
+				htmlFile.WriteString("\t<th>English</th>\n");
+				htmlFile.WriteString("\t<th>ID</th>\n");
+				htmlFile.WriteString("\t<th>Appearance Order</th>\n");
+			htmlFile.WriteString("\t</tr>\n");
+
+			//Get name of info file (0100.BIN, etc.)
+			const size_t lastIndex    = iter->first.find_first_of("TBL");
+			const string infoFileName = iter->first.substr(0, lastIndex);
+			map<string, DialogOrder>::const_iterator dialogOrderIter = dialogOrder.find(infoFileName);			
+			const bool bDialogOrderExists = dialogOrderIter != dialogOrder.end();
+
+			//Create entries for all images
+			int num = 0;
+			for(const FileNameContainer& fileNameInfo : iter->second)
+			{
+				const char* pVarSuffix = fileNameInfo.mNoExtension.c_str();
+				htmlFile.WriteString("<tr>\n");
+					snprintf(buffer, 2048, "<td align=\"center\" width=20>%i</td>", num);
+					htmlFile.WriteString(string(buffer));
+
+					snprintf(buffer, 2048, "<td width=240><img src=\"%s\"></td>", fileNameInfo.mFullPath.c_str());
+					htmlFile.WriteString(string(buffer));
+
+					snprintf(buffer, 2048, "<td width=480><div id=\"edit_%s\" contenteditable=\"true\" onChange=\"SaveEdits()\">Untranslated</div></td>", pVarSuffix);
+					htmlFile.WriteString(string(buffer));
+
+					const unsigned short id = sakuraFileIter->second->mStringInfoArray[num].mUnknown;
+					snprintf(buffer, 2048, "<td align=\"center\" width=120>%02x (%i)</td>", id, id);
+					htmlFile.WriteString(string(buffer));
+					
+					const int order = bDialogOrderExists && dialogOrderIter->second.idAndOrder.find(id) != dialogOrderIter->second.idAndOrder.end() ? dialogOrderIter->second.idAndOrder.find(id)->second : -1;					
+					snprintf(buffer, 2048, "<td align=\"center\" width=120>Order: %i</td>", order);
+					htmlFile.WriteString(string(buffer));
+
+				htmlFile.WriteString("<tr>\n");
+
+				++num;
+			}
+		htmlFile.WriteString("</table><br>\n");
+
+		htmlFile.WriteString("<br><input align=\"center\" type=\"button\" value=\"Save Changes\" onclick=\"SaveEdits()\"/>\n\n");
+
+		//End file
+		htmlFile.WriteString("</body>\n");
+		htmlFile.WriteString("</html>\n");
+	}
 
 	return true;
 }
@@ -1774,7 +2080,9 @@ void PrintHelp()
 	printf("PatchPalettes rootSakuraTaisenDirectory originalPalette newPalette outDirectory\n");
 	printf("InsertText rootSakuraTaisenDirectory translatedText outDirectory\n");
 	printf("FindDuplicateText dialogDirectory outFile\n");
+	printf("FindDialogOrder rootSakuraTaisenDirectory outDirectory");
 	printf("PatchGame rootSakuraTaisenDirectory patchedSakuraTaisenDirectory translatedTextDirectory fontSheet originalPalette");
+	printf("CreateTBLSpreadsheets dialogImageDirectory sakura1Directory");
 }
 
 int main(int argc, char *argv[])
@@ -1865,6 +2173,13 @@ int main(int argc, char *argv[])
 
 		FindDuplicateText(searchDirectory, outputFile);
 	}
+	else if( command == "FindDialogOrder" && argc == 4 )
+	{
+		const string searchDirectory = string(argv[2]);
+		const string outputFile      = string(argv[3]) + Seperators;
+
+		OutputDialogOrder(searchDirectory, outputFile);
+	}
 	else if( command == "PatchGame" && argc == 7 )
 	{
 		const string rootSakuraTaisenDirectory    = string(argv[2]) + Seperators;
@@ -1874,6 +2189,13 @@ int main(int argc, char *argv[])
 		const string originalPalette              = string(argv[6]);
 
 		PatchGame(rootSakuraTaisenDirectory, patchedSakuraTaisenDirectory, translatedTextDirectory, fontSheet, originalPalette);
+	}
+	else if(command == "CreateTBLSpreadsheets" && argc == 4 )
+	{
+		const string dialogImageDirectory = string(argv[2]) + Seperators;
+		const string sakura1Directory     = string(argv[3]) + Seperators;
+
+		CreateTBLSpreadsheets(dialogImageDirectory, sakura1Directory);
 	}
 	else
 	{

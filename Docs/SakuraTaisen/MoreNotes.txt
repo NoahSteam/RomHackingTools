@@ -7,7 +7,7 @@
 
 1c4453f is first line of text  in sakura4
 
-ExtractText d:\Rizwan\SakuraWars\Disc1 d:\Rizwan\SakuraWars\ExtractedFontSheets\Palette.bin d:\Rizwan\SakuraWars\ExtractedTextImages
+ExtractText d:\Rizwan\SakuraWars\Disc1 D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\Palette.bin D:\Rizwan\SakuraWars\ExtractedData\Dialog
 ExtractFontSheets d:\Rizwan\SakuraWars\Test d:\Rizwan\SakuraWars\TranslatedFontSheets\OutPalette.bin d:\Rizwan\SakuraWars\Test
 PatchPalettes d:\Rizwan\SakuraWars\Disc1 d:\Rizwan\SakuraWars\OriginalFontPalette.bin d:\Rizwan\SakuraWars\TranslatedFontSheets\OutPalette.BIN d:\Rizwan\SakuraWars\PatchedPalettes
 InsertText d:\Rizwan\SakuraWars\Disc1 d:\Rizwan\SakuraWars\TranslatedText d:\Rizwan\SakuraWars\TranslatedTBL
@@ -17,6 +17,8 @@ ExtractRawText d:\Rizwan\SakuraWars\Disc1 d:\Rizwan\SakuraWars\ExtractedText
 ExtractRawText d:\Rizwan\SakuraWars\TranslatedTBL d:\Rizwan\SakuraWars\ExtractedTranslatedText
 PatchGameKNJ d:\Rizwan\SakuraWars\Disc1 d:\Rizwan\SakuraWars\TranslatedFontSheets\TranslatedKNJ.BIN d:\Rizwan\SakuraWars\TranslatedKNJ
 PatchGame d:\Rizwan\SakuraWars\Disc1 d:\Rizwan\SakuraWars\Disc1_Translated D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\TranslatedText D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\8x12.bmp D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\Palette.bin
+FindDialogOrder d:\Rizwan\SakuraWars\Disc1 D:\Rizwan\SakuraWars\ExtractedData\DialogText
+CreateTBLSpreadsheets D:\Rizwan\SakuraWars\ExtractedData\Dialog D:\Rizwan\SakuraWars\Disc1\SAKURA1
 
 ExtractFontSheets a:\SakuraTaisen\Disc1\ a:\SakuraTaisen\ExtractedData\FontSheets\Palette.bin a:\SakuraTaisen\ExtractedData\FontSheets
 ExtractFontSheets a:\SakuraTaisen\PatchedData\TranslatedFontSheet A:\SakuraTaisen\PatchedData\TranslatedFontSheet\OutPalette.BIN a:\SakuraTaisen\PatchedData\TranslatedFontSheet

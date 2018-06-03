@@ -37,6 +37,12 @@ struct FileNameContainer
 		}
 	}
 
+	bool operator < (FileNameContainer& rhs) const
+	{		
+		bool bResult = (atoi(mNoExtension.c_str()) < atoi(rhs.mNoExtension.c_str()));
+		return bResult;
+	}
+
 	std::string mFileName;
 	std::string mFullPath;
 	std::string mPathOnly;
