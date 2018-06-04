@@ -70,6 +70,18 @@ This lives in SAKURA:
  0x00010746 for X
  0x00010733 for Y
  
+Spacing X for LIPS 
+ 0x0001066B
+ 
  Sprite drawing code in SAKURA:
  00010404
  0001040A is sprite size (2 bytes).  X/8, Y
+ 
+ Sprite drawing code for LIPS event
+ 
+ 0601466A -> 06001F64 -> 06065EDC-> 05C0010C
+ 
+ Todo:
+ -Output text insertion results
+ -Patch text insertion only
+ -Highlight rows that are LIP lines.

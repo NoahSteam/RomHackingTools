@@ -36,7 +36,7 @@ As part of a special mission, you are hereby ordered to take up a new post as ca
 'The Imperial Floral Assault Group, Anti-Demon Interception Squad, Flower-Troupe.'
 Furthermore, your mission is a highly-classified one for the sake of the defense of Teito.
 You are to head to Ueno Park to join up with the corps. 
-~Imperial Army Lieutenant General. Yoneda Ikki
+Imperial Army Lieutenant General. <br> <sp> <sp> <sp> <sp> <sp> <sp> <sp> ~Yoneda Ikki
 ……Ohgami Ichiro.  As of today, you will be transferring to the Imperial Floral Assault Group, Flower-Troupe.
 Yes, sir!  Ohgami Ichiro, prepared to work to the utmost limits of my abilities, sir!
 Yes……  Excellent reply.
@@ -64,7 +64,7 @@ Still…… to think a young woman like yourself would be a member of the squad�
 Ah, n-no……  It's not that……
 ……I suppose only in a covert squad would it not be unusual to find female squad members like her……)
 Eh - theater…… you say!?
-Untranslated
+I'm on duty! <br> First I'd like to know more about you.
 Untranslated
 Untranslated
 Untranslated

@@ -41,6 +41,8 @@ const string PatchedKNJName("PatchedKNJ.BIN");
 const string Disc1("\\Disc1");
 const string Disc2("\\Disc2");
 const string Seperators("\\");
+const string NewLineWord("<br>");
+const string SpaceWord("<sp>");
 const unsigned short SpecialDialogIndicator = 0xC351;
 
 class SakuraTranslationTable
@@ -1431,12 +1433,49 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 
 				for(size_t wordIndex = 0; wordIndex < numWords; ++wordIndex)
 				{
-					const string& word = textLine.mWords[wordIndex];
-					bool bFailedToAddLine = false;
-
+					const string& word    = textLine.mWords[wordIndex];
+					bool bFailedToAddLine = false;					
 					if( word.size() > maxCharsPerLine )
 					{
 						printf("Unable to insert word because it is longer than %i characters: %s[%i]\n", maxCharsPerLine, word.c_str(), word.size());
+						continue;					
+					}
+
+					//Check to see if this is a newline
+					const bool bNewLineWord = word == NewLineWord;
+					if( bNewLineWord )
+					{
+						IncrementLine();
+
+						//bFailedToAddLine set inside IncrementLine
+						if( bFailedToAddLine )
+						{
+							break;
+						}
+
+						continue;
+					}
+
+					//Check to see if this is a space
+					const bool bSpaceWord = word == SpaceWord;
+					if( bSpaceWord )
+					{	
+						if( charCount + 1 > maxCharsPerLine )
+						{
+							IncrementLine();
+
+							//bFailedToAddLine set inside IncrementLine
+							if( bFailedToAddLine )
+							{
+								break;
+							}
+						}
+						else
+						{
+							translatedString.AddChar( GTranslationLookupTable.GetIndex(' ') );
+							++charCount;
+						}
+
 						continue;
 					}
 
@@ -1444,7 +1483,7 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 					ConditionallyAddNewLine();
 
 					//Add the word
-					const size_t numLettersInWord = word.size();
+					const size_t numLettersInWord = bNewLineWord ? 1 : word.size();
 					if( word.size() + charCount > maxCharsPerLine )
 					{
 						IncrementLine();
@@ -1702,6 +1741,7 @@ bool FixupSakura(const string& rootDir)
 	const int offsetTileSpacingY = 0x000104D7;
 	const int offsetTileSpacingX2 = 0x00010747;
 	const int offsetTileSpacingY2 = 0x00010733;
+	const int offsetTileSpacingLIPSX = 0x0001066B;
 
 	fseek(pFile, offsetTileSpacingX, SEEK_SET);
 	fwrite(&OutTileSpacingX, sizeof(OutTileSpacingX), 1, pFile);
@@ -1714,6 +1754,9 @@ bool FixupSakura(const string& rootDir)
 
 	fseek(pFile, offsetTileSpacingY2, SEEK_SET);
 	fwrite(&OutTileSpacingY, sizeof(OutTileSpacingY), 1, pFile);
+
+	fseek(pFile, offsetTileSpacingLIPSX, SEEK_SET);
+	fwrite(&offsetTileSpacingX, sizeof(offsetTileSpacingX), 1, pFile);
 
 	//fseek(pFile, offsetTileDim, SEEK_SET);
 	//fwrite(&tileSize, sizeof(tileSize), 1, pFile);
@@ -1888,7 +1931,7 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 			continue;
 		}
 
-		const string htmlFileName = outputDirectory + iter->first + string(".html");
+		const string htmlFileName = outputDirectory + iter->first + string(".php");
 		
 		TextFileWriter htmlFile;
 		if( !htmlFile.OpenFileForWrite(htmlFileName) )
@@ -1900,53 +1943,7 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 		//Common header stuff
 		htmlFile.WriteString(htmlHeader);
 		
-		//SaveEdit function
-		htmlFile.WriteString("function SaveEdits()\n{\n");
-		htmlFile.WriteString("var editElems = {\n");
-		for(const FileNameContainer& fileNameInfo : iter->second)
-		{
-			const char* pVarSuffix = fileNameInfo.mNoExtension.c_str();
-
-			//var editElems
-			snprintf(buffer, 2048, "'edit_%s': document.getElementById(\"edit_%s\").innerHTML,\n", pVarSuffix, pVarSuffix);
-			htmlFile.WriteString(string(buffer));
-		}
-		htmlFile.WriteString("};\n");
-		htmlFile.WriteString("localStorage.setItem('userEdits', JSON.stringify(editElems));\n");
-
-		//End SaveEdit function
-		htmlFile.WriteString("}\n\n");
-		htmlFile.WriteString("function CheckEdits(){\n");
-			htmlFile.WriteString("var userEdits = localStorage.getItem('userEdits');\n");
-			htmlFile.WriteString("if(userEdits){\n");
-			htmlFile.WriteString("userEdits = JSON.parse(userEdits);\n");
-				htmlFile.WriteString("for(var elementId in userEdits){\n");
-					htmlFile.WriteString("if( document.getElementById(elementId) )\n");
-					htmlFile.WriteString("document.getElementById(elementId).innerHTML = userEdits[elementId];");
-					htmlFile.WriteString("}\n");
-				htmlFile.WriteString("}\n");	
-		
-		//End CheckEdit function
-		htmlFile.WriteString("}\n\n");
-
-		//FixOnChangeEditableElements - A function that saves the data whenever input happens
-		htmlFile.WriteString("function FixOnChangeEditableElements()\n{\n");		
-			htmlFile.WriteString("var tags = document.querySelectorAll('[contenteditable=true][onChange]');//(requires FF 3.1+, Safari 3.1+, IE8+)\n");
-			htmlFile.WriteString("for (var i=tags.length-1; i>=0; i--) if (typeof(tags[i].onblur)!='function')\n{\n");			
-			htmlFile.WriteString("tags[i].onfocus = function()\n{\n");
-			htmlFile.WriteString("this.data_orig=this.innerHTML;\n};\n");				
-				htmlFile.WriteString("tags[i].onblur = function()\n{\n");				
-					htmlFile.WriteString("if( this.innerHTML != this.data_orig)\n");
-						htmlFile.WriteString("this.onchange();\n");
-					htmlFile.WriteString("delete this.data_orig;\n};\n}\n}\n");
-
-		//Startup function
-		htmlFile.WriteString("function OnStartup()\n{\n");
-			htmlFile.WriteString("CheckEdits();\n");
-			htmlFile.WriteString("FixOnChangeEditableElements();\n}\n");
-		
 		htmlFile.WriteString("</script>\n</head>\n\n");
-		htmlFile.WriteString("<body onload=\"OnStartup()\">\n");
 		fprintf(htmlFile.GetFileHandle(), "<article><header align=\"center\"><h1>Dialog For %s</h1></header></article>\n", iter->first.c_str());
 		htmlFile.WriteString("<br><input align=\"center\" type=\"button\" value=\"Save Changes\" onclick=\"SaveEdits()\"/>\n\n<br><br>");
 
@@ -1975,7 +1972,7 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 					snprintf(buffer, 2048, "<td align=\"center\" width=20>%i</td>", num);
 					htmlFile.WriteString(string(buffer));
 
-					snprintf(buffer, 2048, "<td width=240><img src=\"%s\"></td>", fileNameInfo.mFullPath.c_str());
+					snprintf(buffer, 2048, "<td width=240><img src=\"..\\ExtractedData\\Dialog\\%sTBL\\%s\"></td>", infoFileName.c_str(), fileNameInfo.mFileName.c_str());
 					htmlFile.WriteString(string(buffer));
 
 					snprintf(buffer, 2048, "<td width=480><div id=\"edit_%s\" contenteditable=\"true\" onChange=\"SaveEdits()\">Untranslated</div></td>", pVarSuffix);

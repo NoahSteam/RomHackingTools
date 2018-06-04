@@ -10,7 +10,7 @@
 ExtractText d:\Rizwan\SakuraWars\Disc1 D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\Palette.bin D:\Rizwan\SakuraWars\ExtractedData\Dialog
 ExtractFontSheets d:\Rizwan\SakuraWars\Test d:\Rizwan\SakuraWars\TranslatedFontSheets\OutPalette.bin d:\Rizwan\SakuraWars\Test
 PatchPalettes d:\Rizwan\SakuraWars\Disc1 d:\Rizwan\SakuraWars\OriginalFontPalette.bin d:\Rizwan\SakuraWars\TranslatedFontSheets\OutPalette.BIN d:\Rizwan\SakuraWars\PatchedPalettes
-InsertText d:\Rizwan\SakuraWars\Disc1 d:\Rizwan\SakuraWars\TranslatedText d:\Rizwan\SakuraWars\TranslatedTBL
+InsertText d:\Rizwan\SakuraWars\Disc1 D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\TranslatedText D:\Rizwan\SakuraWars\PatchedData\TBL
 ExtractRawText d:\Rizwan\SakuraWars\TranslatedTBL d:\Rizwan\SakuraWars\TranslatedTBL
 CreateTranslatedFontSheets D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\8x8.bmp d:\Rizwan\SakuraWars\TranslatedFontSheets
 ExtractRawText d:\Rizwan\SakuraWars\Disc1 d:\Rizwan\SakuraWars\ExtractedText
