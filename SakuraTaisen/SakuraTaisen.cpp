@@ -1413,7 +1413,7 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 						translatedSakuraString.AddString( untranslatedString );
 					}
 
-					translatedLines.push_back( translatedSakuraString );				
+					translatedLines.push_back( translatedSakuraString );
 					continue;
 				}
 
@@ -1887,7 +1887,7 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 		}
 	}
 
-	const string htmlHeader("<html><head><style>table{border-collapse: collapse;} table, th, td {border: 1px solid black;}</style><script type=\"text/javascript\">");
+	const string htmlHeader("<html>\n<head>\n<style>\ntable{border-collapse: collapse;} table, th, td {border: 1px solid black;}</style>\n");
 
 	//Create html files for each directory
 	static char buffer[2048];
@@ -1901,7 +1901,7 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 	//Sort bmp files from smallest to greatest (001.bmp -> 999.bmp)
 	for(map<string, vector<FileNameContainer>>::iterator iter = directoryMap.begin(); iter != directoryMap.end(); ++iter)
 	{
-		std::sort(iter->second.begin(), iter->second.end());		
+		std::sort(iter->second.begin(), iter->second.end());
 	}
 	
 	//Find dialog order info
@@ -1942,10 +1942,66 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 
 		//Common header stuff
 		htmlFile.WriteString(htmlHeader);
-		
-		htmlFile.WriteString("</script>\n</head>\n\n");
+		fprintf(htmlFile.GetFileHandle(), "<div id=\"FileName\" style=\"display: none;\">%s</div>\n", tblFileName.c_str());
+		htmlFile.WriteString("<script src=\"https://ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js\"></script>\n\n");		
+
+		//SaveEdits function
+		htmlFile.WriteString("<script type=\"text/javascript\">\n");
+
+		htmlFile.WriteString("function SaveEdits(inDialogImageName, inDivID){\n");
+			htmlFile.WriteString("\tvar translatedText = document.getElementById(inDivID).innerHTML;\n");
+			htmlFile.WriteString("\tvar fileName = document.getElementById(\"FileName\").innerHTML;\n\n");
+			htmlFile.WriteString("\t$.ajax({\n");
+			htmlFile.WriteString("\ttype: \"POST\",\n");
+			htmlFile.WriteString("\turl: \"UpdateTranslation.php\",\n");
+			htmlFile.WriteString("\tdata: { inTBLFileName: fileName, inImageName:inDialogImageName, inTranslation:translatedText, inDivId:inDivID },\n");
+			htmlFile.WriteString("\tsuccess: null\n});\n}\n\n");
+	
+		//LoadData function
+		htmlFile.WriteString("function LoadData(){\n");
+			htmlFile.WriteString("\tvar fileName = document.getElementById(\"FileName\").innerHTML;\n");
+			htmlFile.WriteString("\t$.ajax({\n");
+			htmlFile.WriteString("\ttype: \"POST\",\n");
+			htmlFile.WriteString("\turl: \"GetTranslationData.php\",\n");
+			htmlFile.WriteString("\tdata: { inTBLFileName: fileName},\n");
+			htmlFile.WriteString("\tsuccess: function(result)\n{\n");
+			htmlFile.WriteString("\tvar json = $.parseJSON(result);\n");
+			htmlFile.WriteString("\tvar i;\n");
+			htmlFile.WriteString("\tfor (i = 0; i < json.length; i++)\n{\n");
+				htmlFile.WriteString("\t\tvar jsonEntry = json[i];\n");
+				htmlFile.WriteString("\t\tvar english   = jsonEntry.English;\n");
+				htmlFile.WriteString("\t\tvar divId     = \"#\" + jsonEntry.DivId;\n");
+				htmlFile.WriteString("\t\t$(divId).html(english);\n}\n},\n");
+			htmlFile.WriteString("\terror: function()\n{\n");
+			htmlFile.WriteString("\talert('Unable to load data');\n}\n});\n}\n\n");
+
+
+		//FixOnChangeEditableElements - A function that saves the data whenever input happens
+		htmlFile.WriteString("function FixOnChangeEditableElements()\n{\n");
+			htmlFile.WriteString("\tvar tags = document.querySelectorAll('[contenteditable=true][onChange]');//(requires FF 3.1+, Safari 3.1+, IE8+)\n");
+			htmlFile.WriteString("\tfor (var i=tags.length-1; i>=0; i--) if (typeof(tags[i].onblur)!='function')\n{\n");
+				htmlFile.WriteString("\t\ttags[i].onfocus = function()\n{\n");
+				htmlFile.WriteString("\t\tthis.data_orig=this.innerHTML;\n};\n");
+				htmlFile.WriteString("\t\ttags[i].onblur = function()\n{\n");
+				htmlFile.WriteString("\t\tif( this.innerHTML != this.data_orig)\n");
+					htmlFile.WriteString("\t\t\tthis.onchange();\n");
+			htmlFile.WriteString("\tdelete this.data_orig;\n};\n}\n}\n");
+
+		//Startup function
+		htmlFile.WriteString("function OnStartup()\n{\n");
+		htmlFile.WriteString("\tFixOnChangeEditableElements();\n}\n");
+
+		//End scripts
+		htmlFile.WriteString("</script>\n\n");
+		htmlFile.WriteString("</head>\n\n");
+
+		//Call startup function
+		htmlFile.WriteString("<body onload=\"OnStartup()\">\n");
+
 		fprintf(htmlFile.GetFileHandle(), "<article><header align=\"center\"><h1>Dialog For %s</h1></header></article>\n", iter->first.c_str());
-		htmlFile.WriteString("<br><input align=\"center\" type=\"button\" value=\"Save Changes\" onclick=\"SaveEdits(inDialogImageName, inDivID)\"/>\n\n<br><br>");
+		
+		//Load Data button
+		htmlFile.WriteString("<br><input align=\"center\" type=\"button\" value=\"Load Data\" onclick=\"LoadData()\"/>");
 
 		//Write table
 		htmlFile.WriteString("<table>\n");
@@ -1960,15 +2016,18 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 			//Get name of info file (0100.BIN, etc.)
 			const size_t lastIndex    = iter->first.find_first_of("TBL");
 			const string infoFileName = iter->first.substr(0, lastIndex);
-			map<string, DialogOrder>::const_iterator dialogOrderIter = dialogOrder.find(infoFileName);			
+			map<string, DialogOrder>::const_iterator dialogOrderIter = dialogOrder.find(infoFileName);
 			const bool bDialogOrderExists = dialogOrderIter != dialogOrder.end();
 
 			//Create entries for all images
 			int num = 1;
 			for(const FileNameContainer& fileNameInfo : iter->second)
 			{
+				const unsigned short id = sakuraFileIter->second->mStringInfoArray[num].mUnknown;
+				const char* bgColor = (id >> 8) == 0x4e ? "FF7777" : "FFFFFF"; //LIPS event are highlighted in pink
+
 				const char* pVarSuffix = fileNameInfo.mNoExtension.c_str();
-				htmlFile.WriteString("<tr>\n");
+				fprintf(htmlFile.GetFileHandle(), "<tr bgcolor=\"#%s\">\n", bgColor);
 					snprintf(buffer, 2048, "<td align=\"center\" width=20>%i</td>", num);
 					htmlFile.WriteString(string(buffer));
 
@@ -1978,11 +2037,10 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 					snprintf(buffer, 2048, "<td width=480><div id=\"edit_%s\" contenteditable=\"true\" onChange=\"SaveEdits('%i.bmp', 'edit_%i')\">Untranslated</div></td>", pVarSuffix, num, num);
 					htmlFile.WriteString(string(buffer));
 
-					const unsigned short id = sakuraFileIter->second->mStringInfoArray[num].mUnknown;
 					snprintf(buffer, 2048, "<td align=\"center\" width=120>%02x (%i)</td>", id, id);
 					htmlFile.WriteString(string(buffer));
 					
-					const int order = bDialogOrderExists && dialogOrderIter->second.idAndOrder.find(id) != dialogOrderIter->second.idAndOrder.end() ? dialogOrderIter->second.idAndOrder.find(id)->second : -1;					
+					const int order = bDialogOrderExists && dialogOrderIter->second.idAndOrder.find(id) != dialogOrderIter->second.idAndOrder.end() ? dialogOrderIter->second.idAndOrder.find(id)->second : -1;
 					snprintf(buffer, 2048, "<td align=\"center\" width=120>Order: %i</td>", order);
 					htmlFile.WriteString(string(buffer));
 
@@ -1991,8 +2049,6 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 				++num;
 			}
 		htmlFile.WriteString("</table><br>\n");
-
-		htmlFile.WriteString("<br><input align=\"center\" type=\"button\" value=\"Save Changes\" onclick=\"SaveEdits()\"/>\n\n");
 
 		//End file
 		htmlFile.WriteString("</body>\n");
