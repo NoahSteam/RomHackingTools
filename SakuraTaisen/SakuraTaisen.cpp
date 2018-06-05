@@ -1945,7 +1945,7 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 		
 		htmlFile.WriteString("</script>\n</head>\n\n");
 		fprintf(htmlFile.GetFileHandle(), "<article><header align=\"center\"><h1>Dialog For %s</h1></header></article>\n", iter->first.c_str());
-		htmlFile.WriteString("<br><input align=\"center\" type=\"button\" value=\"Save Changes\" onclick=\"SaveEdits()\"/>\n\n<br><br>");
+		htmlFile.WriteString("<br><input align=\"center\" type=\"button\" value=\"Save Changes\" onclick=\"SaveEdits(inDialogImageName, inDivID)\"/>\n\n<br><br>");
 
 		//Write table
 		htmlFile.WriteString("<table>\n");
@@ -1964,7 +1964,7 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 			const bool bDialogOrderExists = dialogOrderIter != dialogOrder.end();
 
 			//Create entries for all images
-			int num = 0;
+			int num = 1;
 			for(const FileNameContainer& fileNameInfo : iter->second)
 			{
 				const char* pVarSuffix = fileNameInfo.mNoExtension.c_str();
@@ -1975,7 +1975,7 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 					snprintf(buffer, 2048, "<td width=240><img src=\"..\\ExtractedData\\Dialog\\%sTBL\\%s\"></td>", infoFileName.c_str(), fileNameInfo.mFileName.c_str());
 					htmlFile.WriteString(string(buffer));
 
-					snprintf(buffer, 2048, "<td width=480><div id=\"edit_%s\" contenteditable=\"true\" onChange=\"SaveEdits()\">Untranslated</div></td>", pVarSuffix);
+					snprintf(buffer, 2048, "<td width=480><div id=\"edit_%s\" contenteditable=\"true\" onChange=\"SaveEdits('%i.bmp', 'edit_%i')\">Untranslated</div></td>", pVarSuffix, num, num);
 					htmlFile.WriteString(string(buffer));
 
 					const unsigned short id = sakuraFileIter->second->mStringInfoArray[num].mUnknown;
