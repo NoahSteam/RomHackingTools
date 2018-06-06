@@ -205,6 +205,7 @@ struct BitmapData
 
 class BitmapWriter
 {
+	bool SaveAsPNG(const std::string& inFileName, int inWidth, int inHeight, int bitsPerPixel, const char* pInColorData, int inColorSize, const char* pInPaletteData, int inPaletteSize);
 public:
 	bool CreateBitmap(const std::string& inFileName, int width, int height, int bitsPerPixel, const char* pInColorData, int inColorSize, const char* pPaletteData, int paletteSize);
 };

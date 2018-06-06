@@ -5,6 +5,7 @@
 #include <assert.h>
 
 #include "Utils.h"
+#include "..\ExternalTools\lodepng.h"
 
 using std::string;
 using std::vector;
@@ -400,34 +401,82 @@ void PaletteData::SetValue(int index, unsigned short value)
 ////////////////////////////////
 bool BitmapWriter::CreateBitmap(const string& inFileName, int inWidth, int inHeight, int bitsPerPixel, const char* pInColorData, int inColorSize, const char* pInPaletteData, int inPaletteSize)
 {	
-	FileWriter outFile;
-	if( !outFile.OpenFileForWrite(inFileName) )
+	if( 1 )
+	{
+		SaveAsPNG(inFileName, inWidth, inHeight, bitsPerPixel, pInColorData, inColorSize, pInPaletteData, inPaletteSize);
+	}
+	else
+	{
+		FileWriter outFile;
+		if( !outFile.OpenFileForWrite(inFileName) )
+		{
+			return false;
+		}
+
+		BitmapData::FileHeader fileHeader;
+		const int fileSize          = sizeof(BitmapData::FileHeader) + sizeof(BitmapData::InfoHeader) + inColorSize + inPaletteSize;
+		const int offsetToColorData = sizeof(BitmapData::FileHeader) + sizeof(BitmapData::InfoHeader) + inPaletteSize;
+		fileHeader.Initialize(fileSize, offsetToColorData);
+
+		BitmapData::InfoHeader infoHeader;
+		infoHeader.Initialize(inWidth, inHeight, bitsPerPixel);
+
+		outFile.WriteData(&fileHeader, sizeof(fileHeader));
+		outFile.WriteData(&infoHeader, sizeof(infoHeader));
+
+		if( pInPaletteData )
+		{
+			outFile.WriteData(pInPaletteData, inPaletteSize);
+		}
+
+		outFile.WriteData(pInColorData, inColorSize);
+
+		outFile.Close();
+	}
+	
+
+	return true;
+}
+
+bool BitmapWriter::SaveAsPNG(const string& inFileName, int inWidth, int inHeight, int bitsPerPixel, const char* pInColorData, int inColorSize, const char* pInPaletteData, int inPaletteSize)
+{
+	//create encoder and set settings and info (optional)
+	lodepng::State state;
+
+	//generate palette
+	for(int i = 0; i < 16; i++)
+	{
+		const unsigned char r = (unsigned char)floor( ((unsigned char)(pInPaletteData[i+0])/255.f)*31.f + 0.5f);
+		const unsigned char g = (unsigned char)floor( ((unsigned char)(pInPaletteData[i+1])/255.f)*31.f + 0.5f);
+		const unsigned char b = (unsigned char)floor( ((unsigned char)(pInPaletteData[i+2])/255.f)*31.f + 0.5f);
+
+		lodepng_palette_add(&state.info_png.color, r, g, b, 255);
+		lodepng_palette_add(&state.info_raw, r, g, b, 255);
+	}
+
+	//both the raw image and the encoded image must get colorType 3 (palette)
+	state.info_png.color.colortype = LCT_PALETTE; //if you comment this line, and create the above palette in info_raw instead, then you get the same image in a RGBA PNG.
+	state.info_png.color.bitdepth  = 4;
+	state.info_raw.colortype       = LCT_PALETTE;
+	state.info_raw.bitdepth        = 4;
+	state.encoder.auto_convert     = 0; //we specify ourselves exactly what output PNG color mode we want
+	
+	//encode and save
+	std::vector<unsigned char> buffer;
+	unsigned error = lodepng::encode(buffer, (const unsigned char*)pInPaletteData, inWidth, abs(inHeight), state);
+	if(error)
 	{
 		return false;
 	}
 
-	BitmapData::FileHeader fileHeader;
-	const int fileSize          = sizeof(BitmapData::FileHeader) + sizeof(BitmapData::InfoHeader) + inColorSize + inPaletteSize;
-	const int offsetToColorData = sizeof(BitmapData::FileHeader) + sizeof(BitmapData::InfoHeader) + inPaletteSize;
-	fileHeader.Initialize(fileSize, offsetToColorData);
+	const size_t lastIndex = inFileName.find_last_of(".");
+	string pngFileName     = inFileName.substr(0, lastIndex) + string(".png");
 
-	BitmapData::InfoHeader infoHeader;
-	infoHeader.Initialize(inWidth, inHeight, bitsPerPixel);
+	unsigned result = lodepng::save_file(buffer, pngFileName.c_str());
 
-	outFile.WriteData(&fileHeader, sizeof(fileHeader));
-	outFile.WriteData(&infoHeader, sizeof(infoHeader));
-
-	if( pInPaletteData )
-	{
-		outFile.WriteData(pInPaletteData, inPaletteSize);
-	}
-
-	outFile.WriteData(pInColorData, inColorSize);
-	
-	outFile.Close();
-
-	return true;
+	return !result;
 }
+
 
 /////////////////////////////////
 //        BitmapReader        //
