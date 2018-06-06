@@ -1969,7 +1969,7 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 			htmlFile.WriteString("\tvar i;\n");
 			htmlFile.WriteString("\tfor (i = 0; i < json.length; i++)\n{\n");
 				htmlFile.WriteString("\t\tvar jsonEntry = json[i];\n");
-				htmlFile.WriteString("\t\tvar english   = jsonEntry.English;\n");
+				htmlFile.WriteString("\t\tvar english   = jsonEntry.English.replace(/\\\\/g, \'\');\n");
 				htmlFile.WriteString("\t\tvar divId     = \"#\" + jsonEntry.DivId;\n");
 				htmlFile.WriteString("\t\t$(divId).html(english);\n}\n},\n");
 			htmlFile.WriteString("\terror: function()\n{\n");
@@ -2020,21 +2020,21 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 			const bool bDialogOrderExists = dialogOrderIter != dialogOrder.end();
 
 			//Create entries for all images
-			int num = 1;
+			int num = 0;
 			for(const FileNameContainer& fileNameInfo : iter->second)
 			{
 				const unsigned short id = sakuraFileIter->second->mStringInfoArray[num].mUnknown;
-				const char* bgColor = (id >> 8) == 0x4e ? "FF7777" : "FFFFFF"; //LIPS event are highlighted in pink
+				const char* bgColor = (id >> 8) == 0x4e ? "FFAAAA" : "FFFFFF"; //LIPS event are highlighted in pink
 
 				const char* pVarSuffix = fileNameInfo.mNoExtension.c_str();
 				fprintf(htmlFile.GetFileHandle(), "<tr bgcolor=\"#%s\">\n", bgColor);
-					snprintf(buffer, 2048, "<td align=\"center\" width=20>%i</td>", num);
+					snprintf(buffer, 2048, "<td align=\"center\" width=20>%i</td>", num + 1);
 					htmlFile.WriteString(string(buffer));
 
 					snprintf(buffer, 2048, "<td width=240><img src=\"..\\ExtractedData\\Dialog\\%sTBL\\%s\"></td>", infoFileName.c_str(), fileNameInfo.mFileName.c_str());
 					htmlFile.WriteString(string(buffer));
 
-					snprintf(buffer, 2048, "<td width=480><div id=\"edit_%s\" contenteditable=\"true\" onChange=\"SaveEdits('%i.bmp', 'edit_%i')\">Untranslated</div></td>", pVarSuffix, num, num);
+					snprintf(buffer, 2048, "<td width=480><div id=\"edit_%s\" contenteditable=\"true\" onChange=\"SaveEdits('%i.bmp', 'edit_%i')\">Untranslated</div></td>", pVarSuffix, num + 1, num + 1);
 					htmlFile.WriteString(string(buffer));
 
 					snprintf(buffer, 2048, "<td align=\"center\" width=120>%02x (%i)</td>", id, id);
