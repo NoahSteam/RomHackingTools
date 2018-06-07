@@ -1,0 +1,4406 @@
+
+3DSANDROIDIOSPCPS3PS4SWITCHVITAXBOX 360XBOX ONEMORE SYSTEMS Log In Sign Up
+GameFAQs
+
+Search Game Titles
+ANSWERS	BOARDS	COMMUNITY	CONTRIBUTE	GAMES	WHAT’S NEW
+DreamcastStrategyTurn-BasedTactics
+Sakura Taisen – Guides and FAQs
+Home
+FAQs
+Reviews
+Images
+Videos
+Answers
+Board
+
+Would you recommend this FAQ? Yes No
+Episode 1 Translation by Kayama
+Version: 1.02 | Updated: 12/09/01 | Search Guide | Bookmark Guide
+
+Sakura Wars (サクラ大戦) Chapter 1 Translation  v.1.02 2001.12.09
+=================================================================
+Translation 2001 By Kayama <jpstern@lynx.neu.edu>
+
+This is a translation of the first chapter of the game 'Sakura Wars' for the
+Sega Saturn and Sega Dreamcast systems and contains some Japanese text in
+Shift-JIS encoding.
+
+  Permission granted by author to duplicate (unaltered) this document in
+  its entirety for non-profit purposes only.  All other rights reserved.
+
+This translation may be found at the following location:
+
+<http://pages.cthome.net/Kayama/> - primary location
+
+===  Disclaimer ==========
+This work is not authorized by SEGA, RED, or any other company.  I do not
+profess to be fluent in Japanese.  I do not guarantee a 100% accurate
+translation.  All Sakura Wars games are copyright Sega, Red, and/or
+Overworks and all other copyrighted works are trademarks of their respective
+companies.
+
+=== Update History ==========
+v.1.02 2001.12.09
+- Wrapped every line to 80 characters.
+- Completed the list of places visited in Free Movement 1-2.
+
+v.1.01 2001.12.09
+- Added the note on 'message skip' in the options menu.
+- Added a footnote about 'a flower in each hand.'
+
+v.1.00 2001.12.07
+- Initial completion.
+
+== Getting Started =======================================================
+
+This section of the faq is dedicated to helping those with insufficient
+Japanese knowledge get started with the game.  If you have already figured
+all this out, feel free to skip to the next section.
+
+Note that this faq is designed primarily with the Japanese Dreamcast
+version in mind, although most of the material covered should apply to the
+Saturn and Japanese Windows versions of the game as well.  I have not
+played the Japanese or Chinese Windows versions of the game and have no
+knowledge on them whatsoever; therefore this faq takes a console-oriented
+stance on the game.
+
+-- Supported hardware ----------------------------------------------------
+
+Sakura Taisen is a Japanese Sega Saturn/Dreamcast game, and as such is
+intended for use on Japanese or Asian Sega Saturn or Dreamcast consoles.
+There _are_ means of playing Japanese Saturn or Dreamcast games on
+consoles from other territories; however, such information is beyond the
+scope of this faq.
+
+Additionally, the Dreamcast version of Sakura Taisen includes support for
+various Dreamcast peripherals.  The game makes use of the Dreamcast VMU's
+LCD screen during play, so it is advisable, but not necessary, to use a VMU
+with an LCD screen (as opposed to many third party VMUs or certain Sega
+brand models which do not have a screen) in the first slot of the first
+controller.  Also, the game requires the Dreamcast's analog pad be used. 
+Sakura Taisen also supports the Puru-Puru/Jump Pack and, while the VGA box
+is not directly supported, it is possible to run the game in VGA mode
+using various techniques which are not recommended by Sega as they may
+cause damage to your Dreamcast or monitor, and I will take no
+responsibility for any such damage incurred.
+
+-- System file maintenance (Dreamcast version only) ----------------------
+
+When you first start up the game and press the start button, a screen will
+appear asking you to select the Visual Memory Unit (hereafter referred to
+as "VMU") containing the main system file you will use during play.  If a
+highlighted VMU contains a Sakura Wars system file, a picture of a cherry
+blossom will appear in the VMU icon; otherwise, the words 'NO DATA' will
+appear.  If you press the 'A' button on such a highlighted VMU, the
+game will then ask you if you wish to create a system file.  At this point,
+it will be useful to point out two important Japanese words which you
+should be able to recognize easily while playing Sakura Wars:
+
+  はい   ('hai') - 'Yes'
+  いいえ ('iie') - 'No'
+
+Anyway, select 'yes' if you wish to create a new system file.  Once it is
+done, the dialog box on screen will tell you not to remove that VMU during
+game play while the system file is being created; immediately afterward,
+you will be taken to the game's main menu screen.
+
+Otherwise, if a system file already exists on the currently highlighted
+VMU, you will have three options, indicated in the upper right corner of
+the screen.  They are:
+
+  'Y' button: Delete
+  'X' button: Copy
+  'A' button: Load
+
+The 'copy' and 'delete' options should be self-explanatory.  When 'delete'
+is selected, a dialog will pop up asking for confirmation.  'No' is
+highlighted by default.  When 'copy' is selected you will be asked to
+choose a destination VMU for the copy, followed by a confirmation prompt.
+'Load' will of course start the game with the currently selected VMU
+system file.
+
+Note that it is possible to start play without a system file in use, but
+any general data (e.g., which characters you've finished the game with,
+mini-games you've found, etc.) will not be saved.  To do so, highlight
+「開始」('Begin') in the lower right.  You will then be prompted if you
+wish to start the game without using a system file.  Note that it _will_
+still be possible to save your progress during game play (provided you have
+sufficient VMU space).
+
+-- Main game menu --------------------------------------------------------
+
+Once you have chosen a system file (or opted to play without one), a
+screen will appear with the following menu:
+
+ディスク１の最初から  Start from the beginning of disc 1
+セーブの続きから      Continue a saved game
+帝劇の長い一日        A long day in the Imperial Theatre
+インターネット        Internet (Dreamcast version only)
+オプション            Option
+
+Certain menu items may not be available.  'Start from the beginning of
+disc 1' is self-explanatory.  'Continue a saved game' allows you to load a
+game saved at an 'eyecatch' (pre-set points during the game at which you can
+save your progress).  'A long day in the Imperial Theatre' is essentially a
+"bonus area" in which you can view previously seen movies, play mini-games
+you have found during game play, and the like.
+
+Selecting the 'option' menu item brings up a screen with the following
+settings:
+
+カーソル速度   「遅い・・・速い」    Cursor speed     [ Slow . . . Fast ]
+サウンド       「ステレオ/モノラル」 Sound           [ Stereo / Monaural ]
+音声           「ＯＮ/ＯＦＦ」       Voice                [ ON / OFF ]
+ぷるぷるぱっく 「ＯＮ/ＯＦＦ」       Puru-Puru Pack       [ ON / OFF ] *
+文字スキップ   「ＯＮ/ＯＦＦ」       Message Skip         [ ON / OFF ] **
+キー設定       「変更/設定確認」     Key settings  [ Change / Check settings ]
+
+* Dreamcast version only
+** Dreamcast version only; not available until the game has been completed
+at least once
+
+These should once again be pretty self-explanatory.  'Puru-Puru pack'
+refers to force feedback features that occur during play; these can be
+toggled on or off if a Puru-Puru or Jump Pack is installed.  'Voice' refers
+to speech spoken by characters in the game.
+
+'Message Skip,' when enabled, allows you to skip through dialogue by holding
+down the R-trigger.  It is only available after the game has been finished at
+least once.
+
+'Change key settings' allows you to reconfigure buttons on the pad.  'A'
+and 'B' are limited to 'confirm' (「決定」) and 'cancel' (「取り消し」),
+but these functions may be swapped as desired.  'X', 'Y', 'L', and 'R'
+can all be mapped to shortcut commands used during battle.  These
+commands are:
+
+移動      Movement
+通常攻撃  Normal attack
+防御      Defense
+ため      Build up
+全図      Full map
+相談      Consult
+決定      Confirm
+決定なし  Undefined
+
+By default, these are all undefined (「決定なし」).  The final option,
+above 'EXIT,' restores the initial settings (初期決定).
+
+'Confirm key settings' (「決定確認」) simply brings up a window listing
+your current key configuration.
+
+There is an additional option in the option menu which will not initially be
+available.
+
+Selecting 'continue from where you left off' brings up a screen with a list
+of VM slots across the top and a list of files for the currently selected
+VMU.  Options for choosing a saved game are the same for choosing a system
+file above.  Pressing the 'B' button will allow you to return to the main
+menu without having restored a saved game.
+
+The 'Internet' option loads the built-in Dream Passport web browser,
+which will bring you to the official Sakura Wars Dreamcast version homepage.
+Further description of the Dream Passport software is beyond the scope of
+this faq.
+
+-- Conventions used in this faq ------------------------------------------
+
+One of the objectives of Sakura Taisen, apart from saving the world from
+plunging into chaos and destruction, is to deepen your relationship with
+the members of the Floral Assault Group.  This is accomplished by talking
+with characters and responding to them in ways that increase their opinion
+and trust of you.  During the game, positive and negative changes in a
+character's mood are indicated by corresponding chimes; in this faq, such
+changes are represented by a plus sign (+) and a minus sign (-)
+respectively at the beginning of the line of dialog at which one occurs.
+
+Such changes in mood most frequently occur as a result of your response
+to an onscreen prompt with several choices you can make during a
+conversation.  The system is called LIPS, which stands for "Live &
+Interactive Picture System" (a registered trademark of Red).  For each such
+prompt that comes up during the course of this translation, I have first
+listed each of the possible options, followed by the translation of the
+outcome of one or more of those options.
+
+Finally, I have included footnotes at the end of the translation which
+correspond to certain lines that are numbered in curly braces.
+
+=== Background Information ==========
+
+The Taisho (大正) era was from 1912 - 1925 (with formal coronation of the
+Taisho emperor in 1915).  It was the second era since the fall of the
+Tokugawa shogunate, immediately following the Meiji (明治 "the enlightened
+rule") era (1868 - 1912) and restoration.  By the end of the Meiji, western
+culture was finally truly intertwining itself with the traditional culture
+of Japan.
+
+However, in the world of Sakura Taisen, things are slightly different.
+This is the 太正, not 大正 Taisho era.  Most of what you may know about
+Japan during this time in our world holds true; however, technology here is
+heavily advanced thanks to the power of steam, the benefits of which are
+seen rampant throughout Sakura Wars.  Yet unbeknownst to the complacent
+populace, something dark and foreboding seeks to turn this world on its
+end......
+
+=== Opening Credits Translation ==========
+
+製作・総指揮          Production - Overall Direction
+入交昭一郎            Irimajiri Shouichirou
+
+総合プロデューサー    Coordinating Producer
+広井王子              Hiroi Ohji
+
+キャラクター原案      Original Character Design
+藤島康介              Fujishima Kousuke
+
+構成・脚本            Composition - Scenario
+あかほりさとる        Akahori Satoru
+
+作曲・音楽監督        Music Composition - Music Director
+田中公平              Tanaka Kouhei
+
+=== Opening Theme Translation ==========
+
+激！帝国華撃団
+Geki! Teikoku Kagekidan
+(Enrage! Imperial Floral Assault Group)
+
+作詞?広井王子  Lyrics: Hiroi Ouji
+作曲?田中公平  Composer: Tanaka Kouhei
+
+唄?                               Vocals:
+横山智佐(真宮寺さくら)             Yokoyama Chisa (Shinguji Sakura)
+帝国歌劇団                         The Imperial Opera Troupe
+
+引き裂いた  闇が吠え               Hikisaita  Yami ga hoe
+震える帝都に                       Furueru Teito ni
+愛の歌  高らかに                   Ai no uta  Takaraka ni 
+踊りでる戦士たち                   Odorideru senshi-tachi
+心まで  鋼鉄に                     Kokoro made  Koutetsu ni 
+武装する乙女                       Busou suru otome
+悪を蹴散らして                     Aku wo kechirashite
+正義をしめすのだ                   Seigi wo shimesu no da
+
+走れ  光速の  帝国華撃団           Hashire  Kousoku no  TeikokuKagekidan
+唸れ  衝撃の  帝国華撃団           Unare  Shougeki no  TeikokuKagekidan
+
+走れ  光速の  帝国華撃団           Hashire  Kousoku no  TeikokuKagekidan
+唸れ  衝撃の  帝国華撃団           Unare  Shougeki no  TeikokuKagekidan
+
+The torn  Darkness cries out
+To the trembling Teito
+Singing high  The song of love
+The warriors come leaping out
+Maidens armed  Even in their very hearts
+With steel
+Kick about the evil
+And show justice
+
+Run  Fast as light  Imperial Floral Assault Squad
+Yell out  A crashing roar  Imperial Floral Assault Squad
+
+Run  Fast as light  Imperial Floral Assault Squad
+Yell out  A crashing roar  Imperial Floral Assault Squad
+
+=== Chapter 1 Translation ==========
+
+     Chapter 1
+     Teito - The Flowery Assault Group {1}
+
+Imperial Navy Ensign Mr. Ohgami Ichiro: {2}
+
+As part of a special mission, you are hereby ordered to take up a new post as
+captain of the following corps:
+
+'The Imperial Floral Assault Group, Anti-Demon Interception Squad,
+Flower-Troupe.'
+
+Furthermore, your mission is a highly-classified one for the sake of the defense
+of Teito.
+
+You are to head to Ueno Park to join up with the corps.
+                                   Imperial Army Lieutenant General {3}
+                                                           Yoneda Ikki
+
+{Hanakoji} ......Ohgami Ichiro.  As of today, you will be transferring to the
+Imperial Floral Assault Group, Flower-Troupe.
+
+{Ohgami} Yes, sir!  Ohgami Ichiro, prepared to work to the utmost limits of my
+abilities, sir!
+
+{Hanakoji} Yes......  Excellent reply.
+
+It would not do for a politician such as myself to discuss the military secrets
+of the Floral Assault Group with you here.
+
+For further detail you should ask Lieutenant General Yoneda, who serves as
+supreme commanding secretary of the Imperial Floral Assault Group.
+
+Now then, head for Ueno Park.  I expect you to live up to the expectations I had
+when I recommended you as captain.
+
+{Ohgami} Understood, sir!  Ohgami Ichiro, now proceeding to Ueno Park!
+
+{Hanakoji} The sanctity of Teito rests in your hands.  Do your best.
+
+{Ohgami} Yes, sir!
+
+* * * * *
+
+{Ohgami} Ah, what nice weather!  And the Ueno cherry blossoms are in full bloom.
+
+Now then......  Where do you suppose the meeting place is......?  I guess I'll
+try walking around a bit more.
+
+That reminds me......  I believe Ueno Park was where that monster disturbance
+happened just a while ago......
+
+Apparently, the one who cut down that monster, with one blow, was a young
+girl......
+
+........................
+
+He said someone from the Imperial Floral Assault Group would come to meet me;
+when do you suppose they'll show up?
+
+What's this?  That girl......
+
+......!  She's coming this way......
+
+{Girl} ......Excuse me......  Are you Ensign Ohgami Ichiro?
+
+{Ohgami} Ye-yes.  I happen to be Ohgami......
+
+Um......  Forgive me, but, who might you be?
+
+{Girl} I'm Shinguji Sakura.
+
+I received instructions from Lieutenant General Yoneda to provide escort for an
+Ensign Ohgami.
+
+{Ohgami} ......From Lieutenant General Yoneda?
+
+(I'd heard someone would be coming to meet me...... but I never would have
+expected it to be a woman......)
+
+Um, excuse me...... would you happen to be from the Imperial Floral Assault
+Group!?
+
+{Sakura} Yes!
+
+Imperial Floral Assault Group, Flower-Troupe, Shinguji Sakura.
+
+Pleased to make your acquaintance.
+
+{Ohgami} Ah......  I'm Imperial Navy Ensign Ohgami Ichiro.
+
+Still...... to think a young woman like yourself would be a member of the
+squad.....  Frankly, I'm a little surprised.
+
+{Sakura} Do you find women difficult to rely on?
+
+{Ohgami} Ah, n-no......  It's not that......
+
+(......I suppose only in a covert squad would it not be unusual to find female
+squad members like her......)
+
+{Sakura}......Now then, let's proceed to the Grand Imperial Theatre.
+
+{Ohgami} Eh - theatre...... you say!?
+
+=== LIPS 1-1 ==>
+- a - I'm on duty!
+- b - First I'd like to know more about you. {Sa+}
+- time up - {Sa-}
+=
+- a >
+{Ohgami} I'm on duty!  Unfortunately I don't have time to spend seeing a play.
+
+{Sakura} You're mistaken.  Inside the Grand Imperial Theatre is the Imperial
+Floral Assault Group headquarters.
+
+{Ohgami} Ehh!?  The base of a covert squad is inside a theatre!?  That can't
+be......  No, wait a second?
+
+In order to conceal oneself from the enemy's eyes, first do so from one's
+allies'.  I see.
+
+{Sakura} The essentials of the art of war, indeed.
+
+Now then, let's proceed.
+< a -
+
+- b >
+{Ohgami} First I'd like to know more about you.
+
+{Sakura+} About me, you say......?
+
+My name is Shinguji Sakura.  I've just come here from Sendai.  I'm a complete
+newcomer who's just joined the Tei-Geki. {4}
+
+I'm still causing trouble all the time for everyone in the Tei-Geki.
+
+But in order to defend Teito, I intend to work hard even if it means placing my
+life on the line.
+
+{Ohgami} I see - that's an excellent attitude.  I'm relieved to hear those
+words.  That is how a member of a secret corps should be.
+
+......That would mean the Imperial Floral Assault Group has something like a
+secret weapon, wouldn't it?
+
+{Sakura} Making the 'Kohbu' work is a tough job.  But as fellow rookies, let's
+do our best together. {5}
+
+{Ohgami} (Kohbu?  Ahh...... the name of the secret weapon.  I wonder what sort
+of thing it is.)
+
+{Sakura} Come, Lieutenant General Yoneda is waiting!  Let's go!
+
+{Ohgami} Ye-yes!  If you would, please.
+< b -
+
+- time up >
+{Ohgami} (Why do I need to go to a theatre......?)
+
+(Is she really...... a member of the Imperial Floral Assault Group?)
+
+{Sakura-} What's the matter?  You seem distracted.
+
+{Ohgami} O-oh, no!  It-it's nothing!
+
+(It couldn't be...... I'm overthinking this.  This girl knew my name, didn't
+she?)
+
+{Sakura} Now then, let's go.  Lieutenant General Yoneda is waiting.
+
+{Ohgami} Ye-yes!  If you would, please.
+< time up -
+<== LIPS 1-1 ===
+
+* * *
+
+{Ohgami} So this is the Grand Imperial Theatre that was newly built last
+year.....  I never would have expected it to be right in the middle of
+Ginza...... {6}
+
+It's a big building......
+
+Surely, no one would notice that the headquarters of a covert squad are inside a
+theatre like this......
+
+{Sakura} Mr. Ohgami, this is your first time here, isn't it.  Now then, let's go
+inside through the main lobby.
+
+{Ohgami} Wow......  What an impressive entranceway.  Still, it seems a bit
+careless not to have a lookout posted......
+
+Still...... it's rather quiet, isn't it.
+
+{Sakura} Well, today we're only performing at night......
+
+{Ohgami} (Performing at night?  ......Does she mean nighttime drills?)
+
+{Sakura} But, before long, we'll be opening up, and the audience will come
+pouring back in.
+
+{Girl} Ahah?  Big brother, are you Miss Sakura's boyfriend? {7}
+
+{Ohgami} Huh!?
+
+(Wh...... who is this kid!?)
+
+{Sakura} Iris!  You mustn't tease your elders.
+
+This is Ensign Ohgami Ichiro, newly transferred to the Imperial Floral Assault
+Group.
+
+{Ohgami} Ah...... I'm...... Imperial Navy Ensign, Ohgami Ichiro.
+
+{Iris} Imperial Floral Assault Group, Flower-Troupe, Iris.
+
+And this is Jean-Paul, the bear, Iris's very special friend.  Get along nice
+with him.
+
+{Ohgami} (A child like this...... is a member of a covert squad?)
+
+{Iris} Say, Sakura......
+
+{Sakura} What's the matter?
+
+{Iris} This big brother has spiritual energy too......  He'll be fighting in a
+'Kohbu,' won't he. {5}
+
+{Sakura} That's right.
+
+{Iris} Iris...... hates war......  TODO: HERE 120
+
+{Sakura} Don't worry, Iris.  Come on, let's go to your room.  I'll read to you
+from your Mother Goose book.
+
+{Iris} Okay.
+
+{Sakura} Ah, Ensign Ohgami.  Lieutenant General Yoneda is in the manager's
+office.
+
+Well then, I will now be excusing myself.
+
+{Ohgami} J......just what was that girl all about?
+
+Sakura's left, too......  That's no good.
+
+There's nothing I can do about it.  I guess I'll just go see Lieutenant General
+Yoneda myself......
+
+* * *
+
+{Woman's voice} Someone!  Please lend me a hand!
+
+{Ohgami} ......Who could that be?  It sounded like a voice just came from the
+dining hall......
+
+(Wah!  ......Wh-what a bold outfit!)
+
+{Sumire} Ah!  You there!
+
+{Ohgami} ......My-myself, you mean!?
+
+{Sumire} Who else is there?  Stop looking like a fool and come here!
+
+{Ohgami} Ye- yes, ma'am......
+
+{Sumire} I wonder if you wouldn't perhaps pick up that dropped fork and exchange
+it for a new one for me?
+
+=== LIPS 1-2 ==>
+- a - Why should I have to do such a thing......? {Su-}
+- b - Why, certainly. {Su+}
+- time up - {Su-}
+=
+- a >
+{Ohgami} Why should I have to do such a thing......?  I refuse!
+
+In the first place, that's no way to make a request of someone!
+
+{Sumire-} My, then you mean to say I should pick it up myself?
+
+You dare to suggest that the only daughter of Kanzaki Heavy Industries, and the
+star actress of this theatre, and, and......
+
+...the top lady of Japanese high society, I, Kanzaki Sumire, should pick up a
+fork dropped on the floor!?
+
+That is what you are saying, is it not?!  You are fired!  I shall report this to
+the manager and see to it that you are fired!
+
+{Ohgami} ......I happen to be Imperial Navy Ensign Ohgami Ichiro, transferred as
+of today to the Imperial Floral Assault Group.
+
+Fired you may say, but without a decree from the Navy's General Headquarters, I
+cannot leave.
+
+{Sumire} ............!
+
+Ah......  My, oh, no......  O-ho-ho-ho-ho-ho-ho......
+
+No wonder I thought I hadn't seen a waiter like you before......  Forgive me.
+
+Let's see - Ensign Ogawa, was it?
+
+{Ohgami} ......Ohgami.  Um, where might Lieutenant General Yoneda be?
+
+{Sumire} Mr. Yoneda is in the manager's office within.
+
+{Ohgami} Through this way?  Thank you very much.
+< a -
+
+- b >
+{Ohgami} Why, certainly.  ......Here, there you are.
+
+{Sumire+} Thank you.  By the way - I, the top star here, Kanzaki Sumire, have
+been cast aside...
+
+...and before I was even aware, Miss Maria was made leader of our drama group. 
+What do you think of all this?
+
+Honestly, that old fool Yoneda!  He has no eye for people!
+
+{Ohgami} (Huh......?)
+
+......I happen to be Imperial Navy Ensign Ohgami Ichiro, transferred as of today
+to the Imperial Floral Assault Group.
+
+I wish to personally convey the message to Lieutenant General Yoneda......
+
+{Sumire} ............!
+
+Oh my, what shall I do!  How rude of me.  Ho-ho-ho-ho-ho......
+
+Let's just keep what I said just now a secret from Mr. Yoneda!  Is that clear? 
+(Chu!) {8}
+
+{Ohgami} Waah!  Wh-what are you doing all of a sudden!?!
+
+{Sumire} Eh-heh, there's no need to be shy.  That was just to see that the
+favor's returned......  I mean, just to see you off.
+
+{Ohgami} Um, excuse me......  Wh-where might Lieutenant General Yoneda be!?
+
+{Sumire} Ahh, Mr. Yoneda is in the manager's office.  But is this absolutely
+clear?  You are not to mention what I just said to anyone!
+
+Do you understand, Ensign Ogawa?!
+
+{Ohgami} ......It's Ohgami.
+
+{Sumire} Enough, begone!!
+
+{Ohgami} Ye- yes, ma'am......
+< b -
+
+- time up >
+{Sumire-} Just a moment, you!  Can you not hear what I am saying?
+
+Cease your daydreaming, and pick up that fork right away!!
+
+{Ohgami} Why should I have to do such a thing......?  I refuse!
+
+In the first place, that's no way to make a request of someone!
+
+{Sumire} My, then you mean to say I should pick it up myself?
+
+You dare to suggest that the only daughter of Kanzaki Heavy Industries, and the
+star actress of this theatre, and, and......
+
+...the top lady of Japanese high society, I, Kanzaki Sumire, should pick up a
+fork dropped on the floor!?
+
+That is what you are saying, is it not?!  You are fired!  I shall report this to
+the manager and see to it that you are fired!
+
+{Ohgami} (Haah?)
+
+(That's all well and good for her to say all of a sudden, but...... just who is
+this woman!?)
+
+I happen to be Imperial Navy Ensign Ohgami Ichiro, transferred as of today to
+the Imperial Floral Assault Group.
+
+Fired you may say, but without a decree from the Navy's General Headquarters, I
+cannot leave.
+
+{Sumire} ............!
+
+Ah......  My, oh, no......  O-ho-ho-ho-ho-ho-ho......
+
+No wonder I thought I hadn't seen a waiter like you before......  Forgive me.
+
+Let's see - Ensign Ogawa, was it?
+
+{Ohgami} ......Ohgami.  Um, where might Lieutenant General Yoneda be?
+
+{Sumire} Mr. Yoneda is in the manager's office within.
+
+{Ohgami} Through this way?  Thank you very much.
+< time up -
+<== LIPS 1-2 ===
+
+* * *
+
+{Ohgami} ......So this is the office of the head secretary of the Imperial
+Floral Assault Group, his Excellency, Lieutenant General Yoneda......
+
+Lieutenant General Yoneda......  An active strategist in the Russo-Japanese
+War...... {9} What sort of a person is he?
+
+{Woman} Who might you be?
+
+{Ohgami} Ah......  Forgive me.  I'm Imperial Navy Ensign, Ohgami Ichiro.
+
+I would like to see his Excellency, Lieutenant General Yoneda......
+
+{Woman} So you're Ohgami Ichiro, newly transferred to the Tei-Geki. {4}
+
+Pleased to meet you.  I'm Maria Tachibana.
+
+{Ohgami} Miss Maria Tachibana......
+
+=== Click-LIPS 1-1 ==>
+- Maria's hair >
+{Ohgami} (Is this the color they call platinum blonde?)
+< Maria's hair -
+
+- Maria's eyes #1 >
+{Ohgami} (What lovely green eyes.)
+< Maria's eyes #1 -
+
+- Maria's eyes #2 >
+{Ohgami} (She has such a grave expression......)
+< Maria's eyes #2 -
+
+- Maria's face #1 >
+{Ohgami} (So she's a foreigner......  Huh?  But she was speaking Japanese just
+now.)
+< Maria's face #1 -
+
+- Maria's clothes >
+{Ohgami} (There are no openings in either her outfit or her posture.)
+< Maria's clothes -
+
+- Maria's face #2 >
+{Ohgami} (I wonder what country she's from.)
+
+{Maria} Is there...... something on my face?
+
+{Ohgami} Ah......  N- no!
+
+{Maria} Lieutenant General Yoneda is in the manager's office.  I have practice,
+so if you'll excuse me......
+
+And one more thing, just as a warning.  You shouldn't stare at a woman's face! 
+Now then, excuse me!
+< Maria's face #2 -> end Click-LIPS 1-1
+
+- Maria's mouth >
+{Maria} Lieutenant General Yoneda is in the manager's office.  I have practice,
+so if you'll excuse me......
+< Maria's mouth -> end Click-LIPS 1-1
+<== Click-LIPS 1-1 ===
+
+{Ohgami} ......She seemed to be a rather strict person.  Still, I finally feel
+as though I've met someone who actually seems like military personnel.
+
+Still, did she say - practice, was it......?  Would that be some sort of drill?
+
+Now then......  I can finally have an audience with his Excellency, Lieutenant
+General Yoneda.
+
+- {after knocking} -
+
+{Yoneda} Hey, come on in.
+
+{Ohgami} ......Excuse me!!
+
+As of 12:00 today, Imperial Navy Ensign Ohgami Ichiro, newly transferred to the
+Imperial Floral Assault Group,
+
+...has now arrived!
+
+{Yoneda} Yeah, I heard the news from Count Hanakoji.  Well, now, let's just
+dispense with the formal introductions.
+
+In the first place, y'know, this is the Grand Imperial Theatre.  You can't use
+that military talk.
+
+{Ohgami} (Wh...... who is this drunken old man!?)
+
+(Th......this man...... couldn't possibly be......!?)
+
+{Yoneda} Well, how 'bout a round!?
+
+=== LIPS 1-3 ==>
+- a - Are you really...... his Excellency Lieutenant General Yoneda?
+- b - How can you drink sake in the middle of the day!
+- time up -
+=
+- a >
+{Ohgami} ......Um...... are you...... really...... his Excellency Lieutenant
+General Yoneda?
+
+{Yoneda} Idiot!  What's the big idea with this "are you really" bit!?
+
+What's the matter, you can't figure out who a person is if he hasn't got any
+medals on?!  I'm Army Lieutenant General Yoneda Ikki!
+
+Damn fool!
+
+{Ohgami} Fo- forgive me!
+
+{Yoneda} Okay!  As long as you understand, that's fine enough.  Now then, I will
+now entrust you with your first mission!
+< a -
+
+- b >
+{Ohgami} How can you drink sake in the middle of the day?!
+
+Are you really that Lieutenant General Yoneda?  You seem quite different from
+the rumors I've heard......
+
+{Yoneda} Rumors......?  Hey, what sort of rumors!?  Huh?  Spit it out!
+
+{Ohgami} I had heard Lieutenant General Yoneda was a hero of the Russo-Japanese
+War and the greatest strategist the Army has.
+
+{Yoneda} The greatest strategist the Army has...... and, he's the manager of the
+Grand Imperial Theatre.
+
+And on top of that, a drunken old man......
+
+And that's what you don't like.
+
+{Ohgami} No......  I hadn't said that much.
+
+{Yoneda} That is what you're saying!  But you know, Mr. Ohgami......
+
+No matter how much distinguished military service I've performed and how many
+medals hang from my chest, I've killed a whole lot of people.
+
+Both enemies and allies......  I've killed far too many.
+
+So, what's wrong with this?  Being the manager of a theatre!
+
+{Ohgami} ......I understand.  But given that I have been transferred to the
+Imperial Floral Assault Group......
+
+For the harmony and safety of the citizens of Teito...... I intend to fight with
+my life on the line!
+
+{Yoneda} Splendid!  Er, rather...... that's just splendid indeed! {10} Now then,
+here's your first duty!
+< b -
+
+- time up >
+{Ohgami} ......
+
+{Yoneda} Why, you're a real uncivil fellow, aren't you.  Well, no matter.  Now
+then, here's your first duty!
+< time up -
+<== LIPS 1-3 ===
+
+{Yoneda} Change into this and go to the reception desk!  Hmph, in soldier's
+uniform like that you can't help standing out.
+
+Because when it comes down to it, this is a secret corps, after all.
+
+{Ohgami} I see……  So I'll be in disguise for this mission.  That's just what
+I'd expect of a covert squad!
+
+Understood!  Ohgami Ichiro, now proceeding to duty!
+
+{Yoneda} I thought I told you you don't need that formal talk!  Now go already!
+
+{Ohgami} Yes, sir!
+
+* * *
+
+{Sakura} Ah, Mr. Ohgami……
+
+{Iris} Ah…… he's spotted us.
+
+{Ohgami} Sakura and…… Iris, was it?  What are you doing here?
+
+{Iris} See, Sakura.  This is why Iris said "let's run!"
+
+{Sakura} ……Well, you said, "let's go check on how he's doing," didn't you?!
+
+{Iris} And you said, "let's go, let's go!"
+
+{Ohgami} (……It seems the two of them were eavesdropping.)
+
+=== LIPS 1-4 ==>
+- a - It's not right to eavesdrop! {I-}
+- b - Tell me where the reception desk is.
+- time up -
+=
+- a >
+{Ohgami} Here, now!!  It's not right to eavesdrop!
+
+{Sakura} ……I'm sorry.
+
+{Iris-} What!?  And here Iris thought she'd show big brother around!
+
+Well Iris doesn't care about big brother anymore!  So long, bye-bye!
+
+{Sakura} Ah, Iris!  Wait right there!
+
+=== LIPS 1-4-1 ==>
+- a - Call Iris back. {I+}
+- b - Have Sakura lead the way.
+- time up - {Ma+}
+=
+- a >
+{Ohgami} Wa- wait, Iris!  I guess I said a little much.  I'm sorry.
+
+{Iris} Sniff……  But, aren't you…… angry at Iris?
+
+{Ohgami} Ahh, what trouble you cause……  Iris, don't cry.  I'm not
+angry……
+
+{Iris} E-heh-heh, thanks.  Big brother, you're real nice, huh.
+
+{Sakura} ……That Iris.  Tricking us with crocodile tears……  What nerve.
+
+{Ohgami} By the way, I'm sure you two would know, but……
+
+Could you tell me the way to the reception desk, I wonder?  It's my first duty
+here.
+< a -
+
+- time up >
+{Sakura} I'm sorry……  It's partly my fault for not being more careful.
+
+I'm sorry.  I'm worried about Iris, so…… forgive me.
+
+{Ohgami} Ah……  Just a second……  ……She's gone.
+
+……That's no good.  Here I've finally just received my first official duty
+and I don't even know where the reception desk is.
+
+{Maria} Ensign Ohgami, is something the matter?
+
+{Ohgami} You're…… Miss Maria Tachibana…… right?
+
+{Maria} Yes, that's right.  It seems you've already met with Manager Yoneda.
+
+{Ohgami} Yes.  I've already received my first official duty.  I was told to
+change into these clothes and head for the reception desk.
+
+Until I get used to it, I think I'd like to learn about my job a little at a
+time.
+
+{Maria+} I see.  That's an excellent attitude.
+
+By the way, do you happen to know where the reception desk is?
+
+{Ohgami} Ah…… that's right!  And here I meant to ask how to get there……
+
+{Maria} ……In that case, I'll show you the way.
+
+{Ohgami} Really?  That would really help.
+
+{Maria} ……It's a simple task.  Please, come with me.  It's very close.
+
+(Skip down to === Maria guides you to the reception desk ==>.)
+< time up -
+<== LIPS 1-4-1 ===
+< a -
+
+- b >
+{Ohgami} Be that as it may……  I was wondering, could I perhaps trouble you
+to tell me where the reception desk is?
+
+It's my first task here.  I'd like to get to the reception desk as soon as
+possible.
+< b -
+
+- time up >
+{Maria} Here, now!  What are you making a fuss about in front of the manager's
+office!?
+
+{Ohgami} Ah…… you're-!  The one from earlier……
+
+{Iris} Hey, Maria, listen!  Sakura says……
+
+{Sakura} All I said was that I'd show Mr. Ohgami around, but Iris, here……
+
+{Maria} Both of you, stop that at once.  It's almost time for practice to start,
+isn't it?
+
+……As for the Ensign, I'll show him the way.  You two head for the dressing
+room.
+
+{Iris} Oh, that's no fun.
+
+{Sakura} Well then, Mr. Ohgami……  Good luck with your work.
+
+{Maria} Now then, Ensign Ohgami.  I'll show you to the reception desk.
+
+{Ohgami} ……Ye-yes, ma'am.  If you would, please.
+(Skip down to === Maria guides you to the reception desk ==>.)
+< time up -
+<== LIPS 1-4 ===
+
+{Sakura} In that case, I'll lead the way.  Come on, Mr. Ohgami.  Let's go.
+
+{Iris} No!  Iris will show big brother the way!  Let's go, big brother!
+
+=== LIPS 1-5 ==>
+- a - Ask Iris to show the way.
+- b - Ask Sakura to show the way.
+- c - Ask both to show the way.
+- time up -
+=
+- c >
+{Ohgami} Now, both of you, don't fight.  Let's all go together.  ……You
+wouldn't have any problem with that, right?
+
+{Iris +} ……Okay.
+
+{Sakura +} I'm sorry, Iris.  I was being immature too.
+
+{Iris} No, it's all right.  Iris thinks it's more fun when everybody's together.
+
+{Ohgami} Ha-ha-ha, now this is like having a flower in each hand. {11} Well
+then, lead the way, if you would.
+
+{Sakura} Mr. Ohgami, this is the reception desk.
+
+{Ohgami} I see.  You really helped me out by showing me the way.
+
+{Iris} Big brother, the scissors are inside the desk!  Well, Sakura, let's go!
+
+{Sakura} You're right, Iris.  Mr. Ogami, we have practice, so….. please excuse
+us.
+
+{Ohgami} Ah…… you two, hold on just a second……
+
+=== LIPS 1-5-3 ==>
+- a - What job am I supposed to do?
+- b - What do you mean, scissors?
+- c - Good luck with your practice! {Sa+ I+}
+- time up -
+=
+- b >
+{Ohgami} What do you mean…… scissors?  How do I use them?
+
+{Iris} Ehh, big brother, you don't know how to use scissors?  A-ha-ha-ha, you're
+funny.
+
+You put them in your hand, go snip-snip, and you can cut anything.
+
+{Sakura} Ah…… Iris.  We've got to get to practice soon……
+
+{Iris} You're right.  Well, big brother, bye-bye!
+
+{Ohgami} ……What I wanted to ask was what it was I was supposed to do with
+the scissors, though……
+
+{Woman} Excuse me, sir.  How long are you going to keep us waiting?  Hurry up
+and clip my ticket.
+
+{Man} Today they're performing 'The Eve of Dame Camelia,' with Miss Sumire as
+the lead.  Hurry up, please! {12}
+
+{Ohgami} Wh- what are all of you talking about?  I'm not in charge of tickets.
+
+{Woman} But that uniform is for the person in charge of clipping tickets.  And
+you're holding scissors, aren't you.
+
+{Ohgami} Eeh!?  Then…… could that mean that that secret mission of
+mine……
+
+…is being in charge of clipping tickets!?  Th-that's ridiculous!
+< b -
+
+- c >
+{Ohgami} You two, good luck with your practice!  ……Though I don't know what
+sort of practice it's supposed to be.
+
+{Iris+} Thanks, big brother.  Big brother, you should come by later and see,
+too!
+
+{Sakura+} Now then, Mr. Ohgami, good luck with your ticket-clipping job too!
+
+{Ohgami} (……Ticket-clipping?)
+
+{Sakura} Ah…… Iris.  We've got to get to practice soon……
+
+{Iris} You're right.  Well, big brother, bye-bye!
+
+{Ohgami} ……They're gone.
+
+{Woman} Excuse me, sir.  How long are you going to keep us waiting?  Hurry up
+and clip my ticket.
+
+{Man} Today they're performing 'The Eve of Dame Camelia,' with Miss Sumire as
+the lead.  Hurry up, please! {12}
+
+{Ohgami} Wh- what are all of you talking about?  I'm not in charge of tickets.
+
+{Woman} But that uniform is for the person in charge of clipping tickets.  And
+you're holding scissors, aren't you.
+
+{Ohgami} Eeh!?  Then…… could that mean that that secret mission of
+mine……
+
+…is being in charge of clipping tickets!?  Th- that's ridiculous!
+< c -
+<== LIPS 1-5-3 ===
+(Skip down to === After being shown to the reception desk ===.)
+< c -
+
+- time up >
+{Ohgami} (Things look like they could get disastrous if I were to speak
+unjudiciously……  I guess I'll just keep quiet.)
+
+{Maria} Here, now!  What are you making a fuss about in front of the manager's
+office!?
+
+{Ohgami} Ah…… you're-!  The one from earlier……
+
+{Iris} Hey, Maria, listen!  Sakura says……
+
+{Sakura} All I said was that I'd show Mr. Ohgami around, but Iris, here……
+
+{Maria} Both of you, stop that at once.  It's almost time for practice to start,
+isn't it?
+
+……As for the Ensign, I'll show him the way.  You two head for the dressing
+room.
+
+{Iris} Oh, that's no fun.
+
+{Sakura} Well then, Ensign……  Good luck with your work.
+
+{Maria} Now then, Ensign Ohgami.  I'll show you to the reception desk.
+
+{Ohgami} ……Ye- yes, ma'am.  If you would, please.
+(Skip down to === Maria guides you to the reception desk ==>.)
+< time up -
+<== LIPS 1-5 ===
+
+=== Maria guides you to the reception desk ==>
+{Maria} This is the reception area.
+
+{Ohgami} Thank you very much, Miss Maria.
+
+{Maria} ……Since you are a superior officer, you may feel free to drop the
+"Miss" and just call me Maria.
+
+The scissors should be inside the desk.  Now then, I have practice, so please
+excuse me.
+
+{Ohgami} Ah, Miss Mari…… rather, Maria.  Wait just a second!
+
+=== LIPS 1-6 ==>
+- a - What am I supposed to do?
+- b - What do you mean, scissors?
+- c - Good luck with your practice!
+- time up -
+=
+- a >
+{Ohgami} ……By the way, just what sort of job should I be doing here?
+
+{Maria} Ensign Ohgami……  Didn't you hear from the manager?
+
+Manager Yoneda told us to have you perform the ticket-clipping job……
+
+{Ohgami} Ticket-clipping?  What do you mean, ticket-clipping?
+
+{Maria} It is a job in which you clip the customers' tickets.
+
+{Ohgami} Ehh?  A job where you clip tickets!?  Just how is that a secret
+mission!?
+
+{Maria} ……Ensign, the customers have already formed a line.
+
+{Woman} Excuse me, sir.  How long are you going to keep us waiting?  Hurry up
+and clip my ticket.
+
+{Man} Today they're performing 'The Eve of Dame Camelia,' with Miss Sumire as
+the lead.  Hurry up, please! {12}
+
+{Maria} Coming in direct contact with the audience is a very important job.  Now
+then, please do your best.
+
+{Ohgami} (What is the meaning of this……?  This isn't what I was told!)
+< a -
+
+- b >
+{Ohgami} What do you mean…… scissors?  How do I use them?
+
+{Maria} They're scissors used for clipping the tickets.  You should be able to
+figure out how to use them soon enough.
+
+{Ohgami} Huh?  Scissors for clipping the tickets?  Why would I need to use such
+a thing?
+
+{Maria} Ensign Ohgami……  Didn't you hear from the manager?
+
+Manager Yoneda told us to have you perform the ticket-clipping job……
+
+{Ohgami} Ticket-clipping?  What do you mean, ticket-clipping?
+
+{Maria} It is a job in which you clip the customers' tickets.
+
+{Ohgami} Ehh?  A job where you clip tickets!?  Just how is that a secret
+mission!?
+
+{Maria} ……Ensign, the customers have already formed a line.
+
+{Woman} Excuse me, sir.  How long are you going to keep us waiting?  Hurry up
+and clip my ticket.
+
+{Man} Today they're performing 'The Eve of Dame Camelia,' with Miss Sumire as
+the lead.  Hurry up, please! {12}
+
+{Maria} Coming in direct contact with the audience is a very important job.  Now
+then, please do your best.
+
+{Ohgami} (What is the meaning of this……?  This isn't what I was told!)
+< b -
+
+- c >
+{Ohgami} Thank you, Maria.  If it's training for the Floral Assault Group you're
+talking about, I'll show up later too.
+
+{Maria} ……Training?
+
+{Ohgami} Huh?  ……Did I get that wrong?  When you said practice, I thought
+maybe you meant some sort of drills.
+
+{Maria} ……Yes, certainly, in that sense, you wouldn't be wrong calling it
+training.
+
+We're just about to rehearse our lines.
+
+{Ohgami} (Rehearse their lines?  Does she mean they're learning codewords the
+squad will be using?)
+
+{Maria} Now then, Ensign, I must excuse myself.  Good luck with your job.
+
+{Ohgami} Th-thanks.
+
+……By the way, this job of mine…… what is it?
+
+{Woman} Excuse me, sir.  How long are you going to keep us waiting?  Hurry up
+and clip my ticket.
+
+{Man} Today they're performing 'The Eve of Dame Camelia,' with Miss Sumire as
+the lead.  Hurry up, please! {12}
+
+{Ohgami} Wh-what are all of you talking about?  I'm not in charge of tickets.
+
+{Woman} But that uniform is for the person in charge of clipping tickets.  And
+you're holding scissors, aren't you.
+
+{Ohgami} Eeh!?  Then…… could that mean that that secret mission of
+mine……
+
+…is being in charge of clipping tickets!?  Th- that's ridiculous!
+< c -
+<== LIPS 1-6 ===
+<== Maria guides you to the reception desk ===
+
+=== After being shown to the reception desk ===
+
+{Woman} Hey, ticket-clipper boy!  Hurry up and clip my ticket!
+
+{Ohgami} Ye- yes, ma'am.  Let's see…… where should I cut?
+
+{Man} What, brother, you the new guy?  Honestly, wasting so much time.
+
+{Ohgami} Ye- yes, sir!  Please wait one moment!
+
+(……Wasn't my mission to be captain of a covert squad?)
+
+Sir!  Though I may be clipping tickets right now, the truth is……
+
+=== LIPS 1-7 ==>
+- a - I am the captain of the Imperial Floral Assault Group!
+- b - ……I'm just in charge of clipping tickets.
+- time up -
+=
+- a >
+{Ohgami} The truth is, I am the captain of the Imperial Floral Assault Group,
+Flower-Division!
+
+{Woman} Huh?
+
+There's no role of captain in the Flower-Troupe. {13}
+
+In the first place, there's no way you, a man, could be in the Flower-Troupe!
+
+{Ohgami} (……H-how can this be?!  She doesn't believe me in the least!)
+< a -
+
+- b >
+{Ohgami} (No!  The Imperial Floral Assault Group, Flower-Troupe, is a secret
+corps……  I mustn't let its name slip!)
+
+……Though I may be clipping tickets right now, the truth is……  I am in
+charge of clipping tickets, after all.
+
+{Woman} Sir, are you all right!?  Ah!  It's already this late!  The
+Flower-Troupe's performance is going to start! {12}
+
+{Ohgami} (She said "Flower-Troupe"……  Why would an ordinary person know the
+name of a covert squad……?)
+< b -
+
+- time up >
+{Ohgami} (……No.  As the captain of a secret corps I can't afford to say such
+foolish things.)
+
+{Woman} What an uncivil ticket-clipper!  Ah!  It's already this late!  The
+Flower-Troupe's performance is going to start! {12}
+
+{Ohgami} (She said "the Flower-Troupe"……  Why would an ordinary person know
+the name of a covert squad……?)
+< time up -
+<== LIPS 1-7 ===
+
+{Man} Um, excuse me……
+
+{Ohgami} Ah, forgive me.  The scissors, the scissors.  ……All right, there
+you are.
+
+{Man} Um……  Would you happen to like Miss Kanzaki Sumire?
+
+=== LIPS 1-8 ==>
+- a - She's just my type.
+- b - I don't care for her very much……
+- time up -
+=
+- a >
+{Ohgami} Yes, though I haven't been able to speak with her for more than a
+moment, she's just my type.
+
+{Man} Eh!?  You've had the chance to talk with Miss Sumire!?  I really envy
+you……
+
+That's right!  Um……  Could you possibly deliver this letter to Miss Sumire
+for me?
+
+All you need to tell her is that it's from a passionate fan.  I'm begging you.
+
+{Ohgami} Ye-yes, sir……  I understand.
+
+(Hmm - just what sort of a letter…… is this?)
+< a -
+
+- b >
+{Ohgami} No, I don't care for her very much……
+
+{Man} What did you say!?  You don't understand that grace and elegance of hers!?
+
+To think someone like you is working in this theater……  How deplorable a
+situation!
+
+{Ohgami} (I think the fact that an Ensign of the Imperial Navy is clipping
+tickets in a theater is pretty deplorable, too……)
+< b -
+
+- time up >
+{Ohgami} I'm terribly sorry.  I can't answer such questions.
+
+{Man} ……I see.  Forgive me……
+
+Um…… I'm…… a fan of Miss Sumire.  P-please, give her this letter!
+
+W-well then, I've got to be going……  I'm begging you!
+
+{Ohgami} Ah, j-just a second!  Please, wait!
+
+(Hmm - just what sort of a letter…… is this?)
+< time up -
+<== LIPS 1-8 ===
+
+{Boy} Hey!  Ticket-clipper man, here's my ticket!
+
+{Ohgami} Ye- yes.  Let's see…… now where do I clip a child's ticket?
+
+{Boy} Ah, this guy's new here!  He doesn't even know how to clip tickets!
+
+=== LIPS 1-9 ==>
+- a - Handle the situation calmly.
+- b - Glare at the boy.
+- time up -
+=
+- a >
+{Ohgami} Here you are, boy.  Here's your ticket.
+
+{Boy} Keep it up just like that.
+
+{Ohgami} (Wh-what an impertinent brat!)
+< a -
+
+- b >
+{Boy} Mister, do you think it's such a good idea to glare at your customers like
+that!?
+
+{Ohgami} (You brat……  Get lost already!)
+< b -
+
+- time up >
+{Boy} What's the matter?  Say something.
+
+{Ohgami} (Damn it…… you brat!  Getting all cocky when I'm trying to keep
+quiet!)
+< time up -
+<== LIPS 1-9 ===
+
+{Ohgami} ……No matter what, this is just too odd.  Just what makes this
+ticket-clipping a secret mission!?
+
+……All right.  If it's come down to this, I'll try hearing what the other
+squad members have to say.  I may be able to learn something.
+
+And if I'm not satisfied with that, I'll just have to question Lieutenant
+General Yoneda!
+
+* * *
+
+{Ohgami} ……Now then.  Where should I go first?
+
+{Girl} Hello?  Excuse me.
+
+{Ohgami} Ye-yes.  What is it?
+
+{Girl} You've just come here starting today, haven't you?  Pleased to meet you! 
+I've heard the news.
+
+I'm Takamura Tsubaki.  I'm always the acting salesgirl at the gift shop here.
+
+{Ohgami} Miss - Tsubaki, is it.
+
+{Tsubaki} I've got bromides {14} of all the group members here, so please stop
+by to visit anytime!
+
+{Ohgami} Hmm…… so she's a salesgirl.  She's a rather energetic girl.
+
+……Now then, where should I go?
+
+*** Free movement 1-1 **>
+- Areas covered -
+First floor:
+- Gift shop (売店)
+- Secretarial office (事務局)
+- Hallway by the stairs to the basement (automatic event)
+- Dressing room (楽屋)
+- Wing of the stage (舞台袖)
+- Manager's office (支配人室) (end Free movement 1-1)
+Second floor:
+- Archives (書庫)
+- Salon (サロン) (automatic event)
+- Sumire's room (すみれの部屋), after the salon event
+
+~ First floor ~
+
+=== Gift shop (売店) ==>
+{Tsubaki} Ah, Mr. Ohgami.  Welcome!  Is there something you're looking for?
+
+=== Gift shop Click-LIPS ==>
+- Look at Tsubaki's face or outfit >
+{Ohgami} (It looks like an outfit for our gift shop salesgirl.  It suits Tsubaki
+quite well.)
+< Look at Tsubaki's face or outfit -
+
+- Talk to Tsubaki #1 >
+{Ohgami} (That's right.  I should try asking her indirectly what this theater
+really is.)
+
+Tsubaki.  I'd like to ask you something about this theat-……
+
+{Tsubaki} Eh?  About this theater?  If that's the information you're looking
+for, please leave it to me!
+
+Its official name is the Grand Imperial Theater {Dai-Teikoku Gekijou}.  But
+everyone calls it 'Tei-Geki' for short. {4}
+
+Every month, we have lots of different things!  This month, the play's called
+'The Eve of Dame Camelia.' {12}
+
+My name means camellia too, right?  That's why I'm a little happy about that!
+
+{Ohgami} (That's not what I wanted to ask, though……)
+< Talk to Tsubaki #1 -
+
+- Talk to Tsubaki #2 >
+{Ohgami} Tsubaki, um……
+
+{Tsubaki} Mr. Ohgami!  Since you're here, please buy a bromide! {6}
+
+{Ohgami} All- all right……
+< Talk to Tsubaki #2 -
+
+- Look at the bromides >
+{Tsubaki} You wish to purchase a bromide?  Thank you very much!
+
+- Look at any bromide for the first time >
+{Tsubaki} Ah, Mr. Ohgami!  Bromides are an incredibly popular item.  They
+disappear quickly.
+
+That's why I'm terribly sorry to say this, but, when you're buying a bromide,
+please take only one.
+
+{Ohgami} Hmm……  By the way, just whose bromide is this?
+
+- Looking at Sakura's bromide >
+{Tsubaki} That's Miss Sakura's bromide.  It'll be 50 sen. {15}
+< Looking at Sakura's bromide -
+
+{Ohgami} Wh……what!?
+
+(Why…… are bromides of members of a covert squad…… being sold out in
+broad daylight?)
+
+(Wouldn't this…… be like revealing our identity to the world!?)
+
+{Tsubaki} Mr. Ohgami……  What's the matter?
+
+{Ohgami} Oh- oh, no…… it's nothing.
+
+(For now……  I guess I'll buy one.)
+< Look at any bromide for the first time -
+
+- Take Sakura's bromide >
+{Tsubaki} You'll be buying that?  Thank you very much!
+
+Miss Sakura's new here, and her bromides are selling at an incredible rate!
+
+{Ohgami} (It really is Sakura……  Yet she's the member of a secret
+corps……  Is this really such a good idea?)
+
+(Still……  it is a cute bromide, so I guess I'll take it.)
+< Take Sakura's bromide -
+
+- Look away from the bromides -> end Look at the bromides
+< Look at the bromides -
+
+- Talk to Tsubaki #3 >
+{Tsubaki} More bromides will arrive again next month, so please make do with
+just the one for today.
+< Talk to Tsubaki #3 -
+
+- Leave >
+{Ohgami} Well, good luck with your work.
+
+{Tsubaki} Did you find that useful?  Thank you for your patronage!
+
+{Ohgami} ……I guess I'll go someplace else.
+< Leave -> end Gift shop Click-LIPS
+<== Gift shop Click-LIPS ===
+<== Gift shop (売店) ===
+
+=== Secretarial office (事務局) ==>
+{Ohgami} (Ah……  There's someone here.)
+
+{Young woman} Ah, hello.  You're Mr. Ohgami, right?  I'm Sakakibara Yuri!
+
+I perform office work for the theater.  Pleased to make your acquaintance!
+
+{Ohgami} The pleasure is all mine.
+
+{Other woman} Pleased to meet you, Mr. Ohgami.  I'm Fuji'i Kasumi.
+
+I handle office work for the theater.
+
+{Ohgami} Pleased to meet you.  My regards.
+
+=== Secretarial office Click-LIPS ==>
+- Look at Yuri >
+{Yuri} Is there something you need with me?
+< Look at Yuri -
+
+- Talk to Yuri >
+{Yuri} Mr. Ohgami, I'm the source for all news in the Tei-Geki.
+
+{Yuri} If you're ever stuck with a problem, please ask me!
+< Talk to Yuri -
+
+- Look at Kasumi >
+{Kasumi} Is there something you need with me?
+< Look at Kasumi -
+
+- Talk to Kasumi #1 >
+{Kasumi} Ah, yes, Mr. Ohgami.
+
+The stairs to the basement have been placed off limits as per Manager Yoneda's
+orders.
+
+Please take care not to go into the basement, Mr. Ohgami.
+< Talk to Kasumi #1 -
+
+- Talk to Kasumi #2 >
+{Kasumi} Tomorrow is a day off.  Days off really are a happy occasion.
+< Talk to Kasumi #2 -
+
+- Leave >
+{Ohgami} Well then, I'll come by again sometime.  Good luck with your work.
+
+{Yuri} Please come again sometime!
+
+{Ohgami} ……I guess I'll go someplace else.
+< Leave - end Secretarial office Click-LIPS
+<== Secretarial office Click-LIPS ===
+<== Secretarial office (事務局) ===
+
+=!! The hallway by the stairs to the basement (automatic event) !!>
+{Ohgami} (Hm……   Someone's come from behind me……)
+
+Waah!?  Wh- who is that!?  Who's covering my eyes!?
+
+{Voice} Guess who!
+
+=== LIPS 1-10 ==>
+- a - Sumire, right?
+- b - Sakura, right?
+- c - Maria, right?
+- time up -
+=
+- b >
+{Ohgami} This voice……  It must be Sakura, right?
+
+{Sakura} Heh-heh……  You got me.
+
+{Ohgami} ……So it was you, Sakura.  Yeah, you startled me.
+
+Sakura, you do have an unexpected mischievous side to you, don't you.
+
+{Sakura} Heh-heh……  I'm sorry.
+
+{+} ……But, to think that you remembered my voice……  It makes me very
+happy.
+
+{Ohgami} Eh…………?
+
+{Sakura} Ah…………  Fo-forgive me for saying such funny things……
+
+We-well, then……  I'd better be going……
+< b -
+<== LIPS 1-10 ===
+
+{Ohgami} Ah…… Sakura!  Wait just a second!  I have something I want to ask
+you!
+
+{Sakura} What is it?
+
+=== LIPS 1-11 ==>
+- a - Tell me about the Floral Assault Group!
+- b - Where are you headed?
+- c - ……Do you have a boyfriend? {Sa+}
+=
+- a >
+{Ohgami} Sakura.  Could you tell me about the Imperial Floral Assault Group?
+
+{Sakura} ……!
+
+{Ohgami} This is just a theater.  Just where is the covert squad, the Imperial
+Floral Assault Group!?
+
+{Sakura} Th- that's…………
+
+I'm sorry……  I'm looking for Miss Sumire, so…… you'll have to excuse me.
+
+{Ohgami} Ah, wait!  Sakura!!
+
+……She's gone.
+
+I almost get the feeling…… she was trying to run away from me……
+
+……I guess I'll go someplace else.
+< a -
+
+- b >
+{Ohgami} Sakura, where are you headed?
+
+{Sakura} The main performance is about to begin, so I'm going to look for Miss
+Sumire.
+
+I'm pretty sure she's somewhere on the second floor…..  Well, please excuse
+me.
+
+{Ohgami} ……Hmm.  I forgot to ask her about the Imperial Floral Assault
+Group.
+
+……There's nothing I can do about it.  I guess I'll go too.
+< b -
+<== LIPS 1-11 ===
+<!! The hallway by the stairs to the basement (automatic event) !!=
+
+=== Dressing room (楽屋) ==>
+{Ohgami} (Ah……  There's Iris.)
+
+{Iris} Oh, it's big brother.  What's the matter?
+
+{Ohgami} Yes, well, the truth is, there's a little something I want to ask you
+about.
+
+{Iris} What?
+
+=== LIPS 1-12 ==>
+- a - Ask about the Imperial Floral Assault Group.
+- b - Ask about Iris. {I+}
+- time up -
+=
+- a >
+{Ohgami} I'd like you to tell me about the Imperial Floral Assault Group……
+
+{Iris} Yeah, all right.
+
+{Ohgami} Why is the Imperial Floral Assault Group {Teikoku Kagekidan} based
+inside a theater?
+
+{Iris} Because it's a 'kagekidan.'  That's why it's based in a theater. {16}
+
+That's obvious!  You're funny, big brother.
+
+{Ohgami} ………………?
+
+(……I don't understand.  Why is that obvious?)
+< a -
+<== LIPS 1-12 ===
+
+=== Iris Click-LIPS ==>
+- Look at Iris's eyes #1 >
+{Ohgami} (What pretty blue eyes……)
+< Look at Iris's eyes #1 -
+
+- Look at Iris's eyes #2 >
+{Iris} B- big brother……  It's embarrassing having you stare at Iris's eyes
+like that……
+< Look at Iris's eyes #2 -
+
+- Look at Iris's hair #1 >
+{Ohgami} (What lovely blonde hair……)
+< Look at Iris's hair #1 -
+
+- Look at Iris's hair #2 >
+{Iris} It's hard to tie the ribbon just right.
+< Look at Iris's hair #2 -
+
+- Look at Iris's ribbon #1 >
+{Ohgami} (That's a pretty big ribbon……  But it suits Iris rather well.)
+< Look at Iris's ribbon #1 -
+
+- Look at Iris's ribbon #2 >
+{Iris} Isn't this ribbon cute!  It's Iris's favorite.
+< Look at Iris's ribbon #2 -
+
+- Look at Iris's dress #1 >
+{Ohgami} (That's a cute outfit.  She looks almost like a doll.)
+< Look at Iris's dress #1 -
+
+- Look at Iris's dress #2 >
+{Iris} Does this outfit look good?  Iris has lots of clothes for going out.
+< Look at Iris's dress #2 -
+
+- Look at Iris's bear >
+{Iris} Big brother.  Do you remember his name?
+
+=== LIPS 1-13 ==>
+- a - Was it Jon Paul? {Jonpooru}
+- b - Was it Jumper? {Janpaa}
+- c - Was it Jean-Paul? {Janpooru} {I+}
+=
+- c >
+{Ohgami} I remember it.  It's Jean-Paul, right?
+
+{Iris+} Thank you!  Big brother, you remembered it perfectly!
+
+{Ohgami} Of course I did.  He's your very special friend, after all.
+
+{Iris} Thank you, big brother……  Iris is very happy.
+< c -
+<== LIPS 1-13 ===
+< Look at Iris's bear -
+
+- Talk to Iris >
+{Ohgami} Do you know where everyone else went?
+
+{Iris} Sumire's on the second floor.  Sakura just went to go get her.
+
+Maria said she was going to the stage.
+
+Mr. Yoneda…… is in his office, probably?
+
+{Ohgami} I see.  Thanks.
+< Talk to Iris -
+
+- Leave >
+{Ohgami} See you, Iris.
+
+{Iris} Okay!  Bye-bye, big brother!
+
+{Ohgami} ……I guess I'll go someplace else.
+< Leave -> end Iris Click-LIPS
+<== Iris Click-LIPS ===
+<== Dressing room (楽屋) ===
+
+=== Wing of the stage (舞台袖) ==>
+{Ohgami} Ahh, it's Maria, isn't it.  What are you doing here?
+
+{Maria} ……I might ask the same of you, Ensign.  What do you need in a place
+like this?
+
+=== Maria Click-LIPS #2 ==>
+- Talk to Maria >
+{Maria} ……Is there something you need from me?
+
+=== LIPS 1-14 ==>
+- a - Tell me about the Imperial Floral Assault Group.
+- b - Tell me about yourself. {Ma-}
+- time up -
+=
+- a >
+{Ohgami} Maria, tell me something.  I've been transferred here as captain of a
+covert squad.
+
+{Maria} ……Yes.  I've heard from Manager Yoneda.
+
+{Ohgami} ……But, what I've been put to work doing is clipping tickets.  What
+is the meaning of this?
+
+Tell me!  Where is my job as part of the Imperial Floral Assault Group!?
+
+{Maria} ……I'm terribly sorry, but I don't have the authority to answer that
+question.
+
+Please ask Manager Yoneda directly regarding that point.
+
+{Ohgami} Maria…………
+< a -
+<== LIPS 1-14 ===
+< Talk to Maria -
+
+- Leave >
+{Maria} The play is about to begin soon, so beyond this point is off-limits. 
+Please make a note of that, Ensign.
+
+{Ohgami} …………Well there's nothing I can do about it.  I'll go someplace
+else.
+< Leave -> end Maria Click-LIPS #2
+<== Maria Click-LIPS #2 ===
+<== Wing of the stage (舞台袖) ===
+
+~ Second Floor ~
+
+=== Archives (書庫) ==>
+{Ohgami} So these…… are the archives.  Hmm……  it's a little library
+room, huh.
+
+{Sakura} Miss Sumire……  Ah, Mr. Ohgami.
+
+{Ohgami} Hey, Sakura.  Have you found Sumire?
+
+{Sakura} Not yet……  Where in the world could Miss Sumire have gone, I
+wonder……?
+
+Well, Mr. Ohgami……  I'm in a hurry, so please excuse me.
+
+{Ohgami} It seems like Sakura's got it tough too, huh……
+
+……I guess I'll go someplace else.
+<== Archives (書庫) ===
+
+=!! Salon (サロン) (automatic event) !!>
+{Ohgami} (Ah!  There's Sumire.)
+
+{Sumire} My, Ensign Ogata.  What is the matter?
+
+{Ohgami} …………It's Ohgami.
+
+{Sumire} My, how terribly rude of me.  I have it.  From here on, I'll simply
+call you Ensign.
+
+=== Sumire Click-LIPS ==>
+- Look at Sumire's eyes #1 >
+{Ohgami} (……Now that I look more closely, there's a mole beneath her eye.)
+< Look at Sumire's eyes #1 -
+
+- Look at Sumire's eyes #2 >
+{Sumire} Ensign, what is the matter?  Is there something you have to say?
+< Look at Sumire's eyes #2 -
+
+- Look at Sumire's hair #1 >
+{Ohgami} (……She's got such smooth hair, without a hint of curl……)
+< Look at Sumire's hair #1 -
+
+- Look at the band in Sumire's hair >
+{Ohgami} (Is this what they call a 'katusha?' {17}  So that's how she keeps her
+hair in place.)
+< Look at the band in Sumire's hair -
+
+- Look at Sumire's outfit >
+{Ohgami} (Still……  This really is a bold outfit.)
+< Look at Sumire's outfit -
+
+- Talk to Sumire >
+{Sumire} I drink tea just like this before the actual performance……  I
+cannot stand this slight nagging sense of nervousness.
+
+By the way, Ensign……  Is there something you need?
+
+=== LIPS 1-15 ==>
+- a - Ask about the Imperial Floral Assault Group.
+- b - Ask about Sumire.
+- c {If you have the letter from her fan} - Give her the letter. {Su+}
+- time up -
+=
+- c >
+{Ohgami} When I was clipping tickets earlier, I was handed this letter from
+someone calling himself a "passionate fan."
+
+I just thought I'd give it to you.  Here, this is it.
+
+{Sumire} My……  You went out of your way to bring this to me……?
+
+{Su+} Thank you very much, Ensign.
+
+At first, I wasn't sure what sort of person would be transferred here, but……
+
+You seem like a rather considerate person.  In that case, I can rest at ease.
+
+{Ohgami} Is- is that so……
+
+Wait a minute, that's odd……
+
+Why would you, the member of a covert squad, be getting fan letters?
+
+{Sumire} Well.  No matter where I go or what I do, I never fail to have
+gentlemen fixing their gazes upon me.
+
+{Ohgami} I- I see……
+< c -
+<== LIPS 1-15 ===
+
+{Sakura} Miss Sumire!  ……Ah, Mr. Ohgami, you're here too.
+
+{Ohgami} Sakura……
+
+{Sakura} Miss Sumire.  It's almost time for the performance.  We're counting on
+you to get ready.
+
+{Sumire} Thank you for your efforts.  I shall head there after first stopping at
+my room for a moment.
+
+Ah, that's right……  Ensign.  Might I ask you a question this time?
+
+{Ohgami} Eh…… me?
+
+{Sumire} Yes.  Ensign, which of us is more your type, myself or Miss Sakura?
+
+{Sakura} …………!
+
+{Sumire} Come, Ensign.  Would you be so kind as to answer?
+
+=== LIPS 1-16 ==>
+- a - Sumire's my type. {Sa- Su+}
+- b - Sakura's my type. {Sa+ Su-}
+- time up -
+=
+- time up >
+{Ohgami} To ask me which is my type……  That's not fair…………
+
+{Sumire} ……Ohh!  Ensign, you are so indecisive!
+
+{Sakura} That's no good, Miss Sumire.  You've put Mr. Ohgami in a real fix,
+haven't you.
+
+{Sumire} ……I don't really think there's any call for hesitation,
+myself……
+
+Well, this time I shall forgive you.  ……Now then, please excuse me.
+
+{Sakura} Well, Mr. Ohgami.  I'm going too.
+
+{Ohgami} Ah, right.
+
+{Sakura} Mr. Ohgami……
+
+I…… feel so unsure……  I don't know whether to feel relieved or
+disappointed.
+
+……Now then, please excuse me.
+
+{Ohgami} Sakura……
+< time up -
+<== LIPS 1-16 ===
+
+{Ohgami} ……I guess I'll go someplace else.
+<!! Salon (サロン) (automatic event) !!=
+
+=== After visiting several rooms ==>
+{Ohgami} This isn't going to solve anything at this rate.  I should try going to
+the manager's office and asking Manager Yoneda directly.
+<== After visiting several rooms ===
+
+=== Sumire's room (すみれの部屋), after the salon event ==>
+{Ohgami} This…… would appear to be Sumire's room.
+
+- {after knocking} -
+{Sumire} Yes!  ……Who is it?
+
+{Ohgami} Excuse me……  It's Ohgami.  Could I see you for a moment?
+
+{Sumire} I'm in the middle of changing just now.  Could you please wait a
+moment?
+
+{Ohgami} *Gulp*……  In the middle of changing, huh……
+
+=== LIPS 1-17 ==>
+- a - Open the door.
+- time up - {Su+}
+=
+- time up >
+{Sumire} Ensign, sorry to keep you waiting.
+
+{+} Just what I would expect of you, Ensign.  You did take care to wait for me.
+
+{Ohgami} Yeah, well, ha-ha-ha……
+< time up -
+<== LIPS 1-17 ===
+
+{Sumire} By the way…… what is it you need?
+
+=== LIPS 1-18 ==>
+- a - Could you show me your room?
+- b - Tell me about the Floral Assault Group.
+- time over -
+=
+- a >
+{Ohgami} Could you show me your room?  I'm curious to see what the inside of
+your room's like.
+
+{Sumire} ……I refuse.
+
+I don't think it's quite right for a gentleman to enter my room so freely……
+
+{Ohgami} Th-that may be so……
+
+{Sumire} Anyway, I refuse.  As I have other things to attend to, I must excuse
+myself.
+
+{Ohgami} Ahh……  She shut the door on me.
+
+……There's nothing I can do about it.  I guess I'll go someplace else.
+< a -
+
+- b >
+{Ohgami} Sumire.  Could you tell me about the Imperial Floral Assault Group?
+
+{Sumire} The Imperial Floral Assault Group…………
+
+{Ohgami} As far as I've seen, this is really just a theater.
+
+I can't really see how this is the headquarters for a secret corps…… 
+Sumire, could you tell me just what's going on!?
+
+{Sumire} That's…………
+
+……Forgive me.  I still have something I must do.
+
+I apologize deeply as you have taken the trouble to come all the way here, but I
+must be excused.
+
+{Ohgami} Ah!  Sumire, wait!
+
+(She certainly took off in a huff……  What could be the matter?)
+< b -
+<== LIPS 1-18 ===
+<== Sumire's room (すみれの部屋), after the salon event ===
+
+~ First floor (revisited) ~
+=== Manager's office (支配人室) ==> -> end Free movement 1-1
+{Ohgami} All right.  I'll just have Lieutenant General explain to me directly
+just what's going on.
+
+--- If you hadn't yet gone to the secretarial office -->
+{Ohgami} Waah……  You startled me!  ……Wh-who might you be?
+
+{Woman} Pleased to meet you.  You're Mr. Ohgami, right?  I'm Fuji'i Kasumi from
+the secretarial office.
+
+I'm terribly sorry, but I'd like to have you fill out your notification of
+arrival at your new post, so might I have you come to the secretarial office?
+
+=== LIPS 1-19 ==>
+- a - I understand.
+- b - I'm busy right now.
+- time up -
+=
+- a >
+{Ohgami} I understand.
+
+{Kasumi} Well then, I'll lead the way.  It's this way.
+
+* * *
+
+{Ohgami} ……So this is the secretarial office.
+
+{Woman} Ah, hello.  You're Mr. Ohgami, right?  I'm Sakakibara Yuri!
+
+I perform office work for the theater.  Pleased to make your acquaintance!
+
+{Ohgami} The pleasure is all mine.
+
+{Kasumi} Now then, please fill out these forms here.
+
+{Ohgami} Understood.  Let' see…………………………  Will this do it?
+
+{Kasumi} Yes, that's just fine.  Thank you very much.
+
+Manager Yoneda is in the manager's office next door.
+
+{Ohgami} Thank you very much.
+
+Now then, let's head to the manager's office.
+{Return to Free Movement 1-1.}
+< a -
+<== LIPS 1-19 ===
+<-- If you hadn't yet gone to the secretarial office ---
+
+{Yoneda} Ahh, hello……  Hello……
+
+{Ohgami} ……He's on the phone, huh.
+
+{Yoneda} Yes, he's come……  Just a little while ago.  Well, until we've
+watched for a little longer to see how things turn out……
+
+But you know, Hanakoji……  This secret corps…… is difficult.
+
+We spur these women onto the battlefield, and all we can do is sit back and
+watch over them.  As an Imperial soldier…… it's humiliating.
+
+Still, the only ones who can make the 'Kohbu' work, as of now, are those girls.
+
+That's why I'm going out of my way to shelter those girls, to protect them, and
+give them freedom.
+
+It would be wonderful if we could use that young one, but……
+
+Ohh, it looks like he's finally come to complain.  Well then, talk to you
+again……
+
+{Ohgami} ……It looks like his phone call's done.
+
+Excuse me!  It's me, Ohgami, I'm coming in!
+
+{Yoneda} Ohh, Ohgami.  That uniform looks great on you!
+
+Well?  Have you gotten used to your ticket-clipping job?
+
+=== LIPS 1-19 ==>
+- a - Please explain just what's going on!
+- b - ……What was that phone call about just now?
+- time up -
+=
+- a >
+{Ohgami} Please explain just what's going on!  I hadn't heard anything about
+doing the theater's ticket-clipping!
+
+What's more, the squad members are all female.  That Iris is just a small child!
+
+I was to take up a new post as captain of the covert squad, the Imperial Floral
+Assault Group.  This is not what I was told!
+< a -
+
+- b >
+{Ohgami} ……Lieutenant General Yoneda, what was that phone call about just
+now?
+
+{Yoneda} Ohh, that was from Count Hanakoji, who recommended you as captain of
+the Imperial Floral Assault Group.
+
+He just called to ask if you were actually working.
+
+{Ohgami} I see.  I have something I would like to ask you myself.
+< b -
+<== LIPS 1-19 ===
+
+{Ohgami} What am I supposed to be doing as captain…… in this Imperial Floral
+Assault Group!?
+
+No, even before we come to that……  Is this really the Imperial Floral
+Assault Group!?  It's just a theater!!
+
+{Yoneda}  Huh?  Ohgami, have you gotten the wrong impression?
+
+Look real carefully at the picture frame above my head!
+
+{Ohgami} The Imperial……  Opera Troupe……?
+
+Eeh!?  Opera Troupe?  N-not Assault Group!? {18}
+
+{Yoneda} Nope, opera troupe.
+
+{Ohgami} But……  I thought I had been transferred into the secret squad
+{himitsu butai} called the Imperial Floral Assault Group…… {19}
+
+{Yoneda} That's right, the Opera Troupe performs on a "secret stage" {himitsu
+butai}.  Haah-ha-ha-ha!
+
+Didn't you know that national organizations receive much of their income through
+the stage?
+
+{Ohgami} GA-GAAAAAN!  Th……that's…… absurd!! {20}
+
+{Yoneda} Ha-ha-ha!  Go and cool your head for a while.
+
+* * *
+
+{Ohgami} That can't be……  That can't be……
+
+To think that the secret corps…… was just a theater group……
+
+……This has to be some sort of bad dream……
+
+{Sakura} Mr. Ohgami.  What are you doing in a place like this?
+
+{Ohgami} Sakura…………
+
+{Sakura} You look pale…… Mr. Ohgami.  How about you get some rest?
+
+If - you wouldn't mind…… shall I…… take you to your room?
+
+=== LIPS 1-20 ==>
+- a - ……Please.
+- b - Do you think you could leave me alone for a while……?
+- time up -
+=
+- time up >
+{Ohgami} ………………
+
+{Sakura} Mr. Ohgami…………
+
+………………
+
+Come on, let's go.  ……I know it's presumptuous of me, but I will show you to
+your room!
+
+{Ohgami} ……Ah, hey!  Wa-wait just a second.
+
+{Sakura} Come on, let's go!
+
+* * *
+
+{Ohgami} Thanks for bringing me here.  I'm sorry you had to go out of your way
+for me……
+
+{Sakura} Oh no, this is nothing……  After all, I……
+
+{Ohgami} …………?
+
+{Sakura} Ah……  It's- it's nothing.  W-well, I've…… got the play to get
+to, so……
+
+=== LIPS 1-20-1 ==>
+- a - Would you like to come inside?
+- b - In that case, see you……
+- time up -
+=
+- a >
+{Ohgami} If you have the time, won't you come inside?  I'd like to talk with you
+for a bit……
+
+{Sakura} Mr. Ohgami……  You're not feeling very well, are you……
+
+You did keep quiet when I called out to you earlier……
+
+……That's it!  Since I did bring you here of my own accord, I'll invite
+myself in as well.
+
+{Ohgami} Thank you, Sakura.  Well, it's a bit of a mess, but come on in.
+
+Well, make yourself at home.
+
+{Sakura} Ye- yes……
+
+I've…… never actually been in a man's room before.  ……It does make me a
+little nervous.
+
+{Ohgami} Now then……
+
+=== LIPS 1-20-1-1 ==>
+- a - Ask about the theater. {Sa+}
+- b - Ask about Sakura.
+- c - Ask about the Imperial Floral Assault Group.
+- time up -
+=
+- a >
+{Ohgami} Sakura, what sort of things do you do at this theater?
+
+{Sakura} At the Grand Imperial Theater here, we, the opera troupe, put on a new
+performance every month.
+
+This month, we're currently performing 'The Eve of Dame Camelia,' starring Miss
+Sumire as the lead. {12}
+
+We also do all sorts of other plays, from Court plays, to musicals, to conte
+plays. {21}
+
+{Ohgami} Heh……  It sounds like a whole lot of fun.
+
+{Sakura} ……Through the stage we lead the audience into different worlds for
+them to enjoy……
+
+……and so I feel this is a very wonderful, worthwhile job.
+
+{Ohgami} ……………………
+
+{Sakura} Ah, I'm sorry……  I didn't mean to go off by myself like that.
+
+{Ohgami} No, it's all right.
+
+Watching you talk about it so enthusiastically makes me feel better too.
+
+{Sakura +} Mr. Ohgami……
+< a -
+<== LIPS 1-20-1-1 ===
+
+{Ohgami} Huh……?  It seems someone's come.
+
+=== LIPS 1-20-1-2 ==>
+- a - Yes, it's open.
+- b - If you're looking for Ohgami, he's not here.
+- time up -
+=
+- b >
+{Ohgami} I'm sorry.  Ohgami's out at the moment.
+
+=== If Maria came to the door ==>
+{Maria} ……………………
+
+That voice…… belongs to Ensign Ohgami, doesn't it.
+
+{Sakura} M-Mr. Ohgami!  What are you saying!?
+
+{Maria} Excuse me.  ……I'm coming in, Ensign.
+
+Sa- Sakura……!  Why are you in the Ensign's room?
+
+{Sakura} Th-that's because……
+
+{Maria} ……Anyway!  Get to the dressing room at once!  Do you intend to
+ignore the stage!?
+
+{Sakura} Y- yes, ma'am!  I'm sorry!
+
+Well, Mr. Ohgami……  Excuse me.
+
+{Ohgami} ……Ye-yeah.
+
+{Maria-} ……Ensign.
+
+{Ohgami} ……Ah- yes.
+
+{Maria} I don't mind if you chat with them, but I won't have you disrupting
+order in the Flower-Troupe.
+
+{Ohgami} Yeah……  I'm sorry.  I'll be more careful.
+
+{Maria} Now then, I have to be going to the stage myself.  Ensign Ohgami, sorry
+to have disturbed you.  Please excuse me.
+<== If Maria came to the door ===
+< b -
+<== LIPS 1-20-1-2 ===
+< a -
+<== LIPS 1-20-1 ===
+< time up -
+<== LIPS 1-20 ===
+
+{Ohgami} Certainly, you people…… have your own stage to stand upon.  You
+have your own work.
+
+But, there's no work…… no work defending Teito for me here.
+
+How happy I felt when my transfer to the Imperial Floral Assault Group was
+decided.
+
+For someone like me, who's just graduated from military academy, Captain is a
+big role.  My heart raced.
+
+I didn't care what my post was.  I was able to do a job defending peace…… 
+That alone made me genuinely happy.
+
+But…… what I was transferred to, the 'Imperial Opera Troupe'…… ……was
+an opera troupe with nothing but women!
+
+What happened…… to my job defending peace?
+
+~ {Eyecatch 1-1} ~
+
+=== Eyecatches Explained =========>
+An 'eyecatch,' as it is called, originally refers to an image displayed on
+screen during television programs just before and after a commercial break to
+inform the viewer when the show is back on.  As time went on, eyecatches
+evolved, especially in the case of Japanese animation, into a sort of fan
+service; often they would vary from one episode to the next for the same show,
+so they were a thing to look forward too even if the commercials weren't. 
+Additionally, they began to be used in direct-to-video animation, where there
+weren't any commercials during the program, to break up a long show at certain
+plot points.  Such is the case of Sakura Taisen game series, where the eyecatch
+has the additional function of allowing the player to save game progress at
+preset points in the story.
+
+At an eyecatch, the following menu appears:
+
+セーブする       Save game
+隊員の状況       Squad member status
+ゲームを再開     Continue game
+
+'Continue game' is self-explanatory.  The other two options are described as
+follows.
+
+Selecting 'save game' brings up a screen similar to the 'continue from where you
+left off' screen mentioned at the beginning of this faq.  However, when you
+select a saved game slot, the following menu will be visible instead:
+
+セーブする    Save
+削除する      Delete
+キャンセル    Cancel
+
+Once again, choosing either 'save' or 'delete' will bring up a dialog box asking
+you to confirm that operation.  Be careful and make sure you have selected the
+right file and the right menu option.  'Cancel' obviously does just that.
+
+Selecting 'squad member status' brings up a display of currently available
+Flower-Troupe members and a qualitative description of each member's mood.  The
+members are listed in order of their trust for you, from left-to-right and
+top-to-bottom, numbered one through six.  The member who is in the number one
+(upper-left) position trusts you the most and is who you are most likely to end
+up with at the end of the game, but the order will change depending on the
+actions you take.
+
+As stated, a description is provided for each member's mood.  These descriptions
+come in the following three variants:
+
+気力充実！       Full of spirit!
+ふつうの気分     Normal mood
+ごきげんななめ   In a bad mood
+
+There is more to the 'squad member status' screen, but as it is not yet
+available, it will be discussed later.
+<== Eyecatches Explained ==========
+
+{Ohgami} (……It's already well into the night.)
+
+(I'd like to go to sleep, but……  Maybe it's because I'm just not used to the
+bed, but I can't manage to fall asleep……)
+
+(It's almost 12:00, huh……)
+
+…………
+
+(……!  Who in the world could it be…… at this late an hour?)
+
+{Sakura} Mr. Ohgami……  It's Sakura……
+
+{Ohgami} Sakura?  Just a second.  I'll open up the door.
+
+(What could it be, this late at night……?)
+
+Hey, Sakura.  How did the play go?
+
+{Sakura} Yes, it was a huge success.
+
+But more importantly…… I'm sorry about just now.  I didn't mean to make so
+much noise……
+
+{Ohgami} No, no, it's all right.  More importantly…… what is it, this late
+at night?
+
+{Sakura} Um, Mr. Ohgami……
+
+The truth is, I was instructed to have you make the nighttime rounds in the
+theater……
+
+I was told so by Manager Yoneda……
+
+{Ohgami} Nighttime…… rounds?
+
+{Sakura} Yes……  I'm terribly sorry for bringing it up so suddenly, but…… 
+Please.
+
+=== LIPS 1-21 ==>
+- a - All right, I'll do it! {Sa+}
+- b - I guess there's nothing I can do about it.  I'll do it.
+- c - ……I'm going to sleep.
+- time up -
+=
+- a >
+{Ohgami} All right, I'll do it!
+
+I was having trouble getting to sleep.  This'll be just the exercise I need.
+
+{Sakura+} Thank goodness……  I'm so glad you're accepting this in such good
+spirit.
+
+Well then, shall we go?
+< a -
+
+- b >
+{Ohgami} I guess there's nothing I can do about it.  I'll do it.  Boy, oh boy,
+clipping tickets during the day and making the rounds at night, huh.
+
+{Sakura} Don't grumble, Mr. Ohgami.  I'll be going along with you.
+< b -
+
+- c >
+{Ohgami} ……I'm going to sleep.  After being put to work clipping tickets I
+can't stand to be made to go on patrol too.
+
+{Sakura} Mr. Ohgami……  Are you really going to sleep?
+
+=== LIPS 1-21-1 ==>
+- a - All right.  I'll do it.
+- b - I'm really going to sleep. {Sa-}
+- time up -
+=
+- a >
+{Ohgami} I guess there's nothing I can do about it.  I'll do it.  Boy oh boy,
+clipping tickets during the day and making the rounds at night, huh.
+
+{Sakura} Don't grumble, Mr. Ohgami.  I'll be going along with you.
+< a -
+
+- b >
+{Ohgami} Yes.  I'm really going to sleep.
+
+{Sakura-} ……I understand.  If that's the way you're going to be, that's just
+fine with me.  I'll make the rounds.
+
+Mr. Ohgami……
+
+What happened to the Mr. Ohgami who was so full of life when I first met him in
+Ueno Park?
+
+I…… don't want to look at you the way you are now!
+
+{Ohgami} Sakura…………  I wonder if I was a little too stubborn……
+
+……There's nothing I can do about it.  I guess I'll go to sleep for today.
+
+{Skip down past Free Movement 1-2 to ~~~ The next day ~~~.}
+< b -
+
+- time up >
+{Ohgami} ……………………
+
+{Sakura} Come, Mr. Ohgami.  Quit stalling, and let's go!  I'll be going along
+with you too.
+< time up -
+<== LIPS 1-21-1 ===
+< c -
+
+- time up >
+{Ohgami} ……………………
+
+{Sakura} Come, Mr. Ohgami.  Quit stalling, and let's go!  I'll be going along
+with you too.
+< time up -
+<== LIPS 1-21 ===
+
+{Ohgami} Eh!?  You're coming too?
+
+{Sakura} Yes!  After all, you don't know the inside of the theater too well just
+yet, do you?
+
+That's why I'm going with you!
+
+{Ohgami} Thanks.  In that case, I'll be counting on you.
+
+{Sakura} And I as well.  Now then, shall we go at once?
+
+*** Free Movement 1-2 (nighttime patrol) **>
+- Archives (書庫)
+- Archives (書庫) after seeing Maria there previously
+- Salon (サロン)
+- Terrace (テラス) (automatic event)
+- Hall (ホール)
+- Sakura's room (さくらの部屋)
+- Maria's room (マリアの部屋)
+- Empty room (空室) between Sakura and Maria's rooms
+- Sumire's room (すみれの部屋)
+- Iris's room (アイリスの部屋) before going downstairs
+- Empty room (空室) to the left of Iris's
+- Empty room (空室) next to Ohgami's
+- Captain's quarters (隊長室)
+- After first coming downstairs (automatic event)
+- Night duty room (宿直室)
+- Costume room (衣装部屋)
+- Dressing room (楽屋)
+- Iris's room (アイリスの部屋) after finding Jean-Paul
+- Gift shop (売店)
+- Onstage (舞台)
+- First floor audience seating (一階客席)
+- Main entrance (玄関)
+- Lobby (ロビー)
+- Dining hall (食堂)
+- Kitchen (厨房)
+- Secretarial office (事務局)
+- Manager's office (支配人室)
+- Prop room (道具部屋)
+- Large prop room (大道具部屋)
+- Stage wing (舞台袖)
+
+=== Archives (書庫) ==>
+{Ohgami} Ah, Maria.
+
+{Maria} Ensign, and Sakura……  What are you doing at this hour?
+
+{Sakura} Making the nighttime rounds.  Miss Maria, what are you doing at this
+hour yourself?
+
+{Maria} I've come to return a book I borrowed.
+
+{Sakura} Hehh, what did you borrow?
+
+{Maria} 'Crime and Punishment'……
+
+=== LIPS 1-22 ==>
+- a - That's Tolstoy, isn't it. {Ma-}
+- b - That's Dostoevsky, isn't it. {Ma+}
+- c - That's Gorky, isn't it. {Ma-}
+- time up -
+=
+- a >
+{Ohgami} 'Crime and Punishment,' huh……  I believe that's Tosltoy, isn't it.
+
+{Maria} ……That's incorrect.  The author of 'Crime and Punishment' is
+Dostoevsky.
+
+{Ohgami} Huh…………  Was that so?
+
+{Maria-} ……Ensign.  You won't impress me by pretending to know.
+
+Now then, I must be excusing myself.  Good luck with your patrol.
+
+{Sakura} ……Mr. Ohgami.  Shall we continue our rounds?
+< a -
+
+- b >
+{Ohgami} 'Crime and Punishment,' huh……  I believe that's Dostoevsky, isn't
+it.
+
+{Maria+} That's right.  Ensign, you seem to have quite a bit of education, don't
+you.
+
+{Sakura} Mr. Ohgami, that's amazing!  I'm impressed!
+
+{Maria} Now then, I must now be excusing myself.
+
+Ensign, Sakura, good luck making the rounds.  Now then, good night.
+
+{Sakura} Mr. Ohgami, shall we be getting back to the patrol?
+< b -
+
+- c >
+{Ohgami} 'Crime and Punishment,' huh……  I believe that's Gorky, isn't it.
+
+{Maria} ……That's incorrect.  The author of 'Crime and Punishment' is
+Dostoevsky.
+
+{Ohgami} Huh…………  Was that so?
+
+{Maria-} ……Ensign.  You won't impress me by pretending to know.
+
+Now then, I must be excusing myself.  Good luck with your patrol.
+
+{Sakura} ……Mr. Ohgami.  Shall we continue our rounds?
+< c -
+
+- time up >
+{Maria} You're not familiar with it?  It's the work of a Russian novelist named
+Dostoevsky.
+
+These archives are free for you to borrow from, so please feel free to make use
+of them yourself.
+
+Now then, I must now be excusing myself.
+
+Ensign, Sakura, good luck making the rounds.  Now then, good night.
+
+{Sakura} Mr. Ohgami, shall we be getting back to the patrol?
+< time up -
+<== LIPS 1-22 ===
+<== Archives (書庫) ===
+
+=== Archives (書庫) after seeing Maria there previously ==>
+{Ohgami} This was the archives, wasn't it.  I'd like to borrow a book from here
+sometime myself.
+
+{Sakura} For now, there doesn't seem to be anything out of the ordinary.  Let's
+go, Mr. Ohgami.
+<== Archives (書庫) after seeing Maria there previously ===
+
+=== Salon (サロン) ==>
+{Sakura} This is the salon.  Everyone in the Flower-Troupe gathers here often.
+
+{Ohgami} A place of relaxation for everyone, then.
+
+{Sakura} Yes, that's right.  I'd like to stop here and have some tea, but…….
+
+We still have the patrol to take care of……  Shall we go?
+<== Salon (サロン) ===
+
+=!! Terrace (テラス) (automatic event) !!>
+{Ohgami} Huh?  Sakura's…… gone?
+
+Oh, Sakura…… so this is where you were……
+
+{Sakura} Mr. Ohgami…………  Please take a look outside from here.
+
+{Ohgami} Wow……  It's Ginza at night.
+
+{Sakura} I…… think the city lights are amazing.
+
+{Ohgami} Why is that……?
+
+{Sakura} They're not lights meant to be beautiful or showy, and yet they're so
+pretty.
+
+And together with all the other lights, they make such beautiful nighttime
+scenery.
+
+I want to shine on the stage, just like those lights……
+
+{Ohgami} …………
+
+{Sakura} And, like the city lights that shine down on the paths the people walk
+as they go along the street…… ……I want to be a strong, warm light.
+
+……I'm sorry, Mr. Ohgami.  I didn't mean to take up so much of your time
+while we're in the middle of making the rounds……
+
+Come, let's go back on patrol.
+<!! Terrace (テラス) (automatic event) !!=
+
+=== Hall (ホール) ==>
+{Sakura} This is the hall, the entrance to the second floor audience seating. 
+It's designed to allow air in from the lower level.
+
+{Ohgami} Still, that's a large chandelier, isn't it……
+
+{Sakura} Miss Sumire said it wasn't so great, though.
+
+{Ohgami} That sounds just like what Sumire would say……
+
+……There doesn't seem to be anything out of the ordinary, so let's go
+someplace else.
+<== Hall (ホール) ===
+
+=== Second floor audience seating (二階客席) ==>
+{Sakura} This is the second floor audience seating.
+
+{Ohgami} Wow……  That's a really impressive view from here, huh.
+
+{Sakura} There are special seats to be used by upper-class guests up here too.
+
+{Ohgami} I see……  That's quite impressive.
+
+{Sakura} There doesn't seem to be anything out of the ordinary.  Let's go, Mr.
+Ohgami.
+<== Second floor audience seating (二階客席) ===
+
+=== Sakura's room (さくらの部屋) ==>
+{Sakura} This is my room.
+
+{Ohgami} Hehh……
+
+{Sakura} Please come and visit sometime.  But for today, let's go on with the
+patrol.
+<== Sakura's room (さくらの部屋) ===
+
+=== Maria's room (マリアの部屋) ==>
+{Ohgami} This is…… Maria's room, huh.
+
+{Sakura} Miss Maria's Father is from Russia.
+
+- {after knocking} -
+{Maria} Who is it?
+
+{Ohgami} Um……  It's Ohgami……
+
+{Maria} ……Ensign.  It goes against common sense to call upon a woman's room
+this late at night.
+
+{Sakura} ……She got angry at you, huh.
+
+{Ohgami} ……There's no helping it.  Let's continue the patrol.
+<== Maria's room (マリアの部屋) ===
+
+=== Empty room (空室) between Sakura and Maria's rooms ==>
+{Sakura} I've been told this room belongs to Flower-Troupe member Miss
+'Kirishima Kanna.'
+
+I haven't met her yet, but I'm told she practices karate and is currently on a
+training journey even as we speak.
+
+{Ohgami} She practices karate, and she's on a training journey……  Th-that
+sounds pretty impressive.
+
+{Sakura} Mr. Ohgami, let's continue making the rounds.
+<== Empty room (空室) between Sakura and Maria's rooms ===
+
+=== Sumire's room (すみれの部屋) ==>
+{Ohgami} So this is Sumire's room.
+
+{Sakura} The decorating in Miss Sumire's room is extremely gorgeous.
+
+- {after knocking} -
+
+{Sumire} Yes.  Who is it?
+
+{Ohgami} Um……  It's Ohgami……
+
+{Sumire} ……I am going to sleep now, so if there's something you wish to talk
+about, I will hear it tomorrow.
+
+{Ohgami} ……I- I understand.
+
+……Well, there's nothing we can do about that.  Shall we continue the rounds?
+<== Sumire's room (すみれの部屋) ===
+
+=== Iris's room (アイリスの部屋) before going downstairs ==>
+{Ohgami} This is…… Iris's room, huh.
+
+{Sakura} Iris's room is full of stuffed animals.
+
+-{after knocking}-
+{Ohgami} …………There's no response.  Is she not in, I wonder?
+
+{Sakura} It couldn't be……  It's already this late.  Don't you suppose she's
+just asleep?
+<== Iris's room (アイリスの部屋) before going downstairs ===
+
+=== Empty room (空室) to the left of Iris's ==>
+{Sakura} I've been told this room belongs to Flower-Troupe member Miss 'Ri
+Kohran.'
+
+I haven't met her yet, but I'm told she was born in China.
+
+{Ohgami} Heh……  I wonder what she's like.
+
+{Sakura} Mr. Ohgami, let's continue making the rounds.
+<== Empty room (空室) to the left of Iris's ===
+
+=== Empty room (空室) next to Ohgami's ==>
+{Ohgami} This room……  Just whose is it?
+
+{Sakura} I have no idea……  The truth is, I don't really know myself.
+
+But it is locked, and we have no way of investigating.
+
+{Ohgami} There's nothing we can do about it.  Shall we go?
+<== Empty room (空室) next to Ohgami's ===
+
+=== Captain's quarters (隊長室) ==>
+{Ohgami} ……This is my room.
+
+{Sakura} We're not yet finished with the patrol.  Come on, let's go.
+<== Captain's quarters (隊長室) ===
+
+=!! After first coming downstairs (automatic event) !!>
+{Sakura} Iris!
+
+{Ohgami} What's the matter, Iris!?  At so late an hour……
+
+{Iris} Big brother……  Sakura……
+
+{Sakura} What's wrong, Iris?  Go on, tell us.
+
+{Iris} Well you see……  Jean-Paul's missing……
+
+Iris is pretty sure…… she left him behind somewhere……
+
+Sniff……  Jean-Paul's probably all alone right now.  Sniff……  How
+sad……
+
+{Ohgami} Iris…………
+
+{Sakura} Don't worry, Iris.  You'll find him soon tomorrow, once it's light.
+
+Now, it's late.  Go back to your room for today.
+
+{Iris} Sniff…………  Okay……  I will………………
+
+{Sakura} It would help if we knew what rooms she had been in during the
+day……
+
+……Mr. Ohgami, shall we be going now?
+<!! After first coming downstairs (automatic event) !!=
+
+=== Night duty room (宿直室) ==>
+{Sakura} This is the night duty room.  Apparently the previous patrolman would
+stay here during the night.
+
+{Ohgami} So now I'm doing the night watch instead.  I guess defending the peace
+of Teito wasn't my job after all……
+
+{Sakura} …………Shall we go, Mr. Ohgami?
+<== Night duty room (宿直室) ===
+
+=== Costume room (衣装部屋) ==>
+{Sakura} This is the costume room.  We have a lot of costumes here that we use
+during our performances.
+
+{Ohgami} Heh……  That's impressive.
+
+{Sakura} There doesn't seem to be anything out of the ordinary here.  Let's go.
+<== Costume room (衣装部屋) ===
+
+=== Dressing room (楽屋) ==>
+{Ohgami} So this is the dressing room, huh…………
+
+{Sakura} Ah!  Mr. Ohgami!!  Iris's Jean-Paul is over there!
+
+=== Dressing room Click-LIPS ==>
+- Look at the teddy bear >
+{Ohgami} There's no mistake.  It's Iris's Jean-Paul all right.
+
+{Sakura} Thank goodness……  Let's bring it to her at once.
+< Look at the teddy bear -> end Dressing room Click-LIPS
+<== Dressing room Click-LIPS ===
+<== Dressing room (楽屋) ===
+
+=~~ After visiting about six rooms ~~>
+{Sakura} Ah……  It's already this late……
+
+Mr. Ohgami.  It's already quite late at night.
+
+Shall we end today's patrol at this?
+
+--- If you haven't found Jean-Paul or you already returned him to Iris -->
+=== LIPS 1-23 ==>
+- a - I suppose you're right.  Good night.
+- b - I'll walk you to your room. {Sa+}
+- c - Let's continue the patrol a little longer.
+- time up -
+=
+- a >
+{Ohgami} You're right.  Well, good night.  Thanks for everything today.  You
+really helped me out.
+
+{Sakura} It's all right, a little something like this.  But more importantly,
+Mr. Ohgami……  Please cheer up.
+
+{Ohgami} ……All right.
+
+{Sakura} Well, good night.
+
+{Ohgami} ……Now then, I guess I'll be getting back to my room too.
+{Skip down to === After the night rounds are over ===.}
+< a -
+
+- b >
+{Ohgami} In that case, I'll walk you as far as your room.  I did have you hang
+around me a lot today, after all.
+
+{Sakura} ……Are you sure?
+
+{Ohgami} Of course.  Well, shall we go?
+
+* * *
+
+{Sakura+} Thank you very much for going out of your way to take me to my room.
+
+{Ohgami} No, no, this is nothing.  Well, good night.
+
+{Sakura} I'll be able to see you again tomorrow, too……  I'm so glad.
+
+{Ohgami} ……Eh?
+
+{Sakura} N-no.  It's nothing.  Well…… good night.
+
+{Ohgami} ……Now then, I guess I'll go back to my room too.
+{Skip down to === After the night rounds are over ===.}
+< b -
+
+- c >
+{Ohgami} Let's continue the patrol a little longer.  There are still a few
+places I'm curious about.
+
+{Sakura} I understand.  In that case, let's continue the rounds for just a
+little while longer.
+
+But the lights will go out soon, so I think we'll only be able to patrol about
+three more rooms……
+
+{Ohgami} I understand.  All right, let's go.
+< c -
+<== LIPS 1-23 ===
+<-- If you haven't found Jean-Paul or you already returned him to Iris ---
+
+--- If you've found Jean-Paul but haven't returned him to Iris -->
+{Sakura} Oh, that's right, Mr. Ohgami.  We haven't yet given Jean-Paul back to
+Iris, have we.
+
+{Ohgami} You're right.  Shall we go take him back to her?
+
+{Sakura} Yes.  Well then, let's go to Iris's room.
+
+* * *
+
+{Ohgami} We've arrived at Iris's room.
+
+{Skip down to === After knocking on Iris's door ===.}
+<-- If you've found Jean-Paul but haven't returned him to Iris ---
+<~~ After visiting about six rooms ~~=
+
+=== Iris's room (アイリスの部屋) after finding Jean-Paul ==>
+{Ohgami} So this is Iris's room.
+
+{Sakura} There are lots of stuffed animals in Iris's room.
+
+=== After knocking on Iris's door ===
+{Sakura} Iris……  It's Sakura.  Please open the door.
+
+{Iris} Big brother……  Sakura……  Sniff…………
+
+{Ohgami} Here, Iris.  It's Jean-Paul.  It looks like you forgot him in the
+dressing room.
+
+{Iris} Ah!  Jean-Paul!!
+
+{Sakura} You mustn't leave your special friends behind.
+
+{Iris+} Big brother……  Sakura……  Thank you so much!
+
+{Sakura} Now then, it's late, so…… good night.
+
+{Iris} Yes!  Good night!
+
+{Ohgami} ……That's good.  Now Iris should be able to sleep easy.
+
+{Sakura+} Yes.  Thank goodness we found him.
+
+--- If you came here immediately before Sakura told you it was getting late -->
+{Sakura} Now then, shall we continue the rounds?
+<-- If you came here immediately before Sakura told you it was getting late ---
+
+--- If you came here immediately after Sakura told you it was getting late -->
+{Sakura} Now then, Mr. Ohgami……  It's rather late, so I'll be going for
+tonight……
+
+{Ohgami} You're right.  Well, good night.  Thanks for everything today.  You
+really helped me out.
+
+{Sakura} It's nothing, a little something like this.  Well, good night.
+
+{Ohgami} ……Now then, I guess I should get back to my room too.
+{Skip down to === After the night rounds are over ===.}
+<-- If you came here immediately after Sakura told you it was getting late ---
+<== Iris's room (アイリスの部屋) after finding Jean-Paul ===
+
+=== Gift shop (売店) ==>
+{Sakura} This is the gift shop.  Tsubaki's always selling bromides and things
+like that here.
+
+--- If you bought Sakura's bromide earlier -->
+{Ohgami} I bought your bromide earlier.
+
+{Sakura} Eh!?  Really?  Wh-what sort of bromide was it?
+
+{Ohgami} Here, this is the one.
+
+{Sakura+} ……It's true.  It's kind of…… embarrassing.
+
+{Ohgami} Ha-ha-ha, I'll take good care of it.
+
+Now then, let's get back to the patrol.
+
+{Sakura} ……Yes!
+<-- If you bought Sakura's bromide earlier ---
+<== Gift shop (売店) ===
+
+=== Onstage (舞台) ==>
+{Sakura} This is the stage.  It's where we work.
+
+{Ohgami} (The stage {butai} and the squad {butai}, huh……  What a terrible
+joke.)
+
+{Sakura} What's wrong, Mr. Ohgami?
+
+{Ohgami} No…… it's nothing.  Well, there doesn't seem to be anything out of
+the ordinary, so shall we go?
+<== Onstage (舞台) ===
+
+=== First floor audience seating (一階客席) ==>
+{Sakura} This is the first floor audience seating.  We're always putting on our
+performances from atop the stage down there.
+
+{Ohgami} I see…………
+
+{Sakura} There doesn't seem to be anything out of the ordinary.  Let's go, Mr.
+Ohgami.
+<== First floor audience seating (一階客席) ===
+
+=== Main entrance (玄関) ==>
+{Sakura} This is the Grand Imperial Theater's main entrance.
+
+{Ohgami} ……It's locked up tight.  The door locks are all taken care of.
+
+{Sakura} Shall we go someplace else?
+<== Main entrance (玄関) ===
+
+=== Lobby (ロビー) ==>
+{Ohgami} This is where I did the ticket-clipping earlier today.  I never would
+have imagined I'd be coming here to work at night, too……
+
+Is my work…… really no more than ticket-clipping and patrolling……?
+
+{Sakura} ……………………Let's go, Mr. Ohgami.
+<== Lobby (ロビー) ===
+
+=== Dining hall (食堂) ==>
+{Sakura} This is the dining hall.  We're not the only ones who can use it; the
+audience can too.
+
+{Ohgami} There doesn't seem to be anything especially out of the ordinary. 
+Well, shall we go?
+<== Dining hall (食堂) ===
+
+=== Kitchen (厨房) ==>
+{Sakura} This is the kitchen.  We even do some cooking here ourselves from time
+to time.
+
+{Ohgami} You seem to be quite well supplied with facilities.
+
+{Sakura} There's nothing out of the ordinary here.  The burners are all off,
+too.  Well, let's go.
+<== Kitchen (厨房) ===
+
+=== Secretarial office (事務局) ==>
+{Ohgami} This is the secretarial office.  I've been here once before during the
+day.
+
+{Sakura} There doesn't seem to be anything out of the ordinary.  Well, let's go.
+<== Secretarial office (事務局) ===
+
+=== Manager's office (支配人室) ==>
+{Ohgami} I know this place.  It's the manager's office.  I couldn't forget it
+even if I tried.
+
+That 'Imperial Opera Troupe' picture frame……  I feel as though I could see
+it in my dreams.
+
+{Sakura} ……It is locked, and there doesn't seem to be anything out of the
+ordinary.
+<== Manager's office (支配人室) ===
+
+=== Prop room (道具部屋) ==>
+{Sakura} This is the prop room.  This room is where we keep all the small props
+we use onstage.
+
+{Ohgami} Heh……  I'd like to take a good look at just what sort of things
+you've got.
+
+{Sakura} Mr. Ohgami, please do that when you have the free time.  Come, we're
+going.
+<== Prop room (道具部屋) ===
+
+=== Large prop room (大道具部屋) ==>
+{Sakura} This is the large prop room.
+
+{Ohgami} Large props?
+
+{Sakura} Stage sets and backdrops are referred to as large props.  This is the
+storage room for those large props.
+
+{Ohgami} I see……
+
+{Sakura} There doesn't seem to be anything out of the ordinary.  Let's go.
+<== Large prop room (大道具部屋) ===
+
+=== Stage wing (舞台袖) ==>
+{Sakura} This is called the 'wing' - it's where the actresses stay while they're
+waiting for their parts.
+
+{Ohgami} Heh……  I see.
+<== Stage wing (舞台袖) ===
+
+=~~ After visiting about three more rooms after the first time Sakura told you
+it was getting late ~~>
+{Sakura} Ah……  It's just about time.
+
+Mr. Ohgami.  Pretty soon the lights in the theater will be turned off.  Let's
+stop right about now.
+
+{Ohgami} I see……  I understand.
+
+{Sakura} In that case, shall we return to our rooms?
+
+=== LIPS 1-24 ===
+- a - You're right.  Well, good night.
+- b - I'll walk you to your room.
+- time up -
+=
+- a >
+{Ohgami} You're right.  Well, good night.  Thanks for everything today.  You
+really helped me out.
+
+{Sakura} It's all right, a little something like this.  But more importantly,
+Mr. Ohgami……  Please cheer up.
+
+{Ohgami} ……All right.
+
+{Sakura} Well, good night.
+
+{Ohgami} ……Now then, I guess I'll be getting back to my room too.
+< a -
+
+- b >
+{Ohgami} In that case, I'll walk you as far as your room.  I did have you hang
+around me a lot today, after all.
+
+{Sakura} ……Are you sure?
+
+{Ohgami} Of course.  Well, shall we go?
+
+* * *
+
+{Sakura+} Thank you very much for going out of your way to take me to my room.
+
+{Ohgami} No, no, this is nothing.  Well, good night.
+
+{Sakura} I'll be able to see you again tomorrow, too……  I'm so glad.
+
+{Ohgami} ……Eh?
+
+{Sakura} N-no.  It's nothing.  Well…… good night.
+
+{Ohgami} ……Now then, I guess I'll go back to my room too.
+< b -
+<== LIPS 1-24 ===
+
+=== After the night rounds are over === (End Free Movement 1-2)
+{Ohgami} Boy oh boy……  It's already after midnight.
+
+It's the middle of the night……  I guess I'll get to sleep for today.
+
+~~~ The next day ~~~
+
+{Ohgami} Yawwn……  It's morning, huh……
+
+I believe…… they said today was a day off.  I should be released from my
+ticket-clipping duties.
+
+Now then……  What should I do?
+
+=== Prompt 1-1 ==>
+- a - Go to the stage.
+- b - Go to where Yoneda is.
+- c - Go to the reception desk.
+=
+- a >
+{Skip down to === Backstage ===.}
+< a -
+
+- b >
+{Ohgami} That's it!  I'll go hear what Lieutenant General Yoneda has to say.
+
+Does the Imperial Floral Assault Group…… really not exist?
+
+I…… just can't believe it.  No, I don't want to believe it.
+
+I will get a proper response from Lieutenant General Yoneda's own lips!
+
+* * *
+
+{Yoneda} Ohh, Ohgami.  What's going on?
+
+{Ohgami} (Does this man…… even drink sake outdoors?)
+
+Lieutenant General Yoneda.  I have something I'd like to ask of you……
+
+{Yoneda} I'm the Manager, the ma-na-ger.  Inside this theater, you cut out the
+'Lieutenant General.'
+
+So……  What is you wanted to ask?  Huh?  Go on and say it.
+
+{Ohgami} Yes, sir.  First of all……
+
+{Yoneda} W-wait!  ……I- I just remembered!
+
+{Ohgami} ……Wh- what's the matter!?  Lieutenant General…… I mean,
+Manager!
+
+Could it be…… about the Imperial Floral Assault Group?  So you've finally
+sobered up!
+
+{Yoneda} I was on my way to the latrine……  That was close, that was close.
+
+{Ohgami} ……Manager Yoneda……  Really……  Please cut out the jokes
+already!
+
+{Yoneda} Ohgami, I'll hear what you have to say when I get back.
+
+Until then, you go watch the Flower-Troupe rehearse or something.
+
+{Ohgami} The latrine, huh……  This doesn't help me at all.  What should I do?
+
+=== LIPS 1-25 ==>
+- a - Go watch the Flower-Troupe rehearse.
+- b - Wait for Manager Yoneda in his office.
+- time up -
+=
+- a >
+{Skip down to === Backstage ===.}
+< a -
+
+- b >
+{Ohgami} All right.  I'll wait for him inside the office.
+
+I guess I'll just wait here for a while.
+
+=== Manager's office Click-LIPS ==>
+- Look at the desk >
+{Ohgami} It's a magnificent desk.  There are pictures on top of it.
+
+……Hm?  What's this photograph……?
+
+This person joking around here appears to be Manager Yoneda, but……
+
+Who in the world could the other three be……?
+< Look at the desk -
+
+- Look at the suit of armor >
+{Ohgami} That's impressive armor……
+< Look at the suit of armor -
+
+- Look at the large picture frame on the wall above the window >
+{Ohgami} 'The Imperial Opera Troupe'……  No matter how many times I look at
+it, that's what's written there.
+< Look at the large picture frame on the wall above the window -
+
+- Look at the cabinet along the right wall >
+{Ohgami} It's packed with official papers.
+< Look at the cabinet along the right wall -
+
+- Look at the urn in the lower left >
+{Ohgami} It's an old-looking urn.
+< Look at the urn in the lower left -
+
+- After looking at various things >
+{Ohgami} ………………
+
+Just when is the Manager going to return?
+
+Is he drinking himself even further drunk in the latrine?  ……No, it couldn't
+be.
+
+It's foolish to keep on wasting time here.  I guess I'll go watch the
+Flower-Troupe rehearse.
+< After looking at various things -> end Manager's office Click-LIPS
+<== Manager's office Click-LIPS ===
+< b -
+<== LIPS 1-25 ===
+< b -
+
+- c >
+{Ohgami} That's true……  Since I have the free time, maybe I'll try going to
+the reception desk……
+
+* * *
+
+{Ohgami} Ah……!  There's Sumire.
+
+All right……  I guess I'll try asking Sumire something.
+
+{Sumire} My, Ensign.  Good morning.
+
+{Ohgami} Hey, good morning.  You're taking the day off to relax today?
+
+{Sumire} Would that I could……  I have rehearsal onstage starting now.
+
+I'm scheduled to practice the dance with Miss Sakura over again carefully.
+
+{Ohgami} ……Sounds like fun.  I'm jealous.
+
+{Sumire} ……In all honesty, I don't care for rehearsal and the like.
+
+But since failure befits a star even less……
+
+Well, I should be getting to the stage, so…… please excuse me.
+
+{Ohgami} ……Rehearsal, huh.
+
+……I want work too.  I can't stand not having anything to do.
+
+* * *
+
+{Iris} Ah, big brother!
+
+{Ohgami} Hey, Iris.
+
+{Iris} Hey, big brother.  Let's all go to the upcoming flower-viewing {22}
+together.
+
+{Ohgami} That sounds nice.  Yesterday the cherry blossoms in Ueno Park were in
+full bloom.
+
+{Iris} Yeah……  But you know, Iris is happier more about being able to go
+with big brother than about the flowers.
+
+{Ohgami} Is that so?  ……Thank you.
+
+{Iris}  That's called 'taking the drum over the flowers,' isn't it.
+
+{Ohgami} Iris……  That's called 'taking the dumplings over the flowers.' {23}
+
+{Iris} Eh-heh-heh……  Is that so.
+
+……Well, Iris is going now!  Bye-bye, big brother!
+
+* * *
+
+{Ohgami} ……This…… is the place where I work now……
+
+{Maria} ……Ensign.  What are you doing in a place like this?
+
+{Ohgami} H-hey, Maria…………
+
+{Maria} ……………………
+
+Ensign.  Are you not unsatisfied with your job here?
+
+=== LIPS 1-26 ==>
+- a - I'm incredibly unsatisfied.
+- b - I'm not unsatisfied, but……
+- c - I'm satisfied.
+- time up -
+=
+- a >
+{Ohgami} Yes.  I'm incredibly unsatisfied.  I was transferred here as Captain of
+a covert squad.
+
+Despite that…… why have I been put to work clipping tickets?  This isn't
+what I was told.
+
+{Maria} Ensign.  Ticket-clipping is a magnificent job.  What's more……
+
+I know - a world where pleasure does not exist…… a world where one must
+fight to stay alive……
+
+I don't want to make this Teito a city where all the smiles are gone.
+
+That's why I feel that our greeting the audience here in this theater…… is a
+very joyous thing.
+
+{Ohgami} ……………………
+< a -
+
+- b >
+{Ohgami} I'm not unsatisfied, but……  I was transferred here as Captain of
+the Imperial Floral Assault Group.
+
+Yet what I've been doing is clipping tickets……  I'm not sure what's going
+on.
+
+{Maria} Ensign……  I can guess how you feel.  But……
+
+I know - a world where pleasure does not exist…… a world where one must
+fight to stay alive……
+
+I don't want to make this Teito a city where all the smiles are gone.
+
+That's why I feel that our greeting the audience here in this theater…… is a
+very joyous thing.
+
+{Ohgami} ……………………
+< b -
+<== LIPS 1-26 ===
+
+{Maria} Now then, I have practice to get to, so I must be going.  Excuse me.
+
+Ensign.  If you have the time, please stop by the stage.  We'll be holding
+rehearsal.
+
+{Ohgami} ……I guess I'll try going to the stage.  I'll go watch the others
+rehearse.
+< c -
+<== Prompt 1-1 ===
+
+=== Backstage ===
+
+{Sakura} Spin around here……  Raise your hand overhead……
+
+{Sumire} Miss Sakura!  Your footwork is all wrong!
+
+{Ohgami} Oh……  They're really going at it.
+
+So behind those beautiful-looking plays, there's everyday rehearsal like
+this……
+
+{Sumire} Waah!
+
+{Ohgami} Wh-what!?
+
+{Sakura} I'm sorry!!
+
+{Sumire} Miss Sakura!
+
+Do you not find it rude to trample on the hem of someone's kimono!?
+
+{Sakura} I'm sorry.
+
+{Sumire} Honestly, this is why I cannot stand these country types.
+
+So vulgar…… and crude……
+
+Now then, let's start over once more from the beginning.
+
+{Sakura} "Forgive me ever so much!"
+
+{Sumire} You brat……!
+
+Miss Sakura, this is how one deals with someone who can't understand things
+explained to them in words!
+
+=== LIPS 1-27 ==>
+- a - Stop both of them. {Sa+ Su+ Ma+ I+}
+- b - Leave them alone.
+- time up -
+=
+- a >
+{Ohgami} Both of you!  Cut out this fighting!!
+
+{Sumire} E-Ensign!?
+
+{Sakura} M-Mr. Ohgami!!  Look out!
+
+{Ohgami} Gwahh!!
+
+{Sakura} Aahh, Mr. Ohgami!!  I'm sorry!
+
+{Sumire} E-Ensign……  Why is the Ensign here……?
+
+{Ohgami} You two……  Cut out the fighting.
+
+I don't know much about the stage, and I have no intention of interfering with
+your rehearsal.
+
+But……  In a theater group, isn't teamwork what's important?  Let's just cut
+out…… the fighting.
+
+{Sumire+} Ensign…………
+
+{Iris+} Big brother…………
+
+{Maria+} ………………
+
+{Sakura+} I understand……  I'm sorry, Mr. Ohgami.
+
+{Ohgami} ……As long as you understand, that's good enough.  Now then, I'll be
+going……
+
+{Sakura} Ah……  Mr. Ohgami!
+< a -
+
+- time up >
+{Maria} Both of you, stop it!
+
+{Ohgami} (Maria went in to stop them, huh……)
+
+{Sumire} Would you please not stop me?  Miss Sakura is at fault for trampling on
+the hem of my kimono!
+
+{Iris} But, you were saying terrible things too, Sumire!
+
+{Maria} At any rate……  Stop the fighting!
+
+We can't be arguing all the time……
+
+{Sakura} I'm sorry.
+
+{Sumire} ……Hmph!  I will just leave at that for today!
+
+{Ohgami} (…………It seems they've managed to quell the fighting.)
+
+(There's no point in me staying here any longer……  I'd better go back.)
+
+{Sakura} Ah!  Mr. Ohgami!!
+
+Mr. Ohgami…………
+
+Miss Maria, forgive me!
+
+{Maria} Ah, Sakura!  Where are you going!?
+< time up -
+<== LIPS 1-27 ===
+
+* * *
+
+{Sakura} Mr. Ohgami!  Please wait!
+
+{Ohgami} …………Hm?
+
+{Sakura} ……Mr. Ohgami.
+
+{Ohgami} Sakura…………
+
+{Sakura} Would you listen…… to what I have to say?
+
+=== LIPS 1-28 ==>
+- a - All right.  What is it?
+- b - No, you listen to what I have to say!
+- time up -
+=
+- a >
+{Ohgami} All right.  What is it?
+
+{Sakura} Before you came here, Mr. Ohgami, Manager Yoneda said this to me.
+
+The role of captain of the Flower-Troupe can't be performed by a mere soldier. 
+No, a mere soldier must not be allowed to perform it……
+
+We mustn't allow battles in which we sacrifice human lives for the sake of
+victory to continue……
+
+That's why…… the person serving the role of captain of the Flower-Troupe
+must be someone who, for the Flower-Troupe…… for this theater……
+
+…and for his livelihood here - he has to be someone who can show love, he
+said……
+
+That's why Manager Yoneda put you to work clipping-tickets.
+
+{Ohgami} …………So that's how it was.
+
+{Sakura} Mr. Ohgami.  I have a request of you too.
+
+Please, accept this theater…… and us, the Flower-Troupe…… and come to
+like us!
+
+And…… please fight together with us, as our Captain!
+
+{Ohgami} Fight……  Fight, you say……  Against who……?
+
+{Sakura} Th-that's……
+< a -
+
+- b >
+{Ohgami} No, you wait.  You listen to what I have to say.
+
+{Sakura} A……all right.
+
+{Ohgami} When I first heard about this covert squad, in all honesty, my heart
+leapt.
+
+I was going to be able to work to defend peace.  When I thought about that……
+I was so happy.
+
+But despite that……  What……  Just what am I doing in a theater!?!
+
+Please tell me, Sakura!  For what purpose have I come to this theater!?
+
+{Sakura} Th-that's……
+< b -
+<== LIPS 1-28 ===
+
+{Sakura} …………!
+
+{Ohgami} Wh-what?  What's this alarm!?
+
+{Sakura} Mr. Ohgami, we've got to move out!
+
+{Ohgami} Move out!?  Wh-what are you talking about!?
+
+{Sakura} The Imperial Floral Assault Group, Flower-Troupe, is moving out!  Come
+on, let's go!
+
+* * *
+
+{Maria} All members of the Imperial Floral Assault Group, Flower-Troupe,
+assembled!
+
+{Yoneda} Mm, well done!
+
+{Ohgami} Ma-Manager Yoneda……  And everyone else……  Wh-what is this!?
+
+{Yoneda} Ohgami, the opera troupe is on break.  The Imperial Floral Assault
+Group has returned to its original duty!
+
+……I'm sorry for trying to deceive you.
+
+But I wanted to test you to see whether you were appropriate as Captain of a
+covert squad.
+
+{Ohgami} Wh-what in the world is this place?
+
+{Yoneda} This is the core of the Imperial Floral Assault Group.  ……The
+underground command room.
+
+{Ohgami} Manager Yoneda!  The Floral Assault Group…… the Floral Assault
+Group really did exist, didn't it!?
+
+{Yoneda} Of course……  The opera troupe is no more than our disguise to the
+outside world.
+
+Now then, allow me to introduce you once again.  These girls, who will be your
+subordinates, are the squad members of the Imperial Floral Assault Group,
+Flower-Division.
+
+{Sakura} Mr. Ohgami……  If you're with me, I feel like I can fight to the
+very limits of my abilities!
+
+As fellow rookies in the Imperial Floral Assault Group, let's do our best!
+
+{Iris} Big brother, let's do our best!
+
+--- If Sumire is smiling -->
+{Sumire} Ensign, that battle outfit…… looks quite good on you.
+<-- If Sumire is miling ---
+
+--- If Sumire is not smiling -->
+{Sumire} Now then, let us just see…… how skillful the Ensign is.
+<-- If Sumire is not smiling ---
+
+{Maria} Ensign.  I haven't yet acknowledged you as Captain.
+
+When I've been able to understand the way you think, and the way you feel……
+then I'll be able to call you Captain.
+
+{Ohgami} ……I understand.  Everyone, I'm counting on you!
+
+Chief Yoneda.  Who is our enemy?
+
+{Yoneda} I'm sure even you've heard the rumors.
+
+The mysterious organization that threatens Teito, utilizing mechanical troops
+called the 'Masou Kihei'……{24}
+
+Their name…… is the 'Kuronosukai.' {25}
+
+{Ohgami} Kuronosukai……?
+
+{Iris} Sakura, you know, beat one of those Masou Kihei in Ueno Park the very day
+she came to Tokyo.
+
+{Sakura} Iris!  I thought I told you that was a secret!
+
+{Ohgami} What?  Then…… the young girl who defeated that monster was Sakura!?
+
+{Yoneda} That's right.  But there's a limit to how far you can manage against
+the Masou Kihei in the flesh……
+
+And that - is where we come in.  We have a powerful weapon too.  Let me show you
+to the underground hangar.
+
+{Ohgami} Wh……what are these!?
+
+{Yoneda} These are the secret weapons upon which the Imperial Floral Assault
+Group prides itself…… the psycheon armor, 'Kohbu!'
+
+{Ohgami} Psycheon…… armor? {26}
+
+{Yoneda} Yeah……  Mechanical armor, so to speak, that can only be made to
+work by those who possess powerful spiritual energy.
+
+The ones who have that power are the Flower-Troupe…… and you.
+
+……Now then, your Kohbu is the white one.  Go on and get inside it.
+
+The Kuronosukai have been sighted in the same place as last time, Ueno Park.  I
+want you to head to the scene aboard our bullet train!
+
+{Ohgami} Yes, sir!
+
+{Iris} Iris doesn't have a Kohbu yet, so she'll be staying home, but……
+
+Big brother, do your best!
+
+{Ohgami} ……I see, it's really a suit of armor right down to the letter…… 
+All right!  With these we'll be able to make it!
+
+{Sakura} ……Mr. Ohgami, give the order to move out!  Let's defend Ueno Park
+from the hands of the Kuronosukai!
+
+=== LIPS 1-29 ==>
+- a - Imperial Floral Assault Group, move out!! {Sa+ Su+ Ma+}
+- b - Prepare for the flower-viewing!
+- time up -
+=
+- a >
+{Ohgami} Imperial Floral Assault Group, Flower-Troupe, move out!  Our
+destination point, Ueno Park!
+
+{Maria+} Roger!
+
+{Sumire+} My Kohbu has been activated!
+
+{Sakura+} The Imperial Floral Assault Group is moving out!
+< a -
+
+- b >
+{Ohgami} All right, prepare for the flower-viewing!
+
+{Sumire} Huh!?
+
+{Maria} ……Do you have your wits about you, Ensign?
+
+{Sakura} I'm sure he means that we should go view the flowers at Ueno Park after
+winning the battle!
+
+Iris!  We're counting on you to make preparations for the flower-viewing!
+
+{Iris} Got it!
+
+{Sakura} Imperial Floral Assault Group, moving out!  Let's go, Mr. Ohgami!
+< b -
+<== LIPS 1-29 ===
+
+~ {Eyecatch 1-2} ~
+
+{?????} Ha-ha-ha……  Chaos, terror, government overthrow……  What fun.
+
+{?????} Teito is in the hands of the Kuronosukai!
+
+{?????} Let us build a mountain of corpses and show them our might.  Don't you
+agree, Sir Sa'tan.
+
+{Sa'tan} Hm-hm-hm-hm……
+
+{Sakura} That's as far as you go!
+
+{?????} What?
+
+{?????} You!
+
+{Sa'tan} …………
+
+{Flower-Troupe} Imperial Floral Assault Group, go forth!
+
+{?????} Imperial Floral Assault Group, is it?  What nonsense!
+
+{Sa'tan} Interesting……  I'll take care of things here……
+
+{?????} Hmm……  We'll leave it up to you.
+
+{Sa'tan} We'll just see the extent of your ability!
+
+{Sakura} We will show no forgiveness for those who threaten the sanctity of
+Teito!
+
+{Sumire} Come, come at me from wherever you may be!
+
+{Maria} Ensign Ohgami, these are the Kuronosukai.
+
+Now then, I will hereby begin teaching you how to operate the Kohbu, so please
+pay close attention.
+
+=== LIPS 1-30 ==>
+- a - Please do.
+- b - I already know.
+- time up -
+=
+- a >
+{Maria} First, Sakura, let's start with you.
+
+As Sakura just demonstrated, you select your destination point from the field of
+allowable movement.
+
+Sakura, attack!
+
+{Sakura} Yes, ma'am!
+
+{Maria} You attack by choosing your target from your allowable attack range, as
+shown.
+
+You can perform two actions during one turn.  She's just completed a 'movement'
+and an 'attack,' so her turn is over.
+
+Next is my turn.
+
+When your spirits are built up to their maximum level, you can unleash a special
+attack. {27}
+
+Special attacks are powerful, but when used your spirits are reduced to zero.
+
+It is also possible to build up your spirits as I have demonstrated.  And they
+rise when you receive damage as well.
+
+{Sumire} Hm-hm-hm……  Ensign.  It is finally time for the arrival of our star
+performer.
+
+Please watch carefully, if you would, as I demonstrate…… the very number of
+high-class, magnificently beautiful performances I am capable of.
+
+{Maria} Wait, Sumire.  You restore the damage done to Sakura's unit.
+
+{Sumire} Honestly……  This was to be my turn; why should I have to sacrifice
+it for the sake of a country girl like this?
+
+{Sakura} Excuse me for being a country girl!
+
+{Maria} The Kohbu are equipped with facilities for recovering the amount of
+damage dealt to them.
+
+You may repair not only your own unit, but your comrades' units as well.
+
+There is a limit to the number of uses, so please be careful.
+
+Additionally, you may 'defend' yourself to diminish the amount of damage dealt
+to you by the enemy.
+
+'Defense' is effective until your next turn comes.
+
+During battle, you may perform two actions at once, but you can only perform one
+action from a given hierarchy.
+
+Normal attacks and special attacks are both part of the same 'attack' hierarchy,
+so you can't perform one immediately after the other.
+
+'Building up spirits,' 'defense,' and 'recovery' are all part of the same
+'defense' hierarchy, so you can't perform two of them successively.
+
+You are free to choose the order of your actions, so you may attack after moving
+or move after attacking.
+
+Now then, from here on, you will be giving us the orders.
+
+First, let's destroy all of the enemy's Masou Kihei, the 'Wakiji.' {28}
+< a -
+<== LIPS 1-30 ===
+
+=== Battle Explained =========>
+Battle is turn-based and takes place on a grid environment.  As described above,
+you may only perform at most two actions per each unit's turn, and both may not
+be part of the same hierarchy.  Once you've learned what the
+various menu items are, battle should be pretty easy to get accustomed to.
+
+--- Battle Menu ----------
+- Hierarchy overview -
+移 Movement
+攻 Attack
+防 Defense
+情 Information
+終 End
+
+特 Special (Ohgami only)
+
+- Hierarchy breakdown -
+移 Movement
+- 移動 Movement
+- もどる Return (Dreamcast version only; appears only after movement has been
+made during the current turn)
+
+攻 Attack
+- 必殺 Special
+- 通常 Normal
+
+防 Defense
+- 回復 Recovery
+- 防御 Defense
+- ため Build up
+
+情 Information
+- 相談 Consultation
+- 全図 Full map
+- 情報 Information
+
+終 End turn
+- 待機 Standby
+
+特 Special
+- かばう Cover
+
+--- Movement (移) --------
+-- Movement (移動) --
+Upon selecting the movement command, the range of possible movement for the
+given unit will be highlighted.  After selecting your destination point, the
+unit will move there; at that point, you are given an opportunity to cancel the
+movement with the 'B' button or confirm the movement with the 'A' button.  You
+may speed up the actual movement animation by pressing the 'A' button
+(additionally, the 'R' trigger in the Dreamcast version), even during an enemy's
+movement.
+
+-- Return (もどる) (Dreamcast version only) --
+Available only in the Dreamcast version is the ability to return to your
+original location after making a movement.  Originally introduced in Sakura Wars
+2 on the Sega Saturn, selecting this option whisks the current unit back to
+where it originally was at the beginning of its current turn, allowing you to
+choose a different movement destination.  Obviously, this command is available
+only after moving the unit.
+
+--- Attack (攻) --------
+-- Normal (通常) --
+Upon selecting the normal attack command, your given attack range will be
+highlighted, and a cursor will appear over the nearest potential target, if
+there is one.  After initially choosing your primary target, that square and any
+additional squares besides that will be affected by the attack you have elected
+to perform will then be highlighted, and you will be given the opportunity to
+cancel the attack with the 'B' button or confirm it with the 'A' button. 
+Attacks vary in nature, range, and power depending on the attacking unit.  You
+cannot damage your own units with your own attacks.
+
+-- Special (必殺) --
+Special attacks are performed in exactly the same manner as normal attacks, but
+require that your spirit (気合) meter be completely filled; after the attack,
+the meter is drained to zero.  Like normal attacks, special attacks very
+depending on the attacking unit.
+
+--- Defense (防) --------
+-- Build up (ため) --
+This option is only available when the current unit's spirit level meter is not
+max, in which case choosing it will perform the 'build up' action and cause the
+unit's spirit level to rise.  The amount the given unit's spiritual level rises
+depends on its stats and the pilot's trust in you.
+
+-- Defend (防御) --
+Choosing this option significantly decreases all damage received until that
+unit's next turn.
+
+-- Recover (回復) --
+Recovery may only be performed twice per unit per battle.  When this option is
+chosen, you may select either the currently active unit or one of any unit
+immediately (but not diagonally) adjacent to it, and a fair amount of that
+unit's endurance level is restored.
+
+--- Information (情) --------
+-- Information (情報) --
+Selecting this option allows you to hover the cursor over any unit on the
+battlefield, enemy or ally, and view that unit's stats.
+
+The unit's stat window is laid out as follows:
+
+              Machine Name
+
+耐久   Endurance     Current / Max
+気合   Spirit        Current / 100
+
+             攻撃 Attack   防御 Defense   移動 Movement
+操者 Pilot         a              d              g
+甲冑 Armor         b              e              h
+信頼 Trust       + c            + f            + i
+                ----           ----           ----
+合計 Total         x              y              z
+
+必殺 Special attack name
+
+'Trust' generally only applies to Flower-Troupe members.
+If 「なし」('nashi') is listed for the special attack name, the unit has no
+special attack.
+
+-- Full Map (全図) --
+Choosing this option displays a full map of the entire battlefield, allowing you
+to cycle through the positions of all units.
+
+-- Consultation (相談) --
+Choosing this option will cause a member of the Imperial Floral Assault Group to
+remind you of your current mission.
+
+--- End Turn (終了) --------
+-- Standby (待機) --
+Self-explanatory; this option allows you to end the current unit's turn
+prematurely.
+
+--- Special (特) (Ohgami only) ---
+-- Cover (かばう) --
+Available only during Ogami's turn.  This allows you to select a Flower Group
+member to protect from any attack.  Selecting Ogami effectively deactivates the
+'cover' command.  When a member unit being covered by Ogami's is attacked,
+Ogami's unit will appear in its place and nullify the damage.  If both Ogami's
+and the covered unit are in the same enemy attack range, neither unit will
+receive damage.  This can be performed up to eight times per battle. 
+Additionally, depending on the character and the current chapter, this can
+provide a boost to her mood.
+
+--- The start button menu --------
+The start button menu appears whenever you press 'start'.  Pressing 'start'
+again closes it.  The available options are as follows:
+
+再戦 Restart Battle
+中断 Suspend Battle (Dreamcast version only)
+操作 Options
+
+-- Restart Battle (再戦) --
+Selecting this option brings up a prompt asking you whether you wish to restart
+the battle from the beginning.  By default, 'no' (いいえ) is selected.
+
+-- Suspend Battle (中断) (Dreamcast version only) --
+Available only in the Dreamcast version, this option allows you to save your
+current position in battle and return to the title screen.  Note that saving
+your battle position requires a considerable amount of space on your memory
+card, and only one such save can be made per memory card.
+
+-- Options (操作) --
+Brings up the title screen's option menu.
+<== Battle Explained ==========
+
+=== Battle Start ===
+
+=== At the beginning of one of Sakura's later turns ==>
+{Sakura} Say, Mr. Ohgami……
+
+{Ohgami} Eh?
+
+{Sakura} I get such mixed feelings fighting in this place.
+
+=== LIPS 1-31 ==>
+- a - Why's that?
+- b - It is the place where we first met, after all. {Sa+}
+- c - It is the place where you first made the newspaper headlines, after all.
+=
+- b >
+{Ohgami} It is the place where we first met, after all.
+
+{Sakura+} Eh-heh-heh……  That's right.  Fighting our first battle together in
+the place where we first met……  I wonder if it's fate.
+< b -
+<== LIPS 1-31 ===
+<== At the beginning of one of Sakura's later turns ===
+
+=== After defeating all the Wakiji or attacking Sa'tan for the first time ==>
+{Sa'tan} Hm-hm-hm……  Not bad.
+
+I shall take you on personally.
+<== After defeating all the Wakiji or attacking Sa'tan for the first time ===
+
+=== After defeating Sa'tan ===
+{Sa'tan} Floral Assault Group!  We shall put an end to this someday!
+
+{Ohgami} He got away, huh……  But we defended the peace of Teito!!  All
+right, all units, return home!!
+
+{Sakura} Wait, Mr. Ohgami.  The Flower-Troupe hasn't had its personal
+curtain-call yet!
+
+{Ohgami} Wh-what do you mean by that?
+
+{Sakura} All together!
+
+{All} Victory…… pose! {29}
+
+~ {Eyecatch 1-3} ~
+
+{Ohgami} ……The battle's over, and now we get to enjoy the flower-viewing in
+Ueno Park, huh.  Nighttime cherry blossoms aren't such a bad thing either.
+
+……Still, Manager Yoneda, why are you keeping the Kuronosukai top secret?
+
+{Yoneda} Hey, come on, Mr. Ohgami.  You try letting it out.  There'd be a
+riot……
+
+It'd be just what they want.  We have to strike them in utmost secrecy, to the
+very end!
+
+{Ohgami} I see.  So that's what makes us a covert squad.
+
+{Sakura} Thanks for your hard work.
+
+{Ohgami} Yeah.  Thank you, too, Sakura.
+
+{Sakura} It really helped having you with us.
+
+We'll be counting on you from here on, Mr. Ohgami!
+
+{Ohgami} Leave it to me!
+
+{Maria} Our battle with them has only just begun!  Don't get too ahead of
+yourself……
+
+{Ohgami} U-understood.
+
+{Iris} You know, Iris…… likes you, big brother.
+
+Iris will make you her boyfriend, so don't you go cheating on her.
+
+{Ohgami} Ha-ha-ha, thanks.
+
+{Sumire} What're you gettin' all sho pent up about?  Oh, Enshign?
+
+My……  Upon closer look, you're not such a bad-looking man - *hic*.  Perhapsh
+you're jusht my type?
+
+{Ohgami} (How can she be getting drunk on amazake?) {30}
+
+{Sumire} Mm-hmmm, mm-hm-hm-hm……  Ensi~gn, let's drink some more.
+
+{Yoneda} Now, drink up, drink up lots more!  Ohgami!  You've got your
+ticket-clipping job waiting for you again starting tomorrow!
+
+{Ohgami} Ehh!?
+
+{Sakura} Ah-ha-ha-ha……
+
+{All} Ah-ha-ha-ha…………
+
+=== Next episode preview (次回予告) ===
+{Sakura} Mr. Ohgami is a former Naval Ensign.
+
+Suddenly, what appears before his very eyes are the Chinese girl genius, Ri
+Kohran…
+
+…and a mysterious, beautiful woman.
+
+Next time, on Sakura Wars…
+
+"The Enemy's Name is Kuronosukai."
+
+A storm of romance in Taisho cherry blossoms!! {31}
+
+What are you going to do, Mr. Ohgami?
+
+~ {Eyecatch 1-4} ~
+
+=== Translation Notes ==========
+
+{1} 'Teito' (帝都) literally means 'the Imperial Capital,' but since it is
+generally treated as a place name, I've taken the liberty of leaving it as-is.
+
+{2} Ranks are translated to their modern American counterparts, and therefore
+may not be technically correct for the time in which Sakura Wars takes place
+(the 1920s).  Ohgami's rank, 'shou'i' (「少尉」) is the lowest of the 'ikan'
+(「尉官」) rankings, which, in the military (as opposed to the 'Jieitai,' or
+Japanese Self-Defense Force), progress from 'shou'i' to 'chuu'i' (「中尉」)
+followed by 'tai'i' (「大尉」).  According to the 'EXCEED Wa'ei Jiten,' this
+rank translates to 'second lieutenant' in the British or American Armies,
+'acting sublieutenant' in the British Navy, and 'ensign' in the American Navy. 
+As Ohgami is a Naval officer, I have, for better or for worse, chosen the last
+of these translations.
+
+{3} Yoneda's rank, 'chuujou' (「中将」), is the second in the 'joukan'
+(「将官」) rankings, which follow a progression similar to that of the 'ikan'
+ranking (c.f. note {2}).  It corresponds to 'lieutenant general' in both the
+British and American Armies.
+
+{4} This entire episode is replete with puns which don't translate well into
+English.  'Tei-Geki,' when written 「帝劇」, is an abbreviation for both
+'Dai-Teikoku Gekijou' ('The Grand Imperial Theater'); when written 「帝撃」, it
+is short for 'Teikoku Kagekidan' ('The Imperial Floral Assault Group').  (C.f.
+note {17}.)
+
+{5} 'Kohbu' (「光武」) literally means 'warrior of light.'
+
+{6} Ginza (「銀座」), which originally meant 'silver mint' and was so named for
+the silver coin mint built there under the Edo Shogunate, is "the most
+prestigious and fashionable shopping/dining town in Tokyo" and is largely
+considered one of the largest commercial centers in Tokyo.  For more
+information, consult the Ginza Concierge (http://www.ginza.co.jp/index_e.html).
+
+{7}  For those of you who may be unfamiliar with this practice, in Japan it is
+common to refer to complete strangers with familial terms, usually based on the
+other person's age.  For example, a young man would be referred to as 'oniisan'
+or 'big brother.'  As you might guess, of course, it may also be used as
+something of a term of endearment.  Iris uses and will continue to use the term
+in this sense.
+
+{8} 'Chu' is onomatopoeia, representing the sound made when planting a kiss on
+someone.
+
+{9} The Russo-Japanese War was fought in the years 1904-5.  It "marked the first
+time an Asian power had defeated a European power in modern times,
+establish[ing] Japan as a major force in world affairs"
+(http://www.ox.compsoc.net/~gemini/simons/historyweb/russo-war.html).
+
+{10} 'Kekkou' (「結構」) can be translated as 'splendid,' but alone (at least in
+this circumstance) it may sound somewhat formal.  In what appears to be an
+attempt to mask any trace of such formality, Yoneda catches himself with
+something of a play on words, 'kekkouke-darake' (「結構毛だらけ」), which
+literally means 'covered with kekkou-fur.'  The 'ke-darake' is simply a free
+association from the 'ke' in 'kekkou.'  The resultant expression then has a
+somewhat derisive feel to it, representing Yoneda's apparent downplay of
+Ohgami's rigid military formality.  Unfortunately, this didn't come across too
+effectively in the translation.
+
+{11} 'A flower in each hand' (「両手に花」'ryoute ni hana') is a Japanese
+expression which simply means having 'two blessings at once' or a beautiful
+woman on either side of oneself.
+
+{12} 'The Eve of Dame Camelia,' or 'Tsubaki-Hime no Yuu' (「椿姫の夕」), is the
+Japanese title of Verdi's opera 'La Traviata,' based on Dumas's novel 'La Dame
+aux Camelias.'  'Tsubaki' (「椿」) means 'camellia.'
+
+{13} 'Flower-Troupe' is probably the best translation for 'Hana-Gumi'
+(「花組」).  Since '-gumi' simply means 'group' in the general sense, it could
+be used either to mean a troupe of soldiers or a troupe of actors.
+
+{14} A bromide is a chemical compound of an ion of the halogen bromine with a
+more electropositive element or radical, e.g. silver.  Silver bromide (AgBr) is
+a highly photogenic material used in photographic film.  In the more common
+sense, 'bromide,' which refers to collectible photographs or pictures that
+resemble oversized trading cards, most likely comes from 'bromide paper,'
+photographic printing paper with silver bromide emulsion.
+
+{15} A 'sen' (「銭」) is a unit of currency worth one hundredth of a yen.
+
+{16} 'Kagekidan,' when written 「華撃団」, as Ohgami has been saying it up to
+this point, means 'floral assault group.'  However, Iris's speech is written in
+hiragana (the Japanese syllabary, sort of analogous to an alphabet), so the
+meaning of the word is not immediately evident, hinting at an alternate writing
+(and hence meaning) which will be made clear later.  (C.f. note {18}.)
+
+{17} A 'katusha' ('katyusha'? 「カチューシャ」) is a hairband worn in the front
+of the head that curves from one ear to the other; this is what Sumire is
+wearing in her hair.  The term comes from the name of the heroine of the play
+based on Tolstoy's novel 'Voskresenia' ('Resurrection,' or in Japanese,
+'Fukkatsu' (「復活」)), played, rather fittingly for Sakura Wars, by the actress
+Matsui Sumako in the Taisho era.
+
+{18} 'Teikoku Kagekidan' is a play on words central to all of Sakura Wars. 
+'Teikoku' (「帝国」) simply means 'empire.'  'Kagekidan,' however, can mean one
+of two different things in the context of Sakura Wars depending on how it is
+written.  Written 「華撃団」, it translates to 'Floral Assault Group,' to which
+Ohgami originally believed he was being transferred.  Written 「歌劇団」, it
+means 'opera troupe.'  As usual, the pun doesn't translate into English, but I
+tried my best matching the sounds in 'assault group' with 'opera troupe.'
+
+It is perhaps worth mentioning that Sakura Wars's Imperial Opera Troupe seems to
+bear more than a passing nod to another kagekidan, the 'Takarazuka Revue
+Company.'  The Takarazuka Kagekidan, like the Teikoku, was established in the
+Taisho era and also bears the unique distinction of featuring an all-female
+cast, playing both female and male roles, who perform musicals from a variety of
+genres.  The Takarazuka is divided into several groups, including the "Flower"
+(hana-gumi), "Snow" (yuki-gumi), "Moon" (tsuki-gumi), and "Star" (hoshi-gumi),
+some of which also appear in the Teikoku Kagekidan.  The similarities are well
+apparent.  And the Takarazuka, which enjoys considerable popularity, still
+exists today.  For further information, try the official Takarazuka site at
+<http://www.hankyu.co.jp/kageki/>.
+
+{19} Another pun.  'Butai,' written 「部隊」, means 'squad' or 'corps'; written
+「舞台」, it means 'stage.'
+
+{20} "GA-GAAAAAN!" is more onomatopoeia, this one expressing Ohgami's shock.
+
+{21} 'Kyuutei' (宮廷) means 'the Court,' i.e. where the Emperor or King resides. 
+'Kyuutei-geki' or 'Court plays' would thus be those plays performed in the
+Court.  'Conte' (from the French word) plays are short tales of adventure,
+according to the Merriam-Webster dictionary, although the DaiJirin 2nd Edition
+describes the conte as usually being satirical and witty, at least in the
+Japanese use of the word.
+
+{22} 'Hana-mi' (花見) or 'flower (especially cherry blossom) viewing' is one of
+the most popular springtime events in Japan.  Family and friends get together
+and sit under the fully open cherry blossoms and have a sort of picnic
+celebration.  You can catch a glimpse of this in the first scene of this chapter
+when Ohgami first encounters Sakura.  Popular among the aristocracy since the
+Heian Period (794-1185), the tradition of cherry blossom viewing spread
+throughout the populace during the Azuchi Momoyama Period (1568-1600) and still
+continues today.
+
+{23} The expression referred to here is 'hana yori dango' (「花より団子」),
+which essentially encapsulates the idea of choosing the practical over the
+aesthetic.  Iris confuses 'dango' ('dumplings') with 'taiko' ('a drum').  In
+this case, Iris is literally choosing her "big brother" over the cherry blossom
+flowers.
+
+{24} 'Masou Kihei' (「魔操機兵」) literally means 'mechanical soldiers
+controlled by evil/magic.'
+
+{25} 'Kuronosukai' (「黒之巣会」) translates to something like 'the Den of
+Black.'
+
+{26} 'Psycheons' (or perhaps 'psions,' if you prefer) are described as
+fundamental particles, not altogether unlike electrons or protons, of spiritual
+energy.  This energy is what powers the psycheon armor (i.e., the Kohbu).  The
+word I constructed here is a sort of translation of the original word 'ryoushi'
+(「霊子」) into English using Greek word roots that correspond to the characters
+used ('spirit or soul' (「霊」) and 'child' (「子」), or in this case, a suffix
+for fundamental particles; c.f. 'denshi' (「電子」) = 'electron,' 'youshi'
+(「陽子」) = 'proton').
+
+{27} 'Kiai' (「気合」) more or less means 'fighting spirit.'  Perhaps 'guts'
+might be another possible translation.  'Hissatsu kougeki' (「必殺攻撃」),
+literally 'certain-kill attack,' is a term commonly used to mean 'special
+attack.'
+
+{28} 'Wakiji' (「脇侍」) literally means 'support/flank warrior.'
+
+{29} 'Shouri no poozu…… kime!'  The phrase 'victory pose' actually appears
+completely before the ellipsis, after which the word 'kime,' which is a form of
+the verb 'kimeru' is said.  'Kimeru' means 'to decide' or 'to choose.'  In
+essence, the Flower-Troupe is saying that they're 'deciding on' their victory
+pose.  Once again, this doesn't translate well into English, so I've taken the
+liberty of omitting the 'kime' and moving the 'pose' after the ellipsis.
+
+{30} 'Amazake,' which literally means 'sweet sake,' is described as "a cultured
+sweet thick creamy glutinous rice product with virtually no alcohol content"
+(http://www.chariot.net.au/~dna/koji.html#Amasake).
+
+{31} This is the catchphrase of Sakura Wars ('Taishou-zakura ni rouman no
+arashi!!' 「太正桜に浪漫の嵐！！」).  'Taisho' is the era in which Sakura Wars
+takes place (1912-25).
+
+{-eof-}
+View in: Text Mode
+
+GameFAQsfacebook.com/GFAQstwitter.com/GameFAQsHelp / Contact UsChange Colors 
+gamespot.comgiantbomb.commetacritic.comgamerankings.com
+
+SitemapAdvertisePartnershipsCareersPrivacy PolicyAd ChoiceTerms of UseReport Ad
+
+© 2018 CBS Interactive Inc. All rights reserved.
