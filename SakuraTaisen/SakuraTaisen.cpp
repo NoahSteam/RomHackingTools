@@ -1887,7 +1887,7 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 		}
 	}
 
-	const string htmlHeader("<html>\n<head>\n<style>\ntable{border-collapse: collapse;} table, th, td {border: 1px solid black;}</style>\n");
+	const string htmlHeader("<html>\n<head><style>textarea {width: 100%;top: 0; left: 0; right: 0; bottom: 0; position: absolute; resize: none;-webkit-box-sizing: border-box; -moz-box-sizing: border-box; box-sizing: border-box;} table {border-collapse: collapse;} table, th, td { position: relative; border: 1px solid black;}</style>");
 
 	//Create html files for each directory
 	static char buffer[2048];
@@ -1952,14 +1952,22 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 		//SaveEdits function
 		htmlFile.WriteString("<script type=\"text/javascript\">\n");
 
-		htmlFile.WriteString("function SaveEdits(inDialogImageName, inDivID){\n");
-			htmlFile.WriteString("\tvar translatedText = document.getElementById(inDivID).innerHTML;\n");
+		htmlFile.WriteString("function SaveEdits(inDialogImageName, inDivID)\n{\n");
+			htmlFile.WriteString("\tvar translatedText = document.getElementById(inDivID).value;\n");
 			htmlFile.WriteString("\tvar fileName = document.getElementById(\"FileName\").innerHTML;\n\n");
 			htmlFile.WriteString("\t$.ajax({\n");
 			htmlFile.WriteString("\ttype: \"POST\",\n");
 			htmlFile.WriteString("\turl: \"UpdateTranslation.php\",\n");
 			htmlFile.WriteString("\tdata: { inTBLFileName: fileName, inImageName:inDialogImageName, inTranslation:translatedText, inDivId:inDivID },\n");
-			htmlFile.WriteString("\tsuccess: null\n});\n}\n\n");
+			htmlFile.WriteString("\tsuccess: function(result)\n\t{\n");
+				htmlFile.WriteString("\t\tif( translatedText != \"Untranslated\" && translatedText != \"<div>Untranslated</div>\")\n\t{\n");
+					htmlFile.WriteString("\t\t\tvar trId = \"tr_\" + inDivID;\n");
+					htmlFile.WriteString("\t\t\tdocument.getElementById(trId).style.backgroundColor = \"#e3fec8\";\n\t}\n");
+				htmlFile.WriteString("\t\telse\n\t{\n");
+					htmlFile.WriteString("\t\tvar trId = \"tr_\" + inDivID;\n");
+					htmlFile.WriteString("\t\tdocument.getElementById(trId).style.backgroundColor = \"#fefec8\";\n\t}\n\t}");
+				htmlFile.WriteString("\n\t});\n}\n\n");
+
 	
 		//LoadData function
 		htmlFile.WriteString("function LoadData(){\n");
@@ -1976,7 +1984,8 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 				htmlFile.WriteString("\t\tvar english   = jsonEntry.English.replace(/\\\\/g, \'\');\n");
 				htmlFile.WriteString("\t\tvar divId     = \"#\" + jsonEntry.DivId;\n");
 				htmlFile.WriteString("\t\tvar trId      = \"tr_\" + jsonEntry.DivId;\n");
-				htmlFile.WriteString("\t document.getElementById(trId).style.backgroundColor = \"#e3fec8\";\n");
+				htmlFile.WriteString("\t\tif( english != \"Untranslated\" && english != \"<div>Untranslated</div>\")\n\t{\n");
+					htmlFile.WriteString("\t\tdocument.getElementById(trId).style.backgroundColor = \"#e3fec8\";\n\t}\n");
 				htmlFile.WriteString("\t\t$(divId).html(english);\n}\n},\n");
 			htmlFile.WriteString("\terror: function()\n{\n");
 			htmlFile.WriteString("\talert('Unable to load data');\n}\n});\n}\n\n");
@@ -2049,7 +2058,8 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 					snprintf(buffer, 2048, "<td width=240><img src=\"..\\ExtractedData\\Dialog\\%sTBL\\%s\"></td>", infoFileName.c_str(), fileNameInfo.mFileName.c_str());
 					htmlFile.WriteString(string(buffer));
 
-					snprintf(buffer, 2048, "<td width=480><div id=\"edit_%s\" contenteditable=\"true\" onChange=\"SaveEdits('%i.bmp', 'edit_%i')\">Untranslated</div></td>", pVarSuffix, num + 1, num + 1);
+					//snprintf(buffer, 2048, "<td width=480><div id=\"edit_%s\" contenteditable=\"true\" onChange=\"SaveEdits('%i.bmp', 'edit_%i')\">Untranslated</div></td>", pVarSuffix, num + 1, num + 1);
+					snprintf(buffer, 2048, "<td width=480><textarea id=\"edit_%s\" contenteditable=true onchange=\"SaveEdits('%i.bmp', 'edit_%i') style=\"border: none; width: 100%%; -webkit-box-sizing: border-box; -moz-box-sizing: border-box; box-sizing: border-box;\">Untranslated</textarea></td>", pVarSuffix, num + 1, num + 1);
 					htmlFile.WriteString(string(buffer));
 
 					snprintf(buffer, 2048, "<td align=\"center\" width=120>%02x (%i)</td>", id, id);
