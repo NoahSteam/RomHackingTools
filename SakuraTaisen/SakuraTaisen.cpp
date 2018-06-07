@@ -1943,7 +1943,11 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 		//Common header stuff
 		htmlFile.WriteString(htmlHeader);
 		fprintf(htmlFile.GetFileHandle(), "<div id=\"FileName\" style=\"display: none;\">%s</div>\n", tblFileName.c_str());
-		htmlFile.WriteString("<script src=\"https://ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js\"></script>\n\n");		
+		htmlFile.WriteString("<script src=\"https://ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js\">\n\n");
+
+		//Load Data on startup
+		htmlFile.WriteString("\t$( window ).on( \"load\", function()\n {\n\t\tOnStartup();\n});\n\n");
+		htmlFile.WriteString("</script>\n\n");
 
 		//SaveEdits function
 		htmlFile.WriteString("<script type=\"text/javascript\">\n");
@@ -1971,6 +1975,8 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 				htmlFile.WriteString("\t\tvar jsonEntry = json[i];\n");
 				htmlFile.WriteString("\t\tvar english   = jsonEntry.English.replace(/\\\\/g, \'\');\n");
 				htmlFile.WriteString("\t\tvar divId     = \"#\" + jsonEntry.DivId;\n");
+				htmlFile.WriteString("\t\tvar trId      = \"tr_\" + jsonEntry.DivId;\n");
+				htmlFile.WriteString("\t document.getElementById(trId).style.backgroundColor = \"#e3fec8\";\n");
 				htmlFile.WriteString("\t\t$(divId).html(english);\n}\n},\n");
 			htmlFile.WriteString("\terror: function()\n{\n");
 			htmlFile.WriteString("\talert('Unable to load data');\n}\n});\n}\n\n");
@@ -1996,16 +2002,16 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 		htmlFile.WriteString("</head>\n\n");
 
 		//Call startup function
-		htmlFile.WriteString("<body onload=\"OnStartup()\">\n");
+		htmlFile.WriteString("<body>\n");
 
 		fprintf(htmlFile.GetFileHandle(), "<article><header align=\"center\"><h1>Dialog For %s</h1></header></article>\n", iter->first.c_str());
 		
 		//Load Data button
-		htmlFile.WriteString("<br><input align=\"center\" type=\"button\" value=\"Load Data\" onclick=\"LoadData()\"/>");
+		htmlFile.WriteString("<br><table align=\"center\"><tr><td><input align=\"center\" type=\"button\" value=\"Load Data\" onclick=\"LoadData()\"/></td></tr></table><br>");
 
 		//Write table
 		htmlFile.WriteString("<table>\n");
-			htmlFile.WriteString("\t<tr>\n");
+		htmlFile.WriteString("\t<tr bgcolor=\"#c8c8fe\">\n");
 				htmlFile.WriteString("\t<th>#</th>\n");
 				htmlFile.WriteString("\t<th>Japanese</th>\n");
 				htmlFile.WriteString("\t<th>English</th>\n");
@@ -2024,10 +2030,19 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 			for(const FileNameContainer& fileNameInfo : iter->second)
 			{
 				const unsigned short id = sakuraFileIter->second->mStringInfoArray[num].mUnknown;
-				const char* bgColor = (id >> 8) == 0x4e ? "FFAAAA" : "FFFFFF"; //LIPS event are highlighted in pink
+				const int order         = bDialogOrderExists && dialogOrderIter->second.idAndOrder.find(id) != dialogOrderIter->second.idAndOrder.end() ? dialogOrderIter->second.idAndOrder.find(id)->second : -1;
+				const char* bgColor = "fefec8";
+				if( (id >> 8) == 0x4e )
+				{
+					bgColor = "fec8c8"; //LIPS event are highlighted in pink
+				}
+				else if( order == -1 )
+				{
+					bgColor = "B9B9B9"; //Gray out rows that don't need translations
+				}
 
 				const char* pVarSuffix = fileNameInfo.mNoExtension.c_str();
-				fprintf(htmlFile.GetFileHandle(), "<tr bgcolor=\"#%s\">\n", bgColor);
+				fprintf(htmlFile.GetFileHandle(), "<tr id=\"tr_edit_%i\" bgcolor=\"#%s\">\n", num + 1, bgColor);
 					snprintf(buffer, 2048, "<td align=\"center\" width=20>%i</td>", num + 1);
 					htmlFile.WriteString(string(buffer));
 
@@ -2040,7 +2055,6 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 					snprintf(buffer, 2048, "<td align=\"center\" width=120>%02x (%i)</td>", id, id);
 					htmlFile.WriteString(string(buffer));
 					
-					const int order = bDialogOrderExists && dialogOrderIter->second.idAndOrder.find(id) != dialogOrderIter->second.idAndOrder.end() ? dialogOrderIter->second.idAndOrder.find(id)->second : -1;
 					snprintf(buffer, 2048, "<td align=\"center\" width=120>Order: %i</td>", order);
 					htmlFile.WriteString(string(buffer));
 
