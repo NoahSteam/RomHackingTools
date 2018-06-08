@@ -446,9 +446,9 @@ bool BitmapWriter::SaveAsPNG(const string& inFileName, int inWidth, int inHeight
 	//generate palette
 	for(int i = 0; i < 16; i++)
 	{
-		const unsigned char r = (unsigned char)floor( ((unsigned char)(pInPaletteData[i+0])/255.f)*31.f + 0.5f);
-		const unsigned char g = (unsigned char)floor( ((unsigned char)(pInPaletteData[i+1])/255.f)*31.f + 0.5f);
-		const unsigned char b = (unsigned char)floor( ((unsigned char)(pInPaletteData[i+2])/255.f)*31.f + 0.5f);
+		const unsigned char b = pInPaletteData[i+0];
+		const unsigned char g = pInPaletteData[i+1];
+		const unsigned char r = pInPaletteData[i+2];
 
 		lodepng_palette_add(&state.info_png.color, r, g, b, 255);
 		lodepng_palette_add(&state.info_raw, r, g, b, 255);
@@ -463,7 +463,7 @@ bool BitmapWriter::SaveAsPNG(const string& inFileName, int inWidth, int inHeight
 	
 	//encode and save
 	std::vector<unsigned char> buffer;
-	unsigned error = lodepng::encode(buffer, (const unsigned char*)pInPaletteData, inWidth, abs(inHeight), state);
+	unsigned error = lodepng::encode(buffer, (const unsigned char*)pInColorData, inWidth, abs(inHeight), state);
 	if(error)
 	{
 		return false;

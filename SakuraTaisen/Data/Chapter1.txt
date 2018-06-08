@@ -579,7 +579,7 @@ it for a new one for me?
 - time up - {Su-}
 =
 - a >
-{Ohgami} Why should I have to do such a thing......?  I refuse!
+{Ohgami} Why should I have to do such a thing......?  I refuse! [TODO: Get help from Ahmet and Eric]
 
 In the first place, that's no way to make a request of someone!
 
@@ -643,7 +643,7 @@ Let's just keep what I said just now a secret from Mr. Yoneda!  Is that clear?
 {Ohgami} Waah!  Wh-what are you doing all of a sudden!?!
 
 {Sumire} Eh-heh, there's no need to be shy.  That was just to see that the
-favor's returned......  I mean, just to see you off.
+favor's returned......  I mean, just to see you off.  [TODO HERE 163]
 
 {Ohgami} Um, excuse me......  Wh-where might Lieutenant General Yoneda be!?
 

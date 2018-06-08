@@ -2059,7 +2059,7 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 					htmlFile.WriteString(string(buffer));
 
 					//snprintf(buffer, 2048, "<td width=480><div id=\"edit_%s\" contenteditable=\"true\" onChange=\"SaveEdits('%i.bmp', 'edit_%i')\">Untranslated</div></td>", pVarSuffix, num + 1, num + 1);
-					snprintf(buffer, 2048, "<td width=480><textarea id=\"edit_%s\" contenteditable=true onchange=\"SaveEdits('%i.bmp', 'edit_%i') style=\"border: none; width: 100%%; -webkit-box-sizing: border-box; -moz-box-sizing: border-box; box-sizing: border-box;\">Untranslated</textarea></td>", pVarSuffix, num + 1, num + 1);
+					snprintf(buffer, 2048, "<td width=480><textarea id=\"edit_%s\" contenteditable=true onchange=\"SaveEdits('%i.bmp', 'edit_%i')\" style=\"border: none; width: 100%%; -webkit-box-sizing: border-box; -moz-box-sizing: border-box; box-sizing: border-box;\">Untranslated</textarea></td>", pVarSuffix, num + 1, num + 1);
 					htmlFile.WriteString(string(buffer));
 
 					snprintf(buffer, 2048, "<td align=\"center\" width=120>%02x (%i)</td>", id, id);
@@ -2068,7 +2068,7 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 					snprintf(buffer, 2048, "<td align=\"center\" width=120>Order: %i</td>", order);
 					htmlFile.WriteString(string(buffer));
 
-				htmlFile.WriteString("<tr>\n");
+				htmlFile.WriteString("</tr>\n");
 
 				++num;
 			}
