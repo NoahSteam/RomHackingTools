@@ -442,18 +442,25 @@ bool BitmapWriter::SaveAsPNG(const string& inFileName, int inWidth, int inHeight
 {
 	//create encoder and set settings and info (optional)
 	lodepng::State state;
+	
+	
+	if( inPaletteSize != 64 )
+	{
+		printf("Unable to save PNG for %s.  Only 4bit paletted images supported.\n", inFileName.c_str());
+		return false;
+	}
 
 	//generate palette
-	for(int i = 0; i < 16; i++)
+	for(int i = 0; i < inPaletteSize; i += 4)
 	{
-		const unsigned char b = pInPaletteData[i+0];
+		const unsigned char r = pInPaletteData[i+0];
 		const unsigned char g = pInPaletteData[i+1];
-		const unsigned char r = pInPaletteData[i+2];
+		const unsigned char b = pInPaletteData[i+2];
 
 		lodepng_palette_add(&state.info_png.color, r, g, b, 255);
 		lodepng_palette_add(&state.info_raw, r, g, b, 255);
 	}
-
+	
 	//both the raw image and the encoded image must get colorType 3 (palette)
 	state.info_png.color.colortype = LCT_PALETTE; //if you comment this line, and create the above palette in info_raw instead, then you get the same image in a RGBA PNG.
 	state.info_png.color.bitdepth  = 4;
