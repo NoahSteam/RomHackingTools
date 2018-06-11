@@ -1770,7 +1770,7 @@ bool FixupSakura(const string& rootDir)
 
 struct DialogOrder
 {
-	map<unsigned short, int> idAndOrder;
+	map<unsigned short, vector<int>> idAndOrder;
 	map<int, unsigned short> orderAndId;
 };
 
@@ -1809,10 +1809,12 @@ bool FindDialogOrder(const string& rootSakuraTaisenDirectory, map<string, Dialog
 		int appearance = 0;
 		while (index + 5 < infoData.GetDataSize())
 		{
-			if (pData[index] == 0x22 && pData[index + 1] == 0x80 && pData[index + 2] == 0x00)
+			if( (pData[index] == 0x22 && pData[index + 1] == 0x80 && pData[index + 2] == 0x00) ||
+				(pData[index] == 0x2E && pData[index + 1] == 0x80 && pData[index + 2] == 0x00)
+				)
 			{
 				unsigned short id = pData[index + 4] + (pData[index + 3] << 8);
-				outOrder[infoFileNameInfo.mNoExtension].idAndOrder[id]         = appearance;
+				outOrder[infoFileNameInfo.mNoExtension].idAndOrder[id].push_back(appearance);
 				outOrder[infoFileNameInfo.mNoExtension].orderAndId[appearance] = id;
 
 				++appearance;
@@ -1960,11 +1962,11 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 			htmlFile.WriteString("\turl: \"UpdateTranslation.php\",\n");
 			htmlFile.WriteString("\tdata: { inTBLFileName: fileName, inImageName:inDialogImageName, inTranslation:translatedText, inDivId:inDivID },\n");
 			htmlFile.WriteString("\tsuccess: function(result)\n\t{\n");
+				htmlFile.WriteString("\t\tvar trId = \"tr_\" + inDivID;\n");
 				htmlFile.WriteString("\t\tif( translatedText != \"Untranslated\" && translatedText != \"<div>Untranslated</div>\")\n\t{\n");
-					htmlFile.WriteString("\t\t\tvar trId = \"tr_\" + inDivID;\n");
-					htmlFile.WriteString("\t\t\tdocument.getElementById(trId).style.backgroundColor = \"#e3fec8\";\n\t}\n");
+					htmlFile.WriteString("\t\t\tif( document.getElementById(trId).bgColor != \"#fec8c8\" )\n\t{\n");						
+						htmlFile.WriteString("\t\t\t\tdocument.getElementById(trId).bgColor = \"#e3fec8\";\n\t\t}\n\t}\n");
 				htmlFile.WriteString("\t\telse\n\t{\n");
-					htmlFile.WriteString("\t\tvar trId = \"tr_\" + inDivID;\n");
 					htmlFile.WriteString("\t\tdocument.getElementById(trId).style.backgroundColor = \"#fefec8\";\n\t}\n\t}");
 				htmlFile.WriteString("\n\t});\n}\n\n");
 
@@ -1984,8 +1986,8 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 				htmlFile.WriteString("\t\tvar english   = jsonEntry.English.replace(/\\\\/g, \'\');\n");
 				htmlFile.WriteString("\t\tvar divId     = \"#\" + jsonEntry.DivId;\n");
 				htmlFile.WriteString("\t\tvar trId      = \"tr_\" + jsonEntry.DivId;\n");
-				htmlFile.WriteString("\t\tif( english != \"Untranslated\" && english != \"<div>Untranslated</div>\")\n\t{\n");
-					htmlFile.WriteString("\t\tdocument.getElementById(trId).style.backgroundColor = \"#e3fec8\";\n\t}\n");
+				htmlFile.WriteString("\t\tif( document.getElementById(trId).bgColor != \"#fec8c8\" && english != \"Untranslated\" && english != \"<div>Untranslated</div>\")\n\t{\n");
+					htmlFile.WriteString("\t\tdocument.getElementById(trId).bgColor = \"#e3fec8\";\n\t}\n");
 				htmlFile.WriteString("\t\t$(divId).html(english);\n}\n},\n");
 			htmlFile.WriteString("\terror: function()\n{\n");
 			htmlFile.WriteString("\talert('Unable to load data');\n}\n});\n}\n\n");
@@ -2013,8 +2015,28 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 		//Call startup function
 		htmlFile.WriteString("<body>\n");
 
+		htmlFile.WriteString("<?php include 'GetUserPermissions.php';\n");
+			htmlFile.WriteString("\t$bPermissionFound = false;\n");
+			htmlFile.WriteString("\tforeach ($allowedFiles as $value)\n{");		
+				fprintf(htmlFile.GetFileHandle(), "\t\tif( $value == \"%s\" )\n\t\t{\n", tblFileName.c_str());
+					htmlFile.WriteString("\t\t\t$bPermissionFound = true;\n");
+					htmlFile.WriteString("\t\t\tbreak;\n\t\t}\n\t}");
+		htmlFile.WriteString("if( $bPermissionFound )\n{\n?>");
+
 		fprintf(htmlFile.GetFileHandle(), "<article><header align=\"center\"><h1>Dialog For %s</h1></header></article>\n", iter->first.c_str());
 		
+		htmlFile.WriteString("<br>\n");
+		htmlFile.WriteString("Instructions:<br>\n");
+		htmlFile.WriteString("-Skip any row that is grayed out.<br>\n");
+		htmlFile.WriteString("-Your changes are automatically saved.<br>\n");
+		htmlFile.WriteString("-Press the Load Data button when you come back to the page to load your changes.<br><br>\n");
+		htmlFile.WriteString("-Use only a single space after a period.<br>\n");
+		htmlFile.WriteString("-Pink rows are LIPS events where the user has to pick which line to say.  When translating these, insert a \" &lt;br&gt; \" without the quotes to signigy the next option.<br><br>\n");
+		htmlFile.WriteString("For example: The following line has two options.<br>\n");		
+		htmlFile.WriteString("<img src=\"..\\ExtractedData\\Dialog\\0100TBL\\67.png\"><br>\n");
+		htmlFile.WriteString("It would be translated as: <br>\n");
+		htmlFile.WriteString("I'm on duty! &lt;br&gt; First I'd like to know more about you.<br>\n\n");
+
 		//Load Data button
 		htmlFile.WriteString("<br><table align=\"center\"><tr><td><input align=\"center\" type=\"button\" value=\"Load Data\" onclick=\"LoadData()\"/></td></tr></table><br>");
 
@@ -2039,13 +2061,13 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 			for(const FileNameContainer& fileNameInfo : iter->second)
 			{
 				const unsigned short id = sakuraFileIter->second->mStringInfoArray[num].mUnknown;
-				const int order         = bDialogOrderExists && dialogOrderIter->second.idAndOrder.find(id) != dialogOrderIter->second.idAndOrder.end() ? dialogOrderIter->second.idAndOrder.find(id)->second : -1;
+				const vector<int>* pOrder = bDialogOrderExists && dialogOrderIter->second.idAndOrder.find(id) != dialogOrderIter->second.idAndOrder.end() ? &dialogOrderIter->second.idAndOrder.find(id)->second : nullptr;
 				const char* bgColor = "fefec8";
 				if( (id >> 8) == 0x4e )
 				{
 					bgColor = "fec8c8"; //LIPS event are highlighted in pink
 				}
-				else if( order == -1 )
+				else if( !pOrder )
 				{
 					bgColor = "B9B9B9"; //Gray out rows that don't need translations
 				}
@@ -2059,20 +2081,41 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 					htmlFile.WriteString(string(buffer));
 
 					//snprintf(buffer, 2048, "<td width=480><div id=\"edit_%s\" contenteditable=\"true\" onChange=\"SaveEdits('%i.bmp', 'edit_%i')\">Untranslated</div></td>", pVarSuffix, num + 1, num + 1);
-					snprintf(buffer, 2048, "<td width=480><textarea id=\"edit_%s\" contenteditable=true onchange=\"SaveEdits('%i.png', 'edit_%i')\" style=\"border: none; width: 100%%; -webkit-box-sizing: border-box; -moz-box-sizing: border-box; box-sizing: border-box;\">Untranslated</textarea></td>", pVarSuffix, num + 1, num + 1);
+					snprintf(buffer, 2048, "<td width=480><textarea id=\"edit_%s\" contenteditable=true onchange=\"SaveEdits('%i.bmp', 'edit_%i')\" style=\"border: none; width: 100%%; -webkit-box-sizing: border-box; -moz-box-sizing: border-box; box-sizing: border-box;\">Untranslated</textarea></td>", pVarSuffix, num + 1, num + 1);
 					htmlFile.WriteString(string(buffer));
 
 					snprintf(buffer, 2048, "<td align=\"center\" width=120>%02x (%i)</td>", id, id);
 					htmlFile.WriteString(string(buffer));
 					
-					snprintf(buffer, 2048, "<td align=\"center\" width=120>Order: %i</td>", order);
-					htmlFile.WriteString(string(buffer));
+					if( pOrder )
+					{
+						htmlFile.WriteString("<td align=\"center\" width=120>");
+
+						for(size_t orderIndex = 0; orderIndex < pOrder->size(); ++orderIndex)
+						{
+							snprintf(buffer, 2048, "Order: %i", (*pOrder)[orderIndex]);
+							htmlFile.WriteString(string(buffer));
+							if( orderIndex + 1 < pOrder->size() )
+							{
+								htmlFile.WriteString(", ");
+							}
+						}
+						htmlFile.WriteString("</td>");
+					}
+					else
+					{
+						snprintf(buffer, 2048, "<td align=\"center\" width=120>Order: -1</td>");
+					}
+					
+					
 
 				htmlFile.WriteString("</tr>\n");
 
 				++num;
 			}
 		htmlFile.WriteString("</table><br>\n");
+
+		htmlFile.WriteString("<?php\n}\n?>");
 
 		//End file
 		htmlFile.WriteString("</body>\n");

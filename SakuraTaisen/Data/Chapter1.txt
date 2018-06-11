@@ -135,14 +135,14 @@ screen will appear with the following menu:
 
 ディスク１の最初から  Start from the beginning of disc 1
 セーブの続きから      Continue a saved game
-帝劇の長い一日        A long day in the Imperial Theatre
+帝劇の長い一日        A long day in the Imperial Theater
 インターネット        Internet (Dreamcast version only)
 オプション            Option
 
 Certain menu items may not be available.  'Start from the beginning of
 disc 1' is self-explanatory.  'Continue a saved game' allows you to load a
 game saved at an 'eyecatch' (pre-set points during the game at which you can
-save your progress).  'A long day in the Imperial Theatre' is essentially a
+save your progress).  'A long day in the Imperial Theater' is essentially a
 "bonus area" in which you can view previously seen movies, play mini-games
 you have found during game play, and the like.
 
@@ -241,7 +241,7 @@ Japan during this time in our world holds true; however, technology here is
 heavily advanced thanks to the power of steam, the benefits of which are
 seen rampant throughout Sakura Wars.  Yet unbeknownst to the complacent
 populace, something dark and foreboding seeks to turn this world on its
-end......
+end……
 
 === Opening Credits Translation ==========
 
@@ -323,13 +323,13 @@ You are to head to Ueno Park to join up with the corps.
                                    Imperial Army Lieutenant General {3}
                                                            Yoneda Ikki
 
-{Hanakoji} ......Ohgami Ichiro.  As of today, you will be transferring to the
+{Hanakoji} ……Ohgami Ichiro.  As of today, you will be transferring to the
 Imperial Floral Assault Group, Flower-Troupe.
 
 {Ohgami} Yes, sir!  Ohgami Ichiro, prepared to work to the utmost limits of my
 abilities, sir!
 
-{Hanakoji} Yes......  Excellent reply.
+{Hanakoji} Yes……  Excellent reply.
 
 It would not do for a politician such as myself to discuss the military secrets
 of the Floral Assault Group with you here.
@@ -350,41 +350,41 @@ when I recommended you as captain.
 
 {Ohgami} Ah, what nice weather!  And the Ueno cherry blossoms are in full bloom.
 
-Now then......  Where do you suppose the meeting place is......?  I guess I'll
+Now then……  Where do you suppose the meeting place is……?  I guess I'll
 try walking around a bit more.
 
-That reminds me......  I believe Ueno Park was where that monster disturbance
-happened just a while ago......
+That reminds me……  I believe Ueno Park was where that monster disturbance
+happened just a while ago……
 
 Apparently, the one who cut down that monster, with one blow, was a young
-girl......
+girl……
 
-........................
+……………………
 
 He said someone from the Imperial Floral Assault Group would come to meet me;
 when do you suppose they'll show up?
 
-What's this?  That girl......
+What's this?  That girl……
 
-......!  She's coming this way......
+……!  She's coming this way……
 
-{Girl} ......Excuse me......  Are you Ensign Ohgami Ichiro?
+{Girl} ……Excuse me……  Are you Ensign Ohgami Ichiro?
 
-{Ohgami} Ye-yes.  I happen to be Ohgami......
+{Ohgami} Ye-yes.  I happen to be Ohgami……
 
-Um......  Forgive me, but, who might you be?
+Um……  Forgive me, but, who might you be?
 
 {Girl} I'm Shinguji Sakura.
 
 I received instructions from Lieutenant General Yoneda to provide escort for an
 Ensign Ohgami.
 
-{Ohgami} ......From Lieutenant General Yoneda?
+{Ohgami} ……From Lieutenant General Yoneda?
 
-(I'd heard someone would be coming to meet me...... but I never would have
-expected it to be a woman......)
+(I'd heard someone would be coming to meet me…… but I never would have
+expected it to be a woman……)
 
-Um, excuse me...... would you happen to be from the Imperial Floral Assault
+Um, excuse me…… would you happen to be from the Imperial Floral Assault
 Group!?
 
 {Sakura} Yes!
@@ -393,21 +393,21 @@ Imperial Floral Assault Group, Flower-Troupe, Shinguji Sakura.
 
 Pleased to make your acquaintance.
 
-{Ohgami} Ah......  I'm Imperial Navy Ensign Ohgami Ichiro.
+{Ohgami} Ah……  I'm Imperial Navy Ensign Ohgami Ichiro.
 
-Still...... to think a young woman like yourself would be a member of the
-squad.....  Frankly, I'm a little surprised.
+Still…… to think a young woman like yourself would be a member of the
+squad…..  Frankly, I'm a little surprised.
 
 {Sakura} Do you find women difficult to rely on?
 
-{Ohgami} Ah, n-no......  It's not that......
+{Ohgami} Ah, n-no……  It's not that……
 
-(......I suppose only in a covert squad would it not be unusual to find female
-squad members like her......)
+(……I suppose only in a covert squad would it not be unusual to find female
+squad members like her……)
 
-{Sakura}......Now then, let's proceed to the Grand Imperial Theatre.
+{Sakura}……Now then, let's proceed to the Grand Imperial Theater.
 
-{Ohgami} Eh - theatre...... you say!?
+{Ohgami} Eh - theater…… you say!?
 
 === LIPS 1-1 ==>
 - a - I'm on duty!
@@ -417,11 +417,11 @@ squad members like her......)
 - a >
 {Ohgami} I'm on duty!  Unfortunately I don't have time to spend seeing a play.
 
-{Sakura} You're mistaken.  Inside the Grand Imperial Theatre is the Imperial
+{Sakura} You're mistaken.  Inside the Grand Imperial Theater is the Imperial
 Floral Assault Group headquarters.
 
-{Ohgami} Ehh!?  The base of a covert squad is inside a theatre!?  That can't
-be......  No, wait a second?
+{Ohgami} Ehh!?  The base of a covert squad is inside a theater!?  That can't
+be……  No, wait a second?
 
 In order to conceal oneself from the enemy's eyes, first do so from one's
 allies'.  I see.
@@ -434,7 +434,7 @@ Now then, let's proceed.
 - b >
 {Ohgami} First I'd like to know more about you.
 
-{Sakura+} About me, you say......?
+{Sakura+} About me, you say……?
 
 My name is Shinguji Sakura.  I've just come here from Sendai.  I'm a complete
 newcomer who's just joined the Tei-Geki. {4}
@@ -447,13 +447,13 @@ life on the line.
 {Ohgami} I see - that's an excellent attitude.  I'm relieved to hear those
 words.  That is how a member of a secret corps should be.
 
-......That would mean the Imperial Floral Assault Group has something like a
+……That would mean the Imperial Floral Assault Group has something like a
 secret weapon, wouldn't it?
 
 {Sakura} Making the 'Kohbu' work is a tough job.  But as fellow rookies, let's
 do our best together. {5}
 
-{Ohgami} (Kohbu?  Ahh...... the name of the secret weapon.  I wonder what sort
+{Ohgami} (Kohbu?  Ahh…… the name of the secret weapon.  I wonder what sort
 of thing it is.)
 
 {Sakura} Come, Lieutenant General Yoneda is waiting!  Let's go!
@@ -462,15 +462,15 @@ of thing it is.)
 < b -
 
 - time up >
-{Ohgami} (Why do I need to go to a theatre......?)
+{Ohgami} (Why do I need to go to a theater……?)
 
-(Is she really...... a member of the Imperial Floral Assault Group?)
+(Is she really…… a member of the Imperial Floral Assault Group?)
 
 {Sakura-} What's the matter?  You seem distracted.
 
 {Ohgami} O-oh, no!  It-it's nothing!
 
-(It couldn't be...... I'm overthinking this.  This girl knew my name, didn't
+(It couldn't be…… I'm overthinking this.  This girl knew my name, didn't
 she?)
 
 {Sakura} Now then, let's go.  Lieutenant General Yoneda is waiting.
@@ -481,26 +481,26 @@ she?)
 
 * * *
 
-{Ohgami} So this is the Grand Imperial Theatre that was newly built last
-year.....  I never would have expected it to be right in the middle of
-Ginza...... {6}
+{Ohgami} So this is the Grand Imperial Theater that was newly built last
+year…..  I never would have expected it to be right in the middle of
+Ginza…… {6}
 
-It's a big building......
+It's a big building……
 
 Surely, no one would notice that the headquarters of a covert squad are inside a
-theatre like this......
+theater like this……
 
 {Sakura} Mr. Ohgami, this is your first time here, isn't it.  Now then, let's go
 inside through the main lobby.
 
-{Ohgami} Wow......  What an impressive entranceway.  Still, it seems a bit
-careless not to have a lookout posted......
+{Ohgami} Wow……  What an impressive entranceway.  Still, it seems a bit
+careless not to have a lookout posted……
 
-Still...... it's rather quiet, isn't it.
+Still…… it's rather quiet, isn't it.
 
-{Sakura} Well, today we're only performing at night......
+{Sakura} Well, today we're only performing at night……
 
-{Ohgami} (Performing at night?  ......Does she mean nighttime drills?)
+{Ohgami} (Performing at night?  ……Does she mean nighttime drills?)
 
 {Sakura} But, before long, we'll be opening up, and the audience will come
 pouring back in.
@@ -509,32 +509,32 @@ pouring back in.
 
 {Ohgami} Huh!?
 
-(Wh...... who is this kid!?)
+(Wh…… who is this kid!?)
 
 {Sakura} Iris!  You mustn't tease your elders.
 
 This is Ensign Ohgami Ichiro, newly transferred to the Imperial Floral Assault
 Group.
 
-{Ohgami} Ah...... I'm...... Imperial Navy Ensign, Ohgami Ichiro.
+{Ohgami} Ah…… I'm…… Imperial Navy Ensign, Ohgami Ichiro.
 
 {Iris} Imperial Floral Assault Group, Flower-Troupe, Iris.
 
 And this is Jean-Paul, the bear, Iris's very special friend.  Get along nice
 with him.
 
-{Ohgami} (A child like this...... is a member of a covert squad?)
+{Ohgami} (A child like this…… is a member of a covert squad?)
 
-{Iris} Say, Sakura......
+{Iris} Say, Sakura……
 
 {Sakura} What's the matter?
 
-{Iris} This big brother has spiritual energy too......  He'll be fighting in a
+{Iris} This big brother has spiritual energy too……  He'll be fighting in a
 'Kohbu,' won't he. {5}
 
 {Sakura} That's right.
 
-{Iris} Iris...... hates war......  TODO: HERE 120
+{Iris} Iris…… hates war……  TODO: HERE 120
 
 {Sakura} Don't worry, Iris.  Come on, let's go to your room.  I'll read to you
 from your Mother Goose book.
@@ -546,96 +546,96 @@ office.
 
 Well then, I will now be excusing myself.
 
-{Ohgami} J......just what was that girl all about?
+{Ohgami} J……just what was that girl all about?
 
-Sakura's left, too......  That's no good.
+Sakura's left, too……  That's no good.
 
 There's nothing I can do about it.  I guess I'll just go see Lieutenant General
-Yoneda myself......
+Yoneda myself……
 
 * * *
 
 {Woman's voice} Someone!  Please lend me a hand!
 
-{Ohgami} ......Who could that be?  It sounded like a voice just came from the
-dining hall......
+{Ohgami} ……Who could that be?  It sounded like a voice just came from the
+dining hall……
 
-(Wah!  ......Wh-what a bold outfit!)
+(Wah!  ……Wh-what a bold outfit!)
 
 {Sumire} Ah!  You there!
 
-{Ohgami} ......My-myself, you mean!?
+{Ohgami} ……My-myself, you mean!?
 
 {Sumire} Who else is there?  Stop looking like a fool and come here!
 
-{Ohgami} Ye- yes, ma'am......
+{Ohgami} Ye- yes, ma'am……
 
 {Sumire} I wonder if you wouldn't perhaps pick up that dropped fork and exchange
 it for a new one for me?
 
 === LIPS 1-2 ==>
-- a - Why should I have to do such a thing......? {Su-}
+- a - Why should I have to do such a thing……? {Su-}
 - b - Why, certainly. {Su+}
 - time up - {Su-}
 =
 - a >
-{Ohgami} Why should I have to do such a thing......?  I refuse! [TODO: Get help from Ahmet and Eric]
+{Ohgami} Why should I have to do such a thing……?  I refuse! <138>
 
 In the first place, that's no way to make a request of someone!
 
 {Sumire-} My, then you mean to say I should pick it up myself?
 
 You dare to suggest that the only daughter of Kanzaki Heavy Industries, and the
-star actress of this theatre, and, and......
+star actress of this theater, and, and…… 
 
-...the top lady of Japanese high society, I, Kanzaki Sumire, should pick up a
-fork dropped on the floor!?
+…the top lady of Japanese high society, I, Kanzaki Sumire, should pick up a
+fork dropped on the floor!? <142>
 
 That is what you are saying, is it not?!  You are fired!  I shall report this to
-the manager and see to it that you are fired!
+the manager and see to it that you are fired! <143>
 
-{Ohgami} ......I happen to be Imperial Navy Ensign Ohgami Ichiro, transferred as
-of today to the Imperial Floral Assault Group.
+{Ohgami} ……I happen to be Imperial Navy Ensign Ohgami Ichiro, transferred as
+of today to the Imperial Floral Assault Group. <144>
 
 Fired you may say, but without a decree from the Navy's General Headquarters, I
-cannot leave.
+cannot leave. <145>
 
-{Sumire} ............!
+{Sumire} …………! <146>
 
-Ah......  My, oh, no......  O-ho-ho-ho-ho-ho-ho......
+Ah……  My, oh, no……  O-ho-ho-ho-ho-ho-ho……
 
-No wonder I thought I hadn't seen a waiter like you before......  Forgive me.
+No wonder I thought I hadn't seen a waiter like you before……  Forgive me. <148>
 
 Let's see - Ensign Ogawa, was it?
 
-{Ohgami} ......Ohgami.  Um, where might Lieutenant General Yoneda be?
+{Ohgami} ……Ohgami.  Um, where might Lieutenant General Yoneda be?
 
-{Sumire} Mr. Yoneda is in the manager's office within.
+{Sumire} Mr. Yoneda is in the manager's office within. <151>
 
-{Ohgami} Through this way?  Thank you very much.
+{Ohgami} Through this way?  Thank you very much. <152>
 < a -
 
 - b >
-{Ohgami} Why, certainly.  ......Here, there you are.
+{Ohgami} Why, certainly.  ……Here, there you are.
 
 {Sumire+} Thank you.  By the way - I, the top star here, Kanzaki Sumire, have
-been cast aside...
+been cast aside…
 
-...and before I was even aware, Miss Maria was made leader of our drama group. 
-What do you think of all this?
+…and before I was even aware, Miss Maria was made leader of our drama group. 
+What do you think of all this? <155>
 
 Honestly, that old fool Yoneda!  He has no eye for people!
 
-{Ohgami} (Huh......?)
+{Ohgami} (Huh……?) <157>
 
-......I happen to be Imperial Navy Ensign Ohgami Ichiro, transferred as of today
+……I happen to be Imperial Navy Ensign Ohgami Ichiro, transferred as of today
 to the Imperial Floral Assault Group.
 
-I wish to personally convey the message to Lieutenant General Yoneda......
+I wish to personally convey the message to Lieutenant General Yoneda……
 
-{Sumire} ............!
+{Sumire} …………!
 
-Oh my, what shall I do!  How rude of me.  Ho-ho-ho-ho-ho......
+Oh my, what shall I do!  How rude of me.  Ho-ho-ho-ho-ho…… <161>
 
 Let's just keep what I said just now a secret from Mr. Yoneda!  Is that clear? 
 (Chu!) {8}
@@ -643,20 +643,20 @@ Let's just keep what I said just now a secret from Mr. Yoneda!  Is that clear?
 {Ohgami} Waah!  Wh-what are you doing all of a sudden!?!
 
 {Sumire} Eh-heh, there's no need to be shy.  That was just to see that the
-favor's returned......  I mean, just to see you off.  [TODO HERE 163]
+favor's returned……  I mean, just to see you off.  [TODO HERE 164]
 
-{Ohgami} Um, excuse me......  Wh-where might Lieutenant General Yoneda be!?
+{Ohgami} Um, excuse me……  Wh-where might Lieutenant General Yoneda be!?
 
 {Sumire} Ahh, Mr. Yoneda is in the manager's office.  But is this absolutely
 clear?  You are not to mention what I just said to anyone!
 
-Do you understand, Ensign Ogawa?!
+Do you understand, Ensign Ogawa?! <167>
 
-{Ohgami} ......It's Ohgami.
+{Ohgami} ……It's Ohgami.
 
 {Sumire} Enough, begone!!
 
-{Ohgami} Ye- yes, ma'am......
+{Ohgami} Ye- yes, ma'am……
 < b -
 
 - time up >
@@ -664,24 +664,24 @@ Do you understand, Ensign Ogawa?!
 
 Cease your daydreaming, and pick up that fork right away!!
 
-{Ohgami} Why should I have to do such a thing......?  I refuse!
+{Ohgami} Why should I have to do such a thing……?  I refuse!
 
-In the first place, that's no way to make a request of someone!
+In the first place, that's no way to make a request of someone! <174>
 
 {Sumire} My, then you mean to say I should pick it up myself?
 
 You dare to suggest that the only daughter of Kanzaki Heavy Industries, and the
-star actress of this theatre, and, and......
+star actress of this theater, and, and……
 
-...the top lady of Japanese high society, I, Kanzaki Sumire, should pick up a
+…the top lady of Japanese high society, I, Kanzaki Sumire, should pick up a
 fork dropped on the floor!?
 
 That is what you are saying, is it not?!  You are fired!  I shall report this to
 the manager and see to it that you are fired!
 
-{Ohgami} (Haah?)
+{Ohgami} (Haah?) <179>
 
-(That's all well and good for her to say all of a sudden, but...... just who is
+(That's all well and good for her to say all of a sudden, but…… just who is
 this woman!?)
 
 I happen to be Imperial Navy Ensign Ohgami Ichiro, transferred as of today to
@@ -690,15 +690,15 @@ the Imperial Floral Assault Group.
 Fired you may say, but without a decree from the Navy's General Headquarters, I
 cannot leave.
 
-{Sumire} ............!
+{Sumire} …………!
 
-Ah......  My, oh, no......  O-ho-ho-ho-ho-ho-ho......
+Ah……  My, oh, no……  O-ho-ho-ho-ho-ho-ho…… <184>
 
-No wonder I thought I hadn't seen a waiter like you before......  Forgive me.
+No wonder I thought I hadn't seen a waiter like you before……  Forgive me.
 
-Let's see - Ensign Ogawa, was it?
+Let's see - Ensign Ogawa, was it? <186>
 
-{Ohgami} ......Ohgami.  Um, where might Lieutenant General Yoneda be?
+{Ohgami} ……Ohgami.  Um, where might Lieutenant General Yoneda be?
 
 {Sumire} Mr. Yoneda is in the manager's office within.
 
@@ -708,24 +708,25 @@ Let's see - Ensign Ogawa, was it?
 
 * * *
 
-{Ohgami} ......So this is the office of the head secretary of the Imperial
-Floral Assault Group, his Excellency, Lieutenant General Yoneda......
+{Ohgami} ……So this is the office of the head secretary of the Imperial
+Floral Assault Group, his Excellency, Lieutenant General Yoneda……
 
-Lieutenant General Yoneda......  An active strategist in the Russo-Japanese
-War...... {9} What sort of a person is he?
+Lieutenant General Yoneda……  An active strategist in the Russo-Japanese
+War…… {9} What sort of a person is he?
 
-{Woman} Who might you be?
+{Woman} Who might you be? <192>
 
-{Ohgami} Ah......  Forgive me.  I'm Imperial Navy Ensign, Ohgami Ichiro.
+{Ohgami} Ah……  Forgive me.  I'm Imperial Navy Ensign, Ohgami Ichiro.
 
-I would like to see his Excellency, Lieutenant General Yoneda......
+I would like to see his Excellency, Lieutenant General Yoneda……
 
 {Woman} So you're Ohgami Ichiro, newly transferred to the Tei-Geki. {4}
 
 Pleased to meet you.  I'm Maria Tachibana.
 
-{Ohgami} Miss Maria Tachibana......
+{Ohgami} Miss Maria Tachibana……
 
+<TODO: Unknown>
 === Click-LIPS 1-1 ==>
 - Maria's hair >
 {Ohgami} (Is this the color they call platinum blonde?)
@@ -736,11 +737,11 @@ Pleased to meet you.  I'm Maria Tachibana.
 < Maria's eyes #1 -
 
 - Maria's eyes #2 >
-{Ohgami} (She has such a grave expression......)
+{Ohgami} (She has such a grave expression……)
 < Maria's eyes #2 -
 
 - Maria's face #1 >
-{Ohgami} (So she's a foreigner......  Huh?  But she was speaking Japanese just
+{Ohgami} (So she's a foreigner……  Huh?  But she was speaking Japanese just
 now.)
 < Maria's face #1 -
 
@@ -751,12 +752,12 @@ now.)
 - Maria's face #2 >
 {Ohgami} (I wonder what country she's from.)
 
-{Maria} Is there...... something on my face?
+{Maria} Is there…… something on my face?
 
-{Ohgami} Ah......  N- no!
+{Ohgami} Ah……  N- no!
 
 {Maria} Lieutenant General Yoneda is in the manager's office.  I have practice,
-so if you'll excuse me......
+so if you'll excuse me…… <209> <213>
 
 And one more thing, just as a warning.  You shouldn't stare at a woman's face! 
 Now then, excuse me!
@@ -764,48 +765,48 @@ Now then, excuse me!
 
 - Maria's mouth >
 {Maria} Lieutenant General Yoneda is in the manager's office.  I have practice,
-so if you'll excuse me......
+so if you'll excuse me……
 < Maria's mouth -> end Click-LIPS 1-1
 <== Click-LIPS 1-1 ===
 
-{Ohgami} ......She seemed to be a rather strict person.  Still, I finally feel
+{Ohgami} ……She seemed to be a rather strict person.  Still, I finally feel
 as though I've met someone who actually seems like military personnel.
 
-Still, did she say - practice, was it......?  Would that be some sort of drill?
+Still, did she say - practice, was it……?  Would that be some sort of drill?
 
-Now then......  I can finally have an audience with his Excellency, Lieutenant
+Now then……  I can finally have an audience with his Excellency, Lieutenant
 General Yoneda.
 
 - {after knocking} -
 
-{Yoneda} Hey, come on in.
+{Yoneda} Hey, come on in. <217>
 
-{Ohgami} ......Excuse me!!
+{Ohgami} ……Excuse me!!
 
 As of 12:00 today, Imperial Navy Ensign Ohgami Ichiro, newly transferred to the
-Imperial Floral Assault Group,
+Imperial Floral Assault Group, <219>
 
-...has now arrived!
+…has now arrived!
 
 {Yoneda} Yeah, I heard the news from Count Hanakoji.  Well, now, let's just
 dispense with the formal introductions.
 
-In the first place, y'know, this is the Grand Imperial Theatre.  You can't use
+In the first place, y'know, this is the Grand Imperial Theater.  You can't use
 that military talk.
 
-{Ohgami} (Wh...... who is this drunken old man!?)
+{Ohgami} (Wh…… who is this drunken old man!?)
 
-(Th......this man...... couldn't possibly be......!?)
+(Th……this man…… couldn't possibly be……!?)
 
-{Yoneda} Well, how 'bout a round!?
+{Yoneda} 
 
 === LIPS 1-3 ==>
-- a - Are you really...... his Excellency Lieutenant General Yoneda?
+- a - Are you really…… his Excellency Lieutenant General Yoneda?
 - b - How can you drink sake in the middle of the day!
 - time up -
 =
 - a >
-{Ohgami} ......Um...... are you...... really...... his Excellency Lieutenant
+{Ohgami} ……Um…… are you…… really…… his Excellency Lieutenant
 General Yoneda?
 
 {Yoneda} Idiot!  What's the big idea with this "are you really" bit!?
@@ -815,7 +816,7 @@ medals on?!  I'm Army Lieutenant General Yoneda Ikki!
 
 Damn fool!
 
-{Ohgami} Fo- forgive me!
+{Ohgami} Fo- forgive me! <231>
 
 {Yoneda} Okay!  As long as you understand, that's fine enough.  Now then, I will
 now entrust you with your first mission!
@@ -825,43 +826,43 @@ now entrust you with your first mission!
 {Ohgami} How can you drink sake in the middle of the day?!
 
 Are you really that Lieutenant General Yoneda?  You seem quite different from
-the rumors I've heard......
+the rumors I've heard……
 
-{Yoneda} Rumors......?  Hey, what sort of rumors!?  Huh?  Spit it out!
+{Yoneda} Rumors……?  Hey, what sort of rumors!?  Huh?  Spit it out!
 
 {Ohgami} I had heard Lieutenant General Yoneda was a hero of the Russo-Japanese
 War and the greatest strategist the Army has.
 
-{Yoneda} The greatest strategist the Army has...... and, he's the manager of the
-Grand Imperial Theatre.
+{Yoneda} The greatest strategist the Army has…… and, he's the manager of the
+Grand Imperial Theater.
 
-And on top of that, a drunken old man......
+And on top of that, a drunken old man……
 
 And that's what you don't like.
 
-{Ohgami} No......  I hadn't said that much.
+{Ohgami} No……  I hadn't said that much.
 
-{Yoneda} That is what you're saying!  But you know, Mr. Ohgami......
+{Yoneda} That is what you're saying!  But you know, Mr. Ohgami……
 
 No matter how much distinguished military service I've performed and how many
 medals hang from my chest, I've killed a whole lot of people.
 
-Both enemies and allies......  I've killed far too many.
+Both enemies and allies……  I've killed far too many.
 
-So, what's wrong with this?  Being the manager of a theatre!
+So, what's wrong with this?  Being the manager of a theater!
 
-{Ohgami} ......I understand.  But given that I have been transferred to the
-Imperial Floral Assault Group......
+{Ohgami} ……I understand.  But given that I have been transferred to the
+Imperial Floral Assault Group……
 
-For the harmony and safety of the citizens of Teito...... I intend to fight with
+For the harmony and safety of the citizens of Teito…… I intend to fight with
 my life on the line!
 
-{Yoneda} Splendid!  Er, rather...... that's just splendid indeed! {10} Now then,
+{Yoneda} Splendid!  Er, rather…… that's just splendid indeed! {10} Now then,
 here's your first duty!
 < b -
 
 - time up >
-{Ohgami} ......
+{Ohgami} ……
 
 {Yoneda} Why, you're a real uncivil fellow, aren't you.  Well, no matter.  Now
 then, here's your first duty!
@@ -886,7 +887,7 @@ Understood!  Ohgami Ichiro, now proceeding to duty!
 
 {Sakura} Ah, Mr. Ohgami……
 
-{Iris} Ah…… he's spotted us.
+{Iris} Ah…… he's spotted us. <257>
 
 {Ohgami} Sakura and…… Iris, was it?  What are you doing here?
 
@@ -927,14 +928,14 @@ Well Iris doesn't care about big brother anymore!  So long, bye-bye!
 {Ohgami} Ahh, what trouble you cause……  Iris, don't cry.  I'm not
 angry……
 
-{Iris} E-heh-heh, thanks.  Big brother, you're real nice, huh.
+{Iris} E-heh-heh, thanks.  Big brother, you're real nice, huh. <273>
 
-{Sakura} ……That Iris.  Tricking us with crocodile tears……  What nerve.
+{Sakura} ……That Iris.  Tricking us with crocodile tears……  What nerve. <274>
 
 {Ohgami} By the way, I'm sure you two would know, but……
 
 Could you tell me the way to the reception desk, I wonder?  It's my first duty
-here.
+here. <276>
 < a -
 
 - time up >
@@ -969,7 +970,7 @@ By the way, do you happen to know where the reception desk is?
 
 {Ohgami} Really?  That would really help.
 
-{Maria} ……It's a simple task.  Please, come with me.  It's very close.
+{Maria} ……It's a simple task.  Please, come with me.  It's very close. <297>
 
 (Skip down to === Maria guides you to the reception desk ==>.)
 < time up -
@@ -1122,7 +1123,7 @@ mine……
 
 - time up >
 {Ohgami} (Things look like they could get disastrous if I were to speak
-unjudiciously……  I guess I'll just keep quiet.)
+unjudiciously……  I guess I'll just keep quiet.) <330>
 
 {Maria} Here, now!  What are you making a fuss about in front of the manager's
 office!?
@@ -1145,7 +1146,7 @@ room.
 
 {Maria} Now then, Ensign Ohgami.  I'll show you to the reception desk.
 
-{Ohgami} ……Ye- yes, ma'am.  If you would, please.
+{Ohgami} ……Ye- yes, ma'am.  If you would, please. <340>
 (Skip down to === Maria guides you to the reception desk ==>.)
 < time up -
 <== LIPS 1-5 ===
