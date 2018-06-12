@@ -268,3 +268,4 @@ public:
 
 void FindAllFilesWithinDirectory(const std::string& inDirectoryPath, std::vector<FileNameContainer>& outFileNames);
 bool CreateDirectoryHelper(const std::string& dirName);
+bool AreFilesTheSame(const FileData& file1, const FileNameContainer& file2Name);

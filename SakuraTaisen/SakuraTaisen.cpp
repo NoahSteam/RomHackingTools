@@ -1933,6 +1933,56 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 			continue;
 		}
 
+		//Find duplicates
+		printf("Finding Duplicates for %s \n", iter->first.c_str());
+
+		map<string, vector<string>> duplicatesMap; //FileName, Vector<Duplicate FileNames>
+		const size_t numImageFiles = iter->second.size();
+		for(size_t fileIndex = 0; fileIndex < numImageFiles; ++fileIndex)
+		{
+			const FileNameContainer& firstImageName = iter->second[fileIndex];
+
+			//Make sure we haven't already found a match for this file
+			bool bExistingDupFound = false;
+			for(map<string, vector<string>>::const_iterator mapIter = duplicatesMap.begin(); mapIter != duplicatesMap.end(); ++mapIter)
+			{
+				const size_t numDups = mapIter->second.size();
+				for(size_t dupIndex = 0; dupIndex < numDups; ++dupIndex)
+				{
+					if( mapIter->second[dupIndex] == firstImageName.mNoExtension )
+					{
+						bExistingDupFound = true;
+						break;
+					}
+				}
+
+				if( bExistingDupFound )
+				{
+					break;
+				}
+			}
+
+			if( bExistingDupFound )
+			{
+				continue;
+			}
+
+			FileData fileData;
+			if( !fileData.InitializeFileData( firstImageName ) )
+			{
+				continue;
+			}
+
+			//Check all other files
+			for(size_t secondFileIndex = fileIndex + 1; secondFileIndex < numImageFiles; ++secondFileIndex)
+			{
+				if( AreFilesTheSame(fileData, iter->second[secondFileIndex]) )
+				{
+					duplicatesMap[firstImageName.mNoExtension].push_back( iter->second[secondFileIndex].mNoExtension );
+				}
+			}
+		}
+
 		const string htmlFileName = outputDirectory + iter->first + string(".php");
 		
 		TextFileWriter htmlFile;
@@ -1984,7 +2034,48 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 		htmlFile.WriteString("{\n");
 		htmlFile.WriteString("     SaveData(inDialogImageName, inDivID);\n\n");
 		htmlFile.WriteString("     var translatedText = document.getElementById(inDivID).value;\n");
-		htmlFile.WriteString("//   var edit_1_duplicates = [\"1\", \"2\", \"3\"];\n");
+
+		for(map<string, vector<string>>::const_iterator mapIter = duplicatesMap.begin(); mapIter != duplicatesMap.end(); ++mapIter)
+		{
+			fprintf(htmlFile.GetFileHandle(), "     var edit_%s_duplicates = [", mapIter->first.c_str());
+
+			const size_t numDups = mapIter->second.size();
+			for(size_t dupIndex = 0; dupIndex < numDups; ++dupIndex)
+			{
+				fprintf(htmlFile.GetFileHandle(), "\"%s\"", mapIter->second[dupIndex].c_str());
+				if(dupIndex + 1 < numDups)
+				{
+					fprintf(htmlFile.GetFileHandle(), ",");
+				}
+			}
+			fprintf(htmlFile.GetFileHandle(), "];\n");
+
+			//Now print vars for all of the dups
+			for(size_t dupIndex = 0; dupIndex < numDups; ++dupIndex)
+			{
+				fprintf(htmlFile.GetFileHandle(), "     var edit_%s_duplicates = [\"%s\"", mapIter->second[dupIndex].c_str(), mapIter->first.c_str());
+				if(dupIndex + 1 < numDups)
+				{
+					fprintf(htmlFile.GetFileHandle(), ",");
+				}
+			
+				for(size_t dupIndex2 = 0; dupIndex2 < numDups; ++dupIndex2)
+				{
+					if( dupIndex == dupIndex2 )
+					{
+						continue;
+					}
+
+					fprintf(htmlFile.GetFileHandle(), "\"%s\"", mapIter->second[dupIndex2].c_str());
+					if(dupIndex + 1 < numDups)
+					{
+						fprintf(htmlFile.GetFileHandle(), ",");
+					}
+				}
+				fprintf(htmlFile.GetFileHandle(), "];\n");
+			}
+		}
+
 		htmlFile.WriteString("     var dynName = eval(inDivID + \"_duplicates\");\n\n");
 		htmlFile.WriteString("     if(typeof dynName !== 'undefined')\n");
 		htmlFile.WriteString("     {\n");
@@ -2056,7 +2147,7 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 
 		htmlFile.WriteString("<?php include 'GetUserPermissions.php';\n");
 			htmlFile.WriteString("\t$bPermissionFound = false;\n");
-			htmlFile.WriteString("\tforeach ($allowedFiles as $value)\n{");		
+			htmlFile.WriteString("\tforeach ($allowedFiles as $value)\n{");
 				fprintf(htmlFile.GetFileHandle(), "\t\tif( $value == \"%s\" )\n\t\t{\n", tblFileName.c_str());
 					htmlFile.WriteString("\t\t\t$bPermissionFound = true;\n");
 					htmlFile.WriteString("\t\t\tbreak;\n\t\t}\n\t}");

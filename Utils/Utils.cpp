@@ -60,6 +60,35 @@ bool CreateDirectoryHelper(const std::string& dirName)
 	return false;
 }
 
+bool AreFilesTheSame(const FileData& file1Data, const FileNameContainer& file2Name)
+{
+	FILE* pSecondFile = nullptr;
+	const errno_t errorValue = fopen_s(&pSecondFile, file2Name.mFullPath.c_str(), "rb");
+	if( errorValue )
+	{
+		return false;
+	}
+
+	//Figure out the file size by
+	fseek(pSecondFile, 0, SEEK_END);
+	const unsigned long secondFileSize = ftell(pSecondFile);
+	fseek(pSecondFile, 0, SEEK_SET);
+
+	//Close the file
+	fclose(pSecondFile);
+
+	//If the file sizes are the same, then compare the data
+	if( secondFileSize == file1Data.GetDataSize() )
+	{
+		FileData secondFileData;
+		if( secondFileData.InitializeFileData(file2Name) && file1Data.DoesThisFileContain(secondFileData, nullptr, false) )
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
 ////////////////////////////
 //        FileData        //
 ////////////////////////////
