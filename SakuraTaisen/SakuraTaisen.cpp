@@ -2105,7 +2105,7 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 		htmlFile.WriteString("               for (i = 0; i < json.length; i++)\n");
 		htmlFile.WriteString("               {\n");
 		htmlFile.WriteString("                    var jsonEntry = json[i];\n");
-		htmlFile.WriteString("                    var english   = jsonEntry.English.replace(/\\/g, '');\n");
+		htmlFile.WriteString("                    var english   = jsonEntry.English.replace(/\\\\/g, \'\');\n");
 		htmlFile.WriteString("                    var divId     = \"#\" + jsonEntry.DivId;\n");
 		htmlFile.WriteString("                    var trId      = \"tr_\" + jsonEntry.DivId;\n");
 		htmlFile.WriteString("                    if( document.getElementById(trId).bgColor != \"#fec8c8\" && english != \"Untranslated\" && english != \"<div>Untranslated</div>\")\n");
