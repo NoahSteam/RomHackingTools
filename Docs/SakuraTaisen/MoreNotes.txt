@@ -20,10 +20,12 @@ PatchGame d:\Rizwan\SakuraWars\Disc1 d:\Rizwan\SakuraWars\Disc1_Translated D:\Ri
 FindDialogOrder d:\Rizwan\SakuraWars\Disc1 D:\Rizwan\SakuraWars\ExtractedData\DialogText
 CreateTBLSpreadsheets D:\Rizwan\SakuraWars\ExtractedData\Dialog D:\Rizwan\SakuraWars\Disc1\SAKURA1
 
-ExtractFontSheets a:\SakuraTaisen\Disc1\ a:\SakuraTaisen\ExtractedData\FontSheets\Palette.bin a:\SakuraTaisen\ExtractedData\FontSheets
+ExtractFontSheets a:\SakuraTaisen\Disc1\ a:\SakuraTaisen\ExtractedData\Disc1\FontSheets\Palette.bin a:\SakuraTaisen\ExtractedData\Disc1\FontSheets
+ExtractFontSheets a:\SakuraTaisen\Disc2\ a:\SakuraTaisen\ExtractedData\Disc1\FontSheets\Palette.bin a:\SakuraTaisen\ExtractedData\Disc2\FontSheets
 ExtractFontSheets a:\SakuraTaisen\PatchedData\TranslatedFontSheet A:\SakuraTaisen\PatchedData\TranslatedFontSheet\OutPalette.BIN a:\SakuraTaisen\PatchedData\TranslatedFontSheet
 ExtractRawText a:\SakuraTaisen\Disc1\ a:\SakuraTaisen\ExtractedData\ExtractedText
-ExtractText a:\SakuraTaisen\Disc1 a:\SakuraTaisen\ExtractedData\FontSheets\Palette.bin a:\SakuraTaisen\ExtractedData\Dialog
+ExtractText a:\SakuraTaisen\Disc1 a:\SakuraTaisen\ExtractedData\Disc1\FontSheets\Palette.bin a:\SakuraTaisen\ExtractedData\Disc1\Dialog
+ExtractText a:\SakuraTaisen\Disc2 a:\SakuraTaisen\ExtractedData\Disc1\FontSheets\Palette.bin a:\SakuraTaisen\ExtractedData\Disc2\Dialog
 InsertText a:\SakuraTaisen\Disc1 A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\TranslatedText a:\SakuraTaisen\PatchedData\TranslatedTBL
 CreateTranslatedFontSheets A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\8x12.bmp a:\SakuraTaisen\PatchedData\TranslatedFontSheet
 PatchPalettes a:\SakuraTaisen\Disc1 A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\Palette.bin A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\OutPalette.BIN a:\SakuraTaisen\PatchedData\Palettes

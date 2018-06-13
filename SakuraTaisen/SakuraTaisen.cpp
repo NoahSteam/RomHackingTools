@@ -809,7 +809,7 @@ void ExtractText(const string& inSearchDirectory, const string& inPaletteFileNam
 	GetAllFilesOfType(allFiles, "TBL.BIN", textFiles);
 
 	//There needs to be a font sheet for every text file 
-	if( textFiles.size() != fontFiles.size() )
+	if( textFiles.size() > fontFiles.size() )
 	{
 		printf("ExtractText: There need to be the same amount of sakura text files as font sheets");
 
@@ -2054,11 +2054,9 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 			for(size_t dupIndex = 0; dupIndex < numDups; ++dupIndex)
 			{
 				fprintf(htmlFile.GetFileHandle(), "     var edit_%s_duplicates = [\"%s\"", mapIter->second[dupIndex].c_str(), mapIter->first.c_str());
-				if(dupIndex + 1 < numDups)
-				{
-					fprintf(htmlFile.GetFileHandle(), ",");
-				}
+				fprintf(htmlFile.GetFileHandle(), ",");
 			
+				size_t numDupsPrinted = 0;
 				for(size_t dupIndex2 = 0; dupIndex2 < numDups; ++dupIndex2)
 				{
 					if( dupIndex == dupIndex2 )
@@ -2067,10 +2065,12 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 					}
 
 					fprintf(htmlFile.GetFileHandle(), "\"%s\"", mapIter->second[dupIndex2].c_str());
-					if(dupIndex + 1 < numDups)
+					if(numDupsPrinted + 1 < numDups - 1)
 					{
 						fprintf(htmlFile.GetFileHandle(), ",");
 					}
+
+					++numDupsPrinted;
 				}
 				fprintf(htmlFile.GetFileHandle(), "];\n");
 			}
