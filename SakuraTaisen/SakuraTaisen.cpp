@@ -1434,11 +1434,11 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 				for(size_t wordIndex = 0; wordIndex < numWords; ++wordIndex)
 				{
 					const string& word    = textLine.mWords[wordIndex];
-					bool bFailedToAddLine = false;					
+					bool bFailedToAddLine = false;
 					if( word.size() > maxCharsPerLine )
 					{
 						printf("Unable to insert word because it is longer than %i characters: %s[%i]\n", maxCharsPerLine, word.c_str(), word.size());
-						continue;					
+						continue;
 					}
 
 					//Check to see if this is a newline

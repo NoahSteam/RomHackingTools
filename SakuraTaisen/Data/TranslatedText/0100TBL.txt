@@ -35,33 +35,33 @@ Imperial Navy Ensign Mr. Ohgami Ichiro:
 As part of a special mission, you are hereby ordered to take up a new post as captain of the following corps:
 'The Imperial Floral Assault Group, Anti-Demon Interception Squad, Flower-Troupe.'
 Furthermore, your mission is a highly-classified one for the sake of the defense of Teito.
-You are to head to Ueno Park to join up with the corps. 
+You are to head to Ueno Park to join up with the corps.�
 Imperial Army Lieutenant General. <br> <sp> <sp> <sp> <sp> <sp> <sp> <sp> ~Yoneda Ikki
-……Ohgami Ichiro.  As of today, you will be transferring to the Imperial Floral Assault Group, Flower-Troupe.
-Yes, sir!  Ohgami Ichiro, prepared to work to the utmost limits of my abilities, sir!
-Yes……  Excellent reply.
+……Ohgami Ichiro.�As of today, you will be transferring to the Imperial Floral Assault Group, Flower-Troupe.
+Yes, sir! Ohgami Ichiro, prepared to work to the utmost limits of my abilities, sir!
+Yes……�Excellent reply.
 A politician such as myself can not discuss the military secrets of the Floral Assault Group with you here.
 For further detail, ask Lieutenant General Yoneda. He is the commanding secretary of the Imperial Floral Assault Group.
-Now then, head for Ueno Park.  I expect you to live up to the expectations I had when I recommended you as captain.
-Understood, sir!  Ohgami Ichiro, now proceeding to Ueno Park!
-The sanctity of Teito rests in your hands.  Do your best.
+Now then, head for Ueno Park.� I expect you to live up to the expectations I had when I recommended you as captain.
+Understood, sir!� Ohgami Ichiro, now proceeding to Ueno Park!
+The sanctity of Teito rests in your hands.� Do your best.
 Yes, sir!
-Ah, what nice weather!  And the Ueno cherry blossoms are in full bloom.
-Now then……  Where do you suppose the meeting place is……?  I guess I'll try walking around a bit more.
-That reminds me……  I believe Ueno Park was where that monster disturbance happened just a while ago……
+Ah, what nice weather!� And the Ueno cherry blossoms are in full bloom.
+Now then……� Where do you suppose the meeting place is……?� I guess I'll try walking around a bit more.
+That reminds me……� I believe Ueno Park was where that monster disturbance happened just a while ago……
 Apparently, the one who cut down that monster, with one blow, was a young girl……
 ……………………
 He said someone from the Imperial Floral Assault Group would come to meet me; when do you suppose they'll show up?
-What's this?  That girl……
-…!  She's coming this way……
-Ye-yes.  I happen to be Ohgami…
-Um…  Forgive me, but, who might you be?
+What's this?� That girl……
+…!� She's coming this way……
+Ye-yes.� I happen to be Ohgami…
+Um…� Forgive me, but, who might you be?
 ……From Lieutenant General Yoneda?
 (I'd heard someone would be coming to meet me…… but I never would have expected it to be a woman……)
 Um, excuse me…… would you happen to be from the Imperial Floral Assault Group!?
-Ah……  I'm Imperial Navy Ensign Ohgami Ichiro.
-Still…… to think a young woman like yourself would be a member of the squad……  Frankly, I'm a little surprised.
-Ah, n-no……  It's not that……
+Ah……� I'm Imperial Navy Ensign Ohgami Ichiro.
+Still…… to think a young woman like yourself would be a member of the squad……� Frankly, I'm a little surprised.
+Ah, n-no……� It's not that……
 ……I suppose only in a covert squad would it not be unusual to find female squad members like her……)
 Eh - theater…… you say!?
 I'm on duty! <br> First I'd like to know more about you.
@@ -433,7 +433,7 @@ Untranslated
 Untranslated
 Untranslated
 Untranslated
-…Excuse me…  Are you Ensign Ohgami Ichiro?
+…Excuse me…� Are you Ensign Ohgami Ichiro?
 I'm Shinguji Sakura.
 I received instructions from Lieutenant General Yoneda to provide escort for an Ensign Ohgami.
 Yes!
