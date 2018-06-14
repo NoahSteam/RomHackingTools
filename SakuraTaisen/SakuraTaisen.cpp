@@ -34,7 +34,7 @@ using std::string;
 using std::list;
 using std::map;
 
-const unsigned char OutTileSpacingX = 8;  //MUST BE DIVISIBLE BY 8
+const unsigned char OutTileSpacingX = 6;  //MUST BE DIVISIBLE BY 8
 const unsigned char OutTileSpacingY = 12;
 const string PatchedPaletteName("PatchedPalette.BIN");
 const string PatchedKNJName("PatchedKNJ.BIN");
@@ -1026,7 +1026,7 @@ void ConvertTranslatedText(const string& inTextDir, const string& outDir)
 		}
 
 		//Go through each line
-		const int maxCharsPerLine = 30;
+		const int maxCharsPerLine = 240/OutTileSpacingX;
 		const int maxLines        = 4;
 		int charCount             = 0;
 		int sakuraLineCount       = 0;
@@ -1382,8 +1382,8 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 				return false;
 			}
 
-			//Get converted lines of text			
-			const int maxCharsPerLine       = 30;
+			//Get converted lines of text
+			const int maxCharsPerLine       = 240/OutTileSpacingX;
 			const int maxLines              = 4;
 			const size_t numTranslatedLines = translatedFile.mLines.size();
 			for(size_t translatedLineIndex = 0; translatedLineIndex < numTranslatedLines; ++translatedLineIndex)
