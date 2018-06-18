@@ -81,6 +81,19 @@ Spacing X for LIPS
  
  0601466A -> 06001F64 -> 06065EDC-> 05C0010C
  
+ Main menu sprite code:
+ LOGO.SH2 
+000061e8
+05C00088
+06065E58
+06001F54
+0020A200
+
+00208804
+
+0020A1EC
+
+
  Todo:
  -Output text insertion results
  -Patch text insertion only

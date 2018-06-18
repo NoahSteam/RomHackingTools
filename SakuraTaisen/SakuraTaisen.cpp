@@ -48,7 +48,7 @@ const unsigned short SpecialDialogIndicator = 0xC351;
 class SakuraTranslationTable
 {
 public:
-	const unsigned short GetIndex(char inChar) const
+	const unsigned short GetIndex(unsigned char inChar) const
 	{
 		if( inChar == '@' )
 		{
@@ -60,6 +60,11 @@ public:
 			return 0x0a0d;
 		}
 		
+		if( inChar == 0xA0 )
+		{
+			return ' ' + 1;
+		}
+
 		return inChar + 1;
 	}
 };
