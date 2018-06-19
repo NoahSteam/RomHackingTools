@@ -81,8 +81,8 @@ Spacing X for LIPS
  
  0601466A -> 06001F64 -> 06065EDC-> 05C0010C
  
- Main menu sprite code:
- LOGO.SH2 
+Main menu sprite code:
+LOGO.SH2 
 000061e8
 05C00088
 06065E58
@@ -93,6 +93,11 @@ Spacing X for LIPS
 
 0020A1EC
 
+Main Menu Font Loaded at 0x060d0380
+
+Loaded During Main Menu:
+OPSAKURA.CPK @0x06080000
+TITLESE @0x05a54040
 
  Todo:
  -Output text insertion results
