@@ -96,7 +96,8 @@ LOGO.SH2
 Main Menu Font Loaded at 0x060d0380
 
 Letter 'C' in ENDING.BIN a 0x0000c398
-Part of 'C' is in LOGO.SH2 0x00010112 <-Try messing with the values here and then see how it affects VDP1
+Part of 'C' is in LOGO.SH2 0x00010112 <-Try messing with the values here and then see how it affects VDP1.  Loaded at 0x00214112 at run time.
+Compression expanding into 0x060d0380
 
 Loaded During Main Menu:
 OPSAKURA.CPK @0x06080000
