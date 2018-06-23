@@ -35,6 +35,6 @@ PatchPalettes a:\SakuraTaisen\Disc1 A:\NoahSteam\RomPatchingTools\SakuraTaisen\D
 PatchGameKNJ a:\SakuraTaisen\Disc1 A:\SakuraTaisen\PatchedData\TranslatedFontSheet\TranslatedKNJ.BIN a:\SakuraTaisen\PatchedData\KNJ
 FindDuplicateText a:\SakuraTaisen\ExtractedData\Dialog\ a:\SakuraTaisen\ExtractedData\Dialog\Duplicates.txt
 PatchGame a:\SakuraTaisen\Disc1 a:\SakuraTaisen\Disc1_Translated A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\TranslatedText A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\8x12.bmp A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\Palette.bin
-CreateTBLSpreadsheets a:\SakuraTaisen\ExtractedData\Dialog a:\SakuraTaisen\Disc1\SAKURA1
+CreateTBLSpreadsheets a:\SakuraTaisen\ExtractedData\Disc1\Dialog a:\SakuraTaisen\Disc1\SAKURA1
 
 UPDATE TBLFiles SET English = REPLACE(English, '\\n', ' ')

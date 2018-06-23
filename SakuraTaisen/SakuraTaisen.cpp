@@ -2161,16 +2161,26 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 		fprintf(htmlFile.GetFileHandle(), "<article><header align=\"center\"><h1>Dialog For %s</h1></header></article>\n", iter->first.c_str());
 		
 		htmlFile.WriteString("<br>\n");
-		htmlFile.WriteString("Instructions:<br>\n");
+		htmlFile.WriteString("<b>Instructions:</b><br>\n");
+		htmlFile.WriteString("-This page is best displayed using Chrome.  Otherwise some of the table borders are missing for some reason.<br>\n");
 		htmlFile.WriteString("-Skip any row that is grayed out.<br>\n");
 		htmlFile.WriteString("-Your changes are automatically saved.<br>\n");
 		htmlFile.WriteString("-Press the Load Data button when you come back to the page to load your changes.<br><br>\n");
+		
+		htmlFile.WriteString("<b>Style:</b><br>\n");
 		htmlFile.WriteString("-Use only a single space after a period.<br>\n");
+		htmlFile.WriteString("-You do not need to worry about line breaks.  Just translate the text as one line.  The text insertion tool will automatically add newlines as needed.<br>\n");
+		htmlFile.WriteString("-There is a 160 character limit for each dialog entry.<br><br>\n\n");
+
+		htmlFile.WriteString("<b>LIPS Events</b><br>\n");
 		htmlFile.WriteString("-Pink rows are LIPS events where the user has to pick which line to say.  When translating these, insert a \" &lt;br&gt; \" without the quotes to signigy the next option.<br><br>\n");
-		htmlFile.WriteString("For example: The following line has two options.<br>\n");		
+		htmlFile.WriteString("For example: The following line has two options.<br>\n");
 		htmlFile.WriteString("<img src=\"..\\ExtractedData\\Dialog\\0100TBL\\67.png\"><br>\n");
 		htmlFile.WriteString("It would be translated as: <br>\n");
-		htmlFile.WriteString("I'm on duty! &lt;br&gt; First I'd like to know more about you.<br>\n\n");
+		htmlFile.WriteString("I'm on duty! &lt;br&gt; First I'd like to know more about you.<br><br>\n\n");
+
+		htmlFile.WriteString("<b>Naming Conventions:</n><br>\n");
+		htmlFile.WriteString("<a href=\"https://docs.google.com/spreadsheets/d/e/2PACX-1vQlQTZq8EzQz1PU7LxRIGnU1pDgKQRTtNcwbdX-yRS3gIgSv9uZH_i3Tmh6rhPw5zVgudCuriNIZvg4/pubhtml?gid=0&single=true\" target=\"_blank\">Click here to view the naming conventions for Characters, Locations, and Terms</a> <br>\n");
 
 		//Load Data button
 		htmlFile.WriteString("<br><table align=\"center\"><tr><td><input align=\"center\" type=\"button\" value=\"Load Data\" onclick=\"LoadData()\"/></td></tr></table><br>");
