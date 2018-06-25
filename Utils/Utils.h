@@ -24,6 +24,21 @@ struct MatchInfo
 
 struct FileNameContainer
 {
+	FileNameContainer(const char* pFullPath) : mFullPath(pFullPath) 
+	{
+		mFileName = mFullPath.substr(mFullPath.find_last_of("/\\") + 1);
+
+		const size_t lastIndex = mFileName.find_last_of(".");
+		mNoExtension           = mFileName.substr(0, lastIndex);
+
+		const char sep = '\\';
+		size_t i = mFullPath.rfind(sep, mFullPath.length());
+		if( i != std::string::npos )
+		{
+			mPathOnly = mFullPath.substr(0, i);
+		}
+	}
+
 	FileNameContainer(const char* pFileName, const char* pFullPath) : mFileName(pFileName), mFullPath(pFullPath) 
 	{
 		const size_t lastIndex = mFileName.find_last_of(".");

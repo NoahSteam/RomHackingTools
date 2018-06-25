@@ -690,7 +690,7 @@ void DumpExtractedSakuraText(const vector<SakuraTextFile>& inSakuraTextFiles, co
 	}
 }
 
-bool ExtractFontSheetAsBitmap(const FileNameContainer& inFileNameContainer, const string& outFileName, const FileData& inPaletteFile)
+bool ExtractImage(const FileNameContainer& inFileNameContainer, const string& outFileName, const FileData& inPaletteFile, const int inTextureDimX, const int inTextureDimY, const int inNumTexturesPerRow)
 {
 	FileData fontSheet;
 	if( !fontSheet.InitializeFileData(inFileNameContainer) )
@@ -700,10 +700,10 @@ bool ExtractFontSheetAsBitmap(const FileNameContainer& inFileNameContainer, cons
 
 	printf("Extracting: %s\n", inFileNameContainer.mFileName.c_str());
 	
-	const int tileDimX          = 16;
-	const int tileDimY          = 16;
+	const int tileDimX          = inTextureDimX;
+	const int tileDimY          = inTextureDimY;
 	const int tileBytes         = (tileDimX*tileDimY)/2; //4bits per pixel, so only half the amount of bytes as pixels
-	const int tilesPerRow       = 255;
+	const int tilesPerRow       = inNumTexturesPerRow;
 	const int bytesPerTile      = tileBytes;
 	const int bytesPerTileRow   = bytesPerTile*tilesPerRow;
 	const int numRows           = (int)ceil( fontSheet.GetDataSize() / (float)bytesPerTileRow);
@@ -757,6 +757,11 @@ bool ExtractFontSheetAsBitmap(const FileNameContainer& inFileNameContainer, cons
 	return true;
 }
 
+bool ExtractFontSheetAsBitmap(const FileNameContainer& inFileNameContainer, const string& outFileName, const FileData& inPaletteFile)
+{
+	return ExtractImage(inFileNameContainer, outFileName, inPaletteFile, 16, 16, 255);
+}
+
 void ExtractAllFontSheets(const vector<FileNameContainer>& inAllFiles, const string& inPaletteFileName, const string& outDir)
 {
 	FileData paletteFile;
@@ -775,6 +780,21 @@ void ExtractAllFontSheets(const vector<FileNameContainer>& inAllFiles, const str
 		outFileName = outDir + fileNameInfo.mNoExtension + bmpExtension;
 		ExtractFontSheetAsBitmap(fileNameInfo, outFileName, paletteFile);
 	}
+}
+
+void ExtractImages(const string& inFileName, const string& inPaletteFileName, int width, int height, const string& outDir)
+{
+	FileData paletteFile;
+	if( !paletteFile.InitializeFileData(inPaletteFileName.c_str(), inPaletteFileName.c_str()) )
+	{
+		return;
+	}
+
+	FileNameContainer inputFileNameContainer(inFileName.c_str());
+
+	const string bmpExtension(".bmp");
+	const string outFileName= outDir + inputFileNameContainer.mNoExtension + bmpExtension;
+	ExtractImage(inputFileNameContainer, outFileName, paletteFile, width, height, 1);
 }
 
 void DumpSakuraText(const vector<FileNameContainer>& inAllFiles, const string& inOutputDir)
@@ -1403,7 +1423,7 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 				if( textLine.mWords.size() == 1 && textLine.mWords[0] == UntranslatedEnglishString )
 				{
 					const string baseUntranslatedString = sakuraFile.mFileNameInfo.mFileName + string("\nLineNum: ");
-					const string untranslatedString = baseUntranslatedString + std::to_string(translatedLineIndex);
+					const string untranslatedString = baseUntranslatedString + std::to_string(translatedLineIndex + 1);
 
 					SakuraString translatedSakuraString;
 
@@ -1761,7 +1781,7 @@ bool FixupSakura(const string& rootDir)
 	fwrite(&OutTileSpacingY, sizeof(OutTileSpacingY), 1, pFile);
 
 	fseek(pFile, offsetTileSpacingLIPSX, SEEK_SET);
-	fwrite(&offsetTileSpacingX, sizeof(offsetTileSpacingX), 1, pFile);
+	fwrite(&OutTileSpacingX, sizeof(OutTileSpacingX), 1, pFile);
 
 	//fseek(pFile, offsetTileDim, SEEK_SET);
 	//fwrite(&tileSize, sizeof(tileSize), 1, pFile);
@@ -2345,9 +2365,10 @@ void PrintHelp()
 	printf("PatchPalettes rootSakuraTaisenDirectory originalPalette newPalette outDirectory\n");
 	printf("InsertText rootSakuraTaisenDirectory translatedText outDirectory\n");
 	printf("FindDuplicateText dialogDirectory outFile\n");
-	printf("FindDialogOrder rootSakuraTaisenDirectory outDirectory");
-	printf("PatchGame rootSakuraTaisenDirectory patchedSakuraTaisenDirectory translatedTextDirectory fontSheet originalPalette");
-	printf("CreateTBLSpreadsheets dialogImageDirectory sakura1Directory");
+	printf("FindDialogOrder rootSakuraTaisenDirectory outDirectory\n");
+	printf("CreateTBLSpreadsheets dialogImageDirectory sakura1Directory\n");
+	printf("ExtractImages fileName paletteFile width height outDirectory\n");
+	printf("PatchGame rootSakuraTaisenDirectory patchedSakuraTaisenDirectory translatedTextDirectory fontSheet originalPalette\n");
 }
 
 int main(int argc, char *argv[])
@@ -2379,8 +2400,16 @@ int main(int argc, char *argv[])
 		//Find all files within the requested directory
 		vector<FileNameContainer> allFiles;
 		FindAllFilesWithinDirectory(string(pSearchDirectory), allFiles);
+	}
+	else if( command == string("ExtractImages") )
+	{
+		const string fileName         = string(argv[2]);
+		const string paletteFileName  = string(argv[3]);
+		const string width            = string(argv[4]);
+		const string height           = string(argv[5]);
+		const string outDirectory     = string(argv[6]) + Seperators;
 
-		ExtractAllFontSheets(allFiles, paletteFileName, outDirectory);
+		ExtractImages(fileName, paletteFileName, std::atoi(width.c_str()), std::atoi(height.c_str()), outDirectory);
 	}
 	else if( command == string("ExtractText" ) && argc == 5 )
 	{
