@@ -1914,7 +1914,9 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 		}
 	}
 
-	const string htmlHeader("<html>\n<head><style>textarea {width: 100%;top: 0; left: 0; right: 0; bottom: 0; position: absolute; resize: none;-webkit-box-sizing: border-box; -moz-box-sizing: border-box; box-sizing: border-box;} table {border-collapse: collapse;} table, th, td { position: relative; border: 1px solid black;}</style>");
+	const string htmlHeader1("<html>\n<head><style>textarea {width: 100%;top: 0; left: 0; right: 0; bottom: 0; position: absolute; resize: none;-webkit-box-sizing: border-box; -moz-box-sizing: border-box; box-sizing: border-box;} table {border-collapse: collapse;} table, th, td { position: relative; border: 1px solid black;}");
+	const string htmlHeader2("#myProgress {width: 100%;	background-color: #ddd;} #myBar {width: 1%;height: 30px; background-color: #4CAF50;}</style>");
+	const string htmlHeader = htmlHeader1 + htmlHeader2;
 
 	//Create html files for each directory
 	static char buffer[2048];
@@ -2057,22 +2059,22 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 		htmlFile.WriteString("     var fileName = document.getElementById(\"FileName\").innerHTML;\n");
 		htmlFile.WriteString("     $.ajax({\n");
 		htmlFile.WriteString("          type: \"POST\",\n");
-		htmlFile.WriteString("          url: \"UpdateTranslation.php\",\n");
+		htmlFile.WriteString("          url: \"UpdateTranslationTest.php\",\n");
 		htmlFile.WriteString("          data: { inTBLFileName: fileName, inImageName:inDialogImageName, inTranslation:translatedText, inDivId:inDivID, inCrc:inCRC },\n");
 		htmlFile.WriteString("          success: function(result)\n");
 		htmlFile.WriteString("          {\n");
-		htmlFile.WriteString("               var trId = \"tr_\" + inDivID;\n");
-		htmlFile.WriteString("              if( translatedText != \"Untranslated\" && translatedText != \"<div>Untranslated</div>\")\n");
-		htmlFile.WriteString("              {\n");
-		htmlFile.WriteString("                   if( document.getElementById(trId).bgColor != \"#fec8c8\" )\n");
-		htmlFile.WriteString("                   {\n");
-		htmlFile.WriteString("                        document.getElementById(trId).bgColor = \"#e3fec8\";\n");
-		htmlFile.WriteString("                   }\n");
-		htmlFile.WriteString("              }\n");
-		htmlFile.WriteString("              else\n");
-		htmlFile.WriteString("              {\n");
-		htmlFile.WriteString("                   document.getElementById(trId).bgColor = \"#fefec8\";\n");
-		htmlFile.WriteString("              }\n");
+		htmlFile.WriteString("                var trId = \"tr_\" + inDivID;\n");
+		htmlFile.WriteString("                if( translatedText != \"Untranslated\" && translatedText != \"<div>Untranslated</div>\")\n");
+		htmlFile.WriteString("                {\n");
+		htmlFile.WriteString("                     if( document.getElementById(trId).bgColor != \"#fec8c8\" )\n");
+		htmlFile.WriteString("                     {\n");
+		htmlFile.WriteString("                          document.getElementById(trId).bgColor = \"#e3fec8\";\n");
+		htmlFile.WriteString("                     }\n");
+		htmlFile.WriteString("                }\n");
+		htmlFile.WriteString("                else\n");
+		htmlFile.WriteString("                {\n");
+		htmlFile.WriteString("                     document.getElementById(trId).bgColor = \"#fefec8\";\n");
+		htmlFile.WriteString("                }\n");
 		htmlFile.WriteString("         }\n");
 		htmlFile.WriteString("    });\n");
 		htmlFile.WriteString("}\n");
@@ -2124,14 +2126,15 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 		}
 
 		htmlFile.WriteString("     var dynName = inDivID + \"_duplicates\";\n\n");
-		htmlFile.WriteString("     if(dynName && typeof dynName !== 'undefined')\n");
+		htmlFile.WriteString("     if(window.dynName && typeof dynName !== 'undefined')\n");
 		htmlFile.WriteString("     {\n");
-		htmlFile.WriteString("          for(i = 0; i < dynName.length; i++)\n");
+		htmlFile.WriteString("          var dupArray = eval(dynName);\n");
+		htmlFile.WriteString("          for(i = 0; i < dupArray.length; i++)\n");
 		htmlFile.WriteString("          {\n");
-		htmlFile.WriteString("               var lookupName = \"#edit_\" + dynName[i];\n");
+		htmlFile.WriteString("               var lookupName = \"#edit_\" + dupArray[i];\n");
 		htmlFile.WriteString("               $(lookupName).html(translatedText)\n");
-		htmlFile.WriteString("               var dupImageName = dynName[i] + \".bmp\";\n");
-		htmlFile.WriteString("               var dupDivID     = \"edit_\" + dynName[i];\n\n");
+		htmlFile.WriteString("               var dupImageName = dupArray[i] + \".bmp\";\n");
+		htmlFile.WriteString("               var dupDivID     = \"edit_\" + dupArray[i];\n\n");
 		htmlFile.WriteString("               SaveData(dupImageName, dupDivID, 0)\n");
 		htmlFile.WriteString("          }\n");
 		htmlFile.WriteString("     }\n");
@@ -2149,8 +2152,18 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 		htmlFile.WriteString("     });\n");
 		htmlFile.WriteString("}\n");
 
+		//UpdateLoadingBar function
+		htmlFile.WriteString("function UpdateLoadingBar(inLoadPercentage)\n");
+		htmlFile.WriteString("{\n");
+		htmlFile.WriteString("     var elem            = document.getElementById(\"myBar\");\n");
+		htmlFile.WriteString("     var loadPercentElem = document.getElementById(\"LoadPercent\");\n");
+		htmlFile.WriteString("     inLoadPercentage    = Math.floor( inLoadPercentage*100 + 0.5);\n");
+		htmlFile.WriteString("     elem.style.width = inLoadPercentage + '%';\n");
+		htmlFile.WriteString("     loadPercentElem.innerHTML = (inLoadPercentage).toString() + \"%\";\n");
+		htmlFile.WriteString("}\n");
+
 		//AttemptToLoadDuplicateData function
-		htmlFile.WriteString("function AttemptToLoadDuplicateData(inDivID, inCRC, inTrID)\n");
+		htmlFile.WriteString("function AttemptToLoadDuplicateData(inDivID, inCRC, inTrID, inPercentComplete)\n");
 		htmlFile.WriteString("{\n");
 		htmlFile.WriteString("     $.ajax({\n");
 		htmlFile.WriteString("     type: \"POST\",\n");
@@ -2158,6 +2171,7 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 		htmlFile.WriteString("     data: { inCrc: inCRC},\n");
 		htmlFile.WriteString("     success: function(result)\n");
 		htmlFile.WriteString("     {\n");
+		htmlFile.WriteString("          UpdateLoadingBar(inPercentComplete);\n\n");
 		htmlFile.WriteString("          var json = $.parseJSON(result);\n");
 		htmlFile.WriteString("          var i;\n");
 		htmlFile.WriteString("          for (i = 0; i < json.length; i++)\n");
@@ -2171,6 +2185,7 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 		htmlFile.WriteString("                         document.getElementById(inTrID).bgColor = \"#e3fec8\";\n");
 		htmlFile.WriteString("                    }\n");
 		htmlFile.WriteString("                    $(inDivID).html(english);\n");
+		htmlFile.WriteString("                    SaveData(jsonEntry.ImageFileName, jsonEntry.DivId, inCRC);\n");
 		htmlFile.WriteString("                    return;\n");
 		htmlFile.WriteString("               }\n");
 		htmlFile.WriteString("          }\n");
@@ -2202,9 +2217,29 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 		htmlFile.WriteString("                    {\n");
 		htmlFile.WriteString("                         if( document.getElementById(trId).bgColor != \"#fec8c8\" )\n");
 		htmlFile.WriteString("                         {\n");
-		htmlFile.WriteString("                              document.getElementById(trId).bgColor = \"#e3fec8\";\n");
+		htmlFile.WriteString("                         document.getElementById(trId).bgColor = \"#e3fec8\";\n");
 		htmlFile.WriteString("                         }  \n");
 		htmlFile.WriteString("                         $(divId).html(english);\n");
+		htmlFile.WriteString("                    }\n");
+		htmlFile.WriteString("               }\n\n");
+		htmlFile.WriteString("               ////Load duplicates\n");
+		htmlFile.WriteString("               var lastImageIndex = document.getElementById(\"LastImageIndex\").innerHTML;\n");
+		htmlFile.WriteString("               for(i = 1; i < lastImageIndex; ++i)\n");
+		htmlFile.WriteString("               {\n");
+		htmlFile.WriteString("                    var divId    = \"#edit_\" + i;\n");
+		htmlFile.WriteString("                    var trId     = \"tr_edit_\" + i;\n");
+		htmlFile.WriteString("                    var crcId    = \"crc_\" + i;\n");
+		htmlFile.WriteString("                    var crcValue = document.getElementById(crcId).innerHTML;\n");
+		htmlFile.WriteString("                    var translatedText = document.getElementById(\"edit_\" + i).value;\n");
+		htmlFile.WriteString("                    var percentComplete = i/lastImageIndex;\n");
+		htmlFile.WriteString("                    crcValue     = parseInt(crcValue, 16)\n");
+		htmlFile.WriteString("                    if( translatedText == \"Untranslated\" )\n");
+		htmlFile.WriteString("                    {\n");
+		htmlFile.WriteString("                         AttemptToLoadDuplicateData(divId, crcValue, trId, percentComplete);\n");
+		htmlFile.WriteString("                    }\n");
+		htmlFile.WriteString("                    else\n");
+		htmlFile.WriteString("                    {\n");
+		htmlFile.WriteString("                         UpdateLoadingBar(percentComplete);\n");
 		htmlFile.WriteString("                    }\n");
 		htmlFile.WriteString("               }\n");
 		htmlFile.WriteString("          },\n");
@@ -2213,17 +2248,6 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 		htmlFile.WriteString("               alert('Unable to load data');\n");
 		htmlFile.WriteString("          }\n");
 		htmlFile.WriteString("     });\n");
-		htmlFile.WriteString("\n");
-		htmlFile.WriteString("     var lastImageIndex = document.getElementById(\"LastImageIndex\").innerHTML;\n");
-		htmlFile.WriteString("     for(i = 1; i < lastImageIndex; ++i)\n");
-		htmlFile.WriteString("     {\n");
-		htmlFile.WriteString("          var divId    = \"#edit_\" + i;\n");
-		htmlFile.WriteString("          var trId     = \"tr_edit_\" + i;\n");
-		htmlFile.WriteString("          var crcId    = \"crc_\" + i;\n");
-		htmlFile.WriteString("          var crcValue = document.getElementById(crcId).innerHTML;\n");
-		htmlFile.WriteString("          crcValue     = parseInt(crcValue, 16)\n");
-		htmlFile.WriteString("          AttemptToLoadDuplicateData(divId, crcValue, trId)\n");
-		htmlFile.WriteString("     }\n");
 		htmlFile.WriteString("}\n");
 
 
@@ -2265,6 +2289,7 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 		htmlFile.WriteString("-Skip any row that is grayed out.<br>\n");
 		htmlFile.WriteString("-Your changes are automatically saved.<br>\n");
 		htmlFile.WriteString("-Press the Load Data button when you come back to the page to load your changes.<br><br>\n");
+		htmlFile.WriteString("-Please wait for the Load Bar to complete.  It's a bit slow, but as more of the file is translated, it will speed up.<br><br>\n");
 		
 		htmlFile.WriteString("<b>Style:</b><br>\n");
 		htmlFile.WriteString("-Use only a single space after a period.<br>\n");
@@ -2279,7 +2304,7 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 		htmlFile.WriteString("I'm on duty! &lt;br&gt; First I'd like to know more about you.<br><br>\n\n");
 
 		htmlFile.WriteString("<b>Naming Conventions:</n><br>\n");
-		htmlFile.WriteString("<a href=\"https://docs.google.com/spreadsheets/d/e/2PACX-1vQlQTZq8EzQz1PU7LxRIGnU1pDgKQRTtNcwbdX-yRS3gIgSv9uZH_i3Tmh6rhPw5zVgudCuriNIZvg4/pubhtml?gid=0&single=true\" target=\"_blank\">Click here to view the naming conventions for Characters, Locations, and Terms</a> <br>\n");
+		htmlFile.WriteString("<a href=\"https://docs.google.com/spreadsheets/d/1rgafQe78vML_xbxnYuOSlO8P5C8nuhgLjMJOExUQsm0/edit?usp=sharing\" target=\"_blank\">Click here to view the naming conventions for Characters, Locations, and Terms</a> <br>\n");
 
 		htmlFile.WriteString("<?php\n");
 			htmlFile.WriteString("$currUser = $_SERVER['PHP_AUTH_USER'];\n");
@@ -2287,10 +2312,30 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 			htmlFile.WriteString("{\n");
 			htmlFile.WriteString("echo \"<input align=\\\"center\\\" type=\\\"button\\\" value=\\\"Export Data\\\" onclick=\\\"ExportData()\\\"/>\";\n");
 			htmlFile.WriteString("}\n");
-		htmlFile.WriteString("?>\n");
+		htmlFile.WriteString("?>\n\n");
 
 		//Load Data button
-		htmlFile.WriteString("<br><table align=\"center\"><tr><td><input align=\"center\" type=\"button\" value=\"Load Data\" onclick=\"LoadData()\"/></td></tr></table><br>");
+		htmlFile.WriteString("<table align=\"center\">\n");
+		htmlFile.WriteString("     <tr>\n");
+		htmlFile.WriteString("          <td>\n");
+		htmlFile.WriteString("               <input align=\"center\" type=\"button\" value=\"Load Data\" onclick=\"LoadData()\"/>\n");
+		htmlFile.WriteString("          </td>\n");
+		htmlFile.WriteString("     </tr>\n");
+		htmlFile.WriteString("     <tr>\n");
+		htmlFile.WriteString("          <td>\n");
+		htmlFile.WriteString("               Duplicate Load Progress\n");
+		htmlFile.WriteString("          </td>\n");
+		htmlFile.WriteString("          <td width=\"400\">\n");
+		htmlFile.WriteString("               <div id=\"myProgress\">\n");
+		htmlFile.WriteString("               <div id=\"myBar\"></div>\n");
+		htmlFile.WriteString("          </div>\n");
+		htmlFile.WriteString("          </td>\n");
+		htmlFile.WriteString("          <td>\n");
+		htmlFile.WriteString("               <div id=\"LoadPercent\">0</div>\n");
+		htmlFile.WriteString("          </td>\n");
+		htmlFile.WriteString("     </tr>\n");
+		htmlFile.WriteString("</table><br>\n\n");
+
 
 		//Write table
 		htmlFile.WriteString("<table>\n");
