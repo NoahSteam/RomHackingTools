@@ -1959,10 +1959,22 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 		}
 
 		//Find duplicates
-		printf("Finding Duplicates for %s \n", iter->first.c_str());
-
-		map<string, vector<string>> duplicatesMap; //FileName, Vector<Duplicate FileNames>
 		const size_t numImageFiles = iter->second.size();
+		map<const FileNameContainer*, unsigned long> crcMap;
+		for(size_t fileIndex = 0; fileIndex < numImageFiles; ++fileIndex)
+		{
+			const FileNameContainer* pFileContainer = &iter->second[fileIndex];	
+			FileData fileData;
+			if( !fileData.InitializeFileData( *pFileContainer ) )
+			{
+				continue;
+			}
+
+			crcMap[pFileContainer] = fileData.GetCRC();
+		}
+
+		printf("Finding Duplicates for %s \n", iter->first.c_str());
+		map<string, vector<string>> duplicatesMap; //FileName, Vector<Duplicate FileNames>
 		for(size_t fileIndex = 0; fileIndex < numImageFiles; ++fileIndex)
 		{
 			const FileNameContainer& firstImageName = iter->second[fileIndex];
@@ -1992,16 +2004,25 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 				continue;
 			}
 
-			FileData fileData;
-			if( !fileData.InitializeFileData( firstImageName ) )
+			if( crcMap.find(&firstImageName) == crcMap.end() )
 			{
-				continue;
+				printf("Crc data not found.  Unable to generate web files.\n");
+				return false;
 			}
+
+			const unsigned long imageCrc = crcMap[&firstImageName];
 
 			//Check all other files
 			for(size_t secondFileIndex = fileIndex + 1; secondFileIndex < numImageFiles; ++secondFileIndex)
 			{
-				if( AreFilesTheSame(fileData, iter->second[secondFileIndex]) )
+				const FileNameContainer* pSecondFile = &iter->second[secondFileIndex];
+				if( crcMap.find(pSecondFile) == crcMap.end() )
+				{
+					printf("Crc data not found.  Unable to generate web files.\n");
+					return false;
+				}
+
+				if( crcMap[pSecondFile] == imageCrc )
 				{
 					duplicatesMap[firstImageName.mNoExtension].push_back( iter->second[secondFileIndex].mNoExtension );
 				}
@@ -2019,7 +2040,8 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 
 		//Common header stuff
 		htmlFile.WriteString(htmlHeader);
-		fprintf(htmlFile.GetFileHandle(), "<div id=\"FileName\" style=\"display: none;\">%s</div>\n", tblFileName.c_str());
+		fprintf(htmlFile.GetFileHandle(), "\n<div id=\"FileName\" style=\"display: none;\">%s</div>\n", tblFileName.c_str());
+		fprintf(htmlFile.GetFileHandle(), "\n<div id=\"LastImageIndex\" style=\"display: none;\">%i</div>\n", numImageFiles);
 		htmlFile.WriteString("<script src=\"https://ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js\">\n\n");
 
 		//Load Data on startup
@@ -2029,14 +2051,14 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 		//SaveEdits function
 		htmlFile.WriteString("<script type=\"text/javascript\">\n");
 
-		htmlFile.WriteString("function SaveData(inDialogImageName, inDivID)\n");
+		htmlFile.WriteString("function SaveData(inDialogImageName, inDivID, inCRC)\n");
 		htmlFile.WriteString("{\n");
-		htmlFile.WriteString("     var translatedText = document.getElementById(inDivID).value\n");
-		htmlFile.WriteString("     var fileName = document.getElementById(\"FileName\").innerHTML\n");
+		htmlFile.WriteString("     var translatedText = document.getElementById(inDivID).value;\n");
+		htmlFile.WriteString("     var fileName = document.getElementById(\"FileName\").innerHTML;\n");
 		htmlFile.WriteString("     $.ajax({\n");
 		htmlFile.WriteString("          type: \"POST\",\n");
 		htmlFile.WriteString("          url: \"UpdateTranslation.php\",\n");
-		htmlFile.WriteString("          data: { inTBLFileName: fileName, inImageName:inDialogImageName, inTranslation:translatedText, inDivId:inDivID },\n");
+		htmlFile.WriteString("          data: { inTBLFileName: fileName, inImageName:inDialogImageName, inTranslation:translatedText, inDivId:inDivID, inCrc:inCRC },\n");
 		htmlFile.WriteString("          success: function(result)\n");
 		htmlFile.WriteString("          {\n");
 		htmlFile.WriteString("               var trId = \"tr_\" + inDivID;\n");
@@ -2055,9 +2077,9 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 		htmlFile.WriteString("    });\n");
 		htmlFile.WriteString("}\n");
 
-		htmlFile.WriteString("function SaveEdits(inDialogImageName, inDivID)\n");
+		htmlFile.WriteString("function SaveEdits(inDialogImageName, inDivID, inCRC)\n");
 		htmlFile.WriteString("{\n");
-		htmlFile.WriteString("     SaveData(inDialogImageName, inDivID);\n\n");
+		htmlFile.WriteString("     SaveData(inDialogImageName, inDivID, inCRC);\n\n");
 		htmlFile.WriteString("     var translatedText = document.getElementById(inDivID).value;\n");
 
 		for(map<string, vector<string>>::const_iterator mapIter = duplicatesMap.begin(); mapIter != duplicatesMap.end(); ++mapIter)
@@ -2101,8 +2123,8 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 			}
 		}
 
-		htmlFile.WriteString("     var dynName = eval(inDivID + \"_duplicates\");\n\n");
-		htmlFile.WriteString("     if(typeof dynName !== 'undefined')\n");
+		htmlFile.WriteString("     var dynName = inDivID + \"_duplicates\";\n\n");
+		htmlFile.WriteString("     if(dynName && typeof dynName !== 'undefined')\n");
 		htmlFile.WriteString("     {\n");
 		htmlFile.WriteString("          for(i = 0; i < dynName.length; i++)\n");
 		htmlFile.WriteString("          {\n");
@@ -2110,12 +2132,55 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 		htmlFile.WriteString("               $(lookupName).html(translatedText)\n");
 		htmlFile.WriteString("               var dupImageName = dynName[i] + \".bmp\";\n");
 		htmlFile.WriteString("               var dupDivID     = \"edit_\" + dynName[i];\n\n");
-		htmlFile.WriteString("               SaveData(dupImageName, dupDivID)\n");
+		htmlFile.WriteString("               SaveData(dupImageName, dupDivID, 0)\n");
 		htmlFile.WriteString("          }\n");
 		htmlFile.WriteString("     }\n");
 		htmlFile.WriteString("}\n");
 
-	
+		//Export data function
+		htmlFile.WriteString("function ExportData()\n");
+		htmlFile.WriteString("{\n");
+		htmlFile.WriteString("     $(\"textarea\").each ( function ()\n");
+		htmlFile.WriteString("     {\n");
+		htmlFile.WriteString("          var thisText = $(this).text();\n");
+		htmlFile.WriteString("          thisText = thisText.replace(/<br>/g, '&ltbr&gt');\n");
+		htmlFile.WriteString("          thisText = thisText.replace(/<sp>/g, '&ltsp&gt');\n");
+		htmlFile.WriteString("          document.write(thisText + \"<br>\");\n");
+		htmlFile.WriteString("     });\n");
+		htmlFile.WriteString("}\n");
+
+		//AttemptToLoadDuplicateData function
+		htmlFile.WriteString("function AttemptToLoadDuplicateData(inDivID, inCRC, inTrID)\n");
+		htmlFile.WriteString("{\n");
+		htmlFile.WriteString("     $.ajax({\n");
+		htmlFile.WriteString("     type: \"POST\",\n");
+		htmlFile.WriteString("     url: \"GetTranslationFromCRC.php\",\n");
+		htmlFile.WriteString("     data: { inCrc: inCRC},\n");
+		htmlFile.WriteString("     success: function(result)\n");
+		htmlFile.WriteString("     {\n");
+		htmlFile.WriteString("          var json = $.parseJSON(result);\n");
+		htmlFile.WriteString("          var i;\n");
+		htmlFile.WriteString("          for (i = 0; i < json.length; i++)\n");
+		htmlFile.WriteString("          {\n");
+		htmlFile.WriteString("               var jsonEntry = json[i];\n");
+		htmlFile.WriteString("               var english   = jsonEntry.English.replace(/\\\\/g, \'\');\n");
+		htmlFile.WriteString("               if( english != \"Untranslated\" )\n");
+		htmlFile.WriteString("               {\n");
+		htmlFile.WriteString("                    if( document.getElementById(inTrID).bgColor != \"#fec8c8\" )\n");
+		htmlFile.WriteString("                    {\n");
+		htmlFile.WriteString("                         document.getElementById(inTrID).bgColor = \"#e3fec8\";\n");
+		htmlFile.WriteString("                    }\n");
+		htmlFile.WriteString("                    $(inDivID).html(english);\n");
+		htmlFile.WriteString("                    return;\n");
+		htmlFile.WriteString("               }\n");
+		htmlFile.WriteString("          }\n");
+		htmlFile.WriteString("     },\n");
+		htmlFile.WriteString("     error: function()\n");
+		htmlFile.WriteString("     {\n");
+		htmlFile.WriteString("     }\n");
+		htmlFile.WriteString("   });\n");
+		htmlFile.WriteString("}\n");
+
 		//LoadData function
 		htmlFile.WriteString("function LoadData(){\n");
 		htmlFile.WriteString("     var fileName = document.getElementById(\"FileName\").innerHTML;\n");
@@ -2133,11 +2198,14 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 		htmlFile.WriteString("                    var english   = jsonEntry.English.replace(/\\\\/g, \'\');\n");
 		htmlFile.WriteString("                    var divId     = \"#\" + jsonEntry.DivId;\n");
 		htmlFile.WriteString("                    var trId      = \"tr_\" + jsonEntry.DivId;\n");
-		htmlFile.WriteString("                    if( document.getElementById(trId).bgColor != \"#fec8c8\" && english != \"Untranslated\" && english != \"<div>Untranslated</div>\")\n");
+		htmlFile.WriteString("                    if( english != \"Untranslated\" && english != \"<div>Untranslated</div>\")\n");
 		htmlFile.WriteString("                    {\n");
-		htmlFile.WriteString("                         document.getElementById(trId).bgColor = \"#e3fec8\";\n");
+		htmlFile.WriteString("                         if( document.getElementById(trId).bgColor != \"#fec8c8\" )\n");
+		htmlFile.WriteString("                         {\n");
+		htmlFile.WriteString("                              document.getElementById(trId).bgColor = \"#e3fec8\";\n");
+		htmlFile.WriteString("                         }  \n");
+		htmlFile.WriteString("                         $(divId).html(english);\n");
 		htmlFile.WriteString("                    }\n");
-		htmlFile.WriteString("                    $(divId).html(english);\n");
 		htmlFile.WriteString("               }\n");
 		htmlFile.WriteString("          },\n");
 		htmlFile.WriteString("          error: function()\n");
@@ -2145,6 +2213,17 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 		htmlFile.WriteString("               alert('Unable to load data');\n");
 		htmlFile.WriteString("          }\n");
 		htmlFile.WriteString("     });\n");
+		htmlFile.WriteString("\n");
+		htmlFile.WriteString("     var lastImageIndex = document.getElementById(\"LastImageIndex\").innerHTML;\n");
+		htmlFile.WriteString("     for(i = 1; i < lastImageIndex; ++i)\n");
+		htmlFile.WriteString("     {\n");
+		htmlFile.WriteString("          var divId    = \"#edit_\" + i;\n");
+		htmlFile.WriteString("          var trId     = \"tr_edit_\" + i;\n");
+		htmlFile.WriteString("          var crcId    = \"crc_\" + i;\n");
+		htmlFile.WriteString("          var crcValue = document.getElementById(crcId).innerHTML;\n");
+		htmlFile.WriteString("          crcValue     = parseInt(crcValue, 16)\n");
+		htmlFile.WriteString("          AttemptToLoadDuplicateData(divId, crcValue, trId)\n");
+		htmlFile.WriteString("     }\n");
 		htmlFile.WriteString("}\n");
 
 
@@ -2202,6 +2281,14 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 		htmlFile.WriteString("<b>Naming Conventions:</n><br>\n");
 		htmlFile.WriteString("<a href=\"https://docs.google.com/spreadsheets/d/e/2PACX-1vQlQTZq8EzQz1PU7LxRIGnU1pDgKQRTtNcwbdX-yRS3gIgSv9uZH_i3Tmh6rhPw5zVgudCuriNIZvg4/pubhtml?gid=0&single=true\" target=\"_blank\">Click here to view the naming conventions for Characters, Locations, and Terms</a> <br>\n");
 
+		htmlFile.WriteString("<?php\n");
+			htmlFile.WriteString("$currUser = $_SERVER['PHP_AUTH_USER'];\n");
+			htmlFile.WriteString("if( $currUser == \"swtranslator\" )\n");
+			htmlFile.WriteString("{\n");
+			htmlFile.WriteString("echo \"<input align=\\\"center\\\" type=\\\"button\\\" value=\\\"Export Data\\\" onclick=\\\"ExportData()\\\"/>\";\n");
+			htmlFile.WriteString("}\n");
+		htmlFile.WriteString("?>\n");
+
 		//Load Data button
 		htmlFile.WriteString("<br><table align=\"center\"><tr><td><input align=\"center\" type=\"button\" value=\"Load Data\" onclick=\"LoadData()\"/></td></tr></table><br>");
 
@@ -2213,6 +2300,7 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 				htmlFile.WriteString("\t<th>English</th>\n");
 				htmlFile.WriteString("\t<th>ID</th>\n");
 				htmlFile.WriteString("\t<th>Appearance Order</th>\n");
+				htmlFile.WriteString("\t<th>CRC</th>\n");
 			htmlFile.WriteString("\t</tr>\n");
 
 			//Get name of info file (0100.BIN, etc.)
@@ -2225,6 +2313,7 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 			int num = 0;
 			for(const FileNameContainer& fileNameInfo : iter->second)
 			{
+				const unsigned long crc = crcMap[&iter->second[num]];
 				const unsigned short id = sakuraFileIter->second->mStringInfoArray[num].mUnknown;
 				const vector<int>* pOrder = bDialogOrderExists && dialogOrderIter->second.idAndOrder.find(id) != dialogOrderIter->second.idAndOrder.end() ? &dialogOrderIter->second.idAndOrder.find(id)->second : nullptr;
 				const char* bgColor = "fefec8";
@@ -2246,7 +2335,7 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 					htmlFile.WriteString(string(buffer));
 
 					//snprintf(buffer, 2048, "<td width=480><div id=\"edit_%s\" contenteditable=\"true\" onChange=\"SaveEdits('%i.bmp', 'edit_%i')\">Untranslated</div></td>", pVarSuffix, num + 1, num + 1);
-					snprintf(buffer, 2048, "<td width=480><textarea id=\"edit_%s\" contenteditable=true onchange=\"SaveEdits('%i.bmp', 'edit_%i')\" style=\"border: none; width: 100%%; -webkit-box-sizing: border-box; -moz-box-sizing: border-box; box-sizing: border-box;\">Untranslated</textarea></td>", pVarSuffix, num + 1, num + 1);
+					snprintf(buffer, 2048, "<td width=480><textarea id=\"edit_%s\" contenteditable=true onchange=\"SaveEdits('%i.bmp', 'edit_%i', '%lu')\" style=\"border: none; width: 100%%; -webkit-box-sizing: border-box; -moz-box-sizing: border-box; box-sizing: border-box;\">Untranslated</textarea></td>", pVarSuffix, num + 1, num + 1, crc);
 					htmlFile.WriteString(string(buffer));
 
 					snprintf(buffer, 2048, "<td align=\"center\" width=120>%02x (%i)</td>", id, id);
@@ -2270,9 +2359,11 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 					else
 					{
 						snprintf(buffer, 2048, "<td align=\"center\" width=120>Order: -1</td>");
+						htmlFile.WriteString(string(buffer));
 					}
 					
-					
+					snprintf(buffer, 2048, "<td id=\"crc_%i\" align=\"center\" width=20>%08x</td>", num + 1, crc);
+					htmlFile.WriteString(string(buffer));
 
 				htmlFile.WriteString("</tr>\n");
 

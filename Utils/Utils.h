@@ -70,19 +70,22 @@ class FileData
 	std::string   mFullPath;
 	unsigned long mFileSize;
 	unsigned long mBufferSize;
+	unsigned long mCrc;
 	const char*   mpData;
-
+	bool          mbCrcCalculated;
+	
 private:
 	bool IsDataTheSame(const char* pData1, const char* pData2, const unsigned long memSize) const;
 	bool ReadInFileData(const char* pFileName);
 
 public:
-	FileData() : mFileSize(0), mBufferSize(0), mpData(nullptr) {}
+	FileData() : mFileSize(0), mBufferSize(0), mCrc(0xffffffff), mpData(nullptr), mbCrcCalculated(false) {}
 	~FileData();
 	
-	bool InitializeFileData(const FileNameContainer& inFileData);
-	bool InitializeFileData(const char* pFileName, const char* pFullPath);
-	bool DoesThisFileContain(const FileData& otherFile, std::vector<unsigned long>* pOutOffsets, bool bFindMultiple) const;
+	bool  InitializeFileData(const FileNameContainer& inFileData);
+	bool  InitializeFileData(const char* pFileName, const char* pFullPath);
+	bool  DoesThisFileContain(const FileData& otherFile, std::vector<unsigned long>* pOutOffsets, bool bFindMultiple) const;
+	unsigned long GetCRC();
 
 	const char*   GetData() const {return mpData;}
 	unsigned long GetDataSize() const {return mBufferSize;}
