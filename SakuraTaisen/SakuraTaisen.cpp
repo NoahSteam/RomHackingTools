@@ -2071,7 +2071,7 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 		htmlFile.WriteString("              }\n");
 		htmlFile.WriteString("              else\n");
 		htmlFile.WriteString("              {\n");
-		htmlFile.WriteString("                   document.getElementById(trId).style.backgroundColor = \"#fefec8\";\n");
+		htmlFile.WriteString("                   document.getElementById(trId).bgColor = \"#fefec8\";\n");
 		htmlFile.WriteString("              }\n");
 		htmlFile.WriteString("         }\n");
 		htmlFile.WriteString("    });\n");
@@ -2328,22 +2328,22 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 
 				const char* pVarSuffix = fileNameInfo.mNoExtension.c_str();
 				fprintf(htmlFile.GetFileHandle(), "<tr id=\"tr_edit_%i\" bgcolor=\"#%s\">\n", num + 1, bgColor);
-					snprintf(buffer, 2048, "<td align=\"center\" width=20>%i</td>", num + 1);
+					snprintf(buffer, 2048, "<td align=\"center\" width=\"20\">%i</td>", num + 1);
 					htmlFile.WriteString(string(buffer));
 
-					snprintf(buffer, 2048, "<td width=240><img src=\"..\\ExtractedData\\Dialog\\%sTBL\\%s\"></td>", infoFileName.c_str(), fileNameInfo.mFileName.c_str());
+					snprintf(buffer, 2048, "<td width=\"240\"><img src=\"..\\ExtractedData\\Dialog\\%sTBL\\%s\"></td>", infoFileName.c_str(), fileNameInfo.mFileName.c_str());
 					htmlFile.WriteString(string(buffer));
 
 					//snprintf(buffer, 2048, "<td width=480><div id=\"edit_%s\" contenteditable=\"true\" onChange=\"SaveEdits('%i.bmp', 'edit_%i')\">Untranslated</div></td>", pVarSuffix, num + 1, num + 1);
-					snprintf(buffer, 2048, "<td width=480><textarea id=\"edit_%s\" contenteditable=true onchange=\"SaveEdits('%i.bmp', 'edit_%i', '%lu')\" style=\"border: none; width: 100%%; -webkit-box-sizing: border-box; -moz-box-sizing: border-box; box-sizing: border-box;\">Untranslated</textarea></td>", pVarSuffix, num + 1, num + 1, crc);
+					snprintf(buffer, 2048, "<td width=\"480\"><textarea id=\"edit_%s\" contenteditable=true onchange=\"SaveEdits('%i.bmp', 'edit_%i', '%lu')\" style=\"border: none; width: 100%%; -webkit-box-sizing: border-box; -moz-box-sizing: border-box; box-sizing: border-box;\">Untranslated</textarea></td>", pVarSuffix, num + 1, num + 1, crc);
 					htmlFile.WriteString(string(buffer));
 
-					snprintf(buffer, 2048, "<td align=\"center\" width=120>%02x (%i)</td>", id, id);
+					snprintf(buffer, 2048, "<td align=\"center\" width=\"120\">%02x (%i)</td>", id, id);
 					htmlFile.WriteString(string(buffer));
 					
 					if( pOrder )
 					{
-						htmlFile.WriteString("<td align=\"center\" width=120>");
+						htmlFile.WriteString("<td align=\"center\" width=\"120\">");
 
 						for(size_t orderIndex = 0; orderIndex < pOrder->size(); ++orderIndex)
 						{
@@ -2358,11 +2358,11 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 					}
 					else
 					{
-						snprintf(buffer, 2048, "<td align=\"center\" width=120>Order: -1</td>");
+						snprintf(buffer, 2048, "<td align=\"center\" width=\"120\">Order: -1</td>");
 						htmlFile.WriteString(string(buffer));
 					}
 					
-					snprintf(buffer, 2048, "<td id=\"crc_%i\" align=\"center\" width=20>%08x</td>", num + 1, crc);
+					snprintf(buffer, 2048, "<td id=\"crc_%i\" align=\"center\" width=\"20\">%08x</td>", num + 1, crc);
 					htmlFile.WriteString(string(buffer));
 
 				htmlFile.WriteString("</tr>\n");
