@@ -2050,9 +2050,36 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 		htmlFile.WriteString("\t$( window ).on( \"load\", function()\n {\n\t\tOnStartup();\n});\n\n");
 		htmlFile.WriteString("</script>\n\n");
 
-		//SaveEdits function
+		//Begin functions
 		htmlFile.WriteString("<script type=\"text/javascript\">\n");
 
+		//SaveDuplicateData function
+		htmlFile.WriteString("function SaveDuplicateData(inDialogImageName, inEnglish, inDivID, inCRC)\n");
+		htmlFile.WriteString("{\n");
+		htmlFile.WriteString("     var fileName = document.getElementById(\"FileName\").innerHTML;\n");
+		htmlFile.WriteString("     	$.ajax({\n");
+		htmlFile.WriteString("          type: \"POST\",\n");
+		htmlFile.WriteString("          url: \"UpdateTranslationTest.php\",\n");
+		htmlFile.WriteString("          data: { inTBLFileName: fileName, inImageName:inDialogImageName, inTranslation:inEnglish, inDivId:inDivID, inCrc:inCRC },\n");
+		htmlFile.WriteString("          success: function(result)\n");
+		htmlFile.WriteString("          {\n");
+		htmlFile.WriteString("               var trId = \"tr_\" + inDivID;\n");
+		htmlFile.WriteString("               if( inEnglish != \"Untranslated\" && inEnglish != \"<div>Untranslated</div>\")\n");
+		htmlFile.WriteString("               {\n");
+		htmlFile.WriteString("                    if( document.getElementById(trId).bgColor != \"#fec8c8\" )\n");
+		htmlFile.WriteString("                    {\n");
+		htmlFile.WriteString("                         document.getElementById(trId).bgColor = \"#e3fec8\";\n");
+		htmlFile.WriteString("                    }\n");
+		htmlFile.WriteString("               }\n");
+		htmlFile.WriteString("               else\n");
+		htmlFile.WriteString("               {\n");
+		htmlFile.WriteString("                    document.getElementById(trId).bgColor = \"#fefec8\";\n");
+		htmlFile.WriteString("               }\n");
+		htmlFile.WriteString("          }\n");
+		htmlFile.WriteString("     });\n");
+		htmlFile.WriteString("}\n\n");
+
+		//SaveData function
 		htmlFile.WriteString("function SaveData(inDialogImageName, inDivID, inCRC)\n");
 		htmlFile.WriteString("{\n");
 		htmlFile.WriteString("     var translatedText = document.getElementById(inDivID).value;\n");
@@ -2079,6 +2106,7 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 		htmlFile.WriteString("    });\n");
 		htmlFile.WriteString("}\n");
 
+		//SaveEdits function
 		htmlFile.WriteString("function SaveEdits(inDialogImageName, inDivID, inCRC)\n");
 		htmlFile.WriteString("{\n");
 		htmlFile.WriteString("     SaveData(inDialogImageName, inDivID, inCRC);\n\n");
@@ -2185,7 +2213,7 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 		htmlFile.WriteString("                         document.getElementById(inTrID).bgColor = \"#e3fec8\";\n");
 		htmlFile.WriteString("                    }\n");
 		htmlFile.WriteString("                    $(inDivID).html(english);\n");
-		htmlFile.WriteString("                    SaveData(jsonEntry.ImageFileName, jsonEntry.DivId, inCRC);\n");
+		htmlFile.WriteString("                    SaveDuplicateData(jsonEntry.ImageFileName, english, jsonEntry.DivId, inCRC);\n");
 		htmlFile.WriteString("                    return;\n");
 		htmlFile.WriteString("               }\n");
 		htmlFile.WriteString("          }\n");
@@ -2288,8 +2316,8 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 		htmlFile.WriteString("-This page is best displayed using Chrome.  Otherwise some of the table borders are missing for some reason.<br>\n");
 		htmlFile.WriteString("-Skip any row that is grayed out.<br>\n");
 		htmlFile.WriteString("-Your changes are automatically saved.<br>\n");
-		htmlFile.WriteString("-Press the Load Data button when you come back to the page to load your changes.<br><br>\n");
-		htmlFile.WriteString("-Please wait for the Load Bar to complete.  It's a bit slow, but as more of the file is translated, it will speed up.<br><br>\n");
+		htmlFile.WriteString("-Press the Load Data button when you come back to the page to load your changes.<br>\n");
+		htmlFile.WriteString("-Please wait for the Load Bar to complete.  It's a bit slow, but as more of the file is translated, it will speed up.  If it gets stuck in the 90's, that's fine, consider it done. I'll fix this bug soon.<br><br>\n");
 		
 		htmlFile.WriteString("<b>Style:</b><br>\n");
 		htmlFile.WriteString("-Use only a single space after a period.<br>\n");
