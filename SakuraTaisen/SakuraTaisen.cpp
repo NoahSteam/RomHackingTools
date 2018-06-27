@@ -1647,7 +1647,7 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 	return true;
 }
 
-void FindDuplicateText(const string& dialogDirectory, const string& outFileName)
+void FindDuplicateText(const string& dialogImageDirectory, const string& outFileName)
 {
 	TextFileWriter outFile;
 	if( !outFile.OpenFileForWrite(outFileName) )
@@ -1656,95 +1656,106 @@ void FindDuplicateText(const string& dialogDirectory, const string& outFileName)
 	}
 
 	//Find all translated text files
-	vector<FileNameContainer> dialogFiles;
-	FindAllFilesWithinDirectory(dialogDirectory, dialogFiles);
-	if( !dialogFiles.size() )
+	vector<FileNameContainer> allFiles;
+	FindAllFilesWithinDirectory(dialogImageDirectory, allFiles);
+	if( !allFiles.size() )
 	{
 		return;
 	}
 
-	struct MatchingInfo
+	vector<FileNameContainer> imageFiles;
+	GetAllFilesOfType(allFiles, ".png", imageFiles);
+
+	//Seperate all files into their own directories
+	printf("Calculating CRCs...\n");
+	map<string, vector<const FileNameContainer*>> directoryMap;
+	map<const FileNameContainer*, unsigned long> crcMap;
+	for(const FileNameContainer& imageFileNameInfo : imageFiles)
 	{
-		vector<const FileNameContainer*> matches;
-	};
-	map<const FileNameContainer*, MatchingInfo> matchingInfo;
-
-	const size_t numDialogFiles = dialogFiles.size();
-	for(size_t currFileIndex = 0; currFileIndex < numDialogFiles; ++currFileIndex)
-	{
-		const FileNameContainer& currFileInfo = dialogFiles[currFileIndex];
-
-		FileData currFileData;
-		if( !currFileData.InitializeFileData(currFileInfo) )
+		const size_t lastOf = imageFileNameInfo.mPathOnly.find_last_of('\\');
+		const string leaf = imageFileNameInfo.mPathOnly.substr(lastOf+1);
+		if( lastOf != string::npos && leaf.size() > 0 )
 		{
-			continue;
-		}
+			directoryMap[leaf].push_back(&imageFileNameInfo);
 
-		printf("Searching through %s\n", currFileInfo.mFullPath.c_str());
-
-		//Compare with every other file
-		for(size_t secondaryFileIndex = currFileIndex + 1; secondaryFileIndex < numDialogFiles; ++secondaryFileIndex)
-		{
-			const FileNameContainer& secondFileInfo = dialogFiles[secondaryFileIndex];
-
-			map<const FileNameContainer*, MatchingInfo>::const_iterator existingMatch = matchingInfo.find(&secondFileInfo);
-			if( existingMatch != matchingInfo.end() )
-			{
-				bool bPairFound = false;
-				const size_t numMatches = existingMatch->second.matches.size();
-				for(size_t i = 0; i < numMatches; ++i)
-				{
-					if(existingMatch->second.matches[i] == &secondFileInfo )
-					{
-						bPairFound = true;
-						break;
-					}
-				}
-
-				if( bPairFound )
-				{
-					break;
-				}
-			}
-
-			FILE* pSecondFile = nullptr;
-			const errno_t errorValue = fopen_s(&pSecondFile, secondFileInfo.mFullPath.c_str(), "rb");
-			if( errorValue )
+			//Create CRC entry
+			FileData fileData;
+			if( !fileData.InitializeFileData( imageFileNameInfo ) )
 			{
 				continue;
 			}
 
-			//Figure out the file size by
-			fseek(pSecondFile, 0, SEEK_END);
-			const unsigned long secondFileSize = ftell(pSecondFile);
-			fseek(pSecondFile, 0, SEEK_SET);
-			
-			//Close the file
-			fclose(pSecondFile);
+			crcMap[&imageFileNameInfo] = fileData.GetCRC();
+		}
+	}	
 
-			//If the file sizes are the same, then compare the data
-			if( secondFileSize == currFileData.GetDataSize() )
+	printf("Finding Duplicates\n");
+	map<const FileNameContainer*, vector<string>> duplicatesMap; //FileName, Vector<Duplicate FileNames>
+	const size_t numImageFiles = imageFiles.size();
+	for(size_t fileIndex = 0; fileIndex < numImageFiles; ++fileIndex)
+	{
+		const FileNameContainer& firstImageName = imageFiles[fileIndex];
+
+		//Make sure we haven't already found a match for this file
+		bool bExistingDupFound = false;
+		for(map<const FileNameContainer*, vector<string>>::const_iterator mapIter = duplicatesMap.begin(); mapIter != duplicatesMap.end(); ++mapIter)
+		{
+			const size_t numDups = mapIter->second.size();
+			for(size_t dupIndex = 0; dupIndex < numDups; ++dupIndex)
 			{
-				FileData secondFileData;
-				if( secondFileData.InitializeFileData(secondFileInfo) && currFileData.DoesThisFileContain(secondFileData, nullptr, false) )
+				if( mapIter->second[dupIndex] == firstImageName.mNoExtension )
 				{
-					matchingInfo[&currFileInfo].matches.push_back(&secondFileInfo);
+					bExistingDupFound = true;
+					break;
 				}
+			}
+
+			if( bExistingDupFound )
+			{
+				break;
+			}
+		}
+
+		if( bExistingDupFound )
+		{
+			continue;
+		}
+
+		if( crcMap.find(&firstImageName) == crcMap.end() )
+		{
+			printf("Crc data not found.  Unable to generate web files.\n");
+			return;
+		}
+
+		const unsigned long imageCrc = crcMap[&firstImageName];
+
+		//Check all other files
+		for(size_t secondFileIndex = fileIndex + 1; secondFileIndex < numImageFiles; ++secondFileIndex)
+		{
+			const FileNameContainer* pSecondFile = &imageFiles[secondFileIndex];
+			if( crcMap.find(pSecondFile) == crcMap.end() )
+			{
+				printf("Crc data not found.  Unable to generate web files.\n");
+				return;
+			}
+
+			if( crcMap[pSecondFile] == imageCrc )
+			{
+				duplicatesMap[&firstImageName].push_back( imageFiles[secondFileIndex].mFullPath );
 			}
 		}
 	}
 
-
-	for(map<const FileNameContainer*, MatchingInfo>::const_iterator iter = matchingInfo.begin(); iter != matchingInfo.end(); ++iter)
+	//Print out duplicate info
+	const string newLine("\n");
+	for(map<const FileNameContainer*, vector<string>>::const_iterator mapIter = duplicatesMap.begin(); mapIter != duplicatesMap.end(); ++mapIter)
 	{
-		fprintf(outFile.GetFileHandle(), "Matches For: %s\n", iter->first->mFullPath.c_str());
+		fprintf(outFile.GetFileHandle(), "%s %lu\n", mapIter->first->mFullPath.c_str(), crcMap[mapIter->first]);
 
-		for(size_t i = 0; i < iter->second.matches.size(); ++i)
+		for(const string& dupFileName : mapIter->second)
 		{
-			fprintf(outFile.GetFileHandle(), "%s\n", iter->second.matches[i]->mFullPath.c_str());
+			fprintf(outFile.GetFileHandle(), "%s %lu\n", dupFileName.c_str(), crcMap[mapIter->first]);
 		}
-
-		printf("----------------\n");
 	}
 }
 
@@ -1879,8 +1890,33 @@ void OutputDialogOrder(const string& rootSakuraTaisenDirectory, const string& ou
 	}	
 }
 
-bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sakura1Directory)
+bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& duplicatesFileName, const string& sakura1Directory)
 {
+	printf("Parsing duplicates file\n");
+	//Load duplicate info
+	FileNameContainer dupFileNameContainer(duplicatesFileName.c_str());
+	TextFileData duplicatesFile(dupFileNameContainer);
+	if( !duplicatesFile.InitializeTextFile() )
+	{
+		printf("Unable to open duplicates file.\n");
+		return false;
+	}
+
+	map<unsigned long, string> dupCrcMap; //crc, fileName
+	const size_t numDups = duplicatesFile.mLines.size();
+	for(size_t i = 0; i < numDups; ++i)
+	{
+		if( duplicatesFile.mLines[i].mWords.size() != 2 )
+		{
+			printf("Invalid duplicate file format");
+			return false;
+		}
+
+		const unsigned long crc = strtoul(duplicatesFile.mLines[i].mWords[1].c_str(), nullptr, 0); 
+		dupCrcMap[crc] = duplicatesFile.mLines[i].mWords[0];
+	}
+
+
 	vector<FileNameContainer> imageFiles;
 	FindAllFilesWithinDirectory(dialogImageDirectory, imageFiles);
 
@@ -2374,6 +2410,7 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 				htmlFile.WriteString("\t<th>ID</th>\n");
 				htmlFile.WriteString("\t<th>Appearance Order</th>\n");
 				htmlFile.WriteString("\t<th>CRC</th>\n");
+				htmlFile.WriteString("\t<th>IsDuplicate</th>\n");
 			htmlFile.WriteString("\t</tr>\n");
 
 			//Get name of info file (0100.BIN, etc.)
@@ -2387,6 +2424,7 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 			for(const FileNameContainer& fileNameInfo : iter->second)
 			{
 				const unsigned long crc = crcMap[&iter->second[num]];
+				const bool bIsDuplicate = dupCrcMap.find(crc) != dupCrcMap.end();
 				const unsigned short id = sakuraFileIter->second->mStringInfoArray[num].mUnknown;
 				const vector<int>* pOrder = bDialogOrderExists && dialogOrderIter->second.idAndOrder.find(id) != dialogOrderIter->second.idAndOrder.end() ? &dialogOrderIter->second.idAndOrder.find(id)->second : nullptr;
 				const char* bgColor = "fefec8";
@@ -2436,6 +2474,9 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& sak
 					}
 					
 					snprintf(buffer, 2048, "<td id=\"crc_%i\" align=\"center\" width=\"20\">%08x</td>", num + 1, crc);
+					htmlFile.WriteString(string(buffer));
+
+					snprintf(buffer, 2048, "<td align=\"center\" width=\"20\">%s</td>", bIsDuplicate ? "true" : "false");
 					htmlFile.WriteString(string(buffer));
 
 				htmlFile.WriteString("</tr>\n");
@@ -2530,7 +2571,7 @@ void PrintHelp()
 	printf("InsertText rootSakuraTaisenDirectory translatedText outDirectory\n");
 	printf("FindDuplicateText dialogDirectory outFile\n");
 	printf("FindDialogOrder rootSakuraTaisenDirectory outDirectory\n");
-	printf("CreateTBLSpreadsheets dialogImageDirectory sakura1Directory\n");
+	printf("CreateTBLSpreadsheets dialogImageDirectory duplicatesFile sakura1Directory\n");
 	printf("ExtractImages fileName paletteFile width height outDirectory\n");
 	printf("PatchGame rootSakuraTaisenDirectory patchedSakuraTaisenDirectory translatedTextDirectory fontSheet originalPalette\n");
 }
@@ -2648,12 +2689,13 @@ int main(int argc, char *argv[])
 
 		PatchGame(rootSakuraTaisenDirectory, patchedSakuraTaisenDirectory, translatedTextDirectory, fontSheet, originalPalette);
 	}
-	else if(command == "CreateTBLSpreadsheets" && argc == 4 )
+	else if(command == "CreateTBLSpreadsheets" && argc == 5 )
 	{
 		const string dialogImageDirectory = string(argv[2]) + Seperators;
-		const string sakura1Directory     = string(argv[3]) + Seperators;
+		const string duplicatesFile       = string(argv[3]);
+		const string sakura1Directory     = string(argv[4]) + Seperators;
 
-		CreateTBLSpreadsheets(dialogImageDirectory, sakura1Directory);
+		CreateTBLSpreadsheets(dialogImageDirectory, duplicatesFile, sakura1Directory);
 	}
 	else
 	{
