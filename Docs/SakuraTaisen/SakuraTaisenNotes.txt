@@ -105,7 +105,4 @@ TITLESE @0x05a54040
 
 To find the location of a palette, look at the entry in VDP1, remove the left most value and multiply the rest by 2. (C510 -> 510*2 -> A20)
 
- Todo:
- -Output text insertion results
- -Patch text insertion only
- -Highlight rows that are LIP lines.
+In 0100.BIN, 2B8000xxxx where xxxx is an id for the character portrait
