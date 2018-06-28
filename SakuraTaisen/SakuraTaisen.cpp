@@ -2012,6 +2012,7 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& dup
 		}
 
 		printf("Finding Duplicates for %s \n", iter->first.c_str());
+		int numberOfDuplicatesFound = 0;
 		map<string, vector<string>> duplicatesMap; //FileName, Vector<Duplicate FileNames>
 		for(size_t fileIndex = 0; fileIndex < numImageFiles; ++fileIndex)
 		{
@@ -2039,6 +2040,7 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& dup
 
 			if( bExistingDupFound )
 			{
+				++numberOfDuplicatesFound;
 				continue;
 			}
 
@@ -2063,6 +2065,7 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& dup
 				if( crcMap[pSecondFile] == imageCrc )
 				{
 					duplicatesMap[firstImageName.mNoExtension].push_back( iter->second[secondFileIndex].mNoExtension );
+					++numberOfDuplicatesFound;
 				}
 			}
 		}
@@ -2080,6 +2083,8 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& dup
 		htmlFile.WriteString(htmlHeader);
 		fprintf(htmlFile.GetFileHandle(), "\n<div id=\"FileName\" style=\"display: none;\">%s</div>\n", tblFileName.c_str());
 		fprintf(htmlFile.GetFileHandle(), "\n<div id=\"LastImageIndex\" style=\"display: none;\">%i</div>\n", numImageFiles);
+		fprintf(htmlFile.GetFileHandle(), "\n<div id=\"NumberOfDuplicates\" style=\"display: none;\">%i</div>\n", numberOfDuplicatesFound);
+		
 		htmlFile.WriteString("<script src=\"https://ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js\">\n\n");
 
 		//Load Data on startup
@@ -2287,23 +2292,28 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& dup
 		htmlFile.WriteString("                    }\n");
 		htmlFile.WriteString("               }\n\n");
 		htmlFile.WriteString("               ////Load duplicates\n");
-		htmlFile.WriteString("               var lastImageIndex = document.getElementById(\"LastImageIndex\").innerHTML;\n");
+		htmlFile.WriteString("               var lastImageIndex  = document.getElementById(\"LastImageIndex\").innerHTML;\n");
+		htmlFile.WriteString("               var numDuplicates   = document.getElementById(\"NumberOfDuplicates\").innerHTML;\n");
+		htmlFile.WriteString("               var numDupProcessed = 0;\n");
 		htmlFile.WriteString("               for(i = 1; i < lastImageIndex; ++i)\n");
-		htmlFile.WriteString("               {\n");
+		htmlFile.WriteString("               {\n");		
+		htmlFile.WriteString("                    var dupId    = \"dup_\" + i;\n");
+		htmlFile.WriteString("                    var dupValue = document.getElementById(dupId).innerHTML;\n");
+		htmlFile.WriteString("                    if( dupValue == \"false\" )\n");
+		htmlFile.WriteString("                    {\n");
+		htmlFile.WriteString("                         continue;\n");
+		htmlFile.WriteString("                    }\n");		
 		htmlFile.WriteString("                    var divId    = \"#edit_\" + i;\n");
 		htmlFile.WriteString("                    var trId     = \"tr_edit_\" + i;\n");
 		htmlFile.WriteString("                    var crcId    = \"crc_\" + i;\n");
 		htmlFile.WriteString("                    var crcValue = document.getElementById(crcId).innerHTML;\n");
-		htmlFile.WriteString("                    var translatedText = document.getElementById(\"edit_\" + i).value;\n");
-		htmlFile.WriteString("                    var percentComplete = i/lastImageIndex;\n");
+		htmlFile.WriteString("                    var translatedText = document.getElementById(\"edit_\" + i).value;\n");		
 		htmlFile.WriteString("                    crcValue     = parseInt(crcValue, 16)\n");
 		htmlFile.WriteString("                    if( translatedText == \"Untranslated\" )\n");
 		htmlFile.WriteString("                    {\n");
+		htmlFile.WriteString("                         var percentComplete = (numDupProcessed+1)/numDuplicates;\n");
+		htmlFile.WriteString("                         numDupProcessed = numDupProcessed + 1;\n");
 		htmlFile.WriteString("                         AttemptToLoadDuplicateData(divId, crcValue, trId, percentComplete);\n");
-		htmlFile.WriteString("                    }\n");
-		htmlFile.WriteString("                    else\n");
-		htmlFile.WriteString("                    {\n");
-		htmlFile.WriteString("                         UpdateLoadingBar(percentComplete);\n");
 		htmlFile.WriteString("                    }\n");
 		htmlFile.WriteString("               }\n");
 		htmlFile.WriteString("          },\n");
@@ -2410,7 +2420,7 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& dup
 				htmlFile.WriteString("\t<th>ID</th>\n");
 				htmlFile.WriteString("\t<th>Appearance Order</th>\n");
 				htmlFile.WriteString("\t<th>CRC</th>\n");
-				htmlFile.WriteString("\t<th>IsDuplicate</th>\n");
+				htmlFile.WriteString("\t<th>Has a Duplicate</th>\n");
 			htmlFile.WriteString("\t</tr>\n");
 
 			//Get name of info file (0100.BIN, etc.)
@@ -2476,7 +2486,7 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& dup
 					snprintf(buffer, 2048, "<td id=\"crc_%i\" align=\"center\" width=\"20\">%08x</td>", num + 1, crc);
 					htmlFile.WriteString(string(buffer));
 
-					snprintf(buffer, 2048, "<td align=\"center\" width=\"20\">%s</td>", bIsDuplicate ? "true" : "false");
+					snprintf(buffer, 2048, "<td id=\"dup_%i\" align=\"center\" width=\"20\">%s</td>", num + 1, bIsDuplicate ? "true" : "false");
 					htmlFile.WriteString(string(buffer));
 
 				htmlFile.WriteString("</tr>\n");

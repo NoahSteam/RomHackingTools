@@ -21,7 +21,7 @@ ExtractRawText d:\Rizwan\SakuraWars\TranslatedTBL d:\Rizwan\SakuraWars\Extracted
 PatchGameKNJ d:\Rizwan\SakuraWars\Disc1 d:\Rizwan\SakuraWars\TranslatedFontSheets\TranslatedKNJ.BIN d:\Rizwan\SakuraWars\TranslatedKNJ
 PatchGame d:\Rizwan\SakuraWars\Disc1 d:\Rizwan\SakuraWars\Disc1_Translated D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\TranslatedText D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\8x12.bmp D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\Palette.bin
 FindDialogOrder d:\Rizwan\SakuraWars\Disc1 D:\Rizwan\SakuraWars\ExtractedData\DialogText
-CreateTBLSpreadsheets D:\Rizwan\SakuraWars\ExtractedData\Disc1\Dialog D:\Rizwan\SakuraWars\Disc1\SAKURA1
+CreateTBLSpreadsheets D:\Rizwan\SakuraWars\ExtractedData\Disc1\Dialog D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\Duplicates.txt D:\Rizwan\SakuraWars\Disc1\SAKURA1
 ExtractImages d:\Rizwan\SakuraWars\Test\Search.bin D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\Palette.bin 88 46 d:\Rizwan\SakuraWars\TestExtractImages d:\Rizwan\SakuraWars\Test\Search.bin D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\Palette.bin 88 46 d:\Rizwan\SakuraWars\Test
 
 ExtractFontSheets a:\SakuraTaisen\Disc1\ a:\SakuraTaisen\ExtractedData\Disc1\FontSheets\Palette.bin a:\SakuraTaisen\ExtractedData\Disc1\FontSheets
