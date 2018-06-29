@@ -106,3 +106,7 @@ TITLESE @0x05a54040
 To find the location of a palette, look at the entry in VDP1, remove the left most value and multiply the rest by 2. (C510 -> 510*2 -> A20)
 
 In 0100.BIN, 2B8000xxxx where xxxx is an id for the character portrait
+At the top of FCE files are are 2byte indexes to the images.
+-Todo, output all FCE files
+-Seperate the FCE files into face images for the website
+-Fix 0100.bin parsing so that 0001 and 00ff are valid values

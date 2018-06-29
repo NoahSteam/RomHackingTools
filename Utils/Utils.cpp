@@ -453,9 +453,13 @@ PaletteData::~PaletteData()
 	mpPaletteData = nullptr;
 }
 
-void PaletteData::CreateFrom15BitData(const char* pInPaletteData, int inPaletteSize)
+bool PaletteData::CreateFrom15BitData(const char* pInPaletteData, int inPaletteSize)
 {
-	assert(inPaletteSize == 32);
+	if( inPaletteSize != 32 && inPaletteSize != 512 )
+	{
+		printf("Unsupported palette type");
+		return false;
+	}
 
 	//Create 32bit palette from the 16 bit(5:5:5 bgr) palette in SakuraTaisen
 	const int numColorInPalette = inPaletteSize/2;
@@ -468,11 +472,13 @@ void PaletteData::CreateFrom15BitData(const char* pInPaletteData, int inPaletteS
 
 		//Ugly conversion of 5bit values to 8bit.  Probably a better way to do this.
 		//Masking the r,g,b components and then bringing the result into a [0,255] range.
-		mpPaletteData[i]   = (char)floor( ( ((color & 0x001f)/full5BitValue) * 255.f) + 0.5f);
+		mpPaletteData[i+2]  = (char)floor( ( ((color & 0x001f)/full5BitValue) * 255.f) + 0.5f);
 		mpPaletteData[i+1] = (char)floor( ( ( ((color & 0x03E0) >> 5)/full5BitValue) * 255.f) + 0.5f);
-		mpPaletteData[i+2] = (char)floor( ( ( ((color & 0x7C00) >> 10)/full5BitValue) * 255.f) + 0.5f);
+		mpPaletteData[i+0] = (char)floor( ( ( ((color & 0x7C00) >> 10)/full5BitValue) * 255.f) + 0.5f);
 		mpPaletteData[i+3] = 0;
 	}
+
+	return true;
 }
 
 bool PaletteData::CreateFrom32BitData(const char* pInPaletteData, int inPaletteSize)
@@ -521,7 +527,7 @@ void PaletteData::SetValue(int index, unsigned short value)
 ////////////////////////////////
 bool BitmapWriter::CreateBitmap(const string& inFileName, int inWidth, int inHeight, int bitsPerPixel, const char* pInColorData, int inColorSize, const char* pInPaletteData, int inPaletteSize)
 {	
-	if( 1 )
+	if( bitsPerPixel == 4 )
 	{
 		SaveAsPNG(inFileName, inWidth, inHeight, bitsPerPixel, pInColorData, inColorSize, pInPaletteData, inPaletteSize);
 	}
@@ -550,6 +556,21 @@ bool BitmapWriter::CreateBitmap(const string& inFileName, int inWidth, int inHei
 		}
 
 		outFile.WriteData(pInColorData, inColorSize);
+
+		if( bitsPerPixel == 8 )
+		{
+			const int numExpectedBytes = inWidth*abs(inHeight);
+			if( inColorSize < numExpectedBytes )
+			{
+				const int blankBytes = numExpectedBytes - inColorSize;
+				char* pRemainingPixels = new char[blankBytes];
+				memset(pRemainingPixels, 0, sizeof(blankBytes));
+
+				outFile.WriteData(pRemainingPixels, blankBytes);
+
+				delete[] pRemainingPixels;
+			}
+		}
 
 		outFile.Close();
 	}

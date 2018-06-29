@@ -690,7 +690,7 @@ void DumpExtractedSakuraText(const vector<SakuraTextFile>& inSakuraTextFiles, co
 	}
 }
 
-bool ExtractImage(const FileNameContainer& inFileNameContainer, const string& outFileName, const FileData& inPaletteFile, const int inTextureDimX, const int inTextureDimY, const int inNumTexturesPerRow)
+bool ExtractImage(const FileNameContainer& inFileNameContainer, const string& outFileName, const FileData& inPaletteFile, const int inTextureDimX, const int inTextureDimY, const int inNumTexturesPerRow, const int dataOffset = 0)
 {
 	FileData fontSheet;
 	if( !fontSheet.InitializeFileData(inFileNameContainer) )
@@ -700,23 +700,24 @@ bool ExtractImage(const FileNameContainer& inFileNameContainer, const string& ou
 
 	printf("Extracting: %s\n", inFileNameContainer.mFileName.c_str());
 	
-	const int tileDimX          = inTextureDimX;
-	const int tileDimY          = inTextureDimY;
-	const int tileBytes         = (tileDimX*tileDimY)/2; //4bits per pixel, so only half the amount of bytes as pixels
-	const int tilesPerRow       = inNumTexturesPerRow;
-	const int bytesPerTile      = tileBytes;
-	const int bytesPerTileRow   = bytesPerTile*tilesPerRow;
-	const int numRows           = (int)ceil( fontSheet.GetDataSize() / (float)bytesPerTileRow);
-	const int numColumns        = numRows > 0 ? tilesPerRow : fontSheet.GetDataSize()/bytesPerTileRow;
-	const int imageHeight       = numRows*tileDimY;
-	const int imageWidth        = numColumns*tileDimX;
+	const int tileDimX           = inTextureDimX;
+	const int tileDimY           = inTextureDimY;
+	const int tileBytes          = (tileDimX*tileDimY)/2; //4bits per pixel, so only half the amount of bytes as pixels
+	const int tilesPerRow        = inNumTexturesPerRow;
+	const int bytesPerTile       = tileBytes;
+	const int bytesPerTileRow    = bytesPerTile*tilesPerRow;
+	const unsigned long dataSize = fontSheet.GetDataSize() - dataOffset;
+	const int numRows            = (int)ceil( dataSize/ (float)bytesPerTileRow);
+	const int numColumns         = numRows > 0 ? tilesPerRow : dataSize/bytesPerTileRow;
+	const int imageHeight        = numRows*tileDimY;
+	const int imageWidth         = numColumns*tileDimX;
 	
 	//Create 32bit palette from the 16 bit(5:5:5 bgr) palette in SakuraTaisen
 	PaletteData paletteData;
 	paletteData.CreateFrom15BitData(inPaletteFile.GetData(), inPaletteFile.GetDataSize());
 
 	//Allocate space for tiled data
-	int numTiles                     = fontSheet.GetDataSize()/tileBytes;
+	int numTiles                     = dataSize/tileBytes;
 	int currTileRow                  = 0;
 	int currTileCol                  = 0;
 	const int bytesInEachTilesWidth  = tileDimX/2;
@@ -729,7 +730,7 @@ bool ExtractImage(const FileNameContainer& inFileNameContainer, const string& ou
 	//Fill in data
 	for(int tileIndex = 0; tileIndex < numTiles; ++tileIndex)
 	{
-		const char* pTile       = fontSheet.GetData() + tileIndex*tileBytes;
+		const char* pTile       = fontSheet.GetData() + dataOffset + tileIndex*tileBytes;
 		const int outTileOffset = currTileRow*bytesPerHorizontalLine*tileDimY + currTileCol*bytesInEachTilesWidth;
 		char* pOutTile          = pOutTiledData + outTileOffset;
 		int tilePixel           = 0;
@@ -750,7 +751,7 @@ bool ExtractImage(const FileNameContainer& inFileNameContainer, const string& ou
 	}
 
 	BitmapWriter fontBitmap;
-	fontBitmap.CreateBitmap(outFileName, imageWidth, -imageHeight, 4, pOutTiledData, numTiledBytes, paletteData.GetData(), paletteData.GetSize());	
+	fontBitmap.CreateBitmap(outFileName, imageWidth, -imageHeight, inPaletteFile.GetDataSize() == 64 ? 4 : 8, pOutTiledData, numTiledBytes, paletteData.GetData(), paletteData.GetSize());	
 
 	delete[] pOutTiledData;
 
@@ -1806,8 +1807,11 @@ bool FixupSakura(const string& rootDir)
 
 struct DialogOrder
 {
+	typedef map<unsigned short, unsigned short> IdAndImageMap;
+
 	map<unsigned short, vector<int>> idAndOrder;
-	map<int, unsigned short> orderAndId;
+	map<int, unsigned short>         orderAndId;
+	IdAndImageMap                    idAndImage;
 };
 
 bool FindDialogOrder(const string& rootSakuraTaisenDirectory, map<string, DialogOrder>& outOrder)
@@ -1843,7 +1847,8 @@ bool FindDialogOrder(const string& rootSakuraTaisenDirectory, map<string, Dialog
 		const unsigned char* pData = (const unsigned char*)infoData.GetData();
 		unsigned long index = 0;
 		int appearance = 0;
-		while (index + 5 < infoData.GetDataSize())
+		const unsigned long dataSize = infoData.GetDataSize();
+		while (index + 5 < dataSize)
 		{
 			if( (pData[index] == 0x22 && pData[index + 1] == 0x80 && pData[index + 2] == 0x00) ||
 				(pData[index] == 0x2E && pData[index + 1] == 0x80 && pData[index + 2] == 0x00)
@@ -1855,6 +1860,28 @@ bool FindDialogOrder(const string& rootSakuraTaisenDirectory, map<string, Dialog
 
 				++appearance;
 				index += 5;
+
+				//Find image id if there is one
+				unsigned long lookAhead = 0;
+				while(index + lookAhead + 4 < dataSize)
+				{
+					unsigned long lookAheadValue = index + lookAhead;
+					if (pData[lookAheadValue] == 0x2B && pData[lookAheadValue + 1] == 0x80 && pData[lookAheadValue + 2] == 0 && pData[lookAheadValue + 3] != 0)
+					{
+						unsigned short imageId = pData[lookAheadValue + 4] + (pData[lookAheadValue + 3] << 8);
+						outOrder[infoFileNameInfo.mNoExtension].idAndImage[id] = imageId;
+					}
+
+					//Break out if the next id is found
+					if( (pData[lookAheadValue] == 0x22 && pData[lookAheadValue + 1] == 0x80 && pData[lookAheadValue + 2] == 0x00) ||
+						(pData[lookAheadValue] == 0x2E && pData[lookAheadValue + 1] == 0x80 && pData[lookAheadValue + 2] == 0x00)
+						)
+					{
+						break;
+					}
+
+					++lookAhead;
+				}
 			}
 
 			++index;
@@ -1885,7 +1912,11 @@ void OutputDialogOrder(const string& rootSakuraTaisenDirectory, const string& ou
 			{
 				continue;
 			}
-			fprintf(outFile.GetFileHandle(), "%02x\n", secondIter->second);
+
+			const unsigned short id                                   = secondIter->second;
+			DialogOrder::IdAndImageMap::const_iterator idAndImageIter = iter->second.idAndImage.find(id);
+			const unsigned short imageIndex                           = idAndImageIter != iter->second.idAndImage.end() ? idAndImageIter->second : 0;
+			fprintf(outFile.GetFileHandle(), "ID: %02x, Image: %02x\n", secondIter->second, imageIndex);
 		}
 	}	
 }
@@ -1904,8 +1935,8 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& dup
 
 	map<unsigned long, vector<string>> dupCrcMap; //crc, fileNames
 	map<string, unsigned long> dupFilenameCrcMap; //fileName, crc
-	const size_t numDups = duplicatesFile.mLines.size();
-	for(size_t i = 0; i < numDups; ++i)
+	const size_t numDupLines = duplicatesFile.mLines.size();
+	for(size_t i = 0; i < numDupLines; ++i)
 	{
 		if( duplicatesFile.mLines[i].mWords.size() != 2 )
 		{
@@ -2535,6 +2566,21 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& dup
 	return true;
 }
 
+void Extract8BitImage(const string& fileName, const string& paletteFileName, const int offset, const string& outDirectory)
+{
+	FileNameContainer imageFileNameInfo(fileName.c_str());	
+	FileNameContainer paletteFileNameInfo(paletteFileName.c_str());
+	FileData paletteFile;
+	if( !paletteFile.InitializeFileData(paletteFileNameInfo) )
+	{
+		return;
+	}
+
+	const string outFileName = outDirectory + imageFileNameInfo.mNoExtension + string(".bmp");
+
+	ExtractImage(imageFileNameInfo, outFileName, paletteFile, 40, 48, 1, offset);
+}
+
 bool PatchGame(const string& rootSakuraTaisenDirectory, const string& patchedSakuraTaisenDirectory, const string& translatedTextDirectory, const string& fontSheetFileName, const string& originalPaletteFileName)
 {
 	char buffer[MAX_PATH];
@@ -2613,6 +2659,7 @@ void PrintHelp()
 	printf("FindDialogOrder rootSakuraTaisenDirectory outDirectory\n");
 	printf("CreateTBLSpreadsheets dialogImageDirectory duplicatesFile sakura1Directory\n");
 	printf("ExtractImages fileName paletteFile width height outDirectory\n");
+	printf("Extract8BitImage fileName paletteFile offset outDirectory\n");
 	printf("PatchGame rootSakuraTaisenDirectory patchedSakuraTaisenDirectory translatedTextDirectory fontSheet originalPalette\n");
 }
 
@@ -2736,6 +2783,15 @@ int main(int argc, char *argv[])
 		const string sakura1Directory     = string(argv[4]) + Seperators;
 
 		CreateTBLSpreadsheets(dialogImageDirectory, duplicatesFile, sakura1Directory);
+	}
+	else if(command == "Extract8BitImage" && argc == 6 )
+	{
+		const string fileName     = string(argv[2]);
+		const string paletteFile  = string(argv[3]);
+		const int    offset       = atoi(argv[4]);
+		const string outDirectory = string(argv[5]) + Seperators;
+		
+		Extract8BitImage(fileName, paletteFile, offset, outDirectory);
 	}
 	else
 	{

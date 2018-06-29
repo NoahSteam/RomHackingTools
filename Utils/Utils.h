@@ -144,7 +144,7 @@ class PaletteData
 public:
 	~PaletteData();
 
-	void        CreateFrom15BitData(const char* pInData, int inSize);
+	bool        CreateFrom15BitData(const char* pInData, int inSize);
 	bool        CreateFrom32BitData(const char* pInData, int inSize);
 	const char* GetData() const {return mpPaletteData;}
 	int         GetSize() const {return mNumBytesInPalette;}
@@ -198,7 +198,7 @@ struct BitmapData
 			mImageDataSize      = 0;
 			mXPelsPerMeter      = 0;
 			mYPelsPerMeter      = 0;
-			mNumColors          = 16;
+			mNumColors          = (int)pow(2, bitCount);
 			mNumImportantColors = 0;
 		}
 	};
