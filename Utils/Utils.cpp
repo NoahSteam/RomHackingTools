@@ -172,6 +172,11 @@ bool AreFilesTheSame(const FileData& file1Data, const FileNameContainer& file2Na
 ////////////////////////////
 FileData::~FileData()
 {
+	Close();
+}
+
+void FileData::Close()
+{
 	//release memory
 	delete[] mpData;
 	mpData = nullptr;
@@ -527,7 +532,7 @@ void PaletteData::SetValue(int index, unsigned short value)
 ////////////////////////////////
 bool BitmapWriter::CreateBitmap(const string& inFileName, int inWidth, int inHeight, int bitsPerPixel, const char* pInColorData, int inColorSize, const char* pInPaletteData, int inPaletteSize)
 {	
-	if( bitsPerPixel == 4 )
+	if( 1 ) //bitsPerPixel == 4 )
 	{
 		SaveAsPNG(inFileName, inWidth, inHeight, bitsPerPixel, pInColorData, inColorSize, pInPaletteData, inPaletteSize);
 	}
@@ -584,19 +589,18 @@ bool BitmapWriter::SaveAsPNG(const string& inFileName, int inWidth, int inHeight
 	//create encoder and set settings and info (optional)
 	lodepng::State state;
 	
-	
-	if( inPaletteSize != 64 )
+	if( bitsPerPixel != 4 && bitsPerPixel != 8 )
 	{
-		printf("Unable to save PNG for %s.  Only 4bit paletted images supported.\n", inFileName.c_str());
+		printf("Unable to save PNG for %s.  Only 4bit and 8bit paletted images supported.\n", inFileName.c_str());
 		return false;
 	}
 
 	//generate palette
 	for(int i = 0; i < inPaletteSize; i += 4)
 	{
-		const unsigned char r = pInPaletteData[i+0];
+		const unsigned char r = pInPaletteData[i+2];
 		const unsigned char g = pInPaletteData[i+1];
-		const unsigned char b = pInPaletteData[i+2];
+		const unsigned char b = pInPaletteData[i+0];
 
 		lodepng_palette_add(&state.info_png.color, r, g, b, 255);
 		lodepng_palette_add(&state.info_raw, r, g, b, 255);
@@ -604,10 +608,10 @@ bool BitmapWriter::SaveAsPNG(const string& inFileName, int inWidth, int inHeight
 	
 	//both the raw image and the encoded image must get colorType 3 (palette)
 	state.info_png.color.colortype = LCT_PALETTE; //if you comment this line, and create the above palette in info_raw instead, then you get the same image in a RGBA PNG.
-	state.info_png.color.bitdepth  = 4;
+	state.info_png.color.bitdepth  = bitsPerPixel;
 	state.info_raw.colortype       = LCT_PALETTE;
-	state.info_raw.bitdepth        = 4;
-	state.encoder.auto_convert     = 0; //we specify ourselves exactly what output PNG color mode we want
+	state.info_raw.bitdepth        = bitsPerPixel;
+	state.encoder.auto_convert     = 0; //bitsPerPixel specify ourselves exactly what output PNG color mode we want
 	
 	//encode and save
 	std::vector<unsigned char> buffer;

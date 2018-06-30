@@ -690,7 +690,7 @@ void DumpExtractedSakuraText(const vector<SakuraTextFile>& inSakuraTextFiles, co
 	}
 }
 
-bool ExtractImage(const FileNameContainer& inFileNameContainer, const string& outFileName, const FileData& inPaletteFile, const int inTextureDimX, const int inTextureDimY, const int inNumTexturesPerRow, const int dataOffset = 0)
+bool ExtractImage(const FileNameContainer& inFileNameContainer, const string& outFileName, const FileData& inPaletteFile, const int inTextureDimX, const int inTextureDimY, const int inNumTexturesPerRow, const int dataOffset = 0, bool bFillEmptyData = true)
 {
 	FileData fontSheet;
 	if( !fontSheet.InitializeFileData(inFileNameContainer) )
@@ -700,13 +700,14 @@ bool ExtractImage(const FileNameContainer& inFileNameContainer, const string& ou
 
 	printf("Extracting: %s\n", inFileNameContainer.mFileName.c_str());
 	
+	const int divisor            = inPaletteFile.GetDataSize() == 64 ? 2 : 1; //4bit images only have half the pixels
 	const int tileDimX           = inTextureDimX;
 	const int tileDimY           = inTextureDimY;
-	const int tileBytes          = (tileDimX*tileDimY)/2; //4bits per pixel, so only half the amount of bytes as pixels
+	const int tileBytes          = (tileDimX*tileDimY)/divisor; //4bits per pixel, so only half the amount of bytes as pixels
 	const int tilesPerRow        = inNumTexturesPerRow;
 	const int bytesPerTile       = tileBytes;
 	const int bytesPerTileRow    = bytesPerTile*tilesPerRow;
-	const unsigned long dataSize = fontSheet.GetDataSize() - dataOffset;
+	const unsigned long dataSize = bFillEmptyData ? fontSheet.GetDataSize() - dataOffset : inTextureDimX*inTextureDimY*inNumTexturesPerRow;
 	const int numRows            = (int)ceil( dataSize/ (float)bytesPerTileRow);
 	const int numColumns         = numRows > 0 ? tilesPerRow : dataSize/bytesPerTileRow;
 	const int imageHeight        = numRows*tileDimY;
@@ -720,7 +721,7 @@ bool ExtractImage(const FileNameContainer& inFileNameContainer, const string& ou
 	int numTiles                     = dataSize/tileBytes;
 	int currTileRow                  = 0;
 	int currTileCol                  = 0;
-	const int bytesInEachTilesWidth  = tileDimX/2;
+	const int bytesInEachTilesWidth  = tileDimX/divisor;
 	const int numTiledBytes          = (numRows*bytesPerTileRow);// + numColumns*bytesInEachTilesWidth;
 	char* pOutTiledData              = new char[numTiledBytes];
 	const int bytesPerHorizontalLine = bytesInEachTilesWidth*numColumns;
@@ -1847,6 +1848,7 @@ bool FindDialogOrder(const string& rootSakuraTaisenDirectory, map<string, Dialog
 		const unsigned char* pData = (const unsigned char*)infoData.GetData();
 		unsigned long index = 0;
 		int appearance = 0;
+		unsigned short imageId = 0;
 		const unsigned long dataSize = infoData.GetDataSize();
 		while (index + 5 < dataSize)
 		{
@@ -1868,8 +1870,7 @@ bool FindDialogOrder(const string& rootSakuraTaisenDirectory, map<string, Dialog
 					unsigned long lookAheadValue = index + lookAhead;
 					if (pData[lookAheadValue] == 0x2B && pData[lookAheadValue + 1] == 0x80 && pData[lookAheadValue + 2] == 0 && pData[lookAheadValue + 3] != 0)
 					{
-						unsigned short imageId = pData[lookAheadValue + 4] + (pData[lookAheadValue + 3] << 8);
-						outOrder[infoFileNameInfo.mNoExtension].idAndImage[id] = imageId;
+						imageId = pData[lookAheadValue + 4] + (pData[lookAheadValue + 3] << 8);
 					}
 
 					//Break out if the next id is found
@@ -1882,6 +1883,8 @@ bool FindDialogOrder(const string& rootSakuraTaisenDirectory, map<string, Dialog
 
 					++lookAhead;
 				}
+
+				outOrder[infoFileNameInfo.mNoExtension].idAndImage[id] = imageId;
 			}
 
 			++index;
@@ -1923,7 +1926,11 @@ void OutputDialogOrder(const string& rootSakuraTaisenDirectory, const string& ou
 
 bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& duplicatesFileName, const string& sakura1Directory)
 {
+	const int faceFileNameBufferSize = 50;
+	char faceFileNameBuffer[faceFileNameBufferSize];
+
 	printf("Parsing duplicates file\n");
+
 	//Load duplicate info
 	FileNameContainer dupFileNameContainer(duplicatesFileName.c_str());
 	TextFileData duplicatesFile(dupFileNameContainer);
@@ -2476,6 +2483,7 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& dup
 		htmlFile.WriteString("<table>\n");
 		htmlFile.WriteString("\t<tr bgcolor=\"#c8c8fe\">\n");
 				htmlFile.WriteString("\t<th>#</th>\n");
+				htmlFile.WriteString("\t<th>Speaker</th>\n");
 				htmlFile.WriteString("\t<th>Japanese</th>\n");
 				htmlFile.WriteString("\t<th>English</th>\n");
 				htmlFile.WriteString("\t<th>ID</th>\n");
@@ -2512,6 +2520,16 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& dup
 				fprintf(htmlFile.GetFileHandle(), "<tr id=\"tr_edit_%i\" bgcolor=\"#%s\">\n", num + 1, bgColor);
 					snprintf(buffer, 2048, "<td align=\"center\" width=\"20\">%i</td>", num + 1);
 					htmlFile.WriteString(string(buffer));
+
+					int faceImageId = 0;
+					if( bDialogOrderExists )
+					{
+						DialogOrder::IdAndImageMap::const_iterator imageIdIter = dialogOrderIter->second.idAndImage.find(id);
+						faceImageId = imageIdIter && imageIdIter != dialogOrderIter->second.idAndImage.end() ? imageIdIter->second : 0;
+					}
+					snprintf(buffer, 2048, "<td width=\"48\"><img src=\"..\\ExtractedData\\Faces\\%sFCE\\%04x.png\"></td>", infoFileName.c_str(), faceImageId);
+					htmlFile.WriteString(string(buffer));
+					
 
 					snprintf(buffer, 2048, "<td width=\"240\"><img src=\"..\\ExtractedData\\Dialog\\%sTBL\\%s\"></td>", infoFileName.c_str(), fileNameInfo.mFileName.c_str());
 					htmlFile.WriteString(string(buffer));
@@ -2568,7 +2586,7 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& dup
 
 void Extract8BitImage(const string& fileName, const string& paletteFileName, const int offset, const string& outDirectory)
 {
-	FileNameContainer imageFileNameInfo(fileName.c_str());	
+	FileNameContainer imageFileNameInfo(fileName.c_str());
 	FileNameContainer paletteFileNameInfo(paletteFileName.c_str());
 	FileData paletteFile;
 	if( !paletteFile.InitializeFileData(paletteFileNameInfo) )
@@ -2579,6 +2597,85 @@ void Extract8BitImage(const string& fileName, const string& paletteFileName, con
 	const string outFileName = outDirectory + imageFileNameInfo.mNoExtension + string(".bmp");
 
 	ExtractImage(imageFileNameInfo, outFileName, paletteFile, 40, 48, 1, offset);
+}
+
+void ExtractFaceFiles(const string& sakuraDirectory, const string& paletteFileName, const string& outDirectory)
+{
+	//Find all translated text files
+	vector<FileNameContainer> allFiles;
+	FindAllFilesWithinDirectory(sakuraDirectory, allFiles);
+	if( !allFiles.size() )
+	{
+		return;
+	}
+
+	vector<FileNameContainer> faceFiles;
+	GetAllFilesOfType(allFiles, "FCE.BIN", faceFiles);
+
+	FileNameContainer paletteFileNameInfo(paletteFileName.c_str());
+	FileData paletteData;
+	if( !paletteData.InitializeFileData(paletteFileNameInfo) )
+	{
+		return;
+	}
+
+	for(const FileNameContainer& fileNameInfo : faceFiles)
+	{
+		const string subDirName = outDirectory + fileNameInfo.mNoExtension + Seperators;
+		if( !CreateDirectoryHelper(subDirName) )
+		{
+			printf("Unable to create directory: %s", subDirName.c_str());
+			return;
+		}
+
+		//Extract the whole sheet
+		const string wholeSheetName = subDirName + fileNameInfo.mNoExtension + string(".bmp");
+		ExtractImage(fileNameInfo, wholeSheetName, paletteData, 40, 48, 1, 0xA0, true);
+
+		//**Now extract the individual faces**
+		FileData faceFile;
+		if( !faceFile.InitializeFileData(fileNameInfo) )
+		{
+			return;
+		}
+
+		//Read in the head for the face file
+		const unsigned short faceHeaderSize = 0xA0;
+		unsigned char faceFileHeader[faceHeaderSize];
+		memcpy_s(faceFileHeader, faceHeaderSize, faceFile.GetData(), faceHeaderSize);
+
+		//Figure out how many entries there are
+		int numFacesInFile =  0;
+		for(unsigned short s = 0; s < faceHeaderSize/2; ++s)
+		{
+			if( !((unsigned short*)faceFileHeader)[s] )
+			{
+				break;
+			}
+
+			++numFacesInFile;
+		}
+
+		const int faceImageSize = 40*48 + 40*16 + 40*16;
+		const unsigned int numExpectedBytes = numFacesInFile*faceImageSize;
+		if(faceFile.GetDataSize() - faceHeaderSize != numExpectedBytes)
+		{
+			printf("FaceFile %s has an unexpected file size.\n", fileNameInfo.mFileName.c_str());
+			return;
+		}
+		faceFile.Close();
+
+		//Output individuals faces
+		static const int faceFileNameBufferSize = 50;
+		char faceFileNameBuffer[faceFileNameBufferSize];
+		for(int i = 0; i < numFacesInFile; ++i)
+		{
+			sprintf_s(faceFileNameBuffer, faceFileNameBufferSize, "%02x%02x.bmp", faceFileHeader[i], faceFileHeader[i*2+1]);
+
+			const string outFaceFileName = subDirName + faceFileNameBuffer;
+			ExtractImage(fileNameInfo, outFaceFileName, paletteData, 40, 48, 1, i*faceImageSize + faceHeaderSize, false);
+		}
+	}
 }
 
 bool PatchGame(const string& rootSakuraTaisenDirectory, const string& patchedSakuraTaisenDirectory, const string& translatedTextDirectory, const string& fontSheetFileName, const string& originalPaletteFileName)
@@ -2660,6 +2757,7 @@ void PrintHelp()
 	printf("CreateTBLSpreadsheets dialogImageDirectory duplicatesFile sakura1Directory\n");
 	printf("ExtractImages fileName paletteFile width height outDirectory\n");
 	printf("Extract8BitImage fileName paletteFile offset outDirectory\n");
+	printf("ExtractFaceFiles rootSakuraTaisenDirectory paletteFile outDirectory\n");
 	printf("PatchGame rootSakuraTaisenDirectory patchedSakuraTaisenDirectory translatedTextDirectory fontSheet originalPalette\n");
 }
 
@@ -2792,6 +2890,14 @@ int main(int argc, char *argv[])
 		const string outDirectory = string(argv[5]) + Seperators;
 		
 		Extract8BitImage(fileName, paletteFile, offset, outDirectory);
+	}
+	else if(command == "ExtractFaceFiles" && argc == 5 )
+	{
+		const string rootSakuraTaisenDirectory = string(argv[2]) + Seperators;
+		const string paletteFile               = string(argv[3]);
+		const string outDirectory              = string(argv[4]) + Seperators;
+
+		ExtractFaceFiles(rootSakuraTaisenDirectory, paletteFile, outDirectory);
 	}
 	else
 	{

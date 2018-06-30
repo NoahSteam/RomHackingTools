@@ -82,6 +82,7 @@ public:
 	FileData() : mFileSize(0), mBufferSize(0), mCrc(0xffffffff), mpData(nullptr), mbCrcCalculated(false) {}
 	~FileData();
 	
+	void  Close();
 	bool  InitializeFileData(const FileNameContainer& inFileData);
 	bool  InitializeFileData(const char* pFileName, const char* pFullPath);
 	bool  DoesThisFileContain(const FileData& otherFile, std::vector<unsigned long>* pOutOffsets, bool bFindMultiple) const;
