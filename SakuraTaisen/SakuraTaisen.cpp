@@ -2685,6 +2685,68 @@ void ExtractFaceFiles(const string& sakuraDirectory, const string& paletteFileNa
 	}
 }
 
+void ExtractTMapSP(const string& sakuraDirectory, const string& paletteFileName, const string& outDirectory)
+{
+	const string tmapFilePath = sakuraDirectory + string("SAKURA1\\TMAPSP.BIN");
+	FileNameContainer tmapFileNameInfo(tmapFilePath.c_str());
+
+	const string sakuraFilePath = sakuraDirectory + string("SAKURA");
+	FileNameContainer sakuraFileNameInfo(sakuraFilePath.c_str());
+
+	FileNameContainer paletteFileNameInfo(paletteFileName.c_str());
+	FileData paletteFile;
+	if( !paletteFile.InitializeFileData(paletteFileNameInfo) )
+	{
+		return;
+	}
+
+	FileData sakuraFileData;
+	if( !sakuraFileData.InitializeFileData(sakuraFileNameInfo) )
+	{
+		return;
+	}
+
+	FileData tmapFileData;
+	if( !tmapFileData.InitializeFileData(tmapFileNameInfo) )
+	{
+		return;
+	}
+	
+	PaletteData paletteData;
+	if( !paletteData.CreateFrom15BitData(paletteFile.GetData(), paletteFile.GetDataSize()) )
+	{
+		printf("Unable to create palette.\n");
+		return;
+	}
+
+	struct SakuraLut
+	{
+		unsigned char  width;
+		unsigned char  height;
+		unsigned short reserved;
+		unsigned short addressInTmapSP;
+		unsigned short reserved2;
+	};
+	const int numLutEntries = 93;
+	SakuraLut lookupTable[numLutEntries];
+	const unsigned int offsetToData = 0x0001EBF8;
+	memcpy_s(lookupTable, sizeof(lookupTable), sakuraFileData.GetData() + offsetToData, sizeof(lookupTable));
+
+	for(int i = 0; i < numLutEntries; ++i)
+	{
+		lookupTable[i].addressInTmapSP = SwapByteOrder(lookupTable[i].addressInTmapSP);
+
+		const string outFileName = outDirectory + std::to_string(i);
+		const string outFileNameTiled = outDirectory + std::to_string(i) + string("_tiled");
+
+		FileNameContainer outFileNameInfo(outFileName.c_str());
+		ExtractImage(tmapFileNameInfo, outFileNameTiled, paletteFile, lookupTable[i].width*8, lookupTable[i].height, 1, lookupTable[i].addressInTmapSP*8, false);
+		
+		BitmapWriter outBmp;
+		outBmp.CreateBitmap(outFileName, lookupTable[i].width*8, lookupTable[i].height, 4, tmapFileData.GetData() + lookupTable[i].addressInTmapSP*8, (lookupTable[i].width*lookupTable[i].height)/2, paletteData.GetData(), paletteData.GetSize());
+	}
+}
+
 bool PatchGame(const string& rootSakuraTaisenDirectory, const string& patchedSakuraTaisenDirectory, const string& translatedTextDirectory, const string& fontSheetFileName, const string& originalPaletteFileName)
 {
 	char buffer[MAX_PATH];
@@ -2765,6 +2827,7 @@ void PrintHelp()
 	printf("ExtractImages fileName paletteFile width height outDirectory\n");
 	printf("Extract8BitImage fileName paletteFile offset outDirectory\n");
 	printf("ExtractFaceFiles rootSakuraTaisenDirectory paletteFile outDirectory\n");
+	printf("ExtractTMapSP rootSakuraTaisenDirectory paletteFile outDirectory\n");
 	printf("PatchGame rootSakuraTaisenDirectory patchedSakuraTaisenDirectory translatedTextDirectory fontSheet originalPalette\n");
 }
 
@@ -2905,6 +2968,14 @@ int main(int argc, char *argv[])
 		const string outDirectory              = string(argv[4]) + Seperators;
 
 		ExtractFaceFiles(rootSakuraTaisenDirectory, paletteFile, outDirectory);
+	}	
+	else if(command == "ExtractTMapSP" && argc == 5 )
+	{
+		const string rootSakuraTaisenDirectory = string(argv[2]) + Seperators;
+		const string paletteFile               = string(argv[3]);
+		const string outDirectory              = string(argv[4]) + Seperators;
+
+		ExtractTMapSP(rootSakuraTaisenDirectory, paletteFile, outDirectory);
 	}
 	else
 	{

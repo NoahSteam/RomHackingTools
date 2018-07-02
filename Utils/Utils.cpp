@@ -532,7 +532,7 @@ void PaletteData::SetValue(int index, unsigned short value)
 ////////////////////////////////
 bool BitmapWriter::CreateBitmap(const string& inFileName, int inWidth, int inHeight, int bitsPerPixel, const char* pInColorData, int inColorSize, const char* pInPaletteData, int inPaletteSize)
 {	
-	if( 0 ) //bitsPerPixel == 4 )
+	if( 1 ) //bitsPerPixel == 4 )
 	{
 		SaveAsPNG(inFileName, inWidth, inHeight, bitsPerPixel, pInColorData, inColorSize, pInPaletteData, inPaletteSize);
 	}
