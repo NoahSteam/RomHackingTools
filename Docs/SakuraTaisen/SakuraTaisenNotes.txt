@@ -110,3 +110,22 @@ At the top of FCE files are are 2byte indexes to the images.
 -Todo, output all FCE files
 -Seperate the FCE files into face images for the website
 -Fix 0100.bin parsing so that 0001 and 00ff are valid values
+
+Theater text boxes: TMAPS.bin @0x00009780
+05c00088
+06065e58
+06001f88
+
+Theater signs:
+SAKURA in the block around 0001EE50
+Drawing code at 0001e65c and 00020284
+
+Theater signs: 0001EE50
+Width/8,height 07 18
+Drawing code: c510 7a68
+
+An image lives at 8f40 in TMAPSP.BIN
+Sakura specifies the offset as 11E8.
+11e8 * 8 = 8f40
+
+Sakura has size and addresses/8 for images in TMAPSP.BIN

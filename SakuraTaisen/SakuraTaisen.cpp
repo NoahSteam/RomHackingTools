@@ -700,7 +700,7 @@ bool ExtractImage(const FileNameContainer& inFileNameContainer, const string& ou
 
 	printf("Extracting: %s\n", inFileNameContainer.mFileName.c_str());
 	
-	const int divisor            = inPaletteFile.GetDataSize() == 64 ? 2 : 1; //4bit images only have half the pixels
+	const int divisor            = inPaletteFile.GetDataSize() == 32 ? 2 : 1; //4bit images only have half the pixels
 	const int tileDimX           = inTextureDimX;
 	const int tileDimY           = inTextureDimY;
 	const int tileBytes          = (tileDimX*tileDimY)/divisor; //4bits per pixel, so only half the amount of bytes as pixels
@@ -752,7 +752,7 @@ bool ExtractImage(const FileNameContainer& inFileNameContainer, const string& ou
 	}
 
 	BitmapWriter fontBitmap;
-	fontBitmap.CreateBitmap(outFileName, imageWidth, -imageHeight, inPaletteFile.GetDataSize() == 64 ? 4 : 8, pOutTiledData, numTiledBytes, paletteData.GetData(), paletteData.GetSize());	
+	fontBitmap.CreateBitmap(outFileName, imageWidth, -imageHeight, inPaletteFile.GetDataSize() == 32 ? 4 : 8, pOutTiledData, numTiledBytes, paletteData.GetData(), paletteData.GetSize());	
 
 	delete[] pOutTiledData;
 
@@ -1863,14 +1863,15 @@ bool FindDialogOrder(const string& rootSakuraTaisenDirectory, map<string, Dialog
 				++appearance;
 				index += 5;
 
-				//Find image id if there is one
-				unsigned long lookAhead = 0;
-				while(index + lookAhead + 4 < dataSize)
+				//Find next image id if there is one
+				long lookAhead = -6;
+				while(index + lookAhead - 4 > 0)
 				{
 					unsigned long lookAheadValue = index + lookAhead;
-					if (pData[lookAheadValue] == 0x2B && pData[lookAheadValue + 1] == 0x80 && pData[lookAheadValue + 2] == 0 && pData[lookAheadValue + 3] != 0)
+					if (pData[lookAheadValue] == 0x2B && pData[lookAheadValue + 1] == 0x80 && pData[lookAheadValue + 2] == 0 && pData[lookAheadValue + 4] != 0)
 					{
 						imageId = pData[lookAheadValue + 4] + (pData[lookAheadValue + 3] << 8);
+						break;
 					}
 
 					//Break out if the next id is found
@@ -1881,10 +1882,11 @@ bool FindDialogOrder(const string& rootSakuraTaisenDirectory, map<string, Dialog
 						break;
 					}
 
-					++lookAhead;
+					--lookAhead;
 				}
-
+				
 				outOrder[infoFileNameInfo.mNoExtension].idAndImage[id] = imageId;
+
 			}
 
 			++index;
@@ -1926,9 +1928,6 @@ void OutputDialogOrder(const string& rootSakuraTaisenDirectory, const string& ou
 
 bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& duplicatesFileName, const string& sakura1Directory)
 {
-	const int faceFileNameBufferSize = 50;
-	char faceFileNameBuffer[faceFileNameBufferSize];
-
 	printf("Parsing duplicates file\n");
 
 	//Load duplicate info
@@ -2310,7 +2309,9 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& dup
 		htmlFile.WriteString("                         document.getElementById(inTrID).bgColor = \"#e3fec8\";\n");
 		htmlFile.WriteString("                    }\n");
 		htmlFile.WriteString("                    $(inDivID).html(english);\n");
-		htmlFile.WriteString("                    SaveDuplicateData(jsonEntry.ImageFileName, english, jsonEntry.DivId, inCRC);\n");
+		htmlFile.WriteString("                    var divID = inDivID.replace(\"#\", \"\");\n");
+        htmlFile.WriteString("                    var imageName = divID.replace(\"edit_\", \"\") + \".bmp\";\n");
+        htmlFile.WriteString("                    SaveDuplicateData(imageName, english, divID, inCRC);\n");
 		htmlFile.WriteString("                    return;\n");
 		htmlFile.WriteString("               }\n");
 		htmlFile.WriteString("          }\n");
@@ -2525,11 +2526,17 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& dup
 					if( bDialogOrderExists )
 					{
 						DialogOrder::IdAndImageMap::const_iterator imageIdIter = dialogOrderIter->second.idAndImage.find(id);
-						faceImageId = imageIdIter && imageIdIter != dialogOrderIter->second.idAndImage.end() ? imageIdIter->second : 0;
+						faceImageId = imageIdIter != dialogOrderIter->second.idAndImage.end() ? imageIdIter->second : 0;
 					}
-					snprintf(buffer, 2048, "<td width=\"48\"><img src=\"..\\ExtractedData\\Faces\\%sFCE\\%04x.png\"></td>", infoFileName.c_str(), faceImageId);
-					htmlFile.WriteString(string(buffer));
-					
+					if( faceImageId != 0 )
+					{
+						snprintf(buffer, 2048, "<td width=\"48\"><img src=\"..\\ExtractedData\\Faces\\%sFCE\\%04x.png\"></td>", infoFileName.c_str(), faceImageId);
+					}
+					else
+					{
+						snprintf(buffer, 2048, "<td width=\"48\"><img src=\"..\\ExtractedData\\Faces\\UnknownFace.png\"></td>");
+					}
+					htmlFile.WriteString(string(buffer));					
 
 					snprintf(buffer, 2048, "<td width=\"240\"><img src=\"..\\ExtractedData\\Dialog\\%sTBL\\%s\"></td>", infoFileName.c_str(), fileNameInfo.mFileName.c_str());
 					htmlFile.WriteString(string(buffer));
@@ -2670,7 +2677,7 @@ void ExtractFaceFiles(const string& sakuraDirectory, const string& paletteFileNa
 		char faceFileNameBuffer[faceFileNameBufferSize];
 		for(int i = 0; i < numFacesInFile; ++i)
 		{
-			sprintf_s(faceFileNameBuffer, faceFileNameBufferSize, "%02x%02x.bmp", faceFileHeader[i], faceFileHeader[i*2+1]);
+			sprintf_s(faceFileNameBuffer, faceFileNameBufferSize, "%02x%02x.bmp", faceFileHeader[i*2], faceFileHeader[i*2+1]);
 
 			const string outFaceFileName = subDirName + faceFileNameBuffer;
 			ExtractImage(fileNameInfo, outFaceFileName, paletteData, 40, 48, 1, i*faceImageSize + faceHeaderSize, false);
