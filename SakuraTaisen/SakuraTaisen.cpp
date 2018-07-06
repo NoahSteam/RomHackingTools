@@ -1928,30 +1928,6 @@ void OutputDialogOrder(const string& rootSakuraTaisenDirectory, const string& ou
 
 bool CreateTMapSpSpreadsheet(const string& imageDirectory)
 {
-	const int tmapImages[] = 
-	{
-		53,
-		54,
-		55,
-		59,
-		60,
-		63,
-		64,
-		67,
-		70,
-		77,
-		78,
-		79,
-		80,
-		81,
-		82,
-		83,
-		84,
-		85,
-		88,
-		90
-	};
-
 	TextFileWriter htmlFile;
 	const string htmlFileName = imageDirectory + string("..\\..\\Translation\\TMapSP.php");
 	if( !htmlFile.OpenFileForWrite(htmlFileName) )
@@ -1975,40 +1951,40 @@ bool CreateTMapSpSpreadsheet(const string& imageDirectory)
 	htmlFile.WriteString("			var translatedText = document.getElementById(inDivID).value;\n");
 	htmlFile.WriteString("			var fileName = document.getElementById(\"FileName\").innerHTML;\n");
 	htmlFile.WriteString("			$.ajax({\n");
-	htmlFile.WriteString("			type: \"POST\",\n");
-	htmlFile.WriteString("			url: \"UpdateTranslationTest.php\",\n");
-	htmlFile.WriteString("			data: { inTBLFileName: fileName, inImageName:inDialogImageName, inTranslation:translatedText, inDivId:inDivID, inCrc:0 },\n");
-	htmlFile.WriteString("			success: function(result)\n");
-	htmlFile.WriteString("			{\n");
-	htmlFile.WriteString("				var trId = \"tr_\" + inDivID;\n");
-	htmlFile.WriteString("				if( translatedText != \"Untranslated\" && translatedText != \"<div>Untranslated</div>\")\n");
+	htmlFile.WriteString("				type: \"POST\",\n");
+	htmlFile.WriteString("				url: \"UpdateTranslationTest.php\",\n");
+	htmlFile.WriteString("				data: { inTBLFileName: fileName, inImageName:inDialogImageName, inTranslation:translatedText, inDivId:inDivID, inCrc:0 },\n");
+	htmlFile.WriteString("				success: function(result)\n");
 	htmlFile.WriteString("				{\n");
-	htmlFile.WriteString("					if( document.getElementById(trId).bgColor != \"#fec8c8\" )\n");
+	htmlFile.WriteString("					var trId = \"tr_\" + inDivID;\n");
+	htmlFile.WriteString("					if( translatedText != \"Untranslated\" && translatedText != \"<div>Untranslated</div>\")\n");
 	htmlFile.WriteString("					{\n");
-	htmlFile.WriteString("						document.getElementById(trId).bgColor = \"#e3fec8\";\n");
+	htmlFile.WriteString("						if( document.getElementById(trId).bgColor != \"#fec8c8\" )\n");
+	htmlFile.WriteString("						{\n");
+	htmlFile.WriteString("							document.getElementById(trId).bgColor = \"#e3fec8\";\n");
+	htmlFile.WriteString("						}\n");
 	htmlFile.WriteString("					}\n");
-	htmlFile.WriteString("				}\n");
 	htmlFile.WriteString("				else\n");
 	htmlFile.WriteString("				{\n");
 	htmlFile.WriteString("					document.getElementById(trId).bgColor = \"#fefec8\";\n");
 	htmlFile.WriteString("				}\n");
 	htmlFile.WriteString("			}\n");
 	htmlFile.WriteString("		});\n");
-	htmlFile.WriteString("	}\n");
+	htmlFile.WriteString("}\n");
 	htmlFile.WriteString("		function SaveEdits(inDialogImageName, inDivID)\n");
 	htmlFile.WriteString("		{\n");
 	htmlFile.WriteString("			SaveData(inDialogImageName, inDivID);\n");
 	htmlFile.WriteString("		}\n");
 	htmlFile.WriteString("		function ExportData()\n");
 	htmlFile.WriteString("		{\n");
-	htmlFile.WriteString("		$(\"textarea\").each ( function ()\n");
-	htmlFile.WriteString("		{\n");
-	htmlFile.WriteString("			var thisText = $(this).text();\n");
-	htmlFile.WriteString("			thisText = thisText.replace(/<br>/g, '&ltbr&gt');\n");
-	htmlFile.WriteString("			thisText = thisText.replace(/<sp>/g, '&ltsp&gt');\n");
-	htmlFile.WriteString("			document.write(thisText + \"<br>\");\n");
-	htmlFile.WriteString("		});\n");
-	htmlFile.WriteString("	}\n");
+	htmlFile.WriteString("			$(\"textarea\").each ( function ()\n");
+	htmlFile.WriteString("			{\n");
+	htmlFile.WriteString("				var thisText = $(this).text();\n");
+	htmlFile.WriteString("				thisText = thisText.replace(/<br>/g, '&ltbr&gt');\n");
+	htmlFile.WriteString("				thisText = thisText.replace(/<sp>/g, '&ltsp&gt');\n");
+	htmlFile.WriteString("				document.write(thisText + \"<br>\");\n");
+	htmlFile.WriteString("			});\n");
+	htmlFile.WriteString("		}\n");
 	htmlFile.WriteString("	function LoadData()\n");
 	htmlFile.WriteString("	{\n");
 	htmlFile.WriteString("		var fileName = document.getElementById(\"FileName\").innerHTML;\n");
@@ -2023,11 +1999,15 @@ bool CreateTMapSpSpreadsheet(const string& imageDirectory)
 	htmlFile.WriteString("			for (i = 0; i < json.length; i++)\n");
 	htmlFile.WriteString("			{\n");
 	htmlFile.WriteString("				var jsonEntry = json[i];\n");
-	htmlFile.WriteString("				var english   = jsonEntry.English.replace(/\\/g, '');\n");
+	htmlFile.WriteString("				var english   = jsonEntry.English.replace(/\\\\/g, \'\');\n");
 	htmlFile.WriteString("				var divId     = \"#\" + jsonEntry.DivId;\n");
 	htmlFile.WriteString("					var trId      = \"tr_\" + jsonEntry.DivId;\n");
 	htmlFile.WriteString("					if( english != \"Untranslated\" && english != \"<div>Untranslated</div>\")\n");
 	htmlFile.WriteString("					{\n");
+	htmlFile.WriteString("						if( document.getElementById(trId).bgColor != \"#fec8c8\" )\n");
+	htmlFile.WriteString("						{\n");
+	htmlFile.WriteString("						       document.getElementById(trId).bgColor = \"#e3fec8\";\n");
+	htmlFile.WriteString("						}\n");
 	htmlFile.WriteString("						$(divId).html(english);\n");
 	htmlFile.WriteString("					}\n");
 	htmlFile.WriteString("			}\n");
@@ -2067,7 +2047,7 @@ bool CreateTMapSpSpreadsheet(const string& imageDirectory)
 	htmlFile.WriteString("	$bPermissionFound = false;\n");
 	htmlFile.WriteString("	foreach ($allowedFiles as $value)\n");
 	htmlFile.WriteString("	{\n");
-	htmlFile.WriteString("		if( $value == \"0100TBL\" )\n");
+	htmlFile.WriteString("		if( $value == \"TMapSP\" )\n");
 	htmlFile.WriteString("		{\n");
 	htmlFile.WriteString("			$bPermissionFound = true;\n");
 	htmlFile.WriteString("			break;\n");
@@ -2086,7 +2066,7 @@ bool CreateTMapSpSpreadsheet(const string& imageDirectory)
 	htmlFile.WriteString("				$currUser = $_SERVER['PHP_AUTH_USER'];\n");
 	htmlFile.WriteString("				if( $currUser == \"swtranslator\" )\n");
 	htmlFile.WriteString("				{\n");
-	htmlFile.WriteString("					echo \"<input align=\\\"center\" type=\\\"button\\\" value=\\\"Export Data\\\" onclick=\\\"ExportData()\\\"/>\";\n");
+	htmlFile.WriteString("					echo \"<input align=\\\"center\\\" type=\\\"button\\\" value=\\\"Export Data\\\" onclick=\\\"ExportData()\\\"/>\";\n");
 	htmlFile.WriteString("				}\n");
 	htmlFile.WriteString("			?>\n\n");
 	htmlFile.WriteString("			<table align=\"center\">\n");
@@ -2102,12 +2082,13 @@ bool CreateTMapSpSpreadsheet(const string& imageDirectory)
 	htmlFile.WriteString("					<th>Japanese</th>\n");
 	htmlFile.WriteString("					<th>English</th>\n");
 	htmlFile.WriteString("				</tr>\n");
-	//TODO iterate through all images
-	const int numImages = sizeof(tmapImages)/sizeof(int);
-	for(int i = 0; i < numImages; ++i)
+	
+	const int firstImage = 51; 
+	const int lastImage  = 92;
+	for(int i = firstImage; i <= lastImage; ++i)
 	{
-		fprintf(htmlFile.GetFileHandle(), "				<tr id=\"tr_edit_%i\" bgcolor=\"#fefec8\">\n", tmapImages[i]);
-		fprintf(htmlFile.GetFileHandle(), "					<td align=\"center\" width=\"20\">%i</td><td width=\"88\"><img src=\"..\\ExtractedData\\TMapSP\\%i.png\"></td><td width=\"480\"><textarea id=\"edit_%i\" contenteditable=true onchange=\"SaveEdits('%i.bmp', 'edit_%i')\" style=\"border: none; width: 100%%; -webkit-box-sizing: border-box; -moz-box-sizing: border-box; box-sizing: border-box;\">Untranslated</textarea></td>\n", tmapImages[i], tmapImages[i], tmapImages[i], tmapImages[i], tmapImages[i]);
+		fprintf(htmlFile.GetFileHandle(), "				<tr id=\"tr_edit_%i\" bgcolor=\"#fefec8\">\n", i);
+		fprintf(htmlFile.GetFileHandle(), "					<td align=\"center\" width=\"20\">%i</td><td width=\"88\"><img src=\"..\\ExtractedData\\TMapSP\\%i.png\"></td><td width=\"480\"><textarea id=\"edit_%i\" contenteditable=true onchange=\"SaveEdits('%i.bmp', 'edit_%i')\" style=\"border: none; width: 100%%; -webkit-box-sizing: border-box; -moz-box-sizing: border-box; box-sizing: border-box;\">Untranslated</textarea></td>\n", i, i, i, i, i);
 		fprintf(htmlFile.GetFileHandle(), "				</tr>\n");
 	}
 	
@@ -2786,7 +2767,7 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& dup
 	return true;
 }
 
-void Extract8BitImage(const string& fileName, const string& paletteFileName, const int offset, const string& outDirectory)
+void Extract8BitImage(const string& fileName, const string& paletteFileName, const int offset, const int width, const int height, const string& outDirectory)
 {
 	FileNameContainer imageFileNameInfo(fileName.c_str());
 	FileNameContainer paletteFileNameInfo(paletteFileName.c_str());
@@ -2798,7 +2779,7 @@ void Extract8BitImage(const string& fileName, const string& paletteFileName, con
 
 	const string outFileName = outDirectory + imageFileNameInfo.mNoExtension + string(".bmp");
 
-	ExtractImage(imageFileNameInfo, outFileName, paletteFile, 40, 48, 1, offset);
+	ExtractImage(imageFileNameInfo, outFileName, paletteFile, width, height, 1, offset);
 }
 
 void ExtractFaceFiles(const string& sakuraDirectory, const string& paletteFileName, const string& outDirectory)
@@ -2916,15 +2897,15 @@ void ExtractTMapSP(const string& sakuraDirectory, const string& paletteFileName,
 
 	struct SakuraLut
 	{
-		unsigned char  width;
-		unsigned char  height;
-		unsigned short reserved;
 		unsigned short addressInTmapSP;
+		unsigned short reserved;
+		unsigned char  width;
+		unsigned char  height;		
 		unsigned short reserved2;
 	};
 	const int numLutEntries = 93;
 	SakuraLut lookupTable[numLutEntries];
-	const unsigned int offsetToData = 0x0001EBF8;
+	const unsigned int offsetToData = 0x0001EBF4;
 	memcpy_s(lookupTable, sizeof(lookupTable), sakuraFileData.GetData() + offsetToData, sizeof(lookupTable));
 
 	for(int i = 0; i < numLutEntries; ++i)
@@ -3017,7 +2998,7 @@ void PrintHelp()
 	printf("CreateTBLSpreadsheets dialogImageDirectory duplicatesFile sakura1Directory\n");
 	printf("CreateTMapSpSpreadsheet imageDirectory\n");
 	printf("ExtractImages fileName paletteFile width height outDirectory\n");
-	printf("Extract8BitImage fileName paletteFile offset outDirectory\n");
+	printf("Extract8BitImage fileName paletteFile offset width height outDirectory\n");
 	printf("ExtractFaceFiles rootSakuraTaisenDirectory paletteFile outDirectory\n");
 	printf("ExtractTMapSP rootSakuraTaisenDirectory paletteFile outDirectory\n");
 	printf("PatchGame rootSakuraTaisenDirectory patchedSakuraTaisenDirectory translatedTextDirectory fontSheet originalPalette\n");
@@ -3150,14 +3131,16 @@ int main(int argc, char *argv[])
 
 		CreateTMapSpSpreadsheet(imageDirectory);
 	}
-	else if(command == "Extract8BitImage" && argc == 6 )
+	else if(command == "Extract8BitImage" && argc == 8 )
 	{
 		const string fileName     = string(argv[2]);
 		const string paletteFile  = string(argv[3]);
 		const int    offset       = atoi(argv[4]);
-		const string outDirectory = string(argv[5]) + Seperators;
+		const int    width        = atoi(argv[5]);
+		const int    height       = atoi(argv[6]);
+		const string outDirectory = string(argv[7]) + Seperators;
 		
-		Extract8BitImage(fileName, paletteFile, offset, outDirectory);
+		Extract8BitImage(fileName, paletteFile, offset, width, height, outDirectory);
 	}
 	else if(command == "ExtractFaceFiles" && argc == 5 )
 	{

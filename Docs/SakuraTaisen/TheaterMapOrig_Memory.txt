@@ -1,0 +1,16 @@
+Found a match in 0101.BIN @0x00204000
+Found a match in 0101FCE.BIN @0x00251000
+Found a match in 0101KNJ.BIN @0x05c03000
+Found a match in 0101TBL.BIN @0x00224000
+Found a match in 0302FCE.BIN @0x00000000
+Found a match in 0606FCE.BIN @0x00000000
+Found a match in ADVSE1 @0x05a54040
+Found a match in NC97.BIN @0x002d8000
+Found a match in NCOBJ.BIN @0x0028d2a0
+Found a match in TMAP.BIN @0x05e00000
+Found a match in TMAP0.BIN @0x05e00000
+Found a match in TMAP1H.BIN @0x05e11800
+Found a match in TMAP2AH.BIN @0x05e23000
+Found a match in TMAPSP.BIN @0x00244000
+Found a match in VDP1.BIN @0x05c22000
+

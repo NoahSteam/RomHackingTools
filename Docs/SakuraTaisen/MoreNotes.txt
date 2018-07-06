@@ -25,6 +25,8 @@ CreateTBLSpreadsheets D:\Rizwan\SakuraWars\ExtractedData\Disc1\Dialog D:\Rizwan\
 ExtractImages d:\Rizwan\SakuraWars\Test\Search.bin D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\Palette.bin 88 46 d:\Rizwan\SakuraWars\TestExtractImages d:\Rizwan\SakuraWars\Test\Search.bin D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\Palette.bin 88 46 d:\Rizwan\SakuraWars\Test
 Extract8BitImage d:\Rizwan\SakuraWars\Disc1\SAKURA1\0100FCE.BIN d:\Rizwan\SakuraWars\Test\Search.bin 160 d:\Rizwan\SakuraWars
 ExtractFaceFiles d:\Rizwan\SakuraWars\Disc1 d:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\FacePalette.bin d:\Rizwan\SakuraWars\ExtractedData\Disc1\Faces
+ExtractTMapSP d:\Rizwan\SakuraWars\Disc1 d:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\TheaterMapPalette.bin d:\Rizwan\SakuraWars\ExtractedData\Disc1\TMapSP
+CreateTMapSpSpreadsheet d:\Rizwan\SakuraWars\ExtractedData\Disc1\TMapSP
 
 ExtractFontSheets a:\SakuraTaisen\Disc1\ a:\SakuraTaisen\ExtractedData\Disc1\FontSheets\Palette.bin a:\SakuraTaisen\ExtractedData\Disc1\FontSheets
 ExtractFontSheets a:\SakuraTaisen\Disc2\ a:\SakuraTaisen\ExtractedData\Disc1\FontSheets\Palette.bin a:\SakuraTaisen\ExtractedData\Disc2\FontSheets

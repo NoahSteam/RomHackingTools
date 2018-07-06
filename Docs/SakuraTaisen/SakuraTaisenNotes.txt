@@ -129,3 +129,5 @@ Sakura specifies the offset as 11E8.
 11e8 * 8 = 8f40
 
 Sakura has size and addresses/8 for images in TMAPSP.BIN
+
+TBL files can be max 131072 bytes
