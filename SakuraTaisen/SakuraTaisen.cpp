@@ -34,8 +34,12 @@ using std::string;
 using std::list;
 using std::map;
 
-const unsigned char OutTileSpacingX = 6;  //MUST BE DIVISIBLE BY 8
+#define OPTIMIZE_INSERTION_DEBUGGING 0
+
+const unsigned char OutTileSpacingX = 6;
 const unsigned char OutTileSpacingY = 12;
+const unsigned long MaxTBLFileSize  = 0x20000;
+
 const string PatchedPaletteName("PatchedPalette.BIN");
 const string PatchedKNJName("PatchedKNJ.BIN");
 const string Disc1("\\Disc1");
@@ -974,7 +978,6 @@ bool CreateTranslatedFontSheet(const string& inTranslatedFontSheet, const string
 		indexOfAlphaColor = 0;
 	}
 
-
 	const string outPaletteName = outPath + PatchedPaletteName;
 	const string outTableName   = outPath + PatchedKNJName;
 
@@ -1299,6 +1302,96 @@ bool PatchPalettes(const string& rootDirectory, const string& originalPalette, c
 	return true;
 }
 
+struct DialogOrder
+{
+	typedef map<unsigned short, unsigned short> IdAndImageMap;
+
+	map<unsigned short, vector<int>> idAndOrder;
+	map<int, unsigned short>         orderAndId;
+	IdAndImageMap                    idAndImage;
+};
+
+bool FindDialogOrder(const string& rootSakuraTaisenDirectory, map<string, DialogOrder>& outOrder)
+{
+	//Find all files
+	vector<FileNameContainer> sakuraTaisenFiles;
+	FindAllFilesWithinDirectory(rootSakuraTaisenDirectory, sakuraTaisenFiles);
+	if (!sakuraTaisenFiles.size())
+	{
+		return false;
+	}
+
+	//Find all dialog files
+	vector<FileNameContainer> tableFiles;
+	GetAllFilesOfType(sakuraTaisenFiles, "TBL.BIN", tableFiles);
+
+	for (const FileNameContainer& tableFileName : tableFiles)
+	{
+		const size_t lastIndex = tableFileName.mFileName.find_first_of("TBL");
+		const string infoFileName = tableFileName.mFileName.substr(0, lastIndex) + string(".BIN");
+		const string infoFileFullPath = tableFileName.mPathOnly + Seperators + infoFileName;
+
+		printf("Parsing %s\n", infoFileName.c_str());
+
+		FileNameContainer infoFileNameInfo(infoFileName.c_str(), infoFileFullPath.c_str());
+		FileData infoData;
+		if (!infoData.InitializeFileData(infoFileNameInfo))
+		{
+			continue;
+		}
+
+		//Search for 228000
+		const unsigned char* pData = (const unsigned char*)infoData.GetData();
+		unsigned long index = 0;
+		int appearance = 0;
+		unsigned short imageId = 0;
+		const unsigned long dataSize = infoData.GetDataSize();
+		while (index + 5 < dataSize)
+		{
+			if( (pData[index] == 0x22 && pData[index + 1] == 0x80 && pData[index + 2] == 0x00) ||
+				(pData[index] == 0x2E && pData[index + 1] == 0x80 && pData[index + 2] == 0x00)
+				)
+			{
+				unsigned short id = pData[index + 4] + (pData[index + 3] << 8);
+				outOrder[infoFileNameInfo.mNoExtension].idAndOrder[id].push_back(appearance);
+				outOrder[infoFileNameInfo.mNoExtension].orderAndId[appearance] = id;
+
+				++appearance;
+				index += 5;
+
+				//Find next image id if there is one
+				long lookAhead = -6;
+				while(index + lookAhead - 4 > 0)
+				{
+					unsigned long lookAheadValue = index + lookAhead;
+					if (pData[lookAheadValue] == 0x2B && pData[lookAheadValue + 1] == 0x80 && pData[lookAheadValue + 2] == 0 && pData[lookAheadValue + 4] != 0)
+					{
+						imageId = pData[lookAheadValue + 4] + (pData[lookAheadValue + 3] << 8);
+						break;
+					}
+
+					//Break out if the next id is found
+					if( (pData[lookAheadValue] == 0x22 && pData[lookAheadValue + 1] == 0x80 && pData[lookAheadValue + 2] == 0x00) ||
+						(pData[lookAheadValue] == 0x2E && pData[lookAheadValue + 1] == 0x80 && pData[lookAheadValue + 2] == 0x00)
+						)
+					{
+						break;
+					}
+
+					--lookAhead;
+				}
+				
+				outOrder[infoFileNameInfo.mNoExtension].idAndImage[id] = imageId;
+
+			}
+
+			++index;
+		}
+	}
+
+	return true;
+}
+
 bool InsertText(const string& rootSakuraTaisenDirectory, const string& translatedTextDirectory, const string& outDirectory, bool bOutputToCorrespondingDirectory = false)
 {
 #define IncrementLine()\
@@ -1334,6 +1427,10 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 	//Extract the text
 	vector<SakuraTextFile> sakuraTextFiles;
 	FindAllSakuraText(textFiles, sakuraTextFiles);
+
+	//Find dialog order
+	map<string, DialogOrder> dialogOrder;
+	FindDialogOrder(rootSakuraTaisenDirectory, dialogOrder);
 
 	const string UntranslatedEnglishString("Untranslated");
 
@@ -1391,6 +1488,14 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 			}
 		}
 
+#if OPTIMIZE_INSERTION_DEBUGGING
+		//Find the dialog order for this sakura file
+		const size_t lastIndex    = sakuraFile.mFileNameInfo.mNoExtension.find_first_of("TBL");
+		const string infoFileName = sakuraFile.mFileNameInfo.mNoExtension.substr(0, lastIndex);
+		map<string, DialogOrder>::const_iterator dialogOrderIter = dialogOrder.find(infoFileName);
+		const bool bDialogOrderExists = dialogOrderIter != dialogOrder.end();
+#endif
+
 		vector<SakuraString> translatedLines;
 		if( pMatchingTranslatedFileName )
 		{
@@ -1421,10 +1526,38 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 				const size_t numWords = textLine.mWords.size();
 				SakuraString translatedString;
 				
+#if OPTIMIZE_INSERTION_DEBUGGING
+				const unsigned short id = sakuraFile.mStringInfoArray[translatedLineIndex].mUnknown;
+				const vector<int>* pOrder = bDialogOrderExists && dialogOrderIter->second.idAndOrder.find(id) != dialogOrderIter->second.idAndOrder.end() ? &dialogOrderIter->second.idAndOrder.find(id)->second : nullptr;
+
+				//If this string isn't supposed to appear in the game, write smaller bit of debug data to it
+				if( !pOrder )
+				{
+					const string baseUntranslatedString = string("");
+					const string untranslatedString = baseUntranslatedString + std::to_string(translatedLineIndex + 1);
+
+					SakuraString translatedSakuraString;
+
+					//Lines starting with the indicator 0xC351 have a special two byte value instead of the usual 00 00
+					const size_t currSakuraStringIndex = translatedLineIndex;
+					if( sakuraFile.mStringInfoArray[currSakuraStringIndex].mUnknown == SpecialDialogIndicator )
+					{
+						translatedSakuraString.AddString( untranslatedString, sakuraFile.mLines[currSakuraStringIndex].mChars[0].mIndex);
+					}
+					else
+					{
+						translatedSakuraString.AddString( untranslatedString );
+					}
+
+					translatedLines.push_back( translatedSakuraString );
+					continue;
+				}				
+				else
+#endif
 				//If untranslated, then write out the file and line number
 				if( textLine.mWords.size() == 1 && textLine.mWords[0] == UntranslatedEnglishString )
 				{
-					const string baseUntranslatedString = sakuraFile.mFileNameInfo.mFileName + string("\nLineNum: ");
+					const string baseUntranslatedString = sakuraFile.mFileNameInfo.mNoExtension + string(": ");
 					const string untranslatedString = baseUntranslatedString + std::to_string(translatedLineIndex + 1);
 
 					SakuraString translatedSakuraString;
@@ -1552,7 +1685,7 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 			}
 
 			//Fill out everything else with "Untranslated"
-			const string baseUntranslatedString = sakuraFile.mFileNameInfo.mFileName + string("\nLineNum: ");
+			const string baseUntranslatedString = sakuraFile.mFileNameInfo.mNoExtension + string(": ");
 			const size_t untranslatedCount = sakuraFile.mLines.size() - translatedFile.mLines.size();
 			for(size_t i = 0; i < untranslatedCount; ++i)
 			{
@@ -1578,11 +1711,18 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 		else
 		{
 			//Fill out everything else with "Untranslated"
-			const string baseUntranslatedString = sakuraFile.mFileNameInfo.mFileName + string("\nLineNum: ");
+			const string baseUntranslatedString = sakuraFile.mFileNameInfo.mNoExtension + string(": ");
 			for(size_t i = 0; i < sakuraFile.mLines.size(); ++i)
 			{
-				const string untranslatedString = baseUntranslatedString + std::to_string(i + 1);
+#if OPTIMIZE_INSERTION_DEBUGGING
+				//If this isn't supposed to appear in game, just output L:lineNum
+				const unsigned short id = sakuraFile.mStringInfoArray[i].mUnknown;
+				const vector<int>* pOrder = bDialogOrderExists && dialogOrderIter->second.idAndOrder.find(id) != dialogOrderIter->second.idAndOrder.end() ? &dialogOrderIter->second.idAndOrder.find(id)->second : nullptr;
 
+				const string untranslatedString = pOrder ? baseUntranslatedString + std::to_string(i + 1) : std::to_string(i + 1);
+#else
+				const string untranslatedString = baseUntranslatedString + std::to_string(i + 1);
+#endif
 				SakuraString translatedSakuraString;
 				
 				//Lines starting with the indicator 0xC351 have a special two byte value instead of the usual 00 00
@@ -1596,7 +1736,7 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 				}
 
 				translatedLines.push_back( translatedSakuraString );
-			}
+			}		
 		}
 		
 		SakuraTextFileFixedHeader fixedHeader;
@@ -1641,7 +1781,11 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 
 		//Write footer
 		outFile.WriteData(sakuraFile.mFooter.pData, sakuraFile.mFooter.dataSize);
-		
+
+		if( outFile.GetFileSize() > MaxTBLFileSize )
+		{
+			printf("WARNING: TBL file %s is too big: %lu.\n", sakuraFile.mFileNameInfo.mFileName.c_str(), outFile.GetFileSize());
+		}
 	}
 
 	printf("InsertText Succeeded\n");
@@ -1805,97 +1949,6 @@ bool FixupSakura(const string& rootDir)
 
 	return true;
 }
-
-struct DialogOrder
-{
-	typedef map<unsigned short, unsigned short> IdAndImageMap;
-
-	map<unsigned short, vector<int>> idAndOrder;
-	map<int, unsigned short>         orderAndId;
-	IdAndImageMap                    idAndImage;
-};
-
-bool FindDialogOrder(const string& rootSakuraTaisenDirectory, map<string, DialogOrder>& outOrder)
-{
-	//Find all files
-	vector<FileNameContainer> sakuraTaisenFiles;
-	FindAllFilesWithinDirectory(rootSakuraTaisenDirectory, sakuraTaisenFiles);
-	if (!sakuraTaisenFiles.size())
-	{
-		return false;
-	}
-
-	//Find all dialog files
-	vector<FileNameContainer> tableFiles;
-	GetAllFilesOfType(sakuraTaisenFiles, "TBL.BIN", tableFiles);
-
-	for (const FileNameContainer& tableFileName : tableFiles)
-	{
-		const size_t lastIndex = tableFileName.mFileName.find_first_of("TBL");
-		const string infoFileName = tableFileName.mFileName.substr(0, lastIndex) + string(".BIN");
-		const string infoFileFullPath = tableFileName.mPathOnly + Seperators + infoFileName;
-
-		printf("Parsing %s\n", infoFileName.c_str());
-
-		FileNameContainer infoFileNameInfo(infoFileName.c_str(), infoFileFullPath.c_str());
-		FileData infoData;
-		if (!infoData.InitializeFileData(infoFileNameInfo))
-		{
-			continue;
-		}
-
-		//Search for 228000
-		const unsigned char* pData = (const unsigned char*)infoData.GetData();
-		unsigned long index = 0;
-		int appearance = 0;
-		unsigned short imageId = 0;
-		const unsigned long dataSize = infoData.GetDataSize();
-		while (index + 5 < dataSize)
-		{
-			if( (pData[index] == 0x22 && pData[index + 1] == 0x80 && pData[index + 2] == 0x00) ||
-				(pData[index] == 0x2E && pData[index + 1] == 0x80 && pData[index + 2] == 0x00)
-				)
-			{
-				unsigned short id = pData[index + 4] + (pData[index + 3] << 8);
-				outOrder[infoFileNameInfo.mNoExtension].idAndOrder[id].push_back(appearance);
-				outOrder[infoFileNameInfo.mNoExtension].orderAndId[appearance] = id;
-
-				++appearance;
-				index += 5;
-
-				//Find next image id if there is one
-				long lookAhead = -6;
-				while(index + lookAhead - 4 > 0)
-				{
-					unsigned long lookAheadValue = index + lookAhead;
-					if (pData[lookAheadValue] == 0x2B && pData[lookAheadValue + 1] == 0x80 && pData[lookAheadValue + 2] == 0 && pData[lookAheadValue + 4] != 0)
-					{
-						imageId = pData[lookAheadValue + 4] + (pData[lookAheadValue + 3] << 8);
-						break;
-					}
-
-					//Break out if the next id is found
-					if( (pData[lookAheadValue] == 0x22 && pData[lookAheadValue + 1] == 0x80 && pData[lookAheadValue + 2] == 0x00) ||
-						(pData[lookAheadValue] == 0x2E && pData[lookAheadValue + 1] == 0x80 && pData[lookAheadValue + 2] == 0x00)
-						)
-					{
-						break;
-					}
-
-					--lookAhead;
-				}
-				
-				outOrder[infoFileNameInfo.mNoExtension].idAndImage[id] = imageId;
-
-			}
-
-			++index;
-		}
-	}
-
-	return true;
-}
-
 
 void OutputDialogOrder(const string& rootSakuraTaisenDirectory, const string& outputDirectory)
 {
@@ -2130,7 +2183,6 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& dup
 		dupCrcMap[crc].push_back( duplicatesFile.mLines[i].mWords[0] );
 		dupFilenameCrcMap[duplicatesFile.mLines[i].mWords[0]] = crc;
 	}
-
 
 	vector<FileNameContainer> allFilesInImageDirectory;
 	FindAllFilesWithinDirectory(dialogImageDirectory, allFilesInImageDirectory);
@@ -2861,6 +2913,16 @@ void ExtractFaceFiles(const string& sakuraDirectory, const string& paletteFileNa
 	}
 }
 
+struct SakuraLut
+{
+	unsigned short addressInTmapSP;
+	unsigned char  reserved1;
+	unsigned char  reserved2;
+	unsigned char  width;
+	unsigned char  height;
+	unsigned char  reserved3;
+	unsigned char  reserved4;
+};
 void ExtractTMapSP(const string& sakuraDirectory, const string& paletteFileName, const string& outDirectory)
 {
 	const string tmapFilePath = sakuraDirectory + string("SAKURA1\\TMAPSP.BIN");
@@ -2895,14 +2957,6 @@ void ExtractTMapSP(const string& sakuraDirectory, const string& paletteFileName,
 		return;
 	}
 
-	struct SakuraLut
-	{
-		unsigned short addressInTmapSP;
-		unsigned short reserved;
-		unsigned char  width;
-		unsigned char  height;		
-		unsigned short reserved2;
-	};
 	const int numLutEntries = 93;
 	SakuraLut lookupTable[numLutEntries];
 	const unsigned int offsetToData = 0x0001EBF4;
@@ -2919,7 +2973,245 @@ void ExtractTMapSP(const string& sakuraDirectory, const string& paletteFileName,
 	}
 }
 
-bool PatchGame(const string& rootSakuraTaisenDirectory, const string& patchedSakuraTaisenDirectory, const string& translatedTextDirectory, const string& fontSheetFileName, const string& originalPaletteFileName)
+bool PatchTMapSP(const string& sakuraDirectory, const string& patchDataPath)
+{
+	vector<FileNameContainer> allFiles;
+	FindAllFilesWithinDirectory(patchDataPath, allFiles);
+
+	vector<FileNameContainer> patchedImages;
+	GetAllFilesOfType(allFiles, ".bmp", patchedImages);
+
+	if( patchedImages.size() == 0 )
+	{
+		return false;
+	}
+
+	const string tmapFilePath = sakuraDirectory + string("SAKURA1\\TMAPSP.BIN");
+	FileNameContainer tmapFileNameInfo(tmapFilePath.c_str());
+
+	const string sakuraFilePath = sakuraDirectory + string("SAKURA");
+	FileNameContainer sakuraFileNameInfo(sakuraFilePath.c_str());
+
+	//Open TMapFile
+	FILE* pTMapSpFile = nullptr;
+	errno_t errorValue = fopen_s(&pTMapSpFile, tmapFilePath.c_str(), "r+b");
+	if( errorValue )
+	{
+		printf("Unable to open TMapSP file.  Error: %i\n", errorValue);
+		return false;
+	}
+
+	//Open SAKURA file
+	FILE* pSakuraFile = nullptr;
+	errorValue = fopen_s(&pSakuraFile, sakuraFilePath.c_str(), "r+b");
+	if( errorValue )
+	{
+		printf("Unable to open SAKURA file.  Error: %i\n", errorValue);
+		fclose(pTMapSpFile);
+		return false;
+	}
+
+	//Read in lookup table to know where the images reside in TMapSP
+	const int numLutEntries = 93;
+	SakuraLut lookupTable[numLutEntries];
+	SakuraLut patchedLookupTable[numLutEntries];
+	const unsigned int offsetToLookupTable = 0x0001EBF4;
+	fseek(pSakuraFile, offsetToLookupTable, SEEK_SET);
+	fread(lookupTable, sizeof(lookupTable), 1, pSakuraFile);
+	
+	//Create a copy for the patched version of the table.  We'll modify that below.
+	memcpy_s(patchedLookupTable, sizeof(patchedLookupTable), lookupTable, sizeof(lookupTable));
+
+	//**Create the palette from one of the images**
+	//Read in first image
+	BitmapReader firstImage;
+	if( !firstImage.ReadBitmap(patchedImages[0].mFullPath) )
+	{
+		return false;
+	}
+
+	//Convert it to the SakuraTaisen format
+	PaletteData sakuraPalette;
+	sakuraPalette.CreateFrom32BitData(firstImage.mBitmapData.mPaletteData.mpRGBA, firstImage.mBitmapData.mPaletteData.mSizeInBytes);
+
+	//Fix up palette
+	//First index needs to have the transparent color, in our case that's white
+	int indexOfAlphaColor = -1;
+	const unsigned short alphaColor = 0x4629; //In little endian order
+	for(int i = 0; i < 16; ++i)
+	{
+		assert(i*2 < sakuraPalette.GetSize());
+
+		const unsigned short color = *((short*)(sakuraPalette.GetData() + i*2));
+		if( color == alphaColor )
+		{
+			const unsigned short oldColor0 = *((unsigned short*)sakuraPalette.GetData());
+			sakuraPalette.SetValue(0, alphaColor);
+			sakuraPalette.SetValue(i, oldColor0);
+			indexOfAlphaColor = i;
+			break;
+		}
+	}
+
+	if( indexOfAlphaColor == -1 )
+	{
+		printf("Alpha Color not found.  Palette will not be correct. \n");
+		indexOfAlphaColor = 0;
+	}
+
+	//Write out new palette
+	const unsigned int tmapSpPaletteAddress = 0x00056b1c;
+	fseek(pSakuraFile, tmapSpPaletteAddress, SEEK_SET);
+	fwrite(sakuraPalette.GetData(), sakuraPalette.GetSize(), 1, pSakuraFile);
+	//***Done Creating the palette***
+
+	//Address of first image in TMapSP
+	const int firstPatchedImageNum = atoi(patchedImages[0].mNoExtension.c_str());
+	unsigned short imageAddress    = SwapByteOrder(lookupTable[firstPatchedImageNum].addressInTmapSP)*8;
+
+	//Copy everything from original TMapSp file to the new version of it
+	unsigned char* pTMapSpBuffer = new unsigned char[imageAddress];
+	if( !fread_s(pTMapSpBuffer, imageAddress, imageAddress, 1, pTMapSpFile) )
+	{
+		printf("PatchTMapSp: Unable to copy over original TMapSP data.\n");
+		fclose(pSakuraFile);
+		fclose(pTMapSpFile);
+		return false;
+	}
+	fclose(pTMapSpFile);
+
+	//Create new TMapSPFile
+	FileWriter patchedTMapSP;
+	if( !patchedTMapSP.OpenFileForWrite(tmapFileNameInfo.mFullPath) )
+	{
+		printf("PatchTMapSp: Unable to create patched TMapSP file.\n");
+		fclose(pSakuraFile);
+		return false;
+	}
+
+	//Write out the initial unpatched images
+	if( !patchedTMapSP.WriteData(pTMapSpBuffer, imageAddress) )
+	{
+		printf("PatchTMapSp: Unable to copy buffer to patched TMapSP file.\n");
+		fclose(pSakuraFile);
+		return false;
+	}
+	delete[] pTMapSpBuffer;
+
+	//Write out all the patched files into the new TMapSP file
+	unsigned int origImageSize = 0;
+	unsigned int newImageSize = 0;
+	const size_t numPatchedImages = patchedImages.size();
+	for(size_t imageIndex = 0; imageIndex < numPatchedImages; ++imageIndex)
+	{
+		const int lutIndex = atoi(patchedImages[imageIndex].mNoExtension.c_str());
+		if( lutIndex >= numLutEntries || lutIndex < 0 )
+		{
+			printf("Invalid image number: %i.  Only % images allowed.\n", lutIndex, numLutEntries);			
+			fclose(pSakuraFile);
+			return false;
+		}
+
+		origImageSize += lookupTable[lutIndex].width*lookupTable[lutIndex].height/2;
+
+		//Read in translated font sheet
+		BitmapReader origTranslatedBmp;
+		if( !origTranslatedBmp.ReadBitmap(patchedImages[imageIndex].mFullPath) )
+		{
+			fclose(pSakuraFile);
+			return false;
+		}
+
+		const unsigned int newImageWidth  = origTranslatedBmp.mBitmapData.mInfoHeader.mImageWidth;
+		const unsigned int newImageHeight = origTranslatedBmp.mBitmapData.mInfoHeader.mImageHeight;
+		newImageSize += newImageWidth*newImageHeight/2;
+
+		if( newImageWidth/8 > 0xff )
+		{
+			printf("PatchTMapSP failed.  Image width for %s is invalid.  Max width is %i", patchedImages[imageIndex].mFileName.c_str(), 0xff*8);
+			return false;
+		}
+		
+		if( newImageHeight > 0xff )
+		{
+			printf("PatchTMapSP failed.  Image height for %s is invalid.  Max height is %i", patchedImages[imageIndex].mFileName.c_str(), 0xff);
+			return false;
+		}
+
+		//Modify the patched lookup table
+		patchedLookupTable[lutIndex].width  = (unsigned char)(newImageWidth/8);
+		patchedLookupTable[lutIndex].height = (unsigned char)newImageHeight;
+		patchedLookupTable[lutIndex].addressInTmapSP = SwapByteOrder( (unsigned short)(imageAddress/8) );
+
+		TileExtractor tileExtractor;
+		if( !tileExtractor.ExtractTiles(newImageWidth, newImageHeight, newImageWidth, newImageHeight, origTranslatedBmp) )
+		{
+			fclose(pSakuraFile);
+			return false;
+		}
+
+		if( tileExtractor.mTiles.size() != 1 || 
+			tileExtractor.mTiles[0].mTileSize != (newImageWidth*newImageHeight/2) )
+		{
+			fclose(pSakuraFile);
+			printf("PatchTMapSP: Invalid patched image: %i\n", lutIndex);
+		}
+
+		//Write out the SakuraTaisen format image		
+		for(TileExtractor::Tile& tile : tileExtractor.mTiles)
+		{
+			//Fix up alpha lookup
+			for(unsigned int i = 0; i < tile.mTileSize; i++)
+			{
+				const unsigned short paletteIndex1 = (tile.mpTile[i] & 0xF0) >> 4; 
+				const unsigned short paletteIndex2 = (tile.mpTile[i] & 0x0F);
+			
+				if( paletteIndex1 == 0 )
+				{
+					tile.mpTile[i] = (char)((indexOfAlphaColor << 4) + paletteIndex2);
+				}
+				else if( paletteIndex1 == indexOfAlphaColor )
+				{
+					tile.mpTile[i] = (char)paletteIndex2;
+				}
+
+				if( paletteIndex2 == 0 )
+				{
+					tile.mpTile[i] = (char)((tile.mpTile[i]&0xF0) + indexOfAlphaColor);
+				}
+				else if( paletteIndex2 == indexOfAlphaColor )
+				{
+					tile.mpTile[i] = tile.mpTile[i]&0xF0;
+				}
+			}
+
+			if( !patchedTMapSP.WriteData(tile.mpTile, tile.mTileSize) )
+			{
+				printf("PatchTMapSP: Unable to write out patched image %s.\n", patchedImages[imageIndex].mFileName.c_str());
+				fclose(pSakuraFile);
+				return false;
+			}
+		}
+
+		imageAddress += (unsigned short)(newImageWidth*newImageHeight/2);
+	}
+
+	//Save the patched lookup table in the SAKURA file
+	fseek(pSakuraFile, offsetToLookupTable, SEEK_SET);
+	if( fwrite(patchedLookupTable, sizeof(patchedLookupTable), 1, pSakuraFile) != 1 )
+	{
+		printf("PatchTMapSP: Unable to write out patched lookup table.\n");
+		fclose(pSakuraFile);
+		return false;
+	}
+
+	fclose(pSakuraFile);
+
+	return true;
+}
+
+bool PatchGame(const string& rootSakuraTaisenDirectory, const string& patchedSakuraTaisenDirectory, const string& translatedTextDirectory, const string& fontSheetFileName, const string& originalPaletteFileName, 
+               const string &patchedTMapSPDataPath)
 {
 	char buffer[MAX_PATH];
 	const DWORD dwRet = GetCurrentDirectory(MAX_PATH, buffer);
@@ -2959,8 +3251,14 @@ bool PatchGame(const string& rootSakuraTaisenDirectory, const string& patchedSak
 		return false;
 	}
 
-
 	//Step 4
+	if( !PatchTMapSP(patchedSakuraTaisenDirectory, patchedTMapSPDataPath) )
+	{
+		printf("PatchTMapSP failed.  Patch unsuccessful.\n");
+		return false;
+	}
+
+	//Step 5
 	const string translatedKNJPath = tempDir + PatchedKNJName; //Created by CreateTranslatedFontSheet
 	const string patchedKNJPath    = patchedSakuraTaisenDirectory + string("SAKURA1\\");
 	if( !PatchKNJ(rootSakuraTaisenDirectory, translatedKNJPath, patchedKNJPath) )
@@ -2969,7 +3267,7 @@ bool PatchGame(const string& rootSakuraTaisenDirectory, const string& patchedSak
 		return false;
 	}
 
-	//Step 5
+	//Step 6
 	if( !InsertText(rootSakuraTaisenDirectory, translatedTextDirectory, patchedSakuraTaisenDirectory, true) )
 	{
 		printf("Insert Text failed.  Patch unsuccessful.\n");
@@ -3001,7 +3299,8 @@ void PrintHelp()
 	printf("Extract8BitImage fileName paletteFile offset width height outDirectory\n");
 	printf("ExtractFaceFiles rootSakuraTaisenDirectory paletteFile outDirectory\n");
 	printf("ExtractTMapSP rootSakuraTaisenDirectory paletteFile outDirectory\n");
-	printf("PatchGame rootSakuraTaisenDirectory patchedSakuraTaisenDirectory translatedTextDirectory fontSheet originalPalette\n");
+	printf("PatchTMapSP sakuraDirectory patchDataPath\n");
+	printf("PatchGame rootSakuraTaisenDirectory patchedSakuraTaisenDirectory translatedTextDirectory fontSheet originalPalette patchedTMapSpDataPath \n");
 }
 
 int main(int argc, char *argv[])
@@ -3107,15 +3406,16 @@ int main(int argc, char *argv[])
 
 		OutputDialogOrder(searchDirectory, outputFile);
 	}
-	else if( command == "PatchGame" && argc == 7 )
+	else if( command == "PatchGame" && argc == 8 )
 	{
 		const string rootSakuraTaisenDirectory    = string(argv[2]) + Seperators;
 		const string patchedSakuraTaisenDirectory = string(argv[3]) + Seperators;
 		const string translatedTextDirectory      = string(argv[4]);
 		const string fontSheet                    = string(argv[5]);
 		const string originalPalette              = string(argv[6]);
+		const string patchedTMapSpDataPath        = string(argv[7]) + Seperators;
 
-		PatchGame(rootSakuraTaisenDirectory, patchedSakuraTaisenDirectory, translatedTextDirectory, fontSheet, originalPalette);
+		PatchGame(rootSakuraTaisenDirectory, patchedSakuraTaisenDirectory, translatedTextDirectory, fontSheet, originalPalette, patchedTMapSpDataPath);
 	}
 	else if(command == "CreateTBLSpreadsheets" && argc == 5 )
 	{
@@ -3157,6 +3457,13 @@ int main(int argc, char *argv[])
 		const string outDirectory              = string(argv[4]) + Seperators;
 
 		ExtractTMapSP(rootSakuraTaisenDirectory, paletteFile, outDirectory);
+	}
+	else if(command == "PatchTMapSP" && argc == 4 )
+	{
+		const string sakuraDirectory = string(argv[2]) + Seperators;
+		const string patchDataPath   = string(argv[3]) + Seperators;
+
+		PatchTMapSP(sakuraDirectory, patchDataPath);
 	}
 	else
 	{

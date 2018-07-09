@@ -392,6 +392,7 @@ bool FileWriter::WriteData(const void* pInData, unsigned long inDataSize)
 
 	return numElemsWritten == inDataSize;
 }
+
 void FileWriter::Close()
 {
 	if( mpFileHandle )
