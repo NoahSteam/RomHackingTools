@@ -2764,7 +2764,7 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& dup
 					{
 						snprintf(buffer, 2048, "<td width=\"48\"><img src=\"..\\ExtractedData\\Faces\\UnknownFace.png\"></td>");
 					}
-					htmlFile.WriteString(string(buffer));					
+					htmlFile.WriteString(string(buffer));
 
 					snprintf(buffer, 2048, "<td width=\"240\"><img src=\"..\\ExtractedData\\Dialog\\%sTBL\\%s\"></td>", infoFileName.c_str(), fileNameInfo.mFileName.c_str());
 					htmlFile.WriteString(string(buffer));
@@ -3107,9 +3107,18 @@ bool PatchTMapSP(const string& sakuraDirectory, const string& patchDataPath)
 		const int lutIndex = atoi(patchedImages[imageIndex].mNoExtension.c_str());
 		if( lutIndex >= numLutEntries || lutIndex < 0 )
 		{
-			printf("Invalid image number: %i.  Only % images allowed.\n", lutIndex, numLutEntries);			
+			printf("Invalid image number: %i.  Only % images allowed.\n", lutIndex, numLutEntries);
 			fclose(pSakuraFile);
 			return false;
+		}
+
+		if( lutIndex == 92 )
+		{
+			//Modify the patched lookup table
+			patchedLookupTable[lutIndex].width           = patchedLookupTable[64].width;
+			patchedLookupTable[lutIndex].height          = patchedLookupTable[64].height;
+			patchedLookupTable[lutIndex].addressInTmapSP = patchedLookupTable[64].addressInTmapSP;
+			continue;
 		}
 
 		origImageSize += lookupTable[lutIndex].width*lookupTable[lutIndex].height/2;
@@ -3124,7 +3133,7 @@ bool PatchTMapSP(const string& sakuraDirectory, const string& patchDataPath)
 
 		const unsigned int newImageWidth  = origTranslatedBmp.mBitmapData.mInfoHeader.mImageWidth;
 		const unsigned int newImageHeight = origTranslatedBmp.mBitmapData.mInfoHeader.mImageHeight;
-		newImageSize += newImageWidth*newImageHeight/2;
+		newImageSize                     += newImageWidth*newImageHeight/2;
 
 		if( newImageWidth/8 > 0xff )
 		{
@@ -3157,7 +3166,7 @@ bool PatchTMapSP(const string& sakuraDirectory, const string& patchDataPath)
 			printf("PatchTMapSP: Invalid patched image: %i\n", lutIndex);
 		}
 
-		//Write out the SakuraTaisen format image		
+		//Write out the SakuraTaisen format image
 		for(TileExtractor::Tile& tile : tileExtractor.mTiles)
 		{
 			//Fix up alpha lookup

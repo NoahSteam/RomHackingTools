@@ -40,11 +40,12 @@ CreateTranslatedFontSheets A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\8x12.
 PatchPalettes a:\SakuraTaisen\Disc1 A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\Palette.bin A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\OutPalette.BIN a:\SakuraTaisen\PatchedData\Palettes
 PatchGameKNJ a:\SakuraTaisen\Disc1 A:\SakuraTaisen\PatchedData\TranslatedFontSheet\TranslatedKNJ.BIN a:\SakuraTaisen\PatchedData\KNJ
 FindDuplicateText A:\SakuraTaisen\ExtractedData\Disc1\Dialog a:\SakuraTaisen\ExtractedData\Disc1\Dialog\Duplicates.txt
-PatchGame a:\SakuraTaisen\Disc1 a:\SakuraTaisen\Disc1_Translated A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\TranslatedText A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\6x12.bmp A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\Palette.bin
+PatchGame a:\SakuraTaisen\Disc1 a:\SakuraTaisen\Disc1_Translated A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\TranslatedText A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\6x12.bmp A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\Palette.bin A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\TMapSP
 CreateTBLSpreadsheets a:\SakuraTaisen\ExtractedData\Disc1\Dialog A:\SakuraTaisen\ExtractedData\Disc1\Dialog\Duplicates.txt a:\SakuraTaisen\Disc1\SAKURA1
 ExtractFaceFiles a:\SakuraTaisen\Disc1 A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\FacePalette.bin a:\SakuraTaisen\ExtractedData\Disc1\Faces
 ExtractTMapSP a:\SakuraTaisen\Disc1 A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\TheaterMapPalette.bin a:\SakuraTaisen\ExtractedData\Disc1\TMAPSP
 CreateTMapSpSpreadsheet a:\SakuraTaisen\ExtractedData\Disc1\TMapSP
+PatchTMapSp a:\SakuraTaisen\Disc1 A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\TMapSP
 FindData.exe a:\SakuraTaisen\Disc1 a:\SakuraTaisen\off.bin
 
 UPDATE TBLFiles SET English = REPLACE(English, '\\n', ' ')
