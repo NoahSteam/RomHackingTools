@@ -133,3 +133,5 @@ Sakura has size and addresses/8 for images in TMAPSP.BIN
 TBL files can be max 131072 bytes
 
 FCE load address at SAKURA:00018128
+
+EmptyRoom image lives in SAKURA @ 0x00058d10
