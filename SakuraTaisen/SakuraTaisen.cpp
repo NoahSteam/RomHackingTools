@@ -3099,30 +3099,11 @@ bool PatchTMapSP(const string& sakuraDirectory, const string& patchDataPath)
 	delete[] pTMapSpBuffer;
 
 	//Write out all the patched files into the new TMapSP file
-	unsigned int origImageSize = 0;
 	unsigned int newImageSize = 0;
 	const size_t numPatchedImages = patchedImages.size();
+	const string emptyRoom("EmptyRoom");
 	for(size_t imageIndex = 0; imageIndex < numPatchedImages; ++imageIndex)
 	{
-		const int lutIndex = atoi(patchedImages[imageIndex].mNoExtension.c_str());
-		if( lutIndex >= numLutEntries || lutIndex < 0 )
-		{
-			printf("Invalid image number: %i.  Only % images allowed.\n", lutIndex, numLutEntries);
-			fclose(pSakuraFile);
-			return false;
-		}
-
-		if( lutIndex == 92 )
-		{
-			//Modify the patched lookup table
-			patchedLookupTable[lutIndex].width           = patchedLookupTable[64].width;
-			patchedLookupTable[lutIndex].height          = patchedLookupTable[64].height;
-			patchedLookupTable[lutIndex].addressInTmapSP = patchedLookupTable[64].addressInTmapSP;
-			continue;
-		}
-
-		origImageSize += lookupTable[lutIndex].width*lookupTable[lutIndex].height/2;
-
 		//Read in translated font sheet
 		BitmapReader origTranslatedBmp;
 		if( !origTranslatedBmp.ReadBitmap(patchedImages[imageIndex].mFullPath) )
@@ -3134,7 +3115,7 @@ bool PatchTMapSP(const string& sakuraDirectory, const string& patchDataPath)
 		const unsigned int newImageWidth  = origTranslatedBmp.mBitmapData.mInfoHeader.mImageWidth;
 		const unsigned int newImageHeight = origTranslatedBmp.mBitmapData.mInfoHeader.mImageHeight;
 		newImageSize                     += newImageWidth*newImageHeight/2;
-
+		
 		if( newImageWidth/8 > 0xff )
 		{
 			printf("PatchTMapSP failed.  Image width for %s is invalid.  Max width is %i", patchedImages[imageIndex].mFileName.c_str(), 0xff*8);
@@ -3147,10 +3128,39 @@ bool PatchTMapSP(const string& sakuraDirectory, const string& patchDataPath)
 			return false;
 		}
 
-		//Modify the patched lookup table
-		patchedLookupTable[lutIndex].width  = (unsigned char)(newImageWidth/8);
-		patchedLookupTable[lutIndex].height = (unsigned char)newImageHeight;
-		patchedLookupTable[lutIndex].addressInTmapSP = SwapByteOrder( (unsigned short)(imageAddress/8) );
+		bool bIsEmptyRoomImage = patchedImages[imageIndex].mNoExtension == emptyRoom;
+		if( bIsEmptyRoomImage )		
+		{
+			if( newImageWidth != 56 && newImageHeight != 24 )
+			{
+				printf("PatchTMapSP failed.  EmptyRoom image must be 56x24 4bpp.");
+				return false;
+			}
+		}
+		else
+		{
+			const int lutIndex = atoi(patchedImages[imageIndex].mNoExtension.c_str());
+			if( lutIndex >= numLutEntries || lutIndex < 0 )
+			{
+				printf("Invalid image number: %i.  Only % images allowed.\n", lutIndex, numLutEntries);
+				fclose(pSakuraFile);
+				return false;
+			}
+
+			if( lutIndex == 92 )
+			{
+				//Modify the patched lookup table
+				patchedLookupTable[lutIndex].width           = patchedLookupTable[64].width;
+				patchedLookupTable[lutIndex].height          = patchedLookupTable[64].height;
+				patchedLookupTable[lutIndex].addressInTmapSP = patchedLookupTable[64].addressInTmapSP;
+				continue;
+			}
+
+			//Modify the patched lookup table
+			patchedLookupTable[lutIndex].width  = (unsigned char)(newImageWidth/8);
+			patchedLookupTable[lutIndex].height = (unsigned char)newImageHeight;
+			patchedLookupTable[lutIndex].addressInTmapSP = SwapByteOrder( (unsigned short)(imageAddress/8) );
+		}
 
 		TileExtractor tileExtractor;
 		if( !tileExtractor.ExtractTiles(newImageWidth, newImageHeight, newImageWidth, newImageHeight, origTranslatedBmp) )
@@ -3163,7 +3173,7 @@ bool PatchTMapSP(const string& sakuraDirectory, const string& patchDataPath)
 			tileExtractor.mTiles[0].mTileSize != (newImageWidth*newImageHeight/2) )
 		{
 			fclose(pSakuraFile);
-			printf("PatchTMapSP: Invalid patched image: %i\n", lutIndex);
+			printf("PatchTMapSP: Invalid patched image: %s\n", patchedImages[imageIndex].mNoExtension.c_str());
 		}
 
 		//Write out the SakuraTaisen format image
@@ -3194,15 +3204,40 @@ bool PatchTMapSP(const string& sakuraDirectory, const string& patchDataPath)
 				}
 			}
 
-			if( !patchedTMapSP.WriteData(tile.mpTile, tile.mTileSize) )
+			//Empty room image goes into sakura file
+			if( bIsEmptyRoomImage )
 			{
-				printf("PatchTMapSP: Unable to write out patched image %s.\n", patchedImages[imageIndex].mFileName.c_str());
-				fclose(pSakuraFile);
-				return false;
+				const unsigned int emptyMapImageAddress = 0x00058d10;
+
+				//Save the patched lookup table in the SAKURA file
+				fseek(pSakuraFile, emptyMapImageAddress, SEEK_SET);
+				if( fwrite(tile.mpTile, tile.mTileSize, 1, pSakuraFile) != 1 )
+				{
+					printf("PatchTMapSP: Unable to write out EmptyRoom image to SAKURA.\n");
+					fclose(pSakuraFile);
+					return false;
+				}
 			}
+			else
+			{
+				if( !patchedTMapSP.WriteData(tile.mpTile, tile.mTileSize) )
+				{
+					printf("PatchTMapSP: Unable to write out patched image %s.\n", patchedImages[imageIndex].mFileName.c_str());
+					fclose(pSakuraFile);
+					return false;
+				}
+			}
+			
 		}
 
 		imageAddress += (unsigned short)(newImageWidth*newImageHeight/2);
+	}
+
+	if( patchedTMapSP.GetFileSize() > 0xD000 )
+	{
+		printf("PatchTMapSP: Patched TMapSP file is too big.  Max size is 0xD000, current size is %lu.\n", patchedTMapSP.GetFileSize());
+		fclose(pSakuraFile);
+		return false;
 	}
 
 	//Save the patched lookup table in the SAKURA file
