@@ -1308,7 +1308,9 @@ struct DialogOrder
 
 	map<unsigned short, vector<int>> idAndOrder;
 	map<int, unsigned short>         orderAndId;
+	map<int, bool>                   idAndLips;
 	IdAndImageMap                    idAndImage;
+	bool                             bIsLipsLine = false;
 };
 
 bool FindDialogOrder(const string& rootSakuraTaisenDirectory, map<string, DialogOrder>& outOrder)
@@ -1348,13 +1350,16 @@ bool FindDialogOrder(const string& rootSakuraTaisenDirectory, map<string, Dialog
 		const unsigned long dataSize = infoData.GetDataSize();
 		while (index + 5 < dataSize)
 		{
-			if( (pData[index] == 0x22 && pData[index + 1] == 0x80 && pData[index + 2] == 0x00) ||
-				(pData[index] == 0x2E && pData[index + 1] == 0x80 && pData[index + 2] == 0x00)
-				)
+			const bool bIsLipsEntry = (pData[index] == 0x2E && pData[index + 1] == 0x80 && pData[index + 2] == 0x00);
+
+			if( bIsLipsEntry || 
+				(pData[index] == 0x22 && pData[index + 1] == 0x80 && pData[index + 2] == 0x00)
+			  )
 			{
 				unsigned short id = pData[index + 4] + (pData[index + 3] << 8);
 				outOrder[infoFileNameInfo.mNoExtension].idAndOrder[id].push_back(appearance);
 				outOrder[infoFileNameInfo.mNoExtension].orderAndId[appearance] = id;
+				outOrder[infoFileNameInfo.mNoExtension].idAndLips[id] = bIsLipsEntry;
 
 				++appearance;
 				index += 5;
@@ -2731,12 +2736,13 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& dup
 			int num = 0;
 			for(const FileNameContainer& fileNameInfo : iter->second)
 			{
-				const unsigned long crc = crcMap[&iter->second[num]];
-				const bool bIsDuplicate = dupCrcMap.find(crc) != dupCrcMap.end();
-				const unsigned short id = sakuraFileIter->second->mStringInfoArray[num].mUnknown;
+				const unsigned long crc   = crcMap[&iter->second[num]];
+				const bool bIsDuplicate   = dupCrcMap.find(crc) != dupCrcMap.end();
+				const unsigned short id   = sakuraFileIter->second->mStringInfoArray[num].mUnknown;
 				const vector<int>* pOrder = bDialogOrderExists && dialogOrderIter->second.idAndOrder.find(id) != dialogOrderIter->second.idAndOrder.end() ? &dialogOrderIter->second.idAndOrder.find(id)->second : nullptr;
-				const char* bgColor = "fefec8";
-				if( (id >> 8) == 0x4e )
+				const bool bIsLipsEntry   = pOrder ? dialogOrderIter->second.idAndLips.find(id)->second : false;
+				const char* bgColor       = "fefec8";
+				if( bIsLipsEntry )
 				{
 					bgColor = "fec8c8"; //LIPS event are highlighted in pink
 				}

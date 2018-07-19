@@ -135,3 +135,6 @@ TBL files can be max 131072 bytes
 FCE load address at SAKURA:00018128
 
 EmptyRoom image lives in SAKURA @ 0x00058d10
+
+LIPS Spacing:
+06014612 <<---- Shifts by 2, need to shift by 1 by chaning the code to 4108 to 4104
