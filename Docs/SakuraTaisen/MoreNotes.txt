@@ -10,13 +10,13 @@
 ExtractText d:\Rizwan\SakuraWars\Disc1 D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\Palette.bin D:\Rizwan\SakuraWars\ExtractedData\Disc1\Dialog
 ExtractText d:\Rizwan\SakuraWars\Disc2 D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\Palette.bin D:\Rizwan\SakuraWars\ExtractedData\Disc2\Dialog
 ExtractFontSheets d:\Rizwan\SakuraWars\Test D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\Palette.bin d:\Rizwan\SakuraWars\Test
-ExtractFontSheets d:\Rizwan\SakuraWars\Disc1\ D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\Palette.bin d:\Rizwan\SakuraWars\ExtractedData\Test
+ExtractFontSheets d:\Rizwan\SakuraWars\Disc1\ D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\Palette.bin d:\Rizwan\SakuraWars\ExtractedData\Disc1\FontSheets
 ExtractFontSheets d:\Rizwan\SakuraWars\Disc2\ D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\Palette.bin d:\Rizwan\SakuraWars\ExtractedData\Disc2\FontSheets
 PatchPalettes d:\Rizwan\SakuraWars\Disc1 d:\Rizwan\SakuraWars\OriginalFontPalette.bin d:\Rizwan\SakuraWars\TranslatedFontSheets\OutPalette.BIN d:\Rizwan\SakuraWars\PatchedPalettes
 InsertText d:\Rizwan\SakuraWars\Disc1 D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\TranslatedText D:\Rizwan\SakuraWars\PatchedData\TBL
 ExtractRawText d:\Rizwan\SakuraWars\TranslatedTBL d:\Rizwan\SakuraWars\TranslatedTBL
 CreateTranslatedFontSheets D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\8x8.bmp d:\Rizwan\SakuraWars\TranslatedFontSheets
-ExtractRawText d:\Rizwan\SakuraWars\Disc1 d:\Rizwan\SakuraWars\ExtractedText
+ExtractRawText d:\Rizwan\SakuraWars\Disc1 d:\Rizwan\SakuraWars\ExtractedData\Disc1\DialogTextExtractRawText d:\Rizwan\SakuraWars\Disc1 d:\Rizwan\SakuraWars\ExtractedData\Disc1\DialogText
 ExtractRawText d:\Rizwan\SakuraWars\TranslatedTBL d:\Rizwan\SakuraWars\ExtractedTranslatedText
 PatchGameKNJ d:\Rizwan\SakuraWars\Disc1 d:\Rizwan\SakuraWars\TranslatedFontSheets\TranslatedKNJ.BIN d:\Rizwan\SakuraWars\TranslatedKNJ
 PatchGame d:\Rizwan\SakuraWars\Disc1 d:\Rizwan\SakuraWars\Disc1_Translated D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\TranslatedText D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\8x12.bmp D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\Palette.bin D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\TMapSP

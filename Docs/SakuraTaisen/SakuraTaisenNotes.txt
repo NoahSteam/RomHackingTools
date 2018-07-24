@@ -138,3 +138,35 @@ EmptyRoom image lives in SAKURA @ 0x00058d10
 
 LIPS Spacing:
 06014612 <<---- Shifts by 2, need to shift by 1 by chaning the code to 4108 to 4104
+
+Battle Dialog Fonts:
+Found a match in ENDING.BIN @0x00010c98
+Found a match in M01MES.FNT @0x00000500
+Found a match in M02MES.FNT @0x00000500
+Found a match in M03MES.FNT @0x00000880
+Found a match in M04MES.FNT @0x00000680
+Found a match in M05MES.FNT @0x00000700
+Found a match in M06MES.FNT @0x00000900
+Found a match in M07MES.FNT @0x00000a80
+Found a match in M08MES.FNT @0x00000b80
+Found a match in M09MES.FNT @0x00000500
+Found a match in M10MES.FNT @0x00000380
+Found a match in M11MES.FNT @0x00000700
+Found a match in M21MES.FNT @0x00000580
+Found a match in M22MES.FNT @0x00000900
+Found a match in MINIHANA.BIN @0x00092c10
+Found a match in MINISHOT.BIN @0x00055d10
+Found a match in MINISWIM.BIN @0x0003cd28
+
+Battle Dialog Memory Layout:
+Found a match in WKL01.BIN @0x0021f800
+Found a match in FACE01.BIN @0x002b3800
+Found a match in M01MES.BIN @0x002dd800
+Found a match in M01MES.FNT @0x002ce800
+Found a match in WAKIJI.SE @0x05a69bf0
+Found a match in K014.BIN @0x06078000
+Found a match in EVS01001.BIN @0x060c0000
+Found a match in EVS01002.BIN @0x060c0a9c
+Found a match in PCMSE.BIN @0x060e8000
+
+Battle Font in WKL01 around 0x00035628

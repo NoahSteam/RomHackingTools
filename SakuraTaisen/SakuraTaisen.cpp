@@ -531,7 +531,7 @@ private:
 				currValue = SwapByteOrder(currValue);  //Convert to big endian
 				newLineOfText.AddChar(currValue);
 
-				assert(currValue == 0);
+				//assert(currValue == 0);
 			}
 
 			while(1)
@@ -605,7 +605,6 @@ struct SakuraTextFileFixedHeader
 		assert( (mOffsetToTable + (unsigned short)stringTableSize)%2 == 0 );
 	}
 };
-
 
 void FindAllSakuraText(const vector<FileNameContainer>& inFiles, vector<SakuraTextFile>& outText)
 {
@@ -778,6 +777,7 @@ void ExtractAllFontSheets(const vector<FileNameContainer>& inAllFiles, const str
 
 	vector<FileNameContainer> textFiles;
 	GetAllFilesOfType(inAllFiles, "KNJ.BIN", textFiles);
+	GetAllFilesOfType(inAllFiles, "MES.FNT", textFiles);
 
 	const string bmpExtension(".bmp");
 	string outFileName;
@@ -807,6 +807,7 @@ void DumpSakuraText(const vector<FileNameContainer>& inAllFiles, const string& i
 {
 	vector<FileNameContainer> textFiles;
 	GetAllFilesOfType(inAllFiles, "TBL.BIN", textFiles);
+	GetAllFilesOfType(inAllFiles, "MES.BIN", textFiles);
 
 	vector<SakuraTextFile> sakuraTextFiles;
 	FindAllSakuraText(textFiles, sakuraTextFiles);
@@ -834,10 +835,12 @@ void ExtractText(const string& inSearchDirectory, const string& inPaletteFileNam
 	//Find all the font sheet files
 	vector<FileNameContainer> fontFiles;
 	GetAllFilesOfType(allFiles, "KNJ.BIN", fontFiles);
+	GetAllFilesOfType(allFiles, "MES.FNT", fontFiles);
 
 	//Find all the text files
 	vector<FileNameContainer> textFiles;
 	GetAllFilesOfType(allFiles, "TBL.BIN", textFiles);
+	GetAllFilesOfType(allFiles, "MES.BIN", textFiles);
 
 	//There needs to be a font sheet for every text file 
 	if( textFiles.size() > fontFiles.size() )
@@ -3382,6 +3385,8 @@ int main(int argc, char *argv[])
 		//Find all files within the requested directory
 		vector<FileNameContainer> allFiles;
 		FindAllFilesWithinDirectory(string(pSearchDirectory), allFiles);
+
+		ExtractAllFontSheets(allFiles, paletteFileName, outDirectory);
 	}
 	else if( command == string("ExtractImages") )
 	{
