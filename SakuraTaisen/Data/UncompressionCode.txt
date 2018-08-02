@@ -1,0 +1,147 @@
+05C15100
+06068C31
+002C35F8, 002C360B, 002C360E
+
+AC 9C 9F B8 B0 FF BD 95 80 92 BD BD BF BF 3F BD A8 B5 B1 B1 B0 E0 FD FB B8
+AC 9C 9F B8 B0 BD 95 80 92 BD BD BF BF BD A8 B5 B1 B1 B0 B1 B1 B1 B1 B0 B8
+
+AC 9C 9F B8 B0 | BD 95 80 92 BD BD BF BF | 3F BD A8 B5 B1 B1 B0 E0 FD FB B8
+AC 9C 9F B8 B0 | BD 95 80 92 BD BD BF BF | BD A8 B5 B1 B1 B0 B1 B1 B1 B1 B0 B8
+
+AC 9C 9F B8 B0 | BD 95 80 92 BD BD BF BF | BD A8 B5 B1 B1 B0 E0 FD FB B8 | A8 61 A8 F0 BA AC 84 F3 | FD B0 43
+AC 9C 9F B8 B0 | BD 95 80 92 BD BD BF BF | BD A8 B5 B1 B1 B0 B1 B1 B1 B1 B0 B8 | A8 A8 BF BF BA AC B0 B1 B1 B0 B1 B0
+
+E0 went into R6 (used for the shifting logic)
+FD went into R2 @ 0x0603386E.  FD is an offset saying go back FF-FD bytes
+
+R8 = FFFFE000
+R9 = FFFFFF00
+
+
+-r6 starts atwith 0x0FFFFFFF
+
+-Read compressed value and put it into r6
+-Once r6 goes to 0, next byte is put into r6
+
+
+
+0x06033830:
+r1 = r4.b //r4 has compressed data
+@r5 = r1 //r5 is uncompressed data pointer
+++r4
+++r5
+--r7
+if( r7 )
+{
+   r6 = r6 >> 1 //@0x06033838
+   goto 0x06033842
+}
+else
+{ //0x0603383A
+  r6 = r6 >> 1;
+  r6.b = nextCompressedByte (r4)
+  r7 = 8
+  r6 = r6 >> 1
+  if( r6 != 0 )
+  {
+     goto 0x06033830
+  }
+}   
+   
+0x06033842
+ oldR6 = r6;
+ r6 = r6 >> 1
+ if( oldR6 != 0 )
+ {
+	goto 0x06033830
+ }
+ else
+ {
+	--r7;
+	if( r7 )
+	  goto 0x06033850
+	else
+	{
+	  r6 = r6 >> 1
+	  r6 = @r4
+	  ++r4
+	  r7 = 8	  
+	}
+  
+  
+ 0x06033850:
+   oldR6 = r6;
+   r6 = r6 >> 1
+   if((oldR6)
+   {
+	 goto 0x06033886
+   }
+   else
+   {
+     r0 = 0
+	 r7--
+	 if( r7 )
+	 {
+	   goto 0x06033860
+	 }
+	 else
+	 {
+	   r6 = r6 >> 1;
+	   r6 = @r4.b;
+	   ++r4
+	   r7 = 8
+	   r6 = r6 >> 1
+	   
+	   //0x06033860
+	   rotcl r0
+	   r7--;
+	   if( r7 )
+	      goto 0x0603386E
+	   else
+	   { //0x06033866
+	     r6 = r6 >> 1
+		 r6 = @r4.b;
+	     ++r4
+		 r7 = 8
+		 
+		 0x0603386E
+	     r2 = @r4.b;
+		 ++r4
+		 rotcl r0 
+		 r2 = r9 | r2 //r9 = FFFFFF00, r2 = FFFFFFFD
+		 r0 += 2
+		 r2 += r5 //r5 = 06068C43. After this, r2 is 0x06068C40.  r5 is now 0x06068C40 which is the uncompressed data starting at B1B1
+		 r1 = @r2.b; //0x06033878
+		 ++r2
+		 r0--
+		 @r5 = r1.b //r5 = 0x06068C43, r1 = FFFFFFB1.  r5 is now 0x06068C40 which is the uncompressed data starting at B1B1
+		 if( r0 ) //0x0603387E
+		 {
+		    goto 0x06033878
+		 }
+		 else
+		 {
+		   r5++;
+		   bra 0x06033836
+		 }
+	   }
+	 }
+   }
+
+   
+   0x06033836:
+   r7--
+   if(r7)
+   {
+    goto 0x06033842
+   }
+   else
+   {
+     r6 = r6 >> 1
+     r6 = @r4.b;
+	 ++r4
+	 r7 = 8
+	 r6 = r6 >> 1
+	 //0x06033842
+   }
+   
