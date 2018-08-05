@@ -290,3 +290,6 @@ public:
 void FindAllFilesWithinDirectory(const std::string& inDirectoryPath, std::vector<FileNameContainer>& outFileNames);
 bool CreateDirectoryHelper(const std::string& dirName);
 bool AreFilesTheSame(const FileData& file1, const FileNameContainer& file2Name);
+unsigned long prs_decompress_size(void* source);
+unsigned long prs_decompress(void* source, void* dest);
+unsigned long prs_compress(void* source, void* dest, unsigned long size);

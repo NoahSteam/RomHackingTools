@@ -3520,6 +3520,22 @@ int main(int argc, char *argv[])
 
 		PatchTMapSP(sakuraDirectory, patchDataPath);
 	}
+	else if(command == "DCTest")
+	{
+		FileData sourceFile;
+		sourceFile.InitializeFileData("UCTest.bin", "D:\\Rizwan\\SakuraWars\\Test\\TestPRS.bin");
+
+		unsigned long dataSize = sourceFile.GetDataSize();//prs_decompress_size((void*)sourceFile.GetData());
+		char* pOutData = new char[dataSize];
+
+		prs_compress((void*)sourceFile.GetData(), (void*)pOutData, dataSize);
+
+		FileWriter outFile;
+		outFile.OpenFileForWrite("D:\\Rizwan\\SakuraWars\\Test\\TestPRS_Compressed.bin");
+		outFile.WriteData(pOutData, dataSize);
+
+		delete[] pOutData;
+	}
 	else
 	{
 		PrintHelp();
