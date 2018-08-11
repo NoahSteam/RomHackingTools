@@ -170,3 +170,36 @@ Found a match in EVS01002.BIN @0x060c0a9c
 Found a match in PCMSE.BIN @0x060e8000
 
 Battle Font in WKL01 around 0x00035628
+
+Battle Dialog Order:
+EVT01 @ 0x00012140. (00216140 in memory)
+2 Byte FaceID
+2 Byte DialogIndex
+
+Example (#, dialog index, face id):
+3  b6 0112
+4  b7  0116
+5  b8 011c
+6  b9 0106
+7  bb8 001d
+8  bb9 0106
+9  bba
+10 bbb
+11 bbc
+12 bbd
+13 bbe
+14 bbf
+15 bc0
+26 2717
+27 2718
+92 4e20
+
+Face drawing code is in SLG files:
+Found a match in 0SLG.BIN @0x000142a8
+Found a match in 0SLG.BIN @0x00014436
+Found a match in SLG.BIN @0x000142a8
+Found a match in SLG.BIN @0x00014436
+Around: 0510FF17
+
+EVT files have a header up top.  The lookup value associated with each image looks into a table in the EVT file at 0x00011E94.  
+That value refers to the index at the top of the FACE file.  The index at the top of the FACE file has the address of the image desired.

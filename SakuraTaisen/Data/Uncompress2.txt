@@ -1,10 +1,20 @@
+05C15100
+Header: 002B39A0
 002C445E, 002C4462
 
-@0x0603384A move.b @r4+, r6 \\r6 = FFFFFF88
+Start of the data is in the header:
+00 00 FD C4 00 00 08 94
+
+10 bytes into FDC4 is the size of the compressed data: 0814
+
+r8 = FFFFE000
+r9 = FFFFFF00
+
+@0x060384A move.b @r4+, r6 \\r6 = FFFFFF88
 0x0603384C mov 0x08, r7
 0x0603384E shlr r6 \\r6 = 7FFFFFC4
 0x06033850 bt 0x06033886
-0x06033852 move #0x00. r0 \\r0 = 0
+0x06033852 mov #0x00. r0 \\r0 = 0
 0x06033854 dt r7 \\r7 = 7
 0x06033856 bf/s 0x06033860
 0x06033858 shlr r6 \\r6 = 3FFFFFE2
@@ -31,6 +41,7 @@
 0x0603387E bf/s 0x060633878
 0x06033880 add #0x01. r5 \\r5 = 06068C2F -> 06068C30
 0x06033882 bra 0x06033836
+0x06033884 nop
 
 0x06033836 dt r7 \\r7 = 6 -> 5
 0x06033838 bf/s 0x06033842

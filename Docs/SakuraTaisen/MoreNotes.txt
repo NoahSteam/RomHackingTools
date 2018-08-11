@@ -32,7 +32,7 @@ PatchTMapSp d:\Rizwan\SakuraWars\Disc1 D:\Rizwan\Programming\RomHackingTools\Sak
 ExtractFontSheets a:\SakuraTaisen\Disc1\ a:\SakuraTaisen\ExtractedData\Disc1\FontSheets\Palette.bin a:\SakuraTaisen\ExtractedData\Disc1\FontSheets
 ExtractFontSheets a:\SakuraTaisen\Disc2\ a:\SakuraTaisen\ExtractedData\Disc1\FontSheets\Palette.bin a:\SakuraTaisen\ExtractedData\Disc2\FontSheets
 ExtractFontSheets a:\SakuraTaisen\PatchedData\TranslatedFontSheet A:\SakuraTaisen\PatchedData\TranslatedFontSheet\OutPalette.BIN a:\SakuraTaisen\PatchedData\TranslatedFontSheet
-ExtractRawText a:\SakuraTaisen\Disc1\ a:\SakuraTaisen\ExtractedData\ExtractedText
+ExtractRawText a:\SakuraTaisen\Disc1\ a:\SakuraTaisen\ExtractedData\Disc1\ExtractedText
 ExtractText a:\SakuraTaisen\Disc1 a:\SakuraTaisen\ExtractedData\Disc1\FontSheets\Palette.bin a:\SakuraTaisen\ExtractedData\Disc1\Dialog
 ExtractText a:\SakuraTaisen\Disc2 a:\SakuraTaisen\ExtractedData\Disc1\FontSheets\Palette.bin a:\SakuraTaisen\ExtractedData\Disc2\Dialog
 InsertText a:\SakuraTaisen\Disc1 A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\TranslatedText a:\SakuraTaisen\PatchedData\TranslatedTBL
