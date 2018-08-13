@@ -3356,6 +3356,131 @@ void PrintHelp()
 	printf("PatchGame rootSakuraTaisenDirectory patchedSakuraTaisenDirectory translatedTextDirectory fontSheet originalPalette patchedTMapSpDataPath \n");
 }
 
+int GetBytesInSequence(unsigned char inByte)
+{
+	unsigned int sequenceSize = inByte;
+	if( (inByte >> 4) == 0x0f )
+	{
+		sequenceSize = 0xffffff00 | inByte;
+	}
+
+	int count = 0;
+	while(sequenceSize)
+	{
+		sequenceSize = sequenceSize >> 1;
+		++count;
+	}
+
+	return count;
+}
+void DecompressionTest()
+{
+	FileData testData;
+	if( !testData.InitializeFileData("FACE01.BIN", "D:\\Rizwan\\SakuraWars\\Disc1\\SAKURA2\\FACE01.BIN") )
+	{
+		return;
+	}
+
+	vector<unsigned char> output;
+	const unsigned char* compressedData = (const unsigned char*)testData.GetData() + 0xFD09;//0xFDF8;
+	const unsigned int numValues = 0x0814;
+	unsigned long destSize = prs_decompress_size((void*)compressedData);
+	unsigned char* dest = new unsigned char[destSize];
+	prs_decompress((void *)compressedData, dest);
+
+	FILE* pOutFile = nullptr;
+	fopen_s(&pOutFile, "D:\\Rizwan\\SakuraWars\\Test\\uncompressedTest.txt", "wb");
+	if( pOutFile )
+	{
+		fwrite(dest, 1, destSize, pOutFile);
+			
+		fclose(pOutFile);
+	}
+	delete[] dest;
+
+	/*
+	unsigned int currIndex  = 0;
+	int blockBytesRemaining = 5;
+	int numValuesInSequence =  5;
+	while(currIndex < numValues)
+	{
+		unsigned char currValue = compressedData[currIndex];
+		
+		if( blockBytesRemaining && numValuesInSequence )
+		{
+			output.push_back(currValue);
+			--numValuesInSequence;
+			--blockBytesRemaining;
+		}
+		else
+		{
+			//All 8 bytes in the block must have been uncompressed
+			if(!blockBytesRemaining)
+			{
+				blockBytesRemaining = 8;
+				numValuesInSequence = GetBytesInSequence(currValue);
+			}
+			else //the remaining bytes in the block are negative offsets into the uncompressed buffer
+			{
+				//The first value says how many uncmpressed bytes in the next sequence
+				numValuesInSequence = GetBytesInSequence(currValue);
+
+				//int numBytesToGoBack = 0xffffff00 & currValue;
+				int numOffsetBytes = blockBytesRemaining;
+				int additionBytesToCopy = 0;
+				blockBytesRemaining = 8;
+
+				//The next numOffsetBytes amount of bytes will be used to read from the uncompressed buffer and append those unpompressed values to the end of the compressed buffer
+				while(numOffsetBytes)
+				{
+					++currIndex;
+
+					unsigned char offset = compressedData[currIndex];
+					int numBytesToGoBack = -1 * (0xffffff00 | offset);
+					int copyIndex        = output.size() - numBytesToGoBack;
+					int numBytesToCopy   = 2 + additionBytesToCopy;
+
+					assert(copyIndex >= 0);
+
+					while(numBytesToCopy)
+					{
+						output.push_back( output[copyIndex] );
+						++copyIndex;
+						--numBytesToCopy;
+				//		--numValuesInSequence;
+				//		assert(numValuesInSequence >= 0);
+					}
+
+					++additionBytesToCopy;
+					--numOffsetBytes;
+
+					if( numOffsetBytes )
+					{
+					//	--numValuesInSequence;
+					}
+				}
+
+				//blockBytesRemaining = 8 + 1;
+			}
+		}
+
+		++currIndex;		
+	}
+
+    FILE* pOutFile = nullptr;
+	fopen_s(&pOutFile, "D:\\Rizwan\\SakuraWars\\Test\\uncompressedTest.txt", "w");
+	if( pOutFile )
+	{
+		for(size_t i = 0; i < output.size(); ++i)
+		{
+			fprintf(pOutFile, "%02x ", output[i]); 
+		}
+			
+		fclose(pOutFile);
+	}
+	*/
+}
+
 int main(int argc, char *argv[])
 {
 	if(argc == 1)
