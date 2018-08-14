@@ -487,6 +487,35 @@ bool PaletteData::CreateFrom15BitData(const char* pInPaletteData, int inPaletteS
 	return true;
 }
 
+bool PaletteData::CreateFrom24BitData(const char* pInPaletteData, int inPaletteSize)
+{
+	if( inPaletteSize != 1024 )
+	{
+		printf("Unsupported palette type");
+		return false;
+	}
+
+	//Create 32bit palette from the 24 bit(bgr) palette in SakuraTaisen
+	const int numColorInPalette = inPaletteSize/4;
+	mNumBytesInPalette          = numColorInPalette*4;
+	mpPaletteData               = new char[mNumBytesInPalette];
+	for(int i = 0, origIdx = 0; i < mNumBytesInPalette; i += 4, origIdx += 4)
+	{
+		unsigned char blue  = pInPaletteData[origIdx + 1];
+		unsigned char green = pInPaletteData[origIdx + 2];
+		unsigned char red   = pInPaletteData[origIdx + 3];
+
+		//Ugly conversion of 5bit values to 8bit.  Probably a better way to do this.
+		//Masking the r,g,b components and then bringing the result into a [0,255] range.
+		mpPaletteData[i+0] = red;
+		mpPaletteData[i+1] = green;
+		mpPaletteData[i+2] = blue;
+		mpPaletteData[i+3] = 0;
+	}
+
+	return true;
+}
+
 bool PaletteData::CreateFrom32BitData(const char* pInPaletteData, int inPaletteSize)
 {
 	if( inPaletteSize != 64 )

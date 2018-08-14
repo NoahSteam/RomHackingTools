@@ -148,6 +148,7 @@ public:
 	~PaletteData();
 
 	bool        CreateFrom15BitData(const char* pInData, int inSize);
+	bool        CreateFrom24BitData(const char* pInData, int inSize);
 	bool        CreateFrom32BitData(const char* pInData, int inSize);
 	const char* GetData() const {return mpPaletteData;}
 	int         GetSize() const {return mNumBytesInPalette;}

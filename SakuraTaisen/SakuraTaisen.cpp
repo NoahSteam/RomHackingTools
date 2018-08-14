@@ -719,6 +719,7 @@ bool ExtractImage(const FileNameContainer& inFileNameContainer, const string& ou
 	//Create 32bit palette from the 16 bit(5:5:5 bgr) palette in SakuraTaisen
 	PaletteData paletteData;
 	paletteData.CreateFrom15BitData(inPaletteFile.GetData(), inPaletteFile.GetDataSize());
+	//paletteData.CreateFrom24BitData(inPaletteFile.GetData(), inPaletteFile.GetDataSize());
 
 	//Allocate space for tiled data
 	int numTiles                     = dataSize/tileBytes;
@@ -3376,7 +3377,8 @@ int GetBytesInSequence(unsigned char inByte)
 void DecompressionTest()
 {
 	FileData testData;
-	if( !testData.InitializeFileData("FACE01.BIN", "D:\\Rizwan\\SakuraWars\\Disc1\\SAKURA2\\FACE01.BIN") )
+	//if( !testData.InitializeFileData("FACE01.BIN", "D:\\Rizwan\\SakuraWars\\Disc1\\SAKURA2\\FACE01.BIN") )
+	if( !testData.InitializeFileData("FACE01.BIN", "A:\\SakuraTaisen\\Disc1\\SAKURA2\\FACE01.BIN") )
 	{
 		return;
 	}
@@ -3389,7 +3391,7 @@ void DecompressionTest()
 	prs_decompress((void *)compressedData, dest);
 
 	FILE* pOutFile = nullptr;
-	fopen_s(&pOutFile, "D:\\Rizwan\\SakuraWars\\Test\\uncompressedTest.txt", "wb");
+	fopen_s(&pOutFile, "A:\\SakuraTaisen\\ExtractedData\\Disc1\\Test\\UncompressedFace.bin", "wb");
 	if( pOutFile )
 	{
 		fwrite(dest, 1, destSize, pOutFile);
@@ -3397,88 +3399,6 @@ void DecompressionTest()
 		fclose(pOutFile);
 	}
 	delete[] dest;
-
-	/*
-	unsigned int currIndex  = 0;
-	int blockBytesRemaining = 5;
-	int numValuesInSequence =  5;
-	while(currIndex < numValues)
-	{
-		unsigned char currValue = compressedData[currIndex];
-		
-		if( blockBytesRemaining && numValuesInSequence )
-		{
-			output.push_back(currValue);
-			--numValuesInSequence;
-			--blockBytesRemaining;
-		}
-		else
-		{
-			//All 8 bytes in the block must have been uncompressed
-			if(!blockBytesRemaining)
-			{
-				blockBytesRemaining = 8;
-				numValuesInSequence = GetBytesInSequence(currValue);
-			}
-			else //the remaining bytes in the block are negative offsets into the uncompressed buffer
-			{
-				//The first value says how many uncmpressed bytes in the next sequence
-				numValuesInSequence = GetBytesInSequence(currValue);
-
-				//int numBytesToGoBack = 0xffffff00 & currValue;
-				int numOffsetBytes = blockBytesRemaining;
-				int additionBytesToCopy = 0;
-				blockBytesRemaining = 8;
-
-				//The next numOffsetBytes amount of bytes will be used to read from the uncompressed buffer and append those unpompressed values to the end of the compressed buffer
-				while(numOffsetBytes)
-				{
-					++currIndex;
-
-					unsigned char offset = compressedData[currIndex];
-					int numBytesToGoBack = -1 * (0xffffff00 | offset);
-					int copyIndex        = output.size() - numBytesToGoBack;
-					int numBytesToCopy   = 2 + additionBytesToCopy;
-
-					assert(copyIndex >= 0);
-
-					while(numBytesToCopy)
-					{
-						output.push_back( output[copyIndex] );
-						++copyIndex;
-						--numBytesToCopy;
-				//		--numValuesInSequence;
-				//		assert(numValuesInSequence >= 0);
-					}
-
-					++additionBytesToCopy;
-					--numOffsetBytes;
-
-					if( numOffsetBytes )
-					{
-					//	--numValuesInSequence;
-					}
-				}
-
-				//blockBytesRemaining = 8 + 1;
-			}
-		}
-
-		++currIndex;		
-	}
-
-    FILE* pOutFile = nullptr;
-	fopen_s(&pOutFile, "D:\\Rizwan\\SakuraWars\\Test\\uncompressedTest.txt", "w");
-	if( pOutFile )
-	{
-		for(size_t i = 0; i < output.size(); ++i)
-		{
-			fprintf(pOutFile, "%02x ", output[i]); 
-		}
-			
-		fclose(pOutFile);
-	}
-	*/
 }
 
 int main(int argc, char *argv[])
