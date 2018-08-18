@@ -2938,53 +2938,38 @@ void ExtractFACEFiles(const string& sakuraDirectory, const string& outDirectory)
 {
 	struct FaceHeaderInfo
 	{
-		struct Data
+		struct Entry
 		{
+			unsigned long  offsetToData;
 			unsigned short unknown1;
-			unsigned short offsetToData;
 			unsigned short unknown2;
-			unsigned short unknown3;
 		};
 
-		Data* mpData = nullptr;
+		Entry* mpData = nullptr;
 		unsigned int mNumEntries;
 
-		bool Initialize(const char* pFileData, unsigned int inFileSize)
-		{	
-			unsigned int faceFileOffset = 0;
-			int headerSize              = 0;
+		bool Initialize(const char* pFileData)
+		{
 			const char* pFaceData       = pFileData;
+			unsigned long headerSize    = SwapByteOrder( *((unsigned long*)(pFaceData)) );
 
-			while(faceFileOffset < inFileSize)
-			{
-				if( pFaceData[faceFileOffset + 0] == 0x00 &&
-					pFaceData[faceFileOffset + 1] == 0x00 &&
-					pFaceData[faceFileOffset + 2] == 0x00 &&
-					pFaceData[faceFileOffset + 3] == 0x10)
-				{
-					headerSize = faceFileOffset;
-					break;
-				}
-
-				faceFileOffset += 4;
-			}
-
-			if( headerSize == 0 || (headerSize % 4) != 0 )
+			//The header size should be divisible by 8			
+			const unsigned int headerEntrySize = sizeof(Entry);
+			if( headerSize == 0 || (headerSize % headerEntrySize) != 0 )
 			{
 				printf("Unable to figure out the size of the FACE file header.\n");
 				return false;
 			}
 
-			mNumEntries = headerSize/4;
-			mpData      = new Data[mNumEntries];
-			memcpy_s(mpData, sizeof(Data)*mNumEntries, pFileData, sizeof(Data)*mNumEntries);
+			mNumEntries = headerSize/headerEntrySize;
+			mpData      = new Entry[mNumEntries];
+			memcpy_s(mpData, headerEntrySize*mNumEntries, pFileData, headerEntrySize*mNumEntries);
 
 			for(unsigned int i = 0; i < mNumEntries; ++i)
 			{
 				mpData[i].offsetToData = SwapByteOrder(mpData[i].offsetToData);
 				mpData[i].unknown1     = SwapByteOrder(mpData[i].unknown1);
 				mpData[i].unknown2     = SwapByteOrder(mpData[i].unknown2);
-				mpData[i].unknown3     = SwapByteOrder(mpData[i].unknown3);
 			}
 			return true;
 		}
@@ -3009,6 +2994,8 @@ void ExtractFACEFiles(const string& sakuraDirectory, const string& outDirectory)
 
 	for(const FileNameContainer& fileNameInfo : faceFiles)
 	{
+		printf("Extracting %s\n", fileNameInfo.mFileName.c_str());
+
 		const string subDirName = outDirectory + fileNameInfo.mNoExtension + Seperators;
 		if( !CreateDirectoryHelper(subDirName) )
 		{
@@ -3024,39 +3011,49 @@ void ExtractFACEFiles(const string& sakuraDirectory, const string& outDirectory)
 
 		//Figure out how many faces images are in this file
 		FaceHeaderInfo faceFileHeader;
-		if( !faceFileHeader.Initialize( faceFile.GetData(), faceFile.GetDataSize() ) )
+		if( !faceFileHeader.Initialize( faceFile.GetData() ) )
 		{
 			printf("Could not extract %s\n", fileNameInfo.mFileName.c_str());
 			return;
 		}
 
-		for(unsigned int i = 0x34; i < faceFileHeader.mNumEntries; ++i)
+		//Go through every image
+		for(unsigned int i = 0; i < faceFileHeader.mNumEntries; ++i)
 		{
 			const unsigned int offsetToData        = faceFileHeader.mpData[i].offsetToData;
-			const unsigned int compressedDataStart = offsetToData + 0x02;//0x03 + 0x10;
+			const unsigned int compressedDataStart = offsetToData + 16;
 			const unsigned int offsetToPalette     = SwapByteOrder( *((unsigned short*)(faceFile.GetData() + offsetToData + 10)) );
 
 			if( compressedDataStart >= faceFile.GetDataSize() )
 			{
 				printf("Invalid data start position for file %i in %s\n", i, fileNameInfo.mFileName.c_str());
-				return;
+				continue;
+				//return;
 			}
 
 			PRSDecompressor uncompressedImage;
 			uncompressedImage.UncompressData( (void*)(faceFile.GetData() + compressedDataStart) );
 
-			PRSDecompressor uncompressedPalette;
-			uncompressedPalette.UncompressData( (void*)(faceFile.GetData() + offsetToData + offsetToPalette) );
-
-			FileWriter outFile;
-			outFile.OpenFileForWrite("a:\\outData.bin");
-			outFile.WriteData(uncompressedPalette.mpUncompressedData, uncompressedPalette.mUncompressedDataSize);
-			outFile.Close();
-
-			const string outFileName = outDirectory + std::to_string(i) + string(".bmp");
-
+			//Create palette data
+			//Palettes only use 7 bits of the actual value that is stored in the game file
+			const char* pOriginalPaletteData = faceFile.GetData() + offsetToData + offsetToPalette;
+			char* pPaletteData = new char[128];
+			memset(pPaletteData, 0, 128);
+			memcpy_s(pPaletteData, 128, pOriginalPaletteData, 128);
+			for(int p = 0; p < 128; p += 2)
+			{
+				unsigned short* pPaletteValue = (unsigned short*)(pPaletteData + p);
+				*pPaletteValue = SwapByteOrder(*pPaletteValue);
+				*pPaletteValue = (*pPaletteValue) & (unsigned short)(0x7fff);
+				*pPaletteValue = SwapByteOrder(*pPaletteValue);
+			}
+			
 			//Create image from uncompressed data
-			ExtractImageFromData(uncompressedImage.mpUncompressedData + 0x4F, uncompressedImage.mUncompressedDataSize, outFileName, uncompressedPalette.mpUncompressedData, 256, 40, 48, 1, 128, 0, false);
+			const string outFileName = subDirName + std::to_string(i) + string(".bmp");
+			const unsigned char offsetToColorData = 0x40;
+			ExtractImageFromData(uncompressedImage.mpUncompressedData + offsetToColorData, uncompressedImage.mUncompressedDataSize - offsetToColorData, outFileName, pPaletteData, 128, 40, 48, 1, 128, 0, false);
+
+			delete[] pPaletteData;
 		}
 	}
 }
@@ -3694,7 +3691,7 @@ int main(int argc, char *argv[])
 	}
 	else if(command == "ExtractFACEFiles" && argc == 4 )
 	{
-		const string rootSakuraTaisenDirectory = string(argv[2]) + Seperators;
+		const string rootSakuraTaisenDirectory = string(argv[2]) + Seperators + string("SAKURA2\\");
 		const string outDirectory              = string(argv[3]) + Seperators;
 
 		ExtractFACEFiles(rootSakuraTaisenDirectory, outDirectory);

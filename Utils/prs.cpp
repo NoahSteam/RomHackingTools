@@ -229,7 +229,7 @@ u32 prs_decompress(void* source, void* dest) // 800F7CB0 through 800F7DE4 in mem
     int offset;
     u32 x,t; // 2 placed variables 
 
-    printf("\n> decompressing\n");
+   // printf("\n> decompressing\n");
     currentbyte = sourceptr[0];
     sourceptr++;
     for (;;)
@@ -248,7 +248,7 @@ u32 prs_decompress(void* source, void* dest) // 800F7CB0 through 800F7DE4 in mem
         if (flag)
         {
             destptr[0] = sourceptr[0];
-            printf("> > > %08X->%08X byte\n",sourceptr - sourceptr_orig,destptr - destptr_orig);
+     //       printf("> > > %08X->%08X byte\n",sourceptr - sourceptr_orig,destptr - destptr_orig);
             sourceptr++;
             destptr++;
             continue;
@@ -285,7 +285,7 @@ u32 prs_decompress(void* source, void* dest) // 800F7CB0 through 800F7DE4 in mem
 			else 
 				r3 += 2;
             r5 += (u32)destptr;
-            printf("> > > %08X->%08X ldat %08X %08X %s\n",sourceptr - sourceptr_orig,destptr - destptr_orig,r5 - (u32)destptr,r3,flag ? "inline" : "extended");
+       //     printf("> > > %08X->%08X ldat %08X %08X %s\n",sourceptr - sourceptr_orig,destptr - destptr_orig,r5 - (u32)destptr,r3,flag ? "inline" : "extended");
         } 
 		else
 		{
@@ -308,7 +308,7 @@ u32 prs_decompress(void* source, void* dest) // 800F7CB0 through 800F7DE4 in mem
             r3 += 2;
             sourceptr++;
             r5 = offset + (u32)destptr;
-            printf("> > > %08X->%08X sdat %08X %08X\n",sourceptr - sourceptr_orig,destptr - destptr_orig,r5 - (u32)destptr,r3);
+       //     printf("> > > %08X->%08X sdat %08X %08X\n",sourceptr - sourceptr_orig,destptr - destptr_orig,r5 - (u32)destptr,r3);
         }
 
         if (r3 == 0) 

@@ -28,6 +28,7 @@ ExtractFaceFiles d:\Rizwan\SakuraWars\Disc1 d:\Rizwan\Programming\RomHackingTool
 ExtractTMapSP d:\Rizwan\SakuraWars\Disc1 d:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\TheaterMapPalette.bin d:\Rizwan\SakuraWars\ExtractedData\Disc1\TMapSP
 CreateTMapSpSpreadsheet d:\Rizwan\SakuraWars\ExtractedData\Disc1\TMapSP
 PatchTMapSp d:\Rizwan\SakuraWars\Disc1 D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\TMapSP
+ExtractFACEFiles d:\Rizwan\SakuraWars\Disc1 d:\Rizwan\SakuraWars\ExtractedData\Disc1\FACE
 
 ExtractFontSheets a:\SakuraTaisen\Disc1\ a:\SakuraTaisen\ExtractedData\Disc1\FontSheets\Palette.bin a:\SakuraTaisen\ExtractedData\Disc1\FontSheets
 ExtractFontSheets a:\SakuraTaisen\Disc2\ a:\SakuraTaisen\ExtractedData\Disc1\FontSheets\Palette.bin a:\SakuraTaisen\ExtractedData\Disc2\FontSheets
@@ -47,7 +48,7 @@ ExtractTMapSP a:\SakuraTaisen\Disc1 A:\NoahSteam\RomPatchingTools\SakuraTaisen\D
 CreateTMapSpSpreadsheet a:\SakuraTaisen\ExtractedData\Disc1\TMapSP
 PatchTMapSp a:\SakuraTaisen\Disc1 A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\TMapSP
 Extract8BitImage a:\SakuraTaisen\ExtractedData\Disc1\Test\UncompressedFace.bin A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\BattleFacePalette.bin 0 40 48 128 a:\SakuraTaisen\ExtractedData\Disc1\Test
-ExtractFACEFiles a:\SakuraTaisen\Disc1\SAKURA2 a:\SakuraTaisen\ExtractedData\Disc1\FACE
+ExtractFACEFiles a:\SakuraTaisen\Disc1 a:\SakuraTaisen\ExtractedData\Disc1\FACE
 FindData.exe a:\SakuraTaisen\Disc1 a:\SakuraTaisen\Search.bin
 
 UPDATE TBLFiles SET English = REPLACE(English, '\\n', ' ')
