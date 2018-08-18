@@ -288,6 +288,15 @@ public:
 	bool ExtractTiles(unsigned int inTileDimX, unsigned int inTileDimY, unsigned int outTileDimX, unsigned int outTileDimY, const BitmapReader& inBitmap);
 };
 
+struct PRSDecompressor
+{
+	char*         mpUncompressedData = nullptr;
+	unsigned long mUncompressedDataSize = 0;
+
+	~PRSDecompressor();
+	void UncompressData(void* pInData);
+};
+
 void FindAllFilesWithinDirectory(const std::string& inDirectoryPath, std::vector<FileNameContainer>& outFileNames);
 bool CreateDirectoryHelper(const std::string& dirName);
 bool AreFilesTheSame(const FileData& file1, const FileNameContainer& file2Name);

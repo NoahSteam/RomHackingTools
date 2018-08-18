@@ -58,12 +58,12 @@ public:
 		{
 			return 'u' + 16 + 1;//'…' + 1;
 		}
-		
+
 		if( inChar == '\n' )
 		{
 			return 0x0a0d;
 		}
-		
+
 		if( inChar == 0xA0 )
 		{
 			return ' ' + 1;
@@ -143,7 +143,7 @@ struct SakuraString
 			mIndex = (inRow << 8) + inColumn;
 			assert(mIndex > 0);
 		}
-		
+
 		SakuraChar(unsigned short inIndex)
 		{
 			mRow    = (inIndex & 0xff00) >> 8;
@@ -328,7 +328,7 @@ struct SakuraTextFile
 		{
 			dataSize = inSize;
 			pData    = new char[dataSize];
-			
+
 			memcpy(pData, pInData, dataSize);
 		}
 
@@ -349,7 +349,7 @@ struct SakuraTextFile
 
 			return *this;
 		}
-		
+
 		~SakuraDataSegment()
 		{
 			delete[] pData;
@@ -385,8 +385,8 @@ public:
 	SakuraTextFile(const FileNameContainer& fileName) : mFileNameInfo(fileName), mFileSize(0), mpFile(nullptr), mpBuffer(nullptr){}
 
 	SakuraTextFile(SakuraTextFile&& rhs) : mFileNameInfo(std::move(rhs.mFileNameInfo)), mLines(std::move(rhs.mLines)), mHeader(std::move(rhs.mHeader)), mFooter(std::move(rhs.mFooter)), 
-		                                   mDataSegments(std::move(rhs.mDataSegments)), mStringInfoArray(std::move(rhs.mStringInfoArray)), mFileSize(rhs.mFileSize),
-		                                   mpFile(rhs.mpFile), mpBuffer(std::move(rhs.mpBuffer))
+		mDataSegments(std::move(rhs.mDataSegments)), mStringInfoArray(std::move(rhs.mStringInfoArray)), mFileSize(rhs.mFileSize),
+		mpFile(rhs.mpFile), mpBuffer(std::move(rhs.mpBuffer))
 	{
 		rhs.mpBuffer = nullptr;
 		rhs.mpFile   = nullptr;
@@ -403,7 +403,7 @@ public:
 		mFileSize        = rhs.mFileSize;
 		mpFile           = rhs.mpFile;
 		mpBuffer         = std::move(rhs.mpBuffer);
-		
+
 		rhs.mpFile       = nullptr;
 		rhs.mpBuffer     = nullptr;
 	}
@@ -437,7 +437,7 @@ public:
 		mFileSize = ftell(mpFile);
 		fseek(mpFile, 0, SEEK_SET); //reset to the start of the file
 
-		//Allocate buffer to read in data
+									//Allocate buffer to read in data
 		mpBuffer = new char[mFileSize];
 
 		//Read in data
@@ -538,7 +538,7 @@ private:
 			{
 				unsigned short currValue = pWordBuffer[currentIndex++];
 				currValue                = SwapByteOrder(currValue);  //Convert to big endian
-				
+
 				if( currValue != 0 )
 				{
 					bNonZeroValueFound = true;
@@ -572,7 +572,7 @@ struct SakuraTextFileFixedHeader
 	{
 		//All TBL files start with this entries
 		mStringInfo.push_back( SwapByteOrder(inInfo[0].mFullValue) );
-		
+
 		unsigned short prevValue = 0;
 		const size_t numEntries  = inInfo.size() - 1;
 		for(size_t i = 0; i < numEntries; ++i)
@@ -597,7 +597,7 @@ struct SakuraTextFileFixedHeader
 			stringTableSize += sakuraString.mChars.size()*2;
 		}
 		//Done figuring out table size
-		
+
 		assert(stringTableSize/2 <= 0xffff);
 		mOffsetToTable = SwapByteOrder( ((unsigned short*)inSakuraFile.mHeader.pData)[0] );
 		mTableEnd      = (unsigned short)((mOffsetToTable*2 + (unsigned short)stringTableSize) / 2);
@@ -693,33 +693,25 @@ void DumpExtractedSakuraText(const vector<SakuraTextFile>& inSakuraTextFiles, co
 	}
 }
 
-bool ExtractImage(const FileNameContainer& inFileNameContainer, const string& outFileName, const FileData& inPaletteFile, const int inTextureDimX, const int inTextureDimY, const int inNumTexturesPerRow, const int dataOffset = 0, bool bFillEmptyData = true)
+bool ExtractImageFromData(const char* pInColorData, const unsigned int inColorDataSize, const string& outFileName, const char* pInPaletteData, const unsigned int inPaletteDataSize, const int inTextureDimX, const int inTextureDimY, 
+	const int inNumTexturesPerRow, const int inNumColors = 256, const int inDataOffset = 0, bool bInFillEmptyData = true)
 {
-	FileData fontSheet;
-	if( !fontSheet.InitializeFileData(inFileNameContainer) )
-	{
-		return false;
-	}
-
-	printf("Extracting: %s\n", inFileNameContainer.mFileName.c_str());
-	
-	const int divisor            = inPaletteFile.GetDataSize() == 32 ? 2 : 1; //4bit images only have half the pixels
+	const int divisor            = inPaletteDataSize == 32 ? 2 : 1; //4bit images only have half the pixels
 	const int tileDimX           = inTextureDimX;
 	const int tileDimY           = inTextureDimY;
 	const int tileBytes          = (tileDimX*tileDimY)/divisor; //4bits per pixel, so only half the amount of bytes as pixels
 	const int tilesPerRow        = inNumTexturesPerRow;
 	const int bytesPerTile       = tileBytes;
 	const int bytesPerTileRow    = bytesPerTile*tilesPerRow;
-	const unsigned long dataSize = bFillEmptyData ? fontSheet.GetDataSize() - dataOffset : inTextureDimX*inTextureDimY*inNumTexturesPerRow;
+	const unsigned long dataSize = bInFillEmptyData ? inColorDataSize - inDataOffset : inTextureDimX*inTextureDimY*inNumTexturesPerRow;
 	const int numRows            = (int)ceil( dataSize/ (float)bytesPerTileRow);
 	const int numColumns         = numRows > 0 ? tilesPerRow : dataSize/bytesPerTileRow;
 	const int imageHeight        = numRows*tileDimY;
 	const int imageWidth         = numColumns*tileDimX;
-	
+
 	//Create 32bit palette from the 16 bit(5:5:5 bgr) palette in SakuraTaisen
 	PaletteData paletteData;
-	paletteData.CreateFrom15BitData(inPaletteFile.GetData(), inPaletteFile.GetDataSize());
-	//paletteData.CreateFrom24BitData(inPaletteFile.GetData(), inPaletteFile.GetDataSize());
+	paletteData.CreateFrom15BitData(pInPaletteData, inPaletteDataSize);
 
 	//Allocate space for tiled data
 	int numTiles                     = dataSize/tileBytes;
@@ -732,10 +724,13 @@ bool ExtractImage(const FileNameContainer& inFileNameContainer, const string& ou
 
 	memset(pOutTiledData, 0, numTiledBytes);
 
+	//In Mode 3, the image only has 128 colors so only the 7 lower bits are used. 0x7f = 01111111
+	const unsigned char bitMask = inNumColors == 256 ? 0xff : 0x7f;
+
 	//Fill in data
 	for(int tileIndex = 0; tileIndex < numTiles; ++tileIndex)
 	{
-		const char* pTile       = fontSheet.GetData() + dataOffset + tileIndex*tileBytes;
+		const char* pTile       = pInColorData + inDataOffset + tileIndex*tileBytes;
 		const int outTileOffset = currTileRow*bytesPerHorizontalLine*tileDimY + currTileCol*bytesInEachTilesWidth;
 		char* pOutTile          = pOutTiledData + outTileOffset;
 		int tilePixel           = 0;
@@ -744,7 +739,7 @@ bool ExtractImage(const FileNameContainer& inFileNameContainer, const string& ou
 			for(int c = 0; c < bytesInEachTilesWidth; ++c)
 			{
 				assert(outTileOffset + r*bytesPerHorizontalLine + c < numTiledBytes);
-				pOutTile[r*bytesPerHorizontalLine + c] = pTile[tilePixel++];
+				pOutTile[r*bytesPerHorizontalLine + c] = pTile[tilePixel++] & bitMask;
 			}
 		}
 
@@ -756,11 +751,25 @@ bool ExtractImage(const FileNameContainer& inFileNameContainer, const string& ou
 	}
 
 	BitmapWriter fontBitmap;
-	fontBitmap.CreateBitmap(outFileName, imageWidth, -imageHeight, inPaletteFile.GetDataSize() == 32 ? 4 : 8, pOutTiledData, numTiledBytes, paletteData.GetData(), paletteData.GetSize());	
+	fontBitmap.CreateBitmap(outFileName, imageWidth, -imageHeight, inPaletteDataSize == 32 ? 4 : 8, pOutTiledData, numTiledBytes, paletteData.GetData(), paletteData.GetSize());
 
 	delete[] pOutTiledData;
 
 	return true;
+}
+
+bool ExtractImage(const FileNameContainer& inFileNameContainer, const string& outFileName, const FileData& inPaletteFile, const int inTextureDimX, const int inTextureDimY, const int inNumTexturesPerRow, const int inNumColors = 256,
+	const int inDataOffset = 0, bool bInFillEmptyData = true)
+{
+	FileData fontSheet;
+	if( !fontSheet.InitializeFileData(inFileNameContainer) )
+	{
+		return false;
+	}
+
+	printf("Extracting: %s\n", inFileNameContainer.mFileName.c_str());
+
+	return ExtractImageFromData(fontSheet.GetData(), fontSheet.GetDataSize(), outFileName, inPaletteFile.GetData(), inPaletteFile.GetDataSize(), inTextureDimX, inTextureDimY, inNumTexturesPerRow, inNumColors, inDataOffset, bInFillEmptyData);
 }
 
 bool ExtractFontSheetAsBitmap(const FileNameContainer& inFileNameContainer, const string& outFileName, const FileData& inPaletteFile)
@@ -863,7 +872,7 @@ void ExtractText(const string& inSearchDirectory, const string& inPaletteFileNam
 	{
 		const FileNameContainer& fontSheetName = fontFiles[i];
 		const SakuraTextFile& sakuraText       = sakuraTextFiles[i];
-		
+
 		const string fontSheetNumber = fontSheetName.mNoExtension.substr(0, fontSheetName.mNoExtension.size() - 3);
 		const string sakuraFileNum   = sakuraText.mFileNameInfo.mNoExtension.substr(0, sakuraText.mFileNameInfo.mNoExtension.size() - 3);
 
@@ -872,7 +881,7 @@ void ExtractText(const string& inSearchDirectory, const string& inPaletteFileNam
 			printf("ExtractText: Font sheet and text file mistmatch. %s %s", fontSheetName.mNoExtension.c_str(), sakuraText.mFileNameInfo.mNoExtension.c_str());
 			return;
 		}
-		
+
 		//Create output directory for this file
 		string fileOutputDir = inOutputDirectory + sakuraText.mFileNameInfo.mNoExtension + string("\\");
 		if( !CreateDirectoryHelper(fileOutputDir) )
@@ -904,7 +913,7 @@ void ExtractText(const string& inSearchDirectory, const string& inPaletteFileNam
 
 			BitmapSurface sakuraStringBmp;
 			sakuraStringBmp.CreateSurface( SakuraString::MaxCharsPerLine*tileDim, tileDim*numSakuraLines, BitmapSurface::EBitsPerPixel::kBPP_4, paletteData.GetData(), paletteData.GetSize());
-	
+
 			int currRow = 0;
 			int currCol = 0;
 			for(size_t charIndex = sakuraString.mOffsetToStringData; charIndex < sakuraString.mChars.size(); ++charIndex)
@@ -929,7 +938,7 @@ void ExtractText(const string& inSearchDirectory, const string& inPaletteFileNam
 
 				++currCol;
 			}
-			
+
 			const string bitmapName = fileOutputDir + std::to_string(stringIndex + 1) + extension;
 			sakuraStringBmp.WriteToFile(bitmapName);
 
@@ -1002,7 +1011,7 @@ bool CreateTranslatedFontSheet(const string& inTranslatedFontSheet, const string
 		{
 			const unsigned short paletteIndex1 = (tile.mpTile[i] & 0xF0) >> 4; 
 			const unsigned short paletteIndex2 = (tile.mpTile[i] & 0x0F);
-			
+
 			if( paletteIndex1 == 0 )
 			{
 				tile.mpTile[i] = (char)((indexOfAlphaColor << 4) + paletteIndex2);
@@ -1075,7 +1084,7 @@ void ConvertTranslatedText(const string& inTextDir, const string& outDir)
 			{
 				const std::string& word = line.mWords[wordIndex];
 				const SakuraStringLookUpValue lookUpValues(word);
-		
+
 				if(word.size() >= maxCharsPerLine)
 				{
 					printf("In %s, unable to write word: %s because it is longer than the max characters allowed per line[%i]", fileInfo.mNoExtension.c_str(), word.c_str(), maxCharsPerLine);
@@ -1193,7 +1202,7 @@ bool PatchPalettes(const string& rootDirectory, const string& originalPalette, c
 		printf("Unable to patch palettes because original palette not found.\n");
 		return false;
 	}
-	
+
 	//Load new palette data
 	FileData newPaletteData;
 	if( !newPaletteData.InitializeFileData(newPalette.c_str(), newPalette.c_str()) )
@@ -1201,7 +1210,7 @@ bool PatchPalettes(const string& rootDirectory, const string& originalPalette, c
 		printf("Unable to patch palettes because new palette not found.\n");
 		return false;
 	}
-	
+
 	vector<FileNameContainer> foundFiles;
 
 	//Go trhough all files in the SakuraTaisen directory searching for palette data
@@ -1247,7 +1256,7 @@ bool PatchPalettes(const string& rootDirectory, const string& originalPalette, c
 				{
 					outFileName = inOutputDir + sakuraFile.mFileName;
 				}
-				
+
 				FileWriter outFile;
 				if( !outFile.OpenFileForWrite(outFileName) )
 				{
@@ -1358,7 +1367,7 @@ bool FindDialogOrder(const string& rootSakuraTaisenDirectory, map<string, Dialog
 
 			if( bIsLipsEntry || 
 				(pData[index] == 0x22 && pData[index + 1] == 0x80 && pData[index + 2] == 0x00)
-			  )
+				)
 			{
 				unsigned short id = pData[index + 4] + (pData[index + 3] << 8);
 				outOrder[infoFileNameInfo.mNoExtension].idAndOrder[id].push_back(appearance);
@@ -1389,7 +1398,7 @@ bool FindDialogOrder(const string& rootSakuraTaisenDirectory, map<string, Dialog
 
 					--lookAhead;
 				}
-				
+
 				outOrder[infoFileNameInfo.mNoExtension].idAndImage[id] = imageId;
 
 			}
@@ -1428,7 +1437,7 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 	//Find all files within the requested directory
 	vector<FileNameContainer> allFiles;
 	FindAllFilesWithinDirectory(rootSakuraTaisenDirectory, allFiles);
-	
+
 	//Get all files containing dialog
 	vector<FileNameContainer> textFiles;
 	GetAllFilesOfType(allFiles, "TBL.BIN", textFiles);
@@ -1534,7 +1543,7 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 				int currLine          = 1;
 				const size_t numWords = textLine.mWords.size();
 				SakuraString translatedString;
-				
+
 #if OPTIMIZE_INSERTION_DEBUGGING
 				const unsigned short id = sakuraFile.mStringInfoArray[translatedLineIndex].mUnknown;
 				const vector<int>* pOrder = bDialogOrderExists && dialogOrderIter->second.idAndOrder.find(id) != dialogOrderIter->second.idAndOrder.end() ? &dialogOrderIter->second.idAndOrder.find(id)->second : nullptr;
@@ -1563,28 +1572,28 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 				}				
 				else
 #endif
-				//If untranslated, then write out the file and line number
-				if( textLine.mWords.size() == 1 && textLine.mWords[0] == UntranslatedEnglishString )
-				{
-					const string baseUntranslatedString = sakuraFile.mFileNameInfo.mNoExtension + string(": ");
-					const string untranslatedString = baseUntranslatedString + std::to_string(translatedLineIndex + 1);
-
-					SakuraString translatedSakuraString;
-
-					//Lines starting with the indicator 0xC351 have a special two byte value instead of the usual 00 00
-					const size_t currSakuraStringIndex = translatedLineIndex;
-					if( sakuraFile.mStringInfoArray[currSakuraStringIndex].mUnknown == SpecialDialogIndicator )
+					//If untranslated, then write out the file and line number
+					if( textLine.mWords.size() == 1 && textLine.mWords[0] == UntranslatedEnglishString )
 					{
-						translatedSakuraString.AddString( untranslatedString, sakuraFile.mLines[currSakuraStringIndex].mChars[0].mIndex);
-					}
-					else
-					{
-						translatedSakuraString.AddString( untranslatedString );
-					}
+						const string baseUntranslatedString = sakuraFile.mFileNameInfo.mNoExtension + string(": ");
+						const string untranslatedString = baseUntranslatedString + std::to_string(translatedLineIndex + 1);
 
-					translatedLines.push_back( translatedSakuraString );
-					continue;
-				}
+						SakuraString translatedSakuraString;
+
+						//Lines starting with the indicator 0xC351 have a special two byte value instead of the usual 00 00
+						const size_t currSakuraStringIndex = translatedLineIndex;
+						if( sakuraFile.mStringInfoArray[currSakuraStringIndex].mUnknown == SpecialDialogIndicator )
+						{
+							translatedSakuraString.AddString( untranslatedString, sakuraFile.mLines[currSakuraStringIndex].mChars[0].mIndex);
+						}
+						else
+						{
+							translatedSakuraString.AddString( untranslatedString );
+						}
+
+						translatedLines.push_back( translatedSakuraString );
+						continue;
+					}
 
 				//Lines starting with the indicator 0xC351 have a special two byte value instead of the usual 00 00
 				if( sakuraFile.mStringInfoArray[translatedLineIndex].mUnknown == SpecialDialogIndicator )
@@ -1712,7 +1721,7 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 				{
 					translatedSakuraString.AddString( untranslatedString );
 				}				
-				
+
 				translatedLines.push_back( translatedSakuraString );
 			}
 
@@ -1733,7 +1742,7 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 				const string untranslatedString = baseUntranslatedString + std::to_string(i + 1);
 #endif
 				SakuraString translatedSakuraString;
-				
+
 				//Lines starting with the indicator 0xC351 have a special two byte value instead of the usual 00 00
 				if( sakuraFile.mStringInfoArray[i].mUnknown == SpecialDialogIndicator )
 				{
@@ -1747,7 +1756,7 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 				translatedLines.push_back( translatedSakuraString );
 			}		
 		}
-		
+
 		SakuraTextFileFixedHeader fixedHeader;
 		fixedHeader.CreateFixedHeader(sakuraFile.mStringInfoArray, sakuraFile, translatedLines);
 
@@ -2144,7 +2153,7 @@ bool CreateTMapSpSpreadsheet(const string& imageDirectory)
 	htmlFile.WriteString("					<th>Japanese</th>\n");
 	htmlFile.WriteString("					<th>English</th>\n");
 	htmlFile.WriteString("				</tr>\n");
-	
+
 	const int firstImage = 51; 
 	const int lastImage  = 92;
 	for(int i = firstImage; i <= lastImage; ++i)
@@ -2153,7 +2162,7 @@ bool CreateTMapSpSpreadsheet(const string& imageDirectory)
 		fprintf(htmlFile.GetFileHandle(), "					<td align=\"center\" width=\"20\">%i</td><td width=\"88\"><img src=\"..\\ExtractedData\\TMapSP\\%i.png\"></td><td width=\"480\"><textarea id=\"edit_%i\" contenteditable=true onchange=\"SaveEdits('%i.bmp', 'edit_%i')\" style=\"border: none; width: 100%%; -webkit-box-sizing: border-box; -moz-box-sizing: border-box; box-sizing: border-box;\">Untranslated</textarea></td>\n", i, i, i, i, i);
 		fprintf(htmlFile.GetFileHandle(), "				</tr>\n");
 	}
-	
+
 	htmlFile.WriteString("			</table><br>\n");
 	htmlFile.WriteString("			<?php\n");
 	htmlFile.WriteString("		}\n");
@@ -2247,7 +2256,7 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& dup
 	{
 		std::sort(iter->second.begin(), iter->second.end());
 	}
-	
+
 	//Find dialog order info
 	map<string, DialogOrder> dialogOrder;
 	if( !FindDialogOrder(sakura1Directory, dialogOrder) )
@@ -2298,7 +2307,7 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& dup
 		for(size_t fileIndex = 0; fileIndex < numImageFiles; ++fileIndex)
 		{
 			const FileNameContainer& firstImageName = iter->second[fileIndex];
-			
+
 			if( crcMap.find(&firstImageName) == crcMap.end() )
 			{
 				printf("Crc data not found.  Unable to generate web files.\n");
@@ -2363,7 +2372,7 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& dup
 		}
 
 		const string htmlFileName = outputDirectory + iter->first + string(".php");
-		
+
 		TextFileWriter htmlFile;
 		if( !htmlFile.OpenFileForWrite(htmlFileName) )
 		{
@@ -2376,7 +2385,7 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& dup
 		fprintf(htmlFile.GetFileHandle(), "\n<div id=\"FileName\" style=\"display: none;\">%s</div>\n", tblFileName.c_str());
 		fprintf(htmlFile.GetFileHandle(), "\n<div id=\"LastImageIndex\" style=\"display: none;\">%i</div>\n", numImageFiles);
 		fprintf(htmlFile.GetFileHandle(), "\n<div id=\"NumberOfDuplicates\" style=\"display: none;\">%i</div>\n", numberOfDuplicatesFound);
-		
+
 		htmlFile.WriteString("<script src=\"https://ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js\">\n\n");
 
 		//Load Data on startup
@@ -2465,7 +2474,7 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& dup
 			{
 				fprintf(htmlFile.GetFileHandle(), "     var edit_%s_duplicates = [\"%s\"", mapIter->second[dupIndex].c_str(), mapIter->first.c_str());
 				fprintf(htmlFile.GetFileHandle(), ",");
-			
+
 				size_t numDupsPrinted = 0;
 				for(size_t dupIndex2 = 0; dupIndex2 < numDups; ++dupIndex2)
 				{
@@ -2547,8 +2556,8 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& dup
 		htmlFile.WriteString("                    }\n");
 		htmlFile.WriteString("                    $(inDivID).html(english);\n");
 		htmlFile.WriteString("                    var divID = inDivID.replace(\"#\", \"\");\n");
-        htmlFile.WriteString("                    var imageName = divID.replace(\"edit_\", \"\") + \".bmp\";\n");
-        htmlFile.WriteString("                    SaveDuplicateData(imageName, english, divID, inCRC);\n");
+		htmlFile.WriteString("                    var imageName = divID.replace(\"edit_\", \"\") + \".bmp\";\n");
+		htmlFile.WriteString("                    SaveDuplicateData(imageName, english, divID, inCRC);\n");
 		htmlFile.WriteString("                    return;\n");
 		htmlFile.WriteString("               }\n");
 		htmlFile.WriteString("          }\n");
@@ -2633,14 +2642,14 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& dup
 
 		//FixOnChangeEditableElements - A function that saves the data whenever input happens
 		htmlFile.WriteString("function FixOnChangeEditableElements()\n{\n");
-			htmlFile.WriteString("\tvar tags = document.querySelectorAll('[contenteditable=true][onChange]');//(requires FF 3.1+, Safari 3.1+, IE8+)\n");
-			htmlFile.WriteString("\tfor (var i=tags.length-1; i>=0; i--) if (typeof(tags[i].onblur)!='function')\n{\n");
-				htmlFile.WriteString("\t\ttags[i].onfocus = function()\n{\n");
-				htmlFile.WriteString("\t\tthis.data_orig=this.innerHTML;\n};\n");
-				htmlFile.WriteString("\t\ttags[i].onblur = function()\n{\n");
-				htmlFile.WriteString("\t\tif( this.innerHTML != this.data_orig)\n");
-					htmlFile.WriteString("\t\t\tthis.onchange();\n");
-			htmlFile.WriteString("\tdelete this.data_orig;\n};\n}\n}\n");
+		htmlFile.WriteString("\tvar tags = document.querySelectorAll('[contenteditable=true][onChange]');//(requires FF 3.1+, Safari 3.1+, IE8+)\n");
+		htmlFile.WriteString("\tfor (var i=tags.length-1; i>=0; i--) if (typeof(tags[i].onblur)!='function')\n{\n");
+		htmlFile.WriteString("\t\ttags[i].onfocus = function()\n{\n");
+		htmlFile.WriteString("\t\tthis.data_orig=this.innerHTML;\n};\n");
+		htmlFile.WriteString("\t\ttags[i].onblur = function()\n{\n");
+		htmlFile.WriteString("\t\tif( this.innerHTML != this.data_orig)\n");
+		htmlFile.WriteString("\t\t\tthis.onchange();\n");
+		htmlFile.WriteString("\tdelete this.data_orig;\n};\n}\n}\n");
 
 		//Startup function
 		htmlFile.WriteString("function OnStartup()\n{\n");
@@ -2654,15 +2663,15 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& dup
 		htmlFile.WriteString("<body>\n");
 
 		htmlFile.WriteString("<?php include 'GetUserPermissions.php';\n");
-			htmlFile.WriteString("\t$bPermissionFound = false;\n");
-			htmlFile.WriteString("\tforeach ($allowedFiles as $value)\n{");
-				fprintf(htmlFile.GetFileHandle(), "\t\tif( $value == \"%s\" )\n\t\t{\n", tblFileName.c_str());
-					htmlFile.WriteString("\t\t\t$bPermissionFound = true;\n");
-					htmlFile.WriteString("\t\t\tbreak;\n\t\t}\n\t}");
+		htmlFile.WriteString("\t$bPermissionFound = false;\n");
+		htmlFile.WriteString("\tforeach ($allowedFiles as $value)\n{");
+		fprintf(htmlFile.GetFileHandle(), "\t\tif( $value == \"%s\" )\n\t\t{\n", tblFileName.c_str());
+		htmlFile.WriteString("\t\t\t$bPermissionFound = true;\n");
+		htmlFile.WriteString("\t\t\tbreak;\n\t\t}\n\t}");
 		htmlFile.WriteString("if( $bPermissionFound )\n{\n?>");
 
 		fprintf(htmlFile.GetFileHandle(), "<article><header align=\"center\"><h1>Dialog For %s</h1></header></article>\n", iter->first.c_str());
-		
+
 		htmlFile.WriteString("<br>\n");
 		htmlFile.WriteString("<b>Instructions:</b><br>\n");
 		htmlFile.WriteString("-This page is best displayed using Chrome.  Otherwise some of the table borders are missing for some reason.<br>\n");
@@ -2670,7 +2679,7 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& dup
 		htmlFile.WriteString("-Your changes are automatically saved.<br>\n");
 		htmlFile.WriteString("-Press the Load Data button when you come back to the page to load your changes.<br>\n");
 		htmlFile.WriteString("-Please wait for the Load Bar to complete.  It's a bit slow, but as more of the file is translated, it will speed up.  If it gets stuck in the 90's, that's fine, consider it done. I'll fix this bug soon.<br><br>\n");
-		
+
 		htmlFile.WriteString("<b>Style:</b><br>\n");
 		htmlFile.WriteString("-Use only a single space after a period.<br>\n");
 		htmlFile.WriteString("-You do not need to worry about line breaks.  Just translate the text as one line.  The text insertion tool will automatically add newlines as needed.<br>\n");
@@ -2687,11 +2696,11 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& dup
 		htmlFile.WriteString("<a href=\"https://docs.google.com/spreadsheets/d/1rgafQe78vML_xbxnYuOSlO8P5C8nuhgLjMJOExUQsm0/edit?usp=sharing\" target=\"_blank\">Click here to view the naming conventions for Characters, Locations, and Terms</a> <br>\n");
 
 		htmlFile.WriteString("<?php\n");
-			htmlFile.WriteString("$currUser = $_SERVER['PHP_AUTH_USER'];\n");
-			htmlFile.WriteString("if( $currUser == \"swtranslator\" )\n");
-			htmlFile.WriteString("{\n");
-			htmlFile.WriteString("echo \"<input align=\\\"center\\\" type=\\\"button\\\" value=\\\"Export Data\\\" onclick=\\\"ExportData()\\\"/>\";\n");
-			htmlFile.WriteString("}\n");
+		htmlFile.WriteString("$currUser = $_SERVER['PHP_AUTH_USER'];\n");
+		htmlFile.WriteString("if( $currUser == \"swtranslator\" )\n");
+		htmlFile.WriteString("{\n");
+		htmlFile.WriteString("echo \"<input align=\\\"center\\\" type=\\\"button\\\" value=\\\"Export Data\\\" onclick=\\\"ExportData()\\\"/>\";\n");
+		htmlFile.WriteString("}\n");
 		htmlFile.WriteString("?>\n\n");
 
 		//Load Data button
@@ -2720,103 +2729,103 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& dup
 		//Write table
 		htmlFile.WriteString("<table>\n");
 		htmlFile.WriteString("\t<tr bgcolor=\"#c8c8fe\">\n");
-				htmlFile.WriteString("\t<th>#</th>\n");
-				htmlFile.WriteString("\t<th>Speaker</th>\n");
-				htmlFile.WriteString("\t<th>Japanese</th>\n");
-				htmlFile.WriteString("\t<th>English</th>\n");
-				htmlFile.WriteString("\t<th>ID</th>\n");
-				htmlFile.WriteString("\t<th>Appearance Order</th>\n");
-				htmlFile.WriteString("\t<th>CRC</th>\n");
-				htmlFile.WriteString("\t<th>Has a Duplicate</th>\n");
-			htmlFile.WriteString("\t</tr>\n");
+		htmlFile.WriteString("\t<th>#</th>\n");
+		htmlFile.WriteString("\t<th>Speaker</th>\n");
+		htmlFile.WriteString("\t<th>Japanese</th>\n");
+		htmlFile.WriteString("\t<th>English</th>\n");
+		htmlFile.WriteString("\t<th>ID</th>\n");
+		htmlFile.WriteString("\t<th>Appearance Order</th>\n");
+		htmlFile.WriteString("\t<th>CRC</th>\n");
+		htmlFile.WriteString("\t<th>Has a Duplicate</th>\n");
+		htmlFile.WriteString("\t</tr>\n");
 
-			//Get name of info file (0100.BIN, etc.)
-			const size_t lastIndex    = iter->first.find_first_of("TBL");
-			const string infoFileName = iter->first.substr(0, lastIndex);
-			map<string, DialogOrder>::const_iterator dialogOrderIter = dialogOrder.find(infoFileName);
-			const bool bDialogOrderExists = dialogOrderIter != dialogOrder.end();
+		//Get name of info file (0100.BIN, etc.)
+		const size_t lastIndex    = iter->first.find_first_of("TBL");
+		const string infoFileName = iter->first.substr(0, lastIndex);
+		map<string, DialogOrder>::const_iterator dialogOrderIter = dialogOrder.find(infoFileName);
+		const bool bDialogOrderExists = dialogOrderIter != dialogOrder.end();
 
-			//Create entries for all images
-			int num = 0;
-			for(const FileNameContainer& fileNameInfo : iter->second)
+		//Create entries for all images
+		int num = 0;
+		for(const FileNameContainer& fileNameInfo : iter->second)
+		{
+			const unsigned long crc   = crcMap[&iter->second[num]];
+			const bool bIsDuplicate   = dupCrcMap.find(crc) != dupCrcMap.end();
+			const unsigned short id   = sakuraFileIter->second->mStringInfoArray[num].mUnknown;
+			const vector<int>* pOrder = bDialogOrderExists && dialogOrderIter->second.idAndOrder.find(id) != dialogOrderIter->second.idAndOrder.end() ? &dialogOrderIter->second.idAndOrder.find(id)->second : nullptr;
+			const bool bIsLipsEntry   = pOrder ? dialogOrderIter->second.idAndLips.find(id)->second : false;
+			const char* bgColor       = "fefec8";
+			if( bIsLipsEntry )
 			{
-				const unsigned long crc   = crcMap[&iter->second[num]];
-				const bool bIsDuplicate   = dupCrcMap.find(crc) != dupCrcMap.end();
-				const unsigned short id   = sakuraFileIter->second->mStringInfoArray[num].mUnknown;
-				const vector<int>* pOrder = bDialogOrderExists && dialogOrderIter->second.idAndOrder.find(id) != dialogOrderIter->second.idAndOrder.end() ? &dialogOrderIter->second.idAndOrder.find(id)->second : nullptr;
-				const bool bIsLipsEntry   = pOrder ? dialogOrderIter->second.idAndLips.find(id)->second : false;
-				const char* bgColor       = "fefec8";
-				if( bIsLipsEntry )
-				{
-					bgColor = "fec8c8"; //LIPS event are highlighted in pink
-				}
-				else if( !pOrder )
-				{
-					bgColor = "B9B9B9"; //Gray out rows that don't need translations
-				}
-
-				const char* pVarSuffix = fileNameInfo.mNoExtension.c_str();
-				fprintf(htmlFile.GetFileHandle(), "<tr id=\"tr_edit_%i\" bgcolor=\"#%s\">\n", num + 1, bgColor);
-					snprintf(buffer, 2048, "<td align=\"center\" width=\"20\">%i</td>", num + 1);
-					htmlFile.WriteString(string(buffer));
-
-					int faceImageId = 0;
-					if( bDialogOrderExists )
-					{
-						DialogOrder::IdAndImageMap::const_iterator imageIdIter = dialogOrderIter->second.idAndImage.find(id);
-						faceImageId = imageIdIter != dialogOrderIter->second.idAndImage.end() ? imageIdIter->second : 0;
-					}
-					if( faceImageId != 0 )
-					{
-						snprintf(buffer, 2048, "<td width=\"48\"><img src=\"..\\ExtractedData\\Faces\\%sFCE\\%04x.png\"></td>", infoFileName.c_str(), faceImageId);
-					}
-					else
-					{
-						snprintf(buffer, 2048, "<td width=\"48\"><img src=\"..\\ExtractedData\\Faces\\UnknownFace.png\"></td>");
-					}
-					htmlFile.WriteString(string(buffer));
-
-					snprintf(buffer, 2048, "<td width=\"240\"><img src=\"..\\ExtractedData\\Dialog\\%sTBL\\%s\"></td>", infoFileName.c_str(), fileNameInfo.mFileName.c_str());
-					htmlFile.WriteString(string(buffer));
-
-					//snprintf(buffer, 2048, "<td width=480><div id=\"edit_%s\" contenteditable=\"true\" onChange=\"SaveEdits('%i.bmp', 'edit_%i')\">Untranslated</div></td>", pVarSuffix, num + 1, num + 1);
-					snprintf(buffer, 2048, "<td width=\"480\"><textarea id=\"edit_%s\" contenteditable=true onchange=\"SaveEdits('%i.bmp', 'edit_%i', '%lu')\" style=\"border: none; width: 100%%; -webkit-box-sizing: border-box; -moz-box-sizing: border-box; box-sizing: border-box;\">Untranslated</textarea></td>", pVarSuffix, num + 1, num + 1, crc);
-					htmlFile.WriteString(string(buffer));
-
-					snprintf(buffer, 2048, "<td align=\"center\" width=\"120\">%02x (%i)</td>", id, id);
-					htmlFile.WriteString(string(buffer));
-					
-					if( pOrder )
-					{
-						htmlFile.WriteString("<td align=\"center\" width=\"120\">");
-
-						for(size_t orderIndex = 0; orderIndex < pOrder->size(); ++orderIndex)
-						{
-							snprintf(buffer, 2048, "Order: %i", (*pOrder)[orderIndex]);
-							htmlFile.WriteString(string(buffer));
-							if( orderIndex + 1 < pOrder->size() )
-							{
-								htmlFile.WriteString(", ");
-							}
-						}
-						htmlFile.WriteString("</td>");
-					}
-					else
-					{
-						snprintf(buffer, 2048, "<td align=\"center\" width=\"120\">Order: -1</td>");
-						htmlFile.WriteString(string(buffer));
-					}
-					
-					snprintf(buffer, 2048, "<td id=\"crc_%i\" align=\"center\" width=\"20\">%08x</td>", num + 1, crc);
-					htmlFile.WriteString(string(buffer));
-
-					snprintf(buffer, 2048, "<td id=\"dup_%i\" align=\"center\" width=\"20\">%s</td>", num + 1, bIsDuplicate ? "true" : "false");
-					htmlFile.WriteString(string(buffer));
-
-				htmlFile.WriteString("</tr>\n");
-
-				++num;
+				bgColor = "fec8c8"; //LIPS event are highlighted in pink
 			}
+			else if( !pOrder )
+			{
+				bgColor = "B9B9B9"; //Gray out rows that don't need translations
+			}
+
+			const char* pVarSuffix = fileNameInfo.mNoExtension.c_str();
+			fprintf(htmlFile.GetFileHandle(), "<tr id=\"tr_edit_%i\" bgcolor=\"#%s\">\n", num + 1, bgColor);
+			snprintf(buffer, 2048, "<td align=\"center\" width=\"20\">%i</td>", num + 1);
+			htmlFile.WriteString(string(buffer));
+
+			int faceImageId = 0;
+			if( bDialogOrderExists )
+			{
+				DialogOrder::IdAndImageMap::const_iterator imageIdIter = dialogOrderIter->second.idAndImage.find(id);
+				faceImageId = imageIdIter != dialogOrderIter->second.idAndImage.end() ? imageIdIter->second : 0;
+			}
+			if( faceImageId != 0 )
+			{
+				snprintf(buffer, 2048, "<td width=\"48\"><img src=\"..\\ExtractedData\\Faces\\%sFCE\\%04x.png\"></td>", infoFileName.c_str(), faceImageId);
+			}
+			else
+			{
+				snprintf(buffer, 2048, "<td width=\"48\"><img src=\"..\\ExtractedData\\Faces\\UnknownFace.png\"></td>");
+			}
+			htmlFile.WriteString(string(buffer));
+
+			snprintf(buffer, 2048, "<td width=\"240\"><img src=\"..\\ExtractedData\\Dialog\\%sTBL\\%s\"></td>", infoFileName.c_str(), fileNameInfo.mFileName.c_str());
+			htmlFile.WriteString(string(buffer));
+
+			//snprintf(buffer, 2048, "<td width=480><div id=\"edit_%s\" contenteditable=\"true\" onChange=\"SaveEdits('%i.bmp', 'edit_%i')\">Untranslated</div></td>", pVarSuffix, num + 1, num + 1);
+			snprintf(buffer, 2048, "<td width=\"480\"><textarea id=\"edit_%s\" contenteditable=true onchange=\"SaveEdits('%i.bmp', 'edit_%i', '%lu')\" style=\"border: none; width: 100%%; -webkit-box-sizing: border-box; -moz-box-sizing: border-box; box-sizing: border-box;\">Untranslated</textarea></td>", pVarSuffix, num + 1, num + 1, crc);
+			htmlFile.WriteString(string(buffer));
+
+			snprintf(buffer, 2048, "<td align=\"center\" width=\"120\">%02x (%i)</td>", id, id);
+			htmlFile.WriteString(string(buffer));
+
+			if( pOrder )
+			{
+				htmlFile.WriteString("<td align=\"center\" width=\"120\">");
+
+				for(size_t orderIndex = 0; orderIndex < pOrder->size(); ++orderIndex)
+				{
+					snprintf(buffer, 2048, "Order: %i", (*pOrder)[orderIndex]);
+					htmlFile.WriteString(string(buffer));
+					if( orderIndex + 1 < pOrder->size() )
+					{
+						htmlFile.WriteString(", ");
+					}
+				}
+				htmlFile.WriteString("</td>");
+			}
+			else
+			{
+				snprintf(buffer, 2048, "<td align=\"center\" width=\"120\">Order: -1</td>");
+				htmlFile.WriteString(string(buffer));
+			}
+
+			snprintf(buffer, 2048, "<td id=\"crc_%i\" align=\"center\" width=\"20\">%08x</td>", num + 1, crc);
+			htmlFile.WriteString(string(buffer));
+
+			snprintf(buffer, 2048, "<td id=\"dup_%i\" align=\"center\" width=\"20\">%s</td>", num + 1, bIsDuplicate ? "true" : "false");
+			htmlFile.WriteString(string(buffer));
+
+			htmlFile.WriteString("</tr>\n");
+
+			++num;
+		}
 		htmlFile.WriteString("</table><br>\n");
 
 		htmlFile.WriteString("<?php\n}\n?>");
@@ -2829,7 +2838,7 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& dup
 	return true;
 }
 
-void Extract8BitImage(const string& fileName, const string& paletteFileName, const int offset, const int width, const int height, const string& outDirectory)
+void Extract8BitImage(const string& fileName, const string& paletteFileName, const int offset, const int width, const int height, const int numColors, const string& outDirectory)
 {
 	FileNameContainer imageFileNameInfo(fileName.c_str());
 	FileNameContainer paletteFileNameInfo(paletteFileName.c_str());
@@ -2841,10 +2850,11 @@ void Extract8BitImage(const string& fileName, const string& paletteFileName, con
 
 	const string outFileName = outDirectory + imageFileNameInfo.mNoExtension + string(".bmp");
 
-	ExtractImage(imageFileNameInfo, outFileName, paletteFile, width, height, 1, offset);
+	ExtractImage(imageFileNameInfo, outFileName, paletteFile, width, height, 1, numColors, offset);
 }
 
-void ExtractFaceFiles(const string& sakuraDirectory, const string& paletteFileName, const string& outDirectory)
+//FCE files contain faces that appear during the story dialog
+void ExtractFCEFiles(const string& sakuraDirectory, const string& paletteFileName, const string& outDirectory)
 {
 	//Find all translated text files
 	vector<FileNameContainer> allFiles;
@@ -2875,7 +2885,7 @@ void ExtractFaceFiles(const string& sakuraDirectory, const string& paletteFileNa
 
 		//Extract the whole sheet
 		const string wholeSheetName = subDirName + fileNameInfo.mNoExtension + string(".bmp");
-		ExtractImage(fileNameInfo, wholeSheetName, paletteData, 40, 48, 1, 0xA0, true);
+		ExtractImage(fileNameInfo, wholeSheetName, paletteData, 40, 48, 1, 256, 0xA0, true);
 
 		//**Now extract the individual faces**
 		FileData faceFile;
@@ -2918,7 +2928,135 @@ void ExtractFaceFiles(const string& sakuraDirectory, const string& paletteFileNa
 			sprintf_s(faceFileNameBuffer, faceFileNameBufferSize, "%02x%02x.bmp", faceFileHeader[i*2], faceFileHeader[i*2+1]);
 
 			const string outFaceFileName = subDirName + faceFileNameBuffer;
-			ExtractImage(fileNameInfo, outFaceFileName, paletteData, 40, 48, 1, i*faceImageSize + faceHeaderSize, false);
+			ExtractImage(fileNameInfo, outFaceFileName, paletteData, 40, 48, 1, 256, i*faceImageSize + faceHeaderSize, false);
+		}
+	}
+}
+
+//FACE files contain faces that appear during the battle dialog
+void ExtractFACEFiles(const string& sakuraDirectory, const string& outDirectory)
+{
+	struct FaceHeaderInfo
+	{
+		struct Data
+		{
+			unsigned short unknown1;
+			unsigned short offsetToData;
+			unsigned short unknown2;
+			unsigned short unknown3;
+		};
+
+		Data* mpData = nullptr;
+		unsigned int mNumEntries;
+
+		bool Initialize(const char* pFileData, unsigned int inFileSize)
+		{	
+			unsigned int faceFileOffset = 0;
+			int headerSize              = 0;
+			const char* pFaceData       = pFileData;
+
+			while(faceFileOffset < inFileSize)
+			{
+				if( pFaceData[faceFileOffset + 0] == 0x00 &&
+					pFaceData[faceFileOffset + 1] == 0x00 &&
+					pFaceData[faceFileOffset + 2] == 0x00 &&
+					pFaceData[faceFileOffset + 3] == 0x10)
+				{
+					headerSize = faceFileOffset;
+					break;
+				}
+
+				faceFileOffset += 4;
+			}
+
+			if( headerSize == 0 || (headerSize % 4) != 0 )
+			{
+				printf("Unable to figure out the size of the FACE file header.\n");
+				return false;
+			}
+
+			mNumEntries = headerSize/4;
+			mpData      = new Data[mNumEntries];
+			memcpy_s(mpData, sizeof(Data)*mNumEntries, pFileData, sizeof(Data)*mNumEntries);
+
+			for(unsigned int i = 0; i < mNumEntries; ++i)
+			{
+				mpData[i].offsetToData = SwapByteOrder(mpData[i].offsetToData);
+				mpData[i].unknown1     = SwapByteOrder(mpData[i].unknown1);
+				mpData[i].unknown2     = SwapByteOrder(mpData[i].unknown2);
+				mpData[i].unknown3     = SwapByteOrder(mpData[i].unknown3);
+			}
+			return true;
+		}
+
+		~FaceHeaderInfo()
+		{
+			delete[] mpData;
+			mpData = nullptr;
+		}
+	};
+
+	//Find all translated text files
+	vector<FileNameContainer> allFiles;
+	FindAllFilesWithinDirectory(sakuraDirectory, allFiles);
+	if( !allFiles.size() )
+	{
+		return;
+	}
+
+	vector<FileNameContainer> faceFiles;
+	GetAllFilesOfType(allFiles, "FACE", faceFiles);
+
+	for(const FileNameContainer& fileNameInfo : faceFiles)
+	{
+		const string subDirName = outDirectory + fileNameInfo.mNoExtension + Seperators;
+		if( !CreateDirectoryHelper(subDirName) )
+		{
+			printf("Unable to create directory: %s", subDirName.c_str());
+			return;
+		}
+
+		FileData faceFile;
+		if( !faceFile.InitializeFileData(fileNameInfo) )
+		{
+			return;
+		}
+
+		//Figure out how many faces images are in this file
+		FaceHeaderInfo faceFileHeader;
+		if( !faceFileHeader.Initialize( faceFile.GetData(), faceFile.GetDataSize() ) )
+		{
+			printf("Could not extract %s\n", fileNameInfo.mFileName.c_str());
+			return;
+		}
+
+		for(unsigned int i = 0x34; i < faceFileHeader.mNumEntries; ++i)
+		{
+			const unsigned int offsetToData        = faceFileHeader.mpData[i].offsetToData;
+			const unsigned int compressedDataStart = offsetToData + 0x02;//0x03 + 0x10;
+			const unsigned int offsetToPalette     = SwapByteOrder( *((unsigned short*)(faceFile.GetData() + offsetToData + 10)) );
+
+			if( compressedDataStart >= faceFile.GetDataSize() )
+			{
+				printf("Invalid data start position for file %i in %s\n", i, fileNameInfo.mFileName.c_str());
+				return;
+			}
+
+			PRSDecompressor uncompressedImage;
+			uncompressedImage.UncompressData( (void*)(faceFile.GetData() + compressedDataStart) );
+
+			PRSDecompressor uncompressedPalette;
+			uncompressedPalette.UncompressData( (void*)(faceFile.GetData() + offsetToData + offsetToPalette) );
+
+			FileWriter outFile;
+			outFile.OpenFileForWrite("a:\\outData.bin");
+			outFile.WriteData(uncompressedPalette.mpUncompressedData, uncompressedPalette.mUncompressedDataSize);
+			outFile.Close();
+
+			const string outFileName = outDirectory + std::to_string(i) + string(".bmp");
+
+			//Create image from uncompressed data
+			ExtractImageFromData(uncompressedImage.mpUncompressedData + 0x4F, uncompressedImage.mUncompressedDataSize, outFileName, uncompressedPalette.mpUncompressedData, 256, 40, 48, 1, 128, 0, false);
 		}
 	}
 }
@@ -2959,7 +3097,7 @@ void ExtractTMapSP(const string& sakuraDirectory, const string& paletteFileName,
 	{
 		return;
 	}
-	
+
 	PaletteData paletteData;
 	if( !paletteData.CreateFrom15BitData(paletteFile.GetData(), paletteFile.GetDataSize()) )
 	{
@@ -2977,7 +3115,7 @@ void ExtractTMapSP(const string& sakuraDirectory, const string& paletteFileName,
 		lookupTable[i].addressInTmapSP = SwapByteOrder(lookupTable[i].addressInTmapSP);
 
 		const string outFileName = outDirectory + std::to_string(i);
-		
+
 		BitmapWriter outBmp;
 		outBmp.CreateBitmap(outFileName, lookupTable[i].width*8, lookupTable[i].height, 4, tmapFileData.GetData() + lookupTable[i].addressInTmapSP*8, (lookupTable[i].width*lookupTable[i].height)/2, paletteData.GetData(), paletteData.GetSize());
 	}
@@ -3028,7 +3166,7 @@ bool PatchTMapSP(const string& sakuraDirectory, const string& patchDataPath)
 	const unsigned int offsetToLookupTable = 0x0001EBF4;
 	fseek(pSakuraFile, offsetToLookupTable, SEEK_SET);
 	fread(lookupTable, sizeof(lookupTable), 1, pSakuraFile);
-	
+
 	//Create a copy for the patched version of the table.  We'll modify that below.
 	memcpy_s(patchedLookupTable, sizeof(patchedLookupTable), lookupTable, sizeof(lookupTable));
 
@@ -3125,13 +3263,13 @@ bool PatchTMapSP(const string& sakuraDirectory, const string& patchDataPath)
 		const unsigned int newImageWidth  = origTranslatedBmp.mBitmapData.mInfoHeader.mImageWidth;
 		const unsigned int newImageHeight = origTranslatedBmp.mBitmapData.mInfoHeader.mImageHeight;
 		newImageSize                     += newImageWidth*newImageHeight/2;
-		
+
 		if( newImageWidth/8 > 0xff )
 		{
 			printf("PatchTMapSP failed.  Image width for %s is invalid.  Max width is %i", patchedImages[imageIndex].mFileName.c_str(), 0xff*8);
 			return false;
 		}
-		
+
 		if( newImageHeight > 0xff )
 		{
 			printf("PatchTMapSP failed.  Image height for %s is invalid.  Max height is %i", patchedImages[imageIndex].mFileName.c_str(), 0xff);
@@ -3194,7 +3332,7 @@ bool PatchTMapSP(const string& sakuraDirectory, const string& patchDataPath)
 			{
 				const unsigned short paletteIndex1 = (tile.mpTile[i] & 0xF0) >> 4; 
 				const unsigned short paletteIndex2 = (tile.mpTile[i] & 0x0F);
-			
+
 				if( paletteIndex1 == 0 )
 				{
 					tile.mpTile[i] = (char)((indexOfAlphaColor << 4) + paletteIndex2);
@@ -3237,7 +3375,7 @@ bool PatchTMapSP(const string& sakuraDirectory, const string& patchDataPath)
 					return false;
 				}
 			}
-			
+
 		}
 
 		imageAddress += (unsigned short)(newImageWidth*newImageHeight/2);
@@ -3265,7 +3403,7 @@ bool PatchTMapSP(const string& sakuraDirectory, const string& patchDataPath)
 }
 
 bool PatchGame(const string& rootSakuraTaisenDirectory, const string& patchedSakuraTaisenDirectory, const string& translatedTextDirectory, const string& fontSheetFileName, const string& originalPaletteFileName, 
-               const string &patchedTMapSPDataPath)
+	const string &patchedTMapSPDataPath)
 {
 	char buffer[MAX_PATH];
 	const DWORD dwRet = GetCurrentDirectory(MAX_PATH, buffer);
@@ -3350,8 +3488,9 @@ void PrintHelp()
 	printf("CreateTBLSpreadsheets dialogImageDirectory duplicatesFile sakura1Directory\n");
 	printf("CreateTMapSpSpreadsheet imageDirectory\n");
 	printf("ExtractImages fileName paletteFile width height outDirectory\n");
-	printf("Extract8BitImage fileName paletteFile offset width height outDirectory\n");
-	printf("ExtractFaceFiles rootSakuraTaisenDirectory paletteFile outDirectory\n");
+	printf("Extract8BitImage fileName paletteFile offset width height numColors[256, 128] outDirectory\n");
+	printf("ExtractFCEFiles rootSakuraTaisenDirectory paletteFile outDirectory\n");
+	printf("ExtractFACEFiles rootSakuraTaisenDirectory outDirectory\n");
 	printf("ExtractTMapSP rootSakuraTaisenDirectory paletteFile outDirectory\n");
 	printf("PatchTMapSP sakuraDirectory patchDataPath\n");
 	printf("PatchGame rootSakuraTaisenDirectory patchedSakuraTaisenDirectory translatedTextDirectory fontSheet originalPalette patchedTMapSpDataPath \n");
@@ -3374,6 +3513,7 @@ int GetBytesInSequence(unsigned char inByte)
 
 	return count;
 }
+
 void DecompressionTest()
 {
 	FileData testData;
@@ -3384,8 +3524,7 @@ void DecompressionTest()
 	}
 
 	vector<unsigned char> output;
-	const unsigned char* compressedData = (const unsigned char*)testData.GetData() + 0xFD09;//0xFDF8;
-	const unsigned int numValues = 0x0814;
+	const unsigned char* compressedData = (const unsigned char*)testData.GetData() + 0xFDC4 + 2;//0xFDD7;//0xFD09;//0xFDF8;
 	unsigned long destSize = prs_decompress_size((void*)compressedData);
 	unsigned char* dest = new unsigned char[destSize];
 	prs_decompress((void *)compressedData, dest);
@@ -3395,7 +3534,7 @@ void DecompressionTest()
 	if( pOutFile )
 	{
 		fwrite(dest, 1, destSize, pOutFile);
-			
+
 		fclose(pOutFile);
 	}
 	delete[] dest;
@@ -3408,6 +3547,8 @@ int main(int argc, char *argv[])
 		PrintHelp();
 		return 1;
 	}
+
+	//	DecompressionTest();
 
 	const string command(argv[1]);
 	if( command == string("ExtractRawText") && argc == 4 )
@@ -3531,25 +3672,33 @@ int main(int argc, char *argv[])
 
 		CreateTMapSpSpreadsheet(imageDirectory);
 	}
-	else if(command == "Extract8BitImage" && argc == 8 )
+	else if(command == "Extract8BitImage" && argc == 9 )
 	{
 		const string fileName     = string(argv[2]);
 		const string paletteFile  = string(argv[3]);
 		const int    offset       = atoi(argv[4]);
 		const int    width        = atoi(argv[5]);
 		const int    height       = atoi(argv[6]);
-		const string outDirectory = string(argv[7]) + Seperators;
-		
-		Extract8BitImage(fileName, paletteFile, offset, width, height, outDirectory);
+		const int    numColors    = atoi(argv[7]);
+		const string outDirectory = string(argv[8]) + Seperators;
+
+		Extract8BitImage(fileName, paletteFile, offset, width, height, numColors, outDirectory);
 	}
-	else if(command == "ExtractFaceFiles" && argc == 5 )
+	else if(command == "ExtractFCEFiles" && argc == 5 )
 	{
 		const string rootSakuraTaisenDirectory = string(argv[2]) + Seperators;
 		const string paletteFile               = string(argv[3]);
 		const string outDirectory              = string(argv[4]) + Seperators;
 
-		ExtractFaceFiles(rootSakuraTaisenDirectory, paletteFile, outDirectory);
-	}	
+		ExtractFCEFiles(rootSakuraTaisenDirectory, paletteFile, outDirectory);
+	}
+	else if(command == "ExtractFACEFiles" && argc == 4 )
+	{
+		const string rootSakuraTaisenDirectory = string(argv[2]) + Seperators;
+		const string outDirectory              = string(argv[3]) + Seperators;
+
+		ExtractFACEFiles(rootSakuraTaisenDirectory, outDirectory);
+	}
 	else if(command == "ExtractTMapSP" && argc == 5 )
 	{
 		const string rootSakuraTaisenDirectory = string(argv[2]) + Seperators;
@@ -3564,22 +3713,6 @@ int main(int argc, char *argv[])
 		const string patchDataPath   = string(argv[3]) + Seperators;
 
 		PatchTMapSP(sakuraDirectory, patchDataPath);
-	}
-	else if(command == "DCTest")
-	{
-		FileData sourceFile;
-		sourceFile.InitializeFileData("UCTest.bin", "D:\\Rizwan\\SakuraWars\\Test\\TestPRS.bin");
-
-		unsigned long dataSize = sourceFile.GetDataSize();//prs_decompress_size((void*)sourceFile.GetData());
-		char* pOutData = new char[dataSize];
-
-		prs_compress((void*)sourceFile.GetData(), (void*)pOutData, dataSize);
-
-		FileWriter outFile;
-		outFile.OpenFileForWrite("D:\\Rizwan\\SakuraWars\\Test\\TestPRS_Compressed.bin");
-		outFile.WriteData(pOutData, dataSize);
-
-		delete[] pOutData;
 	}
 	else
 	{

@@ -461,7 +461,7 @@ PaletteData::~PaletteData()
 
 bool PaletteData::CreateFrom15BitData(const char* pInPaletteData, int inPaletteSize)
 {
-	if( inPaletteSize != 32 && inPaletteSize != 512 )
+	if( inPaletteSize != 32 && inPaletteSize != 256 && inPaletteSize != 512 )
 	{
 		printf("Unsupported palette type");
 		return false;
@@ -562,7 +562,7 @@ void PaletteData::SetValue(int index, unsigned short value)
 ////////////////////////////////
 bool BitmapWriter::CreateBitmap(const string& inFileName, int inWidth, int inHeight, int bitsPerPixel, const char* pInColorData, int inColorSize, const char* pInPaletteData, int inPaletteSize)
 {	
-	if( 1 ) //bitsPerPixel == 4 )
+	if( 1 )//bitsPerPixel == 4 )
 	{
 		SaveAsPNG(inFileName, inWidth, inHeight, bitsPerPixel, pInColorData, inColorSize, pInPaletteData, inPaletteSize);
 	}
@@ -829,4 +829,20 @@ bool TileExtractor::ExtractTiles(unsigned int inTileWidth, unsigned int inTileHe
 	}
 
 	return true;
+}
+
+///////////////////////////////////
+//        PRSDecompressor        //
+///////////////////////////////////
+PRSDecompressor::~PRSDecompressor()
+{
+	delete[] mpUncompressedData;
+	mpUncompressedData = nullptr;
+}
+
+void PRSDecompressor::UncompressData(void* pInData)
+{
+	mUncompressedDataSize = prs_decompress_size((void*)pInData);
+	mpUncompressedData    = new char[mUncompressedDataSize];
+	prs_decompress(pInData, mpUncompressedData);
 }
