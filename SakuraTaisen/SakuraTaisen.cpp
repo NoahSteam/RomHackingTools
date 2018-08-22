@@ -506,6 +506,7 @@ private:
 	void ParseStrings()
 	{
 		const size_t numStrings = mStringInfoArray.size();
+		const bool bIsMESFile   = mFileNameInfo.mFileName.find("MES.BIN", 0, 6) != string::npos;
 
 		for(size_t i = 0; i < numStrings; ++i)
 		{
@@ -548,7 +549,17 @@ private:
 					offsetToStringData++;
 				}
 
-				newLineOfText.AddChar(currValue);
+				if( bIsMESFile )
+				{
+					if( currentIndex > 2 )
+					{
+						newLineOfText.AddChar(currValue);
+					}
+				}
+				else
+				{
+					newLineOfText.AddChar(currValue);
+				}
 
 				if( currValue == 0 && bNonZeroValueFound )
 				{
@@ -844,12 +855,12 @@ void ExtractText(const string& inSearchDirectory, const string& inPaletteFileNam
 
 	//Find all the font sheet files
 	vector<FileNameContainer> fontFiles;
-	GetAllFilesOfType(allFiles, "KNJ.BIN", fontFiles);
+//	GetAllFilesOfType(allFiles, "KNJ.BIN", fontFiles);
 	GetAllFilesOfType(allFiles, "MES.FNT", fontFiles);
 
 	//Find all the text files
 	vector<FileNameContainer> textFiles;
-	GetAllFilesOfType(allFiles, "TBL.BIN", textFiles);
+//	GetAllFilesOfType(allFiles, "TBL.BIN", textFiles);
 	GetAllFilesOfType(allFiles, "MES.BIN", textFiles);
 
 	//There needs to be a font sheet for every text file 
@@ -3544,8 +3555,6 @@ int main(int argc, char *argv[])
 		PrintHelp();
 		return 1;
 	}
-
-	//	DecompressionTest();
 
 	const string command(argv[1]);
 	if( command == string("ExtractRawText") && argc == 4 )
