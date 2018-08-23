@@ -855,12 +855,12 @@ void ExtractText(const string& inSearchDirectory, const string& inPaletteFileNam
 
 	//Find all the font sheet files
 	vector<FileNameContainer> fontFiles;
-//	GetAllFilesOfType(allFiles, "KNJ.BIN", fontFiles);
+	GetAllFilesOfType(allFiles, "KNJ.BIN", fontFiles);
 	GetAllFilesOfType(allFiles, "MES.FNT", fontFiles);
 
 	//Find all the text files
 	vector<FileNameContainer> textFiles;
-//	GetAllFilesOfType(allFiles, "TBL.BIN", textFiles);
+	GetAllFilesOfType(allFiles, "TBL.BIN", textFiles);
 	GetAllFilesOfType(allFiles, "MES.BIN", textFiles);
 
 	//There needs to be a font sheet for every text file 
@@ -2184,6 +2184,53 @@ bool CreateTMapSpSpreadsheet(const string& imageDirectory)
 
 }
 
+bool CreateMesSpreadSheets(const string& dialogImageDirectory, const string& sakura2Directory)
+{
+	vector<FileNameContainer> allFilesInImageDirectory;
+	FindAllFilesWithinDirectory(dialogImageDirectory, allFilesInImageDirectory);
+
+	vector<FileNameContainer> imageFiles;
+	GetAllFilesOfType(allFilesInImageDirectory, ".png", imageFiles);
+
+	vector<FileNameContainer> allSakura2Files;
+	FindAllFilesWithinDirectory(sakura2Directory, allSakura2Files);
+
+	//Find all dialog files
+	vector<FileNameContainer> mesFiles;
+	GetAllFilesOfType(allSakura1Files, "MES.BIN", mesFiles);
+
+	//Parse the MES files
+	vector<SakuraTextFile> sakuraTextFiles;
+	FindAllSakuraText(mesFiles, sakuraTextFiles);
+
+	//Create map of table file name to the file (M01MES => M01MES.BIN file)
+	map<string, const SakuraTextFile*> sakuraTableFileMap;
+	for(const SakuraTextFile& sakuraFile : sakuraTextFiles)
+	{
+		sakuraTableFileMap[sakuraFile.mFileNameInfo.mNoExtension] = &sakuraFile;
+	}
+
+	//Seperate all files into their own directories
+	map<string, vector<FileNameContainer>> directoryMap;
+	for(const FileNameContainer& imageFileNameInfo : imageFiles)
+	{
+		const size_t lastOf = imageFileNameInfo.mPathOnly.find_last_of('\\');
+		const string leaf   = imageFileNameInfo.mPathOnly.substr(lastOf+1);
+		if( lastOf != string::npos && leaf.size() > 0 )
+		{
+			directoryMap[leaf].push_back(imageFileNameInfo);
+		}
+	}
+
+	//Sort png files from smallest to greatest (001.png -> 999.png)
+	for(map<string, vector<FileNameContainer>>::iterator iter = directoryMap.begin(); iter != directoryMap.end(); ++iter)
+	{
+		std::sort(iter->second.begin(), iter->second.end());
+	}
+
+	return true;
+}
+
 bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& duplicatesFileName, const string& sakura1Directory)
 {
 	printf("Parsing duplicates file\n");
@@ -3494,6 +3541,7 @@ void PrintHelp()
 	printf("FindDuplicateText dialogDirectory outFile\n");
 	printf("FindDialogOrder rootSakuraTaisenDirectory outDirectory\n");
 	printf("CreateTBLSpreadsheets dialogImageDirectory duplicatesFile sakura1Directory\n");
+	printf("CreateMesSpreadsheets dialogImageDirectory sakura2Directory\n");
 	printf("CreateTMapSpSpreadsheet imageDirectory\n");
 	printf("ExtractImages fileName paletteFile width height outDirectory\n");
 	printf("Extract8BitImage fileName paletteFile offset width height numColors[256, 128] outDirectory\n");
@@ -3671,6 +3719,13 @@ int main(int argc, char *argv[])
 		const string sakura1Directory     = string(argv[4]) + Seperators;
 
 		CreateTBLSpreadsheets(dialogImageDirectory, duplicatesFile, sakura1Directory);
+	}
+	else if(command == "CreateMesSpreadsheets" && argc == 4 )
+	{
+		const string dialogImageDirectory = string(argv[2]);
+		const string sakura2Directory     = string(argv[3]) + Seperators;
+
+		CreateMesSpreadSheets(dialogImageDirectory, sakura2Directory);
 	}
 	else if(command == "CreateTMapSpSpreadsheet" && argc == 3 )
 	{
