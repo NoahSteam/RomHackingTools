@@ -52,6 +52,14 @@ struct FileNameContainer
 		}
 	}
 
+	FileNameContainer(const char* pFileName, const string& directory) : mFileName(pFileName), mPathOnly(directory)
+	{
+		mFullPath = directory + string(pFileName);
+		
+		const size_t lastIndex = mFileName.find_last_of(".");
+		mNoExtension           = mFileName.substr(0, lastIndex);
+	}
+
 	bool operator < (FileNameContainer& rhs) const
 	{		
 		bool bResult = (atoi(mNoExtension.c_str()) < atoi(rhs.mNoExtension.c_str()));
@@ -85,7 +93,8 @@ public:
 	void  Close();
 	bool  InitializeFileData(const FileNameContainer& inFileData);
 	bool  InitializeFileData(const char* pFileName, const char* pFullPath);
-	bool  DoesThisFileContain(const FileData& otherFile, std::vector<unsigned long>* pOutOffsets, bool bFindMultiple) const;
+	bool  DoesThisFileContain(const FileData& otherFile, std::vector<unsigned long>* pOutOffsets, bool bFindMultiple) const;	
+	bool  FindDataIndex(const char* pData, unsigned long dataLength, unsigned long& outIndex) const;
 	unsigned long GetCRC();
 
 	const char*   GetData() const {return mpData;}

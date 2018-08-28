@@ -283,6 +283,30 @@ bool FileData::DoesThisFileContain(const FileData& otherFile, vector<unsigned lo
 	return pOutOffsets ? pOutOffsets->size() > 0 : false;
 }
 
+bool FileData::FindDataIndex(const char* pInData, unsigned long inDataLength, unsigned long& outIndex) const
+{
+	if( inDataLength > mFileSize )	
+	{
+		return false;
+	}
+
+	unsigned long       currentOffset = 0;
+	const unsigned long finalOffset   = mFileSize - inDataLength;
+
+	while( currentOffset <= finalOffset )
+	{
+		if( IsDataTheSame(mpData + currentOffset, pInData, inDataLength) )
+		{
+			outIndex = currentOffset;
+			return true;
+		}
+
+		++currentOffset;
+	}
+
+	return false;
+}
+
 unsigned long FileData::GetCRC()
 {
 	if( !mbCrcCalculated )

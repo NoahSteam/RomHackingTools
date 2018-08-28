@@ -2184,6 +2184,49 @@ bool CreateTMapSpSpreadsheet(const string& imageDirectory)
 
 }
 
+bool ParseEvtFiles(const string& sakura2Directory)
+{
+	vector<FileNameContainer> allSakura2Files;
+	FindAllFilesWithinDirectory(sakura2Directory, allSakura2Files);
+
+	//All EVT files
+	vector<FileNameContainer> evtFiles;	
+	evtFiles.push_back( FileNameContainer("EVT01", sakura2Directory) );
+	evtFiles.push_back( FileNameContainer("EVT02", sakura2Directory) );
+	evtFiles.push_back( FileNameContainer("EVT03", sakura2Directory) );
+	evtFiles.push_back( FileNameContainer("EVT04", sakura2Directory) );
+	evtFiles.push_back( FileNameContainer("EVT05", sakura2Directory) );
+	evtFiles.push_back( FileNameContainer("EVT06", sakura2Directory) );
+	evtFiles.push_back( FileNameContainer("EVT07", sakura2Directory) );
+	evtFiles.push_back( FileNameContainer("EVT08", sakura2Directory) );
+	evtFiles.push_back( FileNameContainer("EVT09", sakura2Directory) );
+	evtFiles.push_back( FileNameContainer("EVT10", sakura2Directory) );
+	evtFiles.push_back( FileNameContainer("EVT11", sakura2Directory) );
+	evtFiles.push_back( FileNameContainer("EVT21", sakura2Directory) );
+	evtFiles.push_back( FileNameContainer("EVT22", sakura2Directory) );
+	evtFiles.push_back( FileNameContainer("EVT27", sakura2Directory) );
+
+	//Parse all evt files
+	const size_t numEvtFiles = evtFiles.size();
+	for(size_t i = 0; i < numEvtFiles; ++i)
+	{
+		const FileNameContainer& evtFileName = evtFiles[i];
+
+		FileData fileData;
+		if( !fileData.InitializeFileData(evtFileName) )
+		{
+			return false;
+		}
+
+		//Find the start of the lookup table
+		const char lutStartBytes[]  = {0x01, 0x02, 0x04};
+		unsigned long lutIndex = 0;		
+		if( !fileData.FindDataIndex(lutStartBytes, 3, lutIndex) )
+		{
+		}
+	}
+}
+
 bool CreateMesSpreadSheets(const string& dialogImageDirectory, const string& sakura2Directory)
 {
 	vector<FileNameContainer> allFilesInImageDirectory;
@@ -3093,12 +3136,13 @@ void ExtractFACEFiles(const string& sakuraDirectory, const string& outDirectory)
 			uncompressedImage.UncompressData( (void*)(faceFile.GetData() + compressedDataStart) );
 
 			//Create palette data
-			//Palettes only use 7 bits of the actual value that is stored in the game file
-			const char* pOriginalPaletteData = faceFile.GetData() + offsetToData + offsetToPalette;
-			char* pPaletteData = new char[128];
-			memset(pPaletteData, 0, 128);
-			memcpy_s(pPaletteData, 128, pOriginalPaletteData, 128);
-			for(int p = 0; p < 128; p += 2)
+			//Colors in the palette are in a 15 bit (5:5:5) format.  So we need to & every value by 0x7fff.
+			static const unsigned char numBytesInPalette = 256;
+			const char* pOriginalPaletteData             = faceFile.GetData() + offsetToData + offsetToPalette;
+			char* pPaletteData                           = new char[numBytesInPalette];
+			memset(pPaletteData, 0, numBytesInPalette);
+			memcpy_s(pPaletteData, numBytesInPalette, pOriginalPaletteData, numBytesInPalette);
+			for(int p = 0; p < numBytesInPalette; p += 2)
 			{
 				unsigned short* pPaletteValue = (unsigned short*)(pPaletteData + p);
 				*pPaletteValue = SwapByteOrder(*pPaletteValue);
@@ -3109,7 +3153,8 @@ void ExtractFACEFiles(const string& sakuraDirectory, const string& outDirectory)
 			//Create image from uncompressed data
 			const string outFileName = subDirName + std::to_string(i) + string(".bmp");
 			const unsigned char offsetToColorData = 0x40;
-			ExtractImageFromData(uncompressedImage.mpUncompressedData + offsetToColorData, uncompressedImage.mUncompressedDataSize - offsetToColorData, outFileName, pPaletteData, 128, 40, 48, 1, 128, 0, false);
+			ExtractImageFromData(uncompressedImage.mpUncompressedData + offsetToColorData, uncompressedImage.mUncompressedDataSize - offsetToColorData, outFileName, pPaletteData, numBytesInPalette, 40, 48,
+				                 1, 128, 0, false);
 
 			delete[] pPaletteData;
 		}
