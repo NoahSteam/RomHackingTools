@@ -2184,7 +2184,13 @@ bool CreateTMapSpSpreadsheet(const string& imageDirectory)
 
 }
 
-bool ParseEvtFiles(const string& sakura2Directory)
+struct EVTFileData
+{
+	static const int LutSize = 512;
+	unsigned char faceLookupTable[LutSize];
+};
+
+bool ParseEvtFiles(const string& sakura2Directory, vector<EVTFileData>& outEvtData)
 {
 	vector<FileNameContainer> allSakura2Files;
 	FindAllFilesWithinDirectory(sakura2Directory, allSakura2Files);
@@ -2210,6 +2216,7 @@ bool ParseEvtFiles(const string& sakura2Directory)
 	const size_t numEvtFiles = evtFiles.size();
 	for(size_t i = 0; i < numEvtFiles; ++i)
 	{
+		EVTFileData evtData;
 		const FileNameContainer& evtFileName = evtFiles[i];
 
 		FileData fileData;
@@ -2223,7 +2230,17 @@ bool ParseEvtFiles(const string& sakura2Directory)
 		unsigned long lutIndex = 0;		
 		if( !fileData.FindDataIndex(lutStartBytes, 3, lutIndex) )
 		{
+			return false;
 		}
+		lutIndex -= 11;
+
+		if( lutIndex + evtData.LutSize >= fileData.GetDataSize() )
+		{
+			printf("No valid LUT found for : %s\n", evtFileName.mFileName.c_str());
+			return false;
+		}
+		
+		memcpy_s(&evtData.faceLookupTable, evtData.LutSize, fileData.GetData(), fileData.GetDataSize() - lutIndex);
 	}
 }
 

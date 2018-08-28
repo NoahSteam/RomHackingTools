@@ -171,6 +171,8 @@ Found a match in PCMSE.BIN @0x060e8000
 
 Battle Font in WKL01 around 0x00035628
 
+EVT loaded @204000
+
 Battle Dialog Order:
 EVT01 @ 0x00012140. (00216140 in memory)
 2 Byte FaceID
