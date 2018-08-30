@@ -52,9 +52,9 @@ struct FileNameContainer
 		}
 	}
 
-	FileNameContainer(const char* pFileName, const string& directory) : mFileName(pFileName), mPathOnly(directory)
+	FileNameContainer(const char* pFileName, const std::string& directory) : mFileName(pFileName), mPathOnly(directory)
 	{
-		mFullPath = directory + string(pFileName);
+		mFullPath = directory + std::string(pFileName);
 		
 		const size_t lastIndex = mFileName.find_last_of(".");
 		mNoExtension           = mFileName.substr(0, lastIndex);

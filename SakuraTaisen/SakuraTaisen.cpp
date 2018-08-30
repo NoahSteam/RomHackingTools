@@ -2257,7 +2257,7 @@ bool CreateMesSpreadSheets(const string& dialogImageDirectory, const string& sak
 
 	//Find all dialog files
 	vector<FileNameContainer> mesFiles;
-	GetAllFilesOfType(allSakura1Files, "MES.BIN", mesFiles);
+	GetAllFilesOfType(allSakura2Files, "MES.BIN", mesFiles);
 
 	//Parse the MES files
 	vector<SakuraTextFile> sakuraTextFiles;
@@ -3154,7 +3154,7 @@ void ExtractFACEFiles(const string& sakuraDirectory, const string& outDirectory)
 
 			//Create palette data
 			//Colors in the palette are in a 15 bit (5:5:5) format.  So we need to & every value by 0x7fff.
-			static const unsigned char numBytesInPalette = 256;
+			static const unsigned int numBytesInPalette = 256;
 			const char* pOriginalPaletteData             = faceFile.GetData() + offsetToData + offsetToPalette;
 			char* pPaletteData                           = new char[numBytesInPalette];
 			memset(pPaletteData, 0, numBytesInPalette);
