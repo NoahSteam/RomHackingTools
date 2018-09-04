@@ -27,8 +27,10 @@ Extract8BitImage d:\Rizwan\SakuraWars\Disc1\SAKURA1\0100FCE.BIN d:\Rizwan\Sakura
 ExtractFaceFiles d:\Rizwan\SakuraWars\Disc1 d:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\FacePalette.bin d:\Rizwan\SakuraWars\ExtractedData\Disc1\Faces
 ExtractTMapSP d:\Rizwan\SakuraWars\Disc1 d:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\TheaterMapPalette.bin d:\Rizwan\SakuraWars\ExtractedData\Disc1\TMapSP
 CreateTMapSpSpreadsheet d:\Rizwan\SakuraWars\ExtractedData\Disc1\TMapSP
+CreateMesSpreadsheets D:\Rizwan\SakuraWars\ExtractedData\Disc1\Dialog D:\Rizwan\SakuraWars\Disc1\
 PatchTMapSp d:\Rizwan\SakuraWars\Disc1 D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\TMapSP
 ExtractFACEFiles d:\Rizwan\SakuraWars\Disc1 d:\Rizwan\SakuraWars\ExtractedData\Disc1\FACE
+ParseEVTFiles d:\Rizwan\SakuraWars\Disc1
 
 ExtractFontSheets a:\SakuraTaisen\Disc1\ a:\SakuraTaisen\ExtractedData\Disc1\FontSheets\Palette.bin a:\SakuraTaisen\ExtractedData\Disc1\FontSheets
 ExtractFontSheets a:\SakuraTaisen\Disc2\ a:\SakuraTaisen\ExtractedData\Disc1\FontSheets\Palette.bin a:\SakuraTaisen\ExtractedData\Disc2\FontSheets

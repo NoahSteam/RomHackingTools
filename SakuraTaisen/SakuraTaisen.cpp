@@ -462,6 +462,19 @@ public:
 		assert( mStringInfoArray.size() == mLines.size() );
 	}
 
+	bool DoesIdExist(unsigned short inId) const
+	{
+		for(const SakuraStringInfo& info : mStringInfoArray)
+		{
+			if( info.mUnknown == inId )
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
 	void Close()
 	{
 		if( mpFile )
@@ -551,7 +564,7 @@ private:
 
 				if( bIsMESFile )
 				{
-					if( currentIndex > 2 )
+					if( currentIndex > 2 || (currentIndex == 1 && pWordBuffer[0] == 0) )
 					{
 						newLineOfText.AddChar(currValue);
 					}
@@ -2186,31 +2199,69 @@ bool CreateTMapSpSpreadsheet(const string& imageDirectory)
 
 struct EVTFileData
 {
-	static const int LutSize = 512;
-	unsigned char faceLookupTable[LutSize];
+	struct DialogOrder
+	{
+		unsigned short stringId = 0;
+		unsigned short faceId   = 0;
+	};
+
+	int GetFaceImageNumber(unsigned short stringId) const
+	{
+		for(const DialogOrder& order : mDialogOrder)
+		{
+			if( order.stringId == stringId )
+			{
+				assert(order.faceId < LutSize);
+
+				return mFaceLookupTable[order.faceId] - 1;
+			}
+		}
+
+		return -1;
+	}
+
+	static const int    LutSize = 512;
+	unsigned char       mFaceLookupTable[LutSize];
+	vector<DialogOrder> mDialogOrder;
+	string              mFileName;
 };
 
-bool ParseEvtFiles(const string& sakura2Directory, vector<EVTFileData>& outEvtData)
+bool ParseEvtFiles(const string& sakuraRootDirectory, vector<EVTFileData>& outEvtData)
 {
+	const string sakura2Directory = sakuraRootDirectory + string("SAKURA2\\");
 	vector<FileNameContainer> allSakura2Files;
 	FindAllFilesWithinDirectory(sakura2Directory, allSakura2Files);
 
+	//Find all dialog files (MES.BIN)
+	vector<FileNameContainer> mesFiles;
+	GetAllFilesOfType(allSakura2Files, "MES.BIN", mesFiles);
+
+	//Parse the MES files
+	vector<SakuraTextFile> mesTextFiles;
+	FindAllSakuraText(mesFiles, mesTextFiles);
+
 	//All EVT files
 	vector<FileNameContainer> evtFiles;	
-	evtFiles.push_back( FileNameContainer("EVT01", sakura2Directory) );
-	evtFiles.push_back( FileNameContainer("EVT02", sakura2Directory) );
-	evtFiles.push_back( FileNameContainer("EVT03", sakura2Directory) );
-	evtFiles.push_back( FileNameContainer("EVT04", sakura2Directory) );
-	evtFiles.push_back( FileNameContainer("EVT05", sakura2Directory) );
-	evtFiles.push_back( FileNameContainer("EVT06", sakura2Directory) );
-	evtFiles.push_back( FileNameContainer("EVT07", sakura2Directory) );
-	evtFiles.push_back( FileNameContainer("EVT08", sakura2Directory) );
-	evtFiles.push_back( FileNameContainer("EVT09", sakura2Directory) );
-	evtFiles.push_back( FileNameContainer("EVT10", sakura2Directory) );
-	evtFiles.push_back( FileNameContainer("EVT11", sakura2Directory) );
-	evtFiles.push_back( FileNameContainer("EVT21", sakura2Directory) );
-	evtFiles.push_back( FileNameContainer("EVT22", sakura2Directory) );
-	evtFiles.push_back( FileNameContainer("EVT27", sakura2Directory) );
+	evtFiles.push_back( FileNameContainer("EVT01.BIN", sakura2Directory) );
+	evtFiles.push_back( FileNameContainer("EVT02.BIN", sakura2Directory) );
+	evtFiles.push_back( FileNameContainer("EVT03.BIN", sakura2Directory) );
+	evtFiles.push_back( FileNameContainer("EVT04.BIN", sakura2Directory) );
+	evtFiles.push_back( FileNameContainer("EVT05.BIN", sakura2Directory) );
+	evtFiles.push_back( FileNameContainer("EVT06.BIN", sakura2Directory) );
+	evtFiles.push_back( FileNameContainer("EVT07.BIN", sakura2Directory) );
+	evtFiles.push_back( FileNameContainer("EVT08.BIN", sakura2Directory) );
+	evtFiles.push_back( FileNameContainer("EVT09.BIN", sakura2Directory) );
+	evtFiles.push_back( FileNameContainer("EVT10.BIN", sakura2Directory) );
+	evtFiles.push_back( FileNameContainer("EVT11.BIN", sakura2Directory) );
+	evtFiles.push_back( FileNameContainer("EVT21.BIN", sakura2Directory) );
+	evtFiles.push_back( FileNameContainer("EVT22.BIN", sakura2Directory) );
+//	evtFiles.push_back( FileNameContainer("EVT27.BIN", sakura2Directory) );
+
+	if( mesTextFiles.size() != evtFiles.size() )
+	{
+		printf("Could not parse EVT Files.  Did not find all of the MES.BIN files.\n");
+		return false;
+	}
 
 	//Parse all evt files
 	const size_t numEvtFiles = evtFiles.size();
@@ -2219,33 +2270,90 @@ bool ParseEvtFiles(const string& sakura2Directory, vector<EVTFileData>& outEvtDa
 		EVTFileData evtData;
 		const FileNameContainer& evtFileName = evtFiles[i];
 
-		FileData fileData;
-		if( !fileData.InitializeFileData(evtFileName) )
+		FileData evtFileData;
+		if( !evtFileData.InitializeFileData(evtFileName) )
 		{
 			return false;
 		}
 
+		evtData.mFileName = evtFileName.mNoExtension;
+
 		//Find the start of the lookup table
 		const char lutStartBytes[]  = {0x01, 0x02, 0x04};
 		unsigned long lutIndex = 0;		
-		if( !fileData.FindDataIndex(lutStartBytes, 3, lutIndex) )
+		if( !evtFileData.FindDataIndex(lutStartBytes, 3, lutIndex) )
 		{
 			return false;
 		}
 		lutIndex -= 11;
 
-		if( lutIndex + evtData.LutSize >= fileData.GetDataSize() )
+		if( lutIndex + evtData.LutSize >= evtFileData.GetDataSize() )
 		{
 			printf("No valid LUT found for : %s\n", evtFileName.mFileName.c_str());
 			return false;
 		}
 		
-		memcpy_s(&evtData.faceLookupTable, evtData.LutSize, fileData.GetData(), fileData.GetDataSize() - lutIndex);
+		//copy the start of the face lookup table
+		memcpy_s(&evtData.mFaceLookupTable, evtData.LutSize, evtFileData.GetData() + lutIndex, evtData.LutSize);
+
+		//Now find the dialog order
+		const SakuraTextFile& mesTextFile    = mesTextFiles[i];
+		const char* pDialogOrderStart        = evtFileData.GetData();// + lutIndex + evtData.LutSize;
+		const unsigned long numBytesRemaning = evtFileData.GetDataSize();// - (lutIndex + evtData.LutSize);
+		const unsigned int indexAfterLut     = lutIndex + evtData.LutSize;
+		for(unsigned int evtIndex = 0; evtIndex + 1 < numBytesRemaning; ++evtIndex)
+		{
+			unsigned short inId = 0;
+			memcpy_s(&inId, sizeof(inId), &pDialogOrderStart[evtIndex], sizeof(inId));
+
+			if( inId == 0xffff )
+			{
+				continue;
+			}
+
+			inId = SwapByteOrder(inId);
+
+			if( mesTextFile.DoesIdExist(inId) )
+			{
+				EVTFileData::DialogOrder newEntry;
+			
+				newEntry.stringId = inId;
+
+				if( evtIndex >= indexAfterLut )
+				{
+					memcpy_s(&newEntry.faceId,   sizeof(newEntry.faceId),   &pDialogOrderStart[evtIndex - 2], sizeof(newEntry.faceId));
+				}
+				else
+				{
+					memcpy_s(&newEntry.faceId,   sizeof(newEntry.faceId),   &pDialogOrderStart[evtIndex + 2], sizeof(newEntry.faceId));
+				}
+					
+				newEntry.faceId = SwapByteOrder(newEntry.faceId);
+
+				if( newEntry.faceId > 0 && newEntry.faceId < evtData.LutSize && evtData.mFaceLookupTable[newEntry.faceId] != 0)
+				{
+					evtData.mDialogOrder.push_back( newEntry );
+				}
+			}
+		}
+
+		outEvtData.push_back(evtData);
 	}
+
+	return true;
 }
 
-bool CreateMesSpreadSheets(const string& dialogImageDirectory, const string& sakura2Directory)
+bool CreateMesSpreadSheets(const string& dialogImageDirectory, const string& sakuraRootDirectory)
 {
+	//EVT files contain info on which face image appears for each line of dialog
+	vector<EVTFileData> evtData;
+	if( !ParseEvtFiles(sakuraRootDirectory, evtData) )
+	{
+		return false;
+	}
+
+	const string sakura2Directory = sakuraRootDirectory + string("SAKURA2\\");
+
 	vector<FileNameContainer> allFilesInImageDirectory;
 	FindAllFilesWithinDirectory(dialogImageDirectory, allFilesInImageDirectory);
 
@@ -2271,11 +2379,17 @@ bool CreateMesSpreadSheets(const string& dialogImageDirectory, const string& sak
 	}
 
 	//Seperate all files into their own directories
+	const string mesPrefix("MES");
 	map<string, vector<FileNameContainer>> directoryMap;
 	for(const FileNameContainer& imageFileNameInfo : imageFiles)
 	{
 		const size_t lastOf = imageFileNameInfo.mPathOnly.find_last_of('\\');
 		const string leaf   = imageFileNameInfo.mPathOnly.substr(lastOf+1);
+		if( leaf.find(mesPrefix) == std::string::npos )
+		{
+			continue;
+		}
+
 		if( lastOf != string::npos && leaf.size() > 0 )
 		{
 			directoryMap[leaf].push_back(imageFileNameInfo);
@@ -2286,6 +2400,431 @@ bool CreateMesSpreadSheets(const string& dialogImageDirectory, const string& sak
 	for(map<string, vector<FileNameContainer>>::iterator iter = directoryMap.begin(); iter != directoryMap.end(); ++iter)
 	{
 		std::sort(iter->second.begin(), iter->second.end());
+	}
+
+	const string htmlHeader1("<html>\n<head><style>textarea {width: 100%;top: 0; left: 0; right: 0; bottom: 0; position: absolute; resize: none;-webkit-box-sizing: border-box; -moz-box-sizing: border-box; box-sizing: border-box;} table {border-collapse: collapse;} table, th, td { position: relative; border: 1px solid black;}");
+	const string htmlHeader2("#myProgress {width: 100%;	background-color: #ddd;} #myBar {width: 1%;height: 30px; background-color: #4CAF50;}</style>");
+	const string htmlHeader = htmlHeader1 + htmlHeader2;
+
+	//Create html files for each directory
+	static char buffer[2048];
+	const string outputDirectory = dialogImageDirectory + string("..\\..\\Translation\\");
+	if( !CreateDirectoryHelper(outputDirectory) )
+	{
+		printf("Unable to create translation directory %s.  Error: (%d)\n", outputDirectory.c_str(), GetLastError());
+		return false;
+	}
+
+	for(map<string, vector<FileNameContainer>>::const_iterator iter = directoryMap.begin(); iter != directoryMap.end(); ++iter)
+	{
+		printf("Creating html file for %s\n", iter->first.c_str());
+
+		//Find sakura file for this dialog
+		const string tblFileName = iter->first;
+		map<string, const SakuraTextFile*>::const_iterator sakuraFileIter = sakuraTableFileMap.find(tblFileName);
+		if( sakuraFileIter == sakuraTableFileMap.end() )
+		{
+			printf("Unable to find corresponding sakura file for: %s", tblFileName.c_str());
+			continue;
+		}
+
+		if( iter->second.size() != sakuraFileIter->second->mStringInfoArray.size() )
+		{
+			printf("Unable to create html file for %s.  StringInfo to dialog file count mismatch.", tblFileName.c_str());
+			continue;
+		}
+
+		//Find matching evt file data
+		const char mesNumberBuffer[3]  = {iter->first.c_str()[1], iter->first.c_str()[2], 0};
+		const string mesNumber   = string(mesNumberBuffer);
+		const string evtFileName = "EVT" + mesNumber;
+		int evtIndex              = -1;
+		for(size_t e = 0; e < evtData.size(); ++e)
+		{
+			if( evtData[e].mFileName == evtFileName )
+			{
+				evtIndex = e;
+				break;
+			}
+		}
+
+		if( evtIndex == -1 )
+		{
+			printf("Unable to create an html file: %s because EVT Data not found", iter->first.c_str());
+			continue;
+		}
+		const EVTFileData& evtFileData = evtData[evtIndex];
+
+		const string htmlFileName = outputDirectory + iter->first + string(".html");
+		TextFileWriter htmlFile;
+		if( !htmlFile.OpenFileForWrite(htmlFileName) )
+		{
+			printf("Unable to create an html file: %s", htmlFileName.c_str());
+			continue;
+		}
+
+		const size_t numImageFiles = iter->second.size();
+
+		//Common header stuff
+		htmlFile.WriteString(htmlHeader);
+		fprintf(htmlFile.GetFileHandle(), "\n<div id=\"FileName\" style=\"display: none;\">%s</div>\n", tblFileName.c_str());
+		fprintf(htmlFile.GetFileHandle(), "\n<div id=\"LastImageIndex\" style=\"display: none;\">%i</div>\n", numImageFiles);
+
+		htmlFile.WriteString("<script src=\"https://ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js\">\n\n");
+
+		//Load Data on startup
+		htmlFile.WriteString("\t$( window ).on( \"load\", function()\n {\n\t\tOnStartup();\n});\n\n");
+		htmlFile.WriteString("</script>\n\n");
+
+		//Begin functions
+		htmlFile.WriteString("<script type=\"text/javascript\">\n");
+
+		//SaveDuplicateData function
+		htmlFile.WriteString("function SaveDuplicateData(inDialogImageName, inEnglish, inDivID, inCRC)\n");
+		htmlFile.WriteString("{\n");
+		htmlFile.WriteString("     var fileName = document.getElementById(\"FileName\").innerHTML;\n");
+		htmlFile.WriteString("     	$.ajax({\n");
+		htmlFile.WriteString("          type: \"POST\",\n");
+		htmlFile.WriteString("          url: \"UpdateTranslationTest.php\",\n");
+		htmlFile.WriteString("          data: { inTBLFileName: fileName, inImageName:inDialogImageName, inTranslation:inEnglish, inDivId:inDivID, inCrc:inCRC },\n");
+		htmlFile.WriteString("          success: function(result)\n");
+		htmlFile.WriteString("          {\n");
+		htmlFile.WriteString("               var trId = \"tr_\" + inDivID;\n");
+		htmlFile.WriteString("               if( inEnglish != \"Untranslated\" && inEnglish != \"<div>Untranslated</div>\")\n");
+		htmlFile.WriteString("               {\n");
+		htmlFile.WriteString("                    if( document.getElementById(trId).bgColor != \"#fec8c8\" )\n");
+		htmlFile.WriteString("                    {\n");
+		htmlFile.WriteString("                         document.getElementById(trId).bgColor = \"#e3fec8\";\n");
+		htmlFile.WriteString("                    }\n");
+		htmlFile.WriteString("               }\n");
+		htmlFile.WriteString("               else\n");
+		htmlFile.WriteString("               {\n");
+		htmlFile.WriteString("                    document.getElementById(trId).bgColor = \"#fefec8\";\n");
+		htmlFile.WriteString("               }\n");
+		htmlFile.WriteString("          }\n");
+		htmlFile.WriteString("     });\n");
+		htmlFile.WriteString("}\n\n");
+
+		//SaveData function
+		htmlFile.WriteString("function SaveData(inDialogImageName, inDivID, inCRC)\n");
+		htmlFile.WriteString("{\n");
+		htmlFile.WriteString("     var translatedText = document.getElementById(inDivID).value;\n");
+		htmlFile.WriteString("     var fileName = document.getElementById(\"FileName\").innerHTML;\n");
+		htmlFile.WriteString("     $.ajax({\n");
+		htmlFile.WriteString("          type: \"POST\",\n");
+		htmlFile.WriteString("          url: \"UpdateTranslationTest.php\",\n");
+		htmlFile.WriteString("          data: { inTBLFileName: fileName, inImageName:inDialogImageName, inTranslation:translatedText, inDivId:inDivID, inCrc:inCRC },\n");
+		htmlFile.WriteString("          success: function(result)\n");
+		htmlFile.WriteString("          {\n");
+		htmlFile.WriteString("                var trId = \"tr_\" + inDivID;\n");
+		htmlFile.WriteString("                if( translatedText != \"Untranslated\" && translatedText != \"<div>Untranslated</div>\")\n");
+		htmlFile.WriteString("                {\n");
+		htmlFile.WriteString("                     if( document.getElementById(trId).bgColor != \"#fec8c8\" )\n");
+		htmlFile.WriteString("                     {\n");
+		htmlFile.WriteString("                          document.getElementById(trId).bgColor = \"#e3fec8\";\n");
+		htmlFile.WriteString("                     }\n");
+		htmlFile.WriteString("                }\n");
+		htmlFile.WriteString("                else\n");
+		htmlFile.WriteString("                {\n");
+		htmlFile.WriteString("                     document.getElementById(trId).bgColor = \"#fefec8\";\n");
+		htmlFile.WriteString("                }\n");
+		htmlFile.WriteString("         }\n");
+		htmlFile.WriteString("    });\n");
+		htmlFile.WriteString("}\n");
+
+		//SaveEdits function
+		htmlFile.WriteString("function SaveEdits(inDialogImageName, inDivID, inCRC)\n");
+		htmlFile.WriteString("{\n");
+		htmlFile.WriteString("     SaveData(inDialogImageName, inDivID, inCRC);\n\n");
+		htmlFile.WriteString("     var translatedText = document.getElementById(inDivID).value;\n");
+
+		htmlFile.WriteString("     var dynName = inDivID + \"_duplicates\";\n\n");
+		htmlFile.WriteString("     if(window.dynName && typeof dynName !== 'undefined')\n");
+		htmlFile.WriteString("     {\n");
+		htmlFile.WriteString("          var dupArray = eval(dynName);\n");
+		htmlFile.WriteString("          for(i = 0; i < dupArray.length; i++)\n");
+		htmlFile.WriteString("          {\n");
+		htmlFile.WriteString("               var lookupName = \"#edit_\" + dupArray[i];\n");
+		htmlFile.WriteString("               $(lookupName).html(translatedText)\n");
+		htmlFile.WriteString("               var dupImageName = dupArray[i] + \".bmp\";\n");
+		htmlFile.WriteString("               var dupDivID     = \"edit_\" + dupArray[i];\n\n");
+		htmlFile.WriteString("               SaveData(dupImageName, dupDivID, 0)\n");
+		htmlFile.WriteString("          }\n");
+		htmlFile.WriteString("     }\n");
+		htmlFile.WriteString("}\n");
+
+		//Export data function
+		htmlFile.WriteString("function ExportData()\n");
+		htmlFile.WriteString("{\n");
+		htmlFile.WriteString("     $(\"textarea\").each ( function ()\n");
+		htmlFile.WriteString("     {\n");
+		htmlFile.WriteString("          var thisText = $(this).text();\n");
+		htmlFile.WriteString("          thisText = thisText.replace(/<br>/g, '&ltbr&gt');\n");
+		htmlFile.WriteString("          thisText = thisText.replace(/<sp>/g, '&ltsp&gt');\n");
+		htmlFile.WriteString("          document.write(thisText + \"<br>\");\n");
+		htmlFile.WriteString("     });\n");
+		htmlFile.WriteString("}\n");
+
+		//UpdateLoadingBar function
+		htmlFile.WriteString("function UpdateLoadingBar(inLoadPercentage)\n");
+		htmlFile.WriteString("{\n");
+		htmlFile.WriteString("     var elem            = document.getElementById(\"myBar\");\n");
+		htmlFile.WriteString("     var loadPercentElem = document.getElementById(\"LoadPercent\");\n");
+		htmlFile.WriteString("     inLoadPercentage    = Math.floor( inLoadPercentage*100 + 0.5);\n");
+		htmlFile.WriteString("     elem.style.width = inLoadPercentage + '%';\n");
+		htmlFile.WriteString("     loadPercentElem.innerHTML = (inLoadPercentage).toString() + \"%\";\n");
+		htmlFile.WriteString("}\n");
+
+		//AttemptToLoadDuplicateData function
+		htmlFile.WriteString("function AttemptToLoadDuplicateData(inDivID, inCRC, inTrID, inPercentComplete)\n");
+		htmlFile.WriteString("{\n");
+		htmlFile.WriteString("     $.ajax({\n");
+		htmlFile.WriteString("     type: \"POST\",\n");
+		htmlFile.WriteString("     url: \"GetTranslationFromCRC.php\",\n");
+		htmlFile.WriteString("     data: { inCrc: inCRC},\n");
+		htmlFile.WriteString("     success: function(result)\n");
+		htmlFile.WriteString("     {\n");
+		htmlFile.WriteString("          UpdateLoadingBar(inPercentComplete);\n\n");
+		htmlFile.WriteString("          var json = $.parseJSON(result);\n");
+		htmlFile.WriteString("          var i;\n");
+		htmlFile.WriteString("          for (i = 0; i < json.length; i++)\n");
+		htmlFile.WriteString("          {\n");
+		htmlFile.WriteString("               var jsonEntry = json[i];\n");
+		htmlFile.WriteString("               var english   = jsonEntry.English.replace(/\\\\/g, \'\');\n");
+		htmlFile.WriteString("               if( english != \"Untranslated\" )\n");
+		htmlFile.WriteString("               {\n");
+		htmlFile.WriteString("                    if( document.getElementById(inTrID).bgColor != \"#fec8c8\" )\n");
+		htmlFile.WriteString("                    {\n");
+		htmlFile.WriteString("                         document.getElementById(inTrID).bgColor = \"#e3fec8\";\n");
+		htmlFile.WriteString("                    }\n");
+		htmlFile.WriteString("                    $(inDivID).html(english);\n");
+		htmlFile.WriteString("                    var divID = inDivID.replace(\"#\", \"\");\n");
+		htmlFile.WriteString("                    var imageName = divID.replace(\"edit_\", \"\") + \".bmp\";\n");
+		htmlFile.WriteString("                    SaveDuplicateData(imageName, english, divID, inCRC);\n");
+		htmlFile.WriteString("                    return;\n");
+		htmlFile.WriteString("               }\n");
+		htmlFile.WriteString("          }\n");
+		htmlFile.WriteString("     },\n");
+		htmlFile.WriteString("     error: function()\n");
+		htmlFile.WriteString("     {\n");
+		htmlFile.WriteString("     }\n");
+		htmlFile.WriteString("   });\n");
+		htmlFile.WriteString("}\n");
+
+		//LoadData function
+		htmlFile.WriteString("function LoadData(){\n");
+		htmlFile.WriteString("     var fileName = document.getElementById(\"FileName\").innerHTML;\n");
+		htmlFile.WriteString("     $.ajax({\n");
+		htmlFile.WriteString("          type: \"POST\",\n");
+		htmlFile.WriteString("          url: \"GetTranslationData.php\",\n");
+		htmlFile.WriteString("          data: { inTBLFileName: fileName},\n");
+		htmlFile.WriteString("          success: function(result)\n");
+		htmlFile.WriteString("          {\n");
+		htmlFile.WriteString("               var numDupsPendingLoad = document.getElementById(\"NumberOfDuplicates\").innerHTML;\n");
+		htmlFile.WriteString("               var json = $.parseJSON(result);\n");
+		htmlFile.WriteString("               var i;\n");
+		htmlFile.WriteString("               for (i = 0; i < json.length; i++)\n");
+		htmlFile.WriteString("               {\n");
+		htmlFile.WriteString("                    var jsonEntry = json[i];\n");
+		htmlFile.WriteString("                    var english   = jsonEntry.English.replace(/\\\\/g, \'\');\n");
+		htmlFile.WriteString("                    var divId     = \"#\" + jsonEntry.DivId;\n");
+		htmlFile.WriteString("                    var trId      = \"tr_\" + jsonEntry.DivId;\n");
+		htmlFile.WriteString("                    if( english != \"Untranslated\" && english != \"<div>Untranslated</div>\")\n");
+		htmlFile.WriteString("                    {\n");
+		htmlFile.WriteString("                         if( document.getElementById(trId).bgColor != \"#fec8c8\" )\n");
+		htmlFile.WriteString("                         {\n");
+		htmlFile.WriteString("                              document.getElementById(trId).bgColor = \"#e3fec8\";\n");
+		htmlFile.WriteString("                         }  \n");
+		htmlFile.WriteString("                         $(divId).html(english);\n\n");
+		htmlFile.WriteString("                         var idNum     = jsonEntry.DivId.replace(\"edit_\", \"\");\n");
+		htmlFile.WriteString("                         var dupId     = \"dup_\" + idNum;\n");
+		htmlFile.WriteString("                         var dupValue  = document.getElementById(dupId).innerHTML;\n");
+		htmlFile.WriteString("                         if( dupValue == \"true\" )\n");
+		htmlFile.WriteString("                              numDupsPendingLoad--;\n");
+		htmlFile.WriteString("                    }\n");
+		htmlFile.WriteString("               }\n\n");
+		htmlFile.WriteString("               ////Load duplicates\n");
+		htmlFile.WriteString("               if( numDupsPendingLoad <= 0 )\n");
+		htmlFile.WriteString("               {\n");
+		htmlFile.WriteString("                    UpdateLoadingBar(1);\n\n");
+		htmlFile.WriteString("               }\n");
+		htmlFile.WriteString("               else\n");
+		htmlFile.WriteString("               {\n");
+		htmlFile.WriteString("                    var lastImageIndex  = document.getElementById(\"LastImageIndex\").innerHTML;\n");
+		htmlFile.WriteString("                    var numDupProcessed = 0;\n");
+		htmlFile.WriteString("                    for(i = 1; i < lastImageIndex; ++i)\n");
+		htmlFile.WriteString("                    {\n");
+		htmlFile.WriteString("                         var dupId    = \"dup_\" + i;\n");
+		htmlFile.WriteString("                         var dupValue = document.getElementById(dupId).innerHTML;\n");
+		htmlFile.WriteString("                         if( dupValue == \"false\" )\n");
+		htmlFile.WriteString("                         {\n");
+		htmlFile.WriteString("                              continue;\n");
+		htmlFile.WriteString("                         }\n");
+		htmlFile.WriteString("                         var divId    = \"#edit_\" + i;\n");
+		htmlFile.WriteString("                         var trId     = \"tr_edit_\" + i;\n");
+		htmlFile.WriteString("                         var crcId    = \"crc_\" + i;\n");
+		htmlFile.WriteString("                         var crcValue = document.getElementById(crcId).innerHTML;\n");
+		htmlFile.WriteString("                         var translatedText = document.getElementById(\"edit_\" + i).value;\n");
+		htmlFile.WriteString("                         crcValue     = parseInt(crcValue, 16)\n");
+		htmlFile.WriteString("                         if( translatedText == \"Untranslated\" )\n");
+		htmlFile.WriteString("                         {\n");
+		htmlFile.WriteString("                              var percentComplete = (numDupProcessed+1)/numDupsPendingLoad;\n");
+		htmlFile.WriteString("                              numDupProcessed = numDupProcessed + 1;\n");
+		htmlFile.WriteString("                              AttemptToLoadDuplicateData(divId, crcValue, trId, percentComplete);\n");
+		htmlFile.WriteString("                         }\n");
+		htmlFile.WriteString("                    }\n");
+		htmlFile.WriteString("               }\n");
+		htmlFile.WriteString("          },\n");
+		htmlFile.WriteString("          error: function()\n");
+		htmlFile.WriteString("          {\n");
+		htmlFile.WriteString("               alert('Unable to load data');\n");
+		htmlFile.WriteString("          }\n");
+		htmlFile.WriteString("     });\n");
+		htmlFile.WriteString("}\n");
+
+
+		//FixOnChangeEditableElements - A function that saves the data whenever input happens
+		htmlFile.WriteString("function FixOnChangeEditableElements()\n{\n");
+		htmlFile.WriteString("\tvar tags = document.querySelectorAll('[contenteditable=true][onChange]');//(requires FF 3.1+, Safari 3.1+, IE8+)\n");
+		htmlFile.WriteString("\tfor (var i=tags.length-1; i>=0; i--) if (typeof(tags[i].onblur)!='function')\n{\n");
+		htmlFile.WriteString("\t\ttags[i].onfocus = function()\n{\n");
+		htmlFile.WriteString("\t\tthis.data_orig=this.innerHTML;\n};\n");
+		htmlFile.WriteString("\t\ttags[i].onblur = function()\n{\n");
+		htmlFile.WriteString("\t\tif( this.innerHTML != this.data_orig)\n");
+		htmlFile.WriteString("\t\t\tthis.onchange();\n");
+		htmlFile.WriteString("\tdelete this.data_orig;\n};\n}\n}\n");
+
+		//Startup function
+		htmlFile.WriteString("function OnStartup()\n{\n");
+		htmlFile.WriteString("\tFixOnChangeEditableElements();\n}\n");
+
+		//End scripts
+		htmlFile.WriteString("</script>\n\n");
+		htmlFile.WriteString("</head>\n\n");
+
+		//Call startup function
+		htmlFile.WriteString("<body>\n");
+
+		htmlFile.WriteString("<?php include 'GetUserPermissions.php';\n");
+		htmlFile.WriteString("\t$bPermissionFound = false;\n");
+		htmlFile.WriteString("\tforeach ($allowedFiles as $value)\n{");
+		fprintf(htmlFile.GetFileHandle(), "\t\tif( $value == \"%s\" )\n\t\t{\n", tblFileName.c_str());
+		htmlFile.WriteString("\t\t\t$bPermissionFound = true;\n");
+		htmlFile.WriteString("\t\t\tbreak;\n\t\t}\n\t}");
+		htmlFile.WriteString("if( $bPermissionFound )\n{\n?>");
+
+		fprintf(htmlFile.GetFileHandle(), "<article><header align=\"center\"><h1>Dialog For %s</h1></header></article>\n", iter->first.c_str());
+
+		htmlFile.WriteString("<br>\n");
+		htmlFile.WriteString("<b>Instructions:</b><br>\n");
+		htmlFile.WriteString("-This page is best displayed using Chrome.  Otherwise some of the table borders are missing for some reason.<br>\n");
+		htmlFile.WriteString("-Skip any row that is grayed out.<br>\n");
+		htmlFile.WriteString("-Your changes are automatically saved.<br>\n");
+		htmlFile.WriteString("-Press the Load Data button when you come back to the page to load your changes.<br>\n");
+		htmlFile.WriteString("-Please wait for the Load Bar to complete.  It's a bit slow, but as more of the file is translated, it will speed up.  If it gets stuck in the 90's, that's fine, consider it done. I'll fix this bug soon.<br><br>\n");
+
+		htmlFile.WriteString("<b>Style:</b><br>\n");
+		htmlFile.WriteString("-Use only a single space after a period.<br>\n");
+		htmlFile.WriteString("-You do not need to worry about line breaks.  Just translate the text as one line.  The text insertion tool will automatically add newlines as needed.<br>\n");
+		htmlFile.WriteString("-There is a 160 character limit for each dialog entry.<br><br>\n\n");
+
+		htmlFile.WriteString("<b>LIPS Events</b><br>\n");
+		htmlFile.WriteString("-Pink rows are LIPS events where the user has to pick which line to say.  When translating these, insert a \" &lt;br&gt; \" without the quotes to signigy the next option.<br><br>\n");
+		htmlFile.WriteString("For example: The following line has two options.<br>\n");
+		htmlFile.WriteString("<img src=\"..\\ExtractedData\\Dialog\\0100TBL\\67.png\"><br>\n");
+		htmlFile.WriteString("It would be translated as: <br>\n");
+		htmlFile.WriteString("I'm on duty! &lt;br&gt; First I'd like to know more about you.<br><br>\n\n");
+
+		htmlFile.WriteString("<b>Naming Conventions:</n><br>\n");
+		htmlFile.WriteString("<a href=\"https://docs.google.com/spreadsheets/d/1rgafQe78vML_xbxnYuOSlO8P5C8nuhgLjMJOExUQsm0/edit?usp=sharing\" target=\"_blank\">Click here to view the naming conventions for Characters, Locations, and Terms</a> <br>\n");
+
+		htmlFile.WriteString("<?php\n");
+		htmlFile.WriteString("$currUser = $_SERVER['PHP_AUTH_USER'];\n");
+		htmlFile.WriteString("if( $currUser == \"swtranslator\" )\n");
+		htmlFile.WriteString("{\n");
+		htmlFile.WriteString("echo \"<input align=\\\"center\\\" type=\\\"button\\\" value=\\\"Export Data\\\" onclick=\\\"ExportData()\\\"/>\";\n");
+		htmlFile.WriteString("}\n");
+		htmlFile.WriteString("?>\n\n");
+
+		//Load Data button
+		htmlFile.WriteString("<table align=\"center\">\n");
+		htmlFile.WriteString("     <tr>\n");
+		htmlFile.WriteString("          <td>\n");
+		htmlFile.WriteString("               <input align=\"center\" type=\"button\" value=\"Load Data\" onclick=\"LoadData()\"/>\n");
+		htmlFile.WriteString("          </td>\n");
+		htmlFile.WriteString("     </tr>\n");
+		htmlFile.WriteString("     <tr>\n");
+		htmlFile.WriteString("          <td>\n");
+		htmlFile.WriteString("               Duplicate Load Progress\n");
+		htmlFile.WriteString("          </td>\n");
+		htmlFile.WriteString("          <td width=\"400\">\n");
+		htmlFile.WriteString("               <div id=\"myProgress\">\n");
+		htmlFile.WriteString("               <div id=\"myBar\"></div>\n");
+		htmlFile.WriteString("          </div>\n");
+		htmlFile.WriteString("          </td>\n");
+		htmlFile.WriteString("          <td>\n");
+		htmlFile.WriteString("               <div id=\"LoadPercent\">0</div>\n");
+		htmlFile.WriteString("          </td>\n");
+		htmlFile.WriteString("     </tr>\n");
+		htmlFile.WriteString("</table><br>\n\n");
+
+
+		//Write table
+		htmlFile.WriteString("<table>\n");
+		htmlFile.WriteString("\t<tr bgcolor=\"#c8c8fe\">\n");
+		htmlFile.WriteString("\t<th>#</th>\n");
+		htmlFile.WriteString("\t<th>Speaker</th>\n");
+		htmlFile.WriteString("\t<th>Japanese</th>\n");
+		htmlFile.WriteString("\t<th>English</th>\n");
+		htmlFile.WriteString("\t<th>ID</th>\n");
+		htmlFile.WriteString("\t</tr>\n");
+
+		//Create entries for all images
+		int num = 0;
+		for(const FileNameContainer& fileNameInfo : iter->second)
+		{
+			const unsigned short id   = sakuraFileIter->second->mStringInfoArray[num].mUnknown;
+			const char* bgColor       = "fefec8";
+
+			const char* pVarSuffix = fileNameInfo.mNoExtension.c_str();
+			fprintf(htmlFile.GetFileHandle(), "<tr id=\"tr_edit_%i\" bgcolor=\"#%s\">\n", num + 1, bgColor);
+			snprintf(buffer, 2048, "<td align=\"center\" width=\"20\">%i</td>", num + 1);
+			htmlFile.WriteString(string(buffer));
+
+			int faceImageId = evtFileData.GetFaceImageNumber(id);
+			if( faceImageId != -1 )
+			{
+				//snprintf(buffer, 2048, "<td width=\"48\"><img src=\"..\\ExtractedData\\Faces\\FACE%s\\%02x.png\"></td>", mesNumber.c_str(), faceImageId);
+				snprintf(buffer, 2048, "<td width=\"48\"><img src=\"..\\FACE\\FACE%s\\%i.png\"></td>", mesNumber.c_str(), faceImageId);
+			}
+			else
+			{
+				snprintf(buffer, 2048, "<td width=\"48\"><img src=\"..\\ExtractedData\\Faces\\UnknownFace.png\"></td>");
+				//snprintf(buffer, 2048, "<td width=\"48\"><img src=\"..\\FACE\\UnknownFace.png\"></td>");
+			}
+			htmlFile.WriteString(string(buffer));
+
+			//snprintf(buffer, 2048, "<td width=\"240\"><img src=\"..\\ExtractedData\\Dialog\\M%sMES\\%s\"></td>", mesNumber.c_str(), fileNameInfo.mFileName.c_str());
+			snprintf(buffer, 2048, "<td width=\"240\"><img src=\"..\\Dialog\\M%sMES\\%s\"></td>", mesNumber.c_str(), fileNameInfo.mFileName.c_str());
+			htmlFile.WriteString(string(buffer));
+
+			snprintf(buffer, 2048, "<td width=\"480\"><textarea id=\"edit_%s\" contenteditable=true onchange=\"SaveEdits('%i.bmp', 'edit_%i')\" style=\"border: none; width: 100%%; -webkit-box-sizing: border-box; -moz-box-sizing: border-box; box-sizing: border-box;\">Untranslated</textarea></td>", pVarSuffix, num + 1, num + 1);
+			htmlFile.WriteString(string(buffer));
+
+			snprintf(buffer, 2048, "<td align=\"center\" width=\"120\">%02x (%i)</td>", id, id);
+			htmlFile.WriteString(string(buffer));
+
+			htmlFile.WriteString("</tr>\n");
+
+			++num;
+		}
+		htmlFile.WriteString("</table><br>\n");
+
+		htmlFile.WriteString("<?php\n}\n?>");
+
+		//End file
+		htmlFile.WriteString("</body>\n");
+		htmlFile.WriteString("</html>\n");
 	}
 
 	return true;
@@ -3602,8 +4141,9 @@ void PrintHelp()
 	printf("InsertText rootSakuraTaisenDirectory translatedText outDirectory\n");
 	printf("FindDuplicateText dialogDirectory outFile\n");
 	printf("FindDialogOrder rootSakuraTaisenDirectory outDirectory\n");
+	printf("ParseEVTFiles rootSakuraTaisenDirectory\n");
 	printf("CreateTBLSpreadsheets dialogImageDirectory duplicatesFile sakura1Directory\n");
-	printf("CreateMesSpreadsheets dialogImageDirectory sakura2Directory\n");
+	printf("CreateMesSpreadsheets dialogImageDirectory rootSakuraTaisenDirectory\n");
 	printf("CreateTMapSpSpreadsheet imageDirectory\n");
 	printf("ExtractImages fileName paletteFile width height outDirectory\n");
 	printf("Extract8BitImage fileName paletteFile offset width height numColors[256, 128] outDirectory\n");
@@ -3785,9 +4325,9 @@ int main(int argc, char *argv[])
 	else if(command == "CreateMesSpreadsheets" && argc == 4 )
 	{
 		const string dialogImageDirectory = string(argv[2]);
-		const string sakura2Directory     = string(argv[3]) + Seperators;
+		const string sakuraRootDirectory  = string(argv[3]) + Seperators;
 
-		CreateMesSpreadSheets(dialogImageDirectory, sakura2Directory);
+		CreateMesSpreadSheets(dialogImageDirectory, sakuraRootDirectory);
 	}
 	else if(command == "CreateTMapSpSpreadsheet" && argc == 3 )
 	{
@@ -3836,6 +4376,13 @@ int main(int argc, char *argv[])
 		const string patchDataPath   = string(argv[3]) + Seperators;
 
 		PatchTMapSP(sakuraDirectory, patchDataPath);
+	}
+	else if(command == "ParseEVTFiles" && argc == 3)
+	{
+		const string sakuraDirectory = string(argv[2]) + Seperators;
+	
+		std::vector<EVTFileData> outData;
+		ParseEvtFiles(sakuraDirectory, outData);
 	}
 	else
 	{
