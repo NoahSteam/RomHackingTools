@@ -221,3 +221,5 @@ SUMIRE.SE @0x05a69bf0
 WKL01.BIN @0x0021f800
 
 Note: Something is reading the first image index in FACE01 @002b3802.  Figure that out along with the fact that SLG.BIN has a table for the text id lookup and this might reveal how the face and text id are matched.
+
+EVT string might be a lips string if after the string id there is a pointer (0605)?  Example EVT01.BIN, 4E25 0605

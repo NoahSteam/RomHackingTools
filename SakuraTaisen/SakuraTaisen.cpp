@@ -2455,7 +2455,7 @@ bool CreateMesSpreadSheets(const string& dialogImageDirectory, const string& sak
 		}
 		const EVTFileData& evtFileData = evtData[evtIndex];
 
-		const string htmlFileName = outputDirectory + iter->first + string(".html");
+		const string htmlFileName = outputDirectory + iter->first + string(".php");
 		TextFileWriter htmlFile;
 		if( !htmlFile.OpenFileForWrite(htmlFileName) )
 		{
@@ -2478,32 +2478,6 @@ bool CreateMesSpreadSheets(const string& dialogImageDirectory, const string& sak
 
 		//Begin functions
 		htmlFile.WriteString("<script type=\"text/javascript\">\n");
-
-		//SaveDuplicateData function
-		htmlFile.WriteString("function SaveDuplicateData(inDialogImageName, inEnglish, inDivID, inCRC)\n");
-		htmlFile.WriteString("{\n");
-		htmlFile.WriteString("     var fileName = document.getElementById(\"FileName\").innerHTML;\n");
-		htmlFile.WriteString("     	$.ajax({\n");
-		htmlFile.WriteString("          type: \"POST\",\n");
-		htmlFile.WriteString("          url: \"UpdateTranslationTest.php\",\n");
-		htmlFile.WriteString("          data: { inTBLFileName: fileName, inImageName:inDialogImageName, inTranslation:inEnglish, inDivId:inDivID, inCrc:inCRC },\n");
-		htmlFile.WriteString("          success: function(result)\n");
-		htmlFile.WriteString("          {\n");
-		htmlFile.WriteString("               var trId = \"tr_\" + inDivID;\n");
-		htmlFile.WriteString("               if( inEnglish != \"Untranslated\" && inEnglish != \"<div>Untranslated</div>\")\n");
-		htmlFile.WriteString("               {\n");
-		htmlFile.WriteString("                    if( document.getElementById(trId).bgColor != \"#fec8c8\" )\n");
-		htmlFile.WriteString("                    {\n");
-		htmlFile.WriteString("                         document.getElementById(trId).bgColor = \"#e3fec8\";\n");
-		htmlFile.WriteString("                    }\n");
-		htmlFile.WriteString("               }\n");
-		htmlFile.WriteString("               else\n");
-		htmlFile.WriteString("               {\n");
-		htmlFile.WriteString("                    document.getElementById(trId).bgColor = \"#fefec8\";\n");
-		htmlFile.WriteString("               }\n");
-		htmlFile.WriteString("          }\n");
-		htmlFile.WriteString("     });\n");
-		htmlFile.WriteString("}\n\n");
 
 		//SaveData function
 		htmlFile.WriteString("function SaveData(inDialogImageName, inDivID, inCRC)\n");
@@ -2535,22 +2509,7 @@ bool CreateMesSpreadSheets(const string& dialogImageDirectory, const string& sak
 		//SaveEdits function
 		htmlFile.WriteString("function SaveEdits(inDialogImageName, inDivID, inCRC)\n");
 		htmlFile.WriteString("{\n");
-		htmlFile.WriteString("     SaveData(inDialogImageName, inDivID, inCRC);\n\n");
-		htmlFile.WriteString("     var translatedText = document.getElementById(inDivID).value;\n");
-
-		htmlFile.WriteString("     var dynName = inDivID + \"_duplicates\";\n\n");
-		htmlFile.WriteString("     if(window.dynName && typeof dynName !== 'undefined')\n");
-		htmlFile.WriteString("     {\n");
-		htmlFile.WriteString("          var dupArray = eval(dynName);\n");
-		htmlFile.WriteString("          for(i = 0; i < dupArray.length; i++)\n");
-		htmlFile.WriteString("          {\n");
-		htmlFile.WriteString("               var lookupName = \"#edit_\" + dupArray[i];\n");
-		htmlFile.WriteString("               $(lookupName).html(translatedText)\n");
-		htmlFile.WriteString("               var dupImageName = dupArray[i] + \".bmp\";\n");
-		htmlFile.WriteString("               var dupDivID     = \"edit_\" + dupArray[i];\n\n");
-		htmlFile.WriteString("               SaveData(dupImageName, dupDivID, 0)\n");
-		htmlFile.WriteString("          }\n");
-		htmlFile.WriteString("     }\n");
+		htmlFile.WriteString("     SaveData(inDialogImageName, inDivID, inCRC);\n\n");		
 		htmlFile.WriteString("}\n");
 
 		//Export data function
@@ -2565,52 +2524,6 @@ bool CreateMesSpreadSheets(const string& dialogImageDirectory, const string& sak
 		htmlFile.WriteString("     });\n");
 		htmlFile.WriteString("}\n");
 
-		//UpdateLoadingBar function
-		htmlFile.WriteString("function UpdateLoadingBar(inLoadPercentage)\n");
-		htmlFile.WriteString("{\n");
-		htmlFile.WriteString("     var elem            = document.getElementById(\"myBar\");\n");
-		htmlFile.WriteString("     var loadPercentElem = document.getElementById(\"LoadPercent\");\n");
-		htmlFile.WriteString("     inLoadPercentage    = Math.floor( inLoadPercentage*100 + 0.5);\n");
-		htmlFile.WriteString("     elem.style.width = inLoadPercentage + '%';\n");
-		htmlFile.WriteString("     loadPercentElem.innerHTML = (inLoadPercentage).toString() + \"%\";\n");
-		htmlFile.WriteString("}\n");
-
-		//AttemptToLoadDuplicateData function
-		htmlFile.WriteString("function AttemptToLoadDuplicateData(inDivID, inCRC, inTrID, inPercentComplete)\n");
-		htmlFile.WriteString("{\n");
-		htmlFile.WriteString("     $.ajax({\n");
-		htmlFile.WriteString("     type: \"POST\",\n");
-		htmlFile.WriteString("     url: \"GetTranslationFromCRC.php\",\n");
-		htmlFile.WriteString("     data: { inCrc: inCRC},\n");
-		htmlFile.WriteString("     success: function(result)\n");
-		htmlFile.WriteString("     {\n");
-		htmlFile.WriteString("          UpdateLoadingBar(inPercentComplete);\n\n");
-		htmlFile.WriteString("          var json = $.parseJSON(result);\n");
-		htmlFile.WriteString("          var i;\n");
-		htmlFile.WriteString("          for (i = 0; i < json.length; i++)\n");
-		htmlFile.WriteString("          {\n");
-		htmlFile.WriteString("               var jsonEntry = json[i];\n");
-		htmlFile.WriteString("               var english   = jsonEntry.English.replace(/\\\\/g, \'\');\n");
-		htmlFile.WriteString("               if( english != \"Untranslated\" )\n");
-		htmlFile.WriteString("               {\n");
-		htmlFile.WriteString("                    if( document.getElementById(inTrID).bgColor != \"#fec8c8\" )\n");
-		htmlFile.WriteString("                    {\n");
-		htmlFile.WriteString("                         document.getElementById(inTrID).bgColor = \"#e3fec8\";\n");
-		htmlFile.WriteString("                    }\n");
-		htmlFile.WriteString("                    $(inDivID).html(english);\n");
-		htmlFile.WriteString("                    var divID = inDivID.replace(\"#\", \"\");\n");
-		htmlFile.WriteString("                    var imageName = divID.replace(\"edit_\", \"\") + \".bmp\";\n");
-		htmlFile.WriteString("                    SaveDuplicateData(imageName, english, divID, inCRC);\n");
-		htmlFile.WriteString("                    return;\n");
-		htmlFile.WriteString("               }\n");
-		htmlFile.WriteString("          }\n");
-		htmlFile.WriteString("     },\n");
-		htmlFile.WriteString("     error: function()\n");
-		htmlFile.WriteString("     {\n");
-		htmlFile.WriteString("     }\n");
-		htmlFile.WriteString("   });\n");
-		htmlFile.WriteString("}\n");
-
 		//LoadData function
 		htmlFile.WriteString("function LoadData(){\n");
 		htmlFile.WriteString("     var fileName = document.getElementById(\"FileName\").innerHTML;\n");
@@ -2619,62 +2532,25 @@ bool CreateMesSpreadSheets(const string& dialogImageDirectory, const string& sak
 		htmlFile.WriteString("          url: \"GetTranslationData.php\",\n");
 		htmlFile.WriteString("          data: { inTBLFileName: fileName},\n");
 		htmlFile.WriteString("          success: function(result)\n");
-		htmlFile.WriteString("          {\n");
-		htmlFile.WriteString("               var numDupsPendingLoad = document.getElementById(\"NumberOfDuplicates\").innerHTML;\n");
-		htmlFile.WriteString("               var json = $.parseJSON(result);\n");
-		htmlFile.WriteString("               var i;\n");
-		htmlFile.WriteString("               for (i = 0; i < json.length; i++)\n");
-		htmlFile.WriteString("               {\n");
-		htmlFile.WriteString("                    var jsonEntry = json[i];\n");
-		htmlFile.WriteString("                    var english   = jsonEntry.English.replace(/\\\\/g, \'\');\n");
-		htmlFile.WriteString("                    var divId     = \"#\" + jsonEntry.DivId;\n");
-		htmlFile.WriteString("                    var trId      = \"tr_\" + jsonEntry.DivId;\n");
-		htmlFile.WriteString("                    if( english != \"Untranslated\" && english != \"<div>Untranslated</div>\")\n");
-		htmlFile.WriteString("                    {\n");
-		htmlFile.WriteString("                         if( document.getElementById(trId).bgColor != \"#fec8c8\" )\n");
-		htmlFile.WriteString("                         {\n");
-		htmlFile.WriteString("                              document.getElementById(trId).bgColor = \"#e3fec8\";\n");
-		htmlFile.WriteString("                         }  \n");
-		htmlFile.WriteString("                         $(divId).html(english);\n\n");
-		htmlFile.WriteString("                         var idNum     = jsonEntry.DivId.replace(\"edit_\", \"\");\n");
-		htmlFile.WriteString("                         var dupId     = \"dup_\" + idNum;\n");
-		htmlFile.WriteString("                         var dupValue  = document.getElementById(dupId).innerHTML;\n");
-		htmlFile.WriteString("                         if( dupValue == \"true\" )\n");
-		htmlFile.WriteString("                              numDupsPendingLoad--;\n");
-		htmlFile.WriteString("                    }\n");
-		htmlFile.WriteString("               }\n\n");
-		htmlFile.WriteString("               ////Load duplicates\n");
-		htmlFile.WriteString("               if( numDupsPendingLoad <= 0 )\n");
-		htmlFile.WriteString("               {\n");
-		htmlFile.WriteString("                    UpdateLoadingBar(1);\n\n");
-		htmlFile.WriteString("               }\n");
-		htmlFile.WriteString("               else\n");
-		htmlFile.WriteString("               {\n");
-		htmlFile.WriteString("                    var lastImageIndex  = document.getElementById(\"LastImageIndex\").innerHTML;\n");
-		htmlFile.WriteString("                    var numDupProcessed = 0;\n");
-		htmlFile.WriteString("                    for(i = 1; i < lastImageIndex; ++i)\n");
-		htmlFile.WriteString("                    {\n");
-		htmlFile.WriteString("                         var dupId    = \"dup_\" + i;\n");
-		htmlFile.WriteString("                         var dupValue = document.getElementById(dupId).innerHTML;\n");
-		htmlFile.WriteString("                         if( dupValue == \"false\" )\n");
-		htmlFile.WriteString("                         {\n");
-		htmlFile.WriteString("                              continue;\n");
-		htmlFile.WriteString("                         }\n");
-		htmlFile.WriteString("                         var divId    = \"#edit_\" + i;\n");
-		htmlFile.WriteString("                         var trId     = \"tr_edit_\" + i;\n");
-		htmlFile.WriteString("                         var crcId    = \"crc_\" + i;\n");
-		htmlFile.WriteString("                         var crcValue = document.getElementById(crcId).innerHTML;\n");
-		htmlFile.WriteString("                         var translatedText = document.getElementById(\"edit_\" + i).value;\n");
-		htmlFile.WriteString("                         crcValue     = parseInt(crcValue, 16)\n");
-		htmlFile.WriteString("                         if( translatedText == \"Untranslated\" )\n");
-		htmlFile.WriteString("                         {\n");
-		htmlFile.WriteString("                              var percentComplete = (numDupProcessed+1)/numDupsPendingLoad;\n");
-		htmlFile.WriteString("                              numDupProcessed = numDupProcessed + 1;\n");
-		htmlFile.WriteString("                              AttemptToLoadDuplicateData(divId, crcValue, trId, percentComplete);\n");
-		htmlFile.WriteString("                         }\n");
-		htmlFile.WriteString("                    }\n");
-		htmlFile.WriteString("               }\n");
-		htmlFile.WriteString("          },\n");
+		htmlFile.WriteString("			{\n");
+		htmlFile.WriteString("				var json = $.parseJSON(result);\n");
+		htmlFile.WriteString("				var i;\n");
+		htmlFile.WriteString("				for (i = 0; i < json.length; i++)\n");
+		htmlFile.WriteString("				{\n");
+		htmlFile.WriteString("					var jsonEntry = json[i];\n");
+		htmlFile.WriteString("					var english   = jsonEntry.English.replace(/\\\\/g, \'\');\n");
+		htmlFile.WriteString("					var divId     = \"#\" + jsonEntry.DivId;\n");
+		htmlFile.WriteString("						var trId      = \"tr_\" + jsonEntry.DivId;\n");
+		htmlFile.WriteString("						if( english != \"Untranslated\" && english != \"<div>Untranslated</div>\")\n");
+		htmlFile.WriteString("						{\n");
+		htmlFile.WriteString("							if( document.getElementById(trId).bgColor != \"#fec8c8\" )\n");
+		htmlFile.WriteString("							{\n");
+		htmlFile.WriteString("							       document.getElementById(trId).bgColor = \"#e3fec8\";\n");
+		htmlFile.WriteString("							}\n");
+		htmlFile.WriteString("							$(divId).html(english);\n");
+		htmlFile.WriteString("						}\n");
+		htmlFile.WriteString("				}\n");
+		htmlFile.WriteString("			},\n");;
 		htmlFile.WriteString("          error: function()\n");
 		htmlFile.WriteString("          {\n");
 		htmlFile.WriteString("               alert('Unable to load data');\n");
@@ -2717,27 +2593,23 @@ bool CreateMesSpreadSheets(const string& dialogImageDirectory, const string& sak
 
 		htmlFile.WriteString("<br>\n");
 		htmlFile.WriteString("<b>Instructions:</b><br>\n");
+		htmlFile.WriteString("-Please let me know once the file is complete by emailing me @ sakurataisentranslation@gmail.com<br>\n");
 		htmlFile.WriteString("-This page is best displayed using Chrome.  Otherwise some of the table borders are missing for some reason.<br>\n");
-		htmlFile.WriteString("-Skip any row that is grayed out.<br>\n");
 		htmlFile.WriteString("-Your changes are automatically saved.<br>\n");
-		htmlFile.WriteString("-Press the Load Data button when you come back to the page to load your changes.<br>\n");
-		htmlFile.WriteString("-Please wait for the Load Bar to complete.  It's a bit slow, but as more of the file is translated, it will speed up.  If it gets stuck in the 90's, that's fine, consider it done. I'll fix this bug soon.<br><br>\n");
-
+		htmlFile.WriteString("-Press the Load Data button when you come back to the page to load your changes.<br><br>\n");		
+		
 		htmlFile.WriteString("<b>Style:</b><br>\n");
 		htmlFile.WriteString("-Use only a single space after a period.<br>\n");
 		htmlFile.WriteString("-You do not need to worry about line breaks.  Just translate the text as one line.  The text insertion tool will automatically add newlines as needed.<br>\n");
 		htmlFile.WriteString("-There is a 160 character limit for each dialog entry.<br><br>\n\n");
 
-		htmlFile.WriteString("<b>LIPS Events</b><br>\n");
-		htmlFile.WriteString("-Pink rows are LIPS events where the user has to pick which line to say.  When translating these, insert a \" &lt;br&gt; \" without the quotes to signigy the next option.<br><br>\n");
-		htmlFile.WriteString("For example: The following line has two options.<br>\n");
-		htmlFile.WriteString("<img src=\"..\\ExtractedData\\Dialog\\0100TBL\\67.png\"><br>\n");
-		htmlFile.WriteString("It would be translated as: <br>\n");
-		htmlFile.WriteString("I'm on duty! &lt;br&gt; First I'd like to know more about you.<br><br>\n\n");
-
 		htmlFile.WriteString("<b>Naming Conventions:</n><br>\n");
-		htmlFile.WriteString("<a href=\"https://docs.google.com/spreadsheets/d/1rgafQe78vML_xbxnYuOSlO8P5C8nuhgLjMJOExUQsm0/edit?usp=sharing\" target=\"_blank\">Click here to view the naming conventions for Characters, Locations, and Terms</a> <br>\n");
-
+		htmlFile.WriteString("<a href=\"https://docs.google.com/spreadsheets/d/1rgafQe78vML_xbxnYuOSlO8P5C8nuhgLjMJOExUQsm0/edit?usp=sharing\" target=\"_blank\">Click here to view the naming conventions for Characters, Locations, and Terms</a> </b><br><br>\n\n");
+		
+		htmlFile.WriteString("<b>Notes about MES files:</b><br>\n");
+		htmlFile.WriteString("-It's possible that some of the faces are incorrect, so if the line sounds strange for the character, it's probably the wrong face.<br>\n");
+		htmlFile.WriteString("-Unlike the TBL files, I have not been able to figure out how to identify LIPS lines in the MES files.<br><br>\n\n");
+		
 		htmlFile.WriteString("<?php\n");
 		htmlFile.WriteString("$currUser = $_SERVER['PHP_AUTH_USER'];\n");
 		htmlFile.WriteString("if( $currUser == \"swtranslator\" )\n");
@@ -2753,21 +2625,7 @@ bool CreateMesSpreadSheets(const string& dialogImageDirectory, const string& sak
 		htmlFile.WriteString("               <input align=\"center\" type=\"button\" value=\"Load Data\" onclick=\"LoadData()\"/>\n");
 		htmlFile.WriteString("          </td>\n");
 		htmlFile.WriteString("     </tr>\n");
-		htmlFile.WriteString("     <tr>\n");
-		htmlFile.WriteString("          <td>\n");
-		htmlFile.WriteString("               Duplicate Load Progress\n");
-		htmlFile.WriteString("          </td>\n");
-		htmlFile.WriteString("          <td width=\"400\">\n");
-		htmlFile.WriteString("               <div id=\"myProgress\">\n");
-		htmlFile.WriteString("               <div id=\"myBar\"></div>\n");
-		htmlFile.WriteString("          </div>\n");
-		htmlFile.WriteString("          </td>\n");
-		htmlFile.WriteString("          <td>\n");
-		htmlFile.WriteString("               <div id=\"LoadPercent\">0</div>\n");
-		htmlFile.WriteString("          </td>\n");
-		htmlFile.WriteString("     </tr>\n");
 		htmlFile.WriteString("</table><br>\n\n");
-
 
 		//Write table
 		htmlFile.WriteString("<table>\n");
@@ -2794,8 +2652,8 @@ bool CreateMesSpreadSheets(const string& dialogImageDirectory, const string& sak
 			int faceImageId = evtFileData.GetFaceImageNumber(id);
 			if( faceImageId != -1 )
 			{
-				//snprintf(buffer, 2048, "<td width=\"48\"><img src=\"..\\ExtractedData\\Faces\\FACE%s\\%02x.png\"></td>", mesNumber.c_str(), faceImageId);
-				snprintf(buffer, 2048, "<td width=\"48\"><img src=\"..\\FACE\\FACE%s\\%i.png\"></td>", mesNumber.c_str(), faceImageId);
+				snprintf(buffer, 2048, "<td width=\"48\"><img src=\"..\\ExtractedData\\Faces\\FACE%s\\%i.png\"></td>", mesNumber.c_str(), faceImageId);
+				//snprintf(buffer, 2048, "<td width=\"48\"><img src=\"..\\FACE\\FACE%s\\%i.png\"></td>", mesNumber.c_str(), faceImageId);
 			}
 			else
 			{
@@ -2804,8 +2662,8 @@ bool CreateMesSpreadSheets(const string& dialogImageDirectory, const string& sak
 			}
 			htmlFile.WriteString(string(buffer));
 
-			//snprintf(buffer, 2048, "<td width=\"240\"><img src=\"..\\ExtractedData\\Dialog\\M%sMES\\%s\"></td>", mesNumber.c_str(), fileNameInfo.mFileName.c_str());
-			snprintf(buffer, 2048, "<td width=\"240\"><img src=\"..\\Dialog\\M%sMES\\%s\"></td>", mesNumber.c_str(), fileNameInfo.mFileName.c_str());
+			snprintf(buffer, 2048, "<td width=\"240\"><img src=\"..\\ExtractedData\\Dialog\\M%sMES\\%s\"></td>", mesNumber.c_str(), fileNameInfo.mFileName.c_str());
+			//snprintf(buffer, 2048, "<td width=\"240\"><img src=\"..\\Dialog\\M%sMES\\%s\"></td>", mesNumber.c_str(), fileNameInfo.mFileName.c_str());
 			htmlFile.WriteString(string(buffer));
 
 			snprintf(buffer, 2048, "<td width=\"480\"><textarea id=\"edit_%s\" contenteditable=true onchange=\"SaveEdits('%i.bmp', 'edit_%i')\" style=\"border: none; width: 100%%; -webkit-box-sizing: border-box; -moz-box-sizing: border-box; box-sizing: border-box;\">Untranslated</textarea></td>", pVarSuffix, num + 1, num + 1);
@@ -3331,6 +3189,7 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& dup
 
 		htmlFile.WriteString("<br>\n");
 		htmlFile.WriteString("<b>Instructions:</b><br>\n");
+		htmlFile.WriteString("-Please let me know once the file is complete by emailing me @ sakurataisentranslation@gmail.com<br>\n");
 		htmlFile.WriteString("-This page is best displayed using Chrome.  Otherwise some of the table borders are missing for some reason.<br>\n");
 		htmlFile.WriteString("-Skip any row that is grayed out.<br>\n");
 		htmlFile.WriteString("-Your changes are automatically saved.<br>\n");
