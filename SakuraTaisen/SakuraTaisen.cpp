@@ -988,7 +988,7 @@ bool CreateTranslatedFontSheet(const string& inTranslatedFontSheet, const string
 
 	//Convert it to the SakuraTaisen format
 	PaletteData sakuraPalette;
-	sakuraPalette.CreateFrom32BitData(origTranslatedBmp.mBitmapData.mPaletteData.mpRGBA, origTranslatedBmp.mBitmapData.mPaletteData.mSizeInBytes);
+	sakuraPalette.CreateFrom32BitData(origTranslatedBmp.mBitmapData.mPaletteData.mpRGBA, origTranslatedBmp.mBitmapData.mPaletteData.mSizeInBytes, false);
 
 	//Fix up palette
 	//First index needs to have the transparent color, in our case that's white
@@ -1235,11 +1235,29 @@ bool PatchPalettes(const string& rootDirectory, const string& originalPalette, c
 		return false;
 	}
 
+	vector<string> patchableFiles;
+	patchableFiles.push_back( string("SAKURA") );
+
 	vector<FileNameContainer> foundFiles;
 
 	//Go trhough all files in the SakuraTaisen directory searching for palette data
 	for(const FileNameContainer& sakuraFile : allFiles)
 	{
+		//Only patch certain files right now because other files have a different palette format
+		bool bCanPatchFile = false;
+		for(const string& patchableFileName : patchableFiles)
+		{
+			if( sakuraFile.mFileName == patchableFileName )
+			{
+				bCanPatchFile = true;
+				break;
+			}
+		}
+		if( !bCanPatchFile )
+		{
+			continue;
+		}
+
 		printf("Searching within: %s\n", sakuraFile.mNoExtension.c_str());
 
 		FileData sakuraFileData;
@@ -1331,7 +1349,7 @@ bool PatchPalettes(const string& rootDirectory, const string& originalPalette, c
 
 	for(const FileNameContainer& patchedFile : foundFiles)
 	{
-		printf("Patched: %s\n", patchedFile.mFileName.c_str());
+		printf("Patched palette in: %s\n", patchedFile.mFileName.c_str());
 	}
 
 	printf("PatchPalettes Succeeded\n");
@@ -3836,7 +3854,7 @@ bool PatchTMapSP(const string& sakuraDirectory, const string& patchDataPath)
 
 	//Convert it to the SakuraTaisen format
 	PaletteData sakuraPalette;
-	sakuraPalette.CreateFrom32BitData(firstImage.mBitmapData.mPaletteData.mpRGBA, firstImage.mBitmapData.mPaletteData.mSizeInBytes);
+	sakuraPalette.CreateFrom32BitData(firstImage.mBitmapData.mPaletteData.mpRGBA, firstImage.mBitmapData.mPaletteData.mSizeInBytes, false);
 
 	//Fix up palette
 	//First index needs to have the transparent color, in our case that's white
@@ -4151,6 +4169,7 @@ void PrintHelp()
 	printf("ExtractFACEFiles rootSakuraTaisenDirectory outDirectory\n");
 	printf("ExtractTMapSP rootSakuraTaisenDirectory paletteFile outDirectory\n");
 	printf("PatchTMapSP sakuraDirectory patchDataPath\n");
+	printf("CompressFile inFilePath outFilePath\n");
 	printf("PatchGame rootSakuraTaisenDirectory patchedSakuraTaisenDirectory translatedTextDirectory fontSheet originalPalette patchedTMapSpDataPath \n");
 }
 
@@ -4196,6 +4215,31 @@ void DecompressionTest()
 		fclose(pOutFile);
 	}
 	delete[] dest;
+}
+
+void CompressFile(const string& filePath, const string& outPath)
+{
+	FileData testData;
+	FileNameContainer inFileName(filePath.c_str());
+	if( !testData.InitializeFileData(inFileName) )
+	{
+		return;
+	}
+
+	FileWriter outFile;
+	if( !outFile.OpenFileForWrite(outPath) )
+	{
+		return;
+	}
+
+	char* pOutData = new char[testData.GetDataSize()];
+	for(unsigned long i = 0; i < testData.GetDataSize(); ++i)
+	{
+		pOutData[i] = testData.GetData()[i] << 1;
+	}
+	outFile.WriteData(pOutData, testData.GetDataSize());
+
+	delete[] pOutData;
 }
 
 int main(int argc, char *argv[])
@@ -4383,6 +4427,13 @@ int main(int argc, char *argv[])
 	
 		std::vector<EVTFileData> outData;
 		ParseEvtFiles(sakuraDirectory, outData);
+	}
+	else if(command == "CompressFile" && argc == 4)
+	{
+		const string inFile(argv[2]);
+		const string outFile(argv[3]);
+
+		CompressFile(inFile, outFile);
 	}
 	else
 	{

@@ -158,7 +158,7 @@ public:
 
 	bool        CreateFrom15BitData(const char* pInData, int inSize);
 	bool        CreateFrom24BitData(const char* pInData, int inSize);
-	bool        CreateFrom32BitData(const char* pInData, int inSize);
+	bool        CreateFrom32BitData(const char* pInData, int inSize, bool bDropFirstBit);
 	const char* GetData() const {return mpPaletteData;}
 	int         GetSize() const {return mNumBytesInPalette;}
 	void        SetValue(int index, unsigned short value);
@@ -295,6 +295,15 @@ public:
 	std::vector<Tile> mTiles;
 
 	bool ExtractTiles(unsigned int inTileDimX, unsigned int inTileDimY, unsigned int outTileDimX, unsigned int outTileDimY, const BitmapReader& inBitmap);
+};
+
+struct PRSCompressor
+{
+	char*         mpCompressedData = nullptr;
+	unsigned long mCompressedSize  = 0;
+
+	~PRSCompressor();
+	void CompressData(void* pInData, const unsigned long inDataSize);
 };
 
 struct PRSDecompressor

@@ -540,7 +540,7 @@ bool PaletteData::CreateFrom24BitData(const char* pInPaletteData, int inPaletteS
 	return true;
 }
 
-bool PaletteData::CreateFrom32BitData(const char* pInPaletteData, int inPaletteSize)
+bool PaletteData::CreateFrom32BitData(const char* pInPaletteData, int inPaletteSize, bool bDropFirstBit)
 {
 	if( inPaletteSize != 64 )
 	{
@@ -554,17 +554,18 @@ bool PaletteData::CreateFrom32BitData(const char* pInPaletteData, int inPaletteS
 	mNumBytesInPalette = numColors*numBytesPerColor;
 	mpPaletteData      = new char[mNumBytesInPalette];
 
+	const unsigned short bitMask = bDropFirstBit ? 0x7fff : 0xffff;
 	for(int i = 0, outIndex = 0; i < inPaletteSize; i += 4, outIndex += 2)
 	{
 		assert(outIndex + 1 < mNumBytesInPalette);
 
-		//Bring into 15bit [0,31] range 
+		//Bring into 16bit [0,31] range 
 		const unsigned char r = (unsigned char)floor( ((unsigned char)(pInPaletteData[i+0])/255.f)*31.f + 0.5f);
 		const unsigned char g = (unsigned char)floor( ((unsigned char)(pInPaletteData[i+1])/255.f)*31.f + 0.5f);
 		const unsigned char b = (unsigned char)floor( ((unsigned char)(pInPaletteData[i+2])/255.f)*31.f + 0.5f);
 
-		//Swap byte order so data is written in big endian order
-		unsigned short outColor = (r << 10) + (g << 5) + b;
+		//Swap byte order so data is written in big endian order.  Drop off the first bit if needed.
+		unsigned short outColor = ((r << 10) + (g << 5) + b) & bitMask;
 		std::reverse((char*)&outColor, ((char*)&outColor + 2));
 
 		//copy data over to the palette
@@ -853,6 +854,24 @@ bool TileExtractor::ExtractTiles(unsigned int inTileWidth, unsigned int inTileHe
 	}
 
 	return true;
+}
+
+/////////////////////////////////
+//        PRSCompressor        //
+/////////////////////////////////
+PRSCompressor::~PRSCompressor()
+{
+	delete[] mpCompressedData;
+	mpCompressedData = nullptr;
+
+	mCompressedSize = 0;
+}
+
+void PRSCompressor::CompressData(void* pInData, const unsigned long inDataSize)
+{
+	mpCompressedData = new char[inDataSize];
+
+	mCompressedSize = prs_compress(pInData, (void*)mpCompressedData, inDataSize);
 }
 
 ///////////////////////////////////
