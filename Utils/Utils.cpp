@@ -559,7 +559,6 @@ bool PaletteData::CreateFrom32BitData(const char* pInPaletteData, int inPaletteS
 	{
 		assert(outIndex + 1 < mNumBytesInPalette);
 
-		//Bring into 16bit [0,31] range 
 		const unsigned char r = (unsigned char)floor( ((unsigned char)(pInPaletteData[i+0])/255.f)*31.f + 0.5f);
 		const unsigned char g = (unsigned char)floor( ((unsigned char)(pInPaletteData[i+1])/255.f)*31.f + 0.5f);
 		const unsigned char b = (unsigned char)floor( ((unsigned char)(pInPaletteData[i+2])/255.f)*31.f + 0.5f);
