@@ -4091,14 +4091,10 @@ void CompressFile(const string& filePath, const string& outPath)
 		return;
 	}
 
-	char* pOutData = new char[testData.GetDataSize()];
-	for(unsigned long i = 0; i < testData.GetDataSize(); ++i)
-	{
-		pOutData[i] = testData.GetData()[i] << 1;
-	}
-	outFile.WriteData(pOutData, testData.GetDataSize());
+	PRSCompressor compressedFile;
+	compressedFile.CompressData((void*)testData.GetData(), testData.GetDataSize());
 
-	delete[] pOutData;
+	outFile.WriteData(compressedFile.mpCompressedData, compressedFile.mCompressedSize);
 }
 
 int main(int argc, char *argv[])
