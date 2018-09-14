@@ -223,7 +223,7 @@ bool FileData::ReadInFileData(const char* pFileName)
 	return true;
 }
 
-bool FileData::IsDataTheSame(const char* pData1, const char* pData2, const unsigned long memSize) const
+bool FileData::IsDataTheSame(const char* pData1, const char* pData2, const unsigned long memSize)
 {
 	for(unsigned long currIndex = 0; currIndex < memSize; ++currIndex)
 	{
@@ -283,19 +283,19 @@ bool FileData::DoesThisFileContain(const FileData& otherFile, vector<unsigned lo
 	return pOutOffsets ? pOutOffsets->size() > 0 : false;
 }
 
-bool FileData::FindDataIndex(const char* pInData, unsigned long inDataLength, unsigned long& outIndex) const
+bool FindDataWithinBuffer(const char* pBuffer, unsigned long bufferSize, const char* pSearchData, const unsigned int searchDataSize, unsigned long &outIndex)
 {
-	if( inDataLength > mFileSize )	
+	if( searchDataSize > bufferSize )
 	{
 		return false;
 	}
 
 	unsigned long       currentOffset = 0;
-	const unsigned long finalOffset   = mFileSize - inDataLength;
+	const unsigned long finalOffset   = bufferSize - searchDataSize;
 
 	while( currentOffset <= finalOffset )
 	{
-		if( IsDataTheSame(mpData + currentOffset, pInData, inDataLength) )
+		if( FileData::IsDataTheSame(pBuffer + currentOffset, pSearchData, searchDataSize) )
 		{
 			outIndex = currentOffset;
 			return true;
@@ -305,6 +305,11 @@ bool FileData::FindDataIndex(const char* pInData, unsigned long inDataLength, un
 	}
 
 	return false;
+}
+
+bool FileData::FindDataIndex(const char* pInData, unsigned long inDataLength, unsigned long& outIndex) const
+{
+	return FindDataWithinBuffer(mpData, mFileSize, pInData, inDataLength, outIndex);
 }
 
 unsigned long FileData::GetCRC()

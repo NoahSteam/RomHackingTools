@@ -3935,6 +3935,79 @@ bool PatchTMapSP(const string& sakuraDirectory, const string& patchDataPath)
 	return true;
 }
 
+void FindCompressedData(const string& inCompressedFilePath, const string& inUncompressedFilePath, const string& outDirectory)
+{
+	FileNameContainer compressedFileName(inCompressedFilePath.c_str());
+	FileData compresedFile;
+	if( !compresedFile.InitializeFileData(compressedFileName) )
+	{
+		return;
+	}
+
+	FileNameContainer uncompressedFileName(inUncompressedFilePath.c_str());
+	FileData uncompressedFile;
+	if( !uncompressedFile.InitializeFileData(uncompressedFileName) )
+	{
+		return;
+	}
+
+	struct FoundData
+	{
+		FoundData(unsigned long a, unsigned long b) : uncompressionStart(a), offestInUncompressedData(b){}
+		unsigned long uncompressionStart;
+		unsigned long offestInUncompressedData;
+	};
+
+	//Uncompress the compressed data starting from the first byte and going all the way to the end.  Each time, check to see if it contains the uncompressed data we are searching for.
+	vector<FoundData> foundIndices;
+	const unsigned long fileSize = compresedFile.GetDataSize();
+	for(unsigned long index = 0; index < fileSize; ++index)
+	{
+		printf("Progress: %lu/%lu\n", index, fileSize);
+
+		//Uncompress
+		PRSDecompressor decompressor;
+		decompressor.UncompressData( (void*)(compresedFile.GetData() + index) );
+
+		//Check to see if the search data is found
+		unsigned long foundIndex = 0;
+		if( FindDataWithinBuffer(decompressor.mpUncompressedData, decompressor.mUncompressedDataSize, uncompressedFile.GetData(), uncompressedFile.GetDataSize(), foundIndex) )
+		{
+			foundIndices.push_back( FoundData(index, foundIndex) );
+			printf("Found at: %lu\n", index);
+
+			char numBuffer[12];
+			sprintf_s(numBuffer, 12, "%08x", index);
+
+			//Output uncompressed data
+			const string outFileName = outDirectory + string(numBuffer) + string(".bin");
+			FileWriter outFile;
+			if( !outFile.OpenFileForWrite(outFileName) )
+			{
+				printf("Unable to open file for output: %s", outFileName.c_str());
+			}
+			else
+			{
+				outFile.WriteData(decompressor.mpUncompressedData, decompressor.mUncompressedDataSize);
+			}
+		}
+	}
+	
+	if( foundIndices.size() )
+	{
+		printf("Results:\n");
+		
+		for(const FoundData& foundResult : foundIndices)
+		{
+			printf("Found: %08x %08x\n", foundResult.uncompressionStart, foundResult.offestInUncompressedData);
+		}
+	}
+	else
+	{
+		printf("Data not found:\n");
+	}
+}
+
 bool PatchGame(const string& rootSakuraTaisenDirectory, const string& patchedSakuraTaisenDirectory, const string& translatedTextDirectory, const string& fontSheetFileName, const string& originalPaletteFileName, 
 	const string &patchedTMapSPDataPath)
 {
@@ -4029,6 +4102,7 @@ void PrintHelp()
 	printf("ExtractTMapSP rootSakuraTaisenDirectory paletteFile outDirectory\n");
 	printf("PatchTMapSP sakuraDirectory patchDataPath\n");
 	printf("CompressFile inFilePath outFilePath\n");
+	printf("FindCompressedFile compressedFile uncompressedFile\n");
 	printf("PatchGame rootSakuraTaisenDirectory patchedSakuraTaisenDirectory translatedTextDirectory fontSheet originalPalette patchedTMapSpDataPath \n");
 }
 
@@ -4289,6 +4363,14 @@ int main(int argc, char *argv[])
 		const string outFile(argv[3]);
 
 		CompressFile(inFile, outFile);
+	}
+	else if(command == "FindCompressedData" && argc == 5 )
+	{
+		const string compressedFile(argv[2]);
+		const string uncompressedFile(argv[3]);
+		const string outDirectory = string(argv[4]) + Seperators;
+
+		FindCompressedData(compressedFile, uncompressedFile, outDirectory);
 	}
 	else
 	{

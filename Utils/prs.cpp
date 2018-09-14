@@ -204,7 +204,7 @@ u32 prs_compress(void* source,void* dest,u32 size)
             prs_rawbyte(&pc);
         } 
 		else 
-{
+		{
             //if (lssize > 250) lssize = 250;
             prs_copy(&pc,lsoffset,lssize);
             x += (lssize - 1);

@@ -99,6 +99,8 @@ Letter 'C' in ENDING.BIN a 0x0000c398
 Part of 'C' is in LOGO.SH2 0x00010112 <-Try messing with the values here and then see how it affects VDP1.  Loaded at 0x00214112 at run time.
 Compression expanding into 0x060d0380
 
+Text codes in LOGO.SH2 @ 0x000061E8.  0020A1E0 in memory. 001000100070 where 70 is the index into the font sheet.  The index is 0 based and is multiplied by 16.
+
 Loaded During Main Menu:
 OPSAKURA.CPK @0x06080000
 TITLESE @0x05a54040

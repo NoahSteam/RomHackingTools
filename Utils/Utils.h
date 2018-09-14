@@ -83,7 +83,6 @@ class FileData
 	bool          mbCrcCalculated;
 	
 private:
-	bool IsDataTheSame(const char* pData1, const char* pData2, const unsigned long memSize) const;
 	bool ReadInFileData(const char* pFileName);
 
 public:
@@ -99,6 +98,8 @@ public:
 
 	const char*   GetData() const {return mpData;}
 	unsigned long GetDataSize() const {return mBufferSize;}
+
+	static bool IsDataTheSame(const char* pData1, const char* pData2, const unsigned long memSize);
 };
 
 class TextFileData
@@ -318,6 +319,7 @@ struct PRSDecompressor
 void FindAllFilesWithinDirectory(const std::string& inDirectoryPath, std::vector<FileNameContainer>& outFileNames);
 bool CreateDirectoryHelper(const std::string& dirName);
 bool AreFilesTheSame(const FileData& file1, const FileNameContainer& file2Name);
+bool FindDataWithinBuffer(const char* pBuffer, unsigned long bufferSize, const char* pSearchData, const unsigned int searchDataSize, unsigned long& outIndex);
 unsigned long prs_decompress_size(void* source);
 unsigned long prs_decompress(void* source, void* dest);
 unsigned long prs_compress(void* source, void* dest, unsigned long size);
