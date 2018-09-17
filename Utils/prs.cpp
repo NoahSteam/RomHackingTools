@@ -199,7 +199,7 @@ u32 prs_compress(void* source,void* dest,u32 size)
         }
         if (lssize == 0)
         {
-            printf("> > > %08X->%08X byte\n",x,pc.dstptr - pc.dstptr_orig);
+   //         printf("> > > %08X->%08X byte\n",x,pc.dstptr - pc.dstptr_orig);
             //pc.srcptr = (u8*)((DWORD)source + x);
             prs_rawbyte(&pc);
         } 

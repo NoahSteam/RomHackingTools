@@ -971,7 +971,7 @@ void ExtractText(const string& inSearchDirectory, const string& inPaletteFileNam
 	}
 }
 
-bool CreateTranslatedFontSheet(const string& inTranslatedFontSheet, const string& outPath)
+bool CreateTranslatedFontSheet(const string& inTranslatedFontSheet, const string& outPath, bool bAutoName = true)
 {
 	//Read in translated font sheet
 	BitmapReader origTranslatedBmp;
@@ -1016,7 +1016,7 @@ bool CreateTranslatedFontSheet(const string& inTranslatedFontSheet, const string
 	}
 
 	const string outPaletteName = outPath + PatchedPaletteName;
-	const string outTableName   = outPath + PatchedKNJName;
+	const string outTableName   = bAutoName ? outPath + PatchedKNJName : outPath;
 
 	//Ouptut the palette
 	FileWriter outPalette;
@@ -3953,9 +3953,10 @@ void FindCompressedData(const string& inCompressedFilePath, const string& inUnco
 
 	struct FoundData
 	{
-		FoundData(unsigned long a, unsigned long b) : uncompressionStart(a), offestInUncompressedData(b){}
+		FoundData(unsigned long a, unsigned long b, unsigned long c) : uncompressionStart(a), offestInUncompressedData(b), dataSize(c){}
 		unsigned long uncompressionStart;
 		unsigned long offestInUncompressedData;
+		unsigned long dataSize;
 	};
 
 	//Uncompress the compressed data starting from the first byte and going all the way to the end.  Each time, check to see if it contains the uncompressed data we are searching for.
@@ -3973,7 +3974,7 @@ void FindCompressedData(const string& inCompressedFilePath, const string& inUnco
 		unsigned long foundIndex = 0;
 		if( FindDataWithinBuffer(decompressor.mpUncompressedData, decompressor.mUncompressedDataSize, uncompressedFile.GetData(), uncompressedFile.GetDataSize(), foundIndex) )
 		{
-			foundIndices.push_back( FoundData(index, foundIndex) );
+			foundIndices.push_back( FoundData(index, foundIndex, uncompressedFile.GetDataSize()) );
 			printf("Found at: %lu\n", index);
 
 			char numBuffer[12];
@@ -3999,111 +4000,13 @@ void FindCompressedData(const string& inCompressedFilePath, const string& inUnco
 		
 		for(const FoundData& foundResult : foundIndices)
 		{
-			printf("Found: %08x %08x\n", foundResult.uncompressionStart, foundResult.offestInUncompressedData);
+			printf("Found: %08x %08x Size: %ul\n", foundResult.uncompressionStart, foundResult.offestInUncompressedData, foundResult.dataSize);
 		}
 	}
 	else
 	{
 		printf("Data not found:\n");
 	}
-}
-
-bool PatchGame(const string& rootSakuraTaisenDirectory, const string& patchedSakuraTaisenDirectory, const string& translatedTextDirectory, const string& fontSheetFileName, const string& originalPaletteFileName, 
-	const string &patchedTMapSPDataPath)
-{
-	char buffer[MAX_PATH];
-	const DWORD dwRet = GetCurrentDirectory(MAX_PATH, buffer);
-	if( !dwRet )
-	{
-		printf("Cannot patch game.  Could not find current directory.  Error: (%d)\n", GetLastError());
-		return false;
-	}
-
-	//Create temp work directory
-	const string tempDir = string(buffer) + string("\\Temp\\");
-	if( !CreateDirectoryHelper(tempDir) )
-	{
-		printf("Cannot patch game.  Could not create temp work directory.  Error: (%d)\n", GetLastError());
-		return false;
-	}
-
-	//Step 1
-	if( !CreateTranslatedFontSheet(fontSheetFileName, tempDir) )
-	{
-		printf("CreateTranslatedFontSheet failed.  Patch unsuccessful.\n");
-		return false;
-	}
-
-	//Step2
-	const string newPaletteFileName = tempDir + PatchedPaletteName; //Created by CreateTranslatedFontSheet
-	if( !PatchPalettes(rootSakuraTaisenDirectory, originalPaletteFileName, newPaletteFileName, patchedSakuraTaisenDirectory, true) )
-	{
-		printf("PatchPalettes failed.  Patch unsuccessful.\n");
-		return false;
-	}
-
-	//Step 3
-	if( !FixupSakura(patchedSakuraTaisenDirectory) )
-	{
-		printf("FixupSakura failed.  Patch unsuccessful.\n");
-		return false;
-	}
-
-	//Step 4
-	if( !PatchTMapSP(patchedSakuraTaisenDirectory, patchedTMapSPDataPath) )
-	{
-		printf("PatchTMapSP failed.  Patch unsuccessful.\n");
-		return false;
-	}
-
-	//Step 5
-	const string translatedKNJPath = tempDir + PatchedKNJName; //Created by CreateTranslatedFontSheet
-	const string patchedKNJPath    = patchedSakuraTaisenDirectory + string("SAKURA1\\");
-	if( !PatchKNJ(rootSakuraTaisenDirectory, translatedKNJPath, patchedKNJPath) )
-	{
-		printf("PatchKNJ failed.  Patch unsuccessful.\n");
-		return false;
-	}
-
-	//Step 6
-	if( !InsertText(rootSakuraTaisenDirectory, translatedTextDirectory, patchedSakuraTaisenDirectory, true) )
-	{
-		printf("Insert Text failed.  Patch unsuccessful.\n");
-		return false;
-	}
-
-	printf("Patching Successful!\n");
-
-	return true;
-}
-
-void PrintHelp()
-{
-	printf("usage: SakuraTaisen [command]\n");
-	printf("Commands:\n");
-	printf("ExtractRawText rootSakuraTaisenDirectory outDirectory\n");
-	printf("ExtractFontSheets rootSakuraTaisenDirectory paletteFileName outDirectory\n");
-	printf("ExtractText rootSakuraTaisenDirectory paletteFileName outDirectory\n");
-	printf("CreateTranslatedFontSheets translatedFontSheet outDirectory\n");
-	printf("ConvertTranslatedText translatedTextDir outDirectory\n");
-	printf("PatchGameKNJ rootSakuraTaisenDirectory newKNJ outDirectory\n");
-	printf("PatchPalettes rootSakuraTaisenDirectory originalPalette newPalette outDirectory\n");
-	printf("InsertText rootSakuraTaisenDirectory translatedText outDirectory\n");
-	printf("FindDuplicateText dialogDirectory outFile\n");
-	printf("FindDialogOrder rootSakuraTaisenDirectory outDirectory\n");
-	printf("ParseEVTFiles rootSakuraTaisenDirectory\n");
-	printf("CreateTBLSpreadsheets dialogImageDirectory duplicatesFile sakura1Directory\n");
-	printf("CreateMesSpreadsheets dialogImageDirectory rootSakuraTaisenDirectory\n");
-	printf("CreateTMapSpSpreadsheet imageDirectory\n");
-	printf("ExtractImages fileName paletteFile width height outDirectory\n");
-	printf("Extract8BitImage fileName paletteFile offset width height numColors[256, 128] outDirectory\n");
-	printf("ExtractFCEFiles rootSakuraTaisenDirectory paletteFile outDirectory\n");
-	printf("ExtractFACEFiles rootSakuraTaisenDirectory outDirectory\n");
-	printf("ExtractTMapSP rootSakuraTaisenDirectory paletteFile outDirectory\n");
-	printf("PatchTMapSP sakuraDirectory patchDataPath\n");
-	printf("CompressFile inFilePath outFilePath\n");
-	printf("FindCompressedFile compressedFile uncompressedFile\n");
-	printf("PatchGame rootSakuraTaisenDirectory patchedSakuraTaisenDirectory translatedTextDirectory fontSheet originalPalette patchedTMapSpDataPath \n");
 }
 
 int GetBytesInSequence(unsigned char inByte)
@@ -4169,6 +4072,162 @@ void CompressFile(const string& filePath, const string& outPath)
 	compressedFile.CompressData((void*)testData.GetData(), testData.GetDataSize());
 
 	outFile.WriteData(compressedFile.mpCompressedData, compressedFile.mCompressedSize);
+}
+
+bool PatchMainMenu(const string& sakuraRootDirectory, const string& inTranslatedFontSheet, const string& outFontSheetPath)
+{
+	if( !CreateTranslatedFontSheet(inTranslatedFontSheet, outFontSheetPath, false) )
+	{
+		printf("PatchMainMenu: Unable to create translated font sheet\n");
+		return false;
+	}
+
+	const FileNameContainer translatedFileName(outFontSheetPath.c_str());
+	FileData translatedData;
+	if( !translatedData.InitializeFileData(translatedFileName) )
+	{
+		printf("PatchMainMenu: Unable to open converted font sheet %s\n", outFontSheetPath.c_str());
+		return false;
+	}
+
+	PRSCompressor compressor;
+	compressor.CompressData((void*)translatedData.GetData(), translatedData.GetDataSize());
+
+	const FileNameContainer logoFileName( (sakuraRootDirectory + "SAKURA1\\LOGO.SH2").c_str() );
+	FileData logoFileData;
+	if( !logoFileData.InitializeFileData(logoFileName) )
+	{
+		printf("PatchMainMenu: Unable to open LOGO.SH2: %s\n", logoFileName.mFullPath.c_str());
+		return false;
+	}
+
+	//Create new data
+	const unsigned long origCompressedFontSheetSize = 1281;
+	const unsigned long originalDataSize         = logoFileData.GetDataSize() - origCompressedFontSheetSize;
+	const unsigned long newDataSize              = compressor.mCompressedSize + originalDataSize;
+	char* pNewData                               = new char[newDataSize];
+
+	const unsigned long fontSheetOffset = 0xff20;
+	memcpy_s(pNewData, newDataSize, logoFileData.GetData(), fontSheetOffset);
+	memcpy_s(pNewData + fontSheetOffset, newDataSize - fontSheetOffset, compressor.mpCompressedData, compressor.mCompressedSize);
+	memcpy_s(pNewData + fontSheetOffset + compressor.mCompressedSize - fontSheetOffset - compressor.mCompressedSize, newDataSize, logoFileData.GetData() + fontSheetOffset + origCompressedFontSheetSize, logoFileData.GetDataSize() - (fontSheetOffset + origCompressedFontSheetSize));
+
+	FileWriter outFile;
+	if( !outFile.OpenFileForWrite(logoFileName.mFullPath) )
+	{
+		printf("PatchMainMenu: Unable to open LOGO.SH2 for write\n");
+		return false;
+	}
+	outFile.WriteData(pNewData, newDataSize);
+
+	delete[] pNewData;
+
+	return true;
+}
+
+bool PatchGame(const string& rootSakuraTaisenDirectory, const string& patchedSakuraTaisenDirectory, const string& translatedTextDirectory, const string& fontSheetFileName, const string& originalPaletteFileName, 
+	const string &patchedTMapSPDataPath, const string& inMainMainFontSheetPath)
+{
+	char buffer[MAX_PATH];
+	const DWORD dwRet = GetCurrentDirectory(MAX_PATH, buffer);
+	if( !dwRet )
+	{
+		printf("Cannot patch game.  Could not find current directory.  Error: (%d)\n", GetLastError());
+		return false;
+	}
+
+	//Create temp work directory
+	const string tempDir = string(buffer) + string("\\Temp\\");
+	if( !CreateDirectoryHelper(tempDir) )
+	{
+		printf("Cannot patch game.  Could not create temp work directory.  Error: (%d)\n", GetLastError());
+		return false;
+	}
+
+	//Step 1
+	if( !CreateTranslatedFontSheet(fontSheetFileName, tempDir) )
+	{
+		printf("CreateTranslatedFontSheet failed.  Patch unsuccessful.\n");
+		return false;
+	}
+
+	//Step2
+	const string newPaletteFileName = tempDir + PatchedPaletteName; //Created by CreateTranslatedFontSheet
+	if( !PatchPalettes(rootSakuraTaisenDirectory, originalPaletteFileName, newPaletteFileName, patchedSakuraTaisenDirectory, true) )
+	{
+		printf("PatchPalettes failed.  Patch unsuccessful.\n");
+		return false;
+	}
+
+	//Step 3
+	if( !FixupSakura(patchedSakuraTaisenDirectory) )
+	{
+		printf("FixupSakura failed.  Patch unsuccessful.\n");
+		return false;
+	}
+
+	//Step 4
+	if( !PatchTMapSP(patchedSakuraTaisenDirectory, patchedTMapSPDataPath) )
+	{
+		printf("PatchTMapSP failed.  Patch unsuccessful.\n");
+		return false;
+	}
+
+	//Step 5
+	const string translatedKNJPath = tempDir + PatchedKNJName; //Created by CreateTranslatedFontSheet
+	const string patchedKNJPath    = patchedSakuraTaisenDirectory + string("SAKURA1\\");
+	if( !PatchKNJ(rootSakuraTaisenDirectory, translatedKNJPath, patchedKNJPath) )
+	{
+		printf("PatchKNJ failed.  Patch unsuccessful.\n");
+		return false;
+	}
+
+	//Step 6
+	if( !InsertText(rootSakuraTaisenDirectory, translatedTextDirectory, patchedSakuraTaisenDirectory, true) )
+	{
+		printf("Insert Text failed.  Patch unsuccessful.\n");
+		return false;
+	}
+
+	//Step 7
+	const string translatedMainMenuFontSheetPath = tempDir + "TranslatedMainMenuFontSheet.bin"; //Created by CreateTranslatedFontSheet
+	if( !PatchMainMenu(patchedSakuraTaisenDirectory, inMainMainFontSheetPath, translatedMainMenuFontSheetPath) )
+	{
+		printf("Patching MainMenu LOGO.SH2 failed.\n");
+		return false;
+	}
+	printf("Patching Successful!\n");
+
+	return true;
+}
+
+void PrintHelp()
+{
+	printf("usage: SakuraTaisen [command]\n");
+	printf("Commands:\n");
+	printf("ExtractRawText rootSakuraTaisenDirectory outDirectory\n");
+	printf("ExtractFontSheets rootSakuraTaisenDirectory paletteFileName outDirectory\n");
+	printf("ExtractText rootSakuraTaisenDirectory paletteFileName outDirectory\n");
+	printf("CreateTranslatedFontSheets translatedFontSheet outDirectory\n");
+	printf("ConvertTranslatedText translatedTextDir outDirectory\n");
+	printf("PatchGameKNJ rootSakuraTaisenDirectory newKNJ outDirectory\n");
+	printf("PatchPalettes rootSakuraTaisenDirectory originalPalette newPalette outDirectory\n");
+	printf("InsertText rootSakuraTaisenDirectory translatedText outDirectory\n");
+	printf("FindDuplicateText dialogDirectory outFile\n");
+	printf("FindDialogOrder rootSakuraTaisenDirectory outDirectory\n");
+	printf("ParseEVTFiles rootSakuraTaisenDirectory\n");
+	printf("CreateTBLSpreadsheets dialogImageDirectory duplicatesFile sakura1Directory\n");
+	printf("CreateMesSpreadsheets dialogImageDirectory rootSakuraTaisenDirectory\n");
+	printf("CreateTMapSpSpreadsheet imageDirectory\n");
+	printf("ExtractImages fileName paletteFile width height outDirectory\n");
+	printf("Extract8BitImage fileName paletteFile offset width height numColors[256, 128] outDirectory\n");
+	printf("ExtractFCEFiles rootSakuraTaisenDirectory paletteFile outDirectory\n");
+	printf("ExtractFACEFiles rootSakuraTaisenDirectory outDirectory\n");
+	printf("ExtractTMapSP rootSakuraTaisenDirectory paletteFile outDirectory\n");
+	printf("PatchTMapSP sakuraDirectory patchDataPath\n");
+	printf("CompressFile inFilePath outFilePath\n");
+	printf("FindCompressedFile compressedFile uncompressedFile\n");
+	printf("PatchGame rootSakuraTaisenDirectory patchedSakuraTaisenDirectory translatedTextDirectory fontSheet originalPalette patchedTMapSpDataPath mainMenuFontSheetPath \n");
 }
 
 int main(int argc, char *argv[])
@@ -4276,7 +4335,7 @@ int main(int argc, char *argv[])
 
 		OutputDialogOrder(searchDirectory, outputFile);
 	}
-	else if( command == "PatchGame" && argc == 8 )
+	else if( command == "PatchGame" && argc == 9 )
 	{
 		const string rootSakuraTaisenDirectory    = string(argv[2]) + Seperators;
 		const string patchedSakuraTaisenDirectory = string(argv[3]) + Seperators;
@@ -4284,8 +4343,9 @@ int main(int argc, char *argv[])
 		const string fontSheet                    = string(argv[5]);
 		const string originalPalette              = string(argv[6]);
 		const string patchedTMapSpDataPath        = string(argv[7]) + Seperators;
+		const string mainMenuFontSheetPath        = string(argv[8]);
 
-		PatchGame(rootSakuraTaisenDirectory, patchedSakuraTaisenDirectory, translatedTextDirectory, fontSheet, originalPalette, patchedTMapSpDataPath);
+		PatchGame(rootSakuraTaisenDirectory, patchedSakuraTaisenDirectory, translatedTextDirectory, fontSheet, originalPalette, patchedTMapSpDataPath, mainMenuFontSheetPath);
 	}
 	else if(command == "CreateTBLSpreadsheets" && argc == 5 )
 	{
