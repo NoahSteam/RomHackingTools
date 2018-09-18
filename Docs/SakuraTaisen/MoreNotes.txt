@@ -31,6 +31,7 @@ CreateMesSpreadsheets D:\Rizwan\SakuraWars\ExtractedData\Disc1\Dialog D:\Rizwan\
 PatchTMapSp d:\Rizwan\SakuraWars\Disc1 D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\TMapSP
 ExtractFACEFiles d:\Rizwan\SakuraWars\Disc1 d:\Rizwan\SakuraWars\ExtractedData\Disc1\FACE
 ParseEVTFiles d:\Rizwan\SakuraWars\Disc1
+FindCompressedData d:\Rizwan\SakuraWars\Disc1\SAKURA1\LOGO.SH2 d:\Rizwan\SakuraWars\Search.bin d:\Rizwan\SakuraWars\UncompressedDataResults
 
 ExtractFontSheets a:\SakuraTaisen\Disc1\ a:\SakuraTaisen\ExtractedData\Disc1\FontSheets\Palette.bin a:\SakuraTaisen\ExtractedData\Disc1\FontSheets
 ExtractFontSheets a:\SakuraTaisen\Disc2\ a:\SakuraTaisen\ExtractedData\Disc1\FontSheets\Palette.bin a:\SakuraTaisen\ExtractedData\Disc2\FontSheets
@@ -43,7 +44,7 @@ CreateTranslatedFontSheets A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\8x12.
 PatchPalettes a:\SakuraTaisen\Disc1 A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\Palette.bin A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\OutPalette.BIN a:\SakuraTaisen\PatchedData\Palettes
 PatchGameKNJ a:\SakuraTaisen\Disc1 A:\SakuraTaisen\PatchedData\TranslatedFontSheet\TranslatedKNJ.BIN a:\SakuraTaisen\PatchedData\KNJ
 FindDuplicateText A:\SakuraTaisen\ExtractedData\Disc1\Dialog a:\SakuraTaisen\ExtractedData\Disc1\Dialog\Duplicates.txt
-PatchGame a:\SakuraTaisen\Disc1 a:\SakuraTaisen\Disc1_Translated A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\TranslatedText A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\6x12.bmp A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\Palette.bin A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\TMapSP
+PatchGame a:\SakuraTaisen\Disc1 a:\SakuraTaisen\Disc1_Translated A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\TranslatedText A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\6x12.bmp A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\Palette.bin A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\TMapSP A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\MainMenuFont.bmp
 CreateTBLSpreadsheets a:\SakuraTaisen\ExtractedData\Disc1\Dialog A:\SakuraTaisen\ExtractedData\Disc1\Dialog\Duplicates.txt a:\SakuraTaisen\Disc1\SAKURA1
 CreateMesSpreadsheets a:\SakuraTaisen\ExtractedData\Disc1\Dialog a:\SakuraTaisen\Disc1\
 ExtractFCEFiles a:\SakuraTaisen\Disc1 A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\FacePalette.bin a:\SakuraTaisen\ExtractedData\Disc1\Faces

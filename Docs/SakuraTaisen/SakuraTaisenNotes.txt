@@ -101,6 +101,14 @@ Compression expanding into 0x060d0380
 
 Text codes in LOGO.SH2 @ 0x000061E8.  0020A1E0 in memory. 001000100070 where 70 is the index into the font sheet.  The index is 0 based and is multiplied by 16.
 
+End of LOGO.SH2 is @0x0023F604 in memory.  The offset is specified in LOGO.SH2 @0x0000420C( value is 0023F604).  @0x0020820C in memory.
+
+-Steps to patch logo file:
+1)Create font sheet
+2)Convert font sheet to saturn format
+3)Compress font sheet
+4)Overwrrite logo.sh2 and offset the non-fontsheet data as needed
+5)Modify character entries at 0x000061E8
 Loaded During Main Menu:
 OPSAKURA.CPK @0x06080000
 TITLESE @0x05a54040

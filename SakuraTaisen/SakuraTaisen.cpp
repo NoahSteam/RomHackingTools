@@ -4107,10 +4107,15 @@ bool PatchMainMenu(const string& sakuraRootDirectory, const string& inTranslated
 	const unsigned long newDataSize              = compressor.mCompressedSize + originalDataSize;
 	char* pNewData                               = new char[newDataSize];
 
-	const unsigned long fontSheetOffset = 0xff20;
+	const unsigned long fontSheetOffset   = 0xff20;
+	const unsigned long compressedDiff    = compressor.mCompressedSize - origCompressedFontSheetSize;
+	const unsigned long newEndOfFontSheet = 0x0023F604 + compressedDiff;
 	memcpy_s(pNewData, newDataSize, logoFileData.GetData(), fontSheetOffset);
 	memcpy_s(pNewData + fontSheetOffset, newDataSize - fontSheetOffset, compressor.mpCompressedData, compressor.mCompressedSize);
-	memcpy_s(pNewData + fontSheetOffset + compressor.mCompressedSize - fontSheetOffset - compressor.mCompressedSize, newDataSize, logoFileData.GetData() + fontSheetOffset + origCompressedFontSheetSize, logoFileData.GetDataSize() - (fontSheetOffset + origCompressedFontSheetSize));
+	memcpy_s(pNewData + fontSheetOffset + compressor.mCompressedSize, newDataSize - fontSheetOffset - compressor.mCompressedSize, logoFileData.GetData() + fontSheetOffset + origCompressedFontSheetSize, logoFileData.GetDataSize() - (fontSheetOffset + origCompressedFontSheetSize));
+
+	unsigned int* pOrigOffsetValue = (unsigned int*)(&pNewData[0x420C]);
+	*pOrigOffsetValue = SwapByteOrder(newEndOfFontSheet);
 
 	FileWriter outFile;
 	if( !outFile.OpenFileForWrite(logoFileName.mFullPath) )

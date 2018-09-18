@@ -154,10 +154,10 @@ void prs_copy(PRS_COMPRESSOR* pc,int offset,u8 size)
     //else printf("> > > prs_copy: %08X->%08X @ %08X:%08X\n",pc->srcptr - pc->srcptr_orig,pc->dstptr - pc->dstptr_orig,offset,size);
     if ((offset > -0x100) && (size <= 5))
     {
-        printf("> > > %08X->%08X sdat %08X %08X\n",pc->srcptr - pc->srcptr_orig,pc->dstptr - pc->dstptr_orig,offset,size);
+     //   printf("> > > %08X->%08X sdat %08X %08X\n",pc->srcptr - pc->srcptr_orig,pc->dstptr - pc->dstptr_orig,offset,size);
         prs_shortcopy(pc,offset,size);
     } else {
-        printf("> > > %08X->%08X ldat %08X %08X\n",pc->srcptr - pc->srcptr_orig,pc->dstptr - pc->dstptr_orig,offset,size);
+    //    printf("> > > %08X->%08X ldat %08X %08X\n",pc->srcptr - pc->srcptr_orig,pc->dstptr - pc->dstptr_orig,offset,size);
         prs_longcopy(pc,offset,size);
     }
     pc->srcptr += size;
@@ -172,7 +172,7 @@ u32 prs_compress(void* source,void* dest,u32 size)
     u32 xsize;
     int lsoffset,lssize;
     prs_init(&pc,source,dest);
-    printf("\n> compressing %08X bytes\n",size);
+  //  printf("\n> compressing %08X bytes\n",size);
     for (x = 0; (u32)x < size; x++)
     {
         lsoffset = lssize = xsize = 0;
