@@ -216,7 +216,7 @@ u32 prs_compress(void* source,void* dest,u32 size)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-u32 prs_decompress(void* source, void* dest) // 800F7CB0 through 800F7DE4 in mem 
+u32 prs_decompress(void* source, void* dest, unsigned long destSize) // 800F7CB0 through 800F7DE4 in mem 
 {
     u32 r3,r5; // 6 unnamed registers 
     u32 bitpos = 9; // 4 named registers 
@@ -228,6 +228,7 @@ u32 prs_decompress(void* source, void* dest) // 800F7CB0 through 800F7DE4 in mem
     int flag;
     int offset;
     u32 x,t; // 2 placed variables 
+	unsigned long incrementedCount = 0;
 
    // printf("\n> decompressing\n");
     currentbyte = sourceptr[0];
@@ -251,6 +252,13 @@ u32 prs_decompress(void* source, void* dest) // 800F7CB0 through 800F7DE4 in mem
      //       printf("> > > %08X->%08X byte\n",sourceptr - sourceptr_orig,destptr - destptr_orig);
             sourceptr++;
             destptr++;
+			incrementedCount++;
+
+			if( incrementedCount > destSize )
+			{
+				int shit = 1;
+				++shit;
+			}
             continue;
         }
 
@@ -284,7 +292,12 @@ u32 prs_decompress(void* source, void* dest) // 800F7CB0 through 800F7DE4 in mem
             }
 			else 
 				r3 += 2;
+
+			u32 oldR5 = r5;
             r5 += (u32)destptr;
+
+			u8 dummy = *(u8*)r5;
+			++dummy;
        //     printf("> > > %08X->%08X ldat %08X %08X %s\n",sourceptr - sourceptr_orig,destptr - destptr_orig,r5 - (u32)destptr,r3,flag ? "inline" : "extended");
         } 
 		else
@@ -321,6 +334,13 @@ u32 prs_decompress(void* source, void* dest) // 800F7CB0 through 800F7DE4 in mem
             r5++;
             r3++;
             destptr++;
+			incrementedCount++;
+
+			if( incrementedCount > destSize )
+			{
+				int shit = 1;
+				++shit;
+			}
         }
     }
 }

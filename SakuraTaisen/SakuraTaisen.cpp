@@ -3977,8 +3977,8 @@ void FindCompressedData(const string& inCompressedFilePath, const string& inUnco
 			foundIndices.push_back( FoundData(index, foundIndex, uncompressedFile.GetDataSize()) );
 			printf("Found at: %lu\n", index);
 
-			char numBuffer[12];
-			sprintf_s(numBuffer, 12, "%08x", index);
+			char numBuffer[50];
+			sprintf_s(numBuffer, 50, "%08x", index);
 
 			//Output uncompressed data
 			const string outFileName = outDirectory + string(numBuffer) + string(".bin");
@@ -4040,7 +4040,7 @@ void DecompressionTest()
 	const unsigned char* compressedData = (const unsigned char*)testData.GetData() + 0xFDC4 + 2;//0xFDD7;//0xFD09;//0xFDF8;
 	unsigned long destSize = prs_decompress_size((void*)compressedData);
 	unsigned char* dest = new unsigned char[destSize];
-	prs_decompress((void *)compressedData, dest);
+	prs_decompress((void *)compressedData, dest, destSize);
 
 	FILE* pOutFile = nullptr;
 	fopen_s(&pOutFile, "A:\\SakuraTaisen\\ExtractedData\\Disc1\\Test\\UncompressedFace.bin", "wb");

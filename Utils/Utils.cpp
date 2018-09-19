@@ -890,6 +890,13 @@ PRSDecompressor::~PRSDecompressor()
 void PRSDecompressor::UncompressData(void* pInData)
 {
 	mUncompressedDataSize = prs_decompress_size((void*)pInData);
-	mpUncompressedData    = new char[mUncompressedDataSize];
-	prs_decompress(pInData, mpUncompressedData);
+	mpUncompressedData    = new char[mUncompressedDataSize + 1];
+	memset(mpUncompressedData, 0, mUncompressedDataSize + 1);
+	prs_decompress(pInData, mpUncompressedData, mUncompressedDataSize);
+
+	if( mpUncompressedData[mUncompressedDataSize] != 0 )
+	{
+		int k = 0;
+		++k;
+	}
 }
