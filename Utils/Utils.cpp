@@ -887,8 +887,20 @@ PRSDecompressor::~PRSDecompressor()
 	mpUncompressedData = nullptr;
 }
 
-void PRSDecompressor::UncompressData(void* pInData)
+bool PRSDecompressor::UncompressData(void* pInData, unsigned int inDataSize)
 {
+	unsigned char* pBuffer = nullptr;
+	int decompressedSize = prs_decompress_buf((uint8_t*)pInData, &pBuffer, inDataSize);
+	if( decompressedSize > 0 )
+	{
+		mpUncompressedData    = std::move( reinterpret_cast<char*>(pBuffer) );
+		mUncompressedDataSize = (unsigned long)decompressedSize;
+
+		return true;
+	}
+
+	return false;
+	/*
 	mUncompressedDataSize = prs_decompress_size((void*)pInData);
 	mpUncompressedData    = new char[mUncompressedDataSize + 1];
 	memset(mpUncompressedData, 0, mUncompressedDataSize + 1);
@@ -899,4 +911,5 @@ void PRSDecompressor::UncompressData(void* pInData)
 		int k = 0;
 		++k;
 	}
+	*/
 }

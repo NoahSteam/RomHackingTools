@@ -313,7 +313,7 @@ struct PRSDecompressor
 	unsigned long mUncompressedDataSize = 0;
 
 	~PRSDecompressor();
-	void UncompressData(void* pInData);
+	bool UncompressData(void* pInData, unsigned int inDataSize);
 };
 
 void FindAllFilesWithinDirectory(const std::string& inDirectoryPath, std::vector<FileNameContainer>& outFileNames);
@@ -323,3 +323,4 @@ bool FindDataWithinBuffer(const char* pBuffer, unsigned long bufferSize, const c
 unsigned long prs_decompress_size(void* source);
 unsigned long prs_decompress(void* source, void* dest, unsigned long destSize);
 unsigned long prs_compress(void* source, void* dest, unsigned long size);
+int prs_decompress_buf(const uint8_t *src, uint8_t **dst, size_t src_len);

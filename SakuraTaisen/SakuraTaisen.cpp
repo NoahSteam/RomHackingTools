@@ -3566,7 +3566,7 @@ void ExtractFACEFiles(const string& sakuraDirectory, const string& outDirectory)
 			}
 
 			PRSDecompressor uncompressedImage;
-			uncompressedImage.UncompressData( (void*)(faceFile.GetData() + compressedDataStart) );
+			uncompressedImage.UncompressData( (void*)(faceFile.GetData() + compressedDataStart), faceFile.GetDataSize() - compressedDataStart );
 
 			//Create palette data
 			//Colors in the palette are in a 15 bit (5:5:5) format.  So we need to & every value by 0x7fff.
@@ -3953,10 +3953,11 @@ void FindCompressedData(const string& inCompressedFilePath, const string& inUnco
 
 	struct FoundData
 	{
-		FoundData(unsigned long a, unsigned long b, unsigned long c) : uncompressionStart(a), offestInUncompressedData(b), dataSize(c){}
+		FoundData(unsigned long a, unsigned long b, unsigned long c, unsigned long d) : uncompressionStart(a), offestInUncompressedData(b), dataSize(c), compressedSize(d){}
 		unsigned long uncompressionStart;
 		unsigned long offestInUncompressedData;
 		unsigned long dataSize;
+		unsigned long compressedSize;
 	};
 
 	//Uncompress the compressed data starting from the first byte and going all the way to the end.  Each time, check to see if it contains the uncompressed data we are searching for.
@@ -3968,13 +3969,20 @@ void FindCompressedData(const string& inCompressedFilePath, const string& inUnco
 
 		//Uncompress
 		PRSDecompressor decompressor;
-		decompressor.UncompressData( (void*)(compresedFile.GetData() + index) );
+		if( !decompressor.UncompressData( (void*)(compresedFile.GetData() + index), compresedFile.GetDataSize() - index ) )
+		{
+			continue;
+		}
 
 		//Check to see if the search data is found
 		unsigned long foundIndex = 0;
 		if( FindDataWithinBuffer(decompressor.mpUncompressedData, decompressor.mUncompressedDataSize, uncompressedFile.GetData(), uncompressedFile.GetDataSize(), foundIndex) )
 		{
-			foundIndices.push_back( FoundData(index, foundIndex, uncompressedFile.GetDataSize()) );
+			//Find size of original compressed data
+			PRSCompressor compressedInfo;
+			compressedInfo.CompressData((void*)decompressor.mpUncompressedData, decompressor.mUncompressedDataSize);
+			
+			foundIndices.push_back( FoundData(index, foundIndex, uncompressedFile.GetDataSize(), compressedInfo.mCompressedSize) );
 			printf("Found at: %lu\n", index);
 
 			char numBuffer[50];
@@ -4000,7 +4008,7 @@ void FindCompressedData(const string& inCompressedFilePath, const string& inUnco
 		
 		for(const FoundData& foundResult : foundIndices)
 		{
-			printf("Found: %08x %08x Size: %ul\n", foundResult.uncompressionStart, foundResult.offestInUncompressedData, foundResult.dataSize);
+			printf("Found: %08x %08x Size: %lu CompressedSize: %lu\n", foundResult.uncompressionStart, foundResult.offestInUncompressedData, foundResult.dataSize, foundResult.compressedSize);
 		}
 	}
 	else
@@ -4092,6 +4100,7 @@ bool PatchMainMenu(const string& sakuraRootDirectory, const string& inTranslated
 
 	PRSCompressor compressor;
 	compressor.CompressData((void*)translatedData.GetData(), translatedData.GetDataSize());
+	//compressor.CompressData((void*)(translatedData.GetData() + (16*16/2)*32), (16*16/2)*40);
 
 	const FileNameContainer logoFileName( (sakuraRootDirectory + "SAKURA1\\LOGO.SH2").c_str() );
 	FileData logoFileData;
@@ -4102,20 +4111,52 @@ bool PatchMainMenu(const string& sakuraRootDirectory, const string& inTranslated
 	}
 
 	//Create new data
-	const unsigned long origCompressedFontSheetSize = 1281;
-	const unsigned long originalDataSize         = logoFileData.GetDataSize() - origCompressedFontSheetSize;
-	const unsigned long newDataSize              = compressor.mCompressedSize + originalDataSize;
-	char* pNewData                               = new char[newDataSize];
+	const unsigned long origCompressedFontSheetSize = 2429;
+	const unsigned long originalDataSize            = logoFileData.GetDataSize() - origCompressedFontSheetSize;
+	const unsigned long compressedDiff              = compressor.mCompressedSize > origCompressedFontSheetSize ? compressor.mCompressedSize - origCompressedFontSheetSize : 0;
+	const unsigned long additionalSpace             = compressedDiff == 0 ? origCompressedFontSheetSize - compressor.mCompressedSize : 0;
+	const unsigned long newDataSize                 = compressor.mCompressedSize + originalDataSize + additionalSpace;
+	char* pNewData                                  = new char[newDataSize];
+	memset(pNewData, 0, newDataSize);
 
 	const unsigned long fontSheetOffset   = 0xff20;
-	const unsigned long compressedDiff    = compressor.mCompressedSize - origCompressedFontSheetSize;
-	const unsigned long newEndOfFontSheet = 0x0023F604 + compressedDiff;
 	memcpy_s(pNewData, newDataSize, logoFileData.GetData(), fontSheetOffset);
 	memcpy_s(pNewData + fontSheetOffset, newDataSize - fontSheetOffset, compressor.mpCompressedData, compressor.mCompressedSize);
-	memcpy_s(pNewData + fontSheetOffset + compressor.mCompressedSize, newDataSize - fontSheetOffset - compressor.mCompressedSize, logoFileData.GetData() + fontSheetOffset + origCompressedFontSheetSize, logoFileData.GetDataSize() - (fontSheetOffset + origCompressedFontSheetSize));
 
+	memcpy_s(pNewData + fontSheetOffset + compressor.mCompressedSize + additionalSpace, 
+		     newDataSize - fontSheetOffset - compressor.mCompressedSize - additionalSpace, 
+		     logoFileData.GetData() + fontSheetOffset + origCompressedFontSheetSize, 
+		     logoFileData.GetDataSize() - (fontSheetOffset + origCompressedFontSheetSize));
+
+	const unsigned long newEndOfFontSheet = 0x0023F604 + compressedDiff;
 	unsigned int* pOrigOffsetValue = (unsigned int*)(&pNewData[0x420C]);
 	*pOrigOffsetValue = SwapByteOrder(newEndOfFontSheet);
+
+	//Update pointers pointing to 0x0023F640
+	const unsigned long new23F640 = SwapByteOrder(0x0023F640 + compressedDiff);
+	*(unsigned int*)(&pNewData[0x1000]) = new23F640;
+	*(unsigned int*)(&pNewData[0x13A4]) = new23F640;
+	*(unsigned int*)(&pNewData[0x1780]) = new23F640;
+	*(unsigned int*)(&pNewData[0x19ED]) = new23F640;
+	*(unsigned int*)(&pNewData[0x1B58]) = new23F640;
+	
+	//Update pointers pointing to 0x0023F644
+	const unsigned long new23F644 = SwapByteOrder(0x0023F644 + compressedDiff);
+	*(unsigned int*)(&pNewData[0x10C0]) = new23F644;
+	*(unsigned int*)(&pNewData[0x13AC]) = new23F644;
+	*(unsigned int*)(&pNewData[0x1560]) = new23F644;
+	*(unsigned int*)(&pNewData[0x1770]) = new23F644;
+	*(unsigned int*)(&pNewData[0x19E4]) = new23F644;
+	*(unsigned int*)(&pNewData[0x1B48]) = new23F644;
+
+	//Update pointers pointing to 0x0023F648
+	const unsigned long new23F648 = SwapByteOrder(0x0023F648 + compressedDiff);
+	*(unsigned int*)(&pNewData[0x0FFC]) = new23F648;
+	*(unsigned int*)(&pNewData[0x1394]) = new23F648;
+	*(unsigned int*)(&pNewData[0x155C]) = new23F648;
+	*(unsigned int*)(&pNewData[0x176C]) = new23F648;
+	*(unsigned int*)(&pNewData[0x19E0]) = new23F648;
+	*(unsigned int*)(&pNewData[0x1B44]) = new23F648;
 
 	FileWriter outFile;
 	if( !outFile.OpenFileForWrite(logoFileName.mFullPath) )

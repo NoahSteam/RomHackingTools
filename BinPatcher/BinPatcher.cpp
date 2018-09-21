@@ -27,6 +27,7 @@ using std::string;
 
 void main()
 {
+	/*
 	char buffer[MAX_PATH];
 	DWORD dwRet = GetCurrentDirectory(MAX_PATH, buffer);
 	if( !dwRet )
@@ -65,4 +66,5 @@ void main()
 	fwrite(originalData.GetData() + patchData.GetDataSize(), originalData.GetDataSize() - patchData.GetDataSize(), 1, pBinaryFile);
 
 	fclose(pBinaryFile);
+	*/
 }

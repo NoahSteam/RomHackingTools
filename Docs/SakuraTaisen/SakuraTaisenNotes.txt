@@ -102,6 +102,10 @@ Compression expanding into 0x060d0380
 Text codes in LOGO.SH2 @ 0x000061E8.  0020A1E0 in memory. 001000100070 where 70 is the index into the font sheet.  The index is 0 based and is multiplied by 16.
 
 End of LOGO.SH2 is @0x0023F604 in memory.  The offset is specified in LOGO.SH2 @0x0000420C( value is 0023F604).  @0x0020820C in memory.
+Also need to fix 0x0a2d6a08 in SAKURA4 ?  
+LOGO.SH2 has a pointer: 0023F640 which will end up writing into our buffer. Fix that shit.
+-Something is reading the addresses 0023618C and 0023616C and doing something with them.  Those addresses hold the original compressed data.
+
 
 -Steps to patch logo file:
 1)Create font sheet

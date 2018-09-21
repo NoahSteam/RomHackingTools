@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 15
-VisualStudioVersion = 15.0.26403.7
+# Visual Studio 14
+VisualStudioVersion = 14.0.25420.1
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "FindData", "FindData\FindData.vcxproj", "{A0B43EEF-503F-48DE-A8C7-EDD0CDFE3A63}"
 	ProjectSection(ProjectDependencies) = postProject
@@ -11,6 +11,10 @@ EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "MemoryAnalyzer", "MemoryAnalyzer\MemoryAnalyzer.vcxproj", "{17C79B2B-FDB2-4E90-A00B-B6B06AC37579}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Utils", "Utils\Utils.vcxproj", "{63C1FACD-74DE-487D-9403-8BA4A6B573CF}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "SakuraTaisen", "SakuraTaisen\SakuraTaisen.vcxproj", "{956B4F06-D543-42AE-8580-BA37A85ADE39}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "BinPatcher", "BinPatcher\BinPatcher.vcxproj", "{6445D5EE-3E5F-492E-BBE1-903884F7852B}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -44,6 +48,22 @@ Global
 		{63C1FACD-74DE-487D-9403-8BA4A6B573CF}.Release|x64.Build.0 = Release|x64
 		{63C1FACD-74DE-487D-9403-8BA4A6B573CF}.Release|x86.ActiveCfg = Release|Win32
 		{63C1FACD-74DE-487D-9403-8BA4A6B573CF}.Release|x86.Build.0 = Release|Win32
+		{956B4F06-D543-42AE-8580-BA37A85ADE39}.Debug|x64.ActiveCfg = Debug|x64
+		{956B4F06-D543-42AE-8580-BA37A85ADE39}.Debug|x64.Build.0 = Debug|x64
+		{956B4F06-D543-42AE-8580-BA37A85ADE39}.Debug|x86.ActiveCfg = Debug|Win32
+		{956B4F06-D543-42AE-8580-BA37A85ADE39}.Debug|x86.Build.0 = Debug|Win32
+		{956B4F06-D543-42AE-8580-BA37A85ADE39}.Release|x64.ActiveCfg = Release|x64
+		{956B4F06-D543-42AE-8580-BA37A85ADE39}.Release|x64.Build.0 = Release|x64
+		{956B4F06-D543-42AE-8580-BA37A85ADE39}.Release|x86.ActiveCfg = Release|Win32
+		{956B4F06-D543-42AE-8580-BA37A85ADE39}.Release|x86.Build.0 = Release|Win32
+		{6445D5EE-3E5F-492E-BBE1-903884F7852B}.Debug|x64.ActiveCfg = Debug|x64
+		{6445D5EE-3E5F-492E-BBE1-903884F7852B}.Debug|x64.Build.0 = Debug|x64
+		{6445D5EE-3E5F-492E-BBE1-903884F7852B}.Debug|x86.ActiveCfg = Debug|Win32
+		{6445D5EE-3E5F-492E-BBE1-903884F7852B}.Debug|x86.Build.0 = Debug|Win32
+		{6445D5EE-3E5F-492E-BBE1-903884F7852B}.Release|x64.ActiveCfg = Release|x64
+		{6445D5EE-3E5F-492E-BBE1-903884F7852B}.Release|x64.Build.0 = Release|x64
+		{6445D5EE-3E5F-492E-BBE1-903884F7852B}.Release|x86.ActiveCfg = Release|Win32
+		{6445D5EE-3E5F-492E-BBE1-903884F7852B}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
