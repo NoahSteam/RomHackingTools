@@ -19,7 +19,7 @@ CreateTranslatedFontSheets D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Da
 ExtractRawText d:\Rizwan\SakuraWars\Disc1 d:\Rizwan\SakuraWars\ExtractedData\Disc1\DialogTextExtractRawText
 ExtractRawText d:\Rizwan\SakuraWars\TranslatedTBL d:\Rizwan\SakuraWars\ExtractedTranslatedText
 PatchGameKNJ d:\Rizwan\SakuraWars\Disc1 d:\Rizwan\SakuraWars\TranslatedFontSheets\TranslatedKNJ.BIN d:\Rizwan\SakuraWars\TranslatedKNJ
-PatchGame d:\Rizwan\SakuraWars\Disc1 d:\Rizwan\SakuraWars\Disc1_Translated D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\TranslatedText D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\8x12.bmp D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\Palette.bin D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\TMapSP
+PatchGame d:\Rizwan\SakuraWars\Disc1 d:\Rizwan\SakuraWars\Disc1_Translated D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\TranslatedText D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\6x12.bmp D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\Palette.bin D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\TMapSP D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\MainMenuFont.bmp
 FindDialogOrder d:\Rizwan\SakuraWars\Disc1 D:\Rizwan\SakuraWars\ExtractedData\Disc1\DialogText
 CreateTBLSpreadsheets D:\Rizwan\SakuraWars\ExtractedData\Disc1\Dialog D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\Duplicates.txt D:\Rizwan\SakuraWars\Disc1\SAKURA1
 ExtractImages d:\Rizwan\SakuraWars\Test\Search.bin D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\Palette.bin 88 46 d:\Rizwan\SakuraWars\TestExtractImages d:\Rizwan\SakuraWars\Test\Search.bin D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\Palette.bin 88 46 d:\Rizwan\SakuraWars\Test
@@ -32,6 +32,7 @@ PatchTMapSp d:\Rizwan\SakuraWars\Disc1 D:\Rizwan\Programming\RomHackingTools\Sak
 ExtractFACEFiles d:\Rizwan\SakuraWars\Disc1 d:\Rizwan\SakuraWars\ExtractedData\Disc1\FACE
 ParseEVTFiles d:\Rizwan\SakuraWars\Disc1
 FindCompressedData d:\Rizwan\SakuraWars\Disc1\SAKURA1\LOGO.SH2 d:\Rizwan\SakuraWars\Search.bin d:\Rizwan\SakuraWars\UncompressedDataResults
+FindData.exe d:\Rizwan\SakuraWars\Disc1 d:\Rizwan\SakuraWars\Search.bin
 
 ExtractFontSheets a:\SakuraTaisen\Disc1\ a:\SakuraTaisen\ExtractedData\Disc1\FontSheets\Palette.bin a:\SakuraTaisen\ExtractedData\Disc1\FontSheets
 ExtractFontSheets a:\SakuraTaisen\Disc2\ a:\SakuraTaisen\ExtractedData\Disc1\FontSheets\Palette.bin a:\SakuraTaisen\ExtractedData\Disc2\FontSheets

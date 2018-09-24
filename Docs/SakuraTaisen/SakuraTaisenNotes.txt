@@ -106,6 +106,9 @@ Also need to fix 0x0a2d6a08 in SAKURA4 ?
 LOGO.SH2 has a pointer: 0023F640 which will end up writing into our buffer. Fix that shit.
 -Something is reading the addresses 0023618C and 0023616C and doing something with them.  Those addresses hold the original compressed data.
 
+-Compressed font sheet loaded at 0x00213F20 in memory and ends at 0x0021489D
+-Image after font sheet is at 0x00010808 in LOGO.SH2 and 0x00214808 in memory
+
 
 -Steps to patch logo file:
 1)Create font sheet

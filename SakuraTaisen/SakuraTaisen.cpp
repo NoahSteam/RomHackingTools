@@ -1015,8 +1015,8 @@ bool CreateTranslatedFontSheet(const string& inTranslatedFontSheet, const string
 		indexOfAlphaColor = 0;
 	}
 
-	const string outPaletteName = outPath + PatchedPaletteName;
-	const string outTableName   = bAutoName ? outPath + PatchedKNJName : outPath;
+	const string outPaletteName = bAutoName ? outPath + PatchedPaletteName : outPath + "Palette.bin";
+	const string outTableName   = bAutoName ? outPath + PatchedKNJName : outPath + ".bin";
 
 	//Ouptut the palette
 	FileWriter outPalette;
@@ -4090,17 +4090,39 @@ bool PatchMainMenu(const string& sakuraRootDirectory, const string& inTranslated
 		return false;
 	}
 
-	const FileNameContainer translatedFileName(outFontSheetPath.c_str());
+	const string fontSheetPath = outFontSheetPath + ".bin";
+	const FileNameContainer translatedFileName(fontSheetPath.c_str());
 	FileData translatedData;
 	if( !translatedData.InitializeFileData(translatedFileName) )
 	{
-		printf("PatchMainMenu: Unable to open converted font sheet %s\n", outFontSheetPath.c_str());
+		printf("PatchMainMenu: Unable to open converted font sheet %s\n", fontSheetPath.c_str());
 		return false;
 	}
 
+	const string fontSheetPalettePath = outFontSheetPath + "Palette.bin";
+	const FileNameContainer translatedFontSheetPaletteName(fontSheetPalettePath.c_str());
+	FileData translatedPaletteData;
+	if( !translatedPaletteData.InitializeFileData(translatedFontSheetPaletteName) )
+	{
+		printf("PatchMainMenu: Unable to open converted font sheet palette %s\n", fontSheetPalettePath.c_str());
+		return false;
+	}
+
+	if( translatedPaletteData.GetDataSize() != 32 )
+	{
+		printf("PatchMainMenu: Font sheet palette %s should only be bytes.  It is %i bytes instead.\n", fontSheetPalettePath.c_str(), translatedPaletteData.GetDataSize());
+		return false;
+	}
+
+	int numCharactersInFontSheet = 40;
 	PRSCompressor compressor;
-	compressor.CompressData((void*)translatedData.GetData(), translatedData.GetDataSize());
-	//compressor.CompressData((void*)(translatedData.GetData() + (16*16/2)*32), (16*16/2)*40);
+	compressor.CompressData((void*)translatedData.GetData(), translatedData.GetDataSize() - numCharactersInFontSheet*16*8);
+	
+	//Pad compressed data is it is divisible by 2
+	const unsigned long paddedDataSize = compressor.mCompressedSize + (compressor.mCompressedSize%2);
+	char* pPaddedCompressedData       = new char[paddedDataSize];
+	memset(pPaddedCompressedData, 0, paddedDataSize);
+	memcpy_s(pPaddedCompressedData, paddedDataSize, compressor.mpCompressedData, compressor.mCompressedSize);
 
 	const FileNameContainer logoFileName( (sakuraRootDirectory + "SAKURA1\\LOGO.SH2").c_str() );
 	FileData logoFileData;
@@ -4111,23 +4133,59 @@ bool PatchMainMenu(const string& sakuraRootDirectory, const string& inTranslated
 	}
 
 	//Create new data
-	const unsigned long origCompressedFontSheetSize = 2429;
+	const unsigned long origCompressedFontSheetSize = 2280;
 	const unsigned long originalDataSize            = logoFileData.GetDataSize() - origCompressedFontSheetSize;
-	const unsigned long compressedDiff              = compressor.mCompressedSize > origCompressedFontSheetSize ? compressor.mCompressedSize - origCompressedFontSheetSize : 0;
-	const unsigned long additionalSpace             = compressedDiff == 0 ? origCompressedFontSheetSize - compressor.mCompressedSize : 0;
-	const unsigned long newDataSize                 = compressor.mCompressedSize + originalDataSize + additionalSpace;
+	const unsigned long compressedDiff              = paddedDataSize > origCompressedFontSheetSize ? paddedDataSize - origCompressedFontSheetSize : 0;
+	const unsigned long additionalSpace             = compressedDiff == 0 ? origCompressedFontSheetSize - paddedDataSize : 0;
+	const unsigned long newDataSize                 = paddedDataSize + originalDataSize + additionalSpace;
 	char* pNewData                                  = new char[newDataSize];
 	memset(pNewData, 0, newDataSize);
 
 	const unsigned long fontSheetOffset   = 0xff20;
 	memcpy_s(pNewData, newDataSize, logoFileData.GetData(), fontSheetOffset);
-	memcpy_s(pNewData + fontSheetOffset, newDataSize - fontSheetOffset, compressor.mpCompressedData, compressor.mCompressedSize);
+	memcpy_s(pNewData + fontSheetOffset, newDataSize - fontSheetOffset, pPaddedCompressedData, paddedDataSize);
 
-	memcpy_s(pNewData + fontSheetOffset + compressor.mCompressedSize + additionalSpace, 
-		     newDataSize - fontSheetOffset - compressor.mCompressedSize - additionalSpace, 
+	memcpy_s(pNewData + fontSheetOffset + paddedDataSize + additionalSpace, 
+		     newDataSize - fontSheetOffset - paddedDataSize - additionalSpace, 
 		     logoFileData.GetData() + fontSheetOffset + origCompressedFontSheetSize, 
 		     logoFileData.GetDataSize() - (fontSheetOffset + origCompressedFontSheetSize));
 
+	//Fix palette
+	memcpy_s(pNewData + 0xFE80, newDataSize, translatedPaletteData.GetData(), translatedPaletteData.GetDataSize());
+
+	//Fix red tinted palette
+	memcpy_s(pNewData + 0xFEC0, newDataSize, translatedPaletteData.GetData(), translatedPaletteData.GetDataSize());
+	for(int p = 1; p < 16; ++p)
+	{
+		const unsigned short originalValue =  SwapByteOrder( *((unsigned short*)(pNewData + 0xFE80 + p*2)) );
+		*((unsigned short*)&pNewData[0xFEC0 + p*2]) = originalValue | 0x1CFF;
+	}
+
+	//Fixup pointers
+	for(unsigned long k = 0; k < 0xff20; ++k)
+	{
+		if( k + 4 < newDataSize && pNewData[k+4] != 0 && pNewData[k+4] != 0x06 && pNewData[k+4] != 0x25 )
+		{
+			continue;
+		}
+
+		if( k == 0x6CD || k == 0x6DB || k == 0xA13 || k == 0xABF || k == 0x1DC5 || k == 0x1EFB || k == 0x217F || k == 0x2275 || k == 0x22D9 || k == 0xDDFD || k == 0x2343 || k == 0x2499 ||
+			k == 0x2579 || k == 0x261B || k == 0x2631 || k == 0x26d1 || k == 0x2739 || k == 0x2821 || k == 0x5B95 || k == 0x0606c || k == 0x66C8 || k == 0x66d0 )
+		{
+			continue;
+		}
+
+		const unsigned int address = SwapByteOrder( *(unsigned int*)(&pNewData[k]) );
+		if( address >= 0x214808 && address <= 0x00240000 )
+		{
+			const unsigned int newAddress = address + compressedDiff;
+			*(unsigned int*)(&pNewData[k]) = SwapByteOrder(newAddress);
+
+			printf("Fixed Logo: Old: 0x%08x New: 0x%08x LogoIndex: 0x%08x\n", address, newAddress, k);
+		}
+	}
+
+	/*
 	const unsigned long newEndOfFontSheet = 0x0023F604 + compressedDiff;
 	unsigned int* pOrigOffsetValue = (unsigned int*)(&pNewData[0x420C]);
 	*pOrigOffsetValue = SwapByteOrder(newEndOfFontSheet);
@@ -4158,6 +4216,14 @@ bool PatchMainMenu(const string& sakuraRootDirectory, const string& inTranslated
 	*(unsigned int*)(&pNewData[0x19E0]) = new23F648;
 	*(unsigned int*)(&pNewData[0x1B44]) = new23F648;
 
+	const unsigned long new23616C = SwapByteOrder(0x0023616C + compressedDiff);
+	*(unsigned int*)(&pNewData[0x07EC]) = new23616C;
+
+	const unsigned long new2361CC = SwapByteOrder(0x002361CC + compressedDiff);
+	*(unsigned int*)(&pNewData[0x07DC]) = new23616C;
+	*/
+
+	
 	FileWriter outFile;
 	if( !outFile.OpenFileForWrite(logoFileName.mFullPath) )
 	{
@@ -4236,7 +4302,7 @@ bool PatchGame(const string& rootSakuraTaisenDirectory, const string& patchedSak
 	}
 
 	//Step 7
-	const string translatedMainMenuFontSheetPath = tempDir + "TranslatedMainMenuFontSheet.bin"; //Created by CreateTranslatedFontSheet
+	const string translatedMainMenuFontSheetPath = tempDir + "TranslatedMainMenuFontSheet"; //Created by CreateTranslatedFontSheet
 	if( !PatchMainMenu(patchedSakuraTaisenDirectory, inMainMainFontSheetPath, translatedMainMenuFontSheetPath) )
 	{
 		printf("Patching MainMenu LOGO.SH2 failed.\n");
