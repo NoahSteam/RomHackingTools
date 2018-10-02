@@ -109,6 +109,8 @@ LOGO.SH2 has a pointer: 0023F640 which will end up writing into our buffer. Fix 
 -Compressed font sheet loaded at 0x00213F20 in memory and ends at 0x0021489D
 -Image after font sheet is at 0x00010808 in LOGO.SH2 and 0x00214808 in memory
 
+-Compression Results for MainMenu Bgnd image: Found: 00010808 00000000 Size: 31616 CompressedSize: 4260
+-Palette is @0x00029124 and is 512 bytes
 
 -Steps to patch logo file:
 1)Create font sheet

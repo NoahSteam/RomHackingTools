@@ -490,7 +490,7 @@ PaletteData::~PaletteData()
 
 bool PaletteData::CreateFrom15BitData(const char* pInPaletteData, int inPaletteSize)
 {
-	if( inPaletteSize != 32 && inPaletteSize != 128 && inPaletteSize != 256 )
+	if( inPaletteSize != 32 && inPaletteSize != 128 && inPaletteSize != 256 && inPaletteSize != 512 )
 	{
 		printf("Unsupported palette type");
 		return false;
