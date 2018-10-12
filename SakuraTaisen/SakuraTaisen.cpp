@@ -4082,7 +4082,50 @@ void CompressFile(const string& filePath, const string& outPath)
 	outFile.WriteData(compressedFile.mpCompressedData, compressedFile.mCompressedSize);
 }
 
-bool PatchMainMenu(const string& sakuraRootDirectory, const string& inTranslatedFontSheet, const string& outFontSheetPath)
+struct SakuraCompressedData
+{
+	char*         mpCompressedData = nullptr;
+	unsigned long mDataSize        = 0;
+
+	~SakuraCompressedData()
+	{
+		delete[] mpCompressedData;
+		mpCompressedData = nullptr;
+	}
+
+	bool PatchData(const string& inFileName, bool bPad)
+	{
+		//Load bgnd image
+		const FileNameContainer fileNameInfo(inFileName.c_str());
+		FileData fileData;
+		if( !fileData.InitializeFileData(fileNameInfo) )
+		{
+			return false;
+		}
+
+		//Compress bgnd image
+		PRSCompressor compressor;
+		compressor.CompressData((void*)fileData.GetData(), fileData.GetDataSize());
+
+		//Pad compressed data is it is divisible by 2
+		if( bPad )
+		{
+			mDataSize = compressor.mCompressedSize + (compressor.mCompressedSize%2);
+			char* mpCompressedData       = new char[mDataSize];
+			memset(mpCompressedData, 0, mDataSize);
+			memcpy_s(mpCompressedData, mDataSize, compressor.mpCompressedData, compressor.mCompressedSize);
+		}
+		else
+		{
+			mpCompressedData = std::move(compressor.mpCompressedData);
+			mDataSize        = compressor.mCompressedSize;
+		}
+
+		return true;
+	}
+
+};
+bool PatchMainMenu(const string& sakuraRootDirectory, const string& inTranslatedFontSheet, const string& outFontSheetPath, const string& inMainMenuTranslatedBgnd)
 {
 	if( !CreateTranslatedFontSheet(inTranslatedFontSheet, outFontSheetPath, false) )
 	{
@@ -4090,6 +4133,7 @@ bool PatchMainMenu(const string& sakuraRootDirectory, const string& inTranslated
 		return false;
 	}
 
+	//Load font sheet
 	const string fontSheetPath = outFontSheetPath + ".bin";
 	const FileNameContainer translatedFileName(fontSheetPath.c_str());
 	FileData translatedData;
@@ -4099,6 +4143,7 @@ bool PatchMainMenu(const string& sakuraRootDirectory, const string& inTranslated
 		return false;
 	}
 
+	//Load font sheet palette
 	const string fontSheetPalettePath = outFontSheetPath + "Palette.bin";
 	const FileNameContainer translatedFontSheetPaletteName(fontSheetPalettePath.c_str());
 	FileData translatedPaletteData;
@@ -4114,6 +4159,7 @@ bool PatchMainMenu(const string& sakuraRootDirectory, const string& inTranslated
 		return false;
 	}
 
+	//Compress font sheet
 	int numCharactersInFontSheet = 40;
 	PRSCompressor compressor;
 	compressor.CompressData((void*)translatedData.GetData(), translatedData.GetDataSize() - numCharactersInFontSheet*16*8);
@@ -4123,6 +4169,13 @@ bool PatchMainMenu(const string& sakuraRootDirectory, const string& inTranslated
 	char* pPaddedCompressedData       = new char[paddedDataSize];
 	memset(pPaddedCompressedData, 0, paddedDataSize);
 	memcpy_s(pPaddedCompressedData, paddedDataSize, compressor.mpCompressedData, compressor.mCompressedSize);
+
+	//Compress bgnd image	
+	SakuraCompressedData translatedBgndData;
+	if( !translatedBgndData.PatchData(inMainMenuTranslatedBgnd, true) )
+	{
+		printf("PatchMainMenu: Couldn't load translated bgnd image %s.\n", inMainMenuTranslatedBgnd.c_str());
+	}
 
 	const FileNameContainer logoFileName( (sakuraRootDirectory + "SAKURA1\\LOGO.SH2").c_str() );
 	FileData logoFileData;
@@ -4141,9 +4194,12 @@ bool PatchMainMenu(const string& sakuraRootDirectory, const string& inTranslated
 	char* pNewData                                  = new char[newDataSize];
 	memset(pNewData, 0, newDataSize);
 
-	const unsigned long fontSheetOffset   = 0xff20;
-	memcpy_s(pNewData, newDataSize, logoFileData.GetData(), fontSheetOffset);
-	memcpy_s(pNewData + fontSheetOffset, newDataSize - fontSheetOffset, pPaddedCompressedData, paddedDataSize);
+	//Patch font sheet
+	const unsigned long fontSheetOffset = 0x0000ff20;
+	const unsigned long bgndImageOffset = 0x00010808;
+	memcpy_s(pNewData,                   newDataSize,                   logoFileData.GetData(), fontSheetOffset); //Copy everything from the start of the file to the font sheet
+	memcpy_s(pNewData + fontSheetOffset, newDataSize - fontSheetOffset, pPaddedCompressedData,  paddedDataSize);  //Copy patched font sheet
+	//memcpy_s(pNewData + fontSheetOffset, newDataSize - fontSheetOffset, translatedBgndData.mpCompressedData, translatedBgndData.mDataSize);  //Copy patched bgnd image <----TODO
 
 	memcpy_s(pNewData + fontSheetOffset + paddedDataSize + additionalSpace, 
 		     newDataSize - fontSheetOffset - paddedDataSize - additionalSpace, 
@@ -4151,7 +4207,7 @@ bool PatchMainMenu(const string& sakuraRootDirectory, const string& inTranslated
 		     logoFileData.GetDataSize() - (fontSheetOffset + origCompressedFontSheetSize));
 
 	//Fix palette
-	memcpy_s(pNewData + 0xFE80, newDataSize, translatedPaletteData.GetData(), translatedPaletteData.GetDataSize());
+	memcpy_s(pNewData + 0xFE80, newDataSize, translatedPaletteData.GetData(), translatedPaletteData.GetDataSize()); //Palettes appear before the patched data, so we can use the original offsets
 
 	//Fix red tinted palette
 	memcpy_s(pNewData + 0xFEC0, newDataSize, translatedPaletteData.GetData(), translatedPaletteData.GetDataSize());
@@ -4233,12 +4289,13 @@ bool PatchMainMenu(const string& sakuraRootDirectory, const string& inTranslated
 	outFile.WriteData(pNewData, newDataSize);
 
 	delete[] pNewData;
+	delete[] pPaddedCompressedData;
 
 	return true;
 }
 
 bool PatchGame(const string& rootSakuraTaisenDirectory, const string& patchedSakuraTaisenDirectory, const string& translatedTextDirectory, const string& fontSheetFileName, const string& originalPaletteFileName, 
-	const string &patchedTMapSPDataPath, const string& inMainMainFontSheetPath)
+	const string &patchedTMapSPDataPath, const string& inMainMainFontSheetPath, const string& inMainMenuTranslatedBgnd)
 {
 	char buffer[MAX_PATH];
 	const DWORD dwRet = GetCurrentDirectory(MAX_PATH, buffer);
@@ -4303,7 +4360,7 @@ bool PatchGame(const string& rootSakuraTaisenDirectory, const string& patchedSak
 
 	//Step 7
 	const string translatedMainMenuFontSheetPath = tempDir + "TranslatedMainMenuFontSheet"; //Created by CreateTranslatedFontSheet
-	if( !PatchMainMenu(patchedSakuraTaisenDirectory, inMainMainFontSheetPath, translatedMainMenuFontSheetPath) )
+	if( !PatchMainMenu(patchedSakuraTaisenDirectory, inMainMainFontSheetPath, translatedMainMenuFontSheetPath, inMainMenuTranslatedBgnd) )
 	{
 		printf("Patching MainMenu LOGO.SH2 failed.\n");
 		return false;
@@ -4339,7 +4396,7 @@ void PrintHelp()
 	printf("PatchTMapSP sakuraDirectory patchDataPath\n");
 	printf("CompressFile inFilePath outFilePath\n");
 	printf("FindCompressedFile compressedFile uncompressedFile\n");
-	printf("PatchGame rootSakuraTaisenDirectory patchedSakuraTaisenDirectory translatedTextDirectory fontSheet originalPalette patchedTMapSpDataPath mainMenuFontSheetPath \n");
+	printf("PatchGame rootSakuraTaisenDirectory patchedSakuraTaisenDirectory translatedTextDirectory fontSheet originalPalette patchedTMapSpDataPath mainMenuFontSheetPath mainMenuBgndPatchedImage \n");
 }
 
 int main(int argc, char *argv[])
@@ -4456,8 +4513,9 @@ int main(int argc, char *argv[])
 		const string originalPalette              = string(argv[6]);
 		const string patchedTMapSpDataPath        = string(argv[7]) + Seperators;
 		const string mainMenuFontSheetPath        = string(argv[8]);
+		const string mainMenuTranslatedBgnd       = string(argv[9]);
 
-		PatchGame(rootSakuraTaisenDirectory, patchedSakuraTaisenDirectory, translatedTextDirectory, fontSheet, originalPalette, patchedTMapSpDataPath, mainMenuFontSheetPath);
+		PatchGame(rootSakuraTaisenDirectory, patchedSakuraTaisenDirectory, translatedTextDirectory, fontSheet, originalPalette, patchedTMapSpDataPath, mainMenuFontSheetPath, mainMenuTranslatedBgnd);
 	}
 	else if(command == "CreateTBLSpreadsheets" && argc == 5 )
 	{

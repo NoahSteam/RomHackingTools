@@ -865,17 +865,24 @@ bool TileExtractor::ExtractTiles(unsigned int inTileWidth, unsigned int inTileHe
 /////////////////////////////////
 PRSCompressor::~PRSCompressor()
 {
-	delete[] mpCompressedData;
-	mpCompressedData = nullptr;
-
-	mCompressedSize = 0;
+	Reset();
 }
 
 void PRSCompressor::CompressData(void* pInData, const unsigned long inDataSize)
 {
+	Reset();
+
 	mpCompressedData = new char[inDataSize];
 
 	mCompressedSize = prs_compress(pInData, (void*)mpCompressedData, inDataSize);
+}
+
+void PRSCompressor::Reset()
+{
+	delete[] mpCompressedData;
+	mpCompressedData = nullptr;
+
+	mCompressedSize = 0;
 }
 
 ///////////////////////////////////

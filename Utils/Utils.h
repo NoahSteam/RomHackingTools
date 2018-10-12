@@ -305,6 +305,7 @@ struct PRSCompressor
 
 	~PRSCompressor();
 	void CompressData(void* pInData, const unsigned long inDataSize);
+	void Reset();
 };
 
 struct PRSDecompressor
