@@ -547,16 +547,16 @@ bool PaletteData::CreateFrom24BitData(const char* pInPaletteData, int inPaletteS
 
 bool PaletteData::CreateFrom32BitData(const char* pInPaletteData, int inPaletteSize, bool bDropFirstBit)
 {
-	if( inPaletteSize != 64 )
+	if( !(inPaletteSize == 64 || inPaletteSize == 128 || inPaletteSize == 256 || inPaletteSize == 1024) )
 	{
-		printf("Unsupported palette type");
+		printf("PaletteData::CreateFrom32BitData: Unsupported palette type");
 		return false;
 	}
 
-	const int numColors        = 16;
+	mNumColors                 = inPaletteSize/4;
 	const int numBytesPerColor = 2;
 
-	mNumBytesInPalette = numColors*numBytesPerColor;
+	mNumBytesInPalette = mNumColors*numBytesPerColor;
 	mpPaletteData      = new char[mNumBytesInPalette];
 
 	const unsigned short bitMask = bDropFirstBit ? 0x7fff : 0xffff;
@@ -711,7 +711,7 @@ bool BitmapReader::ReadBitmap(const string& inBitmapName)
 
 	memcpy(&mBitmapData.mInfoHeader, pFileData + sizeof(mBitmapData.mFileHeader), sizeof(mBitmapData.mInfoHeader));
 
-	if( mBitmapData.mInfoHeader.mBitCount != 4 )
+	if( !(mBitmapData.mInfoHeader.mBitCount == 4 || mBitmapData.mInfoHeader.mBitCount == 8) )
 	{
 		printf("%s has unsupported bit count [%i]", inBitmapName.c_str(), mBitmapData.mInfoHeader.mBitCount);
 		return false;	
@@ -725,7 +725,8 @@ bool BitmapReader::ReadBitmap(const string& inBitmapName)
 	memcpy(mBitmapData.mPaletteData.mpRGBA, pFileData + sizeof(mBitmapData.mFileHeader) + sizeof(mBitmapData.mInfoHeader), mBitmapData.mPaletteData.mSizeInBytes);
 
 	//Read in color data
-	const int numColorBytes             = abs(mBitmapData.mInfoHeader.mImageHeight)*mBitmapData.mInfoHeader.mImageWidth / 2;
+	const int divisor                   = mBitmapData.mInfoHeader.mBitCount == 4 ? 2 : 1;
+	const int numColorBytes             = abs(mBitmapData.mInfoHeader.mImageHeight)*mBitmapData.mInfoHeader.mImageWidth / divisor;
 	mBitmapData.mColorData.mSizeInBytes = numColorBytes;
 	mBitmapData.mColorData.mpRGBA       = new char[numColorBytes];
 	memcpy(mBitmapData.mColorData.mpRGBA, pFileData + mBitmapData.mFileHeader.mOffsetToData, numColorBytes);
@@ -794,6 +795,60 @@ bool BitmapSurface::WriteToFile(const std::string& fileName)
 /////////////////////////////////
 //        TileExtractor        //
 /////////////////////////////////
+void TileExtractor::FixupIndexOfAlphaColor(const unsigned short inIndexOfAlphaColor, bool bInIs4bit)
+{
+	if( bInIs4bit )
+	{
+		for(TileExtractor::Tile& tile : mTiles)
+		{
+			for(unsigned int i = 0; i < tile.mTileSize; i++)
+			{
+				const unsigned short paletteIndex1 = (tile.mpTile[i] & 0xF0) >> 4;
+				const unsigned short paletteIndex2 = (tile.mpTile[i] & 0x0F);
+
+				if(paletteIndex1 == 0)
+				{
+					tile.mpTile[i] = (char)((inIndexOfAlphaColor << 4) + paletteIndex2);
+				}
+				else if(paletteIndex1 == inIndexOfAlphaColor)
+				{
+					tile.mpTile[i] = (char)paletteIndex2;
+				}
+
+				if(paletteIndex2 == 0)
+				{
+					tile.mpTile[i] = (char)((tile.mpTile[i] & 0xF0) + inIndexOfAlphaColor);
+				}
+				else if(paletteIndex2 == inIndexOfAlphaColor)
+				{
+					tile.mpTile[i] = tile.mpTile[i] & 0xF0;
+				}
+			}
+		}
+	}
+	else
+	{
+		const unsigned char indexOfAlphaColor = (unsigned char)inIndexOfAlphaColor;
+
+		for(TileExtractor::Tile& tile : mTiles)
+		{
+			for(unsigned int i = 0; i < tile.mTileSize; i++)
+			{
+				unsigned char paletteIndex = (unsigned char)tile.mpTile[i];
+
+				if(paletteIndex == 0)
+				{
+					tile.mpTile[i] = indexOfAlphaColor;
+				}
+				else if(paletteIndex == indexOfAlphaColor)
+				{
+					tile.mpTile[i] = 0;
+				}
+			}
+		}
+	}
+}
+
 bool TileExtractor::ExtractTiles(unsigned int inTileWidth, unsigned int inTileHeight, unsigned int outTileWidth, unsigned int outTileHeight, const BitmapReader& inBitmap)
 {
 	if( inTileWidth > outTileWidth || inTileHeight > outTileHeight )
@@ -802,9 +857,9 @@ bool TileExtractor::ExtractTiles(unsigned int inTileWidth, unsigned int inTileHe
 		return false;
 	}
 
-	if( inBitmap.mBitmapData.mInfoHeader.mBitCount != 4 )
+	if( !(inBitmap.mBitmapData.mInfoHeader.mBitCount == 4 || inBitmap.mBitmapData.mInfoHeader.mBitCount == 8) )
 	{
-		printf("Can't extract tiles.  Only 4 bit paletted bitmaps supported\n");
+		printf("Can't extract tiles.  Only 4 and 8 bit paletted bitmaps supported\n");
 		return false;
 	}
 
@@ -822,9 +877,10 @@ bool TileExtractor::ExtractTiles(unsigned int inTileWidth, unsigned int inTileHe
 	//Allocate tiles
 	mTiles.resize(numTiles);
 
-	const unsigned int numBytesPerTileWidth = inTileWidth/2;
+	const unsigned int divisor              = inBitmap.mBitmapData.mInfoHeader.mBitCount == 4 ? 2 : 1;
+	const unsigned int numBytesPerTileWidth = inTileWidth/divisor;
 	const unsigned int stride               = numBytesPerTileWidth*numColumns;
-	const unsigned int numBytesPerTile      = (outTileWidth*outTileHeight)/2;//(inTileWidth*inTileHeight)/2; //4bits per pixel
+	const unsigned int numBytesPerTile      = (outTileWidth*outTileHeight)/divisor;//(inTileWidth*inTileHeight)/2; //4bits per pixel
 	unsigned int currTile                   = 0;
 
 	//Bitmaps are stored upside down, so start form the bottom

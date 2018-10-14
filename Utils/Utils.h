@@ -153,7 +153,7 @@ class PaletteData
 {
 	char* mpPaletteData      = nullptr;
 	int   mNumBytesInPalette = 0; 
-
+	int   mNumColors         = 0;
 public:
 	~PaletteData();
 
@@ -162,6 +162,7 @@ public:
 	bool        CreateFrom32BitData(const char* pInData, int inSize, bool bDropFirstBit);
 	const char* GetData() const {return mpPaletteData;}
 	int         GetSize() const {return mNumBytesInPalette;}
+	int         GetNumColors() const {return mNumColors;}
 	void        SetValue(int index, unsigned short value);
 };
 
@@ -296,6 +297,7 @@ public:
 	std::vector<Tile> mTiles;
 
 	bool ExtractTiles(unsigned int inTileDimX, unsigned int inTileDimY, unsigned int outTileDimX, unsigned int outTileDimY, const BitmapReader& inBitmap);
+	void FixupIndexOfAlphaColor(const unsigned short inIndexOfAlphaColor, bool bInIs4bit);
 };
 
 struct PRSCompressor
