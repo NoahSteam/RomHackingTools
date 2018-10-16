@@ -49,6 +49,119 @@ const string NewLineWord("<br>");
 const string SpaceWord("<sp>");
 const unsigned short SpecialDialogIndicator = 0xC351;
 
+struct BmpToSakuraConverter
+{
+	TileExtractor mTileExtractor;
+	PaletteData   mPalette;
+	static const unsigned short CYAN = 0xe07f; //In little endian order
+	static const unsigned short WHITE = 0xff7f;
+
+	bool ConvertBmpToSakuraFormat(const string& inBmpPath, const unsigned short inAlphaColor = CYAN, unsigned int* pTileWidth = 0, unsigned int* pTileHeight = 0)
+	{
+		//Read in translated font sheet
+		BitmapReader origBmp;
+		if(!origBmp.ReadBitmap(inBmpPath))
+		{
+			return false;
+		}
+
+		const unsigned int imageWidth  = pTileWidth ? *pTileWidth : origBmp.mBitmapData.mInfoHeader.mImageWidth;
+		const unsigned int imageHeight = pTileHeight ? *pTileHeight : origBmp.mBitmapData.mInfoHeader.mImageHeight;
+
+		if(!mTileExtractor.ExtractTiles(imageWidth, imageHeight, imageWidth, imageHeight, origBmp))
+		{
+			return false;
+		}
+
+		//Convert it to the SakuraTaisen format
+		if( !mPalette.CreateFrom32BitData(origBmp.mBitmapData.mPaletteData.mpRGBA, origBmp.mBitmapData.mPaletteData.mSizeInBytes, false) )
+		{
+			return false;
+		}
+
+		//Fix up palette
+		//First index needs to have the transparent color
+		int indexOfAlphaColor = -1;
+		for(int i = 0; i < mPalette.GetNumColors(); ++i)
+		{
+			assert(i * 2 < mPalette.GetSize());
+
+			const unsigned short color = *((short*)(mPalette.GetData() + i * 2));
+			if(color == inAlphaColor)
+			{
+				const unsigned short oldColor0 = *((unsigned short*)mPalette.GetData());
+				mPalette.SetValue(0, inAlphaColor);
+				mPalette.SetValue(i, oldColor0);
+				indexOfAlphaColor = i;
+				break;
+			}
+		}
+
+		if(indexOfAlphaColor == -1)
+		{
+			printf("Alpha Color not found.  Palette will not be correct. \n");
+			indexOfAlphaColor = 0;
+		}
+
+		//Fix up color data now that the palette has been modified
+		if( indexOfAlphaColor != -1 )
+		{
+			mTileExtractor.FixupIndexOfAlphaColor((unsigned short)indexOfAlphaColor, origBmp.mBitmapData.mInfoHeader.mBitCount == 4);
+		}
+
+		return true;
+	}
+};
+
+struct SakuraCompressedData
+{
+	char*         mpCompressedData = nullptr;
+	unsigned long mDataSize        = 0;
+
+	~SakuraCompressedData()
+	{
+		delete[] mpCompressedData;
+		mpCompressedData = nullptr;
+	}
+
+	void PatchDataInMemory(const char* pInData, const unsigned long inDataSize, bool bPad)
+	{
+		//Compress bgnd image
+		PRSCompressor compressor;
+		compressor.CompressData((void*)pInData, inDataSize);
+
+		//Pad compressed data is it is divisible by 2
+		if(bPad)
+		{
+			mDataSize = compressor.mCompressedSize + (compressor.mCompressedSize % 2);
+			mpCompressedData = new char[mDataSize];
+			memset(mpCompressedData, 0, mDataSize);
+			memcpy_s(mpCompressedData, mDataSize, compressor.mpCompressedData, compressor.mCompressedSize);
+		}
+		else
+		{
+			mpCompressedData = std::move(compressor.mpCompressedData);
+			mDataSize = compressor.mCompressedSize;
+		}
+	}
+
+	bool PatchDataFromFile(const string& inFileName, bool bPad)
+	{
+		//Load bgnd image
+		const FileNameContainer fileNameInfo(inFileName.c_str());
+		FileData fileData;
+		if( !fileData.InitializeFileData(fileNameInfo) )
+		{
+			return false;
+		}
+
+		//Compress bgnd image
+		PatchDataInMemory(fileData.GetData(), fileData.GetDataSize(), bPad);
+
+		return true;
+	}
+};
+
 class SakuraTranslationTable
 {
 public:
@@ -749,7 +862,7 @@ bool ExtractImageFromData(const char* pInColorData, const unsigned int inColorDa
 	memset(pOutTiledData, 0, numTiledBytes);
 
 	//In Mode 3, the image only has 128 colors so only the 7 lower bits are used. 0x7f = 01111111
-	const unsigned char bitMask = inNumColors == 256 ? 0xff : 0x7f;
+	const unsigned char bitMask = inNumColors == 128 ? 0x7f : 0xff;
 
 	//Fill in data
 	for(int tileIndex = 0; tileIndex < numTiles; ++tileIndex)
@@ -971,70 +1084,6 @@ void ExtractText(const string& inSearchDirectory, const string& inPaletteFileNam
 	}
 }
 
-struct BmpToSakuraConverter
-{
-	TileExtractor mTileExtractor;
-	PaletteData   mPalette;
-	static const unsigned short CYAN = 0xe07f; //In little endian order
-	static const unsigned short WHITE = 0xff7f;
-
-	bool ConvertBmpToSakuraFormat(const string& inBmpPath, const unsigned short inAlphaColor = CYAN, unsigned int* pTileWidth = 0, unsigned int* pTileHeight = 0)
-	{
-		//Read in translated font sheet
-		BitmapReader origBmp;
-		if(!origBmp.ReadBitmap(inBmpPath))
-		{
-			return false;
-		}
-
-		const unsigned int imageWidth  = pTileWidth ? *pTileWidth : origBmp.mBitmapData.mInfoHeader.mImageWidth;
-		const unsigned int imageHeight = pTileHeight ? *pTileHeight : origBmp.mBitmapData.mInfoHeader.mImageHeight;
-
-		if(!mTileExtractor.ExtractTiles(imageWidth, imageHeight, imageWidth, imageHeight, origBmp))
-		{
-			return false;
-		}
-
-		//Convert it to the SakuraTaisen format
-		if( !mPalette.CreateFrom32BitData(origBmp.mBitmapData.mPaletteData.mpRGBA, origBmp.mBitmapData.mPaletteData.mSizeInBytes, false) )
-		{
-			return false;
-		}
-
-		//Fix up palette
-		//First index needs to have the transparent color
-		int indexOfAlphaColor = -1;
-		for(int i = 0; i < mPalette.GetNumColors(); ++i)
-		{
-			assert(i * 2 < mPalette.GetSize());
-
-			const unsigned short color = *((short*)(mPalette.GetData() + i * 2));
-			if(color == inAlphaColor)
-			{
-				const unsigned short oldColor0 = *((unsigned short*)mPalette.GetData());
-				mPalette.SetValue(0, inAlphaColor);
-				mPalette.SetValue(i, oldColor0);
-				indexOfAlphaColor = i;
-				break;
-			}
-		}
-
-		if(indexOfAlphaColor == -1)
-		{
-			printf("Alpha Color not found.  Palette will not be correct. \n");
-			indexOfAlphaColor = 0;
-		}
-
-		//Fix up color data now that the palette has been modified
-		if( indexOfAlphaColor != -1 )
-		{
-			mTileExtractor.FixupIndexOfAlphaColor((unsigned short)indexOfAlphaColor, origBmp.mBitmapData.mInfoHeader.mBitCount == 4);
-		}
-
-		return true;
-	}
-};
-
 bool CreateTranslatedFontSheet(const string& inTranslatedFontSheet, const string& outPath, bool bAutoName = true)
 {
 	//Read in translated font sheet
@@ -1093,32 +1142,11 @@ bool CreateTranslatedFontSheet(const string& inTranslatedFontSheet, const string
 	//Write out the SakuraTaisen KNJ file
 	FileWriter outTable;
 	outTable.OpenFileForWrite(outTableName);
+	
+	tileExtractor.FixupIndexOfAlphaColor(indexOfAlphaColor, true);
+
 	for(TileExtractor::Tile& tile : tileExtractor.mTiles)
 	{
-		for(unsigned int i = 0; i < tile.mTileSize; i++)
-		{
-			const unsigned short paletteIndex1 = (tile.mpTile[i] & 0xF0) >> 4; 
-			const unsigned short paletteIndex2 = (tile.mpTile[i] & 0x0F);
-
-			if( paletteIndex1 == 0 )
-			{
-				tile.mpTile[i] = (char)((indexOfAlphaColor << 4) + paletteIndex2);
-			}
-			else if( paletteIndex1 == indexOfAlphaColor )
-			{
-				tile.mpTile[i] = (char)paletteIndex2;
-			}
-
-			if( paletteIndex2 == 0 )
-			{
-				tile.mpTile[i] = (char)((tile.mpTile[i]&0xF0) + indexOfAlphaColor);
-			}
-			else if( paletteIndex2 == indexOfAlphaColor )
-			{
-				tile.mpTile[i] = tile.mpTile[i]&0xF0;
-			}
-		}
-
 		outTable.WriteData(tile.mpTile, tile.mTileSize);
 	}
 
@@ -3922,33 +3950,9 @@ bool PatchTMapSP(const string& sakuraDirectory, const string& patchDataPath)
 		}
 
 		//Write out the SakuraTaisen format image
+		tileExtractor.FixupIndexOfAlphaColor(indexOfAlphaColor, true);
 		for(TileExtractor::Tile& tile : tileExtractor.mTiles)
 		{
-			//Fix up alpha lookup
-			for(unsigned int i = 0; i < tile.mTileSize; i++)
-			{
-				const unsigned short paletteIndex1 = (tile.mpTile[i] & 0xF0) >> 4; 
-				const unsigned short paletteIndex2 = (tile.mpTile[i] & 0x0F);
-
-				if( paletteIndex1 == 0 )
-				{
-					tile.mpTile[i] = (char)((indexOfAlphaColor << 4) + paletteIndex2);
-				}
-				else if( paletteIndex1 == indexOfAlphaColor )
-				{
-					tile.mpTile[i] = (char)paletteIndex2;
-				}
-
-				if( paletteIndex2 == 0 )
-				{
-					tile.mpTile[i] = (char)((tile.mpTile[i]&0xF0) + indexOfAlphaColor);
-				}
-				else if( paletteIndex2 == indexOfAlphaColor )
-				{
-					tile.mpTile[i] = tile.mpTile[i]&0xF0;
-				}
-			}
-
 			//Empty room image goes into sakura file
 			if( bIsEmptyRoomImage )
 			{
@@ -4146,55 +4150,6 @@ void CompressFile(const string& filePath, const string& outPath)
 	outFile.WriteData(compressedFile.mpCompressedData, compressedFile.mCompressedSize);
 }
 
-struct SakuraCompressedData
-{
-	char*         mpCompressedData = nullptr;
-	unsigned long mDataSize        = 0;
-
-	~SakuraCompressedData()
-	{
-		delete[] mpCompressedData;
-		mpCompressedData = nullptr;
-	}
-
-	void PatchDataInMemory(const char* pInData, const unsigned long inDataSize, bool bPad)
-	{
-		//Compress bgnd image
-		PRSCompressor compressor;
-		compressor.CompressData((void*)pInData, inDataSize);
-
-		//Pad compressed data is it is divisible by 2
-		if(bPad)
-		{
-			mDataSize = compressor.mCompressedSize + (compressor.mCompressedSize % 2);
-			mpCompressedData = new char[mDataSize];
-			memset(mpCompressedData, 0, mDataSize);
-			memcpy_s(mpCompressedData, mDataSize, compressor.mpCompressedData, compressor.mCompressedSize);
-		}
-		else
-		{
-			mpCompressedData = std::move(compressor.mpCompressedData);
-			mDataSize = compressor.mCompressedSize;
-		}
-	}
-
-	bool PatchDataFromFile(const string& inFileName, bool bPad)
-	{
-		//Load bgnd image
-		const FileNameContainer fileNameInfo(inFileName.c_str());
-		FileData fileData;
-		if( !fileData.InitializeFileData(fileNameInfo) )
-		{
-			return false;
-		}
-
-		//Compress bgnd image
-		PatchDataInMemory(fileData.GetData(), fileData.GetDataSize(), bPad);
-
-		return true;
-	}
-
-};
 bool PatchMainMenu(const string& sakuraRootDirectory, const string& inTranslatedFontSheet, const string& outFontSheetPath, const string& inMainMenuTranslatedBgnd)
 {
 	if( !CreateTranslatedFontSheet(inTranslatedFontSheet, outFontSheetPath, false) )
@@ -4417,7 +4372,7 @@ bool PatchGame(const string& rootSakuraTaisenDirectory, const string& patchedSak
 	}
 
 	//Step 7
-	const string translatedMainMenuFontSheetPath = tempDir + "TranslatedMainMenuFontSheet"; //Created by CreateTranslatedFontSheet
+	const string translatedMainMenuFontSheetPath = tempDir + "TranslatedMainMenuFontSheet";
 	if( !PatchMainMenu(patchedSakuraTaisenDirectory, inMainMainFontSheetPath, translatedMainMenuFontSheetPath, inMainMenuTranslatedBgnd) )
 	{
 		printf("Patching MainMenu LOGO.SH2 failed.\n");
