@@ -55,7 +55,7 @@ struct BmpToSakuraConverter
 	PaletteData   mPalette;
 	static const unsigned short CYAN = 0xe07f; //In little endian order
 	static const unsigned short WHITE = 0xff7f;
-
+	static const unsigned short BLACK = 0;
 	bool ConvertBmpToSakuraFormat(const string& inBmpPath, const unsigned short inAlphaColor = CYAN, unsigned int* pTileWidth = 0, unsigned int* pTileHeight = 0)
 	{
 		//Read in translated font sheet
@@ -124,7 +124,7 @@ struct SakuraCompressedData
 		mpCompressedData = nullptr;
 	}
 
-	void PatchDataInMemory(const char* pInData, const unsigned long inDataSize, bool bPad)
+	void PatchDataInMemory(const char* pInData, const unsigned long inDataSize, bool bPad, unsigned long padAmount = 0)
 	{
 		//Compress bgnd image
 		PRSCompressor compressor;
@@ -133,7 +133,15 @@ struct SakuraCompressedData
 		//Pad compressed data is it is divisible by 2
 		if(bPad)
 		{
-			mDataSize = compressor.mCompressedSize + (compressor.mCompressedSize % 2);
+			if( compressor.mCompressedSize < padAmount )
+			{
+				mDataSize = padAmount;
+			}
+			else
+			{
+				mDataSize = compressor.mCompressedSize + (compressor.mCompressedSize % 2);
+			}
+			
 			mpCompressedData = new char[mDataSize];
 			memset(mpCompressedData, 0, mDataSize);
 			memcpy_s(mpCompressedData, mDataSize, compressor.mpCompressedData, compressor.mCompressedSize);
@@ -2057,7 +2065,7 @@ void FindDuplicateText(const string& dialogImageDirectory, const string& outFile
 	}
 }
 
-bool FixupSakura(const string& rootDir)
+bool FixupSakura(const string& rootDir, const string& inTranslatedOptionsBmp)
 {
 	const string filePath = rootDir + string("SAKURA");
 	FILE* pFile = nullptr;
@@ -2067,6 +2075,31 @@ bool FixupSakura(const string& rootDir)
 		printf("Unable to open SAKURA.  Error: %i\n", errorValue);
 		return false;
 	}
+
+	//****Patch Options Image****
+	//Compress bgnd image
+	BmpToSakuraConverter patchedOptionsImage;
+	if( !patchedOptionsImage.ConvertBmpToSakuraFormat(inTranslatedOptionsBmp, BmpToSakuraConverter::CYAN) )
+	{
+		printf("FixupSakura: Couldn't convert image: %s.\n", inTranslatedOptionsBmp.c_str());
+		return false;
+	}
+
+	const unsigned long originalDataSize = 1629;
+	SakuraCompressedData translatedOptionsData;
+	translatedOptionsData.PatchDataInMemory(patchedOptionsImage.mTileExtractor.mTiles[0].mpTile, patchedOptionsImage.mTileExtractor.mTiles[0].mTileSize, true, originalDataSize);
+	if( translatedOptionsData.mDataSize > originalDataSize )
+	{
+		printf("Patched options image is larger than original.  Original: %ul Patched: %ul\n", originalDataSize, translatedOptionsData.mDataSize);
+		return false;
+	}
+	fseek(pFile, 0x0005AE38, SEEK_SET);
+	fwrite(translatedOptionsData.mpCompressedData, originalDataSize, 1, pFile);
+
+	//Patch palette
+	fseek(pFile, 0x0005AD98, SEEK_SET);
+	fwrite(patchedOptionsImage.mPalette.GetData(), patchedOptionsImage.mPalette.GetSize(), 1, pFile);
+	//****Done Patching Options Image****
 
 	//const unsigned short tileSize  = (OutTileSpacingY << 8) + (OutTileSpacingX/8);
 
@@ -2096,6 +2129,7 @@ bool FixupSakura(const string& rootDir)
 	//fwrite(&tileSize, sizeof(tileSize), 1, pFile);
 
 	fclose(pFile);
+
 
 	printf("FixupSakura Succeeded.\n");
 
@@ -4203,10 +4237,6 @@ bool PatchMainMenu(const string& sakuraRootDirectory, const string& inTranslated
 		return false;
 	}
 
-	FileWriter outFileTest;
-	outFileTest.OpenFileForWrite("D:\\Rizwan\\SakuraWars\\Test\\testImg.bin");
-	outFileTest.WriteData(patchedBgndImage.mTileExtractor.mTiles[0].mpTile, patchedBgndImage.mTileExtractor.mTiles[0].mTileSize);
-
 	SakuraCompressedData translatedBgndData;
 	translatedBgndData.PatchDataInMemory(patchedBgndImage.mTileExtractor.mTiles[0].mpTile, patchedBgndImage.mTileExtractor.mTiles[0].mTileSize, true);
 	
@@ -4308,7 +4338,7 @@ bool PatchMainMenu(const string& sakuraRootDirectory, const string& inTranslated
 }
 
 bool PatchGame(const string& rootSakuraTaisenDirectory, const string& patchedSakuraTaisenDirectory, const string& translatedTextDirectory, const string& fontSheetFileName, const string& originalPaletteFileName, 
-	const string &patchedTMapSPDataPath, const string& inMainMainFontSheetPath, const string& inMainMenuTranslatedBgnd)
+	const string &patchedTMapSPDataPath, const string& inMainMainFontSheetPath, const string& inMainMenuTranslatedBgnd, const string& inPatchedOptionsImage)
 {
 	char buffer[MAX_PATH];
 	const DWORD dwRet = GetCurrentDirectory(MAX_PATH, buffer);
@@ -4342,7 +4372,7 @@ bool PatchGame(const string& rootSakuraTaisenDirectory, const string& patchedSak
 	}
 
 	//Step 3
-	if( !FixupSakura(patchedSakuraTaisenDirectory) )
+	if( !FixupSakura(patchedSakuraTaisenDirectory, inPatchedOptionsImage) )
 	{
 		printf("FixupSakura failed.  Patch unsuccessful.\n");
 		return false;
@@ -4409,7 +4439,7 @@ void PrintHelp()
 	printf("PatchTMapSP sakuraDirectory patchDataPath\n");
 	printf("CompressFile inFilePath outFilePath\n");
 	printf("FindCompressedFile compressedFile uncompressedFile\n");
-	printf("PatchGame rootSakuraTaisenDirectory patchedSakuraTaisenDirectory translatedTextDirectory fontSheet originalPalette patchedTMapSpDataPath mainMenuFontSheetPath mainMenuBgndPatchedImage \n");
+	printf("PatchGame rootSakuraTaisenDirectory patchedSakuraTaisenDirectory translatedTextDirectory fontSheet originalPalette patchedTMapSpDataPath mainMenuFontSheetPath mainMenuBgndPatchedImage optionsImagePatched \n");
 }
 
 int main(int argc, char *argv[])
@@ -4493,7 +4523,7 @@ int main(int argc, char *argv[])
 
 		PatchPalettes(searchDirectory, origPalette, newPalette, outDir);
 
-		FixupSakura(outDir);
+		//FixupSakura(outDir);
 	}
 	else if( command == "InsertText" && argc == 5 )
 	{
@@ -4517,7 +4547,7 @@ int main(int argc, char *argv[])
 
 		OutputDialogOrder(searchDirectory, outputFile);
 	}
-	else if( command == "PatchGame" && argc == 10 )
+	else if( command == "PatchGame" && argc == 11 )
 	{
 		const string rootSakuraTaisenDirectory    = string(argv[2]) + Seperators;
 		const string patchedSakuraTaisenDirectory = string(argv[3]) + Seperators;
@@ -4527,8 +4557,9 @@ int main(int argc, char *argv[])
 		const string patchedTMapSpDataPath        = string(argv[7]) + Seperators;
 		const string mainMenuFontSheetPath        = string(argv[8]);
 		const string mainMenuTranslatedBgnd       = string(argv[9]);
+		const string patchedOptionsImage          = string(argv[10]);
 
-		PatchGame(rootSakuraTaisenDirectory, patchedSakuraTaisenDirectory, translatedTextDirectory, fontSheet, originalPalette, patchedTMapSpDataPath, mainMenuFontSheetPath, mainMenuTranslatedBgnd);
+		PatchGame(rootSakuraTaisenDirectory, patchedSakuraTaisenDirectory, translatedTextDirectory, fontSheet, originalPalette, patchedTMapSpDataPath, mainMenuFontSheetPath, mainMenuTranslatedBgnd, patchedOptionsImage);
 	}
 	else if(command == "CreateTBLSpreadsheets" && argc == 5 )
 	{
