@@ -1151,7 +1151,7 @@ bool CreateTranslatedFontSheet(const string& inTranslatedFontSheet, const string
 	FileWriter outTable;
 	outTable.OpenFileForWrite(outTableName);
 	
-	tileExtractor.FixupIndexOfAlphaColor(indexOfAlphaColor, true);
+	tileExtractor.FixupIndexOfAlphaColor((unsigned short)indexOfAlphaColor, true);
 
 	for(TileExtractor::Tile& tile : tileExtractor.mTiles)
 	{
@@ -3984,7 +3984,7 @@ bool PatchTMapSP(const string& sakuraDirectory, const string& patchDataPath)
 		}
 
 		//Write out the SakuraTaisen format image
-		tileExtractor.FixupIndexOfAlphaColor(indexOfAlphaColor, true);
+		tileExtractor.FixupIndexOfAlphaColor((unsigned short)indexOfAlphaColor, true);
 		for(TileExtractor::Tile& tile : tileExtractor.mTiles)
 		{
 			//Empty room image goes into sakura file
