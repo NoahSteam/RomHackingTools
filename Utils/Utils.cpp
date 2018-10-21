@@ -953,7 +953,7 @@ PRSDecompressor::~PRSDecompressor()
 bool PRSDecompressor::UncompressData(void* pInData, unsigned int inDataSize)
 {
 	unsigned char* pBuffer = nullptr;
-	int decompressedSize = prs_decompress_buf((uint8_t*)pInData, &pBuffer, inDataSize);
+	int decompressedSize = prs_decompress_buf((uint8_t*)pInData, &pBuffer, inDataSize, mCompressedSize);
 	if( decompressedSize > 0 )
 	{
 		mpUncompressedData    = std::move( reinterpret_cast<char*>(pBuffer) );

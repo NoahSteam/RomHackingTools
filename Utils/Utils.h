@@ -314,6 +314,7 @@ struct PRSDecompressor
 {
 	char*         mpUncompressedData = nullptr;
 	unsigned long mUncompressedDataSize = 0;
+	size_t        mCompressedSize = 0;
 
 	~PRSDecompressor();
 	bool UncompressData(void* pInData, unsigned int inDataSize);
@@ -326,4 +327,4 @@ bool FindDataWithinBuffer(const char* pBuffer, unsigned long bufferSize, const c
 unsigned long prs_decompress_size(void* source);
 unsigned long prs_decompress(void* source, void* dest, unsigned long destSize);
 unsigned long prs_compress(void* source, void* dest, unsigned long size);
-int prs_decompress_buf(const uint8_t *src, uint8_t **dst, size_t src_len);
+int prs_decompress_buf(const uint8_t *src, uint8_t **dst, size_t src_len, size_t &outCompressedSize);

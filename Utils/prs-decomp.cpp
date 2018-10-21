@@ -429,7 +429,7 @@ static int copy_abyte(struct prs_dec_cxt *cxt) {
     to reading from a file. prs_decompress_file and prs_decompress_buf may also
     return errors related to memory allocation.
  ******************************************************************************/
-int prs_decompress_buf(const uint8_t *src, uint8_t **dst, size_t src_len) 
+int prs_decompress_buf(const uint8_t *src, uint8_t **dst, size_t src_len, size_t& outOrigCompressedSize) 
 {
     struct prs_dec_cxt cxt =
         { 0, 0, src, NULL, NULL, src_len, src_len * 2, 0, 0, &copy_abyte,
@@ -464,6 +464,8 @@ int prs_decompress_buf(const uint8_t *src, uint8_t **dst, size_t src_len)
        unshortened buffer). */
     if(!(*dst = (uint8_t*)realloc(cxt.dst, rv)))
         *dst = cxt.dst;
+
+	outOrigCompressedSize = cxt.src_pos;
 
     return rv;
 }

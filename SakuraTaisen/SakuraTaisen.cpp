@@ -117,6 +117,7 @@ struct SakuraCompressedData
 {
 	char*         mpCompressedData = nullptr;
 	unsigned long mDataSize        = 0;
+	unsigned long mFrontPad        = 0;
 
 	~SakuraCompressedData()
 	{
@@ -124,7 +125,7 @@ struct SakuraCompressedData
 		mpCompressedData = nullptr;
 	}
 
-	void PatchDataInMemory(const char* pInData, const unsigned long inDataSize, bool bPad, unsigned long padAmount = 0)
+	void PatchDataInMemory(const char* pInData, const unsigned long inDataSize, bool bPad, bool bFrontPad = false, unsigned long padAmount = 0)
 	{
 		//Compress bgnd image
 		PRSCompressor compressor;
@@ -136,6 +137,11 @@ struct SakuraCompressedData
 			if( compressor.mCompressedSize < padAmount )
 			{
 				mDataSize = padAmount;
+
+				if( bFrontPad )
+				{
+					mFrontPad = padAmount - compressor.mCompressedSize;
+				}
 			}
 			else
 			{
@@ -144,7 +150,7 @@ struct SakuraCompressedData
 			
 			mpCompressedData = new char[mDataSize];
 			memset(mpCompressedData, 0, mDataSize);
-			memcpy_s(mpCompressedData, mDataSize, compressor.mpCompressedData, compressor.mCompressedSize);
+			memcpy_s(mpCompressedData + mFrontPad, mDataSize - mFrontPad, compressor.mpCompressedData, compressor.mCompressedSize);
 		}
 		else
 		{
@@ -2085,14 +2091,23 @@ bool FixupSakura(const string& rootDir, const string& inTranslatedOptionsBmp)
 		return false;
 	}
 
-	const unsigned long originalDataSize = 1629;
+	const unsigned long originalDataSize = 1256;
 	SakuraCompressedData translatedOptionsData;
-	translatedOptionsData.PatchDataInMemory(patchedOptionsImage.mTileExtractor.mTiles[0].mpTile, patchedOptionsImage.mTileExtractor.mTiles[0].mTileSize, true, originalDataSize);
+	translatedOptionsData.PatchDataInMemory(patchedOptionsImage.mTileExtractor.mTiles[0].mpTile, patchedOptionsImage.mTileExtractor.mTiles[0].mTileSize, true, true, originalDataSize);
 	if( translatedOptionsData.mDataSize > originalDataSize )
 	{
 		printf("Patched options image is larger than original.  Original: %ul Patched: %ul\n", originalDataSize, translatedOptionsData.mDataSize);
 		return false;
 	}
+
+	const unsigned int pointerToOptionsImage = SwapByteOrder(0x0605EE38 + translatedOptionsData.mFrontPad);
+	fseek(pFile, 0x00035244, SEEK_SET);
+	fwrite(&pointerToOptionsImage, 4, 1, pFile);
+	fseek(pFile, 0x00039BA0, SEEK_SET);
+	fwrite(&pointerToOptionsImage, 4, 1, pFile);
+	fseek(pFile, 0x00039C58, SEEK_SET);
+	fwrite(&pointerToOptionsImage, 4, 1, pFile);
+
 	fseek(pFile, 0x0005AE38, SEEK_SET);
 	fwrite(translatedOptionsData.mpCompressedData, originalDataSize, 1, pFile);
 
@@ -4081,10 +4096,10 @@ void FindCompressedData(const string& inCompressedFilePath, const string& inUnco
 		if( FindDataWithinBuffer(decompressor.mpUncompressedData, decompressor.mUncompressedDataSize, uncompressedFile.GetData(), uncompressedFile.GetDataSize(), foundIndex) )
 		{
 			//Find size of original compressed data
-			PRSCompressor compressedInfo;
-			compressedInfo.CompressData((void*)decompressor.mpUncompressedData, decompressor.mUncompressedDataSize);
+			//PRSCompressor compressedInfo;
+			//compressedInfo.CompressData((void*)decompressor.mpUncompressedData, decompressor.mUncompressedDataSize);
 			
-			foundIndices.push_back( FoundData(index, foundIndex, uncompressedFile.GetDataSize(), compressedInfo.mCompressedSize) );
+			foundIndices.push_back( FoundData(index, foundIndex, uncompressedFile.GetDataSize(), decompressor.mUncompressedDataSize) );
 			printf("Found at: %lu\n", index);
 
 			char numBuffer[50];
@@ -4337,6 +4352,25 @@ bool PatchMainMenu(const string& sakuraRootDirectory, const string& inTranslated
 	return true;
 }
 
+bool CopyOriginalFiles(const string& rootSakuraTaisenDirectory, const string& patchedSakuraTaisenDirectory)
+{
+	const string originalSakuraFile = rootSakuraTaisenDirectory + "SAKURA";
+	const string newSakuraFile      = patchedSakuraTaisenDirectory + "SAKURA";
+	if( !CopyFile(originalSakuraFile.c_str(), newSakuraFile.c_str(), FALSE) )
+	{
+		return false;
+	}
+
+	const string originalLogoFile = rootSakuraTaisenDirectory + "SAKURA1\\LOGO.SH2";
+	const string newLogoFile = patchedSakuraTaisenDirectory + "SAKURA1\\LOGO.SH2";
+	if(!CopyFile(originalLogoFile.c_str(), newLogoFile.c_str(), FALSE))
+	{
+		return false;
+	}
+
+	return true;
+}
+
 bool PatchGame(const string& rootSakuraTaisenDirectory, const string& patchedSakuraTaisenDirectory, const string& translatedTextDirectory, const string& fontSheetFileName, const string& originalPaletteFileName, 
 	const string &patchedTMapSPDataPath, const string& inMainMainFontSheetPath, const string& inMainMenuTranslatedBgnd, const string& inPatchedOptionsImage)
 {
@@ -4353,6 +4387,13 @@ bool PatchGame(const string& rootSakuraTaisenDirectory, const string& patchedSak
 	if( !CreateDirectoryHelper(tempDir) )
 	{
 		printf("Cannot patch game.  Could not create temp work directory.  Error: (%d)\n", GetLastError());
+		return false;
+	}
+
+	//Step 0
+	if( !CopyOriginalFiles(rootSakuraTaisenDirectory, patchedSakuraTaisenDirectory) )
+	{
+		printf("CopyOriginalFiles failed.  Patch unsuccessful.\n");
 		return false;
 	}
 
