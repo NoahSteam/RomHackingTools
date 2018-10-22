@@ -2091,7 +2091,7 @@ bool FixupSakura(const string& rootDir, const string& inTranslatedOptionsBmp)
 		return false;
 	}
 
-	const unsigned long originalDataSize = 1256;
+	const unsigned long originalDataSize = 1255;
 	SakuraCompressedData translatedOptionsData;
 	translatedOptionsData.PatchDataInMemory(patchedOptionsImage.mTileExtractor.mTiles[0].mpTile, patchedOptionsImage.mTileExtractor.mTiles[0].mTileSize, true, true, originalDataSize);
 	if( translatedOptionsData.mDataSize > originalDataSize )
@@ -4265,7 +4265,7 @@ bool PatchMainMenu(const string& sakuraRootDirectory, const string& inTranslated
 
 	//Create new data
 	const unsigned long origCompressedFontSheetSize = 2280;
-	const unsigned long origCompressedBgndImgSize   = 4260;
+	const unsigned long origCompressedBgndImgSize   = 3942;//4260;
 	const unsigned long origCompressedSize          = origCompressedFontSheetSize + origCompressedBgndImgSize;
 	const unsigned long originalDataSize            = logoFileData.GetDataSize() - origCompressedSize;  //Original size of all the non-compressed data in LOGO.SH2
 	const unsigned long newCompressedSize           = patchedFontSheetSize + translatedBgndData.mDataSize;

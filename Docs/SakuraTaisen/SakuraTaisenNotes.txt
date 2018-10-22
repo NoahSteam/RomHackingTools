@@ -112,11 +112,12 @@ LOGO.SH2 has a pointer: 0023F640 which will end up writing into our buffer. Fix 
 -Compression Results for MainMenu Bgnd image: Found: 00010808 00000000 Size: 31616 CompressedSize: 4260
 -Palette is @0x00029124 and is 512 bytes
 
+-During options, SAKURA is loaded @0x60004000
 -Options image is in SAKURA file:
 Found: 0005ae38 00000000 Size: 20735 CompressedSize: 1255
--Compressed data is loaded in memory @0x0605EE38.  Pointer is in SAKURA @0x00039C58
+-Compressed data is loaded in memory @0x0605EE38.  Pointer is in SAKURA @0x00039C58 (0x0603dba0, 0x0603dc58 in memory)
 -Palette @ 0x0005AD98
--Imediatley after this, the font arrows start @0x060FF320 in memory.  That is, 0x4E8 bytes from start of options image
+-Imediatley after this, the font arrows start @0x060FF320 in memory.  That is, 0x4E8 bytes from start of options image. Pointer is @0x0603dc64 in memory.
 
 -Steps to patch logo file:
 1)Create font sheet
