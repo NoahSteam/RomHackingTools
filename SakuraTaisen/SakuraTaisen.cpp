@@ -2074,8 +2074,8 @@ void FindDuplicateText(const string& dialogImageDirectory, const string& outFile
 bool FixupSakura(const string& rootDir, const string& inTranslatedOptionsBmp)
 {
 	const string filePath = rootDir + string("SAKURA");
-	FILE* pFile = nullptr;
-	errno_t errorValue = fopen_s(&pFile, filePath.c_str(), "r+b");
+	FILE* pSakuraFile = nullptr;
+	errno_t errorValue = fopen_s(&pSakuraFile, filePath.c_str(), "r+b");
 	if (errorValue)
 	{
 		printf("Unable to open SAKURA.  Error: %i\n", errorValue);
@@ -2091,9 +2091,33 @@ bool FixupSakura(const string& rootDir, const string& inTranslatedOptionsBmp)
 		return false;
 	}
 
+	//Read in original options image
+	char* pOriginalData = new char[1255];
+	fseek(pSakuraFile, 0x0005ae38, SEEK_SET);
+	fread(pOriginalData, 1255, 1, pSakuraFile);
+
+	PRSDecompressor uncompressedBgndImage;
+	uncompressedBgndImage.UncompressData((void*)pOriginalData, 1255);
+	delete[] pOriginalData;
+	//Done reading in original image
+
+	const unsigned int origImageDataSize = 144*288/2;
+	const unsigned int patchedImageSize  = patchedOptionsImage.mTileExtractor.mTiles[0].mTileSize;
+	const unsigned int newImageDataSize  = patchedImageSize + (uncompressedBgndImage.mUncompressedDataSize - origImageDataSize);
+	if( newImageDataSize != uncompressedBgndImage.mUncompressedDataSize )
+	{
+		printf("FixupSakura failed. Data size mismatch");
+		return false;
+	}
+	char* pNewImageData = new char[newImageDataSize];
+	memset(pNewImageData, 0, newImageDataSize);
+	memcpy_s(pNewImageData, newImageDataSize, patchedOptionsImage.mTileExtractor.mTiles[0].mpTile, patchedImageSize);
+	memcpy_s(pNewImageData + patchedImageSize, newImageDataSize - patchedImageSize, uncompressedBgndImage.mpUncompressedData + origImageDataSize, uncompressedBgndImage.mUncompressedDataSize - origImageDataSize);
 	const unsigned long originalDataSize = 1255;
 	SakuraCompressedData translatedOptionsData;
-	translatedOptionsData.PatchDataInMemory(patchedOptionsImage.mTileExtractor.mTiles[0].mpTile, patchedOptionsImage.mTileExtractor.mTiles[0].mTileSize, true, true, originalDataSize);
+	translatedOptionsData.PatchDataInMemory(pNewImageData, newImageDataSize, true, false, originalDataSize);
+	delete[] pNewImageData;
+
 	if( translatedOptionsData.mDataSize > originalDataSize )
 	{
 		printf("Patched options image is larger than original.  Original: %ul Patched: %ul\n", originalDataSize, translatedOptionsData.mDataSize);
@@ -2101,49 +2125,57 @@ bool FixupSakura(const string& rootDir, const string& inTranslatedOptionsBmp)
 	}
 
 	const unsigned int pointerToOptionsImage = SwapByteOrder(0x0605EE38 + translatedOptionsData.mFrontPad);
-	fseek(pFile, 0x00035244, SEEK_SET);
-	fwrite(&pointerToOptionsImage, 4, 1, pFile);
-	fseek(pFile, 0x00039BA0, SEEK_SET);
-	fwrite(&pointerToOptionsImage, 4, 1, pFile);
-	fseek(pFile, 0x00039C58, SEEK_SET);
-	fwrite(&pointerToOptionsImage, 4, 1, pFile);
+	fseek(pSakuraFile, 0x00035244, SEEK_SET);
+	fwrite(&pointerToOptionsImage, 4, 1, pSakuraFile);
+	fseek(pSakuraFile, 0x00039BA0, SEEK_SET);
+	fwrite(&pointerToOptionsImage, 4, 1, pSakuraFile);
+	fseek(pSakuraFile, 0x00039C58, SEEK_SET);
+	fwrite(&pointerToOptionsImage, 4, 1, pSakuraFile);
 
-	fseek(pFile, 0x0005AE38, SEEK_SET);
-	fwrite(translatedOptionsData.mpCompressedData, originalDataSize, 1, pFile);
+	const unsigned int pointerToSelectorImage = SwapByteOrder(0x0605EE38 + translatedOptionsData.mFrontPad);
+	fseek(pSakuraFile, 0x00035244, SEEK_SET);
+	fwrite(&pointerToOptionsImage, 4, 1, pSakuraFile);
+	fseek(pSakuraFile, 0x00039BA0, SEEK_SET);
+	fwrite(&pointerToOptionsImage, 4, 1, pSakuraFile);
+	fseek(pSakuraFile, 0x00039C58, SEEK_SET);
+	fwrite(&pointerToOptionsImage, 4, 1, pSakuraFile);
+
+	fseek(pSakuraFile, 0x0005AE38, SEEK_SET);
+	fwrite(translatedOptionsData.mpCompressedData, translatedOptionsData.mDataSize, 1, pSakuraFile);
 
 	//Patch palette
-	fseek(pFile, 0x0005AD98, SEEK_SET);
-	fwrite(patchedOptionsImage.mPalette.GetData(), patchedOptionsImage.mPalette.GetSize(), 1, pFile);
+	fseek(pSakuraFile, 0x0005AD98, SEEK_SET);
+	fwrite(patchedOptionsImage.mPalette.GetData(), patchedOptionsImage.mPalette.GetSize(), 1, pSakuraFile);
 	//****Done Patching Options Image****
 
 	//const unsigned short tileSize  = (OutTileSpacingY << 8) + (OutTileSpacingX/8);
 
 	//const int offsetTileDim     = 0x0001040A;
-	const int offsetTileSpacingX = 0x000104e5;
-	const int offsetTileSpacingY = 0x000104D7;
-	const int offsetTileSpacingX2 = 0x00010747;
-	const int offsetTileSpacingY2 = 0x00010733;
+	const int offsetTileSpacingX     = 0x000104e5;
+	const int offsetTileSpacingY     = 0x000104D7;
+	const int offsetTileSpacingX2    = 0x00010747;
+	const int offsetTileSpacingY2    = 0x00010733;
 	const int offsetTileSpacingLIPSX = 0x0001066B;
 
-	fseek(pFile, offsetTileSpacingX, SEEK_SET);
-	fwrite(&OutTileSpacingX, sizeof(OutTileSpacingX), 1, pFile);
+	fseek(pSakuraFile, offsetTileSpacingX, SEEK_SET);
+	fwrite(&OutTileSpacingX, sizeof(OutTileSpacingX), 1, pSakuraFile);
 
-	fseek(pFile, offsetTileSpacingY, SEEK_SET);
-	fwrite(&OutTileSpacingY, sizeof(OutTileSpacingY), 1, pFile);
+	fseek(pSakuraFile, offsetTileSpacingY, SEEK_SET);
+	fwrite(&OutTileSpacingY, sizeof(OutTileSpacingY), 1, pSakuraFile);
 
-	fseek(pFile, offsetTileSpacingX2, SEEK_SET);
-	fwrite(&OutTileSpacingX, sizeof(OutTileSpacingX), 1, pFile);
+	fseek(pSakuraFile, offsetTileSpacingX2, SEEK_SET);
+	fwrite(&OutTileSpacingX, sizeof(OutTileSpacingX), 1, pSakuraFile);
 
-	fseek(pFile, offsetTileSpacingY2, SEEK_SET);
-	fwrite(&OutTileSpacingY, sizeof(OutTileSpacingY), 1, pFile);
+	fseek(pSakuraFile, offsetTileSpacingY2, SEEK_SET);
+	fwrite(&OutTileSpacingY, sizeof(OutTileSpacingY), 1, pSakuraFile);
 
-	fseek(pFile, offsetTileSpacingLIPSX, SEEK_SET);
-	fwrite(&OutTileSpacingX, sizeof(OutTileSpacingX), 1, pFile);
+	fseek(pSakuraFile, offsetTileSpacingLIPSX, SEEK_SET);
+	fwrite(&OutTileSpacingX, sizeof(OutTileSpacingX), 1, pSakuraFile);
 
 	//fseek(pFile, offsetTileDim, SEEK_SET);
 	//fwrite(&tileSize, sizeof(tileSize), 1, pFile);
 
-	fclose(pFile);
+	fclose(pSakuraFile);
 
 
 	printf("FixupSakura Succeeded.\n");
@@ -4099,7 +4131,7 @@ void FindCompressedData(const string& inCompressedFilePath, const string& inUnco
 			//PRSCompressor compressedInfo;
 			//compressedInfo.CompressData((void*)decompressor.mpUncompressedData, decompressor.mUncompressedDataSize);
 			
-			foundIndices.push_back( FoundData(index, foundIndex, uncompressedFile.GetDataSize(), decompressor.mUncompressedDataSize) );
+			foundIndices.push_back( FoundData(index, foundIndex, uncompressedFile.GetDataSize(), decompressor.mCompressedSize) );
 			printf("Found at: %lu\n", index);
 
 			char numBuffer[50];
@@ -4156,19 +4188,19 @@ void DecompressionTest()
 {
 	FileData testData;
 	//if( !testData.InitializeFileData("FACE01.BIN", "D:\\Rizwan\\SakuraWars\\Disc1\\SAKURA2\\FACE01.BIN") )
-	if( !testData.InitializeFileData("FACE01.BIN", "A:\\SakuraTaisen\\Disc1\\SAKURA2\\FACE01.BIN") )
+	if( !testData.InitializeFileData("Uncompressed.bin", "A:\\SakuraTaisen\\Uncompressed.bin") )
 	{
 		return;
 	}
 
 	vector<unsigned char> output;
-	const unsigned char* compressedData = (const unsigned char*)testData.GetData() + 0xFDC4 + 2;//0xFDD7;//0xFD09;//0xFDF8;
+	const unsigned char* compressedData = (const unsigned char*)testData.GetData();//0xFDD7;//0xFD09;//0xFDF8;
 	unsigned long destSize = prs_decompress_size((void*)compressedData);
 	unsigned char* dest = new unsigned char[destSize];
 	prs_decompress((void *)compressedData, dest, destSize);
 
 	FILE* pOutFile = nullptr;
-	fopen_s(&pOutFile, "A:\\SakuraTaisen\\ExtractedData\\Disc1\\Test\\UncompressedFace.bin", "wb");
+	fopen_s(&pOutFile, "A:\\SakuraTaisen\\UncompressedDataResults\\UncompressedFace.bin", "wb");
 	if( pOutFile )
 	{
 		fwrite(dest, 1, destSize, pOutFile);
