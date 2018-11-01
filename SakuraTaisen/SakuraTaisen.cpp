@@ -2153,21 +2153,23 @@ bool FixupSakura(const string& rootDir, const string& inTranslatedOptionsBmp)
 	//Patch palette
 	memcpy_s(pNewSakuraData + 0x0005AD98 + optionsSizeDiff, newSakuraLength - 0x0005AD98 + optionsSizeDiff, patchedOptionsImage.mPalette.GetData(), patchedOptionsImage.mPalette.GetSize());
 
-	FileData optionsHWRAM;
-	if( !optionsHWRAM.InitializeFileData("Options_HWRAM.bin", "D:\\Rizwan\\SakuraWars\\MemoryDumps\\Options_HWRAM.bin") )
-	{
-		return false;
-	}
-
 	//Fixup pointers after the options image
 	for(unsigned long k = 0x00035240; k < newSakuraLength; ++k)
 	{
-		unsigned int possiblePointer = *((unsigned int*)&origSakuraData.GetData()[k]);
+		const unsigned long origK = k - optionsSizeDiff;
+		if( (origK >= 0x0005629C && origK <= 0x000562BC) || (origK >= 0x0005880A && origK <= 0x00058FBC) || (origK >= 0x0005ADAC && origK <= 0x0005b328) || (origK >= 0x0005F148 && origK <= 0x0005FB83) || 
+			(origK >= 0x0005B329 && origK <= 0x0005FA19) || (origK >= 0x00052D2F && origK <= 0x000539AD) || (origK >- 0x000553DD && origK <= 0x0005540D) || (origK >= 0x0005873B && origK <= 0x0005900D) ||
+			(origK >= 0x0005AD7D && origK <= 0x0005B329) )
+		{
+			continue;
+		}
+
+		unsigned int possiblePointer = *((unsigned int*)&pNewSakuraData[k]);
 		possiblePointer = SwapByteOrder(possiblePointer);
 
 		if( possiblePointer == 0x06060606 || possiblePointer == 0x06060607 || possiblePointer == 0x06060707 || possiblePointer == 0x06060601 || possiblePointer == 0x06060406 || possiblePointer == 0x06060106 || //0x06060106
 			possiblePointer == 0x06060605 || possiblePointer == 0x06060506 || possiblePointer == 0x06060602 || possiblePointer == 0x06060206 || possiblePointer == 0x06060603 || possiblePointer == 0x06060306 ||
-			possiblePointer == 0x06060600 || possiblePointer == 0x06060001 )
+			possiblePointer == 0x06060600 || possiblePointer == 0x06060001 || possiblePointer == 0x06054D700)
 		{
 			continue;
 		}
@@ -2177,17 +2179,9 @@ bool FixupSakura(const string& rootDir, const string& inTranslatedOptionsBmp)
 			continue;
 		}
 
-		unsigned int hwRamValue = *((unsigned int*)&optionsHWRAM.GetData()[possiblePointer - 0x06000000]);
-		if( !hwRamValue )
-		{
-		//	continue;
-		}
 		unsigned int newAddress = possiblePointer + optionsSizeDiff;
 		newAddress = SwapByteOrder(newAddress);
 		memcpy_s(pNewSakuraData + k, newSakuraLength - k, &newAddress, sizeof(newAddress));
-
-		//fseek(pSakuraFile, k, SEEK_SET);
-		//fwrite((void*)&newAddress, sizeof(newAddress), 1, pSakuraFile);
 
 		printf("Fixed Sakura: Old: 0x%08x New: 0x%08x LogoIndex: 0x%08x\n", possiblePointer, SwapByteOrder(newAddress), k);
 	}
