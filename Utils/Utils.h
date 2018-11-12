@@ -324,7 +324,8 @@ void FindAllFilesWithinDirectory(const std::string& inDirectoryPath, std::vector
 bool CreateDirectoryHelper(const std::string& dirName);
 bool AreFilesTheSame(const FileData& file1, const FileNameContainer& file2Name);
 bool FindDataWithinBuffer(const char* pBuffer, unsigned long bufferSize, const char* pSearchData, const unsigned int searchDataSize, unsigned long& outIndex);
-unsigned long prs_decompress_size(void* source);
-unsigned long prs_decompress(void* source, void* dest, unsigned long destSize);
-unsigned long prs_compress(void* source, void* dest, unsigned long size);
+//unsigned long prs_decompress_size(void* source);
+//unsigned long prs_decompress(void* source, void* dest, unsigned long destSize);
+//unsigned long prs_compress(void* source, void* dest, unsigned long size);
 int prs_decompress_buf(const uint8_t *src, uint8_t **dst, size_t src_len, size_t &outCompressedSize);
+int prs_compress(const uint8_t *src, uint8_t **dst, size_t src_len);

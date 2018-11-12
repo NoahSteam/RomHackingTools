@@ -2127,9 +2127,12 @@ bool FixupSakura(const string& rootDir, const string& inTranslatedOptionsBmp)
 		return false;
 	}
 	char* pNewImageData = new char[newImageDataSize];
+	//memcpy_s(pNewImageData, newImageDataSize, uncompressedBgndImage.mpUncompressedData, uncompressedBgndImage.mUncompressedDataSize);
+	
 	memset(pNewImageData, 0, newImageDataSize);
 	memcpy_s(pNewImageData, newImageDataSize, patchedOptionsImage.mTileExtractor.mTiles[0].mpTile, patchedImageSize);
 	memcpy_s(pNewImageData + patchedImageSize, newImageDataSize - patchedImageSize, uncompressedBgndImage.mpUncompressedData + origImageDataSize, uncompressedBgndImage.mUncompressedDataSize - origImageDataSize);
+	
 	SakuraCompressedData translatedOptionsData;
 	translatedOptionsData.PatchDataInMemory(pNewImageData, newImageDataSize, true, false, origOptionsCompressedSize);
 	delete[] pNewImageData;
@@ -2154,28 +2157,33 @@ bool FixupSakura(const string& rootDir, const string& inTranslatedOptionsBmp)
 	memcpy_s(pNewSakuraData + 0x0005AD98 + optionsSizeDiff, newSakuraLength - 0x0005AD98 + optionsSizeDiff, patchedOptionsImage.mPalette.GetData(), patchedOptionsImage.mPalette.GetSize());
 
 	//Fixup pointers after the options image
+	/*
 	for(unsigned long k = 0x00035240; k < newSakuraLength; ++k)
 	{
 		const unsigned long origK = k - optionsSizeDiff;
+		
+		/*
 		if( (origK >= 0x0005629C && origK <= 0x000562BC) || (origK >= 0x0005880A && origK <= 0x00058FBC) || (origK >= 0x0005ADAC && origK <= 0x0005b328) || (origK >= 0x0005F148 && origK <= 0x0005FB83) || 
 			(origK >= 0x0005B329 && origK <= 0x0005FA19) || (origK >= 0x00052D2F && origK <= 0x000539AD) || (origK >- 0x000553DD && origK <= 0x0005540D) || (origK >= 0x0005873B && origK <= 0x0005900D) ||
 			(origK >= 0x0005AD7D && origK <= 0x0005B329) )
 		{
 			continue;
-		}
+		}*/
 
+	/*
 		unsigned int possiblePointer = *((unsigned int*)&pNewSakuraData[k]);
 		possiblePointer = SwapByteOrder(possiblePointer);
 
 		if( possiblePointer == 0x06060606 || possiblePointer == 0x06060607 || possiblePointer == 0x06060707 || possiblePointer == 0x06060601 || possiblePointer == 0x06060406 || possiblePointer == 0x06060106 || //0x06060106
 			possiblePointer == 0x06060605 || possiblePointer == 0x06060506 || possiblePointer == 0x06060602 || possiblePointer == 0x06060206 || possiblePointer == 0x06060603 || possiblePointer == 0x06060306 ||
-			possiblePointer == 0x06060600 || possiblePointer == 0x06060001 || possiblePointer == 0x06054D700)
+			possiblePointer == 0x06060600 || possiblePointer == 0x06060001 || possiblePointer == 0x06054D70)
 		{
 			continue;
 		}
-		if( !(possiblePointer > 0x0605EE38 && possiblePointer < 0x060e0000) )
-	//	if( !(possiblePointer == 0x0605F320) )
+
+		if( !(possiblePointer > 0x0605EE38 && possiblePointer < 0x06063A2A) )
 		{
+//			if( possiblePointer != 0x060EC300 && possiblePointer != 0x060ef000 && possiblePointer != 0x060f3000 && possiblePointer != 0x060F4000 && possiblePointer != 0x060f5800 && possiblePointer != 0x060f6000 )
 			continue;
 		}
 
@@ -2184,7 +2192,7 @@ bool FixupSakura(const string& rootDir, const string& inTranslatedOptionsBmp)
 		memcpy_s(pNewSakuraData + k, newSakuraLength - k, &newAddress, sizeof(newAddress));
 
 		printf("Fixed Sakura: Old: 0x%08x New: 0x%08x LogoIndex: 0x%08x\n", possiblePointer, SwapByteOrder(newAddress), k);
-	}
+	}*/
 	//****Done Patching Options Image****
 
 	//const unsigned short tileSize  = (OutTileSpacingY << 8) + (OutTileSpacingX/8);
@@ -4209,6 +4217,7 @@ int GetBytesInSequence(unsigned char inByte)
 
 void DecompressionTest()
 {
+	/*
 	FileData testData;
 	//if( !testData.InitializeFileData("FACE01.BIN", "D:\\Rizwan\\SakuraWars\\Disc1\\SAKURA2\\FACE01.BIN") )
 	if( !testData.InitializeFileData("Uncompressed.bin", "A:\\SakuraTaisen\\Uncompressed.bin") )
@@ -4230,7 +4239,7 @@ void DecompressionTest()
 
 		fclose(pOutFile);
 	}
-	delete[] dest;
+	delete[] dest;*/
 }
 
 void CompressFile(const string& filePath, const string& outPath)
@@ -4379,12 +4388,16 @@ bool PatchMainMenu(const string& sakuraRootDirectory, const string& inTranslated
 		}
 
 		const unsigned int address = SwapByteOrder( *(unsigned int*)(&pNewData[k]) );
-		if( address >= 0x214808 && address <= 0x00240000 )
+		if( (address % 2) != 0 )
+		{
+			continue;
+		}
+		if( address >= 0x00214808 && address <= 0x00240000 )
 		{
 			const unsigned int newAddress = address + compressedDiff;
 			*(unsigned int*)(&pNewData[k]) = SwapByteOrder(newAddress);
 
-			//printf("Fixed Logo: Old: 0x%08x New: 0x%08x LogoIndex: 0x%08x\n", address, newAddress, k);
+			printf("Fixed Logo: Old: 0x%08x New: 0x%08x LogoIndex: 0x%08x\n", address, newAddress, k);
 		}
 	}
 

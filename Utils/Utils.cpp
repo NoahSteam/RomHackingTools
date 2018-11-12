@@ -930,7 +930,8 @@ void PRSCompressor::CompressData(void* pInData, const unsigned long inDataSize)
 
 	mpCompressedData = new char[inDataSize];
 
-	mCompressedSize = prs_compress(pInData, (void*)mpCompressedData, inDataSize);
+	//mCompressedSize = prs_compress(const uint8_t *src, uint8_t **dst, size_t src_len)
+	mCompressedSize = prs_compress((uint8_t*)pInData, (uint8_t**)&mpCompressedData, inDataSize);
 }
 
 void PRSCompressor::Reset()

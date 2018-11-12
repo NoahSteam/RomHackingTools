@@ -165,7 +165,7 @@ void prs_copy(PRS_COMPRESSOR* pc,int offset,u8 size)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-u32 prs_compress(void* source,void* dest,u32 size)
+u32 prs_compress_old(void* source,void* dest,u32 size)
 {
     PRS_COMPRESSOR pc;
     int x,y;
