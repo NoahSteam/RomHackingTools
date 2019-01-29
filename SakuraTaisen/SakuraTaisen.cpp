@@ -3233,7 +3233,7 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& dup
 		}
 
 		htmlFile.WriteString("     var dynName = inDivID + \"_duplicates\";\n\n");
-		htmlFile.WriteString("     if(window.dynName && typeof dynName !== 'undefined')\n");
+		htmlFile.WriteString("     if(typeof dynName !== 'undefined')\n");
 		htmlFile.WriteString("     {\n");
 		htmlFile.WriteString("          var dupArray = eval(dynName);\n");
 		htmlFile.WriteString("          for(i = 0; i < dupArray.length; i++)\n");
