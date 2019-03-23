@@ -3190,6 +3190,41 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& dup
 		htmlFile.WriteString("{\n");
 		htmlFile.WriteString("     SaveData(inDialogImageName, inDivID, inCRC);\n\n");
 		htmlFile.WriteString("     var translatedText = document.getElementById(inDivID).value;\n");
+		
+		//Print out array containing all available duplicate
+		if( duplicatesMap.size() )
+		{
+			htmlFile.WriteString("     var allDups = [\n");
+		}
+		else
+		{
+			htmlFile.WriteString("     var allDups = [];\n");
+		}
+		
+		bool firstDupPrinted = false;
+		for(map<string, vector<string>>::const_iterator mapIter = duplicatesMap.begin(); mapIter != duplicatesMap.end(); ++mapIter)
+		{
+			if( firstDupPrinted )
+			{
+				fprintf(htmlFile.GetFileHandle(), ",\n");
+			}
+
+			fprintf(htmlFile.GetFileHandle(), "                    \"edit_%s\"", mapIter->first.c_str());
+			
+			//Print dups of this entry (contained in mapIter->first)
+			const size_t numDups = mapIter->second.size();
+			for(size_t dupIndex = 0; dupIndex < numDups; ++dupIndex)
+			{
+				fprintf(htmlFile.GetFileHandle(), ", \"edit_%s\"", mapIter->second[dupIndex].c_str());
+			}
+
+			firstDupPrinted = true;
+
+		}
+		if( duplicatesMap.size() )
+		{
+			htmlFile.WriteString("];\n\n");
+		}
 
 		for(map<string, vector<string>>::const_iterator mapIter = duplicatesMap.begin(); mapIter != duplicatesMap.end(); ++mapIter)
 		{
@@ -3210,7 +3245,11 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& dup
 			for(size_t dupIndex = 0; dupIndex < numDups; ++dupIndex)
 			{
 				fprintf(htmlFile.GetFileHandle(), "     var edit_%s_duplicates = [\"%s\"", mapIter->second[dupIndex].c_str(), mapIter->first.c_str());
-				fprintf(htmlFile.GetFileHandle(), ",");
+
+				if( numDups > 1 )
+				{
+					fprintf(htmlFile.GetFileHandle(), ",");
+				}
 
 				size_t numDupsPrinted = 0;
 				for(size_t dupIndex2 = 0; dupIndex2 < numDups; ++dupIndex2)
@@ -3233,10 +3272,10 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& dup
 		}
 
 		htmlFile.WriteString("     var dynName = inDivID + \"_duplicates\";\n\n");
-		htmlFile.WriteString("     if(typeof dynName !== 'undefined')\n");
+		htmlFile.WriteString("     if( allDups.includes(inDivID) )\n");
 		htmlFile.WriteString("     {\n");
 		htmlFile.WriteString("          var dupArray = eval(dynName);\n");
-		htmlFile.WriteString("          for(i = 0; i < dupArray.length; i++)\n");
+		htmlFile.WriteString("          for(var i = 0; i < dupArray.length; i++)\n");
 		htmlFile.WriteString("          {\n");
 		htmlFile.WriteString("               var lookupName = \"#edit_\" + dupArray[i];\n");
 		htmlFile.WriteString("               $(lookupName).html(translatedText)\n");
