@@ -707,7 +707,7 @@ private:
 				}
 			}
 
-			newLineOfText.mOffsetToStringData = mStringInfoArray[i].mUnknown >= SpecialDialogIndicator ? 2 : offsetToStringData;
+			newLineOfText.mOffsetToStringData = !bIsMESFile && mStringInfoArray[i].mUnknown >= SpecialDialogIndicator ? 2 : offsetToStringData;
 			mLines.push_back(newLineOfText);
 		}
 	}
