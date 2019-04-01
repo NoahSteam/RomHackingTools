@@ -2087,10 +2087,11 @@ bool FixupSLG(const string& rootDir, const string& outDir, const string& newFont
 		printf("FixupSLG: Unable to patch palettes because new palette not found.\n");
 		return false;
 	}
-
-	if( newPaletteData.GetDataSize() != 32 )
+	
+	const int paletteSize = 32;
+	if( newPaletteData.GetDataSize() != paletteSize )
 	{
-		printf("FixupSLG: Palette size should be 32.  NewPaletteFile %s has a size of %ul instead.\n", newFontPaletteFile.c_str(), newPaletteData.GetDataSize());
+		printf("FixupSLG: Palette size should be %i.  NewPaletteFile %s has a size of %ul instead.\n", paletteSize, newFontPaletteFile.c_str(), newPaletteData.GetDataSize());
 		return false;
 	}
 
@@ -2124,8 +2125,17 @@ bool FixupSLG(const string& rootDir, const string& outDir, const string& newFont
 		//***Fix the palette***
 		const int paletteAddress1 = 0x000158A4;
 		const int paletteAddress2 = 0x0004A1D8;
+		char* pNewPalette         = new char[paletteSize];
 
+		//Store palette as 15bit color
+		for(int i = 0; i < paletteSize; ++i)
+		{
+			pNewPalette[i] = newPaletteData.GetData()[i] & 0x7f;
+		}
 
+		//copy over the palette
+		memcpy_s((void*)(origSlgData.GetData() + paletteAddress1), origSlgData.GetDataSize(), pNewPalette, paletteSize);
+		delete[] pNewPalette;
 		//***Done fixing the palette***
 
 		//Output patched file
@@ -2957,7 +2967,7 @@ bool CreateMesSpreadSheets(const string& dialogImageDirectory, const string& sak
 			}
 			htmlFile.WriteString(string(buffer));
 
-			snprintf(buffer, 2048, "<td width=\"240\"><img src=\"..\\ExtractedData\\Dialog\\M%sMES\\%s\"></td>", mesNumber.c_str(), fileNameInfo.mFileName.c_str());
+			snprintf(buffer, 2048, "<td width=\"240\"><img src=\"..\\ExtractedData\\Dialog\\MES\\M%sMES\\%s\"></td>", mesNumber.c_str(), fileNameInfo.mFileName.c_str());
 			//snprintf(buffer, 2048, "<td width=\"240\"><img src=\"..\\Dialog\\M%sMES\\%s\"></td>", mesNumber.c_str(), fileNameInfo.mFileName.c_str());
 			htmlFile.WriteString(string(buffer));
 
