@@ -660,7 +660,7 @@ private:
 			unsigned short offsetToStringData = 0;
 
 			//The dialog starting at 0xC531 has a special starting tag instead of the usual 00 00
-			if( mStringInfoArray[i].mUnknown == SpecialDialogIndicator )
+			if( mStringInfoArray[i].mUnknown == SpecialDialogIndicator && !bIsMESFile )
 			{
 				//First byte
 				unsigned short currValue = pWordBuffer[currentIndex++];
@@ -1279,8 +1279,9 @@ bool PatchKNJ(const string& rootDirectory, const string& newKNJ, const string& o
 	FindAllFilesWithinDirectory(string(rootDirectory), allFiles);
 
 	//Get all knj files
-	vector<FileNameContainer> knjFiles;
-	GetAllFilesOfType(allFiles, "KNJ.BIN", knjFiles);
+	vector<FileNameContainer> originalFontsheets;
+	GetAllFilesOfType(allFiles, "KNJ.BIN", originalFontsheets);
+	GetAllFilesOfType(allFiles, "MES.FNT", originalFontsheets);
 
 	//Load patched file
 	FileData newFileData;
@@ -1289,9 +1290,12 @@ bool PatchKNJ(const string& rootDirectory, const string& newKNJ, const string& o
 		return false;
 	}
 
+	const string sakura1Directory("\\SAKURA1\\");
+	const string sakura2Directory("\\SAKURA2\\");
+
 	//Patch original files
 	string outFileName;
-	for(const FileNameContainer& knj : knjFiles)
+	for(const FileNameContainer& knj : originalFontsheets)
 	{
 		FileData fileToPatch;
 		if( !fileToPatch.InitializeFileData(knj) )
@@ -1299,10 +1303,11 @@ bool PatchKNJ(const string& rootDirectory, const string& newKNJ, const string& o
 			continue;
 		}
 
-		printf("Patching %s \n", knj.mNoExtension.c_str());
+		printf("Patching %s \n", knj.mFileName.c_str());
 
-		outFileName = outDir + knj.mFileName;
-
+		const bool bIsMESFnt = knj.mFileName.find("MES.FNT", 0, 6) != string::npos;
+		outFileName          = bIsMESFnt ? outDir + sakura2Directory + knj.mFileName : outDir + sakura1Directory + knj.mFileName;
+		
 		FileWriter patchedFile;
 		if( patchedFile.OpenFileForWrite(outFileName) )
 		{
@@ -1310,7 +1315,7 @@ bool PatchKNJ(const string& rootDirectory, const string& newKNJ, const string& o
 		}
 		else
 		{
-			printf("Unable to patch: %s \n", knj.mNoExtension.c_str());
+			printf("Unable to patch: %s \n", knj.mFileName.c_str());
 		}
 	}
 
@@ -1589,6 +1594,7 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 	//Get all files containing dialog
 	vector<FileNameContainer> textFiles;
 	GetAllFilesOfType(allFiles, "TBL.BIN", textFiles);
+	GetAllFilesOfType(allFiles, "MES.BIN", textFiles);
 
 	//Extract the text
 	vector<SakuraTextFile> sakuraTextFiles;
@@ -1604,6 +1610,8 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 	for(const SakuraTextFile& sakuraFile : sakuraTextFiles)
 	{
 		printf("Inserting text for: %s\n", sakuraFile.mFileNameInfo.mFileName.c_str());
+
+		const bool bIsMESFile   = sakuraFile.mFileNameInfo.mFileName.find("MES.BIN", 0, 6) != string::npos;
 
 		//Figure out output file name
 		string outFileName;
@@ -1730,7 +1738,7 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 
 						//Lines starting with the indicator 0xC351 have a special two byte value instead of the usual 00 00
 						const size_t currSakuraStringIndex = translatedLineIndex;
-						if( sakuraFile.mStringInfoArray[currSakuraStringIndex].mUnknown == SpecialDialogIndicator )
+						if( sakuraFile.mStringInfoArray[currSakuraStringIndex].mUnknown == SpecialDialogIndicator && !bIsMESFile )
 						{
 							translatedSakuraString.AddString( untranslatedString, sakuraFile.mLines[currSakuraStringIndex].mChars[0].mIndex);
 						}
@@ -1744,7 +1752,7 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 					}
 
 				//Lines starting with the indicator 0xC351 have a special two byte value instead of the usual 00 00
-				if( sakuraFile.mStringInfoArray[translatedLineIndex].mUnknown == SpecialDialogIndicator )
+				if( sakuraFile.mStringInfoArray[translatedLineIndex].mUnknown == SpecialDialogIndicator && !bIsMESFile )
 				{
 					translatedString.AddChar( sakuraFile.mLines[translatedLineIndex].mChars[0].mIndex );
 					translatedString.AddChar(0);
@@ -1861,7 +1869,7 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 
 				//Lines starting with the indicator 0xC351 have a special two byte value instead of the usual 00 00
 				const size_t currSakuraStringIndex = i + translatedFile.mLines.size();
-				if( sakuraFile.mStringInfoArray[currSakuraStringIndex].mUnknown == SpecialDialogIndicator )
+				if( sakuraFile.mStringInfoArray[currSakuraStringIndex].mUnknown == SpecialDialogIndicator && !bIsMESFile )
 				{
 					translatedSakuraString.AddString( untranslatedString, sakuraFile.mLines[currSakuraStringIndex].mChars[0].mIndex);
 				}
@@ -2069,6 +2077,71 @@ void FindDuplicateText(const string& dialogImageDirectory, const string& outFile
 			fprintf(outFile.GetFileHandle(), "%s %lu\n", dupFileName.c_str(), crcMap[mapIter->first]);
 		}
 	}
+}
+
+bool FixupSLG(const string& rootDir, const string& outDir, const string& newFontPaletteFile)
+{
+	FileData newPaletteData;
+	if( !newPaletteData.InitializeFileData(newFontPaletteFile.c_str(), newFontPaletteFile.c_str()) )
+	{
+		printf("FixupSLG: Unable to patch palettes because new palette not found.\n");
+		return false;
+	}
+
+	if( newPaletteData.GetDataSize() != 32 )
+	{
+		printf("FixupSLG: Palette size should be 32.  NewPaletteFile %s has a size of %ul instead.\n", newFontPaletteFile.c_str(), newPaletteData.GetDataSize());
+		return false;
+	}
+
+	vector<string> slgFiles;
+	slgFiles.push_back("0SLG.BIN");
+	slgFiles.push_back("SLG.BIN");
+	
+	for(const string& slgFileName : slgFiles)
+	{
+		//Open the original file
+		const string filePath = rootDir + string("SAKURA2\\\\") + slgFileName;	
+		FileData origSlgData;
+		if( !origSlgData.InitializeFileData(slgFileName.c_str(), filePath.c_str()) )
+		{
+			printf("FixupSLG: Unable to open %s file.\n", filePath.c_str());
+			return false;
+		}
+
+		//***Fix the character spacing***
+		const int offsetTileSpacingX  = 0x0002167B; //Used when all text is displayed
+		const int offsetTileSpacingY  = 0x0002165D; //Used when all text is displayed
+		const int offsetTileSpacingX2 = 0x00021903; //Used while text is scrolling
+		const int offsetTileSpacingY2 = 0x000218E1; //Used while text is scrolling
+
+		memcpy_s((void*)(origSlgData.GetData() + offsetTileSpacingX),     origSlgData.GetDataSize(), (void*)&OutTileSpacingX, sizeof(OutTileSpacingX));
+		memcpy_s((void*)(origSlgData.GetData() + offsetTileSpacingY),     origSlgData.GetDataSize(), (void*)&OutTileSpacingY, sizeof(OutTileSpacingY));
+		memcpy_s((void*)(origSlgData.GetData() + offsetTileSpacingX2),    origSlgData.GetDataSize(), (void*)&OutTileSpacingX, sizeof(OutTileSpacingX));
+		memcpy_s((void*)(origSlgData.GetData() + offsetTileSpacingY2),    origSlgData.GetDataSize(), (void*)&OutTileSpacingY, sizeof(OutTileSpacingY));
+		//**Done fixing character spacing***
+
+		//***Fix the palette***
+		const int paletteAddress1 = 0x000158A4;
+		const int paletteAddress2 = 0x0004A1D8;
+
+
+		//***Done fixing the palette***
+
+		//Output patched file
+		const string outFilePath = outDir + string("SAKURA2\\\\") + slgFileName;
+		FileWriter patchedFile;
+		if( !patchedFile.OpenFileForWrite(outFilePath) )
+		{
+			printf("Failed patching: Unable to open %s file for write.\n", outFilePath.c_str());
+			return false;
+		}
+
+		patchedFile.WriteData(origSlgData.GetData(), origSlgData.GetDataSize());
+	}
+
+	printf("FixupSakura Succeeded.\n");
+	return true;
 }
 
 bool FixupSakura(const string& rootDir, const string& inTranslatedOptionsBmp)
@@ -4479,8 +4552,8 @@ bool CopyOriginalFiles(const string& rootSakuraTaisenDirectory, const string& pa
 }
 
 bool PatchGame(const string& rootSakuraTaisenDirectory, const string& patchedSakuraTaisenDirectory, const string& translatedTextDirectory, const string& fontSheetFileName, const string& originalPaletteFileName, 
-	const string &patchedTMapSPDataPath, const string& inMainMainFontSheetPath, const string& inMainMenuTranslatedBgnd, const string& inPatchedOptionsImage)
-{
+	const string &patchedTMapSPDataPath, const string& /*inMainMainFontSheetPath*/, const string& /*inMainMenuTranslatedBgnd*/, const string& inPatchedOptionsImage)
+{	
 	char buffer[MAX_PATH];
 	const DWORD dwRet = GetCurrentDirectory(MAX_PATH, buffer);
 	if( !dwRet )
@@ -4527,6 +4600,13 @@ bool PatchGame(const string& rootSakuraTaisenDirectory, const string& patchedSak
 	}
 
 	//Step 4
+	if( !FixupSLG(rootSakuraTaisenDirectory, patchedSakuraTaisenDirectory, newPaletteFileName) )
+	{
+		printf("FixupSLG failed.  Patch unsuccessful.\n");
+		return false;
+	}
+
+	//Step 4
 	if( !PatchTMapSP(patchedSakuraTaisenDirectory, patchedTMapSPDataPath) )
 	{
 		printf("PatchTMapSP failed.  Patch unsuccessful.\n");
@@ -4535,7 +4615,7 @@ bool PatchGame(const string& rootSakuraTaisenDirectory, const string& patchedSak
 
 	//Step 5
 	const string translatedKNJPath = tempDir + PatchedKNJName; //Created by CreateTranslatedFontSheet
-	const string patchedKNJPath    = patchedSakuraTaisenDirectory + string("SAKURA1\\");
+	const string patchedKNJPath    = patchedSakuraTaisenDirectory;
 	if( !PatchKNJ(rootSakuraTaisenDirectory, translatedKNJPath, patchedKNJPath) )
 	{
 		printf("PatchKNJ failed.  Patch unsuccessful.\n");
@@ -4550,12 +4630,13 @@ bool PatchGame(const string& rootSakuraTaisenDirectory, const string& patchedSak
 	}
 
 	//Step 7
+	/*
 	const string translatedMainMenuFontSheetPath = tempDir + "TranslatedMainMenuFontSheet";
 	if( !PatchMainMenu(patchedSakuraTaisenDirectory, inMainMainFontSheetPath, translatedMainMenuFontSheetPath, inMainMenuTranslatedBgnd) )
 	{
 		printf("Patching MainMenu LOGO.SH2 failed.\n");
 		return false;
-	}
+	}*/
 	printf("Patching Successful!\n");
 
 	return true;

@@ -249,6 +249,15 @@ PCMSE.BIN @0x060e8000
 SUMIRE.SE @0x05a69bf0
 WKL01.BIN @0x0021f800
 
+Battle Dialog Text Spacing:
+During still text
+Add 16 to x @0602567a @0x0002167B in SLG.bin and 0SLG.bin
+Add 16 to y @0602565c @0x0002165D in SLG.bin and 0SLG.bin
+
+During moving text
+Add 16 to x @06025902 @0x00021903 in SLG.bin and 0SLG.bin
+Add 16 to y @060258e0 @0x0002181E in SLG.bin and 0SLG.bin
+
 Note: Something is reading the first image index in FACE01 @002b3802.  Figure that out along with the fact that SLG.BIN has a table for the text id lookup and this might reveal how the face and text id are matched.
 
 EVT string might be a lips string if after the string id there is a pointer (0605)?  Example EVT01.BIN, 4E25 0605
