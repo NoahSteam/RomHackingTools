@@ -660,7 +660,7 @@ private:
 			unsigned short offsetToStringData = 0;
 
 			//The dialog starting at 0xC531 has a special starting tag instead of the usual 00 00
-			if( mStringInfoArray[i].mUnknown == SpecialDialogIndicator && !bIsMESFile )
+			if( mStringInfoArray[i].mUnknown == SpecialDialogIndicator || bIsMESFile )//&& !bIsMESFile )
 			{
 				//First byte
 				unsigned short currValue = pWordBuffer[currentIndex++];
@@ -707,7 +707,8 @@ private:
 				}
 			}
 
-			newLineOfText.mOffsetToStringData = !bIsMESFile && mStringInfoArray[i].mUnknown >= SpecialDialogIndicator ? 2 : offsetToStringData;
+			//newLineOfText.mOffsetToStringData = !bIsMESFile && mStringInfoArray[i].mUnknown >= SpecialDialogIndicator ? 2 : offsetToStringData;
+			newLineOfText.mOffsetToStringData = bIsMESFile || (mStringInfoArray[i].mUnknown >= SpecialDialogIndicator) ? 2 : offsetToStringData;
 			mLines.push_back(newLineOfText);
 		}
 	}
@@ -1738,9 +1739,10 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 
 						//Lines starting with the indicator 0xC351 have a special two byte value instead of the usual 00 00
 						const size_t currSakuraStringIndex = translatedLineIndex;
-						if( sakuraFile.mStringInfoArray[currSakuraStringIndex].mUnknown == SpecialDialogIndicator && !bIsMESFile )
+						if( sakuraFile.mStringInfoArray[currSakuraStringIndex].mUnknown >= SpecialDialogIndicator || bIsMESFile )
 						{
-							translatedSakuraString.AddString( untranslatedString, sakuraFile.mLines[currSakuraStringIndex].mChars[0].mIndex);
+							translatedSakuraString.AddString( untranslatedString, sakuraFile.mLines[currSakuraStringIndex].mChars[0].mIndex );
+							translatedSakuraString.AddString( untranslatedString, sakuraFile.mLines[currSakuraStringIndex].mChars[1].mIndex );
 						}
 						else
 						{
@@ -1752,10 +1754,11 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 					}
 
 				//Lines starting with the indicator 0xC351 have a special two byte value instead of the usual 00 00
-				if( sakuraFile.mStringInfoArray[translatedLineIndex].mUnknown == SpecialDialogIndicator && !bIsMESFile )
+				if( sakuraFile.mStringInfoArray[translatedLineIndex].mUnknown >= SpecialDialogIndicator || bIsMESFile )
 				{
 					translatedString.AddChar( sakuraFile.mLines[translatedLineIndex].mChars[0].mIndex );
-					translatedString.AddChar(0);
+					translatedString.AddChar( sakuraFile.mLines[translatedLineIndex].mChars[1].mIndex );
+					//translatedString.AddChar(0);
 				}
 				else
 				{
@@ -1869,9 +1872,10 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 
 				//Lines starting with the indicator 0xC351 have a special two byte value instead of the usual 00 00
 				const size_t currSakuraStringIndex = i + translatedFile.mLines.size();
-				if( sakuraFile.mStringInfoArray[currSakuraStringIndex].mUnknown == SpecialDialogIndicator && !bIsMESFile )
+				if( sakuraFile.mStringInfoArray[currSakuraStringIndex].mUnknown >= SpecialDialogIndicator || bIsMESFile )
 				{
 					translatedSakuraString.AddString( untranslatedString, sakuraFile.mLines[currSakuraStringIndex].mChars[0].mIndex);
+					translatedSakuraString.AddString( untranslatedString, sakuraFile.mLines[currSakuraStringIndex].mChars[1].mIndex);
 				}
 				else
 				{
@@ -1900,9 +1904,10 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 				SakuraString translatedSakuraString;
 
 				//Lines starting with the indicator 0xC351 have a special two byte value instead of the usual 00 00
-				if( sakuraFile.mStringInfoArray[i].mUnknown == SpecialDialogIndicator )
+				if( sakuraFile.mStringInfoArray[i].mUnknown >= SpecialDialogIndicator || bIsMESFile )
 				{
 					translatedSakuraString.AddString( untranslatedString, sakuraFile.mLines[i].mChars[0].mIndex);
+					translatedSakuraString.AddString( untranslatedString, sakuraFile.mLines[i].mChars[1].mIndex);
 				}
 				else
 				{
