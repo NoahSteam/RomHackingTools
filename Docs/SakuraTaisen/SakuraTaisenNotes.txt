@@ -277,4 +277,11 @@ Still: @06025655 is max, 0x00021655 in SLG.bin
 Max lines is specified @0602596D, which is 02.,, 06025974(?, yea I think so)
 060258ea mov 0x0f, r1.  Needs to be fixed to max char length (240/font width).  That's at 0x000218EB in SLG.BIN
 
+002DDB80 <-start of ha ha ha 
+06068734 <-002DDB80 written here
+Code: 0x06025A90 <-Writes 002DFB7F to 06068734
+Code: 0x06025b4C reads 0x06025B78[002DD800] which is the start of the MES file.
+Code: 0x00625B2A reads from 06025B88[002F8000] which is the end of the MES data section.  Reads into R7, R7 eventually becomes 002DFB7F which is the start of the character info section for the third dialog entry.
+
+Battle dialog is loaded @002dd800.  Character speed starts at 002E1DF0 (2DFB40 unpatched).  Read 002DFB80 in unpatched version.
 Dialog is rendered as a continous block of text. When 0A0D is encountered, the reading of the image jumps by the (stride - num characters printed)

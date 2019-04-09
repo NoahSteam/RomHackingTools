@@ -39,6 +39,7 @@ using std::map;
 const unsigned char OutTileSpacingX = 8;
 const unsigned char OutTileSpacingY = 12;
 const unsigned long MaxTBLFileSize  = 0x20000;
+const unsigned long MaxMESFileSize  = 0x1A800;
 const char          MaxLines        = 4;
 
 const string PatchedPaletteName("PatchedPalette.BIN");
@@ -184,7 +185,7 @@ public:
 	{
 		if( inChar == '@' )
 		{
-			return 'u' + 16 + 1;//'…' + 1;
+			return 'u' + 16;// + 1;//'…' + 1;
 		}
 
 		if( inChar == '\n' )
@@ -194,10 +195,10 @@ public:
 
 		if( inChar == 0xA0 )
 		{
-			return ' ' + 1;
+			return ' ';// + 1;
 		}
 
-		return inChar + 1;
+		return inChar;// + 1;
 	}
 };
 const SakuraTranslationTable GTranslationLookupTable;
@@ -1960,7 +1961,29 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 		}
 
 		//Write footer
-		outFile.WriteData(sakuraFile.mFooter.pData, sakuraFile.mFooter.dataSize);
+		if( bIsMESFile )
+		{
+			const unsigned char char2E   = 0x2e;
+			const unsigned char char6E   = 0x6e;
+			const unsigned char  charEnd = 0;
+			for(const SakuraString& translatedString : translatedLines)
+			{
+				const size_t numChars = translatedString.mChars.size();// > 45 ? 45 : translatedString.mChars.size();
+				for(size_t c = 3; c < numChars; ++c)
+				{
+					if( !translatedString.mChars[c].IsNewLine() )
+					{	
+						outFile.WriteData(&char2E, sizeof(char2E));
+						outFile.WriteData(&char6E, sizeof(char6E));
+					}
+				}
+				outFile.WriteData(&charEnd, sizeof(charEnd));
+			}
+		}
+		else
+		{
+			outFile.WriteData(sakuraFile.mFooter.pData, sakuraFile.mFooter.dataSize);
+		}
 
 		if( outFile.GetFileSize() > MaxTBLFileSize )
 		{
