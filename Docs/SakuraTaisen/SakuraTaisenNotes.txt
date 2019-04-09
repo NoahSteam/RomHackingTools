@@ -272,5 +272,9 @@ Font sheet is @0x002ce800 in memory
 00CED00 <-First character is at this offset
 Character code from MES.bin file is read @0x06025944
 Put a breakpoint @002DDB56 to see a character being read in
-Scrolling: Max characters per line is @06025962 and @0602596A.  The max is 14 characters, 0x0E.  This is @0x00021963 and @0x0002196B in slg.bin.  Max multiplier is 15 which is @06025980 and 0x00021982 in slg.
-Still: @06025655 is max, 06034aad5 
+Scrolling: Max characters per line is @06025962 and @0602596A.  The max is 14 characters, 0x0E.  This is @0x00021963 and @0x0002196B in slg.bin.  Max multiplier is 15 which is @06025980 and 0x00021981 in slg.
+Still: @06025655 is max, 0x00021655 in SLG.bin
+Max lines is specified @0602596D, which is 02.,, 06025974(?, yea I think so)
+060258ea mov 0x0f, r1.  Needs to be fixed to max char length (240/font width).  That's at 0x000218EB in SLG.BIN
+
+Dialog is rendered as a continous block of text. When 0A0D is encountered, the reading of the image jumps by the (stride - num characters printed)

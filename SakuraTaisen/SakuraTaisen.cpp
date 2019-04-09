@@ -36,9 +36,10 @@ using std::map;
 
 #define OPTIMIZE_INSERTION_DEBUGGING 0
 
-const unsigned char OutTileSpacingX = 6;
+const unsigned char OutTileSpacingX = 8;
 const unsigned char OutTileSpacingY = 12;
 const unsigned long MaxTBLFileSize  = 0x20000;
+const char          MaxLines        = 4;
 
 const string PatchedPaletteName("PatchedPalette.BIN");
 const string PatchedKNJName("PatchedKNJ.BIN");
@@ -1201,7 +1202,7 @@ void ConvertTranslatedText(const string& inTextDir, const string& outDir)
 
 		//Go through each line
 		const int maxCharsPerLine = 240/OutTileSpacingX;
-		const int maxLines        = 4;
+		const int maxLines        = MaxLines;
 		int charCount             = 0;
 		int sakuraLineCount       = 0;
 		int lineIndex             = 1;
@@ -1690,8 +1691,8 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 			}
 
 			//Get converted lines of text
-			const int maxCharsPerLine       = 240/OutTileSpacingX;
-			const int maxLines              = 4;
+			const int maxCharsPerLine       = (240/OutTileSpacingX);
+			const int maxLines              = MaxLines;
 			const size_t numTranslatedLines = translatedFile.mLines.size();
 			for(size_t translatedLineIndex = 0; translatedLineIndex < numTranslatedLines; ++translatedLineIndex)
 			{	
@@ -2126,6 +2127,27 @@ bool FixupSLG(const string& rootDir, const string& outDir, const string& newFont
 		memcpy_s((void*)(origSlgData.GetData() + offsetTileSpacingX2),    origSlgData.GetDataSize(), (void*)&OutTileSpacingX, sizeof(OutTileSpacingX));
 		memcpy_s((void*)(origSlgData.GetData() + offsetTileSpacingY2),    origSlgData.GetDataSize(), (void*)&OutTileSpacingY, sizeof(OutTileSpacingY));
 		//**Done fixing character spacing***
+
+		//***Fix Max Character Lengths***
+		const int offsetMaxCharsWhenScrolling  = 0x000218EB;
+		const int offsetMaxSpacingScrolling1   = 0x00021963;
+		const int offsetMaxSpacingScrolling2   = 0x0002196B;
+		const int offsetMaxMultiplierScrolling = 0x00021981;
+		const int offsetMaxMultiplier          = 0x00021655;
+		const int offsetMaxLines_1             = 0x0002196D;
+		const int offsetMaxLines_2             = 0x00021975;
+		const unsigned char maxMultiplier      = (240/(OutTileSpacingX));
+		const unsigned char maxCharacters      = maxMultiplier - 1;
+		const unsigned char maxLines           = MaxLines - 1;
+
+		memcpy_s((void*)(origSlgData.GetData() + offsetMaxSpacingScrolling1),     origSlgData.GetDataSize(), (void*)&maxCharacters, sizeof(maxCharacters));
+		memcpy_s((void*)(origSlgData.GetData() + offsetMaxSpacingScrolling2),     origSlgData.GetDataSize(), (void*)&maxCharacters, sizeof(maxCharacters));
+		memcpy_s((void*)(origSlgData.GetData() + offsetMaxMultiplierScrolling),   origSlgData.GetDataSize(), (void*)&maxMultiplier, sizeof(maxMultiplier));
+		memcpy_s((void*)(origSlgData.GetData() + offsetMaxMultiplier),            origSlgData.GetDataSize(), (void*)&maxMultiplier, sizeof(maxMultiplier));
+		memcpy_s((void*)(origSlgData.GetData() + offsetMaxCharsWhenScrolling),    origSlgData.GetDataSize(), (void*)&maxMultiplier, sizeof(maxMultiplier));
+		memcpy_s((void*)(origSlgData.GetData() + offsetMaxLines_1),               origSlgData.GetDataSize(), (void*)&maxLines,      sizeof(maxLines));
+		memcpy_s((void*)(origSlgData.GetData() + offsetMaxLines_2),               origSlgData.GetDataSize(), (void*)&maxLines,      sizeof(maxLines));
+		//***Done Fixing Max Character Lengths***
 
 		//***Fix the palette***
 		const int paletteAddress1 = 0x000158A4;
@@ -4566,6 +4588,41 @@ bool CopyOriginalFiles(const string& rootSakuraTaisenDirectory, const string& pa
 	return true;
 }
 
+void FindDiff()
+{
+	FileData file1;
+	FileData file2;
+	FileData file3;
+
+	if( !file1.InitializeFileData("BattleDialog_1.bin", "D:\\Rizwan\\SakuraWars\\MemoryDumps\\BattleDialog_1.bin") )
+	{
+		return;
+	}
+
+	if( !file2.InitializeFileData("BattleDialog_2.bin", "D:\\Rizwan\\SakuraWars\\MemoryDumps\\BattleDialog_2.bin") )
+	{
+		return;
+	}
+
+	if( !file3.InitializeFileData("BattleDialog_3.bin", "D:\\Rizwan\\SakuraWars\\MemoryDumps\\BattleDialog_3.bin") )
+	{
+		return;
+	}
+
+	if( file1.GetDataSize() != file2.GetDataSize() )
+	{
+		return;
+	}
+
+	for(unsigned int i = 0; i < file1.GetDataSize(); ++i)
+	{
+		if( file1.GetData()[i] == 0x05 && file2.GetData()[i] == 0x0B && file3.GetData()[i] == 0x11 )
+		{
+			printf("Diff Found at 0x%08x\n", i);
+		}
+	}
+}
+
 bool PatchGame(const string& rootSakuraTaisenDirectory, const string& patchedSakuraTaisenDirectory, const string& translatedTextDirectory, const string& fontSheetFileName, const string& originalPaletteFileName, 
 	const string &patchedTMapSPDataPath, const string& /*inMainMainFontSheetPath*/, const string& /*inMainMenuTranslatedBgnd*/, const string& inPatchedOptionsImage)
 {	
@@ -4688,6 +4745,17 @@ void PrintHelp()
 
 int main(int argc, char *argv[])
 {
+#if 0
+	FindDiff();
+
+	if(argc == 2)
+	{
+		string command(argv[1]);
+		command = "";
+
+		return 1;
+	}
+#else
 	if(argc == 1)
 	{
 		PrintHelp();
@@ -4894,6 +4962,6 @@ int main(int argc, char *argv[])
 	{
 		PrintHelp();
 	}
-
+#endif
 	return 1;
 }
