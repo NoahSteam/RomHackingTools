@@ -280,8 +280,11 @@ Max lines is specified @0602596D, which is 02.,, 06025974(?, yea I think so)
 002DDB80 <-start of ha ha ha 
 06068734 <-002DDB80 written here
 Code: 0x06025A90 <-Writes 002DFB7F to 06068734
-Code: 0x06025b4C reads 0x06025B78[002DD800] which is the start of the MES file.
+Code: 0x06025B4C reads 0x06025B78[002DD800] which is the start of the MES file.
 Code: 0x00625B2A reads from 06025B88[002F8000] which is the end of the MES data section.  Reads into R7, R7 eventually becomes 002DFB7F which is the start of the character info section for the third dialog entry.
+
+Code: 0x06025B54 <-Calculates the start of the character info [should be 002E1DD0 for translated data]
+The second two bytes in the string info at the top of the MES file indicates how many characters to skip in order to get to the character info of this line of dialog. 0004 0000
 
 Battle dialog is loaded @002dd800.  Character speed starts at 002E1DF0 (2DFB40 unpatched).  Read 002DFB80 in unpatched version.
 Dialog is rendered as a continous block of text. When 0A0D is encountered, the reading of the image jumps by the (stride - num characters printed)

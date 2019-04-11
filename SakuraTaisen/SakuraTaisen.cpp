@@ -489,10 +489,10 @@ struct SakuraTextFile
 	struct SakuraStringInfo
 	{
 		unsigned int   mFullValue;
-		unsigned short mUnknown;
+		unsigned short mStringId;
 		unsigned short mOffsetFromPrevString;
 
-		SakuraStringInfo(unsigned short inFirst, unsigned short inSecond) : mUnknown(inFirst), mOffsetFromPrevString(inSecond)
+		SakuraStringInfo(unsigned short inFirst, unsigned short inSecond) : mStringId(inFirst), mOffsetFromPrevString(inSecond)
 		{
 			mFullValue = (inFirst << 16) + inSecond;
 		}
@@ -595,7 +595,7 @@ public:
 	{
 		for(const SakuraStringInfo& info : mStringInfoArray)
 		{
-			if( info.mUnknown == inId )
+			if( info.mStringId == inId )
 			{
 				return true;
 			}
@@ -662,7 +662,7 @@ private:
 			unsigned short offsetToStringData = 0;
 
 			//The dialog starting at 0xC531 has a special starting tag instead of the usual 00 00
-			if( mStringInfoArray[i].mUnknown == SpecialDialogIndicator || bIsMESFile )//&& !bIsMESFile )
+			if( 1 )//mStringInfoArray[i].mStringId == SpecialDialogIndicator || bIsMESFile )//&& !bIsMESFile )
 			{
 				//First byte
 				unsigned short currValue = pWordBuffer[currentIndex++];
@@ -710,7 +710,7 @@ private:
 			}
 
 			//newLineOfText.mOffsetToStringData = !bIsMESFile && mStringInfoArray[i].mUnknown >= SpecialDialogIndicator ? 2 : offsetToStringData;
-			newLineOfText.mOffsetToStringData = bIsMESFile || (mStringInfoArray[i].mUnknown >= SpecialDialogIndicator) ? 2 : offsetToStringData;
+			newLineOfText.mOffsetToStringData = 2;//bIsMESFile || (mStringInfoArray[i].mStringId >= SpecialDialogIndicator) ? 2 : offsetToStringData;
 			mLines.push_back(newLineOfText);
 		}
 	}
@@ -733,7 +733,7 @@ struct SakuraTextFileFixedHeader
 		{
 			//const unsigned short trailingZeroes = (unsigned short)(inSakuraFile.mDataSegments[i+1].dataSize)/2;
 			const unsigned short newSecondValue = (unsigned short)inStrings[i].mChars.size() + prevValue; //+ trailingZeros;
-			const unsigned int   newValue       = ((unsigned int)(inInfo[i+1].mUnknown) << 16) + (unsigned int)newSecondValue;
+			const unsigned int   newValue       = ((unsigned int)(inInfo[i+1].mStringId) << 16) + (unsigned int)newSecondValue;
 			prevValue                           = newSecondValue;
 
 			mStringInfo.push_back( SwapByteOrder(newValue) );
@@ -838,7 +838,7 @@ void DumpExtractedSakuraText(const vector<SakuraTextFile>& inSakuraTextFiles, co
 		{
 			const SakuraTextFile::SakuraStringInfo& stringInfo = textFile.mStringInfoArray[i];
 			const int diffFromPrev = i == 0 ? 0 : stringInfo.mOffsetFromPrevString - textFile.mStringInfoArray[i-1].mOffsetFromPrevString;
-			fprintf(pOutInfoFile, "%02x %02x %i DiffFromPrev: %i\n", stringInfo.mUnknown, stringInfo.mOffsetFromPrevString, stringInfo.mOffsetFromPrevString, diffFromPrev);
+			fprintf(pOutInfoFile, "%02x %02x %i DiffFromPrev: %i\n", stringInfo.mStringId, stringInfo.mOffsetFromPrevString, stringInfo.mOffsetFromPrevString, diffFromPrev);
 		}
 
 		fclose(pOutFile);
@@ -1695,6 +1695,7 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 			const int maxCharsPerLine       = (240/OutTileSpacingX);
 			const int maxLines              = MaxLines;
 			const size_t numTranslatedLines = translatedFile.mLines.size();
+			unsigned short numCharsPrinted  = 0;
 			for(size_t translatedLineIndex = 0; translatedLineIndex < numTranslatedLines; ++translatedLineIndex)
 			{	
 				const TextFileData::TextLine& textLine = translatedFile.mLines[translatedLineIndex];
@@ -1704,7 +1705,7 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 				SakuraString translatedString;
 
 #if OPTIMIZE_INSERTION_DEBUGGING
-				const unsigned short id = sakuraFile.mStringInfoArray[translatedLineIndex].mUnknown;
+				const unsigned short id = sakuraFile.mStringInfoArray[translatedLineIndex].mStringId;
 				const vector<int>* pOrder = bDialogOrderExists && dialogOrderIter->second.idAndOrder.find(id) != dialogOrderIter->second.idAndOrder.end() ? &dialogOrderIter->second.idAndOrder.find(id)->second : nullptr;
 
 				//If this string isn't supposed to appear in the game, write smaller bit of debug data to it
@@ -1717,7 +1718,7 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 
 					//Lines starting with the indicator 0xC351 have a special two byte value instead of the usual 00 00
 					const size_t currSakuraStringIndex = translatedLineIndex;
-					if( sakuraFile.mStringInfoArray[currSakuraStringIndex].mUnknown == SpecialDialogIndicator )
+					if( sakuraFile.mStringInfoArray[currSakuraStringIndex].mStringId == SpecialDialogIndicator )
 					{
 						translatedSakuraString.AddString( untranslatedString, sakuraFile.mLines[currSakuraStringIndex].mChars[0].mIndex);
 					}
@@ -1741,10 +1742,10 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 
 						//Lines starting with the indicator 0xC351 have a special two byte value instead of the usual 00 00
 						const size_t currSakuraStringIndex = translatedLineIndex;
-						if( sakuraFile.mStringInfoArray[currSakuraStringIndex].mUnknown >= SpecialDialogIndicator || bIsMESFile )
+						if( 1 )//sakuraFile.mStringInfoArray[currSakuraStringIndex].mStringId >= SpecialDialogIndicator || bIsMESFile )
 						{
 							translatedSakuraString.AddString( untranslatedString, sakuraFile.mLines[currSakuraStringIndex].mChars[0].mIndex );
-							translatedSakuraString.AddString( untranslatedString, sakuraFile.mLines[currSakuraStringIndex].mChars[1].mIndex );
+							translatedSakuraString.AddString( untranslatedString, numCharsPrinted );//untranslatedString, sakuraFile.mLines[currSakuraStringIndex].mChars[1].mIndex );
 						}
 						else
 						{
@@ -1756,10 +1757,10 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 					}
 
 				//Lines starting with the indicator 0xC351 have a special two byte value instead of the usual 00 00
-				if( sakuraFile.mStringInfoArray[translatedLineIndex].mUnknown >= SpecialDialogIndicator || bIsMESFile )
+				if( 1 )//sakuraFile.mStringInfoArray[translatedLineIndex].mStringId >= SpecialDialogIndicator || bIsMESFile )
 				{
 					translatedString.AddChar( sakuraFile.mLines[translatedLineIndex].mChars[0].mIndex );
-					translatedString.AddChar( sakuraFile.mLines[translatedLineIndex].mChars[1].mIndex );
+					translatedString.AddChar( numCharsPrinted );//sakuraFile.mLines[translatedLineIndex].mChars[1].mIndex );
 					//translatedString.AddChar(0);
 				}
 				else
@@ -1845,21 +1846,42 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 					if( wordIndex + 1 < numWords )
 					{
 						//Insert new line if needed
-						if( word.size() + charCount > maxCharsPerLine )
+						const string& nextWord = textLine.mWords[wordIndex + 1];
+						if( nextWord.size() + charCount > maxCharsPerLine ) //if( word.size() + charCount > maxCharsPerLine )
 						{
 							ConditionallyAddNewLine();
 						}
 						else //Otherwise add a space
 						{
-							translatedString.AddChar( GTranslationLookupTable.GetIndex(' ') );
-							++charCount;
-
-							ConditionallyAddNewLine();
+							if( charCount + 1 >= maxCharsPerLine )
+							{
+								IncrementLine();
+							}
+							else
+							{
+								translatedString.AddChar( GTranslationLookupTable.GetIndex(' ') );
+								++charCount;
+							}
 						}
 					}
 				}
 
 				translatedString.AddChar(0);
+
+				const short numLinesInString = translatedString.GetNumberOfLines() - 1;
+				if( numLinesInString < 0 )
+				{
+					printf("Invalid number of lines in string\n");
+					break;
+				}
+				const short numCharsPrintedInLine = (static_cast<short>(translatedString.mChars.size()) - 3 - numLinesInString);
+				if( numCharsPrintedInLine < 0 )
+				{
+					printf("Invalid number of characters in string\n");
+					break;
+				}
+				numCharsPrinted += static_cast<unsigned short>(numCharsPrintedInLine)*2 + 1;
+
 				translatedLines.push_back( std::move(translatedString) );
 			}
 
@@ -1874,7 +1896,7 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 
 				//Lines starting with the indicator 0xC351 have a special two byte value instead of the usual 00 00
 				const size_t currSakuraStringIndex = i + translatedFile.mLines.size();
-				if( sakuraFile.mStringInfoArray[currSakuraStringIndex].mUnknown >= SpecialDialogIndicator || bIsMESFile )
+				if( 1 )//sakuraFile.mStringInfoArray[currSakuraStringIndex].mStringId >= SpecialDialogIndicator || bIsMESFile )
 				{
 					translatedSakuraString.AddString( untranslatedString, sakuraFile.mLines[currSakuraStringIndex].mChars[0].mIndex);
 					translatedSakuraString.AddString( untranslatedString, sakuraFile.mLines[currSakuraStringIndex].mChars[1].mIndex);
@@ -1896,7 +1918,7 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 			{
 #if OPTIMIZE_INSERTION_DEBUGGING
 				//If this isn't supposed to appear in game, just output L:lineNum
-				const unsigned short id = sakuraFile.mStringInfoArray[i].mUnknown;
+				const unsigned short id = sakuraFile.mStringInfoArray[i].mStringId;
 				const vector<int>* pOrder = bDialogOrderExists && dialogOrderIter->second.idAndOrder.find(id) != dialogOrderIter->second.idAndOrder.end() ? &dialogOrderIter->second.idAndOrder.find(id)->second : nullptr;
 
 				const string untranslatedString = pOrder ? baseUntranslatedString + std::to_string(i + 1) : std::to_string(i + 1);
@@ -1906,7 +1928,7 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 				SakuraString translatedSakuraString;
 
 				//Lines starting with the indicator 0xC351 have a special two byte value instead of the usual 00 00
-				if( sakuraFile.mStringInfoArray[i].mUnknown >= SpecialDialogIndicator || bIsMESFile )
+				if( 1 )//sakuraFile.mStringInfoArray[i].mStringId >= SpecialDialogIndicator || bIsMESFile )
 				{
 					translatedSakuraString.AddString( untranslatedString, sakuraFile.mLines[i].mChars[0].mIndex);
 					translatedSakuraString.AddString( untranslatedString, sakuraFile.mLines[i].mChars[1].mIndex);
@@ -1968,13 +1990,13 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 			const unsigned char  charEnd = 0;
 			for(const SakuraString& translatedString : translatedLines)
 			{
-				const size_t numChars = translatedString.mChars.size();// > 45 ? 45 : translatedString.mChars.size();
-				for(size_t c = 3; c < numChars; ++c)
+				const size_t numChars = translatedString.mChars.size() - 1;
+				for(size_t c = 2; c < numChars; ++c)
 				{
 					if( !translatedString.mChars[c].IsNewLine() )
-					{	
-						outFile.WriteData(&char2E, sizeof(char2E));
+					{
 						outFile.WriteData(&char6E, sizeof(char6E));
+						outFile.WriteData(&char2E, sizeof(char2E));
 					}
 				}
 				outFile.WriteData(&charEnd, sizeof(charEnd));
@@ -2996,7 +3018,7 @@ bool CreateMesSpreadSheets(const string& dialogImageDirectory, const string& sak
 		int num = 0;
 		for(const FileNameContainer& fileNameInfo : iter->second)
 		{
-			const unsigned short id   = sakuraFileIter->second->mStringInfoArray[num].mUnknown;
+			const unsigned short id   = sakuraFileIter->second->mStringInfoArray[num].mStringId;
 			const char* bgColor       = "fefec8";
 
 			const char* pVarSuffix = fileNameInfo.mNoExtension.c_str();
@@ -3661,7 +3683,7 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& dup
 		{
 			const unsigned long crc   = crcMap[&iter->second[num]];
 			const bool bIsDuplicate   = dupCrcMap.find(crc) != dupCrcMap.end();
-			const unsigned short id   = sakuraFileIter->second->mStringInfoArray[num].mUnknown;
+			const unsigned short id   = sakuraFileIter->second->mStringInfoArray[num].mStringId;
 			const vector<int>* pOrder = bDialogOrderExists && dialogOrderIter->second.idAndOrder.find(id) != dialogOrderIter->second.idAndOrder.end() ? &dialogOrderIter->second.idAndOrder.find(id)->second : nullptr;
 			const bool bIsLipsEntry   = pOrder ? dialogOrderIter->second.idAndLips.find(id)->second : false;
 			const char* bgColor       = "fefec8";
