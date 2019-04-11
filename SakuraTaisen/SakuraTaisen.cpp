@@ -1868,19 +1868,23 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 
 				translatedString.AddChar(0);
 
-				const short numLinesInString = translatedString.GetNumberOfLines() - 1;
-				if( numLinesInString < 0 )
+				//If the first byte is non-zero, then this string has timing info associated with it
+				if( sakuraFile.mLines[translatedLineIndex].mChars[0].mIndex != 0 )
 				{
-					printf("Invalid number of lines in string\n");
-					break;
+					const short numLinesInString = static_cast<short>(translatedString.GetNumberOfLines()) - 1;
+					if( numLinesInString < 0 )
+					{
+						printf("Invalid number of lines in string\n");
+						break;
+					}
+					const short numCharsPrintedInLine = (static_cast<short>(translatedString.mChars.size()) - 3 - numLinesInString);
+					if( numCharsPrintedInLine < 0 )
+					{
+						printf("Invalid number of characters in string\n");
+						break;
+					}
+					numCharsPrinted += static_cast<unsigned short>(numCharsPrintedInLine)*2 + 1;
 				}
-				const short numCharsPrintedInLine = (static_cast<short>(translatedString.mChars.size()) - 3 - numLinesInString);
-				if( numCharsPrintedInLine < 0 )
-				{
-					printf("Invalid number of characters in string\n");
-					break;
-				}
-				numCharsPrinted += static_cast<unsigned short>(numCharsPrintedInLine)*2 + 1;
 
 				translatedLines.push_back( std::move(translatedString) );
 			}
@@ -1983,13 +1987,18 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 		}
 
 		//Write footer
-		if( bIsMESFile )
+		if( 1 )//bIsMESFile )
 		{
 			const unsigned char char2E   = 0x2e;
 			const unsigned char char6E   = 0x6e;
 			const unsigned char  charEnd = 0;
 			for(const SakuraString& translatedString : translatedLines)
 			{
+				if( translatedString.mChars[0].mIndex == 0 )
+				{
+					continue;
+				}
+
 				const size_t numChars = translatedString.mChars.size() - 1;
 				for(size_t c = 2; c < numChars; ++c)
 				{
@@ -2238,17 +2247,22 @@ bool FixupSakura(const string& rootDir, const string& inTranslatedOptionsBmp)
 	
 	//***Patch Text Drawing Code***
 	//const int offsetTileDim     = 0x0001040A;
-	const int offsetTileSpacingX     = 0x000104e5;
-	const int offsetTileSpacingY     = 0x000104D7;
-	const int offsetTileSpacingX2    = 0x00010747;
-	const int offsetTileSpacingY2    = 0x00010733;
-	const int offsetTileSpacingLIPSX = 0x0001066B;
+	const int offsetTileSpacingX      = 0x000104e5;
+	const int offsetTileSpacingY      = 0x000104D7;
+	const int offsetTileSpacingX2     = 0x00010747;
+	const int offsetTileSpacingY2     = 0x00010733;
+	const int offsetTileSpacingLIPSX  = 0x0001066B;
+	const int offsetLIPSX_Formatting1 = 0x00010613;
+	const int offsetLIPSX_Formatting2 = 0x00010647;
+	const char lipsFormattingCode     = 0x01;
 
-	memcpy_s((void*)(origSakuraData.GetData() + offsetTileSpacingX),     origSakuraData.GetDataSize(), (void*)&OutTileSpacingX, sizeof(OutTileSpacingX));
-	memcpy_s((void*)(origSakuraData.GetData() + offsetTileSpacingY),     origSakuraData.GetDataSize(), (void*)&OutTileSpacingY, sizeof(OutTileSpacingY));
-	memcpy_s((void*)(origSakuraData.GetData() + offsetTileSpacingX2),    origSakuraData.GetDataSize(), (void*)&OutTileSpacingX, sizeof(OutTileSpacingX));
-	memcpy_s((void*)(origSakuraData.GetData() + offsetTileSpacingY2),    origSakuraData.GetDataSize(), (void*)&OutTileSpacingY, sizeof(OutTileSpacingY));
-	memcpy_s((void*)(origSakuraData.GetData() + offsetTileSpacingLIPSX), origSakuraData.GetDataSize(), (void*)&OutTileSpacingX, sizeof(OutTileSpacingX));
+	memcpy_s((void*)(origSakuraData.GetData() + offsetTileSpacingX),      origSakuraData.GetDataSize(), (void*)&OutTileSpacingX, sizeof(OutTileSpacingX));
+	memcpy_s((void*)(origSakuraData.GetData() + offsetTileSpacingY),      origSakuraData.GetDataSize(), (void*)&OutTileSpacingY, sizeof(OutTileSpacingY));
+	memcpy_s((void*)(origSakuraData.GetData() + offsetTileSpacingX2),     origSakuraData.GetDataSize(), (void*)&OutTileSpacingX, sizeof(OutTileSpacingX));
+	memcpy_s((void*)(origSakuraData.GetData() + offsetTileSpacingY2),     origSakuraData.GetDataSize(), (void*)&OutTileSpacingY, sizeof(OutTileSpacingY));
+	memcpy_s((void*)(origSakuraData.GetData() + offsetTileSpacingLIPSX),  origSakuraData.GetDataSize(), (void*)&OutTileSpacingX, sizeof(OutTileSpacingX));
+	memcpy_s((void*)(origSakuraData.GetData() + offsetLIPSX_Formatting1), origSakuraData.GetDataSize(), (void*)&lipsFormattingCode, sizeof(lipsFormattingCode));
+	memcpy_s((void*)(origSakuraData.GetData() + offsetLIPSX_Formatting2), origSakuraData.GetDataSize(), (void*)&lipsFormattingCode, sizeof(lipsFormattingCode));
 	//***Done Patching Text Drawing Code***
 
 	//****Patch Options Image****
