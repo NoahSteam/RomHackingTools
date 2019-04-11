@@ -1,0 +1,483 @@
+It's a photo of Sakura. She's looking right at me. I wonder what she's thinking...
+It's a photo of Sumire. This is a side of her you don't see too often.
+It's a photo of Maria. ...She's lost in thought and looks kind of sad...
+A photo of Kanna. She looks strong and reliable. I can't wait to meet her.
+A photo of Iris. She's surrounded by flowers and flashing a radiant smile.
+A photo of Kohran. She's looking pretty in profile with her face dyed red by the evening sun.
+A letter given to me by a customer. I was asked to give it to Sumire. I have a bad feeling about this...
+Maria's pistol. This may help me escape from here...
+A hair ornament. It's decorated with flowers and looks very elegant.
+A pretty pendant. The delicate workmanship is gorgeous.
+A hairpin for use in a traditional bun hairstyle. It would complement a formal outfit well.
+This key will allow me to enter rooms I couldn't get into before.
+I found this in a bedroom on the second floor. I can use it to access the back room.
+A teacup Iris asked me to get for her. It has a very stylish design.
+A matchbox Iris asked me to get for her. The brand logo is very colorful.
+A knife Iris asked me to get for her. Just a normal utensil you'd use during a meal.
+A prop sword and shield used onstage. They're well made and look just like the real thing.
+A prop crown used onstage. It's well constructed and incredibly detailed.
+A wig and costume used onstage. I wonder what kind of act could use a flashy outfit like this?
+A photo of Sakura in her swimsuit. Wow, this is really something. I'm gonna treasure this.
+A photo of Sumire in her stage costume. Her distinctive makeup really makes an impact.
+It's a photo of Maria on stage in the military uniform from "For Love"... She's a beautiful woman disguised as a man.
+A photo of Kanna in her training gear. Catching her in a private moment like this feels surprisingly intimate.
+A photo of Iris in her swimsuit. She's holding a rubber ring and looks ready to have some fun. How cute.
+A photo of Kohran. I don't get to see her with her braids undone very often. It's a nice look.
+A photo of Ayame in a traditional outfit. I hope she'll always be as happy and content as she is here.
+Ayame's gun. Why...? Why did it have to turn out like this...?
+Jean-Paul the teddy bear. Iris's best friend. She always carries him with her and takes good care of him.
+Is it this late already...? Soon it'll be time to put the theatre's lights out.
+I only have time to inspect about 3 more rooms... What should I do?
+Untranslated
+I guess I'll keep going a little longer.
+It's been a long day... I think I'll go back to my room and sleep.
+It's almost time to put the theatre's lights out. My watch is about finished.
+Phew... It's been a long day. I think I'll go back to my room and try to get some sleep.
+I'd like to find a book to borrow some time, but I'm on patrol right now. Better leave it for later.
+OK, looks like all is good here. I'll go check out another room.
+I wonder if Sakura's in there?
+Doesn't matter if she is. I have to continue my patrol.
+...No answer. Is she asleep already?
+...The room is empty. I have a feeling that another member of the Flower Division stays here...
+No point in loafing around in a place like this. I'd better continue my patrol.
+...No answer. Well, of course not--it's an empty room.
+I wonder if Maria's in her room?
+Maria... might be asleep. Guess I'll go to another room.
+...No answer, huh?
+I wonder if Kohran's in there?
+I'm still on patrol, so why don't I check out another room?
+...Looks like she's not here. Oh well. Moving on?
+There's no way Iris could still be awake now, right?
+OK then. I'll get back to my patrol. Can't go wasting time.
+...She's not answering. Probably already asleep.
+I wonder if Sumire's in her room?
+Nothing to be done here. I should try and get back to my patrol.
+...Who is it?
+It's uhh... Ogami.
+...I'm in bed already. My apologies, but if there's something you need, please leave it until tomorrow.
+It's uhh... Ogami.
+Sir, if you need something please leave it until tomorrow, OK?
+...I know the owner of every room, except this one.
+It's a waste of time to stay here any longer. I'd better continue my patrol.
+Like I thought, it looks like no one's in here.
+Nobody's in here. I mean, you wouldn't expect anyone to be up drinking tea at this hour anyway.
+...Oh well. I guess I'll continue my patrol.
+Ginza at night... Such a beautiful view...
+...I let myself get distracted. I guess I'll continue my patrol.
+Heeey!! Anyone in heeere??
+...I really am in a theatre. My voice travels so well.
+Everything seems fine here. I'll continue my patrol.
+This is the entrance hall. It's amazing how quiet it is compared to the daytime.
+...Everything seems fine here. I'll check out another room.
+Aah, a futon on a tatami mat. Maybe I could sleep here...
+...But I definitely shouldn't. ...Guess I'll continue my patrol.
+The director's office. Looks like Manager Yoneda... isn't here.
+The door is locked, and everything seems fine. Let's continue the patrol.
+...Manager Yoneda's probably getting hammered again.
+Nobody's in here. I have to be careful, this is where we keep the company books and papers.
+...Nothing out of the ordinary. Guess I'll continue my patrol.
+Sakura and Maria's costumes have been left here...
+...Everything seems fine here. Why don't I go to another room?
+These must be to use on stage... The makeup smells nice.
+...Everything seems fine here. I'll go to another room.
+But... what an amazing number of props.
+I don't even know if there IS anyone who can tell which of these props are kept where.
+Anyway, everything seems fine here. I'll continue my patrol.
+...The stage backdrops and supports have been left in here.
+...There's no one around. Well, it's unlikely that anyone would steal this stuff. I'll go to another room.
+Everything looks fine. ...Only mice would try to break in to here I think.
+I guess I'll continue the patrol. I only have so much time after all.
+The cafeteria is bustling during the day, but it's dead quiet now.
+There's no one here, and no point in sticking around any longer.
+The merchandise is still where it was during the daytime. ...That's pretty careless.
+I'd like to take just one photo... But that would be a terrible thing to do.
+Anyway, no problem here. I guess I'll continue my patrol.
+I've spent more time than I care to remember cutting tickets in this place.
+Now, why don't I continue my work as night watchman?
+Is the entrance locked? ...Check. It's securely fastened.
+I don't see any other problems. I'll continue my patrol.
+Aah... I missed seeing Kohran's first play today.
+I'll make sure to go see it tomorrow.
+Anyway, everything seems fine here. I'll go check out another room.
+Is this... a warehouse? There's a bunch of stuff in here.
+Anyway, everything seems fine.
+I tried to check out the Training room... but nobody's in there.
+...Everything seems fine here. I guess I'll continue my patrol.
+I can't believe there's a pool like this under the theatre... This place really is amazing.
+...Everything seems fine here. I guess I'll continue my patrol.
+This is the hangar where the Koubu are kept.
+The Koubu have to be ready for action at all times, so they're left on standby. ...Nothing out of place here.
+This is where we change before using the training room, pool, and showers.
+My locker is the third from the right. OK, no problems here. I'll continue my patrol.
+I've heard these showers use water heated by a steam machine in the Imperial Theatre's basement.
+I'd like to take a nice long shower... but I'm on duty right now.
+It figures the Imperial Assault Force would have such advanced medical equipment.
+That said, I hope we won't be needing this room too much.
+...Everything looks fine here, I'll continue my patrol.
+This is the command room, the center of the Imperial Assault Force. When the alarm sounds, we all assemble here.
+...No problems here. OK, I'll go to another room.
+A steam calculator...
+I've heard there are only a few of this size in Japan.
+...If anything is wrong with this thing, I sure can't tell. Might as well head for another room.
+This is the room where we hold strategy meetings.
+Anyway, no problems here. I'll continue my patrol.
+Phew... I don't mind doing it, but this job sure isn't easy...
+There's no way I can finish by myself... I guess I'll just do as much as I can.
+Ogami...
+Huh? Sakura... What are you doing up so late?
+I'm so sorry Ogami. It's my fault that this happened...
+Hey, don't worry about it. It was bound to happen sooner or later.
+Hey, would... Would you let me help too?
+I could use the help. <br> I can manage by myself, don't worry about it.
+Sure, I could use the help. Would you help me fix the set the two of us broke?
+Of course!
+That's really nice of you but... I can manage by myself.
+I see...
+In that case... I'm going to go to bed. Sorry again, Ogami...
+S-Sakura! ...Maybe I should have asked her to help?
+...Oh well, I guess I'll carry on the repairs.
+Ogami, it's my fault that the stage broke. Please, let me help!
+...I understand. Alright then, would you help me fix the set the two of us broke?
+Of course!
+W-wow... That being said, I wonder how I could have been so clumsy.
+You know, I'm really jealous of people as responsible and put-together as you and Maria.
+Thanks. <br> I'm not that responsible.
+Thanks. <br> I'm not that responsible. <br> I saw you when you were rehearsing.
+Thanks... But I'm definitely not as responsible as Maria.
+But... people can depend on you.
+Thanks, Sakura. Even if you're just flattering me, I'm glad.
+It wasn't... I wasn't flattering you.
+I'm not that responsible. I can be pretty clumsy myself you know.
+Really? But... that's good. I feel kind of relieved actually.
+...Sorry Ogami, that came out pretty weird. I'll stop distracting you now.
+...But Sakura, you're pretty hardworking too, right?
+I saw you the other day, when you were rehearsing by yourself.
+What?! W-When did you see that?
+Last night. You were practising your dancing here, right?
+Y-Yeah... My dancing's pretty bad, so...
+I feel like I have to work harder than everyone else.
+But I'm actually... kind of glad you were watching me.
+By the way. didn't Kohran say that Hanayashiki Branch is usually an amusement park?
+I think so, yeah...
+Head office is a theatre, and the branch office is an amusement park. Haha, it's kind of funny isn't it?
+Hahaha, yeah you're right...
+(...I wonder if the Captain of the Hanayashiki Branch works as the ticket-seller as well?)
+I wonder what it's like there? <br> We should go see it together. <br> Apparently they have a workshop there.
+Hanayashiki Branch huh... I wonder what it's like?
+I'd like to know too. I heard that the Hanayashiki Branch Manager is the Deputy Commander of the Imperial Assault Force.
+Huh... the Deputy Commander? I wonder what they're like?
+I'm not too sure either. Maybe they're an even bigger drinker than Mr. Yoneda.
+When it comes to the Imperial Combat Revue... that's actually pretty likely. Let's hope not though.
+Hahaha, yeah let's hope not.
+An amusement park huh... We should go see it together.
+Ogami... you're such a joker.
+I'm not joking! If we go back through Asakusa...
+Yeah! We can eat monjayaki, buy some fresh rice crackers for the others...
+You don't... think about much except eating, do you?
+What's wrong with that? Eating and walking around Asakusa is bound to be a lot of fun, right?
+I heard from Kohran, apparently they have a Combat Revue Workshop at the Hanayashiki Branch.
+Yeah. Kohran worked there, apparently.
+Speaking of which, Ogami. I heard something from Kohran too...
+She said that there's something really amazing hidden underground at the Hanayashiki Branch.
+Really...? What could it be? Something amazing, huh...
+Well... Kohran didn't tell me anything else apart from that.
+...Sorry Ogami. I've been talking so much, I'm really putting us behind on our work.
+Oh! Ogami, you're still gonna be working for a while... right?
+...Huh? ...Uhh, yeah sure.
+Wait here a minute, would you? I'll be right back.
+H-Hey, Sakura! ...She's gone.
+...Oh well. I guess I'll carry on the repairs.
+...Y-Yeah. I-It's stopped hurting.
+O-of course....
+She's so...pretty.
+Wh...who could she be? ...That girl.
+Aghhh!!! W-Who's there? Somebody pinched my back!
+Ahhh!! Sakura! H-How long have you been standing there!?
+N...no, that was...
+I-It wasn't... She wasn't my girlf...
+Huh? Sakura!? Wait a second!
+Ah... She's gone.
+...Huh? This is...
+Whoah! A bento box... It's so well-made as well.
+Could this... Did she make this for me?
+Untranslated
+Phew, I'm kinda tired. I guess I'll head back to my room.
+I'm going to Sakura's room. It's not fair on her to leave things like this.
+...No choice. Guess I'll keep working.
+Phew... It's no good. I can't focus on work right now.
+What happened with that girl just now, I can't get it out of my head...
+...*sigh* That girl... who was she I wonder?
+...Right, here we are. Sakura... I wonder if she's in?
+Hmm... Then again it's pretty late. What should I do...?
+Untranslated
+No good. If I don't explain things now then...
+Actually let's leave it for tomorrow... Guess I'll go back to my room.
+Yes...? Who's there?
+I'm a fan. Can I get your autograph? <br> It's Ogami...
+I'm one of your fans. Can I have an autograph?
+That voice... Ogami is that you? Stop making fun of me!
+I'm already in bed!
+H-Hey, Sakura!
+...
+...Ahh, I made her mad.
+No choice. I guess I'll head back for tonight.
+It's Ogami...
+...
+Sakura... a-about before, I'm really...
+... Before all that, why don't you come in?
+... Excuse me.
+... Who's there? I'll scream!
+D-damn! No choice. I'm heading back!
+So, this is my first time in Sakura's room huh...
+Anyway, was there something you wanted?
+...It's cute, like a little girl's bed.
+Really? I'm embarrassed, please don't look at it like that...
+I'm gonna turn in.
+H-Hold on Ogami! You can't just get into someone's bed without their permission!?
+Ogami! If there's nothing you wanted, please go back to your room. I'm about to go to bed.
+Hey, w-wait a minute!
+Sakura! Listen to me!
+I said I don't know!
+Uh oh... I guess I messed with her too much...
+...No choice. Guess I'll head back to my room and try and get some sleep.
+It... looks like a picture of a castle.
+That's a picture of the castle in Sendai, my hometown. It's called Aoba Castle.
+Ogami. Do you really think a picture of a castle is all that strange?
+Who's this photo of...?
+That's...a picture of my family.
+That's a picture of my family. We took it together at a photo studio in Sendai.
+You were wearing a plait during the day right...? You looked, kind of cute.
+...Is that so?
+(Sakura... she still looks mad)
+Ogami. It's getting really late, hurry up and tell me what you wanted.
+(...She still looks mad)
+(...She still looks mad)
+Sakura, thanks for helping me out before. You didn't get your clothes dirty did you?
+No they're fine. How about you, is your finger OK?
+Oh, it's fine isn't it? After all, that pretty girl fixed it right up.
+(...Uh-oh. She's still mad.)
+Ogami. It's getting really late, hurry up and tell me what you wanted.
+W-well...
+...What is it?
+...Thanks, for the bento. <br> Why don't we do some more work? <br> Who was that girl from before?
+...Thanks, for the bento. That's all I wanted to say.
+And sorry for... asking you to make it for me.
+Ogami...
+I'm really sorry. I was being stubborn...
+Anyway... I wonder who that girl was?
+...
+Ah, n-nevermind. W-well, I'm gonna head back.
+So... Goodnight.
+...We did good work today. Goodnight, Ogami.
+...Well, I guess I'l get back to my room and try to get some sleep.
+If you're up to it, why don't we get some more work done?
+...I'm really sorry. I'm... not really feeling up to it. Can we carry on tomorrow?
+Oh right... I guess that'll have to do then.
+Well then, see you tomorrow... Good night, Sakura.
+...Good night.
+...No choice. I guess I'll head to bed too.
+I wonder who that girl was from before? Sakura, do you know?
+...Ogami! That's all you came here to ask me about!?
+Oh, no, I mean...
+I don't know! Ask someone else, would you?
+I'm going to bed! Please leave, Ogami!!
+Hey, w-wait a minute!
+Sakura! Listen to me!
+I said I don't know!
+Ugh... I shouldn't have asked that.
+...Oh well. I guess I'll head back and try to get some sleep.
+Hey, Ogami. I was about to go to bed so...
+If there's something you need, you can ask me tomorrow, right?
+...Right. Ok, see you tomorrow then... Good night, Sakura.
+...Good night.
+...No choice. Guess I'll head to bed too.
+Phew... Today was a hard day. Let's get some sleep.
+But even so... That girl... Who was she I wonder?
+...I should have some good dreams tonight.
+9.00... Nearly time to start my patrol.
+...There's a hammering noise coming from the stage.
+...Is someone fixing it?
+If so... who on earth could it be?
+...I guess I'll go check out the stage.
+Huh? What's making that noise?
+...I can hear it coming from the stage. ...Sounds like a hammer.
+Maybe someone's repairing the stage? At this hour... who could it be?
+That sound... I can hear it coming from the stage, I wonder what it is...
+Who on earth is fixing the stage?
+Who could be fixing the stage this late at night?
+Huh? That noise, what could it be?
+...I can hear it coming from the stage. ...Sounds like a hammer.
+Is someone repairing the stage? At this hour... who could it be?
+Huh? Isn't that Kohran?
+Kohran... Are you fixing the stage by yourself?
+Hahaha... There's no way I could fix everything just by myself right?
+I was just fixing the stuff that I'm good at, like the wiring, the lights and stuff, you know?
+This late at night and all by yourself... Amazing, Kohran...
+I'm just doing it cuz I enjoy it. No need to gush that much!
+...Check it out Ogami. The wiring's pretty much fixed, so I'll leave the rest up to you, kay?
+...Wha-?
+Ogami. I know ya don't feel like it, but sometimes ya gotta be patient.
+The guy who works hardest when nobody else is watching... That's the captain's role, right?
+So I'm leaving it up to you from now on. Ogami, you got this.
+The captain's role, huh... You've got me there, Kohran.
+I guess I'll do some repairs like she said, even if it's just for a little while.
+Sakura, did you finish the bento?
+Not yet. Ogami, don't rush me!
+Oh, Sakura... You're cooking this late?
+Yup! Tomorrow, everyone's repairing the stage right?
+So I'm making everyone their own bento to eat.
+Wow... This tamagoyaki looks really good.
+No touching! I've made you your own one already.
+Really...? I can't wait for tomorrow.
+Anyway, I'm in the middle of my patrol so... Do your best, Sakura.
+Thank you. You too Ogami, good luck with the patrol.
+Is Iris already asleep?
+...I should be getting back to the patrol.
+Iris, it's Ogami...
+Zzzz...
+Already asleep, huh... It'd be a shame to wake her up, I'll just leave quietly.
+I wonder if Maria's still up?
+Guess I'll get back to my patrol.
+It's Ogami... Maria, are you there?
+Sir, thank you for your hard work patrolling.
+I'm reading at the moment so... Please forgive me for not inviting you in.
+(A bit harsh... especially since I came all this way)
+Ahem! It's Ogami...
+...I'm fairly sure I just told you that I'm in the middle of reading...
+In any case, should you really be loafing around in a place like this in the middle of your patrol?
+S-sorry.
+(Looks like I made her mad... No choice, time to go)
+I wonder... Is Sumire still up?
+I should get going. No point staying in the same place forever.
+It's Ogami... Sumire, are you up?
+Oh, sir. The night patrol, is it? Thanks for doing it for us.
+I feel bad since you came all this way... but I'm already in bed.
+It's not good for my beauty sleep to stay up too late. If there's anything you need, would you inquire about it tomorrow?
+(I see... I kind of wanted to talk to her though)
+It's me...
+Sir. If there's something you need, would you save it until tomorrow?
+Of, of course.
+Aahh!!
+...Oww...
+I'm f...fine...
+Oh...!
+I'm f-fine! I...It's just a little scrape after all.
+...
+...Y-Yeah. I-It's stopped hurting.
+Oh... of course.
+Sh...she's so pretty... That girl... who could she be?
+S...Sakura!
+W-what... When you say it like that, you sound like somebody's wife.
+Ah...no, I mean...
+H-hey... Sakura?
+...She's gone. There's nothing for it. Guess I'll head back to my room as well.
+Come forth, Four Lords of Death...!
+We are gathered here before you...
+How may we be of service?
+What was the meaning of that debacle, you imbeciles?!
+Well, a mysterious group called the Imperial Combat Revue thwarted our plans...
+I do not want excuses!
+Our apologies, Master Tenkai...
+The fact is they are quite skilled...
+Silence, Satan! We are supposed to be invincible!
+I've devised a way to destroy the barrier around Teito! ...A spell called the "Six Fallen Stars."
+Complete this spell and destroy all of Teito! Your first target shall be Shiba Park!
+Ha~!
+Wait! This time I shall come along. I'm sure you would like to watch me fight.
+Don't you agree, Satan?
+Of course...
+Hmph! Your days are numbered, you old fool...
+Eeeeeek!!
+Cough, cough...Um...This is the Imperial Theater, right?
+Cough...Awww...My steambike is totaled...
+The name's Kohran Li. Starting today, I've transferred from the Imperial Assault Garden Branch to Ginza Headquarters.
+Yoneda! Yoneda, where are you?!
+No sweat! I'll go by myself!
+Augh! My face is up here, yanno!
+The steam bike I invented boasts 4 cylinders and 5 valves! It runs at 100 horsepower and 200 km per hour!
+Does that sound like a mess to you?! You better watch yourself, buddy...
+Or I'm gonna knock your block off!
+As long as you get it, we're cool! I'm Kohran Li, scientific genius.
+I'll be living here from now on. Nice to meetcha!
+Anyways, who are you?
+Ho, I guess that makes you my boss...
+I humbly introduce myself as Kohran Li, just transferred from the Garden Branch to Ginza Headquarters!
+Please direct me to Lieutenant General Yoneda, sir!
+Much obliged, Ensign Ogami...
+No sweat! I'll find him myself!
+Are you a Koubu pilot, too?
+They're complex machines, and typically only girls have the spiritual energy to pilot them.
+It's rare to see a guy pilot one. You must be a real hot shot!
+By the way, the Hive of Darkness is made up of remnants of the Tokugawa regime who wanna overthrow the government.
+We've got to stop them.
+Come in!
+Welcome to our shop. Good morning! What can I do for you?
+How do you do? I'm Tsubaki Takamura. It's a pleasure to meet you, Ogami!
+Ah, Ogami, welcome! What can I do for you?
+I hope I was able to be of service. Thank you very much for coming by!
+Andre, my love! Please...run away with me.
+Were I to abandon my duty and men to run away with you... I would be a different man.
+Would you still love me then?
+Oh, Andre!
+Grrrr! Arrrrgh!
+Hello there. You're Ogami, right? I'm Yuri Sakakibara!
+I do the theater's office work. I'm looking forward to working with you!
+Oh my, did you come by to see me? Hee hee, only teasing you!
+Do you need me for anything?
+I hope I was able to be of service.
+It's nice to meet you, Ogami. I'm Kasumi Fujii.
+I'm the theater's office work manager.
+Do you need something?
+Good work today.
+Look, it's still swollen. Let me give it a lick for you one more time.
+No need to be embarrassed!
+How is it...?
+Doing your best is all well and good but take it easy OK...?
+Wow, looks like you were having heaps of fun, huh?
+Lucky you, she almost looked like your girlfriend.
+Is that so... Well then...
+Hey now... Are you OK?
+Ok you say... But you're bleeding aren't you? Let me take a look.
+She's so...pretty. That girl... I wonder who she is. ...*sigh*.
+Ogling and fawning over girls is really disrespectful you know...
+Hey, that's so rude! Since when did I act like your wife!?
+You're the worst!
+She's so... pretty. That girl... I wonder who she is. ...*sigh*.
+Ogling and fawning over girls is really disrespectful you know...
+Hey, that's so rude! Since when did I act like your wife!?
+You're the worst!
+Thank you for your hard work.
+This is the Deputy Commander of the Imperial Assault Force, and chief of the Hanayashiki Branch.
+I'm Ayame Fujieda. I'm pleased to meet you, Ogami.
+A captain must be able to make judgments in an instant. I have high hopes for you. Good luck.
+Ahhh...
+Cursed Imperial Assault Force! Defiant to the last I see!
+In that case, I, Tenkai, shall show you the meaning of true terror!!
+Lords of Death!!
+Annihilate Teito!! Destroy... the Imperial Assault Force!!
+Destroy! Destroy! Destroy!
+How is it...?
+Doing your best is all well and good but take it easy OK...?
+No worries! I always carry a repair kit with me just in case!
+I'll have it fixed in a jiffy!
+By the way, Ensign. You went up against the Hive of Darkness, right?
+How'd it feel?
+Heh! You've got guts! I like that.
+Don't get too cocky, though. We don't know what'll happen next.
+Really? I appreciate your honesty, Ensign. Most people couldn't admit that.
+And now that I'm here, you've got nothing to worry about! I'll protect you!
+Er, you don't have to talk about it if you don't want to.
+After all, everybody's gone through stuff they'd rather forget!
+Say no more, say no more.
+Just give it all you've got next time, Ensign!
+I-is that my photo?! Gee, how embarrassing!
+Um, Ensign? I want to go to the Manager's Office...
+I'll be on this stage very soon...
+Are you sure about this, Ensign?
+A captain must be able to make judgments in an instant. I have high hopes for you. Do your best Ogami.
+Do your best, Ogami.
+Eyaaaah!!
+S-sir!!
+Welcome to our shop. Good morning! What can I do for you?
+Ah, Ogami, welcome! What can I do for you?
+Untranslated

@@ -1575,7 +1575,6 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 	{\
 		printf("Unable to fully insert line because it is longer than %i characters: %s\n", maxLines*maxCharsPerLine, textLine.mFullLine.c_str());\
 		bFailedToAddLine = true;\
-		break;\
 	}\
     translatedString.AddChar( GTranslationLookupTable.GetIndex('\n') );
 
@@ -1583,6 +1582,10 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 #define ConditionallyAddNewLine()\
 	if( word.size() + charCount > maxCharsPerLine )\
 	{\
+		if( bIsLipsEntry )\
+		{\
+			printf("LIPS line is too long.  Needs to be a max of %i characters long. %s", maxCharsPerLine, textLine.mFullLine.c_str());\
+		}\
 		IncrementLine()\
 	}
 
@@ -1665,13 +1668,11 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 			}
 		}
 
-#if OPTIMIZE_INSERTION_DEBUGGING
 		//Find the dialog order for this sakura file
-		const size_t lastIndex    = sakuraFile.mFileNameInfo.mNoExtension.find_first_of("TBL");
-		const string infoFileName = sakuraFile.mFileNameInfo.mNoExtension.substr(0, lastIndex);
+		const size_t lastIndex                                   = sakuraFile.mFileNameInfo.mNoExtension.find_first_of("TBL");
+		const string infoFileName                                = sakuraFile.mFileNameInfo.mNoExtension.substr(0, lastIndex);
 		map<string, DialogOrder>::const_iterator dialogOrderIter = dialogOrder.find(infoFileName);
-		const bool bDialogOrderExists = dialogOrderIter != dialogOrder.end();
-#endif
+		const bool bDialogOrderExists                            = dialogOrderIter != dialogOrder.end();
 
 		vector<SakuraString> translatedLines;
 		if( pMatchingTranslatedFileName )
@@ -1704,23 +1705,25 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 				const size_t numWords = textLine.mWords.size();
 				SakuraString translatedString;
 
-#if OPTIMIZE_INSERTION_DEBUGGING
-				const unsigned short id = sakuraFile.mStringInfoArray[translatedLineIndex].mStringId;
-				const vector<int>* pOrder = bDialogOrderExists && dialogOrderIter->second.idAndOrder.find(id) != dialogOrderIter->second.idAndOrder.end() ? &dialogOrderIter->second.idAndOrder.find(id)->second : nullptr;
+				//Figure out if this is a lips entry
+				const size_t currSakuraStringIndex = translatedLineIndex;
+				const unsigned short id            = sakuraFile.mStringInfoArray[currSakuraStringIndex].mStringId;
+				const vector<int>* pOrder          = bDialogOrderExists && dialogOrderIter->second.idAndOrder.find(id) != dialogOrderIter->second.idAndOrder.end() ? &dialogOrderIter->second.idAndOrder.find(id)->second : nullptr;
+				const bool bIsLipsEntry            = pOrder ? dialogOrderIter->second.idAndLips.find(id)->second : false;
 
-				//If this string isn't supposed to appear in the game, write smaller bit of debug data to it
-				if( !pOrder )
+				//If untranslated, then write out the file and line number
+				if( textLine.mWords.size() == 1 && textLine.mWords[0] == UntranslatedEnglishString )
 				{
-					const string baseUntranslatedString = string("");
+					const string baseUntranslatedString = sakuraFile.mFileNameInfo.mNoExtension + string(": ");
 					const string untranslatedString = baseUntranslatedString + std::to_string(translatedLineIndex + 1);
 
 					SakuraString translatedSakuraString;
 
 					//Lines starting with the indicator 0xC351 have a special two byte value instead of the usual 00 00
-					const size_t currSakuraStringIndex = translatedLineIndex;
-					if( sakuraFile.mStringInfoArray[currSakuraStringIndex].mStringId == SpecialDialogIndicator )
+					if( 1 )//sakuraFile.mStringInfoArray[currSakuraStringIndex].mStringId >= SpecialDialogIndicator || bIsMESFile )
 					{
-						translatedSakuraString.AddString( untranslatedString, sakuraFile.mLines[currSakuraStringIndex].mChars[0].mIndex);
+						translatedSakuraString.AddString( untranslatedString, sakuraFile.mLines[currSakuraStringIndex].mChars[0].mIndex );
+						translatedSakuraString.AddString( untranslatedString, numCharsPrinted );//untranslatedString, sakuraFile.mLines[currSakuraStringIndex].mChars[1].mIndex );
 					}
 					else
 					{
@@ -1729,32 +1732,7 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 
 					translatedLines.push_back( translatedSakuraString );
 					continue;
-				}				
-				else
-#endif
-					//If untranslated, then write out the file and line number
-					if( textLine.mWords.size() == 1 && textLine.mWords[0] == UntranslatedEnglishString )
-					{
-						const string baseUntranslatedString = sakuraFile.mFileNameInfo.mNoExtension + string(": ");
-						const string untranslatedString = baseUntranslatedString + std::to_string(translatedLineIndex + 1);
-
-						SakuraString translatedSakuraString;
-
-						//Lines starting with the indicator 0xC351 have a special two byte value instead of the usual 00 00
-						const size_t currSakuraStringIndex = translatedLineIndex;
-						if( 1 )//sakuraFile.mStringInfoArray[currSakuraStringIndex].mStringId >= SpecialDialogIndicator || bIsMESFile )
-						{
-							translatedSakuraString.AddString( untranslatedString, sakuraFile.mLines[currSakuraStringIndex].mChars[0].mIndex );
-							translatedSakuraString.AddString( untranslatedString, numCharsPrinted );//untranslatedString, sakuraFile.mLines[currSakuraStringIndex].mChars[1].mIndex );
-						}
-						else
-						{
-							translatedSakuraString.AddString( untranslatedString );
-						}
-
-						translatedLines.push_back( translatedSakuraString );
-						continue;
-					}
+				}
 
 				//Lines starting with the indicator 0xC351 have a special two byte value instead of the usual 00 00
 				if( 1 )//sakuraFile.mStringInfoArray[translatedLineIndex].mStringId >= SpecialDialogIndicator || bIsMESFile )
@@ -1790,7 +1768,7 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 						//bFailedToAddLine set inside IncrementLine
 						if( bFailedToAddLine )
 						{
-							break;
+						//	break;
 						}
 
 						continue;
@@ -1802,12 +1780,17 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 					{	
 						if( charCount + 1 > maxCharsPerLine )
 						{
+							if( bIsLipsEntry )
+							{
+								printf("LIPS line is too long.  Needs to be a max of %i characters long. %s", maxCharsPerLine, textLine.mFullLine.c_str());
+								break;
+							}
 							IncrementLine();
 
 							//bFailedToAddLine set inside IncrementLine
 							if( bFailedToAddLine )
 							{
-								break;
+							//	break;
 							}
 						}
 						else
@@ -1821,12 +1804,20 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 
 					//Insert new line if needed
 					ConditionallyAddNewLine();
-
+					
 					//Add the word
 					const size_t numLettersInWord = bNewLineWord ? 1 : word.size();
 					if( word.size() + charCount > maxCharsPerLine )
 					{
-						IncrementLine();
+						if( bIsLipsEntry )
+						{
+							printf("LIPS line is too long.  Needs to be a max of %i characters long. %s", maxCharsPerLine, textLine.mFullLine.c_str());
+						//	break;
+						}
+						else
+						{
+							IncrementLine();
+						}
 					}
 
 					const char* pWord = word.c_str();
@@ -1847,20 +1838,30 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 					{
 						//Insert new line if needed
 						const string& nextWord = textLine.mWords[wordIndex + 1];
-						if( nextWord.size() + charCount > maxCharsPerLine ) //if( word.size() + charCount > maxCharsPerLine )
+						if( nextWord != NewLineWord )
 						{
-							ConditionallyAddNewLine();
-						}
-						else //Otherwise add a space
-						{
-							if( charCount + 1 >= maxCharsPerLine )
+							//If adding the next word will put us over the word limit, add a new line
+							if( nextWord.size() + charCount > maxCharsPerLine )
 							{
-								IncrementLine();
+								ConditionallyAddNewLine();
 							}
-							else
+							else //Otherwise add a space
 							{
-								translatedString.AddChar( GTranslationLookupTable.GetIndex(' ') );
-								++charCount;
+								if( charCount + 1 >= maxCharsPerLine )
+								{
+									if( bIsLipsEntry )
+									{
+										printf("LIPS line is too long.  Needs to be a max of %i characters long. %s", maxCharsPerLine, textLine.mFullLine.c_str());
+								//		break;
+									}
+
+									IncrementLine();
+								}
+								else
+								{
+									translatedString.AddChar( GTranslationLookupTable.GetIndex(' ') );
+									++charCount;
+								}
 							}
 						}
 					}
@@ -1920,15 +1921,7 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 			const string baseUntranslatedString = sakuraFile.mFileNameInfo.mNoExtension + string(": ");
 			for(size_t i = 0; i < sakuraFile.mLines.size(); ++i)
 			{
-#if OPTIMIZE_INSERTION_DEBUGGING
-				//If this isn't supposed to appear in game, just output L:lineNum
-				const unsigned short id = sakuraFile.mStringInfoArray[i].mStringId;
-				const vector<int>* pOrder = bDialogOrderExists && dialogOrderIter->second.idAndOrder.find(id) != dialogOrderIter->second.idAndOrder.end() ? &dialogOrderIter->second.idAndOrder.find(id)->second : nullptr;
-
-				const string untranslatedString = pOrder ? baseUntranslatedString + std::to_string(i + 1) : std::to_string(i + 1);
-#else
 				const string untranslatedString = baseUntranslatedString + std::to_string(i + 1);
-#endif
 				SakuraString translatedSakuraString;
 
 				//Lines starting with the indicator 0xC351 have a special two byte value instead of the usual 00 00
@@ -2247,14 +2240,14 @@ bool FixupSakura(const string& rootDir, const string& inTranslatedOptionsBmp)
 	
 	//***Patch Text Drawing Code***
 	//const int offsetTileDim     = 0x0001040A;
-	const int offsetTileSpacingX      = 0x000104e5;
-	const int offsetTileSpacingY      = 0x000104D7;
-	const int offsetTileSpacingX2     = 0x00010747;
-	const int offsetTileSpacingY2     = 0x00010733;
-	const int offsetTileSpacingLIPSX  = 0x0001066B;
-	const int offsetLIPSX_Formatting1 = 0x00010613;
-	const int offsetLIPSX_Formatting2 = 0x00010647;
-	const char lipsFormattingCode     = 0x01;
+	const int offsetTileSpacingX            = 0x000104e5;
+	const int offsetTileSpacingY            = 0x000104D7;
+	const int offsetTileSpacingX2           = 0x00010747;
+	const int offsetTileSpacingY2           = 0x00010733;
+	const int offsetTileSpacingLIPSX        = 0x0001066B;
+	const int offsetLIPSX_Formatting1       = 0x00010612;
+	const int offsetLIPSX_Formatting2       = 0x00010646;
+	const unsigned short lipsFormattingCode = 0x0041; //0x4100 in big endian.  This is equivalent to SHLL R1
 
 	memcpy_s((void*)(origSakuraData.GetData() + offsetTileSpacingX),      origSakuraData.GetDataSize(), (void*)&OutTileSpacingX, sizeof(OutTileSpacingX));
 	memcpy_s((void*)(origSakuraData.GetData() + offsetTileSpacingY),      origSakuraData.GetDataSize(), (void*)&OutTileSpacingY, sizeof(OutTileSpacingY));
