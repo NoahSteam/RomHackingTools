@@ -345,6 +345,7 @@ bool TextFileData::InitializeTextFile()
 	memset(fixedString, 0, bufferSize);
 
 	const string space(" ");
+	const string newLine("<br>");
 	char* pToken = nullptr;
 	while( fgets(buffer, bufferSize, pFile) != nullptr )
 	{
@@ -373,8 +374,47 @@ bool TextFileData::InitializeTextFile()
 				}
 			}
 
-			newLineOfText.mWords.push_back(fixedString);
-			newLineOfText.mFullLine += string(fixedString) + space;
+			//Split out newLine characters
+			string testString(fixedString);
+			size_t pos = testString == newLine ? std::string::npos : testString.find(newLine);
+			if( pos != std::string::npos )
+			{
+				std::string token;
+				while( pos != std::string::npos ) 
+				{
+					token = testString.substr(0, pos);
+					if( pos > 0 )
+					{
+						newLineOfText.mWords.push_back(token);
+						newLineOfText.mFullLine += token + space;
+
+						newLineOfText.mWords.push_back(newLine);
+						newLineOfText.mFullLine += newLine + space;
+
+						testString.erase(0, pos + newLine.length());
+					}
+					else
+					{
+						newLineOfText.mWords.push_back(newLine);
+						newLineOfText.mFullLine += newLine + space;
+
+						testString.erase(0, pos + newLine.length());
+					}
+
+					pos = testString.find(newLine);
+				}
+
+				if( testString.size() )
+				{
+					newLineOfText.mWords.push_back(testString);
+					newLineOfText.mFullLine += testString + space;
+				}
+			}
+			else
+			{
+				newLineOfText.mWords.push_back(fixedString);
+				newLineOfText.mFullLine += string(fixedString) + space;
+			}
 
 			pToken = strtok_s(NULL, pDelim, &pContext);
 		}

@@ -1,10 +1,10 @@
 It's a photo of Sakura. Her gaze is so intense. I wonder what she's thinking?
 It's a photo of Sumire. It shows a side of her that's usually hidden.
-It's a photo of Maria. She's lost in thought and seems a bit sad...
+It's a photo of Maria. She's lost in thought and seems a bit sad…
 It's a photo of Kanna. In it, she looks as energetic and confident as ever.
 It's a photo of Iris. In it, she's one beautiful flower surrounded by many.
 It's a photo of Kohran. Her profile is framed by a breathtaking sunset.
-A customer gave me this letter and asked me to pass it on to Sumire... Hmm.
+A customer gave me this letter and asked me to pass it on to Sumire… Hmm.
 It's Maria's gun. I wonder if I can use it to escape?
 It's a cute flower-shaped hairpin.
 It's a beautiful, finely-crafted brooch.
@@ -18,87 +18,87 @@ This is the knife Iris asked for. It's just an ordinary piece of silverware.
 It's a prop sword and shield used in stage plays. Looks handmade.
 It's an exquisitely-detailed prop crown used in stage plays.
 It's a gaudy costume wig. What play could it possibly be used in?
-A photo of Sakura in a swimsuit? Whoa, this is pretty risque... I can't let anyone else see it.
+A photo of Sakura in a swimsuit? Whoa, this is pretty risque… I can't let anyone else see it.
 It's a photo of Sumire in costume. Her elaborate makeup is quite impressive.
-It's a photo of Maria on stage in the military uniform from "For Love"... She's a beautiful woman disguised as a man.
+It's a photo of Maria on stage in the military uniform from "For Love"… She's a beautiful woman disguised as a man.
 It's a rare training photo with a very private feel.
 A photo of Iris in a swimsuit. She looks so cute holding that inner tube.
 It's Kohran in a maid outfit. She looks great with her hair down.
 It's Ayame in Japanese-style clothing. I wish she'd smile like that all the time.
 It's Ayame's gun. What am I supposed to do with it?
-Ahhh... That was a nice rest.
-I had an interesting dream, too... Anyway, I should go join the others.
+Ahhh… That was a nice rest.
+I had an interesting dream, too… Anyway, I should go join the others.
 Thank you, Ogami! You were a huge help!
 I hope you'll help me out again.
-Oh, this takes me back...
+Oh, this takes me back…
 I know, right? Those kids sent me a photo.
 I guess good memories never fade, huh?
 Say, what are you going to do with this borscht?
 I'm planning on serving it for dinner tonight.
 Everyone will love eating the Captain's home cooking!
 That was fun, Ogami! Let's play again sometime.
-Sorry, Iris. I don't think I picked a very good outfit...
+Sorry, Iris. I don't think I picked a very good outfit…
 No no no! I love it because you picked it out, Onii-chan!
 Next time, though, try to pick one that's a little cuter! 'Kay?
 Whew! It feels great to go swimming again!
 Were the mines to your liking?
 Huh? D-did you put those mines there, Sumire?
 Indeed I did. After all, swimming by itself is dreadfully boring.
-(*Sigh* I beg to differ...)
+(*Sigh* I beg to differ…)
 Well, there's no performance today, so I can take it easy.
 Leave the room <br> Zone out
 Finally, a day off! I'll go join the others.
-Ahh... It's lovely outside. A perfect day to zone out in my room.
+Ahh… It's lovely outside. A perfect day to zone out in my room.
 Yes?
-Sakura...
+Sakura…
 Good morning, Ogami!
 We finally have a day off. You shouldn't spend it by yourself.
-Yeah, I guess...
+Yeah, I guess…
 There's no rehearsal today, either, so we're all relaxing in our rooms.
-Won't you come visit me in mine? Well then, I'll see you later...
+Won't you come visit me in mine? Well then, I'll see you later…
 What should I do today?
-Ahh... It's lovely outside. A perfect day to zone out in my room.
+Ahh… It's lovely outside. A perfect day to zone out in my room.
 Yes?
-Sumire...
+Sumire…
 Good morning, Ensign.
 Rest day or not, I still think it's rather rude of you to ignore me.
-Uh, sorry...
+Uh, sorry…
 There is no rehearsal today, either, so we are all relaxing in our rooms.
-Do come visit me in mine. Now, if you'll excuse me...
+Do come visit me in mine. Now, if you'll excuse me…
 What should I do today?
-Ahh... It's lovely outside. A perfect day to zone out in my room.
+Ahh… It's lovely outside. A perfect day to zone out in my room.
 Yes?
-Maria...
+Maria…
 Good morning, Captain.
-I'm sorry for the intrusion...
+I'm sorry for the intrusion…
 It's just that everyone wants to spend the day off with you.
-And I, uh... Never mind.
+And I, uh… Never mind.
 Heh! I bet everyone's glad to finally have a day off.
 Ahem! I'll be in my room. I hope you'll come see me.
 What should I do today?
-Ahh... It's lovely outside. A perfect day to zone out in my room.
+Ahh… It's lovely outside. A perfect day to zone out in my room.
 Yes?
-Kanna...
+Kanna…
 Wake up, Captain! It's beautiful outside!
 We may have the day off, but that's no reason to laze around!
-Yeah, I guess...
+Yeah, I guess…
 Damn straight! So get off your butt and come to my room!
 What should I do today?
-Ahh... It's lovely outside. A perfect day to zone out in my room.
+Ahh… It's lovely outside. A perfect day to zone out in my room.
 Yes?
-Iris...?
+Iris…?
 Yoo-hoo! Are you awake, Onii-chan?
 We've got the day off! Come play with me!
 I planned to spend time with everyone today, actually.
 Really? Yay! I wonder what game we should play?
 I'll be waiting in my room. Please come see me!
 What should I do today?
-Ahh... It's lovely outside. A perfect day to zone out in my room.
+Ahh… It's lovely outside. A perfect day to zone out in my room.
 Yes?
-Kohran...
-Ogami, you lazybones...
+Kohran…
+Ogami, you lazybones…
 We finally have a day off! Don't you want to spend it with us?
-Sure, I guess...
+Sure, I guess…
 Good! Let's party down on our day off!
 Now, I'll be in my room. Come see me, 'kay?
 What should I do today?
@@ -111,17 +111,17 @@ Sit and reminisce <br> Maybe another time
 I'm not feeling very nostalgic right now. Maybe another time.
 I see. Well, you can come here any time you like.
 Sure. Nothing wrong with reflecting on the past once in awhile.
-Well then, close your eyes and remember times past...
+Well then, close your eyes and remember times past…
 Are you all right, Ogami?
 Reminisce more <br> Come back later
 I'm not feeling very nostalgic right now. Maybe another time.
 I see. Well, you can come here whenever you like.
-That was quite nostalgic... I'd like to reminisce a bit more.
-Memories truly are life's treasure. Well then, close your eyes again...
+That was quite nostalgic… I'd like to reminisce a bit more.
+Memories truly are life's treasure. Well then, close your eyes again…
 Hello Ogami!
 Hey, Yuri! We're both off duty today, so we can take it easy.
 Yep! Days off are the perfect time to catch up on new gossip!
-Say, Ogami, I've got a really neat record...
+Say, Ogami, I've got a really neat record…
 Want to listen to it with me?
 Hey, Ogami! Want to listen to some music?
 Listen to music <br> Maybe another time
@@ -139,8 +139,8 @@ Yes, I'd like to listen to more music.
 Great! Pick out which song you want to hear.
 Hi, Ogami!
 Uh, Tsubaki, why are you in the Gift Shop on our day off?
-Oh... Force of habit, I guess... Eheheheh!
-By the way, Ogami, I have some jumbo-sized photos...
+Oh… Force of habit, I guess… Eheheheh!
+By the way, Ogami, I have some jumbo-sized photos…
 They're larger versions of photos you've already purchased. Would you like to see them?
 Hey, Ogami. I have some jumbo-sized photos. Would you like to see them?
 I'd love to see them! <br> Maybe another time.
@@ -156,56 +156,56 @@ There's a special set of photos in addition to the six normally sold in the Gift
 These seven special photos are only available for purchase during the New Year's holiday.
 I think I'll have another look.
 Sure thing! Here are the photos you've purchased so far.
-It's empty... Maybe everyone's in their rooms.
+It's empty… Maybe everyone's in their rooms.
 Staying here would be a waste of time. I'll try another room.
 Hey, Ogami! Would you like to play Koi-Koi with us?
-Pardon me, Ensign... Would you care to play Koi-Koi with us?
+Pardon me, Ensign… Would you care to play Koi-Koi with us?
 Captain, would you like to play Hanafuda with us on our day off?
 Hey, Captain! Wanna play Hanafuda with us?
 Hey, Onii-chan! Come play Hanafuda with us!
 Hey, Ogami! Come play Hanafuda with us! You know you wanna!
 Sure! <br> Not right now.
 Sure! Watch out, though, 'cause I plan to win!
-Er, not right now...
-Oh... Well, please come back if you change your mind.
+Er, not right now…
+Oh… Well, please come back if you change your mind.
 What a shame. Still, we'll gladly play against you should you change your mind.
-Oh... Maybe another time, then.
+Oh… Maybe another time, then.
 Pfft! You're no fun. Come back if you change your mind, Captain.
 How lame! C'mon, Onii-chan, play with us!
 Hmph! Not cool, Ogami. Well, come back if you change your mind.
-W-why is everyone gathered here...?
-Ahem! ...I've brought Ogami with me.
+W-why is everyone gathered here…?
+Ahem! …I've brought Ogami with me.
 Yay! Onii-chan!!
 You managed to pass Ayame's quiz? That's impressive, Captain.
-Ayame... What's going on?
+Ayame… What's going on?
 We decided to hold a Hanafuda Tournament on our day off.
 It's a single-elimination tournament. I'll be participating, of course.
 I won't go easy on you, Ogami.
 I, Sumire Kanzaki, shall use this opportunity to demonstrate my genius intellect.
 The premise of Hanafuda is similar to combat. It's a strategy game in which you must decide to advance or withdraw.
 Woo hoo! What a groovy way to spend our day off!
-Well, Ogami. Let's see if you can defeat all seven of us...
+Well, Ogami. Let's see if you can defeat all seven of us…
 at Hanafuda!
 Hi, Ogami. What are you doing here?
 Lieutenant General Yoneda? What are YOU doing here?
-Heh! ...I just wanted a change of scenery. I assume you do, too.
+Heh! …I just wanted a change of scenery. I assume you do, too.
 What kind of scenery are you in the mood for?
 Hi, Ogami. Care for another change of scenery?
 What kind of scenery are you in the mood for?
 Flower Division <br> Chibi <br> Koubu
-Hmm... I think I'll pick Flower Division.
+Hmm… I think I'll pick Flower Division.
 Flower Division, eh? You got it. Now close your eyes!
-Hmm... I think I'll pick Flower Division.
+Hmm… I think I'll pick Flower Division.
 *Sigh* Ogami, that's your current background.
 We may have the day off, but that's no reason to space out.
-Hmm... I think I'll pick Chibi.
+Hmm… I think I'll pick Chibi.
 Chibi, eh? You got it. Now close your eyes!
-Hmm... I think I'll pick Chibi.
+Hmm… I think I'll pick Chibi.
 *Sigh* Ogami, that's your current background.
 We may have the day off, but that's no reason to space out.
-Hmm... I think I'll pick Koubu.
+Hmm… I think I'll pick Koubu.
 Koubu, eh? You got it. Now close your eyes!
-Hmm... I think I'll pick Koubu.
+Hmm… I think I'll pick Koubu.
 *Sigh* Ogami, that's your current background.
 We may have the day off, but that's no reason to space out.
 Hellooo? Earth to Ogami!
@@ -223,17 +223,17 @@ Hello, Ogami. Are you enjoying our day off?
 Yes ma'am. I'm relaxing and taking it easy.
 Good! Say, would you like to play a trivia quiz?
 I'll ask you ten questions, and you give me the correct answers.
-Get all ten right, and I'll tell you a secret...
+Get all ten right, and I'll tell you a secret…
 Hello, Ogami. Would you like to try the quiz again?
-Absolutely! <br> Advanced Round, please! <br> ...Maybe later.
-Absolutely! <br> ...Maybe later.
+Absolutely! <br> Advanced Round, please! <br> …Maybe later.
+Absolutely! <br> …Maybe later.
 Absolutely! I'll show you why I was top of my class at the military academy!
 Very well. Let's begin!
 Advanced Round, please!
 I see. So you beat Kohran at Hanafuda, huh?
 All right. These questions are tougher. Answer them correctly and I'll tell you a secret.
 There are ten questions total. Let's begin!
-...Well done, Ogami! You didn't miss a single one.
+…Well done, Ogami! You didn't miss a single one.
 So what about that secret you mentioned, Ayame?
 Not so fast. That was just a warm-up.
 Make it through a second round of tougher questions and then I'll tell you.
@@ -241,56 +241,56 @@ Aww, man! I knew it sounded too easy.
 Beat Kohran at Hanafuda and bring me a photo as proof. Then you can do the Advanced Round.
 So, Ogami, would you like to continue the quiz?
 What a shame. Perhaps another time.
-...Do you want to stop, Ogami?
+…Do you want to stop, Ogami?
 Keep going <br> Give up
 I can't stop now! I'm a man, not a mouse!
-Mmm... That's the spirit, Ogami. Let's begin!
-...I give up. These questions are really hard.
-...I see. Well, come back if you want to give it another shot.
+Mmm… That's the spirit, Ogami. Let's begin!
+…I give up. These questions are really hard.
+…I see. Well, come back if you want to give it another shot.
 Well done, Ogami! You made it through the Advanced Round!
 Your brilliance and tenacity are second to none.
 Now, as promised, I'll tell you the secret.
 Come with me to the Salon, Ogami.
 I guess the questions were too difficult for you.
-...Do you want to stop, Ogami?
+…Do you want to stop, Ogami?
 Keep going <br> Give up
 I can't stop now! I'm a man, not a mouse!
 Well said, Ogami! Beat the Advanced Round and you'll be a top-notch captain!
 Now, take a deep breath and get ready. Let's begin!
-...I give up. These questions are really hard.
-...I see. Perhaps you should study up a bit first.
+…I give up. These questions are really hard.
+…I see. Perhaps you should study up a bit first.
 Come back later if you'd like to give it another shot.
 What should I do now?
 Come in!
-Ogami... Are you going to bed already?
+Ogami… Are you going to bed already?
 No, of course not! <br> I thought I'd take a nap. <br> Yes, I am.
 No, of course not! It's still early.
 Oh, good! You had me worried for a moment.
 Well then, keep having fun! See you later.
 Where should I go now?
-I thought I'd take a little nap...
+I thought I'd take a little nap…
 I see. It is the perfect day for a nap.
 Come visit me afterwards, okay?
-Boy, I'm really sleepy...
-I hope I'll *yawn* have good dreams...
-Yes, I am. I'm exhausted...
-Oh... Good night, then.
+Boy, I'm really sleepy…
+I hope I'll *yawn* have good dreams…
+Yes, I am. I'm exhausted…
+Oh… Good night, then.
 Tomorrow's another busy day, Ogami. Let's do our best.
-I hope to see you in my dreams...
-Pardon me, Ensign... Are you retiring to bed already?
+I hope to see you in my dreams…
+Pardon me, Ensign… Are you retiring to bed already?
 No, of course not! <br> I thought I'd take a nap. <br> Yes, I am.
 No, of course not! It's still early.
 Thank goodness. You had me worried for a moment.
 We rarely have a day off, Ensign. Do try to make the most of it.
 All right, I'll go wander around a bit more.
-I thought I'd take a little nap...
-Indeed... It is a fine day for a nap.
+I thought I'd take a little nap…
+Indeed… It is a fine day for a nap.
 Do come visit me afterwards.
-Boy, I'm really sleepy...
-I hope I'll *yawn* have good dreams...
-Yes, I am. I'm exhausted...
-Oh... Then I bid you good night, Ensign.
-...I shall see you in my dreams.
+Boy, I'm really sleepy…
+I hope I'll *yawn* have good dreams…
+Yes, I am. I'm exhausted…
+Oh… Then I bid you good night, Ensign.
+…I shall see you in my dreams.
 Captain, are you headed to bed already?
 No, of course not! <br> I thought I'd take a nap. <br> Yes, I am.
 No, of course not! It's still early.
@@ -298,12 +298,12 @@ I'm glad to hear that. We never know when we'll be called to battle,
 so it's important to enjoy ourselves while we can.
 Ahem! Please excuse me.
 Where should I go now?
-I thought I'd take a little nap...
+I thought I'd take a little nap…
 Oh? Well then, go right ahead.
-Boy, I'm really sleepy...
-I hope I'll *yawn* have good dreams...
-Yes, I am. I'm exhausted...
-I see...
+Boy, I'm really sleepy…
+I hope I'll *yawn* have good dreams…
+Yes, I am. I'm exhausted…
+I see…
 Rest well, Captain. Tomorrow is another busy day.
 Captain, don't tell me you're done for the day!
 No, of course not! <br> I thought I'd take a nap. <br> Yes, I am.
@@ -311,13 +311,13 @@ No, of course not! It's still early.
 Damn right! The key to a happy life is good food, good sleep, and good fun!
 I'll be in my room. Come by and see me, Captain. Bye!
 Where should I go now?
-I thought I'd take a little nap...
-Huh... Not a bad idea. I think I'll go take one, too!
+I thought I'd take a little nap…
+Huh… Not a bad idea. I think I'll go take one, too!
 Bye, Captain!
-Boy, I'm really sleepy...
-I hope I'll *yawn* have good dreams...
-Yes, I am. I'm exhausted...
-Oh... See you tomorrow, then.
+Boy, I'm really sleepy…
+I hope I'll *yawn* have good dreams…
+Yes, I am. I'm exhausted…
+Oh… See you tomorrow, then.
 G'night, Captain.
 Onii-chan, are you going to bed already?
 No, of course not! <br> I thought I'd take a nap. <br> Yes, I am.
@@ -325,12 +325,12 @@ No, of course not! It's still early.
 Yay! I was worried there for a second!
 I'll be in my room, so come play with me! 'Kay?
 Where should I go now?
-I thought I'd take a little nap...
-Hmph... Okay. Come play with me after, though!
+I thought I'd take a little nap…
+Hmph… Okay. Come play with me after, though!
 Bye bye!
-Boy, I'm really sleepy...
-I hope I'll *yawn* have good dreams...
-Yes, I am. I'm exhausted...
+Boy, I'm really sleepy…
+I hope I'll *yawn* have good dreams…
+Yes, I am. I'm exhausted…
 Seriously?! How lame!!
 Fine! But you owe me playtime on our next day off!
 Ogami, are you already done for the day?
@@ -339,33 +339,33 @@ No, of course not! It's still early.
 That's the spirit! The day's still young!
 I'll be in my room! Come pay me a visit, okay?
 Where should I go now?
-I thought I'd take a little nap...
+I thought I'd take a little nap…
 A nap, huh? Come see me after, okay?
-Boy, I'm really sleepy...
-I hope I'll *yawn* have good dreams...
-Yes, I am. I'm exhausted...
+Boy, I'm really sleepy…
+I hope I'll *yawn* have good dreams…
+Yes, I am. I'm exhausted…
 For real? You're such a buzzkill.
 I guess I'll take a rain check for our next day off.
 G'night, Ogami.
-Oh, Ogami...
+Oh, Ogami…
 Hi, Sakura. I came to spend time with you.
-...I'm afraid I'm a little busy at the moment.
+…I'm afraid I'm a little busy at the moment.
 I just received the script for our next play,
 and I need to focus on reading through it. I'm so sorry.
 Oh? That's too bad.
 Still, work comes first. I'll come back later!
 Sorry! I promise you can help me clean next time.
-Ahem! It's me...
+Ahem! It's me…
 I'm sorry, but I'm busy reading over the script right now.
-Oh... Okay, then. I'll stop bothering you.
+Oh… Okay, then. I'll stop bothering you.
 (I should try another room.)
 Hi, Sakura.
 Oh! Hello, Ogami.
 There's no performance today, so I'm going to clean the stage and scene dock.
 I hate to ask, but would you mind giving me a hand?
 Hi, Sakura.
-Ogami... I'm glad you came.
-Listen, I have a favor to ask you...
+Ogami… I'm glad you came.
+Listen, I have a favor to ask you…
 There's no performance today, so I'm going to clean the stage and scene dock.
 Would you mind helping me out?
 Oh, Ogami! Will you help me clean the scene dock again?
@@ -377,20 +377,20 @@ Of course I'll help!
 Wonderful! Well, let's get started!
 Sure, I'll help you clean again!
 You will? Great! Let's get to work!
-(Cleaning with Sakura was intense but enjoyable...)
-(Exhausting but fun...)
-...? What's wrong, Ogami?
+(Cleaning with Sakura was intense but enjoyable…)
+(Exhausting but fun…)
+…? What's wrong, Ogami?
 Nothing. I was just thinking about all the fun we had.
 *Giggle* It's only cleaning, Ogami. No big deal.
-Well, Sakura, I guess I'll be going...
+Well, Sakura, I guess I'll be going…
 Come see me again, okay?
 Where should I go next?
 Hi, Kanna.
 Hey, Captain. I appreciate you comin' to see me and all,
-but I'm about to take a nap. Sorry...
+but I'm about to take a nap. Sorry…
 You are? Okay, I'll come back later.
-Hey, Kanna? It's me...
-.........
+Hey, Kanna? It's me…
+………
 She's probably fast asleep. No sense in waking her up.
 Hi, Kanna.
 Hey, Captain! Good to see you!
@@ -400,8 +400,8 @@ Heh! I remember it like it was yesterday.
 C'mon, Captain! Close your eyes and picture it!
 Hi, Kanna.
 Hey, Captain. I was just thinkin' about the stuff that happened this past year.
-Practicin' karate, gettin' bitten by a snake...
-Helpin' those lost kids in the lobby... You remember that?
+Practicin' karate, gettin' bitten by a snake…
+Helpin' those lost kids in the lobby… You remember that?
 Yeah, I think so.
 C'mon, Captain! Close your eyes and picture it!
 Hey, Captain. Remember when we helped those lost kids?
@@ -409,7 +409,7 @@ Recall <br> Go to another room
 Recall <br> Look at the photo <br> Go to another room
 Recall again <br> Go to another room
 Recall again <br> Look at the photo <br> Go to another room
-...Yes, I think so.
+…Yes, I think so.
 I can close my eyes and picture it.
 Can I see the photo the kids gave you?
 Sure! Here it is.
@@ -423,15 +423,15 @@ Hi, Maria.
 Hello, Captain. I appreciate you coming to see me,
 but I'm busy writing a report at the moment.
 You are? Okay, I'll come back later.
-My apologies, Captain. I'm still busy writing my report...
+My apologies, Captain. I'm still busy writing my report…
 You are? Sorry for bothering you. I'll come back later.
 Hi, Maria.
-Captain... I was thinking of doing some cooking.
+Captain… I was thinking of doing some cooking.
 Would you mind giving me a hand?
 Hi, Maria.
-Captain... It's good to see you! I was thinking of doing some cooking.
+Captain… It's good to see you! I was thinking of doing some cooking.
 Would you mind giving me a hand?
-Captain... I was thinking of doing some cooking.
+Captain… I was thinking of doing some cooking.
 Would you mind giving me a hand?
 Help her cook <br> Go to another room
 Help her cook <br> Reminisce <br> Go to another room
@@ -442,7 +442,7 @@ Excellent! Come with me to the kitchen.
 Let's try making borscht. Good luck, Captain!
 Let's make borscht again. I'll try to do a better job this time.
 Heheh! Very well. We'll give it another shot.
-Say, Maria, you looked cute in that apron...
+Say, Maria, you looked cute in that apron…
 C-Captain! Please don't tease me!
 Heh! It's nothing to be embarrassed about.
 Bye, Maria. I'll come back later.
@@ -453,10 +453,10 @@ Hiya, Ogami. Sorry, but I'm busy as a bee right now!
 I'm developing an automated Hanafuda board called "Mr. Koi-Koi"!
 "Mr. Koi-Koi"?
 Can you maybe come back later?
-...You're as odd as ever, Kohran.
-Kohran, it's me...
-...I'm busy right now. Come back later, okay?
-(She's still working on her new invention...)
+…You're as odd as ever, Kohran.
+Kohran, it's me…
+…I'm busy right now. Come back later, okay?
+(She's still working on her new invention…)
 (I should try another room.)
 Hi, Kohran. I came to spend time with you.
 Hiya, Ogami! Want to play Hanafuda?
@@ -472,18 +472,18 @@ Watch out, 'cause I won't go easy on you!
 Let's play again, Kohran!
 That's the spirit! Game on!
 (I had fun playing Hanafuda with Kohran.)
-(Plus, she looks kinda sexy when she plays...)
-......
-...What's wrong, Ogami?
-Oh, uh, um... Nothing. Hahaha!
+(Plus, she looks kinda sexy when she plays…)
+……
+…What's wrong, Ogami?
+Oh, uh, um… Nothing. Hahaha!
 Bye, Kohran. I'll come back later.
 Okie dokie! Let's play Hanafuda again sometime!
 Where should I go next?
 Hi, Iris. I came to spend time with you.
-Wow, you sure look tired...
+Wow, you sure look tired…
 Yeah, I'm super sleepy, so I'm gonna take a nap.
 Bye bye, Onii-chan!
-And just like that, she's fast asleep...
+And just like that, she's fast asleep…
 I should try another room.
 Iris is probably still asleep.
 I should try another room.
@@ -505,26 +505,26 @@ Sure! I'll try to pick a better outfit this time.
 Wow! Thanks, Onii-chan! You're the best!
 Now, pick something that really suits me!
 (I wonder how Iris feels when she's all dressed up?)
-...What's wrong, Onii-chan? You got awfully quiet all of a sudden.
-Sorry! I was thinking about you, Iris...
+…What's wrong, Onii-chan? You got awfully quiet all of a sudden.
+Sorry! I was thinking about you, Iris…
 About me? Heehee! How sweet!
 Bye, Iris. I'll visit you again later.
 You'd better! Heehee!
 Where should I go next?
 Hi, Sumire.
-Ensign... My apologies, but I'm busy
+Ensign… My apologies, but I'm busy
 pouring over the script for our next play.
-Oh... That's too bad.
-Perhaps we can visit when I have more free time. Now, please excuse me...
+Oh… That's too bad.
+Perhaps we can visit when I have more free time. Now, please excuse me…
 Where should I go next?
-Ahem! It's me...
-My apologies, Ensign. I am busy reading over the script...
+Ahem! It's me…
+My apologies, Ensign. I am busy reading over the script…
 (I guess that's that. I should try another room.)
 Hi, Sumire.
 My my, Ensign. You have impeccable timing.
 I am going for a swim in the underground pool. Would you care to join me?
 Hi, Sumire.
-Ensign... It's a pleasure to see you.
+Ensign… It's a pleasure to see you.
 I am going for a swim in the underground pool. Would you care to join me?
 My my, Ensign. You have impeccable timing.
 I am going for a swim in the underground pool. Would you care to join me?
@@ -537,11 +537,11 @@ I'd love to. Just don't forget to do your warm-up first.
 Today I'll be watching you swim.
 I'd like to swim a bit more.
 I admire your spirit, Ensign! I think I'll join you!
-(Sumire showed a lot of skin in that swimsuit...)
+(Sumire showed a lot of skin in that swimsuit…)
 Did you come to my room just to gaze at me like a lovesick fool?
-(That's one skimpy swimsuit...)
+(That's one skimpy swimsuit…)
 What is the matter, Ensign?
-Oh, um, uh... Nothing.
+Oh, um, uh… Nothing.
 Goodbye, Sumire. I'll see you later.
 Indeed. Perhaps we can go swimming then.
 Where should I go next?

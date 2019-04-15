@@ -48,6 +48,7 @@ const string Disc1("\\Disc1");
 const string Disc2("\\Disc2");
 const string Seperators("\\");
 const string NewLineWord("<br>");
+const string LipsWord("<LIPS>");
 const string SpaceWord("<sp>");
 const unsigned short SpecialDialogIndicator = 0xC351;
 
@@ -314,12 +315,12 @@ struct SakuraString
 		return true;
 	}
 
-	void AddString(const string& inString, unsigned short specialValue = 0)
+	void AddString(const string& inString, unsigned short specialValue, unsigned short numCharsPrinted)
 	{
 		if( specialValue )
 		{
 			mChars.push_back( std::move(SakuraChar(specialValue)) );
-			mChars.push_back( std::move(SakuraChar(0)) );
+			mChars.push_back( std::move(SakuraChar(numCharsPrinted)) );
 		}
 		else
 		{
@@ -722,7 +723,7 @@ struct SakuraTextFileFixedHeader
 	unsigned short mTableEnd;
 	vector<unsigned int> mStringInfo;
 
-	void CreateFixedHeader(const vector<SakuraTextFile::SakuraStringInfo>& inInfo, const SakuraTextFile& inSakuraFile, const vector<SakuraString>& inStrings)
+	bool CreateFixedHeader(const vector<SakuraTextFile::SakuraStringInfo>& inInfo, const SakuraTextFile& inSakuraFile, const vector<SakuraString>& inStrings)
 	{
 		//All TBL files start with this entries
 		mStringInfo.push_back( SwapByteOrder(inInfo[0].mFullValue) );
@@ -752,11 +753,19 @@ struct SakuraTextFileFixedHeader
 		}
 		//Done figuring out table size
 
-		assert(stringTableSize/2 <= 0xffff);
 		mOffsetToTable = SwapByteOrder( ((unsigned short*)inSakuraFile.mHeader.pData)[0] );
 		mTableEnd      = (unsigned short)((mOffsetToTable*2 + (unsigned short)stringTableSize) / 2);
 
 		assert( (mOffsetToTable + (unsigned short)stringTableSize)%2 == 0 );
+
+		if(stringTableSize/2 > 0xffff)
+		{
+			const int sizeToReduce = (stringTableSize/2) - 0xffff;
+			printf("\nERROR:Translated file %s is too big.  Needs to be reduced by %i bytes (%i characters)\n", inSakuraFile.mFileNameInfo.mFileName.c_str(), sizeToReduce, sizeToReduce/2);
+			return false;
+		}
+
+		return true;
 	}
 };
 
@@ -1584,9 +1593,12 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 	{\
 		if( bIsLipsEntry )\
 		{\
-			printf("LIPS line is too long.  Needs to be a max of %i characters long. %s", maxCharsPerLine, textLine.mFullLine.c_str());\
+			printf("LIPS line is too long.  Needs to be a max of %i characters long. %s\n", maxCharsPerLine, textLine.mFullLine.c_str());\
 		}\
-		IncrementLine()\
+		else\
+		{\
+			IncrementLine()\
+		}\
 	}
 
 	//Find all translated text files
@@ -1617,7 +1629,7 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 	{
 		printf("Inserting text for: %s\n", sakuraFile.mFileNameInfo.mFileName.c_str());
 
-		const bool bIsMESFile   = sakuraFile.mFileNameInfo.mFileName.find("MES.BIN", 0, 6) != string::npos;
+		const bool bIsMESFile = sakuraFile.mFileNameInfo.mFileName.find("MES.BIN", 0, 6) != string::npos;
 
 		//Figure out output file name
 		string outFileName;
@@ -1709,26 +1721,26 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 				const size_t currSakuraStringIndex = translatedLineIndex;
 				const unsigned short id            = sakuraFile.mStringInfoArray[currSakuraStringIndex].mStringId;
 				const vector<int>* pOrder          = bDialogOrderExists && dialogOrderIter->second.idAndOrder.find(id) != dialogOrderIter->second.idAndOrder.end() ? &dialogOrderIter->second.idAndOrder.find(id)->second : nullptr;
-				const bool bIsLipsEntry            = pOrder ? dialogOrderIter->second.idAndLips.find(id)->second : false;
+				const bool bHasLipsTag             = textLine.mWords.size() > 0 && textLine.mWords[0] == LipsWord;
+				const bool bIsLipsEntry            = bHasLipsTag ? true : pOrder ? dialogOrderIter->second.idAndLips.find(id)->second : false;
+				const bool bIsUnused               = bIsMESFile ? false : pOrder ? false : true;
 
 				//If untranslated, then write out the file and line number
-				if( textLine.mWords.size() == 1 && textLine.mWords[0] == UntranslatedEnglishString )
+				if( bIsUnused || 
+					(textLine.mWords.size() == 1 && textLine.mWords[0] == UntranslatedEnglishString )
+					)
 				{
-					const string baseUntranslatedString = sakuraFile.mFileNameInfo.mNoExtension + string(": ");
-					const string untranslatedString = baseUntranslatedString + std::to_string(translatedLineIndex + 1);
+					bool bUseShorthand = false;
+					if( numTranslatedLines > 1200 )
+					{
+						bUseShorthand = true;
+					}
+
+					const string baseUntranslatedString = sakuraFile.mFileNameInfo.mNoExtension + string(":");
+					const string untranslatedString = numTranslatedLines ? "U" : baseUntranslatedString + std::to_string(translatedLineIndex + 1); //Just print out a U for unused lines to save space
 
 					SakuraString translatedSakuraString;
-
-					//Lines starting with the indicator 0xC351 have a special two byte value instead of the usual 00 00
-					if( 1 )//sakuraFile.mStringInfoArray[currSakuraStringIndex].mStringId >= SpecialDialogIndicator || bIsMESFile )
-					{
-						translatedSakuraString.AddString( untranslatedString, sakuraFile.mLines[currSakuraStringIndex].mChars[0].mIndex );
-						translatedSakuraString.AddString( untranslatedString, numCharsPrinted );//untranslatedString, sakuraFile.mLines[currSakuraStringIndex].mChars[1].mIndex );
-					}
-					else
-					{
-						translatedSakuraString.AddString( untranslatedString );
-					}
+					translatedSakuraString.AddString( untranslatedString, sakuraFile.mLines[currSakuraStringIndex].mChars[0].mIndex, numCharsPrinted );
 
 					translatedLines.push_back( translatedSakuraString );
 					continue;
@@ -1749,7 +1761,7 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 					}
 				}
 
-				for(size_t wordIndex = 0; wordIndex < numWords; ++wordIndex)
+				for(size_t wordIndex = bHasLipsTag ? 1 : 0; wordIndex < numWords; ++wordIndex)
 				{
 					const string& word    = textLine.mWords[wordIndex];
 					bool bFailedToAddLine = false;
@@ -1782,10 +1794,13 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 						{
 							if( bIsLipsEntry )
 							{
-								printf("LIPS line is too long.  Needs to be a max of %i characters long. %s", maxCharsPerLine, textLine.mFullLine.c_str());
-								break;
+								printf("LIPS line is too long.  Needs to be a max of %i characters long. %s\n", maxCharsPerLine, textLine.mFullLine.c_str());
+								//break;
 							}
-							IncrementLine();
+							else
+							{
+								IncrementLine();
+							}
 
 							//bFailedToAddLine set inside IncrementLine
 							if( bFailedToAddLine )
@@ -1811,7 +1826,7 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 					{
 						if( bIsLipsEntry )
 						{
-							printf("LIPS line is too long.  Needs to be a max of %i characters long. %s", maxCharsPerLine, textLine.mFullLine.c_str());
+							printf("LIPS line is too long.  Needs to be a max of %i characters long. %s\n", maxCharsPerLine, textLine.mFullLine.c_str());
 						//	break;
 						}
 						else
@@ -1851,11 +1866,13 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 								{
 									if( bIsLipsEntry )
 									{
-										printf("LIPS line is too long.  Needs to be a max of %i characters long. %s", maxCharsPerLine, textLine.mFullLine.c_str());
+										printf("LIPS line is too long.  Needs to be a max of %i characters long. %s\n", maxCharsPerLine, textLine.mFullLine.c_str());
 								//		break;
 									}
-
-									IncrementLine();
+									else
+									{
+										IncrementLine();
+									}
 								}
 								else
 								{
@@ -1896,21 +1913,11 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 			for(size_t i = 0; i < untranslatedCount; ++i)
 			{
 				const string untranslatedString = baseUntranslatedString + std::to_string(i + translatedFile.mLines.size() + 1);
-
 				SakuraString translatedSakuraString;
 
-				//Lines starting with the indicator 0xC351 have a special two byte value instead of the usual 00 00
 				const size_t currSakuraStringIndex = i + translatedFile.mLines.size();
-				if( 1 )//sakuraFile.mStringInfoArray[currSakuraStringIndex].mStringId >= SpecialDialogIndicator || bIsMESFile )
-				{
-					translatedSakuraString.AddString( untranslatedString, sakuraFile.mLines[currSakuraStringIndex].mChars[0].mIndex);
-					translatedSakuraString.AddString( untranslatedString, sakuraFile.mLines[currSakuraStringIndex].mChars[1].mIndex);
-				}
-				else
-				{
-					translatedSakuraString.AddString( untranslatedString );
-				}				
-
+				translatedSakuraString.AddString( untranslatedString, sakuraFile.mLines[currSakuraStringIndex].mChars[0].mIndex, numCharsPrinted);
+				
 				translatedLines.push_back( translatedSakuraString );
 			}
 
@@ -1923,18 +1930,8 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 			{
 				const string untranslatedString = baseUntranslatedString + std::to_string(i + 1);
 				SakuraString translatedSakuraString;
-
-				//Lines starting with the indicator 0xC351 have a special two byte value instead of the usual 00 00
-				if( 1 )//sakuraFile.mStringInfoArray[i].mStringId >= SpecialDialogIndicator || bIsMESFile )
-				{
-					translatedSakuraString.AddString( untranslatedString, sakuraFile.mLines[i].mChars[0].mIndex);
-					translatedSakuraString.AddString( untranslatedString, sakuraFile.mLines[i].mChars[1].mIndex);
-				}
-				else
-				{
-					translatedSakuraString.AddString( untranslatedString );
-				}
-
+				translatedSakuraString.AddString( untranslatedString, sakuraFile.mLines[i].mChars[0].mIndex, 0);
+			
 				translatedLines.push_back( translatedSakuraString );
 			}		
 		}
@@ -2183,17 +2180,34 @@ bool FixupSLG(const string& rootDir, const string& outDir, const string& newFont
 		const int offsetMaxMultiplier          = 0x00021655;
 		const int offsetMaxLines_1             = 0x0002196D;
 		const int offsetMaxLines_2             = 0x00021975;
+		const int offsetLipsCharWidthOffset    = 0x00021809;
+		const int offsetLipsShiftLeft_1        = 0x00021765; //Change the command from SHLL2(4108) to SHLL1(4100)
+		const int offsetLipsShiftLeft_2        = 0x00021799; //Change the command from SHLL2(4108) to SHLL1(4100)
+		const int offsetLipsMaxCharsOffset_1   = 0x00021755; //Change the command from MOV 0x0F(E20F) to SHLL1(E21E)
+		const int offsetLipsMaxCharsOffset_2   = 0x0002178B; //Change the command from MOV 0x0F(E20F) to SHLL1(E21E)
+		const int offsetLipsNumCharsPerLine_1  = 0x000217B9;
+		const int offsetLipsNumCharsPerLine_2  = 0x000217BF;
 		const unsigned char maxMultiplier      = (240/(OutTileSpacingX));
 		const unsigned char maxCharacters      = maxMultiplier - 1;
 		const unsigned char maxLines           = MaxLines - 1;
+		const unsigned char lipsXOffset        = 0;
+		const unsigned char shiftLeftValue     = 0;
+		const unsigned char maxCharsPerLipsLine= maxMultiplier;
 
-		memcpy_s((void*)(origSlgData.GetData() + offsetMaxSpacingScrolling1),     origSlgData.GetDataSize(), (void*)&maxCharacters, sizeof(maxCharacters));
-		memcpy_s((void*)(origSlgData.GetData() + offsetMaxSpacingScrolling2),     origSlgData.GetDataSize(), (void*)&maxCharacters, sizeof(maxCharacters));
-		memcpy_s((void*)(origSlgData.GetData() + offsetMaxMultiplierScrolling),   origSlgData.GetDataSize(), (void*)&maxMultiplier, sizeof(maxMultiplier));
-		memcpy_s((void*)(origSlgData.GetData() + offsetMaxMultiplier),            origSlgData.GetDataSize(), (void*)&maxMultiplier, sizeof(maxMultiplier));
-		memcpy_s((void*)(origSlgData.GetData() + offsetMaxCharsWhenScrolling),    origSlgData.GetDataSize(), (void*)&maxMultiplier, sizeof(maxMultiplier));
-		memcpy_s((void*)(origSlgData.GetData() + offsetMaxLines_1),               origSlgData.GetDataSize(), (void*)&maxLines,      sizeof(maxLines));
-		memcpy_s((void*)(origSlgData.GetData() + offsetMaxLines_2),               origSlgData.GetDataSize(), (void*)&maxLines,      sizeof(maxLines));
+		memcpy_s((void*)(origSlgData.GetData() + offsetMaxSpacingScrolling1),     origSlgData.GetDataSize(), (void*)&maxCharacters,	       sizeof(maxCharacters));
+		memcpy_s((void*)(origSlgData.GetData() + offsetMaxSpacingScrolling2),     origSlgData.GetDataSize(), (void*)&maxCharacters,	       sizeof(maxCharacters));
+		memcpy_s((void*)(origSlgData.GetData() + offsetMaxMultiplierScrolling),   origSlgData.GetDataSize(), (void*)&maxMultiplier,	       sizeof(maxMultiplier));
+		memcpy_s((void*)(origSlgData.GetData() + offsetMaxMultiplier),            origSlgData.GetDataSize(), (void*)&maxMultiplier,	       sizeof(maxMultiplier));
+		memcpy_s((void*)(origSlgData.GetData() + offsetMaxCharsWhenScrolling),    origSlgData.GetDataSize(), (void*)&maxMultiplier,	       sizeof(maxMultiplier));
+		memcpy_s((void*)(origSlgData.GetData() + offsetMaxLines_1),               origSlgData.GetDataSize(), (void*)&maxLines,		       sizeof(maxLines));
+		memcpy_s((void*)(origSlgData.GetData() + offsetMaxLines_2),               origSlgData.GetDataSize(), (void*)&maxLines,		       sizeof(maxLines));
+		memcpy_s((void*)(origSlgData.GetData() + offsetLipsCharWidthOffset),      origSlgData.GetDataSize(), (void*)&OutTileSpacingX,      sizeof(OutTileSpacingX));
+		memcpy_s((void*)(origSlgData.GetData() + offsetLipsShiftLeft_1),		  origSlgData.GetDataSize(), (void*)&shiftLeftValue,       sizeof(shiftLeftValue));
+		memcpy_s((void*)(origSlgData.GetData() + offsetLipsShiftLeft_2),		  origSlgData.GetDataSize(), (void*)&shiftLeftValue,       sizeof(shiftLeftValue));
+		memcpy_s((void*)(origSlgData.GetData() + offsetLipsMaxCharsOffset_1),	  origSlgData.GetDataSize(), (void*)&maxCharsPerLipsLine,  sizeof(maxCharsPerLipsLine));
+		memcpy_s((void*)(origSlgData.GetData() + offsetLipsMaxCharsOffset_2),	  origSlgData.GetDataSize(), (void*)&maxCharsPerLipsLine,  sizeof(maxCharsPerLipsLine));
+		memcpy_s((void*)(origSlgData.GetData() + offsetLipsNumCharsPerLine_1),	  origSlgData.GetDataSize(), (void*)&maxCharsPerLipsLine,  sizeof(maxCharsPerLipsLine));
+		memcpy_s((void*)(origSlgData.GetData() + offsetLipsNumCharsPerLine_2),	  origSlgData.GetDataSize(), (void*)&maxCharsPerLipsLine,  sizeof(maxCharsPerLipsLine));
 		//***Done Fixing Max Character Lengths***
 
 		//***Fix the palette***

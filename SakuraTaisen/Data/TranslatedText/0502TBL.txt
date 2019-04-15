@@ -1,7 +1,7 @@
 It's a photo of Sakura. She's looking right at me. I wonder what she's thinking...
 It's a photo of Sumire. This is a side of her you don't see too often.
 It's a photo of Maria. ...She's lost in thought and looks kind of sad...
-A photo of Kanna. Kanna's signature strength comes through clearly.
+A photo of Kanna. Kanna's signature strength comes through clearly. 
 A photo of Iris. She's surrounded by flowers and flashing a radiant smile.
 A photo of Kohran. She's looking pretty in profile with her face dyed red by the evening sun.
 A letter given to me by a customer. I was asked to give it to Sumire. I have a bad feeling about this...
@@ -19,7 +19,7 @@ A prop crown used onstage. It's well constructed and incredibly detailed.
 A wig and costume used onstage. I wonder what kind of act could use a flashy outfit like this?
 A photo of Sakura in her swimsuit. Wow, this is really something. I'm gonna treasure this.
 A photo of Sumire in her stage costume. Her distinctive makeup really makes an impact.
-It's a photo of Maria on stage in the military uniform from "For Love"... She's a beautiful woman disguised as a man.
+It's a photo of Maria on stage in the military uniform from "For Love"... She's a beautiful woman disguised as a man. 
 A photo of Kanna in her training gear. Catching her in a private moment like this feels surprisingly intimate.
 A photo of Iris in her swimsuit. She's holding a rubber ring and looks ready to have some fun. How cute.
 A photo of Kohran. I don't get to see her with her braids undone very often. It's a nice look.
@@ -253,9 +253,7 @@ It's an enemy. I saw an enemy walking over there.
 What!?
 Oh dear... perhaps you were simply surprised by your own reflection in the mirror?
 Shut up! I'm trying to tell you something important, so shut up and listen!
-Stop the fighting.
-
-Listen to what Kanna has to say.
+Stop the fighting. <br> Listen to what Kanna has to say.
 Stop it, you two! This is no time to be arguing!
 But, sir... I really saw them!
 Really now~... What did they look like?
@@ -727,7 +725,7 @@ Look, Kanna! There's a med-kit on the bed!
 Quick, look inside!
 Right! Let's see, antivenom, antivenom...
 ... they got one, sir?
-"Shishido Pharmaceuticals 'Sigma Doll'"...
+"Shishido Pharmaceuticals 'Sigma Doll'"... 
 "For use as antiseptic for snake bites etc. Does not counteract venom."
 You're kidding... it's just for disinfecting? That's not going to fix this.
 ... true, but it's better than nothing. Here, I'll put some on...
@@ -1259,19 +1257,19 @@ Alright you two, suit up!
 Prepare yourselves... we're gonna pay you back in full for this whole thing!
 First Setsuna and now Rasetsu, defeated...
 Only two of my Four Lords of Death remain... how pathetic.
-Again, I am truly sorry.
+Again, I am truly sorry. 
 However, I have but one goal! I must complete the Hexagram of Demon Invocation!! I will not balk from sacrifices!!
 Of course...
 Rend, ye skies! Shatter, ye earth! All ye myriad tears become a great river, all ye countless drops of blood become an ocean, and give to me your power!
 Go forth, Miroku, Satan!!
-Ha~!
+Ha~! 
 Hey hey hey hey hey! All you demons and monsters out there listen up!
 You've got guts picking a fight with me, Son Goku, first disciple of Sanzo Hoshi.
 I'll send the lot of you to the other side. Give thanks and rest in peace!!
 Ha! Know your place, you stone monkey! Such impertinence to the physical embodiment of beauty and love you see before you!
 I, the demoness, will send you to the depths of Hell!! Ohohoho!!
-Prepare yourself! You...you god damn...s, s, snake of a woman!
-What the?! You big, stupid monkey!!
+Prepare yourself! You...you god damn...s, s, snake of a woman! 
+What the?! You big, stupid monkey!! 
 Ah!?
 Hieeeeee!?... *Whack*...
 What on Earth are you doing!? Do you even know how to act!?
@@ -1310,13 +1308,13 @@ Alright! Let's give 'em hell!!
 Looks like all the players are here.
 Sumire......
 What is it....?
-You....Somehow you did it.
+You....Somehow you did it. 
 You too~! Well, you didn't do quite as much as I did but...
-Ke~! Watch what you say, dummy!
+Ke~! Watch what you say, dummy! 
 Untranslated
 No good! I require assistance! Kya~!
 Are you OK, Captain?
-It will be just splendid if you'd leave it alone!
+It will be just splendid if you'd leave it alone! 
 Untranslated
 Untranslated
 Untranslated
@@ -1349,16 +1347,16 @@ It was so horrible... I cried and cried... and no one came.
 Anyway, Sumire...Weren't you bitten by a spider?
 Untranslated
 Wait...speaking of...weren't you bitten by a snake, Kanna?
-Huh? Ahhhh~!! I totally forgot! T-this is no good! Snake's venom!
+Huh? Ahhhh~!! I totally forgot! T-this is no good! Snake's venom! 
 Untranslated
 Why does Kohran always conveniently carry these kinds of things...?
 Untranslated
-Both of you are lookin' fine! Ain't no snake venom, no spider venom, no reaction at all!
-Just as I thought! Oh-ho-ho. As if I, Kanzaki Sumire, would be done in by a spider. Not a chance!
-Damnit Sumire! If you really knew that then why were you freaking out so much?!
+Both of you are lookin' fine! Ain't no snake venom, no spider venom, no reaction at all! 
+Just as I thought! Oh-ho-ho. As if I, Kanzaki Sumire, would be done in by a spider. Not a chance! 
+Damnit Sumire! If you really knew that then why were you freaking out so much?! 
 Ahh~, It seems we're back to the usual Sumire and Kanna.
 Not much to be done about it, huh? But it appears they're fighting like good friends, if I do say so myself
-It should be pretty easy to see why they get along, honestly.
+It should be pretty easy to see why they get along, honestly. 
 Untranslated
 Welcome! What can I do for you?
 Ah, Mr. Ogami. Welcome! What can I do for you?

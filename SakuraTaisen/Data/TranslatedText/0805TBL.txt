@@ -1,11 +1,11 @@
-It's a photo of Sakura. She's looking right at me. I wonder what she's thinking...
+It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
-It's a photo of Maria. ...She's lost in thought and looks kind of sad...
+It's a photo of Maria. …She's lost in thought and looks kind of sad…
 A photo of Kanna. Kanna's signature strength comes through clearly.
 A photo of Iris. She's surrounded by flowers and flashing a radiant smile.
 A photo of Kohran. She's looking pretty in profile with her face dyed red by the evening sun.
-A letter given to me by a patron. I was asked to give it to Sumire. I have a bad feeling about this...
-Maria's pistol. This may help me escape from here...
+A letter given to me by a patron. I was asked to give it to Sumire. I have a bad feeling about this…
+Maria's pistol. This may help me escape from here…
 A hair ornament. It's decorated with flowers and looks very elegant.
 A pretty pendant. The delicate workmanship is gorgeous.
 A hairpin for use in a traditional bun hairstyle. It would complement a formal outfit well.
@@ -19,12 +19,12 @@ A prop crown used onstage. It's well-constructed and incredibly detailed.
 A wig and costume used onstage. I wonder what kind of act could use a flashy outfit like this?
 A photo of Sakura in her swimsuit. Wow, this is really something. I'm gonna treasure this.
 A photo of Sumire in her stage costume. Her distinctive makeup really makes an impact.
-It's a photo of Maria on stage in the military uniform from "For Love"... She's a beautiful woman disguised as a man.
+It's a photo of Maria on stage in the military uniform from "For Love"… She's a beautiful woman disguised as a man.
 A photo of Kanna in her training gear. Catching her in a private moment like this feels surprisingly intimate.
 A photo of Iris in her swimsuit. She's holding a rubber ring and looks ready to have some fun. How cute.
 A photo of Kohran. I don't get to see her with her braids undone very often. It's a nice look.
 A photo of Ayame in a traditional outfit. I hope she'll always be as happy and content as she is here.
-Ayame's gun. Why...? Why did it have to turn out like this...?
+Ayame's gun. Why…? Why did it have to turn out like this…?
 Jean-Paul the teddy bear. Iris's best friend. She always carries him with her and takes good care of him.
 Untranslated
 Untranslated
@@ -57,7 +57,7 @@ Untranslated
 Untranslated
 The strong sunlight of Winter is even coming in here.
 Untranslated
-...There's no one here. Is everyone in their rooms?
+…There's no one here. Is everyone in their rooms?
 Untranslated
 I wonder if the manager is around.
 Untranslated
@@ -69,20 +69,20 @@ No one here. Looks like I have to go someplace else.
 Untranslated
 Untranslated
 Untranslated
-This room is still a mess...
+This room is still a mess…
 I should go somewhere else. There's nothing to do in this room when I'm not on duty.
 Since we did that big end-of-year cleaning, the floor is speckless.
 I guess there's no reason why anyone would be here. Let's go somewhere else.
 Untranslated
 Why don't I go check somewhere else.
 Untranslated
-Tsubaki is on vacation too? I'd hoped I could buy some portrait cards today...
+Tsubaki is on vacation too? I'd hoped I could buy some portrait cards today…
 Untranslated
 Untranslated
 Untranslated
 Untranslated
 Untranslated
-...No one here.
+…No one here.
 Untranslated
 Untranslated
 Untranslated
@@ -92,7 +92,7 @@ Untranslated
 This pool is heated by steam engines in the basement.
 Untranslated
 Untranslated
-...Oh well. I'd better go, too.
+…Oh well. I'd better go, too.
 Untranslated
 Untranslated
 Untranslated
@@ -142,15 +142,13 @@ Untranslated
 Untranslated
 Untranslated
 What's wrong, Sakura?
-......
+……
 Untranslated
-...
-Untranslated
-Untranslated
-Untranslated
-But... thanks!
+…
 Untranslated
 Untranslated
+Untranslated
+But… thanks!
 Untranslated
 Untranslated
 Untranslated
@@ -173,23 +171,25 @@ Untranslated
 Untranslated
 Untranslated
 Untranslated
-Commander...
-Untranslated
-......
-Untranslated
-Wha...?
 Untranslated
 Untranslated
+Commander…
 Untranslated
+……
 Untranslated
+Wha…?
 Untranslated
 Untranslated
 Untranslated
 Untranslated
-...S-sorry.
 Untranslated
 Untranslated
-......
+Untranslated
+Untranslated
+…S-sorry.
+Untranslated
+Untranslated
+……
 Untranslated
 Untranslated
 Untranslated
@@ -224,7 +224,7 @@ Untranslated
 Untranslated
 Untranslated
 Untranslated
-... understood.
+… understood.
 Untranslated
 Untranslated
 Untranslated
@@ -232,7 +232,7 @@ Untranslated
 Untranslated
 Untranslated
 Untranslated
-Y, yes...
+Y, yes…
 Untranslated
 Untranslated
 Untranslated
@@ -259,39 +259,26 @@ Untranslated
 Untranslated
 Untranslated
 Untranslated
-OK...I'm coming in.
+OK…I'm coming in.
 Untranslated
 Untranslated
 Pardon me.
 Untranslated
-Umm...
+Umm…
 Untranslated
 Untranslated
 Untranslated
 Untranslated
 Untranslated
 Untranslated
-I see...
+I see…
 Untranslated
 Untranslated
 Untranslated
 Untranslated
 Untranslated
 Untranslated
-...?
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-...?
+…?
 Untranslated
 Untranslated
 Untranslated
@@ -304,8 +291,21 @@ Untranslated
 Untranslated
 Untranslated
 Untranslated
-...
-...What's wrong, Kohran?
+…?
+Untranslated
+Untranslated
+Untranslated
+Untranslated
+Untranslated
+Untranslated
+Untranslated
+Untranslated
+Untranslated
+Untranslated
+Untranslated
+Untranslated
+…
+…What's wrong, Kohran?
 Untranslated
 Untranslated
 Untranslated
@@ -324,14 +324,14 @@ Untranslated
 Untranslated
 Untranslated
 Untranslated
-...I see.
+…I see.
 Untranslated
 Untranslated
-Wha...?
+Wha…?
 Untranslated
-......
+……
 Untranslated
-Yeah...
+Yeah…
 Untranslated
 Untranslated
 What is it?
@@ -344,29 +344,27 @@ Untranslated
 Untranslated
 Untranslated
 Untranslated
-... right.
-Kohran...
+… right.
+Kohran…
 Untranslated
 Untranslated
 Untranslated
 Untranslated
-... right.
-Ogami...?
+… right.
+Ogami…?
 What?
 Untranslated
-...?
+…?
 Untranslated
-Kohran...
+Kohran…
 Untranslated
-It's Ogami...
-Untranslated
-Untranslated
+It's Ogami…
 Untranslated
 Untranslated
 Untranslated
-Sumire...
 Untranslated
 Untranslated
+Sumire…
 Untranslated
 Untranslated
 Untranslated
@@ -383,17 +381,19 @@ Untranslated
 Untranslated
 Untranslated
 Untranslated
-......
-...?
-Untranslated
-... huh?
 Untranslated
 Untranslated
-...
+……
+…?
+Untranslated
+… huh?
+Untranslated
+Untranslated
+…
 Untranslated
 Untranslated
 Untranslated
-...
+…
 Untranslated
 Untranslated
 Untranslated
@@ -433,28 +433,28 @@ Untranslated
 Untranslated
 Untranslated
 Untranslated
-......
+……
 Untranslated
 Untranslated
 Untranslated
 Untranslated
 Untranslated
 Untranslated
-Sumire...
+Sumire…
 Untranslated
 Untranslated
 Why don't I go check somewhere else.
 Untranslated
 Untranslated
-It's me, Ogami... Are you there, Sumire?
+It's me, Ogami… Are you there, Sumire?
 Untranslated
 Untranslated
 Untranslated
 Untranslated
 Untranslated
-...What?
+…What?
 Untranslated
-...
+…
 Untranslated
 Untranslated
 Untranslated
@@ -470,10 +470,10 @@ Ogami? Come in, it's open.
 Excuse me.
 Untranslated
 Untranslated
-...I'm sorry.
+…I'm sorry.
 Untranslated
 Untranslated
-...
+…
 Untranslated
 Untranslated
 Untranslated
@@ -481,11 +481,11 @@ Untranslated
 Ye- yes, ma'am……
 Untranslated
 Untranslated
-... understood.
+… understood.
 Untranslated
 Untranslated
 Untranslated
-... I see.
+… I see.
 Untranslated
 Untranslated
 Untranslated
@@ -588,7 +588,7 @@ Untranslated
 Untranslated
 Untranslated
 Untranslated
-...
+…
 Untranslated
 Untranslated
 Untranslated
@@ -629,14 +629,14 @@ Untranslated
 Untranslated
 Untranslated
 Untranslated
-...?
+…?
 Untranslated
 Untranslated
 Untranslated
 Untranslated
 Untranslated
 Untranslated
-... huh?
+… huh?
 Untranslated
 Untranslated
 Untranslated
@@ -648,33 +648,33 @@ Untranslated
 Untranslated
 Untranslated
 Untranslated
-I see...
+I see…
 Untranslated
 Untranslated
 Untranslated
-......
+……
 Untranslated
 Untranslated
 Untranslated
 Untranslated
-Hey... I can hear the shower going... and this locker is open.
+Hey… I can hear the shower going… and this locker is open.
 …………!
 Untranslated
-C, crap... blood is rushing to my head... make good choices, Ogami!
-I'm outta here! <br> My body won't obey! It's headed for the shower...
+C, crap… blood is rushing to my head… make good choices, Ogami!
+I'm outta here! <br> My body won't obey! It's headed for the shower…
 Untranslated
 Untranslated
-C, crap... I can't decide what to do!
+C, crap… I can't decide what to do!
 Untranslated
 I'm dead! I need to get out of here!
-Phew... I managed to escape before she noticed.
-No... my body... it's moving on it's own... toward the shower...
+Phew… I managed to escape before she noticed.
+No… my body… it's moving on it's own… toward the shower…
 Untranslated
 Untranslated
-(Sakura...)
+(Sakura…)
 Untranslated
 (I'm done for! I need to run!)
-Phew... I managed to escape before she noticed.
+Phew… I managed to escape before she noticed.
 Untranslated
 Untranslated
 Untranslated
@@ -692,31 +692,31 @@ Untranslated
 Untranslated
 Untranslated
 Untranslated
-I'll do my best to make it a great year! And, er...
+I'll do my best to make it a great year! And, er…
 No! It's nothing!
 You were always there for me last year. Thank you for everything!
 Sakura! I didn't expect such a well-mannered greeting from you!
 Thank you. I'll try hard this year to be a proper lady like you, Sumire!
-Ohohohoho... Seems like you have finally seen the light!
-Hmph... I was planning to make it from Nishijin brocade imported from Kyoto...
+Ohohohoho… Seems like you have finally seen the light!
+Hmph… I was planning to make it from Nishijin brocade imported from Kyoto…
 Untranslated
 Untranslated
 Untranslated
 Untranslated
 Untranslated
-Commander... Happy New Year.
-Yo, boss! Chinese New Year is still some weeks off though...
+Commander… Happy New Year.
+Yo, boss! Chinese New Year is still some weeks off though…
 You look much older already!
 Happy New Year, uncle Ichi!
 I'll be eleven this year! How long do you think until I can get married?
 Oh, really?
 You've come a long way as a commander! I have a feeling we've got an awesome year ahead of us.
-Like you would know anything about that...
+Like you would know anything about that…
 How dare you, you evil hag!
 Stop your screaming, gorilla!
 Want to pick a fight, you rotten snake?
-Ogami... You did well last year. Keep it up!
-Boss... You're acting blushy all day!
+Ogami… You did well last year. Keep it up!
+Boss… You're acting blushy all day!
 Untranslated
 Untranslated
 Untranslated
@@ -728,30 +728,30 @@ Untranslated
 Untranslated
 Untranslated
 Untranslated
-Wha... Really? You'd take me there?
-OK then, wait a minute...
+Wha… Really? You'd take me there?
+OK then, wait a minute…
 Alright, let's meet in one hour in front of the theater!
 Promise!
 Untranslated
 You and me, let's get out of here and enjoy our shrine visit together.
 That makes me happy! Let's get out of here right away.
-Just kidding! Hohohoho... How innocent you are!
+Just kidding! Hohohoho… How innocent you are!
 Untranslated
 All right, just what I wanted to hear! Let's get out of here!
 Hahaha! All right, let's drink and be merry! Right?
 I really like you, boss. Come on then, show me how you celebrate New Year's day in Tokyo. Just the two of us!
-This is our little secret... OK, let's go!
+This is our little secret… OK, let's go!
 Untranslated
 Untranslated
-Hey, uncle Ichi... Take me to the shrine please!
-Just the two of us, having fun. Hihihi... Wouldn't that be nice?
+Hey, uncle Ichi… Take me to the shrine please!
+Just the two of us, having fun. Hihihi… Wouldn't that be nice?
 Yaaay, I'm so happy! Let's leave right now!
 Untranslated
 Booooohoooooo!
 Untranslated
 Untranslated
 Yay! A date with uncle Ichi!
-Hihi... Normally my servants would drive me there.
+Hihi… Normally my servants would drive me there.
 That's beneath me.
 Let's go then.
 Untranslated
@@ -766,15 +766,15 @@ Untranslated
 Sorry you had to wait!
 You mean this dress?
 I wanted to dress in a real Japanese kimono. New Year's day only comes once a year, after all!
-And also... It's my first date with you, Mr. Ogami.
+And also… It's my first date with you, Mr. Ogami.
 Even if you're only flattering me, that makes me happy.
 Thank you, really.
 Ah! The train's here! Let's get on!
 What a crowd! So this is what New Year's day is like in Tokyo!
-I'm so glad Tokyo is finally at peace...
-OK... Let's go too then!
-What a crowd...
-Of course...
+I'm so glad Tokyo is finally at peace…
+OK… Let's go too then!
+What a crowd…
+Of course…
 Untranslated
 Untranslated
 Untranslated
@@ -782,31 +782,31 @@ Untranslated
 Untranslated
 Untranslated
 Untranslated
-So many people in one place... These commoners all behave like faceless drones.
+So many people in one place… These commoners all behave like faceless drones.
 If you want to make commoners like you, you have to do as they do.
 I hope you appreciate my efforts.
 Come on, commander! Let's go.
 Quickly!
 Oh, not bad! Very festive.
-Oh, stop it... You really went all out there.
+Oh, stop it… You really went all out there.
 You're a great guy.
-Hey... Do you have to talk shop when it's just the two of us?
-But... that's just what I like about you.
+Hey… Do you have to talk shop when it's just the two of us?
+But… that's just what I like about you.
 Come one, let's go.
-So... this is what you do on New Year's day? Not really what I imagined.
-Hmmm, it seems to unmotivated, lonely...
+So… this is what you do on New Year's day? Not really what I imagined.
+Hmmm, it seems to unmotivated, lonely…
 Oh, let's light some firecrackers! Then we'll get in the mood!
-Really? How boring...
+Really? How boring…
 Right. Wanna go on?
-Whoaaa... So many people! Don't you think, uncle Ichi?
-Hey, hey, hey... What's that real big house over there?
+Whoaaa… So many people! Don't you think, uncle Ichi?
+Hey, hey, hey… What's that real big house over there?
 Come on, uncle Ichi!
 Let's go already!
 I'm not telling.
 Let's go then.
-Ohohoho... That's a secret.
+Ohohoho… That's a secret.
 Should we get going?
-Nah, it's nothing...
+Nah, it's nothing…
 Wanna get going?
 No, it's nothing.
 Let's go somewhere else, uncle Ichi!
@@ -814,7 +814,7 @@ Not telling!
 Step right up, step right up! We've got a monkey straight from China!
 How about it? Wanna give it a go, sir?
 Let's try it, Mr. Ogami!
-Hmph... A childish diversion.
+Hmph… A childish diversion.
 Commander! Let's try that!
 Untranslated
 Hey, uncle. I wanna try!
@@ -835,29 +835,29 @@ I'm impressed, boss!
 You're so awesome, uncle Ichi!
 Please come here, Mr. Ogami.
 Come here for a moment.
-Really, commander... Why did you have to take me to such an out of the way place?
+Really, commander… Why did you have to take me to such an out of the way place?
 Oh, you don't need to blush. There's no one around who could see us.
-Oh, commander! And Sumire, too...
-Sakura...
+Oh, commander! And Sumire, too…
+Sakura…
 Untranslated
 Heya, Sakura! Fancy running into you here!
-Wh... Why are you all here?
+Wh… Why are you all here?
 Untranslated
 That's right! Isn't it nice for all of the Flower Division to celebrate New Year together?
 Exactly. We wanted to have fun together.
 That was fun! Something like this isn't bad once in a while. A bit like a date.
 What? What what what? What's with that artificial laugh?
-So being with me really isn't enough...?
+So being with me really isn't enough…?
 Oh, commander! And Kanna, too.
 S-Sakura!?
 Untranslated
 Untranslated
 Wh-wh-why is everyone here all of a sudden!?
-Come on, boss... Where else would we go on New Year's day but the shrine?
+Come on, boss… Where else would we go on New Year's day but the shrine?
 That's right! Isn't it nice for all of the Flower Division to celebrate New Year together?
-Well... That's it, really.
-Phew... There's a bunch of people everywhere. Really makes me tired.
-Thanks. Tell me one thing, boss...
+Well… That's it, really.
+Phew… There's a bunch of people everywhere. Really makes me tired.
+Thanks. Tell me one thing, boss…
 Are you happy you visited the shrine with me?n
 Really? Makes me happy to hear you say so, boss!
 Oh, commander! And Kohran, too.
@@ -865,58 +865,58 @@ S-Sakura!?
 Untranslated
 Oooh, there's Sakura! Yoohoo!
 Why's everyone here all of a sudden!?
-Ohohoho... Where else would we go on New Year's day but the shrine?
+Ohohoho… Where else would we go on New Year's day but the shrine?
 Didn't we agree on celebrating New Year together?
-Not really...
+Not really…
 That's right! Isn't it nice for all of the Flower Division to celebrate New Year together?
 That's it!
-Tell me, uncle Ichi... What do you think of me?
-Do you... like me?
-Hihihi... I love you too, uncle!
+Tell me, uncle Ichi… What do you think of me?
+Do you… like me?
+Hihihi… I love you too, uncle!
 Aww, come on! If you wanna confess your love, you have to be serious!
 Oh, commander! And Iris, too.
-Ah... Sakura!
+Ah… Sakura!
 So you really wanted to visit the shrine with everyone, Mr. Ogami?
 Sakura! What are the odds?
 Why's everyone here?
-Come on, boss... Where else would we go on New Year's day but the shrine?
+Come on, boss… Where else would we go on New Year's day but the shrine?
 Just get crazy for once!
 That's right! Isn't it nice for all of the Flower Division to celebrate New Year together?
-Oh, look... A manifestation of the North Star Buddha!
+Oh, look… A manifestation of the North Star Buddha!
 I have to pay my respects, as a user of the North Star Fencing style.
 Daaaaaaaa!
-Whoa...
+Whoa…
 Untranslated
 We just followed you!
 We can't let you have all the fun!
-Ohohohoho...
+Ohohohoho…
 Don't surprise me like that! You just wanted to give me scare!
 Let's all visit the shrine together!
 That's right! Isn't it nice for all of the Flower Division to celebrate New Year together?
 Right on! That's what I like about you!
-It feels like we're being watched...
-Hahahaha...!
-That voice...
+It feels like we're being watched…
+Hahahaha…!
+That voice…
 Over there!
 So we meet again, my friends of the Imperial Floral Storm Troop!
 My name is Aoi Satan!
-The Black Web...? Don't make me laugh.
+The Black Web…? Don't make me laugh.
 That Tenkai's finished for good. After all, he was nothing more than the shogunate's lap dog.
 But I, Aoi Satan, am of a different breed! I'll never give up!
 Your precious peace won't continue forever. Pray all you want!
-A ridiculous man like you, so easily bewitched by the charms of women...
+A ridiculous man like you, so easily bewitched by the charms of women…
 You'll never stop me.
 I'll level this city for good. All humans will cower before me!
-What I want? Hehehehe...
+What I want? Hehehehe…
 I just can't stand the sight of happy humans!
 On the other hand, nothing excites me like the look of pain and fear in their eyes!
 You won't get to enjoy that on our watch!
 I'll destroy everyone and everything you love!
 What!?
-Hihihi... Come to me, all ye children of the gutter, all ye oppressed and evil!
+Hihihi… Come to me, all ye children of the gutter, all ye oppressed and evil!
 I am the great liberator of demons! Come forth, Koma!
-That's...!?
-Gihi... Gihihihihi!
+That's…!?
+Gihi… Gihihihihi!
 What the hell?
 Look out, everyone!
 Untranslated
@@ -931,14 +931,14 @@ Untranslated
 Untranslated
 Untranslated
 Untranslated
-Gihi... Gihihihihi!
+Gihi… Gihihihihi!
 Untranslated
 Untranslated
 Untranslated
 Untranslated
-Gihi... Gihihihihi!
+Gihi… Gihihihihi!
 Untranslated
-I see...
+I see…
 Untranslated
 Untranslated
 Untranslated
@@ -950,28 +950,28 @@ Untranslated
 Yeah!!
 You should work hard and follow my example so you can make your debut in high society.
 By the way, Mr. Ogami, what do you think about this dress? Isn't it a little too plain?
-Hmph... I was planning to make it from Nishijin brocade imported from Kyoto...
-I wanted to wear a luxurious long-sleeved kimono. Such a pity...
-Yeah, yeah... Suits you perfectly, Sumire, like always.
+Hmph… I was planning to make it from Nishijin brocade imported from Kyoto…
+I wanted to wear a luxurious long-sleeved kimono. Such a pity…
+Yeah, yeah… Suits you perfectly, Sumire, like always.
 Do I detect some sarcasm in your tone?
 Ahahaha, what gave you that idea? I was being honest! Wasn't I, boss?
 Why the sudden silence, Mr. Ogami?!
 Indecisive as ever!
 But I'm right, aren't I? Whatever you're wearing, it always suits you!
 Ooooohohohoho! Looks like you finally learned to appreciate my beauty.
-So, Mr. Ogami... If you're going to visit the shrine, I could accompany you.
-You don't look very busy to me, commander! Come one... Let's celebrate New Year's day, just the two of us!
+So, Mr. Ogami… If you're going to visit the shrine, I could accompany you.
+You don't look very busy to me, commander! Come one… Let's celebrate New Year's day, just the two of us!
 What!? You gonna turn me down, boss?
-That's just... I hate you! To play with my feelings like that...
-Boohoo... I hate you, uncle! So you don't like me after all!
-Commander... Would you like to take me to the shrine?
-In my country, we didn't have this custom...
+That's just… I hate you! To play with my feelings like that…
+Boohoo… I hate you, uncle! So you don't like me after all!
+Commander… Would you like to take me to the shrine?
+In my country, we didn't have this custom…
 Oh, really? I understand.
 Really? I'll come by your room later then.
 Ogami? What's up?
 What? With me?
-A New Year's shrine visit with you... Hihi, that doesn't sound so bad.
-But... I'm sorry. I can't really leave my post right now.
+A New Year's shrine visit with you… Hihi, that doesn't sound so bad.
+But… I'm sorry. I can't really leave my post right now.
 Just take one of the girls. Didn't some of them ask you already?
 Everyone wanted to go with you.
 You shouldn't let them wait too long.
@@ -979,40 +979,40 @@ Untranslated
 Untranslated
 Take care of the girls! Don't mess this up, Ogami.
 Untranslated
-Sorry. I wanted to stop them all...
-I never expected a day like this to come...
-To finally be able to enjoy these carefree days...
-You're right... I could never go back to what I was like back then.
+Sorry. I wanted to stop them all…
+I never expected a day like this to come…
+To finally be able to enjoy these carefree days…
+You're right… I could never go back to what I was like back then.
 Oh, what am I saying? I shouldn't dwell on those old stories.
 New Year's day in Russia?
 It's not that different from Japan.
 Untranslated
 Untranslated
 We pray to have another good year.
-Maybe not, but... Am I really that different now?
-Hihi... I'm sorry. Back then, I was just...
+Maybe not, but… Am I really that different now?
+Hihi… I'm sorry. Back then, I was just…
 Untranslated
 Don't play it down, commander. I'm really grateful.
 Hihi, I guess you're right.
 Untranslated
-Visiting the shrine at the side of a gentleman... This is a first for me.
+Visiting the shrine at the side of a gentleman… This is a first for me.
 Is it that strange?
 What did you think I am, Mr. Ogami!
 Oh no, those gentlemen never talk to me.
 Untranslated
 I'm sure you would look splendid in formal wear though.
 You're a lieutenant, after all. You must at least have learnt ballroom dancing, right?
-Just say the word, and it would be my pleasure to help you remember...
+Just say the word, and it would be my pleasure to help you remember…
 Untranslated
-We should definitely give it a go sometime. As I said... whenever you want!
+We should definitely give it a go sometime. As I said… whenever you want!
 You're late, Lieutenant! Didn't you practice running in the Navy?
-Ahaha... This feels so good I got carried away a little.
+Ahaha… This feels so good I got carried away a little.
 Come on! This little stroll is enough to make you huff and puff like you're about to die?
 Untranslated
 Untranslated
 Untranslated
 And I'm not talking about Karate and stuff.
-A guy who doesn't give up, no matter what... That's real strength.
+A guy who doesn't give up, no matter what… That's real strength.
 Untranslated
 Untranslated
 Untranslated
@@ -1020,7 +1020,7 @@ Uuuuncle Iiiichiiii! Come one, come ON!
 Can I ask you something? What do people think when they see us like this?
 Untranslated
 Hihi! Just kidding!
-About that place we're going to... It's called a "shrine", right?
+About that place we're going to… It's called a "shrine", right?
 Hihihi, that's great! I have to tell Mama and Papa in a letter!
 I wrote one just the other day. I told them of you, uncle Ichi.
 How you kissed me!
@@ -1042,13 +1042,13 @@ All right! Here we fly!
 Wa-wa-wait a second, boss! Where do you think you're holding on to!?
 Stop it, stop it! Move your hands a little lower!
 Eeek! Not THAT low! Higher, higher!
-I gotta ask, boss... You didn't do that on purpose, did ya?
+I gotta ask, boss… You didn't do that on purpose, did ya?
 Well, all right.
-Wow... So many people...
+Wow… So many people…
 Everyone looks like they're having fun.
-Ah, sorry. I'm not used to something like this...
-Yes...
-Hihihi... You're right.
+Ah, sorry. I'm not used to something like this…
+Yes…
+Hihihi… You're right.
 Me? I'll wish for this peace to go on forever.
 Thank you, commander. This was a lovely day.
 Untranslated
@@ -1056,8 +1056,8 @@ Untranslated
 Untranslated
 Untranslated
 I've been meaning to go there. But it would have felt stupid going there alone.
-Yeah, that's true...
+Yeah, that's true…
 Thank you!
-Guys...!
+Guys…!
 What are you all doing here?
 Untranslated

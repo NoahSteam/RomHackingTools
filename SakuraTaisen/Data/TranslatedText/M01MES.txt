@@ -1,6 +1,6 @@
-
+Ready~
 Strike a pose... Yay!
-Heh heh heh... Terror, confusion, the government in disarray... What a beautiful sight.
+Heh heh heh... Terror, confusion, the government in disarray... What a beautiful sight. 
 The capital is ours!
 Let us build a mountain of corpses as a warning to all that would oppose us. What say you, Lord Satan?
 Heh heh heh...
@@ -90,7 +90,7 @@ They got away... but, we were able to protect the Capital!! Let's return to base
 Just a moment, Ogami. It's not time for the Flower Unit's curtain call just yet!
 W, what?
 Ensign Ogami, those are members of the Hive of Darkness.
-Please explain. <br> I'm already aware.
+<LIPS> Please explain. <br> I'm already aware.
 I see, that's reassuring. Then I'll leave all the instructions up to you from here on.
 A single mistake can cost lives on the battlefield!! Focus, sir!!
 Two actions can be taken on a single turn. Once you've 'moved' and 'attacked', your turn is over.
@@ -184,7 +184,7 @@ Woo! We did it!!
 Hey, Ogami...
 Hm?
 It feels strange fighting here.
-Why? <br> This is where I first met you. <br> This is where you became a news article.
+<LIPS> Why? <br> This is where I first met you <br> Here you became a news story
 Why?
 ... oh, well I guess you didn't really think it was important, so never mind...
 This is where I first met you.

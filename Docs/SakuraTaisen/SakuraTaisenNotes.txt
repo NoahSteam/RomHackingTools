@@ -288,3 +288,6 @@ The second two bytes in the string info at the top of the MES file indicates how
 
 Battle dialog is loaded @002dd800.  Character speed starts at 002E1DF0 (2DFB40 unpatched).  Read 002DFB80 in unpatched version.
 Dialog is rendered as a continous block of text. When 0A0D is encountered, the reading of the image jumps by the (stride - num characters printed)
+
+Battle dialog LIPS:
+000217bf needs to be 0x1E instead of 0x0F.  This is the stride of the line of text in vdp1 memory.  
