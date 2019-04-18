@@ -866,7 +866,7 @@ bool ExtractImageFromData(const char* pInColorData, const unsigned int inColorDa
 	const int tilesPerRow        = inNumTexturesPerRow;
 	const int bytesPerTile       = tileBytes;
 	const int bytesPerTileRow    = bytesPerTile*tilesPerRow;
-	const unsigned long dataSize = bInFillEmptyData ? inColorDataSize - inDataOffset : inTextureDimX*inTextureDimY*inNumTexturesPerRow;
+	const unsigned long dataSize = bInFillEmptyData ? inColorDataSize - inDataOffset : (inTextureDimX*inTextureDimY*inNumTexturesPerRow)/divisor;
 	const int numRows            = (int)ceil( dataSize/ (float)bytesPerTileRow);
 	const int numColumns         = numRows > 0 ? tilesPerRow : dataSize/bytesPerTileRow;
 	const int imageHeight        = numRows*tileDimY;
@@ -3886,6 +3886,39 @@ void ExtractFCEFiles(const string& sakuraDirectory, const string& paletteFileNam
 	}
 }
 
+struct SakuraPalette
+{
+	char* mpPaletteData = nullptr;
+	int   mPaletteSize  = 0;
+
+	SakuraPalette(const char* pInData, int paletteSize)
+	{
+		mPaletteSize = paletteSize;
+
+		//Create palette data
+		//Colors in the palette are in a 15 bit (5:5:5) format.  So we need to & every value by 0x7fff.
+		static const unsigned int numBytesInPalette = mPaletteSize;
+		const char* pOriginalPaletteData            = pInData;
+		mpPaletteData                         = new char[numBytesInPalette];
+		memset(mpPaletteData, 0, numBytesInPalette);
+		memcpy_s(mpPaletteData, numBytesInPalette, pOriginalPaletteData, numBytesInPalette);
+
+		for(unsigned int p = 0; p < numBytesInPalette; p += 2)
+		{
+			unsigned short* pPaletteValue = (unsigned short*)(mpPaletteData + p);
+			*pPaletteValue = SwapByteOrder(*pPaletteValue);
+			*pPaletteValue = (*pPaletteValue) & (unsigned short)(0x7fff);
+			*pPaletteValue = SwapByteOrder(*pPaletteValue);
+		}
+	}
+
+	~SakuraPalette()
+	{
+		delete[] mpPaletteData;
+		mpPaletteData = nullptr;
+	}
+};
+
 //FACE files contain faces that appear during the battle dialog
 void ExtractFACEFiles(const string& sakuraDirectory, const string& outDirectory)
 {
@@ -4006,10 +4039,140 @@ void ExtractFACEFiles(const string& sakuraDirectory, const string& outDirectory)
 			const string outFileName = subDirName + std::to_string(i) + string(".bmp");
 			const unsigned char offsetToColorData = 0x40;
 			ExtractImageFromData(uncompressedImage.mpUncompressedData + offsetToColorData, uncompressedImage.mUncompressedDataSize - offsetToColorData, outFileName, pPaletteData, numBytesInPalette, 40, 48,
-				                 1, 128, 0, false);
+				                 1, 256, 0, false);
 
 			delete[] pPaletteData;
 		}
+	}
+}
+
+void ExtractWKLFiles(const string& sakuraDirectory, const string& outDirectory)
+{
+	struct WklUncompressedData
+	{
+		struct ImageInfo
+		{
+			unsigned short width;
+			unsigned short height;
+			unsigned short unknown1;
+			unsigned short unknown2;
+			unsigned short unknown3;
+			unsigned short offsetBytesFromStart;
+			unsigned short unknown4;
+			unsigned short numBytes;
+
+			void SwapEndianness()
+			{
+				width                = SwapByteOrder(width);
+				height               = SwapByteOrder(height);
+				offsetBytesFromStart = SwapByteOrder(offsetBytesFromStart);
+				numBytes             = SwapByteOrder(numBytes);
+			}
+		};
+
+		unsigned short mNumImages   = 0;
+		ImageInfo*     mpImageInfos = nullptr;
+		const char*    mpFileData   = nullptr;
+
+		~WklUncompressedData()
+		{
+			delete[] mpImageInfos;
+			mpImageInfos = nullptr;
+		}
+
+		bool ReadInImages(const char* pInData)
+		{
+			mpFileData = pInData;
+
+			memcpy_s(&mNumImages, sizeof(mNumImages), pInData, sizeof(mNumImages));
+			mNumImages = SwapByteOrder(mNumImages);
+			if( mNumImages == 0 )
+			{
+				return true;
+			}
+			
+			mpImageInfos = new ImageInfo[mNumImages];
+			memcpy_s(mpImageInfos, sizeof(ImageInfo)*mNumImages, pInData + 0x10, sizeof(ImageInfo)*mNumImages);
+			
+			for(unsigned short i = 0; i < mNumImages; ++i)
+			{
+				mpImageInfos[i].SwapEndianness();
+			}
+
+			return true;
+		}
+
+		bool DumpImages(const char* pInPaletteData, const unsigned int inPaletteSize, const string& outDirectory)
+		{
+			const unsigned int headerOffset = 0x10*(mNumImages + 1);
+
+			for(unsigned short i = 0; i < mNumImages; ++i)
+			{
+				const string outFileName = outDirectory + string("Image_") + std::to_string(i);
+				const char* pImageData = &mpFileData[ mpImageInfos[i].offsetBytesFromStart + headerOffset];
+				ExtractImageFromData(pImageData, mpImageInfos[i].numBytes, outFileName, pInPaletteData, inPaletteSize, mpImageInfos[i].width, mpImageInfos[i].height, 1, 16, 0, false);
+			}
+
+			return true;
+		}
+	};
+
+	//Find all translated text files
+	vector<FileNameContainer> allFiles;
+	FindAllFilesWithinDirectory(sakuraDirectory, allFiles);
+	if( !allFiles.size() )
+	{
+		return;
+	}
+
+	vector<FileNameContainer> faceFiles;
+	GetAllFilesOfType(allFiles, "WKL", faceFiles);
+
+	for(const FileNameContainer& fileNameInfo : faceFiles)
+	{
+		printf("Extracting %s\n", fileNameInfo.mFileName.c_str());
+
+		const string outSubDirName = outDirectory + fileNameInfo.mNoExtension + Seperators;
+		if( !CreateDirectoryHelper(outSubDirName) )
+		{
+			printf("Unable to create directory: %s", outSubDirName.c_str());
+			return;
+		}
+
+		FileData wklFile;
+		if( !wklFile.InitializeFileData(fileNameInfo) )
+		{
+			return;
+		}
+
+		const char* pWklData = wklFile.GetData();
+
+		//Read in palette data
+		unsigned long offsetToPaletteData = 0x280;
+		unsigned long paletteAddress      = 0;
+		memcpy_s(&paletteAddress, sizeof(paletteAddress), &pWklData[offsetToPaletteData], sizeof(paletteAddress));
+		paletteAddress = SwapByteOrder(paletteAddress);
+
+		//Read in the address at which the compressed image data lives
+		unsigned long offsetToImageData = 0x100;
+		unsigned long imageDataAddress  = 0;
+		memcpy_s(&imageDataAddress, sizeof(imageDataAddress), &pWklData[offsetToImageData], sizeof(imageDataAddress));
+		imageDataAddress = SwapByteOrder(imageDataAddress);
+
+		//Read in offset to compressed data
+		unsigned long offsetToCompressedData = 0;
+		memcpy_s(&offsetToCompressedData, sizeof(offsetToCompressedData), &pWklData[imageDataAddress + 8], sizeof(offsetToCompressedData));
+		offsetToCompressedData = SwapByteOrder(offsetToCompressedData);
+
+		//Uncompress image data
+		PRSDecompressor uncompressedImages;
+		uncompressedImages.UncompressData( (void*)(pWklData + offsetToCompressedData + imageDataAddress), wklFile.GetDataSize() - (offsetToCompressedData + imageDataAddress));
+
+		SakuraPalette paletteData(&pWklData[paletteAddress - 0x20], 32);
+
+		WklUncompressedData uncompressedImageData;
+		uncompressedImageData.ReadInImages(uncompressedImages.mpUncompressedData);
+		uncompressedImageData.DumpImages(paletteData.mpPaletteData, paletteData.mPaletteSize, outSubDirName);
 	}
 }
 
@@ -4802,6 +4965,7 @@ void PrintHelp()
 	printf("Extract8BitImage fileName paletteFile offset width height numColors[256, 128] outDirectory\n");
 	printf("ExtractFCEFiles rootSakuraTaisenDirectory paletteFile outDirectory\n");
 	printf("ExtractFACEFiles rootSakuraTaisenDirectory outDirectory\n");
+	printf("ExtractWKLFiles rootSakuraTaisenDirectory outDirectory\n");
 	printf("ExtractTMapSP rootSakuraTaisenDirectory paletteFile outDirectory\n");
 	printf("PatchTMapSP sakuraDirectory patchDataPath\n");
 	printf("CompressFile inFilePath outFilePath\n");
@@ -4986,6 +5150,13 @@ int main(int argc, char *argv[])
 		const string outDirectory              = string(argv[3]) + Seperators;
 
 		ExtractFACEFiles(rootSakuraTaisenDirectory, outDirectory);
+	}
+	else if(command == "ExtractWKLFiles" && argc == 4 )
+	{
+		const string rootSakuraTaisenDirectory = string(argv[2]) + Seperators + string("SAKURA2\\");
+		const string outDirectory              = string(argv[3]) + Seperators;
+
+		ExtractWKLFiles(rootSakuraTaisenDirectory, outDirectory);
 	}
 	else if(command == "ExtractTMapSP" && argc == 5 )
 	{

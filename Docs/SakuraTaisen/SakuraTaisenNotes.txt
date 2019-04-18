@@ -291,3 +291,32 @@ Dialog is rendered as a continous block of text. When 0A0D is encountered, the r
 
 Battle dialog LIPS:
 000217bf needs to be 0x1E instead of 0x0F.  This is the stride of the line of text in vdp1 memory.  
+
+---Battle Menu---
+0026C51A <-compressed name for Sakura during battle found in:
+00265C1A
+06068C06
+
+Found a match in WKL01.BIN @0x0004cd1a
+Found a match in WKL02.BIN @0x000529b2
+Found a match in WKL03.BIN @0x0005242a
+Found a match in WKL04.BIN @0x00051f2a
+Found a match in WKL05.BIN @0x0005206a
+Found a match in WKL06.BIN @0x0004e3da
+Found a match in WKL07.BIN @0x00051752
+Found a match in WKL08.BIN @0x0004dc52
+Found a match in WKL09.BIN @0x00052f6a
+Found a match in WKL10.BIN @0x0004e96a
+Found a match in WKL11.BIN @0x000579e6
+Found a match in WKL21.BIN @0x00048896
+Found a match in WKL21.BIN @0x00049b4e
+Found a match in WKL22.BIN @0x000534e6
+Found a match in WKL22.BIN @0x0005479e
+
+WKL file:
+-Uncompressed Data Deader:
+   -In the first 16 bytes, first two bytes specify the number of images
+   -For each image, there are 16 bytes of info.  short Width, short Height, short unknown, short unknown2, 
+512 header
+-Palette for "Sakura" image is  @00073D18
+-Palette offset is specified at @0x278
