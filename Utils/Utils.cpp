@@ -126,6 +126,23 @@ void FindAllFilesWithinDirectory(const string& inDirectoryPath, vector<FileNameC
 	}
 }
 
+bool DoesDirectoryExist(const std::string& dirName)
+{
+	DWORD fileAttributes = GetFileAttributesA(dirName.c_str());
+	if( fileAttributes == INVALID_FILE_ATTRIBUTES )
+	{
+		return false;
+	}
+
+	if( fileAttributes & FILE_ATTRIBUTE_DIRECTORY )
+	{
+		return true;
+	}
+
+	return false;
+
+}
+
 bool CreateDirectoryHelper(const std::string& dirName)
 {
 	if( CreateDirectory(dirName.c_str(), NULL) || ERROR_ALREADY_EXISTS == GetLastError() )
@@ -462,6 +479,17 @@ bool FileWriter::WriteData(const void* pInData, unsigned long inDataSize)
 	return numElemsWritten == inDataSize;
 }
 
+bool FileWriter::WriteDataAtOffset(const void* pInData, unsigned long inSize, unsigned long inOffset)
+{
+	fseek(mpFileHandle, inOffset, SEEK_SET);
+
+	bool bSuccess = WriteData(pInData, inSize);
+
+	fseek(mpFileHandle, 0, SEEK_END);
+
+	return bSuccess;
+}
+
 void FileWriter::Close()
 {
 	if( mpFileHandle )
@@ -631,7 +659,7 @@ void PaletteData::SetValue(int index, unsigned short value)
 ////////////////////////////////
 bool BitmapWriter::CreateBitmap(const string& inFileName, int inWidth, int inHeight, int bitsPerPixel, const char* pInColorData, int inColorSize, const char* pInPaletteData, int inPaletteSize)
 {	
-	if( 1 )//bitsPerPixel == 4 )
+	if( 0 )//bitsPerPixel == 4 )
 	{
 		SaveAsPNG(inFileName, inWidth, inHeight, bitsPerPixel, pInColorData, inColorSize, pInPaletteData, inPaletteSize);
 	}

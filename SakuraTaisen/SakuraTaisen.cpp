@@ -4734,10 +4734,11 @@ struct WklUncompressedData
 	bool DumpImages(const char* pInPaletteData, const unsigned int inPaletteSize, const string& inPrefix, const string& outDirectory)
 	{
 		const unsigned int headerOffset = 0x10*(mNumImages + 1);
+		const string bmpExtension(".bmp");
 
 		for(unsigned short i = 0; i < mNumImages; ++i)
 		{
-			const string outFileName = outDirectory + inPrefix + string("_") + std::to_string(i);
+			const string outFileName = outDirectory + inPrefix + string("_") + std::to_string(i) + bmpExtension;
 			const char* pImageData = &mpFileData[ mpImageInfos[i].offsetBytesFromStart + headerOffset];
 			ExtractImageFromData(pImageData, mpImageInfos[i].numBytes, outFileName, pInPaletteData, inPaletteSize, mpImageInfos[i].width, mpImageInfos[i].height, 1, 16, 0, false);
 		}
@@ -4752,16 +4753,19 @@ struct WklCompressedInfo
 	unsigned int size;
 };
 
-bool PatchWKLFiles(const string& sakuraDirectory, const string& outDirectory, const string& translatedWklDirectory)
+bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirectory, const string& inTranslatedDirectory)
 {
 	const unsigned int maxCompressedSize = 0x1BA4;
+
+	const string outDirectory           = inPatchedDirectory + Seperators + string("SAKURA2\\");
+	const string translatedWKLDirectory = inTranslatedDirectory + string("WKL\\");
 
 	//Find all files
 	vector<FileNameContainer> allFiles;
 	FindAllFilesWithinDirectory(sakuraDirectory, allFiles);
 	if( !allFiles.size() )
 	{
-		printf("PatchWKL failed.  No files found in %s", sakuraDirectory.c_str());
+		printf("PatchWKL failed.  No files found in %s\n", sakuraDirectory.c_str());
 		return false;
 	}
 
@@ -4770,19 +4774,38 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& outDirectory, co
 	GetAllFilesOfType(allFiles, "WKL", wklFiles);
 
 	WklCompressedInfo compressedInfo[64];
+	WklCompressedInfo origCompressedInfo[64];
 
 	for(const FileNameContainer& fileNameInfo : wklFiles)
 	{
+		const string translatedDirectory = translatedWKLDirectory + fileNameInfo.mNoExtension + Seperators;
+		if( !DoesDirectoryExist(translatedDirectory) )
+		{
+			continue;
+		}
+
 		printf("Patching %s\n", fileNameInfo.mFileName.c_str());
 
-		FileData wklFile;
-		if( !wklFile.InitializeFileData(fileNameInfo) )
+		FileData originalWKLFile;
+		if( !originalWKLFile.InitializeFileData(fileNameInfo) )
 		{
 			printf("PatchWKL failed.  Unable to open %s", fileNameInfo.mFullPath.c_str());
 			return false;
 		}
 
-		const char* pWklData = wklFile.GetData();
+		//Open patched file
+		FileNameContainer outFileName(fileNameInfo.mFileName.c_str(), outDirectory);
+		FileWriter outFile;
+		if( !outFile.OpenFileForWrite(outFileName.mFullPath) )
+		{
+			printf("PatchWKL failed.  Unable to open %s for write\n", outFileName.mFullPath.c_str());
+			return false;
+		}
+
+		//Copy over original contents
+		outFile.WriteData(originalWKLFile.GetData(), originalWKLFile.GetDataSize());
+
+		const char* pWklData = originalWKLFile.GetData();
 
 		//Read in the address at which the compressed image data lives
 		unsigned long offsetToImageData = 0x100;
@@ -4792,28 +4815,33 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& outDirectory, co
 
 		//Read in offset to compressed data
 		memcpy_s(&compressedInfo, sizeof(compressedInfo), &pWklData[imageDataAddress], sizeof(compressedInfo));
-
+		memcpy_s(&origCompressedInfo, sizeof(origCompressedInfo), &pWklData[imageDataAddress], sizeof(origCompressedInfo));
+		
+		const string bmpExtension(".bmp");
 		char tempBuffer[512];
+		unsigned int offsetToImageBlock = sizeof(compressedInfo);
 		for(int i = 0; i < 64; ++i)
-		{
+		{	
+			compressedInfo[i].offset = offsetToImageBlock;
+
 			if( !compressedInfo[i].size )
 			{
 				continue;
 			}
 
-			const unsigned int imageOffset = SwapByteOrder(compressedInfo[i].offset);
-			const unsigned int offsetToCompressedData = imageOffset + imageDataAddress;
+			const unsigned int origImageOffset            = SwapByteOrder(origCompressedInfo[i].offset);
+			const unsigned int offsetToCompressedData = origImageOffset + imageDataAddress;
 			
 			//Uncompress image data
 			PRSDecompressor uncompressedImages;
-			uncompressedImages.UncompressData( (void*)(pWklData + offsetToCompressedData), wklFile.GetDataSize() - (offsetToCompressedData));
+			uncompressedImages.UncompressData( (void*)(pWklData + offsetToCompressedData), originalWKLFile.GetDataSize() - (offsetToCompressedData));
 			if( !uncompressedImages.mCompressedSize )
 			{
 				continue;
 			}
 
 			//Create prefix
-			sprintf_s(tempBuffer, 512, "%i_%0x", i, imageOffset);
+			sprintf_s(tempBuffer, 512, "%i_%0x", i, origImageOffset);
 			const string prefix = string(tempBuffer);
 
 			//Read in original data
@@ -4825,36 +4853,67 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& outDirectory, co
 			translatedWklData.mpImageInfos = new WklUncompressedData::ImageInfo[uncompressedImageData.mNumImages];
 
 			//Find translated files
-			unsigned short offsetFromStart = 0;
+			unsigned short offsetFromStart    = 0;
+			unsigned int sizeOfDataToCompress = 0;
 			for(unsigned short imageIndex = 0; imageIndex < uncompressedImageData.mNumImages; ++imageIndex)
 			{
 				const string originalFileName   = prefix + string("_") + std::to_string(imageIndex);
-				const string translatedFileName = translatedWklDirectory + originalFileName;
+				const string translatedFileName = translatedDirectory + originalFileName + bmpExtension;
 				
 				//Read in translated data
 				BitmapReader translatedImage;
 				if( !translatedImage.ReadBitmap(translatedFileName.c_str()) )
 				{
-					printf("PatchWKL failed.  Unable to open %s", translatedFileName.c_str());
+					printf("PatchWKL failed.  Unable to open %s\n", translatedFileName.c_str());
 					return false;
 				}
 
+				translatedImage.mBitmapData.mInfoHeader.mImageWidth = abs(translatedImage.mBitmapData.mInfoHeader.mImageWidth);
+				translatedImage.mBitmapData.mInfoHeader.mImageHeight = abs(translatedImage.mBitmapData.mInfoHeader.mImageHeight);
+
 				//Uncompressed image header for translated data
 				translatedWklData.mpImageInfos[imageIndex]                      = uncompressedImageData.mpImageInfos[imageIndex];
-				translatedWklData.mpImageInfos[imageIndex].width                = translatedImage.mBitmapData.mInfoHeader.mImageWidth;
-				translatedWklData.mpImageInfos[imageIndex].height               = translatedImage.mBitmapData.mInfoHeader.mImageHeight;
-				translatedWklData.mpImageInfos[imageIndex].offsetBytesFromStart = offsetFromStart;
-				translatedWklData.mpImageInfos[imageIndex].numBytes             = translatedImage.mBitmapData.mColorData.mSizeInBytes;
+				translatedWklData.mpImageInfos[imageIndex].width                = SwapByteOrder((unsigned short)translatedImage.mBitmapData.mInfoHeader.mImageWidth);
+				translatedWklData.mpImageInfos[imageIndex].height               = SwapByteOrder((unsigned short)translatedImage.mBitmapData.mInfoHeader.mImageHeight);
+				translatedWklData.mpImageInfos[imageIndex].offsetBytesFromStart = SwapByteOrder((unsigned short)offsetFromStart);
+				translatedWklData.mpImageInfos[imageIndex].numBytes             = SwapByteOrder((unsigned short)translatedImage.mBitmapData.mColorData.mSizeInBytes);
 
-				offsetFromStart += translatedImage.mBitmapData.mInfoHeader.mImageDataSize;
+				const unsigned short colorBytes  = translatedImage.mBitmapData.mColorData.mSizeInBytes;
+				offsetFromStart      += colorBytes;
+				sizeOfDataToCompress += colorBytes;
 
 				//Add image data.  Todo, take this and the header and compress it all.  Fixup the pWklData header.
-				char* pImageData = new char[translatedImage.mBitmapData.mInfoHeader.mImageDataSize];
-				memcpy_s(pImageData, translatedImage.mBitmapData.mInfoHeader.mImageDataSize, translatedImage.mBitmapData.mColorData.mpRGBA, translatedImage.mBitmapData.mColorData.mSizeInBytes);
+				char* pImageData = new char[colorBytes];
+				memcpy_s(pImageData, colorBytes, translatedImage.mBitmapData.mColorData.mpRGBA, translatedImage.mBitmapData.mColorData.mSizeInBytes);
 				translatedWklData.mImageData.push_back( pImageData );
 			}
+			
+			//Put all of the data that needs to be compressed into a single contiguous block of memory
+			char* pDataToCompress = new char[sizeOfDataToCompress];
+			memset(pDataToCompress, 0, sizeOfDataToCompress);
+			memcpy_s(pDataToCompress, sizeOfDataToCompress, &translatedWklData.mNumImages, sizeof(translatedWklData.mNumImages));
+			memcpy_s(pDataToCompress + 0x10, sizeOfDataToCompress - 0x10, translatedWklData.mpImageInfos, sizeof(WklUncompressedData::ImageInfo)*uncompressedImageData.mNumImages);
+
+			//Compress the data
+			PRSCompressor compressedTranslatedData;
+			compressedTranslatedData.CompressData(pDataToCompress, sizeOfDataToCompress);
+
+			//Fixup header info
+			compressedInfo[i].size = SwapByteOrder(compressedTranslatedData.mCompressedSize);
+			offsetToImageBlock    += compressedTranslatedData.mCompressedSize;
+
+			//Write out the compressed data
+			outFile.WriteDataAtOffset(compressedTranslatedData.mpCompressedData, compressedTranslatedData.mCompressedSize, imageDataAddress + compressedInfo[i].offset);
+
+			//Cleanup
+			delete[] pDataToCompress;
 		}
+
+		//Write out the header
+		outFile.WriteDataAtOffset(compressedInfo, sizeof(compressedInfo), imageDataAddress);
 	}
+
+	return true;
 }
 
 void ExtractWKLFiles(const string& sakuraDirectory, const string& outDirectory)
@@ -4936,12 +4995,6 @@ void ExtractWKLFiles(const string& sakuraDirectory, const string& outDirectory)
 			WklUncompressedData uncompressedImageData;
 			uncompressedImageData.ReadInImages(uncompressedImages.mpUncompressedData);
 			uncompressedImageData.DumpImages(paletteData.mpPaletteData, paletteData.mPaletteSize, prefix, outSubDirName);
-
-			FileWriter w;
-			if( w.OpenFileForWrite("d:\\rizwan\\test.bin") )
-			{
-				w.WriteData(uncompressedImages.mpUncompressedData, uncompressedImages.mUncompressedDataSize);
-			}
 		}
 	}
 }
@@ -5623,7 +5676,7 @@ void FindDiff()
 }
 
 bool PatchGame(const string& rootSakuraTaisenDirectory, const string& patchedSakuraTaisenDirectory, const string& translatedTextDirectory, const string& fontSheetFileName, const string& originalPaletteFileName, 
-	const string &patchedTMapSPDataPath, const string& /*inMainMainFontSheetPath*/, const string& /*inMainMenuTranslatedBgnd*/, const string& inPatchedOptionsImage)
+	const string &patchedTMapSPDataPath, const string& /*inMainMainFontSheetPath*/, const string& /*inMainMenuTranslatedBgnd*/, const string& inPatchedOptionsImage, const string& inTranslatedDataDirectory)
 {	
 	char buffer[MAX_PATH];
 	const DWORD dwRet = GetCurrentDirectory(MAX_PATH, buffer);
@@ -5638,6 +5691,12 @@ bool PatchGame(const string& rootSakuraTaisenDirectory, const string& patchedSak
 	if( !CreateDirectoryHelper(tempDir) )
 	{
 		printf("Cannot patch game.  Could not create temp work directory.  Error: (%d)\n", GetLastError());
+		return false;
+	}
+
+	if( !PatchWKLFiles(rootSakuraTaisenDirectory, patchedSakuraTaisenDirectory, inTranslatedDataDirectory) )
+	{
+		printf("PatchWKLFiles failed. Patch unsuccessful.\n");
 		return false;
 	}
 
@@ -5741,7 +5800,7 @@ void PrintHelp()
 	printf("PatchTMapSP sakuraDirectory patchDataPath\n");
 	printf("CompressFile inFilePath outFilePath\n");
 	printf("FindCompressedFile compressedFile uncompressedFile\n");
-	printf("PatchGame rootSakuraTaisenDirectory patchedSakuraTaisenDirectory translatedTextDirectory fontSheet originalPalette patchedTMapSpDataPath mainMenuFontSheetPath mainMenuBgndPatchedImage optionsImagePatched \n");
+	printf("PatchGame rootSakuraTaisenDirectory patchedSakuraTaisenDirectory translatedTextDirectory fontSheet originalPalette patchedTMapSpDataPath mainMenuFontSheetPath mainMenuBgndPatchedImage optionsImagePatched translatedDataDirectory \n");
 }
 
 int main(int argc, char *argv[])
@@ -5867,7 +5926,7 @@ int main(int argc, char *argv[])
 
 		OutputDialogOrder(searchDirectory, outputFile);
 	}
-	else if( command == "PatchGame" && argc == 11 )
+	else if( command == "PatchGame" && argc == 12 )
 	{
 		const string rootSakuraTaisenDirectory    = string(argv[2]) + Seperators;
 		const string patchedSakuraTaisenDirectory = string(argv[3]) + Seperators;
@@ -5878,8 +5937,9 @@ int main(int argc, char *argv[])
 		const string mainMenuFontSheetPath        = string(argv[8]);
 		const string mainMenuTranslatedBgnd       = string(argv[9]);
 		const string patchedOptionsImage          = string(argv[10]);
+		const string translatedDataDirectory      = string(argv[11]) + Seperators;
 
-		PatchGame(rootSakuraTaisenDirectory, patchedSakuraTaisenDirectory, translatedTextDirectory, fontSheet, originalPalette, patchedTMapSpDataPath, mainMenuFontSheetPath, mainMenuTranslatedBgnd, patchedOptionsImage);
+		PatchGame(rootSakuraTaisenDirectory, patchedSakuraTaisenDirectory, translatedTextDirectory, fontSheet, originalPalette, patchedTMapSpDataPath, mainMenuFontSheetPath, mainMenuTranslatedBgnd, patchedOptionsImage, translatedDataDirectory);
 	}
 	else if(command == "CreateTBLSpreadsheets" && argc == 5 )
 	{
