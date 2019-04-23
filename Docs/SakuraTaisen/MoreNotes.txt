@@ -21,6 +21,7 @@ PatchGameKNJ d:\Rizwan\SakuraWars\Disc1 d:\Rizwan\SakuraWars\TranslatedFontSheet
 PatchGame d:\Rizwan\SakuraWars\Disc1 d:\Rizwan\SakuraWars\Disc1_Translated D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\TranslatedText D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\8x12.bmp D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\Palette.bin D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\TMapSP D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\MainMenuFont.bmp D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\MainMenuPatched.bmp D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\OptionsBgndPatched.bmp
 FindDialogOrder d:\Rizwan\SakuraWars\Disc1 D:\Rizwan\SakuraWars\ExtractedData\Disc1\DialogText
 CreateTBLSpreadsheets D:\Rizwan\SakuraWars\ExtractedData\Disc1\Dialog D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\Duplicates.txt D:\Rizwan\SakuraWars\Disc1\SAKURA1
+CreateWKLSpreadsheets D:\Rizwan\SakuraWars\ExtractedData\Disc1\WKL D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\WKLDuplicates.txt D:\Rizwan\SakuraWars\Disc1\SAKURA2
 ExtractImages d:\Rizwan\SakuraWars\Test\Search.bin D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\Palette.bin 88 46 d:\Rizwan\SakuraWars\TestExtractImages d:\Rizwan\SakuraWars\Test\Search.bin D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\Palette.bin 88 46 d:\Rizwan\SakuraWars\Test
 Extract8BitImage d:\Rizwan\SakuraWars\Disc1\SAKURA1\0100FCE.BIN d:\Rizwan\SakuraWars\Test\Search.bin 160 d:\Rizwan\SakuraWars
 ExtractFaceFiles d:\Rizwan\SakuraWars\Disc1 d:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\FacePalette.bin d:\Rizwan\SakuraWars\ExtractedData\Disc1\Faces
@@ -30,6 +31,8 @@ CreateMesSpreadsheets D:\Rizwan\SakuraWars\ExtractedData\Disc1\Dialog D:\Rizwan\
 PatchTMapSp d:\Rizwan\SakuraWars\Disc1 D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\TMapSP
 ExtractFACEFiles d:\Rizwan\SakuraWars\Disc1 d:\Rizwan\SakuraWars\ExtractedData\Disc1\FACE
 ParseEVTFiles d:\Rizwan\SakuraWars\Disc1
+ExtractWKLFiles d:\Rizwan\SakuraWars\Disc1 d:\Rizwan\SakuraWars\ExtractedData\Disc1\WKL
+FindDuplicateText D:\Rizwan\SakuraWars\ExtractedData\Disc1\WKL D:\Rizwan\SakuraWars\ExtractedData\Disc1\WKL\duplicates.txt
 FindCompressedData d:\Rizwan\SakuraWars\Disc1\SAKURA1\LOGO.SH2 d:\Rizwan\SakuraWars\Search.bin d:\Rizwan\SakuraWars\UncompressedDataResults
 FindData.exe d:\Rizwan\SakuraWars\Disc1 d:\Rizwan\SakuraWars\Search.bin
 
