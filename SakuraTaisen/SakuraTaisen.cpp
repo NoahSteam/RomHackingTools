@@ -4692,10 +4692,18 @@ struct WklUncompressedData
 		}
 	};
 
-	unsigned short mNumImages   = 0;
-	ImageInfo*     mpImageInfos = nullptr;
-	const char*    mpFileData   = nullptr;
-	vector<char*>  mImageData;
+	struct TranslatedImageData
+	{
+		TranslatedImageData(char* pInColorData, unsigned short inDataSize) : pColorData(pInColorData), dataSize(inDataSize){}
+
+		char*          pColorData = nullptr;
+		unsigned short dataSize   = 0;
+	};
+
+	unsigned short              mNumImages   = 0;
+	ImageInfo*                  mpImageInfos = nullptr;
+	const char*                 mpFileData   = nullptr;
+	vector<TranslatedImageData> mImageData;
 
 	~WklUncompressedData()
 	{
@@ -4704,7 +4712,7 @@ struct WklUncompressedData
 
 		for(size_t i = 0; i < mImageData.size(); ++i)
 		{
-			delete[] mImageData[i];
+			delete[] mImageData[i].pColorData;
 		}
 		mImageData.clear();
 	}
@@ -4803,19 +4811,24 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 		}
 
 		//Copy over original contents
-		outFile.WriteData(originalWKLFile.GetData(), originalWKLFile.GetDataSize());
-
-		const char* pWklData = originalWKLFile.GetData();
+		const char* pOriginalWklData = originalWKLFile.GetData();
+		char* pNewWklData = new char[originalWKLFile.GetDataSize()];
+		if( !pNewWklData )
+		{
+			printf("PatchWKL failed.  Unable to allocate memory\n");
+			return false;
+		}
+		memcpy_s(pNewWklData, originalWKLFile.GetDataSize(), pOriginalWklData, originalWKLFile.GetDataSize());
 
 		//Read in the address at which the compressed image data lives
 		unsigned long offsetToImageData = 0x100;
 		unsigned long imageDataAddress  = 0;
-		memcpy_s(&imageDataAddress, sizeof(imageDataAddress), &pWklData[offsetToImageData], sizeof(imageDataAddress));
+		memcpy_s(&imageDataAddress, sizeof(imageDataAddress), &pOriginalWklData[offsetToImageData], sizeof(imageDataAddress));
 		imageDataAddress = SwapByteOrder(imageDataAddress);
 
 		//Read in offset to compressed data
-		memcpy_s(&compressedInfo, sizeof(compressedInfo), &pWklData[imageDataAddress], sizeof(compressedInfo));
-		memcpy_s(&origCompressedInfo, sizeof(origCompressedInfo), &pWklData[imageDataAddress], sizeof(origCompressedInfo));
+		memcpy_s(&compressedInfo, sizeof(compressedInfo), &pOriginalWklData[imageDataAddress], sizeof(compressedInfo));
+		memcpy_s(&origCompressedInfo, sizeof(origCompressedInfo), &pOriginalWklData[imageDataAddress], sizeof(origCompressedInfo));
 		
 		const string bmpExtension(".bmp");
 		char tempBuffer[512];
@@ -4826,6 +4839,7 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 
 			if( !compressedInfo[i].size )
 			{
+				compressedInfo[i].offset = SwapByteOrder(offsetToImageBlock);
 				continue;
 			}
 
@@ -4834,7 +4848,7 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 			
 			//Uncompress image data
 			PRSDecompressor uncompressedImages;
-			uncompressedImages.UncompressData( (void*)(pWklData + offsetToCompressedData), originalWKLFile.GetDataSize() - (offsetToCompressedData));
+			uncompressedImages.UncompressData( (void*)(pOriginalWklData + offsetToCompressedData), originalWKLFile.GetDataSize() - (offsetToCompressedData));
 			if( !uncompressedImages.mCompressedSize )
 			{
 				continue;
@@ -4873,26 +4887,43 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 
 				//Uncompressed image header for translated data
 				translatedWklData.mpImageInfos[imageIndex]                      = uncompressedImageData.mpImageInfos[imageIndex];
-				translatedWklData.mpImageInfos[imageIndex].width                = SwapByteOrder((unsigned short)translatedImage.mBitmapData.mInfoHeader.mImageWidth);
-				translatedWklData.mpImageInfos[imageIndex].height               = SwapByteOrder((unsigned short)translatedImage.mBitmapData.mInfoHeader.mImageHeight);
-				translatedWklData.mpImageInfos[imageIndex].offsetBytesFromStart = SwapByteOrder((unsigned short)offsetFromStart);
-				translatedWklData.mpImageInfos[imageIndex].numBytes             = SwapByteOrder((unsigned short)translatedImage.mBitmapData.mColorData.mSizeInBytes);
+				translatedWklData.mpImageInfos[imageIndex].width                = ((unsigned short)translatedImage.mBitmapData.mInfoHeader.mImageWidth);
+				translatedWklData.mpImageInfos[imageIndex].height               = ((unsigned short)translatedImage.mBitmapData.mInfoHeader.mImageHeight);
+				translatedWklData.mpImageInfos[imageIndex].offsetBytesFromStart = ((unsigned short)offsetFromStart);
+				translatedWklData.mpImageInfos[imageIndex].numBytes             = ((unsigned short)translatedImage.mBitmapData.mColorData.mSizeInBytes);
+				translatedWklData.mpImageInfos[imageIndex].SwapEndianness();
 
 				const unsigned short colorBytes  = translatedImage.mBitmapData.mColorData.mSizeInBytes;
 				offsetFromStart      += colorBytes;
 				sizeOfDataToCompress += colorBytes;
 
-				//Add image data.  Todo, take this and the header and compress it all.  Fixup the pWklData header.
 				char* pImageData = new char[colorBytes];
-				memcpy_s(pImageData, colorBytes, translatedImage.mBitmapData.mColorData.mpRGBA, translatedImage.mBitmapData.mColorData.mSizeInBytes);
-				translatedWklData.mImageData.push_back( pImageData );
+				memcpy_s(pImageData, colorBytes, translatedImage.mBitmapData.mColorData.mpRGBA, colorBytes);
+				translatedWklData.mImageData.push_back( WklUncompressedData::TranslatedImageData(pImageData, colorBytes) );
 			}
 			
 			//Put all of the data that needs to be compressed into a single contiguous block of memory
+			const unsigned short numImagesBigEndian = SwapByteOrder(translatedWklData.mNumImages);
+			sizeOfDataToCompress += sizeof(WklUncompressedData::ImageInfo)*(uncompressedImageData.mNumImages + 1); //+1 for the initial 16 bytes which just contain the number of images
 			char* pDataToCompress = new char[sizeOfDataToCompress];
 			memset(pDataToCompress, 0, sizeOfDataToCompress);
-			memcpy_s(pDataToCompress, sizeOfDataToCompress, &translatedWklData.mNumImages, sizeof(translatedWklData.mNumImages));
+			memcpy_s(pDataToCompress, sizeOfDataToCompress, &numImagesBigEndian, sizeof(numImagesBigEndian));
 			memcpy_s(pDataToCompress + 0x10, sizeOfDataToCompress - 0x10, translatedWklData.mpImageInfos, sizeof(WklUncompressedData::ImageInfo)*uncompressedImageData.mNumImages);
+
+			//Copy over image data
+			unsigned short baseOffset = sizeof(WklUncompressedData::ImageInfo)*uncompressedImageData.mNumImages + 0x10;
+			for(unsigned short imageIndex = 0; imageIndex < (unsigned short)translatedWklData.mImageData.size(); ++imageIndex)
+			{
+				memcpy_s(pDataToCompress + baseOffset, sizeOfDataToCompress - baseOffset, translatedWklData.mImageData[imageIndex].pColorData, translatedWklData.mImageData[imageIndex].dataSize);
+
+				baseOffset += translatedWklData.mImageData[imageIndex].dataSize;
+			}
+
+			FileWriter outFile1;
+			if( outFile1.OpenFileForWrite("a:\\test.bin") )
+			{
+				outFile1.WriteData(pDataToCompress, sizeOfDataToCompress);
+			}
 
 			//Compress the data
 			PRSCompressor compressedTranslatedData;
@@ -4903,14 +4934,22 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 			offsetToImageBlock    += compressedTranslatedData.mCompressedSize;
 
 			//Write out the compressed data
-			outFile.WriteDataAtOffset(compressedTranslatedData.mpCompressedData, compressedTranslatedData.mCompressedSize, imageDataAddress + compressedInfo[i].offset);
+			//outFile.WriteDataAtOffset(compressedTranslatedData.mpCompressedData, compressedTranslatedData.mCompressedSize, imageDataAddress + compressedInfo[i].offset);
+			memcpy_s(pNewWklData + imageDataAddress + compressedInfo[i].offset, originalWKLFile.GetDataSize(), compressedTranslatedData.mpCompressedData, compressedTranslatedData.mCompressedSize);
+
+			//Now swap the byte order
+			compressedInfo[i].offset = SwapByteOrder(compressedInfo[i].offset);
 
 			//Cleanup
 			delete[] pDataToCompress;
 		}
 
 		//Write out the header
-		outFile.WriteDataAtOffset(compressedInfo, sizeof(compressedInfo), imageDataAddress);
+		memcpy_s(pNewWklData + imageDataAddress, originalWKLFile.GetDataSize(), compressedInfo, sizeof(compressedInfo));
+
+		outFile.WriteData(pNewWklData, originalWKLFile.GetDataSize());
+
+		delete[] pNewWklData;
 	}
 
 	return true;

@@ -315,6 +315,7 @@ Found a match in WKL22.BIN @0x0005479e
 
 WKL file:
 -Loaded @0x0021F800
+-Uncompressed @06068BF0
 -Uncompressed Data Deader:
    -In the first 16 bytes, first two bytes specify the number of images
    -For each image, there are 16 bytes of info.  short Width, short Height, short unknown, short unknown2, 
