@@ -18,7 +18,6 @@ ExtractRawText d:\Rizwan\SakuraWars\TranslatedTBL d:\Rizwan\SakuraWars\Translate
 CreateTranslatedFontSheets D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\8x8.bmp d:\Rizwan\SakuraWars\TranslatedFontSheets
 ExtractRawText d:\rizwan\SakuraWars\Disc1 d:\rizwan\sakurawars\extracteddata\disc1\dialogtext
 PatchGameKNJ d:\Rizwan\SakuraWars\Disc1 d:\Rizwan\SakuraWars\TranslatedFontSheets\TranslatedKNJ.BIN d:\Rizwan\SakuraWars\TranslatedKNJ
-PatchGame d:\Rizwan\SakuraWars\Disc1 d:\Rizwan\SakuraWars\Disc1_Translated D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\TranslatedText D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\8x12.bmp D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\Palette.bin D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\TMapSP D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\MainMenuFont.bmp D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\MainMenuPatched.bmp D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\OptionsBgndPatched.bmp
 FindDialogOrder d:\Rizwan\SakuraWars\Disc1 D:\Rizwan\SakuraWars\ExtractedData\Disc1\DialogText
 CreateTBLSpreadsheets D:\Rizwan\SakuraWars\ExtractedData\Disc1\Dialog D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\Duplicates.txt D:\Rizwan\SakuraWars\Disc1\SAKURA1
 CreateWKLSpreadsheets D:\Rizwan\SakuraWars\ExtractedData\Disc1\WKL D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\WKLDuplicates.txt D:\Rizwan\SakuraWars\Disc1\SAKURA2
@@ -34,6 +33,7 @@ ParseEVTFiles d:\Rizwan\SakuraWars\Disc1
 ExtractWKLFiles d:\Rizwan\SakuraWars\Disc1 d:\Rizwan\SakuraWars\ExtractedData\Disc1\WKL
 FindDuplicateText D:\Rizwan\SakuraWars\ExtractedData\Disc1\WKL D:\Rizwan\SakuraWars\ExtractedData\Disc1\WKL\duplicates.txt
 FindCompressedData d:\Rizwan\SakuraWars\Disc1\SAKURA1\LOGO.SH2 d:\Rizwan\SakuraWars\Search.bin d:\Rizwan\SakuraWars\UncompressedDataResults
+PatchGame d:\Rizwan\SakuraWars\Disc1 d:\Rizwan\SakuraWars\Disc1_Translated D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\TranslatedText D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\8x12.bmp D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\Palette.bin D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\TMapSP D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\MainMenuFont.bmp D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\MainMenuPatched.bmp D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\OptionsBgndPatched.bmp D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data
 FindData.exe d:\Rizwan\SakuraWars\Disc1 d:\Rizwan\SakuraWars\Search.bin
 
 ExtractFontSheets a:\SakuraTaisen\Disc1\ a:\SakuraTaisen\ExtractedData\Disc1\FontSheets\Palette.bin a:\SakuraTaisen\ExtractedData\Disc1\FontSheets

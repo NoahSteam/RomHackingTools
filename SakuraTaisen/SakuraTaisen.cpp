@@ -4761,6 +4761,27 @@ struct WklCompressedInfo
 	unsigned int size;
 };
 
+struct WklHeader
+{
+	struct Entry
+	{
+		unsigned int offset = 0;
+		unsigned int size = 0;
+	};
+
+	static const int NumEntries = 98;
+	Entry mEntries[NumEntries];
+
+	void SwapByteOrder()
+	{
+		for(int i = 0; i < NumEntries; ++i)
+		{
+			mEntries[i].offset = ::SwapByteOrder(mEntries[i].offset);
+			mEntries[i].size   = ::SwapByteOrder(mEntries[i].size);
+		}
+	}
+};
+
 bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirectory, const string& inTranslatedDirectory)
 {
 	const unsigned int maxCompressedSize = 0x1BA4;
@@ -4781,9 +4802,10 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 	vector<FileNameContainer> wklFiles;
 	GetAllFilesOfType(allFiles, "WKL", wklFiles);
 
-	WklCompressedInfo compressedInfo[64];
-	WklCompressedInfo origCompressedInfo[64];
-
+	const int numCompressedEntries = 64;
+	WklCompressedInfo compressedInfo[numCompressedEntries];
+	WklCompressedInfo origCompressedInfo[numCompressedEntries];
+	
 	for(const FileNameContainer& fileNameInfo : wklFiles)
 	{
 		const string translatedDirectory = translatedWKLDirectory + fileNameInfo.mNoExtension + Seperators;
@@ -4812,14 +4834,7 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 
 		//Copy over original contents
 		const char* pOriginalWklData = originalWKLFile.GetData();
-		char* pNewWklData = new char[originalWKLFile.GetDataSize()];
-		if( !pNewWklData )
-		{
-			printf("PatchWKL failed.  Unable to allocate memory\n");
-			return false;
-		}
-		memcpy_s(pNewWklData, originalWKLFile.GetDataSize(), pOriginalWklData, originalWKLFile.GetDataSize());
-
+		
 		//Read in the address at which the compressed image data lives
 		unsigned long offsetToImageData = 0x100;
 		unsigned long imageDataAddress  = 0;
@@ -4827,9 +4842,16 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 		imageDataAddress = SwapByteOrder(imageDataAddress);
 
 		//Read in offset to compressed data
-		memcpy_s(&compressedInfo, sizeof(compressedInfo), &pOriginalWklData[imageDataAddress], sizeof(compressedInfo));
+		memset(&compressedInfo, 0, sizeof(compressedInfo));
 		memcpy_s(&origCompressedInfo, sizeof(origCompressedInfo), &pOriginalWklData[imageDataAddress], sizeof(origCompressedInfo));
 		
+		MemoryBlocks newWklCompressedData;
+		MemoryBlocks newWklData;
+		const unsigned int compressedImageHeaderSize = 512;
+		const unsigned int compressedDataLastOffset_original = SwapByteOrder(origCompressedInfo[numCompressedEntries - 1].offset);
+		newWklData.AddBlock(pOriginalWklData, 0, imageDataAddress);
+		newWklData.AddBlock(pOriginalWklData, imageDataAddress + compressedDataLastOffset_original, originalWKLFile.GetDataSize() - (imageDataAddress + compressedDataLastOffset_original));
+
 		const string bmpExtension(".bmp");
 		char tempBuffer[512];
 		unsigned int offsetToImageBlock = sizeof(compressedInfo);
@@ -4837,8 +4859,9 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 		{	
 			compressedInfo[i].offset = offsetToImageBlock;
 
-			if( !compressedInfo[i].size )
+			if( !origCompressedInfo[i].size )
 			{
+				compressedInfo[i].size   = 0;
 				compressedInfo[i].offset = SwapByteOrder(offsetToImageBlock);
 				continue;
 			}
@@ -4882,6 +4905,22 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 					return false;
 				}
 
+				const int imageWidth  = abs(translatedImage.mBitmapData.mInfoHeader.mImageWidth);
+				const int imageHeight = abs(translatedImage.mBitmapData.mInfoHeader.mImageHeight);
+
+				TileExtractor tileExtractor;
+				if( !tileExtractor.ExtractTiles(imageWidth, imageHeight, imageWidth, imageHeight, translatedImage) )
+				{
+					return false;
+				}
+
+				if( tileExtractor.mTiles.size() != 1 || 
+					tileExtractor.mTiles[0].mTileSize != static_cast<unsigned int>(imageWidth*imageHeight/2) )
+				{
+					printf("PatchWkl: Invalid patched image: %s\n", translatedFileName.c_str());
+					return false;
+				}
+
 				translatedImage.mBitmapData.mInfoHeader.mImageWidth = abs(translatedImage.mBitmapData.mInfoHeader.mImageWidth);
 				translatedImage.mBitmapData.mInfoHeader.mImageHeight = abs(translatedImage.mBitmapData.mInfoHeader.mImageHeight);
 
@@ -4893,12 +4932,13 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 				translatedWklData.mpImageInfos[imageIndex].numBytes             = ((unsigned short)translatedImage.mBitmapData.mColorData.mSizeInBytes);
 				translatedWklData.mpImageInfos[imageIndex].SwapEndianness();
 
-				const unsigned short colorBytes  = translatedImage.mBitmapData.mColorData.mSizeInBytes;
+				assert(tileExtractor.mTiles[0].mTileSize <= 0xffff);
+				const unsigned short colorBytes = static_cast<unsigned short>(tileExtractor.mTiles[0].mTileSize);//static_cast<unsigned short>(translatedImage.mBitmapData.mColorData.mSizeInBytes);
 				offsetFromStart      += colorBytes;
 				sizeOfDataToCompress += colorBytes;
 
 				char* pImageData = new char[colorBytes];
-				memcpy_s(pImageData, colorBytes, translatedImage.mBitmapData.mColorData.mpRGBA, colorBytes);
+				memcpy_s(pImageData, colorBytes, tileExtractor.mTiles[0].mpTile, colorBytes);
 				translatedWklData.mImageData.push_back( WklUncompressedData::TranslatedImageData(pImageData, colorBytes) );
 			}
 			
@@ -4919,12 +4959,6 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 				baseOffset += translatedWklData.mImageData[imageIndex].dataSize;
 			}
 
-			FileWriter outFile1;
-			if( outFile1.OpenFileForWrite("a:\\test.bin") )
-			{
-				outFile1.WriteData(pDataToCompress, sizeOfDataToCompress);
-			}
-
 			//Compress the data
 			PRSCompressor compressedTranslatedData;
 			compressedTranslatedData.CompressData(pDataToCompress, sizeOfDataToCompress);
@@ -4934,8 +4968,7 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 			offsetToImageBlock    += compressedTranslatedData.mCompressedSize;
 
 			//Write out the compressed data
-			//outFile.WriteDataAtOffset(compressedTranslatedData.mpCompressedData, compressedTranslatedData.mCompressedSize, imageDataAddress + compressedInfo[i].offset);
-			memcpy_s(pNewWklData + imageDataAddress + compressedInfo[i].offset, originalWKLFile.GetDataSize(), compressedTranslatedData.mpCompressedData, compressedTranslatedData.mCompressedSize);
+			newWklCompressedData.AddBlock(compressedTranslatedData.mpCompressedData, 0, compressedTranslatedData.mCompressedSize);
 
 			//Now swap the byte order
 			compressedInfo[i].offset = SwapByteOrder(compressedInfo[i].offset);
@@ -4944,12 +4977,48 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 			delete[] pDataToCompress;
 		}
 
-		//Write out the header
-		memcpy_s(pNewWklData + imageDataAddress, originalWKLFile.GetDataSize(), compressedInfo, sizeof(compressedInfo));
+		//***Write out the new file***
+		const MemoryBlocks::Block& newWklHeader = newWklData.GetBlock(0);
+		const MemoryBlocks::Block& newWklFooter = newWklData.GetBlock(1);
 
-		outFile.WriteData(pNewWklData, originalWKLFile.GetDataSize());
+		//fixup header pointers
+		WklHeader wklHeader_patched;
+		memcpy_s(&wklHeader_patched, sizeof(wklHeader_patched), pOriginalWklData, sizeof(wklHeader_patched));
+		wklHeader_patched.SwapByteOrder();
 
-		delete[] pNewWklData;
+		const unsigned int compressedDataLastOffset_patched = SwapByteOrder(compressedInfo[numCompressedEntries - 1].offset);
+		const int newDataSizeDelta                          = compressedDataLastOffset_patched - compressedDataLastOffset_original;
+		for(int headerEntry = 0; headerEntry < WklHeader::NumEntries; ++headerEntry)
+		{
+			if( wklHeader_patched.mEntries[headerEntry].offset > imageDataAddress )
+			{
+				wklHeader_patched.mEntries[headerEntry].offset += newDataSizeDelta;
+			}
+			else if( wklHeader_patched.mEntries[headerEntry].offset == imageDataAddress )
+			{
+				wklHeader_patched.mEntries[headerEntry].size = compressedDataLastOffset_patched;
+			}
+		}
+		wklHeader_patched.SwapByteOrder();
+		memcpy_s(newWklHeader.pData, sizeof(wklHeader_patched.mEntries), wklHeader_patched.mEntries, sizeof(wklHeader_patched.mEntries));
+		//done fixing header pointers
+		
+		//write header
+		outFile.WriteData(newWklHeader.pData, newWklHeader.blockSize);
+		outFile.WriteData(compressedInfo, sizeof(compressedInfo));
+
+		//write compressed image data
+		unsigned int sizeWritten = 0;
+		for(unsigned int blockIndex = 0; blockIndex < newWklCompressedData.GetNumberOfBlocks(); ++blockIndex)
+		{
+			outFile.WriteData(newWklCompressedData.GetBlock(blockIndex).pData, newWklCompressedData.GetBlock(blockIndex).blockSize);
+
+			sizeWritten += newWklCompressedData.GetBlock(blockIndex).blockSize;
+		}
+		
+		//write footer
+		outFile.WriteData(newWklFooter.pData, newWklFooter.blockSize);
+		//***Done writing new file***
 	}
 
 	return true;

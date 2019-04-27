@@ -984,6 +984,45 @@ bool TileExtractor::ExtractTiles(unsigned int inTileWidth, unsigned int inTileHe
 	return true;
 }
 
+////////////////////////////////
+//        MemoryBlocks        //
+////////////////////////////////
+MemoryBlocks::~MemoryBlocks()
+{
+	for(MemoryBlocks::Block& block : mBlocks)
+	{
+		delete[] block.pData;
+		block.pData = nullptr;
+	}
+
+	mBlocks.clear();
+}
+
+char* MemoryBlocks::AddBlock(const char* pOriginalData, unsigned int offset, unsigned int blockSize)
+{	
+	mBlocks.push_back( MemoryBlocks::Block() );
+
+	MemoryBlocks::Block& newBlock = mBlocks[mBlocks.size() - 1];
+	newBlock.pData                = new char[blockSize];
+	newBlock.blockSize            = blockSize;
+
+	memcpy_s(newBlock.pData, blockSize, pOriginalData + offset, blockSize);
+
+	return newBlock.pData;
+}
+
+size_t MemoryBlocks::GetNumberOfBlocks() const
+{
+	return mBlocks.size();
+}
+
+const MemoryBlocks::Block& MemoryBlocks::GetBlock(unsigned int blockIndex) const
+{
+	assert(blockIndex < mBlocks.size());
+
+	return mBlocks[blockIndex];
+}
+
 /////////////////////////////////
 //        PRSCompressor        //
 /////////////////////////////////

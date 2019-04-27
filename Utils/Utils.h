@@ -300,6 +300,26 @@ public:
 	void FixupIndexOfAlphaColor(const unsigned short inIndexOfAlphaColor, bool bInIs4bit);
 };
 
+class MemoryBlocks
+{
+public:
+	struct Block
+	{
+		char*        pData = nullptr;
+		unsigned int blockSize = 0;
+	};
+
+private:
+	std::vector<Block> mBlocks;
+
+public:
+	~MemoryBlocks();
+
+	char*        AddBlock(const char* pOriginalData, unsigned int offset, unsigned int blockSize);
+	size_t       GetNumberOfBlocks() const;
+	const Block& GetBlock(unsigned int blockIndex) const;
+};
+
 struct PRSCompressor
 {
 	char*         mpCompressedData = nullptr;
