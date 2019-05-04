@@ -52,6 +52,27 @@ const string LipsWord("<LIPS>");
 const string SpaceWord("<sp>");
 const unsigned short SpecialDialogIndicator = 0xC351;
 
+void PrintPaletteColors(const string& paletteFile)
+{
+	FileNameContainer fileName(paletteFile.c_str());
+
+	FileData paletteFileData;
+	if( !paletteFileData.InitializeFileData(fileName) )
+	{
+		printf("Couldn't open file %s\n", paletteFile.c_str());
+		return;
+	}
+
+	PaletteData paletteData;
+	paletteData.CreateFrom15BitData(paletteFileData.GetData(), paletteFileData.GetDataSize());
+
+	const char* pColorData = paletteData.GetData();
+	for(int i = 0; i < paletteData.GetNumColors(); ++i)
+	{
+		printf("%i) R: %u G: %u B: %u\n", i, (unsigned char)pColorData[i*4 + 2], (unsigned char)pColorData[i*4 + 1], (unsigned char)pColorData[i*4 + 0]);
+	}
+}
+
 struct BmpToSakuraConverter
 {
 	TileExtractor mTileExtractor;
@@ -2144,8 +2165,23 @@ void FindDuplicateText(const string& dialogImageDirectory, const string& outFile
 	}
 }
 
-bool FixupSLG(const string& rootDir, const string& outDir, const string& newFontPaletteFile)
+bool FixupSLG(const string& rootDir, const string& outDir, const string& inTranslatedDirectory, const string& newFontPaletteFile)
 {
+	//We need the palette from the patched stats menu image
+	const string translatedWKLDirectory  = inTranslatedDirectory + string("WKL\\");
+	const string patchedStatsImagePath   = translatedWKLDirectory + string("StatsMenuPatched.bmp");
+
+	BmpToSakuraConverter statsImage;
+	if( !statsImage.ConvertBmpToSakuraFormat(patchedStatsImagePath, BmpToSakuraConverter::BLACK) )
+	{
+		printf("FixupSLG: Unable to convert stats image %s to sakura format.\n", patchedStatsImagePath.c_str());
+		return false;
+	}
+	if( statsImage.mPalette.GetSize() != 32 )
+	{
+		printf("FixupSLG: Stats image %s is of an invalid size.  It needs to be a 16 color 32 byte palette.\n", patchedStatsImagePath.c_str());
+	}
+
 	FileData newPaletteData;
 	if( !newPaletteData.InitializeFileData(newFontPaletteFile.c_str(), newFontPaletteFile.c_str()) )
 	{
@@ -2174,6 +2210,11 @@ bool FixupSLG(const string& rootDir, const string& outDir, const string& newFont
 			printf("FixupSLG: Unable to open %s file.\n", filePath.c_str());
 			return false;
 		}
+
+		//***Fix StatsMenu Palette***
+	//	const int offsetToStatsMenuPalette = 0x00011b78;
+	//	memcpy_s((void*)(origSlgData.GetData() + offsetToStatsMenuPalette), origSlgData.GetDataSize(), statsImage.mPalette.GetData(), statsImage.mPalette.GetSize());
+		//***Done fixing StatsMenu palette
 
 		//***Fix the character spacing***
 		const int offsetTileSpacingX  = 0x0002167B; //Used when all text is displayed
@@ -4782,12 +4823,81 @@ struct WklHeader
 	}
 };
 
+class BmpToSakuraImage
+{
+	TileExtractor tileExtractor;
+
+public:
+	bool Initialize(const string& translatedFileName)
+	{
+		BitmapReader translatedImage;
+		if( !translatedImage.ReadBitmap(translatedFileName.c_str()) )
+		{
+			printf("BmpToSakuraImage::Initialize:  Unable to open %s\n", translatedFileName.c_str());
+			return false;
+		}
+
+		const int imageWidth  = abs(translatedImage.mBitmapData.mInfoHeader.mImageWidth);
+		const int imageHeight = abs(translatedImage.mBitmapData.mInfoHeader.mImageHeight);
+		
+		if( !tileExtractor.ExtractTiles(imageWidth, imageHeight, imageWidth, imageHeight, translatedImage) )
+		{
+			printf("BmpToSakuraImage::Initialize:  Unable to extract image %s\n", translatedFileName.c_str());
+			return false;
+		}
+
+		if( tileExtractor.mTiles.size() != 1 || 
+			tileExtractor.mTiles[0].mTileSize != static_cast<unsigned int>(imageWidth*imageHeight/2) )
+		{
+			printf("BmpToSakuraImage::Initialize:  Invalid extracted image %s\n", translatedFileName.c_str());
+			return false;
+		}
+
+		return true;
+	}
+
+	const char* GetImageData() const
+	{
+		return tileExtractor.mTiles[0].mpTile;
+	}
+
+	unsigned int GetImageDataSize() const
+	{
+		return tileExtractor.mTiles[0].mTileSize;
+	}
+};
+
 bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirectory, const string& inTranslatedDirectory)
 {
-	const unsigned int maxCompressedSize = 0x1BA4;
+	//Addresses for where the stats menu image lives in each file
+	const unsigned int statsMenuImageBytes = 152*184/2;
+	std::map<string, unsigned int> statsMenuAddresses;
+	statsMenuAddresses["WKL01"] = 0x00037a18;
+	statsMenuAddresses["WKL02"] = 0x0003d6b0;
+	statsMenuAddresses["WKL03"] = 0x0003d128;
+	statsMenuAddresses["WKL04"] = 0x0003cc28;
+	statsMenuAddresses["WKL05"] = 0x0003cd68;
+	statsMenuAddresses["WKL06"] = 0x000390d8;
+	statsMenuAddresses["WKL07"] = 0x0003c450;
+	statsMenuAddresses["WKL08"] = 0x00038950;
+	statsMenuAddresses["WKL09"] = 0x0003dc68;
+	statsMenuAddresses["WKL10"] = 0x00039668;
+	statsMenuAddresses["WKL11"] = 0x000426e4;
+	statsMenuAddresses["WKL21"] = 0x00033594;
+	statsMenuAddresses["WKL22"] = 0x00004718;
+	//SYSSPR.BIN @0x00004688
 
-	const string outDirectory           = inPatchedDirectory + Seperators + string("SAKURA2\\");
-	const string translatedWKLDirectory = inTranslatedDirectory + string("WKL\\");
+	const unsigned int maxCompressedSize = 0x1BA4;
+	const string outDirectory            = inPatchedDirectory + Seperators + string("SAKURA2\\");
+	const string translatedWKLDirectory  = inTranslatedDirectory + string("WKL\\");
+	const string patchedStatsImagePath   = translatedWKLDirectory + string("StatsMenuPatched.bmp");
+
+	//Load patched image data
+	BmpToSakuraImage patchedStatsMenu;
+	if( !patchedStatsMenu.Initialize(patchedStatsImagePath) )
+	{
+		return false;
+	}
 
 	//Find all files
 	vector<FileNameContainer> allFiles;
@@ -4849,8 +4959,19 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 		MemoryBlocks newWklData;
 		const unsigned int compressedImageHeaderSize = 512;
 		const unsigned int compressedDataLastOffset_original = SwapByteOrder(origCompressedInfo[numCompressedEntries - 1].offset);
+		const unsigned int statsImageAddress = statsMenuAddresses[fileNameInfo.mNoExtension];
+		if( imageDataAddress < statsImageAddress )
+		{
+			printf("PatchWKL failed.  In %s, ImageData is coming before stats image.\n", outFileName.mFullPath.c_str());
+			return false;
+		}
+
+		//create data blocks
 		newWklData.AddBlock(pOriginalWklData, 0, imageDataAddress);
 		newWklData.AddBlock(pOriginalWklData, imageDataAddress + compressedDataLastOffset_original, originalWKLFile.GetDataSize() - (imageDataAddress + compressedDataLastOffset_original));
+
+		//copy over patched data
+		newWklData.WriteInBlock(0, statsImageAddress, patchedStatsMenu.GetImageData(), patchedStatsMenu.GetImageDataSize());
 
 		const string bmpExtension(".bmp");
 		char tempBuffer[512];
@@ -5838,7 +5959,7 @@ bool PatchGame(const string& rootSakuraTaisenDirectory, const string& patchedSak
 	}
 
 	//Step 4
-	if( !FixupSLG(rootSakuraTaisenDirectory, patchedSakuraTaisenDirectory, newPaletteFileName) )
+	if( !FixupSLG(rootSakuraTaisenDirectory, patchedSakuraTaisenDirectory, inTranslatedDataDirectory, newPaletteFileName) )
 	{
 		printf("FixupSLG failed.  Patch unsuccessful.\n");
 		return false;
@@ -5906,6 +6027,7 @@ void PrintHelp()
 	printf("ExtractWKLFiles rootSakuraTaisenDirectory outDirectory\n");
 	printf("ExtractTMapSP rootSakuraTaisenDirectory paletteFile outDirectory\n");
 	printf("PatchTMapSP sakuraDirectory patchDataPath\n");
+	printf("PrintPaletteColors fileName\n");
 	printf("CompressFile inFilePath outFilePath\n");
 	printf("FindCompressedFile compressedFile uncompressedFile\n");
 	printf("PatchGame rootSakuraTaisenDirectory patchedSakuraTaisenDirectory translatedTextDirectory fontSheet originalPalette patchedTMapSpDataPath mainMenuFontSheetPath mainMenuBgndPatchedImage optionsImagePatched translatedDataDirectory \n");
@@ -6148,6 +6270,12 @@ int main(int argc, char *argv[])
 		const string outDirectory = string(argv[4]) + Seperators;
 
 		FindCompressedData(compressedFile, uncompressedFile, outDirectory);
+	}
+	else if(command == "PrintPaletteColors" && argc == 3 )
+	{
+		const string inFile(argv[2]);
+		
+		PrintPaletteColors(inFile);
 	}
 	else
 	{

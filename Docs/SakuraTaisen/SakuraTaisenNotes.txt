@@ -322,3 +322,12 @@ WKL file:
 512 header
 -Palette for "Sakura" image is  @00073D18
 -Palette offset is specified at @0x278
+
+Stats image:
+-Header @0336f8 [0000000E0 IN WKL01] points to another header
+-In this second header, the third entry is an offset [35b0] to another header.
+-In this third header, the stats image us tge second entry
+
+Stats image palette:
+Found a match in 0SLG.BIN @0x00011b78
+Found a match in SLG.BIN @0x00011b78
