@@ -322,3 +322,11 @@ WKL file:
 512 header
 -Palette for "Sakura" image is  @00073D18
 -Palette offset is specified at @0x278
+
+:For image next to character number:
+-Data block is pointed to at index 0xE8 in the wkl header
+-Data block header is [uint offset, uint size]
+-The index to the next block is at index 3
+-This block starts with a 2 byte entry saying how many images
+-8 bytes later the image data starts
+-Image Data[uint offset, uint size, ushort width, ushort height, uint unknown]
