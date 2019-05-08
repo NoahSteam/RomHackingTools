@@ -565,17 +565,17 @@ bool PaletteData::CreateFrom15BitData(const char* pInPaletteData, int inPaletteS
 	}
 
 	//Create 32bit palette from the 16 bit(5:5:5 bgr) palette in SakuraTaisen
-	const int numColorInPalette = inPaletteSize/2;
-	mNumBytesInPalette          = numColorInPalette*4;
-	mpPaletteData               = new char[mNumBytesInPalette];
-	const float full5BitValue   = (float)0x1f;
+	mNumColors                = inPaletteSize/2;
+	mNumBytesInPalette        = mNumColors*4;
+	mpPaletteData             = new char[mNumBytesInPalette];
+	const float full5BitValue = (float)0x1f;
 	for(int i = 0, origIdx = 0; i < mNumBytesInPalette; i += 4, origIdx += 2)
 	{
 		unsigned short color = ((pInPaletteData[origIdx] << 8) + (unsigned char)pInPaletteData[origIdx+1]);
-
+		
 		//Ugly conversion of 5bit values to 8bit.  Probably a better way to do this.
 		//Masking the r,g,b components and then bringing the result into a [0,255] range.
-		mpPaletteData[i+2]  = (char)floor( ( ((color & 0x001f)/full5BitValue) * 255.f) + 0.5f);
+		mpPaletteData[i+2] = (char)floor( ( ((color & 0x001f)/full5BitValue) * 255.f) + 0.5f);
 		mpPaletteData[i+1] = (char)floor( ( ( ((color & 0x03E0) >> 5)/full5BitValue) * 255.f) + 0.5f);
 		mpPaletteData[i+0] = (char)floor( ( ( ((color & 0x7C00) >> 10)/full5BitValue) * 255.f) + 0.5f);
 		mpPaletteData[i+3] = 0;
@@ -593,9 +593,9 @@ bool PaletteData::CreateFrom24BitData(const char* pInPaletteData, int inPaletteS
 	}
 
 	//Create 32bit palette from the 24 bit(bgr) palette in SakuraTaisen
-	const int numColorInPalette = inPaletteSize/4;
-	mNumBytesInPalette          = numColorInPalette*4;
-	mpPaletteData               = new char[mNumBytesInPalette];
+	mNumColors         = inPaletteSize/4;
+	mNumBytesInPalette = mNumColors*4;
+	mpPaletteData      = new char[mNumBytesInPalette];
 	for(int i = 0, origIdx = 0; i < mNumBytesInPalette; i += 4, origIdx += 4)
 	{
 		unsigned char blue  = pInPaletteData[origIdx + 1];
@@ -1021,6 +1021,24 @@ const MemoryBlocks::Block& MemoryBlocks::GetBlock(unsigned int blockIndex) const
 	assert(blockIndex < mBlocks.size());
 
 	return mBlocks[blockIndex];
+}
+
+bool MemoryBlocks::WriteInBlock(unsigned int blockIndex, unsigned int offset, const char* pData, unsigned int dataSize)
+{
+	if( blockIndex >= mBlocks.size() )
+	{
+		printf("MemoryBlocks::WriteInBlock: Invalid block index\n");
+		return false;
+	}
+
+	if( offset + dataSize >= mBlocks[blockIndex].blockSize )
+	{
+		printf("MemoryBlocks::WriteInBlock: Data will not fit in the block\n");
+		return false;
+	}
+
+	memcpy_s(mBlocks[blockIndex].pData + offset, mBlocks[blockIndex].blockSize - offset, pData, dataSize);
+	return true;
 }
 
 /////////////////////////////////

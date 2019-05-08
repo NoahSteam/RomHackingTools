@@ -318,6 +318,7 @@ public:
 	char*        AddBlock(const char* pOriginalData, unsigned int offset, unsigned int blockSize);
 	size_t       GetNumberOfBlocks() const;
 	const Block& GetBlock(unsigned int blockIndex) const;
+	bool         WriteInBlock(unsigned int blockIndex, unsigned int offset, const char* pData, unsigned int dataSize);
 };
 
 struct PRSCompressor
