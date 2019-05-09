@@ -50,6 +50,7 @@ const string Seperators("\\");
 const string NewLineWord("<br>");
 const string LipsWord("<LIPS>");
 const string SpaceWord("<sp>");
+const string BMPExtension(".bmp");
 const unsigned short SpecialDialogIndicator = 0xC351;
 
 void PrintPaletteColors(const string& paletteFile)
@@ -5189,6 +5190,7 @@ void ExtractWKLFiles(const string& sakuraDirectory, const string& outDirectory)
 
 		const char* pWklData = wklFile.GetData();
 
+		//***Character Nmes & Special Moves****
 		//Read in the address at which the compressed image data lives
 		unsigned long offsetToImageData = 0x100;
 		unsigned long imageDataAddress  = 0;
@@ -5225,6 +5227,82 @@ void ExtractWKLFiles(const string& sakuraDirectory, const string& outDirectory)
 			uncompressedImageData.ReadInImages(uncompressedImages.mpUncompressedData);
 			uncompressedImageData.DumpImages(paletteData.mpPaletteData, paletteData.mPaletteSize, prefix, outSubDirName);
 		}
+		//***Done with Character Names & Special Moves
+
+		//***Other images***
+		unsigned long offsetToImageData2 = 0xE8;
+		unsigned long imageDataAddress2  = 0;
+		memcpy_s(&imageDataAddress2, sizeof(imageDataAddress2), &pWklData[offsetToImageData2], sizeof(imageDataAddress));
+		imageDataAddress2 = SwapByteOrder(imageDataAddress2);
+
+		struct WklMiscHeader
+		{
+			unsigned int offset;
+			unsigned int size;
+
+			void SwapByteOrder()
+			{
+				offset = ::SwapByteOrder(offset);
+				size   = ::SwapByteOrder(size);
+			}
+		};
+
+		struct WklMiscImageHeader
+		{
+			unsigned int   offset;
+			unsigned int   offset2;
+			unsigned short width;
+			unsigned short height;
+			unsigned int   unknown;
+
+			void SwapByteOrder()
+			{
+				offset   = ::SwapByteOrder(offset);
+				offset2  = ::SwapByteOrder(offset2);
+				width    = ::SwapByteOrder(width);
+				height   = ::SwapByteOrder(height);
+				unknown  = ::SwapByteOrder(unknown);
+			}
+		};
+
+		//Read the first entry so we can now how big the header is
+		WklMiscHeader firstEntry;
+		memcpy_s(&firstEntry, sizeof(firstEntry), &pWklData[imageDataAddress2], sizeof(firstEntry));
+		firstEntry.SwapByteOrder();
+
+		const unsigned int numEntries = firstEntry.offset/sizeof(WklMiscHeader);
+		WklMiscHeader* pMiscHeaders   = new WklMiscHeader[numEntries];
+		memcpy_s(pMiscHeaders, sizeof(WklMiscHeader)*numEntries, &pWklData[imageDataAddress2], sizeof(WklMiscHeader)*numEntries);
+		for(unsigned int entryIndex = 0; entryIndex < numEntries; ++entryIndex)
+		{
+			pMiscHeaders[entryIndex].SwapByteOrder();
+
+			unsigned short numMiscImages = 0;
+			memcpy_s(&numMiscImages, sizeof(numMiscImages), &pWklData[imageDataAddress2 + pMiscHeaders[entryIndex].offset], sizeof(numMiscImages));
+			numMiscImages = SwapByteOrder(numMiscImages);
+
+			WklMiscImageHeader* pImageHeaders = new WklMiscImageHeader[numMiscImages];
+			const unsigned int imageHeaderEnd = imageDataAddress2 + pMiscHeaders[entryIndex].offset + 8;
+			const unsigned int miscImageHeaderEnd = imageHeaderEnd + sizeof(WklMiscImageHeader)*(numMiscImages) + 8; //Last 8 bytes is some uknown thing
+			memcpy_s(pImageHeaders, sizeof(WklMiscImageHeader)*numMiscImages, &pWklData[imageHeaderEnd], sizeof(WklMiscImageHeader)*numMiscImages);
+			for(unsigned short imageIndex = 0; imageIndex < numMiscImages; ++imageIndex)
+			{	
+				WklMiscImageHeader& imageHeader = pImageHeaders[imageIndex];
+				imageHeader.SwapByteOrder();
+
+				//Dump iamge
+				sprintf_s(tempBuffer, 512, "Misc_%i_%0x_", entryIndex, imageIndex);
+				const string prefix = string(tempBuffer);
+
+				const string outFileName = outSubDirName + prefix + BMPExtension;
+				const char* pImageData   = &pWklData[miscImageHeaderEnd + imageHeader.offset + imageHeader.offset2];
+				ExtractImageFromData(pImageData, (imageHeader.width*imageHeader.height)/2, outFileName, paletteData.mpPaletteData, paletteData.mPaletteSize, imageHeader.width, imageHeader.height, 1, 16, 0, false);
+				
+			}
+			delete[] pImageHeaders;
+		}
+		delete[] pMiscHeaders;
+		//***Done with Other Images
 	}
 }
 
