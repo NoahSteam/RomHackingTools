@@ -4405,14 +4405,87 @@ bool CreateWKLSpreadSheets(const string& dialogImageDirectory, const string& dup
 		htmlFile.WriteString("\t<th>Has a Duplicate</th>\n");
 		htmlFile.WriteString("\t</tr>\n");
 
+		map<string, bool> validMiscFileNames;
+		validMiscFileNames["Misc_0_1a"] = true;
+		validMiscFileNames["Misc_0_1b"] = true;
+		validMiscFileNames["Misc_0_1c"] = true;
+		validMiscFileNames["Misc_0_1d"] = true;
+		validMiscFileNames["Misc_0_1e"] = true;
+		validMiscFileNames["Misc_0_1f"] = true;
+		validMiscFileNames["Misc_0_5"]  = true;
+		validMiscFileNames["Misc_0_6"]  = true;
+		validMiscFileNames["Misc_0_7"]  = true;
+		validMiscFileNames["Misc_0_8"]  = true;
+		validMiscFileNames["Misc_0_9"]  = true;
+		validMiscFileNames["Misc_0_10"] = true;
+		validMiscFileNames["Misc_0_11"] = true;
+		validMiscFileNames["Misc_0_12"] = true;
+		validMiscFileNames["Misc_0_13"] = true;
+		validMiscFileNames["Misc_0_14"] = true;
+		validMiscFileNames["Misc_0_15"] = true;
+		validMiscFileNames["Misc_0_16"] = true;
+		validMiscFileNames["Misc_0_17"] = true;
+		validMiscFileNames["Misc_0_18"] = true;
+		validMiscFileNames["Misc_0_19"] = true;
+		validMiscFileNames["Misc_0_20"] = true;
+		validMiscFileNames["Misc_0_a"]  = true;
+		validMiscFileNames["Misc_0_b"]  = true;
+		validMiscFileNames["Misc_0_c"]  = true;
+		validMiscFileNames["Misc_0_d"]  = true;
+		validMiscFileNames["Misc_0_e"]  = true;
+		validMiscFileNames["Misc_0_f"]  = true;
+		validMiscFileNames["Misc_3_3"]  = true;
+		validMiscFileNames["Misc_3_4"]  = true;
+		validMiscFileNames["Misc_3_15"] = true;
+		validMiscFileNames["Misc_8_4"]  = true;
+		validMiscFileNames["Misc_13_0"] = true;
+		validMiscFileNames["Misc_13_1"] = true;
+		validMiscFileNames["Misc_14_1"] = true;
+		validMiscFileNames["Misc_14_2"] = true;
+		validMiscFileNames["Misc_14_3"] = true;
+		validMiscFileNames["Misc_14_4"] = true;
+		validMiscFileNames["Misc_15_1"] = true;
+		validMiscFileNames["Misc_15_2"] = true;
+		
+		const string MiscPrefix("Misc_");
+
 		//Get name of info file (0100.BIN, etc.)
 		const string infoFileName = iter->first;
 
-		//Create entries for all images
-		int num = 0;
+		//Order the filename list so that Misc files appear last
+		vector<const FileNameContainer*> imagesToProcess;
 		for(const FileNameContainer& fileNameInfo : iter->second)
 		{
-			const unsigned long crc   = crcMap[&iter->second[num]];
+			if( fileNameInfo.mNoExtension.compare(0, MiscPrefix.length(), MiscPrefix) == 0 )
+			{
+				continue;
+			}
+			imagesToProcess.push_back(&fileNameInfo);
+		}
+		for(const FileNameContainer& fileNameInfo : iter->second)
+		{
+			if( fileNameInfo.mNoExtension.compare(0, MiscPrefix.length(), MiscPrefix) == 0 )
+			{
+				imagesToProcess.push_back(&fileNameInfo);
+			}
+		}
+
+		//Create entries for all images
+		int num = 0;
+		for(const FileNameContainer* pFileNameInfo : imagesToProcess)
+		{
+			const FileNameContainer& fileNameInfo = *pFileNameInfo;
+
+			//Only output certain of the Misc files
+			if( fileNameInfo.mNoExtension.compare(0, MiscPrefix.length(), MiscPrefix) == 0 )
+			{
+				if( validMiscFileNames.find(fileNameInfo.mNoExtension) == validMiscFileNames.end() )
+				{
+					continue;
+				}
+			}
+
+			const unsigned long crc   = crcMap[&fileNameInfo];
 			const bool bIsDuplicate   = dupCrcMap.find(crc) != dupCrcMap.end();
 			const char* bgColor       = "fefec8";
 			
@@ -5291,7 +5364,7 @@ void ExtractWKLFiles(const string& sakuraDirectory, const string& outDirectory)
 				imageHeader.SwapByteOrder();
 
 				//Dump iamge
-				sprintf_s(tempBuffer, 512, "Misc_%i_%0x_", entryIndex, imageIndex);
+				sprintf_s(tempBuffer, 512, "Misc_%i_%0x", entryIndex, imageIndex);
 				const string prefix = string(tempBuffer);
 
 				const string outFileName = outSubDirName + prefix + BMPExtension;
