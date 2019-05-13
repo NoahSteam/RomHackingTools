@@ -339,3 +339,6 @@ Found a match in SLG.BIN @0x00011b78
 -This block starts with a 2 byte entry saying how many images
 -8 bytes later the image data starts
 -Image Data[uint offset, uint size, ushort width, ushort height, uint unknown]
+
+:Battle Mech Palette:
+-Written to 0605BEA0 from 00286B1C.  The data appears to be offset in the patched file.  Should be read from 0006730a in WKL01.bin
