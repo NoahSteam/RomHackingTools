@@ -78,10 +78,10 @@ struct BmpToSakuraConverter
 {
 	TileExtractor mTileExtractor;
 	PaletteData   mPalette;
-	static const unsigned short CYAN = 0xe07f; //In little endian order
+	static const unsigned short CYAN  = 0xe07f; //In little endian order
 	static const unsigned short WHITE = 0xff7f;
 	static const unsigned short BLACK = 0;
-	bool ConvertBmpToSakuraFormat(const string& inBmpPath, const unsigned short inAlphaColor = CYAN, unsigned int* pTileWidth = 0, unsigned int* pTileHeight = 0)
+	bool ConvertBmpToSakuraFormat(const string& inBmpPath, bool bFixupAlphaColor, const unsigned short inAlphaColor = CYAN, unsigned int* pTileWidth = 0, unsigned int* pTileHeight = 0)
 	{
 		//Read in translated font sheet
 		BitmapReader origBmp;
@@ -105,36 +105,49 @@ struct BmpToSakuraConverter
 		}
 
 		//Fix up palette
-		//First index needs to have the transparent color
-		int indexOfAlphaColor = -1;
-		for(int i = 0; i < mPalette.GetNumColors(); ++i)
-		{
-			assert(i * 2 < mPalette.GetSize());
-
-			const unsigned short color = *((short*)(mPalette.GetData() + i * 2));
-			if(color == inAlphaColor)
+		if( bFixupAlphaColor )
+		{	
+			//First index needs to have the transparent color
+			int indexOfAlphaColor = -1;
+			for(int i = 0; i < mPalette.GetNumColors(); ++i)
 			{
-				const unsigned short oldColor0 = *((unsigned short*)mPalette.GetData());
-				mPalette.SetValue(0, inAlphaColor);
-				mPalette.SetValue(i, oldColor0);
-				indexOfAlphaColor = i;
-				break;
+				assert(i * 2 < mPalette.GetSize());
+
+				const unsigned short color = *((short*)(mPalette.GetData() + i * 2));
+				if(color == inAlphaColor)
+				{
+					const unsigned short oldColor0 = *((unsigned short*)mPalette.GetData());
+					mPalette.SetValue(0, inAlphaColor);
+					mPalette.SetValue(i, oldColor0);
+					indexOfAlphaColor = i;
+					break;
+				}
+			}
+
+			if(indexOfAlphaColor == -1)
+			{
+				printf("Alpha Color not found.  Palette will not be correct. \n");
+				indexOfAlphaColor = 0;
+			}
+
+			//Fix up color data now that the palette has been modified
+			if( indexOfAlphaColor != -1 )
+			{
+				mTileExtractor.FixupIndexOfAlphaColor((unsigned short)indexOfAlphaColor, origBmp.mBitmapData.mInfoHeader.mBitCount == 4);
 			}
 		}
 
-		if(indexOfAlphaColor == -1)
-		{
-			printf("Alpha Color not found.  Palette will not be correct. \n");
-			indexOfAlphaColor = 0;
-		}
-
-		//Fix up color data now that the palette has been modified
-		if( indexOfAlphaColor != -1 )
-		{
-			mTileExtractor.FixupIndexOfAlphaColor((unsigned short)indexOfAlphaColor, origBmp.mBitmapData.mInfoHeader.mBitCount == 4);
-		}
-
 		return true;
+	}
+
+	const char* GetImageData() const
+	{
+		return mTileExtractor.mTiles[0].mpTile;
+	}
+
+	unsigned int GetImageDataSize() const
+	{
+		return mTileExtractor.mTiles[0].mTileSize;
 	}
 };
 
@@ -2173,7 +2186,7 @@ bool FixupSLG(const string& rootDir, const string& outDir, const string& inTrans
 	const string patchedStatsImagePath   = translatedWKLDirectory + string("StatsMenuPatched.bmp");
 
 	BmpToSakuraConverter statsImage;
-	if( !statsImage.ConvertBmpToSakuraFormat(patchedStatsImagePath, BmpToSakuraConverter::BLACK) )
+	if( !statsImage.ConvertBmpToSakuraFormat(patchedStatsImagePath, true, BmpToSakuraConverter::BLACK) )
 	{
 		printf("FixupSLG: Unable to convert stats image %s to sakura format.\n", patchedStatsImagePath.c_str());
 		return false;
@@ -2332,7 +2345,7 @@ bool FixupSakura(const string& rootDir, const string& inTranslatedOptionsBmp)
 	//****Patch Options Image****
 	//Compress bgnd image
 	BmpToSakuraConverter patchedOptionsImage;
-	if( !patchedOptionsImage.ConvertBmpToSakuraFormat(inTranslatedOptionsBmp, BmpToSakuraConverter::CYAN) )
+	if( !patchedOptionsImage.ConvertBmpToSakuraFormat(inTranslatedOptionsBmp, true, BmpToSakuraConverter::CYAN) )
 	{
 		printf("FixupSakura: Couldn't convert image: %s.\n", inTranslatedOptionsBmp.c_str());
 		return false;
@@ -4897,47 +4910,33 @@ struct WklHeader
 	}
 };
 
-class BmpToSakuraImage
+struct WklMiscHeader
 {
-	TileExtractor tileExtractor;
+	unsigned int offset;
+	unsigned int size;
 
-public:
-	bool Initialize(const string& translatedFileName)
+	void SwapByteOrder()
 	{
-		BitmapReader translatedImage;
-		if( !translatedImage.ReadBitmap(translatedFileName.c_str()) )
-		{
-			printf("BmpToSakuraImage::Initialize:  Unable to open %s\n", translatedFileName.c_str());
-			return false;
-		}
-
-		const int imageWidth  = abs(translatedImage.mBitmapData.mInfoHeader.mImageWidth);
-		const int imageHeight = abs(translatedImage.mBitmapData.mInfoHeader.mImageHeight);
-		
-		if( !tileExtractor.ExtractTiles(imageWidth, imageHeight, imageWidth, imageHeight, translatedImage) )
-		{
-			printf("BmpToSakuraImage::Initialize:  Unable to extract image %s\n", translatedFileName.c_str());
-			return false;
-		}
-
-		if( tileExtractor.mTiles.size() != 1 || 
-			tileExtractor.mTiles[0].mTileSize != static_cast<unsigned int>(imageWidth*imageHeight/2) )
-		{
-			printf("BmpToSakuraImage::Initialize:  Invalid extracted image %s\n", translatedFileName.c_str());
-			return false;
-		}
-
-		return true;
+		offset = ::SwapByteOrder(offset);
+		size   = ::SwapByteOrder(size);
 	}
+};
 
-	const char* GetImageData() const
-	{
-		return tileExtractor.mTiles[0].mpTile;
-	}
+struct WklMiscImageHeader
+{
+	unsigned int   offset;
+	unsigned int   offset2;
+	unsigned short width;
+	unsigned short height;
+	unsigned int   unknown;
 
-	unsigned int GetImageDataSize() const
+	void SwapByteOrder()
 	{
-		return tileExtractor.mTiles[0].mTileSize;
+		offset   = ::SwapByteOrder(offset);
+		offset2  = ::SwapByteOrder(offset2);
+		width    = ::SwapByteOrder(width);
+		height   = ::SwapByteOrder(height);
+		unknown  = ::SwapByteOrder(unknown);
 	}
 };
 
@@ -4967,8 +4966,8 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 	const string patchedStatsImagePath   = translatedWKLDirectory + string("StatsMenuPatched.bmp");
 
 	//Load patched image data
-	BmpToSakuraImage patchedStatsMenu;
-	if( !patchedStatsMenu.Initialize(patchedStatsImagePath) )
+	BmpToSakuraConverter patchedStatsMenu;
+	if( !patchedStatsMenu.ConvertBmpToSakuraFormat(patchedStatsImagePath, false) )
 	{
 		return false;
 	}
@@ -5156,8 +5155,8 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 
 			//Compress the data
 			PRSCompressor compressedTranslatedData;
-			compressedTranslatedData.CompressData(pDataToCompress, sizeOfDataToCompress);
-
+			compressedTranslatedData.CompressData(pDataToCompress, sizeOfDataToCompress, true);
+			
 			//Fixup header info
 			compressedInfo[i].size = SwapByteOrder(compressedTranslatedData.mCompressedSize);
 			offsetToImageBlock    += compressedTranslatedData.mCompressedSize;
@@ -5307,36 +5306,6 @@ void ExtractWKLFiles(const string& sakuraDirectory, const string& outDirectory)
 		unsigned long imageDataAddress2  = 0;
 		memcpy_s(&imageDataAddress2, sizeof(imageDataAddress2), &pWklData[offsetToImageData2], sizeof(imageDataAddress));
 		imageDataAddress2 = SwapByteOrder(imageDataAddress2);
-
-		struct WklMiscHeader
-		{
-			unsigned int offset;
-			unsigned int size;
-
-			void SwapByteOrder()
-			{
-				offset = ::SwapByteOrder(offset);
-				size   = ::SwapByteOrder(size);
-			}
-		};
-
-		struct WklMiscImageHeader
-		{
-			unsigned int   offset;
-			unsigned int   offset2;
-			unsigned short width;
-			unsigned short height;
-			unsigned int   unknown;
-
-			void SwapByteOrder()
-			{
-				offset   = ::SwapByteOrder(offset);
-				offset2  = ::SwapByteOrder(offset2);
-				width    = ::SwapByteOrder(width);
-				height   = ::SwapByteOrder(height);
-				unknown  = ::SwapByteOrder(unknown);
-			}
-		};
 
 		//Read the first entry so we can now how big the header is
 		WklMiscHeader firstEntry;
@@ -5891,7 +5860,7 @@ bool PatchMainMenu(const string& sakuraRootDirectory, const string& inTranslated
 
 	//Compress bgnd image
 	BmpToSakuraConverter patchedBgndImage;
-	if( !patchedBgndImage.ConvertBmpToSakuraFormat(inMainMenuTranslatedBgnd) )
+	if( !patchedBgndImage.ConvertBmpToSakuraFormat(inMainMenuTranslatedBgnd, true) )
 	{
 		printf("PatchMainMenu: Couldn't convert image: %s.\n", inMainMenuTranslatedBgnd.c_str());
 		return false;

@@ -327,7 +327,7 @@ struct PRSCompressor
 	unsigned long mCompressedSize  = 0;
 
 	~PRSCompressor();
-	void CompressData(void* pInData, const unsigned long inDataSize);
+	void CompressData(void* pInData, const unsigned long inDataSize, bool bTwoByteAlign = false);
 	void Reset();
 };
 

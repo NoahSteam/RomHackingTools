@@ -1049,7 +1049,7 @@ PRSCompressor::~PRSCompressor()
 	Reset();
 }
 
-void PRSCompressor::CompressData(void* pInData, const unsigned long inDataSize)
+void PRSCompressor::CompressData(void* pInData, const unsigned long inDataSize, bool bTwoByteAlign)
 {
 	Reset();
 
@@ -1057,6 +1057,19 @@ void PRSCompressor::CompressData(void* pInData, const unsigned long inDataSize)
 
 	//mCompressedSize = prs_compress(const uint8_t *src, uint8_t **dst, size_t src_len)
 	mCompressedSize = prs_compress((uint8_t*)pInData, (uint8_t**)&mpCompressedData, inDataSize);
+
+	if( bTwoByteAlign && mCompressedSize%2 != 0 )
+	{
+		unsigned long newSize = mCompressedSize + mCompressedSize%2;
+		char* pNewData        = new char[newSize];
+		memset(pNewData, 0, newSize);
+
+		memcpy_s(pNewData, newSize, mpCompressedData, mCompressedSize);
+		
+		delete[] mpCompressedData;
+		mpCompressedData = pNewData;
+		mCompressedSize  = newSize;
+	}
 }
 
 void PRSCompressor::Reset()
