@@ -1020,7 +1020,7 @@ MemoryBlocks::~MemoryBlocks()
 }
 
 char* MemoryBlocks::AddBlock(const char* pOriginalData, unsigned int offset, unsigned int blockSize)
-{	
+{
 	mBlocks.push_back( MemoryBlocks::Block() );
 
 	MemoryBlocks::Block& newBlock = mBlocks[mBlocks.size() - 1];

@@ -90,8 +90,8 @@ struct BmpToSakuraConverter
 			return false;
 		}
 
-		const unsigned int imageWidth  = pTileWidth ? *pTileWidth : origBmp.mBitmapData.mInfoHeader.mImageWidth;
-		const unsigned int imageHeight = pTileHeight ? *pTileHeight : origBmp.mBitmapData.mInfoHeader.mImageHeight;
+		const unsigned int imageWidth  = pTileWidth ? *pTileWidth : abs(origBmp.mBitmapData.mInfoHeader.mImageWidth);
+		const unsigned int imageHeight = pTileHeight ? *pTileHeight : abs(origBmp.mBitmapData.mInfoHeader.mImageHeight);
 
 		if(!mTileExtractor.ExtractTiles(imageWidth, imageHeight, imageWidth, imageHeight, origBmp))
 		{
@@ -5181,9 +5181,10 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 	//SYSSPR.BIN @0x00004688
 
 	const unsigned int maxCompressedSize = 0x1BA4;
-	const string outDirectory            = inPatchedDirectory + Seperators + string("SAKURA2\\");
-	const string translatedWKLDirectory  = inTranslatedDirectory + string("WKL\\");
-	const string patchedStatsImagePath   = translatedWKLDirectory + string("StatsMenuPatched.bmp");
+	const string outDirectory              = inPatchedDirectory + Seperators + string("SAKURA2\\");
+	const string translatedWKLDirectory    = inTranslatedDirectory + string("WKL\\");
+	const string translatedSharedDirectory = translatedWKLDirectory + string("Shared\\");
+	const string patchedStatsImagePath     = translatedWKLDirectory + string("StatsMenuPatched.bmp");
 
 	//Load patched image data
 	BmpToSakuraConverter patchedStatsMenu;
@@ -5235,11 +5236,6 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 			return false;
 		}
 
-		//TODO: Patch in battle menu images
-		WklBattleMenuExtractor wklExtractor;
-		wklExtractor.Initialize(fileNameInfo);
-		const unsigned int startOfBattleImages = wklExtractor.BattleMenu.mImageBlocks[0].mBattleImages[0].mAddress;
-
 		//Copy over original contents
 		const char* pOriginalWklData = originalWKLFile.GetData();
 		
@@ -5255,6 +5251,7 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 		
 		MemoryBlocks newWklCompressedData;
 		MemoryBlocks newWklData;
+		MemoryBlocks patchedBattleMenuBlocks;
 		const unsigned int compressedImageHeaderSize         = 512;
 		const unsigned int compressedDataLastOffset_original = SwapByteOrder(origCompressedInfo[numCompressedEntries - 1].offset);
 		const unsigned int statsImageAddress                 = statsMenuAddresses[fileNameInfo.mNoExtension];
@@ -5264,14 +5261,46 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 			return false;
 		}
 
+		//Gather data from original wkl file
+		WklBattleMenuExtractor wklExtractor;
+		wklExtractor.Initialize(fileNameInfo);
+		const unsigned int startOfBattleImages = wklExtractor.mBattleMenu.mImageBlocks[0]->mBattleImages[0]->mAddress;
+		const unsigned int endOfBattleImages   = wklExtractor.mBattleMenu.mImageBlocks.back()->mBattleImages.back()->mAddress; //TODO: Grab end of the image and make a block from that to the start of battle images and write that out
+
+		if( compressedDataAddress < endOfBattleImages )
+		{
+			printf("PatchWKL failed.  In %s, compressedData is coming before menu images.\n", outFileName.mFullPath.c_str());
+			return false;
+		}
+
 		//create data blocks
-		newWklData.AddBlock(pOriginalWklData, 0, compressedDataAddress);
+		//newWklData.AddBlock(pOriginalWklData, 0, compressedDataAddress);
+		const int memoryBlock_HeaderIndex           = 0;
+		const int memoryBlock_PostBattleImagesIndex = 1;
+		const int memoryBlock_FooterIndex           = 2;
+		newWklData.AddBlock(pOriginalWklData, 0, startOfBattleImages);
+		newWklData.AddBlock(pOriginalWklData, endOfBattleImages, compressedDataAddress - endOfBattleImages);
 		newWklData.AddBlock(pOriginalWklData, compressedDataAddress + compressedDataLastOffset_original, originalWKLFile.GetDataSize() - (compressedDataAddress + compressedDataLastOffset_original));
 
-		//copy over patched data
-		newWklData.WriteInBlock(0, statsImageAddress, patchedStatsMenu.GetImageData(), patchedStatsMenu.GetImageDataSize());
+		//copy over patched patchedStatsMenu
+		for(const WklBattleMenuExtractor::BattleMenu::ImageBlock* pImageBlock : wklExtractor.mBattleMenu.mImageBlocks)
+		{
+			for(const WklBattleMenuExtractor::BattleMenu::ImageBlock::BattleImage* pBattleImage : pImageBlock->mBattleImages)
+			{
+				const string patchedBattleImagePath = translatedSharedDirectory + pBattleImage->mPrefix + BMPExtension;
+				
+				//Load patched image data
+				BmpToSakuraConverter patchedBattleImage;
+				if( !patchedBattleImage.ConvertBmpToSakuraFormat(patchedBattleImagePath, false) )
+				{
+					return false;
+				}
 
-		const string bmpExtension(".bmp");
+				patchedBattleMenuBlocks.AddBlock(patchedBattleImage.GetImageData(), 0, patchedBattleImage.GetImageDataSize());
+			}
+		}
+		//newWklData.WriteInBlock(0, statsImageAddress, .GetImageData(), patchedStatsMenu.GetImageDataSize());
+
 		char tempBuffer[512];
 		unsigned int offsetToImageBlock = sizeof(compressedInfo);
 		for(int i = 0; i < 64; ++i)
@@ -5285,7 +5314,7 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 				continue;
 			}
 
-			const unsigned int origImageOffset            = SwapByteOrder(origCompressedInfo[i].offset);
+			const unsigned int origImageOffset        = SwapByteOrder(origCompressedInfo[i].offset);
 			const unsigned int offsetToCompressedData = origImageOffset + compressedDataAddress;
 			
 			//Uncompress image data
@@ -5305,7 +5334,7 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 			uncompressedImageData.ReadInImages(uncompressedImages.mpUncompressedData);
 
 			WklUncompressedData translatedWklData;
-			translatedWklData.mNumImages = uncompressedImageData.mNumImages;
+			translatedWklData.mNumImages   = uncompressedImageData.mNumImages;
 			translatedWklData.mpImageInfos = new WklUncompressedData::ImageInfo[uncompressedImageData.mNumImages];
 
 			//Find translated files
@@ -5314,7 +5343,7 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 			for(unsigned short imageIndex = 0; imageIndex < uncompressedImageData.mNumImages; ++imageIndex)
 			{
 				const string originalFileName   = prefix + string("_") + std::to_string(imageIndex);
-				const string translatedFileName = translatedDirectory + originalFileName + bmpExtension;
+				const string translatedFileName = translatedDirectory + originalFileName + BMPExtension;
 				
 				//Read in translated data
 				BitmapReader translatedImage;
@@ -5397,8 +5426,9 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 		}
 
 		//***Write out the new file***
-		const MemoryBlocks::Block& newWklHeader = newWklData.GetBlock(0);
-		const MemoryBlocks::Block& newWklFooter = newWklData.GetBlock(1);
+		const MemoryBlocks::Block& newWklHeader           = newWklData.GetBlock(memoryBlock_HeaderIndex);
+		const MemoryBlocks::Block& newWklPostBattleImages = newWklData.GetBlock(memoryBlock_PostBattleImagesIndex);
+		const MemoryBlocks::Block& newWklFooter           = newWklData.GetBlock(memoryBlock_FooterIndex);
 
 		//fixup header pointers
 		WklHeader wklHeader_patched;
@@ -5424,9 +5454,18 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 		
 		//write header
 		outFile.WriteData(newWklHeader.pData, newWklHeader.blockSize);
+		
+		//Write out patched battle images
+		for(unsigned int b = 0; b < patchedBattleMenuBlocks.GetNumberOfBlocks(); ++b)
+		{
+			outFile.WriteData(patchedBattleMenuBlocks.GetBlock(b).pData, patchedBattleMenuBlocks.GetBlock(b).blockSize);
+		}
+
+		outFile.WriteData(newWklPostBattleImages.pData, newWklPostBattleImages.blockSize);
+
+		//**write compressed image data**
 		outFile.WriteData(compressedInfo, sizeof(compressedInfo));
 
-		//write compressed image data
 		unsigned int sizeWritten = 0;
 		for(unsigned int blockIndex = 0; blockIndex < newWklCompressedData.GetNumberOfBlocks(); ++blockIndex)
 		{
@@ -5434,6 +5473,7 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 
 			sizeWritten += newWklCompressedData.GetBlock(blockIndex).blockSize;
 		}
+		//**Done writing compressed image data**
 		
 		//write footer
 		outFile.WriteData(newWklFooter.pData, newWklFooter.blockSize);
