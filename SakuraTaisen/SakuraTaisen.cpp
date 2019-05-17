@@ -90,10 +90,10 @@ struct BmpToSakuraConverter
 			return false;
 		}
 
-		const unsigned int imageWidth  = pTileWidth ? *pTileWidth : abs(origBmp.mBitmapData.mInfoHeader.mImageWidth);
-		const unsigned int imageHeight = pTileHeight ? *pTileHeight : abs(origBmp.mBitmapData.mInfoHeader.mImageHeight);
+		const unsigned int imageWidth = pTileWidth ? *pTileWidth : origBmp.mBitmapData.mInfoHeader.mImageWidth;
+		const int imageHeight         = pTileHeight ? *pTileHeight : abs(origBmp.mBitmapData.mInfoHeader.mImageHeight);
 
-		if(!mTileExtractor.ExtractTiles(imageWidth, imageHeight, imageWidth, imageHeight, origBmp))
+		if(!mTileExtractor.ExtractTiles(imageWidth, imageHeight, imageWidth, abs(imageHeight), origBmp))
 		{
 			return false;
 		}
@@ -4946,6 +4946,11 @@ struct WklMiscImageHeader
 		height   = ::SwapByteOrder(height);
 		unknown  = ::SwapByteOrder(unknown);
 	}
+
+	unsigned int GetImageByteCount() const
+	{
+		return (width*height)/2;
+	}
 };
 
 struct WklBattleMenuExtractor
@@ -5050,6 +5055,23 @@ struct WklBattleMenuExtractor
 			}
 		}
 
+		void ReverseByteOrder()
+		{
+			for(unsigned int entryIndex = 0; entryIndex < mNumBlocks; ++entryIndex)
+			{	
+				mpImageBlocksInfo[entryIndex].SwapByteOrder();
+			}
+
+			for(const ImageBlock* pImageBlock : mImageBlocks)
+			{
+				for(unsigned short imageIndex = 0; imageIndex < pImageBlock->mNumImages; ++imageIndex)
+				{
+					WklMiscImageHeader& imageHeader = pImageBlock->mpImagesInBlock[imageIndex];
+					imageHeader.SwapByteOrder();
+				}
+			}
+		}
+
 		unsigned long       mImageDataAddress = 0;
 		WklMiscHeader*      mpImageBlocksInfo = nullptr;
 		unsigned int        mNumBlocks        = 0;
@@ -5131,7 +5153,7 @@ public:
 			memcpy_s(&pNewImageBlock->mNumImages, sizeof(pNewImageBlock->mNumImages), &pWklData[mBattleMenu.mImageDataAddress + mBattleMenu.mpImageBlocksInfo[entryIndex].offset], sizeof(pNewImageBlock->mNumImages));
 			pNewImageBlock->mNumImages = SwapByteOrder(pNewImageBlock->mNumImages);
 
-			pNewImageBlock->mpImagesInBlock         = new WklMiscImageHeader[pNewImageBlock->mNumImages];
+			pNewImageBlock->mpImagesInBlock       = new WklMiscImageHeader[pNewImageBlock->mNumImages];
 			const unsigned int imageHeaderEnd     = mBattleMenu.mImageDataAddress + mBattleMenu.mpImageBlocksInfo[entryIndex].offset + 8;
 			const unsigned int miscImageHeaderEnd = imageHeaderEnd + sizeof(WklMiscImageHeader)*(pNewImageBlock->mNumImages) + 8; //Last 8 bytes is some uknown thing
 			memcpy_s(pNewImageBlock->mpImagesInBlock, sizeof(WklMiscImageHeader)*pNewImageBlock->mNumImages, &pWklData[imageHeaderEnd], sizeof(WklMiscImageHeader)*pNewImageBlock->mNumImages);
@@ -5264,8 +5286,9 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 		//Gather data from original wkl file
 		WklBattleMenuExtractor wklExtractor;
 		wklExtractor.Initialize(fileNameInfo);
-		const unsigned int startOfBattleImages = wklExtractor.mBattleMenu.mImageBlocks[0]->mBattleImages[0]->mAddress;
-		const unsigned int endOfBattleImages   = wklExtractor.mBattleMenu.mImageBlocks.back()->mBattleImages.back()->mAddress; //TODO: Grab end of the image and make a block from that to the start of battle images and write that out
+
+		const unsigned int startOfBattleImages = wklExtractor.mBattleMenu.mImageDataAddress;
+		const unsigned int endOfBattleImages   = wklExtractor.mBattleMenu.mImageBlocks.back()->mBattleImages.back()->mAddress + wklExtractor.mBattleMenu.mImageBlocks.back()->mBattleImages.back()->mImageHeader.GetImageByteCount();
 
 		if( compressedDataAddress < endOfBattleImages )
 		{
@@ -5282,9 +5305,31 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 		newWklData.AddBlock(pOriginalWklData, endOfBattleImages, compressedDataAddress - endOfBattleImages);
 		newWklData.AddBlock(pOriginalWklData, compressedDataAddress + compressedDataLastOffset_original, originalWKLFile.GetDataSize() - (compressedDataAddress + compressedDataLastOffset_original));
 
-		//copy over patched patchedStatsMenu
+		//**Copy over patched patchedStatsMenu**
+		//Block header
+		wklExtractor.mBattleMenu.ReverseByteOrder();
+		patchedBattleMenuBlocks.AddBlock((const char*)wklExtractor.mBattleMenu.mpImageBlocksInfo, 0, sizeof(WklMiscHeader)*wklExtractor.mBattleMenu.mNumBlocks);
+
 		for(const WklBattleMenuExtractor::BattleMenu::ImageBlock* pImageBlock : wklExtractor.mBattleMenu.mImageBlocks)
 		{
+			char blockData[8];
+			memset(blockData, 0, sizeof(blockData));
+			memcpy_s(blockData, 8, &pImageBlock->mNumImages, sizeof(pImageBlock->mNumImages));
+			SwapByteOrderInPlace(blockData, 2);
+			patchedBattleMenuBlocks.AddBlock(blockData, 0, sizeof(blockData));
+			patchedBattleMenuBlocks.AddBlock((const char*)pImageBlock->mpImagesInBlock, 0, sizeof(WklMiscImageHeader)*pImageBlock->mNumImages);
+
+			//Last 8 bytes of block header
+			char last8Bytes[8];
+			memset(last8Bytes, 0, sizeof(last8Bytes));
+			WklMiscImageHeader lastImageInfo = (pImageBlock->mpImagesInBlock[pImageBlock->mNumImages - 1]);
+			lastImageInfo.SwapByteOrder();
+			unsigned int lastOffset1 = SwapByteOrder(lastImageInfo.width*lastImageInfo.height/2 + lastImageInfo.offset);
+			unsigned int lastOffset2 = SwapByteOrder(lastImageInfo.offset2);
+			memcpy_s(last8Bytes, 8, &lastOffset1, sizeof(lastOffset1));
+			memcpy_s(last8Bytes + 4, 4, &lastOffset2, sizeof(lastOffset2));
+			patchedBattleMenuBlocks.AddBlock(last8Bytes, 0, sizeof(last8Bytes));
+
 			for(const WklBattleMenuExtractor::BattleMenu::ImageBlock::BattleImage* pBattleImage : pImageBlock->mBattleImages)
 			{
 				const string patchedBattleImagePath = translatedSharedDirectory + pBattleImage->mPrefix + BMPExtension;
@@ -5445,7 +5490,10 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 			}
 			else if( wklHeader_patched.mEntries[headerEntry].offset == compressedDataAddress )
 			{
-				wklHeader_patched.mEntries[headerEntry].size = compressedDataLastOffset_patched;
+				if( wklHeader_patched.mEntries[headerEntry].size > 0 )
+				{
+					wklHeader_patched.mEntries[headerEntry].size = compressedDataLastOffset_patched;
+				}
 			}
 		}
 		wklHeader_patched.SwapByteOrder();
@@ -5456,9 +5504,12 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 		outFile.WriteData(newWklHeader.pData, newWklHeader.blockSize);
 		
 		//Write out patched battle images
+		unsigned int totalBattleMenuSize = 0;
 		for(unsigned int b = 0; b < patchedBattleMenuBlocks.GetNumberOfBlocks(); ++b)
 		{
 			outFile.WriteData(patchedBattleMenuBlocks.GetBlock(b).pData, patchedBattleMenuBlocks.GetBlock(b).blockSize);
+
+			totalBattleMenuSize += patchedBattleMenuBlocks.GetBlock(b).blockSize;
 		}
 
 		outFile.WriteData(newWklPostBattleImages.pData, newWklPostBattleImages.blockSize);

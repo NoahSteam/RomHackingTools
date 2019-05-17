@@ -109,6 +109,11 @@ void CalcCrc32(const BYTE byte, DWORD &dwCrc32)
 	dwCrc32 = ((dwCrc32) >> 8) ^ GCrc32Table[(byte) ^ ((dwCrc32) & 0x000000FF)];
 }
 
+void SwapByteOrderInPlace(char* pData, unsigned int numBytes)
+{
+	std::reverse(pData, (pData + numBytes));
+}
+
 void FindAllFilesWithinDirectory(const string& inDirectoryPath, vector<FileNameContainer>& outFileNames)
 {
 	WIN32_FIND_DATA fileData;
@@ -938,9 +943,16 @@ void TileExtractor::FixupIndexOfAlphaColor(const unsigned short inIndexOfAlphaCo
 	}
 }
 
-bool TileExtractor::ExtractTiles(unsigned int inTileWidth, unsigned int inTileHeight, unsigned int outTileWidth, unsigned int outTileHeight, const BitmapReader& inBitmap)
+bool TileExtractor::ExtractTiles(unsigned int inTileWidth, int inTileHeight, unsigned int outTileWidth, unsigned int outTileHeight, const BitmapReader& inBitmap)
 {
-	if( inTileWidth > outTileWidth || inTileHeight > outTileHeight )
+	if( inTileHeight < 0 )
+	{
+		printf("Can't extract tiles.  Image can't be stored with a negative width\n");
+		return false;
+	}
+
+	const unsigned int inAbsTileHeight = abs(inTileHeight);
+	if( inTileWidth > outTileWidth || inAbsTileHeight > outTileHeight )
 	{
 		printf("Can't extract tiles.  Invalid tile sizes\n");
 		return false;
@@ -952,13 +964,13 @@ bool TileExtractor::ExtractTiles(unsigned int inTileWidth, unsigned int inTileHe
 		return false;
 	}
 
-	if( inBitmap.mBitmapData.mInfoHeader.mImageWidth % inTileWidth != 0 || inBitmap.mBitmapData.mInfoHeader.mImageHeight % inTileHeight != 0 )
+	if( inBitmap.mBitmapData.mInfoHeader.mImageWidth % inTileWidth != 0 || inBitmap.mBitmapData.mInfoHeader.mImageHeight % inAbsTileHeight != 0 )
 	{
 		//printf("Can't extract tiles.  Only 4 bit paletted bitmaps supported\n");
 		//return false;
 	}
 
-	const unsigned int numRows    = (abs(inBitmap.mBitmapData.mInfoHeader.mImageHeight)/inTileHeight);
+	const int numRows             = (abs(inBitmap.mBitmapData.mInfoHeader.mImageHeight)/inAbsTileHeight);
 	const unsigned int numColumns = (inBitmap.mBitmapData.mInfoHeader.mImageWidth/inTileWidth);
 	const unsigned int numTiles   = numRows * numColumns;
 	const char* pLinearData       = inBitmap.mBitmapData.mColorData.mpRGBA;
@@ -971,7 +983,7 @@ bool TileExtractor::ExtractTiles(unsigned int inTileWidth, unsigned int inTileHe
 	const unsigned int stride               = numBytesPerTileWidth*numColumns;
 	const unsigned int numBytesPerTile      = (outTileWidth*outTileHeight)/divisor;//(inTileWidth*inTileHeight)/2; //4bits per pixel
 	unsigned int currTile                   = 0;
-
+	
 	//Bitmaps are stored upside down, so start form the bottom
 	for(int y = numRows - 1; y >= 0; --y)
 	{
@@ -983,12 +995,12 @@ bool TileExtractor::ExtractTiles(unsigned int inTileWidth, unsigned int inTileHe
 			mTiles[currTile].mY        = y;
 			memset(mTiles[currTile].mpTile, 0, numBytesPerTile);
 
-			unsigned int linearDataIndex = y*stride*inTileHeight + x*numBytesPerTileWidth;
-			for(unsigned int tilePixelY = 0; tilePixelY < inTileHeight; ++tilePixelY)
+			unsigned int linearDataIndex = y*stride*inAbsTileHeight + x*numBytesPerTileWidth;
+			for(unsigned int tilePixelY = 0; tilePixelY < inAbsTileHeight; ++tilePixelY)
 			{
 				for(unsigned int tilePixelX = 0; tilePixelX < numBytesPerTileWidth; ++tilePixelX)
 				{
-					const unsigned int linearY = inTileHeight - tilePixelY - 1;
+					const unsigned int linearY = inAbsTileHeight - tilePixelY - 1;
 					assert( (int)linearY >= 0 );
 					assert(tilePixelY*numBytesPerTileWidth + tilePixelX < numBytesPerTile);
 					assert(linearDataIndex + linearY*stride + tilePixelX < (unsigned int)inBitmap.mBitmapData.mColorData.mSizeInBytes);
@@ -1019,7 +1031,7 @@ MemoryBlocks::~MemoryBlocks()
 	mBlocks.clear();
 }
 
-char* MemoryBlocks::AddBlock(const char* pOriginalData, unsigned int offset, unsigned int blockSize)
+char* MemoryBlocks::AddBlock(const char* pOriginalData, unsigned int offset, unsigned int blockSize, bool bReverseBytes)
 {
 	mBlocks.push_back( MemoryBlocks::Block() );
 
@@ -1028,6 +1040,11 @@ char* MemoryBlocks::AddBlock(const char* pOriginalData, unsigned int offset, uns
 	newBlock.blockSize            = blockSize;
 
 	memcpy_s(newBlock.pData, blockSize, pOriginalData + offset, blockSize);
+
+	if( bReverseBytes )
+	{
+		std::reverse(newBlock.pData, (newBlock.pData + blockSize));
+	}
 
 	return newBlock.pData;
 }

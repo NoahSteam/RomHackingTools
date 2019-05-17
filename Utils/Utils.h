@@ -11,6 +11,8 @@ T SwapByteOrder(const T inData)
 	return reversedValue;
 }
 
+void SwapByteOrderInPlace(char* pData, unsigned int numBytes);
+
 struct MatchInfo
 {
 	std::string   mFileName;
@@ -296,7 +298,7 @@ public:
 
 	std::vector<Tile> mTiles;
 
-	bool ExtractTiles(unsigned int inTileDimX, unsigned int inTileDimY, unsigned int outTileDimX, unsigned int outTileDimY, const BitmapReader& inBitmap);
+	bool ExtractTiles(unsigned int inTileDimX, int inTileDimY, unsigned int outTileDimX, unsigned int outTileDimY, const BitmapReader& inBitmap);
 	void FixupIndexOfAlphaColor(const unsigned short inIndexOfAlphaColor, bool bInIs4bit);
 };
 
@@ -315,7 +317,7 @@ private:
 public:
 	~MemoryBlocks();
 
-	char*        AddBlock(const char* pOriginalData, unsigned int offset, unsigned int blockSize);
+	char*        AddBlock(const char* pOriginalData, unsigned int offset, unsigned int blockSize, bool bReverseBytes = false);
 	size_t       GetNumberOfBlocks() const;
 	const Block& GetBlock(unsigned int blockIndex) const;
 	bool         WriteInBlock(unsigned int blockIndex, unsigned int offset, const char* pData, unsigned int dataSize);
