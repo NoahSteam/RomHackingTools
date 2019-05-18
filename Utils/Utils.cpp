@@ -947,8 +947,8 @@ bool TileExtractor::ExtractTiles(unsigned int inTileWidth, int inTileHeight, uns
 {
 	if( inTileHeight < 0 )
 	{
-		printf("Can't extract tiles.  Image can't be stored with a negative width\n");
-		return false;
+	//	printf("Can't extract tiles.  Image can't be stored with a negative width\n");
+	//	return false;
 	}
 
 	const unsigned int inAbsTileHeight = abs(inTileHeight);
@@ -983,7 +983,8 @@ bool TileExtractor::ExtractTiles(unsigned int inTileWidth, int inTileHeight, uns
 	const unsigned int stride               = numBytesPerTileWidth*numColumns;
 	const unsigned int numBytesPerTile      = (outTileWidth*outTileHeight)/divisor;//(inTileWidth*inTileHeight)/2; //4bits per pixel
 	unsigned int currTile                   = 0;
-	
+	const bool bReadInReverse               = inTileHeight >= 0 ? true : false;
+
 	//Bitmaps are stored upside down, so start form the bottom
 	for(int y = numRows - 1; y >= 0; --y)
 	{
@@ -1000,7 +1001,7 @@ bool TileExtractor::ExtractTiles(unsigned int inTileWidth, int inTileHeight, uns
 			{
 				for(unsigned int tilePixelX = 0; tilePixelX < numBytesPerTileWidth; ++tilePixelX)
 				{
-					const unsigned int linearY = inAbsTileHeight - tilePixelY - 1;
+					const unsigned int linearY = bReadInReverse ? inAbsTileHeight - tilePixelY - 1 : tilePixelY;
 					assert( (int)linearY >= 0 );
 					assert(tilePixelY*numBytesPerTileWidth + tilePixelX < numBytesPerTile);
 					assert(linearDataIndex + linearY*stride + tilePixelX < (unsigned int)inBitmap.mBitmapData.mColorData.mSizeInBytes);

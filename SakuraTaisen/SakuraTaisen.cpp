@@ -91,7 +91,7 @@ struct BmpToSakuraConverter
 		}
 
 		const unsigned int imageWidth = pTileWidth ? *pTileWidth : origBmp.mBitmapData.mInfoHeader.mImageWidth;
-		const int imageHeight         = pTileHeight ? *pTileHeight : abs(origBmp.mBitmapData.mInfoHeader.mImageHeight);
+		const int imageHeight         = pTileHeight ? *pTileHeight : origBmp.mBitmapData.mInfoHeader.mImageHeight;
 
 		if(!mTileExtractor.ExtractTiles(imageWidth, imageHeight, imageWidth, abs(imageHeight), origBmp))
 		{
@@ -5149,7 +5149,6 @@ public:
 			BattleMenu::ImageBlock* pNewImageBlock = new BattleMenu::ImageBlock();
 			mBattleMenu.mImageBlocks.push_back(pNewImageBlock);
 
-			unsigned short numMiscImages = 0;
 			memcpy_s(&pNewImageBlock->mNumImages, sizeof(pNewImageBlock->mNumImages), &pWklData[mBattleMenu.mImageDataAddress + mBattleMenu.mpImageBlocksInfo[entryIndex].offset], sizeof(pNewImageBlock->mNumImages));
 			pNewImageBlock->mNumImages = SwapByteOrder(pNewImageBlock->mNumImages);
 
@@ -5324,8 +5323,8 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 			memset(last8Bytes, 0, sizeof(last8Bytes));
 			WklMiscImageHeader lastImageInfo = (pImageBlock->mpImagesInBlock[pImageBlock->mNumImages - 1]);
 			lastImageInfo.SwapByteOrder();
-			unsigned int lastOffset1 = SwapByteOrder(lastImageInfo.width*lastImageInfo.height/2 + lastImageInfo.offset);
-			unsigned int lastOffset2 = SwapByteOrder(lastImageInfo.offset2);
+			unsigned int lastOffset1 = SwapByteOrder(lastImageInfo.offset + lastImageInfo.offset2);
+			unsigned int lastOffset2 = SwapByteOrder(lastImageInfo.width*lastImageInfo.height/2);
 			memcpy_s(last8Bytes, 8, &lastOffset1, sizeof(lastOffset1));
 			memcpy_s(last8Bytes + 4, 4, &lastOffset2, sizeof(lastOffset2));
 			patchedBattleMenuBlocks.AddBlock(last8Bytes, 0, sizeof(last8Bytes));
