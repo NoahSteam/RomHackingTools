@@ -986,7 +986,7 @@ bool TileExtractor::ExtractTiles(unsigned int inTileWidth, int inTileHeight, uns
 	const bool bReadInReverse               = inTileHeight >= 0 ? true : false;
 
 	//Bitmaps are stored upside down, so start form the bottom
-	for(int y = numRows - 1; y >= 0; --y)
+	for(int y = bReadInReverse ? numRows - 1 : 0; bReadInReverse ? y >= 0 : y < numRows; bReadInReverse ? --y : ++y)
 	{
 		for(unsigned int x = 0; x < numColumns; ++x)
 		{
@@ -1048,6 +1048,14 @@ char* MemoryBlocks::AddBlock(const char* pOriginalData, unsigned int offset, uns
 	}
 
 	return newBlock.pData;
+}
+
+void MemoryBlocks::AddBlock(const MemoryBlocks& inBlock)
+{
+	for(unsigned int b = 0; b < inBlock.GetNumberOfBlocks(); ++b)
+	{
+		AddBlock(inBlock.GetBlock(b).pData, 0, inBlock.GetBlock(b).blockSize);
+	}
 }
 
 size_t MemoryBlocks::GetNumberOfBlocks() const
