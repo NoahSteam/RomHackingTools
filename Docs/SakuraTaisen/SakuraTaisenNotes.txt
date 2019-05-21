@@ -342,3 +342,10 @@ Found a match in SLG.BIN @0x00011b78
 
 :Battle Mech Palette:
 -Written to 0605BEA0 from 00286B1C.  The data appears to be offset in the patched file.  Should be read from 0006730a in WKL01.bin
+
+:Battle Cursor:
+In SLG @0x000127dc, 25c04000 is the start of the cursor write address
+
+06016428
+060167E0 <- read from here and get 06016428(where the cursor image data is)
+060167D4 <- read close to where the vdp1 address for the cursor is calculated
