@@ -5512,7 +5512,7 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 		//Get size of the patched battle menu
 		const unsigned int newBattleMenuSize   = offsetFromBlockHeader;
 		const unsigned int origBattleMenuSize  = SwapByteOrder(*(unsigned int*)(wklExtractor.mWklFile.GetData() + 0xEC));
-		const unsigned int battleMenuDelta     = newBattleMenuSize - origBattleMenuSize;
+		const int battleMenuDelta              = newBattleMenuSize - origBattleMenuSize;
 		for(int headerEntry = 0; headerEntry < WklHeader::NumEntries; ++headerEntry)
 		{
 			if( wklHeader_patched.mEntries[headerEntry].offset > wklExtractor.mBattleMenu.mImageDataAddress )
