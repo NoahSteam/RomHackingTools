@@ -349,3 +349,9 @@ In SLG @0x000127dc, 25c04000 is the start of the cursor write address
 06016428
 060167E0 <- read from here and get 06016428(where the cursor image data is)
 060167D4 <- read close to where the vdp1 address for the cursor is calculated
+
+//Modify this by the size different of the wkl data to have the cursor image be written to the correct address
+25C1500 is specified @06018528 and @00014520 in SLG.bin
+
+//To fix images after the cursor
+@0601844C [@0001444C], 2A20 is specified.  This is the VDP1 offset(00015100/8) at which images after the cursor start.
