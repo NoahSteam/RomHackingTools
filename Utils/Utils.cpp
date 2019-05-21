@@ -573,6 +573,81 @@ void TextFileWriter::Close()
 	mpFileHandle = nullptr;
 }
 
+//////////////////////////////////
+//        FileReadWriter        //
+//////////////////////////////////
+FileReadWriter::~FileReadWriter()
+{
+	Close();
+}
+
+bool FileReadWriter::OpenFile(const std::string& inFileName)
+{
+	errno_t errorValue = fopen_s(&mpFileHandle, inFileName.c_str(), "r+b");
+	if( errorValue )
+	{
+		printf("Unable to open file.  Error: %i\n", errorValue);
+		return false;
+	}
+
+	return true;
+}
+
+void FileReadWriter::Close()
+{
+	if( mpFileHandle )
+	{
+		fclose(mpFileHandle);
+	}
+
+	mpFileHandle = nullptr;
+}
+
+bool FileReadWriter::WriteData(unsigned long inFileOffset, char* pInData, unsigned long inDataSize, bool bSwapEndianness)
+{
+	if( !mpFileHandle )
+	{
+		return false;
+	}
+
+	if( bSwapEndianness )
+	{
+		SwapByteOrderInPlace(pInData, inDataSize);
+	}
+
+	fseek(mpFileHandle, inFileOffset, SEEK_SET);
+	
+	const unsigned long numElemsWritten = (unsigned long)fwrite(pInData, sizeof(char), inDataSize, mpFileHandle);
+
+	fseek(mpFileHandle, 0, SEEK_SET);
+
+	return numElemsWritten == inDataSize;
+}
+
+bool FileReadWriter::ReadData(unsigned long inFileOffset, char* pOutData, unsigned long inDataSize, bool bSwapEndianness)
+{
+	if( !mpFileHandle )
+	{
+		return false;
+	}
+
+	fseek(mpFileHandle, inFileOffset, SEEK_SET);
+
+	if( !fread_s(pOutData, inDataSize, inDataSize, 1, mpFileHandle) )
+	{
+		return false;
+	}
+
+	fseek(mpFileHandle, 0, SEEK_SET);
+
+	if( bSwapEndianness )
+	{
+		SwapByteOrderInPlace((char*)pOutData, inDataSize);
+	}
+
+	return true;
+}
+
 ///////////////////////////////
 //        PaletteData        //
 ///////////////////////////////

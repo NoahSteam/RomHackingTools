@@ -2218,7 +2218,7 @@ bool FixupSLG(const string& rootDir, const string& outDir, const string& inTrans
 	for(const string& slgFileName : slgFiles)
 	{
 		//Open the original file
-		const string filePath = rootDir + string("SAKURA2\\\\") + slgFileName;	
+		const string filePath = rootDir + string("SAKURA2\\\\") + slgFileName;
 		FileData origSlgData;
 		if( !origSlgData.InitializeFileData(slgFileName.c_str(), filePath.c_str()) )
 		{
@@ -5182,6 +5182,7 @@ public:
 	}
 };
 
+//Also modifies SLG files
 bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirectory, const string& inTranslatedDirectory)
 {
 	const unsigned int maxCompressedSize = 0x1BA4;
@@ -5214,6 +5215,8 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 	WklCompressedInfo compressedInfo[numCompressedEntries];
 	WklCompressedInfo origCompressedInfo[numCompressedEntries];
 	
+	int battleMenuDelta         = 0;
+	bool bCalculatedBattleDelta = false;
 	for(const FileNameContainer& fileNameInfo : wklFiles)
 	{
 		const string translatedDirectory = translatedWKLDirectory + fileNameInfo.mNoExtension + Seperators;
@@ -5289,7 +5292,7 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 		//patchedBattleMenuImageData.AddBlock((const char*)wklExtractor.mBattleMenu.mpImageBlocksInfo, 0, sizeof(WklBattleMenuImageBlockInfo)*wklExtractor.mBattleMenu.mNumBlocks);
 
 		unsigned int offsetFromBlockHeader = wklExtractor.mBattleMenu.mNumBlocks*sizeof(WklBattleMenuImageBlockInfo);
-		unsigned int imageBlockSize = 0;
+		unsigned int imageBlockSize        = 0;
 		for(const WklBattleMenuExtractor::BattleMenu::ImageBlock* pImageBlock : wklExtractor.mBattleMenu.mImageBlocks)
 		{	
 			imageBlockSize = 0;
@@ -5512,7 +5515,13 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 		//Get size of the patched battle menu
 		const unsigned int newBattleMenuSize   = offsetFromBlockHeader;
 		const unsigned int origBattleMenuSize  = SwapByteOrder(*(unsigned int*)(wklExtractor.mWklFile.GetData() + 0xEC));
-		const int battleMenuDelta              = newBattleMenuSize - origBattleMenuSize;
+		const int newBattleMenuDelta           = newBattleMenuSize - origBattleMenuSize;
+		if( bCalculatedBattleDelta )
+		{
+			assert(newBattleMenuDelta == battleMenuDelta);
+		}
+		battleMenuDelta        = newBattleMenuDelta;
+		bCalculatedBattleDelta = true;
 		for(int headerEntry = 0; headerEntry < WklHeader::NumEntries; ++headerEntry)
 		{
 			if( wklHeader_patched.mEntries[headerEntry].offset > wklExtractor.mBattleMenu.mImageDataAddress )
@@ -5562,6 +5571,55 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 		outFile.WriteData(newWklFooter.pData, newWklFooter.blockSize);
 		//***Done writing new file***
 	}
+
+	//***Fix pointers in SLG files***
+	vector<string> slgFiles;
+	slgFiles.push_back("0SLG.BIN");
+	slgFiles.push_back("SLG.BIN");
+
+	for(const string& slgFileName : slgFiles)
+	{
+		//Open the original file
+		const string filePath = outDirectory + slgFileName;
+		FileReadWriter slgFile;
+		if( !slgFile.OpenFile(filePath.c_str()) )
+		{
+			printf("PatchWKL: Unable to open %s file.\n", filePath.c_str());
+			return false;
+		}
+
+		//Fixup 4 byte offsets
+		unsigned long origVDP1Value = 0;
+		unsigned long newVPD1Value  = 0;
+		slgFile.ReadData(0x00014528, (char*)&origVDP1Value, sizeof(origVDP1Value), true);
+		newVPD1Value = origVDP1Value + battleMenuDelta;
+		slgFile.WriteData(0x00014528, (char*)&newVPD1Value, sizeof(newVPD1Value), true);
+
+		slgFile.ReadData(0x00014058, (char*)&origVDP1Value, sizeof(origVDP1Value), true);
+		newVPD1Value = origVDP1Value + battleMenuDelta;
+		slgFile.WriteData(0x00014058, (char*)&newVPD1Value, sizeof(newVPD1Value), true);
+
+		slgFile.ReadData(0x000140f0, (char*)&origVDP1Value, sizeof(origVDP1Value), true);
+		newVPD1Value = origVDP1Value + battleMenuDelta;
+		slgFile.WriteData(0x000140f0, (char*)&newVPD1Value, sizeof(newVPD1Value), true);
+
+		//Fixup 2 byte offsets
+		unsigned short origVDP1Offset = 0;
+		unsigned short newVDP1Offset  = 0;
+		slgFile.ReadData(0x0001444C, (char*)&origVDP1Offset, sizeof(origVDP1Offset), true);
+		newVDP1Offset = ((origVDP1Offset<<3) + battleMenuDelta) >> 3;
+		slgFile.WriteData(0x0001444C, (char*)&newVDP1Offset, sizeof(newVDP1Offset), true);
+
+		slgFile.ReadData(0x000142A6, (char*)&origVDP1Offset, sizeof(origVDP1Offset), true);
+		newVDP1Offset = ((origVDP1Offset<<3) + battleMenuDelta) >> 3;
+		slgFile.WriteData(0x000142A6, (char*)&newVDP1Offset, sizeof(newVDP1Offset), true);
+
+		slgFile.ReadData(0x00014434, (char*)&origVDP1Offset, sizeof(origVDP1Offset), true);
+		newVDP1Offset = ((origVDP1Offset<<3) + battleMenuDelta) >> 3;
+		slgFile.WriteData(0x00014434, (char*)&newVDP1Offset, sizeof(newVDP1Offset), true);
+
+	}
+	//***Done with SLG files***
 
 	return true;
 }
@@ -6419,12 +6477,6 @@ bool PatchGame(const string& rootSakuraTaisenDirectory, const string& patchedSak
 		return false;
 	}
 
-	if( !PatchWKLFiles(rootSakuraTaisenDirectory, patchedSakuraTaisenDirectory, inTranslatedDataDirectory) )
-	{
-		printf("PatchWKLFiles failed. Patch unsuccessful.\n");
-		return false;
-	}
-
 	//Step 0
 	if( !CopyOriginalFiles(rootSakuraTaisenDirectory, patchedSakuraTaisenDirectory) )
 	{
@@ -6461,14 +6513,21 @@ bool PatchGame(const string& rootSakuraTaisenDirectory, const string& patchedSak
 		return false;
 	}
 
-	//Step 4
+	//Step 5
+	if( !PatchWKLFiles(rootSakuraTaisenDirectory, patchedSakuraTaisenDirectory, inTranslatedDataDirectory) )
+	{
+		printf("PatchWKLFiles failed. Patch unsuccessful.\n");
+		return false;
+	}
+
+	//Step 6
 	if( !PatchTMapSP(patchedSakuraTaisenDirectory, patchedTMapSPDataPath) )
 	{
 		printf("PatchTMapSP failed.  Patch unsuccessful.\n");
 		return false;
 	}
 
-	//Step 5
+	//Step 7
 	const string translatedKNJPath = tempDir + PatchedKNJName; //Created by CreateTranslatedFontSheet
 	const string patchedKNJPath    = patchedSakuraTaisenDirectory;
 	if( !PatchKNJ(rootSakuraTaisenDirectory, translatedKNJPath, patchedKNJPath) )
@@ -6477,7 +6536,7 @@ bool PatchGame(const string& rootSakuraTaisenDirectory, const string& patchedSak
 		return false;
 	}
 
-	//Step 6
+	//Step 8
 	if( !InsertText(rootSakuraTaisenDirectory, translatedTextDirectory, patchedSakuraTaisenDirectory, true) )
 	{
 		printf("Insert Text failed.  Patch unsuccessful.\n");

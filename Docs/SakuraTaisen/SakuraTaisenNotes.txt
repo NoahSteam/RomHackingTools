@@ -350,8 +350,11 @@ In SLG @0x000127dc, 25c04000 is the start of the cursor write address
 060167E0 <- read from here and get 06016428(where the cursor image data is)
 060167D4 <- read close to where the vdp1 address for the cursor is calculated
 
+:Fix Addresses in SLG files for Battle UI:
 //Modify this by the size different of the wkl data to have the cursor image be written to the correct address
-25C1500 is specified @06018528 and @00014520 in SLG.bin
+In SLG.bin @00014528[06018528] 25C1500 is specified.
+In SLG.bin @000140f0[060180F0] 00015D80, VDP1 offset at which compressed battle ui is written.
+In SLG.bin @00014058[06018058] 25c15d80 (other VDP1 offset for the compressed battle ui address).
 
-//To fix images after the cursor
 @0601844C [@0001444C], 2A20 is specified.  This is the VDP1 offset(00015100/8) at which images after the cursor start.
+SLG.bin @000142A6 & @00014434 Blink image written to 05c15B00 [2B60 when divided by 8] and 05c15880 [2B10 when divided by 8]

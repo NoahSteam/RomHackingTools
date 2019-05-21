@@ -145,10 +145,25 @@ class TextFileWriter
 public:
 	~TextFileWriter();
 
-	bool OpenFileForWrite(const std::string& outFileName);
-	void WriteString(const std::string& inString);
-	void Close();
+	bool  OpenFileForWrite(const std::string& outFileName);
+	void  WriteString(const std::string& inString);
+	void  Close();
 	FILE* GetFileHandle() { return mpFileHandle; }
+};
+
+class FileReadWriter
+{
+	FILE*       mpFileHandle = nullptr;
+	std::string mFileName;
+
+public:
+	~FileReadWriter();
+
+	bool  OpenFile(const std::string& inFileName);
+	void  Close();
+	bool  WriteData(unsigned long fileOffset, char* pData, unsigned long dataSize, bool bSwapEndianness = false);
+	bool  ReadData(unsigned long inFileOffset, char* pData, unsigned long dataSize, bool bSwapEndianness = false);
+	FILE* GetFileHandle() {return mpFileHandle;}
 };
 
 class PaletteData
