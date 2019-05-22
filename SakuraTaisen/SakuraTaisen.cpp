@@ -5416,6 +5416,12 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 				const int imageWidth  = abs(translatedImage.mBitmapData.mInfoHeader.mImageWidth);
 				const int imageHeight = abs(translatedImage.mBitmapData.mInfoHeader.mImageHeight);
 
+				if( imageWidth%8 != 0 )
+				{
+					printf("PatchWKL failed.  %s has a width of %i which is not divisible by 8\n", translatedFileName.c_str(), imageWidth);
+					return false;
+				}
+
 				TileExtractor tileExtractor;
 				if( !tileExtractor.ExtractTiles(imageWidth, imageHeight, imageWidth, imageHeight, translatedImage) )
 				{
