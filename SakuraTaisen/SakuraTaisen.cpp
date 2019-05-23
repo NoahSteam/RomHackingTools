@@ -5597,10 +5597,6 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 		//Fixup 4 byte offsets
 		unsigned long origVDP1Value = 0;
 		unsigned long newVPD1Value  = 0;
-		slgFile.ReadData(0x00014528, (char*)&origVDP1Value, sizeof(origVDP1Value), true);
-		newVPD1Value = origVDP1Value + battleMenuDelta;
-		slgFile.WriteData(0x00014528, (char*)&newVPD1Value, sizeof(newVPD1Value), true);
-
 		slgFile.ReadData(0x00014058, (char*)&origVDP1Value, sizeof(origVDP1Value), true);
 		newVPD1Value = origVDP1Value + battleMenuDelta;
 		slgFile.WriteData(0x00014058, (char*)&newVPD1Value, sizeof(newVPD1Value), true);
@@ -5609,9 +5605,9 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 		newVPD1Value = origVDP1Value + battleMenuDelta;
 		slgFile.WriteData(0x000140f0, (char*)&newVPD1Value, sizeof(newVPD1Value), true);
 
-		slgFile.ReadData(0x000140f0, (char*)&origVDP1Value, sizeof(origVDP1Value), true);
+		slgFile.ReadData(0x00014528, (char*)&origVDP1Value, sizeof(origVDP1Value), true);
 		newVPD1Value = origVDP1Value + battleMenuDelta;
-		slgFile.WriteData(0x000140f0, (char*)&newVPD1Value, sizeof(newVPD1Value), true);
+		slgFile.WriteData(0x00014528, (char*)&newVPD1Value, sizeof(newVPD1Value), true);
 
 		slgFile.ReadData(0x00021590, (char*)&origVDP1Value, sizeof(origVDP1Value), true);
 		newVPD1Value = origVDP1Value + battleMenuDelta;
@@ -5621,13 +5617,13 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 		newVPD1Value = origVDP1Value + battleMenuDelta;
 		slgFile.WriteData(0x000219c4, (char*)&newVPD1Value, sizeof(newVPD1Value), true);
 
+		slgFile.ReadData(0x00010f8c, (char*)&origVDP1Value, sizeof(origVDP1Value), true);
+		newVPD1Value = origVDP1Value + battleMenuDelta;
+		slgFile.WriteData(0x00010f8c, (char*)&newVPD1Value, sizeof(newVPD1Value), true);
+
 		//Fixup 2 byte offsets
 		unsigned short origVDP1Offset = 0;
 		unsigned short newVDP1Offset  = 0;
-		slgFile.ReadData(0x0001444C, (char*)&origVDP1Offset, sizeof(origVDP1Offset), true);
-		newVDP1Offset = ((origVDP1Offset<<3) + battleMenuDelta) >> 3;
-		slgFile.WriteData(0x0001444C, (char*)&newVDP1Offset, sizeof(newVDP1Offset), true);
-
 		slgFile.ReadData(0x000142A6, (char*)&origVDP1Offset, sizeof(origVDP1Offset), true);
 		newVDP1Offset = ((origVDP1Offset<<3) + battleMenuDelta) >> 3;
 		slgFile.WriteData(0x000142A6, (char*)&newVDP1Offset, sizeof(newVDP1Offset), true);
@@ -5635,6 +5631,20 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 		slgFile.ReadData(0x00014434, (char*)&origVDP1Offset, sizeof(origVDP1Offset), true);
 		newVDP1Offset = ((origVDP1Offset<<3) + battleMenuDelta) >> 3;
 		slgFile.WriteData(0x00014434, (char*)&newVDP1Offset, sizeof(newVDP1Offset), true);
+
+		slgFile.ReadData(0x0001444C, (char*)&origVDP1Offset, sizeof(origVDP1Offset), true);
+		newVDP1Offset = ((origVDP1Offset<<3) + battleMenuDelta) >> 3;
+		slgFile.WriteData(0x0001444C, (char*)&newVDP1Offset, sizeof(newVDP1Offset), true);
+
+		//Value: 2000 
+	//	slgFile.ReadData(0x00012d90, (char*)&origVDP1Offset, sizeof(origVDP1Offset), true);
+	//	newVDP1Offset = ((origVDP1Offset<<3) + battleMenuDelta) >> 3;
+	//	slgFile.WriteData(0x00012d90, (char*)&newVDP1Offset, sizeof(newVDP1Offset), true);
+
+		//Value: 4000 
+	//	slgFile.ReadData(0x00012d92, (char*)&origVDP1Offset, sizeof(origVDP1Offset), true);
+	//	newVDP1Offset = ((origVDP1Offset<<3) + battleMenuDelta) >> 3;
+	//	slgFile.WriteData(0x00012d92, (char*)&newVDP1Offset, sizeof(newVDP1Offset), true);
 	}
 	//***Done with SLG files***
 

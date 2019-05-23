@@ -358,3 +358,6 @@ In SLG.bin @00014058[06018058] 25c15d80 (other VDP1 offset for the compressed ba
 
 @0601844C [@0001444C], 2A20 is specified.  This is the VDP1 offset(00015100/8) at which images after the cursor start.
 SLG.bin @000142A6 & @00014434 Blink image written to 05c15B00 [2B60 when divided by 8] and 05c15880 [2B10 when divided by 8]
+
+Something is writing to.  We need that space for battle sprites.
+05c18380
