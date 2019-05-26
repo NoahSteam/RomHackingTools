@@ -603,6 +603,22 @@ void FileReadWriter::Close()
 	mpFileHandle = nullptr;
 }
 
+bool FileReadWriter::WriteData(unsigned long inFileOffset, const char* pInData, unsigned long inDataSize)
+{
+	if( !mpFileHandle )
+	{
+		return false;
+	}
+
+	fseek(mpFileHandle, inFileOffset, SEEK_SET);
+	
+	const unsigned long numElemsWritten = (unsigned long)fwrite(pInData, sizeof(char), inDataSize, mpFileHandle);
+
+	fseek(mpFileHandle, 0, SEEK_SET);
+
+	return numElemsWritten == inDataSize;
+}
+
 bool FileReadWriter::WriteData(unsigned long inFileOffset, char* pInData, unsigned long inDataSize, bool bSwapEndianness)
 {
 	if( !mpFileHandle )

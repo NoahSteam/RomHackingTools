@@ -161,6 +161,7 @@ public:
 
 	bool  OpenFile(const std::string& inFileName);
 	void  Close();
+	bool  WriteData(unsigned long fileOffset, const char* pData, unsigned long dataSize);
 	bool  WriteData(unsigned long fileOffset, char* pData, unsigned long dataSize, bool bSwapEndianness = false);
 	bool  ReadData(unsigned long inFileOffset, char* pData, unsigned long dataSize, bool bSwapEndianness = false);
 	FILE* GetFileHandle() {return mpFileHandle;}

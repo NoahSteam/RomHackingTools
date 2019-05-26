@@ -359,5 +359,16 @@ In SLG.bin @00014058[06018058] 25c15d80 (other VDP1 offset for the compressed ba
 @0601844C [@0001444C], 2A20 is specified.  This is the VDP1 offset(00015100/8) at which images after the cursor start.
 SLG.bin @000142A6 & @00014434 Blink image written to 05c15B00 [2B60 when divided by 8] and 05c15880 [2B10 when divided by 8]
 
-Something is writing to.  We need that space for battle sprites.
-05c18380
+//Battle sprites
+0020AD9C[0004F100] <-VDP1 write Address Coming from (EVT01.bin @0x00006D9C).  Add offset/8 to it.
+00221000[1118] <-VDP1 read address calculated using this (WKL01.bin @0x00001800 and more) ALTERNATIVELY MODIFY:
+0x0000FF68[00017B00](0x0605057A) in SLG.BIN add with the offset
+
+Battle Menu Locations:
+BaseAddress=0x0604ac90[0x00046c90 in SLG.BIN]
+base+spriteNum*8+4 for y
+base+spriteNum*8+2 for x
+
+For Vertical backdrop:
+0604ac60 is base address
+base+spriteNum*8 for x

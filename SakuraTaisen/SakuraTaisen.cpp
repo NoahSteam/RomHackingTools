@@ -5583,6 +5583,14 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 	slgFiles.push_back("0SLG.BIN");
 	slgFiles.push_back("SLG.BIN");
 
+	FileData battleMenuFormattingData;
+	FileNameContainer battleMenuFormattingDataPath("BattleMenuFormatting.bin", inTranslatedDirectory);
+	if( !battleMenuFormattingData.InitializeFileData(battleMenuFormattingDataPath) )
+	{
+		printf("PatchWKL failed. Unable to open %s\\BattleMenuFormatting.bin\n", inTranslatedDirectory.c_str());
+		return false;
+	}
+
 	for(const string& slgFileName : slgFiles)
 	{
 		//Open the original file
@@ -5621,21 +5629,34 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 		newVPD1Value = origVDP1Value + battleMenuDelta;
 		slgFile.WriteData(0x00010f8c, (char*)&newVPD1Value, sizeof(newVPD1Value), true);
 
+		slgFile.ReadData(0x0000FF68, (char*)&origVDP1Value, sizeof(origVDP1Value), true);
+		newVPD1Value = origVDP1Value + battleMenuDelta;
+		slgFile.WriteData(0x0000FF68, (char*)&newVPD1Value, sizeof(newVPD1Value), true);
+
+
 		//Fixup 2 byte offsets
 		unsigned short origVDP1Offset = 0;
 		unsigned short newVDP1Offset  = 0;
 		slgFile.ReadData(0x000142A6, (char*)&origVDP1Offset, sizeof(origVDP1Offset), true);
-		newVDP1Offset = ((origVDP1Offset<<3) + battleMenuDelta) >> 3;
+		newVDP1Offset = ((origVDP1Offset<<3) + (unsigned short)battleMenuDelta) >> 3;
 		slgFile.WriteData(0x000142A6, (char*)&newVDP1Offset, sizeof(newVDP1Offset), true);
 
 		slgFile.ReadData(0x00014434, (char*)&origVDP1Offset, sizeof(origVDP1Offset), true);
-		newVDP1Offset = ((origVDP1Offset<<3) + battleMenuDelta) >> 3;
+		newVDP1Offset = ((origVDP1Offset<<3) + (unsigned short)battleMenuDelta) >> 3;
 		slgFile.WriteData(0x00014434, (char*)&newVDP1Offset, sizeof(newVDP1Offset), true);
 
 		slgFile.ReadData(0x0001444C, (char*)&origVDP1Offset, sizeof(origVDP1Offset), true);
-		newVDP1Offset = ((origVDP1Offset<<3) + battleMenuDelta) >> 3;
+		newVDP1Offset = ((origVDP1Offset<<3) + (unsigned short)battleMenuDelta) >> 3;
 		slgFile.WriteData(0x0001444C, (char*)&newVDP1Offset, sizeof(newVDP1Offset), true);
 
+		//Clipping for the battle menu, change 0x0030 to 0xffd8 (48 to -40)
+		unsigned short newBattleMenuClippingValue = 0xFFD8;
+		slgFile.WriteData(0x000253DC, (char*)&newBattleMenuClippingValue, sizeof(newBattleMenuClippingValue), true);
+
+		slgFile.WriteData(0x00046c60, battleMenuFormattingData.GetData(), battleMenuFormattingData.GetDataSize());
+		/*
+		
+		*/
 		//Value: 2000 
 	//	slgFile.ReadData(0x00012d90, (char*)&origVDP1Offset, sizeof(origVDP1Offset), true);
 	//	newVDP1Offset = ((origVDP1Offset<<3) + battleMenuDelta) >> 3;
@@ -5648,6 +5669,23 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 	}
 	//***Done with SLG files***
 
+	/*
+	Found a match in EVT01.BIN @0x00006d9a
+	Found a match in EVT02.BIN @0x000087aa
+	Found a match in EVT03.BIN @0x00007536
+	Found a match in EVT04.BIN @0x00007aca
+	Found a match in EVT05.BIN @0x000063ea
+	Found a match in EVT06.BIN @0x00008472
+	Found a match in EVT07.BIN @0x00008b12
+	Found a match in EVT08.BIN @0x00008ee6
+	Found a match in EVT08.BIN @0x0001172e
+	Found a match in EVT09.BIN @0x0000325e
+	Found a match in EVT10.BIN @0x00003b32
+	Found a match in EVT11.BIN @0x00005306
+	Found a match in EVT21.BIN @0x00003a96
+	Found a match in EVT22.BIN @0x0000972e
+	Found a match in EVT27.BIN @0x00009852
+	*/
 	return true;
 }
 
