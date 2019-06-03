@@ -4026,6 +4026,68 @@ bool CreateWKLSpreadSheets(const string& dialogImageDirectory, const string& dup
 			}
 		}
 
+		map<string, bool> validMiscFileNames;
+		validMiscFileNames["Misc_0_1a"] = true;
+		validMiscFileNames["Misc_0_1b"] = true;
+		validMiscFileNames["Misc_0_1c"] = true;
+		validMiscFileNames["Misc_0_1d"] = true;
+		validMiscFileNames["Misc_0_1e"] = true;
+		validMiscFileNames["Misc_0_1f"] = true;
+		validMiscFileNames["Misc_0_5"]  = true;
+		validMiscFileNames["Misc_0_6"]  = true;
+		validMiscFileNames["Misc_0_7"]  = true;
+		validMiscFileNames["Misc_0_8"]  = true;
+		validMiscFileNames["Misc_0_9"]  = true;
+		validMiscFileNames["Misc_0_10"] = true;
+		validMiscFileNames["Misc_0_11"] = true;
+		validMiscFileNames["Misc_0_12"] = true;
+		validMiscFileNames["Misc_0_13"] = true;
+		validMiscFileNames["Misc_0_14"] = true;
+		validMiscFileNames["Misc_0_15"] = true;
+		validMiscFileNames["Misc_0_16"] = true;
+		validMiscFileNames["Misc_0_17"] = true;
+		validMiscFileNames["Misc_0_18"] = true;
+		validMiscFileNames["Misc_0_19"] = true;
+		validMiscFileNames["Misc_0_20"] = true;
+		validMiscFileNames["Misc_0_a"]  = true;
+		validMiscFileNames["Misc_0_b"]  = true;
+		validMiscFileNames["Misc_0_c"]  = true;
+		validMiscFileNames["Misc_0_d"]  = true;
+		validMiscFileNames["Misc_0_e"]  = true;
+		validMiscFileNames["Misc_0_f"]  = true;
+		validMiscFileNames["Misc_3_3"]  = true;
+		validMiscFileNames["Misc_3_4"]  = true;
+		validMiscFileNames["Misc_3_15"] = true;
+		validMiscFileNames["Misc_8_4"]  = true;
+		validMiscFileNames["Misc_13_0"] = true;
+		validMiscFileNames["Misc_13_1"] = true;
+		validMiscFileNames["Misc_14_1"] = true;
+		validMiscFileNames["Misc_14_2"] = true;
+		validMiscFileNames["Misc_14_3"] = true;
+		validMiscFileNames["Misc_14_4"] = true;
+		validMiscFileNames["Misc_15_1"] = true;
+		validMiscFileNames["Misc_15_2"] = true;
+		
+		const string MiscPrefix("Misc_");
+
+		//Order the filename list so that Misc files appear last
+		vector<const FileNameContainer*> imagesToProcess;
+		for(const FileNameContainer& fileNameInfo : iter->second)
+		{
+			if( fileNameInfo.mNoExtension.compare(0, MiscPrefix.length(), MiscPrefix) == 0 )
+			{
+				continue;
+			}
+			imagesToProcess.push_back(&fileNameInfo);
+		}
+		for(const FileNameContainer& fileNameInfo : iter->second)
+		{
+			if( fileNameInfo.mNoExtension.compare(0, MiscPrefix.length(), MiscPrefix) == 0 )
+			{
+				imagesToProcess.push_back(&fileNameInfo);
+			}
+		}
+
 		const string htmlFileName = outputDirectory + iter->first + string(".php");
 
 		TextFileWriter htmlFile;
@@ -4083,7 +4145,7 @@ bool CreateWKLSpreadSheets(const string& dialogImageDirectory, const string& dup
 		htmlFile.WriteString("     var fileName = document.getElementById(\"FileName\").innerHTML;\n");
 		htmlFile.WriteString("     $.ajax({\n");
 		htmlFile.WriteString("          type: \"POST\",\n");
-		htmlFile.WriteString("          url: \"UpdateTranslationTest.php\",\n");
+		htmlFile.WriteString("          url: \"UpdateWKLTranslation.php\",\n");
 		htmlFile.WriteString("          data: { inTBLFileName: fileName, inImageName:inDialogImageName, inTranslation:translatedText, inDivId:inDivID, inCrc:inCRC },\n");
 		htmlFile.WriteString("          success: function(result)\n");
 		htmlFile.WriteString("          {\n");
@@ -4107,101 +4169,6 @@ bool CreateWKLSpreadSheets(const string& dialogImageDirectory, const string& dup
 		htmlFile.WriteString("function SaveEdits(inDialogImageName, inDivID, inCRC)\n");
 		htmlFile.WriteString("{\n");
 		htmlFile.WriteString("     SaveData(inDialogImageName, inDivID, inCRC);\n\n");
-		htmlFile.WriteString("     var translatedText = document.getElementById(inDivID).value;\n");
-		
-		//Print out array containing all available duplicate
-		if( duplicatesMap.size() )
-		{
-			htmlFile.WriteString("     var allDups = [\n");
-		}
-		else
-		{
-			htmlFile.WriteString("     var allDups = [];\n");
-		}
-		
-		bool firstDupPrinted = false;
-		for(map<string, vector<string>>::const_iterator mapIter = duplicatesMap.begin(); mapIter != duplicatesMap.end(); ++mapIter)
-		{
-			if( firstDupPrinted )
-			{
-				fprintf(htmlFile.GetFileHandle(), ",\n");
-			}
-
-			fprintf(htmlFile.GetFileHandle(), "                    \"edit_%s\"", mapIter->first.c_str());
-			
-			//Print dups of this entry (contained in mapIter->first)
-			const size_t numDups = mapIter->second.size();
-			for(size_t dupIndex = 0; dupIndex < numDups; ++dupIndex)
-			{
-				fprintf(htmlFile.GetFileHandle(), ", \"edit_%s\"", mapIter->second[dupIndex].c_str());
-			}
-
-			firstDupPrinted = true;
-
-		}
-		if( duplicatesMap.size() )
-		{
-			htmlFile.WriteString("];\n\n");
-		}
-
-		for(map<string, vector<string>>::const_iterator mapIter = duplicatesMap.begin(); mapIter != duplicatesMap.end(); ++mapIter)
-		{
-			fprintf(htmlFile.GetFileHandle(), "     var edit_%s_duplicates = [", mapIter->first.c_str());
-
-			const size_t numDups = mapIter->second.size();
-			for(size_t dupIndex = 0; dupIndex < numDups; ++dupIndex)
-			{
-				fprintf(htmlFile.GetFileHandle(), "\"%s\"", mapIter->second[dupIndex].c_str());
-				if(dupIndex + 1 < numDups)
-				{
-					fprintf(htmlFile.GetFileHandle(), ",");
-				}
-			}
-			fprintf(htmlFile.GetFileHandle(), "];\n");
-
-			//Now print vars for all of the dups
-			for(size_t dupIndex = 0; dupIndex < numDups; ++dupIndex)
-			{
-				fprintf(htmlFile.GetFileHandle(), "     var edit_%s_duplicates = [\"%s\"", mapIter->second[dupIndex].c_str(), mapIter->first.c_str());
-
-				if( numDups > 1 )
-				{
-					fprintf(htmlFile.GetFileHandle(), ",");
-				}
-
-				size_t numDupsPrinted = 0;
-				for(size_t dupIndex2 = 0; dupIndex2 < numDups; ++dupIndex2)
-				{
-					if( dupIndex == dupIndex2 )
-					{
-						continue;
-					}
-
-					fprintf(htmlFile.GetFileHandle(), "\"%s\"", mapIter->second[dupIndex2].c_str());
-					if(numDupsPrinted + 1 < numDups - 1)
-					{
-						fprintf(htmlFile.GetFileHandle(), ",");
-					}
-
-					++numDupsPrinted;
-				}
-				fprintf(htmlFile.GetFileHandle(), "];\n");
-			}
-		}
-
-		htmlFile.WriteString("     var dynName = inDivID + \"_duplicates\";\n\n");
-		htmlFile.WriteString("     if( allDups.includes(inDivID) )\n");
-		htmlFile.WriteString("     {\n");
-		htmlFile.WriteString("          var dupArray = eval(dynName);\n");
-		htmlFile.WriteString("          for(var i = 0; i < dupArray.length; i++)\n");
-		htmlFile.WriteString("          {\n");
-		htmlFile.WriteString("               var lookupName = \"#edit_\" + dupArray[i];\n");
-		htmlFile.WriteString("               $(lookupName).html(translatedText)\n");
-		htmlFile.WriteString("               var dupImageName = dupArray[i] + \".bmp\";\n");
-		htmlFile.WriteString("               var dupDivID     = \"edit_\" + dupArray[i];\n\n");
-		htmlFile.WriteString("               SaveData(dupImageName, dupDivID, 0)\n");
-		htmlFile.WriteString("          }\n");
-		htmlFile.WriteString("     }\n");
 		htmlFile.WriteString("}\n");
 
 		//Export data function
@@ -4263,74 +4230,26 @@ bool CreateWKLSpreadSheets(const string& dialogImageDirectory, const string& dup
 		htmlFile.WriteString("}\n");
 
 		//LoadData function
-		htmlFile.WriteString("function LoadData(){\n");
-		htmlFile.WriteString("     var fileName = document.getElementById(\"FileName\").innerHTML;\n");
-		htmlFile.WriteString("     $.ajax({\n");
-		htmlFile.WriteString("          type: \"POST\",\n");
-		htmlFile.WriteString("          url: \"GetTranslationData.php\",\n");
-		htmlFile.WriteString("          data: { inTBLFileName: fileName},\n");
-		htmlFile.WriteString("          success: function(result)\n");
-		htmlFile.WriteString("          {\n");
-		htmlFile.WriteString("               var numDupsPendingLoad = document.getElementById(\"NumberOfDuplicates\").innerHTML;\n");
-		htmlFile.WriteString("               var json = $.parseJSON(result);\n");
-		htmlFile.WriteString("               var i;\n");
-		htmlFile.WriteString("               for (i = 0; i < json.length; i++)\n");
-		htmlFile.WriteString("               {\n");
-		htmlFile.WriteString("                    var jsonEntry = json[i];\n");
-		htmlFile.WriteString("                    var english   = jsonEntry.English.replace(/\\\\/g, \'\');\n");
-		htmlFile.WriteString("                    var divId     = \"#\" + jsonEntry.DivId;\n");
-		htmlFile.WriteString("                    var trId      = \"tr_\" + jsonEntry.DivId;\n");
-		htmlFile.WriteString("                    if( english != \"Untranslated\" && english != \"<div>Untranslated</div>\")\n");
-		htmlFile.WriteString("                    {\n");
-		htmlFile.WriteString("                         if( document.getElementById(trId).bgColor != \"#fec8c8\" )\n");
-		htmlFile.WriteString("                         {\n");
-		htmlFile.WriteString("                              document.getElementById(trId).bgColor = \"#e3fec8\";\n");
-		htmlFile.WriteString("                         }  \n");
-		htmlFile.WriteString("                         $(divId).html(english);\n\n");
-		htmlFile.WriteString("                         var idNum     = jsonEntry.DivId.replace(\"edit_\", \"\");\n");
-		htmlFile.WriteString("                         var dupId     = \"dup_\" + idNum;\n");
-		htmlFile.WriteString("                         var dupValue  = document.getElementById(dupId).innerHTML;\n");
-		htmlFile.WriteString("                         if( dupValue == \"true\" )\n");
-		htmlFile.WriteString("                              numDupsPendingLoad--;\n");
-		htmlFile.WriteString("                    }\n");
-		htmlFile.WriteString("               }\n\n");
-		htmlFile.WriteString("               ////Load duplicates\n");
-		htmlFile.WriteString("               if( numDupsPendingLoad <= 0 )\n");
-		htmlFile.WriteString("               {\n");
-		htmlFile.WriteString("                    UpdateLoadingBar(1);\n\n");
-		htmlFile.WriteString("               }\n");
-		htmlFile.WriteString("               else\n");
-		htmlFile.WriteString("               {\n");
-		htmlFile.WriteString("                    var lastImageIndex  = document.getElementById(\"LastImageIndex\").innerHTML;\n");
-		htmlFile.WriteString("                    var numDupProcessed = 0;\n");
-		htmlFile.WriteString("                    for(i = 1; i < lastImageIndex; ++i)\n");
-		htmlFile.WriteString("                    {\n");
-		htmlFile.WriteString("                         var dupId    = \"dup_\" + i;\n");
-		htmlFile.WriteString("                         var dupValue = document.getElementById(dupId).innerHTML;\n");
-		htmlFile.WriteString("                         if( dupValue == \"false\" )\n");
-		htmlFile.WriteString("                         {\n");
-		htmlFile.WriteString("                              continue;\n");
-		htmlFile.WriteString("                         }\n");
-		htmlFile.WriteString("                         var divId    = \"#edit_\" + i;\n");
-		htmlFile.WriteString("                         var trId     = \"tr_edit_\" + i;\n");
-		htmlFile.WriteString("                         var crcId    = \"crc_\" + i;\n");
-		htmlFile.WriteString("                         var crcValue = document.getElementById(crcId).innerHTML;\n");
-		htmlFile.WriteString("                         var translatedText = document.getElementById(\"edit_\" + i).value;\n");
-		htmlFile.WriteString("                         crcValue     = parseInt(crcValue, 16)\n");
-		htmlFile.WriteString("                         if( translatedText == \"Untranslated\" )\n");
-		htmlFile.WriteString("                         {\n");
-		htmlFile.WriteString("                              var percentComplete = (numDupProcessed+1)/numDupsPendingLoad;\n");
-		htmlFile.WriteString("                              numDupProcessed = numDupProcessed + 1;\n");
-		htmlFile.WriteString("                              AttemptToLoadDuplicateData(divId, crcValue, trId, percentComplete);\n");
-		htmlFile.WriteString("                         }\n");
-		htmlFile.WriteString("                    }\n");
-		htmlFile.WriteString("               }\n");
-		htmlFile.WriteString("          },\n");
-		htmlFile.WriteString("          error: function()\n");
-		htmlFile.WriteString("          {\n");
-		htmlFile.WriteString("               alert('Unable to load data');\n");
-		htmlFile.WriteString("          }\n");
-		htmlFile.WriteString("     });\n");
+		htmlFile.WriteString("function LoadData()\n{\n");
+		int imageNum = 0;
+		for(const FileNameContainer* pFileNameInfo : imagesToProcess)
+		{
+			const FileNameContainer& fileNameInfo = *pFileNameInfo;
+
+			//Only output certain of the Misc files
+			if( fileNameInfo.mNoExtension.compare(0, MiscPrefix.length(), MiscPrefix) == 0 )
+			{
+				if( validMiscFileNames.find(fileNameInfo.mNoExtension) == validMiscFileNames.end() )
+				{
+					continue;
+				}
+			}
+
+			const unsigned long crc   = crcMap[&fileNameInfo];
+			snprintf(buffer, 2048, "     AttemptToLoadDuplicateData('#edit_%i', %lu, 'tr_edit_%i', 1);\n", imageNum + 1, crc, imageNum + 1);
+			htmlFile.WriteString(string(buffer));
+			++imageNum;
+		}
 		htmlFile.WriteString("}\n");
 
 
@@ -4419,70 +4338,8 @@ bool CreateWKLSpreadSheets(const string& dialogImageDirectory, const string& dup
 		htmlFile.WriteString("\t<th>Has a Duplicate</th>\n");
 		htmlFile.WriteString("\t</tr>\n");
 
-		map<string, bool> validMiscFileNames;
-		validMiscFileNames["Misc_0_1a"] = true;
-		validMiscFileNames["Misc_0_1b"] = true;
-		validMiscFileNames["Misc_0_1c"] = true;
-		validMiscFileNames["Misc_0_1d"] = true;
-		validMiscFileNames["Misc_0_1e"] = true;
-		validMiscFileNames["Misc_0_1f"] = true;
-		validMiscFileNames["Misc_0_5"]  = true;
-		validMiscFileNames["Misc_0_6"]  = true;
-		validMiscFileNames["Misc_0_7"]  = true;
-		validMiscFileNames["Misc_0_8"]  = true;
-		validMiscFileNames["Misc_0_9"]  = true;
-		validMiscFileNames["Misc_0_10"] = true;
-		validMiscFileNames["Misc_0_11"] = true;
-		validMiscFileNames["Misc_0_12"] = true;
-		validMiscFileNames["Misc_0_13"] = true;
-		validMiscFileNames["Misc_0_14"] = true;
-		validMiscFileNames["Misc_0_15"] = true;
-		validMiscFileNames["Misc_0_16"] = true;
-		validMiscFileNames["Misc_0_17"] = true;
-		validMiscFileNames["Misc_0_18"] = true;
-		validMiscFileNames["Misc_0_19"] = true;
-		validMiscFileNames["Misc_0_20"] = true;
-		validMiscFileNames["Misc_0_a"]  = true;
-		validMiscFileNames["Misc_0_b"]  = true;
-		validMiscFileNames["Misc_0_c"]  = true;
-		validMiscFileNames["Misc_0_d"]  = true;
-		validMiscFileNames["Misc_0_e"]  = true;
-		validMiscFileNames["Misc_0_f"]  = true;
-		validMiscFileNames["Misc_3_3"]  = true;
-		validMiscFileNames["Misc_3_4"]  = true;
-		validMiscFileNames["Misc_3_15"] = true;
-		validMiscFileNames["Misc_8_4"]  = true;
-		validMiscFileNames["Misc_13_0"] = true;
-		validMiscFileNames["Misc_13_1"] = true;
-		validMiscFileNames["Misc_14_1"] = true;
-		validMiscFileNames["Misc_14_2"] = true;
-		validMiscFileNames["Misc_14_3"] = true;
-		validMiscFileNames["Misc_14_4"] = true;
-		validMiscFileNames["Misc_15_1"] = true;
-		validMiscFileNames["Misc_15_2"] = true;
-		
-		const string MiscPrefix("Misc_");
-
 		//Get name of info file (0100.BIN, etc.)
 		const string infoFileName = iter->first;
-
-		//Order the filename list so that Misc files appear last
-		vector<const FileNameContainer*> imagesToProcess;
-		for(const FileNameContainer& fileNameInfo : iter->second)
-		{
-			if( fileNameInfo.mNoExtension.compare(0, MiscPrefix.length(), MiscPrefix) == 0 )
-			{
-				continue;
-			}
-			imagesToProcess.push_back(&fileNameInfo);
-		}
-		for(const FileNameContainer& fileNameInfo : iter->second)
-		{
-			if( fileNameInfo.mNoExtension.compare(0, MiscPrefix.length(), MiscPrefix) == 0 )
-			{
-				imagesToProcess.push_back(&fileNameInfo);
-			}
-		}
 
 		//Create entries for all images
 		int num = 0;
@@ -5127,6 +4984,7 @@ public:
 			WklUncompressedData* pUncompressedImageData = new WklUncompressedData();
 			pUncompressedImageData->Initialize(tempBuffer, imageOffset);
 			pUncompressedImageData->ReadInImages(uncompressedImages.mpUncompressedData);
+			mNamesAndSpecialMoves.mUncompressedData.push_back(pUncompressedImageData);
 		}
 		//***Done with Character Names & Special Moves
 
@@ -5721,8 +5579,9 @@ void ExtractWKLFiles(const string& sakuraDirectory, const string& outDirectory)
 	vector<FileNameContainer> wklFiles;
 	GetAllFilesOfType(allFiles, "WKL", wklFiles);
 
-//	WklCompressedInfo compressedInfo[64];
+	WklCompressedInfo compressedInfo[64];
 
+	/*
 	for(const FileNameContainer& fileNameInfo : wklFiles)
 	{
 		printf("Extracting %s\n", fileNameInfo.mFileName.c_str());
@@ -5738,9 +5597,9 @@ void ExtractWKLFiles(const string& sakuraDirectory, const string& outDirectory)
 		WklBattleMenuExtractor wklExtractor;
 		wklExtractor.Initialize(fileNameInfo);
 		wklExtractor.DumpImages(outSubDirName, paletteData);
-	}
+	}*/
 	
-	/*
+	
 	for(const FileNameContainer& fileNameInfo : wklFiles)
 	{
 		printf("Extracting %s\n", fileNameInfo.mFileName.c_str());
@@ -5835,7 +5694,7 @@ void ExtractWKLFiles(const string& sakuraDirectory, const string& outDirectory)
 				const string prefix = string(tempBuffer);
 
 				const string outFileName = outSubDirName + prefix + BMPExtension;
-				const char* pImageData   = &pWklData[miscImageHeaderEnd + imageHeader.offset + imageHeader.offsetFromPrevImage];
+				const char* pImageData   = &pWklData[miscImageHeaderEnd + imageHeader.offsetFromHeader + imageHeader.offsetFromPrevImage];
 				ExtractImageFromData(pImageData, (imageHeader.width*imageHeader.height)/2, outFileName, paletteData.mpPaletteData, paletteData.mPaletteSize, imageHeader.width, imageHeader.height, 1, 16, 0, false);
 				
 			}
@@ -5844,7 +5703,6 @@ void ExtractWKLFiles(const string& sakuraDirectory, const string& outDirectory)
 		delete[] pMiscHeaders;
 		//***Done with Other Images
 	}
-	*/
 }
 
 struct SakuraLut
