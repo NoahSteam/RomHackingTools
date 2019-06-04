@@ -5527,6 +5527,27 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 	}
 	//***Done with SLG files***
 
+	const string evtFilePath     = outDirectory + "EVT01.BIN";
+	const string evtOrigFilePath = sakuraDirectory + "SAKURA2\\EVT01.BIN";
+	FileReadWriter evtFile;
+	FileData origEvtFile;
+	if( !evtFile.OpenFile(evtFilePath.c_str()) )
+	{
+		printf("PatchWKL: Unable to open %s file.\n", evtFilePath.c_str());
+		return false;
+	}
+	if( !origEvtFile.InitializeFileData(evtOrigFilePath.c_str()) )
+	{
+		printf("PatchWKL: Unable to open %s file.\n", evtOrigFilePath.c_str());
+		return false;
+	}
+
+	unsigned long origEvtVDP1WriteAddress = 0;
+	unsigned long newEvtVDP1WriteAddress  = 0;
+	origEvtFile.ReadData(0x00006d9c, (char*)&origEvtVDP1WriteAddress, sizeof(origEvtVDP1WriteAddress), true);
+	newEvtVDP1WriteAddress = (origEvtVDP1WriteAddress + (unsigned short)(battleMenuDelta>>3));
+	evtFile.WriteData(0x00006d9c, (char*)&newEvtVDP1WriteAddress, sizeof(newEvtVDP1WriteAddress), true);
+
 	/*
 	Found a match in EVT01.BIN @0x00006d9a
 	Found a match in EVT02.BIN @0x000087aa
