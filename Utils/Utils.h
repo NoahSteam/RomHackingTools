@@ -96,6 +96,7 @@ public:
 	bool  DoesThisFileContain(const FileData& otherFile, std::vector<unsigned long>* pOutOffsets, bool bFindMultiple) const;	
 	bool  FindDataIndex(const char* pData, unsigned long dataLength, unsigned long& outIndex) const;
 	unsigned long GetCRC();
+	bool ReadData(unsigned long inDataOffset, char* pOutData, unsigned long inDataSize, bool bSwapEndianness);
 
 	const char*   GetData() const {return mpData;}
 	unsigned long GetDataSize() const {return mBufferSize;}

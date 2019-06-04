@@ -368,6 +368,21 @@ unsigned long FileData::GetCRC()
 	return mCrc;
 }
 
+bool FileData::ReadData(unsigned long inDataOffset, char* pOutData, unsigned long inDataSize, bool bSwapEndianness)
+{
+	if( memcpy_s(pOutData, inDataSize, mpData + inDataOffset, inDataSize) )
+	{
+		return false;
+	}
+
+	if( bSwapEndianness )
+	{
+		SwapByteOrderInPlace((char*)pOutData, inDataSize);
+	}
+
+	return true;
+}
+
 //////////////////////////////
 //        TextFileData      //
 //////////////////////////////
