@@ -5448,7 +5448,14 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 		printf("PatchWKL failed. Unable to open %s\\BattleMenuFormatting.bin\n", inTranslatedDirectory.c_str());
 		return false;
 	}
-
+	
+	/*
+	const int maxMultiplier = (240/(OutTileSpacingX));
+	const int maxCharacters = maxMultiplier;
+	const int textBytes     = maxCharacters*((16*16)/2);
+	const int origTextBytes = ((240/16))*((16*16)/2);
+	const int textDelta = (textBytes - origTextBytes);
+	*/
 	for(const string& slgFileName : slgFiles)
 	{
 		//Open the original file
