@@ -373,6 +373,8 @@ For Vertical backdrop:
 0604ac60 is base address
 base+spriteNum*8 for x
 
+Battle Text:
+Written @05C16480
 Battle Sprites: VDP1 Address
 06064188
 060488F4

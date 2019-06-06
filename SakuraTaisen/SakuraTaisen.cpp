@@ -5449,13 +5449,13 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 		return false;
 	}
 	
-	/*
-	const int maxMultiplier = (240/(OutTileSpacingX));
-	const int maxCharacters = maxMultiplier;
-	const int textBytes     = maxCharacters*((16*16)/2);
-	const int origTextBytes = ((240/16))*((16*16)/2);
-	const int textDelta = (textBytes - origTextBytes);
-	*/
+	
+	const int maxMultiplier        = (240/(OutTileSpacingX));
+	const int maxCharactersPerLine = maxMultiplier;
+	const int textBytes            = maxCharactersPerLine*MaxLines*((16*16)/2);
+	const int origTextBytes        = ((240/16))*MaxLines*((16*16)/2);
+	const int textDelta            = (textBytes - origTextBytes);
+	
 	for(const string& slgFileName : slgFiles)
 	{
 		//Open the original file
@@ -5470,54 +5470,68 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 		//Fixup 4 byte offsets
 		unsigned long origVDP1Value = 0;
 		unsigned long newVPD1Value  = 0;
+
+		//Cursor image VDP1 offset
 		slgFile.ReadData(0x00014058, (char*)&origVDP1Value, sizeof(origVDP1Value), true);
 		newVPD1Value = origVDP1Value + battleMenuDelta;
 		slgFile.WriteData(0x00014058, (char*)&newVPD1Value, sizeof(newVPD1Value), true);
 
+		//Cursor image VDP1 offset
 		slgFile.ReadData(0x000140f0, (char*)&origVDP1Value, sizeof(origVDP1Value), true);
 		newVPD1Value = origVDP1Value + battleMenuDelta;
 		slgFile.WriteData(0x000140f0, (char*)&newVPD1Value, sizeof(newVPD1Value), true);
 
+		//Cursor image VDP1 offset
 		slgFile.ReadData(0x00014528, (char*)&origVDP1Value, sizeof(origVDP1Value), true);
 		newVPD1Value = origVDP1Value + battleMenuDelta;
 		slgFile.WriteData(0x00014528, (char*)&newVPD1Value, sizeof(newVPD1Value), true);
 
+		//Dialog text VDP1 address [05C16480]
 		slgFile.ReadData(0x00021590, (char*)&origVDP1Value, sizeof(origVDP1Value), true);
 		newVPD1Value = origVDP1Value + battleMenuDelta;
 		slgFile.WriteData(0x00021590, (char*)&newVPD1Value, sizeof(newVPD1Value), true);
 
+		//Dialog text VDP1 address [05C16480]
 		slgFile.ReadData(0x000219c4, (char*)&origVDP1Value, sizeof(origVDP1Value), true);
 		newVPD1Value = origVDP1Value + battleMenuDelta;
 		slgFile.WriteData(0x000219c4, (char*)&newVPD1Value, sizeof(newVPD1Value), true);
 
+		//Battle Sprites VDP1 address[05C17B00]
 		slgFile.ReadData(0x00010f8c, (char*)&origVDP1Value, sizeof(origVDP1Value), true);
-		newVPD1Value = origVDP1Value + battleMenuDelta;
+		newVPD1Value = origVDP1Value + battleMenuDelta + textDelta;
 		slgFile.WriteData(0x00010f8c, (char*)&newVPD1Value, sizeof(newVPD1Value), true);
 
+		//Battle sprites VDP1 read address[05C17B00]
 		slgFile.ReadData(0x0000FF68, (char*)&origVDP1Value, sizeof(origVDP1Value), true);
-		newVPD1Value = origVDP1Value + battleMenuDelta;
+		newVPD1Value = origVDP1Value + battleMenuDelta + textDelta;
 		slgFile.WriteData(0x0000FF68, (char*)&newVPD1Value, sizeof(newVPD1Value), true);
 
 
 		//Fixup 2 byte offsets
 		unsigned short origVDP1Offset = 0;
 		unsigned short newVDP1Offset  = 0;
-		slgFile.ReadData(0x000142A6, (char*)&origVDP1Offset, sizeof(origVDP1Offset), true);
-		newVDP1Offset = ((origVDP1Offset<<3) + (unsigned short)battleMenuDelta) >> 3;
-		slgFile.WriteData(0x000142A6, (char*)&newVDP1Offset, sizeof(newVDP1Offset), true);
 
-		slgFile.ReadData(0x00014434, (char*)&origVDP1Offset, sizeof(origVDP1Offset), true);
-		newVDP1Offset = ((origVDP1Offset<<3) + (unsigned short)battleMenuDelta) >> 3;
-		slgFile.WriteData(0x00014434, (char*)&newVDP1Offset, sizeof(newVDP1Offset), true);
+		//Face images
+		//Blink image written to 05c15B00 [2B60 when divided by 8] and 05c15880 [2B10 when divided by 8]
+		{
+			slgFile.ReadData(0x000142A6, (char*)&origVDP1Offset, sizeof(origVDP1Offset), true);
+			newVDP1Offset = ((origVDP1Offset<<3) + (unsigned short)battleMenuDelta) >> 3;
+			slgFile.WriteData(0x000142A6, (char*)&newVDP1Offset, sizeof(newVDP1Offset), true);
 
-		slgFile.ReadData(0x0001444C, (char*)&origVDP1Offset, sizeof(origVDP1Offset), true);
-		newVDP1Offset = ((origVDP1Offset<<3) + (unsigned short)battleMenuDelta) >> 3;
-		slgFile.WriteData(0x0001444C, (char*)&newVDP1Offset, sizeof(newVDP1Offset), true);
+			slgFile.ReadData(0x00014434, (char*)&origVDP1Offset, sizeof(origVDP1Offset), true);
+			newVDP1Offset = ((origVDP1Offset<<3) + (unsigned short)battleMenuDelta) >> 3;
+			slgFile.WriteData(0x00014434, (char*)&newVDP1Offset, sizeof(newVDP1Offset), true);
+
+			slgFile.ReadData(0x0001444C, (char*)&origVDP1Offset, sizeof(origVDP1Offset), true);
+			newVDP1Offset = ((origVDP1Offset<<3) + (unsigned short)battleMenuDelta) >> 3;
+			slgFile.WriteData(0x0001444C, (char*)&newVDP1Offset, sizeof(newVDP1Offset), true);
+		}
 
 		//Clipping for the battle menu, change 0x0030 to 0xffd8 (48 to -40)
 		unsigned short newBattleMenuClippingValue = 0xFFD8;
 		slgFile.WriteData(0x000253DC, (char*)&newBattleMenuClippingValue, sizeof(newBattleMenuClippingValue), true);
 
+		//Battle menu formatting
 		slgFile.WriteData(0x00046c60, battleMenuFormattingData.GetData(), battleMenuFormattingData.GetDataSize());
 		/*
 		
@@ -5549,29 +5563,51 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 		return false;
 	}
 
-	unsigned long origEvtVDP1WriteAddress = 0;
-	unsigned long newEvtVDP1WriteAddress  = 0;
-	origEvtFile.ReadData(0x00006d9c, (char*)&origEvtVDP1WriteAddress, sizeof(origEvtVDP1WriteAddress), true);
-	newEvtVDP1WriteAddress = (origEvtVDP1WriteAddress + (unsigned short)(battleMenuDelta>>3));
-	evtFile.WriteData(0x00006d9c, (char*)&newEvtVDP1WriteAddress, sizeof(newEvtVDP1WriteAddress), true);
+	//unsigned long origEvtVDP1WriteAddress = 0;
+	//unsigned long newEvtVDP1WriteAddress  = 0;
 
-	/*
-	Found a match in EVT01.BIN @0x00006d9a
-	Found a match in EVT02.BIN @0x000087aa
-	Found a match in EVT03.BIN @0x00007536
-	Found a match in EVT04.BIN @0x00007aca
-	Found a match in EVT05.BIN @0x000063ea
-	Found a match in EVT06.BIN @0x00008472
-	Found a match in EVT07.BIN @0x00008b12
-	Found a match in EVT08.BIN @0x00008ee6
-	Found a match in EVT08.BIN @0x0001172e
-	Found a match in EVT09.BIN @0x0000325e
-	Found a match in EVT10.BIN @0x00003b32
-	Found a match in EVT11.BIN @0x00005306
-	Found a match in EVT21.BIN @0x00003a96
-	Found a match in EVT22.BIN @0x0000972e
-	Found a match in EVT27.BIN @0x00009852
-	*/
+	//VDP1 Write address
+	{
+		/*
+		origEvtFile.ReadData(0x00006d9c, (char*)&origEvtVDP1WriteAddress, sizeof(origEvtVDP1WriteAddress), true);
+		newEvtVDP1WriteAddress = (origEvtVDP1WriteAddress + (unsigned short)((battleMenuDelta)>>3));
+		evtFile.WriteData(0x00006d9c, (char*)&newEvtVDP1WriteAddress, sizeof(newEvtVDP1WriteAddress), true);*/
+
+		//25CF100
+		//origEvtFile.ReadData(0x000077d4, (char*)&origEvtVDP1WriteAddress, sizeof(origEvtVDP1WriteAddress), true);
+		//newEvtVDP1WriteAddress = (origEvtVDP1WriteAddress + (unsigned short)((battleMenuDelta + textDelta)));
+		//evtFile.WriteData(0x000077d4, (char*)&newEvtVDP1WriteAddress, sizeof(newEvtVDP1WriteAddress), true);
+
+		/*
+		origEvtFile.ReadData(0x00000c1c, (char*)&origEvtVDP1WriteAddress, sizeof(origEvtVDP1WriteAddress), true);
+		newEvtVDP1WriteAddress = (origEvtVDP1WriteAddress + (unsigned short)((battleMenuDelta + textDelta)>>3));
+		evtFile.WriteData(0x00000c1c, (char*)&newEvtVDP1WriteAddress, sizeof(newEvtVDP1WriteAddress), true);
+
+		origEvtFile.ReadData(0x00001128, (char*)&origEvtVDP1WriteAddress, sizeof(origEvtVDP1WriteAddress), true);
+		newEvtVDP1WriteAddress = (origEvtVDP1WriteAddress + (unsigned short)((battleMenuDelta + textDelta)>>3));
+		evtFile.WriteData(0x00001128, (char*)&newEvtVDP1WriteAddress, sizeof(newEvtVDP1WriteAddress), true);
+
+		origEvtFile.ReadData(0x00001320, (char*)&origEvtVDP1WriteAddress, sizeof(origEvtVDP1WriteAddress), true);
+		newEvtVDP1WriteAddress = (origEvtVDP1WriteAddress + (unsigned short)((battleMenuDelta + textDelta)>>3));
+		evtFile.WriteData(0x00001320, (char*)&newEvtVDP1WriteAddress, sizeof(newEvtVDP1WriteAddress), true);*/
+		/*
+		Found a match in EVT01.BIN @0x00006d9a
+		Found a match in EVT02.BIN @0x000087aa
+		Found a match in EVT03.BIN @0x00007536
+		Found a match in EVT04.BIN @0x00007aca
+		Found a match in EVT05.BIN @0x000063ea
+		Found a match in EVT06.BIN @0x00008472
+		Found a match in EVT07.BIN @0x00008b12
+		Found a match in EVT08.BIN @0x00008ee6
+		Found a match in EVT08.BIN @0x0001172e
+		Found a match in EVT09.BIN @0x0000325e
+		Found a match in EVT10.BIN @0x00003b32
+		Found a match in EVT11.BIN @0x00005306
+		Found a match in EVT21.BIN @0x00003a96
+		Found a match in EVT22.BIN @0x0000972e
+		Found a match in EVT27.BIN @0x00009852
+		*/
+	}
 	return true;
 }
 
