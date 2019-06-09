@@ -1,0 +1,78 @@
+05c00200
+06060348
+060488F4
+0605057A <-2f60 written here
+
+0605051c
+
+0603ec9c <- has write address for sprites
+0603ec98
+
+05c1f500
+06034cc4
+060165d8
+06016570
+0020ab1c
+
+00217f50 <--First sprite write address written heree
+0020AD90C[F100] <-VDP1 write Address Coming from (EVT01.bin @0x00006D9E)
+
+0605057A
+06059DDC
+
+//Position for battle menu options
+05c000ec<-write
+06060148<-write
+06047B78 <-write r10 has x value, originally in r6
+06014B80<-read
+06029230
+0604ACB0 [0008] X coordinate? OR 0604AC9A
+
+0604ac90 is base address
+base+spriteNum*8+4 for y
+base+spriteNum*8+2 for x
+
+Hex: 8,18,28,38,48,58,
+Dec: 8,24,40,56,72
+
+Hex: 8,28,48,68, 88, A8, C8
+Dec: 8,40,72,104,136,168,200 
+
+0604ac56 <-around where formatting code is
+
+05c00016c
+060601ac
+06047B78
+
+For Vertical backdrop:
+0604ac60 is base address
+base+spriteNum*8 for x
+
+Hex: 0,20,40,60,80
+Dec: 0,32,64,96,128
+
+For Horizontal Backdrop:
+060600ec
+06047B7A
+06014B80
+06029234
+06068C18 <-x coordinate written here for maria
+06029414 <-read around where x coordinate is being calculated
+06052fd8 <-x=0030 written here
+060293dc [0030] from 000253dc
+
+Tutorial Cursor:
+060600CE <-Y position
+06001F6A
+06017ED2 <-Read
+0601314c
+060133E8
+
+@0020453C <-Read
+06058bb8 <-write
+002046ac
+0020471c
+0020489C
+
+06058BA6 contains the left screen coordinate?
+0020453C <-Read this [00A0] which is the center of the screen

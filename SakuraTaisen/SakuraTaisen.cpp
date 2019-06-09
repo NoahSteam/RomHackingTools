@@ -5449,11 +5449,11 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 		return false;
 	}
 	
-	
+	//Calculate text offset
 	const int maxMultiplier        = (240/(OutTileSpacingX));
 	const int maxCharactersPerLine = maxMultiplier;
 	const int textBytes            = maxCharactersPerLine*MaxLines*((16*16)/2);
-	const int origTextBytes        = ((240/16))*MaxLines*((16*16)/2);
+	const int origTextBytes        = ((240/16))*3*((16*16)/2);
 	const int textDelta            = (textBytes - origTextBytes);
 	
 	for(const string& slgFileName : slgFiles)
