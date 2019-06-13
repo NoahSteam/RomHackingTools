@@ -378,3 +378,5 @@ Written @05C16480
 Battle Sprites: VDP1 Address
 06064188
 060488F4
+
+EVT01 loaded @0x00204000

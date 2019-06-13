@@ -76,3 +76,6 @@ Tutorial Cursor:
 
 06058BA6 contains the left screen coordinate?
 0020453C <-Read this [00A0] which is the center of the screen
+
+@06017824, read something
+@06017834 mov #0x18. r6
