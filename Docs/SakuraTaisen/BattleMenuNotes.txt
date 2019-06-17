@@ -79,3 +79,89 @@ Tutorial Cursor:
 
 @06017824, read something
 @06017834 mov #0x18. r6
+
+Tutorial Cursor Attempt 2:
+06058BB4 <-X position
+
+//For second part
+002046B0
+002046a8
+0020471c
+002047b0 <-look at where r10 is being set
+002047ac
+002047a4
+
+01c8 comes from 0020576a
+
+First Part:
+002046B0
+002046a8
+0020471c
+0020489c 
+06001F90 <- contains 01ec0000
+002044ec <-read here to see where 01ec is being written into r4
+
+002044c8 <- adds 0x0c to calculation.
+
+Third Part:
+002046B0
+002046a8
+0020471c
+0020489c
+
+00204898 <-read to see where FFF8 is coming from
+
+Try modifying 002044e8 from 00D8 to 00b8?
+002160fe has FFF8
+
+Around 002160fe is where the x,y positions of the cursor are for the tutorial
+Around 002044f4 is where x initial position is during maria's move
+00216100
+
+//Reading 002160f4
+002160f0 + r8<<2 @0x002044ba
+00204898 at this point r7 has value that will be put into r8 and r7 gets it from r9 which gets it from r6 in the prev step(002047e4)
+00204890 <-read @002047e4
+r6 is assigned 1 @0020564a \\read 00205774 to get here
+
+Read 06017a3e to get initial assignment of 007800000 into r1
+
+center of the screen is the origin (x=160 => 0 in world space)
+
+480+120 = 600
+600/2 = 300(0x12c) @0x0601781e shar r5
+300 + 99
+399
+516 + 399 = 915(0x393)
+99 - 300 (0x63 - 0x12c) = -201 (0xff37
+915/6(0x393 * 0x2AAAAAAB) = 0x0000098800000131 (MACH, MACL)
+-201(0xff37) + 516(0x204) = 315(0x13b)
+98/4 = 38(0x26) @0601783c
+915 * 2 (0x393 << 1) = 1830(0x726) =>r2
+r2 - r2 = 0
+r1 * 0x18 (0x26 * 0x18, 38*24) = 912(0x390)
+2AAAAAAB * 0x13b (0x13b/6, 315/6) = 52(0x34)
+52/4 = 16(0x0d)
+0x13b << 1 (315*2), 630 => r7
+r7 - r7
+r1(0x0d) - r7(0) = 0x0d
+0x0d * 0x18 = 312(0x138)
+0xfdfc + 0x390 = -516 + 912 = 396(0x18c)
+0xfdfc + 0x138 = -516 + 312 = -204 (0xff34)
+0x18c(396) - 0xff34(-204) = 600
+0xff34 + 0x258 = 0xc0(192)
+0xc0/2 - 0x60
+
+mov 0x18 @ 06017766, 06017834
+
+0x0601a0e0 has 0x009f(159)
+06058bb4 has x value written to it
+
+002046a0 has ff60
+
+002046a6 calculation that ends up with 0x64(100)
+002046ac @00204610
+
+00204530
+
+00216108
