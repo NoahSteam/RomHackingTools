@@ -5456,6 +5456,9 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 	const int origTextBytes        = ((240/16))*3*((16*16)/2);
 	const int textDelta            = (textBytes - origTextBytes);
 	
+	//Clipping for the battle menu, change 0x0030 to 0xffd8 (48 to -40)
+	unsigned short newBattleMenuClippingValue = 0xFFD8;
+	
 	for(const string& slgFileName : slgFiles)
 	{
 		//Open the original file
@@ -5528,7 +5531,6 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 		}
 
 		//Clipping for the battle menu, change 0x0030 to 0xffd8 (48 to -40)
-		unsigned short newBattleMenuClippingValue = 0xFFD8;
 		slgFile.WriteData(0x000253DC, (char*)&newBattleMenuClippingValue, sizeof(newBattleMenuClippingValue), true);
 
 		//Battle menu formatting
@@ -5550,9 +5552,9 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 
 	const string evtFilePath     = outDirectory + "EVT01.BIN";
 	const string evtOrigFilePath = sakuraDirectory + "SAKURA2\\EVT01.BIN";
-	FileReadWriter evtFile;
+	FileWriter evtFile;
 	FileData origEvtFile;
-	if( !evtFile.OpenFile(evtFilePath.c_str()) )
+	if( !evtFile.OpenFileForWrite(evtFilePath.c_str()) )
 	{
 		printf("PatchWKL: Unable to open %s file.\n", evtFilePath.c_str());
 		return false;
@@ -5562,6 +5564,19 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 		printf("PatchWKL: Unable to open %s file.\n", evtOrigFilePath.c_str());
 		return false;
 	}
+
+	const string tutorialPatchPath = inTranslatedDirectory + "EVT01_Tutorial.bin";
+	FileData evt01TutorialPatch;
+	if( !evt01TutorialPatch.InitializeFileData(tutorialPatchPath.c_str()) )
+	{
+		printf("PatchWKL: Unable to open %s file.\n", tutorialPatchPath.c_str());
+		return false;
+	}
+	
+
+	evtFile.WriteData(origEvtFile.GetData(), origEvtFile.GetDataSize());
+	evtFile.WriteDataAtOffset(evt01TutorialPatch.GetData(), evt01TutorialPatch.GetDataSize(), 0x000120F0);
+	evtFile.WriteDataAtOffset(&newBattleMenuClippingValue, sizeof(newBattleMenuClippingValue), 0x000004F8, true);
 
 	//unsigned long origEvtVDP1WriteAddress = 0;
 	//unsigned long newEvtVDP1WriteAddress  = 0;

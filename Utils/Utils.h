@@ -132,7 +132,7 @@ public:
 
 	bool          OpenFileForWrite(const std::string& outFileName);
 	bool          WriteData(const void* pData, unsigned long size);
-	bool          WriteDataAtOffset(const void* pData, unsigned long size, unsigned long offset);
+	bool          WriteDataAtOffset(const void* pData, unsigned long size, unsigned long offset, bool bSwapEndianness = false);
 	void          Close();
 	unsigned long GetFileSize() const {return mDataSize;}
 	FILE*         GetHandle() {return mpFileHandle;}

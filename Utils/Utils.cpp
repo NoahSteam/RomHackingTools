@@ -520,11 +520,25 @@ bool FileWriter::WriteData(const void* pInData, unsigned long inDataSize)
 	return numElemsWritten == inDataSize;
 }
 
-bool FileWriter::WriteDataAtOffset(const void* pInData, unsigned long inSize, unsigned long inOffset)
+bool FileWriter::WriteDataAtOffset(const void* pInData, unsigned long inSize, unsigned long inOffset, bool bSwapEndianness)
 {
 	fseek(mpFileHandle, inOffset, SEEK_SET);
 
-	bool bSuccess = WriteData(pInData, inSize);
+	bool bSuccess = false;
+	if( bSwapEndianness )
+	{
+		char* pSwappedData = new char[inSize];
+		memcpy_s(pSwappedData, inSize, pInData, inSize);
+		SwapByteOrderInPlace(pSwappedData, inSize);
+
+		bSuccess = WriteData(pSwappedData, inSize);
+
+		delete[] pSwappedData;
+	}
+	else
+	{
+		bSuccess = WriteData(pInData, inSize);
+	}
 
 	fseek(mpFileHandle, 0, SEEK_END);
 
