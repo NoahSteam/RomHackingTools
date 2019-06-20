@@ -2258,12 +2258,14 @@ bool FixupSLG(const string& rootDir, const string& outDir, const string& inTrans
 		const int offsetLipsMaxCharsOffset_2   = 0x0002178B; //Change the command from MOV 0x0F(E20F) to SHLL1(E21E)
 		const int offsetLipsNumCharsPerLine_1  = 0x000217B9;
 		const int offsetLipsNumCharsPerLine_2  = 0x000217BF;
+		const int offsetLipsStartLocationY     = 0x0002173D; //Change the cpommand from MOV 0xCC(-52), r11 to 0xCE(-50)
 		const unsigned char maxMultiplier      = (240/(OutTileSpacingX));
 		const unsigned char maxCharacters      = maxMultiplier - 1;
 		const unsigned char maxLines           = MaxLines - 1;
 		const unsigned char lipsXOffset        = 0;
 		const unsigned char shiftLeftValue     = 0;
 		const unsigned char maxCharsPerLipsLine= maxMultiplier;
+		const unsigned char lipsStartLocY      = 0xCE;
 
 		memcpy_s((void*)(origSlgData.GetData() + offsetMaxSpacingScrolling1),     origSlgData.GetDataSize(), (void*)&maxCharacters,	       sizeof(maxCharacters));
 		memcpy_s((void*)(origSlgData.GetData() + offsetMaxSpacingScrolling2),     origSlgData.GetDataSize(), (void*)&maxCharacters,	       sizeof(maxCharacters));
@@ -2279,11 +2281,12 @@ bool FixupSLG(const string& rootDir, const string& outDir, const string& inTrans
 		memcpy_s((void*)(origSlgData.GetData() + offsetLipsMaxCharsOffset_2),	  origSlgData.GetDataSize(), (void*)&maxCharsPerLipsLine,  sizeof(maxCharsPerLipsLine));
 		memcpy_s((void*)(origSlgData.GetData() + offsetLipsNumCharsPerLine_1),	  origSlgData.GetDataSize(), (void*)&maxCharsPerLipsLine,  sizeof(maxCharsPerLipsLine));
 		memcpy_s((void*)(origSlgData.GetData() + offsetLipsNumCharsPerLine_2),	  origSlgData.GetDataSize(), (void*)&maxCharsPerLipsLine,  sizeof(maxCharsPerLipsLine));
+		memcpy_s((void*)(origSlgData.GetData() + offsetLipsStartLocationY),	      origSlgData.GetDataSize(), (void*)&lipsStartLocY,        sizeof(lipsStartLocY));
 		//***Done Fixing Max Character Lengths***
 
 		//***Fix the palette***
 		const int paletteAddress1 = 0x000158A4;
-		const int paletteAddress2 = 0x0004A1D8;
+		const int paletteAddress2 = 0x000158C4;//0x0004A1D8;
 		char* pNewPalette         = new char[paletteSize];
 
 		//Store palette as 15bit color
@@ -2294,6 +2297,7 @@ bool FixupSLG(const string& rootDir, const string& outDir, const string& inTrans
 
 		//copy over the palette
 		memcpy_s((void*)(origSlgData.GetData() + paletteAddress1), origSlgData.GetDataSize(), pNewPalette, paletteSize);
+		memcpy_s((void*)(origSlgData.GetData() + paletteAddress2), origSlgData.GetDataSize(), pNewPalette, paletteSize);
 		delete[] pNewPalette;
 		//***Done fixing the palette***
 
