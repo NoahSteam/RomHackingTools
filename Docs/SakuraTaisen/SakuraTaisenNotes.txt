@@ -80,7 +80,12 @@ Spacing X for LIPS
  Sprite drawing code for LIPS event
  
  0601466A -> 06001F64 -> 06065EDC-> 05C0010C
- 
+
+Text palette is in SAKURA @00053954 
+LIPS highlighted text palette is in SAKURA @00053974
+
+Text X location is specified at 0001683C (E3A0) where A0 is -96 and also @0001D668 though I don't know when that's used.
+
 Main menu sprite code:
 LOGO.SH2 
 000061e8

@@ -2313,11 +2313,11 @@ bool FixupSLG(const string& rootDir, const string& outDir, const string& inTrans
 		patchedFile.WriteData(origSlgData.GetData(), origSlgData.GetDataSize());
 	}
 
-	printf("FixupSakura Succeeded.\n");
+	printf("FixupSLG Succeeded.\n");
 	return true;
 }
 
-bool FixupSakura(const string& rootDir, const string& inTranslatedOptionsBmp)
+bool FixupSakura(const string& rootDir, const string& inTranslatedOptionsBmp, const string& patchedPalettePath)
 {
 	const string filePath = rootDir + string("SAKURA");	
 	FileData origSakuraData;
@@ -2327,6 +2327,14 @@ bool FixupSakura(const string& rootDir, const string& inTranslatedOptionsBmp)
 		return false;
 	}
 	
+	//Load new palette data
+	FileData newPaletteData;
+	if( !newPaletteData.InitializeFileData(patchedPalettePath.c_str(), patchedPalettePath.c_str()) )
+	{
+		printf("Unable to patch palettes because new palette not found.\n");
+		return false;
+	}
+
 	//***Patch Text Drawing Code***
 	//const int offsetTileDim     = 0x0001040A;
 	const int offsetTileSpacingX            = 0x000104e5;
@@ -2336,16 +2344,26 @@ bool FixupSakura(const string& rootDir, const string& inTranslatedOptionsBmp)
 	const int offsetTileSpacingLIPSX        = 0x0001066B;
 	const int offsetLIPSX_Formatting1       = 0x00010612;
 	const int offsetLIPSX_Formatting2       = 0x00010646;
+	const int offsetLipsStartLocationY      = 0x000105FB; //Change the cpommand from MOV 0xCC(-52), r11 to 0xCE(-50)
 	const unsigned short lipsFormattingCode = 0x0041; //0x4100 in big endian.  This is equivalent to SHLL R1
+	const unsigned char lipsStartLocY       = 0xCE;
 
-	memcpy_s((void*)(origSakuraData.GetData() + offsetTileSpacingX),      origSakuraData.GetDataSize(), (void*)&OutTileSpacingX, sizeof(OutTileSpacingX));
-	memcpy_s((void*)(origSakuraData.GetData() + offsetTileSpacingY),      origSakuraData.GetDataSize(), (void*)&OutTileSpacingY, sizeof(OutTileSpacingY));
-	memcpy_s((void*)(origSakuraData.GetData() + offsetTileSpacingX2),     origSakuraData.GetDataSize(), (void*)&OutTileSpacingX, sizeof(OutTileSpacingX));
-	memcpy_s((void*)(origSakuraData.GetData() + offsetTileSpacingY2),     origSakuraData.GetDataSize(), (void*)&OutTileSpacingY, sizeof(OutTileSpacingY));
-	memcpy_s((void*)(origSakuraData.GetData() + offsetTileSpacingLIPSX),  origSakuraData.GetDataSize(), (void*)&OutTileSpacingX, sizeof(OutTileSpacingX));
+	memcpy_s((void*)(origSakuraData.GetData() + offsetTileSpacingX),      origSakuraData.GetDataSize(), (void*)&OutTileSpacingX,    sizeof(OutTileSpacingX));
+	memcpy_s((void*)(origSakuraData.GetData() + offsetTileSpacingY),      origSakuraData.GetDataSize(), (void*)&OutTileSpacingY,    sizeof(OutTileSpacingY));
+	memcpy_s((void*)(origSakuraData.GetData() + offsetTileSpacingX2),     origSakuraData.GetDataSize(), (void*)&OutTileSpacingX,    sizeof(OutTileSpacingX));
+	memcpy_s((void*)(origSakuraData.GetData() + offsetTileSpacingY2),     origSakuraData.GetDataSize(), (void*)&OutTileSpacingY,    sizeof(OutTileSpacingY));
+	memcpy_s((void*)(origSakuraData.GetData() + offsetTileSpacingLIPSX),  origSakuraData.GetDataSize(), (void*)&OutTileSpacingX,    sizeof(OutTileSpacingX));
 	memcpy_s((void*)(origSakuraData.GetData() + offsetLIPSX_Formatting1), origSakuraData.GetDataSize(), (void*)&lipsFormattingCode, sizeof(lipsFormattingCode));
 	memcpy_s((void*)(origSakuraData.GetData() + offsetLIPSX_Formatting2), origSakuraData.GetDataSize(), (void*)&lipsFormattingCode, sizeof(lipsFormattingCode));
+	memcpy_s((void*)(origSakuraData.GetData() + offsetLipsStartLocationY),origSakuraData.GetDataSize(), (void*)&lipsStartLocY,      sizeof(lipsStartLocY));
 	//***Done Patching Text Drawing Code***
+
+	//****Patch Palettes****
+	const int offsetPalette     = 0x00053954;
+	const int offsetLIPSPalette = 0x00053974;
+	memcpy_s((void*)(origSakuraData.GetData() + offsetPalette), origSakuraData.GetDataSize(), newPaletteData.GetData(), newPaletteData.GetDataSize());
+	memcpy_s((void*)(origSakuraData.GetData() + offsetLIPSPalette), origSakuraData.GetDataSize(), newPaletteData.GetData(), newPaletteData.GetDataSize());
+	//***Done Patching Palettes***
 
 	//****Patch Options Image****
 	//Compress bgnd image
@@ -6464,7 +6482,7 @@ void FindDiff()
 	}
 }
 
-bool PatchGame(const string& rootSakuraTaisenDirectory, const string& patchedSakuraTaisenDirectory, const string& translatedTextDirectory, const string& fontSheetFileName, const string& originalPaletteFileName, 
+bool PatchGame(const string& rootSakuraTaisenDirectory, const string& patchedSakuraTaisenDirectory, const string& translatedTextDirectory, const string& fontSheetFileName, const string& /*originalPaletteFileName*/, 
 	const string &patchedTMapSPDataPath, const string& /*inMainMainFontSheetPath*/, const string& /*inMainMenuTranslatedBgnd*/, const string& inPatchedOptionsImage, const string& inTranslatedDataDirectory)
 {	
 	char buffer[MAX_PATH];
@@ -6499,14 +6517,15 @@ bool PatchGame(const string& rootSakuraTaisenDirectory, const string& patchedSak
 
 	//Step2
 	const string newPaletteFileName = tempDir + PatchedPaletteName; //Created by CreateTranslatedFontSheet
+	/**
 	if( !PatchPalettes(rootSakuraTaisenDirectory, originalPaletteFileName, newPaletteFileName, patchedSakuraTaisenDirectory, true) )
 	{
 		printf("PatchPalettes failed.  Patch unsuccessful.\n");
 		return false;
-	}
+	}*/
 
 	//Step 3
-	if( !FixupSakura(patchedSakuraTaisenDirectory, inPatchedOptionsImage) )
+	if( !FixupSakura(patchedSakuraTaisenDirectory, inPatchedOptionsImage, newPaletteFileName) )
 	{
 		printf("FixupSakura failed.  Patch unsuccessful.\n");
 		return false;
