@@ -1184,7 +1184,7 @@ void ExtractText(const string& inSearchDirectory, const string& inPaletteFileNam
 					continue;
 				}
 
-				if( sakuraChar.mIndex == 0 || sakuraChar.mIndex > 255*3)
+				if( sakuraChar.mIndex == 0 || sakuraChar.mIndex > 255*4 )
 				{
 					continue;
 				}
