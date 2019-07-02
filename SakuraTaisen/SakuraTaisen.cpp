@@ -332,21 +332,35 @@ struct SakuraString
 	static const int   MaxCharsPerLine     = 15;
 	unsigned short     mOffsetToStringData = 0;
 
-	bool AddChar(unsigned short index)
+	bool AddChar(unsigned short index, bool bPushFront = false)
 	{
-		mChars.push_back( std::move(SakuraChar(index)) );
+		if( bPushFront )
+		{
+			mChars.insert( mChars.begin(), std::move(SakuraChar(index)) );
+		}
+		else
+		{
+			mChars.push_back( std::move(SakuraChar(index)) );
+		}
 
 		return true;
 	}
 
-	bool AddChar(char row, char column)
+	bool AddChar(char row, char column, bool bPushFront)
 	{
 		if( row == 0 && column == 0 )
 		{
 			return false; 
 		}
 
-		mChars.push_back( std::move(SakuraChar(row, column)) );
+		if( bPushFront )
+		{
+			mChars.insert( mChars.begin(), std::move(SakuraChar(row, column)) );
+		}
+		else
+		{
+			mChars.push_back( std::move(SakuraChar(row, column)) );
+		}
 
 		return true;
 	}
@@ -387,6 +401,20 @@ struct SakuraString
 		}
 
 		return numLines;
+	}
+
+	int GetNumberOfPrintedCharacters() const
+	{
+		int numChars = 0;
+		for(const SakuraChar& sakuraChar : mChars)
+		{
+			if( sakuraChar.mIndex != SakuraChar::NewLine )
+			{
+				++numChars;
+			}
+		}
+
+		return numChars;
 	}
 
 	int GetMaxCharactersInLine() const
@@ -654,6 +682,10 @@ public:
 		mpFile   = nullptr;
 	}
 
+	unsigned long GetFileSize() const
+	{
+		return mFileSize;
+	}
 private:
 	void ParseHeader()
 	{
@@ -790,9 +822,15 @@ struct SakuraTextFileFixedHeader
 		//Done figuring out table size
 
 		mOffsetToTable = SwapByteOrder( ((unsigned short*)inSakuraFile.mHeader.pData)[0] );
-		mTableEnd      = (unsigned short)((mOffsetToTable*2 + (unsigned short)stringTableSize) / 2);
 
-		assert( (mOffsetToTable + (unsigned short)stringTableSize)%2 == 0 );
+		unsigned long timingDataL = ((mOffsetToTable<<1) + stringTableSize) >> 1;
+		if(timingDataL/2 > 0xffff)
+		{
+			const int sizeToReduce = (timingDataL/2) - 0xffff;
+			printf("\nERROR:Translated file %s is too big. Timing data is too far down.  Needs to be reduced by %i bytes (%i characters)\n", inSakuraFile.mFileNameInfo.mFileName.c_str(), sizeToReduce, sizeToReduce/2);
+			return false;
+		}
+		mTableEnd = (unsigned short)timingDataL;//(unsigned short)((mOffsetToTable*2 + (unsigned short)stringTableSize) / 2);
 
 		if(stringTableSize/2 > 0xffff)
 		{
@@ -813,6 +851,11 @@ void FindAllSakuraText(const vector<FileNameContainer>& inFiles, vector<SakuraTe
 
 		SakuraTextFile sakuraFile(fileName);
 		if( !sakuraFile.OpenFile() )
+		{
+			continue;
+		}
+
+		if( sakuraFile.GetFileSize() == 0 )
 		{
 			continue;
 		}
@@ -1759,7 +1802,34 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 			const int maxCharsPerLine       = (240/OutTileSpacingX);
 			const int maxLines              = MaxLines;
 			const size_t numTranslatedLines = translatedFile.mLines.size();
-			unsigned short numCharsPrinted  = 0;
+			unsigned short numCharsPrintedForMES  = 0;
+			unsigned short numCharsPrintedFortTBL = 0;
+
+			auto UpdateNumTimingCharsPrinted = [&](int inTranslatedLineIndex, const SakuraString& inTranslatedString)->bool
+			{ 
+				if( sakuraFile.mLines[inTranslatedLineIndex].mChars[0].mIndex != 0 )
+				{
+					const short numLinesInString = static_cast<short>(inTranslatedString.GetNumberOfLines()) - 1;
+					if( numLinesInString < 0 )
+					{
+						printf("Invalid number of lines in string\n");
+						return false;
+					}
+
+					//-3 because 2 for the initial bytes and one for the trailing zero
+					const unsigned short numCharsPrintedInLine = (unsigned short)inTranslatedString.GetNumberOfPrintedCharacters() - 3;//(static_cast<short>(translatedString.mChars.size()) - 3 - numLinesInString);
+					if( (short)numCharsPrintedInLine < 0 )
+					{
+						printf("Invalid number of characters in string\n");
+						return false;
+					}
+					numCharsPrintedForMES  += numCharsPrintedInLine*2 + 1;
+					numCharsPrintedFortTBL += (numCharsPrintedInLine + 1)*2;
+				}
+
+				return true;
+			};
+
 			for(size_t translatedLineIndex = 0; translatedLineIndex < numTranslatedLines; ++translatedLineIndex)
 			{	
 				const TextFileData::TextLine& textLine = translatedFile.mLines[translatedLineIndex];
@@ -1777,7 +1847,8 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 				const bool bIsUnused               = bIsMESFile ? false : pOrder ? false : true;
 
 				//If untranslated, then write out the file and line number
-				if( bIsUnused || 
+				if( bIsUnused ||
+					textLine.mWords.size() == 0 ||
 					(textLine.mWords.size() == 1 && textLine.mWords[0] == UntranslatedEnglishString )
 					)
 				{
@@ -1791,24 +1862,45 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 					const string untranslatedString = numTranslatedLines ? "U" : baseUntranslatedString + std::to_string(translatedLineIndex + 1); //Just print out a U for unused lines to save space
 
 					SakuraString translatedSakuraString;
-					translatedSakuraString.AddString( untranslatedString, sakuraFile.mLines[currSakuraStringIndex].mChars[0].mIndex, numCharsPrinted );
+					unsigned short timingData = 0;
+					if( bIsMESFile )
+					{
+						timingData = numCharsPrintedForMES;
+					}
+					else
+					{
+						if( sakuraFile.mLines[translatedLineIndex].mChars[0].mIndex != 0 && textLine.mFullLine.size() > 1 )
+						{
+							timingData = (numCharsPrintedFortTBL >> 1);
+						}
+					}
+					translatedSakuraString.AddString( untranslatedString, sakuraFile.mLines[currSakuraStringIndex].mChars[0].mIndex, timingData );
+
+					UpdateNumTimingCharsPrinted(translatedLineIndex, translatedSakuraString);
 
 					translatedLines.push_back( translatedSakuraString );
 					continue;
 				}
 
 				//Lines starting with the indicator 0xC351 have a special two byte value instead of the usual 00 00
-				if( 1 )//sakuraFile.mStringInfoArray[translatedLineIndex].mStringId >= SpecialDialogIndicator || bIsMESFile )
 				{
 					translatedString.AddChar( sakuraFile.mLines[translatedLineIndex].mChars[0].mIndex );
-					translatedString.AddChar( numCharsPrinted );//sakuraFile.mLines[translatedLineIndex].mChars[1].mIndex );
-					//translatedString.AddChar(0);
-				}
-				else
-				{
-					for(unsigned short initialZeroes = 0; initialZeroes < sakuraFile.mLines[translatedLineIndex].mOffsetToStringData; ++initialZeroes)
+
+					if( bIsMESFile )
 					{
-						translatedString.AddChar(0);
+						translatedString.AddChar( numCharsPrintedForMES );
+					}
+					else
+					{
+						//If the TBL file has timing data, the second byte of the startin sequence will be the number of timing chars, otherwise its just a 00
+						if( sakuraFile.mLines[translatedLineIndex].mChars[0].mIndex != 0 && textLine.mFullLine.size() > 1 )
+						{	
+							translatedString.AddChar( (numCharsPrintedFortTBL >> 1) );
+						}
+						else
+						{
+							translatedString.AddChar(0);
+						}
 					}
 				}
 
@@ -1935,8 +2027,10 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 					}
 				}
 
+				//String ends with 0000
 				translatedString.AddChar(0);
 
+				/*
 				//If the first byte is non-zero, then this string has timing info associated with it
 				if( sakuraFile.mLines[translatedLineIndex].mChars[0].mIndex != 0 )
 				{
@@ -1946,29 +2040,35 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 						printf("Invalid number of lines in string\n");
 						break;
 					}
-					const short numCharsPrintedInLine = (static_cast<short>(translatedString.mChars.size()) - 3 - numLinesInString);
-					if( numCharsPrintedInLine < 0 )
+
+					//-3 because 2 for the initial bytes and one for the trailing zero
+					const unsigned short numCharsPrintedInLine = (unsigned short)translatedString.GetNumberOfPrintedCharacters() - 3;//(static_cast<short>(translatedString.mChars.size()) - 3 - numLinesInString);
+					if( (short)numCharsPrintedInLine < 0 )
 					{
 						printf("Invalid number of characters in string\n");
 						break;
 					}
-					numCharsPrinted += static_cast<unsigned short>(numCharsPrintedInLine)*2 + 1;
-				}
-
+					numCharsPrintedForMES += numCharsPrintedInLine*2 + 1;
+					numCharsPrintedFortTBL += (numCharsPrintedInLine + 1)*2;
+				}*/
+				UpdateNumTimingCharsPrinted(translatedLineIndex, translatedString);
 				translatedLines.push_back( std::move(translatedString) );
 			}
 
 			//Fill out everything else with "Untranslated"
 			const string baseUntranslatedString = sakuraFile.mFileNameInfo.mNoExtension + string(": ");
-			const size_t untranslatedCount = sakuraFile.mLines.size() - translatedFile.mLines.size();
+			const size_t untranslatedCount      = sakuraFile.mLines.size() - translatedFile.mLines.size();
+			const unsigned short timingData     = bIsMESFile ? numCharsPrintedForMES : (numCharsPrintedFortTBL >> 1);
 			for(size_t i = 0; i < untranslatedCount; ++i)
 			{
 				const string untranslatedString = baseUntranslatedString + std::to_string(i + translatedFile.mLines.size() + 1);
 				SakuraString translatedSakuraString;
 
 				const size_t currSakuraStringIndex = i + translatedFile.mLines.size();
-				translatedSakuraString.AddString( untranslatedString, sakuraFile.mLines[currSakuraStringIndex].mChars[0].mIndex, numCharsPrinted);
+				translatedSakuraString.AddString( untranslatedString, sakuraFile.mLines[currSakuraStringIndex].mChars[0].mIndex, timingData);
 				
+				UpdateNumTimingCharsPrinted(currSakuraStringIndex, translatedSakuraString);
+
 				translatedLines.push_back( translatedSakuraString );
 			}
 
@@ -2028,7 +2128,6 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 		}
 
 		//Write footer
-		if( 1 )//bIsMESFile )
 		{
 			const unsigned char char2E   = 0x2e;
 			const unsigned char char6E   = 0x6e;
@@ -2040,21 +2139,24 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 					continue;
 				}
 
-				const size_t numChars = translatedString.mChars.size() - 1;
+				const size_t numChars = translatedString.mChars.size() - 1; //.size includes null terminator
+				int numProcessed = 0;
 				for(size_t c = 2; c < numChars; ++c)
 				{
 					if( !translatedString.mChars[c].IsNewLine() )
 					{
 						outFile.WriteData(&char6E, sizeof(char6E));
 						outFile.WriteData(&char2E, sizeof(char2E));
+						++numProcessed;
 					}
 				}
 				outFile.WriteData(&charEnd, sizeof(charEnd));
+
+				if( !bIsMESFile )
+				{
+					outFile.WriteData(&charEnd, sizeof(charEnd));
+				}
 			}
-		}
-		else
-		{
-			outFile.WriteData(sakuraFile.mFooter.pData, sakuraFile.mFooter.dataSize);
 		}
 
 		if( outFile.GetFileSize() > MaxTBLFileSize )
@@ -2359,9 +2461,11 @@ bool FixupSakura(const string& rootDir, const string& inTranslatedOptionsBmp, co
 	//***Done Patching Text Drawing Code***
 
 	//****Patch Palettes****
-	const int offsetPalette     = 0x00053954;
+	const int offsetPalette1    = 0x00053954;
+//	const int offsetPalette2    = 0x0005ADB8;
 	const int offsetLIPSPalette = 0x00053974;
-	memcpy_s((void*)(origSakuraData.GetData() + offsetPalette), origSakuraData.GetDataSize(), newPaletteData.GetData(), newPaletteData.GetDataSize());
+	memcpy_s((void*)(origSakuraData.GetData() + offsetPalette1), origSakuraData.GetDataSize(), newPaletteData.GetData(), newPaletteData.GetDataSize());
+//	memcpy_s((void*)(origSakuraData.GetData() + offsetPalette2), origSakuraData.GetDataSize(), newPaletteData.GetData(), newPaletteData.GetDataSize());
 	memcpy_s((void*)(origSakuraData.GetData() + offsetLIPSPalette), origSakuraData.GetDataSize(), newPaletteData.GetData(), newPaletteData.GetDataSize());
 	//***Done Patching Palettes***
 

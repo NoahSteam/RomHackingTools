@@ -9,6 +9,8 @@
 
 ExtractText d:\Rizwan\SakuraWars\Disc1 D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\Palette.bin D:\Rizwan\SakuraWars\ExtractedData\Disc1\Dialog
 ExtractText d:\Rizwan\SakuraWars\Disc2 D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\Palette.bin D:\Rizwan\SakuraWars\ExtractedData\Disc2\Dialog
+ExtractText d:\Rizwan\SakuraWars\Disc1_Translated D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\Palette.bin D:\Rizwan\SakuraWars\ExtractedData\Disc1_Translated\Dialog
+ExtractRawText d:\Rizwan\SakuraWars\Disc1_Translated d:\Rizwan\SakuraWars\ExtractedData\Disc1_Translated\ExtractedText
 ExtractFontSheets d:\Rizwan\SakuraWars\Test D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\Palette.bin d:\Rizwan\SakuraWars\Test
 ExtractFontSheets d:\Rizwan\SakuraWars\Disc1\ D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\Palette.bin d:\Rizwan\SakuraWars\ExtractedData\Disc1\FontSheets
 ExtractFontSheets d:\Rizwan\SakuraWars\Disc2\ D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\Palette.bin d:\Rizwan\SakuraWars\ExtractedData\Disc2\FontSheets
