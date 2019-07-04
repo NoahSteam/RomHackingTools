@@ -1,11 +1,11 @@
-It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+It's a photo of Sakura. She's looking right at me. I wonder what she's thinking...
 It's a photo of Sumire. This is a side of her you don't see too often.
-It's a photo of Maria. …She's lost in thought and looks kind of sad…
-A photo of Kanna. Kanna's signature strength comes through clearly.
+It's a photo of Maria. ...She's lost in thought and looks kind of sad...
+A photo of Kanna. Kanna's signature strength comes through clearly. 
 A photo of Iris. She's surrounded by flowers and flashing a radiant smile.
 A photo of Kohran. She's looking pretty in profile with her face dyed red by the evening sun.
-A letter given to me by a customer. I was asked to give it to Sumire. I have a bad feeling about this…
-Maria's pistol. This may help me escape from here…
+A letter given to me by a customer. I was asked to give it to Sumire. I have a bad feeling about this...
+Maria's pistol. This may help me escape from here...
 A hair ornament. It's decorated with flowers and looks very elegant.
 A pretty pendant. The delicate workmanship is gorgeous.
 A hairpin for use in a traditional bun hairstyle. It would complement a formal outfit well.
@@ -20,101 +20,227 @@ A prop crown used onstage. It's well constructed and incredibly detailed.
 A wig and costume used onstage. I wonder what kind of act could use a flashy outfit like this?
 A photo of Sakura in her swimsuit. Wow, this is really something. I'm gonna treasure this.
 A photo of Sumire in her stage costume. Her distinctive makeup really makes an impact.
-It's a photo of Maria on stage in the military uniform from "For Love"… She's a beautiful woman disguised as a man.
+It's a photo of Maria on stage in the military uniform from "For Love"... She's a beautiful woman disguised as a man. 
 A photo of Kanna in her training gear. Catching her in a private moment like this feels surprisingly intimate.
 A photo of Iris in her swimsuit. She's holding a rubber ring and looks ready to have some fun. How cute.
 A photo of Kohran. I don't get to see her with her braids undone very often. It's a nice look.
 A photo of Ayame in a traditional outfit. I hope she'll always be as happy and content as she is here.
-Ayame's gun. Why…? Why did it have to turn out like this…?
-…!
-…It… was just a dream.
-…Uncle Ichiro. I want…
-I want… to become a grown-up as soon as possible…
-…Morning already? I wonder if Iris has calmed down?
-Iris…
-No good. If I don't see Iris and say something…
-…Iris. It's me.
-…!
-Would you listen to what I have to say, please?
-…
-Let's try the date again. <br> Cut this out!
-Iris… Next Sunday, are you free? Let's try the date again.
-…What's wrong?
-It's not like that, Iris.
-I'm not lying, Iris!
-Iris, cut this out! Exactly how long is it going to be until you're satisfied with the trouble you're causing everyone!
-What!?
-That's not true! Everyone's really worried about you!
-It's nothing like that! Everybody likes you, Iris!
-Of course!
-What!?
-That's not true! Everyone's really worried about you!
-It's nothing like that! Everybody likes you, Iris!
-Of course!
-K-Kiss!?
-(…What should I do…)
-Kiss her.
-…
-W…What's wrong, Iris!?
-I-Iris…
-Iris!
-…
-…She's gone.
-…! W-What!?
-Ogami!!
-Sakura! What on earth is…!?
-This is really bad! Iris boarded a Koubu and headed outside!!
-W…What!?
-If Iris goes running around town the way she is now, there's going to be all sorts of trouble!
-Come on, let's get to the control room.
-This is quite the pickle… Who'd have thought little Iris would go running around town in a Koubu.
-Not to mention the Koubu she took was our very latest model, fresh from the Hanayashiki Branch.
-Sir… do we know where Iris is headed?
-It appears she's heading toward Asakusa.
-Sh… she is!?
-She's managed to get that far? But it's her first time even piloting a Koubu!
-Get to Asakusa and bring Iris back to us. I'm counting on you, everyone!
-What…?
-Sir!
-What, Ayame? What's gotten you all riled up?
-It's the Hive of Darkness!
-I've got a report of Hive of Darkness Masou Kihei confirmed in Asakusa!
-Are you serious!?
-Dammit! They would have to show up right now, wouldn't they!
-Well, I suppose we should count it a blessing that Iris is heading for Asakusa, then.
-This way, we can secure Iris and take down the Hive of Darkness simultaneously.
-Alright. Head for Asakusa immediately! I'm counting on you, Ogami!
-Yes, sir!
-(Okay… let's move…)
-… wait a moment, Ogami.
-Ma'am…?
-Ogami… I trust you understand why Iris ran away.
-……
-What would you say are Iris's good points, Ogami?
-Wha…?
-For example, she's cheerful, innocent, and is honest to herself and others about the feelings in her heart…
-The very things that make her 'childish' are the things we like most about her, wouldn't you agree?
-So, she shouldn't force herself to grow up too fast…
-Please tell her that, Ogami.
-I think perhaps… you are the only one who can.
-Well then, Ogami. Everyone's waiting for you! Sortie at once!
-Imperial Combat Revue, launch! <br> We'll bring Iris back!
-Imperial Combat Revue, launch!
-Yes, sir! Our destination is the Kaminarimon at Asakusa!
-We're coming for you, Iris!
-You can put your faith in us…
-We've got your back, kiddo!
-Imperial Combat Revue, launching!
-Alright everyone! We're bringing Iris back, got it!
-You got it, sir!
-This time we'll brook no failures.
-Iris, we're coming…
-So don't go doing anything crazy!
-Let's go, Ogami! Let's save Iris!!
-Your response, Ogami! Pull yourself together.
-Oh, yeah…
-Alright. Imperial Combat Revue, launch!!
-Uncle Ichi~!n
+Ayame's gun. Why...? Why did it have to turn out like this...?
+Ogami, you moron! How could you let this happen under your watch!?
+Jeez Ogami... looks like you've really done it this time...
+... well she did bust up a whole movie theater... can't really argue with this outcome.
+Well she busted up a water fountain in broad daylight... can't really argue with this outcome.
+Would you please be quiet! I can't hear what they're saying!
+I'm sorry. I should have kept a better eye on her.
+...
+I take full responsibility. <br> Iris, you should apologize too!
+... I take full responsibility for this incident. I accept any punishment you deem necessary.
+But... remember, Iris is still just a kid.
+Ah!! W, wait, Iris!!
+Iris, you should apologize too! When you do something wrong, you apologize!
+Ah!! W, wait, Iris!!
+What are you thinking, sir! Pull yourself together!
+Sorry, I don't know what to say...
+...
+Ah!! W, wait, Iris!!
+... hmm? Sounds like someone's running this way.
+H, hey! Watch out!
+Kyaaaaah!
+You three... you were eavesdropping!
+I... Iris...
+She ran that way...
+Toward... her room...
+... what am I supposed to do?
+Go after Iris. <br> Go back to the commander's room. <br> Help these three.
+Iris, wait!
+Looks like Iris ran off to her room...
+Sir... there's nothing Iris hates more than being treated like a child...
+That's why I was trying to punish her as I would an adult...
+Ogami... you might be able to get through to Iris.
+This is a test of your abilities as a commander. I'm counting on you.
+Of course...
+Alright then, get going. Don't let us down, Ogami.
+(Oh... I could probably fix this with some hot water...)
+Hey, you three! Are you okay!?
+... O, Ogami... I think you've got other things to worry about than us.
+You should be going after Iris...
+I think... she's shut herself in her room...
+... right.
+... what should I do?
+... O, Ogami... you should go after her...
+You should be going after Iris...
+I think... she's shut herself in her room...
+...
+... right.
+Oh, Ogami...
+Sakura, did Iris come by here?
+Yes, she went into her room... she was running pretty hard...
+Okay... thanks.
+(I wonder if she'll let me in...)
+Well, I can't go anywhere until I at least try to see Iris...
+Iris, it's Ogami... can I come in?
+...
+Iris......
+Shoot... I don't think she's in any mood to listen to me.
+Boss! Leave this to us!
+Ogami, ever heard someone say 'if you can't push, try pulling'?
+You can't solve everything just charging straight ahead! Let us help you!
+Settle down and leave this to me. Listen, Iris wants to grow up fast, right?
+Well since I'm the biggest person here, she'll definitely listen to what I say.
+... I honestly pity simpletons like you...
+Who on Earth would want to grow up to be a giant muscle-head like you?
+Excuse me?
+What Iris wants is an adult's beauty.
+Meaning, she wants to grow up to be a lovely lady like myself...
+... Is this really the time for us to be fighting over this?
+Ogami, would you pick one of us to handle this?
+Ask Sumire. <br> Ask Kanna. <br> Ask Kohran.
+Alright. Sumire, would you handle it?
+Leave it to me. I will most certainly get through to her.
+Iris! I know all about wanting to grow up as quickly as possible.
+How about I show you how to put on make-up like a beautiful lady?
+I just need you to open the door for me.
+...
+Woah... she opened the door!?
+What else did you expect? Now excuse me while I go set things straight with her.
+... I'm turning on the lights.
+...
+If I put on make-up, will I be beautiful? Will that make me a grown-up?
+Well no amount of make-up will work if you're wearing a frown like that.
+When you're putting on make-up, the most important thing is to smile. Okay, Iris?
+If... I smile when I put on make-up, will I be a grown up then?
+Of course! Now let's see a smile...
+...
+(Hohohoho... she's buying it.)
+(Talking her down is like taking candy from a baby, for me.)
+...!!
+...? Is something the matter, Iris?
+Sumire... you liar.
+Liar! Sumire you liar! Liar! Liar!!
+I... Iris...
+That was just a joke... I didn't mean anything by it... Just calm down...
+...?
+W, what's going on!?
+Sumire!?
+I failed... It appears our Iris... can read people's minds.
+W, what! Are you serious!?
+If that's true then we're in a real bind!
+Ensign... it seems approaching Iris without real conviction will only hurt her more.
+I think we should leave her be for now.
+... guess we have no choice but to pull back for now.
+Okay, Kanna, I'm leaving it to you.
+You got it. Just you watch, I'll get through to her.
+Iris, it's me. You want to get big as fast as you can, right?
+If that's what you want, just leave it to me. I can show you how.
+...
+Woah... she opened the door!?
+Woah, it's pretty dark in here... I'm gonna turn on the lights.
+...
+Can I really... can I really grow up faster? I can be a grown-up?
+Aww, no need to rush. First of all you should eat this special Kanna lunch.
+It's a little spicy, but if you gobble this down you'll get bigger in no time.
+... really? If I eat this... I'll be a grown-up?
+Of course! Now go ahead and eat up!
+...
+(Looks like it's working.)
+(It's hard to stay grumpy with a full stomach. This should perk her right up.)
+…………!
+...? What's the matter, Iris. Aren't you gonna eat it?
+Kanna... you liar.
+Liar... Kanna you liar. Liar! Liar!!
+I-Iris?
+W, wait! J, just hear me out...
+...?
+W, what's going on!?
+K-Kanna!?
+Heheheh, well, looks like we're in a bind. Seems our Iris can read people's minds now.
+W, what? Then we'll never cheer her up with smooth talking!
+... I don't think even I could convince a telepath.
+If we go in there half-cocked it'll just make things worse, boss.
+I think it'd be best just to leave her alone, for now.
+Yeah, I think we'd better retreat for now. You too, Ogami...
+Okay, Kohran, I'll leave it up to you.
+You got it, boss! I'll get through to her!
+Iris, it's Kohran. You want to grow up faster, right?
+I've got a 4000 year-old special Chinese remedy here that'll do the trick for you.
+...
+Woah... she opened the door!?
+Just sit tight and watch, Ogami.
+Can't say your room is a pretty sight like this... I'm gonna turn on the lights, Iris.
+...
+... just leave the medicine and leave me alone.
+Now just a minute... You've got to use this medicine properly, or it won't work.
+When you take this... you've got to open your heart and think happy thoughts.
+Happy thoughts...?
+That's right... so with how you are right now it won't work. It's expensive, so we don't want to waste it, right?
+...
+(There we go... she's falling for it!)
+(I just need her to smile. Once she's smiling, all those good feelings will follow!)
+…………!
+...? What's the matter, Iris? C'mon, let's see a smile.
+Kohran... you liar.
+Liar... Kohran, you liar... Liar! Liar!!
+I-Iris?
+H, hold on! V, violence is against the rules!
+...?
+W, what's going on!?
+K-Kohran!?
+Ah... this is bad. Iris can read minds. She saw right through me.
+W, what! Are you serious!?
+... I don't think even I could convince a telepath.
+Ogami, I think sweet talk is just gonna get us in trouble here.
+I think we just need to wait until she calms down...
+... Well, I guess we should retreat for now too.
+...
+What should I do?
+Go back to my room. <br> Try to talk to her one more time.
+... I can't get through to Iris right now...
+... I should just head back to my room and think of what to do next.
+... Ogami.
+... As her commander, I can't just give up. I'm going to go try to talk to her one more time.
+Ogami... wait just a moment.
+... what should I do?
+... Ogami.
+Ma'am...
+Ogami... you look quite troubled.
+Yeah... how can I get Iris to listen to me?
+... that's a difficult question.
+Sumire and the others see Iris as a child...
+Kanna and the others see Iris as a child...
+Kohran and the others see Iris as a child...
+But, Maria is trying to treat her as an adult...
+Ogami, what do you think?
+I think Maria is right. <br> I think Sumire and the others are right. <br> I think they're both wrong.
+I think Maria is right. <br> I think Kanna and the others are right. <br> I think they're both wrong.
+I think Maria is right. <br> I think Kohran and the others are right. <br> I think they're both wrong.
+I think... Maria is right.
+Iris hates being treated as a child...
+True... Iris does clearly dislike being treated as a child...
+But that's because she's stuck right now, between being an adult and being a child.
+She's trying to become an adult right now. Desperately. Don't forget that.
+... Now it's up to you to think of what to do next, Ogami. We're counting on you.
+Ayame...
+I think... Sumire and the others are right.
+I think... Kanna and the others are right.
+I think... Kohran and the others are right.
+Iris is a child, after all. If we awkwardly try to treat her as an adult, I think she'll just rebel.
+True... as you said, Iris is a child right now.
+But... she's on the verge of adulthood.
+She is?
+Yes... I believe that's why she has such a complex about being treated like a child.
+You must understand that, Ogami, if you want to open her heart.
+Ayame...
+I... think both sides are incorrect.
+...
+... well, if you understand that, then I don't think there's anything left for me to say.
+The next step is up to you, Ogami. We're counting on you.
+Ayame...
+...
+Of course... this is a difficult question.
+For now, let's just leave Iris alone.
+What to do after that is for you to decide, Ogami.
+Ma'am...
+Uncle Ichi~!
 Untranslated
 Untranslated
 Untranslated
@@ -122,20 +248,20 @@ Untranslated
 Untranslated
 Untranslated
 Untranslated
-There's so many people…what's this place?
+There's so many people...what's this place?
 What's that?
 I wanna see! I wanna see it! Can we?!
 Hey, what kind of story will it be?
 Uncle Ichi, who's that person?
-Ohhh….
+Ohhh....
 Now then, we open at a laboratory deep, deeeeep within the mountains.
 Untranslated
-I… I'm no little girl anymore. And this isn't even all that scary.
+I... I'm no little girl anymore. And this isn't scary at all.
 Untranslated
-Make it stop… I'm afraid…
-Please… Make it stop…
-Make it stop… I'm afraid…
-Make it stop… Please…
+Make it stop... I'm afraid...
+Please... Make it stop...
+Make it stop... I'm afraid...
+Make it stop... Please... 
 No, stay away!
 Eeeeek!
 Don't give us that! Take a look at this!
@@ -144,20 +270,20 @@ You wanna explain this, Ogami?!
 Goodbye. I'm going off to live by myself.
 I DID turn 10 years old today. Don't come looking for me.
 Stupid Uncle Ichi!n- Iris
-Tomorrow is my birthday and Uncle will take me on a date to Asakusa.
+Tomorrow is my birthday and Uncle Ichi will take me on a date to Asakusa.
 I'm gonna look so pretty that he'll surely fall in love with me.
 And he will kiss me in front of the fountain in the park.
 Leave me alone! I don't want to see you ever again!
 You don't care about me, Uncle Ichi! You don't love me!
 I'm not stupid! I'm not a kid! I hate you, Uncle Ichi!
-I hate you…I hate you…I haaaate you!
-Sob… Uwaaaahhh…
+I hate you...I hate you...I haaaate you!
+Sob... Uwaaaahhh...
 One wrong move and that could have been a disaster. Think about what you've done.
 Hmph. I didn't do anything wrong.
-Iris… do you really not understand what you've done?
+Iris... do you really not understand what you've done?
 No. It's not my fault! I didn't do anything!
 Letting your powers run wild is dangerous.
-Come now, Maria, no need to be so upset… yelling will give you wrinkles, you know.
+Come now, Maria, no need to be so upset... yelling will give you wrinkles, you know.
 That's not going to cut it! Iris needs to take responsibility and be punished!
 Ensign! These things happen because you spoil her!
 Stop treating me like a kid!
@@ -165,7 +291,7 @@ It's not my fault!
 Gyaaaaahhhhh!
 No! I didn't do anything wrong!
 No! I didn't do anything wrong!
-Ogami……
+Ogami...
 Iris can be a bit difficult sometimes.
 She won't open up to us if we keep treating her like a child.
 Untranslated
@@ -177,52 +303,52 @@ And you should stop shaking the whole set every time you move!
 Untranslated
 Untranslated
 No!
-Even… even when we go out, you won't go arm-in-arm with me…
+Even... even when we go out, you won't go arm-in-arm with me...
 I know you get bored spending time with a kid like me.
 You're lying!
 I knew it.
 You think I'm a bother. Everyone does.
 You're lying! You all think I'm a bother because I'm a kid. You all hate me!
-… you hate me too, don't you Uncle Ichiro?
-So… so… you love me?
-If you love me… kiss me!
+... you hate me too, don't you Uncle Ichiro?
+So... so... you love me?
+If you love me... kiss me!
 Right now!
-Ahhh…!?
-… Uncle Ichiro, you're lying…
-You don't love me at all! You don't want to kiss me…
+Ahhh...!?
+... Uncle Ichiro, you're lying...
+You don't love me at all! You don't want to kiss me...
 I can read your thoughts.
-You… you think I'm just a little kid after all!
+You... you think I'm just a little kid after all!
 Liar!
-… ahaha… hehehe….
-Hey, Iris… can I ask you something?
+... ahaha... hehehe....
+Hey, Iris... can I ask you something?
 Huh!?
-When you jumped to Ogami… did you feel anything?
+When you jumped to Ogami... did you feel anything?
 Iris.
 What?
 The captain's calling for ya.
 Okay!
 You look happy.
-OK! But…
+OK! But...
 We get to do our date over again! See ya!
-Oh, about what you asked. When I jumped to him…
-I felt something really warm. And…
+Oh, about what you asked. When I jumped to him...
+I felt something really warm. And...
 And?
 The rest is a se~cret! Bye-bye!
-For heaven's sake, to think they'd do this to a beautiful, refined lady like myself…
+For heaven's sake, to think they'd do this to a beautiful, refined lady like myself...
 *Sigh~ Leaving all this cleaning to me. I can't believe them. Are we forgetting who's fault this was?
-Nnngh… nnnnnh…!
-*Gasp…!
+Nnngh... nnnnnh...!
+*Gasp...!
 Huh? Where am I!? What happened?
-… I remember I was crying in my room…
+... I remember I was crying in my room...
 But I feel like all those bad feelings have gone away. I feel all better.
 Huh? What's the matter, onii-chan? Huh? Huh? You're being weird.
 You're late! It's not polite to keep a lady waiting, you know?
-Yup! That's my absolute favorite dress!
+Yup! This is my absolute favorite dress!
 What are you looking at?
 Where are you going?
 Huh, aren't you going to buy me something?
 Look at all those people over there. I want to have a look, too!
-Sniff… so you didn't have any fun at all?
+Sniff... so you didn't have any fun at all?
 Everyone thinks that of me!
 You think so too. I know it!
 Welcome to our shop. Good morning! What can I do for you?

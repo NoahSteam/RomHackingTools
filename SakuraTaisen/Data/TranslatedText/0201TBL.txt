@@ -1,10 +1,10 @@
 It's a photo of Sakura. Her gaze is so intense. I wonder what she's thinking?
 It's a photo of Sumire. It shows a side of her that's usually hidden.
-It's a photo of Maria. She's lost in thought and seems a bit sad…
+It's a photo of Maria. She's lost in thought and seems a bit sad...
 It's a photo of Kanna. She looks energetic and confident. I can't wait to meet her.
 It's a photo of Iris. In it, she's one beautiful flower surrounded by many.
 It's a photo of Kohran. She looks good in her traditional outfit. What kind of person is she?
-A customer gave me this letter and asked me to pass it on to Sumire… Hmm.
+A customer gave me this letter and asked me to pass it on to Sumire... Hmm.
 It's Maria's gun. I wonder if I can use it to escape?
 It's a cute flower-shaped hairpin.
 A pretty pendant. The delicate workmanship is gorgeous.
@@ -17,17 +17,17 @@ This is the knife Iris asked for. It's just an ordinary piece of silverware.
 It's a prop sword and shield used in stage plays. Looks handmade.
 It's an exquisitely-detailed prop crown used in stage plays.
 It's a gaudy costume wig. What play could it possibly be used in?
-A photo of Sakura in a swimsuit? Whoa, this is pretty risque… I can't let anyone else see it.
+A photo of Sakura in a swimsuit? Whoa, this is pretty risque... I can't let anyone else see it.
 It's a photo of Sumire in costume. Her elaborate makeup is quite impressive.
-It's a photo of Maria on stage in the military uniform from "For Love"… She's a beautiful woman disguised as a man.
+It's a photo of Maria on stage in the military uniform from "For Love"... She's a beautiful woman disguised as a man. 
 It's a rare training photo with a very private feel.
 A photo of Iris in a swimsuit. She looks so cute holding that inner tube.
 It's Kohran in a maid outfit. She looks great with her hair down.
 It's Ayame in Japanese-style clothing. I wish she'd smile like that all the time.
 It's Ayame's gun. What am I supposed to do with it?
 It's Jean Paul, Iris's beloved teddy bear.
-*Sigh* …The play's about to start. I'm ready to clip.
-I still can't believe they put me to work clipping tickets…
+Phew ...The play's about to start. I'm ready to punch some tickets.
+I still can't believe they put me to work punching tickets...
 Hello, Ensign. You're doing a wonderful job.
 Hi, Sumire. What's up?
 A new member will be joining us today.
@@ -35,46 +35,46 @@ I came to check on things before the play begins. However, it seems she hasn't a
 What's her name? <br> What's she like? <br> Is she cute?
 What's her name?
 Kohran Li. Everyone just calls her "Kohran," though.
-Kohran Li…?
+Kohran Li...?
 Yes. She was born in China but speaks with a Kansai accent.
-I see…
+I see...
 Ah, look at the time! I'm needed onstage. Please excuse me.
 Oh? What's she like?
 She speaks with an unusual Kansai accent, and apparently she has a knack for tinkering with machines.
 She was transferred to the Hanayashiki Branch upon her arrival here.
 Hanayashiki Branch?
 Yes. It is a branch of the Imperial Combat Revue in Asakusa that operates as an amusement park.
-I see…
+I see...
 Ah, look at the time! I'm needed onstage. Please excuse me.
 Oh? Is she cute?
-You can decide that for yourself! Now, if you'll excuse me…
-W-wait, Sumire! …Was it something I said?
+You can decide that for yourself! Now, if you'll excuse me...
+W-wait, Sumire! ...Was it something I said?
 You seem out of sorts, Ensign. Are you unwell?
 S-sorry! I was just lost in thought.
 Oh? What were you thinking about?
-The new member <br> Clipping tickets <br> Tonight's dinner
-Um, I was thinking about the new member…
+The new member <br> Punching tickets <br> Tonight's dinner
+Um, I was thinking about the new member...
 I take it you're worried about how she will mesh with the rest of the team.
 You're beginning to think like a captain, Ensign Ogami.
 Hahaha! Thanks.
 Ah, look at the time! I'm needed onstage. Please excuse me.
-I was thinking about how much I hate clipping tickets…
+I was thinking about how much I hate punching tickets...
 While I don't disagree with you, Ensign,
 I am far too busy to discuss such trivial matters! Please excuse me.
-…Guess I shouldn't have said that.
-I was thinking about what to have for dinner tonight…
+...Guess I shouldn't have said that.
+I was thinking about what to have for dinner tonight...
 What?! How dare you waste my time with such nonsense!
 You are utterly infuriating! Goodbye!!
-Yikes! That didn't go well…
-…Ensign? You're staring into space. Are you all right?
+Yikes! That didn't go well...
+...Ensign? You're staring into space. Are you all right?
 S-sorry! I was just lost in thought.
 Lost in thought? That simply will not do.
 As Captain of the Flower Division, you must always stay alert.
-S-sorry…
+S-sorry...
 Now then, I am needed onstage. Please excuse me.
 So I guess we're getting a new member.
 Apparently she's been here before. I wonder what she's like?
-Onii-chan!
+Uncle Ichi!
 Hey, Iris. What's up?
 Um, I came to meet Kohran!
 Who's that? <br> What about the play?
@@ -82,73 +82,73 @@ Kohran? Who's that?
 Oh, she's a member of the Flower Division!
 She spent a little time here before.
 A member of the Flower Division, huh?
-Yeah! One time, she was showing off this weird gizmo she built…
+Yeah! One time, she was showing off this weird gizmo she built...
 when suddenly it went KABOOM!
 Kaboom?
 Yeah! She got totally covered in ash!
-Yikes! She sounds bonkers…
+Yikes! She sounds bonkers...
 Oh no! The play's starting! I've gotta go!
-Bye bye, Onii-chan!
+Bye bye, Uncle Ichi!
 What about the play, Iris? It's almost curtain-up time.
 Oh, you're right! I hope Kohran gets here soon!
 You can't keep waiting like this. Get a move on or Maria will fuss at you.
 Right! I don't wanna make Maria mad again!
-Bye bye, Onii-chan!
-…You okay, Onii-chan? You seem kinda spacey.
+Bye bye, Uncle Ichi!
+...You okay, Uncle Ichi? You seem kinda spacey.
 S-sorry! I was just lost in thought.
 Huh? You mean talking to me is boring?!
-No, of course not…
-Hmph! Bye, Onii-chan!
-Oops… I made her angry.
+No, of course not...
+Hmph! Bye, Uncle Ichi!
+Oops... I made her angry.
 So I guess we're getting a new member.
-Her name's Kohran. I wonder what she's like…?
+Her name's Kohran. I wonder what she's like...?
 W-whoa! What was that racket?!
-Y-yes…
-U-um…
+Y-yes...
+U-um...
 Are you OK? What's with that mess of a bike?
-…Are you OK? Oh, and just who are you, anyway?
-What's with that mess of a bike…?
-I-I see…
+...Are you OK? Oh, and just who are you, anyway?
+What's with that mess of a bike...?
+I-I see...
 I'm sorry.
-Er…
+Er...
 I'm Imperial Japanese Navy Ensign Ichiro Ogami.
 You could say I'm the captain-in-training of the Imperial Combat Revue.
-I'll be happy to escort you. <br> I'm rather busy right now…
+I'll be happy to escort you. <br> I'm rather busy right now...
 I'll be happy to escort you. This way, please.
-Oh, what about your bike…?
+Oh, what about your bike...?
 I'm rather busy right now, so I can't escort you.
-S-she's gone…!
+S-she's gone...!
 Ogami!
-Tsubaki…
+Tsubaki...
 You mustn't let Kohran run off by herself! She's sure to get lost.
-I'll handle clipping tickets. Please go with Kohran.
-…Okay. Sounds good to me.
+I'll handle punching tickets. Please go with Kohran.
+...Okay. Sounds good to me.
 W-wait!
-…She's gone.
+...She's gone.
 Ogami!
-Tsubaki…
+Tsubaki...
 You mustn't let Kohran run off by herself! She's sure to get lost.
-I'll handle clipping tickets. Please go with Kohran.
-…Okay. Sounds good to me.
-Come forth, Four Lords of Death…!
-We are gathered here before you…
+I'll handle punching tickets. Please go with Kohran.
+...Okay. Sounds good to me.
+Come forth, Four Lords of Death...!
+We are gathered here before you...
 How may we be of service?
 What was the meaning of that debacle, you imbeciles?!
-Well, a mysterious group called the Imperial Combat Revue thwarted our plans…
+Well, a mysterious group called the Imperial Combat Revue thwarted our plans...
 I do not want excuses!
-Our apologies, Master Tenkai…
-The fact is they are quite skilled…
+Our apologies, Master Tenkai...
+The fact is they are quite skilled...
 Silence, Satan! We are supposed to be invincible!
-I've devised a way to destroy the barrier around Teito! …A spell called the "Six Fallen Stars."
-Complete this spell and destroy all of Teito! Your first target shall be Shiba Park!
+I've devised a way to destroy the barrier around Teito! ...A spell called the "Hexagram of Infernal Summoning."
+Complete this spell and destroy the capital! Your first target shall be Shiba Park!
 Yes, master!
 Wait! This time I shall come along. I'm sure you would like to watch me fight.
 Don't you agree, Satan?
-Yes, master…
-Hmph! Your days are numbered, you old fool…
+Yes, master...
+Hmph! Your days are numbered, you old fool...
 Eeeeeek!!
 *Cough cough* Um, this is the Imperial Theater, right?
-*Cough* Geez Louise… My Steam Bike's trashed…
+*Cough* Geez Louise... My Steam Bike's trashed...
 The name's Kohran Li. I've been transferred here from the Hanayashiki Branch.
 Yoneda! Yoneda, where are you?!
 No sweat! I'll go by myself!
@@ -159,10 +159,10 @@ and I'll knock your block off!
 It's all good! I'm Kohran Li, scientific genius.
 I'll be living here from now on. Nice to meetcha!
 Anyways, who are you?
-Oh, so you're our boss…
+Oh, so you're our boss...
 Kohran Li reporting for duty, sir! I recently transferred here from the Hanayashiki Branch, sir!
 Please direct me to Lieutenant General Yoneda, sir!
-Much obliged, Ensign Ogami…
+Much obliged, Ensign Ogami...
 No sweat! I'll find him myself!
 Are you a Koubu pilot, too?
 They're complex machines, and typically only girls have the spiritual energy to pilot them.
@@ -174,8 +174,8 @@ Welcome to the Gift Shop! How can I help you?
 How do you do? I'm Tsubaki Takamura. It's a pleasure to meet you, Ogami!
 Hello, Ogami! How can I help you?
 I hope I was able to be of service. Thank you very much for coming by!
-Andre, my love! Please…run away with me.
-Were I to abandon my duty and men to run away with you… I would be a different man.
+Andre, my love! Please...run away with me.
+Were I to abandon my duty and men to run away with you... I would be a different man.
 Would you still love me then?
 Oh, Andre!
 Grrrr! Arrrrgh!
@@ -193,15 +193,15 @@ Come on, don't be embarrassed!
 How does that feel?
 Doing your best is all well and good, but take care of yourself, okay?
 Well, well! Looks like you were having lots of fun!
-Fine then, your girlfriend.
-I see… Well then…
+You two look just like lovers, how nice.
+I see... Well then...
 Oh dear! Are you okay?
 Yes, but you're bleeding! Let me take a look.
-What a pretty girl… I wonder who she is? …*Sigh*
+What a pretty girl... I wonder who she is? ...*Sigh*
 Ogling girls? You should be ashamed of yourself.
 How rude! Since when did I become your wife?!
 You're the worst!
-What a pretty girl… I wonder who she is? …*Sigh*
+What a pretty girl... I wonder who she is? ...*Sigh*
 Ogling girls? You should be ashamed of yourself.
 How rude! Since when did I become your wife?!
 You're the worst!
@@ -213,7 +213,7 @@ A captain must be able to make judgments in an instant. I have high hopes for yo
 Cursed Imperial Combat Revue! They are defiant to the bitter end!
 No matter. We shall show them how fearsome I, Tenkai, truly am.
 Lords of Death!!
-Destroy Teito!! Annihilate… the Imperial Combat Revue!!
+Destroy the capital!! Annihilate the Imperial Combat Revue!!
 Annihilate! Annihilate! Annihilate!
 How does that feel?
 Doing your best is all well and good, but take care of yourself, okay?
@@ -230,8 +230,8 @@ After all, everybody's gone through stuff they'd rather forget!
 Say no more, say no more.
 Just give it all you've got next time, Ensign!
 I-is that my photo?! Gee, how embarrassing!
-Um, Ensign? I want to go to the Manager's Office…
-I'll be on this stage very soon…
+Um, Ensign? I want to go to the Manager's Office...
+I'll be on this stage very soon...
 Are you sure about this, Ensign?
 A captain must be able to make judgments in an instant. I have high hopes for you. Do your best, Ogami.
 Do your best, Ogami.
