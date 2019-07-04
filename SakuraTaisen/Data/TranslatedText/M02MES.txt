@@ -131,10 +131,10 @@ This is bad! It's gonna blow itself up when it gets to Teito Tower!! We've gotta
 Oh no! It's going to self-destruct when it reaches Teito Tower! We need to stop it before it gets there!!
 Ensign, you need to stop its movements somehow!!
 Dammit! Things aren't looking good…
-
+Untranslated
 Ensign Ogami! If you surround the enemy with our units, we can halt its movement!
 Right. Everyone! Surround the enemy with your Koubu and keep it from moving!
-
+Untranslated
 Kohran and I can take down the cannons set up by the enemy from a distance.
 It looks quite formidable. We should focus on defense and look for an opening.
 Let's focus our attacks on the main body of the enemy. We should also periodically stop its movements with our units.
@@ -143,13 +143,13 @@ Good! Let's keep this up!
 Ensign Ogami. The strength of this enemy is incomparable to anything we've faced before. You need to focus on defensive tactics for this battle.
 So wait, that means this mission's a failure if we let Teito Tower get destroyed?
 Curse you! Teito Tower can wait. Focus on crushing them!!
-
-
+Untranslated
+Untranslated
 Hey, boss. How should I be fighting?
 Head to the front line. <br> Hang back and used ranged attacks. <br> Just sit back and watch.
 You serious, boss? Doesn't sound like you're considering my strengths at all.
 Listen up, I'm good at bombing groups of enemies from a distance. Try to keep that in mind!
-
+Untranslated
 Good one, boss! You've got my strengths all figured out!
 My attacks are best for spots where the enemy is bunching up!!
 Wh, what!? You want me to just sit and watch while everyone else is out there fighting for their lives?
@@ -159,12 +159,12 @@ Trust me, I'll shine when it comes to ranged attacks and attacking multiple targ
 Oh come on… don't you know?
 This is my first battle and all, I was hoping you'd give me a bit of advice or something…
 Well… I'm just gonna give it my all. You just do the same, got it boss?
-
+Untranslated
 Wait a moment, Ensign! It looks like the enemy has already made preparations for battle here.
 These installations look like cannons. They'll aim at anything in their line of sight. Let's destroy them to open the path forward.
 This is a 'steam stand'. It can recover your durability. They're a beneficial spot to hold.
 I understand. Okay everyone, let's move out!!
-
+Untranslated
 Ogami, I noticed you didn't come to help repair the stage today!
 I assume you were too busy thinking about that lovely woman?
 Well, yeah… <br> Hey, that's not true. <br> I was thinking about you.
