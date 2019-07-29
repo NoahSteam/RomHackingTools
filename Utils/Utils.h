@@ -93,6 +93,7 @@ public:
 	void  Close();
 	bool  InitializeFileData(const FileNameContainer& inFileData);
 	bool  InitializeFileData(const char* pFileName, const char* pFullPath);
+	void  WriteToFile(const char* pFileName) const;
 	bool  DoesThisFileContain(const FileData& otherFile, std::vector<unsigned long>* pOutOffsets, bool bFindMultiple) const;	
 	bool  FindDataIndex(const char* pData, unsigned long dataLength, unsigned long& outIndex) const;
 	unsigned long GetCRC();
