@@ -388,3 +388,6 @@ EVT01 loaded @0x00204000
 
 //Dialog Pause Menu Options
 -Stored in SAKURA @0x00059700 as compressed data
+
+//Font sheet for save progression screen
+Found: 0005c654 00002600 Size: 128 CompressedSize: 6970
