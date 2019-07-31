@@ -391,3 +391,8 @@ EVT01 loaded @0x00204000
 
 //Font sheet for save progression screen
 Found: 0005c654 00002600 Size: 128 CompressedSize: 6970
+
+//Options formatting code
+SAKURA @0x0005aa54 (0605EA50 in memory)
+0SLG.BIN @0x00048090
+SLG.BIN @0x00048090

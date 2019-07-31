@@ -1244,7 +1244,7 @@ bool CreateTranslatedFontSheet(const string& inTranslatedFontSheet, const string
 
 	if( indexOfAlphaColor == -1 )
 	{
-		printf("Alpha Color not found.  Palette will not be correct. \n");
+		printf("Alpha Color not found for %s.  Palette will not be correct. \n", inTranslatedFontSheet.c_str());
 		indexOfAlphaColor = 0;
 	}
 
@@ -6419,7 +6419,8 @@ void CompressFile(const string& filePath, const string& outPath)
 	outFile.WriteData(compressedFile.mpCompressedData, compressedFile.mCompressedSize);
 }
 
-bool PatchMainMenu(const string& sakuraRootDirectory, const string& inTranslatedFontSheet, const string& outFontSheetPath, const string& inMainMenuTranslatedBgnd)
+bool PatchMainMenu(const string& inPatchedSakuraRootDirectory, const string& inTranslatedMainMenuFontSheet, const string& outMainMenuFontSheetPath, const string& inMainMenuTranslatedBgnd, 
+				   const string& inTranslatedDataDirectory, const string& inTempDir)
 {
 	struct MainMenuText
 	{
@@ -6430,23 +6431,17 @@ bool PatchMainMenu(const string& sakuraRootDirectory, const string& inTranslated
 		unsigned short characterOffset; //multiple of 16
 		
 
-		void SetCharacter(char c, short xPosition = 0)
-		{
+		void SetCharacter(char c, short xPosition = 0, bool bModifyPosition = true)
+		{	
 			characterOffset = c*16;
-			x = (unsigned short)xPosition;
-
-			/*
-			if( c == ' ' )
-			{
-				characterOffset = 64*16;
-			}
-			else
-			{
-				characterOffset = (c - 'A')*16;
-			}
-			*/
 			SwapByteOrderInPlace((char*)&characterOffset, sizeof(characterOffset));
-			SwapByteOrderInPlace((char*)&x, sizeof(x));
+
+			if( bModifyPosition )
+			{	
+				x = (unsigned short)xPosition;
+
+				SwapByteOrderInPlace((char*)&x, sizeof(x));
+			}
 		}
 
 		void SwapEndianness()
@@ -6459,35 +6454,57 @@ bool PatchMainMenu(const string& sakuraRootDirectory, const string& inTranslated
 		}
 	};
 
-	if( !CreateTranslatedFontSheet(inTranslatedFontSheet, outFontSheetPath, false) )
+	//LOGO.SH2
+	const FileNameContainer logoFileName( (inPatchedSakuraRootDirectory + "SAKURA1\\LOGO.SH2").c_str() );
+	FileData logoFileData;
+	if( !logoFileData.InitializeFileData(logoFileName) )
 	{
-		printf("PatchMainMenu: Unable to create translated font sheet\n");
+		printf("PatchMainMenu: Unable to open LOGO.SH2: %s\n", logoFileName.mFullPath.c_str());
 		return false;
 	}
 
-	//Load font sheet
-	const string fontSheetPath = outFontSheetPath + ".bin";
+	//SAKURA
+	const FileNameContainer sakuraFileName( (inPatchedSakuraRootDirectory + "SAKURA").c_str() );
+	FileReadWriter sakuraFileData;
+	if( !sakuraFileData.OpenFile(sakuraFileName.mFullPath) )
+	{
+		printf("PatchMainMenu: Unable to open SAKURA: %s\n", logoFileName.mFullPath.c_str());
+		return false;
+	}
+
+	//Create Sakura format MainMenu font sheet
+	if( !CreateTranslatedFontSheet(inTranslatedMainMenuFontSheet, outMainMenuFontSheetPath, false) )
+	{
+		printf("PatchMainMenu: Unable to create translated main menu font sheet\n");
+		return false;
+	}
+
+	//Options font sheet
+	const string translatedOptionsFontSheetPath = inTranslatedDataDirectory + string("OptionsSettings.bmp");
+	string optionsFontSheetSakuraFormatPath = inTempDir + string("OptionsSettingsFontSheet");
+	if( !CreateTranslatedFontSheet(translatedOptionsFontSheetPath, optionsFontSheetSakuraFormatPath, false) )
+	{
+		printf("PatchMainMenu: Unable to create translated options font sheet\n");
+		return false;
+	}
+
+	//Load MainMenu font sheet
+	const string fontSheetPath = outMainMenuFontSheetPath + ".bin";
 	const FileNameContainer translatedFileName(fontSheetPath.c_str());
 	FileData translatedData;
 	if( !translatedData.InitializeFileData(translatedFileName) )
 	{
-		printf("PatchMainMenu: Unable to open converted font sheet %s\n", fontSheetPath.c_str());
+		printf("PatchMainMenu: Unable to open converted main menu font sheet %s\n", fontSheetPath.c_str());
 		return false;
 	}
 
-	//Load font sheet palette
-	const string fontSheetPalettePath = outFontSheetPath + "Palette.bin";
-	const FileNameContainer translatedFontSheetPaletteName(fontSheetPalettePath.c_str());
-	FileData translatedPaletteData;
-	if( !translatedPaletteData.InitializeFileData(translatedFontSheetPaletteName) )
+	//Load Options font sheet
+	const string optionsFontSheetPath = optionsFontSheetSakuraFormatPath + ".bin";
+	const FileNameContainer translatedOptionsFileName(optionsFontSheetPath.c_str());
+	FileData translatedOptionsData;
+	if( !translatedOptionsData.InitializeFileData(translatedOptionsFileName) )
 	{
-		printf("PatchMainMenu: Unable to open converted font sheet palette %s\n", fontSheetPalettePath.c_str());
-		return false;
-	}
-
-	if( translatedPaletteData.GetDataSize() != 32 )
-	{
-		printf("PatchMainMenu: Font sheet palette %s should only be 32 bytes.  It is %i bytes instead.\n", fontSheetPalettePath.c_str(), translatedPaletteData.GetDataSize());
+		printf("PatchMainMenu: Unable to open converted options font sheet %s\n", optionsFontSheetPath.c_str());
 		return false;
 	}
 
@@ -6496,9 +6513,21 @@ bool PatchMainMenu(const string& sakuraRootDirectory, const string& inTranslated
 	PRSCompressor compressor;
 	compressor.CompressData((void*)translatedData.GetData(), (numCharactersInFontSheet*16*8));//translatedData.GetDataSize() - (numCharactersInFontSheet*16*8));
 	
+	//Compress options font sheet
+	const unsigned long optionsFontSheetOffset        = 0x0005b320;
+	const unsigned long originalOptionsCompressedSize = 3782;
+	SakuraCompressedData optionsCompressedData;
+	optionsCompressedData.PatchDataInMemory(translatedOptionsData.GetData(), translatedOptionsData.GetDataSize(), true, false, originalOptionsCompressedSize);
+	if( optionsCompressedData.mDataSize > originalOptionsCompressedSize )
+	{
+		printf("PatchMainMenu: Compressed options font sheet is larger than the original %ul instead of %ul \n", optionsCompressedData.mDataSize, originalOptionsCompressedSize);
+		return false;
+	}
+	sakuraFileData.WriteData(optionsFontSheetOffset, optionsCompressedData.mpCompressedData, optionsCompressedData.mDataSize);
+
 	//Pad compressed data is it is divisible by 2
 	const unsigned long patchedFontSheetSize = compressor.mCompressedSize + (compressor.mCompressedSize%2);
-	char* pCompressedFontSheet       = new char[patchedFontSheetSize];
+	char* pCompressedFontSheet               = new char[patchedFontSheetSize];
 	memset(pCompressedFontSheet, 0, patchedFontSheetSize);
 	memcpy_s(pCompressedFontSheet, patchedFontSheetSize, compressor.mpCompressedData, compressor.mCompressedSize);
 
@@ -6512,25 +6541,22 @@ bool PatchMainMenu(const string& sakuraRootDirectory, const string& inTranslated
 
 	SakuraCompressedData translatedBgndData;
 	translatedBgndData.PatchDataInMemory(patchedBgndImage.mTileExtractor.mTiles[0].mpTile, patchedBgndImage.mTileExtractor.mTiles[0].mTileSize, true);
-	
-	const FileNameContainer logoFileName( (sakuraRootDirectory + "SAKURA1\\LOGO.SH2").c_str() );
-	FileData logoFileData;
-	if( !logoFileData.InitializeFileData(logoFileName) )
-	{
-		printf("PatchMainMenu: Unable to open LOGO.SH2: %s\n", logoFileName.mFullPath.c_str());
-		return false;
-	}
 
 	//Create text for the main menu
-	const unsigned long mainMenuTextOffset         = 0x000061E4;
-	const unsigned long mainMenuOptionTextOffset   = 0x000060D6;
-	const unsigned long mainMenuContinueTextOffset = 0x00006194;
+	const unsigned long mainMenuTextOffset           = 0x000061E4;
+	const unsigned long mainMenuOptionTextOffset     = 0x000060D6;
+	const unsigned long mainMenuContinueTextOffset   = 0x00006194;
 	MainMenuText newGameText[8];
 	MainMenuText continueText[8];
 	MainMenuText optionText[5];
 	memcpy_s((void*)newGameText, sizeof(newGameText), logoFileData.GetData() + mainMenuTextOffset, sizeof(newGameText));
 	memcpy_s((void*)continueText, sizeof(continueText), logoFileData.GetData() + mainMenuContinueTextOffset, sizeof(continueText));
 	memcpy_s((void*)optionText, sizeof(optionText), logoFileData.GetData() + mainMenuOptionTextOffset, sizeof(optionText));
+	
+	//SAKURA layout code
+	const unsigned long optionsCursorSpeedTextOffset = 0x0005aa50;
+	MainMenuText cursorSpeedText[11];
+	sakuraFileData.ReadData(optionsCursorSpeedTextOffset, (char*)cursorSpeedText, sizeof(cursorSpeedText));
 	
 	short startX = -1 * (74/2);
 	newGameText[0].SetCharacter(0, startX);
@@ -6558,6 +6584,18 @@ bool PatchMainMenu(const string& sakuraRootDirectory, const string& inTranslated
 	optionText[2].SetCharacter(11, startX + 16*2);
 	optionText[3].SetCharacter(16, startX + 16*3);
 	optionText[4].SetCharacter(16, startX + 16*4);
+
+	cursorSpeedText[0].SetCharacter(0,  0, false); //0-5 is "Cursor Speed"
+	cursorSpeedText[1].SetCharacter(1,  0, false);
+	cursorSpeedText[2].SetCharacter(2,  0, false);
+	cursorSpeedText[3].SetCharacter(3,  0, false);
+	cursorSpeedText[4].SetCharacter(4,  0, false);
+	cursorSpeedText[5].SetCharacter(72, 0, false); 
+	cursorSpeedText[6].SetCharacter(5,  0, false); //slow
+	cursorSpeedText[7].SetCharacter(7,  0, false); //dot
+	cursorSpeedText[8].SetCharacter(7,  0, false); //dot
+	cursorSpeedText[9].SetCharacter(7,  0, false); //dot
+	cursorSpeedText[10].SetCharacter(6, 0, false);//fast
 	//**Done creating text for the main menu**
 
 	//Create new data
@@ -6590,8 +6628,10 @@ bool PatchMainMenu(const string& sakuraRootDirectory, const string& inTranslated
 	memcpy_s(pNewData + memCpyOffset + mainMenuTextOffset, newDataSize - memCpyOffset, &newGameText, sizeof(newGameText));
 	memcpy_s(pNewData + memCpyOffset + mainMenuContinueTextOffset, newDataSize - memCpyOffset, &continueText, sizeof(continueText));
 	memcpy_s(pNewData + memCpyOffset + mainMenuOptionTextOffset, newDataSize - memCpyOffset, &optionText, sizeof(optionText));
-	//memcpy_s(pNewData + memCpyOffset + mainMenuTextOffset + sizeof(newGameText), newDataSize - memCpyOffset, &continueText, sizeof(continueText));
 
+	//SAKURA file: write layout code for menus
+	sakuraFileData.WriteData(optionsCursorSpeedTextOffset, (char*)cursorSpeedText, sizeof(cursorSpeedText));
+	
 	//Copy patched font sheet
 	memCpyOffset += fontSheetOffset;
 	memcpy_s(pNewData + memCpyOffset, newDataSize - memCpyOffset, pCompressedFontSheet, patchedFontSheetSize);
@@ -6619,18 +6659,6 @@ bool PatchMainMenu(const string& sakuraRootDirectory, const string& inTranslated
 	//Copy the rest of the LOGO.SH2 file
 	memCpyOffset += (translatedBgndData.mDataSize - compressedDiff); //compressedDiff should be negative
 	memcpy_s(pNewData + memCpyOffset, newDataSize - memCpyOffset, logoFileData.GetData() + fontSheetOffset + origCompressedSize, logoFileData.GetDataSize() - (fontSheetOffset + origCompressedSize));
-
-	/* Don't fix the font palette because the patched images should use the existing palette
-	//Fix palette
-	memcpy_s(pNewData + 0xFE80, newDataSize, translatedPaletteData.GetData(), translatedPaletteData.GetDataSize()); //Palettes appear before the patched data, so we can use the original offsets
-
-	//Fix red tinted palette
-	memcpy_s(pNewData + 0xFEC0, newDataSize, translatedPaletteData.GetData(), translatedPaletteData.GetDataSize());
-	for(int p = 1; p < 16; ++p)
-	{
-		const unsigned short originalValue =  SwapByteOrder( *((unsigned short*)(pNewData + 0xFE80 + p*2)) );
-		*((unsigned short*)&pNewData[0xFEC0 + p*2]) = originalValue | 0x1CFF;
-	}*/
 
 	//Fix bgnd palette
 	const unsigned long newPaletteAddress = 0x00029324;// + compressedDiff;
@@ -6827,7 +6855,7 @@ bool PatchGame(const string& rootSakuraTaisenDirectory, const string& patchedSak
 
 	//Step 7
 	const string translatedMainMenuFontSheetPath = tempDir + "TranslatedMainMenuFontSheet";
-	if( !PatchMainMenu(patchedSakuraTaisenDirectory, inMainMainFontSheetPath, translatedMainMenuFontSheetPath, inMainMenuTranslatedBgnd) )
+	if( !PatchMainMenu(patchedSakuraTaisenDirectory, inMainMainFontSheetPath, translatedMainMenuFontSheetPath, inMainMenuTranslatedBgnd, inTranslatedDataDirectory, tempDir) )
 	{
 		printf("Patching MainMenu LOGO.SH2 failed.\n");
 		return false;
