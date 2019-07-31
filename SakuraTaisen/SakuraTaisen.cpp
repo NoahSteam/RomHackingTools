@@ -6556,11 +6556,20 @@ bool PatchMainMenu(const string& inPatchedSakuraRootDirectory, const string& inT
 	
 	//SAKURA layout code
 	const unsigned long optionsCursorSpeedTextOffset = 0x0005aa50;
-	const unsigned long optionsSoundTextOffset = 0x0005a974;
+	const unsigned long optionsSoundTextOffset       = 0x0005a974;
+	const unsigned long optionsVoiceTextOffset       = 0x0005a8c8;
+	const unsigned long optionsControlsTextOffset    = 0x0005a800;
+	const unsigned long optionsExitTextOffset        = 0x0005a796;
 	MainMenuText cursorSpeedText[11];
 	MainMenuText soundText[12];
+	MainMenuText voiceText[7];
+	MainMenuText controlsText[10];
+	MainMenuText exitText[4];
 	sakuraFileData.ReadData(optionsCursorSpeedTextOffset, (char*)cursorSpeedText, sizeof(cursorSpeedText));
-	sakuraFileData.ReadData(optionsSoundTextOffset, (char*)soundText, sizeof(soundText));
+	sakuraFileData.ReadData(optionsSoundTextOffset,       (char*)soundText,       sizeof(soundText));
+	sakuraFileData.ReadData(optionsVoiceTextOffset,       (char*)voiceText,       sizeof(voiceText));
+	sakuraFileData.ReadData(optionsControlsTextOffset,    (char*)controlsText,    sizeof(controlsText));
+	sakuraFileData.ReadData(optionsExitTextOffset,        (char*)exitText,        sizeof(exitText));
 	
 	short startX = -1 * (74/2);
 	newGameText[0].SetCharacter(0, startX);
@@ -6620,41 +6629,40 @@ bool PatchMainMenu(const string& inPatchedSakuraRootDirectory, const string& inT
 	soundText[10].SetCharacter(16);
 	soundText[11].SetCharacter(emptyOptionsChar);
 
-	/*
 	//Voices
-	cursorSpeedText[22].SetCharacter(17);
-	cursorSpeedText[23].SetCharacter(18);
+	voiceText[0].SetCharacter(17);
+	voiceText[1].SetCharacter(18);
 
 	//On
-	cursorSpeedText[24].SetCharacter(19);
-	cursorSpeedText[25].SetCharacter(20);
+	voiceText[2].SetCharacter(19);
+	voiceText[3].SetCharacter(20);
 
 	//Off
-	cursorSpeedText[26].SetCharacter(21);
-	cursorSpeedText[27].SetCharacter(22);
-	cursorSpeedText[28].SetCharacter(emptyOptionsChar);
+	voiceText[4].SetCharacter(21);
+	voiceText[5].SetCharacter(22);
+	voiceText[6].SetCharacter(emptyOptionsChar);
 
 	//Controls
-	cursorSpeedText[29].SetCharacter(23);
-	cursorSpeedText[30].SetCharacter(24);
-	cursorSpeedText[31].SetCharacter(25);
-	cursorSpeedText[32].SetCharacter(emptyOptionsChar);
+	controlsText[0].SetCharacter(23);
+	controlsText[1].SetCharacter(24);
+	controlsText[2].SetCharacter(25);
+	controlsText[3].SetCharacter(emptyOptionsChar);
 
 	//Set
-	cursorSpeedText[33].SetCharacter(26);
-	cursorSpeedText[34].SetCharacter(27);
+	controlsText[4].SetCharacter(26);
+	controlsText[5].SetCharacter(27);
 
 	//Accept
-	cursorSpeedText[35].SetCharacter(28);
-	cursorSpeedText[36].SetCharacter(29);
-	cursorSpeedText[37].SetCharacter(30);
-	cursorSpeedText[38].SetCharacter(emptyOptionsChar);
+	controlsText[6].SetCharacter(28);
+	controlsText[7].SetCharacter(29);
+	controlsText[8].SetCharacter(30);
+	controlsText[9].SetCharacter(emptyOptionsChar);
 
 	//Exit
-	cursorSpeedText[39].SetCharacter(31);
-	cursorSpeedText[40].SetCharacter(32);
-	cursorSpeedText[41].SetCharacter(emptyOptionsChar);
-	cursorSpeedText[42].SetCharacter(emptyOptionsChar);*/
+	exitText[0].SetCharacter(31);
+	exitText[1].SetCharacter(32);
+	exitText[2].SetCharacter(emptyOptionsChar);
+	exitText[3].SetCharacter(emptyOptionsChar);
 
 	//**Done creating text for the main menu**
 
@@ -6685,13 +6693,16 @@ bool PatchMainMenu(const string& inPatchedSakuraRootDirectory, const string& inT
 	memcpy_s(pNewData + memCpyOffset, newDataSize - memCpyOffset, logoFileData.GetData(), fontSheetOffset);
 
 	//Copy over new main menu text
-	memcpy_s(pNewData + memCpyOffset + mainMenuTextOffset, newDataSize - memCpyOffset, &newGameText, sizeof(newGameText));
+	memcpy_s(pNewData + memCpyOffset + mainMenuTextOffset,         newDataSize - memCpyOffset, &newGameText, sizeof(newGameText));
 	memcpy_s(pNewData + memCpyOffset + mainMenuContinueTextOffset, newDataSize - memCpyOffset, &continueText, sizeof(continueText));
-	memcpy_s(pNewData + memCpyOffset + mainMenuOptionTextOffset, newDataSize - memCpyOffset, &optionText, sizeof(optionText));
+	memcpy_s(pNewData + memCpyOffset + mainMenuOptionTextOffset,   newDataSize - memCpyOffset, &optionText, sizeof(optionText));
 
 	//SAKURA file: write layout code for menus
 	sakuraFileData.WriteData(optionsCursorSpeedTextOffset, (char*)cursorSpeedText, sizeof(cursorSpeedText));
-	sakuraFileData.WriteData(optionsSoundTextOffset, (char*)soundText, sizeof(soundText));
+	sakuraFileData.WriteData(optionsSoundTextOffset,       (char*)soundText,       sizeof(soundText));
+	sakuraFileData.WriteData(optionsVoiceTextOffset,       (char*)voiceText,       sizeof(voiceText));
+	sakuraFileData.WriteData(optionsControlsTextOffset,    (char*)controlsText,    sizeof(controlsText));
+	sakuraFileData.WriteData(optionsExitTextOffset,        (char*)exitText,        sizeof(exitText));
 	
 	//Copy patched font sheet
 	memCpyOffset += fontSheetOffset;
