@@ -6431,17 +6431,18 @@ bool PatchMainMenu(const string& inPatchedSakuraRootDirectory, const string& inT
 		unsigned short characterOffset; //multiple of 16
 		
 
-		void SetCharacter(char c, short xPosition = 0, bool bModifyPosition = true)
+		void SetCharacter(char c, short xPosition)
 		{	
+			SetCharacter(c);
+			
+			x = (unsigned short)xPosition;
+			SwapByteOrderInPlace((char*)&x, sizeof(x));
+		}
+
+		void SetCharacter(char c)
+		{
 			characterOffset = c*16;
 			SwapByteOrderInPlace((char*)&characterOffset, sizeof(characterOffset));
-
-			if( bModifyPosition )
-			{	
-				x = (unsigned short)xPosition;
-
-				SwapByteOrderInPlace((char*)&x, sizeof(x));
-			}
 		}
 
 		void SwapEndianness()
@@ -6555,8 +6556,11 @@ bool PatchMainMenu(const string& inPatchedSakuraRootDirectory, const string& inT
 	
 	//SAKURA layout code
 	const unsigned long optionsCursorSpeedTextOffset = 0x0005aa50;
+	const unsigned long optionsSoundTextOffset = 0x0005a974;
 	MainMenuText cursorSpeedText[11];
+	MainMenuText soundText[12];
 	sakuraFileData.ReadData(optionsCursorSpeedTextOffset, (char*)cursorSpeedText, sizeof(cursorSpeedText));
+	sakuraFileData.ReadData(optionsSoundTextOffset, (char*)soundText, sizeof(soundText));
 	
 	short startX = -1 * (74/2);
 	newGameText[0].SetCharacter(0, startX);
@@ -6585,17 +6589,73 @@ bool PatchMainMenu(const string& inPatchedSakuraRootDirectory, const string& inT
 	optionText[3].SetCharacter(16, startX + 16*3);
 	optionText[4].SetCharacter(16, startX + 16*4);
 
-	cursorSpeedText[0].SetCharacter(0,  0, false); //0-5 is "Cursor Speed"
-	cursorSpeedText[1].SetCharacter(1,  0, false);
-	cursorSpeedText[2].SetCharacter(2,  0, false);
-	cursorSpeedText[3].SetCharacter(3,  0, false);
-	cursorSpeedText[4].SetCharacter(4,  0, false);
-	cursorSpeedText[5].SetCharacter(72, 0, false); 
-	cursorSpeedText[6].SetCharacter(5,  0, false); //slow
-	cursorSpeedText[7].SetCharacter(7,  0, false); //dot
-	cursorSpeedText[8].SetCharacter(7,  0, false); //dot
-	cursorSpeedText[9].SetCharacter(7,  0, false); //dot
-	cursorSpeedText[10].SetCharacter(6, 0, false);//fast
+	const INT emptyOptionsChar = 72;
+	cursorSpeedText[0].SetCharacter(0); //0-5 is "Cursor Speed"
+	cursorSpeedText[1].SetCharacter(1);
+	cursorSpeedText[2].SetCharacter(2);
+	cursorSpeedText[3].SetCharacter(3);
+	cursorSpeedText[4].SetCharacter(4);
+	cursorSpeedText[5].SetCharacter(emptyOptionsChar);
+	cursorSpeedText[6].SetCharacter(5);  //slow
+	cursorSpeedText[7].SetCharacter(7);  //dot
+	cursorSpeedText[8].SetCharacter(7);  //dot
+	cursorSpeedText[9].SetCharacter(7);  //dot
+	cursorSpeedText[10].SetCharacter(6); //fast
+
+	//Sound
+	soundText[0].SetCharacter(8); 
+	soundText[1].SetCharacter(9);
+	soundText[2].SetCharacter(10);
+	soundText[3].SetCharacter(emptyOptionsChar);
+
+	//Stereo
+	soundText[4].SetCharacter(11);
+	soundText[5].SetCharacter(12);
+	soundText[6].SetCharacter(13);
+	soundText[7].SetCharacter(emptyOptionsChar);
+
+	//Mono
+	soundText[8].SetCharacter(14);
+	soundText[9].SetCharacter(15);
+	soundText[10].SetCharacter(16);
+	soundText[11].SetCharacter(emptyOptionsChar);
+
+	/*
+	//Voices
+	cursorSpeedText[22].SetCharacter(17);
+	cursorSpeedText[23].SetCharacter(18);
+
+	//On
+	cursorSpeedText[24].SetCharacter(19);
+	cursorSpeedText[25].SetCharacter(20);
+
+	//Off
+	cursorSpeedText[26].SetCharacter(21);
+	cursorSpeedText[27].SetCharacter(22);
+	cursorSpeedText[28].SetCharacter(emptyOptionsChar);
+
+	//Controls
+	cursorSpeedText[29].SetCharacter(23);
+	cursorSpeedText[30].SetCharacter(24);
+	cursorSpeedText[31].SetCharacter(25);
+	cursorSpeedText[32].SetCharacter(emptyOptionsChar);
+
+	//Set
+	cursorSpeedText[33].SetCharacter(26);
+	cursorSpeedText[34].SetCharacter(27);
+
+	//Accept
+	cursorSpeedText[35].SetCharacter(28);
+	cursorSpeedText[36].SetCharacter(29);
+	cursorSpeedText[37].SetCharacter(30);
+	cursorSpeedText[38].SetCharacter(emptyOptionsChar);
+
+	//Exit
+	cursorSpeedText[39].SetCharacter(31);
+	cursorSpeedText[40].SetCharacter(32);
+	cursorSpeedText[41].SetCharacter(emptyOptionsChar);
+	cursorSpeedText[42].SetCharacter(emptyOptionsChar);*/
+
 	//**Done creating text for the main menu**
 
 	//Create new data
@@ -6631,6 +6691,7 @@ bool PatchMainMenu(const string& inPatchedSakuraRootDirectory, const string& inT
 
 	//SAKURA file: write layout code for menus
 	sakuraFileData.WriteData(optionsCursorSpeedTextOffset, (char*)cursorSpeedText, sizeof(cursorSpeedText));
+	sakuraFileData.WriteData(optionsSoundTextOffset, (char*)soundText, sizeof(soundText));
 	
 	//Copy patched font sheet
 	memCpyOffset += fontSheetOffset;
