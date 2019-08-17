@@ -6301,7 +6301,7 @@ void FindCompressedData(const string& inCompressedFilePath, const string& inUnco
 	const unsigned long fileSize = compresedFile.GetDataSize();
 	for(unsigned long index = 0; index < fileSize; ++index)
 	{
-		printf("Progress: %lu/%lu\n", index, fileSize);
+		//printf("Progress: %lu/%lu\n", index, fileSize);
 
 		//Uncompress
 		PRSDecompressor decompressor;
@@ -6436,6 +6436,15 @@ bool PatchMainMenu(const string& inPatchedSakuraRootDirectory, const string& inT
 			SetCharacter(c);
 			
 			x = (unsigned short)xPosition;
+			SwapByteOrderInPlace((char*)&x, sizeof(x));
+		}
+
+		void SetCharacterWithOffset(char c, short xOffset)
+		{
+			SetCharacter(c);
+
+			SwapByteOrderInPlace((char*)&x, sizeof(x));
+			x += xOffset;
 			SwapByteOrderInPlace((char*)&x, sizeof(x));
 		}
 
@@ -6618,16 +6627,18 @@ bool PatchMainMenu(const string& inPatchedSakuraRootDirectory, const string& inT
 	soundText[3].SetCharacter(emptyOptionsChar);
 
 	//Stereo
-	soundText[4].SetCharacter(11);
-	soundText[5].SetCharacter(12);
-	soundText[6].SetCharacter(13);
-	soundText[7].SetCharacter(emptyOptionsChar);
+	short xOffset = 15;
+	soundText[4].SetCharacterWithOffset(11, xOffset);
+	soundText[5].SetCharacterWithOffset(12, xOffset);
+	soundText[6].SetCharacterWithOffset(13, xOffset);
+	soundText[7].SetCharacterWithOffset(emptyOptionsChar, xOffset);
 
 	//Mono
-	soundText[8].SetCharacter(14);
-	soundText[9].SetCharacter(15);
-	soundText[10].SetCharacter(16);
-	soundText[11].SetCharacter(emptyOptionsChar);
+	xOffset = 16;
+	soundText[8].SetCharacterWithOffset(14, xOffset);
+	soundText[9].SetCharacterWithOffset(15, xOffset);
+	soundText[10].SetCharacterWithOffset(16, xOffset);
+	soundText[11].SetCharacterWithOffset(emptyOptionsChar, xOffset);
 
 	//Voices
 	voiceText[0].SetCharacter(17);
@@ -6638,9 +6649,10 @@ bool PatchMainMenu(const string& inPatchedSakuraRootDirectory, const string& inT
 	voiceText[3].SetCharacter(20);
 
 	//Off
-	voiceText[4].SetCharacter(21);
-	voiceText[5].SetCharacter(22);
-	voiceText[6].SetCharacter(emptyOptionsChar);
+	xOffset = 8;
+	voiceText[4].SetCharacterWithOffset(21, xOffset);
+	voiceText[5].SetCharacterWithOffset(22, xOffset);
+	voiceText[6].SetCharacterWithOffset(emptyOptionsChar, xOffset);
 
 	//Controls
 	controlsText[0].SetCharacter(23);
@@ -6653,16 +6665,18 @@ bool PatchMainMenu(const string& inPatchedSakuraRootDirectory, const string& inT
 	controlsText[5].SetCharacter(27);
 
 	//Accept
-	controlsText[6].SetCharacter(28);
-	controlsText[7].SetCharacter(29);
-	controlsText[8].SetCharacter(30);
-	controlsText[9].SetCharacter(emptyOptionsChar);
+	xOffset = 13;
+	controlsText[6].SetCharacterWithOffset(28, xOffset);
+	controlsText[7].SetCharacterWithOffset(29, xOffset);
+	controlsText[8].SetCharacterWithOffset(30, xOffset);
+	controlsText[9].SetCharacterWithOffset(emptyOptionsChar, xOffset);
 
 	//Exit
-	exitText[0].SetCharacter(31);
-	exitText[1].SetCharacter(32);
-	exitText[2].SetCharacter(emptyOptionsChar);
-	exitText[3].SetCharacter(emptyOptionsChar);
+	xOffset = 16;
+	exitText[0].SetCharacterWithOffset(31, xOffset);
+	exitText[1].SetCharacterWithOffset(32, xOffset);
+	exitText[2].SetCharacterWithOffset(emptyOptionsChar, xOffset);
+	exitText[3].SetCharacterWithOffset(emptyOptionsChar, xOffset);
 
 	//**Done creating text for the main menu**
 
@@ -7205,7 +7219,20 @@ int main(int argc, char *argv[])
 		const string uncompressedFile(argv[3]);
 		const string outDirectory = string(argv[4]) + Seperators;
 
-		FindCompressedData(compressedFile, uncompressedFile, outDirectory);
+		vector<FileNameContainer> fileNames;
+		FindAllFilesWithinDirectory( "d:\\rizwan\\sakurawars\\disc1", fileNames);
+
+		for(FileNameContainer& fc : fileNames)
+		{	
+			if( fc.mFileName == "SAKURA4" || fc.mFileName == "VCEADV" || fc.mFileName == "OTOMEADP.DAT" || fc.mFileName == "SLG1ADP.DAT" || fc.mFileName == "MINIADP.DAT")
+			{
+				continue;
+			}
+			printf("Searching %s\n", fc.mFullPath.c_str());
+			FindCompressedData(fc.mFullPath, uncompressedFile, outDirectory);
+		}
+
+		//FindCompressedData(compressedFile, uncompressedFile, outDirectory);
 	}
 	else if(command == "PrintPaletteColors" && argc == 3 )
 	{

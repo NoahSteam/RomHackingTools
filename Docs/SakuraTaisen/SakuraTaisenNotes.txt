@@ -398,3 +398,11 @@ SAKURA @0x0005aa54 (0605EA50 in memory)
 SLG.BIN @0x00048090
 
 Voices 0005a8c8 0605e8c8
+
+//Loaded During Save Screen
+Found a match in ADVSE1 @0x05a54040
+Found a match in KABE00.BIN @0x060e0000
+Found a match in WALL1.BIN @0x060e0000
+Found a match in EVE0118.BIN @0x060c0000
+Found a match in FACE01.BIN @0x002b3800
+Found a match in LIPS_CG.BIN @0x05c4f100
