@@ -119,7 +119,7 @@ public:
 
 	TextFileData(const FileNameContainer& inFileNameInfo) : mFileNameInfo(inFileNameInfo){}
 
-	bool InitializeTextFile();
+	bool InitializeTextFile(bool bFixupSpecialCharacters = true);
 };
 
 class FileWriter
@@ -149,6 +149,7 @@ public:
 
 	bool  OpenFileForWrite(const std::string& outFileName);
 	void  WriteString(const std::string& inString);
+	void  AddNewLine();
 	void  Close();
 	FILE* GetFileHandle() { return mpFileHandle; }
 };

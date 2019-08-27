@@ -79,9 +79,20 @@ struct BmpToSakuraConverter
 {
 	TileExtractor mTileExtractor;
 	PaletteData   mPalette;
+	char*         mpPackedTiles = nullptr;
+	unsigned int  mPackedTileSize = 0;
+
 	static const unsigned short CYAN  = 0xe07f; //In little endian order
 	static const unsigned short WHITE = 0xff7f;
 	static const unsigned short BLACK = 0;
+
+	~BmpToSakuraConverter()
+	{
+		delete mpPackedTiles;
+		mpPackedTiles   = nullptr;
+		mPackedTileSize = 0;
+	}
+
 	bool ConvertBmpToSakuraFormat(const string& inBmpPath, bool bFixupAlphaColor, const unsigned short inAlphaColor = CYAN, unsigned int* pTileWidth = 0, unsigned int* pTileHeight = 0)
 	{
 		//Read in translated font sheet
@@ -139,6 +150,23 @@ struct BmpToSakuraConverter
 		}
 
 		return true;
+	}
+
+	void PackTiles()
+	{
+		if( mTileExtractor.mTiles.size() )
+		{
+			mPackedTileSize = mTileExtractor.mTiles.size() * mTileExtractor.mTiles[0].mTileSize;
+			mpPackedTiles = new char[mPackedTileSize];
+
+			int packedTileOffset = 0;
+			for(const TileExtractor::Tile& tile : mTileExtractor.mTiles)
+			{
+				memcpy_s(mpPackedTiles + packedTileOffset, mPackedTileSize - packedTileOffset, tile.mpTile, tile.mTileSize);
+				
+				packedTileOffset += tile.mTileSize;
+			}
+		}
 	}
 
 	const char* GetImageData() const
@@ -2170,6 +2198,121 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 	return true;
 }
 
+bool DumpTranslationFilesWithoutUnusedLines(const string& rootSakuraTaisenDirectory, const string& translatedTextDirectory, const string& outDirectory)
+{
+
+	//Find all translated text files
+	vector<FileNameContainer> translatedTextFiles;
+	FindAllFilesWithinDirectory(string(translatedTextDirectory), translatedTextFiles);
+
+	//Find all files within the requested directory
+	vector<FileNameContainer> allFiles;
+	FindAllFilesWithinDirectory(rootSakuraTaisenDirectory, allFiles);
+
+	//Get all files containing dialog
+	vector<FileNameContainer> textFiles;
+	GetAllFilesOfType(allFiles, "TBL.BIN", textFiles);
+	GetAllFilesOfType(allFiles, "MES.BIN", textFiles);
+
+	//Extract the text
+	vector<SakuraTextFile> sakuraTextFiles;
+	FindAllSakuraText(textFiles, sakuraTextFiles);
+
+	//Find dialog order
+	map<string, DialogOrder> dialogOrder;
+	FindDialogOrder(rootSakuraTaisenDirectory, dialogOrder);
+
+	const string UntranslatedEnglishString("Untranslated");
+
+	//Insert text
+	for(const SakuraTextFile& sakuraFile : sakuraTextFiles)
+	{
+		printf("Dumping text for: %s\n", sakuraFile.mFileNameInfo.mFileName.c_str());
+
+		const bool bIsMESFile = sakuraFile.mFileNameInfo.mFileName.find("MES.BIN", 0, 6) != string::npos;
+
+		//Create output file
+		string outFileName = outDirectory + sakuraFile.mFileNameInfo.mNoExtension + "_NoUnusedText.txt";
+		TextFileWriter outFile;
+		if( !outFile.OpenFileForWrite(outFileName) )
+		{
+			printf("Unable to open the output file %s.\n", outFileName.c_str());
+
+			return false;
+		}
+
+		//Search for the corresponding translated file name
+		const FileNameContainer* pMatchingTranslatedFileName = nullptr;
+		for(const FileNameContainer& translatedFileName : translatedTextFiles)
+		{
+			if( translatedFileName.mNoExtension == sakuraFile.mFileNameInfo.mNoExtension )
+			{
+				pMatchingTranslatedFileName = &translatedFileName;
+				break;
+			}
+		}
+
+		//Find the dialog order for this sakura file
+		const size_t lastIndex                                   = sakuraFile.mFileNameInfo.mNoExtension.find_first_of("TBL");
+		const string infoFileName                                = sakuraFile.mFileNameInfo.mNoExtension.substr(0, lastIndex);
+		map<string, DialogOrder>::const_iterator dialogOrderIter = dialogOrder.find(infoFileName);
+		const bool bDialogOrderExists                            = dialogOrderIter != dialogOrder.end();
+
+		vector<SakuraString> translatedLines;
+		if( pMatchingTranslatedFileName )
+		{
+			//Open translated text file
+			TextFileData translatedFile(*pMatchingTranslatedFileName);
+			if( !translatedFile.InitializeTextFile(false) )
+			{
+				printf("Unable to open the translation file %s.\n", pMatchingTranslatedFileName->mFullPath.c_str());
+				return false;
+			}
+
+			//Make sure we have the correct amount of lines
+			if( sakuraFile.mLines.size() < translatedFile.mLines.size() )
+			{
+				printf("Unable to translate file: %s because the translation has too many lines.\n", pMatchingTranslatedFileName->mNoExtension.c_str());
+				return false;
+			}
+
+			//Get converted lines of text
+			const size_t numTranslatedLines = translatedFile.mLines.size();
+			for(size_t translatedLineIndex = 0; translatedLineIndex < numTranslatedLines; ++translatedLineIndex)
+			{	
+				const TextFileData::TextLine& textLine = translatedFile.mLines[translatedLineIndex];
+				const size_t numWords = textLine.mWords.size();
+				SakuraString translatedString;
+
+				//Figure out if this is a lips entry
+				const size_t currSakuraStringIndex = translatedLineIndex;
+				const unsigned short id            = sakuraFile.mStringInfoArray[currSakuraStringIndex].mStringId;
+				const vector<int>* pOrder          = bDialogOrderExists && dialogOrderIter->second.idAndOrder.find(id) != dialogOrderIter->second.idAndOrder.end() ? &dialogOrderIter->second.idAndOrder.find(id)->second : nullptr;
+				const bool bHasLipsTag             = textLine.mWords.size() > 0 && textLine.mWords[0] == LipsWord;
+				const bool bIsLipsEntry            = bHasLipsTag ? true : pOrder ? dialogOrderIter->second.idAndLips.find(id)->second : false;
+				const bool bIsUnused               = bIsMESFile ? false : pOrder ? false : true;
+
+				//If untranslated, then write out the file and line number
+				if( bIsUnused ||
+					textLine.mWords.size() == 0 )
+				{
+					static const string unusedString = "Unused\n";
+					outFile.WriteString(unusedString);
+					continue;
+				}
+				else
+				{
+					outFile.WriteString(textLine.mFullLine);
+					outFile.AddNewLine();
+				}
+			}
+
+		}//if(pMatchingTranslatedFileName)
+	}
+
+	return true;
+}
+
 void FindDuplicateText(const string& dialogImageDirectory, const string& outFileName)
 {
 	TextFileWriter outFile;
@@ -2280,143 +2423,6 @@ void FindDuplicateText(const string& dialogImageDirectory, const string& outFile
 			fprintf(outFile.GetFileHandle(), "%s %lu\n", dupFileName.c_str(), crcMap[mapIter->first]);
 		}
 	}
-}
-
-bool FixupSLG(const string& rootDir, const string& outDir, const string& inTranslatedDirectory, const string& newFontPaletteFile)
-{
-	//We need the palette from the patched stats menu image
-	const string translatedWKLDirectory  = inTranslatedDirectory + string("WKL\\");
-	const string patchedStatsImagePath   = translatedWKLDirectory + string("StatsMenuPatched.bmp");
-
-	BmpToSakuraConverter statsImage;
-	if( !statsImage.ConvertBmpToSakuraFormat(patchedStatsImagePath, true, BmpToSakuraConverter::BLACK) )
-	{
-		printf("FixupSLG: Unable to convert stats image %s to sakura format.\n", patchedStatsImagePath.c_str());
-		return false;
-	}
-	if( statsImage.mPalette.GetSize() != 32 )
-	{
-		printf("FixupSLG: Stats image %s is of an invalid size.  It needs to be a 16 color 32 byte palette.\n", patchedStatsImagePath.c_str());
-	}
-
-	FileData newPaletteData;
-	if( !newPaletteData.InitializeFileData(newFontPaletteFile.c_str(), newFontPaletteFile.c_str()) )
-	{
-		printf("FixupSLG: Unable to patch palettes because new palette not found.\n");
-		return false;
-	}
-	
-	const int paletteSize = 32;
-	if( newPaletteData.GetDataSize() != paletteSize )
-	{
-		printf("FixupSLG: Palette size should be %i.  NewPaletteFile %s has a size of %ul instead.\n", paletteSize, newFontPaletteFile.c_str(), newPaletteData.GetDataSize());
-		return false;
-	}
-
-	vector<string> slgFiles;
-	slgFiles.push_back("0SLG.BIN");
-	slgFiles.push_back("SLG.BIN");
-	
-	for(const string& slgFileName : slgFiles)
-	{
-		//Open the original file
-		const string filePath = rootDir + string("SAKURA2\\\\") + slgFileName;
-		FileData origSlgData;
-		if( !origSlgData.InitializeFileData(slgFileName.c_str(), filePath.c_str()) )
-		{
-			printf("FixupSLG: Unable to open %s file.\n", filePath.c_str());
-			return false;
-		}
-
-		//***Fix StatsMenu Palette***
-	//	const int offsetToStatsMenuPalette = 0x00011b78;
-	//	memcpy_s((void*)(origSlgData.GetData() + offsetToStatsMenuPalette), origSlgData.GetDataSize(), statsImage.mPalette.GetData(), statsImage.mPalette.GetSize());
-		//***Done fixing StatsMenu palette
-
-		//***Fix the character spacing***
-		const int offsetTileSpacingX  = 0x0002167B; //Used when all text is displayed
-		const int offsetTileSpacingY  = 0x0002165D; //Used when all text is displayed
-		const int offsetTileSpacingX2 = 0x00021903; //Used while text is scrolling
-		const int offsetTileSpacingY2 = 0x000218E1; //Used while text is scrolling
-
-		memcpy_s((void*)(origSlgData.GetData() + offsetTileSpacingX),     origSlgData.GetDataSize(), (void*)&OutTileSpacingX, sizeof(OutTileSpacingX));
-		memcpy_s((void*)(origSlgData.GetData() + offsetTileSpacingY),     origSlgData.GetDataSize(), (void*)&OutTileSpacingY, sizeof(OutTileSpacingY));
-		memcpy_s((void*)(origSlgData.GetData() + offsetTileSpacingX2),    origSlgData.GetDataSize(), (void*)&OutTileSpacingX, sizeof(OutTileSpacingX));
-		memcpy_s((void*)(origSlgData.GetData() + offsetTileSpacingY2),    origSlgData.GetDataSize(), (void*)&OutTileSpacingY, sizeof(OutTileSpacingY));
-		//**Done fixing character spacing***
-
-		//***Fix Max Character Lengths***
-		const int offsetMaxCharsWhenScrolling  = 0x000218EB;
-		const int offsetMaxSpacingScrolling1   = 0x00021963;
-		const int offsetMaxSpacingScrolling2   = 0x0002196B;
-		const int offsetMaxMultiplierScrolling = 0x00021981;
-		const int offsetMaxMultiplier          = 0x00021655;
-		const int offsetMaxLines_1             = 0x0002196D;
-		const int offsetMaxLines_2             = 0x00021975;
-		const int offsetLipsCharWidthOffset    = 0x00021809;
-		const int offsetLipsShiftLeft_1        = 0x00021765; //Change the command from SHLL2(4108) to SHLL1(4100)
-		const int offsetLipsShiftLeft_2        = 0x00021799; //Change the command from SHLL2(4108) to SHLL1(4100)
-		const int offsetLipsMaxCharsOffset_1   = 0x00021755; //Change the command from MOV 0x0F(E20F) to SHLL1(E21E)
-		const int offsetLipsMaxCharsOffset_2   = 0x0002178B; //Change the command from MOV 0x0F(E20F) to SHLL1(E21E)
-		const int offsetLipsNumCharsPerLine_1  = 0x000217B9;
-		const int offsetLipsNumCharsPerLine_2  = 0x000217BF;
-		const int offsetLipsStartLocationY     = 0x0002173D; //Change the cpommand from MOV 0xCC(-52), r11 to 0xCE(-50)
-		const unsigned char maxMultiplier      = (240/(OutTileSpacingX));
-		const unsigned char maxCharacters      = maxMultiplier - 1;
-		const unsigned char maxLines           = MaxLines - 1;
-		const unsigned char lipsXOffset        = 0;
-		const unsigned char shiftLeftValue     = 0;
-		const unsigned char maxCharsPerLipsLine= maxMultiplier;
-		const unsigned char lipsStartLocY      = 0xCE;
-
-		memcpy_s((void*)(origSlgData.GetData() + offsetMaxSpacingScrolling1),     origSlgData.GetDataSize(), (void*)&maxCharacters,	       sizeof(maxCharacters));
-		memcpy_s((void*)(origSlgData.GetData() + offsetMaxSpacingScrolling2),     origSlgData.GetDataSize(), (void*)&maxCharacters,	       sizeof(maxCharacters));
-		memcpy_s((void*)(origSlgData.GetData() + offsetMaxMultiplierScrolling),   origSlgData.GetDataSize(), (void*)&maxMultiplier,	       sizeof(maxMultiplier));
-		memcpy_s((void*)(origSlgData.GetData() + offsetMaxMultiplier),            origSlgData.GetDataSize(), (void*)&maxMultiplier,	       sizeof(maxMultiplier));
-		memcpy_s((void*)(origSlgData.GetData() + offsetMaxCharsWhenScrolling),    origSlgData.GetDataSize(), (void*)&maxMultiplier,	       sizeof(maxMultiplier));
-		memcpy_s((void*)(origSlgData.GetData() + offsetMaxLines_1),               origSlgData.GetDataSize(), (void*)&maxLines,		       sizeof(maxLines));
-		memcpy_s((void*)(origSlgData.GetData() + offsetMaxLines_2),               origSlgData.GetDataSize(), (void*)&maxLines,		       sizeof(maxLines));
-		memcpy_s((void*)(origSlgData.GetData() + offsetLipsCharWidthOffset),      origSlgData.GetDataSize(), (void*)&OutTileSpacingX,      sizeof(OutTileSpacingX));
-		memcpy_s((void*)(origSlgData.GetData() + offsetLipsShiftLeft_1),		  origSlgData.GetDataSize(), (void*)&shiftLeftValue,       sizeof(shiftLeftValue));
-		memcpy_s((void*)(origSlgData.GetData() + offsetLipsShiftLeft_2),		  origSlgData.GetDataSize(), (void*)&shiftLeftValue,       sizeof(shiftLeftValue));
-		memcpy_s((void*)(origSlgData.GetData() + offsetLipsMaxCharsOffset_1),	  origSlgData.GetDataSize(), (void*)&maxCharsPerLipsLine,  sizeof(maxCharsPerLipsLine));
-		memcpy_s((void*)(origSlgData.GetData() + offsetLipsMaxCharsOffset_2),	  origSlgData.GetDataSize(), (void*)&maxCharsPerLipsLine,  sizeof(maxCharsPerLipsLine));
-		memcpy_s((void*)(origSlgData.GetData() + offsetLipsNumCharsPerLine_1),	  origSlgData.GetDataSize(), (void*)&maxCharsPerLipsLine,  sizeof(maxCharsPerLipsLine));
-		memcpy_s((void*)(origSlgData.GetData() + offsetLipsNumCharsPerLine_2),	  origSlgData.GetDataSize(), (void*)&maxCharsPerLipsLine,  sizeof(maxCharsPerLipsLine));
-		memcpy_s((void*)(origSlgData.GetData() + offsetLipsStartLocationY),	      origSlgData.GetDataSize(), (void*)&lipsStartLocY,        sizeof(lipsStartLocY));
-		//***Done Fixing Max Character Lengths***
-
-		//***Fix the palette***
-		const int paletteAddress1 = 0x000158A4;
-		const int paletteAddress2 = 0x000158C4;//0x0004A1D8;
-		char* pNewPalette         = new char[paletteSize];
-
-		//Store palette as 15bit color
-		for(int i = 0; i < paletteSize; ++i)
-		{
-			pNewPalette[i] = newPaletteData.GetData()[i] & 0x7f;
-		}
-
-		//copy over the palette
-		memcpy_s((void*)(origSlgData.GetData() + paletteAddress1), origSlgData.GetDataSize(), pNewPalette, paletteSize);
-		memcpy_s((void*)(origSlgData.GetData() + paletteAddress2), origSlgData.GetDataSize(), pNewPalette, paletteSize);
-		delete[] pNewPalette;
-		//***Done fixing the palette***
-
-		//Output patched file
-		const string outFilePath = outDir + string("SAKURA2\\\\") + slgFileName;
-		FileWriter patchedFile;
-		if( !patchedFile.OpenFileForWrite(outFilePath) )
-		{
-			printf("Failed patching: Unable to open %s file for write.\n", outFilePath.c_str());
-			return false;
-		}
-
-		patchedFile.WriteData(origSlgData.GetData(), origSlgData.GetDataSize());
-	}
-
-	printf("FixupSLG Succeeded.\n");
-	return true;
 }
 
 bool FixupSakura(const string& rootDir, const string& inTranslatedOptionsBmp, const string& patchedPalettePath, const string& inTranslatedDataDirectory)
@@ -5626,8 +5632,8 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 	const int origTextBytes        = ((240/16))*3*((16*16)/2);
 	const int textDelta            = (textBytes - origTextBytes);
 	
-	//Clipping for the battle menu, change 0x0030 to 0xffd8 (48 to -40)
-	unsigned short newBattleMenuClippingValue = 0xFFD8;
+	//Clipping for the battle menu, change 0x0030 to 0xffa0 (48 to -96)
+	unsigned short newBattleMenuClippingValue = 0xFFA0;
 	
 	for(const string& slgFileName : slgFiles)
 	{
@@ -5700,7 +5706,7 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 			slgFile.WriteData(0x0001444C, (char*)&newVDP1Offset, sizeof(newVDP1Offset), true);
 		}
 
-		//Clipping for the battle menu, change 0x0030 to 0xffd8 (48 to -40)
+		//Clipping for the battle menu, change 0x0030 to 0xffb8 (48 to -72)
 		slgFile.WriteData(0x000253DC, (char*)&newBattleMenuClippingValue, sizeof(newBattleMenuClippingValue), true);
 
 		//Battle menu formatting
@@ -6419,51 +6425,272 @@ void CompressFile(const string& filePath, const string& outPath)
 	outFile.WriteData(compressedFile.mpCompressedData, compressedFile.mCompressedSize);
 }
 
+struct MainMenuText
+{
+	unsigned short x;
+	unsigned short y;
+	unsigned short width;
+	unsigned short height;
+	unsigned short characterOffset; //multiple of 16
+		
+
+	void SetCharacter(char c, short xPosition)
+	{	
+		SetCharacter(c);
+			
+		x = (unsigned short)xPosition;
+		SwapByteOrderInPlace((char*)&x, sizeof(x));
+	}
+
+	void SetCharacterWithOffset(char c, short xOffset)
+	{
+		SetCharacter(c);
+
+		SwapByteOrderInPlace((char*)&x, sizeof(x));
+		x += xOffset;
+		SwapByteOrderInPlace((char*)&x, sizeof(x));
+	}
+
+	void SetCharacter(char c)
+	{
+		characterOffset = c*16;
+		SwapByteOrderInPlace((char*)&characterOffset, sizeof(characterOffset));
+	}
+
+	void SwapEndianness()
+	{
+		SwapByteOrderInPlace((char*)&width, sizeof(width));
+		SwapByteOrderInPlace((char*)&height, sizeof(height));
+		SwapByteOrderInPlace((char*)&characterOffset, sizeof(characterOffset));
+		SwapByteOrderInPlace((char*)&x, sizeof(x));
+		SwapByteOrderInPlace((char*)&y, sizeof(y));
+	}
+};
+
+struct OptionsSettingsMenu
+{
+	void CreateTranslatedMenu(FileReadWriter& sakuraFileData, bool bIsSLG)
+	{
+		//SAKURA layout code
+		const unsigned long optionsCursorSpeedTextOffset = bIsSLG ? 0x0004808c : 0x0005aa50;
+		const unsigned long optionsSoundTextOffset       = bIsSLG ? 0x00047fb0 : 0x0005a974;
+		const unsigned long optionsVoiceTextOffset       = bIsSLG ? 0x00047f04 : 0x0005a8c8;
+		const unsigned long optionsControlsTextOffset    = bIsSLG ? 0x00047e3c : 0x0005a800;
+		const unsigned long optionsExitTextOffset        = bIsSLG ? 0x00047dd2 : 0x0005a796;
+		MainMenuText cursorSpeedText[11];
+		MainMenuText soundText[12];
+		MainMenuText voiceText[7];
+		MainMenuText controlsText[10];
+		MainMenuText exitText[4];
+		sakuraFileData.ReadData(optionsCursorSpeedTextOffset, (char*)cursorSpeedText, sizeof(cursorSpeedText));
+		sakuraFileData.ReadData(optionsSoundTextOffset,       (char*)soundText,       sizeof(soundText));
+		sakuraFileData.ReadData(optionsVoiceTextOffset,       (char*)voiceText,       sizeof(voiceText));
+		sakuraFileData.ReadData(optionsControlsTextOffset,    (char*)controlsText,    sizeof(controlsText));
+		sakuraFileData.ReadData(optionsExitTextOffset,        (char*)exitText,        sizeof(exitText));
+	
+		const INT emptyOptionsChar = 60;
+		cursorSpeedText[0].SetCharacter(0); //0-5 is "Cursor Speed"
+		cursorSpeedText[1].SetCharacter(1);
+		cursorSpeedText[2].SetCharacter(2);
+		cursorSpeedText[3].SetCharacter(3);
+		cursorSpeedText[4].SetCharacter(4);
+		cursorSpeedText[5].SetCharacter(emptyOptionsChar);
+		cursorSpeedText[6].SetCharacter(5);  //slow
+		cursorSpeedText[7].SetCharacter(7);  //dot
+		cursorSpeedText[8].SetCharacter(7);  //dot
+		cursorSpeedText[9].SetCharacter(7);  //dot
+		cursorSpeedText[10].SetCharacter(6); //fast
+
+		//Sound
+		soundText[0].SetCharacter(8); 
+		soundText[1].SetCharacter(9);
+		soundText[2].SetCharacter(10);
+		soundText[3].SetCharacter(emptyOptionsChar);
+
+		//Stereo
+		short xOffset = 15;
+		soundText[4].SetCharacterWithOffset(11, xOffset);
+		soundText[5].SetCharacterWithOffset(12, xOffset);
+		soundText[6].SetCharacterWithOffset(13, xOffset);
+		soundText[7].SetCharacterWithOffset(emptyOptionsChar, xOffset);
+
+		//Mono
+		xOffset = 16;
+		soundText[8].SetCharacterWithOffset(14, xOffset);
+		soundText[9].SetCharacterWithOffset(15, xOffset);
+		soundText[10].SetCharacterWithOffset(16, xOffset);
+		soundText[11].SetCharacterWithOffset(emptyOptionsChar, xOffset);
+
+		//Voices
+		voiceText[0].SetCharacter(17);
+		voiceText[1].SetCharacter(18);
+
+		//On
+		voiceText[2].SetCharacter(19);
+		voiceText[3].SetCharacter(20);
+
+		//Off
+		xOffset = 8;
+		voiceText[4].SetCharacterWithOffset(21, xOffset);
+		voiceText[5].SetCharacterWithOffset(22, xOffset);
+		voiceText[6].SetCharacterWithOffset(emptyOptionsChar, xOffset);
+
+		//Controls
+		controlsText[0].SetCharacter(23);
+		controlsText[1].SetCharacter(24);
+		controlsText[2].SetCharacter(25);
+		controlsText[3].SetCharacter(emptyOptionsChar);
+
+		//Set
+		controlsText[4].SetCharacter(26);
+		controlsText[5].SetCharacter(27);
+
+		//Accept
+		xOffset = 13;
+		controlsText[6].SetCharacterWithOffset(28, xOffset);
+		controlsText[7].SetCharacterWithOffset(29, xOffset);
+		controlsText[8].SetCharacterWithOffset(30, xOffset);
+		controlsText[9].SetCharacterWithOffset(emptyOptionsChar, xOffset);
+
+		//Exit
+		xOffset = 16;
+		exitText[0].SetCharacterWithOffset(31, xOffset);
+		exitText[1].SetCharacterWithOffset(32, xOffset);
+		exitText[2].SetCharacterWithOffset(emptyOptionsChar, xOffset);
+		exitText[3].SetCharacterWithOffset(emptyOptionsChar, xOffset);
+
+		//Ok
+		const unsigned long controlsOkTextOffset = bIsSLG ? 0x00047dbe : 0x0005a782;
+		MainMenuText controlsOk[2];
+		sakuraFileData.ReadData(controlsOkTextOffset, (char*)controlsOk, sizeof(controlsOk));
+		controlsOk[0].SetCharacter(33);
+		controlsOk[1].SetCharacter(34);
+
+		//Cancel
+		const unsigned long controlsCancelTextOffset = bIsSLG ? 0x00047d96 : 0x0005a75a;
+		MainMenuText controlsCancel[4];
+		sakuraFileData.ReadData(controlsCancelTextOffset, (char*)controlsCancel, sizeof(controlsCancel));
+		controlsCancel[0].SetCharacter(35);
+		controlsCancel[1].SetCharacter(36);
+		controlsCancel[2].SetCharacter(37);
+		controlsCancel[3].SetCharacter(emptyOptionsChar);
+
+		//Move
+		const unsigned long controlsMoveTextOffset = bIsSLG ? 0x00047ce2 : 0x0005a6a6;
+		MainMenuText controlsMove[2];
+		sakuraFileData.ReadData(controlsMoveTextOffset, (char*)controlsMove, sizeof(controlsMove));
+		controlsMove[0].SetCharacter(38);
+		controlsMove[1].SetCharacter(39);
+
+		//Attack
+		const unsigned long controlsAttackTextOffset = bIsSLG ? 0x00047cf6 : 0x0005a6ba;
+		MainMenuText controlsAttack[4];
+		sakuraFileData.ReadData(controlsAttackTextOffset, (char*)controlsAttack, sizeof(controlsAttack));
+		controlsAttack[0].SetCharacter(40);
+		controlsAttack[1].SetCharacter(41);
+		controlsAttack[2].SetCharacter(42);
+		controlsAttack[3].SetCharacter(emptyOptionsChar);
+
+		//Defend
+		const unsigned long controlsDefendTextOffset = bIsSLG ? 0x00047d32 : 0x0005a6f6;
+		MainMenuText controlsDefendText[2];
+		sakuraFileData.ReadData(controlsDefendTextOffset, (char*)controlsDefendText, sizeof(controlsDefendText));
+		controlsDefendText[0].SetCharacter(43);
+		controlsDefendText[1].SetCharacter(44);
+
+		//Charge
+		const unsigned long controlsChargeTextOffset = bIsSLG ? 0x00047d1e : 0x0005a6e2;
+		MainMenuText controlsChargeText[2];
+		sakuraFileData.ReadData(controlsChargeTextOffset, (char*)controlsChargeText, sizeof(controlsChargeText));
+		controlsChargeText[0].SetCharacter(45);
+		controlsChargeText[1].SetCharacter(46);
+
+		//View All
+		const unsigned long controlsViewAllTextOffset = bIsSLG ? 0x00047d5a : 0x0005a71e;
+		MainMenuText controlsViewAllText[2];
+		sakuraFileData.ReadData(controlsViewAllTextOffset, (char*)controlsViewAllText, sizeof(controlsViewAllText));
+		controlsViewAllText[0].SetCharacter(47);
+		controlsViewAllText[1].SetCharacter(48);
+
+		//Advice
+		const unsigned long controlsAdviceTextOffset = bIsSLG ? 0x00047d46 : 0x0005a70a;
+		MainMenuText controlsAdviceText[2];
+		sakuraFileData.ReadData(controlsAdviceTextOffset, (char*)controlsAdviceText, sizeof(controlsAdviceText));
+		controlsAdviceText[0].SetCharacter(49);
+		controlsAdviceText[1].SetCharacter(50);
+
+		//Ok
+		const unsigned long controlsOk2TextOffset = bIsSLG ? 0x00047dbe : 0x0005a782;
+		MainMenuText controlsOk2Text[2];
+		sakuraFileData.ReadData(controlsOk2TextOffset, (char*)controlsOk2Text, sizeof(controlsOk2Text));
+		controlsOk2Text[0].SetCharacter(33);
+		controlsOk2Text[1].SetCharacter(34);
+
+		//NoSetting
+		const unsigned long controlsNoSettingTextOffset = bIsSLG ? 0x00047cba : 0x0005a67e;
+		MainMenuText controlsNoSetting[4];
+		sakuraFileData.ReadData(controlsNoSettingTextOffset, (char*)controlsNoSetting, sizeof(controlsNoSetting));
+		controlsNoSetting[0].SetCharacter(51);
+		controlsNoSetting[1].SetCharacter(52);
+		controlsNoSetting[2].SetCharacter(53);
+		controlsNoSetting[3].SetCharacter(54);
+
+		//Default
+		const unsigned long controlsDefaultTextOffset = bIsSLG ? 0x00047c92 : 0x0005a656;
+		MainMenuText controlsDefault[4];
+		sakuraFileData.ReadData(controlsDefaultTextOffset, (char*)controlsDefault, sizeof(controlsDefault));
+		controlsDefault[0].SetCharacter(55);
+		controlsDefault[1].SetCharacter(56);
+		controlsDefault[2].SetCharacter(57);
+		controlsDefault[3].SetCharacter(emptyOptionsChar);
+		//X
+		const unsigned long controlsXOffset = bIsSLG ? 0x0004830a : 0x0005acce;
+		MainMenuText controlsXText[1];
+		sakuraFileData.ReadData(controlsXOffset, (char*)controlsXText, sizeof(controlsXText));
+		controlsXText[0].SetCharacter(58);
+
+		//X for accept
+		const unsigned long controlsXForAcceptOffset = bIsSLG ? 0x00047c38 : 0x0005a5fc;
+		MainMenuText controlsXForAcceptText[1];
+		sakuraFileData.ReadData(controlsXForAcceptOffset, (char*)controlsXForAcceptText, sizeof(controlsXForAcceptText));
+		controlsXForAcceptText[0].SetCharacter(58);
+
+		//Exit
+		const unsigned long controlsExitOffset = bIsSLG ? 0x00047c6a : 0x0005a62e;
+		MainMenuText controlsExit[4];
+		sakuraFileData.ReadData(controlsExitOffset, (char*)controlsExit, sizeof(controlsExit));
+		controlsExit[0].SetCharacter(31);
+		controlsExit[1].SetCharacter(32);
+		controlsExit[2].SetCharacter(emptyOptionsChar);
+		controlsExit[3].SetCharacter(emptyOptionsChar);
+		//**Done creating text for the main menu**
+
+		sakuraFileData.WriteData(optionsCursorSpeedTextOffset, (char*)cursorSpeedText, sizeof(cursorSpeedText));
+		sakuraFileData.WriteData(optionsSoundTextOffset,       (char*)soundText,       sizeof(soundText));
+		sakuraFileData.WriteData(optionsVoiceTextOffset,       (char*)voiceText,       sizeof(voiceText));
+		sakuraFileData.WriteData(optionsControlsTextOffset,    (char*)controlsText,    sizeof(controlsText));
+		sakuraFileData.WriteData(optionsExitTextOffset,        (char*)exitText,        sizeof(exitText));
+
+		sakuraFileData.WriteData(controlsOkTextOffset,        (char*)controlsOk,				sizeof(controlsOk));
+		sakuraFileData.WriteData(controlsCancelTextOffset,    (char*)controlsCancel,			sizeof(controlsCancel));
+		sakuraFileData.WriteData(controlsMoveTextOffset,      (char*)controlsMove,				sizeof(controlsMove));
+		sakuraFileData.WriteData(controlsAttackTextOffset,    (char*)controlsAttack,			sizeof(controlsAttack));
+		sakuraFileData.WriteData(controlsDefendTextOffset,    (char*)controlsDefendText,		sizeof(controlsDefendText));
+		sakuraFileData.WriteData(controlsChargeTextOffset,    (char*)controlsChargeText,		sizeof(controlsChargeText));
+		sakuraFileData.WriteData(controlsViewAllTextOffset,   (char*)controlsViewAllText,		sizeof(controlsViewAllText));
+		sakuraFileData.WriteData(controlsAdviceTextOffset,    (char*)controlsAdviceText,		sizeof(controlsAdviceText));
+		sakuraFileData.WriteData(controlsOk2TextOffset,       (char*)controlsOk2Text,			sizeof(controlsOk2Text));
+		sakuraFileData.WriteData(controlsNoSettingTextOffset, (char*)controlsNoSetting,			sizeof(controlsNoSetting));
+		sakuraFileData.WriteData(controlsDefaultTextOffset,   (char*)controlsDefault,			sizeof(controlsDefault));
+		sakuraFileData.WriteData(controlsXOffset,             (char*)controlsXText,				sizeof(controlsXText));
+		sakuraFileData.WriteData(controlsXForAcceptOffset,    (char*)controlsXForAcceptText,    sizeof(controlsXForAcceptText));
+		sakuraFileData.WriteData(controlsExitOffset,          (char*)controlsExit,				sizeof(controlsExit));
+	}
+};
+
 bool PatchMainMenu(const string& inPatchedSakuraRootDirectory, const string& inTranslatedMainMenuFontSheet, const string& outMainMenuFontSheetPath, const string& inMainMenuTranslatedBgnd, 
 				   const string& inTranslatedDataDirectory, const string& inTempDir)
 {
-	struct MainMenuText
-	{
-		unsigned short x;
-		unsigned short y;
-		unsigned short width;
-		unsigned short height;
-		unsigned short characterOffset; //multiple of 16
-		
-
-		void SetCharacter(char c, short xPosition)
-		{	
-			SetCharacter(c);
-			
-			x = (unsigned short)xPosition;
-			SwapByteOrderInPlace((char*)&x, sizeof(x));
-		}
-
-		void SetCharacterWithOffset(char c, short xOffset)
-		{
-			SetCharacter(c);
-
-			SwapByteOrderInPlace((char*)&x, sizeof(x));
-			x += xOffset;
-			SwapByteOrderInPlace((char*)&x, sizeof(x));
-		}
-
-		void SetCharacter(char c)
-		{
-			characterOffset = c*16;
-			SwapByteOrderInPlace((char*)&characterOffset, sizeof(characterOffset));
-		}
-
-		void SwapEndianness()
-		{
-			SwapByteOrderInPlace((char*)&width, sizeof(width));
-			SwapByteOrderInPlace((char*)&height, sizeof(height));
-			SwapByteOrderInPlace((char*)&characterOffset, sizeof(characterOffset));
-			SwapByteOrderInPlace((char*)&x, sizeof(x));
-			SwapByteOrderInPlace((char*)&y, sizeof(y));
-		}
-	};
-
 	//LOGO.SH2
 	const FileNameContainer logoFileName( (inPatchedSakuraRootDirectory + "SAKURA1\\LOGO.SH2").c_str() );
 	FileData logoFileData;
@@ -6552,6 +6779,43 @@ bool PatchMainMenu(const string& inPatchedSakuraRootDirectory, const string& inT
 	SakuraCompressedData translatedBgndData;
 	translatedBgndData.PatchDataInMemory(patchedBgndImage.mTileExtractor.mTiles[0].mpTile, patchedBgndImage.mTileExtractor.mTiles[0].mTileSize, true);
 
+	//Intermediate Screen
+	const string intermediateScreenPath = inTranslatedDataDirectory + "IntermediateScreen.bmp";
+	BmpToSakuraConverter patchedIntermediateScreen;
+	unsigned int intermediateScreenTileDim = 16;
+	if( !patchedIntermediateScreen.ConvertBmpToSakuraFormat(intermediateScreenPath, false, 0, &intermediateScreenTileDim, &intermediateScreenTileDim) )
+	{
+		printf("PatchMainMenu: Couldn't convert image: %s.\n", inMainMenuTranslatedBgnd.c_str());
+		return false;
+	}
+
+	patchedIntermediateScreen.PackTiles();
+
+	const unsigned long originalIntermediateSreenCompressedSize = 966;
+	SakuraCompressedData translatedIntermediateScreenData;
+	translatedIntermediateScreenData.PatchDataInMemory(patchedIntermediateScreen.mpPackedTiles, patchedIntermediateScreen.mPackedTileSize, true, false, originalIntermediateSreenCompressedSize);
+
+	if( translatedIntermediateScreenData.mDataSize > originalIntermediateSreenCompressedSize )
+	{
+		printf("PatchMainMenu: Compressed size for the IntermediateScreen is too big.  Should be less thatn %ul, is %ul", originalIntermediateSreenCompressedSize, translatedIntermediateScreenData.mDataSize);
+		return false;
+	}
+
+	const FileNameContainer icatallFileName( (inPatchedSakuraRootDirectory + "SAKURA1\\ICATALL.DAT").c_str() );
+	FileReadWriter icatallFileData;
+	if( !icatallFileData.OpenFile(icatallFileName.mFullPath) )
+	{
+		printf("PatchMainMenu: Unable to open ICATALL: %s\n", icatallFileName.mFullPath.c_str());
+		return false;
+	}
+	icatallFileData.WriteData(0x00002800, translatedIntermediateScreenData.mpCompressedData, translatedIntermediateScreenData.mDataSize);
+
+	const unsigned long intermediateTextIndiceOffset = 0x0005f5c8;
+	const char intermediateTextIndices[36] = {0, 1, 0, 2, 0, 13, 0, 13, 0, 13, 0, 0, 
+											  0, 3, 0, 4, 0, 5, 0, 13, 0, 13, 0, 0, 
+											  0, 6, 0, 7, 0, 8, 0, 9, 0, 10, 0, 11};
+	//
+
 	//Create text for the main menu
 	const unsigned long mainMenuTextOffset           = 0x000061E4;
 	const unsigned long mainMenuOptionTextOffset     = 0x000060D6;
@@ -6563,23 +6827,11 @@ bool PatchMainMenu(const string& inPatchedSakuraRootDirectory, const string& inT
 	memcpy_s((void*)continueText, sizeof(continueText), logoFileData.GetData() + mainMenuContinueTextOffset, sizeof(continueText));
 	memcpy_s((void*)optionText, sizeof(optionText), logoFileData.GetData() + mainMenuOptionTextOffset, sizeof(optionText));
 	
-	//SAKURA layout code
-	const unsigned long optionsCursorSpeedTextOffset = 0x0005aa50;
-	const unsigned long optionsSoundTextOffset       = 0x0005a974;
-	const unsigned long optionsVoiceTextOffset       = 0x0005a8c8;
-	const unsigned long optionsControlsTextOffset    = 0x0005a800;
-	const unsigned long optionsExitTextOffset        = 0x0005a796;
-	MainMenuText cursorSpeedText[11];
-	MainMenuText soundText[12];
-	MainMenuText voiceText[7];
-	MainMenuText controlsText[10];
-	MainMenuText exitText[4];
-	sakuraFileData.ReadData(optionsCursorSpeedTextOffset, (char*)cursorSpeedText, sizeof(cursorSpeedText));
-	sakuraFileData.ReadData(optionsSoundTextOffset,       (char*)soundText,       sizeof(soundText));
-	sakuraFileData.ReadData(optionsVoiceTextOffset,       (char*)voiceText,       sizeof(voiceText));
-	sakuraFileData.ReadData(optionsControlsTextOffset,    (char*)controlsText,    sizeof(controlsText));
-	sakuraFileData.ReadData(optionsExitTextOffset,        (char*)exitText,        sizeof(exitText));
-	
+	//Options menu layout
+	OptionsSettingsMenu sakuraOptionsMenu;
+	sakuraOptionsMenu.CreateTranslatedMenu(sakuraFileData, false);
+
+	//SAKURA layout code for main menu
 	short startX = -1 * (74/2);
 	newGameText[0].SetCharacter(0, startX);
 	newGameText[1].SetCharacter(1, startX + 16);
@@ -6606,79 +6858,6 @@ bool PatchMainMenu(const string& inPatchedSakuraRootDirectory, const string& inT
 	optionText[2].SetCharacter(11, startX + 16*2);
 	optionText[3].SetCharacter(16, startX + 16*3);
 	optionText[4].SetCharacter(16, startX + 16*4);
-
-	const INT emptyOptionsChar = 72;
-	cursorSpeedText[0].SetCharacter(0); //0-5 is "Cursor Speed"
-	cursorSpeedText[1].SetCharacter(1);
-	cursorSpeedText[2].SetCharacter(2);
-	cursorSpeedText[3].SetCharacter(3);
-	cursorSpeedText[4].SetCharacter(4);
-	cursorSpeedText[5].SetCharacter(emptyOptionsChar);
-	cursorSpeedText[6].SetCharacter(5);  //slow
-	cursorSpeedText[7].SetCharacter(7);  //dot
-	cursorSpeedText[8].SetCharacter(7);  //dot
-	cursorSpeedText[9].SetCharacter(7);  //dot
-	cursorSpeedText[10].SetCharacter(6); //fast
-
-	//Sound
-	soundText[0].SetCharacter(8); 
-	soundText[1].SetCharacter(9);
-	soundText[2].SetCharacter(10);
-	soundText[3].SetCharacter(emptyOptionsChar);
-
-	//Stereo
-	short xOffset = 15;
-	soundText[4].SetCharacterWithOffset(11, xOffset);
-	soundText[5].SetCharacterWithOffset(12, xOffset);
-	soundText[6].SetCharacterWithOffset(13, xOffset);
-	soundText[7].SetCharacterWithOffset(emptyOptionsChar, xOffset);
-
-	//Mono
-	xOffset = 16;
-	soundText[8].SetCharacterWithOffset(14, xOffset);
-	soundText[9].SetCharacterWithOffset(15, xOffset);
-	soundText[10].SetCharacterWithOffset(16, xOffset);
-	soundText[11].SetCharacterWithOffset(emptyOptionsChar, xOffset);
-
-	//Voices
-	voiceText[0].SetCharacter(17);
-	voiceText[1].SetCharacter(18);
-
-	//On
-	voiceText[2].SetCharacter(19);
-	voiceText[3].SetCharacter(20);
-
-	//Off
-	xOffset = 8;
-	voiceText[4].SetCharacterWithOffset(21, xOffset);
-	voiceText[5].SetCharacterWithOffset(22, xOffset);
-	voiceText[6].SetCharacterWithOffset(emptyOptionsChar, xOffset);
-
-	//Controls
-	controlsText[0].SetCharacter(23);
-	controlsText[1].SetCharacter(24);
-	controlsText[2].SetCharacter(25);
-	controlsText[3].SetCharacter(emptyOptionsChar);
-
-	//Set
-	controlsText[4].SetCharacter(26);
-	controlsText[5].SetCharacter(27);
-
-	//Accept
-	xOffset = 13;
-	controlsText[6].SetCharacterWithOffset(28, xOffset);
-	controlsText[7].SetCharacterWithOffset(29, xOffset);
-	controlsText[8].SetCharacterWithOffset(30, xOffset);
-	controlsText[9].SetCharacterWithOffset(emptyOptionsChar, xOffset);
-
-	//Exit
-	xOffset = 16;
-	exitText[0].SetCharacterWithOffset(31, xOffset);
-	exitText[1].SetCharacterWithOffset(32, xOffset);
-	exitText[2].SetCharacterWithOffset(emptyOptionsChar, xOffset);
-	exitText[3].SetCharacterWithOffset(emptyOptionsChar, xOffset);
-
-	//**Done creating text for the main menu**
 
 	//Create new data
 	const unsigned long origCompressedFontSheetSize = 2280;
@@ -6712,12 +6891,8 @@ bool PatchMainMenu(const string& inPatchedSakuraRootDirectory, const string& inT
 	memcpy_s(pNewData + memCpyOffset + mainMenuOptionTextOffset,   newDataSize - memCpyOffset, &optionText, sizeof(optionText));
 
 	//SAKURA file: write layout code for menus
-	sakuraFileData.WriteData(optionsCursorSpeedTextOffset, (char*)cursorSpeedText, sizeof(cursorSpeedText));
-	sakuraFileData.WriteData(optionsSoundTextOffset,       (char*)soundText,       sizeof(soundText));
-	sakuraFileData.WriteData(optionsVoiceTextOffset,       (char*)voiceText,       sizeof(voiceText));
-	sakuraFileData.WriteData(optionsControlsTextOffset,    (char*)controlsText,    sizeof(controlsText));
-	sakuraFileData.WriteData(optionsExitTextOffset,        (char*)exitText,        sizeof(exitText));
-	
+	sakuraFileData.WriteData(intermediateTextIndiceOffset, intermediateTextIndices, sizeof(intermediateTextIndices));
+
 	//Copy patched font sheet
 	memCpyOffset += fontSheetOffset;
 	memcpy_s(pNewData + memCpyOffset, newDataSize - memCpyOffset, pCompressedFontSheet, patchedFontSheetSize);
@@ -6750,36 +6925,6 @@ bool PatchMainMenu(const string& inPatchedSakuraRootDirectory, const string& inT
 	const unsigned long newPaletteAddress = 0x00029324;// + compressedDiff;
 	memcpy_s(pNewData + newPaletteAddress, newDataSize - newPaletteAddress, patchedBgndImage.mPalette.GetData(), patchedBgndImage.mPalette.GetSize());
 
-	//Fixup pointers
-	/*
-	for(unsigned long k = 0; k < 0xff20; ++k)
-	{
-		if( k + 4 < newDataSize && pNewData[k+4] != 0 && pNewData[k+4] != 0x06 && pNewData[k+4] != 0x25 )
-		{
-			continue;
-		}
-
-		if( k == 0x6CD || k == 0x6DB || k == 0xA13 || k == 0xABF || k == 0x1DC5 || k == 0x1EFB || k == 0x217F || k == 0x2275 || k == 0x22D9 || k == 0xDDFD || k == 0x2343 || k == 0x2499 ||
-			k == 0x2579 || k == 0x261B || k == 0x2631 || k == 0x26d1 || k == 0x2739 || k == 0x2821 || k == 0x5B95 || k == 0x0606c || k == 0x66C8 || k == 0x66d0 )
-		{
-			continue;
-		}
-
-		const unsigned int address = SwapByteOrder( *(unsigned int*)(&pNewData[k]) );
-		if( (address % 2) != 0 )
-		{
-			continue;
-		}
-		if( address >= 0x00214808 && address <= 0x00240000 )
-		{
-			const unsigned int newAddress = address + compressedDiff;
-			*(unsigned int*)(&pNewData[k]) = SwapByteOrder(newAddress);
-
-			printf("Fixed Logo: Old: 0x%08x New: 0x%08x LogoIndex: 0x%08x\n", address, newAddress, k);
-		}
-	}
-	*/
-
 	//Pointer to the bgnd image data.  This has to be treated seperatly because the fixup happening above is after both the font sheet and the bgnd image
 	const unsigned int fontSizeDiff = patchedFontSheetSize > origCompressedFontSheetSize ? patchedFontSheetSize - origCompressedFontSheetSize : 0;
 	const unsigned int newAddress = 0x214808 + fontSizeDiff;
@@ -6799,6 +6944,231 @@ bool PatchMainMenu(const string& inPatchedSakuraRootDirectory, const string& inT
 	return true;
 }
 
+bool FixupSLG(const string& rootDir, const string& outDir, const string& inTranslatedDirectory, const string& newFontPaletteFile, const string& inTempDir)
+{
+	//We need the palette from the patched stats menu image
+	const string translatedWKLDirectory  = inTranslatedDirectory + string("WKL\\");
+	const string patchedStatsImagePath   = translatedWKLDirectory + string("StatsMenuPatched.bmp");
+
+	BmpToSakuraConverter statsImage;
+	if( !statsImage.ConvertBmpToSakuraFormat(patchedStatsImagePath, true, BmpToSakuraConverter::BLACK) )
+	{
+		printf("FixupSLG: Unable to convert stats image %s to sakura format.\n", patchedStatsImagePath.c_str());
+		return false;
+	}
+	if( statsImage.mPalette.GetSize() != 32 )
+	{
+		printf("FixupSLG: Stats image %s is of an invalid size.  It needs to be a 16 color 32 byte palette.\n", patchedStatsImagePath.c_str());
+	}
+
+	FileData newPaletteData;
+	if( !newPaletteData.InitializeFileData(newFontPaletteFile.c_str(), newFontPaletteFile.c_str()) )
+	{
+		printf("FixupSLG: Unable to patch palettes because new palette not found.\n");
+		return false;
+	}
+	
+	const int paletteSize = 32;
+	if( newPaletteData.GetDataSize() != paletteSize )
+	{
+		printf("FixupSLG: Palette size should be %i.  NewPaletteFile %s has a size of %ul instead.\n", paletteSize, newFontPaletteFile.c_str(), newPaletteData.GetDataSize());
+		return false;
+	}
+
+	//**Create options settings font sheet
+	//Options font sheet
+	const string translatedOptionsFontSheetPath = inTranslatedDirectory + string("OptionsSettings.bmp");
+	string optionsFontSheetSakuraFormatPath     = inTempDir + string("OptionsSettingsFontSheet");
+	if( !CreateTranslatedFontSheet(translatedOptionsFontSheetPath, optionsFontSheetSakuraFormatPath, false) )
+	{
+		printf("FixupSLG: Unable to create translated options font sheet\n");
+		return false;
+	}
+
+	//Load Options font sheet
+	const string optionsFontSheetPath = optionsFontSheetSakuraFormatPath + ".bin";
+	const FileNameContainer translatedOptionsFileName(optionsFontSheetPath.c_str());
+	FileData translatedOptionsData;
+	if( !translatedOptionsData.InitializeFileData(translatedOptionsFileName) )
+	{
+		printf("FixupSLG: Unable to open converted options font sheet %s\n", optionsFontSheetPath.c_str());
+		return false;
+	}
+
+	//Compress options font sheet
+	const unsigned long optionsFontSheetOffset        = 0x0005b320;
+	const unsigned long originalOptionsCompressedSize = 3782;
+	SakuraCompressedData optionsCompressedData;
+	optionsCompressedData.PatchDataInMemory(translatedOptionsData.GetData(), translatedOptionsData.GetDataSize(), true, false, originalOptionsCompressedSize);
+	if( optionsCompressedData.mDataSize > originalOptionsCompressedSize )
+	{
+		printf("PatchMainMenu: Compressed options font sheet is larger than the original %ul instead of %ul \n", optionsCompressedData.mDataSize, originalOptionsCompressedSize);
+		return false;
+	}
+	//**Done with settings font sheet
+
+	vector<string> slgFiles;
+	slgFiles.push_back("0SLG.BIN");
+	slgFiles.push_back("SLG.BIN");
+	
+	for(const string& slgFileName : slgFiles)
+	{
+		//Open the original file
+		const string filePath = rootDir + string("SAKURA2\\\\") + slgFileName;
+		FileData origSlgData;
+		if( !origSlgData.InitializeFileData(slgFileName.c_str(), filePath.c_str()) )
+		{
+			printf("FixupSLG: Unable to open %s file.\n", filePath.c_str());
+			return false;
+		}
+
+		//***Fix StatsMenu Palette***
+	//	const int offsetToStatsMenuPalette = 0x00011b78;
+	//	memcpy_s((void*)(origSlgData.GetData() + offsetToStatsMenuPalette), origSlgData.GetDataSize(), statsImage.mPalette.GetData(), statsImage.mPalette.GetSize());
+		//***Done fixing StatsMenu palette
+
+		//***Read in original options image***
+		//The bgnd image is part of a sprite sheet that has another image in it as well.  So in order to patch it, we need to uncompress the original data to get the original sprite sheet, 
+		//then copy over the new bgnd image into it, then compress that data again and save that out.
+		const unsigned int bgndImageOriginalCompressedSize = 1255;
+		const int ofsetBgndImage                           = 0x0004a258;
+		char* pOriginalOptionsImageData                    = new char[bgndImageOriginalCompressedSize];
+
+		memcpy_s(pOriginalOptionsImageData, bgndImageOriginalCompressedSize, (void*)(origSlgData.GetData() + ofsetBgndImage), bgndImageOriginalCompressedSize);
+	
+		//Uncompress the original data
+		PRSDecompressor uncompressedBgndImage;
+		uncompressedBgndImage.UncompressData((void*)pOriginalOptionsImageData, bgndImageOriginalCompressedSize);
+		delete[] pOriginalOptionsImageData;
+
+		//Convert patched options bgnd image to sakura format
+		const string mainMenuTranslatedBgnd = inTranslatedDirectory + "OptionsBgndPatched.bmp";
+		BmpToSakuraConverter patchedBgndImage;
+		if( !patchedBgndImage.ConvertBmpToSakuraFormat(mainMenuTranslatedBgnd, true) )
+		{
+			printf("PatchMainMenu: Couldn't convert image: %s.\n", mainMenuTranslatedBgnd.c_str());
+			return false;
+		}
+
+		//Copy the translated image data into the original sprite sheet
+		memcpy_s(uncompressedBgndImage.mpUncompressedData, uncompressedBgndImage.mUncompressedDataSize, patchedBgndImage.GetImageData(), patchedBgndImage.GetImageDataSize());
+
+		//Compress the data
+		SakuraCompressedData translatedBgndData;
+		translatedBgndData.PatchDataInMemory(uncompressedBgndImage.mpUncompressedData, uncompressedBgndImage.mUncompressedDataSize, true, false, bgndImageOriginalCompressedSize);
+		if( translatedBgndData.mDataSize > bgndImageOriginalCompressedSize )
+		{
+			printf("PatchMainMenu: Translated bgnd image is too big when compressed. Max is %u, this is %u.\n", bgndImageOriginalCompressedSize, translatedBgndData.mDataSize);
+			return false;
+		}
+		//**Done compressing bgnd image
+		//***Done reading in original image***
+
+		//***Fix the character spacing***
+		const int offsetTileSpacingX  = 0x0002167B; //Used when all text is displayed
+		const int offsetTileSpacingY  = 0x0002165D; //Used when all text is displayed
+		const int offsetTileSpacingX2 = 0x00021903; //Used while text is scrolling
+		const int offsetTileSpacingY2 = 0x000218E1; //Used while text is scrolling
+
+		memcpy_s((void*)(origSlgData.GetData() + offsetTileSpacingX),     origSlgData.GetDataSize(), (void*)&OutTileSpacingX, sizeof(OutTileSpacingX));
+		memcpy_s((void*)(origSlgData.GetData() + offsetTileSpacingY),     origSlgData.GetDataSize(), (void*)&OutTileSpacingY, sizeof(OutTileSpacingY));
+		memcpy_s((void*)(origSlgData.GetData() + offsetTileSpacingX2),    origSlgData.GetDataSize(), (void*)&OutTileSpacingX, sizeof(OutTileSpacingX));
+		memcpy_s((void*)(origSlgData.GetData() + offsetTileSpacingY2),    origSlgData.GetDataSize(), (void*)&OutTileSpacingY, sizeof(OutTileSpacingY));
+		//**Done fixing character spacing***
+
+		//***Fix Max Character Lengths***
+		const int offsetMaxCharsWhenScrolling  = 0x000218EB;
+		const int offsetMaxSpacingScrolling1   = 0x00021963;
+		const int offsetMaxSpacingScrolling2   = 0x0002196B;
+		const int offsetMaxMultiplierScrolling = 0x00021981;
+		const int offsetMaxMultiplier          = 0x00021655;
+		const int offsetMaxLines_1             = 0x0002196D;
+		const int offsetMaxLines_2             = 0x00021975;
+		const int offsetLipsCharWidthOffset    = 0x00021809;
+		const int offsetLipsShiftLeft_1        = 0x00021765; //Change the command from SHLL2(4108) to SHLL1(4100)
+		const int offsetLipsShiftLeft_2        = 0x00021799; //Change the command from SHLL2(4108) to SHLL1(4100)
+		const int offsetLipsMaxCharsOffset_1   = 0x00021755; //Change the command from MOV 0x0F(E20F) to SHLL1(E21E)
+		const int offsetLipsMaxCharsOffset_2   = 0x0002178B; //Change the command from MOV 0x0F(E20F) to SHLL1(E21E)
+		const int offsetLipsNumCharsPerLine_1  = 0x000217B9;
+		const int offsetLipsNumCharsPerLine_2  = 0x000217BF;
+		const int offsetLipsStartLocationY     = 0x0002173D; //Change the cpommand from MOV 0xCC(-52), r11 to 0xCE(-50)
+		const int offsetItemCountXOffset       = 0x0002512B;
+		const int offsetOptionsFontSheet       = 0x0004a740;
+		const int offsetBgndImagePalette       = 0x0004a1b8;
+		const unsigned char maxMultiplier      = (240/(OutTileSpacingX));
+		const unsigned char maxCharacters      = maxMultiplier - 1;
+		const unsigned char maxLines           = MaxLines - 1;
+		const unsigned char lipsXOffset        = 0;
+		const unsigned char shiftLeftValue     = 0;
+		const unsigned char maxCharsPerLipsLine= maxMultiplier;
+		const unsigned char lipsStartLocY      = 0xCE;
+		const unsigned char itemCountXOffset   = 0x30; //This is the text that appears next to a battle menu option which has a number associated with it (ex: Cover x8)
+
+		memcpy_s((void*)(origSlgData.GetData() + offsetMaxSpacingScrolling1),     origSlgData.GetDataSize(), (void*)&maxCharacters,							sizeof(maxCharacters));
+		memcpy_s((void*)(origSlgData.GetData() + offsetMaxSpacingScrolling2),     origSlgData.GetDataSize(), (void*)&maxCharacters,							sizeof(maxCharacters));
+		memcpy_s((void*)(origSlgData.GetData() + offsetMaxMultiplierScrolling),   origSlgData.GetDataSize(), (void*)&maxMultiplier,							sizeof(maxMultiplier));
+		memcpy_s((void*)(origSlgData.GetData() + offsetMaxMultiplier),            origSlgData.GetDataSize(), (void*)&maxMultiplier,							sizeof(maxMultiplier));
+		memcpy_s((void*)(origSlgData.GetData() + offsetMaxCharsWhenScrolling),    origSlgData.GetDataSize(), (void*)&maxMultiplier,							sizeof(maxMultiplier));
+		memcpy_s((void*)(origSlgData.GetData() + offsetMaxLines_1),               origSlgData.GetDataSize(), (void*)&maxLines,								sizeof(maxLines));
+		memcpy_s((void*)(origSlgData.GetData() + offsetMaxLines_2),               origSlgData.GetDataSize(), (void*)&maxLines,								sizeof(maxLines));
+		memcpy_s((void*)(origSlgData.GetData() + offsetLipsCharWidthOffset),      origSlgData.GetDataSize(), (void*)&OutTileSpacingX,						sizeof(OutTileSpacingX));
+		memcpy_s((void*)(origSlgData.GetData() + offsetLipsShiftLeft_1),		  origSlgData.GetDataSize(), (void*)&shiftLeftValue,						sizeof(shiftLeftValue));
+		memcpy_s((void*)(origSlgData.GetData() + offsetLipsShiftLeft_2),		  origSlgData.GetDataSize(), (void*)&shiftLeftValue,						sizeof(shiftLeftValue));
+		memcpy_s((void*)(origSlgData.GetData() + offsetLipsMaxCharsOffset_1),	  origSlgData.GetDataSize(), (void*)&maxCharsPerLipsLine,					sizeof(maxCharsPerLipsLine));
+		memcpy_s((void*)(origSlgData.GetData() + offsetLipsMaxCharsOffset_2),	  origSlgData.GetDataSize(), (void*)&maxCharsPerLipsLine,					sizeof(maxCharsPerLipsLine));
+		memcpy_s((void*)(origSlgData.GetData() + offsetLipsNumCharsPerLine_1),	  origSlgData.GetDataSize(), (void*)&maxCharsPerLipsLine,					sizeof(maxCharsPerLipsLine));
+		memcpy_s((void*)(origSlgData.GetData() + offsetLipsNumCharsPerLine_2),	  origSlgData.GetDataSize(), (void*)&maxCharsPerLipsLine,					sizeof(maxCharsPerLipsLine));
+		memcpy_s((void*)(origSlgData.GetData() + offsetLipsStartLocationY),	      origSlgData.GetDataSize(), (void*)&lipsStartLocY,							sizeof(lipsStartLocY));
+		memcpy_s((void*)(origSlgData.GetData() + offsetItemCountXOffset),	      origSlgData.GetDataSize(), (void*)&itemCountXOffset,						sizeof(itemCountXOffset));
+		memcpy_s((void*)(origSlgData.GetData() + offsetOptionsFontSheet),		  origSlgData.GetDataSize(), (void*)optionsCompressedData.mpCompressedData, optionsCompressedData.mDataSize);
+		memcpy_s((void*)(origSlgData.GetData() + ofsetBgndImage),		          origSlgData.GetDataSize(), (void*)translatedBgndData.mpCompressedData,    translatedBgndData.mDataSize);
+		memcpy_s((void*)(origSlgData.GetData() + offsetBgndImagePalette),		  origSlgData.GetDataSize(), (void*)patchedBgndImage.mPalette.GetData(),    patchedBgndImage.mPalette.GetSize());
+		//***Done Fixing Max Character Lengths***
+
+		//***Fix the palette***
+		const int paletteAddress1 = 0x000158A4;
+		const int paletteAddress2 = 0x000158C4;//0x0004A1D8;
+		char* pNewPalette         = new char[paletteSize];
+
+		//Store palette as 15bit color
+		for(int i = 0; i < paletteSize; ++i)
+		{
+			pNewPalette[i] = newPaletteData.GetData()[i] & 0x7f;
+		}
+
+		//copy over the palette
+		memcpy_s((void*)(origSlgData.GetData() + paletteAddress1), origSlgData.GetDataSize(), pNewPalette, paletteSize);
+		memcpy_s((void*)(origSlgData.GetData() + paletteAddress2), origSlgData.GetDataSize(), pNewPalette, paletteSize);
+		delete[] pNewPalette;
+		//***Done fixing the palette***
+
+		//Output patched file
+		const string outFilePath = outDir + string("SAKURA2\\\\") + slgFileName;
+		FileWriter patchedFile;
+		if( !patchedFile.OpenFileForWrite(outFilePath) )
+		{
+			printf("Failed patching: Unable to open %s file for write.\n", outFilePath.c_str());
+			return false;
+		}
+
+		patchedFile.WriteData(origSlgData.GetData(), origSlgData.GetDataSize());
+		patchedFile.Close();
+
+		//Options menu layout
+		OptionsSettingsMenu slgOptionsMenu;
+		FileReadWriter finalSLGFile;
+		if( !finalSLGFile.OpenFile(outFilePath) )
+		{
+			printf("Failed patching: Unable to open %s file for read/write.\n", outFilePath.c_str());
+			return false;
+		}
+		slgOptionsMenu.CreateTranslatedMenu(finalSLGFile, true);
+	}
+
+	printf("FixupSLG Succeeded.\n");
+	return true;
+}
+
 bool CopyOriginalFiles(const string& rootSakuraTaisenDirectory, const string& patchedSakuraTaisenDirectory)
 {
 	const string originalSakuraFile = rootSakuraTaisenDirectory + "SAKURA";
@@ -6809,8 +7179,15 @@ bool CopyOriginalFiles(const string& rootSakuraTaisenDirectory, const string& pa
 	}
 
 	const string originalLogoFile = rootSakuraTaisenDirectory + "SAKURA1\\LOGO.SH2";
-	const string newLogoFile = patchedSakuraTaisenDirectory + "SAKURA1\\LOGO.SH2";
+	const string newLogoFile      = patchedSakuraTaisenDirectory + "SAKURA1\\LOGO.SH2";
 	if(!CopyFile(originalLogoFile.c_str(), newLogoFile.c_str(), FALSE))
+	{
+		return false;
+	}
+
+	const string originalIcatallFile = rootSakuraTaisenDirectory + "SAKURA1\\ICATALL.DAT";
+	const string newIcatallFile      = patchedSakuraTaisenDirectory + "SAKURA1\\ICATALL.DAT";
+	if(!CopyFile(originalIcatallFile.c_str(), newIcatallFile.c_str(), FALSE))
 	{
 		return false;
 	}
@@ -6903,7 +7280,7 @@ bool PatchGame(const string& rootSakuraTaisenDirectory, const string& patchedSak
 	}
 
 	//Step 4
-	if( !FixupSLG(rootSakuraTaisenDirectory, patchedSakuraTaisenDirectory, inTranslatedDataDirectory, newPaletteFileName) )
+	if( !FixupSLG(rootSakuraTaisenDirectory, patchedSakuraTaisenDirectory, inTranslatedDataDirectory, newPaletteFileName, tempDir) )
 	{
 		printf("FixupSLG failed.  Patch unsuccessful.\n");
 		return false;
@@ -6979,7 +7356,8 @@ void PrintHelp()
 	printf("PatchTMapSP sakuraDirectory patchDataPath\n");
 	printf("PrintPaletteColors fileName\n");
 	printf("CompressFile inFilePath outFilePath\n");
-	printf("FindCompressedFile compressedFile uncompressedFile\n");
+	printf("FindCompressedData compressedFile uncompressedFile outDirectory\n");
+	printf("FindCompressedDataInDir inDirectory uncompressedFile outDirectory\n");
 	printf("PatchGame rootSakuraTaisenDirectory patchedSakuraTaisenDirectory translatedTextDirectory fontSheet originalPalette patchedTMapSpDataPath mainMenuFontSheetPath mainMenuBgndPatchedImage optionsImagePatched translatedDataDirectory \n");
 }
 
@@ -7219,8 +7597,16 @@ int main(int argc, char *argv[])
 		const string uncompressedFile(argv[3]);
 		const string outDirectory = string(argv[4]) + Seperators;
 
+		FindCompressedData(compressedFile, uncompressedFile, outDirectory);
+	}
+	else if(command == "FindCompressedDataInDir" && argc == 5 )
+	{
+		const string inDirectory(argv[2]);
+		const string uncompressedFile(argv[3]);
+		const string outDirectory = string(argv[4]) + Seperators;
+
 		vector<FileNameContainer> fileNames;
-		FindAllFilesWithinDirectory( "d:\\rizwan\\sakurawars\\disc1", fileNames);
+		FindAllFilesWithinDirectory( inDirectory, fileNames);
 
 		for(FileNameContainer& fc : fileNames)
 		{	
@@ -7231,14 +7617,20 @@ int main(int argc, char *argv[])
 			printf("Searching %s\n", fc.mFullPath.c_str());
 			FindCompressedData(fc.mFullPath, uncompressedFile, outDirectory);
 		}
-
-		//FindCompressedData(compressedFile, uncompressedFile, outDirectory);
 	}
 	else if(command == "PrintPaletteColors" && argc == 3 )
 	{
 		const string inFile(argv[2]);
 		
 		PrintPaletteColors(inFile);
+	}
+	else if(command == "DumpTranslationFilesWithoutUnusedLines" && argc == 5)
+	{
+		const string rootSakuraTaisenDirectory(argv[2]);
+		const string translatedTextDirectory(argv[3]);
+		const string outDirectory = string(argv[4]) + Seperators;
+
+		DumpTranslationFilesWithoutUnusedLines(rootSakuraTaisenDirectory, translatedTextDirectory, outDirectory);
 	}
 	else
 	{

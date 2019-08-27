@@ -395,7 +395,7 @@ bool FileData::ReadData(unsigned long inDataOffset, char* pOutData, unsigned lon
 //////////////////////////////
 //        TextFileData      //
 //////////////////////////////
-bool TextFileData::InitializeTextFile()
+bool TextFileData::InitializeTextFile(bool bFixupSpecialCharacters)
 {
 	FILE* pFile              = nullptr;
 	const errno_t errorValue = fopen_s(&pFile, mFileNameInfo.mFullPath.c_str(), "r");
@@ -429,7 +429,7 @@ bool TextFileData::InitializeTextFile()
 			const size_t tokenLen = strlen(pToken);
 			for(size_t t = 0, f = 0; t < tokenLen; t)
 			{
-				if( pToken[t] == -30 )
+				if( bFixupSpecialCharacters && pToken[t] == -30 )
 				{
 					t += 3;
 
@@ -599,6 +599,17 @@ void TextFileWriter::WriteString(const string& inString)
 	{
 		printf("Unable to write string: %s in file: %s", inString.c_str(), mFileName.c_str());
 	}
+}
+
+void TextFileWriter::AddNewLine()
+{
+	assert(mpFileHandle);
+	if( !mpFileHandle )
+	{
+		return;
+	}
+
+	fprintf(mpFileHandle, "\n");
 }
 
 void TextFileWriter::Close()

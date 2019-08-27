@@ -406,3 +406,9 @@ Found a match in WALL1.BIN @0x060e0000
 Found a match in EVE0118.BIN @0x060c0000
 Found a match in FACE01.BIN @0x002b3800
 Found a match in LIPS_CG.BIN @0x05c4f100
+
+//Intermediate Save Menu:
+Indices for characters are in SAKURA @0005f5c8
+
+//Load Screen Font:
+Found: 0005c654 00000000 Size: 512 CompressedSize: 6970
