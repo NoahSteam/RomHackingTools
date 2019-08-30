@@ -979,7 +979,7 @@ void DumpExtractedSakuraText(const vector<SakuraTextFile>& inSakuraTextFiles, co
 }
 
 bool ExtractImageFromData(const char* pInColorData, const unsigned int inColorDataSize, const string& outFileName, const char* pInPaletteData, const unsigned int inPaletteDataSize, const int inTextureDimX, const int inTextureDimY, 
-	const int inNumTexturesPerRow, const int inNumColors = 256, const int inDataOffset = 0, bool bInFillEmptyData = true)
+	const int inNumTexturesPerRow, const int inNumColors = 256, const int inDataOffset = 0, bool bInFillEmptyData = true, bool bForceBitmapFormat = false)
 {
 	const int divisor            = inPaletteDataSize == 32 ? 2 : 1; //4bit images only have half the pixels
 	const int tileDimX           = inTextureDimX;
@@ -1036,7 +1036,7 @@ bool ExtractImageFromData(const char* pInColorData, const unsigned int inColorDa
 	}
 
 	BitmapWriter fontBitmap;
-	fontBitmap.CreateBitmap(outFileName, imageWidth, -imageHeight, inPaletteDataSize == 32 ? 4 : 8, pOutTiledData, numTiledBytes, paletteData.GetData(), paletteData.GetSize());
+	fontBitmap.CreateBitmap(outFileName, imageWidth, -imageHeight, inPaletteDataSize == 32 ? 4 : 8, pOutTiledData, numTiledBytes, paletteData.GetData(), paletteData.GetSize(), bForceBitmapFormat);
 
 	delete[] pOutTiledData;
 
@@ -5019,10 +5019,11 @@ struct WklBattleMenuExtractor
 		{
 			struct BattleImage
 			{
-				unsigned int       mAddress = 0;
-				string             mPrefix;
+				unsigned int             mAddress = 0;
+				string                   mPrefix;
+				FileData                 mImageFileData;
 				WklBattleMenuImageHeader mImageHeader;
-
+				
 				void SetPrefix(const char* pInPrefix)
 				{
 					mPrefix = pInPrefix;
@@ -5038,6 +5039,16 @@ struct WklBattleMenuExtractor
 					const string outFileName = outDirectory + mPrefix + BMPExtension;
 					const char* pImageData   = &pInWklData[mAddress];
 					ExtractImageFromData(pImageData, (mImageHeader.width*mImageHeader.height)/2, outFileName, inSakuraPalette.mpPaletteData, inSakuraPalette.mPaletteSize, mImageHeader.width, mImageHeader.height, 1, 16, 0, false);
+				}
+
+				bool LoadImage(const char* pInWklData, const SakuraPalette& inSakuraPalette, const string& tempDir)
+				{
+					const char* pImageData   = &pInWklData[mAddress];
+					const string outFileName = tempDir + string("\\battleImage.bmp");
+					ExtractImageFromData(pImageData, (mImageHeader.width*mImageHeader.height)/2, outFileName, inSakuraPalette.mpPaletteData, inSakuraPalette.mPaletteSize, mImageHeader.width, mImageHeader.height, 
+						                 1, 16, 0, false, true);
+
+					return mImageFileData.InitializeFileData( FileNameContainer(outFileName.c_str()) );
 				}
 			};
 
@@ -5217,13 +5228,43 @@ public:
 };
 
 //Also modifies SLG files
-bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirectory, const string& inTranslatedDirectory)
+bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirectory, const string& inTranslatedDirectory, const string& inTempDir, const string& extractedWklDir)
 {
 	const unsigned int maxCompressedSize = 0x1BA4;
 	const string outDirectory              = inPatchedDirectory + Seperators + string("SAKURA2\\");
 	const string translatedWKLDirectory    = inTranslatedDirectory + string("WKL\\");
 	const string translatedSharedDirectory = translatedWKLDirectory + string("Shared\\");
 	const string patchedStatsImagePath     = translatedWKLDirectory + string("StatsMenuPatched.bmp");
+
+	//Create map of where the key is the crc of the original wkl image and the value is the path to the translated image
+	map<unsigned long, FileNameContainer> patchedWklFileCrcMap;
+
+	vector<string> wklSubDirs;
+	FindAllDirectoriesWithinDirectory(translatedWKLDirectory, wklSubDirs);
+	for(const string& wklSubDir : wklSubDirs)
+	{
+		//Get all images in the translated directory
+		const string wklSubDirPath = translatedWKLDirectory + wklSubDir;
+		vector<FileNameContainer> allPatchedWklImages;
+		FindAllFilesWithinDirectory(wklSubDirPath, allPatchedWklImages);
+
+		//For every translated image, get the crc of the original image
+		for(const FileNameContainer& patchedWklImageName : allPatchedWklImages)
+		{
+			FileNameContainer originalWklImagePath( (extractedWklDir + string("\\") + wklSubDir + string("\\") + patchedWklImageName.mFileName).c_str() );
+			FileData originalWkImage;
+			if( !originalWkImage.InitializeFileData(originalWklImagePath) )
+			{
+				printf("PatchWKL failed.  Unable top open %s", patchedWklImageName.mFullPath.c_str());
+				return false;
+			}
+
+			//It is assumed that the patched wkl directory has no duplicate images
+			patchedWklFileCrcMap[originalWkImage.GetCRC()] = patchedWklImageName;
+		}
+
+	}
+	//Done creating map
 
 	//Load patched image data
 	BmpToSakuraConverter patchedStatsMenu;
@@ -5245,31 +5286,42 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 	vector<FileNameContainer> wklFiles;
 	GetAllFilesOfType(allFiles, "WKL", wklFiles);
 
+	//Get palette for battle images from slg.bin
+	FileData slgFileData;
+	const FileNameContainer slgPath( (sakuraDirectory + "\\SAKURA2\\SLG.BIN").c_str() );
+	if( !slgFileData.InitializeFileData(slgPath) )
+	{
+		printf("PatchWKL failed.  Unable to get slg data\n");
+		return false;
+	}
+	SakuraPalette battleImagePalette(&slgFileData.GetData()[0x00011B78], 32);
+
 	const int numCompressedEntries = 64;
 	WklCompressedInfo compressedInfo[numCompressedEntries];
 	WklCompressedInfo origCompressedInfo[numCompressedEntries];
 	
 	int battleMenuDelta         = 0;
 	bool bCalculatedBattleDelta = false;
-	for(const FileNameContainer& fileNameInfo : wklFiles)
+	for(const FileNameContainer& originalWklFileName : wklFiles)
 	{
-		const string translatedDirectory = translatedWKLDirectory + fileNameInfo.mNoExtension + Seperators;
-		if( !DoesDirectoryExist(translatedDirectory) )
+		//const string translatedDirectory = translatedWKLDirectory + originalWklFileName.mNoExtension + Seperators;
+		const string extractedDirectory = extractedWklDir + originalWklFileName.mNoExtension + Seperators;
+		if( !DoesDirectoryExist(extractedDirectory) )
 		{
 			continue;
 		}
 
-		printf("Patching %s\n", fileNameInfo.mFileName.c_str());
+		printf("Patching %s\n", originalWklFileName.mFileName.c_str());
 
 		FileData originalWKLFile;
-		if( !originalWKLFile.InitializeFileData(fileNameInfo) )
+		if( !originalWKLFile.InitializeFileData(originalWklFileName) )
 		{
-			printf("PatchWKL failed.  Unable to open %s", fileNameInfo.mFullPath.c_str());
+			printf("PatchWKL failed.  Unable to open %s", originalWklFileName.mFullPath.c_str());
 			return false;
 		}
 
 		//Open patched file
-		FileNameContainer outFileName(fileNameInfo.mFileName.c_str(), outDirectory);
+		FileNameContainer outFileName(originalWklFileName.mFileName.c_str(), outDirectory);
 		FileWriter outFile;
 		if( !outFile.OpenFileForWrite(outFileName.mFullPath) )
 		{
@@ -5300,7 +5352,7 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 		
 		//Gather data from original wkl file
 		WklBattleMenuExtractor wklExtractor;
-		wklExtractor.Initialize(fileNameInfo);
+		wklExtractor.Initialize(originalWklFileName);
 
 		const unsigned int startOfBattleImages = wklExtractor.mBattleMenu.mImageDataAddress;
 		const unsigned int endOfBattleImages   = wklExtractor.mBattleMenu.mImageBlocks.back()->mBattleImages.back()->mAddress + wklExtractor.mBattleMenu.mImageBlocks.back()->mBattleImages.back()->mImageHeader.GetImageByteCount();
@@ -5341,9 +5393,22 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 			int currImage                    = 0;
 			unsigned int offsetFromHeader    = 0;
 			unsigned int offsetFromPrevImage = 0;
-			for(const WklBattleMenuExtractor::BattleMenu::ImageBlock::BattleImage* pBattleImage : pImageBlock->mBattleImages)
+			for(WklBattleMenuExtractor::BattleMenu::ImageBlock::BattleImage* pBattleImage : pImageBlock->mBattleImages)
 			{
-				const string patchedBattleImagePath = translatedSharedDirectory + pBattleImage->mPrefix + BMPExtension;
+				//Load original battle image
+				if( !pBattleImage->LoadImage(originalWKLFile.GetData(), battleImagePalette, inTempDir) )
+				{
+					return false;
+				}
+				//Find the translated image based on the crc of this battle image
+				map<unsigned long, FileNameContainer>::iterator pathToTranslatedImage = patchedWklFileCrcMap.find(pBattleImage->mImageFileData.GetCRC());
+				if( pathToTranslatedImage == patchedWklFileCrcMap.end() )
+				{
+					printf("PatchWKL failed.  Could not find a translated image for battle image %s in %s\n", pBattleImage->mPrefix.c_str(), originalWklFileName.mFileName.c_str());
+					return false;
+				}
+
+				const string patchedBattleImagePath = pathToTranslatedImage->second.mFullPath;
 				BitmapReader bmpReader;
 				if( !bmpReader.ReadBitmap(patchedBattleImagePath) )
 				{
@@ -5370,9 +5435,19 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 			patchedBattleMenuImageData.AddBlock((char*)&offsetFromPrevImage, 0, sizeof(offsetFromPrevImage), true);
 			imageBlockSize += 16;
 
-			for(const WklBattleMenuExtractor::BattleMenu::ImageBlock::BattleImage* pBattleImage : pImageBlock->mBattleImages)
+			//Copy image data
+			for(WklBattleMenuExtractor::BattleMenu::ImageBlock::BattleImage* pBattleImage : pImageBlock->mBattleImages)
 			{
-				const string patchedBattleImagePath = translatedSharedDirectory + pBattleImage->mPrefix + BMPExtension;
+				//Find the translated image based on the crc of this battle image
+				map<unsigned long, FileNameContainer>::iterator pathToTranslatedImage = patchedWklFileCrcMap.find(pBattleImage->mImageFileData.GetCRC());
+				if( pathToTranslatedImage == patchedWklFileCrcMap.end() )
+				{
+					printf("PatchWKL failed.  Could not find a translated image for battle image %s in %s\n", pBattleImage->mPrefix.c_str(), originalWklFileName.mFileName.c_str());
+					return false;
+				}
+
+				const string patchedBattleImagePath = pathToTranslatedImage->second.mFullPath;
+				//const string patchedBattleImagePath = translatedSharedDirectory + pBattleImage->mPrefix + BMPExtension;
 				
 				//Load patched image data
 				BmpToSakuraConverter patchedBattleImage;
@@ -5437,13 +5512,30 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 			for(unsigned short imageIndex = 0; imageIndex < uncompressedImageData.mNumImages; ++imageIndex)
 			{
 				const string originalFileName   = prefix + string("_") + std::to_string(imageIndex);
-				const string translatedFileName = translatedDirectory + originalFileName + BMPExtension;
-				
+				//const string translatedFileName = translatedDirectory + originalFileName + BMPExtension;
+				const FileNameContainer originalFilePath( (extractedDirectory + originalFileName + BMPExtension).c_str() );
+				FileData originalWklImageData;
+				if( !originalWklImageData.InitializeFileData(originalFilePath) )
+				{
+					printf("PatchWKL failed.  Unable to open %s", originalFilePath.mFullPath.c_str());
+					return false;
+				}
+
+				//Find the translated image based on the crc of this battle image
+				map<unsigned long, FileNameContainer>::iterator pathToTranslatedImage = patchedWklFileCrcMap.find(originalWklImageData.GetCRC());
+				if( pathToTranslatedImage == patchedWklFileCrcMap.end() )
+				{
+					printf("PatchWKL failed.  Could not find translated image %s", originalFilePath.mFullPath.c_str());
+					return false;
+				}
+
+				const string patchedBattleImagePath = pathToTranslatedImage->second.mFullPath;
+
 				//Read in translated data
 				BitmapReader translatedImage;
-				if( !translatedImage.ReadBitmap(translatedFileName.c_str()) )
+				if( !translatedImage.ReadBitmap(patchedBattleImagePath.c_str()) )
 				{
-					printf("PatchWKL failed.  Unable to open %s\n", translatedFileName.c_str());
+					printf("PatchWKL failed.  Unable to open %s\n", patchedBattleImagePath.c_str());
 					return false;
 				}
 
@@ -5452,7 +5544,7 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 
 				if( imageWidth%8 != 0 )
 				{
-					printf("PatchWKL failed.  %s has a width of %i which is not divisible by 8\n", translatedFileName.c_str(), imageWidth);
+					printf("PatchWKL failed.  %s has a width of %i which is not divisible by 8\n", patchedBattleImagePath.c_str(), imageWidth);
 					return false;
 				}
 
@@ -5465,7 +5557,7 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 				if( tileExtractor.mTiles.size() != 1 || 
 					tileExtractor.mTiles[0].mTileSize != static_cast<unsigned int>(imageWidth*imageHeight/2) )
 				{
-					printf("PatchWkl: Invalid patched image: %s\n", translatedFileName.c_str());
+					printf("PatchWkl: Invalid patched image: %s\n", patchedBattleImagePath.c_str());
 					return false;
 				}
 
@@ -7230,8 +7322,50 @@ void FindDiff()
 	}
 }
 
+void CopySharedWklImages(const string& inSourceDirectory, const string& inWklOutputDirectory)
+{
+	map<unsigned long, bool> wklCrcs;
+	
+	vector<string> wklDirectories;
+	FindAllDirectoriesWithinDirectory(inSourceDirectory, wklDirectories);
+	for(const string& wklDir : wklDirectories)
+	{
+		printf("Processing %s\n", wklDir.c_str());
+
+		//Find all files within this wkl directory
+		const string sourceDir = inSourceDirectory + string("\\") + wklDir;
+		vector<FileNameContainer> wklSourceFiles;
+		FindAllFilesWithinDirectory(sourceDir, wklSourceFiles);
+
+		//Create output directory
+		const string outWklDir = inWklOutputDirectory + string("\\") + wklDir;
+		CreateDirectoryHelper(outWklDir);
+
+		//Copy over unique files
+		for(const FileNameContainer& sourceFileName : wklSourceFiles)
+		{
+			FileData wklData;
+			if( !wklData.InitializeFileData(sourceFileName) )
+			{
+				printf("Unable to open file %s\n", sourceFileName.mFullPath.c_str());
+				return;
+			}
+
+			const unsigned long wklCrc = wklData.GetCRC();
+			if( wklCrcs.find(wklCrc) == wklCrcs.end() )
+			{
+				wklCrcs[wklCrc] = true;
+
+				const string outFileName = outWklDir + string("\\") + sourceFileName.mFileName;
+				CopyFile(sourceFileName.mFullPath.c_str(), outFileName.c_str(), true);
+			}
+		}
+	}
+}
+
 bool PatchGame(const string& rootSakuraTaisenDirectory, const string& patchedSakuraTaisenDirectory, const string& translatedTextDirectory, const string& fontSheetFileName, const string& /*originalPaletteFileName*/, 
-	const string &patchedTMapSPDataPath, const string& inMainMainFontSheetPath, const string& inMainMenuTranslatedBgnd, const string& inPatchedOptionsImage, const string& inTranslatedDataDirectory)
+	const string &patchedTMapSPDataPath, const string& inMainMainFontSheetPath, const string& inMainMenuTranslatedBgnd, const string& inPatchedOptionsImage, const string& inTranslatedDataDirectory,
+	const string& inExtractedWklDir)
 {	
 	char buffer[MAX_PATH];
 	const DWORD dwRet = GetCurrentDirectory(MAX_PATH, buffer);
@@ -7287,7 +7421,7 @@ bool PatchGame(const string& rootSakuraTaisenDirectory, const string& patchedSak
 	}
 
 	//Step 5
-	if( !PatchWKLFiles(rootSakuraTaisenDirectory, patchedSakuraTaisenDirectory, inTranslatedDataDirectory) )
+	if( !PatchWKLFiles(rootSakuraTaisenDirectory, patchedSakuraTaisenDirectory, inTranslatedDataDirectory, tempDir, inExtractedWklDir) )
 	{
 		printf("PatchWKLFiles failed. Patch unsuccessful.\n");
 		return false;
@@ -7358,7 +7492,7 @@ void PrintHelp()
 	printf("CompressFile inFilePath outFilePath\n");
 	printf("FindCompressedData compressedFile uncompressedFile outDirectory\n");
 	printf("FindCompressedDataInDir inDirectory uncompressedFile outDirectory\n");
-	printf("PatchGame rootSakuraTaisenDirectory patchedSakuraTaisenDirectory translatedTextDirectory fontSheet originalPalette patchedTMapSpDataPath mainMenuFontSheetPath mainMenuBgndPatchedImage optionsImagePatched translatedDataDirectory \n");
+	printf("PatchGame rootSakuraTaisenDirectory patchedSakuraTaisenDirectory translatedTextDirectory fontSheet originalPalette patchedTMapSpDataPath mainMenuFontSheetPath mainMenuBgndPatchedImage optionsImagePatched translatedDataDirectory extractedWklDir\n");
 }
 
 int main(int argc, char *argv[])
@@ -7484,7 +7618,7 @@ int main(int argc, char *argv[])
 
 		OutputDialogOrder(searchDirectory, outputFile);
 	}
-	else if( command == "PatchGame" && argc == 12 )
+	else if( command == "PatchGame" && argc == 13 )
 	{
 		const string rootSakuraTaisenDirectory    = string(argv[2]) + Seperators;
 		const string patchedSakuraTaisenDirectory = string(argv[3]) + Seperators;
@@ -7496,8 +7630,10 @@ int main(int argc, char *argv[])
 		const string mainMenuTranslatedBgnd       = string(argv[9]);
 		const string patchedOptionsImage          = string(argv[10]);
 		const string translatedDataDirectory      = string(argv[11]) + Seperators;
+		const string extractedWklDirectory        = string(argv[12]) + Seperators;
 
-		PatchGame(rootSakuraTaisenDirectory, patchedSakuraTaisenDirectory, translatedTextDirectory, fontSheet, originalPalette, patchedTMapSpDataPath, mainMenuFontSheetPath, mainMenuTranslatedBgnd, patchedOptionsImage, translatedDataDirectory);
+		PatchGame(rootSakuraTaisenDirectory, patchedSakuraTaisenDirectory, translatedTextDirectory, fontSheet, originalPalette, patchedTMapSpDataPath, mainMenuFontSheetPath, mainMenuTranslatedBgnd, patchedOptionsImage, 
+				  translatedDataDirectory, extractedWklDirectory);
 	}
 	else if(command == "CreateTBLSpreadsheets" && argc == 5 )
 	{
@@ -7631,6 +7767,13 @@ int main(int argc, char *argv[])
 		const string outDirectory = string(argv[4]) + Seperators;
 
 		DumpTranslationFilesWithoutUnusedLines(rootSakuraTaisenDirectory, translatedTextDirectory, outDirectory);
+	}
+	else if(command == "CopySharedWklImages" && argc == 4)
+	{
+		const string sourceDir(argv[2]);
+		const string outDir(argv[3]);
+
+		CopySharedWklImages(sourceDir, outDir);
 	}
 	else
 	{

@@ -152,6 +152,40 @@ void FindAllFilesWithinDirectory(const string& inDirectoryPath, vector<FileNameC
 	}
 }
 
+void FindAllDirectoriesWithinDirectory(const std::string& inDirectoryPath, std::vector<string>& outDirectories)
+{
+	WIN32_FIND_DATA fileData;
+
+	const string currentPath = inDirectoryPath + string("\\");
+	const string anyFilePath = inDirectoryPath + string("\\*");
+
+	//get the first file in the directory
+	HANDLE result = FindFirstFile(anyFilePath.c_str(), &fileData);
+
+	while (result != INVALID_HANDLE_VALUE)
+	{
+		unsigned nameLength = static_cast<unsigned> (strlen(fileData.cFileName));
+
+		//skip if the file is just a '.'
+		if (fileData.cFileName[0] == '.')
+		{
+			if (!FindNextFile(result, &fileData))
+				break;
+			continue;
+		}
+
+		if (fileData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY && strcmp(fileData.cFileName, ".") != 0 && strcmp(fileData.cFileName, "..") != 0)
+		{
+			const string subDirectoryPath = fileData.cFileName;
+			outDirectories.push_back(subDirectoryPath);
+		}
+
+		if (!FindNextFile(result, &fileData))
+			break;
+	}
+}
+
+
 bool DoesDirectoryExist(const std::string& dirName)
 {
 	DWORD fileAttributes = GetFileAttributesA(dirName.c_str());
@@ -372,6 +406,8 @@ unsigned long FileData::GetCRC()
 		{
 			CalcCrc32(mpData[i], mCrc);
 		}
+
+		mbCrcCalculated = true;
 	}
 
 	return mCrc;
@@ -823,9 +859,9 @@ void PaletteData::SetValue(int index, unsigned short value)
 ////////////////////////////////
 //        BitmapWriter        //
 ////////////////////////////////
-bool BitmapWriter::CreateBitmap(const string& inFileName, int inWidth, int inHeight, int bitsPerPixel, const char* pInColorData, int inColorSize, const char* pInPaletteData, int inPaletteSize)
+bool BitmapWriter::CreateBitmap(const string& inFileName, int inWidth, int inHeight, int bitsPerPixel, const char* pInColorData, int inColorSize, const char* pInPaletteData, int inPaletteSize, bool bForceBitmapFormat)
 {	
-	if( 0 )//bitsPerPixel == 4 )
+	if( 0 && !bForceBitmapFormat )//bitsPerPixel == 4 )
 	{
 		SaveAsPNG(inFileName, inWidth, inHeight, bitsPerPixel, pInColorData, inColorSize, pInPaletteData, inPaletteSize);
 	}

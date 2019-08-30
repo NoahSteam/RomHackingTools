@@ -25,6 +25,10 @@ struct MatchInfo
 
 struct FileNameContainer
 {
+	FileNameContainer()
+	{
+	}
+
 	FileNameContainer(const char* pFullPath) : mFullPath(pFullPath) 
 	{
 		mFileName = mFullPath.substr(mFullPath.find_last_of("/\\") + 1);
@@ -261,7 +265,7 @@ class BitmapWriter
 {
 	bool SaveAsPNG(const std::string& inFileName, int inWidth, int inHeight, int bitsPerPixel, const char* pInColorData, int inColorSize, const char* pInPaletteData, int inPaletteSize);
 public:
-	bool CreateBitmap(const std::string& inFileName, int width, int height, int bitsPerPixel, const char* pInColorData, int inColorSize, const char* pPaletteData, int paletteSize);
+	bool CreateBitmap(const std::string& inFileName, int width, int height, int bitsPerPixel, const char* pInColorData, int inColorSize, const char* pPaletteData, int paletteSize, bool bForceBMPFormat = false);
 };
 
 class BitmapReader
@@ -364,6 +368,7 @@ struct PRSDecompressor
 };
 
 void FindAllFilesWithinDirectory(const std::string& inDirectoryPath, std::vector<FileNameContainer>& outFileNames);
+void FindAllDirectoriesWithinDirectory(const std::string& inDirectoryPath, std::vector<std::string>& outDirectories);
 bool DoesDirectoryExist(const std::string& dirName);
 bool CreateDirectoryHelper(const std::string& dirName);
 bool AreFilesTheSame(const FileData& file1, const FileNameContainer& file2Name);
