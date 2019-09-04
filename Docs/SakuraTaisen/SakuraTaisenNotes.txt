@@ -412,3 +412,49 @@ Indices for characters are in SAKURA @0005f5c8
 
 //Load Screen Font:
 Found: 0005c654 00000000 Size: 512 CompressedSize: 6970
+
+//Swim Logo
+Found a match in MINISWIM.BIN @0x0003cf28
+
+//MiniGame Option 1:
+Found a match in HANAMAIN.BIN @0x00014688
+Found a match in MINICOOK.BIN @0x000124bc
+Found a match in MINIHANA.BIN @0x000124bc
+Found a match in MINIMAIG.BIN @0x000124bc
+Found a match in MINISHOT.BIN @0x000124bc
+Found a match in MINISLOT.BIN @0x000124bc
+Found a match in MINISOJI.BIN @0x000124bc
+Found a match in MINISWIM.BIN @0x000124bc
+
+//MiniGame Option 2:
+Found a match in HANAMAIN.BIN @0x00013c08
+Found a match in MINICOOK.BIN @0x00011a3c
+Found a match in MINIHANA.BIN @0x00011a3c
+Found a match in MINIMAIG.BIN @0x00011a3c
+Found a match in MINISHOT.BIN @0x00011a3c
+Found a match in MINISLOT.BIN @0x00011a3c
+Found a match in MINISOJI.BIN @0x00011a3c
+Found a match in MINISWIM.BIN @0x00011a3c
+
+SWIM mini game's font sheet loaded 0x0023fab8 [vdp: @05c223c0] [MINISWIM.BIN: 0003b1a8].  There are 59 characters in the font sheet.
+SWIM mini game's instructions are at 0025ab28 in game [00056b28 in MINISWIN.BIN]
+
+//Minigame Time image
+Found a match in HANAMAIN.BIN @0x00016628
+Found a match in MINICOOK.BIN @0x0001445c
+Found a match in MINIHANA.BIN @0x0001445c
+Found a match in MINIMAIG.BIN @0x0001445c
+Found a match in MINISHOT.BIN @0x0001445c
+Found a match in MINISLOT.BIN @0x0001445c
+Found a match in MINISOJI.BIN @0x0001445c
+Found a match in MINISWIM.BIN @0x0001445c
+
+//Minigame Seconds image:
+Found a match in HANAMAIN.BIN @0x000165a8
+Found a match in MINICOOK.BIN @0x000143dc
+Found a match in MINIHANA.BIN @0x000143dc
+Found a match in MINIMAIG.BIN @0x000143dc
+Found a match in MINISHOT.BIN @0x000143dc
+Found a match in MINISLOT.BIN @0x000143dc
+Found a match in MINISOJI.BIN @0x000143dc
+Found a match in MINISWIM.BIN @0x000143dc

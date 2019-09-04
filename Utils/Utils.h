@@ -116,6 +116,17 @@ public:
 	{
 		std::vector<std::string> mWords;
 		std::string              mFullLine;
+
+	private:
+		int                      mNumberOfLines = 1;
+
+	public:
+		int GetNumberOfLines() const
+		{
+			return mNumberOfLines;
+		}
+
+		friend class TextFileData;
 	};
 
 	FileNameContainer     mFileNameInfo;
@@ -299,7 +310,7 @@ public:
 
 	bool CreateSurface(int width, int height, EBitsPerPixel bitsPerPixel, const char* pPalette, int paletteSize);
 	void AddTile(const char* pData, int dataSize, int x, int y, int width, int height);
-	bool WriteToFile(const std::string& fileName);
+	bool WriteToFile(const std::string& fileName, bool bForceBitmap = false);
 };
 
 class TileExtractor
@@ -373,6 +384,7 @@ bool DoesDirectoryExist(const std::string& dirName);
 bool CreateDirectoryHelper(const std::string& dirName);
 bool AreFilesTheSame(const FileData& file1, const FileNameContainer& file2Name);
 bool FindDataWithinBuffer(const char* pBuffer, unsigned long bufferSize, const char* pSearchData, const unsigned int searchDataSize, unsigned long& outIndex);
+bool CreateTemporaryDirectory(std::string& outDir);
 //unsigned long prs_decompress_size(void* source);
 //unsigned long prs_decompress(void* source, void* dest, unsigned long destSize);
 //unsigned long prs_compress(void* source, void* dest, unsigned long size);

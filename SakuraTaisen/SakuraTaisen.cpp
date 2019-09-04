@@ -93,7 +93,7 @@ struct BmpToSakuraConverter
 		mPackedTileSize = 0;
 	}
 
-	bool ConvertBmpToSakuraFormat(const string& inBmpPath, bool bFixupAlphaColor, const unsigned short inAlphaColor = CYAN, unsigned int* pTileWidth = 0, unsigned int* pTileHeight = 0)
+	bool ConvertBmpToSakuraFormat(const string& inBmpPath, bool bFixupAlphaColor, const unsigned short inAlphaColor = CYAN, const unsigned int* pTileWidth = 0, const unsigned int* pTileHeight = 0)
 	{
 		//Read in translated font sheet
 		BitmapReader origBmp;
@@ -493,6 +493,24 @@ class SakuraFontSheet
 	vector<SakuraFontTile> mCharacterTiles;
 
 public:
+	bool CreateFontSheetFromData(const char* pInData, unsigned int inDataSize)
+	{
+		const int numBytesPerTile = 128;
+		if( inDataSize % 128 != 0 )
+		{
+			printf("CreateFontSheet: Invalid size for data.  Should be multiple of 128, is %u", inDataSize);
+			return false;
+		}
+
+		const int numTilesInFile = inDataSize / numBytesPerTile;
+		for(int currTile = 0; currTile < numTilesInFile; ++currTile)
+		{
+			mCharacterTiles.push_back( std::move(SakuraFontTile(&pInData[currTile*numBytesPerTile], numBytesPerTile)) );
+		}
+
+		return true;
+	}
+
 	bool CreateFontSheet(const FileNameContainer& inFileNameInfo)
 	{
 		FileData fontFile;
@@ -518,7 +536,7 @@ public:
 		return true;
 	}
 
-	const char* GetCharacterTile(const SakuraString::SakuraChar& sakuraChar)
+	const char* GetCharacterTile(const SakuraString::SakuraChar& sakuraChar) const
 	{	
 		int tileIndex = sakuraChar.mIndex - 1;
 		assert(tileIndex >= 0);
@@ -1044,7 +1062,7 @@ bool ExtractImageFromData(const char* pInColorData, const unsigned int inColorDa
 }
 
 bool ExtractImage(const FileNameContainer& inFileNameContainer, const string& outFileName, const FileData& inPaletteFile, const int inTextureDimX, const int inTextureDimY, const int inNumTexturesPerRow, const int inNumColors = 256,
-	const int inDataOffset = 0, bool bInFillEmptyData = true)
+	const int inDataOffset = 0, bool bInFillEmptyData = true, bool bForceBitmap = false)
 {
 	FileData fontSheet;
 	if( !fontSheet.InitializeFileData(inFileNameContainer) )
@@ -1054,7 +1072,8 @@ bool ExtractImage(const FileNameContainer& inFileNameContainer, const string& ou
 
 	printf("Extracting: %s\n", inFileNameContainer.mFileName.c_str());
 
-	return ExtractImageFromData(fontSheet.GetData(), fontSheet.GetDataSize(), outFileName, inPaletteFile.GetData(), inPaletteFile.GetDataSize(), inTextureDimX, inTextureDimY, inNumTexturesPerRow, inNumColors, inDataOffset, bInFillEmptyData);
+	return ExtractImageFromData(fontSheet.GetData(), fontSheet.GetDataSize(), outFileName, inPaletteFile.GetData(), inPaletteFile.GetDataSize(), inTextureDimX, inTextureDimY, inNumTexturesPerRow, 
+		                        inNumColors, inDataOffset, bInFillEmptyData, bForceBitmap);
 }
 
 bool ExtractFontSheetAsBitmap(const FileNameContainer& inFileNameContainer, const string& outFileName, const FileData& inPaletteFile)
@@ -1108,6 +1127,152 @@ void DumpSakuraText(const vector<FileNameContainer>& inAllFiles, const string& i
 	FindAllSakuraText(textFiles, sakuraTextFiles);
 
 	DumpExtractedSakuraText(sakuraTextFiles, inOutputDir);
+}
+
+struct MiniGameSakuraText
+{
+	//Read in Sakura formated string (each character is a 2 byte lookup into the font sheet)
+	vector<SakuraString> mStrings;
+
+	void ReadInStrings(const char* pFileData, unsigned int offsetToTextData)
+	{
+		unsigned short readValue    = 0;
+		unsigned int   offset       = offsetToTextData;
+		const int stride            = sizeof(unsigned short);
+		SakuraString* pSakuraString = new SakuraString();
+		while(1)
+		{	
+			const char* pDataPointer = pFileData + offset;
+
+			//Convert to big endian
+			readValue = SwapByteOrder( *((unsigned short*)(pDataPointer)) );
+
+			//If the read value is 0, it is the end of the string
+			if( readValue == 0 )
+			{
+				const char* pNextEntry = pDataPointer + stride;
+
+				mStrings.push_back(*pSakuraString);
+				delete pSakuraString;
+				pSakuraString = new SakuraString();
+
+				//If the next value is also 0, this is the end of the text data
+				const unsigned short nextValue = *((unsigned short*)(pNextEntry));
+				if( nextValue == 0 )
+				{
+					break;
+				}
+			}
+			else
+			{
+				pSakuraString->AddChar(readValue);
+			}
+
+			offset += stride;
+		}
+
+		delete pSakuraString;
+	}
+
+	void DumpTextImages(const SakuraFontSheet& inFontSheet, const PaletteData& inPaletteData, const string& outputDirectory)
+	{
+		const string extension(".bmp");
+
+		//Dump out the dialog for each line
+		int stringIndex   = 0;
+		const int tileDim = 16;
+		for(size_t lineIndex = 0; lineIndex < mStrings.size(); ++lineIndex)
+		{	
+			const SakuraString& sakuraString = mStrings[lineIndex];
+			if( sakuraString.mChars.size() > 255 )
+			{
+				continue;
+			}
+
+			const int numSakuraLines = sakuraString.GetNumberOfLines();
+
+			BitmapSurface sakuraStringBmp;
+			sakuraStringBmp.CreateSurface( SakuraString::MaxCharsPerLine*tileDim, tileDim*numSakuraLines, BitmapSurface::EBitsPerPixel::kBPP_4, inPaletteData.GetData(), inPaletteData.GetSize());
+
+			int currRow = 0;
+			int currCol = 0;
+			for(size_t charIndex = sakuraString.mOffsetToStringData; charIndex < sakuraString.mChars.size(); ++charIndex)
+			{
+				const SakuraString::SakuraChar& sakuraChar = sakuraString.mChars[charIndex];
+
+				if( sakuraChar.IsNewLine() )
+				{
+					++currRow;
+					currCol = 0;
+					continue;
+				}
+
+				if( sakuraChar.mIndex == 0 || sakuraChar.mIndex > 255*4 )
+				{
+					continue;
+				}
+
+				const char* pData = inFontSheet.GetCharacterTile(sakuraChar);
+
+				sakuraStringBmp.AddTile(pData, inFontSheet.GetTileSizeInBytes(), currCol*16, currRow*16, tileDim, tileDim);
+
+				++currCol;
+			}
+
+			const string bitmapName = outputDirectory + std::to_string(stringIndex + 1) + extension;
+			sakuraStringBmp.WriteToFile(bitmapName, true);
+
+			++stringIndex;
+		}
+	}
+};
+
+void ExtractMiniSwimText(const string& rootSakuraDirectory, const string& outputDirectory)
+{
+	//Create temp work directory
+	string tempDir;
+	if( !CreateTemporaryDirectory(tempDir) )
+	{
+		printf("Could not create temp work directory.  Error: (%d)\n", GetLastError());
+		return;
+	}
+
+	CreateDirectoryHelper(outputDirectory);
+
+	//Open MINISWIM.BIN
+	const string sakura3Directory = rootSakuraDirectory + "\\SAKURA3\\";
+	FileNameContainer miniSwimFileName( (sakura3Directory + "MINISWIM.BIN").c_str() );
+	FileData miniSwimFile;
+	if( !miniSwimFile.InitializeFileData(miniSwimFileName) )
+	{
+		printf("Unable to open %s", miniSwimFileName.mFullPath.c_str() );
+		return;
+	}
+
+	//Font palette
+	const int paletteSize = 32;
+	const unsigned char rawPaletteData[paletteSize] = {(UCHAR)0x7f, (UCHAR)0xff, (UCHAR)0x08, (UCHAR)0x42, (UCHAR)0x10, (UCHAR)0x84, (UCHAR)0x18, (UCHAR)0xc6, (UCHAR)0x21, (UCHAR)0x08, (UCHAR)0x29, (UCHAR)0x4a, (UCHAR)0x31, (UCHAR)0x8c, 
+													   (UCHAR)0x39, (UCHAR)0xce, (UCHAR)0x42, (UCHAR)0x10, (UCHAR)0x4a, (UCHAR)0x52, (UCHAR)0x52, (UCHAR)0x94, (UCHAR)0x5a, (UCHAR)0xd6, (UCHAR)0x63, (UCHAR)0x18, (UCHAR)0x6b, (UCHAR)0x5a, 
+													   (UCHAR)0x73, (UCHAR)0x9c, (UCHAR)0x7f, (UCHAR)0xff};
+
+	//Create 32bit palette data
+	PaletteData paletteData;
+	paletteData.CreateFrom15BitData((const char*)rawPaletteData, paletteSize);
+
+	//Create font sheet
+	const int numCharactersInFontSheet = 59;
+	const int numBytesPerCharacter = 16*16/2;
+	SakuraFontSheet sakuraFontSheet;
+	if( !sakuraFontSheet.CreateFontSheetFromData( (miniSwimFile.GetData() + 0x0003b1a8), numBytesPerCharacter*numCharactersInFontSheet) )
+	{
+		return;
+	}
+
+	//Read in sakura text
+	const unsigned int textDataOffset = 0x00056b28;
+	MiniGameSakuraText sakuraText;
+	sakuraText.ReadInStrings(miniSwimFile.GetData(), textDataOffset);
+	sakuraText.DumpTextImages(sakuraFontSheet, paletteData, outputDirectory);
 }
 
 void ExtractText(const string& inSearchDirectory, const string& inPaletteFileName, const string& inOutputDirectory)
@@ -1874,6 +2039,14 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 				const bool bIsLipsEntry            = bHasLipsTag ? true : pOrder ? dialogOrderIter->second.idAndLips.find(id)->second : false;
 				const bool bIsUnused               = bIsMESFile ? false : pOrder ? false : true;
 
+				if( bIsLipsEntry )
+				{
+					if( textLine.GetNumberOfLines() != sakuraFile.mLines[currSakuraStringIndex].GetNumberOfLines() )
+					{
+						printf("LIPS ERROR - Translated LIPS line does not have expected number of options. Expected: %i, Has: %i (File: %s Line: %u)\n", sakuraFile.mLines[currSakuraStringIndex].GetNumberOfLines(), textLine.GetNumberOfLines(), sakuraFile.mFileNameInfo.mFileName.c_str(), currSakuraStringIndex);
+					}
+				}
+
 				//If untranslated, then write out the file and line number
 				if( bIsUnused ||
 					textLine.mWords.size() == 0 ||
@@ -2453,8 +2626,10 @@ bool FixupSakura(const string& rootDir, const string& inTranslatedOptionsBmp, co
 	const int offsetLIPSX_Formatting1       = 0x00010612;
 	const int offsetLIPSX_Formatting2       = 0x00010646;
 	const int offsetLipsStartLocationY      = 0x000105FB; //Change the cpommand from MOV 0xCC(-52), r11 to 0xCE(-50)
+	const int offsetLipsStartLocationY2     = 0x00010603; //Change the cpommand from MOV 0xC4, r11 to 0xC6
 	const unsigned short lipsFormattingCode = 0x0041; //0x4100 in big endian.  This is equivalent to SHLL R1
-	const unsigned char lipsStartLocY       = 0xCE;
+	const unsigned char lipsStartLocY       = 0xCE; //When there are 2 options
+	const unsigned char lipsStartLocY2      = 0xC6; //When there are 3 options
 
 	memcpy_s((void*)(origSakuraData.GetData() + offsetTileSpacingX),      origSakuraData.GetDataSize(), (void*)&OutTileSpacingX,    sizeof(OutTileSpacingX));
 	memcpy_s((void*)(origSakuraData.GetData() + offsetTileSpacingY),      origSakuraData.GetDataSize(), (void*)&OutTileSpacingY,    sizeof(OutTileSpacingY));
@@ -2464,6 +2639,7 @@ bool FixupSakura(const string& rootDir, const string& inTranslatedOptionsBmp, co
 	memcpy_s((void*)(origSakuraData.GetData() + offsetLIPSX_Formatting1), origSakuraData.GetDataSize(), (void*)&lipsFormattingCode, sizeof(lipsFormattingCode));
 	memcpy_s((void*)(origSakuraData.GetData() + offsetLIPSX_Formatting2), origSakuraData.GetDataSize(), (void*)&lipsFormattingCode, sizeof(lipsFormattingCode));
 	memcpy_s((void*)(origSakuraData.GetData() + offsetLipsStartLocationY),origSakuraData.GetDataSize(), (void*)&lipsStartLocY,      sizeof(lipsStartLocY));
+	memcpy_s((void*)(origSakuraData.GetData() + offsetLipsStartLocationY2),origSakuraData.GetDataSize(), (void*)&lipsStartLocY2,      sizeof(lipsStartLocY2));
 	//***Done Patching Text Drawing Code***
 
 	//****Patch Palettes****
@@ -2607,14 +2783,17 @@ bool FixupSakura(const string& rootDir, const string& inTranslatedOptionsBmp, co
 
 		string translatedImagePath = inTranslatedDataDirectory + string("GameOptions.bmp");
 		BmpToSakuraConverter patchedImage;
-		if( !patchedImage.ConvertBmpToSakuraFormat(translatedImagePath, false, BmpToSakuraConverter::WHITE) )
+		const unsigned int gameOptionTileDim = 16;
+		if( !patchedImage.ConvertBmpToSakuraFormat(translatedImagePath, false, BmpToSakuraConverter::WHITE, &gameOptionTileDim, &gameOptionTileDim) )
 		{
 			printf("FixupSakura: Couldn't convert image: %s.\n", translatedImagePath.c_str());
 			return false;
 		}
 
+		patchedImage.PackTiles();
+
 		SakuraCompressedData translatedCompressedData;
-		translatedCompressedData.PatchDataInMemory(patchedImage.GetImageData(), patchedImage.GetImageDataSize(), true, false, origGameOptionsCompressedSize);
+		translatedCompressedData.PatchDataInMemory(patchedImage.mpPackedTiles, patchedImage.mPackedTileSize, true, false, origGameOptionsCompressedSize);//patchedImage.GetImageData(), patchedImage.GetImageDataSize(), true, false, origGameOptionsCompressedSize);
 
 		memcpy_s(pNewSakuraData + origGameOptionsOffset, origGameOptionsCompressedSize, translatedCompressedData.mpCompressedData, translatedCompressedData.mDataSize);
 	}
@@ -4577,7 +4756,7 @@ bool CreateWKLSpreadSheets(const string& dialogImageDirectory, const string& dup
 	return true;
 }
 
-void Extract8BitImage(const string& fileName, const string& paletteFileName, const int offset, const int width, const int height, const int numColors, const string& outDirectory)
+void Extract8BitImage(const string& fileName, const string& paletteFileName, const int offset, const int width, const int height, const int numColors, const bool bForceBitmap, const string& outDirectory)
 {
 	FileNameContainer imageFileNameInfo(fileName.c_str());
 	FileNameContainer paletteFileNameInfo(paletteFileName.c_str());
@@ -4589,7 +4768,7 @@ void Extract8BitImage(const string& fileName, const string& paletteFileName, con
 
 	const string outFileName = outDirectory + imageFileNameInfo.mNoExtension + string(".bmp");
 
-	ExtractImage(imageFileNameInfo, outFileName, paletteFile, width, height, 1, numColors, offset);
+	ExtractImage(imageFileNameInfo, outFileName, paletteFile, width, height, 1, numColors, offset, true, bForceBitmap);
 }
 
 //FCE files contain faces that appear during the story dialog
@@ -7363,21 +7542,161 @@ void CopySharedWklImages(const string& inSourceDirectory, const string& inWklOut
 	}
 }
 
-bool PatchGame(const string& rootSakuraTaisenDirectory, const string& patchedSakuraTaisenDirectory, const string& translatedTextDirectory, const string& fontSheetFileName, const string& /*originalPaletteFileName*/, 
-	const string &patchedTMapSPDataPath, const string& inMainMainFontSheetPath, const string& inMainMenuTranslatedBgnd, const string& inPatchedOptionsImage, const string& inTranslatedDataDirectory,
-	const string& inExtractedWklDir)
-{	
-	char buffer[MAX_PATH];
-	const DWORD dwRet = GetCurrentDirectory(MAX_PATH, buffer);
-	if( !dwRet )
+void SwapEndiannessForArrayOfShorts(short* pArray, const int sizeInBytes)
+{
+	const int numEntries = sizeInBytes / 2;
+
+	for(int i = 0; i < numEntries; ++i)
 	{
-		printf("Cannot patch game.  Could not find current directory.  Error: (%d)\n", GetLastError());
+		SwapByteOrderInPlace( (char*)&pArray[i], sizeof(short) );
+	}
+}
+
+bool PatchMiniSwim(const string& patchedSakuraDirectory, const string& inTranslatedDataDirectory)
+{
+	const string patchedMinigameFileName = patchedSakuraDirectory + string("\\SAKURA3\\MINISWIM.BIN");
+
+	FileReadWriter miniGameFile;
+	if( !miniGameFile.OpenFile(patchedMinigameFileName) )
+	{
 		return false;
 	}
 
+	//Open translated logo
+	const string logoFileName = inTranslatedDataDirectory + "SwimLogo.bmp";
+	BmpToSakuraConverter patchedLogo;
+	if( !patchedLogo.ConvertBmpToSakuraFormat(logoFileName, false) )
+	{
+		printf("PatchMiniSwim: Couldn't convert image: %s.\n", logoFileName.c_str());
+		return false;
+	}
+
+	//Patch logo
+	miniGameFile.WriteData(0x0003cf28, patchedLogo.GetImageData(), patchedLogo.GetImageDataSize());
+
+	//Open translated fontsheet
+	const string fontSheetFileName = inTranslatedDataDirectory + "MiniSwimFontsheet.bmp";
+	BmpToSakuraConverter patchedFontSheet;
+	const unsigned int tileDim = 16;
+	if( !patchedFontSheet.ConvertBmpToSakuraFormat(fontSheetFileName, false, 0, &tileDim, &tileDim) )
+	{
+		printf("PatchMiniSwim: Couldn't convert image: %s.\n", logoFileName.c_str());
+		return false;
+	}
+
+	patchedFontSheet.PackTiles();
+
+	//Patch fontsheet
+	miniGameFile.WriteData(0x0003b1a8, patchedFontSheet.mpPackedTiles, patchedFontSheet.mPackedTileSize);
+
+	//Patch text lookups
+	short mainText[]   = {1, 2, 3, 4, 5, 0x0a0d, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 0x0a0d, 19, 20, 21, 22, 23, 24, 25, 26, 27, 0};
+	short buttonText[] = {28, 29, 0x0a0d, 30, 31, 0x0a0d, 30, 31, 0x0a0d, 30, 31, 0};
+	
+	SwapEndiannessForArrayOfShorts(mainText, sizeof(mainText));
+	SwapEndiannessForArrayOfShorts(buttonText, sizeof(buttonText));
+
+	miniGameFile.WriteData(0x00056b28, (char*)mainText, sizeof(mainText));
+	miniGameFile.WriteData(0x00056bc2, (char*)buttonText, sizeof(buttonText));
+
+	return true;
+}
+
+bool PatchMiniGames(const string& rootSakuraDirectory, const string& patchedSakuraDirectory, const string& inTranslatedDataDirectory)
+{
+	printf("Patching Minigames\n");
+
+	//Open translated option 1 (start)
+	const string option1FileName = inTranslatedDataDirectory + "MiniGameOption1.bmp";
+	BmpToSakuraConverter patchedOption1;
+	if( !patchedOption1.ConvertBmpToSakuraFormat(option1FileName, false) )
+	{
+		printf("PatchMiniGames: Couldn't convert image: %s.\n", option1FileName.c_str());
+		return false;
+	}
+
+	//Open translated option 2 (practice)
+	const string option2FileName = inTranslatedDataDirectory + "MiniGameOption2.bmp";
+	BmpToSakuraConverter patchedOption2;
+	if( !patchedOption2.ConvertBmpToSakuraFormat(option2FileName, false) )
+	{
+		printf("PatchMiniGames: Couldn't convert image: %s.\n", option2FileName.c_str());
+		return false;
+	}
+
+	//Open translated time image
+	const string timeImageFileName = inTranslatedDataDirectory + "MiniGameTime.bmp";
+	BmpToSakuraConverter patchedTimeImage;
+	if( !patchedTimeImage.ConvertBmpToSakuraFormat(timeImageFileName, false) )
+	{
+		printf("PatchMiniGames: Couldn't convert image: %s.\n", timeImageFileName.c_str());
+		return false;
+	}
+
+	//Open translated seconds image
+	const string secondsImageFileName = inTranslatedDataDirectory + "MiniGameSeconds.bmp";
+	BmpToSakuraConverter patchedSecondsImage;
+	if( !patchedSecondsImage.ConvertBmpToSakuraFormat(secondsImageFileName, false) )
+	{
+		printf("PatchMiniGames: Couldn't convert image: %s.\n", secondsImageFileName.c_str());
+		return false;
+	}
+
+	struct MiniGameFileOffsets
+	{
+		string       fileName;
+		unsigned int option1Offset;
+		unsigned int option2Offset;
+		unsigned int timeImageOffset;
+		unsigned int secondsImageOffset;
+	};
+
+	const int numMiniGameFiles = 8;
+	MiniGameFileOffsets miniGameOption1Offsets[numMiniGameFiles] = 
+	{
+		"HANAMAIN.BIN", 0x00014688, 0x00013c08, 0x00016628, 0x000165a8,
+		"MINICOOK.BIN", 0x000124bc, 0x00011a3c, 0x0001445c, 0x000143dc,
+		"MINIHANA.BIN", 0x000124bc, 0x00011a3c, 0x0001445c, 0x000143dc,
+		"MINIMAIG.BIN", 0x000124bc, 0x00011a3c, 0x0001445c, 0x000143dc,
+		"MINISHOT.BIN", 0x000124bc, 0x00011a3c, 0x0001445c, 0x000143dc,
+		"MINISLOT.BIN", 0x000124bc, 0x00011a3c, 0x0001445c, 0x000143dc,
+		"MINISOJI.BIN", 0x000124bc, 0x00011a3c, 0x0001445c, 0x000143dc,
+		"MINISWIM.BIN", 0x000124bc, 0x00011a3c, 0x0001445c, 0x000143dc,
+	};
+
+	//Patch common data among all mini games
+	for(int miniGameIndex = 0; miniGameIndex < numMiniGameFiles; ++miniGameIndex)
+	{
+		//Create a copy of the original file in the patched directory to stomp any modifications from previous patch runs
+		const string originalMinigameFileName = rootSakuraDirectory + string("\\SAKURA3\\") + miniGameOption1Offsets[miniGameIndex].fileName;
+		const string patchedMinigameFileName  = patchedSakuraDirectory + string("\\SAKURA3\\") + miniGameOption1Offsets[miniGameIndex].fileName;
+		CopyFile(originalMinigameFileName.c_str(), patchedMinigameFileName.c_str(), false);
+
+		//Open patched MiniSwim file
+		FileReadWriter miniGameFile;
+		if( !miniGameFile.OpenFile(patchedMinigameFileName.c_str()) )
+		{
+			return false;
+		}
+
+		miniGameFile.WriteData(miniGameOption1Offsets[miniGameIndex].option1Offset,      patchedOption1.GetImageData(),      patchedOption1.GetImageDataSize());
+		miniGameFile.WriteData(miniGameOption1Offsets[miniGameIndex].option2Offset,      patchedOption2.GetImageData(),      patchedOption2.GetImageDataSize());
+		miniGameFile.WriteData(miniGameOption1Offsets[miniGameIndex].timeImageOffset,    patchedTimeImage.GetImageData(),    patchedTimeImage.GetImageDataSize());
+		miniGameFile.WriteData(miniGameOption1Offsets[miniGameIndex].secondsImageOffset, patchedSecondsImage.GetImageData(), patchedSecondsImage.GetImageDataSize());
+	}
+
+	bool bResult = PatchMiniSwim(patchedSakuraDirectory, inTranslatedDataDirectory);
+
+	return bResult;
+}
+
+bool PatchGame(const string& rootSakuraTaisenDirectory, const string& patchedSakuraTaisenDirectory, const string& translatedTextDirectory, const string& fontSheetFileName, const string& /*originalPaletteFileName*/, 
+	const string &patchedTMapSPDataPath, const string& inMainMainFontSheetPath, const string& inMainMenuTranslatedBgnd, const string& inPatchedOptionsImage, const string& inTranslatedDataDirectory,
+	const string& inExtractedWklDir)
+{
 	//Create temp work directory
-	const string tempDir = string(buffer) + string("\\Temp\\");
-	if( !CreateDirectoryHelper(tempDir) )
+	string tempDir;
+	if( !CreateTemporaryDirectory(tempDir) )
 	{
 		printf("Cannot patch game.  Could not create temp work directory.  Error: (%d)\n", GetLastError());
 		return false;
@@ -7457,6 +7776,14 @@ bool PatchGame(const string& rootSakuraTaisenDirectory, const string& patchedSak
 		printf("Patching MainMenu LOGO.SH2 failed.\n");
 		return false;
 	}
+
+	//Step 8
+	if( !PatchMiniGames(rootSakuraTaisenDirectory, patchedSakuraTaisenDirectory, inTranslatedDataDirectory) )
+	{
+		printf("Patching MiniGames failed.\n");
+		return false;
+	}
+
 	printf("Patching Successful!\n");
 
 	return true;
@@ -7482,7 +7809,7 @@ void PrintHelp()
 	printf("CreateWKLSpreadsheets dialogImageDirectory duplicatesFile rootSakuraTaisenDirectory\n");
 	printf("CreateTMapSpSpreadsheet imageDirectory\n");
 	printf("ExtractImages fileName paletteFile width height outDirectory\n");
-	printf("Extract8BitImage fileName paletteFile offset width height numColors[256, 128] outDirectory\n");
+	printf("Extract8BitImage fileName paletteFile offset width height numColors[256, 128] pngOrBmp[0 png, 1 bmp] outDirectory\n");
 	printf("ExtractFCEFiles rootSakuraTaisenDirectory paletteFile outDirectory\n");
 	printf("ExtractFACEFiles rootSakuraTaisenDirectory outDirectory\n");
 	printf("ExtractWKLFiles rootSakuraTaisenDirectory outDirectory\n");
@@ -7492,6 +7819,7 @@ void PrintHelp()
 	printf("CompressFile inFilePath outFilePath\n");
 	printf("FindCompressedData compressedFile uncompressedFile outDirectory\n");
 	printf("FindCompressedDataInDir inDirectory uncompressedFile outDirectory\n");
+	printf("ExtractMiniGameData rootSakuraDirectory outDirectory\n");
 	printf("PatchGame rootSakuraTaisenDirectory patchedSakuraTaisenDirectory translatedTextDirectory fontSheet originalPalette patchedTMapSpDataPath mainMenuFontSheetPath mainMenuBgndPatchedImage optionsImagePatched translatedDataDirectory extractedWklDir\n");
 }
 
@@ -7664,7 +7992,7 @@ int main(int argc, char *argv[])
 
 		CreateTMapSpSpreadsheet(imageDirectory);
 	}
-	else if(command == "Extract8BitImage" && argc == 9 )
+	else if(command == "Extract8BitImage" && argc == 10 )
 	{
 		const string fileName     = string(argv[2]);
 		const string paletteFile  = string(argv[3]);
@@ -7672,9 +8000,10 @@ int main(int argc, char *argv[])
 		const int    width        = atoi(argv[5]);
 		const int    height       = atoi(argv[6]);
 		const int    numColors    = atoi(argv[7]);
-		const string outDirectory = string(argv[8]) + Seperators;
+		const int    pngOrBmp     = atoi(argv[8]);
+		const string outDirectory = string(argv[9]) + Seperators;
 
-		Extract8BitImage(fileName, paletteFile, offset, width, height, numColors, outDirectory);
+		Extract8BitImage(fileName, paletteFile, offset, width, height, numColors, pngOrBmp == 1, outDirectory);
 	}
 	else if(command == "ExtractFCEFiles" && argc == 5 )
 	{
@@ -7774,6 +8103,13 @@ int main(int argc, char *argv[])
 		const string outDir(argv[3]);
 
 		CopySharedWklImages(sourceDir, outDir);
+	}
+	else if(command == "ExtractMiniGameData" && argc == 4)
+	{
+		const string rootSakuraDir(argv[2]);
+		const string outDir(argv[3]);
+
+		ExtractMiniSwimText(rootSakuraDir, outDir);
 	}
 	else
 	{

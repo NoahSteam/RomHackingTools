@@ -522,6 +522,14 @@ bool TextFileData::InitializeTextFile(bool bFixupSpecialCharacters)
 			pToken = strtok_s(NULL, pDelim, &pContext);
 		}
 
+		for(const std::string& word : newLineOfText.mWords)
+		{
+			if( word == newLine )
+			{
+				++newLineOfText.mNumberOfLines;
+			}
+		}
+
 		mLines.push_back(std::move(newLineOfText));
 	}
 
@@ -861,7 +869,7 @@ void PaletteData::SetValue(int index, unsigned short value)
 ////////////////////////////////
 bool BitmapWriter::CreateBitmap(const string& inFileName, int inWidth, int inHeight, int bitsPerPixel, const char* pInColorData, int inColorSize, const char* pInPaletteData, int inPaletteSize, bool bForceBitmapFormat)
 {	
-	if( 0 && !bForceBitmapFormat )//bitsPerPixel == 4 )
+	if( !bForceBitmapFormat )//bitsPerPixel == 4 )
 	{
 		SaveAsPNG(inFileName, inWidth, inHeight, bitsPerPixel, pInColorData, inColorSize, pInPaletteData, inPaletteSize);
 	}
@@ -1055,11 +1063,11 @@ void BitmapSurface::AddTile(const char* pInData, int dataSize, int inX, int inY,
 	}
 }
 
-bool BitmapSurface::WriteToFile(const std::string& fileName)
+bool BitmapSurface::WriteToFile(const std::string& fileName, bool bForceBitmap)
 {
 	BitmapWriter bitmap;
 
-	return bitmap.CreateBitmap(fileName, mWidth, -mHeight, mBitsPerPixel, mpBuffer, mBufferSize, mpPalette, mPaletteSize);
+	return bitmap.CreateBitmap(fileName, mWidth, -mHeight, mBitsPerPixel, mpBuffer, mBufferSize, mpPalette, mPaletteSize, bForceBitmap);
 }
 
 /////////////////////////////////
@@ -1337,4 +1345,24 @@ bool PRSDecompressor::UncompressData(void* pInData, unsigned int inDataSize)
 		++k;
 	}
 	*/
+}
+
+bool CreateTemporaryDirectory(string& outDir)
+{
+	char buffer[MAX_PATH];
+	const DWORD dwRet = GetCurrentDirectory(MAX_PATH, buffer);
+	if( !dwRet )
+	{
+		return false;
+	}
+
+	//Create temp work directory
+	const string tempDir = string(buffer) + string("\\Temp\\");
+	if( !CreateDirectoryHelper(tempDir) )
+	{
+		return false;
+	}
+
+	outDir = tempDir;
+	return true;
 }
