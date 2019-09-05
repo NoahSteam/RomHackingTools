@@ -7646,6 +7646,14 @@ bool PatchMiniGames(const string& rootSakuraDirectory, const string& patchedSaku
 		return false;
 	}
 
+	//Open translated N\A image
+	const string secondsImageFileName = inTranslatedDataDirectory + "MiniGameNAPatched.bmp";
+	BmpToSakuraConverter patchedSecondsImage;
+	if (!patchedSecondsImage.ConvertBmpToSakuraFormat(secondsImageFileName, false))
+	{
+		printf("PatchMiniGames: Couldn't convert image: %s.\n", secondsImageFileName.c_str());
+		return false;
+	}
 	struct MiniGameFileOffsets
 	{
 		string       fileName;
