@@ -1,4 +1,4 @@
-It's a photo of Sakura. She's looking right at me. I wonder what she's thinking...
+﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking...
 It's a photo of Sumire. This is a side of her you don't see too often.
 It's a photo of Maria. ...She's lost in thought and looks kind of sad...
 A photo of Kanna. She looks strong and reliable. I can't wait to meet her.
@@ -25,24 +25,24 @@ A photo of Iris in her swimsuit. She's holding a rubber ring and looks ready to 
 A photo of Kohran. I don't get to see her with her braids undone very often. It's a nice look.
 A photo of Ayame in a traditional outfit. I hope she'll always be as happy and content as she is here.
 Ayame's gun. Why...? Why did it have to turn out like this...?
-Jean Paul the teddy bear. Iris's best friend. She always carries him with her and takes good care of him.
-Whoah... That beautiful girl... Who could she be I wonder?
-...She was in the theatre so late last night, so maybe she works for the theatre troupe?
+Jean-Paul the teddy bear. Iris's best friend. She always carries him with her and takes good care of him.
+Whoa... That beautiful girl... Who could she be I wonder?
+...She was in the theater late last night, so maybe she works for the theater troupe?
 But I've been here for a month and I've never even seen her...
 Wow... I really want to meet her again...
-Alright everyone! Let's get down to some repairs!
+Alright, everyone! Let's get down to some repairs!
 Wowee, Sakura. You're so fired up!
 Hmph... Aren't you even a little ashamed of the mess you made yesterday?
 ...Hey, hey, Sakura! Uncle Ichiro's not here. How come?
 He was working on fixing the stage until pretty late last night... Let's let him sleep.
-Alright everyone! Let's get down to some repairs, right?
+Alright, everyone! Let's get down to some repairs, right?
 ...
 What's wrong Sakura? You look... kinda down.
 Hmph... Could it be that you're rather ashamed of the mess you made yesterday?
-C'mon now... Couldja be a bit more positive?
+C'mon now... Could ya be a bit more positive?
 "C'mon" yourself... Why should I have to do this kind of　manual labor?
 Well I loooooove this kind of stuff! It's so much fun, like construction work or something!
-...Ogami, what's keeping him I wonder?
+...Ogami, what's keeping him, I wonder?
 Ain't he still sleeping? Well, it's fine right? Sometimes ya just gotta take it easy.
 It's time!!
 Everyone, stop the repairs for now. Assemble in the control room!
@@ -55,7 +55,7 @@ If I'm not mistaken, that's where they recently finished construction on Teito T
 We can't let them destroy something that important!
 Teito Tower transmits and relays radio frequencies for the whole Tokyo area! If they destroy that...
 Everything from encoded military transmissions to tea-time radio, they'll all be cut off at the source!
-But Commander, considering the distance, using the Koubu there's no way we can make it in time...
+But Commander, considering the distance, there's no way we can make it in time via the Koubu...
 Understood. Not to worry. This time we'll be attacking with the Shogei-maru!
 Shogei-maru?
 Finally... the Shogei-maru's maiden voyage!
@@ -107,7 +107,7 @@ Cough... Awww... My steambike is totaled...
 The name's Kohran Li. Starting today, I've transferred from the Imperial Assault Hanayashiki Branch to Ginza Headquarters.
 Yoneda! Yoneda, where are you?!
 No sweat! I'll go by myself!
-Augh! My face is up here, yanno!
+Augh! My face is up here, y'know!
 The steam bike I invented boasts 4 cylinders and 5 valves! It runs at 100 horsepower and 200 km per hour!
 Does that sound like a mess to you?! You better watch yourself, buddy...
 Or I'm gonna knock your block off!
@@ -151,13 +151,13 @@ Wow, looks like you were having heaps of fun, huh?
 Lucky you, she almost looked like your girlfriend.
 Is that so... Well then...
 Hey now... Are you OK?
-Ok you say... But you're bleeding aren't you? Let me take a look.
+Ok, you say... But you're bleeding aren't you? Let me take a look.
 She's so... pretty. That girl... I wonder who she is. ...*sigh*.
 Ogling and fawning over girls is really disrespectful you know...
 Hey, that's so rude! Since when did I act like your wife!?
 You're the worst!
-She's so...pretty. That woman... I wonder who she is. ...*sigh*.
-Ogling and fawning over girls is really disrespectful you know...
+She's so... pretty. That woman... I wonder who she is. ...*sigh*.
+Ogling and fawning over girls is really disrespectful, you know...
 Hey, that's so rude! Since when did I act like your wife!?
 You're the worst!
 Thank you for your hard work.
@@ -171,7 +171,7 @@ Lords of Death!!
 Annihilate the capital!! Destroy... the Imperial Combat Revue!!
 Destroy! Destroy! Destroy!
 How is it...?
-Doing your best is all well and good but take it easy OK...?
+Doing your best is all well and good but take it easy, OK...?
 No worries! I always carry a repair kit with me just in case!
 I'll have it fixed in a jiffy!
 By the way, Ensign. You went up against the Hive of Darkness, right?

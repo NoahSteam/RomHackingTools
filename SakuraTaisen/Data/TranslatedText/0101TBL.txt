@@ -39,15 +39,15 @@ Ah, good to see you, Ogami. That uniform looks good on you.
 How's your work going? Have you gotten the hang of punching tickets all right?
 Please explain my assignment. <br> Were you on the phone?
 Can you please explain my assignment? No one told me anything about taking tickets at a theater!
-And all of my squad members are women. One of them - I think her name was Iris - is just a little girl!
+And all of my squad members are women! One of them... I think her name was Iris... is just a little girl!
 I thought I was accepting the post as captain of a secret strike team. This is nothing like what I imagined!
 Commander, who were you speaking to just now?
 Count Hanakouji, as it happens. The man who recommended you for this position.
 He wanted to make sure you weren't shirking any of your new duties.
 I see. Actually, I have a question for you regarding that, Commander.
-Aww, don't look so glum, Ogami. Loosen up, how 'bout we have a drink or two, huh?
+Aww, don't look so glum, Ogami. Loosen up. How 'bout we have a drink or two, huh?
 (Is this guy really the Lieutenant General Ikki Yoneda I've heard about? He's drinking in the middle of the afternoon...)
-Whatcha think of the job? I thought punchin' tickets'd be right up yer street.
+Whatcha think of the job? I thought punchin' tickets'd be right up yer alley.
 Give me a break! This job is nothing like the assignment I was told about!
 I'm supposed to be captain of this Imperial Combat Revue, right? What are my duties?
 Actually, before you answer that... This IS the Imperial Combat Revue, right? It looks like a regular theater!
@@ -84,10 +84,10 @@ Ogami...
 ...
 All right, let's go! I'll take you as far as your door. Right this way! 
 Whoa! Hey, slow down a little.
-No time to shilly-shally.
+No time to dilly-dally.
 Thanks for the help. Sorry to make you worry about me.
 Oh, it was no trouble. Besides...
-...?
+Huh...?
 Oh, it's nothing, really. I-if you'll excuse me, I have a performance to prepare for...
 Would you like to come in?<br>Okay, see you later.
 If you have some time, would you like to come in? There's something I'd like to discuss with you.
@@ -107,7 +107,7 @@ No, I'm the one who should apologize.
 It's just... You have your roles to play here, parts only you can perform.
 But what about me? I don't feel like I'm doing anything to safeguard the capital.
 I was so happy when I got the news I was being transferred here.
-Being promoted to captain of my own squad straight out of the academy was like a dream come true.
+Being promoted to captain of my own squad, straight out of the academy... it was like a dream come true.
 It didn't even matter what my assignment was. I'd be satisfied with any post if it meant protecting the capital.
 I thought I was taking control of a crack assault force, so when I found an exclusively female theater troupe, well...
 Does my being here help protect our nation's peace at all?
@@ -149,7 +149,7 @@ This month's performance is "The Eve of Lady Camellia", with Sumire in the lead 
 We also put on court plays, musicals, sketch comedies, and various other sorts of performances.
 Wow...seems like a lot of fun.
 Onstage, we can dazzle the audience by leading them into a different world.
-It makes our work feel tremendously worthwhile.
+It makes our work feel tremendously rewarding.
 ...
 I'm sorry...just listen to me prattling on.
 No, it's all right.
@@ -159,14 +159,14 @@ Huh?...Seems like someone's here.
 Tell me about yourself, Sakura. What's it like living here?
 About me, you say? To tell the truth, I'm still fairly new here, too.
 On performance days, I'm up on stage. Our play for this month is "The Eve of Lady Camellia", with Sumire in the lead role.
-On our days off...well, I do a lot of rehearsing.
-Aside from that, there's cleaning, laundry...and my sword training.
+On our days off... well, I do a lot of rehearsing.
+Aside from that, there's cleaning, laundry... and my sword training.
 Sword training?
 Yes. Before I came to the capital, I would practice at a dojo in Sendai.
 Actually, there was something of an uproar the day I first arrived here...
 Wow, so you can use a sword. Not bad for a young woman like you.
-Oh, no...it's not all that impressive.
-Huh?...Seems like someone's here.
+Oh, no... it's not all that impressive.
+Huh? ...Seems like someone's here.
 ...Actually, there's something I'd like to ask you.
 Oh, of course. What is it?
 I was assigned the role of captain of a secret squad called the Imperial Combat Revue.
@@ -252,7 +252,7 @@ Okay, okay. Sorry, Iris. But don't you need to get back to the stage?
 The play's starting, so I better go. Bye-bye, Uncle Ichi!
 Phew...that was close.
 So Iris performs as well...I guess that would make her a child actress.
-Honestly, I'm envious. You all have your roles to play here...parts only you can perform.
+Honestly, I'm envious. You all have your roles to play here... parts only you can perform.
 But what about me? I don't feel like I'm doing anything to safeguard the capital.
 I was so happy when I got the news I was being transferred here.
 Being promoted to captain of my own squad straight out of the academy was like a dream come true.
@@ -301,14 +301,14 @@ Haha! How did you like my impression of Sumire?
 Ahahaha! <br>...What was THAT?
 Ahahaha! That was spot-on, Sakura!
 Really? Thanks! I was afraid it wouldn't hit the mark.
-Ogami…
+Ogami!
 I hope you'll keep on smiling like this.
 That gloomy expression you had earlier doesn't suit you at all.
 Sakura...
 Well, I should get going. They need me onstage.
 I'll get out of your way, Ogami. Excuse me.
 ...I'm sorry, Sakura.
-It's just...You have your roles to play here, parts only you can perform.
+It's just... You have your roles to play here, parts only you can perform.
 But what about me? I don't feel like I'm doing anything to safeguard the capital.
 I was so happy when I got the news I was being transferred here.
 Being promoted to captain of my own squad straight out of the academy was like a dream come true.
@@ -319,7 +319,7 @@ Does my being here help protect our nation's peace at all?
 Uhh...no good, huh? Ohh, that was just pathetic...
 S-Sakura, there's no need to cry!
 Eheheh, just kidding. I'm no good at impressions, but my acting's not bad, right?
-Sheesh...you had me going for a second, there.
+Sheesh... you had me going for a second, there.
 Feeling a little better, Ogami?
 Huh? Sakura, were you trying to cheer me up?
 How did I do? Well, I should get going. They need me onstage.
@@ -333,7 +333,7 @@ It didn't even matter what my assignment was. I'd be satisfied with any post if 
 I thought I was taking control of a crack assault force, so when I found an exclusively female theater troupe, well...
 Does my being here help protect our nation's peace at all?
 ...
-Uhh...Ogami, you look dazed...don't tell me it's because of my impression?
+Ah... Ogami, you look dazed... don't tell me it's because of my impression?
 S-Sakura, there's no need to cry!
 Eheheh, just kidding. I'm no good at impressions, but my acting's not bad, right?
 Sheesh...you had me going for a second, there.
@@ -342,8 +342,8 @@ Huh?!
 Sakura, were you trying to cheer me up?
 How did I do? Well, I should get going. They need me onstage.
 I'll get out of your way, Ogami. Excuse me.
-Ogami...chin up, all right?
-Sakura...you were trying to cheer me up, weren't you?
+Ogami... chin up, all right?
+Sakura... you were trying to cheer me up, weren't you?
 All this is fine for you. You have a role to play here.
 But what about me? I don't feel like I'm doing anything to safeguard the capital.
 I was so happy when I got the news I was being transferred here.
@@ -355,7 +355,7 @@ Sorry, but Ogami's not in at the moment!
 ...
 Huh...Uncle Ichi's not here? Guess I gotta look somewhere else.
 Aww, the play's starting soon...Sakura, where did you go?
-Phew...that was close.
+Phew... that was close.
 Honestly! What a ridiculous way to hide from people!
 But...
 That WAS pretty funny, Ogami! I nearly burst out laughing.
@@ -364,7 +364,7 @@ Feeling a little better, Ogami?
 Huh? Sakura, were you trying to cheer me up?
 How did I do? Well, I should get going. They need me onstage.
 I'll get out of your way now.
-Ogami...chin up, all right?
+Ogami... chin up, all right?
 ...I'm sorry, Sakura.
 It's just... You have your roles to play here, parts only you can perform.
 But what about me? I don't feel like I'm doing anything to safeguard the capital.
@@ -374,7 +374,7 @@ It didn't even matter what my assignment was. I'd be satisfied with any post if 
 I thought I was taking control of a crack assault force, so when I found an exclusively female theater troupe, well...
 Does my being here help protect our nation's peace at all?
 ...He doesn't appear to be here.
-At any rate...where could Sakura be?
+At any rate... where could Sakura be?
 ...He's of no use, then. I shall search elsewhere.
 But really...where on earth could Sakura have wandered off to?
 ...He's not here. Ohhh, the play's gonna start soon!
@@ -393,7 +393,7 @@ I thought I was taking control of a crack assault force, so when I found an excl
 Does my being here help protect our nation's peace at all?
 It looks like this is Sumire's room.
 Ensign! The door is locked, which means you cannot simply enter as you please!
-(Sheesh...doesn't seem like she wants to talk.)
+(Sheesh... doesn't seem like she wants to talk.)
 Enough of your foolishness. Say something if you want my attention!
 Sumire! I need to speak with you!
 I'm terribly sorry, but I'm changing at the moment.
@@ -402,17 +402,17 @@ I'm terribly sorry, but I'm changing at the moment.
 Yes? Who's there?
 Um...it's Ogami. Do you have a minute?
 I'm right in the middle of changing. Could you wait just one moment, please?
-Gulp...she's changing?
+Gulp... she's changing?
 Open the door.
 ...I can't wait any longer. I'm coming inside!
 E-ensign! What DO you think you're doing?!
-S-sorry...I just got tired of waiting, so -
+S-sorry... I just got tired of waiting, so -
 I asked for just one moment, did I not?!
 How outrageous of you to simply barge into a lady's room!
 I'm sorry. I got impatient...
 Had you come in before I'd begun changing, that would be one thing. But...
 Enough of your excuses! Leave, right this instant!
-No way around it...I screwed that up.
+No way around it... I screwed that up.
 Forget it. I'll go somewhere else.
 Thank you for waiting, Ensign.
 Such impeccable patience is nothing less than I'd expect from a military officer.
@@ -424,8 +424,8 @@ Could you show me your room? I'd love to see what it's like in there.
 Most certainly not.
 Why, the very thought of allowing a man into my room so casually...
 Y-yeah, but -
-In any case, I refuse. Now if you will excuse me, I've my own matters to attend to.
-Ah...she closed the door right in my face.
+In any case, I refuse. Now, if you will excuse me, I've my own matters to attend to.
+Ah... she closed the door right in my face.
 Sumire, please. Can't you tell me more about the Imperial Combat Revue?
 ...This again? You certainly are a persistent fellow, Ensign!
 I'm begging you! I can't have been sent here just to take tickets all day, right?
@@ -446,7 +446,7 @@ Well...
 ...Pardon me. There are some pressing matters I must attend to.
 I hate to leave after you took the time to come and see me, but I must bid you adieu for now.
 Ah, Sumire, wait!
-(She seemed awfully flustered...what's going on here?)
+(She seemed awfully flustered... what's going on here?)
 While taking tickets earlier, I was entrusted this letter by someone calling himself a devoted fan.
 I figured I should pass it along to you. Here you are.
 Goodness! You went to such trouble for my sake?
@@ -459,10 +459,10 @@ I've still some matters of my own to attend to, so I will take my leave. Thank y
 ...I guess that patron ought to be satisfied now.
 ...
 ...Ensign, you grew so silent all of the sudden. Whatever is the matter?
-Uh...sorry. I was trying to think of what to say.
+Uh... sorry. I was trying to think of what to say.
 I'm a busy woman, you know. I simply haven't the time to stroll along at your pace.
 Now if you will excuse me, I shall take my leave!
-Ah...she shut the door in my face.
+Ah...s he shut the door in my face.
 This appears to be a lounge where the troupe members come to relax.
 Sumire was drinking tea out here earlier...
 ...Seems there's no one here. Better head somewhere else.
@@ -474,7 +474,7 @@ Oh, pardon me. I know - I'll call you "Ensign" from now on, to simplify things.
 (It's a wonder it hasn't slipped right off her shoulders.)
 ...Is something the matter, Ensign? Your eyes have been fixed upon my body for some time.
 (This is one daring outfit, all right...)
-(C-crap! My eyes are being drawn in towards her chest!)
+(C-crap! My eyes are being drawn towards her chest!)
 (Then again, it's pretty hard NOT to look!)
 ...Ensign, just where do your eyes keep wandering off to?
 (I'd better quit staring if I don't want to get chewed out again...)
@@ -483,14 +483,14 @@ Oh, pardon me. I know - I'll call you "Ensign" from now on, to simplify things.
 (...Looking more closely, there appears to be a beauty mark beneath her eye.)
 (I think it's called a "tear mark". It's pretty alluring...)
 Ensign, you've been gazing at my face for some time now.
-Oh, I, uh...s-sorry.
+Oh, I, uh... s-sorry.
 Not to worry.
 A man would have to be mad to not be captivated by my beauty.
 (I'd better stop staring like an idiot.)
 (...Looking more closely, there appears to be a beauty mark beneath her eye.)
 What is it, Ensign? Did you wish to speak with me?
 Drinking tea before a performance like this is the perfect way to dissolve whatever tension I may be feeling.
-By the way, Ensign...what was it you needed?
+By the way, Ensign... what was it you needed?
 (Her hair is gathered back in a hairband.)
 (...I wonder what her hair would look like without it?)
 'Scuse me...
@@ -500,7 +500,7 @@ I-I just wanted to see what your hair is like without the hairband...
 You'd have better luck were you to try such a thing with Iris's ribbon!
 And here I believed you to be rather mature...how frightfully rude!
 I'll be going!
-Guess I pushed Sumire too far...she really let me have it.
+Guess I pushed Sumire too far... she really let me have it.
 ...Oh well. I'd better go too.
 Ensign, do you really mean to leave in the middle of our conversation?
 Ask about the Imperial Combat Revue. <br>Ask Sumire about herself.
@@ -511,7 +511,7 @@ By the look of it, this is just an ordinary theater.
 I have a hard time believing it's the headquarters for a secret assault force. Sumire, won't you tell me what's really going on?
 Well...
 I hope it's not too forward of me to say, but I'd love to know more about you...
-My my, Ensign...how unexpectedly straight to the point you are.
+My my, Ensign... how unexpectedly straight to the point you are.
 As I mentioned before, I am the daughter of the Kanzaki family, which controls the Kanzaki Group.
 Originally, the only stage I stood upon was the stage of high society.
 But then Kanzaki Heavy Industries became linked with this theater due to their collaborations, and so I came to live here.
@@ -530,7 +530,7 @@ Well, no matter where I go or what I do, I've no shortage of gentleman admirers.
 I-I see...
 Whatever is the matter? Has a cat got your tongue? Oh, I do despise an unreliable man.
 You would do well to straighten up your act, Ensign.
-Sumireee!...Oh, you're here too, Ogami?
+Sumireee! ...Oh, you're here too, Ogami?
 Sakura...
 Sumire, it's almost time for you to go onstage. Please come get ready.
 How good of you to come for me. I must drop by my room for a moment, then I'll be right there.
@@ -549,16 +549,16 @@ I don't want to hear it!
 My, that was rather harsh of her...
 Well, I shall take my leave now, Ensign.
 I guess I offended Sakura...
-I suppose...Sakura is my type.
+I suppose... Sakura is my type.
 What was that?! Ensign, you simply have no eye for the finer things!
 How very distasteful! I will be going, now!
 Ah - Sumire!
 Ogami, I need to go after her...please excuse me.
 I really shouldn't have said anything with both of them there...
-Oh!...Sakura...
+Oh! ...Sakura...
 Ogami...
-What you said...it made me happy.
-See you later then...
+What you said... it made me happy.
+Well, see you later, then...
 Sakura...
 What sort of woman I prefer...well...
 ...Ugh, what an indecisive man you are, Ensign!
@@ -568,7 +568,7 @@ I will let it slide for now, I suppose. Well, I must be off.
 I should go too. See you later, Ogami.
 Yeah, sure.
 Ogami...
-I'm kind of relieved, but also a bit disappointed...what a complicated feeling this is.
+I'm kind of relieved, but also a bit disappointed... what a complicated feeling this is.
 ...Well, I should get going.
 Sakura...
 ...Ensign. Just where are your eyes wandering off while I'm speaking to you?
@@ -604,19 +604,19 @@ By the way, Ogami...
 The stairway to the basement is off-limits, by order of Director Yoneda.
 Please take care that you don't wander into the basement, Ogami.
 There won't be any performances tomorrow. It's so nice to have a day off.
-Ogami, I'm quite knowledgable about this theater.
+Ogami, I'm quite knowledgeable about this theater.
 If you ever run into a problem, feel free to ask me!
 Sumire spends a lot of time in the upstairs lounge.
 By the way, you heard about that mysterious girl who defeated a monster in Ueno Park a while back, right?
 You know, that was actually -
 Yuri!
-Oh...so-rry!
+Oh... so-rry!
 Ogami, go ahead and forget what I just said!
-...?
+Hm...?
 Maria is an avid book reader!
 Seems like she's in the library every night picking out books to read.
 Iris is just the cutest thing! She reminds me of a little doll.
-But you know...she's rumored to be the daughter of a very rich family.
+But you know... she's rumored to be the daughter of a very rich family.
 The Flower Division has 6 members in total.
 Huh? But I've only met 4 members so far.
 The other two aren't here right now. Their names are Kanna and Kohran.
@@ -633,19 +633,19 @@ Whooaa! Wh-who's covering my eyes?!
 Sumire? <br>Sakura? <br>Maria?
 That voice...is that Sumire?
 Nope!
-Oh...it was you, Sakura. You sure startled me.
-Haha...I'm a little disappointed though, Ogami.
+Oh... it was you, Sakura. You sure startled me.
+Hehe... I'm a little disappointed though, Ogami.
 I thought you would've remembered my voice by now...
-I'm...I'm sorry.
+I'm... I'm sorry.
 Oh, it's fine. Just try to remember it from here on.
 Well, I should get going.
 Ah - Sakura, hold on! There's something I wanted to ask you.
 What is it?
-That voice...is that you, Sakura?
-Haha...you got me.
+That voice... is that you, Sakura?
+Hehe... you got me.
 ...So it was you. Boy, you sure startled me.
 Even you have a mischievous side then, huh?
-Haha...sorry about that.
+Hehe... sorry about that.
 But...it makes me so happy that you remembered my voice.
 Huh?...
 Uh...s-sorry. I guess that was a strange thing to say.
@@ -661,14 +661,14 @@ S-Sakura...
 I'll be going! Pardon me for saying such an odd thing.
 Ah...looks like I offended her.
 Oh well. I'd better go.
-Huh?...Um, uh....
+Huh? ...Um, uh....
 Come on...you really don't know, Ogami?
 Oh, it was you, Sakura? You sure startled me.
-Sorry...you came up behind me so suddenly, I didn't have time to think.
+Sorry... you came up behind me so suddenly, I didn't have time to think.
 No, it's all right. I should be apologizing to you.
-I mean...it does seem very like you to be startled by someone's touch.
+I mean... it does seem very like you to be startled by someone's touch.
 Huh?...
-Uh...I-I'm sorry. What a strange thing for me to say...
+Uh... I-I'm sorry. What a strange thing for me to say...
 W-well, I should get going...
 Ah - Sakura, hold on! There's something I wanted to ask you.
 What is it?
@@ -680,11 +680,11 @@ W-well, uh...
 I'm sorry...I need to find Sumire. Please excuse me.
 Sakura, wait!
 ...There she goes.
-Why do I get the feeling...she was running from me?
+Why do I get the feeling... she was running from me?
 I'd better check somewhere else...
 Where are you headed, Sakura?
 The performance is due to begin soon, so I'm looking for Sumire.
-I'm willing to bet she's somewhere on the second floor...well, I'll be going.
+I'm willing to bet she's somewhere on the second floor... well, I'll be going.
 ...Shoot, I forgot to ask her about the Imperial Combat Revue.
 ...Oh well. I'd better go too.
 Where are you headed, Sakura?
@@ -692,13 +692,13 @@ Me? Rehearsal is about to begin, so I need to get going.
 Well, I'll be on my way!
 ...Rehearsal? Rehearsal for what?
 ...Oh well. I'd better go too.
-U-uh...Sakura, do you have a boyfriend?
+U-uh... Sakura, do you have a boyfriend?
 Huh!?
 Ogami...
 No, I don't. But...
 ...
 S-sorry, I need to go.
-Ah, Sakura...did I do something wrong? Maybe that was a strange thing to ask.
+Ah, Sakura... did I do something wrong? Maybe that was a strange thing to ask.
 Guess I'll go somewhere else...
 Uh, never mind.
 You're an odd one, Ogami. Well, I'll be on my way!
@@ -713,7 +713,7 @@ Ah, Ogami! The photos are extremely popular items - they always sell out right a
 For that reason, I'm afraid I can only sell you one at a time. My apologies.
 Hmm...by the way, just whose photo is this?
 Wh-what the - ?!
-(Why are photos of a secret combat squad...being sold to the public?!)
+(Why are photos of a secret combat squad... being sold to the public?!)
 (Wouldn't this reveal their true identities?!)
 Ogami, what's the matter?
 Uh, n-nothing.
@@ -735,20 +735,20 @@ Meaning, she's a big name in high society, too! How incredible!
 (But I guess I could get it, since I'm already here.)
 That's a photo of Maria. That'll be 50 zeni.
 You'd like to buy that? Thank you!
-Maria is from Russia. But I've heard her mother is Japanese.
+Maria is from Russia, but I've heard her mother is Japanese.
 She's got that stoic aura about her, and gorgeous blond hair. Wish I was that cool...
 (Th-there's even a photo of Maria? Is it really okay to be selling photos of a secret combat squad like this?)
 (Well, I guess I could get it since I'm already here.)
 That's a photo of Kohran Li. That'll be 50 zeni.
-Kohran...Li? Is she Chinese?
+Kohran... Li? Is she Chinese?
 Yes, she was born in China. She's a brilliant scientist.
 You'd like to buy that? Thank you!
 Kohran's always joking around. She's so funny!
 I believe she's at the Hanayashiki branch in Asakusa right now.
-(Hmm...she's wearing a Chinese dress.)
+(Hmm... she's wearing a Chinese dress.)
 (Guess I could get it for now.)
 That's a photo of Kanna Kirishima. That'll be 50 zeni.
-Kanna...Kirishima?
+Kanna... Kirishima?
 She's very popular with children. Right now, she's in her hometown in Okinawa.
 Hmm...
 You'd like to buy that? Thank you!
@@ -822,21 +822,21 @@ I hadn't realized...
 Thank you for sharing that with me, Iris. Now I know a little more about you.
 Uh-huh! Next time, you should tell me something about yourself, Uncle Ichi!
 What is it, Uncle Ichi? Didn't you want to ask me something?
-Huh?...Oh, sorry. I blanked out for a second.
+Huh?... Oh, sorry. I blanked out for a second.
 You're acting so odd. Are you okay?
 (What adorable clothes. She looks like a doll.)
 Doesn't this dress look good on me? I have lots of fancy clothes.
 (What adorable clothes. She looks like a doll.)
 Uncle Ichi, do you remember my bear's name?
-John Paul? <br>Jumper? <br>Jean-Paul?
-Umm...it's John Paul, right?
+Jean Pierre? <br>Jumper? <br>Jean-Paul?
+Umm... it's Jean Pierre, right?
 Noo! It's Jean-Paul! Jean-Paul!
 S-sorry. I forgot.
 ...You better remember. He's my very best friend.
 He's a bear, not a sweater! And his name is Jean-Paul!
 S-sorry. I forgot.
 ...You better remember. He's my very best friend.
-I remember. It's Jean-Paul, isn't it.
+I remember. It's Jean-Paul, isn't it?
 Yaay! Uncle Ichi, you really remembered!
 Of course. He's your very best friend.
 Thank you, Uncle Ichi...I'm so happy you remembered.
@@ -850,7 +850,7 @@ Isn't this ribbon sooo cute? It's my favorite!
 (She has beautiful blond hair.)
 You know, tying up this ribbon all nice is hard.
 (Such pretty blue eyes...)
-Uncle Ichi...if you keep looking into my eyes like that, I'm gonna get embarrassed...
+Uncle Ichi... if you keep looking into my eyes like that, I'm gonna get embarrassed...
 (Such pretty blue eyes...)
 Do you know where everyone else is?
 Sumire is upstairs. Sakura went to go get her.
@@ -864,20 +864,20 @@ Uncle Ichi, what are you looking at? You should talk to me!
 Uncle Ichi, what are you looking at? You should talk to me!
 Uncle Ichi, what are you looking at? Are you bored of talking to me?!
 Uncle Ichi, what are you looking at? You should talk to me!
-This is...a library? Huh...it sure is cozy.
+This is... a library? Huh...it sure is cozy.
 ...Seems there's no one here. Better head somewhere else.
 The library. Maybe I should drop by at night and see what sort of books they have here.
 ...Seems there's no one here. Better head somewhere else.
 The library. Maybe I should drop by at night and see what sort of books they have here.
 ...Seems there's no one here. Better head somewhere else.
-This is...a library? Huh...it sure is cozy.
+This is... a library? Huh...it sure is cozy.
 Sumireee...oh, Ogami.
 Hey, Sakura. Did you find Sumire?
 No, not yet...Where on earth could she be?
 Well, I need to hurry. Please excuse me, Ogami.
 Looks like Sakura's having a hard time, too...
 Hey, Sakura. Are you looking for Sumire?
-Yes, I am...Where on earth could she be?
+Yes, I am... Where on earth could she be?
 Well, I need to hurry. Please excuse me, Ogami.
 Looks like Sakura's having a hard time, too...
 I'd better check somewhere else...
@@ -908,7 +908,7 @@ Please tell me...what is my true role in the Imperial Combat Revue?!
 You had best ask Director Yoneda directly regarding that matter.
 Maria...
 Maria, would you tell me a little about yourself?
-...?
+Yes...?
 As captain of the Imperial Combat Revue, I'd like to know how a woman such as yourself came to be here.
 ...I don't believe there's any need for me to answer that.
 In any case, I hardly acknowledge you to be the captain as it is.
@@ -920,7 +920,7 @@ The stage, set room, and prop room are all off-limits. Take care not to enter.
 G-got it.
 The play is about to begin, so this area is off-limits. Please keep your distance, Ensign.
 The stage, set room, and prop room are all off-limits. Take care not to enter.
-(It's hard to tell through her clothes, but...that's a fine-looking chest.)
+(It's hard to tell through her clothes, but... that's a fine-looking chest.)
 Just what are you looking at, Ensign?
 N-nothing...
 I had heard that you were an excellent soldier...
@@ -936,10 +936,10 @@ Ensign, you ought to look someone in the eye when you're speaking to them.
 What's with this room? There's a futon or something laid out.
 Oh, this must be the night-duty room. We had one in the navy, too.
 This looks like a night-duty room. Whoever is on night watch duty stands guard from here.
-There's so many outfits...this must be the wardrobe room.
-Could these be disguises for a secret squadron?...No. These are just costumes, no matter how I look at them.
+There's so many outfits... this must be the wardrobe room.
+Could these be disguises for a secret squadron? ...No. These are just costumes, no matter how I look at them.
 The wardrobe room. All the clothes here are for women.
-So this is the dining hall...I suppose it's normally for the patrons' use.
+So this is the dining hall... I suppose it's normally for the patrons' use.
 The dining hall.
 Is this the kitchen? No, at this scale it's more like a galley.
 The galley. There's an irresistible smell coming from the soup simmering on the stove.
@@ -948,7 +948,7 @@ It's the theater's entryway. A steady stream of patrons is flooding inside.
 So this is the theater's auditorium...what a magnificent structure!
 The auditorium. Patrons are beginning to trickle in.
 This is the second-floor hallway. There's a fair amount of patrons here, too.
-Wow...this theater has two floors' worth of audience seating?
+Wow... this theater has two floors' worth of audience seating?
 You can see the entire stage from here. These are some really great seats.
 These are the second-floor audience seats. What a fantastic view!
 Wow, this is spacious. It's even got a desk. This is a pretty nice room.
@@ -975,7 +975,7 @@ It's the mystery room.
 What beautiful weather. Looking out from here, the capital's springtime scenery appears quite tranquil.
 ...
 The weather looks great today.
-...Um...Are you Ensign Ichiro Ogami?
+...Um... Are you Ensign Ichiro Ogami?
 I'm Sakura Shinguji.
 Lieutenant General Yoneda has tasked me with being your escort.
 Yes, ma'am!
@@ -1002,9 +1002,9 @@ I'm Iris. I'm in the Imperial Revue too, in the Flower Division.
 And this bear here is Jean-Paul. He's my very best friend, so you better be nice to him.
 Untranslated
 What's wrong?
-This man has spiritual energy too……  He'll be fighting in a 'Koubu,' won't he.
+This man has spiritual energy too!  He'll be fighting in a 'Koubu,' won't he.
 Untranslated
-I…… don't like it when people fight……
+I don't like it when people fight!
 Untranslated
 Untranslated
 Untranslated
@@ -1017,8 +1017,8 @@ I seem to have dropped my fork. I don't suppose you could pick it up and fetch m
 Well then, do you expect me to pick it up myself?
 I'll have you know I'm the sole heir to Kanzaki Heavy Industries and the leading star of this theater! And furthermore...
 The queen of Japanese high society, Sumire Kanzaki! Now pick up my fork from the floor!
-How very dare you! You're fired! You'll be sent packing as soon as I've reported you to the director!
-Oh! ...Oh dear me...Ohohohoho....
+How dare you! You're fired! You'll be sent packing as soon as I've reported you to the director!
+Oh! ...Oh dear me... Ohohohoho....
 No wonder you made such a strange waiter...So terribly sorry.
 Untranslated
 Untranslated
@@ -1028,7 +1028,7 @@ Untranslated
 My thanks. By the way, I happen to be Sumire Kanzaki, the top star of this theater.
 Although somehow or other, Maria ended up as the leader of our opera troupe. What do you think of that?
 Honestly, that old fart Yoneda has no eye for talent!
-Oh my, what shall I do!  How rude of me.  Hahaha……
+Oh my, what shall I do!  How rude of me.  Ohohoho!
 Let's just keep what I said just now a secret from Mr. Yoneda!  Is that clear?  (Mwa!)
 Untranslated
 Untranslated
@@ -1052,7 +1052,7 @@ Untranslated
 Untranslated
 Untranslated
 Untranslated
-That is what you're saying! <br> But you know, Ogami……
+That is what you're saying! <br> But you know, Ogami?
 Untranslated
 Untranslated
 So, what's wrong with being the manager of a theater!
@@ -1068,8 +1068,8 @@ Untranslated
 Ah, Ogami, welcome! What can I do for you?
 I hope I was able to be of service. Thank you very much for coming by!
 Uwah!
-Ah, hello?...Yes yes, hello.
-Yes, he's here...just a little while ago. Well, I'm going to wait a bit longer, see how things shake out...
+Ah, hello?... Yes yes, hello.
+Yes, he's here... just a little while ago. Well, I'm going to wait a bit longer, see how things shake out...
 But you know, Hanakoji...the matter of this secret corps is a tough pill to swallow.
 We drive these girls onto the battlefield, while all we can do is sit back and watch. As an Imperial soldier, well...it's humiliating.
 And yet, right now they are the only ones who can operate the Koubu.
@@ -1104,7 +1104,7 @@ The battle against these enemies has just begun, so don't get too carried away..
 Untranslated
 Untranslated
 Untranslated
-Y'know...I like you an awful lot, Uncle Ichi.
+Y'know... I like you an awful lot, Uncle Ichi.
 I'll let you be my boyfriend, so don't go cheating on me!
 Chug it, chug it all down! Ogami! You're on ticket duty again tomorrow!
 Ahahaha...
@@ -1134,7 +1134,7 @@ It's fine, Ogami. Don't worry yourself over it.
 Nice to meet you. You're Ogami, right? I'm Kasumi Fujii, the theater's office manager.
 I'm sorry to impose, but would you mind coming with me to the secretary's office to fill out some new-hire forms?
 I'm afraid it's regulation, but it shouldn't take too long. I hope you understand.
-Um...did you hear me, Ogami?
+Um... did you hear me, Ogami?
 Then I'll guide you there. This way, please.
 If you wouldn't mind, please fill out these forms for me.
 Yes, that's fine. Thanks very much.
@@ -1142,6 +1142,6 @@ Untranslated
 Untranslated
 S-stop...just what's gotten into you?
 I'm looking forward to working with you again, Ogami!
-Huu, huhuhu...Come on, Ensiiign, let'sh keep drinking!
+Huu, huhuhu... Come on, Ensiiign, let'sh keep drinking!
 Guess whooo~?
 Untranslated

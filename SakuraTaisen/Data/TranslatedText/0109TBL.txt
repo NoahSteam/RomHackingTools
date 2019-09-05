@@ -9,7 +9,7 @@ It's Maria's gun. I wonder if I can use it to escape?
 It's a cute flower-shaped hairpin.
 It's a beautiful, finely-crafted brooch.
 A hairpin that looks best with traditional Japanese clothing and hairstyles.
-It's Jean Paul, Iris's beloved teddy bear.
+It's Jean-Paul, Iris' beloved teddy bear.
 This key will let me enter rooms I couldn't before.
 I found this in a bedroom on the second floor. I can use it to access the back room.
 This is the cup Iris asked for. It's a cute little thing.
@@ -379,7 +379,7 @@ Sure, I'll help you clean again!
 You will? Great! Let's get to work!
 (Cleaning with Sakura was intense but enjoyable...)
 (Exhausting but fun...)
-...? What's wrong, Ogami?
+Hmm...? What's wrong, Ogami?
 Nothing. I was just thinking about all the fun we had.
 Hehe. It's only cleaning, Ogami. No big deal.
 Well, Sakura, I guess I'll be going...
@@ -390,7 +390,7 @@ Hey, boss. I appreciate you comin' to see me and all,
 but I'm about to take a nap. Sorry...
 You are? Okay, I'll come back later.
 Hey, Kanna? It's me...
-.........
+......
 She's probably fast asleep. No sense in waking her up.
 Hi, Kanna.
 Hey, boss! Good to see you!
@@ -441,7 +441,7 @@ Sure, I'll help you.
 Excellent! Come with me to the kitchen.
 Let's try making borscht. Focus, sir!
 Let's make borscht again. I'll try to do a better job this time.
-Heheh! Very well. We'll give it another shot.
+Heh, very well. We'll give it another shot.
 Say, Maria, you looked cute in that apron...
 S-sir! Please don't tease me!
 Heh! It's nothing to be embarrassed about.
@@ -477,7 +477,7 @@ That's the spirit! Game on!
 ...What's wrong, Ogami?
 Oh, uh, um... Nothing. Hahaha!
 Bye, Kohran. I'll come back later.
-Okie dokie! Let's play Hanafuda again sometime!
+Alrighty! Let's play Hanafuda again sometime!
 Where should I go next?
 Hi, Iris. I came to spend time with you.
 Wow, you sure look tired...
@@ -552,7 +552,7 @@ Where did you first meet Sakura?
 Shiba Park <br> Ueno Park <br> Hibiya Park
 What type of flower was on the wallpaper in Episode Two?
 Lily <br> Lily of the Valley <br> Morning Glory
-What's the name of Sakura's Special Attack? If you can't get this you're a failure as her captain.
+What's the name of Sakura's Special Attack? If you can't get this, you're a failure as her captain.
 Mocha Hoshin <br> Ouka Hoshin <br> Hoka Oshin
 What was Maria's old code name?
 Accessory <br> Calamity Jane <br> Cassowary

@@ -1878,9 +1878,10 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 #define ConditionallyAddNewLine()\
 	if( word.size() + charCount > maxCharsPerLine )\
 	{\
-		if( bIsLipsEntry )\
+		if( bIsLipsEntry && !bAlreadyShowedError )\
 		{\
-			printf("LIPS line is too long.  Needs to be a max of %i characters long. %s\n", maxCharsPerLine, textLine.mFullLine.c_str());\
+			printf("LIPS line is too long[D].  Needs to be a max of %i characters long. %s\n", maxCharsPerLine, textLine.mFullLine.c_str());\
+			bAlreadyShowedError = true;\
 		}\
 		else\
 		{\
@@ -1914,7 +1915,7 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 	//Insert text
 	for(const SakuraTextFile& sakuraFile : sakuraTextFiles)
 	{
-		printf("Inserting text for: %s\n", sakuraFile.mFileNameInfo.mFileName.c_str());
+		printf("\nInserting text for: %s\n", sakuraFile.mFileNameInfo.mFileName.c_str());
 
 		const bool bIsMESFile = sakuraFile.mFileNameInfo.mFileName.find("MES.BIN", 0, 6) != string::npos;
 
@@ -2026,9 +2027,10 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 			for(size_t translatedLineIndex = 0; translatedLineIndex < numTranslatedLines; ++translatedLineIndex)
 			{	
 				const TextFileData::TextLine& textLine = translatedFile.mLines[translatedLineIndex];
-				int charCount         = 0;
-				int currLine          = 1;
-				const size_t numWords = textLine.mWords.size();
+				int charCount            = 0;
+				int currLine             = 1;
+				const size_t numWords    = textLine.mWords.size();
+				bool bAlreadyShowedError = false;
 				SakuraString translatedString;
 
 				//Figure out if this is a lips entry
@@ -2043,7 +2045,7 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 				{
 					if( textLine.GetNumberOfLines() != sakuraFile.mLines[currSakuraStringIndex].GetNumberOfLines() )
 					{
-						printf("LIPS ERROR - Translated LIPS line does not have expected number of options. Expected: %i, Has: %i (File: %s Line: %u)\n", sakuraFile.mLines[currSakuraStringIndex].GetNumberOfLines(), textLine.GetNumberOfLines(), sakuraFile.mFileNameInfo.mFileName.c_str(), currSakuraStringIndex);
+						printf("LIPS ERROR - Translated LIPS line does not have expected number of options. Expected: %i, Has: %i (File: %s Line: %u)\n", sakuraFile.mLines[currSakuraStringIndex].GetNumberOfLines(), textLine.GetNumberOfLines(), sakuraFile.mFileNameInfo.mFileName.c_str(), currSakuraStringIndex + 1);
 					}
 				}
 
@@ -2138,7 +2140,7 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 						{
 							if( bIsLipsEntry )
 							{
-								printf("LIPS line is too long.  Needs to be a max of %i characters long. %s\n", maxCharsPerLine, textLine.mFullLine.c_str());
+								printf("LIPS line is too long[A].  Needs to be a max of %i characters long. %s\n", maxCharsPerLine, textLine.mFullLine.c_str());
 								//break;
 							}
 							else
@@ -2168,9 +2170,10 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 					const size_t numLettersInWord = bNewLineWord ? 1 : word.size();
 					if( word.size() + charCount > maxCharsPerLine )
 					{
-						if( bIsLipsEntry )
+						if( bIsLipsEntry && !bAlreadyShowedError )
 						{
-							printf("LIPS line is too long.  Needs to be a max of %i characters long. %s\n", maxCharsPerLine, textLine.mFullLine.c_str());
+							printf("LIPS line is too long [B].  Needs to be a max of %i characters long. %s\n", maxCharsPerLine, textLine.mFullLine.c_str());
+							bAlreadyShowedError = true;
 						//	break;
 						}
 						else
@@ -2208,9 +2211,10 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 							{
 								if( charCount + 1 >= maxCharsPerLine )
 								{
-									if( bIsLipsEntry )
+									if( bIsLipsEntry && !bAlreadyShowedError )
 									{
-										printf("LIPS line is too long.  Needs to be a max of %i characters long. %s\n", maxCharsPerLine, textLine.mFullLine.c_str());
+										printf("LIPS line is too long[C].  Needs to be a max of %i characters long. %s\n", maxCharsPerLine, textLine.mFullLine.c_str());
+										bAlreadyShowedError = true;
 								//		break;
 									}
 									else
@@ -7649,19 +7653,20 @@ bool PatchMiniGames(const string& rootSakuraDirectory, const string& patchedSaku
 		unsigned int option2Offset;
 		unsigned int timeImageOffset;
 		unsigned int secondsImageOffset;
+		unsigned int pauseImageOffset;
 	};
 
 	const int numMiniGameFiles = 8;
 	MiniGameFileOffsets miniGameOption1Offsets[numMiniGameFiles] = 
 	{
-		"HANAMAIN.BIN", 0x00014688, 0x00013c08, 0x00016628, 0x000165a8,
-		"MINICOOK.BIN", 0x000124bc, 0x00011a3c, 0x0001445c, 0x000143dc,
-		"MINIHANA.BIN", 0x000124bc, 0x00011a3c, 0x0001445c, 0x000143dc,
-		"MINIMAIG.BIN", 0x000124bc, 0x00011a3c, 0x0001445c, 0x000143dc,
-		"MINISHOT.BIN", 0x000124bc, 0x00011a3c, 0x0001445c, 0x000143dc,
-		"MINISLOT.BIN", 0x000124bc, 0x00011a3c, 0x0001445c, 0x000143dc,
-		"MINISOJI.BIN", 0x000124bc, 0x00011a3c, 0x0001445c, 0x000143dc,
-		"MINISWIM.BIN", 0x000124bc, 0x00011a3c, 0x0001445c, 0x000143dc,
+		"HANAMAIN.BIN", 0x00014688, 0x00013c08, 0x00016628, 0x000165a8, 0x00015508,
+		"MINICOOK.BIN", 0x000124bc, 0x00011a3c, 0x0001445c, 0x000143dc, 0x0001333c,
+		"MINIHANA.BIN", 0x000124bc, 0x00011a3c, 0x0001445c, 0x000143dc, 0x0001333c,
+		"MINIMAIG.BIN", 0x000124bc, 0x00011a3c, 0x0001445c, 0x000143dc, 0x0001333c,
+		"MINISHOT.BIN", 0x000124bc, 0x00011a3c, 0x0001445c, 0x000143dc, 0x0001333c,
+		"MINISLOT.BIN", 0x000124bc, 0x00011a3c, 0x0001445c, 0x000143dc, 0x0001333c,
+		"MINISOJI.BIN", 0x000124bc, 0x00011a3c, 0x0001445c, 0x000143dc, 0x0001333c,
+		"MINISWIM.BIN", 0x000124bc, 0x00011a3c, 0x0001445c, 0x000143dc, 0x0001333c,
 	};
 
 	//Patch common data among all mini games

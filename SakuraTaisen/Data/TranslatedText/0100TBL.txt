@@ -9,7 +9,7 @@ Maria's pistol. This may help me escape from here…
 A hair ornament. It's decorated with flowers and looks very elegant.
 A brooch. It's a beautiful piece of delicate craftsmanship.
 A hairpin for use in a traditional bun hairstyle. It would complement a formal outfit well.
-Jean Paul the teddy bear. Iris's best friend. She always carries him with her and takes good care of him.
+Jean-Paul the teddy bear. Iris's best friend. She always carries him with her and takes good care of him.
 This key will allow me to enter rooms I couldn't get into before.
 I found this in a bedroom on the second floor. Now I can get into the room at the back.
 A teacup Iris asked me to get for her. It has a very stylish design.
@@ -24,20 +24,20 @@ A photo of Maria during a performance of "All For Love." Even in a man's uniform
 A photo of Kanna in her training gear. Catching her in a private moment like this feels surprisingly intimate.
 A photo of Iris in her swimsuit. She's holding a rubber ring and looks ready to have some fun. How cute.
 A photo of Kohran. I don't get to see her with her braids undone very often. It's a nice look.
-A photo of Ayame in a traditional outfit. I hope she'll always be as happy and content as she is here.
+A photo of Ayame in a traditional outfit. I hope she'll always be as happy and carefree as she is here.
 Ayame's gun. Why…? Why did it have to turn out like this…?
 Nothing I can do here. I'd better check somewhere else…
 There's no one here. I'd better check somewhere else…
 I'd better check somewhere else…
 I'm not making any progress here. Maybe I should go to the manager's office and talk to Lt. Gen. Yoneda.
 The more I wander around this place, the more it seems like a normal theater…
-Imperial Navy Ensign Ogami-san Ichiro:
-As part of a special mission, you are hereby ordered to take up a new post as captain of the following corps:
+Imperial Navy Ensign Ichiro Ogami:
+As part of a special mission, you are hereby ordered to take up a new post as captain of the following brigade:
 'The Imperial Combat Revue, Anti-Demon Interception Squad, Flower Division.'
 Furthermore, your mission is a highly-classified one for the sake of the defense of the capital.
-You are to head to Ueno Park to join up with the corps. 
+You are to head to Ueno Park to join up with the troupe. 
 Imperial Army Lieutenant General. <br> <sp> <sp> <sp> <sp> <sp> <sp> <sp> ~Yoneda Ikki
-……Ogami Ichiro.  As of today, you will be transferring to the Imperial Combat Revue, Flower Division.
+……Ichiro Ogami.  As of today, you will be transferring to the Imperial Combat Revue, Flower Division.
 Yes, sir!  Ichiro Ogami, prepared to work to the utmost limits of my abilities, sir!
 Yes……  Excellent reply.
 A politician such as myself can not discuss the military secrets of the Combat Revue with you here.
@@ -49,7 +49,7 @@ Yes, sir!
 Ah, what nice weather!  And the Ueno cherry blossoms are in full bloom.
 Now then…… Where do you suppose the meeting place is……? I guess I'll try walking around a bit more.
 That reminds me……  I believe Ueno Park was where that monster disturbance happened just a while ago……
-Apparently, the one who cut down that monster, with one blow, was a young girl……
+Apparently, the one who cut down that monster in a single blow was a young girl……
 ……………………
 He said someone from the Imperial Combat Revue would come to meet me; when do you suppose they'll show up?
 What's this?  That girl……
@@ -66,7 +66,7 @@ Ah, n-no……  It's not that……
 Eh - theater…… you say!?
 I'm on duty! <br> First tell me more about you.
 I'm on duty! Sorry, but I don't have time to see a play right now.
-Ehh!?  The base of a covert squad is inside a theater!?  That can't be……  No, wait a second?
+Ehh!?  The base of a covert squad is inside a theater!?  That can't be……  No, wait a second...
 In order to conceal oneself from the enemy's eyes, first do so from one's allies.  I see.
 First I'd like to know more about you.
 I see - that's an excellent attitude.  I'm relieved to hear those words.  That is how a member of a secret corps should be.
@@ -80,8 +80,8 @@ O-oh, no!  It-it's nothing!
 Ye-yes!  If you would, please.
 So this is the Grand Imperial Theater that was newly built last year…..  I never would have expected it to be right in the middle of Ginza……
 It's a big building……
-Surely, no one would notice that the headquarters of a covert squad are inside a theater like this……
-Wow……  What an impressive entrance way.  Still, it seems a bit careless not to have a lookout posted……
+Surely, no one would notice that the headquarters of a covert squad is inside a theater like this……
+Wow……  What an impressive entryway.  Still, it seems a bit careless not to have a lookout posted……
 Still…… it's rather quiet, isn't it.
 (Performing at night? <br> ……Does she mean nighttime drills?)
 Huh!?
@@ -99,7 +99,7 @@ Why should I have to do that? <br> Why, certainly.
 Why should I have to do such a thing……?  I refuse!
 In the first place, that's no way to make a request of someone!
 ……I happen to be Imperial Navy Ensign Ichiro Ogami, transferred as of today to the Imperial Combat Revue.
-Fired you may say, but without a decree from the Navy's General Headquarters, I cannot leave.
+You can say 'fired' all you like, but without a decree from the Navy's General Headquarters, I cannot leave.
 …………!
 ……Hello, I'm Ogami. Um, where might Lieutenant General Yoneda be?
 Through this way? <br> Thank you very much.
@@ -117,7 +117,7 @@ In the first place, that's no way to make a request of someone!
 (Haah?)
 (That's all well and good for her to say all of a sudden, but…… just who is this woman!?)
 I happen to be Imperial Navy Ensign Ichiro Ogami, transferred as of today to the Imperial Floral Assault Group.
-Fired you may say, but without a decree from the Navy's General Headquarters, I cannot leave.
+You can say 'fired' all you like, but without a decree from the Navy's General Headquarters, I cannot leave.
 …………!
 ……Hello, I'm Ogami. Um, where might Lieutenant General Yoneda be?
 Through this way? <br> Thank you very much.
@@ -139,7 +139,7 @@ Ah…… N- no!
 (What lovely green eyes…)
 She has such a grave expression……
 (…Glorious…)
-(Yes. … … Big … …)
+(My. … … Impressive … …)
 ……
 ……Excuse me!!
 As of 12:00 today, Imperial Navy Ensign Ichiro Ogami, newly transferred to the Imperial Combat Revue,
@@ -159,7 +159,7 @@ For the harmony and safety of the citizens of Teito…… I intend to fight with my 
 I see…… So I'll be in disguise for this mission. That's just what I'd expect of a covert squad!
 Understood! Ichiro Ogami, now proceeding to duty!
 Yes, sir!
-Ah, Mr. Ohgami……
+Ah, Mr. Ogami……
 Ah…… he's spotted us.
 Sakura and…… Iris, was it? What are you doing here?
 Look, Sakura. This is why I said "we'd better run!"
@@ -177,7 +177,7 @@ Wa- wait, Iris! I guess I said a little much. I'm sorry.
 Sniff…… But, aren't you…… angry at me?
 Ahh, dang it…… <br> Iris, don't cry. I'm not angry……
 E-heh-heh, thanks. You're real nice, huh.
-……That Iris. Tricking us with crocodile tears…… What nerve.
+……That Iris. Tricking us with crocodile tears…… Of all the nerve.
 By the way, I'm sure you two would know, but……
 Could you tell me the way to the reception desk, I wonder? It's my first duty here.
 …I may have gone to far, but it's a lesson she needs to learn…
@@ -222,9 +222,9 @@ I-I see. I'd best be going, then…Go ahead, Iris…
 C'mon, Uncle Ichi! Follow me!
 Sakura, can I ask you to take me? My apologies for making you show me around all day…
 It's no trouble at all. Shall we get going?
-Well, hmf! I don't care about you anymore! So long, bye-bye!
+Well, hmph! I don't care about you anymore! So long, bye-bye!
 Ogami…Iris left her parents behind in France and is staying here alone.
-She tries to be strong, but she's really lonely.
+She tries to be strong, but she's actually quite lonely.
 So…please be kind to her, all right?
 I hadn't realized…
 Well, I'll show you to the reception desk. Come on, let's go.
@@ -232,7 +232,7 @@ Now, both of you, don't fight. Let's all go together. ……You wouldn't have any pr
 ……Mm.
 I'm sorry, Iris. I was being immature too.
 No, it's all right. I'm happy as long as we're all together.
-Ha-ha-ha, well looks like I've got a lady on either arm. Well then, lead the way, if you would.
+Ha-ha-ha, well looks like I've got a lady on each arm. Well then, lead the way, if you would.
 (Things look like they could get disastrous if I say the wrong thing…… I guess I'll just keep quiet.)
 Here, now! What are you making a fuss about in front of the manager's office!?
 Ah…… you're-! The one from earlier……
@@ -248,7 +248,7 @@ Ogami, this is the reception desk.
 I see. You really helped me out by showing me the way.
 The ticket punch should be inside the desk. I have practice, so I'll be going now…
 Ah…Wait a minute, Sakura…
-What job am I supposed to do? <br> Uhh the ticket punch?? <br> Good luck with your practice!
+What job am I supposed to do? <br> Uhh, the ticket puncher? <br> Good luck with your practice!
 …By the way, what kind of work am I supposed to be doing here?
 What? Didn't you hear from Manager Yoneda?
 He told me that the new captain was going to do the ticket punching.
@@ -269,7 +269,7 @@ Excuse me, young man. How long do you expect us to wait? You'd better hurry up a
 Today Sumire has the lead role in "Evening of the Camellia Princess." Hurry up!
 W-what do you mean? I'm not in charge of tickets!
 But here you are, wearing a ticket puncher's outfit. And aren't those the ticket punchers?
-Ee!? Can it be……that this is my secret duty……
+Ehh!? Can it be……that this is my secret duty……
 In charge of punching tickets!? Th-that's insane!
 Good luck with your practice, Sakura! …Although I don't know what kind of practice it is.
 Thank you! I hope your ticket punching goes well too, Ogami!
@@ -279,7 +279,7 @@ Uncle Ichi, here's the reception desk.
 Thank you. You really helped out by bringing me here.
 I've gotta go practice now. Look, here's the ticket punchers. Bye-bye, Uncle Ichi.
 Ah…Wait a minute, Iris…
-What job am I supposed to do? <br> Uhhh… ticket punchers?? <br> Good luck with your practice!
+What job am I supposed to do? <br> Uhhh… ticket punching? <br> Good luck with your practice!
 …By the way, what kind of work am I supposed to be doing here?
 I dunno. Old man Yoneda said something about "punching tickets."
 I guess he meant snip-snipping the tickets for the guests?
@@ -300,14 +300,14 @@ Excuse me, young man. How long do you expect us to wait? You'd better hurry up a
 Today Sumire has the lead role in "Evening of the Camellia Princess." Hurry up!
 Wh-what are you talking about? I'm not in charge of the tickets.
 But here you are, wearing a ticket puncher's outfit. And aren't those the ticket punchers?
-Ee!? Can it be……that this is my secret duty……
+Ehh!? Can it be……that this is my secret duty……
 In charge of punching tickets!? Th-that's insane!
 Ogami, this is the reception desk.
 I see. You really helped out by bringing me here.
 Uncle Ichi, the ticket punchers are inside the desk! Well, Sakura, let's go!
 You're right, Iris. Ogami, we have practice, so… please excuse us.
 Ah……wait a second, you two…… 
-What job am I supposed to do? <br> Uhhh… ticket punchers?? <br> Good luck with your practice!
+What job am I supposed to do? <br> Uhhh… ticket punching? <br> Good luck with your practice!
 Aww…They're both gone.
 …By the way, what kind of work am I supposed to be doing here?
 What? Didn't you hear from Manager Yoneda?
@@ -331,7 +331,7 @@ Hey, sir. How long are you going to keep us waiting? Hurry up and punch my ticke
 Today Sumire has the lead role in "Evening of the Camellia Princess." Hurry up!
 Wh-what's with these people? I'm not in charge of the tickets.
 But here you are, wearing a ticket puncher's outfit. And aren't those the ticket punchers?
-Ee!? Can it be……that this is my secret duty……
+Ehh!? Can it be……that this is my secret duty……
 In charge of punching tickets!? Th-that's insane!
 You two, good luck with your practice! ……Though I don't know what sort of practice it's supposed to be.
 Thanks, Uncle Ichi. You should come by later and see, too!
@@ -374,7 +374,7 @@ Excuse me, young man. How long do you expect us to wait? You'd better hurry up a
 Today Sumire has the lead role in "Evening of the Camellia Princess." Hurry up!
 Wh-what's with these people? I'm not in charge of the tickets!
 But here you are, wearing a ticket puncher's outfit. And aren't those the ticket punchers?
-Ee!? Can it be……that this is my secret duty……
+Ehh!? Can it be……that this is my secret duty……
 In charge of punching tickets!? Th-that's insane!
 Hey, ticket puncher. How long are you going to keep us waiting? Hurry up and punch my ticket!
 Y-yes. Umm…… where do I punch the hole?
@@ -405,8 +405,8 @@ Oh yeah! Um…… Could you possibly deliver this letter to Sumire for me?
 Just tell her it's from a huge fan of hers. Please!
 Y-yes sir…… understood.
 No, I don't care for her very much……
-What did you say!? You don't understand that grace and elegance of hers!?
-To think someone like you is working in this theater…… How deplorable a situation!
+What did you say!? You don't appreciate her grace and elegance!?
+To think someone like you is working in this theater…… How deplorable!
 (I think the fact that an Ensign of the Imperial Navy is punching tickets in a theater is pretty deplorable, too……)
 I'm terribly sorry. I can't answer such questions.
 ……I see. Forgive me……
@@ -512,10 +512,10 @@ And on top of that, <br> a drunken old man……
 And that's what you don't like.
 That is what you're saying! <br> But you know, Ogami……
 No matter how much distinguished military service I've performed and how many medals hang from my chest, I've killed a whole lot of people.
-Both enemies and allies…… <br> I've killed far too many.
-So, what's wrong with being the manager of a theater!
+Enemies and allies alike…… <br> I've killed far too many.
+So, what's wrong with being the manager of a theater?
 Splendid! Er, rather…… that's just splendid indeed! Now then, here's your first duty!
-Why, you're a real uncivil fellow, aren't you. Well, no matter. Now then, here's your first duty!
+Why, you're a real uncivil fellow, aren't you? Well, no matter. Now then, here's your first duty!
 Untranslated
 Untranslated
 Untranslated
@@ -583,7 +583,7 @@ I'm Tsubaki Takamura. I'm always working at the gift shop here.
 I've got photos of all the group members here, so please stop by to visit anytime!
 Untranslated
 Come again!
-Ohh goshhh, I was only joking!
+Ohh gosh~, I was only joking!
 Hee hee. Thanks, Ogami.
 Oh, okay then. I got it!
 Hee hee. You're a hoot, Ogami!
