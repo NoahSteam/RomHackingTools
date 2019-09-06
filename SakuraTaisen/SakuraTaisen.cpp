@@ -7647,11 +7647,11 @@ bool PatchMiniGames(const string& rootSakuraDirectory, const string& patchedSaku
 	}
 
 	//Open translated N\A image
-	const string secondsImageFileName = inTranslatedDataDirectory + "MiniGameNAPatched.bmp";
-	BmpToSakuraConverter patchedSecondsImage;
-	if (!patchedSecondsImage.ConvertBmpToSakuraFormat(secondsImageFileName, false))
+	const string naImageFileName = inTranslatedDataDirectory + "MiniGameNAPatched.bmp";
+	BmpToSakuraConverter naImage;
+	if (!naImage.ConvertBmpToSakuraFormat(naImageFileName, false))
 	{
-		printf("PatchMiniGames: Couldn't convert image: %s.\n", secondsImageFileName.c_str());
+		printf("PatchMiniGames: Couldn't convert image: %s.\n", naImageFileName.c_str());
 		return false;
 	}
 	struct MiniGameFileOffsets
@@ -7661,7 +7661,7 @@ bool PatchMiniGames(const string& rootSakuraDirectory, const string& patchedSaku
 		unsigned int option2Offset;
 		unsigned int timeImageOffset;
 		unsigned int secondsImageOffset;
-		unsigned int pauseImageOffset;
+		unsigned int notAvailableImageOffset;
 	};
 
 	const int numMiniGameFiles = 8;
@@ -7692,10 +7692,11 @@ bool PatchMiniGames(const string& rootSakuraDirectory, const string& patchedSaku
 			return false;
 		}
 
-		miniGameFile.WriteData(miniGameOption1Offsets[miniGameIndex].option1Offset,      patchedOption1.GetImageData(),      patchedOption1.GetImageDataSize());
-		miniGameFile.WriteData(miniGameOption1Offsets[miniGameIndex].option2Offset,      patchedOption2.GetImageData(),      patchedOption2.GetImageDataSize());
-		miniGameFile.WriteData(miniGameOption1Offsets[miniGameIndex].timeImageOffset,    patchedTimeImage.GetImageData(),    patchedTimeImage.GetImageDataSize());
-		miniGameFile.WriteData(miniGameOption1Offsets[miniGameIndex].secondsImageOffset, patchedSecondsImage.GetImageData(), patchedSecondsImage.GetImageDataSize());
+		miniGameFile.WriteData(miniGameOption1Offsets[miniGameIndex].option1Offset,           patchedOption1.GetImageData(),      patchedOption1.GetImageDataSize());
+		miniGameFile.WriteData(miniGameOption1Offsets[miniGameIndex].option2Offset,           patchedOption2.GetImageData(),      patchedOption2.GetImageDataSize());
+		miniGameFile.WriteData(miniGameOption1Offsets[miniGameIndex].timeImageOffset,         patchedTimeImage.GetImageData(),    patchedTimeImage.GetImageDataSize());
+		miniGameFile.WriteData(miniGameOption1Offsets[miniGameIndex].secondsImageOffset,      patchedSecondsImage.GetImageData(), patchedSecondsImage.GetImageDataSize());
+		miniGameFile.WriteData(miniGameOption1Offsets[miniGameIndex].notAvailableImageOffset, naImage.GetImageData(),             naImage.GetImageDataSize());
 	}
 
 	bool bResult = PatchMiniSwim(patchedSakuraDirectory, inTranslatedDataDirectory);
