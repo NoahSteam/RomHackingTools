@@ -1176,6 +1176,12 @@ struct MiniGameSakuraText
 
 	void DumpTextImages(const SakuraFontSheet& inFontSheet, const PaletteData& inPaletteData, const string& outputDirectory)
 	{
+		const string pngDir = outputDirectory + "\\png\\";
+		const string bmpDir = outputDirectory + "\\bmp\\";
+		CreateDirectoryHelper(outputDirectory);
+		CreateDirectoryHelper(pngDir);
+		CreateDirectoryHelper(bmpDir);
+
 		const string extension(".bmp");
 
 		//Dump out the dialog for each line
@@ -1219,7 +1225,9 @@ struct MiniGameSakuraText
 				++currCol;
 			}
 
-			const string bitmapName = outputDirectory + std::to_string(stringIndex + 1) + extension;
+			const string pngName    = pngDir + std::to_string(stringIndex + 1) + extension;
+			const string bitmapName = bmpDir + std::to_string(stringIndex + 1) + extension;
+			sakuraStringBmp.WriteToFile(pngName, false);
 			sakuraStringBmp.WriteToFile(bitmapName, true);
 
 			++stringIndex;
@@ -1239,40 +1247,69 @@ void ExtractMiniSwimText(const string& rootSakuraDirectory, const string& output
 
 	CreateDirectoryHelper(outputDirectory);
 
-	//Open MINISWIM.BIN
-	const string sakura3Directory = rootSakuraDirectory + "\\SAKURA3\\";
-	FileNameContainer miniSwimFileName( (sakura3Directory + "MINISWIM.BIN").c_str() );
-	FileData miniSwimFile;
-	if( !miniSwimFile.InitializeFileData(miniSwimFileName) )
-	{
-		printf("Unable to open %s", miniSwimFileName.mFullPath.c_str() );
-		return;
-	}
-
 	//Font palette
 	const int paletteSize = 32;
-	const unsigned char rawPaletteData[paletteSize] = {(UCHAR)0x7f, (UCHAR)0xff, (UCHAR)0x08, (UCHAR)0x42, (UCHAR)0x10, (UCHAR)0x84, (UCHAR)0x18, (UCHAR)0xc6, (UCHAR)0x21, (UCHAR)0x08, (UCHAR)0x29, (UCHAR)0x4a, (UCHAR)0x31, (UCHAR)0x8c, 
-													   (UCHAR)0x39, (UCHAR)0xce, (UCHAR)0x42, (UCHAR)0x10, (UCHAR)0x4a, (UCHAR)0x52, (UCHAR)0x52, (UCHAR)0x94, (UCHAR)0x5a, (UCHAR)0xd6, (UCHAR)0x63, (UCHAR)0x18, (UCHAR)0x6b, (UCHAR)0x5a, 
-													   (UCHAR)0x73, (UCHAR)0x9c, (UCHAR)0x7f, (UCHAR)0xff};
+	const unsigned char rawPaletteData[paletteSize] = { (UCHAR)0x7f, (UCHAR)0xff, (UCHAR)0x08, (UCHAR)0x42, (UCHAR)0x10, (UCHAR)0x84, (UCHAR)0x18, (UCHAR)0xc6, (UCHAR)0x21, (UCHAR)0x08, (UCHAR)0x29, (UCHAR)0x4a, (UCHAR)0x31, (UCHAR)0x8c,
+													   (UCHAR)0x39, (UCHAR)0xce, (UCHAR)0x42, (UCHAR)0x10, (UCHAR)0x4a, (UCHAR)0x52, (UCHAR)0x52, (UCHAR)0x94, (UCHAR)0x5a, (UCHAR)0xd6, (UCHAR)0x63, (UCHAR)0x18, (UCHAR)0x6b, (UCHAR)0x5a,
+													   (UCHAR)0x73, (UCHAR)0x9c, (UCHAR)0x7f, (UCHAR)0xff };
 
 	//Create 32bit palette data
 	PaletteData paletteData;
 	paletteData.CreateFrom15BitData((const char*)rawPaletteData, paletteSize);
 
-	//Create font sheet
-	const int numCharactersInFontSheet = 59;
-	const int numBytesPerCharacter = 16*16/2;
-	SakuraFontSheet sakuraFontSheet;
-	if( !sakuraFontSheet.CreateFontSheetFromData( (miniSwimFile.GetData() + 0x0003b1a8), numBytesPerCharacter*numCharactersInFontSheet) )
+	//MINISWIM.BIN
 	{
-		return;
+		const string sakura3Directory = rootSakuraDirectory + "\\SAKURA3\\";
+		FileNameContainer miniSwimFileName((sakura3Directory + "MINISWIM.BIN").c_str());
+		FileData miniSwimFile;
+		if (!miniSwimFile.InitializeFileData(miniSwimFileName))
+		{
+			printf("Unable to open %s", miniSwimFileName.mFullPath.c_str());
+			return;
+		}
+
+		//Create font sheet
+		const int numCharactersInFontSheet = 59;
+		const int numBytesPerCharacter = 16 * 16 / 2;
+		SakuraFontSheet sakuraFontSheet;
+		if (!sakuraFontSheet.CreateFontSheetFromData((miniSwimFile.GetData() + 0x0003b1a8), numBytesPerCharacter*numCharactersInFontSheet))
+		{
+			return;
+		}
+
+		//Read in sakura text
+		const unsigned int textDataOffset = 0x00056b28;
+		MiniGameSakuraText sakuraText;
+		sakuraText.ReadInStrings(miniSwimFile.GetData(), textDataOffset);
+		sakuraText.DumpTextImages(sakuraFontSheet, paletteData, (outputDirectory + "\\MINISWIM\\") );
 	}
 
-	//Read in sakura text
-	const unsigned int textDataOffset = 0x00056b28;
-	MiniGameSakuraText sakuraText;
-	sakuraText.ReadInStrings(miniSwimFile.GetData(), textDataOffset);
-	sakuraText.DumpTextImages(sakuraFontSheet, paletteData, outputDirectory);
+	//MINIHANA.BIN
+	{
+		const string sakura3Directory = rootSakuraDirectory + "\\SAKURA3\\";
+		FileNameContainer miniGameFileName((sakura3Directory + "MINIHANA.BIN").c_str());
+		FileData miniGameFile;
+		if (!miniGameFile.InitializeFileData(miniGameFileName))
+		{
+			printf("Unable to open %s", miniGameFileName.mFullPath.c_str());
+			return;
+		}
+
+		//Create font sheet
+		const int numCharactersInFontSheet = 111;
+		const int numBytesPerCharacter = 16 * 16 / 2;
+		SakuraFontSheet sakuraFontSheet;
+		if (!sakuraFontSheet.CreateFontSheetFromData((miniGameFile.GetData() + 0x00092210), numBytesPerCharacter*numCharactersInFontSheet))
+		{
+			return;
+		}
+
+		//Read in sakura text
+		const unsigned int textDataOffset = 0x00a6b84;
+		MiniGameSakuraText sakuraText;
+		sakuraText.ReadInStrings(miniGameFile.GetData(), textDataOffset);
+		sakuraText.DumpTextImages(sakuraFontSheet, paletteData, (outputDirectory + "\\MINIHANA\\"));
+	}
 }
 
 void ExtractText(const string& inSearchDirectory, const string& inPaletteFileName, const string& inOutputDirectory)
@@ -7556,6 +7593,64 @@ void SwapEndiannessForArrayOfShorts(short* pArray, const int sizeInBytes)
 	}
 }
 
+bool PatchMiniHana(const string& patchedSakuraDirectory, const string& inTranslatedDataDirectory)
+{
+	const string patchedMinigameFileName = patchedSakuraDirectory + string("\\SAKURA3\\MINIHANA.BIN");
+
+	FileReadWriter miniGameFile;
+	if (!miniGameFile.OpenFile(patchedMinigameFileName))
+	{
+		return false;
+	}
+
+	//Open translated logo
+	const string logoFileName = inTranslatedDataDirectory + "MiniHanaLogo.bmp";
+	BmpToSakuraConverter patchedLogo;
+	if (!patchedLogo.ConvertBmpToSakuraFormat(logoFileName, false))
+	{
+		printf("PatchMiniSwim: Couldn't convert image: %s.\n", logoFileName.c_str());
+		return false;
+	}
+
+	//Patch logo
+	miniGameFile.WriteData(0x00095990, patchedLogo.GetImageData(), patchedLogo.GetImageDataSize());
+
+	/*
+	//Open translated fontsheet
+	const string fontSheetFileName = inTranslatedDataDirectory + "MiniSwimFontsheet.bmp";
+	BmpToSakuraConverter patchedFontSheet;
+	const unsigned int tileDim = 16;
+	if (!patchedFontSheet.ConvertBmpToSakuraFormat(fontSheetFileName, false, 0, &tileDim, &tileDim))
+	{
+		printf("PatchMiniSwim: Couldn't convert image: %s.\n", logoFileName.c_str());
+		return false;
+	}
+
+	patchedFontSheet.PackTiles();
+
+	//Patch fontsheet
+	miniGameFile.WriteData(0x00092210, patchedFontSheet.mpPackedTiles, patchedFontSheet.mPackedTileSize);  //FIXED
+
+	//Patch text lookups
+	short mainText[] = { 1, 2, 3, 4, 5, 0x0a0d, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 0x0a0d, 19, 20, 21, 22, 23, 24, 25, 26, 27, 0 };
+	short buttonText[] = { 28, 29, 0x0a0d, 30, 31, 0x0a0d, 30, 31, 0x0a0d, 30, 31, 0 };
+	short mainText2[] = { 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 0x0a0d, 48, 49, 50, 51, 52, 53, 54, 55, 0 };
+	short buttonText2[] = { 56, 57, 0x0a0d, 28, 29, 0x0a0d, 58, 59, 0 };
+
+	SwapEndiannessForArrayOfShorts(mainText, sizeof(mainText));
+	SwapEndiannessForArrayOfShorts(buttonText, sizeof(buttonText));
+	SwapEndiannessForArrayOfShorts(mainText2, sizeof(mainText2));
+	SwapEndiannessForArrayOfShorts(buttonText2, sizeof(buttonText2));
+
+	miniGameFile.WriteData(0x000a6b84, (char*)mainText, sizeof(mainText));
+	miniGameFile.WriteData(0x00056bc2, (char*)buttonText, sizeof(buttonText));
+	miniGameFile.WriteData(0x00056b78, (char*)mainText2, sizeof(mainText2));
+	miniGameFile.WriteData(0x00056be0, (char*)buttonText2, sizeof(buttonText2));
+	*/
+
+	return true;
+}
+
 bool PatchMiniSwim(const string& patchedSakuraDirectory, const string& inTranslatedDataDirectory)
 {
 	const string patchedMinigameFileName = patchedSakuraDirectory + string("\\SAKURA3\\MINISWIM.BIN");
@@ -7594,14 +7689,20 @@ bool PatchMiniSwim(const string& patchedSakuraDirectory, const string& inTransla
 	miniGameFile.WriteData(0x0003b1a8, patchedFontSheet.mpPackedTiles, patchedFontSheet.mPackedTileSize);
 
 	//Patch text lookups
-	short mainText[]   = {1, 2, 3, 4, 5, 0x0a0d, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 0x0a0d, 19, 20, 21, 22, 23, 24, 25, 26, 27, 0};
-	short buttonText[] = {28, 29, 0x0a0d, 30, 31, 0x0a0d, 30, 31, 0x0a0d, 30, 31, 0};
-	
+	short mainText[]    = {1, 2, 3, 4, 5, 0x0a0d, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 0x0a0d, 19, 20, 21, 22, 23, 24, 25, 26, 27, 0};
+	short buttonText[]  = {28, 29, 0x0a0d, 30, 31, 0x0a0d, 30, 31, 0x0a0d, 30, 31, 0};
+	short mainText2[]   = {32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 0x0a0d, 48, 49, 50, 51, 52, 53, 54, 55, 0};
+	short buttonText2[] = {56, 57, 0x0a0d, 28, 29, 0x0a0d, 58, 59, 0};
+
 	SwapEndiannessForArrayOfShorts(mainText, sizeof(mainText));
 	SwapEndiannessForArrayOfShorts(buttonText, sizeof(buttonText));
+	SwapEndiannessForArrayOfShorts(mainText2, sizeof(mainText2));
+	SwapEndiannessForArrayOfShorts(buttonText2, sizeof(buttonText2));
 
 	miniGameFile.WriteData(0x00056b28, (char*)mainText, sizeof(mainText));
 	miniGameFile.WriteData(0x00056bc2, (char*)buttonText, sizeof(buttonText));
+	miniGameFile.WriteData(0x00056b78, (char*)mainText2, sizeof(mainText2));
+	miniGameFile.WriteData(0x00056be0, (char*)buttonText2, sizeof(buttonText2));
 
 	return true;
 }
@@ -7662,19 +7763,27 @@ bool PatchMiniGames(const string& rootSakuraDirectory, const string& patchedSaku
 		unsigned int timeImageOffset;
 		unsigned int secondsImageOffset;
 		unsigned int notAvailableImageOffset;
+		unsigned int pauseOption1Offset;
 	};
 
+	/* starts at 0x000144c8/0x000122fc
+	Resume
+	Start
+	1 P Port
+	2 P Port
+	Scoring
+	*/
 	const int numMiniGameFiles = 8;
 	MiniGameFileOffsets miniGameOption1Offsets[numMiniGameFiles] = 
 	{
-		"HANAMAIN.BIN", 0x00014688, 0x00013c08, 0x00016628, 0x000165a8, 0x00015508,
-		"MINICOOK.BIN", 0x000124bc, 0x00011a3c, 0x0001445c, 0x000143dc, 0x0001333c,
-		"MINIHANA.BIN", 0x000124bc, 0x00011a3c, 0x0001445c, 0x000143dc, 0x0001333c,
-		"MINIMAIG.BIN", 0x000124bc, 0x00011a3c, 0x0001445c, 0x000143dc, 0x0001333c,
-		"MINISHOT.BIN", 0x000124bc, 0x00011a3c, 0x0001445c, 0x000143dc, 0x0001333c,
-		"MINISLOT.BIN", 0x000124bc, 0x00011a3c, 0x0001445c, 0x000143dc, 0x0001333c,
-		"MINISOJI.BIN", 0x000124bc, 0x00011a3c, 0x0001445c, 0x000143dc, 0x0001333c,
-		"MINISWIM.BIN", 0x000124bc, 0x00011a3c, 0x0001445c, 0x000143dc, 0x0001333c,
+		"HANAMAIN.BIN", 0x00014688, 0x00013c08, 0x00016628, 0x000165a8, 0x00015508, 0x000144c8,
+		"MINICOOK.BIN", 0x000124bc, 0x00011a3c, 0x0001445c, 0x000143dc, 0x0001333c, 0x000122fc,
+		"MINIHANA.BIN", 0x000124bc, 0x00011a3c, 0x0001445c, 0x000143dc, 0x0001333c, 0x000122fc,
+		"MINIMAIG.BIN", 0x000124bc, 0x00011a3c, 0x0001445c, 0x000143dc, 0x0001333c, 0x000122fc,
+		"MINISHOT.BIN", 0x000124bc, 0x00011a3c, 0x0001445c, 0x000143dc, 0x0001333c, 0x000122fc,
+		"MINISLOT.BIN", 0x000124bc, 0x00011a3c, 0x0001445c, 0x000143dc, 0x0001333c, 0x000122fc,
+		"MINISOJI.BIN", 0x000124bc, 0x00011a3c, 0x0001445c, 0x000143dc, 0x0001333c, 0x000122fc,
+		"MINISWIM.BIN", 0x000124bc, 0x00011a3c, 0x0001445c, 0x000143dc, 0x0001333c, 0x000122fc,
 	};
 
 	//Patch common data among all mini games
