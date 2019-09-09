@@ -7722,7 +7722,7 @@ bool PatchMiniHana(const string& patchedSakuraDirectory, const string& inTransla
 	//Patch text lookups
 	short textIndices1[] = { 1, 2, 3, 4, 5, 6, 0x0a0d, 7, 8, 9, 0x0a0d, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 0 };
 	short textIndices2[] = { 23, 24, 25, 26, 27, 28, 29, 39, 31, 32, 33, 0x0a0d, 34, 35, 36, 37, 38, 39, 40, 41, 0 };
-	short textIndices3[] = { 42, 43, 44, 45, 0x0a0d, 46, 0x0a0d, 46, 0 };
+	short textIndices3[] = { 42, 43, 44, 45, 0x0a0d, 46, 0x0a0d, 0x0a0d, 46, 0 };
 	short textIndices4[] = { 47, 48, 49, 0x0a0d, 50, 51, 52, 0x0a0d, 53, 54, 55, 56, 0x0a0d, 57, 58, 59, 0 };
 	short textIndices5[] = { 60, 61, 62, 63, 64, 65, 66, 0 };
 	short textIndices6[] = { 67, 68, 69, 70, 71, 72, 73, 0 };
