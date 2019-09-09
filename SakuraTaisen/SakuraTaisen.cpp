@@ -1235,7 +1235,7 @@ struct MiniGameSakuraText
 	}
 };
 
-void ExtractMiniSwimText(const string& rootSakuraDirectory, const string& outputDirectory)
+void ExtractMiniSwimText(const string& rootSakuraDirectory, const string& translatedDataDirectory, const string& outputDirectory)
 {
 	//Create temp work directory
 	string tempDir;
@@ -1247,69 +1247,82 @@ void ExtractMiniSwimText(const string& rootSakuraDirectory, const string& output
 
 	CreateDirectoryHelper(outputDirectory);
 
-	//Font palette
-	const int paletteSize = 32;
-	const unsigned char rawPaletteData[paletteSize] = { (UCHAR)0x7f, (UCHAR)0xff, (UCHAR)0x08, (UCHAR)0x42, (UCHAR)0x10, (UCHAR)0x84, (UCHAR)0x18, (UCHAR)0xc6, (UCHAR)0x21, (UCHAR)0x08, (UCHAR)0x29, (UCHAR)0x4a, (UCHAR)0x31, (UCHAR)0x8c,
-													   (UCHAR)0x39, (UCHAR)0xce, (UCHAR)0x42, (UCHAR)0x10, (UCHAR)0x4a, (UCHAR)0x52, (UCHAR)0x52, (UCHAR)0x94, (UCHAR)0x5a, (UCHAR)0xd6, (UCHAR)0x63, (UCHAR)0x18, (UCHAR)0x6b, (UCHAR)0x5a,
-													   (UCHAR)0x73, (UCHAR)0x9c, (UCHAR)0x7f, (UCHAR)0xff };
-
-	//Create 32bit palette data
-	PaletteData paletteData;
-	paletteData.CreateFrom15BitData((const char*)rawPaletteData, paletteSize);
-
-	//MINISWIM.BIN
+	struct MiniGameDumper
 	{
-		const string sakura3Directory = rootSakuraDirectory + "\\SAKURA3\\";
-		FileNameContainer miniSwimFileName((sakura3Directory + "MINISWIM.BIN").c_str());
-		FileData miniSwimFile;
-		if (!miniSwimFile.InitializeFileData(miniSwimFileName))
-		{
-			printf("Unable to open %s", miniSwimFileName.mFullPath.c_str());
-			return;
+		string              mRootSakuraDirectory;
+		string              mOutputDirectory;
+		FileData            mLogoPaletteFile;
+		PaletteData         mFontPaletteData;
+		const int           mFontPaletteSize = 32;
+		const unsigned char mRawPaletteData[32] = { (UCHAR)0x7f, (UCHAR)0xff, (UCHAR)0x08, (UCHAR)0x42, (UCHAR)0x10, (UCHAR)0x84, (UCHAR)0x18, (UCHAR)0xc6, (UCHAR)0x21, (UCHAR)0x08, (UCHAR)0x29, (UCHAR)0x4a, (UCHAR)0x31, (UCHAR)0x8c,
+													(UCHAR)0x39, (UCHAR)0xce, (UCHAR)0x42, (UCHAR)0x10, (UCHAR)0x4a, (UCHAR)0x52, (UCHAR)0x52, (UCHAR)0x94, (UCHAR)0x5a, (UCHAR)0xd6, (UCHAR)0x63, (UCHAR)0x18, (UCHAR)0x6b, (UCHAR)0x5a,
+													(UCHAR)0x73, (UCHAR)0x9c, (UCHAR)0x7f, (UCHAR)0xff };
+
+		bool Initialize(const string& rootSakuraDirectory, const string& outputDirectory, const string& translatedDataDirectory)
+		{	
+			mRootSakuraDirectory = rootSakuraDirectory;
+			mOutputDirectory     = outputDirectory;
+
+			//Create 32bit palette data
+			mFontPaletteData.CreateFrom15BitData((const char*)mRawPaletteData, mFontPaletteSize);
+
+			//Create 32bit palette data
+			FileNameContainer logoPaletteFileName((translatedDataDirectory + "MiniGameLogoPalette.bin").c_str());
+			if (!mLogoPaletteFile.InitializeFileData(logoPaletteFileName))
+			{
+				printf("Unable to open MiniGameLogoPalette.bin\n");
+				return false;
+			}
+
+			return true;
 		}
 
-		//Create font sheet
-		const int numCharactersInFontSheet = 59;
-		const int numBytesPerCharacter = 16 * 16 / 2;
-		SakuraFontSheet sakuraFontSheet;
-		if (!sakuraFontSheet.CreateFontSheetFromData((miniSwimFile.GetData() + 0x0003b1a8), numBytesPerCharacter*numCharactersInFontSheet))
+		bool Dump(const char* inMiniGameFileName, int inNumCharactersInFontSheet, unsigned int inFontSheetAddress, unsigned int textDataAddress)
 		{
-			return;
+			const string sakura3Directory = mRootSakuraDirectory + "\\SAKURA3\\";
+			FileNameContainer miniGameFileName((sakura3Directory + inMiniGameFileName + ".bin").c_str());
+			FileData miniGameFile;
+			if (!miniGameFile.InitializeFileData(miniGameFileName))
+			{
+				printf("Unable to open %s", miniGameFileName.mFullPath.c_str());
+				return false;
+			}
+
+			//Create font sheet
+			const int numBytesPerCharacter = 16 * 16 / 2;
+			SakuraFontSheet sakuraFontSheet;
+			if( !sakuraFontSheet.CreateFontSheetFromData((miniGameFile.GetData() + inFontSheetAddress), numBytesPerCharacter*inNumCharactersInFontSheet) )
+			{
+				return false;
+			}
+
+			const string miniGameOutputDirectory = mOutputDirectory + Seperators + inMiniGameFileName + Seperators;
+
+			//Read in sakura text
+			MiniGameSakuraText sakuraText;
+			sakuraText.ReadInStrings(miniGameFile.GetData(), textDataAddress);
+			sakuraText.DumpTextImages(sakuraFontSheet, mFontPaletteData, miniGameOutputDirectory);
+
+			//Dump Logo
+			ExtractImageFromData(miniGameFile.GetData() + inFontSheetAddress + inNumCharactersInFontSheet * numBytesPerCharacter, 128 * 24 / 2, miniGameOutputDirectory + "bmp\\Logo.bmp",
+				mLogoPaletteFile.GetData(), mLogoPaletteFile.GetDataSize(), 128, 24, 1, 256, 0, true, true);
+
+			ExtractImageFromData(miniGameFile.GetData() + inFontSheetAddress + inNumCharactersInFontSheet * numBytesPerCharacter, 128 * 24 / 2, miniGameOutputDirectory + "png\\Logo.png",
+				mLogoPaletteFile.GetData(), mLogoPaletteFile.GetDataSize(), 128, 24, 1, 256, 0, true, false);
+
+			return true;
 		}
+	};
 
-		//Read in sakura text
-		const unsigned int textDataOffset = 0x00056b28;
-		MiniGameSakuraText sakuraText;
-		sakuraText.ReadInStrings(miniSwimFile.GetData(), textDataOffset);
-		sakuraText.DumpTextImages(sakuraFontSheet, paletteData, (outputDirectory + "\\MINISWIM\\") );
-	}
-
-	//MINIHANA.BIN
-	{
-		const string sakura3Directory = rootSakuraDirectory + "\\SAKURA3\\";
-		FileNameContainer miniGameFileName((sakura3Directory + "MINIHANA.BIN").c_str());
-		FileData miniGameFile;
-		if (!miniGameFile.InitializeFileData(miniGameFileName))
-		{
-			printf("Unable to open %s", miniGameFileName.mFullPath.c_str());
-			return;
-		}
-
-		//Create font sheet
-		const int numCharactersInFontSheet = 111;
-		const int numBytesPerCharacter = 16 * 16 / 2;
-		SakuraFontSheet sakuraFontSheet;
-		if (!sakuraFontSheet.CreateFontSheetFromData((miniGameFile.GetData() + 0x00092210), numBytesPerCharacter*numCharactersInFontSheet))
-		{
-			return;
-		}
-
-		//Read in sakura text
-		const unsigned int textDataOffset = 0x00a6b84;
-		MiniGameSakuraText sakuraText;
-		sakuraText.ReadInStrings(miniGameFile.GetData(), textDataOffset);
-		sakuraText.DumpTextImages(sakuraFontSheet, paletteData, (outputDirectory + "\\MINIHANA\\"));
-	}
+	MiniGameDumper miniGameDumper;
+	miniGameDumper.Initialize(rootSakuraDirectory, outputDirectory, translatedDataDirectory);
+	miniGameDumper.Dump("MINICOOK", 42,  0x00093568, 0x000aece4);
+	miniGameDumper.Dump("MINIMAIG", 43,  0x000504B4, 0x00061e90);
+	miniGameDumper.Dump("MINISWIM", 59,  0x0003b1a8, 0x00056b28);
+	miniGameDumper.Dump("MINIHANA", 111, 0x00092210, 0x000a6b84);
+	miniGameDumper.Dump("MINISHOT", 43,  0x00055510, 0x00080D94);
+	miniGameDumper.Dump("MINISLOT", 37,  0x0006149C, 0x0007e650);
+	miniGameDumper.Dump("MINISOJI", 36,  0x00064810, 0x00074cbc);
 }
 
 void ExtractText(const string& inSearchDirectory, const string& inPaletteFileName, const string& inOutputDirectory)
@@ -7593,12 +7606,79 @@ void SwapEndiannessForArrayOfShorts(short* pArray, const int sizeInBytes)
 	}
 }
 
-bool PatchMiniHana(const string& patchedSakuraDirectory, const string& inTranslatedDataDirectory)
+struct MiniGameTextIndiceFinder
 {
-	const string patchedMinigameFileName = patchedSakuraDirectory + string("\\SAKURA3\\MINIHANA.BIN");
+	vector<unsigned int> indiceAddresses;
+	vector<unsigned int> numCharsPerLine;
+
+	void FindIndices(const char* pFileData, unsigned int startAddress)
+	{	
+		unsigned int currAddress = startAddress;
+		bool bNextValueIsAddressStart = true;
+		int numCharsInLine = 1;
+		while(1)
+		{
+			const char* pCurrPointer = pFileData + currAddress;
+			short readValue = *((short*)pCurrPointer);
+			if( readValue == 0 && bNextValueIsAddressStart )
+			{
+				break;
+			}
+
+			if( bNextValueIsAddressStart )
+			{
+				indiceAddresses.push_back(currAddress);
+				bNextValueIsAddressStart = false;
+			}
+			
+			if( readValue == 0 )
+			{
+				bNextValueIsAddressStart = true;
+				numCharsPerLine.push_back(numCharsInLine);
+			}
+			else
+			{
+				++numCharsInLine;
+			}
+
+			currAddress += sizeof(short);
+		}
+	}
+
+	bool ValidateNewIndices(int index, unsigned int inDataSize)
+	{
+		const size_t numIndices = inDataSize / sizeof(short);
+
+		if( (size_t)index >= numCharsPerLine.size() ||
+			numIndices > numCharsPerLine[index] )
+		{
+			printf("Invalid minigame index: %i", index);
+			return false;
+		}
+
+		return true;
+	}
+};
+
+void PatchMiniCook()
+{
+	//Logo: 0x00094A68
+}
+
+bool PatchMiniHana(const string& patchedSakuraDirectory, const string& inTranslatedDataDirectory, const string& originalSakuraDirectory)
+{
+	const string patchedMinigameFileName  = patchedSakuraDirectory + string("\\SAKURA3\\MINIHANA.BIN");
+	const string originalMinigameFileName = originalSakuraDirectory + string("\\SAKURA3\\MINIHANA.BIN");
 
 	FileReadWriter miniGameFile;
 	if (!miniGameFile.OpenFile(patchedMinigameFileName))
+	{
+		return false;
+	}
+
+	FileNameContainer originalMinigameFileNameContainer(originalMinigameFileName.c_str());
+	FileData miniGameOriginalFile;
+	if( !miniGameOriginalFile.InitializeFileData(originalMinigameFileNameContainer) )
 	{
 		return false;
 	}
@@ -7615,38 +7695,99 @@ bool PatchMiniHana(const string& patchedSakuraDirectory, const string& inTransla
 	//Patch logo
 	miniGameFile.WriteData(0x00095990, patchedLogo.GetImageData(), patchedLogo.GetImageDataSize());
 
-	/*
 	//Open translated fontsheet
-	const string fontSheetFileName = inTranslatedDataDirectory + "MiniSwimFontsheet.bmp";
+	const string fontSheetFileName = inTranslatedDataDirectory + "MiniHanaFontSheet.bmp";
 	BmpToSakuraConverter patchedFontSheet;
 	const unsigned int tileDim = 16;
 	if (!patchedFontSheet.ConvertBmpToSakuraFormat(fontSheetFileName, false, 0, &tileDim, &tileDim))
 	{
-		printf("PatchMiniSwim: Couldn't convert image: %s.\n", logoFileName.c_str());
+		printf("PatchMiniHana: Couldn't convert image: %s.\n", logoFileName.c_str());
 		return false;
 	}
 
 	patchedFontSheet.PackTiles();
 
 	//Patch fontsheet
-	miniGameFile.WriteData(0x00092210, patchedFontSheet.mpPackedTiles, patchedFontSheet.mPackedTileSize);  //FIXED
+	//miniGameDumper.Dump("MINIHANA", 111, 0x00092210, 0x000a6b84);
+	miniGameFile.WriteData(0x00092210, patchedFontSheet.mpPackedTiles, patchedFontSheet.mPackedTileSize);
+
+	MiniGameTextIndiceFinder indiceFinder;
+	indiceFinder.FindIndices(miniGameOriginalFile.GetData(), 0x000a6b84);
+	if( indiceFinder.indiceAddresses.size() != 16 )
+	{
+		printf("PatchMiniHana: Couldn't find text indices\n");
+		return false;
+	}
 
 	//Patch text lookups
-	short mainText[] = { 1, 2, 3, 4, 5, 0x0a0d, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 0x0a0d, 19, 20, 21, 22, 23, 24, 25, 26, 27, 0 };
-	short buttonText[] = { 28, 29, 0x0a0d, 30, 31, 0x0a0d, 30, 31, 0x0a0d, 30, 31, 0 };
-	short mainText2[] = { 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 0x0a0d, 48, 49, 50, 51, 52, 53, 54, 55, 0 };
-	short buttonText2[] = { 56, 57, 0x0a0d, 28, 29, 0x0a0d, 58, 59, 0 };
+	short textIndices1[] = { 1, 2, 3, 4, 5, 6, 0x0a0d, 7, 8, 9, 0x0a0d, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 0 };
+	short textIndices2[] = { 23, 24, 25, 26, 27, 28, 29, 39, 31, 32, 33, 0x0a0d, 34, 35, 36, 37, 38, 39, 40, 41, 0 };
+	short textIndices3[] = { 42, 43, 44, 45, 0x0a0d, 46, 0x0a0d, 46, 0 };
+	short textIndices4[] = { 47, 48, 49, 0x0a0d, 50, 51, 52, 0x0a0d, 53, 54, 55, 56, 0x0a0d, 57, 58, 59, 0 };
+	short textIndices5[] = { 60, 61, 62, 63, 64, 65, 66, 0 };
+	short textIndices6[] = { 67, 68, 69, 70, 71, 72, 73, 0 };
+	short textIndices7[] = { 74, 75, 76, 77, 78, 79, 80, 0 };
+	short textIndices8[] = { 81, 82, 83, 70, 71, 72, 73, 0 };
+	short textIndices9[] = { 84, 85, 86, 87, 0 };
+	short textIndices10[] = { 88, 89, 90, 91, 92, 0 };
+	short textIndices11[] = { 93, 94, 95, 0 };
+	short textIndices12[] = { 96, 97, 98, 99, 100, 101, 102, 0 };
+	short textIndices13[] = { 103, 104, 0 };
+	short textIndices14[] = { 105, 106, 0 };
+	short textIndices15[] = { 107, 108, 0 };
+	short textIndices16[] = { 109, 110, 111, 0 };
+	
+	SwapEndiannessForArrayOfShorts(textIndices1, sizeof(textIndices1));
+	SwapEndiannessForArrayOfShorts(textIndices2, sizeof(textIndices2));
+	SwapEndiannessForArrayOfShorts(textIndices3, sizeof(textIndices3));
+	SwapEndiannessForArrayOfShorts(textIndices4, sizeof(textIndices4));
+	SwapEndiannessForArrayOfShorts(textIndices5, sizeof(textIndices5));
+	SwapEndiannessForArrayOfShorts(textIndices6, sizeof(textIndices6));
+	SwapEndiannessForArrayOfShorts(textIndices7, sizeof(textIndices7));
+	SwapEndiannessForArrayOfShorts(textIndices8, sizeof(textIndices8));
+	SwapEndiannessForArrayOfShorts(textIndices9, sizeof(textIndices9));
+	SwapEndiannessForArrayOfShorts(textIndices10, sizeof(textIndices10));
+	SwapEndiannessForArrayOfShorts(textIndices11, sizeof(textIndices11));
+	SwapEndiannessForArrayOfShorts(textIndices12, sizeof(textIndices12));
+	SwapEndiannessForArrayOfShorts(textIndices13, sizeof(textIndices13));
+	SwapEndiannessForArrayOfShorts(textIndices14, sizeof(textIndices14));
+	SwapEndiannessForArrayOfShorts(textIndices15, sizeof(textIndices15));
+	SwapEndiannessForArrayOfShorts(textIndices16, sizeof(textIndices16));
 
-	SwapEndiannessForArrayOfShorts(mainText, sizeof(mainText));
-	SwapEndiannessForArrayOfShorts(buttonText, sizeof(buttonText));
-	SwapEndiannessForArrayOfShorts(mainText2, sizeof(mainText2));
-	SwapEndiannessForArrayOfShorts(buttonText2, sizeof(buttonText2));
+	if( !indiceFinder.ValidateNewIndices(0, sizeof(textIndices1)) ) return false;
+	if( !indiceFinder.ValidateNewIndices(1, sizeof(textIndices2)) ) return false;
+	if( !indiceFinder.ValidateNewIndices(2, sizeof(textIndices3)) ) return false;
+	if( !indiceFinder.ValidateNewIndices(3, sizeof(textIndices4)) ) return false;
+	if( !indiceFinder.ValidateNewIndices(4, sizeof(textIndices5)) ) return false;
+	if( !indiceFinder.ValidateNewIndices(5, sizeof(textIndices6)) ) return false;
+	if( !indiceFinder.ValidateNewIndices(6, sizeof(textIndices7)) ) return false;
+	if( !indiceFinder.ValidateNewIndices(7, sizeof(textIndices8)) ) return false;
+	if( !indiceFinder.ValidateNewIndices(8, sizeof(textIndices9)) ) return false;
+	if( !indiceFinder.ValidateNewIndices(9,  sizeof(textIndices10)) ) return false;
+	if( !indiceFinder.ValidateNewIndices(10, sizeof(textIndices11)) ) return false;
+	if( !indiceFinder.ValidateNewIndices(11, sizeof(textIndices12)) ) return false;
+	if( !indiceFinder.ValidateNewIndices(12, sizeof(textIndices13)) ) return false;
+	if( !indiceFinder.ValidateNewIndices(13, sizeof(textIndices14)) ) return false;
+	if( !indiceFinder.ValidateNewIndices(14, sizeof(textIndices15)) ) return false;
+	if( !indiceFinder.ValidateNewIndices(15, sizeof(textIndices16)) ) return false;
 
-	miniGameFile.WriteData(0x000a6b84, (char*)mainText, sizeof(mainText));
-	miniGameFile.WriteData(0x00056bc2, (char*)buttonText, sizeof(buttonText));
-	miniGameFile.WriteData(0x00056b78, (char*)mainText2, sizeof(mainText2));
-	miniGameFile.WriteData(0x00056be0, (char*)buttonText2, sizeof(buttonText2));
-	*/
+	miniGameFile.WriteData(indiceFinder.indiceAddresses[0], (char*)textIndices1, sizeof(textIndices1));
+	miniGameFile.WriteData(indiceFinder.indiceAddresses[1], (char*)textIndices2, sizeof(textIndices2));
+	miniGameFile.WriteData(indiceFinder.indiceAddresses[2], (char*)textIndices3, sizeof(textIndices3));
+	miniGameFile.WriteData(indiceFinder.indiceAddresses[3], (char*)textIndices4, sizeof(textIndices4));
+	miniGameFile.WriteData(indiceFinder.indiceAddresses[4], (char*)textIndices5, sizeof(textIndices5));
+	miniGameFile.WriteData(indiceFinder.indiceAddresses[5], (char*)textIndices6, sizeof(textIndices6));
+	miniGameFile.WriteData(indiceFinder.indiceAddresses[6], (char*)textIndices7, sizeof(textIndices7));
+	miniGameFile.WriteData(indiceFinder.indiceAddresses[7], (char*)textIndices8, sizeof(textIndices8));
+	miniGameFile.WriteData(indiceFinder.indiceAddresses[8], (char*)textIndices9, sizeof(textIndices9));
+	miniGameFile.WriteData(indiceFinder.indiceAddresses[9], (char*)textIndices10, sizeof(textIndices10));
+	miniGameFile.WriteData(indiceFinder.indiceAddresses[10], (char*)textIndices11, sizeof(textIndices11));
+	miniGameFile.WriteData(indiceFinder.indiceAddresses[11], (char*)textIndices12, sizeof(textIndices12));
+	miniGameFile.WriteData(indiceFinder.indiceAddresses[12], (char*)textIndices13, sizeof(textIndices13));
+	miniGameFile.WriteData(indiceFinder.indiceAddresses[13], (char*)textIndices14, sizeof(textIndices14));
+	miniGameFile.WriteData(indiceFinder.indiceAddresses[14], (char*)textIndices15, sizeof(textIndices15));
+	miniGameFile.WriteData(indiceFinder.indiceAddresses[15], (char*)textIndices16, sizeof(textIndices16));
+
 
 	return true;
 }
@@ -7764,6 +7905,7 @@ bool PatchMiniGames(const string& rootSakuraDirectory, const string& patchedSaku
 		unsigned int secondsImageOffset;
 		unsigned int notAvailableImageOffset;
 		unsigned int pauseOption1Offset;
+		unsigned int scrollingTextOffset;
 	};
 
 	/* starts at 0x000144c8/0x000122fc
@@ -7776,14 +7918,14 @@ bool PatchMiniGames(const string& rootSakuraDirectory, const string& patchedSaku
 	const int numMiniGameFiles = 8;
 	MiniGameFileOffsets miniGameOption1Offsets[numMiniGameFiles] = 
 	{
-		"HANAMAIN.BIN", 0x00014688, 0x00013c08, 0x00016628, 0x000165a8, 0x00015508, 0x000144c8,
-		"MINICOOK.BIN", 0x000124bc, 0x00011a3c, 0x0001445c, 0x000143dc, 0x0001333c, 0x000122fc,
-		"MINIHANA.BIN", 0x000124bc, 0x00011a3c, 0x0001445c, 0x000143dc, 0x0001333c, 0x000122fc,
-		"MINIMAIG.BIN", 0x000124bc, 0x00011a3c, 0x0001445c, 0x000143dc, 0x0001333c, 0x000122fc,
-		"MINISHOT.BIN", 0x000124bc, 0x00011a3c, 0x0001445c, 0x000143dc, 0x0001333c, 0x000122fc,
-		"MINISLOT.BIN", 0x000124bc, 0x00011a3c, 0x0001445c, 0x000143dc, 0x0001333c, 0x000122fc,
-		"MINISOJI.BIN", 0x000124bc, 0x00011a3c, 0x0001445c, 0x000143dc, 0x0001333c, 0x000122fc,
-		"MINISWIM.BIN", 0x000124bc, 0x00011a3c, 0x0001445c, 0x000143dc, 0x0001333c, 0x000122fc,
+		"HANAMAIN.BIN", 0x00014688, 0x00013c08, 0x00016628, 0x000165a8, 0x00015508, 0x000144c8,	0x00016728,
+		"MINICOOK.BIN", 0x000124bc, 0x00011a3c, 0x0001445c, 0x000143dc, 0x0001333c, 0x000122fc,	0x0001455c,
+		"MINIHANA.BIN", 0x000124bc, 0x00011a3c, 0x0001445c, 0x000143dc, 0x0001333c, 0x000122fc,	0x0001455c,
+		"MINIMAIG.BIN", 0x000124bc, 0x00011a3c, 0x0001445c, 0x000143dc, 0x0001333c, 0x000122fc,	0x0001455c,
+		"MINISHOT.BIN", 0x000124bc, 0x00011a3c, 0x0001445c, 0x000143dc, 0x0001333c, 0x000122fc,	0x0001455c,
+		"MINISLOT.BIN", 0x000124bc, 0x00011a3c, 0x0001445c, 0x000143dc, 0x0001333c, 0x000122fc,	0x0001455c,
+		"MINISOJI.BIN", 0x000124bc, 0x00011a3c, 0x0001445c, 0x000143dc, 0x0001333c, 0x000122fc,	0x0001455c,
+		"MINISWIM.BIN", 0x000124bc, 0x00011a3c, 0x0001445c, 0x000143dc, 0x0001333c, 0x000122fc,	0x0001455c,
 	};
 
 	//Patch common data among all mini games
@@ -7809,6 +7951,7 @@ bool PatchMiniGames(const string& rootSakuraDirectory, const string& patchedSaku
 	}
 
 	bool bResult = PatchMiniSwim(patchedSakuraDirectory, inTranslatedDataDirectory);
+	bResult      = bResult && PatchMiniHana(patchedSakuraDirectory, inTranslatedDataDirectory, rootSakuraDirectory);
 
 	return bResult;
 }
@@ -8227,12 +8370,13 @@ int main(int argc, char *argv[])
 
 		CopySharedWklImages(sourceDir, outDir);
 	}
-	else if(command == "ExtractMiniGameData" && argc == 4)
+	else if(command == "ExtractMiniGameData" && argc == 5)
 	{
-		const string rootSakuraDir(argv[2]);
-		const string outDir(argv[3]);
+		const string rootSakuraDir     = string(argv[2]) + Seperators;
+		const string translatedDataDir = string(argv[3]) + Seperators;
+		const string outDir            = string(argv[4]) + Seperators;
 
-		ExtractMiniSwimText(rootSakuraDir, outDir);
+		ExtractMiniSwimText(rootSakuraDir, translatedDataDir, outDir);
 	}
 	else
 	{
