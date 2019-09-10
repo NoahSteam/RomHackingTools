@@ -1134,7 +1134,7 @@ struct MiniGameSakuraText
 	//Read in Sakura formated string (each character is a 2 byte lookup into the font sheet)
 	vector<SakuraString> mStrings;
 
-	void ReadInStrings(const char* pFileData, unsigned int offsetToTextData)
+	void ReadInStrings(const char* pFileData, unsigned int offsetToTextData, unsigned int numCharsInFontSheet)
 	{
 		unsigned short readValue    = 0;
 		unsigned int   offset       = offsetToTextData;
@@ -1146,6 +1146,12 @@ struct MiniGameSakuraText
 
 			//Convert to big endian
 			readValue = SwapByteOrder( *((unsigned short*)(pDataPointer)) );
+
+			//If we get a character that is beyond the font sheet, we are reading past the character data block
+			if( readValue > numCharsInFontSheet && readValue != 0x0a0d )
+			{
+				break;
+			}
 
 			//If the read value is 0, it is the end of the string
 			if( readValue == 0 )
@@ -1300,7 +1306,7 @@ void ExtractMiniSwimText(const string& rootSakuraDirectory, const string& transl
 
 			//Read in sakura text
 			MiniGameSakuraText sakuraText;
-			sakuraText.ReadInStrings(miniGameFile.GetData(), textDataAddress);
+			sakuraText.ReadInStrings(miniGameFile.GetData(), textDataAddress, inNumCharactersInFontSheet);
 			sakuraText.DumpTextImages(sakuraFontSheet, mFontPaletteData, miniGameOutputDirectory);
 
 			//Dump Logo
@@ -1322,7 +1328,7 @@ void ExtractMiniSwimText(const string& rootSakuraDirectory, const string& transl
 	miniGameDumper.Dump("MINIHANA", 111, 0x00092210, 0x000a6b84);
 	miniGameDumper.Dump("MINISHOT", 43,  0x00055510, 0x00080D94);
 	miniGameDumper.Dump("MINISLOT", 37,  0x0006149C, 0x0007e650);
-	miniGameDumper.Dump("MINISOJI", 36,  0x00064810, 0x00074cbc);
+	miniGameDumper.Dump("MINISOJI", 35,  0x00064810, 0x00074cbc);
 }
 
 void ExtractText(const string& inSearchDirectory, const string& inPaletteFileName, const string& inOutputDirectory)
