@@ -62,8 +62,8 @@ ExtractFCEFiles a:\SakuraTaisen\Disc1 A:\NoahSteam\RomPatchingTools\SakuraTaisen
 ExtractTMapSP a:\SakuraTaisen\Disc1 A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\TheaterMapPalette.bin a:\SakuraTaisen\ExtractedData\Disc1\TMAPSP
 CreateTMapSpSpreadsheet a:\SakuraTaisen\ExtractedData\Disc1\TMapSP
 PatchTMapSp a:\SakuraTaisen\Disc1 A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\TMapSP
-Extract8BitImage a:\SakuraTaisen\ExtractedData\Disc1\Test\UncompressedFace.bin A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\BattleFacePalette.bin 0 40 48 128 a:\SakuraTaisen\ExtractedData\Disc1\Test
-Extract8BitImage a:\SakuraTaisen\UncompressedDataResults\0000ff20.bin A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\Palette.bin 0 16 16 256 a:\SakuraTaisen\UncompressedDataResults
+Extract8BitImage a:\SakuraTaisen\ExtractedData\Disc1\Test\UncompressedFace.bin A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\BattleFacePalette.bin 0 40 48 128 1 a:\SakuraTaisen\ExtractedData\Disc1\Test
+Extract8BitImage a:\SakuraTaisen\UncompressedDataResults\0000ff20.bin A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\Palette.bin 0 16 16 256 1 a:\SakuraTaisen\UncompressedDataResults
 ExtractFACEFiles a:\SakuraTaisen\Disc1 a:\SakuraTaisen\ExtractedData\Disc1\FACE
 ExtractWKLFiles a:\SakuraTaisen\Disc1 a:\SakuraTaisen\ExtractedData\Disc1\WKL
 ExtractMiniGameData a:\SakuraTaisen\Disc1  A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data a:\SakuraTaisen\ExtractedData\Disc1\Minigames\
