@@ -1894,7 +1894,8 @@ bool FindDialogOrder(const string& rootSakuraTaisenDirectory, map<string, Dialog
 		const unsigned long dataSize = infoData.GetDataSize();
 		while (index + 5 < dataSize)
 		{
-			const bool bIsLipsEntry = (pData[index] == 0x2E && pData[index + 1] == 0x80 && pData[index + 2] == 0x00);
+			const bool bIsLipsEntry = (pData[index] == 0x2E && pData[index + 1] == 0x80 && pData[index + 2] == 0x00) ||
+				                      (pData[index] == 0x17 && pData[index + 1] == 0x80 && pData[index + 2] == 0x00);
 
 			if( bIsLipsEntry || 
 				(pData[index] == 0x22 && pData[index + 1] == 0x80 && pData[index + 2] == 0x00)
@@ -1931,7 +1932,6 @@ bool FindDialogOrder(const string& rootSakuraTaisenDirectory, map<string, Dialog
 				}
 
 				outOrder[infoFileNameInfo.mNoExtension].idAndImage[id] = imageId;
-
 			}
 
 			++index;
@@ -2040,7 +2040,7 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 		const FileNameContainer* pMatchingTranslatedFileName = nullptr;
 		for(const FileNameContainer& translatedFileName : translatedTextFiles)
 		{
-			if( translatedFileName.mNoExtension == sakuraFile.mFileNameInfo.mNoExtension )
+			if( translatedFileName.mNoExtension.find(sakuraFile.mFileNameInfo.mNoExtension) != string::npos )
 			{
 				pMatchingTranslatedFileName = &translatedFileName;
 				break;
@@ -2141,7 +2141,7 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 					}
 
 					const string baseUntranslatedString = sakuraFile.mFileNameInfo.mNoExtension + string(":");
-					const string untranslatedString = numTranslatedLines ? "U" : baseUntranslatedString + std::to_string(translatedLineIndex + 1); //Just print out a U for unused lines to save space
+					const string untranslatedString = bUseShorthand ? "U" : baseUntranslatedString + std::to_string(translatedLineIndex + 1); //Just print out a U for unused lines to save space
 
 					SakuraString translatedSakuraString;
 					unsigned short timingData = 0;
