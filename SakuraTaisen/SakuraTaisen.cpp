@@ -1989,7 +1989,34 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 	map<string, DialogOrder> dialogOrder;
 	FindDialogOrder(rootSakuraTaisenDirectory, dialogOrder);
 
+	//***Load duplicate info***
+	const string duplicatesFileName = translatedTextDirectory + string("\\..\\DuplicatesForTextInsert.txt");
+	FileNameContainer dupFileNameContainer(duplicatesFileName.c_str());
+	TextFileData duplicatesFile(dupFileNameContainer);
+	if( !duplicatesFile.InitializeTextFile() )
+	{
+		printf("Unable to open duplicates file.\n");
+		return false;
+	}
+
+	const string underScore("_");
+	map<string, bool> duplicatesMap; //dir+lineNumber, dummyBool
+	const size_t numDupLines = duplicatesFile.mLines.size();
+	for(size_t i = 0; i < numDupLines; ++i)
+	{
+		if( duplicatesFile.mLines[i].mWords.size() != 3 )
+		{
+			printf("Invalid duplicate file format");
+			return false;
+		}
+
+		const string dirPlusLine = duplicatesFile.mLines[i].mWords[0] + underScore + duplicatesFile.mLines[i].mWords[1];
+		duplicatesMap[dirPlusLine] = true;
+	}
+	//***Done loading duplicate data***
+
 	const string UntranslatedEnglishString("Untranslated");
+	const string UnusedEnglishString("Unused");
 
 	//Insert text
 	for(const SakuraTextFile& sakuraFile : sakuraTextFiles)
@@ -2052,6 +2079,9 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 		const string infoFileName                                = sakuraFile.mFileNameInfo.mNoExtension.substr(0, lastIndex);
 		map<string, DialogOrder>::const_iterator dialogOrderIter = dialogOrder.find(infoFileName);
 		const bool bDialogOrderExists                            = dialogOrderIter != dialogOrder.end();
+
+		static const int dirPlusLineBufferSize = 255;
+		char dirPlusLineNumberBuffer[dirPlusLineBufferSize];
 
 		vector<SakuraString> translatedLines;
 		if( pMatchingTranslatedFileName )
@@ -2128,16 +2158,38 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 					}
 				}
 
+				/*
+				if( textLine.mWords[0] == UntranslatedEnglishString )
+				{
+					printf("Error: Untranslated line. (File: %s Line: %u)\n", sakuraFile.mFileNameInfo.mFileName.c_str(), currSakuraStringIndex + 1);
+				}*/
+
 				//If untranslated, then write out the file and line number
 				if( bIsUnused ||
 					textLine.mWords.size() == 0 ||
-					(textLine.mWords.size() == 1 && textLine.mWords[0] == UntranslatedEnglishString )
+					(textLine.mWords.size() == 1 && (textLine.mWords[0] == UntranslatedEnglishString || textLine.mWords[0] == UnusedEnglishString) )
 					)
 				{
 					bool bUseShorthand = false;
 					if( numTranslatedLines > 1200 )
 					{
 						bUseShorthand = true;
+					}
+
+					if( textLine.mWords.size() == 0 )
+					{
+						printf("Warning: Blank line. (File: %s Line: %u)\n", sakuraFile.mFileNameInfo.mFileName.c_str(), currSakuraStringIndex + 1);
+					}
+					//Verify that this line should indeed be unused
+					else if( textLine.mWords[0] == UnusedEnglishString )
+					{
+						snprintf(dirPlusLineNumberBuffer, dirPlusLineBufferSize, "%s_%i", sakuraFile.mFileNameInfo.mNoExtension.c_str(), translatedLineIndex);
+
+						const string dirPlusLineNumber = dirPlusLineNumberBuffer;
+						if( duplicatesMap.find(dirPlusLineNumber) == duplicatesMap.end() )
+						{
+							printf("Warning: UnusedString has no duplicates in any other file, so it might be used. (File: %s Line: %u)\n", sakuraFile.mFileNameInfo.mFileName.c_str(), currSakuraStringIndex + 1);
+						}
 					}
 
 					const string baseUntranslatedString = sakuraFile.mFileNameInfo.mNoExtension + string(":");
@@ -5181,7 +5233,7 @@ struct WklUncompressedData
 		{
 			const string outFileName = outDirectory + inPrefix + string("_") + std::to_string(i) + bmpExtension;
 			const char* pImageData = &mpFileData[ mpImageInfos[i].offsetBytesFromStart + headerOffset];
-			ExtractImageFromData(pImageData, mpImageInfos[i].numBytes, outFileName, pInPaletteData, inPaletteSize, mpImageInfos[i].width, mpImageInfos[i].height, 1, 16, 0, false);
+			ExtractImageFromData(pImageData, mpImageInfos[i].numBytes, outFileName, pInPaletteData, inPaletteSize, mpImageInfos[i].width, mpImageInfos[i].height, 1, 16, 0, false, true);
 		}
 
 		return true;
@@ -5301,7 +5353,7 @@ struct WklBattleMenuExtractor
 				{
 					const string outFileName = outDirectory + mPrefix + BMPExtension;
 					const char* pImageData   = &pInWklData[mAddress];
-					ExtractImageFromData(pImageData, (mImageHeader.width*mImageHeader.height)/2, outFileName, inSakuraPalette.mpPaletteData, inSakuraPalette.mPaletteSize, mImageHeader.width, mImageHeader.height, 1, 16, 0, false);
+					ExtractImageFromData(pImageData, (mImageHeader.width*mImageHeader.height)/2, outFileName, inSakuraPalette.mpPaletteData, inSakuraPalette.mPaletteSize, mImageHeader.width, mImageHeader.height, 1, 16, 0, false, true);
 				}
 
 				bool LoadImage(const char* pInWklData, const SakuraPalette& inSakuraPalette, const string& tempDir)
@@ -5518,7 +5570,7 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 			FileData originalWkImage;
 			if( !originalWkImage.InitializeFileData(originalWklImagePath) )
 			{
-				printf("PatchWKL failed.  Unable top open %s", patchedWklImageName.mFullPath.c_str());
+				printf("PatchWKL failed.  Unable to open %s\n", originalWklImagePath.mFullPath.c_str());
 				return false;
 			}
 
@@ -6305,7 +6357,7 @@ void ExtractWKLFiles(const string& sakuraDirectory, const string& outDirectory)
 
 				const string outFileName = outSubDirName + prefix + BMPExtension;
 				const char* pImageData   = &pWklData[miscImageHeaderEnd + imageHeader.offsetFromHeader + imageHeader.offsetFromPrevImage];
-				ExtractImageFromData(pImageData, (imageHeader.width*imageHeader.height)/2, outFileName, paletteData.mpPaletteData, paletteData.mPaletteSize, imageHeader.width, imageHeader.height, 1, 16, 0, false);
+				ExtractImageFromData(pImageData, (imageHeader.width*imageHeader.height)/2, outFileName, paletteData.mpPaletteData, paletteData.mPaletteSize, imageHeader.width, imageHeader.height, 1, 16, 0, false, true);
 				
 			}
 			delete[] pImageHeaders;
@@ -7699,6 +7751,21 @@ bool PatchMiniHana(const string& patchedSakuraDirectory, const string& inTransla
 {
 	//Compressed FontSheet:
 	//Found: 000a8178 00000000 Size: 384 CompressedSize: 12625
+
+	/*Points: 
+	Found a match in HANAMAIN.BIN @0x000261e8
+	Found a match in MINIHANA.BIN @0x00044e30
+	*/
+
+	/*Dealer:
+	Found a match in HANAMAIN.BIN @0x000267e8
+	Found a match in MINIHANA.BIN @0x00045430
+	*/
+
+	/*Round:
+	Found a match in HANAMAIN.BIN @0x00026568
+	Found a match in MINIHANA.BIN @0x000451b0
+	*/
 
 	const string patchedMinigameFileName  = patchedSakuraDirectory + string("\\SAKURA3\\MINIHANA.BIN");
 	const string originalMinigameFileName = originalSakuraDirectory + string("\\SAKURA3\\MINIHANA.BIN");

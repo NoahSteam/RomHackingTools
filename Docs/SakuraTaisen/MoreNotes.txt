@@ -54,7 +54,7 @@ CreateTranslatedFontSheets A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\8x12.
 PatchPalettes a:\SakuraTaisen\Disc1 A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\Palette.bin A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\OutPalette.BIN a:\SakuraTaisen\PatchedData\Palettes
 PatchGameKNJ a:\SakuraTaisen\Disc1 A:\SakuraTaisen\PatchedData\TranslatedFontSheet\TranslatedKNJ.BIN a:\SakuraTaisen\PatchedData\KNJ
 FindDuplicateText A:\SakuraTaisen\ExtractedData\Disc1\Dialog a:\SakuraTaisen\ExtractedData\Disc1\Dialog\Duplicates.txt
-PatchGame a:\SakuraTaisen\Disc1 a:\SakuraTaisen\Disc1_Translated A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\TranslatedText A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\8x12.bmp A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\Palette.bin A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\TMapSP A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\MainMenuFont2.bmp A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\MainMenuPatched.bmp A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\OptionsBgndPatched.bmp A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data
+PatchGame a:\SakuraTaisen\Disc1 a:\SakuraTaisen\Disc1_Translated A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\TranslatedText A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\8x12.bmp A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\Palette.bin A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\TMapSP A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\MainMenuFont2.bmp A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\MainMenuPatched.bmp A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\OptionsBgndPatched.bmp A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data a:\SakuraTaisen\ExtractedData\Disc1\WKL
 CreateTBLSpreadsheets a:\SakuraTaisen\ExtractedData\Disc1\Dialog A:\SakuraTaisen\ExtractedData\Disc1\Dialog\Duplicates.txt a:\SakuraTaisen\Disc1\SAKURA1
 CreateMesSpreadsheets a:\SakuraTaisen\ExtractedData\Disc1\Dialog a:\SakuraTaisen\Disc1\
 CreateWKLSpreadsheets a:\SakuraTaisen\ExtractedData\Disc1\WKL A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\WKLDuplicates.txt A:\SakuraTaisen\Disc1\SAKURA2
@@ -66,6 +66,7 @@ Extract8BitImage a:\SakuraTaisen\ExtractedData\Disc1\Test\UncompressedFace.bin A
 Extract8BitImage a:\SakuraTaisen\UncompressedDataResults\0000ff20.bin A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\Palette.bin 0 16 16 256 1 a:\SakuraTaisen\UncompressedDataResults
 ExtractFACEFiles a:\SakuraTaisen\Disc1 a:\SakuraTaisen\ExtractedData\Disc1\FACE
 ExtractWKLFiles a:\SakuraTaisen\Disc1 a:\SakuraTaisen\ExtractedData\Disc1\WKL
+CopySharedWklImages a:\SakuraTaisen\ExtractedData\Disc1\WKL A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\WKL
 ExtractMiniGameData a:\SakuraTaisen\Disc1  A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data a:\SakuraTaisen\ExtractedData\Disc1\Minigames\
 FindDuplicateText  a:\SakuraTaisen\ExtractedData\Disc1\WKL A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\WKLDuplicates.txt
 FindCompressedData a:\SakuraTaisen\Disc1\SAKURA1\LOGO.SH2 a:\SakuraTaisen\Uncompressed.bin a:\SakuraTaisen\UncompressedDataResults
