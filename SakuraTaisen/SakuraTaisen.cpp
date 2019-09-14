@@ -2158,11 +2158,10 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 					}
 				}
 
-				/*
 				if( textLine.mWords[0] == UntranslatedEnglishString )
 				{
 					printf("Error: Untranslated line. (File: %s Line: %u)\n", sakuraFile.mFileNameInfo.mFileName.c_str(), currSakuraStringIndex + 1);
-				}*/
+				}
 
 				//If untranslated, then write out the file and line number
 				if( bIsUnused ||
@@ -2186,9 +2185,9 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 						snprintf(dirPlusLineNumberBuffer, dirPlusLineBufferSize, "%s_%i", sakuraFile.mFileNameInfo.mNoExtension.c_str(), translatedLineIndex);
 
 						const string dirPlusLineNumber = dirPlusLineNumberBuffer;
-						if( duplicatesMap.find(dirPlusLineNumber) == duplicatesMap.end() )
+						if( duplicatesMap.find(dirPlusLineNumber) == duplicatesMap.end() && !(id >= 0xc351 && id <= 0xcfff) && id != 0x9c41 )
 						{
-							printf("Warning: UnusedString has no duplicates in any other file, so it might be used. (File: %s Line: %u)\n", sakuraFile.mFileNameInfo.mFileName.c_str(), currSakuraStringIndex + 1);
+							printf("Warning: UnusedString has no duplicates in any other file, so it might be used. (File: %s Line: %u Id: %#06x)\n", sakuraFile.mFileNameInfo.mFileName.c_str(), currSakuraStringIndex + 1, id);
 						}
 					}
 

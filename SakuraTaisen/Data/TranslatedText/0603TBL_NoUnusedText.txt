@@ -245,7 +245,7 @@ I think you'll all have more fun if us older folks stay out of it.
 Don't say that! You're still way too young to be one of the 'older folks', Ayame. 
 Haha... well thank you, Ogami. You're quite talented at flattery. 
 Setting that aside for the moment, is there anything you'd like to discuss with me as the leader of the Flower Division? 
-Unused
+Unused 
 I'd like to hear about how our last battle impacted the area, please. 
 You did a splendid job of wrapping this last battle up quickly. You have a good grasp of the strengths of your division. 
 We will continue to expect great things of you as a leader. 
@@ -286,7 +286,7 @@ The one with the most enemies shot down during the last battle was Iris.
 Since she is able to move around the battlefield freely, she might be best suited for supporting the others. 
 The one with the most enemies shot down during the last battle was Kohran. 
 Kohran's explosives can hit multiple enemies at once. She should aim for large groups when possible. 
-Her performance was truly inspiring.
+Her performance was truly inspiring. 
 Take this as proof of her trust in you as a commanding officer, Ogami. 
 You think so...? Well, thank you, ma'am. 
 I think that's all there is to report about that. Did you need anything else? 
@@ -688,7 +688,7 @@ Since we each did half, we got done twice as fast!
 Ensign, try not to spoil Iris too much. 
 Since we each did half, we got done twice as fast! 
 All that's left is to wait for the party. 
-Ensign, could you please check how they're doing?
+Ensign, could you please check how they're doing? 
 Okay, I'll do that. 
 Oh, Ensign. Would you mind helping me finish getting the green room ready? 
 Leave it to me! <br> Sorry, I'm a little busy... 
@@ -705,11 +705,11 @@ No excuses! Come here and get to work!
 Y-yes, ma'am! 
 Good grief, we're finally done. 
 Yes. All that's left now is to await the party. 
-Ensign, could you please check how they're doing?
+Ensign, could you please check how they're doing? 
 Okay, I'll do that. 
 Looks like the green room is all ready. 
 Yes. All that's left now is to await the party. 
-Ensign, could you please check how they're doing?
+Ensign, could you please check how they're doing? 
 Okay, I'll do that. 
 Alright, we're at your room. Do I get to hear what we're working on now? 
 ...nothing that's going to explode like last time, I hope? 
@@ -914,7 +914,7 @@ Yep! Once you get everything, bring it to the green room.
 Here's your list. I'm counting on you, Uncle Ichi. 
 Hmm, let's see... cups, knives and matches. 
 I'd say most of that should be in the galley. 
-Oh yeah, Uncle Ichi!
+Oh yeah, Uncle Ichi! 
 Whoa, you startled me! Wh-what is it, Iris? 
 I'm really happy you're helping me. Thank you so much. 
 Hahaha, she's so excited she took off running. Well, guess I'd better look for this stuff. 
@@ -945,7 +945,7 @@ Okay. I should have known you weren't the kind of boy who peeks in the shower...
 ...sorry for not believing you, Uncle Ichi. 
 Oh, you don't need to apologize. It was my fault too. But I'm glad to see you back to normal. 
 By the way, what are you getting ready for the party? 
-...
+... 
 What's the matter, Uncle Ichi? 
 I just figure you won't believe me, no matter what I say. 
 I didn't go there to see you in the shower. That's the truth. But... I know you don't believe me. 
@@ -1155,7 +1155,7 @@ The shops are all closed today. I should head somewhere else.
 Good work holding down the fort. Don't let it get you down. 
 I'm on duty today. 
 Kasumi and Tsubaki are at Renga getting a bite. I'm jealous. 
-Zzzzzzzzz....
+Zzzzzzzzz.... 
 Commander Yoneda's still out like a light. 
 Gotta leave the sword, crown and shield here... 
 The wig will be in the dressing room. I should head out. 

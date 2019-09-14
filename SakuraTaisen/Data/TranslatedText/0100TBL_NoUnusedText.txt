@@ -69,7 +69,7 @@ I'm on duty! Sorry, but I don't have time to see a play right now.
 Ehh!?  The base of a covert squad is inside a theater!?  That can't be……  No, wait a second...
 In order to conceal oneself from the enemy's eyes, first do so from one's allies.  I see.
 First I'd like to know more about you.
-I see - that's an excellent attitude.  I'm relieved to hear those words.  That is how a member of a secret corps should be.
+I see - that's an excellent attitude. I'm relieved to hear those words. That's how a secret corps member should be.
 ……That would mean the Imperial Combat Revue has something like a secret weapon, wouldn't it?
 (Koubu?  Ahh…… the name of the secret weapon.  I wonder what sort of thing it is.)
 Ye-yes!  If you would, please.
@@ -78,7 +78,7 @@ Ye-yes!  If you would, please.
 O-oh, no!  It-it's nothing!
 (It couldn't be…… I'm overthinking this.  This girl knew my name, didn't she?)
 Ye-yes!  If you would, please.
-So this is the Grand Imperial Theater that was newly built last year…..  I never would have expected it to be right in the middle of Ginza……
+So this is the Imperial Theater that was built last year... Never would've expected it to be in the middle of Ginza...
 It's a big building……
 Surely, no one would notice that the headquarters of a covert squad is inside a theater like this……
 Wow……  What an impressive entryway.  Still, it seems a bit careless not to have a lookout posted……
@@ -151,7 +151,7 @@ You're really the Lieutenant? <br> Why're you drinking right now!
 Fo- forgive me!
 How can you drink sake in the middle of the day?!
 Are you really that Lieutenant General Yoneda? You seem quite different from the rumors I've heard……
-I had heard Lieutenant General Yoneda was a hero of the Russo-Japanese War and the greatest strategist the Army has.
+I heard Lieutenant General Yoneda was a hero of the Russo-Japanese War and the greatest strategist the Army has.
 No…… <br> I hadn't said that much.
 ……I understand. But given that I have been transferred to the Imperial Combat Revue……
 For the harmony and safety of the citizens of Teito…… I intend to fight with my life on the line!
@@ -189,11 +189,11 @@ Yes, I know your first duty will be at the reception desk. Come on, let's go tog
 I'm sorry…… <br> It's partly my fault for not being more careful.
 I'm sorry. I'm worried about Iris, so…… forgive me.
 Ah…… Just a second…… ……She's gone.
-……That's no good. Here I've finally just received my first official duty and I don't even know where the reception desk is.
+That's no good... I've finally just received my first official duty and I don't even know where the reception desk is.
 Ensign Ogami, is something the matter?
 You're…… <br> Miss Maria Tachibana…… <br> right?
 Yes, that's right. It seems you've already met with Manager Yoneda.
-Yes. I've already received my first official duty. I was told to change into these clothes and head for the reception desk.
+Yes. I've already received my first official duty. I was told to get changed and head for the reception desk.
 Until I get used to it, I think I'd like to learn about my job a little at a time.
 I see. That's an excellent attitude.
 By the way, do you happen to know where the reception desk is?
@@ -388,7 +388,7 @@ Huh??
 There's no role of captain in the Flower Division.
 In the first place, there's no way you, a man, could be in the Flower Division!
 (……H-how can this be?! She doesn't believe me in the least!)
-(No! <br> The Imperial Combat Revue Flower Division, is a secret corps…… I mustn't let its name slip!)
+(No! <br> The Imperial Combat Revue Flower Division, is a secret corps... I mustn't let its name slip!)
 ……Though I may be punching tickets right now, the truth is…… Actually I am just a ticket puncher.
 Sir, are you all right!? Ah! It's already this late! The Flower Division's performance is going to start!
 (She just said "Flower Division"…… Why would an ordinary person know the name of a covert squad……?)
@@ -426,7 +426,7 @@ Mister, do you think it's such a good idea to glare at your customers like that!
 What's the matter? Say something.
 (Damn it…… you brat! Getting all cocky when I'm trying to keep quiet!)
 ……No matter how I look at it, this is just too odd. Just how is ticket punching a secret mission!?
-……All right. If it's come down to this, I'll try hearing what the other squad members have to say. I may be able to learn something.
+All right. If it's come down to this, I'll try hearing what the others have to say. I may be able to learn something.
 And if I'm not satisfied with that, I'll just have to question Lieutenant General Yoneda!
 ……Now then. Where should I go first?
 Ye-yes. What is it?
@@ -473,9 +473,9 @@ Ah!  You there!
 Who else is there?  Stop looking like a fool and come here!
 I wonder if you wouldn't perhaps pick up that dropped fork and exchange it for a new one for me?
 My, then you mean to say I should pick it up myself?
-You dare to suggest that the only daughter of Kanzaki Heavy Industries, and the star actress of this theater, and, and……
+You dare to suggest that the only daughter of Kanzaki Heavy Industries, the star actress of this theater, and, and...
 …the top lady of Japanese high society, I, Sumire Kanzaki, should pick up a fork dropped on the floor!?
-That is what you are saying, is it not?! You are fired! I shall report this to the manager and see to it that you are fired!
+That is what you are saying, isn't it?! You're fired! I shall report this to the manager and see to it that you're gone!
 Ah…… <br> My, oh, no…… <br> Hahaha……
 No wonder I thought I hadn't seen a waiter like you before…… <br> Forgive me.
 Let's see - Ensign Ogawa, was it?
@@ -489,7 +489,7 @@ Honestly, that old fool Yoneda!  He has no eye for people!
 Oh my, what shall I do!  How rude of me.  Hahaha……
 Let's just keep what I said just now a secret from Mr. Yoneda!  Is that clear?  (Mwa!)
 Eh-heh, there's no need to be shy.  That was just to see that the favor's returned……  I mean, just to see you off.
-Ahh, Mr. Yoneda is in the manager's office. But is this absolutely clear? You are not to mention what I just said to anyone!
+Ahh, Mr. Yoneda is in the manager's office. But is this absolutely clear? Do not to mention what I just said to anyone! 
 Do you understand, Ensign Ogawa?!
 Enough, begone!!
 Who might you be?
@@ -503,15 +503,15 @@ Yeah, I heard the news from Count Hanakoji. Now then, there's no need for formal
 In the first place, y'know, this is the Grand Imperial Theater. You can't use that military talk.
 Well, how 'bout a round!?
 Idiot! <br> What's the big idea with this "are you really" bit!?
-What's the matter, you can't figure out who a person is if he hasn't got any medals on?! I'm Army Lieutenant General Yoneda Ikki!
+What's the matter, you can't figure out who I am if I haven't got any medals?! I'm Army Lieutenant General Yoneda Ikki!
 Damn fool!
-Okay! As long as you understand, that's fine enough. Now then, I will now entrust you with your first mission!
+Okay! As long as you understand, that's fine. Now then, I will now start your first mission!
 Rumors……? <br> Hey, what sort of rumors!? Huh? Spit it out! 
 The greatest strategist the Army has…… and, he's the manager of the Grand Imperial Theater.
 And on top of that, <br> a drunken old man……
 And that's what you don't like.
 That is what you're saying! <br> But you know, Ogami……
-No matter how much distinguished military service I've performed and how many medals hang from my chest, I've killed a whole lot of people.
+No matter how much military service I've performed and how many medals I've got, I've killed a whole lot of people.
 Enemies and allies alike…… <br> I've killed far too many.
 So, what's wrong with being the manager of a theater?
 Splendid! Er, rather…… that's just splendid indeed! Now then, here's your first duty!
@@ -602,4 +602,4 @@ S-stop…just what's gotten into you?
 I'm looking forward to working with you again, Ogami!
 Huu, huhuhu…Come on, Ensiiign, let'sh keep drinking!
 Guess whooo~?
-My name is Shinguji Sakura.  I've just come here from Sendai.  I'm a complete newcomer who's just joined the Tei-Geki.
+My name is Sakura Shinguji. I've just come here from Sendai. I'm a complete newcomer who's just joined the Tei-Geki.

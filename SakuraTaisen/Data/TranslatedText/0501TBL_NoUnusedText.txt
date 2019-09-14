@@ -45,7 +45,7 @@ No answer. Guess she's already headed for the meeting room.
 Is Ayame still in her room? 
 She probably already headed for the underground meeting room. 
 ...nobody home. 
-It's nice to relax and drink some tea here...
+It's nice to relax and drink some tea here... 
 But right now I need to get to the underground meeting room. 
 Looks like nobody's here. I should head to the underground meeting room. 
 We've been sold out every day recently, so this area's always packed with guests. 
@@ -159,7 +159,7 @@ Sometime in August, 1923... Headquarters of the Hive of Darkness
 Kuh... It seems I can't just force my way through... 
 And here I thought it was merely a broken down old building... This power is nothing to sniff at. 
 ...I suppose there is no way around it. First we must seal this place... this building... 
-36 hours later, Imperial Theatre
+36 hours later, Imperial Theatre 
 I say it every time but... Sumire sure does steal the show. 
 Kanna is a perfect fit for Son Goku, and Sumire's great as that demoness... 
 But I bet ya Sumire will start yelling 'Why am I always the villain!?' after it's over. 

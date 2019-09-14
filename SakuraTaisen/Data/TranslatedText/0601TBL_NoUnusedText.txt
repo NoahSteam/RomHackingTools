@@ -48,10 +48,10 @@ Huh... I wonder if Sakura is in her room.
 Why don't I go check somewhere else. 
 ...It seems she isn't here. Didn't everyone say they were getting together today? 
 Hmm... I wonder if Kanna is in her room? 
-Why don't I go check somewhere else?
+Why don't I go check somewhere else? 
 ...Seems like she's not here. I guess she hasn't returned to her room yet. 
 Hmm... I wonder if Maria is in her room? 
-Why don't I go check elsewhere?
+Why don't I go check elsewhere? 
 ...Seems like she's not here. I guess she hasn't returned to her room yet. 
 I wonder if Iris is on her way back... 
 Okay, guess I'll head somewhere else. 
@@ -401,7 +401,7 @@ I was left behind, wasn't I? I've gotta stop thinking like that or I'll start cr
 I don't want the kids who came to see the Flower Division's performance to think something like that. 
 Allowing them to come to this theater and make good memories together... That's my most important job. 
 Our memories are precious, aren't they? <br> Fighting is an important job too. <br> That's just like you, Kanna. 
-Our memories are precious, aren't they?
+Our memories are precious, aren't they? 
 Exactly. We can give those kids a dream to work towards. 
 Even if bad things happen, they can think back on our performance with a smile on their faces. 
 Every time I stand there up on the stage, I always tell myself that that's the kind of performance I wanna show them. 
@@ -630,7 +630,7 @@ No, no! Haha. It was just a joke! A joke!
 It's ah... It's quite alright, Captain. Please don't worry so much. 
 W-well then... I'll take my leave. 
 Alright, I'll see you later. 
-Who'd have thought Maria would ever act like that?
+Who'd have thought Maria would ever act like that? 
 So underneath that exterior, she's just a girl after all. 
 Kasumi is leading the patrons out of the theater. 
 She seems busy, so I won't bother her. 
@@ -654,7 +654,7 @@ Alright, I'm coming in!
 Kohran, what're you up to? 
 Shh! ...I'm in the middle of making a totally new type of robot... 
 I'm trying to connect a really important wire right now... I can't concentrate so... can you stop being so nosy? 
-What kind of robot? <br> I'm not going to say a word. <br> You're building noses?
+What kind of robot? <br> I'm not going to say a word. <br> You're building noses? 
 Wow... What kind of robot? 
 Didn't I just tell you to shut your trap for one second?! Aaaah... 
 Wh... what's wrong? 
@@ -663,7 +663,7 @@ Don't worry. I'm not gonna say a single word.
 That were nine words just there! Aaah... 
 Wh...what's wrong? 
 Ah...damn it... 
-You're building noses?
+You're building noses? 
 You dim-witted...! What are you talking about?! I said "nosey"! 
 Oh, I've just shoved it right in without thinking about it! 
 K... Kohran! If you scream like that... 
@@ -856,7 +856,7 @@ The Flower Division? Right now they're throwing a party, I think. They should be
 ...yes. We should see some results soon.... thanks... 
 I wonder if the manager is around. 
 I guess I'll try somewhere else. 
-Zzz... zzz... zzz... zzz...
+Zzz... zzz... zzz... zzz... 
 He's sleeping pretty deeply, he seems peaceful. 
 It's Ogami... do you have a moment? 
 Oh, Ogami. Yeah, come on in. 
@@ -890,7 +890,7 @@ I think you'll all have more fun if us older folks stay out of it.
 Don't say that! You're still way too young to be one of the 'older folks', Ayame. 
 Haha... well thank you, Ogami. You're quite talented at flattery. 
 Setting that aside for the moment, is there anything you'd like to discuss with me as the leader of the Flower Division? 
-Unused
+Unused 
 I'd like to hear about how our last battle impacted the area, please. 
 You did a splendid job of wrapping this last battle up quickly. You have a good grasp of the strengths of your division. 
 We will continue to expect great things of you as a leader. 
@@ -942,7 +942,7 @@ Oh, they've definitely changed. I suppose they aren't showing on the surface, th
 Somewhere in their hearts they came to recognize their own maturity... I think they became a little more headstrong. 
 And you're the one who brought about this change, Ogami. 
 Me? But I didn't do anything. 
-I wonder about that... hehehe.
+I wonder about that... hehehe. 
 Keep up the good work, Ensign. 
 ...doesn't look like Yuri's here. I think maybe she was helping a lost kid or something. 
 I should try another room. 
