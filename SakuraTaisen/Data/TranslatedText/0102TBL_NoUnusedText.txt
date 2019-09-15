@@ -20,7 +20,7 @@ It's an exquisitely-detailed prop crown used in stage plays.
 It's a gaudy costume wig. What play could it possibly be used in? 
 A photo of Sakura in a swimsuit? Whoa, this is pretty risque... I can't let anyone else see it. 
 It's a photo of Sumire in costume. Her elaborate makeup is quite impressive. 
-It's a photo of Maria on stage in the military uniform from "For Love"... She's a beautiful woman disguised as a man. 
+It's a photo of Maria on stage in the uniform from "For Love"... She's a beautiful woman disguised as a man. 
 It's a rare training photo with a very private feel. 
 A photo of Iris in a swimsuit. She looks so cute holding that inner tube. 
 It's Kohran in a maid outfit. She looks great with her hair down. 
@@ -29,7 +29,7 @@ It's Ayame's gun. What am I supposed to do with it?
 Nothing I can do here. I'd better check somewhere else... 
 There's no one here. I'd better check somewhere else... 
 I'd better check somewhere else... 
-I'm not making any progress here. I should go to the Manager's Office and speak directly with Lieutenant General Yoneda. 
+I'm not making any progress. Best go to the Manager's Office and speak directly with Lt. General Yoneda.
 Everything I've seen makes me think this place is just a theater... 
 Go to the Stage <br> Go to Yoneda's Room <br> Go to the Reception Desk 
 (...It's already well into the night.) 
@@ -341,7 +341,7 @@ W-what is this place?!
 The core of the Imperial Combat Revue. ...The underground Command Room. 
 Manager Yoneda, you mean the Imperial Combat Revue is real?! 
 Of course! The theater troupe is merely a facade. 
-Now then, let me introduce you again. These girls are members of the Flower Division of the Imperial Combat Revue. They shall be your subordinates. 
+So, I'll introduce you again. They are members of the Flower Division. They'll be your subordinates. 
 Ogami... Under your command, I feel like I can fight with all my might! 
 As new members of the Imperial Combat Revue, let's do our best! 
 I'm counting on you, Ogami! 
@@ -578,7 +578,7 @@ Sumire's room is very beautifully decorated.
 Y~es? Who is it~? 
 It's Ogami... I've got something for you. 
 What is it, sir? And Sakura? What are you two doing here at this hour... 
-This afternoon while I was punching tickets I got a letter for you from a man who said he was 'your biggest fan'. 
+This afternoon while punching tickets, I got a letter from a man who said he was 'your biggest fan'. 
 I figured I should pass it along to you. Here you go. 
 Well... you came here just to hand this to me? Thank you very much! 
 Though I'm not used to mail deliveries in the middle of the night. 
@@ -668,7 +668,7 @@ This is the prop room.
 Right. Everything looks fine, so let's keep going. 
 This is the set room. 
 'Set' room? 
-Yes, 'set' refers to all the backdrops and things we use to set the scene during the performance. We store all that here. 
+Yes, 'set' refers to all the objects we use to set the scene during the performance. We store all that here. 
 I see... 
 Everything appears to be in order. Let's keep going. 
 ... the floor looks very dusty... We'll need to clean it again. 
@@ -707,7 +707,7 @@ Ogami, let's continue our rounds.
 I heard Kohran will be coming to work here next month. 
 So this room will be empty until then. Let's move on. 
 This room belongs to Kanna Kirishima. She's another member of the Flower Division. 
-I haven't met her myself, but I heard she practices karate. In fact, she's off on a training trip right now, apparently. 
+I haven't met her myself, but I heard she practices karate. In fact, she's off training right now, apparently. 
 A karate user? And she's on a training trip... Man, she sounds tough. 
 Ogami, let's continue our rounds. 
 I heard Kanna will be joining us at the theater two months from now. 

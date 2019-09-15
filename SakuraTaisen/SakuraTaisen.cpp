@@ -1897,9 +1897,10 @@ bool FindDialogOrder(const string& rootSakuraTaisenDirectory, map<string, Dialog
 			const bool bIsLipsEntry = (pData[index] == 0x2E && pData[index + 1] == 0x80 && pData[index + 2] == 0x00) ||
 				                      (pData[index] == 0x17 && pData[index + 1] == 0x80 && pData[index + 2] == 0x00);
 
-			if( bIsLipsEntry || 
-				(pData[index] == 0x22 && pData[index + 1] == 0x80 && pData[index + 2] == 0x00)
-				)
+			const bool bIsRegularDialog = (pData[index] == 0x22 && pData[index + 1] == 0x80 && pData[index + 2] == 0x00) ||
+				                          (pData[index] == 0x00 && pData[index + 1] == 0x80 && pData[index + 2] == 0x00 && pData[index + 3] == 0x27);
+
+			if( bIsLipsEntry || bIsRegularDialog )
 			{
 				unsigned short id = pData[index + 4] + (pData[index + 3] << 8);
 				outOrder[infoFileNameInfo.mNoExtension].idAndOrder[id].push_back(appearance);
@@ -1922,7 +1923,9 @@ bool FindDialogOrder(const string& rootSakuraTaisenDirectory, map<string, Dialog
 
 					//Break out if the next id is found
 					if( (pData[lookAheadValue] == 0x22 && pData[lookAheadValue + 1] == 0x80 && pData[lookAheadValue + 2] == 0x00) ||
-						(pData[lookAheadValue] == 0x2E && pData[lookAheadValue + 1] == 0x80 && pData[lookAheadValue + 2] == 0x00)
+						(pData[lookAheadValue] == 0x2E && pData[lookAheadValue + 1] == 0x80 && pData[lookAheadValue + 2] == 0x00) || 
+						(pData[lookAheadValue] == 0x17 && pData[lookAheadValue + 1] == 0x80 && pData[lookAheadValue + 2] == 0x00) ||
+						(pData[lookAheadValue] == 0x00 && pData[lookAheadValue + 1] == 0x80 && pData[lookAheadValue + 2] == 0x00 && pData[lookAheadValue + 3] == 0x27)
 						)
 					{
 						break;
@@ -5552,6 +5555,7 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 
 	//Create map of where the key is the crc of the original wkl image and the value is the path to the translated image
 	map<unsigned long, FileNameContainer> patchedWklFileCrcMap;
+	map<unsigned long, FileNameContainer> patchedWklOriginalFileCrcMap;
 
 	vector<string> wklSubDirs;
 	FindAllDirectoriesWithinDirectory(translatedWKLDirectory, wklSubDirs);
@@ -5575,6 +5579,7 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 
 			//It is assumed that the patched wkl directory has no duplicate images
 			patchedWklFileCrcMap[originalWkImage.GetCRC()] = patchedWklImageName;
+			patchedWklOriginalFileCrcMap[originalWkImage.GetCRC()] = originalWklImagePath;
 		}
 
 	}
@@ -5736,6 +5741,14 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 				translatedImageInfo.height              = SwapByteOrder(static_cast<unsigned short>(abs(bmpReader.mBitmapData.mInfoHeader.mImageHeight)));
 				translatedImageInfo.unknown             = pImageBlock->mpImagesInBlock[currImage].unknown;
 
+				/*
+				if( bmpReader.mBitmapData.mInfoHeader.mImageWidth != pBattleImage->mImageHeader.width || abs(bmpReader.mBitmapData.mInfoHeader.mImageHeight) != pBattleImage->mImageHeader.height)
+				{
+					printf("WKL Stat: Image dims don't match. Width(%i -> %i), Height(%i -> %i) %s\n", pBattleImage->mImageHeader.width, bmpReader.mBitmapData.mInfoHeader.mImageWidth,
+						                                                                                  pBattleImage->mImageHeader.height, bmpReader.mBitmapData.mInfoHeader.mImageHeight,
+						                                                                                  pathToTranslatedImage->second.mFullPath.c_str());
+				}*/
+
 				offsetFromHeader   += offsetFromPrevImage;
 				offsetFromPrevImage = bmpReader.mBitmapData.mColorData.mSizeInBytes;
 				imageBlockSize     += bmpReader.mBitmapData.mColorData.mSizeInBytes + sizeof(translatedImageInfo);
@@ -5845,6 +5858,14 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 
 				const string patchedBattleImagePath = pathToTranslatedImage->second.mFullPath;
 
+				//Read in original data
+				BitmapReader originalImage;
+				if( !originalImage.ReadBitmap(originalFilePath.mFullPath) )
+				{
+					printf("PatchWKL failed.  Unable to open %s\n", originalFilePath.mFullPath.c_str());
+					return false;
+				}
+
 				//Read in translated data
 				BitmapReader translatedImage;
 				if( !translatedImage.ReadBitmap(patchedBattleImagePath.c_str()) )
@@ -5855,6 +5876,13 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 
 				const int imageWidth  = abs(translatedImage.mBitmapData.mInfoHeader.mImageWidth);
 				const int imageHeight = abs(translatedImage.mBitmapData.mInfoHeader.mImageHeight);
+
+				if( imageWidth != originalImage.mBitmapData.mInfoHeader.mImageWidth || imageHeight != abs(originalImage.mBitmapData.mInfoHeader.mImageHeight) )
+				{
+					printf("WKL Warning: Image dims don't match. Width(%i -> %i), Height(%i -> %i) %s\n", originalImage.mBitmapData.mInfoHeader.mImageWidth, imageWidth, 
+						                                                                                  abs(originalImage.mBitmapData.mInfoHeader.mImageHeight), imageHeight,
+						                                                                                  pathToTranslatedImage->second.mFullPath.c_str());
+				}
 
 				if( imageWidth%8 != 0 )
 				{
@@ -5875,8 +5903,8 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 					return false;
 				}
 
-				translatedImage.mBitmapData.mInfoHeader.mImageWidth = abs(translatedImage.mBitmapData.mInfoHeader.mImageWidth);
-				translatedImage.mBitmapData.mInfoHeader.mImageHeight = abs(translatedImage.mBitmapData.mInfoHeader.mImageHeight);
+				translatedImage.mBitmapData.mInfoHeader.mImageWidth  = imageWidth;// abs(translatedImage.mBitmapData.mInfoHeader.mImageWidth);
+				translatedImage.mBitmapData.mInfoHeader.mImageHeight = imageHeight;//abs(translatedImage.mBitmapData.mInfoHeader.mImageHeight);
 
 				//Uncompressed image header for translated data
 				translatedWklData.mpImageInfos[imageIndex]                      = uncompressedImageData.mpImageInfos[imageIndex];

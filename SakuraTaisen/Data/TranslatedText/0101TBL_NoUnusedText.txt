@@ -46,7 +46,7 @@ Count Hanakouji, as it happens. The man who recommended you for this position.
 He wanted to make sure you weren't shirking any of your new duties. 
 I see. Actually, I have a question for you regarding that, Commander. 
 Aww, don't look so glum, Ogami. Loosen up. How 'bout we have a drink or two, huh? 
-(Is this guy really the Lieutenant General Ikki Yoneda I've heard about? He's drinking in the middle of the afternoon...) 
+(Is this guy really the Lt. General Ikki Yoneda I've heard about? He's drinking in the middle of the afternoon...) 
 Whatcha think of the job? I thought punchin' tickets'd be right up yer alley. 
 Give me a break! This job is nothing like the assignment I was told about! 
 I'm supposed to be captain of this Imperial Combat Revue, right? What are my duties? 
@@ -142,7 +142,7 @@ Being promoted to captain of my own squad straight out of the academy was like a
 It didn't even matter what my assignment was. I'd be satisfied with any post if it meant protecting the capital. 
 I thought I was taking control of a crack assault force, so when I found an exclusively female theater troupe, well... 
 Does my being here help protect our nation's peace at all? 
-Ask about the theater <br> Ask Sakura about herself <br> Ask about the Imperial Combat Revue 
+Ask about the theater <br> Ask Sakura about herself <br> Ask about the Combat Revue 
 Sakura, what do you do here at the theater? 
 The Revue puts on a new show at the Imperial Theater every month. 
 This month's performance is "The Eve of Lady Camellia", with Sumire in the lead role. 
@@ -181,7 +181,7 @@ But I'm relieved...you seem to be such a sincere man.
 Huh?... 
 N-no, it's nothing. 
 Now, who could THAT be? 
-Come in, it's open. <br> If you're looking for Ogami, he's not in! 
+Come in, it's open. <br> Ogami's not here right now! 
 Come in, it's open. 
 Maria...what is it? 
 Well, the play will be starting shortly... 
@@ -196,7 +196,7 @@ Well, please excuse me, Ogami.
 ...Uh, yes? 
 ...Ensign. 
 Y-yes? 
-There's nothing wrong with idle conversation, but it would be problematic if you were to disturb the order of the Flower Division. 
+There's nothing wrong with idle talk, but it would be a problem if you disturb the order of the Flower Division. 
 Ah...understood. I'll take care not to disturb you all. 
 Then if you'll excuse me, the stage is calling. 
 Undoubtedly, you all have your roles to play here...parts only you can perform. 
@@ -210,7 +210,7 @@ Come in, it's open.
 Sumire...what is it? 
 Ensign, terribly sorry to bother you while you're off-duty. 
 Truthfully, the play I'm to star in - "The Eve of Lady Camellia" - is due to begin quite soon, but... 
-...we have been waiting fruitlessly for Sakura to show up in the dressing room for some time now. Would you happen to have seen her? 
+...we've been waiting for Sakura to show up in the dressing room. Would you happen to have seen her? 
 Oh! I completely forgot! 
 S-Sakura... 
 S-Sakura? Why in heaven's name are you in the Ensign's room?! 
@@ -272,7 +272,7 @@ Well, please excuse me, Ogami.
 ...Uh, yes? 
 ...Ensign. 
 ...Uh, yes? 
-There's nothing wrong with idle conversation, but it would be problematic if you were to disturb the order of the Flower Division. 
+There's nothing wrong with idle talk, but it would be a problem if you disturb the order of the Flower Division. 
 Ah...understood. I'll take care not to disturb you all. 
 Pardon my intrusion, Ensign Ogami. If you'll excuse me, the stage is calling. 
 Undoubtedly, you all have your roles to play here...parts only you can perform. 
@@ -418,8 +418,8 @@ Thank you for waiting, Ensign.
 Such impeccable patience is nothing less than I'd expect from a military officer. 
 It was nothing, hahaha... 
 By the way...did you have some need of me? 
-Could you show me your room? <br> Tell me about the Combat Revue. <br> Give her the letter. 
-Could you show me your room? <br> Tell me about the Combat Revue. 
+Could you show me your room? <br> Ask about the Combat Revue. <br> Give her the letter. 
+Could you show me your room? <br> Ask about the Combat Revue. 
 Could you show me your room? I'd love to see what it's like in there. 
 Most certainly not. 
 Why, the very thought of allowing a man into my room so casually... 
@@ -441,7 +441,7 @@ Ah, Sumire, wait!
 Sumire, could you tell me about the Imperial Combat Revue? 
 Imperial Combat Revue... 
 By the look of it, this is just an ordinary theater. 
-I have a hard time believing it's the headquarters for a secret assault force. Sumire, won't you tell me what's really going on? 
+I have a hard time believing it's the HQ for a secret force. Sumire, won't you tell me what's really going on? 
 Well... 
 ...Pardon me. There are some pressing matters I must attend to. 
 I hate to leave after you took the time to come and see me, but I must bid you adieu for now. 
@@ -489,7 +489,7 @@ A man would have to be mad to not be captivated by my beauty.
 (I'd better stop staring like an idiot.) 
 (...Looking more closely, there appears to be a beauty mark beneath her eye.) 
 What is it, Ensign? Did you wish to speak with me? 
-Drinking tea before a performance like this is the perfect way to dissolve whatever tension I may be feeling. 
+Drinking tea before a performance is the perfect way to dissolve tension. 
 By the way, Ensign... what was it you needed? 
 (Her hair is gathered back in a hairband.) 
 (...I wonder what her hair would look like without it?) 
@@ -503,18 +503,18 @@ I'll be going!
 Guess I pushed Sumire too far... she really let me have it. 
 ...Oh well. I'd better go too. 
 Ensign, do you really mean to leave in the middle of our conversation? 
-Ask about the Imperial Combat Revue. <br> Ask Sumire about herself. 
-Ask about the Imperial Combat Revue. <br> Ask Sumire about herself. <br> Hand her the letter. 
+Ask about the Combat Revue. <br> Ask Sumire about herself. 
+Ask about the Combat Revue. <br> Ask Sumire about herself. <br> Hand her the letter. 
 Sumire, could you tell me about the Imperial Combat Revue? 
 Imperial Combat Revue... 
 By the look of it, this is just an ordinary theater. 
-I have a hard time believing it's the headquarters for a secret assault force. Sumire, won't you tell me what's really going on? 
+I have a hard time believing it's the HQ for a secret force. Sumire, won't you tell me what's really going on? 
 Well... 
 I hope it's not too forward of me to say, but I'd love to know more about you... 
 My my, Ensign... how unexpectedly straight to the point you are. 
 As I mentioned before, I am the daughter of the Kanzaki family, which controls the Kanzaki Group. 
 Originally, the only stage I stood upon was the stage of high society. 
-But then Kanzaki Heavy Industries became linked with this theater due to their collaborations, and so I came to live here. 
+But then Kanzaki Inc. became linked with this theater due to their efforts, and so I came to live here. 
 Kanzaki Heavy Industries? Why would a theater collaborate with an industrial manufacturing company? 
 Ah, w-well now... 
 While taking tickets earlier, I was entrusted this letter by someone calling himself a devoted fan. 
@@ -623,7 +623,7 @@ The other two aren't here right now. Their names are Kanna and Kohran.
 They'll be returning to the theater before too long. 
 All right, I'm going to ask Commander Yoneda more about my position. 
 Whoa! You startled me...W-who might you be? 
-Of course. <br> I'm a little busy at the moment... 
+Of course. <br> I'm a little busy... 
 Of course. 
 I'm a little busy at the moment...could it wait until later? 
 I-I understand. 
@@ -672,10 +672,10 @@ Uh... I-I'm sorry. What a strange thing for me to say...
 W-well, I should get going... 
 Ah - Sakura, hold on! There's something I wanted to ask you. 
 What is it? 
-Tell me about the Combat Revue! <br> Where are you headed? <br> ...Do you have a boyfriend? 
+Tell me about the Revue! <br> Where are you headed? <br> ...Do you have a boyfriend? 
 Sakura, could you please tell me about the Imperial Combat Revue? 
 ...! 
-This place is just an ordinary theater. Where exactly is the secret combat squad - the Imperial Combat Revue - supposed to be?! 
+This place is just an ordinary theater. Where exactly is the secret squad, the Imperial Combat Revue, supposed to be?! 
 W-well, uh... 
 I'm sorry...I need to find Sumire. Please excuse me. 
 Sakura, wait! 
@@ -806,7 +806,7 @@ Yeeess?
 Oh, it's you, Uncle Ichi. Do you need something? 
 Actually, yeah. There's something I wanted to ask you about real quick. 
 Yeeess? 
-Ask about the Imperial Combat Revue. <br> Ask Iris about herself. 
+Ask about the Combat Revue. <br> Ask Iris about herself. 
 I was wondering if you could tell me about the Imperial Combat Revue... 
 Sure, okay. 
 Why is the troop headquartered in a theater? 
@@ -899,7 +899,7 @@ Ensign, do you need me for something?
 Ensign, I believe I previously instructed you not to leer at people. 
 Ensign, do you need me for something? 
 ...Did you need something from me? 
-Tell me about the Combat Revue. <br> Tell me about yourself, Maria. 
+Tell me about the Revue. <br> Tell me about yourself, Maria. 
 Maria, tell me something. I was assigned here as the captain of a secret combat squad. 
 ...Yes. I heard as much from Director Yoneda. 
 But the only duty I've been given is that of a ticket puncher. What's the meaning of this? 
@@ -1071,7 +1071,7 @@ Unused
 Ah, hello?... Yes yes, hello. 
 Yes, he's here... just a little while ago. Well, I'm going to wait a bit longer, see how things shake out... 
 But you know, Hanakoji...the matter of this secret corps is a tough pill to swallow. 
-We drive these girls onto the battlefield, while all we can do is sit back and watch. As an Imperial soldier, well...it's humiliating. 
+We force girls onto the battlefield, while all we do is sit back and watch. Frankly... it's humiliating. 
 And yet, right now they are the only ones who can operate the Koubu. 
 That's why I'm making it a point to protect these girls, while giving them as much freedom as possible. 
 If only we could make use of that young one... 
