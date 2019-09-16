@@ -92,7 +92,7 @@ We need to leave some for the guests, so just take one for now, okay?
 Hey come on now Ensign. That's embarrassing. Don't buy that. 
 Huh? ...but Ogami, you already bought a copy of Kohran's picture, didn't you? 
 Whaa? You serious? Why're you picking up my picture when ya haven't even met me yet? 
-It just sort of caught my eye... <br> I thought you looked cute... <br> I needed some change... 
+Just sort of caught my eye... <br> I thought you looked cute... <br> I needed some change... 
 I mean there wasn't any special reason. It just sort of caught my eye... 
 Huh. I guess you're just a curious person, aren't you Ensign. 
 But that actually makes me kinda happy. 
@@ -156,7 +156,7 @@ Alright, I'll show you the way so just follow me.
 Thank you, that would be great. 
 ...She's not here it seems, and not on the stage. 
 Dang it... where the heck did she go? 
-(Come to think of it, Kohran's a member of the Flower Division too, so she'll be standing on that stage with the others soon.) 
+(Come to think of it, Kohran's a member too, so she'll be standing on that stage with the others soon.) 
 Ah, sorry, sorry, I got a little sidetracked. 
 Well can we head to the manager's office now, Mr. Ensign? 
 Right, right. No time for getting sidetracked. 
@@ -180,7 +180,7 @@ It was no big deal. We handled it just fine.
 ... it was a bit rough. 
 We've already been here, Mr. Ensign. Are you hungry or something? 
 Well, no, but... 
-Well if you want something to eat just run me over to the manager's office quick and then you can come back and pig out or whatever. 
+Well if you're hungry, just run me over to the office quick and then you can come back and pig out or whatever. 
 Not in the galley. I mean, not that I would expect her to be here anyway. 
 Shall we look in another room? 
 Huh, so this is the galley. 
@@ -220,7 +220,7 @@ Ok Kohran, see you later!
 Forget about that, Kohran! Tell me about the Hanayashiki Branch! 
 The Hanayashiki Branch is in an amusement park, right? What are the best rides there? 
 Oh, I can tell you all sorts of stuff about the rides! I actually worked on a bunch of them myself! 
-Yuri, I understand that you're happy to be back together with a friend who joined at the same time as you, but she has other things she needs to be doing. 
+Yuri, I know you're happy to be with a friend who joined you, but she has other things she needs to be doing.
 Actually, Ogami, why don't you show Kohran to the manager's office? 
 Sure. Okay then, Kohran, shall we head to the manager's office? 
 See ya Yuri, Kasumi. I'll talk with you to later. 
@@ -233,7 +233,7 @@ Yep, Kohran and I joined up at the same time.
 Forget about that, Kohran! Tell me about the Hanayashiki Branch! 
 The Hanayashiki Branch is in an amusement park right? What are the best rides there? 
 Oh, I can tell you all sorts of stuff about the rides! I actually worked on a bunch of them myself! 
-Yuri, I understand that you're happy to be back together with a friend who joined at the same time as you, but she has other things she needs to be doing. 
+Yuri, I know you're happy to be with a friend who joined you, but she has other things she needs to be doing.
 Say, Ogami, why don't you show Kohran to the manager's office? 
 Sure. Okay then, Kohran, shall we head to the manager's office? 
 See ya Yuri, Kasumi. I'll talk with you to later. 
@@ -269,7 +269,7 @@ I've got to say, she looks quite charming in men's clothes!
 Whoa... that sounds fun. 
 Ogami, you still haven't found Kohran? 
 No.... I wonder where she went. 
-Since it has been a long time since Kohran has been here, she's probably walking around the building, looking at all the places nostalgically. 
+It's been a while since Kohran has been here, she's probably walking around and being nostalgic. 
 Oh, Ogami, Kohran! Welcome! 
 (A shopkeeper's outfit. Tsubaki looks good in it.) 
 H, hey, Ogami! Where do you think you're looking? Stop! 
@@ -278,7 +278,7 @@ Kohran! Good to see you!
 Tsubaki, you look really good. I'm gonna be joining up here, so I look forward to working with you. 
 Same here. Really good to see you. 
 I heard you arrived by bike, Kohran. Why didn't you take the capital railway? 
-Eh, the steam trains are always so crowded. Plus the weather's great today and it's not too far coming from Asakusa. 
+Eh, the steam trains are always so crowded, the weather's great, and it's not too far from Asakusa. 
 Okay, well, I'll get your bike carried in. Good luck on the stage! 
 Ogami, have you found Kohran yet? 
 Well... not yet. Where could she have gone? 
@@ -314,7 +314,7 @@ S-sorry.
 Hey, Mr. Ensign, where do you think you are going? 
 I'll be playing a girl from the streets this time. 
 How do you like my outfit? 
-It really suits you. <br> A bit racy, isn't it? <br> I like your normal outfit better. 
+It really suits you. <br> A bit racy, isn't it? <br> I like your normal outfit. 
 It really suits you. Very cute! 
 You think so? ...Thank you. 
 It really is! Totally cute. 
@@ -351,7 +351,7 @@ I... hmm... well...
 Oh, sorry Mr. Ensign. That was a weird thing to ask, I guess. 
 But no need to fib, Mr. Ensign. You can be always be honest with me. 
 ... By the way, Mr. Ensign, do you mind if I just call you Ogami? 
-Of course. <br> No way! <br> How about you call me 'lover boy'? 
+Of course. <br> No way! <br> Call me 'lover boy'. 
 Of course. 
 Thanks. I always have trouble calling Yoneda 'Lieutenant General' too. 
 I just love how relaxed the Flower Division of the Revue is about things like that. 
@@ -383,12 +383,12 @@ I look forward to serving with you, Ogami!
 It was no trouble at all. <br> It was a bit rough. 
 It was no big deal. We handled it just fine. 
 ... it was a bit rough. 
-Would you look at that... looks like you're one smooth operator, aren't you, Ogami? Be careful or Sakura will get jealous. 
-Would you look at that... looks like you're one smooth operator, aren't you, Ogami? Be careful or Sumire will get jealous. 
-Would you look at that... looks like you're one smooth operator, aren't you, Ogami? Be careful or Maria will get jealous. 
-Would you look at that... looks like you're one smooth operator, aren't you, Ogami? Be careful or Kanna will get jealous. 
-Would you look at that... looks like you're one smooth operator, aren't you, Ogami? Be careful or Iris will get jealous. 
-Would you look at that... looks like you're one smooth operator, aren't you, Ogami? Be careful or Kohran will get jealous. 
+Well, look at that... you're one smooth operator, aren't you, Ogami? Be careful or Sakura will get jealous. 
+Well, look at that... you're one smooth operator, aren't you, Ogami? Be careful or Sumire will get jealous. 
+Well, look at that... you're one smooth operator, aren't you, Ogami? Be careful or Maria will get jealous. 
+Well, look at that... you're one smooth operator, aren't you, Ogami? Be careful or Kanna will get jealous. 
+Well, look at that... you're one smooth operator, aren't you, Ogami? Be careful or Iris will get jealous. 
+Well, look at that... you're one smooth operator, aren't you, Ogami? Be careful or Kohran will get jealous. 
 Ah, Kohran! You have returned from the Hanayashiki Branch, I see. 
 Maria! You really DO look good in men's clothing. 
 Ogami here is showing me to my room. 
@@ -406,7 +406,7 @@ A French soldier named Andre.
 ...Sir. Where do you think are you going with Kohran? 
 Sir. Have a good day. 
 I need to be at the stage and prepare for the show. Thank you for taking care of this for me. 
-As a leader, that goes without saying. <br> As a man, that goes without saying. 
+My duty as a leader. <br> My duty as a man. 
 As a leader that goes without saying. I'm only bringing her to her room after all. 
 Oh I don't think that's the case, sir. I don't think all leaders are quite as considerate as you. 
 She's right Ogami! You are helping me a great deal here. 
@@ -434,7 +434,7 @@ So lieutenant, now that you have met her, what is your first impression?
 She's a bit strange. <br> She's cute! <br> I think she's funny. 
 Well... what can I say? She's a bit strange. 
 You read people like books, don't you, Ensign? 
-I guess she really is a strange one. Her speech could use some refinement, and some of her inventions can be a bit dangerous. 
+I guess she really is strange. Her speech could use some refinement, and her inventions can be a bit dangerous. 
 But she really knows a lot about machines. You can count on her in that regard. 
 ... She's cute, wouldn't you say? 
 Cute? Kohran? 
@@ -525,7 +525,7 @@ Unused
 Are you a Koubu pilot, too? 
 Unused
 It's rare to see a guy pilot one. You must be a real hot shot! 
-By the way, the Hive of Darkness is made up of remnants of the Tokugawa regime who wanna overthrow the government. 
+By the way, the Hive of Darkness are remnants of the Tokugawa regime who wanna overthrow the government. 
 We've got to stop them. 
 Come in! 
 Unused

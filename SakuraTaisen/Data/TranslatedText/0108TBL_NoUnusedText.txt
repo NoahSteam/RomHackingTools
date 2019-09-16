@@ -32,15 +32,15 @@ Our curtain opens on the year Taisho 12. The season is spring, when cherry bloss
 The scene is Imperial Tokyo, where the adventurous spirit of a boom town floats through the air. And more... 
 Horse-drawn carriages, steam engines, airplanes... Tokyo is the height of civilization, where East meets West. 
 The hero of this tale is Ichiro Ogami. 
-A young ensign in the Imperial Japanese Navy who has just been appointed commander of the Flower Division, a secret corps in the Imperial Assault Force. 
+A young ensign in the Navy, made commander of the Flower Division, a secret corps of the Imperial Assault Force. 
 The story begins as Ichiro Ogami... in other words, you... meets with a certain girl... 
 Under the blooming cherry trees of Ueno Park. 
-Now sit back, relax, and enjoy Sakura Wars. 
+Now sit back, relax, and enjoy the tale of Sakura Wars. 
 Well, here I am at Ueno Park...but is there really a secret corps member around here? 
 Y-yes. I am Ogami... 
 Um... Excuse me, but who are you? 
 Wait, it's a... theater?! 
-I'm on duty! <br> First I'd like to know more about you. 
+I'm on duty! <br> I'd like to know about you. 
 I'm on duty! <br> Sorry, but I don't have time to see a play right now. 
 First I'd like to know more about you. 
 N-no... I just spaced out for a moment. 
@@ -52,8 +52,8 @@ Oh... that's right! The basement and second floor are being cleaned, so please b
 Huh? That sound... 
 W-whoa! What was that racket?! 
 U-um... 
-Are you OK? What's with that mess of a bike? 
-...Are you OK? <br> And, um...by the way, who are you? 
+Are you OK? <br> What's with that messy bike? 
+...Are you OK? And, um...by the way, who are you? 
 What's with that mess of a bike...? 
 Ye- yes, ma'am. 
 I-I apologize. 
@@ -69,7 +69,7 @@ The Imperial Opera Revue, Flower Division is the other face of the Imperial Comb
 Normally, we perform all kinds of shows on this stage. 
 Today's show, "For Love," is special because it's a sequel to an earlier work. Please take a look. 
 ...I-I apologize. I picked an awkward scene to show you... 
-Everyone makes mistakes. <br> Ahaha, you really goofed up that one! 
+Everyone makes mistakes. <br> You really goofed that one! 
 Everyone makes mistakes. Don't sweat it, Sakura. 
 ...Oh, thank you. Ogami, you're... such a kind person. 
 Now, let's head for the next room! I'll give you my best tour! 
@@ -99,7 +99,7 @@ I'm Imperial Japanese Navy Ensign Ichiro Ogami.
 This is Kanna Kirishima. She's another member of the Flower Division. 
 She's a karate master, which makes her a big help in battle. 
 (Whoa! ...T-that outfit doesn't leave much to the imagination!) 
-Why should I have to do such a thing...? <br> All right. 
+Why should I do that...? <br> All right. 
 Why should I have to do such a thing...? I refuse! 
 I'm Imperial Japanese Navy Ensign Ichiro Ogami. As of today, I've transferred to the Imperial Combat Revue. 
 You can tell me I'm fired, but I'm not going anywhere without orders from Navy Headquarters. 
@@ -205,7 +205,7 @@ I'm leaving you in charge of the Flower Division on the battlefield!
 Yes, sir! 
 All right...I'll finally be seeing some action! 
 Ogami, give the order to attack! 
-Flower Division, attack! <br> Get ready for the flower viewing party! <br> ...Where will we be fighting? 
+Flower Division, attack! <br> Time for the flower party! <br> ...uh, where are we fighting? 
 Flower Division, attack! 
 Roger! 
 Hive of Darkness... 
@@ -421,7 +421,7 @@ Cough, cough...Um...This is the Imperial Theater, right?
 Cough...Awww...My steambike is totaled... 
 The name's Kohran Li. Starting today, I've transferred from the Imperial Revue Hanayashiki Branch to Ginza Headquarters. 
 Agh! My face is up here, y'know! 
-The steam bike I invented boasts 4 cylinders and 5 valves! It runs at 100 horsepower and 200 km per hour! 
+My steam bike boasts 4 cylinders and 5 valves! It runs at 100 HP and 200km per hour! 
 Does that sound like a mess to you?! You better watch yourself, buddy... 
 Or I'm gonna knock your block off! 
 As long as you get it, we're cool! I'm Kohran Li, scientific genius. 

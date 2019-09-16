@@ -184,7 +184,7 @@ S-sorry...
 What's up, Ogami? You've seemed kinda down. 
 ...I know! I've got an idea. 
 Ogami, you got anything else on your plate today? 
-...Not really. <br> I'm tired, so I'm going to bed. <br> I'd like to see your room, Kohran. 
+...Not really. <br> I'm tired, I'm going to bed. <br> I'd like to see your room. 
 ...Not really. 
 Perfect. Ogami, wanna have some fun with me? 
 Today wore me out, so I'm going to bed. 
@@ -410,7 +410,7 @@ OK. Take care, then.
 Sure, for instance...Why you joined the Combat Revue... 
 ...... 
 ...Until recently, I'd been living in China. 
-The deputy commander of the Imperial Combat Revue...came to Japan to meet with the current head of the Hanayashiki Branch. 
+The deputy commander of the Revue... came to Japan to meet with the current head of the Hanayashiki Branch. 
 That deputy commander also scouted Maria and Iris while traveling around the world. 
 Wow... I had no idea. So that's what happened. 
 So, that's about it for my story. ...I'll say it again, Ogami--I'm glad I met you. 
@@ -464,7 +464,7 @@ O-of course. Sorry, I couldn't help looking...
 It's quite all right. Of course your gaze would be arrested by such beauty. 
 Ensign. Go ahead and feast your eyes, but don't take it to the point of rudeness. 
 Ensign, this swimsuit...What do you think of it? 
-It looks good on you. <br> What an unusual design. <br> Don't you think it's too revealing? 
+It looks good on you. <br> What an unusual design. <br> Isn't it's too revealing? 
 It looks good on you. I don't see a problem? 
 I didn't need you to tell me that. 
 What I wanted was a detailed opinion on the design and such. 
@@ -533,7 +533,7 @@ Ah... She's gone.
 You saved my life, Ensign. 
 Even though you can't swim, you rushed in to save me... 
 I...don't know how to thank you... 
-Are you all right? <br> You should be more careful, you idiot! 
+Are you all right? <br> Be more careful, you idiot! 
 Are you all right? You'd better get some rest. Shall we go back to your room? 
 No...I'm fine. 
 I still have my pride, you know. 
@@ -577,7 +577,7 @@ She might have collapsed in there...All right, I'm going in!
 Yikes...! 
 ...T-the bathing suit Sumire was just wearing is in that locker... 
 C, crap... blood is rushing to my head... make good choices, Ogami! 
-Back to the training room! <br> My body's moving on its own toward the showers... 
+Back to the training room! <br> I'm..going to the showers... 
 Barging into the showers would be inexcusably rude. I'm going back on patrol! 
 Phew... I managed to get myself under control... 
 C, crap... I can't decide what to do! 
@@ -607,7 +607,7 @@ Could you... keep it a secret that I almost drowned in the pool tonight?
 Yes. 
 See you later then... 
 Um...Ensign. Would you perhaps like some tea? 
-I would, thank you... <br> I'm sorry, but I'm in the middle of my patrol. 
+I would, thank you... <br> Sorry, but I'm on patrol. 
 I'm sorry, but I'm in the middle of my patrol. I have to get back to it soon... 
 You do...? That's a shame, after you went to the trouble of escorting me here. 
 Thank you for everything you did today...Good night, Ensign. 
@@ -683,7 +683,7 @@ Hey... I can hear the shower going... and this locker is open.
 Yikes...! 
 ...D-does that mean that...Sumire's clothes are in the locker? 
 C, crap... blood is rushing to my head... make good choices, Ogami! 
-Get back on patrol! <br> My body's moving on its own toward the showers... 
+Get back on patrol! <br> I'm..going to the showers...
 Barging into the showers would be inexcusably rude. I'm going back on patrol! 
 Phew... I managed to get myself under control... 
 C, crap... I can't decide what to do! 
@@ -891,7 +891,7 @@ Hey, hey... Sakura doesn't deserve all the blame, does she?
 Oh my... Are you volunteering to repair the set in her place, Ensign? 
 Wha...? 
 What do you say? 
-All right. I'll do it. <br> Why should I have to do that...? 
+All right. I'll do it. <br> Why should I have to...? 
 All right. I'll do it. This was partly my fault, after all. 
 Ogami... 
 Sir... 

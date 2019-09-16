@@ -5555,7 +5555,6 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 
 	//Create map of where the key is the crc of the original wkl image and the value is the path to the translated image
 	map<unsigned long, FileNameContainer> patchedWklFileCrcMap;
-	map<unsigned long, FileNameContainer> patchedWklOriginalFileCrcMap;
 
 	vector<string> wklSubDirs;
 	FindAllDirectoriesWithinDirectory(translatedWKLDirectory, wklSubDirs);
@@ -5579,7 +5578,6 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 
 			//It is assumed that the patched wkl directory has no duplicate images
 			patchedWklFileCrcMap[originalWkImage.GetCRC()] = patchedWklImageName;
-			patchedWklOriginalFileCrcMap[originalWkImage.GetCRC()] = originalWklImagePath;
 		}
 
 	}
@@ -7614,14 +7612,21 @@ bool CopyOriginalFiles(const string& rootSakuraTaisenDirectory, const string& pa
 
 	const string originalLogoFile = rootSakuraTaisenDirectory + "SAKURA1\\LOGO.SH2";
 	const string newLogoFile      = patchedSakuraTaisenDirectory + "SAKURA1\\LOGO.SH2";
-	if(!CopyFile(originalLogoFile.c_str(), newLogoFile.c_str(), FALSE))
+	if( !CopyFile(originalLogoFile.c_str(), newLogoFile.c_str(), FALSE) )
 	{
 		return false;
 	}
 
 	const string originalIcatallFile = rootSakuraTaisenDirectory + "SAKURA1\\ICATALL.DAT";
 	const string newIcatallFile      = patchedSakuraTaisenDirectory + "SAKURA1\\ICATALL.DAT";
-	if(!CopyFile(originalIcatallFile.c_str(), newIcatallFile.c_str(), FALSE))
+	if( !CopyFile(originalIcatallFile.c_str(), newIcatallFile.c_str(), FALSE) )
+	{
+		return false;
+	}
+
+	const string originalHanaMainFile = rootSakuraTaisenDirectory + "SAKURA3\\HANAMAIN.BIN";
+	const string newHanaMainFile      = patchedSakuraTaisenDirectory + "SAKURA3\\HANAMAIN.BIN";
+	if( !CopyFile(originalHanaMainFile.c_str(), newHanaMainFile.c_str(), FALSE) )
 	{
 		return false;
 	}
@@ -7779,23 +7784,9 @@ bool PatchMiniHana(const string& patchedSakuraDirectory, const string& inTransla
 	//Compressed FontSheet:
 	//Found: 000a8178 00000000 Size: 384 CompressedSize: 12625
 
-	/*Points: 
-	Found a match in HANAMAIN.BIN @0x000261e8
-	Found a match in MINIHANA.BIN @0x00044e30
-	*/
-
-	/*Dealer:
-	Found a match in HANAMAIN.BIN @0x000267e8
-	Found a match in MINIHANA.BIN @0x00045430
-	*/
-
-	/*Round:
-	Found a match in HANAMAIN.BIN @0x00026568
-	Found a match in MINIHANA.BIN @0x000451b0
-	*/
-
 	const string patchedMinigameFileName  = patchedSakuraDirectory + string("\\SAKURA3\\MINIHANA.BIN");
 	const string originalMinigameFileName = originalSakuraDirectory + string("\\SAKURA3\\MINIHANA.BIN");
+	const string patchedHanaMainFileName  = patchedSakuraDirectory + string("\\SAKURA3\\HANAMAIN.BIN");
 
 	FileReadWriter miniGameFile;
 	if (!miniGameFile.OpenFile(patchedMinigameFileName))
@@ -7810,10 +7801,55 @@ bool PatchMiniHana(const string& patchedSakuraDirectory, const string& inTransla
 		return false;
 	}
 
+	FileReadWriter hanaMainFile;
+	if( !hanaMainFile.OpenFile(patchedHanaMainFileName) )
+	{
+		return false;
+	}
+
+	//Open translated Points image
+	//Found a match in HANAMAIN.BIN @0x000261e8
+	//Found a match in MINIHANA.BIN @0x00044e30
+	const string pointsImageFileName = inTranslatedDataDirectory + "MiniGamePoints.bmp";
+	BmpToSakuraConverter pointsImage;
+	if( !pointsImage.ConvertBmpToSakuraFormat(pointsImageFileName, false) )
+	{
+		printf("PatchMiniHana: Couldn't convert image: %s.\n", pointsImageFileName.c_str());
+		return false;
+	}
+	miniGameFile.WriteData(0x00044e30, pointsImage.GetImageData(), pointsImage.GetImageDataSize());
+	hanaMainFile.WriteData(0x000261e8, pointsImage.GetImageData(), pointsImage.GetImageDataSize());
+
+	//Open translated Dealer image
+	//Found a match in HANAMAIN.BIN @0x000267e8
+	//Found a match in MINIHANA.BIN @0x00045430
+	const string dealerImageFileName = inTranslatedDataDirectory + "MiniGameDealer.bmp";
+	BmpToSakuraConverter dealerImage;
+	if( !dealerImage.ConvertBmpToSakuraFormat(dealerImageFileName, false) )
+	{
+		printf("PatchMiniHana: Couldn't convert image: %s.\n", dealerImageFileName.c_str());
+		return false;
+	}
+	miniGameFile.WriteData(0x00045430, dealerImage.GetImageData(), dealerImage.GetImageDataSize());
+	hanaMainFile.WriteData(0x000267e8, dealerImage.GetImageData(), dealerImage.GetImageDataSize());
+
+	//Open translated Round image
+	//Found a match in HANAMAIN.BIN @0x00026568
+	//Found a match in MINIHANA.BIN @0x000451b0
+	const string roundImageFileName = inTranslatedDataDirectory + "MiniGameRound.bmp";
+	BmpToSakuraConverter roundsImage;
+	if( !roundsImage.ConvertBmpToSakuraFormat(roundImageFileName, false) )
+	{
+		printf("PatchMiniHana: Couldn't convert image: %s.\n", roundImageFileName.c_str());
+		return false;
+	}
+	miniGameFile.WriteData(0x000451b0, roundsImage.GetImageData(), roundsImage.GetImageDataSize());
+	hanaMainFile.WriteData(0x00026568, roundsImage.GetImageData(), roundsImage.GetImageDataSize());
+
 	//Open translated logo
 	const string logoFileName = inTranslatedDataDirectory + "MiniHanaLogo.bmp";
 	BmpToSakuraConverter patchedLogo;
-	if (!patchedLogo.ConvertBmpToSakuraFormat(logoFileName, false))
+	if( !patchedLogo.ConvertBmpToSakuraFormat(logoFileName, false) )
 	{
 		printf("PatchMiniSwim: Couldn't convert image: %s.\n", logoFileName.c_str());
 		return false;
@@ -7826,7 +7862,7 @@ bool PatchMiniHana(const string& patchedSakuraDirectory, const string& inTransla
 	const string fontSheetFileName = inTranslatedDataDirectory + "MiniHanaFontSheet.bmp";
 	BmpToSakuraConverter patchedFontSheet;
 	const unsigned int tileDim = 16;
-	if (!patchedFontSheet.ConvertBmpToSakuraFormat(fontSheetFileName, false, 0, &tileDim, &tileDim))
+	if( !patchedFontSheet.ConvertBmpToSakuraFormat(fontSheetFileName, false, 0, &tileDim, &tileDim) )
 	{
 		printf("PatchMiniHana: Couldn't convert image: %s.\n", logoFileName.c_str());
 		return false;
@@ -7914,7 +7950,6 @@ bool PatchMiniHana(const string& patchedSakuraDirectory, const string& inTransla
 	miniGameFile.WriteData(indiceFinder.indiceAddresses[13], (char*)textIndices14, sizeof(textIndices14));
 	miniGameFile.WriteData(indiceFinder.indiceAddresses[14], (char*)textIndices15, sizeof(textIndices15));
 	miniGameFile.WriteData(indiceFinder.indiceAddresses[15], (char*)textIndices16, sizeof(textIndices16));
-
 
 	return true;
 }

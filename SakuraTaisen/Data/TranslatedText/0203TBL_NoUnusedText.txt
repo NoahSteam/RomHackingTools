@@ -128,7 +128,7 @@ Huh? Sakura... What are you doing up so late?
 I'm so sorry, Ogami. It's my fault that this happened... 
 Hey, don't worry about it. It was bound to happen sooner or later. 
 Hey, would... Would you let me help too? 
-I could use the help. <br> I can manage by myself, don't worry about it. 
+I could use the help. <br> I can manage, don't worry. 
 Sure, I could use the help. Would you help me fix the set the two of us broke? 
 Of course! 
 That's really nice of you but... I can manage by myself. 
@@ -142,7 +142,7 @@ Of course!
 W-wow... That being said, I wonder how I could have been so clumsy. 
 You know, I'm really jealous of people as responsible and put-together as you and Maria. 
 Thanks. <br> I'm not that responsible. 
-Thanks. <br> I'm not that responsible. <br> I saw you when you were rehearsing. 
+Thanks. <br> I'm not that responsible. <br> I saw you rehearsing. 
 Thanks... But I'm definitely not as responsible as Maria. 
 But... people can depend on you. 
 Thanks, Sakura. Even if you're just flattering me, I'm glad. 
@@ -162,9 +162,9 @@ I think so, yeah...
 Head office is a theater, and the branch office is an amusement park. Haha, it's kind of funny isn't it? 
 Hahaha, yeah you're right... 
 (...I wonder if the Captain of the Hanayashiki Branch works as the ticket-seller as well?) 
-I wonder what it's like there? <br> We should go see it together. <br> Apparently they have a workshop there. 
+Wonder what it's like there? <br> We should go see it together. <br> They have a workshop there. 
 Hanayashiki Branch huh... I wonder what it's like? 
-I'd like to know too. I heard that the Hanayashiki Branch Manager is the Deputy Commander of the Imperial Combat Revue. 
+I'd like to know too. I heard the Branch Manager is in charge of the Imperial Combat Revue. 
 Huh... the Deputy Commander? I wonder what they're like? 
 I'm not too sure either. Maybe they're an even bigger drinker than Mr. Yoneda. 
 When it comes to the Imperial Combat Revue... that's actually pretty likely. Let's hope not though. 
@@ -209,11 +209,11 @@ What happened with that girl just now, I can't get it out of my head...
 ...*sigh* That girl... who was she I wonder? 
 ...Right, here we are. Sakura... I wonder if she's in? 
 Hmm... Then again it's pretty late. What should I do...? 
-I have to talk to her right now. <br> I should wait until tomorrow. 
+Talk to her right now. <br> Should wait until tomorrow. 
 No good. If I don't explain things now then... 
 Actually let's leave it for tomorrow... Guess I'll go back to my room. 
-Yes...? Who's there? 
-I'm a fan. Can I get your autograph? <br> It's Ogami... 
+Yes...? Who's there? 	 
+Can I get your autograph? <br> It's Ogami... 
 I'm one of your fans. Can I have an autograph? 
 That voice... Ogami is that you? Stop making fun of me! 
 I'm already in bed! 
@@ -259,7 +259,7 @@ Oh, it's fine, isn't it? After all, that pretty girl fixed it right up.
 Ogami. It's getting really late, hurry up and tell me what you wanted. 
 W-well... 
 ...What is it? 
-...Thanks, for the bento. <br> Why don't we do some more work? <br> Who was that girl from before? 
+Thanks for the bento. <br> Why don't we do more work? <br> Who was that girl before? 
 ...Thanks, for the bento. That's all I wanted to say. 
 I'm really sorry... especially after you went to all that trouble making it for me. 
 Ogami... 
@@ -352,7 +352,7 @@ I should get going. No point staying in the same place forever.
 It's Ogami... Sumire, are you up? 
 Oh, Ensign. The night patrol, is it? Thanks for doing it for us. 
 I feel bad since you came all this way... but I'm already in bed. 
-It's not good for my beauty sleep to stay up too late. If there's anything you need, could you inquire about it tomorrow? 
+It's not good for my beauty sleep to stay up late. If there's anything you need, could you inquire tomorrow? 
 (I see... I kind of wanted to talk to her though) 
 It's me... 
 Ensign. If there's something you need, would you save it until tomorrow? 
