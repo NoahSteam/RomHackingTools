@@ -46,7 +46,7 @@ Nobody's in here. You wouldn't expect anyone to be up drinking tea at this hour.
 But what Maria said earlier...that I'm "unfit to be captain"...Could that really be true? 
 Looking out at Ginza at night, I never thought that the neon streets could be this beautiful. 
 Right. I haven't spotted Maria. Where is she... 
-This performance of the Flower Division's Cinderella was another success. Even the afternoon performance had sold-out box seats. 
+Our performance of Cinderella was another success. Even the afternoon show had sold-out box seats. 
 Let's try going somewhere else. 
 In the afternoon, this is where the patrons with box seats gather. 
 Maria...isn't here. Seems she's not on the terrace, either. 
@@ -198,7 +198,7 @@ Mmm...
 Heya, Ogami! Man, you sure look a mess. 
 Eep! ...Oh, it's you, Kohran... 
 Aw, c'mon! I was just messing around. How you feeling? 
-Thank you for the medicine. <br> ...I had a dream about you, Kohran. <br> ...Could you please let me sleep? 
+Thank you for the medicine. <br> I had a dream about you. <br> Could you let me sleep? 
 Thank you for the medicine. It really helped me to relax. 
 What's with the formality?! I'm gonna get all embarrassed if you keep thanking me like that! 
 I came to check up on ya cause I was worried... 
@@ -237,7 +237,7 @@ Uncle Ichi, are you feeling any better?
 Iris... yeah, I feel a lot better. 
 ...I thought maybe, you might not wake up again... 
 I was so worried... 
-...Thank you. That makes me happy. <br> Sorry I worried you. <br> It was a nice break. 
+...That makes me happy. <br> Sorry I worried you. <br> It was a nice break. 
 ...Thank you. That makes me happy, Iris. 
 Hee hee! It really is you, Uncle Ichi! 
 I don't know what I would've done if you had been a different person after you woke up! 
@@ -311,10 +311,10 @@ I'm asking you... why did you leap out back then?!
 Well... that kid was... 
 ...Sir. Please allow me to speak freely just this once! 
 The wounds you received in that battle... are entirely your own fault! 
-Not only that, but the enemy slipped right through our fingers because you allowed yourself to be distracted by a single civilian... 
+Not only that, but the enemy slipped past us because you let yourself be distracted by a single civilian... 
 As a result, far more civilian lives were put in danger... do you understand that? 
 You're wrong! <br> ...You're absolutely right. 
-If you allow yourself to be swept up by a fit of emotion and lose sight of the bigger picture, then you won't be able to function as a commanding officer. 
+If you get swept up by emotions and lose sight of the bigger picture, you won't be able to function as a commander. 
 Ensign Ogami. You are... unfit to be captain! 
 ...! 
 That is all I have to say. Excuse me! 
@@ -431,7 +431,7 @@ I couldn't carry you to the sickbay on my own. Since it's getting late, I brough
 You were groaning so much, and yet all I could do was give you some medicine... 
 I see... 
 I'm so sorry. I've been nothing but a burden to you ever since we first met... 
-Haha, it's perfectly all right... after all, part of my job is to look after the well-being of both you and the rest of the Flower Division. 
+Haha, it's all right... after all, part of my job is to look after the well-being of you and the rest of the Division. 
 ...Although, I suppose it is in my nature to worry over other people. 
 I have been looking after others for a long time now... 
 (That sounds like her, all right...) 
@@ -695,7 +695,7 @@ Hey... I can hear the shower going... and this locker is open.
 ...! 
 ...K-Kanna's clothes are in the locker... which means...! 
 C-crap... blood is rushing to my head... make good choices, Ogami! 
-I'm outta here! <br> My body won't obey! It's headed for the shower... 
+I'm outta here! <br> I'm moving to the shower... 
 Going into the shower right now would be crossing the line. I'm outta here! 
 Phew... I managed to get myself under control... 
 C-crap... I can't decide what to do! 
@@ -824,7 +824,7 @@ Unused
 Maria Tachibana! Member of the Imperial Combat Revue, soldier of the Russian Revolution... 
 Or perhaps, I should call you "Cassowary"?! 
 The Hive of Darkness has seen through to your true identity! 
-Your position as a soldier of the Capital who defends justice is but a mere facade...when in truth, you are a stone-hearted savage! 
+Your position as a soldier who defends justice is but a mere facade... in truth, you are a stone-hearted savage! 
 Tch...! 
 If you don't wish your past exposed for all your comrades to see, you will show yourself before us immediately! 
 Hmhm...hahahahaha! 

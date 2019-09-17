@@ -46,7 +46,7 @@ Nobody's in here. You wouldn't expect anyone to be up drinking tea at this hour.
 But what Maria said earlier... that I'm "unfit to be captain"... Could that really be true? 
 Looking out at Ginza at night, I never thought that the neon streets could be this beautiful. 
 Right. I haven't spotted Maria. Where is she...? 
-This performance of the Flower Troupe's Cinderella was another success. Even the afternoon performance had sold-out box seats. 
+Our performance of Cinderella was another success. Even the afternoon performance had sold-out box seats. 
 Let's try going somewhere else. 
 In the afternoon, this is where the patrons with box seats gather. 
 Maria... isn't here. Seems she's not on the terrace, either. 
@@ -115,7 +115,7 @@ It's my fault. If only I hadn't hesitated to give the order to attack...
 At any rate, I should go see Sakura. 
 Oh, right. Maybe I should bring flowers or something, too. 
 I wonder which flowers I should take... 
-I'll get the long-lasting cactus. <br> I'll get the bouquet of chrysanthemums. <br> I'll get the bouquet of roses. 
+The long-lasting cactus. <br> The Chrysanthemums. <br> The bouquet of roses. 
 Maybe I should go with the cactus. You can keep those for a long time. I wonder...if Sakura would like it. 
 A bouquet of Chrysanthemums. I'm sure Sakura would like those. 
 It'd be a little embarrassing but... what about a bouquet of roses? 
@@ -151,7 +151,7 @@ The language of flowers? Hmm... what does it mean?
 U, uh... If you don't know, then that's fine. 
 But, I'm... very happy. 
 Because you came to see me... 
-I'm sorry you got hurt because of me. <br> How are your injuries...? <br> Maria is angry at me. 
+Sorry you got hurt... <br> How are your injuries...? <br> Maria is angry at me. 
 I'm really sorry. Because of me, you got hurt. 
 No. I don't think it's your fault at all. 
 But... if I had given the order to attack... 
@@ -275,7 +275,7 @@ Of, of course.
 Well then, Sakura. Take care. 
 Of course. Thank you. 
 Wow, Ayame is an amazing woman any way you look at her. I really admire her... 
-You'll be like her soon. <br> She really is great. <br> Yeah, completely different from the other women here. 
+You'll be like her soon. <br> She really is great. <br> Much different from them. 
 Sakura, you'll become an adult soon, too, you know. 
 Huh? Oh, yeah. But, I wonder if I'll be amazing like Ayame is? 
 Absolutely! You definitely will! 
@@ -306,7 +306,7 @@ What's going on here? Maybe I should go check the kitchen...
 Uncle Ichi... 
 What's wrong, Iris? You look like you're going to cry. 
 ...... 
-Was Sumire picking on you? <br> You shouldn't be messing around. <br> Playing house with Sumire? 
+Was Sumire picking on you? <br> You shouldn't be playing. <br> Playing house with Sumire? 
 Well, Ensign! What do you mean by that?! 
 Are you implying that I would bully Iris?! 
 N, no, that's not what I... 
@@ -355,7 +355,7 @@ Huh? Wait a minute. Can Sumire cook?
 I should just not think about it. 
 Hey, Captain. Did you come to train, too? 
 Ah, yeah. You too, Kirishima? 
-You can just call me "Kanna." ... And a bunch of stuff happened as soon as I got here, right? So I had trouble sleeping... you? 
+You can just call me "Kanna." ... A lot happened as soon as I got here, right? So I had trouble sleeping... you? 
 Yeah... I have a lot on my mind. 
 Well, if you don't mind my asking, why don't you tell me what's bothering you. 
 It's about Sakura. <br> It's about Maria. <br> It's about you. 
@@ -610,7 +610,7 @@ Hey... I can hear the shower going... and this locker is open.
 ...! 
 ...K-Kanna's clothes are in the locker... which means...! 
 C, crap... blood is rushing to my head... make good choices, Ogami! 
-I'm outta here! <br> My body won't obey! It's headed for the shower... 
+I'm outta here! <br> I'm moving to the shower... 
 Going into the shower right now would be crossing the line. I'm outta here! 
 Phew... I managed to get myself under control... 
 C, crap... I can't decide what to do! 
@@ -673,7 +673,7 @@ Hey... I can hear the shower going... and this locker is open.
 ...! 
 ...K-kanna's clothes are in the locker... which means...! 
 C, crap... blood is rushing to my head... make good choices, Ogami! 
-I'm outta here! <br> My body won't obey! It's headed for the shower... 
+I'm outta here! <br> I'm moving to the shower... 
 Going into the shower right now would be crossing the line. I'm outta here! 
 Phew... I managed to get myself under control... 
 C, crap... I can't decide what to do! 
@@ -727,7 +727,7 @@ Ahh!?
 O-Ogami... 
 Oh... I just, uh... 
 Were you eavesdropping, sir? That seems to be a great hobby of yours. 
-(Right! I'm the commanding officer of the Flower Division, aren't I? I have a right to take part in this conversation.) 
+(Right! I'm the commander of the Flower Division, aren't I? I have a right to take part in this conversation.) 
 I'm coming in! 
 O, Ogami... 
 Ensign! How long have you been there? 
@@ -845,7 +845,7 @@ Ensign Ogami? Enter!
 Maria Tachibana! Member of the Imperial Combat Revue, soldier of the Russian Revolution... 
 Or perhaps, I should call you "Cassowary"?! 
 The Hive of Darkness has seen through to your true identity! 
-Your position as a soldier of the Capital who defends justice is but a mere facade... when in truth, you are a stone-hearted savage! 
+Your position as a soldier who defends justice is but a mere facade... in truth, you are a stone-hearted savage! 
 Tch...! 
 If you don't wish your past exposed for all your comrades to see, you will show yourself before us immediately! 
 Hmhm... hahahahaha! 

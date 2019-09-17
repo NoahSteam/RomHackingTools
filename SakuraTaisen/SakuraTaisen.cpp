@@ -8112,6 +8112,80 @@ bool PatchMiniGames(const string& rootSakuraDirectory, const string& patchedSaku
 	return bResult;
 }
 
+void CreateFontSheetEntries(const string& inFileName)
+{
+	FILE* pFile = nullptr;
+	const errno_t errorValue = fopen_s(&pFile, inFileName.c_str(), "r");
+	if( errorValue )
+	{
+		printf("Unable to open file: %s.  Error code: %i \n", inFileName.c_str(), errorValue);
+		return;
+	}
+
+	map<string, int> fontSheetEntries;
+	while( 1 )
+	{
+		string newEntry;
+
+		//First char
+		int result = fgetc(pFile);
+		char c = (char)result;
+		if( result == EOF )
+		{
+			break;
+		}
+		if( c == '\n' )
+		{
+			continue;
+		}
+
+		newEntry += c;
+
+		//Second char
+		result = fgetc(pFile);
+		char c2 = (char)result;
+		if( result == EOF )
+		{
+			if( fontSheetEntries.find(newEntry) == fontSheetEntries.end() )
+			{
+				fontSheetEntries[newEntry] = 1;
+			}
+			else
+			{
+				fontSheetEntries[newEntry] = fontSheetEntries[newEntry] + 1;
+			}
+			break;
+		}
+		if( c2 == '\n' )
+		{
+			if( fontSheetEntries.find(newEntry) == fontSheetEntries.end() )
+			{
+				fontSheetEntries[newEntry] = 1;
+			}
+			else
+			{
+				fontSheetEntries[newEntry] = fontSheetEntries[newEntry] + 1;
+			}
+			continue;
+		}
+		newEntry += c2;
+
+		if( fontSheetEntries.find(newEntry) == fontSheetEntries.end() )
+		{
+			fontSheetEntries[newEntry] = 1;
+		}
+		else
+		{
+			fontSheetEntries[newEntry] = fontSheetEntries[newEntry] + 1;
+		}
+	}
+
+	for(map<string, int>::const_iterator iter = fontSheetEntries.begin(); iter != fontSheetEntries.end(); ++iter)
+	{
+		printf("%s  %i\n", iter->first.c_str(), iter->second);
+	}
+}
+
 bool PatchGame(const string& rootSakuraTaisenDirectory, const string& patchedSakuraTaisenDirectory, const string& translatedTextDirectory, const string& fontSheetFileName, const string& /*originalPaletteFileName*/, 
 	const string &patchedTMapSPDataPath, const string& inMainMainFontSheetPath, const string& inMainMenuTranslatedBgnd, const string& inPatchedOptionsImage, const string& inTranslatedDataDirectory,
 	const string& inExtractedWklDir)
@@ -8533,6 +8607,12 @@ int main(int argc, char *argv[])
 		const string outDir            = string(argv[4]) + Seperators;
 
 		ExtractMiniSwimText(rootSakuraDir, translatedDataDir, outDir);
+	}
+	else if( command == "CreateFontSheetEntries" && argc == 3 )
+	{
+		const string textFile = string(argv[2]);
+
+		CreateFontSheetEntries(textFile);
 	}
 	else
 	{

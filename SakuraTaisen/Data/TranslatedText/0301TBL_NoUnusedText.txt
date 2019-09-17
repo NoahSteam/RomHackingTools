@@ -58,7 +58,7 @@ The show's over, so it looks like all the guests have taken off.
 The show ended without a hitch. All the guests have already left. 
 I wonder... where's everyone from the Flower Division at? 
 During the rainy season it seems this room has a sort of sticky humidity... 
-Well it'd be a waste of time to stick around in the night shift room with no one around, so I guess I'll head somewhere else. 
+It'd be a waste of time to stick around in the night room with no one here, guess I'll head somewhere else. 
 It's the manager's room. I wonder if Yoneda is in? 
 Okay. I'm gonna head somewhere else. 
 Zzz... Zzz... 
@@ -108,7 +108,7 @@ Can I help you?
 (That bouncy look is pretty trendy.) 
 Is something odd about my hair? Oh no~! I've got some split ends! 
 (Her face is small and balanced. I think even a model would be jealous.) 
-(It doesn't seem like she uses a lot of make-up. Well, she's got such a nice foundation, I don't think she really needs it...) 
+(It doesn't seem like she uses much make-up. Well, she's got a nice foundation, I don't think she needs it...) 
 What's the matter, Ogami? You're staring at my face... Oh, I see. You've fallen for me, right? 
 Hey, you shouldn't be teasing an adult. 
 Hehehe... sorry, Ogami. 
@@ -128,7 +128,7 @@ Ahaha, Ogami. I see you've been stricken by my allure~!
 Oh, Ogami. I was just thinking when I was backstage a bit ago... 
 Hm? 
 ... Maria doesn't look too well. 
-At first I thought it was just a problem with her makeup or the lighting, but no... I wonder if she's getting enough sleep? 
+At first I thought it was a problem with her makeup or the lighting, but... I wonder if she's getting enough sleep? 
 (Maria... what's going on with her?) 
 Yo, Yumi. How're you doing? 
 Pretty horrible actually, Ogami. I hate this gloomy weather! Can't we do something about it? 
@@ -139,10 +139,10 @@ Ogami, have you heard that there's places in Europe where they put roofs over th
 You can stroll around as dry as a bone in any weather. Man, can't wait for them to get some of those around here... 
 Oh, hey, Ogami. Did you hear about Kanna? 
 Kanna... I think I've heard that name before... 
-Her name is Kanna Kirishima! She's been a member of the Flower Division for a while, but recently she's been in Okinawa. 
+That's Kanna Kirishima! She's been a member for a while, but recently she's been in Okinawa. 
 She was supposed to come back a lot sooner, but I've heard she'll be arriving here shortly. 
 Huh... 
-She's amazing. She's really strong, so she's popular among kids, and she's the kind of person you can really count on... 
+She's amazing, really strong, popular among kids, and she's the kind of person you can really count on... 
 ... wow, what's her personality like? 
 Well... That's something you should find out for yourself, Ogami. 
 I guess that's true... 
@@ -156,7 +156,7 @@ R, really, you think so?
 Sakura's really popular with all sorts of people, from kids to adults. 
 Ogami, seems like you've been pretty friendly with Sumire lately. 
 R, really, you think so? 
-Sumire's got this aura that makes her hard to approach, but that's actually turned into one of her selling points. 
+Sumire's got this aura that makes her hard to approach, but that's actually become one of her selling points. 
 She's always getting bouquets from young aristocrats. 
 Ogami, seems like you've been pretty friendly with Maria lately. 
 R, really, you think so? 
@@ -170,21 +170,21 @@ Honestly... I really don't get where Kohran's popularity comes from...
 Oh, Ogami. I was just thinking when I was backstage a bit ago... 
 Hm? 
 ... Maria doesn't look too well. 
-At first I thought it was just a problem with her makeup or the lighting, but no... I wonder if she's getting enough sleep? 
+At first I thought it was a problem with her makeup or the lighting, but... I wonder if she's getting enough sleep? 
 (Maria... what's going on with her?) 
 Can I help you? 
 (She's got a ribbon on... it really looks good on her.) 
 (I'd say it's a definite charm point that contrasts nicely with her mature looks.) 
 (Not a single hair out of place, nice and sleek.) 
-(She really does have beautiful hair... I imagine she spends a lot of time taking care of her looks every day.) 
+(She really does have beautiful hair... I imagine she spends a lot of time on her looks.) 
 (Kasumi. She's wearing a serene expression...) 
-(She looks gentle, but I'm sure she's scary if you get her mad... the perfect 'big sis' type that guys dream about.) 
+(She looks gentle, but I bet she's scary if you get her mad... the 'big sis' type that guys dream about.) 
 ... is something the matter, Ogami? 
 Nah, it's nothing, Kasumi. 
 (Her eyes have this quiet, calm look.) 
 (Kasumi always looks you right in the eye when she talks to you.) 
 (Japanese fashion suits her pretty well.) 
-(She radiates serenity, but her movements and stance have no openings I can see... I wonder if she has some martial arts training.) 
+(She radiates serenity, but her movements have no openings I can see... wonder if she has some martial arts training.) 
 (The neckline of that Japanese outfit is perfect on her...) 
 ...... 
 (Who'd have thought she'd have such...) 
@@ -222,7 +222,7 @@ Well, I guess I'll go somewhere else.
 Yo, Ogamiii... howzit goin'? 
 Um, pretty good... 
 Whassa matter! That response was as bleak as those rainy season clouds outside... 
-Which reminds me, it's a good thing Teito Tower made it through alright. It would have been a disaster if it had gone down. 
+It's a good thing Teito Tower made it through. It would have been a disaster if it had gone down. 
 That's true... 
 Plus I wouldn't have been able to hear the horse race results, which woulda been terrible too, right? 
 ... right... 
@@ -257,7 +257,7 @@ Oh, that reminds me, I was just writing up a report for Commander Yoneda...
 Yes, I write reports on various information regarding the Flower Division. 
 It's a major part of my job. 
 ... I see. 
-... this is a good opportunity. As the current commanding officer of the Flower Division, is there anything you'd like to ask me? 
+...this is a good opportunity. As the current commander of the Flower Division, is there anything you'd like to ask me? 
 Ask for a battle report. <br> Ask for a casualty report. <br> No, thanks. 
 I'd like to hear about how our last battle impacted the surrounding area. 
 During the last battle you were able to protect Teito Tower from harm. 
@@ -265,7 +265,7 @@ Any further damage to the tower would have caused major problems with transmissi
 Ogami, your leadership was excellent. Please continue with this same standard of excellence. 
 ... o-, of course! Thank you, ma'am! 
 ... unfortunately, during the last battle Teito Tower took significant damage. 
-If we had been any later, it would have disabled Tokyo's ability to function as the logistical heart of this country. 
+If we had been any later, it would have disabled Tokyo's ability to function as the heart of this country. 
 ... there is no excuse for my failure. 
 No need to apologize to me. You were able to defeat the enemy, so we should count this as a victory. 
 ... understood. 
@@ -276,14 +276,14 @@ I'd like to hear the casualty report for the Flower Division from the last battl
 Ogami... in a small unit like yours, the loss of a single member can cause irreparable damage. 
 Though we should be grateful their life was spared. 
 Of course... 
-Sakura's capabilities are by no means lacking, but neither are they particularly excellent. She should not be sent out without proper support. 
+Sakura's skills are by no means lacking, but neither are they excellent. She shouldn't be sent without proper support. 
 Sumire has excellent combat capabilities, but you mustn't overestimate her. She needs proper support. 
 Maria's defenses are weak, so you should avoid placing her in close-quarters combat situations. 
-Kohran's attack power is weak, but she can attack a wide area. Please take that into consideration when giving her orders. 
-As the commanding officer, you must provide sufficient support. Your aid is what will strengthen the bonds of the unit. 
+Kohran's attack power is weak, but she can attack a wide area. Take that into consideration when giving her orders. 
+As the commander, you must provide sufficient support. Your aid is what will strengthen the bonds of the unit. 
 I'm trusting you to look after them, Ogami. 
 Yes, ma'am! 
-We took quite a lot of damage... You need to provide better support for your troops, or they'll lose their faith in you. 
+We took quite a lot of damage... provide better support for your troops, or they'll lose their faith in you. 
 Yes, ma'am... it was my failure. 
 There were far too many casualties. Ogami... you're a failure as a leader! 
 I need you to do better than this. 
@@ -302,7 +302,7 @@ The one with the most enemies shot down during the last battle was Sumire.
 Sumire's technique is especially powerful when she is surrounded by enemies. 
 However, that doesn't mean you should send her off alone. 
 The one with the most enemies shot down during the last battle was Maria. 
-Maria is great as a back-line fighter. She excels when she's firing over the shoulders of her comrades on the front line. 
+Maria is great at the back line. She excels when she's firing over the shoulders of her comrades. 
 With her skills, you can trust that she'll never accidentally hit an ally. 
 The one with the most enemies shot down during the last battle was Kohran. 
 Kohran's bombs have a large explosion radius, so you should aim her attacks where enemies are clustered. 
@@ -334,7 +334,7 @@ Really? ...Then perhaps you don't need me to tell you this, but...
 Regarding Sumire Kanzaki, you have to ask yourself 'was her upbringing really so blessed?' 
 ...I doubt even Sumire herself could answer that question... 
 ...understood. 
-As an officer, when you want to form a tighter bond with your subordinates you must first discard your preconceptions. 
+When you want to form a tighter bond with your subordinates, you must first discard your preconceptions. 
 Yes, ma'am! 
 Sumire is kind, and has a strong sense of responsibility. Look after her properly, Ogami! 
 ...understood, ma'am! 
@@ -485,7 +485,7 @@ Oh, Kasumi... You too.
 ...I was talking to Yuri just now, and... 
 She said Maria messed up some of her lines in today's performance... 
 I can't believe Maria would make mistakes like that... right? 
-I wonder what's wrong... <br> Do you know anything about it? <br> I guess everyone makes mistakes. 
+I wonder what's wrong... <br> Do you know anything? <br> Everyone makes mistakes. 
 Hmm... I have no idea. I don't think she'd get this depressed just from messing up a line or two... 
 Are you worried, Ogami? 
 Well yeah... we're squad-mates, after all... 
@@ -529,7 +529,7 @@ Oh, Ogami. The door's open.
 Excuse me. 
 Oh, Ogami. It's pretty rare for you to stop by my office. 
 So... how can I help you? 
-Ask about Maria. <br> Ask about the Hive of Darkness. <br> Chat. 
+Ask about Maria. <br> Ask about the enemy. <br> Chat. 
 Maria seems to be troubled lately. 
 I see... so you're finally starting to worry about things like that... 
 I don't think this is any time for jokes! I need to talk with you seriously about... 
@@ -592,7 +592,7 @@ That's a pretty nice desk. It looks good and sturdy.
 Maria... what's going on with you today? You're not acting like your normal self. 
 …………………… 
 If it's okay... 
-Will you tell me what's going on? <br> You can talk to me anytime... <br> ... Never mind, you don't need to tell me. 
+Tell me what's going on? <br> Talk to me anytime. <br> ... Never mind, you don't need to tell me. 
 Will you tell me what's going on? I could help you out, if you let me. 
 ...I'm sorry, sir. Please don't worry about me. 
 I appreciate your camaraderie, but... this isn't something you could help with. 
@@ -663,7 +663,7 @@ But I do love 'Cinderella', so I suppose I can put up with it.
 Oh? 
 Ensign... 
 Do you know why the fairy godmother sets Cinderella's magic to come undone at midnight? 
-Just for the story to work, right? <br> Because that's how magic is. 
+For the story to work, right? <br> That's how magic is. 
 ...just for the story, right? If the magic didn't come undone, there wouldn't be a plot. 
 Plebeian! ...Honestly sir, I don't think there's a single romantic bone in your body. That's not the point! 
 Never mind! I'm needed at the stage. Excuse me! 
@@ -709,7 +709,7 @@ I could ask you the same thing, Kohran.
 I figured I'd relax with a nice shower after the show. I'm feeling 110% better! 
 Can't beat a post-show shower, no sirree! 
 (So she was taking a shower...) 
-If only I got here sooner... <br> Want me to oil you up? <br> What do you do with your glasses when you shower? 
+If only I got here sooner... <br> Want me to oil you up? <br> Where'd you put your glasses? 
 ... damn! If only I got here sooner... 
 Uhh... 'scuse me? Are you sayin' you woulda loved to be there to peep on me? 
 Wha... no, no... 
@@ -717,7 +717,7 @@ Ogami... I never woulda taken you for a closet pervert... you think you know a g
 Good thing I finished up quick. Guess I dodged a bullet. 
 ... crap, now she's got the wrong idea. 
 Though... uh, I guess she wasn't really wrong. 
-Well, now that you're clean should I oil you up? 
+Well, now that you're clean, should I oil you up? 
 Ahahaha! Your jokes need a little work! 
 I know I'm crazy about machines, but that doesn't mean you gotta oil me like one! 
 Oh, yeah, I guess you're right... (Pretty sure there are oils for people too...) 
@@ -746,7 +746,7 @@ Hey... I can hear the shower going... and this locker is open.
 …………! 
 ... these are Kohran's clothes, in the locker... so, right now she's...? 
 C, crap... blood is rushing to my head... make good choices, Ogami! 
-I'm outta here! <br> My body won't obey! It's headed for the shower... 
+I'm outta here! <br> I'm drawn to the shower... 
 Going into the shower right now would be crossing the line. I'm outta here! 
 Phew... I managed to get myself under control... 
 C, crap... I can't decide what to do! 
@@ -777,7 +777,7 @@ Oh, Uncle Ichi! We finally got some nice weather today!
 Yeah. It's rare to get nice sunny days like this during 'tsuyu'. 
 'Tsuyu'? What's that? 
 Oh... I guess you didn't have it in France. 'Tsuyu' is... 
-...what we call the rainy season in June. <br> ... a condition when the rain fronts stagnate in this area. 
+...the rainy season in June. <br> ...when the rain fronts stagnate. 
 It's what we call the rainy season in June. Once it's over, it'll be time for summer. 
 Uncle Ichi, you're so smart! That's why you're my boyfriend! 
 I love summer, so I wish 'tsuyu' would be over already! 

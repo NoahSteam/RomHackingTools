@@ -74,7 +74,7 @@ I'll guard my head! <br> I'll guard my back! <br> I'll guard my stomach!
 A thrust to the stomach... Blocked! 
 You blocked my thrust! I guess I underestimated you. 
 OK, now block my final attack! 
-That's... an upper two-step kick! <br> That's... a middle roundhouse kick! <br> That's... an upper roundhouse kick! 
+...an upper two-step kick! <br> ...a middle roundhouse kick! <br> ...an upper roundhouse kick! 
 Ha, I did it! I blocked all the techniques! 
 Not bad, boss! I guess you earned that number one place at the academy! 
 You managed to block all my techniques... You're the real deal, boss! 
@@ -103,7 +103,7 @@ Karate can be deadly, you know! I pulled my punches this time, but if I didn't, 
 Oh, by the way... Aren't you hungry too, now after the training? 
 How about I serve you my super awesome specialty? 
 What do you say? Wanna eat together? 
-I could eat a cow! <br> What exactly IS your specialty? <br> Nah, thank you. 
+I could eat a cow! <br> What IS your specialty? <br> Nah, thank you. 
 I know, right! I feel absolutely starved! 
 Okey-dokey! Off to the kitchen then! 
 What exactly IS your specialty? 
@@ -255,7 +255,7 @@ Yo!
 Sakura Shinguji. Pleased to meet you! 
 And I'm Kohran Li! Hey, if you don't mind me saying... you're a pretty handsome guy. 
 Hehe... well, thanks for that but I'm actually a girl. But no hard feelings, yeah? 
-Kanna Kirishima... She's the successor to the Ryukyu Karate Kirishima Style. Now that she's here, the whole Flower Division is assembled! 
+Kanna Kirishima... the successor of Ryukyu Karate Kirishima Style. Now that she's here, the Flower Division is assembled! 
 Yo, chief! It's been a while! 
 We're glad to have you back, Kanna! 
 Unused
