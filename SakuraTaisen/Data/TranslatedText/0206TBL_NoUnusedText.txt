@@ -220,7 +220,7 @@ Ok Kohran, see you later!
 Forget about that, Kohran! Tell me about the Hanayashiki Branch! 
 The Hanayashiki Branch is in an amusement park, right? What are the best rides there? 
 Oh, I can tell you all sorts of stuff about the rides! I actually worked on a bunch of them myself! 
-Yuri, I know you're happy to be with a friend who joined you, but she has other things she needs to be doing.
+Yuri, I know you're happy to be with a friend who joined you, but she has other things she needs to be doing. 
 Actually, Ogami, why don't you show Kohran to the manager's office? 
 Sure. Okay then, Kohran, shall we head to the manager's office? 
 See ya Yuri, Kasumi. I'll talk with you to later. 
@@ -233,7 +233,7 @@ Yep, Kohran and I joined up at the same time.
 Forget about that, Kohran! Tell me about the Hanayashiki Branch! 
 The Hanayashiki Branch is in an amusement park right? What are the best rides there? 
 Oh, I can tell you all sorts of stuff about the rides! I actually worked on a bunch of them myself! 
-Yuri, I know you're happy to be with a friend who joined you, but she has other things she needs to be doing.
+Yuri, I know you're happy to be with a friend who joined you, but she has other things she needs to be doing. 
 Say, Ogami, why don't you show Kohran to the manager's office? 
 Sure. Okay then, Kohran, shall we head to the manager's office? 
 See ya Yuri, Kasumi. I'll talk with you to later. 

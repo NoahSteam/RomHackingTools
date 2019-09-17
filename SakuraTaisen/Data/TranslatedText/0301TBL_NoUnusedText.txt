@@ -276,14 +276,14 @@ I'd like to hear the casualty report for the Flower Division from the last battl
 Ogami... in a small unit like yours, the loss of a single member can cause irreparable damage. 
 Though we should be grateful their life was spared. 
 Of course... 
-Sakura's skills are by no means lacking, but neither are they excellent. She shouldn't be sent without proper support. 
+Sakura's skills are by no means lacking, nor excellent. She shouldn't be sent without proper support. 
 Sumire has excellent combat capabilities, but you mustn't overestimate her. She needs proper support. 
 Maria's defenses are weak, so you should avoid placing her in close-quarters combat situations. 
-Kohran's attack power is weak, but she can attack a wide area. Take that into consideration when giving her orders. 
-As the commander, you must provide sufficient support. Your aid is what will strengthen the bonds of the unit. 
+Kohran's attack power is weak, but she has wide range. Take that into consideration when giving her orders. 
+As the commander, you must provide sufficient support. Your aid strengthens the bonds of the unit. 
 I'm trusting you to look after them, Ogami. 
 Yes, ma'am! 
-We took quite a lot of damage... provide better support for your troops, or they'll lose their faith in you. 
+We took extensive damage... provide better support, or they'll lose their faith in you. 
 Yes, ma'am... it was my failure. 
 There were far too many casualties. Ogami... you're a failure as a leader! 
 I need you to do better than this. 
@@ -592,7 +592,7 @@ That's a pretty nice desk. It looks good and sturdy.
 Maria... what's going on with you today? You're not acting like your normal self. 
 …………………… 
 If it's okay... 
-Tell me what's going on? <br> Talk to me anytime. <br> ... Never mind, you don't need to tell me. 
+Tell me what's going on? <br> Talk to me anytime. <br> You don't need to tell me. 
 Will you tell me what's going on? I could help you out, if you let me. 
 ...I'm sorry, sir. Please don't worry about me. 
 I appreciate your camaraderie, but... this isn't something you could help with. 
@@ -777,7 +777,7 @@ Oh, Uncle Ichi! We finally got some nice weather today!
 Yeah. It's rare to get nice sunny days like this during 'tsuyu'. 
 'Tsuyu'? What's that? 
 Oh... I guess you didn't have it in France. 'Tsuyu' is... 
-...the rainy season in June. <br> ...when the rain fronts stagnate. 
+...the June rainy season. <br> ...when the rain stagnates. 
 It's what we call the rainy season in June. Once it's over, it'll be time for summer. 
 Uncle Ichi, you're so smart! That's why you're my boyfriend! 
 I love summer, so I wish 'tsuyu' would be over already! 

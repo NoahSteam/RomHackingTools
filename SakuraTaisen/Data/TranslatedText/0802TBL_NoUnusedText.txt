@@ -140,7 +140,7 @@ In order to keep this peace, we'll have to work even harder.
 Yeah... Sorry. 
 ... 
 (Let's see... What should I wish for?) 
-This peace is eternal.<br>That Sakura likes me.
+This peace is eternal. <br> That Sakura likes me. 
 (Please let this peace go on forever.) 
 (Please let Sakura like me.) 
 ...... 
@@ -148,7 +148,7 @@ This peace is eternal.<br>That Sakura likes me.
 So, Sakura... What did you wish for? 
 ... 
 (Let's see... What should I wish for?) 
-This peace is eternal.<br>That Sumire likes me.
+This peace is eternal. <br> That Sumire likes me. 
 (Please let this peace go on forever.) 
 (Please let Sumire like me.) 
 ...... 
@@ -156,7 +156,7 @@ This peace is eternal.<br>That Sumire likes me.
 So, Sumire... What did you wish for? 
 ... 
 (Let's see... What should I wish for?) 
-This peace is eternal.<br>That Maria likes me.
+This peace is eternal. <br> That Maria likes me. 
 (Please let this peace go on forever.) 
 (Please let Maria like me.) 
 ...... 
@@ -165,7 +165,7 @@ OK, should we go?
 What did you wish for, Maria? 
 ...... 
 (Let's see... What should I wish for?) 
-This peace is eternal.<br>That Kohran likes me.
+This peace is eternal. <br> That Kohran likes me. 
 (Please let this peace go on forever.) 
 (Please let Kohran like me.) 
 ... 
@@ -173,7 +173,7 @@ This peace is eternal.<br>That Kohran likes me.
 So, Kohran... What did you wish for? 
 ... 
 (Let's see... What should I wish for?) 
-This peace is eternal.<br>That Iris likes me.
+This peace is eternal. <br> That Iris likes me. 
 (Please let this peace go on forever.) 
 (Please let Iris like me.) 
 ...... 
@@ -181,7 +181,7 @@ This peace is eternal.<br>That Iris likes me.
 By the way... What was your wish? 
 ...... 
 (Let's see... What should I wish for?) 
-This peace is eternal.<br>That Kanna likes me. 
+This peace is eternal. <br> That Kanna likes me. 
 (Please let this peace go on forever.) 
 (Please let Kanna like me.) 
 ...... 
