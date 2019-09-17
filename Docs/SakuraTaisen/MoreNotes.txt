@@ -69,6 +69,7 @@ ExtractWKLFiles a:\SakuraTaisen\Disc1 a:\SakuraTaisen\ExtractedData\Disc1\WKL
 CopySharedWklImages a:\SakuraTaisen\ExtractedData\Disc1\WKL A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\WKL
 ExtractMiniGameData a:\SakuraTaisen\Disc1  A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data a:\SakuraTaisen\ExtractedData\Disc1\Minigames\
 FindDuplicateText  a:\SakuraTaisen\ExtractedData\Disc1\WKL A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\WKLDuplicates.txt
+DumpTranslationFilesWithoutUnusedLines a:\SakuraTaisen\Disc1 A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\TranslatedText A:\SakuraTaisen\TranslationFiles\
 FindCompressedData a:\SakuraTaisen\Disc1\SAKURA1\LOGO.SH2 a:\SakuraTaisen\Uncompressed.bin a:\SakuraTaisen\UncompressedDataResults
 FindData.exe a:\SakuraTaisen\Disc1 a:\SakuraTaisen\Search.bin
 
