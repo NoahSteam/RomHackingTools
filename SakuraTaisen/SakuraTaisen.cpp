@@ -7799,7 +7799,7 @@ bool PatchMiniCook(const string& patchedSakuraDirectory, const string& inTransla
 	BmpToSakuraConverter patchedLogo;
 	if( !patchedLogo.ConvertBmpToSakuraFormat(logoFileName, false) )
 	{
-		printf("PatchMiniSwim: Couldn't convert image: %s.\n", logoFileName.c_str());
+		printf("PatchMiniCook: Couldn't convert image: %s.\n", logoFileName.c_str());
 		return false;
 	}
 
@@ -7885,7 +7885,7 @@ bool PatchMiniMaig(const string& patchedSakuraDirectory, const string& inTransla
 	const unsigned int tileDim = 16;
 	if( !patchedFontSheet.ConvertBmpToSakuraFormat(fontSheetFileName, false, 0, &tileDim, &tileDim) )
 	{
-		printf("PatchMiniHana: Couldn't convert image: %s.\n", logoFileName.c_str());
+		printf("PatchMiniMaig: Couldn't convert image: %s.\n", logoFileName.c_str());
 		return false;
 	}
 
@@ -7898,7 +7898,7 @@ bool PatchMiniMaig(const string& patchedSakuraDirectory, const string& inTransla
 	indiceFinder.FindIndices(miniGameOriginalFile.GetData(), 0x00061e90);
 	if( indiceFinder.indiceAddresses.size() != 3 )
 	{
-		printf("PatchMiniHana: Couldn't find text indices\n");
+		printf("PatchMiniMaig: Couldn't find text indices\n");
 		return false;
 	}
 
@@ -7914,6 +7914,225 @@ bool PatchMiniMaig(const string& patchedSakuraDirectory, const string& inTransla
 	if( !indiceFinder.ValidateNewIndices(0, sizeof(textIndices1)) ) return false;
 	if( !indiceFinder.ValidateNewIndices(1, sizeof(textIndices2)) ) return false;
 	if( !indiceFinder.ValidateNewIndices(2, sizeof(textIndices3)) ) return false;
+
+	miniGameFile.WriteData(indiceFinder.indiceAddresses[0], (char*)textIndices1, sizeof(textIndices1));
+	miniGameFile.WriteData(indiceFinder.indiceAddresses[1], (char*)textIndices2, sizeof(textIndices2));
+	miniGameFile.WriteData(indiceFinder.indiceAddresses[2], (char*)textIndices3, sizeof(textIndices3));
+
+	return true;
+}
+
+bool PatchMiniShot(const string& patchedSakuraDirectory, const string& inTranslatedDataDirectory, const string& originalSakuraDirectory)
+{
+	const string patchedMinigameFileName = patchedSakuraDirectory + string("\\SAKURA3\\MINISHOT.BIN");
+	const string originalMinigameFileName = originalSakuraDirectory + string("\\SAKURA3\\MINISHOT.BIN");
+
+	FileReadWriter miniGameFile;
+	if (!miniGameFile.OpenFile(patchedMinigameFileName))
+	{
+		return false;
+	}
+
+	FileNameContainer originalMinigameFileNameContainer(originalMinigameFileName.c_str());
+	FileData miniGameOriginalFile;
+	if (!miniGameOriginalFile.InitializeFileData(originalMinigameFileNameContainer))
+	{
+		return false;
+	}
+
+	//Open translated logo
+	const string logoFileName = inTranslatedDataDirectory + "MiniShotLogo.bmp";
+	BmpToSakuraConverter patchedLogo;
+	if (!patchedLogo.ConvertBmpToSakuraFormat(logoFileName, false))
+	{
+		printf("PatchMiniShot: Couldn't convert image: %s.\n", logoFileName.c_str());
+		return false;
+	}
+
+	//Patch logo
+	miniGameFile.WriteData(0x00055510 + (43 * 16 * 8), patchedLogo.GetImageData(), patchedLogo.GetImageDataSize());
+
+	//Open translated fontsheet
+	const string fontSheetFileName = inTranslatedDataDirectory + "MiniShotFontSheet.bmp";
+	BmpToSakuraConverter patchedFontSheet;
+	const unsigned int tileDim = 16;
+	if (!patchedFontSheet.ConvertBmpToSakuraFormat(fontSheetFileName, false, 0, &tileDim, &tileDim))
+	{
+		printf("PatchMiniShot: Couldn't convert image: %s.\n", logoFileName.c_str());
+		return false;
+	}
+
+	patchedFontSheet.PackTiles();
+
+	//Patch fontsheet
+	miniGameFile.WriteData(0x00080D94, patchedFontSheet.mpPackedTiles, patchedFontSheet.mPackedTileSize);
+
+	MiniGameTextIndiceFinder indiceFinder;
+	indiceFinder.FindIndices(miniGameOriginalFile.GetData(), 0x00061e90);
+	if (indiceFinder.indiceAddresses.size() != 3)
+	{
+		printf("PatchMiniShot: Couldn't find text indices\n");
+		return false;
+	}
+
+	//Patch text lookups
+	short textIndices1[] = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 0x0a0d, 11, 12, 13, 14, 15, 16, 17, 18, 19, 0x0a0d, 20, 21, 22, 23, 24, 25, 26, 27, 0 };
+	short textIndices2[] = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 0x0a0d, 11, 12, 13, 14, 15, 16, 17, 18, 19, 0x0a0d, 29, 30, 31, 32, 33, 34, 35, 0 };
+	short textIndices3[] = { 36, 37, 0x0a0d, 38, 39, 0x0a0d, 38, 39, 0x0a0d, 38, 39, 0 };
+
+	SwapEndiannessForArrayOfShorts(textIndices1, sizeof(textIndices1));
+	SwapEndiannessForArrayOfShorts(textIndices2, sizeof(textIndices2));
+	SwapEndiannessForArrayOfShorts(textIndices3, sizeof(textIndices3));
+
+	if (!indiceFinder.ValidateNewIndices(0, sizeof(textIndices1))) return false;
+	if (!indiceFinder.ValidateNewIndices(1, sizeof(textIndices2))) return false;
+	if (!indiceFinder.ValidateNewIndices(2, sizeof(textIndices3))) return false;
+
+	miniGameFile.WriteData(indiceFinder.indiceAddresses[0], (char*)textIndices1, sizeof(textIndices1));
+	miniGameFile.WriteData(indiceFinder.indiceAddresses[1], (char*)textIndices2, sizeof(textIndices2));
+	miniGameFile.WriteData(indiceFinder.indiceAddresses[2], (char*)textIndices3, sizeof(textIndices3));
+
+	return true;
+}
+
+bool PatchMiniSlot(const string& patchedSakuraDirectory, const string& inTranslatedDataDirectory, const string& originalSakuraDirectory)
+{
+	const string patchedMinigameFileName = patchedSakuraDirectory + string("\\SAKURA3\\MINISLOT.BIN");
+	const string originalMinigameFileName = originalSakuraDirectory + string("\\SAKURA3\\MINISLOT.BIN");
+
+	FileReadWriter miniGameFile;
+	if (!miniGameFile.OpenFile(patchedMinigameFileName))
+	{
+		return false;
+	}
+
+	FileNameContainer originalMinigameFileNameContainer(originalMinigameFileName.c_str());
+	FileData miniGameOriginalFile;
+	if (!miniGameOriginalFile.InitializeFileData(originalMinigameFileNameContainer))
+	{
+		return false;
+	}
+
+	//Open translated logo
+	const string logoFileName = inTranslatedDataDirectory + "MiniSlotLogo.bmp";
+	BmpToSakuraConverter patchedLogo;
+	if (!patchedLogo.ConvertBmpToSakuraFormat(logoFileName, false))
+	{
+		printf("PatchMiniSlot: Couldn't convert image: %s.\n", logoFileName.c_str());
+		return false;
+	}
+
+	//Patch logo
+	miniGameFile.WriteData(0x0006149C + (37 * 16 * 8), patchedLogo.GetImageData(), patchedLogo.GetImageDataSize());
+
+	//Open translated fontsheet
+	const string fontSheetFileName = inTranslatedDataDirectory + "MiniSlotFontSheet.bmp";
+	BmpToSakuraConverter patchedFontSheet;
+	const unsigned int tileDim = 16;
+	if (!patchedFontSheet.ConvertBmpToSakuraFormat(fontSheetFileName, false, 0, &tileDim, &tileDim))
+	{
+		printf("PatchMiniSlot: Couldn't convert image: %s.\n", logoFileName.c_str());
+		return false;
+	}
+
+	patchedFontSheet.PackTiles();
+
+	//Patch fontsheet
+	miniGameFile.WriteData(0x0006149C, patchedFontSheet.mpPackedTiles, patchedFontSheet.mPackedTileSize);
+
+	MiniGameTextIndiceFinder indiceFinder;
+	indiceFinder.FindIndices(miniGameOriginalFile.GetData(), 0x0007e650);
+	if (indiceFinder.indiceAddresses.size() != 3)
+	{
+		printf("PatchMiniSlot: Couldn't find text indices\n");
+		return false;
+	}
+
+	//Patch text lookups
+	short textIndices1[] = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 0x0a0d, 17, 18, 19, 20, 21, 22, 23, 24, 0 };
+	short textIndices2[] = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 0x0a0d, 13, 14, 15, 16, 21, 22, 23, 24, 0 };
+	short textIndices3[] = { 25, 26, 0x0a0d, 27, 28, 0x0a0d, 29, 30, 0x0a0d, 31, 32, 0 };
+
+	SwapEndiannessForArrayOfShorts(textIndices1, sizeof(textIndices1));
+	SwapEndiannessForArrayOfShorts(textIndices2, sizeof(textIndices2));
+	SwapEndiannessForArrayOfShorts(textIndices3, sizeof(textIndices3));
+
+	if (!indiceFinder.ValidateNewIndices(0, sizeof(textIndices1))) return false;
+	if (!indiceFinder.ValidateNewIndices(1, sizeof(textIndices2))) return false;
+	if (!indiceFinder.ValidateNewIndices(2, sizeof(textIndices3))) return false;
+
+	miniGameFile.WriteData(indiceFinder.indiceAddresses[0], (char*)textIndices1, sizeof(textIndices1));
+	miniGameFile.WriteData(indiceFinder.indiceAddresses[1], (char*)textIndices2, sizeof(textIndices2));
+	miniGameFile.WriteData(indiceFinder.indiceAddresses[2], (char*)textIndices3, sizeof(textIndices3));
+
+	return true;
+}
+
+bool PatchMiniSoji(const string& patchedSakuraDirectory, const string& inTranslatedDataDirectory, const string& originalSakuraDirectory)
+{
+	const string patchedMinigameFileName = patchedSakuraDirectory + string("\\SAKURA3\\MINISOJI.BIN");
+	const string originalMinigameFileName = originalSakuraDirectory + string("\\SAKURA3\\MINISOJI.BIN");
+
+	FileReadWriter miniGameFile;
+	if (!miniGameFile.OpenFile(patchedMinigameFileName))
+	{
+		return false;
+	}
+
+	FileNameContainer originalMinigameFileNameContainer(originalMinigameFileName.c_str());
+	FileData miniGameOriginalFile;
+	if (!miniGameOriginalFile.InitializeFileData(originalMinigameFileNameContainer))
+	{
+		return false;
+	}
+
+	//Open translated logo
+	const string logoFileName = inTranslatedDataDirectory + "MiniSojiLogo.bmp";
+	BmpToSakuraConverter patchedLogo;
+	if (!patchedLogo.ConvertBmpToSakuraFormat(logoFileName, false))
+	{
+		printf("PatchMiniSoji: Couldn't convert image: %s.\n", logoFileName.c_str());
+		return false;
+	}
+
+	//Patch logo
+	//miniGameFile.WriteData(0x00064810 + (35 * 16 * 8), patchedLogo.GetImageData(), patchedLogo.GetImageDataSize());
+
+	//Open translated fontsheet
+	const string fontSheetFileName = inTranslatedDataDirectory + "MiniSojiFontSheet.bmp";
+	BmpToSakuraConverter patchedFontSheet;
+	const unsigned int tileDim = 16;
+	if (!patchedFontSheet.ConvertBmpToSakuraFormat(fontSheetFileName, false, 0, &tileDim, &tileDim))
+	{
+		printf("PatchMiniSoji: Couldn't convert image: %s.\n", logoFileName.c_str());
+		return false;
+	}
+
+	patchedFontSheet.PackTiles();
+
+	//Patch fontsheet
+	miniGameFile.WriteData(0x00064810, patchedFontSheet.mpPackedTiles, patchedFontSheet.mPackedTileSize);
+
+	MiniGameTextIndiceFinder indiceFinder;
+	indiceFinder.FindIndices(miniGameOriginalFile.GetData(), 0x00074cbc);
+	if (indiceFinder.indiceAddresses.size() != 3)
+	{
+		printf("PatchMiniSoji: Couldn't find text indices\n");
+		return false;
+	}
+
+	//Patch text lookups
+	short textIndices1[] = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 0x0a0d, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 0 };
+	short textIndices2[] = { 25, 26, 27, 28, 0x0a0d, 0x0a0d, 0x0a0d, 0 };
+	short textIndices3[] = { 0x0a0d, 30, 31, 32, 0x0a0d, 30, 31, 34, 0 };
+
+	SwapEndiannessForArrayOfShorts(textIndices1, sizeof(textIndices1));
+	SwapEndiannessForArrayOfShorts(textIndices2, sizeof(textIndices2));
+	SwapEndiannessForArrayOfShorts(textIndices3, sizeof(textIndices3));
+
+	if (!indiceFinder.ValidateNewIndices(0, sizeof(textIndices1))) return false;
+	if (!indiceFinder.ValidateNewIndices(1, sizeof(textIndices2))) return false;
+	if (!indiceFinder.ValidateNewIndices(2, sizeof(textIndices3))) return false;
 
 	miniGameFile.WriteData(indiceFinder.indiceAddresses[0], (char*)textIndices1, sizeof(textIndices1));
 	miniGameFile.WriteData(indiceFinder.indiceAddresses[1], (char*)textIndices2, sizeof(textIndices2));
@@ -8251,6 +8470,9 @@ bool PatchMiniGames(const string& rootSakuraDirectory, const string& patchedSaku
 	bResult      = bResult && PatchMiniHana(patchedSakuraDirectory, inTranslatedDataDirectory, rootSakuraDirectory);
 	bResult      = bResult && PatchMiniCook(patchedSakuraDirectory, inTranslatedDataDirectory, rootSakuraDirectory);
 	bResult      = bResult && PatchMiniMaig(patchedSakuraDirectory, inTranslatedDataDirectory, rootSakuraDirectory);
+	bResult      = bResult && PatchMiniShot(patchedSakuraDirectory, inTranslatedDataDirectory, rootSakuraDirectory);
+	bResult      = bResult && PatchMiniSlot(patchedSakuraDirectory, inTranslatedDataDirectory, rootSakuraDirectory);
+	bResult      = bResult && PatchMiniSoji(patchedSakuraDirectory, inTranslatedDataDirectory, rootSakuraDirectory);
 
 	return bResult;
 }

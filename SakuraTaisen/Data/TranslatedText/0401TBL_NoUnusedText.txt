@@ -20,7 +20,7 @@ A prop crown used onstage. It's well constructed and incredibly detailed.
 A wig and costume used onstage. I wonder what kind of act could use a flashy outfit like this? 
 A photo of Sakura in her swimsuit. Wow, this is really something. I'm gonna treasure this. 
 A photo of Sumire in her stage costume. Her distinctive makeup really makes an impact. 
-It's a photo of Maria on stage in the military uniform from "For Love"... She's a beautiful woman disguised as a man. 
+A photo of Maria on stage in the uniform from "For Love"... a beautiful woman disguised as a man. 
 A photo of Kanna in her training gear. Catching her in a private moment like this feels surprisingly intimate. 
 A photo of Iris in her swimsuit. She's holding a rubber ring and looks ready to have some fun. How cute. 
 A photo of Kohran. I don't get to see her with her braids undone very often. It's a nice look. 
@@ -33,7 +33,7 @@ Well, she busted up a water fountain in broad daylight... can't really argue wit
 Would you please be quiet?! I can't hear what they're saying! 
 I'm sorry. I should have kept a better eye on her. 
 ... 
-I take full responsibility. <br> Iris, you should apologize too! 
+I take full responsibility. <br> Iris, apologize too! 
 ...I take full responsibility for this incident. I accept any punishment you deem necessary. 
 But... remember, Iris is still just a kid. 
 Ah!! W, wait, Iris!! 
@@ -51,7 +51,7 @@ I... Iris...
 She ran that way... 
 Toward... her room... 
 ...what am I supposed to do? 
-Go after Iris. <br> Go back to the commander's room. <br> Help these three. 
+Go after Iris. <br> Go back to your room. <br> Help these three. 
 Iris, wait! 
 Looks like Iris ran off to her room... 
 Sir... there's nothing Iris hates more than being treated like a child... 
@@ -193,7 +193,7 @@ I think we just need to wait until she calms down...
 ...Well, I guess we should retreat for now too. 
 ... 
 What should I do? 
-Go back to my room. <br> Try to talk to her one more time. 
+Go back to your room. <br> Talk to her one more time. 
 ...I can't get through to Iris right now... 
 ...I should just head back to my room and think of what to do next. 
 ...Ogami. 
@@ -210,9 +210,9 @@ Kanna and the others see Iris as a child...
 Kohran and the others see Iris as a child... 
 But, Maria is trying to treat her as an adult... 
 Ogami, what do you think? 
-I think Maria is right. <br> I think Sumire and the others are right. <br> I think they're both wrong. 
-I think Maria is right. <br> I think Kanna and the others are right. <br> I think they're both wrong. 
-I think Maria is right. <br> I think Kohran and the others are right. <br> I think they're both wrong. 
+I think Maria is right. <br> Sumire and them are right. <br> I think they're both wrong. 
+I think Maria is right. <br> Kanna and them are right. <br> I think they're both wrong. 
+I think Maria is right. <br> Kohran and them are right. <br> I think they're both wrong. 
 I think... Maria is right. 
 Iris hates being treated as a child... 
 True... Iris does clearly dislike being treated as a child... 
