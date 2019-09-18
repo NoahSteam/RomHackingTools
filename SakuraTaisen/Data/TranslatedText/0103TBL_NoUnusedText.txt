@@ -1,11 +1,11 @@
-﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking... 
+﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
 It's a photo of Sumire. This is a side of her you don't see too often. 
-It's a photo of Maria. ...She's lost in thought and looks kind of sad... 
+It's a photo of Maria. …She's lost in thought and looks kind of sad… 
 It's a photo of Kanna. She's looking strong and sturdy. I hope I get to meet her soon. 
 It's a photo of Iris. Surrounded by flowers, she looks like a cute little flower herself. 
 It's a photo of Kohran. Chinese clothes look good on her. I wonder what kind of girl she is. 
-It's the letter the guest left with me. I was told to give it to Sumire, but...Hmmm. 
-It's Maria's gun. ...Is there a way to use this to escape? 
+It's the letter the guest left with me. I was told to give it to Sumire, but…Hmmm. 
+It's Maria's gun. …Is there a way to use this to escape? 
 It's a hair ornament. It's shaped like a flower and really cute. 
 It's a pretty brooch. The fine craftsmanship is gorgeous. 
 It's a hairpin. This would look best with Japanese clothes and a married woman's hairstyle. 
@@ -18,21 +18,21 @@ This is the knife Iris asked me to bring. It's a perfectly normal table knife.
 This fake sword and shield were used in plays. The props have been made with care down to the last detail. 
 This fake crown was used in plays. The intricate details have been rendered with great skill. 
 This wig is used on stage. What kind of play would have such a flashy costume? 
-Is that Sakura in a swimsuit? What a photo... I'll never let anyone else have this. 
+Is that Sakura in a swimsuit? What a photo… I'll never let anyone else have this. 
 It's Sumire in her stage costume. Her powerful makeup is really impressive. 
-It's Maria on stage. Is that the military uniform from "For Love"...? She looks great in men's clothes. 
+It's Maria on stage. Is that the military uniform from "For Love"…? She looks great in men's clothes. 
 It's rare to see one of her training. This photo has a kind of private feel to it. 
 Iris in a swimsuit? It's so cute that she has a pool tube. 
 A photo of Kohran. I don't get to see her with her braids undone very often. It's a nice look. 
 A photo of Ayame in a traditional outfit. I hope she'll always be as happy and content as she is here. 
-Ayame's gun. Why...? Why did it have to turn out like this...? 
-Nothing I can do here. I'd better check somewhere else... 
-There's no one here. I'd better check somewhere else... 
-I'd better check somewhere else... 
+Ayame's gun. Why…? Why did it have to turn out like this…? 
+Nothing I can do here. I'd better check somewhere else… 
+There's no one here. I'd better check somewhere else… 
+I'd better check somewhere else… 
 I'm not making any progress here. Maybe I should go to the manager's office and talk to Lt Gen Yoneda. 
-But... the more I wander around this place, the more it seems like a normal theater... 
-...So, a flower-viewing party in Ueno Park after battle? The cherry blossoms at night aren't too shabby. 
-...But, sir, why do you keep everything about the Hive of Darkness top secret? 
+But… the more I wander around this place, the more it seems like a normal theater… 
+…So, a flower-viewing party in Ueno Park after battle? The cherry blossoms at night aren't too shabby. 
+…But, sir, why do you keep everything about the Hive of Darkness top secret? 
 I see. So that's what makes it a secret squadron. 
 No problem. Thank you too, Sakura. 
 I said, let me handle it! 
@@ -159,23 +159,23 @@ Unused
 Unused
 Unused
 Unused
-Oh, come now, Ogami. What do you think would happen if we didn't? Riots, that's what... 
+Oh, come now, Ogami. What do you think would happen if we didn't? Riots, that's what… 
 We'd be playing right into their hands. No matter what, we must fight them in absolute secrecy! 
 Thank you so much for today. 
 It's a good thing you were here, Ogami. 
 Heeey, why sho sherioush? Lighten up, willya? 
-Oh my...up closhe, you sure are handshome! Hic! You're my type, y'knooow? 
-The battle against these enemies has just begun, so don't get too carried away... 
+Oh my…up closhe, you sure are handshome! Hic! You're my type, y'knooow? 
+The battle against these enemies has just begun, so don't get too carried away… 
 Unused
 Unused
 Unused
-Y'know...I like you an awful lot, oniichan. 
+Y'know…I like you an awful lot, oniichan. 
 I'll let you be my boyfriend, so don't go cheating on me! 
 Chug it, chug it all down! Ogami! You're on ticket duty again tomorrow! 
-Ahahaha... 
+Ahahaha… 
 Unused
 Unused
-Ahahaha... 
+Ahahaha… 
 Unused
 Unused
 Unused
@@ -207,6 +207,6 @@ Unused
 Unused
 Unused
 I'm looking forward to working with you again, Ogami! 
-Huu, huhuhu...Come on, Ensiiign, let'sh keep drinking! 
+Huu, huhuhu…Come on, Ensiiign, let'sh keep drinking! 
 Unused
 Unused
