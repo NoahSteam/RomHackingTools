@@ -45,7 +45,7 @@ No answer. Guess she's already headed for the meeting room.
 Is Ayame still in her room? 
 She probably already headed for the underground meeting room. 
 …nobody home. 
-It's nice to relax and drink some tea here… 
+It's nice to relax and drink some tea here…
 But right now I need to get to the underground meeting room. 
 Looks like nobody's here. I should head to the underground meeting room. 
 We've been sold out every day recently, so this area's always packed with guests. 
@@ -159,7 +159,7 @@ Sometime in August, 1923… Headquarters of the Hive of Darkness
 Kuh… It seems I can't just force my way through… 
 And here I thought it was merely a broken down old building… This power is nothing to sniff at. 
 …I suppose there is no way around it. First we must seal this place… this building… 
-36 hours later, Imperial Theatre 
+36 hours later, Imperial Theatre
 I say it every time but… Sumire sure does steal the show. 
 Kanna is a perfect fit for Son Goku, and Sumire's great as that demoness… 
 But I bet ya Sumire will start yelling 'Why am I always the villain!?' after it's over. 
@@ -208,10 +208,10 @@ You got it! Time for round two!
 Good grief, how long are they going to keep fighting? 
 Those two need to give it a rest. 
 Ogami… can't you do anything? 
-Cut it out, you two! <br> I am NOT sticking my nose in this. <br> Sometimes it's best to get it out of your system! 
+Cut it out, you two! <br> Stay out of it. <br> Let them get it out. 
 Cut it out, you two! 
 Shut up and butt out!! 
-You stay out of this, Ensign!! 
+You stay out of this, Ensign!!
 Y, yes ma'am! 
 Well, that sure didn't look like it worked… 
 I… am NOT sticking my nose in this. 
@@ -269,7 +269,7 @@ Come in, it's open.
 Yo, captain. Shouldn't you be headed for the meeting room? 
 …… 
 …did you need me for something? 
-I was worried about you… <br> No, nothing in particular. <br> There's something we need to address. 
+I was worried about you… <br> Nothing in particular. <br> We need to talk. 
 …… 
 W, what's the matter? It's weird if you just come in here and stare at me like that… 
 Kanna, I… 
@@ -296,7 +296,7 @@ Who says I need to patch things up with her!
 Kanna! 
 …… 
 …sorry, I didn't mean to upset you… 
-Would you like to walk to the meeting room with me? <br> Should we go hang out somewhere, just the two of us? <br> I'm going to head to the meeting room. 
+Come to the meeting room? <br> Want us to go somewhere? <br> I'm going to the meeting room. 
 Should we go hang out somewhere, just the two of us sometime? … I know! Let's go to the beach! 
 Great idea! It's so busy around here I haven't been to the beach in ages. 
 …well, unfortunately for now we should just head to the meeting room. 
@@ -338,7 +338,7 @@ Oh, no… I just happened to be passing by.
 Ensign, shouldn't you be heading for the meeting? 
 …… 
 …did you need something from me? 
-I was worried about you… <br> No, nothing in particular. <br> There's something we need to discuss. 
+I was worried about you… <br> Nothing in particular. <br> We need to talk. 
 …… 
 Wh-what on Earth is the matter? Don't just walk in and stare at me like that. 
 Oh, um… 
@@ -366,7 +366,7 @@ I have no interest in patching this up!
 Sumire! 
 …… 
 …sorry, I didn't mean to upset you… 
-Would you like to walk to the meeting room with me? <br> Should we go hang out somewhere, just the two of us? <br> I'm going to head to the meeting room. 
+Come to the meeting room? <br> Want us to go somewhere? <br> I'm going to the meeting room. 
 How would you like to go hang out somewhere, just the two of us? 
 Oh, that sounds wonderful… I haven't been on a trip in ages. 
 I think a drive by the beach would be lovely this time of year. 
@@ -412,7 +412,7 @@ Oh, no, it's nothing, Kasumi.
 (There's a quiet, calm look in her eyes.) 
 (Kasumi always looks people right in the eyes when she talks to them.) 
 (Those traditional Japanese clothes look great on her.) 
-(Even though she appears relaxed, I can't see any openings in her stance… I wonder if she's had martial training?) 
+(Even though she's relaxed, I can't see any openings… I wonder if she's had martial training?) 
 (Gotta love the chest areas on traditional Japanese clothes…) 
 …… 
 (She's actually got quite a…) 
@@ -426,7 +426,7 @@ But the guests are actually eating it up. Some people come just to watch that. T
 Kanna's especially popular with the kids. We'll probably have a lot of kids getting separated from her parents. 
 We're at the busiest time of year for the theater, Ogami. 
 'The Journey West' will run all summer, but after that's done we'll close for a bit. A slightly late summer break. 
-We get lost kids every year during the summer performances. It's always a big deal trying to track them down. 
+We get lost kids every year during the performances. It's always a big deal trying to track them down. 
 Do you need me for anything? 
 (She's got her scarf pinned with a brooch.) 
 (I wonder what it's made of… Couldn't be a real jewel, right?) 
@@ -436,7 +436,7 @@ Do you need me for anything?
 (That bouncy look is pretty trendy.) 
 Is something odd about my hair? Oh no~, I've got some split ends! 
 (Her face is small and balanced. I think even a model would be jealous.) 
-(It doesn't seem like she uses a lot of make-up. Well, she's got such a nice foundation, I don't think she really needs it…) 
+(Doesn't seem like she uses a lot of make-up. Well, she's got a nice foundation, I don't think she needs it…) 
 What's the matter, Ogami? You're staring at my face… Oh, I see. You've fallen for me, right? 
 Hey, you shouldn't be teasing an adult. 
 Hehehe… sorry, Ogami. 
@@ -471,7 +471,7 @@ Hey it turned out alright in the end, right? You both realized you'd made a mist
 And now you two are good friends again… 
 Huh, interesting. 
 Looks like you and Sakura have been hitting it off lately, Ogami. 
-Ms. Sumire's got this aura that makes her hard to approach, but that's actually turned into one of her selling points. 
+Ms. Sumire's got this aura that makes her hard to approach, but that's one of her selling points. 
 Lady Maria's popular among men AND women. Her performances are just that good. 
 It's pretty easy to see why she's so popular, though mostly just among our more elderly guests. 
 Honestly… I really don't get where Ms. Kohran's popularity comes from… 
@@ -495,13 +495,13 @@ Only two of my Four Lords of Death remain… how pathetic.
 Again, I am truly sorry. 
 However, I have but one goal! I must complete the Hexagram of Demon Invocation!! I will not balk from sacrifices!! 
 Of course… 
-Rend, ye skies! Shatter, ye earth! All ye myriad tears become a great river, all ye countless drops of blood become an ocean, and give to me your power! 
+Rend ye skies! Shatter ye earth! Ye tears shall be as a great river, ye blood an ocean, and offer your power! 
 Go forth, Miroku, Satan!! 
 At once!! 
 Hey hey hey hey hey! All you demons and monsters out there listen up! 
 You've got guts picking a fight with me, Son Goku, first disciple of Sanzo Hoshi. 
 I'll send the lot of you to the other side. Give thanks and rest in peace!! 
-Ha! Know your place, you stone monkey! Such impertinence to the physical embodiment of beauty and love you see before you! 
+Ha! Know your place, you stone monkey! Such impertinence to the personification of beauty and love you see before you! 
 I, the demoness, will send you to the depths of Hell!! Ohohoho!! 
 Prepare yourself! You…you god damn…s-s-snake of a woman! 
 What the?! You big, stupid monkey!! 

@@ -253,7 +253,7 @@ It's an enemy. I saw an enemy walking over there.
 What!? 
 Oh dear… perhaps you were simply surprised by your own reflection in the mirror? 
 Shut up! I'm trying to tell you something important, so shut up and listen! 
-Stop the fighting. <br> Listen to what Kanna has to say. 
+Stop the fighting. <br> Listen to Kanna. 
 Stop it, you two! This is no time to be arguing! 
 But, sir… I really saw them! 
 Really now~… What did they look like? 
@@ -263,7 +263,7 @@ Damn it, shut up!
 Kanna… please keep going, I'd like to hear what you have to say. 
 …right. I was walking down the hall… 
 Then, suddenly, I saw one of the enemies turning a corner in the hall ahead. 
-…are we to believe the mechanical soldiers of the Hive of Darkness are wandering around in a broken down old mansion like this? 
+…are we to believe the Hive of Darkness are wandering around in a broken down old mansion like this? 
 Well, considering the seals plastered all over the walls and the evil energy you sensed from the mansion earlier… 
 I'd say there's definitely something here. Something that may be connected with the Hive of Darkness. 
 Kanna, that's some good work you've done. You've given us some vital intelligence. 
@@ -434,8 +434,8 @@ Alright, let's head out then. We don't want Sumire getting hurt or anything.
 Right, let's go! 
 …so this is Fukugawa Manor. It's completely run down… 
 Yes… it simply oozes ominous atmosphere. 
-According to the materials Commander Yoneda gave me, it was built by some noble family during the early days of westernization in the country… 
-They ended up getting hit with one tragedy after another and scattered to the wind. After that, the place was left abandoned… 
+According to the materials Yoneda gave me, it was built by some nobles during the early days of westernization… 
+They ended up getting hit with one tragedy after another. After that, the place was left abandoned… 
 … 
 Hm? Something the matter, Sumire? 
 I… can feel a strong spiritual energy radiating from this mansion. 
@@ -477,7 +477,7 @@ Wha…? I… no, that was…
 Ohohoho! I, I fear you are quite mistaken. 
 I just felt sorry for the poor flooring being stomped to pieces… 
 What the hell! Okay, now I'm pissed. 
-I don't want to see your stupid face anymore! I'd rather go hang out with ghosts than spend another minute with you! 
+I don't want to see your stupid face anymore! I'd rather go hang out with ghosts! 
 I feel quite the same about you! I would be quite content parting ways with a wild woman like you! 
 Well I'm going for that door on the left! Don't even think about following me! 
 What a coincidence, I plan on taking the door on the right! My, how wonderful it will be to get away from you! 
@@ -496,7 +496,7 @@ Wait a second, Sumire. Just calm down.
 That ape woman… I really cannot forgive her! 
 She is crude, inconsiderate, and has absolutely none of the qualities one expects from a lady! Not one!! 
 Don't you agree, sir!? 
-I suppose… <br> Would you please patch things up with her already? <br> No, this was your fault! 
+I suppose… <br> Please patch things up? <br> No, this was your fault! 
 I suppose… that outburst a minute ago was way over the line. 
 I completely agree! I knew you would see the right of it, sir. 
 Sumire, would you just patch things up with her already? 
@@ -520,7 +520,7 @@ I must say… I look forward to finishing our investigation as quickly as possib
 I'm sure if we stay too long this moldy smell will cling to my clothing. 
 Dammit, that nasty hag! She really pissed me off this time! 
 Right, sir? Don't you think she went too far? 
-I suppose… <br> … Could you two just patch things up already? <br> No, this was your fault! 
+I suppose… <br> Please patch things up? <br> No, this was your fault! 
 I suppose… she did cross the line. 
 Right? I knew you would understand, sir! You get what I'm talking about. 
 Hey, Kanna, don't you think it's time for you two to just patch things up? 
@@ -572,7 +572,7 @@ I think so… I heard a sort of 'plop' sound.
 S, sir… something just landed on my arm… 
 Oh… you're right! There's something wrapping around your arm! 
 Eeeeeek! It-it's moving… this cold… scaly feeling… no, please no! 
-Kiiiiiiiiii! 
+Kiiiiiiiiii!
 Ah, wait! Sumire! 
 Help Kanna. <br> Chase Sumire. 
 Ow! Ah… wahhhhh! It… it bit me!! 
@@ -588,7 +588,7 @@ Just hold on, Kanna! I'll get rid of that snake for you!!
 …okay. I tossed the snake over there. It's gone, you're okay now. 
 …but that snake was poisonous. I just know it. It bit my arm real good. I'm… I'm gonna die here… 
 Kanna… 
-Give her first aid. <br> Suck the poison from the wound. 
+Give her first aid. <br> Suck the poison out. 
 Okay, Kanna, I'm going to do some first aid. We'll need to put a tourniquet your arm so the poison doesn't spread. 
 …Yeah, sure. 
 There… that should keep the poison from spreading to the rest of your body. 
@@ -616,7 +616,7 @@ S-sir what are you doing?!
 Uh… I was going to suck out the poison… 
 Sir… now's really not the time to be joking around. Have some decency. 
 Ah, right. 
-Well, for now let's just put a tourniquet on your arm to keep the poison from spreading. Here, let's tie up your sleeve… 
+For now let's just put a tourniquet on your arm to prevent the spread. Let's tie up your sleeve… 
 G-got it. 
 There… that should keep the poison from spreading to the rest of your body. 
 Hey, sir… am I gonna die? 
@@ -754,7 +754,7 @@ Okay… I'm rubbing on the medicine.
 I know this isn't an antivenom, but we'll have to make do with this for now. 
 …I dunno if it's the medicine or what, but I feel better already. 
 …thanks, sir. I could tell you were really serious about finding this medicine for me. 
-I am your commander, after all. <br> I just did what anyone would do. 
+I'm a commander, after all. <br> Just did what anyone would do. 
 I'm the commander of the Flower Division. It's my duty to protect you all. 
 Hehe… right. Just doing your duty… 
 …? 
@@ -837,7 +837,7 @@ Hold still, Sumire! I'll get the spider for you!!
 …okay. I tossed the spider over there. It's alright, Sumire. 
 But that was definitely a poisonous spider, and it bit me on the hand… I… I'm not going to make it. 
 Sumire… 
-Try to cheer her up. <br> Suck the poison from the wound. 
+Try to cheer her up. <br> Suck the poison out. 
 Sumire, we need to get you some first aid. Let's put a tourniquet on your arm to keep the poison from spreading. 
 …yes, of course. 
 There… that should keep the poison from spreading to the rest of your body. 
@@ -872,7 +872,7 @@ S-sir! What on Earth are you doing!
 Uh… I was going to suck out the poison… 
 Sir, please refrain from joking at a time like this. 
 Ah, right. 
-Well, for now let's just put a tourniquet on your arm to keep the poison from spreading. Here, let's tie up your sleeve… 
+For now, we need to get a tourniquet on your arm before the poison spreads. Here, wrap up your sleeve… 
 …of course. 
 There… that should keep the poison from spreading to the rest of your body. 
 Sir… do you think… I will die here? 
@@ -959,7 +959,7 @@ Okay… I'm rubbing on the medicine.
 I know this isn't an antivenom, but we'll have to make do with this for now. 
 …I suppose it could just be my imagination, but I do believe I feel better already. 
 Thank you, sir… it made me happy seeing you rushing around so flustered on my account… 
-I am your commander, after all. <br> I just did what anyone would do. 
+I'm a commander, after all. <br> Just did what anyone would do. 
 I'm the commander of the Flower Division. It's my duty to protect you all. 
 …oh, so it was your duty?… So that is all it was… 
 …? 
@@ -1114,7 +1114,7 @@ Sumire… Kanna… b… behind you…
 No, no… 
 Are… are those… 
 (Dammit… what should I do!?) 
-Shove Sumire and Kanna out of the way. <br> Shoot the spiders and snakes. <br> Whack them away with my hands. 
+Shove them out of the way. <br> Shoot the spiders and snakes. <br> Whack them away. 
 Crap, I can't think of anything else, so… 
 Sumire! Kanna! Hunker down, I'm going to shove you both out of here! 
 S-sir! 

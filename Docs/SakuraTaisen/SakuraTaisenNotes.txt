@@ -240,7 +240,7 @@ Around: 0510FF17
 EVT files have a header up top.  The lookup value associated with each image looks into a table in the EVT file at 0x00011E94.  
 That value refers to the index at the top of the FACE file.  The index at the top of the FACE file has the address of the image desired.
 
-Subtitle text: first image compressed @.x000196db
+Subtitle text: first image compressed @0x000196db
 
 Battle Dialog extra text in SLG.BIN and 0SLG.BIN @ 00045e50 (In mem @06049e50)
 In memory during battle:
@@ -458,3 +458,8 @@ Found a match in MINISHOT.BIN @0x000143dc
 Found a match in MINISLOT.BIN @0x000143dc
 Found a match in MINISOJI.BIN @0x000143dc
 Found a match in MINISWIM.BIN @0x000143dc
+
+//Subtitles data compressed here in LOGO.SH2
+Found: 000196d8 00000000 Size: 1280 CompressedSize: 12673
+
+Image data for subtitle images is in SAKURA @0x000a210

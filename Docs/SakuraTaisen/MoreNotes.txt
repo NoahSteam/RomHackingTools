@@ -37,6 +37,7 @@ FindDuplicateText D:\Rizwan\SakuraWars\ExtractedData\Disc1\WKL D:\Rizwan\SakuraW
 DumpTranslationFilesWithoutUnusedLines d:\Rizwan\SakuraWars\Disc1 D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\TranslatedText D:\Rizwan\SakuraWars\TranslationFiles\
 CopySharedWklImages D:\Rizwan\SakuraWars\ExtractedData\Disc1\WKL d:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\WKL
 ExtractMiniGameData d:\Rizwan\SakuraWars\Disc1 d:\Rizwan\SakuraWars\ExtractedData\Disc1\Minigames\
+ExtractSubtitles d:\Rizwan\SakuraWars\Disc1 d:\Rizwan\SakuraWars\ExtractedData\Disc1\Subtitles\
 FindCompressedData d:\Rizwan\SakuraWars\Disc1\SAKURA1\LOGO.SH2 d:\Rizwan\SakuraWars\Search.bin d:\Rizwan\SakuraWars\UncompressedDataResults
 PatchGame d:\Rizwan\SakuraWars\Disc1 d:\Rizwan\SakuraWars\Disc1_Translated D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\TranslatedText D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\8x12.bmp D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\Palette.bin D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\TMapSP D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\MainMenuFont2.bmp D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\MainMenuPatched.bmp D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\OptionsBgndPatched.bmp D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data D:\Rizwan\SakuraWars\ExtractedData\Disc1\WKL
 FindData.exe d:\Rizwan\SakuraWars\Disc1 d:\Rizwan\SakuraWars\Search.bin

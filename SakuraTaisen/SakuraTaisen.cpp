@@ -8551,6 +8551,71 @@ void CreateFontSheetEntries(const string& inFileName)
 	}
 }
 
+void ExtractSubtitles(const string& rootSakuraDirectory, const string& outDirectory)
+{
+	CreateDirectoryHelper(outDirectory);
+
+	//00019588 is where the subtitle palette lives in LOGO.SH2
+
+	//SAKURA file
+	FileNameContainer sakuraFilePath((rootSakuraDirectory + "SAKURA").c_str());
+	FileData sakuraData;
+	if( !sakuraData.InitializeFileData(sakuraFilePath) )
+	{
+		return;
+	}
+
+	//LOGO.SH2 file
+	FileNameContainer logoFilePath((rootSakuraDirectory + "\\SAKURA1\\LOGO.SH2").c_str());
+	FileData logoData;
+	if( !logoData.InitializeFileData(logoFilePath) )
+	{
+		return;
+	}
+
+	//Read in info for each subtitle image
+	struct SubtitleInfo
+	{
+		unsigned int   unknown;
+		unsigned char  width;
+		unsigned char  height;
+		unsigned short unknown2;
+
+		void PostLoadFixup()
+		{
+			width  = SwapByteOrder(width) * 8;
+			height = SwapByteOrder(height);
+		}
+	};
+
+	const int numSubtitles = 17;
+	SubtitleInfo subtitles[17];
+	memcpy_s(subtitles, sizeof(subtitles), sakuraData.GetData() + 0x000a20c, sizeof(subtitles));
+
+	for (int i = 0; i < numSubtitles; ++i)
+	{
+		subtitles[i].PostLoadFixup();
+	}
+
+	//Uncompress subtitle image block
+	PRSDecompressor uncompressedData;
+	uncompressedData.UncompressData((void*)(logoData.GetData() + 0x000196d8), logoData.GetDataSize() - 0x000196d8);
+
+	char buffer[10];
+	int imageOffset = 0;
+	for(int i = 0; i < numSubtitles; ++i)
+	{
+		sprintf_s(buffer, 10, "%i.bmp", i);
+		const string outFileName = outDirectory + buffer;
+
+		const int imageSize = subtitles[i].width*subtitles[i].height / 2;
+		ExtractImageFromData(uncompressedData.mpUncompressedData + imageOffset, imageSize, outFileName, logoData.GetData() + 0x00019578, 32, subtitles[i].width, subtitles[i].height, 1,
+			                 256, 0, false, true);
+
+		imageOffset += imageSize;
+	}
+}
+
 bool PatchGame(const string& rootSakuraTaisenDirectory, const string& patchedSakuraTaisenDirectory, const string& translatedTextDirectory, const string& fontSheetFileName, const string& /*originalPaletteFileName*/, 
 	const string &patchedTMapSPDataPath, const string& inMainMainFontSheetPath, const string& inMainMenuTranslatedBgnd, const string& inPatchedOptionsImage, const string& inTranslatedDataDirectory,
 	const string& inExtractedWklDir)
@@ -8978,6 +9043,13 @@ int main(int argc, char *argv[])
 		const string textFile = string(argv[2]);
 
 		CreateFontSheetEntries(textFile);
+	}
+	else if( command == "ExtractSubtitles" && argc == 4 )
+	{ 
+		const string rootSakuraDir = string(argv[2]) + Seperators;
+		const string outDir        = string(argv[3]) + Seperators;
+
+		ExtractSubtitles(rootSakuraDir, outDir);
 	}
 	else
 	{
