@@ -881,7 +881,7 @@ struct SakuraTextFileFixedHeader
 		if(stringTableSize/2 > 0xffff)
 		{
 			const int sizeToReduce = (stringTableSize/2) - 0xffff;
-			printf("\nERROR:Translated file %s is too big.  Needs to be reduced by %i bytes (%i characters)\n", inSakuraFile.mFileNameInfo.mFileName.c_str(), sizeToReduce, sizeToReduce/2);
+			printf("\nERROR:Translated file %s is too big.  Needs to be reduced by %i bytes (%i characters)\n", inSakuraFile.mFileNameInfo.mFileName.c_str(), sizeToReduce, sizeToReduce);
 			return false;
 		}
 
@@ -1993,15 +1993,17 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 	FindDialogOrder(rootSakuraTaisenDirectory, dialogOrder);
 
 	//***Load duplicate info***
+	printf("Loading Duplicate Info\n");
 	const string duplicatesFileName = translatedTextDirectory + string("\\..\\DuplicatesForTextInsert.txt");
 	FileNameContainer dupFileNameContainer(duplicatesFileName.c_str());
 	TextFileData duplicatesFile(dupFileNameContainer);
-	if( !duplicatesFile.InitializeTextFile() )
+	if( !duplicatesFile.InitializeTextFile(false) )
 	{
 		printf("Unable to open duplicates file.\n");
 		return false;
 	}
 
+	printf("Creating Duplicate Map\n");
 	const string underScore("_");
 	map<string, bool> duplicatesMap; //dir+lineNumber, dummyBool
 	const size_t numDupLines = duplicatesFile.mLines.size();
@@ -2196,9 +2198,6 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 						}
 					}
 
-					const string baseUntranslatedString = sakuraFile.mFileNameInfo.mNoExtension + string(":");
-					const string untranslatedString = bUseShorthand ? "U" : baseUntranslatedString + std::to_string(translatedLineIndex + 1); //Just print out a U for unused lines to save space
-
 					SakuraString translatedSakuraString;
 					unsigned short timingData = 0;
 					if( bIsMESFile )
@@ -2212,6 +2211,10 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 							timingData = (numCharsPrintedFortTBL >> 1);
 						}
 					}
+
+					const string baseUntranslatedString = sakuraFile.mFileNameInfo.mNoExtension + string(":");
+					const string untranslatedString = bUseShorthand && !timingData ? "U" : baseUntranslatedString + std::to_string(translatedLineIndex + 1); //Just print out a U for unused lines to save space
+
 					translatedSakuraString.AddString( untranslatedString, sakuraFile.mLines[currSakuraStringIndex].mChars[0].mIndex, timingData );
 
 					UpdateNumTimingCharsPrinted(translatedLineIndex, translatedSakuraString);
@@ -7727,7 +7730,7 @@ struct MiniGameTextIndiceFinder
 	vector<unsigned int> indiceAddresses;
 	vector<unsigned int> numCharsPerLine;
 
-	void FindIndices(const char* pFileData, unsigned int startAddress)
+	void FindIndices(const char* pFileData, unsigned int startAddress, int numCharsInFontSheet)
 	{	
 		unsigned int currAddress = startAddress;
 		bool bNextValueIsAddressStart = true;
@@ -7735,8 +7738,13 @@ struct MiniGameTextIndiceFinder
 		while(1)
 		{
 			const char* pCurrPointer = pFileData + currAddress;
-			short readValue = *((short*)pCurrPointer);
+			unsigned short readValue = SwapByteOrder(*((short*)pCurrPointer));
 			if( readValue == 0 && bNextValueIsAddressStart )
+			{
+				break;
+			}
+
+			if( readValue > numCharsInFontSheet && readValue != 0x0a0d )
 			{
 				break;
 			}
@@ -7812,7 +7820,7 @@ bool PatchMiniCook(const string& patchedSakuraDirectory, const string& inTransla
 	const unsigned int tileDim = 16;
 	if( !patchedFontSheet.ConvertBmpToSakuraFormat(fontSheetFileName, false, 0, &tileDim, &tileDim) )
 	{
-		printf("PatchMiniCook: Couldn't convert image: %s.\n", logoFileName.c_str());
+		printf("PatchMiniCook: Couldn't convert image: %s.\n", fontSheetFileName.c_str());
 		return false;
 	}
 
@@ -7822,7 +7830,7 @@ bool PatchMiniCook(const string& patchedSakuraDirectory, const string& inTransla
 	miniGameFile.WriteData(0x00093568, patchedFontSheet.mpPackedTiles, patchedFontSheet.mPackedTileSize);
 
 	MiniGameTextIndiceFinder indiceFinder;
-	indiceFinder.FindIndices(miniGameOriginalFile.GetData(), 0x000aece4);
+	indiceFinder.FindIndices(miniGameOriginalFile.GetData(), 0x000aece4, 42);
 	if( indiceFinder.indiceAddresses.size() != 3 )
 	{
 		printf("PatchMiniCook: Couldn't find text indices\n");
@@ -7885,7 +7893,7 @@ bool PatchMiniMaig(const string& patchedSakuraDirectory, const string& inTransla
 	const unsigned int tileDim = 16;
 	if( !patchedFontSheet.ConvertBmpToSakuraFormat(fontSheetFileName, false, 0, &tileDim, &tileDim) )
 	{
-		printf("PatchMiniMaig: Couldn't convert image: %s.\n", logoFileName.c_str());
+		printf("PatchMiniMaig: Couldn't convert image: %s.\n", fontSheetFileName.c_str());
 		return false;
 	}
 
@@ -7895,7 +7903,7 @@ bool PatchMiniMaig(const string& patchedSakuraDirectory, const string& inTransla
 	miniGameFile.WriteData(0x000504B4, patchedFontSheet.mpPackedTiles, patchedFontSheet.mPackedTileSize);
 
 	MiniGameTextIndiceFinder indiceFinder;
-	indiceFinder.FindIndices(miniGameOriginalFile.GetData(), 0x00061e90);
+	indiceFinder.FindIndices(miniGameOriginalFile.GetData(), 0x00061e90, 43);
 	if( indiceFinder.indiceAddresses.size() != 3 )
 	{
 		printf("PatchMiniMaig: Couldn't find text indices\n");
@@ -7958,17 +7966,17 @@ bool PatchMiniShot(const string& patchedSakuraDirectory, const string& inTransla
 	const unsigned int tileDim = 16;
 	if (!patchedFontSheet.ConvertBmpToSakuraFormat(fontSheetFileName, false, 0, &tileDim, &tileDim))
 	{
-		printf("PatchMiniShot: Couldn't convert image: %s.\n", logoFileName.c_str());
+		printf("PatchMiniShot: Couldn't convert image: %s.\n", fontSheetFileName.c_str());
 		return false;
 	}
 
 	patchedFontSheet.PackTiles();
 
 	//Patch fontsheet
-	miniGameFile.WriteData(0x00080D94, patchedFontSheet.mpPackedTiles, patchedFontSheet.mPackedTileSize);
+	miniGameFile.WriteData(0x00055510, patchedFontSheet.mpPackedTiles, patchedFontSheet.mPackedTileSize);
 
 	MiniGameTextIndiceFinder indiceFinder;
-	indiceFinder.FindIndices(miniGameOriginalFile.GetData(), 0x00061e90);
+	indiceFinder.FindIndices(miniGameOriginalFile.GetData(), 0x00080D94, 43);
 	if (indiceFinder.indiceAddresses.size() != 3)
 	{
 		printf("PatchMiniShot: Couldn't find text indices\n");
@@ -8031,7 +8039,7 @@ bool PatchMiniSlot(const string& patchedSakuraDirectory, const string& inTransla
 	const unsigned int tileDim = 16;
 	if (!patchedFontSheet.ConvertBmpToSakuraFormat(fontSheetFileName, false, 0, &tileDim, &tileDim))
 	{
-		printf("PatchMiniSlot: Couldn't convert image: %s.\n", logoFileName.c_str());
+		printf("PatchMiniSlot: Couldn't convert image: %s.\n", fontSheetFileName.c_str());
 		return false;
 	}
 
@@ -8041,7 +8049,7 @@ bool PatchMiniSlot(const string& patchedSakuraDirectory, const string& inTransla
 	miniGameFile.WriteData(0x0006149C, patchedFontSheet.mpPackedTiles, patchedFontSheet.mPackedTileSize);
 
 	MiniGameTextIndiceFinder indiceFinder;
-	indiceFinder.FindIndices(miniGameOriginalFile.GetData(), 0x0007e650);
+	indiceFinder.FindIndices(miniGameOriginalFile.GetData(), 0x0007e650, 37);
 	if (indiceFinder.indiceAddresses.size() != 3)
 	{
 		printf("PatchMiniSlot: Couldn't find text indices\n");
@@ -8087,13 +8095,14 @@ bool PatchMiniSoji(const string& patchedSakuraDirectory, const string& inTransla
 	}
 
 	//Open translated logo
+	/*
 	const string logoFileName = inTranslatedDataDirectory + "MiniSojiLogo.bmp";
 	BmpToSakuraConverter patchedLogo;
 	if (!patchedLogo.ConvertBmpToSakuraFormat(logoFileName, false))
 	{
 		printf("PatchMiniSoji: Couldn't convert image: %s.\n", logoFileName.c_str());
 		return false;
-	}
+	}*/
 
 	//Patch logo
 	//miniGameFile.WriteData(0x00064810 + (35 * 16 * 8), patchedLogo.GetImageData(), patchedLogo.GetImageDataSize());
@@ -8104,7 +8113,7 @@ bool PatchMiniSoji(const string& patchedSakuraDirectory, const string& inTransla
 	const unsigned int tileDim = 16;
 	if (!patchedFontSheet.ConvertBmpToSakuraFormat(fontSheetFileName, false, 0, &tileDim, &tileDim))
 	{
-		printf("PatchMiniSoji: Couldn't convert image: %s.\n", logoFileName.c_str());
+		printf("PatchMiniSoji: Couldn't convert image: %s.\n", fontSheetFileName.c_str());
 		return false;
 	}
 
@@ -8114,7 +8123,7 @@ bool PatchMiniSoji(const string& patchedSakuraDirectory, const string& inTransla
 	miniGameFile.WriteData(0x00064810, patchedFontSheet.mpPackedTiles, patchedFontSheet.mPackedTileSize);
 
 	MiniGameTextIndiceFinder indiceFinder;
-	indiceFinder.FindIndices(miniGameOriginalFile.GetData(), 0x00074cbc);
+	indiceFinder.FindIndices(miniGameOriginalFile.GetData(), 0x00074cbc, 35);
 	if (indiceFinder.indiceAddresses.size() != 3)
 	{
 		printf("PatchMiniSoji: Couldn't find text indices\n");
@@ -8237,7 +8246,7 @@ bool PatchMiniHana(const string& patchedSakuraDirectory, const string& inTransla
 	miniGameFile.WriteData(0x00092210, patchedFontSheet.mpPackedTiles, patchedFontSheet.mPackedTileSize);
 
 	MiniGameTextIndiceFinder indiceFinder;
-	indiceFinder.FindIndices(miniGameOriginalFile.GetData(), 0x000a6b84);
+	indiceFinder.FindIndices(miniGameOriginalFile.GetData(), 0x000a6b84, 111);
 	if( indiceFinder.indiceAddresses.size() != 16 )
 	{
 		printf("PatchMiniHana: Couldn't find text indices\n");
@@ -8474,10 +8483,12 @@ bool PatchMiniGames(const string& rootSakuraDirectory, const string& patchedSaku
 	bResult      = bResult && PatchMiniSlot(patchedSakuraDirectory, inTranslatedDataDirectory, rootSakuraDirectory);
 	bResult      = bResult && PatchMiniSoji(patchedSakuraDirectory, inTranslatedDataDirectory, rootSakuraDirectory);
 
+	printf("PatchMinigames Succeeded.\n");
+
 	return bResult;
 }
 
-void CreateFontSheetEntries(const string& inFileName)
+void CreateFontSheetEntries(const string& inFileName, bool bEveryCombination)
 {
 	FILE* pFile = nullptr;
 	const errno_t errorValue = fopen_s(&pFile, inFileName.c_str(), "r");
@@ -8543,19 +8554,24 @@ void CreateFontSheetEntries(const string& inFileName)
 		{
 			fontSheetEntries[newEntry] = fontSheetEntries[newEntry] + 1;
 		}
+
+		if( bEveryCombination )
+		{
+			fpos_t currPos = 0;
+			fgetpos(pFile, &currPos);
+			fseek(pFile, long(currPos - 1), SEEK_SET);
+		}
 	}
 
 	for(map<string, int>::const_iterator iter = fontSheetEntries.begin(); iter != fontSheetEntries.end(); ++iter)
 	{
-		printf("%s  %i\n", iter->first.c_str(), iter->second);
+		printf("%s %i\n", iter->first.c_str(), iter->second);
 	}
 }
 
 void ExtractSubtitles(const string& rootSakuraDirectory, const string& outDirectory)
 {
 	CreateDirectoryHelper(outDirectory);
-
-	//00019588 is where the subtitle palette lives in LOGO.SH2
 
 	//SAKURA file
 	FileNameContainer sakuraFilePath((rootSakuraDirectory + "SAKURA").c_str());
@@ -8610,10 +8626,108 @@ void ExtractSubtitles(const string& rootSakuraDirectory, const string& outDirect
 
 		const int imageSize = subtitles[i].width*subtitles[i].height / 2;
 		ExtractImageFromData(uncompressedData.mpUncompressedData + imageOffset, imageSize, outFileName, logoData.GetData() + 0x00019578, 32, subtitles[i].width, subtitles[i].height, 1,
-			                 256, 0, false, true);
+			                 256, 0, false, false);
 
 		imageOffset += imageSize;
 	}
+}
+
+bool PatchSubtitles(const string& rootSakuraTaisenDirectory, const string& patchedSakuraTaisenDirectory, const string& patchedDataDirectory)
+{
+	//SAKURA file
+	FileNameContainer sakuraFilePath((rootSakuraTaisenDirectory + "SAKURA").c_str());
+	FileData sakuraData;
+	if( !sakuraData.InitializeFileData(sakuraFilePath) )
+	{
+		return false;
+	}
+
+	//LOGO.SH2 file
+	FileNameContainer logoFilePath((patchedSakuraTaisenDirectory + "\\SAKURA1\\LOGO.SH2").c_str());
+	FileReadWriter logoData;
+	if( !logoData.OpenFile(logoFilePath.mFullPath) )
+	{
+		return false;
+	}
+
+	//Read in info for each subtitle image
+	struct SubtitleInfo
+	{
+		unsigned int   unknown;
+		unsigned char  width;
+		unsigned char  height;
+		unsigned short unknown2;
+
+		void PostLoadFixup()
+		{
+			width = SwapByteOrder(width) * 8;
+			height = SwapByteOrder(height);
+		}
+	};
+
+	const int numSubtitles = 17;
+	SubtitleInfo subtitles[17];
+	memcpy_s(subtitles, sizeof(subtitles), sakuraData.GetData() + 0x000a20c, sizeof(subtitles));
+
+	for(int i = 0; i < numSubtitles; ++i)
+	{
+		subtitles[i].PostLoadFixup();
+	}
+
+	//Create saturn image data for all subtitle images
+	char buffer[255];
+	int imageDataSize = 0;
+	BmpToSakuraConverter patchedSubtitles[numSubtitles];
+	for(int i = 0; i < numSubtitles; ++i)
+	{
+		snprintf(buffer, 255, "\\Subtitles\\%i.bmp", i);
+
+		const string subtitleImage = patchedDataDirectory + buffer;
+		if( !patchedSubtitles[i].ConvertBmpToSakuraFormat(subtitleImage, false) )
+		{
+			printf("PatchSubtitles: Couldn't convert image: %s.\n", subtitleImage.c_str());
+			return false;
+		}
+
+		//Make sure the patched image is the same size as the original image
+		/*
+		if( patchedSubtitles[i].mTileExtractor.mTiles[0].mX != subtitles[i].width || patchedSubtitles[i].mTileExtractor.mTiles[0].mY != subtitles[i].height )
+		{
+			printf("PatchSubtitles: Image dimensions for %s need to be %i %i.\n", subtitleImage.c_str(), subtitles[i].width, subtitles[i].height);
+			return false;
+		}*/
+		imageDataSize += patchedSubtitles[i].GetImageDataSize();
+	}
+
+	//Pack all images into a single block of data
+	char* pSubtitleImageBlock = new char[imageDataSize];
+	int imageOffset = 0;
+	for(int i = 0; i < numSubtitles; ++i)
+	{
+		memcpy_s(pSubtitleImageBlock + imageOffset, imageDataSize - imageOffset, patchedSubtitles[i].GetImageData(), patchedSubtitles[i].GetImageDataSize());
+
+		imageOffset += patchedSubtitles[i].GetImageDataSize();
+	}
+
+	//Compress the patched data
+	const int originalCompressedSize = 12673;
+	SakuraCompressedData compressor;
+	compressor.PatchDataInMemory(pSubtitleImageBlock, imageDataSize, true, false, originalCompressedSize);
+	if( compressor.mDataSize > originalCompressedSize)
+	{
+		printf("PatchSubtitles: Compressed data size[%i] is too big. Needs to be smaller than %i.\n", compressor.mDataSize, originalCompressedSize);
+		return false;
+	}
+
+	//Clear memory
+	delete[] pSubtitleImageBlock;
+
+	//Copy over the patched data
+	logoData.WriteData(0x000196d8, compressor.mpCompressedData, compressor.mDataSize);
+
+	printf("PatchSubtitles Succeeded.\n");
+
+	return true;
 }
 
 bool PatchGame(const string& rootSakuraTaisenDirectory, const string& patchedSakuraTaisenDirectory, const string& translatedTextDirectory, const string& fontSheetFileName, const string& /*originalPaletteFileName*/, 
@@ -8710,6 +8824,12 @@ bool PatchGame(const string& rootSakuraTaisenDirectory, const string& patchedSak
 		return false;
 	}
 
+	//Step 9
+	if( !PatchSubtitles(rootSakuraTaisenDirectory, patchedSakuraTaisenDirectory, inTranslatedDataDirectory) )
+	{
+		printf("Patching Subtitles failed.\n");
+		return false;
+	}
 	printf("Patching Successful!\n");
 
 	return true;
@@ -9042,7 +9162,7 @@ int main(int argc, char *argv[])
 	{
 		const string textFile = string(argv[2]);
 
-		CreateFontSheetEntries(textFile);
+		CreateFontSheetEntries(textFile, true);
 	}
 	else if( command == "ExtractSubtitles" && argc == 4 )
 	{ 

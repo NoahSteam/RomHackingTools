@@ -1,6 +1,6 @@
-It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
-It's a photo of Sumire. This is a side of her you don't see too often. 
-It's a photo of Maria. …She's lost in thought and looks kind of sad… 
+A photo of Sakura. She's looking right at me. I wonder what she's thinking… 
+A photo of Sumire. This is a side of her you don't see too often. 
+A photo of Maria. …She's lost in thought and looks kind of sad… 
 A photo of Kanna. Kanna's signature strength comes through clearly. 
 A photo of Iris. She's surrounded by flowers and flashing a radiant smile. 
 A photo of Kohran. She's looking pretty in profile with her face dyed red by the evening sun. 
@@ -20,7 +20,7 @@ A prop crown used onstage. It's well-constructed and incredibly detailed.
 A wig and costume used onstage. I wonder what kind of act could use a flashy outfit like this? 
 A photo of Sakura in her swimsuit. Wow, this is really something. I'm gonna treasure this. 
 A photo of Sumire in her stage costume. Her distinctive makeup really makes an impact. 
-It's a photo of Maria on stage in the military uniform from "For Love"… She's a beautiful woman disguised as a man. 
+A photo of Maria on stage in the military uniform from "For Love"… She's a beautiful woman disguised as a man. 
 A photo of Kanna in her training gear. Catching her in a private moment like this feels surprisingly intimate. 
 A photo of Iris in her swimsuit. She's holding a rubber ring and looks ready to have some fun. How cute. 
 A photo of Kohran. I don't get to see her with her braids undone very often. It's a nice look. 
@@ -38,7 +38,7 @@ What's the matter with you!?
 Gah… Lo… Lord Satan… 
 !! 
 A-Ayame! Damn it, the Pandemonium Vessel…! 
-Yell. Shoot her. 
+Yell.<br>Shoot her. 
 Shoot her. 
 N-no! 
 ! 

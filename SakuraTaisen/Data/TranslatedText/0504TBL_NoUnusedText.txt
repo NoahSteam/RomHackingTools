@@ -37,11 +37,11 @@ Staring at people's clothes like that…Are you possessed or something?
 Koran, don't you have work clothes? 
 Don't worry! This battle garb is really tough. 
 Yeah… 
-Everything's built-in from communicators to knives. Fireproof, waterproof, and, of course, oil -resistant, electricity-resistant, and shock-resistant, too! 
+Everything's built-in from comms to knives. Resists fire, water, and, of course, oil and electricity too! 
 Wow, that's amazing! 
 Stubborn dirt comes off with just a wipe. Seriously, it's excellent clothing! 
 You're sweating a little. 
-The koubu also go into battle…I have to service them properly. 
+The koubu also go into battle…I have to service them properly.
 Your expression is so lively. You really love machines, don't you? 
 Maybe it's because you've been tinkering with the machines you like so much, but your eyes have so much energy. 
 What's gotten into you? Starting into people's eyes… 
@@ -172,29 +172,29 @@ Hmm… Kohran's fanbase is a bit of a mystery.
 I'm here! 
 Ensign Ogami, thank you for coming. 
 Lieutenant General Yoneda would like a word with you. Good luck…Ogami. 
-In Fukugawa, there is a former aristocrat's mansion. Now, it is unoccupied for the most part and has become broken down and abandoned. 
+In Fukugawa, there is a former noble's mansion. It's mostly unoccupied and has become abandoned. 
 Apparently, the Hive of Darkness is using it somehow. 
 You mean the Fukugawa mansion? What would the Hive of Darkness want with that place? 
 …I don't know. However, I have one theory as to their motives. 
 And that is…sorcery. 
-Did you say…sorcery? <br> Why investigate Fukugawa? <br> What's their motive? 
-Why investigate Fukugawa? <br> What's their motive? 
-What's their motive? 
-Why investigate Fukugawa? 
-Unused 
-What's their motive? 
-Unused 
-Unused 
-Why investigate Fukugawa? 
-Unused 
+Did you say…sorcery?<br>Why investigate Fukugawa?<br>What's their motive?
+Why investigate Fukugawa?<br>What's their motive?
+What's their motive?
+Why investigate Fukugawa?
+Did you say…sorcery?<br>What's their motive?
+What's their motive?
+Did you say…sorcery?
+Did you say…sorcery?<br>Why investigate Fukugawa?
+Why investigate Fukugawa?
+Did you say…sorcery?
 Sorcery…? As in paper fortunes and Yin and Yang? This is the Taishou era… 
 Sorcery is not simply old-fashioned thinking, Ogami. 
-Completely natural explanations for things beyond science…that is sorcery. The ancient power that underlies all history… 
+Natural explanations for things beyond science… sorcery. The ancient power that underlies all history… 
 Could it be that the Hive of Darkness is planning to put a spell on Teito? 
 On Teito itself… 
 Why investigate Fukugawa? 
 We've gotten a report from the townspeople. The other night, a suspicious group was seen around the abandoned mansion. 
-It has also been confirmed that something which looked like a Hex Mech was also with the group. The possibility that it was the Hive of Darkness is very high. 
+We've confirmed that something like a Hex Mech was also present. The odds that it's the Hive are very high. 
 But why Fukugawa…? 
 Until now, every location where the Hive of Darkness has appeared has been one of Teito's spiritual places. 
 Fukugawa may be an industrial zone now, but it was once a famous, sacred place with shrines and temples. 
@@ -215,12 +215,12 @@ We can't use the Koubu this time because Kohran is servicing them and making adj
 Our mission is to spy and investigate. Don't do anything extreme. 
 Commander, who is being sent to Fukugawa? 
 Hm. This time the spy team will consist of Ogami, Sumire, and Kanna. We'll limit it to three. 
-What?! 
+What?!
 Me…and Sumire?! 
-What! Me and Sumire? Understood! I'd like to go with Sakura though… 
-What! Me and Sumire? Understood! I'd like to go with Maria though… 
-What! Me and Sumire? Understood! I'd like to go with Iris though… 
-What! Me and Sumire? Understood! I'd like to go with Kohran though… 
+What! Sumire?<br>Understood!<br>I'd prefer Sakura though… 
+What! Sumire?<br>Understood!<br>I'd prefer Maria though… 
+What! Sumire?<br>Understood!<br>I'd prefer Iris though… 
+What! Sumire?<br>Understood!<br>I'd prefer Kohran though… 
 What! Sumire and Kanna?! But, why?! 
 Maria and Sakura are researching new battle tactics, Kohran is servicing the Koubu… 
 Besides Sumire and Kanna, my hands are tied. 
@@ -267,7 +267,7 @@ Huh… That massive object behind you. Could it be…
 What the hell! Are you looking for a fight?! 
 Sumire, could you please cut it out! Hey, Kanna, you calm down too… 
 Hmm. You two seem veeery close, don't you… 
-Sumire, you're misunderstanding this! You see…to tell the truth…it's not like that! 
+You're misunderstanding this!<br> You see… to tell the truth… <br>It's not like that! 
 Sumire, this is a misunderstanding! 
 Oh, a misunderstanding? Which part am I misunderstanding? 
 I only spoke to Kanna as her commanding officer. 
@@ -277,9 +277,9 @@ Oh, I see. As a commanding officer, you sympathized with poor Kanna.
 No, Sumire. It's not that I felt bad for her… 
 Sir…I'm going to go ahead. See you. 
 Aww, poor Kanna. I also sympathize with you. 
-"Shut up! Just leave it, or you're lookin' to get smacked!" 
+"Shut up! Just leave it, or you're lookin' to get smacked!"  
 Waaa, I'm scared! Ogami, help meee. 
-Tch…! 
+Tch…!
 Uh, wait, Kanna! 
 (Not good… This level of animosity can't just be laughed off.) 
 (There are only seven members of the Flower Troupe. We need value teamwork…) 
@@ -314,7 +314,7 @@ Huh…! K-Kanna!!
 (Jeez, this is bad. Even worse than that time with Sumire…) 
 Huh!? What are the captain and this awful woman doing together? 
 Hmm… I see. The two of them are taking a cozy walk together. Whatever. 
-Kanna, this is a misunderstanding! This is not… It doesn't mean… Don't say it that way! 
+This is a misunderstanding!<br>It doesn't mean…<br>Don't say it that way! 
 Kanna, this is a misunderstanding! 
 Oh, a misunderstanding! Which part!? 
 I only reached out to Sumire as captain. 
@@ -344,7 +344,7 @@ Kanna! You shouldn't say things like that!
 That's right! I don't want to hear it from a creature even lower than an amoeba. 
 A-amoeba…? 
 …W-well anyway, you're going after Sumire too hard! 
-…Whatever! 
+…Whatever!
 She left. 
 I wonder… if I said too much? 
 It's perfect medicine for that person. 
@@ -368,10 +368,10 @@ Got it. Aaah, if only a certain someone wasn't coming, this would be the best.
 I agree entirely. If I was alone with Ensign, this would be an amazing, pleasant assignment. 
 Pfft. Ensign, I'm going ahead. 
 I am going as well. I hate to be kept waiting, so please come quickly. 
-Jeez. Are those two going to be ok…? 
+Jeez. Are those two going to be ok…?
 A-Ayame… 
 Uh… well… actually… 
-I'm concerned about Sumire and Kanna…What the Hive of Darkness' aim is, I don't… 
+I'm concerned about them…<br>What is the Hive? 
 I'm concerned about what's going on between Sumire and Kanna… In this state, can they truly do their duty? 
 T-that's right but… I wonder if I can get them to make up? 
 Ah… of course… Is that what it is? 
@@ -390,33 +390,33 @@ Uh, of course… My apologies.
 Look after those two, Ogami. 
 Ah, Ogami. Didn't you leave already? 
 Well… I thought that I would talk with you before leaving… 
-Haha, I'm glad I can be of service but… it's also important that you think independently as captain, don't you think? 
+Haha, I'm glad I can be of service but… it's also important that you think independently, right? 
 Anyway, you said you wanted to talk to me… what about? 
 Well… It's about the last battle. 
 Oh… what exactly you want to ask, Ogami? 
-Situation Report <br> Member Report <br> It's nothing. 
+Situation Report <br>Member Report <br>It's nothing.
 I'd like to hear about how our last battle impacted the surrounding area. 
 The damage to the Asakusa area has been kept to a minimum. You did well. Ogami. 
 You did particularly well during the battle in the city, your quick response was excellent. 
-You realized what the enemy was going to do, you made a decision, and you acted. This is very important on the battlefield. 
+You realized what the enemy's plan, made a decision, and acted. This is crucial on the battlefield. 
 Try your best with what you have, Ogami. 
 Unfortunately… you weren't about to respond quickly enough, and the surrounding area took a lot of damage. 
-The damage has spread… It seems that the Sanja Festival will be postponed. 
+The damage has spread… It seems that the Sanja Festival will be postponed.
 Ahh… and a bundle of petitions has been delivered from the fabric shop. 
-On the battlefield, your enemy's actions, the movement of your troops - being able to quickly assess the factors for these two opposing forces very important. 
+Your enemy's actions, the movement of your troops - being able to quickly assess factors is very important. 
 …You can do it, Captain. 
 I'd like to hear about the troops' fighting style in our last battle. 
 Ogami… 
 In the 7-person Flower Troupe, even lacking one member is an extraordinarily large loss, don't you agree? 
 Though we should be grateful their life was spared. 
-Sakura's capabilities are by no means lacking, but neither are they particularly excellent. She should not be sent out without proper support. 
+Sakura's skills are by no means lacking, nor excellent. She shouldn't be sent without proper support. 
 Sumire has excellent combat capabilities, but you mustn't overestimate her. She needs proper support. 
 Maria's defenses are weak, so you should avoid placing her in close-quarters combat situations. 
-Kanna has the strength to fight one or two of even our Flower Troupe members in close-quarters combat. She's cut out to be an advance guard. 
+Kanna has the strength to fight in close-quarters combat. She's cut out to be an advance guard. 
 Iris was angry. She still can't fight by herself, so we have to protect her… 
 Kohran's attack skills are weak, but she can do range attacks. Make sure you understand that, Ogami. 
-As the commanding officer, you must provide sufficient support. Your aid is what will strengthen the bonds of the unit. 
-We took quite a lot of damage… You need to provide better support for your troops, or they'll lose their faith in you. 
+As the commander, you must provide sufficient support. You are what strengthens the bonds of the unit. 
+We took quite a lot of damage… You need to provide better support, or they'll lose their faith in you. 
 The damage was vast. If you continue with this style of battle… Ogami, you're a failure as captain! 
 The damage to the Flower Troupe was minimal. You did well, Ogami. 
 You cared for those in your command and your judgments were spot-on. 
@@ -429,10 +429,10 @@ The one with the most enemies shot down during the last battle was Sumire.
 Sumire's technique is especially powerful when she is surrounded by enemies. 
 However, that doesn't mean you should send her off alone. 
 The one with the most enemies shot down during the last battle was Maria. 
-Maria is great as a back-line fighter. She excels when she's firing over the shoulders of her comrades on the front line. 
+Maria is great as a back-line fighter. She excels when she's firing over the shoulders on the front line. 
 With her skills, you can trust that she'll never accidentally hit an ally. 
 The one with the most enemies shot down during the last battle was Kanna. 
-Kanna has great attacking skills so she can battle at the front line. However, this means she is not fit as a back-line fighter. 
+Kanna has great attacks, so she can fight at the front line. However, this means she shouldn't be at the back. 
 The one with the most enemies shot down during the last battle was Iris. 
 Since she is able to move around the battlefield freely, she might be best suited for supporting the others. 
 The one with the most enemies shot down during the last battle was Kohran. 
@@ -449,7 +449,7 @@ At the time of westernization, a noble family apparently summoned an engineer fr
 At some point, strange rumors began to spread and even after the owner left the house… the strange events have continued. 
 For that reason, because it's been abandoned, the inside must be in ruins. 
 The floor plan won't be constructed in the Taisho style so don't get lost. 
-Understood… though I have enough to worry about with Sumire and Kanna along. 
+Understood… though I have enough to worry about with Sumire and Kanna along.
 It's because people with different origins and backgrounds are living under one roof… 
 There are going to be conflicts. It was like that until now…and it will continue to be that way. 
 Ogami. I'm counting on you to take care of them. 
@@ -463,14 +463,14 @@ Nope! I wasn't sleepy so I was just sitting around. Come in, Uncle.
 Ok, I'll come in…just for a little bit. 
 Hey, hey, Uncle. I can't sleep…Tell me a story. 
 A story? Hmm… 
-"The Battle of the Monkey and the Crab." <br> The Western "Cinderella." <br> The grown-up "Stories of my Past." 
+"The Monkey and the Crab." <br> The Western "Cinderella." <br> "Stories of my Past." 
 Great, okay, I'll tell you the story of "The Battle of the Monkey and the Crab! 
 Yay! I don't know that one! Hey, what's a "battle?" 
 That's right, you were born in France, weren't you? 
 A "battle" is… like a "war," but in this story, it means something like a "fight." 
 Huh! Mr. Monkey and Mr. Crab's fight? So, what happens? 
 (Uhhh… huh? Who appears in the story, again?) 
-A bee, a chestnut, and a cow <br> A bee, a monster, and a cow <br> A sparrow, a chestnut, and a cow 
+A bee, a chestnut, and a cow <br> A bee, a monster, and a cow <br> A bird, a chestnut, and a cow 
 (That's right! It was a bee, a chestnut, and a cow!) 
 Okay, I'll tell you the story. The beginning of "The Battle of the Monkey and the Crab" starts now! 
 Yay! Tell me! Tell me! 
@@ -519,8 +519,8 @@ Thanks, Uncle! Tell me another interesting story sometime, okay! Good night!
 Okay, I'll tell you the story. The beginning of "The Battle of the Monkey and the Crab" starts now! 
 Yay! Tell me! Tell me! 
 …And so it was that the crab and the monkey would go head to head. 
-The game was Rock, Paper, Scissors! The battle was so fierce, it took your breath away. Their fists were flying! And then… 
-The crab beat the monkey with "scissors!" From then on, the crab's hand remained in the shape of scissors, as it has to this day. 
+The game was Rock, Paper, Scissors! The fierce battle took their breath away. Their fists were flying! And then… 
+The crab beat the monkey with "scissors!" And the crab's hand remained as scissors to this day. 
 And they all lived happily every after! …I don't think that was exactly how the story went. 
 Ahahahahaa! That was really funny! I laughed so hard my stomach hurts! 
 I'm glad you liked it. Okay, I'm going to get going. Sweet dreams. 
@@ -574,7 +574,7 @@ Ogami! Please, I'd rather you didn't…
 Oh, sorry… 
 I wonder if the show can continue like this until next month. I'm worried. 
 Ogami, couldn't you get Kanna and Sumire to make up somehow? 
-When you put it like that… hmm… It's very difficult.. 
+When you put it like that… hmm… It's very difficult… 
 Please, Ogami. You're our only hope. 
 I hope they don't fight in Fukugawa… But I'm worried. 
 Ogami, I'm sure it'll be a challenge but try your best. 
@@ -582,12 +582,12 @@ Do you need me for anything?
 (She's got her scarf pinned with a brooch.) 
 (I wonder what it's made of… Couldn't be a real jewel, right?) 
 … are you interested in this brooch? Oh, hey, listen to this, I actually got it super cheap at a bargain sale. 
-…… 
+……
 (The way Yuri's hair curls away from her face is one of her charm points…) 
 (That bouncy look is pretty trendy.) 
 Is something odd about my hair? Oh no~, I've got some split ends! 
 (Her face is small and balanced. I think even a model would be jealous.) 
-(It doesn't seem like she uses a lot of make-up. Well, she's got such a nice foundation, I don't think she really needs it…) 
+(It doesn't seem like she uses a lot of make-up. Well, she's got a nice foundation, I don't think she needs it…) 
 What's wrong, Ogami? You've been staring at my face for a while… Haha, you're in love with me, aren't you! 
 Hey, you shouldn't be teasing an adult. 
 Hehehe… sorry, Ogami. 
@@ -641,7 +641,7 @@ H, hey, Ogami! Where do you think you're looking? Stop!
 Ogami… come on, don't stare at me like that. It's embarrassing. 
 Thanks for your business! Come again! 
 Is there something on my face? 
-Ogami, thanks for before! They'll be remodeled immediately. I hope you're looking forward to the finished product! 
+Ogami, thanks for that! They'll be remodeled ASAP. I hope you're looking forward to the finished product! 
 (I don't want to be in the way. I guess I'll go to the hangar for now.) 
 Ogami, you're just in time. I want your opinion on the Koubu maintenance… 
 What's this? Leaving without hardly saying a word? That's not very nice… 
@@ -655,48 +655,48 @@ In that case, I'll happily share my opinion!
 Well, considering the budget, an "update" really means more a "slight improvement" but… 
 Well, let's hurry up and go then. 
 Do you want to make your Koubu more offensive or more defensive? 
-Ramp up the offenses! <br> Beef up the defenses! 
+Ramp up the offenses!<br>Beef up the defenses!
 Offense is the best defense, right? That's a very Ogami-like choice. 
 Okay, next is Maria's Koubu. Which will you choose? 
 Alright. I'm making the armor lighter so I think that should increase the evasion rate a little. 
 Okay, next is Maria's Koubu. Which will you choose? 
-Unused 
+Let's go with offensive.<br>Make it defensive.
 Got it. Maria's Koubu will be offensive. 
 Next is Sakura's Koubu. Which will you choose, Ogami? 
 Got it. Maria's Koubu will be defensive. 
 Next is Sakura's Koubu. Which will you choose, Ogami? 
-Unused 
+Let's make it offensive.<br>Defensive would be best.
 Okay, you want Sakura's Koubu to be defensive. It's exactly as I thought. 
 Next is Sumire's Koubu. Which one? 
 Oh, you want Sakura's Koubu to be defensive? That could be very interesting. 
 Next is Sumire's Koubu. Which one? 
-Unused 
+Offensive, I suppose.<br>How about defensive?
 Of course. Sumire's will be offensive. 
 Next is Kanna's. What do you think? 
 Of course. Sumire's will be defensive. 
 Next is Kanna's. What do you think? 
-Unused 
+Offensive.<br>How about defensive?
 You're going to make Kanna's Koubu offensive then? 
 What will you do with Iris's Koubu that just entered battle not long ago? 
 Defensive, huh…? That might actually work pretty well. 
 What will you do with Iris's Koubu that just entered battle not long ago? 
-Unused 
+Let's make it offensive.<br>How about defensive?
 I think Iris is going to be a great asset in battle, so I think that's fine. 
 Finally, which do you want my Koubu to be? I think I should make it offensive… 
-That sounds good to me. <br> Yours should be defensive. 
+That sounds good to me.<br>Yours should be defensive.
 Exactly! If you don't attack then you can't win, right? 
 Alright, my Koubu will be offensive. 
 No, when I think about your style, Kohran, I think that yours should be defensive. 
 Hmm…my "style," huh? Of course… 
 …… 
 Understood. I'll do as you say and make my Koubu defensive! 
-Now, it's just whether we have enough funds. If we go over budget, even the things we could do we won't be able to do. 
+Now, it's just whether we have enough funds. If we go over budget, even the things we could do won't be doable. 
 Uhh, so, add the cost of materials… Hmm… multiplied by six… and the overall expense is… 
-Unused
-…Is it 2120? Uh… 2200. No, 2320. 
+…Ogami, what's 1250 plus 970? 
+…Is it 2120?<br>Uh… 2200.<br>No, 2320. 
 …Right! Ogami, you're so smart. You fixed it! 
 Uh, no, I mean… Hahahaha. 
-….Is it 2220? What's wrong, Ogami? You're taking forever. 
+…Is it 2220? What's wrong, Ogami? You're taking forever. 
 C-crap! I was so close… 
 Really? Uhhh… wait! You're wrong, Ogami! 
 S-sorry… 
@@ -722,7 +722,7 @@ Yeah…
 If the situation becomes dangerous, please make her go to a safer place. 
 "One pair of heels is worth two pair of hands,"…they say. 
 Yeah, that's… 
-That's an ancient Chinese war strategy, isn't it? <br> That's a Shingen Takeda war strategy, isn't it? <br> That's a Napoleon war strategy, isn't it? 
+That's Chinese, isn't it? <br> That's Shingen, isn't it? <br> That's Napoleon, isn't it? 
 That's an ancient Chinese war strategy, isn't it? 
 Really, is it? 
 That's just like you, Captain. You know a lot of things. 
@@ -744,7 +744,7 @@ Now that I think of it, Kohran should be servicing the Koubu in the underground 
 Before you leave, why don't go have a look? 
 Ogami, if you use Iris's special move, you can undo the damage done to your Koubu. 
 In fact, you can revive everyone within a certain area. It's very helpful. 
-It seems like we've gotten a reliable ally. <br> She's doing so well, even though she's still a child. <br> We can't protect her completely. 
+We've gained a reliable ally. <br> She's doing well, for a child. <br> We can't protect her. 
 It seems like we've gotten a reliable ally. 
 Absolutely. Iris is going to have the best battle power in the whole Flower Troupe. 
 I'll have to make sure I don't fall behind!! 
@@ -768,11 +768,11 @@ Captain, believe in Iris. This is the time when she is going to have the most gr
 That's right, Ogami. 
 …Yes, that's true. I think so too. 
 Maria and I are going to talk about the battle Iris will join. 
-Right. Good luck. 
+Right. Good luck.
 Yes, ma'am! 
 I wonder if the manager is around. 
 I guess I'll try somewhere else. 
-Zzz… zZz… Zzz… 
+Zzz… zZz… Zzz…
 He's sleeping so well. It looks nice. 
 Still not on your way? If you don't hurry the sun will set! 
 Yes, that is…I don't have my Koubu… 
@@ -804,7 +804,7 @@ Punctuality is the politeness of princes. I only ask that Ensign keep to the sch
 Well, it's doubtful whether an insensitive woman such as you has any sense of time at all. 
 What did you say?! 
 Hold on, in the end I was the one who was late. Please stop fighting. 
-Alright, we're headed to Fukugawa mansion. Our objective is to scout the area and investigate. Loud fighting is not allowed. 
+Alright, we're headed to the mansion. Our objective is to scout and investigate. Fighting is not allowed. 
 Hmph! 
 Siiiigh, I don't know if I can. 
 (Jeez… It's like last time…) 
@@ -879,11 +879,11 @@ Unused
 Unused
 Unused
 But isn't it the job of the captain to resolve trouble amongst the troops? 
-The chief expects you to resolve the issue and that's why he decided on those particular members, don't you think? 
+The chief expects you to resolve the issue and that's why he decided on them, don't you think? 
 Even I don't know what the enemy plans to do once they have cast a spell on Teito. 
 Isn't it your responsibility to find that out, Ogami? 
 Ogami… I understand how hard it is with Sumire and Kanna, and the Hive of Darkness. 
-But you can't let your doubts show on your face. It makes everyone anxious. 
+But you can't let your doubts show on your face. It makes everyone anxious.
 Unused
 Unused
 Unused
