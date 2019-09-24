@@ -1876,8 +1876,8 @@ bool FindDialogOrder(const string& rootSakuraTaisenDirectory, map<string, Dialog
 
 	for (const FileNameContainer& tableFileName : tableFiles)
 	{
-		const size_t lastIndex = tableFileName.mFileName.find_first_of("TBL");
-		const string infoFileName = tableFileName.mFileName.substr(0, lastIndex) + string(".BIN");
+		const size_t lastIndex        = tableFileName.mFileName.find_first_of("TBL");
+		const string infoFileName     = tableFileName.mFileName.substr(0, lastIndex) + string(".BIN");
 		const string infoFileFullPath = tableFileName.mPathOnly + Seperators + infoFileName;
 
 		printf("Parsing %s\n", infoFileName.c_str());
@@ -1890,10 +1890,10 @@ bool FindDialogOrder(const string& rootSakuraTaisenDirectory, map<string, Dialog
 		}
 
 		//Search for 228000
-		const unsigned char* pData = (const unsigned char*)infoData.GetData();
-		unsigned long index = 0;
-		int appearance = 0;
-		unsigned short imageId = 0;
+		const unsigned char* pData   = (const unsigned char*)infoData.GetData();
+		unsigned long index          = 0;
+		int appearance               = 0;
+		unsigned short imageId       = 0;
 		const unsigned long dataSize = infoData.GetDataSize();
 		while (index + 5 < dataSize)
 		{
@@ -1965,7 +1965,7 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 	{\
 		if( bIsLipsEntry && !bAlreadyShowedError )\
 		{\
-			printf("LIPS line is too long[D].  Needs to be a max of %i characters long. %s\n", maxCharsPerLine, textLine.mFullLine.c_str());\
+			printf("LIPS line is too long[D %i].  Needs to be a max of %i characters long. %s\n", translatedLineIndex + 1, maxCharsPerLine, textLine.mFullLine.c_str());\
 			bAlreadyShowedError = true;\
 		}\
 		else\
