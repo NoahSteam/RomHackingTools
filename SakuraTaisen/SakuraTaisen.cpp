@@ -1244,7 +1244,7 @@ struct MiniGameSakuraText
 	}
 };
 
-void ExtractMiniSwimText(const string& rootSakuraDirectory, const string& translatedDataDirectory, const string& outputDirectory)
+void ExtractMinigameData(const string& rootSakuraDirectory, const string& translatedDataDirectory, const string& outputDirectory)
 {
 	//Create temp work directory
 	string tempDir;
@@ -1286,7 +1286,7 @@ void ExtractMiniSwimText(const string& rootSakuraDirectory, const string& transl
 			return true;
 		}
 
-		bool Dump(const char* inMiniGameFileName, int inNumCharactersInFontSheet, unsigned int inFontSheetAddress, unsigned int textDataAddress, bool bIsCompressed = false, const char* pSubDirectory = nullptr)
+		bool Dump(const char* inMiniGameFileName, int inNumCharactersInFontSheet, unsigned int logoWidth, unsigned int inFontSheetAddress, unsigned int textDataAddress, bool bIsCompressed = false, const char* pSubDirectory = nullptr)
 		{
 			const string sakura3Directory = mRootSakuraDirectory + "\\SAKURA3\\";
 			FileNameContainer miniGameFileName((sakura3Directory + inMiniGameFileName + ".bin").c_str());
@@ -1332,11 +1332,11 @@ void ExtractMiniSwimText(const string& rootSakuraDirectory, const string& transl
 			if( !bIsCompressed )
 			{
 				//Dump Logo
-				ExtractImageFromData(miniGameFile.GetData() + inFontSheetAddress + inNumCharactersInFontSheet * numBytesPerCharacter, 128 * 24 / 2, miniGameOutputDirectory + "bmp\\Logo.bmp",
-					mLogoPaletteFile.GetData(), mLogoPaletteFile.GetDataSize(), 128, 24, 1, 256, 0, true, true);
+				ExtractImageFromData(miniGameFile.GetData() + inFontSheetAddress + inNumCharactersInFontSheet * numBytesPerCharacter, logoWidth * 24 / 2, miniGameOutputDirectory + "bmp\\Logo.bmp",
+					mLogoPaletteFile.GetData(), mLogoPaletteFile.GetDataSize(), logoWidth, 24, 1, 256, 0, true, true);
 
-				ExtractImageFromData(miniGameFile.GetData() + inFontSheetAddress + inNumCharactersInFontSheet * numBytesPerCharacter, 128 * 24 / 2, miniGameOutputDirectory + "png\\Logo.png",
-					mLogoPaletteFile.GetData(), mLogoPaletteFile.GetDataSize(), 128, 24, 1, 256, 0, true, false);
+				ExtractImageFromData(miniGameFile.GetData() + inFontSheetAddress + inNumCharactersInFontSheet * numBytesPerCharacter, logoWidth * 24 / 2, miniGameOutputDirectory + "png\\Logo.png",
+					mLogoPaletteFile.GetData(), mLogoPaletteFile.GetDataSize(), logoWidth, 24, 1, 256, 0, true, false);
 			}
 
 			return true;
@@ -1345,16 +1345,16 @@ void ExtractMiniSwimText(const string& rootSakuraDirectory, const string& transl
 
 	MiniGameDumper miniGameDumper;
 	miniGameDumper.Initialize(rootSakuraDirectory, outputDirectory, translatedDataDirectory);
-	miniGameDumper.Dump("MINICOOK", 42,  0x00093568, 0x000aece4);
-	miniGameDumper.Dump("MINIMAIG", 43,  0x000504B4, 0x00061e90);
-	miniGameDumper.Dump("MINISWIM", 59,  0x0003b1a8, 0x00056b28);
-	miniGameDumper.Dump("MINISHOT", 43,  0x00055510, 0x00080D94);
-	miniGameDumper.Dump("MINISLOT", 37,  0x0006149C, 0x0007e650);
-	miniGameDumper.Dump("MINISOJI", 35,  0x00064810, 0x00074cbc);
+	miniGameDumper.Dump("MINICOOK", 42, 128, 0x00093568, 0x000aece4);
+	miniGameDumper.Dump("MINIMAIG", 43, 128, 0x000504B4, 0x00061e90);
+	miniGameDumper.Dump("MINISWIM", 59, 128, 0x0003b1a8, 0x00056b28);
+	miniGameDumper.Dump("MINISHOT", 43, 128, 0x00055510, 0x00080D94);
+	miniGameDumper.Dump("MINISLOT", 37, 128, 0x0006149C, 0x0007e650);
+	miniGameDumper.Dump("MINISOJI", 35, 144, 0x00064810, 0x00074cbc);
 
-	miniGameDumper.Dump("MINIHANA", 111, 0x00092210, 0x000a6b84);
+	miniGameDumper.Dump("MINIHANA", 111, 128, 0x00092210, 0x000a6b84);
 	//miniGameDumper.Dump("MINIHANA", 230, 0x000a8178, 0x000a6b82, true, "Section1"); //Compressed data for font sheet found: 000a8178 00000000 Size: 384 CompressedSize: 12625
-	miniGameDumper.Dump("MINIHANA", 230, 0x000a8178, 0x000a6f1c, true, "Section2"); //Compressed data for font sheet found: 000a8178 00000000 Size: 384 CompressedSize: 12625
+	miniGameDumper.Dump("MINIHANA", 230, 128, 0x000a8178, 0x000a6f1c, true, "Section2"); //Compressed data for font sheet found: 000a8178 00000000 Size: 384 CompressedSize: 12625
 }
 
 void ExtractText(const string& inSearchDirectory, const string& inPaletteFileName, const string& inOutputDirectory)
@@ -7815,7 +7815,7 @@ bool PatchMiniCook(const string& patchedSakuraDirectory, const string& inTransla
 	}
 
 	//Patch logo
-	miniGameFile.WriteData(0x00094A68, patchedLogo.GetImageData(), patchedLogo.GetImageDataSize());
+	miniGameFile.WriteData(0x00093568 + (42*16*8), patchedLogo.GetImageData(), patchedLogo.GetImageDataSize());
 
 	//Open translated fontsheet
 	const string fontSheetFileName = inTranslatedDataDirectory + "MiniCookFontSheet.bmp";
@@ -8098,17 +8098,16 @@ bool PatchMiniSoji(const string& patchedSakuraDirectory, const string& inTransla
 	}
 
 	//Open translated logo
-	/*
 	const string logoFileName = inTranslatedDataDirectory + "MiniSojiLogo.bmp";
 	BmpToSakuraConverter patchedLogo;
 	if (!patchedLogo.ConvertBmpToSakuraFormat(logoFileName, false))
 	{
 		printf("PatchMiniSoji: Couldn't convert image: %s.\n", logoFileName.c_str());
 		return false;
-	}*/
+	}
 
 	//Patch logo
-	//miniGameFile.WriteData(0x00064810 + (35 * 16 * 8), patchedLogo.GetImageData(), patchedLogo.GetImageDataSize());
+	miniGameFile.WriteData(0x00064810 + (35 * 16 * 8), patchedLogo.GetImageData(), patchedLogo.GetImageDataSize());
 
 	//Open translated fontsheet
 	const string fontSheetFileName = inTranslatedDataDirectory + "MiniSojiFontSheet.bmp";
@@ -9170,7 +9169,7 @@ int main(int argc, char *argv[])
 		const string translatedDataDir = string(argv[3]) + Seperators;
 		const string outDir            = string(argv[4]) + Seperators;
 
-		ExtractMiniSwimText(rootSakuraDir, translatedDataDir, outDir);
+		ExtractMinigameData(rootSakuraDir, translatedDataDir, outDir);
 	}
 	else if( command == "CreateFontSheetEntries" && argc == 3 )
 	{
