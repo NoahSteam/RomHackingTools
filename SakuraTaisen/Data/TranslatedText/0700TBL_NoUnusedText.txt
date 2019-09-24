@@ -1,6 +1,6 @@
-A photo of Sakura. She's looking right at me. I wonder what she's thinking… 
-A photo of Sumire. This is a side of her you don't see too often. 
-A photo of Maria. …She's lost in thought and looks kind of sad… 
+It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
+It's a photo of Sumire. This is a side of her you don't see too often. 
+It's a photo of Maria. …She's lost in thought and looks kind of sad… 
 A photo of Kanna. Kanna's signature strength comes through clearly. 
 A photo of Iris. She's surrounded by flowers and flashing a radiant smile. 
 A photo of Kohran. She's looking pretty in profile with her face dyed red by the evening sun. 
@@ -20,7 +20,7 @@ A prop crown used onstage. It's well-constructed and incredibly detailed.
 A wig and costume used onstage. I wonder what kind of act could use a flashy outfit like this? 
 A photo of Sakura in her swimsuit. Wow, this is really something. I'm gonna treasure this. 
 A photo of Sumire in her stage costume. Her distinctive makeup really makes an impact. 
-A photo of Maria on stage in the military uniform from "For Love"… She's a beautiful woman disguised as a man. 
+It's a photo of Maria on stage in the military uniform from "For Love"… She's a beautiful woman disguised as a man. 
 A photo of Kanna in her training gear. Catching her in a private moment like this feels surprisingly intimate. 
 A photo of Iris in her swimsuit. She's holding a rubber ring and looks ready to have some fun. How cute. 
 A photo of Kohran. I don't get to see her with her braids undone very often. It's a nice look. 
@@ -324,7 +324,7 @@ Maria…
 And I'm… No… Forget about it. 
 Please excuse me. 
 (Everyone's here. Well, except Sakura.) 
-I won't budge! <br> Please calm down, Lieutenant General! 
+I won't budge! <br> Calm down, Lt. General! 
 I won't budge! We can't let you go alone, Lieutenant General! 
 What!? 
 You shouldn't go meet Tenkai alone… We should all go, as the Imperial Floral Assault Troop, Flower Division! 
@@ -372,7 +372,7 @@ Hey, uncle! You already thought of something, right? Right?
 (Iris…) 
 (Tenkai announced they'd destroy Teito at 4 in the morning. That's only… about 1 hour from now.) 
 (You gotta think, Ogami. What… What should we do!?) 
-If we attack their base… <br> If we strengthen Teito's defences… 
+If we attack their base… <br> Strengthen Teito's defenses. 
 I know! We attack their base! We just ignore their underlings and go straight for Tenkai himself! 
 The magical force field over Teito must be his doing. So, if we strike at him… 
 You're right, the force field would probably disappear! 
@@ -387,7 +387,7 @@ Not everyone will get out in time. To be blunt, that's not a good plan at all.
 But… Everyone… Everyone's going to die!? 
 There's only one hour left… Once Tenkai's magical force field activates, the whole of Teito will be destroyed. 
 Wait… Doesn't that mean we just have to do something about the force field itself? 
-That's right! We should ignore all the underlings and go straight for Tenkai. One decisive strike, just like in Karate! 
+Yes! Ignore all the underlings and go straight for Tenkai. One decisive strike, just like in Karate! 
 Hm, one hour might just be enough time to do that. 
 …But how will we ever find out where Tenkai is? 
 Leave that to me! At times like this, the steam processor comes in handy! 

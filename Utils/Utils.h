@@ -331,6 +331,8 @@ public:
 	};
 
 	std::vector<Tile> mTiles;
+	unsigned int mImageWidth = 0;
+	unsigned int mImageHeight = 0;
 
 	bool ExtractTiles(unsigned int inTileDimX, int inTileDimY, unsigned int outTileDimX, unsigned int outTileDimY, const BitmapReader& inBitmap);
 	void FixupIndexOfAlphaColor(const unsigned short inIndexOfAlphaColor, bool bInIs4bit);

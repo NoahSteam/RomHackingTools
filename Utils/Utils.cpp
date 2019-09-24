@@ -1153,7 +1153,7 @@ bool TileExtractor::ExtractTiles(unsigned int inTileWidth, int inTileHeight, uns
 		//printf("Can't extract tiles.  Only 4 bit paletted bitmaps supported\n");
 		//return false;
 	}
-
+	
 	const int numRows             = (abs(inBitmap.mBitmapData.mInfoHeader.mImageHeight)/inAbsTileHeight);
 	const unsigned int numColumns = (inBitmap.mBitmapData.mInfoHeader.mImageWidth/inTileWidth);
 	const unsigned int numTiles   = numRows * numColumns;

@@ -110,6 +110,9 @@ struct BmpToSakuraConverter
 			return false;
 		}
 
+		mTileExtractor.mImageWidth  = origBmp.mBitmapData.mInfoHeader.mImageWidth;
+		mTileExtractor.mImageHeight = origBmp.mBitmapData.mInfoHeader.mImageHeight;
+
 		//Convert it to the SakuraTaisen format
 		if( !mPalette.CreateFrom32BitData(origBmp.mBitmapData.mPaletteData.mpRGBA, origBmp.mBitmapData.mPaletteData.mSizeInBytes, false) )
 		{
@@ -8632,12 +8635,12 @@ void ExtractSubtitles(const string& rootSakuraDirectory, const string& outDirect
 	}
 }
 
-bool PatchSubtitles(const string& rootSakuraTaisenDirectory, const string& patchedSakuraTaisenDirectory, const string& patchedDataDirectory)
+bool PatchSubtitles(const string& /*rootSakuraTaisenDirectory*/, const string& patchedSakuraTaisenDirectory, const string& patchedDataDirectory)
 {
 	//SAKURA file
-	FileNameContainer sakuraFilePath((rootSakuraTaisenDirectory + "SAKURA").c_str());
-	FileData sakuraData;
-	if( !sakuraData.InitializeFileData(sakuraFilePath) )
+	FileNameContainer sakuraFilePath((patchedSakuraTaisenDirectory + "SAKURA").c_str());
+	FileReadWriter sakuraData;
+	if( !sakuraData.OpenFile(sakuraFilePath.mFullPath) )
 	{
 		return false;
 	}
@@ -8653,21 +8656,23 @@ bool PatchSubtitles(const string& rootSakuraTaisenDirectory, const string& patch
 	//Read in info for each subtitle image
 	struct SubtitleInfo
 	{
-		unsigned int   unknown;
+		unsigned short offset;
+		unsigned short unknown1;
 		unsigned char  width;
 		unsigned char  height;
 		unsigned short unknown2;
 
 		void PostLoadFixup()
 		{
-			width = SwapByteOrder(width) * 8;
-			height = SwapByteOrder(height);
+			width  = width * 8;
+			offset = SwapByteOrder(offset);
 		}
 	};
 
 	const int numSubtitles = 17;
 	SubtitleInfo subtitles[17];
-	memcpy_s(subtitles, sizeof(subtitles), sakuraData.GetData() + 0x000a20c, sizeof(subtitles));
+	sakuraData.ReadData(0x000a20c, (char*)subtitles, sizeof(subtitles), false);
+	//memcpy_s(subtitles, sizeof(subtitles), sakuraData.ReadData + 0x000a20c, sizeof(subtitles));
 
 	for(int i = 0; i < numSubtitles; ++i)
 	{
@@ -8677,6 +8682,7 @@ bool PatchSubtitles(const string& rootSakuraTaisenDirectory, const string& patch
 	//Create saturn image data for all subtitle images
 	char buffer[255];
 	int imageDataSize = 0;
+	unsigned int offsetFromStart = 0;
 	BmpToSakuraConverter patchedSubtitles[numSubtitles];
 	for(int i = 0; i < numSubtitles; ++i)
 	{
@@ -8689,14 +8695,19 @@ bool PatchSubtitles(const string& rootSakuraTaisenDirectory, const string& patch
 			return false;
 		}
 
-		//Make sure the patched image is the same size as the original image
-		/*
-		if( patchedSubtitles[i].mTileExtractor.mTiles[0].mX != subtitles[i].width || patchedSubtitles[i].mTileExtractor.mTiles[0].mY != subtitles[i].height )
+		subtitles[i].width  = (unsigned char)((patchedSubtitles[i].mTileExtractor.mImageWidth/8));
+		subtitles[i].height = (unsigned char)((patchedSubtitles[i].mTileExtractor.mImageHeight));
+		subtitles[i].offset = (unsigned short)offsetFromStart;
+		subtitles[i].offset = SwapByteOrder(subtitles[i].offset);
+
+		imageDataSize   += patchedSubtitles[i].GetImageDataSize();
+		offsetFromStart += subtitles[i].width*subtitles[i].height/2;
+
+		if( offsetFromStart > 0xffff )
 		{
-			printf("PatchSubtitles: Image dimensions for %s need to be %i %i.\n", subtitleImage.c_str(), subtitles[i].width, subtitles[i].height);
+			printf("PatchSubtitles: Image data is too big\n");
 			return false;
-		}*/
-		imageDataSize += patchedSubtitles[i].GetImageDataSize();
+		}
 	}
 
 	//Pack all images into a single block of data
@@ -8713,7 +8724,7 @@ bool PatchSubtitles(const string& rootSakuraTaisenDirectory, const string& patch
 	const int originalCompressedSize = 12673;
 	SakuraCompressedData compressor;
 	compressor.PatchDataInMemory(pSubtitleImageBlock, imageDataSize, true, false, originalCompressedSize);
-	if( compressor.mDataSize > originalCompressedSize)
+	if( compressor.mDataSize > originalCompressedSize )
 	{
 		printf("PatchSubtitles: Compressed data size[%i] is too big. Needs to be smaller than %i.\n", compressor.mDataSize, originalCompressedSize);
 		return false;
@@ -8721,6 +8732,9 @@ bool PatchSubtitles(const string& rootSakuraTaisenDirectory, const string& patch
 
 	//Clear memory
 	delete[] pSubtitleImageBlock;
+
+	//Patch subtitle image info table
+	sakuraData.WriteData(0x000a20c, (char*)subtitles, sizeof(subtitles), false);
 
 	//Copy over the patched data
 	logoData.WriteData(0x000196d8, compressor.mpCompressedData, compressor.mDataSize);
