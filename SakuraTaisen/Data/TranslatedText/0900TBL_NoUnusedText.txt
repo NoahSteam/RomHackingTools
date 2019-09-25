@@ -1,6 +1,6 @@
-A photo of Sakura. She's looking right at me. I wonder what she's thinking… 
-A photo of Sumire. This is a side of her you don't see too often. 
-A photo of Maria. …She's lost in thought and looks kind of sad… 
+It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
+It's a photo of Sumire. This is a side of her you don't see too often. 
+It's a photo of Maria. …She's lost in thought and looks kind of sad… 
 A photo of Kanna. Kanna's signature strength comes through clearly. 
 A photo of Iris. She's surrounded by flowers and flashing a radiant smile. 
 A photo of Kohran. She's looking pretty in profile with her face dyed red by the evening sun. 
@@ -20,7 +20,7 @@ A prop crown used onstage. It's well-constructed and incredibly detailed.
 A wig and costume used onstage. I wonder what kind of act could use a flashy outfit like this? 
 A photo of Sakura in her swimsuit. Wow, this is really something. I'm gonna treasure this. 
 A photo of Sumire in her stage costume. Her distinctive makeup really makes an impact. 
-A photo of Maria on stage in the military uniform from "For Love"… She's a beautiful woman disguised as a man. 
+It's a photo of Maria on stage in the military uniform from "For Love"… She's a beautiful woman disguised as a man. 
 A photo of Kanna in her training gear. Catching her in a private moment like this feels surprisingly intimate. 
 A photo of Iris in her swimsuit. She's holding a rubber ring and looks ready to have some fun. How cute. 
 A photo of Kohran. I don't get to see her with her braids undone very often. It's a nice look. 
@@ -105,7 +105,7 @@ For Kohran, it's the first leading role since "Wings".
 Dinosaur Island? What is it about? 
 Well, er… It's about an explorer! 
 …? 
-"Dinosaur Island" is a blood-curdling, spine-tingling, gut-tickling adventure set in the South Seas! 
+"Dinosaur Island" is a blood-curdling, gut-busting adventure set in the South Seas! 
 It has mysterious ruins, blood-thirsty natives, unspeakable rituals, deadly traps… you name it! 
 That's… quite something. But what kind of story is it? 
 Erm… It's called a "farts". 
@@ -155,7 +155,7 @@ For Kohran, it's the first leading role since "Wings".
 Dinosaur Island? What is it about? 
 Well, er… It's about an explorer! 
 …? 
-"Dinosaur Island" is a blood-curdling, spine-tingling, gut-tickling adventure set in the South Seas! 
+"Dinosaur Island" is a blood-curdling, gut-busting adventure set in the South Seas! 
 It has mysterious ruins, blood-thirsty natives, unspeakable rituals, deadly traps… you name it! 
 That's… quite something. But what kind of story is it? 
 Erm… It's called a "farts". 
@@ -181,7 +181,7 @@ For Kohran, it's the first leading role since "Wings".
 Dinosaur Island? What is it about? 
 Well, er… It's about an explorer! 
 …? 
-"Dinosaur Island" is a blood-curdling, spine-tingling, gut-tickling adventure set in the South Seas! 
+"Dinosaur Island" is a blood-curdling, gut-busting adventure set in the South Seas! 
 It has mysterious ruins, blood-thirsty natives, unspeakable rituals, deadly traps… you name it! 
 That's… quite something. But what kind of story is it? 
 Erm… It's called a "farts". 
@@ -250,7 +250,7 @@ Hey, hey!
 (That bouncy look is pretty trendy.) 
 Is there something wrong with my hair? …Yikes! A split end! 
 (She's got a nice, small face. I think even a model would be jealous…) 
-(It doesn't seem like she uses a lot of make-up. Well, she's got such a nice foundation, I don't think she really needs it…) 
+(Doesn't seem like she uses make-up. Well, she's got a nice foundation, don't think she really needs it…) 
 What's wrong, Ogami? You've been staring at my face for a while… Haha, you're in love with me, aren't you! 
 Hey, you shouldn't tease your elders! 
 Hehehe… sorry, Ogami. 
@@ -395,7 +395,7 @@ Well… I guess that means you shouldn't loaf about here.
 …I'm sorry. 
 Get a grip, commander! 
 Huh? There's someone there… 
-Take a peek in the shower room. <br> Go back to the corridor. 
+Peek in the shower room. <br> Go back to the corridor. 
 I wonder who's in there… 
 Ah! It's Maria… 
 She's beautiful… 
@@ -489,7 +489,7 @@ I'll play the leading part next time! Just you watch!
 (Well, no wonder she's enjoying it. She can wear something like that in the play, after all.) 
 I… I think she was in the shower room earlier. 
 But, Mr. Ogami… I hope you didn't peek? 
-I just heard the shower running… <br> Of course not! 
+I heard the shower running… <br> Of course not! 
 When I walked down the corridor, I heard the shower running, and I thought it might be Maria. 
 When I left the parlor, she said she was going to wash her hair… She's probably just late. 
 Is that so… Then she should be here soon. 
@@ -565,7 +565,7 @@ A bold foray into new waters, by Imperial Theater standards. A fusion of comedy 
 Huh… 
 After the comedy part, there will be a mixed children's choir. Exciting, isn't it? 
 I'm looking forward to it! Can't wait! 
-Hehe, you won't be disappointed! By the way, boss… Weren't you on your way to the underground storage room? 
+Hehe, you won't be disappointed! By the way, boss… Weren't you going to the underground storage room? 
 Ah… you're right. OK, I'm off. 
 Later! 
 I thought you weren't in the play? 

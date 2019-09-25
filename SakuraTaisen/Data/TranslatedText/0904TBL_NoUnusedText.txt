@@ -1,6 +1,6 @@
-A photo of Sakura. She's looking right at me. I wonder what she's thinking… 
-A photo of Sumire. This is a side of her you don't see too often. 
-A photo of Maria. …She's lost in thought and looks kind of sad… 
+It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
+It's a photo of Sumire. This is a side of her you don't see too often. 
+It's a photo of Maria. …She's lost in thought and looks kind of sad… 
 A photo of Kanna. Kanna's signature strength comes through clearly. 
 A photo of Iris. She's surrounded by flowers and flashing a radiant smile. 
 A photo of Kohran. She's looking pretty in profile with her face dyed red by the evening sun. 
@@ -20,7 +20,7 @@ A prop crown used onstage. It's well-constructed and incredibly detailed.
 A wig and costume used onstage. I wonder what kind of act could use a flashy outfit like this? 
 A photo of Sakura in her swimsuit. Wow, this is really something. I'm gonna treasure this. 
 A photo of Sumire in her stage costume. Her distinctive makeup really makes an impact. 
-A photo of Maria on stage in the military uniform from "For Love"… She's a beautiful woman disguised as a man. 
+It's a photo of Maria on stage in the military uniform from "For Love"… She's a beautiful woman disguised as a man. 
 A photo of Kanna in her training gear. Catching her in a private moment like this feels surprisingly intimate. 
 A photo of Iris in her swimsuit. She's holding a rubber ring and looks ready to have some fun. How cute. 
 A photo of Kohran. I don't get to see her with her braids undone very often. It's a nice look. 
@@ -62,7 +62,7 @@ Sakura! So this is where you were.
 (This doesn't look good… The morale of the whole Flower Division has hit rock bottom…) 
 … 
 You've… grown strong. 
-No… That may be it. 
+No… <br> That may be it. 
 No… I… just admired her as my superior, that's all. 
 … 
 You're right… I was certainly drawn to Ayame. 
@@ -102,7 +102,7 @@ That's good…
 …What's the matter, Maria? 
 Sumire… 
 Don't be so down… 
-You're not acting like yourself! <br> You should get some rest. 
+You're not yourself! <br> You should get some rest. 
 You really aren't acting like yourself right now! 
 Sumire… You should get some rest. 
 … 
@@ -215,7 +215,7 @@ It looks like Ayame is snuggling up to the man on the left…
 Maybe this is Shinnosuke Kanzaki, who later disappeared? 
 Hm, is this…? The man on the left, I think… maybe… I've seen him somewhere before? 
 Let's take a look… <br> Let's leave it. 
-Kouma Wars, 1917 <br> Flower Division, Reporting Journal <br> January 1st, 1924 
+Koma Wars, 1917 <br> Reporting Journal <br> January 1st, 1924 
 (I shouldn't just read this without permission…) 
 It's dated… seven years ago. 
 "Koma Wars documents" - Taisho 7 (1918), Imperial Infantry" - "Top secret" 
@@ -227,11 +227,11 @@ Koma are demons that latch onto living beings and feed on their negative emotion
 Low-level Koma consist only of a head, but they feed and grow stronger, with the high-grade ones gaining human appearance. 
 The giant monsters witnessed during the Koma Wars are presumed to be very large low-level Koma. 
 During the final stage of the Koma Wars, an independent unit chased the giant Koma underground. 
-It was known as the "anti-demon unit" and suffered one dead and one missing in action. It was dispersed thereafter. 
+It was known as the "anti-demon unit" and suffered one dead and one MIA. It was dispersed thereafter. 
 Commanding officer of this unit was Lieutenant General Ikki Yoneda of the Imperial Infantry. 
 The Flower Division… This is about us? 
 Fourth of April, fair weather. 
-Imperial Navy Lieutenant Ogami Ichiro will arrive in our Ginza headquarters by recommendation of Count Hanakoji. 
+Imperial Navy Lt. Ogami Ichiro will arrive in our Ginza HQ by recommendation of Count Hanakoji. 
 Anniversary performance of "Evening of the Camellia Lady" was resounding success. Theater is in a good spot. 
 April 5th, fair, then cloudy. 
 Reports of Black Web at Ueno Park. Presumed leader is present. First real test for Flower Division. 
@@ -242,7 +242,7 @@ Yoneda gave orders to ready the Shogeimaru. Will head to the Flower Mansion by T
 May 13th, fair weather. 
 Met Ichiro Ogami last night. He was how I imagined him, more or less. Hope he meets our expectations. 
 Contact-free piloting system is ready. Iris' Kobu will be ready soon. 
-Maiden voyage of the Shogeimaru. Damages to vicinity of Flower mansion due to scrambling impossible to predict. 
+Maiden voyage of the Shogeimaru. Damages to vicinity of mansion due to scrambling impossible to predict. 
 June 9th, rain. 
 Lt. Ogami wounded in battle of Tsukiji, but nothing serious. Kanna Kirishima back from Okinawa. 
 Maria acting strange, seems vexed by something. Have to talk to her ASAP. 
@@ -299,7 +299,7 @@ Aoi Satan, leader of the Koma. He betrayed the Black Web and sneers at everythin
 I just don't know. I feel like I'm on the verge of remembering, and then I get a splitting headache. 
 I just don't know. 
 January 8th, fair weather, then snow. 
-We celebrated Sumire's birthday. Surprisingly, she accepted everyone's felicitations without the usual animosities. 
+We celebrated Sumire's birthday. Surprisingly, she accepted everyone without the usual animosities. 
 Sumire seems changed. I'm different now, too, we all are. That's what being alive is like. 
 February 2nd, fair weather. 
 Horrible headaches. Yoneda is worried about me. I'll rest in the afternoon. 
@@ -356,10 +356,10 @@ Can you guess why I gathered you all here?
 The thing we all feared has finally come to pass… 
 What's that? In Tokyo Bay…? 
 Hmmm… 
-On the night of the crimson moon, when the seal is broken, the sacred land of the Koma will return and bring a god-machine of destruction. 
+On the night of the red moon, when the seal is broken, the sacred land will return and bring a god-machine of destruction. 
 And that god-machine will turn all the lands to ashes with the light of judgment… Thus is written in "Abandon the Gods". 
 "Abandon the Gods"…? 
-It's a book of prophecies that has been passed down in the noblest families of Teito, along with the Pandemonium Vessel. 
+It's a book of prophecies passed down in the noblest families of Teito, along with the Pandemonium Vessel. 
 The noblest families? You don't mean… 
 Then that is… 
 Yes… The Sacred Demon Castle. 
@@ -600,7 +600,7 @@ Come on, Mr. Ogami! Let's save Ms. Ayame!
 Ayame must be under Satan's control. I'm sure there's a way to free her. We can't just abandon her! 
 Muahahaha…! The castle that will fulfill all my ambitions is about to return. Murderess! 
 Yes. 
-It will still take some time until the Sacred Demon Castle will be reborn. You will distract those girls until the time has come. 
+It will be some time until the Sacred Demon Castle will be reborn. Distract those girls until the time has come. 
 Yes, master! 
 Show me what you can do. 
 Please wait. 
@@ -700,7 +700,7 @@ Ha… Then again, who am I to say that about her? I should stop talking about th
 It was ages ago… Back when I was still only fighting for myself. 
 Now it's different… I have friends who fight by my side. 
 No… Not at all! 
-Commander… No, I should say Mr. Ogami… You're always fighting for the Flower Division and the people of this city… 
+Commander… No, Mr. Ogami… You're always fighting for the Flower Division and the people of this city… 
 And I guess… I'm one more weight on your shoulders. 
 I'll fight alongside you, for this city. That's all that counts for now. 
 Yes, but… 

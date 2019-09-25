@@ -1,6 +1,6 @@
-A photo of Sakura. She's looking right at me. I wonder what she's thinking… 
-A photo of Sumire. This is a side of her you don't see too often. 
-A photo of Maria. …She's lost in thought and looks kind of sad… 
+It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
+It's a photo of Sumire. This is a side of her you don't see too often. 
+It's a photo of Maria. …She's lost in thought and looks kind of sad… 
 A photo of Kanna. Kanna's signature strength comes through clearly. 
 A photo of Iris. She's surrounded by flowers and flashing a radiant smile. 
 A photo of Kohran. She's looking pretty in profile with her face dyed red by the evening sun. 
@@ -20,7 +20,7 @@ A prop crown used onstage. It's well-constructed and incredibly detailed.
 A wig and costume used onstage. I wonder what kind of act could use a flashy outfit like this? 
 A photo of Sakura in her swimsuit. Wow, this is really something. I'm gonna treasure this. 
 A photo of Sumire in her stage costume. Her distinctive makeup really makes an impact. 
-A photo of Maria on stage in the military uniform from "For Love"… She's a beautiful woman disguised as a man. 
+It's a photo of Maria on stage in the military uniform from "For Love"… She's a beautiful woman disguised as a man. 
 A photo of Kanna in her training gear. Catching her in a private moment like this feels surprisingly intimate. 
 A photo of Iris in her swimsuit. She's holding a rubber ring and looks ready to have some fun. How cute. 
 A photo of Kohran. I don't get to see her with her braids undone very often. It's a nice look. 
@@ -28,7 +28,7 @@ A photo of Ayame in a traditional outfit. I hope she'll always be as happy and c
 Ayame's gun. Why…? Why did it have to turn out like this…? 
 Phew… Is it already this late? 
 A lot happened today… I should reflect on everything to get my mind in order… 
-The Pandemonium Vessel and the Koma. <br> The Power of Purification. <br> The Sacred Demon Castle. 
+The Vessel and the Koma. <br> The Power of Purification. <br>The Sacred Demon Castle.
 The Pandemonium Vessel… So it's a key to open the Sacred Demon Castle… 
 And if someone with a pure heart wields it, it can defeat even the most powerful Koma… 
 The Koma… Monstrosities that have been at war with us humans since ancient times… 
@@ -56,9 +56,9 @@ The sealed land… A miracle out of the darkness… Could that have something to
 Maria seems to have read it, too… But she didn't know about the Pandemonium Vessel. 
 Why did Yoneda show it to me and no one else? 
 Anyway, I think I have everything straight now. 
-Think about it some more. <br> Don't think about it. 
+Think about it some more. <br>Don't think about it. 
 But, wait… Something doesn't check out. 
-The effect of the Power of Purification. <br> Why the Pandemonium Vessel is at the Imperial Theater. <br> The Koma Wars. 
+The effect of the Power.<br>Why the Vessel is here.<br>The Koma Wars. 
 The Power of Purification… 
 Only very few people remain of the bloodline that can wield it… 
 Colonel Shinguji… Sakura's father used that power to defeat the Koma. 
@@ -139,7 +139,7 @@ Pandemonium Vessel?
 Right now, it's all that keeps the Koma's power at bay. 
 If it were to fall into their hands, then that could mean the end of the world. 
 …What!? And where is this Pandemonium Vessel? 
-It's hidden somewhere in the Imperial Theater. Ms. Ayame and I were ordered to keep it safe, and its existence a secret. 
+It's hidden somewhere here. Ms. Ayame and I were ordered to keep it safe, and its existence a secret. 
 …Don't you understand? I told you everything I could. 
 Mr. Ogami… 
 (Sakura doesn't know…) 
@@ -162,7 +162,7 @@ Pandemonium Vessel?
 Right now, it's all that keeps the Koma's power at bay. 
 If it were to fall into their hands, then that could mean the end of the world. 
 Wh-what!? And where on earth is this infernal device? 
-It's hidden somewhere in the Imperial Theater. Ms. Ayame and I were ordered to keep it safe, and its existence a secret. 
+It's hidden somewhere here. Ms. Ayame and I were ordered to keep it safe, and its existence a secret. 
 …Don't you understand? I told you everything I could. 
 Lieutenant… 
 To be honest… 
@@ -175,7 +175,7 @@ Pandemonium Vessel?
 Right now, it's all that keeps the Koma's power at bay. 
 If it were to fall into their hands, then that could mean the end of the world. 
 And where on earth is this Pandemonium Vessel? 
-It's hidden somewhere in the Imperial Theater. Ms. Ayame and I were ordered to keep it safe, and its existence a secret. 
+It's hidden somewhere here. Ms. Ayame and I were ordered to keep it safe, and its existence a secret. 
 …Don't you understand? I told you everything I could. 
 Mr. Ogami… If it's top secret, can you really tell me? 
 That's much better than if you got the wrong idea… 
@@ -189,7 +189,7 @@ The Pandemonium Vessel…
 Right now, it's all that keeps the Koma's power at bay. 
 If it were to fall into their hands, then that could mean the end of the world. 
 Wait a second! And where is that Pandemonium Vessel thing? 
-It's hidden somewhere in the Imperial Theater. Ms. Ayame and I were ordered to keep it safe, and its existence a secret. 
+It's hidden somewhere here. Ms. Ayame and I were ordered to keep it safe, and its existence a secret. 
 …Don't you understand? I told you everything I could. 
 Boss… 
 To be honest… 
@@ -215,7 +215,7 @@ Pandemonium Vessel?
 Right now, it's all that keeps the Koma's power at bay. 
 If it were to fall into their hands, then that could mean the end of the world. 
 That doesn't sound good at all… So where is it? That Pandemonium Vessel, I mean. 
-It's hidden somewhere in the Imperial Theater. Ms. Ayame and I were ordered to keep it safe, and its existence a secret. 
+It's hidden somewhere here. Ms. Ayame and I were ordered to keep it safe, and its existence a secret. 
 …Don't you understand? I told you everything I could. 
 Commander… 
 Come on… It's a nice mood, isn't it? 

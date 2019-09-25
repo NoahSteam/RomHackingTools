@@ -9175,7 +9175,7 @@ int main(int argc, char *argv[])
 	{
 		const string textFile = string(argv[2]);
 
-		CreateFontSheetEntries(textFile, true);
+		CreateFontSheetEntries(textFile, false);
 	}
 	else if( command == "ExtractSubtitles" && argc == 4 )
 	{ 

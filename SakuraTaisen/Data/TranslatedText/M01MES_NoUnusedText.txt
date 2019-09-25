@@ -28,7 +28,7 @@ Come at me anytime!
 Everybody pay attention. I'm going to explain how to operate your Koubu. 
 Sakura, we'll start with you. 
 Here I go! 
-Turn order is determined by your Movement stat. To put it simply, units with stronger willpower will get to act sooner. 
+Turn order is determined by Movement. Put simply, units with stronger willpower will get to act sooner. 
 Your troops' morale will play a significant part in the outcome of any battle. Be sure to bear that in mind. 
 First, order your active unit to one of the spaces within its range of movement, like Sakura did just now. 
 Sakura, attack! 
@@ -71,7 +71,7 @@ Finally, allow me to explain Special Abilities, sir.
 Each of us in the Flower Division has a special talent. 
 These abilities are enhanced by the Koubu so we can use them in combat. 
 We call these Special Abilities. 
-However, these Special Abilities inflict a great psychological burden on the user, so we must limit their use. 
+However, these inflict a great psychological burden on the user, so we must limit their use. 
 Allow me to demonstrate with my own Special Ability. 
 Podozhdi! 
 My Special Ability is Podozhdi. 
@@ -105,9 +105,9 @@ Please be aware of the limits on the number of actions you can take.
 There is also a 'Defend' action, which will reduce incoming damage from enemy attacks. 
 The effect of 'Defend' lasts until your next turn. 
 During battle you can take 2 actions each turn, but you may only use the same action type 1 time per turn. 
-The normal 'Attack' action and the Special Attack action are considered the same action type, so you cannot use them both on the same turn. 
-'Focus', 'Defend' and 'Heal' are all also considered the same action type, so you cannot use 2 of them on the same turn. 
-However, you are free to use the actions in whatever order you wish. You could move, then attack, or you could attack, then move. 
+Normal 'Attack' and Special Attack action are considered the same type, so you cannot use them both on the same turn. 
+'Focus', 'Defend' and 'Heal' are also considered the same type, so you cannot use 2 in the same turn. 
+However, you are free to use them in any order you wish. You could move then attack, or you could attack then move. 
 I will now explain the operation of Koubu. Please pay attention. 
 I need to focus! 
 I'm moving out! 
@@ -188,7 +188,7 @@ It feels strange fighting here.
 Why? 
 …oh, well I guess you didn't really think it was important, so never mind… 
 This is where I first met you. 
-Hehe… that's right. It's strange that we're having our first battle together in the place where we first met… or maybe it's destiny… 
+Hehe… that's right. Strange that we're having our first battle together where we first met… or maybe it's destiny…
 This is where you had that article written about you: 'Mysterious Young Lady Cuts Down Monster'. 
 Oh, come on! Please just forget about that, it's embarrassing! 
 Huh…? 

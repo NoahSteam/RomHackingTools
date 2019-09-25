@@ -217,7 +217,7 @@ OK! I'll take it easy for once!
 Ms. Ayame… 
 The manager gave me permission to go out, so I wanted to do just that… 
 Yes, and… er… 
-Would you… like to go to the shrine with me? <br> So, see you around. 
+Come to the shrine with me? <br> So, see you around. 
 Ms. Ayame… Would you… like to go to the shrine with me? 
 A-all right… 
 I see… 
@@ -249,7 +249,7 @@ Pardon me.
 Sakura… I… 
 What is it this time? 
 Sakura… I… 
-Do you want to go visit the shrine with me? <br> …It's nothing. 
+Visit the shrine with me? <br> …It's nothing. 
 Do you want to go visit the shrine with me? 
 Together with you, you mean? 
 Sorry, but I… 
@@ -279,7 +279,7 @@ Sorry to keep you waiting, Lieutenant. Let us leave.
 Oh? Aren't you going to wear the dress from before? 
 Well… I got worried I'd stand out too much in such a crowd… 
 I didn't want that to get in the way when we finally spend some time together. 
-You're right. <br> I liked the other one better. <br> …I think you'll still stand out. 
+You're right. <br> I liked the other one better. <br> …you'll still stand out. 
 You're right. Let's just enjoy New Year's day together, the two of us. 
 Yes… I have a feeling this will be an excellent year! 
 OK, should we leave? I guess Meiji Shrine is the place to go. 
@@ -305,7 +305,7 @@ I figured I'd stand out too much, so I changed.
 By the way, what did you want? 
 Really, Lieutenant… If you want something from me, can't you tell me right away? 
 Sumire, listen… 
-Do you want to go visit the shrine with me? <br> …It's nothing. 
+Visit the shrine with me? <br> …It's nothing. 
 Would you… come visit the shrine with me? 
 I'm sorry, but tonight I have to be at the Kanzaki estate. 
 Show my face at some boring party… You know how it is. 
@@ -394,7 +394,7 @@ I want to eat a lot, have a lot of fun… and then sleep a lot!
 Hahaha, that's just like you, Kanna! You know what they say - your first dream of the year comes true. 
 It'll come true…? 
 What kind of dream would you want to have, commander? 
-Of a peaceful Teito. <br> Of you, Kanna. <br> I'll have a nightmare for sure. 
+Of a peaceful Teito. <br> Of you, Kanna. <br> A nightmare, for sure. 
 Of a peaceful Teito. Even with the Black Web gone, this city still hasn't fully recovered. 
 I want everything rebuilt, so the people can forget what happened and live in peace. 
 It's not just a dream I have while I'm sleeping. It's the same when I'm awake. 
@@ -455,7 +455,7 @@ Yaaay! We're going to visit the shrine together! I'm so happy!
 Oh, right… I wanted to ask you something, uncle. 
 What is it? 
 What… do we do at the shrine? 
-We go there to make wishes. <br> We go there to draw omikuji. <br> We go there to have fun at the stalls. 
+We go there to make wishes. <br> We go there to draw omikuji. <br> To have fun at the stalls. 
 We go there to make wishes for the New Year. 
 Health, good grades, money… People wish for all kinds of things. Love, too, of course… 
 OK, I've got it! I decided what I'll wish for at the shrine! 
@@ -517,7 +517,7 @@ It's Ogami… Are you there, Kohran?
 Look who's up early! Did you finish talking to Yoneda, boss? 
 Yeah. He said I could go out and do whatever I want. 
 Perfect! Should we go there on my steam bike? 
-That sounds fun! Can I ride, too? <br> …Are you sure it's safe? 
+That sounds fun! <br> …Are you sure it's safe? 
 That sounds fun! Can I ride, too? 
 Of course! I improved the engine, so it's even faster than before! 
 Let's go already! …By the way, which shrine did you have in mind? 

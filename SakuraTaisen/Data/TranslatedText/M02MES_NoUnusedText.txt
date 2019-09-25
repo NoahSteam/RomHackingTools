@@ -72,7 +72,7 @@ We did it!
 Phew! 
 Nice one! 
 Woo! We did it!! 
-Om khili khili vajra hum phat… Om khili khili vajra hum phat… Om khili khili vajra hum phat… 
+Om khili khili vajra hum phat… Om khili khili vajra hum phat… Om khili khili vajra hum phat…
 I can see the gates of the infernal realm! 
 Hold it right there! 
 The Imperial Combat Revue has arrived! 
@@ -112,8 +112,8 @@ Dammit! This thing's a monsters!!
 Impossible… I can't believe the damage it's dealt me… 
 No way! This thing's too strong! 
 Man, no kidding, this thing is crazy strong! 
-We've located the main body of the enemy! The Shogei-Maru is starting bombardment! Get everyone out of the bombing area! 
-So that's the main body… If we can eliminate that, the dead spirits should clear away. I'll leave the rest to you, Commander Ogami. 
+We've located the main body! The Shogei-Maru is starting bombardment! Get out of the bombing area! 
+So that's it… If we can eliminate that, the spirits should clear away. I'll leave the rest to you, Commander Ogami. 
 R-roger that. Everyone, focus your attacks on the main body! 
 We did it! 
 Of course, with me here it was a given we would win. 
@@ -131,25 +131,25 @@ This is bad! It's gonna blow itself up when it gets to Teito Tower!! We've gotta
 Oh no! It's going to self-destruct when it reaches Teito Tower! We need to stop it before it gets there!! 
 Ensign, you need to stop its movements somehow!! 
 Dammit! Things aren't looking good… 
-Untranslated 
+Ensign Ogami! Surround the enemy with allied Koubus and halt their advance!  
 Ensign Ogami! If you surround the enemy with our units, we can halt its movement! 
 Right. Everyone! Surround the enemy with your Koubu and keep it from moving! 
-Untranslated 
+Kohran and I can destroy the enemy cannon installations with our ranged attacks. 
 Kohran and I can take down the cannons set up by the enemy from a distance. 
 It looks quite formidable. We should focus on defense and look for an opening. 
 Let's focus our attacks on the main body of the enemy. We should also periodically stop its movements with our units. 
 Alright, we did it! My first gold star!! 
 Good! Let's keep this up! 
-Ensign Ogami. The strength of this enemy is incomparable to anything we've faced before. You need to focus on defensive tactics for this battle. 
+Ensign Ogami. The enemy's strength is incomparable to anything before. Focus on defensive tactics for this battle. 
 So wait, that means this mission's a failure if we let Teito Tower get destroyed? 
 Curse you! Teito Tower can wait. Focus on crushing them!! 
 Untranslated 
-Untranslated 
+Hey Ogami, how should I be fightin'?
 Hey, boss. How should I be fighting? 
 Head to the front line. <br> Hang back and used ranged attacks. <br> Just sit back and watch. 
 You serious, boss? Doesn't sound like you're considering my strengths at all. 
 Listen up, I'm good at bombing groups of enemies from a distance. Try to keep that in mind! 
-Untranslated 
+You got it! Nice one, Ogami! You got my strengths all figured out!
 Good one, boss! You've got my strengths all figured out! 
 My attacks are best for spots where the enemy is bunching up!! 
 Wh-what!? You want me to just sit and watch while everyone else is out there fighting for their lives? 
@@ -159,12 +159,12 @@ Trust me, I'll shine when it comes to ranged attacks and attacking multiple targ
 Oh come on… don't you know? 
 This is my first battle and all, I was hoping you'd give me a bit of advice or something… 
 Well… I'm just gonna give it my all. You just do the same, got it boss? 
-Untranslated 
+Wait, sir! It appears the enemy has had plenty of time to prepare for this battle. 
 Wait a moment, Ensign! It looks like the enemy has already made preparations for battle here. 
-These installations look like cannons. They'll aim at anything in their line of sight. Let's destroy them to open the path forward. 
+These installations look like cannons. They'll aim at anything in sight. Destroy them to open the path forward. 
 This is a 'steam stand'. It can recover your durability. They're a beneficial spot to hold. 
 I understand. Okay everyone, let's move out!! 
-Untranslated 
+Ogami, you skipped out on helping repair the stage today! 
 Ogami, I noticed you didn't come to help repair the stage today! 
 I assume you were too busy thinking about that lovely woman? 
 Well, yeah… <br> Hey, that's not true. <br> I was thinking about you. 

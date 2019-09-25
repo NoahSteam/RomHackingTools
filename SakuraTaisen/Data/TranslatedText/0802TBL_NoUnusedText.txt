@@ -140,7 +140,7 @@ In order to keep this peace, we'll have to work even harder.
 Yeah… Sorry. 
 … 
 (Let's see… What should I wish for?) 
-This peace is eternal. <br> That Sakura likes me. 
+This peace is eternal.<br>That Sakura likes me.
 (Please let this peace go on forever.) 
 (Please let Sakura like me.) 
 …… 
@@ -148,7 +148,7 @@ This peace is eternal. <br> That Sakura likes me.
 So, Sakura… What did you wish for? 
 … 
 (Let's see… What should I wish for?) 
-This peace is eternal. <br> That Sumire likes me. 
+This peace is eternal.<br>That Sumire likes me.
 (Please let this peace go on forever.) 
 (Please let Sumire like me.) 
 …… 
@@ -156,7 +156,7 @@ This peace is eternal. <br> That Sumire likes me.
 So, Sumire… What did you wish for? 
 … 
 (Let's see… What should I wish for?) 
-This peace is eternal. <br> That Maria likes me. 
+This peace is eternal.<br>That Maria likes me.
 (Please let this peace go on forever.) 
 (Please let Maria like me.) 
 …… 
@@ -165,7 +165,7 @@ OK, should we go?
 What did you wish for, Maria? 
 …… 
 (Let's see… What should I wish for?) 
-This peace is eternal. <br> That Kohran likes me. 
+This peace is eternal.<br>That Kohran likes me.
 (Please let this peace go on forever.) 
 (Please let Kohran like me.) 
 … 
@@ -173,7 +173,7 @@ This peace is eternal. <br> That Kohran likes me.
 So, Kohran… What did you wish for? 
 … 
 (Let's see… What should I wish for?) 
-This peace is eternal. <br> That Iris likes me. 
+This peace is eternal.<br>That Iris likes me.
 (Please let this peace go on forever.) 
 (Please let Iris like me.) 
 …… 
@@ -181,7 +181,7 @@ This peace is eternal. <br> That Iris likes me.
 By the way… What was your wish? 
 …… 
 (Let's see… What should I wish for?) 
-This peace is eternal. <br> That Kanna likes me. 
+This peace is eternal.<br>That Kanna likes me.
 (Please let this peace go on forever.) 
 (Please let Kanna like me.) 
 …… 
@@ -237,7 +237,7 @@ Don't you want to go somewhere else, Mr. Ogami?
 Y-yeah, I guess so. 
 But we already saw the monkey! Let's go somewhere else. 
 Hmmm, a trained monkey? It's a little different from the ones I used to watch. 
-Trained monkeys in China, you mean? <br> The monkey looks just like you, Kohran! 
+In China, you mean? <br> Looks just like you, Kohran! 
 Trained monkeys in China, you mean? I wonder what they can do… 
 You don't know them, boss? They can throw knives, or… 
 K-knives!? 
@@ -256,7 +256,7 @@ Anyway, let's get going. I wanna see lots of stuff while we're here!
 Looking at that monkey again, Uncle Ichi? 
 Whoa, what a cute monkey! 
 Yeah, kind of. 
-Are there monkeys in France, too? <br> It looks just like you, Iris! 
+Are they in France, too? <br> Looks just like you, Iris! 
 By the way… Are there monkeys in France, too? 
 Yep! And they all have blonde hair! 
 Wha…!? 
@@ -274,7 +274,7 @@ I've seen everything around here, so let's go somewhere else, please!
 OK, let's go! 
 Don't you think there's still other stuff to see? 
 Wow, he's really agile! 
-Who do you think is more agile, him or you? <br> Do you know monkey-style kung fu? 
+Who's more agile, him or you? <br> Know monkey-style kung fu? 
 I wonder… Who do you think is more agile, him or you? 
 Wait, don't talk about me like I'm an ape! But yeah, I guess he's faster than me. 
 I see… 
@@ -294,7 +294,7 @@ Oh, you can play coconut shy there!
 That looks fun. Do you want to try it, commander? 
 Wait, grown-ups can't play! It would be too easy for you! 
 If you want to play something, why not try the shooting stall in the back? 
-OK, bring it on! <br> …I'd rather not. 
+OK, bring it on! <br>…I'd rather not. 
 OK, bring it on! It's only New Year's day once a year, so let's have some fun! 
 It's my pleasure! I'll show you to the cork-shooting stall. 
 Nah, I don't feel like it. 
@@ -396,7 +396,7 @@ This is for you, Kanna!
 Oh, a cactus? Thanks. I'll take good care of it. 
 You look like you're really into it. 
 Whoa, Mr. Ogami… That takes me back! 
-I used to play with these things a lot. <br> I've never really tried it before. 
+Used to play with them a lot. <br> Never really tried it before. 
 I used to play with these things a lot. 
 You too? When we had one of our country festivals, there always were lots of stalls. 
 I was really into it. 
@@ -426,7 +426,7 @@ You seem to be really enjoying this.
 What do you do with this? 
 Oh, you don't know what this is, Maria? 
 Let me show you… 
-It's something to eat. <br> You cut out shapes. <br> Whoever destroys it first is the winner. 
+It's something to eat. <br> You cut out shapes. <br> The destroyer is the winner. 
 It's something to eat. 
 …So, it's like Risk? 
 Er, not really… 
@@ -450,7 +450,7 @@ Hehe… You don't know, Mr. Ogami? It's fine, let's go somewhere else.
 Sorry. 
 I've had enough of this, boss. Let's make ourselves scarce. 
 Hm, this is the first time I've seen something like this. 
-What games did you play as a kid? <br> This takes me back… 
+What did you play as a kid? <br> This takes me back… 
 By the way, Kohran… What games did you play as a kid? 
 Like I told you before, I've only played Hanafuda. 
 Interesting… 
@@ -467,7 +467,7 @@ Come on, boss. It's fine to admit you don't know anything about it.
 Sorry. 
 You like it THAT much, Uncle Ichi? 
 What's this, Uncle? 
-It's something like a relief, I guess. <br> It's something to eat. 
+It's like a relief, I guess. <br> It's something to eat. 
 It's something like a relief, I guess. Only made of candy. 
 Really!? Show me, show me! 
 Oh… You really ate it? 
@@ -515,7 +515,7 @@ No, I… I just showed her around…
 Hm…? No, nothing particular… 
 (What should I do? If we go now, we'll be back pretty late…) 
 (We can't leave the theater unattended for so long…) 
-OK, let's go! <br> We shouldn't leave the theater unattended… 
+OK, let's go! <br> We can't leave it unattended… 
 …OK, let's go! It's New Year's day, so let's have some fun! 
 We shouldn't leave the theater unattended… New Year's day or not, we never know when we have to deploy. 
 (Hm… What should we do…?) 
@@ -902,7 +902,7 @@ Unused
 It's all right! Trust me! 
 There was just a little problem with the engine back then. 
 It's a whole different beast now! 
-I improved it a lot, especially the suspension! Thanks to my special fuel, the engine is 2.5 times more powerful! 
+I improved a lot, especially the suspension! Thanks to my special fuel, the engine is 2.5 times more powerful! 
 If I put wings on it, it'd probably take off! 
 This is the first run with human passengers though. 
 Don't worry! Just think about how lucky you are, boss! 
