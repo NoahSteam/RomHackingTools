@@ -105,7 +105,7 @@ Please be aware of the limits on the number of actions you can take.
 There is also a 'Defend' action, which will reduce incoming damage from enemy attacks. 
 The effect of 'Defend' lasts until your next turn. 
 During battle you can take 2 actions each turn, but you may only use the same action type 1 time per turn. 
-Normal 'Attack' and Special Attack action are considered the same type, so you cannot use them both on the same turn. 
+Normal and Special Attacks are considered the same type, so you can't use them both on the same turn. 
 'Focus', 'Defend' and 'Heal' are also considered the same type, so you cannot use 2 in the same turn. 
 However, you are free to use them in any order you wish. You could move then attack, or you could attack then move. 
 I will now explain the operation of Koubu. Please pay attention. 
