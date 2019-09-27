@@ -464,7 +464,17 @@ Found: 000196d8 00000000 Size: 1280 CompressedSize: 12673
 
 Image data for subtitle images is in SAKURA @0x000a210
 
+
 //Reading tbl text
+Read 06014510  to get breakpoint near rendering code when done scrolling
+Read 0601476c   to get breakpoint near rendering code when scrolling
+
 read@ 060144b6, 060144c6 when done scrolling [000104b6, 000104c6] in SAKURA] mov.w @r11, r1; mov.w @(r0, r11), r1
 read@ 06014722 mov.w @(r0, r13), r1 when scrolling [00010722 in SAKURA]
 060147f6 string num chars is multiplied by 2 to get to string data
+
+060144C4 [000104c4], character index is calculated when scrolling [add r0, r0], change to 7000 (add 0x00, r0)
+06014720 [00010720], character index is calculated when scrolling [add r0, r0], change to 7000 (add 0x00, r0)
+
+0a0d @0601476c when scrolling
+0a0d @06014510 when done scrolling

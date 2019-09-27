@@ -896,7 +896,12 @@ struct SakuraTextFileFixedHeader
 		{
 			//const unsigned short trailingZeroes = (unsigned short)(inSakuraFile.mDataSegments[i+1].dataSize)/2;
 #if USE_SINGLE_BYTE_LOOKUPS
-			const unsigned short newSecondValue = (unsigned short)inStrings[i].mChars.size() + 6 + prevValue; //+ trailingZeros;
+			if( (unsigned int)(inStrings[i].mChars.size() + 3 + prevValue) > 0xffff)
+			{
+				printf("\nERROR:Translated file %s has a string entries that exceed the bounds[%u]\n", inSakuraFile.mFileNameInfo.mFileName.c_str(), 0xffff);
+			}
+
+			const unsigned short newSecondValue = (unsigned short)inStrings[i].mChars.size() + 3 + prevValue; //+ trailingZeros;
 #else
 			const unsigned short newSecondValue = (unsigned short)inStrings[i].mChars.size() + prevValue; //+ trailingZeros;
 #endif
@@ -2049,14 +2054,18 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 	FindDialogOrder(rootSakuraTaisenDirectory, dialogOrder);
 
 	//***Load duplicate info***
+	const bool bSearchForDuplicates = false;
 	printf("Loading Duplicate Info\n");
 	const string duplicatesFileName = translatedTextDirectory + string("\\..\\DuplicatesForTextInsert.txt");
 	FileNameContainer dupFileNameContainer(duplicatesFileName.c_str());
 	TextFileData duplicatesFile(dupFileNameContainer);
-	if( !duplicatesFile.InitializeTextFile(false) )
+	if( bSearchForDuplicates )
 	{
-		printf("Unable to open duplicates file.\n");
-		return false;
+		if( !duplicatesFile.InitializeTextFile(false) )
+		{
+			printf("Unable to open duplicates file.\n");
+			return false;
+		}
 	}
 
 	printf("Creating Duplicate Map\n");
@@ -2247,7 +2256,7 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 
 						const string dirPlusLineNumber = dirPlusLineNumberBuffer;
 						if( bIsLipsEntry || 
-							(duplicatesMap.find(dirPlusLineNumber) == duplicatesMap.end() && !(id >= 0xc351 && id <= 0xcfff) && id != 0x9c41 ) 
+							( bSearchForDuplicates && (duplicatesMap.find(dirPlusLineNumber) == duplicatesMap.end() && !(id >= 0xc351 && id <= 0xcfff) && id != 0x9c41) ) 
 							)
 						{
 							printf("Warning: UnusedString has no duplicates in any other file, so it might be used. (File: %s Line: %u Id: %#06x)\n", sakuraFile.mFileNameInfo.mFileName.c_str(), currSakuraStringIndex + 1, id);
