@@ -466,7 +466,7 @@ Image data for subtitle images is in SAKURA @0x000a210
 
 
 //Reading tbl text
-Read 06014510  to get breakpoint near rendering code when done scrolling
+Read 06014510  to get breakpoint near rendering code when done scrolling, higher callstack 06014c08
 Read 0601476c   to get breakpoint near rendering code when scrolling
 
 read@ 060144b6, 060144c6 when done scrolling [000104b6, 000104c6] in SAKURA] mov.w @r11, r1; mov.w @(r0, r11), r1
@@ -478,3 +478,6 @@ read@ 06014722 mov.w @(r0, r13), r1 when scrolling [00010722 in SAKURA]
 
 0a0d @0601476c when scrolling
 0a0d @06014510 when done scrolling
+
+060144f0 has add r0,r0 [300c] <- when done scrolling.
+Todo: Find where the character limit is met when scrolling
