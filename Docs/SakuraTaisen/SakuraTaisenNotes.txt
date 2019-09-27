@@ -463,3 +463,8 @@ Found a match in MINISWIM.BIN @0x000143dc
 Found: 000196d8 00000000 Size: 1280 CompressedSize: 12673
 
 Image data for subtitle images is in SAKURA @0x000a210
+
+//Reading tbl text
+read@ 060144b6, 060144c6 when done scrolling [000104b6, 000104c6] in SAKURA] mov.w @r11, r1; mov.w @(r0, r11), r1
+read@ 06014722 mov.w @(r0, r13), r1 when scrolling [00010722 in SAKURA]
+060147f6 string num chars is multiplied by 2 to get to string data
