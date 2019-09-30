@@ -882,44 +882,71 @@ private:
 
 struct SakuraTextFileFixedHeader
 {
-	unsigned short mOffsetToTable;
-	unsigned short mTableEnd;
-	vector<unsigned int> mStringInfo;
+	struct StringInfo
+	{
+		unsigned short stringId;
+		unsigned short offsetFromTableStart;
+
+		explicit StringInfo(unsigned short inStringId, unsigned short inOffsetFromTableStart) : stringId( SwapByteOrder(inStringId) ), offsetFromTableStart( SwapByteOrder(inOffsetFromTableStart) )
+		{
+		}
+	};
+
+#pragma pack(2)
+	struct StringInfo8Bytes
+	{
+		unsigned short stringId;
+		unsigned int   offsetFromTableStart;
+
+		explicit StringInfo8Bytes(unsigned short inStringId, unsigned int inOffsetFromTableStart) : stringId( SwapByteOrder(inStringId) ), offsetFromTableStart( SwapByteOrder(inOffsetFromTableStart) )
+		{
+		}
+	};
+#pragma pack(pop)
+
+	unsigned short           mOffsetToTable;
+	unsigned short           mOffsetToTable8Bytes;
+	unsigned short           mTableEnd;
+	unsigned int             mTableEnd8Bytes;
+	vector<StringInfo>       mStringInfo;
+	vector<StringInfo8Bytes> mStringInfo8Bytes;
 
 	bool CreateFixedHeader(const vector<SakuraTextFile::SakuraStringInfo>& inInfo, const SakuraTextFile& inSakuraFile, const vector<SakuraString>& inStrings)
 	{
 		//All TBL files start with this entries
-		mStringInfo.push_back( SwapByteOrder(inInfo[0].mFullValue) );
+		//mStringInfo.push_back( SwapByteOrder(inInfo[0].mFullValue) );
+		mStringInfo.push_back( StringInfo(inInfo[0].mStringId, inInfo[0].mOffsetFromPrevString) );
+		mStringInfo8Bytes.push_back( StringInfo8Bytes(inInfo[0].mStringId, inInfo[0].mOffsetFromPrevString) );
 
-		int totalCharCount = 0;
-		unsigned short prevValue = 0;
-		const size_t numEntries  = inInfo.size() - 1;
+		int totalCharCount             = 0;
+		unsigned short prevValue       = 0;
+		unsigned int   prevValue8Bytes = 0;
+		const size_t numEntries        = inInfo.size() - 1;
 		for(size_t i = 0; i < numEntries; ++i)
 		{
-			//const unsigned short trailingZeroes = (unsigned short)(inSakuraFile.mDataSegments[i+1].dataSize)/2;
 #if USE_SINGLE_BYTE_LOOKUPS
-			if( (unsigned int)(inStrings[i].mChars.size() + 3 + prevValue) > 0xffff)
-			{
-				printf("\nERROR:Translated file %s has a string entries that exceed the bounds[%u]\n", inSakuraFile.mFileNameInfo.mFileName.c_str(), 0xffff);
-			}
-
-			const unsigned short newSecondValue = (unsigned short)inStrings[i].mChars.size() + 3 + prevValue; //+ trailingZeros;
-			totalCharCount += (unsigned short)inStrings[i].mChars.size() + 3;
+			const unsigned short newOffset       = (unsigned short)inStrings[i].mChars.size() + 3 + prevValue; //+ trailingZeros;
+			const unsigned int   newOffset8bytes = inStrings[i].mChars.size() + 3 + prevValue8Bytes; //+ trailingZeros;
+			totalCharCount                      += inStrings[i].mChars.size() + 3;
 #else
-			const unsigned short newSecondValue = (unsigned short)inStrings[i].mChars.size() + prevValue; //+ trailingZeros;
-			totalCharCount += (unsigned short)inStrings[i].mChars.size();
+			const unsigned short newOffset = (unsigned short)inStrings[i].mChars.size() + prevValue; //+ trailingZeros;
+			totalCharCount                += (unsigned short)inStrings[i].mChars.size();
 #endif
-			
-			const unsigned int   newValue       = ((unsigned int)(inInfo[i+1].mStringId) << 16) + (unsigned int)newSecondValue;
-			prevValue                           = newSecondValue;
+			prevValue       = newOffset;
+			prevValue8Bytes = newOffset8bytes;
+			mStringInfo.push_back( StringInfo(inInfo[i + 1].mStringId, newOffset) );
 
-			mStringInfo.push_back( SwapByteOrder(newValue) );
+#if USE_8_BYTE_OFFSETS
+			mStringInfo8Bytes.push_back( StringInfo8Bytes(inInfo[i + 1].mStringId, newOffset8bytes) );
+#endif
 		}
 
+#if !USE_8_BYTE_OFFSETS
 		if( totalCharCount > 0xffff )
 		{
 			printf("\nERROR:Translated file %s exceeds max char count. Max is %u.  File has %i\n", inSakuraFile.mFileNameInfo.mFileName.c_str(), 0xffff, totalCharCount);
 		}
+#endif
 
 		//Figure out text table size
 		unsigned long stringTableSize = 0;
@@ -938,22 +965,35 @@ struct SakuraTextFileFixedHeader
 		}
 		//Done figuring out table size
 
-		mOffsetToTable = SwapByteOrder( ((unsigned short*)inSakuraFile.mHeader.pData)[0] );
+		if( (unsigned short)( sizeof(short) + sizeof(int) + sizeof(short)*inInfo.size() + sizeof(int)*inInfo.size() ) >> 1 > 0xffff )
+		{
+			printf("\nERROR:Translated file %s string table exceeds 2 byte limit\n", inSakuraFile.mFileNameInfo.mFileName.c_str());
+			return false;
+		}
 
-		unsigned long timingDataL = ((mOffsetToTable<<1) + stringTableSize) >> 1;
+		mOffsetToTable       = SwapByteOrder( ((unsigned short*)inSakuraFile.mHeader.pData)[0] );
+		mOffsetToTable8Bytes = (unsigned short)( sizeof(short) + sizeof(int) + sizeof(short)*inInfo.size() + sizeof(int)*inInfo.size() ) >> 1;
+
+		unsigned long timingDataL      = ((mOffsetToTable<<1) + stringTableSize) >> 1;
+		unsigned long timingData8Bytes = ((mOffsetToTable8Bytes<<1) + stringTableSize) >> 1;
 		if(timingDataL/2 > 0xffff)
 		{
+#if !USE_8_BYTE_OFFSETS
 			const int sizeToReduce = (timingDataL/2) - 0xffff;
 			printf("\nERROR:Translated file %s is too big. Timing data is too far down.  Needs to be reduced by %i bytes (%i characters)\n", inSakuraFile.mFileNameInfo.mFileName.c_str(), sizeToReduce, sizeToReduce/2);
 			return false;
+#endif
 		}
-		mTableEnd = (unsigned short)timingDataL;//(unsigned short)((mOffsetToTable*2 + (unsigned short)stringTableSize) / 2);
+		mTableEnd       = (unsigned short)timingDataL;
+		mTableEnd8Bytes = timingData8Bytes;
 
 		if(stringTableSize/2 > 0xffff)
 		{
+#if !USE_8_BYTE_OFFSETS
 			const int sizeToReduce = (stringTableSize/2) - 0xffff;
 			printf("\nERROR:Translated file %s is too big.  Needs to be reduced by %i bytes (%i characters)\n", inSakuraFile.mFileNameInfo.mFileName.c_str(), sizeToReduce, sizeToReduce);
 			return false;
+#endif
 		}
 
 		return true;
@@ -2521,11 +2561,30 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 		fixedHeader.CreateFixedHeader(sakuraFile.mStringInfoArray, sakuraFile, translatedLines);
 
 		//Write header
+#if USE_8_BYTE_OFFSETS
+		if( bIsMESFile )
+		{
+			const unsigned short bigEndianOffsetToTable = SwapByteOrder(fixedHeader.mOffsetToTable);
+			const unsigned short bigEndianTableEnd      = SwapByteOrder(fixedHeader.mTableEnd);
+			outFile.WriteData(&bigEndianOffsetToTable, sizeof(bigEndianOffsetToTable));
+			outFile.WriteData(&bigEndianTableEnd, sizeof(bigEndianTableEnd));
+			outFile.WriteData(&fixedHeader.mStringInfo[0], fixedHeader.mStringInfo.size()*sizeof(fixedHeader.mStringInfo[0]));
+		}
+		else
+		{
+			const unsigned short bigEndianOffsetToTable = SwapByteOrder(fixedHeader.mOffsetToTable8Bytes);
+			const unsigned int bigEndianTableEnd        = SwapByteOrder(fixedHeader.mTableEnd8Bytes);
+			outFile.WriteData(&bigEndianOffsetToTable, sizeof(bigEndianOffsetToTable));
+			outFile.WriteData(&bigEndianTableEnd, sizeof(bigEndianTableEnd));
+			outFile.WriteData(&fixedHeader.mStringInfo8Bytes[0], fixedHeader.mStringInfo8Bytes.size()*sizeof(fixedHeader.mStringInfo8Bytes[0]));
+		}
+#else
 		const unsigned short bigEndianOffsetToTable = SwapByteOrder(fixedHeader.mOffsetToTable);
 		const unsigned short bigEndianTableEnd      = SwapByteOrder(fixedHeader.mTableEnd);
 		outFile.WriteData(&bigEndianOffsetToTable, sizeof(bigEndianOffsetToTable));
 		outFile.WriteData(&bigEndianTableEnd, sizeof(bigEndianTableEnd));
 		outFile.WriteData(&fixedHeader.mStringInfo[0], fixedHeader.mStringInfo.size()*sizeof(fixedHeader.mStringInfo[0]));
+#endif
 		//outFile.WriteData(sakuraFile.mHeader.pData, sakuraFile.mHeader.dataSize);
 
 		//Output data

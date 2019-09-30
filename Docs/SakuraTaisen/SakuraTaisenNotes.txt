@@ -522,3 +522,5 @@ Read @06014594, 060145a4, 0601461a, 0601462a
 ///////////Converting offsets to 4 bytes
 060147f6 mov.w @r8, r1
 060147fa extu.w r1, r8
+060147e8 add 4, r8 //should be add 6
+060147e2 mov.w @r1, r1
