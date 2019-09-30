@@ -467,7 +467,10 @@ Image data for subtitle images is in SAKURA @0x000a210
 
 //Reading tbl text
 Read 06014510  to get breakpoint near rendering code when done scrolling, higher callstack 06014c08
-Read 0601476c   to get breakpoint near rendering code when scrolling
+Read 0601476c   to get breakpoint near rendering code when scrolling, 06014c08
+
+06068515 has 0A written to it
+06014a40, 06014a4c add r0, r0.  Only second one needs to be modified?
 
 read@ 060144b6, 060144c6 when done scrolling [000104b6, 000104c6] in SAKURA] mov.w @r11, r1; mov.w @(r0, r11), r1
 read@ 06014722 mov.w @(r0, r13), r1 when scrolling [00010722 in SAKURA]
@@ -475,9 +478,47 @@ read@ 06014722 mov.w @(r0, r13), r1 when scrolling [00010722 in SAKURA]
 
 060144C4 [000104c4], character index is calculated when scrolling [add r0, r0], change to 7000 (add 0x00, r0)
 06014720 [00010720], character index is calculated when scrolling [add r0, r0], change to 7000 (add 0x00, r0)
+060144f0 [000104f0] has add r0,r0 [300c] <- when done scrolling.
 
 0a0d @0601476c when scrolling
 0a0d @06014510 when done scrolling
 
-060144f0 has add r0,r0 [300c] <- when done scrolling.
-Todo: Find where the character limit is met when scrolling
+22BA14 is start of sakura's line in 0100TBL
+22D6B8 is start of sakura's timing data
+
+////////Lips Fixup for 1-Byte lookups//////
+//Code that reads characters from string to determine if the line is over when printing lines associated with text
+06014bdc add r0, r0
+06014be0 extu.w r1, r1
+
+225DC2 start of LIPS LINE [227042 in 2 byte version)
+Read @06014594, 060145a4, 0601461a, 0601462a
+
+060146a4 has 0x0a0d
+
+//Fixes around 06014594
+060146d6 add r4, r4
+06014596 extu.w r1, r1
+
+//Fixes around 060145a4
+060145a2 has add r0, r0
+060145a6 extu.w r1, r1
+
+//Fixes around 0601461a
+0601461c extu.w r1, r1
+
+//Fixes around 0601462a
+06014628 add r0, r0
+0601462c extu.w r1, r6
+
+//Fixes around 0601463e
+0601463e add r0, r0
+06014642 extu.w r1, r1
+
+//Fixes around 06014676
+06014676 add r0, r0
+0601467a extu.w r1, r1
+
+///////////Converting offsets to 4 bytes
+060147f6 mov.w @r8, r1
+060147fa extu.w r1, r8

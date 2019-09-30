@@ -36,6 +36,7 @@ using std::map;
 
 #define OPTIMIZE_INSERTION_DEBUGGING 0
 #define USE_SINGLE_BYTE_LOOKUPS 1
+#define USE_8_BYTE_OFFSETS 1
 
 const unsigned char OutTileSpacingX = 8;
 const unsigned char OutTileSpacingY = 12;
@@ -495,7 +496,7 @@ struct SakuraString
 	{
 		if( mChars.size() > 3 )
 		{
-			const unsigned short returnSize = (unsigned short)(mChars.size() - 3) + sizeof(short) * 3;
+			const unsigned short returnSize = (unsigned short)(mChars.size()) + 3;
 			return returnSize;
 		}
 		
@@ -512,14 +513,14 @@ struct SakuraString
 			if(count < 2)
 			{
 				//Change endianness so that it gets written in big endian order
-				const char value1 = (char)(sakuraChar.mIndex & 0xff00);// ((sakuraChar.mIndex & 0xff00) >> 8) + ((sakuraChar.mIndex & 0x00ff) << 8);
+				const char value1 = (char)((sakuraChar.mIndex & 0xff00) >> 8);// ((sakuraChar.mIndex & 0xff00) >> 8) + ((sakuraChar.mIndex & 0x00ff) << 8);
 				const char value2 = (char)(sakuraChar.mIndex & 0x00ff);
 				outData.push_back(value1);
 				outData.push_back(value2);
 			}
 			else
 			{
-				const char value1 = (char)(sakuraChar.mIndex & 0xff00);
+				const char value1 = (char)((sakuraChar.mIndex & 0xff00) >> 8);
 				const char value2 = (char)(sakuraChar.mIndex & 0x00ff);
 
 				//If both bytes are 0, then these are the end bytes and they need to be output
@@ -890,6 +891,7 @@ struct SakuraTextFileFixedHeader
 		//All TBL files start with this entries
 		mStringInfo.push_back( SwapByteOrder(inInfo[0].mFullValue) );
 
+		int totalCharCount = 0;
 		unsigned short prevValue = 0;
 		const size_t numEntries  = inInfo.size() - 1;
 		for(size_t i = 0; i < numEntries; ++i)
@@ -902,13 +904,21 @@ struct SakuraTextFileFixedHeader
 			}
 
 			const unsigned short newSecondValue = (unsigned short)inStrings[i].mChars.size() + 3 + prevValue; //+ trailingZeros;
+			totalCharCount += (unsigned short)inStrings[i].mChars.size() + 3;
 #else
 			const unsigned short newSecondValue = (unsigned short)inStrings[i].mChars.size() + prevValue; //+ trailingZeros;
+			totalCharCount += (unsigned short)inStrings[i].mChars.size();
 #endif
+			
 			const unsigned int   newValue       = ((unsigned int)(inInfo[i+1].mStringId) << 16) + (unsigned int)newSecondValue;
 			prevValue                           = newSecondValue;
 
 			mStringInfo.push_back( SwapByteOrder(newValue) );
+		}
+
+		if( totalCharCount > 0xffff )
+		{
+			printf("\nERROR:Translated file %s exceeds max char count. Max is %u.  File has %i\n", inSakuraFile.mFileNameInfo.mFileName.c_str(), 0xffff, totalCharCount);
 		}
 
 		//Figure out text table size
@@ -2197,7 +2207,12 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 						return false;
 					}
 					numCharsPrintedForMES  += numCharsPrintedInLine*2 + 1;
+
+#if USE_SINGLE_BYTE_LOOKUPS
 					numCharsPrintedFortTBL += (numCharsPrintedInLine + 1)*2;
+#else
+					numCharsPrintedFortTBL += (numCharsPrintedInLine + 1)*2;
+#endif
 				}
 
 				return true;
@@ -2435,6 +2450,13 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 					}
 				}
 
+#if USE_SINGLE_BYTE_LOOKUPS
+				if( translatedString.mChars.size() % 2 != 0 )
+				{
+					translatedString.AddChar(' ');
+				}
+#endif
+
 				//String ends with 0000
 				translatedString.AddChar(0);
 
@@ -2568,6 +2590,9 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 					{
 						outFile.WriteData(&char6E, sizeof(char6E));
 						outFile.WriteData(&char2E, sizeof(char2E));
+						outFile.WriteData(&char6E, sizeof(char6E));
+						outFile.WriteData(&char2E, sizeof(char2E));
+
 						++numProcessed;
 					}
 				}
@@ -2855,10 +2880,6 @@ bool FixupSakura(const string& rootDir, const string& inTranslatedOptionsBmp, co
 	const unsigned short lipsFormattingCode = 0x0041; //0x4100 in big endian.  This is equivalent to SHLL R1
 	const unsigned char lipsStartLocY       = 0xCE; //When there are 2 options
 	const unsigned char lipsStartLocY2      = 0xC6; //When there are 3 options
-	const unsigned short readCharWhenScrolling1 = 0xb061; //61b0 in big endian.
-	const unsigned short readCharWhenScrolling2 = 0xbc01; //01bd in big endian.
-	const unsigned short readChar               = 0xdc01; //01dc in big endian.
-	const unsigned short getStringAddress       = 0x0078; //7800 in big endian
 
 	memcpy_s((void*)(origSakuraData.GetData() + offsetTileSpacingX),      origSakuraData.GetDataSize(), (void*)&OutTileSpacingX,    sizeof(OutTileSpacingX));
 	memcpy_s((void*)(origSakuraData.GetData() + offsetTileSpacingY),      origSakuraData.GetDataSize(), (void*)&OutTileSpacingY,    sizeof(OutTileSpacingY));
@@ -2871,10 +2892,61 @@ bool FixupSakura(const string& rootDir, const string& inTranslatedOptionsBmp, co
 	memcpy_s((void*)(origSakuraData.GetData() + offsetLipsStartLocationY2),origSakuraData.GetDataSize(), (void*)&lipsStartLocY2,    sizeof(lipsStartLocY2));
 
 #if USE_SINGLE_BYTE_LOOKUPS
+	const unsigned short readCharWhenScrolling1 = 0xb061; //61b0 in big endian. mov.b instead of mov.w
+	const unsigned short readCharWhenScrolling2 = 0xbc01; //01bd in big endian. mov.b instead of mov.w
+	const unsigned short readChar               = 0xdc01; //01dc in big endian. mov.b instead of mov.w
+	const unsigned short getStringAddress       = 0x0078; //7800 in big endian
+	const unsigned short newLineCharacter       = 0x0d00; //00d0 in big endian.  Since we only output the second byte of 0x0a0d, the game code should just check for 0x0d as a newline character
+	const unsigned short add_0_r0               = 0x0070; //7000 in big endian.  add 0x00, r0
+	const unsigned short extu_b_r1_r1           = 0x1c61; //611c in big endian. extu.b r1, r1 instead of extu.w
+	const unsigned short extu_b_r1_r6           = 0x1c66; //661c in big endian. extu.b r1, r6 instead of extu.w
+	const unsigned short add_0_r4               = 0x0074; //7400 in big endian. 
+	const unsigned short mov_b_atR0_r1_r1       = 0x1c01; //011c in big endian.  move.b @(r0, r1), r1
+
 	memcpy_s((void*)(origSakuraData.GetData() + offsetReadCharWhenScrolling1), origSakuraData.GetDataSize(), (void*)&readCharWhenScrolling1, sizeof(readCharWhenScrolling1));
 	memcpy_s((void*)(origSakuraData.GetData() + offsetReadCharWhenScrolling2), origSakuraData.GetDataSize(), (void*)&readCharWhenScrolling2, sizeof(readCharWhenScrolling2));
 	memcpy_s((void*)(origSakuraData.GetData() + offsetReadChar),               origSakuraData.GetDataSize(), (void*)&readChar,               sizeof(readChar));
 	memcpy_s((void*)(origSakuraData.GetData() + offsetStringAddressCalc),      origSakuraData.GetDataSize(), (void*)&getStringAddress,       sizeof(getStringAddress));
+	memcpy_s((void*)(origSakuraData.GetData() + 0x0001076c),                   origSakuraData.GetDataSize(), (void*)&newLineCharacter,       sizeof(newLineCharacter));
+	memcpy_s((void*)(origSakuraData.GetData() + 0x00010510),                   origSakuraData.GetDataSize(), (void*)&newLineCharacter,       sizeof(newLineCharacter));
+	memcpy_s((void*)(origSakuraData.GetData() + 0x000104c4),                   origSakuraData.GetDataSize(), (void*)&add_0_r0,               sizeof(add_0_r0));
+	memcpy_s((void*)(origSakuraData.GetData() + 0x00010720),                   origSakuraData.GetDataSize(), (void*)&add_0_r0,               sizeof(add_0_r0));
+	memcpy_s((void*)(origSakuraData.GetData() + 0x000104f0),                   origSakuraData.GetDataSize(), (void*)&add_0_r0,               sizeof(add_0_r0));
+	memcpy_s((void*)(origSakuraData.GetData() + 0x00010a4c),                   origSakuraData.GetDataSize(), (void*)&add_0_r0,               sizeof(add_0_r0));
+	memcpy_s((void*)(origSakuraData.GetData() + 0x00010bdc),                   origSakuraData.GetDataSize(), (void*)&add_0_r0,               sizeof(add_0_r0));
+
+	memcpy_s((void*)(origSakuraData.GetData() + 0x000104b8),                   origSakuraData.GetDataSize(), (void*)&extu_b_r1_r1,           sizeof(extu_b_r1_r1));
+	memcpy_s((void*)(origSakuraData.GetData() + 0x00010bde),                   origSakuraData.GetDataSize(), (void*)&mov_b_atR0_r1_r1,       sizeof(mov_b_atR0_r1_r1));
+	memcpy_s((void*)(origSakuraData.GetData() + 0x00010be0),                   origSakuraData.GetDataSize(), (void*)&extu_b_r1_r1,           sizeof(extu_b_r1_r1));
+	memcpy_s((void*)(origSakuraData.GetData() + 0x000104c8),                   origSakuraData.GetDataSize(), (void*)&extu_b_r1_r6,           sizeof(extu_b_r1_r6));
+	memcpy_s((void*)(origSakuraData.GetData() + 0x00010724),                   origSakuraData.GetDataSize(), (void*)&extu_b_r1_r6,           sizeof(extu_b_r1_r6));
+
+	//For LIPS
+	memcpy_s((void*)(origSakuraData.GetData() + 0x000106a4),                   origSakuraData.GetDataSize(), (void*)&newLineCharacter,       sizeof(newLineCharacter));
+	memcpy_s((void*)(origSakuraData.GetData() + 0x00010bf4),                   origSakuraData.GetDataSize(), (void*)&newLineCharacter,       sizeof(newLineCharacter));
+
+	//Fixes around 06014594
+	memcpy_s((void*)(origSakuraData.GetData() + 0x000106d4),                   origSakuraData.GetDataSize(), (void*)&add_0_r4,               sizeof(add_0_r4));
+	memcpy_s((void*)(origSakuraData.GetData() + 0x00010596),                   origSakuraData.GetDataSize(), (void*)&extu_b_r1_r1,           sizeof(extu_b_r1_r1));
+
+	//Fixes around 060145a4
+	memcpy_s((void*)(origSakuraData.GetData() + 0x000105a2),                   origSakuraData.GetDataSize(), (void*)&add_0_r0,               sizeof(add_0_r0));
+	memcpy_s((void*)(origSakuraData.GetData() + 0x000105a6),                   origSakuraData.GetDataSize(), (void*)&extu_b_r1_r1,           sizeof(extu_b_r1_r1));
+
+	//Fixes around 0601461a
+	memcpy_s((void*)(origSakuraData.GetData() + 0x0001061c),                   origSakuraData.GetDataSize(), (void*)&extu_b_r1_r1,           sizeof(extu_b_r1_r1));
+
+	//Fixes around 0601462a
+	memcpy_s((void*)(origSakuraData.GetData() + 0x00010628),                   origSakuraData.GetDataSize(), (void*)&add_0_r0,               sizeof(add_0_r0));
+	memcpy_s((void*)(origSakuraData.GetData() + 0x0001062c),                   origSakuraData.GetDataSize(), (void*)&extu_b_r1_r6,           sizeof(extu_b_r1_r6));
+
+	//Fixes around 0601463e
+	memcpy_s((void*)(origSakuraData.GetData() + 0x0001063e),                   origSakuraData.GetDataSize(), (void*)&add_0_r0,               sizeof(add_0_r0));
+	memcpy_s((void*)(origSakuraData.GetData() + 0x00010642),                   origSakuraData.GetDataSize(), (void*)&extu_b_r1_r1,           sizeof(extu_b_r1_r1));
+
+	//Fixes around 06014676
+	memcpy_s((void*)(origSakuraData.GetData() + 0x00010676),                   origSakuraData.GetDataSize(), (void*)&add_0_r0,               sizeof(add_0_r0));
+	memcpy_s((void*)(origSakuraData.GetData() + 0x0001067a),                   origSakuraData.GetDataSize(), (void*)&extu_b_r1_r1,           sizeof(extu_b_r1_r1));
 #endif
 	//***Done Patching Text Drawing Code***
 
