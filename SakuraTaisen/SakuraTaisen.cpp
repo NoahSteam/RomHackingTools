@@ -892,7 +892,7 @@ struct SakuraTextFileFixedHeader
 		}
 	};
 
-#pragma pack(2)
+#pragma pack(push, 2)
 	struct StringInfo8Bytes
 	{
 		unsigned short stringId;
@@ -911,7 +911,7 @@ struct SakuraTextFileFixedHeader
 	vector<StringInfo>       mStringInfo;
 	vector<StringInfo8Bytes> mStringInfo8Bytes;
 
-	bool CreateFixedHeader(const vector<SakuraTextFile::SakuraStringInfo>& inInfo, const SakuraTextFile& inSakuraFile, const vector<SakuraString>& inStrings)
+	bool CreateFixedHeader(const vector<SakuraTextFile::SakuraStringInfo>& inInfo, const SakuraTextFile& inSakuraFile, const vector<SakuraString>& inStrings, bool bIsMesFile)
 	{
 		//All TBL files start with this entries
 		//mStringInfo.push_back( SwapByteOrder(inInfo[0].mFullValue) );
@@ -925,7 +925,7 @@ struct SakuraTextFileFixedHeader
 		for(size_t i = 0; i < numEntries; ++i)
 		{
 #if USE_SINGLE_BYTE_LOOKUPS
-			const unsigned short newOffset       = (unsigned short)inStrings[i].mChars.size() + 3 + prevValue; //+ trailingZeros;
+			const unsigned short newOffset       = bIsMesFile ? (unsigned short)inStrings[i].mChars.size() + prevValue : (unsigned short)inStrings[i].mChars.size() + 3 + prevValue; //+ trailingZeros;
 			const unsigned int   newOffset8bytes = inStrings[i].mChars.size() + 3 + prevValue8Bytes; //+ trailingZeros;
 			totalCharCount                      += inStrings[i].mChars.size() + 3;
 #else
@@ -941,22 +941,25 @@ struct SakuraTextFileFixedHeader
 #endif
 		}
 
-#if !USE_8_BYTE_OFFSETS
-		if( totalCharCount > 0xffff )
+		const bool bCheckTotalCharError = !USE_8_BYTE_OFFSETS || bIsMesFile;
+		if( bCheckTotalCharError && totalCharCount > 0xffff )
 		{
 			printf("\nERROR:Translated file %s exceeds max char count. Max is %u.  File has %i\n", inSakuraFile.mFileNameInfo.mFileName.c_str(), 0xffff, totalCharCount);
 		}
-#endif
 
 		//Figure out text table size
 		unsigned long stringTableSize = 0;
 		for(const SakuraString& sakuraString : inStrings)
 		{
-#if USE_SINGLE_BYTE_LOOKUPS
-			stringTableSize += sakuraString.GetSingleByteDataSize();
-#else
-			stringTableSize += sakuraString.mChars.size()*2;
-#endif
+			const bool bUseSingleByteLookups = !bIsMesFile && USE_SINGLE_BYTE_LOOKUPS;
+			if( bUseSingleByteLookups )
+			{
+				stringTableSize += sakuraString.GetSingleByteDataSize();
+			}
+			else
+			{
+				stringTableSize += sakuraString.mChars.size()*2;
+			}
 		}
 
 		if( stringTableSize % 2 != 0 )
@@ -978,22 +981,24 @@ struct SakuraTextFileFixedHeader
 		unsigned long timingData8Bytes = ((mOffsetToTable8Bytes<<1) + stringTableSize) >> 1;
 		if(timingDataL/2 > 0xffff)
 		{
-#if !USE_8_BYTE_OFFSETS
-			const int sizeToReduce = (timingDataL/2) - 0xffff;
-			printf("\nERROR:Translated file %s is too big. Timing data is too far down.  Needs to be reduced by %i bytes (%i characters)\n", inSakuraFile.mFileNameInfo.mFileName.c_str(), sizeToReduce, sizeToReduce/2);
-			return false;
-#endif
+			if( bCheckTotalCharError )
+			{
+				const int sizeToReduce = (timingDataL/2) - 0xffff;
+				printf("\nERROR:Translated file %s is too big. Timing data is too far down.  Needs to be reduced by %i bytes (%i characters)\n", inSakuraFile.mFileNameInfo.mFileName.c_str(), sizeToReduce, sizeToReduce/2);
+				return false;
+			}
 		}
 		mTableEnd       = (unsigned short)timingDataL;
 		mTableEnd8Bytes = timingData8Bytes;
 
 		if(stringTableSize/2 > 0xffff)
 		{
-#if !USE_8_BYTE_OFFSETS
-			const int sizeToReduce = (stringTableSize/2) - 0xffff;
-			printf("\nERROR:Translated file %s is too big.  Needs to be reduced by %i bytes (%i characters)\n", inSakuraFile.mFileNameInfo.mFileName.c_str(), sizeToReduce, sizeToReduce);
-			return false;
-#endif
+			if( bCheckTotalCharError )
+			{
+				const int sizeToReduce = (stringTableSize/2) - 0xffff;
+				printf("\nERROR:Translated file %s is too big.  Needs to be reduced by %i bytes (%i characters)\n", inSakuraFile.mFileNameInfo.mFileName.c_str(), sizeToReduce, sizeToReduce);
+				return false;
+			}
 		}
 
 		return true;
@@ -2295,7 +2300,7 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 					)
 				{
 					bool bUseShorthand = false;
-					if( numTranslatedLines > 1200 )
+					if( USE_SINGLE_BYTE_LOOKUPS && USE_8_BYTE_OFFSETS && numTranslatedLines > 1200 )
 					{
 						bUseShorthand = true;
 					}
@@ -2491,7 +2496,7 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 				}
 
 #if USE_SINGLE_BYTE_LOOKUPS
-				if( translatedString.mChars.size() % 2 != 0 )
+				if( !bIsMESFile && translatedString.mChars.size() % 2 != 0 )
 				{
 					translatedString.AddChar(' ');
 				}
@@ -2558,7 +2563,7 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 		}
 
 		SakuraTextFileFixedHeader fixedHeader;
-		fixedHeader.CreateFixedHeader(sakuraFile.mStringInfoArray, sakuraFile, translatedLines);
+		fixedHeader.CreateFixedHeader(sakuraFile.mStringInfoArray, sakuraFile, translatedLines, bIsMESFile);
 
 		//Write header
 #if USE_8_BYTE_OFFSETS
@@ -2603,10 +2608,19 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 			if( translationIndex < numInsertedLines )
 			{
 #if USE_SINGLE_BYTE_LOOKUPS
-				vector<unsigned char> translationData;
-				translatedLines[dataIndex].GetSingleByteDataArray(translationData);
-				outFile.WriteData(translationData.data(), translationData.size() * sizeof(char));
-				numSingleBytesWritten += translationData.size() * sizeof(char);
+				if( bIsMESFile )
+				{
+					vector<unsigned short> translationData;
+					translatedLines[dataIndex].GetDataArray(translationData);
+					outFile.WriteData(translationData.data(), translationData.size() * sizeof(short));
+				}
+				else
+				{
+					vector<unsigned char> translationData;
+					translatedLines[dataIndex].GetSingleByteDataArray(translationData);
+					outFile.WriteData(translationData.data(), translationData.size() * sizeof(char));
+					numSingleBytesWritten += translationData.size() * sizeof(char);
+				}
 #else
 				vector<unsigned short> translationData;
 				translatedLines[dataIndex].GetDataArray(translationData);
@@ -2961,6 +2975,7 @@ bool FixupSakura(const string& rootDir, const string& inTranslatedOptionsBmp, co
 	const unsigned short extu_b_r1_r6           = 0x1c66; //661c in big endian. extu.b r1, r6 instead of extu.w
 	const unsigned short add_0_r4               = 0x0074; //7400 in big endian. 
 	const unsigned short mov_b_atR0_r1_r1       = 0x1c01; //011c in big endian.  move.b @(r0, r1), r1
+	const unsigned short mov_b_atR0_r10_r1      = 0xac01; //01ac in big endian.  move.b @(r0, r10), r1
 
 	memcpy_s((void*)(origSakuraData.GetData() + offsetReadCharWhenScrolling1), origSakuraData.GetDataSize(), (void*)&readCharWhenScrolling1, sizeof(readCharWhenScrolling1));
 	memcpy_s((void*)(origSakuraData.GetData() + offsetReadCharWhenScrolling2), origSakuraData.GetDataSize(), (void*)&readCharWhenScrolling2, sizeof(readCharWhenScrolling2));
@@ -2984,8 +2999,17 @@ bool FixupSakura(const string& rootDir, const string& inTranslatedOptionsBmp, co
 	memcpy_s((void*)(origSakuraData.GetData() + 0x000106a4),                   origSakuraData.GetDataSize(), (void*)&newLineCharacter,       sizeof(newLineCharacter));
 	memcpy_s((void*)(origSakuraData.GetData() + 0x00010bf4),                   origSakuraData.GetDataSize(), (void*)&newLineCharacter,       sizeof(newLineCharacter));
 
+	//060145a4 mov.w @(r0, r10), r1
+	//060145c8 add r0, r0
+	//060145ca mov.w @(r0, r10), r1
+	//060145cc extu.w r1, r1
+	memcpy_s((void*)(origSakuraData.GetData() + 0x000105a4),                   origSakuraData.GetDataSize(), (void*)&mov_b_atR0_r10_r1,      sizeof(mov_b_atR0_r10_r1));
+	memcpy_s((void*)(origSakuraData.GetData() + 0x000105c8),                   origSakuraData.GetDataSize(), (void*)&add_0_r0,               sizeof(add_0_r0));
+	memcpy_s((void*)(origSakuraData.GetData() + 0x000105ca),                   origSakuraData.GetDataSize(), (void*)&mov_b_atR0_r10_r1,      sizeof(mov_b_atR0_r10_r1));
+	memcpy_s((void*)(origSakuraData.GetData() + 0x000105cc),                   origSakuraData.GetDataSize(), (void*)&extu_b_r1_r1,           sizeof(extu_b_r1_r1));
+
 	//Fixes around 06014594
-	memcpy_s((void*)(origSakuraData.GetData() + 0x000106d4),                   origSakuraData.GetDataSize(), (void*)&add_0_r4,               sizeof(add_0_r4));
+	memcpy_s((void*)(origSakuraData.GetData() + 0x000106d6),                   origSakuraData.GetDataSize(), (void*)&add_0_r4,               sizeof(add_0_r4));
 	memcpy_s((void*)(origSakuraData.GetData() + 0x00010596),                   origSakuraData.GetDataSize(), (void*)&extu_b_r1_r1,           sizeof(extu_b_r1_r1));
 
 	//Fixes around 060145a4
@@ -3006,6 +3030,52 @@ bool FixupSakura(const string& rootDir, const string& inTranslatedOptionsBmp, co
 	//Fixes around 06014676
 	memcpy_s((void*)(origSakuraData.GetData() + 0x00010676),                   origSakuraData.GetDataSize(), (void*)&add_0_r0,               sizeof(add_0_r0));
 	memcpy_s((void*)(origSakuraData.GetData() + 0x0001067a),                   origSakuraData.GetDataSize(), (void*)&extu_b_r1_r1,           sizeof(extu_b_r1_r1));
+#endif
+
+#if USE_8_BYTE_OFFSETS
+	/*
+	060147f6 mov.w @r8, r1 0x000107f0
+	060147fa extu.w r1, r8 0x000107fa
+	060147e8 add 4, r8     0x000107e8  //should be add 6
+	060147e2 mov.w @r1, r1 0x000107e2
+	060147e6 extu.w r1,r9  0x000107e6
+	06014806 add 4, r8
+	06014808 add 0xfc, r8
+	*/
+
+	const unsigned short mov_l_r8_r1  = 0x8261; //6182
+	const unsigned short mov_r1_r8    = 0x1368; //6113 basically do nothing, because mov_l_r8_r1 is all we want   
+	const unsigned short add_6_r8     = 0x0678; //7806
+	const unsigned short mov_l_r1_r1  = 0x1261; //6112
+	const unsigned short move_r1_r9   = 0x1369; //6913
+	const unsigned short add_fa_r8    = 0xfa78; //78fa
+
+	memcpy_s((void*)(origSakuraData.GetData() + 0x000107f6), origSakuraData.GetDataSize(), (void*)&mov_l_r8_r1,  sizeof(mov_l_r8_r1));
+	memcpy_s((void*)(origSakuraData.GetData() + 0x000107fa), origSakuraData.GetDataSize(), (void*)&mov_r1_r8,    sizeof(mov_r1_r8));
+	memcpy_s((void*)(origSakuraData.GetData() + 0x000107e8), origSakuraData.GetDataSize(), (void*)&add_6_r8,     sizeof(add_6_r8));
+	memcpy_s((void*)(origSakuraData.GetData() + 0x000107e2), origSakuraData.GetDataSize(), (void*)&mov_l_r1_r1,  sizeof(mov_l_r1_r1));
+	memcpy_s((void*)(origSakuraData.GetData() + 0x000107e6), origSakuraData.GetDataSize(), (void*)&move_r1_r9,   sizeof(move_r1_r9));
+	memcpy_s((void*)(origSakuraData.GetData() + 0x00010806), origSakuraData.GetDataSize(), (void*)&add_6_r8,     sizeof(add_6_r8));
+	memcpy_s((void*)(origSakuraData.GetData() + 0x00010808), origSakuraData.GetDataSize(), (void*)&add_fa_r8,    sizeof(add_fa_r8));
+
+	//LIPS
+	/*
+	060146c2 add 4, r4
+	060146d0 mov.w @r4, r1
+	060146e0 add 4, r4
+	060146e2 add 0xfc, r4
+	060146d4 extu.w r1, r4
+	*/
+	
+	const unsigned short add_6_r4     = 0x0674; //7406
+	const unsigned short mov_l_r4_r1  = 0x4261; //6142
+	const unsigned short add_fa_r4    = 0xfa74; //74fa
+	const unsigned short mov_r1_r4    = 0x1364; //6413
+	memcpy_s((void*)(origSakuraData.GetData() + 0x000106c2), origSakuraData.GetDataSize(), (void*)&add_6_r4,     sizeof(add_6_r4));
+	memcpy_s((void*)(origSakuraData.GetData() + 0x000106D0), origSakuraData.GetDataSize(), (void*)&mov_l_r4_r1,  sizeof(mov_l_r4_r1));
+	memcpy_s((void*)(origSakuraData.GetData() + 0x000106e0), origSakuraData.GetDataSize(), (void*)&add_6_r4,     sizeof(add_6_r4));
+	memcpy_s((void*)(origSakuraData.GetData() + 0x000106e2), origSakuraData.GetDataSize(), (void*)&add_fa_r4,    sizeof(add_fa_r4));
+	memcpy_s((void*)(origSakuraData.GetData() + 0x000106d4), origSakuraData.GetDataSize(), (void*)&mov_r1_r4,    sizeof(mov_r1_r4));
 #endif
 	//***Done Patching Text Drawing Code***
 
