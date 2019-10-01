@@ -35,8 +35,8 @@ using std::list;
 using std::map;
 
 #define OPTIMIZE_INSERTION_DEBUGGING 0
-#define USE_SINGLE_BYTE_LOOKUPS 1
-#define USE_8_BYTE_OFFSETS 1
+#define USE_SINGLE_BYTE_LOOKUPS 0
+#define USE_8_BYTE_OFFSETS 0
 
 const unsigned char OutTileSpacingX = 8;
 const unsigned char OutTileSpacingY = 12;
@@ -920,7 +920,7 @@ struct SakuraTextFileFixedHeader
 
 		int totalCharCount             = 0;
 		unsigned short prevValue       = 0;
-		unsigned int   prevValue8Bytes = 0;
+		unsigned int   prevValue8Bytes = 0; prevValue8Bytes = 0;
 		const size_t numEntries        = inInfo.size() - 1;
 		for(size_t i = 0; i < numEntries; ++i)
 		{
@@ -928,12 +928,12 @@ struct SakuraTextFileFixedHeader
 			const unsigned short newOffset       = bIsMesFile ? (unsigned short)inStrings[i].mChars.size() + prevValue : (unsigned short)inStrings[i].mChars.size() + 3 + prevValue; //+ trailingZeros;
 			const unsigned int   newOffset8bytes = inStrings[i].mChars.size() + 3 + prevValue8Bytes; //+ trailingZeros;
 			totalCharCount                      += inStrings[i].mChars.size() + 3;
+			prevValue8Bytes                      = newOffset8bytes;
 #else
 			const unsigned short newOffset = (unsigned short)inStrings[i].mChars.size() + prevValue; //+ trailingZeros;
 			totalCharCount                += (unsigned short)inStrings[i].mChars.size();
 #endif
 			prevValue       = newOffset;
-			prevValue8Bytes = newOffset8bytes;
 			mStringInfo.push_back( StringInfo(inInfo[i + 1].mStringId, newOffset) );
 
 #if USE_8_BYTE_OFFSETS
@@ -2300,10 +2300,12 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 					)
 				{
 					bool bUseShorthand = false;
-					if( USE_SINGLE_BYTE_LOOKUPS && USE_8_BYTE_OFFSETS && numTranslatedLines > 1200 )
+#if USE_SINGLE_BYTE_LOOKUPS && USE_8_BYTE_OFFSETS 
+					if( numTranslatedLines > 1200 )
 					{
 						bUseShorthand = true;
 					}
+#endif
 
 					if( textLine.mWords.size() == 0 )
 					{
