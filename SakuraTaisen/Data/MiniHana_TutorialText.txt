@@ -37,10 +37,10 @@ Look, a combo!
 You collected 3 cards with blue scrolls.
 That's worth 6 points!
 Whoever scores a combo first, wins.
-In this case, that's you! You score the points of your combo.
-Btw, points are also called "mon", after an old currency.
-You can look up the combos in the menu.
-There are 12 in all. I'm sure you'll memorize them quickly.
+That's you! You score combo points!
+Btw, points? Also "mon", after old currency.
+You can find combos in the menu.
+There's 12 in all, you'll get them quick.
 Now, with your blue scrolls, you win this round.
 If you wish, you can continue!
 You already have the Deer and the Butterfly.
