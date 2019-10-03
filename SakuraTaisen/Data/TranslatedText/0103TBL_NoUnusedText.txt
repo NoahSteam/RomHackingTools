@@ -1,9 +1,9 @@
-﻿A photo of Sakura. She's looking right at me. I wonder what she's thinking… 
-A photo of Sumire. This is a side of her you don't see too often. 
-A photo of Maria. …She's lost in thought and looks kind of sad… 
-A photo of Kanna. She's looking strong and sturdy. I hope I get to meet her soon. 
-A photo of Iris. Surrounded by flowers, she looks like a cute little flower herself. 
-A photo of Kohran. Chinese clothes look good on her. I wonder what kind of girl she is. 
+﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
+It's a photo of Sumire. This is a side of her you don't see too often. 
+It's a photo of Maria. …She's lost in thought and looks kind of sad… 
+It's a photo of Kanna. She's looking strong and sturdy. I hope I get to meet her soon. 
+It's a photo of Iris. Surrounded by flowers, she looks like a cute little flower herself. 
+It's a photo of Kohran. Chinese clothes look good on her. I wonder what kind of girl she is. 
 It's the letter the guest left with me. I was told to give it to Sumire, but…Hmmm. 
 It's Maria's gun. …Is there a way to use this to escape? 
 It's a hair ornament. It's shaped like a flower and really cute. 
@@ -23,8 +23,8 @@ It's Sumire in her stage costume. Her powerful makeup is really impressive.
 It's Maria on stage. Is that the military uniform from "For Love"…? She looks great in men's clothes. 
 It's rare to see one of her training. This photo has a kind of private feel to it. 
 Iris in a swimsuit? It's so cute that she has a pool tube. 
-A photo of Kohran. I don't get to see her with her braids undone very often. It's a nice look. 
-A photo of Ayame in a traditional outfit. I hope she'll always be as happy and content as she is here. 
+It's a photo of Kohran. I don't get to see her with her braids undone very often. It's a nice look. 
+It's a photo of Ayame in a traditional outfit. I hope she'll always be as happy and content as she is here. 
 Ayame's gun. Why…? Why did it have to turn out like this…? 
 Nothing I can do here. I'd better check somewhere else… 
 There's no one here. I'd better check somewhere else… 

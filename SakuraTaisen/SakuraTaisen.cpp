@@ -3089,6 +3089,28 @@ bool FixupSakura(const string& rootDir, const string& inTranslatedOptionsBmp, co
 	memcpy_s((void*)(origSakuraData.GetData() + 0x0001062a), origSakuraData.GetDataSize(), (void*)&mov_b_atR0_r10_r1,  sizeof(mov_b_atR0_r10_r1));
 	memcpy_s((void*)(origSakuraData.GetData() + 0x00010678), origSakuraData.GetDataSize(), (void*)&mov_b_atR0_r10_r1,  sizeof(mov_b_atR0_r10_r1));
 //	memcpy_s((void*)(origSakuraData.GetData() + 0x00010640), origSakuraData.GetDataSize(), (void*)&mov_b_atR0_r14_r1,  sizeof(mov_b_atR0_r14_r1));
+
+	//Menu items
+	const unsigned int sakuraLoadAddress = 0x06004000;
+	/*
+	06014530 add 4, r6     //offsetting from tbl header to get to the first string id.  Needs to be add 6
+	0601454e add 4, r6     //adding 4 to get to the next string id
+	06014550 add 0xfc, r6  //move back by 4, should be 0xfa
+	0601453e mov.w @r6, r1 //read the offset to the string
+	06014542 extu.w r1, r6 //extu the offset should be mov r1, r6, 6613
+	06014544 add r6, r6    //multiply offset by 2, should be add 0, r6 7600
+	*/
+	const unsigned short add_6_r6      = 0x0676;
+	const unsigned short add_fa_r6     = 0xfa76;
+	const unsigned short mov_l_atR6_r1 = 0x6261;
+	const unsigned short mov_r1_r6     = 0x1366;
+	const unsigned short add_0_r6      = 0x0076;
+	memcpy_s((void*)(origSakuraData.GetData() + (0x06014530 - sakuraLoadAddress)), origSakuraData.GetDataSize(), (void*)&add_6_r6,      sizeof(add_6_r6));
+	memcpy_s((void*)(origSakuraData.GetData() + (0x0601454e - sakuraLoadAddress)), origSakuraData.GetDataSize(), (void*)&add_6_r6,      sizeof(add_6_r6));
+	memcpy_s((void*)(origSakuraData.GetData() + (0x06014550 - sakuraLoadAddress)), origSakuraData.GetDataSize(), (void*)&add_fa_r6,     sizeof(add_fa_r6));
+	memcpy_s((void*)(origSakuraData.GetData() + (0x0601453e - sakuraLoadAddress)), origSakuraData.GetDataSize(), (void*)&mov_l_atR6_r1, sizeof(mov_l_atR6_r1));
+	memcpy_s((void*)(origSakuraData.GetData() + (0x06014542 - sakuraLoadAddress)), origSakuraData.GetDataSize(), (void*)&mov_r1_r6,     sizeof(mov_r1_r6));
+	memcpy_s((void*)(origSakuraData.GetData() + (0x06014544 - sakuraLoadAddress)), origSakuraData.GetDataSize(), (void*)&add_0_r6,      sizeof(add_0_r6));
 #endif
 	//***Done Patching Text Drawing Code***
 

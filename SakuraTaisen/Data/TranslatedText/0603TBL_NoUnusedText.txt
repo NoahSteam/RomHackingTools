@@ -29,7 +29,7 @@ Unused
 (…If you look closely, she's still wearing her stage hairdo.) 
 (…She must have come here in a big hurry after the play ended.) 
 (As always, that's some wild hair.) 
-(It's Kanna's trademark headband. It always looks so good on her.) 
+(It's Kanna's trademark headband. It always looks good on her.) 
 (I've heard that the store even sells "Kanna Headbands" for her kid fans.) 
 (Wow…You don't usually see Kanna looking like this.) 
 (I wonder what happened here…? Kanna's got a troubled look in her eyes.) 
@@ -208,7 +208,7 @@ Thanks for your business! Come again!
 Hello? … I see. Thanks for doing that. We've got our processor working on it too. 
 I see, so they're wedges… Okay, we'll try running that through our processor. 
 The Flower Division? Right now they're throwing a party, I think. They should be fine. 
-… yes. We should see some results soon…. thanks… 
+… yes. We should see some results soon… thanks… 
 I wonder if the manager is around. 
 I guess I'll try somewhere else. 
 Zzz… zzz… zzz… zzz… 
@@ -1155,7 +1155,7 @@ The shops are all closed today. I should head somewhere else.
 Good work holding down the fort. Don't let it get you down. 
 I'm on duty today. 
 Kasumi and Tsubaki are at Renga getting a bite. I'm jealous. 
-Zzzzzzzzz….
+Zzzzzzzzz…
 Commander Yoneda's still out like a light. 
 Gotta leave the sword, crown and shield here… 
 The wig will be in the dressing room. I should head out. 

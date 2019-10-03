@@ -63,7 +63,7 @@ This room is kind of useless now, isn't it?
 Nobody here either. Off to somewhere else. 
 The room is full of costumes. 
 But… there's no one here. I'll go check somewhere else. 
-Sumire still isn't here. Everyone said they would gather in the parlor but…. 
+Sumire still isn't here. Everyone said they would gather in the parlor but… 
 Not much I can do about it. I'll be leaving. 
 No matter when I come here it's always a disaster. 
 There was no reason to come here. I'll go elsewhere. 
@@ -260,7 +260,7 @@ REALLY really?
 Really really. 
 Aww! I believe you! 
 (Phew…) 
-But… Uncle Ichi. You're lucky it was me… if it were someone else, then…. 
+But… Uncle Ichi. You're lucky it was me… if it were someone else, then… 
 They might've been super duper mad! Be careful, okay? 
 Anyway, I'm gonna go meet up with everyone else! Bye~Bye~! 
 S-she's right… I'd better be careful. 
@@ -280,7 +280,7 @@ Okaaaay! Anyway, I'm gonna go meet up with everyone else!
 Hey, come on! I'm totally innocent! 
 Ahhh, that was refreshing! Huh? Uncle Ichi, what's wrong? 
 I should be asking you that. I was walking through the corridor and heard quite the scream coming from your room. 
-….Huh? Ohhhh… 
+…Huh? Ohhhh… 
 I mixed up the hot and cold water, so I shouted… Maybe that's what you heard? 
 Are you kidding me? I'm glad I didn't rush in here. 
 I think you just wanted to come into my room, isn't that right? 
@@ -297,7 +297,7 @@ Hehehe! I knew it! Uncle Ichi is a pervert!
 …… 
 Aww, Uncle Ichi's being shy! How cuuuute! 
 Well… Uh… 
-Next time…. Let's get in together! Okay, Uncle Ichi? 
+Next time… Let's get in together! Okay, Uncle Ichi? 
 …Hey now! 
 Anyway, I'm gonna go meet up with everyone else! Bye~Bye~! 
 Ahh… this is no good. What am I saying?! 
@@ -366,7 +366,7 @@ Well, we can't just leave the poor kids alone, right?
 All right! Having you around is as good as having a hundred average guys! Let's do it! 
 …Kanna… You're so kind. 
 Hmm? Me… kind? Boss… 
-But… back when I was a kid, I once got lost in the forest, so…. 
+But… back when I was a kid, I once got lost in the forest, so… 
 I understand how lonely those lost kids must be. 
 …All right! Let's help these lost kids find their parents! 
 Boss! So you'll help me?! 
@@ -385,7 +385,7 @@ Alright! Lets help these lost kids find their parents.
 Yo, Boss! If you're here, that means you came to help me, right? 
 I mean… it's not like that, but… 
 Boss… You wouldn't leave these poor kids alone, would you? 
-W-well…. 
+W-well… 
 I know you aren't that kind of guy, Boss. Alright! Let's help these kids out. 
 …Got it! Let's help them out! 
 All right! Having you around is as good as having a hundred average men! Let's do it, Boss! 
@@ -558,7 +558,7 @@ Oh, erm… So I was wrong? Hahaha…
 I see, I have ruined the mood. Please excuse me, I'll go ahead. 
 Hmmm… I wonder what that was all about. 
 I was really surprised earlier seeing that side of Maria… 
-Ahh! Ma….Maria!? 
+Ahh! Ma…Maria!? 
 Lieutenant! I… 
 (Oh… that costume. Where did I see that before…?) 
 (Could it be… isn't that the costume that Sakura wore for her role of the French city girl?) 
@@ -649,7 +649,7 @@ Kohran must have gone to the parlor by now. She's not here either.
 This is Kohran's room. 
 Who could that be… I'm… a little tied up right now… Hold on… Gimme a sec… 
 Open the door anyway. 
-….Hmmmm. This wire should go here, right? And…Come on! Get in there! 
+…Hmmmm. This wire should go here, right? And…Come on! Get in there! 
 Alright, I'm coming in! 
 Kohran, what're you up to? 
 Shh! …I'm in the middle of making a totally new type of robot… 
@@ -737,7 +737,7 @@ Okay, okay, I get it! I'm really sorry.
 Come on, Ogami! You don't have to make such a serious face. 
 You can always fix up something that's broken. 
 But… really, showing at least a minimum of manners shouldn't be too hard. 
-Ahh….I'm really, really sorry. 
+Ahh…I'm really, really sorry. 
 From now on, you oughta be careful when entering other people's rooms. Got it, Ogami?! 
 Y…yeah. 
 Hmph… Well, I promised I'd meet everyone in the parlor, so I'll be going. Later, Ogami. 
@@ -853,7 +853,7 @@ Thanks for your business! Come again!
 Hello? …I see. Thanks for doing that. We've got our processor working on it too. 
 I see, so they're wedges… Okay, we'll try running that through our processor. 
 The Flower Division? Right now they're throwing a party, I think. They should be fine. 
-…yes. We should see some results soon…. thanks… 
+…yes. We should see some results soon… thanks… 
 I wonder if the manager is around. 
 I guess I'll try somewhere else. 
 Zzz… zzz… zzz… zzz…
@@ -870,7 +870,7 @@ Hey Ogami. Once the party's over, go buy me some drinks, okay?
 Then bring 'em on down to the control room. I'll pay you back there. 
 Uh… okay. 
 Alright. Dismissed. 
-Yes, sir…. Wait, what? Why the control room? 
+Yes, sir… Wait, what? Why the control room? 
 Is Ayame around? 
 I guess I'll try somewhere else. 
 Looks like Ayame isn't back yet. 

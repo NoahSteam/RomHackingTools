@@ -24,7 +24,7 @@ Ogami! Now, quickly!
 Hurry, Ogami! Open the hatch, now! 
 Iris! 
 No! 
-Persuade her. <br> nScold her. 
+Persuade her.<br> Scold her.
 Iris, please listen to me! I know I lied to you. 
 Iris, please listen to me! I know I lied to you. 
 Iris, please listen to me! I know I lied to you. 
