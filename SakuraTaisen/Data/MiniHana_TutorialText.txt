@@ -1,60 +1,60 @@
 Rule time!
 To think we'd play Hanafuda in my room...
-Whoever wins... Let's have fun!
-Thanks for joining the Great Koi Koi Battle!
+Let's have fun!
+Welcome to the Great Koi Koi Battle!
 Since this is your first time...
-I'll explain. Listen up!
-First, the screen layout.
-We get dealt 8 cards. That's our hand.
-Another 8 are placed face up in the middle.
-That's the shared pool. We take cards from there.
-I'll explain the rest as we play.
-See the green highlight?
-There's a card of the same type in the middle.
-A bit different, but the flowers are the same.
-Match your card with one from the pool to take it.
-Why don't you try?
+Listen up!
+1st, the screen layout.
+There's 8 cards, our hand.
+8 more go face up in the middle.
+That's the pool. We take cards from there.
+I'll explain as we play.
+See the green?
+There's the same type in the middle.
+A bit different, flowers are the same.
+Match with the pool to take it.
+Now try.
 Pick a card.
-Once the card appears bigger, push the button to confirm.
-Great, you took a pair.
-Next, a card will be revealed.
-If it matches another card...
-Amazing! Take another pair. Feels great, right?
-Your cards are in the lower right.
-There's a match! Why don't you take it?
-If you play a non-matching card, it's tossed into the pool.
-Your turn's over. Now me.
-I'm also trying to form a pair.
-A card's revealed. If it matches, I take it.
-And we keep taking turns. Easy, right?
-Looks like you don't have a match!
-You'll have to discard one.
-Choose a card you won't need.
-Select a card and confirm.
-A card from the pile will be revealed after.
-Let's keep playing.
+Once the card's bigger, push to confirm.
+Great.
+Next, a card reveal.
+If it matches...
+Amazing! Another pair. Great, right?
+Yours are in the lower right.
+A match! Why don't you take it?
+A non-matching card gets tossed into the pool.
+Now my turn.
+I also want a pair.
+If it matches, I take it.
+And keep taking turns. Easy, right?
+Aw, no match!
+Discard one.
+Choose one you won't need.
+Select and confirm.
+A card will be revealed after.
+Keep playing.
 Look, a combo!
-You collected 3 cards with blue scrolls.
-That's worth 6 points!
-Whoever scores a combo first, wins.
-That's you! You score combo points!
-Btw, points? Also "mon", after old currency.
-You can find combos in the menu.
-There's 12 in all, you'll get them quick.
-Now, with your blue scrolls, you win this round.
-If you wish, you can continue!
-You already have the Deer and the Butterfly.
-If you get the Boar, you'd score another combo.
-This combo would be worth another 6.
-That would bring up your total to 12.
-To secure your points, choose "I'm done."
+3 cards with blue scrolls.
+6 points!
+The first combo wins.
+That's you! Get combo points!
+AKA "mon", after old currency.
+Combos are in the menu.
+There's 12, you'll get them quick.
+Now, with the scrolls, you win this round.
+If you wish, continue!
+You already have Deer & Butterfly.
+If you get Boar, that's another combo.
+This would be worth another 6.
+Brings your total to 12!
+To keep them, choose "I'm done."
 To keep going, choose "Koi Koi."
 You chose "I'm done", so this round is over.
-You win. The 6 points you scored are taken from me.
-But it's not always gonna be so easy.
-If I'd scored first and chosen "Koi Koi"...
+You win! The 6 points are taken from me.
+It's not always gonna be easy.
+If I'd scored and chosen "Koi Koi"...
 Sometimes it pays to be aggressive.
-Now we'll play for real! I won't hold back!
+Now for real! I won't hold back!
 You chose "Koi Koi"! You like to gamble, huh?
 The 6 points from your blue scrolls aren't secured yet.
 OK, the battle continues! Do your best!
@@ -67,4 +67,4 @@ I'm not choosing "Koi Koi", so the round ends here.
 All the combos you made this round are lost.
 Choosing "Koi Koi" can score lots of points, but it is risky.
 Luck can swing both ways. Next time you might win.
-Now, let's play for real. I won't hold back this time!
+Now, for real. I won't hold back this time!
