@@ -201,7 +201,7 @@ struct SakuraCompressedData
 	{
 		//Compress bgnd image
 		PRSCompressor compressor;
-		compressor.CompressData((void*)pInData, inDataSize);
+		compressor.CompressData((void*)pInData, inDataSize, PRSCompressor::kCompressOption_None);
 
 		//Pad compressed data is it is divisible by 2
 		if(bPad)
@@ -5627,7 +5627,7 @@ struct WklUncompressedData
 
 struct WklCompressedInfo
 {
-	unsigned int offset;
+	unsigned int compressedInfoOffset;
 	unsigned int size;
 };
 
@@ -5635,7 +5635,7 @@ struct WklHeader
 {
 	struct Entry
 	{
-		unsigned int offset = 0;
+		unsigned int wklHeaderEntryOffset = 0;
 		unsigned int size = 0;
 	};
 
@@ -5646,21 +5646,21 @@ struct WklHeader
 	{
 		for(int i = 0; i < NumEntries; ++i)
 		{
-			mEntries[i].offset = ::SwapByteOrder(mEntries[i].offset);
-			mEntries[i].size   = ::SwapByteOrder(mEntries[i].size);
+			mEntries[i].wklHeaderEntryOffset = ::SwapByteOrder(mEntries[i].wklHeaderEntryOffset);
+			mEntries[i].size                 = ::SwapByteOrder(mEntries[i].size);
 		}
 	}
 };
 
 struct WklBattleMenuImageBlockInfo
 {
-	unsigned int offset;
+	unsigned int battleMenuImageOffset;
 	unsigned int size;
 
 	void SwapByteOrder()
 	{
-		offset = ::SwapByteOrder(offset);
-		size   = ::SwapByteOrder(size);
+		battleMenuImageOffset = ::SwapByteOrder(battleMenuImageOffset);
+		size                  = ::SwapByteOrder(size);
 	}
 };
 
@@ -5854,7 +5854,7 @@ public:
 				continue;
 			}
 
-			const unsigned int imageOffset            = SwapByteOrder(mNamesAndSpecialMoves.mCompressedInfo[i].offset);
+			const unsigned int imageOffset            = SwapByteOrder(mNamesAndSpecialMoves.mCompressedInfo[i].compressedInfoOffset);
 			const unsigned int offsetToCompressedData = imageOffset + mNamesAndSpecialMoves.mImageDataAddress;
 
 			//Uncompress image data
@@ -5885,7 +5885,7 @@ public:
 		memcpy_s(&firstEntry, sizeof(firstEntry), &pWklData[mBattleMenu.mImageDataAddress], sizeof(firstEntry));
 		firstEntry.SwapByteOrder();
 
-		mBattleMenu.mNumBlocks        = firstEntry.offset/sizeof(WklBattleMenuImageBlockInfo);
+		mBattleMenu.mNumBlocks        = firstEntry.battleMenuImageOffset/sizeof(WklBattleMenuImageBlockInfo);
 		mBattleMenu.mpImageBlocksInfo = new WklBattleMenuImageBlockInfo[mBattleMenu.mNumBlocks];
 		memcpy_s(mBattleMenu.mpImageBlocksInfo, sizeof(WklBattleMenuImageBlockInfo)*mBattleMenu.mNumBlocks, &pWklData[mBattleMenu.mImageDataAddress], sizeof(WklBattleMenuImageBlockInfo)*mBattleMenu.mNumBlocks);
 		for(unsigned int entryIndex = 0; entryIndex < mBattleMenu.mNumBlocks; ++entryIndex)
@@ -5895,11 +5895,11 @@ public:
 			BattleMenu::ImageBlock* pNewImageBlock = new BattleMenu::ImageBlock();
 			mBattleMenu.mImageBlocks.push_back(pNewImageBlock);
 
-			memcpy_s(&pNewImageBlock->mNumImages, sizeof(pNewImageBlock->mNumImages), &pWklData[mBattleMenu.mImageDataAddress + mBattleMenu.mpImageBlocksInfo[entryIndex].offset], sizeof(pNewImageBlock->mNumImages));
+			memcpy_s(&pNewImageBlock->mNumImages, sizeof(pNewImageBlock->mNumImages), &pWklData[mBattleMenu.mImageDataAddress + mBattleMenu.mpImageBlocksInfo[entryIndex].battleMenuImageOffset], sizeof(pNewImageBlock->mNumImages));
 			pNewImageBlock->mNumImages = SwapByteOrder(pNewImageBlock->mNumImages);
 
 			pNewImageBlock->mpImagesInBlock       = new WklBattleMenuImageHeader[pNewImageBlock->mNumImages];
-			const unsigned int imageHeaderEnd     = mBattleMenu.mImageDataAddress + mBattleMenu.mpImageBlocksInfo[entryIndex].offset + 8;
+			const unsigned int imageHeaderEnd     = mBattleMenu.mImageDataAddress + mBattleMenu.mpImageBlocksInfo[entryIndex].battleMenuImageOffset + 8;
 			const unsigned int miscImageHeaderEnd = imageHeaderEnd + sizeof(WklBattleMenuImageHeader)*(pNewImageBlock->mNumImages) + 8; //Last 8 bytes is some uknown thing
 			memcpy_s(pNewImageBlock->mpImagesInBlock, sizeof(WklBattleMenuImageHeader)*pNewImageBlock->mNumImages, &pWklData[imageHeaderEnd], sizeof(WklBattleMenuImageHeader)*pNewImageBlock->mNumImages);
 			for(unsigned short imageIndex = 0; imageIndex < pNewImageBlock->mNumImages; ++imageIndex)
@@ -6034,13 +6034,13 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 		
 		//Read in the address at which the compressed image data lives
 		unsigned long offsetToImageData     = 0x100;
-		unsigned long compressedDataAddress = 0;
-		memcpy_s(&compressedDataAddress, sizeof(compressedDataAddress), &pOriginalWklData[offsetToImageData], sizeof(compressedDataAddress));
-		compressedDataAddress = SwapByteOrder(compressedDataAddress);
+		unsigned long origCompressedDataAddress = 0;
+		memcpy_s(&origCompressedDataAddress, sizeof(origCompressedDataAddress), &pOriginalWklData[offsetToImageData], sizeof(origCompressedDataAddress));
+		origCompressedDataAddress = SwapByteOrder(origCompressedDataAddress);
 
 		//Read in offset to compressed data
 		memset(&compressedInfo, 0, sizeof(compressedInfo));
-		memcpy_s(&origCompressedInfo, sizeof(origCompressedInfo), &pOriginalWklData[compressedDataAddress], sizeof(origCompressedInfo));
+		memcpy_s(&origCompressedInfo, sizeof(origCompressedInfo), &pOriginalWklData[origCompressedDataAddress], sizeof(origCompressedInfo));
 		
 		MemoryBlocks newWklCompressedData;
 		MemoryBlocks newWklData;
@@ -6048,7 +6048,7 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 		MemoryBlocks patchedBattleMenuBlocksHeader;
 		MemoryBlocks patchedBattleMenuBlocks;
 		const unsigned int compressedImageHeaderSize         = 512;
-		const unsigned int compressedDataLastOffset_original = SwapByteOrder(origCompressedInfo[numCompressedEntries - 1].offset);
+		const unsigned int compressedDataLastOffset_original = SwapByteOrder(origCompressedInfo[numCompressedEntries - 1].compressedInfoOffset);
 		
 		//Gather data from original wkl file
 		WklBattleMenuExtractor wklExtractor;
@@ -6057,7 +6057,7 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 		const unsigned int startOfBattleImages = wklExtractor.mBattleMenu.mImageDataAddress;
 		const unsigned int endOfBattleImages   = wklExtractor.mBattleMenu.mImageBlocks.back()->mBattleImages.back()->mAddress + wklExtractor.mBattleMenu.mImageBlocks.back()->mBattleImages.back()->mImageHeader.GetImageByteCount();
 
-		if( compressedDataAddress < endOfBattleImages )
+		if( origCompressedDataAddress < endOfBattleImages )
 		{
 			printf("PatchWKL failed.  In %s, compressedData is coming before menu images.\n", outFileName.mFullPath.c_str());
 			return false;
@@ -6069,8 +6069,8 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 		const int memoryBlock_PostBattleImagesIndex = 1;
 		const int memoryBlock_FooterIndex           = 2;
 		newWklData.AddBlock(pOriginalWklData, 0, startOfBattleImages);
-		newWklData.AddBlock(pOriginalWklData, endOfBattleImages, compressedDataAddress - endOfBattleImages);
-		newWklData.AddBlock(pOriginalWklData, compressedDataAddress + compressedDataLastOffset_original, originalWKLFile.GetDataSize() - (compressedDataAddress + compressedDataLastOffset_original));
+		newWklData.AddBlock(pOriginalWklData, endOfBattleImages, origCompressedDataAddress - endOfBattleImages);
+		newWklData.AddBlock(pOriginalWklData, origCompressedDataAddress + compressedDataLastOffset_original, originalWKLFile.GetDataSize() - (origCompressedDataAddress + compressedDataLastOffset_original));
 
 		//**Copy over battle menu**
 		//Block header
@@ -6182,17 +6182,17 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 		unsigned int offsetToImageBlock = sizeof(compressedInfo);
 		for(int i = 0; i < 64; ++i)
 		{	
-			compressedInfo[i].offset = offsetToImageBlock;
+			compressedInfo[i].compressedInfoOffset = offsetToImageBlock;
 
 			if( !origCompressedInfo[i].size )
 			{
 				compressedInfo[i].size   = 0;
-				compressedInfo[i].offset = SwapByteOrder(offsetToImageBlock);
+				compressedInfo[i].compressedInfoOffset = SwapByteOrder(offsetToImageBlock);
 				continue;
 			}
 
-			const unsigned int origImageOffset        = SwapByteOrder(origCompressedInfo[i].offset);
-			const unsigned int offsetToCompressedData = origImageOffset + compressedDataAddress;
+			const unsigned int origImageOffset        = SwapByteOrder(origCompressedInfo[i].compressedInfoOffset);
+			const unsigned int offsetToCompressedData = origImageOffset + origCompressedDataAddress;
 			
 			//Uncompress image data
 			PRSDecompressor uncompressedImages;
@@ -6324,7 +6324,7 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 
 			//Compress the data
 			PRSCompressor compressedTranslatedData;
-			compressedTranslatedData.CompressData(pDataToCompress, sizeOfDataToCompress, true);
+			compressedTranslatedData.CompressData(pDataToCompress, sizeOfDataToCompress, PRSCompressor::kCompressOption_FourByteAlign);
 			
 			//Fixup header info
 			compressedInfo[i].size = SwapByteOrder(compressedTranslatedData.mCompressedSize);
@@ -6334,7 +6334,7 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 			newWklCompressedData.AddBlock(compressedTranslatedData.mpCompressedData, 0, compressedTranslatedData.mCompressedSize);
 
 			//Now swap the byte order
-			compressedInfo[i].offset = SwapByteOrder(compressedInfo[i].offset);
+			compressedInfo[i].compressedInfoOffset = SwapByteOrder(compressedInfo[i].compressedInfoOffset);
 
 			//Cleanup
 			delete[] pDataToCompress;
@@ -6350,15 +6350,15 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 		memcpy_s(&wklHeader_patched, sizeof(wklHeader_patched), pOriginalWklData, sizeof(wklHeader_patched));
 		wklHeader_patched.SwapByteOrder();
 
-		const unsigned int compressedDataLastOffset_patched = SwapByteOrder(compressedInfo[numCompressedEntries - 1].offset);
+		const unsigned int compressedDataLastOffset_patched = SwapByteOrder(compressedInfo[numCompressedEntries - 1].compressedInfoOffset);
 		const int newDataSizeDelta                          = compressedDataLastOffset_patched - compressedDataLastOffset_original;
 		for(int headerEntry = 0; headerEntry < WklHeader::NumEntries; ++headerEntry)
 		{
-			if( wklHeader_patched.mEntries[headerEntry].offset > compressedDataAddress )
+			if( wklHeader_patched.mEntries[headerEntry].wklHeaderEntryOffset > origCompressedDataAddress )
 			{
-				wklHeader_patched.mEntries[headerEntry].offset += newDataSizeDelta;
+				wklHeader_patched.mEntries[headerEntry].wklHeaderEntryOffset += newDataSizeDelta;
 			}
-			else if( wklHeader_patched.mEntries[headerEntry].offset == compressedDataAddress )
+			else if( wklHeader_patched.mEntries[headerEntry].wklHeaderEntryOffset == origCompressedDataAddress )
 			{
 				if( wklHeader_patched.mEntries[headerEntry].size > 0 )
 				{
@@ -6371,6 +6371,11 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 		const unsigned int newBattleMenuSize   = offsetFromBlockHeader;
 		const unsigned int origBattleMenuSize  = SwapByteOrder(*(unsigned int*)(wklExtractor.mWklFile.GetData() + 0xEC));
 		const int newBattleMenuDelta           = newBattleMenuSize - origBattleMenuSize;
+		if( newBattleMenuDelta%4 != 0 )
+		{
+			printf("PatchWKL: Battle menu data is not at a four byte boundary for the file %s\n", originalWklFileName.mFileName.c_str());
+		}
+
 		if( bCalculatedBattleDelta )
 		{
 			assert(newBattleMenuDelta == battleMenuDelta);
@@ -6379,11 +6384,11 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 		bCalculatedBattleDelta = true;
 		for(int headerEntry = 0; headerEntry < WklHeader::NumEntries; ++headerEntry)
 		{
-			if( wklHeader_patched.mEntries[headerEntry].offset > wklExtractor.mBattleMenu.mImageDataAddress )
+			if( wklHeader_patched.mEntries[headerEntry].wklHeaderEntryOffset > wklExtractor.mBattleMenu.mImageDataAddress )
 			{
-				wklHeader_patched.mEntries[headerEntry].offset += battleMenuDelta;
+				wklHeader_patched.mEntries[headerEntry].wklHeaderEntryOffset += battleMenuDelta;
 			}
-			else if( wklHeader_patched.mEntries[headerEntry].offset == wklExtractor.mBattleMenu.mImageDataAddress )
+			else if( wklHeader_patched.mEntries[headerEntry].wklHeaderEntryOffset == wklExtractor.mBattleMenu.mImageDataAddress )
 			{
 				if( wklHeader_patched.mEntries[headerEntry].size > 0 )
 				{
@@ -6707,7 +6712,7 @@ void ExtractWKLFiles(const string& sakuraDirectory, const string& outDirectory)
 				continue;
 			}
 
-			const unsigned int imageOffset = SwapByteOrder(compressedInfo[i].offset);
+			const unsigned int imageOffset = SwapByteOrder(compressedInfo[i].compressedInfoOffset);
 			const unsigned int offsetToCompressedData = imageOffset + imageDataAddress;
 			
 			//Uncompress image data
@@ -6739,7 +6744,7 @@ void ExtractWKLFiles(const string& sakuraDirectory, const string& outDirectory)
 		memcpy_s(&firstEntry, sizeof(firstEntry), &pWklData[imageDataAddress2], sizeof(firstEntry));
 		firstEntry.SwapByteOrder();
 
-		const unsigned int numEntries = firstEntry.offset/sizeof(WklBattleMenuImageBlockInfo);
+		const unsigned int numEntries = firstEntry.battleMenuImageOffset/sizeof(WklBattleMenuImageBlockInfo);
 		WklBattleMenuImageBlockInfo* pMiscHeaders   = new WklBattleMenuImageBlockInfo[numEntries];
 		memcpy_s(pMiscHeaders, sizeof(WklBattleMenuImageBlockInfo)*numEntries, &pWklData[imageDataAddress2], sizeof(WklBattleMenuImageBlockInfo)*numEntries);
 		for(unsigned int entryIndex = 0; entryIndex < numEntries; ++entryIndex)
@@ -6747,11 +6752,11 @@ void ExtractWKLFiles(const string& sakuraDirectory, const string& outDirectory)
 			pMiscHeaders[entryIndex].SwapByteOrder();
 
 			unsigned short numMiscImages = 0;
-			memcpy_s(&numMiscImages, sizeof(numMiscImages), &pWklData[imageDataAddress2 + pMiscHeaders[entryIndex].offset], sizeof(numMiscImages));
+			memcpy_s(&numMiscImages, sizeof(numMiscImages), &pWklData[imageDataAddress2 + pMiscHeaders[entryIndex].battleMenuImageOffset], sizeof(numMiscImages));
 			numMiscImages = SwapByteOrder(numMiscImages);
 
 			WklBattleMenuImageHeader* pImageHeaders     = new WklBattleMenuImageHeader[numMiscImages];
-			const unsigned int imageHeaderEnd     = imageDataAddress2 + pMiscHeaders[entryIndex].offset + 8;
+			const unsigned int imageHeaderEnd     = imageDataAddress2 + pMiscHeaders[entryIndex].battleMenuImageOffset + 8;
 			const unsigned int miscImageHeaderEnd = imageHeaderEnd + sizeof(WklBattleMenuImageHeader)*(numMiscImages) + 8; //Last 8 bytes is some uknown thing
 			memcpy_s(pImageHeaders, sizeof(WklBattleMenuImageHeader)*numMiscImages, &pWklData[imageHeaderEnd], sizeof(WklBattleMenuImageHeader)*numMiscImages);
 			for(unsigned short imageIndex = 0; imageIndex < numMiscImages; ++imageIndex)
@@ -7235,7 +7240,7 @@ void CompressFile(const string& filePath, const string& outPath)
 	}
 
 	PRSCompressor compressedFile;
-	compressedFile.CompressData((void*)testData.GetData(), testData.GetDataSize());
+	compressedFile.CompressData((void*)testData.GetData(), testData.GetDataSize(), PRSCompressor::kCompressOption_None);
 
 	outFile.WriteData(compressedFile.mpCompressedData, compressedFile.mCompressedSize);
 }
@@ -7563,7 +7568,7 @@ bool PatchMainMenu(const string& inPatchedSakuraRootDirectory, const string& inT
 	//Compress font sheet
 	int numCharactersInFontSheet = 65;
 	PRSCompressor compressor;
-	compressor.CompressData((void*)translatedData.GetData(), (numCharactersInFontSheet*16*8));//translatedData.GetDataSize() - (numCharactersInFontSheet*16*8));
+	compressor.CompressData((void*)translatedData.GetData(), (numCharactersInFontSheet*16*8), PRSCompressor::kCompressOption_None);//translatedData.GetDataSize() - (numCharactersInFontSheet*16*8));
 	
 	//Compress options font sheet
 	const unsigned long optionsFontSheetOffset        = 0x0005b320;
@@ -9118,6 +9123,34 @@ bool PatchSubtitles(const string& /*rootSakuraTaisenDirectory*/, const string& p
 	return true;
 }
 
+void ConvertYabauseSaveToMednafen(const string& yabauseFileName, const string& outFileName)
+{
+	FileData yabauseFile;
+	if( !yabauseFile.InitializeFileData( FileNameContainer(yabauseFileName.c_str()) ) )
+	{
+		printf("Unable to open %s\n", yabauseFileName.c_str());
+		return;
+	}
+
+	FileWriter outFile;
+	if( !outFile.OpenFileForWrite(outFileName) )
+	{
+		printf("Unable to open %s", outFileName.c_str());
+		return;
+	}
+
+	const unsigned long yabauseFileSize = yabauseFile.GetDataSize();
+	for(unsigned long i = 0; i < yabauseFileSize; ++i)
+	{
+		if( i % 2 != 0 )
+		{
+			outFile.WriteData( (char*)(&yabauseFile.GetData()[i]), 1);
+		}
+	}
+
+	printf("Success!\n");
+}
+
 bool PatchGame(const string& rootSakuraTaisenDirectory, const string& patchedSakuraTaisenDirectory, const string& translatedTextDirectory, const string& fontSheetFileName, const string& /*originalPaletteFileName*/, 
 	const string &patchedTMapSPDataPath, const string& inMainMainFontSheetPath, const string& inMainMenuTranslatedBgnd, const string& inPatchedOptionsImage, const string& inTranslatedDataDirectory,
 	const string& inExtractedWklDir)
@@ -9254,6 +9287,7 @@ void PrintHelp()
 	printf("FindCompressedData compressedFile uncompressedFile outDirectory\n");
 	printf("FindCompressedDataInDir inDirectory uncompressedFile outDirectory\n");
 	printf("ExtractMiniGameData rootSakuraDirectory outDirectory\n");
+	printf("YabauseToMednafen yabauseFilePath outFile\n");
 	printf("PatchGame rootSakuraTaisenDirectory patchedSakuraTaisenDirectory translatedTextDirectory fontSheet originalPalette patchedTMapSpDataPath mainMenuFontSheetPath mainMenuBgndPatchedImage optionsImagePatched translatedDataDirectory extractedWklDir\n");
 }
 
@@ -9558,6 +9592,13 @@ int main(int argc, char *argv[])
 		const string outDir        = string(argv[3]) + Seperators;
 
 		ExtractSubtitles(rootSakuraDir, outDir);
+	}
+	else if( command == "YabauseToMednafen" && argc == 4 )
+	{
+		const string yabauseFile = string(argv[2]);
+		const string outFile     = string(argv[3]);
+
+		ConvertYabauseSaveToMednafen(yabauseFile, outFile);
 	}
 	else
 	{

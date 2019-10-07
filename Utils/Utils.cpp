@@ -1280,7 +1280,7 @@ PRSCompressor::~PRSCompressor()
 	Reset();
 }
 
-void PRSCompressor::CompressData(void* pInData, const unsigned long inDataSize, bool bTwoByteAlign)
+void PRSCompressor::CompressData(void* pInData, const unsigned long inDataSize, ECompressOption compressOption)
 {
 	Reset();
 
@@ -1289,17 +1289,30 @@ void PRSCompressor::CompressData(void* pInData, const unsigned long inDataSize, 
 	//mCompressedSize = prs_compress(const uint8_t *src, uint8_t **dst, size_t src_len)
 	mCompressedSize = prs_compress((uint8_t*)pInData, (uint8_t**)&mpCompressedData, inDataSize);
 
-	if( bTwoByteAlign && mCompressedSize%2 != 0 )
+	if( compressOption != PRSCompressor::kCompressOption_None )
 	{
-		unsigned long newSize = mCompressedSize + mCompressedSize%2;
-		char* pNewData        = new char[newSize];
-		memset(pNewData, 0, newSize);
+		unsigned long newSize = 0;
 
-		memcpy_s(pNewData, newSize, mpCompressedData, mCompressedSize);
+		if( compressOption == PRSCompressor::kCompressOption_TwoByteAlign && mCompressedSize%2 != 0 )
+		{
+			newSize = mCompressedSize + mCompressedSize%2;
+		}
+		else if( compressOption == PRSCompressor::kCompressOption_FourByteAlign && mCompressedSize % 4 != 0 )
+		{
+			newSize = mCompressedSize + (4 - mCompressedSize%4);
+		}
+
+		if( newSize != 0 )
+		{
+			char* pNewData = new char[newSize];
+			memset(pNewData, 0, newSize);
+
+			memcpy_s(pNewData, newSize, mpCompressedData, mCompressedSize);
 		
-		delete[] mpCompressedData;
-		mpCompressedData = pNewData;
-		mCompressedSize  = newSize;
+			delete[] mpCompressedData;
+			mpCompressedData = pNewData;
+			mCompressedSize  = newSize;
+		}
 	}
 }
 

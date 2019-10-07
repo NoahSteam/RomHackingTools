@@ -362,11 +362,18 @@ public:
 
 struct PRSCompressor
 {
+	enum ECompressOption
+	{
+		kCompressOption_None,
+		kCompressOption_TwoByteAlign,
+		kCompressOption_FourByteAlign,
+	};
+
 	char*         mpCompressedData = nullptr;
 	unsigned long mCompressedSize  = 0;
 
 	~PRSCompressor();
-	void CompressData(void* pInData, const unsigned long inDataSize, bool bTwoByteAlign = false);
+	void CompressData(void* pInData, const unsigned long inDataSize, ECompressOption compressOption = kCompressOption_None);
 	void Reset();
 };
 
