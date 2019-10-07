@@ -35,6 +35,7 @@ struct FileNameContainer
 
 		const size_t lastIndex = mFileName.find_last_of(".");
 		mNoExtension           = mFileName.substr(0, lastIndex);
+		mExtention             = mFileName.substr(lastIndex, mFileName.size() - 1);
 
 		const char sep = '\\';
 		size_t i = mFullPath.rfind(sep, mFullPath.length());
@@ -48,6 +49,7 @@ struct FileNameContainer
 	{
 		const size_t lastIndex = mFileName.find_last_of(".");
 		mNoExtension           = mFileName.substr(0, lastIndex);
+		mExtention             = mFileName.substr(lastIndex, mFileName.size() - 1);
 
 		const char sep = '\\';
 		size_t i = mFullPath.rfind(sep, mFullPath.length());
@@ -63,6 +65,7 @@ struct FileNameContainer
 		
 		const size_t lastIndex = mFileName.find_last_of(".");
 		mNoExtension           = mFileName.substr(0, lastIndex);
+		mExtention             = mFileName.substr(lastIndex, mFileName.size() - 1);
 	}
 
 	bool operator < (FileNameContainer& rhs) const
@@ -75,6 +78,7 @@ struct FileNameContainer
 	std::string mFullPath;
 	std::string mPathOnly;
 	std::string mNoExtension;
+	std::string mExtention;
 };
 
 class FileData
