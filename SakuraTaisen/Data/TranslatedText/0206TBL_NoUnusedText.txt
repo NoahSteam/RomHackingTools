@@ -345,7 +345,7 @@ Hm… Normal I guess. It's not like we're friends or anything.
 You're not? Well, since you are both newbies, you didn't have many chances to get to know each other, I guess. 
 Not so good, I'm afraid. I guess we are pretty different… 
 …Hey, Mr. Ensign. You know, with you being the captain here and all, you really shouldn't say stuff like that! 
-I'd expect more from the captain of the Imperial Combat Revue. 
+I'd expect more from the captain of the Imperial Assault Troupe. 
 You're right. I shouldn't have said that. 
 I… hmm… well… 
 Oh, sorry Mr. Ensign. That was a weird thing to ask, I guess. 
@@ -355,8 +355,8 @@ Of course. <br> No way! <br> Call me 'lover boy'.
 Of course. 
 Thanks. I always have trouble calling Yoneda 'Lieutenant General' too. 
 I just love how relaxed the Flower Division of the Revue is about things like that. 
-… What?! I kind of like being called Ensign… 
-That's fine. No need to fuss about a name, right? 
+…What?! I kind of like being called Ensign… 
+Oh, come on! No need to fuss about a title, right? 
 All right then! Ogami it is! 
 You know… how about you call me lover boy? 
 What are you talking about? Cut it out, ya weirdo! 
@@ -374,7 +374,7 @@ Kohran Li, reporting back for duty!
 Ah Kohran! Good to have you back. I hope you'll not miss the Hanayashiki Branch too much. 
 Nah, as long as I get to tinker around with machines I don't really care where I am. 
 Plus the captain here seems like a nice guy… 
-Vice Admiral Yoneda I can explain! 
+Lt. General Yoneda... It's not like that! 
 Hahahahaha! Well, thank you for your service. 
 I'll have Maria fill her in on all the details, so you show Kohran to her room, Ogami. 
 And after that, go to the administration office to help Kasumi. 
@@ -438,7 +438,7 @@ I guess she really is strange. Her speech could use some refinement, and her inv
 But she really knows a lot about machines. You can count on her in that regard. 
 … She's cute, wouldn't you say? 
 Cute? Kohran? 
-Well… What can I say. it really isn't my place to judge peoples taste. 
+Well… What can I say? It really isn't my place to judge people's taste. 
 Hmm… I think she is funny. 
 That is certainly true. That speech of her could use some refinement, though. 
 She was born in China, you would think they would have taught her some manners there. 
@@ -487,7 +487,7 @@ Thank you very much, Ogami!
 Wait a sec… 
 First the ticket punching and now this… 
 Am I really the commander here? 
-Lately I'm start to doubt myself… 
+Lately, I'm starting to doubt myself… 
 Unused
 Unused
 Unused

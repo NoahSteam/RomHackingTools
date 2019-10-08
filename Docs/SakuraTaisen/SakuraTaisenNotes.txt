@@ -524,3 +524,5 @@ Read @06014594, 060145a4, 0601461a, 0601462a
 060147fa extu.w r1, r8
 060147e8 add 4, r8 //should be add 6
 060147e2 mov.w @r1, r1
+
+//Inventory items referenced via SAKURA 000343fc

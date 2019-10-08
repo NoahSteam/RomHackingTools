@@ -35,7 +35,7 @@ struct FileNameContainer
 
 		const size_t lastIndex = mFileName.find_last_of(".");
 		mNoExtension           = mFileName.substr(0, lastIndex);
-		mExtention             = mFileName.substr(lastIndex, mFileName.size() - 1);
+		mExtention             = lastIndex != 0xffffffff ? mFileName.substr(lastIndex, mFileName.size() - 1) : "";
 
 		const char sep = '\\';
 		size_t i = mFullPath.rfind(sep, mFullPath.length());
@@ -49,7 +49,7 @@ struct FileNameContainer
 	{
 		const size_t lastIndex = mFileName.find_last_of(".");
 		mNoExtension           = mFileName.substr(0, lastIndex);
-		mExtention             = mFileName.substr(lastIndex, mFileName.size() - 1);
+		mExtention             = lastIndex != 0xffffffff ? mFileName.substr(lastIndex, mFileName.size() - 1) : "";
 
 		const char sep = '\\';
 		size_t i = mFullPath.rfind(sep, mFullPath.length());
@@ -65,7 +65,7 @@ struct FileNameContainer
 		
 		const size_t lastIndex = mFileName.find_last_of(".");
 		mNoExtension           = mFileName.substr(0, lastIndex);
-		mExtention             = mFileName.substr(lastIndex, mFileName.size() - 1);
+		mExtention             = lastIndex != 0xffffffff ? mFileName.substr(lastIndex, mFileName.size() - 1) : "";
 	}
 
 	bool operator < (FileNameContainer& rhs) const
@@ -389,6 +389,16 @@ struct PRSDecompressor
 
 	~PRSDecompressor();
 	bool UncompressData(void* pInData, unsigned int inDataSize);
+};
+
+struct YabauseToMednafin
+{
+	void ConvertData(const std::string& inFileName, const std::string& outFileName);
+};
+
+struct MednafinToYabause
+{
+	void ConvertData(const std::string& inFileName, const std::string& outFileName);
 };
 
 void FindAllFilesWithinDirectory(const std::string& inDirectoryPath, std::vector<FileNameContainer>& outFileNames);

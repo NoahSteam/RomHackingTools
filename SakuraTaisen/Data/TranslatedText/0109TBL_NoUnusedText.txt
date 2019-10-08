@@ -558,7 +558,7 @@ What was Maria's old code name?
 Accessory <br> Calamity Jane <br> Cassowary 
 What is Sakura's father's name? 
 Ryoma Shinguji <br> Kozuma Shinguji <br> Kazuma Shinguji 
-What is the name of Crimson Miroku's Masou Kihei? 
+What is the name of Crimson Miroku's Hex Mech? 
 Ginkaku <br> Kujaku <br> Amaterasu 
 What motion picture was playing when you went on your date with Iris? 
 A Rare Animal Emerges <br> A Yeti Emerges <br> A Slime Approaches 
@@ -604,7 +604,7 @@ Who does this belong to?
 Sumire <br> Maria <br> Ayame 
 Where is Teito Tower located? 
 Shiba Park <br> Nihonbashi <br> Kudanshita 
-Who initially recommended you for Captain of the Imperial Combat Revue? 
+Who initially recommended you for Captain of the Imperial Assault Troupe? 
 Count Fukurokoji <br> Count Hanakoji <br> Count Umekoji 
 Where is the Imperial Theater located? 
 Kudanshita <br> Asakusa <br> Ginza 
@@ -668,7 +668,7 @@ Which of these is a job you've done?
 Stage lighting <br> Sorting vouchers <br> Buying groceries 
 Which of these did you visit at night? 
 Fukagawa <br> Shiba Park <br> Nihonbashi 
-What special ability does Setsuna's Masou Kihei have? 
+What special ability does Setsuna's Hex Mech have? 
 Piercing rounds <br> Double turns <br> Summon allies 
 Who appears in a photo with a dog? 
 Sumire <br> Iris <br> Kohran 

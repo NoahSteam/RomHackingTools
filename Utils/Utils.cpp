@@ -1360,6 +1360,70 @@ bool PRSDecompressor::UncompressData(void* pInData, unsigned int inDataSize)
 	*/
 }
 
+/////////////////////////////////////
+//        YabauseToMednafin        //
+/////////////////////////////////////
+void YabauseToMednafin::ConvertData(const string& inFileName, const string& outFileName)
+{
+	FileData yabauseFile;
+	if( !yabauseFile.InitializeFileData( FileNameContainer(inFileName.c_str()) ) )
+	{
+		printf("Unable to open %s\n", inFileName.c_str());
+		return;
+	}
+
+	FileWriter outFile;
+	if( !outFile.OpenFileForWrite(outFileName) )
+	{
+		printf("Unable to open %s", outFileName.c_str());
+		return;
+	}
+
+	const unsigned long yabauseFileSize = yabauseFile.GetDataSize();
+	for(unsigned long i = 0; i < yabauseFileSize; ++i)
+	{
+		if( i % 2 != 0 )
+		{
+			outFile.WriteData( (char*)(&yabauseFile.GetData()[i]), 1);
+		}
+	}
+
+	printf("Successfully converted Yabause Save to Mednafin!\n");
+}
+
+/////////////////////////////////////
+//        YabauseToMednafin        //
+/////////////////////////////////////
+void MednafinToYabause::ConvertData(const string& inFileName, const string& outFileName)
+{
+	FileData mednafinFile;
+	if( !mednafinFile.InitializeFileData( FileNameContainer(inFileName.c_str()) ) )
+	{
+		printf("Unable to open %s\n", inFileName.c_str());
+		return;
+	}
+
+	FileWriter outFile;
+	if( !outFile.OpenFileForWrite(outFileName) )
+	{
+		printf("Unable to open %s", outFileName.c_str());
+		return;
+	}
+
+	const unsigned char ff = 0xff;
+	const unsigned long yabauseFileSize = mednafinFile.GetDataSize();
+	for(unsigned long i = 0; i < yabauseFileSize; ++i)
+	{
+		outFile.WriteData(&ff, sizeof(ff));
+		outFile.WriteData( (char*)(&mednafinFile.GetData()[i]), 1);
+	}
+
+	printf("Successfully converted Yabause Save to Mednafin!\n");
+}
+
+////////////////////////////////////
+//        Helper Functions        //
+////////////////////////////////////
 bool CreateTemporaryDirectory(string& outDir)
 {
 	char buffer[MAX_PATH];
