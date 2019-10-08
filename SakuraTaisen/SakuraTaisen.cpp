@@ -2723,7 +2723,7 @@ bool DumpTranslationFilesWithoutUnusedLines(const string& rootSakuraTaisenDirect
 		const bool bIsMESFile = sakuraFile.mFileNameInfo.mFileName.find("MES.BIN", 0, 6) != string::npos;
 
 		//Create output file
-		string outFileName = outDirectory + sakuraFile.mFileNameInfo.mNoExtension + "_NoUnusedText.txt";
+		string outFileName = outDirectory + sakuraFile.mFileNameInfo.mNoExtension + ".txt";
 		TextFileWriter outFile;
 		if( !outFile.OpenFileForWrite(outFileName) )
 		{

@@ -245,7 +245,7 @@ I think you'll all have more fun if us older folks stay out of it.
 Don't say that! You're still way too young to be one of the 'older folks', Ayame. 
 Haha… well thank you, Ogami. You're quite talented at flattery. 
 Setting that aside, is there anything you'd like to discuss, as the leader of the Flower Division? 
-Situation Report<br>Member Report<br>It's nothing
+Situation Report <br> Member Report <br> It's nothing 
 I'd like to hear about how our last battle impacted the area, please. 
 You did splendid at wrapping this up quickly. You have a good grasp of the strengths of your division. 
 We will continue to expect great things of you as a leader. 
@@ -262,7 +262,7 @@ Maria's defenses are weak, so you should avoid placing her in close-quarters com
 Kanna has the strength to fight in close-quarters combat. She's cut out to be an advance guard. 
 Iris was angry. She still can't fight by herself, so we have to protect her… 
 Kohran's attack skills are weak, but she can do range attacks. Make sure you understand that, Ogami. 
-As commander, you must provide support. Your aid is what will strengthen the unit's bonds.  
+As commander, you must provide support. Your aid is what will strengthen the unit's bonds. 
 We took a lot of damage… You need to take better care of your subordinates or you'll lose their trust. 
 We took far too much damage in that last battle. You need to make better use of everyone's talents. 
 If you keep handling battles this way… well, let's set that aside 
@@ -278,7 +278,7 @@ The one with the most enemies shot down during the last battle was Sumire.
 Sumire's technique is especially powerful when she is surrounded by enemies. 
 However, that doesn't mean you should send her off alone. 
 The one with the most enemies shot down during the last battle was Maria. 
-Maria is great as a back-line fighter. She excels when she's firing over the shoulders on the front line.  
+Maria is great as a back-line fighter. She excels when she's firing over the shoulders on the front line. 
 With her skills, you can trust that she'll never accidentally hit an ally. 
 The one with the most enemies shot down during the last battle was Kanna. 
 Kanna has great attacks, so she can fight at the front line. However, this means she shouldn't be at the back. 
@@ -286,7 +286,7 @@ The one with the most enemies shot down during the last battle was Iris.
 Since she is able to move around the battlefield freely, she might be best suited for supporting the others. 
 The one with the most enemies shot down during the last battle was Kohran. 
 Kohran's explosives can hit multiple enemies at once. She should aim for large groups when possible. 
-Her performance was truly inspiring.
+Her performance was truly inspiring. 
 Take this as proof of her trust in you as a commanding officer, Ogami. 
 You think so…? Well, thank you, ma'am. 
 I think that's all there is to report about that. Did you need anything else? 
@@ -480,7 +480,7 @@ S-Sakura!? I thought you left to go shopping…
 Well… I wanted to talk to you about what happened with Tsubaki… 
 W, wait, please let me explain about that! 
 Oh, uh, thanks… 
-Tsubaki was quite busy today, right? I just thought it would be nice to treat her to dinner.
+Tsubaki was quite busy today, right? I just thought it would be nice to treat her to dinner. 
 I promise I had the purest of intentions. 
 …oh, I know. Heavens, what's wrong with me? I jumped to some awful conclusions… 
 So… are we okay? 
@@ -688,7 +688,7 @@ Since we each did half, we got done twice as fast!
 Ensign, try not to spoil Iris too much. 
 Since we each did half, we got done twice as fast! 
 All that's left is to wait for the party. 
-Ensign, could you please check how they're doing?
+Ensign, could you please check how they're doing? 
 Okay, I'll do that. 
 Oh, Ensign. Would you mind helping me finish getting the green room ready? 
 Leave it to me! <br> Sorry, I'm a little busy… 
@@ -705,11 +705,11 @@ No excuses! Come here and get to work!
 Y-yes, ma'am! 
 Good grief, we're finally done. 
 Yes. All that's left now is to await the party. 
-Ensign, could you please check how they're doing?
+Ensign, could you please check how they're doing? 
 Okay, I'll do that. 
 Looks like the green room is all ready. 
 Yes. All that's left now is to await the party. 
-Ensign, could you please check how they're doing?
+Ensign, could you please check how they're doing? 
 Okay, I'll do that. 
 Alright, we're at your room. Do I get to hear what we're working on now? 
 …nothing that's going to explode like last time, I hope? 
@@ -914,7 +914,7 @@ Yep! Once you get everything, bring it to the green room.
 Here's your list. I'm counting on you, Uncle Ichi. 
 Hmm, let's see… cups, knives and matches. 
 I'd say most of that should be in the galley. 
-Oh yeah, Uncle Ichi!
+Oh yeah, Uncle Ichi! 
 Whoa, you startled me! Wh-what is it, Iris? 
 I'm really happy you're helping me. Thank you so much. 
 Hahaha, she's so excited she took off running. Well, guess I'd better look for this stuff. 
@@ -945,7 +945,7 @@ Okay. I should have known you weren't the kind of boy who peeks in the shower…
 …sorry for not believing you, Uncle Ichi. 
 Oh, you don't need to apologize. It was my fault too. But I'm glad to see you back to normal. 
 By the way, what are you getting ready for the party? 
-…
+… 
 What's the matter, Uncle Ichi? 
 I just figure you won't believe me, no matter what I say. 
 I didn't go there to see you in the shower. That's the truth. But… I know you don't believe me. 
@@ -1155,7 +1155,7 @@ The shops are all closed today. I should head somewhere else.
 Good work holding down the fort. Don't let it get you down. 
 I'm on duty today. 
 Kasumi and Tsubaki are at Renga getting a bite. I'm jealous. 
-Zzzzzzzzz…
+Zzzzzzzzz… 
 Commander Yoneda's still out like a light. 
 Gotta leave the sword, crown and shield here… 
 The wig will be in the dressing room. I should head out. 
