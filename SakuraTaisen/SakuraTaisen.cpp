@@ -9129,6 +9129,13 @@ bool PatchSubtitles(const string& /*rootSakuraTaisenDirectory*/, const string& p
 	return true;
 }
 
+void ExtractTiledImages(const string& rootSakuraDir, const string& outFileName)
+{
+	//Extract title files
+
+
+}
+
 void ConvertYabauseSaveToMednafen(const string& yabauseFileName, const string& outFileName)
 {
 	FileData yabauseFile;
@@ -9613,6 +9620,13 @@ int main(int argc, char *argv[])
 		const string outFile     = string(argv[3]);
 
 		ConvertYabauseSaveToMednafen(yabauseFile, outFile);
+	}
+	else if( command == "ExtractTiledImages" )
+	{
+		const string rootSakuraDir = string(argv[2]) + Seperators;
+		const string outDir        = string(argv[3]) + Seperators;
+
+		ExtractTiledImages(rootSakuraDir, outDir);
 	}
 	else
 	{
