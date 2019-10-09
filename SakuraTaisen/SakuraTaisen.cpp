@@ -217,7 +217,8 @@ struct SakuraCompressedData
 			}
 			else
 			{
-				mDataSize = compressor.mCompressedSize + (compressor.mCompressedSize % 2);
+				const unsigned long alignmentPadding = (compressor.mCompressedSize % 4) == 0 ? 0 : 4 - (compressor.mCompressedSize % 4);
+				mDataSize = compressor.mCompressedSize + (compressor.mCompressedSize % 4);
 			}
 			
 			mpCompressedData = new char[mDataSize];
@@ -3218,6 +3219,11 @@ bool FixupSakura(const string& rootDir, const string& inTranslatedOptionsBmp, co
 	const unsigned int newSakuraLength = origSakuraData.GetDataSize() + optionsSizeDiff;
 	char* pNewSakuraData = new char[newSakuraLength];
 
+	if( optionsSizeDiff > 0 )
+	{
+		printf("FixupSakura failed. Compressed data is larger than original\n");
+		return false;
+	}
 	//***Copy over the original data upto the options image***
 	//Copy everything up to the options data
 	memcpy_s(pNewSakuraData, newSakuraLength, origSakuraData.GetData(), origOptionsOffset);
@@ -7568,7 +7574,7 @@ bool PatchMainMenu(const string& inPatchedSakuraRootDirectory, const string& inT
 	//Compress font sheet
 	int numCharactersInFontSheet = 65;
 	PRSCompressor compressor;
-	compressor.CompressData((void*)translatedData.GetData(), (numCharactersInFontSheet*16*8), PRSCompressor::kCompressOption_None);//translatedData.GetDataSize() - (numCharactersInFontSheet*16*8));
+	compressor.CompressData((void*)translatedData.GetData(), (numCharactersInFontSheet*16*8), PRSCompressor::kCompressOption_FourByteAlign);//translatedData.GetDataSize() - (numCharactersInFontSheet*16*8));
 	
 	//Compress options font sheet
 	const unsigned long optionsFontSheetOffset        = 0x0005b320;
@@ -9151,9 +9157,17 @@ void ConvertYabauseSaveToMednafen(const string& yabauseFileName, const string& o
 	printf("Success!\n");
 }
 
-bool PatchGame(const string& rootSakuraTaisenDirectory, const string& patchedSakuraTaisenDirectory, const string& translatedTextDirectory, const string& fontSheetFileName, const string& /*originalPaletteFileName*/, 
-	const string &patchedTMapSPDataPath, const string& inMainMainFontSheetPath, const string& inMainMenuTranslatedBgnd, const string& inPatchedOptionsImage, const string& inTranslatedDataDirectory,
-	const string& inExtractedWklDir)
+bool PatchGame(const string& rootSakuraTaisenDirectory, 
+			   const string& patchedSakuraTaisenDirectory, 
+			   const string& translatedTextDirectory, 
+			   const string& fontSheetFileName, 
+			   const string& ,//originalPaletteFileName, 
+			   const string& patchedTMapSPDataPath, 
+			   const string& inMainMainFontSheetPath, 
+			   const string& inMainMenuTranslatedBgnd, 
+			   const string& inPatchedOptionsImage, 
+			   const string& inTranslatedDataDirectory, 
+			   const string& inExtractedWklDir)
 {
 	//Create temp work directory
 	string tempDir;

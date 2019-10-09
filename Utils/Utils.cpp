@@ -1299,7 +1299,8 @@ void PRSCompressor::CompressData(void* pInData, const unsigned long inDataSize, 
 		}
 		else if( compressOption == PRSCompressor::kCompressOption_FourByteAlign && mCompressedSize % 4 != 0 )
 		{
-			newSize = mCompressedSize + (4 - mCompressedSize%4);
+			const unsigned long paddingAmount = mCompressedSize%4 == 0 ? 0 : (4 - mCompressedSize%4);
+			newSize = mCompressedSize + paddingAmount;
 		}
 
 		if( newSize != 0 )
