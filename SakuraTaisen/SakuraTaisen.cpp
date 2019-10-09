@@ -9132,8 +9132,24 @@ bool PatchSubtitles(const string& /*rootSakuraTaisenDirectory*/, const string& p
 void ExtractTiledImages(const string& rootSakuraDir, const string& outFileName)
 {
 	//Extract title files
+	char buffer[1024];
+	for(int i = 1; i <= 10; ++i)
+	{
+		sprintf_s(buffer, 1024, "%sSAKURA1\\TITLE%i.bmp", rootSakuraDir.c_str(), i);
 
+		const string inFileName(buffer);
+		BitmapReader origBmp;
+		if(!origBmp.ReadBitmap(inFileName))
+		{
+			return;
+		}
 
+		TileExtractor tileExtractor;
+		if(!tileExtractor.ExtractTiles(8, 8, abs(origBmp.mBitmapData.mInfoHeader.mImageHeight), origBmp.mBitmapData.mInfoHeader.mImageHeight))
+		{
+			return;
+		}
+	}
 }
 
 void ConvertYabauseSaveToMednafen(const string& yabauseFileName, const string& outFileName)
