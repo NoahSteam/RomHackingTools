@@ -1,3 +1,15 @@
+Unused 
+Unused 
+Unused 
+Unused 
+Unused 
+Unused 
+Unused 
+Unused 
+Unused 
+Unused 
+Unused 
+Unused 
 Unused
 Unused
 Unused
@@ -13,19 +25,7 @@ Unused
 Unused
 Unused
 Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
+Unused 
 It's this late already…? Soon it'll be time to put out the lights in the theater. 
 I only have time to inspect 3 more rooms…What should I do? 
 Continue patrol. <br> Go to sleep. 
@@ -108,10 +108,10 @@ This is where we change before using the training room, pool, and showers.
 My locker is the third from the right. OK, no problems here. I'll continue my patrol. 
 I've heard these showers use water heated by a steam machine in the Imperial Theater's basement. 
 I'd like to take a nice long shower… but I'm on patrol right now. 
-It figures that the Imperial Assault Force would have such advanced medical equipment. 
+It figures that the Imperial Assault Troupe would have such advanced medical equipment. 
 But I sure hope we won't be needing this room much. 
 …Everything looks fine here, so I'll continue my patrol. 
-This is the command room, the center of the Imperial Assault Force. When the alarm sounds, we all assemble here. 
+This is the command room, the center of the Imperial Assault Troupe. When the alarm sounds, we all assemble here. 
 …No problems here. OK, I'll go to another room. 
 A steam computer… 
 I've heard there are only a few of this size in Japan. 
@@ -219,7 +219,7 @@ Eh… How so?
 By taking care of these tasks, you leave us all free to focus on our plays. 
 …It means a lot to hear you say that. 
 I'll be going now, sir. I leave the patrolling of the theater to you. 
-……Ahh. 
+…Right. 
 …Well, I guess I'll continue my patrol. 
 What about you, Maria? 
 I'm in love. 
@@ -252,10 +252,10 @@ It's Ogami… I'm sorry about earlier. I shouldn't have lied…
 … 
 …Eh, whatever. Come on in. Door's open. 
 OK… I'm coming in. 
-Whoa… How did all these bags get here…? 
-I had all my stuff sent over yesterday. 
+Whoa… How did all this stuff get here…? 
+I had all my things sent over yesterday. 
 But I gotta say… Lies won't fly with me, Captain. 
-Flattery based on lies will never make me happy! 
+False flattery will never make me happy! 
 …I'm sorry. I'll try to do better. 
 Hey, as long as you get it! Go ahead and relax. 
 …Hey. Is that you, Ogami? 
@@ -960,10 +960,10 @@ Unused
 Unused
 Unused
 Unused
-Andre, my love! Please… run away with me. 
+Lord Andre, my love! Please… run away with me. 
 If I were to abandon my mission and my men to escape with you…I would no longer be myself. 
 Would you still love me then? 
-Oh, Andre! 
+Oh, Lord Andre! 
 Unused
 Unused
 Unused

@@ -1,3 +1,15 @@
+Unused 
+Unused 
+Unused 
+Unused 
+Unused 
+Unused 
+Unused 
+Unused 
+Unused 
+Unused 
+Unused 
+Unused 
 Unused
 Unused
 Unused
@@ -13,26 +25,14 @@ Unused
 Unused
 Unused
 Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
+Unused 
 Thank you for attending Tokyo Game Show, and welcome to Sakura Wars! 
 We now present Sakura Wars, tonight's exclusive special program. 
 Our curtain opens on the year Taisho 12. The season is spring, when cherry blossoms dance and scatter in the wind. 
 The scene is Imperial Tokyo, where the adventurous spirit of a boom town floats through the air. And more… 
 Horse-drawn carriages, steam engines, airplanes… Tokyo is the height of civilization, where East meets West. 
 The hero of this tale is Ichiro Ogami. 
-A young ensign in the Navy, made commander of the Flower Division, a secret corps of the Imperial Assault Force. 
+A young ensign in the Navy, made commander of the Flower Division, a secret corps of the Imperial Assault Troupe. 
 The story begins as Ichiro Ogami… in other words, you… meets with a certain girl… 
 Under the blooming cherry trees of Ueno Park. 
 Now sit back, relax, and enjoy the tale of Sakura Wars. 
@@ -59,8 +59,8 @@ Ye- yes, ma'am.
 I-I apologize. 
 Er… 
 I'm Imperial Japanese Navy Ensign Ichiro Ogami. 
-I'm… well, you could say I'm captain-in-training of the Imperial Assault Force. 
-Ogami, Kohran is another member of our Imperial Assault Force Flower Division. 
+I'm… well, you could say I'm captain-in-training of the Imperial Assault Troupe. 
+Ogami, Kohran is another member of our Imperial Assault Troupe Flower Division. 
 She's a brilliant scientist from China, though as you've heard, she speaks in Kansai dialect for some reason. 
 But…sometimes she causes explosions like the one just now, so please take care around her. 
 Now, let's go see another room. 
@@ -115,7 +115,7 @@ She may seem harsh, but she's really a nice person.
 Pleased to meet you as well. 
 Kasumi and Yuri take care of the Imperial Theater's office work. 
 You can ask them if you have any questions about the theater. 
-This is the Imperial Assault Force director's office. It's Manager Yoneda's room. 
+This is the Imperial Assault Troupe director's office. It's Manager Yoneda's room. 
 That's right. Let's move on to another room. 
 Zzz… Zzz… 
 …Sounds like he's asleep. 
@@ -255,7 +255,7 @@ Unused
 Unused
 Unused
 …Now, shall we proceed to the Imperial Theater? 
-Not exactly. The Imperial Theater contains the headquarters of the Imperial Assault Force. 
+Not exactly. The Imperial Theater contains the headquarters of the Imperial Assault Troupe. 
 Unused
 Shall we proceed to the Imperial Theater? 
 About me…? 
@@ -269,8 +269,8 @@ Unused
 Unused
 Oooh! Sakura, is this your boyfriend? 
 Iris! You shouldn't tease grown-ups like that. 
-This is Ensign Ichiro Ogami. He's just transferred to the Imperial Assault Force. 
-I'm Iris. I'm in the Imperial Assault Force too, in the Flower Division. 
+This is Ensign Ichiro Ogami. He's just transferred to the Imperial Assault Troupe. 
+I'm Iris. I'm in the Imperial Assault Troupe too, in the Flower Division. 
 And this bear here is Jean-Paul. He's my very best friend, so you better be nice to him. 
 Unused
 Unused
@@ -307,7 +307,7 @@ Unused
 Unused
 Unused
 And who might you be? 
-Are you Ensign Ogami, the new transfer to the Imperial Assault Force? 
+Are you Ensign Ogami, the new transfer to the Imperial Assault Troupe? 
 Greetings. I am Maria Tachibana. 
 Is there… something stuck to my face? 
 Lieutenant General Yoneda is in the director's office. I have training now, so I'll be on my way… 

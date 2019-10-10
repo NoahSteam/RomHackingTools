@@ -2281,7 +2281,7 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 				const vector<int>* pOrder          = bDialogOrderExists && dialogOrderIter->second.idAndOrder.find(id) != dialogOrderIter->second.idAndOrder.end() ? &dialogOrderIter->second.idAndOrder.find(id)->second : nullptr;
 				const bool bHasLipsTag             = textLine.mWords.size() > 0 && textLine.mWords[0] == LipsWord;
 				const bool bIsLipsEntry            = bHasLipsTag ? true : pOrder ? dialogOrderIter->second.idAndLips.find(id)->second : false;
-				const bool bIsUnused               = bIsMESFile ? false : pOrder ? false : true;
+				const bool bIsUnused               = bIsMESFile ? false : pOrder || (id >= 0x9c41 && id <= 0x9c4e) ? false : true;
 
 				if( bIsLipsEntry )
 				{
@@ -2291,7 +2291,9 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 					}
 				}
 
-				if( textLine.mWords[0] == UntranslatedEnglishString )
+				if( textLine.mWords[0] == UntranslatedEnglishString || 
+					(textLine.mWords[0] == UnusedEnglishString && !bIsUnused )
+					)
 				{
 					printf("Error: Untranslated line. (File: %s Line: %u)\n", sakuraFile.mFileNameInfo.mFileName.c_str(), currSakuraStringIndex + 1);
 				}
@@ -2783,7 +2785,7 @@ bool DumpTranslationFilesWithoutUnusedLines(const string& rootSakuraTaisenDirect
 				const vector<int>* pOrder          = bDialogOrderExists && dialogOrderIter->second.idAndOrder.find(id) != dialogOrderIter->second.idAndOrder.end() ? &dialogOrderIter->second.idAndOrder.find(id)->second : nullptr;
 				const bool bHasLipsTag             = textLine.mWords.size() > 0 && textLine.mWords[0] == LipsWord;
 				const bool bIsLipsEntry            = bHasLipsTag ? true : pOrder ? dialogOrderIter->second.idAndLips.find(id)->second : false;
-				const bool bIsUnused               = bIsMESFile ? false : pOrder ? false : true;
+				const bool bIsUnused               = bIsMESFile ? false : pOrder || (id >= 0x9c41 && id < 0x9c4e) ? false : true;
 
 				//If untranslated, then write out the file and line number
 				if( bIsUnused ||
@@ -9129,25 +9131,117 @@ bool PatchSubtitles(const string& /*rootSakuraTaisenDirectory*/, const string& p
 	return true;
 }
 
-void ExtractTiledImages(const string& rootSakuraDir, const string& outFileName)
+void ExtractTiledImage(const char* pFileName, const char* pOutFileName, int dataOffset)
 {
+	const FileNameContainer inFileName(pFileName);
+	const string outFileName(pOutFileName);
+
+	FileData inFileData;
+	if( !inFileData.InitializeFileData(inFileName) )
+	{
+		printf("ExtractTiledImage %s failed\n", pFileName);
+		return;
+	}
+
+	ExtractImageFromData(inFileData.GetData(), 8*8*(320/8)*(224/8) + dataOffset, outFileName, inFileData.GetData(), 512, 8, 8, 320/8, 256, dataOffset, true, true);
+}
+
+void ExtractTiledImages(const string& rootSakuraDir, const string& outDir)
+{
+	const string outTitleDirectory = outDir + string("TitleFiles\\");
+	const string outLoadDirectory  = outDir + string("LoadFiles\\");
+	const string outMiscDirectory  = outDir + string("MiscFiles\\");
+	CreateDirectoryHelper(outDir);
+	CreateDirectoryHelper(outTitleDirectory);
+	CreateDirectoryHelper(outLoadDirectory);
+	CreateDirectoryHelper(outMiscDirectory);
+
 	//Extract title files
-	char buffer[1024];
+	char buffer0[1024];
+	char buffer1[1024];
 	for(int i = 1; i <= 10; ++i)
 	{
-		sprintf_s(buffer, 1024, "%sSAKURA1\\TITLE%i.bmp", rootSakuraDir.c_str(), i);
-
-		const string inFileName(buffer);
-		BitmapReader origBmp;
-		if(!origBmp.ReadBitmap(inFileName))
+		sprintf_s(buffer0, 1024, "%sSAKURA1\\TITLE%i.bin", rootSakuraDir.c_str(), i);
+		sprintf_s(buffer1, 1024, "%sTITLE%i.bmp", outTitleDirectory.c_str(), i);
+	
+		ExtractTiledImage(buffer0, buffer1, 0x1380);
+		/*
+		FileData inFileData;
+		if( !inFileData.InitializeFileData(inFileName) )
 		{
+			printf("ExtractTiledImage failed\n");
 			return;
 		}
 
-		TileExtractor tileExtractor;
-		if(!tileExtractor.ExtractTiles(8, 8, abs(origBmp.mBitmapData.mInfoHeader.mImageHeight), origBmp.mBitmapData.mInfoHeader.mImageHeight))
+		const int dataOffset = 0x1380;
+		ExtractImageFromData(inFileData.GetData(), 8*8*(320/8)*(224/8) + dataOffset, outFileName, inFileData.GetData(), 512, 8, 8, 320/8, 256, dataOffset, true, true);
+		*/
+	}
+
+	//Extract LOAD.BIN
+	{
+		sprintf_s(buffer0, 1024, "%sSAKURA1\\LOAD.bin", rootSakuraDir.c_str());
+		sprintf_s(buffer1, 1024, "%sLOAD.bmp", outLoadDirectory.c_str());
+		ExtractTiledImage(buffer0, buffer1, 0x13c0);
+
+		sprintf_s(buffer0, 1024, "%sSAKURA1\\LOAD01.bin", rootSakuraDir.c_str());
+		sprintf_s(buffer1, 1024, "%sLOAD01.bmp", outLoadDirectory.c_str());
+		ExtractTiledImage(buffer0, buffer1, 0x13c0);
+	}
+
+	//Extract misc files
+	{
+		const char* fileNames[] = 
 		{
-			return;
+			"OMAKE01",
+			"OMAKE02",
+			"OMAKE03",
+			"OMAKE11",
+			"OMAKE12",
+			"OMAKE13",
+			"WALL1",
+			"IC01",
+			"IC02",
+			"IC03",
+			"IC04",
+			"IC06",
+			"IC07",
+			"IC08",
+			"IC09",
+			"IC1001",
+			"IC1002",
+			"IC1003",
+			"IC1004",
+			"IC1005",
+			"IC1006",
+			"KABE01",
+			"KABE10",
+			"KABE11",
+			"KABE20",
+			"KABE21",
+			"KABE30",
+			"KABE31",
+			"KABE40",
+			"KABE41",
+			"KABE50",
+			"KABE51",
+			"KABE60",
+			"KABE61",
+			"KABE70",
+			"KABE71",
+			"KABE80",
+			"KABE81",
+			"KABE90",
+			"KABE91",
+			"WALL1"
+		};
+
+		const int numFiles = sizeof(fileNames)/sizeof(char*);
+		for(int i = 0; i < numFiles; ++i)
+		{
+			sprintf_s(buffer0, 1024, "%sSAKURA1\\%s.bin", rootSakuraDir.c_str(), fileNames[i]);
+			sprintf_s(buffer1, 1024, "%s%s.bmp", outMiscDirectory.c_str(), fileNames[i]);
+			ExtractTiledImage(buffer0, buffer1, 0x1380);
 		}
 	}
 }

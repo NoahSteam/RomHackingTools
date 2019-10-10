@@ -1,3 +1,15 @@
+Unused 
+Unused 
+Unused 
+Unused 
+Unused 
+Unused 
+Unused 
+Unused 
+Unused 
+Unused 
+Unused 
+Unused 
 Unused
 Unused
 Unused
@@ -13,19 +25,7 @@ Unused
 Unused
 Unused
 Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
+Unused 
 So that's Kohran. I guess she'll be working here from now on. Should I go take a peek at the Manager's Office? 
 That girl said her name was Kohran, right? I guess she's in the Manager's Office by now. 
 Oh, you sure? 
@@ -199,7 +199,7 @@ You'll have to show me which rides are best next time we go there!
 You got it! See you two later. 
 Ok then Okami. I hope to see you again sometime. 
 Sure. Okay then Kohran, shall we head to the manager's office? 
-See ya Yuri, Kasumi. I'll talk with you to later. 
+See ya Yuri, Kasumi. I'll talk with you two later. 
 I was just walking around. What are you doing here? 
 Who me? I'm just saying hi to Yuri and Kasumi. 
 Oh, listen, Ogami. Kohran and I actually joined up at the same time. I'm so happy she's back with us. 
@@ -208,13 +208,13 @@ You'll have to show me which rides are best next time we go there!
 You got it! See you two later. 
 Say, Ogami, why don't you show Kohran to the manager's office? 
 Sure. Okay then Kohran, shall we head to the manager's office? 
-See ya Yuri, Kasumi. I'll talk with you to later. 
+See ya Yuri, Kasumi. I'll talk with you two later. 
 I'm just trying to get away from work for a bit. 
 In that case, Ogami, would you please take Kohran to the manager's office. 
 We joined up at the same time, so I'd love to take her myself, but I can't step away just now. 
 Ogami, if you have free time, then there is work to do! Please come to the office later. 
 Uh, sure. 
-See ya Yuri, Kasumi. I'll talk with you to later. 
+See ya Yuri, Kasumi. I'll talk with you two later. 
 Ok Kohran, see you later! 
 … what's the matter, Mr. Ensign? You're spacing out. 
 Forget about that, Kohran! Tell me about the Hanayashiki Branch! 
@@ -223,7 +223,7 @@ Oh, I can tell you all sorts of stuff about the rides! I actually worked on a bu
 Yuri, I know you're happy to be with a friend who joined you, but she has other things she needs to be doing. 
 Actually, Ogami, why don't you show Kohran to the manager's office? 
 Sure. Okay then, Kohran, shall we head to the manager's office? 
-See ya Yuri, Kasumi. I'll talk with you to later. 
+See ya Yuri, Kasumi. I'll talk with you two later. 
 Yuri, Kasumi! It's been a while! 
 Ah, Kohran!? You're back! 
 Kohran! When did you get here!? 
@@ -236,7 +236,7 @@ Oh, I can tell you all sorts of stuff about the rides! I actually worked on a bu
 Yuri, I know you're happy to be with a friend who joined you, but she has other things she needs to be doing. 
 Say, Ogami, why don't you show Kohran to the manager's office? 
 Sure. Okay then, Kohran, shall we head to the manager's office? 
-See ya Yuri, Kasumi. I'll talk with you to later. 
+See ya Yuri, Kasumi. I'll talk with you two later. 
 Oh, Ogami, have you still not taken Kohran to the manager's office? 
 The manager's office is right next door. Are you getting sidetracked? 
 Seriously, Mr. Ensign. We shouldn't keep Yoneda waiting. 
@@ -329,7 +329,7 @@ Hahaha! Look at you, Mr. Ensign, getting all red in the face!
 …Ogami? Who is that? 
 Hi there! I'm Kohran Li! 
 I just arrived here from the Hanayashiki Branch. Nice to meet you! 
-Hi, My name is Sakura Shinguji. I joined the squad just recently. Nice to meet you too. 
+Hi, my name is Sakura Shinguji. I joined the squad just recently. Nice to meet you too. 
 You two are going to be comrades in the Flower Division, so here's hoping you can be good friends. 
 Of course! 
 OK, then… I have to get to the performance. Ogami, Ms. Li, if you'd excuse me. 
@@ -407,44 +407,44 @@ A French soldier named Andre.
 Sir. Have a good day. 
 I need to be at the stage and prepare for the show. Thank you for taking care of this for me. 
 My duty as a leader. <br> My duty as a man. 
-As a leader that goes without saying. I'm only bringing her to her room after all. 
-Oh I don't think that's the case, sir. I don't think all leaders are quite as considerate as you. 
-She's right Ogami! You are helping me a great deal here. 
-As a man that goes without saying. If I see a woman in need I simply have to help her. 
+As a leader, that goes without saying. I'm only bringing her to her room after all. 
+Oh, I don't think that's the case, sir. I don't think all leaders are quite as considerate as you. 
+She's right, Ogami! You are helping me a great deal here. 
+As a man, that goes without saying. If I see a woman in need, I simply have to help her. 
 Stop it, you'll make me blush. I'm not used to being treated like this. 
 But… it does make me kind of happy. 
 …… 
 …Ogami, you know you gotta say something, otherwise it isn't much of a conversation. 
 Oh… sorry… my mind wandered off there for a bit. 
 …I'm really sorry, Kohran, but the show is about to start very soon. 
-When you're ready just come to the dressing room. I'll go ahead. 
+When you're ready, just come to the dressing room. I'll go ahead. 
 What!? Is it really that late, already? I can't be late for my very first show. 
 Huh, you'll participate in the show, even though you just arrived? 
 Don't worry. I've been a member of the Flower Division for a while now. I'm used to making stuff up as I go. 
 And besides, I only have a small role with barely any lines. Easy peasy! 
-Anyway. Thanks for showing me the way Ogami. See you later 
+Anyway. Thanks for showing me the way Ogami. See you later! 
 So… looks like the Flower Division just got reinforcements. I can't wait to see Kohran in action. 
 Ensign~! 
 That voice… 
 Ah, Sumire! 
 Ensign, wasn't that Kohran just now? 
 Yes. I just brought her… 
-Did you now? Well, she's finally returned to the Imperial Revue. 
+Did you, now? Well, she's finally returned to the Imperial Revue. 
 So lieutenant, now that you have met her, what is your first impression? 
 She's a bit strange. <br> She's cute! <br> I think she's funny. 
 Well… what can I say? She's a bit strange. 
 You read people like books, don't you, Ensign? 
 I guess she really is strange. Her speech could use some refinement, and her inventions can be a bit dangerous. 
 But she really knows a lot about machines. You can count on her in that regard. 
-… She's cute, wouldn't you say? 
+…She's cute, wouldn't you say? 
 Cute? Kohran? 
 Well… What can I say? It really isn't my place to judge people's taste. 
 Hmm… I think she is funny. 
 That is certainly true. That speech of her could use some refinement, though. 
 She was born in China, you would think they would have taught her some manners there. 
 Well, I apologize for putting you on the spot with a question out of the blue like that. 
-Anyway, Ensign, the manager sent me to tell you that you should go help in the administrations office. 
-So, now that I delivered that message I have to get going. Please excuse me. 
+Anyway, Ensign, the manager sent me to tell you that you should go help in the administration office. 
+So, now that I delivered that message, I have to get going. Please excuse me. 
 …Now that she mentions it… I DID offer to help earlier. Guess I have to go then. 
 So… looks like the Flower Division just got reinforcements. I can't wait to see Kohran in action. 
 Uncle Ichi~! 

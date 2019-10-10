@@ -69,6 +69,7 @@ ExtractFACEFiles a:\SakuraTaisen\Disc1 a:\SakuraTaisen\ExtractedData\Disc1\FACE
 ExtractWKLFiles a:\SakuraTaisen\Disc1 a:\SakuraTaisen\ExtractedData\Disc1\WKL
 CopySharedWklImages a:\SakuraTaisen\ExtractedData\Disc1\WKL A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\WKL
 ExtractMiniGameData a:\SakuraTaisen\Disc1  A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data a:\SakuraTaisen\ExtractedData\Disc1\Minigames\
+ExtractTiledImages a:\SakuraTaisen\Disc1  a:\SakuraTaisen\ExtractedData\Disc1\TiledImages\
 FindDuplicateText  a:\SakuraTaisen\ExtractedData\Disc1\WKL A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\WKLDuplicates.txt
 DumpTranslationFilesWithoutUnusedLines a:\SakuraTaisen\Disc1 A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\TranslatedText A:\SakuraTaisen\TranslationFiles\
 CreateFontSheetEntries a:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\MiniHana_TutorialText.txt

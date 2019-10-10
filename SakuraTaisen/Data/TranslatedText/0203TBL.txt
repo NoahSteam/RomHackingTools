@@ -1,3 +1,15 @@
+Unused 
+Unused 
+Unused 
+Unused 
+Unused 
+Unused 
+Unused 
+Unused 
+Unused 
+Unused 
+Unused 
+Unused 
 Unused
 Unused
 Unused
@@ -13,19 +25,7 @@ Unused
 Unused
 Unused
 Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
+Unused 
 Is it this late already…? Soon it'll be time to put the theater's lights out. 
 I only have time to inspect about 3 more rooms… What should I do? 
 Continue patrol. <br> Go to sleep. 
@@ -111,7 +111,7 @@ This is where we change before using the training room, pool, and showers.
 My locker is the third from the right. OK, no problems here. I'll continue my patrol. 
 I've heard these showers use water heated by a steam machine in the Imperial Theater's basement. 
 I'd like to take a nice long shower… but I'm on duty right now. 
-It figures the Imperial Assault Force would have such advanced medical equipment. 
+It figures the Imperial Assault Troupe would have such advanced medical equipment. 
 That said, I hope we won't be needing this room too much. 
 …Everything looks fine here, I'll continue my patrol. 
 This is the command room, the heart of the Imperial Assault Troupe. When the alarms ring, this is where we gather. 
@@ -135,7 +135,7 @@ That's really nice of you but… I can manage by myself.
 I see… 
 In that case… I'm going to go to bed. Sorry again, Ogami… 
 S-Sakura! …Maybe I should have asked her to help? 
-…Oh well, I guess I'll carry on the repairs. 
+…Oh well, I guess I'll carry on with the repairs. 
 Ogami, it's my fault that the stage broke. Please, let me help! 
 …I understand. Alright then, would you help me fix the broken set? 
 Of course! 
@@ -269,7 +269,7 @@ Anyway… I wonder who that girl was?
 Ah, n-nevermind. W-well, I'm gonna head back. 
 So… Goodnight. 
 …We did good work today. Goodnight, Ogami. 
-…Well, I guess I'l get back to my room and try to get some sleep. 
+…Well, I guess I'll get back to my room and try to get some sleep. 
 If you're up to it, why don't we get some more work done? 
 …I'm really sorry. I'm… not really feeling up to it. Can we carry on tomorrow? 
 Oh right… I guess that'll have to do then. 
@@ -457,7 +457,7 @@ Unused
 Unused
 Unused
 How is it…? 
-Doing your best is all well and good but take it easy OK…? 
+Doing your best is all well and good but take it easy,` OK…? 
 Unused
 Unused
 Unused
