@@ -1,15 +1,4 @@
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
+﻿Unused
 Unused
 Unused
 Unused
@@ -25,7 +14,18 @@ Unused
 Unused
 Unused
 Unused
-Unused 
+Unused
+Unused
+Unused
+Unused
+Unused
+Unused
+Unused
+Unused
+Unused
+Unused
+Unused
+Unused
 It's this late already…? Soon it'll be time to put out the lights in the theater. 
 I only have time to inspect 3 more rooms…What should I do? 
 Continue patrol. <br> Go to sleep. 
@@ -520,7 +520,7 @@ Hold on, I'm coming! <br> I'm going to get help!
 I'm going to get help! Hang on, Sumire! 
 E-Ensign! I can't…My leg!! 
 Damn it…There's no time! I'll… have to save her… 
-…All right! Hold on, Sumire! I'm on my way! 
+…All right! Hold on, Sumire! I'm going to save you!
 E-Ensign! Please hurry! 
 Hmph… I somehow managed to get to the pool's edge on my own… 
 Hold on! I'm on my way! 

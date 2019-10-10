@@ -1,4 +1,4 @@
-It's a photo of Sakura. Her gaze is so intense. I wonder what she's thinking? 
+﻿It's a photo of Sakura. Her gaze is so intense. I wonder what she's thinking? 
 It's a photo of Sumire. It shows a side of her that's usually hidden. 
 It's a photo of Maria. She's lost in thought and seems a bit sad… 
 It's a photo of Kanna. In it, she looks as energetic and confident as ever. 
@@ -552,7 +552,7 @@ Where did you first meet Sakura?
 Shiba Park <br> Ueno Park <br> Hibiya Park 
 What type of flower was on the wallpaper in Episode Two? 
 Lily <br> Lily of the Valley <br> Morning Glory 
-What's the name of Sakura's Special Attack? If you can't get this, you're a failure as her captain. 
+What's the name of Sakura's Special Attack? If you don’t get this right, you aren’t fit to be commander. 
 Mocha Hoshin <br> Ouka Hoshin <br> Hoka Oshin 
 What was Maria's old code name? 
 Accessory <br> Calamity Jane <br> Cassowary 

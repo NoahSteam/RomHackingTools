@@ -1,4 +1,4 @@
-Unused
+﻿Unused
 Unused
 Unused
 Unused
@@ -285,7 +285,7 @@ I'm trusting you to look after them, Ogami.
 Yes, ma'am! 
 We took extensive damage… provide better support, or they'll lose their faith in you. 
 Yes, ma'am… it was my failure. 
-There were far too many casualties. Ogami… you're a failure as a leader! 
+There were far too many casualties. Ogami… you really aren’t fit to be commander! 
 I need you to do better than this. 
 Yes, ma'am… I'm deeply sorry. 
 The Flower Division took relatively minor damage. Very well done, Ogami. 
