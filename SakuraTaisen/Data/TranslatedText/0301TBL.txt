@@ -1,15 +1,3 @@
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
 Unused
 Unused
 Unused
@@ -25,7 +13,19 @@ Unused
 Unused
 Unused
 Unused
-Unused 
+Unused
+Unused
+Unused
+Unused
+Unused
+Unused
+Unused
+Unused
+Unused
+Unused
+Unused
+Unused
+Unused
 The rainy season is in full force outside, so I suppose it wouldn't be so bad to spend a day in the library… 
 It's a nice sunny day outside, but maybe I'll come back when it's raining and spend some time relaxing here. 
 Phew… there's nothing as relaxing as coming back to your own room after a hard day's work… 
@@ -457,7 +457,7 @@ Sir… I apologize for asking something so strange, but…
 Oh, uh… yes? 
 Do you ever… have dreams about the past? 
 Sure… all the time. <br> Not really. <br> I dream about girls… 
-Sure… all the time. I see dreams about when I was in officer school, and when I first came here. 
+Sure… all the time. I have dreams about when I was in officer school, and when I first came here. 
 But… why do you ask? 
 Oh… it's nothing. 
 Hey, Maria… 
@@ -808,7 +808,7 @@ Gah! The set!!
 Kyaaaaa!! O, Ogami!! 
 Ooooooooo!! Damn this is heavy! 
 Yiiiikes… now that's impressive. You've got some real muscle in those guns, Ogami! 
-… thanks, but could you maybe do something about this!! 
+…thanks, but could you maybe do something about this?! 
 I, I'll go get some rope! 
 Uncle Ichi, are you okay? You're sweating a lot. 
 Pretend it's nothing. <br> Call for help. 
