@@ -1,4 +1,4 @@
-Unused
+﻿Unused
 Unused
 Unused
 Unused
@@ -417,7 +417,7 @@ Iris was angry. She still can't fight by herself, so we have to protect her…
 Kohran's attack skills are weak, but she can do range attacks. Make sure you understand that, Ogami. 
 As the commander, you must provide sufficient support. You are what strengthens the bonds of the unit. 
 We took quite a lot of damage… You need to provide better support, or they'll lose their faith in you. 
-The damage was vast. If you continue with this style of battle… Ogami, you're a failure as captain! 
+The damage was vast. If you continue with this style of battle… Ogami, you aren’t fit to be commander! 
 The damage to the Flower Troupe was minimal. You did well, Ogami. 
 You cared for those in your command and your judgments were spot-on. 
 Also… let's see. You shouldn't view these numbers as a complete reflection of the battle's outcome, but… 

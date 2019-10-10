@@ -1,4 +1,4 @@
-It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
+﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
 It's a photo of Sumire. This is a side of her you don't see too often. 
 It's a photo of Maria. …She's lost in thought and looks kind of sad… 
 A photo of Kanna. Kanna's signature strength comes through clearly. 
@@ -1066,7 +1066,7 @@ I'm trusting you to look after them, Ogami.
 Yes, ma'am! 
 We took extensive damage… provide better support, or they'll lose their faith in you. 
 Yes, ma'am… it was my failure. 
-The damage was vast. If you continue with this style of battle… Ogami, you're a failure as captain! 
+The damage was vast. If you continue with this style of battle… Ogami, you aren’t fit to be commander! 
 I need you to do better than this. 
 Yes, ma'am… it was my failure. 
 Oh yes, about Maria… I couldn't help but notice something. 
