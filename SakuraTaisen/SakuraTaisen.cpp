@@ -7290,12 +7290,14 @@ struct OptionsSettingsMenu
 {
 	void CreateTranslatedMenu(FileReadWriter& sakuraFileData, bool bIsSLG)
 	{
+		const int Disc2Offset = GIsDisc2 ? 0x138 : 0;
+
 		//SAKURA layout code
-		const unsigned long optionsCursorSpeedTextOffset = bIsSLG ? 0x0004808c : 0x0005aa50;
-		const unsigned long optionsSoundTextOffset       = bIsSLG ? 0x00047fb0 : 0x0005a974;
-		const unsigned long optionsVoiceTextOffset       = bIsSLG ? 0x00047f04 : 0x0005a8c8;
-		const unsigned long optionsControlsTextOffset    = bIsSLG ? 0x00047e3c : 0x0005a800;
-		const unsigned long optionsExitTextOffset        = bIsSLG ? 0x00047dd2 : 0x0005a796;
+		const unsigned long optionsCursorSpeedTextOffset = bIsSLG ? 0x0004808c : 0x0005aa50 + Disc2Offset; //5ab88
+		const unsigned long optionsSoundTextOffset       = bIsSLG ? 0x00047fb0 : 0x0005a974 + Disc2Offset;
+		const unsigned long optionsVoiceTextOffset       = bIsSLG ? 0x00047f04 : 0x0005a8c8 + Disc2Offset;
+		const unsigned long optionsControlsTextOffset    = bIsSLG ? 0x00047e3c : 0x0005a800 + Disc2Offset;
+		const unsigned long optionsExitTextOffset        = bIsSLG ? 0x00047dd2 : 0x0005a796 + Disc2Offset;
 		MainMenuText cursorSpeedText[11];
 		MainMenuText soundText[12];
 		MainMenuText voiceText[7];
@@ -7379,14 +7381,14 @@ struct OptionsSettingsMenu
 		exitText[3].SetCharacterWithOffset(emptyOptionsChar, xOffset);
 
 		//Ok
-		const unsigned long controlsOkTextOffset = bIsSLG ? 0x00047dbe : 0x0005a782;
+		const unsigned long controlsOkTextOffset = bIsSLG ? 0x00047dbe : 0x0005a782 + Disc2Offset;
 		MainMenuText controlsOk[2];
 		sakuraFileData.ReadData(controlsOkTextOffset, (char*)controlsOk, sizeof(controlsOk));
 		controlsOk[0].SetCharacter(33);
 		controlsOk[1].SetCharacter(34);
 
 		//Cancel
-		const unsigned long controlsCancelTextOffset = bIsSLG ? 0x00047d96 : 0x0005a75a;
+		const unsigned long controlsCancelTextOffset = bIsSLG ? 0x00047d96 : 0x0005a75a + Disc2Offset;
 		MainMenuText controlsCancel[4];
 		sakuraFileData.ReadData(controlsCancelTextOffset, (char*)controlsCancel, sizeof(controlsCancel));
 		controlsCancel[0].SetCharacter(35);
@@ -7395,14 +7397,14 @@ struct OptionsSettingsMenu
 		controlsCancel[3].SetCharacter(emptyOptionsChar);
 
 		//Move
-		const unsigned long controlsMoveTextOffset = bIsSLG ? 0x00047ce2 : 0x0005a6a6;
+		const unsigned long controlsMoveTextOffset = bIsSLG ? 0x00047ce2 : 0x0005a6a6 + Disc2Offset;
 		MainMenuText controlsMove[2];
 		sakuraFileData.ReadData(controlsMoveTextOffset, (char*)controlsMove, sizeof(controlsMove));
 		controlsMove[0].SetCharacter(38);
 		controlsMove[1].SetCharacter(39);
 
 		//Attack
-		const unsigned long controlsAttackTextOffset = bIsSLG ? 0x00047cf6 : 0x0005a6ba;
+		const unsigned long controlsAttackTextOffset = bIsSLG ? 0x00047cf6 : 0x0005a6ba + Disc2Offset;
 		MainMenuText controlsAttack[4];
 		sakuraFileData.ReadData(controlsAttackTextOffset, (char*)controlsAttack, sizeof(controlsAttack));
 		controlsAttack[0].SetCharacter(40);
@@ -7411,42 +7413,42 @@ struct OptionsSettingsMenu
 		controlsAttack[3].SetCharacter(emptyOptionsChar);
 
 		//Defend
-		const unsigned long controlsDefendTextOffset = bIsSLG ? 0x00047d32 : 0x0005a6f6;
+		const unsigned long controlsDefendTextOffset = bIsSLG ? 0x00047d32 : 0x0005a6f6 + Disc2Offset;
 		MainMenuText controlsDefendText[2];
 		sakuraFileData.ReadData(controlsDefendTextOffset, (char*)controlsDefendText, sizeof(controlsDefendText));
 		controlsDefendText[0].SetCharacter(43);
 		controlsDefendText[1].SetCharacter(44);
 
 		//Charge
-		const unsigned long controlsChargeTextOffset = bIsSLG ? 0x00047d1e : 0x0005a6e2;
+		const unsigned long controlsChargeTextOffset = bIsSLG ? 0x00047d1e : 0x0005a6e2 + Disc2Offset;
 		MainMenuText controlsChargeText[2];
 		sakuraFileData.ReadData(controlsChargeTextOffset, (char*)controlsChargeText, sizeof(controlsChargeText));
 		controlsChargeText[0].SetCharacter(45);
 		controlsChargeText[1].SetCharacter(46);
 
 		//View All
-		const unsigned long controlsViewAllTextOffset = bIsSLG ? 0x00047d5a : 0x0005a71e;
+		const unsigned long controlsViewAllTextOffset = bIsSLG ? 0x00047d5a : 0x0005a71e + Disc2Offset;
 		MainMenuText controlsViewAllText[2];
 		sakuraFileData.ReadData(controlsViewAllTextOffset, (char*)controlsViewAllText, sizeof(controlsViewAllText));
 		controlsViewAllText[0].SetCharacter(47);
 		controlsViewAllText[1].SetCharacter(48);
 
 		//Advice
-		const unsigned long controlsAdviceTextOffset = bIsSLG ? 0x00047d46 : 0x0005a70a;
+		const unsigned long controlsAdviceTextOffset = bIsSLG ? 0x00047d46 : 0x0005a70a + Disc2Offset;
 		MainMenuText controlsAdviceText[2];
 		sakuraFileData.ReadData(controlsAdviceTextOffset, (char*)controlsAdviceText, sizeof(controlsAdviceText));
 		controlsAdviceText[0].SetCharacter(49);
 		controlsAdviceText[1].SetCharacter(50);
 
 		//Ok
-		const unsigned long controlsOk2TextOffset = bIsSLG ? 0x00047dbe : 0x0005a782;
+		const unsigned long controlsOk2TextOffset = bIsSLG ? 0x00047dbe : 0x0005a782 + Disc2Offset;
 		MainMenuText controlsOk2Text[2];
 		sakuraFileData.ReadData(controlsOk2TextOffset, (char*)controlsOk2Text, sizeof(controlsOk2Text));
 		controlsOk2Text[0].SetCharacter(33);
 		controlsOk2Text[1].SetCharacter(34);
 
 		//NoSetting
-		const unsigned long controlsNoSettingTextOffset = bIsSLG ? 0x00047cba : 0x0005a67e;
+		const unsigned long controlsNoSettingTextOffset = bIsSLG ? 0x00047cba : 0x0005a67e + Disc2Offset;
 		MainMenuText controlsNoSetting[4];
 		sakuraFileData.ReadData(controlsNoSettingTextOffset, (char*)controlsNoSetting, sizeof(controlsNoSetting));
 		controlsNoSetting[0].SetCharacter(51);
@@ -7455,7 +7457,7 @@ struct OptionsSettingsMenu
 		controlsNoSetting[3].SetCharacter(54);
 
 		//Default
-		const unsigned long controlsDefaultTextOffset = bIsSLG ? 0x00047c92 : 0x0005a656;
+		const unsigned long controlsDefaultTextOffset = bIsSLG ? 0x00047c92 : 0x0005a656 + Disc2Offset;
 		MainMenuText controlsDefault[4];
 		sakuraFileData.ReadData(controlsDefaultTextOffset, (char*)controlsDefault, sizeof(controlsDefault));
 		controlsDefault[0].SetCharacter(55);
@@ -7463,19 +7465,19 @@ struct OptionsSettingsMenu
 		controlsDefault[2].SetCharacter(57);
 		controlsDefault[3].SetCharacter(emptyOptionsChar);
 		//X
-		const unsigned long controlsXOffset = bIsSLG ? 0x0004830a : 0x0005acce;
+		const unsigned long controlsXOffset = bIsSLG ? 0x0004830a : 0x0005acce + Disc2Offset;
 		MainMenuText controlsXText[1];
 		sakuraFileData.ReadData(controlsXOffset, (char*)controlsXText, sizeof(controlsXText));
 		controlsXText[0].SetCharacter(58);
 
 		//X for accept
-		const unsigned long controlsXForAcceptOffset = bIsSLG ? 0x00047c38 : 0x0005a5fc;
+		const unsigned long controlsXForAcceptOffset = bIsSLG ? 0x00047c38 : 0x0005a5fc + Disc2Offset;
 		MainMenuText controlsXForAcceptText[1];
 		sakuraFileData.ReadData(controlsXForAcceptOffset, (char*)controlsXForAcceptText, sizeof(controlsXForAcceptText));
 		controlsXForAcceptText[0].SetCharacter(58);
 
 		//Exit
-		const unsigned long controlsExitOffset = bIsSLG ? 0x00047c6a : 0x0005a62e;
+		const unsigned long controlsExitOffset = bIsSLG ? 0x00047c6a : 0x0005a62e + Disc2Offset;
 		MainMenuText controlsExit[4];
 		sakuraFileData.ReadData(controlsExitOffset, (char*)controlsExit, sizeof(controlsExit));
 		controlsExit[0].SetCharacter(31);
