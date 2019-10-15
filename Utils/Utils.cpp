@@ -476,6 +476,11 @@ bool TextFileData::InitializeTextFile(bool bFixupSpecialCharacters)
 				{
 					t += 1;
 				}
+				else if( pToken[t] == (char)0xc3 && pToken[t+1] == (char)0xa8 )
+				{
+					t += 2;
+					fixedString[f++] = (char)232;
+				}
 				else
 				{
 					fixedString[f++] = pToken[t++];
