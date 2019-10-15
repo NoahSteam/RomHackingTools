@@ -7083,12 +7083,12 @@ bool PatchTMapSP(const string& sakuraDirectory, const string& patchDataPath)
 	const string patchedTMapDir     = patchDataPath + string("\\TMapSP\\");
 	const string patchedFukagawaDir = patchDataPath + string("\\Fukagawa\\");
 
-	if( !PatchTheaterView(sakuraDirectory, patchedTMapDir,     93, 0x0001EBF4, "SAKURA1\\TMAPSP.BIN", 0xd000) ) //0x0001ecc
+	if( !PatchTheaterView(sakuraDirectory, patchedTMapDir,     93, 0x0001EBF4, "SAKURA1\\TMAPSP.BIN", 0xd000) ) //0x0001ecc disc 2
 	{
 		return false;
 	}
 
-	if( !PatchTheaterView(sakuraDirectory, patchedFukagawaDir, 67, 0x00020760, "SAKURA1\\FUKAGAWA.BIN", 0x6d3f) ) //0x00020778
+	if( !PatchTheaterView(sakuraDirectory, patchedFukagawaDir, 67, 0x00020760, "SAKURA1\\FUKAGAWA.BIN", 0x6d3f) ) //0x00020778 disc2
 	{
 		return false; 
 	}
