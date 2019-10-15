@@ -1,31 +1,31 @@
-﻿Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
+﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking...
+It's a photo of Sumire. This is a side of her you don't see too often.
+It's a photo of Maria. ...She's lost in thought and looks kind of sad...
+A photo of Kanna. She looks strong and reliable. I can't wait to meet her.
+A photo of Iris. She's surrounded by flowers and flashing a radiant smile.
+A photo of Kohran. She's looking pretty in profile with her face dyed red by the evening sun.
+A letter given to me by a customer. I was asked to give it to Sumire. I have a bad feeling about this...
+Maria's pistol. This may help me escape from here...
+A hair ornament. It's decorated with flowers and looks very elegant.
+A pretty pendant. The delicate workmanship is gorgeous.
+A hairpin for use in a traditional bun hairstyle. It would complement a formal outfit well.
+This key will let me enter rooms I couldn't before.
+I found this in a bedroom on the second floor. I can use it to access the back room.
+A teacup Iris asked me to get for her. It has a very stylish design.
+This is the matchbox Iris asked for. Its logo is quite colorful.
+A knife Iris asked me to get for her. Just a normal utensil you'd use during a meal.
+A prop sword and shield used onstage. They're well-made and look just like the real thing.
+A prop crown used onstage. It's well constructed and incredibly detailed.
+A wig and costume used onstage. I wonder what kind of act could use a flashy outfit like this?
+A photo of Sakura in her swimsuit. Wow, this is really something. I'm gonna treasure this.
+A photo of Sumire in her stage costume. Her distinctive makeup really makes an impact.
+It's a photo of Maria on stage in the military uniform from "For Love"... She's a beautiful woman disguised as a man.
+A photo of Kanna in her training gear. Catching her in a private moment like this feels surprisingly intimate.
+A photo of Iris in her swimsuit. She's holding a rubber ring and looks ready to have some fun. How cute.
+A photo of Kohran. I don't get to see her with her braids undone very often. It's a nice look.
+A photo of Ayame in a traditional outfit. I hope she'll always be as happy and content as she is here.
+Ayame's gun. Why...? Why did it have to turn out like this...?
+Jean-Paul the teddy bear. Iris's best friend. She always carries him with her and takes good care of him.
 The rainy season is in full force outside, so I suppose it wouldn't be so bad to spend a day in the library… 
 It's a nice sunny day outside, but maybe I'll come back when it's raining and spend some time relaxing here. 
 Phew… there's nothing as relaxing as coming back to your own room after a hard day's work… 
@@ -80,7 +80,7 @@ The performance just ended, so no one's here training right now.
 The pool… looks like no one's here. Dang. 
 Well, nothing to do here. I think I'll head somewhere else. 
 Since Kohran joined the Flower Division, our capabilities have grown. 
-Now the only question is can I be the commander they need me to be. Honestly I think that's the hardest part. 
+Now the only question is, can I be the captain they need me to be? Honestly, I think that's the hardest part. 
 Kohran already took off, so there's no one here. 
 … well, nothing for me to do here. Guess I'll head out too. 
 I can smell soap… and the air is just a little on the warm side. 
@@ -257,13 +257,13 @@ Oh, that reminds me, I was just writing up a report for Commander Yoneda…
 Yes, I write reports on various information regarding the Flower Division. 
 It's a major part of my job. 
 … I see. 
-…this is a good opportunity. As the current commander of the Flower Division, is there anything you'd like to ask me? 
+…this is a good opportunity. As the current captain of the Flower Division, is there anything you'd like to ask me? 
 Ask for a battle report. <br> Ask for a casualty report. <br> No, thanks. 
 I'd like to hear about how our last battle impacted the surrounding area. 
 During the last battle you were able to protect Teito Tower from harm. 
 Any further damage to the tower would have caused major problems with transmissions throughout the city. 
 Ogami, your leadership was excellent. Please continue with this same standard of excellence. 
-… o-, of course! Thank you, ma'am! 
+… o-of course! Thank you, ma'am! 
 … unfortunately, during the last battle Teito Tower took significant damage. 
 If we had been any later, it would have disabled Tokyo's ability to function as the heart of this country. 
 … there is no excuse for my failure. 
@@ -279,13 +279,13 @@ Of course…
 Sakura's skills are by no means lacking, nor excellent. She shouldn't be sent without proper support. 
 Sumire has excellent combat capabilities, but you mustn't overestimate her. She needs proper support. 
 Maria's defenses are weak, so you should avoid placing her in close-quarters combat situations. 
-Kohran's attack power is weak, but she has wide range. Take that into consideration when giving her orders. 
-As the commander, you must provide sufficient support. Your aid strengthens the bonds of the unit. 
+Kohran's attack power is weak, but she has a wide range. Take that into consideration when giving her orders. 
+As the captain, you must provide sufficient support. Your aid strengthens the bonds of the unit. 
 I'm trusting you to look after them, Ogami. 
 Yes, ma'am! 
 We took extensive damage… provide better support, or they'll lose their faith in you. 
 Yes, ma'am… it was my failure. 
-There were far too many casualties. Ogami… you really aren’t fit to be commander! 
+There were far too many casualties. Ogami… you really aren’t fit to be captain! 
 I need you to do better than this. 
 Yes, ma'am… I'm deeply sorry. 
 The Flower Division took relatively minor damage. Very well done, Ogami. 
@@ -293,7 +293,7 @@ You cared for those in your command and your judgments were spot-on.
 … Yes, ma'am! Thank you, ma'am! 
 Shiba Park was on high ground, so your movements were limited, but… 
 I think your leadership was excellent, including your utilization of Kohran for the first time. 
-Also… let' see. You shouldn't view these numbers as a complete reflection of the battle's outcome, but… 
+Also… let's see. You shouldn't view these numbers as a complete reflection of the battle's outcome, but… 
 The number of enemies destroyed should be used as one rubric to evaluate your troops. 
 The one with the most enemies shot down during the last battle was Sakura. 
 Sakura's technique shines when the enemies line up facing the same direction. 
@@ -350,7 +350,7 @@ Worries…?
 You'll just need to ask her yourself about them. 
 Oh come on! 
 Haha, I suppose you could call this… homework. 
-I, I see… understood, ma'am. 
+I-I see… understood, ma'am. 
 Ogami… about Iris… 
 Iris? 
 Iris really is still just a child. 
@@ -387,7 +387,7 @@ Ogami, I appreciate your interest, but…
 These photos are mainly for guests, so please just take one. 
 Oh, I guess that's true. I'll come again some other time. 
 You'd like to buy that? Thank you! 
-Sakura's popularity is booming right now. People find her really relateable. 
+Sakura's popularity is booming right now. People find her really relatable. 
 You'd like to buy that photo? Thank you! 
 That's a photo of Sumire. That'll be 50 zeni. 
 We need to leave some for the guests, so just take one for now, okay? 
@@ -437,11 +437,11 @@ The strength of the Assault Troupe is focused in its leaders; Ichiro Ogami and M
 So, if we were to take those two out of the picture… 
 But… you say that as if it's a simple matter… 
 … I happen to have some very interesting information regarding Maria Tachibana… If we make good use of it… 
-I see… Very well, Setsuna. I'll leave this in your hands… Crush the Imperial Revue! 
+I see… Very well, Setsuna. I'll leave this in your hands… Crush the Imperial Assault Troupe! 
 Yes, my lord!! Leave it to me… 
 Hmhmhm… all humans have skeletons in their closets they hope will never be unearthed… 
 Well now, Maria Tachibana… how will you handle my little surprise? 
-Ladies and gentlemen, this concludes the Imperial Revue, Flower Division performance of 'Cinderella'. 
+Ladies and gentlemen, this concludes the Imperial Troupe, Flower Division performance of 'Cinderella'. 
 Thank you for joining us this evening. 
 We hope you'll come visit us again soon. 
 Man, I'm finally done punching tickets for the day… 
@@ -601,7 +601,7 @@ Maria… I'm here for you, anytime you want to talk.
 I see… thank you. 
 …Never mind, you don't need to tell me. 
 …huh? 
-Everyone's got worries. But in the end overcoming them is something that's up to the individual. 
+Everyone's got worries. But in the end, overcoming them is something that's up to the individual. 
 So… if you don't want to talk about it, I won't force you. 
 Sir… Thank you. 
 …sir, is something wrong? 
@@ -656,7 +656,7 @@ Well, I'd better be off… They want everyone helping take care of the set today
 If you've got some time, you should come help too, Ogami. Excuse me. 
 Taking care of the set… I should probably head over there myself in a bit. 
 Oh, Sumire. 
-Well, if it isn't the ensign. 
+Well, if it isn't the Ensign. 
 Nice job today. You're doing 'Cinderella' this month, right? 
 Yes. I've been cast as the evil stepmother. Seems I've only been getting roles like that lately. 
 But I do love 'Cinderella', so I suppose I can put up with it. 
@@ -677,7 +677,7 @@ What I want is… true 'magic'.
 …true 'magic'? 
 …yes. The power that can make a woman shine for all of eternity… 
 …… 
-…oh, never mind. It would lack refinement for me to try to put it in words. 
+…oh, never mind. It would lack refinement for me to try to put it into words. 
 Well, you'll have to excuse me. I am needed at the set. 
 Hmm… I'm not really sure what that was all about… 
 Oh, don't you know? 
@@ -730,7 +730,7 @@ Kohran, what do you do with your glasses when you shower?
 I take 'em off of course. Can't wash my face with glasses on, now can I? 
 Ahaha, guess with those off I wouldn't notice even if someone came in to peep on me. 
 … wait, Ogami… that isn't why you asked… right? 
-O, of course not. I was just curious, that's all. 
+O-of course not. I was just curious, that's all. 
 Gotcha. I guess you've never worn glasses, so you wouldn't know. 
 Well, see ya around. 
 Oh, hey. I don't know where you were headed, but there's no one around in the basement. 
@@ -745,15 +745,15 @@ Well, guess I'd better head out too.
 Hey… I can hear the shower going… and this locker is open. 
 …………! 
 … these are Kohran's clothes, in the locker… so, right now she's…? 
-C, crap… blood is rushing to my head… make good choices, Ogami! 
+C-crap… blood is rushing to my head… make good choices, Ogami! 
 I'm outta here! <br> I'm drawn to the shower… 
 Going into the shower right now would be crossing the line. I'm outta here! 
 Phew… I managed to get myself under control… 
-C, crap… I can't decide what to do! 
+C-crap… I can't decide what to do! 
 … well I'm nice and toasty, guess I should go dry off. 
 I'm dead! I need to get out of here! 
 Phew… I managed to escape before she noticed. 
-No… my body… it's moving on it's own… toward the shower… 
+No… my body… it's moving on its own… toward the shower… 
 (It's… K-Kohran… she's showering…) 
 (Huh? She… she doesn't seem to realize I'm here.) 
 Alrighty… uh-oh… where are my glasses? 
@@ -764,7 +764,7 @@ Oh, here they are. What're you doing over here, glasses?
 Phew… I managed to escape before she noticed. 
 But man… I would have loved to keep looking a little longer. 
 Phew, man that feels good… Oh, Ogami. Whatcha up to? 
-Gah! K, Kohran! That was fast. 
+Gah! K-Kohran! That was fast. 
 Fast? What was fast? 
 Uh, nothing, never mind… 
 …you feelin' okay, Ogami? I've gotta get going. See ya. 
@@ -773,16 +773,16 @@ Everybody's getting together on stage to help take care of the set.
 Phew… she didn't notice… I'm safe. 
 …okay, let's get out of here. 
 Hey Iris, so this is where you were. 
-Oh, Uncle Ichi! We finally got some nice weather today! 
+Oh, Mon Frère! We finally got some nice weather today! 
 Yeah. It's rare to get nice sunny days like this during 'tsuyu'. 
 'Tsuyu'? What's that? 
 Oh… I guess you didn't have it in France. 'Tsuyu' is… 
 …the June rainy season. <br> …when the rain stagnates. 
 It's what we call the rainy season in June. Once it's over, it'll be time for summer. 
-Uncle Ichi, you're so smart! That's why you're my boyfriend! 
+Mon Frère, you're so smart! That's why you're my boyfriend! 
 I love summer, so I wish 'tsuyu' would be over already! 
 Hahaha, so you like summer best, huh? 
-Yep! We should go to the beach together sometime, Uncle Ichi! 
+Yep! We should go to the beach together sometime, Mon Frère! 
 Okay, I need to go. They want me to help take care of the set. 
 See you later. 
 Taking care of the set, huh… they could probably use some extra muscle, so I should head over there too. 
@@ -805,39 +805,39 @@ Huh? …Oh, yes, that's right.
 Hey, Maria, you don't sound so good. Are you okay? 
 I'm fine, don't worry. Come on, let's focus on the set. 
 Gah! The set!! 
-Kyaaaaa!! O, Ogami!! 
+Kyaaaaa!! O-Ogami!! 
 Ooooooooo!! Damn this is heavy! 
 Yiiiikes… now that's impressive. You've got some real muscle in those guns, Ogami! 
 …thanks, but could you maybe do something about this?! 
-I, I'll go get some rope! 
-Uncle Ichi, are you okay? You're sweating a lot. 
+I-I'll go get some rope! 
+Mon Frère, are you okay? You're sweating a lot. 
 Pretend it's nothing. <br> Call for help. 
 Ha, ha, ha… this… is nothing… 
 Ensign… I don't know who you're trying to impress, but now really isn't the time. 
 Sumire! How can you say that! 
 You can do it, Ogami! We'll pull it off of you as quick as we can. 
 You got this, Ogami! Put your back into it!! 
-I'll wipe your sweat for you, Uncle Ichi! 
+I'll wipe your sweat for you, Mon Frère! 
 Wah… hey, stop! That tickles! 
 S… somebody help! I… I can't hold on…! 
 Don't say that! You've got this, Ogami! 
 What should we do? Should we call Mr. Yoneda? 
 And what would he do? He'd die of a strained back! 
 I don't care what you do, just do something fast! 
-Keep it up, Uncle Ichi! I'll cheer for you! 
+Keep it up, Mon Frère! I'll cheer for you! 
 (Ku… guhhhh…) 
-I, I can't hold it!! 
-(Ku… I, I've got to hold on! Put your back into it, Ichiro Ogami!!) 
+I-I can't hold it!! 
+(Ku… I-I've got to hold on! Put your back into it, Ichiro Ogami!!) 
 Oh my… he's really serious about this, isn't he? 
 That's our boy! You got this, Ogami! Show us what you're made of!! 
 You can do it, Ogami! We'll pull it off of you as soon as we can. 
-Keep it up, Uncle Ichi! I'll cheer for you! 
+Keep it up, Mon Frère! I'll cheer for you! 
 (Ku… ugh… I… I can't hold it anymore…) 
-I, I can't hold it!! 
-Kyaaaaaa! Uncle Ichi!! 
+I-I can't hold it!! 
+Kyaaaaaa! Mon Frère!! 
 Iris! Get out of the way! 
 …huh? 
-…huh?? Uncle Ichi… we're alive? 
+…huh?? Mon Frère… we're alive? 
 Hah, that's pretty sad… can't even lift this much? 
 Hey, glasses, get a rope on this thing and pull it up! 
 (Incredible… she's holding up the set with a single hand…) 

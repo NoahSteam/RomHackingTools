@@ -1,4 +1,4 @@
-Hey everyone, let's do it! 
+﻿﻿Hey everyone, let's do it! 
 Victory pose… Yeah! 
 I've got to focus! 
 Here I go! 
@@ -21,7 +21,7 @@ Come, Ensign, it's your move!
 I'll be watching you! 
 Uwahhh!! 
 I suppose I'll let you win for now! 
-The commander needs me!! 
+The captain needs me!! 
 I'll have to take down the enemies myself! 
 Where's my next target!? 
 Whoever wants to die first, just step forward… 
@@ -36,14 +36,14 @@ Forgive me, sir. I need to withdraw!
 I can fight too! 
 Here I go! 
 I'm super strong! 
-I'll fight hard for Uncle Ichi!! 
+I'll fight hard for Mon Frère!! 
 Uh, some of these lights are flashing… 
-You're the best, Uncle Ichi! 
-Go get 'em Uncle Ichi! 
+You're the best, Mon Frère! 
+Go get 'em Mon Frère! 
 I'll be watching! 
 Kyaaaa… 
 Stupid… stars… 
-Sorry, Uncle Ichi… 
+Sorry, Mon Frère… 
 Gonna go all out. 
 Better not underestimate science~. 
 Movin' out!! 
@@ -51,21 +51,21 @@ Check this out!
 I'm takin' too much damage here! 
 Aww, you're the best! 
 I'm rootin' for ya! 
-Take 'em down, boss! 
+Take 'em down, Ogami! 
 Uwahhh… 
 Dangit… they got me… 
-Sorry boss… 
+Sorry Ogami… 
 Alright! Let's do this!! 
 Full power! Hiyaaaaa! 
 Feast your eyes on the killer techniques of the Kirishima! 
-Let's take 'em down, boss!! 
+Let's take 'em down, Ogami!! 
 No problem! It's just a scratch!! 
 Thanks! I owe you one! 
-Get in there, boss! 
+Get in there, Ogami! 
 Let's see what you can do! 
 Uwahhh… 
 Damn. Guess I still haven't trained enough… 
-I've gotta keep fighting… for the boss. 
+I've gotta keep fighting… for the captain. 
 Alright! 
 We did it! 
 We did it! 
@@ -113,7 +113,7 @@ Impossible… I can't believe the damage it's dealt me…
 No way! This thing's too strong! 
 Man, no kidding, this thing is crazy strong! 
 We've located the main body! The Shogei-Maru is starting bombardment! Get out of the bombing area! 
-So that's it… If we eliminate that, the spirit should disperse. I'll leave the rest to you, Commander Ogami. 
+So that's it… If we eliminate that, the spirit should disperse. I'll leave the rest to you, Captain Ogami. 
 R-roger that. Everyone, focus your attacks on the main body! 
 We did it! 
 Of course, with me here, it was a given that we would win. 
@@ -143,14 +143,14 @@ Good! Let's keep this up!
 Ensign Ogami. The enemy's strength is incomparable to anything before. Focus on defensive tactics. 
 So wait, that means this mission's a failure if we let Teito Tower get destroyed? 
 Curse you! Teito Tower can wait. Focus on crushing them!! 
-Unused 
+.
 Hey Ogami, how should I be fightin'?
-Hey, boss. How should I be fighting? 
+Hey, Ogami. How should I be fighting? 
 Head to the front line. <br> Use ranged attacks. <br> Just sit back and watch. 
-You serious, boss? Doesn't sound like you're considering my strengths at all. 
+You serious, Ogami? Doesn't sound like you're considering my strengths at all. 
 Listen up, I'm good at bombing groups of enemies from a distance. Try to keep that in mind! 
 You got it! Nice one, Ogami! You got my strengths all figured out!
-Good one, boss! You've got my strengths all figured out! 
+Good one, Ogami! You've got my strengths all figured out! 
 My attacks are best for spots where the enemy is bunching up!! 
 Wh-what!? You want me to just sit and watch while everyone else is out there fighting for their lives? 
 Hey, I'm in the Imperial Assault Troupe too, you know! No way can I just sit back and watch! 
@@ -158,7 +158,7 @@ I mean, yeah I'm good at distance attacks from the back line, but…
 Trust me, I'll shine when it comes to ranged attacks and attacking multiple targets! 
 Oh come on… don't you know? 
 This is my first battle and all, I was hoping you'd give me a bit of advice or something… 
-Well… I'm just gonna give it my all. You just do the same, got it boss? 
+Well… I'm just gonna give it my all. You just do the same, got it Ogami? 
 Wait, sir! It appears the enemy has had plenty of time to prepare for this battle. 
 Wait a moment, Ensign! It looks like the enemy has already made preparations for battle here. 
 These installations look like cannons. They'll aim at anything in sight. Destroy them to open the path forward. 

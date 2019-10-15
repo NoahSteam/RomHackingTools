@@ -1,31 +1,31 @@
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused 
+﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking...
+It's a photo of Sumire. This is a side of her you don't see too often.
+It's a photo of Maria. ...She's lost in thought and looks kind of sad...
+A photo of Kanna. She looks strong and reliable. I can't wait to meet her.
+A photo of Iris. She's surrounded by flowers and flashing a radiant smile.
+A photo of Kohran. She's looking pretty in profile with her face dyed red by the evening sun.
+A letter given to me by a customer. I was asked to give it to Sumire. I have a bad feeling about this...
+Maria's pistol. This may help me escape from here...
+A hair ornament. It's decorated with flowers and looks very elegant.
+A pretty pendant. The delicate workmanship is gorgeous.
+A hairpin for use in a traditional bun hairstyle. It would complement a formal outfit well.
+This key will let me enter rooms I couldn't before.
+I found this in a bedroom on the second floor. I can use it to access the back room.
+A teacup Iris asked me to get for her. It has a very stylish design.
+This is the matchbox Iris asked for. Its logo is quite colorful.
+A knife Iris asked me to get for her. Just a normal utensil you'd use during a meal.
+A prop sword and shield used onstage. They're well-made and look just like the real thing.
+A prop crown used onstage. It's well constructed and incredibly detailed.
+A wig and costume used onstage. I wonder what kind of act could use a flashy outfit like this?
+A photo of Sakura in her swimsuit. Wow, this is really something. I'm gonna treasure this.
+A photo of Sumire in her stage costume. Her distinctive makeup really makes an impact.
+It's a photo of Maria on stage in the military uniform from "For Love"... She's a beautiful woman disguised as a man.
+A photo of Kanna in her training gear. Catching her in a private moment like this feels surprisingly intimate.
+A photo of Iris in her swimsuit. She's holding a rubber ring and looks ready to have some fun. How cute.
+A photo of Kohran. I don't get to see her with her braids undone very often. It's a nice look.
+A photo of Ayame in a traditional outfit. I hope she'll always be as happy and content as she is here.
+Ayame's gun. Why...? Why did it have to turn out like this...?
+Jean-Paul the teddy bear. Iris's best friend. She always carries him with her and takes good care of him.
 So that's Kohran. I guess she'll be working here from now on. Should I go take a peek at the Manager's Office? 
 That girl said her name was Kohran, right? I guess she's in the Manager's Office by now. 
 Oh, you sure? 
@@ -62,8 +62,8 @@ These photos are mainly for guests, so please just take one.
 I see, I guess that's true… I'll come again. 
 You'd like to buy that? Thank you! 
 Maria is playing a male role this month. She looks really good in her military costume! 
-Back when I was here before Maria was the captain. 
-A captain's work is rough but good luck with it, Ensign. 
+Back when I was here before, Maria was the captain. 
+A captain's work is rough, but good luck with it, Ensign. 
 You'd like to buy this photo? Thank you! 
 That's a photo of Kanna. That'll be 50 zeni. 
 We need to leave some for the guests, so just take one for now, okay? 
@@ -89,7 +89,7 @@ and I think Iris's Koubu will be finished and sent over here to Ginza sometime i
 You'd like to buy this photo? Thank you! 
 That's a photo of Kohran. That'll be 50 zeni. 
 We need to leave some for the guests, so just take one for now, okay? 
-Hey come on now Ensign. That's embarrassing. Don't buy that. 
+Hey, come on now, Ensign. That's embarrassing. Don't buy that. 
 Huh? …but Ogami, you already bought a copy of Kohran's picture, didn't you? 
 Whaa? You serious? Why're you picking up my picture when ya haven't even met me yet? 
 Just sort of caught my eye… <br> I thought you looked cute… <br> I needed some change… 
@@ -140,7 +140,7 @@ Iris! Good to see you! How've you been?
 Good! Hey hey Kohran, come to my room and let's play. 
 Sorry, I gotta go to the manager's office first. I'll see you later, Iris. 
 What!? Bo~ring! 
-… huh? But Uncle Yoneda's room is on the first floor. How come you're up here? 
+… huh? But Mr. Yoneda's room is on the first floor. How come you're up here? 
 What, we're not even on the right floor? C'mon Mr. Ensign, get it together… 
 Kohran, come play with me when you're free. 
 You got it. See ya, Iris. 
@@ -301,7 +301,7 @@ Man, it has been a while since I last saw the old man…
 Ogami! 
 Hmmm? That voice… 
 Oh Sakura. Did you just come from the stage? 
-Yes. This time I am costarring with Maria. 
+Yes. This time I am co-starring with Maria. 
 (She braided her hair… Cute.) 
 (She's wearing subtle make up for the performance. Nice!) 
 Ogami… can you please stop staring at me like that? It's embarrassing! 
@@ -349,12 +349,12 @@ I'd expect more from the captain of the Imperial Assault Troupe.
 You're right. I shouldn't have said that. 
 I… hmm… well… 
 Oh, sorry Mr. Ensign. That was a weird thing to ask, I guess. 
-But no need to fib, Mr. Ensign. You can be always be honest with me. 
+But no need to fib, Mr. Ensign. You can always be honest with me. 
 … By the way, Mr. Ensign, do you mind if I just call you Ogami? 
 Of course. <br> No way! <br> Call me 'lover boy'. 
 Of course. 
 Thanks. I always have trouble calling Yoneda 'Lieutenant General' too. 
-I just love how relaxed the Flower Division of the Revue is about things like that. 
+I just love how relaxed the Flower Division of the Troupe is about things like that. 
 …What?! I kind of like being called Ensign… 
 Oh, come on! No need to fuss about a title, right? 
 All right then! Ogami it is! 
@@ -429,8 +429,8 @@ That voice…
 Ah, Sumire! 
 Ensign, wasn't that Kohran just now? 
 Yes. I just brought her… 
-Did you, now? Well, she's finally returned to the Imperial Revue. 
-So lieutenant, now that you have met her, what is your first impression? 
+Did you, now? Well, she's finally returned to the Imperial Troupe. 
+So Ensign, now that you have met her, what is your first impression? 
 She's a bit strange. <br> She's cute! <br> I think she's funny. 
 Well… what can I say? She's a bit strange. 
 You read people like books, don't you, Ensign? 
@@ -447,32 +447,32 @@ Anyway, Ensign, the manager sent me to tell you that you should go help in the a
 So, now that I delivered that message, I have to get going. Please excuse me. 
 …Now that she mentions it… I DID offer to help earlier. Guess I have to go then. 
 So… looks like the Flower Division just got reinforcements. I can't wait to see Kohran in action. 
-Uncle Ichi~! 
+Mon Frère~! 
 Hm, that voice…? 
-Uncle Ichi! Wasn't that Kohran? 
+Mon Frère! Wasn't that Kohran? 
 Yes. I just brought her to her room. 
 Yay! So she really is back! 
-What do you think, uncle? Do you like her? 
+What do you think, Mon Frère? Do you like her? 
 Of course! <br> Hard to say. <br> No way. 
 Of course. She's really funny. 
 That's wonderful! I like her a lot, too. 
-But, before I forget. Uncle Yoneda said you should help out in the administration office. 
+But, before I forget. Mr. Yoneda said you should help out in the administration office. 
 Gotta go! See you later! 
 Hard to say. I just met her, after all. 
 … I see. But I'm sure you'll get to know her soon! 
 Of course. 
-But, before I forget. Uncle Yoneda said you should help out in the administration office. 
+But, before I forget. Mr. Yoneda said you should help out in the administration office. 
 Gotta go! See you later! 
 No way. I don't see us getting along at all. 
 What? How can you say that!? 
 I'm sorry. I didn't mean it. I'll do my best to like her. Please stop crying… 
 Okay… Promise you'll try! 
-But before I forget. Uncle Yoneda said you should help out in the administration office. 
+But before I forget. Mr. Yoneda said you should help out in the administration office. 
 Gotta go! See you later! 
 …… 
 Did you hear me? 
 Yes… I heard you… 
-… Uncle Yoneda said that you should go and help in the administration office. 
+… Mr. Yoneda said that you should go and help in the administration office. 
 Gotta go! See you later! 
 … I guess I DID promise to help… I better go the administration office, then. 
 Ah, Ogami. 
@@ -486,7 +486,7 @@ What!?
 Thank you very much, Ogami! 
 Wait a sec… 
 First the ticket punching and now this… 
-Am I really the commander here? 
+Am I really the captain here? 
 Lately, I'm starting to doubt myself… 
 Unused
 Unused
@@ -524,7 +524,7 @@ Unused
 Unused
 Are you a Koubu pilot, too? 
 Unused
-It's rare to see a guy pilot one. You must be a real hot shot! 
+It's rare to see a guy pilot one. You must be a real hotshot! 
 By the way, the Hive of Darkness are remnants of the Tokugawa regime who wanna overthrow the government. 
 We've got to stop them. 
 Come in! 

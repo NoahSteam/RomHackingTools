@@ -1,31 +1,31 @@
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
+﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking...
+It's a photo of Sumire. This is a side of her you don't see too often.
+It's a photo of Maria. ...She's lost in thought and looks kind of sad...
+A photo of Kanna. She looks strong and reliable. I can't wait to meet her.
+A photo of Iris. She's surrounded by flowers and flashing a radiant smile.
+A photo of Kohran. She's looking pretty in profile with her face dyed red by the evening sun.
+A letter given to me by a customer. I was asked to give it to Sumire. I have a bad feeling about this...
+Maria's pistol. This may help me escape from here...
+A hair ornament. It's decorated with flowers and looks very elegant.
+A pretty pendant. The delicate workmanship is gorgeous.
+A hairpin for use in a traditional bun hairstyle. It would complement a formal outfit well.
+This key will let me enter rooms I couldn't before.
+I found this in a bedroom on the second floor. I can use it to access the back room.
+A teacup Iris asked me to get for her. It has a very stylish design.
+This is the matchbox Iris asked for. Its logo is quite colorful.
+A knife Iris asked me to get for her. Just a normal utensil you'd use during a meal.
+A prop sword and shield used onstage. They're well-made and look just like the real thing.
+A prop crown used onstage. It's well constructed and incredibly detailed.
+A wig and costume used onstage. I wonder what kind of act could use a flashy outfit like this?
+A photo of Sakura in her swimsuit. Wow, this is really something. I'm gonna treasure this.
+A photo of Sumire in her stage costume. Her distinctive makeup really makes an impact.
+It's a photo of Maria on stage in the military uniform from "For Love"... She's a beautiful woman disguised as a man.
+A photo of Kanna in her training gear. Catching her in a private moment like this feels surprisingly intimate.
+A photo of Iris in her swimsuit. She's holding a rubber ring and looks ready to have some fun. How cute.
+A photo of Kohran. I don't get to see her with her braids undone very often. It's a nice look.
+A photo of Ayame in a traditional outfit. I hope she'll always be as happy and content as she is here.
+Ayame's gun. Why...? Why did it have to turn out like this...?
+Jean-Paul the teddy bear. Iris's best friend. She always carries him with her and takes good care of him.
 New Year's Day is a good time for new beginnings. Not bad to spend the first day reading. 
 Maybe I should come here again tonight. 
 Yeah… It wouldn't be bad to have a lazy New Year while eating oranges. 
@@ -34,7 +34,7 @@ On New Year's Eve, we were partying here until late at night.
 Once the night is over, the new year will be there. A strange feeling. 
 It's been three months since those Black Web shenanigans… Ginza has been almost completely rebuilt. 
 I'm just happy we can celebrate the New Year in peace. 
-I don't have duty on New Year's day. I can stretch my bones all day if I want. 
+I don't have duty on New Year's Day. I can stretch my bones all day if I want. 
 The Flower Division also has the day off. Maybe I should ask someone out to visit the shrine. 
 The strong sunlight of Winter is even coming in here. 
 The weather's fine again today. An ideal day for going out. 
@@ -42,10 +42,10 @@ The weather's fine again today. An ideal day for going out.
 Maybe I should ask someone out to visit the shrine later. 
 The manager… He's been drinking non-stop since yesterday. 
 Let's go to another room. 
-Mr. Yoneda, it's me, Ogami… 
+Manager Yoneda, it's me, Ogami… 
 ZZZZZzzz… ZZZZZzzz… 
 Not a chance. As I thought, he's passed out… 
-Yuri and Kasumi seem to be off duty on New Year's day. 
+Yuri and Kasumi seem to be off duty on New Year's Day. 
 Boring… I should check out another room. 
 No one here. Looks like I have to go someplace else. 
 …Is everyone in their own rooms? 
@@ -71,7 +71,7 @@ They probably haven't much to do, so I should ask someone out to visit the shrin
 …No one here. 
 Sakura demolished this stage last year. It seems forever ago… 
 It's everyone from the Flower Division. I'm sure there'll be lots of action this year too. 
-Ugh… What am I doing here on New Year's day? 
+Ugh… What am I doing here on New Year's Day? 
 Maybe all this laziness is getting to me. 
 New Year's Day is a good time for new beginnings. It wouldn't be bad to do some workout here… 
 …On second thought, no. I wouldn't want to get sore on the first day of the year. 
@@ -120,7 +120,7 @@ Y-yes…
 Hahaha… 
 (But… Starting the year off with some peace and quiet is really great…) 
 Phew, maybe I had a little too much New Year's sake… My head's killing me. 
-Lieutenant Ogami, Lieutenant Ogami. Manager Yoneda wants to see you. Please come to the manager's office. 
+Ensign Ogami, Ensign Ogami. Manager Yoneda wants to see you. Please come to the manager's office. 
 Manager Yoneda? What does he want from me? Well, I guess I'll find out… 
 Let's go. 
 Hey, Sakura… Are you going visiting the shrine? 
@@ -186,15 +186,15 @@ Yes, sir!
 Why did you want to see me, manager?n 
 Good to see you, Ogami! But first things first - a drink? 
 Cheers! <br> …I'll have to decline. <br> Please tell my why I'm here. 
-Cheers! After all, what's New Year's day without some booze? 
+Cheers! After all, what's New Year's Day without some booze? 
 …You idiot! 
 …Y-yes? 
 …Don't get carried away by your New Year's spirit. 
-"In prosperity, prepare for adversary." If you haven't mastered that, you're not fit to be a commander. 
+"In prosperity, prepare for adversary." If you haven't mastered that, you're not fit to be a captain. 
 …I'm sorry. 
 With all due respect… I'll have to decline. 
 Right. You probably should. 
-"In prosperity, prepare for adversary." If you haven't mastered that, you're not fit to be a commander, you know. 
+"In prosperity, prepare for adversary." If you haven't mastered that, you're not fit to be a captain, you know. 
 Yes. 
 Please tell my why I'm here. 
 Why are you in such a hurry, Ogami? Very suspicious… 
@@ -205,10 +205,10 @@ But remember, "In prosperity, prepare for adversary." Even in times of peace, we
 Yes. 
 Attention, man! What's with that gone fishing face!? 
 Oh… sorry. 
-New Year's eve really did a number on you, huh? 
-"In prosperity, prepare for adversary." If you haven't mastered that, you're not fit to be a commander. 
+New Year's Eve really did a number on you, huh? 
+"In prosperity, prepare for adversary." If you haven't mastered that, you're not fit to be a captain. 
 …I'm sorry. 
-…That said, I guess it's only natural that you want to relax a little on New Year's day. 
+…That said, I guess it's only natural that you want to relax a little on New Year's Day. 
 Anyway, you don't have to work today. Catch some fresh air or something. 
 Y-yes, ma'am! 
 OK, I'm off then. 
@@ -234,7 +234,7 @@ Maybe I should go to another room.
 It's Ogami… Are you in, Sakura? 
 Wow… Beautiful! 
 Yes, of course. <br> No, I was talking about you. 
-Yes, of course. That's perfect for New Year's day. 
+Yes, of course. That's perfect for New Year's Day. 
 OK, should we get going? Let's take the steam train to Meiji Shrine. 
 No, I was talking about you. 
 No, I really mean it… 
@@ -243,7 +243,7 @@ OK, should we get going? Let's take the steam train to Meiji Shrine.
 S-sorry. I was admiring your long-sleeved kimono… 
 OK, should we get going? Let's take the steam train to Meiji Shrine. 
 It's me, Ogami… Are you in, Sakura? 
-Mr. Ogami? Come in, the door is open! 
+Ogami? Come in, the door is open! 
 Come in, door's open! 
 Pardon me. 
 Sakura… I… 
@@ -268,19 +268,19 @@ OK. In one hour, in front of the theater.
 Visiting the shrine with Sakura… I couldn't think of a better way to start off the new year. 
 It's a little early, but maybe I should already wait in front of the theater. 
 It's… No, it's nothing. 
-What is it, Mr. Ogami? Did you have too much of that New Year's sake? 
-Cut it out! New Year's day or not, that's in bad taste. 
+What is it, Ogami? Did you have too much of that New Year's sake? 
+Cut it out! New Year's Day or not, that's in bad taste. 
 S-sorry. I'll see myself out. 
 Hm… Whom should I ask to visit the shrine with me? 
 I wonder if Sumire is in her room. 
 Maybe I should go to another room. 
 It's me, Ogami… Are you there, Sumire? 
-Sorry to keep you waiting, Lieutenant. Let us leave. 
+Sorry to keep you waiting, Ensign. Let us leave. 
 Oh? Aren't you going to wear the dress from before? 
 Well… I got worried I'd stand out too much in such a crowd… 
 I didn't want that to get in the way when we finally spend some time together. 
 You're right. <br> I liked the other one better. <br> …you'll still stand out. 
-You're right. Let's just enjoy New Year's day together, the two of us. 
+You're right. Let's just enjoy New Year's Day together, the two of us. 
 Yes… I have a feeling this will be an excellent year! 
 OK, should we leave? I guess Meiji Shrine is the place to go. 
 To be honest, I liked the other one better. 
@@ -295,7 +295,7 @@ OK, should we leave? I guess Meiji Shrine is the place to go.
 Do you want to stand around there until the sun sets? 
 Y-you're right. Should we leave? I guess Meiji Shrine is the place to go. 
 It's me, Ogami… Are you there, Sumire? 
-Lieutenant? Please do come in! 
+Ensign? Please do come in! 
 What is it, all of a sudden? Just come in, it's open. 
 Coming in! 
 Hm? What happened to the other dress? 
@@ -303,7 +303,7 @@ I was just about to leave to visit the shrine…
 I figured I'd stand out too much, so I changed. 
 (I think she'll still stand out…) 
 By the way, what did you want? 
-Really, Lieutenant… If you want something from me, can't you tell me right away? 
+Really, Ensign… If you want something from me, can't you tell me right away? 
 Sumire, listen… 
 Visit the shrine with me? <br> …It's nothing. 
 Would you… come visit the shrine with me? 
@@ -316,21 +316,21 @@ Looks like Sumire blew me off…
 I guess I'll just ask someone else. 
 Would you come visit the shrine with me? 
 I know you said you were busy, but… I don't want to go with anyone else. 
-Wha… with me? Are you serious, Lieutenant? 
+Wha… with me? Are you serious, Ensign? 
 Yes, of course! 
 Thank you for asking. I would gladly join you! 
 Phew… I'm glad! I'd have been really sad if you'd said no. 
 Very well, we should leave at once! Time is of the essence. 
 OK, perfect. Let's go to Meiji Shrine then. 
 It's… No, it's nothing. 
-Are you all right, Lieutenant? Did the New Year already do a number on you? 
-Please be serious, Lieutenant! New Year's day or not, that's just rude! 
+Are you all right, Ensign? Did the New Year already do a number on you? 
+Please be serious, Ensign! New Year's Day or not, that's just rude! 
 S-sorry. I'll see myself out. 
 Hm… Whom should I ask to visit the shrine with me? 
 I wonder if Maria is in her room. 
 Maybe I should go to another room. 
 It's me, Ogami… Are you there, Maria? 
-Sorry to keep you waiting, Lieutenant. Shall we go? 
+Sorry to keep you waiting, Ensign. Shall we go? 
 Yes. We fought hard for this peace. So let's enjoy it for once. 
 Y-yes… 
 …Maria? 
@@ -353,7 +353,7 @@ It's strange to be worried now, when we've defeated the Black Web, isn't it?
 Exactly. We fought hard for this peace, so let's enjoy it for once. 
 Come on. I guess Meiji Shrine is the place to go. 
 It's me, Ogami… Are you there, Maria? 
-Commander? Please, come in. 
+Captain? Please, come in. 
 Come in, the door isn't locked. 
 Coming in! 
 Hey, Maria. I wanted to ask… Are you busy? 
@@ -363,12 +363,12 @@ It's just… I…
 Come visit the shrine with me. <br> …Never mind. 
 Come visit the shrine with me. What do you say? 
 I'm sorry, but I'll have to decline that offer. 
-It's just… Even though it's New Year's day, I feel a strange sense of unease. 
+It's just… Even though it's New Year's Day, I feel a strange sense of unease. 
 One more reason to visit the shrine. To take your mind off things. 
 Thank you for your concern. 
 But I'm really not in the mood for something like that right now. 
 I see… 
-Please forgive me, commander. 
+Please forgive me, Captain. 
 Looks like Maria blew me off… 
 I guess I'll just ask someone else. 
 Maria… Please come to the shrine with me. 
@@ -381,35 +381,35 @@ This is my first New Year's shrine visit. I'd be happy to go with you.
 Trust me, it'll be fine! Should we take the Steam Train to Meiji Shrine then? 
 It's… No, it's nothing. 
 If there's nothing else, could you let me continue reading? 
-You must be really bored, commander. What is it this time? 
+You must be really bored, Captain. What is it this time? 
 S-sorry. I'll see myself out. 
 Hm… Whom should I ask to visit the shrine with me? 
 I wonder if Kanna is in her room. 
 Maybe I should go to another room. 
 It's me, Ogami… Are you there, Kanna? 
-Hey, commander! Here I am! 
-I also got permission to go out from manager Yoneda. 
+Hey, Boss! Here I am! 
+I also got permission to go out from Manager Yoneda. 
 Really? Glad to hear it! Even you like to relax on a day like this, right? 
 I want to eat a lot, have a lot of fun… and then sleep a lot! 
 Hahaha, that's just like you, Kanna! You know what they say - your first dream of the year comes true. 
 It'll come true…? 
-What kind of dream would you want to have, commander? 
-Of a peaceful Teito. <br> Of you, Kanna. <br> A nightmare, for sure. 
+What kind of dream would you want to have, Boss? 
+Of a peaceful Teito. <br> Of you, Kanna. <br> I’ll have a nightmare, for sure. 
 Of a peaceful Teito. Even with the Black Web gone, this city still hasn't fully recovered. 
 I want everything rebuilt, so the people can forget what happened and live in peace. 
 It's not just a dream I have while I'm sleeping. It's the same when I'm awake. 
-Not bad, commander. You really have a good heart. 
+Not bad, Boss. You really have a good heart. 
 But we defeated the Black Web, so who'd attack the Flower Division? Aren't you worrying too much? 
 OK, wanna leave? I just want to get out of here. 
 I'd dream of you, Kanna. How we go visit the shrine together. 
 Oh, stop it… You'll make me blush! That would be some nightmare. 
 No, that's about the most pleasant dream I could imagine right now. 
 … 
-Thanks, commander… I guess dreaming of you… wouldn't be so bad either. 
+Thanks, Boss… I guess dreaming of you… wouldn't be so bad either. 
 Huh? What did you say just now? 
 Erm, I mean… Let's go to the shrine then! 
 I'll have a nightmare for sure. I can feel it in my bones already. 
-That's depressing, commander! Let's not start the New Year like that. 
+That's depressing, Boss! Let's not start the New Year like that. 
 You gotta have a nice dream that'll take your mind off things. You just gotta try hard! 
 Hahaha! Having nice dreams by sheer willpower? Typical Kanna! 
 Starting the year with a lot of energy is important! Now let's go out there and go wild! 
@@ -419,7 +419,7 @@ Hmmm…
 Than let's leave it at that and just enjoy our shrine visit! 
 All right. Let's get out of here. 
 It's me, Ogami… Are you there, Kanna? 
-That you, commander? Just come in! 
+That you, Boss? Just come in! 
 I'll give you one thing, you're persistent. 
 Coming in! 
 So, what's up? 
@@ -435,24 +435,24 @@ Looks like Kanna blew me off…
 I guess I'll just ask someone else. 
 Would you maybe… join me for visiting the shrine? 
 I know you said no, but… I don't want to go with anyone else. 
-Huh? With me? You serious, commander? 
+Huh? With me? You serious, Boss? 
 Of course. I wouldn't joke about something like that. 
-Thanks, commander. That really makes me happy. 
+Thanks, Boss. That really makes me happy. 
 If you really wanna go with me, how could I say no? 
 Wow, that's great! Let's go as soon as possible! 
 Yeah. OK, let's go! 
 It's… No, it's nothing. 
-You're acting weird, commander. Did you maybe have a little too much of that New Year's sake? 
+You're acting weird, Boss. Did you maybe have a little too much of that New Year's sake? 
 Come on! If you want something, just get it out the first time! 
 S-sorry. I'll see myself out. 
 Hm… Whom should I ask to visit the shrine with me? 
 I wonder if Iris is in her room. 
 Maybe I should go to another room. 
 It's me, Ogami… Are you there, Iris? 
-Are you ready, uncle Ichi? 
+Are you ready, Mon Frère? 
 Yep. Yoneda gave me permission to go out. I can do what I want all day! 
 Yaaay! We're going to visit the shrine together! I'm so happy! 
-Oh, right… I wanted to ask you something, uncle. 
+Oh, right… I wanted to ask you something, Frère. 
 What is it? 
 What… do we do at the shrine? 
 We go there to make wishes. <br> We go there to draw omikuji. <br> To have fun at the stalls. 
@@ -465,24 +465,24 @@ We go there to draw omikuji.
 Omi… what? 
 That's right… You're from France, so you wouldn't know. 
 Omikuji are strips of paper we draw to have our fortune told. They have words like "Kichi" or "Kyo" on them. 
-Uncle Ichi… 
+Mon Frère… 
 What does that mean, "Kichi" and "Kyo"? 
 You know what? It's easier if we just go there and I show you. 
 We go there to have fun at the stalls. 
 Yay, that sounds fun! I love stalls! 
 Oh… So you know about festival stalls? 
 Yeah! I saw them when I went with the others to visit a traditional festival! 
-Let's go, uncle Ichi! Let's go! 
+Let's go, Mon Frère! Let's go! 
 Hahaha, all right! After you! 
-Hey, uncle Ichi! Why are you spacing out? Let's go! 
+Hey, Mon Frère! Why are you spacing out? Let's go! 
 Hey, Iris! Don't pull my arm like that! 
 Come on, or I'll leave you behind! 
 It's me, Ogami… Are you there, Iris? 
-Uncle Ichi? Come in! The door is open! 
+Mon Frère? Come in! The door is open! 
 Yay, you're back! 
 The door isn't locked, so just come in! 
 Coming in! 
-What is it, Uncle Ichi? 
+What is it, Mon Frère? 
 What do you want this time? 
 Listen… 
 Come visit the shrine with me. <br> …Never mind. 
@@ -496,19 +496,19 @@ Hm… Japanese people really have lots of annoying customs…
 The temple bell wouldn't stop ringing yesterday… 
 So now, I'm super sleepy! I want to take a nap… 
 Oh, I see… Too bad. 
-It's nice you asked me though… Sorry, uncle Ichi. 
+It's nice you asked me though… Sorry, Mon Frère. 
 Iris blew me off… 
 I guess I'll just ask someone else. 
 Iris… Do you want to go visit the shrine with me? 
 I know you said no, but… I don't want to go with anyone else. 
-OK, let's go! I'll go to the shrine with you, uncle Ichi! 
+OK, let's go! I'll go to the shrine with you, Mon Frère! 
 Hahaha, I love how enthusiastic you sound. Then let's go visit Meiji Shrine! 
-OK, let's go then! With you, I'd go anywhere, uncle Ichi! 
+OK, let's go then! With you, I'd go anywhere, Mon Frère! 
 Hahaha, that's nice. Should we get going? 
 Yeah! 
 It's… No, it's nothing. 
-You're being strange, uncle Ichi. What's the matter? 
-You keep acting strange. What's up, uncle Ichi? 
+You're being strange, Mon Frère. What's the matter? 
+You keep acting strange. What's up, Mon Frère? 
 S-sorry. I'll see myself out. 
 Hm… Whom should I ask to visit the shrine with me? 
 I wonder if Kohran is in her room. 
@@ -576,7 +576,7 @@ Get a grip, man! If you keep wasting time here, it'll be too late to go out.
 Y-yes! Please excuse me. 
 Three months later. Taisho 13 (1924), 1st of January. 
 Happy New Year! 
-Mr. Ogami! Happy New Year! 
+Ogami! Happy New Year! 
 Unused
 Unused
 Unused
@@ -593,19 +593,19 @@ Unused
 Unused
 Unused
 Unused
-Commander… Happy New Year. 
-Yo, boss! Chinese New Year is still some weeks off though… 
+Captain… Happy New Year. 
+Yo, Chief! Chinese New Year is still a few weeks off though… 
 You look much older already! 
-Happy New Year, Uncle Ichi! 
+Happy New Year, Mon Frère! 
 I'll be eleven this year! How long do you think until I can get married? 
 Oh, really? 
-You've come a long way as a commander! I have a feeling we've got an awesome year ahead of us. 
+You've come a long way as a captain! I have a feeling we've got an awesome year ahead of us. 
 Like you would know anything about that… 
 How dare you, you evil hag! 
 Stop your screaming, gorilla! 
 Want to pick a fight, you rotten snake? 
 Ogami… You did well last year. Keep it up! 
-Boss… You've been acting bashful all day! 
+Chief… You've been acting bashful all day! 
 Unused
 Unused
 Unused
@@ -628,18 +628,18 @@ Just kidding! Hohohoho… How innocent you are!
 Unused
 All right, just what I wanted to hear! Let's get out of here! 
 Hahaha! All right, let's drink and be merry! Right? 
-I really like you, boss. Come on then, show me how you celebrate New Year's day in Tokyo. Just the two of us! 
+I really like you, boss. Come on then, show me how you celebrate New Year's Day in Tokyo. Just the two of us! 
 This is our little secret… OK, let's go! 
 Unused
 Unused
-Hey, uncle Ichi… Take me to the shrine please! 
+Hey, Mon Frère… Take me to the shrine please! 
 Just the two of us, having fun. Hehehe… Wouldn't that be nice? 
 Yaaay, I'm so happy! Let's leave right now! 
 Unused
 Booooohoooooo! 
 Unused
 Unused
-Yay! A date with Uncle Ichi! 
+Yay! A date with Mon Frère! 
 Unused
 Unused
 Unused
@@ -654,8 +654,8 @@ Unused
 Unused
 Sorry you had to wait! 
 You mean this dress? 
-I wanted to dress in a real Japanese kimono. New Year's day only comes once a year, after all! 
-And also… It's my first date with you, Mr. Ogami. 
+I wanted to dress in a real Japanese kimono. New Year's Day only comes once a year, after all! 
+And also… It's my first date with you, Ogami. 
 Even if you're only flattering me, that makes me happy. 
 Thank you, really. 
 Unused
@@ -838,22 +838,22 @@ Unused
 Unused
 Unused
 You should work hard and follow my example so you can make your debut in high society. 
-By the way, Mr. Ogami, what do you think about this dress? Isn't it a little too plain? 
+By the way, Ogami, what do you think about this dress? Isn't it a little too plain? 
 Hmph… I was planning to make it from Nishijin brocade imported from Kyoto… 
 I wanted to wear a luxurious long-sleeved kimono. Such a pity… 
 Yeah, yeah… Suits you perfectly, Sumire, like always. 
 Do I detect some sarcasm in your tone? 
 Ahahaha, what gave you that idea? I was being honest! Wasn't I, boss? 
-Why the sudden silence, Mr. Ogami?! 
+Why the sudden silence, Ogami?! 
 Indecisive as ever! 
 But I'm right, aren't I? Whatever you're wearing, it always suits you! 
 Ooooohohohoho! Looks like you finally learned to appreciate my beauty. 
-So, Mr. Ogami… If you're going to visit the shrine, I could accompany you. 
-You don't look very busy to me, commander! Come one… Let's celebrate New Year's day, just the two of us! 
-What!? You gonna turn me down, boss? 
+So, Ogami… If you're going to visit the shrine, I could accompany you. 
+You don't look very busy to me, Boss! Come on… Let's celebrate New Year's Day, just the two of us! 
+What!? You gonna turn me down, Chief? 
 That's just… I hate you! To play with my feelings like that… 
-Boohoo… I hate you, uncle! So you don't like me after all! 
-Commander… Would you like to take me to the shrine? 
+Boohoo… I hate you, Frère! So you don't like me after all! 
+Captain… Would you like to take me to the shrine? 
 In my country, we didn't have this custom… 
 Oh, really? I understand. 
 Really? I'll come by your room later then. 
@@ -865,7 +865,7 @@ Just take one of the girls. Didn't some of them ask you already?
 Everyone wanted to go with you. 
 You shouldn't let them wait too long. 
 Oh, and one more thing… "He who runs after two hares will catch neither". Keep that in mind. 
-Hehe, why not? It's only New Year's day once a year, so let's get a little crazy. 
+Hehe, why not? It's only New Year's Day once a year, so let's get a little crazy. 
 Take care of the girls! Don't mess this up, Ogami. 
 Unused
 Unused

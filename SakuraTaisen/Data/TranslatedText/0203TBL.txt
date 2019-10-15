@@ -1,31 +1,31 @@
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused 
+﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking...
+It's a photo of Sumire. This is a side of her you don't see too often.
+It's a photo of Maria. ...She's lost in thought and looks kind of sad...
+A photo of Kanna. She looks strong and reliable. I can't wait to meet her.
+A photo of Iris. She's surrounded by flowers and flashing a radiant smile.
+A photo of Kohran. She's looking pretty in profile with her face dyed red by the evening sun.
+A letter given to me by a customer. I was asked to give it to Sumire. I have a bad feeling about this...
+Maria's pistol. This may help me escape from here...
+A hair ornament. It's decorated with flowers and looks very elegant.
+A pretty pendant. The delicate workmanship is gorgeous.
+A hairpin for use in a traditional bun hairstyle. It would complement a formal outfit well.
+This key will allow me to enter rooms I couldn't get into before.
+I found this in a bedroom on the second floor. I can use it to access the back room.
+A teacup Iris asked me to get for her. It has a very stylish design.
+A matchbox Iris asked me to get for her. The brand logo is very colorful.
+A knife Iris asked me to get for her. Just a normal utensil you'd use during a meal.
+A prop sword and shield used onstage. They're well made and look just like the real thing.
+A prop crown used onstage. It's well constructed and incredibly detailed.
+A wig and costume used onstage. I wonder what kind of act could use a flashy outfit like this?
+A photo of Sakura in her swimsuit. Wow, this is really something. I'm gonna treasure this.
+A photo of Sumire in her stage costume. Her distinctive makeup really makes an impact.
+It's a photo of Maria on stage in the military uniform from "For Love"... She's a beautiful woman disguised as a man.
+A photo of Kanna in her training gear. Catching her in a private moment like this feels surprisingly intimate.
+A photo of Iris in her swimsuit. She's holding a rubber ring and looks ready to have some fun. How cute.
+A photo of Kohran. I don't get to see her with her braids undone very often. It's a nice look.
+A photo of Ayame in a traditional outfit. I hope she'll always be as happy and content as she is here.
+Ayame's gun. Why...? Why did it have to turn out like this...?
+Jean-Paul the teddy bear. Iris's best friend. She always carries him with her and takes good care of him.
 Is it this late already…? Soon it'll be time to put the theater's lights out. 
 I only have time to inspect about 3 more rooms… What should I do? 
 Continue patrol. <br> Go to sleep. 
@@ -175,7 +175,7 @@ I'm not joking! If we go back through Asakusa…
 Yeah! We can eat monjayaki, buy some fresh rice crackers for the others… 
 You don't… think about much except eating, do you? 
 What's wrong with that? Eating and walking around Asakusa is bound to be a lot of fun, right? 
-I heard from Kohran, apparently they have a Assault Troupe Workshop at the Hanayashiki Branch. 
+I heard from Kohran that they have an Assault Troupe Workshop at the Hanayashiki Branch. 
 Yeah. Kohran worked there, apparently. 
 Speaking of which, Ogami. I heard something from Kohran too… 
 She said that there's something really amazing hidden underground at the Hanayashiki Branch. 
@@ -230,7 +230,7 @@ Sakura… a-about before, I'm really…
 D-damn! No choice. I'm heading back! 
 So, this is my first time in Sakura's room, huh… 
 Anyway, was there something you wanted? 
-…It's cute, very girlish. 
+…It's cute; very girlish. 
 Really? I'm embarrassed, please don't look at it like that… 
 I'm gonna turn in. 
 H-Hold on, Ogami! You can't just get into someone's bed without their permission! 
@@ -246,7 +246,7 @@ Ogami. Do you really think a picture of a castle is all that strange?
 Who's this photo of…? 
 That's…a picture of my family. 
 That's a picture of my family. We took it together at a photo studio in Sendai. 
-You were wearing a plait during the day right…? You looked, kind of cute. 
+You were wearing a braid during the day right…? You looked kind of cute. 
 …Is that so? 
 (Sakura… she still looks mad) 
 Ogami. It's getting really late, hurry up and tell me what you wanted. 

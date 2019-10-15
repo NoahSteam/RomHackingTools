@@ -1,31 +1,31 @@
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
+﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking...
+It's a photo of Sumire. This is a side of her you don't see too often.
+It's a photo of Maria. ...She's lost in thought and looks kind of sad...
+A photo of Kanna. She looks strong and reliable. I can't wait to meet her.
+A photo of Iris. She's surrounded by flowers and flashing a radiant smile.
+A photo of Kohran. She's looking pretty in profile with her face dyed red by the evening sun.
+A letter given to me by a customer. I was asked to give it to Sumire. I have a bad feeling about this...
+Maria's pistol. This may help me escape from here...
+A hair ornament. It's decorated with flowers and looks very elegant.
+A pretty pendant. The delicate workmanship is gorgeous.
+A hairpin for use in a traditional bun hairstyle. It would complement a formal outfit well.
+This key will let me enter rooms I couldn't before.
+I found this in a bedroom on the second floor. I can use it to access the back room.
+A teacup Iris asked me to get for her. It has a very stylish design.
+This is the matchbox Iris asked for. Its logo is quite colorful.
+A knife Iris asked me to get for her. Just a normal utensil you'd use during a meal.
+A prop sword and shield used onstage. They're well-made and look just like the real thing.
+A prop crown used onstage. It's well constructed and incredibly detailed.
+A wig and costume used onstage. I wonder what kind of act could use a flashy outfit like this?
+A photo of Sakura in her swimsuit. Wow, this is really something. I'm gonna treasure this.
+A photo of Sumire in her stage costume. Her distinctive makeup really makes an impact.
+It's a photo of Maria on stage in the military uniform from "For Love"... She's a beautiful woman disguised as a man.
+A photo of Kanna in her training gear. Catching her in a private moment like this feels surprisingly intimate.
+A photo of Iris in her swimsuit. She's holding a rubber ring and looks ready to have some fun. How cute.
+A photo of Kohran. I don't get to see her with her braids undone very often. It's a nice look.
+A photo of Ayame in a traditional outfit. I hope she'll always be as happy and content as she is here.
+Ayame's gun. Why...? Why did it have to turn out like this...?
+Jean-Paul the teddy bear. Iris's best friend. She always carries him with her and takes good care of him.
 The alarm!? The Koma are here! 
 …All right. Let's show them our special training paid off! 
 Phew… It's really relaxing to be alone in your own room once in a while… 
@@ -102,11 +102,11 @@ This is where the Flower Division assembles when the alarm goes off.
 Let's pray that it doesn't, as long as our Kobu are in the garage… 
 Even the mighty steam processor couldn't warn us about the appearance of the Koma. 
 They were sealed six years ago… No one could have anticipated their return. 
-Around New Year's day, all of us were here discussing what we could do against the Koma… 
+Around New Year's Day, all of us were here discussing what we could do against the Koma… 
 The Koma… What a formidable enemy. 
 I haven't been here for three weeks. 
-It's been some time since we've been at the Great Imperial Theater. 
-Commander… I'd like to speak with you. 
+It's been some time since we've been at the Imperial Theater. 
+Captain… I'd like to speak with you. 
 Wh-what!? Why are you so formal, all of a sudden? 
 I wanted to give you my sincerest thanks for allowing me to accompany you on the special training. 
 I haven't had such a productive training in ages. 
@@ -116,12 +116,12 @@ Thank you. By the way, do you still remember our instructor at the shooting rang
 That Lieutenant Commander who got all starry-eyed in front of you? Of course I remember him! 
 He was really surprised you're an actress too… He even wanted to come here to see you perform. 
 Hehe… Why I never! 
-What…? Oh, the commander and Maria! Since when are you back? 
+What…? Oh, the Boss and Maria! Since when are you back? 
 Oh… Seems like you found us! 
 It's good to be back! 
 Welcome back! Sakura just came back a short while ago. 
 You look like you're in a good mood, Kanna. 
-Mr. Ogami! Ms. Maria! Welcome back! 
+Ogami! Maria! Welcome back! 
 Nice to see you again, Sakura. 
 (It's all dusty. But this dust is Sakura's mark of pride.) 
 Ah… These clothes got all dirty. I have to change right now… 
@@ -131,7 +131,7 @@ Don't worry, Sakura. It just shows how hard you've been training.
 (Her black hair looks nice and silky.) 
 (Long and beautiful hair… She's a true Japanese beauty.) 
 (There's a fire in her eyes. The training really wiped that worried look from before off her face!) 
-What is it, Mr. Ogami? 
+What is it, Ogami? 
 I was just thinking you have such a determined look about you. 
 Hehe… Really? 
 (Her eyes are sparkling.) 
@@ -140,7 +140,7 @@ Is there something wrong with my face?
 You look like you're ready to take on anything. 
 Oh, you think so? …You'll make me blush! 
 (She looks lean.) 
-Mr. Ogami… At last I get to see you again… 
+Ogami… At last I get to see you again… 
 What's wrong, Sakura? 
 … 
 …Oh, sorry. I'm so happy, I was lost for words… 
@@ -164,16 +164,16 @@ You'll have to hold back against me!
 (Whoa, there are blood stains on her chest!) 
 Why are you so interested in my breasts? 
 Kanna… Are you hurt? 
-Oh, that's nothing. Don't worry, commander. 
+Oh, that's nothing. Don't worry, Boss. 
 (…Incredible!) 
 (She looks… liberated, somehow.) 
-…Something the matter, commander? You've been staring me in the eyes for some time now. 
+…Something the matter? You've been staring me in the eyes for some time now. 
 I was just thinking, I like that determined look in your eyes. 
 Of course. The training would have been worthless otherwise. 
 (Her eyes are brimming with confidence.) 
 (What a gallant face.) 
 (There's a cut on her cheek. It must have been an arduous special training.) 
-Commander… 
+Boss… 
 What is it, Kanna? 
 …… 
 I have to admit… I was thinking about you during my training… 
@@ -248,7 +248,7 @@ See you, Iris… Sweet dreams.
 So, I checked up on Iris… Let's see how everyone else is doing. 
 …Enemies!? The Koma have finally made their move! 
 Wake up, Iris! We have to move out! 
-Uh… Huh…? Is that you, uncle Ichi? 
+Uh… Huh…? Is that you, Mon Frère? 
 She went ahead to the control room! 
 I haven't been in Kohran's room in a long time… 
 Let's go see the others. 
@@ -365,7 +365,7 @@ Uh, yeah…
 We already spoke earlier, so why don't you go see the others? 
 …All right. I'll leave you to it. 
 Sumire… 
-Why, Lieutenant. It's been a while since I had the pleasure. 
+Why, Ensign. It's been a while since I had the pleasure. 
 How did you spend these past three weeks? 
 Hohohoho, I went to town! I treated myself to a dress, jewelry, perfume… and some really nice dinners! 
 Heh… To polish my beauty to a sheen, that's MY special training. 
@@ -390,14 +390,14 @@ You say exactly the same things as the other gentlemen.
 No… it's nothing. If you'll excuse me now… 
 Sumire… What's the matter? 
 … 
-Lieutenant… I know it all to well… 
+Ensign… I know it all too well… 
 I know what you're thinking. 
 "We trained by the sweat of our brow, and what have you been doing?" 
 … 
 I just did what I'm good at. 
 …What do you mean? 
 It's nothing… Please excuse me. 
-Commander? What are you doing here of all places? 
+Captain? What are you doing here of all places? 
 I could ask you the same thing… You just got back, and you're already in the library. 
 It feels like forever ago… Even though it's only been three weeks. 
 I was just running around without ever taking a rest. 
@@ -406,22 +406,22 @@ Hehe, I thought you'd be. Well, I'm off. Excuse me.
 I've been away for a while, so I want to walk around the theater some more. 
 Maria was right here earlier… 
 Now it's deserted. I should go somewhere else. 
-Oh, Mr. Ogami. It's good to see you again. So you're back from your special training? 
+Oh, Ogami. It's good to see you again. So you're back from your special training? 
 Yes, we just returned. Tell me, Kasumi… What exactly are you doing here? 
 This underground hangar is off limits for the time being. 
 I'm posted here so no one wanders in by accident. 
 Off limits? That's… why!? 
 I'm sorry, but I can't answer that. 
 I can just tell you that entry is not permitted at the moment, even for you. 
-Mr. Ogami, the hangar is off limits, so please refrain from entering. 
+Ogami, the hangar is off limits, so please refrain from entering. 
 What's going on in there? I'd sure like to know… 
 I'm sorry, but I can't answer that. 
-Listen, Mr. Ogami… 
+Listen, Ogami… 
 Hey, Yuri! What are you doing here? 
-Listen, Mr. Ogami… You shouldn't be too hard on Sumire. 
+Listen, Ogami… You shouldn't be too hard on Sumire. 
 Huh? 
 I saw her. She was working very hard all day, every day. 
-She sweet-talked everyone and their uncle in this city in order to raise funds for developing new weapons. 
+She sweet-talked everyone and their Frère in this city in order to raise funds for developing new weapons. 
 What!? 
 Parties in the financial world at night, government offices during the day… 
 She can't have gotten much sleep lately. 
@@ -438,7 +438,7 @@ Sumire, she… can be a little difficult sometimes…
 I'm sure she just didn't want you to worry about her. 
 Really? 
 It's not like I want you to give her a free pass for anything. 
-But, if you really care about her, Mr. Ogami… 
+But, if you really care about her, Ogami… 
 Then you should always remember that there's a reason for her to behave like she does. 
 Sumire… 
 I hope Sumire is in her room… 
@@ -447,7 +447,7 @@ Guess I'll head somewhere else.
 Sumire said she'd take a nap. I shouldn't disturb her now. 
 …Sumire isn't here. I wonder where she went. 
 It's me, Ogami… Are you there, Sumire? 
-Oh, Lieutenant… Can I help you with anything? 
+Oh, Ensign… Can I help you with anything? 
 I wanted to talk to you. Could you please let me in? 
 Please do. The door is open. 
 If it's a lecture you want to give me, you can keep it to yourself though. 
@@ -546,14 +546,14 @@ Haha… Your silence speaks volumes. There really is something you don't like at
 If you wanna grow big and strong, you mustn't be picky. But of course I won't force you. 
 What a great meal! 
 When I eat the food here, it really feels like I'm finally home again. 
-See you around, commander. 
+See you around, Boss. 
 OK… I have to get going. 
 Hey, Tsubaki… 
-Welcome, Mr. Ogami! 
+Welcome, Ogami! 
 I'm super busy organizing the posters and stuff. Would you mind coming back later? 
 Oh… See you later, then. 
 Hey, Tsubaki. Long time no see! 
-Welcome back, Mr. Ogami! I hope you had a productive special training! 
+Welcome back, Ogami! I hope you had a productive special training! 
 So you have to work, even when there aren't any shows? 
 Yes! I'm super busy organizing all the posters and portrait cards! 
 Because I'm sorting through the portrait cards right now, I can't sell any right now, unfortunately. 
@@ -578,7 +578,7 @@ It's normally not for sale. It's very valuable, so take good care of it!
 I hope you'll continue to buy lots of portrait cards this year! 
 I've got a different portrait card each month, so you should check back regularly! 
 Oh? Sakura… 
-Ah… Mr. Ogami. 
+Ah… Ogami. 
 You're practicing all alone? 
 No… I'm not here to practice… 
 I just wanted to look at the stage, after I've been away for so long. 
@@ -596,10 +596,10 @@ When the shows start again, I'll have to do a different kind of special training
 …Come on, say something. Or do you just think I'm weird? 
 Oh, sorry… I didn't think that at all… 
 Maybe you can't imagine how it is, but my body started moving by itself. 
-OK, Mr. Ogami… If you'll excuse me… 
+OK, Ogami… If you'll excuse me… 
 Yeah. See you later! 
 OK, I should get going, too. 
-Hey, commander! 
+Hey, Boss! 
 Looks like you're hard at work, Kanna! Back to training already? 
 Well, if our last battle taught us one thing, it's to never let our guard down, right? 
 …That's true. 
@@ -608,7 +608,7 @@ You know what, you're right.
 That was so nice… Going to the shrine just with you… 
 I'm happy you see it that way, too. 
 B-by the way, was the special training successful? 
-Hey, commander! 
+Hey, Boss! 
 Looks like you're hard at work, Kanna! Back to training already? 
 Well, if our last battle taught us one thing, it's to never let our guard down, right? 
 …That's true. 
@@ -622,24 +622,24 @@ By the way, how did your special training go?
 Just great! <br> So-so… <br> It was a catastrophe. 
 Just great! 
 Sounds good! 
-I'm counting on you, commander! 
+I'm counting on you, Boss! 
 So-so, I'd say… 
 Oh, really? Well, better to have middling results than none at all. 
 It was a catastrophe. 
 Wha-wha-what?! What were you doing? 
-But don't worry, commander! I can make up for a hundred others! 
+But don't worry, Boss! I can make up for a hundred others! 
 Hahaha… 
 …? 
 …I can't really tell if it was effective or not. 
 What, really? What have you been doing all those weeks? 
 Well, all sorts of things… 
-OK then… Let's give it our best, commander. 
+OK then… Let's give it our best, Boss. 
 Yes, let's do that! 
 But… I really wish I could handle guns… Then I could have been the one to go with you… 
 … huh? 
 Ah, no… It's nothing! I… I'll be going now. 
 OK. See you later, Kanna! 
-Co-commander… 
+B-Boss… 
 Hm? What is it, Kanna? 
 You… You were all alone with Maria for several weeks, right? 
 Yeah, because we were always together there at the training camp. 
@@ -655,7 +655,7 @@ OK, see you later.
 … 
 I hope you take good care of Maria! She… She really needs a man she can rely on! 
 Huh? Hey, hold on… 
-Well, I have to get going. See you, commander. 
+Well, I have to get going. See you, Boss. 
 OK, see you later. 
 Huh… Isn't the shower running? …There's an open locker… 
 …! 
@@ -676,7 +676,7 @@ Phew… Guess it's time to finish.
 (I'm done for! I need to run!) 
 Phew… I managed to escape before she noticed. 
 Man, seeing Sakura taking a shower… I have a feeling this is going to be an awesome year! 
-Oh, Mr. Ogami! What are you doing here? 
+Oh, Ogami! What are you doing here? 
 Whoa! You're… You're already finished? 
 Yes! It feels like washing all the exhaustion from my special training away! 
 But… How did you know I was taking a shower? 

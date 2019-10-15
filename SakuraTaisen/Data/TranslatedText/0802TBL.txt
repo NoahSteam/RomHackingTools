@@ -1,31 +1,31 @@
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
+﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking...
+It's a photo of Sumire. This is a side of her you don't see too often.
+It's a photo of Maria. ...She's lost in thought and looks kind of sad...
+A photo of Kanna. She looks strong and reliable. I can't wait to meet her.
+A photo of Iris. She's surrounded by flowers and flashing a radiant smile.
+A photo of Kohran. She's looking pretty in profile with her face dyed red by the evening sun.
+A letter given to me by a customer. I was asked to give it to Sumire. I have a bad feeling about this...
+Maria's pistol. This may help me escape from here...
+A hair ornament. It's decorated with flowers and looks very elegant.
+A pretty pendant. The delicate workmanship is gorgeous.
+A hairpin for use in a traditional bun hairstyle. It would complement a formal outfit well.
+This key will let me enter rooms I couldn't before.
+I found this in a bedroom on the second floor. I can use it to access the back room.
+A teacup Iris asked me to get for her. It has a very stylish design.
+This is the matchbox Iris asked for. Its logo is quite colorful.
+A knife Iris asked me to get for her. Just a normal utensil you'd use during a meal.
+A prop sword and shield used onstage. They're well-made and look just like the real thing.
+A prop crown used onstage. It's well constructed and incredibly detailed.
+A wig and costume used onstage. I wonder what kind of act could use a flashy outfit like this?
+A photo of Sakura in her swimsuit. Wow, this is really something. I'm gonna treasure this.
+A photo of Sumire in her stage costume. Her distinctive makeup really makes an impact.
+It's a photo of Maria on stage in the military uniform from "For Love"... She's a beautiful woman disguised as a man.
+A photo of Kanna in her training gear. Catching her in a private moment like this feels surprisingly intimate.
+A photo of Iris in her swimsuit. She's holding a rubber ring and looks ready to have some fun. How cute.
+A photo of Kohran. I don't get to see her with her braids undone very often. It's a nice look.
+A photo of Ayame in a traditional outfit. I hope she'll always be as happy and content as she is here.
+Ayame's gun. Why...? Why did it have to turn out like this...?
+Jean-Paul the teddy bear. Iris's best friend. She always carries him with her and takes good care of him.
 …! 
 …What is it, Maria? 
 What's that voice!? 
@@ -51,15 +51,15 @@ OK, should we get going? Let's take the steam train to Meiji Shrine.
 Hahaha… 
 Oh… The steam train is arriving at exactly the right moment. 
 Come, Maria. Watch your step when you get in. 
-Thank you, commander. 
+Thank you, Captain. 
 OK, Kohran. Slow and steady wins the race. 
 Just leave it to me! I know the streets of this city like the back of my hand. We'll be at Meiji Shrine in no time! 
 All right then… Should we go to Meiji Shrine for our shrine visit? 
 You want to walk to the station, Iris? 
-Yup! Let's go, Uncle Ichi! 
+Yup! Let's go, Mon Frère! 
 OK… How should we get to Meiji Shrine… 
 Taking the steam train would be the fastest… 
-Are you serious, commander?! We'll run there of course! 
+Are you serious, Boss?! We'll run there of course! 
 What?! You want to run all the way to Meiji Shrine? 
 Sure! The air is wonderful on New Year's day. It'll be a fun jog. 
 Let's go! Or do you want to be left behind? 
@@ -69,7 +69,7 @@ No, no… I just wouldn't have expected that.
 What I thought?! That's not… 
 I just figured you'd get lots of invitations from young counts and princes. 
 …? 
-Oh really? …Those circles are like a foreign world for me. 
+Oh really? …Those circles are like a foreign world to me. 
 Y-you think so? 
 Dancing? I couldn't remember a single step… 
 Hahaha… I'd only step on your feet and embarrass myself. 
@@ -189,7 +189,7 @@ This peace is eternal. <br> That Kanna likes me.
 So, Kanna… What did you wish for? 
 There are lots of stalls, just like on festival days. 
 Ook, ook, ook! 
-Mr. Ogami… Looks like you've taken a fancy to that monkey. 
+Ogami… Looks like you've taken a fancy to that monkey. 
 Whoa, that monkey's so cute! 
 Not as cute as you. <br> Yeah, he's really cute. 
 Not as cute as you, Sakura. 
@@ -213,7 +213,7 @@ Its behind is really very red. What a stylish little creature.
 Isn't it cute? And clever, too! 
 But, alas… I've never grown accustomed to wild animals… 
 I see… 
-Could we go somewhere else, Lieutenant? I don't want to catch its smell. 
+Could we go somewhere else, Ensign? I don't want to catch its smell. 
 OK. Should we move on then? 
 You really like that monkey, huh? 
 Oh, how lovely! So… does it do anything? 
@@ -233,7 +233,7 @@ I have to see that for myself! Let's stay here and watch.
 Hey, Maria! See that over there!? Let's check it out! 
 Hehehe… Okay, let's go. 
 Erm… 
-Don't you want to go somewhere else, Mr. Ogami? 
+Don't you want to go somewhere else, Ogami? 
 Y-yeah, I guess so. 
 But we already saw the monkey! Let's go somewhere else. 
 Hmmm, a trained monkey? It's a little different from the ones I used to watch. 
@@ -253,7 +253,7 @@ What is it, boss? You look like you're completely mesmerized!
 Did that monkey inspire you to some deep thoughts? 
 Ah, no, I… 
 Anyway, let's get going. I wanna see lots of stuff while we're here! 
-Looking at that monkey again, Uncle Ichi? 
+Looking at that monkey again, Mon Frère? 
 Whoa, what a cute monkey! 
 Yeah, kind of. 
 Are they in France, too? <br> Looks just like you, Iris! 
@@ -264,11 +264,11 @@ Hehehe… Busted!
 Wait a second… So you were just kidding? 
 I suddenly want a monkey plush real bad! 
 It looks just like you, Iris! 
-What!? What do you mean, Uncle Ichi? 
+What!? What do you mean, Mon Frère? 
 Oh, er… I just meant you're as cute as him. 
 You're not making that up, are you? 
 Of… Of course not! Let's just go somewhere else, all right? 
-What's up, Uncle Ichi? 
+What's up, Mon Frère? 
 Ah… Sorry. I was just looking at this monkey… 
 I've seen everything around here, so let's go somewhere else, please! 
 OK, let's go! 
@@ -284,14 +284,14 @@ Oh, er… Would you now?
 Do you know monkey-style kung fu? 
 What's that supposed to be? 
 Well, kung fu where you move like a monkey. Seeing this little guy, it just came to my mind. 
-Interesting… You sure know a lot of stuff, commander. 
+Interesting… You sure know a lot of stuff, Boss. 
 Hahaha… 
 Ahaha… If you look at them like this, monkeys are rather cute. 
 Absolutely. And clever, too! 
 It's not bad to watch a show like this once in a while. 
 We already did the cork-shooting. Let's try something else. 
 Oh, you can play coconut shy there! 
-That looks fun. Do you want to try it, commander? 
+That looks fun. Do you want to try it, Captain? 
 Wait, grown-ups can't play! It would be too easy for you! 
 If you want to play something, why not try the shooting stall in the back? 
 OK, bring it on! <br> …I'd rather not. 
@@ -329,7 +329,7 @@ Whoa, a pendant? Thank you so much!
 I'm so happy! I'll treasure this! 
 This is for you, Sakura! 
 Whoa, that takes me back… A Knitting Nancy! 
-Thank you, Mr. Ogami! 
+Thank you, Ogami! 
 This is for you, Sakura! 
 Wow, thank you! What a cute cactus! 
 But you know, you already gave me a cactus before… 
@@ -344,7 +344,7 @@ Oh, don't worry. I'm sure they'll look lovely next to each other!
 Good job! Here's your prize. Why don't you give it to your lovely lady? 
 This is for you, Sumire! 
 Oh my, how sweet… 
-I'll hold this dear, Lieutenant. 
+I'll hold this dear, Ensign. 
 Haha… Don't make me blush. 
 This is for you, Sumire! 
 My, what a nice doll! But what's this pole for? 
@@ -352,7 +352,7 @@ I think it's called a Knitting Nancy?
 How do you use it? I have to ask Sakura when we're back. 
 I've received many presents in my life… 
 But a toy? That's a first. 
-I will treasure it. Thank you, Lieutenant. 
+I will treasure it. Thank you, Ensign. 
 Haha… Don't make me blush. 
 This is for you, Sumire! 
 Oh, a cactus? Thank you, I'll take good care of it. 
@@ -372,14 +372,14 @@ This is for you, Kohran!
 Oh, a cactus! Thanks, boss. I'll take good care of it. 
 Good job! Here's your prize. Why don't you give it to your lovely lady? 
 Here, Iris… This is for you! 
-Uncle Ichi… You gave me a pendant before, don't you remember? 
+Mon Frère… You gave me a pendant before, don't you remember? 
 Oh, sorry! I didn't mean to give you the same thing again… 
 OK! Another addition to my treasure pile! 
-Whoa, what a beautiful pendant! Thank you, Uncle Ichi! 
+Whoa, what a beautiful pendant! Thank you, Mon Frère! 
 Hehehe… This is my big treasure now! 
 Here, Iris… This is for you! 
 Wow, how cute! A doll, and a Knitting Nancy too! 
-Thanks, Uncle Ichi! I'm so happy! 
+Thanks, Mon Frère! I'm so happy! 
 Here, Iris… This is for you! 
 What's that? Some sort of messed-up flower? 
 It's called a cactus. It's not a flower. 
@@ -387,18 +387,18 @@ Not a flower? Then these are leaves?
 That's… Ah, it doesn't matter. Let's go, Iris! 
 Good job! Here's your prize. Why don't you give it to your lovely lady? 
 This is for you, Kanna! 
-Thank you, commander! I've never gotten anything like this! 
+Thank you, Boss! I've never gotten anything like this! 
 I'm not one to care for plants, but I'll give it my best! 
 This is for you, Kanna! 
 That's one cute doll! When I was little, I kind of… I always wanted a doll… 
-Thanks, commander. I'll always keep it close. 
+Thanks, Boss. I'll always keep it close. 
 This is for you, Kanna! 
 Oh, a cactus? Thanks. I'll take good care of it. 
 You look like you're really into it. 
-Whoa, Mr. Ogami… That takes me back! 
+Whoa, Ogami… That takes me back! 
 Used to play with them a lot. <br> Never really tried it before. 
 I used to play with these things a lot. 
-You too? When we had one of our country festivals, there always were lots of stalls. 
+You too? When we had one of our country festivals, there were always lots of stalls. 
 I was really into it. 
 Hehe… That's true. 
 Sorry, I've never really tried it before. 
@@ -419,7 +419,7 @@ Really…? Ah, no, no! Not like that…
 Don't worry, I can do it alone! No problem at all… 
 Why'd it break!? 
 Erm… 
-So you don't know either, Lieutenant? 
+So you don't know either, Ensign? 
 Sorry. 
 I've had enough of this childish game. Let's move on. 
 You seem to be really enjoying this. 
@@ -446,7 +446,7 @@ Yeah…
 …… 
 Let's go, Maria. 
 Erm… 
-Hehe… You don't know, Mr. Ogami? It's fine, let's go somewhere else. 
+Hehe… You don't know, Ogami? It's fine, let's go somewhere else. 
 Sorry. 
 I've had enough of this, boss. Let's make ourselves scarce. 
 Hm, this is the first time I've seen something like this. 
@@ -465,8 +465,8 @@ This your first time too, boss?
 No, not at all! See… 
 Come on, boss. It's fine to admit you don't know anything about it. 
 Sorry. 
-You like it THAT much, Uncle Ichi? 
-What's this, Uncle? 
+You like it THAT much, Mon Frère? 
+What's this, Frère? 
 It's like a relief, I guess. <br> It's something to eat. 
 It's something like a relief, I guess. Only made of candy. 
 Really!? Show me, show me! 
@@ -481,8 +481,8 @@ Lady. If you eat it, you'll die.
 Wow, really? 
 Why didn't you tell me right away? 
 …Hm. What should I say? 
-What's this, Uncle Ichi? 
-What's this? What's this? What's this? Tell me, Uncle Ichi! 
+What's this, Mon Frère? 
+What's this? What's this? What's this? Tell me, Mon Frère! 
 Hm… I'll explain it to you some other time. 
 Hm…? That's interesting. 
 Haven't you seen enough of this? You really like it, huh? 
@@ -495,7 +495,7 @@ What do you think, Kanna? Should we get the biggest one?
 Thanks, but… That really doesn't change anything. 
 No? Well, if you don't feel like it… 
 …Phew, this is really hard. 
-…Commander. 
+…Boss. 
 Wait a second! This head here… 
 Listen… I said I don't like this. Don't you think it's a bit selfish to do it on your own? 
 Oh, sorry. I just… 
@@ -636,7 +636,7 @@ Unused
 Sorry you had to wait! 
 You mean this dress? 
 I wanted to dress in a real Japanese kimono. New Year's day only comes once a year, after all! 
-And also… It's my first date with you, Mr. Ogami. 
+And also… It's my first date with you, Ogami. 
 Even if you're only flattering me, that makes me happy. 
 Thank you, really. 
 Ah! The train's here! Let's get on! 
@@ -655,7 +655,7 @@ Unused
 So many people in one place… These commoners all behave like faceless drones. 
 If you want to make commoners like you, you have to do as they do. 
 I hope you appreciate my efforts. 
-Come on, commander! Let's go. 
+Come on, Captain! Let's go. 
 Quickly! 
 Oh, not bad! Very festive. 
 Oh, stop it… You really went all out there. 
@@ -664,13 +664,13 @@ Hey… Do you have to talk shop when it's just the two of us?
 But… that's just what I like about you. 
 Come one, let's go. 
 So… this is what you do on New Year's day? Not really what I imagined. 
-Hmmm, it seems to unmotivated, lonely… 
+Hmmm, it seems so unmotivated, so lonely… 
 Oh, let's light some firecrackers! Then we'll get in the mood! 
 Really? How boring… 
 Right. Wanna go on? 
-Whoaaa… So many people! Don't you think, Uncle Ichi? 
+Whoaaa… So many people! Don't you think, Mon Frère? 
 Hey, hey, hey… What's that real big house over there? 
-Come on, Uncle Ichi! 
+Come on, Mon Frère! 
 Let's go already! 
 I'm not telling. 
 Let's go then. 
@@ -679,20 +679,20 @@ Should we get going?
 Nah, it's nothing… 
 Wanna get going? 
 No, it's nothing. 
-Let's go somewhere else, Uncle Ichi! 
+Let's go somewhere else, Mon Frère! 
 Not telling! 
 Step right up, step right up! We've got a monkey straight from China! 
 How about it? Wanna give it a go, sir? 
-Let's try it, Mr. Ogami! 
+Let's try it, Ogami! 
 Hmph… A childish diversion. 
-Commander! Let's try that! 
+Boss! Let's try that! 
 Unused
-Hey, Uncle Ichi. I wanna try! 
+Hey, Mon Frère. I wanna try! 
 Unused
 Unused
 Not bad at all! 
 I'm impressed, boss! 
-You're so awesome, Uncle Ichi! 
+You're so awesome, Mon Frère! 
 Unused
 Unused
 Unused
@@ -703,55 +703,55 @@ Unused
 Unused
 Unused
 Unused
-Please come here, Mr. Ogami. 
+Please come here, Ogami. 
 Come here for a moment. 
-Really, commander… Why did you have to take me to such an out of the way place? 
+Really,Captain… Why did you have to take me to such an out-of-the-way place? 
 Oh, you don't need to blush. There's no one around who could see us. 
-Oh, commander! And Sumire, too… 
+Oh, Captain! And Sumire, too… 
 Sakura… 
 Unused
 Heya, Sakura! Fancy running into you here! 
 Wh… Why are you all here? 
 Unused
-That's right! Isn't it nice for all of the Flower Division to celebrate New Year together? 
+That's right! Isn't it nice for all of the Flower Division to celebrate the New Year together? 
 Exactly. We wanted to have fun together. 
 That was fun! Something like this isn't bad once in a while. A bit like a date. 
 What? What what what? What's with that artificial laugh? 
 So being with me really isn't enough…? 
-Oh, commander! And Kanna, too. 
+Oh, Captain! And Kanna, too. 
 S-Sakura!? 
 Unused
 Unused
 Wh-wh-why is everyone here all of a sudden!? 
 Come on, boss… Where else would we go on New Year's day but the shrine? 
-That's right! Isn't it nice for all of the Flower Division to celebrate New Year together? 
+That's right! Isn't it nice for all of the Flower Division to celebrate the New Year together? 
 Well… That's it, really. 
 Phew… There's a bunch of people everywhere. Really makes me tired. 
 Thanks. Tell me one thing, boss… 
-Are you happy you visited the shrine with me?n 
+Are you happy you visited the shrine with me? 
 Really? Makes me happy to hear you say so, boss! 
-Oh, commander! And Kohran, too. 
+Oh, Captain! And Kohran, too. 
 S-Sakura!? 
 Unused
 Oooh, there's Sakura! Yoohoo! 
 Why's everyone here all of a sudden!? 
 Ohohoho… Where else would we go on New Year's day but the shrine? 
-Didn't we agree on celebrating New Year together? 
+Didn't we agree on celebrating the New Year together? 
 Not really… 
-That's right! Isn't it nice for all of the Flower Division to celebrate New Year together? 
+That's right! Isn't it nice for all of the Flower Division to celebrate the New Year together? 
 That's it! 
-Tell me, Uncle Ichi… What do you think of me? 
+Tell me, Mon Frère… What do you think of me? 
 Do you… like me? 
-Hehehe… I love you too, Uncle! 
+Hehehe… I love you too, Frère! 
 Aww, come on! If you wanna confess your love, you have to be serious! 
-Oh, commander! And Iris, too. 
+Oh, Captain! And Iris, too. 
 Ah… Sakura! 
-So you really wanted to visit the shrine with everyone, Mr. Ogami? 
+So you really wanted to visit the shrine with everyone, Ogami? 
 Sakura! What are the odds? 
 Why's everyone here? 
-Come on, boss… Where else would we go on New Year's day but the shrine? 
+Come on, Chief… Where else would we go on New Year's Day but the shrine? 
 Just get crazy for once! 
-That's right! Isn't it nice for all of the Flower Division to celebrate New Year together? 
+That's right! Isn't it nice for all of the Flower Division to celebrate the New Year together? 
 Oh, look… A manifestation of the North Star Buddha! 
 I have to pay my respects, as a user of the North Star Fencing style. 
 Daaaaaaaa! 
@@ -760,7 +760,7 @@ Unused
 We just followed you! 
 We can't let you have all the fun! 
 Ohohohoho… 
-Don't surprise me like that! You just wanted to give me scare! 
+Don't surprise me like that! You just wanted to give me a scare! 
 Let's all visit the shrine together! 
 Unused
 Right on! That's what I like about you! 
@@ -861,21 +861,21 @@ And then, when the day is dawning across the snowy fields, we turn towards it an
 We pray to have another good year. 
 Maybe not, but… Am I really that different now? 
 Hehe… I'm sorry. Back then, I was just… 
-But even so… That greenhorn Lieutenant Ogami risked his life to save me. 
-Don't play it down, commander. I'm really grateful. 
-Hehe, I guess you're right. 
+But even so… That greenhorn Ensign Ogami risked his life to save me. 
+Don't play it down, Captain. I'm really grateful. 
+Heheh, I guess you're right. 
 Unused
 Visiting the shrine at the side of a gentleman… This is a first for me. 
 Is it that strange? 
-What did you think I am, Mr. Ogami?! 
+What did you think I am, Ogami?! 
 Oh no, those gentlemen never talk to me. 
 They don't talk to ME. They talk to the daughter of the Kanzaki conglomerate. 
 I'm sure you would look splendid in formal wear though. 
-You're a lieutenant, after all. You must at least have learned ballroom dancing, right? 
+You're a Ensign, after all. You must at least have learned ballroom dancing, right? 
 Just say the word, and it would be my pleasure to help you remember… 
 Hohoho, impossible! I could teach you all the secret techniques of ballroom dancing. 
 We should definitely give it a go sometime. As I said… whenever you want! 
-You're late, Lieutenant! Didn't you practice running in the Navy? 
+You're late, Ensign! Didn't you practice running in the Navy? 
 Ahaha… This feels so good I got carried away a little. 
 Come on! This little stroll is enough to make you huff and puff like you're about to die? 
 Pathetic… In Okinawa, the men aren't that weak. 
@@ -886,13 +886,13 @@ A guy who doesn't give up, no matter what… That's real strength.
 Hehe… You should do some exercising under Okinawa's scorching sun, too! 
 I just love the place! Every time I go back there, I forget about all my troubles. 
 I'd really like to take you there some day. That endless sky, the azure sea… 
-Uuuuncle Iiiichiiii! Come one, come ON! 
+UuuFrère Iiiichiiii! Come one, come ON! 
 Can I ask you something? What do people think when they see us like this? 
 That we're siblings? A couple? Or a girl who's being kidnapped by a stranger? 
 Hehe! Just kidding! 
 About that place we're going to… It's called a "shrine", right? 
 Hehehe, that's great! I have to tell Mama and Papa in a letter! 
-I wrote one just the other day. I told them of you, Uncle Ichi. 
+I wrote one just the other day. I told them of you, Mon Frère. 
 How you kissed me! 
 How you told me you loved me. 
 Did I do something wrong? I'm not so much younger than Sakura! 
@@ -905,29 +905,29 @@ It's a whole different beast now!
 I improved a lot, especially the suspension! Thanks to my special fuel, the engine is 2.5 times more powerful! 
 If I put wings on it, it'd probably take off! 
 This is the first run with human passengers though. 
-Don't worry! Just think about how lucky you are, boss! 
+Don't worry! Just think about how lucky you are, Chief! 
 You're the first guy who gets to ride behind me! 
 Other than certain individuals, I don't let just anyone near me! 
 All right! Here we fly! 
-Wa-wa-wait a second, boss! Where do you think you're holding on to!? 
+Wa-wa-wait a second, Chief! Where do you think you're holding on to!? 
 Stop it, stop it! Move your hands a little lower! 
 Eeek! Not THAT low! Higher, higher! 
-I gotta ask, boss… You didn't do that on purpose, did ya? 
+I gotta ask, Chief… You didn't do that on purpose, did ya? 
 Well, all right. 
 Wow… So many people… 
 Everyone looks like they're having fun. 
-Ah, sorry. I'm not used to something like this… 
+Ah, sorry. I'm not used to this sort of atmosphere… 
 Yes… 
-Hehehe… You're right. 
+Heheheh… You're right. 
 Me? I'll wish for this peace to go on forever. 
-Thank you, commander. This was a lovely day. 
-I felt like I could forget about all those hard times for the first time. 
+Thank you, Captain. This was a lovely day. 
+I felt like I could let my hair down for the first time in a long while. 
 Do you have anything planned for later? 
 I was wondering… Maybe you'd want to take a stroll to Yokohama with me? 
 A friend of mine has a cafe at the harbor. It's small, but… 
-I've been meaning to go there. But it would have felt stupid going there alone. 
+I've been meaning to go there. But I would have felt foolish going alone. 
 Yeah, that's true… 
 Thank you! 
 Guys…! 
 What are you all doing here? 
-OK! Let's go there together with all the Flower Division! 
+OK! Let's go there together with the whole Flower Division! 

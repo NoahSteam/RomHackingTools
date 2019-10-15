@@ -1,4 +1,4 @@
-﻿It's a photo of Sakura. Her gaze is so intense. I wonder what she's thinking? 
+﻿﻿﻿It's a photo of Sakura. Her gaze is so intense. I wonder what she's thinking? 
 It's a photo of Sumire. It shows a side of her that's usually hidden. 
 It's a photo of Maria. She's lost in thought and seems a bit sad… 
 It's a photo of Kanna. In it, she looks as energetic and confident as ever. 
@@ -38,7 +38,7 @@ I'm planning on serving it for dinner tonight.
 Everyone will love eating the Captain's home cooking! 
 That was fun, Ogami! Let's play again sometime. 
 Sorry, Iris. I don't think I picked a very good outfit… 
-No no no! I love it because you picked it out, Uncle Ichi! 
+No no no! I love it because you picked it out, Mon Frère! 
 Next time, though, try to pick one that's a little cuter! 'Kay? 
 Whew! It feels great to go swimming again! 
 Were the mines to your liking? 
@@ -87,7 +87,7 @@ What should I do today?
 Ahh… It's lovely outside. A perfect day to zone out in my room. 
 Yes? 
 Iris…? 
-Yoo-hoo! Are you awake, Uncle Ichi? 
+Yoo-hoo! Are you awake, Mon Frère? 
 We've got the day off! Come play with me! 
 I planned to spend time with everyone today, actually. 
 Really? Yay! I wonder what game we should play? 
@@ -162,7 +162,7 @@ Hey, Ogami! Would you like to play Koi-Koi with us?
 Pardon me, Ensign… Would you care to play Koi-Koi with us? 
 Captain, would you like to play Hanafuda with us on our day off? 
 Hey, boss! Wanna play Hanafuda with us? 
-Hey, Uncle Ichi! Come play Hanafuda with us! 
+Hey, Mon Frère! Come play Hanafuda with us! 
 Hey, Ogami! Come play Hanafuda with us! You know you wanna! 
 Sure! <br> Not right now. 
 Sure! Watch out, though, 'cause I plan to win! 
@@ -171,11 +171,11 @@ Oh… Well, please come back if you change your mind.
 What a shame. Still, we'll gladly play against you should you change your mind. 
 Oh… Maybe another time, then. 
 Pfft! You're no fun. Come back if you change your mind, boss. 
-How lame! C'mon, Uncle Ichi, play with us! 
+How lame! C'mon, Mon Frère, play with us! 
 Hmph! Not cool, Ogami. Well, come back if you change your mind. 
 W-why is everyone gathered here…? 
 Ahem! …I've brought Ogami with me. 
-Yay! Uncle Ichi!! 
+Yay! Mon Frère!! 
 You managed to pass Ayame's quiz? That's impressive, boss. 
 Ayame… What's going on? 
 We decided to hold a Hanafuda Tournament on our day off. 
@@ -319,7 +319,7 @@ I hope I'll *yawn* have good dreams…
 Yes, I am. I'm exhausted… 
 Oh… See you tomorrow, then. 
 G'night, Captain. 
-Uncle Ichi, are you going to bed already? 
+Mon Frère, are you going to bed already? 
 No, of course not! <br> I thought I'd take a nap. <br> Yes, I am. 
 No, of course not! It's still early. 
 Yay! I was worried there for a second! 
@@ -472,7 +472,7 @@ Watch out, 'cause I won't go easy on you!
 Let's play again, Kohran! 
 That's the spirit! Game on! 
 (I had fun playing Hanafuda with Kohran.) 
-(Plus, she looks kinda sexy when she plays…) 
+(Plus, she looks kinda sultry when she plays…) 
 …… 
 …What's wrong, Ogami? 
 Oh, uh, um… Nothing. Hahaha! 
@@ -482,30 +482,30 @@ Where should I go next?
 Hi, Iris. I came to spend time with you. 
 Wow, you sure look tired… 
 Yeah, I'm super sleepy, so I'm gonna take a nap. 
-Bye bye, Uncle Ichi! 
+Bye bye, Mon Frère! 
 And just like that, she's fast asleep… 
 I should try another room. 
 Iris is probably still asleep. 
 I should try another room. 
 Hi, Iris. I came to spend time with you. 
-Hey, Uncle Ichi! I've been waiting for you! 
+Hey, Mon Frère! I've been waiting for you! 
 Come with me to the costume room! I want you to pick out an outfit for me to wear! 
 Hi, Iris. I came to spend time with you. 
-Hey, Uncle Ichi! I've been waiting for you! 
+Hey, Mon Frère! I've been waiting for you! 
 Come with me to the costume room and pick out an outfit for me to wear! 
-Hey, Uncle Ichi! I've been waiting for you! 
+Hey, Mon Frère! I've been waiting for you! 
 Come with me to the costume room and pick out an outfit for me to wear! 
 Pick an outfit <br> Go to another room 
 Pick an outfit <br> Picture Iris in costume <br> Go to another room 
 Pick an outfit again <br> Go to another room 
 Pick an outfit <br> Picture Iris in costume <br> Go to another room 
 Okay, but I don't know much about clothes. 
-Yay! Thanks, Uncle Ichi! Let's head to the costume room! 
+Yay! Thanks, Mon Frère! Let's head to the costume room! 
 Sure! I'll try to pick a better outfit this time. 
-Wow! Thanks, Uncle Ichi! You're the best! 
+Wow! Thanks, Mon Frère! You're the best! 
 Now, pick something that really suits me! 
 (I wonder how Iris looks when she's all dressed up?) 
-…What's wrong, Uncle Ichi? You got awfully quiet all of a sudden. 
+…What's wrong, Mon Frère? You got awfully quiet all of a sudden. 
 Sorry! I was thinking about you, Iris… 
 About me? Heehee! How sweet! 
 Bye, Iris. I'll visit you again later. 
@@ -552,7 +552,7 @@ Where did you first meet Sakura?
 Shiba Park <br> Ueno Park <br> Hibiya Park 
 What type of flower was on the wallpaper in Episode Two? 
 Lily <br> Lily of the Valley <br> Morning Glory 
-What's the name of Sakura's Special Attack? If you don’t get this right, you aren’t fit to be commander. 
+What's the name of Sakura's Special Attack? If you don’t get this right, you aren’t fit to be captain. 
 Mocha Hoshin <br> Ouka Hoshin <br> Hoka Oshin 
 What was Maria's old code name? 
 Accessory <br> Calamity Jane <br> Cassowary 
@@ -639,7 +639,7 @@ Which play features this set?
 "For Love" <br> "Journey to the West" <br> "Adventure Island" 
 Whose gun is this? 
 Ayame's <br> Yoneda's <br> Maria's 
-This is an visual question. 
+This is a visual question. 
 What sparked the fight between these two? 
 Party preparation <br> A play <br> A meal 
 This is a visual question. 

@@ -1,31 +1,31 @@
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused 
+﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking...
+It's a photo of Sumire. This is a side of her you don't see too often.
+It's a photo of Maria. ...She's lost in thought and looks kind of sad...
+A photo of Kanna. She looks strong and reliable. I can't wait to meet her.
+A photo of Iris. She's surrounded by flowers and flashing a radiant smile.
+A photo of Kohran. She's looking pretty in profile with her face dyed red by the evening sun.
+A letter given to me by a customer. I was asked to give it to Sumire. I have a bad feeling about this...
+Maria's pistol. This may help me escape from here...
+A hair ornament. It's decorated with flowers and looks very elegant.
+A pretty pendant. The delicate workmanship is gorgeous.
+A hairpin for use in a traditional bun hairstyle. It would complement a formal outfit well.
+This key will let me enter rooms I couldn't before.
+I found this in a bedroom on the second floor. I can use it to access the back room.
+A teacup Iris asked me to get for her. It has a very stylish design.
+This is the matchbox Iris asked for. Its logo is quite colorful.
+A knife Iris asked me to get for her. Just a normal utensil you'd use during a meal.
+A prop sword and shield used onstage. They're well-made and look just like the real thing.
+A prop crown used onstage. It's well constructed and incredibly detailed.
+A wig and costume used onstage. I wonder what kind of act could use a flashy outfit like this?
+A photo of Sakura in her swimsuit. Wow, this is really something. I'm gonna treasure this.
+A photo of Sumire in her stage costume. Her distinctive makeup really makes an impact.
+It's a photo of Maria on stage in the military uniform from "For Love"... She's a beautiful woman disguised as a man.
+A photo of Kanna in her training gear. Catching her in a private moment like this feels surprisingly intimate.
+A photo of Iris in her swimsuit. She's holding a rubber ring and looks ready to have some fun. How cute.
+A photo of Kohran. I don't get to see her with her braids undone very often. It's a nice look.
+A photo of Ayame in a traditional outfit. I hope she'll always be as happy and content as she is here.
+Ayame's gun. Why...? Why did it have to turn out like this...?
+Jean-Paul the teddy bear. Iris's best friend. She always carries him with her and takes good care of him.
 All kinds of different books are lined up here. And in particular… 
 Women's magazines and hair catalogs, huh? I guess this really is the theater archive. 
 I wonder where Maria is? 
@@ -61,7 +61,7 @@ And Yuri and Kasumi already went home…
 I'll try looking somewhere else… 
 Maria…isn't here. 
 No point in hanging around here. Let's go. 
-This room is so lively when there's a performance but when the performance is over it becomes quiet again, too. 
+This room is so lively when there's a performance, but becomes so quiet once the show’s over.
 I guess I'll check out somewhere else. 
 These props look incredible. I wonder who could've made them? 
 The level of detail on these must really bring life to the stage. 
@@ -134,7 +134,7 @@ Ogami… you were out for three days in one of the recovery pods.
 Ogami… are you in pain? 
 (I suppose… my head aches a bit? But if that's the worst of it…) 
 I'm just fine. <br> Only a little… 
-Here, Uncle Ichi. Take your medicine. 
+Here, Mon Frère. Take your medicine. 
 (Painkillers, maybe?) 
 …… 
 Eugh… what the heck is this?! I-it's so bitter! 
@@ -142,7 +142,7 @@ Kohran, are you certain this medicine will be effective?
 I figured something like this might happen, so I whipped up this wonder drug just in case. No need to worry. 
 Y-you made this medicine, Kohran? 
 H-huh? I suddenly…feel… 
-Huh? Uncle Ichi? 
+Huh? Mon Frère? 
 Hmhmhm, excellent. I see it's working beautifully. Your wounds will seal themselves up in no time at all. 
 Of course, the tradeoff is that it'll knock you out like a light. 
 Now, just clear your mind and drift off to dreamland. You did great, Ogami… 
@@ -157,7 +157,7 @@ Well…
 At any rate, let's take our leave. We wouldn't want to wake the Ensign. 
 Right. Well then…goodnight, Ogami. 
 It's nothing much. I'm just fine. 
-I…I was soooo worried about you, Uncle Ichi! 
+I…I was soooo worried about you, Mon Frère! 
 I'm sorry for worrying you, Iris… 
 Still, what a relief it wasn't too serious! People are the one thing I can't fix. 
 (Though you DID try to remodel me…) 
@@ -172,17 +172,17 @@ Not necessarily.
 In that case, Ogami, you really oughta get some rest. 
 … 
 … 
-Uncle Ichi…does it hurt? 
+Mon Frère…does it hurt? 
 You look like a wreck, all right. 
 But it should be easy enough to power through injuries like these! 
-Jeez! Uncle Ichi's not like you, Kanna! 
+Jeez! Mon Frère's not like you, Kanna! 
 Ogami, please take this medicine! 
 What happened…to that kid? 
 He seems to have made it out safely. Apparently, his parents came by and couldn't stop thanking us. 
 I see… 
 Quite honestly…I am seeing you in a new light, Captain. 
 Yeah, even if I worked myself up, there's no way I could've done what you did. I think I'm falling for you, boss. 
-Yeah, you're amazing, Uncle Ichi! I love you too! 
+Yeah, you're amazing, Mon Frère! I love you too! 
 Attaboy, Ogami! Nice job! 
 N-no… I really didn't… 
 Ogami…are you all right? 
@@ -195,7 +195,7 @@ Mmm…
 (They left…) 
 (That cold hand… who… could it have been?…) 
 …Hm? Someone else is coming… 
-Heya, Ogami! Man, you sure look a mess. 
+Heya, Chief! Man, you sure look a mess. 
 Eep! …Oh, it's you, Kohran… 
 Aw, c'mon! I was just messing around. How you feeling? 
 Thank you for the medicine. <br> I had a dream about you. <br> Could you let me sleep? 
@@ -233,30 +233,30 @@ Tropical plants, tropical clothing, tropical fruit…and tropical dance!
 Ah, that's right… Ensign. Next time, I will bring along a rare tropical fruit! 
 …Thank you. 
 It was my pleasure. Well then, I shall take my leave. 
-Uncle Ichi, are you feeling any better? 
+Mon Frère, are you feeling any better? 
 Iris… yeah, I feel a lot better. 
-…I thought maybe, you might not wake up again… 
+…I thought maybe you might not wake up again… 
 I was so worried… 
 …That makes me happy. <br> Sorry I worried you. <br> It was a nice break. 
 …Thank you. That makes me happy, Iris. 
-Hee hee! It really is you, Uncle Ichi! 
+Hee hee! It really is you, Mon Frère! 
 I don't know what I would've done if you had been a different person after you woke up! 
-Okay, I'm gonna go back to my room now. Goodnight, Uncle Ichi. 
+Okay, I'm gonna go back to my room now. Goodnight, Mon Frère. 
 Iris… I'm sorry I worried you. 
 It's okay! As long as you get better, I'll be happy! 
 Once you get better, you have to play with me again! 
 Of course. 
-Okay, I'm gonna go back to my room now. Goodnight, Uncle Ichi. 
+Okay, I'm gonna go back to my room now. Goodnight, Mon Frère. 
 It was a nice break. I just got to sleep the whole time. 
 …… 
-Uncle Ichi, you…meanie! 
+Mon Frère, you…meanie! 
 I-Iris?! 
 I… I was so, SO worried about you! 
-But you don't even care… you're awful! I HATE you, Uncle Ichi! 
+But you don't even care… you're awful! I HATE you, Mon Frère! 
 Iris… you were worried about me? I feel awful… 
-Uncle Ichi… are you feeling sick? 
+Mon Frère… are you feeling sick? 
 Rest up and get better, okay? 
-Goodnight, Uncle Ichi. 
+Goodnight, Mon Frère. 
 How are you feeling, Ogami? 
 Sakura… 
 Ogami… are you hungry? I brought you something to eat. 
@@ -314,7 +314,7 @@ The wounds you received in that battle… are entirely your own fault!
 Not only that, but the enemy slipped past us because you let yourself be distracted by a single civilian… 
 As a result, far more civilian lives were put in danger… do you understand that? 
 You're wrong! <br> …You're absolutely right. 
-If you get swept up by emotions and lose sight of the big picture, you won't be an effective commander. 
+If you get swept up by emotions and lose sight of the big picture, you won't be an effective leader. 
 Ensign Ogami. You are… unfit to be captain! 
 …! 
 That is all I have to say. Excuse me! 
@@ -331,7 +331,7 @@ No, that's not true! If I'd abandoned that child back then…
 …You're wrong! 
 There's just… there's no way I could stand by and let that child be killed! 
 We in the Imperial Assault Troupe are duty-bound to protect the citizens of the capital! 
-If we can't even save one child, then what what good is the Revue?! What good is the Flower Division?! 
+If we can't even save one child, then what good is the Troupe?! What good is the Flower Division?! 
 You don't get it, do you, Ensign?! 
 That short-sighted line of thinking is what led to this outcome! 
 It is nonsensical for the Flower Division's captain to risk his life for a lone citizen! 
@@ -401,7 +401,7 @@ I'm…
 … 
 Well, Ogami. As of tomorrow, you're out of here! 
 Meet the new captain. 
-Starting today, I'm the captain. So we don't need you anymore, Uncle Ichi. 
+Starting today, I'm the captain. So we don't need you anymore, Mon Frère. 
 Ogami, I'm so disappointed in you. 
 Starting tomorrow, you'll become a servant of the Kanzaki household! 
 To think, I expected so much more from you. 
@@ -546,7 +546,7 @@ Go ahead and turn in for the day. Don't push yourself too hard.
 You got it… welp, goodnight Ogami. 
 Yeah, goodnight. 
 Goodnight, Kohran. 
-Well then…Vit's getting late. I need to hurry and find Maria. 
+Well then… It's getting late. I need to hurry and find Maria. 
 Well, I'll take her to my room for now. 
 O-Ogami! And… Kohran! 
 Eep! S-Sakura… 
@@ -558,7 +558,7 @@ So she's asleep… all right. I'll take her to her room.
 B-but… 
 "But" nothing! Leaving her with you would just cause me to worry! 
 Come on now, Kohran. Let's go. 
-MmMhmm… 
+Mmhmm… 
 Well then, please excuse us, Ogami. 
 Oh boy… she really caught me with my pants down there. 
 …I'd better pull myself together and find Maria. 
@@ -679,16 +679,16 @@ Snoooore…
 Already asleep, then… 
 Kanna left, so there's no one here now. 
 …Oh well. I'd better go, too. 
-Yo, Captain. I'm feelin' a bit more clear-headed after my shower. 
+Yo, Boss. I'm feelin' a bit more clear-headed after my shower. 
 I-I see. I bet you're feeling great. 
-How about you clear your head too, Captain? You'll sleep like a baby afterwards. 
+How about you clear your head too? You'll sleep like a baby afterwards. 
 Y-yeah, you're right. 
-Captain… I know I boiled over and shouted at you earlier, but… 
+BossI know I boiled over and shouted at you earlier, but… 
 Please, I need your help with Maria. She seriously never opens herself up to anyone. 
 But, you're her captain. She just might open up to you. 
 So enough with the sneaky eavesdropping. You need to get right up in her face and talk to her. 
 Kanna… 
-Later, Captain. I'm heading out now. 
+Later, Boss. I'm heading out now. 
 …Get right up in her face, huh? 
 …I better find Maria. I've wasted enough time already. 
 Hey… I can hear the shower going… and this locker is open. 
@@ -705,7 +705,7 @@ Phew… I managed to escape before she noticed.
 No… my body… it's moving on its own… toward the shower… 
 (K-Kanna's in the shower…) 
 …Hm? 
-Who's there… is that you, Captain? 
+Who's there… is that you, Boss? 
 (Ack! S-she found me out already!) 
 W-what should I do?! 
 Run away. <br> Act natural. 
@@ -714,7 +714,7 @@ Huff, huff… Phew, I'm out of breath…
 Oh boy… I was nearly in hot water there… 
 Don't you mean I was the one in hot water?! 
 Eep?! K-Kanna, you knew I was there?! 
-'Course I did! And I find voyeurs completely disgusting, Captain! 
+'Course I did! And I find voyeurs completely disgusting! 
 First eavesdropping, now this… just what kind of man are you?! 
 I'm… I'm sorry. 
 Peeping on someone just tryin' to wash off her training sweat… 
@@ -725,19 +725,19 @@ I'm… pretty ashamed of myself.
 Y-yeah, it's me, Kanna. I came to take a shower too. 
 Oh, all right then. There's some open stalls toward the back, so hop on in. 
 (Yes! She bought it!) 
-Hey, Captain… you still wearing your clothes? Are you gonna shower like that? 
+Hey, Boss...,you still wearing your clothes? Are you gonna shower like that? 
 O-oh man, you're right! Ha, hahaha… How silly of me! 
 Hahaha, better screw your head back on! 
 W-well, I'd better go… take it easy Kanna. 
 Whew… what a miracle. She actually believed me… 
 …That was a huge waste of time. I better hurry and find Maria… 
-Did you come to take a shower? There's some open stalls toward the back, Captain. 
+Did you come to take a shower? There's some open stalls toward the back. 
 Y-yeah… 
 (Huh… she didn't freak out! She doesn't care that I'm here?) 
-Hey, Captain… you still wearing your clothes? Are you gonna shower like that? 
+Hey, Boss...you still wearing your clothes? Are you gonna shower like that? 
 O-oh man, you're right! Ha, hahaha… How silly of me! 
 Hahaha, better screw your head back on! 
-W-well, I'd better go… take it easy Kanna. 
+W-well, I'd better go… take it easy, Kanna. 
 Phew… oh man, it's a good thing that was Kanna in there… 
 …That was a huge waste of time. I better hurry and find Maria… 
 Ensign… 
@@ -807,12 +807,12 @@ Unused
 Unused
 So you've come around? 
 Heheheh… 
-Heheheh, you have fallen into our clutches at last, Ichiro Ogami. With this, the Revue's end is at hand. 
+Heheheh, you have fallen into our clutches at last, Ichiro Ogami. With this, the Troupe's end is at hand. 
 Heheh, well then, Ogami. Let me introduce you to my brilliant assistant. 
-Heya, Ogami! Man, you sure look a mess. 
+Heya, Chief! Man, you sure look a mess. 
 Heheheh… How does it feel, Ogami? Knowing you're to be remodeled by your former subordinate? 
 By our hand, you will be reconstructed as the Hive of Darkness's newest minion! 
-Now, Kohran! Pour every ounce of your skill into the creation of our new comrade: the New Ichiro Ogami! 
+Now, Kohran! Pour every ounce of your skills into the creation of our new comrade: the New Ichiro Ogami! 
 Right-o, leave it to me! 
 Unused
 Unused

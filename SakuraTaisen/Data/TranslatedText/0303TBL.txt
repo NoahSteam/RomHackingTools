@@ -1,31 +1,31 @@
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused 
+﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking...
+It's a photo of Sumire. This is a side of her you don't see too often.
+It's a photo of Maria. ...She's lost in thought and looks kind of sad...
+A photo of Kanna. She looks strong and reliable. I can't wait to meet her.
+A photo of Iris. She's surrounded by flowers and flashing a radiant smile.
+A photo of Kohran. She's looking pretty in profile with her face dyed red by the evening sun.
+A letter given to me by a customer. I was asked to give it to Sumire. I have a bad feeling about this...
+Maria's pistol. This may help me escape from here...
+A hair ornament. It's decorated with flowers and looks very elegant.
+A pretty pendant. The delicate workmanship is gorgeous.
+A hairpin for use in a traditional bun hairstyle. It would complement a formal outfit well.
+This key will let me enter rooms I couldn't before.
+I found this in a bedroom on the second floor. I can use it to access the back room.
+A teacup Iris asked me to get for her. It has a very stylish design.
+This is the matchbox Iris asked for. Its logo is quite colorful.
+A knife Iris asked me to get for her. Just a normal utensil you'd use during a meal.
+A prop sword and shield used onstage. They're well-made and look just like the real thing.
+A prop crown used onstage. It's well constructed and incredibly detailed.
+A wig and costume used onstage. I wonder what kind of act could use a flashy outfit like this?
+A photo of Sakura in her swimsuit. Wow, this is really something. I'm gonna treasure this.
+A photo of Sumire in her stage costume. Her distinctive makeup really makes an impact.
+It's a photo of Maria on stage in the military uniform from "For Love"... She's a beautiful woman disguised as a man.
+A photo of Kanna in her training gear. Catching her in a private moment like this feels surprisingly intimate.
+A photo of Iris in her swimsuit. She's holding a rubber ring and looks ready to have some fun. How cute.
+A photo of Kohran. I don't get to see her with her braids undone very often. It's a nice look.
+A photo of Ayame in a traditional outfit. I hope she'll always be as happy and content as she is here.
+Ayame's gun. Why...? Why did it have to turn out like this...?
+Jean-Paul the teddy bear. Iris's best friend. She always carries him with her and takes good care of him.
 I wonder… just what did Setsuna mean… 
 All those things he said about Maria… what was he getting at? 
 Boss…! Boss, open up! It's an emergency! 
@@ -42,24 +42,24 @@ I was running some maintenance on the Koubu when Maria showed up.
 I called out to her but she just hopped in her Koubu and took off. Didn't even give me a single glance. 
 (… I knew it. She's going to fight Setsuna alone…) 
 Ogami… do you know what's going on? 
-Yeah… Setsuna from the Hive of Darkness called Maria 'kazuar', and I think it riled her up… 
+Yeah… Setsuna from the Hive of Darkness called Maria 'Cassowary', and I think it riled her up… 
 Ah…! 
-Hey… what's 'kazuar' mean? 
+Hey… what's 'Cassowary' mean? 
 I suppose this is something you should all hear… 
 … this is from back when Maria lived in Russia… 
 There was a storm of revolution, as the people rose up against the tyranny of the totalitarian royalty… 
 Among the fighters at the heart of that revolution was a lone girl… 
-Her codename was 'kazuar', meaning 'cassowary'. That girl was Maria. 
+Her codename was 'Cassowary'. That girl was Maria. 
 In Japan we call cassowary 'the fire-eating bird'. 
 Maria earned that nickname for her fighting style, running like a black flame through the battlefield. 
-Her commander at that time… well, he was like a brother to her… 
-But… he lost his life fighting in a certain battle. The support from his group came to late. 
+Her captain at that time… well, he was like a brother to her… 
+But… he lost his life fighting in a certain battle. The support from his group came too late. 
 Maria was afraid of all the gunfire. She hesitated, and her supporting fire came too late… it still haunts her. 
 Ever since that day… she's always regretted her fatal mistake on the battlefield. 
 I think she's especially conscious of you, Ogami. It seems to me she sees her old self in you… 
 So that's why she's always particularly strict with him… she's trying to prevent another tragedy. 
-S, Sakura!? You should be in bed! 
-I heard the alarm. Don't forget I'm a member of the Flower Division too! I can't just stay in bed for this!! 
+S-Sakura!? You should be in bed! 
+I heard the alarm. Don't forget, I'm a member of the Flower Division too! I can't just stay in bed for this!! 
 Sakura… 
 But… still, for her to run off to fight alone… 
 I think… she probably didn't want us to know. 
@@ -67,11 +67,11 @@ She's always been like that.
 She never wants anyone else to know about the tragedies in her past. 
 I think, especially… she didn't want you to know, boss… 
 … 
-I had no idea Maria was carrying that kind of baggage… 
+I had no idea that Maria was carrying that kind of baggage… 
 Can't believe she even kept it from me, after all we've been through together! She's just trying to play the martyr! 
 I'm… not too fond of sticking my nose in other people's business, but… 
 Now that I know what she's feeling, I can't leave her alone! 
-Uncle Ichi, take care of Maria, okay? 
+Mon Frère, take care of Maria, okay? 
 Let's go, Ogami! 
 Right!! Imperial Assault Troupe, move out! 
 Unused

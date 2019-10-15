@@ -1,31 +1,31 @@
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
+﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking...
+It's a photo of Sumire. This is a side of her you don't see too often.
+It's a photo of Maria. ...She's lost in thought and looks kind of sad...
+A photo of Kanna. She looks strong and reliable. I can't wait to meet her.
+A photo of Iris. She's surrounded by flowers and flashing a radiant smile.
+A photo of Kohran. She's looking pretty in profile with her face dyed red by the evening sun.
+A letter given to me by a customer. I was asked to give it to Sumire. I have a bad feeling about this...
+Maria's pistol. This may help me escape from here...
+A hair ornament. It's decorated with flowers and looks very elegant.
+A pretty pendant. The delicate workmanship is gorgeous.
+A hairpin for use in a traditional bun hairstyle. It would complement a formal outfit well.
+This key will let me enter rooms I couldn't before.
+I found this in a bedroom on the second floor. I can use it to access the back room.
+A teacup Iris asked me to get for her. It has a very stylish design.
+This is the matchbox Iris asked for. Its logo is quite colorful.
+A knife Iris asked me to get for her. Just a normal utensil you'd use during a meal.
+A prop sword and shield used onstage. They're well-made and look just like the real thing.
+A prop crown used onstage. It's well constructed and incredibly detailed.
+A wig and costume used onstage. I wonder what kind of act could use a flashy outfit like this?
+A photo of Sakura in her swimsuit. Wow, this is really something. I'm gonna treasure this.
+A photo of Sumire in her stage costume. Her distinctive makeup really makes an impact.
+It's a photo of Maria on stage in the military uniform from "For Love"... She's a beautiful woman disguised as a man.
+A photo of Kanna in her training gear. Catching her in a private moment like this feels surprisingly intimate.
+A photo of Iris in her swimsuit. She's holding a rubber ring and looks ready to have some fun. How cute.
+A photo of Kohran. I don't get to see her with her braids undone very often. It's a nice look.
+A photo of Ayame in a traditional outfit. I hope she'll always be as happy and content as she is here.
+Ayame's gun. Why...? Why did it have to turn out like this...?
+Jean-Paul the teddy bear. Iris's best friend. She always carries him with her and takes good care of him.
 (…If you look closely, she's still wearing her stage hairdo.) 
 (…She must have come here in a big hurry after the play ended.) 
 (As always, that's some wild hair.) 
@@ -216,7 +216,7 @@ He's sleeping so deeply. He seems at peace.
 It's Ogami… do you have a moment? 
 Oh, Ogami. Yeah, come on in. 
 Excuse me. 
-Chief, what was that phone call about, just now? 
+Commander, what was that phone call about, just now? 
 Huh? Whaddya mean? 
 Well… just now… 
 What? I wasn't talking on the phone or anything. Are you hearing things? 
@@ -262,14 +262,14 @@ Maria's defenses are weak, so you should avoid placing her in close-quarters com
 Kanna has the strength to fight in close-quarters combat. She's cut out to be an advance guard. 
 Iris was angry. She still can't fight by herself, so we have to protect her… 
 Kohran's attack skills are weak, but she can do range attacks. Make sure you understand that, Ogami. 
-As commander, you must provide support. Your aid is what will strengthen the unit's bonds. 
+As captain, you must provide support. Your aid is what will strengthen the unit's bonds. 
 We took a lot of damage… You need to take better care of your subordinates or you'll lose their trust. 
 We took far too much damage in that last battle. You need to make better use of everyone's talents. 
 If you keep handling battles this way… well, let's set that aside 
 There were no casualties to the Flower Division. Well done, Ogami. 
 I think you made excellent use of the Flower Division during the Fukagawa battle. 
 Your evaluation of the battle and tactical decisions were spot on. 
-Also… let' see. You shouldn't view these numbers as a complete reflection of the battle's outcome, but… 
+Also… let's ee. You shouldn't view these numbers as a complete reflection of the battle's outcome, but… 
 The number of enemies destroyed should be used as one rubric to evaluate your troops. 
 The one with the most enemies shot down during the last battle was Sakura. 
 Sakura's technique shines when the enemies line up facing the same direction. 
@@ -437,7 +437,7 @@ Hmmm. Seems like the Ensign wants some alone time with Sakura. I suppose we'd be
 Captain… 
 …alright, let's give them some space, everyone. 
 …alright everyone, let's move it. Guess the boss wants some alone time with Sakura. 
-How come you're being all secret with Sakura, Uncle Ichi? Hmph, I don't care! …Let's go, everyone! 
+How come you're being all secret with Sakura, Mon Frère? Hmph, I don't care! …Let's go, everyone! 
 R-roger that, boss… C'mon folks, let's give these two some room. 
 Okay, it's just the two of us… Listen, Sakura, about what happened earlier… 
 Oh, uh, thanks… 
@@ -513,7 +513,7 @@ Hey, Ogami!
 Those who don't work… 
 Don't eat! 
 And certainly don't party either! 
-Oh come on, Uncle Ichi! Even I'm helping out! Don't be lazy! 
+Oh come on, Mon Frère! Even I'm helping out! Don't be lazy! 
 Everyone's right, sir. 
 I can't prevent you from taking a break, but please try to remember your position as leader. 
 Alright everyone, get to your tasks. Once everything's ready, we'll meet up at the green room. 
@@ -543,18 +543,18 @@ Carrying the tables? Sure.
 Thanks, boss! 
 Okay. The tables are in the basement storage right? 
 That's what I figure. Let's go. 
-Hey hey Uncle Ichi! Let's prepare for the party together, okay? 
+Hey hey Mon Frère! Let's prepare for the party together, okay? 
 Sure. Let's see what Maria's got for us. 
 Let's see. Would you please handle setting out the utensils? 
-Yay! I'm partners with Uncle Ichi! 
+Yay! I'm partners with Mon Frère! 
 Yep… so, what should I do? 
 Hmph, how nice to be so carefree. 
 Ensign, would you and Iris please bring the cups and other utensils we'll need for the party? 
 Just a moment… I'll write down everything we need. 
 Okay, so I just need to get the stuff on this note, right? 
 Correct. 
-…are you thinking dirty thoughts again, Uncle PEEPER? 
-…uncle what? Ensign, what is she talking about? 
+…are you thinking dirty thoughts again, Mon Perv? 
+…Frère what? Ensign, what is she talking about? 
 Wha!? Uh, it's nothing! 
 …I see. At any rate, as far as what we need for the party… 
 Ensign, would you and Iris please bring the cups and other utensils we'll need for the party? 
@@ -566,20 +566,20 @@ Most of this stuff should be in the galley.
 Alright you two, I'm leaving this in your hands. 
 Once you have everything, please bring it all to the green room. 
 I'll be getting the room ready. 
-Let's go, Uncle Ichi! 
+Let's go, Mon Frère! 
 Alright. See you at the green room. 
 …and here is your list, ENSIGN. 
 Oh, uh, thanks… 
-…Sumire looks su~per mad. Did you say something weird to her, Uncle Ichi? 
+…Sumire looks su~per mad. Did you say something weird to her, Mon Frère? 
 Uh, no, of course not… let's see here, what's on my list… 
 Hm, let's see… cups, knives, and matches. 
 Most of this stuff should be in the galley. 
 Alright you two, I'm leaving this in your hands. 
 Once you have everything, please bring it all to the green room. 
 I'll be getting the room ready. 
-Let's go, Uncle Ichi! 
+Let's go, Mon Frère! 
 Alright. See you at the green room. 
-…hey, Uncle Ichi? 
+…hey, Mon Frère? 
 Hm? Oh, what's up, Iris? 
 Do you want to pair up with me? Come on, let's be partners! 
 Hahaha, sure! So, what should I do? 
@@ -587,13 +587,13 @@ Oh, Sumire said we should get the stuff on this list.
 There are two lists, so we can each take one! 
 Got it. Okay, so I just need to grab the things on this list, right? 
 Yep! Once you get everything, bring it to the green room. 
-Here's your list. I'm counting on you, Uncle Ichi. 
+Here's your list. I'm counting on you, Mon Frère. 
 Hmm, let's see… cups, knives and matches. 
 I'd say most of that should be in the galley. 
-Oh! Wait just a sec Uncle Ichi! 
+Oh! Wait just a sec Mon Frère! 
 Woah! What's the matter, Iris? Did you forget to tell me something? 
-Yeah. Um… thanks for being my partner, Uncle Ichi! 
-Hehe… see you, Uncle Ichi! 
+Yeah. Um… thanks for being my partner, Mon Frère! 
+Hehe… see you, Mon Frère! 
 …and there she goes. Well, guess I'd better go grab these things on the list. 
 Well then, perhaps I'll ask you to lend me a hand, Ensign! 
 …sure. 
@@ -605,12 +605,12 @@ Okay, what can I do?
 Could you bring the cups, plates and other dinnerware we'll be needing? 
 Wait just a moment, I'll write you a list of what we need. 
 …here you go, Iris. Please bring the things written on this note. 
-Oka~y! Later Sumire! Later Uncle Ichi! 
+Oka~y! Later Sumire! Later Mon Frère! 
 Well, shall we get started, Ensign? It should be quite easy with the two of us. 
 …well then, I suppose we should get started. 
 (…oh man, she's definitely not in a good mood…) 
 See you later, Sumire! 
-…I don't want to spend a single second with Uncle Peeper, so I'm gonna do this by myself. See you! 
+…I don't want to spend a single second with Mon Perv, so I'm gonna do this by myself. See you! 
 …Ensign, what did Iris mean by that? 
 I sorta saw her in the bath… <br> Huh!? <br> I wasn't peeping, I swear! 
 Uh, I sorta saw her in the bath… I mean-! No! That was an accident! 
@@ -683,7 +683,7 @@ Hey Sumire. Hi Iris. How are things going?
 Good. Just a little bit more. 
 The room preparations are almost complete. 
 Here, Iris. I brought the things you asked for. 
-Thanks Uncle Ichi! You were really fast! 
+Thanks Mon Frère! You were really fast! 
 Since we each did half, we got done twice as fast! 
 Ensign, try not to spoil Iris too much. 
 Since we each did half, we got done twice as fast! 
@@ -790,23 +790,23 @@ Hey, come to think of it, has Sakura made it back from doing the shopping yet?
 …she hasn't returned yet. Honestly, that girl. Where on Earth could she be? 
 (Sakura's pretty late… I wonder what she's doing.) 
 Iris, sorry to keep you waiting! I brought the cups, knives and matches! 
-Thanks, Uncle Ichi! I was waiting here for you the whole time! The party's already starting. 
+Thanks, Mon Frère! I was waiting here for you the whole time! The party's already starting. 
 Oh it is? Aw, you didn't have to stay out here. You could have waited for me inside. 
-But it wouldn't be fun without you, Uncle Ichi. 
+But it wouldn't be fun without you, Mon Frère. 
 Thanks, Iris. Sorry I took so long. 
-Hehe, stop Uncle Ichi, I'm blushing. C'mon, let's go in! 
-What took you so long, Uncle Ichi? Did you bring the cups and things you were supposed to? 
+Hehe, stop Mon Frère, I'm blushing. C'mon, let's go in! 
+What took you so long, Mon Frère? Did you bring the cups and things you were supposed to? 
 Well, yeah, I brought it all. Sorry for taking so long, Iris. 
 …… 
 I've been acting mean this whole time, but you helped me and got the things I asked… 
-I'm sorry for saying so many mean things to you, Uncle Ichi. 
+I'm sorry for saying so many mean things to you, Mon Frère. 
 Nah, it's okay. I'll just be glad if we can be friends again and put this all behind us. 
 Come on, let's go inside. You're probably hungry, right. 
-Yeah! I'm starving! Let's go, Uncle Ichi! 
+Yeah! I'm starving! Let's go, Mon Frère! 
 Sorry, Iris… I haven't found everything yet. 
 What? Are you kidding? It's all right there in the kitchen! 
 The kitchen? …Oh, the galley! Okay, I'll go get it all right now. 
-Oh forget about it! I just want you here, Uncle Ichi! 
+Oh forget about it! I just want you here, Mon Frère! 
 Everyone's waiting for us. Let's go inside! 
 Hey, come to think of it, has Sakura made it back from doing the shopping yet? 
 Not yet. If she doesn't come back soon all the food's gonna get cold… 
@@ -827,7 +827,7 @@ You're very welcome. Well, Ensign, shall we?
 Hey, come to think of it, has Sakura made it back from doing the shopping yet? 
 …she hasn't returned yet. Honestly, that girl. Where on Earth could she be? 
 (Sakura's pretty late… I wonder what she's doing.) 
-Ah… commander. Everyone's already inside. You should head in as well. 
+Ah… Captain. Everyone's already inside. You should head in as well. 
 Nice, the party's finally starting. Can't wait to get in there and relax. 
 …wait, how come you're out here, Maria? 
 I didn't feel comfortable relaxing knowing you were still out getting things ready, sir. 
@@ -854,9 +854,9 @@ Hey, come to think of it, has Sakura made it back from doing the shopping yet?
 Now that you mention it… I haven't seen her yet. 
 I see… 
 (Sakura's pretty late… I wonder what she's doing.) 
-Hurry up Uncle Ichi! The party's already starting! 
+Hurry up Mon Frère! The party's already starting! 
 Oh, so I guess everyone already finished their preparations. 
-I waited for you, Uncle Ichi! 
+I waited for you, Mon Frère! 
 Thanks, Iris. That was nice of you. 
 Hehe… it's boring if you're not there. 
 C'mon, hurry, let's go in. 
@@ -865,12 +865,12 @@ I don't think so.
 I see… 
 (Sakura's pretty late… I wonder what she's doing.) 
 Iris… what are you doing out here? 
-…Uncle Ichi, the party already started. 
+…Mon Frère, the party already started. 
 …are you still mad at me? 
-…no. I… I want to be friends again, Uncle Ichi. 
+…no. I… I want to be friends again, Mon Frère. 
 I don't want to fight with you and spoil the party. 
 Iris…… 
-Sorry, Uncle Ichi… I've said a lot of mean things to you. 
+Sorry, Mon Frère… I've said a lot of mean things to you. 
 You don't hate me, do you? 
 Don't worry about it, Iris. I'm the one who should be apologizing. 
 Well, I'm guessing you're hungry. Shall we go inside and get something to eat? 
@@ -900,7 +900,7 @@ Hey, come to think of it, has Sakura made it back from doing the shopping yet?
 Nope… haven't seen her around. She's not in the green room either. 
 I see… 
 (Sakura's pretty late… I wonder what she's doing.) 
-Uncle Ichi! Want to be my partner for getting the party ready? 
+Mon Frère! Want to be my partner for getting the party ready? 
 What are you doing for the preparations, Iris? 
 Umm, I'm supposed to bring the plates and cups and stuff. 
 Sumire wrote a list of the stuff I need to bring. 
@@ -911,29 +911,29 @@ I really want to help, but I've got other things I need to do. Sorry, Iris.
 I'm really sorry. I'll see you at the party. 
 Got it. Okay, so I just need to grab the things on this list, right? 
 Yep! Once you get everything, bring it to the green room. 
-Here's your list. I'm counting on you, Uncle Ichi. 
+Here's your list. I'm counting on you, Mon Frère. 
 Hmm, let's see… cups, knives and matches. 
 I'd say most of that should be in the galley. 
-Oh yeah, Uncle Ichi! 
+Oh yeah, Mon Frère! 
 Whoa, you startled me! Wh-what is it, Iris? 
 I'm really happy you're helping me. Thank you so much. 
 Hahaha, she's so excited she took off running. Well, guess I'd better look for this stuff. 
 … 
-Here's your list. I'm counting on you, Uncle Ichi. 
+Here's your list. I'm counting on you, Mon Frère. 
 Huh?! Hang on, Iris, I never said I'd help you. 
 Oh yes you will, I already asked you so no backing out. Bring it all to the green room once you have it. 
 Iris, w-wait!… Well, there she goes. Oh well. 
 Hmm, let's see… cups, knives and matches. 
 They should all be in the galley or dining room. I should look for them there. 
-Oh look, it's Uncle Peeper. 
+Oh look, it's Mon Perv. 
 Uh, listen… are you still angry about that? 
 Of course I am! You were peeping on me in the shower! 
 Well, you're just so cute… <br> You've got it all wrong! 
 …well, it's just I think you're so adorable, and… 
 I wasn't in control of my own actions. Before I knew what was happening, I was in the shower room. 
 When I thought about you being there in the shower… I just lost control. 
-Oh, Uncle Ichi… If that's what happened, I guess I can forgive you… 
-NOT! You're not even a little sorry, stupid Uncle Peeper! 
+Oh, Mon Frère… If that's what happened, I guess I can forgive you… 
+NOT! You're not even a little sorry, stupid Mon Perv! 
 I don't want to look at your stupid face anymore! Nyehhh! 
 Oh man… I made her even angrier. 
 You've got it all wrong, Iris! I was just walking down the hall when I heard you scream… 
@@ -942,18 +942,18 @@ Scream…? Did I scream…?
 Oh, you mean when I mixed up the hot and cold water? I guess I sorta screamed… 
 That must have been it! I was just worried about you! Please believe me! 
 Okay. I should have known you weren't the kind of boy who peeks in the shower… 
-…sorry for not believing you, Uncle Ichi. 
+…sorry for not believing you, Mon Frère. 
 Oh, you don't need to apologize. It was my fault too. But I'm glad to see you back to normal. 
 By the way, what are you getting ready for the party? 
 … 
-What's the matter, Uncle Ichi? 
+What's the matter, Mon Frère? 
 I just figure you won't believe me, no matter what I say. 
 I didn't go there to see you in the shower. That's the truth. But… I know you don't believe me. 
-Uncle Ichi… 
+Mon Frère… 
 It just really gets me down, thinking that a member of my own squad doesn't trust me… 
 Don't say that! I believe in you! Don't be sad! 
 Now that I think about it, there's no way you'd do something bad like that. 
-Uncle Ichi, I'm sorry. I got all upset over nothing. 
+Mon Frère, I'm sorry. I got all upset over nothing. 
 Don't worry about it, it was my fault too. I should have been more careful. So can we be friends again? 
 Yeah. I hated being upset for so long like that. 
 I wanted to be friends again too. 
@@ -1082,7 +1082,7 @@ Alrighty, here we go. Lift it up with me, one, two, three!
 Hup! Okay, let's take it slow. 
 Oh. Well, good luck. 
 Uh, okay… not going to offer me a hand? 
-Hey! It's Kanna and Uncle Ichi. Whatcha doing? 
+Hey! It's Kanna and Mon Frère. Whatcha doing? 
 Hey Iris, you actually came at a good time. Use your powers to carry this table to the green room for me! 
 No problem! You just need this table in the green room, right? 
 Kay, here I go. Ya! 
@@ -1092,7 +1092,7 @@ Unlike a certain person I could mention, you're actually helpful.
 Well I didn't have to carry the table, but I feel kind of bad. 
 Hmm… looks pretty heavy. Should I call for some help? 
 Well that'd be nice, but everyone else is busy doing their own preparations. 
-Hey! It's Kanna and Uncle Ichi. Whatcha doing? 
+Hey! It's Kanna and Mon Frère. Whatcha doing? 
 Hey Iris, you actually came at a good time. Use your powers to carry this table to the green room for me! 
 No problem! You just need this table in the green room, right? 
 Kay, here I go. Ya! 
@@ -1102,7 +1102,7 @@ Alrighty boss, I'm gonna run off and help out the others!
 Man that kid's powerful. I'll have to remember to invite her next time I move. 
 … 
 I'm not asking for help or anything, so if you've got somewhere to be feel free to take off. 
-Hey! It's Kanna and Uncle Ichi. Whatcha doing? 
+Hey! It's Kanna and Mon Frère. Whatcha doing? 
 Hey Iris, you actually came at a good time. Use your powers to carry this table to the green room for me! 
 No problem! You just need this table in the green room, right? 
 Kay, here I go. Ya! 
@@ -1113,13 +1113,13 @@ Well I didn't have to carry the table, but I feel kind of bad.
 K-Kanna, are you alright? It's not too… heavy… is it? 
 I'm fine. How about you, boss? 
 (Good grief. I knew Kanna was strong, but she's not even showing any strain lifting this heavy of a table.) 
-Oh, Uncle Ichi! That table looks heavy. 
+Oh, Mon Frère! That table looks heavy. 
 Oh, uh, hi Iris. 
-Hey Uncle Ichi, want me to help? 
+Hey Mon Frère, want me to help? 
 Y-yes please. <br> No, I don't think so. <br> No… I'm… fine… 
 Y-yes please! 
 Oh come on, boss, don't be such a wimp. This is nothing. 
-Honestly Uncle Ichi, what would you do without me. 
+Honestly Mon Frère, what would you do without me. 
 Kay, here I go. Ya! 
 Ah! 
 Th-the whole table vanished! 
@@ -1139,7 +1139,7 @@ Ha, just leave it to me… ha ha… hahaha.
 You look like you're really struggling though. 
 Alright, let's get this thing moved before my arms give-… I mean before the sun sets. 
 Hmm… what should I do? 
-Come on, Uncle Ichi, no need to be shy. It's okay to ask me for help! 
+Come on, Mon Frère, no need to be shy. It's okay to ask me for help! 
 Kay, here I go. Ya! 
 Ah! 
 Th-the whole table vanished! 
@@ -1148,7 +1148,7 @@ We… we made it!
 Alright! That's it for the table preparations! 
 Now we just need to wait for the food and silverware. 
 Alrighty, I'm gonna head off and help out the others. 
-Ah! I was still in the middle of my job! I'll see you later, Uncle Ichi! 
+Ah! I was still in the middle of my job! I'll see you later, Mon Frère! 
 I should probably see if I can help someone too. 
 (Come to think of it, she said she was going to go grab a meal at Renga,) 
 The shops are all closed today. I should head somewhere else. 

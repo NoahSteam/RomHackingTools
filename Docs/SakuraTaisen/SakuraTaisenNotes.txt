@@ -526,3 +526,6 @@ Read @06014594, 060145a4, 0601461a, 0601462a
 060147e2 mov.w @r1, r1
 
 //Inventory items referenced via SAKURA 000343fc
+
+//Theater 2
+Found a match in FUKAGAWA.BIN @0x000069e0

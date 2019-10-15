@@ -1,4 +1,4 @@
-It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
+﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
 It's a photo of Sumire. This is a side of her you don't see too often. 
 It's a photo of Maria. She's lost in thought and looks kind of sad… 
 It's a photo of Kanna. She looks strong and reliable. I can't wait to meet her. 
@@ -30,7 +30,7 @@ Nothing I can do here. I'd better check somewhere else…
 There's no one here. I'd better check somewhere else… 
 I'd better check somewhere else… 
 I'm not making any progress here. Maybe I should go to the director's office and talk to General Yoneda. 
-But the more I wander around this place, the more it seems like an ordinary theater… 
+The more I wander around this place, the more it seems like an ordinary theater… 
 General Yoneda should know what's going on here. I'll go ask him to explain the situation to me. 
 He's on the phone… 
 Sounds like he finished his call. 
@@ -144,7 +144,7 @@ I thought I was taking control of a crack assault force, so when I found an excl
 Does my being here help protect our nation's peace at all? 
 Ask about the theater <br> Ask Sakura about herself <br> Ask about the Troupe 
 Sakura, what do you do here at the theater? 
-The Revue puts on a new show at the Imperial Theater every month. 
+The Troupe puts on a new show at the Imperial Theater every month. 
 This month's performance is "The Eve of Lady Camellia", with Sumire in the lead role. 
 We also put on court plays, musicals, sketch comedies, and various other sorts of performances. 
 Wow…seems like a lot of fun. 
@@ -234,7 +234,7 @@ Does my being here help protect our nation's peace at all?
 Come in, it's open. 
 Oh, Iris…what is it? 
 Um, so, the play's gonna start soon. 
-Sakura didn't show up backstage, so we're all looking for her. Have you seen her, Uncle Ichi? 
+Sakura didn't show up backstage, so we're all looking for her. Have you seen her, Mon Frère? 
 Oh! I completely forgot! 
 S-Sakura… 
 Oh, you're here! Found you, Sakura! 
@@ -242,14 +242,14 @@ I'm so sorry! I'll come right away.
 Well, please excuse me, Ogami. 
 …Uh, yes? 
 Yaay! I found Sakura! 
-Huh? But…why was she in your room, Uncle Ichi? 
+Huh? But…why was she in your room, Mon Frère? 
 Ehh?! W-well… 
-…Uncle Ichi, what were you and Sakura doing together in here? 
+…Mon Frère, what were you and Sakura doing together in here? 
 I-it wasn't anything…we were just talking! 
 Huuh? No fair! I wanna talk to you, too! 
 Okay, okay. Sorry, Iris. But don't you need to get back to the stage? 
 …Oh, yeah! Then let's talk another time! Pinky promise, okay? 
-The play's starting, so I better go. Bye-bye, Uncle Ichi! 
+The play's starting, so I better go. Bye-bye, Mon Frère! 
 Phew…that was close. 
 So Iris performs as well…I guess that would make her a child actress. 
 Honestly, I'm envious. You all have your roles to play here… parts only you can perform. 
@@ -353,7 +353,7 @@ I thought I was taking control of a crack assault force, so when I found an excl
 Does my being here help protect our nation's peace at all? 
 Sorry, but Ogami's not in at the moment! 
 … 
-Huh…Uncle Ichi's not here? Guess I gotta look somewhere else. 
+Huh…Mon Frère's not here? Guess I gotta look somewhere else. 
 Aww, the play's starting soon…Sakura, where did you go? 
 Phew… that was close. 
 Honestly! What a ridiculous way to hide from people! 
@@ -405,7 +405,7 @@ I'm right in the middle of changing. Could you wait just one moment, please?
 Gulp… she's changing? 
 Open the door. 
 …I can't wait any longer. I'm coming inside! 
-E-ensign! What DO you think you're doing?! 
+E-Ensign! What DO you think you're doing?! 
 S-sorry… I just got tired of waiting, so - 
 I asked for just one moment, did I not?! 
 How outrageous of you to simply barge into a lady's room! 
@@ -462,8 +462,8 @@ I've still some matters of my own to attend to, so I will take my leave. Thank y
 Uh… sorry. I was trying to think of what to say. 
 I'm a busy woman, you know. I simply haven't the time to stroll along at your pace. 
 Now if you will excuse me, I shall take my leave! 
-Ah…s he shut the door in my face. 
-This appears to be a salon where the troupe members come to relax. 
+Ah…she shut the door in my face. 
+This appears to be a salon where the troop members come to relax. 
 Sumire was drinking tea out here earlier… 
 …Seems there's no one here. Better head somewhere else. 
 (Oh! Sumire is here.) 
@@ -672,7 +672,7 @@ Uh… I-I'm sorry. What a strange thing for me to say…
 W-well, I should get going… 
 Ah - Sakura, hold on! There's something I wanted to ask you. 
 What is it? 
-Tell me about the Revue! <br> Where are you headed? <br> …Do you have a boyfriend? 
+Tell me about the Troop! <br> Where are you headed? <br> …Do you have a boyfriend? 
 Sakura, could you please tell me about the Imperial Assault Troop? 
 …! 
 This place is just an ordinary theater. Where exactly is the secret squad, the Assault Troop, supposed to be?! 
@@ -784,26 +784,26 @@ I see. Thanks.
 … 
 (…Is she angry with me for what happened earlier?) 
 … 
-Uncle Ichi, sorry about before… 
+Mon Frère, sorry about before… 
 …'cause it's not good to "eavesdrop". 
 Iris…… 
 Maria scolded me earlier. 
-Uncle Ichi…please don't hate me. 
+Mon Frère…please don't hate me. 
 Don't worry. I wouldn't hate you because of something like that. 
 You mean it? Okay, then let's make up! 
 By the way, Iris…there's something I wanted to ask. 
 Yeeess? 
 (Oh, Iris is here.) 
-Oh, it's you, Uncle Ichi. Do you need something? 
+Oh, it's you, Mon Frère. Do you need something? 
 Actually, yeah. There's something I wanted to ask you about real quick. 
 Yeeess? 
 (Oh, Iris is here.) 
-Oh, Uncle Ichi! I had a lot of fun earlier! 
+Oh, Mon Frère! I had a lot of fun earlier! 
 Yeah. Thanks for before, Iris. 
 By the way…there's something I wanted to ask you. 
 Yeeess? 
 (Oh, Iris is here.) 
-Oh, it's you, Uncle Ichi. Do you need something? 
+Oh, it's you, Mon Frère. Do you need something? 
 Actually, yeah. There's something I wanted to ask you about real quick. 
 Yeeess? 
 Ask about the Troop. <br> Ask Iris about herself. 
@@ -811,7 +811,7 @@ I was wondering if you could tell me about the Imperial Assault Troop…
 Sure, okay. 
 Why is the troop headquartered in a theater? 
 We're in a theater, because that's where the "troupe" performs. 
-Isn't that obvious? You're pretty strange, Uncle Ichi. 
+Isn't that obvious? You're pretty strange, Mon Frère. 
 …? 
 (I don't get it. There's nothing obvious about it!) 
 I'd like to know more about you, Iris. 
@@ -820,14 +820,14 @@ So, I used to live in France.
 I was recruited and came to Japan, and now I live here. 
 I hadn't realized… 
 Thank you for sharing that with me, Iris. Now I know a little more about you. 
-Uh-huh! Next time, you should tell me something about yourself, Uncle Ichi! 
-What is it, Uncle Ichi? Didn't you want to ask me something? 
+Uh-huh! Next time, you should tell me something about yourself, Mon Frère! 
+What is it, Mon Frère? Didn't you want to ask me something? 
 Huh?… Oh, sorry. I blanked out for a second. 
 You're acting so odd. Are you okay? 
 (What adorable clothes. She looks like a doll.) 
 Doesn't this dress look good on me? I have lots of fancy clothes. 
 (What adorable clothes. She looks like a doll.) 
-Uncle Ichi, do you remember my bear's name? 
+Mon Frère, do you remember my bear's name? 
 Jean Pierre? <br> Jumper? <br> Jean-Paul? 
 Umm… it's Jean Pierre, right? 
 Noo! It's Jean-Paul! Jean-Paul! 
@@ -837,20 +837,20 @@ He's a bear, not a sweater! And his name is Jean-Paul!
 S-sorry. I forgot. 
 …You better remember. He's my very best friend. 
 I remember. It's Jean-Paul, isn't it? 
-Yaay! Uncle Ichi, you really remembered! 
+Yaay! Mon Frère, you really remembered! 
 Of course. He's your very best friend. 
-Thank you, Uncle Ichi…I'm so happy you remembered. 
+Thank you, Mon Frère…I'm so happy you remembered. 
 Erm…sorry. I forgot… 
 You forgot? He's Jean-Paul the bear. 
-Make sure you remember his name, okay, Uncle Ichi? 
+Make sure you remember his name, okay, Mon Frère? 
 You got it. 
-Hey, Jean-Paul. Uncle Ichi here is our new friend. 
+Hey, Jean-Paul. Mon Frère here is our new friend. 
 (That's an enormous ribbon…but it looks great on her.) 
 Isn't this ribbon sooo cute? It's my favorite! 
 (She has beautiful blond hair.) 
 You know, tying up this ribbon all nice is hard. 
 (Such pretty blue eyes…) 
-Uncle Ichi… if you keep looking into my eyes like that, I'm gonna get embarrassed… 
+Mon Frère… if you keep looking into my eyes like that, I'm gonna get embarrassed… 
 (Such pretty blue eyes…) 
 Do you know where everyone else is? 
 Sumire is upstairs. Sakura went to go get her. 
@@ -859,11 +859,11 @@ I think Mr. Yoneda is in his room?
 I see. Thanks. 
 I'm waiting here for everybody else. 
 Bye, Iris. 
-Bye-bye, Uncle Ichi! 
-Uncle Ichi, what are you looking at? You should talk to me! 
-Uncle Ichi, what are you looking at? You should talk to me! 
-Uncle Ichi, what are you looking at? Are you bored of talking to me?! 
-Uncle Ichi, what are you looking at? You should talk to me! 
+Bye-bye, Mon Frère! 
+Mon Frère, what are you looking at? You should talk to me! 
+Mon Frère, what are you looking at? You should talk to me! 
+Mon Frère, what are you looking at? Are you bored of talking to me?! 
+Mon Frère, what are you looking at? You should talk to me! 
 This is… a library? Huh…it sure is cozy. 
 …Seems there's no one here. Better head somewhere else. 
 The library. Maybe I should drop by at night and see what sort of books they have here. 
@@ -899,7 +899,7 @@ Ensign, do you need me for something?
 Ensign, I believe I previously instructed you not to leer at people. 
 Ensign, do you need me for something? 
 …Did you need something from me? 
-Tell me about the Revue. <br> Tell me about yourself, Maria. 
+Tell me about the Troop. <br> Tell me about yourself, Maria. 
 Maria, tell me something. I was assigned here as the captain of a secret combat squad. 
 …Yes. I heard as much from Director Yoneda. 
 But the only duty I've been given is that of a ticket puncher. What's the meaning of this? 

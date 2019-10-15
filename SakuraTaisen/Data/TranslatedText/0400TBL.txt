@@ -1,4 +1,4 @@
-﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
+﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
 It's a photo of Sumire. This is a side of her you don't see too often. 
 It's a photo of Maria. …She's lost in thought and looks kind of sad… 
 A photo of Kanna. Kanna's signature strength comes through clearly. 
@@ -9,7 +9,7 @@ Maria's pistol. This may help me escape from here…
 A hair ornament. It's decorated with flowers and looks very elegant. 
 A pretty pendant. The delicate workmanship is gorgeous. 
 A hairpin for use in a traditional bun hairstyle. It would complement a formal outfit well. 
-Jean Paul the teddy bear. Iris's best friend. She always carries him with her and takes good care of him. 
+Jean-Paul the teddy bear. Iris's best friend. She always carries him with her and takes good care of him. 
 This key will let me enter rooms I couldn't before. 
 I found this in a bedroom on the second floor. Now I can get into the room at the back. 
 A teacup Iris asked me to get for her. It has a very stylish design. 
@@ -37,8 +37,8 @@ Look, there they go. Wonder who'll come out the winner? This'll be the match of 
 Hey, Maria. Know what…? 
 Iris. Chattering during rehearsal is prohibited. 
 How boring. 
-I'm gonna go play with Uncle Ichi! 
-Ah Iris! Where are you going; we're rehearsing right now! Come back! 
+I'm gonna go play with Mon Frère! 
+Ah Iris! Where are you going?! we're rehearsing right now! Come back! 
 I don't wanna! Bye bye! 
 Sheesh… just when I think I've gotten out of ticket punching, I get roped into sorting pay slips… 
 And here I thought I could take it easy until the performance of "Love is a Diamond" starts next week… 
@@ -77,10 +77,10 @@ Thanks so much! Okay, I'll be waiting for you at the set room tomorrow.
 Cleaning the set room? Sounds like a pain… 
 It's fine if you don't want to. Don't force yourself to come help on my account… 
 Um, but if you have the time and don't mind, please do come by and help. 
-Uncle Ichi! 
+Mon Frère! 
 Huh? That voice… is that Iris? 
-Ehehe… Uncle Ichi! 
-Hey, Uncle Ichi. Let's go on a date tomorrow! 
+Ehehe… Mon Frère! 
+Hey, Mon Frère. Let's go on a date tomorrow! 
 Eep… a date?! 
 A… date?! 
 So… you'll come, right? 
@@ -90,7 +90,7 @@ It'll be fun! Okay, that settles it!
 I mean, tomorrow is my birthday! 
 Eh? Really? 
 Yep! So, I wanna be with you tomorrow. 
-Sounds good, right? Let's go on a date together, Uncle Ichi! 
+Sounds good, right? Let's go on a date together, Mon Frère! 
 I can't go tomorrow… I've already got plans. 
 … 
 … 
@@ -99,14 +99,14 @@ I mean, tomorrow is my birthday!
 Eh? Really? 
 Yep! So, I wanna be with you tomorrow. 
 What a dilemma… 
-You'll come, right Uncle Ichi? 
+You'll come, right Mon Frère? 
 I mean, tomorrow is my birthday! 
 Eh? Really? 
 Yep! So, I wanna be with you tomorrow. 
-Sounds good, right? Let's go on a date together, Uncle Ichi! 
+Sounds good, right? Let's go on a date together, Mon Frère! 
 Okay, let's go! <br> I really can't make it. <br> Sakura, do you mind? 
 Okay, let's go! After all, your birthday only comes once a year. 
-Hooray, you're coming! Thank you, Uncle Ichi! 
+Hooray, you're coming! Thank you, Mon Frère! 
 That's wonderful, Iris. 
 Ogami… I'll ask for your help with cleaning another day. 
 After all, birthdays are important since they only come once a year. 
@@ -115,10 +115,10 @@ It's all right. I'll ask for your help some other time, instead.
 See you later, Iris. Rehearsal is over for today, so make sure you get to bed early tonight. 
 Okay! Thank you, Sakura! 
 I really can't make it. I have other plans tomorrow. 
-Uncle Ichi… 
+Mon Frère… 
 You must hate me… 
 N no, Iris, I… 
-Forget it! Uncle Ichi, you meanie! 
+Forget it! Mon Frère, you meanie! 
 Iris… 
 Ogami… maybe it would've been best to humor her? 
 But… 
@@ -131,12 +131,12 @@ Sakura, do you mind?
 Ogami, please go along with Iris tomorrow. 
 We can clean anytime, but a birthday only comes once a year. 
 Sakura… 
-Yeah, Sakura's right! Hooray! Uncle Ichi and I are going and a date! 
+Yeah, Sakura's right! Hooray! Mon Frère and I are going on a date! 
 I'm heading back to the stage, so I'll be on my way. 
 Huh? Well… 
 How come you have to ask Sakura about every little thing?! 
 Well… 
-Forget it! Who needs you, Uncle Ichi! 
+Forget it! Who needs you, Mon Frère! 
 Iris… 
 I'm sorry, Ogami… it seems I've upset Iris. 
 Hey, don't trouble yourself over it. 
@@ -147,25 +147,25 @@ I'll go apologize to her tomorrow…
 Ogami, please go along with Iris tomorrow. 
 We can clean anytime, but a birthday only comes once a year. 
 Sakura… 
-Yeah, Sakura's right! Hooray! Uncle Ichi and I are going and a date! 
+Yeah, Sakura's right! Hooray! Mon Frère and I are going on a date! 
 Guess I have no choice… 
 Hooray! I'm so excited! 
 See you later, Iris. Rehearsal is over for today, so make sure you get to bed early tonight. 
 Okay! Thank you, Sakura! 
 Okay, let's do it. I've never really gotten the chance to go anywhere with you, Iris. 
-Yaaay! Thank you, Uncle Ichi! I'm so happy! 
+Yaaay! Thank you, Mon Frère! I'm so happy! 
 Oh, I see, Ogami. You can't be bothered to help me out, but you have enough time to spend with Iris? 
 Eep?! That's not what I… 
 Ogami, you just promised me you'd help me with cleaning! 
-Eep! W well, I… 
-No way! Sakura, stop trying to steal Uncle Ichi away! 
+Eep! W-well, I… 
+No way! Sakura, stop trying to steal Mon Frère away! 
 I mean, tomorrow is my birthday, after all! 
 Eh? Really? 
 If that's true, you should've mentioned it sooner… 
 In that case… Ogami, why don't you go out with Iris tomorrow? 
-Yeah, Sakura's right! Hooray! Uncle Ichi and I are going and a date! 
+Yeah, Sakura's right! Hooray! Mon Frère and I are going on a date! 
 Well then, Ogami, I'll be on my way. 
-Hey, Uncle Ichi! You should help me pick out which outfit to wear tomorrow! 
+Hey, Mon Frère! You should help me pick out which outfit to wear tomorrow! 
 Huh? What's wrong with what you're wearing now? 
 I can't wear this! It's our first date, so I have to look my best! 
 So, you have to come to the wardrobe room and help me pick out what to wear! 
@@ -180,15 +180,15 @@ A date with Iris tomorrow, huh… ? Wonder what we'll end up doing…
 Hmm… I don't know all that much about clothes. 
 That's okay! Let's go, let's go! 
 Leave it to me! I'll pick out something that looks great on you, Iris. 
-Really? You're the best, Uncle Ichi! I'm counting on you! 
+Really? You're the best, Mon Frère! I'm counting on you! 
 Okay, let's go! Hurry, hurry! 
 Don't look so grumpy, it'll be fine! 
 I hope you'll pick out something that looks good on me. 
 Hmm… I'm not too sure of myself, but I'll give it a shot. 
 Yay! Okay, let's go! Hurry, hurry! 
-You've got Jean Paul with you as usual, I see. 
+You've got Jean-Paul with you as usual, I see. 
 Of course! He's my friend, so we're always together. 
-(Jean Paul, eh? It certainly is a French sounding name.) 
+(Jean-Paul, eh? It certainly is a French sounding name.) 
 Eheheh… Isn't this ribbon sooo cute? It's my favorite! 
 Eheheh… Isn't this ribbon sooo cute? It's my favorite! 
 Blonde hair… how lovely. 
@@ -196,21 +196,21 @@ Good grief, Ogami!
 Blonde hair… how lovely. 
 Good grief, Ogami! 
 (She seems really happy for some reason.) 
-You look pretty happy. Did something good happen? 
-Hee hee… what's up? 
+She looks pretty happy. Did something good happen? 
+Hee hee… what are you looking at? 
 (She seems really happy for some reason.) 
-Uncle Ichi, wait! Where are you going? 
+Mon Frère, wait! Where are you going? 
 Sheesh, what're you looking at? 
 This is the wardrobe room… you're going to choose your outfit from here? 
 Yep. I brought some of my own clothes from my room in here. 
-Okay, Uncle Ichi. Pick out something that'll look good on me! 
+Okay, Mon Frère. Pick out something that'll look good on me! 
 You've got great taste. I'm kinda surprised! 
 Really? I'm glad you like what I picked out. 
 Yeah! Thanks to you, I've got my outfit all ready for tomorrow. 
 What's it look like? 
 It's a seeecret! You'll see it tomorrow! 
 Well, I'm going to bed. I don't wanna oversleep tomorrow. 
-You can come to my room tomorrow to pick me up, Uncle Ichi. Night night! 
+You can come to my room tomorrow to pick me up, Mon Frère. Night night! 
 I wonder what sort of outfit Iris will wear tomorrow… 
 Anyway, I can't imagine what we'll do on a date together… 
 Sorry, Iris. I guess you didn't like the outfit I picked out? 
@@ -219,7 +219,7 @@ I have all kinds of outfits, but I already decided on one for tomorrow.
 What's it look like? 
 It's a seeecret! You'll see it tomorrow! 
 Well, I'm going to bed. I don't wanna oversleep tomorrow. 
-You can come to my room tomorrow to pick me up, Uncle Ichi. Night night! 
+You can come to my room tomorrow to pick me up, Mon Frère. Night night! 
 I wonder what sort of outfit Iris will wear tomorrow… 
 Anyway, I can't imagine what we'll do on a date together… 
 Sorry. I tried picking out an outfit you might like… 
@@ -230,39 +230,39 @@ During all that changing, I found the dress I'm gonna wear anyway.
 Really? Which one? 
 It's a seeecret! You'll see it tomorrow! 
 Well, I'm going to bed. I don't wanna oversleep tomorrow. 
-You can come to my room tomorrow to pick me up, Uncle Ichi. Night night! 
+You can come to my room tomorrow to pick me up, Mon Frère. Night night! 
 I wonder what sort of outfit Iris will wear tomorrow… 
 Anyway, I can't imagine what we'll do on a date together… 
 I promised Iris we'd go on a date today… 
 I'm pretty sure she wanted me to meet her at her room. All right, better get going. 
 It's Ogami… Iris, you there? 
-Good morning, Uncle Ichi! You came right on time! 
-Good morning, Uncle Ichi. I see you came to get me! 
-Uncle Ichi, you're super late! 
+Good morning, Mon Frère! You came right on time! 
+Good morning, Mon Frère. I see you came to get me! 
+Mon Frère, you're super late! 
 S sorry… I got caught up in getting ready… 
 Sheesh… I'll let you off easy this time, since today is my birthday. 
-Are you bringing Jean Paul along on our date, too? 
-That's right. Jean Paul wants to go out too, you see. 
-Oh, I see! You'll be jealous if Jean Paul comes too, won't you? 
+Are you bringing Jean-Paul along on our date, too? 
+That's right. Jean-Paul wants to go out too, you see. 
+Oh, I see! You'll be jealous if Jean-Paul comes too, won't you? 
 …You saw right through me. <br> Not really? <br> Can't you leave him here? 
 Yes, you're absolutely right. And here I thought I'd get the chance to spend some time alone with you… 
 Eh? Really?! 
 But, I'd feel bad to leave him all alone… 
 So, is it okay if we bring him along? He promises he won't get in the way! 
 Um, not really. 
-Is that so? You can tell me the truth, Uncle Ichi. 
-But, I'm sorry… Jean Paul gets really lonely by himself. 
+Is that so? You can tell me the truth, Mon Frère. 
+But, I'm sorry… Jean-Paul gets really lonely by himself. 
 So, is it okay if we bring him along? He promises he won't get in the way! 
 I see… all right, then. 
 Can't you leave him here? He won't even know the difference. 
-You're horrible! Jean Paul is my friend! 
+You're horrible! Jean-Paul is my friend! 
 There's no way I can leave him here! 
-Oh! You're acting all shy, Uncle Ichi! Hee hee, it's so cute~! 
-(So she's bringing Jean Paul… that's fine, as long as she doesn't lose him… ) 
+Oh! You're acting all shy, Mon Frère! Hee hee, it's so cute~! 
+(So she's bringing Jean-Paul… that's fine, as long as she doesn't lose him… ) 
 Your ribbon looks as cute as ever. 
-Uncle Ichi, don't keep staring at the same spot. 
+Mon Frère, don't keep staring at the same spot. 
 Your ribbon looks as cute as ever. 
-Uncle Ichi, don't keep staring at the same spot. 
+Mon Frère, don't keep staring at the same spot. 
 Hey hey, isn't there somewhere else you want to look at? 
 Hey hey, isn't there somewhere else you want to look at? 
 (Her eyes are sparkling. She must really be enjoying this date.) 
@@ -270,60 +270,60 @@ Hey hey, isn't there somewhere else you want to look at?
 You're wearing something different from usual today. 
 So, I was able to help by choosing an outfit last night? 
 Yep! I liked this one best. 
-Say, Uncle Ichi. What do you think of this outfit? 
+Say, Mon Frère. What do you think of this outfit? 
 It's very cute. <br> It's pretty nice, I guess. <br> Your usual outfit's better. 
 It's very cute. It suits you well, Iris. 
-Really?! Thank you, Uncle Ichi… that makes me so happy! 
+Really?! Thank you, Mon Frère… that makes me so happy! 
 I wore them just for you. I'm glad you like them! 
 Well now, shall we get going? 
-Yeah! Let's go, let's go! Uncle Ichi, this way! Hurryyyy! 
+Yeah! Let's go, let's go! Mon Frère, this way! Hurryyyy! 
 It's pretty nice, I guess. It looks good on you. 
-Thank you, Uncle Ichi. I like this outfit, too. 
+Thank you, Mon Frère. I like this outfit, too. 
 Well now, shall we get going? 
-Yeah! Let's go, let's go! Uncle Ichi, this way! Hurryyyy! 
+Yeah! Let's go, let's go! Mon Frère, this way! Hurryyyy! 
 I like your usual outfit better. 
 Huh?! But I picked this one out just for you… 
-Uncle Ichi, do you not like this outfit? 
+Mon Frère, do you not like this outfit? 
 Oh, no… I didn't mean that… 
 It's okay. Anyway, let's hurry up and go! We're wasting time! 
 Umm… I never know what to say in situations like this. 
-Jeez, Uncle Ichi… you don't understand a girl's heart at all! 
+Jeez, Mon Frère… you don't understand a girl's heart at all! 
 But… that's just one of the charming things about you! 
-W well, why don't we get a move on? 
-Yeah! Let's go, let's go! Uncle Ichi, this way! Hurryyyy! 
+W-well, why don't we get a move on? 
+Yeah! Let's go, let's go! Mon Frère, this way! Hurryyyy! 
 Well, shall we get going? Let's head outside for now. 
-Oh, Uncle Ichi! Wait a second! 
+Oh, Mon Frère! Wait a second! 
 Jeez, you didn't even notice what I'm wearing! 
 The train's nearly here. 
-Hey, Uncle Ichi. Where are you gonna take me? 
+Hey, Mon Frère. Where are you gonna take me? 
 Shopping at the Dept. Store <br> See a movie in Asakusa <br> Ueno Zoo 
 Why don't we go shopping at the Nipponbashi Department Store? I'll buy something for you, Iris. 
 Really?! Yaaay! I wonder what you'll get me? 
 Oh, but… 
 What's wrong? 
-Um, Uncle Ichi… I wanna go to Asakusa. 
+Um, Mon Frère… I wanna go to Asakusa. 
 Asakusa? 
 Yeah. Kohran said that when she was at the Hanayashiki branch, she went to Asakusa all the time. 
 She said there's lots of shops and that it's really interesting. So, let's go to Asakusa! 
 Got it. To Asakusa we'll go, then. 
 Yeah! Let's go, right now! 
 Would you like to go see a movie in Asakusa? 
-Okay! If we're going to Asakusa, I don't mind! 
-Really… did you want to go to Asakusa? 
+Okay! As long as we go to Asakusa I'm happy! 
+So you wanted to go there anyway? 
 Yeah. Kohran said that when she was at the Hanayashiki branch, she went to Asakusa all the time. 
 She said there's lots of shops and that it's really interesting. So, let's go to Asakusa! 
 All right. To Asakusa we'll go, then. 
 Yeah! Let's go, let's go, right now! 
 How about we go to the Ueno Zoo? I've heard they have all kinds of rare animals there, like kangaroos. 
 Yaay, the zoo! Let's go, let's go!… Oh, but… 
-Hey, Uncle Ichi… I wanna go to Asakusa. 
+Hey, Mon Frère… I wanna go to Asakusa. 
 Asakusa? 
 Yeah. Kohran said that when she was at the Hanayashiki branch, she went to Asakusa all the time. 
 She said there's lots of shops and that it's really interesting. So, let's go to Asakusa! 
 All right. To Asakusa we'll go, then. 
 Yeah! Let's go, let's go, right now! 
 Hmm… where should we go… 
-Come on, Uncle Ichi. When you're on a date, you're supposed to lead the lady around. 
+Come on, Mon Frère. When you're on a date, you're supposed to lead the lady around. 
 So… why don't you take me to Asakusa? Okay? 
 Asakusa? 
 Yeah. Kohran said that when she was at the Hanayashiki branch, she went to Asakusa all the time. 
@@ -331,7 +331,7 @@ She said there's lots of shops and that it's really interesting. So, let's go to
 All right. To Asakusa we'll go, then. 
 Yeah! Let's go, let's go, right now! 
 We've arrived in Asakusa. Where do you want to go, Iris? 
-I'll go anywhere you wanna go, Uncle Ichi. 
+I'll go anywhere you wanna go, Mon Frère. 
 Okay then… wonder where we should go first. 
 Let's take a walk in the park. <br> Let's go to the movie theater. <br> Let's go shopping. 
 Let's take a walk in the park. <br> Let's go to the movie theater. 
@@ -342,14 +342,14 @@ Let's go to the movie theater.
 Let's go shopping. 
 All right, let's take a walk in the park. 
 Okay! Let's go, let's go! 
-Oh, there's a fountain! Let's go over there, Uncle Ichi! 
-Hey, Uncle Ichi… I have a favor to ask. 
+Oh, there's a fountain! Let's go over there, Mon Frère! 
+Hey, Mon Frère… I have a favor to ask. 
 What is it? 
 I want to walk together with you like we're a couple. 
 (Like a couple… ) 
 Hold her hand. <br> Link arms with her. <br> Give her a piggyback ride. 
 All right, let's walk holding hands. 
-Okay! Don't let go, Uncle Ichi. 
+Okay! Don't let go, Mon Frère. 
 Okay, let's walk with our arms linked. 
 Eh? Really?! Hee hee… my heart's racing! 
 Oh, but… your arm won't reach that high, will it? 
@@ -357,16 +357,16 @@ Oh…
 You're right. Okay then… why don't we hold hands instead? 
 Ah, good idea. 
 We'll try linking arms when you get a little bigger. 
-I hope I can grow up soon, so that I can walk with my arm linked in yours, Uncle Ichi… 
+I hope I can grow up soon, so that I can walk with my arm linked in yours, Mon Frère… 
 All right, I'll give you a piggyback ride. 
 Piggyback?! 
-Uncle Ichi, what sort of couple gives piggyback rides? 
+Mon Frère, what sort of couple gives piggyback rides? 
 You still think of me as a child, don't you! 
 S-sorry, Iris… that's not what I meant… 
-Forget it! I've had it with you, Uncle Ichi! 
+Forget it! I've had it with you, Mon Frère! 
 Iris, wait! You're gonna get lost! 
 I am not a child! I won't get lost! 
-Are you shy, Uncle Ichi? I'll just take your hand myself! 
+Are you shy, Mon Frère? I'll just take your hand myself! 
 Oh…! 
 Eheheh… it's like we're really a couple. 
 Y-yeah, it is. 
@@ -374,12 +374,12 @@ Walking along holding hands with you like this is a dream come true!
 Why don't we take a short rest here, Iris? 
 Okay then. But make sure you don't let go of my hand. 
 I got it. 
-By the way, Uncle Ichi… 
+By the way, Mon Frère… 
 What is it? 
 Do you know how old I turn today? 
 Iris, wait up! 
 Sorry… I shouldn't have done that. 
-Uncle Ichi. Today is my birthday, you know. 
+Mon Frère. Today is my birthday, you know. 
 Yeah. 
 So… how old do you think I'm turning today? 
 8 years old? <br> 10 years old? <br> 12 years old? 
@@ -388,13 +388,13 @@ Wrong! I'm not some little kid!
 I'm turning 10 years old today! I won't be a kid forever! 
 S-sorry… 
 I'm sorry. Forgive me, Iris. 
-Okay. As long as you understand, it's fine. Hey, Uncle Ichi… why don't we go somewhere else? 
+Okay. As long as you understand, it's fine. Hey, Mon Frère… why don't we go somewhere else? 
 I'm tired of this place! 
 Hmm… 10 years old? 
-Ding ding! You're smart, Uncle Ichi! You got it exactly right. 
+Ding ding! You're smart, Mon Frère! You got it exactly right. 
 With this, I'm in the same decade of life as Sakura and the others! 
 Sure enough… if they're in their teens, then that makes you a pre teen. 
-Yep, that's right! Hey, Uncle Ichi… why don't we go somewhere else? 
+Yep, that's right! Hey, Mon Frère… why don't we go somewhere else? 
 I'm tired of this place! 
 Hm… 12 years old? 
 Eh?! Do I really look that grown up? 
@@ -402,13 +402,13 @@ I'm turning 10 years old today.
 I see… sorry, guess I got it wrong. 
 Oh, that's okay. Because that means you think I look really grown up, right? 
 Y-yeah… 
-Yup! Hey, Uncle Ichi… why don't we go somewhere else? 
+Yup! Hey, Mon Frère… why don't we go somewhere else? 
 I'm tired of this place! 
-You don't know, Uncle Ichi? I'm turning 10 years old today. 
+You don't know, Mon Frère? I'm turning 10 years old today. 
 10 years old, huh… 
 With this, I'm in the same decade of life as Sakura and the others! 
 Sure enough… if they're in their teens, then that makes you a pre teen. 
-Yep, that's right! Hey, Uncle Ichi… why don't we go somewhere else? 
+Yep, that's right! Hey, Mon Frère… why don't we go somewhere else? 
 I'm tired of this place! 
 Whoa… looks like it's nearly time for the movie to start. 
 Iris, let's make our way to the movie theater. 
@@ -429,7 +429,7 @@ Huh? There's still about an hour before the start of the next film screening.
 No point in hanging around here… let's go somewhere else, Iris. 
 All right, let's go shopping. 
 Okay! I wanna go to that jewelry shop over there! 
-Huh?! H hang on, Iris. I can't buy any jewelry! 
+Huh?! H-hang on, Iris. I can't buy any jewelry! 
 It's fine! Hurry, hurry! 
 Welcome sir, and young miss. Take your time and look around. 
 What the… it's an accessory store. I thought it was for jewelry… 
@@ -438,10 +438,10 @@ Yeah! Present, present!
 My, you two seem close. She your little sister? 
 She's my daughter. <br> She's my coworker. <br> She's my girlfriend. 
 No, she's my daughter. 
-Uncle Ichi! What do you mean, I'm your daughter?! 
+Mon Frère! What do you mean, I'm your daughter?! 
 S sorry. I was only kidding. 
 Jeez! Don't say such weird stuff; we're out on a date and everything! 
-Uncle, eh… then, the two of you ARE related? You don't look alike at all… 
+Frère, eh… then, the two of you ARE related? You don't look alike at all… 
 No way! He's my boyfriend! 
 B-boyfriend? 
 I-Iris?! 
@@ -451,34 +451,34 @@ Uh… well, you see…
 Ah, it's not important. Take your time and look around! 
 No… she's my girlfriend. 
 G-girlfriend?! Really, now? These foreigners sure are open to anything… 
-…Uncle Ichi. 
+…Mon Frère. 
 Thank you… that makes me so happy. 
 Well then, sir! How about buying something for your cute little girlfriend, here? 
 Hmph, unfriendly fella, aren't ya? 
 No matter. Since you're here, take the time to look around. 
 So you'll take the hairpin? Pleasure doing business with ya! 
 Happy birthday, Iris. Here's my present to you. 
-Thank you, Uncle Ichi! 
+Thank you, Mon Frère! 
 Do you like it? 
 Yeah! I'm gonna treasure it! 
-So, where should we go now, Uncle Ichi? 
+So, where should we go now, Mon Frère? 
 That hairpin's a great choice. It'll look fantastic in that golden hair of hers, won't it? 
 The hair accessory, then? Here you are, thanks for the business! 
 Happy birthday, Iris. Here's my present to you. 
-Thank you, Uncle Ichi! 
+Thank you, Mon Frère! 
 Do you like it? 
 Yeah! I'm gonna treasure it! 
-So, where should we go now, Uncle Ichi? 
+So, where should we go now, Mon Frère? 
 That hair accessory is a good choice. Wouldn't it look nice in the young lady's hair instead of that ribbon? 
 The pendant, then? Excellent choice, sir! Thanks for your patronage! 
 Happy birthday, Iris. Here's my present to you. 
-Thank you, Uncle Ichi… I was just thinking of how much I wanted this. 
+Thank you, Mon Frère… I was just thinking of how much I wanted this. 
 I'm really happy! 
 Do you like it? 
 Yeah! I'm gonna treasure it! 
-So, where should we go now, Uncle Ichi? 
+So, where should we go now, Mon Frère? 
 How can you call yourself a man and refuse to buy this for your lady? Come on, sir! I'll even give you a nice discount. 
-Huh?! Uncle Ichi, will you buy it for me? 
+Huh?! Mon Frère, will you buy it for me? 
 Whoa… looks like it's nearly time for the movie to start. 
 Iris, let's make our way to the movie theater. 
 Mmhmm! 
@@ -490,7 +490,7 @@ Ahem…
 He's called a "narrator". He's the person who explains the story. 
 Since the movie doesn't have any sound, the narrator tells us what's happening onscreen. 
 Oh, it's starting. 
-(Quite atmospheric… 
+(Quite atmospheric…) 
 Huh!? 
 … … 
 (Iris is squeezing my hand… is she frightened?) 
@@ -509,7 +509,7 @@ Whaaaaaaah!
 Wh-what was that? An earthquake?! 
 Iris! Please, calm down! 
 Th-this is bad! At this rate, the building's gonna come down… 
-Iris, it's not safe here! Get out! 
+Iris, it's not safe here! Let’s get out! 
 Ohhh, the theater… this is awful… 
 Just what kind of power does Iris have… ? 
 …Yes? 
@@ -1061,17 +1061,17 @@ Kanna has the strength to even our own in close quarters combat. She's cut out t
 It's a good idea to have her operate together with Maria or Sumire. 
 Iris was angry. She still can't fight by herself, so we have to protect her… 
 Kohran's attack power is weak, but she has wide range. Take that into consideration when giving her orders. 
-As the commander, you must provide sufficient support. Your aid strengthens the bonds of the unit. 
+As the captain, you must provide sufficient support. Your aid strengthens the bonds of the unit. 
 I'm trusting you to look after them, Ogami. 
 Yes, ma'am! 
 We took extensive damage… provide better support, or they'll lose their faith in you. 
 Yes, ma'am… it was my failure. 
-The damage was vast. If you continue with this style of battle… Ogami, you aren’t fit to be commander! 
+The damage was vast. If you continue with this style of battle… Ogami, you aren’t fit to be captain! 
 I need you to do better than this. 
 Yes, ma'am… it was my failure. 
 Oh yes, about Maria… I couldn't help but notice something. 
 Huh? What about her? 
-Did you notice that she doesn't call you 'ensign' anymore? She's using "commander" instead. 
+Did you notice that she doesn't call you 'Ensign' anymore? She's using "Captain" instead. 
 Oh… now that you mention it… 
 Seems like she has finally started to accept you. 
 Actually, she has been a lot friendlier in general. 
@@ -1080,7 +1080,7 @@ You… you think so?
 …Haha. Oh, and one more thing… 
 …Yes. 
 Iris told me that you're going on a date with her today. 
-Of, of course. 
+O-of course. 
 Behave yourself, Ogami. 
 Oh, Ogami. Welcome! 
 Oh, what can I help you with? 
@@ -1131,7 +1131,7 @@ Hey, hey!
 (That bouncy look is pretty trendy.) 
 Is something odd about my hair? Oh no~, I've got some split ends! 
 (Her face is small and balanced. I think even a model would be jealous.) 
-(It doesn't seem like she uses a lot of make up… she's got a nice foundation, doubt she really needs it… ) 
+(It doesn't seem like she uses a lot of makeup… she's got a nice foundation, doubt she really needs it… ) 
 What's the matter, Ogami? You're staring at my face… Oh, I see. You've fallen for me, right? 
 Hey, you shouldn't be teasing an adult. 
 Hehehe… Sorry, Ogami! 
@@ -1161,17 +1161,17 @@ I'd love to know that too!
 …Do you like my brooch? This thing was a bargain, I got it super cheap! 
 …Oh. 
 Looks like you and Sakura have been hitting it off lately, Ogami. 
-R, really, you think so? 
+R-really, you think so? 
 She's really popular, with adults and children alike. 
 Looks like you and Sumire have been hitting it off lately, Ogami. 
-R, really, you think so? 
+R-really, you think so? 
 Most people see her as hard to approach, but they also feel that's what makes her attractive. 
 She often gets flowers from high ranking young men. 
 Looks like you and Maria have been hitting it off lately, Ogami. 
-R, really, you think so? 
-Maria is really popular with man and woman alike. Especially with young high school girls, actually. 
+R-really, you think so? 
+Maria is really popular with men and women alike. Especially with young high school girls, actually. 
 Ogami, seems like you've been pretty friendly with Iris lately. 
-R, really, you think so? 
+R-really, you think so? 
 It's really easy to see her appeal. Older people are especially smitten by her. 
 Seems like you've gotten pretty close to Kohran lately, huh, Ogami? 
 Y-you think so? 
@@ -1184,7 +1184,7 @@ It's Ogami… Kohran, are you there?
 Oh, hey Ogami! Just a sec… 
 Oh, drat! 
 Whoa! Wh-what is it? 
-Cough… cough… Oh… Hi, boss… What's the matter? 
+Cough… cough… Oh… Hi, Chief… What's the matter? 
 Is everything alright, Kohran? 
 I was just in the process of finishing my latest invention… That's when you showed up… 
 I just had pulled out some wire when I got up to open the door. 
@@ -1192,7 +1192,7 @@ A-are you okay? <br> What are you making?
 A-are you okay, Kohran? That was quite an explosion. 
 Yeah, everything's fine. I'm used to things blowing up around me… 
 It's basically business as usual for me. Nothing that would bring me down. 
-OK boss, I have to get back to work. So excuse me, please. 
+OK, I have to get back to work. So excuse me, please. 
 Seems like she eats explosions for breakfast… Not sure whether I should be impressed or worried. 
 Anyway, I'd better get out of here. Kohran doesn't seem to be in the mood for a chat. 
 …What are you making? 
@@ -1202,11 +1202,11 @@ Well, what do you think, what for? Detecting lies of course!
 …Huh? 
 I'm sure this invention will come in handy in an emergency! 
 You never know when you're gonna need to know if someone's lying. Better be prepared. 
-OK boss, I have to get back to work. So excuse me, please. 
+OK, I have to get back to work. So excuse me, please. 
 Who knows… Maybe she's right and there really is a time when this machine will be of use. 
-OK boss, I have to get back to work. So excuse me, please. 
+OK, I have to get back to work. So excuse me, please. 
 She's still continuing after what happened?! I guess she never learns… 
-Anyway I'd better get out of here. Kohran doesn't seem to be in the mood for a chat. 
+Anyway, I'd better get out of here. Kohran doesn't seem to be in the mood for a chat. 
 It's Ogami… Are you there, Sumire? 
 Oh, is that you, Ensign? Do come in, the door is open. 
 Pardon me. 
@@ -1218,47 +1218,47 @@ Yours faithfully. <br> Best regards. <br> Yours eternally.
 You usually write "Yours faithfully", don't you? 
 Hm, I'm sure you're right, but isn't that a little too formal? 
 Well, no matter. I'll ask Ayame for advice later. 
-If you would excuse me, Lieutenant? I still have a letter to write… 
+If you would excuse me, Ensign? I still have a letter to write… 
 Oh, sure. See you later. 
 Why don't you write "Best regards"? 
 Ah! Yes, that sounds right! Not too formal and not too familiar. 
 But I have to say… You know your stuff. 
 I'm honestly impressed. 
 Hahaha, thank you. I'm glad I could help. 
-I'll finish up the letter now… Thanks a lot, lieutenant. 
+I'll finish up the letter now… Thanks a lot, Ensign. 
 I'll be going then. 
 Why not something like "Yours eternally"? 
 …Ensign, I'm not writing to a long lost lover. 
 We really need to refine your manners… 
 I'm sorry I couldn't be of help. 
 It's alright. 
-But I should really get back to finishing this letter… Would you mind, lieutenant? 
+But I should really get back to finishing this letter… Would you mind, Ensign? 
 Sorry… I'll see myself out then. 
 So you don't know either? … Ah, well I'll just go and ask Ayame for advice later. 
-But I should really get back to finishing this letter… Would you mind, lieutenant? 
+But I should really get back to finishing this letter… Would you mind, Ensign? 
 Sorry… I'll see myself out then. 
 Hi, Maria. 
-…Commander. Isn't this a wonderful summer's day? 
+…Captain. Isn't this a wonderful summer's day? 
 I heard that the Japanese people celebrate something called "Tanabata". 
 Apparently it's the day after tomorrow, but I'm still not sure what exactly people do on that day. 
 We decorate dolls. <br> We write wishes on paper. <br> We put up pine trees. 
 We decorate dolls and eat lots of colorful mochi. 
 Wait isn't that "Doll's Day"? I thought that was on March the third. 
 Oh… yeah… you are right… 
-Commander, even I know that, and I'm from Russia. Please stop fooling around, OK? 
+Captain, even I know that, and I'm from Russia. Please stop fooling around, OK? 
 Well then, I'll… take my leave. 
 Tanabata… so, summer really is here. 
 That reminds me, I totally forgot about Iris. I better get going. 
 We write wishes on paper strips and tie them to tree branches. 
 Oh, right, now that you mention it, I think Ayame told me about that before. 
-Wishes… So what are you going to write on your paper strip this year, commander? 
+Wishes… So what are you going to write on your paper strip this year, Captain? 
 Wishes for the Division. <br> Wishes for Maria. <br> Wishes for myself. 
 I'll write down my wishes for the Flower Division; that nobody gets hurt and we continue to have fun. 
 I see; how very like you. I suppose I would wish for much the same thing. 
 You've taught me a great deal, sir. I must thank you. Well, I'll be going now. 
 Tanabata… so, summer really is here. 
 That reminds me, I totally forgot about Iris. I better get going. 
-I'd write that I want to better friends with you and we continue to have fun. 
+I'd write that I want to be better friends with you and we continue to have fun. 
 Really… Thank you, sir. 
 I… I have to go now, thank you for the chat… Bye. 
 Tanabata… so, summer really is here. 
@@ -1274,12 +1274,12 @@ You've taught me a great deal, sir. I must thank you. Well, I'll be going now.
 Tanabata… so, summer really is here. 
 That reminds me, I totally forgot about Iris. I better get going. 
 We put little pine trees in front of our houses, eat mochi and drink sake with herbs. 
-Wait, isn't that what you do on new year's? Even I know THAT. 
+Wait, isn't that what you do on New Year's? Even I know THAT. 
 I guess I'll find out myself soon enough. I have to go now. 
 Tanabata… so, summer really is here. 
 That reminds me, I totally forgot about Iris. I better get going. 
 You don't know either, sir? 
-Guess I'll have to wait and see then. See you later, sir. 
+Guess I'll have to wait and see, then. See you later, sir. 
 Tanabata… so, summer really is here. 
 That reminds me, I totally forgot about Iris. I better get going. 
 Sir, who was that on the phone just now? 
@@ -1290,35 +1290,35 @@ But I heard…
 Silence! I have to get ready for my nap now. Off you go! 
 I… Of course. Excuse me, sir. 
 Oh, hey there, Kanna. 
-Yo, boss. You gonna eat breakfast, too? 
+Yo, Boss. You gonna eat breakfast, too? 
 No, just passing through. 
 Really? It ain't good for you to skip breakfast, y'know. 
 What do you usually eat first thing in the morning? 
 Rice and miso soup. <br> Lots of bread. <br> I don't eat breakfast. 
 Rice and miso soup. Can't get my morning started without them. 
 You too?! We're so much alike! 
-I tell you, if I don't eat at least ten bowls of rice in the morning I'm simply useless. Hahahaha! 
+I tell you, if I don't eat at least ten bowls of rice in the morning I'm just useless. Hahahaha! 
 I… I'm not sure we're on the same page… 
-W well, take it easy. I'd better get going. 
-Bye, boss! 
+W-well, take it easy. I'd better get going. 
+Bye, Boss! 
 I eat lots of bread. Maybe some coffee, too. 
 Huh… I don't hate bread myself, but… 
 I just need some rice and miso soup in the morning. Otherwise I'm useless and have no energy the entire day. 
-Ten bowls of rice, that what it needs to get me going! Ahahaha! 
+Ten bowls of rice, that what it takes to get me going! Ahahaha! 
 Wow. I could never eat that much in the morning… 
 It's never too late for a change! Hey, another bowl please! Over here! 
-W well, take it easy. I'd better get going. 
-Bye, boss! 
+W-well, take it easy. I'd better get going. 
+Bye, Boss! 
 I don't eat breakfast. 
 Whaaaat!? How do you keep up your energy if you don't eat something in the morning? 
-It might be none of my business… but boss… you really need to eat breakfast! 
+It might be none of my business… but Boss… you really need to eat breakfast! 
 …Thanks, Kanna. 
 Well, take it easy. I'd better get going. 
-Oh yeah? Bye, boss! 
-Hey, boss! What's the matter? 
+Oh yeah? Bye, Boss! 
+Hey, Boss! What's the matter? 
 Uh… sorry about that. I sort of spaced out. 
 Still not entirely awake, huh? Come on, snap out of it! 
-Y, yes sir! 
+Y-yes ma-am! 
 Hehe. Seems to have worked. OK, go get'em, tiger! 
 OK… 
 Do you want some help cleaning? It must be tough on your own, Sakura. 
@@ -1330,16 +1330,16 @@ This floor's cleaner than ever, thanks to you.
 Oh no, I didn't do that much. You're the one working so hard, Sakura. 
 Yes, but it was a lot more fun working together, so thank you for that. 
 But you better hurry and go see Iris now. 
-Phew.. that was quite the work out. 
+Phew.. that was quite the workout. 
 OK… That ate up more time than I thought, I better go pick up Iris right now. 
 Good work, Ogami. 
 Oh no, I didn't do that much. You're the one working so hard, Sakura. 
 Yes, but it was a lot more fun working together, so thank you for that. 
 But you better hurry and go see Iris now. 
-Phew.. that was quite the work out. 
+Phew.. that was quite the workout. 
 OK… That ate up more time than I thought, I better go pick up Iris right now. 
 You're already thinking about your date with Iris, aren't you, Ogami? 
-You seemed to be really absent minded during the cleaning… 
+You seemed to be really absent-minded during the cleaning… 
 No… it wasn't really that… 
 But, I'm happy you helped out anyway. Thank you very much. 
 But you better hurry and go see Iris now. 
@@ -1357,8 +1357,8 @@ There's so many people… what's this place?
 What's that? 
 I wanna see! I wanna see it! Can we?! 
 Hey, what kind of story will it be? 
-Uncle Ichi, who's that person? 
-Ohhh… . 
+Mon Frère, who's that person? 
+Ohhh… 
 Now then, we open at a laboratory deep, deeeeep within the mountains. 
 In it lives a single scientist, obsessed with his research. 
 I… I'm no little girl anymore. And this isn't scary at all. 
@@ -1374,13 +1374,13 @@ Stop acting like it's nothing!! What do you make of this!
 You wanna explain this, Ogami?! 
 Goodbye. I'm going off to live by myself. 
 I DID turn 10 years old today. Don't come looking for me. 
-Stupid Uncle Ichi! 
-Tomorrow is my birthday and Uncle Ichi will take me on a date to Asakusa. 
+Stupid Mon Frère! 
+Tomorrow is my birthday and Mon Frère will take me on a date to Asakusa. 
 I'm gonna look so pretty that he'll surely fall in love with me. 
 And he will kiss me in front of the fountain in the park. 
 Unused
-You don't care about me, Uncle Ichi! You don't love me! 
-I'm not stupid! I'm not a kid! I hate you, Uncle Ichi! 
+You don't care about me, Mon Frère! You don't love me! 
+I'm not stupid! I'm not a kid! I hate you, Mon Frère! 
 I hate you… I hate you… I haaaate you! 
 Unused
 Unused
@@ -1400,10 +1400,10 @@ Unused
 Unused
 Unused
 O-Omiyaaaa! 
-Ohhh, my lord Kan'ichi~ 
+Ohhh, my lord Kan'ichiii... 
 That's not how you say it! 
 This way will do just fine. 
-What a bunch of horse shit! I think you have a screw loose! 
+What a bunch of crap! I think you have a screw loose! 
 And you should stop shaking the whole set every time you move! 
 Unused
 Unused

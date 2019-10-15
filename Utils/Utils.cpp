@@ -449,14 +449,14 @@ bool TextFileData::InitializeTextFile(bool bFixupSpecialCharacters)
 
 	const string space(" ");
 	const string newLine("<br>");
-	char* pToken = nullptr;
+	char* pToken   = nullptr;
 	while( fgets(buffer, bufferSize, pFile) != nullptr )
 	{
 		TextLine newLineOfText;
 		char *pNextToken   = nullptr;;
 		char* pContext     = nullptr;
 		const char* pDelim = " \n";
-		
+
 		pToken = strtok_s(buffer, pDelim, &pContext);
 		while(pToken != NULL)
 		{
@@ -470,6 +470,11 @@ bool TextFileData::InitializeTextFile(bool bFixupSpecialCharacters)
 					t += 3;
 
 					fixedString[f++] = '@';
+				}
+				//Skip past UTF8 byte order marker
+				else if( pToken[t] == (char)0xef || pToken[t] == (char)0xbb || pToken[t] == (char)0xbf )
+				{
+					t += 1;
 				}
 				else
 				{
@@ -899,7 +904,7 @@ bool BitmapWriter::CreateBitmap(const string& inFileName, int inWidth, int inHei
 
 		outFile.WriteData(pInColorData, inColorSize);
 
-		if( bitsPerPixel == 8 )
+		if( bitsPerPixel == 8  )
 		{
 			const int numExpectedBytes = inWidth*abs(inHeight);
 			if( inColorSize < numExpectedBytes )

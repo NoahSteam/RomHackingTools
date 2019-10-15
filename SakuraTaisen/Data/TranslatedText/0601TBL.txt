@@ -1,31 +1,31 @@
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused 
+﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking...
+It's a photo of Sumire. This is a side of her you don't see too often.
+It's a photo of Maria. ...She's lost in thought and looks kind of sad...
+A photo of Kanna. She looks strong and reliable. I can't wait to meet her.
+A photo of Iris. She's surrounded by flowers and flashing a radiant smile.
+A photo of Kohran. She's looking pretty in profile with her face dyed red by the evening sun.
+A letter given to me by a customer. I was asked to give it to Sumire. I have a bad feeling about this...
+Maria's pistol. This may help me escape from here...
+A hair ornament. It's decorated with flowers and looks very elegant.
+A pretty pendant. The delicate workmanship is gorgeous.
+A hairpin for use in a traditional bun hairstyle. It would complement a formal outfit well.
+This key will let me enter rooms I couldn't before.
+I found this in a bedroom on the second floor. I can use it to access the back room.
+A teacup Iris asked me to get for her. It has a very stylish design.
+This is the matchbox Iris asked for. Its logo is quite colorful.
+A knife Iris asked me to get for her. Just a normal utensil you'd use during a meal.
+A prop sword and shield used onstage. They're well-made and look just like the real thing.
+A prop crown used onstage. It's well constructed and incredibly detailed.
+A wig and costume used onstage. I wonder what kind of act could use a flashy outfit like this?
+A photo of Sakura in her swimsuit. Wow, this is really something. I'm gonna treasure this.
+A photo of Sumire in her stage costume. Her distinctive makeup really makes an impact.
+It's a photo of Maria on stage in the military uniform from "For Love"... She's a beautiful woman disguised as a man.
+A photo of Kanna in her training gear. Catching her in a private moment like this feels surprisingly intimate.
+A photo of Iris in her swimsuit. She's holding a rubber ring and looks ready to have some fun. How cute.
+A photo of Kohran. I don't get to see her with her braids undone very often. It's a nice look.
+A photo of Ayame in a traditional outfit. I hope she'll always be as happy and content as she is here.
+Ayame's gun. Why...? Why did it have to turn out like this...?
+Jean-Paul the teddy bear. Iris's best friend. She always carries him with her and takes good care of him.
 (…If you look closely, she's still wearing her stage hairdo.) 
 (…She must have come here in a big hurry after the play ended.) 
 (As always, that's some wild hair.) 
@@ -235,10 +235,10 @@ What is it? If you don't have anything to say to me, then please don't call afte
 …I'll be taking my leave. 
 Ah! She left. I guess I made her angry… What a bummer. 
 I'll have to apologize later. 
-Uncle Ichi!! You came to peep at me, didn't you!? 
+Mon Frère!! You came to peep at me, didn't you!? 
 There's no ulterior motives! <br> …I've been caught. <br> I came to check up on you! 
 You're mistaken! I don't have any ulterior motives or anything like that! 
-Liar! Uncle Ichi is dirty! 
+Liar! Mon Frère is dirty! 
 D-dirty? 
 Pervert! 
 Degenerate! 
@@ -246,7 +246,7 @@ What are you saying? And why do you know that word?!
 I-I dunno! 
 Ah! Iris! …She left…Well, that's a shame. 
 …I've been caught, have I? Oh well, what can you do, ahahaha… 
-Grrrrrrr! Uncle Ichi is such an idiot! Pervert! Dirty old man! I can't believe this! 
+Grrrrrrr! Mon Frère is such an idiot! Pervert! Dirty old man! I can't believe this! 
 Uggh! Get out of here! 
 Are you kidding me? This is the second time this has happened! This is too much. 
 Yikes! It looks like Iris teleported me here. 
@@ -260,17 +260,17 @@ REALLY really?
 Really really. 
 Aww! I believe you! 
 (Phew…) 
-But… Uncle Ichi. You're lucky it was me… if it were someone else, then… 
+But… Mon Frère. You're lucky it was me… if it were someone else, then… 
 They might've been super duper mad! Be careful, okay? 
 Anyway, I'm gonna go meet up with everyone else! Bye~Bye~! 
 S-she's right… I'd better be careful. 
 … 
-Uncle Ichi… Don't make that face! 
+Mon Frère… Don't make that face! 
 I'm not angry, okay? 
 I'm sorry, Iris. It was a little careless of me to run in here like that. 
-No, no, it's okay, Uncle Ichi. 
+No, no, it's okay, Mon Frère. 
 Anyway, I'm gonna go meet up with everyone else! Bye~Bye~! 
-I'm sorry I made you worry, Uncle Ichi. 
+I'm sorry I made you worry, Mon Frère. 
 It's okay, really. I just heard your screams and thought something might've happened to you. 
 Honestly, I'm just glad it wasn't anything serious. 
 Actually, I was a little surprised when I heard your voice but… 
@@ -278,7 +278,7 @@ I'm so happy that you would worry about me like that!
 Hahaha. Next time make sure you don't mix up the hot and cold water, ok? 
 Okaaaay! Anyway, I'm gonna go meet up with everyone else! 
 Hey, come on! I'm totally innocent! 
-Ahhh, that was refreshing! Huh? Uncle Ichi, what's wrong? 
+Ahhh, that was refreshing! Huh? Mon Frère, what's wrong? 
 I should be asking you that. I was walking through the corridor and heard quite the scream coming from your room. 
 …Huh? Ohhhh… 
 I mixed up the hot and cold water, so I shouted… Maybe that's what you heard? 
@@ -286,23 +286,23 @@ Are you kidding me? I'm glad I didn't rush in here.
 I think you just wanted to come into my room, isn't that right? 
 That's not it at all. <br> …You're right. <br> Leave it to your imagination. 
 That's not it at all. I wasn't trying to catch a peek or anything. 
-Uncle Ichi… 
+Mon Frère… 
 W-what?! Hold on a second… Why are you mad, Iris? 
 Hmph! You don't want to see me naked! Isn't that right? 
 Well… Uh… 
-Hmph! Stupid Uncle Ichi! 
+Hmph! Stupid Mon Frère! 
 Phew. She left but…why was she mad at me?! 
 Well if I'm being honest… I wanted to take a peek. 
-Hehehe! I knew it! Uncle Ichi is a pervert! 
+Hehehe! I knew it! Mon Frère is a pervert! 
 …… 
-Aww, Uncle Ichi's being shy! How cuuuute! 
+Aww, Mon Frère's being shy! How cuuuute! 
 Well… Uh… 
-Next time… Let's get in together! Okay, Uncle Ichi? 
+Next time… Let's get in together! Okay, Mon Frère? 
 …Hey now! 
 Anyway, I'm gonna go meet up with everyone else! Bye~Bye~! 
 Ahh… this is no good. What am I saying?! 
 …I'll leave that to your imagination. 
-You were just itching to come to my room, weren't you, Uncle Ichi? 
+You were just itching to come to my room, weren't you, Mon Frère? 
 …… 
 See?! I knew it! 
 I-Iris! Hold on a second! 
@@ -326,29 +326,29 @@ Hurry to the shower room. <br> Shout "What's wrong!?".
 Iris isn't here either! Maybe she's in the shower room? Uh-oh… 
 The hell with it! I can't just abandon Iris! I'm busting into that shower! 
 Iris! Are you alright?! 
-Huh?! Oh! Uncle Ichi! Get out of here! 
+Huh?! Oh! Mon Frère! Get out of here! 
 Huh? What the!? Uwaaaaaah! 
 Woah… Apparently I've been teleported here by Iris… 
 I wanted to go and help her but… I've been mistaken for a peeping tom… 
 Iris! What's wrong!? Are you okay!? 
-Huh!? That voice… Uncle Ichi?! Uncle Ichi, what's wrong? 
+Huh!? That voice… Mon Frère?! Mon Frère, what's wrong? 
 I heard someone screaming and thought something was wrong! 
 Well… uh… I… I thought I would take a shower but I accidentally mixed up the hot and cold water. 
 I got super surprised and shouted real loud. 
 Are you kidding? That's it…? I was more surprised than you were! 
-I'm sorry, Uncle Ichi. Were you worried about me~? 
+I'm sorry, Mon Frère. Were you worried about me~? 
 Of course I was! 
 Reeeally…? Hehehe, I'm happy. 
 Well, it was nothing after all. I'm glad it was nothing big. 
 I was worried about you but… I was a little nervous to enter the shower room. 
 First things first, I need to figure out what's going on. 
 Iris! What's wrong!? Are you okay!? 
-Huh!? That voice… Uncle Ichi?! Uncle Ichi, what's wrong? 
+Huh!? That voice… Mon Frère?! Mon Frère, what's wrong? 
 I heard someone screaming and thought something was wrong! 
 Well… uh… I… I thought I would take a shower but I accidentally mixed up the hot and cold water. 
 I got super surprised and shouted real loud. 
 Are you kidding? That's it…? I was more surprised than you were! 
-I'm sorry, Uncle Ichi. Were you worried about me~? 
+I'm sorry, Mon Frère. Were you worried about me~? 
 Of course! 
 Reeeally…? Hehehe, I'm happy. 
 Well, it was nothing after all. I'm glad it was nothing big. 
@@ -411,7 +411,7 @@ Aw, c'mon. I appreciate it, but flattery will get you nowhere.
 Well, I'd better get going, then. Everyone should be in the parlor by now. 
 Boss… thank you for helping me. 
 That's true. But fighting is still our most important job. 
-Of course! Protecting everyone from evil is the the Imperial Revue's most important job! 
+Of course! Protecting everyone from evil is the Imperial Assault Troupe's most important job! 
 Everything that's precious to these kids… their precious people, town, dreams… I'll try to protect it all! 
 …or, something. Hope I'm not actin' like a show-off? 
 No, not at all. Actually, it was really fantastic. 
@@ -559,10 +559,10 @@ I see, I have ruined the mood. Please excuse me, I'll go ahead.
 Hmmm… I wonder what that was all about. 
 I was really surprised earlier seeing that side of Maria… 
 Ahh! Ma…Maria!? 
-Lieutenant! I… 
+Ensign! I… 
 (Oh… that costume. Where did I see that before…?) 
 (Could it be… isn't that the costume that Sakura wore for her role of the French city girl?) 
-Lieutenant… this is… 
+Ensign… this is… 
 (Maria seems uncharacteristically nervous.) 
 (She's not as intimidating as usual. I guess underneath it all she's just a normal girl.) 
 (She looks flustered…) 
@@ -575,18 +575,18 @@ I was just sorting through the costumes when Sakura's fell into my hands.
 It looked so cute and… well… I just… 
 That was unprofessional of me. Please forget about this. 
 I understand, it's all right. 
-Lieutenant… please, do not speak of this to anyone. Promise me. 
+Ensign… please, do not speak of this to anyone. Promise me. 
 W-well then… I'll take my leave. 
 Alright, I'll see you later. 
 Who'd have thought Maria would ever act like that? 
 So underneath that exterior, she's just a girl after all. 
 Maria… What are you doing? 
-Lieutenant… I was sorting the costumes and I came across this… 
+Ensign… I was sorting the costumes and I came across this… 
 And then, well… 
 This is a really cute dress, so I… 
 It really suits you. <br> You startled me. <br> It's a bit small… 
 It really suits you. 
-L-Lieutenant, please don't tease me like that! 
+E-Ensign, please don't tease me like that! 
 I'm not joking around at all. You are a woman after all, you should dress like this more often. 
 What? No… Things like this don't suit me at all. 
 Nonsense! You are really beautiful and should dress up a little more often! 
@@ -609,7 +609,7 @@ I wasn't teasing you. You're beautiful, Maria. You should wear feminine clothes 
 That's impossible for me. Besides, the patrons all expect me to dress like a man, right? 
 Really? Well, there certainly isn't anyone that plays the male roles as good as you do. 
 No… that's not what I mean… 
-Well then… Lieutenant… 
+Well then… Ensign… 
 …What is it, Maria? 
 You won't tell anyone else about this, will you? 
 Hmmm, but what if I did? <br> It's our secret. <br> It'll make for good gossip! 
@@ -622,7 +622,7 @@ Alright… then it'll be just between the two of us.
 Well, I think getting carried away might actually be good for you. Relax a little. 
 Really…? Hehe, maybe you are right. 
 This will make for some good gossip! 
-Lieutenant… people with loose lips don't tend to live for very long… 
+Ensign… people with loose lips don't tend to live for very long… 
 (Gulp…) 
 No, no! Haha. It was just a joke! A joke! 
 …… 
@@ -638,8 +638,8 @@ Oh… it's Kasumi.
 Ogami, nice work today. 
 You as well. But…what are you doing here? 
 I'm escorting the guests to the exit. 
-We've closed off the doors so that the guests don't wander of into the rest of the building. 
-Would you be so kind to go through the first floor if you want to go to the second? 
+We've closed off the doors so that the guests don't wander off into the rest of the building. 
+Would you be so kind as to go through the first floor if you want to go to the second? 
 Really? What a bother. 
 Haha, Sorry, but we can't have our guests confuse the exits, THAT would be even more bothersome. 
 Yes, being a guide to our guests truly is an important responsibility. 
@@ -726,7 +726,7 @@ See these pieces everywhere? That's the most advanced entertainment robot the wo
 Entertainment robot? 
 Yes! Glorious bringer of fun and lightener of moods at even the most boring of parties! 
 Thanks to his steam processor he was able to simulate both sides of a double act routine… 
-Depending on the situation his body was able to transform in sixteen different ways! 
+Depending on the situation, his body was able to transform in sixteen different ways! 
 A customized card-trick arm, a family-friendly exotic dance function, and even an automatic tip collector! 
 Thanks to my "life of the party" circuitry, his tricks would have become ever wilder! 
 And on top of that… 
@@ -861,7 +861,7 @@ He's sleeping pretty deeply, he seems peaceful.
 It's Ogami… do you have a moment? 
 Oh, Ogami. Yeah, come on in. 
 Excuse me. 
-Chief, what was that phone call about, just now? 
+Commander, what was that phone call about, just now? 
 Huh? Whaddya mean? 
 Well… just now… 
 What? I wasn't talking on the phone or anything. Are you hearing things? 
@@ -907,7 +907,7 @@ Maria's defenses are weak, so you should avoid placing her in close-quarters com
 Kanna has the strength to fight in close-quarters combat. She's cut out to be an advance guard. 
 Iris was angry. She still can't fight by herself, so we have to protect her… 
 Kohran's attack skills are weak, but she can do range attacks. Make sure you understand that, Ogami. 
-As commander, you must provide support. Your aid is what will strengthen the unit's bonds. 
+As captain, you must provide support. Your aid is what will strengthen the unit's bonds. 
 We took quite a lot of damage… You need to provide better support, or they'll lose their faith in you. 
 We took far too much damage in that last battle. You need to make better use of everyone's talents. 
 If you keep handling battles this way… well, let's set that aside. 
@@ -932,7 +932,7 @@ She can move around fast, so it's a good strategy to have her support all the ot
 The one with the most enemies shot down during the last battle was Kohran. 
 Her bombs have a wide area of effect. Let her aim at clusters of enemies. 
 She was absolutely wonderful! 
-That means she trusts you as a commander, Ogami. 
+That means she trusts you as a captain, Ogami. 
 You think so? …Well, thank you, ma'am. 
 I think that's all there is to report about that. Did you need anything else? 
 No, thank you, ma'am. 
@@ -948,7 +948,7 @@ Keep up the good work, Ensign.
 I should try another room. 
 Hey there, Ogami. We're finally done with the summer performance. 
 I'm on duty today. 
-Kasumi and Tsubaki are out getting a bite at the Renga. I wish I was with them. 
+Kasumi and Tsubaki are out getting a bite at Renga. I wish I was with them. 
 Aw man, that's too bad. Well, see you around. 
 Do you need me for anything? 
 (She's got her scarf pinned with a brooch.) 

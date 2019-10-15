@@ -1,31 +1,31 @@
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused 
+﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking...
+It's a photo of Sumire. This is a side of her you don't see too often.
+It's a photo of Maria. ...She's lost in thought and looks kind of sad...
+A photo of Kanna. She looks strong and reliable. I can't wait to meet her.
+A photo of Iris. She's surrounded by flowers and flashing a radiant smile.
+A photo of Kohran. She's looking pretty in profile with her face dyed red by the evening sun.
+A letter given to me by a customer. I was asked to give it to Sumire. I have a bad feeling about this...
+Maria's pistol. This may help me escape from here...
+A hair ornament. It's decorated with flowers and looks very elegant.
+A pretty pendant. The delicate workmanship is gorgeous.
+A hairpin for use in a traditional bun hairstyle. It would complement a formal outfit well.
+This key will let me enter rooms I couldn't before.
+I found this in a bedroom on the second floor. I can use it to access the back room.
+A teacup Iris asked me to get for her. It has a very stylish design.
+This is the matchbox Iris asked for. Its logo is quite colorful.
+A knife Iris asked me to get for her. Just a normal utensil you'd use during a meal.
+A prop sword and shield used onstage. They're well-made and look just like the real thing.
+A prop crown used onstage. It's well constructed and incredibly detailed.
+A wig and costume used onstage. I wonder what kind of act could use a flashy outfit like this?
+A photo of Sakura in her swimsuit. Wow, this is really something. I'm gonna treasure this.
+A photo of Sumire in her stage costume. Her distinctive makeup really makes an impact.
+It's a photo of Maria on stage in the military uniform from "For Love"... She's a beautiful woman disguised as a man.
+A photo of Kanna in her training gear. Catching her in a private moment like this feels surprisingly intimate.
+A photo of Iris in her swimsuit. She's holding a rubber ring and looks ready to have some fun. How cute.
+A photo of Kohran. I don't get to see her with her braids undone very often. It's a nice look.
+A photo of Ayame in a traditional outfit. I hope she'll always be as happy and content as she is here.
+Ayame's gun. Why...? Why did it have to turn out like this...?
+Jean-Paul the teddy bear. Iris's best friend. She always carries him with her and takes good care of him.
 All kinds of different books are lined up here. And in particular… 
 Women's magazines and hair catalogs, huh? I guess this really is the theater archive. 
 I wonder where Maria is? 
@@ -62,7 +62,7 @@ Yuri and Kasumi already went home…
 I'll try looking somewhere else… 
 Maria is… not here. 
 No point in hanging around here. Let's go. 
-This room is so lively when there's a performance but when the performance is over it becomes quiet again like this. 
+This room is so lively when there's a performance, but becomes so quiet once the show’s over.
 I guess I'll check out somewhere else. 
 These props look incredible. I wonder who could've made them? 
 The level of detail on these must really bring life to the stage. 
@@ -109,8 +109,8 @@ A steam computer…
 I've heard there are only a few of this size in Japan. 
 I guess I'll go somewhere else. 
 This is the room where we have strategy meetings. No one's here… 
-But what Maria said earlier… that I'm "unfit to be commander"… Could that really be true? 
-During the Tsuiji battle, the boy was saved but Sakura got hurt. 
+But what Maria said earlier… that I'm "unfit to be captain"… Could that really be true? 
+During the Tsukiji battle, the boy was saved but Sakura got hurt. 
 It's my fault. If only I hadn't hesitated to give the order to attack… 
 At any rate, I should go see Sakura. 
 Oh, right. Maybe I should bring flowers or something, too. 
@@ -169,17 +169,17 @@ Hey, hey, don't push yourself too hard.
 Haha… Okay. 
 Well, Maria's mad at me. 
 Huh? Why is she angry at you? 
-"You are a failure as a commander" - That's what she said. She doesn't mince words. 
+She told me I was “unfit to be captain.” She doesn't mince words. 
 Naturally, I'm the reason that you were wounded, so… 
 Ogami… 
 Sorry. I came to see how you were and I end up talking about this… 
 Ogami… Maria definitely believes in you. 
 That's why… she is always purposefully hard on you. 
 You think so? 
-Yeah. And, if it means anything, I think you are a great commander. 
+Yeah. And, if it means anything, I think you’re a great captain. 
 Thank you… Sakura. 
 Are you all right, Ogami? 
-Y, yeah… I was just thinking… 
+Y-yeah… I was just thinking… 
 I see. You just seemed so distant. 
 Sorry. 
 It's all right. You have a lot to think about, I'm sure. 
@@ -192,7 +192,7 @@ Hahaha! It's nothing.
 Take care, then. 
 Thank you. 
 I can't stop thinking about what Maria said to me… 
-About me being a failure as a commander… 
+About me being unfit to be captain… 
 Even though it's late, maybe I should try and talk with Maria again. 
 It's gotten late. 
 All right. Somehow, I will find Maria tonight and have a good talk with her. 
@@ -236,7 +236,7 @@ Hi, Iris.
 Here. I brought you something. 
 Iris, what is that? 
 It's my special Apple Pate. 
-(Pate? Th, this charred thing…? This is… food, right?) 
+(Pate? Th-this charred thing…? This is… food, right?) 
 Encourage Sakura. <br> Stop Iris. 
 Sakura, I think it'd be good to eat at least one bite. 
 Yeah, thank you, Iris. I'll try some then. 
@@ -246,11 +246,11 @@ Iris! Sakura is sick. She shouldn't overeat.
 Oh… 
 (It's really amazing how you bore this, Sakura…) 
 Iris, Sakura will upset her stomach. 
-But I tried so hard making it… 
+But I tried so hard at making it… 
 Nnn…*sniffle*… 
-I, Iris, I'll eat it, okay? 
-No, you can't! Maybe if you were healthy but in your condition right now you shouldn't push yourself… 
-Uncle Ichi, you're so mean! I worked so hard and everything… 
+I-Iris, I'll eat it, okay? 
+No, you can't! Maybe if you were healthy, but in your condition you shouldn't push yourself… 
+Mon Frère, you're so mean! I worked so hard and everything… 
 Oh, wait! Iris! 
 … 
 Maybe we hurt her feelings? 
@@ -266,12 +266,12 @@ Come in!
 Huh? Ayame is here. 
 Sakura, how are you feeling? 
 Oh, I'm fine now. Starting tomorrow, I'll even be able to go back onstage! 
-Haha, if you have energy to talk big, then you're probably fine. 
+Haha, if you have the energy to talk big, then you're probably fine. 
 Haha… that's great. If you have the energy to joke around then you're probably fine. 
 However, you're a girl. You need to listen to your body. 
 Yes, ma'am! 
 Ogami, it's good that you care, but be sure to let the injured rest. 
-Of, of course. 
+O-of course. 
 Well then, Sakura. Take care. 
 Of course. Thank you. 
 Wow, Ayame is an amazing woman any way you look at her. I really admire her… 
@@ -284,7 +284,7 @@ She really is great…
 I want to be an amazing woman like that someday… 
 Yeah, completely different from the other women here. 
 Other women… that means me too? 
-N, no… that's not… 
+N-no… that's not… 
 …… 
 Don't you think so, Ogami? 
 Huh? Oh, yeah… 
@@ -295,7 +295,7 @@ What Ayame said was just a suggestion… I don't think I'll follow it.
 What's going on? It's awfully loud… 
 How many times do I have to tell you before you'll understand? I said it's wrong! 
 It's fine like this. 
-What you just put in is called "starch" not "flour!" 
+What you just put in is called "starch", not "flour!" 
 It's fine! 
 I can do it by myself! 
 Well, if that's the case, why did you put in salt instead of sugar? 
@@ -303,13 +303,13 @@ Salt…? It's fine!!
 You! You mean you're going to make Sakura eat THAT?! You're going to kill her! 
 …*sniffle*. 
 What's going on here? Maybe I should go check the kitchen… 
-Uncle Ichi… 
+Mon Frère… 
 What's wrong, Iris? You look like you're going to cry. 
 …… 
 Was Sumire picking on you? <br> You shouldn't be playing. <br> Playing house with Sumire? 
 Well, Ensign! What do you mean by that?! 
 Are you implying that I would bully Iris?! 
-N, no, that's not what I… 
+N-no, that's not what I… 
 I'm making an apple pie. 
 I'm not doing anything wrong! 
 This child! She said she wants to make a pate, but she can't do it properly. 
@@ -324,14 +324,14 @@ Something to cheer her up?
 Ensign, would you please avoid such feeble jokes?! 
 Wa… WAAAAAAA! 
 Honestly, Ensign! This is all your doing! 
-I, I'm sorry, Iris… please stop crying. 
+I-I'm sorry, Iris… please stop crying. 
 I want to make an apple pie… 
 …… 
 I want to make an apple pie… 
 My mom used to make them for me when I was sick… 
 And so… you're doing the same for Sakura… 
 What about you, Sumire? 
-I, I didn't come in here to make a meal for Sakura if that's what you mean! 
+I-I didn't come in here to make a meal for Sakura if that's what you mean! 
 You're both very kind, aren't you? 
 Sumire, please help her. <br> Iris, let her help you. <br> I'll help. 
 But I'm telling you it's all wrong! 
@@ -345,9 +345,9 @@ You can rely on me.
 I hope Sakura likes your pie. 
 Yeah. 
 Ensign, you are aware that "Men don't belong in the kitchen" right? 
-Uncle Ichi, you can cook? 
+Mon Frère, you can cook? 
 Well, Ensign, I wonder if we could have the men leave? 
-This is the territory of we women. 
+This is the territory of us women. 
 Y-yeah… 
 Well then… good luck. 
 Huh? Wait a minute. Can Sumire cook? 
@@ -397,7 +397,7 @@ You were the top of your class in military school, weren't you, Ensign?
 Show me the fighting technique of a trained naval officer. 
 Man, it's been a long time since I've had a good sweat. Don't hold back, Ensign. 
 Yeah… You, too. 
-All right, I'm going hit the showers. 
+All right, I'm going to hit the showers. 
 What I really want to do is jump into a river right now… 
 What? I don't like people who aren't straight with me, Ensign. 
 Oh well. I think I'm going to head out then. See you later. 
@@ -727,7 +727,7 @@ Ahh!?
 O-Ogami… 
 Oh… I just, uh… 
 Were you eavesdropping, sir? That seems to be a great hobby of yours. 
-(Right! I'm the commander of the Flower Division, aren't I? I have a right to take part in this conversation.) 
+(Right! I'm the captain of the Flower Division, aren't I? I have a right to take part in this conversation.) 
 I'm coming in! 
 O, Ogami… 
 Ensign! How long have you been there? 
@@ -746,18 +746,18 @@ That wasn't what happened! I wasn't trying to listen, but I heard anyway.
 There's no alternative, you were eavesdropping! 
 I don't want to listen to your excuses. Excuse me. 
 I'm sorry… I heard your voice and I just… 
-Seriously… You're some commander, aren't you? 
+Seriously… You're some captain, aren't you? 
 Well then I'm… leaving. 
 Ah, Maria…! 
 Go after her. <br> Talk to Yoneda. 
-M, Maria! Please wait! 
+M-Maria! Please wait! 
 I'm coming in! 
 Sir… What were you talking about just now? 
 You idiot! Never mind that, hurry up and go after Maria! 
-Y, Yes! Excuse me! 
+Y-Yes! Excuse me! 
 It seems like Maria went toward the lobby. Ogami, go after her! 
 You idiot! What are you just standing there for! Go after her, Ogami! 
-Y, Yes! Excuse me! 
+Y-Yes! Excuse me! 
 It looks like Maria went toward the lobby. Go after her! 
 That fool! 
 …… 
@@ -772,14 +772,14 @@ Fwahahahaha!
 …! 
 …That voice! 
 …! 
-…Soldier of the revolution? Kasuar? What the heck's he talking about? 
+…Soldier of the revolution? Cassowary? What the heck's he talking about? 
 …He's gone. 
 … 
 Maria………… 
-What… was that about? <br> "Kasuar"…? 
+What… was that about? <br> "Cassowary"…? 
 What… was that about? 
 …He's that Hive of Darkness member we fought in Tsukiji. I believe his name was "Setsuna"… 
-He called you "Kasuar" a minute ago… 
+He called you "Cassowary" a minute ago… 
 What sort of name is that? 
 … 
 …… 
@@ -788,7 +788,7 @@ Maria… if you go, then I'm going with you.
 …It's all right. Did you really believe I would rise to such a provocation, sir? 
 Well then, sir…excuse me. 
 All the same… all that just now… 
-"Kasuar" and "soldier of the Russian Revolution"… what could it all mean? 
+"Cassowary" and "soldier of the Russian Revolution"… what could it all mean? 
 Maria… you really aren't going to tell me anything, are you? 
 Unused
 Unused
@@ -823,9 +823,9 @@ Unused
 Unused
 Is that what you really think?! 
 Unused
-The commander's life can be lost during just one moment of bad judgment! Do you understand?! 
+A comrade's life can be lost during just one moment of bad judgment! Do you understand?! 
 Unused
-Sir! You are a failure as a commander! 
+Sir! You are unfit to be captain! 
 Unused
 Unused
 Unused

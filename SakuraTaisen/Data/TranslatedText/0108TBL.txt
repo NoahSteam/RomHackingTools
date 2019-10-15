@@ -1,38 +1,38 @@
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused 
+﻿﻿A photo of Sakura. She's looking right at me. I wonder what she's thinking...
+A photo of Sumire. This is a side of her you don't see too often.
+A photo of Maria. ...She's lost in thought and looks kind of sad...
+A photo of Kanna. Kanna's signature strength comes through clearly.
+A photo of Iris. She's surrounded by flowers and flashing a radiant smile.
+A photo of Kohran. She's looking pretty in profile with her face dyed red by the evening sun.
+A letter given to me by a customer. I was asked to give it to Sumire. I have a bad feeling about this...
+Maria's pistol. This may help me escape from here...
+A hair ornament. It's decorated with flowers and looks very elegant.
+A pretty pendant. The delicate workmanship is gorgeous.
+A hairpin for use in a traditional bun hairstyle. It would complement a formal outfit well.
+Jean Paul the teddy bear. Iris's best friend. She always carries him with her and takes good care of him.
+This key will allow me to enter rooms I couldn't get into before.
+A teacup Iris asked me to get for her. It has a very stylish design.
+A matchbox Iris asked me to get for her. The brand logo is very colorful.
+A knife Iris asked me to get for her. Just a normal utensil you'd use during a meal.
+A prop sword and shield used onstage. They're well made and look just like the real thing.
+A prop sword and shield used onstage. They're well made and look just like the real thing.
+A prop crown used onstage. It's well constructed and incredibly detailed.
+A photo of Sakura in her swimsuit. Wow, this is really something. I'm gonna treasure this.
+A photo of Sakura in her swimsuit. Wow, this is really something. I'm gonna treasure this.
+A photo of Maria during a performance of "All For Love." Even in a man's uniform, her beauty shines through.
+A photo of Kanna in her training gear. Catching her in a private moment like this feels surprisingly intimate.
+A photo of Iris in her swimsuit. She's holding a rubber ring and looks ready to have some fun. How cute.
+A photo of Kohran. I don't get to see her with her braids undone very often. It's a nice look.
+A photo of Ayame in a traditional outfit. I hope she'll always be as happy and content as she is here.
+A photo of Ayame in a traditional outfit. I hope she'll always be as happy and content as she is here.
+Jean Paul the teddy bear. Iris's best friend. She always carries him with her and takes good care of him.
 Thank you for attending Tokyo Game Show, and welcome to Sakura Wars! 
 We now present Sakura Wars, tonight's exclusive special program. 
 Our curtain opens on the year Taisho 12. The season is spring, when cherry blossoms dance and scatter in the wind. 
 The scene is Imperial Tokyo, where the adventurous spirit of a boom town floats through the air. And more… 
 Horse-drawn carriages, steam engines, airplanes… Tokyo is the height of civilization, where East meets West. 
 The hero of this tale is Ichiro Ogami. 
-A young ensign in the Navy, made commander of the Flower Division, a secret corps of the Imperial Assault Troupe. 
+A young ensign in the Navy, made captain of the Flower Division, a secret corps of the Imperial Assault Troupe. 
 The story begins as Ichiro Ogami… in other words, you… meets with a certain girl… 
 Under the blooming cherry trees of Ueno Park. 
 Now sit back, relax, and enjoy the tale of Sakura Wars. 
@@ -65,7 +65,7 @@ She's a brilliant scientist from China, though as you've heard, she speaks in Ka
 But…sometimes she causes explosions like the one just now, so please take care around her. 
 Now, let's go see another room. 
 Wow… So this is where the audience sits. 
-The Imperial Opera Revue, Flower Division is the other face of the Imperial Assault Troupe, Flower Division. 
+The Imperial Assault Troop, Flower Division is the other face of the Imperial Assault Troupe, Flower Division. 
 Normally, we perform all kinds of shows on this stage. 
 Today's show, "For Love," is special because it's a sequel to an earlier work. Please take a look. 
 …I-I apologize. I picked an awkward scene to show you… 
@@ -285,7 +285,7 @@ Unused
 Unused
 Ah! You over there! 
 Unused
-I seem to have dropped my fork. I don't supposed you could pick it up and fetch me a new one? 
+I seem to have dropped my fork. I don't suppose you could pick it up and fetch me a new one? 
 Well then, do you expect me to pick it up myself? 
 I'll have you know I'm the sole heir to Kanzaki Industry and the leading star of this theater! And furthermore… 
 The queen of Japanese high society, Sumire Kanzaki! Now pick up my fork from the floor! 
@@ -419,7 +419,7 @@ Unused
 My name is Sakura Shinguji. I just arrived here from Sendai. I'm a new member of the Imperial Theater. 
 Cough, cough…Um…This is the Imperial Theater, right? 
 Cough…Awww…My steambike is totaled… 
-The name's Kohran Li. Starting today, I've transferred from the Imperial Revue Hanayashiki Branch to Ginza Headquarters. 
+The name's Kohran Li. Starting today, I've transferred from the Imperial Troupe Hanayashiki Branch to Ginza Headquarters. 
 Agh! My face is up here, y'know! 
 My steam bike boasts 4 cylinders and 5 valves! It runs at 100 HP and 200km per hour! 
 Does that sound like a mess to you?! You better watch yourself, buddy… 
@@ -429,9 +429,9 @@ I'll be living here from now on. Nice to meetcha!
 Anyways, who are you? 
 Huh, I guess that makes you my boss… 
 I humbly introduce myself as Kohran Li, just transferred from the Garden Branch to Ginza Headquarters! 
-Whoa, you're the ensign?! You sure have got the look for it! Man, I like you!! 
+Whoa, you're the Ensign?! You sure have got the look for it! Man, I like you!! 
 Yo! 
-Eh, no worries…I 'm Kanna Kirishima. Who're you? 
+Eh, no worries…I'm Kanna Kirishima. Who're you? 
 Thank you for your hard work. 
 I'm Ayame Fujieda. I'm pleased to meet you, Ogami. 
 A captain must be able to make judgments in an instant. I have high hopes for you. Good luck. 

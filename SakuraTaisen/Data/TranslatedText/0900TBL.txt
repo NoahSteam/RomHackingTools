@@ -1,4 +1,4 @@
-It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
+﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
 It's a photo of Sumire. This is a side of her you don't see too often. 
 It's a photo of Maria. …She's lost in thought and looks kind of sad… 
 It's a photo of Kanna. Kanna's signature strength comes through clearly. 
@@ -41,35 +41,35 @@ And what kind of book is that?
 It's a manuscript called "Abandon the Gods". Lieutenant General Yoneda lent it to me. 
 Show me that… 
 Hey, be careful! It's a priceless book! 
-Ah, here you are, commander. It's about Yoneda… 
+Ah, here you are, Captain. It's about Yoneda… 
 Hm? That book…! 
 Maria, do you know about this old thing? 
-Yoneda lent it to me when I became commander of the Flower Division. 
+Yoneda lent it to me when I became captain of the Flower Division. 
 He lent it to you too? 
-He just said there's something in here that every commander of the Flower Division should know. 
-Ms. Ayame explained it to me back then, so I was able to read it… 
+He just said there's something in here that every captain of the Flower Division should know. 
+Ayame explained it to me back then, so I was able to read it… 
 Ask Maria about the contents. <br> Ask Ayame about the contents. 
 Maria… Could you tell me what's written in it? 
 I wouldn't mind personally, but… If Yoneda lent it to you directly… 
 Didn't he mean for you to find out yourself? 
-Should I ask Ms. Ayame for help, too? 
-I don't know… Ms. Ayame is strict with things like this. 
+Should I ask Ayame for help, too? 
+I don't know… Ayame is strict with things like this. 
 Don't you think you're supposed to find out what it means by yourself? 
 … 
-Good luck, commander. 
+Good luck, Captain. 
 Oh boy… I should take a break. 
-Commander… You shouldn't leave an important book like that lying around on the floor… 
-Uncle Ichi, I brought you some juice! 
+Captain… You shouldn't leave an important book like that lying around on the floor… 
+Mon Frère, I brought you some juice! 
 Hm? Oh, thank you, Iris. 
 Hey, Iris! Mind your step! 
 Huh? …Ah! 
 Ah, Iris! 
 Stop Iris from falling. <br> Protect the priceless book. 
-Ah, commander! I almost forgot… Yoneda wants to see you. 
+Ah, Captain! I almost forgot… Yoneda wants to see you. 
 Hm… OK! And where? 
 He's waiting for you in the underground storage room. 
 The underground storage room? I hope he doesn't want me to clean up the storage this time… 
-He seemed in a hurry, so you should go see him as soon as possible. 
+He seemed to be in a hurry, so you should go see him as soon as possible. 
 Ah…! 
 Ah… 
 Ah… The juice will hit Maria… 
@@ -122,12 +122,12 @@ Don't worry about it, Iris. Just be more careful in the future, OK?
 Yeah… 
 Whoa! That's cold! 
 Aaah! The boss is in trouble! 
-I'm sorry, uncle Ichi… 
+I'm sorry, Mon Frère… 
 But at least the book escaped a soggy fate. 
 It's not fine at all! 
 Now I'm all wet! 
-Mr. Ogami… Please use this handkerchief. 
-Get that shabby rag out of the Lieutenant's face! Here, please use mine instead. 
+Ogami… Please use this handkerchief. 
+Get that shabby rag out of the Ensign's face! Here, please use mine instead. 
 (What should I do? They're both offering me a handkerchief!) 
 Take Sakura's. <br> Take Sumire's. <br> Use my own. 
 Thanks, Sakura. 
@@ -143,7 +143,7 @@ Looks like the boss has learned a few lessons.
 …What do you mean? 
 Nah, don't worry. I don't blame you. 
 Erm… 
-…You'll never change, Mr. Ogami. 
+…You'll never change, Ogami. 
 You're as indecisive as ever! 
 Ah… hahaha… 
 (No matter which one I take, someone will be upset…) 
@@ -167,7 +167,7 @@ Oh… I see.
 OK, let's go. 
 …Ah! 
 Whoa! The… the… the book! 
-Sorry, uncle Ichi. 
+Sorry, Mon Frère. 
 "Abandon the Gods" is an exceedingly rare and valuable book… 
 Ah, don't worry! The boss can just pay for it out of his pocket, can't he? 
 Yes… Hahaha… Hey, wait a second! What about my living expenses? 
@@ -191,7 +191,7 @@ No, I'm not in it. This time, I'm working behind the scenes.
 Oh… I see. 
 (Somehow I'm curious how Maria would be in a comedy…) 
 OK, let's go. 
-Oh, Mr. Ogami. Let me handle the reception today. 
+Oh, Ogami. Let me handle the reception today. 
 You should rest. 
 (Those traditional Japanese clothes look great on her.) 
 (Her demeanor is so calm, but it seems like she has no free time…I wonder if she has experience with martial arts.) 
@@ -221,7 +221,7 @@ My shirt got torn by everyone grabbing me and shouting "It's the ticket puncher!
 Hehehe… Look who's popular. You should be happy! 
 By the way, there's something I wanted to talk to you about… 
 What is it? 
-It's… It's about Ms. Ayame. She doesn't seem herself lately… 
+It's… It's about Ayame. She doesn't seem herself lately… 
 Huh…? 
 And… everyone's a bit worried about her. 
 She always managed to cheer us up, no matter what happened. But now… 
@@ -230,11 +230,11 @@ I don't really know… But anyway, I have to get back to work.
 OK. See you later. 
 (That ribbon in her hair… it really suits her.) 
 (I'd say that's a good charm point to go with Kasumi's mature looks.) 
-Ah, Mr. Ogami? Manager Yoneda was looking for you! 
+Ah, Ogami? Manager Yoneda was looking for you! 
 Oh, by the way… Lieutenant General Yoneda is waiting in the underground storage room. 
 Sorry, I have to get going… 
 I hope you're not in trouble. Well, see you around… 
-Oh, Mr. Ogami. Hi! 
+Oh, Ogami. Hi! 
 How can I help you? 
 (Her clothes are pretty colorful.) 
 (Maybe she's going for that popular bus guide look?) 
@@ -263,8 +263,8 @@ Oh, really?
 It's a pretty grand-scale show called "Dinosaur Island". 
 The sets are gigantic. I'm sure it's just as expensive as "For Love". 
 We're putting a lot of effort in, so I'm sure it will be a huge success. 
-Did you notice? How Ms. Ayame is behaving, I mean… 
-Ms. Ayame? 
+Did you notice? How Ayame is behaving, I mean… 
+Ayame? 
 Yes, don't you think she's looking awfully pale? She looks like she hasn't slept in a month. 
 I wonder what's up with her. 
 March already… Time never stops, huh? 
@@ -287,7 +287,7 @@ Oh, really?
 It's a pretty grand-scale show called "Dinosaur Island". 
 The sets are gigantic. I'm sure it's just as expensive as "For Love". 
 We're putting a lot of effort in, so I'm sure it will be a huge success. 
-Oh, by the way… The manager was looking for you, Mr. Ogami. 
+Oh, by the way… The manager was looking for you, Ogami. 
 Ah… You're right, I remember. 
 (She's got her scarf pinned with a brooch.) 
 (I wonder what it's made of… Couldn't be a real jewel, right?) 
@@ -295,7 +295,7 @@ Ah… You're right, I remember.
 …… 
 Oh, you're leaving already? 
 Yeah. See you! 
-Hm? Mr. Ogami… 
+Hm? Ogami… 
 (She's got a slim body…) 
 (Tsubaki is always taking care of the shop all by herself…) 
 Is something wrong, Ogami? 
@@ -338,7 +338,7 @@ Oh, I'm… I'm sorry… (I seem to have surprised her. Was she thinking about so
 Hehe… No matter, I'll forgive you. By the way… 
 …Didn't I tell you before that you shouldn't intrude on a lady's room too much? 
 (As always, everything's in its proper place. Huh…? What's with that book on the desk?) 
-(I can't see it properly because of Ms. Ayame's shadow, but I can make out the word "Koma".) 
+(I can't see it properly because of Ayame's shadow, but I can make out the word "Koma".) 
 Ogami? 
 (What's that all about?) 
 Earth to Ogami! Can you hear me? 
@@ -362,13 +362,13 @@ OK… Thank you.
 (And inside that uniform, there's…) 
 …Ogami! Anyone in there? 
 I'm… I'm sorry! 
-Hehe… You've got to get a grip of yourself, commander. 
+Hehe… You've got to get a grip of yourself, Captain. 
 (She's got beautiful hair…) 
 (Not a single hair dares to fall out of line… That's true power!) 
-(*sigh* Ms. Ayame is as beautiful as ever.) 
+(*sigh* Ayame is as beautiful as ever.) 
 (Huh? Maybe I'm seeing things, but she looks troubled somehow…) 
 What's up, Ogami? 
-Ms. Ayame… Are you all right? 
+Ayame… Are you all right? 
 …Me? I'm fine, thank you. 
 …I see. 
 Hehe… A strange one, you are. 
@@ -380,7 +380,7 @@ By the way… I heard Yoneda lent you that book, "Abandon the Gods".
 Yes… Although I haven't read much of it yet… 
 I guess it's pretty hard to get into… 
 But more importantly, I've got the Koma Wars Chronicles here. I'll lend them to you. 
-Yes, please do! I can't make head or tail of that old book… 
+Yes, please do! I can't make heads or tails of that old book… 
 Oh, for sure… It's a manuscript from several hundred years back. Anyone would have trouble reading it. 
 Oh no! Is it that late already? 
 Yoneda is waiting for you in the underground storage room. 
@@ -393,7 +393,7 @@ A strange one, you are. By the way, I hear Yoneda has been looking for you.
 Oh, shoot! I was supposed to go to the underground storage room! 
 Well… I guess that means you shouldn't loaf about here. 
 …I'm sorry. 
-Get a grip, commander! 
+Get a grip, Captain! 
 Huh? There's someone there… 
 Peek in the shower room. <br> Go back to the corridor. 
 I wonder who's in there… 
@@ -422,7 +422,7 @@ Ma-Manager!
 (What's with that look? Something you wanna tell me?) 
 …… 
 Both of you… You're helpless… 
-M-Ms. Ayame… 
+M-Ayame… 
 What a spry gentleman you are, Lieutenant General… 
 Hm… Ahem! You're late, Ogami. I was looking for you. 
 Well… 
@@ -430,24 +430,24 @@ Is anyone there?!
 (If they notice us, we'll be in trouble. Move, quickly…) 
 (Y-yes…) 
 Maria, is that you? 
-Ah, yes, Ms. Ayame… What is it? 
+Ah, yes, Ayame… What is it? 
 Sakura and the others were looking for you. 
 Oh, I'm sorry. I'll join you in a second. 
 (What are you doing? The underground storage room! Get a move on!) 
-(I'm sorry, Ms. Ayame.) 
+(I'm sorry, Ayame.) 
 (The underground storage room! Move, Ogami!) 
 … 
 (She seems to be changing. I should go somewhere else.) 
 Yes. It's finished, Iris. 
 Thank you, Sakura. 
-Hey, Mr. Ogami. This dress is cute, isn't it? A ribbon around the neck is the height of fashion. 
-I can wear "extravagant" clothes like this, can't I, uncle? 
+Hey, Ogami. This dress is cute, isn't it? A ribbon around the neck is the height of fashion. 
+I can wear "extravagant" clothes like this, can't I, Frère? 
 It looks great on you. <br> I prefer your normal clothes. <br> I prefer a different costume. 
 It looks great on you. 
 Right, right? Everything looks good on me, no matter what! 
 Don't get carried away now, Iris! 
 I prefer your normal clothes. 
-Really, uncle Ichi? 
+Really, Mon Frère? 
 Do you think so? I like something like this, every once in a while… 
 Umm… 
 I prefer a different costume. 
@@ -456,9 +456,9 @@ I'd say you should dress like a feisty princess. That would suit you!
 "Feisty"?! That's no fair, I'm ladylike and all! 
 Haha, yes… But… Feisty is cute, in your case… 
 … 
-What's up Mr. Ogami? Cat got your tongue? 
+What's up Ogami? Cat got your tongue? 
 Sorry… I just didn't know what to say… 
-Ah! I wanted to ask you something, Mr. Ogami. Have you seen Maria anywhere? 
+Ah! I wanted to ask you something, Ogami. Have you seen Maria anywhere? 
 What's wrong? 
 The show is about to start, but she's not here yet. It's not like her to be late… 
 In the shower room, I think? <br> No idea. 
@@ -466,7 +466,7 @@ We talked in the parlor earlier…
 We talked in the parlor earlier… 
 Oh boy, is it this late already? I've gotta change! 
 … 
-Mr. Ogami? It's just, as long as you're there, I can't change… 
+Ogami? It's just, as long as you're there, I can't change… 
 Ah, sorry. See you later… 
 The typical outfit of an explorer. 
 (That makes me shiver just from looking. February is too early for such a get-up.) 
@@ -478,17 +478,17 @@ Hehe! Not bad, is it?
 Hehe! Cool, isn't it? 
 (A pith helmet with a headlamp… No explorer should set out without one.) 
 (But this isn't the real deal, so she might as well take it off…) 
-Hahaha! Look, uncle Ichi! 
+Hahaha! Look, Mon Frère! 
 Ha… Haha… (So she's only playing?) 
 (But this isn't the real deal, so she might as well take it off…) 
-Hahaha! Look, uncle Ichi! 
+Hahaha! Look, Mon Frère! 
 Ha… Haha… (So she's only playing?) 
 (There's probably never been such a cute explorer in the history of exploring.) 
 I'll play the leading part next time! Just you watch! 
 (She seems to be having fun…) 
 (Well, no wonder she's enjoying it. She can wear something like that in the play, after all.) 
 I… I think she was in the shower room earlier. 
-But, Mr. Ogami… I hope you didn't peek? 
+But, Ogami… I hope you didn't peek? 
 I heard the shower running… <br> Of course not! 
 When I walked down the corridor, I heard the shower running, and I thought it might be Maria. 
 When I left the parlor, she said she was going to wash her hair… She's probably just late. 
@@ -497,11 +497,11 @@ I guess so.
 Of course not! Do you really think I'd do such a thing? 
 Yeah, I kind of do. 
 … 
-Hehehi… Iris, you bad girl. You shouldn't put Mr. Ogami on the spot like that. 
+Hehehi… Iris, you bad girl. You shouldn't put Ogami on the spot like that. 
 Yes, of course… 
 Sorry for saying weird things… 
 Just as I thought! You're the worst! 
-Yaaay! Uncle Ichi is the wooooorst! 
+Yaaay! Mon Frère is the wooooorst! 
 Ha… Haha… 
 Hm… "The hidden Inca treasure is back there!" …Like that? 
 Kohran? What are you doing? 
@@ -590,7 +590,7 @@ I know. I'll go there.
 Manual labor, me! This is the worst day of my life! 
 It can't be helped, it's all hands on deck now. 
 Those voices… Sumire and Kanna? I wonder what's going on. 
-Oh, Lieutenant… 
+Oh, Ensign… 
 What are the two of you up to? 
 As you can see, we're preparing the stage. 
 Usually, we have our stage hands for this kind of work! 
@@ -604,7 +604,7 @@ I know, I know. What kind of a fool do you think I am to fall in there?
 OK, I'll head to the underground storage room. Hang in there, you two! 
 Yes, sir… 
 All right… 
-Hey, commander, the preparations are going just fine. 
+Hey, Boss, the preparations are going just fine. 
 As long as a certain someone isn't chattering on the job… 
 What are you talking about!? 
 Let me stop you right there! 
@@ -615,7 +615,7 @@ I should go to the underground storage room, too.
 Sumire and Kanna are preparing the stage for the show. 
 I should go to the underground storage room, too. 
 Oh, Ogami, I was looking for you. Come, quickly, the manager is already fuming! 
-Oh, I see…! But Ms. Ayame, what's down there in the storage room? 
+Oh, I see…! But Ayame, what's down there in the storage room? 
 Just come with me, all right? It's rude to keep others waiting. 
 OK… Sorry. 
 What are you doing!? You're already late! Get a move on! 

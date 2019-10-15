@@ -1,4 +1,4 @@
-It's a photo of Sakura. Her gaze is so intense. I wonder what she's thinking? 
+﻿﻿It's a photo of Sakura. Her gaze is so intense. I wonder what she's thinking? 
 It's a photo of Sumire. It shows a side of her that's usually hidden. 
 It's a photo of Maria. She's lost in thought and seems a bit sad… 
 It's a photo of Kanna. She looks energetic and confident. I can't wait to meet her. 
@@ -172,24 +172,24 @@ Lucky you. I've got nothing to do and I'm bored stiff!
 …… 
 Ah, Sumire… 
 …? Did I make her angry? 
-Hi, Uncle Ichi! 
+Hi, Mon Frère! 
 Hey, Iris. 
 Thank you for your help last night! 
 I'm glad we found Jean-Paul, Iris. 
 Mmhmm! 
-…Um, Uncle Ichi? 
+…Um, Mon Frère? 
 What is it, Iris? 
 You're so nice! …I really like you! 
 Is that so? …Thank you. 
-…Well, I'm gonna go now! Bye bye, Uncle Ichi! 
-Hey, Uncle Ichi? Let's all go to the flower-viewing festival soon. 
+…Well, I'm gonna go now! Bye bye, Mon Frère! 
+Hey, Mon Frère? Let's all go to the flower-viewing festival soon. 
 That sounds nice. The cherry blossoms were in full bloom in Ueno Park yesterday. 
 Yeah… But I'm more interested in spending time with you. 
 Is that so? …Thank you. 
 That's what they call "toys over flowers," right? 
 I think you mean, "boys over flowers." 
 Eheheh… Oh, okay. 
-…Well, I'm gonna go now! Bye bye, Uncle Ichi! 
+…Well, I'm gonna go now! Bye bye, Mon Frère! 
 …So this is my new workplace… 
 …Sir. What are you doing here? 
 H-hey, Maria… 
@@ -259,7 +259,7 @@ Stopping you two from fighting.
 I don't know much about theater, and I didn't intend to interrupt your rehearsal. 
 However, teamwork is important in a troupe, right? …So stop fighting. 
 Sir… 
-Uncle Ichi… 
+Mon Frère… 
 … 
 I understand. I'm sorry, Ogami. 
 …Good! Well then, I'll be going now… 
@@ -345,13 +345,13 @@ So, I'll introduce you again. They are members of the Flower Division. They'll b
 Ogami… Under your command, I feel like I can fight with all my might! 
 As new members of the Imperial Assault Troop, let's do our best! 
 I'm counting on you, Ogami! 
-Uncle Ichi, let's both do our best! 
-Uncle Ichi, do your best! 
+Mon Frère, let's both do our best! 
+Mon Frère, do your best! 
 Sir… That uniform suits you well. 
 Well then, sir. Let us see how skilled you are… 
 Battle is often harsh and cruel. Now we'll see whether or not 
-you have the skills to be Captain. 
-I haven't accepted you as a Captain yet, sir. 
+you have the skills to be captain. 
+I haven't accepted you as a captain yet, sir. 
 When I can understand how you think and feel…then I shall call you Captain. 
 …I understand. Let's all do our best! 
 Commander, who is our enemy? 
@@ -373,7 +373,7 @@ By which I mean the members of the Flower Division…and you.
 The enemy's been spotted in the same place as last time, Ueno Park. Use our bullet train to get there! 
 Yes, sir! 
 I don't have a Koubu yet, so I'll be staying behind… 
-Do your best, Uncle Ichi! 
+Do your best, Mon Frère! 
 …I see! It really is just a huge suit of armor. Seems easy enough to pilot! 
 Ogami, give the order to move out! We must protect Ueno Park from the Hive of Darkness! 
 Flower Division, move out! <br> Prepare for flower-viewing! 
@@ -393,7 +393,7 @@ It may be your first battle, but you still need to order the attack!
 Y-yes, sir! 
 Flower Division, move out! Target area is… Crap, I forgot. 
 Sir! Do try to focus! 
-Do your best, Uncle Ichi! 
+Do your best, Mon Frère! 
 Ogami, the target area is Ueno Park. 
 R-right! 
 Ahem! Flower Division, move out! Head to Ueno Park! 
@@ -431,11 +431,11 @@ Let's stop by Iris's room.
 Okay. Off to Iris's room we go! 
 We've arrived at Iris' room. 
 Iris…! It's Sakura. Please open the door. 
-Uncle Ichi… Sakura… *Sniffle* 
+Mon Frère… Sakura… *Sniffle* 
 Look, Iris! It's Jean-Paul. I think you left him backstage. 
 Ah! Jean-Paul!! 
 You shouldn't leave your beloved friends behind. 
-Uncle Ichi…Sakura… Thank you so much! 
+Mon Frère…Sakura… Thank you so much! 
 Well, it's late, so… Good night. 
 Okay! Good night! 
 … good. I think Iris should be able to sleep peacefully now. 
@@ -461,7 +461,7 @@ Did they really bring me here to punch tickets and play security guard…?
 …Let's go, Ogami. 
 Iris! 
 What's the matter, Iris? What are you doing up? 
-Uncle Ichi… Sakura… 
+Mon Frère… Sakura… 
 What's wrong, Iris? Come here and tell us what's going on. 
 Um… I can't find Jean-Paul… 
 I think maybe I left him somewhere… 
@@ -495,7 +495,7 @@ I want to be a warm light, and strong… the kind that lights the way for the pe
 … Oh, I'm sorry, Ogami. I didn't mean to keep you from your guard duties… 
 Well now, let's continue our rounds. 
 The city lights, huh… 
-As commander of the Assault Troop. I hoped I could work protecting the people living under those lights… 
+As captain of the Assault Troop, I hoped I could work protecting the people living under those lights… 
 Ogami… 
 …anyway, let's keep moving. Come to think of it, guarding a theater is still a job that keeps people safe. 
 Right! Then, let's go to the next room, Ogami! 
@@ -541,18 +541,18 @@ Looks like she's already asleep. Let's move on, Ogami.
 …No reply. Is she not there? 
 Oh I doubt it… at this hour she's probably asleep don't you think? 
 Iris… It's Sakura. Please open up. 
-Uncle Ichi… Sakura… *Sniffle* 
+Mon Frère… Sakura… *Sniffle* 
 Here you go, Iris. We found Jean-Paul. It seems you left him in the music room. 
 Ah! Jean-Paul!! 
 You shouldn't leave your beloved friends behind. 
-Uncle Ichi… Sakura… Thank you so much! 
+Mon Frère… Sakura… Thank you so much! 
 Well, it's late, so… Good night. 
 Okay! Good night! 
 … good. Now Iris should be able to sleep peacefully. 
 Yes. I'm really glad we found it. 
 Well, shall we continue our rounds? 
 Iris… 
-Uncle Ichi… Sakura… you didn't find Jean-Paul? 
+Mon Frère… Sakura… you didn't find Jean-Paul? 
 I'm sorry… We couldn't find him. 
 But I'm sure we'll find him right away once it's light tomorrow. Just get some sleep and don't worry. 
 Okay… 
@@ -612,7 +612,7 @@ And now I'm the security guard. Man, wasn't I supposed to be protecting the whol
 I remember. This is the night-duty room. 
 Nothing seems out of place. Let's move on. 
 I remember this place. It's the manager's room. Like I could ever forget it. 
-I think I'll be seeing the words 'Imperial Revue' in my dreams… 
+I think I'll be seeing the words 'Imperial Assault Troupe' in my dreams… 
 … the door is locked, and there doesn't seem to be anything out of place. 
 Well it's locked and I don't see anything unusual. Let's move on. 
 This is the office. I came here during the afternoon. 
@@ -656,7 +656,7 @@ This is a 'wing', right? The performers wait for their turn on stage here.
 That's right. You're a quick learner! 
 … nothing looks out of place here. Let's move on. 
 This is the stage. This is where we work our magic. 
-(And here I thought the 'Imperial Revue' would be a combat unit… I guess this was someone's idea of a joke.) 
+(And here I thought the 'Imperial Assault Troupe' would be a combat unit… I guess this was someone's idea of a joke.) 
 Is something wrong, Ogami? 
 No… it's nothing. Doesn't look like there's anything out of place here. Let's keep moving. 
 The stage looks fine. 

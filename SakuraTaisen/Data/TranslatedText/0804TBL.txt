@@ -1,51 +1,51 @@
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused 
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused 
+﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking...
+It's a photo of Sumire. This is a side of her you don't see too often.
+It's a photo of Maria. ...She's lost in thought and looks kind of sad...
+A photo of Kanna. She looks strong and reliable. I can't wait to meet her.
+A photo of Iris. She's surrounded by flowers and flashing a radiant smile.
+A photo of Kohran. She's looking pretty in profile with her face dyed red by the evening sun.
+A letter given to me by a customer. I was asked to give it to Sumire. I have a bad feeling about this...
+Maria's pistol. This may help me escape from here...
+A hair ornament. It's decorated with flowers and looks very elegant.
+A pretty pendant. The delicate workmanship is gorgeous.
+A hairpin for use in a traditional bun hairstyle. It would complement a formal outfit well.
+This key will let me enter rooms I couldn't before.
+I found this in a bedroom on the second floor. I can use it to access the back room.
+A teacup Iris asked me to get for her. It has a very stylish design.
+This is the matchbox Iris asked for. Its logo is quite colorful.
+A knife Iris asked me to get for her. Just a normal utensil you'd use during a meal.
+A prop sword and shield used onstage. They're well-made and look just like the real thing.
+A prop crown used onstage. It's well constructed and incredibly detailed.
+A wig and costume used onstage. I wonder what kind of act could use a flashy outfit like this?
+A photo of Sakura in her swimsuit. Wow, this is really something. I'm gonna treasure this.
+A photo of Sumire in her stage costume. Her distinctive makeup really makes an impact.
+It's a photo of Maria on stage in the military uniform from "For Love"... She's a beautiful woman disguised as a man.
+A photo of Kanna in her training gear. Catching her in a private moment like this feels surprisingly intimate.
+A photo of Iris in her swimsuit. She's holding a rubber ring and looks ready to have some fun. How cute.
+A photo of Kohran. I don't get to see her with her braids undone very often. It's a nice look.
+A photo of Ayame in a traditional outfit. I hope she'll always be as happy and content as she is here.
+Ayame's gun. Why...? Why did it have to turn out like this...?
+Jean-Paul the teddy bear. Iris's best friend. She always carries him with her and takes good care of him.
 2nd January. Imperial City Daily Report. News Extra 
 "A New Enemy Has Appeared". "Mass Chaos at Meiji Shrine" 
 A hideous monster has appeared at Meiji Shrine. It was a desperate struggle for the Imperial Flower Division. 
 The bizarre beast appeared at the crowded Shrine and caused mass hysteria in the area. 
-The Revue was dispatched, and victorious, yet seriously injured. Were the Spirit Armor and Koubu destroyed? 
+The Troupe was dispatched, and victorious, yet seriously injured. Were the Spirit Armor and Koubu destroyed? 
 It seems that the citizens of the imperial capital are unable to hide their shock at the appearance of a new demon. 
 With all due respect… <br> It's my responsibility… 
 With all due respect, Commander Yoneda. Their "Koubu" was no match for that enemy. 
-Ogamii! What the hell are you saying?! Aren't you the commanding officer of the Flower division!? 
+Ogami! What the hell are you saying?! Aren't you the commanding officer of the Flower division!? 
 Were you only taught to talk crap at military school?? 
 … 
 I'm sorry… It's my fault. I am fully prepared to receive the punishment I deserve. 
-You bloody idiot! If you go off and kill yourself now then it's all over!! 
+You bloody idiot! If you go off and kill yourself now, then it's all over!! 
 And yet… the Koubu was totally destroyed! 
 …I have no words. 
 Geez… we're gonna have to go back without a single piece left of our precious Spirit Armor… 
 I… I'm so ashamed…! 
 The Hive of Darkness will come after the civilians next. They should beware these new threats… 
-And cos everyone's just hiding away in their houses now the economy has totally broken down. 
-The big shots up in government have been giving me nothing but shit about this since yesterday. 
+And cos everyone's just hiding away in their houses now, the economy has totally broken down. 
+The big shots up in government have been giving me nothing but grief about this since yesterday. 
 No wonder my stomach is killing me. 
 Are you sure that's not just cos you drink too much… 
 Did you just say something?? 
@@ -55,9 +55,9 @@ We can't just assume there'll be peace once the Hive of Darkness are defeated!
 If I see any more bad behavior out of you I'll be demoting you to full-time ticket collector! 
 F…full-time ticket collector!? 
 If you don't like it I suggest you hurry up and think of a counterattack against these monsters quick smart! 
-Y, yes sir! 
+Y-yes sir! 
 If you got it then go already! 
-Y, yes! Excuse me! 
+Y-yes! Excuse me! 
 …… 
 Even so… if there are monsters like that still alive out there… 
 The kouma… 
@@ -103,8 +103,8 @@ It's Ogami. I'd like to talk to you.
 Come in! 
 Excuse me. 
 Manager, please listen to me… 
-This is about the Kobu, I guess? 
-Yes, exactly. The Kobus' potential is exhausted, and our funds are limited… 
+This is about the Koubu, I guess? 
+Yes, exactly. The Koubus' potential is exhausted, and our funds are limited… 
 Can't you do anything about this? 
 I've been wrecking my brains about this whole pickle… 
 Can I ask you to leave the whole thing to me? 
@@ -125,13 +125,13 @@ Yes… It pains me to say it, but I have no idea what we could do…
 Don't beat yourself up about it. This problem is just too big. 
 Producing entirely new Spirit Armors… That would be a national effort. 
 Yes… 
-I'll have a word with Lieutenant General Yoneda about the Kobu. I think he had some kind of idea. 
+I'll have a word with Lieutenant General Yoneda about the Koubu. I think he had some kind of idea. 
 But, Ogami… Please allow me one word of warning. 
 Like I said before, the most important thing for a leader is to make a decision and stick with it. 
 …Understood. 
 …And another thing is to never make your team members worry. 
 …! 
-You can bet they all feel as uneasy as you about the loss of the Kobu. 
+You can bet they all feel as uneasy as you about the loss of the Koubu. 
 You need to act as positively as possible. 
 If you can't keep it together, they'll only get all the more worried. 
 I'm sure you can figure out the rest yourself. Good luck, Ogami. 
@@ -140,10 +140,10 @@ Everyone should be in the command room by now.
 Looks as though everyone's gathered. 
 OK… So, should we start? 
 Let's think about a strategy to fight those monsters… the Koma. 
-To start with, please let us hear your thoughts, commander. 
+To start with, please let us hear your thoughts, Boss. 
 What can we do to stand against those monsters? 
 Go back to training. <br> Get more powerful weapons. 
-We all need to go back to training. The Kobu are only as strong as their pilots. 
+We all need to go back to training. The Koubu are only as strong as their pilots. 
 The Flower Division can only become stronger if each of its members grows stronger. 
 Go back to our roots, you mean? 
 In order to stand against the Koma, we need more powerful weapons. 
@@ -151,14 +151,14 @@ That's a tough one, boss…
 … 
 Ah, yes… I asked Lieutenant General Yoneda for help with that problem. 
 All right… It seems we have to come up with a different way. 
-Commander… The fighting capabilities of the Spirit Armors grow in proportion with the abilities of their pilots. 
-Even using the same Kobu as before, if we grow stronger, we'll be much more powerful in a battle. 
+Captain… The fighting capabilities of the Spirit Armors grow in proportion with the abilities of their pilots. 
+Even using the same Koubu as before, if we grow stronger, we'll be much more powerful in a battle. 
 Boss! This is an important meeting, so how can you space out like that!? 
 Yes, er… Sorry… 
 Oh boy… Are we really out of ideas? 
 …I've got a proposal. 
 The fighting capabilities of the Spirit Armors grow in proportion with the abilities of their pilots. 
-Even using the same Kobu as before, if we grow stronger, we'll be much more powerful in a battle. 
+Even using the same Koubu as before, if we grow stronger, we'll be much more powerful in a battle. 
 A return to our origins? Not bad. 
 OK, then I'll return to the remote mountains where I exercised karate! 
 And I'll ask my old sword fighting sensei for a refresher. 
@@ -166,7 +166,7 @@ OK! So, all of you…
 I'm not too keen on special training. 
 Do we really HAVE to do that? 
 …huh? 
-I think it would be much better to build new Kobu! 
+I think it would be much better to build new Koubu! 
 I agree. This is not an enemy we can fight empty-handed anyway. 
 But don't you think the ones who've steeled their spirit will survive the longest? 
 If that's what you believe, feel free to go live on your remote mountains… 
@@ -192,16 +192,16 @@ Besides, I'm busy with a new invention at the moment.
 All right, enough of this! If someone doesn't agree, I won't force them to do anything. 
 It's obvious to all of you that we can't win against the Koma as we are now. 
 …OK. Just do whatever you like. 
-M-Mr. Ogami? 
+Ogami? 
 I'm sure everyone of us knows in their hearts what we have to do. 
-Please do whatever you see fit… as long as it will help us fight the Koma! 
-…What is it, commander? 
+Please do whatever you see fit… as long as it will help us fight the Kouma! 
+…What is it, Captain? 
 That's how it is… 
 Kohran. 
 Yeah? 
-Contact the Flower Mansion's workshop and improve the Kobu as much as you can! 
+Contact the Flower Mansion's workshop and improve the Koubu as much as you can! 
 Roger! 
-I'll leave the rest to everyone's own decision. Do you agree, commander? 
+I'll leave the rest to everyone's own decision. Do you agree, Captain? 
 All right, then we'll do as we see fit. 
 Yay, I can have lots of naps! 
 …Thanks, boss. 

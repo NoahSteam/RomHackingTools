@@ -1,4 +1,4 @@
-Ready~ 
+﻿﻿Ready~ 
 Victory pose… Yeah! 
 Heh heh heh… Terror, confusion, the government in disarray… What a beautiful sight. 
 The capital is ours! 
@@ -9,7 +9,7 @@ What?!
 You…! 
 … 
 You won't get through the Imperial Assault Troupe! 
-Imperial Revue? How ridiculous! 
+Imperial Assault Troupe? How ridiculous! 
 Interesting… Everyone, let me handle this. 
 Ooh, this should be good. 
 Show me the true extent of your power! 
@@ -106,7 +106,7 @@ There is also a 'Defend' action, which will reduce incoming damage from enemy at
 The effect of 'Defend' lasts until your next turn. 
 During battle you can take 2 actions each turn, but you may only use the same action type 1 time per turn. 
 Normal and Special Attacks are considered the same type, so you can't use them both on the same turn. 
-'Focus', 'Defend' and 'Heal' are also considered the same type, so you cannot use 2 in the same turn. 
+'Rest', 'Defend' and 'Restore' are also considered the same type, so you cannot use 2 in the same turn. 
 However, you are free to use them in any order you wish. You could move then attack, or you could attack then move. 
 I will now explain the operation of Koubu. Please pay attention. 
 I need to focus! 
@@ -130,7 +130,7 @@ Now, Ensign, make your move!
 I'll be keeping my eyes on you! 
 Uwahhh!! 
 I suppose I'll let you win for now! 
-The commander needs me!! 
+The captain needs me!! 
 I'll have to take down the enemies myself! 
 Where's my next target!? 
 Whoever wants to die first, just step forward… 
@@ -145,14 +145,14 @@ Forgive me, sir. I need to withdraw!
 I can fight too! 
 Here I go! 
 I'm super strong! 
-I'll fight hard for Uncle Ichi!! 
+I'll fight hard for Mon Frère!! 
 Uh, some of these lights are flashing… 
-You're the best, Uncle Ichi! 
-Go get 'em Uncle Ichi! 
+You're the best, Mon Frère! 
+Go get 'em Mon Frère! 
 I'll be watching! 
 Kyaaaa… 
 Stupid… stars… 
-Sorry, Uncle Ichi… 
+Sorry, Mon Frère… 
 Gonna go all out. 
 Better not underestimate science~! 
 Movin' out!! 

@@ -1,31 +1,31 @@
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
+﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking...
+It's a photo of Sumire. This is a side of her you don't see too often.
+It's a photo of Maria. ...She's lost in thought and looks kind of sad...
+A photo of Kanna. She looks strong and reliable. I can't wait to meet her.
+A photo of Iris. She's surrounded by flowers and flashing a radiant smile.
+A photo of Kohran. She's looking pretty in profile with her face dyed red by the evening sun.
+A letter given to me by a customer. I was asked to give it to Sumire. I have a bad feeling about this...
+Maria's pistol. This may help me escape from here...
+A hair ornament. It's decorated with flowers and looks very elegant.
+A pretty pendant. The delicate workmanship is gorgeous.
+A hairpin for use in a traditional bun hairstyle. It would complement a formal outfit well.
+This key will let me enter rooms I couldn't before.
+I found this in a bedroom on the second floor. I can use it to access the back room.
+A teacup Iris asked me to get for her. It has a very stylish design.
+This is the matchbox Iris asked for. Its logo is quite colorful.
+A knife Iris asked me to get for her. Just a normal utensil you'd use during a meal.
+A prop sword and shield used onstage. They're well-made and look just like the real thing.
+A prop crown used onstage. It's well constructed and incredibly detailed.
+A wig and costume used onstage. I wonder what kind of act could use a flashy outfit like this?
+A photo of Sakura in her swimsuit. Wow, this is really something. I'm gonna treasure this.
+A photo of Sumire in her stage costume. Her distinctive makeup really makes an impact.
+It's a photo of Maria on stage in the military uniform from "For Love"... She's a beautiful woman disguised as a man.
+A photo of Kanna in her training gear. Catching her in a private moment like this feels surprisingly intimate.
+A photo of Iris in her swimsuit. She's holding a rubber ring and looks ready to have some fun. How cute.
+A photo of Kohran. I don't get to see her with her braids undone very often. It's a nice look.
+A photo of Ayame in a traditional outfit. I hope she'll always be as happy and content as she is here.
+Ayame's gun. Why...? Why did it have to turn out like this...?
+Jean-Paul the teddy bear. Iris's best friend. She always carries him with her and takes good care of him.
 On the other side of these clouds, there's the Sacred Demon Castle… and Ayame. 
 Will I be able to face her? 
 Sakura… 
@@ -38,14 +38,14 @@ I was just… I was thinking about what I'm going to do.
 First, Ayame leaves the Floral Storm Troop… And now we're even supposed to fight her? 
 … 
 I'm… scared. Of things that end… and things we have to set an end to. 
-It's strange, isn't it? Here I stand, proud commander of the Flower Division, trembling like a little boy. 
+It's strange, isn't it? Here I stand, proud captain of the Flower Division, trembling like a little boy. 
 … 
 And all of a sudden, everything I believed in lies in shambles… 
 I'm afraid I'll lose everything… 
 This enemy we're facing surpasses our wildest imaginations. 
 To be honest, I have no idea how we're supposed to defeat a monster like that. 
 … 
-I'm pathetic, don't you think? A commander shouldn't talk like this… 
+I'm pathetic, don't you think? A captain shouldn't talk like this… 
 …?! 
 Sakura… 
 … 
@@ -115,7 +115,7 @@ I'm scared… What are we gonna do?
 Don't worry… It'll be fine, Iris. 
 That's right, Iris. There's no need to worry. 
 …Fine. 
-Uncle Ichi… You'll be okay, right? 
+Mon Frère… You'll be okay, right? 
 Tenkai's Six Star Summoning… The return of the Koma… The Pandemonium Vessel… 
 So all of this… the rise of the Sacred Demon Castle… all of this was Aoi Satan's plan all along? 
 Yeah, it seems that way… 
@@ -147,10 +147,10 @@ Sakura. It was far from meaningless.
 If we hadn't fought, there would have been a lot more casualties. 
 …You're right. What we did wasn't meaningless! 
 I guess… 
-Mr. Ogami… Don't talk like that. 
-That's right, commander. We, the Flower Division, trust you with our lives. 
+Ogami… Don't talk like that. 
+That's right, Boss. We, the Flower Division, trust you with our lives. 
 If you give up, think about how that'd make us feel. 
-Yes! You're our commander. Get a grip, Mr. Ogami! 
+Yes! You're our Captain. Get a grip, Ogami! 
 Yeah… I'm sorry. 
 It's no use wallowing in self-pity. We have to figure out a plan of action. 
 There's a feeling that all the members of the Flower Division share. 
@@ -160,12 +160,12 @@ You're the only one who can help them right now.
 But… To think that the Sacred Demon Castle really appeared… 
 Hey, Ogami, wait a minute! Where are you going all alone? 
 If you're acting like that, it's only natural everyone else will despair too. 
-What are you going to do, commander? 
+What are you going to do, Captain? 
 Let's just move out! <br> We have to think this over. 
 Hm… There must be a way… 
 We have to go! If we mope around here, things are only going to get worse. 
 You're right, Kanna. 
-Lieutenant General Yoneda! I can't stand sitting here and doing nothing while we wait for the end! 
+Lieutenant General Yoneda! I can't stand sitting here doing nothing while we wait for the end! 
 We'll move out! 
 You fool! Don't rush things, Ogami! Just settle down for a moment… 
 To tell you the truth… 
@@ -178,13 +178,13 @@ There's no other way but attack!
 With every minute that passes, the damage gets bigger! 
 Doesn't anyone have an idea? 
 But… If we do nothing… 
-…Commander. Let's think about this whole thing together. Maybe we can find a way. 
+…Captain. Let's think about this whole thing together. Maybe we can find a way. 
 Hm… If you ask me, I can't come up with anything other than a full frontal attack. 
 No matter who I'm up against… I just can't run away. 
 With an enemy like this, you still want to attack head-on? You really must be dumb… 
 Hmph… It's the only talent I have. 
 It's still better than this pointless armchair analysis. 
-I can't believe you… Lieutenant, what do you think about Kanna's proposal? 
+I can't believe you… Ensign, what do you think about Kanna's proposal? 
 That might just work. <br> That's too risky. 
 That might just work… 
 Right? A girl's gotta be brave. 
@@ -210,7 +210,7 @@ What's that, all of a sudden? It's not as if I can conjure up my inventions out 
 I see… I was hoping one of your inventions could save us. 
 Sorry I couldn't be more helpful… 
 I can't think of a way… 
-Uncle Ichi! I'll think about it too! I'll think so, SO hard! 
+Mon Frère! I'll think about it too! I'll think so, SO hard! 
 And… can I ask something? 
 What is it? 
 Well, I had one idea… 
@@ -244,7 +244,7 @@ Yes, you just gotta believe… And I'm sure you can do that, Iris.
 Yes, I can! I won't get all sad like that again! 
 Not bad, Maria… Not bad. 
 Thanks, Maria… You really helped me out there. 
-…You're welcome, commander. 
+…You're welcome, Captain. 
 What do you think, Iris? 
 Well, I…I think Ayame will come back for sure! 
 Why do you believe that? 
@@ -254,9 +254,9 @@ What she said must have been a lie. I know it!
 …A lie? 
 (I'd sure love to believe that…) 
 Well… 
-What is it, Mr. Ogami? 
+What is it, Ogami? 
 Boss…? 
-Commander… Why aren't you saying anything? 
+Boss… Why aren't you saying anything? 
 (Ayame… Could she really just come back to us?) 
 It's all right. You needn't worry. 
 Really…? Ayame will come back? In that case, I'm gonna do my best! 
@@ -290,7 +290,7 @@ If we just find that, we stand a chance.
 A weak point? 
 Hmmm… 
 There's no other way… But… 
-Mr. Ogami… You're the only one we can rely on right now. Please be there for us… 
+Ogami… You're the only one we can rely on right now. Please be there for us… 
 Calm down, Ogami. What good will it do if you're like this? 
 Listen, everyone. There's only one path open to us. 
 What we fear most right now is the Spirit Cannon firing. 
@@ -475,26 +475,26 @@ I believe in you… we all do.
 Captain… 
 Yes… 
 What do you mean? 
-Commander, that's… 
+Captain, that's… 
 I… Maybe I've become weak. 
 This moment in time… I can't bear the thought of it passing. I never felt like this before. 
 Captain… 
-Mr. Ogami. What are you doing here? 
+Ogami. What are you doing here? 
 I can see in your face that's not true. There's something, I don't know… 
 Something sad about it… 
-But… Mr. Ogami! What happened!? Why are you so… 
+But… Ogami! What happened!? Why are you so… 
 You see? My heart… It's pounding like crazy. 
 We're all in this together. And I bet we all feel the same, more or less. 
-I'm afraid too. If I was alone I'd probably be petrified… 
+I'm afraid too. If I was alone, I'd probably be petrified… 
 I'm not as strong as everyone else yet… not as strong as my father. 
 But everyone's there for me… and you always encourage me. That gives me the strength to fight! 
 I can keep going because of you! 
 Don't ever call yourself pathetic! 
 You keep me going… 
 And that's why you have to fight! No one else will protect Teito, and the future of mankind! 
-Let's keep fighting, Mr. Ogami… You and me together! 
-Everyone's on the bridge. They're waiting for their commander… for you! 
-Mr. Ogami! 
+Let's keep fighting, Ogami… You and me together! 
+Everyone's on the bridge. They're waiting for their captain… for you! 
+Ogami! 
 Yes, sir! 
 Unused
 Unused

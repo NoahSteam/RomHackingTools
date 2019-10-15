@@ -1,4 +1,4 @@
-﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
+﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
 It's a photo of Sumire. This is a side of her you don't see too often. 
 It's a photo of Maria. …She's lost in thought and looks kind of sad… 
 It's a photo of Kanna. She's looking strong and sturdy. I hope I get to meet her soon. 
@@ -169,7 +169,7 @@ The battle against these enemies has just begun, so don't get too carried away�
 Unused
 Unused
 Unused
-Y'know…I like you an awful lot, Uncle Ichi. 
+Y'know…I like you an awful lot, Mon Frère. 
 I'll let you be my boyfriend, so don't go cheating on me! 
 Chug it, chug it all down! Ogami! You're on ticket duty again tomorrow! 
 Ahahaha… 

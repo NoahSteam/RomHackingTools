@@ -1,32 +1,32 @@
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Ogami and the Imperial Floral Storm Troop, Flower Division, all present! 
+﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking...
+It's a photo of Sumire. This is a side of her you don't see too often.
+It's a photo of Maria. ...She's lost in thought and looks kind of sad...
+A photo of Kanna. She looks strong and reliable. I can't wait to meet her.
+A photo of Iris. She's surrounded by flowers and flashing a radiant smile.
+A photo of Kohran. She's looking pretty in profile with her face dyed red by the evening sun.
+A letter given to me by a customer. I was asked to give it to Sumire. I have a bad feeling about this...
+Maria's pistol. This may help me escape from here...
+A hair ornament. It's decorated with flowers and looks very elegant.
+A pretty pendant. The delicate workmanship is gorgeous.
+A hairpin for use in a traditional bun hairstyle. It would complement a formal outfit well.
+This key will let me enter rooms I couldn't before.
+I found this in a bedroom on the second floor. I can use it to access the back room.
+A teacup Iris asked me to get for her. It has a very stylish design.
+This is the matchbox Iris asked for. Its logo is quite colorful.
+A knife Iris asked me to get for her. Just a normal utensil you'd use during a meal.
+A prop sword and shield used onstage. They're well-made and look just like the real thing.
+A prop crown used onstage. It's well constructed and incredibly detailed.
+A wig and costume used onstage. I wonder what kind of act could use a flashy outfit like this?
+A photo of Sakura in her swimsuit. Wow, this is really something. I'm gonna treasure this.
+A photo of Sumire in her stage costume. Her distinctive makeup really makes an impact.
+It's a photo of Maria on stage in the military uniform from "For Love"... She's a beautiful woman disguised as a man.
+A photo of Kanna in her training gear. Catching her in a private moment like this feels surprisingly intimate.
+A photo of Iris in her swimsuit. She's holding a rubber ring and looks ready to have some fun. How cute.
+A photo of Kohran. I don't get to see her with her braids undone very often. It's a nice look.
+A photo of Ayame in a traditional outfit. I hope she'll always be as happy and content as she is here.
+Ayame's gun. Why...? Why did it have to turn out like this...?
+Jean-Paul the teddy bear. Iris's best friend. She always carries him with her and takes good care of him.
+Ogami and the Imperial Floral Assault Troop, Flower Division, all present! 
 Hm… Koma have appeared on the Ginza. You have to move out immediately! 
 But, Lieutenant General Yoneda… How are we supposed to fight if we can't use the Kobu!? 
 Don't worry about that. Please come to the hangar, all of you! 
@@ -44,7 +44,7 @@ Kohran's special training was building this very device.
 Hehehe… And now you know. 
 OK, Ogami! Give the dispatch order! 
 Ready to move out! <br> Show them our training! 
-Imperial Floral Storm Troop, ready to move out! Let's send those Koma back to hell! 
+Imperial Floral Assault Troop, ready to move out! Let's send those Koma back to hell! 
 Roger! 
 We spent three weeks with special training… 
 Now is the time to show them the results! 
@@ -54,32 +54,32 @@ Jinbu… The time has finally come to demonstrate your capabilities!
 Come on, everyone! Let's show them the results of our special training! 
 Roger! 
 We'll strike them down in one fell swoop! 
-Let's do this, Mr. Ogami! 
+Let's do this, Ogami! 
 Come on, Ogami! This is the baptism of fire for the Jinbu! It's no time to space out! 
 Uh…y-yes, sir! 
-Erm… Imperial Floral Storm Troop, ready to move out! 
+Erm… Imperial Floral Assault Troop, ready to move out! 
 What power! The Kobu didn't even compare… With these, we can win! 
 Ogami! 
 Let's do our best, Sakura. Show me the results of your special training! 
-Yes! …Mr. Ogami, I wanted to ask you… During your special training, did you and Maria… 
+Yes! …Ogami, I wanted to ask you… During your special training, did you and Maria… 
 What is it? 
 …No, it's nothing! Sorry to bother you at a time like this… 
 All right! Activate Jinbu Spirit Armor! 
-Imperial Floral Storm Troop, move out! 
+Imperial Floral Assault Troop, move out! 
 Yessir! 
-Lieutenant… 
+Ensign… 
 Sumire… 
 Ensign, you remember, right? You promised me a dance. 
 I remember. 
 See that you do not forget! Or I will be certain to remind you. 
 All right! Activate Jinbu Spirit Armor! 
-Imperial Floral Storm Troop, move out! 
+Imperial Floral Assault Troop, move out! 
 Yessir! 
 …Captain. 
 Maria…about that cafe in Yokohama we talked about. There's no time limit, you know. 
 Captain…yes, of course. 
 All right! Activate Jinbu Spirit Armor! 
-Imperial Floral Storm Troop, move out! 
+Imperial Floral Assault Troop, move out! 
 Yessir! 
 …Boss! 
 Kanna? I hope you'll show me the results of your special training! 
@@ -87,13 +87,13 @@ Hehe… You didn't dilly-dally yourself during these past three weeks, did you?
 Of course not! I'm counting on you! 
 Yes! On the battlefield, I always give it all I've got! 
 All right! Activate Jinbu Spirit Armor! 
-Imperial Floral Storm Troop, move out! 
+Imperial Floral Assault Troop, move out! 
 Yessir! 
-…Uncle Ichi! 
+…Mon Frère! 
 Iris…did you get enough sleep? 
 Yep! I'm gonna do my very best! 
 All right! Activate Jinbu Spirit Armor! 
-Imperial Floral Storm Troop, move out! 
+Imperial Floral Assault Troop, move out! 
 Rooooger! 
 …Ogami! 
 Kohran, this machine is incredible! 
@@ -102,7 +102,7 @@ Kohran, this machine is incredible!
 Er… My love for the Jinbu, of course! I hope you didn't think anything weird. 
 You got it. 
 All right! Activate Jinbu Spirit Armor! 
-Imperial Floral Storm Troop, move out! 
+Imperial Floral Assault Troop, move out! 
 Yessir! 
 Jinbu! It's time for your big stage debut! 
 Unused

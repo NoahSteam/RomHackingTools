@@ -1,4 +1,4 @@
-It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
+﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
 It's a photo of Sumire. This is a side of her you don't see too often. 
 It's a photo of Maria. …She's lost in thought and looks kind of sad… 
 It's a photo of Kanna. Kanna's signature strength comes through clearly. 
@@ -76,25 +76,25 @@ No, there must never be a repeat of the Koma Wars.
 Question is, will we be able to prevent it? 
 Hm? Who is it? Come in. 
 Ah… Sakura… 
-Mr. Ogami! Where have you been!? 
+Ogami! Where have you been!? 
 S-Sakura… What is it? 
-I'm the one asking questions here. Where did you go with Ms. Ayame and what did you do? 
+I'm the one asking questions here. Where did you go with Ayame and what did you do? 
 N-no… That's… 
 So it's something you can't tell me? 
 No, it's not like that! 
 Then just answer me! I'm a member of the Flower Division too, you know! 
 What… What should I do? 
 Ah… Sumire… 
-Lieutenant! Where have you been!? 
+Ensign! Where have you been!? 
 S-Sumire… What is it, all of a sudden? 
-I'm the one asking questions here. Where did you go with Ms. Ayame and what did were you up to? 
+I'm the one asking questions here. Where did you go with Ayame and what were you up to? 
 N-no… That's… 
 You can't even tell me? 
 No, it's not like that! 
 Then out with it! Why would you need to hide something from me? 
 What… What should I do? 
 Ah… Maria… 
-Mr. Ogami… 
+Ogami… 
 M-Maria… What's the matter? 
 …Isn't there something you've been hiding from me? 
 N-no… That's… 
@@ -112,7 +112,7 @@ No, it's… it's not what you think!
 Then please tell me! I'm a member of the Flower Division, too, you know? 
 What… What should I do? 
 Ah… Iris… 
-Uncle Ichi… 
+Mon Frère… 
 I-Iris… What can I do for you? 
 …What have you been up to with auntie Ayame? 
 Er… nothing at all… 
@@ -121,9 +121,9 @@ No, it's… it's not what you think!
 Then what is it? Something I mustn't know? 
 What… What should I do? 
 Ah… Kanna… 
-Lieutenant… 
+Ensign… 
 K-Kanna… What is it? 
-…What were you and Ms. Ayame doing? 
+…What were you and Ayame doing? 
 Er… nothing at all… 
 …You really need to keep secrets from me? 
 No, it's… it's not what you think! 
@@ -139,18 +139,18 @@ Pandemonium Vessel?
 Right now, it's all that keeps the Koma's power at bay. 
 If it were to fall into their hands, then that could mean the end of the world. 
 …What!? And where is this Pandemonium Vessel? 
-It's hidden somewhere here. Ms. Ayame and I were ordered to keep it safe, and its existence a secret. 
+It's hidden somewhere here. Ayame and I were ordered to keep it safe, and its existence a secret. 
 …Don't you understand? I told you everything I could. 
-Mr. Ogami… 
+Ogami… 
 (Sakura doesn't know…) 
 (That her father… gave his life…) 
-Mr. Ogami? 
+Ogami? 
 (If she knew, then… I'm sure, she'd…) 
 (She must not know…) 
 Sakura… 
 …? 
 I promise I'll protect you and the rest of the Flower Division… 
-Mr… Mr. Ogami… 
+Mr… Ogami… 
 And we'll fight the Koma together! 
 …Yes! 
 To be honest… 
@@ -162,9 +162,9 @@ Pandemonium Vessel?
 Right now, it's all that keeps the Koma's power at bay. 
 If it were to fall into their hands, then that could mean the end of the world. 
 Wh-what!? And where on earth is this infernal device? 
-It's hidden somewhere here. Ms. Ayame and I were ordered to keep it safe, and its existence a secret. 
+It's hidden somewhere here. Ayame and I were ordered to keep it safe, and its existence a secret. 
 …Don't you understand? I told you everything I could. 
-Lieutenant… 
+Ensign… 
 To be honest… 
 …? 
 It's top secret. I was instructed not to tell anyone. 
@@ -175,9 +175,9 @@ Pandemonium Vessel?
 Right now, it's all that keeps the Koma's power at bay. 
 If it were to fall into their hands, then that could mean the end of the world. 
 And where on earth is this Pandemonium Vessel? 
-It's hidden somewhere here. Ms. Ayame and I were ordered to keep it safe, and its existence a secret. 
+It's hidden somewhere here. Ayame and I were ordered to keep it safe, and its existence a secret. 
 …Don't you understand? I told you everything I could. 
-Mr. Ogami… If it's top secret, can you really tell me? 
+Ogami… If it's top secret, can you really tell me? 
 That's much better than if you got the wrong idea… 
 Ogami… 
 To be honest… 
@@ -189,7 +189,7 @@ The Pandemonium Vessel…
 Right now, it's all that keeps the Koma's power at bay. 
 If it were to fall into their hands, then that could mean the end of the world. 
 Wait a second! And where is that Pandemonium Vessel thing? 
-It's hidden somewhere here. Ms. Ayame and I were ordered to keep it safe, and its existence a secret. 
+It's hidden somewhere here. Ayame and I were ordered to keep it safe, and its existence a secret. 
 …Don't you understand? I told you everything I could. 
 Boss… 
 To be honest… 
@@ -203,7 +203,7 @@ If it were to fall into their hands, then that could mean the end of the world.
 ??? 
 (Hm… She probably won't understand if I put it like this.) 
 Well, simply put… There is a thing here in the Imperial Theater called the "Pandemonium Vessel". 
-It's a very important object, so it was kept a secret to everyone except Ms. Ayame and myself. 
+It's a very important object, so it was kept a secret to everyone except Ayame and myself. 
 Do you understand? If I'd have been allowed to, I'd have told you for sure. 
 Ehehe… Really? That makes me happy! 
 To be honest… 
@@ -215,24 +215,24 @@ Pandemonium Vessel?
 Right now, it's all that keeps the Koma's power at bay. 
 If it were to fall into their hands, then that could mean the end of the world. 
 That doesn't sound good at all… So where is it? That Pandemonium Vessel, I mean. 
-It's hidden somewhere here. Ms. Ayame and I were ordered to keep it safe, and its existence a secret. 
+It's hidden somewhere here. Ayame and I were ordered to keep it safe, and its existence a secret. 
 …Don't you understand? I told you everything I could. 
-Commander… 
-Come on… It's a nice mood, isn't it? 
-Really now, Lieutenant! First Ms. Ayame, and now Ms. Sakura? Make up your mind already! 
+Boss… 
+Come on… There’s some lovey-dovey stuff going on between you two, right? 
+Really now, Ensign! First Ayame, and now Ms. Sakura? Make up your mind already! 
 Sumire… Are you mad because you're not the center of attention for once? 
 Wh-what!? 
 Come on, no need to get angry. 
-Come on… It's a nice mood, isn't it? 
-First Ms. Ayame, and now Ms. Sumire? Seems like no one is safe from you, Mr. Ogami… 
+Come on… There’s some lovey-dovey stuff going on between you two, right? 
+First Ayame, and now Ms. Sumire? Seems like no one is safe from you, Ogami… 
 Indeed. It's almost impressive… 
 …But it really IS strange. I think you're still hiding something from us. 
-Come on… It's a nice mood, isn't it? 
-Lieutenant! First Ayame, and now Maria? At least make your mind up! 
+Come on… There’s some lovey-dovey stuff going on between you two, right? 
+Ensign! First Ayame, and now Maria? At least make your mind up! 
 Sumire… Are you mad because you're not the center of attention for once? 
 Wh-what!? 
 Come on, no need to get angry. 
-Come on… It's a nice mood, isn't it? 
+Come on… There’s some lovey-dovey stuff going on between you two, right? 
 You can't decide, huh? 
 Hehe… Are you jealous, Sumire? 
 I have no idea what you're talking about! 
@@ -242,34 +242,34 @@ Certainly… But it's not just that…
 Sumire… Are you mad because you're not the center of attention for once? 
 Wh-what!? 
 Come on, no need to get angry. 
-This is… a nice mood, isn't it? 
-Really, Lieutenant? First Ayame, and now Kanna? Do you have trouble deciding? 
+So...the two of you have some chemistry between you, then? 
+Really, Ensign? First Ayame, and now Kanna? Do you have trouble deciding? 
 Sumire… Are you mad because you're not the center of attention for once? 
 Wh-what!? 
 Come on, no need to get angry. 
 (Damn it… I can't say any more…) 
-And… Right! I discussed the most effective way to strike at the Koma with Ms. Ayame. 
+And… Right! I discussed the most effective way to strike at the Koma with Ayame. 
 … 
 I'm not lying to you! (I just omitted a few things…) 
 Is that true? 
 Y-yes, that's really true. (Except for the Pandemonium Vessel…) 
 Ah… Sakura… But I just can't tell her the truth… 
 (Damn it… I can't say any more…) 
-And… Right! I discussed the most effective way to strike at the Koma with Ms. Ayame. 
+And… Right! I discussed the most effective way to strike at the Koma with Ayame. 
 … 
 I'm not lying to you! (I just omitted a few things…) 
 Is that true? 
 Y-yes, that's really true. (Except for the Pandemonium Vessel…) 
 Ah… Sumire… But I just can't tell her the truth… 
 (Damn it… I can't say any more…) 
-And… Right! I discussed the most effective way to strike at the Koma with Ms. Ayame. 
+And… Right! I discussed the most effective way to strike at the Koma with Ayame. 
 … 
 I'm not lying to you! (I just omitted a few things…) 
 Is that true? 
 Y-yes, that's really true. (Except for the Pandemonium Vessel…) 
 Ah… Maria… But I just can't tell her the truth… 
 (Damn it… I can't say any more…) 
-And… Right! I discussed the most effective way to strike at the Koma with Ms. Ayame. 
+And… Right! I discussed the most effective way to strike at the Koma with Ayame. 
 … 
 I'm not lying to you! (I just omitted a few things…) 
 For real? 
@@ -283,73 +283,73 @@ Reeeeeally?
 Yes, I swear. (I still won't tell you about the Pandemonium Vessel though…) 
 Ah… Iris… But I just can't tell her the truth… 
 (Damn it… I can't say any more…) 
-And… Right! I discussed the most effective way to strike at the Koma with Ms. Ayame. 
+And… Right! I discussed the most effective way to strike at the Koma with Ayame. 
 … 
 I'm not lying to you! (I just omitted a few things…) 
 Really? 
 Y-yes, that's really true. (Except for the Pandemonium Vessel…) 
 Ah… Kanna… But I just can't tell her the truth… 
 So you ARE hiding something? 
-What is it that you can't tell me, Lieutenant? 
+What is it that you can't tell me, Ensign? 
 Maybe he thinks you can't keep a secret? 
 Wh-what!? 
 Come on, no need to get angry. 
 But it IS strange, boss. What could be so important you would lie even to poor Sakura? 
 So you ARE hiding something? 
-You disappoint me, Mr. Ogami… Why can't you tell us? 
+You disappoint me, Ogami… Why can't you tell us? 
 Hey, no need to get angry. 
 But it IS strange, boss. What could be so important you would lie even to poor Sumire? 
 So you ARE hiding something? 
-What is it that you can't tell me, Lieutenant? 
+What is it that you can't tell me, Ensign? 
 Maybe he thinks you can't keep a secret? 
 Wh-what!? 
 Come on, no need to get angry. 
 But it IS strange, boss. What could be so important you would lie even to poor Maria? 
 So you ARE hiding something? 
-You can't even tell ME, Lieutenant? 
+You can't even tell ME, Ensign? 
 But it really IS strange. What kind of a terrible secret could it be? 
 So you ARE hiding something? 
-What is it that you can't tell me, Lieutenant? 
+What is it that you can't tell me, Ensign? 
 Maybe he thinks you can't keep a secret? 
 Wh-what!? 
 Come on, no need to get angry. …But it really IS strange. What kind of secret is worth telling lies over? 
 So it's just as I thought, huh? 
-You can't even tell ME, Lieutenant? 
+You can't even tell ME, Ensign? 
 Maybe he thinks you can't keep a secret? 
 Wh-what!? 
 Come on, no need to get angry. …But it really IS strange. What kind of secret is worth telling lies over? 
 (A very straight, feminine posture.) 
 (…) 
-What's the matter with you, Mr. Ogami? Why are you staring like that? 
+What's the matter with you, Ogami? Why are you staring like that? 
 Oh… sorry. 
 (Her black hair looks nice and silky.) 
 (Long and beautiful hair… She's a true Japanese beauty.) 
 (Oh dear… She's sulking.) 
 (But… She's cute when she's angry.) 
-…Mr. Ogami! Are you staring at anything in particular? 
+…Ogami! Are you staring at anything in particular? 
 (…Great, now she's angry at me.) 
 (There's anger in her eyes. I guess she's serious this time.) 
 What's with this strange mood all of a sudden? 
 No, I… erm… 
-Mr. Ogami… So you ARE hiding something! 
+Ogami… So you ARE hiding something! 
 (I love Japanese clothes… They show off her figure nicely.) 
-(But… She's at the age where certain aspects just become apparent.) 
-…Mr. Ogami! What are you looking at!? 
+(But… She's at the age where certain aspects become apparent.) 
+…Ogami! What are you looking at!? 
 (A very straight, feminine posture.) 
 (…) 
-What's the matter with you, Mr. Ogami? Why are you staring like that? 
+What's the matter with you, Ogami? Why are you staring like that? 
 Oh… sorry. 
 You looked away! So you were lying!? 
 No… That's not… 
 I've had enough! 
-Where are you going, Mr. Ogami!? We aren't done here! 
+Where are you going, Ogami!? We aren't done here! 
 (She's a real lady, how she pulls off those clothes…) 
 (What a ravishing style.) 
-What's the matter, Lieutenant? 
+What's the matter, Ensign? 
 N-no, it's nothing… 
 (But I must say… That's a bold outfit.) 
 (*gulp*) 
-Lieutenant! What are you looking at!? 
+Ensign! What are you looking at!? 
 (Beautiful brunette hair… And perfectly styled as well.) 
 (Even her hair screams "upper class". It's perfectly groomed.) 
 (Sumire is a real beauty, even when she's angry.) 
@@ -366,7 +366,7 @@ So… you ARE hiding something, aren't you!
 There, you averted your eyes! That proves you were lying! 
 No… That's not… 
 I've had it with you! 
-Where do you think you're going, Lieutenant? This discussion is far from over! 
+Where do you think you're going, Ensign? This discussion is far from over! 
 (Not a single imperfection in her clothes or her posture… That's Maria for you.) 
 (What a body… I love Russian women!) 
 (What pretty golden hair……) 
@@ -385,7 +385,7 @@ You're hiding something, I know it. Something you can't tell me… What a shame.
 Can't even look me in the eye, huh? 
 No… That's not… 
 …I've had enough of this. 
-Where do you think you're going, Mr. Ogami! We're not finished here! 
+Where do you think you're going, Ogami! We're not finished here! 
 (What a slim body…) 
 (She's not good at sports, is she? But she doesn't need to be, being a genius scientist and all.) 
 (Chinese clothes? It really emphasizes her figure.) 
@@ -423,11 +423,11 @@ So why were you so… friendly with her?
 You ARE hiding something… I knew it! 
 Aaaah! You looked away! So it really was a lie! 
 No… That's not… 
-Forget it! Uncle Ichi, you meanie! 
-Where are you going, uncle Ichi? It's rude to leave in the middle of a conversation! 
+Forget it! Mon Frère, you meanie! 
+Where are you going, Mon Frère? It's rude to leave in the middle of a conversation! 
 (The figure of a warrior. Befitting of the successor to Kirishima Karate.) 
 (She's so big, but not a gram of fat on her body… Impressive!) 
-Cut it out, commander! Didn't I tell you not to stare at me like that? 
+Cut it out, Boss! Didn't I tell you not to stare at me like that? 
 Ah… sorry. 
 (Whoa…) 
 Hey, hey… What are you looking at? 
@@ -435,7 +435,7 @@ Oh, I'm sorry!
 (…) 
 What…? 
 No, I… I was just fascinated. 
-Do you think this is the time for stuff like that? Get a grip, commander! 
+Do you think this is the time for stuff like that? Get a grip, Boss! 
 S-sorry… (She makes me feel like a naughty schoolboy.) 
 (Even her hair is wild and independent.) 
 (As always, with her bandana. That's part of her very own fashion style, I guess.) 
@@ -467,29 +467,29 @@ Erm… That's…
 You… You can't even tell me? OK, I've had enough! 
 K-Kohran, please… 
 Erm… That's… 
-Uncle Ichi… I hate you! 
+Mon Frère… I hate you! 
 I-Iris, please… 
 Erm… That's… 
 …I understand now! That's just the type of person you are! 
 K-Kanna, please… 
 Ah… 
 I'm right, aren't I? 
-I really can't imagine why Ms. Ayame would take any interest in someone like you! 
+I really can't imagine why Ayame would take any interest in someone like you! 
 Seems like you're a real challenger, boss. 
-But I really wouldn't think Ms. Ayame would accept someone like you… 
+But I really wouldn't think Ayame would accept someone like you… 
 Not a doubt about it! I feel real sorry for Maria, too… 
 Seems like you're a real challenger, boss. 
 Not a doubt about it! I feel real sorry for Maria, too… 
-I really can't imagine why Ms. Ayame would take any interest in someone like you! 
+I really can't imagine why Ayame would take any interest in someone like you! 
 Seems like you're a real challenger, boss. 
-But I really wouldn't think Ms. Ayame would accept someone like you… 
-I really can't imagine why Ms. Ayame would take any interest in someone like you! 
+But I really wouldn't think Ayame would accept someone like you… 
+I really can't imagine why Ayame would take any interest in someone like you! 
 I feel sorry for Kohran. 
-But I really wouldn't think Ms. Ayame would accept someone like you… 
-I really can't imagine why Ms. Ayame would take any interest in someone like you! 
+But I really wouldn't think Ayame would accept someone like you… 
+I really can't imagine why Ayame would take any interest in someone like you! 
 Seems like you're a real challenger, boss. 
 But it really seems to be true. 
-I really can't imagine why Ms. Ayame would take any interest in someone like you! 
+I really can't imagine why Ayame would take any interest in someone like you! 
 Seems like you're a real challenger, boss. 
 Why… What did I… 
 Where should we go? I… I don't know… 
@@ -512,17 +512,17 @@ Who… Who am I?
 A red moon? What an ominous night. But now I should check the basement… 
 I guess everything's fine downstairs… 
 Hm? 
-Hm? Oh, Ms. Ayame! 
+Hm? Oh, Ayame! 
 …… 
 Wh-what's the matter?n 
 Uh… *sniff* Uh! 
-Ms. Ayame! What happened? Are you okay? 
+Ayame! What happened? Are you okay? 
 Uh… Uhhh… 
 What… What happened? …Whoa! 
 Whoa! …U-ugh! 
 Glglglglgl… 
-Ms… Ms. Ayame! …Ugh. 
-Gah… Whaaaa! M-Ms. Ayame… 
+Ms… Ayame! …Ugh. 
+Gah… Whaaaa! M-Ayame… 
 Gah… ugh… can't breathe… 
 Ms… Ayame… Please stop… 
 Guah… *cough* 
@@ -534,7 +534,7 @@ Ms… Ayame… Please stop…
 Uhh… 
 Hmphehehe… 
 … 
-Ms. Ayame… It's me… 
+Ayame… It's me… 
 …! 
 I'm… sorry… Are you OK… Ogami? I… I… 
 N-no… *cough* I'm… I'm fine… Just tell me… what happened? 
@@ -542,75 +542,75 @@ Please, Ogami… Hold me… Hold me tight.
 Wha…? 
 Please… right now…! 
 Ask her what happened. <br> Put your arms around her. 
-Ms. Ayame… What's going on? 
+Ayame… What's going on? 
 I don't know… I… Who… 
 Huhuhu… Hehehe… 
-Ms. Ayame…? …Whoa! 
+Ayame…? …Whoa! 
 Tighter… please… 
 … 
-Ms… Ms. Ayame… 
+Ms… Ayame… 
 Uh… 
-(He didn't understand how I feel… Where did you go, Mr. Ogami?) 
+(He didn't understand how I feel… Where did you go, Ogami?) 
 (He must be doing his rounds in the basement…) 
-(Lieutenant… What are you hiding? What could it be?) 
+(Ensign… What are you hiding? What could it be?) 
 (He must be doing his rounds in the basement…) 
-(Mr. Ogami… What are you hiding from us?) 
+(Ogami… What are you hiding from us?) 
 (He must be doing his rounds in the basement…) 
 (Boss… He didn't even care how I feel…) 
 (He must be doing his rounds in the basement…) 
-(Uncle Ichi… Where are you?) 
+(Mon Frère… Where are you?) 
 (Maybe in the underground storage room?) 
 (Why would he have secrets from me?) 
 (He must be doing his rounds in the basement…) 
 Huh! What!? 
-Mr. Ogami! 
-Lieutenant!?n 
-Lieutenant!? 
+Ogami! 
+Ensign!?
+Ensign!? 
 Huh! What!? 
-Mr. Ogami! 
+Ogami! 
 Wh-what!? 
 Boss! 
 What's…!? 
-Uncle Ichi! 
+Mon Frère! 
 Wh-what!? 
-Commander! 
+Boss! 
 Guahaha… 
-Ms. Ayame! Please stop! 
+Ayame! Please stop! 
 …Uhhh. 
 Gah… *cough, cough* 
-Are you OK, Mr. Ogami? 
+Are you OK, Ogami? 
 I'm fine, don't worry! But you must give the dispatch order! Go! …I'll follow right behind you. 
 B-but…! 
 Please, just go! I'll explain later! 
 Y-yes! 
 Understood! But you have to come too! 
 Yes, I'll be right behind you… 
-(Ms. Ayame… The underground storage room? But… why?) 
+(Ayame… The underground storage room? But… why?) 
 Guahaha… 
-Ms. Ayame! Stop it, will you! 
+Ayame! Stop it, will you! 
 …Uhhh. 
 Gah… *cough, cough* 
-Are you OK, Lieutenant? 
+Are you OK, Ensign? 
 I'm fine, don't worry! But you must give the dispatch order! Go! …I'll follow right behind you. 
 B-but…! 
 Please, just go! I'll explain later! 
-Understood! But you have to come too, Lieutenant! 
+Understood! But you have to come too, Ensign! 
 Yes, I'll be right behind you… 
-(Ms. Ayame… The underground storage room? But… why?) 
+(Ayame… The underground storage room? But… why?) 
 Guahaha… 
-Ms. Ayame! Please stop! 
+Ayame! Please stop! 
 …Uhhh. 
 Gah… *cough, cough* 
-Are you OK, Mr. Ogami? 
+Are you OK, Ogami? 
 I'm fine, don't worry! But you must give the dispatch order! Go! …I'll follow right behind you. 
 B-but…! 
 Please, just go! I'll explain later! 
 Y-yes! 
 Understood, but you have to come too! 
 Yes, I'll be right behind you… 
-(Ms. Ayame… The underground storage room? But… why?) 
+(Ayame… The underground storage room? But… why?) 
 Guahaha… 
-Ms. Ayame! What're you doing?! 
+Ayame! What're you doing?! 
 …Uhhh. 
 Gah… *cough, cough* 
 Everything all right, boss? 
@@ -620,68 +620,68 @@ Please, just go! I'll explain later!
 Okay, boss! 
 Please don't take too long! 
 Yes, I'll be right behind you… 
-(Ms. Ayame… The underground storage room? But… why?) 
+(Ayame… The underground storage room? But… why?) 
 Guahaha… 
 Auntie Ayame! What are you doing? 
 …Uhhh. 
 Gah… *cough, cough* 
-Are you OK, uncle Ichi? 
+Are you OK, Mon Frère? 
 I'm fine, don't worry! But you must give the dispatch order! Go! …I'll follow right behind you. 
 B-but…! 
 Please, just go! I'll explain later! 
 O-okay! 
-Please hurry, uncle Ichi! 
+Please hurry, Mon Frère! 
 Yes, I'll be right behind you… 
-(Ms. Ayame… The underground storage room? But… why?) 
+(Ayame… The underground storage room? But… why?) 
 Guahaha… 
-Ms. Ayame! What are you doing? 
+Ayame! What are you doing? 
 …Uhhh. 
 Gah… *cough, cough* 
-Are you OK, commander? 
+Are you OK, Boss? 
 I'm fine, don't worry! But you must give the dispatch order! Go! …I'll follow right behind you. 
 B-but…! 
 Please, just go! I'll explain later! 
 Y-yes! 
-Hurry, commander! 
+Hurry, Boss! 
 Yes, I'll be right behind you… 
-(Ms. Ayame… The underground storage room? But… why?) 
+(Ayame… The underground storage room? But… why?) 
 What! 
 What's going on? 
 What! 
-Lieutenant… What's going on here? 
+Ensign… What's going on here? 
 What!? 
-Commander! What on earth… 
+Captain! What on earth… 
 What! 
 What's going on here…? 
 What!? 
-Uncle Ichi… 
+Mon Frère… 
 What!? 
 What's going on here? 
 Oh! The enemy!… 
 … 
-Mr. Ogami… 
+Ogami… 
 Oh! The enemy!… 
 …… 
-Lieutenant… 
+Ensign… 
 Oh! The enemy!… 
 … 
-Commander… 
+Captain… 
 Oh! The enemy!… 
 … 
 Boss… 
 Oh! The enemy!… 
 … 
-Uncle Ichi… 
+Mon Frère… 
 Oh! The enemy!… 
 …… 
-Commander… 
-Ms. Ayame! 
+Boss… 
+Ayame! 
 O-Ogami… I'm… sorry… I… 
-Ms. Ayame… What on earth happened? Are you okay? 
+Ayame… What on earth happened? Are you okay? 
 I'm sorry, Ogami… But now, please… the enemy! 
 B-but… 
 Please, Ogami… Right now… I… 
-Ms. Ayame… 
+Ayame… 
 I'm fine, please go… 
 …Yes. 
 Take this, Ogami… 
@@ -693,7 +693,7 @@ An… An order? But that's… Why?
 I beg you… You're the only one who can do this for me… 
 Now go, Ogami! 
 A-Ayame… 
-Lieutenant Ogami, snap out of it! Engage the enemy! 
+Ensign Ogami, snap out of it! Engage the enemy! 
 Y-yes! 
 Uh… 
 No… No, no, no… 

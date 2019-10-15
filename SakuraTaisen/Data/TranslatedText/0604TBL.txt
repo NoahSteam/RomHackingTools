@@ -1,31 +1,31 @@
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
-Unused
+﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking...
+It's a photo of Sumire. This is a side of her you don't see too often.
+It's a photo of Maria. ...She's lost in thought and looks kind of sad...
+A photo of Kanna. She looks strong and reliable. I can't wait to meet her.
+A photo of Iris. She's surrounded by flowers and flashing a radiant smile.
+A photo of Kohran. She's looking pretty in profile with her face dyed red by the evening sun.
+A letter given to me by a customer. I was asked to give it to Sumire. I have a bad feeling about this...
+Maria's pistol. This may help me escape from here...
+A hair ornament. It's decorated with flowers and looks very elegant.
+A pretty pendant. The delicate workmanship is gorgeous.
+A hairpin for use in a traditional bun hairstyle. It would complement a formal outfit well.
+This key will let me enter rooms I couldn't before.
+I found this in a bedroom on the second floor. I can use it to access the back room.
+A teacup Iris asked me to get for her. It has a very stylish design.
+This is the matchbox Iris asked for. Its logo is quite colorful.
+A knife Iris asked me to get for her. Just a normal utensil you'd use during a meal.
+A prop sword and shield used onstage. They're well-made and look just like the real thing.
+A prop crown used onstage. It's well constructed and incredibly detailed.
+A wig and costume used onstage. I wonder what kind of act could use a flashy outfit like this?
+A photo of Sakura in her swimsuit. Wow, this is really something. I'm gonna treasure this.
+A photo of Sumire in her stage costume. Her distinctive makeup really makes an impact.
+It's a photo of Maria on stage in the military uniform from "For Love"... She's a beautiful woman disguised as a man.
+A photo of Kanna in her training gear. Catching her in a private moment like this feels surprisingly intimate.
+A photo of Iris in her swimsuit. She's holding a rubber ring and looks ready to have some fun. How cute.
+A photo of Kohran. I don't get to see her with her braids undone very often. It's a nice look.
+A photo of Ayame in a traditional outfit. I hope she'll always be as happy and content as she is here.
+Ayame's gun. Why...? Why did it have to turn out like this...?
+Jean-Paul the teddy bear. Iris's best friend. She always carries him with her and takes good care of him.
 (…If you look closely, she's still wearing her stage hairdo.) 
 (…She must have come here in a big hurry after the play ended.) 
 (As always, that's some wild hair.) 
@@ -39,9 +39,9 @@ Unused
 (No! I can't believe I'm staring at Kanna's chest while she's upset…What am I doing?!) 
 (O-oh nooo! My eyes are drawn like a magnet to her breasts!) 
 Captain…What exactly are you looking at?! 
-Commander! You're too late… Gnnnnh… C-c-cold water…! 
+Captain! You're too late… Gnnnnh… C-c-cold water…! 
 Of course, it's right here. That's why I can't stand people who don't know their manners. 
-How's that, commander? The secrets of 4 millennia of Chinese traditions! …And hep! 
+How's that, Captain? The secrets of 4 millennia of Chinese traditions! …And hep! 
 I expected this kind of thing, so I prepared for it. Aaaaand, again! 
 Applaud. <br> Give a level-headed critique. <br> Break into laughter. 
 Wow! Way to go, Kohran! When did you learn that?! 
@@ -66,7 +66,7 @@ What on earth are the two of you on about?
 In China, plate spinning is an officially certified party trick. 
 So yeah, you're looking at a real party trick! 
 Is that… Monkey spinning?! Incredible! 
-What are you sayin', boss?! It's plate spinning, not monkey spinning! 
+What are you sayin', Chief?! It's plate spinning, not monkey spinning! 
 …Huh? It's not? 
 Of course not! If you tried spinning a monkey on a stick, animal rights organizations would come after you! 
 Y-you're right… I WAS thinking it sounded kind of strange. 
@@ -94,7 +94,7 @@ But you were a spectacular success! The children in the front row cried like cra
 What was that?! 
 Oh… nothing at all. 
 Hahaha! It's great how we can laugh about something like that in our season's end party! 
-Open your mouth, uncle Ichi! 
+Open your mouth, Mon Frère! 
 Aaaaaah… 
 Hehehe… Next, I'll grab some juice. …Oh? 
 There's no juice left! 
@@ -114,7 +114,7 @@ I just hope Sakura won't be mad at us…
 Nah, we'll just apologize to her. It's just a prank, after all… 
 You're really something, all of you… 
 That's a bit much… She comes home in the middle of that rain shower, and we play a trick like that on her? 
-You're absolutely right, commander. Dressing up as ghosts? What are we, children? 
+You're absolutely right, captain. Dressing up as ghosts? What are we, children? 
 … 
 You can't be serious, all of you! She's out shopping in that rain, don't you feel sorry for her? 
 Dressing up as ghosts? What are we, children? 
@@ -197,7 +197,7 @@ We cannot let Teito, which we build with our own blood, sweat and tears, fall in
 We must prevent their plan from coming to fruition, no matter the cost. 
 Yes, sir! 
 The steam processor predicts that their next target will be Hibiya Park. 
-Lieutenant Ogami, you and the Flower Division are to prepare for battle and get ready to intervene! 
+Ensign Ogami, you and the Flower Division are to prepare for battle and get ready to intervene! 
 Roger, sir! 
 Destroying Teito with a magical force field… The Black Web has truly been weaving a diabolical plan. 
 I have to get the Flower Division ready for battle. 
@@ -222,10 +222,10 @@ T-the thunder god… is going to take me away!
 What? 
 Sakura, are you serious? 
 Give me a break. I wouldn't have taken you for a scaredy-cat. 
-Lieutenant Ogami, Lieutenant Ogami. This is General Yoneda. Please report to the command room immediately. 
-Lieutenant. The general wants to see you. We have to hurry to the command room. 
-Lieutenant. Please leave this to me. 
-If she's that scared of the God of Thunder… I wonder how she could ever ride a Kobu! 
+Ensign Ogami, Ensign Ogami. This is General Yoneda. Please report to the command room immediately. 
+Ensign. The general wants to see you. We have to hurry to the command room. 
+Ensign. Please leave this to me. 
+If she's that scared of the God of Thunder… I wonder how she could ever ride a Koubu! 
 I'm afraid of the God of Thunder as well. 
 Sakura… She must have remembered something from her childhood days. 
 Can I… disturb you for one second? 
