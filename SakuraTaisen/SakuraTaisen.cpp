@@ -44,6 +44,7 @@ const unsigned long MaxTBLFileSize  = 0x20000;
 const unsigned long MaxMESFileSize  = 0x1A800;
 const unsigned long MaxWKLFileSize  = 0x82E00;
 const char          MaxLines        = 4;
+bool GIsDisc2 = false;
 
 const string PatchedPaletteName("PatchedPalette.BIN");
 const string PatchedKNJName("PatchedKNJ.BIN");
@@ -3167,9 +3168,9 @@ bool FixupSakura(const string& rootDir, const string& inTranslatedOptionsBmp, co
 	//***Done Patching Text Drawing Code***
 
 	//****Patch Palettes****
-	const int offsetPalette1    = 0x00053954;
+	const int offsetPalette1    = GIsDisc2 ? 0x00053a8c : 0x00053954;
 //	const int offsetPalette2    = 0x0005ADB8;
-	const int offsetLIPSPalette = 0x00053974;
+	const int offsetLIPSPalette = GIsDisc2 ? 0x00053aac : 0x00053974;
 	memcpy_s((void*)(origSakuraData.GetData() + offsetPalette1), origSakuraData.GetDataSize(), newPaletteData.GetData(), newPaletteData.GetDataSize());
 //	memcpy_s((void*)(origSakuraData.GetData() + offsetPalette2), origSakuraData.GetDataSize(), newPaletteData.GetData(), newPaletteData.GetDataSize());
 	memcpy_s((void*)(origSakuraData.GetData() + offsetLIPSPalette), origSakuraData.GetDataSize(), newPaletteData.GetData(), newPaletteData.GetDataSize());
@@ -3186,7 +3187,7 @@ bool FixupSakura(const string& rootDir, const string& inTranslatedOptionsBmp, co
 
 	//Read in original options image
 	const unsigned long origOptionsCompressedSize  = 1256;
-	const unsigned int  origOptionsOffset = 0x0005AE38;
+	const unsigned int  origOptionsOffset = GIsDisc2 ? 0x0005AF70 : 0x0005AE38;
 	char* pOriginalOptionsImageData = new char[origOptionsCompressedSize];
 	memcpy_s(pOriginalOptionsImageData, origOptionsCompressedSize, (void*)(origSakuraData.GetData() + origOptionsOffset), origOptionsCompressedSize);
 	
@@ -3239,46 +3240,8 @@ bool FixupSakura(const string& rootDir, const string& inTranslatedOptionsBmp, co
 
 	//Patch palette
 	//Options image palette
-	memcpy_s(pNewSakuraData + 0x0005AD98 + optionsSizeDiff, newSakuraLength - 0x0005AD98 + optionsSizeDiff, patchedOptionsImage.mPalette.GetData(), patchedOptionsImage.mPalette.GetSize());
-
-	//Fixup pointers after the options image
-	/*
-	for(unsigned long k = 0x00035240; k < newSakuraLength; ++k)
-	{
-		const unsigned long origK = k - optionsSizeDiff;
-		
-		/*
-		if( (origK >= 0x0005629C && origK <= 0x000562BC) || (origK >= 0x0005880A && origK <= 0x00058FBC) || (origK >= 0x0005ADAC && origK <= 0x0005b328) || (origK >= 0x0005F148 && origK <= 0x0005FB83) || 
-			(origK >= 0x0005B329 && origK <= 0x0005FA19) || (origK >= 0x00052D2F && origK <= 0x000539AD) || (origK >- 0x000553DD && origK <= 0x0005540D) || (origK >= 0x0005873B && origK <= 0x0005900D) ||
-			(origK >= 0x0005AD7D && origK <= 0x0005B329) )
-		{
-			continue;
-		}*/
-
-	/*
-		unsigned int possiblePointer = *((unsigned int*)&pNewSakuraData[k]);
-		possiblePointer = SwapByteOrder(possiblePointer);
-
-		if( possiblePointer == 0x06060606 || possiblePointer == 0x06060607 || possiblePointer == 0x06060707 || possiblePointer == 0x06060601 || possiblePointer == 0x06060406 || possiblePointer == 0x06060106 || //0x06060106
-			possiblePointer == 0x06060605 || possiblePointer == 0x06060506 || possiblePointer == 0x06060602 || possiblePointer == 0x06060206 || possiblePointer == 0x06060603 || possiblePointer == 0x06060306 ||
-			possiblePointer == 0x06060600 || possiblePointer == 0x06060001 || possiblePointer == 0x06054D70)
-		{
-			continue;
-		}
-
-		if( !(possiblePointer > 0x0605EE38 && possiblePointer < 0x06063A2A) )
-		{
-//			if( possiblePointer != 0x060EC300 && possiblePointer != 0x060ef000 && possiblePointer != 0x060f3000 && possiblePointer != 0x060F4000 && possiblePointer != 0x060f5800 && possiblePointer != 0x060f6000 )
-			continue;
-		}
-
-		unsigned int newAddress = possiblePointer + optionsSizeDiff;
-		newAddress = SwapByteOrder(newAddress);
-		memcpy_s(pNewSakuraData + k, newSakuraLength - k, &newAddress, sizeof(newAddress));
-
-		printf("Fixed Sakura: Old: 0x%08x New: 0x%08x LogoIndex: 0x%08x\n", possiblePointer, SwapByteOrder(newAddress), k);
-	}*/
-	//****Done Patching Options Image****
+	const int optionsPaletteOffset = GIsDisc2 ? 0x0005aed0 : 0x0005AD98;
+	memcpy_s(pNewSakuraData + optionsPaletteOffset + optionsSizeDiff, newSakuraLength - optionsPaletteOffset + optionsSizeDiff, patchedOptionsImage.mPalette.GetData(), patchedOptionsImage.mPalette.GetSize());
 
 	//const unsigned short tileSize  = (OutTileSpacingY << 8) + (OutTileSpacingX/8);
 
@@ -3288,7 +3251,7 @@ bool FixupSakura(const string& rootDir, const string& inTranslatedOptionsBmp, co
 	//***Patch Dialog Options Menu***
 	{
 		const unsigned long origDialogOptionsCompressedSize = 376;
-		const unsigned int origDialogOptionsOffset = 0x00059700;
+		const unsigned int origDialogOptionsOffset = GIsDisc2 ? 0x00059838 : 0x00059700;
 
 		string translatedPausedOptionsImagePath = inTranslatedDataDirectory + string("PauseOptions.bmp");
 		BmpToSakuraConverter patchedPausedOptionsImage;
@@ -3308,7 +3271,7 @@ bool FixupSakura(const string& rootDir, const string& inTranslatedOptionsBmp, co
 	//***Game options during gameplay***
 	{
 		const unsigned long origGameOptionsCompressedSize = 601;
-		const unsigned int origGameOptionsOffset = 0x00059878;
+		const unsigned int origGameOptionsOffset = GIsDisc2 ? 0x000599b0 : 0x00059878;
 
 		string translatedImagePath = inTranslatedDataDirectory + string("GameOptions.bmp");
 		BmpToSakuraConverter patchedImage;
@@ -6929,19 +6892,6 @@ bool PatchTheaterView(const string& sakuraDirectory, const string& patchDataPath
 		return false;
 	}
 
-	/*
-	//Read in lookup table to know where the images reside in TMapSP
-	const int numLutEntries = 93;
-	SakuraLut lookupTable[numLutEntries];
-	SakuraLut patchedLookupTable[numLutEntries];
-	const unsigned int offsetToLookupTable = 0x0001EBF4;
-	fseek(pSakuraFile, offsetToLookupTable, SEEK_SET);
-	fread(lookupTable, sizeof(lookupTable), 1, pSakuraFile);
-
-	//Create a copy for the patched version of the table.  We'll modify that below.
-	memcpy_s(patchedLookupTable, sizeof(patchedLookupTable), lookupTable, sizeof(lookupTable));
-	*/
-	
 	//Read in lookup table to know where the images reside in TMapSP
 	SakuraLut* lookupTable        = new SakuraLut[inNumLutEntries];
 	SakuraLut* patchedLookupTable = new SakuraLut[inNumLutEntries];
@@ -6959,43 +6909,6 @@ bool PatchTheaterView(const string& sakuraDirectory, const string& patchDataPath
 	{
 		return false;
 	}
-
-	/*
-	//Convert it to the SakuraTaisen format
-	PaletteData sakuraPalette;
-	sakuraPalette.CreateFrom32BitData(firstImage.mBitmapData.mPaletteData.mpRGBA, firstImage.mBitmapData.mPaletteData.mSizeInBytes, false);
-
-	//Fix up palette
-	//First index needs to have the transparent color, in our case that's white
-	int indexOfAlphaColor = -1;
-	const unsigned short alphaColor = 0x4629; //In little endian order
-	for(int i = 0; i < 16; ++i)
-	{
-		assert(i*2 < sakuraPalette.GetSize());
-
-		const unsigned short color = *((short*)(sakuraPalette.GetData() + i*2));
-		if( color == alphaColor )
-		{
-			const unsigned short oldColor0 = *((unsigned short*)sakuraPalette.GetData());
-			sakuraPalette.SetValue(0, alphaColor);
-			sakuraPalette.SetValue(i, oldColor0);
-			indexOfAlphaColor = i;
-			break;
-		}
-	}
-
-	if( indexOfAlphaColor == -1 )
-	{
-		printf("Alpha Color not found.  Palette will not be correct. \n");
-		indexOfAlphaColor = 0;
-	}
-
-	//Write out new palette
-	const unsigned int tmapSpPaletteAddress = 0x00056b1c;
-	fseek(pSakuraFile, tmapSpPaletteAddress, SEEK_SET);
-	fwrite(sakuraPalette.GetData(), sakuraPalette.GetSize(), 1, pSakuraFile);
-	//***Done Creating the palette***
-	*/
 
 	//Address of first image in TMapSP
 	const int firstPatchedImageNum = atoi(patchedImages[0].mNoExtension.c_str());
@@ -7115,7 +7028,7 @@ bool PatchTheaterView(const string& sakuraDirectory, const string& patchDataPath
 			//Empty room image goes into sakura file
 			if( bIsEmptyRoomImage )
 			{
-				const unsigned int emptyMapImageAddress = 0x00058d10;
+				const unsigned int emptyMapImageAddress = GIsDisc2 ? 0x00058e48 : 0x00058d10;
 
 				//Save the patched lookup table in the SAKURA file
 				fseek(pSakuraFile, emptyMapImageAddress, SEEK_SET);
@@ -7170,12 +7083,12 @@ bool PatchTMapSP(const string& sakuraDirectory, const string& patchDataPath)
 	const string patchedTMapDir     = patchDataPath + string("\\TMapSP\\");
 	const string patchedFukagawaDir = patchDataPath + string("\\Fukagawa\\");
 
-	if( !PatchTheaterView(sakuraDirectory, patchedTMapDir,     93, 0x0001EBF4, "SAKURA1\\TMAPSP.BIN", 0xd000) )
+	if( !PatchTheaterView(sakuraDirectory, patchedTMapDir,     93, 0x0001EBF4, "SAKURA1\\TMAPSP.BIN", 0xd000) ) //0x0001ecc
 	{
 		return false;
 	}
 
-	if( !PatchTheaterView(sakuraDirectory, patchedFukagawaDir, 67, 0x00020760, "SAKURA1\\FUKAGAWA.BIN", 0x6d3f) )
+	if( !PatchTheaterView(sakuraDirectory, patchedFukagawaDir, 67, 0x00020760, "SAKURA1\\FUKAGAWA.BIN", 0x6d3f) ) //0x00020778
 	{
 		return false; 
 	}
@@ -7657,7 +7570,7 @@ bool PatchMainMenu(const string& inPatchedSakuraRootDirectory, const string& inT
 	compressor.CompressData((void*)translatedData.GetData(), (numCharactersInFontSheet*16*8), PRSCompressor::kCompressOption_FourByteAlign);//translatedData.GetDataSize() - (numCharactersInFontSheet*16*8));
 	
 	//Compress options font sheet
-	const unsigned long optionsFontSheetOffset        = 0x0005b320;
+	const unsigned long optionsFontSheetOffset        = GIsDisc2 ? 0x0005b458 : 0x0005b320;
 	const unsigned long originalOptionsCompressedSize = 3782;
 	SakuraCompressedData optionsCompressedData;
 	optionsCompressedData.PatchDataInMemory(translatedOptionsData.GetData(), translatedOptionsData.GetDataSize(), true, false, originalOptionsCompressedSize);
@@ -7716,7 +7629,7 @@ bool PatchMainMenu(const string& inPatchedSakuraRootDirectory, const string& inT
 	}
 	icatallFileData.WriteData(0x00002800, translatedIntermediateScreenData.mpCompressedData, translatedIntermediateScreenData.mDataSize);
 
-	const unsigned long intermediateTextIndiceOffset = 0x0005f5c8;
+	const unsigned long intermediateTextIndiceOffset = GIsDisc2 ? 0x0005f700 : 0x0005f5c8;
 	const char intermediateTextIndices[36] = {0, 1, 0, 2, 0, 13, 0, 13, 0, 13, 0, 0, 
 											  0, 3, 0, 4, 0, 5, 0, 13, 0, 13, 0, 0, 
 											  0, 6, 0, 7, 0, 8, 0, 9, 0, 10, 0, 11};
@@ -9544,11 +9457,12 @@ bool PatchGame(const string& rootSakuraTaisenDirectory,
 	}
 
 	//Step 9
+	/*
 	if( !PatchSubtitles(rootSakuraTaisenDirectory, patchedSakuraTaisenDirectory, inTranslatedDataDirectory) )
 	{
 		printf("Patching Subtitles failed.\n");
 		return false;
-	}
+	}*/
 
 	//Step 10
 	if( !PatchScreens(rootSakuraTaisenDirectory, patchedSakuraTaisenDirectory, inTranslatedDataDirectory) )
@@ -9593,7 +9507,7 @@ void PrintHelp()
 	printf("FindCompressedDataInDir inDirectory uncompressedFile outDirectory\n");
 	printf("ExtractMiniGameData rootSakuraDirectory outDirectory\n");
 	printf("YabauseToMednafen yabauseFilePath outFile\n");
-	printf("PatchGame rootSakuraTaisenDirectory patchedSakuraTaisenDirectory translatedTextDirectory fontSheet originalPalette patchedTMapSpDataPath mainMenuFontSheetPath mainMenuBgndPatchedImage optionsImagePatched translatedDataDirectory extractedWklDir\n");
+	printf("PatchGame isDisc2 rootSakuraTaisenDirectory patchedSakuraTaisenDirectory translatedTextDirectory fontSheet originalPalette patchedTMapSpDataPath mainMenuFontSheetPath mainMenuBgndPatchedImage optionsImagePatched translatedDataDirectory extractedWklDir\n");
 }
 
 int main(int argc, char *argv[])
@@ -9719,18 +9633,19 @@ int main(int argc, char *argv[])
 
 		OutputDialogOrder(searchDirectory, outputFile);
 	}
-	else if( command == "PatchGame" && argc == 12 )
+	else if( command == "PatchGame" && argc == 13 )
 	{
-		const string rootSakuraTaisenDirectory    = string(argv[2]) + Seperators;
-		const string patchedSakuraTaisenDirectory = string(argv[3]) + Seperators;
-		const string translatedTextDirectory      = string(argv[4]);
-		const string fontSheet                    = string(argv[5]);
-		const string originalPalette              = string(argv[6]);
-		const string mainMenuFontSheetPath        = string(argv[7]);
-		const string mainMenuTranslatedBgnd       = string(argv[8]);
-		const string patchedOptionsImage          = string(argv[9]);
-		const string translatedDataDirectory      = string(argv[10]) + Seperators;
-		const string extractedWklDirectory        = string(argv[11]) + Seperators;
+		GIsDisc2                                  = string(argv[2]) == "1" ? true : false;
+		const string rootSakuraTaisenDirectory    = string(argv[3]) + Seperators;
+		const string patchedSakuraTaisenDirectory = string(argv[4]) + Seperators;
+		const string translatedTextDirectory      = string(argv[5]);
+		const string fontSheet                    = string(argv[6]);
+		const string originalPalette              = string(argv[7]);
+		const string mainMenuFontSheetPath        = string(argv[8]);
+		const string mainMenuTranslatedBgnd       = string(argv[9]);
+		const string patchedOptionsImage          = string(argv[10]);
+		const string translatedDataDirectory      = string(argv[11]) + Seperators;
+		const string extractedWklDirectory        = string(argv[12]) + Seperators;
 
 		PatchGame(rootSakuraTaisenDirectory, patchedSakuraTaisenDirectory, translatedTextDirectory, fontSheet, originalPalette, mainMenuFontSheetPath, mainMenuTranslatedBgnd, patchedOptionsImage, 
 				  translatedDataDirectory, extractedWklDirectory);
