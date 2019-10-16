@@ -8033,6 +8033,14 @@ bool CopyOriginalFiles(const string& rootSakuraTaisenDirectory, const string& pa
 		return false;
 	}
 
+	const string originalTMapSPFile = rootSakuraTaisenDirectory + "SAKURA1\\TMapSP.BIN";
+	const string newTMapSPFile      = patchedSakuraTaisenDirectory + "SAKURA1\\TMapSP.BIN";
+	if( !CopyFile(originalTMapSPFile.c_str(), newTMapSPFile.c_str(), FALSE) )
+	{
+		return false;
+	}
+
+
 	return true;
 }
 
