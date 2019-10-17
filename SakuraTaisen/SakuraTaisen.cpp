@@ -3557,21 +3557,21 @@ bool ParseEvtFiles(const string& sakuraRootDirectory, vector<EVTFileData>& outEv
 	FindAllSakuraText(mesFiles, mesTextFiles);
 
 	//All EVT files
-	vector<FileNameContainer> evtFiles;	
-	evtFiles.push_back( FileNameContainer("EVT01.BIN", sakura2Directory) );
-	evtFiles.push_back( FileNameContainer("EVT02.BIN", sakura2Directory) );
-	evtFiles.push_back( FileNameContainer("EVT03.BIN", sakura2Directory) );
-	evtFiles.push_back( FileNameContainer("EVT04.BIN", sakura2Directory) );
-	evtFiles.push_back( FileNameContainer("EVT05.BIN", sakura2Directory) );
-	evtFiles.push_back( FileNameContainer("EVT06.BIN", sakura2Directory) );
-	evtFiles.push_back( FileNameContainer("EVT07.BIN", sakura2Directory) );
-	evtFiles.push_back( FileNameContainer("EVT08.BIN", sakura2Directory) );
-	evtFiles.push_back( FileNameContainer("EVT09.BIN", sakura2Directory) );
-	evtFiles.push_back( FileNameContainer("EVT10.BIN", sakura2Directory) );
-	evtFiles.push_back( FileNameContainer("EVT11.BIN", sakura2Directory) );
-	evtFiles.push_back( FileNameContainer("EVT21.BIN", sakura2Directory) );
-	evtFiles.push_back( FileNameContainer("EVT22.BIN", sakura2Directory) );
-//	evtFiles.push_back( FileNameContainer("EVT27.BIN", sakura2Directory) );
+	vector<FileNameContainer> allEvtFiles;
+	GetAllFilesOfType(allSakura2Files, "EVT0", allEvtFiles);
+	GetAllFilesOfType(allSakura2Files, "EVT1", allEvtFiles);
+	GetAllFilesOfType(allSakura2Files, "EVT2", allEvtFiles);
+
+	//Remove EVT13 from the list because it has no corresponding mes file
+	const string evt13("EVT13");
+	vector<FileNameContainer> evtFiles;
+	for(const FileNameContainer& evtFileName : allEvtFiles)
+	{
+		if( evtFileName.mNoExtension != evt13 )
+		{
+			evtFiles.push_back(evtFileName);
+		}
+	}
 
 	if( mesTextFiles.size() != evtFiles.size() )
 	{
@@ -5495,8 +5495,7 @@ void ExtractFACEFiles(const string& sakuraDirectory, const string& outDirectory)
 			//Create image from uncompressed data
 			const string outFileName = subDirName + std::to_string(i) + string(".bmp");
 			const unsigned char offsetToColorData = 0x40;
-			ExtractImageFromData(uncompressedImage.mpUncompressedData + offsetToColorData, uncompressedImage.mUncompressedDataSize - offsetToColorData, outFileName, pPaletteData, numBytesInPalette, 40, 48,
-				                 1, 256, 0, false);
+			ExtractImageFromData(uncompressedImage.mpUncompressedData + offsetToColorData, uncompressedImage.mUncompressedDataSize - offsetToColorData, outFileName, pPaletteData, numBytesInPalette, 40, 48, 1, 256, 0, false, true);
 
 			delete[] pPaletteData;
 		}
