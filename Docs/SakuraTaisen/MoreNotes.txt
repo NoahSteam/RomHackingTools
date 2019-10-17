@@ -57,6 +57,7 @@ CreateTranslatedFontSheets A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\8x12.
 PatchPalettes a:\SakuraTaisen\Disc1 A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\Palette.bin A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\OutPalette.BIN a:\SakuraTaisen\PatchedData\Palettes
 PatchGameKNJ a:\SakuraTaisen\Disc1 A:\SakuraTaisen\PatchedData\TranslatedFontSheet\TranslatedKNJ.BIN a:\SakuraTaisen\PatchedData\KNJ
 FindDuplicateText A:\SakuraTaisen\ExtractedData\Disc1\Dialog a:\SakuraTaisen\ExtractedData\Disc1\Dialog\Duplicates.txt
+FindDuplicateText A:\SakuraTaisen\ExtractedData\Disc1\WKL A:\SakuraTaisen\ExtractedData\WKL\duplicates.txt
 CreateTBLSpreadsheets a:\SakuraTaisen\ExtractedData\Disc1\Dialog A:\SakuraTaisen\ExtractedData\Disc1\Dialog\Duplicates.txt a:\SakuraTaisen\Disc1\SAKURA1
 CreateMesSpreadsheets a:\SakuraTaisen\ExtractedData\Disc1\Dialog a:\SakuraTaisen\Disc1\
 CreateWKLSpreadsheets a:\SakuraTaisen\ExtractedData\Disc1\WKL A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\WKLDuplicates.txt A:\SakuraTaisen\Disc1\SAKURA2

@@ -5479,7 +5479,7 @@ void ExtractFACEFiles(const string& sakuraDirectory, const string& outDirectory)
 
 			//Create palette data
 			//Colors in the palette are in a 15 bit (5:5:5) format.  So we need to & every value by 0x7fff.
-			static const unsigned int numBytesInPalette = 256;
+			static const unsigned int numBytesInPalette = 128;
 			const char* pOriginalPaletteData             = faceFile.GetData() + offsetToData + offsetToPalette;
 			char* pPaletteData                           = new char[numBytesInPalette];
 			memset(pPaletteData, 0, numBytesInPalette);
@@ -5495,8 +5495,9 @@ void ExtractFACEFiles(const string& sakuraDirectory, const string& outDirectory)
 			//Create image from uncompressed data
 			const string outFileName = subDirName + std::to_string(i) + string(".bmp");
 			const unsigned char offsetToColorData = 0x40;
-			ExtractImageFromData(uncompressedImage.mpUncompressedData + offsetToColorData, uncompressedImage.mUncompressedDataSize - offsetToColorData, outFileName, pPaletteData, numBytesInPalette, 40, 48, 1, 256, 0, false, true);
-
+			ExtractImageFromData(uncompressedImage.mpUncompressedData + offsetToColorData, uncompressedImage.mUncompressedDataSize - offsetToColorData, outFileName, pPaletteData, 128, 40, 48, 1, 128, 0, false, false);
+			//ExtractImageFromData(uncompressedImage.mpUncompressedData + offsetToColorData, uncompressedImage.mUncompressedDataSize - offsetToColorData, outFileName, pPaletteData, numBytesInPalette, 40, 48, 1, 256, 0, false, true);
+			//ExtractImageFromData(uncompressedImage.mpUncompressedData + offsetToColorData, uncompressedImage.mUncompressedDataSize - offsetToColorData, outFileName, pPaletteData, 128, 40, 48, 1, 128, 0, false);
 			delete[] pPaletteData;
 		}
 	}
@@ -5588,7 +5589,7 @@ struct WklUncompressedData
 		{
 			const string outFileName = outDirectory + inPrefix + string("_") + std::to_string(i) + bmpExtension;
 			const char* pImageData = &mpFileData[ mpImageInfos[i].offsetBytesFromStart + headerOffset];
-			ExtractImageFromData(pImageData, mpImageInfos[i].numBytes, outFileName, pInPaletteData, inPaletteSize, mpImageInfos[i].width, mpImageInfos[i].height, 1, 16, 0, false, true);
+			ExtractImageFromData(pImageData, mpImageInfos[i].numBytes, outFileName, pInPaletteData, inPaletteSize, mpImageInfos[i].width, mpImageInfos[i].height, 1, 16, 0, false, false);
 		}
 
 		return true;
@@ -6740,7 +6741,7 @@ void ExtractWKLFiles(const string& sakuraDirectory, const string& outDirectory)
 
 				const string outFileName = outSubDirName + prefix + BMPExtension;
 				const char* pImageData   = &pWklData[miscImageHeaderEnd + imageHeader.offsetFromHeader + imageHeader.offsetFromPrevImage];
-				ExtractImageFromData(pImageData, (imageHeader.width*imageHeader.height)/2, outFileName, paletteData.mpPaletteData, paletteData.mPaletteSize, imageHeader.width, imageHeader.height, 1, 16, 0, false, true);
+				ExtractImageFromData(pImageData, (imageHeader.width*imageHeader.height)/2, outFileName, paletteData.mpPaletteData, paletteData.mPaletteSize, imageHeader.width, imageHeader.height, 1, 16, 0, false, false);
 				
 			}
 			delete[] pImageHeaders;
