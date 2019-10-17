@@ -34,13 +34,13 @@ Damned Black Web! So we didn't get all of them…?
 What…!? 
 That's…! 
 What do you want from us? 
-Ms. Ayame! 
+Ayame! 
 Let's go, everyone! We'll show them what our Koubu can do! 
 …! 
 …OK. An hour has passed by now. 
 Wow… Beautiful! 
 Yes, of course. <br> No, I was talking about you. 
-Yes, of course. That's perfect for New Year's day. 
+Yes, of course. That's perfect for New Year's Day. 
 OK, should we get going? Let's take the steam train to Meiji Shrine. 
 No, I was talking about you. 
 No, I really mean it… 
@@ -61,7 +61,7 @@ OK… How should we get to Meiji Shrine…
 Taking the steam train would be the fastest… 
 Are you serious, Boss?! We'll run there of course! 
 What?! You want to run all the way to Meiji Shrine? 
-Sure! The air is wonderful on New Year's day. It'll be a fun jog. 
+Sure! The air is wonderful on New Year's Day. It'll be a fun jog. 
 Let's go! Or do you want to be left behind? 
 Oh boy… This New Year is off to a good start… 
 Oh, really? 
@@ -86,7 +86,7 @@ You know what, Maria… You really changed a lot. You never used to talk like th
 When we first met, you used to get mad at me all the time. 
 No, no. You were right. I was so green back then. 
 I was barely knew what I was doing… 
-Nah… But anyway, this is New Year's day, remember? Let's have some fun! 
+Nah… But anyway, this is New Year's Day, remember? Let's have some fun! 
 Whoa, Kohran! Aren't we going a little too fast? 
 But… I still remember what happened when we first met, and… 
 Hey, hey! 
@@ -124,7 +124,7 @@ I don't want to lose you in the crowd, so let's hold hands.
 Isn't that why you came here? 
 You're complaining, but aren't you having fun, too? 
 Yeah, yeah… 
-Well, it's New Year's day after all… 
+Well, it's New Year's Day after all… 
 …? 
 You'll get used to it. Just give it time. 
 And… In an atmosphere like this, everyone's enjoying themselves. 
@@ -295,7 +295,7 @@ That looks fun. Do you want to try it, Captain?
 Wait, grown-ups can't play! It would be too easy for you! 
 If you want to play something, why not try the shooting stall in the back? 
 OK, bring it on! <br> …I'd rather not. 
-OK, bring it on! It's only New Year's day once a year, so let's have some fun! 
+OK, bring it on! It's only New Year's Day once a year, so let's have some fun! 
 It's my pleasure! I'll show you to the cork-shooting stall. 
 Nah, I don't feel like it. 
 No? Too bad… 
@@ -448,7 +448,7 @@ Let's go, Maria.
 Erm… 
 Hehe… You don't know, Ogami? It's fine, let's go somewhere else. 
 Sorry. 
-I've had enough of this, boss. Let's make ourselves scarce. 
+I've had enough of this, Chief. Let's make ourselves scarce. 
 Hm, this is the first time I've seen something like this. 
 What did you play as a kid? <br> This takes me back… 
 By the way, Kohran… What games did you play as a kid? 
@@ -456,14 +456,14 @@ Like I told you before, I've only played Hanafuda.
 Interesting… 
 Stalls in Japan really have the weirdest stuff. 
 This takes me back… I used to do it all the time as a kid. 
-Wow. I always thought you'd been born a full-grown adult, boss. 
+Wow. I always thought you'd been born a full-grown adult, Chief. 
 H-how do you mean? 
 I… I was only kidding! No hard feelings, eh? 
 …Really? 
 Well, erm… 
-This your first time too, boss? 
+This your first time too, Chief? 
 No, not at all! See… 
-Come on, boss. It's fine to admit you don't know anything about it. 
+Come on, Chief. It's fine to admit you don't know anything about it. 
 Sorry. 
 You like it THAT much, Mon Frère? 
 What's this, Frère? 
@@ -516,8 +516,8 @@ Hm…? No, nothing particular…
 (What should I do? If we go now, we'll be back pretty late…) 
 (We can't leave the theater unattended for so long…) 
 OK, let's go! <br> We can't leave it unattended… 
-…OK, let's go! It's New Year's day, so let's have some fun! 
-We shouldn't leave the theater unattended… New Year's day or not, we never know when we have to deploy. 
+…OK, let's go! It's New Year's Day, so let's have some fun! 
+We shouldn't leave the theater unattended… New Year's Day or not, we never know when we have to deploy. 
 (Hm… What should we do…?) 
 Sa… Sakura! 
 Er… Hi, Sakura… What a coincidence! 
@@ -635,12 +635,12 @@ Unused
 Unused
 Sorry you had to wait! 
 You mean this dress? 
-I wanted to dress in a real Japanese kimono. New Year's day only comes once a year, after all! 
+I wanted to dress in a real Japanese kimono. New Year's Day only comes once a year, after all! 
 And also… It's my first date with you, Ogami. 
 Even if you're only flattering me, that makes me happy. 
 Thank you, really. 
 Ah! The train's here! Let's get on! 
-What a crowd! So this is what New Year's day is like in Tokyo! 
+What a crowd! So this is what New Year's Day is like in Tokyo! 
 I'm so glad Tokyo is finally at peace… 
 OK… Let's go too then! 
 What a crowd… 
@@ -663,7 +663,7 @@ You're a great guy.
 Hey… Do you have to talk shop when it's just the two of us? 
 But… that's just what I like about you. 
 Come one, let's go. 
-So… this is what you do on New Year's day? Not really what I imagined. 
+So… this is what you do on New Year's Day? Not really what I imagined. 
 Hmmm, it seems so unmotivated, so lonely… 
 Oh, let's light some firecrackers! Then we'll get in the mood! 
 Really? How boring… 
@@ -723,7 +723,7 @@ S-Sakura!?
 Unused
 Unused
 Wh-wh-why is everyone here all of a sudden!? 
-Come on, boss… Where else would we go on New Year's day but the shrine? 
+Come on, boss… Where else would we go on New Year's Day but the shrine? 
 That's right! Isn't it nice for all of the Flower Division to celebrate the New Year together? 
 Well… That's it, really. 
 Phew… There's a bunch of people everywhere. Really makes me tired. 
@@ -735,7 +735,7 @@ S-Sakura!?
 Unused
 Oooh, there's Sakura! Yoohoo! 
 Why's everyone here all of a sudden!? 
-Ohohoho… Where else would we go on New Year's day but the shrine? 
+Ohohoho… Where else would we go on New Year's Day but the shrine? 
 Didn't we agree on celebrating the New Year together? 
 Not really… 
 That's right! Isn't it nice for all of the Flower Division to celebrate the New Year together? 
@@ -854,7 +854,7 @@ I never expected a day like this to come…
 To finally be able to enjoy these carefree days… 
 You're right… I could never go back to what I was like back then. 
 Oh, what am I saying? I shouldn't dwell on those old stories. 
-New Year's day in Russia? 
+New Year's Day in Russia? 
 It's not that different from Japan. 
 We get together with friends and party all night. 
 And then, when the day is dawning across the snowy fields, we turn towards it and say a prayer. 

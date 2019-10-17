@@ -214,11 +214,11 @@ Y-yes, ma'am!
 OK, I'm off then. 
 Catch some fresh air… That's some good advice, even though it came from Yoneda. 
 OK! I'll take it easy for once! 
-Ms. Ayame… 
+Ayame… 
 The manager gave me permission to go out, so I wanted to do just that… 
 Yes, and… er… 
 Come to the shrine with me? <br> So, see you around. 
-Ms. Ayame… Would you… like to go to the shrine with me? 
+Ayame… Would you… like to go to the shrine with me? 
 A-all right… 
 I see… 
 Ye-yes, ma'am…… 
@@ -394,8 +394,8 @@ I want to eat a lot, have a lot of fun… and then sleep a lot!
 Hahaha, that's just like you, Kanna! You know what they say - your first dream of the year comes true. 
 It'll come true…? 
 What kind of dream would you want to have, Boss? 
-Of a peaceful Teito. <br> Of you, Kanna. <br> I’ll have a nightmare, for sure. 
-Of a peaceful Teito. Even with the Black Web gone, this city still hasn't fully recovered. 
+Of a peaceful Tokyo. <br> Of you, Kanna. <br> I’ll have a nightmare, for sure. 
+Of a peaceful Tokyo. Even with the Hive of Darkness gone, this city still hasn't fully recovered. 
 I want everything rebuilt, so the people can forget what happened and live in peace. 
 It's not just a dream I have while I'm sleeping. It's the same when I'm awake. 
 Not bad, Boss. You really have a good heart. 
@@ -530,10 +530,10 @@ OK!
 Come on, no dilly-dallying! 
 Wa-wa-wait! Don't pull me like that, Kohran! 
 It's Ogami… Are you there, Kohran? 
-That you, boss? Come in, door's open! 
+That you, Chief? Come in, door's open! 
 How many times do I have to tell you? If it's open, you can come right in! 
 Pardon me. 
-So, what's up, boss? Can I help you with anything? 
+So, what's up, Chief? Can I help you with anything? 
 I'm a little busy, you know. If you want something, keep it snappy. 
 Listen… 
 Come visit the shrine with me. <br> …Never mind. 
@@ -541,11 +541,11 @@ Kohran, I wonder… Do you want to go visit the shrine with me?
 What? You want to go with me? 
 Hmm… I'd love to go, but… there's something I need to check. 
 What are you talking about? 
-The Kobu… Even though we call them "spirit armor", they're not indestructible. At some point, they'll break. 
-The Kobu are pretty beat up after the fight against the Black Web… 
+The Koubu… Even though we call them "spirit armor", they're not indestructible. At some point, they'll break. 
+The Koubu are pretty beat up after the fight against the Hive of Darkness… 
 In my professional opinion, they won't stand another big fight like that. 
 What!? It can't be that bad, right…? 
-Well, no need to get dramatic. We did manage to smash the Black Web to pieces. 
+Well, no need to get dramatic. We did manage to smash the Hive to pieces. 
 I just wanted to get in touch with the Flower Mansion one of these days. 
 And that's why you should ask someone else to go visit the shrine with you. I'm afraid I can't. 
 I see… That's too bad. 
@@ -559,15 +559,15 @@ Probably not, right…?
 What are you saying… Of course! Of course I'll go with you! 
 Phew… I'm glad! I'd have been really sad if you'd said no. 
 Great! We can go there on my Steam Bike! 
-Steam bike!? Ah, that thing that blew up when you first arrived here? 
+Steam Bike!? Ah, that thing that blew up when you first arrived here? 
 It's… No, it's nothing. 
-Come on, boss. Are you still asleep? 
+Come on, Chief. Are you still asleep? 
 I'm busy right now. If there's nothing you want, could you please give me some space? 
-Sorry boss, but I'm busy. If you're bored, go somewhere else. 
+Sorry Chief, but I'm busy. If you're bored, go somewhere else. 
 S-sorry. I'll see myself out. 
 Hm… Whom should I ask to visit the shrine with me? 
 Oh, Ogami! Still loitering around here? 
-Ye- yes, ma'am…… 
+Y-yes, ma'am…… 
 Get a grip! As leader of the Flower Division, you can't behave like that anymore. 
 Y-yes, ma'am! 
 Come now, invite someone and have fun at the shrine. Don't waste your youth in my office. 
@@ -628,7 +628,7 @@ Just kidding! Hohohoho… How innocent you are!
 Unused
 All right, just what I wanted to hear! Let's get out of here! 
 Hahaha! All right, let's drink and be merry! Right? 
-I really like you, boss. Come on then, show me how you celebrate New Year's Day in Tokyo. Just the two of us! 
+I really like you, Chief. Come on then, show me how you celebrate New Year's Day in Tokyo. Just the two of us! 
 This is our little secret… OK, let's go! 
 Unused
 Unused
@@ -849,7 +849,7 @@ Indecisive as ever!
 But I'm right, aren't I? Whatever you're wearing, it always suits you! 
 Ooooohohohoho! Looks like you finally learned to appreciate my beauty. 
 So, Ogami… If you're going to visit the shrine, I could accompany you. 
-You don't look very busy to me, Boss! Come on… Let's celebrate New Year's Day, just the two of us! 
+You don't look very busy to me, Chief! Come on… Let's celebrate New Year's Day, just the two of us! 
 What!? You gonna turn me down, Chief? 
 That's just… I hate you! To play with my feelings like that… 
 Boohoo… I hate you, Frère! So you don't like me after all! 

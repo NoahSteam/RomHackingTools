@@ -99,7 +99,7 @@ Once your Willpower has reached its maximum, you can use a Special Attack.
 You can also choose to accumulate Willpower, as you just saw. It also raises as you take damage. 
 Using your Special Attack will drop your Willpower to 0. 
 Wait, Sumire. Please heal Sakura. 
-Honestly, here I was all fired up for my moment in the spotlight but no, the country girl needs some help. 
+Honestly! Here I was all fired up for my moment in the spotlight, but no, the country girl needs some help. 
 Sorry for being from the country! 
 Please be aware of the limits on the number of actions you can take. 
 There is also a 'Defend' action, which will reduce incoming damage from enemy attacks. 
@@ -113,7 +113,7 @@ I need to focus!
 I'm moving out! 
 Leave it to me!! 
 Watch this, Ogami. 
-I, I'm okay… 
+I-I'm okay… 
 Thank you! 
 Get them, Ogami! 
 I'm counting on you, Ogami! 

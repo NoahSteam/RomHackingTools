@@ -56,12 +56,12 @@ I don't think we'd hold a strategy meeting in a place like this.
 I need to get down to the underground meeting room. 
 It's the manager’s office. I think he's already headed down. 
 I should head for the meeting room. 
-No answer… I doubt he's passed out drunk or anything. 
+No reply... Either he's passed out drunk, or he just isn't here. 
 Nobody here. 
 I need to head to the meeting room. 
-It's always lively when a performance is going, but the Flower Group isn't here right now. 
+It's always lively when a performance is going, but the Flower Division isn't here right now. 
 I should get to the underground meeting room. 
-I don't think there will be any adjustments here. 
+Does no one ever tidy up here? 
 I should head for the underground meeting room. 
 It always seems to be dimly lit, here… 
 I should head for the meeting room. 
@@ -155,7 +155,7 @@ Hmm… Kohran's fanbase is a bit of a mystery.
 Sometime in August, 1923… Headquarters of the Hive of Darkness 
 …… 
 …… 
-24 hours later, somewhere in the capital 
+24 hours later, somewhere in the Imperial capital 
 Kuh… It seems I can't just force my way through… 
 And here I thought it was merely a broken down old building… This power is nothing to sniff at. 
 …I suppose there is no way around it. First we must seal this place… this building… 
@@ -226,14 +226,14 @@ Alright, you two! Just get all this out of your systems!!
 Ogami! What are you saying!? 
 Sometimes it's best just to let them vent. 
 But that's crazy! 
-Nah, I agree with Ogami. When you're working with machines, you gotta know when to let them blow off some steam. 
+Nah, I agree with Chief. When you're working with machines, you gotta know when to let them blow off some steam. 
 So it might be best for Sumire and Kanna to just get all that stress and anger off their chests. 
 Back in the city, I was letting off some steam too! 
 That wasn't blowing off, that was blowing UP, Iris! You can't go around destroying parts of the city! 
 …oh, fine. 
 Ogami! You've got to say something. 
 Y-yeah… 
-Come on, be a man, Ogami. You're not gonna say anything? 
+Come on, be a man, Chief. You're not gonna say anything? 
 Looks like even Mon Frère is scared of those two. 
 Everyone, stop this at once!! Do you really think this is the time or place for this kind of nonsense!? 
 Ah… Maria. 
@@ -425,7 +425,7 @@ Though I don't think anyone could have predicted they'd get into that big of a f
 But the guests are actually eating it up. Some people come just to watch that. The kids love it too. 
 Kanna's especially popular with the kids. We'll probably have a lot of kids getting separated from her parents. 
 We're at the busiest time of year for the theater, Ogami. 
-'The Journey West' will run all summer, but after that's done we'll close for a bit. A slightly late summer break. 
+'Journey to the West' will run all summer, but after that's done we'll close for a bit. A slightly late summer break. 
 We get lost kids every year during the performances. It's always a big deal trying to track them down. 
 Do you need me for anything? 
 (She's got her scarf pinned with a brooch.) 
@@ -473,7 +473,7 @@ Huh, interesting.
 Looks like you and Sakura have been hitting it off lately, Ogami. 
 Ms. Sumire's got this aura that makes her hard to approach, but that's one of her selling points. 
 Lady Maria's popular among men AND women. Her performances are just that good. 
-It's pretty easy to see why she's so popular, though mostly just among our more elderly guests. 
+It's pretty easy to see why Iris is so popular, though mostly just among our more elderly guests. 
 Honestly… I really don't get where Ms. Kohran's popularity comes from… 
 Kanna's super popular among the kids. 
 Ogami, you can't make Iris cry anymore! 
@@ -491,9 +491,9 @@ Ogami… come on, don't stare at me like that. It's embarrassing.
 Is there something on my face? 
 Thanks for your business! Come again! 
 First Setsuna and now Rasetsu, defeated… 
-Only two of my Four Lords of Death remain… how pathetic. 
-Again, I am truly sorry. 
-However, I have but one goal! I must complete the Hexagram of Demon Invocation!! I will not balk from sacrifices!! 
+Only two of my Four Lords of Death remain… You're worthless! 
+Please forgive us... 
+However, I have but one goal! I must complete the Hexagram of Infernal Calling!! I will not balk from sacrifices!! 
 Of course… 
 Rend ye skies! Shatter ye earth! Ye tears shall be as a great river, ye blood an ocean, and offer your power! 
 Go forth, Miroku, Satan!! 

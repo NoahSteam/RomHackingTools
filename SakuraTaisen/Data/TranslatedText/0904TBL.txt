@@ -51,7 +51,7 @@ This is…
 How could this happen? 
 What… What should I do? 
 Ayame, tell me… What should I do? 
-Boss… Why did it come to this? 
+Chief… Why did it come to this? 
 Auntie Ayame looked SO scary back then… What was up with her? 
 Mon Frère… Tell me, what happened? 
 Our trusted vice commander… I refuse to believe it! If this is a dream, please wake me up… 
@@ -234,7 +234,7 @@ Fourth of April, fair weather.
 Imperial Navy Lt. Ogami Ichiro will arrive in our Ginza HQ by recommendation of Count Hanakoji. 
 Anniversary performance of "Evening of the Camellia Lady" was resounding success. Theater is in a good spot. 
 April 5th, fair, then cloudy. 
-Reports of Black Web at Ueno Park. Presumed leader is present. First real test for Flower Division. 
+Reports of Hive of Darkness at Ueno Park. Presumed leader is present. First real test for Flower Division. 
 Ensign Ogami's performance deemed "pretty good for his first try" by Yoneda. 
 May 12th, a calm Japanese spring day. 
 Kohran Li has started in the Ginza HQ. Seems enthusiastic about her work. 
@@ -263,16 +263,16 @@ July 6th, fair weather.
 Story of Iris' rampage is all over the newspapers. Yoneda in a foul mood. 
 No one is called before committee of inquiry this time. Perhaps pressure from all sides is high enough? 
 August 2nd, cloudy. 
-Thanks to reports from citizens, we know of Black Web's plans in advance for the first time. 
+Thanks to reports from citizens, we know of Hive of Darkness's plans in advance for the first time. 
 Will recommend Lt. Ogami, Sumire and Kanna as investigation team into abandoned Tsukiji mansion. 
 August 3rd, cloudy. 
 Investigation in Fukagawa is complete. Looks like I sent the right people. Lt. Ogami has proven his worth. 
 Maitreya Hosokawa said something about "enemy's plan". Must find out what it means. 
 August 29th, fair weather. 
-Steam Processor has calculated position of Black Web's HQ. 
+Steam Processor has calculated position of Hive of Darkness's HQ. 
 Feeling very uneasy the last few days. Hope that nothing bad will happen. 
 October 10th, fair weather. 
-Last month went by like a storm. At last, Teito's facilities are functional again. 
+Last month went by like a storm. At last, the capital’s facilities are functional again. 
 Lt. Ogami and Flower Division are busy preparing celebratory performance, "Flaming Touch of the Snake Woman". 
 November 23th, fair weather. 
 Today marked last performance of "Wings". Various problems arose, but Kohran did well in starring role. 
@@ -293,9 +293,9 @@ How long did I search for him?
 How long did I hold out hope he'd return? 
 I still can't forget him. How could I? You can't delete your own memories. 
 January 2nd, fair weather. 
-Aoi Satan. I can't stop thinking about that man for some reason. Is it because we fought him before? 
+Sable Satan. I can't stop thinking about that man for some reason. Is it because we fought him before? 
 No. I met him somewhere else. But when, and where? 
-Aoi Satan, leader of the Koma. He betrayed the Black Web and sneers at everything that's good and right. 
+Sable Satan, leader of the Koma. He betrayed the Hive of Darkness and sneers at everything that's good and right. 
 I just don't know. I feel like I'm on the verge of remembering, and then I get a splitting headache. 
 I just don't know. 
 January 8th, fair weather, then snow. 
@@ -359,11 +359,11 @@ Hmmm…
 On the night of the red moon, when the seal breaks, the sacred land will return with a god-machine of destruction. 
 And that god-machine will turn all the lands to ashes with the light of judgment… Thus is written in "Abandon the Gods". 
 "Abandon the Gods"…? 
-It's a book of prophecies passed down in the noblest families of Teito, along with the Pandemonium Vessel. 
+It's a book of prophecies passed down in the noblest families of the capital, along with the Pandemonium Vessel. 
 The noblest families? You don't mean… 
 Then that is… 
 Yes… The Sacred Demon Castle. 
-Seima Castle… 
+The Sacred Demon Castle… 
 "God-machine" must refer to the spirit cannon that has been rumoured since ancient times. 
 Spirit cannon? 
 Its light rends the skies and dissolves solid land into mist… allegedly. 
@@ -372,7 +372,7 @@ There's no time to spare! We must hurry to Tokyo Bay and prevent the Sacred Demo
 Yessir! 
 ! 
 What? 
-Come out of that dirty hut, dogs of Teito! 
+Come out of that dirty hut, dogs of the capital! 
 That… that voice… 
 Ayame… 
 We can't dawdle any longer… Let's go, everyone! 
@@ -400,7 +400,7 @@ I'm in front of Kohran's room…
 Kohran… She seems to have gone somewhere. 
 Who is it…? 
 Kohran… Kohran! Are you there? 
-Boss? Leave me alone for a while, will ya? 
+Chief? Leave me alone for a while, will ya? 
 …All right, got it. 
 Let's try some other place… 
 I should leave her in peace for now. 
@@ -413,7 +413,7 @@ Ensign… Please excuse me, but could you give me some time to reflect on my own
 …All right. 
 Let's try some other place… 
 Let's leave her for now. 
-This auditorium… this whole theater is like a barometer measuring the peace in Teito. And we have to keep it high. 
+This auditorium… this whole theater is like a barometer measuring the peace in the capital. And we have to keep it high. 
 Everyone seems to have gone someplace else… 
 We have to fill this room with spectators again… That's our most important mission. 
 Everyone seems to have gone someplace else… 
@@ -661,7 +661,7 @@ Mon Frère…
 I just… I don't want to be alone… 
 Can you promise me, Mon Frère? That you'll never leave me alone? 
 That you'll always… be there? 
-*sniff* Ah, boss… 
+*sniff* Ah, Chief… 
 You know me… I can't do anything right. 
 I can't shoot a gun like Maria, and I'm not strong like Kanna. 
 *sniff* The only thing I'm even remotely good is tinkering with stuff. 
@@ -669,23 +669,23 @@ I never told you this, but… I didn't even go to school.
 But still, Ayame took me in. She took care of me and made sure I got an education here in Japan. 
 She was always so good to me… But then… *sniff* 
 *sniff* How did it come to this…? 
-Can you tell me that, boss? 
+Can you tell me that, Chief? 
 *sniff* Really? 
 You're right… Gotta keep smiling! Nothing good's ever come of moping. 
-Thanks, boss. I should head back to my room and get some shut-eye. 
-OK, Captain… Good night. 
+Thanks, Chief. I should head back to my room and get some shut-eye. 
+Okay, Captain… Good night. 
 Unused
 Lies and natto are the two things I can't stand! 
-No, no… A lie is better than nothing. I really like you, boss! 
+No, no… A lie is better than nothing. I really like you, Chief! 
 OK… I should probably head back to my room. 
-B-boss… 
+C-Chief… 
 It doesn't matter… 
-That… That'd be too much. I can't ask that of you, boss… 
+That… That'd be too much. I can't ask that of you, Chief… 
 A no-good gal like me, whose only ability is to kick machines into shape… 
-That's… Boss… So you remembered? 
-Boss… 
+That's… Chief… So you remembered? 
+Chief… 
 Yeah… 
-Boss… 
+Chief… 
 Of course… If I could fly with you, you can't imagine how much I'd… 
 *sniff* It's funny, really… 
 Just being here with you like this… I already feel so much better. I wonder why that is… 

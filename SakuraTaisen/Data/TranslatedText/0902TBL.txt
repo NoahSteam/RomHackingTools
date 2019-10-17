@@ -103,7 +103,7 @@ No, it's… it's not what you think!
 Then out with it! No excuses! 
 What… What should I do? 
 Ah… Kohran… 
-Boss… 
+Chief… 
 K-Kohran… What's up? 
 …Isn't there something you've been hiding from me? 
 N-no… That's… 
@@ -121,7 +121,7 @@ No, it's… it's not what you think!
 Then what is it? Something I mustn't know? 
 What… What should I do? 
 Ah… Kanna… 
-Ensign… 
+Boss… 
 K-Kanna… What is it? 
 …What were you and Ayame doing? 
 Er… nothing at all… 
@@ -150,7 +150,7 @@ Ogami?
 Sakura… 
 …? 
 I promise I'll protect you and the rest of the Flower Division… 
-Mr… Ogami… 
+Ogami… 
 And we'll fight the Koma together! 
 …Yes! 
 To be honest… 
@@ -191,7 +191,7 @@ If it were to fall into their hands, then that could mean the end of the world.
 Wait a second! And where is that Pandemonium Vessel thing? 
 It's hidden somewhere here. Ayame and I were ordered to keep it safe, and its existence a secret. 
 …Don't you understand? I told you everything I could. 
-Boss… 
+Chief… 
 To be honest… 
 Yes…? 
 It's top secret. I was instructed not to tell anyone. 
@@ -217,14 +217,14 @@ If it were to fall into their hands, then that could mean the end of the world.
 That doesn't sound good at all… So where is it? That Pandemonium Vessel, I mean. 
 It's hidden somewhere here. Ayame and I were ordered to keep it safe, and its existence a secret. 
 …Don't you understand? I told you everything I could. 
-Boss… 
+Chief… 
 Come on… There’s some lovey-dovey stuff going on between you two, right? 
-Really now, Ensign! First Ayame, and now Ms. Sakura? Make up your mind already! 
+Really now, Ensign! First Ayame, and now Sakura? Make up your mind already! 
 Sumire… Are you mad because you're not the center of attention for once? 
 Wh-what!? 
 Come on, no need to get angry. 
 Come on… There’s some lovey-dovey stuff going on between you two, right? 
-First Ayame, and now Ms. Sumire? Seems like no one is safe from you, Ogami… 
+First Ayame, and now Sumire? Seems like no one is safe from you, Ogami… 
 Indeed. It's almost impressive… 
 …But it really IS strange. I think you're still hiding something from us. 
 Come on… There’s some lovey-dovey stuff going on between you two, right? 
@@ -294,17 +294,17 @@ What is it that you can't tell me, Ensign?
 Maybe he thinks you can't keep a secret? 
 Wh-what!? 
 Come on, no need to get angry. 
-But it IS strange, boss. What could be so important you would lie even to poor Sakura? 
+But it IS strange, Chief. What could be so important you would lie even to poor Sakura? 
 So you ARE hiding something? 
 You disappoint me, Ogami… Why can't you tell us? 
 Hey, no need to get angry. 
-But it IS strange, boss. What could be so important you would lie even to poor Sumire? 
+But it IS strange, Chief. What could be so important you would lie even to poor Sumire? 
 So you ARE hiding something? 
 What is it that you can't tell me, Ensign? 
 Maybe he thinks you can't keep a secret? 
 Wh-what!? 
 Come on, no need to get angry. 
-But it IS strange, boss. What could be so important you would lie even to poor Maria? 
+But it IS strange, Chief. What could be so important you would lie even to poor Maria? 
 So you ARE hiding something? 
 You can't even tell ME, Ensign? 
 But it really IS strange. What kind of a terrible secret could it be? 
@@ -390,7 +390,7 @@ Where do you think you're going, Ogami! We're not finished here!
 (She's not good at sports, is she? But she doesn't need to be, being a genius scientist and all.) 
 (Chinese clothes? It really emphasizes her figure.) 
 (But… This is…) 
-…What's up, boss? 
+…What's up, Chief? 
 N-no, it's nothing… 
 (Kohran's head. The pigtails really suit her.) 
 (I wonder how she'd look with open hair.) 
@@ -427,7 +427,7 @@ Forget it! Mon Frère, you meanie!
 Where are you going, Mon Frère? It's rude to leave in the middle of a conversation! 
 (The figure of a warrior. Befitting of the successor to Kirishima Karate.) 
 (She's so big, but not a gram of fat on her body… Impressive!) 
-Cut it out, Boss! Didn't I tell you not to stare at me like that? 
+Cut it out, Chief! Didn't I tell you not to stare at me like that? 
 Ah… sorry. 
 (Whoa…) 
 Hey, hey… What are you looking at? 
@@ -435,7 +435,7 @@ Oh, I'm sorry!
 (…) 
 What…? 
 No, I… I was just fascinated. 
-Do you think this is the time for stuff like that? Get a grip, Boss! 
+Do you think this is the time for stuff like that? Get a grip, Chief! 
 S-sorry… (She makes me feel like a naughty schoolboy.) 
 (Even her hair is wild and independent.) 
 (As always, with her bandana. That's part of her very own fashion style, I guess.) 
@@ -475,22 +475,22 @@ K-Kanna, please…
 Ah… 
 I'm right, aren't I? 
 I really can't imagine why Ayame would take any interest in someone like you! 
-Seems like you're a real challenger, boss. 
+Seems like you're a real challenger, Chief. 
 But I really wouldn't think Ayame would accept someone like you… 
 Not a doubt about it! I feel real sorry for Maria, too… 
-Seems like you're a real challenger, boss. 
+Seems like you're a real challenger, Chief. 
 Not a doubt about it! I feel real sorry for Maria, too… 
 I really can't imagine why Ayame would take any interest in someone like you! 
-Seems like you're a real challenger, boss. 
+Seems like you're a real challenger, Chief. 
 But I really wouldn't think Ayame would accept someone like you… 
 I really can't imagine why Ayame would take any interest in someone like you! 
 I feel sorry for Kohran. 
 But I really wouldn't think Ayame would accept someone like you… 
 I really can't imagine why Ayame would take any interest in someone like you! 
-Seems like you're a real challenger, boss. 
+Seems like you're a real challenger, Chief. 
 But it really seems to be true. 
 I really can't imagine why Ayame would take any interest in someone like you! 
-Seems like you're a real challenger, boss. 
+Seems like you're a real challenger, Chief. 
 Why… What did I… 
 Where should we go? I… I don't know… 
 What… What am I supposed to do…? 
@@ -532,7 +532,7 @@ Gaah… *cough*
 Argh… I can't… too strong… 
 Ms… Ayame… Please stop… 
 Uhh… 
-Hmphehehe… 
+Hmp-hehehe… 
 … 
 Ayame… It's me… 
 …! 
@@ -556,7 +556,7 @@ Uh…
 (He must be doing his rounds in the basement…) 
 (Ogami… What are you hiding from us?) 
 (He must be doing his rounds in the basement…) 
-(Boss… He didn't even care how I feel…) 
+(Chief… He didn't even care how I feel…) 
 (He must be doing his rounds in the basement…) 
 (Mon Frère… Where are you?) 
 (Maybe in the underground storage room?) 
@@ -569,11 +569,11 @@ Ensign!?
 Huh! What!? 
 Ogami! 
 Wh-what!? 
-Boss! 
+Chief! 
 What's…!? 
 Mon Frère! 
 Wh-what!? 
-Boss! 
+Chief! 
 Guahaha… 
 Ayame! Please stop! 
 …Uhhh. 
@@ -613,11 +613,11 @@ Guahaha…
 Ayame! What're you doing?! 
 …Uhhh. 
 Gah… *cough, cough* 
-Everything all right, boss? 
+Everything all right, Chief? 
 I'm fine, don't worry! But you must give the dispatch order! Go! …I'll follow right behind you. 
 B-but…! 
 Please, just go! I'll explain later! 
-Okay, boss! 
+Okay, Chief! 
 Please don't take too long! 
 Yes, I'll be right behind you… 
 (Ayame… The underground storage room? But… why?) 
@@ -637,12 +637,12 @@ Guahaha…
 Ayame! What are you doing? 
 …Uhhh. 
 Gah… *cough, cough* 
-Are you OK, Boss? 
+Are you OK, Chief? 
 I'm fine, don't worry! But you must give the dispatch order! Go! …I'll follow right behind you. 
 B-but…! 
 Please, just go! I'll explain later! 
 Y-yes! 
-Hurry, Boss! 
+Hurry, Chief! 
 Yes, I'll be right behind you… 
 (Ayame… The underground storage room? But… why?) 
 What! 
@@ -668,13 +668,13 @@ Oh! The enemy!…
 Captain… 
 Oh! The enemy!… 
 … 
-Boss… 
+Chief… 
 Oh! The enemy!… 
 … 
 Mon Frère… 
 Oh! The enemy!… 
 …… 
-Boss… 
+Chief… 
 Ayame! 
 O-Ogami… I'm… sorry… I… 
 Ayame… What on earth happened? Are you okay? 

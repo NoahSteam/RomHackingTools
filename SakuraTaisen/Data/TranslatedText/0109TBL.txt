@@ -36,7 +36,7 @@ I guess good memories never fade, huh?
 Say, what are you going to do with this borscht? 
 I'm planning on serving it for dinner tonight. 
 Everyone will love eating the Captain's home cooking! 
-That was fun, Ogami! Let's play again sometime. 
+That was fun, Chief! Let's play again sometime. 
 Sorry, Iris. I don't think I picked a very good outfit… 
 No no no! I love it because you picked it out, Mon Frère! 
 Next time, though, try to pick one that's a little cuter! 'Kay? 
@@ -96,7 +96,7 @@ What should I do today?
 Ahh… It's lovely outside. A perfect day to zone out in my room. 
 Yes? 
 Kohran… 
-Ogami, you lazybones… 
+Chief, you lazybones… 
 We finally have a day off! Don't you want to spend it with us? 
 Sure, I guess… 
 Good! Let's party down on our day off! 
@@ -163,7 +163,7 @@ Pardon me, Ensign… Would you care to play Koi-Koi with us?
 Captain, would you like to play Hanafuda with us on our day off? 
 Hey, boss! Wanna play Hanafuda with us? 
 Hey, Mon Frère! Come play Hanafuda with us! 
-Hey, Ogami! Come play Hanafuda with us! You know you wanna! 
+Hey, Chief! Come play Hanafuda with us! You know you wanna! 
 Sure! <br> Not right now. 
 Sure! Watch out, though, 'cause I plan to win! 
 Er, not right now… 
@@ -449,7 +449,7 @@ Bye, Maria. I'll come back later.
 Perhaps we can cook together again sometime, sir. 
 Where should I go next? 
 Hi, Kohran. I came to spend time with you. 
-Hiya, Ogami. Sorry, but I'm busy as a bee right now! 
+Hiya, Chief. Sorry, but I'm busy as a bee right now! 
 I'm developing an automated Hanafuda board called "Mr. Koi-Koi"! 
 "Mr. Koi-Koi"? 
 Can you maybe come back later? 
@@ -459,10 +459,10 @@ Kohran, it's me…
 (She's still working on her new invention…) 
 (I should try another room.) 
 Hi, Kohran. I came to spend time with you. 
-Hiya, Ogami! Want to play Hanafuda? 
+Hiya, Chief! Want to play Hanafuda? 
 Hi, Kohran. I came to spend time with you. 
 I was wondering when you'd show up! Let's play Hanafuda! 
-Hiya, Ogami! Want to play Hanafuda again? 
+Hiya, Chief! Want to play Hanafuda again? 
 Play Hanafuda <br> Maybe later 
 Play Hanafuda <br> Reminisce <br> Maybe later 
 Play Hanafuda again <br> Come back later 
@@ -474,7 +474,7 @@ That's the spirit! Game on!
 (I had fun playing Hanafuda with Kohran.) 
 (Plus, she looks kinda sultry when she plays…) 
 …… 
-…What's wrong, Ogami? 
+…What's wrong, Chief? 
 Oh, uh, um… Nothing. Hahaha! 
 Bye, Kohran. I'll come back later. 
 Alrighty! Let's play Hanafuda again sometime! 
@@ -565,7 +565,7 @@ A Rare Animal Emerges <br> A Yeti Emerges <br> A Slime Approaches
 What was Kohran doing while you were in Fukagawa? 
 Inventing <br> Rehearsing <br> Modifying the Koubu 
 How much does a photo from the Gift Shop cost? 
-30 sen <br> 50 sen <br> 70 sen 
+30 zeni <br> 50 zeni <br> 70 zeni
 What is the name of Sakura's childhood friend? 
 Takeshi <br> Takashi <br> Tsuyoshi 
 Which of the following does Sumire especially dislike? 
@@ -576,7 +576,7 @@ What is Ikki Yoneda's official army rank?
 Major General <br> Lieutenant General <br> Admiral 
 What is the name of the Magic Circle that the Tenkai invoked? 
 Hexagram of Infernal Calling <br> Heptagram of Infernal Calling <br> Octogram of Infernal Calling 
-What is Iris's last name? 
+What is Iris' last name? 
 Champagne <br> Chateaubriand <br> Jardin 
 Where did Iris run off to alone in her Koubu? 
 Tsukiji <br> Fukagawa <br> Asakusa 
@@ -629,7 +629,7 @@ Iris <br> Kohran <br> Sumire
 Who was once classmates with Yuri? 
 Sumire <br> Kanna <br> Kohran 
 What is the title of Sumire's mini-game? 
-The Flying Fish of Teito <br> The Flying Fish of Taishou <br> The Flying Fish of Fujiyama 
+The Flying Fish of Teito <br> The Flying Fish of Taisho <br> The Flying Fish of Fujiyama 
 Which room has an electric fan in it? 
 Salon <br> Night Watchman's Room <br> Backstage 
 Which of these is not one of Kohran's inventions? 

@@ -8005,41 +8005,23 @@ bool FixupSLG(const string& rootDir, const string& outDir, const string& inTrans
 
 bool CopyOriginalFiles(const string& rootSakuraTaisenDirectory, const string& patchedSakuraTaisenDirectory)
 {
-	const string originalSakuraFile = rootSakuraTaisenDirectory + "SAKURA";
-	const string newSakuraFile      = patchedSakuraTaisenDirectory + "SAKURA";
-	if( !CopyFile(originalSakuraFile.c_str(), newSakuraFile.c_str(), FALSE) )
-	{
-		return false;
+#define CopyOriginalFile(fileName)\
+	{\
+		const string originalSakuraFile = rootSakuraTaisenDirectory + fileName;\
+		const string newSakuraFile      = patchedSakuraTaisenDirectory + fileName;\
+		if( !CopyFile(originalSakuraFile.c_str(), newSakuraFile.c_str(), FALSE) )\
+		{\
+			return false;\
+		}\
 	}
 
-	const string originalLogoFile = rootSakuraTaisenDirectory + "SAKURA1\\LOGO.SH2";
-	const string newLogoFile      = patchedSakuraTaisenDirectory + "SAKURA1\\LOGO.SH2";
-	if( !CopyFile(originalLogoFile.c_str(), newLogoFile.c_str(), FALSE) )
-	{
-		return false;
-	}
-
-	const string originalIcatallFile = rootSakuraTaisenDirectory + "SAKURA1\\ICATALL.DAT";
-	const string newIcatallFile      = patchedSakuraTaisenDirectory + "SAKURA1\\ICATALL.DAT";
-	if( !CopyFile(originalIcatallFile.c_str(), newIcatallFile.c_str(), FALSE) )
-	{
-		return false;
-	}
-
-	const string originalHanaMainFile = rootSakuraTaisenDirectory + "SAKURA3\\HANAMAIN.BIN";
-	const string newHanaMainFile      = patchedSakuraTaisenDirectory + "SAKURA3\\HANAMAIN.BIN";
-	if( !CopyFile(originalHanaMainFile.c_str(), newHanaMainFile.c_str(), FALSE) )
-	{
-		return false;
-	}
-
-	const string originalTMapSPFile = rootSakuraTaisenDirectory + "SAKURA1\\TMapSP.BIN";
-	const string newTMapSPFile      = patchedSakuraTaisenDirectory + "SAKURA1\\TMapSP.BIN";
-	if( !CopyFile(originalTMapSPFile.c_str(), newTMapSPFile.c_str(), FALSE) )
-	{
-		return false;
-	}
-
+	
+	CopyOriginalFile("SAKURA");
+	CopyOriginalFile("SAKURA1\\LOGO.SH2");
+	CopyOriginalFile("SAKURA1\\ICATALL.DAT");
+	CopyOriginalFile("SAKURA3\\HANAMAIN.BIN");
+	CopyOriginalFile("SAKURA1\\TMapSP.BIN");
+	CopyOriginalFile("SAKURA1\\FUKAGAWA.BIN");
 
 	return true;
 }
@@ -9467,12 +9449,11 @@ bool PatchGame(const string& rootSakuraTaisenDirectory,
 	}
 
 	//Step 9
-	/*
 	if( !PatchSubtitles(rootSakuraTaisenDirectory, patchedSakuraTaisenDirectory, inTranslatedDataDirectory) )
 	{
 		printf("Patching Subtitles failed.\n");
 		return false;
-	}*/
+	}
 
 	//Step 10
 	if( !PatchScreens(rootSakuraTaisenDirectory, patchedSakuraTaisenDirectory, inTranslatedDataDirectory) )

@@ -26,7 +26,7 @@ It's a photo of Iris in her swimsuit. She's holding a rubber ring and looks read
 It's a photo of Kohran. I don't get to see her with her braids undone very often. It's a nice look. 
 It's a photo of Ayame in a traditional outfit. I hope she'll always be as happy and content as she is here. 
 Ayame's gun. Why…? Why did it have to turn out like this…? 
-Ms. Ayame! How is Sakura? 
+Ayame! How is Sakura? 
 We brought her straight to the infirmary… But she hasn't regained consciousness yet. 
 I see… I really wonder why she passed out… 
 Ogami… You worrying about her shows how close you two are. 
@@ -82,7 +82,7 @@ What's happening to her? <br> What's a state of trance?
 So… What's happening to her? 
 We don't have any way to wake her up currently… 
 That means the Flower Division has lost an important part of its fighting capabilities. 
-That can't be! Ms. Ayame… Please tell me that's not true! 
+That can't be! Ayame… Please tell me that's not true! 
 I'm sorry… I can't believe I'm saying this myself… 
 A state of trance? What's that? 
 It's like she's hypnotized. 
@@ -106,7 +106,7 @@ Tell the truth. <br> Dodge the question. <br> Act cheerfully.
 Sakura… seems to be in a state of trance. 
 What?! 
 …A state of trance?! 
-Ms. Sakura… 
+Sakura… 
 Hey, Kanna. What's a "state of trance"? 
 Well, er… 
 She fell asleep and doesn't wake up. 
@@ -329,7 +329,7 @@ I won't budge! We can't let you go alone, Lieutenant General!
 What!? 
 You shouldn't go meet Tenkai alone… We should all go, as the Imperial Floral Assault Troop, Flower Division! 
 And we won't go there to lay down and die. 
-The Flower Division will move out to defeat Tenkai… and to protect Teito! 
+The Flower Division will move out to defeat Tenkai… and to protect the capital! 
 Ogami… 
 Please calm down, Commander! We haven't lost yet! 
 Sakura might not be there, but the Flower Division is as strong as ever. The Koubu and the Shogei-Maru are ready! 
@@ -345,7 +345,7 @@ Did you already forget? Their weapons are not match for the Black Web…
 Plus, they've got their hands full with evacuating all the citizens. 
 No… This time, there might be no way out. They're just too many… 
 Many? How much do you think? 
-They're spilling out of seven places in Teito simultaneously. More than 1,000 at each location. 
+They're spilling out of seven places in the capital simultaneously. More than 1,000 at each location. 
 So at least 7,000, in all… 
 Damn it! There's no way we can fight them all… 
 And all that without Sakura… What should we do, Frère? 
@@ -370,35 +370,35 @@ I hate to say it… But Sumire's right. The difference in numbers is just too ov
 We'll be dead at four o'clock. 
 Hey, Frère! You already thought of something, right? Right? 
 (Iris…) 
-(Tenkai announced they'd destroy Teito at 4 in the morning. That's only… about 1 hour from now.) 
+(Tenkai announced they'd destroy the capital at 4 in the morning. That's only… about 1 hour from now.) 
 (You gotta think, Ogami. What… What should we do!?) 
-If we attack their base… <br> Strengthen Teito's defenses. 
+If we attack their base… <br> Strengthen Tokyo's defenses. 
 I know! We attack their base! We just ignore their underlings and go straight for Tenkai himself! 
-The magical force field over Teito must be his doing. So, if we strike at him… 
+The magical force field over the capital must be his doing. So, if we strike at him… 
 You're right, the force field would probably disappear! 
 One decisive strike where the enemy is the most vulnerable. That's the same strategy as Karate! 
 That seems to be the only viable strategy. 
 Yaaaay! You're the smartest, Frère! 
 Well, don't get too excited just yet. It certainly won't be easy to break through to their base… 
-How about we strengthen Teito's defenses and get out all the civilians? 
-But if Tenkai's magical force field is activated, it will probably destroy all of Teito. 
+How about we strengthen Tokyo's defenses and get out all the civilians? 
+But if Tenkai's magical force field is activated, it will probably destroy all of the capital. 
 Not everyone will get out in time. To be blunt, that's not a good plan at all. 
 …Damn it. We have to think of something better! 
 But… Everyone… Everyone's going to die!? 
-There's only one hour left… Once Tenkai's magical force field activates, the whole of Teito will be destroyed. 
+There's only one hour left… Once Tenkai's magical force field activates, the whole of Tokyo will be destroyed. 
 Wait… Doesn't that mean we just have to do something about the force field itself? 
 Yes! Ignore all the underlings and go straight for Tenkai. One decisive strike, just like in Karate! 
 Hm, one hour might just be enough time to do that. 
 …But how will we ever find out where Tenkai is? 
 Leave that to me! At times like this, the steam processor comes in handy! 
-It's hard to verify if it's Tenkai, but we can localize spiritual force and project it on a map of Teito. 
+It's hard to verify if it's Tenkai, but we can localize spiritual force and project it on a map of the capital. 
 OK, do it! 
 Yeah! Let's all gather in the Calculations Room! 
 Hehehe… Seems like we don't have to step in, Ayame. 
 Yes… He can stand on his own feet by now. 
 Yeah, not soon, and he'll have reached his full potential. Not a bad look. 
 It's been some time since we've been here. This machine is as awe-inspiring as ever. 
-OK then! I'll have it show the spiritual force over Teito as dots on a map. 
+OK then! I'll have it show the spiritual force over the capital as dots on a map. 
 That said, the steam processor can only detect location and strength of spiritual forces. 
 …Which means, it can't determine which of them is Tenkai. 
 But he'll probably be the biggest dot of the bunch. Let's take a look. 
@@ -442,7 +442,7 @@ I'll use these powers to clean the capital of all filthy Western blood…
 In no time, the glorious Tokugawa shogunate will be restored! 
 Miserable citizens of the capital! You have only one hour left to live! 
 That means I'll grant the government time until 4 in the night to disband and bow down to me! 
-As a sign of your submission, you'll hand over 10 billion from the Teito Bank and Lt. Gen. Yoneda! 
+As a sign of your submission, you'll hand over 10 billion from Teito Bank, and Lieutenant General Yoneda! 
 If you don't meet my demands, the capital’s demise will be unavoidable! Waaahahahahaha! 
 These demands are crazy… This is an outrage! We'll ignore him! 
 We can't risk the lives of all the people in the capital! What's your decision, Prime Minister? 

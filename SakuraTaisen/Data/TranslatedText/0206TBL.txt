@@ -171,7 +171,7 @@ True. We should head straight for the manager's office.
 She's not outside… though the remains of the bike she rode in on are still there. 
 Come to think of it, is it okay leaving it out there like that? 
 Yeah, no problem! After I report in and things settle down I'll come out here and fix it right up. 
-Ogami, if you get too sidetracked the guests are gonna start showing up. 
+Chief, if you get too sidetracked the guests are gonna start showing up. 
 True. We should head straight for the manager's office. 
 Hmmm… Not in the dining room. 
 Ok, I'll have to look in another room. 
@@ -187,8 +187,8 @@ Huh, so this is the galley.
 I prefer tinkering with machines over cooking if I'm being honest. 
 Is there something you need to do here, Mr. Ensign? 
 Uh no, not especially. 
-Ok then why don't we go to the manager's office. 
-Ah, Ogami. What's up? 
+Ok then, why don't we go to the manager's office? 
+Ah, Chief. What's up? 
 I was looking for you! <br> Just strolling around… <br> I snuck away from work. 
 I was looking for you! I figured it would be best to show you to the manager's office after all. 
 Cool! I was just saying hello to Yuri and Kasumi here. 
@@ -350,25 +350,25 @@ You're right. I shouldn't have said that.
 I… hmm… well… 
 Oh, sorry Mr. Ensign. That was a weird thing to ask, I guess. 
 But no need to fib, Mr. Ensign. You can always be honest with me. 
-… By the way, Mr. Ensign, do you mind if I just call you Ogami? 
+… By the way, Mr. Ensign, do you mind if I just call you Chief? 
 Of course. <br> No way! <br> Call me 'lover boy'. 
 Of course. 
 Thanks. I always have trouble calling Yoneda 'Lieutenant General' too. 
 I just love how relaxed the Flower Division of the Troupe is about things like that. 
 …What?! I kind of like being called Ensign… 
 Oh, come on! No need to fuss about a title, right? 
-All right then! Ogami it is! 
+All right then! Chief it is! 
 You know… how about you call me lover boy? 
 What are you talking about? Cut it out, ya weirdo! 
 … nice joke, though. I actually thought you were serious there for a second! Hahaha! 
 Glad that you have a sense of humor, then. I can tell we'll be getting along great! 
 Well… That's a good question… 
-Looks like it is all the same to you. Ogami it is! 
-Okay, Ogami? 
+Looks like it is all the same to you. Chief it is! 
+Okay, Chief? 
 Of… of course. 
-So shall we go inside then, Ogami? Yoneda must be waiting. 
+So shall we go inside then, Chief? Yoneda must be waiting. 
 Yes, let's go in. 
-…Ogami, where are you going? 
+…Chief, where are you going? 
 It's Ogami, I'm coming in. 
 Kohran Li, reporting back for duty! 
 Ah Kohran! Good to have you back. I hope you'll not miss the Hanayashiki Branch too much. 
@@ -379,42 +379,42 @@ Hahahahaha! Well, thank you for your service.
 I'll have Maria fill her in on all the details, so you show Kohran to her room, Ogami. 
 And after that, go to the administration office to help Kasumi. 
 …Understood! 
-I look forward to serving with you, Ogami! 
+I look forward to serving with you, Chief! 
 It was no trouble at all. <br> It was a bit rough. 
 It was no big deal. We handled it just fine. 
 … it was a bit rough. 
-Well, look at that… you're one smooth operator, aren't you, Ogami? Be careful or Sakura will get jealous. 
-Well, look at that… you're one smooth operator, aren't you, Ogami? Be careful or Sumire will get jealous. 
-Well, look at that… you're one smooth operator, aren't you, Ogami? Be careful or Maria will get jealous. 
-Well, look at that… you're one smooth operator, aren't you, Ogami? Be careful or Kanna will get jealous. 
-Well, look at that… you're one smooth operator, aren't you, Ogami? Be careful or Iris will get jealous. 
-Well, look at that… you're one smooth operator, aren't you, Ogami? Be careful or Kohran will get jealous. 
+Well, look at that… you're one smooth operator, aren't you, Chief? Be careful or Sakura will get jealous. 
+Well, look at that… you're one smooth operator, aren't you, Chief? Be careful or Sumire will get jealous. 
+Well, look at that… you're one smooth operator, aren't you, Chief? Be careful or Maria will get jealous. 
+Well, look at that… you're one smooth operator, aren't you, Chief? Be careful or Kanna will get jealous. 
+Well, look at that… you're one smooth operator, aren't you, Chief? Be careful or Iris will get jealous. 
+Well, look at that… you're one smooth operator, aren't you, Chief? Be careful or Kohran will get jealous. 
 Ah, Kohran! You have returned from the Hanayashiki Branch, I see. 
 Maria! You really DO look good in men's clothing. 
-Ogami here is showing me to my room. 
+The Chief here is showing me to my room. 
 Is that so? I'll leave her in your hands then, sir. 
 (What wonderful platinum blonde hair she has.) 
 (Maybe it is because she knows Kohran from before, but there is a warmth in her eyes I've never seen before.) 
 (… If I keep staring like that, she'll get angry.) 
-Hey Ogami, don't gape at women like that! 
+Hey Chief, don't gape at women like that! 
 … Sir. I think I already told you that you shouldn't stare at women in such a manner. 
 Gotta listen to what people say, Ogami. You deserved that one. 
 Hey Ogami, don't gape at women like that! 
-That outfit is awesome. What role are playing? 
+That outfit is awesome. What role are you playing? 
 A French soldier named Andre. 
 (But man, she really does look great in men's clothing.) 
 …Sir. Where do you think are you going with Kohran? 
 Sir. Have a good day. 
 I need to be at the stage and prepare for the show. Thank you for taking care of this for me. 
 My duty as a leader. <br> My duty as a man. 
-As a leader, that goes without saying. I'm only bringing her to her room after all. 
+As a leader, that goes without saying. I'm only bringing her to her room, after all. 
 Oh, I don't think that's the case, sir. I don't think all leaders are quite as considerate as you. 
-She's right, Ogami! You are helping me a great deal here. 
+She's right, Chief! You’re helping me a great deal here. 
 As a man, that goes without saying. If I see a woman in need, I simply have to help her. 
 Stop it, you'll make me blush. I'm not used to being treated like this. 
 But… it does make me kind of happy. 
 …… 
-…Ogami, you know you gotta say something, otherwise it isn't much of a conversation. 
+…Chief, you know you gotta say something, otherwise it isn't much of a conversation. 
 Oh… sorry… my mind wandered off there for a bit. 
 …I'm really sorry, Kohran, but the show is about to start very soon. 
 When you're ready, just come to the dressing room. I'll go ahead. 
@@ -422,7 +422,7 @@ What!? Is it really that late, already? I can't be late for my very first show.
 Huh, you'll participate in the show, even though you just arrived? 
 Don't worry. I've been a member of the Flower Division for a while now. I'm used to making stuff up as I go. 
 And besides, I only have a small role with barely any lines. Easy peasy! 
-Anyway. Thanks for showing me the way Ogami. See you later! 
+Anyway. Thanks for showing me the way, Chief. See you later! 
 So… looks like the Flower Division just got reinforcements. I can't wait to see Kohran in action. 
 Ensign~! 
 That voice… 

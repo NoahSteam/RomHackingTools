@@ -1,13 +1,13 @@
-﻿﻿It's a photo of Sakura. He's looking this way intently. Wonder what he's thinking about… 
-It's a photo of Sumire. Although he doesn't normally show it, but he's capable of making such an expression too. 
+﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking...
+It's a photo of Sumire. This is a side of her you don't see too often. 
 It's a photo of Maria. …She's lost in thought and looks kind of sad… 
 It's a photo of Kanna. Kanna's signature strength comes through clearly. 
 It's a photo of Iris. She's surrounded by flowers and flashing a radiant smile. 
 It's a photo of Kohran. She's looking pretty in profile with her face dyed red by the evening sun. 
-The letter from the customer. I was told to hand it over to Miss Sumire… hmm.. 
-Maria's gun …Isn't there any way I can use this to escape? 
+A letter given to me by a customer. I was asked to give it to Sumire. I have a bad feeling about this...
+Maria's pistol. This may help me escape from here...
 A hair ornament. It's decorated with flowers and looks very elegant. 
-A brooch. It's a beautiful piece of delicate craftsmanship. 
+A pretty pendant. The delicate workmanship is gorgeous.
 A hairpin for use in a traditional bun hairstyle. It would complement a formal outfit well. 
 Jean-Paul the teddy bear. Iris's best friend. She always carries him with her and takes good care of him. 
 This key will let me enter rooms I couldn't before. 
@@ -27,12 +27,12 @@ It's a photo of Kohran. I don't get to see her with her braids undone very often
 It's a photo of Ayame in a traditional outfit. I hope she'll always be as happy and content as she is here. 
 Ayame's gun. Why…? Why did it have to turn out like this…? 
 Sakura! Thank god you regained consciousness..! 
-Mr. Ogami… Sorry, I'm late. 
+Ogami… Sorry, I'm late. 
 Not at all! We escaped from the clutches of death thanks to you… 
 I..it looks like I was unconscious. Thought I'd never be able to open my eyes again. 
-That is… I've become used to used to your power.. that's why I can talk to you like this.. 
+That is… I've become used to your power.. that's why I can talk to you like this.. 
 Sakura… 
-Mr. O-Ogami… I… 
+O-Ogami… I… 
 Ah! It's Sakura! Everyone, Sakura is here! Come quickly! 
 …Looks like we've been found out. Just… when the two of us were finally alone. 
 We were able to make it out just by a hair's breadth. Thank god all of us are safe! 
@@ -42,16 +42,16 @@ Thank god, Sakura! With this, the whole of flower division is safe and here!
 I knew Sakura wouldn't go down with just that much. You were actually just resting weren't you? 
 Seriously… Always making us worry 
 But…Sakura, you, how did you get your consciousness back? 
-Uh…I, was actually having a dream. 
+Uh…I was actually having a dream. 
 A dream…? 
 What kind of a dream? <br> Weren't you feeling cold? 
 What kind of a dream was it? 
 More importantly, You were sleeping naked… weren't you cold? 
-Geez… Mr. Ogami! Don't tease me! Aren't you embarrassed? 
+Geez… Ogami! Don't tease me! Aren't you embarrassed? 
 Now that you mention it, Ogami… You were staring at Sakura quite intently. 
-Mr… Mr. Ogami?! 
-N-No, that's no true… Miss Ayame, don't tease and trouble me. 
-Hehe… Sorry. 
+O-Ogami?! 
+N-No, that's no true… Ayame, I’m gonna be in trouble if you tease me like that. 
+Heheh… Sorry. 
 Hey, Sakura. What kind of a dream was it? 
 Hey, Sakura. What kind of a dream was it? 
 Uh… It was nostalgic and warm… but mysterious too. 
@@ -60,18 +60,18 @@ What?! Sakura! What did you just say?
 Y-yes… There was a demon sealed behind a gate…and.. 
 Do you know something of this, Commander Yoneda? 
 Yeah… 
-Five years ago, a battle called "The Demonic War" took place.. 
-Demonic… War… 
+Five years ago, a battle called "The Kouma War" took place.. 
+Kouma… War… 
 On the one side Kouma, an ancient evil. On the other, the special Anti-Demon Unit of the Imperial infantry. 
 I established it with my old comrade Kazuma Shinguji, gathering the elite of the infantry. 
 Shinnosuke Kanzaki was also with us, the creator of the Koubu and the Shogei-Maru. 
 … 
 And of course, Ayame Fujieda, who's with us now. It was just the four of us. 
-Five years ago, we fought the Koma, who appeared in great numbers. That was the Demonic War. 
+Five years ago, we fought the Koma, who appeared in great numbers. That was the Kouma War. 
 We, the Imperial Anti-Demon Unit, used an ancient spell. 
-Thus, we managed to seal the Kouma deep in the earth under Teito. 
+Thus, we managed to seal the Kouma deep in the earth under the capital. 
 But we paid a hefty price… 
-The Kouma Wars… I never heard of it before. 
+The Kouma War… I never heard of it before. 
 Ogami… You look like you have many questions. 
 The Imperial Anti-Demon Unit…? <br> An ancient spell…? <br> Kazuma Shinguji…? 
 The Imperial Anti-Demon Unit…? <br> An ancient spell…? 
@@ -109,7 +109,7 @@ Looks like the big finale is upon as! I can't wait!
 The big decisive battle! 
 If we win this fight… We won't have to fight ever again! 
 Are you all ready? 
-Mr. Ogami! Please give the dispatch order! 
+Ogami! Please give the dispatch order! 
 Flower Division, to battle! <br> We'll return, no matter what! 
 Imperial Floral Storm Troop, Flower Division, get ready for battle! Board the Kobu and prepare for dispatch! 
 Roger! We'll board the Kobu and await drop orders! 

@@ -65,7 +65,7 @@ Six years ago… Lt. General Yoneda and the Anti-Kouma Corps managed to seal awa
 I wonder if Aoi Satan's hands have been resurrected in the city now… 
 If the Koubu isn't healed quickly… it will be real trouble for the Imperial City. 
 Yes, just a minute… 
-Ogami… sorry for comin' in so late. 
+Chief… sorry for comin' in so late. 
 …What's wrong, Kohran? 
 …I uh, got somethin' I wanna talk to ya about. Mind if I… come in? 
 …Alright. Come inside then. 
@@ -83,13 +83,13 @@ And now the Koubu are ruined… and to make matters worse, there ain't no money,
 There's just no way we could make a new Koubu at this kinda time… 
 What about a loan…? 
 …Huh!? 
-What's up, Ogami? Ya look a bit scary… 
+What's up, Chief? Ya look a bit scary… 
 Sorry… did you hear something just then? 
 Nope, I didn't hear nothin'. Maybe it was just ya imagination? 
 Maybe… 
-Ogami… what are we gonna do? 
+Chief… what are we gonna do? 
 Go and talk to Yoneda. <br> Go and talk to Ayame. 
-Ogami, there ain't nothin' we can do about the Koubu thing now. 
+Chief, there ain't nothin' we can do about the Koubu thing now. 
 We should talk to Yoneda and see if he can give us a hand somehow. 
 Until then, should we gather everyone and see if we can't figure out somethin' together? 
 Good idea. Get everyone to meet in the tactics room. 
@@ -113,10 +113,10 @@ I have a plan that should solve our problems, but it'll take some time. So, Ogam
 You do your job and put some spirit back in the Flower Division! 
 Understood. See you later. 
 The members of the Flower Division should be gathered in the command room by now. 
-I can't solve this problem alone. I'll ask Ms. Ayame for help. 
+I can't solve this problem alone. I'll ask Ayame for help. 
 …Alright. I'll go and get everyone from the Flower Division together in the tactics room. 
 Please do. 
-OK… I should go see Ms. Ayame. 
+OK… I should go see Ayame. 
 It's me, Ogami… Do you have a minute? 
 Oh, Ogami? Come right in. How can I help you? 
 I'm sorry to disturb you so late. To be honest, I need your help… 
@@ -147,13 +147,13 @@ We all need to go back to training. The Koubu are only as strong as their pilots
 The Flower Division can only become stronger if each of its members grows stronger. 
 Go back to our roots, you mean? 
 In order to stand against the Koma, we need more powerful weapons. 
-That's a tough one, boss… 
+That's a tough one, Chief… 
 … 
 Ah, yes… I asked Lieutenant General Yoneda for help with that problem. 
 All right… It seems we have to come up with a different way. 
 Captain… The fighting capabilities of the Spirit Armors grow in proportion with the abilities of their pilots. 
 Even using the same Koubu as before, if we grow stronger, we'll be much more powerful in a battle. 
-Boss! This is an important meeting, so how can you space out like that!? 
+Chief! This is an important meeting, so how can you space out like that!? 
 Yes, er… Sorry… 
 Oh boy… Are we really out of ideas? 
 …I've got a proposal. 
@@ -185,7 +185,7 @@ What about the others?
 I'll follow your orders… 
 …And you, Kohran? 
 Well… even special training isn't like flipping a switch to become stronger in a few days. 
-Different strokes for different folks. That's true for mind and body. Right, boss? 
+Different strokes for different folks. That's true for mind and body. Right, Chief? 
 Even if you think this is good for some of us, it might not be ideal for everyone. 
 But… 
 Besides, I'm busy with a new invention at the moment. 
@@ -204,7 +204,7 @@ Roger!
 I'll leave the rest to everyone's own decision. Do you agree, Captain? 
 All right, then we'll do as we see fit. 
 Yay, I can have lots of naps! 
-…Thanks, boss. 
+…Thanks, Chief. 
 Oh boy, maybe I'm out of practice? 
 Hehe… Seems like I won this time. 
 Not so fast, this isn't over! 

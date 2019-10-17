@@ -44,13 +44,13 @@ Why don't I go check somewhere else.
 I hope Sumire is in her room… 
 Guess I'll head somewhere else. 
 She doesn't seem to be here. 
-Ms. Ayame's room. I haven't been her in some time… 
+Ayame's room. I haven't been her in some time… 
 I should go somewhere else. 
-Ms. Ayame seems to be away. 
+Ayame seems to be away. 
 It's no use. I should leave. 
 Sumire seems to be gone already. 
 I didn't know about her reasons, but still… I'm afraid I was too harsh. 
-At first glance, Teito looks peaceful. People are going about their daily lifes as if nothing's wrong. 
+At first glance, the capital looks peaceful. People are going about their daily lifes as if nothing's wrong. 
 If the Koma attacked for real, they would turn this town into a living hell in an instant. 
 I really wonder what we can do against them without our Kobu. 
 The Imperial Theater was closed while everyone was away for their special training. 
@@ -202,9 +202,9 @@ She's probably still sleeping.
 I should go somewhere else. 
 I should leave for now. I wouldn't want to wake her up. 
 Yes, who is it? 
-Huh? That sounds like Ms. Ayame. 
+Huh? That sounds like Ayame. 
 Ogami? Please come in! 
-Ms. Ayame! It's great to see you again! 
+Ayame! It's great to see you again! 
 It's nice to have you back, Ogami. You look much stronger than before! 
 Thank you very much! 
 So… What brings you here? 
@@ -221,7 +221,7 @@ It's all right. Without your advice…
 I'd have given up this whole thing a long time ago. 
 …I don't think that's true. 
 You've made great progress… Soon, you won't need my advice anymore. 
-Ms… Ms. Ayame! 
+A-Ayame! 
 The Flower Division is built on all its members, and on you, Ogami! 
 …So do your best! 
 …Understood. 
@@ -254,25 +254,25 @@ I haven't been in Kohran's room in a long time…
 Let's go see the others. 
 OK! 
 It's me, Ogami… Can I come in? 
-Finally you're back, boss! I was getting impatient! 
-Whoa, it really is you, boss… 
+Finally you're back, Chief! I was getting impatient! 
+Whoa, it really is you, Chief… 
 It's good to see you, Kohran! How have you been doing? 
 Everything's peachy! 
 Let's not stand around here, get inside! 
 OK…I'm coming in. 
-Boss? Long time no see! 
+Chief? Long time no see! 
 If the door's open, you can come in anytime! 
 OK, I'm coming in. 
-We can catch up later. Can I help you with anything, boss? 
+We can catch up later. Can I help you with anything, Chief? 
 Umm… 
-How are the Kobu? <br> I wanted to see you, Kohran. 
-How are the Kobu? Did you come up with a way to repair them? 
+How are the Koubu? <br> I wanted to see you, Kohran. 
+How are the Koubu? Did you come up with a way to repair them? 
 Well, to be honest… I haven't even touched the Kobu. 
 What!? But how will we be able to fight the Koma? 
 No matter how much we trained, fighting them without our Spirit Armours would be madness! 
 …I'm not allowed to tell you anything about that. 
 I see… 
-I'm sorry, boss. That's the only explanation I can give you… 
+I'm sorry, Chief. That's the only explanation I can give you… 
 Since you're finally back, let's do something fun! …Wanna play Hanafuda? 
 Kohran… You sound very optimistic. 
 Yeah! I'm in a good mood because I've just completed the assignment old man Yoneda gave me! 
@@ -281,7 +281,7 @@ Oh, shoot! That was supposed to be a secret!
 …? 
 It's… It's nothing. Back to work! 
 I wanted to see you, Kohran. After all, we've been apart for three weeks. 
-Yep… I also really wanted to see you, boss. 
+Yep… I also really wanted to see you, Chief. 
 And… to be honest, I was a little afraid. 
 …Afraid? 
 Yeah… If those demons attacked while you were still gone… 
@@ -299,9 +299,9 @@ I should get going then… I have to say hello to everyone.
 Well… 
 Leave the room. <br> Talk to Kohran. 
 See you later, Kohran. 
-I'm glad you stopped by, boss. 
+I'm glad you stopped by, Chief. 
 Hang in there! 
-Please do your best, Kohran. You're the only one we can rely on regarding the Spirit Armours. 
+Please do your best, Kohran. You're the only one we can rely on regarding the Spirit Armor. 
 Hang in there! 
 Yeah… 
 … 
@@ -333,11 +333,11 @@ It's your dream, right? You have to build planes. For your sake, and for his…
 I'm right, aren't I? 
 Yeah… 
 If I can lend a hand, you can give me a shout anytime. 
-There's one thing I wanted to ask you, boss… 
+There's one thing I wanted to ask you, Chief… 
 What is it? 
 When my airplane is complete… Would you fly with me? 
 Of course… I'd be happy to! 
-…Thanks, boss. 
+…Thanks, Chief. 
 See you around, Kohran. 
 So you loved him… 
 Wha…? Me? 
@@ -346,21 +346,21 @@ Could you, maybe… leave me alone for a bit?
 I wanna think about it. Please… 
 …All right. 
 Kohran… 
-I'm sorry, boss. Didn't wanna bore you with my old stories… 
+I'm sorry, Chief. Didn't wanna bore you with my old stories… 
 No, not at all. 
 Could you, maybe… leave me alone for a bit? 
 I wanna think about it. Please… 
 …All right. 
-Boss…? 
+Chief…? 
 What? 
-I forgot to tell you one thing, boss… 
+I forgot to tell you one thing, Chief… 
 …? 
 He was… well, he was a lot like you. 
 Kohran… 
-See you later, boss. 
+See you later, Chief. 
 It's Ogami… 
 Come in, it's open! 
-What's up, boss? Did you say hello to everyone yet? 
+What's up, Chief? Did you say hello to everyone yet? 
 Uh, yeah… 
 We already spoke earlier, so why don't you go see the others? 
 …All right. I'll leave you to it. 
@@ -370,7 +370,7 @@ How did you spend these past three weeks?
 Hohohoho, I went to town! I treated myself to a dress, jewelry, perfume… and some really nice dinners! 
 Heh… To polish my beauty to a sheen, that's MY special training. 
 You're unbelievable! <br> I don't know what to say… <br> It looks like you succeeded. 
-You're unbelievable! What good's that gonna do for protecting Teito? 
+You're unbelievable! What good's that gonna do for protecting the capital? 
 What do you mean? 
 Sakura and the others steeled themselves in arduous training… 
 And you!? What have you achieved during that time? 
@@ -462,10 +462,10 @@ Sumire…
 You needn't worry about me. Go see Iris and Kohran instead. 
 They have been pining for your return… 
 …OK. Thank you, Sumire. 
-Ms. Ayame's room. I haven't been her in some time… 
+Ayame's room. I haven't been her in some time… 
 I should go somewhere else. 
 She doesn't seem to be here. I wonder where she could have gone. 
-It's me, Ogami. Are you there, Ms. Ayame? 
+It's me, Ogami. Are you there, Ayame? 
 Ogami? Please, come in. 
 Excuse me. 
 I suppose you're here for a strategy review? 
@@ -483,13 +483,13 @@ Everyone was looking forward to seeing you again.
 Please go see them, why don't you. 
 …Understood. 
 Hey, Maria. What's going on? 
-Looking at Teito like this sure brings back memories… I got lost in thought. 
+Looking at Tokyo like this sure brings back memories… I got lost in thought. 
 You're right… It's been three weeks. 
 …Yes. 
 Well, I'll leave you to it… Please excuse me. 
 …Maria is gone, so I should leave too. 
-OK, I should probably report to Mr. Yoneda that I'm back from my special training. 
-Mr. Yoneda… He's probably asleep. 
+OK, I should probably report to Manager Yoneda that I'm back from my special training. 
+Yoneda… He's probably asleep. 
 …Let's go to another room. I should check up on everyone from the Flower Division. 
 Zzzzz… Zzzzz… 
 It's no use. He must already be sleeping. 
@@ -498,7 +498,7 @@ Oh, Ogami! Come in, come in!
 Yessir! 
 It's good to see you again, sir! I have returned from my special training! 
 Oh… Your face looks a little more slim. Not bad, not bad. 
-Mr. Yoneda… 
+Sir… 
 What about the Kobu? <br> How are the girls doing? <br> Any news about the Koma? 
 What about the Kobu? 
 The Kobu…? I told you I'd take care of that, didn't I? 
@@ -512,7 +512,7 @@ Maria accompanied you, so… You got lucky?
 Especially… Kanna, right? 
 Especially… Iris, right? 
 Especially… Kohran, right? 
-Mr. Yoneda! Please don't make fun of me! 
+S-Sir! Please don't make fun of me! 
 Any news about the Koma? 
 Luckily, they haven't shown their faces here recently. 
 I bet they're taking an extended New Year's vacation. Wahahahaha! 
@@ -572,8 +572,8 @@ Iris' special portrait card? Here you go!
 Kanna's special portrait card? Here you go! 
 Kohran's special portrait card? Here you go! 
 …OK, just for you, I have an extra-special, secret portrait card here! 
-Ta-daaa! It's a portrait of… Ms. Ayame! 
-Wh-what's this… Why do you have portrait card of Ms. Ayame!? 
+Ta-daaa! It's a portrait of… Ayame! 
+Wh-what's this… Why do you have portrait card of Ayame!? 
 It's normally not for sale. It's very valuable, so take good care of it! 
 I hope you'll continue to buy lots of portrait cards this year! 
 I've got a different portrait card each month, so you should check back regularly! 

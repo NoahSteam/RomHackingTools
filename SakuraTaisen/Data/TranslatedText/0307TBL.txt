@@ -416,7 +416,7 @@ You're… a good guy.
 Haha… thanks. 
 Looks like Kohran already left. 
 …I shouldn't be wasting time with this. I'd better hurry and find Maria. 
-Ah, Ogami. What're you doing up at this hour? 
+Ah, Chief. What're you doing up at this hour? 
 What about you, Kohran? Weren't you nodding off in here earlier? 
 …Huh? How'd you know about that? 
 …It's crazy embarrassing you saw me like that! Hahaha, ohh man. 
@@ -424,7 +424,7 @@ You were saying something about an "airplane" in your sleep…
 Wha-? I was talking about that?! 
 Yeah… though, I didn't mean to listen in… 
 …I getcha. Eh, it was just sleep-talk, so don't worry about it. 
-Welp, I'm gonna head back to my room and get to bed for real. See ya later, Ogami. 
+Welp, I'm gonna head back to my room and get to bed for real. See ya later, Chief. 
 …Well, I'd better get going too. I need to find Maria and speak with her. 
 Hey… is that Kohran asleep over there? 
 (That's Kohran, all right. Why is she asleep in a place like this?) 
@@ -445,12 +445,12 @@ Uhnn… mm…
 Kohran. 
 Didja happen to… make a… new airplane? 
 …Airplane? Kohran… still half-asleep, I see. 
-Huh? Why… is Ogami… in the airplane? 
-…Eh?! Ogami?! 
-O-Ogami, it's you! Sorry 'bout that! I wasn't fully awake! 
+Huh? Why… is Chief… in the airplane? 
+…Eh?! Chief?! 
+C-Chief, it's you! Sorry 'bout that! I wasn't fully awake! 
 Hey, it's okay. More importantly, you'll catch a cold sleeping out here. 
 So sorry! Thanks a bundle for waking me up; you're a lifesaver! 
-Welp, I'm gonna head back to my room and get to bed for real. See ya later, Ogami. 
+Welp, I'm gonna head back to my room and get to bed for real. See ya later, Chief. 
 …Well, I'd better get going too. I need to find Maria and speak with her. 
 Oh well. I'd better carry her to her room. 
 …Huh? 
@@ -465,16 +465,16 @@ Take Kohran to her room. <br> Take her to my room.
 Okay, let's get Kohran to her room. It's pretty close by. 
 Kohran. We're at your room. Hey, Kohran, wake up. 
 Uhnn… mm… 
-Agh, Ogami?! W-why am I here? 
+Agh, Chief?! W-why am I here? 
 H-huh? This… isn't the library. It's the door to my room. 
 I found you asleep in the library, so I carried you here. 
 I figured you might catch cold otherwise… 
-Is that right? Thanks, Ogami! I owe you one. 
+Is that right? Thanks, Chief! I owe you one. 
 I got so sleepy right in the middle of my research… 
 Go ahead and turn in for the day. Don't push yourself too hard. 
-You got it… welp, goodnight Ogami. 
-Yeah, goodnight. 
-Goodnight, Kohran. 
+You got it… welp, good night, Chief. 
+Yeah, good night. 
+Good night, Kohran. 
 Well then… it's getting late. I need to hurry and find Maria. 
 Well, I'll take her to my room for now. 
 O-Ogami! And… Kohran! 

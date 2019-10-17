@@ -573,7 +573,7 @@ Are you being truthful? If you're lying, you will regret it!
 I'm not lying… you have to believe me! 
 Everyone just wait a second! I have just the right thing for this occasion. 
 What is that? 
-You'll see in just a sec! Gimme your head, Ogami. 
+You'll see in just a sec! Gimme your head, Chief. 
 Wh-what're you doing?! 
 I… Well… 
 Ogami… if you know, please tell us! 
@@ -581,7 +581,7 @@ I feel like this may be partially my fault, too…
 What do you mean? 
 Everyone just wait a second! I have just the right thing for this occasion. 
 What is that? 
-You'll see in just a sec! Gimme your head, Ogami. 
+You'll see in just a sec! Gimme your head, Chief. 
 Wh-what're you doing?! 
 What… is this?! 
 My newest invention! It's a lie detector I call "Mr. Truth". 
@@ -1181,10 +1181,10 @@ Y-you think so?
 Kanna's really popular with children. 
 I guess she's like a hero they can relate to. 
 It's Ogami… Kohran, are you there? 
-Oh, hey Ogami! Just a sec… 
+Oh, hey Chief! Just a sec… 
 Oh, drat! 
 Whoa! Wh-what is it? 
-Cough… cough… Oh… Hi, Chief… What's the matter? 
+Cough, cough… Oh… Hi, Chief… What's the matter? 
 Is everything alright, Kohran? 
 I was just in the process of finishing my latest invention… That's when you showed up… 
 I just had pulled out some wire when I got up to open the door. 
@@ -1192,7 +1192,7 @@ A-are you okay? <br> What are you making?
 A-are you okay, Kohran? That was quite an explosion. 
 Yeah, everything's fine. I'm used to things blowing up around me… 
 It's basically business as usual for me. Nothing that would bring me down. 
-OK, I have to get back to work. So excuse me, please. 
+OK, Chief, I have to get back to work. So excuse me, please. 
 Seems like she eats explosions for breakfast… Not sure whether I should be impressed or worried. 
 Anyway, I'd better get out of here. Kohran doesn't seem to be in the mood for a chat. 
 …What are you making? 
@@ -1202,8 +1202,8 @@ Well, what do you think, what for? Detecting lies of course!
 …Huh? 
 I'm sure this invention will come in handy in an emergency! 
 You never know when you're gonna need to know if someone's lying. Better be prepared. 
-OK, I have to get back to work. So excuse me, please. 
-Who knows… Maybe she's right and there really is a time when this machine will be of use. 
+OK, Chief, I have to get back to work. So excuse me, please. 
+Who knows… Maybe she's right and there really will be a time when it’ll be of use. 
 OK, I have to get back to work. So excuse me, please. 
 She's still continuing after what happened?! I guess she never learns… 
 Anyway, I'd better get out of here. Kohran doesn't seem to be in the mood for a chat. 
