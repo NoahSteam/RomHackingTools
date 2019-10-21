@@ -529,3 +529,11 @@ Read @06014594, 060145a4, 0601461a, 0601462a
 
 //Theater 2
 Found a match in FUKAGAWA.BIN @0x000069e0
+
+//MiniMaig (Kanna) Minigame
+Character data coming from around 00265140 in memory.
+
+//Font sheet is compressed in MINIMAIG.bin
+Found at: 388308
+Results:
+Found: 0005ecd4 00001500 Size: 128 CompressedSize: 9305

@@ -1451,7 +1451,7 @@ void ExtractMinigameData(const string& rootSakuraDirectory, const string& transl
 			sakuraText.ReadInStrings(miniGameFile.GetData(), textDataAddress, inNumCharactersInFontSheet);
 			sakuraText.DumpTextImages(sakuraFontSheet, mFontPaletteData, miniGameOutputDirectory);
 
-			if( !bIsCompressed )
+			if( !bIsCompressed && !pSubDirectory )
 			{
 				//Dump Logo
 				ExtractImageFromData(miniGameFile.GetData() + inFontSheetAddress + inNumCharactersInFontSheet * numBytesPerCharacter, logoWidth * 24 / 2, miniGameOutputDirectory + "bmp\\Logo.bmp",
@@ -1467,12 +1467,14 @@ void ExtractMinigameData(const string& rootSakuraDirectory, const string& transl
 
 	MiniGameDumper miniGameDumper;
 	miniGameDumper.Initialize(rootSakuraDirectory, outputDirectory, translatedDataDirectory);
-	miniGameDumper.Dump("MINICOOK", 42, 128, 0x00093568, 0x000aece4);
-	miniGameDumper.Dump("MINIMAIG", 43, 128, 0x000504B4, 0x00061e90);
-	miniGameDumper.Dump("MINISWIM", 59, 128, 0x0003b1a8, 0x00056b28);
-	miniGameDumper.Dump("MINISHOT", 43, 128, 0x00055510, 0x00080D94);
-	miniGameDumper.Dump("MINISLOT", 37, 128, 0x0006149C, 0x0007e650);
-	miniGameDumper.Dump("MINISOJI", 35, 144, 0x00064810, 0x00074cbc);
+	miniGameDumper.Dump("MINICOOK", 42,  128, 0x00093568, 0x000aece4);
+	miniGameDumper.Dump("MINIMAIG", 175, 128, 0x0005ecd4, 0x00061130, true, "Compressed");
+	miniGameDumper.Dump("MINIMAIG", 43,  128, 0x000504B4, 0x00061e90);
+
+	miniGameDumper.Dump("MINISWIM", 59,  128, 0x0003b1a8, 0x00056b28);
+	miniGameDumper.Dump("MINISHOT", 43,  128, 0x00055510, 0x00080D94);
+	miniGameDumper.Dump("MINISLOT", 37,  128, 0x0006149C, 0x0007e650);
+	miniGameDumper.Dump("MINISOJI", 35,  144, 0x00064810, 0x00074cbc);
 
 	miniGameDumper.Dump("MINIHANA", 111, 128, 0x00092210, 0x000a6b84);
 	//miniGameDumper.Dump("MINIHANA", 230, 0x000a8178, 0x000a6b82, true, "Section1"); //Compressed data for font sheet found: 000a8178 00000000 Size: 384 CompressedSize: 12625
