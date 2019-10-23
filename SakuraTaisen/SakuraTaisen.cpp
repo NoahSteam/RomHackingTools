@@ -1468,6 +1468,8 @@ void ExtractMinigameData(const string& rootSakuraDirectory, const string& transl
 	MiniGameDumper miniGameDumper;
 	miniGameDumper.Initialize(rootSakuraDirectory, outputDirectory, translatedDataDirectory);
 	miniGameDumper.Dump("MINICOOK", 42,  128, 0x00093568, 0x000aece4);
+	miniGameDumper.Dump("MINICOOK", 191, 128, 0x000a3b80, 0x000a60c0, true, "Compressed");
+
 	miniGameDumper.Dump("MINIMAIG", 175, 128, 0x0005ecd4, 0x00061130, true, "Compressed");
 	miniGameDumper.Dump("MINIMAIG", 43,  128, 0x000504B4, 0x00061e90);
 
@@ -5591,7 +5593,7 @@ struct WklUncompressedData
 		{
 			const string outFileName = outDirectory + inPrefix + string("_") + std::to_string(i) + bmpExtension;
 			const char* pImageData = &mpFileData[ mpImageInfos[i].offsetBytesFromStart + headerOffset];
-			ExtractImageFromData(pImageData, mpImageInfos[i].numBytes, outFileName, pInPaletteData, inPaletteSize, mpImageInfos[i].width, mpImageInfos[i].height, 1, 16, 0, false, false);
+			ExtractImageFromData(pImageData, mpImageInfos[i].numBytes, outFileName, pInPaletteData, inPaletteSize, mpImageInfos[i].width, mpImageInfos[i].height, 1, 16, 0, false, true);
 		}
 
 		return true;
@@ -6743,7 +6745,7 @@ void ExtractWKLFiles(const string& sakuraDirectory, const string& outDirectory)
 
 				const string outFileName = outSubDirName + prefix + BMPExtension;
 				const char* pImageData   = &pWklData[miscImageHeaderEnd + imageHeader.offsetFromHeader + imageHeader.offsetFromPrevImage];
-				ExtractImageFromData(pImageData, (imageHeader.width*imageHeader.height)/2, outFileName, paletteData.mpPaletteData, paletteData.mPaletteSize, imageHeader.width, imageHeader.height, 1, 16, 0, false, false);
+				ExtractImageFromData(pImageData, (imageHeader.width*imageHeader.height)/2, outFileName, paletteData.mpPaletteData, paletteData.mPaletteSize, imageHeader.width, imageHeader.height, 1, 16, 0, false, true);
 				
 			}
 			delete[] pImageHeaders;
@@ -9257,7 +9259,7 @@ void ExtractTiledImages(const string& rootSakuraDir, const string& outDir)
 	{
 		sprintf_s(buffer0, 1024, "%sSAKURA1\\LOAD.bin", rootSakuraDir.c_str());
 		sprintf_s(buffer1, 1024, "%sLOAD.bmp", outLoadDirectory.c_str());
-		ExtractTiledImage(buffer0, buffer1, 0x13c0);
+		ExtractTiledImage(buffer0, buffer1, 0x1380);
 
 		sprintf_s(buffer0, 1024, "%sSAKURA1\\LOAD01.bin", rootSakuraDir.c_str());
 		sprintf_s(buffer1, 1024, "%sLOAD01.bmp", outLoadDirectory.c_str());
