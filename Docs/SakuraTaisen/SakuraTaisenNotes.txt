@@ -542,6 +542,11 @@ Whenever 0008 is read, it is replaced with a kid's name.
 002652ce is first occurrence of 0008 in memory, read at 00219294 and compared with 0x08 002192b6
 
 //Cook Minigame
-Text data starting from 002aa0d0 in memory
+Text data starting from 002aa0d0 in memory.  0x000a60c0 in MiniCook.bin
 
 Font sheet is found at: 000a3b80 00000080 Size: 512 CompressedSize: 9534
+
+//Options Submenu in SAKURAFound at: 365580
+Found at: 365580
+Results:
+Found: 0005940c 00000000 Size: 14336 CompressedSize: 429

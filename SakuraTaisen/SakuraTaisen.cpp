@@ -3221,6 +3221,27 @@ bool FixupSakura(const string& rootDir, const string& inTranslatedOptionsBmp, co
 	translatedOptionsData.PatchDataInMemory(pNewImageData, newImageDataSize, true, false, origOptionsCompressedSize);
 	delete[] pNewImageData;
 
+	//***Options Submenu Image***
+	const string patchedOptionsSubmenuImagePath = inTranslatedDataDirectory + "OptionsSubmenu.bmp";
+	BmpToSakuraConverter patchedOptionsSubmenuImage;
+	if( !patchedOptionsSubmenuImage.ConvertBmpToSakuraFormat(inTranslatedOptionsBmp, true, BmpToSakuraConverter::CYAN) )
+	{
+		printf("FixupSakura: Couldn't convert image: %s.\n", patchedOptionsSubmenuImagePath.c_str());
+		return false;
+	}
+
+	const int originalOptionsSubmenuCompressedSize = 14336;
+	SakuraCompressedData translatedOptionsSubmenuData;
+	translatedOptionsSubmenuData.PatchDataInMemory(patchedOptionsSubmenuImage.GetImageData(), patchedOptionsSubmenuImage.GetImageDataSize(), true, false, originalOptionsSubmenuCompressedSize);
+	if( translatedOptionsSubmenuData.mDataSize != origOptionsCompressedSize )
+	{
+		printf("FixupSakura failed. Compressed data for OptionsSubmenu image size[%i] is larger than the original[%i\n", translatedOptionsSubmenuData.mDataSize, originalOptionsSubmenuCompressedSize);
+		return false;
+	}
+	const int offsetToOptionsSubmenu = GIsDisc2 ? 0x00059544 : 0x0005940c;
+	memcpy_s(pNewImageData + offsetToOptionsSubmenu, newImageDataSize, translatedOptionsSubmenuData.mpCompressedData, originalOptionsSubmenuCompressedSize);
+	//***Done with OptionsSubmenu***
+
 	//Create new sakura image data
 	const unsigned int optionsSizeDiff = origOptionsCompressedSize < translatedOptionsData.mDataSize ? translatedOptionsData.mDataSize - origOptionsCompressedSize : 0;
 	const unsigned int newSakuraLength = origSakuraData.GetDataSize() + optionsSizeDiff;
@@ -3244,8 +3265,8 @@ bool FixupSakura(const string& rootDir, const string& inTranslatedOptionsBmp, co
 
 	//Patch palette
 	//Options image palette
-	const int optionsPaletteOffset = GIsDisc2 ? 0x0005aed0 : 0x0005AD98;
-	memcpy_s(pNewSakuraData + optionsPaletteOffset + optionsSizeDiff, newSakuraLength - optionsPaletteOffset + optionsSizeDiff, patchedOptionsImage.mPalette.GetData(), patchedOptionsImage.mPalette.GetSize());
+	//const int optionsPaletteOffset = GIsDisc2 ? 0x0005aed0 : 0x0005AD98;
+	//memcpy_s(pNewSakuraData + optionsPaletteOffset + optionsSizeDiff, newSakuraLength - optionsPaletteOffset + optionsSizeDiff, patchedOptionsImage.mPalette.GetData(), patchedOptionsImage.mPalette.GetSize());
 
 	//const unsigned short tileSize  = (OutTileSpacingY << 8) + (OutTileSpacingX/8);
 
