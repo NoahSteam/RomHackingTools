@@ -33,6 +33,7 @@ PatchTMapSp d:\Rizwan\SakuraWars\Disc1 D:\Rizwan\Programming\RomHackingTools\Sak
 ExtractFACEFiles d:\Rizwan\SakuraWars\Disc1 d:\Rizwan\SakuraWars\ExtractedData\Disc1\FACE
 ParseEVTFiles d:\Rizwan\SakuraWars\Disc1
 ExtractWKLFiles d:\Rizwan\SakuraWars\Disc1 d:\Rizwan\SakuraWars\ExtractedData\Disc1\WKL
+ExtractTiledImages d:\Rizwan\SakuraWars\Disc1  d:\Rizwan\SakuraWars\ExtractedData\Disc1\TiledImages\
 FindDuplicateText D:\Rizwan\SakuraWars\ExtractedData\Disc1\WKL D:\Rizwan\SakuraWars\ExtractedData\Disc1\WKL\duplicates.txt
 DumpTranslationFilesWithoutUnusedLines d:\Rizwan\SakuraWars\Disc1 D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\TranslatedText D:\Rizwan\SakuraWars\TranslationFiles\
 CopySharedWklImages D:\Rizwan\SakuraWars\ExtractedData\Disc1\WKL d:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\WKL

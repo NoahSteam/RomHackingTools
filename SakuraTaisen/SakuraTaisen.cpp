@@ -221,7 +221,7 @@ struct SakuraCompressedData
 				const unsigned long alignmentPadding = (compressor.mCompressedSize % 4) == 0 ? 0 : 4 - (compressor.mCompressedSize % 4);
 				mDataSize = compressor.mCompressedSize + (compressor.mCompressedSize % 4);
 			}
-			
+
 			mpCompressedData = new char[mDataSize];
 			memset(mpCompressedData, 0, mDataSize);
 			memcpy_s(mpCompressedData + mFrontPad, mDataSize - mFrontPad, compressor.mpCompressedData, compressor.mCompressedSize);
@@ -2925,6 +2925,33 @@ void FindDuplicateText(const string& dialogImageDirectory, const string& outFile
 	}
 }
 
+struct CompressedImagePatcher
+{
+	bool Patch(const unsigned long inOffset, const unsigned long inOriginalCompressedSize, const string& inTranslatedDataDirectory, const char* pTranlsatedImageName, const char* pOutBuffer, 
+			   const unsigned long inBufferSize)
+	{
+		const string patchedOptionsSubmenuImagePath = inTranslatedDataDirectory + pTranlsatedImageName;
+		BmpToSakuraConverter patchedOptionsSubmenuImage;
+		if( !patchedOptionsSubmenuImage.ConvertBmpToSakuraFormat(patchedOptionsSubmenuImagePath, true, BmpToSakuraConverter::CYAN) )
+		{
+			printf("CompressedImagePatcher: Couldn't convert image: %s.\n", patchedOptionsSubmenuImagePath.c_str());
+			return false;
+		}
+
+		SakuraCompressedData translatedOptionsSubmenuData;
+		translatedOptionsSubmenuData.PatchDataInMemory(patchedOptionsSubmenuImage.GetImageData(), patchedOptionsSubmenuImage.GetImageDataSize(), true, false, inOriginalCompressedSize);
+		if( translatedOptionsSubmenuData.mDataSize != inOriginalCompressedSize )
+		{
+			printf("CompressedImagePatcher failed. Compressed data for OptionsSubmenu image size[%i] is larger than the original[%i\n", translatedOptionsSubmenuData.mDataSize, inOriginalCompressedSize);
+			return false;
+		}
+
+		errno_t errorValue = memcpy_s( (void*)(pOutBuffer + inOffset), inBufferSize, translatedOptionsSubmenuData.mpCompressedData, inOriginalCompressedSize);
+
+		return errorValue == 0;
+	}
+};
+
 bool FixupSakura(const string& rootDir, const string& inTranslatedOptionsBmp, const string& patchedPalettePath, const string& inTranslatedDataDirectory)
 {
 	const string filePath = rootDir + string("SAKURA");	
@@ -3221,27 +3248,6 @@ bool FixupSakura(const string& rootDir, const string& inTranslatedOptionsBmp, co
 	translatedOptionsData.PatchDataInMemory(pNewImageData, newImageDataSize, true, false, origOptionsCompressedSize);
 	delete[] pNewImageData;
 
-	//***Options Submenu Image***
-	const string patchedOptionsSubmenuImagePath = inTranslatedDataDirectory + "OptionsSubmenu.bmp";
-	BmpToSakuraConverter patchedOptionsSubmenuImage;
-	if( !patchedOptionsSubmenuImage.ConvertBmpToSakuraFormat(inTranslatedOptionsBmp, true, BmpToSakuraConverter::CYAN) )
-	{
-		printf("FixupSakura: Couldn't convert image: %s.\n", patchedOptionsSubmenuImagePath.c_str());
-		return false;
-	}
-
-	const int originalOptionsSubmenuCompressedSize = 14336;
-	SakuraCompressedData translatedOptionsSubmenuData;
-	translatedOptionsSubmenuData.PatchDataInMemory(patchedOptionsSubmenuImage.GetImageData(), patchedOptionsSubmenuImage.GetImageDataSize(), true, false, originalOptionsSubmenuCompressedSize);
-	if( translatedOptionsSubmenuData.mDataSize != origOptionsCompressedSize )
-	{
-		printf("FixupSakura failed. Compressed data for OptionsSubmenu image size[%i] is larger than the original[%i\n", translatedOptionsSubmenuData.mDataSize, originalOptionsSubmenuCompressedSize);
-		return false;
-	}
-	const int offsetToOptionsSubmenu = GIsDisc2 ? 0x00059544 : 0x0005940c;
-	memcpy_s(pNewImageData + offsetToOptionsSubmenu, newImageDataSize, translatedOptionsSubmenuData.mpCompressedData, originalOptionsSubmenuCompressedSize);
-	//***Done with OptionsSubmenu***
-
 	//Create new sakura image data
 	const unsigned int optionsSizeDiff = origOptionsCompressedSize < translatedOptionsData.mDataSize ? translatedOptionsData.mDataSize - origOptionsCompressedSize : 0;
 	const unsigned int newSakuraLength = origSakuraData.GetDataSize() + optionsSizeDiff;
@@ -3262,6 +3268,62 @@ bool FixupSakura(const string& rootDir, const string& inTranslatedOptionsBmp, co
 	//copy everything after original options data
 	memcpy_s(pNewSakuraData + origOptionsOffset + translatedOptionsData.mDataSize, newSakuraLength - origOptionsOffset - translatedOptionsData.mDataSize, origSakuraData.GetData() + origOptionsOffset + origOptionsCompressedSize, origSakuraData.GetDataSize() - origOptionsOffset - origOptionsCompressedSize);
 	//**done copying original data to new data
+
+	//***Options Submenu Image***
+	{
+		const int offsetToImage = GIsDisc2 ? 0x00059544 : 0x0005940c;
+		CompressedImagePatcher imagePatcher;
+		if( !imagePatcher.Patch(offsetToImage, 432, inTranslatedDataDirectory, "OptionsSubmenu.bmp", pNewSakuraData, newSakuraLength) )
+		{
+			return false;
+		}
+	}
+	//***Done with OptionsSubmenu***
+
+	//***Systems Submenu Image***
+	{
+		const int offsetToImage = 0x000595bc; //Disc1 and Disc2 have the same offset
+		CompressedImagePatcher imagePatcher;
+		if( !imagePatcher.Patch(offsetToImage, 324, inTranslatedDataDirectory, "SystemMenu.bmp", pNewSakuraData, newSakuraLength) )
+		{
+			return false;
+		}
+	}
+	//***Done with Systems Submenu***
+
+	//***Systems Submenu Image***
+	{
+		//This one has a header compressed with it which we want to retain, so uncompress original data, patch new data, copy it into the original data, and then compress that
+		const unsigned int origOffset = GIsDisc2 ? 0x0005e2c8 : 0x0005e190;//0x0005e2bf : 0x0005e187;
+		const unsigned int origCompressedSize = 2292;
+		PRSDecompressor uncompressedData;
+		uncompressedData.UncompressData((void*)(origSakuraData.GetData() + origOffset), origCompressedSize);
+		
+		const string translatedImagePath = inTranslatedDataDirectory + "LoadMenu.bmp";
+		BmpToSakuraConverter translatedImage;
+		if( !translatedImage.ConvertBmpToSakuraFormat(translatedImagePath, true, BmpToSakuraConverter::CYAN) )
+		{
+			printf("FixupSakura: Couldn't convert image: %s.\n", translatedImagePath.c_str());
+			return false;
+		}
+
+		if( memcpy_s(uncompressedData.mpUncompressedData + 0, uncompressedData.mUncompressedDataSize - 0, translatedImage.GetImageData(), translatedImage.GetImageDataSize()) != 0 )
+		{
+			printf("FixupSakura: Unable to copy translated SystemMenu.bmp into original data buffer.\n");
+			return false;
+		}
+
+		SakuraCompressedData compressedData;
+		compressedData.PatchDataInMemory(uncompressedData.mpUncompressedData, uncompressedData.mUncompressedDataSize, true, false, origCompressedSize);
+		if( compressedData.mDataSize != origCompressedSize )
+		{
+			printf("CompressedImagePatcher failed. Compressed data for LoadMenu image size[%i] is larger than the original[%i\n", compressedData.mDataSize, origCompressedSize);
+			return false;
+		}
+
+		memcpy_s(pNewSakuraData + origOffset, newSakuraLength - origOffset, compressedData.mpCompressedData, compressedData.mDataSize);
+	}
+	//***Done with Systems Submenu***
 
 	//Patch palette
 	//Options image palette
