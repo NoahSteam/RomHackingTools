@@ -7965,7 +7965,7 @@ bool FixupSLG(const string& rootDir, const string& outDir, const string& inTrans
 		//Convert patched options bgnd image to sakura format
 		const string mainMenuTranslatedBgnd = inTranslatedDirectory + "OptionsBgndPatched.bmp";
 		BmpToSakuraConverter patchedBgndImage;
-		if( !patchedBgndImage.ConvertBmpToSakuraFormat(mainMenuTranslatedBgnd, true) )
+		if( !patchedBgndImage.ConvertBmpToSakuraFormat(mainMenuTranslatedBgnd, false) )
 		{
 			printf("PatchMainMenu: Couldn't convert image: %s.\n", mainMenuTranslatedBgnd.c_str());
 			return false;
@@ -8015,7 +8015,7 @@ bool FixupSLG(const string& rootDir, const string& outDir, const string& inTrans
 		const int offsetLipsStartLocationY     = 0x0002173D; //Change the cpommand from MOV 0xCC(-52), r11 to 0xCE(-50)
 		const int offsetItemCountXOffset       = 0x0002512B;
 		const int offsetOptionsFontSheet       = 0x0004a740;
-		const int offsetBgndImagePalette       = 0x0004a1b8;
+	//	const int offsetBgndImagePalette       = 0x0004a1b8;
 		const unsigned char maxMultiplier      = (240/(OutTileSpacingX));
 		const unsigned char maxCharacters      = maxMultiplier - 1;
 		const unsigned char maxLines           = MaxLines - 1;
@@ -8043,7 +8043,7 @@ bool FixupSLG(const string& rootDir, const string& outDir, const string& inTrans
 		memcpy_s((void*)(origSlgData.GetData() + offsetItemCountXOffset),	      origSlgData.GetDataSize(), (void*)&itemCountXOffset,						sizeof(itemCountXOffset));
 		memcpy_s((void*)(origSlgData.GetData() + offsetOptionsFontSheet),		  origSlgData.GetDataSize(), (void*)optionsCompressedData.mpCompressedData, optionsCompressedData.mDataSize);
 		memcpy_s((void*)(origSlgData.GetData() + ofsetBgndImage),		          origSlgData.GetDataSize(), (void*)translatedBgndData.mpCompressedData,    translatedBgndData.mDataSize);
-		memcpy_s((void*)(origSlgData.GetData() + offsetBgndImagePalette),		  origSlgData.GetDataSize(), (void*)patchedBgndImage.mPalette.GetData(),    patchedBgndImage.mPalette.GetSize());
+		//memcpy_s((void*)(origSlgData.GetData() + offsetBgndImagePalette),		  origSlgData.GetDataSize(), (void*)patchedBgndImage.mPalette.GetData(),    patchedBgndImage.mPalette.GetSize());
 		//***Done Fixing Max Character Lengths***
 
 		//***Fix the palette***
