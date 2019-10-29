@@ -988,6 +988,8 @@ bool BitmapReader::ReadBitmap(const string& inBitmapName)
 		return false;
 	}
 
+	mFilename = inBitmapName;
+
 	const char* pFileData = inFile.GetData();
 	memcpy(&mBitmapData.mFileHeader, pFileData, sizeof(mBitmapData.mFileHeader));
 
@@ -1010,7 +1012,8 @@ bool BitmapReader::ReadBitmap(const string& inBitmapName)
 	const int numBytesPerColor            = 4;
 	mBitmapData.mPaletteData.mSizeInBytes = numColorsInPalette*numBytesPerColor;
 	mBitmapData.mPaletteData.mpRGBA       = new char[mBitmapData.mPaletteData.mSizeInBytes];
-	memcpy(mBitmapData.mPaletteData.mpRGBA, pFileData + sizeof(mBitmapData.mFileHeader) + sizeof(mBitmapData.mInfoHeader), mBitmapData.mPaletteData.mSizeInBytes);
+	const int offsetToPalette             = mBitmapData.mFileHeader.mOffsetToData - mBitmapData.mPaletteData.mSizeInBytes;
+	memcpy(mBitmapData.mPaletteData.mpRGBA, pFileData + offsetToPalette, mBitmapData.mPaletteData.mSizeInBytes);
 
 	//Read in color data
 	const int divisor                   = mBitmapData.mInfoHeader.mBitCount == 4 ? 2 : 1;
@@ -1018,6 +1021,27 @@ bool BitmapReader::ReadBitmap(const string& inBitmapName)
 	mBitmapData.mColorData.mSizeInBytes = numColorBytes;
 	mBitmapData.mColorData.mpRGBA       = new char[numColorBytes];
 	memcpy(mBitmapData.mColorData.mpRGBA, pFileData + mBitmapData.mFileHeader.mOffsetToData, numColorBytes);
+
+	return true;
+}
+
+bool BitmapReader::Save()
+{
+	FileWriter outFile;
+	if( !outFile.OpenFileForWrite(mFilename) )
+	{
+		return false;
+	}
+
+	outFile.WriteData(&mBitmapData.mFileHeader, sizeof(mBitmapData.mFileHeader));
+	outFile.WriteData(&mBitmapData.mInfoHeader, sizeof(mBitmapData.mInfoHeader));
+
+	if( mBitmapData.mPaletteData.mSizeInBytes )
+	{
+		outFile.WriteData(mBitmapData.mPaletteData.mpRGBA, mBitmapData.mPaletteData.mSizeInBytes);
+	}
+
+	outFile.WriteData(mBitmapData.mColorData.mpRGBA, mBitmapData.mColorData.mSizeInBytes);
 
 	return true;
 }

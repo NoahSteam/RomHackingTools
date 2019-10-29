@@ -285,10 +285,13 @@ public:
 
 class BitmapReader
 {
+	std::string mFilename;
+
 public:
 	BitmapData mBitmapData;
 
 	bool ReadBitmap(const std::string& inFileName);
+	bool Save();
 };
 
 class BitmapSurface

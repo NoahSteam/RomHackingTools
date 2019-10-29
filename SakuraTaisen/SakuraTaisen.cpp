@@ -9434,6 +9434,149 @@ void ConvertYabauseSaveToMednafen(const string& yabauseFileName, const string& o
 	printf("Success!\n");
 }
 
+void AddShadowsToWKLText(const string& wklDirectory)
+{
+	vector<FileNameContainer> allFiles;
+	FindAllFilesWithinDirectory(wklDirectory, allFiles);
+
+	vector<FileNameContainer> bmpFiles;
+	GetAllFilesOfType(allFiles, ".bmp", bmpFiles);
+
+	for(const FileNameContainer& fileName : bmpFiles)
+	{
+		BitmapReader bmpData;
+		if( !bmpData.ReadBitmap(fileName.mFullPath) )
+		{
+			printf("Failed to read %s\n", fileName.mFullPath.c_str());
+			return;
+		}
+
+		const int numBytes        = bmpData.mBitmapData.mColorData.mSizeInBytes;
+		char* pModifiedData       = new char[numBytes];
+		const char* pOriginalData = bmpData.mBitmapData.mColorData.mpRGBA;
+		memcpy_s(pModifiedData, numBytes, pOriginalData, numBytes);
+
+		//Flip image
+		const int imageHeight = abs(bmpData.mBitmapData.mInfoHeader.mImageHeight);
+		for(int y = 0; y < imageHeight; ++y)
+		{
+			for(int x = 0; x < bmpData.mBitmapData.mInfoHeader.mImageWidth/2; ++x)
+			{
+				const int currentPixel = y*bmpData.mBitmapData.mInfoHeader.mImageWidth/2 + x;
+				const int outPixel     = ((imageHeight - 1) - y)*bmpData.mBitmapData.mInfoHeader.mImageWidth/2 + x;
+				pModifiedData[outPixel]  = pOriginalData[currentPixel];
+			}
+		}
+
+		const char grayColor = 1;
+		const char shadowColor = 3;
+		//Add shadows
+		for(int y = 0; y < imageHeight ; ++y)
+		{
+			if( y == 3 )
+			{
+				int k = 0;
+				++k;
+			}
+			for(int x = 0; x < bmpData.mBitmapData.mInfoHeader.mImageWidth/2; ++x)
+			{
+				const int currentPixel = y*bmpData.mBitmapData.mInfoHeader.mImageWidth/2 + x;
+				const int upperPixel   = y > 0 ?               (y-1)*bmpData.mBitmapData.mInfoHeader.mImageWidth/2 + x : -1;
+				const int lowerPixel   = y + 1 < imageHeight ? (y+1)*bmpData.mBitmapData.mInfoHeader.mImageWidth/2 + x : -1;
+				const char colorValue1 = (pModifiedData[currentPixel] & 0xf0) >> 4;
+				if( colorValue1 == grayColor )
+				{
+					//left
+					if( x > 0 )
+					{
+						const char leftValue = pModifiedData[currentPixel - 1] & 0x0f;
+						if( leftValue != grayColor )
+						{
+							pModifiedData[currentPixel-1] = (pModifiedData[currentPixel-1]&0xf0) + shadowColor;
+						}
+					}
+
+					//right
+					const char rightValue = (pModifiedData[currentPixel] & 0x0f);
+					if( rightValue != grayColor )
+					{
+						pModifiedData[currentPixel] = (pModifiedData[currentPixel] & 0xf0) + shadowColor;
+					}
+
+					//up
+					if( upperPixel > -1 )
+					{
+						const char upValue = (pModifiedData[upperPixel] & 0xf0) >> 4;
+						if( upValue != grayColor )
+						{
+							pModifiedData[upperPixel] = (pModifiedData[upperPixel] & 0x0f) + (shadowColor << 4);
+						}
+					}
+
+					//down
+					if( lowerPixel > -1 )
+					{
+						const char downValue = (pModifiedData[lowerPixel] & 0xf0) >> 4;
+						if( downValue != grayColor )
+						{
+							pModifiedData[lowerPixel] = (pModifiedData[lowerPixel] & 0x0f) + (shadowColor << 4);
+						}
+					}
+
+				}//if( colorValue1 == 1)
+
+				char colorValue2 = pModifiedData[currentPixel] & 0x0f;
+				if( colorValue2 == grayColor )
+				{
+					//left
+					const char leftValue = (pModifiedData[currentPixel] & 0xf0) >> 4;
+					if( leftValue != grayColor )
+					{
+						pModifiedData[currentPixel] = (pModifiedData[currentPixel]&0x0f) + (shadowColor << 4);
+					}
+
+					//check right
+					if( x + 1 < bmpData.mBitmapData.mInfoHeader.mImageWidth/2 )
+					{
+						const char rightValue = (pModifiedData[currentPixel + 1] & 0xf0) >> 4;
+						if( rightValue != grayColor )
+						{
+							pModifiedData[currentPixel + 1] = (pModifiedData[currentPixel + 1] & 0x0f) + (shadowColor<<4);
+						}
+					}
+
+					//up
+					if( upperPixel > -1 )
+					{
+						const char upValue = (pModifiedData[upperPixel] & 0x0f);
+						if( upValue != grayColor )
+						{
+							pModifiedData[upperPixel] = (pModifiedData[upperPixel] & 0xf0) + shadowColor;
+						}
+					}
+
+					//down
+					if( lowerPixel > -1 )
+					{
+						const char downValue = (pModifiedData[lowerPixel] & 0x0f);
+						if( downValue != grayColor )
+						{
+							pModifiedData[lowerPixel] = (pModifiedData[lowerPixel] & 0xf0) + shadowColor;
+						}
+					}
+				}//if(colorValue2 == 1)
+
+			} //for x
+		}
+
+		BitmapWriter outBitmap;
+		outBitmap.CreateBitmap(fileName.mFullPath, bmpData.mBitmapData.mInfoHeader.mImageWidth, -abs(imageHeight), 4, pModifiedData, numBytes, 
+							   bmpData.mBitmapData.mPaletteData.mpRGBA, bmpData.mBitmapData.mPaletteData.mSizeInBytes, true);
+	}
+
+	printf("Success\n");
+}
+
 bool PatchGame(const string& rootSakuraTaisenDirectory, 
 			   const string& patchedSakuraTaisenDirectory, 
 			   const string& translatedTextDirectory, 
@@ -9897,12 +10040,18 @@ int main(int argc, char *argv[])
 
 		ConvertYabauseSaveToMednafen(yabauseFile, outFile);
 	}
-	else if( command == "ExtractTiledImages" )
+	else if( command == "ExtractTiledImages" && argc == 4 )
 	{
 		const string rootSakuraDir = string(argv[2]) + Seperators;
 		const string outDir        = string(argv[3]) + Seperators;
 
 		ExtractTiledImages(rootSakuraDir, outDir);
+	}
+	else if( command == "AddShadowsToWKLText" && argc == 3 ) 
+	{
+		const string wklDir = string(argv[2]) + Seperators;
+
+		AddShadowsToWKLText(wklDir);
 	}
 	else
 	{
