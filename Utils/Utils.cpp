@@ -464,22 +464,22 @@ bool TextFileData::InitializeTextFile(bool bFixupSpecialCharacters)
 			memset(fixedString, 0, bufferSize);
 			const size_t tokenLen = strlen(pToken);
 			for(size_t t = 0, f = 0; t < tokenLen; t)
-			{
-				if( bFixupSpecialCharacters && pToken[t] == -30 )
-				{
-					t += 3;
-
-					fixedString[f++] = '@';
-				}
-				//Skip past UTF8 byte order marker
-				else if( pToken[t] == (char)0xef || pToken[t] == (char)0xbb || pToken[t] == (char)0xbf )
+			{	
+				if( pToken[t] == (char)0xef || pToken[t] == (char)0xbb || pToken[t] == (char)0xbf )
 				{
 					t += 1;
 				}
+				//Skip past UTF8 byte order marker
 				else if( pToken[t] == (char)0xc3 && pToken[t+1] == (char)0xa8 )
 				{
 					t += 2;
 					fixedString[f++] = (char)232;
+				}
+				else if( bFixupSpecialCharacters && pToken[t] == -30 )
+				{
+					t += 3;
+
+					fixedString[f++] = '@';
 				}
 				else
 				{
