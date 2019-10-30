@@ -8284,6 +8284,11 @@ bool PatchMiniCook(const string& patchedSakuraDirectory, const string& inTransla
 		printf("PatchMiniCook: Couldn't convert image: %s.\n", logoFileName.c_str());
 		return false;
 	}
+	if( patchedLogo.mPalette.GetNumColors() > 16 )
+	{
+		printf("PatchMiniCook: Patched logo has more than 16 colors\n");
+		return false;
+	}
 
 	//Patch logo
 	miniGameFile.WriteData(0x00093568 + (42*16*8), patchedLogo.GetImageData(), patchedLogo.GetImageDataSize());
@@ -8355,6 +8360,11 @@ bool PatchMiniMaig(const string& patchedSakuraDirectory, const string& inTransla
 	if( !patchedLogo.ConvertBmpToSakuraFormat(logoFileName, false) )
 	{
 		printf("PatchMiniMaig: Couldn't convert image: %s.\n", logoFileName.c_str());
+		return false;
+	}
+	if( patchedLogo.mPalette.GetNumColors() > 16 )
+	{
+		printf("PatchMiniMaig: Patched logo has more than 16 colors\n");
 		return false;
 	}
 
@@ -8430,6 +8440,11 @@ bool PatchMiniShot(const string& patchedSakuraDirectory, const string& inTransla
 		printf("PatchMiniShot: Couldn't convert image: %s.\n", logoFileName.c_str());
 		return false;
 	}
+	if( patchedLogo.mPalette.GetNumColors() > 16 )
+	{
+		printf("PatchMiniShot: Patched logo has more than 16 colors\n");
+		return false;
+	}
 
 	//Patch logo
 	miniGameFile.WriteData(0x00055510 + (43 * 16 * 8), patchedLogo.GetImageData(), patchedLogo.GetImageDataSize());
@@ -8503,6 +8518,11 @@ bool PatchMiniSlot(const string& patchedSakuraDirectory, const string& inTransla
 		printf("PatchMiniSlot: Couldn't convert image: %s.\n", logoFileName.c_str());
 		return false;
 	}
+	if( patchedLogo.mPalette.GetNumColors() > 16 )
+	{
+		printf("PatchMiniSlot: Patched logo has more than 16 colors\n");
+		return false;
+	}
 
 	//Patch logo
 	miniGameFile.WriteData(0x0006149C + (37 * 16 * 8), patchedLogo.GetImageData(), patchedLogo.GetImageDataSize());
@@ -8574,6 +8594,11 @@ bool PatchMiniSoji(const string& patchedSakuraDirectory, const string& inTransla
 	if (!patchedLogo.ConvertBmpToSakuraFormat(logoFileName, false))
 	{
 		printf("PatchMiniSoji: Couldn't convert image: %s.\n", logoFileName.c_str());
+		return false;
+	}
+	if( patchedLogo.mPalette.GetNumColors() > 16 )
+	{
+		printf("PatchMiniSoji: Patched logo has more than 16 colors\n");
 		return false;
 	}
 
@@ -8695,7 +8720,12 @@ bool PatchMiniHana(const string& patchedSakuraDirectory, const string& inTransla
 	BmpToSakuraConverter patchedLogo;
 	if( !patchedLogo.ConvertBmpToSakuraFormat(logoFileName, false) )
 	{
-		printf("PatchMiniSwim: Couldn't convert image: %s.\n", logoFileName.c_str());
+		printf("PatchMiniHana: Couldn't convert image: %s.\n", logoFileName.c_str());
+		return false;
+	}
+	if( patchedLogo.mPalette.GetNumColors() > 16 )
+	{
+		printf("PatchMiniHana: Patched logo has more than 16 colors\n");
 		return false;
 	}
 
@@ -8814,6 +8844,11 @@ bool PatchMiniSwim(const string& patchedSakuraDirectory, const string& inTransla
 	if( !patchedLogo.ConvertBmpToSakuraFormat(logoFileName, false) )
 	{
 		printf("PatchMiniSwim: Couldn't convert image: %s.\n", logoFileName.c_str());
+		return false;
+	}
+	if( patchedLogo.mPalette.GetNumColors() > 16 )
+	{
+		printf("PatchMiniSwim: Patched logo has more than 16 colors\n");
 		return false;
 	}
 
