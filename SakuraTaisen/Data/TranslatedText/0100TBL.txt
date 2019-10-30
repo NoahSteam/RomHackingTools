@@ -37,12 +37,12 @@ As a special assignment, I appoint you captain of the following outfit.
 You are on a secret assignment to defend our Imperial capital. 
 Proceed to Ueno Park to meet up with your squad. 
 Imperial Army Lieutenant General. <br> <sp> <sp> <sp> <sp> <sp> <sp> <sp> Yoneda Ikki 
-Ichiro Ogami. You're being transferred to the Flower Division of the Imperial Assault Troop, effective immediately. 
+Ichiro Ogami. You're being transferred to the Flower Division of the Imperial Assault Troop, immediately.
 Yes, sir! I'm going to give it my absolute best! 
 Good. That's what I like to hear. 
 My position as a politician doesn't allow me to talk about a military secret like the Assault Troop here and now. 
 For more information you have to ask the officer in command, Lt. Gen. Yoneda. 
-Now, go to Ueno Park. Don't make me regret I chose you for this position! 
+Now, go to Ueno Park. Don't make me regret recommending you for this position! 
 Yes, sir! I'll be on my way immediately! 
 The safety of the capital lies in your hands. Good Luck! 
 Yes, sir! 
@@ -99,7 +99,7 @@ Why should I have to do that? <br> Yes, right away!
 Why should I have to do such a thing…? I refuse! 
 And in any case, is that any way to ask for someone's help? 
 …I'm Imperial Navy Ensign Ichiro Ogami. I was transferred to the Imperial Assault Troop effective today. 
-Try and have me fired all you want, but without a written order from the Navy headquarters, I'm not going anywhere. 
+Try and have me fired all you want, but without an order from the Navy headquarters, I'm not leaving. 
 ……! 
 …It's Ogami. Can you tell me where I might find Lieutenant General Yoneda? 
 Through this way? Thank you very much. 
@@ -115,9 +115,9 @@ Y-yes, ma'am…
 Why should I have to do such a thing…? I refuse! 
 And in any case, is that any way to ask for someone's help? 
 (Huh?) 
-(What was that about? What a strange person!) 
-I’m Imperial Navy Ensign Ichiro Ogami. I was transferred to the Imperial Floral Assault Group effective today. 
-Try and have me fired all you want, but without a written order from the Navy headquarters, I'm not going anywhere. 
+(What was that about? What a strange person!)
+I’m Imperial Navy Ensign Ichiro Ogami, transferred to the Imperial Floral Assault Troop effective today.
+Try and have me fired all you want, but without a written order from the Navy headquarters, I'm not leaving. 
 ……! 
 …It's Ogami. Can you tell me where I might find Lieutenant General Yoneda? 
 Through this way? Thank you very much. 
@@ -146,7 +146,7 @@ I’m Imperial Navy Ensign Ichiro Ogami. Starting today at 12:00, I am part of t
 Reporting for duty! 
 (What the… Who is this drunkard?) 
 (Don't tell me this is…) 
-Are you really Lt. Gen. Yoneda? <br> Why're you drinking right now! 
+Are you really General Yoneda? <br> Why're you drinking right now! 
 …Are… are you really Lieutenant General Yoneda? 
 I… I'm sorry! 
 How can you drink sake in the middle of the day?! 
@@ -169,7 +169,7 @@ Yes, and you said it was a great idea!
 You shouldn't eavesdrop! <br> Where’s the reception desk? 
 Hey! You shouldn't eavesdrop! 
 …Sorry. 
-What? We just wanted to see if you need help! 
+What? We just wanted to see if you needed help! 
 I don't want anything to do with you any more! Bye-bye! 
 Iris! Wait! 
 Call after Iris. <br> Have Sakura lead the way. 
@@ -464,7 +464,7 @@ He has the "Spirit Power" too… does that mean he’s going to fight in a "Koub
 That's right. 
 I… hate fighting. 
 Unused
-Oh, don’t worry, Iris. Let’s go back to your room and I'll read you from that Mother Goose book. 
+Oh, don’t worry, Iris. Let’s go back to your room and I'll read you stories from that Mother Goose book. 
 Okay. 
 Ah, Ensign Ogami. Lieutenant General Yoneda is in the manager's office. 
 Please excuse me for now. 
@@ -484,7 +484,7 @@ Unused
 Unused
 Mr. Yoneda is in the manager's office within. 
 Thank you. Oh, by the way. What do you think about how that Maria just came out of nowhere… 
-…and replaced me, top star Kanzaki Sumire, as the leader of the troupe? 
+…and replaced me, top star Kanzaki Sumire, as the leader of the troop? 
 That old geezer Yoneda… He couldn't spot a star if you hit him over the head with it. 
 Oh my, what shall I do! How rude of me. Hohohohoho… 
 Oh, and be so nice not to mention what I just said to Yoneda, okay? (*kiss*) 
@@ -602,4 +602,4 @@ Unused
 Unused
 Unused
 Unused
-My name is Sakura Shinguji. I just arrived from Sendai and newly joined the troupe. 
+My name is Sakura Shinguji. I just arrived from Sendai and newly joined the troop. 

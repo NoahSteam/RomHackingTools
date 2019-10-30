@@ -1,11 +1,11 @@
-﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking...
+﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
-It's a photo of Maria. ...She's lost in thought and looks kind of sad...
+It's a photo of Maria. …She's lost in thought and looks kind of sad…
 A photo of Kanna. She looks strong and reliable. I can't wait to meet her.
 A photo of Iris. She's surrounded by flowers and flashing a radiant smile.
 A photo of Kohran. She's looking pretty in profile with her face dyed red by the evening sun.
-A letter given to me by a customer. I was asked to give it to Sumire. I have a bad feeling about this...
-Maria's pistol. This may help me escape from here...
+A letter given to me by a customer. I was asked to give it to Sumire. I have a bad feeling about this…
+Maria's pistol. This may help me escape from here…
 A hair ornament. It's decorated with flowers and looks very elegant.
 A pretty pendant. The delicate workmanship is gorgeous.
 A hairpin for use in a traditional bun hairstyle. It would complement a formal outfit well.
@@ -19,12 +19,12 @@ A prop crown used onstage. It's well constructed and incredibly detailed.
 A wig and costume used onstage. I wonder what kind of act could use a flashy outfit like this?
 A photo of Sakura in her swimsuit. Wow, this is really something. I'm gonna treasure this.
 A photo of Sumire in her stage costume. Her distinctive makeup really makes an impact.
-It's a photo of Maria on stage in the military uniform from "For Love"... She's a beautiful woman disguised as a man.
+It's a photo of Maria on stage in the military uniform from "For Love"… She's a beautiful woman disguised as a man.
 A photo of Kanna in her training gear. Catching her in a private moment like this feels surprisingly intimate.
 A photo of Iris in her swimsuit. She's holding a rubber ring and looks ready to have some fun. How cute.
 A photo of Kohran. I don't get to see her with her braids undone very often. It's a nice look.
 A photo of Ayame in a traditional outfit. I hope she'll always be as happy and content as she is here.
-Ayame's gun. Why...? Why did it have to turn out like this...?
+Ayame's gun. Why…? Why did it have to turn out like this…?
 Jean-Paul the teddy bear. Iris's best friend. She always carries him with her and takes good care of him.
 If you bundle three of them together, they don't get in your way when you're working. It's very convenient. 
 (When you look from this angle…you can really tell she has a chest…) 
@@ -207,7 +207,7 @@ The Hive of Darkness is an organization aiming for the reinstatement of the Shog
 Consequently, attacking specific spots in the capital might hold some kind of deep meaning. 
 We don't have enough information. This is the perfect opportunity to look into our enemy's movements. 
 Absolutely… 
-Spying is not technically the responsibility of the Flower Troupe but… 
+Spying is not technically the responsibility of the Assault Troupe but… 
 Right now is a good chance to grasp the Hive of Darkness' plans. 
 It is necessary for us to understand the enemy's plan when we go on the offensive as well. 
 Of course. That's why we must investigate Fukagawa's mansion. 
@@ -226,7 +226,7 @@ Maria and Sakura are researching new battle tactics, Kohran is servicing the Kou
 Besides Sumire and Kanna, my hands are tied. 
 And I-Iris? 
 Hm… Iris is… 
-Iris is...? 
+Iris is…? 
 It's her nap time. 
 I'm so tiiired! 
 Nap time?! 
@@ -282,7 +282,7 @@ Waaa, I'm scared! Ogami, help meee.
 Tch…! 
 Uh, wait, Kanna! 
 (Not good… This level of animosity can't just be laughed off.) 
-(There are only seven members of the Flower Troupe. We need value teamwork…) 
+(There are only seven members of the Assault Troupe. We need value teamwork…) 
 …Ensign. Shall we head to the Operations Room? 
 Uh, yeah. Let's go. 
 No, Sumire! It's doesn't mean anything… 
@@ -327,7 +327,7 @@ Oh ho ho. It looks like I've usurped him. Sorry.
 …… 
 Ah, Sumire…I guess she left. 
 (Not good… This level of animosity can't just be laughed off.) 
-(There are only seven members of the Flower Troupe. We need to value teamwork…) 
+(There are only seven members of the Assault Troupe. We need to value teamwork…) 
 …What do you want to do, Captain? We should get going. 
 …Yes. 
 No, Kanna! This isn't what it… 
@@ -407,9 +407,9 @@ Your enemy's actions, the movement of your troops - being able to quickly assess
 …You can do it, Captain. 
 I'd like to hear about the troops' fighting style in our last battle. 
 Ogami… 
-In the 7-person Flower Troupe, even lacking one member is an extraordinarily large loss, don't you agree? 
+In the 7-person Assault Troupe, even lacking one member is an extraordinarily large loss, don't you agree? 
 Though we should be grateful their life was spared. 
-Sakura's skills are by no means lacking, nor excellent. She shouldn't be sent without proper support. 
+Sakura certainly isn’t weak, but she also isn’t the strongest. She shouldn't be sent without proper support. 
 Sumire has excellent combat capabilities, but you mustn't overestimate her. She needs proper support. 
 Maria's defenses are weak, so you should avoid placing her in close-quarters combat situations. 
 Kanna has the strength to fight in close-quarters combat. She's cut out to be an advance guard. 
@@ -418,7 +418,7 @@ Kohran's attack skills are weak, but she can do range attacks. Make sure you und
 As the captain, you must provide sufficient support. You are what strengthens the bonds of the unit. 
 We took quite a lot of damage… You need to provide better support, or they'll lose their faith in you. 
 The damage was vast. If you continue with this style of battle… Ogami, you aren’t fit to be captain! 
-The damage to the Flower Troupe was minimal. You did well, Ogami. 
+The damage to the Assault Troupe was minimal. You did well, Ogami. 
 You cared for those in your command and your judgments were spot-on. 
 Also… let's see. You shouldn't view these numbers as a complete reflection of the battle's outcome, but… 
 The number of enemies destroyed should be used as one rubric to evaluate your troops. 
@@ -692,7 +692,7 @@ Hmm…my "style," huh? Of course…
 Understood. I'll do as you say and make my Koubu defensive! 
 Now, it's just whether we have enough funds. If we go over budget, even the things we could do won't be doable. 
 Uhh, so, add the cost of materials… Hmm… multiplied by six… and the overall expense is… 
-...Chief, what's 1250 plus 970?
+…Chief, what's 1250 plus 970?
 …Is it 2120? <br> Uh… 2200. <br> No, 2320. 
 …Right! Chief, you're so smart. You fixed it! 
 Uh, no, I mean… Hahahaha. 
@@ -746,7 +746,7 @@ Ogami, if you use Iris's special move, you can undo the damage done to your Koub
 In fact, you can revive everyone within a certain area. It's very helpful. 
 We've gained a reliable ally. <br> She's doing well, for a child. <br> We can't protect her. 
 It seems like we've gotten a reliable ally. 
-Absolutely. Iris is going to have the best battle power in the whole Flower Troupe. 
+Absolutely. Iris is going to have the best battle power in the whole Assault Troupe. 
 I'll have to make sure I don't fall behind!! 
 She's doing so well, even though she's still a child. 
 That's true. When I was ten, all I did was play outside in the fields and mountains… 
@@ -812,7 +812,7 @@ Unused
 Unused
 Again, I am truly sorry.
 Unused
-Of course...
+Of course…
 Unused
 Unused
 Ha~!
@@ -824,7 +824,7 @@ Unused
 Unused
 Unused
 Ah!?
-Hieeeeee!?... *Whack*...
+Hieeeeee!?… *Whack*…
 Unused
 What!? You're the one messing it all up!! Stupid hag!!
 Unused

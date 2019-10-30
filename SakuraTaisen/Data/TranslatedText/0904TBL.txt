@@ -29,7 +29,7 @@ Ayame's gun. Why…? Why did it have to turn out like this…?
 Ayame… 
 … 
 … 
-I know it's hard for everyone, but we don't know when the Koma will attack again. 
+I know it's hard for everyone, but we don't know when the Kouma will attack again. 
 We have to get some rest. 
 I guess so… 
 Those girls need someone to rely on right now… And that someone is you. 
@@ -197,7 +197,7 @@ Ayame…
 (I think there's a glass window behind this paper screen.) 
 (There's no one here anymore who would open that window…) 
 (There are 3 books lying on the desk. Maybe she wrote something down in one of them?) 
-"Imperial Theater, Flower Division, Reporting Journal", "January 1st, 1924", "Koma Wars, 1917"… 
+"Imperial Theater, Flower Division, Reporting Journal", "January 1st, 1924", "Kouma War, 1917"… 
 (Dressers are often handed down through the generations. Did Ayame receive this one from her mother?) 
 (This dresser is looking exactly as before… Only Ayame isn't here anymore.) 
 (This crucifix has an overbearing presence in this room. I wonder why…) 
@@ -212,21 +212,21 @@ The man on the right looks a bit like Sakura. It must be Colonel Shinguji.
 Yoneda looks exactly like he does now. And in the middle, Ayame… Those were happier times for her. 
 (A photograph of the anti-demon unit…) 
 It looks like Ayame is snuggling up to the man on the left… 
-Maybe this is Shinnosuke Kanzaki, who later disappeared? 
+Maybe this is Shinnosuke Yamazaki, who later disappeared? 
 Hm, is this…? The man on the left, I think… maybe… I've seen him somewhere before? 
 Let's take a look… <br> Let's leave it. 
-Koma Wars, 1917 <br> Reporting Journal <br> January 1st, 1924 
+Kouma War, 1917 <br> Reporting Journal <br> January 1st, 1924 
 (I shouldn't just read this without permission…) 
 It's dated… seven years ago. 
-"Koma Wars documents" - Taisho 7 (1918), Imperial Infantry" - "Top secret" 
-"Koma Wars" is a term used for combat operations against the creatures called "Koma" that occurred from Taisho 6 to 7. 
+"Kouma War documents" - Taisho 7 (1918), Imperial Infantry" - "Top secret" 
+"Kouma War" is a term used for combat operations against the creatures called "Kouma" that occurred from Taisho 6 to 7. 
 About one square mile in the Nihonbashi area was totally destroyed, including all buildings. 
 According to internal calculations from the Infantry, damages amount to hundreds of millions of Yen. 
-The intelligence bureau's historians found out that evidence of the Koma existed even in ancient China. 
-Koma are demons that latch onto living beings and feed on their negative emotions. 
-Low-level Koma consist only of a head, but they feed and grow stronger, with the high-grade ones gaining human appearance. 
-The giant monsters witnessed during the Koma Wars are presumed to be very large low-level Koma. 
-During the final stage of the Koma Wars, an independent unit chased the giant Koma underground. 
+The intelligence bureau's historians found out that evidence of the Kouma existed even in ancient China. 
+Kouma are demons that latch onto living beings and feed on their negative emotions. 
+Low-level Kouma consist only of a head, but they feed and grow stronger, eventually gaining human appearance. 
+The giant monsters witnessed during the Kouma War are presumed to be very large low-level Kouma. 
+During the final stage of the Kouma War, an independent unit chased the giant Kouma underground. 
 It was known as the "anti-demon unit" and suffered one dead and one MIA. It was dispersed thereafter. 
 Commanding officer of this unit was Lieutenant General Ikki Yoneda of the Imperial Infantry. 
 The Flower Division… This is about us? 
@@ -238,16 +238,16 @@ Reports of Hive of Darkness at Ueno Park. Presumed leader is present. First real
 Ensign Ogami's performance deemed "pretty good for his first try" by Yoneda. 
 May 12th, a calm Japanese spring day. 
 Kohran Li has started in the Ginza HQ. Seems enthusiastic about her work. 
-Yoneda gave orders to ready the Shogeimaru. Will head to the Flower Mansion by Thunderstrike. 
+Yoneda gave orders to ready the Soaring Whale. Will head to the Flower Mansion by Thunderstrike. 
 May 13th, fair weather. 
 Met Ichiro Ogami last night. He was how I imagined him, more or less. Hope he meets our expectations. 
 Contact-free piloting system is ready. Iris' Kobu will be ready soon. 
-Maiden voyage of the Shogeimaru. Damages to mansion from scrambling impossible to predict. 
+Maiden voyage of the Soaring Whale. Damages to mansion from scrambling impossible to predict. 
 June 9th, rain. 
-Lt. Ogami wounded in battle of Tsukiji, but nothing serious. Kanna Kirishima back from Okinawa. 
+Lt. Ogami wounded in battle of Hex Mech, but nothing serious. Kanna Kirishima back from Okinawa. 
 Maria acting strange, seems vexed by something. Have to talk to her ASAP. 
 June 9th, rain. 
-Sakura wounded in battle of Tsukiji, but nothing serious. Kanna Kirishima back from Okinawa. 
+Sakura wounded in battle of Hex Mech, but nothing serious. Kanna Kirishima back from Okinawa. 
 Maria acting strange, seems vexed by something. Have to talk to her ASAP. 
 June 13th, rain. 
 After Maria's rogue action, Yoneda was summoned before committee of inquiry. 
@@ -264,7 +264,7 @@ Story of Iris' rampage is all over the newspapers. Yoneda in a foul mood.
 No one is called before committee of inquiry this time. Perhaps pressure from all sides is high enough? 
 August 2nd, cloudy. 
 Thanks to reports from citizens, we know of Hive of Darkness's plans in advance for the first time. 
-Will recommend Lt. Ogami, Sumire and Kanna as investigation team into abandoned Tsukiji mansion. 
+Will recommend Lt. Ogami, Sumire and Kanna as investigation team into abandoned Hex Mech mansion. 
 August 3rd, cloudy. 
 Investigation in Fukagawa is complete. Looks like I sent the right people. Lt. Ogami has proven his worth. 
 Maitreya Hosokawa said something about "enemy's plan". Must find out what it means. 
@@ -282,8 +282,8 @@ New Year's Eve. The end of an eventful year.
 Lt. Ogami and Flower Divison are listening to "Old Year, New Year" on radio. 
 Hope next year will be a good one. 
 January 2nd, fair weather. 
-My fears became reality: Koma have appeared. Monsters that were hidden underground. 
-"Koma Wars". That tragedy must never be repeated. 
+My fears became reality: Kouma have appeared. Monsters that were hidden underground. 
+"Kouma War". That tragedy must never be repeated. 
 …That's the last entry. 
 "January 1st, 1924." I wonder what this is… 
 January 1st, fair weather. 
@@ -295,7 +295,7 @@ I still can't forget him. How could I? You can't delete your own memories.
 January 2nd, fair weather. 
 Sable Satan. I can't stop thinking about that man for some reason. Is it because we fought him before? 
 No. I met him somewhere else. But when, and where? 
-Sable Satan, leader of the Koma. He betrayed the Hive of Darkness and sneers at everything that's good and right. 
+Sable Satan, leader of the Kouma. He betrayed the Hive of Darkness and sneers at everything good and right. 
 I just don't know. I feel like I'm on the verge of remembering, and then I get a splitting headache. 
 I just don't know. 
 January 8th, fair weather, then snow. 
@@ -304,7 +304,7 @@ Sumire seems changed. I'm different now, too, we all are. That's what being aliv
 February 2nd, fair weather. 
 Horrible headaches. Yoneda is worried about me. I'll rest in the afternoon. 
 February 9th, rain. 
-I remembered Kanna has a navigator's license, so I'm teaching her how to control the Shogeimaru. 
+I remembered Kanna has a navigator's license, so I'm teaching her how to control the Soaring Whale. 
 I'll teach Kohran everything about running the Flower Mansion. So she can take over when I'm gone. 
 February 18th, rain. 
 When I look at that photo in the evening, I can't stop crying. It was our first and last photo. 
@@ -413,7 +413,7 @@ Ensign… Please excuse me, but could you give me some time to reflect on my own
 …All right. 
 Let's try some other place… 
 Let's leave her for now. 
-This auditorium… this whole theater is like a barometer measuring the peace in the capital. And we have to keep it high. 
+This auditorium… this whole theater is like a barometer measuring the peace in the capital. Must keep it high. 
 Everyone seems to have gone someplace else… 
 We have to fill this room with spectators again… That's our most important mission. 
 Everyone seems to have gone someplace else… 
@@ -591,20 +591,20 @@ Unused
 Sorry… I'm sure I don't make sense… 
 Unused
 That's it! Ayame must simply be under Satan's control! 
-We have to save her! The Imperial Floral Storm Troop wouldn't be the same without her! 
+We have to save her! The Imperial Floral Assault Troupe wouldn't be the same without her! 
 Thank you, Ogami. 
 I… I liked her a lot, too. She was a big inspiration. 
 I could only dream of becoming like her one day… 
 But everything's changed now! I've grown a lot stronger since then. 
 Come on, Ogami! Let's save Ayame! 
 Ayame must be under Satan's control. I'm sure there's a way to free her. We can't just abandon her! 
-Muahahaha…! The castle that will fulfill all my ambitions is about to return. Murderess! 
+Muahahaha…! The castle that will fulfill all my ambitions is about to return. Aya-me! 
 Yes. 
 It will be some time until the Sacred Demon Castle will be reborn. Distract those girls until the time has come. 
 Yes, master! 
 Show me what you can do. 
 Please wait. 
-This Murderess was sleeping until a short while ago. She might fail. 
+This Aya-me was sleeping until a short while ago. She might fail. 
 You should entrust me, Butterfly, with this task! 
 Hmph… Very well. As you please… 
 Thank you kindly… 

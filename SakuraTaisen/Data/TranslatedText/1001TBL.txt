@@ -1,11 +1,11 @@
-﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking...
+﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
-It's a photo of Maria. ...She's lost in thought and looks kind of sad...
+It's a photo of Maria. …She's lost in thought and looks kind of sad…
 A photo of Kanna. She looks strong and reliable. I can't wait to meet her.
 A photo of Iris. She's surrounded by flowers and flashing a radiant smile.
 A photo of Kohran. She's looking pretty in profile with her face dyed red by the evening sun.
-A letter given to me by a customer. I was asked to give it to Sumire. I have a bad feeling about this...
-Maria's pistol. This may help me escape from here...
+A letter given to me by a customer. I was asked to give it to Sumire. I have a bad feeling about this…
+Maria's pistol. This may help me escape from here…
 A hair ornament. It's decorated with flowers and looks very elegant.
 A pretty pendant. The delicate workmanship is gorgeous.
 A hairpin for use in a traditional bun hairstyle. It would complement a formal outfit well.
@@ -19,12 +19,12 @@ A prop crown used onstage. It's well constructed and incredibly detailed.
 A wig and costume used onstage. I wonder what kind of act could use a flashy outfit like this?
 A photo of Sakura in her swimsuit. Wow, this is really something. I'm gonna treasure this.
 A photo of Sumire in her stage costume. Her distinctive makeup really makes an impact.
-It's a photo of Maria on stage in the military uniform from "For Love"... She's a beautiful woman disguised as a man.
+It's a photo of Maria on stage in the military uniform from "For Love"… She's a beautiful woman disguised as a man.
 A photo of Kanna in her training gear. Catching her in a private moment like this feels surprisingly intimate.
 A photo of Iris in her swimsuit. She's holding a rubber ring and looks ready to have some fun. How cute.
 A photo of Kohran. I don't get to see her with her braids undone very often. It's a nice look.
 A photo of Ayame in a traditional outfit. I hope she'll always be as happy and content as she is here.
-Ayame's gun. Why...? Why did it have to turn out like this...?
+Ayame's gun. Why…? Why did it have to turn out like this…?
 Jean-Paul the teddy bear. Iris's best friend. She always carries him with her and takes good care of him.
 On the other side of these clouds, there's the Sacred Demon Castle… and Ayame. 
 Will I be able to face her? 
@@ -35,7 +35,7 @@ What's wrong, Sakura?
 Huh? 
 …Lonely? Maybe you're right. 
 I was just… I was thinking about what I'm going to do. 
-First, Ayame leaves the Floral Storm Troop… And now we're even supposed to fight her? 
+First, Ayame leaves the Floral Assault Troupe… And now we're even supposed to fight her? 
 … 
 I'm… scared. Of things that end… and things we have to set an end to. 
 It's strange, isn't it? Here I stand, proud captain of the Flower Division, trembling like a little boy. 
@@ -117,11 +117,11 @@ That's right, Iris. There's no need to worry.
 …Fine. 
 Mon Frère… You'll be okay, right? 
 Tenkai's Six Star Summoning… The return of the Koma… The Pandemonium Vessel… 
-So all of this… the rise of the Sacred Demon Castle… all of this was Aoi Satan's plan all along? 
+So all of this… the rise of the Sacred Demon Castle… all of this was Sable Satan's plan all along? 
 Yeah, it seems that way… 
 The Sacred Demon Castle is sucking up power like a living thing! We have to stop it… 
-Aoi Satan… The Pandemonium Vessel that Ayame took with her… The Sacred Demon Castle, which has risen from the sea… 
-Damn it! I should have realized sooner what Aoi Satan was up to! 
+Sable Satan… The Pandemonium Vessel that Ayame took with her… The Sacred Demon Castle, which has risen from the sea… 
+Damn it! I should have realized sooner what Sable Satan was up to! 
 Yeah… It really seems like it's too late to stop it now… 
 But… even if we had noticed it sooner… What could we have done? 
 The castle is their HQ. We have to come up with a plan to attack it. 
@@ -129,7 +129,7 @@ I don't think this is purely a question of size!
 How are we supposed to fight something like that? It would be suicide! 
 Why do we have to fight that thing? 
 Sumire… 
-Sumire… If we don't do it, who will? We're the Imperial Floral Storm Troop. 
+Sumire… If we don't do it, who will? We're the Imperial Floral Assault Troupe. 
 I know that much… 
 I just… I just want it to be over… 
 I never thought it'd come to this… 
@@ -308,19 +308,19 @@ I'm aware of that, of course.
 … 
 This is our biggest challenge yet. I certainly don't intend to run from it! 
 No matter what they throw at us, I'll crush it… with my own fists! 
-Hear, hear! You should know you're in safe hands with me! 
+Hear, hear! You should know that you're in safe hands with me! 
 There's no way we're gonna lose! 
-The Imperial Floral Storm Troop will give anything for peace and for a good show! 
+The Imperial Floral Assault Troupe will give anything for peace and for a good show! 
 Y-you all… 
 And besides that… We'll go, no matter who wants to stop us. 
-The Imperial Floral Storm Troop, Flower Division will protect this city! 
+The Imperial Floral Assault Troupe, Flower Division will protect this city! 
 … 
 …Lieutenant General! 
 …Alright, I won't try to stop you. Be victorious! For the future of the Imperial capital! 
-Okay, let's go, everyone! Imperial Floral Storm Troop, move out! 
+Okay, let's go, everyone! Imperial Floral Assault Troupe, move out! 
 Yes sir! 
-The Shogeimaru has entered protected airspace! Sacred Demon Castle starboard ahead! Staying at 2000 above ground. 
-We'll engage the enemy soon. Aoi Satan will probably be our last, and our most awesome foe. 
+The Soaring Whale has entered protected airspace! Sacred Demon Castle starboard ahead! Staying at 2000 above ground. 
+We'll engage the enemy soon. Sable Satan will probably be our last, and our most awesome foe. 
 But we will save Tokyo, save the world! And then… 
 We'll all come back here safe and sound! 
 …Yes sir! 
@@ -343,7 +343,7 @@ Lieutenant General Yoneda!
 I forgot to tell you one thing… 
 Once we're back home, we'll have a big party! So don't take too long! 
 …Yes sir! 
-Kanna! Land the Shogeimaru where the castle gate used to be! We'll enter the castle from there! 
+Kanna! Land the Soaring Whale where the castle gate used to be! We'll enter the castle from there! 
 Roger! 
 I wish you luck… 
 Koma are approaching fast from the direction of the castle. About 2000 units! 
@@ -358,7 +358,7 @@ Greed… wrath… envy… The spirit cannon is powered by all of humanity's vice
 When Lord Satan's prayer is completed, this fire will mark the 12th hour… 
 And then, the light of darkness will wash over the world and turn it black! 
 HAHAHA! 
-Hehehe… The Shogeimaru's measly cannons can't even scratch the castle's front gate. 
+Hehehe… The Soaring Whale’s measly cannons can't even scratch the castle's front gate. 
 And what did I do? I just sat in my chair, sending those girls into battle… 
 I'm a failure as a soldier. 
 But still, I loved you more than anyone and would have done anything to protect your lives… 

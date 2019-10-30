@@ -559,7 +559,7 @@ Accessory <br> Calamity Jane <br> Cassowary
 What is Sakura's father's name? 
 Ryoma Shinguji <br> Kozuma Shinguji <br> Kazuma Shinguji 
 What is the name of Crimson Miroku's Hex Mech? 
-Ginkaku <br> Kujaku <br> Amaterasu 
+Silver Horn <br> Peafowl <br> Amaterasu 
 What motion picture was playing when you went on your date with Iris? 
 A Rare Animal Emerges <br> A Yeti Emerges <br> A Slime Approaches 
 What was Kohran doing while you were in Fukagawa? 
@@ -584,19 +584,19 @@ How much money did the Tenkai demand from the government?
 100 million yen <br> 1 billion yen <br> 10 billion yen 
 Which of the following rooms is located underground? 
 Night Watchman's Room <br> Infirmary <br> Set Room 
-What are the blue Wakiji called? 
+What are the blue Hex Mechs called? 
 Infantry <br> Matchlock <br> Artillery 
 Which of these girls has a photo for sale in the Gift Shop? 
 Kasumi <br> Tsubaki <br> Yuri 
 This is a visual question. 
 What are Maria and Ogami looking at here? 
-Shogei-Maru <br> Aerial Footage <br> Shooting Star 
+Soaring Whale <br> Aerial Footage <br> Shooting Star 
 This is a visual question. 
 Who defeated these three people? 
 Iris <br> Ogami <br> Maria 
 This is a visual question. 
 What is the trio looking at? 
-The train chasing them <br> Miroku and her Wakiji <br> The Fukagawa house in flames 
+The train chasing them <br> Miroku’s Hex Mech <br> The Fukagawa house in flames 
 This is a visual question. 
 Who is missing from this picture? 
 Maria <br> Iris <br> Sakura 
