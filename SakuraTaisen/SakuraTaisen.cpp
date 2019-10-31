@@ -2304,7 +2304,7 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 				}
 
 				//If untranslated, then write out the file and line number
-				if( bIsUnused ||
+				if(// bIsUnused ||
 					textLine.mWords.size() == 0 ||
 					(textLine.mWords.size() == 1 && (textLine.mWords[0] == UntranslatedEnglishString || textLine.mWords[0] == UnusedEnglishString) )
 					)
