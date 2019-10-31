@@ -8733,97 +8733,136 @@ bool PatchMiniHana(const string& patchedSakuraDirectory, const string& inTransla
 	miniGameFile.WriteData(0x00095990, patchedLogo.GetImageData(), patchedLogo.GetImageDataSize());
 
 	//Open translated fontsheet
-	const string fontSheetFileName = inTranslatedDataDirectory + "MiniHanaFontSheet.bmp";
-	BmpToSakuraConverter patchedFontSheet;
-	const unsigned int tileDim = 16;
-	if( !patchedFontSheet.ConvertBmpToSakuraFormat(fontSheetFileName, false, 0, &tileDim, &tileDim) )
 	{
-		printf("PatchMiniHana: Couldn't convert image: %s.\n", logoFileName.c_str());
-		return false;
+		const string fontSheetFileName = inTranslatedDataDirectory + "MiniHanaFontSheet.bmp";
+		BmpToSakuraConverter patchedFontSheet;
+		const unsigned int tileDim = 16;
+		if( !patchedFontSheet.ConvertBmpToSakuraFormat(fontSheetFileName, false, 0, &tileDim, &tileDim) )
+		{
+			printf("PatchMiniHana: Couldn't convert image: %s.\n", logoFileName.c_str());
+			return false;
+		}
+
+		patchedFontSheet.PackTiles();
+
+		//Patch fontsheet
+		//miniGameDumper.Dump("MINIHANA", 111, 0x00092210, 0x000a6b84);
+		miniGameFile.WriteData(0x00092210, patchedFontSheet.mpPackedTiles, patchedFontSheet.mPackedTileSize);
 	}
 
-	patchedFontSheet.PackTiles();
-
-	//Patch fontsheet
-	//miniGameDumper.Dump("MINIHANA", 111, 0x00092210, 0x000a6b84);
-	miniGameFile.WriteData(0x00092210, patchedFontSheet.mpPackedTiles, patchedFontSheet.mPackedTileSize);
-
-	MiniGameTextIndiceFinder indiceFinder;
-	indiceFinder.FindIndices(miniGameOriginalFile.GetData(), 0x000a6b84, 111);
-	if( indiceFinder.indiceAddresses.size() != 16 )
+	//Text
 	{
-		printf("PatchMiniHana: Couldn't find text indices\n");
-		return false;
+		MiniGameTextIndiceFinder indiceFinder;
+		indiceFinder.FindIndices(miniGameOriginalFile.GetData(), 0x000a6b84, 111);
+		if( indiceFinder.indiceAddresses.size() != 16 )
+		{
+			printf("PatchMiniHana: Couldn't find text indices\n");
+			return false;
+		}
+
+		//Patch text lookups
+		short textIndices1[] = { 1, 2, 3, 4, 5, 6, 0x0a0d, 7, 8, 9, 0x0a0d, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 0 };
+		short textIndices2[] = { 23, 24, 25, 26, 27, 28, 29, 39, 31, 32, 33, 0x0a0d, 34, 35, 36, 37, 38, 39, 40, 41, 0 };
+		short textIndices3[] = { 42, 43, 44, 45, 0x0a0d, 46, 0x0a0d, 0x0a0d, 46, 0 };
+		short textIndices4[] = { 47, 48, 49, 0x0a0d, 50, 51, 52, 0x0a0d, 53, 54, 55, 56, 0x0a0d, 57, 58, 59, 0 };
+		short textIndices5[] = { 60, 61, 62, 63, 64, 65, 66, 0 };
+		short textIndices6[] = { 67, 68, 69, 70, 71, 72, 73, 0 };
+		short textIndices7[] = { 74, 75, 76, 77, 78, 79, 80, 0 };
+		short textIndices8[] = { 81, 82, 83, 70, 71, 72, 73, 0 };
+		short textIndices9[] = { 84, 85, 86, 87, 0 };
+		short textIndices10[] = { 88, 89, 90, 91, 92, 0 };
+		short textIndices11[] = { 93, 94, 95, 0 };
+		short textIndices12[] = { 96, 97, 98, 99, 100, 101, 102, 0 };
+		short textIndices13[] = { 103, 104, 0 };
+		short textIndices14[] = { 105, 106, 0 };
+		short textIndices15[] = { 107, 108, 0 };
+		short textIndices16[] = { 109, 110, 111, 0 };
+
+		SwapEndiannessForArrayOfShorts(textIndices1, sizeof(textIndices1));
+		SwapEndiannessForArrayOfShorts(textIndices2, sizeof(textIndices2));
+		SwapEndiannessForArrayOfShorts(textIndices3, sizeof(textIndices3));
+		SwapEndiannessForArrayOfShorts(textIndices4, sizeof(textIndices4));
+		SwapEndiannessForArrayOfShorts(textIndices5, sizeof(textIndices5));
+		SwapEndiannessForArrayOfShorts(textIndices6, sizeof(textIndices6));
+		SwapEndiannessForArrayOfShorts(textIndices7, sizeof(textIndices7));
+		SwapEndiannessForArrayOfShorts(textIndices8, sizeof(textIndices8));
+		SwapEndiannessForArrayOfShorts(textIndices9, sizeof(textIndices9));
+		SwapEndiannessForArrayOfShorts(textIndices10, sizeof(textIndices10));
+		SwapEndiannessForArrayOfShorts(textIndices11, sizeof(textIndices11));
+		SwapEndiannessForArrayOfShorts(textIndices12, sizeof(textIndices12));
+		SwapEndiannessForArrayOfShorts(textIndices13, sizeof(textIndices13));
+		SwapEndiannessForArrayOfShorts(textIndices14, sizeof(textIndices14));
+		SwapEndiannessForArrayOfShorts(textIndices15, sizeof(textIndices15));
+		SwapEndiannessForArrayOfShorts(textIndices16, sizeof(textIndices16));
+
+		if( !indiceFinder.ValidateNewIndices(0, sizeof(textIndices1)) ) return false;
+		if( !indiceFinder.ValidateNewIndices(1, sizeof(textIndices2)) ) return false;
+		if( !indiceFinder.ValidateNewIndices(2, sizeof(textIndices3)) ) return false;
+		if( !indiceFinder.ValidateNewIndices(3, sizeof(textIndices4)) ) return false;
+		if( !indiceFinder.ValidateNewIndices(4, sizeof(textIndices5)) ) return false;
+		if( !indiceFinder.ValidateNewIndices(5, sizeof(textIndices6)) ) return false;
+		if( !indiceFinder.ValidateNewIndices(6, sizeof(textIndices7)) ) return false;
+		if( !indiceFinder.ValidateNewIndices(7, sizeof(textIndices8)) ) return false;
+		if( !indiceFinder.ValidateNewIndices(8, sizeof(textIndices9)) ) return false;
+		if( !indiceFinder.ValidateNewIndices(9,  sizeof(textIndices10)) ) return false;
+		if( !indiceFinder.ValidateNewIndices(10, sizeof(textIndices11)) ) return false;
+		if( !indiceFinder.ValidateNewIndices(11, sizeof(textIndices12)) ) return false;
+		if( !indiceFinder.ValidateNewIndices(12, sizeof(textIndices13)) ) return false;
+		if( !indiceFinder.ValidateNewIndices(13, sizeof(textIndices14)) ) return false;
+		if( !indiceFinder.ValidateNewIndices(14, sizeof(textIndices15)) ) return false;
+		if( !indiceFinder.ValidateNewIndices(15, sizeof(textIndices16)) ) return false;
+
+		miniGameFile.WriteData(indiceFinder.indiceAddresses[0], (char*)textIndices1, sizeof(textIndices1));
+		miniGameFile.WriteData(indiceFinder.indiceAddresses[1], (char*)textIndices2, sizeof(textIndices2));
+		miniGameFile.WriteData(indiceFinder.indiceAddresses[2], (char*)textIndices3, sizeof(textIndices3));
+		miniGameFile.WriteData(indiceFinder.indiceAddresses[3], (char*)textIndices4, sizeof(textIndices4));
+		miniGameFile.WriteData(indiceFinder.indiceAddresses[4], (char*)textIndices5, sizeof(textIndices5));
+		miniGameFile.WriteData(indiceFinder.indiceAddresses[5], (char*)textIndices6, sizeof(textIndices6));
+		miniGameFile.WriteData(indiceFinder.indiceAddresses[6], (char*)textIndices7, sizeof(textIndices7));
+		miniGameFile.WriteData(indiceFinder.indiceAddresses[7], (char*)textIndices8, sizeof(textIndices8));
+		miniGameFile.WriteData(indiceFinder.indiceAddresses[8], (char*)textIndices9, sizeof(textIndices9));
+		miniGameFile.WriteData(indiceFinder.indiceAddresses[9], (char*)textIndices10, sizeof(textIndices10));
+		miniGameFile.WriteData(indiceFinder.indiceAddresses[10], (char*)textIndices11, sizeof(textIndices11));
+		miniGameFile.WriteData(indiceFinder.indiceAddresses[11], (char*)textIndices12, sizeof(textIndices12));
+		miniGameFile.WriteData(indiceFinder.indiceAddresses[12], (char*)textIndices13, sizeof(textIndices13));
+		miniGameFile.WriteData(indiceFinder.indiceAddresses[13], (char*)textIndices14, sizeof(textIndices14));
+		miniGameFile.WriteData(indiceFinder.indiceAddresses[14], (char*)textIndices15, sizeof(textIndices15));
+		miniGameFile.WriteData(indiceFinder.indiceAddresses[15], (char*)textIndices16, sizeof(textIndices16));
 	}
 
-	//Patch text lookups
-	short textIndices1[] = { 1, 2, 3, 4, 5, 6, 0x0a0d, 7, 8, 9, 0x0a0d, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 0 };
-	short textIndices2[] = { 23, 24, 25, 26, 27, 28, 29, 39, 31, 32, 33, 0x0a0d, 34, 35, 36, 37, 38, 39, 40, 41, 0 };
-	short textIndices3[] = { 42, 43, 44, 45, 0x0a0d, 46, 0x0a0d, 0x0a0d, 46, 0 };
-	short textIndices4[] = { 47, 48, 49, 0x0a0d, 50, 51, 52, 0x0a0d, 53, 54, 55, 56, 0x0a0d, 57, 58, 59, 0 };
-	short textIndices5[] = { 60, 61, 62, 63, 64, 65, 66, 0 };
-	short textIndices6[] = { 67, 68, 69, 70, 71, 72, 73, 0 };
-	short textIndices7[] = { 74, 75, 76, 77, 78, 79, 80, 0 };
-	short textIndices8[] = { 81, 82, 83, 70, 71, 72, 73, 0 };
-	short textIndices9[] = { 84, 85, 86, 87, 0 };
-	short textIndices10[] = { 88, 89, 90, 91, 92, 0 };
-	short textIndices11[] = { 93, 94, 95, 0 };
-	short textIndices12[] = { 96, 97, 98, 99, 100, 101, 102, 0 };
-	short textIndices13[] = { 103, 104, 0 };
-	short textIndices14[] = { 105, 106, 0 };
-	short textIndices15[] = { 107, 108, 0 };
-	short textIndices16[] = { 109, 110, 111, 0 };
+#if 0
+	//Tutorial fontsheet
+	{
+		const string fontSheetFileName = inTranslatedDataDirectory + "MiniHana_TutorialFontSheet.bmp";
+		BmpToSakuraConverter patchedFontSheet;
+		const unsigned int tileDim = 16;
+		if( !patchedFontSheet.ConvertBmpToSakuraFormat(fontSheetFileName, false, 0, &tileDim, &tileDim) )
+		{
+			printf("PatchMiniHana: Couldn't convert image: %s.\n", logoFileName.c_str());
+			return false;
+		}
+		patchedFontSheet.PackTiles();
+
+		SakuraCompressedData compressedData;
+		compressedData.PatchDataInMemory(patchedFontSheet.mpPackedTiles, patchedFontSheet.mPackedTileSize, true, false, 384);
+		if( compressedData.mDataSize != 384 )
+		{
+			printf("PatchMiniHana: Patched data is too big for: %s.\n", fontSheetFileName.c_str());
+		}
+		miniGameFile.WriteData(0x000a8178, compressedData.mpCompressedData, compressedData.mDataSize);
+	}
 	
-	SwapEndiannessForArrayOfShorts(textIndices1, sizeof(textIndices1));
-	SwapEndiannessForArrayOfShorts(textIndices2, sizeof(textIndices2));
-	SwapEndiannessForArrayOfShorts(textIndices3, sizeof(textIndices3));
-	SwapEndiannessForArrayOfShorts(textIndices4, sizeof(textIndices4));
-	SwapEndiannessForArrayOfShorts(textIndices5, sizeof(textIndices5));
-	SwapEndiannessForArrayOfShorts(textIndices6, sizeof(textIndices6));
-	SwapEndiannessForArrayOfShorts(textIndices7, sizeof(textIndices7));
-	SwapEndiannessForArrayOfShorts(textIndices8, sizeof(textIndices8));
-	SwapEndiannessForArrayOfShorts(textIndices9, sizeof(textIndices9));
-	SwapEndiannessForArrayOfShorts(textIndices10, sizeof(textIndices10));
-	SwapEndiannessForArrayOfShorts(textIndices11, sizeof(textIndices11));
-	SwapEndiannessForArrayOfShorts(textIndices12, sizeof(textIndices12));
-	SwapEndiannessForArrayOfShorts(textIndices13, sizeof(textIndices13));
-	SwapEndiannessForArrayOfShorts(textIndices14, sizeof(textIndices14));
-	SwapEndiannessForArrayOfShorts(textIndices15, sizeof(textIndices15));
-	SwapEndiannessForArrayOfShorts(textIndices16, sizeof(textIndices16));
-
-	if( !indiceFinder.ValidateNewIndices(0, sizeof(textIndices1)) ) return false;
-	if( !indiceFinder.ValidateNewIndices(1, sizeof(textIndices2)) ) return false;
-	if( !indiceFinder.ValidateNewIndices(2, sizeof(textIndices3)) ) return false;
-	if( !indiceFinder.ValidateNewIndices(3, sizeof(textIndices4)) ) return false;
-	if( !indiceFinder.ValidateNewIndices(4, sizeof(textIndices5)) ) return false;
-	if( !indiceFinder.ValidateNewIndices(5, sizeof(textIndices6)) ) return false;
-	if( !indiceFinder.ValidateNewIndices(6, sizeof(textIndices7)) ) return false;
-	if( !indiceFinder.ValidateNewIndices(7, sizeof(textIndices8)) ) return false;
-	if( !indiceFinder.ValidateNewIndices(8, sizeof(textIndices9)) ) return false;
-	if( !indiceFinder.ValidateNewIndices(9,  sizeof(textIndices10)) ) return false;
-	if( !indiceFinder.ValidateNewIndices(10, sizeof(textIndices11)) ) return false;
-	if( !indiceFinder.ValidateNewIndices(11, sizeof(textIndices12)) ) return false;
-	if( !indiceFinder.ValidateNewIndices(12, sizeof(textIndices13)) ) return false;
-	if( !indiceFinder.ValidateNewIndices(13, sizeof(textIndices14)) ) return false;
-	if( !indiceFinder.ValidateNewIndices(14, sizeof(textIndices15)) ) return false;
-	if( !indiceFinder.ValidateNewIndices(15, sizeof(textIndices16)) ) return false;
-
-	miniGameFile.WriteData(indiceFinder.indiceAddresses[0], (char*)textIndices1, sizeof(textIndices1));
-	miniGameFile.WriteData(indiceFinder.indiceAddresses[1], (char*)textIndices2, sizeof(textIndices2));
-	miniGameFile.WriteData(indiceFinder.indiceAddresses[2], (char*)textIndices3, sizeof(textIndices3));
-	miniGameFile.WriteData(indiceFinder.indiceAddresses[3], (char*)textIndices4, sizeof(textIndices4));
-	miniGameFile.WriteData(indiceFinder.indiceAddresses[4], (char*)textIndices5, sizeof(textIndices5));
-	miniGameFile.WriteData(indiceFinder.indiceAddresses[5], (char*)textIndices6, sizeof(textIndices6));
-	miniGameFile.WriteData(indiceFinder.indiceAddresses[6], (char*)textIndices7, sizeof(textIndices7));
-	miniGameFile.WriteData(indiceFinder.indiceAddresses[7], (char*)textIndices8, sizeof(textIndices8));
-	miniGameFile.WriteData(indiceFinder.indiceAddresses[8], (char*)textIndices9, sizeof(textIndices9));
-	miniGameFile.WriteData(indiceFinder.indiceAddresses[9], (char*)textIndices10, sizeof(textIndices10));
-	miniGameFile.WriteData(indiceFinder.indiceAddresses[10], (char*)textIndices11, sizeof(textIndices11));
-	miniGameFile.WriteData(indiceFinder.indiceAddresses[11], (char*)textIndices12, sizeof(textIndices12));
-	miniGameFile.WriteData(indiceFinder.indiceAddresses[12], (char*)textIndices13, sizeof(textIndices13));
-	miniGameFile.WriteData(indiceFinder.indiceAddresses[13], (char*)textIndices14, sizeof(textIndices14));
-	miniGameFile.WriteData(indiceFinder.indiceAddresses[14], (char*)textIndices15, sizeof(textIndices15));
-	miniGameFile.WriteData(indiceFinder.indiceAddresses[15], (char*)textIndices16, sizeof(textIndices16));
+	//Tutorial text
+	{
+		MiniGameTextIndiceFinder indiceFinder;
+		indiceFinder.FindIndices(miniGameOriginalFile.GetData(), 0x000a6f1c, 230);
+		if( indiceFinder.indiceAddresses.size() != 16 )
+		{
+			printf("PatchMiniHana: Couldn't find text indices for tutorial\n");
+			return false;
+		}
+	}
+#endif
 
 	return true;
 }
