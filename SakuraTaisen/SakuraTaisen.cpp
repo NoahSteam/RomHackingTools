@@ -8830,7 +8830,6 @@ bool PatchMiniHana(const string& patchedSakuraDirectory, const string& inTransla
 		miniGameFile.WriteData(indiceFinder.indiceAddresses[15], (char*)textIndices16, sizeof(textIndices16));
 	}
 
-#if 0
 	//Tutorial fontsheet
 	{
 		const string fontSheetFileName = inTranslatedDataDirectory + "MiniHana_TutorialFontSheet.bmp";
@@ -8856,13 +8855,160 @@ bool PatchMiniHana(const string& patchedSakuraDirectory, const string& inTransla
 	{
 		MiniGameTextIndiceFinder indiceFinder;
 		indiceFinder.FindIndices(miniGameOriginalFile.GetData(), 0x000a6f1c, 230);
-		if( indiceFinder.indiceAddresses.size() != 16 )
+		if( indiceFinder.indiceAddresses.size() != 70 )
 		{
 			printf("PatchMiniHana: Couldn't find text indices for tutorial\n");
 			return false;
 		}
+
+		short textIndices1[] = {0, 1};
+		short textIndices2[] = {3, 4, 5, 6, 7, 8};
+		short textIndices3[] = {9, 10, 11};
+		short textIndices4[] = {12, 13, 14, 15, 16, 17};
+		short textIndices5[] = {18, 19, 20, 21, 22};
+		short textIndices6[] = {23, 24, 25};
+		short textIndices7[] = {26, 27, 28, 29};
+		short textIndices8[] = {30, 31, 32};
+		short textIndices9[] = {33, 34, 35, 36};
+		short textIndices10[] = {37, 38, 39, 41};
+		short textIndices11[] = {42, 43, 44};
+		short textIndices12[] = {45, 46, 47};
+		short textIndices13[] = {48, 49, 50, 51, 52};
+		short textIndices14[] = {53, 54, 55, 56, 57};
+		short textIndices15[] = {58, 59, 60, 61};
+		short textIndices16[] = {62, 63};
+		short textIndices17[] = {64, 65};
+		short textIndices18[] = {66, 67, 68, 69};
+		short textIndices19[] = {70, 71, 72};
+		short textIndices20[] = {73, 74, 75};
+		short textIndices21[] = {76, 77, 78, 79};
+		short textIndices22[] = {80, 81, 82};
+		short textIndices23[] = {83, 84, 85, 86};
+		short textIndices24[] = {87, 88, 89};
+		short textIndices25[] = {90, 91, 92, 93, 94};
+		short textIndices26[] = {95, 96, 97};
+		short textIndices27[] = {98, 99, 100};
+		short textIndices28[] = {101, 102, 103};
+		short textIndices29[] = {104, 105, 106, 107};
+		short textIndices30[] = {108, 109};
+		short textIndices31[] = {110, 111};
+		short textIndices32[] = {112, 1113, 114, 115};
+		short textIndices33[] = {116, 117, 118};
+		short textIndices34[] = {119, 120, 121, 122};
+		short textIndices35[] = {123, 124, 125};
+		short textIndices36[] = {126, 127};
+		short textIndices37[] = {128, 129, 130, 131};
+		short textIndices38[] = {132, 133};
+		short textIndices39[] = {134, 135, 136};
+		short textIndices40[] = {137, 138, 139, 140, 141};
+		short textIndices41[] = {142, 143, 144, 145, 146};
+		short textIndices42[] = {147, 148, 149};
+		short textIndices43[] = {150, 151, 152, 153};
+		short textIndices44[] = {154, 155, 156, 157, 158, 159};
+		short textIndices45[] = {160, 161, 162};
+		short textIndices46[] = {163, 164, 165, 166, 167};
+		short textIndices47[] = {168, 169, 170, 171, 172};
+		short textIndices48[] = {173, 174, 175, 176};
+		short textIndices49[] = {177, 178, 179, 180};
+		short textIndices50[] = {181, 182, 183, 184};
+		short textIndices51[] = {185, 186, 187, 188};
+		short textIndices52[] = {189, 190, 191, 192, 193, 194};
+		short textIndices53[] = {195, 196, 197, 198};
+		short textIndices54[] = {199, 200, 201, 202};
+		short textIndices55[] = {203, 204, 205, 206, 207};
+		short textIndices56[] = {208, 209, 210, 211};
+		short textIndices57[] = {212, 213, 214, 215, 216, 217};
+		short textIndices58[] = {218, 219, 220, 221, 222, 223};
+		short textIndices59[] = {222, 226};
+		short textIndices60[] = {227, 228};
+		short textIndices61[] = {227, 228};
+		short textIndices62[] = {227, 228};
+		short textIndices63[] = {227, 228};
+		short textIndices64[] = {227, 228};
+		short textIndices65[] = {227, 228};
+		short textIndices66[] = {227, 228};
+		short textIndices67[] = {227, 228};
+		short textIndices68[] = {227, 228};
+		short textIndices69[] = {227, 228};
+		short textIndices70[] = {227, 228};
+
+#define PatchTextIndices(indice) SwapEndiannessForArrayOfShorts(indice, sizeof(indice));\
+                                 if( !indiceFinder.ValidateNewIndices(indiceNumber, sizeof(indice)) ) return false;\
+                                 miniGameFile.WriteData(indiceFinder.indiceAddresses[indiceNumber], (char*)indice, sizeof(indice));\
+                                 ++indiceNumber;
+
+		int indiceNumber = 0;
+		PatchTextIndices(textIndices1);
+		PatchTextIndices(textIndices2);
+		PatchTextIndices(textIndices3);
+		PatchTextIndices(textIndices4);
+		PatchTextIndices(textIndices5);
+		PatchTextIndices(textIndices6);
+		PatchTextIndices(textIndices7);
+		PatchTextIndices(textIndices8);
+		PatchTextIndices(textIndices9);
+		PatchTextIndices(textIndices10);
+		PatchTextIndices(textIndices11);
+		PatchTextIndices(textIndices12);
+		PatchTextIndices(textIndices13);
+		PatchTextIndices(textIndices14);
+		PatchTextIndices(textIndices15);
+		PatchTextIndices(textIndices16);
+		PatchTextIndices(textIndices17);
+		PatchTextIndices(textIndices18);
+		PatchTextIndices(textIndices19);
+		PatchTextIndices(textIndices20);
+		PatchTextIndices(textIndices21);
+		PatchTextIndices(textIndices22);
+		PatchTextIndices(textIndices23);
+		PatchTextIndices(textIndices24);
+		PatchTextIndices(textIndices25);
+		PatchTextIndices(textIndices26);
+		PatchTextIndices(textIndices27);
+		PatchTextIndices(textIndices28);
+		PatchTextIndices(textIndices29);
+		PatchTextIndices(textIndices30);
+		PatchTextIndices(textIndices31);
+		PatchTextIndices(textIndices32);
+		PatchTextIndices(textIndices33);
+		PatchTextIndices(textIndices34);
+		PatchTextIndices(textIndices35);
+		PatchTextIndices(textIndices36);
+		PatchTextIndices(textIndices37);
+		PatchTextIndices(textIndices38);
+		PatchTextIndices(textIndices39);
+		PatchTextIndices(textIndices40);
+		PatchTextIndices(textIndices41);
+		PatchTextIndices(textIndices42);
+		PatchTextIndices(textIndices43);
+		PatchTextIndices(textIndices44);
+		PatchTextIndices(textIndices45);
+		PatchTextIndices(textIndices46);
+		PatchTextIndices(textIndices47);
+		PatchTextIndices(textIndices48);
+		PatchTextIndices(textIndices49);
+		PatchTextIndices(textIndices50);
+		PatchTextIndices(textIndices51);
+		PatchTextIndices(textIndices52);
+		PatchTextIndices(textIndices53);
+		PatchTextIndices(textIndices54);
+		PatchTextIndices(textIndices55);
+		PatchTextIndices(textIndices56);
+		PatchTextIndices(textIndices57);
+		PatchTextIndices(textIndices58);
+		PatchTextIndices(textIndices59);
+		PatchTextIndices(textIndices60);
+		PatchTextIndices(textIndices61);
+		PatchTextIndices(textIndices62);
+		PatchTextIndices(textIndices63);
+		PatchTextIndices(textIndices64);
+		PatchTextIndices(textIndices65);
+		PatchTextIndices(textIndices66);
+		PatchTextIndices(textIndices67);
+		PatchTextIndices(textIndices68);
+		PatchTextIndices(textIndices69);
+		PatchTextIndices(textIndices70);
 	}
-#endif
 
 	return true;
 }
