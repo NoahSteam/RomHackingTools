@@ -475,11 +475,36 @@ bool TextFileData::InitializeTextFile(bool bFixupSpecialCharacters)
 					t += 2;
 					fixedString[f++] = (char)232;
 				}
-				else if( bFixupSpecialCharacters && pToken[t] == -30 )
+				else if( bFixupSpecialCharacters && pToken[t] == (char)0xe2 && pToken[t+1] == (char)0x80 && pToken[t+2] == (char)0xa6 )
 				{
 					t += 3;
-
 					fixedString[f++] = '@';
+				}
+				else if( bFixupSpecialCharacters && pToken[t] == (char)0xe2 && pToken[t+1] == (char)0x80 && pToken[t+2] == (char)0x99 )
+				{
+					t += 3;
+					fixedString[f++] = '\'';
+				}
+				else if( bFixupSpecialCharacters && pToken[t] == (char)0xe2 && pToken[t+1] == (char)0x80 && pToken[t+2] == (char)0x9c )
+				{
+					t += 3;
+					fixedString[f++] = '\"';
+				}
+				else if( bFixupSpecialCharacters && pToken[t] == (char)0xe2 && pToken[t+1] == (char)0x80 && pToken[t+2] == (char)0x9d )
+				{
+					t += 3;
+					fixedString[f++] = '\"';
+				}
+				else if( bFixupSpecialCharacters && pToken[t] == (char)0xe2 && pToken[t+1] == (char)0x80 && pToken[t+2] == (char)0x98 )
+				{
+					t += 3;
+					fixedString[f++] = '\'';
+				}
+				else if( bFixupSpecialCharacters && pToken[t] == (char)0xe2 )
+				{
+					printf("Unhandled multi-byte character in string %s in %s", pToken, mFileNameInfo.mFileName.c_str());
+
+					t += 3;
 				}
 				else
 				{
