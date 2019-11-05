@@ -27,6 +27,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 #include "Utils.h"
 #include "..\ExternalTools\lodepng.h"
+#include "decompress_rtns.h"
 
 using std::string;
 using std::vector;

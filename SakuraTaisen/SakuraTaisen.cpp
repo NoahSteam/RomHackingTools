@@ -27,6 +27,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include <map>
 #include <algorithm>
 #include "..\Utils\Utils.h"
+#include "..\Utils\decompress_rtns.c"
 #include <assert.h>
 
 using std::vector;
@@ -7183,6 +7184,58 @@ bool PatchTMapSP(const string& sakuraDirectory, const string& patchDataPath)
 	return true;
 }
 
+void FindCMPData(const string& inCompressedFilePath, const string& inUncompressedFilePath, const string& outDirectory)
+{
+	FileData inFileData;
+	if( !inFileData.InitializeFileData( FileNameContainer(inCompressedFilePath.c_str()) ) )
+	{
+		return;
+	}
+
+	FileData searchData;
+	if( !searchData.InitializeFileData( FileNameContainer(inUncompressedFilePath.c_str()) ) )
+	{
+		return;
+	}
+
+	char buffer[MAX_PATH];
+	for(unsigned long i = 0; i < inFileData.GetDataSize(); ++i)
+	{
+		int fileOffset = (int)i;
+		int dataSizeBytes = 0;
+		int cmprType = 0;
+
+		if(analyzeHeader(inCompressedFilePath.c_str(), &fileOffset, &dataSizeBytes, &cmprType) < 0 )
+		{
+			continue;
+		}
+
+		snprintf(buffer, MAX_PATH, "%s\\%i.bin", outDirectory.c_str(), i);
+		const string outFile(buffer);
+		if( cmp_decompress(inCompressedFilePath.c_str(), outFile.c_str(), fileOffset, dataSizeBytes, cmprType) == 0 )
+		{
+			FileData newFile;
+			if( !newFile.InitializeFileData( FileNameContainer(outFile.c_str()) ) )
+			{
+				continue;
+			}
+
+			if( newFile.GetDataSize() < searchData.GetDataSize() )
+			{
+				continue;
+			}
+
+			if( FileData::IsDataTheSame(newFile.GetData(), searchData.GetData(), searchData.GetDataSize()) )
+			{
+				printf("Found at: %i\n", i);
+				break;
+			}
+		}
+	}
+
+	printf("Not found\n");
+}
+
 void FindCompressedData(const string& inCompressedFilePath, const string& inUncompressedFilePath, const string& outDirectory)
 {
 	FileNameContainer compressedFileName(inCompressedFilePath.c_str());
@@ -9442,23 +9495,33 @@ bool PatchScreens(const string& rootSakuraTaisenDirectory, const string& patched
 
 	struct ScreenFileInfo
 	{
+		enum EType
+		{
+			kType_Load,
+			kType_BG,
+		};
+
 		char* pName;
-		int offset;
+		int   offset;
+		EType type;
 	};
 
 	ScreenFileInfo filesToPatch[] = 
 	{
-		"TITLE1", 0x13c0,
-		"TITLE2", 0x13c0,
-		"TITLE3", 0x13c0,
-		"TITLE4", 0x13c0,
-		"TITLE5", 0x13c0,
-		"TITLE6", 0x13c0,
-		"TITLE7", 0x13c0,
-		"TITLE8", 0x13c0,
-		"TITLE9", 0x13c0,
-		"TITLE10",0x13c0,
-		"LOAD",   0x1380,
+		"TITLE1", 0x13c0, ScreenFileInfo::kType_Load,
+		"TITLE2", 0x13c0, ScreenFileInfo::kType_Load,
+		"TITLE3", 0x13c0, ScreenFileInfo::kType_Load,
+		"TITLE4", 0x13c0, ScreenFileInfo::kType_Load,
+		"TITLE5", 0x13c0, ScreenFileInfo::kType_Load,
+		"TITLE6", 0x13c0, ScreenFileInfo::kType_Load,
+		"TITLE7", 0x13c0, ScreenFileInfo::kType_Load,
+		"TITLE8", 0x13c0, ScreenFileInfo::kType_Load,
+		"TITLE9", 0x13c0, ScreenFileInfo::kType_Load,
+		"TITLE10",0x13c0, ScreenFileInfo::kType_Load,
+		"LOAD",   0x1380, ScreenFileInfo::kType_Load,
+		"BG1211", 0x50,   ScreenFileInfo::kType_BG,
+		"BG1212", 0x50,   ScreenFileInfo::kType_BG,
+		"BG1213", 0x50,   ScreenFileInfo::kType_BG
 	};
 
 	const int numTitleFiles = sizeof(filesToPatch)/sizeof(ScreenFileInfo);
@@ -9496,10 +9559,27 @@ bool PatchScreens(const string& rootSakuraTaisenDirectory, const string& patched
 			return false;
 		}
 		
-		const int offsetToImageData = filesToPatch[i].offset;
-		outFile.WriteData(patchedScreen.mPalette.GetData(), patchedScreen.mPalette.GetSize());
-		outFile.WriteData(originalFile.GetData() + expectedPaletteSize, offsetToImageData - expectedPaletteSize);
-		outFile.WriteData(patchedScreen.mpPackedTiles, patchedScreen.mPackedTileSize);
+		switch(filesToPatch[i].type)
+		{
+			case ScreenFileInfo::kType_Load:
+			{
+				const int offsetToImageData = filesToPatch[i].offset;
+				outFile.WriteData(patchedScreen.mPalette.GetData(), patchedScreen.mPalette.GetSize());
+				outFile.WriteData(originalFile.GetData() + expectedPaletteSize, offsetToImageData - expectedPaletteSize);
+				outFile.WriteData(patchedScreen.mpPackedTiles, patchedScreen.mPackedTileSize);
+			}break;
+
+			case ScreenFileInfo::kType_BG:
+			{
+				outFile.WriteData(originalFile.GetData(), filesToPatch[i].offset);
+				outFile.WriteData(patchedScreen.mpPackedTiles, patchedScreen.mPackedTileSize);
+				outFile.WriteData(patchedScreen.mPalette.GetData(), patchedScreen.mPalette.GetSize());
+
+				const long sizeOfPatchedData = patchedScreen.mPackedTileSize + patchedScreen.mPalette.GetSize();
+				outFile.WriteData(originalFile.GetData() + sizeOfPatchedData, originalFile.GetDataSize() - (sizeOfPatchedData + filesToPatch[i].offset));
+			}break;
+		};
+		
 
 		if( outFile.GetFileSize() != originalFile.GetDataSize() )
 		{
@@ -10213,6 +10293,16 @@ int main(int argc, char *argv[])
 		const string outFile(argv[3]);
 
 		CompressFile(inFile, outFile);
+	}
+	else if(command == "FindCMPData" && argc == 5 )
+	{
+		const string compressedFile(argv[2]);
+		const string uncompressedFile(argv[3]);
+		const string outDirectory = string(argv[4]) + Seperators;
+
+		FindCMPData(compressedFile, uncompressedFile, outDirectory);
+		
+		return -1;
 	}
 	else if(command == "FindCompressedData" && argc == 5 )
 	{
