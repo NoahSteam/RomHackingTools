@@ -1,4 +1,4 @@
-﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
 It's a photo of Maria. …She's lost in thought and looks kind of sad…
 A photo of Kanna. She looks strong and reliable. I can't wait to meet her.
@@ -85,7 +85,7 @@ That's a custom I can really picture in cold, cold Russia.
 You know what, Maria… You really changed a lot. You never used to talk like this. 
 When we first met, you used to get mad at me all the time. 
 No, no. You were right. I was so green back then. 
-I was barely knew what I was doing… 
+I barely knew what I was doing… 
 Nah… But anyway, this is New Year's Day, remember? Let's have some fun! 
 Whoa, Kohran! Aren't we going a little too fast? 
 But… I still remember what happened when we first met, and… 
@@ -511,7 +511,7 @@ Er… Hi, Sakura… What a coincidence!
 …What? Everyone together? 
 Even you, Maria… 
 (Oh, shoot… There goes my quality time with Sumire…) 
-No, I… I just showed her around… 
+No, I… I just showed you around… 
 Hm…? No, nothing particular… 
 (What should I do? If we go now, we'll be back pretty late…) 
 (We can't leave the theater unattended for so long…) 
@@ -768,7 +768,7 @@ It feels like we're being watched…
 Hahahaha…! 
 That voice… 
 Over there! 
-So we meet again, my friends of the Imperial Floral Assault Troop! 
+So we meet again, my friends of the Imperial Floral Assault Troupe! 
 My name is Sable Satan! 
 The Hive of Darkness…? Don't make me laugh. 
 That Tenkai's finished for good. After all, he was nothing more than the shogunate's lap dog. 
@@ -784,7 +784,7 @@ You won't get to enjoy that on our watch!
 I'll destroy everyone and everything you love! 
 What!? 
 Hehehe… Come to me, all ye children of the gutter, all ye oppressed and evil! 
-I am the great liberator of demons! Come forth, Koma! 
+I am the great liberator of demons! Come forth, Kouma! 
 That's…!? 
 Hehe… Heeheeheeheeheee! 
 What the hell? 
@@ -919,7 +919,7 @@ Everyone looks like they're having fun.
 Ah, sorry. I'm not used to this sort of atmosphere… 
 Yes… 
 Heheheh… You're right. 
-Me? I'll wish for this peace to go on forever. 
+Me? I wished for this peace to go on forever. 
 Thank you, Captain. This was a lovely day. 
 I felt like I could let my hair down for the first time in a long while. 
 Do you have anything planned for later? 

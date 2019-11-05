@@ -1,4 +1,4 @@
-﻿﻿It's a photo of Sakura. Her gaze is so intense. I wonder what she's thinking? 
+﻿﻿﻿It's a photo of Sakura. Her gaze is so intense. I wonder what she's thinking? 
 It's a photo of Sumire. It shows a side of her that's usually hidden. 
 It's a photo of Maria. She's lost in thought and seems a bit sad… 
 It's a photo of Kanna. She looks energetic and confident. I can't wait to meet her. 
@@ -606,10 +606,10 @@ R, right…
 Sumire! I need to speak with you! 
 I am trying to sleep! Would you please go bother someone else!? 
 Well, I don't think this is getting us anywhere… Let's go. 
-This is the night-duty room. I heard we had a live-in night guard who stayed here. 
+This is the night watchman's room. I heard we had a live-in night guard who stayed here. 
 And now I'm the security guard. Man, wasn't I supposed to be protecting the whole capital…? 
 …Let's go, Ogami. 
-I remember. This is the night-duty room. 
+I remember. This is the night watchman's room. 
 Nothing seems out of place. Let's move on. 
 I remember this place. It's the manager's room. Like I could ever forget it. 
 I think I'll be seeing the words 'Imperial Assault Troupe' in my dreams… 
@@ -619,10 +619,10 @@ This is the office. I came here during the afternoon.
 … nothing going on here. Let's keep going. 
 Doesn't look like Sakakibara or Kasumi are here… I guess that's to be expected. 
 Nothing seems to be amiss. Let's keep moving. 
-This is the galley. Sometimes we do a little cooking here. 
+This is the kitchen. Sometimes we prepare food here ourselves. 
 Looks like it's pretty well-equipped. 
 Nothing out of the ordinary. The gas for the stoves is off too. Good. Alright, next. 
-It's the galley. Doesn't look like anyone left the fire on. Let's move on. 
+It's the kitchen. Doesn't look like anyone left the fire on. Let's move on. 
 This is the cafeteria. It's not just for us; the guests can use it too. 
 Doesn't look like anything's out of place. Let's keep moving. 
 This is our shop. Tsubaki is always selling our pictures here. 
@@ -666,9 +666,9 @@ Woah… I'd love to see what kind of stuff you have in here.
 Well, you'll have to do that on your own time. Let's keep going. 
 This is the prop room. 
 Right. Everything looks fine, so let's keep going. 
-This is the set room. 
-'Set' room? 
-Yes, 'set' refers to all the objects we use to set the scene during the performance. We store all that here. 
+This is the large prop room. 
+'Large props'? 
+Yes, that refers to all the larger objects we use to set the scene during the performance. We store all that here. 
 I see… 
 Everything appears to be in order. Let's keep going. 
 … the floor looks very dusty… We'll need to clean it again. 

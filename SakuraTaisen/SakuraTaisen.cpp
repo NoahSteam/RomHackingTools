@@ -3282,7 +3282,7 @@ bool FixupSakura(const string& rootDir, const string& inTranslatedOptionsBmp, co
 
 	//***Systems Submenu Image***
 	{
-		const int offsetToImage = 0x000595bc; //Disc1 and Disc2 have the same offset
+		const int offsetToImage = GIsDisc2 ? 0x000596f4 : 0x000595bc; //Disc1 and Disc2 have the same offset
 		CompressedImagePatcher imagePatcher;
 		if( !imagePatcher.Patch(offsetToImage, 324, inTranslatedDataDirectory, "SystemMenu.bmp", pNewSakuraData, newSakuraLength) )
 		{
@@ -9531,11 +9531,13 @@ void ExtractTiledImages(const string& rootSakuraDir, const string& outDir)
 	const string outTitleDirectory = outDir + string("TitleFiles\\");
 	const string outLoadDirectory  = outDir + string("LoadFiles\\");
 	const string outMiscDirectory  = outDir + string("MiscFiles\\");
+	const string outBGDirectory  = outDir + string("BGFiles\\");
 	CreateDirectoryHelper(outDir);
 	CreateDirectoryHelper(outTitleDirectory);
 	CreateDirectoryHelper(outLoadDirectory);
 	CreateDirectoryHelper(outMiscDirectory);
-
+	CreateDirectoryHelper(outBGDirectory);
+ 
 	//Extract title files
 	char buffer0[1024];
 	char buffer1[1024];
@@ -9552,23 +9554,23 @@ void ExtractTiledImages(const string& rootSakuraDir, const string& outDir)
 			printf("ExtractTiledImage failed\n");
 			return;
 		}
-
+ 
 		const int dataOffset = 0x1380;
 		ExtractImageFromData(inFileData.GetData(), 8*8*(320/8)*(224/8) + dataOffset, outFileName, inFileData.GetData(), 512, 8, 8, 320/8, 256, dataOffset, true, true);
 		*/
 	}
-
+ 
 	//Extract LOAD.BIN
 	{
 		sprintf_s(buffer0, 1024, "%sSAKURA1\\LOAD.bin", rootSakuraDir.c_str());
 		sprintf_s(buffer1, 1024, "%sLOAD.bmp", outLoadDirectory.c_str());
 		ExtractTiledImage(buffer0, buffer1, 0x1380);
-
+ 
 		sprintf_s(buffer0, 1024, "%sSAKURA1\\LOAD01.bin", rootSakuraDir.c_str());
 		sprintf_s(buffer1, 1024, "%sLOAD01.bmp", outLoadDirectory.c_str());
 		ExtractTiledImage(buffer0, buffer1, 0x13c0);
 	}
-
+ 
 	//Extract misc files
 	{
 		const char* fileNames[] = 
@@ -9615,13 +9617,39 @@ void ExtractTiledImages(const string& rootSakuraDir, const string& outDir)
 			"KABE91",
 			"WALL1"
 		};
-
+ 
 		const int numFiles = sizeof(fileNames)/sizeof(char*);
 		for(int i = 0; i < numFiles; ++i)
 		{
 			sprintf_s(buffer0, 1024, "%sSAKURA1\\%s.bin", rootSakuraDir.c_str(), fileNames[i]);
 			sprintf_s(buffer1, 1024, "%s%s.bmp", outMiscDirectory.c_str(), fileNames[i]);
 			ExtractTiledImage(buffer0, buffer1, 0x1380);
+		}
+	}
+ 
+	//BG Files
+	{
+		const string searchDir = rootSakuraDir + "SAKURA1\\";
+		vector<FileNameContainer> allFiles;
+		FindAllFilesWithinDirectory(searchDir, allFiles);
+ 
+		vector<FileNameContainer> bmpFiles;
+		GetAllFilesOfType(allFiles, "BG", bmpFiles);
+ 
+		const size_t numFiles = bmpFiles.size();
+		for(size_t i = 0; i < numFiles; ++i)
+		{
+			const FileNameContainer inFileName(bmpFiles[i].mFullPath.c_str());
+			const string outFileName((outBGDirectory + bmpFiles[i].mNoExtension + ".bmp"));
+ 
+			FileData inFileData;
+			if( !inFileData.InitializeFileData(inFileName) )
+			{
+				printf("ExtractTiledImage %s failed\n", bmpFiles[i].mFullPath.c_str());
+				return;
+			}
+ 
+			ExtractImageFromData(inFileData.GetData(), 8*8*(288/8)*(144/8) + 0x50, outFileName, inFileData.GetData() + 0x50 + (288*144), 512, 8, 8, 288/8, 256, 0x50, true, false);
 		}
 	}
 }

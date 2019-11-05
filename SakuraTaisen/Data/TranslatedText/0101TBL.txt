@@ -1,4 +1,4 @@
-﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
+﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
 It's a photo of Sumire. This is a side of her you don't see too often. 
 It's a photo of Maria. She's lost in thought and looks kind of sad… 
 It's a photo of Kanna. She looks strong and reliable. I can't wait to meet her. 
@@ -916,10 +916,10 @@ E-excuse me?!
 Ensign, you're interfering with my duties. Please refrain from speaking with me. 
 If you have no business with me, I must ask you to take yourself elsewhere. 
 The play is about to begin, so this area is off-limits. Please keep your distance, Ensign. 
-The stage, set room, and prop room are all off-limits. Take care not to enter. 
+The stage, prop room, and large prop room are all off-limits. Take care not to enter. 
 G-got it. 
 The play is about to begin, so this area is off-limits. Please keep your distance, Ensign. 
-The stage, set room, and prop room are all off-limits. Take care not to enter. 
+The stage, prop room, and large prop room are all off-limits. Take care not to enter. 
 (It's hard to tell through her clothes, but… that's a fine-looking chest.) 
 Just what are you looking at, Ensign? 
 N-nothing… 
@@ -934,15 +934,15 @@ Ensign, you ought to look someone in the eye when you're speaking to them.
 You'd do well to compose yourself a little more while conversing with someone, Ensign. 
 Ensign, you ought to look someone in the eye when you're speaking to them. 
 What's with this room? There's a futon or something laid out. 
-Oh, this must be the night-duty room. We had one in the navy, too. 
-This looks like a night-duty room. Whoever is on night watch duty stands guard from here. 
+Oh, this must be the night watchman's room. We had one in the navy, too. 
+This looks like a night watchman's room. Whoever is on night watch duty stands guard from here. 
 There's so many outfits… this must be the wardrobe room. 
 Could these be disguises for a secret squadron? …No. These are just costumes, no matter how I look at them. 
 The wardrobe room. All the clothes here are for women. 
 So this is the dining hall… I suppose it's normally for the patrons' use. 
 The dining hall. 
-Is this the kitchen? No, at this scale it's more like a galley. 
-The galley. There's an irresistible smell coming from the soup simmering on the stove. 
+Is this the kitchen? Looks like one you’d find in a restaurant. 
+The kitchen. There's an irresistible smell coming from the soup simmering on the stove. 
 This is the lobby. I was taking tickets here a little while ago. 
 It's the theater's entryway. A steady stream of patrons is flooding inside. 
 So this is the theater's auditorium…what a magnificent structure! 

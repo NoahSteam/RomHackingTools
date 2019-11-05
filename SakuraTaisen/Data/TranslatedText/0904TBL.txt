@@ -1,4 +1,4 @@
-﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
+﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
 It's a photo of Sumire. This is a side of her you don't see too often. 
 It's a photo of Maria. …She's lost in thought and looks kind of sad… 
 It's a photo of Kanna. Kanna's signature strength comes through clearly. 
@@ -120,7 +120,7 @@ Kohran…
 I'll save her! 
 …? 
 Ayame is very important to me too. I'll save her, no matter what! 
-For real, for real! Come on, Kohran, cheer up! 
+Really, really! Come on, Kohran, cheer up! 
 I'm… I didn't lie… 
 Wha…? 
 … 
@@ -166,7 +166,7 @@ Iris… Are you up?
 Iris…… 
 Kanna… 
 You can't fight on an empty stomach, right? 
-Really. 
+True. 
 You're such a strong person. 
 That's not true. You always fight with everything you've got. 
 You shouldn't talk like that. You of all people, Kanna… 
@@ -184,7 +184,7 @@ Kanna…
 Kanna… You should get some rest. 
 What about you, Boss? Shouldn't you rest, too? 
 If you're resting, I'll get some rest too. 
-If I eat this… Please… Don't concern yourself with me. 
+After I eat this… Please… Don't concern yourself with me. 
 …Yeah, sorry. I'm off. 
 The Pandemonium Vessel is no longer here. Ayame took it and… brought it to Satan. 
 (I'm in front of Ayame's room.) 
@@ -318,7 +318,7 @@ Oh, I see. Come in.
 Please look how everyone's doing. 
 Lieutenant General… 
 So, Ogami… What's the state of the Flower Division? 
-Yes… 
+Well… 
 No matter, you did well. 
 … 
 Right, I've got something I wanted to ask of you. 
@@ -369,7 +369,7 @@ Spirit cannon?
 Its light rends the skies and dissolves solid land into mist… allegedly. 
 It will be just like the war 400 years ago. The fabled sealed land "Yamato" will rise again. 
 There's no time to spare! We must hurry to Tokyo Bay and prevent the Sacred Demon Castle from reappearing! 
-Yessir! 
+Yes sir! 
 ! 
 What? 
 Come out of that dirty hut, dogs of the capital! 
@@ -561,13 +561,13 @@ Unused
 O black rain, o devilish wind, o wicked sea, open the seal for us… Grant us power! 
 At last, it will return to this world… the Sacred Demon Castle! 
 Hehehe… 
-Captain… 
+Ensign… 
 You think I'm depressed!? Ha! Ridiculous! 
 What do I care if one or two women like that die? 
 Huh… 
-Difficult?! You talk just like them, Captain! 
+Not myself?! You talk just like them, Ensign! 
 Hmph! 
-You don't need to worry about me! You talk just like them, Captain! 
+You don't need to worry about me! You talk just like them, Ensign! 
 Now excuse me! 
 How… How could you say something like that!? 
 You… who knows us better than anyone else! 
@@ -606,7 +606,7 @@ Show me what you can do.
 Please wait. 
 This Aya-me was sleeping until a short while ago. She might fail. 
 You should entrust me, Butterfly, with this task! 
-Hmph… Very well. As you please… 
+Hmph… Very well. Do as you please… 
 Thank you kindly… 
 Hehehe… 
 Why are you laughing? 
@@ -632,7 +632,7 @@ But… What are you saying!? This isn't like you at all, Ogami!
 Yes! No matter what happened, you managed to get us through so far! 
 Please cheer up! 
 Don't give up, Ogami. You're the only one we can rely on right now. 
-Hm? Ensign…? 
+Hm? Boss…? 
 Well, it's true… If we sit here and cry, that won't make Ayame come back, right? 
 No worries! I'll bring her back, even if I have to drag her kicking and screaming! 
 If I'd just been stronger, then… All of this wouldn't have happened. 
@@ -673,7 +673,7 @@ Can you tell me that, Chief?
 *sniff* Really? 
 You're right… Gotta keep smiling! Nothing good's ever come of moping. 
 Thanks, Chief. I should head back to my room and get some shut-eye. 
-Okay, Captain… Good night. 
+OK, Chief… Good night. 
 Unused
 Lies and natto are the two things I can't stand! 
 No, no… A lie is better than nothing. I really like you, Chief! 

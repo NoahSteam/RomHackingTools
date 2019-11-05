@@ -1,4 +1,4 @@
-﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
 It's a photo of Maria. …She's lost in thought and looks kind of sad…
 A photo of Kanna. She looks strong and reliable. I can't wait to meet her.
@@ -562,7 +562,7 @@ Just a moment… I'll write down everything we need.
 …here you go, Iris. Please bring the things written on this note. 
 …and here are your assignments, Ensign. 
 Hm, let's see… cups, knives, and matches. 
-Most of this stuff should be in the galley. 
+Most of this stuff should be in the kitchen. 
 Alright you two, I'm leaving this in your hands. 
 Once you have everything, please bring it all to the green room. 
 I'll be getting the room ready. 
@@ -573,7 +573,7 @@ Oh, uh, thanks…
 …Sumire looks su~per mad. Did you say something weird to her, Mon Frère? 
 Uh, no, of course not… let's see here, what's on my list… 
 Hm, let's see… cups, knives, and matches. 
-Most of this stuff should be in the galley. 
+Most of this stuff should be in the kitchen. 
 Alright you two, I'm leaving this in your hands. 
 Once you have everything, please bring it all to the green room. 
 I'll be getting the room ready. 
@@ -589,7 +589,7 @@ Got it. Okay, so I just need to grab the things on this list, right?
 Yep! Once you get everything, bring it to the green room. 
 Here's your list. I'm counting on you, Mon Frère. 
 Hmm, let's see… cups, knives and matches. 
-I'd say most of that should be in the galley. 
+I'd say most of that should be in the kitchen. 
 Oh! Wait just a sec Mon Frère! 
 Woah! What's the matter, Iris? Did you forget to tell me something? 
 Yeah. Um… thanks for being my partner, Mon Frère! 
@@ -655,7 +655,7 @@ Yes, let's.
 The c-cooking!? I'm not proud of it but… I suck at cooking. 
 Don't worry, I'll teach you. Would that be unacceptable, sir? 
 Oh, no, I mean if you're going to go that far I don't mind. Just don't blame me if it turns out terrible. 
-Thank you. Shall we head to the galley? 
+Thank you. Shall we head to the kitchen? 
 …sir. 
 …Oh, Maria. Weren't you going to go get started on the cooking? 
 Well, yes, but… Would you mind lending me a hand, sir? 
@@ -668,8 +668,8 @@ S-sir! I believe I asked you to forget about that, did I not!?
 Hey, it's nothing to be ashamed of. 
 I'm kind of glad I got to see your girly side. 
 Oh sir, please don't tease me. 
-A-anyway… let's head for the galley. 
-Thank you, sir! …Let's make our way to the galley. 
+A-anyway… let's head for the kitchen. 
+Thank you, sir! …Let's make our way to the kitchen. 
 I will take care of cleaning the floor if you see to arranging the room itself, Ensign. 
 There are props from the performance scattered here and there, would you please return them to their proper room? 
 Roger that. Let's see… I'll take these swords and other props first. 
@@ -805,7 +805,7 @@ Come on, let's go inside. You're probably hungry, right.
 Yeah! I'm starving! Let's go, Mon Frère! 
 Sorry, Iris… I haven't found everything yet. 
 What? Are you kidding? It's all right there in the kitchen! 
-The kitchen? …Oh, the galley! Okay, I'll go get it all right now. 
+The kitchen? …Of course! Okay, I'll go get it all right now. 
 Oh forget about it! I just want you here, Mon Frère! 
 Everyone's waiting for us. Let's go inside! 
 Hey, come to think of it, has Sakura made it back from doing the shopping yet? 
@@ -913,7 +913,7 @@ Got it. Okay, so I just need to grab the things on this list, right?
 Yep! Once you get everything, bring it to the green room. 
 Here's your list. I'm counting on you, Mon Frère. 
 Hmm, let's see… cups, knives and matches. 
-I'd say most of that should be in the galley. 
+I'd say most of that should be in the kitchen. 
 Oh yeah, Mon Frère! 
 Whoa, you startled me! Wh-what is it, Iris? 
 I'm really happy you're helping me. Thank you so much. 
@@ -924,7 +924,7 @@ Huh?! Hang on, Iris, I never said I'd help you.
 Oh yes you will, I already asked you so no backing out. Bring it all to the green room once you have it. 
 Iris, w-wait!… Well, there she goes. Oh well. 
 Hmm, let's see… cups, knives and matches. 
-They should all be in the galley or dining room. I should look for them there. 
+They should all be in the kitchen or dining room. I should look for them there. 
 Oh look, it's Mon Perv. 
 Uh, listen… are you still angry about that? 
 Of course I am! You were peeping on me in the shower! 
@@ -1042,7 +1042,7 @@ I'm making them because I was hoping to give you and the others a chance to expe
 I'm sure everyone will be happy to try out dishes we've never had before. 
 Thank you for your help, sir. 
 Sir, how are your preparations coming? 
-Okay, everything I need should be in the galley. 
+Okay, everything I need should be in the kitchen. 
 We've got cups and… let's see, matches and knives. Knives should be in the cutlery drawers, right? 
 Okay, got the knives. Next is matches. Where might they be? 
 Sir, the matches are over here. Here you are. 

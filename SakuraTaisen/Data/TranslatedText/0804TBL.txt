@@ -1,4 +1,4 @@
-﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
 It's a photo of Maria. …She's lost in thought and looks kind of sad…
 A photo of Kanna. She looks strong and reliable. I can't wait to meet her.
@@ -44,10 +44,10 @@ And yet… the Koubu was totally destroyed!
 Geez… we're gonna have to go back without a single piece left of our precious Spirit Armor… 
 I… I'm so ashamed…! 
 The Hive of Darkness will come after the civilians next. They should beware these new threats… 
-And cos everyone's just hiding away in their houses now, the economy has totally broken down. 
+And because everyone's just hiding away in their houses now, the economy has totally broken down. 
 The big shots up in government have been giving me nothing but grief about this since yesterday. 
 No wonder my stomach is killing me. 
-Are you sure that's not just cos you drink too much… 
+Are you sure that's not just because you drink too much… 
 Did you just say something?? 
 No, I didn't say anything! 
 Better not have, Ogami! 
@@ -60,25 +60,25 @@ If you got it then go already!
 Y-yes! Excuse me! 
 …… 
 Even so… if there are monsters like that still alive out there… 
-The kouma… 
-Six years ago… Lt. General Yoneda and the Anti-Kouma Corps managed to seal away the kouma in other bases… 
+The Kouma… 
+Six years ago… Lt. General Yoneda and the Anti-Kouma Corps managed to seal away the Kouma in other bases… 
 I wonder if Aoi Satan's hands have been resurrected in the city now… 
-If the Koubu isn't healed quickly… it will be real trouble for the Imperial City. 
+If the Koubu aren’t healed quickly… it will be real trouble for the Imperial City. 
 Yes, just a minute… 
 Chief… sorry for comin' in so late. 
 …What's wrong, Kohran? 
 …I uh, got somethin' I wanna talk to ya about. Mind if I… come in? 
 …Alright. Come inside then. 
 …Kohran? 
-Kohran… what could she possibly want to talk to the Ensign about at this time… 
+Kohran… what could she possibly want to talk to the Ensign about at this hour… 
 …So then, Kohran. What on earth did you want to talk about? 
-If I get right to the point… there ain't much chance of the Koubu gettin' repaired. 
+If I get right to the point… there isn't much chance of the Koubu gettin' repaired. 
 What? 
-I had a look at it, but the Koubu's spirit engine is totally bust. It'll be real difficult to fix… 
-And frankly, even if I could fix it… it's got no chance against the enemy next time. 
+I had a look at them, but the Koubu's spirit engines are totally busted. It'll be real difficult to fix… 
+And frankly, even if I could fix them… they wouldn’t stand a chance against the enemy next time. 
 …So we need a weapon other than the Koubu, you mean… 
-Well, that ain't that easy either. This Imperial Assault Troupe sucks up loads of cash and makes nothin' back. 
-Developin', maintainin' and improvin' the Spirit Armor… who knows how much all that's cost us. 
+Well, that ain't that easy either. The Imperial Assault Troupe sucks up loads of cash and makes nothin' back. 
+Developin', maintainin' and improvin' the Spirit Armor… who knows how much all that will cost us. 
 And now the Koubu are ruined… and to make matters worse, there ain't no money, 'cause of this new enemy. 
 There's just no way we could make a new Koubu at this kinda time… 
 What about a loan…? 
@@ -139,14 +139,14 @@ I'm sure you can figure out the rest yourself. Good luck, Ogami.
 Everyone should be in the command room by now. 
 Looks as though everyone's gathered. 
 OK… So, should we start? 
-Let's think about a strategy to fight those monsters… the Koma. 
+Let's think about a strategy to fight those monsters… the Kouma. 
 To start with, please let us hear your thoughts, Boss. 
 What can we do to stand against those monsters? 
 Go back to training. <br> Get more powerful weapons. 
 We all need to go back to training. The Koubu are only as strong as their pilots. 
 The Flower Division can only become stronger if each of its members grows stronger. 
 Go back to our roots, you mean? 
-In order to stand against the Koma, we need more powerful weapons. 
+In order to stand against the Kouma, we need more powerful weapons. 
 That's a tough one, Chief… 
 … 
 Ah, yes… I asked Lieutenant General Yoneda for help with that problem. 
@@ -160,7 +160,7 @@ Oh boy… Are we really out of ideas?
 The fighting capabilities of the Spirit Armors grow in proportion with the abilities of their pilots. 
 Even using the same Koubu as before, if we grow stronger, we'll be much more powerful in a battle. 
 A return to our origins? Not bad. 
-OK, then I'll return to the remote mountains where I exercised karate! 
+OK, then I'll return to the remote mountains where I practiced karate! 
 And I'll ask my old sword fighting sensei for a refresher. 
 OK! So, all of you… 
 I'm not too keen on special training. 
@@ -190,7 +190,7 @@ Even if you think this is good for some of us, it might not be ideal for everyon
 But… 
 Besides, I'm busy with a new invention at the moment. 
 All right, enough of this! If someone doesn't agree, I won't force them to do anything. 
-It's obvious to all of you that we can't win against the Koma as we are now. 
+It's obvious to all of you that we can't win against the Kouma as we are now. 
 …OK. Just do whatever you like. 
 Ogami? 
 I'm sure everyone of us knows in their hearts what we have to do. 
@@ -458,7 +458,7 @@ What kind of moronic article did that idiot write?
 Hihihi… No need to freak out like that, Lieutenant General. 
 It's just the right amount for this brainless moron still stuck in the holiday mood. Besides… 
 "In prosperity, prepare for adversary." Even in times of peace, we can't let our guard down. 
-In our last fight against the Black Web, we didn't finish the job. 
+In our last fight against the Hive, we didn't finish the job. 
 This Aoi Satan… He may be even more dangerous than Tenkai. 
 Hehe… Heeheeheeheeheeee! 
 At last it's time for you to emerge to the surface. 

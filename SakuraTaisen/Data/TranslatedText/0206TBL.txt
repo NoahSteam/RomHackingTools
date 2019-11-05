@@ -1,4 +1,4 @@
-﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
 It's a photo of Maria. …She's lost in thought and looks kind of sad…
 A photo of Kanna. She looks strong and reliable. I can't wait to meet her.
@@ -181,9 +181,9 @@ It was no big deal. We handled it just fine.
 We've already been here, Mr. Ensign. Are you hungry or something? 
 Well, no, but… 
 Well if you're hungry, just run me over to the office quick and then you can come back and pig out or whatever. 
-Not in the galley. I mean, not that I would expect her to be here anyway. 
+Not in the kitchen. I mean, not that I would expect her to be here anyway. 
 Shall we look in another room? 
-Huh, so this is the galley. 
+Huh, so this is the kitchen. 
 I prefer tinkering with machines over cooking if I'm being honest. 
 Is there something you need to do here, Mr. Ensign? 
 Uh no, not especially. 

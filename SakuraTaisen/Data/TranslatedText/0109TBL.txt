@@ -1,4 +1,4 @@
-﻿﻿﻿It's a photo of Sakura. Her gaze is so intense. I wonder what she's thinking? 
+﻿﻿﻿﻿It's a photo of Sakura. Her gaze is so intense. I wonder what she's thinking? 
 It's a photo of Sumire. It shows a side of her that's usually hidden. 
 It's a photo of Maria. She's lost in thought and seems a bit sad… 
 It's a photo of Kanna. In it, she looks as energetic and confident as ever. 
@@ -361,14 +361,14 @@ Oh… Okay, then. I'll stop bothering you.
 (I should try another room.) 
 Hi, Sakura. 
 Oh! Hello, Ogami. 
-There's no performance today, so I'm going to clean the stage and set room. 
+There's no performance today, so I'm going to clean the stage and large prop room. 
 I hate to ask, but would you mind giving me a hand? 
 Hi, Sakura. 
 Ogami… I'm glad you came. 
 Listen, I have a favor to ask you… 
-There's no performance today, so I'm going to clean the stage and set room. 
+There's no performance today, so I'm going to clean the stage and large prop room. 
 Would you mind helping me out? 
-Oh, Ogami! Will you help me clean the set room again? 
+Oh, Ogami! Will you help me clean the large prop room again? 
 Of course I'll help! <br> Maybe later. 
 Help her clean <br> Gaze at her <br> Go to another room 
 Help her clean again <br> Go to another room 
@@ -583,7 +583,7 @@ Tsukiji <br> Fukagawa <br> Asakusa
 How much money did the Tenkai demand from the government? 
 100 million yen <br> 1 billion yen <br> 10 billion yen 
 Which of the following rooms is located underground? 
-Night Watchman's Room <br> Infirmary <br> Set Room 
+Night Watchman's Room <br> Infirmary <br> Large Prop Room 
 What are the blue Hex Mechs called? 
 Infantry <br> Matchlock <br> Artillery 
 Which of these girls has a photo for sale in the Gift Shop? 

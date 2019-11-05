@@ -1,4 +1,4 @@
-﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
 It's a photo of Maria. …She's lost in thought and looks kind of sad…
 A photo of Kanna. She looks strong and reliable. I can't wait to meet her.
@@ -26,7 +26,7 @@ A photo of Kohran. I don't get to see her with her braids undone very often. It'
 A photo of Ayame in a traditional outfit. I hope she'll always be as happy and content as she is here.
 Ayame's gun. Why…? Why did it have to turn out like this…?
 Jean-Paul the teddy bear. Iris's best friend. She always carries him with her and takes good care of him.
-The alarm!? The Koma are here! 
+The alarm!? The Kouma are here! 
 …All right. Let's show them our special training paid off! 
 Phew… It's really relaxing to be alone in your own room once in a while… 
 I'd love to just sit down for a minute, but I guess I should talk to everyone first. 
@@ -51,8 +51,8 @@ It's no use. I should leave.
 Sumire seems to be gone already. 
 I didn't know about her reasons, but still… I'm afraid I was too harsh. 
 At first glance, the capital looks peaceful. People are going about their daily lifes as if nothing's wrong. 
-If the Koma attacked for real, they would turn this town into a living hell in an instant. 
-I really wonder what we can do against them without our Kobu. 
+If the Kouma attacked for real, they would turn this town into a living hell in an instant. 
+I really wonder what we can do against them without our Koubu. 
 The Imperial Theater was closed while everyone was away for their special training. 
 No one here, so I should probably leave. 
 The strong sunlight of Winter is even coming in here. 
@@ -99,11 +99,11 @@ I should leave before the warm air makes me dizzy.
 I really hope no one will have to use this place this year… 
 Good health is the most important thing after all. 
 This is where the Flower Division assembles when the alarm goes off. 
-Let's pray that it doesn't, as long as our Kobu are in the garage… 
-Even the mighty steam processor couldn't warn us about the appearance of the Koma. 
+Let's pray that it doesn't, as long as our Koubu are in the garage… 
+Even the mighty steam processor couldn't warn us about the appearance of the Kouma. 
 They were sealed six years ago… No one could have anticipated their return. 
-Around New Year's Day, all of us were here discussing what we could do against the Koma… 
-The Koma… What a formidable enemy. 
+Around New Year's Day, all of us were here discussing what we could do against the Kouma… 
+The Kouma… What a formidable enemy. 
 I haven't been here for three weeks. 
 It's been some time since we've been at the Imperial Theater. 
 Captain… I'd like to speak with you. 
@@ -195,7 +195,7 @@ Sumire was sitting in the parlor. She didn't do any special training and just we
 Oh boy… 
 I expect you'll want to check on all of them? 
 You're right, that's a good idea. 
-The alarm!? The Koma are here! 
+The alarm!? The Kouma are here! 
 …All right. Let's show them our special training paid off! 
 I wonder if Iris is all right. I haven't seen her in a while. 
 She's probably still sleeping. 
@@ -246,7 +246,7 @@ Mentally and physically? Hmmm…
 That really is more important for her right now than any special training could ever be, huh? 
 See you, Iris… Sweet dreams. 
 So, I checked up on Iris… Let's see how everyone else is doing. 
-…Enemies!? The Koma have finally made their move! 
+…Enemies!? The Kouma have finally made their move! 
 Wake up, Iris! We have to move out! 
 Uh… Huh…? Is that you, Mon Frère? 
 She went ahead to the control room! 
@@ -267,8 +267,8 @@ We can catch up later. Can I help you with anything, Chief?
 Umm… 
 How are the Koubu? <br> I wanted to see you, Kohran. 
 How are the Koubu? Did you come up with a way to repair them? 
-Well, to be honest… I haven't even touched the Kobu. 
-What!? But how will we be able to fight the Koma? 
+Well, to be honest… I haven't even touched the Koubu. 
+What!? But how will we be able to fight the Kouma? 
 No matter how much we trained, fighting them without our Spirit Armours would be madness! 
 …I'm not allowed to tell you anything about that. 
 I see… 
@@ -410,7 +410,7 @@ Oh, Ogami. It's good to see you again. So you're back from your special training
 Yes, we just returned. Tell me, Kasumi… What exactly are you doing here? 
 This underground hangar is off limits for the time being. 
 I'm posted here so no one wanders in by accident. 
-Off limits? That's… why!? 
+Off limits? Why’s that!? 
 I'm sorry, but I can't answer that. 
 I can just tell you that entry is not permitted at the moment, even for you. 
 Ogami, the hangar is off limits, so please refrain from entering. 
@@ -421,17 +421,17 @@ Hey, Yuri! What are you doing here?
 Listen, Ogami… You shouldn't be too hard on Sumire. 
 Huh? 
 I saw her. She was working very hard all day, every day. 
-She sweet-talked everyone and their Frère in this city in order to raise funds for developing new weapons. 
+She sweet-talked everyone and their brother in this city in order to raise funds for developing new weapons. 
 What!? 
 Parties in the financial world at night, government offices during the day… 
-She can't have gotten much sleep lately. 
-She isn't on too friendly terms with her family. 
-She was almost cast out before she joined the Flower Division… 
-But even though, now she went home to make amends. 
-To raise money from the Kanzaki conglomerate and others. 
+She couldn’t have gotten much sleep lately. 
+She also isn't on friendly terms with her family. 
+In fact, she was almost cast out before she joined the Flower Division… 
+But despite that, she went home to make amends. 
+All to raise money from the Kanzaki conglomerate and others. 
 So that's what she was doing… 
 And she was successful. 
-It was only thanks to her that the Flower Mansion could restart their weapon development program. 
+It was only thanks to her that the Flower Division could restart their weapon development program. 
 And on top of that, someone had to take care of the Imperial Theater while you were all gone, right? 
 … 
 Sumire, she… can be a little difficult sometimes… 
@@ -471,7 +471,7 @@ Excuse me.
 I suppose you're here for a strategy review? 
 But to be honest, there's not much to talk about regarding the battle at Meiji Shrine. 
 …I'm sorry. 
-Don't blame yourself. You were up against Koma, after all! 
+Don't blame yourself. You were up against Kouma, after all! 
 You can't imagine how much we struggled in the Kouma War six years ago… 
 … 
 I'm sorry, but I can't give you any advice this time. 
@@ -499,9 +499,9 @@ Yessir!
 It's good to see you again, sir! I have returned from my special training! 
 Oh… Your face looks a little more slim. Not bad, not bad. 
 Sir… 
-What about the Kobu? <br> How are the girls doing? <br> Any news about the Koma? 
-What about the Kobu? 
-The Kobu…? I told you I'd take care of that, didn't I? 
+What about the Koubu? <br> How are the girls doing? <br> Any news about the Kouma? 
+What about the Koubu? 
+The Koubu…? I told you I'd take care of that, didn't I? 
 That's true, but… 
 Do you think I just sat on my butt these past three weeks? Don't worry! 
 How are the girls doing? 
@@ -513,7 +513,7 @@ Especially… Kanna, right?
 Especially… Iris, right? 
 Especially… Kohran, right? 
 S-Sir! Please don't make fun of me! 
-Any news about the Koma? 
+Any news about the Kouma? 
 Luckily, they haven't shown their faces here recently. 
 I bet they're taking an extended New Year's vacation. Wahahahaha! 
 Let's pray it stays that way. 
