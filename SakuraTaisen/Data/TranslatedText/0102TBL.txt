@@ -668,7 +668,7 @@ This is the prop room.
 Right. Everything looks fine, so let's keep going. 
 This is the large prop room. 
 'Large props'? 
-Yes, that refers to all the larger objects we use to set the scene during the performance. We store all that here. 
+Yes, that refers to all the larger objects we use to set the performance's scene. We store all that here.
 I see… 
 Everything appears to be in order. Let's keep going. 
 … the floor looks very dusty… We'll need to clean it again. 

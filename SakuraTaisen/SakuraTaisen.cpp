@@ -8830,6 +8830,7 @@ bool PatchMiniHana(const string& patchedSakuraDirectory, const string& inTransla
 		miniGameFile.WriteData(indiceFinder.indiceAddresses[15], (char*)textIndices16, sizeof(textIndices16));
 	}
 
+#if 0
 	//Tutorial fontsheet
 	{
 		const string fontSheetFileName = inTranslatedDataDirectory + "MiniHana_TutorialFontSheet.bmp";
@@ -9009,6 +9010,7 @@ bool PatchMiniHana(const string& patchedSakuraDirectory, const string& inTransla
 		PatchTextIndices(textIndices69);
 		PatchTextIndices(textIndices70);
 	}
+#endif
 
 	return true;
 }
