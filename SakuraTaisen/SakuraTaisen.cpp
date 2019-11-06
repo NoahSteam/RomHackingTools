@@ -5464,54 +5464,54 @@ struct SakuraPalette
 	}
 };
 
+struct FaceHeaderInfo
+{
+	struct Entry
+	{
+		unsigned long  offsetToData;
+		unsigned short unknown1;
+		unsigned short unknown2;
+	};
+
+	Entry* mpData = nullptr;
+	unsigned int mNumEntries;
+
+	bool Initialize(const char* pFileData)
+	{
+		const char* pFaceData       = pFileData;
+		unsigned long headerSize    = SwapByteOrder( *((unsigned long*)(pFaceData)) );
+
+		//The header size should be divisible by 8			
+		const unsigned int headerEntrySize = sizeof(Entry);
+		if( headerSize == 0 || (headerSize % headerEntrySize) != 0 )
+		{
+			printf("Unable to figure out the size of the FACE file header.\n");
+			return false;
+		}
+
+		mNumEntries = headerSize/headerEntrySize;
+		mpData      = new Entry[mNumEntries];
+		memcpy_s(mpData, headerEntrySize*mNumEntries, pFileData, headerEntrySize*mNumEntries);
+
+		for(unsigned int i = 0; i < mNumEntries; ++i)
+		{
+			mpData[i].offsetToData = SwapByteOrder(mpData[i].offsetToData);
+			mpData[i].unknown1     = SwapByteOrder(mpData[i].unknown1);
+			mpData[i].unknown2     = SwapByteOrder(mpData[i].unknown2);
+		}
+		return true;
+	}
+
+	~FaceHeaderInfo()
+	{
+		delete[] mpData;
+		mpData = nullptr;
+	}
+};
+
 //FACE files contain faces that appear during the battle dialog
 void ExtractFACEFiles(const string& sakuraDirectory, const string& outDirectory)
 {
-	struct FaceHeaderInfo
-	{
-		struct Entry
-		{
-			unsigned long  offsetToData;
-			unsigned short unknown1;
-			unsigned short unknown2;
-		};
-
-		Entry* mpData = nullptr;
-		unsigned int mNumEntries;
-
-		bool Initialize(const char* pFileData)
-		{
-			const char* pFaceData       = pFileData;
-			unsigned long headerSize    = SwapByteOrder( *((unsigned long*)(pFaceData)) );
-
-			//The header size should be divisible by 8			
-			const unsigned int headerEntrySize = sizeof(Entry);
-			if( headerSize == 0 || (headerSize % headerEntrySize) != 0 )
-			{
-				printf("Unable to figure out the size of the FACE file header.\n");
-				return false;
-			}
-
-			mNumEntries = headerSize/headerEntrySize;
-			mpData      = new Entry[mNumEntries];
-			memcpy_s(mpData, headerEntrySize*mNumEntries, pFileData, headerEntrySize*mNumEntries);
-
-			for(unsigned int i = 0; i < mNumEntries; ++i)
-			{
-				mpData[i].offsetToData = SwapByteOrder(mpData[i].offsetToData);
-				mpData[i].unknown1     = SwapByteOrder(mpData[i].unknown1);
-				mpData[i].unknown2     = SwapByteOrder(mpData[i].unknown2);
-			}
-			return true;
-		}
-
-		~FaceHeaderInfo()
-		{
-			delete[] mpData;
-			mpData = nullptr;
-		}
-	};
-
 	//Find all translated text files
 	vector<FileNameContainer> allFiles;
 	FindAllFilesWithinDirectory(sakuraDirectory, allFiles);
@@ -5589,6 +5589,124 @@ void ExtractFACEFiles(const string& sakuraDirectory, const string& outDirectory)
 			delete[] pPaletteData;
 		}
 	}
+}
+
+bool PatchFACEFiles(const string& rootSakuraDirectory, const string& rootTranslatedSakuraDirectory, const string& dataDirectory)
+{
+	printf("Patching FACE files\n");
+
+	//Original Obstacle image 
+	FileData face02File;
+	const string face02FilePath = dataDirectory + Seperators + "FACE02.BIN";
+	if( !face02File.InitializeFileData( FileNameContainer( face02FilePath.c_str() ) ) )
+	{
+		return false;
+	}
+
+	//Figure out how many faces images are in this file
+	FaceHeaderInfo face02FileHeader;
+	if( !face02FileHeader.Initialize( face02File.GetData() ) )
+	{
+		printf("Could not extract %s\n", face02FilePath.c_str());
+		return false;
+	}
+
+	PRSDecompressor origObstacleImage;
+	{
+		const unsigned int offsetToData        = face02FileHeader.mpData[52].offsetToData;
+		const unsigned int compressedDataStart = offsetToData + 16;
+
+		origObstacleImage.UncompressData( (void*)(face02File.GetData() + compressedDataStart), face02File.GetDataSize() - compressedDataStart );
+	}
+	
+	//Patched obstacle image
+	BmpToSakuraConverter patchedObstacleImage;
+	if( !patchedObstacleImage.ConvertBmpToSakuraFormat(dataDirectory + Seperators + "Obstacle.bmp", false) )
+	{
+		return false;
+	}
+
+	//Find all files
+	vector<FileNameContainer> allFiles;
+	const string sakura2Directory = rootSakuraDirectory + "\\SAKURA2\\";
+	FindAllFilesWithinDirectory(sakura2Directory, allFiles);
+	if( !allFiles.size() )
+	{
+		return false;
+	}
+
+	vector<FileNameContainer> faceFiles;
+	GetAllFilesOfType(allFiles, "FACE", faceFiles);
+
+	const string sakura2PatchedDirectory = rootTranslatedSakuraDirectory + "\\SAKURA2\\";
+	for(const FileNameContainer& fileNameInfo : faceFiles)
+	{	
+		FileData faceFile;
+		if( !faceFile.InitializeFileData(fileNameInfo) )
+		{
+			return false;
+		}
+
+		//Figure out how many faces images are in this file
+		FaceHeaderInfo faceFileHeader;
+		if( !faceFileHeader.Initialize( faceFile.GetData() ) )
+		{
+			printf("Could not extract %s\n", fileNameInfo.mFileName.c_str());
+			return false;
+		}
+
+		//Go through every image
+		for(unsigned int i = 0; i < faceFileHeader.mNumEntries; ++i)
+		{
+			const unsigned int offsetToData        = faceFileHeader.mpData[i].offsetToData;
+			const unsigned int compressedDataStart = offsetToData + 16;
+			//const unsigned int offsetToPalette     = SwapByteOrder( *((unsigned short*)(faceFile.GetData() + offsetToData + 10)) );
+
+			if( compressedDataStart >= faceFile.GetDataSize() )
+			{
+				continue;
+			}
+
+			PRSDecompressor uncompressedImage;
+			uncompressedImage.UncompressData( (void*)(faceFile.GetData() + compressedDataStart), faceFile.GetDataSize() - compressedDataStart );
+
+			//Check to see if this is the obstacle image
+			if( uncompressedImage.mUncompressedDataSize == origObstacleImage.mUncompressedDataSize && 
+				FileData::IsDataTheSame(uncompressedImage.mpUncompressedData, origObstacleImage.mpUncompressedData, uncompressedImage.mUncompressedDataSize) )
+			{
+				
+				const string patchedFileName = sakura2PatchedDirectory + fileNameInfo.mFileName;
+				FileReadWriter patchedFile;
+				if( !patchedFile.OpenFile(patchedFileName) )
+				{
+					return false;
+				}
+
+				const int offsetToImageData = 0x40;
+				char* pDataBuffer = new char[uncompressedImage.mUncompressedDataSize];
+
+				memcpy_s(pDataBuffer, uncompressedImage.mUncompressedDataSize, uncompressedImage.mpUncompressedData, uncompressedImage.mUncompressedDataSize);
+				memcpy_s(pDataBuffer + offsetToImageData, uncompressedImage.mUncompressedDataSize - offsetToImageData, patchedObstacleImage.GetImageData(), patchedObstacleImage.GetImageDataSize());
+
+				SakuraCompressedData patchedObstacleData;
+				patchedObstacleData.PatchDataInMemory(pDataBuffer, uncompressedImage.mUncompressedDataSize, true, false, origObstacleImage.mCompressedSize);
+				if( patchedObstacleData.mDataSize > uncompressedImage.mUncompressedDataSize )
+				{
+					printf("Patched obstacle image data is too big when compressed\n");
+					return false;
+				}
+
+				patchedFile.WriteData(offsetToData, patchedObstacleData.mpCompressedData, patchedObstacleData.mDataSize, false);
+
+				printf("     Patched Face: %i in %s\n", i, fileNameInfo.mNoExtension.c_str());
+				break;
+			}
+		}
+	}
+
+	printf("Patch FACE files succeeded!\n");
+
+	return true;
 }
 
 struct WklUncompressedData
@@ -10392,6 +10510,14 @@ int main(int argc, char *argv[])
 		const string wklDir = string(argv[2]) + Seperators;
 
 		AddShadowsToWKLText(wklDir);
+	}
+	else if( command == "PatchFACEFiles" && argc == 5 )
+	{
+		const string rootSakuraDir     = string(argv[2]) + Seperators;
+		const string outDir            = string(argv[3]) + Seperators;
+		const string translatedDataDir = string(argv[4]) + Seperators;
+
+		PatchFACEFiles(rootSakuraDir, outDir, translatedDataDir);
 	}
 	else
 	{
