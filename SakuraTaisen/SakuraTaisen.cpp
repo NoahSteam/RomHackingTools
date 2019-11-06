@@ -5696,7 +5696,7 @@ bool PatchFACEFiles(const string& rootSakuraDirectory, const string& rootTransla
 				patchedObstacleData.PatchDataInMemory(pDataBuffer, uncompressedImage.mUncompressedDataSize, true, false, origObstacleImage.mCompressedSize);
 
 				//Verify the size fits
-				if( patchedObstacleData.mDataSize > uncompressedImage.mUncompressedDataSize )
+				if( patchedObstacleData.mDataSize > uncompressedImage.mCompressedSize )
 				{
 					printf("Patched obstacle image data is too big when compressed\n");
 					return false;
