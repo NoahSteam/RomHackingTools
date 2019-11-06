@@ -5683,19 +5683,26 @@ bool PatchFACEFiles(const string& rootSakuraDirectory, const string& rootTransla
 				}
 
 				const int offsetToImageData = 0x40;
-				char* pDataBuffer = new char[uncompressedImage.mUncompressedDataSize];
+				char* pDataBuffer           = new char[uncompressedImage.mUncompressedDataSize];
 
+				//Copy original data over which consists of a header, the face image, and eye open/close image
 				memcpy_s(pDataBuffer, uncompressedImage.mUncompressedDataSize, uncompressedImage.mpUncompressedData, uncompressedImage.mUncompressedDataSize);
+
+				//Now copy over the patched image
 				memcpy_s(pDataBuffer + offsetToImageData, uncompressedImage.mUncompressedDataSize - offsetToImageData, patchedObstacleImage.GetImageData(), patchedObstacleImage.GetImageDataSize());
 
+				//Compress the data
 				SakuraCompressedData patchedObstacleData;
 				patchedObstacleData.PatchDataInMemory(pDataBuffer, uncompressedImage.mUncompressedDataSize, true, false, origObstacleImage.mCompressedSize);
+
+				//Verify the size fits
 				if( patchedObstacleData.mDataSize > uncompressedImage.mUncompressedDataSize )
 				{
 					printf("Patched obstacle image data is too big when compressed\n");
 					return false;
 				}
 
+				//Write it out
 				patchedFile.WriteData(offsetToData, patchedObstacleData.mpCompressedData, patchedObstacleData.mDataSize, false);
 
 				printf("     Patched Face: %i in %s\n", i, fileNameInfo.mNoExtension.c_str());
