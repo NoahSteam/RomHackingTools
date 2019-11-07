@@ -5569,8 +5569,8 @@ void ExtractFACEFiles(const string& sakuraDirectory, const string& outDirectory)
 			//Colors in the palette are in a 15 bit (5:5:5) format.  So we need to & every value by 0x7fff.
 			static const unsigned int numBytesInPalette = 128;
 			const char* pOriginalPaletteData             = faceFile.GetData() + offsetToData + offsetToPalette;
-			char* pPaletteData                           = new char[numBytesInPalette];
-			memset(pPaletteData, 0, numBytesInPalette);
+			char* pPaletteData                           = new char[512];//[numBytesInPalette];
+			memset(pPaletteData, 0, 512);//numBytesInPalette);
 			memcpy_s(pPaletteData, numBytesInPalette, pOriginalPaletteData, numBytesInPalette);
 			for(int p = 0; p < numBytesInPalette; p += 2)
 			{
@@ -5583,7 +5583,9 @@ void ExtractFACEFiles(const string& sakuraDirectory, const string& outDirectory)
 			//Create image from uncompressed data
 			const string outFileName = subDirName + std::to_string(i) + string(".bmp");
 			const unsigned char offsetToColorData = 0x40;
-			ExtractImageFromData(uncompressedImage.mpUncompressedData + offsetToColorData, uncompressedImage.mUncompressedDataSize - offsetToColorData, outFileName, pPaletteData, 128, 40, 48, 1, 128, 0, false, false);
+			//ExtractImageFromData(uncompressedImage.mpUncompressedData + offsetToColorData, uncompressedImage.mUncompressedDataSize - offsetToColorData, outFileName, pPaletteData, 128, 40, 48, 1, 128, 0, false, false);
+			ExtractImageFromData(uncompressedImage.mpUncompressedData + offsetToColorData, uncompressedImage.mUncompressedDataSize - offsetToColorData, outFileName, pPaletteData, 512, 40, 48, 1, 128, 0, false, false);
+			ExtractImageFromData(uncompressedImage.mpUncompressedData + offsetToColorData, uncompressedImage.mUncompressedDataSize - offsetToColorData, outFileName, pPaletteData, 512, 40, 48, 1, 128, 0, false, true);
 			//ExtractImageFromData(uncompressedImage.mpUncompressedData + offsetToColorData, uncompressedImage.mUncompressedDataSize - offsetToColorData, outFileName, pPaletteData, numBytesInPalette, 40, 48, 1, 256, 0, false, true);
 			//ExtractImageFromData(uncompressedImage.mpUncompressedData + offsetToColorData, uncompressedImage.mUncompressedDataSize - offsetToColorData, outFileName, pPaletteData, 128, 40, 48, 1, 128, 0, false);
 			delete[] pPaletteData;
@@ -5624,6 +5626,12 @@ bool PatchFACEFiles(const string& rootSakuraDirectory, const string& rootTransla
 	if( !patchedObstacleImage.ConvertBmpToSakuraFormat(dataDirectory + Seperators + "Obstacle.bmp", false) )
 	{
 		return false;
+	}
+
+	//Offset palette because original data uses only 128 colors
+	for(unsigned int i = 0; i < patchedObstacleImage.GetImageDataSize(); ++i)
+	{
+		patchedObstacleImage.mTileExtractor.mTiles[0].mpTile[i] += 128;
 	}
 
 	//Find all files
@@ -5703,7 +5711,7 @@ bool PatchFACEFiles(const string& rootSakuraDirectory, const string& rootTransla
 				}
 
 				//Write it out
-				patchedFile.WriteData(offsetToData, patchedObstacleData.mpCompressedData, patchedObstacleData.mDataSize, false);
+				patchedFile.WriteData(compressedDataStart, patchedObstacleData.mpCompressedData, patchedObstacleData.mDataSize, false);
 
 				printf("     Patched Face: %i in %s\n", i, fileNameInfo.mNoExtension.c_str());
 				break;
