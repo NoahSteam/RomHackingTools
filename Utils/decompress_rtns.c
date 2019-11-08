@@ -154,7 +154,7 @@ int cmp_decompress(const char* inputFname, const char* outputFname, int fileOffs
 {
 	FILE* ofile = NULL;
 	char* obuffer = NULL;
-	unsigned int fsize = 0;
+//	unsigned int fsize = 0;
 	int rval = 0;
 
 	/* Open the input file for reading */

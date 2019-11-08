@@ -1,4 +1,4 @@
-﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
 It's a photo of Maria. …She's lost in thought and looks kind of sad…
 A photo of Kanna. She looks strong and reliable. I can't wait to meet her.
@@ -284,7 +284,7 @@ Unused
 Unused
 Unused
 Unused
-Sable Satan, I will never forgive you for using such underhanded tactics! 
+Cerulean Satan, I will never forgive you for using such underhanded tactics! 
 Our first priority is protecting the peace of the capital. 
 Is that really what we're here for? 
 Will… will everyone start fighting again? 

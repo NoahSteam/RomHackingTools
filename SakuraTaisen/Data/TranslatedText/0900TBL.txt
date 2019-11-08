@@ -1,4 +1,4 @@
-﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
+﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
 It's a photo of Sumire. This is a side of her you don't see too often. 
 It's a photo of Maria. …She's lost in thought and looks kind of sad… 
 It's a photo of Kanna. Kanna's signature strength comes through clearly. 
@@ -672,7 +672,7 @@ The new show is a comedy, so there are a lot of children here.
 Oh, I shouldn't forget Yoneda is waiting for me downstairs, in the underground storage room. 
 This place is as gloomy as ever. 
 I should head to the underground storage room. 
-The new show seems to be using a lot of stage props, so this room is gettin a lot of use. 
+The new show seems to be using a lot of stage props, so this room is getting a lot of use. 
 I have to be in the underground storage room, like, right now! 
 The Jinbu are lined up. This is our city's trump card in our fight against the demons. 
 Let's hurry down to the underground storage room. 
@@ -687,7 +687,7 @@ If I don't show up in the underground storage room soon, I'll never hear the end
 No one here, either. 
 Let's go to the underground storage room. 
 This processor is operated by inserting wooden program cards into the machine. 
-I wonder when it'll come in useful next… But now, I should really head to the underground storage room. 
+I wonder when it'll come in handy next… But now, I should really head to the underground storage room. 
 There's a show on, so of course no one's here. 
 I have to join Yoneda in the underground storage room. 
 Normally he could talk to me here… I wonder why he insisted I come to the underground storage room. 
@@ -700,11 +700,11 @@ And after everything is dead and gone, new life will be born!
 Destruction is only the prelude to new life! 
 On the night of the crimson moon, the strongest of all Kouma will be born again… 
 And they will join us in our ecstasy of extermination! 
-Kouma "Deer"! 
+Kouma Deer! 
 Yes, master! 
 You will buy us the time we need. 
 As you command. 
-And don't do anything stupid, like seeking revenge for "Boar"! 
+And don't do anything stupid, like seeking revenge for Boar! 
 Yes… 
 I will prove to you that I am the strongest of all, Lord Satan… 
 Unused

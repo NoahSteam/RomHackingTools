@@ -1,4 +1,4 @@
-﻿I've got to focus!
+﻿﻿I've got to focus!
 Here I go!
 Leave it to me!!
 Watch this, Ogami.
@@ -181,7 +181,7 @@ Kanna! I've got your back!
 Comparing the Kouma to Iris? That's the apex of absurdity!
 What's that supposed to mean? Do you think I'm stupid?! Grrrrrrrrrr!
 This is nothing… You're nothiiiiing!
-Geheheh, I'm the best! Some ridiculous Assault Troupe can't take me one!
+Geheheh, I'm the best! Some ridiculous Assault Troupe can't take me on!
 Our strongest foe yet!<br>Is that all?
 Damn… This is the strongest foe we've faced yet!
 Geheheh, of course I am! And I'll collect all your heads as proof!
@@ -193,9 +193,9 @@ What's up? So star-struck you can't say anything? Geheheh!
 Oh no! You should never encourage guys like him!
 Listen, Ogami… What's that top-secret thing you mentioned? I promise I won't tell anyone!
 By the way, Ensign… What's that top-secret affair you mentioned? Can't you tell little old me?
-By the way, captain… That secret you mentioned… What kind of a thing is it?
-Listen up, chief… Couldn't ya let me in on that top-secret thing you mentioned is all about? I won't tell!
-Hey, boss… What about that top-secret thing? Can't you tell me?
+By the way, Captain… That secret you mentioned… What kind of a thing is it?
+Listen up, Chief… Couldn't ya let me in on that top-secret thing you mentioned is all about? I won't tell!
+Hey, Boss… What about that top-secret thing? Can't you tell me?
 Mon Frère, what's that secret you talked about? I'm sooo curious!
 Well, it's…<br>No!
 Well, it's…
@@ -207,9 +207,9 @@ Yeah.
 U-huh.
 You're sooo mean! You couldn't tell ME!
 How nice of you! Yet you couldn't tell ME, apparently.
-Are you sure, captain? It IS top secret, after all…
-But ya couldn't tell it to ME! You're the worst, chief! Go hang yourself!
-Not cool, boss! You couldn't tell ME, remember?
+Are you sure, Captain? It IS top secret, after all…
+But ya couldn't tell it to ME! You're the worst, Chief! Go hang yourself!
+Not cool, Boss! You couldn't tell ME, remember?
 I hate you soooooo much! Why couldn't you tell ME, huh?
 What's that… He's spilling his guts.
 What's that… He's spilling his guts.
@@ -231,6 +231,6 @@ Bah! You're sooo strict!
 Sorry, we should prioritize taking down the enemy.
 Sorry. Let's talk after we've defeated the enemy.
 Sorry. It was careless of me to bring that up during a battle.
-I shouldn't have asked right in the middle of fightin'. Sorry, chief.
+I shouldn't have asked right in the middle of fightin'. Sorry, Chief.
 Okay… I'll ask you again after we've wiped them out.
 Don't want to talk to me? You're so mean, Mon Frère!

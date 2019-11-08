@@ -1,4 +1,4 @@
-﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
 It's a photo of Maria. …She's lost in thought and looks kind of sad…
 A photo of Kanna. She looks strong and reliable. I can't wait to meet her.
@@ -269,7 +269,7 @@ If you keep handling battles this way… well, let's set that aside
 There were no casualties to the Flower Division. Well done, Ogami. 
 I think you made excellent use of the Flower Division during the Fukagawa battle. 
 Your evaluation of the battle and tactical decisions were spot on. 
-Also… let's ee. You shouldn't view these numbers as a complete reflection of the battle's outcome, but… 
+Also… let's see. You shouldn't view these numbers as a complete reflection of the battle's outcome, but… 
 The number of enemies destroyed should be used as one rubric to evaluate your troops. 
 The one with the most enemies shot down during the last battle was Sakura. 
 Sakura's technique shines when the enemies line up facing the same direction. 
@@ -425,7 +425,7 @@ Well I can hardly just laze around while you all work…
 So I suppose I'll prepare the green room and set out the dinnerware. 
 Okay. Iris, you help Sumire, please. 
 Oka~y! 
-And I… well don't you worry about what I'll be working on. 
+As for me… well, don't you worry about what I'll be working on. 
 I'll go buy the drinks and snacks. 
 (Oh man… Sakura might still be upset from earlier… should I do something?) 
 Call out to her. <br> Go after her. 

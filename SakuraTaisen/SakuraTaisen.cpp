@@ -5584,8 +5584,8 @@ void ExtractFACEFiles(const string& sakuraDirectory, const string& outDirectory)
 			const string outFileName = subDirName + std::to_string(i) + string(".bmp");
 			const unsigned char offsetToColorData = 0x40;
 			//ExtractImageFromData(uncompressedImage.mpUncompressedData + offsetToColorData, uncompressedImage.mUncompressedDataSize - offsetToColorData, outFileName, pPaletteData, 128, 40, 48, 1, 128, 0, false, false);
-			ExtractImageFromData(uncompressedImage.mpUncompressedData + offsetToColorData, uncompressedImage.mUncompressedDataSize - offsetToColorData, outFileName, pPaletteData, 512, 40, 48, 1, 128, 0, false, false);
-			ExtractImageFromData(uncompressedImage.mpUncompressedData + offsetToColorData, uncompressedImage.mUncompressedDataSize - offsetToColorData, outFileName, pPaletteData, 512, 40, 48, 1, 128, 0, false, true);
+			ExtractImageFromData(uncompressedImage.mpUncompressedData + offsetToColorData, uncompressedImage.mUncompressedDataSize - offsetToColorData, outFileName, pPaletteData, 512, 40, 80, 1, 128, 0, false, false);
+			ExtractImageFromData(uncompressedImage.mpUncompressedData + offsetToColorData, uncompressedImage.mUncompressedDataSize - offsetToColorData, outFileName, pPaletteData, 512, 40, 80, 1, 128, 0, false, true);
 			//ExtractImageFromData(uncompressedImage.mpUncompressedData + offsetToColorData, uncompressedImage.mUncompressedDataSize - offsetToColorData, outFileName, pPaletteData, numBytesInPalette, 40, 48, 1, 256, 0, false, true);
 			//ExtractImageFromData(uncompressedImage.mpUncompressedData + offsetToColorData, uncompressedImage.mUncompressedDataSize - offsetToColorData, outFileName, pPaletteData, 128, 40, 48, 1, 128, 0, false);
 			delete[] pPaletteData;

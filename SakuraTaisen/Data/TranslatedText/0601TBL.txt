@@ -1,4 +1,4 @@
-﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
 It's a photo of Maria. …She's lost in thought and looks kind of sad…
 A photo of Kanna. She looks strong and reliable. I can't wait to meet her.
@@ -166,8 +166,8 @@ I'll chat with Tsubaki, since I'm done with work for today.
 Ah, Ogami! Great work today. Will you be finishing soon? 
 Yup, I'll be leaving soon. 
 Thanks for your hard work todaaaay! 
-(No matter when I see her, Tsubaki is always so energetic) 
-What's wrong Ogami? You were staring at me a little… 
+(No matter when I see her, Tsubaki is always so energetic.) 
+What's wrong, Ogami? You were staring at me a little… 
 (Tsubaki is always energetic, isn't she? She doesn't seem even a little tired.) 
 Are you all right, Ogami? You look a little dazed. Aren't you tired? 
 I'm done with work, but you're still here, eh, Tsubaki? 
@@ -178,10 +178,10 @@ Well then, I'll be heading out.
 Thanks for all your hard work! Oh, and everyone from the Flower Division should be in the parlor! 
 Everyone gave their all in today's performance, so please give them some kind words, okay? 
 I'll do that. Anyway, keep up the good work. 
-Eh! Really?! Ah… well… what should I do…? 
+Eh?! Really?! Ah… well… what should I do…? 
 What's wrong? 
 Actually… I had promised Kasumi that I would go eat with her at Renga. 
-Oh really… Well, if you've got a prior engagement then there's nothing we can do about it. 
+Oh, really… Well, if you've got a prior engagement, then there's nothing we can do about it. 
 I'm very sorry! I've already made plans this time, but please invite me out again soon! 
 Alright… next time it is! Well, I'll be going then. 
 It's a promise, then! And again, thank you for your hard work today! 
@@ -865,7 +865,7 @@ Commander, what was that phone call about, just now?
 Huh? Whaddya mean? 
 Well… just now… 
 What? I wasn't talking on the phone or anything. Are you hearing things? 
-Absolutely… 
+If you say so… 
 Hey Ogami. Once the party's over, go buy me some drinks, okay? 
 Then bring 'em on down to the control room. I'll pay you back there. 
 Uh… okay. 
@@ -1011,7 +1011,7 @@ Indeed not… leave everything to me. Their headquarters are within my sights…
 Only one ley line remains! Our Hexagram of Infernal Calling nears its completion! 
 The imperial capital shall be destroyed by the fires of judgment unlike anything the world has ever seen. 
 We'll burn the corruption the west has brought to Japan! 
-And from the ashes, the Tokugawa shogunate shall rise reborn! 
+And from the ashes, the Tokugawa Shogunate shall rise reborn! 
 Go now! Strike down all that is westernized! 
 At your bidding, Master. 
 Your word is my command… 
