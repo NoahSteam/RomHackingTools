@@ -549,4 +549,7 @@ Font sheet is found at: 000a3b80 00000080 Size: 512 CompressedSize: 9534
 //Options Submenu in SAKURAFound at: 365580
 Found at: 365580
 Results:
-Found: 0005940c 00000000 Size: 14336 CompressedSize: 429
+Found: 0005940c 00000000 Size: 14336 CompressedSize: 429\\
+
+//Hana mini game 1 Round info:
+002462B8 in memory <- change to 0 to modify position of Round
