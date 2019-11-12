@@ -10155,6 +10155,13 @@ bool PatchGame(const string& rootSakuraTaisenDirectory,
 		return false;
 	}
 
+	//Step 11
+	if( !PatchFACEFiles(rootSakuraTaisenDirectory, patchedSakuraTaisenDirectory, inTranslatedDataDirectory) )
+	{
+		printf("Patching FACEs failed.\n");
+		return false;
+	}
+
 	printf("Patching Successful!\n");
 	return true;
 }
