@@ -553,3 +553,10 @@ Found: 0005940c 00000000 Size: 14336 CompressedSize: 429\\
 
 //Hana mini game 1 Round info:
 002462B8 in memory <- change to 0 to modify position of Round
+
+//Intro Credits:
+Each line is defined by 160 bytes.  Only the first 160 bytes are used.
+Index 0 in the tile sheet starts at 00113540.
+Stored @05e60000 in memory.
+Tile data is compressed in LOGO.sh2 (Found: 00032edc 00000000 Size: 847 CompressedSize: 6889)
+Lookup table is compressed in LOGO.sh2 @0x000349c8 (Found: 000349c8 00000146 Size: 34 CompressedSize: 916)
