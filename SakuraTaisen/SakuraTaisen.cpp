@@ -10040,6 +10040,44 @@ void AddShadowsToWKLText(const string& wklDirectory)
 	printf("Success\n");
 }
 
+bool PatchIntroCredits(const string& rootSakuraTaisenDirectory, const string& patchedSakuraTaisenDirectory, const string& patchedDataDirectory)
+{
+	printf("Patching Intro Credits\n");
+
+	//Create image data
+	const string creditsPath = patchedDataDirectory + Seperators + "IntroCredits.bmp";
+	const unsigned int creditsTileDim = 8;
+	BmpToSakuraConverter creditsImage;
+	if( !creditsImage.ConvertBmpToSakuraFormat(creditsPath, false, BmpToSakuraConverter::CYAN, &creditsTileDim, &creditsTileDim) )
+	{
+		return false;
+	}
+
+	creditsImage.PackTiles();
+
+	SakuraCompressedData creditsCompressed;
+	creditsCompressed.PatchDataInMemory(creditsImage.mpPackedTiles, creditsImage.mPackedTileSize, true, false, 6889);
+	if( creditsCompressed.mDataSize > 6889 )
+	{
+		printf("Compressed credits image is too big");
+		return false;
+	}
+	//Done with image data
+
+	const string logoFilePath = patchedSakuraTaisenDirectory + Seperators + "SAKURA1\\LOGO.SH2";
+	FileReadWriter logoFile;
+	if( !logoFile.OpenFile(logoFilePath) )
+	{
+		return false;
+	}
+
+	logoFile.WriteData(0x000349c8, creditsCompressed.mpCompressedData, creditsCompressed.mDataSize, false);
+
+	printf("Success\n");
+
+	return true;
+}
+
 bool PatchGame(const string& rootSakuraTaisenDirectory, 
 			   const string& patchedSakuraTaisenDirectory, 
 			   const string& translatedTextDirectory, 
@@ -10159,6 +10197,13 @@ bool PatchGame(const string& rootSakuraTaisenDirectory,
 	if( !PatchFACEFiles(rootSakuraTaisenDirectory, patchedSakuraTaisenDirectory, inTranslatedDataDirectory) )
 	{
 		printf("Patching FACEs failed.\n");
+		return false;
+	}
+
+	//Step 12
+	if( !PatchIntroCredits(rootSakuraTaisenDirectory, patchedSakuraTaisenDirectory, inTranslatedDataDirectory) )
+	{
+		printf("Patching Intro Credits failed.\n");
 		return false;
 	}
 
