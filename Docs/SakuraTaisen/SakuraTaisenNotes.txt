@@ -560,3 +560,5 @@ Index 0 in the tile sheet starts at 00113540.
 Stored @05e60000 in memory.
 Tile data is compressed in LOGO.sh2 (Found: 00032edc 00000000 Size: 847 CompressedSize: 6889)
 Lookup table is compressed in LOGO.sh2 @0x000349c8 (Found: 000349c8 00000146 Size: 34 CompressedSize: 916)
+
+Lookup table has a 4byte lookup entry for each tile and is 0 based.  So (328/8)*(224/8)*4 bytes.

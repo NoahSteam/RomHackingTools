@@ -7317,8 +7317,9 @@ bool PatchTMapSP(const string& sakuraDirectory, const string& patchDataPath)
 	return true;
 }
 
-void FindCMPData(const string& inCompressedFilePath, const string& inUncompressedFilePath, const string& outDirectory)
+void FindCMPData(const string& /*inCompressedFilePath*/, const string& /*inUncompressedFilePath*/, const string& /*outDirectory*/)
 {
+#if 0
 	FileData inFileData;
 	if( !inFileData.InitializeFileData( FileNameContainer(inCompressedFilePath.c_str()) ) )
 	{
@@ -7367,6 +7368,7 @@ void FindCMPData(const string& inCompressedFilePath, const string& inUncompresse
 	}
 
 	printf("Not found\n");
+#endif
 }
 
 void FindCompressedData(const string& inCompressedFilePath, const string& inUncompressedFilePath, const string& outDirectory)
@@ -9016,6 +9018,15 @@ bool PatchMiniHana(const string& patchedSakuraDirectory, const string& inTransla
 		miniGameFile.WriteData(indiceFinder.indiceAddresses[15], (char*)textIndices16, sizeof(textIndices16));
 	}
 
+	//Fixup # Round to be Round #
+	{
+		unsigned short roundLocation = 0xe0ff; //ffe0 in big endian
+		unsigned short numberLocation = 0x60e4; //e460 in big endian
+		
+		miniGameFile.WriteData(0x000422bc, (char*)&roundLocation, sizeof(roundLocation));
+		miniGameFile.WriteData(0x0001aa12, (char*)&numberLocation, sizeof(numberLocation));
+	}
+
 #if 0
 	//Tutorial fontsheet
 	{
@@ -10040,7 +10051,7 @@ void AddShadowsToWKLText(const string& wklDirectory)
 	printf("Success\n");
 }
 
-bool PatchIntroCredits(const string& rootSakuraTaisenDirectory, const string& patchedSakuraTaisenDirectory, const string& patchedDataDirectory)
+bool PatchIntroCredits(const string& patchedSakuraTaisenDirectory, const string& patchedDataDirectory)
 {
 	printf("Patching Intro Credits\n");
 
@@ -10071,9 +10082,81 @@ bool PatchIntroCredits(const string& rootSakuraTaisenDirectory, const string& pa
 		return false;
 	}
 
-	logoFile.WriteData(0x000349c8, creditsCompressed.mpCompressedData, creditsCompressed.mDataSize, false);
+	//Write out new image data
+	logoFile.WriteData(0x00032edc, creditsCompressed.mpCompressedData, creditsCompressed.mDataSize, false);
 
-	printf("Success\n");
+	//Create lookup table
+	static const int tableSize = (320/8)*(224/8);
+	int lookupTable[tableSize];
+	int lookupTable_o[tableSize];
+	memset(lookupTable, 0, sizeof(lookupTable));
+	memset(lookupTable_o, 0, sizeof(lookupTable_o));
+
+	auto SetLookupEntries = [&](int row, int from, int to, int drawAt)
+	{
+		int start      = from + row*20;
+		int end        = start + to - from;
+		int writeIndex = 0;
+		for(int i = start; i <= end; ++i, ++writeIndex)
+		{
+			if( row*40 + drawAt + writeIndex >= tableSize )
+			{
+				int k = 0;
+				++k;
+			}
+			lookupTable[row*40 + drawAt + writeIndex] = SwapByteOrder(i);
+			lookupTable_o[row*40 + drawAt + writeIndex] = (i);
+		}
+	};
+	
+	SetLookupEntries(0, 4, 16, 14); //Production Director
+	
+	SetLookupEntries(1, 3, 16, 13); //Shoichiro Iramijiri
+	SetLookupEntries(2, 3, 16, 13);
+
+	SetLookupEntries(3, 0, 5, 1); //Producer
+	SetLookupEntries(3, 8, 20, 28); //Character Designer
+
+	SetLookupEntries(4, 0, 5, 1); //Producer - bottom
+	SetLookupEntries(4, 8, 20, 28); //Characer Designer - bottom
+
+	SetLookupEntries(5, 1, 3, 2); //Oji
+	SetLookupEntries(5, 10, 16, 30); //Kousuke
+	
+	SetLookupEntries(6, 0, 4, 1); //Hiroi
+	SetLookupEntries(6, 10, 17, 30); //Fujishima
+
+	SetLookupEntries(7, 12, 12, 32); //Fujishima - bottom
+
+	SetLookupEntries(8, 0, 5, 1); //Editor
+	SetLookupEntries(8, 9, 16, 30); //Composer
+
+	SetLookupEntries(9, 0, 5, 0); //Scenario
+	SetLookupEntries(9, 8, 17, 29); //Music Director
+
+	SetLookupEntries(10, 0, 5, 0); //Sotrau
+	SetLookupEntries(10, 11, 15, 31);  //Kohei
+
+	SetLookupEntries(11, 0, 5, 0); //Akahori
+	SetLookupEntries(11, 11, 16, 30); //Tanaka
+
+	SetLookupEntries(12, 0, 5, 0); //Akahori - Bottom
+	SetLookupEntries(12, 11, 16, 30); //Tanaka - Bottom
+
+	SetLookupEntries(14, 0, 19, 10); //Sakura Wars Translation Project
+
+	SakuraCompressedData lutCompressed;
+	lutCompressed.PatchDataInMemory((char*)lookupTable, sizeof(lookupTable), true, false, 916);
+	if( lutCompressed.mDataSize != 916 )
+	{
+		printf("Lookup table is too big.  Should be 916, is %ul\n", lutCompressed.mDataSize);
+		return false;
+	}
+
+	//Write out compressed lut table
+	logoFile.WriteData(0x000349c8, lutCompressed.mpCompressedData, lutCompressed.mDataSize, false);
+
+	printf("Patching Intro Credits Succeeded!\n");
 
 	return true;
 }
@@ -10201,7 +10284,7 @@ bool PatchGame(const string& rootSakuraTaisenDirectory,
 	}
 
 	//Step 12
-	if( !PatchIntroCredits(rootSakuraTaisenDirectory, patchedSakuraTaisenDirectory, inTranslatedDataDirectory) )
+	if( !PatchIntroCredits(patchedSakuraTaisenDirectory, inTranslatedDataDirectory) )
 	{
 		printf("Patching Intro Credits failed.\n");
 		return false;

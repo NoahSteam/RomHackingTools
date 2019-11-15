@@ -1,4 +1,4 @@
-﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
 It's a photo of Maria. …She's lost in thought and looks kind of sad…
 A photo of Kanna. She looks strong and reliable. I can't wait to meet her.
@@ -33,13 +33,13 @@ The bizarre beast appeared at the crowded Shrine and caused mass hysteria in the
 The Troupe was dispatched, and victorious, yet seriously injured. Were the Spirit Armor and Koubu destroyed? 
 It seems that the citizens of the imperial capital are unable to hide their shock at the appearance of a new demon. 
 With all due respect… <br> It's my responsibility… 
-With all due respect, Commander Yoneda, the Koubu were no match for that enemy. 
+With all due respect, Lt. General Yoneda, the Koubu were no match for that enemy. 
 Ogami! What the hell are you saying?! Aren't you the commanding officer of the Flower Division!? 
 Were you only taught to talk crap at military school?? 
 … 
 I'm sorry… It's my fault. I am fully prepared to receive the punishment I deserve. 
-You damn fool! What good’ll it do us if you resign your post?! 
-And yet… the Koubu were totally destroyed! 
+You damn fool! What good will it do us if you resign your post?! 
+And… the Koubu were totally destroyed! 
 …I have no words. 
 Geez… we're gonna have to go back without a single piece left of our precious Spirit Armor… 
 I… I'm so ashamed…! 
@@ -106,7 +106,7 @@ Sir, the truth is…
 This is about the Koubu, I guess? 
 Yes, exactly. The Koubus' potential is exhausted, and our funds are limited… 
 Can't you do anything about this? 
-I've been wracking my brains about this whole pickle… 
+I've been wracking my brain about this whole pickle… 
 Can I ask you to leave the whole thing to me? 
 Really? But… 
 Trust me, I’ve got a plan, but it'll take some time. So, Ogami… 
@@ -120,8 +120,8 @@ OK… I should go see Ayame.
 It's Ogami… Do you have a minute? 
 Oh, Ogami? Come right in. How can I help you? 
 I'm sorry to disturb you so late. To be honest, I need your help… 
-…about the Koubu, yes? 
-Yes… It pains me to say it, but I have no idea what we could do… 
+…About the Koubu, yes? 
+Yes… It pains me to say it, but I have no idea what we should do… 
 Don't beat yourself up about it. This problem is just too big. 
 Producing entirely new Spirit Armors… That would be a national effort. 
 Yes… 
@@ -149,16 +149,16 @@ Go back to our roots, you mean?
 In order to stand against the Kouma, we need more powerful weapons. 
 That's a tough one, Chief… 
 … 
-Oh, right… I asked Lieutenant General Yoneda for help with that problem. 
-All right… It seems we have to come up with a different way. 
+Oh, right… I already asked for help with that problem. 
+All right… It seems we have to come up with a different solution. 
 Captain… The fighting capabilities of the Spirit Armors grow in proportion with the abilities of their pilots. 
-Even using the same Koubu as before, if we grow stronger, we'll be much more powerful in a battle. 
+Even using the same Koubu as before, if we grow stronger, we'll be much more powerful in battle. 
 Chief! This is an important meeting, so how can you space out like that!? 
 Yes, er… Sorry… 
 Oh boy… Are we really out of ideas? 
 …I have a proposal. 
 The fighting capabilities of the Spirit Armors grow in proportion with the abilities of their pilots. 
-Even using the same Koubu as before, if we grow stronger, we'll be much more powerful in a battle. 
+Even using the same Koubu as before, if we grow stronger, we'll be much more powerful in battle. 
 Back to basics, eh? Not bad. 
 OK, then I'll return to the remote mountains where I practiced karate! 
 And I'll ask my old sword fighting master for a refresher. 
@@ -170,7 +170,7 @@ I think it would be much better to build new Koubu!
 I agree. In any case, this is not an enemy we can fight unarmed. 
 But don't you think the ones who've steeled their spirit will survive the longest? 
 If that's what you believe, then hide yourself in the mountains and continue your karate training… 
-Maybe you'll become king of the jungle there! 
+Maybe you'll become king of the jungle while you’re at it! 
 What’d you say!? 
 Settle down, you two! 
 …What shall we do, Captain? 
@@ -191,7 +191,7 @@ But…
 Besides, I'm busy with a new invention at the moment. 
 All right, enough of this! If someone doesn't agree, I won't force them to do anything. 
 It's obvious to all of us that we can't win against the Kouma as we are now. 
-…OK. Just do whatever you like. 
+…OK. I’ll leave it to your discretion. 
 Ogami? 
 I'm sure every one of us knows in our hearts what we have to do. 
 Please do whatever you see fit… as long as it will help us fight the Kouma! 
@@ -202,7 +202,7 @@ Yeah?
 Contact the Hanayashiki workshop and improve the Koubu as much as you can! 
 Roger! 
 I'll leave the rest of you to make your own decisions. Do you agree, Captain? 
-Very well, then we'll do as we see fit. 
+Very well then, we'll follow our own judgement. 
 Yay, I’m gonna take lots of naps! 
 …Thanks, Chief. 
 Oh boy, maybe I'm out of practice? 
@@ -455,8 +455,8 @@ Unused
 Unused
 Unused
 What kind of moronic article did these idiots write? 
-Hehehe…don’t you think you were a bit hard on him, Lieutenant General? 
-It was just enough for that brainless moron still stuck in the holiday mood. Besides… 
+Haha…don’t you think you were a bit hard on him, Lieutenant General? 
+It was just enough to shake that brainless moron out of his holiday mood. Besides… 
 "In prosperity, prepare for adversary." Even in times of peace, we can't let our guard down. 
 In our last fight against the Hive, we didn't finish the job. 
 This Cerulean Satan… He may be even more dangerous than Tenkai. 
