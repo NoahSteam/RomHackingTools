@@ -1,4 +1,4 @@
-﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
 It's a photo of Maria. …She's lost in thought and looks kind of sad…
 A photo of Kanna. She looks strong and reliable. I can't wait to meet her.
@@ -50,16 +50,16 @@ Stop it, Chief! I'm embarrassed, seriously…But, I'm happy too.
 When I have a moment, I want to read this book. 
 However, this is not the time for reading. Let's head to the entrance. 
 There's no point in returning to the room. Sumire and Kanna should be waiting at the entrance. 
-Sakura should be in the Operations Room. 
+Sakura should be in the War Room. 
 I'd better hurry to the entrance too. 
-It looks like no one is here. They must still be in the Operations Room. 
+It looks like no one is here. They must still be in the War Room. 
 Kanna should already be at the entrance. 
 I'd better hurry to the entrance too. 
 Kanna, are you here…? It doesn't look like it. 
-Maria should be in the Operations Room. 
+Maria should be in the War Room. 
 I need to hurry up and join Sumire and Kanna at the entrance. 
 …It doesn't look like anyone is here. 
-The voices coming from the Operations Room sound passionate. 
+The voices coming from the War Room sound passionate. 
 Kohran is in the underground hangar. 
 I need to hurry up and join Sumire and Kanna at the entrance. 
 She's not here. Kohran must still be in the hangar. 
@@ -107,10 +107,10 @@ Nobody here.
 However, if I don't hurry to the entrance, they're going to really complain. 
 Nobody here. 
 All right, let's hurry to where Sumire and Kanna are! 
-I can faintly hear the sounds from the boiler room. 
+I can faintly hear the sounds from the Steam Processor room. 
 I'd better hurry up and get to the entrance. 
 The alarm isn't ringing so it only follows that nobody would be here right now. 
-Next door in the Operations Room, Sakura and Maria are talking. 
+Next door in the War Room, Sakura and Maria are talking. 
 Better get to the entrance. 
 Nobody here. 
 Better get to the entrance. 
@@ -283,7 +283,7 @@ Tch…!
 Uh, wait, Kanna! 
 (Not good… This level of animosity can't just be laughed off.) 
 (There are only seven members of the Assault Troupe. We need value teamwork…) 
-…Ensign. Shall we head to the Operations Room? 
+…Ensign. Shall we head to the War Room? 
 Uh, yeah. Let's go. 
 No, Sumire! It's doesn't mean anything… 
 It doesn't? What reason do you have to be with Kanna, then? 
@@ -358,7 +358,7 @@ Stop it, both of you! This isn't the time to be arguing!
 I could say the same thing to you! 
 Well then, Captain, please be careful. 
 Thanks. Take care of things while I'm gone. 
-Understood. Well then, Sakura, please stay in the Operations Room. 
+Understood. Well then, Sakura, please stay in the War Room. 
 Understood. 
 Mon Frère, good luck! I'll be taking a nap. 
 I'll be in the hangar servicing the Koubu. Chief, if it's all right, could you stop by sometime? 

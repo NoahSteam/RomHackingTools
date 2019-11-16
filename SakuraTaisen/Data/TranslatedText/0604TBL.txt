@@ -1,4 +1,4 @@
-﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
 It's a photo of Maria. …She's lost in thought and looks kind of sad…
 A photo of Kanna. She looks strong and reliable. I can't wait to meet her.
@@ -156,7 +156,7 @@ What's a steam processor?
 Don't tell me… you've never seen our steam processor in the room back there? 
 Well… in fact… 
 Oh dear, then I'll have to tell you. 
-As its name implies, it's a steam-powered device that calculates, analyses and processes information. 
+As its name implies, it's a steam-powered device that calculates, analyzes and processes information. 
 Its logic circuits can do calculations a hundred times faster than the human brain. 
 Wow, that's incredible! 
 It really is, isn't it? We can easily calculate our enemies' strategy or which horse is going to win the race. 

@@ -1,4 +1,4 @@
-﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
 It's a photo of Maria. …She's lost in thought and looks kind of sad…
 A photo of Kanna. She looks strong and reliable. I can't wait to meet her.
@@ -33,7 +33,7 @@ Kanna, what's wrong?
 Boss! Maria… Maria just ran off in her Koubu! 
 What!? Are you sure, Kanna!? 
 Don't tell me… is she going to fight Setsuna alone…? 
-Boss, we can talk later. We need to get to the command room! 
+Boss, we can talk later. We need to get to the Command Room! 
 Right! 
 … looks like everyone but Sakura is here. 
 What happened with Maria? 

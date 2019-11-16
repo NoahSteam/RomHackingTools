@@ -1,4 +1,4 @@
-﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
+﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
 It's a photo of Sumire. This is a side of her you don't see too often. 
 It's a photo of Maria. …She's lost in thought and looks kind of sad… 
 It's a photo of Kanna. Kanna's signature strength comes through clearly. 
@@ -135,7 +135,7 @@ Oh, I'm… I'm sorry, everyone. (Did Ayame trick them on purpose?)
 … 
 She just needs a little rest, then she'll be all right. 
 I know we're all worried about Sakura, but let's start the strategy meeting. 
-You're right. Come on, everyone. To the command room. 
+You're right. Come on, everyone. To the War Room. 
 …… 
 (The city is under threat, and Sakura is still unconscious… This isn't good…) 
 Captain… Everything OK? You're frowning… 
@@ -393,7 +393,7 @@ Hm, one hour might just be enough time to do that.
 Leave that to me! At times like this, the steam processor comes in handy! 
 It's hard to verify if it's Tenkai, but we can localize spiritual force and project it on a map of the capital. 
 OK, do it! 
-Yeah! Let's all gather in the Calculations Room! 
+Yeah! Let's all gather in the Steam Processor room! 
 Hehehe… Seems like we don't have to step in, Ayame. 
 Yes… He can stand on his own feet by now. 
 Yeah, soon enough, and he'll have reached his full potential. Not a bad look. 

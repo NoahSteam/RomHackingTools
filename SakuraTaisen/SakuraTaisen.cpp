@@ -10051,111 +10051,101 @@ void AddShadowsToWKLText(const string& wklDirectory)
 	printf("Success\n");
 }
 
-bool PatchIntroCredits(const string& patchedSakuraTaisenDirectory, const string& patchedDataDirectory)
-{
-	printf("Patching Intro Credits\n");
-
+bool PatchTiledData(FileReadWriter& outFile, const string& fontSheetPath, const string& lookupTablePath, unsigned int fontSheetAddress, unsigned int lutAddress, 
+					unsigned int fontCompressedSize, unsigned int lutCompressedSize)
+{		
 	//Create image data
-	const string creditsPath = patchedDataDirectory + Seperators + "IntroCredits.bmp";
-	const unsigned int creditsTileDim = 8;
-	BmpToSakuraConverter creditsImage;
-	if( !creditsImage.ConvertBmpToSakuraFormat(creditsPath, false, BmpToSakuraConverter::CYAN, &creditsTileDim, &creditsTileDim) )
+	const unsigned int tileDim = 8;
+	BmpToSakuraConverter fontSheet;
+	if( !fontSheet.ConvertBmpToSakuraFormat(fontSheetPath, false, BmpToSakuraConverter::CYAN, &tileDim, &tileDim) )
 	{
 		return false;
 	}
 
-	creditsImage.PackTiles();
+	fontSheet.PackTiles();
 
-	SakuraCompressedData creditsCompressed;
-	creditsCompressed.PatchDataInMemory(creditsImage.mpPackedTiles, creditsImage.mPackedTileSize, true, false, 6889);
-	if( creditsCompressed.mDataSize > 6889 )
+	SakuraCompressedData fontSheetCompressedData;
+	fontSheetCompressedData.PatchDataInMemory(fontSheet.mpPackedTiles, fontSheet.mPackedTileSize, true, false, fontCompressedSize);
+	if( fontSheetCompressedData.mDataSize > fontCompressedSize )
 	{
 		printf("Compressed credits image is too big");
 		return false;
 	}
 	//Done with image data
 
-	const string logoFilePath = patchedSakuraTaisenDirectory + Seperators + "SAKURA1\\LOGO.SH2";
-	FileReadWriter logoFile;
-	if( !logoFile.OpenFile(logoFilePath) )
+	//Write out new image data
+	outFile.WriteData(fontSheetAddress, fontSheetCompressedData.mpCompressedData, fontSheetCompressedData.mDataSize, false);
+
+	//Open tile map containing screen layout
+	FILE* tileFile = nullptr;
+	errno_t errorValue = fopen_s(&tileFile, lookupTablePath.c_str(), "r");
+	if( errorValue )
 	{
+		printf("Unable to open %s\n", lookupTablePath.c_str());
 		return false;
 	}
 
-	//Write out new image data
-	logoFile.WriteData(0x00032edc, creditsCompressed.mpCompressedData, creditsCompressed.mDataSize, false);
-
-	//Create lookup table
-	static const int tableSize = (320/8)*(224/8);
-	int lookupTable[tableSize];
-	int lookupTable_o[tableSize];
-	memset(lookupTable, 0, sizeof(lookupTable));
-	memset(lookupTable_o, 0, sizeof(lookupTable_o));
-
-	auto SetLookupEntries = [&](int row, int from, int to, int drawAt)
+	std::vector<int> tileEntries;
+	while( feof(tileFile) != EOF )
 	{
-		int start      = from + row*20;
-		int end        = start + to - from;
-		int writeIndex = 0;
-		for(int i = start; i <= end; ++i, ++writeIndex)
+		char comma;
+		int tileIndex;
+
+		if( fscanf_s(tileFile, "%i%c", &tileIndex, &comma, 2) == EOF )
 		{
-			if( row*40 + drawAt + writeIndex >= tableSize )
-			{
-				int k = 0;
-				++k;
-			}
-			lookupTable[row*40 + drawAt + writeIndex] = SwapByteOrder(i);
-			lookupTable_o[row*40 + drawAt + writeIndex] = (i);
+			break;
 		}
-	};
-	
-	SetLookupEntries(0, 4, 16, 14); //Production Director
-	
-	SetLookupEntries(1, 3, 16, 13); //Shoichiro Iramijiri
-	SetLookupEntries(2, 3, 16, 13);
 
-	SetLookupEntries(3, 0, 5, 1); //Producer
-	SetLookupEntries(3, 8, 20, 28); //Character Designer
+		tileEntries.push_back( SwapByteOrder(tileIndex) );
+	}
 
-	SetLookupEntries(4, 0, 5, 1); //Producer - bottom
-	SetLookupEntries(4, 8, 20, 28); //Characer Designer - bottom
+	fclose(tileFile);
 
-	SetLookupEntries(5, 1, 3, 2); //Oji
-	SetLookupEntries(5, 10, 16, 30); //Kousuke
-	
-	SetLookupEntries(6, 0, 4, 1); //Hiroi
-	SetLookupEntries(6, 10, 17, 30); //Fujishima
-
-	SetLookupEntries(7, 12, 12, 32); //Fujishima - bottom
-
-	SetLookupEntries(8, 0, 5, 1); //Editor
-	SetLookupEntries(8, 9, 16, 30); //Composer
-
-	SetLookupEntries(9, 0, 5, 0); //Scenario
-	SetLookupEntries(9, 8, 17, 29); //Music Director
-
-	SetLookupEntries(10, 0, 5, 0); //Sotrau
-	SetLookupEntries(10, 11, 15, 31);  //Kohei
-
-	SetLookupEntries(11, 0, 5, 0); //Akahori
-	SetLookupEntries(11, 11, 16, 30); //Tanaka
-
-	SetLookupEntries(12, 0, 5, 0); //Akahori - Bottom
-	SetLookupEntries(12, 11, 16, 30); //Tanaka - Bottom
-
-	SetLookupEntries(14, 0, 19, 10); //Sakura Wars Translation Project
+	if( tileEntries.size() != (320 / 8)*(224 / 8) )
+	{
+		printf("IntroCredits.csv does not have the expected number of tiles [40 * 28].  Found %u instead.\n", tileEntries.size());
+		return false;
+	}
 
 	SakuraCompressedData lutCompressed;
-	lutCompressed.PatchDataInMemory((char*)lookupTable, sizeof(lookupTable), true, false, 916);
-	if( lutCompressed.mDataSize != 916 )
+	lutCompressed.PatchDataInMemory((char*)tileEntries.data(), tileEntries.size()*sizeof(int), true, false, lutCompressedSize);
+	if( lutCompressed.mDataSize != lutCompressedSize )
 	{
 		printf("Lookup table is too big.  Should be 916, is %ul\n", lutCompressed.mDataSize);
 		return false;
 	}
 
 	//Write out compressed lut table
-	logoFile.WriteData(0x000349c8, lutCompressed.mpCompressedData, lutCompressed.mDataSize, false);
+	outFile.WriteData(lutAddress, lutCompressed.mpCompressedData, lutCompressed.mDataSize, false);
+	
+	return true;
+}
 
+bool PatchIntroCredits(const string& patchedSakuraTaisenDirectory, const string& patchedDataDirectory)
+{
+	printf("Patching Intro Credits\n");
+
+	const string logoFilePath = patchedSakuraTaisenDirectory + "\\SAKURA1\\LOGO.SH2";
+	FileReadWriter logoFile;
+	if( !logoFile.OpenFile(logoFilePath) )
+	{
+		return false;
+	}
+
+	const string creditsPath = patchedDataDirectory + "\\VDP2\\IntroCredits.bmp";
+	const string creditsTileMapPath = patchedDataDirectory + "\\VDP2\\IntroCredits.csv";
+	if( !PatchTiledData(logoFile, creditsPath, creditsTileMapPath, 0x00032edc, 0x000349c8, 6889, 916) )
+	{
+		return false;
+	}
+
+	const string sakuraWarsLogo = patchedDataDirectory + "\\VDP2\\SakuraWarsLogo.bmp";
+	const string sakuraWarsLogoTileMapPath = patchedDataDirectory + "\\VDP2\\SakuraWarsLogo.csv";
+	if( !PatchTiledData(logoFile, sakuraWarsLogo, sakuraWarsLogoTileMapPath, 0x00035924, 0x00035c30, 777, 208) )
+	{
+		return false;
+	}
+	
 	printf("Patching Intro Credits Succeeded!\n");
 
 	return true;

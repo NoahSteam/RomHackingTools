@@ -1,4 +1,4 @@
-﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
 It's a photo of Maria. …She's lost in thought and looks kind of sad…
 A photo of Kanna. She looks strong and reliable. I can't wait to meet her.
@@ -111,9 +111,9 @@ I'd like to take a nice long shower… but I'm on patrol right now.
 It figures that the Imperial Assault Troupe would have such advanced medical equipment. 
 But I sure hope we won't be needing this room much. 
 …Everything looks fine here, so I'll continue my patrol. 
-This is the command room, the center of the Imperial Assault Troupe. When the alarm sounds, we all assemble here. 
+This is the Command Room, the center of the Imperial Assault Troupe. When the alarm sounds, we all assemble here. 
 …No problems here. OK, I'll go to another room. 
-A steam computer… 
+A steam processor… 
 I've heard there are only a few of this size in Japan. 
 …If anything is wrong with this thing, I sure can't tell. Might as well head for another room. 
 This is the room where we hold strategy meetings. 
@@ -343,7 +343,7 @@ Ogami, you should learn to say what you're really thinking.
 You're a real pro at cards, Chief! I give up. 
 Not at all, I just got lucky. 
 No, this game takes both luck and talent. Though I gotta admit I had faith in my skills. 
-That was a pretty good match. Thanks for keeping me company, Ogami. 
+That was a pretty good match. Thanks for keeping me company, Chief. 
 It was no problem. I really had fun. 
 Sorry, Chief. I never do anything by half measures. 
 Let's play again one of these days. You can up your game in the meantime! 
