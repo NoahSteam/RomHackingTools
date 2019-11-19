@@ -562,3 +562,14 @@ Tile data is compressed in LOGO.sh2 (Found: 00032edc 00000000 Size: 847 Compress
 Lookup table is compressed in LOGO.sh2 @0x000349c8 (Found: 000349c8 00000146 Size: 34 CompressedSize: 916)
 
 Lookup table has a 4byte lookup entry for each tile and is 0 based.  So (328/8)*(224/8)*4 bytes.
+
+//MINICOOK05c00268
+002B9728
+06001F6C
+
+look at r6 @0021e6b8
+
+002B7AD6 < 49 written here.  49 ends up being the number
+
+Put a breakpoint @0021909e to see 49 being read
+002aa0c6 has 0049
