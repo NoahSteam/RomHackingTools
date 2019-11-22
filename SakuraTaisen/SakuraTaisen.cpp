@@ -1409,7 +1409,8 @@ void ExtractMinigameData(const string& rootSakuraDirectory, const string& transl
 			return true;
 		}
 
-		bool Dump(const char* inMiniGameFileName, int inNumCharactersInFontSheet, unsigned int logoWidth, unsigned int inFontSheetAddress, unsigned int textDataAddress, bool bIsCompressed = false, const char* pSubDirectory = nullptr)
+		bool Dump(const char* inMiniGameFileName, int inNumCharactersInFontSheet, unsigned int logoWidth, unsigned int inFontSheetAddress, unsigned int textDataAddress, 
+				  bool bIsCompressed = false, const char* pSubDirectory = nullptr)
 		{
 			const string sakura3Directory = mRootSakuraDirectory + "\\SAKURA3\\";
 			FileNameContainer miniGameFileName((sakura3Directory + inMiniGameFileName + ".bin").c_str());
@@ -1482,6 +1483,77 @@ void ExtractMinigameData(const string& rootSakuraDirectory, const string& transl
 	miniGameDumper.Dump("MINIHANA", 111, 128, 0x00092210, 0x000a6b84);
 	//miniGameDumper.Dump("MINIHANA", 230, 0x000a8178, 0x000a6b82, true, "Section1"); //Compressed data for font sheet found: 000a8178 00000000 Size: 384 CompressedSize: 12625
 	miniGameDumper.Dump("MINIHANA", 230, 128, 0x000a8178, 0x000a6f1c, true, "Section2"); //Compressed data for font sheet found: 000a8178 00000000 Size: 384 CompressedSize: 12625
+}
+
+void ExtractStatusScreen(const string& rootSakuraDirectory, const string& translatedDataDirectory, const string& outputDirectory)
+{
+//	miniGameDumper.Dump("ICATALL.DAT", 48, 0, 0x00013800, 0x0005f428, true, "Section2"); //Compressed data for font sheet found: 000a8178 00000000 Size: 384 CompressedSize: 12625
+
+	CreateDirectoryHelper(outputDirectory);
+	CreateDirectoryHelper( (outputDirectory + "png") );
+	CreateDirectoryHelper( (outputDirectory + "bmp") );
+
+	const string icatallFilePath = rootSakuraDirectory + "SAKURA1\\ICATALL.DAT";
+	FileData icatallFileData;
+	if( !icatallFileData.InitializeFileData(FileNameContainer(icatallFilePath.c_str())) )
+	{
+		return;
+	}
+
+	//Dump images
+	{
+		const string fontFilePath = translatedDataDirectory + "StatusScreenPalette.bin";
+		FileData paletteFile;
+		if( !paletteFile.InitializeFileData( FileNameContainer(fontFilePath.c_str()) ) )
+		{
+			return;
+		}
+
+		PRSDecompressor uncompressedData;
+		uncompressedData.UncompressData( (void*)(icatallFileData.GetData() + 0x00008800), icatallFileData.GetDataSize() - 0x00008800);
+
+		ExtractImageFromData(uncompressedData.mpUncompressedData, 144*384, outputDirectory + "bmp\\Images.bmp",
+					paletteFile.GetData(), paletteFile.GetDataSize(), 144, 384, 1, 256, 0, true, true);
+
+		ExtractImageFromData(uncompressedData.mpUncompressedData, 144*384, outputDirectory + "png\\Images.png",
+					paletteFile.GetData(), paletteFile.GetDataSize(), 144, 384, 1, 256, 0, true, false);
+	}
+
+	//Dump text
+	{
+		const string sakuraFilePath = rootSakuraDirectory + "SAKURA";
+		FileData sakuraFileData;
+		if( !sakuraFileData.InitializeFileData(FileNameContainer(sakuraFilePath.c_str())) )
+		{
+			return;
+		}
+
+		//Create font sheet
+		const int numBytesPerCharacter = 16 * 16 / 2;
+		SakuraFontSheet sakuraFontSheet;
+		PRSDecompressor decompressor;
+		decompressor.UncompressData((void*)(icatallFileData.GetData() + 0x00013800), (icatallFileData.GetDataSize() - 0x00013800));
+
+		if( !sakuraFontSheet.CreateFontSheetFromData(decompressor.mpUncompressedData, decompressor.mUncompressedDataSize) )
+		{
+			printf("Unable to create font sheet.\n");
+			return;
+		}
+
+		const string fontFilePath = translatedDataDirectory + "Palette.bin";
+		FileData fontFile;
+		if( !fontFile.InitializeFileData(FileNameContainer(fontFilePath.c_str()) ) )
+		{
+			return;
+		}
+
+		PaletteData fontPaletteData;
+		fontPaletteData.CreateFrom15BitData(fontFile.GetData(), fontFile.GetDataSize());
+
+		MiniGameSakuraText sakuraText;
+		sakuraText.ReadInStrings(sakuraFileData.GetData(), 0x0005f428, 48);
+		sakuraText.DumpTextImages(sakuraFontSheet, fontPaletteData, outputDirectory);
+	}
 }
 
 void ExtractText(const string& inSearchDirectory, const string& inPaletteFileName, const string& inOutputDirectory)
@@ -9380,6 +9452,101 @@ bool PatchMiniGames(const string& rootSakuraDirectory, const string& patchedSaku
 	return bResult;
 }
 
+bool PatchStatusScreen(const string& patchedSakuraDirectory, const string& inTranslatedDataDirectory)
+{
+	const string sakuraFilePath = patchedSakuraDirectory + Seperators + "SAKURA";
+	FileData sakuraFileData;
+	if( !sakuraFileData.InitializeFileData( FileNameContainer(sakuraFilePath.c_str())) )
+	{
+		return false;
+	}
+
+	FileReadWriter sakuraFile;
+	if( !sakuraFile.OpenFile(sakuraFilePath ) )
+	{
+		return false;
+	}
+
+	const string icatallFilePath = patchedSakuraDirectory + Seperators + "SAKURA1\\ICATALL.DAT";
+	FileReadWriter icatallFile;
+	if( !icatallFile.OpenFile(icatallFilePath ) )
+	{
+		return false;
+	}
+
+	//Open translated fontsheet
+	const string fontSheetFileName = inTranslatedDataDirectory + "\\StatusScreenFontSheet.bmp";
+	BmpToSakuraConverter patchedFontSheet;
+	const unsigned int tileDim = 16;
+	if( !patchedFontSheet.ConvertBmpToSakuraFormat(fontSheetFileName, false, 0, &tileDim, &tileDim) )
+	{
+		printf("PatchStatusScreen: Couldn't convert image: %s.\n", fontSheetFileName.c_str());
+		return false;
+	}
+
+	patchedFontSheet.PackTiles();
+
+	SakuraCompressedData fontSheetCompressedData;
+	fontSheetCompressedData.PatchDataInMemory(patchedFontSheet.mpPackedTiles, patchedFontSheet.mPackedTileSize, true, false, 2522);
+	if( fontSheetCompressedData.mDataSize > 2522 )
+	{
+		printf("Compressed font sheet is too big");
+		return false;
+	}
+
+	//Patch fontsheet
+	icatallFile.WriteData(0x00013800, fontSheetCompressedData.mpCompressedData, fontSheetCompressedData.mDataSize);
+
+	MiniGameTextIndiceFinder indiceFinder;
+	indiceFinder.FindIndices(sakuraFileData.GetData(), 0x0005f428, 48);
+	if( indiceFinder.indiceAddresses.size() != 18 )
+	{
+		printf("PatchStatusScreen: Couldn't find text indices\n");
+		return false;
+	}
+
+	short textIndices1[] = {1, 2, 0};
+	short textIndices2[] = {3, 4, 0};
+	short textIndices3[] = {30, 30, 0};
+	short textIndices4[] = {5, 6, 0};
+	short textIndices5[] = {7, 8, 0};
+	short textIndices6[] = {9, 10, 0};
+	short textIndices7[] = {30, 30, 0};
+	short textIndices8[] = {30, 30, 0};
+	short textIndices9[] = {30, 30, 0};
+	short textIndices10[] = {30, 30, 0};
+	short textIndices11[] = {30, 30, 0};
+	short textIndices12[] = {30, 30, 0};
+	short textIndices13[] = {30, 30, 0};
+	short textIndices14[] = {30, 30, 0};
+	short textIndices15[] = {30, 30, 0};
+
+#define PatchTextIndices(indice) SwapEndiannessForArrayOfShorts(indice, sizeof(indice));\
+                                if( !indiceFinder.ValidateNewIndices(indiceNumber, sizeof(indice)) ) return false;\
+                                sakuraFile.WriteData(indiceFinder.indiceAddresses[indiceNumber], (char*)indice, sizeof(indice));\
+                                ++indiceNumber;
+
+	int indiceNumber = 0;
+	PatchTextIndices(textIndices1);
+	PatchTextIndices(textIndices2);
+	PatchTextIndices(textIndices3);
+	PatchTextIndices(textIndices4);
+	PatchTextIndices(textIndices5);
+	PatchTextIndices(textIndices6);
+	PatchTextIndices(textIndices7);
+	PatchTextIndices(textIndices8);
+	PatchTextIndices(textIndices9);
+	PatchTextIndices(textIndices10);
+	PatchTextIndices(textIndices11);
+	PatchTextIndices(textIndices12);
+	PatchTextIndices(textIndices13);
+	PatchTextIndices(textIndices14);
+	PatchTextIndices(textIndices15);
+
+
+	return true;
+}
+
 void CreateFontSheetEntries(const string& inFileName, bool bEveryCombination)
 {
 	FILE* pFile = nullptr;
@@ -10280,6 +10447,13 @@ bool PatchGame(const string& rootSakuraTaisenDirectory,
 		return false;
 	}
 
+	//Step 13
+	if( !PatchStatusScreen(patchedSakuraTaisenDirectory, inTranslatedDataDirectory) )
+	{
+		printf("Patching Status Screen Failed.\n");
+		return false;
+	}
+
 	printf("Patching Successful!\n");
 	return true;
 }
@@ -10314,7 +10488,8 @@ void PrintHelp()
 	printf("CompressFile inFilePath outFilePath\n");
 	printf("FindCompressedData compressedFile uncompressedFile outDirectory\n");
 	printf("FindCompressedDataInDir inDirectory uncompressedFile outDirectory\n");
-	printf("ExtractMiniGameData rootSakuraDirectory outDirectory\n");
+	printf("ExtractMiniGameData rootSakuraDirectory patchedDataDirectory outDirectory\n");
+	printf("ExtractStatusScreen rootSakuraDirectory patchedDataDirectory outDirectory\n");
 	printf("YabauseToMednafen yabauseFilePath outFile\n");
 	printf("PatchGame isDisc2 rootSakuraTaisenDirectory patchedSakuraTaisenDirectory translatedTextDirectory fontSheet originalPalette patchedTMapSpDataPath mainMenuFontSheetPath mainMenuBgndPatchedImage optionsImagePatched translatedDataDirectory extractedWklDir\n");
 }
@@ -10658,6 +10833,14 @@ int main(int argc, char *argv[])
 		const string translatedDataDir = string(argv[4]) + Seperators;
 
 		PatchFACEFiles(rootSakuraDir, outDir, translatedDataDir);
+	}
+	else if( command == "ExtractStatusScreen" && argc == 5 )
+	{
+		const string rootSakuraDir     = string(argv[2]) + Seperators;
+		const string translatedDataDir = string(argv[3]) + Seperators;
+		const string outDir            = string(argv[4]) + Seperators;
+
+		ExtractStatusScreen(rootSakuraDir, translatedDataDir, outDir);
 	}
 	else
 	{

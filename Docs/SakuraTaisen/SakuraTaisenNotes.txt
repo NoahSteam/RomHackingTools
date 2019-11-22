@@ -573,3 +573,15 @@ look at r6 @0021e6b8
 
 Put a breakpoint @0021909e to see 49 being read
 002aa0c6 has 0049
+
+//Status screen
+Text table @06063420 in memory and @0x0005f428 in Sakura
+
+Font Sheet Found at: 79872 in ICATALL.DAT
+Results:
+Found: 00013800 00000100 Size: 399 CompressedSize: 2522
+
+Images:
+Found at: 34816
+Results:
+Found: 00008800 00000000 Size: 9216 CompressedSize: 21967

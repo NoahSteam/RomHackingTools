@@ -37,7 +37,8 @@ ExtractTiledImages d:\Rizwan\SakuraWars\Disc1  d:\Rizwan\SakuraWars\ExtractedDat
 FindDuplicateText D:\Rizwan\SakuraWars\ExtractedData\Disc1\WKL D:\Rizwan\SakuraWars\ExtractedData\Disc1\WKL\duplicates.txt
 DumpTranslationFilesWithoutUnusedLines d:\Rizwan\SakuraWars\Disc1 D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\TranslatedText D:\Rizwan\SakuraWars\TranslationFiles\
 CopySharedWklImages D:\Rizwan\SakuraWars\ExtractedData\Disc1\WKL d:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\WKL
-ExtractMiniGameData d:\Rizwan\SakuraWars\Disc1 d:\Rizwan\SakuraWars\ExtractedData\Disc1\Minigames\
+ExtractMiniGameData d:\Rizwan\SakuraWars\Disc1 D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data d:\Rizwan\SakuraWars\ExtractedData\Disc1\Minigames\
+ExtractStatusScreen d:\Rizwan\SakuraWars\Disc1 D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data d:\Rizwan\SakuraWars\ExtractedData\Disc1\StatusScreen\
 ExtractSubtitles d:\Rizwan\SakuraWars\Disc1 d:\Rizwan\SakuraWars\ExtractedData\Disc1\Subtitles\
 PatchFACEFiles d:\Rizwan\SakuraWars\Disc1 d:\Rizwan\SakuraWars\Disc1_Translated d:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data
 AddShadowsToWKLText d:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\WKL
