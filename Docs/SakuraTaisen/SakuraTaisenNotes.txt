@@ -585,3 +585,5 @@ Images:
 Found at: 34816
 Results:
 Found: 00008800 00000000 Size: 9216 CompressedSize: 21967
+
+There are pointers to the LUT entries for the Atk/Def/Mov entries in sakura.  Find and fix those.

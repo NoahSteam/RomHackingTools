@@ -1,7 +1,7 @@
 ﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
 It's a photo of Maria. …She's lost in thought and looks kind of sad…
-A photo of Kanna. She looks strong and reliable. I can't wait to meet her.
+A photo of Kanna. Her signature strength comes through clearly.
 A photo of Iris. She's surrounded by flowers and flashing a radiant smile.
 A photo of Kohran. She's looking pretty in profile with her face dyed red by the evening sun.
 A letter given to me by a customer. I was asked to give it to Sumire. I have a bad feeling about this…
@@ -54,7 +54,7 @@ Hmm… I wonder if Maria is in her room?
 Why don't I go check elsewhere? 
 …Seems like she's not here. I guess she hasn't returned to her room yet. 
 I wonder if Iris is on her way back… 
-Okay, guess I'll head somewhere else. 
+OK, guess I'll head somewhere else. 
 Damn. Seems there's no one here. 
 I wonder if Sumire is inside. 
 No sense standing around here. I should get going. 
@@ -109,7 +109,7 @@ These photos are mainly for guests, so please just take one.
 Oh, I guess that's true. I'll come again some other time. 
 You'd like to buy this photo? Thank you! 
 That's a photo of Sakura. That'll be 50 zeni. 
-We need to leave some for the guests, so just take one for now, okay? 
+We need to leave some for the guests, so just take one for now, OK? 
 Ogami, I appreciate your interest, but… 
 These photos are mainly for guests, so please just take one. 
 Oh, I guess that's true. I'll come again some other time. 
@@ -117,7 +117,7 @@ You'd like to buy that? Thank you!
 Sakura's popularity is booming right now. People find her really relateable. 
 You'd like to buy this photo? Thank you! 
 That's a photo of Sumire. That'll be 50 zeni. 
-We need to leave some for the guests, so just take one for now, okay? 
+We need to leave some for the guests, so just take one for now, OK? 
 Ogami, I appreciate your interest, but… 
 These photos are mainly for guests, so please just take one. 
 Oh, I guess that's true. I'll come again some other time. 
@@ -125,7 +125,7 @@ You'd like to buy that? Thank you!
 Most of Sumire's fans are young rich guys, judging by their appearances. 
 You'd like to buy this photo? Thank you! 
 That's a photo of Maria. That'll be 50 zeni. 
-We need to leave some for the guests, so just take one for now, okay? 
+We need to leave some for the guests, so just take one for now, OK? 
 Ogami, I appreciate your interest, but… 
 These photos are mainly for guests, so please just take one. 
 Oh, I guess that's true. I'll come again some other time. 
@@ -134,7 +134,7 @@ Let's see, our top seller these days is… Maria's photo, I think?
 She's very popular among young ladies and students. 
 You'd like to buy this photo? Thank you! 
 That's a photo of Kanna. That'll be 50 zeni. 
-We need to leave some for the guests, so just take one for now, okay? 
+We need to leave some for the guests, so just take one for now, OK? 
 Ogami, I appreciate your interest, but… 
 These photos are mainly for guests, so please just take one. 
 Oh, I guess that's true. I'll come again some other time. 
@@ -142,7 +142,7 @@ You'd like to buy that? Thank you!
 Most of Kanna's photos go to kids who beg their parents to buy it for them. 
 You'd like to buy this photo? Thank you! 
 That's a photo of Iris. That'll be 50 zeni. 
-We need to leave some for the guests, so just take one for now, okay? 
+We need to leave some for the guests, so just take one for now, OK? 
 Ogami, I appreciate your interest, but… 
 These photos are mainly for guests, so please just take one. 
 Oh, I guess that's true. I'll come again some other time. 
@@ -151,7 +151,7 @@ Most of the guys buying Iris's photo are older gentlemen.
 They always glance around nervously when they buy it. I wonder if they're worried what people will think? 
 You'd like to buy this photo? Thank you! 
 That's a photo of Kohran. That'll be 50 zeni. 
-We need to leave some for the guests, so just take one for now, okay? 
+We need to leave some for the guests, so just take one for now, OK? 
 Ogami, I appreciate your interest, but… 
 These photos are mainly for guests, so please just take one. 
 Oh, I guess that's true. I'll come again some other time. 
@@ -176,7 +176,7 @@ That's true… Well then, I'll get out of your hair.
 Go back to your room. <br> Invite Tsubaki out. <br> Meet up with everyone. 
 Well then, I'll be heading out. 
 Thanks for all your hard work! Oh, and everyone from the Flower Division should be in the parlor! 
-Everyone gave their all in today's performance, so please give them some kind words, okay? 
+Everyone gave their all in today's performance, so please give them some kind words, OK? 
 I'll do that. Anyway, keep up the good work. 
 Eh?! Really?! Ah… well… what should I do…? 
 What's wrong? 
@@ -187,7 +187,7 @@ Alright… next time it is! Well, I'll be going then.
 It's a promise, then! And again, thank you for your hard work today! 
 If that's all, I'm heading home. 
 Thanks for all your hard work! Oh, and everyone from the Flower Division should be in the parlor! 
-Everyone gave their all in today's performance, so please give them some kind words, okay? 
+Everyone gave their all in today's performance, so please give them some kind words, OK? 
 I'll do that. Anyway, keep up the good work. 
 What's wrong Ogami? You look a little out of it. 
 Hey, Miss! Give me that picture! 
@@ -261,17 +261,17 @@ Really really.
 Aww! I believe you! 
 (Phew…) 
 But… Mon Frère. You're lucky it was me… if it were someone else, then… 
-They might've been super duper mad! Be careful, okay? 
+They might've been super duper mad! Be careful, OK? 
 Anyway, I'm gonna go meet up with everyone else! Bye~Bye~! 
 S-she's right… I'd better be careful. 
 … 
 Mon Frère… Don't make that face! 
-I'm not angry, okay? 
+I'm not angry, OK? 
 I'm sorry, Iris. It was a little careless of me to run in here like that. 
-No, no, it's okay, Mon Frère. 
+No, no, it's OK, Mon Frère. 
 Anyway, I'm gonna go meet up with everyone else! Bye~Bye~! 
 I'm sorry I made you worry, Mon Frère. 
-It's okay, really. I just heard your screams and thought something might've happened to you. 
+It's OK, really. I just heard your screams and thought something might've happened to you. 
 Honestly, I'm just glad it wasn't anything serious. 
 Actually, I was a little surprised when I heard your voice but… 
 I'm so happy that you would worry about me like that! 
@@ -297,7 +297,7 @@ Hehehe! I knew it! Mon Frère is a pervert!
 …… 
 Aww, Mon Frère's being shy! How cuuuute! 
 Well… Uh… 
-Next time… Let's get in together! Okay, Mon Frère? 
+Next time… Let's get in together! OK, Mon Frère? 
 …Hey now! 
 Anyway, I'm gonna go meet up with everyone else! Bye~Bye~! 
 Ahh… this is no good. What am I saying?! 
@@ -328,9 +328,9 @@ The hell with it! I can't just abandon Iris! I'm busting into that shower!
 Iris! Are you alright?! 
 Huh?! Oh! Mon Frère! Get out of here! 
 Huh? What the!? Uwaaaaaah! 
-Woah… Apparently I've been teleported here by Iris… 
+Whoa… Apparently I've been teleported here by Iris… 
 I wanted to go and help her but… I've been mistaken for a peeping tom… 
-Iris! What's wrong!? Are you okay!? 
+Iris! What's wrong!? Are you OK!? 
 Huh!? That voice… Mon Frère?! Mon Frère, what's wrong? 
 I heard someone screaming and thought something was wrong! 
 Well… uh… I… I thought I would take a shower but I accidentally mixed up the hot and cold water. 
@@ -342,7 +342,7 @@ Reeeally…? Hehehe, I'm happy.
 Well, it was nothing after all. I'm glad it was nothing big. 
 I was worried about you but… I was a little nervous to enter the shower room. 
 First things first, I need to figure out what's going on. 
-Iris! What's wrong!? Are you okay!? 
+Iris! What's wrong!? Are you OK!? 
 Huh!? That voice… Mon Frère?! Mon Frère, what's wrong? 
 I heard someone screaming and thought something was wrong! 
 Well… uh… I… I thought I would take a shower but I accidentally mixed up the hot and cold water. 
@@ -449,9 +449,9 @@ What's the hurry? <br> …your kids? <br> Well, I'll see you later.
 What's got you in such a hurry? 
 Looks like there's some lost kids in the lobby and it's causin' problems for Yuri. I'm gonna go back her up. 
 When you say kids… you don't mean… your kids, do you? 
-Don't be an idiot! I don't have any kids, okay!? 
+Don't be an idiot! I don't have any kids, OK!? 
 Looks like there's some lost kids in the lobby and it's causin' problems for Yuri. I'm gonna go back her up. 
-Give it your all, okay? <br> Well, I'll see you later. <br> Mind if I give you a hand? 
+Give it your all, OK? <br> Well, I'll see you later. <br> Mind if I give you a hand? 
 Oh really? That seems tough… Well, be sure to give it your all! 
 I will. Those kids came out here to see our performance, so I can't just abandon them. 
 I'll see ya later, Boss! If you get a minute, I'd appreciate your help in the lobby! 
@@ -480,7 +480,7 @@ Everyone should be gathering in the parlor by now.
 If you don't mind, Ogami… Would you please come with me? 
 Sure, I'll come along. <br> I've got plans… sorry. <br> I can go on my own. 
 Sure, I'll come along. Let's go. 
-Okay! It looks like coming to get you was a good idea after all. 
+OK! It looks like coming to get you was a good idea after all. 
 Oh? Sakura… did you come here just to get me? 
 Huh?! I just figured that you'd be tired from work is all… 
 …Thank you, Sakura. 
@@ -489,7 +489,7 @@ Come on!! Don't be like this! Everyone's already waiting, so let's hurry up and 
 Ah, Sakura! Could you stop pulling my hand?! 
 Heheh, if you're not going, then I'll just have to pull you all the way to the parlor! 
 I appreciate it, but… I have something I really need to do…I'll definitely come by a little later. 
-…is that so? I understand. Well, everyone is already in the parlor, so please stop by, okay? 
+…is that so? I understand. Well, everyone is already in the parlor, so please stop by, OK? 
 …I'm holding you to that, Ogami! 
 Everyone's meeting in the parlor, eh? I should try and show my face later on. 
 The parlor, right? Alright, I'll head over by myself. 
@@ -643,7 +643,7 @@ Would you be so kind as to go through the first floor if you want to go to the s
 Really? What a bother. 
 Haha, Sorry, but we can't have our guests confuse the exits, THAT would be even more bothersome. 
 Yes, being a guide to our guests truly is an important responsibility. 
-…Okay. I'll go through the first floor to get to the second. Keep up the good work. 
+…OK. I'll go through the first floor to get to the second. Keep up the good work. 
 Thank you very much. And thank you for all your hard work today, Ogami. 
 Kohran must have gone to the parlor by now. She's not here either. 
 This is Kohran's room. 
@@ -730,7 +730,7 @@ Depending on the situation, his body was able to transform in sixteen different 
 A customized card-trick arm, a family-friendly exotic dance function, and even an automatic tip collector! 
 Thanks to my "life of the party" circuitry, his tricks would have become ever wilder! 
 And on top of that… 
-Okay, okay, I get it! I'm really sorry. 
+OK, OK, I get it! I'm really sorry. 
 …Well… maybe I got carried away a bit, but anyway, you need to be more careful! 
 … 
 … 
@@ -851,7 +851,7 @@ Ogami… come on, don't stare at me like that. It's embarrassing.
 Is there something on my face? 
 Thanks for your business! Come again! 
 Hello? …I see. Thanks for doing that. We've got our processor working on it too. 
-I see, so they're wedges… Okay, we'll try running that through our processor. 
+I see, so they're wedges… OK, we'll try running that through our processor. 
 The Flower Division? Right now they're throwing a party, I think. They should be fine. 
 …yes. We should see some results soon… thanks… 
 I wonder if the manager is around. 
@@ -866,9 +866,9 @@ Huh? Whaddya mean?
 Well… just now… 
 What? I wasn't talking on the phone or anything. Are you hearing things? 
 If you say so… 
-Hey Ogami. Once the party's over, go buy me some drinks, okay? 
+Hey Ogami. Once the party's over, go buy me some drinks, OK? 
 Then bring 'em on down to the Command Room. I'll pay you back there. 
-Uh… okay. 
+Uh… OK. 
 Alright. Dismissed. 
 Yes, sir… Wait, what? Why the Command Room? 
 Is Ayame around? 

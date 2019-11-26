@@ -1,6 +1,6 @@
-﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
+﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
 It's a photo of Sumire. This is a side of her you don't see too often. 
-It's a photo of Maria. She's lost in thought and looks kind of sad… 
+It's a photo of Maria. …She's lost in thought and looks kind of sad… 
 It's a photo of Kanna. She looks strong and reliable. I can't wait to meet her. 
 It's a photo of Iris. She's surrounded by flowers and flashing a radiant smile. 
 It's a photo of Kohran. She looks good in her traditional outfit. What kind of person is she? 
@@ -89,7 +89,7 @@ Thanks for the help. Sorry to make you worry about me.
 Oh, it was no trouble. Besides… 
 Huh…? 
 Oh, it's nothing, really. I-if you'll excuse me, I have a performance to prepare for… 
-Would you like to come in? <br> Okay, see you later. 
+Would you like to come in? <br> OK, see you later. 
 If you have some time, would you like to come in? There's something I'd like to discuss with you. 
 …I'm very sorry. The performance is due to start any minute now. 
 I really would like to spend some more time with you, but duty calls. 
@@ -247,8 +247,8 @@ Ehh?! W-well…
 …Mon Frère, what were you and Sakura doing together in here? 
 I-it wasn't anything…we were just talking! 
 Huuh? No fair! I wanna talk to you, too! 
-Okay, okay. Sorry, Iris. But don't you need to get back to the stage? 
-…Oh, yeah! Then let's talk another time! Pinky promise, okay? 
+OK, OK. Sorry, Iris. But don't you need to get back to the stage? 
+…Oh, yeah! Then let's talk another time! Pinky promise, OK? 
 The play's starting, so I better go. Bye-bye, Mon Frère! 
 Phew…that was close. 
 So Iris performs as well…I guess that would make her a child actress. 
@@ -725,19 +725,19 @@ I'll have more stock by next month, so please wait until then.
 That's a photo of Sakura. That'll be 50 zeni. 
 You'd like to buy that? Thank you! 
 Sakura may be new, but her photos are selling like hotcakes! 
-(Sure enough, that's Sakura…Is it really okay to be selling photos of a secret combat squad like this?) 
+(Sure enough, that's Sakura…Is it really OK to be selling photos of a secret combat squad like this?) 
 (But, it IS a cute photo…I guess I'll take it.) 
 That's a photo of Sumire. That'll be 50 zeni. 
 You'd like to buy that? Thank you! 
 Her family runs the Kanzaki Group. 
 Meaning, she's a big name in high society, too! How incredible! 
-(That's Sumire, all right…Is it really okay to be selling photos of a secret combat squad like this?) 
+(That's Sumire, all right…Is it really OK to be selling photos of a secret combat squad like this?) 
 (But I guess I could get it, since I'm already here.) 
 That's a photo of Maria. That'll be 50 zeni. 
 You'd like to buy that? Thank you! 
 Maria is from Russia, but I've heard her mother is Japanese. 
 She's got that stoic aura about her, and gorgeous blond hair. Wish I was that cool… 
-(Th-there's even a photo of Maria? Is it really okay to be selling photos of a secret combat squad like this?) 
+(Th-there's even a photo of Maria? Is it really OK to be selling photos of a secret combat squad like this?) 
 (Well, I guess I could get it since I'm already here.) 
 That's a photo of Kohran Li. That'll be 50 zeni. 
 Kohran… Li? Is she Chinese? 
@@ -760,7 +760,7 @@ That's a photo of Iris. That'll be 50 zeni.
 You'd like to buy that? Thank you! 
 Apparently, Iris is the daughter of a very wealthy French family. 
 I hear she came to Japan after being scouted from France. 
-(Th-there's even a photo of Iris? Is it really okay to be selling photos of a secret combat squad like this?) 
+(Th-there's even a photo of Iris? Is it really OK to be selling photos of a secret combat squad like this?) 
 (Still…I already paid for it, so I may as well take it.) 
 (A shopkeeper's outfit. Tsubaki looks good in it.) 
 H-hey, Ogami! Where do you think you're looking? Stop! 
@@ -790,7 +790,7 @@ Iris……
 Maria scolded me earlier. 
 Mon Frère…please don't hate me. 
 Don't worry. I wouldn't hate you because of something like that. 
-You mean it? Okay, then let's make up! 
+You mean it? OK, then let's make up! 
 By the way, Iris…there's something I wanted to ask. 
 Yeeess? 
 (Oh, Iris is here.) 
@@ -808,14 +808,14 @@ Actually, yeah. There's something I wanted to ask you about real quick.
 Yeeess? 
 Ask about the Troop. <br> Ask Iris about herself. 
 I was wondering if you could tell me about the Imperial Assault Troop… 
-Sure, okay. 
+Sure, OK. 
 Why is the troop headquartered in a theater? 
 We're in a theater, because that's where the "troupe" performs. 
 Isn't that obvious? You're pretty strange, Mon Frère. 
 …? 
 (I don't get it. There's nothing obvious about it!) 
 I'd like to know more about you, Iris. 
-About me? Okay! Eheheh, gosh, you're making me blush… 
+About me? OK! Eheheh, gosh, you're making me blush… 
 So, I used to live in France. 
 I was recruited and came to Japan, and now I live here. 
 I hadn't realized… 
@@ -823,7 +823,7 @@ Thank you for sharing that with me, Iris. Now I know a little more about you.
 Uh-huh! Next time, you should tell me something about yourself, Mon Frère! 
 What is it, Mon Frère? Didn't you want to ask me something? 
 Huh?… Oh, sorry. I blanked out for a second. 
-You're acting so odd. Are you okay? 
+You're acting so odd. Are you OK? 
 (What adorable clothes. She looks like a doll.) 
 Doesn't this dress look good on me? I have lots of fancy clothes. 
 (What adorable clothes. She looks like a doll.) 
@@ -842,7 +842,7 @@ Of course. He's your very best friend.
 Thank you, Mon Frère…I'm so happy you remembered. 
 Erm…sorry. I forgot… 
 You forgot? He's Jean-Paul the bear. 
-Make sure you remember his name, okay, Mon Frère? 
+Make sure you remember his name, OK, Mon Frère? 
 You got it. 
 Hey, Jean-Paul. Mon Frère here is our new friend. 
 (That's an enormous ribbon…but it looks great on her.) 
@@ -1127,7 +1127,7 @@ Unused
 Come again! 
 Ohh goshhh, I was only joking! 
 Hee hee. Thanks, Ogami. 
-Oh, okay then. I got it! 
+Oh, OK then. I got it! 
 Hee hee. You're a hoot, Ogami! 
 Seriously, don't give it another thought. 
 It's fine, Ogami. Don't worry yourself over it. 

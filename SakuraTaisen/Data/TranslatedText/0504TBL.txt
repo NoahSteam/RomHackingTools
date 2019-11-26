@@ -1,7 +1,7 @@
 ﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
 It's a photo of Maria. …She's lost in thought and looks kind of sad…
-A photo of Kanna. She looks strong and reliable. I can't wait to meet her.
+A photo of Kanna. Her signature strength comes through clearly.
 A photo of Iris. She's surrounded by flowers and flashing a radiant smile.
 A photo of Kohran. She's looking pretty in profile with her face dyed red by the evening sun.
 A letter given to me by a customer. I was asked to give it to Sumire. I have a bad feeling about this…
@@ -121,7 +121,7 @@ These photos are mainly for guests, so please just take one.
 Oh, I guess that's true. I'll come again some other time. 
 You'd like to buy this photo? Thank you! 
 That's a photo of Sakura. That'll be 50 zeni. 
-We need to leave some for the guests, so just take one for now, okay? 
+We need to leave some for the guests, so just take one for now, OK? 
 Ogami, I appreciate your interest, but… 
 These photos are mainly for guests, so please just take one. 
 Oh, I guess that's true. I'll come again some other time. 
@@ -129,7 +129,7 @@ You'd like to buy that? Thank you!
 Sakura's popularity is booming right now. People find her really relatable. 
 You'd like to buy this photo? Thank you! 
 That's a photo of Sumire. That'll be 50 zeni. 
-We need to leave some for the guests, so just take one for now, okay? 
+We need to leave some for the guests, so just take one for now, OK? 
 Ogami, I appreciate your interest, but… 
 These photos are mainly for guests, so please just take one. 
 Oh, I guess that's true. I'll come again some other time. 
@@ -137,7 +137,7 @@ You'd like to buy that? Thank you!
 Most of Sumire's fans are young rich guys, judging by their appearances. 
 You'd like to buy this photo? Thank you! 
 That's a photo of Maria. That'll be 50 zeni. 
-We need to leave some for the guests, so just take one for now, okay? 
+We need to leave some for the guests, so just take one for now, OK? 
 Ogami, I appreciate your interest, but… 
 These photos are mainly for guests, so please just take one. 
 Oh, I guess that's true. I'll come again some other time. 
@@ -146,7 +146,7 @@ Let's see, our top seller these days is… Maria's photo, I think?
 She's very popular among young ladies and students. 
 You'd like to buy this photo? Thank you! 
 That's a photo of Kanna. That'll be 50 zeni. 
-We need to leave some for the guests, so just take one for now, okay? 
+We need to leave some for the guests, so just take one for now, OK? 
 Ogami, I appreciate your interest, but… 
 These photos are mainly for guests, so please just take one. 
 Oh, I guess that's true. I'll come again some other time. 
@@ -154,7 +154,7 @@ You'd like to buy that? Thank you!
 Most of Kanna's photos go to kids who beg their parents to buy it for them. 
 You'd like to buy this photo? Thank you! 
 That's a photo of Iris. That'll be 50 zeni. 
-We need to leave some for the guests, so just take one for now, okay? 
+We need to leave some for the guests, so just take one for now, OK? 
 Ogami, I appreciate your interest, but… 
 These photos are mainly for guests, so please just take one. 
 Oh, I guess that's true. I'll come again some other time. 
@@ -163,7 +163,7 @@ Most of the guys buying Iris's photo are older gentlemen.
 They always glance around nervously when they buy it. I wonder if they're worried what people will think? 
 You'd like to buy this photo? Thank you! 
 That's a photo of Kohran. That'll be 50 zeni. 
-We need to leave some for the guests, so just take one for now, okay? 
+We need to leave some for the guests, so just take one for now, OK? 
 Ogami, I appreciate your interest, but… 
 These photos are mainly for guests, so please just take one. 
 Oh, I guess that's true. I'll come again some other time. 
@@ -259,7 +259,7 @@ Kanna!!
 …Fine. We can't help an order. Let's go together. 
 What's this? If you're going to go all annoyed like that you could always just refuse, you know. 
 Shut up! You shut your mouth! 
-(Man… Are the three of us going to be okay?) 
+(Man… Are the three of us going to be OK?) 
 Oh, Ensign? 
 Waaa!! S-Sumire. 
 (Well, this isn't good. This is worse than that time with Kanna…) 
@@ -464,7 +464,7 @@ Ok, I'll come in…just for a little bit.
 Hey, hey, Mon Frère. I can't sleep…Tell me a story. 
 A story? Hmm… 
 "The Monkey and the Crab." <br> The Western "Cinderella." <br> "Stories of my Past." 
-Great, okay, I'll tell you the story of "The Battle of the Monkey and the Crab! 
+Great, OK, I'll tell you the story of "The Battle of the Monkey and the Crab! 
 Yay! I don't know that one! Hey, what's a "battle?" 
 That's right, you were born in France, weren't you? 
 A "battle" is… like a "war," but in this story, it means something like a "fight." 
@@ -472,7 +472,7 @@ Huh! Mr. Monkey and Mr. Crab's fight? So, what happens?
 (Uhhh… huh? Who appears in the story, again?) 
 A bee, a chestnut, and a cow <br> A bee, a monster, and a cow <br> A bird, a chestnut, and a cow 
 (That's right! It was a bee, a chestnut, and a cow!) 
-Okay, I'll tell you the story. The beginning of "The Battle of the Monkey and the Crab" starts now! 
+OK, I'll tell you the story. The beginning of "The Battle of the Monkey and the Crab" starts now! 
 Yay! Tell me! Tell me! 
 Once upon a time, in a far off place… 
 And then… 
@@ -483,10 +483,10 @@ The crab was able to have his revenge on the monkey. And they all lived happily 
 Yay! That was really great for Mr. Crab. 
 What did you think, Iris? 
 Yeah! It was really interesting! Thank you, Mon Frère! 
-You're welcome. Okay, I'm going to get going. Sweet dreams. 
+You're welcome. OK, I'm going to get going. Sweet dreams. 
 You be careful, too, Frère! Good night! 
 (Right. I'm sure it was a bee, a monster, and a cow.) 
-Okay, I'll tell you the story. The beginning of "The Battle of the Monkey and the Crab" starts now! 
+OK, I'll tell you the story. The beginning of "The Battle of the Monkey and the Crab" starts now! 
 Yay! Tell me! Tell me! 
 Once upon a time, in a far off place… 
 And then… 
@@ -498,10 +498,10 @@ Yay! It all worked out!
 What did you think, Iris? 
 Yeah! It was super interesting! I was a little nervous when the monster was being defeated! 
 (I don't think that's exactly how the story went. It bothers me a little but…well, it's fine.) 
-I'm glad you liked it. Okay, I'm going to get going. Sweet dreams. 
+I'm glad you liked it. OK, I'm going to get going. Sweet dreams. 
 You be careful, too, Frère! Good night! 
 (Right. I think it was a sparrow, a chestnut, and a cow.) 
-Okay, I'll tell you the story. The beginning of "The Battle of the Monkey and the Crab" starts now! 
+OK, I'll tell you the story. The beginning of "The Battle of the Monkey and the Crab" starts now! 
 Yay! Tell me! Tell me! 
 And then… 
 However… 
@@ -513,18 +513,18 @@ Ahahahaa! That was really funny! I laughed so hard my stomach hurts!
 But I wonder why there was a bee inside the biggest basket. 
 Uh, uhh… To show that greed will only disappoint you, of course. 
 (I don't think that's exactly how the story went. It bothers me a little but… well, it's fine.) 
-Okay, I'm going to get going. Sweet dreams. 
-Thanks, Frère! Tell me another interesting story sometime, okay! Good night! 
+OK, I'm going to get going. Sweet dreams. 
+Thanks, Frère! Tell me another interesting story sometime, OK! Good night! 
 (Oh, no, I forgot! Well, I guess I'll just say something!) 
-Okay, I'll tell you the story. The beginning of "The Battle of the Monkey and the Crab" starts now! 
+OK, I'll tell you the story. The beginning of "The Battle of the Monkey and the Crab" starts now! 
 Yay! Tell me! Tell me! 
 …And so it was that the crab and the monkey would go head to head. 
 The game was Rock, Paper, Scissors! The fierce battle took their breath away. Their fists were flying! And then… 
 The crab beat the monkey with "scissors!" And the crab's hand remained as scissors to this day. 
 And they all lived happily every after! …I don't think that was exactly how the story went. 
 Ahahahahaa! That was really funny! I laughed so hard my stomach hurts! 
-I'm glad you liked it. Okay, I'm going to get going. Sweet dreams. 
-Thanks, Frère! Tell me another interesting story sometime, okay! Good night! 
+I'm glad you liked it. OK, I'm going to get going. Sweet dreams. 
+Thanks, Frère! Tell me another interesting story sometime, OK! Good night! 
 Uhh, long ago, there was a very beautiful maiden called "Cinderella"… 
 I know that one! That's a story for little kids! 
 Uh… Well, I thought you'd like it… 
@@ -532,8 +532,8 @@ Frère! You're thinking of me as a child and making fun of me again, aren't you?
 N-n-no, that's not true! It was just a little joke. A joke! 
 R-right! I was going to head to Fukagawa. Well, see you, Iris! 
 What?! He ran away! Now I really hate you, Frère! 
-Okay, this is a bit more of a grown-up story, "Stories of my Past" 
-Okay… right. I was admitted to military school in April, when the cherry blossoms were falling… 
+OK, this is a bit more of a grown-up story, "Stories of my Past" 
+OK… right. I was admitted to military school in April, when the cherry blossoms were falling… 
 Zzz… 
 I-Iris!? You're sleeping… S-somehow I feel like this is my fault. 
 Oh well. I should leave the room quietly, so I don't wake her… 
@@ -607,7 +607,7 @@ Ahaha, Ogami. I see you've been stricken by my allure~!
 Fukagawa…? That's going to be something… Somehow, there are a lot of awful rumors surrounding that mansion. 
 You know, in Fukagawa…there's a lovely view from the hill… 
 Now, that place has an eerie feeling. Like something is going to happen… 
-Ogami, Kanna isn't always calm, so pay attention to her, okay? 
+Ogami, Kanna isn't always calm, so pay attention to her, OK? 
 If she gets sulky even once, it'll be a disaster! 
 Ogami, if you care for Kanna, don't leave her side! 
 Ogami! After Iris, the word is you're going on a date with Sumire. 
@@ -647,7 +647,7 @@ Chief, you're just in time. I want your opinion on the Koubu maintenance…
 What's this? Leaving without hardly saying a word? That's not very nice… 
 You haven't even heard what I was going to say so why are you so restless? 
 If it's something I can help with then please let me know. 
-Okay, well, I do have something I want to ask. 
+OK, well, I do have something I want to ask. 
 Actually, right now I'm servicing the Koubu, and I'm updating them while I'm at it! 
 What? That's amazing!! 
 And so, I want you to decide whether I should focus on their offensive or defensive abilities. 
@@ -657,16 +657,16 @@ Well, let's hurry up and go then.
 Do you want to make your own Koubu more offensive or more defensive? 
 Ramp up the offenses! <br> Beef up the defenses! 
 Offense is the best defense, right? That's a very Chief-like choice. 
-Okay, next is Maria's Koubu. Which will you choose? 
+OK, next is Maria's Koubu. Which will you choose? 
 Alright. I'm making the armor lighter so I think that should increase the evasion rate a little. 
-Okay, next is Maria's Koubu. Which will you choose? 
+OK, next is Maria's Koubu. Which will you choose? 
 Let's go with offensive. <br> Make it defensive. 
 Got it. Maria's Koubu will be offensive. 
 Next is Sakura's Koubu. Which will you choose, Chief? 
 Got it. Maria's Koubu will be defensive. 
 Next is Sakura's Koubu. Which will you choose, Chief? 
 Let's make it offensive. <br> Defensive would be best. 
-Okay, you want Sakura's Koubu to be offensive. It's exactly as I thought. 
+OK, you want Sakura's Koubu to be offensive. It's exactly as I thought. 
 Next is Sumire's Koubu. Which one? 
 Oh, you want Sakura's Koubu to be defensive? That could be very interesting. 
 Next is Sumire's Koubu. Which one? 
@@ -701,7 +701,7 @@ C-crap! I was so close…
 Really? Uhhh… wait! You're wrong, Chief! 
 S-sorry… 
 No, no, that's alright. Everyone makes mistakes! 
-…Somehow I think I'll be able to stay within the budget. Okay, let's do it! 
+…Somehow I think I'll be able to stay within the budget. OK, let's do it! 
 I'm sorry for making you help me for so long. You really helped me though. 
 I'm looking forward to our updated Koubu. Good luck. 
 Thanks. Be careful. See you later. 

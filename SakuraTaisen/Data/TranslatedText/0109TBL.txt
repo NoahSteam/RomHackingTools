@@ -126,7 +126,7 @@ Want to listen to it with me?
 Hey, Ogami! Want to listen to some music? 
 Listen to music <br> Maybe another time 
 I don't feel like listening to music. Maybe another time. 
-That's okay. You can come here whenever the mood strikes you. 
+That's OK. You can come here whenever the mood strikes you. 
 Sure, I'd love to. 
 Great! What song would you like to hear? 
 Did you enjoy that, Ogami? 
@@ -146,7 +146,7 @@ Hey, Ogami. I have some jumbo-sized photos. Would you like to see them?
 I'd love to see them! <br> Maybe another time. 
 I sell six standard photos in the Gift Shop, but there are also seven special photos. 
 Collect all six standard photos and you can buy one of the special photos during the New Year's holiday. 
-Be sure to buy a photo every month, okay? 
+Be sure to buy a photo every month, OK? 
 I'd love to see them! 
 Sure thing! These are all the photos you've purchased so far. 
 Neat, huh? 
@@ -270,7 +270,7 @@ Well then, keep having fun! See you later.
 Where should I go now? 
 I thought I'd take a little nap… 
 I see. It is the perfect day for a nap. 
-Come visit me afterwards, okay? 
+Come visit me afterwards, OK? 
 Boy, I'm really sleepy… 
 I hope I'll *yawn* have good dreams… 
 Yes, I am. I'm exhausted… 
@@ -326,7 +326,7 @@ Yay! I was worried there for a second!
 I'll be in my room, so come play with me! 'Kay? 
 Where should I go now? 
 I thought I'd take a little nap… 
-Hmph… Okay. Come play with me after, though! 
+Hmph… OK. Come play with me after, though! 
 Bye bye! 
 Boy, I'm really sleepy… 
 I hope I'll *yawn* have good dreams… 
@@ -337,10 +337,10 @@ Ogami, are you already done for the day?
 No, of course not! <br> I thought I'd take a nap. <br> Yes, I am. 
 No, of course not! It's still early. 
 That's the spirit! The day's still young! 
-I'll be in my room! Come pay me a visit, okay? 
+I'll be in my room! Come pay me a visit, OK? 
 Where should I go now? 
 I thought I'd take a little nap… 
-A nap, huh? Come see me after, okay? 
+A nap, huh? Come see me after, OK? 
 Boy, I'm really sleepy… 
 I hope I'll *yawn* have good dreams… 
 Yes, I am. I'm exhausted… 
@@ -357,7 +357,7 @@ Still, work comes first. I'll come back later!
 Sorry! I promise you can help me clean next time. 
 Ahem! It's me… 
 I'm sorry, but I'm busy reading over the script right now. 
-Oh… Okay, then. I'll stop bothering you. 
+Oh… OK, then. I'll stop bothering you. 
 (I should try another room.) 
 Hi, Sakura. 
 Oh! Hello, Ogami. 
@@ -383,12 +383,12 @@ Hmm…? What's wrong, Ogami?
 Nothing. I was just thinking about all the fun we had. 
 Hehe. It's only cleaning, Ogami. No big deal. 
 Well, Sakura, I guess I'll be going… 
-Come see me again, okay? 
+Come see me again, OK? 
 Where should I go next? 
 Hi, Kanna. 
 Hey, boss. I appreciate you comin' to see me and all, 
 but I'm about to take a nap. Sorry… 
-You are? Okay, I'll come back later. 
+You are? OK, I'll come back later. 
 Hey, Kanna? It's me… 
 …… 
 She's probably fast asleep. No sense in waking her up. 
@@ -422,7 +422,7 @@ Where should I go next?
 Hi, Maria. 
 Hello, sir. I appreciate you coming to see me, 
 but I'm busy writing a report at the moment. 
-You are? Okay, I'll come back later. 
+You are? OK, I'll come back later. 
 My apologies, sir. I'm still busy writing my report… 
 You are? Sorry for bothering you. I'll come back later. 
 Hi, Maria. 
@@ -455,7 +455,7 @@ I'm developing an automated Hanafuda board called "Mr. Koi-Koi"!
 Can you maybe come back later? 
 …You're as odd as ever, Kohran. 
 Kohran, it's me… 
-…I'm busy right now. Come back later, okay? 
+…I'm busy right now. Come back later, OK? 
 (She's still working on her new invention…) 
 (I should try another room.) 
 Hi, Kohran. I came to spend time with you. 
@@ -499,7 +499,7 @@ Pick an outfit <br> Go to another room
 Pick an outfit <br> Picture Iris in costume <br> Go to another room 
 Pick an outfit again <br> Go to another room 
 Pick an outfit <br> Picture Iris in costume <br> Go to another room 
-Okay, but I don't know much about clothes. 
+OK, but I don't know much about clothes. 
 Yay! Thanks, Mon Frère! Let's head to the costume room! 
 Sure! I'll try to pick a better outfit this time. 
 Wow! Thanks, Mon Frère! You're the best! 
@@ -613,7 +613,7 @@ Black Hornets <br> Crimson Hornets <br> Honey Bees
 What does Sumire call you? 
 Ogami <br> Captain <br> Ensign 
 When the Four Lords of Death assembled in Ueno Park, which one was on the far right? 
-Crimson Miroku <br> Jade Setsuna <br> Aoi Satan 
+Crimson Miroku <br> Azure Setsuna <br> Sable Satan 
 In Episode Two, who helped repair the set at night? 
 Maria <br> Kohran <br> Sakura 
 In which room of Fukagawa Mansion was Kanna bitten by a snake? 

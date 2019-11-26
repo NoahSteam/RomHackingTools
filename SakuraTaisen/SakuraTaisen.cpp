@@ -8631,6 +8631,8 @@ bool PatchMiniMaig(const string& patchedSakuraDirectory, const string& inTransla
 	//Patch logo
 	miniGameFile.WriteData(0x000504B4 + (43*16*8), patchedLogo.GetImageData(), patchedLogo.GetImageDataSize());
 
+	//Using TrekkiesUnite modification for this now
+#if 0
 	//Open translated fontsheet
 	const string fontSheetFileName = inTranslatedDataDirectory + "MiniMaigFontSheet.bmp";
 	BmpToSakuraConverter patchedFontSheet;
@@ -8670,6 +8672,7 @@ bool PatchMiniMaig(const string& patchedSakuraDirectory, const string& inTransla
 	miniGameFile.WriteData(indiceFinder.indiceAddresses[0], (char*)textIndices1, sizeof(textIndices1));
 	miniGameFile.WriteData(indiceFinder.indiceAddresses[1], (char*)textIndices2, sizeof(textIndices2));
 	miniGameFile.WriteData(indiceFinder.indiceAddresses[2], (char*)textIndices3, sizeof(textIndices3));
+#endif
 
 	return true;
 }
@@ -8992,6 +8995,8 @@ bool PatchMiniHana(const string& patchedSakuraDirectory, const string& inTransla
 	//Patch logo
 	miniGameFile.WriteData(0x00095990, patchedLogo.GetImageData(), patchedLogo.GetImageDataSize());
 
+	//Using TrekkiesUnite modification for this now
+#if 0
 	//Open translated fontsheet
 	{
 		const string fontSheetFileName = inTranslatedDataDirectory + "MiniHanaFontSheet.bmp";
@@ -9089,6 +9094,7 @@ bool PatchMiniHana(const string& patchedSakuraDirectory, const string& inTransla
 		miniGameFile.WriteData(indiceFinder.indiceAddresses[14], (char*)textIndices15, sizeof(textIndices15));
 		miniGameFile.WriteData(indiceFinder.indiceAddresses[15], (char*)textIndices16, sizeof(textIndices16));
 	}
+#endif
 
 	//Fixup # Round to be Round #
 	{
@@ -9474,6 +9480,32 @@ bool PatchStatusScreen(const string& patchedSakuraDirectory, const string& inTra
 		return false;
 	}
 
+	//Patch background image
+	{
+		//Open translated fontsheet
+		const string imagePath = inTranslatedDataDirectory + "\\StatusScreen.bmp";
+		BmpToSakuraConverter patchedImage;
+		const unsigned int tileWidth  = 144;
+		const unsigned int tileHeight = 64;
+		if( !patchedImage.ConvertBmpToSakuraFormat(imagePath, false, 0, &tileWidth, &tileHeight) )
+		{
+			printf("PatchStatusScreen: Couldn't convert image: %s.\n", imagePath.c_str());
+			return false;
+		}
+
+		patchedImage.PackTiles();
+
+		SakuraCompressedData compressedData;
+		compressedData.PatchDataInMemory(patchedImage.mpPackedTiles, patchedImage.mPackedTileSize, true, false, 21967);
+		if( compressedData.mDataSize > 21967 )
+		{
+			printf("Compressed StatusScreen is too big");
+			return false;
+		}
+
+		icatallFile.WriteData(0x00008800, compressedData.mpCompressedData, compressedData.mDataSize);
+	}//Done patching background image
+
 	//Open translated fontsheet
 	const string fontSheetFileName = inTranslatedDataDirectory + "\\StatusScreenFontSheet.bmp";
 	BmpToSakuraConverter patchedFontSheet;
@@ -9497,36 +9529,60 @@ bool PatchStatusScreen(const string& patchedSakuraDirectory, const string& inTra
 	//Patch fontsheet
 	icatallFile.WriteData(0x00013800, fontSheetCompressedData.mpCompressedData, fontSheetCompressedData.mDataSize);
 
+	//Read pointer table
+	static const int NumPointers = 12;
+	const int PointerTableOffset = GIsDisc2 ? 0x0005f5ec : 0x0005f4b4;
+	int pointerTable[NumPointers];
+	sakuraFile.ReadData(PointerTableOffset, (char*)pointerTable, sizeof(pointerTable), false);
+	
+	map<int, int> originalPointerMap;
+	for(int i = 0; i < NumPointers; ++i) 
+	{
+		SwapByteOrderInPlace((char*)&pointerTable[i], sizeof(int));
+
+		originalPointerMap[pointerTable[i]] = i;
+	}
+
+	const int pointerTableStart = GIsDisc2 ? 0x0005f560 : 0x0005f428;
 	MiniGameTextIndiceFinder indiceFinder;
-	indiceFinder.FindIndices(sakuraFileData.GetData(), 0x0005f428, 48);
+	indiceFinder.FindIndices(sakuraFileData.GetData(), pointerTableStart, 48);
 	if( indiceFinder.indiceAddresses.size() != 18 )
 	{
 		printf("PatchStatusScreen: Couldn't find text indices\n");
 		return false;
 	}
 
-	short textIndices1[] = {1, 2, 0};
-	short textIndices2[] = {3, 4, 0};
-	short textIndices3[] = {30, 30, 0};
-	short textIndices4[] = {5, 6, 0};
-	short textIndices5[] = {7, 8, 0};
-	short textIndices6[] = {9, 10, 0};
-	short textIndices7[] = {30, 30, 0};
-	short textIndices8[] = {30, 30, 0};
-	short textIndices9[] = {30, 30, 0};
-	short textIndices10[] = {30, 30, 0};
-	short textIndices11[] = {30, 30, 0};
-	short textIndices12[] = {30, 30, 0};
-	short textIndices13[] = {30, 30, 0};
-	short textIndices14[] = {30, 30, 0};
-	short textIndices15[] = {30, 30, 0};
+	short textIndices1[] = {1, 2, 3, 0};      //Sakura
+	short textIndices2[] = {4, 5, 6, 0};      //Sumire
+	short textIndices3[] = {7, 8, 9, 0};      //Kohran
+	short textIndices4[] = {10, 11, 12, 0};   //Kanna
+	short textIndices5[] = {13, 14, 15, 0};   //Maria
+	short textIndices6[] = {16, 17, 0};       //Iris
+	short textIndices7[] = {18, 19, 0};       //High
+	short textIndices8[] = {21, 22, 0};       //Spirits
+	short textIndices9[] = {23, 24, 25, 0};   //Normal
+	short textIndices10[] = {26, 27, 0};      //Mood
+	short textIndices11[] = {28, 29, 30, 0};  //Terrible
+	short textIndices12[] = {26, 27, 0};      //Mood
+	short textIndices13[] = {31, 32, 0};      //Attack
+	short textIndices14[] = {33, 34, 0};      //Defense
+	short textIndices15[] = {35, 36, 0};      //Movement
 
+	const int pointerTableStartInRAM = GIsDisc2 ? 0x06063560 : 0x06063428;
+	int currentRAMAddress = pointerTableStartInRAM;
+	int currentAddress    = pointerTableStart;
+	map<int, int> adjustedPointerMap;
 #define PatchTextIndices(indice) SwapEndiannessForArrayOfShorts(indice, sizeof(indice));\
                                 if( !indiceFinder.ValidateNewIndices(indiceNumber, sizeof(indice)) ) return false;\
-                                sakuraFile.WriteData(indiceFinder.indiceAddresses[indiceNumber], (char*)indice, sizeof(indice));\
-                                ++indiceNumber;
+                                sakuraFile.WriteData(currentAddress, (char*)indice, sizeof(indice));\
+								adjustedPointerMap[(indiceFinder.indiceAddresses[indiceNumber] - pointerTableStart) + pointerTableStartInRAM] = currentRAMAddress;\
+								currentRAMAddress += sizeof(indice);\
+								currentAddress    += sizeof(indice);\
+								++indiceNumber;
 
+	
 	int indiceNumber = 0;
+	int statsPointers[3];
 	PatchTextIndices(textIndices1);
 	PatchTextIndices(textIndices2);
 	PatchTextIndices(textIndices3);
@@ -9539,10 +9595,43 @@ bool PatchStatusScreen(const string& patchedSakuraDirectory, const string& inTra
 	PatchTextIndices(textIndices10);
 	PatchTextIndices(textIndices11);
 	PatchTextIndices(textIndices12);
+
+	statsPointers[0] = SwapByteOrder(currentRAMAddress); //Address for Atk
 	PatchTextIndices(textIndices13);
+
+	statsPointers[1] = SwapByteOrder(currentRAMAddress); //Address for Def
 	PatchTextIndices(textIndices14);
+
+	statsPointers[2] = SwapByteOrder(currentRAMAddress); //Address for Mov
 	PatchTextIndices(textIndices15);
 
+	//Write out new pointer table
+	int newPointerTable[NumPointers];
+	for(int i = 0; i < NumPointers; ++i)
+	{
+		newPointerTable[i] = SwapByteOrder( adjustedPointerMap[ pointerTable[i] ] );
+	}
+	sakuraFile.WriteData(PointerTableOffset, (char*)newPointerTable, sizeof(int)*NumPointers);
+
+	const int statsPointersOffset = GIsDisc2 ? 0x0003e470 : 0x0003e458;
+	sakuraFile.WriteData(statsPointersOffset, (char*)statsPointers, 3*sizeof(int));
+
+	//Modify the code that reads the Atk, Def, Mov strings to read 4 bytes because our data takes up two tiles.
+	{
+		//Stats codes
+		const long disc1Offset = GIsDisc2 ? 0 : -32;
+
+		//Disc 1 
+		unsigned short mov_l_atR1_R1 = 0x1261;
+		unsigned short mov_l_r1_atR6 = 0x1226;
+
+		#define SakuraAdd(x) ( (x - sakuraLoadAddress) + disc1Offset)
+		const unsigned int sakuraLoadAddress = 0x06004000;
+		sakuraFile.WriteData( SakuraAdd(0x0604240A), (char*)&mov_l_atR1_R1, sizeof(short) );
+		sakuraFile.WriteData( SakuraAdd(0x06042410), (char*)&mov_l_atR1_R1, sizeof(short) );
+		sakuraFile.WriteData( SakuraAdd(0x06042414), (char*)&mov_l_atR1_R1, sizeof(short) );
+		sakuraFile.WriteData( SakuraAdd(0x06042416), (char*)&mov_l_r1_atR6, sizeof(short) );
+	}
 
 	return true;
 }

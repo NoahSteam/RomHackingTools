@@ -1,7 +1,7 @@
-﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
 It's a photo of Maria. …She's lost in thought and looks kind of sad…
-A photo of Kanna. She looks strong and reliable. I can't wait to meet her.
+A photo of Kanna. Her signature strength comes through clearly.
 A photo of Iris. She's surrounded by flowers and flashing a radiant smile.
 A photo of Kohran. She's looking pretty in profile with her face dyed red by the evening sun.
 A letter given to me by a customer. I was asked to give it to Sumire. I have a bad feeling about this…
@@ -32,7 +32,7 @@ Could it be… was that sound someone from the Hive of Darkness?
 I think so. Looks like they're on the 2nd floor too… 
 What in heaven's name are they doing in a broken down old mansion like this? 
 It's up to us to find out, Sumire. Let's proceed carefully. 
-Yes, of course, sir. 
+Yes, of course, Ensign. 
 Huh!? 
 …what was that sound? 
 That noise… could it be someone from the Hive of Darkness? 
@@ -42,18 +42,18 @@ It's up to us to find out, Kanna. Let's proceed carefully.
 Yeah, you're right. 
 !? 
 There's that noise again… 
-Sir… if we don't get up to the 2nd floor soon, the villains from the Hive of Darkness will escape. 
+Ensign… if we don't get up to the 2nd floor soon, the villains from the Hive of Darkness will escape. 
 You're right, we don't have time to be messing around down here… 
 Let us make haste. 
 !? 
 There's that noise again… 
-Sir… if we don't get up there soon they're going to escape. 
+Boss… if we don't get up there soon they're going to escape. 
 No, I think if they wanted to run they would've already done it. I just wonder what they're trying to accomplish here. 
 We need to find them. 
 We need to hurry to the 2nd floor or the villains from the Hive of Darkness will escape. 
 I know that! 
-Let us make haste, sir! 
-Sir, we need to get upstairs before they escape. 
+Let us make haste! 
+Boss, we need to get upstairs before they escape. 
 I know. 
 Let's get up there! 
 It's a parlor. Oh! There's something like a medicine bottle on the table. 
@@ -111,13 +111,13 @@ Alright… we'll just need to search the other rooms.
 Where would the first aid kit be? 
 Man, so many identical rooms… 
 There's seals pasted up everywhere. Why are they putting these up? 
-There are seals set up on every wall. Why on Earth are they doing this? 
+There are seals set up on every wall. Why on earth are they doing this? 
 Ensign, there's something on the floor. 
-Sir, do you see something on the floor there? 
+Ensign, do you see something on the floor there? 
 Huh, where? 
 Over there, look closely… 
-Sir, do you see something on the floor over there? 
-Sir, do you see something on the floor over there? 
+Ensign, do you see something on the floor over there? 
+Ensign, do you see something on the floor over there? 
 …huh, where? 
 Look, it's over there. 
 This is the room where we found the key on the ground. 
@@ -167,7 +167,7 @@ Let's see, 'Shishido Pharmaceuticals Sigma Doll'. It says it's just for snake bi
 So no help for my spider bite? How disheartening… 
 Alright… we'll just need to search the other rooms. 
 Yes… 
-This is… the room where the spiders came out just now. 
+This is… the room where the spider came out just now. 
 This looks like a room for the servants. 
 This certainly isn't a very pleasant room. 
 Could we please move on to another room? I-I couldn't take it if more spiders appeared. 
@@ -176,18 +176,18 @@ It's a very modest room. There's nothing but a bed and a cabinet.
 Looks like this was one of the servant's room. 
 I'm sure this was one of the rooms for the servants. 
 Same as all the other rooms we've checked, there are seals on the walls here too. 
-Sir, the spirit energy coming out of this mansion… it feels like it's gotten weaker. 
+Ensign, the spirit energy coming out of this mansion… it feels like it's gotten weaker. 
 Damn… what are those Hive of Darkness bastards planning? 
-Sir, the spirit energy coming out of the mansion… It seems to be weakening. 
+Ensign, the spirit energy coming out of the mansion… It seems to be weakening. 
 Damn… what are those Hive of Darkness bastards planning? 
 E-Ensign, do you see something on the floor over there? 
 Where? 
 Look, right there! There! 
-Sir, do you see something on the floor there? 
+Ensign, do you see something on the floor there? 
 Huh, where? 
 Over there, look closely… 
-Sir, do you see something on the floor over there? 
-Sir, do you see something on the floor over there? 
+Ensign, do you see something on the floor over there? 
+Ensign, do you see something on the floor over there? 
 …huh, where? 
 Look, it's over there. 
 This is where we found the key on the ground earlier. 
@@ -202,7 +202,7 @@ It's a key. Looks like it goes to a door somewhere.
 We should be able to unlock a door somewhere in the mansion with that, right? 
 That's true… alright! Let's go look for a locked door. 
 Kanna may be there too. 
-Then let's go, sir. If we dally, it may give the Hive of Darkness time to escape. 
+Then let's go, Ensign. If we dally, it may give the Hive of Darkness time to escape. 
 Looks like a key to one of the locked doors. 
 This could be the key Kanna was talking about. 
 Yeah, I think you're right about that. Let's go back to the dining room on the first floor where Kanna is. 
@@ -247,8 +247,8 @@ Dad… don't go… don't leave me!
 Kanna… hang on! 
 …… 
 Kanna, hey! Stay with me! 
-…B, Boss! 
-W, what is it Kanna? You look startled. 
+…B-Boss! 
+W-what is it Kanna? You look startled. 
 It's an enemy. I saw an enemy walking over there. 
 What!? 
 Oh dear… perhaps you were simply surprised by your own reflection in the mirror? 
@@ -290,7 +290,7 @@ Sumire! …Jeez, look at her throwing us out of whack like that! …What's the p
 We should all go. 
 I see… so we'll have Kanna accompanying us. 
 Why do you sound disappointed?! 
-Oh, pay it no mind. I just thought I would be able to search alone with the Ensign. 
+Oh, pay it no mind. I just thought I would be able to search alone with Ensign. 
 I hadn't even considered you would be joining us. 
 Oh, is that so? Well fine then. I'll go do my own thing! You enjoy your alone time with the captain! 
 W-wait, Kanna! 
@@ -336,7 +336,7 @@ And our mission?
 We'll continue our investigation while we search for Kanna. 
 Well, then for now let us take our leave. It would be terrible if something were to happen to Kanna. 
 Right, let's go. 
-…E, Ensign! 
+…E-Ensign! 
 Ah, Sumire. What's the matter? 
 I… I heard footsteps from this room, just now! 
 What? 
@@ -361,7 +361,7 @@ The sound grew distant… until I couldn't hear it anymore.
 I see… that's very vital information, Sumire. 
 Oh my, there's no need to praise me for a little thing like this. You've got me blushing. 
 …… 
-Sir… 
+Captain… 
 What is that look you're giving me? I am telling the truth! 
 H-hey… you've got to keep your voice down. 
 I will not be silenced! I truly heard the footsteps of the enemy as they walk around the mansion! 
@@ -408,7 +408,7 @@ How come you decided to go with me?
 Well… 
 I figured it would be better to split up into two parties to search rather than staying as one group. 
 So that's it! Got it. I sort of thought… well, never mind. 
-But hey, Boss, Sumire took off on her own. Is that okay? 
+But hey, Boss, Sumire took off on her own. Is that OK? 
 No, it isn't… but we'll just have to look for her while we continue with the investigation. 
 Understood. 
 …… 
@@ -476,7 +476,7 @@ Owww… damn, my foot went right through the floor.
 Wha…? I… no, that was… 
 Ohohoho! I, I fear you are quite mistaken. 
 I just felt sorry for the poor flooring being stomped to pieces… 
-What the hell! Okay, now I'm pissed. 
+What the hell! OK, now I'm pissed. 
 I don't want to see your stupid face anymore! I'd rather go hang out with ghosts! 
 I feel quite the same about you! I would be quite content parting ways with a wild woman like you! 
 Well I'm going for that door on the left! Don't even think about following me! 
@@ -553,12 +553,12 @@ Looks like it… but it doesn't look like she's noticed us.
 I know! How about I bounce a rock off her skull to get her attention? 
 Oh cut that out! 
 Hey! Sumir-… 
-Shhh! …please keep your voice down, Ensign! 
-…the enemy are here… beyond this very door! 
+Shhh! …Please keep your voice down, Ensign! 
+…The enemy is here… beyond this very door! 
 What! H… how did you find them? 
 Well… I saw a strange shadow as I was walking by myself. 
 I silently tracked them, and watched them enter this door. 
-Okay! Good job, Sumire! 
+OK! Good job, Sumire! 
 Unlike some people, I can actually be useful. Wouldn't you agree, Kanna? 
 You trying to pick a fight again? 
 Hey! Cut it out, you two! 
@@ -566,7 +566,7 @@ Alright… we're going to bust into that room… both of you don't make a sound.
 There they are… 
 There are seals all over the walls… 
 I suppose the seals on all the walls were his doing. 
-Okay… let's get a bit closer… 
+OK… let's get a bit closer… 
 Oh… did something fall from the ceiling just now? 
 I think so… I heard a sort of 'plop' sound. 
 B-Boss… something just landed on my arm… 
@@ -578,18 +578,18 @@ Help Kanna. <br> Chase Sumire.
 Ow! Ah… wahhhhh! It… it bit me!! 
 Are you alright, Kanna!? I'll get rid of that snake, just hold on!! 
 … I'm… dead… 
-(Kanna's been bit by a snake and Sumire ran off on her own…) 
+(Kanna's been bitten by a snake and Sumire ran off on her own…) 
 (What am I supposed to do!? Should I help Kanna? Or chase after Sumire!?) 
 Oww! Ah… uwahhhhhh! It… it bit me!! 
 Kanna, are you alright!? 
 (There's no way I can leave Kanna like this! I should help her first!) 
 Just hold on, Kanna! I'll get rid of that snake for you!! 
 …I'm… dead… 
-…okay. I tossed the snake over there. It's gone, you're okay now. 
+…OK. I tossed the snake over there. It's gone, you're OK now. 
 …but that snake was poisonous. I just know it. It bit my arm real good. I'm… I'm gonna die here… 
 Kanna… 
 Give her first aid. <br> Suck the poison out. 
-Okay, Kanna, I'm going to do some first aid. We'll need to put a tourniquet your arm so the poison doesn't spread. 
+OK, Kanna, I'm going to do some first aid. We'll need to put a tourniquet on your arm so the poison doesn't spread. 
 …Yeah, sure. 
 There… that should keep the poison from spreading to the rest of your body. 
 …thanks, Boss. 
@@ -597,18 +597,18 @@ Hey, Boss… am I gonna die?
 Kanna! Pull yourself together! What happened to the brave, confident Kanna I know!? 
 Wasn't it you who just said there wasn't a single thing on Earth that could scare you? What happened to that!? 
 Snakes… I can't handle snakes… 
-…B, Boss!! Wh, what are you-…!? 
+…B-Boss!! Wh-what are you…!? 
 Hold still… I'm going to suck the poison from the wound, just in case… 
 Uh… 
 …just hold on. It'll be quick. 
 …… 
-…okay. That should do it. 
+…OK. That should do it. 
 Boss… 
 Hm? 
 … I thought I was gonna die there for a second, but… 
 Having you do this for me… it really made my heart relax… I feel a lot better now. 
 …Good. I'm glad. You look better already. 
-…okay, that's done. I'll also put a tourniquet on your arm so the poison doesn't spread. 
+…OK, that's done. I'll also put a tourniquet on your arm so the poison doesn't spread. 
 … Thanks… 
 Heheh… and to think I was just talking big about how there wasn't a single thing in this world that could spook me. 
 Sorry, I didn't want to show you my weak side like this… 
@@ -628,7 +628,7 @@ B-Boss… ugh…
 (Kanna… what am I supposed to do in a situation like this!) 
 …Boss… 
 (Calm down! I need to keep calm and figure out the next move…!) 
-Okay Kanna, what we need to do is give you some first aid. We need to make sure the poison won't spread any further. 
+OK Kanna, what we need to do is give you some first aid. We need to make sure the poison won't spread any further. 
 Here, let's tie up your sleeve… 
 Sumire, wait! I'll go with you! 
 Sumire? Hey! Sumire!! 
@@ -657,7 +657,7 @@ A reason…?
 Yeah. How many years ago was it… 
 Anyway, it happened when I was a kid living with my dad in Okinawa… 
 Ever since then… I've been terrified of snakes… 
-Just the thought of being bit by a snake and left all alone like I was back then… 
+Just the thought of being bitten by a snake and left all alone like I was back then… 
 That would be my worst nightmare… 
 I hadn't realized… 
 …hehe, it's one hell of a joke, right? A big, strong woman like me whining like a little girl… 
@@ -682,7 +682,7 @@ Kanna…
 When I see a snake it's like I'm a little kid again. I can't stand being weak like this. 
 Hey, everyone feels the same when they're facing their own fears… Don't beat yourself up over it. 
 Hehe, well crap… I really didn't want you to see me like this… 
-Okay, Kanna. Here, lean on my shoulder… 
+OK, Kanna. Here, lean on my shoulder… 
 Alright. 
 …ugh! 
 What's wrong, Kanna? Is the bite hurting? 
@@ -701,7 +701,7 @@ Don't you dare say things like 'if I don't make it' or 'if it comes to that'!
 Listen. You just need to focus on getting better. There's got to be a way to save you! 
 This mansion is huge… there's got to be medicine in here somewhere. 
 Boss… 
-Come on, lean on me. We can't waste any more time. We're going to find you some medicine. 
+Come on, lean on me. We can't waste anymore time. We're going to find you some medicine. 
 And I'm serious… I don't ever want to hear you talking like that again. 
 …yes, sir. That was my bad, Boss. 
 You're right. I can't be talking like that. Right now I need to grit my teeth and keep going. 
@@ -740,17 +740,17 @@ I could swear I saw a bottle just like this somewhere else in the mansion.
 There's another bottle like this somewhere else. Let's go find it! 
 Boss… are you serious? 
 Don't give up just yet, Kanna! Let's go find the other bottle! 
-Okay… I believe in you, Boss. 
-Okay, it's called 'Sigma Doll'… Remember the shape of this bottle… 
-Okay Kanna, let's go! 
+OK… I believe in you, Boss. 
+OK, it's called 'Sigma Doll'… Remember the shape of this bottle… 
+OK Kanna, let's go! 
 Oh! There it is! The medicine bottle! 
 "Shishido Pharmaceuticals 'Sigma Doll'"… 
 This is it, Kanna! We found it! 
 And this time there's medicine left in the bottle. It's not empty. 
 …we, we did it, Boss. 
-Okay, give me your arm. I'll rub this stuff on. 
+OK, give me your arm. I'll rub this stuff on. 
 This is where the snake bit me. 
-Okay… I'm rubbing on the medicine. 
+OK… I'm applying the medicine. 
 I know this isn't an antivenom, but we'll have to make do with this for now. 
 …I dunno if it's the medicine or what, but I feel better already. 
 …thanks, Boss. I could tell you were really serious about finding this medicine for me. 
@@ -765,8 +765,8 @@ I don't think so… Not many men would go this far.
 Boss… you saved my life. Thanks. 
 K-Kanna… 
 Boss… 
-…a, anyway, let's get moving. I'm worried about Sumire, off chasing the enemy by herself… 
-Y, yeah. Let's go. 
+…A-anyway, let's get moving. I'm worried about Sumire, off chasing the enemy by herself… 
+Y-yeah. Let's go. 
 Hey, hey. Don't clam up when someone's trying to thank you! 
 Ah, yeah. Sorry. 
 …but I'm glad to see you're feeling a little better. 
@@ -774,12 +774,12 @@ Ah, yeah. Sorry.
 Alright, let's go. I'm worried about Sumire, off chasing the enemy by herself… 
 Huh? …wait a sec, Boss. That door on the right… it's open. 
 You're right… 
-Okay… let's see what's back there. 
+OK… let's see what's back there. 
 Sumire could have gone through this door, chasing the enemy. 
 Let's go, Boss. 
 …a hallway. It's pretty dark… 
 Ensign! 
-Woah! S, Sumire… You surprised me. 
+Whoa! S-Sumire… You surprised me. 
 Oh, K-Kanna… so… it looks like you made it safely… 
 S-Sumire… Um… 
 W-what… what happened to the enemy you were chasing? Let me guess, you lost sight of it. 
@@ -791,14 +791,14 @@ I have been following the enemy ever since we parted ways, Ensign.
 They entered that room just over there. I believe they should still be inside. 
 Really! Good work, Sumire! 
 Alright… this time we'll figure out what they're up to without them noticing. 
-Okay, let's head in… Quietly now. 
+OK, let's head in… Quietly now. 
 There they are… 
 They're slapping more seals on the walls… 
-What on Earth are they trying to accomplish by doing that? 
-Okay… let's get a bit closer… 
+What on earth are they trying to accomplish by doing that? 
+OK… let's get a bit closer… 
 Hey… did something just fall from the ceiling? 
 I think so… I heard a sort of 'plop' sound. 
-E, Ensign… something just fell onto my hand… 
+E-Ensign… something just fell onto my hand… 
 Oh… you're right! It looks like some kind of bug… 
 It, it's moving… This tickling feeling… could, could this be a-… 
 Kiiiiiiiiii! 
@@ -831,10 +831,10 @@ But spiders… I cannot handle spiders…
 (What the hell am I supposed to do!? Should I try to help Sumire? Or should I be chasing after Kanna!?) 
 Ow! Aaah! The spider… it bit me!! 
 Sumire, are you alright!? 
-(Okay, I can't just leave Sumire like this! I have to help her!) 
+(OK, I can't just leave Sumire like this! I have to help her!) 
 Hold still, Sumire! I'll get the spider for you!! 
 …this is it… for me… 
-…okay. I tossed the spider over there. It's alright, Sumire. 
+…OK. I tossed the spider over there. It's alright, Sumire. 
 But that was definitely a poisonous spider, and it bit me on the hand… I… I'm not going to make it. 
 Sumire… 
 Try to cheer her up. <br> Suck the poison out. 
@@ -853,22 +853,22 @@ To think this could happen to someone of my caliber… how unseemly…
 Well, what's happened has happened. Right now we need to focus on making the situation better… 
 Yes… of course… 
 First let's put a tourniquet on your arm so the poison doesn't spread. Here, wrap up your sleeve… 
-…E, Ensign!! What on Earth are you doing!? 
+…E-Ensign!! What on earth are you doing!? 
 Hold still… I'm going to suck the poison from the wound, just in case… 
 Ah… 
 …just hold on. It'll be quick. 
 …… 
-…okay. That should do it. 
+…OK. That should do it. 
 Ensign… 
 Hm? 
 To think you would go so far for my sake, Ensign… I… I don't know what to say… 
 It feels a bit scandalous but… it also seems to have calmed my heart. 
 …good. I'm glad. You look better already. 
-…okay, that's done. I'll also put a tourniquet on your arm so the poison doesn't spread. 
+…OK, that's done. I'll also put a tourniquet on your arm so the poison doesn't spread. 
 Ensign… thank you… 
 When we stood in front of the mansion I boasted that nothing in this world could frighten me… 
 I'm ashamed to show such weakness in front of you. 
-E-Ensign! What on Earth are you doing! 
+E-Ensign! What on earth are you doing! 
 Uh… I was going to suck out the poison… 
 Ensign, please refrain from joking at a time like this. 
 Ah, right. 
@@ -883,7 +883,7 @@ But spiders… I cannot handle spiders…
 … 
 …s-sorry. That was a rude question. 
 Ensign… will you promise never to tell this to another soul? 
-Oh… y, yes. 
+Oh… y-yes. 
 How many years ago was it…? It happened while I was still a child… 
 After it happened… I was scarred for life. I became terribly afraid of spiders… 
 Whenever I see a spider now, I remember the fear and loneliness of that moment… 
@@ -901,7 +901,7 @@ E-Ensign…
 Don't worry. If another spider shows up I'll take care of it for you. You're safe with me. 
 Ensign… 
 Thank you… That makes me happy… 
-…okay, can you stand? I know it still hurts but we need to keep moving. 
+…OK, can you stand? I know it still hurts but we need to keep moving. 
 Yes… 
 …… 
 Ensign… 
@@ -918,7 +918,7 @@ Of course… Thank you.
 Sumire? What's wrong? Is the wound hurting? 
 …yes… I feel a bit faint… 
 … 
-(Oh no… is it the spider venom!? It's already effecting her this badly…!?) 
+(Oh no… is it the spider venom!? It's already affecting her this badly…!?) 
 …Ensign… would you… listen to my request? 
 What is it? 
 If I should… fall here, I want you to take care of Kanna… please… 
@@ -930,12 +930,12 @@ E… Ensign!
 Kanna would be pissed if she heard you talking like this! 
 She'd say "Is this weakling really the one who picked a fight with me!?" 
 Ensign… 
-Come on, lean on me. We can't waste any more time. We're going to find you some medicine. 
+Come on, lean on me. We can't waste anymore time. We're going to find you some medicine. 
 …of course. I apologize, Ensign. It was unseemly of me to whine like that… 
 I mustn't do anything that would upset Kanna. 
 …thank you, Ensign. Your words have given me strength… 
 I need you by my side too, Ensign. Always. 
-O-of course… A, anyway we need to get you some medicine. Let's get moving! 
+O-of course… A-anyway we need to get you some medicine. Let's get moving! 
 We found an antivenom for snake poison earlier but… Was there anything for spiders? 
 …I understand. Don't worry about Kanna. 
 But for now I'm going to focus on saving you. 
@@ -955,7 +955,7 @@ This is it, Sumire! We found it!
 I'm… I'm saved. 
 Alright, Sumire, give me your arm. I'll rub this on the bite. 
 Ensign… here it is, that's where the spider bit me. 
-Okay… I'm rubbing on the medicine. 
+OK… I'm applying the medicine. 
 I know this isn't an antivenom, but we'll have to make do with this for now. 
 …I suppose it could just be my imagination, but I do believe I feel better already. 
 Thank you, Ensign… it made me happy to see you rushing around so flustered on my account… 
@@ -975,7 +975,7 @@ Ensign…
 …w-we should probably get moving. I'm worried about Kanna, since she's off chasing the enemy alone… 
 Yes, of course. Let's get a move on. 
 Oh, come to think of it, Ensign. 
-…Ensign, what on Earth are you daydreaming about? 
+…Ensign, what on earth are you daydreaming about? 
 Oh, sorry. I just spaced out for a second. 
 …But, I'm glad you're feeling better, Sumire. 
 …Yes, I do believe I've recovered somewhat. 
@@ -1004,14 +1004,14 @@ I think that would be the wisest choice. Let's make haste, Ensign.
 Alright! 
 Did you find the key, Ensign? 
 Yeah. Well, I don't know if it's the key for this door, but I did find a new key. 
-Okay! Let's give it a try! 
+OK! Let's give it a try! 
 Boss! 
-Kanna! Good, you're okay. What happened to the enemy you were chasing!? 
+Kanna! Good, you're OK. What happened to the enemy you were chasing!? 
 Well… as soon as we ran into this room I suddenly lost sight of them. 
 There's a locked door over here. I think they ran through here… 
-Okay… well, let's try out this key we found then. 
+OK… well, let's try out this key we found then. 
 I think that key we picked up may work here… 
-Okay… Here goes. 
+OK… Here goes. 
 It opened! 
 Alright! Now we can see what's through here! 
 …be on guard, you two. 
@@ -1041,7 +1041,7 @@ Let's go search for a key.
 …true. I don't think spying on the enemy from here will do us much good. 
 What shall we do? 
 …let's go search. 
-Okay, I'll keep an eye on the enemy from here. 
+OK, I'll keep an eye on the enemy from here. 
 Try and get that key as quickly as possible. 
 You got it. Take care of things here for us, Kanna. 
 Let's make haste. 
@@ -1078,7 +1078,7 @@ Let us search for the key. We haven't yet checked all the rooms.
 Search? 
 We can't allow our investigation to grind to a halt here. 
 …you're right. If we stick around here we'll just lose them… 
-Okay, let's go search. 
+OK, let's go search. 
 Alright. I'll stay here and keep an eye on the enemy. 
 Hurry up and find that key. 
 Take care of things here for us, Kanna. 
@@ -1104,26 +1104,26 @@ Even the Hive of Darkness guys must have needed a key to get in here.
 …well, no use us waiting here. Let's check the mansion again. 
 I'll stay here and keep an eye on the enemy… You guys get that key. 
 Right, let's hurry. 
-Okay… there it is. This time we're not letting it get away. 
+OK… there it is. This time we're not letting it get away. 
 Keep your voice down this time, Sumire. 
 I should say the same to you. Please take care. 
-Okay, let's get closer. … Ahh!? 
-W, what's wrong, Boss? 
+OK, let's get closer… Ahh!? 
+W-what's wrong, Boss? 
 Sumire… Kanna… b… behind you… 
-(Craaaap. This time it's snakes AND spiders!) 
+(Craaaap. This time it's a snake AND a spider!) 
 No, no… 
 Are… are those… 
 (Dammit… what should I do!?) 
-Shove them out of the way. <br> Shoot the spiders and snakes. <br> Whack them away. 
+Shove them out of the way. <br> Shoot the spider and snake. <br> Whack them away. 
 Crap, I can't think of anything else, so… 
 Sumire! Kanna! Hunker down, I'm going to shove you both out of here! 
-C-Captain! 
-Y-yes, sir! 
+B-Boss! 
+Y-yes sir! 
 Oww… Sumire, Kanna! Are you alright!? 
 Did you not think to hold back a little before ramming us? 
 Yeah, but thanks to that we managed to escape getting bit. 
 But… dammit, the enemy got away again. 
-And this time it's all your fault, Captain. 
+And this time it's all your fault, Ensign. 
 Kanna! Sumire! 
 Wah, stop! Why the heck are you waving around your gun at a time like this!! Stop pointing that thing our way! 
 Are you mad!? What if you had hit me!! 
@@ -1131,12 +1131,12 @@ Would you two stop flailing around! I can't hit anything with you moving like th
 Wahhh! 
 Aaah! 
 Hold still you two… ah! 
-Calm down, you two! The snakes and spiders are gone! 
+Calm down, you two! The snake and spider are gone! 
 What! 
 What did you say! 
 Take a good look around. 
-Oh, you're right… Where did those snakes slither off too…? 
-It… appears the spiders have also gone… 
+Oh, you're right… Where did that snake slither off too…? 
+It… appears the spider is also gone… 
 You two were flailing around so much you managed to chase them off… 
 Ahhh, that's a relief… 
 I agree completely… Oh… my… I suddenly feel dizzy again… 
@@ -1145,7 +1145,7 @@ Hey… are you two alright?
 Yeah… yeah, I'm fine. 
 It's just a little dizzy spell… it'll take more than this to stop me. 
 Sumire, Kanna, don't move! I'll get rid of them! 
-B, Boss! 
+B-Boss! 
 Come get some! Yaaaaaaah! 
 *Pant*, *pant*… Alright! I was able to chase them off! 
 Phew… I thought I was really gonna die this time… thanks, Boss! 
@@ -1170,7 +1170,7 @@ Sumire, Kanna… I need you to support each other too.
 …I have no objections. 
 Alright! Let's get back to our mission! Looks like the enemy went underground down those stairs. 
 Let's go, you two! 
-Yes, sir! 
+Yes sir! 
 Yessir! 
 Let's chase the enemy underground. 
 The enemy ran down here. Let's get them! 
@@ -1185,7 +1185,7 @@ Looks like the enemy ran through that door. Let's go.
 What the heck is up with this room? 
 Hm… it seems we've run into a dead end. 
 Oh, there he is… that's the guy from before, I'm sure of it. 
-Okay, let's take a look around… make sure there aren't any spiders or snakes here first. 
+OK, let's take a look around… make sure there aren't any spiders or snakes here first. 
 Alright, between the three of us we should be able to pin him down. Let's go! 
 …I agree. There's nowhere for him to hide in this room. 
 Alright! Let's go! 
@@ -1196,16 +1196,16 @@ Dammit! Were they putting up those seals to lock away the spirit energy!?
 But… but why!? 
 Ensign, he's getting away! 
 He's not getting away this time! Let's get up that ladder! 
-Sir! We've got to get him. 
+We've got to get him! 
 Hurry, up that ladder! 
-Okay, let's get up there. Watch your feet! 
+OK, let's get up there. Watch your feet! 
 Damn… this is a long ladder… 
-… it appears it goes all the way above ground. 
+…it appears it goes all the way above ground. 
 What's that sound!? Is it the enemy, Boss!? 
 No… the ladder stops here. There's a manhole cover here… looks like I can open it… 
 So we can get out through there? 
 Ensign… please open it. 
-Okay… I'm going to open it slowly. 
+OK… I'm going to open it slowly. 
 Ugh… it's bright. 
 …! Boss, l-look! 
 A ley line!? … Does this have something to do with the magic the commander was talking about!? 
@@ -1220,23 +1220,23 @@ Dammit…
 Yes… perhaps you can keep them talking to buy us some time, Ensign? 
 …but even if we stall, there's no guarantee anyone will come for us… but I'll give it a try! 
 Oh God! We could really use some help here! 
-S-sir! What are you thinking, at a time like this!? 
+E-Ensign! What are you thinking, at a time like this!? 
 Hey, pull yourself together! 
-Praying to God in your hour of need! Ohohoho! I had thought better of the Imperial Assault Troupe! 
+Praying to God in your hour of need? Ohohoho! I had thought better of the Imperial Assault Troupe! 
 …damn, isn't there anything we can do? 
 Yes… perhaps you can keep them talking to buy us some time, Ensign? 
 …but even if we stall, there's no guarantee anyone will come for us… but I'll give it a try! 
 …… 
-Sir! 
-Sir! 
+Boss! 
+Ensign! 
 Isn't there anything we can do!? Are we just supposed to let them get away with their plot! 
-Okay! How about it, Captain. What say we take these guys down, just the three of us? 
-What on Earth are you saying! How do you expect us to win as we are now! 
+OK! How about it, Boss. What say we take these guys down, just the three of us? 
+What on earth are you saying! How do you expect us to win as we are now! 
 So are you saying we should just sit here and do nothing!? 
 …Kanna, I'm afraid Sumire is right. We don't even have our Koubu… 
 But… ahhh, dammit! 
 But we still shouldn't waste time like this… we need some sort of plan… 
-Sir, perhaps you could get them talking and buy us some time? 
+Ensign, perhaps you could get them talking and buy us some time? 
 …try to stall them, huh… Well, it's better than doing nothing… Alright, I'll give it a try! 
 Hey, what are you trying to do here!? What's your plan with this mansion? 
 Hahaha… I don't suppose you lot could sense it, but this mansion is brimming with strong spiritual energy. 
@@ -1279,9 +1279,9 @@ Unused
 Unused
 Unused
 Unused
-Wahhh!! S, snake! Snakes snakes snakes! Wahhh!! Woaaaaah!! 
+Wahhh!! S-snake! Snake, snake, SNAKE! Wahhh!! Woaaaaah!! 
 Wahhhh! Gaaaahh!… Snake… 
-Kyaaaa!! S, s, spider!! A, a, spider… spider… 
+Kyaaaa!! S-s-spider!! A, a spider… SPIDER… 
 Kyaaaa! I'm gonna die! Ahhhh, I can't take it! Go away! Go away! 
 My father is the president of Kanzaki Heavy Industries. And my mother is a motion picture star. 
 Neither of them were ever home. Even on my birthday. It was a tragic day. 
@@ -1332,7 +1332,7 @@ Unused
 Unused
 Unused
 Kanna! The enemy fled because you had to raise your voice like that! 
-B-Boss! P-p-please get rid of the snake! Q, quick! 
+B-Boss! P-p-please get rid of the snake! Q-quick! 
 Ngh… good grief! I can't believe how useless you are! I'll chase the enemy! 
 Ahh! You idiot! You chased off the enemy, yelling like that! 
 E-E-Ensign! S-s-spider! Get it away! Quick! 

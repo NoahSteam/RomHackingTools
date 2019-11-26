@@ -45,7 +45,7 @@ Is Kohran around?
 Guess I'll head somewhere else. 
 … guess no one's home. Maybe they aren't done cleaning up after the performance yet? 
 Is Iris back in her room yet? 
-Okay. I'm gonna head somewhere else. 
+OK. I'm gonna head somewhere else. 
 … looks like Iris is out. 
 Sumire… wonder if she's in her room. 
 Guess I'll walk around a bit more. 
@@ -60,7 +60,7 @@ I wonder… where's everyone from the Flower Division at?
 During the rainy season it seems this room has a sort of sticky humidity… 
 It'd be a waste of time to stick around in the night room with no one here, guess I'll head somewhere else. 
 It's the manager's room. I wonder if Yoneda is in? 
-Okay. I'm gonna head somewhere else. 
+OK. I'm gonna head somewhere else. 
 Zzz… Zzz… 
 Yoneda… Looks like he fell asleep. 
 I wonder if Sakura already headed backstage. 
@@ -382,7 +382,7 @@ These photos are mainly for guests, so please just take one.
 Oh, I guess that's true. I'll come again some other time. 
 You'd like to buy this photo? Thank you! 
 That's a photo of Sakura. That'll be 50 zeni. 
-We need to leave some for the guests, so just take one for now, okay? 
+We need to leave some for the guests, so just take one for now, OK? 
 Ogami, I appreciate your interest, but… 
 These photos are mainly for guests, so please just take one. 
 Oh, I guess that's true. I'll come again some other time. 
@@ -390,7 +390,7 @@ You'd like to buy that? Thank you!
 Sakura's popularity is booming right now. People find her really relatable. 
 You'd like to buy that photo? Thank you! 
 That's a photo of Sumire. That'll be 50 zeni. 
-We need to leave some for the guests, so just take one for now, okay? 
+We need to leave some for the guests, so just take one for now, OK? 
 Ogami, I appreciate your interest, but… 
 These photos are mainly for guests, so please just take one. 
 Oh, I guess that's true. I'll come again some other time. 
@@ -398,7 +398,7 @@ You'd like to buy that? Thank you!
 Most of Sumire's fans are young rich guys, judging by their appearances. 
 You'd like to buy that photo? Thank you! 
 That's a photo of Maria. That'll be 50 zeni. 
-We need to leave some for the guests, so just take one for now, okay? 
+We need to leave some for the guests, so just take one for now, OK? 
 Ogami, I appreciate your interest, but… 
 These photos are mainly for guests, so please just take one. 
 Oh, I guess that's true. I'll come again some other time. 
@@ -407,7 +407,7 @@ Let's see, our top seller these days is… Maria's photo, I think?
 She's very popular among young ladies and students. 
 You'd like to buy that photo? Thank you! 
 That's a photo of Kanna. That'll be 50 zeni. 
-We need to leave some for the guests, so just take one for now, okay? 
+We need to leave some for the guests, so just take one for now, OK? 
 Ogami, I appreciate your interest, but… 
 These photos are mainly for guests, so please just take one. 
 Oh, I guess that's true. I'll come again some other time. 
@@ -415,7 +415,7 @@ You'd like to buy that? Thank you!
 Most of Kanna's photos go to kids who beg their parents to buy it for them. 
 You'd like to buy that photo? Thank you! 
 That's a photo of Iris. That'll be 50 zeni. 
-We need to leave some for the guests, so just take one for now, okay? 
+We need to leave some for the guests, so just take one for now, OK? 
 Ogami, I appreciate your interest, but… 
 These photos are mainly for guests, so please just take one. 
 Oh, I guess that's true. I'll come again some other time. 
@@ -424,7 +424,7 @@ Most of the guys buying Iris's photo are older gentlemen.
 They always glance around nervously when they buy it. I wonder if they're worried what people will think? 
 You'd like to buy that photo? Thank you! 
 That's a photo of Kohran. That'll be 50 zeni. 
-We need to leave some for the guests, so just take one for now, okay? 
+We need to leave some for the guests, so just take one for now, OK? 
 Ogami, I appreciate your interest, but… 
 These photos are mainly for guests, so please just take one. 
 Oh, I guess that's true. I'll come again some other time. 
@@ -521,7 +521,7 @@ I'm fine… Excuse me.
 … You don't look 'fine' at all, Maria… 
 But… I guess she just needs her space right now. 
 It's the manager's room. I wonder if Yoneda is in? 
-Okay, guess I'll head somewhere else. 
+OK, guess I'll head somewhere else. 
 Zz~… Zz~… 
 Yoneda… Looks like he fell asleep. 
 Um… it's Ogami. 
@@ -591,7 +591,7 @@ That's a pretty nice desk. It looks good and sturdy.
 …………………… 
 Maria… what's going on with you today? You're not acting like your normal self. 
 …………………… 
-If it's okay… 
+If it's OK… 
 Tell me what's going on? <br> Talk to me anytime. <br> You don't need to tell me. 
 Will you tell me what's going on? I could help you out, if you let me. 
 …I'm sorry, sir. Please don't worry about me. 
@@ -632,7 +632,7 @@ Maria, right?
 Yes… she mixed up quite a few of her lines again today. It's like she's a different person… 
 And I don't think she's getting enough sleep lately either… I'm really worried for her. 
 Ogami… if you have a chance, please try to talk to Maria. 
-Okay… I'll see what I can do. 
+OK… I'll see what I can do. 
 Well, I'd better be off… They want everyone helping take care of the set today. 
 If you've got some time, you should come help too, Ogami. Excuse me. 
 Taking care of the set… I should probably head over there myself in a bit. 
@@ -643,7 +643,7 @@ Oh… you're worried about Maria. Now that you mention it, yeah, she seems prett
 Yes… she mixed up quite a few of her lines again today. It's like she's a different person… 
 And I don't think she's getting enough sleep lately either… I'm really worried for her. 
 Ogami… if you have a chance, please try to talk to Maria. 
-Okay… I'll see what I can do. 
+OK… I'll see what I can do. 
 Well, I'd better be off… They want everyone helping take care of the set today. 
 If you've got some time, you should come help too, Ogami. Excuse me. 
 Taking care of the set… I should probably head over there myself in a bit. 
@@ -651,7 +651,7 @@ Taking care of the set… I should probably head over there myself in a bit.
 She mixed up quite a few of her lines again today. It's like she's a different person… 
 And I don't think she's getting enough sleep lately either… I'm really worried for her. 
 Ogami… if you have a chance, please try to talk to Maria. 
-Okay… I'll see what I can do. 
+OK… I'll see what I can do. 
 Well, I'd better be off… They want everyone helping take care of the set today. 
 If you've got some time, you should come help too, Ogami. Excuse me. 
 Taking care of the set… I should probably head over there myself in a bit. 
@@ -688,7 +688,7 @@ Hmm… I'm not sure. It seems like a complicated question…
 Looks like the guests are almost all gone for the evening. 
 I wonder… where is everyone? Maybe I should check out the stage. 
 The regulars are starting to remember me now… 
-Hmm… is it okay to feel happy over something like that? 
+Hmm… is it OK to feel happy over something like that? 
 Oh, Ogami, hello. 
 Today's performance was 'Cinderella'! 
 Maria is just so perfect as the prince, same as last month! 
@@ -767,11 +767,11 @@ Phew, man that feels good… Oh, Chief. Whatcha up to?
 Gah! K-Kohran! That was fast. 
 Fast? What was fast? 
 Uh, nothing, never mind… 
-…you feelin' okay, Chief? I've gotta get going. See ya. 
+…you feelin' OK, Chief? I've gotta get going. See ya. 
 Oh, hey. I don't know where you were headed, but there's no one around in the basement. 
 Everybody's getting together on stage to help take care of the set. 
 Phew… she didn't notice… I'm safe. 
-…okay, let's get out of here. 
+…OK, let's get out of here. 
 Hey Iris, so this is where you were. 
 Oh, Mon Frère! We finally got some nice weather today! 
 Yeah. It's rare to get nice sunny days like this during 'tsuyu'. 
@@ -783,7 +783,7 @@ Mon Frère, you're so smart! That's why you're my boyfriend!
 I love summer, so I wish 'tsuyu' would be over already! 
 Hahaha, so you like summer best, huh? 
 Yep! We should go to the beach together sometime, Mon Frère! 
-Okay, I need to go. They want me to help take care of the set. 
+OK, I need to go. They want me to help take care of the set. 
 See you later. 
 Taking care of the set, huh… they could probably use some extra muscle, so I should head over there too. 
 Well, see, 'tsuyu' is what we call the condition when the rain fronts accumulate in this area. 
@@ -802,7 +802,7 @@ What's up?
 Ensign, this set piece looks like it's about to collapse. Could you hold it up for us? 
 We were all thinking we should fix it up… right, Maria? 
 Huh? …Oh, yes, that's right. 
-Hey, Maria, you don't sound so good. Are you okay? 
+Hey, Maria, you don't sound so good. Are you OK? 
 I'm fine, don't worry. Come on, let's focus on the set. 
 Gah! The set!! 
 Kyaaaaa!! O-Ogami!! 
@@ -810,7 +810,7 @@ Ooooooooo!! Damn this is heavy!
 Yiiiikes… now that's impressive. You've got some real muscle in those guns, Chief! 
 …thanks, but could you maybe do something about this?! 
 I-I'll go get some rope! 
-Mon Frère, are you okay? You're sweating a lot. 
+Mon Frère, are you OK? You're sweating a lot. 
 Pretend it's nothing. <br> Call for help. 
 Ha, ha, ha… this… is nothing… 
 Ensign… I don't know who you're trying to impress, but now really isn't the time. 

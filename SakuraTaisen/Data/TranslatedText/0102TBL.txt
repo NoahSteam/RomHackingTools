@@ -1,6 +1,6 @@
 ﻿﻿﻿﻿It's a photo of Sakura. Her gaze is so intense. I wonder what she's thinking? 
 It's a photo of Sumire. It shows a side of her that's usually hidden. 
-It's a photo of Maria. She's lost in thought and seems a bit sad… 
+It's a photo of Maria. …She's lost in thought and seems a bit sad… 
 It's a photo of Kanna. She looks energetic and confident. I can't wait to meet her. 
 It's a photo of Iris. In it, she's one beautiful flower surrounded by many. 
 It's a photo of Kohran. She looks good in her traditional outfit. What kind of person is she? 
@@ -112,7 +112,7 @@ Oh, Ogami. What's up?
 Lieutenant General Yoneda, there's something I'd like to ask you… 
 It's "Manager"! MAN-A-GER! No calling me "Lieutenant General" in this theater. 
 Now then, what is it? Ask away. 
-Okay. First… 
+OK. First… 
 H-hold on! …I just remembered something! 
 …W-what is it, Lieutenant General--er, Manager? 
 Is it about the Imperial Assault Troupe? Have you finally sobered up? 
@@ -158,7 +158,7 @@ Hmm, I can't see it too well.
 Hmm, I can't see it too well. 
 I've got lots of free time, so I'll check out the Reception Desk. 
 Oh! There's Sumire! 
-Okay, I'll try talking to her… 
+OK, I'll try talking to her… 
 Ah, Ensign. Good morning. 
 Morning! Are you taking it easy today? 
 I wish I could, but I have rehearsal onstage right now. 
@@ -188,7 +188,7 @@ Yeah… But I'm more interested in spending time with you.
 Is that so? …Thank you. 
 That's what they call "toys over flowers," right? 
 I think you mean, "boys over flowers." 
-Eheheh… Oh, okay. 
+Eheheh… Oh, OK. 
 …Well, I'm gonna go now! Bye bye, Mon Frère! 
 …So this is my new workplace… 
 …Sir. What are you doing here? 
@@ -403,12 +403,12 @@ It's getting quite late, Ogami.
 Shall we end our rounds here? 
 Oh dear, look at the time… 
 Ogami, the theater lights will be turned off soon. Let's end our rounds here. 
-Oh, okay. 
+Oh, OK. 
 Well then, shall we return to our rooms? 
-Yeah, okay. Good night. <br> I'll walk you to your room. <br> Let's keep doing rounds. 
-Yeah, okay. Good night. <br> I'll walk you to your room. 
-Yeah, okay. Thanks for all of your help today. …Good night. 
-It's no problem at all, Ogami. Just try to cheer up, okay? 
+Yeah, OK. Good night. <br> I'll walk you to your room. <br> Let's keep doing rounds. 
+Yeah, OK. Good night. <br> I'll walk you to your room. 
+Yeah, OK. Thanks for all of your help today. …Good night. 
+It's no problem at all, Ogami. Just try to cheer up, OK? 
 …Mmm hmm. 
 Well, good night. 
 …I guess I'll head back to my room. 
@@ -416,7 +416,7 @@ I'll walk you to your room. It's the least I can do after all the help you've gi
 …Are you sure? 
 Of course. Well then, let's go. 
 Let's keep doing rounds. There are other places I want to check. 
-Okay. We'll do rounds for a little bit longer. 
+OK. We'll do rounds for a little bit longer. 
 But the lights will go off soon. I think we can only check 3 more rooms… 
 I'll keep that in mind. Let's go. 
 Thank you for your hard work, Ogami. Please excuse me. 
@@ -428,7 +428,7 @@ Yes, let's.
 Iris…! It's Sakura. Please open the door. 
 That's right! We still have to return Jean-Paul to Iris. 
 Let's stop by Iris's room. 
-Okay. Off to Iris's room we go! 
+OK. Off to Iris's room we go! 
 We've arrived at Iris' room. 
 Iris…! It's Sakura. Please open the door. 
 Mon Frère… Sakura… *Sniffle* 
@@ -437,11 +437,11 @@ Ah! Jean-Paul!!
 You shouldn't leave your beloved friends behind. 
 Mon Frère…Sakura… Thank you so much! 
 Well, it's late, so… Good night. 
-Okay! Good night! 
+OK! Good night! 
 … good. I think Iris should be able to sleep peacefully now. 
 Yes. I'm really glad we found it. 
 Well then, Ogami… Since it's so late at night, that's enough for today… 
-Yeah, okay. Thanks for all of your help today. …Good night. 
+Yeah, OK. Thanks for all of your help today. …Good night. 
 Oh, it was nothing. Well, good night. 
 …I guess I'll head back to my room. 
 You'll walk me to my room? But we're standing right in front of it! 
@@ -469,7 +469,7 @@ I think maybe I left him somewhere…
 Iris…… 
 Don't worry, Iris. Tomorrow when it's light you should be able to find him right away. 
 But it's late now, so you need to get to bed. 
-*sniffle*… okay… I'll go to bed… 
+*sniffle*… OK… I'll go to bed… 
 It would help if we knew where Iris spent the afternoon… 
 …Ogami. Let's get going, shall we? 
 Is this… a music room…? 
@@ -484,7 +484,7 @@ Ogami! Don't forget to grab Jean-Paul.
 Huh? Where'd Sakura go? 
 Oh, there you are, Sakura. 
 Come here and take a look outside, Ogami… 
-Woah… Ginza at night. 
+Whoa… Ginza at night. 
 I think the lights of the city are just amazing. 
 What makes you say that? 
 Well, they're not meant to be decorative or artistic, but each one shines so beautifully. 
@@ -547,7 +547,7 @@ Ah! Jean-Paul!!
 You shouldn't leave your beloved friends behind. 
 Mon Frère… Sakura… Thank you so much! 
 Well, it's late, so… Good night. 
-Okay! Good night! 
+OK! Good night! 
 … good. Now Iris should be able to sleep peacefully. 
 Yes. I'm really glad we found it. 
 Well, shall we continue our rounds? 
@@ -555,7 +555,7 @@ Iris…
 Mon Frère… Sakura… you didn't find Jean-Paul? 
 I'm sorry… We couldn't find him. 
 But I'm sure we'll find him right away once it's light tomorrow. Just get some sleep and don't worry. 
-Okay… 
+OK… 
 Jean-Paul… Iris, where the heck did you forget him? 
 This is… Maria's room? 
 Maria's father is Russian. 
@@ -662,7 +662,7 @@ No… it's nothing. Doesn't look like there's anything out of place here. Let's 
 The stage looks fine. 
 Let's get back to our rounds. 
 This is the prop room. We store all the props we use in our performances here. 
-Woah… I'd love to see what kind of stuff you have in here. 
+Whoa… I'd love to see what kind of stuff you have in here. 
 Well, you'll have to do that on your own time. Let's keep going. 
 This is the prop room. 
 Right. Everything looks fine, so let's keep going. 
@@ -713,7 +713,7 @@ Ogami, let's continue our rounds.
 I heard Kanna will be joining us at the theater two months from now. 
 So this room will be empty until then. Let's move on. 
 This is the 2nd floor seating for our guests. 
-Woah… the view from here is amazing. 
+Whoa… the view from here is amazing. 
 Some of these seats are reserved by some of our regulars from the upper class. 
 I see… impressive. 
 Nothing seems to be out of place. Let's continue our rounds, Ogami. 

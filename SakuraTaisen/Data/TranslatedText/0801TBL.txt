@@ -1,7 +1,7 @@
 ﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
 It's a photo of Maria. …She's lost in thought and looks kind of sad…
-A photo of Kanna. She looks strong and reliable. I can't wait to meet her.
+A photo of Kanna. Her signature strength comes through clearly.
 A photo of Iris. She's surrounded by flowers and flashing a radiant smile.
 A photo of Kohran. She's looking pretty in profile with her face dyed red by the evening sun.
 A letter given to me by a customer. I was asked to give it to Sumire. I have a bad feeling about this…
@@ -77,8 +77,8 @@ New Year's Day is a good time for new beginnings. It wouldn't be bad to do some 
 …On second thought, no. I wouldn't want to get sore on the first day of the year. 
 This pool is heated by steam engines in the basement. 
 In the Navy, we did ice swimming contests… The Floral Assault Troupe have it good. 
-Yesterday, Kohran was polishing the Kobu up to a sheen… 
-Including the Kobu in our big end-of-year cleaning… That's Kohran for you! 
+Yesterday, Kohran was polishing the Koubu up to a sheen… 
+Including the Koubu in our big end-of-year cleaning… That's Kohran for you! 
 No one here, huh? Boring. 
 I should go someplace else. 
 No one here. Let's check another room. 
@@ -149,14 +149,14 @@ Please wait in your room, Maria. I'll come pick you up.
 Sorry, but manager Yoneda wanted to speak with me. 
 Maybe that was a little too harsh… 
 Oh, Kohran? What's with the long face? 
-It's just… I was taking care of the Kobu, and we've got a little problem. 
+It's just… I was taking care of the Koubu, and we've got a little problem. 
 Problem? 
-The Kobu… Even though we call them "spirit armor", they're not indestructible. At some point, they'll break. 
-The Kobu are pretty beat up after the fight against the Hive of Darkness… 
+The Koubu… Even though we call them "Spirit Armor", they're not indestructible. At some point, they'll break. 
+The Koubu are pretty beat up after the fight against the Hive of Darkness… 
 In my professional opinion, they won't stand another big fight like that. 
 What!? So if we keep being attacked… 
 Well, they haven't shown themselves for some time now, and we can just pray it stays that way. 
-I also asked the Flower Mansion about the Kobu, so you'll have to be patient until we figure something out. 
+I also asked the Hanayashiki about the Koubu, so you'll have to be patient until we figure something out. 
 …OK. Thank you, Kohran. 
 … 
 I'd love to. <br> No time, sorry… 
@@ -262,7 +262,7 @@ It's a pity, but what can you do? I'll leave you to it then.
 Looks like Sakura blew me off… 
 I guess I'll just ask someone else. 
 Sakura… Please come to the shrine with me. 
-I know you said no earlier… But I really, really want to go with you. 
+I know I cut you off earlier… But I really, really want to go with you. 
 Yes, of course! 
 OK. In one hour, in front of the theater. 
 Visiting the shrine with Sakura… I couldn't think of a better way to start off the new year. 
@@ -372,7 +372,7 @@ Please forgive me, Captain.
 Looks like Maria blew me off… 
 I guess I'll just ask someone else. 
 Maria… Please come to the shrine with me. 
-I know you said no, but… I don't want to go with anyone else. 
+I know I cut you off earlier, but… I don't want to go with anyone else. 
 With me… Are you sure? 
 Of course. If it isn't too much trouble… 
 Trouble? Not at all, I'd gladly join you! 
@@ -434,7 +434,7 @@ I see…
 Looks like Kanna blew me off… 
 I guess I'll just ask someone else. 
 Would you maybe… join me for visiting the shrine? 
-I know you said no, but… I don't want to go with anyone else. 
+I know I cut you off earlier, but… I don't want to go with anyone else. 
 Huh? With me? You serious, Boss? 
 Of course. I wouldn't joke about something like that. 
 Thanks, Boss. That really makes me happy. 
@@ -500,7 +500,7 @@ It's nice you asked me though… Sorry, Mon Frère.
 Iris blew me off… 
 I guess I'll just ask someone else. 
 Iris… Do you want to go visit the shrine with me? 
-I know you said no, but… I don't want to go with anyone else. 
+I know I cut you off earlier, but… I don't want to go with anyone else. 
 OK, let's go! I'll go to the shrine with you, Mon Frère! 
 Hahaha, I love how enthusiastic you sound. Then let's go visit Meiji Shrine! 
 OK, let's go then! With you, I'd go anywhere, Mon Frère! 
@@ -524,7 +524,7 @@ Let's go already! …By the way, which shrine did you have in mind?
 How about Meiji Shrine? 
 All righty! 
 …Are you sure it's safe? I mean, with two people on it? 
-Ah, no problem! You can pilot a Kobu, so you'll manage my little bike. 
+Ah, no problem! You can pilot a Koubu, so you'll manage my little bike. 
 …Well, I guess you're right. But please don't go too fast. 
 OK! 
 Come on, no dilly-dallying! 
@@ -541,19 +541,19 @@ Kohran, I wonder… Do you want to go visit the shrine with me?
 What? You want to go with me? 
 Hmm… I'd love to go, but… there's something I need to check. 
 What are you talking about? 
-The Koubu… Even though we call them "spirit armor", they're not indestructible. At some point, they'll break. 
+The Koubu… Even though we call them "Spirit Armor", they're not indestructible. At some point, they'll break. 
 The Koubu are pretty beat up after the fight against the Hive of Darkness… 
 In my professional opinion, they won't stand another big fight like that. 
 What!? It can't be that bad, right…? 
 Well, no need to get dramatic. We did manage to smash the Hive to pieces. 
-I just wanted to get in touch with the Flower Mansion one of these days. 
+I just wanted to get in touch with Hanayashiki one of these days. 
 And that's why you should ask someone else to go visit the shrine with you. I'm afraid I can't. 
 I see… That's too bad. 
 I hope you get to have fun! 
 Looks like Kohran blew me off… 
 I guess I'll just ask someone else. 
 Kohran… How about visiting the shrine with me? 
-I know you said no, but… I don't want to go with anyone else. 
+I know I cut you off earlier, but… I don't want to go with anyone else. 
 Visit the shrine… with me!? 
 Probably not, right…? 
 What are you saying… Of course! Of course I'll go with you! 

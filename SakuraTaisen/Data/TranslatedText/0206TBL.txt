@@ -1,4 +1,4 @@
-﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
 It's a photo of Maria. …She's lost in thought and looks kind of sad…
 A photo of Kanna. She looks strong and reliable. I can't wait to meet her.
@@ -36,7 +36,7 @@ Don't get all greedy, Mr. Ensign. You can always buy one another time.
 I see, I guess that's true…I'll come again. 
 You'd like to buy this photo? Thank you! 
 That's Sakura's picture, isn't it? That will be 50 zeni. 
-We need to leave some for the guests, so just take one for now, okay? 
+We need to leave some for the guests, so just take one for now, OK? 
 Ogami, I appreciate your interest, but… 
 These photos are mainly for guests, so please just take one. 
 I see, I guess that's true…I'll come again. 
@@ -47,7 +47,7 @@ That's right. She arrived a little before I did.
 Great, the more the merrier. I hope we can be friends. 
 You'd like to buy this photo? Thank you! 
 That's a photo of Sumire. That'll be 50 zeni. 
-We need to leave some for the guests, so just take one for now, okay? 
+We need to leave some for the guests, so just take one for now, OK? 
 Ogami, I appreciate your interest, but… 
 These photos are mainly for guests, so please just take one. 
 I see, I guess that's true… I'll come again. 
@@ -56,7 +56,7 @@ Sumire is playing a supporting role this month. She's been grumbling about it fo
 Yep, that sounds like Sumire. Seems she's still got that fiery tongue. 
 You'd like to buy this photo? Thank you! 
 That's a photo of Maria. That'll be 50 zeni. 
-We need to leave some for the guests, so just take one for now, okay? 
+We need to leave some for the guests, so just take one for now, OK? 
 Ogami, I appreciate your interest, but… 
 These photos are mainly for guests, so please just take one. 
 I see, I guess that's true… I'll come again. 
@@ -66,7 +66,7 @@ Back when I was here before, Maria was the captain.
 A captain's work is rough, but good luck with it, Ensign. 
 You'd like to buy this photo? Thank you! 
 That's a photo of Kanna. That'll be 50 zeni. 
-We need to leave some for the guests, so just take one for now, okay? 
+We need to leave some for the guests, so just take one for now, OK? 
 Kanna? Who's that? Never heard of her. 
 Now that you mention it, that's right. Kanna's been traveling for quite some time. 
 Ogami, I appreciate your interest, but… 
@@ -78,7 +78,7 @@ So she's an old hand around here. Hope we can be friends.
 Kanna's super friendly, so I think you two will get along fine, Kohran. 
 You'd like to buy this photo? Thank you! 
 That's a photo of Iris. That'll be 50 zeni. 
-We need to leave some for the guests, so just take one for now, okay? 
+We need to leave some for the guests, so just take one for now, OK? 
 Ogami, I appreciate your interest, but… 
 These photos are mainly for guests, so please just take one. 
 I see, I guess that's true… I'll come again. 
@@ -88,7 +88,7 @@ Oh hey! I was actually working on weapon development at the Hanayashiki Branch,
 and I think Iris's Koubu will be finished and sent over here to Ginza sometime in July. 
 You'd like to buy this photo? Thank you! 
 That's a photo of Kohran. That'll be 50 zeni. 
-We need to leave some for the guests, so just take one for now, okay? 
+We need to leave some for the guests, so just take one for now, OK? 
 Hey, come on now, Ensign. That's embarrassing. Don't buy that. 
 Huh? …but Ogami, you already bought a copy of Kohran's picture, didn't you? 
 Whaa? You serious? Why're you picking up my picture when ya haven't even met me yet? 
@@ -169,7 +169,7 @@ Sorry to butt in on your work. Let's just get to the manager's office quick so y
 … Mr. Ensign, if you keep getting sidetracked we won't get there before guests start arriving. 
 True. We should head straight for the manager's office. 
 She's not outside… though the remains of the bike she rode in on are still there. 
-Come to think of it, is it okay leaving it out there like that? 
+Come to think of it, is it OK leaving it out there like that? 
 Yeah, no problem! After I report in and things settle down I'll come out here and fix it right up. 
 Chief, if you get too sidetracked the guests are gonna start showing up. 
 True. We should head straight for the manager's office. 
@@ -198,7 +198,7 @@ Hey Kohran! Is it true the Hanayashiki Branch is always running as an amusement 
 You'll have to show me which rides are best next time we go there! 
 You got it! See you two later. 
 Ok then Okami. I hope to see you again sometime. 
-Sure. Okay then Kohran, shall we head to the manager's office? 
+Sure. OK then Kohran, shall we head to the manager's office? 
 See ya Yuri, Kasumi. I'll talk with you two later. 
 I was just walking around. What are you doing here? 
 Who me? I'm just saying hi to Yuri and Kasumi. 
@@ -207,7 +207,7 @@ Hey Kohran! Is it true the Hanayashiki Branch is always running as an amusement 
 You'll have to show me which rides are best next time we go there! 
 You got it! See you two later. 
 Say, Ogami, why don't you show Kohran to the manager's office? 
-Sure. Okay then Kohran, shall we head to the manager's office? 
+Sure. OK then Kohran, shall we head to the manager's office? 
 See ya Yuri, Kasumi. I'll talk with you two later. 
 I'm just trying to get away from work for a bit. 
 In that case, Ogami, would you please take Kohran to the manager's office. 
@@ -222,7 +222,7 @@ The Hanayashiki Branch is in an amusement park, right? What are the best rides t
 Oh, I can tell you all sorts of stuff about the rides! I actually worked on a bunch of them myself! 
 Yuri, I know you're happy to be with a friend who joined you, but she has other things she needs to be doing. 
 Actually, Ogami, why don't you show Kohran to the manager's office? 
-Sure. Okay then, Kohran, shall we head to the manager's office? 
+Sure. OK then, Kohran, shall we head to the manager's office? 
 See ya Yuri, Kasumi. I'll talk with you two later. 
 Yuri, Kasumi! It's been a while! 
 Ah, Kohran!? You're back! 
@@ -235,7 +235,7 @@ The Hanayashiki Branch is in an amusement park right? What are the best rides th
 Oh, I can tell you all sorts of stuff about the rides! I actually worked on a bunch of them myself! 
 Yuri, I know you're happy to be with a friend who joined you, but she has other things she needs to be doing. 
 Say, Ogami, why don't you show Kohran to the manager's office? 
-Sure. Okay then, Kohran, shall we head to the manager's office? 
+Sure. OK then, Kohran, shall we head to the manager's office? 
 See ya Yuri, Kasumi. I'll talk with you two later. 
 Oh, Ogami, have you still not taken Kohran to the manager's office? 
 The manager's office is right next door. Are you getting sidetracked? 
@@ -243,7 +243,7 @@ Seriously, Mr. Ensign. We shouldn't keep Yoneda waiting.
 Yes, yes, that's right. Well, let's go! 
 Wait a minute, Mr. Ensign! This isn't the manager's office! 
 Oh… uh, right… Sorry, I just sorta-… 
-… geez, Mr. Ensign. You've got a few screws loose. 
+…Jeez, Mr. Ensign. You've got a few screws loose. 
 Ogami! 
 Hmmm? That voice… 
 Oh, Sakura. Did you just come from the stage? 
@@ -279,7 +279,7 @@ Tsubaki, you look really good. I'm gonna be joining up here, so I look forward t
 Same here. Really good to see you. 
 I heard you arrived by bike, Kohran. Why didn't you take the capital railway? 
 Eh, the steam trains are always so crowded, the weather's great, and it's not too far from Asakusa. 
-Okay, well, I'll get your bike carried in. Good luck on the stage! 
+OK, well, I'll get your bike carried in. Good luck on the stage! 
 Ogami, have you found Kohran yet? 
 Well… not yet. Where could she have gone? 
 When you meet her, please guide her right to the manager's office, ok? 
@@ -306,7 +306,7 @@ Yes. This time I am co-starring with Maria.
 (She's wearing subtle make up for the performance. Nice!) 
 Ogami… can you please stop staring at me like that? It's embarrassing! 
 …Hey, Mr. Ensign! You know if you stare at someone like that, you should at least say something! 
-(Woah, that blouse shows a lot of skin.) 
+(Whoa, that blouse shows a lot of skin.) 
 (…But compared to what Sumire wears, it's still pretty tame.) 
 (… Though, now that I think about it, compared to Sumire's usual get up, this is still pretty tame.) 
 … Ogami, would you mind not staring at me like that? 
@@ -364,7 +364,7 @@ What are you talking about? Cut it out, ya weirdo!
 Glad that you have a sense of humor, then. I can tell we'll be getting along great! 
 Well… That's a good question… 
 Looks like it is all the same to you. Chief it is! 
-Okay, Chief? 
+OK, Chief? 
 Of… of course. 
 So shall we go inside then, Chief? Yoneda must be waiting. 
 Yes, let's go in. 
@@ -466,7 +466,7 @@ Gotta go! See you later!
 No way. I don't see us getting along at all. 
 What? How can you say that!? 
 I'm sorry. I didn't mean it. I'll do my best to like her. Please stop crying… 
-Okay… Promise you'll try! 
+OK… Promise you'll try! 
 But before I forget. Mr. Yoneda said you should help out in the administration office. 
 Gotta go! See you later! 
 …… 
@@ -476,7 +476,7 @@ Yes… I heard you…
 Gotta go! See you later! 
 … I guess I DID promise to help… I better go the administration office, then. 
 Ah, Ogami. 
-Okay, I'm here, what do you want me to do? 
+OK, I'm here, what do you want me to do? 
 You see those files? They need sorting. 
 Got it. Leave it to me. 
 Phew! This is such a relief. Now I can go home without having to worry. 

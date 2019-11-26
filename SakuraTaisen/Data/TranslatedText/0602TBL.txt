@@ -1,7 +1,7 @@
 ﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
 It's a photo of Maria. …She's lost in thought and looks kind of sad…
-A photo of Kanna. She looks strong and reliable. I can't wait to meet her.
+A photo of Kanna. Her signature strength comes through clearly.
 A photo of Iris. She's surrounded by flowers and flashing a radiant smile.
 A photo of Kohran. She's looking pretty in profile with her face dyed red by the evening sun.
 A letter given to me by a customer. I was asked to give it to Sumire. I have a bad feeling about this…
@@ -199,12 +199,12 @@ Be my partner for a day. <br> That's my job! <br> …it's no walk in the park.
 Sure, you can be my partner for a day. 
 Really? Alright! It's a promise, Mon Frère! 
 But won't they need you up on stage while I'm working? 
-That's okay. I can teleport! 
+That's OK. I can teleport! 
 Hey now, don't go doing that while you're on stage please… 
-Okay! Don't forget, Mon Frère! You promised! 
+OK! Don't forget, Mon Frère! You promised! 
 Heck no. That's my job! 
 Awww! You're no fun!! 
-Woah! Are you finally taking this ticket-punching thing seriously, Chief? 
+Whoa! Are you finally taking this ticket-punching thing seriously, Chief? 
 After all that complaining, it seems these are your true colors? 
 Oh, no… I just… kinda got caught up in the moment… 
 Hey, nothing to be ashamed of sir! You gotta take pride in your job, no matter what it is. 
@@ -220,7 +220,7 @@ Not good! The light's gone out in Chief’s eyes!
 It seems things have been more difficult for you than I would have imagined, Ensign. 
 Oh come on, it's not that bad. Suck it up, boss! 
 …anyway, ticket-punching isn't something you want to do for fun. 
-Okay, Mon Frère… please stop… 
+OK, Mon Frère… please stop… 
 …… 
 Hey Chief, how come you went all quiet? 
 Did I say something weird? 
@@ -280,7 +280,7 @@ We all need to relax, every once in a while, sir.
 But everyone is still underage, so no alcohol. I'm especially looking at you, Sumire. 
 What? But what's the point of a party with no alcohol? 
 Hey, I'm fine as long as I can eat my fill of tasty food. You gotta come party with us, Boss. 
-Thanks. Okay, I'll be happy to join you all! 
+Thanks. OK, I'll be happy to join you all! 
 Alright! Looks like we're all on board, so let's start getting ready! 
 Unused
 Unused

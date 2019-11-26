@@ -1,7 +1,7 @@
 ﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
 It's a photo of Maria. …She's lost in thought and looks kind of sad…
-A photo of Kanna. She looks strong and reliable. I can't wait to meet her.
+A photo of Kanna. Her signature strength comes through clearly.
 A photo of Iris. She's surrounded by flowers and flashing a radiant smile.
 A photo of Kohran. She's looking pretty in profile with her face dyed red by the evening sun.
 A letter given to me by a customer. I was asked to give it to Sumire. I have a bad feeling about this…
@@ -161,12 +161,12 @@ Thanks, Sakura…
 Haha! You're the one thanking me? You're so weird. 
 Hahaha! 
 Hahaha! 
-Are your injuries… okay? 
+Are your injuries… OK? 
 Yes. Ayame says that at this rate they will heal without any scars. 
 I see. That's great. 
 They are already mostly healed. After tomorrow, I'll even be able to return to the stage. 
 Hey, hey, don't push yourself too hard. 
-Haha… Okay. 
+Haha… OK. 
 Well, Maria's mad at me. 
 Huh? Why is she angry at you? 
 She told me I was “unfit to be captain.” She doesn't mince words. 
@@ -198,8 +198,8 @@ It's gotten late.
 All right. Somehow, I will find Maria tonight and have a good talk with her. 
 …… 
 Oh, Ogami! 
-Well, take care. Sumire, keep an eye on her, okay? 
-Oh, okay… Thank you, Maria. 
+Well, take care. Sumire, keep an eye on her, OK? 
+Oh, OK… Thank you, Maria. 
 I'm here for her. She'll be fine. 
 Right… take care. 
 Was Maria here? 
@@ -214,11 +214,11 @@ Ha, haha… ha…
 Oh, Sumire. Please take care of… what we talked about. 
 Oh, that's right! I almost forgot. 
 I'll tell Kohran that you're on board. 
-No matter what you do, please make sure that Iris doesn't find out, okay? 
+No matter what you do, please make sure that Iris doesn't find out, OK? 
 Don't worry. Since it's me, there won't be any problems. 
 …? What are you talking about? 
 It's a S-E-C-R-E-T. So, if you have no business here, go somewhere else! 
-Okay. Well then, take care, Sakura. 
+OK. Well then, take care, Sakura. 
 Thank you, Ogami. 
 Sakura? 
 Oh, Ogami? I'm getting changed. Don't come in! 
@@ -248,7 +248,7 @@ Oh…
 Iris, Sakura will upset her stomach. 
 But I tried so hard at making it… 
 Nnn…*sniffle*… 
-I-Iris, I'll eat it, okay? 
+I-Iris, I'll eat it, OK? 
 No, you can't! Maybe if you were healthy, but in your condition you shouldn't push yourself… 
 Mon Frère, you're so mean! I worked so hard and everything… 
 Oh, wait! Iris! 
@@ -363,7 +363,7 @@ Don't let things that have already happened bother you, Captain. Try not to worr
 From where I'm standing, she's not such a fragile girl. 
 You think so? 
 Sure! Just trust me! 
-Okay? 
+OK? 
 (I wonder if that was supposed to be a wink.) 
 Hmm, that's a tough one. Maria has always been stubborn. 
 …? 
@@ -448,7 +448,7 @@ Didja happen to… make a… new airplane?
 Huh? Why… is Chief… in the airplane? 
 …Eh?! Chief?! 
 C-Chief, it's you! Sorry 'bout that! I wasn't fully awake! 
-Hey, it's okay. More importantly, you'll catch a cold sleeping out here. 
+Hey, it's OK. More importantly, you'll catch a cold sleeping out here. 
 So sorry! Thanks a bundle for waking me up; you're a lifesaver! 
 Welp, I'm gonna head back to my room and get to bed for real. See ya later, Chief. 
 …Well, I'd better get going too. I need to find Maria and speak with her. 
@@ -462,7 +462,7 @@ She may be a member of the Flower Division, riding a Koubu into battle…
 …but she's still just an ordinary girl. 
 Right then… where should I take her? 
 Take Kohran to her room. <br> Take her to my room. 
-Okay, let's get Kohran to her room. It's pretty close by. 
+OK, let's get Kohran to her room. It's pretty close by. 
 Kohran. We're at your room. Hey, Kohran, wake up. 
 Uhnn… mm… 
 Agh, Chief?! W-why am I here? 
@@ -527,7 +527,7 @@ Say, Sumire. Since I'm rubbing your shoulders, would you mind if I asked you som
 …Oh my. Ah - a little to the right…Well, what would you like to ask? 
 Have you seen Maria? I've been searching for her. 
 Maria, you say? Very well, give me another 100 rubs and I shall answer you. 
-S-seriously? Well, okay then. I'll give this massage my all! 
+S-seriously? Well, OK then. I'll give this massage my all! 
 Ahh… just like that, Ensign… how… wonderful… 
 Thank you so very much, Ensign. I shall sleep quite well thanks to this. 
 I will take my leave of you. Please excuse me. 

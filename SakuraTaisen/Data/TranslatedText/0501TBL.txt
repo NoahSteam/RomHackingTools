@@ -1,7 +1,7 @@
 ﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
 It's a photo of Maria. …She's lost in thought and looks kind of sad…
-A photo of Kanna. She looks strong and reliable. I can't wait to meet her.
+A photo of Kanna. Her signature strength comes through clearly.
 A photo of Iris. She's surrounded by flowers and flashing a radiant smile.
 A photo of Kohran. She's looking pretty in profile with her face dyed red by the evening sun.
 A letter given to me by a customer. I was asked to give it to Sumire. I have a bad feeling about this…
@@ -104,7 +104,7 @@ These photos are mainly for guests, so please just take one.
 Oh, I guess that's true. I'll come again some other time. 
 You'd like to buy this photo? Thank you! 
 That's a photo of Sakura. That'll be 50 zeni. 
-We need to leave some for the guests, so just take one for now, okay? 
+We need to leave some for the guests, so just take one for now, OK? 
 Ogami, I appreciate your interest, but… 
 These photos are mainly for guests, so please just take one. 
 Oh, I guess that's true. I'll come again some other time. 
@@ -112,7 +112,7 @@ You'd like to buy that? Thank you!
 Sakura's popularity is booming right now. People find her really relatable. 
 You'd like to buy this photo? Thank you! 
 That's a photo of Sumire. That'll be 50 zeni. 
-We need to leave some for the guests, so just take one for now, okay? 
+We need to leave some for the guests, so just take one for now, OK? 
 Ogami, I appreciate your interest, but… 
 These photos are mainly for guests, so please just take one. 
 Oh, I guess that's true. I'll come again some other time. 
@@ -120,7 +120,7 @@ You'd like to buy that? Thank you!
 Most of Sumire's fans are young rich guys, judging by their appearances. 
 You'd like to buy this photo? Thank you! 
 That's a photo of Maria. That'll be 50 zeni. 
-We need to leave some for the guests, so just take one for now, okay? 
+We need to leave some for the guests, so just take one for now, OK? 
 Ogami, I appreciate your interest, but… 
 These photos are mainly for guests, so please just take one. 
 Oh, I guess that's true. I'll come again some other time. 
@@ -129,7 +129,7 @@ Let's see, our top seller these days is… Maria's photo, I think?
 She's very popular among young ladies and students. 
 You'd like to buy this photo? Thank you! 
 That's a photo of Kanna. That'll be 50 zeni. 
-We need to leave some for the guests, so just take one for now, okay? 
+We need to leave some for the guests, so just take one for now, OK? 
 Ogami, I appreciate your interest, but… 
 These photos are mainly for guests, so please just take one. 
 Oh, I guess that's true. I'll come again some other time. 
@@ -137,7 +137,7 @@ You'd like to buy that? Thank you!
 Most of Kanna's photos go to kids who beg their parents to buy it for them. 
 You'd like to buy this photo? Thank you! 
 That's a photo of Iris. That'll be 50 zeni. 
-We need to leave some for the guests, so just take one for now, okay? 
+We need to leave some for the guests, so just take one for now, OK? 
 Ogami, I appreciate your interest, but… 
 These photos are mainly for guests, so please just take one. 
 Oh, I guess that's true. I'll come again some other time. 
@@ -146,7 +146,7 @@ Most of the guys buying Iris's photo are older gentlemen.
 They always glance around nervously when they buy it. I wonder if they're worried what people will think? 
 You'd like to buy this photo? Thank you! 
 That's a photo of Kohran. That'll be 50 zeni. 
-We need to leave some for the guests, so just take one for now, okay? 
+We need to leave some for the guests, so just take one for now, OK? 
 Ogami, I appreciate your interest, but… 
 These photos are mainly for guests, so please just take one. 
 Oh, I guess that's true. I'll come again some other time. 
@@ -164,14 +164,14 @@ I say it every time but… Sumire sure does steal the show.
 Kanna is a perfect fit for Son Goku, and Sumire's great as that demoness… 
 Totally, but I bet Sumire’ll start yelling 'Why am I always the villain!?' afterward! 
 Haha, I bet you're right. 
-Woah… now they've done it! 
+Whoa… now they've done it! 
 Uh-oh… 
 …good grief, you two, you really wrecked the place, didn't you? 
 …… 
 …… 
 Oh, Ogami… those two have been like that ever since the performance ended… 
 They look like the tiniest little thing could set them off! You have to do something about this! 
-(Woah… look at the state she's in… were they actually beating each other up?) 
+(Whoa… look at the state she's in… were they actually beating each other up?) 
 (Judging from their clothes… this was no ordinary argument.) 
 (Jeez, look at that nasty shiner… just how bad was this fight?) 
 (I can't believe Sumire managed to survive a fight against Kanna.) 
@@ -182,7 +182,7 @@ Oh, uh… I was just wondering… if you're injured, is all…
 I'm JUST fine, thank you VERY much! 
 (Jeez, her clothes are all messed up.) 
 (What the heck kind of fight was it, for Kanna's clothes to be this bad?) 
-(Woah… her face is pretty scary right now.) 
+(Whoa… her face is pretty scary right now.) 
 (It'll be hard making peace when these two are so stubborn in their own ways…) 
 (…of course, nothing has changed that awesome rack of hers…) 
 Captain! What the hell do you think you're staring at? 
@@ -250,7 +250,7 @@ Oh, yes, you're correct. Commander Yoneda has summoned us all.
 He did? 
 What's up? 
 I'm afraid I don't know, he didn't tell me. For now, we should assemble in the War Room in the basement! 
-Okay! 
+OK! 
 …I'm gonna run to my room and change first. 
 As am I… though I think that torn, dirty look suits you. 
 'the hell did you just say!? 
@@ -278,7 +278,7 @@ Well… the truth is, I was worried about you.
 What? You were? 
 Well, having a fight right after what happened during the performance… I just figured you might be feeling down. 
 That's why you came? 
-Yeah… are you okay? 
+Yeah… are you OK? 
 Yeah, I'm fine. But… I'm kinda happy you were worried about me. 
 Of course I was. Oh… that reminds me… 
 No, nothing in particular. 
@@ -314,12 +314,12 @@ Right, I'll be right behind you. See you there.
 What're you trailing off for! That just makes me suspicious. 
 No, it's nothing. 
 Hmmm, really? Well, I'm going to head to the meeting. See you there. 
-Okay… I'd better head to the meeting too. 
+OK… I'd better head to the meeting too. 
 …captain, I'm glad you're worried about me, but… 
 I'd just like to be alone for now… 
 But… 
 I'll head to the meeting soon. Don't worry. 
-…okay. I understand. 
+…OK. I understand. 
 …right. See you there. 
 Well… how about we go together? 
 Are you done getting ready? 
@@ -385,7 +385,7 @@ Ensign! It's quite alarming if you trail off like that.
 If you have something you'd like to say, say it clearly! 
 No, it's nothing. 
 …oh? Well then you'll have to excuse me, I'm going to head for the meeting. 
-Okay… I'd better head to the meeting too. 
+OK… I'd better head to the meeting too. 
 …I'm flattered that you're worried for me, but… 
 Please could you leave me alone, for a while longer? 
 But… 
@@ -479,7 +479,7 @@ Kanna's super popular among the kids.
 Ogami, you can't make Iris cry anymore! 
 Looks like you're as up-to-date on gossip as ever. 
 Oh I know everything, for example, the other day you… 
-Uh, that's okay, I'd rather not hear, thanks… 
+Uh, that's OK, I'd rather not hear, thanks… 
 Oh, Mr. Ogami, hello. 
 Looks like Kanna and Sumire are still co-starring again this month. 
 Didn't those two have some kind of argument on stage? 

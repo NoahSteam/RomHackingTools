@@ -1,7 +1,7 @@
 ﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
 It's a photo of Sumire. This is a side of her you don't see too often. 
 It's a photo of Maria. …She's lost in thought and looks kind of sad… 
-It's a photo of Kanna. Kanna's signature strength comes through clearly. 
+It's a photo of Kanna. Her signature strength comes through clearly.
 It's a photo of Iris. She's surrounded by flowers and flashing a radiant smile. 
 It's a photo of Kohran. She's looking pretty in profile with her face dyed red by the evening sun. 
 A letter given to me by a customer. I was asked to give it to Sumire. I have a bad feeling about this… 
@@ -85,7 +85,7 @@ Well, I suppose we should count it a blessing that Iris is heading for Asakusa, 
 This way, we can secure Iris and take down the Hive of Darkness simultaneously. 
 Alright. Head for Asakusa immediately! I'm counting on you, Ogami! 
 Yes, sir! 
-(Okay… let's move…) 
+(OK… let's move…) 
 …wait a moment, Ogami. 
 Ma'am…? 
 Ogami… I trust you understand why Iris ran away. 

@@ -1,7 +1,7 @@
 ﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
 It's a photo of Maria. …She's lost in thought and looks kind of sad…
-A photo of Kanna. She looks strong and reliable. I can't wait to meet her.
+A photo of Kanna. Her signature strength comes through clearly.
 A photo of Iris. She's surrounded by flowers and flashing a radiant smile.
 A photo of Kohran. She's looking pretty in profile with her face dyed red by the evening sun.
 A letter given to me by a customer. I was asked to give it to Sumire. I have a bad feeling about this…
@@ -146,7 +146,7 @@ Huh? Mon Frère?
 Hmhmhm, excellent. I see it's working beautifully. Your wounds will seal themselves up in no time at all. 
 Of course, the tradeoff is that it'll knock you out like a light. 
 Now, just clear your mind and drift off to dreamland. You did great, Chief… 
-Okay everyone, let's give him about half a day to sleep it off. 
+OK everyone, let's give him about half a day to sleep it off. 
 Awww, but whyyy?! 
 C'mon Iris, you gotta be quiet now. 
 But that's no fun! 
@@ -206,7 +206,7 @@ I came to check up on ya cause I was worried…
 Welp, I'm gonna head back. Take care, Chief! 
 While I was out…I had a dream about you, Kohran. 
 Eh? About ME?! 
-Aww geez…how embarrassing. What kinda dream? 
+Aww jeez…how embarrassing. What kinda dream? 
 I dreamed…I was about to undergo an operation where you would remodel me. 
 What the heck!? …Is that the only kind of your dreams I show up in? 
 Ahahaha! That's hilarious! 
@@ -241,12 +241,12 @@ I was so worried…
 …Thank you. That makes me happy, Iris. 
 Hee hee! It really is you, Mon Frère! 
 I don't know what I would've done if you had been a different person after you woke up! 
-Okay, I'm gonna go back to my room now. Goodnight, Mon Frère. 
+OK, I'm gonna go back to my room now. Goodnight, Mon Frère. 
 Iris… I'm sorry I worried you. 
-It's okay! As long as you get better, I'll be happy! 
+It's OK! As long as you get better, I'll be happy! 
 Once you get better, you have to play with me again! 
 Of course. 
-Okay, I'm gonna go back to my room now. Goodnight, Mon Frère. 
+OK, I'm gonna go back to my room now. Goodnight, Mon Frère. 
 It was a nice break. I just got to sleep the whole time. 
 …… 
 Mon Frère, you…meanie! 
@@ -255,7 +255,7 @@ I… I was so, SO worried about you!
 But you don't even care… you're awful! I HATE you, Mon Frère! 
 Iris… you were worried about me? I feel awful… 
 Mon Frère… are you feeling sick? 
-Rest up and get better, okay? 
+Rest up and get better, OK? 
 Goodnight, Mon Frère. 
 How are you feeling, Ogami? 
 Sakura… 
@@ -519,7 +519,7 @@ Didja happen to… make a… new airplane?
 …Airplane? Kohran… still half-asleep, I see. 
 …Eh?! Chief?! 
 C-Chief, it's you! Sorry 'bout that! I wasn't fully awake! 
-Hey, it's okay. More importantly, you'll catch a cold sleeping out here. 
+Hey, it's OK. More importantly, you'll catch a cold sleeping out here. 
 So sorry! Thanks a bundle for waking me up; you're a lifesaver! 
 Welp, I'm gonna head back to my room and get to bed for real. See ya later, Chief. 
 …Well, I'd better get going too. I need to find Maria and speak with her. 
@@ -533,7 +533,7 @@ She may be a member of the Flower Division, riding the Koubu into battle…
 …but she's still just an ordinary girl. 
 Right then… where should I take her? 
 Take Kohran to her room. <br> Take her to my room. 
-Okay, let's get Kohran to her room. It's pretty close by. 
+OK, let's get Kohran to her room. It's pretty close by. 
 Kohran. We're at your room. Hey, Kohran, wake up. 
 Uhnn… mm… 
 Agh, Chief?! W-why am I here? 
@@ -598,7 +598,7 @@ Say, Sumire. Since I'm rubbing your shoulders, would you mind if I asked you som
 …Oh my. Ah - a little to the right… Well, what would you like to ask? 
 Have you seen Maria? I've been searching for her. 
 Maria, you say? Very well, give me another 100 rubs and I shall answer you. 
-S-seriously? Well, okay then. I'll give this massage my all! 
+S-seriously? Well, OK then. I'll give this massage my all! 
 Ahh… just like that, Ensign… how… wonderful… 
 Thank you so very much, Ensign. I shall sleep quite well thanks to this. 
 I will take my leave of you. Please excuse me. 

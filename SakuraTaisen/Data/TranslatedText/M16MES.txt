@@ -131,7 +131,7 @@ Ogami, you simpleton! What kind of a trap is that?!
 Sir… Did you really think that would hold back the Kouma?
 No… I just…
 The inner wall has been breached!
-Damn it! Okay, then leave the ones inside to us!
+Damn it! OK, then leave the ones inside to us!
 We can't use the same trap again! Don't let them get in by any means!
 The hell are you doing?! Not even Iris would fall for that!
 Sorry. I got inspired by the last show…
@@ -167,7 +167,7 @@ You idiot! The Kouma managed to get in!
 Aaaaaaaaaaaaaaaaah!
 Oh no! We should have set a trap…!
 That was a formidable foe… But we'll beat them, I'm sure of it!
-Okay, everyone! Let's do our thing!
+OK, everyone! Let's do our thing!
 Listen! You can't let any enemies into the theater!
 When you go to destroy the devices, leave someone to protect the theater. If they get in, we're done for. 
 Deer moves twice. Use everyone to surround him and finish him off.
@@ -232,5 +232,5 @@ Sorry, we should prioritize taking down the enemy.
 Sorry. Let's talk after we've defeated the enemy.
 Sorry. It was careless of me to bring that up during a battle.
 I shouldn't have asked right in the middle of fightin'. Sorry, Chief.
-Okay… I'll ask you again after we've wiped them out.
+OK… I'll ask you again after we've wiped them out.
 Don't want to talk to me? You're so mean, Mon Frère!

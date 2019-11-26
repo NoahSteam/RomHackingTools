@@ -1,7 +1,7 @@
 ﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
 It's a photo of Sumire. This is a side of her you don't see too often. 
 It's a photo of Maria. …She's lost in thought and looks kind of sad… 
-It's a photo of Kanna. Kanna's signature strength comes through clearly. 
+It's a photo of Kanna. Her signature strength comes through clearly. 
 It's a photo of Iris. She's surrounded by flowers and flashing a radiant smile. 
 It's a photo of Kohran. She's looking pretty in profile with her face dyed red by the evening sun. 
 A letter given to me by a patron. I was asked to give it to Sumire. I have a bad feeling about this… 
@@ -97,7 +97,7 @@ Maria…
 Maybe I can't do much… but… 
 Maria… 
 You're… a strong person. 
-No… It's okay. 
+No… It's OK. 
 That's good… 
 …What's the matter, Maria? 
 Sumire… 
@@ -152,7 +152,7 @@ Huh…?
 Iris… 
 Iris…! 
 … 
-It's fine… It's okay. 
+It's fine… It's OK. 
 No one here would ever think of leaving you alone. Don't worry. We're all in this together. 
 I'll be by your side. Always. So stop worrying and sleep well… 
 I'm here for you, Iris. I'll always watch over you. 
@@ -241,7 +241,7 @@ Kohran Li has started in the Ginza HQ. Seems enthusiastic about her work.
 Yoneda gave orders to ready the Soaring Whale. Will head to the Flower Mansion by Thunderstrike. 
 May 13th, fair weather. 
 Met Ichiro Ogami last night. He was how I imagined him, more or less. Hope he meets our expectations. 
-Contact-free piloting system is ready. Iris' Kobu will be ready soon. 
+Contact-free piloting system is ready. Iris' Koubu will be ready soon. 
 Maiden voyage of the Soaring Whale. Damages to mansion from scrambling impossible to predict. 
 June 9th, rain. 
 Lt. Ogami wounded in battle of Hex Mech, but nothing serious. Kanna Kirishima back from Okinawa. 
@@ -383,7 +383,7 @@ She doesn't seem to be here. Must have gone someplace else.
 Who is it…? 
 Sakura… It's me, Ogami… 
 Ogami… Could you leave me alone for a while? 
-…Okay, I'll do that. 
+…OK, I'll do that. 
 Let's try some other place… 
 Let's leave her for now. 
 I wonder how Kanna is doing. 
@@ -392,7 +392,7 @@ She doesn't seem to be here. Where would she be? The canteen, maybe?
 Who is it…? 
 Kanna… It's me, Ogami… 
 Boss? I'm sorry, but I don't feel like talking right now. 
-…Okay, got it. 
+…OK, got it. 
 Let's try some other place… 
 But… I guess she just needs her space right now. 
 I wonder how Kohran is doing… 
@@ -586,7 +586,7 @@ This is exactly what Satan wanted, isn't it? We should know better than this.
 Unused
 Ogami… You liked Ayame, right? 
 But… It didn't look like that to me. 
-As for me… I liked her a lot. I always strove to become a person just like her. 
+As for me… I liked her a lot. I always strived to become a person just like her. 
 Unused
 Sorry… I'm sure I don't make sense… 
 Unused

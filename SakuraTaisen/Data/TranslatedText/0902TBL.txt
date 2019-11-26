@@ -1,7 +1,7 @@
-﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
+﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
 It's a photo of Sumire. This is a side of her you don't see too often. 
 It's a photo of Maria. …She's lost in thought and looks kind of sad… 
-It's a photo of Kanna. Kanna's signature strength comes through clearly. 
+It's a photo of Kanna. Her signature strength comes through clearly. 
 It's a photo of Iris. She's surrounded by flowers and flashing a radiant smile. 
 It's a photo of Kohran. She's looking pretty in profile with her face dyed red by the evening sun. 
 A letter given to me by a patron. I was asked to give it to Sumire. I have a bad feeling about this… 
@@ -516,7 +516,7 @@ Hm? Oh, Ayame!
 …… 
 Wh-what's the matter? 
 Uh… *sniff* Uh! 
-Ayame! What happened? Are you okay? 
+Ayame! What happened? Are you OK? 
 Uh… Uhhh… 
 What… What happened? …Whoa! 
 Whoa! …U-ugh! 
@@ -617,7 +617,7 @@ Everything all right, Chief?
 I'm fine, don't worry! But you must give the dispatch order! Go! …I'll follow right behind you. 
 B-but…! 
 Please, just go! I'll explain later! 
-Okay, Chief! 
+OK, Chief! 
 Please don't take too long! 
 Yes, I'll be right behind you… 
 (Ayame… The underground storage room? But… why?) 
@@ -629,7 +629,7 @@ Are you OK, Mon Frère?
 I'm fine, don't worry! But you must give the dispatch order! Go! …I'll follow right behind you. 
 B-but…! 
 Please, just go! I'll explain later! 
-O-okay! 
+O-OK! 
 Please hurry, Mon Frère! 
 Yes, I'll be right behind you… 
 (Ayame… The underground storage room? But… why?) 
@@ -677,7 +677,7 @@ Oh! The enemy!…
 Chief… 
 Ayame! 
 O-Ogami… I'm… sorry… I… 
-Ayame… What on earth happened? Are you okay? 
+Ayame… What on earth happened? Are you OK? 
 I'm sorry, Ogami… But now, please… the enemy! 
 B-but… 
 Please, Ogami… Right now… I… 

@@ -1,4 +1,4 @@
-﻿﻿The Imperial Assault Troupe has arrived! 
+﻿﻿﻿The Imperial Assault Troupe has arrived! 
 Captain! There are more enemies coming in from our flank! We should divide our forces!! 
 Roger! 
 Roger! 
@@ -8,7 +8,7 @@ Raahhhh!! Come get some!!
 C'mon, let's have ourselves a party! 
 I'm gonna beat you all! 
 Whoever wants to die first, step forward! 
-Okay! three of you follow me and we'll break through the front! The other three stay and guard our flank! 
+OK! Three of you follow me and we'll break through the front! The other three stay and guard our flank! 
 Ogami! I'll go with you! 
 Got it! You're with me, Sakura! 
 Ogami… 
@@ -58,7 +58,7 @@ Alright, let's do it, Iris!
 Yeah! If you're with me I won't be scared! Not one bit! 
 … 
 Iris, I need you to stay here. The fight ahead is too dangerous for you. Please leave it to me. 
-Oh… okay. 
+Oh… OK. 
 … 
 I know you're worried about me… 
 So I'll be good and wait here for you. But you have to win, Mon Frère! 
@@ -90,5 +90,5 @@ Fight by my side. <br> You need to stay here.
 Of course. <br> Sumire, you need to stay here. 
 I'll feel better with you. <br> I need to stop their advance. 
 Alright, let's go, Maria. <br> I need you to stay here. 
-Okay, let's go, Iris! <br> I need you to stay here. 
-Sounds good to me. Let's go! <br> No, I need you to stay here, Kanna. 
+OK, let's go, Iris! <br> I need you to stay here. 
+Sounds good to me. Let's go! <br> I need you to stay here. 
