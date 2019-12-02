@@ -1529,7 +1529,6 @@ void ExtractStatusScreen(const string& rootSakuraDirectory, const string& transl
 		}
 
 		//Create font sheet
-		const int numBytesPerCharacter = 16 * 16 / 2;
 		SakuraFontSheet sakuraFontSheet;
 		PRSDecompressor decompressor;
 		decompressor.UncompressData((void*)(icatallFileData.GetData() + 0x00013800), (icatallFileData.GetDataSize() - 0x00013800));
@@ -8125,6 +8124,47 @@ bool PatchMainMenu(const string& inPatchedSakuraRootDirectory, const string& inT
 	return true;
 }
 
+void ExtractLoadScreen(const string& inRootSakuraDirectory, const string& inTranslatedDataDirectory, const string& inOutputDirectory)
+{
+	CreateDirectoryHelper(inOutputDirectory);
+
+	const string sakuraFilePath = inRootSakuraDirectory + "SAKURA";
+	FileData sakuraFileData;
+	if( !sakuraFileData.InitializeFileData( FileNameContainer(sakuraFilePath.c_str()) ) )
+	{
+		return;
+	}
+
+	{
+		//Create font sheet
+		SakuraFontSheet sakuraFontSheet;
+		PRSDecompressor decompressor;
+		decompressor.UncompressData((void*)(sakuraFileData.GetData() + 0x0005c654), (sakuraFileData.GetDataSize() - 0x0005c654));
+
+		if( !sakuraFontSheet.CreateFontSheetFromData(decompressor.mpUncompressedData, decompressor.mUncompressedDataSize) )
+		{
+			printf("Unable to create font sheet.\n");
+			return;
+		}
+
+		const string fontFilePath = inTranslatedDataDirectory + "Palette.bin";
+		FileData fontFile;
+		if( !fontFile.InitializeFileData(FileNameContainer(fontFilePath.c_str()) ) )
+		{
+			return;
+		}
+
+		PaletteData fontPaletteData;
+		fontPaletteData.CreateFrom15BitData(fontFile.GetData(), fontFile.GetDataSize());
+
+		MiniGameSakuraText sakuraText;
+		sakuraText.ReadInStrings(sakuraFileData.GetData(), 0x0005a0a6, 128);
+		sakuraText.DumpTextImages(sakuraFontSheet, fontPaletteData, inOutputDirectory);
+	}
+
+	printf("LoadScreen Extracted\n");
+}
+
 bool FixupSLG(const string& rootDir, const string& outDir, const string& inTranslatedDirectory, const string& newFontPaletteFile, const string& inTempDir)
 {
 	//We need the palette from the patched stats menu image
@@ -10930,6 +10970,14 @@ int main(int argc, char *argv[])
 		const string outDir            = string(argv[4]) + Seperators;
 
 		ExtractStatusScreen(rootSakuraDir, translatedDataDir, outDir);
+	}
+	else if( command == "ExtractLoadScreen" && argc == 5 )
+	{
+		const string rootSakuraDir     = string(argv[2]) + Seperators;
+		const string translatedDataDir = string(argv[3]) + Seperators;
+		const string outDir            = string(argv[4]) + Seperators;
+
+		ExtractLoadScreen(rootSakuraDir, translatedDataDir, outDir);
 	}
 	else
 	{
