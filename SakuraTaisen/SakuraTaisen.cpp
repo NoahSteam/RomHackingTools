@@ -9498,6 +9498,159 @@ bool PatchMiniGames(const string& rootSakuraDirectory, const string& patchedSaku
 	return bResult;
 }
 
+bool PatchLoadScreen(const string& patchedSakuraDirectory, const string& inTranslatedDataDirectory)
+{
+	const string sakuraFilePath = patchedSakuraDirectory + Seperators + "SAKURA";
+	FileData sakuraFileData;
+	if( !sakuraFileData.InitializeFileData( FileNameContainer(sakuraFilePath.c_str())) )
+	{
+		return false;
+	}
+
+	FileReadWriter sakuraFile;
+	if( !sakuraFile.OpenFile(sakuraFilePath ) )
+	{
+		return false;
+	}
+
+	//Patch font sheet
+	{
+		//Open translated fontsheet
+		const string fontSheetFileName = inTranslatedDataDirectory + "\\LoadSaveScreen.bmp";
+		BmpToSakuraConverter patchedFontSheet;
+		const unsigned int tileDim = 16;
+		if( !patchedFontSheet.ConvertBmpToSakuraFormat(fontSheetFileName, false, 0, &tileDim, &tileDim) )
+		{
+			printf("PatchStatusScreen: Couldn't convert image: %s.\n", fontSheetFileName.c_str());
+			return false;
+		}
+
+		patchedFontSheet.PackTiles();
+
+		SakuraCompressedData fontSheetCompressedData;
+		fontSheetCompressedData.PatchDataInMemory(patchedFontSheet.mpPackedTiles, patchedFontSheet.mPackedTileSize, true, false, 6970);
+		if( fontSheetCompressedData.mDataSize > 6970 )
+		{
+			printf("Compressed LoadSaveScreen font sheet is too big");
+			return false;
+		}
+
+		//Patch fontsheet
+		const unsigned int fontSheetAddress = GIsDisc2 ? 0x0005c78c : 0x0005c654;
+		sakuraFile.WriteData(fontSheetAddress, fontSheetCompressedData.mpCompressedData, fontSheetCompressedData.mDataSize);
+	}
+
+	//Patch lookup table
+	{
+		MiniGameTextIndiceFinder indiceFinder;
+		const unsigned int indiceOffset = GIsDisc2 ? 0x0005a1de : 0x0005a0a6;
+		indiceFinder.FindIndices(sakuraFileData.GetData(), indiceOffset, 128);
+		if( indiceFinder.indiceAddresses.size() != 70 )
+		{
+			printf("PatchLoadScreen: Couldn't find text indices for tutorial\n");
+			return false;
+		}
+		short textIndices1[] = {14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 0};
+		short textIndices2[] = {3, 4, 5, 6, 7, 8, 0};
+		short textIndices3[] = {9, 10, 11, 0};
+		short textIndices4[] = {12, 13, 14, 15, 16, 17, 0};
+		short textIndices5[] = {18, 19, 20, 21, 22, 0};
+		short textIndices6[] = {23, 24, 25, 0};
+		short textIndices7[] = {26, 27, 28, 29, 0};
+		short textIndices8[] = {30, 31, 32, 0};
+		short textIndices9[] = {33, 34, 35, 36, 0};
+		short textIndices10[] = {37, 38, 39, 40, 41, 0};
+		short textIndices11[] = {42, 43, 44, 0};
+		short textIndices12[] = {45, 46, 47, 0};
+		short textIndices13[] = {48, 49, 50, 51, 52, 0};
+		short textIndices14[] = {53, 54, 55, 56, 57, 0};
+		short textIndices15[] = {58, 59, 60, 61, 0};
+		short textIndices16[] = {62, 63, 0};
+		short textIndices17[] = {64, 65, 0};
+		short textIndices18[] = {66, 67, 68, 69, 0};
+		short textIndices19[] = {70, 71, 72, 0};
+		short textIndices20[] = {73, 74, 75, 0};
+		short textIndices21[] = {76, 77, 78, 79, 0};
+		short textIndices22[] = {80, 81, 82, 0};
+		short textIndices23[] = {83, 84, 85, 86, 0};
+		short textIndices24[] = {87, 88, 89, 0};
+		short textIndices25[] = {90, 91, 92, 93, 94, 0};
+		short textIndices26[] = {95, 96, 97, 0};
+		short textIndices27[] = {98, 99, 100, 0};
+		short textIndices28[] = {101, 102, 103, 0};
+		short textIndices29[] = {104, 105, 106, 107, 0};
+		short textIndices30[] = {108, 109, 0};
+		short textIndices31[] = {110, 111, 0};
+		short textIndices32[] = {112, 113, 114, 115, 0};
+		short textIndices33[] = {116, 117, 118, 0};
+		short textIndices34[] = {119, 120, 121, 122, 0};
+		short textIndices35[] = {123, 124, 125, 0};
+		short textIndices36[] = {126, 127, 0};
+		short textIndices37[] = {128, 129, 130, 131, 0};
+		short textIndices38[] = {132, 133, 0};
+		short textIndices39[] = {134, 135, 136, 0};
+		short textIndices40[] = {137, 138, 139, 140, 141, 0};
+		short textIndices41[] = {142, 143, 144, 145, 146, 0};
+		short textIndices42[] = {147, 148, 149, 0};
+		short textIndices43[] = {150, 151, 152, 153, 0};
+		short textIndices44[] = {154, 155, 156, 157, 158, 159, 0};
+
+	#define PatchLoadScreenIndices(indice) SwapEndiannessForArrayOfShorts(indice, sizeof(indice));\
+									if( !indiceFinder.ValidateNewIndices(indiceNumber, sizeof(indice)) ) return false;\
+									sakuraFile.WriteData(indiceFinder.indiceAddresses[indiceNumber], (char*)indice, sizeof(indice));\
+									++indiceNumber;
+
+		int indiceNumber = 0;
+		PatchLoadScreenIndices(textIndices1);
+		PatchLoadScreenIndices(textIndices2);
+		PatchLoadScreenIndices(textIndices3);
+		PatchLoadScreenIndices(textIndices4);
+		PatchLoadScreenIndices(textIndices5);
+		PatchLoadScreenIndices(textIndices6);
+		PatchLoadScreenIndices(textIndices7);
+		PatchLoadScreenIndices(textIndices8);
+		PatchLoadScreenIndices(textIndices9);
+		PatchLoadScreenIndices(textIndices10);
+		PatchLoadScreenIndices(textIndices11);
+		PatchLoadScreenIndices(textIndices12);
+		PatchLoadScreenIndices(textIndices13);
+		PatchLoadScreenIndices(textIndices14);
+		PatchLoadScreenIndices(textIndices15);
+		PatchLoadScreenIndices(textIndices16);
+		PatchLoadScreenIndices(textIndices17);
+		PatchLoadScreenIndices(textIndices18);
+		PatchLoadScreenIndices(textIndices19);
+		PatchLoadScreenIndices(textIndices20);
+		PatchLoadScreenIndices(textIndices21);
+		PatchLoadScreenIndices(textIndices22);
+		PatchLoadScreenIndices(textIndices23);
+		PatchLoadScreenIndices(textIndices24);
+		PatchLoadScreenIndices(textIndices25);
+		PatchLoadScreenIndices(textIndices26);
+		PatchLoadScreenIndices(textIndices27);
+		PatchLoadScreenIndices(textIndices28);
+		PatchLoadScreenIndices(textIndices29);
+		PatchLoadScreenIndices(textIndices30);
+		PatchLoadScreenIndices(textIndices31);
+		PatchLoadScreenIndices(textIndices32);
+		PatchLoadScreenIndices(textIndices33);
+		PatchLoadScreenIndices(textIndices34);
+		PatchLoadScreenIndices(textIndices35);
+		PatchLoadScreenIndices(textIndices36);
+		PatchLoadScreenIndices(textIndices37);
+		PatchLoadScreenIndices(textIndices38);
+		PatchLoadScreenIndices(textIndices39);
+		PatchLoadScreenIndices(textIndices40);
+		PatchLoadScreenIndices(textIndices41);
+		PatchLoadScreenIndices(textIndices42);
+		PatchLoadScreenIndices(textIndices43);
+		PatchLoadScreenIndices(textIndices44);
+	}
+	
+
+	return true;
+}
+
 bool PatchStatusScreen(const string& patchedSakuraDirectory, const string& inTranslatedDataDirectory)
 {
 	const string sakuraFilePath = patchedSakuraDirectory + Seperators + "SAKURA";
@@ -10484,6 +10637,8 @@ bool PatchGame(const string& rootSakuraTaisenDirectory,
 		printf("CopyOriginalFiles failed.  Patch unsuccessful.\n");
 		return false;
 	}
+
+	PatchLoadScreen(patchedSakuraTaisenDirectory, inTranslatedDataDirectory);
 
 	//Step 1
 	if( !CreateTranslatedFontSheet(fontSheetFileName, tempDir) )
