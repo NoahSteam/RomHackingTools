@@ -8932,7 +8932,7 @@ bool PatchMiniSoji(const string& patchedSakuraDirectory, const string& inTransla
 	}
 
 	//Patch text lookups
-	short textIndices1[] = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 0x0a0d, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 0 };
+	short textIndices1[] = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 0x0a0d, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 0 };
 	short textIndices2[] = { 25, 26, 27, 28, 0x0a0d, 0x0a0d, 0x0a0d, 0 };
 	short textIndices3[] = { 0x0a0d, 30, 31, 32, 0x0a0d, 30, 31, 34, 0 };
 
@@ -9583,9 +9583,9 @@ bool PatchStatusScreen(const string& patchedSakuraDirectory, const string& inTra
 		originalPointerMap[pointerTable[i]] = i;
 	}
 
-	const int pointerTableStart = GIsDisc2 ? 0x0005f560 : 0x0005f428;
+	const int lookupTableStart = GIsDisc2 ? 0x0005f560 : 0x0005f428;
 	MiniGameTextIndiceFinder indiceFinder;
-	indiceFinder.FindIndices(sakuraFileData.GetData(), pointerTableStart, 48);
+	indiceFinder.FindIndices(sakuraFileData.GetData(), lookupTableStart, 48);
 	if( indiceFinder.indiceAddresses.size() != 18 )
 	{
 		printf("PatchStatusScreen: Couldn't find text indices\n");
@@ -9608,14 +9608,20 @@ bool PatchStatusScreen(const string& patchedSakuraDirectory, const string& inTra
 	short textIndices14[] = {33, 34, 0};      //Defense
 	short textIndices15[] = {35, 36, 0};      //Movement
 
+	//Clear out out lookup values
+	static const int EmptyDataSize = 110;
+	char emptyData[EmptyDataSize];
+	memset(emptyData, 0, EmptyDataSize);
+	sakuraFile.WriteData(lookupTableStart, emptyData, EmptyDataSize);
+
 	const int pointerTableStartInRAM = GIsDisc2 ? 0x06063560 : 0x06063428;
 	int currentRAMAddress = pointerTableStartInRAM;
-	int currentAddress    = pointerTableStart;
+	int currentAddress    = lookupTableStart;
 	map<int, int> adjustedPointerMap;
 #define PatchTextIndices(indice) SwapEndiannessForArrayOfShorts(indice, sizeof(indice));\
                                 if( !indiceFinder.ValidateNewIndices(indiceNumber, sizeof(indice)) ) return false;\
                                 sakuraFile.WriteData(currentAddress, (char*)indice, sizeof(indice));\
-								adjustedPointerMap[(indiceFinder.indiceAddresses[indiceNumber] - pointerTableStart) + pointerTableStartInRAM] = currentRAMAddress;\
+								adjustedPointerMap[(indiceFinder.indiceAddresses[indiceNumber] - lookupTableStart) + pointerTableStartInRAM] = currentRAMAddress;\
 								currentRAMAddress += sizeof(indice);\
 								currentAddress    += sizeof(indice);\
 								++indiceNumber;
@@ -9636,12 +9642,18 @@ bool PatchStatusScreen(const string& patchedSakuraDirectory, const string& inTra
 	PatchTextIndices(textIndices11);
 	PatchTextIndices(textIndices12);
 
+	currentRAMAddress += currentRAMAddress%4;
+	currentAddress += currentAddress%4;
 	statsPointers[0] = SwapByteOrder(currentRAMAddress); //Address for Atk
 	PatchTextIndices(textIndices13);
 
+	currentRAMAddress += currentRAMAddress%4;
+	currentAddress += currentAddress%4;
 	statsPointers[1] = SwapByteOrder(currentRAMAddress); //Address for Def
 	PatchTextIndices(textIndices14);
 
+	currentRAMAddress += currentRAMAddress%4;
+	currentAddress += currentAddress%4;
 	statsPointers[2] = SwapByteOrder(currentRAMAddress); //Address for Mov
 	PatchTextIndices(textIndices15);
 
@@ -9659,7 +9671,7 @@ bool PatchStatusScreen(const string& patchedSakuraDirectory, const string& inTra
 	//Modify the code that reads the Atk, Def, Mov strings to read 4 bytes because our data takes up two tiles.
 	{
 		//Stats codes
-		const long disc1Offset = GIsDisc2 ? 0 : -32;
+		const long disc1Offset = GIsDisc2 ? 0 : -24;
 
 		//Disc 1 
 		unsigned short mov_l_atR1_R1 = 0x1261;
