@@ -9500,6 +9500,8 @@ bool PatchMiniGames(const string& rootSakuraDirectory, const string& patchedSaku
 
 bool PatchLoadScreen(const string& patchedSakuraDirectory, const string& inTranslatedDataDirectory)
 {
+	printf("Patch Load Screen\n");
+
 	const string sakuraFilePath = patchedSakuraDirectory + Seperators + "SAKURA";
 	FileData sakuraFileData;
 	if( !sakuraFileData.InitializeFileData( FileNameContainer(sakuraFilePath.c_str())) )
@@ -9545,60 +9547,66 @@ bool PatchLoadScreen(const string& patchedSakuraDirectory, const string& inTrans
 		MiniGameTextIndiceFinder indiceFinder;
 		const unsigned int indiceOffset = GIsDisc2 ? 0x0005a1de : 0x0005a0a6;
 		indiceFinder.FindIndices(sakuraFileData.GetData(), indiceOffset, 128);
-		if( indiceFinder.indiceAddresses.size() != 70 )
+		if( indiceFinder.indiceAddresses.size() != 44 )
 		{
 			printf("PatchLoadScreen: Couldn't find text indices for tutorial\n");
 			return false;
 		}
-		short textIndices1[] = {14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 0};
-		short textIndices2[] = {3, 4, 5, 6, 7, 8, 0};
-		short textIndices3[] = {9, 10, 11, 0};
-		short textIndices4[] = {12, 13, 14, 15, 16, 17, 0};
-		short textIndices5[] = {18, 19, 20, 21, 22, 0};
-		short textIndices6[] = {23, 24, 25, 0};
-		short textIndices7[] = {26, 27, 28, 29, 0};
-		short textIndices8[] = {30, 31, 32, 0};
-		short textIndices9[] = {33, 34, 35, 36, 0};
-		short textIndices10[] = {37, 38, 39, 40, 41, 0};
-		short textIndices11[] = {42, 43, 44, 0};
-		short textIndices12[] = {45, 46, 47, 0};
-		short textIndices13[] = {48, 49, 50, 51, 52, 0};
-		short textIndices14[] = {53, 54, 55, 56, 57, 0};
-		short textIndices15[] = {58, 59, 60, 61, 0};
-		short textIndices16[] = {62, 63, 0};
-		short textIndices17[] = {64, 65, 0};
-		short textIndices18[] = {66, 67, 68, 69, 0};
-		short textIndices19[] = {70, 71, 72, 0};
-		short textIndices20[] = {73, 74, 75, 0};
-		short textIndices21[] = {76, 77, 78, 79, 0};
-		short textIndices22[] = {80, 81, 82, 0};
-		short textIndices23[] = {83, 84, 85, 86, 0};
-		short textIndices24[] = {87, 88, 89, 0};
-		short textIndices25[] = {90, 91, 92, 93, 94, 0};
-		short textIndices26[] = {95, 96, 97, 0};
-		short textIndices27[] = {98, 99, 100, 0};
-		short textIndices28[] = {101, 102, 103, 0};
-		short textIndices29[] = {104, 105, 106, 107, 0};
-		short textIndices30[] = {108, 109, 0};
-		short textIndices31[] = {110, 111, 0};
-		short textIndices32[] = {112, 113, 114, 115, 0};
-		short textIndices33[] = {116, 117, 118, 0};
-		short textIndices34[] = {119, 120, 121, 122, 0};
-		short textIndices35[] = {123, 124, 125, 0};
-		short textIndices36[] = {126, 127, 0};
-		short textIndices37[] = {128, 129, 130, 131, 0};
-		short textIndices38[] = {132, 133, 0};
-		short textIndices39[] = {134, 135, 136, 0};
-		short textIndices40[] = {137, 138, 139, 140, 141, 0};
-		short textIndices41[] = {142, 143, 144, 145, 146, 0};
-		short textIndices42[] = {147, 148, 149, 0};
-		short textIndices43[] = {150, 151, 152, 153, 0};
-		short textIndices44[] = {154, 155, 156, 157, 158, 159, 0};
+		short textIndices1[] = {15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 0}; //The Capital's Floral Assault Troop!
+		short textIndices2[] = {1, 2, 3, 6, 0}; //Episode 2
+		short textIndices3[] = {27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 0}; //The Enemy Is...The Hive of Darkness!
+		short textIndices4[] = {1, 2, 3, 7, 0}; //Episode 3
+		short textIndices5[] = {39, 40, 41, 42, 43, 44, 45, 46, 47, 0}; //I'm Not Fit To Be Captain?!
+		short textIndices6[] = {1, 2, 3, 8, 0}; //Episode 4
+		short textIndices7[] = {48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 0}; //Chaos! Chaos! The Great Rampage!!
+		short textIndices8[] = {1, 2, 3, 9, 0}; //Episode 5
+		short textIndices9[] = {58, 59, 60, 61, 62, 63, 64, 0}; //Bloom Like A Flower! A Maiden's Willpower!
+		short textIndices10[] = {1, 2, 3, 10, 0}; //Episode 6
+		short textIndices11[] = {65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 0}; //The Capital's Great Collapse!?
+		short textIndices12[] = {1, 2, 3, 11, 0}; //Episode 7
+		short textIndices13[] = {75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 0}; //Decisive Battle - The Limit of Life!
+		short textIndices14[] = {1, 2, 3, 12, 0}; //Episode 8
+		short textIndices15[] = {87, 88, 89, 90, 91, 92, 93, 94, 95, 0}; // A Date In Days Of Peace
+		short textIndices16[] = {1, 2, 3, 13, 0}; //Episode 9
+		short textIndices17[] = {97, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 0}; //The Ultimate Weapon Revealed
+		short textIndices18[] = {1, 2, 3, 14, 0}; //Episode 10
+		short textIndices19[] = {107, 108, 109, 110, 111, 112, 113, 0}; //The Final Judgement
+		short textIndices20[] = {114, 115, 116, 117, 118, 119, 120, 0}; //Data to be copied
+		short textIndices21[] = {129, 130, 131, 132, 133, 134, 0}; //Copy which data
+		short textIndices22[] = {114, 115, 116, 117, 121, 122, 123, 0}; //Copy data to be loaded
+		short textIndices23[] = {114, 115, 116, 117, 124, 125, 0}; //Copy data to be saved
+		short textIndices24[] = {114, 115, 116, 117, 126, 127, 128, 0}; //Copy data to be deleted
+		short textIndices25[] = {135, 136, 137, 138, 0}; //No records
+		short textIndices26[] = {139, 140, 141, 0}; //Delete?
+		short textIndices27[] = {142, 143, 0}; //Yes
+		short textIndices28[] = {144, 0}; //No
+		short textIndices29[] = {144, 145, 146, 147, 148, 0}; //No save data
+		short textIndices30[] = {149, 150, 151, 152, 6, 0}; //Please Insert Disc 2
+		short textIndices31[] = {149, 150, 151, 152, 5, 0}; //Please Insert Disc 1
+		short textIndices32[] = {153, 154, 155, 156, 157, 0}; //Last Chapter
+		short textIndices33[] = {158, 159, 160, 0}; //The End
+		short textIndices34[] = {161, 162, 163, 164, 165, 166, 0}; //could not be read.
+		short textIndices35[] = {167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 0}; //In order to continue playing
+		short textIndices36[] = {184, 185, 186, 187, 188, 189, 0}; //Finished saving.
+		short textIndices37[] = {149, 150, 151, 152, 6, 0}; //Please Insert Disc 2
+		short textIndices38[] = {196, 197, 198, 199, 200, 201, 202, 0}; //to continue playing.
+		short textIndices39[] = {177, 178, 179, 0}; //Copy?
+		short textIndices40[] = {180, 181, 0}; //Save?
+		short textIndices41[] = {182, 183, 0}; //Load?
+		short textIndices42[] = {184, 185, 186, 187, 188, 189, 0}; //Finished saving.
+		short textIndices43[] = {184, 185, 186, 194, 195, 196, 0}; //Finished deleting.
+		short textIndices44[] = {184, 185, 186, 190, 191, 192, 193, 0}; //Finished copying.
 
-	#define PatchLoadScreenIndices(indice) SwapEndiannessForArrayOfShorts(indice, sizeof(indice));\
-									if( !indiceFinder.ValidateNewIndices(indiceNumber, sizeof(indice)) ) return false;\
-									sakuraFile.WriteData(indiceFinder.indiceAddresses[indiceNumber], (char*)indice, sizeof(indice));\
-									++indiceNumber;
+		const int pointerTableStartInRAM = GIsDisc2 ? 0x0605e1d4 : 0x0605e0a6; //Todo Disc 2 offset
+		int currentRAMAddress = pointerTableStartInRAM;
+		int currentAddress    = indiceOffset;
+		map<int, int> adjustedPointerMap;
+#define PatchLoadScreenIndices(indice) SwapEndiannessForArrayOfShorts(indice, sizeof(indice));\
+                                sakuraFile.WriteData(currentAddress, (char*)indice, sizeof(indice));\
+								adjustedPointerMap[(indiceFinder.indiceAddresses[indiceNumber] - indiceOffset) + pointerTableStartInRAM] = currentRAMAddress;\
+								currentRAMAddress += sizeof(indice);\
+								currentAddress    += sizeof(indice);\
+								++indiceNumber;
 
 		int indiceNumber = 0;
 		PatchLoadScreenIndices(textIndices1);
@@ -9645,14 +9653,28 @@ bool PatchLoadScreen(const string& patchedSakuraDirectory, const string& inTrans
 		PatchLoadScreenIndices(textIndices42);
 		PatchLoadScreenIndices(textIndices43);
 		PatchLoadScreenIndices(textIndices44);
-	}
-	
+
+		static const int NumPointers = 44;
+		const int PointerTableOffset = GIsDisc2 ? 0x0005f5ec : 0X0005A398; //Todo disc2 offset
+		int pointerTable[NumPointers];
+		sakuraFile.ReadData(PointerTableOffset, (char*)pointerTable, sizeof(pointerTable), false);
+
+		//Write out new pointer table
+		int newPointerTable[NumPointers];
+		for(int i = 0; i < NumPointers; ++i)
+		{
+			newPointerTable[i] = SwapByteOrder( adjustedPointerMap[ SwapByteOrder(pointerTable[i]) ] );
+		}
+		sakuraFile.WriteData(PointerTableOffset, (char*)newPointerTable, sizeof(int)*NumPointers);
+	}	
 
 	return true;
 }
 
 bool PatchStatusScreen(const string& patchedSakuraDirectory, const string& inTranslatedDataDirectory)
 {
+	printf("Patch Status Screen\n");
+
 	const string sakuraFilePath = patchedSakuraDirectory + Seperators + "SAKURA";
 	FileData sakuraFileData;
 	if( !sakuraFileData.InitializeFileData( FileNameContainer(sakuraFilePath.c_str())) )
@@ -10638,8 +10660,6 @@ bool PatchGame(const string& rootSakuraTaisenDirectory,
 		return false;
 	}
 
-	PatchLoadScreen(patchedSakuraTaisenDirectory, inTranslatedDataDirectory);
-
 	//Step 1
 	if( !CreateTranslatedFontSheet(fontSheetFileName, tempDir) )
 	{
@@ -10747,6 +10767,13 @@ bool PatchGame(const string& rootSakuraTaisenDirectory,
 	if( !PatchStatusScreen(patchedSakuraTaisenDirectory, inTranslatedDataDirectory) )
 	{
 		printf("Patching Status Screen Failed.\n");
+		return false;
+	}
+
+	//Step 14
+	if( !PatchLoadScreen(patchedSakuraTaisenDirectory, inTranslatedDataDirectory) )
+	{
+		printf("Patching LoadSave Screen Failed.\n");
 		return false;
 	}
 
