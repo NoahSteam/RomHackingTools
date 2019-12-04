@@ -9655,17 +9655,23 @@ bool PatchLoadScreen(const string& patchedSakuraDirectory, const string& inTrans
 		PatchLoadScreenIndices(textIndices44);
 
 		static const int NumPointers = 44;
-		const int PointerTableOffset = GIsDisc2 ? 0x0005f5ec : 0X0005A398; //Todo disc2 offset
-		int pointerTable[NumPointers];
-		sakuraFile.ReadData(PointerTableOffset, (char*)pointerTable, sizeof(pointerTable), false);
-
+		const int PointerTableOffset = GIsDisc2 ? 0x0005f5ec : 0x0005A398; //Todo disc2 offset
+	
 		//Write out new pointer table
-		int newPointerTable[NumPointers];
-		for(int i = 0; i < NumPointers; ++i)
+		printf("Fixing LoadScreen Pointer\n");
+		for(unsigned long i = PointerTableOffset; i < sakuraFileData.GetDataSize(); i += 4)
 		{
-			newPointerTable[i] = SwapByteOrder( adjustedPointerMap[ SwapByteOrder(pointerTable[i]) ] );
+			int origValue;
+			sakuraFileData.ReadData(i, (char*)&origValue, sizeof(origValue), true);
+
+			if( adjustedPointerMap.find(origValue) != adjustedPointerMap.end() )
+			{
+				const int newValue = SwapByteOrder( adjustedPointerMap[ origValue ] );
+				sakuraFile.WriteData(i, (char*)&newValue, sizeof(newValue), false);
+
+				printf("     %0x to %0x at %0x\n", origValue, newValue, i);
+			}
 		}
-		sakuraFile.WriteData(PointerTableOffset, (char*)newPointerTable, sizeof(int)*NumPointers);
 	}	
 
 	return true;
