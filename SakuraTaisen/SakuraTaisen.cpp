@@ -8158,7 +8158,7 @@ void ExtractLoadScreen(const string& inRootSakuraDirectory, const string& inTran
 		fontPaletteData.CreateFrom15BitData(fontFile.GetData(), fontFile.GetDataSize());
 
 		MiniGameSakuraText sakuraText;
-		sakuraText.ReadInStrings(sakuraFileData.GetData(), 0x0005a0a6, 128);
+		sakuraText.ReadInStrings(sakuraFileData.GetData(), 0x0005a09e, 128);
 		sakuraText.DumpTextImages(sakuraFontSheet, fontPaletteData, inOutputDirectory);
 	}
 
@@ -9545,13 +9545,15 @@ bool PatchLoadScreen(const string& patchedSakuraDirectory, const string& inTrans
 	//Patch lookup table
 	{
 		MiniGameTextIndiceFinder indiceFinder;
-		const unsigned int indiceOffset = GIsDisc2 ? 0x0005a1de : 0x0005a0a6;
+		const unsigned int indiceOffset = GIsDisc2 ? 0x0005a1de : 0x0005a09e;
 		indiceFinder.FindIndices(sakuraFileData.GetData(), indiceOffset, 128);
-		if( indiceFinder.indiceAddresses.size() != 44 )
+		if( indiceFinder.indiceAddresses.size() != 45 )
 		{
 			printf("PatchLoadScreen: Couldn't find text indices for tutorial\n");
 			return false;
 		}
+
+		short textIndices0[] = {1, 2, 3, 5, 0}; //Episode 2
 		short textIndices1[] = {15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 0}; //The Capital's Floral Assault Troop!
 		short textIndices2[] = {1, 2, 3, 6, 0}; //Episode 2
 		short textIndices3[] = {27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 0}; //The Enemy Is...The Hive of Darkness!
@@ -9597,7 +9599,7 @@ bool PatchLoadScreen(const string& patchedSakuraDirectory, const string& inTrans
 		short textIndices43[] = {184, 185, 186, 194, 195, 196, 0}; //Finished deleting.
 		short textIndices44[] = {184, 185, 186, 190, 191, 192, 193, 0}; //Finished copying.
 
-		const int pointerTableStartInRAM = GIsDisc2 ? 0x0605e1d4 : 0x0605e0a6; //Todo Disc 2 offset
+		const int pointerTableStartInRAM = GIsDisc2 ? 0x0605e1d4 : 0x0605e09e; //Todo Disc 2 offset
 		int currentRAMAddress = pointerTableStartInRAM;
 		int currentAddress    = indiceOffset;
 		map<int, int> adjustedPointerMap;
@@ -9609,6 +9611,7 @@ bool PatchLoadScreen(const string& patchedSakuraDirectory, const string& inTrans
 								++indiceNumber;
 
 		int indiceNumber = 0;
+		PatchLoadScreenIndices(textIndices0);
 		PatchLoadScreenIndices(textIndices1);
 		PatchLoadScreenIndices(textIndices2);
 		PatchLoadScreenIndices(textIndices3);
@@ -9654,24 +9657,28 @@ bool PatchLoadScreen(const string& patchedSakuraDirectory, const string& inTrans
 		PatchLoadScreenIndices(textIndices43);
 		PatchLoadScreenIndices(textIndices44);
 
-		static const int NumPointers = 44;
+		static const int NumPointers = 45;
 		const int PointerTableOffset = GIsDisc2 ? 0x0005f5ec : 0x0005A398; //Todo disc2 offset
 	
 		//Write out new pointer table
 		printf("Fixing LoadScreen Pointer\n");
-		for(unsigned long i = PointerTableOffset; i < sakuraFileData.GetDataSize(); i += 4)
+		int numFixed = 0;
+		for(unsigned long i = 0; i < sakuraFileData.GetDataSize(); i += 4)
 		{
 			int origValue;
 			sakuraFileData.ReadData(i, (char*)&origValue, sizeof(origValue), true);
 
 			if( adjustedPointerMap.find(origValue) != adjustedPointerMap.end() )
 			{
-				const int newValue = SwapByteOrder( adjustedPointerMap[ origValue ] );
-				sakuraFile.WriteData(i, (char*)&newValue, sizeof(newValue), false);
+				const int newValue = adjustedPointerMap[ origValue ];
+				sakuraFile.WriteData(i, (char*)&newValue, sizeof(newValue), true);
 
-				printf("     %0x to %0x at %0x\n", origValue, newValue, i);
+				printf("     %0x to %0x at %0x\n", origValue, SwapByteOrder(newValue), i);
+				numFixed++;
 			}
 		}
+
+		printf("Num Fixed: %i\n", numFixed);
 	}	
 
 	return true;
