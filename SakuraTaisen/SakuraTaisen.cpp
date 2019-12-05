@@ -9545,7 +9545,7 @@ bool PatchLoadScreen(const string& patchedSakuraDirectory, const string& inTrans
 	//Patch lookup table
 	{
 		MiniGameTextIndiceFinder indiceFinder;
-		const unsigned int indiceOffset = GIsDisc2 ? 0x0005a1de : 0x0005a09e;
+		const unsigned int indiceOffset = GIsDisc2 ? 0x0005a1d6 : 0x0005a09e;
 		indiceFinder.FindIndices(sakuraFileData.GetData(), indiceOffset, 128);
 		if( indiceFinder.indiceAddresses.size() != 45 )
 		{
@@ -9599,7 +9599,7 @@ bool PatchLoadScreen(const string& patchedSakuraDirectory, const string& inTrans
 		short textIndices43[] = {184, 185, 186, 194, 195, 196, 0}; //Finished deleting.
 		short textIndices44[] = {184, 185, 186, 190, 191, 192, 193, 0}; //Finished copying.
 
-		const int pointerTableStartInRAM = GIsDisc2 ? 0x0605e1d4 : 0x0605e09e; //Todo Disc 2 offset
+		const int pointerTableStartInRAM = GIsDisc2 ? 0x0605e1d6 : 0x0605e09e;
 		int currentRAMAddress = pointerTableStartInRAM;
 		int currentAddress    = indiceOffset;
 		map<int, int> adjustedPointerMap;
@@ -9657,9 +9657,6 @@ bool PatchLoadScreen(const string& patchedSakuraDirectory, const string& inTrans
 		PatchLoadScreenIndices(textIndices43);
 		PatchLoadScreenIndices(textIndices44);
 
-		static const int NumPointers = 45;
-		const int PointerTableOffset = GIsDisc2 ? 0x0005f5ec : 0x0005A398; //Todo disc2 offset
-	
 		//Write out new pointer table
 		printf("Fixing LoadScreen Pointer\n");
 		int numFixed = 0;
