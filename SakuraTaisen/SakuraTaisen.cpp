@@ -9517,6 +9517,7 @@ bool PatchLoadScreen(const string& patchedSakuraDirectory, const string& inTrans
 
 	//Patch font sheet
 	{
+#if 0
 		//Open translated fontsheet
 		const string fontSheetFileName = inTranslatedDataDirectory + "\\LoadSaveScreen.bmp";
 		BmpToSakuraConverter patchedFontSheet;
@@ -9529,6 +9530,11 @@ bool PatchLoadScreen(const string& patchedSakuraDirectory, const string& inTrans
 
 		patchedFontSheet.PackTiles();
 
+		FileWriter outFile;
+		outFile.OpenFileForWrite("d:\\Rizwan\\outsheet.bin");
+		outFile.WriteData(patchedFontSheet.mpPackedTiles, patchedFontSheet.mPackedTileSize);
+		outFile.Close();
+
 		SakuraCompressedData fontSheetCompressedData;
 		fontSheetCompressedData.PatchDataInMemory(patchedFontSheet.mpPackedTiles, patchedFontSheet.mPackedTileSize, true, false, 6970);
 		if( fontSheetCompressedData.mDataSize > 6970 )
@@ -9536,10 +9542,15 @@ bool PatchLoadScreen(const string& patchedSakuraDirectory, const string& inTrans
 			printf("Compressed LoadSaveScreen font sheet is too big");
 			return false;
 		}
+#endif
+
+		const string precompressedFontSheetName = inTranslatedDataDirectory + "\\LoadSaveScreenCompressed.bin";
+		FileData precompressedData;
+		precompressedData.InitializeFileData( FileNameContainer(precompressedFontSheetName.c_str()));
 
 		//Patch fontsheet
 		const unsigned int fontSheetAddress = GIsDisc2 ? 0x0005c78c : 0x0005c654;
-		sakuraFile.WriteData(fontSheetAddress, fontSheetCompressedData.mpCompressedData, fontSheetCompressedData.mDataSize);
+		sakuraFile.WriteData(fontSheetAddress, precompressedData.GetData(), precompressedData.GetDataSize());
 	}
 
 	//Patch lookup table
@@ -9553,7 +9564,7 @@ bool PatchLoadScreen(const string& patchedSakuraDirectory, const string& inTrans
 			return false;
 		}
 
-		short textIndices0[] = {1, 2, 3, 5, 0}; //Episode 2
+		short textIndices0[] = {1, 2, 3, 5, 0}; //Episode 1
 		short textIndices1[] = {15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 0}; //The Capital's Floral Assault Troop!
 		short textIndices2[] = {1, 2, 3, 6, 0}; //Episode 2
 		short textIndices3[] = {27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 0}; //The Enemy Is...The Hive of Darkness!
