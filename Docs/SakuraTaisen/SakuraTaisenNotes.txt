@@ -591,3 +591,37 @@ There are pointers to the LUT entries for the Atk/Def/Mov entries in sakura.  Fi
 //Save/Load Screen
 Found at: 378452
 Found: 0005c654 00001800 Size: 560 CompressedSize: 6970
+
+Text data for interactable items around 0605dc78 in memory
+
+//
+Uncompressed text ending around 060f18a0
+
+0600a1c2 is code breakpoint where uncompressed data is being read
+
+Data ending around 05c7cd00
+
+060f2526
+
+060611c6 is compressed data end of read area
+
+060f2560
+
+Compressed font sheet pointer read from 0605E4C4
+
+//
+0600a164
+0600a0a2
+
+Something being written to 060f2800.  When code comes to 0600a164, r6 contains the pointer to where data will be uncompressed
+
+Compressed data read from 06060656
+
+Compressed data uncompressed to 060EE000
+
+Other images loaded ontop of font sheet uncompressed data.  Check the saturn image:
+05c00248
+06066018
+Saturn image vdp1 offset is calculated at 0603d66e
+
+0007D000 coming from 0603d994 in memory.  This is the base vdp1 adddress for the images after the font.
