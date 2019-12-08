@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿It's a photo of Sakura. Her gaze is so intense. I wonder what she's thinking? 
+﻿﻿﻿﻿﻿﻿It's a photo of Sakura. Her gaze is so intense. I wonder what she's thinking? 
 It's a photo of Sumire. It shows a side of her that's usually hidden. 
 It's a photo of Maria. She's lost in thought and seems a bit sad… 
 It's a photo of Kanna. In it, she looks as energetic and confident as ever. 
@@ -109,7 +109,7 @@ Would you like to sit and reminisce with me, Ogami?
 Oh, would you like to sit and reminisce with me, Ogami? 
 Sit and reminisce <br> Maybe another time 
 I'm not feeling very nostalgic right now. Maybe another time. 
-I see. Well, you can come here any time you like. 
+I see. Well, you can come here anytime you like. 
 Sure. Nothing wrong with reflecting on the past once in awhile. 
 Well then, close your eyes and remember times past… 
 Are you all right, Ogami? 
@@ -161,7 +161,7 @@ Staying here would be a waste of time. I'll try another room.
 Hey, Ogami! Would you like to play Koi-Koi with us? 
 Pardon me, Ensign… Would you care to play Koi-Koi with us? 
 Captain, would you like to play Hanafuda with us on our day off? 
-Hey, boss! Wanna play Hanafuda with us? 
+Hey, Boss! Wanna play Hanafuda with us? 
 Hey, Mon Frère! Come play Hanafuda with us! 
 Hey, Chief! Come play Hanafuda with us! You know you wanna! 
 Sure! <br> Not right now. 
@@ -170,13 +170,13 @@ Er, not right now…
 Oh… Well, please come back if you change your mind. 
 What a shame. Still, we'll gladly play against you should you change your mind. 
 Oh… Maybe another time, then. 
-Pfft! You're no fun. Come back if you change your mind, boss. 
+Pfft! You're no fun. Come back if you change your mind, Boss. 
 How lame! C'mon, Mon Frère, play with us! 
 Hmph! Not cool, Ogami. Well, come back if you change your mind. 
 W-why is everyone gathered here…? 
 Ahem! …I've brought Ogami with me. 
 Yay! Mon Frère!! 
-You managed to pass Ayame's quiz? That's impressive, boss. 
+You managed to pass Ayame's quiz? That's impressive, Boss. 
 Ayame… What's going on? 
 We decided to hold a Hanafuda Tournament on our day off. 
 It's a single-elimination tournament. I'll be participating, of course. 
@@ -309,11 +309,11 @@ Boss, don't tell me you're done for the day!
 No, of course not! <br> I thought I'd take a nap. <br> Yes, I am. 
 No, of course not! It's still early. 
 Damn right! The key to a happy life is good food, good sleep, and good fun! 
-I'll be in my room. Come by and see me, boss. Bye! 
+I'll be in my room. Come by and see me, Boss. Bye! 
 Where should I go now? 
 I thought I'd take a little nap… 
 Huh… Not a bad idea. I think I'll go take one, too! 
-Bye, boss! 
+Bye, Boss! 
 Boy, I'm really sleepy… 
 I hope I'll *yawn* have good dreams… 
 Yes, I am. I'm exhausted… 
@@ -386,25 +386,25 @@ Well, Sakura, I guess I'll be going…
 Come see me again, OK? 
 Where should I go next? 
 Hi, Kanna. 
-Hey, boss. I appreciate you comin' to see me and all, 
+Hey, Boss. I appreciate you comin' to see me and all, 
 but I'm about to take a nap. Sorry… 
 You are? OK, I'll come back later. 
 Hey, Kanna? It's me… 
 …… 
 She's probably fast asleep. No sense in waking her up. 
 Hi, Kanna. 
-Hey, boss! Good to see you! 
+Hey, Boss! Good to see you! 
 Say, remember when you and me helped out those lost kids? 
 Yeah, I think so. 
 Heh! I remember it like it was yesterday. 
-C'mon, boss! Close your eyes and picture it! 
+C'mon, Boss! Close your eyes and picture it! 
 Hi, Kanna. 
-Hey, boss. I was just thinkin' about the stuff that happened this past year. 
+Hey, Boss. I was just thinkin' about the stuff that happened this past year. 
 Practicin' karate, gettin' bitten by a snake… 
 Helpin' those lost kids in the lobby… You remember that? 
 Yeah, I think so. 
-C'mon, boss! Close your eyes and picture it! 
-Hey, boss. Remember when we helped those lost kids? 
+C'mon, Boss! Close your eyes and picture it! 
+Hey, Boss. Remember when we helped those lost kids? 
 Recall <br> Go to another room 
 Recall <br> Look at the photo <br> Go to another room 
 Recall again <br> Go to another room 
@@ -417,7 +417,7 @@ You think those kids will come back?
 Of course! They love watching you perform. 
 No kidding? I'll have to rehearse extra hard, then! 
 See you later, Kanna. 
-Bye, boss. Let's do this again sometime! 
+Bye, Boss. Let's do this again sometime! 
 Where should I go next? 
 Hi, Maria. 
 Hello, sir. I appreciate you coming to see me, 

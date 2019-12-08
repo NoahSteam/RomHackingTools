@@ -1,4 +1,4 @@
-﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
 It's a photo of Maria. …She's lost in thought and looks kind of sad…
 A photo of Kanna. Her signature strength comes through clearly.
@@ -383,7 +383,7 @@ Hm… well if you don't want to talk about it, that's fine.
 Did I say something wrong? 
 No, it's not that. Thanks for worrying about me anyway, though. 
 Haha! You, too. 
-Hey. Hey, boss! Do you want to come train with me? 
+Hey. Hey, Boss! Do you want to come train with me? 
 No thanks. <br> Sure. 
 I'll take a rain check. I'm still making the rounds… 
 Ah, too bad. You're pretty serious, aren't you, Ensign Ogami? 
@@ -620,7 +620,7 @@ Phew… I managed to escape before she noticed.
 No… my body… it's moving on it's own… toward the shower… 
 (K-Kanna's in the shower…) 
 …Hm? 
-Who's there… is that you, boss? 
+Who's there… is that you, Boss? 
 (Ack! S-she found me out already!) 
 W-what should I do?! 
 Run away. <br> Act natural. 
@@ -646,7 +646,7 @@ Hahaha, better screw your head back on!
 W-well, I'd better go… take it easy, Kanna. 
 Whew… what a miracle. She actually believed me… 
 …That was a huge waste of time. I better hurry and find Maria… 
-Did you come to take a shower? There's some open stalls toward the back, boss. 
+Did you come to take a shower? There's some open stalls toward the back, Boss. 
 Y-yeah… 
 (Huh… she didn't freak out! She doesn't care that I'm here?) 
 Hey, Captain… you still wearing your clothes? Are you gonna shower like that? 
@@ -657,16 +657,16 @@ Phew… oh man, it's a good thing that was Kanna in there…
 …That was a huge waste of time. I better hurry and find Maria… 
 Kanna left, so there's no one here now. 
 …Oh well. I'd better go, too. 
-Yo, boss. I'm feelin' a bit more clear-headed after my shower. 
+Yo, Boss. I'm feelin' a bit more clear-headed after my shower. 
 I-I see. I bet you're feeling great. 
-How about you clear your head too, boss? You'll sleep like a baby afterwards. 
+How about you clear your head too, Boss? You'll sleep like a baby afterwards. 
 Y-yeah, you're right. 
 Boss… I know I boiled over and shouted at you earlier, but… 
 Please, I need your help with Maria. She seriously never opens herself up to anyone. 
 But, you're her captain. She just might open up to you. 
 So enough with the sneaky eavesdropping. You need to get right up in her face and talk to her. 
 Kanna… 
-Later, boss. I'm heading out now. 
+Later, Boss. I'm heading out now. 
 …Get right up in her face, huh? 
 …I better find Maria. I've wasted enough time already. 
 Hey… I can hear the shower going… and this locker is open. 
@@ -683,7 +683,7 @@ Phew… I managed to escape before she noticed.
 No… my body… it's moving on it's own… toward the shower… 
 (K-Kanna's in the shower…) 
 …Hm? 
-Who's there… is that you, boss? 
+Who's there… is that you, Boss? 
 (Ack! S-she found me out already!) 
 W-what should I do?! 
 Run away. <br> Act natural. 
@@ -703,16 +703,16 @@ I'm… pretty ashamed of myself.
 Y-yeah, it's me, Kanna. I came to take a shower too. 
 Oh, all right then. There's some open stalls toward the back, so hop on in. 
 (Yes! She bought it!) 
-Hey, Captain… you still wearing your clothes? Are you gonna shower like that? 
+Hey, Boss… you still wearing your clothes? Are you gonna shower like that? 
 O-oh man, you're right! Ha, hahaha… How silly of me! 
 Hahaha, better screw your head back on! 
 W-well, I'd better go…take it easy, Kanna. 
 Whew… what a miracle. She actually believed me… 
 …That was a huge waste of time. I better hurry and find Maria… 
-Did you come to take a shower? There's some open stalls toward the back, boss. 
+Did you come to take a shower? There's some open stalls toward the back, Boss. 
 Y-yeah… 
 (Huh… she didn't freak out! She doesn't care that I'm here?) 
-Hey, Captain… you still wearing your clothes? Are you gonna shower like that? 
+Hey, Boss… you still wearing your clothes? Are you gonna shower like that? 
 O-oh man, you're right! Ha, hahaha… How silly of me! 
 Hahaha, better screw your head back on! 
 W-well, I'd better go…take it easy, Kanna. 

@@ -1,4 +1,4 @@
-﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
 It's a photo of Maria. …She's lost in thought and looks kind of sad…
 A photo of Kanna. Her signature strength comes through clearly.
@@ -37,7 +37,7 @@ Maria is late? She's never late.
 Forgive me for being late! 
 Talk to Kanna. <br> Talk to Maria. 
 Kanna, it's been a while since you sortied, right? Take care out there. 
-Thanks, boss. I'm looking forward to seeing your fighting style. 
+Thanks, Boss. I'm looking forward to seeing your fighting style. 
 You should be able to fight harder than ever before, with my special cooking in you. 
 Commander Yoneda, what information do we have on the enemy? 
 Maria… are you alright? You don't look so good… 

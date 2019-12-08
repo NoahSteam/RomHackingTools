@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
+﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
 It's a photo of Sumire. This is a side of her you don't see too often. 
 It's a photo of Maria. …She's lost in thought and looks kind of sad… 
 It's a photo of Kanna. Her signature strength comes through clearly. 
@@ -399,7 +399,7 @@ Peek in the shower room. <br> Go back to the corridor.
 I wonder who's in there… 
 Ah! It's Maria… 
 She's beautiful… 
-(And there I thought I was late…) 
+(And here I thought I was late…) 
 Ma-Manager! 
 (Shhhh! Keep your voice down!) 
 (Wha…?) 
@@ -413,7 +413,7 @@ The manager is waiting. I should hurry.
 (… …Oh no! I got lost in thought!) 
 (Hey!) 
 Whoa! 
-(And there I thought I was late…) 
+(And here I thought I was late…) 
 Ma-Manager! 
 (Shhhh! Keep your voice down!) 
 (Wha…?) 
@@ -421,8 +421,8 @@ Ma-Manager!
 … 
 (What's with that look? Something you wanna tell me?) 
 …… 
-Both of you… You're helpless… 
-M-Ayame… 
+Both of you… You're hopeless… 
+A-Ayame… 
 What a spry gentleman you are, Lieutenant General… 
 Hm… Ahem! You're late, Ogami. I was looking for you. 
 Well… 
@@ -505,7 +505,7 @@ Yaaay! Mon Frère is the wooooorst!
 Ha… Haha… 
 Hm… "The hidden Inca treasure is back there!" …Like that? 
 Kohran? What are you doing? 
-Oh, hey, boss. 
+Oh, hey, Chief. 
 Why're you still loitering around here? 
 Don't you know Yoneda wants to see you? I'd hurry if I were you. 
 All right. Break a leg! 
@@ -518,7 +518,7 @@ Ahaha… No worries.
 (Is that a real one, like they use in the infantry? The Imperial Theater is really obsessed with details…) 
 (A pith helmet with a headlamp… No explorer should set out without one.) 
 (But this isn't the real deal, so she might as well take it off…) 
-…Hm? Never seen a helmet before, boss? 
+…Hm? Never seen a helmet before, Chief? 
 (Ah, a rare sight! Kohran has put up her hair.) 
 (It really suits her.) 
 Do you like my hair like this? 

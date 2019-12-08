@@ -625,3 +625,11 @@ Other images loaded ontop of font sheet uncompressed data.  Check the saturn ima
 Saturn image vdp1 offset is calculated at 0603d66e
 
 0007D000 coming from 0603d994 in memory.  This is the base vdp1 adddress for the images after the font.
+
+0x6600 is the size of the uncompressed patched font sheet (204 * 16 * 8)
+
+Solution:
+-Change @0605e4d0[0005a4d0] from 060f2800 to 060EE000 + (204*16*8) + 16.  This makes it so that the compressed data for the images after the fontsheet are moved down.
+-Change @0603d994[00039994] from 0007d000 to 00078800 + (204*16*8).  This changes where in vdp1 the uncompressed data after the font sheet is written to.
+-Change @0603d3c8 from 0007d000 to 00078800 + (204*16*8) ? 
+

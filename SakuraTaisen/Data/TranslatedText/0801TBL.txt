@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
 It's a photo of Maria. …She's lost in thought and looks kind of sad…
 A photo of Kanna. Her signature strength comes through clearly.
@@ -514,7 +514,7 @@ Hm… Whom should I ask to visit the shrine with me?
 I wonder if Kohran is in her room. 
 Maybe I should go to another room. 
 It's Ogami… Are you there, Kohran? 
-Look who's up early! Did you finish talking to Yoneda, boss? 
+Look who's up early! Did you finish talking to Yoneda, Chief? 
 Yeah. He said I could go out and do whatever I want. 
 Perfect! Should we go there on my steam bike? 
 That sounds fun! <br> …Are you sure it's safe? 

@@ -1,4 +1,4 @@
-﻿﻿﻿﻿It's a photo of Sakura. Her gaze is so intense. I wonder what she's thinking? 
+﻿﻿﻿﻿﻿It's a photo of Sakura. Her gaze is so intense. I wonder what she's thinking? 
 It's a photo of Sumire. It shows a side of her that's usually hidden. 
 It's a photo of Maria. …She's lost in thought and seems a bit sad… 
 It's a photo of Kanna. She looks energetic and confident. I can't wait to meet her. 
@@ -58,8 +58,8 @@ Hey, Sakura. How did the play go?
 It was a huge success. 
 By the way…what is it, this late at night? 
 Well, Ogami… 
-Manager Yoneda instructed me to 
-have you handle nighttime rounds in the theater… 
+Manager Yoneda instructed me to… 
+… to have you handle nighttime rounds in the theater. 
 Nighttime…rounds? 
 Yes. I know it's terribly short notice, but I hope you understand… 
 You can count on me! <br> Fine, I'll do the rounds. <br> Uh, I'm going to sleep. 
@@ -250,15 +250,15 @@ Each brilliant performance is the result of everyday rehearsals like this one.
 H-huh?! 
 Stop them. <br> Leave them alone. 
 Hey, you two! Stop fighting! 
-S-sir?! 
+E-Ensign?! 
 O-Ogami!! Look out! 
 Urggh!! 
 O-Ogami!! I'm so sorry! 
-Sir… What are you doing here?! 
+Ensign… What are you doing here?! 
 Stopping you two from fighting. 
 I don't know much about theater, and I didn't intend to interrupt your rehearsal. 
 However, teamwork is important in a troupe, right? …So stop fighting. 
-Sir… 
+Ensign… 
 Mon Frère… 
 … 
 I understand. I'm sorry, Ogami. 
@@ -313,16 +313,16 @@ Wha…?!
 Huh?! What's that alarm? 
 Ogami, we must move out! 
 Move out?! What do you mean? 
-The Flower Division of the Imperial Assault Troop is moving out! Let's go! 
+The Flower Division of the Imperial Assault Troupe is moving out! Let's go! 
 … 
 You have no backbone, Ogami! How long do you plan on making that timid face? 
 I've got something to say! Cover your ears if you don't want to listen! 
-Before you came here, Manager Yoneda said that 
-the Captain of the Flower Division must be more than a mere soldier; 
-that we mustn't continue to fight battles in which human lives are sacrificed for the sake of victory; 
-and that the person who serves as Captain 
-must truly love the Flower Division, this theater, and working here… 
-That's why he made you ticket clipper. 
+Before you came here, Manager Yoneda said that… 
+…the Captain of the Flower Division must be more than a mere soldier. 
+That we mustn't continue to fight battles in which human lives are sacrificed for the sake of victory. 
+And that the person who serves as Captain… 
+…must truly love the Flower Division, this theater, and working here. 
+That's why he made you the ticket clipper. 
 …Is that so? 
 Battle…? Against who? 
 W-well… 
@@ -330,27 +330,27 @@ Wha…?!
 Huh?! What's that alarm? 
 Ogami, we must move out! 
 Move out?! What do you mean? 
-The Flower Division of the Imperial Assault Troop is moving out! Let's go! 
-The Flower Division of the Imperial Assault Troop is fully assembled! 
+The Flower Division of the Imperial Assault Troupe is moving out! Let's go! 
+The Flower Division of the Imperial Assault Troupe is fully assembled! 
 Well done! 
 Manager Yoneda…and the whole troupe… What is this?! 
-Ogami, we are taking a break from theater to return to our primary role… as the Imperial Assault Troop! 
+Ogami, we are taking a break from theater to return to our primary role… as the Imperial Assault Troupe! 
 I'm sorry for deceiving you. 
 But I wanted to ensure that you were qualified to be captain of a covert squad. 
 W-what is this place?! 
-The core of the Imperial Assault Troop. …The underground Command Room. 
-Manager Yoneda, you mean the Imperial Assault Troop is real?! 
+The core of the Imperial Assault Troupe. …The underground Command Room. 
+Manager Yoneda, you mean the covert squad is real?! 
 Of course! The theater troupe is merely a facade. 
 So, I'll introduce you again. They are members of the Flower Division. They'll be your subordinates. 
 Ogami… Under your command, I feel like I can fight with all my might! 
-As new members of the Imperial Assault Troop, let's do our best! 
+As new members of the Imperial Assault Troupe, let's do our best! 
 I'm counting on you, Ogami! 
 Mon Frère, let's both do our best! 
 Mon Frère, do your best! 
 Sir… That uniform suits you well. 
-Well then, sir. Let us see how skilled you are… 
-Battle is often harsh and cruel. Now we'll see whether or not 
-you have the skills to be captain. 
+Well then, Ensign. Let us see how skilled you are… 
+Battle is often harsh and cruel. 
+Now we’ll see whether or not you have the skills to be captain. 
 I haven't accepted you as a captain yet, sir. 
 When I can understand how you think and feel…then I shall call you Captain. 
 …I understand. Let's all do our best! 
@@ -365,7 +365,7 @@ What? You mean it was Sakura who defeated that monster?!
 Correct. However, a human can only do so much against a Hex Mech. 
 That's where we come in. We have a powerful weapon at our disposal. Let me show you the underground hangar. 
 W-what are those?! 
-The Imperial Assault Troop's secret weapon! "Koubu" Spirit Armor! 
+The Imperial Assault Troupe's secret weapon! The "Koubu" Spirit Armor! 
 Spirit…Armor? 
 Yes. Think of it as mechanical armor that can only be used by those with powerful spiritual energy. 
 By which I mean the members of the Flower Division…and you. 
@@ -380,14 +380,14 @@ Flower Division, move out! <br> Prepare for flower-viewing!
 Flower Division, move out! Target area is Ueno Park! 
 Roger! 
 Koubu activated! 
-Imperial Assault Troop is moving out! 
+Imperial Assault Troupe is moving out! 
 Prepare for flower-viewing! 
 Huh?! 
 …Have you lost your mind, sir? 
 Surely he means we should go flower-viewing in Ueno Park after we win the battle! 
 Iris! Prepare for our flower-viewing excursion! 
 Will do! 
-Imperial Assault Troop is moving out! Let's go, Ogami! 
+Imperial Assault Troupe is moving out! Let's go, Ogami! 
 You're the captain, you fool! Don't just stand there twiddling your thumbs! 
 It may be your first battle, but you still need to order the attack! 
 Y-yes, sir! 
@@ -491,7 +491,7 @@ Well, they're not meant to be decorative or artistic, but each one shines so bea
 And together they show us this breathtaking view. 
 I want to shine on the stage, just like one of those lights… 
 … 
-I want to be a warm light, and strong… the kind that lights the way for the people in the streets. 
+I want to be a warm and strong light… the kind that shines the way for the people in the streets. 
 … Oh, I'm sorry, Ogami. I didn't mean to keep you from your guard duties… 
 Well now, let's continue our rounds. 
 The city lights, huh… 
@@ -511,7 +511,7 @@ Tolstoy, right? <br> Dostoevsky, right? <br> Gorky, right?
 Crime and Punishment, huh… If I'm not mistaken, that's Tolstoy, right? 
 …No. The author of Crime and Punishment is Dostoevsky. 
 Oh… it is? 
-… you're can't impress anyone by feigning knowledge, sir. 
+…You won’t impress anyone by feigning knowledge, sir. 
 Well, I'll excuse myself. Please take care of the watch, you two. 
 …Ogami. Shall we continue our rounds? 
 Crime and Punishment, huh… If I'm not mistaken, that's Dostoevsky, right? 
@@ -523,7 +523,7 @@ Let's continue our rounds, Ogami.
 Crime and Punishment, huh… If I'm not mistaken, that's Gorky, right? 
 …No. The author of Crime and Punishment is Dostoevsky. 
 Oh… it is? 
-… you're can't impress anyone by feigning knowledge, sir. 
+…You won’t impress anyone by feigning knowledge, sir. 
 Well, I'll excuse myself. Please take care of the watch, you two. 
 …Ogami. Shall we continue our rounds? 
 Haven't you heard of it? It's a work by the Russian writer Dostoevsky. 

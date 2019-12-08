@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
+﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
 It's a photo of Sumire. This is a side of her you don't see too often. 
 It's a photo of Maria. …She's lost in thought and looks kind of sad… 
 A photo of Kanna. Her signature strength comes through clearly. 
@@ -617,7 +617,7 @@ OK. The second question. Do you like tomboys?
 Yes! <br> No! 
 Yes! 
 It didn't blow up, so that's the truth. 
-Well, look at that. So the boss likes tomboys, huh? 
+Well, look at that. So the Boss likes tomboys, huh? 
 I trust this machine less with every second. Are you really sure it works? 
 Yeah, I gotta say, that last question made me a bit skeptical, too. 
 Ah… I forgot to turn it on! So, now it should work! 
@@ -652,12 +652,12 @@ It works! I knew my inventions are perfection!
 Ogami! Are you OK!? 
 It blew up even though you said that you knew where she is, so… 
 So, he has no idea where she is… what a waste of time. 
-Well if the boss doesn't know it either, we better get going and look somewhere else. 
+Well if the Boss doesn't know it either, we better get going and look somewhere else. 
 No! 
 …It didn't explode. 
 So if he doesn't know and it didn't blow up, that means… 
 He really doesn't know. What a waste of time. 
-Well if the boss doesn't know it either, we better get going and look somewhere else. 
+Well if the Boss doesn't know it either, we better get going and look somewhere else. 
 If you weren't lying, why did you behave so suspiciously? 
 Ogami! 
 It works! I knew my inventions are perfection! 
@@ -733,7 +733,7 @@ Maybe I can have a little chat with Maria.
 I wonder if Kohran is in her room? 
 I should go somewhere else. 
 Ahem! It's me… 
-…Sorry, boss, but I'm right in the middle of a new invention. Come back later. 
+…Sorry, Boss, but I'm right in the middle of a new invention. Come back later. 
 Iris must be waiting for me. 
 I still have some time to kill before I go and see Iris. 
 Maybe Sumire is in her room? 

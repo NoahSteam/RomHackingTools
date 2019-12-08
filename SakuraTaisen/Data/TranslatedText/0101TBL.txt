@@ -1,4 +1,4 @@
-﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
+﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
 It's a photo of Sumire. This is a side of her you don't see too often. 
 It's a photo of Maria. …She's lost in thought and looks kind of sad… 
 It's a photo of Kanna. She looks strong and reliable. I can't wait to meet her. 
@@ -535,7 +535,7 @@ Sakura…
 Sumire, it's almost time for you to go on stage. Please come get ready. 
 How good of you to come for me. I must drop by my room for a moment, then I'll be right there. 
 By the way…may I pose a question to you, Ensign? 
-Eh - to me? 
+Eh, to me? 
 Yes. Between myself and Sakura, what sort of woman do you prefer? 
 …! 
 Won't you tell me, Ensign? 
@@ -552,7 +552,7 @@ I guess I offended Sakura…
 I suppose… Sakura is my type. 
 What was that?! Ensign, you simply have no eye for the finer things! 
 How very distasteful! I will be going, now! 
-Ah - Sumire! 
+Ah, Sumire! 
 Ogami, I need to go after her…please excuse me. 
 I really shouldn't have said anything with both of them there… 
 Oh! …Sakura… 
@@ -810,7 +810,7 @@ Ask about the Troop. <br> Ask Iris about herself.
 I was wondering if you could tell me about the Imperial Assault Troop… 
 Sure, OK. 
 Why is the troop headquartered in a theater? 
-We're in a theater, because that's where the "troupe" performs. 
+We're in a theater, because that's where the "troop" performs. 
 Isn't that obvious? You're pretty strange, Mon Frère. 
 …? 
 (I don't get it. There's nothing obvious about it!) 
@@ -882,7 +882,7 @@ Well, I need to hurry. Please excuse me, Ogami.
 Looks like Sakura's having a hard time, too… 
 I'd better check somewhere else… 
 Hi, Maria. 
-You appear to have a considerable amount of free time as well, don't you, Ensign. 
+You appear to have a considerable amount of free time, don't you, Ensign. 
 As I mentioned before, the stage is currently off-limits. Your cooperation is appreciated. 
 Oh well. Guess I'll head somewhere else. 
 It's Maria, right? What are you doing here? 
@@ -908,7 +908,7 @@ Please tell me…what is my true role in the Imperial Assault Troop?!
 You had best ask Director Yoneda directly regarding that matter. 
 Maria… 
 Maria, would you tell me a little about yourself? 
-Yes…? 
+What…? 
 As captain of the Imperial Assault Troop, I'd like to know how a woman such as yourself came to be here. 
 …I don't believe there's any need for me to answer that. 
 In any case, I hardly acknowledge you to be the captain as it is. 

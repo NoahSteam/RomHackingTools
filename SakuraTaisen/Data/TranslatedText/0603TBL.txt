@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
 It's a photo of Maria. …She's lost in thought and looks kind of sad…
 A photo of Kanna. Her signature strength comes through clearly.
@@ -38,7 +38,7 @@ Jean-Paul the teddy bear. Iris's best friend. She always carries him with her an
 (Oho?! Maybe it's my imagination, but it seems like I can see more than usual…) 
 (No! I can't believe I'm staring at Kanna's chest while she's upset…What am I doing?!) 
 (O-oh nooo! My eyes are drawn like a magnet to her breasts!) 
-Where the hell do you think you're looking, boss!? 
+Where the hell do you think you're looking, Boss!? 
 I don't think there's anything here we need for the party. 
 I don't really have time to stand around reading right now. 
 No place like my own room for relaxing… 
@@ -436,9 +436,9 @@ Sorry, everyone. I'll come help out after we talk, but could you leave us alone 
 Hmmm. Seems like the Ensign wants some alone time with Sakura. I suppose we'd best get out of their way. 
 Captain… 
 …alright, let's give them some space, everyone. 
-…alright everyone, let's move it. Guess the boss wants some alone time with Sakura. 
+…alright everyone, let's move it. Guess the Boss wants some alone time with Sakura. 
 How come you're being all secret with Sakura, Mon Frère? Hmph, I don't care! …Let's go, everyone! 
-R-roger that, boss… C'mon folks, let's give these two some room. 
+R-roger that, Chief… C'mon folks, let's give these two some room. 
 OK, it's just the two of us… Listen, Sakura, about what happened earlier… 
 Oh, uh, thanks… 
 Tsubaki was quite busy today, right? I just thought it would be nice to treat her to dinner. 
@@ -521,26 +521,26 @@ Well, that could have gone better… What should I do now?
 Alright everyone, get to your tasks. Once everything's ready, we'll meet up at the green room. 
 …huh…? Crap, everyone took off while I was spacing out. 
 Well… what should I do now? 
-Hey boss, mind giving me a hand? 
+Hey Chief, mind giving me a hand? 
 Sure, what do you need? 
 Don't sweat the details! Just follow me to my room, OK? 
 …alright. 
 OK, let's go! 
-Hey boss, if you're looking for something to do, would you mind giving me a hand? 
+Hey Chief, if you're looking for something to do, would you mind giving me a hand? 
 Sure, what do you need? 
 Don't sweat the details! Just follow me to my room, OK? 
 …alright. 
 OK, let's go! 
-Hey boss, could you help me out? 
+Hey Boss, could you help me out? 
 Sure, I'm happy to help with anything that needs some extra muscle! I'll try not to slow you down! 
-Ahaha! That's the spirit, boss! 
+Ahaha! That's the spirit, Boss! 
 OK. The tables are in the basement storage right? 
 That's what I figure. Let's go. 
-Yo, boss. Listen… 
+Yo, Boss. Listen… 
 What's up, Kanna? 
-How about lending me a hand, boss? 
+How about lending me a hand, Boss? 
 Carrying the tables? Sure. 
-Thanks, boss! 
+Thanks, Boss! 
 OK. The tables are in the basement storage right? 
 That's what I figure. Let's go. 
 Hey hey Mon Frère! Let's prepare for the party together, OK? 
@@ -713,28 +713,28 @@ Ensign, could you please check how they're doing?
 OK, I'll do that. 
 Alright, we're at your room. Do I get to hear what we're working on now? 
 …nothing that's going to explode like last time, I hope? 
-Oh don't you worry, boss. This time there won't be any explosions. 
+Oh don't you worry, Chief. This time there won't be any explosions. 
 But… Hmm… Lemme think for a sec. 
-…actually, boss, I think I'm good. You don't need to help. 
+…actually, Chief, I think I'm good. You don't need to help. 
 Huh? Why'd you change your mind? 
 Well, ya see I was hoping to do a little show for the party, and I wanted to practice. 
 I was hoping to give you a preview and get your thoughts on it, but… 
 All of a sudden I'm feelin' shy. I think I'll just practice on my own. You just wait for the real thing. 
 Oh come on, show me! <br> I look forward to seeing it. <br> Gonna do a striptease? 
 Oh come on, show me! I'd love to see it. 
-Well thanks, boss, but… nah, I just can't do it for ya right now. 
+Well thanks, Chief, but… nah, I just can't do it for ya right now. 
 I got a lot to get ready, too… You'll just have to wait for the real thing. 
 I'd better get to it. See ya at the party. 
 Hmm… I wonder what kind of performance it's going to be. 
 …Alright, I look forward to seeing it. 
-Thanks, boss! Sorry for dragging you all the way here just to give you the boot. 
+Thanks, Chief! Sorry for dragging you all the way here just to give you the boot. 
 Well, you'd better just be sure the performance lives up to the hype. 
-C'mon boss, don't make me more nervous than I already am! 
+C'mon Chief, don't make me more nervous than I already am! 
 I'd better get to it. See ya at the party. 
 Hmm… I wonder what kind of performance it's going to be. 
 Oh, a hidden talent, huh? You gonna do a striptease or something? 
-You got a screw loose or something, boss? 
-Alright, get outta here! I've got a lot of prepping to do. Why don't YOU go practice a nice striptease, boss? 
+You got a screw loose or something, Chief? 
+Alright, get outta here! I've got a lot of prepping to do. Why don't YOU go practice a nice striptease, Chief? 
 …aw, come on, at least let me know what kind of performance it's going to be. 
 Nope. Sorry for dragging you all the way here just to give you the boot, but shoo! 
 Hmm… I wonder what kind of performance it's going to be. 
@@ -742,27 +742,27 @@ This is Kohran's room.
 No answer… I guess she's not here. 
 Sorry, I'm super busy right now. If you need something, come back later, OK? 
 Coming! Wait just a sec. 
-Oh, hey boss! What's up? 
-… Oh, hey boss. Weren't you helping out Sakura? 
-… Oh, hey boss. Weren't you helping out Sumire? 
-… Oh, hey boss. Weren't you helping out Maria? 
-… Oh, hey boss. Weren't you helping out Kanna? 
-… Oh, hey boss. Weren't you helping out Iris? 
+Oh, hey Chief! What's up? 
+… Oh, hey Chief. Weren't you helping out Sakura? 
+… Oh, hey Chief. Weren't you helping out Sumire? 
+… Oh, hey Chief. Weren't you helping out Maria? 
+… Oh, hey Chief. Weren't you helping out Kanna? 
+… Oh, hey Chief. Weren't you helping out Iris? 
 I thought I'd lend a hand. <br> Oh, never mind. 
 Well, I thought I'd come give you a hand… Can I help? 
 Oh, really? Wow! That… makes me really happy. 
-…but, sorry boss. I don't really have anything I need help with. 
+…but, sorry Chief. I don't really have anything I need help with. 
 Seriously? I can move stuff or whatever. Don't be shy, just tell me what you need. 
 Nah, all I'm doing is practicing my performance for the party. 
 So there's nothing I need help with. If you saw my performance now there'd be no surprise for the party, right? 
 Sorry. Thanks for coming to check on me though. 
 … OK. Well I'm sorta in the middle of something so I'll see ya later. 
 Hmm… what's she doing in there? 
-Hey boss, now really isn't the time for jokes. 
+Hey Chief, now really isn't the time for jokes. 
 I'm super busy here, so if you don't need me for anything I'll see you later! 
-… whoa, she's still in a really bad mood. 
+… Whoa, she's still in a really bad mood. 
 What're ya going all quiet for? Weirdo. 
-Listen, I'm super busy so I'll see ya later, boss. 
+Listen, I'm super busy so I'll see ya later, Chief. 
 'Super busy'? What's she doing in there? 
 Ensign, are you done putting away the props? 
 Oh, uh, no. Sorry, I'm not done yet. 
@@ -843,13 +843,13 @@ Not at all… it's not something you need thank me for.
 Though… I'm worried that Sakura hasn't returned yet. 
 (Oh that's right, Sakura went out to do the shopping…) 
 (Maria's right, Sakura definitely should have been back by now…) 
-Where've you been, boss! The party already started a while ago! 
+Where've you been, Boss! The party already started a while ago! 
 Oh, so I guess everyone else finished their preparations. 
 Wait, what are you doing out here then, Kanna? 
-Oh come on, boss… you sure can be clueless sometimes. 
+Oh come on, Boss… you sure can be clueless sometimes. 
 I was waiting for a certain someone to show up! 
 Oh, thanks. Sorry, I guess it was a dumb question. 
-Hey, don't worry about it. I actually kinda like that part of you, boss. 
+Hey, don't worry about it. I actually kinda like that part of you, Boss. 
 Hey, come to think of it, has Sakura made it back from doing the shopping yet? 
 Now that you mention it… I haven't seen her yet. 
 I see… 
@@ -1068,9 +1068,9 @@ Good grief. Same as always, this place is just full of random junk.
 You've got that right. Oh, there's a table over there. 
 Alrighty, here we go. Lift it up with me, one, two, three! 
 Hup! OK, let's take it slow. 
-Hey boss, you came just in time! I actually need to carry this table all the way to the green room. 
+Hey Boss, you came just in time! I actually need to carry this table all the way to the green room. 
 It's a little too big for me to carry alone. 
-Oh, hey boss… What's up? 
+Oh, hey Boss… What's up? 
 What's the matter, Kanna? What're you doing here all alone? 
 Well… I just feel like you've been acting a little distant lately. 
 I have? 
@@ -1087,7 +1087,7 @@ Hey Iris, you actually came at a good time. Use your powers to carry this table 
 No problem! You just need this table in the green room, right? 
 Kay, here I go. Ya! 
 Whoa! Th, the whole table… I guess that's our Iris for you. 
-Thanks Iris, you're a life saver. 
+Thanks Iris, you're a lifesaver. 
 Unlike a certain person I could mention, you're actually helpful. 
 Well I didn't have to carry the table, but I feel kind of bad. 
 Hmm… looks pretty heavy. Should I call for some help? 
@@ -1097,28 +1097,28 @@ Hey Iris, you actually came at a good time. Use your powers to carry this table 
 No problem! You just need this table in the green room, right? 
 Kay, here I go. Ya! 
 Whoa! Th-the whole table… I guess that's our Iris for you. 
-Thanks Iris, you're a life saver. 
-Alrighty boss, I'm gonna run off and help out the others! 
+Thanks Iris, you're a lifesaver. 
+Alrighty Boss, I'm gonna run off and help out the others! 
 Man that kid's powerful. I'll have to remember to invite her next time I move. 
 … 
-I'm not asking for help or anything, so if you've got somewhere to be feel free to take off. 
+I'm not asking for help or anything. If you've got somewhere to be, feel free to take off. 
 Hey! It's Kanna and Mon Frère. Whatcha doing? 
 Hey Iris, you actually came at a good time. Use your powers to carry this table to the green room for me! 
 No problem! You just need this table in the green room, right? 
 Kay, here I go. Ya! 
 Whoa! Th-the whole table… I guess that's our Iris for you. 
-Thanks Iris, you're a life saver. 
+Thanks Iris, you're a lifesaver. 
 Unlike a certain person I could mention, you're actually helpful. 
 Well I didn't have to carry the table, but I feel kind of bad. 
 K-Kanna, are you alright? It's not too… heavy… is it? 
-I'm fine. How about you, boss? 
+I'm fine. How about you, Boss? 
 (Good grief. I knew Kanna was strong, but she's not even showing any strain lifting this heavy of a table.) 
 Oh, Mon Frère! That table looks heavy. 
 Oh, uh, hi Iris. 
 Hey Mon Frère, want me to help? 
 Y-yes please. <br> No, I don't think so. <br> No… I'm… fine… 
 Y-yes please! 
-Oh come on, boss, don't be such a wimp. This is nothing. 
+Oh come on, Boss, don't be such a wimp. This is nothing. 
 Honestly Mon Frère, what would you do without me. 
 Kay, here I go. Ya! 
 Ah! 
@@ -1134,7 +1134,7 @@ Th-the whole table vanished!
 Yep, I just made it 'te-le-port' to the green room. Easy as pie. 
 We… we made it! 
 I… I'm fine… 
-Attaboy boss! Let's see those muscles. 
+Attaboy Boss! Let's see those muscles. 
 Ha, just leave it to me… ha ha… hahaha. 
 You look like you're really struggling though. 
 Alright, let's get this thing moved before my arms give-… I mean before the sun sets. 

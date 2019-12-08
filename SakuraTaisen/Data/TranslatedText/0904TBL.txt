@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
+﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
 It's a photo of Sumire. This is a side of her you don't see too often. 
 It's a photo of Maria. …She's lost in thought and looks kind of sad… 
 It's a photo of Kanna. Her signature strength comes through clearly. 
@@ -605,7 +605,7 @@ Yes, master!
 Show me what you can do. 
 Please wait. 
 This Aya-me was sleeping until a short while ago. She might fail. 
-You should entrust me, Butterfly, with this task! 
+You should entrust me, Sho, the Butterfly, with this task! 
 Hmph… Very well. Do as you please… 
 Thank you kindly… 
 Hehehe… 
@@ -664,7 +664,7 @@ That you'll always… be there?
 *sniff* Ah, Chief… 
 You know me… I can't do anything right. 
 I can't shoot a gun like Maria, and I'm not strong like Kanna. 
-*sniff* The only thing I'm even remotely good is tinkering with stuff. 
+*sniff* The only thing I'm even remotely good at is tinkering with stuff. 
 I never told you this, but… I didn't even go to school. 
 But still, Ayame took me in. She took care of me and made sure I got an education here in Japan. 
 She was always so good to me… But then… *sniff* 

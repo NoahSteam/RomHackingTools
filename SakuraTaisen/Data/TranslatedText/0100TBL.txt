@@ -1,4 +1,4 @@
-﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
+﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
 It's a photo of Sumire. This is a side of her you don't see too often. 
 It's a photo of Maria. …She's lost in thought and looks kind of sad… 
 It's a photo of Kanna. She looks strong and reliable. I can't wait to meet her. 
@@ -41,7 +41,7 @@ Ichiro Ogami. You're being transferred to the Flower Division of the Imperial As
 Yes, sir! I'm going to give it my absolute best! 
 Good. That's what I like to hear. 
 My position as a politician doesn't allow me to talk about a military secret like the Assault Troop here and now. 
-For more information you have to ask the officer in command, Lt. Gen. Yoneda. 
+For more information you have to ask the officer in command, Lieutenant General Yoneda. 
 Now, go to Ueno Park. Don't make me regret recommending you for this position! 
 Yes, sir! I'll be on my way immediately! 
 The safety of the capital lies in your hands. Good Luck! 
@@ -229,7 +229,7 @@ So… please be nice to her?
 I hadn't realized… 
 I'll show you the way to the reception. Let's go. 
 Hey, stop fighting, you two. How about we all go together, hm? 
-…Yes. 
+…Alright. 
 I'm sorry, Iris. I guess I was a bit childish, too. 
 It's OK. Let's all go together. I like that! 
 Hahaha, looks like I've got a lady on each arm. Must be my lucky day. Shall we? 
@@ -286,7 +286,7 @@ I guess you punch the guests' tickets with that clipper.
 What? Punching tickets? How is that supposed to be a "special mission"? 
 Aren't you glad you have such a nice job? Well, I'm off then. 
 …What is the meaning of this? I thought I came here to be captain of the Imperial Assault Troop… 
-Clipper…? What I'm supposed to do with it? 
+Clipper…? What am I supposed to do with those? 
 What?! You don't know how to use a clipper? Hahaha, that's funny. 
 You hold it in your hand and go snippety snip like this, and it'll cut holes. 
 Yeah, but… cut holes in what, specifically? 
@@ -319,13 +319,13 @@ Well, I don't know anything about that, sorry.
 Excuse me, young man. How long do you expect us to wait? Punch our tickets! 
 Today Sumire is starring in "The Eve of Lady Camellia". I can't wait! 
 Sakura, if we don't get going, practice is gonna start without us. 
-Ah…you're right. W-well, Ogami, please excuse us. 
+Ah… you're right. W-well, Ogami, please excuse us. 
 (What the… this must be a misunderstanding!) 
-Clipper…? What I'm supposed to do with it? 
+Clipper…? What am I supposed to do with those? 
 What?! You don't know how to use a clipper? Hahaha, that's funny. 
 You hold it in your hand and go snippety snip like this, and it'll cut holes. 
 Hey, Iris. If we're not off to practice soon… 
-You are right. Bye-bye! 
+Oh, right. Bye-bye! 
 …but I really wanted to know what I'm supposed to use the clipper for. 
 Excuse me, young man. How long do you expect us to wait? Punch our tickets! 
 Today Sumire is starring in "The Eve of Lady Camellia". I can't wait!
@@ -336,7 +336,7 @@ Punching tickets!? You gotta be kidding me!
 Have fun at practice, you two! …Even if I don't know what kind of practice we're talking about. 
 Thanks, Mon Frère. You should come by later and see, too! 
 Thank you! I hope your ticket punching goes well too, Ogami! 
-(…Ticket punching?) 
+(Ticket punching?...) 
 Hey, Iris. If we're not off to practice soon… 
 You're right. Well, Mon Frère, bye-bye! 
 …Aaaaand they're gone. 
@@ -358,7 +358,7 @@ Excuse me, young man. How long do you expect us to wait? Punch our tickets!
 Today Sumire is starring in "The Eve of Lady Camellia". I can't wait! 
 Coming in direct contact with the audience is a very important job. I expect you to do your best. 
 (What the… this must be a misunderstanding!) 
-Clipper…? What I'm supposed to do with it? 
+Clipper…? What am I supposed to do with those? 
 It's a clipper to punch tickets. I'm sure you'll figure out how it works. 
 What? A clipper for punching tickets? What would I need that for? 
 Thank you, Maria. And later I'll join the training, of course. 
@@ -378,17 +378,17 @@ Whaaa…!? Does that mean… my secret mission is just…
 Punching tickets!? You gotta be kidding me! 
 Hey, ticket guy. Get going and punch those tickets! 
 Y-yes. Uh… where do I punch the hole? 
-Huh? You're new here? Jeez… don't dilly-dally. 
+Huh? Are you new here? Jeez… don't dilly-dally. 
 Y-yes! Just a moment, please! 
 (…Wasn't my assignment to be captain of a secret squad?) 
 Listen, at the moment I'm punching tickets here, but in reality… 
 I'm captain of the Troop! <br> I'm just a ticket puncher. 
-In reality I'm captain of the Flower Division of the Imperial Assault Troop! 
+In reality, I'm the captain of the Imperial Assault Troop’s Flower Division! 
 Huh?? 
 The Flower Division doesn't have a captain. 
 And anyway, a man has no business in the Flower Division! 
 (What on earth?! She doesn't believe me at all!) 
-(No way! The Imperial Assault Troop is a secret unit. I can't just shout that name around!) 
+(No way! The Imperial Assault Troop is a secret unit. I can't just blow their cover like this!) 
 …At the moment I'm punching tickets here, but in reality… Just kidding, I really am just a ticket puncher. 
 Everything alright with you? Oh! Look at the time. The Flower Division's show is about to start! 
 (Did she just say Flower Division…? How does a civilian know the name of this secret unit…?) 
@@ -400,7 +400,7 @@ Ah, sorry. Where is that clipper…? Ah! Here it is! There you go.
 Um… Do you happen to like Sumire Kanzaki? 
 She's just my type. <br> I don't care much for her… 
 Yeah, I haven't talked to her all that much, but she sure is my type. 
-Whaaa…! You have talked to Sumire?! Man, I'm so jealous… 
+Whaaa…! You’ve talked to Sumire?! Man, I'm so jealous… 
 Oh, right… Ahem… would you mind giving this letter to her? 
 Please tell her it is from her most passionate fan. 
 Y-yes, sir… understood. 
@@ -421,7 +421,7 @@ Handle the situation calmly. <br> Glare at the boy.
 Here you go, boy. Here's your ticket back. 
 Keep up the "good" work. 
 (Wh-what's the matter with that obnoxious child?!) 
-Are you sure you should glare at the guests like this? 
+Are you sure you should glare at the guests like that? 
 (This brat… I wish he'd just get lost.) 
 What? You've got something to say? 
 (Stupid brat! Just because I didn't say anything, he thinks he can treat me like this.) 

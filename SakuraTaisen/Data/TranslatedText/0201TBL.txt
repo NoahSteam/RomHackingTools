@@ -1,4 +1,4 @@
-﻿﻿﻿It's a photo of Sakura. Her gaze is so intense. I wonder what she's thinking?
+﻿﻿﻿﻿It's a photo of Sakura. Her gaze is so intense. I wonder what she's thinking?
 It's a photo of Sumire. It shows a side of her that's usually hidden.
 It's a photo of Maria. She's lost in thought and seems a bit sad…
 It's a photo of Kanna. She looks energetic and confident. I can't wait to meet her.
@@ -83,13 +83,13 @@ Oh, she's a member of the Flower Division!
 She spent a little time here before. 
 A member of the Flower Division, huh? 
 Yeah! One time, she was showing off this weird gizmo she built… 
-when suddenly it went KABOOM! 
+…when suddenly it went KABOOM! 
 Kaboom? 
 Yeah! She got totally covered in ash! 
 Yikes! She sounds bonkers… 
 Oh no! The play's starting! I've gotta go! 
 Bye bye, Mon Frère! 
-What about the play, Iris? It's almost curtain-up time. 
+What about the play, Iris? It's almost curtain time. 
 Oh, you're right! I hope Kohran gets here soon! 
 You can't keep waiting like this. Get a move on or Maria will fuss at you. 
 Right! I don't wanna make Maria mad again! 
@@ -154,12 +154,12 @@ Unused
 Unused
 Huh?! Are you blind or what?! 
 This Steam Bike is my very own invention! It's got a 16v engine and can do 200 kph at 100 hp! 
-Does that sound like a mess to you?! Keep talkin' crap about my bike 
-and I'll knock your block off! 
+Does that sound like a mess to you?! Keep talkin' crap about my bike… 
+…and I'll knock your block off! 
 It's all good! I'm Kohran Li, scientific genius. 
 I'll be living here from now on. Nice to meetcha! 
 Anyways, who are you? 
-Oh, so you're our boss… 
+Oh, so you're our captain… 
 Kohran Li reporting for duty, sir! I recently transferred here from the Hanayashiki Branch, sir! 
 Please direct me to Lieutenant General Yoneda, sir! 
 Much obliged, Ensign Ogami… 

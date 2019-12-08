@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
 It's a photo of Maria. …She's lost in thought and looks kind of sad…
 A photo of Kanna. Her signature strength comes through clearly.
@@ -319,7 +319,7 @@ The Imperial Assault Troupe, Flower Division will protect this city!
 …Alright, I won't try to stop you. Be victorious! For the future of the Imperial capital! 
 OK, let's go, everyone! Imperial Assault Troupe, move out! 
 Yes sir! 
-The Soaring Whale has entered protected airspace! Sacred Demon Castle starboard ahead! Staying at 2000 above ground. 
+We've entered enemy airspace! The Demon Castle is on our starboard bow! Maintaining an altitude of 2,000 ft.
 We'll engage the enemy soon. Cerulean Satan will probably be our last, and our most awesome foe. 
 But we will save Tokyo, save the world! And then… 
 We'll all come back here safe and sound! 
@@ -346,7 +346,7 @@ Once we're back home, we'll have a big party! So don't take too long!
 Kanna! Land the Soaring Whale where the castle gate used to be! We'll enter the castle from there! 
 Roger! 
 I wish you luck… 
-Kouma are approaching fast from the direction of the castle. About 2000 units! 
+Kouma are approaching fast from the direction of the castle. About 2,000 units! 
 Prepare for interception fire! Open all gunports! 
 We have to draw the Kouma towards us until the Flower Division has reached the Spirit Cannon! 
 Roger! 
@@ -362,7 +362,7 @@ Hehehe… The Soaring Whale’s measly cannons can't even scratch the castle's f
 And what did I do? I just sat in my chair, sending those girls into battle… 
 I'm a failure as a soldier. 
 But still, I loved you more than anyone and would have done anything to protect your lives… 
-But Ayame… We cannot leave this world to the demons! 
+Ayame… We cannot leave this world to the demons! 
 Looks like Yoneda pulled out his trump card. 
 Even so, it will all be in vain. 
 Let's get out our trump card as well, then… 
