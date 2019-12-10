@@ -715,7 +715,7 @@ bool FileReadWriter::OpenFile(const std::string& inFileName)
 	errno_t errorValue = fopen_s(&mpFileHandle, inFileName.c_str(), "r+b");
 	if( errorValue )
 	{
-		printf("Unable to open file.  Error: %i\n", errorValue);
+		printf("Unable to open file %s.  Error: %i\n", inFileName.c_str(), errorValue);
 		return false;
 	}
 

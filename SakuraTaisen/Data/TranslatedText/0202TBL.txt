@@ -1,4 +1,4 @@
-﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
 It's a photo of Maria. …She's lost in thought and looks kind of sad…
 A photo of Kanna. She looks strong and reliable. I can't wait to meet her.
@@ -67,10 +67,10 @@ Everything seems fine here. I'll continue my patrol.
 The theater's entrance hall. It's so quiet that it's hard to believe how lively the place is during the day. 
 …Everything seems fine here. I'll check out another room. 
 Aah, a futon on a tatami mat. Maybe I could sleep here… 
-…But I definitely shouldn't. …Guess I'll continue my patrol. 
+…But I definitely shouldn't… Guess I'll continue my patrol. 
 The director's office… Looks like Manager Yoneda isn't here. 
 The door is locked, and everything seems fine. I'll continue my patrol. 
-…Manager Yoneda's probably getting hammered again. 
+…Yoneda's probably somewhere getting hammered again. 
 They were running me ragged in here today. 
 I already checked out this room back then, so it should be OK. 
 Sakura's and Maria's costumes have been left here… 
@@ -86,8 +86,8 @@ Everything looks OK here. …The only ones who would want to break into this roo
 I guess I'll continue my patrol. I only have so much time. 
 The cafeteria is bustling during the day, but it's dead quiet now. 
 There's no one here, and no point in sticking around any longer. 
-The goods are still where they were when the store was open…That's pretty careless. 
-I'd like to grab just one photo…But that would be a terrible idea. 
+The merchandise is still where it was when the store was open…That's pretty careless. 
+I'd like to grab just one photo… But that would be a terrible idea. 
 Anyway, no problem here. I guess I'll continue my patrol. 
 I've spent more time than I care to remember punching tickets in this place. 
 Now, why don't I continue my work as night watchman? 
@@ -98,7 +98,7 @@ I'll make sure to go see it tomorrow.
 Anyway, everything seems fine here. I'll go check out another room. 
 Is this… a warehouse? There's a bunch of stuff in here. 
 Anyway, everything seems fine. 
-It's so quiet that all the commotion earler feels like a dream. 
+It's so quiet here now. All the commotion from earlier feels like a dream. 
 …Everything seems fine here. I guess I'll continue my patrol. 
 Sumire almost drowned tonight and it was terrible… 
 So I can't afford to be careless when I'm on patrol. Right, that's the spirit! 
@@ -128,7 +128,7 @@ It's Kohran. Sorry to bother you, Chief.
 Hey, Kohran… 
 Ogami isn't in right now! 
 …Oh, yeah? Then just who am I talking to? 
-I knew it! You're totally in there, Chief. 
+I knew it! You're totally in here, Chief. 
 It's you, Kohran? S-sorry about that. 
 …… 
 (Oh, great…I'm exhausted…Just let me get some sleep…) 
@@ -229,7 +229,7 @@ I'm in love with the view from this place at night…
 Sir… Each of city lights that we can see from here represents the daily lives of the citizens. 
 Yes… So they do. 
 Under those lights, so many people are mourning, laughing, raging, rejoicing… living. 
-Sir, I… think of this view as a precious treasure. 
+Sir, I… I think of this view as a precious treasure. 
 But…the fact that I think of it this way… perhaps it's because… of what I have survived. 
 …Maria? 
 Ah… my apologies. I've interfered with your work. …I'll be on my way. 
@@ -363,11 +363,11 @@ I'm glad as well.
 Well, there's somewhere I'd like to go, so please excuse me. 
 Good night, Chief. 
 …So, I guess I'll get back to my patrol work. 
-I hope it goes well, Chief. 
+Hey Chief, hope your night rounds are going well. 
 Kohran, it's already late. Shouldn't you get to bed? 
 Sorry… I'd like to stay here a little longer. 
 …Got it. Take care on your way back. 
-Thanks. Good luck with your patrol, Chief. 
+Thanks. Good luck with your patrol. 
 Hey, it's the Koubu! That brings back memories… 
 By the way, Chief, Iris's Koubu is in development at the Hanayashiki Branch. 
 I think it'll arrive here around July. 
@@ -386,7 +386,7 @@ Oh, no! We just handled the construction. The blueprints were made a long, long 
 Who made them? 
 Beats me… But I wish I could have met that person. That was some real genius work! 
 Is that so? 
-To begin with…When the Spirit Armor was in the design stage… 
+To begin with… When the Spirit Armor was in the design stage… 
 (Uh-oh… This is shaping up to be a long story.) 
 Listen in silence. <br> Get back on patrol. <br> Ask Kohran about herself. 
 Is this your unit, Chief? 
@@ -410,8 +410,8 @@ OK. Take care, then.
 Sure, for instance…Why you joined the Assault Troupe… 
 …… 
 …Until recently, I'd been living in China. 
-The deputy commander of the Troupe… came to Japan to meet with the current head of the Hanayashiki Branch. 
-That deputy commander also scouted Maria and Iris while traveling around the world. 
+Then I met the head of the Hanayashiki branch, former deputy commander of the Troupe, and came to Japan. 
+The deputy commander was also the one that scouted Maria and Iris during the commander’s travels around the world. 
 Wow… I had no idea. So that's what happened. 
 So, that's about it for my story. …I'll say it again, Chief… I’m glad I met you. 
 I'm glad too, Kohran. 
@@ -419,7 +419,7 @@ Well, I'm gonna stay and look at the Koubu a little longer.
 OK. In that case, I'll get back to my patrol. 
 Good night, and good luck with the patrol. 
 …So that's the story. Chief, did you get all that? 
-…H-huh? What's that, now? 
+…H-huh? What's that now? 
 Really? You didn't follow any of it? 
 …Sorry. 
 Eh, it's OK. I'm gonna stay and look at the Koubu a little longer. 
@@ -520,12 +520,12 @@ Hold on, I'm coming! <br> I'm going to get help!
 I'm going to get help! Hang on, Sumire! 
 E-Ensign! I can't…My leg!! 
 Damn it…There's no time! I'll… have to save her… 
-…All right! Hold on, Sumire! I'm going to save you!
+…All right! Hang in there, Sumire! I'm going to save you!
 E-Ensign! Please hurry! 
 Hmph… I somehow managed to get to the pool's edge on my own… 
 Hold on! I'm on my way! 
 Honestly… I thought I was done for! 
-And some help you turned out to be! 
+Some help you turned out to be! 
 S-sorry… 
 I'm leaving! 
 Ah… She's gone. 
@@ -576,11 +576,11 @@ She might have collapsed in there…All right, I'm going in!
 …Is Sumire in the shower…? 
 Yikes…! 
 …T-the bathing suit Sumire was just wearing is in that locker… 
-C, crap… blood is rushing to my head… make good choices, Ogami! 
+C-crap… blood is rushing to my head… make good choices, Ogami! 
 Back to the training room! <br> I'm…going to the showers… 
 Barging into the showers would be inexcusably rude. I'm going back on patrol! 
 Phew… I managed to get myself under control… 
-C, crap… I can't decide what to do! 
+C-crap… I can't decide what to do! 
 …Now then, time to get out… 
 T-this is bad! Gotta get out of here! 
 Phew… I managed to get myself under control… 
@@ -682,11 +682,11 @@ Sumire's silhouette in the shower…I won't forget this anytime soon…
 Hey… I can hear the shower going… and this locker is open. 
 Yikes…! 
 …D-does that mean that…Sumire's clothes are in the locker? 
-C, crap… blood is rushing to my head… make good choices, Ogami! 
+C-crap… blood is rushing to my head… make good choices, Ogami! 
 Get back on patrol! <br> I'm…going to the showers… 
 Barging into the showers would be inexcusably rude. I'm going back on patrol! 
 Phew… I managed to get myself under control… 
-C, crap… I can't decide what to do! 
+C-crap… I can't decide what to do! 
 …Now then, time to get out… 
 T-this is bad! Gotta get back to the hallway! 
 Phew… I managed to get myself under control… 
@@ -778,7 +778,7 @@ Hey… Isn't that Maria? What could she be doing here?
 I was just thinking about last month's battle at Ueno Park. 
 It was your first mission with the Flower Division, and there are a number of points to reflect on… 
 But is there anything you'd like to ask me, Ensign? 
-Ask about battle tactics. <br> Ask about troop members. <br> Nothing, really. 
+Ask about battle tactics. <br> Ask about troupe members. <br> Nothing, really. 
 Could you tell me about how the battle went? 
 In the last battle, we were able to take down the enemy quickly, and I see no particular problems. 
 The enemy leader escaped us, but you showed excellent leadership. 
@@ -792,9 +792,9 @@ Sakura's weapon is a sword, so of course she must fight in the front.
 Don't forget to provide backup so she won't be out there alone. 
 Sumire can attack many enemies at once, so she'll inevitably spend a lot of time fighting in the front. 
 Be sure to provide backup so she won't be out there alone. 
-I must apologize for the last battle. …I was forced to withdraw partway through… 
+I must apologize for the last battle… I was forced to withdraw partway through… 
 I have been doing some reflection of my own. I hope we can put these lessons to use in future battles. 
-Depending on your command, the troops can display a great deal of power, but the opposite may also happen. 
+Depending on your command, the troupe members can display a great deal of power, but the opposite may also happen. 
 Please guide them with the utmost care. 
 In the last battle, the Flower Division took too much damage. 
 Please make sure to consider each member's abilities, and always deploy them in the most advantageous manner. 
