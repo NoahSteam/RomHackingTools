@@ -633,3 +633,9 @@ Solution:
 -Change @0603d994[00039994] from 0007d000 to 00078800 + (204*16*8).  This changes where in vdp1 the uncompressed data after the font sheet is written to.
 -Change @0603d3c8 from 0007d000 to 00078800 + (204*16*8) ? 
 
+//MiniHana popuptext
+At 423B0 in MiniHana and also somewhere in HanaMain
+
+Logos: 200*80
+Found a match in HANAMAIN.BIN @0x00026868
+Found a match in MINIHANA.BIN @0x000454b0
