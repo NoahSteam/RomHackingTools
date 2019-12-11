@@ -639,3 +639,7 @@ At 423B0 in MiniHana and also somewhere in HanaMain
 Logos: 200*80
 Found a match in HANAMAIN.BIN @0x00026868
 Found a match in MINIHANA.BIN @0x000454b0
+
+//Intro Logo compression data
+SakuraLogo Found: 00025410 0000a200 Size: 6272 CompressedSize: 15123
+Kanji Logo: Found: 00025410 0000e740 Size: 4608 CompressedSize: 15123
