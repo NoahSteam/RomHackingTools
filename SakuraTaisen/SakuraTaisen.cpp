@@ -9561,6 +9561,15 @@ bool PatchMiniGames(const string& rootSakuraDirectory, const string& patchedSaku
 		return false;
 	}
 
+	//Open translated RankingLogo image
+	const string miniHanaPopupText = inTranslatedDataDirectory + "MiniHanaPopupText.bmp";
+	BmpToSakuraConverter miniHanaImage;
+	if( !miniHanaImage.ConvertBmpToSakuraFormat(miniHanaPopupText, false) )
+	{
+		printf("PatchMiniGames: Couldn't convert image: %s.\n", miniHanaPopupText.c_str());
+		return false;
+	}
+
 	struct MiniGameFileOffsets
 	{
 		string       fileName;
@@ -9572,19 +9581,20 @@ bool PatchMiniGames(const string& rootSakuraDirectory, const string& patchedSaku
 		unsigned int scrollingTextOffset;
 		unsigned int rankingTextOffset;
 		unsigned int rankingLogoOffset;
+		unsigned int hanaPopupTextOffset;
 	};
 
 	const int numMiniGameFiles = 8;
 	MiniGameFileOffsets miniGameOption1Offsets[numMiniGameFiles] = 
 	{
-		"HANAMAIN.BIN", 0x00013c08, 0x00016628, 0x000165a8, 0x00016528, 0x00015508, 0x00016728, 0x00014d88, 0x00015608,
-		"MINICOOK.BIN", 0x00011a3c, 0x0001445c, 0x000143dc, 0x0001435c, 0x0001333c, 0x0001455c, 0x00012bbc, 0x0001343c, 
-		"MINIHANA.BIN", 0x00011a3c, 0x0001445c, 0x000143dc, 0x0001435c, 0x0001333c, 0x0001455c, 0x00012bbc, 0x0001343c, 
-		"MINIMAIG.BIN", 0x00011a3c, 0x0001445c, 0x000143dc, 0x0001435c, 0x0001333c, 0x0001455c, 0x00012bbc, 0x0001343c, 
-		"MINISHOT.BIN", 0x00011a3c, 0x0001445c, 0x000143dc, 0x0001435c, 0x0001333c, 0x0001455c, 0x00012bbc, 0x0001343c, 
-		"MINISLOT.BIN", 0x00011a3c, 0x0001445c, 0x000143dc, 0x0001435c, 0x0001333c, 0x0001455c, 0x00012bbc, 0x0001343c, 
-		"MINISOJI.BIN", 0x00011a3c, 0x0001445c, 0x000143dc, 0x0001435c, 0x0001333c, 0x0001455c, 0x00012bbc, 0x0001343c, 
-		"MINISWIM.BIN", 0x00011a3c, 0x0001445c, 0x000143dc, 0x0001435c, 0x0001333c, 0x0001455c, 0x00012bbc, 0x0001343c, 
+		"HANAMAIN.BIN", 0x00013c08, 0x00016628, 0x000165a8, 0x00016528, 0x00015508, 0x00016728, 0x00014d88, 0x00015608, 0x00023768, 
+		"MINICOOK.BIN", 0x00011a3c, 0x0001445c, 0x000143dc, 0x0001435c, 0x0001333c, 0x0001455c, 0x00012bbc, 0x0001343c, 0, 
+		"MINIHANA.BIN", 0x00011a3c, 0x0001445c, 0x000143dc, 0x0001435c, 0x0001333c, 0x0001455c, 0x00012bbc, 0x0001343c, 0x000423b0, 
+		"MINIMAIG.BIN", 0x00011a3c, 0x0001445c, 0x000143dc, 0x0001435c, 0x0001333c, 0x0001455c, 0x00012bbc, 0x0001343c, 0, 
+		"MINISHOT.BIN", 0x00011a3c, 0x0001445c, 0x000143dc, 0x0001435c, 0x0001333c, 0x0001455c, 0x00012bbc, 0x0001343c, 0, 
+		"MINISLOT.BIN", 0x00011a3c, 0x0001445c, 0x000143dc, 0x0001435c, 0x0001333c, 0x0001455c, 0x00012bbc, 0x0001343c, 0, 
+		"MINISOJI.BIN", 0x00011a3c, 0x0001445c, 0x000143dc, 0x0001435c, 0x0001333c, 0x0001455c, 0x00012bbc, 0x0001343c, 0, 
+		"MINISWIM.BIN", 0x00011a3c, 0x0001445c, 0x000143dc, 0x0001435c, 0x0001333c, 0x0001455c, 0x00012bbc, 0x0001343c, 0, 
 	};
 
 	//Patch common data among all mini games
@@ -9610,6 +9620,11 @@ bool PatchMiniGames(const string& rootSakuraDirectory, const string& patchedSaku
 		miniGameFile.WriteData(miniGameOption1Offsets[miniGameIndex].scrollingTextOffset,     scrollingTextImage.GetImageData(),  scrollingTextImage.GetImageDataSize());
 		miniGameFile.WriteData(miniGameOption1Offsets[miniGameIndex].rankingTextOffset,		  rankingTextImage.GetImageData(),    rankingTextImage.GetImageDataSize());
 		miniGameFile.WriteData(miniGameOption1Offsets[miniGameIndex].rankingLogoOffset,		  rankingLogoImage.GetImageData(),    rankingLogoImage.GetImageDataSize());
+
+		if( miniGameOption1Offsets[miniGameIndex].hanaPopupTextOffset )
+		{
+			miniGameFile.WriteData(miniGameOption1Offsets[miniGameIndex].hanaPopupTextOffset, miniHanaImage.GetImageData(),		  miniHanaImage.GetImageDataSize());
+		}
 	}
 
 	bool bResult = PatchMiniSwim(patchedSakuraDirectory, inTranslatedDataDirectory);
