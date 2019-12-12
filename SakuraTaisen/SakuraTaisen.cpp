@@ -10827,6 +10827,106 @@ bool PatchIntroCredits(const string& patchedSakuraTaisenDirectory, const string&
 	return true;
 }
 
+bool PatchIntroLogo(const string& patchedSakuraDirectory, const string& patchedDataDirectory)
+{
+	printf("Patch Intro Logo Screen\n");
+
+	const string logoFilePath = patchedSakuraDirectory + "\\SAKURA1\\LOGO.SH2";
+	FileData logoFileData;
+	if( !logoFileData.InitializeFileData( FileNameContainer(logoFilePath.c_str()) ) )
+	{
+		return false;
+	}
+
+	FileReadWriter logoFile;
+	if( !logoFile.OpenFile(logoFilePath) )
+	{
+		return false;
+	}
+
+#if 0
+	const int originalCompressedSize = 15123;
+	const int offsetToImage = 0x00025410;
+	PRSDecompressor uncompressedData;
+	uncompressedData.UncompressData( (void*)(logoFileData.GetData() + offsetToImage), logoFileData.GetDataSize() - offsetToImage);
+
+	const string sakuraImagePath = patchedDataDirectory + "\\SakuraLogo_Sakura.bmp";
+	const string warsImagePath = patchedDataDirectory + "\\SakuraLogo_Wars.bmp";
+
+	//Create image data
+	BmpToSakuraConverter sakuraImage;
+	if( !sakuraImage.ConvertBmpToSakuraFormat(sakuraImagePath, false, BmpToSakuraConverter::CYAN) )
+	{
+		return false;
+	}
+
+	//Wars
+	BmpToSakuraConverter warsImage;
+	if( !warsImage.ConvertBmpToSakuraFormat(warsImagePath, false, BmpToSakuraConverter::CYAN) )
+	{
+		return false;
+	}
+
+
+	memcpy_s(uncompressedData.mpUncompressedData + 0x0000a200, sakuraImage.GetImageDataSize(), sakuraImage.GetImageData(), sakuraImage.GetImageDataSize());
+	memcpy_s(uncompressedData.mpUncompressedData + 0x0000e740, warsImage.GetImageDataSize(), warsImage.GetImageData(), warsImage.GetImageDataSize());
+
+	FileWriter f;
+	f.OpenFileForWrite("d:\\rizwan\\precompressed.bin");
+	f.WriteData(uncompressedData.mpUncompressedData, uncompressedData.mUncompressedDataSize);
+
+	SakuraCompressedData fontSheetCompressedData;
+	fontSheetCompressedData.PatchDataInMemory(uncompressedData.mpUncompressedData, uncompressedData.mUncompressedDataSize, true, false, originalCompressedSize);
+	if( fontSheetCompressedData.mDataSize > originalCompressedSize )
+	{
+		printf("Compressed credits image is too big");
+		return false;
+	}
+	
+	//Write out new image data
+	logoFile.WriteData(offsetToImage, fontSheetCompressedData.mpCompressedData, fontSheetCompressedData.mDataSize, false);
+#else
+	const string patchDataPath = patchedDataDirectory + "\\PrecompressedIntroLogo.bin";
+	FileData patchData;
+	if( !patchData.InitializeFileData( FileNameContainer(patchDataPath.c_str()) ) )
+	{
+		return false;
+	}
+
+	const int originalCompressedSize = 15123;
+	const int offsetToImage = 0x00025410;
+
+	if( patchData.GetDataSize() > originalCompressedSize )
+	{
+		printf("Compressed credits image is too big");
+		return false;
+	}
+	logoFile.WriteData(offsetToImage, (char*)patchData.GetData(), patchData.GetDataSize(), false);
+#endif
+	//Done with image data
+
+	
+	//Fix formatting
+	unsigned char sakuraFormatting[] = {0xff, 0x80, 
+										0xff, 0xd0, 
+										0x00, 0x98, 
+										0x00, 0x38};
+	logoFile.WriteData(0x628a, (char*)sakuraFormatting, sizeof(sakuraFormatting), false);
+
+	//Move the "Tai" off screen
+	unsigned char taiFormatting[] = {0x00, 0x00,
+									0x00, 0xff};
+
+	logoFile.WriteData(0x62b4, (char*)taiFormatting, sizeof(sakuraFormatting), false);
+	
+	//Wars
+	unsigned char warsFormatting[] = {0xff, 0xd0,
+									0xff, 0xa0};
+	logoFile.WriteData(0x62ce, (char*)warsFormatting, sizeof(warsFormatting), false);
+
+	return true;
+}
+
 bool PatchGame(const string& rootSakuraTaisenDirectory, 
 			   const string& patchedSakuraTaisenDirectory, 
 			   const string& translatedTextDirectory, 
@@ -10852,6 +10952,8 @@ bool PatchGame(const string& rootSakuraTaisenDirectory,
 		printf("CopyOriginalFiles failed.  Patch unsuccessful.\n");
 		return false;
 	}
+
+//	PatchIntroLogo(patchedSakuraTaisenDirectory, inTranslatedDataDirectory);
 
 	//Step 1
 	if( !CreateTranslatedFontSheet(fontSheetFileName, tempDir) )
@@ -10970,6 +11072,13 @@ bool PatchGame(const string& rootSakuraTaisenDirectory,
 		return false;
 	}
 
+	//Step 14
+	if( !PatchIntroLogo(patchedSakuraTaisenDirectory, inTranslatedDataDirectory) )
+	{
+		printf("Patching IntroLogo Failed.\n");
+		return false;
+	}
+	
 	printf("Patching Successful!\n");
 	return true;
 }
