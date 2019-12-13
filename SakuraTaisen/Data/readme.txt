@@ -3,6 +3,7 @@ Sakura Wars Tranlslation Project
 Sakura Wars
 December 12, 2019
 http://sakurawarstranslation.com/
+
 -------------------------------------------------------------------------------
 CONTENTS
 -------------------------------------------------------------------------------
@@ -13,7 +14,9 @@ CONTENTS
 5.) Translation Credits
 6.) Acknowledgements & Special Thanks
 
-What's translated in this patch?
+-------------------------------------------------------------------------------
+1.) What's translated in this patch?
+-------------------------------------------------------------------------------
 Story dialog
 Battle dialog
 Minigames
@@ -24,12 +27,12 @@ Load Screens
 Bootup screen
 
 -------------------------------------------------------------------------------
-1.) Release History
+2.) Release History
 -------------------------------------------------------------------------------
 December 12, 2019 V 1.00
 
 -------------------------------------------------------------------------------
-2.) Patching Instructions
+3.) Patching Instructions
 -------------------------------------------------------------------------------
 
 ==REQUIRED TOOLS==
@@ -53,7 +56,7 @@ December 12, 2019 V 1.00
 
 2) Create the iso Image:
 	a)	Pop your Sakura Wars CD into your computer's CD/DVD ROM drive. Open the 
-		disc in IsoBuster. RigIht-click on the top-level CD icon and do as follows:
+		disc in IsoBuster. Right-click on the top-level CD icon and do as follows:
 		Extract CD <Content> -> Extract User Data (*.tao, *.iso, *.img, *.wav)
 
 	b) 	Save the image in a directory of your choice. 
@@ -62,20 +65,24 @@ December 12, 2019 V 1.00
 		Select "Replace with all zeros," check the "Always apply Selection" box, and click the
 		"Selection" button. The image copy will complete.
 
-	d) You will end up with a file called Track 01.iso and Track 02.wav (depending on your cdrom drive there might be more wav files). 
+	d) You should end up with two files:
+		Track 01.iso
+		Track 02.wav. 
 
 3) Apply the Patch
 	a) Back up your iso in case the patch fails.
 	
 	b) Using DeltaPatcher.exe (*NOT DeltaPatcherLite.exe*), apply the appropriate patch to your Track 01.iso file.
 	
-	c) If the patch was successful, you'll recieve a prompt saying "Patch successfully applied"
+	c) If the patch was successful, you'll recieve a prompt saying "Patch successfully applied".
 
+	d) Do this for both discs.
+	
 4) Place the provided cue files into the same directory as each of your isos.  One for Disc1, one for Disc2
 	a) If your iso is called anything besides "Track 01.iso", modify the cue files using Notepad.exe so that the iso name matches.
  	
 5) Run the game!
-	a) Use mednafen to run the game.
+	a) Use mednafen to run the game by providing it the cue file.
 
 ~Optional~
 6) Burn a CD-R for your Saturn.
@@ -87,13 +94,15 @@ December 12, 2019 V 1.00
 	b) Use the CUE files to burn each disc.
 	
 -------------------------------------------------------------------------------
-3.) Compatibility & Troubleshooting
+4.) Compatibility & Troubleshooting
 -------------------------------------------------------------------------------
 
-*This patch has been tested using Mednafen 1.22.2 and also on a modded Sega Saturn + Action Replay
+*This patch has been tested using Mednafen 1.22.2 and also on a modded Sega Saturn + Action Replay.
+
+It has been reported by one user that the patch does not run on Rhea setups.
 
 -------------------------------------------------------------------------------
-4.) Translation Credits	
+5.) Translation Credits	
 -------------------------------------------------------------------------------
 
 ==PROJECT LEAD==
@@ -112,7 +121,7 @@ CrouchingMouse
 Schlomo
 
 ==TRANSLATION LEADS==
-Getsuya
+MatatabiMitsu
 Schlomo
 CrouchingMouse
 Nezumi
@@ -121,11 +130,23 @@ Nezumi
 Kate Robinson 
 Eien Ni Hen
 Cal Hampton
+Eben Williams
+Margie Obendorf
+Sarah Dopierala
+Mason van Dyk
 
 ==GRAPHICS MODIFICATION==
 Joqu
 Ibnu
 NoahSteam
+TrekkiesUnite118
+
+==TESTERS==
+BowlOfLentils
+cj_iwakura
+CrouchingMouse
+PsionicStorm
+Paragonias
 
 ==TALENT RECRUITMENT==
 cj_iwakura
@@ -137,46 +158,30 @@ VO by CrouchingMouse
 Narration Script by Eien1No1Yami and CJ Iwakura
 
 -------------------------------------------------------------------------------
-5.) Acknowledgements & Special Thanks
+6.) Acknowledgements & Special Thanks
 -------------------------------------------------------------------------------
-EsperKnight    - For some great hacking advice
-CybwerWarriorX - For providing some very initial clues into how the text in SakuraWars is stored
+EsperKnight    - For some great hacking advice.  The script would have been butchered in certain parts of the game were it not for his suggestion of how to cram so much text into the given amount of space.
+CybwerWarriorX - For providing some very initial clues into how the text in SakuraWars is stored.
 ItsumoKnight   - For managing the discord channel and giving us all some awesome icons :)
 Nym
-Victor Ireland - For inspiring fan translators
+Victor Ireland - For inspiring fan translators.
 Sega and RED   - For creating this amazing game and a badass console!
+FaustWolf      - For introducing me to the amazing world of fan translations, Saturn hacking, 
+				 giving me the confidence to believe that what seems impposible can be accomplished, 
+				 and even providing a template for this readme :)
 
-*The header font used on the monarch select bios is based on the fonts from 
- "The Legend of Zelda: Windwaker" (captured by AleX_XelA) and "Tales of 
-  Symphonia: Dawn of the New World" (captured by Mageker). The font for the 
-  domestics screen buttons is based on the font from "Actraiser" (captured by
-  Stangmar).
+(The folling is shamelessly taken from Dragon Force II's readme because it's all still true!)
 
-*To Guillaume Duhamel, Theo Berkau, and Anders Montonen, for making Yabause's
+*To Guillaume Duhamel, Theo Berkau, Anders Montonen, and EsperKnight for making Yabause's
  debugger the most user-friendly tracing tool out there, and for making the
  Sega Saturn one of the most well-documented consoles. 
 
- If you're interested in the technical side of Sega Saturn translation projects, 
+If you're interested in the technical side of Sega Saturn translation projects, 
  make wiki.yabause.org your one stop info shop!
 
-*To Barubary, author of TiledGGD. This helped immensely throughout the 
- Dragon Force II translation project! There's nothing like being able to pop in
- an entire memory dump and find out how a game writes its screen coordinates to 
- a tee. FW owes you a beer sometime!
-
-*To SnowBro, author of TileMolester. Still the user-friendly standard for 
- editing and re-inserting game graphics.
+*To everyone involved with Mednafen, by far the best Saturn emulator I have used.
 
 *To SadNESCity and PhOeNiX, for making Delta Patcher.
 
 *To the Romhacking.net community, for being awesome, and for keeping a central 
  hub for fannish works alive. 
-
-*To ZeaLitY and the entire Kajar Labs crew. Not only did you take FW from PoliSci
- student to budding game modder while showing him the Springtime of Youth, you 
- created a really cool readme format that FW totally ripped off for purposes of
- this entire document! 
-
-*To Working Designs and the Sega Saturn and Dragon Force fanbase, for giving the 
- translation team something to live up to and a reason to do something totally,
- totally ambitious and cool.
