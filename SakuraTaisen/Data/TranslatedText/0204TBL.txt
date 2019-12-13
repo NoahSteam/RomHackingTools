@@ -1,4 +1,4 @@
-﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
 It's a photo of Maria. …She's lost in thought and looks kind of sad…
 A photo of Kanna. She looks strong and reliable. I can't wait to meet her.
@@ -11,9 +11,9 @@ A pretty pendant. The delicate workmanship is gorgeous.
 A hairpin for use in a traditional bun hairstyle. It would complement a formal outfit well.
 This key will allow me to enter rooms I couldn't get into before.
 I found this in a bedroom on the second floor. I can use it to access the back room.
-A teacup Iris asked me to get for her. It has a very stylish design.
+A set of cups Iris asked me to get for her. They have a very stylish design.
 A matchbox Iris asked me to get for her. The brand logo is very colorful.
-A knife Iris asked me to get for her. Just a normal utensil you'd use during a meal.
+Some knives Iris asked me to get for her. Just a normal utensil you'd use during a meal.
 A prop sword and shield used onstage. They're well made and look just like the real thing.
 A prop crown used onstage. It's well constructed and incredibly detailed.
 A wig and costume used onstage. I wonder what kind of act could use a flashy outfit like this?
@@ -40,7 +40,7 @@ Alright, everyone! Let's get down to some repairs, right?
 What's wrong Sakura? You look… kinda down. 
 Hmph… Could it be that you're rather ashamed of the mess you made yesterday? 
 C'mon now… Could ya be a bit more positive? 
-This is nuts…! Why should I have to do this kind of　manual labor? 
+This is nuts…! Why should I have to do this kind of manual labor? 
 Well I loooooove this kind of stuff! It's so much fun, like construction work or something! 
 …Ogami, what's keeping him, I wonder? 
 Ain't he still sleeping? Well, it's fine right? Sometimes ya just gotta take it easy. 
@@ -68,7 +68,7 @@ Assault Troupe, move out! <br> Kohran, do your best!
 Imperial Assault Troupe, move out! Destination: Shiba Park! 
 Roger! 
 Roger! 
-Sir… I'll repay you for what you did at the pool, I promise! 
+Ensign… I'll repay you for what you did at the pool, I promise! 
 I can't wait! 
 Good luck, Mon Frère! 
 Kohran, good luck! 

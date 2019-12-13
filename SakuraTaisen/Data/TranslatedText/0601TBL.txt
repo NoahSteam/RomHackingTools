@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
 It's a photo of Maria. …She's lost in thought and looks kind of sad…
 A photo of Kanna. Her signature strength comes through clearly.
@@ -11,9 +11,9 @@ A pretty pendant. The delicate workmanship is gorgeous.
 A hairpin for use in a traditional bun hairstyle. It would complement a formal outfit well.
 This key will let me enter rooms I couldn't before.
 I found this in a bedroom on the second floor. I can use it to access the back room.
-A teacup Iris asked me to get for her. It has a very stylish design.
+A set of cups Iris asked me to get for her. They have a very stylish design.
 This is the matchbox Iris asked for. Its logo is quite colorful.
-A knife Iris asked me to get for her. Just a normal utensil you'd use during a meal.
+Some knives Iris asked me to get for her. Just a normal utensil you'd use during a meal.
 A prop sword and shield used onstage. They're well-made and look just like the real thing.
 A prop crown used onstage. It's well constructed and incredibly detailed.
 A wig and costume used onstage. I wonder what kind of act could use a flashy outfit like this?
@@ -242,7 +242,7 @@ Liar! Mon Frère is dirty!
 D-dirty? 
 Pervert! 
 Degenerate! 
-What are you saying? And why do you know that word?! 
+What are you saying? And how do you know that word?! 
 I-I dunno! 
 Ah! Iris! …She left…Well, that's a shame. 
 …I've been caught, have I? Oh well, what can you do, ahahaha… 
@@ -256,8 +256,8 @@ I was passing by the changing rooms and heard you screaming…
 I was worried that something had happened, so I ran here as quickly as I could. 
 …Reeeeally? 
 Really. 
-REALLY really? 
-Really really. 
+REALLY, really? 
+Really, really. 
 Aww! I believe you! 
 (Phew…) 
 But… Mon Frère. You're lucky it was me… if it were someone else, then… 
@@ -277,9 +277,9 @@ Actually, I was a little surprised when I heard your voice but…
 I'm so happy that you would worry about me like that! 
 Hahaha. Next time make sure you don't mix up the hot and cold water, ok? 
 Okaaaay! Anyway, I'm gonna go meet up with everyone else! 
-Hey, come on! I'm totally innocent! 
+Oh man… She's really carefree.
 Ahhh, that was refreshing! Huh? Mon Frère, what's wrong? 
-I should be asking you that. I was walking through the corridor and heard quite the scream coming from your room. 
+I should be asking you that. I was walking through the corridor and heard quite the scream coming from the shower. 
 …Huh? Ohhhh… 
 I mixed up the hot and cold water, so I shouted… Maybe that's what you heard? 
 Are you kidding me? I'm glad I didn't rush in here. 
@@ -340,7 +340,7 @@ I'm sorry, Mon Frère. Were you worried about me~?
 Of course I was! 
 Reeeally…? Hehehe, I'm happy. 
 Well, it was nothing after all. I'm glad it was nothing big. 
-I was worried about you but… I was a little nervous to enter the shower room. 
+I’m worried about Iris but… I’m a little nervous to enter the shower room. 
 First things first, I need to figure out what's going on. 
 Iris! What's wrong!? Are you OK!? 
 Huh!? That voice… Mon Frère?! Mon Frère, what's wrong? 
@@ -352,7 +352,7 @@ I'm sorry, Mon Frère. Were you worried about me~?
 Of course! 
 Reeeally…? Hehehe, I'm happy. 
 Well, it was nothing after all. I'm glad it was nothing big. 
-I was worried about you but… I was a little nervous to enter the shower room. 
+I’m worried about Iris but… I’m a little nervous to enter the shower room. 
 First things first, I need to figure out what's going on. 
 Hey, Boss… 
 I feel bad about just leaving Kanna in the lurch, but… guess I'd better go elsewhere. 
@@ -397,23 +397,23 @@ That's true. I'm really grateful for everyone's help.
 As expected from the Boss! Your judgment and memory are fantastic! 
 It's nothing, really. I'm just relieved all the kids were able to find their parents. 
 I know it well… what it feels like to lose sight of your parents… 
-I was left behind, wasn't I? I've gotta stop thinking like that or I'll start crying. 
-I don't want the kids who came to see the Flower Division's performance to think something like that. 
-Allowing them to come to this theater and make good memories together… That's my most important job. 
+You just can’t stop thinking “did they leave without me?” and it makes you wanna start crying. 
+I don't want the kids that come to see the Flower Division's performances to ever think about crying. 
+Creating a place where these kids can come to the theater and make good memories… That's my most important job. 
 Memories are key, right? <br> Fighting is important too. <br> That's just like you, Kanna. 
 Our memories are precious, aren't they? 
 Exactly. We can give those kids a dream to work towards. 
-Even if bad things happen, they can think back on our performance with a smile on their faces. 
-Every time I stand there up on the stage, I always tell myself that that's the kind of performance I wanna show them. 
-…or, something. Hope I'm not actin' like a show-off? 
+Even if bad things happen, they can think back to our performances with a smile on their faces. 
+Every time I'm on the stage, I always tell myself that I want to create those kinds of memories with my performance. 
+…or, something like that. Hope I'm not actin' like a show-off? 
 No, not at all. Actually, it was really fantastic. 
 Aw, c'mon. I appreciate it, but flattery will get you nowhere. 
 Well, I'd better get going, then. Everyone should be in the parlor by now. 
 Boss… thank you for helping me. 
 That's true. But fighting is still our most important job. 
 Of course! Protecting everyone from evil is the Imperial Assault Troupe's most important job! 
-Everything that's precious to these kids… their precious people, town, dreams… I'll try to protect it all! 
-…or, something. Hope I'm not actin' like a show-off? 
+Everything that's precious to these kids… their families, homes and even their dreams… I'll protect them all! 
+…or something like that. Hope I'm not actin' like a show-off? 
 No, not at all. Actually, it was really fantastic. 
 Aw, c'mon. I appreciate it, but flattery will get you nowhere. 
 Well, I'd better get going, then. Everyone should be in the parlor by now. 
@@ -421,11 +421,11 @@ Boss… thank you for helping me.
 That's just like you, Kanna. 
 Really? I just figure, I hate feeling lonely… 
 Life's a lot better with a smile on your face and a spring in your step! 
-Yeah. And that's the kind of place this theater is, at any rate. 
-Yep. For my part, I wanna make sure to keep this theater overflowing with smiling faces. 
+Yeah. And that's the kind of place this theater is. 
+Yep. For my part, I wanna keep this theater overflowing with smiling faces. 
 Well, I'd better get going, then. Everyone should be in the parlor by now. 
 Boss… thank you for helping me. 
-…or, something. Hope I'm not actin' like a show-off? 
+…or, something like that. Hope I'm not actin' like a show-off? 
 Well, I'd better get going, then. Everyone should be in the parlor by now. 
 Boss… thank you for helping me. 
 Kanna's performance is always a hit with the kids. No doubt it's the energy and brightness she brings to the stage… 
@@ -503,7 +503,7 @@ I suppose… it's about Kanna, right?
 …Yes. You're quite perceptive. 
 I thought you two had made peace with each other recently? 
 This is an issue I have with the casting. It's a completely separate matter. 
-How on earth could Kanna be cast as the lead, and I as the villain?! 
+How on earth could Yoneda cast Kanna as the lead, and I as the villain?! 
 I suppose… it's about the play, right? 
 That's exactly it! Perceptive as always, Ensign. That saves me the need to explain! 
 Curse Yoneda, that crusty old man! He's been casting me in nothing but supporting roles as of late… 
@@ -594,8 +594,8 @@ Nonsense! You are really beautiful and should dress up a little more often!
 You startled me, Maria. 
 I-I'm sorry to have caught you off-guard… 
 It's fine, you really don't need to apologize. You're a girl after all. 
-But how… 
-You're beautiful, Maria… so… you look fantastic wearing those girly clothes. 
+But… 
+You're beautiful, Maria… so… you would look fantastic wearing a dress like that. 
 …Is that so? It's hard for me to tell, so… 
 It's a little small on you but… 
 You're right…These girly clothes don't really suit me at all, do they? 
@@ -660,12 +660,12 @@ Didn't I just tell you to shut your trap for one second?! Aaaah…
 Wh… what's wrong? 
 Ah… damn it… 
 Don't worry. I'm not gonna say a single word. 
-That were nine words just there! Aaah… 
+That was nine words just there! Aaah… 
 Wh…what's wrong? 
 Ah…damn it… 
 You're building noses? 
 You dim-witted…! What are you talking about?! I said "nosey"! 
-Oh, I've just shoved it right in without thinking about it! 
+Oh, I just shoved it right in without thinking about it! 
 K… Kohran! If you scream like that… 
 Ah… damn it… 
 …… 
@@ -685,7 +685,7 @@ Thanks to you I connected the wrong wire and boom! There he goes!
 S-sorry… 
 I slaved away on him for a month! What a mess… I'll go see the others. 
 Chief… next time someone tells you to shut up, you better listen. Please, I mean it… 
-I'll go and meet up with the others. They're probably in the parlor. You better don't follow me! 
+I'll go and meet up with the others. They're probably in the parlor. You better not follow me! 
 What are you talking about? What is this "Party Boy"? 
 Today was the last show of the summer season. And I promised I'd have him ready for the celebrations… 
 For an entire month I spent my nights working to create the perfect party trick robot… 
@@ -699,10 +699,10 @@ Oh, and… I'm really sorry you had to witness this disaster… Sorry.
 Nonsense! But… I really would have liked to see Party Boy in action. 
 … 
 In that case, I'm gonna show you a little secret later. You can look forward to it! 
-And off she goes… What the hell did she mean by "secret"? 
+And off she goes… What did she mean by "secret"? 
 I'm coming in, Kohran… 
 Kohran… What do you think you're doing? 
-C…Chief!? How long have you been here for? 
+C…Chief!? How long have you been here? 
 Ah…damn it… 
 Would you look at this freaking mess! Now my Party Boy's in pieces! 
 A-are you alright, Kohran? 

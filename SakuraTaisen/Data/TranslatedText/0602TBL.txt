@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
 It's a photo of Maria. …She's lost in thought and looks kind of sad…
 A photo of Kanna. Her signature strength comes through clearly.
@@ -11,9 +11,9 @@ A pretty pendant. The delicate workmanship is gorgeous.
 A hairpin for use in a traditional bun hairstyle. It would complement a formal outfit well.
 This key will let me enter rooms I couldn't before.
 I found this in a bedroom on the second floor. I can use it to access the back room.
-A teacup Iris asked me to get for her. It has a very stylish design.
+A set of cups Iris asked me to get for her. They have a very stylish design.
 This is the matchbox Iris asked for. Its logo is quite colorful.
-A knife Iris asked me to get for her. Just a normal utensil you'd use during a meal.
+Some knives Iris asked me to get for her. Just a normal utensil you'd use during a meal.
 A prop sword and shield used onstage. They're well-made and look just like the real thing.
 A prop crown used onstage. It's well constructed and incredibly detailed.
 A wig and costume used onstage. I wonder what kind of act could use a flashy outfit like this?
@@ -91,11 +91,11 @@ Ohohoho! You are my preyyy! I won't let you escape.
 Why don't you play a spider? <br> You'd make a good snake. <br> I'd love to be prey myself… 
 Then Kanna should be a spider woman. Spider woman vs. snake woman; an epic rivalry for the ages. 
 Hey, there's a plan! Alright! I'm gonna wrap the snake woman up in my web! 
-A-a spider woman!? Please don't give her any strange ideas, sir! 
+A-a spider woman!? Please don't give her any strange ideas, Ensign! 
 Hey, that sounds great! Just leave it to me, I'll make you guys some awesome suits! 
 You'd make a pretty good snake. I can just see it now, so sensual and tempting. 
 Between the demoness and this snake, I'd say you're world class at erotic roles, Sumire. 
-… That praise doesn't please me in the slightest, sir… 
+… That praise doesn't please me in the slightest, Ensign… 
 Hey, I'll be your prey anytime you want… 
 Oh my, what a lovely thought. Once I have you in my coils, you won't escape, my cute little snack… 
 Stooooop! You can't have Mon Frère! He's mine! 
@@ -103,10 +103,10 @@ Hmph, and here comes the little ragamuffin to spoil the wonderful adult mood…
 Don't worry about it… 
 (Sumire as a snake, huh. I can just see her wrapping her body around her pray, letting her tongue play on her lips…) 
 (And then she GULPS you down!… Oh man. That's horrific, but I can't stop thinking about it!) 
-Are you feeling unwell, sir? The color has gone from your face. 
+Are you feeling unwell, Ensign? The color has gone from your face. 
 N-no! I'm good! Hahaha! 
 Looks like this'll be my happiest birthday yet! 
-My birthday's coming up on September 7th, sir! 
+My birthday's coming up on September 7th, Boss! 
 Oh, really!? 
 Well it's a little early, but happy birthday. 
 Thanks… Hehe, this is actually the first time anyone will be around to celebrate my birthday with me. 
@@ -137,7 +137,7 @@ Get it together. You should at least know the ages of the members in your comman
 Hey why'd you go all quiet… 
 Oh, it's just that I thought it would be rude to try and guess a lady's age. 
 …'lady'? Are we still talking about me? 
-Ahahaha! Nice one, sir! 
+Ahahaha! Nice one, Boss! 
 Was it really that funny? 
 …no, well, I mean… Nobody's ever called me a lady before. I mean it's not bad at all. 
 I'm just not used to paying any mind to that kind of thing, so it feels a little strange. Just treat me normal. 
@@ -207,7 +207,7 @@ Awww! You're no fun!!
 Whoa! Are you finally taking this ticket-punching thing seriously, Chief? 
 After all that complaining, it seems these are your true colors? 
 Oh, no… I just… kinda got caught up in the moment… 
-Hey, nothing to be ashamed of sir! You gotta take pride in your job, no matter what it is. 
+Hey, nothing to be ashamed of Boss! You gotta take pride in your job, no matter what it is. 
 You go and punch those tickets, Chief. We're counting on you! 
 Hey cut it out, you guys… 
 …it's no walk in the park, Iris… 

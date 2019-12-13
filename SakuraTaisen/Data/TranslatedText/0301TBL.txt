@@ -1,4 +1,4 @@
-﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…ensign
 It's a photo of Sumire. This is a side of her you don't see too often.
 It's a photo of Maria. …She's lost in thought and looks kind of sad…
 A photo of Kanna. She looks strong and reliable. I can't wait to meet her.
@@ -11,9 +11,9 @@ A pretty pendant. The delicate workmanship is gorgeous.
 A hairpin for use in a traditional bun hairstyle. It would complement a formal outfit well.
 This key will let me enter rooms I couldn't before.
 I found this in a bedroom on the second floor. I can use it to access the back room.
-A teacup Iris asked me to get for her. It has a very stylish design.
+A set of cups Iris asked me to get for her. They have a very stylish design.
 This is the matchbox Iris asked for. Its logo is quite colorful.
-A knife Iris asked me to get for her. Just a normal utensil you'd use during a meal.
+Some knives Iris asked me to get for her. Just a normal utensil you'd use during a meal.
 A prop sword and shield used onstage. They're well-made and look just like the real thing.
 A prop crown used onstage. It's well constructed and incredibly detailed.
 A wig and costume used onstage. I wonder what kind of act could use a flashy outfit like this?
@@ -152,7 +152,7 @@ Really… Sumire?… I guess everyone has their hidden side.
 Wait, Ogami, 'hidden'? What sort of personality DID you think Sumire had? 
 Uh, um… well… I can't really say. 
 Ogami, seems like you've been pretty friendly with Sakura lately. 
-R, really, you think so? 
+R-really, you think so? 
 Sakura's really popular with all sorts of people, from kids to adults. 
 Ogami, seems like you've been pretty friendly with Sumire lately. 
 R, really, you think so? 
@@ -331,7 +331,7 @@ You probably think Sumire's just a spoiled rich girl, don't you?
 … well, I wouldn't put it quite like that… 
 Really? …Then perhaps you don't need me to tell you this, but… 
 …… 
-Regarding Sumire Kanzaki, you have to ask yourself 'was her upbringing really so blessed?' 
+Regarding Sumire Kanzaki, you have to ask yourself, 'was her upbringing really so blessed?' 
 …I doubt even Sumire herself could answer that question… 
 …understood. 
 When you want to form a tighter bond with your subordinates, you must first discard your preconceptions. 
@@ -430,10 +430,10 @@ These photos are mainly for guests, so please just take one.
 Oh, I guess that's true. I'll come again some other time. 
 You'd like to buy that? Thank you! 
 Hmm… Kohran's fanbase is a bit of a mystery. 
-Fool! You've let the Assault Force meddle in our plans again! 
-… Lord Tenkai… I believe I have a plan that could put an end to the Assault Force. 
+Fool! You've let the Assault Troupe meddle in our plans again! 
+Lord Tenkai… I believe I have a plan that could put an end to the Assault Troupe. 
 Oh… and what is this plan of yours? 
-The strength of the Assault Troupe is focused in its leaders; Ichiro Ogami and Maria Tachibana. 
+The strength of the Assault Troupe is focused in its leaders, Ichiro Ogami and Maria Tachibana. 
 So, if we were to take those two out of the picture… 
 But… you say that as if it's a simple matter… 
 … I happen to have some very interesting information regarding Maria Tachibana… If we make good use of it… 
@@ -441,7 +441,7 @@ I see… Very well, Setsuna. I'll leave this in your hands… Crush the Imperial
 Yes, my lord!! Leave it to me… 
 Hmhmhm… all humans have skeletons in their closets they hope will never be unearthed… 
 Well now, Maria Tachibana… how will you handle my little surprise? 
-Ladies and gentlemen, this concludes the Imperial Troupe, Flower Division performance of 'Cinderella'. 
+Ladies and gentlemen, this concludes the Imperial Troupe, Flower Division’s performance of 'Cinderella'. 
 Thank you for joining us this evening. 
 We hope you'll come visit us again soon. 
 Man, I'm finally done punching tickets for the day… 
@@ -451,7 +451,7 @@ Oh, it's Maria. Hey! Maria!
 Huh? Could she not hear me or something? 
 Heeeeey! Maria! 
 Oh… sir… 
-What's the matter? I've never seen you spacing out like that. 
+What's the matter? I've never seen you space out like that. 
 … 
 Sir… I apologize for asking something so strange, but… 
 Oh, uh… yes? 
@@ -486,9 +486,9 @@ Oh, Kasumi… You too.
 She said Maria messed up some of her lines in today's performance… 
 I can't believe Maria would make mistakes like that… right? 
 I wonder what's wrong… <br> Do you know anything? <br> Everyone makes mistakes. 
-Hmm… I have no idea. I don't think she'd get this depressed just from messing up a line or two… 
+Hmm… I wonder what’s wrong. I don't think she'd get this depressed just from messing up a line or two… 
 Are you worried, Ogami? 
-Well yeah… we're squad-mates, after all… 
+Well yeah… we're squadmates, after all… 
 Hehe… are you sure that's the only reason? 
 Hey, come on, don't tease me. 
 Kasumi… do you know anything about what's going on with Maria? 
@@ -535,14 +535,14 @@ I see… so you're finally starting to worry about things like that…
 I don't think this is any time for jokes! I need to talk with you seriously about… 
 About Maria, right? If you've noticed she's troubled, why come talk to me about it? 
 You're her commanding officer, you should sort these things out yourself! 
-B, but… 
+B-but… 
 Ah, get outta here! Looking at yer mopey mug will make my sake go sour! 
-Y, yes sir! 
+Y-yes sir! 
 Commander Yoneda… I wanted to ask you about the Hive of Darkness. 
 The Hive of Darkness, huh… They said their boss was a guy named Tenkai, right? 
 I don't know what they're planning, but whatever it is can't be good for the Empire. 
 Make sure you keep everything ship-shape so you can fight them at your very best! 
-Y, yes sir! 
+Y-yes sir! 
 Now get outta here! I'm trying to take a nap. 
 I wonder when this year's rainy season will end. 
 Aw, don't say that, Ogami. It's great drinking sake while watching a steady drizzle outside. 
@@ -665,7 +665,7 @@ Ensign…
 Do you know why the fairy godmother sets Cinderella's magic to come undone at midnight? 
 For the story to work, right? <br> That's how magic is. 
 …just for the story, right? If the magic didn't come undone, there wouldn't be a plot. 
-Plebeian! …Honestly sir, I don't think there's a single romantic bone in your body. That's not the point! 
+Plebeian! …Honestly Ensign, I don't think there's a single romantic bone in your body. That's not the point! 
 Never mind! I'm needed at the stage. Excuse me! 
 …? What got her all riled up? 
 Because that's how magic is. A promise that could fade at any moment… that's magic. 

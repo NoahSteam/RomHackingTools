@@ -10920,10 +10920,74 @@ bool PatchIntroLogo(const string& patchedSakuraDirectory, const string& patchedD
 	logoFile.WriteData(0x62b4, (char*)taiFormatting, sizeof(sakuraFormatting), false);
 	
 	//Wars
-	unsigned char warsFormatting[] = {0xff, 0xd0,
-									0xff, 0xa0};
-	logoFile.WriteData(0x62ce, (char*)warsFormatting, sizeof(warsFormatting), false);
+	unsigned char warsFormatting[] = {0xff, 0xf0,
+									0xff, 0xe0};
+	logoFile.WriteData(0x62de, (char*)warsFormatting, sizeof(warsFormatting), false);
 
+	//Patch tiled image
+	if( 0 )
+	{
+		const string fontSheetPath = patchedDataDirectory + "\\SakuraLogo_Small.bmp";
+
+		//Create image data
+		const unsigned int tileDim = 8;
+		BmpToSakuraConverter fontSheet;
+		if( !fontSheet.ConvertBmpToSakuraFormat(fontSheetPath, false, BmpToSakuraConverter::CYAN, &tileDim, &tileDim) )
+		{
+			return false;
+		}
+
+		fontSheet.PackTiles();
+
+		SakuraCompressedData fontSheetCompressedData;
+		fontSheetCompressedData.PatchDataInMemory(fontSheet.mpPackedTiles, fontSheet.mPackedTileSize, true, false, 1644);
+		if( fontSheetCompressedData.mDataSize > 1644 )
+		{
+			printf("Compressed swirl sakura image is too big");
+			return false;
+		}
+		//Done with image data
+
+		//Write out new image data
+		logoFile.WriteData(0x00024b8c, fontSheetCompressedData.mpCompressedData, fontSheetCompressedData.mDataSize, false);
+
+		//Open tile map containing screen layout
+		const string lookupTablePath = patchedDataDirectory + "\\VDP2\\IntroLogo.csv";
+		FILE* tileFile = nullptr;
+		errno_t errorValue = fopen_s(&tileFile, lookupTablePath.c_str(), "r");
+		if( errorValue )
+		{
+			printf("Unable to open %s\n", lookupTablePath.c_str());
+			return false;
+		}
+
+		std::vector<int> tileEntries;
+		while( feof(tileFile) != EOF )
+		{
+			char comma;
+			int tileIndex;
+
+			if( fscanf_s(tileFile, "%i%c", &tileIndex, &comma, 2) == EOF )
+			{
+				break;
+			}
+
+			tileEntries.push_back( SwapByteOrder(tileIndex) );
+		}
+
+		fclose(tileFile);
+
+		/*
+		if( tileEntries.size() != (320 / 8)*(224 / 8) )
+		{
+			printf("IntroCredits.csv does not have the expected number of tiles [40 * 28].  Found %u instead.\n", tileEntries.size());
+			return false;
+		}*/
+
+		//Write out compressed lut table
+		const int lutAddress = 0x000251f8;
+		logoFile.WriteData(lutAddress, (char*)tileEntries.data(), tileEntries.size()*sizeof(int), false);
+	}
 	return true;
 }
 
@@ -11073,11 +11137,11 @@ bool PatchGame(const string& rootSakuraTaisenDirectory,
 	}
 
 	//Step 14
-	if( !PatchIntroLogo(patchedSakuraTaisenDirectory, inTranslatedDataDirectory) )
+	/*if( !PatchIntroLogo(patchedSakuraTaisenDirectory, inTranslatedDataDirectory) )
 	{
 		printf("Patching IntroLogo Failed.\n");
 		return false;
-	}
+	}*/
 	
 	printf("Patching Successful!\n");
 	return true;

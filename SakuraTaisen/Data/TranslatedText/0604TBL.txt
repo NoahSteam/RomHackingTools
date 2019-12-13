@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
 It's a photo of Maria. …She's lost in thought and looks kind of sad…
 A photo of Kanna. Her signature strength comes through clearly.
@@ -11,9 +11,9 @@ A pretty pendant. The delicate workmanship is gorgeous.
 A hairpin for use in a traditional bun hairstyle. It would complement a formal outfit well.
 This key will let me enter rooms I couldn't before.
 I found this in a bedroom on the second floor. I can use it to access the back room.
-A teacup Iris asked me to get for her. It has a very stylish design.
+A set of cups Iris asked me to get for her. They have a very stylish design.
 This is the matchbox Iris asked for. Its logo is quite colorful.
-A knife Iris asked me to get for her. Just a normal utensil you'd use during a meal.
+Some knives Iris asked me to get for her. Just a normal utensil you'd use during a meal.
 A prop sword and shield used onstage. They're well-made and look just like the real thing.
 A prop crown used onstage. It's well constructed and incredibly detailed.
 A wig and costume used onstage. I wonder what kind of act could use a flashy outfit like this?
@@ -39,9 +39,9 @@ Jean-Paul the teddy bear. Iris's best friend. She always carries him with her an
 (No! I can't believe I'm staring at Kanna's chest while she's upset…What am I doing?!) 
 (O-oh nooo! My eyes are drawn like a magnet to her breasts!) 
 Boss…What exactly are you looking at?! 
-Boss! You're too late… Gnnnnh… C-c-cold water…! 
-Of course, it's right here. That's why I can't stand people who don't know their manners. 
-How's that, Captain? The secrets of 4 millennia of Chinese traditions! …And hep! 
+Boss! You're too late… Gnnnnh… W-w-water…! 
+Goodness, the water is right here. This is why I can't stand people who don't know their manners. 
+How's that, Chief? The secrets of 4 millennia of Chinese traditions! …And hep! 
 I expected this kind of thing, so I prepared for it. Aaaaand, again! 
 Applaud. <br> Give a level-headed critique. <br> Break into laughter. 
 Wow! Way to go, Kohran! When did you learn that?! 
@@ -78,7 +78,7 @@ For real?
 Y-yes, really! It's an impressive technique! 
 It's nothing special, really. In China, everyone is able to do that. 
 What, really? 
-Look, I even can do this! Globe spinning! 
+Look, I can even do this! Globe spinning! 
 Wow! Plates spinning on top of the other plates! Incredible, Kohran! 
 Hehehe… If you praise me that much, I'll become embarrassed… 
 Kohran! We'll add our plates when they're empty! 
@@ -96,11 +96,11 @@ Oh… nothing at all.
 Hahaha! It's great how we can laugh about something like that in our season's end party! 
 Open your mouth, Mon Frère! 
 Aaaaaah… 
-Hehehe… Next, I'll grab some juice. …Oh? 
+Hehehe… Next, I'll grab some juice… Oh? 
 There's no juice left! 
-…Here neither! Sakura was supposed to buy some… 
+…We’re all out here as well! Sakura was supposed to buy some more… 
 But she's late. She didn't meet a ghost, did she? 
-Now you say that, I'm worried… Oh, outside… 
+Now that you mention it, I'm starting to worry… Oh, look outside… 
 It started raining. 
 It's one of those sudden evening showers. Maybe that's what held her up? 
 Hm… A ghost? 
@@ -119,7 +119,7 @@ You're absolutely right, captain. Dressing up as ghosts? What are we, children?
 You can't be serious, all of you! She's out shopping in that rain, don't you feel sorry for her? 
 Dressing up as ghosts? What are we, children? 
 I'm a child! So that means I can be a ghost at least? 
-Oh! Now you're suddenly a child again?! 
+Oh! Now you suddenly want to be treated like a child?! 
 Well, I'm in… But will Sakura really be afraid of some ghosts? 
 A valid question. That boor won't be much fazed by ghosts, methinks. 
 Well, that's fine too. Even funnier in a way, if she just stands there confused. 
@@ -177,22 +177,22 @@ After every one of their attacks, a strange machine was left behind.
 A machine? 
 Yes… like this one. 
 What is that? 
-An ancient ritual object kept in Kaneiji Temple in Ueno… We call it "the connector". 
+An ancient ritual object kept in Kaneiji Temple in Ueno… We call it "The Connector". 
 Kaneiji Temple…? What does that have to do with the Kouma? 
 Kaneiji was founded by none other than High Priest Tenkai. Leader of the Hive of Darkness. 
 Tenkai! 
 Take a look at this… 
-The red spots mark the places where we found these machines… Shiba, Tsukiji, Asakusa, Kudanshita, Fukagawa. 
+The red spots mark the places where we found these machines… Shiba, Tsukiji, Asakusa, Kudanshita and Fukagawa. 
 If we add the spot calculated by the steam processor, Hibiya Park, then… 
 What is this?! 
 They form a magical force field around Tokyo! 
 If this force field is completed, the capital will be under the control of those demons! 
-The destruction it will cause in this city is impossible to predict. 
+The destruction it will cause in the city is impossible to predict. 
 Heavens will rend, the earth will split. We'll have unending disasters, and Tokyo will be doomed for eternity! 
 This is what they were planning all along. 
 This… This is horrible. 
 It cannot be verified if Tenkai really is the same demon as the one 400 years ago… 
-One thing is clear. For them, we are tainted by Western culture and defiling this city. 
+But one thing is clear. For them, we are tainted by Western culture and are defiling this city. 
 We cannot let the capital, which we built with our own blood, sweat and tears, fall to the hands of those demons.
 We must prevent their plan from coming to fruition, no matter the cost. 
 Yes, sir! 
@@ -222,13 +222,13 @@ T-the Thunder God… is going to take me away!
 What? 
 Sakura, are you serious? 
 Give me a break. I wouldn't have taken you for a scaredy-cat. 
-Ensign Ogami, Ensign Ogami. This is General Yoneda. Please report to the command room immediately. 
-Ensign. The general wants to see you. We have to hurry to the command room. 
+Ensign Ogami, Ensign Ogami. Please report to General Yoneda in the command room immediately. 
+Ensign, the general wants to see you. We have to hurry to the command room. 
 Ensign. Please leave this to me. 
 If she's that scared of the God of Thunder… I wonder how she could ever ride a Koubu! 
 I'm afraid of the God of Thunder as well. 
-Sakura… She must have remembered something from her childhood days. 
-Can I… disturb you for one second? 
+Sakura… She must have remembered something from her childhood. 
+Can I… bother you for a moment? 
 Unused
 Unused
 Unused

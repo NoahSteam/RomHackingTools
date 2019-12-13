@@ -646,5 +646,11 @@ Kanji Logo: Found: 00025410 0000e740 Size: 4608 CompressedSize: 15123
 
 //Animated logo
 Found: 00024b8c 00000100 Size: 399 CompressedSize: 1644
+19x7 tiles 8x8 pixels
+tile map is at 0x251f8 in LOGO.SH2
 
 To fix the "Sakura", @0x20a28a, change to ff98 ffc8 0098 0038
+TO fix wars, change @0x020a2d0, change to ffa0 00
+
+Sakura x=44 y = 70
+Wars x=144, y = 108

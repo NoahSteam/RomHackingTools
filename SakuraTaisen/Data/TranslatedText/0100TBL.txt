@@ -12,9 +12,9 @@ A hairpin for use in a traditional bun hairstyle. It would complement a formal o
 Jean-Paul the teddy bear. Iris's best friend. She always carries him with her and takes good care of him. 
 This key will allow me to enter rooms I couldn't get into before. 
 I found this in a bedroom on the second floor. Now I can get into the room at the back. 
-A teacup Iris asked me to get for her. It has a very stylish design. 
+A set of cups Iris asked me to get for her. They have a very stylish design. 
 A matchbox Iris asked me to get for her. The brand logo is very colorful. 
-A knife Iris asked me to get for her. Just a normal utensil you'd use during a meal. 
+Some knives Iris asked me to get for her. Just a normal utensil you'd use during a meal. 
 A prop sword and shield used onstage. They're well made and look just like the real thing. 
 A prop crown used onstage. It's well constructed and incredibly detailed. 
 A wig and costume used onstage. I wonder what kind of act could use a flashy outfit like this? 
@@ -336,7 +336,7 @@ Punching tickets!? You gotta be kidding me!
 Have fun at practice, you two! …Even if I don't know what kind of practice we're talking about. 
 Thanks, Mon Frère. You should come by later and see, too! 
 Thank you! I hope your ticket punching goes well too, Ogami! 
-(Ticket punching?...) 
+(Ticket punching?…) 
 Hey, Iris. If we're not off to practice soon… 
 You're right. Well, Mon Frère, bye-bye! 
 …Aaaaand they're gone. 
