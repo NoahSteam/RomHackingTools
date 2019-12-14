@@ -1,4 +1,4 @@
-﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often. 
 It's a photo of Maria. …She's lost in thought and looks kind of sad… 
 It's a photo of Kanna. Her signature strength comes through clearly.
@@ -113,7 +113,7 @@ Ogami! Please give the dispatch order!
 Flower Division, to battle! <br> We'll return, no matter what! 
 Imperial Assault Troupe, Flower Division, get ready for battle! Board the Koubu and prepare for dispatch! 
 Roger! We'll board the Koubu and await drop orders! 
-OK! Lt. General Yoneda! 
+OK! Commander Yoneda! 
 Very well! Bring the Soaring Whale in on our target: right above Nihonbashi! 
 As soon as we reach target, dispatch all Koubu! 
 Yes, sir! Full turn to Starboard! Target: Nihonbashi! 
