@@ -164,11 +164,11 @@ Narration Script by Eien1No1Yami and CJ Iwakura
 EsperKnight    - For some great hacking advice.  The script would have been butchered in certain parts of the game were it not for his suggestion of how to cram so much text into the given amount of space.
 CybwerWarriorX - For providing some very initial clues into how the text in SakuraWars is stored.
 ItsumoKnight   - For managing the discord channel and giving us all some awesome icons :)
-Nym
-Victor Ireland - For inspiring fan translators.
+Nym            - For introducing cj_iwakura to the Russian PC version of the game.
+Victor Ireland - For inspiring fan translators and having tried to bring Sakura Wars to the West.
 Sega and RED   - For creating this amazing game and a badass console!
 FaustWolf      - For introducing me to the amazing world of fan translations, Saturn hacking, 
-				 giving me the confidence to believe that what seems impposible can be accomplished, 
+				 showing me that what seems impossible can be made possible, 
 				 and even providing a template for this readme :)
 
 (The folling is shamelessly taken from Dragon Force II's readme because it's all still true!)
