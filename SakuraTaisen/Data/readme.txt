@@ -11,8 +11,9 @@ CONTENTS
 2.) Release History
 3.) Patching Instructions
 4.) Compatibility Troubleshooting
-5.) Translation Credits
-6.) Acknowledgements & Special Thanks
+5.) Known Issues
+6.) Translation Credits
+7.) Acknowledgements & Special Thanks
 
 -------------------------------------------------------------------------------
 1.) What's translated in this patch?
@@ -102,7 +103,16 @@ December 12, 2019 V 1.00
 It has been reported by one user that the patch does not run on Rhea setups.
 
 -------------------------------------------------------------------------------
-5.) Translation Credits	
+5.) Known Issues
+-------------------------------------------------------------------------------
+-During battles, there is 1 frame of animation on the player's mech that is corrupted while playing the reaction animation
+-Lips often don't move on characters during voiced lines
+-The "Obstacles" image during battle sometimes has a bad palette
+
+All of these issues are planned to be addressed in a future patch.
+
+-------------------------------------------------------------------------------
+6.) Translation Credits	
 -------------------------------------------------------------------------------
 
 ==PROJECT LEAD==
@@ -159,30 +169,25 @@ VO by CrouchingMouse
 Narration Script by Eien1No1Yami and CJ Iwakura
 
 -------------------------------------------------------------------------------
-6.) Acknowledgements & Special Thanks
+7.) Acknowledgements & Special Thanks
 -------------------------------------------------------------------------------
 EsperKnight    - For some great hacking advice.  The script would have been butchered in certain parts of the game were it not for his suggestion of how to cram so much text into the given amount of space.
 CybwerWarriorX - For providing some very initial clues into how the text in SakuraWars is stored.
 ItsumoKnight   - For managing the discord channel and giving us all some awesome icons :)
-Nym            - For introducing cj_iwakura to the Russian PC version of the game.
+Mym            - For introducing cj_iwakura to the Russian PC version of the game.
 Victor Ireland - For inspiring fan translators and having tried to bring Sakura Wars to the West.
-Sega and RED   - For creating this amazing game and a badass console!
 FaustWolf      - For introducing me to the amazing world of fan translations, Saturn hacking, 
 				 showing me that what seems impossible can be made possible, 
 				 and even providing a template for this readme :)
+Sega and RED   - For creating this amazing game and a badass console!
 
-(The folling is shamelessly taken from Dragon Force II's readme because it's all still true!)
+To Guillaume Duhamel, Theo Berkau, Anders Montonen, and EsperKnight for making Yabause's
+ debugger the most user-friendly tracing tool out there.  This patch would not have been 
+ possible without their work.
 
-*To Guillaume Duhamel, Theo Berkau, Anders Montonen, and EsperKnight for making Yabause's
- debugger the most user-friendly tracing tool out there, and for making the
- Sega Saturn one of the most well-documented consoles. 
+To everyone involved with Mednafen, by far the best Saturn emulator I have used.
 
-If you're interested in the technical side of Sega Saturn translation projects, 
- make wiki.yabause.org your one stop info shop!
+To SadNESCity and PhOeNiX, for making Delta Patcher.
 
-*To everyone involved with Mednafen, by far the best Saturn emulator I have used.
-
-*To SadNESCity and PhOeNiX, for making Delta Patcher.
-
-*To the Romhacking.net community, for being awesome, and for keeping a central 
- hub for fannish works alive. 
+To the Romhacking.net community, for being awesome, and for keeping a central 
+hub for fannish works alive. 
