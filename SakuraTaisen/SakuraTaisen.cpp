@@ -669,12 +669,22 @@ struct SakuraTextFile
 		}
 	};
 
+	struct SakuraTimingData
+	{
+		struct SakuraCharTimingData
+		{
+			vector<unsigned char> mTimingBytes;
+		};
+		
+		vector<SakuraCharTimingData> mTimingForLine;
+	};
+
 	FileNameContainer         mFileNameInfo;
 	vector<SakuraString>      mLines;
 	SakuraDataSegment         mHeader;
-	SakuraDataSegment         mFooter;
 	vector<SakuraDataSegment> mDataSegments;
 	vector<SakuraStringInfo>  mStringInfoArray;
+	vector<SakuraTimingData>  mLineTimingData;
 
 private:
 	unsigned long       mFileSize;
@@ -684,7 +694,7 @@ private:
 public:
 	SakuraTextFile(const FileNameContainer& fileName) : mFileNameInfo(fileName), mFileSize(0), mpFile(nullptr), mpBuffer(nullptr){}
 
-	SakuraTextFile(SakuraTextFile&& rhs) : mFileNameInfo(std::move(rhs.mFileNameInfo)), mLines(std::move(rhs.mLines)), mHeader(std::move(rhs.mHeader)), mFooter(std::move(rhs.mFooter)), 
+	SakuraTextFile(SakuraTextFile&& rhs) : mFileNameInfo(std::move(rhs.mFileNameInfo)), mLines(std::move(rhs.mLines)), mHeader(std::move(rhs.mHeader)),
 		mDataSegments(std::move(rhs.mDataSegments)), mStringInfoArray(std::move(rhs.mStringInfoArray)), mFileSize(rhs.mFileSize),
 		mpFile(rhs.mpFile), mpBuffer(std::move(rhs.mpBuffer))
 	{
@@ -699,7 +709,7 @@ public:
 		mDataSegments    = std::move(rhs.mDataSegments);
 		mStringInfoArray = std::move(rhs.mStringInfoArray);
 		mHeader          = std::move(rhs.mHeader);
-		mFooter          = std::move(rhs.mFooter);
+		mLineTimingData  = std::move(rhs.mLineTimingData);
 		mFileSize        = rhs.mFileSize;
 		mpFile           = rhs.mpFile;
 		mpBuffer         = std::move(rhs.mpBuffer);
@@ -816,8 +826,57 @@ private:
 	void ParseFooter()
 	{
 		//Second two bytes are the offset that will take us to the footer
-		const unsigned short dataSize = SwapByteOrder( *((unsigned short*)(mpBuffer + 2)) ) * 2;
-		mFooter = std::move(SakuraDataSegment(mpBuffer + dataSize, mFileSize - dataSize));
+		const unsigned short offsetToTimingData = SwapByteOrder( *((unsigned short*)(mpBuffer + 2)) ) * 2;
+		char* pTimingData = mpBuffer + offsetToTimingData;
+		int timingDataSize = mFileSize - offsetToTimingData;
+		int index = 0;
+		const unsigned char CharTimingStartID = 0x2E;
+
+		SakuraTimingData timingForLine;
+		SakuraTimingData::SakuraCharTimingData timingForCharacter;
+		
+		do 
+		{
+			unsigned char timingChar = pTimingData[index];
+
+			//If we found 00 00, then this is the end of the timing data for the line of text
+			if( timingChar == 0 && 
+				timingDataSize > 0 && 
+				pTimingData[index + 1] == 0 )
+			{
+				timingForLine.mTimingForLine.push_back(timingForCharacter);
+				timingForCharacter.mTimingBytes.clear();
+
+				mLineTimingData.push_back(timingForLine);
+				timingForLine.mTimingForLine.clear();
+				
+				index += 2;
+				timingDataSize -=2;
+			}
+			else if( timingChar == CharTimingStartID && timingForCharacter.mTimingBytes.size() ) //When timing for next character is hit
+			{
+				timingForLine.mTimingForLine.push_back(timingForCharacter);
+				timingForCharacter.mTimingBytes.clear();
+
+				//Start off next entry
+				timingForCharacter.mTimingBytes.push_back(timingChar);
+			}
+			else
+			{
+				if( timingForCharacter.mTimingBytes.size() == 0 && timingChar != CharTimingStartID )
+				{
+					printf("Invalid timing data start found in %s \n", mFileNameInfo.mFileName.c_str());
+				}
+				timingForCharacter.mTimingBytes.push_back(timingChar);
+			}
+			
+			
+			--timingDataSize;
+			++index;
+		} while (timingDataSize > 0);
+
+		int k = 0;
+		++k;
 	}
 
 	void ParseStrings()
