@@ -878,7 +878,7 @@ private:
 	void ParseFooter()
 	{
 		//Second two bytes are the offset that will take us to the footer
-		const unsigned short offsetToTimingData = SwapByteOrder( *((unsigned short*)(mpBuffer + 2)) ) * 2;
+		const unsigned int offsetToTimingData = SwapByteOrder( *((unsigned short*)(mpBuffer + 2)) ) * 2;
 		char* pTimingData = mpBuffer + offsetToTimingData;
 		int timingDataSize = mFileSize - offsetToTimingData;
 		int index = 0;
@@ -888,14 +888,19 @@ private:
 		SakuraTimingData timingForLine;
 		SakuraTimingData::SakuraCharTimingData timingForCharacter;
 		
-		size_t currentLineIndex = (size_t)GetVoicedLineStartIndex();
+		const size_t startLineIndex = (size_t)GetVoicedLineStartIndex();
+		size_t currentLineIndex     = startLineIndex;
 		if( (int)currentLineIndex == -1 && timingDataSize )
 		{
 			printf("No voiced lines found in %s", mFileNameInfo.mFileName.c_str());
 			return;
 		}
 
-		//TODO: Deal with padding bytes and figure out the 00552e pattern
+		if( (int)currentLineIndex != -1 )
+		{
+			return;
+		}
+
 		do 
 		{
 			unsigned char timingChar = pTimingData[index];
@@ -916,7 +921,7 @@ private:
 					const size_t numCharsInLine = (size_t)mLines[currentLineIndex].GetNumberOfActualCharacters();
 					if( timingForLine.mTimingForLine.size() != numCharsInLine )
 					{
-						printf("Number of characters in line[%u] doesn't match number of timing entries[%u] for line %u in %s\n", numCharsInLine, timingForLine.mTimingForLine.size(), currentLineIndex, mFileNameInfo.mFileName.c_str());
+				//		printf("Number of characters in line[%u] doesn't match number of timing entries[%u] for line %u in %s\n", numCharsInLine, timingForLine.mTimingForLine.size(), currentLineIndex, mFileNameInfo.mFileName.c_str());
 					}
 				}
 
@@ -957,17 +962,17 @@ private:
 				bSearchingForStart = false;
 			}
 			else
-			{
+			{	
 				//Some lines have data prefixing it
 				if( timingForCharacter.mTimingBytes.size() == 0 && timingChar != CharTimingStartID )
 				{
 					bSearchingForStart = true;
 				}
-				else
+				else if( bSearchingForStart && timingChar == CharTimingStartID )
 				{
 					bSearchingForStart = false;
 				}
-				
+
 				timingForCharacter.mTimingBytes.push_back(timingChar);
 			}
 			
@@ -975,7 +980,7 @@ private:
 			++index;
 		} while (timingDataSize > 0);
 	
-		if( mLineTimingData.size() != mLines.size() )
+		if( mLineTimingData.size() != (mLines.size() - startLineIndex) )
 		{
 			printf("Line timing count[%u] doesn't match the number of lines[%u] in %s\n", mLineTimingData.size(), mLines.size(), mFileNameInfo.mFileName.c_str());
 		}
