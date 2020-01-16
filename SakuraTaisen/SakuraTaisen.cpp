@@ -39,6 +39,7 @@ using std::map;
 #define USE_SINGLE_BYTE_LOOKUPS 1
 #define USE_4_BYTE_OFFSETS 1
 #define USE_TREKKIS_MINIGAME_DATA 1
+#define FIX_TIMING_DATA 1
 
 const unsigned char OutTileSpacingX = 8;
 const unsigned char OutTileSpacingY = 12;
@@ -704,7 +705,7 @@ struct SakuraTextFile
 		
 		vector<SakuraCharTimingData> mTimingForLine;
 
-		size_t GetNumBytesInLine()
+		size_t GetNumBytesInLine() const
 		{
 			size_t count = 0;
 			for(const SakuraCharTimingData& lineData : mTimingForLine)
@@ -733,7 +734,7 @@ public:
 
 	SakuraTextFile(SakuraTextFile&& rhs) : mFileNameInfo(std::move(rhs.mFileNameInfo)), mLines(std::move(rhs.mLines)), mHeader(std::move(rhs.mHeader)),
 		mDataSegments(std::move(rhs.mDataSegments)), mStringInfoArray(std::move(rhs.mStringInfoArray)), mFileSize(rhs.mFileSize),
-		mpFile(rhs.mpFile), mpBuffer(std::move(rhs.mpBuffer))
+		mpFile(rhs.mpFile), mpBuffer(std::move(rhs.mpBuffer)), mLineTimingData(std::move(rhs.mLineTimingData))
 	{
 		rhs.mpBuffer = nullptr;
 		rhs.mpFile   = nullptr;
@@ -896,9 +897,15 @@ private:
 			return;
 		}
 
-		if( (int)currentLineIndex != -1 )
+		if( (int)currentLineIndex == -1 )
 		{
 			return;
+		}
+
+		//Todo: This is a temp fix for MES files
+		if( startLineIndex > 0 )
+		{
+			mLineTimingData.resize(startLineIndex);
 		}
 
 		do 
@@ -921,7 +928,7 @@ private:
 					const size_t numCharsInLine = (size_t)mLines[currentLineIndex].GetNumberOfActualCharacters();
 					if( timingForLine.mTimingForLine.size() != numCharsInLine )
 					{
-				//		printf("Number of characters in line[%u] doesn't match number of timing entries[%u] for line %u in %s\n", numCharsInLine, timingForLine.mTimingForLine.size(), currentLineIndex, mFileNameInfo.mFileName.c_str());
+						printf("Number of characters in line[%u] doesn't match number of timing entries[%u] for line %u in %s\n", numCharsInLine, timingForLine.mTimingForLine.size(), currentLineIndex, mFileNameInfo.mFileName.c_str());
 					}
 				}
 
@@ -980,7 +987,8 @@ private:
 			++index;
 		} while (timingDataSize > 0);
 	
-		if( mLineTimingData.size() != (mLines.size() - startLineIndex) )
+		if( startLineIndex != (size_t)-1 && 
+			(mLineTimingData.size() != (mLines.size() - startLineIndex)) )
 		{
 			printf("Line timing count[%u] doesn't match the number of lines[%u] in %s\n", mLineTimingData.size(), mLines.size(), mFileNameInfo.mFileName.c_str());
 		}
@@ -2534,8 +2542,40 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 						printf("Invalid number of characters in string\n");
 						return false;
 					}
-					numCharsPrintedForMES  += numCharsPrintedInLine*2 + 1;
+
+#if FIX_TIMING_DATA
+					if( !bIsMESFile )
+					{
+						if( (int)sakuraFile.mLineTimingData.size() < inTranslatedLineIndex )
+						{
+							printf("Not enough timing data lines in %s.  Expected %i, got %i", sakuraFile.mFileNameInfo.mFileName.c_str(), inTranslatedLineIndex, sakuraFile.mLineTimingData.size());
+
+							numCharsPrintedFortTBL += (numCharsPrintedInLine + 1)*2;
+						}
+						else
+						{
+							const int numOriginalCharactersInLine = sakuraFile.mLineTimingData[inTranslatedLineIndex].mTimingForLine.size();
+							if( numCharsPrintedInLine >= numOriginalCharactersInLine )
+							{
+								const int dummyTimingDataCount = (numCharsPrintedInLine + 1)*2; 
+								const int originalTimingCount  = (int)sakuraFile.mLineTimingData[inTranslatedLineIndex].GetNumBytesInLine();
+								const int finalPrintedCount    = (numCharsPrintedInLine - numOriginalCharactersInLine)*2 + originalTimingCount;
+								numCharsPrintedFortTBL        += finalPrintedCount;
+							}
+							else //TODO: Do this case.  Print out the data itself in the footer.
+							{
+							//	const int originalTimingCount  = sakuraFile.mLineTimingData[inTranslatedLineIndex].GetNumBytesInLine();
+							//	const int finalPrintedCount    = originalTimingCount;
+								int ad = 0;
+								++ad;
+							}
+						}
+					}
+#else
 					numCharsPrintedFortTBL += (numCharsPrintedInLine + 1)*2;
+#endif
+
+					numCharsPrintedForMES  += numCharsPrintedInLine*2 + 1;
 				}
 
 				return true;
@@ -2623,6 +2663,7 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 					const string untranslatedString = bUseShorthand && !timingData ? "U" : baseUntranslatedString + std::to_string(translatedLineIndex + 1); //Just print out a U for unused lines to save space
 
 					translatedSakuraString.AddString( untranslatedString, sakuraFile.mLines[currSakuraStringIndex].mChars[0].mIndex, timingData, !bIsMESFile);
+					//sakuraFile.mLineTimingData[currSakuraStringIndex].GetNumBytesInLine()
 					UpdateNumTimingCharsPrinted(translatedLineIndex, translatedSakuraString);
 
 					translatedLines.push_back( translatedSakuraString );
@@ -2786,27 +2827,6 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 				//String ends with 0000
 				translatedString.AddChar(0);
 
-				/*
-				//If the first byte is non-zero, then this string has timing info associated with it
-				if( sakuraFile.mLines[translatedLineIndex].mChars[0].mIndex != 0 )
-				{
-					const short numLinesInString = static_cast<short>(translatedString.GetNumberOfLines()) - 1;
-					if( numLinesInString < 0 )
-					{
-						printf("Invalid number of lines in string\n");
-						break;
-					}
-
-					//-3 because 2 for the initial bytes and one for the trailing zero
-					const unsigned short numCharsPrintedInLine = (unsigned short)translatedString.GetNumberOfPrintedCharacters() - 3;//(static_cast<short>(translatedString.mChars.size()) - 3 - numLinesInString);
-					if( (short)numCharsPrintedInLine < 0 )
-					{
-						printf("Invalid number of characters in string\n");
-						break;
-					}
-					numCharsPrintedForMES += numCharsPrintedInLine*2 + 1;
-					numCharsPrintedFortTBL += (numCharsPrintedInLine + 1)*2;
-				}*/
 				UpdateNumTimingCharsPrinted(translatedLineIndex, translatedString);
 				translatedLines.push_back( std::move(translatedString) );
 			}
