@@ -715,6 +715,25 @@ struct SakuraTextFile
 
 			return count;
 		}
+
+		char* GetByteStream() const
+		{
+			const size_t numBytes = GetNumBytesInLine();
+			char* pByteStream     = new char[numBytes];
+			size_t offset         = 0;
+			for(const SakuraCharTimingData& lineData : mTimingForLine)
+			{
+				if( offset >= numBytes )
+				{
+					printf("SakuraTimingData::GetByteStream: ByteStream buffer is too small\n");
+					return pByteStream;
+				}
+
+				memcpy_s(pByteStream + offset, numBytes, lineData.mTimingBytes.data(), lineData.mTimingBytes.size());
+				offset += lineData.mTimingBytes.size();
+			}
+			return pByteStream;
+		}
 	};
 
 	FileNameContainer         mFileNameInfo;
@@ -2559,15 +2578,27 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 							{
 								const int dummyTimingDataCount = (numCharsPrintedInLine + 1)*2; 
 								const int originalTimingCount  = (int)sakuraFile.mLineTimingData[inTranslatedLineIndex].GetNumBytesInLine();
-								const int finalPrintedCount    = (numCharsPrintedInLine - numOriginalCharactersInLine)*2 + originalTimingCount;
+								const int finalPrintedCount    = (numCharsPrintedInLine - numOriginalCharactersInLine)*2 + 2 + originalTimingCount;
+
 								numCharsPrintedFortTBL        += finalPrintedCount;
+
+								//Add extra byte to make things two byte aligned
+								if( originalTimingCount%2 != 0 )
+								{
+									numCharsPrintedFortTBL += 1;
+								}
 							}
-							else //TODO: Do this case.  Print out the data itself in the footer.
+							else
 							{
-							//	const int originalTimingCount  = sakuraFile.mLineTimingData[inTranslatedLineIndex].GetNumBytesInLine();
-							//	const int finalPrintedCount    = originalTimingCount;
-								int ad = 0;
-								++ad;
+								const int originalTimingCount  = sakuraFile.mLineTimingData[inTranslatedLineIndex].GetNumBytesInLine();
+								const int finalPrintedCount    = originalTimingCount + 2;
+								numCharsPrintedFortTBL        += finalPrintedCount;
+
+								//Add extra byte to make things two byte aligned
+								if( originalTimingCount%2 != 0 )
+								{
+									numCharsPrintedFortTBL += 1;
+								}
 							}
 						}
 					}
@@ -2948,6 +2979,85 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 			const unsigned char char2E   = 0x2e;
 			const unsigned char char6E   = 0x6e;
 			const unsigned char  charEnd = 0;
+
+#if FIX_TIMING_DATA
+			const size_t numTranslatedLines = translatedLines.size();
+			for(size_t translatedLinedIndex = 0; translatedLinedIndex < numTranslatedLines; ++translatedLinedIndex)
+			{
+				const SakuraString& translatedString = translatedLines[translatedLinedIndex];
+				if( translatedString.mChars[0].mIndex == 0 )
+				{
+					continue;
+				}
+
+				if( bIsMESFile )
+				{
+					const size_t numChars = translatedString.mChars.size() - 1; //.size includes null terminator
+					int numProcessed = 0;
+					for(size_t c = 2; c < numChars; ++c)
+					{
+						if( !translatedString.mChars[c].IsNewLine() )
+						{
+							outFile.WriteData(&char6E, sizeof(char6E));
+							outFile.WriteData(&char2E, sizeof(char2E));
+
+							++numProcessed;
+						}
+					}
+					outFile.WriteData(&charEnd, sizeof(charEnd));
+
+					if( !bIsMESFile )
+					{
+						outFile.WriteData(&charEnd, sizeof(charEnd));
+					}
+				}
+				else //if ( bIsMESFile )
+				{
+					const size_t numOriginalCharactersInLine = sakuraFile.mLineTimingData[translatedLinedIndex].mTimingForLine.size();
+					const size_t numNewCharactersInLines     = (size_t)translatedString.GetNumberOfActualCharacters();
+					if( numNewCharactersInLines >= numOriginalCharactersInLine )
+					{
+						const size_t numOriginalBytes = sakuraFile.mLineTimingData[translatedLinedIndex].GetNumBytesInLine();
+
+						//Write out original data
+						char* pTimingDataByteStream = sakuraFile.mLineTimingData[translatedLinedIndex].GetByteStream();
+						outFile.WriteData(pTimingDataByteStream, numOriginalBytes);
+						delete[] pTimingDataByteStream;
+
+						//Make it two byte aligned by adding in an extra 0x6e
+						if( numOriginalBytes%2 != 0 )
+						{
+							outFile.WriteData(&char2E, sizeof(char6E));
+						}
+
+						//Write out remainder
+						size_t numRemainingCharacters = numNewCharactersInLines - numOriginalCharactersInLine;
+						for(size_t c = 0; c < numRemainingCharacters; ++c)
+						{
+							outFile.WriteData(&char2E, sizeof(char2E));
+							outFile.WriteData(&char6E, sizeof(char6E));
+						}
+					}
+					else
+					{
+						const size_t numOriginalBytes = sakuraFile.mLineTimingData[translatedLinedIndex].GetNumBytesInLine();
+
+						char* pTimingDataByteStream = sakuraFile.mLineTimingData[translatedLinedIndex].GetByteStream();
+						outFile.WriteData(pTimingDataByteStream, numOriginalBytes);
+						delete[] pTimingDataByteStream;
+
+						//Make it two byte aligned by adding in an extra 0x6e
+						if( numOriginalBytes%2 != 0 )
+						{
+							outFile.WriteData(&char2E, sizeof(char6E));
+						}
+					}
+
+					outFile.WriteData(&charEnd, sizeof(charEnd));
+					outFile.WriteData(&charEnd, sizeof(charEnd));
+				}
+			}
+#else
 			for(const SakuraString& translatedString : translatedLines)
 			{
 				if( translatedString.mChars[0].mIndex == 0 )
@@ -2974,6 +3084,7 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 					outFile.WriteData(&charEnd, sizeof(charEnd));
 				}
 			}
+#endif
 		}
 
 		if( outFile.GetFileSize() > MaxTBLFileSize )
