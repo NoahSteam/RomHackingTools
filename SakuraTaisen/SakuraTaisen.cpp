@@ -743,6 +743,24 @@ struct SakuraTextFile
 			return count;
 		}
 
+		size_t GetNumPrefixBytes() const
+		{
+			size_t numPrefixBytes = 0;
+
+			if( mTimingForLine.size() && mTimingForLine[0].mTimingBytes.size() )
+			{
+				if( mTimingForLine[0].mTimingBytes[0] != CharTimingStartID )
+				{	
+					while( numPrefixBytes < mTimingForLine[0].mTimingBytes.size() && mTimingForLine[0].mTimingBytes[numPrefixBytes] != CharTimingStartID )
+					{
+						++numPrefixBytes;
+					}
+				}
+			}
+
+			return numPrefixBytes;
+		}
+
 		char* GetByteStream() const
 		{
 			const size_t numBytes = GetNumBytesInLine();
@@ -968,6 +986,7 @@ private:
 				timingForCharacter.mTimingBytes.clear();
 
 				//Make sure that the number of timing entries matches the number of characters in this line
+				/*
 				if( currentLineIndex < mLines.size() )
 				{
 					const size_t numCharsInLine = (size_t)mLines[currentLineIndex].GetNumberOfActualCharacters();
@@ -975,7 +994,7 @@ private:
 					{
 						printf("Number of characters in line[%u] doesn't match number of timing entries[%u] for line %u in %s\n", numCharsInLine, timingForLine.mTimingForLine.size(), currentLineIndex, mFileNameInfo.mFileName.c_str());
 					}
-				}
+				}*/
 
 				++currentLineIndex;
 
@@ -1035,7 +1054,7 @@ private:
 		if( startLineIndex != (size_t)-1 && 
 			(mLineTimingData.size() != (mLines.size() - startLineIndex)) )
 		{
-			printf("Line timing count[%u] doesn't match the number of lines[%u] in %s\n", mLineTimingData.size(), mLines.size(), mFileNameInfo.mFileName.c_str());
+		//	printf("Line timing count[%u] doesn't match the number of lines[%u] in %s\n", mLineTimingData.size(), mLines.size(), mFileNameInfo.mFileName.c_str());
 		}
 	}
 
@@ -2584,7 +2603,7 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 					}
 
 					//-3 because 2 for the initial bytes and one for the trailing zero
-					const unsigned short numCharsPrintedInLine = (unsigned short)inTranslatedString.GetNumberOfPrintedCharacters() - 3;//(static_cast<short>(translatedString.mChars.size()) - 3 - numLinesInString);
+					const unsigned short numCharsPrintedInLine = (unsigned short)inTranslatedString.GetNumberOfActualCharacters();//(unsigned short)inTranslatedString.GetNumberOfPrintedCharacters() - 3;//(static_cast<short>(translatedString.mChars.size()) - 3 - numLinesInString);
 					if( (short)numCharsPrintedInLine < 0 )
 					{
 						printf("Invalid number of characters in string\n");
@@ -2602,41 +2621,26 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 						}
 						else
 						{
-							const int numOriginalCharactersInLine = sakuraFile.mLineTimingData[inTranslatedLineIndex].mTimingForLine.size();
-							if( 1 )//numCharsPrintedInLine >= numOriginalCharactersInLine )
+							const int numPrefixBytes              = sakuraFile.mLineTimingData[inTranslatedLineIndex].GetNumPrefixBytes();
+							const int originalTimingCount         = (int)sakuraFile.mLineTimingData[inTranslatedLineIndex].GetNumBytesInLine_NoKeyValues();
+							int finalPrintedCount                 = numCharsPrintedInLine + originalTimingCount + 2;
+							
+							//Extra 0x6e bytes will be added
+							if( numCharsPrintedInLine >= (originalTimingCount - numPrefixBytes) )
 							{
-								const int originalTimingCount  = (int)sakuraFile.mLineTimingData[inTranslatedLineIndex].GetNumBytesInLine_NoKeyValues();
-								int finalPrintedCount          = numCharsPrintedInLine + originalTimingCount + 2;
-
-								//Extra 0x6e bytes will be added
-								if( numCharsPrintedInLine > originalTimingCount )
-								{
-									finalPrintedCount += (numCharsPrintedInLine - originalTimingCount);
-								}
-
-								numCharsPrintedFortTBL        += finalPrintedCount;
-
-								//Add extra byte to make things two byte aligned
-								if( finalPrintedCount%2 != 0 )
-								{
-									numCharsPrintedFortTBL += 1;
-									finalPrintedCount += 1;
-								}
-
-								lineTimingMap[inTranslatedLineIndex] = finalPrintedCount;
+								finalPrintedCount += (numCharsPrintedInLine - originalTimingCount) + numPrefixBytes;
 							}
-							else
+
+							numCharsPrintedFortTBL += finalPrintedCount;
+
+							//Add extra byte to make things two byte aligned
+							if( finalPrintedCount%2 != 0 )
 							{
-								const int originalTimingCount  = sakuraFile.mLineTimingData[inTranslatedLineIndex].GetNumBytesInLine();
-								const int finalPrintedCount    = originalTimingCount + 2;
-								numCharsPrintedFortTBL        += finalPrintedCount;
-
-								//Add extra byte to make things two byte aligned
-								if( originalTimingCount%2 != 0 )
-								{
-									numCharsPrintedFortTBL += 1;
-								}
+								numCharsPrintedFortTBL += 1;
+								finalPrintedCount += 1;
 							}
+
+							lineTimingMap[inTranslatedLineIndex] = finalPrintedCount;
 						}
 					}
 #else
@@ -3111,7 +3115,7 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 								{
 									numBytesToSplit += (numNewCharactersInLines - numBytesToSplit);
 								
-									//Padd with 0x6e
+									//Pad with 0x6e
 									if( numTimingBytes < numBytesToSplit )
 									{
 										char* pNewBuffer = new char[numBytesToSplit];
@@ -3125,21 +3129,11 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 
 								numTimingValuesPerCharacter     = numBytesToSplit/numNewCharactersInLines;
 								numCharactersWithOneTimingValue = numBytesToSplit - numTimingValuesPerCharacter*numNewCharactersInLines;
-								/*
-								numCharactersWithMultipleTimingValues = numNewCharactersInLines - numBytesToSplit%numNewCharactersInLines;
-								numCharactersWithOneTimingValue       = numNewCharactersInLines - numCharactersWithMultipleTimingValues;
-
-								if( numCharactersWithOneTimingValue + numCharactersWithMultipleTimingValues != numNewCharactersInLines )
-								{
-									printf("Invalid new timing data in %s\n", sakuraFile.mFileNameInfo.mFileName.c_str());
-									return false;
-								}
-								*/
 							}
 
 							int numSingleEntriesWritten = 0;
 							int timingIndex = 0;
-							for(int characterIndex = 0; characterIndex < numNewCharactersInLines; characterIndex++)
+							for(size_t characterIndex = 0; characterIndex < numNewCharactersInLines; characterIndex++)
 							{
 								outFile.WriteData(&CharTimingStartID, sizeof(CharTimingStartID));
 								++numTimingBytesWritten;
@@ -3159,28 +3153,6 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 									++numTimingBytesWritten;
 								}
 							}
-
-							/*
-							//Write out timing data for two timing value entries
-							for(int innerLoop = 0; innerLoop < numCharactersWithMultipleTimingValues; innerLoop++)
-							{
-								outFile.WriteData(&CharTimingStartID, sizeof(CharTimingStartID));
-								outFile.WriteData(&pDataWithNoStartID[innerLoop*2], sizeof(char));
-								outFile.WriteData(&pDataWithNoStartID[innerLoop*2 + 1], sizeof(char));
-								
-								numTimingBytesWritten += 3;
-							}
-							
-							//Write out timing data for single timing value entries
-							const int bufferOffset = numCharactersWithMultipleTimingValues*2;
-							for(int innerLoop = 0; innerLoop < numCharactersWithOneTimingValue; innerLoop++)
-							{
-								outFile.WriteData(&CharTimingStartID, sizeof(CharTimingStartID));
-								outFile.WriteData(&pDataWithNoStartID[bufferOffset + innerLoop], sizeof(char));
-
-								numTimingBytesWritten += 2;
-							}*/
-
 							break;
 						}
 
@@ -3199,20 +3171,6 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 						if( expectedTimingCount != numTimingBytesWritten )
 						{
 							printf("Invalid timing count for line %i in %s. Expected %i, wrote out %i\n", translatedLinedIndex, sakuraFile.mFileNameInfo.mFileName.c_str(), expectedTimingCount, numTimingBytesWritten);
-						}
-					}
-					else //TODO: This case and bug fixing in previous section.  Make sure the count is the same as what was calculated when writing the timing data for the line.
-					{
-						const size_t numOriginalBytes = sakuraFile.mLineTimingData[translatedLinedIndex].GetNumBytesInLine();
-
-						char* pTimingDataByteStream = sakuraFile.mLineTimingData[translatedLinedIndex].GetByteStream();
-						outFile.WriteData(pTimingDataByteStream, numOriginalBytes);
-						delete[] pTimingDataByteStream;
-
-						//Make it two byte aligned by adding in an extra 0x6e
-						if( numOriginalBytes%2 != 0 )
-						{
-							outFile.WriteData(&char2E, sizeof(char6E));
 						}
 					}
 
