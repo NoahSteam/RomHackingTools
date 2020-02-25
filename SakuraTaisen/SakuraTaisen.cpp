@@ -944,16 +944,18 @@ private:
 	{
 		//Second two bytes are the offset that will take us to the footer
 		const unsigned int offsetToTimingData = SwapByteOrder( *((unsigned short*)(mpBuffer + 2)) ) * 2;
-		char* pTimingData = mpBuffer + offsetToTimingData;
-		int timingDataSize = mFileSize - offsetToTimingData;
-		int index = 0;
-		bool bSearchingForStart = false;
+		char* pTimingData                     = mpBuffer + offsetToTimingData;
+		int timingDataSize                    = mFileSize - offsetToTimingData;
+		int index                             = 0;
+		bool bSearchingForStart               = false;
 
 		SakuraTimingData timingForLine;
 		SakuraTimingData::SakuraCharTimingData timingForCharacter;
 		
-		const size_t startLineIndex = (size_t)GetVoicedLineStartIndex();
+		const bool bIsMESFile       = mFileNameInfo.mFileName.find("MES.BIN", 0, 6) != string::npos;
+		const size_t startLineIndex = bIsMESFile ? 0 : (size_t)GetVoicedLineStartIndex();
 		size_t currentLineIndex     = startLineIndex;
+
 		if( (int)currentLineIndex == -1 && timingDataSize )
 		{
 			printf("No voiced lines found in %s", mFileNameInfo.mFileName.c_str());
@@ -966,16 +968,19 @@ private:
 		}
 
 		//Todo: This is a temp fix for MES files
+		/*
 		if( startLineIndex > 0 )
 		{
 			mLineTimingData.resize(startLineIndex);
 		}
+		*/
+		mLineTimingData.resize(mLines.size());
 
 		do 
 		{
 			unsigned char timingChar = pTimingData[index];
 			
-			//If we found 00 00, then this is the end of the timing data for the line of text
+			//If we found 00, then this is the end of the timing data for the line of text
 			if( timingChar == 0 && 
 				timingDataSize > 0  && 
 				timingForCharacter.mTimingBytes.size()
@@ -996,14 +1001,14 @@ private:
 					}
 				}*/
 
-				++currentLineIndex;
-
 				const size_t numTimingChararactersForLine = timingForLine.GetNumBytesInLine();
-				mLineTimingData.push_back(timingForLine);
+				mLineTimingData[currentLineIndex] = timingForLine;//mLineTimingData.push_back(timingForLine);
 				timingForLine.mTimingForLine.clear();
 				
+				++currentLineIndex;
+
 				//Take into account padding bytes
-				if( numTimingChararactersForLine % 2 == 0 )
+				if( !bIsMESFile && numTimingChararactersForLine % 2 == 0 )
 				{
 					index += 2;
 					timingDataSize -=2;
@@ -1019,6 +1024,15 @@ private:
 				if( timingDataSize <= 0 )
 				{
 					break;
+				}
+
+				if( bIsMESFile )
+				{
+					const size_t numLinesInFile = mLines.size();
+					while( mLines[currentLineIndex].mChars[0].mIndex == 0 && currentLineIndex < numLinesInFile )
+					{
+						++currentLineIndex;
+					}
 				}
 				continue;
 			}
@@ -2452,7 +2466,7 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 
 	//Get all files containing dialog
 	vector<FileNameContainer> textFiles;
-	GetAllFilesOfType(allFiles, "TBL.BIN", textFiles);
+//	GetAllFilesOfType(allFiles, "TBL.BIN", textFiles);
 	GetAllFilesOfType(allFiles, "MES.BIN", textFiles);
 
 	//Extract the text
@@ -2611,7 +2625,7 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 					}
 
 #if FIX_TIMING_DATA
-					if( !bIsMESFile )
+					if( 1 )//!bIsMESFile )
 					{
 						if( (int)sakuraFile.mLineTimingData.size() < inTranslatedLineIndex )
 						{
@@ -2634,7 +2648,7 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 							numCharsPrintedFortTBL += finalPrintedCount;
 
 							//Add extra byte to make things two byte aligned
-							if( finalPrintedCount%2 != 0 )
+							if( !bIsMESFile && finalPrintedCount%2 != 0 )
 							{
 								numCharsPrintedFortTBL += 1;
 								finalPrintedCount += 1;
@@ -3031,7 +3045,7 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 					continue;
 				}
 
-				if( bIsMESFile )
+				if( 0 )//bIsMESFile )
 				{
 					const size_t numChars = translatedString.mChars.size() - 1; //.size includes null terminator
 					int numProcessed = 0;
@@ -3054,6 +3068,8 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 				}
 				else //if ( bIsMESFile )
 				{
+					//Todo: Probably don't need to write out timing data for lines that don't have timing data in the original file
+
 					const size_t numOriginalCharactersInLine = sakuraFile.mLineTimingData[translatedLinedIndex].mTimingForLine.size();
 					const size_t numNewCharactersInLines     = (size_t)translatedString.GetNumberOfActualCharacters();
 					if( 1 ) //numNewCharactersInLines >= numOriginalCharactersInLine )
@@ -3160,7 +3176,7 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 						delete[] pTimingDataByteStream;
 
 						//Make it two byte aligned by adding in an extra 0x6e
-						if( numTimingBytesWritten%2 != 0 )
+						if( !bIsMESFile && numTimingBytesWritten%2 != 0 )
 						{
 							outFile.WriteData(&char6E, sizeof(char6E));
 							++numTimingBytesWritten;
