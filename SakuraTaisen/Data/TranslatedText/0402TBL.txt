@@ -1,6 +1,6 @@
-﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
+﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
 It's a photo of Sumire. This is a side of her you don't see too often. 
-It's a photo of Maria. …She's lost in thought and looks kind of sad… 
+It's a photo of Maria. She's lost in thought and looks kind of sad… 
 It's a photo of Kanna. Her signature strength comes through clearly.
 It's a photo of Iris. She's surrounded by flowers and flashing a radiant smile. 
 It's a photo of Kohran. She's looking pretty in profile with her face dyed red by the evening sun. 
@@ -27,9 +27,9 @@ It's a photo of Kohran. I don't get to see her with her braids undone very often
 It's a photo of Ayame in a traditional outfit. I hope she'll always be as happy and content as she is here. 
 Ayame's gun. Why…? Why did it have to turn out like this…? 
 …! 
-…It… was just a dream. 
+It… was just a dream. 
 …Mon Frère. I want… 
-I want… to become a grown-up as soon as possible… 
+I want…to become a grown-up as soon as possible… 
 …Morning already? I wonder if Iris has calmed down… 
 Iris… 
 No. I need to go see Iris and talk to her. 
@@ -38,7 +38,7 @@ No. I need to go see Iris and talk to her.
 Would you listen to what I have to say, please? 
 … 
 Let's try the date again. <br> Cut this out! 
-Iris… Next Sunday, are you free? Let's try the date again. 
+Iris… next Sunday, are you free? Let's try the date again. 
 …What's wrong? 
 It's not like that, Iris. 
 I'm not lying, Iris! 
@@ -51,11 +51,11 @@ What!?
 That's not true! Everyone's really worried about you! 
 It's nothing like that! Everybody likes you, Iris! 
 Of course! 
-K-Kiss!? 
+K-Kiss?! 
 (…What should I do…) 
 Kiss her. 
 … 
-W…What's wrong, Iris!? 
+W-What's wrong, Iris!? 
 I-Iris… 
 Iris! 
 … 
@@ -64,48 +64,48 @@ Iris!
 Ogami!! 
 Sakura! What on earth is…!? 
 This is really bad! Iris boarded a Koubu and headed outside!! 
-W…What!? 
+W-What!? 
 If Iris goes running around town the way she is now, there's going to be all sorts of trouble! 
 Come on, let's get to the Command Room. 
 This is quite the pickle… Who'd have thought little Iris would go running around town in a Koubu. 
 Not to mention the Koubu she took was our very latest model, fresh from the Hanayashiki Branch. 
-Sir… do we know where Iris is headed? 
+Sir… Do we know where Iris is headed? 
 It appears she's heading toward Asakusa. 
-Sh… she is!? 
+Sh… She is!? 
 She's managed to get that far? But it's her first time even piloting a Koubu! 
 Get to Asakusa and bring Iris back to us. I'm counting on you, everyone! 
 What…? 
 Sir! 
 What, Ayame? What's gotten you all riled up? 
 It's the Hive of Darkness! 
-I've got a report of Hive of Darkness Hex Mechs confirmed in Asakusa! 
+I've got a confirmed report of the Hive’s Hex Mechs in Asakusa! 
 Are you serious!? 
 Dammit! They would have to show up right now, wouldn't they! 
 Well, I suppose we should count it a blessing that Iris is heading for Asakusa, then. 
 This way, we can secure Iris and take down the Hive of Darkness simultaneously. 
-Alright. Head for Asakusa immediately! I'm counting on you, Ogami! 
+All right. Head for Asakusa immediately! I'm counting on you, Ogami! 
 Yes, sir! 
 (OK… let's move…) 
-…wait a moment, Ogami. 
+…Wait a moment, Ogami. 
 Ma'am…? 
 Ogami… I trust you understand why Iris ran away. 
-…… 
+… 
 What would you say are Iris's good points, Ogami? 
 Wha…? 
-For example, she's cheerful, innocent, and is honest with herself and others about the feelings in her heart… 
-The very things that make her 'childish' are the things we like most about her, wouldn't you agree? 
+For example, she's cheerful, innocent and is honest with herself and others about her feelings… 
+The very things that make her “childish” are also the things we like the most about her, wouldn't you agree? 
 So, she shouldn't force herself to grow up too fast… 
 Please tell her that, Ogami. 
 I think perhaps… you are the only one who can. 
 Well then, Ogami. Everyone's waiting for you! Sortie at once! 
 Assault Troupe, launch! <br> We'll bring Iris back! 
 Imperial Assault Troupe, launch! 
-Yes, sir! Our destination is the Kaminarimon at Asakusa! 
+Yes, sir! Our destination is the Kaminarimon in Asakusa! 
 We're coming for you, Iris! 
 You can put your faith in us… 
 We've got your back, kiddo! 
 Imperial Assault Troupe, launching! 
-Alright everyone! We're bringing Iris back, got it? 
+All right everyone! We're bringing Iris back, got it? 
 You got it, Boss! 
 This time we'll brook no failures. 
 Iris, we're coming… 
@@ -113,7 +113,7 @@ So don't go doing anything crazy!
 Let's go, Ogami! Let's save Iris!! 
 Your response, Ogami! Pull yourself together. 
 Oh, yeah… 
-Alright. Imperial Assault Troupe, launch!! 
+All right. Imperial Assault Troupe, launch!! 
 Unused
 Unused
 Unused
@@ -177,7 +177,7 @@ Unused
 Unused
 Unused
 No! 
-Even… even when we go out, you won't go arm-in-arm with me… 
+Even… Even when we went out, you wouldn’t walk arm-in-arm with me… 
 I know you get bored spending time with a kid like me. 
 You're lying! 
 I knew it. 
@@ -191,7 +191,7 @@ Ahhh…!?
 …Mon Frère, you're lying… 
 You don't love me at all! You don't want to kiss me… 
 I can read your thoughts. 
-You… you think I'm just a little kid after all! 
+You… You think I'm just a little kid after all! 
 Liar! 
 Unused
 Unused

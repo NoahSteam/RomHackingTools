@@ -1,6 +1,6 @@
-﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
-It's a photo of Maria. …She's lost in thought and looks kind of sad…
+It's a photo of Maria. She's lost in thought and looks kind of sad…
 A photo of Kanna. She looks strong and reliable. I can't wait to meet her.
 A photo of Iris. She's surrounded by flowers and flashing a radiant smile.
 A photo of Kohran. She's looking pretty in profile with her face dyed red by the evening sun.
@@ -106,8 +106,8 @@ Unused
 Unused
 Unused
 Thank you for your hard work. 
-This is the Deputy Commander of the Imperial Assault Troupe, and chief of the Hanayashiki Branch. 
-I'm Ayame Fujieda. I'm pleased to meet you, Ogami. 
+This is the Deputy Commander of the Imperial Assault Troupe and manager of the Hanayashiki Branch. 
+I'm Ayame Fujieda. Pleased to meet you, Ogami. 
 Unused
 Ahhh… 
 Cursed Imperial Assault Troupe! Defiant to the last I see! 

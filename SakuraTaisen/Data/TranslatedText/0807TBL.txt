@@ -1,6 +1,6 @@
-﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
-It's a photo of Maria. …She's lost in thought and looks kind of sad…
+It's a photo of Maria. She's lost in thought and looks kind of sad…
 A photo of Kanna. Her signature strength comes through clearly.
 A photo of Iris. She's surrounded by flowers and flashing a radiant smile.
 A photo of Kohran. She's looking pretty in profile with her face dyed red by the evening sun.
@@ -287,7 +287,7 @@ Unused
 Cerulean Satan, I will never forgive you for using such underhanded tactics! 
 Our first priority is protecting the peace of the capital. 
 Is that really what we're here for? 
-Will… will everyone start fighting again? 
+Will… Will everyone start fighting again? 
 No matter what happens, we must protect the capital! 
 Unused
 Unused

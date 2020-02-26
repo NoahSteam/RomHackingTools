@@ -1,4 +1,4 @@
-I've got to focus!
+﻿I've got to focus!
 Here I go!
 Leave it to me!!
 Watch this, Ogami.
@@ -53,7 +53,7 @@ Take 'em down, Chief!
 Uwahhh…
 Dangit… they got me…
 Sorry Chief…
-Alright! Let's do this!!
+All right! Let's do this!!
 Full power! Hiyaaaaa!
 Feast your eyes on the killer techniques of the Kirishima!
 Let's take 'em down, Boss!!
@@ -64,7 +64,7 @@ Let's see what you can do!
 Uwahhh…
 Damn. Guess I still haven't trained enough…
 I've gotta keep fighting… for the boss.
-Alright!
+All right!
 We did it!
 We did it!
 Phew!
@@ -72,8 +72,8 @@ Nice one!
 Woo! We did it!!
 The Imperial Assault Troupe has arrived!
 These are different from the enemies you've fought until now! Be careful!
-Wh-what?! There's something wrong with my Koubu!
-Everyone, eject! The Koubu…they've hit their limit!
+Wh-What?! There's something wrong with my Koubu!
+Everyone, eject! The Koubu… they've hit their limit!
 Roger!
 Ogami, these enemies seem a lot stronger than the ones we've always faced before!
 Ensign, our previous enemies do not hold a candle to these beasts!
@@ -81,7 +81,7 @@ Sir, these are formidable foes!
 Man, these guys can really put up a fight!
 Mon Frère, I'm scared!
 These monsters really aren't messin' around, Chief!
-(Their strength is on a completely different level than ours…what do we do?!)
+(Their strength is on a completely different level than ours… what do we do?!)
 Damn, they're so powerful!
 Ogami, we can't keep this up!
 Ensign, this isn't looking good…
@@ -97,8 +97,8 @@ Nicely done, Ensign Ogami!
 Soaring Whale, prepare for bombardment! Targets sighted! And, fire!
 Bombardment completed. The enemies are still alive, but they should have been greatly weakened.
 Ensign Ogami, the time for victory is at hand. Annihilate the enemy!
-OK! The battle is won. All units, return to base.
-…?! Ogami, my Koubu…it won't move!
+OK! The battle is won. All units return to base.
+…?! Ogami, my Koubu… it won't move!
 …?! Ensign, my Koubu isn't moving!
 …?! Sir, my Koubu won't move!
 …?! Boss, my Koubu's not moving!
@@ -108,12 +108,12 @@ These enemies are much stronger than anything you've faced before! Ogami, don't 
 Don't recklessly attack. Focus on defending yourselves and evacuate to the other side of the shrine gate.
 Even if you're able to deal some damage, it won't affect the enemy's considerable strength. Do not act rashly.
 Bahahaha! For a bunch of worms, you've got an awful lot of spirit!
-I am Boar, of the Three Knights of Twilight! We shall meet again…that is, if you fools even survive this!
-I am Deer, of the Three Knights of Twilight. If you can make it through this alive, you will face me next!
+I am Boar, of the Three Knights of Twilight! We shall meet again… that is, if you fools can survive this!
+I am Deer, of the Three Knights of Twilight. Even if you survive this, you will have to face me!
 I am Butterfly, of the Three Knights of Twilight. The lot of you should feel fortunate to have even met me.
 Hohohoho. Be sure to give thanks to your god for our encounter before you die.
-I'm afraid I won't be dirtying my hands of you all, either.
-But I imagine those fellows will offer you more than enough hospitality. Now, if you'll excuse me…
+I'm afraid I won't be dirtying my hands this time, either.
+But I imagine they'll offer you enough hospitality in my absence. Now, if you'll excuse me…
 Sakura trusts you from the depths of her heart. Try attacking with her when you have enough Willpower.
 Sumire trusts you from the depths of her heart. Try attacking with her when you have enough Willpower.
 Maria trusts you from the depths of her heart. Try attacking with her when you have enough Willpower.

@@ -1,6 +1,6 @@
-﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
+﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
 It's a photo of Sumire. This is a side of her you don't see too often. 
-It's a photo of Maria. …She's lost in thought and looks kind of sad… 
+It's a photo of Maria. She's lost in thought and looks kind of sad… 
 It's a photo of Kanna. She looks strong and reliable. I can't wait to meet her. 
 It's a photo of Iris. She's surrounded by flowers and flashing a radiant smile. 
 It's a photo of Kohran. She looks good in her traditional outfit. What kind of person is she? 
@@ -30,38 +30,38 @@ Nothing I can do here. I'd better check somewhere else…
 There's no one here. I'd better check somewhere else… 
 I'd better check somewhere else… 
 This is getting me nowhere. I should go to the manager's office and talk to Mr. Yoneda. 
-But… no matter how I look at it, this seems to be nothing more than a theater. 
+But… No matter how I look at it, this seems to be nothing more than a theater. 
 To Imperial Navy Ensign, Ichiro Ogami. 
 As a special assignment, I appoint you captain of the following outfit. 
-'The Imperial Assault Troop', Anti-Demon Corps, Flower Division.' 
+‘The Imperial Assault Troop’ <br> ‘Anti-Demon Corps, Flower Division’. 
 You are on a secret assignment to defend our Imperial capital. 
 Proceed to Ueno Park to meet up with your squad. 
-Imperial Army Lieutenant General. <br> <sp> <sp> <sp> <sp> <sp> <sp> <sp> Yoneda Ikki 
-Ichiro Ogami. You're being transferred to the Flower Division of the Imperial Assault Troop, immediately.
-Yes, sir! I'm going to give it my absolute best! 
+Imperial Army Lt. General <br> Ikki Yoneda
+Ichiro Ogami. Starting today, you will be transferred to the Flower Division of the Imperial Assault Troop.
+Yes, sir! I am going to give it my absolute best! 
 Good. That's what I like to hear. 
 My position as a politician doesn't allow me to talk about a military secret like the Assault Troop here and now. 
-For more information you have to ask the officer in command, Lieutenant General Yoneda. 
+For more information you will have to ask the officer in command, Lieutenant General Yoneda. 
 Now, go to Ueno Park. Don't make me regret recommending you for this position! 
-Yes, sir! I'll be on my way immediately! 
+Yes, sir! I will be on my way immediately! 
 The safety of the capital lies in your hands. Good Luck! 
 Yes, sir! 
 Ahh, what a wonderful day. The cherry blossoms are in full bloom. 
-Now then… Where is this meet-up point…? Maybe I should look around a bit more. 
+Now then, where is this meet-up point…? Maybe I should look around a bit more. 
 Now that I think about it, that recent monster appearance also took place in this park… 
-I heard a young girl got rid of the monster with a sword… 
+I heard a young girl got rid of the monster with only a sword… 
 … 
 I was told someone from the Imperial Assault Troop would meet me here. I wonder how long he'll keep me waiting? 
-Wait a second… That girl… 
+Wait a second, that girl… 
 She's coming this way…! 
-Y-yes. I’m Ogami… 
+Y-Yes. I’m Ogami… 
 Ahem… Excuse me, but you are…? 
 …From Lieutenant General Yoneda? 
-(I was told someone would meet me… But who would have thought it would be a girl!) 
-You, uh… are you a member of the Imperial Assault Troop!? 
+(I was told someone would meet me here… but who would have thought it would be a girl!) 
+You, uh… Are you a member of the Imperial Assault Troop!? 
 Ah… I'm Imperial Navy Ensign Ichiro Ogami. 
-But… to tell the truth, I'm surprised that a girl like you is a squad member. 
-N-no. That's not what I meant… 
+But… To tell the truth, I'm surprised that a young woman such as yourself is a squad member. 
+N-No. That's not what I meant… 
 (It's a top-secret unit after all… Maybe it's not so strange that there are female members.) 
 What?! A theater…!? 
 I'm on duty! <br> First tell me more about you. 
@@ -72,21 +72,21 @@ First tell me more about you.
 I see, that's the right attitude! Happy to hear that. No wonder you're a member of the secret squad. 
 …So the Imperial Assault Troop has something like a secret weapon, right? 
 (Koubu? Ah, that's what the secret weapon is called. I wonder what it is.) 
-Y-yes! Thank you very much! 
+Y-Yes! Thank you very much! 
 (Why do we have to go to the theater…?) 
 (Is she really a member of the Imperial Assault Troop?) 
-N-no… it's nothing! 
+N-No… it's nothing! 
 (No, I'm worrying too much. She knew my name, after all.) 
-Y-yes! Thank you very much! 
-The Imperial Theater that was built last year… Impressive, it's right in the middle of Ginza… 
+Y-Yes! Thank you very much! 
+The Imperial Theater that was built last year. Impressive… It's right in the middle of Ginza. 
 That's one big building… 
 No one would guess that in reality this theater is a secret military headquarters… 
 Whoa… What an extraordinary lobby. But not a single guard in sight. That's rather careless… 
 At any rate… It's really quiet here. 
-(Night performance? … Is that supposed to be a night-time drill?) 
+(Night performance…? Is that supposed to be a night-time drill?) 
 Waah!? 
-(Who’s that child…?!?) 
-Ah… I'm… Imperial Navy Ensign, Ichiro Ogami. 
+(Who is this child…!?) 
+Ah… I'm…Imperial Navy Ensign Ichiro Ogami. 
 (Don't tell me this child is a member of the secret unit.) 
 What is the deal with that girl…? 
 Sakura has gone as well… Damn. 
@@ -94,39 +94,39 @@ I guess I'll have to find Lieutenant General Yoneda on my own…
 …Who was that? I think it came from the dining hall… 
 (What the…! Isn't that get-up a bit too revealing…?) 
 …Are you talking to me!? 
-Ye- yes, ma'am… 
+Y-Yes, ma'am… 
 Why should I have to do that? <br> Yes, right away! 
 Why should I have to do such a thing…? I refuse! 
 And in any case, is that any way to ask for someone's help? 
-…I'm Imperial Navy Ensign Ichiro Ogami. I was transferred to the Imperial Assault Troop effective today. 
+…I'm Imperial Navy Ensign Ichiro Ogami. I was transferred to the Imperial Assault Troop, effective today. 
 Try and have me fired all you want, but without an order from the Navy headquarters, I'm not leaving. 
-……! 
+…! 
 …It's Ogami. Can you tell me where I might find Lieutenant General Yoneda? 
 Through this way? Thank you very much. 
 Yes, right away! …Here, there you go. 
 (Phew…) 
-…I'm Imperial Navy Ensign Ichiro Ogami. I was transferred to the Imperial Assault Troop effective today. 
+…I'm Imperial Navy Ensign Ichiro Ogami. I was transferred to the Imperial Assault Troop, effective today. 
 I'd like to report to Lieutenant General Yoneda… 
-……! 
-Waah! Wh-what are you doing all of a sudden!?! 
+…! 
+Waah! Wh-What are you doing all of a sudden!?! 
 Ahem… Where might I find Lieutenant General Yoneda? 
 …My name is Ogami. 
-Y-yes, ma'am… 
+Y-Yes, ma'am… 
 Why should I have to do such a thing…? I refuse! 
 And in any case, is that any way to ask for someone's help? 
 (Huh?) 
 (What was that about? What a strange person!)
-I’m Imperial Navy Ensign Ichiro Ogami, transferred to the Imperial Floral Assault Troop effective today.
+I’m Imperial Navy Ensign Ichiro Ogami. I transferred to the Imperial Assault Troop, effective today.
 Try and have me fired all you want, but without a written order from the Navy headquarters, I'm not leaving. 
-……! 
+…! 
 …It's Ogami. Can you tell me where I might find Lieutenant General Yoneda? 
 Through this way? Thank you very much. 
-…So this is Lieutenant General Yoneda's room, Commanding Officer of the Imperial Assault Troop… 
-Lieutenant General Ikki Yoneda, the great strategist from the Russo-Japanese war. I wonder what kind of man he is. 
-Ah… excuse me. I'm Imperial Navy Ensign Ichiro Ogami. 
+…So this is Lieutenant General Yoneda's room, commanding officer of the Imperial Assault Troop… 
+Lieutenant General Ikki Yoneda, the great strategist from the Russo-Japanese War. I wonder what kind of man he is. 
+Ah… Excuse me. I'm Imperial Navy Ensign Ichiro Ogami. 
 I would like to see Lieutenant General Yoneda… 
 Miss Maria Tachibana… 
-…What a rigid person… but finally someone who looks a bit like a soldier. 
+What a rigid person… but finally someone who looks a bit like a soldier. 
 But what type of practice was she talking about? 
 Well then… I'll finally meet Lieutenant General Yoneda. 
 (What a speckless display of uniform and posture.) 
@@ -135,7 +135,7 @@ Well then… I'll finally meet Lieutenant General Yoneda.
 (A beautiful blonde.) 
 (Huh? A foreigner? But she was speaking Japanese just now.) 
 (I wonder what country she's from.) 
-Huh? … No! 
+Huh? …No! 
 (What brilliant green eyes…) 
 (What a stern gaze…) 
 (Nice…) 
@@ -147,25 +147,25 @@ Reporting for duty!
 (What the… Who is this drunkard?) 
 (Don't tell me this is…) 
 Are you really General Yoneda? <br> Why're you drinking right now! 
-…Are… are you really Lieutenant General Yoneda? 
+…Are…you really Lieutenant General Yoneda? 
 I… I'm sorry! 
-How can you drink sake in the middle of the day?! 
+How can you drink sake in the middle of the day!? 
 Are you really Lieutenant General Yoneda? You're different from the stories I heard… 
-You are supposed to be a hero from the Russo-Japanese war, a master strategist of the Army. 
-I… that's not what I meant. 
+You are supposed to be a hero from the Russo-Japanese War, a master strategist of the Army. 
+I… That's not what I meant. 
 I understand. But since I was transferred here… 
 I intend to give my everything to protect the people of the Imperial capital! 
 … 
-I see… So we operate in disguise. Par for the course for a secret unit! 
+I see… so we operate in disguise. Par for the course for a secret unit! 
 Yes, sir! Ichiro Ogami, ready for duty! 
 Yes, sir! 
-Ah, Mr. Ogami… 
-Oooh… busted. 
+Ah, Ogami… 
+Oooh… Busted. 
 Sakura and… Iris, was it? What are you doing here? 
 See, Sakura! I told you we should run away! 
-Hey, weren't you the one saying we should 'check things out' in the first place? 
+Hey, weren't you the one saying we should “check things out” in the first place? 
 Yes, and you said it was a great idea! 
-(These two… looks like they were eavesdropping.) 
+(These two… Looks like they were eavesdropping.) 
 You shouldn't eavesdrop! <br> Where’s the reception desk? 
 Hey! You shouldn't eavesdrop! 
 …Sorry. 
@@ -174,31 +174,31 @@ I don't want anything to do with you any more! Bye-bye!
 Iris! Wait! 
 Call after Iris. <br> Have Sakura lead the way. 
 Iris, please wait! I didn't mean it. I'm sorry! 
-Sob… Aren't you angry with me? 
+*sob*… Aren't you angry with me? 
 Jeez… Iris, please don't cry. I'm not mad at you… 
 Really? Teehee. You're really nice. 
-Oh, Iris… Again with the crocodile tears… Of all the nerve. 
+Oh, Iris… again with the crocodile tears. Of all the nerve. 
 By the way, I thought one of you two might know this… 
 Where's the reception desk? I'm to go there for my first assignment. 
 I may have been a little too harsh, but I can't let a thing like that slide… 
 I'm sorry, I should have kept an eye on her.. 
-No need to apologize, Sakura. Would you mind showing me the way to the reception. 
-I have to go there because… but you already heard that, right? 
+No need to apologize, Sakura. Would you mind showing me the way to the reception? 
+I have to go there because… Well, I guess you already heard, right? 
 Hmph! Please stop being mean, Ogami. 
 Yeah, your first assignment awaits you at the reception. How about we go together? 
 I'm sorry, I should have kept an eye on her. 
-Please excuse me. But I'm a bit worried about Iris… sorry. 
-Hey… wait a sec… She's gone. 
+Please excuse me. But I'm a bit worried about Iris… Sorry. 
+Hey, wait a sec… She's gone. 
 …Damn. My first official assignment and I have no idea where to go. 
 Ensign Ogami, is everything all right? 
-You're… Miss Maria Tachibana… <br> right? 
+You're… Miss Maria Tachibana… <br> Right? 
 Yes, that's correct. You have met with Mr. Yoneda, I presume. 
 Yes. I also received my first order. I am to wear this and report to the reception. 
 I still need a little warming up until I'm used to things around here. 
 Is that so? That's a fine attitude! 
 By the way, do you know how to get to the reception? 
-Oh…right! I had hoped you could tell me that… 
-…well, then I'm going to show you the way. 
+Oh… Right! I had hoped you could tell me that… 
+…Well, then I'll show you the way. 
 Really? Thanks a lot. 
 …It's nothing. Follow me please. It is right this way. 
 Anyways… Could you two tell me where the reception is? 
@@ -206,44 +206,44 @@ It's my first assignment here. I’d like to go there immediately.
 Hey! Why are you making such a ruckus in front of the manager’s office!? 
 Ah… You're the one from earlier… 
 Mariaaa! It's all Sakura's fault. She… 
-I just said that I wanted to go and help Mr. Ogami, but Iris… 
+I just said that I wanted to go and help Ogami, but Iris… 
 Cut it out, you two! Isn't practice about to start soon? 
 …As for the Ensign, I'll show him the way. You two, go to the dressing room. 
-B-but… That's not fair. 
+B-But… That's not fair. 
 Well then, Ogami… Please do your best. 
 Now then, Ensign Ogami. Please follow me to the reception. 
-…Y-yes. Thank you. 
+…Y-Yes. Thank you. 
 OK, I'll show you the way. Let's go, Ogami. 
 No! He's going with me! Let's go, Mon Frère! 
 Ask Iris to show the way. <br> Ask Sakura to show the way. <br> Ask both to show the way. 
-Sakura escorted me to the theater… So I guess it’s Iris' turn now. 
+Sakura escorted me to the theater… so I guess it’s Iris' turn now. 
 Yay! Let's go! Let's go! Bye-bye, Sakura. 
-Oh…I see. Well, I'm off then. See you later, Iris… 
+Oh… I see. Well, I'm off then. See you later, Iris… 
 C'mon, Mon Frère! Follow me! 
 Sakura, would you mind showing me the way once more? 
-Not at all, it's a pleasure. Let's go. 
+Not at all, it would be my pleasure. Let's go. 
 Bah! I don't want anything to do with you anyway. Bye-bye! 
 Ogami… Iris came here all alone. Her family is back in France. 
 She's doing her best, but she really is a bit lonely 
-So… please be nice to her? 
+So… Please be nice to her? 
 I hadn't realized… 
 I'll show you the way to the reception. Let's go. 
 Hey, stop fighting, you two. How about we all go together, hm? 
-…Alright. 
-I'm sorry, Iris. I guess I was a bit childish, too. 
+…All right. 
+I'm sorry, Iris. I guess I was also being a bit childish. 
 It's OK. Let's all go together. I like that! 
 Hahaha, looks like I've got a lady on each arm. Must be my lucky day. Shall we? 
 (If I say something wrong, things might get ugly… I better keep my mouth shut.) 
 Here, now! What are you making a fuss about in front of the manager's office!? 
-AAh… You're the one from earlier… 
+Aah… You're the one from earlier… 
 Mariaaa! It's all Sakura's fault. She… 
-I just said that I wanted to go and help Mr. Ogami, but Iris… 
+I just said that I wanted to go and help Ogami, but Iris… 
 Cut it out, you two! Isn't practice about to start soon? 
 …As for the Ensign, I'll show him the way. You two, go to the dressing room. 
-B-but… That's not fair. 
+B-But… That's not fair. 
 Well then, Ogami… Please do your best. 
 Now then, Ensign Ogami. Please follow me to the reception. 
-…Y-yes. Thank you. 
+…Y-Yes. Thank you. 
 Ogami, this is the reception. 
 Thank you for your help, Sakura. You're a lifesaver. 
 The clipper should be inside the desk. I have practice, so I'll be going now… 
@@ -251,7 +251,7 @@ Hey… Sakura. Wait a second.
 What job am I supposed to do? <br> Clipper? <br> Good luck with your practice! 
 …By the way, what kind of work am I supposed to be doing here? 
 Huh? Didn't you hear from Manager Yoneda? 
-Our new captain will work as ticket puncher. That's what Manager Yoneda told us. 
+Our new captain will work as a ticket puncher. That's what Manager Yoneda told us. 
 Ticket punching? What is that supposed to mean? 
 Well, you punch the admission tickets of the guests, of course. 
 What? Punching tickets? How is that supposed to be a "special mission"? 
@@ -264,12 +264,12 @@ Clipper…? What am I supposed to do with it?
 It basically works like a pair of scissors, even though it looks a little different. 
 OK, practice is about to start so I have to excuse myself. Do your best, Ogami. 
 …Aaaand she’s gone. 
-…but I really wanted to know what I'm supposed to use the clipper for. 
+…But I really wanted to know what I'm supposed to use the clipper for. 
 Excuse me, young man. How long do you expect us to wait? Punch our tickets! 
 Today Sumire is starring in "The Eve of Lady Camellia". I can't wait! 
 What do you mean? I'm not responsible for tickets. 
-But…that's the ticket puncher’s uniform you’re wearing. And don't you have a clipper as well? 
-Whaaa…!? Does that mean… my secret mission is just… 
+But… that's the ticket puncher’s uniform you’re wearing. And don't you have a clipper as well? 
+Whaaa…!? Does that mean… My secret mission is just… 
 Punching tickets!? You gotta be kidding me! 
 You do your best at practice, Sakura! …Even if I don't know what kind of practice we're talking about. 
 Thank you! I hope your ticket punching goes well too, Ogami! 
@@ -287,26 +287,26 @@ What? Punching tickets? How is that supposed to be a "special mission"?
 Aren't you glad you have such a nice job? Well, I'm off then. 
 …What is the meaning of this? I thought I came here to be captain of the Imperial Assault Troop… 
 Clipper…? What am I supposed to do with those? 
-What?! You don't know how to use a clipper? Hahaha, that's funny. 
+What!? You don't know how to use a clipper? Hahaha, that's funny. 
 You hold it in your hand and go snippety snip like this, and it'll cut holes. 
-Yeah, but… cut holes in what, specifically? 
+Yeah, but… Cut holes in what, specifically? 
 Ah, if I don't show up to practice, Maria’s going to be really mad. See ya, Mon Frère! 
 …This uniform, a clipper… What am I supposed to be doing? 
 Have fun at practice, Iris! …Even if I don't know what kind of practice we're talking about. 
-Thanks, Mon Frère. You're such a nice guy! …Bye-bye! 
+Thanks, Mon Frère. You're such a nice guy! Bye-bye! 
 …Haha, that carefreeness is kind of cute. 
 …Aaaand she’s gone. 
 Excuse me, young man. How long do you expect us to wait? Punch our tickets! 
 Today Sumire is starring in "The Eve of Lady Camellia". I can't wait! 
 What do you mean? I'm not responsible for tickets. 
-But…that's the ticket puncher’s uniform you’re wearing. And don't you have a clipper as well? 
-Whaaa…!? Does that mean… my secret mission is just… 
+But… that's the ticket puncher’s uniform you’re wearing. And don't you have a clipper as well? 
+Whaaa…!? Does that mean… My secret mission is just… 
 Punching tickets!? You gotta be kidding me! 
 Ogami, this is the reception. 
 I see. Thank you for showing me the way. 
 Mon Frère, the clipper is inside the desk! Come on, Sakura, let's go! 
 You're right, Iris. Ogami, we have practice, so… please excuse us. 
-H-hey you two, wait a second… 
+H-Hey you two, wait a second… 
 What job am I supposed to do? <br> Clipper? <br> Good luck with your practice! 
 …Aaaaand they're gone. 
 …By the way, what kind of work am I supposed to be doing here? 
@@ -314,24 +314,24 @@ Huh? Didn't the manager tell you?
 Mr. Yoneda said he was gonna have you punch the tickets. 
 Punch tickets? What tickets? 
 Well, the admission tickets of the guests, of course. 
-What? … What’s that supposed to mean? This is my "secret mission"? 
+What? …What’s that supposed to mean? This is my "secret mission"? 
 Well, I don't know anything about that, sorry. 
 Excuse me, young man. How long do you expect us to wait? Punch our tickets! 
 Today Sumire is starring in "The Eve of Lady Camellia". I can't wait! 
 Sakura, if we don't get going, practice is gonna start without us. 
-Ah… you're right. W-well, Ogami, please excuse us. 
-(What the… this must be a misunderstanding!) 
+Ah… You're right. W-Well, Ogami, please excuse us. 
+(What the… This must be a misunderstanding!) 
 Clipper…? What am I supposed to do with those? 
-What?! You don't know how to use a clipper? Hahaha, that's funny. 
+What!? You don't know how to use a clipper? Hahaha, that's funny. 
 You hold it in your hand and go snippety snip like this, and it'll cut holes. 
 Hey, Iris. If we're not off to practice soon… 
 Oh, right. Bye-bye! 
-…but I really wanted to know what I'm supposed to use the clipper for. 
+…But I really wanted to know what I'm supposed to use the clipper for. 
 Excuse me, young man. How long do you expect us to wait? Punch our tickets! 
 Today Sumire is starring in "The Eve of Lady Camellia". I can't wait!
 What do you mean? I'm not responsible for tickets. 
-But…that's the ticket puncher’s uniform you’re wearing. And don't you have a clipper as well? 
-Whaaa…!? Does that mean… my secret mission is just… 
+But… that's the ticket puncher’s uniform you’re wearing. And don't you have a clipper as well? 
+Whaaa…!? Does that mean… My secret mission is just… 
 Punching tickets!? You gotta be kidding me! 
 Have fun at practice, you two! …Even if I don't know what kind of practice we're talking about. 
 Thanks, Mon Frère. You should come by later and see, too! 
@@ -349,38 +349,38 @@ What job am I supposed to do? <br> Clipper? <br> Good luck with your practice!
 …By the way, what kind of work am I supposed to be doing here? 
 …Aaaand she’s gone. 
 Ensign Ogami… hasn't the manager told you? 
-He said you’re supposed to work as ticket puncher… 
+He said you’re supposed to work as a ticket puncher… 
 Ticket puncher? What is that supposed to mean? 
 You just punch the tickets of our guests. 
-What? … Punching tickets? This is my "secret mission"? 
+What…? Punching tickets? This is my "secret mission"? 
 …Ensign, the guests are already lining up. 
 Excuse me, young man. How long do you expect us to wait? Punch our tickets! 
 Today Sumire is starring in "The Eve of Lady Camellia". I can't wait! 
-Coming in direct contact with the audience is a very important job. I expect you to do your best. 
-(What the… this must be a misunderstanding!) 
+Working with the audience directly is a very important job. I expect you to do your best. 
+(What the… This must be a misunderstanding!) 
 Clipper…? What am I supposed to do with those? 
-It's a clipper to punch tickets. I'm sure you'll figure out how it works. 
+It's a clipper to punch tickets. I'm sure you can figure out how it works. 
 What? A clipper for punching tickets? What would I need that for? 
 Thank you, Maria. And later I'll join the training, of course. 
 …Training? 
-Huh? …Maybe I'm wrong, but when you talked about practice I thought it would be some kind of training session. 
-Well, yes… If you want to put it like that. 
-Right now for instance, we’ll practice our lines. 
+Huh…? Maybe I'm wrong, but when you talked about practice I thought it would be some kind of training session. 
+Well, yes… if you want to put it like that. 
+Right now for instance, we’ll be practicing our lines. 
 (Lines? Maybe they practice some military code?) 
 Now, if you'll excuse me, Ensign. Do your best. 
-Th-thank you. 
+Th-Thank you. 
 …By the way. This work… What am I supposed to do? 
 Excuse me, young man. How long do you expect us to wait? Punch our tickets! 
 Today Sumire is starring in "The Eve of Lady Camellia". I can't wait! 
 What do you mean? I'm not responsible for tickets. 
-But…that's the ticket puncher’s uniform you’re wearing. And don't you have a clipper as well? 
-Whaaa…!? Does that mean… my secret mission is just… 
+But… that's the ticket puncher’s uniform you’re wearing. And don't you have a clipper as well? 
+Whaaa…!? Does that mean… My secret mission is just… 
 Punching tickets!? You gotta be kidding me! 
 Hey, ticket guy. Get going and punch those tickets! 
-Y-yes. Uh… where do I punch the hole? 
-Huh? Are you new here? Jeez… don't dilly-dally. 
-Y-yes! Just a moment, please! 
-(…Wasn't my assignment to be captain of a secret squad?) 
+Y-Yes. Uh… Where do I punch the hole? 
+Huh? Are you new here? Jeez, don't dilly-dally. 
+Y-Yes! Just a moment, please! 
+(Wasn't my assignment to be captain of a secret squad…?) 
 Listen, at the moment I'm punching tickets here, but in reality… 
 I'm captain of the Troop! <br> I'm just a ticket puncher. 
 In reality, I'm the captain of the Imperial Assault Troop’s Flower Division! 
@@ -389,38 +389,38 @@ The Flower Division doesn't have a captain.
 And anyway, a man has no business in the Flower Division! 
 (What on earth?! She doesn't believe me at all!) 
 (No way! The Imperial Assault Troop is a secret unit. I can't just blow their cover like this!) 
-…At the moment I'm punching tickets here, but in reality… Just kidding, I really am just a ticket puncher. 
-Everything alright with you? Oh! Look at the time. The Flower Division's show is about to start! 
-(Did she just say Flower Division…? How does a civilian know the name of this secret unit…?) 
-(…No! That I'm the leader of a secret division is nothing I can brag about openly.) 
+…At the moment I'm punching tickets here, but in reality… just kidding! I really am just a ticket puncher. 
+Is everything all right with you? Oh! Look at the time. The Flower Division's show is about to start! 
+(Did she just say Flower Division…? How does a civilian know the name of this secret unit?) 
+(…No! I can’t brag about being the leader of a secret unit out in the open.) 
 What a rude ticket puncher! Oh! Look at the time. The Flower Division’s show is about to start! 
-(Did she just say Flower Division…? How does a civilian know the name of this secret unit…?)  
+(Did she just say Flower Division…? How does a civilian know the name of this secret unit?)  
 Ahem… 
 Ah, sorry. Where is that clipper…? Ah! Here it is! There you go. 
 Um… Do you happen to like Sumire Kanzaki? 
 She's just my type. <br> I don't care much for her… 
 Yeah, I haven't talked to her all that much, but she sure is my type. 
 Whaaa…! You’ve talked to Sumire?! Man, I'm so jealous… 
-Oh, right… Ahem… would you mind giving this letter to her? 
+Oh, right… Ahem. Would you mind giving this letter to her? 
 Please tell her it is from her most passionate fan. 
-Y-yes, sir… understood. 
+Y-Yes, sir… Understood. 
 No, I don't care for her very much… 
 Whaaaat? How can you not appreciate such grace and charm? 
 A guy like you really has no business working in this theater. How pathetic! 
 (An Imperial Navy Ensign punching tickets… I guess that IS kind of pathetic.) 
 I'm sorry, but I can't answer a question like that. 
 Oh, I see. I’m sorry… 
-Ahem… You see, I'm a big fan of Sumire. P-please give her this letter! 
-W-well, I've got to be going… I'm counting on you! 
-H-hey! Wait a moment! 
+Ahem… You see, I'm a big fan of Sumire. P-Please give her this letter! 
+W-Well, I've got to be going… I'm counting on you! 
+H-Hey! Wait a moment! 
 (What am I going to do with this letter?) 
 Hey! Ticket puncher guy, here's my ticket! 
-Y-yes! Ahem… Where do I punch a children's ticket? 
+Y-Yes! Ahem… Where do I punch a children's ticket? 
 This guy's new here! He doesn't even know how to punch tickets! 
 Handle the situation calmly. <br> Glare at the boy. 
-Here you go, boy. Here's your ticket back. 
+There you go, boy. Here's your ticket back. 
 Keep up the "good" work. 
-(Wh-what's the matter with that obnoxious child?!) 
+(Wh-What's the matter with that obnoxious child!?) 
 Are you sure you should glare at the guests like that? 
 (This brat… I wish he'd just get lost.) 
 What? You've got something to say? 
@@ -429,11 +429,11 @@ What? You've got something to say?
 …OK! I'm gonna have a talk with the squad. Maybe then I'll get some sort of explanation. 
 If I'm still not convinced, I'll have to ask Lieutenant General Yoneda! 
 So… Where should I go first? 
-Y-yes. What is it? 
+Y-Yes. What is it? 
 Miss Tsubaki, is it? 
 Hmm… She works here at the gift shop. Seems full of energy. 
 …OK. Where to next? 
-Excuse me… Are you Ensign Ichiro Ogami? 
+Excuse me… are you Ensign Ichiro Ogami? 
 My name is Sakura Shinguji. 
 I received orders from Lieutenant General Yoneda to pick you up. 
 Yes! 
@@ -441,26 +441,26 @@ Imperial Assault Troop, Flower Division, Sakura Shinguji.
 Nice to meet you. 
 Is that a problem for you? 
 OK. Let's go to the Imperial Theater. 
-You misunderstand. The Imperial Assault Troop's headquarters are located in the Imperial Theater. 
+You misunderstand. The Imperial Assault Troop's headquarters is located in the Imperial Theater. 
 An ingenious ruse, isn't it? 
 So, let's get going. 
 About me…? 
 Unused
 I still feel like I'm causing everybody nothing but trouble. 
 But I'd give my life in order to protect the capital. 
-Using a "Koubu" is really hard. But we newbies should stick together and do our best. 
+Operating a “Koubu” can be pretty difficult. So we newbies should stick together and do our best. 
 But we shouldn't keep Lieutenant General Yoneda waiting! Let's go! 
 Since it’s your first time, let's enter through the main lobby. 
 Unused
 That's because today there is only a night performance. 
-He-he…! Hey Frère, are you Sakura's lover? 
-Iris! Haven't I told you already that you shouldn't talk like that to grown-ups? 
+He he…! Hey Mon Frère, are you Sakura's lover? 
+Iris! Haven't I told you already that you shouldn't speak that way to a grown-up? 
 This is Ensign Ichiro Ogami, newly transferred to the Imperial Assault Troop. 
 Imperial Assault Troop, Flower Division, Iris. 
 And this is Jean-Paul, the bear. He’s my best friend. I hope you two get along. 
 Sakura… 
 What is it? 
-He has the "Spirit Power" too… does that mean he’s going to fight in a "Koubu" as well? 
+He has Spirit Power too… Does that mean he’s going to fight in a "Koubu" as well? 
 That's right. 
 I… hate fighting. 
 Unused
@@ -474,20 +474,20 @@ Do you see anyone else? Wipe that stupid look off your face and get over here!
 Pick up that fork I dropped over there and go get me a new one.  
 What? You want me to pick it up myself?! 
 The only daughter of Kanzaki Heavy Industries, the star actress of this theater, and, and… 
-…the top lady of Japanese high society… I, Sumire Kanzaki, should pick up a fork from the floor!? 
+…the top lady of Japanese high society! I, Sumire Kanzaki, should pick up a fork from the floor!? 
 Fine. You're fired! I'll go to the manager right away and have you fired.
-Ah… Oh my… Hohohohohoho… 
-And I was wondering if we had a new waiter… Forgive me. 
+Ah… Oh my. Hohohohohoho… 
+And I was wondering if we had a new waiter… forgive me. 
 Let's see… Ensign Ogawa, was it? 
 Unused
 Unused
 Unused
 Mr. Yoneda is in the manager's office within. 
 Thank you. Oh, by the way. What do you think about how that Maria just came out of nowhere… 
-…and replaced me, top star Kanzaki Sumire, as the leader of the troop? 
+…and replaced me, top star Sumire Kanzaki, as the leader of the troop? 
 That old geezer Yoneda… He couldn't spot a star if you hit him over the head with it. 
 Oh my, what shall I do! How rude of me. Hohohohoho… 
-Oh, and be so nice not to mention what I just said to Yoneda, OK? (*kiss*) 
+Oh, and be so nice not to mention what I just said to Yoneda, OK? *kiss* 
 There, there, no need to turn all red. Just a little revenge… er, reward, is what I mean. 
 Mr. Yoneda is in the manager's room. But remember, don't mention our little talk. 
 Do you understand, Ensign Ogawa? 
@@ -499,15 +499,15 @@ Do I have something on my face?
 Lieutenant General Yoneda is in the manager's office. I have training, so I must leave you… 
 But I have one piece of advice for you. Don't stare at women like that! And now excuse me. 
 Hey, come on in! 
-I've ‘eard about you from Count ‘anakoji. No need for  formalities, hic. 
+I've ‘eard about you from Count ‘anakoji. No need for formalities, hic. 
 Remember, dis is the Great Imperial Theater, hic. Cut da military talk! 
 How 'bout a drink? 
-What the…! What do you mean, "really?” 
+What the…! What do you mean, "really”? 
 Can't you recognize people without a badge of rank? Hic! I'm Army Lieutenant General Ikki Yoneda! 
 Idiot! 
 Good! Glad we cleared that up. So, let me give you ya’ first assignment. 
-Stories…what stories? Come on, out with it! 
-The greatest strategist the Army has… working as manager of the Imperial Theater. 
+Stories… What stories? Come on, out with it! 
+The greatest strategist the Army had… working as manager of the Imperial Theater. 
 A shameless drunkard to boot… Hic!
 You've got a problem with that? 
 Of course it is. But let me tell you something… 

@@ -1,6 +1,6 @@
-﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
-It's a photo of Maria. …She's lost in thought and looks kind of sad…
+It's a photo of Maria. She's lost in thought and looks kind of sad…
 A photo of Kanna. Her signature strength comes through clearly.
 A photo of Iris. She's surrounded by flowers and flashing a radiant smile.
 A photo of Kohran. She's looking pretty in profile with her face dyed red by the evening sun.
@@ -36,7 +36,7 @@ There's no point in hanging around here. Let's go somewhere else.
 Kohran must already be asleep. I would feel bad for waking her, so I'd better leave her alone. 
 I wonder… if Kohran is in her room? 
 Let's hurry up and find Maria. If I take too long the theater lights will get shut off. 
-…doesn't look like she's here. Where did she go at this hour? 
+…Doesn't look like she's here. Where did she go at this hour? 
 …It's no good. I'd better go somewhere else. 
 There's no way Iris could still be awake now, right? 
 For now, talking with Maria is our first priority. Let's go. 
@@ -46,7 +46,7 @@ Nobody's in here. You wouldn't expect anyone to be up drinking tea at this hour.
 But what Maria said earlier… that I'm "unfit to be captain"… Could that really be true? 
 Looking out at Ginza at night, I never thought that the neon streets could be this beautiful. 
 Right. I haven't spotted Maria. Where is she…? 
-Our performance of Cinderella was another success. Even the afternoon performance had sold-out box seats. 
+Our performance of “Cinderella” was another success. Even the afternoon performance had sold-out box seats. 
 Let's try going somewhere else. 
 In the afternoon, this is where the patrons with box seats gather. 
 Maria… isn't here. Seems she's not on the terrace, either. 
@@ -57,7 +57,7 @@ Let's look for Maria.
 Commander Yoneda. It's Ogami. 
 Idiot! What are you doing bumbling back here for?! 
 Hurry up and go after Maria!! 
-Y-yes, Sir! 
+Y-Yes, Sir! 
 Yuri and Kasumi already went home… 
 I'll try looking somewhere else… 
 Maria is… not here. 
@@ -69,15 +69,15 @@ The level of detail on these must really bring life to the stage.
 These props are great and all, but I'm worried about Maria. Where could she be… 
 This large prop room must get used quite a bit, it's really dirty… 
 Don't they clean it at all? 
-But what Maria said earlier…that I'm "unfit to be captain"…Could that really be true? 
+But what Maria said earlier… that I'm "unfit to be captain"… Could that really be true? 
 This kitchen is always in perfect order. I wonder who cleans it up. 
 Well, maybe I'll go somewhere else. 
 I'd like to have lunch with the patrons sometime. 
 Maybe I'd get an idea of how they feel. 
-Maria… isn't here. 
+Maria isn't here. 
 I wonder what sells the best in this shop. I bet it's the photos. 
 You know, I haven't seen Maria. I wonder where she went. 
-They usually collect tickets at that reception desk. Man, punching tickets is hard work! 
+They usually collect tickets at the reception desk. Man, punching tickets is hard work! 
 Maybe I'll head somewhere else. 
 I wonder what my impression of this place was when I first came. I kind of want to remember now. 
 Well, enough of that. I don't see Maria here. I wonder where she went… 
@@ -113,50 +113,50 @@ But what Maria said earlier… that I'm "unfit to be captain"… Could that real
 During the Tsukiji battle, the boy was saved but Sakura got hurt. 
 It's my fault. If only I hadn't hesitated to give the order to attack… 
 At any rate, I should go see Sakura. 
-Oh, right. Maybe I should bring flowers or something, too. 
-I wonder which flowers I should take… 
-The long-lasting cactus. <br> The Chrysanthemums. <br> The bouquet of roses. 
-Maybe I should go with the cactus. You can keep those for a long time. I wonder…if Sakura would like it. 
+Oh, right. Maybe I should also bring flowers or something. 
+…I wonder what kind of flowers I should take? 
+A long-lasting cactus. <br> Chrysanthemums. <br> Bouquet of roses. 
+Maybe I should go with the cactus. You can keep those for a long time. I wonder if Sakura will like it… 
 A bouquet of Chrysanthemums. I'm sure Sakura would like those. 
 It'd be a little embarrassing but… what about a bouquet of roses? 
 No, I don't need flowers. My feelings are enough. 
 Ok. Let's go. 
 Hey, Maria. Are you visiting Sakura? 
 … 
-Well, the fact that Sakura's wounds aren't too serious is a little bit of luck in all this unhappiness. 
+Well, the fact that Sakura's wounds aren't too serious is a bright spot in all this unhappiness. 
 Huh!? 
 Maria… 
-Ogami? Is the person out there you, Ogami? 
-Y, yeah… Can I come in? 
-Yes, of course! It's open. 
+Ogami? Is that you out there, Ogami? 
+Y-Yeah… Can I come in? 
+Yes, of course! The door’s open. 
 Hey Sakura. How are you? 
 I've been alone and bored most of the time. Please come in. 
 (Oh, that's right… I brought flowers…) 
-Sakura. I wonder… if I could give you these. 
+Sakura. I wonder if… I could give you these. 
 Wow! Thank you! 
 You know, Ogami… Chrysanthemums are a fall flower… 
-Huh?! Oh… S, Sorry. 
-No, that's alright. I'm just happy to get flowers from you. 
+Huh?! Oh, s-sorry. 
+No, that's all right. I'm just happy to get flowers from you. 
 A cactus? Thank you. 
 A cactus. It's so nostalgic… My father loved them… 
 I see. 
 Ogami, in the language of flowers, the cactus means "passion". 
 Even without water, they grow strong. 
-I'm disappointed in myself. I… I won't ever be able to be like a cactus. 
-Just like that last battle. Because of my mistake, everyone was affected. 
-…… 
+I'm disappointed in myself. I… I wasn’t strong like the cactus. 
+My carelessness has once again caused trouble for everyone…
+…
 Wow! Thank you! 
 Ogami, do you know what red roses mean in the language of flowers? 
-The language of flowers? Hmm… what does it mean? 
-U, uh… If you don't know, then that's fine. 
-But, I'm… very happy. 
+The language of flowers? Hmm… What does it mean? 
+Uh… If you don't know, then that's fine. 
+But, I'm…very happy. 
 Because you came to see me… 
-Sorry you got hurt… <br> How are your injuries…? <br> Maria is angry at me. 
+Sorry you got hurt… <br> How are your injuries? <br> Maria is angry at me. 
 I'm really sorry. Because of me, you got hurt. 
 No. I don't think it's your fault at all. 
 But… if I had given the order to attack… 
 It's all right. I was the one who acted foolishly. 
-…… 
+…
 Thanks, Sakura… 
 Haha! You're the one thanking me? You're so weird. 
 Hahaha! 
@@ -172,14 +172,14 @@ Huh? Why is she angry at you?
 She told me I was “unfit to be captain.” She doesn't mince words. 
 Naturally, I'm the reason that you were wounded, so… 
 Ogami… 
-Sorry. I came to see how you were and I end up talking about this… 
+Sorry. I came to see how you were and I ended up talking about this… 
 Ogami… Maria definitely believes in you. 
 That's why… she is always purposefully hard on you. 
 You think so? 
 Yeah. And, if it means anything, I think you’re a great captain. 
 Thank you… Sakura. 
 Are you all right, Ogami? 
-Y-yeah… I was just thinking… 
+Y-Yeah… I was just thinking… 
 I see. You just seemed so distant. 
 Sorry. 
 It's all right. You have a lot to think about, I'm sure. 
@@ -188,7 +188,7 @@ Hey, hey, don't push yourself too hard.
 Well, I guess I'll be going then. See you later. 
 Thank you for coming to see me. 
 And… thank you for the lovely flowers… 
-Hahaha! It's nothing. 
+Hahaha! It was nothing. 
 Take care, then. 
 Thank you. 
 I can't stop thinking about what Maria said to me… 
@@ -196,7 +196,7 @@ About me being unfit to be captain…
 Even though it's late, maybe I should try and talk with Maria again. 
 It's gotten late. 
 All right. Somehow, I will find Maria tonight and have a good talk with her. 
-…… 
+…
 Oh, Ogami! 
 Well, take care. Sumire, keep an eye on her, OK? 
 Oh, OK… Thank you, Maria. 
@@ -204,20 +204,20 @@ I'm here for her. She'll be fine.
 Right… take care. 
 Was Maria here? 
 What were the three of you talking about? 
-Just girl talk. 
+Just some girl talk. 
 Huh? 
 Right, Sumire? 
-Yes, about things that cannot be heard by any gentlemen. 
+Yes, topics that cannot be heard by any gentlemen. 
 Hahaha! 
-Hahaha! 
-Ha, haha… ha… 
-Oh, Sumire. Please take care of… what we talked about. 
+Ohohoho! 
+Aha, haha… ha… 
+Ah, Sumire. Please take care of… what we talked about. 
 Oh, that's right! I almost forgot. 
 I'll tell Kohran that you're on board. 
 No matter what you do, please make sure that Iris doesn't find out, OK? 
-Don't worry. Since it's me, there won't be any problems. 
+Don't worry. With me on the job, there won't be any problems.
 …? What are you talking about? 
-It's a S-E-C-R-E-T. So, if you have no business here, go somewhere else! 
+It's a S-E-C-R-E-T. So, if you don’t have any business here, please go somewhere else! 
 OK. Well then, take care, Sakura. 
 Thank you, Ogami. 
 Sakura? 
@@ -228,19 +228,19 @@ Jeez!
 Sakura, did you really need to hit him over the head with a flower vase like that? 
 You seemed to have knocked him out cold. 
 What? Oh no, what should I do… 
-Owww… she really got me… 
+Owww… She really got me… 
 Considering what just happened… I should probably stay away for now. 
 Sakura, How are you fe- 
 Sakura! 
 Hi, Iris. 
 Here. I brought you something. 
 Iris, what is that? 
-It's my special Apple Pate. 
-(Pate? Th-this charred thing…? This is… food, right?) 
+It's my special Apple Tarte. 
+(Tarte? Th-This charred thing…? This is…food, right?) 
 Encourage Sakura. <br> Stop Iris. 
 Sakura, I think it'd be good to eat at least one bite. 
 Yeah, thank you, Iris. I'll try some then. 
-…… 
+…
 Sakura, eat more! 
 Iris! Sakura is sick. She shouldn't overeat. 
 Oh… 
@@ -257,9 +257,9 @@ Maybe we hurt her feelings?
 I don't think there was any way to avoid it, in a situation like that… 
 Here you go! 
 Thank you, Iris. 
-Sakura! Oh… you ate it. 
-…… 
-D-delicious. It was r-really good. 
+Sakura! Oh… You ate it. 
+… 
+D-Delicious. It was r-really good. 
 You're welcome! 
 (Oh man, I guess I was too late. Sorry, Sakura.) 
 Come in! 
@@ -267,25 +267,25 @@ Huh? Ayame is here.
 Sakura, how are you feeling? 
 Oh, I'm fine now. Starting tomorrow, I'll even be able to go back onstage! 
 Haha, if you have the energy to talk big, then you're probably fine. 
-Haha… that's great. If you have the energy to joke around then you're probably fine. 
+Haha… That's great. If you have the energy to joke around then you're probably fine. 
 However, you're a girl. You need to listen to your body. 
 Yes, ma'am! 
 Ogami, it's good that you care, but be sure to let the injured rest. 
-O-of course. 
+O-Of course. 
 Well then, Sakura. Take care. 
 Of course. Thank you. 
 Wow, Ayame is an amazing woman any way you look at her. I really admire her… 
 You'll be like her soon. <br> She really is great. <br> Much different from them. 
 Sakura, you'll become an adult soon, too, you know. 
-Huh? Oh, yeah. But, I wonder if I'll be amazing like Ayame is? 
+Huh? Oh, yeah. But, I wonder if I'll ever be as amazing as Ayame? 
 Absolutely! You definitely will! 
 Thank you, Ogami. 
 She really is great… 
 I want to be an amazing woman like that someday… 
 Yeah, completely different from the other women here. 
-Other women… that means me too? 
-N-no… that's not… 
-…… 
+Other women… Does that include me as well? 
+N-No… That's not… 
+…
 Don't you think so, Ogami? 
 Huh? Oh, yeah… 
 Right. I shouldn't overstay my welcome. 
@@ -295,39 +295,39 @@ What Ayame said was just a suggestion… I don't think I'll follow it.
 What's going on? It's awfully loud… 
 How many times do I have to tell you before you'll understand? I said it's wrong! 
 It's fine like this. 
-What you just put in is called "starch", not "flour!" 
+The ingredient you just added is called "starch", not "flour"! 
 It's fine! 
 I can do it by myself! 
 Well, if that's the case, why did you put in salt instead of sugar? 
 Salt…? It's fine!! 
-You! You mean you're going to make Sakura eat THAT?! You're going to kill her! 
+Unbelievable! Don’t tell me you plan to make Sakura eat THAT?! You're going to kill her! 
 …*sniffle*. 
 What's going on here? Maybe I should go check the kitchen… 
 Mon Frère… 
 What's wrong, Iris? You look like you're going to cry. 
-…… 
+… 
 Was Sumire picking on you? <br> You shouldn't be playing. <br> Playing house with Sumire? 
 Well, Ensign! What do you mean by that?! 
 Are you implying that I would bully Iris?! 
-N-no, that's not what I… 
-I'm making an apple pie. 
+N-No, that's not what I… 
+I'm making an apple tarte. 
 I'm not doing anything wrong! 
-This child! She said she wants to make a pate, but she can't do it properly. 
-Pate…? 
-Oh dear. Ensign, in France, they call pie "pate." 
+This child! She said she wants to make a tarte, but she can't do it properly. 
+Tarte…? 
+Oh dear. Ensign, in France, they call pie "tarte." 
 Pie…? 
 It's something baked that you make out of flour… 
 Why is it I have to explain what pie is to you?! 
-Uh… oh, sorry. 
-I wanted to give Sakura… 
-Something to cheer her up? 
-Ensign, would you please avoid such feeble jokes?! 
+Uh… Oh, sorry. 
+I wanted to do something for Sakura… 
+You two are really worried about her, huh? 
+Me? Spare me such feeble jokes, Ensign!! 
 Wa… WAAAAAAA! 
 Honestly, Ensign! This is all your doing! 
-I-I'm sorry, Iris… please stop crying. 
-I want to make an apple pie… 
-…… 
-I want to make an apple pie… 
+I-I'm sorry, Iris… Please stop crying. 
+I want to make an apple tarte… 
+…
+I want to make an apple tarte… 
 My mom used to make them for me when I was sick… 
 And so… you're doing the same for Sakura… 
 What about you, Sumire? 
@@ -335,10 +335,10 @@ I-I didn't come in here to make a meal for Sakura if that's what you mean!
 You're both very kind, aren't you? 
 Sumire, please help her. <br> Iris, let her help you. <br> I'll help. 
 But I'm telling you it's all wrong! 
-Well, fine. With my help, you will make a truly exceptional pate. 
+Well, fine. With my help, you will make a truly exceptional pie. 
 I can do it by myself! 
 If Sumire helps, it'll get done faster. Right, Iris? 
-… right. 
+…All right. 
 … 
 Iris, you can't do it alone. It'd be good to let Sumire help. 
 You can rely on me. 
@@ -348,85 +348,85 @@ Ensign, you are aware that "Men don't belong in the kitchen" right?
 Mon Frère, you can cook? 
 Well, Ensign, I wonder if we could have the men leave? 
 This is the territory of us women. 
-Y-yeah… 
-Well then… good luck. 
+Y-Yeah… 
+Well then… Good luck. 
 Huh? Wait a minute. Can Sumire cook? 
-…… 
+… 
 I should just not think about it. 
-Hey, Captain. Did you come to train, too? 
+Hey, Boss. Did you come to train, too? 
 Ah, yeah. You too, Kirishima? 
-You can just call me "Kanna." … A lot happened as soon as I got here, right? So I had trouble sleeping… you? 
+You can just call me "Kanna." A lot happened as soon as I got here, right? So I had trouble sleeping. You? 
 Yeah… I have a lot on my mind. 
 Well, if you don't mind my asking, why don't you tell me what's bothering you. 
 It's about Sakura. <br> It's about Maria. <br> It's about you. 
-Don't let things that have already happened bother you, Captain. Try not to worry so much. 
-From where I'm standing, she's not such a fragile girl. 
+Don't let things that have already happened bother you, Boss. Try not to worry so much. 
+From what I’ve seen, she's not such a fragile girl. 
 You think so? 
 Sure! Just trust me! 
 OK? 
 (I wonder if that was supposed to be a wink.) 
 Hmm, that's a tough one. Maria has always been stubborn. 
 …? 
-Well, I'm the person here who has known Maria the longest. 
+Well, I've known Maria the longest out of everyone here. 
 She's always been the kind of person who doesn't show her emotions. 
-For as long as I've known her, I've never seen her get this emotional. 
+In all the time I've known her, I've never seen her get this emotional. 
 I think there's something going on! 
 Really? 
-Sure! Don't you think something's up, Ensign? 
-…Hmmm… 
+Sure! Don't you think something's up, Boss? 
+Hmmm… 
 I actually wanted to hear more about you, Kanna. 
 What? Don't tease me! But, I guess it's not really a bad thing…being asked. 
 Hahahaha… 
 Hehehehe… 
-Hm… well if you don't want to talk about it, that's fine. 
+Hm… Well if you don't want to talk about it, that's fine. 
 … 
 Did I say something wrong? 
 No, it's not that. Thanks for worrying about me anyway, though. 
 Haha! You, too. 
-Hey. Hey, Boss! Do you want to come train with me? 
+Uh… Hey, Boss! Do you want to come train with me? 
 No thanks. <br> Sure. 
 I'll take a rain check. I'm still making the rounds… 
-Ah, too bad. You're pretty serious, aren't you, Ensign Ogami? 
+Ah, too bad. You're pretty serious, aren't you, Boss? 
 Well, that's my job, you know… 
 I guess that's that. See you later. 
 Of course! Let's go together. 
 Good, that's what I like to hear! 
-Alright, let's go! 
+All right, let's go! 
 Huh? By training do you mean karate sparring? 
-You were the top of your class in military school, weren't you, Ensign? 
+You were the top of your class in military school, weren't you, Boss? 
 Show me the fighting technique of a trained naval officer. 
-Man, it's been a long time since I've had a good sweat. Don't hold back, Ensign. 
+Man, it's been a long time since I've had a good sweat. Don't hold back, Boss. 
 Yeah… You, too. 
 All right, I'm going to hit the showers. 
 What I really want to do is jump into a river right now… 
-What? I don't like people who aren't straight with me, Ensign. 
+What? I don't like people who aren't straight with me, Boss. 
 Oh well. I think I'm going to head out then. See you later. 
-Ensign…? 
+Boss…? 
 Oh, sorry. 
 Huh…? There's a spot open next to me. You want to come in? 
-U-uh, actually… I think I'll pass. 
+U-Uh, actually… I think I'll pass. 
 What are you being shy about! 
-…don't worry about it. No one wants to see my manly body naked! 
+…Don't worry about it. No one wants to see my manly body naked! 
 But… that doesn't change the fact that you're a woman. 
 Hm, honestly, hearing you say it like that feels kind of strange… 
 …Well, I'm going then! 
-Ensign…? 
+Boss…? 
 Huh…? 
 You're… a good guy. 
-Haha… thanks. 
+Haha… Thanks. 
 Looks like Kohran already left. 
 …I shouldn't be wasting time with this. I'd better hurry and find Maria. 
 Ah, Chief. What're you doing up at this hour? 
 What about you, Kohran? Weren't you nodding off in here earlier? 
 …Huh? How'd you know about that? 
-…It's crazy embarrassing you saw me like that! Hahaha, ohh man. 
+…It's crazy embarrassing you saw me like that! Hahaha, oh man. 
 You were saying something about an "airplane" in your sleep… 
 Wha-? I was talking about that?! 
-Yeah… though, I didn't mean to listen in… 
+Yeah… Though, I didn't mean to listen in… 
 …I getcha. Eh, it was just sleep-talk, so don't worry about it. 
 Welp, I'm gonna head back to my room and get to bed for real. See ya later, Chief. 
 …Well, I'd better get going too. I need to find Maria and speak with her. 
-Hey… is that Kohran asleep over there? 
+Hey… Is that Kohran asleep over there? 
 (That's Kohran, all right. Why is she asleep in a place like this?) 
 Carry Kohran to her room. <br> Speak to her. <br> Leave quietly. 
 Mmm… 
@@ -437,76 +437,76 @@ Wait up… I… the airplane…
 (I should leave her here. I'd hate to wake her up badly.) 
 Mmm… 
 Kohran? 
-Wait up…I…the airplane… 
+Wait up… I… the airplane… 
 (…She's talking in her sleep? Wonder what sort of dream she's having.) 
 (At any rate, I'd better get going. Finding Maria is my top priority right now.) 
 Hey, Kohran. You'll catch a cold sleeping here like this. 
 Uhnn… mm… 
 Kohran. 
-Didja happen to… make a… new airplane? 
-…Airplane? Kohran… still half-asleep, I see. 
-Huh? Why… is Chief… in the airplane? 
+Didja happen to…make a…new airplane? 
+Airplane? Kohran… still half-asleep, I see. 
+Huh? Why…is Chief…in the airplane? 
 …Eh?! Chief?! 
 C-Chief, it's you! Sorry 'bout that! I wasn't fully awake! 
 Hey, it's OK. More importantly, you'll catch a cold sleeping out here. 
-So sorry! Thanks a bundle for waking me up; you're a lifesaver! 
+So sorry! Thanks a bundle for waking me up, you're a lifesaver! 
 Welp, I'm gonna head back to my room and get to bed for real. See ya later, Chief. 
 …Well, I'd better get going too. I need to find Maria and speak with her. 
 Oh well. I'd better carry her to her room. 
 …Huh? 
 Kohran… I'm gonna pick you up now. 
 Up we go… 
-…Huh? She's… lighter than I expected. 
-…… 
+…Huh? She's…lighter than I expected. 
+… 
 She may be a member of the Flower Division, riding a Koubu into battle… 
-…but she's still just an ordinary girl. 
-Right then… where should I take her? 
+…But she's still just an ordinary girl. 
+Right then… Where should I take her? 
 Take Kohran to her room. <br> Take her to my room. 
 OK, let's get Kohran to her room. It's pretty close by. 
 Kohran. We're at your room. Hey, Kohran, wake up. 
-Uhnn… mm… 
-Agh, Chief?! W-why am I here? 
-H-huh? This… isn't the library. It's the door to my room. 
+Uhnn…mm… 
+Agh, Chief?! W-Why am I here? 
+H-huh? This…isn't the library. It's the door to my room. 
 I found you asleep in the library, so I carried you here. 
-I figured you might catch cold otherwise… 
+I figured you might catch a cold otherwise… 
 Is that right? Thanks, Chief! I owe you one. 
 I got so sleepy right in the middle of my research… 
 Go ahead and turn in for the day. Don't push yourself too hard. 
-You got it… welp, good night, Chief. 
+You got it. Welp, good night, Chief. 
 Yeah, good night. 
 Good night, Kohran. 
-Well then… it's getting late. I need to hurry and find Maria. 
+Well then… It's getting late. I need to hurry and find Maria. 
 Well, I'll take her to my room for now. 
 O-Ogami! And… Kohran! 
 Eep! S-Sakura… 
-Um… are you feeling better? 
+Um… Are you feeling better? 
 Yes. I'm a bit thirsty, so I got up to get some water. Um, by the way… 
 …Ogami. Where were you taking Kohran? 
 Uh, nothing, never mind… 
-So she's asleep… all right. I'll take her to her room. 
+So she's asleep. All right… I'll take her to her room. 
 B-but… 
 "But" nothing! Leaving her with you would just cause me to worry! 
 Come on now, Kohran. Let's go. 
-Uhnn… mm… 
+Uhnn…mm… 
 Well then, please excuse us, Ogami. 
-Oh boy… she really caught me with my pants down there. 
+Oh boy… She really caught me with my pants down there. 
 …I'd better pull myself together and find Maria. 
-This is bad… what should I do? 
-Oh, Ogami! And Kohran, too… What's the matter? 
+This is bad… What should I do? 
+Oh, Ogami! And Kohran, too. What's the matter…? 
 Oh, Sakura… 
-Um… are you feeling better? 
+Um… Are you feeling better? 
 Yes. I was asleep for so long that I'm not tired at all anymore, so I went to go borrow a book. 
 But never mind that… What are you doing, Ogami? 
 The thing is, Kohran dozed off in the library… 
 I figured she might catch a cold if I left her like that, so I'm carrying her to her room. 
-Oh, so that's all it was. I thought for sure that… 
-For sure that… what? 
-N-no, forget about it. 
+Oh, so that's all it was. I thought for sure that you… 
+That I what? 
+N-No, forget about it. 
 Well then, I'll bring Kohran to her room from here. It's pretty close by. 
 And this way I can take her inside, since we're both women. 
-I see… all right, I'll leave her to you. 
+I see… All right, I'll leave her to you. 
 Sure thing. Hey… Kohran. Let's go. 
-Uhnn… mm… 
+Uhnn…mm… 
 Haha, such a sleepyhead… Well, please excuse me, Ogami. 
 …I need to get back to looking for Maria. That was quite a detour. 
 Oh, Sumire. What are you doing up so late? 
@@ -514,24 +514,24 @@ I misplaced my stage shoes, so I came back to fetch them.
 (Oh… I should ask her if she's seen Maria.) 
 Um, Sumire… 
 Ah, that's right! Ensign, I've a favor to ask of you. 
-W-what is it? 
+W-What is it? 
 Since you're already here, would you mind terribly giving my shoulders a rub? 
 It is vitally important to relax before bedtime in order to stay beautiful. 
 B-but I'm kind of in the middle of something right - 
-Do you mean to say…you won't abide my request? 
-A-all right… 
+Do you mean to say… you won't abide my request? 
+A-All right… 
 (Oh man… how did I get stuck doing this when I need to be looking for Maria?) 
 Ahh, this feels wonderful… 
 Ask about Maria. <br> Get on her good side. 
 Say, Sumire. Since I'm rubbing your shoulders, would you mind if I asked you something? 
-…Oh my. Ah - a little to the right…Well, what would you like to ask? 
+…Oh my. Ah, a little to the right… Well, what would you like to ask? 
 Have you seen Maria? I've been searching for her. 
 Maria, you say? Very well, give me another 100 rubs and I shall answer you. 
-S-seriously? Well, OK then. I'll give this massage my all! 
-Ahh… just like that, Ensign… how… wonderful… 
+S-Seriously? Well, OK then. I'll give this massage my all! 
+Ahh… Just like that, Ensign. How…wonderful… 
 Thank you so very much, Ensign. I shall sleep quite well thanks to this. 
 I will take my leave of you. Please excuse me. 
-H-hey, Sumire! You promised me you'd tell me where Maria went! 
+H-Hey, Sumire! You promised me you'd tell me where Maria went! 
 Oh my, I must have forgotten. It was about Maria, wasn't it? 
 Maria… I have not seen her even once since night fell. 
 Wh-what the heck?! Sumire, you don't know where she is? That wasn't the deal! 
@@ -540,64 +540,64 @@ A plea of ignorance is still an answer. With that, excuse me.
 …I fell for that hook, line, and sinker. 
 Oh man… I can't believe I let myself get fooled by Sumire of all people… 
 Why ma'am, you're terribly stiff here. 
-Ahh… just like that, Ensign… how… wonderful… 
-Ensign, you certainly are skilled at giving shoulder rubs… quite the captain, indeed. 
+Ahh… Just like that, Ensign. How…wonderful… 
+Ensign, you certainly are skilled at giving shoulder rubs… Quite the captain, indeed. 
 (How does giving shoulder rubs make me "quite the captain"?) 
-Oh… a bit more at the base of my neck, if you please… 
+Oh… A bit more at the base of my neck, if you please… 
 Certainly, ma'am. Right around here? 
-Why yes, right there. Ahh, how wonderful… very well, next is… 
+Why yes, right there. Ahh, how wonderful. Very well, next is… 
 (Just how long is she planning to have me do this?) 
-Aghh… my fingers have given out… 
+Aghh… My fingers have given out… 
 Thank you so very much, Ensign. I shall sleep quite well thanks to this. 
 I will take my leave of you. Please excuse me. 
 …Oh man. What a complete waste of time. 
-I've gotta find Maria… better try somewhere else. 
-Ahh, what a heavenly feeling… having a gentleman rub my shoulders is rather exhilarating. 
+I've gotta find Maria… Better try somewhere else. 
+Ahh, what a heavenly feeling… Having a gentleman rub my shoulders is rather exhilarating. 
 (I'd say that rubbing the shoulders of a woman like her is pretty exhilarating…) 
-Oh… a bit more at the base of my neck, if you please… 
+Oh… A bit more at the base of my neck, if you please… 
 Certainly, ma'am. Right around here? 
-Why yes, right there. Ahh, how wonderful… very well, next is… 
+Why yes, right there. Ahh, how wonderful. Very well, next is… 
 (Just how long is she planning to have me do this?) 
-Aghh… my fingers have given out… 
+Aghh… My fingers have given out… 
 Thank you so very much, Ensign. I shall sleep quite well thanks to this. 
 I will take my leave of you. Please excuse me. 
 …Oh man. What a complete waste of time. 
-I've gotta find Maria… better try somewhere else. 
+I've gotta find Maria… Better try somewhere else. 
 I wonder if Sumire is in her room? 
 I've gotta get going. Right now, finding Maria is my top priority. 
 …No response. Maybe she's asleep? 
 It's Ogami… 
 I have retired for the evening. If there is something you need of me, could it wait until tomorrow? 
-S-sorry. 
+S-Sorry. 
 It's Ogami… Sumire, are you there? 
 Oh, Ensign. Was there something you needed? 
-It's just… have you seen Maria around? 
+It's just… Have you seen Maria around? 
 No, I cannot say that I have. 
-I see… sorry to bother you so late. 
+I see… Sorry to bother you so late. 
 I wonder if Ayame is in her room? 
 For now, talking with Maria is my first priority. 
-Um…… It's Ogami…… 
+Um… It's Ogami… 
 …Ogami. Hurry now, and find Maria. 
-… understood. 
-Um…… It's Ogami…… 
+…Understood. 
+Um… It's Ogami… 
 Ogami? Come in, it's open. 
 …Excuse me. 
 Ma'am, there's something I wanted to ask you about… 
 …About Maria, yes? 
-… understood. 
+…Understood. 
 Maria isn't one to speak openly about her own troubles. 
-Ogami… a captain's duties do not end with leading his forces into battle. 
+Ogami… A captain's duties do not end with leading his forces into battle. 
 If you are concerned about Maria, you should make every effort to understand what she is going through. 
 You have nothing to lose by trying, right? 
 Yes… that's true. 
-Haha… very good. Well then, off you go. 
+Haha… Very good. Well then, off you go. 
 Maybe Maria is in her room? 
 I'd better look somewhere else. At any rate, I need to have a proper discussion with Maria… 
 It's Ogami… Maria, are you there? 
-…… 
+…
 You there, Maria? 
-…… 
-Looks like she's not in her room… where could she be? 
+…
+Looks like she's not in her room… Where could she be? 
 Ahem! It's me… 
 …Guess she's not here, after all. 
 This will be Kanna's room from today on. 
@@ -606,61 +606,61 @@ No point in loafing around here. I'll try somewhere else.
 Kanna… are you there? 
 Snoooore… 
 Already asleep, then… 
-Hey… I can hear the shower going… and this locker is open. 
+Hey… I can hear the shower going… And this locker is open. 
 …! 
 …K-Kanna's clothes are in the locker… which means…! 
-C, crap… blood is rushing to my head… make good choices, Ogami! 
+C-Crap… Blood is rushing to my head… Make good choices, Ogami! 
 I'm outta here! <br> I'm moving to the shower… 
 Going into the shower right now would be crossing the line. I'm outta here! 
 Phew… I managed to get myself under control… 
-C, crap… I can't decide what to do! 
+C-Crap… I can't decide what to do! 
 …Whew, all freshened up. Time to get outta here. 
 I'm dead! I need to get out of here! 
 Phew… I managed to escape before she noticed. 
-No… my body… it's moving on it's own… toward the shower… 
+No… My body…it's moving on its own…toward the shower… 
 (K-Kanna's in the shower…) 
 …Hm? 
 Who's there… is that you, Boss? 
-(Ack! S-she found me out already!) 
-W-what should I do?! 
+(Ack! S-She found me out already!) 
+W-What should I do?! 
 Run away. <br> Act natural. 
-(C-crap! I've gotta get out of here!) 
+(C-Crap! I've gotta get out of here!) 
 Huff, huff… Phew, I'm out of breath… 
 Oh boy… I was nearly in hot water there… 
 Don't you mean I was the one in hot water?! 
 Eep?! K-Kanna, you knew I was there?! 
 'Course I did! And I find voyeurs completely disgusting, Boss! 
-First eavesdropping, now this… just what kind of man are you?! 
+First eavesdropping, now this… Just what kind of man are you?! 
 I'm… I'm sorry. 
 Peeping on someone just tryin' to wash off her training sweat… 
 So much for my nice, refreshing shower! 
 Augh… Kanna sure tore into me there… 
-I'm… pretty ashamed of myself. 
-(So it's come to this… here goes nothing!) 
-Y-yeah, it's me, Kanna. I came to take a shower too. 
+I'm pretty ashamed of myself… 
+(So it's come to this… Here goes nothing!) 
+Y-Yeah, it's me, Kanna. I came to take a shower too. 
 Oh, all right then. There's some open stalls toward the back, so hop on in. 
 (Yes! She bought it!) 
-Hey, Captain… you still wearing your clothes? Are you gonna shower like that? 
-O-oh man, you're right! Ha, hahaha… How silly of me! 
+Hey, Boss… you still wearing your clothes? Are you gonna shower like that? 
+O-Oh man, you're right! Ha, hahaha… How silly of me! 
 Hahaha, better screw your head back on! 
-W-well, I'd better go… take it easy, Kanna. 
-Whew… what a miracle. She actually believed me… 
+W-Well, I'd better go… Take it easy, Kanna. 
+Whew… What a miracle. She actually believed me… 
 …That was a huge waste of time. I better hurry and find Maria… 
 Did you come to take a shower? There's some open stalls toward the back, Boss. 
-Y-yeah… 
-(Huh… she didn't freak out! She doesn't care that I'm here?) 
-Hey, Captain… you still wearing your clothes? Are you gonna shower like that? 
-O-oh man, you're right! Ha, hahaha… How silly of me! 
+Y-Yeah… 
+(Huh… She didn't freak out! She doesn't care that I'm here?) 
+Hey, Boss… you still wearing your clothes? Are you gonna shower like that? 
+O-Oh man, you're right! Ha, hahaha… How silly of me! 
 Hahaha, better screw your head back on! 
-W-well, I'd better go… take it easy, Kanna. 
-Phew… oh man, it's a good thing that was Kanna in there… 
+W-Well, I'd better go… take it easy, Kanna. 
+Phew… Oh man, it's a good thing that was Kanna in there… 
 …That was a huge waste of time. I better hurry and find Maria… 
 Kanna left, so there's no one here now. 
 …Oh well. I'd better go, too. 
 Yo, Boss. I'm feelin' a bit more clear-headed after my shower. 
 I-I see. I bet you're feeling great. 
 How about you clear your head too, Boss? You'll sleep like a baby afterwards. 
-Y-yeah, you're right. 
+Y-Yeah, you're right. 
 Boss… I know I boiled over and shouted at you earlier, but… 
 Please, I need your help with Maria. She seriously never opens herself up to anyone. 
 But, you're her captain. She just might open up to you. 
@@ -671,87 +671,87 @@ Later, Boss. I'm heading out now.
 …I better find Maria. I've wasted enough time already. 
 Hey… I can hear the shower going… and this locker is open. 
 …! 
-…K-kanna's clothes are in the locker… which means…! 
-C, crap… blood is rushing to my head… make good choices, Ogami! 
+…K-Kanna's clothes are in the locker… Which means…! 
+C-Crap… Blood is rushing to my head… Make good choices, Ogami! 
 I'm outta here! <br> I'm moving to the shower… 
 Going into the shower right now would be crossing the line. I'm outta here! 
 Phew… I managed to get myself under control… 
-C, crap… I can't decide what to do! 
+C-Crap… I can't decide what to do! 
 …Whew, all freshened up. Time to get outta here. 
 I'm dead! I need to get out of here! 
 Phew… I managed to escape before she noticed. 
-No… my body… it's moving on it's own… toward the shower… 
+No… My body…it's moving on its own…toward the shower… 
 (K-Kanna's in the shower…) 
 …Hm? 
-Who's there… is that you, Boss? 
-(Ack! S-she found me out already!) 
-W-what should I do?! 
+Who's there… Is that you, Boss? 
+(Ack! S-She found me out already!) 
+W-What should I do?! 
 Run away. <br> Act natural. 
-(C-crap! I've gotta get out of here!) 
+(C-Crap! I've gotta get out of here!) 
 Huff, huff… Phew, I'm out of breath… 
 Oh boy… I was nearly in hot water there… 
 Don't you mean I was the one in hot water?! 
 Eep?! K-Kanna, you knew I was there?! 
 'Course I did! And I find voyeurs completely disgusting, Boss! 
-First eavesdropping, now this… just what kind of man are you?! 
+First eavesdropping, now this… Just what kind of man are you?! 
 I'm… I'm sorry. 
 Peeping on someone just tryin' to wash off her training sweat… 
 So much for my nice, refreshing shower! 
 Augh… Kanna sure tore into me there… 
 I'm… pretty ashamed of myself. 
-(So it's come to this… here goes nothing!) 
-Y-yeah, it's me, Kanna. I came to take a shower too. 
+(So it's come to this… Here goes nothing!) 
+Y-Yeah, it's me, Kanna. I came to take a shower too. 
 Oh, all right then. There's some open stalls toward the back, so hop on in. 
 (Yes! She bought it!) 
 Hey, Boss… you still wearing your clothes? Are you gonna shower like that? 
-O-oh man, you're right! Ha, hahaha… How silly of me! 
+O-Oh man, you're right! Ha, hahaha… How silly of me! 
 Hahaha, better screw your head back on! 
-W-well, I'd better go…take it easy, Kanna. 
-Whew… what a miracle. She actually believed me… 
+W-Well, I'd better go… take it easy, Kanna. 
+Whew… What a miracle. She actually believed me… 
 …That was a huge waste of time. I better hurry and find Maria… 
 Did you come to take a shower? There's some open stalls toward the back, Boss. 
-Y-yeah… 
-(Huh… she didn't freak out! She doesn't care that I'm here?) 
+Y-Yeah… 
+(Huh… She didn't freak out! She doesn't care that I'm here?) 
 Hey, Boss… you still wearing your clothes? Are you gonna shower like that? 
-O-oh man, you're right! Ha, hahaha… How silly of me! 
+O-Oh man, you're right! Ha, hahaha… How silly of me! 
 Hahaha, better screw your head back on! 
-W-well, I'd better go…take it easy, Kanna. 
-Phew… oh man, it's a good thing that was Kanna in there… 
+W-Well, I'd better go… take it easy, Kanna. 
+Phew… Oh man, it's a good thing that was Kanna in there… 
 …That was a huge waste of time. I better hurry and find Maria… 
 That's… Maria's voice. It's coming from the Manager's Office. 
 … 
-…Are you thinking about that time? 
+…Back then? 
 Listen. <br> Go inside. <br> Leave. 
 Who's there?! 
 Ahh!? 
 O-Ogami… 
 Oh… I just, uh… 
-Were you eavesdropping, sir? That seems to be a great hobby of yours. 
+Were you eavesdropping, sir? That seems to be something of a hobby of yours. 
 (Right! I'm the captain of the Flower Division, aren't I? I have a right to take part in this conversation.) 
 I'm coming in! 
-O, Ogami… 
+O-Ogami… 
 Ensign! How long have you been there? 
-Well, I guess I'll just have to eavesdrop… 
+Well, I don’t want to eavesdrop… 
 I'm curious about what they're saying, but maybe I should go somewhere else. 
-…… 
+…
 …! 
-Y, yes… 
-O, Ogami… 
-…… 
+Y-Yes… 
+O-Ogami… 
+… 
 Sir! 
 Make an excuse. <br> Apologize. 
-Were you eavesdropping, sir? That seems to be a great hobby of yours. 
-Well then, I'll… take my leave. 
-That wasn't what happened! I wasn't trying to listen, but I heard anyway. 
-There's no alternative, you were eavesdropping! 
-I don't want to listen to your excuses. Excuse me. 
+Were you eavesdropping, sir? That seems to be something of a hobby of yours. 
+Well then… I'll take my leave. 
+I was walking by and overheard your conversation. I wasn't trying to listen in, but I heard anyway. 
+There's no way around it, you were eavesdropping! 
+I don't want to hear your excuses. Pardon me. 
 I'm sorry… I heard your voice and I just… 
 Seriously… You're some captain, aren't you? 
-Well then I'm… leaving. 
+Well then… I'm leaving. 
 Ah, Maria…! 
 Go after her. <br> Talk to Yoneda. 
 M-Maria! Please wait! 
-I'm coming in! 
+I have to go after her! 
 Sir… What were you talking about just now? 
 You idiot! Never mind that, hurry up and go after Maria! 
 Y-Yes! Excuse me! 
@@ -760,13 +760,13 @@ You idiot! What are you just standing there for! Go after her, Ogami!
 Y-Yes! Excuse me! 
 It looks like Maria went toward the lobby. Go after her! 
 That fool! 
-…… 
-Sir… 
+…
+Ensign… 
 Maria, wait up! 
-Sir…Leave me alone! 
+Ensign… leave me alone! 
 Maria, please listen to me! 
 Maria! I know I shouldn't have eavesdropped, but please listen to me! 
-I don't… have anything to say to you! 
+I don't…have anything to say to you! 
 Maria! Wait! 
 Fwahahahaha! 
 …! 
@@ -775,20 +775,20 @@ Fwahahahaha!
 …Soldier of the revolution? Cassowary? What the heck's he talking about? 
 …He's gone. 
 … 
-Maria………… 
-What… was that about? <br> "Cassowary"…? 
-What… was that about? 
-…He's that Hive of Darkness member we fought in Tsukiji. I believe his name was "Setsuna"… 
+Maria…
+What…was that about? <br> "Cassowary"…? 
+What…was that about? 
+He's that Hive of Darkness member we fought in Tsukiji. I believe his name was "Setsuna"… 
 He called you "Cassowary" a minute ago… 
 What sort of name is that? 
 … 
-…… 
+…
 Sir… let's head back inside. 
-Maria… if you go, then I'm going with you. 
+Maria… If you go, then I'm going with you. 
 …It's all right. Did you really believe I would rise to such a provocation, sir? 
-Well then, sir…excuse me. 
+Well then, sir… Excuse me. 
 All the same… all that just now… 
-"Cassowary" and "soldier of the Russian Revolution"… what could it all mean? 
+"Cassowary" and "soldier of the Russian Revolution"… What could it all mean? 
 Maria… you really aren't going to tell me anything, are you? 
 Unused
 Unused
@@ -839,16 +839,16 @@ You called for me, Commander.
 It sounds like you chewed out that idiot Ogami. I heard what happened. 
 Sakura's injuries are clearly due to the Ensign's flawed judgment. 
 If he is incorrect in his orders on the battlefield, it won't make a difference how many troops we have! 
-The troops, your… comrades. 
-Maria… is it the case that you are still upset about what happened that time…? 
+The troops, your comrades… 
+Maria… could it be that you are still upset about what happened back then…? 
 Ensign Ogami? Enter! 
 Maria Tachibana! Member of the Imperial Assault Troupe, soldier of the Russian Revolution… 
 Or perhaps, I should call you "Cassowary"?! 
 The Hive of Darkness has seen through to your true identity! 
-Your position as a soldier who defends justice is but a mere facade… in truth, you are a stone-hearted savage! 
+Your position as a soldier who defends justice is but a mere facade. In truth… you are a stone-hearted savage! 
 Tch…! 
 If you don't wish your past exposed for all your comrades to see, you will show yourself before us immediately! 
-Hmhm… hahahahaha! 
+Hmhm… Hahahahaha! 
 Unused
 Unused
 Unused
@@ -899,7 +899,7 @@ Unused
 Unused
 Unused
 Unused
-If the Ensign hadn't hesitated to give the order to attack that time, this wouldn't have happened! 
+If you hadn't hesitated to give an order, this wouldn't have happened! 
 Unused
 Unused
 Unused

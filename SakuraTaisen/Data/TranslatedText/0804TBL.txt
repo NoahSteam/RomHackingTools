@@ -1,6 +1,6 @@
-﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
-It's a photo of Maria. …She's lost in thought and looks kind of sad…
+It's a photo of Maria. She's lost in thought and looks kind of sad…
 A photo of Kanna. Her signature strength comes through clearly.
 A photo of Iris. She's surrounded by flowers and flashing a radiant smile.
 A photo of Kohran. She's looking pretty in profile with her face dyed red by the evening sun.
@@ -27,11 +27,11 @@ A photo of Ayame in a traditional outfit. I hope she'll always be as happy and c
 Ayame's gun. Why…? Why did it have to turn out like this…?
 Jean-Paul the teddy bear. Iris's best friend. She always carries him with her and takes good care of him.
 January 2nd. Imperial City Daily Report. News Extra 
-"A New Enemy Has Appeared". "Mass Chaos at Meiji Shrine" 
-A hideous monster has appeared at Meiji Shrine. It was a desperate struggle for the Imperial Flower Division. 
-The bizarre beast appeared at the crowded Shrine and caused mass hysteria in the area. 
-The Troupe was dispatched, and victorious, yet seriously injured. Were the Spirit Armor and Koubu destroyed? 
-It seems that the citizens of the imperial capital are unable to hide their shock at the appearance of a new demon. 
+"A New Enemy Has Appeared"! "Mass Chaos at Meiji Shrine"! 
+Hideous monsters appeared at Meiji Shrine the other day. It was a desperate struggle for the Assault Troupe to fight them off.
+The bizarre beasts appeared at the crowded Shrine during New Years Day celebrations and caused mass hysteria in the area. 
+The Troupe was dispatched, and victorious, yet seriously injured. Were the group’s battlesuits, the Koubu, destroyed?
+It seems that the citizens of the imperial capital are unable to hide their shock at the appearance of this new threat. 
 With all due respect… <br> It's my responsibility… 
 With all due respect, Lt. General Yoneda, the Koubu were no match for that enemy. 
 Ogami! What the hell are you saying?! Aren't you the commanding officer of the Flower Division!? 
@@ -41,24 +41,24 @@ I'm sorry… It's my fault. I am fully prepared to receive the punishment I dese
 You damn fool! What good will it do us if you resign your post?! 
 And… the Koubu were totally destroyed! 
 …I have no words. 
-Jeez… we're gonna have to go back without a single piece left of our precious Spirit Armor… 
+Jeez… we’re going to have to face this new enemy somehow with our precious Spirit Armor in pieces… 
 I… I'm so ashamed…! 
-First the Hive of Darkness, and now this new threat…the citizens are terrified… 
-And because everyone's just hiding away in their houses now, the economy has totally broken down. 
-The big shots up in government have been giving me nothing but grief about this since yesterday. 
+First the Hive of Darkness, and now this new threat… the citizens are terrified… 
+And because everyone is hiding away in their houses out of fear, the economy has totally broken down. 
+The big shots up in government have been giving me nothing but grief about this incident since yesterday. 
 No wonder my stomach is killing me. 
-Are you sure that's not just because you drink too much…? 
+Are you sure that's not being caused by all the alcohol you drink…? 
 Did you just say something? 
 No, I didn't say anything! 
 Better not have, Ogami! 
 We can't just assume there'll be peace because we defeated the Hive of Darkness! 
 If I see any more shameful behavior out of you, I'll be demoting you to full-time ticket collector! 
-F…full-time ticket collector!? 
+Fu… Full-time ticket collector!? 
 If you don't like it, I suggest you hurry up and think of a counterattack against these monsters quick-like! 
-Y-yes sir! 
+Y-Yes, sir! 
 If you got it, then go already! 
-Y-yes! Excuse me! 
-…… 
+Y-Yes! Excuse me! 
+…
 Even so… if there are monsters like that still alive out there… 
 The Kouma… 
 Six years ago… Lt. General Yoneda and the Anti-Kouma Corps managed to seal away the Kouma beneath the earth… 
@@ -68,43 +68,43 @@ Yes, just a minute…
 Chief… sorry for comin' in so late. 
 …What's wrong, Kohran? 
 …I, uh, got somethin' I wanna talk to ya about. Mind if I… come in? 
-…Alright. Come inside then. 
+…All right. Come inside then. 
 …Kohran? 
 Kohran… what could she possibly wish to talk with the Ensign about at this hour… 
 …So then, Kohran. What exactly did you want to talk about? 
 Lemme cut right to the chase… there isn't much chance of the Koubu getting repaired. 
 What? 
-I had a look at them, but the Koubus’ spirit engines are totally busted. It'll be real difficult to fix… 
+I took a look at them, but the Koubu’s spirit engines are totally busted. It'll be real difficult to fix… 
 And frankly, even if I could fix them… they wouldn’t stand a chance against the enemy next time. 
 …So we need a weapon other than the Koubu, you mean… 
-Well, that won’t be easy, either. The Imperial Assault Troupe sucks up loads of cash and makes nothing back. 
+Well, that won’t be easy, either. The Imperial Assault Troupe sucks up tons of money and makes almost nothing back. 
 Developing, maintaining and improving the Spirit Armor… who knows how much all that’ll cost us. 
-And now the Koubu are ruined… and to make matters worse, the capital’s economy is shaky 'cause of this new enemy. 
-There's just no way we could make a new Koubu at a time like this… 
+Not only are the Koubu ruined but, to make matters worse, the capital’s economy is also shaky 'cause of this new enemy.
+There's just no way we could make new Spirit Armor at a time like this… 
 What about a loan…? 
 …Hm?! 
 What's up, Chief? Ya look a bit scary… 
-Sorry… did you hear something just then? 
+Sorry… Did you hear something just now? 
 Nope, I didn't hear nothin'. Maybe it was just your imagination? 
 Maybe… 
-Chief… what are we gonna do? 
+Chief… What are we gonna do? 
 Go and talk to Yoneda. <br> Go and talk to Ayame. 
-Chief, there’s nothing we can do about the Koubu thing now. 
+Chief, there’s nothing we can do about the Koubu right now. 
 We should talk to Yoneda and see if he can give us a hand somehow. 
 In the meantime, why don't we figure out if there's something each of us can do on our own?
 Good idea. Get everyone to meet in the War Room. 
 Got it. 
-Right… I'll go and talk to the higher ups. 
-This isn't a problem I can solve on my own. I will discuss it with Yoneda. 
-…Alright. I'll go and get everyone from the Flower Division together in the War Room. 
+Right… I'll go and talk to the commander. 
+This isn't a problem I can solve on my own. I’ll discuss the situation with Yoneda. 
+…All right. I'll go and get everyone from the Flower Division together in the War Room. 
 Please do. 
 OK… I should go to the manager's office. 
 It's Ogami. I'd like to talk to you. 
 Come in! 
 Excuse me. 
 Sir, the truth is… 
-This is about the Koubu, I guess? 
-Yes, exactly. The Koubus' potential is exhausted, and our funds are limited… 
+This is about the Koubu, I suppose? 
+Yes, exactly. The Koubu's potential is exhausted, and our funds are limited… 
 Can't you do anything about this? 
 I've been wracking my brain about this whole pickle… 
 Can I ask you to leave the whole thing to me? 
@@ -114,16 +114,16 @@ You do your job and put some spirit back in the Flower Division!
 Understood. I’ll take my leave. 
 The members of the Flower Division should be gathered in the War Room by now. 
 I can't solve this problem alone. I'll ask Ayame for help. 
-…Alright. I'll go and get everyone from the Flower Division together in the War Room. 
+…All right. I'll go and get everyone from the Flower Division together in the War Room. 
 Please do. 
 OK… I should go see Ayame. 
-It's Ogami… Do you have a minute? 
+It's Ogami… do you have a minute? 
 Oh, Ogami? Come right in. How can I help you? 
 I'm sorry to disturb you so late. To be honest, I need your help… 
-…About the Koubu, yes? 
+…About the Koubu, right? 
 Yes… It pains me to say it, but I have no idea what we should do… 
 Don't beat yourself up about it. This problem is just too big. 
-Producing entirely new Spirit Armors… That would be a national effort. 
+Producing entirely new Spirit Armors… that would be a national effort. 
 Yes… 
 I'll have a word with Lieutenant General Yoneda about the Koubu. I think he had some kind of idea. 
 But, Ogami… could I offer you a word of advice? 
@@ -144,28 +144,28 @@ First off, let’s hear your thoughts, Boss.
 What can we do to stand against those monsters? 
 Go back to training. <br> Get more powerful weapons. 
 We all need to go back to training. The Koubu are only as strong as their pilots. 
-The Flower Division can only become stronger if each of its members grows stronger. 
+The Flower Division can only become stronger as a unit if we first grow stronger as individuals. 
 Go back to our roots, you mean? 
 In order to stand against the Kouma, we need more powerful weapons. 
 That's a tough one, Chief… 
 … 
 Oh, right… I already asked for help with that problem. 
-All right… It seems we have to come up with a different solution. 
-Captain… The fighting capabilities of the Spirit Armors grow in proportion with the abilities of their pilots. 
+All right… it seems we have to come up with a different solution. 
+Captain… the fighting capabilities of the Spirit Armor grows in proportion with the abilities of their pilots. 
 Even using the same Koubu as before, if we grow stronger, we'll be much more powerful in battle. 
 Chief! This is an important meeting, so how can you space out like that!? 
 Yes, er… Sorry… 
-Oh boy… Are we really out of ideas? 
+Oh boy… are we really out of ideas? 
 …I have a proposal. 
-The fighting capabilities of the Spirit Armors grow in proportion with the abilities of their pilots. 
-Even using the same Koubu as before, if we grow stronger, we'll be much more powerful in battle. 
+The fighting capabilities of the Spirit Armor grows in proportion with the abilities of the pilot. 
+Even if we use the same Koubu as before, if we grow stronger ourselves, we'll be much more powerful in battle. 
 Back to basics, eh? Not bad. 
 OK, then I'll return to the remote mountains where I practiced karate! 
 And I'll ask my old sword fighting master for a refresher. 
 OK! So, all of you… 
 I'm not too keen on special training. 
 Do we really HAVE to do that? 
-…huh? 
+…Huh? 
 I think it would be much better to build new Koubu! 
 I agree. In any case, this is not an enemy we can fight unarmed. 
 But don't you think the ones who've steeled their spirit will survive the longest? 
@@ -180,8 +180,8 @@ I want each of you to go back to your original fields of expertise and try to re
 Right! 
 OK! 
 How about the rest of you? 
-…… 
-…… 
+… 
+… 
 I will follow your orders, Captain… 
 …And you, Kohran? 
 Well… even special training isn't like flipping a switch to become stronger in a few days. 
@@ -212,8 +212,8 @@ Hmm, I’m so close…
 Wow, you bought a LOT of stuff! 
 Hohoho… Next, I need a new dress! Then we'll have some tea when we return. 
 And then… it's nappy time! 
-I'll show you all! I know I'll do it… I'll show you I'm stronger than even my father! 
-The way of the sword is the way of the heart. Your heart speaks through your sword… Fast and light… 
+I'll show you all! I know I can do it… I'll show you I'm stronger than even my father! 
+The way of the sword is the way of the heart. Your heart speaks through your sword… fast and light… 
 Unused
 Unused
 Unused
@@ -455,9 +455,9 @@ Unused
 Unused
 Unused
 What kind of moronic article did these idiots write? 
-Haha…don’t you think you were a bit hard on him, Lieutenant General? 
+Haha… Don’t you think you were a bit hard on him, Lieutenant General? 
 It was just enough to shake that brainless moron out of his holiday mood. Besides… 
-"In prosperity, prepare for adversary." Even in times of peace, we can't let our guard down. 
+"In prosperity, prepare for adversary". Even in times of peace, we can't let our guard down. 
 In our last fight against the Hive, we didn't finish the job. 
 This Cerulean Satan… He may be even more dangerous than Tenkai. 
 Giyaah… Gyagyagyaaaahh! 

@@ -1,6 +1,6 @@
-﻿﻿﻿﻿﻿﻿It's a photo of Sakura. Her gaze is so intense. I wonder what she's thinking? 
+﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. Her gaze is so intense. I wonder what she's thinking? 
 It's a photo of Sumire. It shows a side of her that's usually hidden. 
-It's a photo of Maria. …She's lost in thought and seems a bit sad… 
+It's a photo of Maria. She's lost in thought and seems a bit sad… 
 It's a photo of Kanna. She looks energetic and confident. I can't wait to meet her. 
 It's a photo of Iris. In it, she's one beautiful flower surrounded by many. 
 It's a photo of Kohran. She looks good in her traditional outfit. What kind of person is she? 
@@ -29,7 +29,7 @@ It's Ayame's gun. What am I supposed to do with it?
 Nothing I can do here. I'd better check somewhere else… 
 There's no one here. I'd better check somewhere else… 
 I'd better check somewhere else… 
-I'm not making any progress. Best go to the Manager's Office and speak directly with Lt. General Yoneda. 
+I'm not making any progress. Best go to the manager's office and speak directly with Lt. General Yoneda. 
 Everything I've seen makes me think this place is just a theater… 
 Go to the Stage <br> Go to Yoneda's Room <br> Go to the Reception Desk 
 (…It's already well into the night.) 
@@ -43,27 +43,27 @@ Sakura? Just a second. I'll open the door.
 Hey, Sakura. How did the play go? 
 It was a huge success. 
 But more importantly… I'm sorry about just now. I didn't mean to make so much noise… 
-No, no, it's all right. More importantly…what is it, this late at night? 
+No, no, it's all right. More importantly… What do you need from me this late at night? 
 Ogami? It's Sakura. I'm sorry to bother you at this hour. 
 Sakura? Just a second. I'll open up the door. 
 (What's she doing here at this hour?) 
 Hey, Sakura. How did the play go? 
 It was a huge success because of you. Oh, and thank you for your hospitality earlier. 
 I should be thanking you. After all, it was nice having someone to talk to… 
-More importantly…what is it, this late at night? 
+More importantly… What do you need from me this late at night? 
 Ogami…? It's me, Sakura… 
 Sakura? Just a second. I'll open up the door. 
 (What's she doing here at this hour?) 
 Hey, Sakura. How did the play go? 
 It was a huge success. 
-By the way…what is it, this late at night? 
+By the way… What do you need from me this late at night? 
 Well, Ogami… 
-Manager Yoneda instructed me to… 
-… to have you handle nighttime rounds in the theater. 
-Nighttime…rounds? 
+Manager Yoneda instructed me… 
+…to have you handle nighttime rounds in the theater. 
+Nighttime rounds…? 
 Yes. I know it's terribly short notice, but I hope you understand… 
 You can count on me! <br> Fine, I'll do the rounds. <br> Uh, I'm going to sleep. 
-Uh, I'm going to sleep. There's no way I can handle nighttime rounds after clipping tickets. 
+Uh, I'm going to sleep. There's no way I can handle nighttime rounds after clipping tickets all day. 
 Ogami… Are you really going to sleep? 
 …Fine, I'll do the rounds. <br> Yeah, I'm going to sleep. 
 Yeah, I'm really going to sleep. 
@@ -74,8 +74,8 @@ I-I can't stand to see you like this!
 Sakura… Oh boy, I think I was a little too stubborn. 
 …Nothing I can do now but go to sleep. 
 Sure! You can count on me! 
-I was having trouble getting to sleep anyway. Exercise will help with that. 
-Really…? T-thank you for being so considerate! 
+I was having trouble getting to sleep anyway. Getting some exercise will help fix my insomnia. 
+Really…? T-Thank you for being so considerate! 
 Well then, shall we go? 
 Huh?! You're coming with me? 
 Of course! After all, you don't know your way around the theater yet. 
@@ -98,23 +98,23 @@ Thanks. I'll be counting on you.
 And I you. Now let's get moving! 
 Aw, man… It's already after 12:00. 
 It's the dead of night… I'd better get some sleep. 
-*Yawn* It's morning… 
+*yawn* It's morning… 
 I think they said we have the day off. That means I get a break from ticket-clipping duty. 
 Well then… What should I do? 
 It's an off-day, but maybe I'll go check out the stage for fun. 
 I'd like to see the place where the Flower Division works. 
-Right! I'll go and speak with Lieutenant General Yoneda. 
-Is it true…? Does the Imperial Assault Troop not exist? 
+Right! I'll go and speak with Lt. General Yoneda. 
+Is it true…? Does the secret assault force really not exist? 
 I-I can't believe it. No, I don't want to believe it. 
-I need to hear it straight from Lieutenant General Yoneda himself! 
+I need to hear it straight from Lt. General Yoneda himself! 
 Oh, Ogami. What's up? 
 (He's even drinking outside…?) 
-Lieutenant General Yoneda, there's something I'd like to ask you… 
+Lt. General Yoneda, there's something I'd like to ask you… 
 It's "Manager"! MAN-A-GER! No calling me "Lieutenant General" in this theater. 
 Now then, what is it? Ask away. 
 OK. First… 
-H-hold on! …I just remembered something! 
-…W-what is it, Lieutenant General--er, Manager? 
+H-Hold on! …I just remembered something! 
+…W-What is it, Lieutenant General--er, Manager? 
 Is it about the Imperial Assault Troupe? Have you finally sobered up? 
 No! I was on my way to the bathroom! I, uh, gotta go! 
 …Sir, please stop joking around. 
@@ -129,7 +129,7 @@ I'll wait in here for awhile.
 Oh well. Guess I'll wait here a while. 
 … 
 … 
-…… 
+…
 I wonder when he'll be back. 
 Did he pass out drunk in the bathroom? …Nah, no way. 
 No point twiddling my thumbs here. I'll go see the troupe's dress rehearsal. 
@@ -156,7 +156,7 @@ It's an antique vase.
 It's an antique vase. 
 Hmm, I can't see it too well. 
 Hmm, I can't see it too well. 
-I've got lots of free time, so I'll check out the Reception Desk. 
+I've got lots of free time, so I'll check out the reception desk. 
 Oh! There's Sumire! 
 OK, I'll try talking to her… 
 Ah, Ensign. Good morning. 
@@ -169,7 +169,7 @@ But it wouldn't do for a star such as myself to make a mistake during a performa
 Well, I'm needed onstage soon… Please excuse me. 
 …Rehearsal, huh? 
 Lucky you. I've got nothing to do and I'm bored stiff! 
-…… 
+…
 Ah, Sumire… 
 …? Did I make her angry? 
 Hi, Mon Frère! 
@@ -180,8 +180,8 @@ Mmhmm!
 …Um, Mon Frère? 
 What is it, Iris? 
 You're so nice! …I really like you! 
-Is that so? …Thank you. 
-…Well, I'm gonna go now! Bye bye, Mon Frère! 
+Is that so…? Thank you. 
+…Well, I'm gonna go now! Bye-bye, Mon Frère! 
 Hey, Mon Frère? Let's all go to the flower-viewing festival soon. 
 That sounds nice. The cherry blossoms were in full bloom in Ueno Park yesterday. 
 Yeah… But I'm more interested in spending time with you. 
@@ -189,10 +189,10 @@ Is that so? …Thank you.
 That's what they call "toys over flowers," right? 
 I think you mean, "boys over flowers." 
 Eheheh… Oh, OK. 
-…Well, I'm gonna go now! Bye bye, Mon Frère! 
+…Well, I'm gonna go now! Bye-bye, Mon Frère! 
 …So this is my new workplace… 
 …Sir. What are you doing here? 
-H-hey, Maria… 
+H-Hey, Maria… 
 … 
 Tell me, sir. Are you unhappy with your job here? 
 Very unhappy. <br> Not exactly, no… <br> I'm happy with it. 
@@ -211,9 +211,9 @@ Our job is to protect the peace, is it not?
 Well then, I must go to rehearsal. Please excuse me. 
 Maria… 
 … 
-Maria said she was going to rehearsal… The whole Flower Division must be onstage. 
+Maria said she was going to rehearsal. The whole Flower Division must be onstage… 
 I think I'll head over to the stage. I need to have a talk with all of them… 
-Of course not! I was sent here to be Captain of the Imperial Assault Troop! 
+Of course not! I was sent here to be captain of the Imperial Assault Troupe! 
 I'll do any job asked of me. Even clipping tickets. 
 But I haven't forgotten my duty to protect the capital! 
 Oh…? I am relieved to hear that. 
@@ -227,13 +227,13 @@ My apologies, sir. That was a most impertinent question…
 You don't yet understand because you've only seen this place as a theater. 
 Speaking of which, we will have rehearsal onstage shortly. 
 Please stop by and watch us. 
-Ahh… thank you. 
+Ahh… Thank you. 
 Ahem! Please excuse me. 
 I think I'll head over to the stage and watch everyone rehearse. 
-Very unhappy. I was sent here to be captain of a covert unit, 
-so why am I stuck clipping tickets? It's not what I expected at all. 
+Very unhappy. I was sent here to be captain of a covert unit… 
+…so why am I stuck clipping tickets? It's not what I expected at all. 
 I'll have you know, clipping tickets is a fine job. What's more… 
-Not exactly, no… I was sent here to be Captain of the Imperial Assault Troop. 
+Not exactly, no… I was sent here to be captain of the Imperial Assault Troupe. 
 Yet I've been put to work clipping tickets… I'm perplexed to say the least. 
 Look, I understand how you feel. However… 
 I have seen a world devoid of happiness. A world where one must fight to stay alive… 
@@ -247,7 +247,7 @@ Spin around here… Raise your hands…
 Sakura! Your footwork is all wrong! 
 Wow, they're hard at work… 
 Each brilliant performance is the result of everyday rehearsals like this one. 
-H-huh?! 
+H-Huh?! 
 Stop them. <br> Leave them alone. 
 Hey, you two! Stop fighting! 
 E-Ensign?! 
@@ -285,30 +285,30 @@ Sakura…?
 May I tell you something? 
 Sure. What is it? <br> No! I'll talk and you listen! 
 Sure. What is it? 
-Before you came here, Manager Yoneda said that 
-the Captain of the Flower Division must be more than a mere soldier; 
-that we mustn't continue to fight battles in which human lives are sacrificed for the sake of victory; 
-and that the person who serves as Captain 
-must truly love the Flower Division, this theater, and working here… 
-That's why he made you ticket clipper. 
+Before you came here, Manager Yoneda said that… 
+…the captain of the Flower Division must be more than a mere soldier. 
+That we mustn't continue to fight battles in which human lives are sacrificed for the sake of victory. 
+And that the person who serves as captain… 
+…must truly love the Flower Division, this theater, and working here… 
+That's why he made you a ticket clipper. 
 …Is that so? 
 I have a favor to ask of you, Ogami. 
 Please cherish this theater and our troupe… 
-And please lead us into battle as our Captain! 
+And please lead us into battle as our captain! 
 Battle…? Against who? 
-W-well… 
+W-Well… 
 …! 
 Huh?! What's that alarm? 
 Ogami, we must move out! 
 Move out?! What do you mean? 
-The Flower Division of the Imperial Assault Troop is moving out! Let's go! 
+The Flower Division of the Imperial Assault Troupe is moving out! Let's go! 
 No! I'll talk and you listen! 
-Y-yes sir… 
-When I first heard I'd be the leader of a covert squad, I was absolutely thrilled. 
+Y-Yes, sir… 
+When I first heard that I'd be the leader of a covert squad, I was absolutely thrilled. 
 I thought I'd get to work to defend the peace. I was so happy. 
 So what in the world am I doing in a theater?! 
 Tell me, Sakura! Why was I sent here?! 
-W-well… 
+W-Well… 
 Wha…?! 
 Huh?! What's that alarm? 
 Ogami, we must move out! 
@@ -318,14 +318,14 @@ The Flower Division of the Imperial Assault Troupe is moving out! Let's go!
 You have no backbone, Ogami! How long do you plan on making that timid face? 
 I've got something to say! Cover your ears if you don't want to listen! 
 Before you came here, Manager Yoneda said that… 
-…the Captain of the Flower Division must be more than a mere soldier. 
+…the captain of the Flower Division must be more than a mere soldier. 
 That we mustn't continue to fight battles in which human lives are sacrificed for the sake of victory. 
-And that the person who serves as Captain… 
-…must truly love the Flower Division, this theater, and working here. 
+And that the person who serves as captain… 
+…must truly love the Flower Division, this theater and working here. 
 That's why he made you the ticket clipper. 
 …Is that so? 
 Battle…? Against who? 
-W-well… 
+W-Well… 
 Wha…?! 
 Huh?! What's that alarm? 
 Ogami, we must move out! 
@@ -333,16 +333,16 @@ Move out?! What do you mean?
 The Flower Division of the Imperial Assault Troupe is moving out! Let's go! 
 The Flower Division of the Imperial Assault Troupe is fully assembled! 
 Well done! 
-Manager Yoneda…and the whole troupe… What is this?! 
+Manager Yoneda… and the whole troupe… What is this?! 
 Ogami, we are taking a break from theater to return to our primary role… as the Imperial Assault Troupe! 
 I'm sorry for deceiving you. 
 But I wanted to ensure that you were qualified to be captain of a covert squad. 
-W-what is this place?! 
-The core of the Imperial Assault Troupe. …The underground Command Room. 
+W-What is this place?! 
+The core of the Imperial Assault Troupe… the underground Command Room. 
 Manager Yoneda, you mean the covert squad is real?! 
 Of course! The theater troupe is merely a facade. 
-So, I'll introduce you again. They are members of the Flower Division. They'll be your subordinates. 
-Ogami… Under your command, I feel like I can fight with all my might! 
+So, I'll introduce you again. These are the members of the Flower Division. They'll be your subordinates. 
+Ogami, under your command, I feel like I can fight with all my might! 
 As new members of the Imperial Assault Troupe, let's do our best! 
 I'm counting on you, Ogami! 
 Mon Frère, let's both do our best! 
@@ -352,24 +352,24 @@ Well then, Ensign. Let us see how skilled you are…
 Battle is often harsh and cruel. 
 Now we’ll see whether or not you have the skills to be captain. 
 I haven't accepted you as a captain yet, sir. 
-When I can understand how you think and feel…then I shall call you Captain. 
+When I can understand how you think and feel… then I shall call you captain. 
 …I understand. Let's all do our best! 
 Commander, who is our enemy? 
 I'm sure you've heard rumors of them. 
-They're a mysterious organization that terrorizes the capital with mechanical soldiers called "Hex Mechs." 
-They are known as…the "Hive of Darkness." 
+They're a mysterious organization that terrorizes the capital with mechanical soldiers called "Hex Mechs". 
+They are known as… the "Hive of Darkness". 
 Hive of Darkness…? 
-Sakura beat up a Hex Mech in Ueno Park the day she came to Tokyo! 
+Sakura beat up a Hex Mech in Ueno Park the day she arrived in Tokyo! 
 Iris! That was supposed to be a secret! 
 What? You mean it was Sakura who defeated that monster?! 
 Correct. However, a human can only do so much against a Hex Mech. 
 That's where we come in. We have a powerful weapon at our disposal. Let me show you the underground hangar. 
-W-what are those?! 
+W-What are those?! 
 The Imperial Assault Troupe's secret weapon! The "Koubu" Spirit Armor! 
-Spirit…Armor? 
+Spirit… Armor? 
 Yes. Think of it as mechanical armor that can only be used by those with powerful spiritual energy. 
-By which I mean the members of the Flower Division…and you. 
-…Now then, the white Koubu is yours. Go ahead and get inside it. 
+By which I mean the members of the Flower Division… and you. 
+Now then… The white Koubu is yours. Go ahead and get inside it. 
 The enemy's been spotted in the same place as last time, Ueno Park. Use our bullet train to get there! 
 Yes, sir! 
 I don't have a Koubu yet, so I'll be staying behind… 
@@ -380,22 +380,22 @@ Flower Division, move out! <br> Prepare for flower-viewing!
 Flower Division, move out! Target area is Ueno Park! 
 Roger! 
 Koubu activated! 
-Imperial Assault Troupe is moving out! 
+The Imperial Assault Troupe is moving out! 
 Prepare for flower-viewing! 
 Huh?! 
 …Have you lost your mind, sir? 
 Surely he means we should go flower-viewing in Ueno Park after we win the battle! 
 Iris! Prepare for our flower-viewing excursion! 
 Will do! 
-Imperial Assault Troupe is moving out! Let's go, Ogami! 
+The Imperial Assault Troupe is moving out! Let's go, Ogami! 
 You're the captain, you fool! Don't just stand there twiddling your thumbs! 
 It may be your first battle, but you still need to order the attack! 
-Y-yes, sir! 
+Y-Yes, sir! 
 Flower Division, move out! Target area is… Crap, I forgot. 
 Sir! Do try to focus! 
 Do your best, Mon Frère! 
 Ogami, the target area is Ueno Park. 
-R-right! 
+R-Right! 
 Ahem! Flower Division, move out! Head to Ueno Park! 
 …His behavior doesn't exactly fill me with confidence. 
 Ah, look at the time… 
@@ -407,7 +407,7 @@ Oh, OK.
 Well then, shall we return to our rooms? 
 Yeah, OK. Good night. <br> I'll walk you to your room. <br> Let's keep doing rounds. 
 Yeah, OK. Good night. <br> I'll walk you to your room. 
-Yeah, OK. Thanks for all of your help today. …Good night. 
+Yeah, OK. Thanks for all of your help today. Good night… 
 It's no problem at all, Ogami. Just try to cheer up, OK? 
 …Mmm hmm. 
 Well, good night. 
@@ -417,7 +417,7 @@ I'll walk you to your room. It's the least I can do after all the help you've gi
 Of course. Well then, let's go. 
 Let's keep doing rounds. There are other places I want to check. 
 OK. We'll do rounds for a little bit longer. 
-But the lights will go off soon. I think we can only check 3 more rooms… 
+But the lights will go off soon. I think we can only check three more rooms… 
 I'll keep that in mind. Let's go. 
 Thank you for your hard work, Ogami. Please excuse me. 
 …Oh, and try to cheer up. 
@@ -431,30 +431,30 @@ Let's stop by Iris's room.
 OK. Off to Iris's room we go! 
 We've arrived at Iris' room. 
 Iris…! It's Sakura. Please open the door. 
-Mon Frère… Sakura… *Sniffle* 
+Mon Frère… Sakura… *sniffle* 
 Look, Iris! It's Jean-Paul. I think you left him backstage. 
 Ah! Jean-Paul!! 
 You shouldn't leave your beloved friends behind. 
-Mon Frère…Sakura… Thank you so much! 
+Mon Frère… Sakura… Thank you so much! 
 Well, it's late, so… Good night. 
 OK! Good night! 
-… good. I think Iris should be able to sleep peacefully now. 
+…Good. I think Iris should be able to sleep peacefully now. 
 Yes. I'm really glad we found it. 
 Well then, Ogami… Since it's so late at night, that's enough for today… 
-Yeah, OK. Thanks for all of your help today. …Good night. 
+Yeah, OK. Thanks for all of your help today. Good night… 
 Oh, it was nothing. Well, good night. 
 …I guess I'll head back to my room. 
 You'll walk me to my room? But we're standing right in front of it! 
-Oh… you're right. 
-Haha… you're quite a character, Ogami. 
+Oh… You're right. 
+Haha… You're quite a character, Ogami. 
 Well, good night. 
 Yeah. Good night. 
 …I guess I'll head back to my room. 
 Thank you for the escort. 
 Aw, don't mention it. Good night. 
 So, I'll get to meet you tomorrow too… I'm glad. 
-… huh? 
-N-nevermind. It's nothing. Well… good night. 
+…Huh? 
+N-Nevermind. It's nothing. Well… Good night. 
 …I guess I'll head back to my room. 
 I spent all afternoon punching tickets here. And now I'm back here working again tonight. 
 Did they really bring me here to punch tickets and play security guard…? 
@@ -466,20 +466,20 @@ What's wrong, Iris? Come here and tell us what's going on.
 Um… I can't find Jean-Paul… 
 I think maybe I left him somewhere… 
 *sniffle*… My poor Jean-Paul… *sniffle*… He's all alone… 
-Iris…… 
+Iris… 
 Don't worry, Iris. Tomorrow when it's light you should be able to find him right away. 
 But it's late now, so you need to get to bed. 
 *sniffle*… OK… I'll go to bed… 
 It would help if we knew where Iris spent the afternoon… 
 …Ogami. Let's get going, shall we? 
-Is this… a music room…? 
+Is this… a dressing room…? 
 Ah! Ogami!! Over there, it's Iris' Jean-Paul! 
-It's the music room. This is where we found Jean-Paul just a bit ago. 
-Iris looked really happy… good work, Ogami. 
-It's the music room. This is where we found Jean-Paul just a bit ago. 
+It's the dressing room. This is where we found Jean-Paul just a bit ago. 
+Iris looked really happy. Good work, Ogami. 
+It's the dressing room. This is where we found Jean-Paul just a bit ago. 
 Let's hurry up and return Jean-Paul to Iris, Ogami. 
 No doubt about it. It's Iris' Jean-Paul. 
-Oh good… let's go give it to her. 
+Oh good… Let's go give it to her. 
 Ogami! Don't forget to grab Jean-Paul. 
 Huh? Where'd Sakura go? 
 Oh, there you are, Sakura. 
@@ -491,13 +491,13 @@ Well, they're not meant to be decorative or artistic, but each one shines so bea
 And together they show us this breathtaking view. 
 I want to shine on the stage, just like one of those lights… 
 … 
-I want to be a warm and strong light… the kind that shines the way for the people in the streets. 
+I want to be a warm and strong light… The kind that shines the way for the people in the streets. 
 … Oh, I'm sorry, Ogami. I didn't mean to keep you from your guard duties… 
 Well now, let's continue our rounds. 
 The city lights, huh… 
-As captain of the Assault Troop, I hoped I could work protecting the people living under those lights… 
+As captain of the Assault Troupe, I hoped I could work protecting the people living under those lights… 
 Ogami… 
-…anyway, let's keep moving. Come to think of it, guarding a theater is still a job that keeps people safe. 
+…Anyway, let's keep moving. Come to think of it, guarding a theater is still a job that keeps people safe. 
 Right! Then, let's go to the next room, Ogami! 
 Through the window I can see Ginza's night scenery. 
 Let's go, Ogami. You can't guard the theater properly if you're just staring out the window. 
@@ -508,21 +508,21 @@ I came to return a book I borrowed.
 Ohh, what did you borrow? 
 It's Crime and Punishment… 
 Tolstoy, right? <br> Dostoevsky, right? <br> Gorky, right? 
-Crime and Punishment, huh… If I'm not mistaken, that's Tolstoy, right? 
+Crime and Punishment, huh. If I'm not mistaken, that's Tolstoy, right? 
 …No. The author of Crime and Punishment is Dostoevsky. 
-Oh… it is? 
+Oh… It is? 
 …You won’t impress anyone by feigning knowledge, sir. 
 Well, I'll excuse myself. Please take care of the watch, you two. 
 …Ogami. Shall we continue our rounds? 
-Crime and Punishment, huh… If I'm not mistaken, that's Dostoevsky, right? 
+Crime and Punishment, huh. If I'm not mistaken, that's Dostoevsky, right? 
 Correct. It seems you're a man of culture, sir. 
 Wow, Ogami! I'm impressed! 
 Well, I'll be on my way. 
 Sakura, sir, I'm leaving the watch in your hands. Good night. 
 Let's continue our rounds, Ogami. 
-Crime and Punishment, huh… If I'm not mistaken, that's Gorky, right? 
+Crime and Punishment, huh. If I'm not mistaken, that's Gorky, right? 
 …No. The author of Crime and Punishment is Dostoevsky. 
-Oh… it is? 
+Oh… It is? 
 …You won’t impress anyone by feigning knowledge, sir. 
 Well, I'll excuse myself. Please take care of the watch, you two. 
 …Ogami. Shall we continue our rounds? 
@@ -536,23 +536,23 @@ Well, nothing seems out of place here. Let's move on to the next room, Ogami.
 So this is… Iris' room. 
 Iris has quite a lot of stuffed animals in her room. 
 Iris… it's Ogami… 
-………… 
+…
 Looks like she's already asleep. Let's move on, Ogami. 
 …No reply. Is she not there? 
-Oh I doubt it… at this hour she's probably asleep don't you think? 
-Iris… It's Sakura. Please open up. 
-Mon Frère… Sakura… *Sniffle* 
+Oh I doubt it, at this hour she's probably asleep don't you think? 
+Iris… it's Sakura. Please open up. 
+Mon Frère… Sakura… *sniffle* 
 Here you go, Iris. We found Jean-Paul. It seems you left him in the music room. 
 Ah! Jean-Paul!! 
 You shouldn't leave your beloved friends behind. 
 Mon Frère… Sakura… Thank you so much! 
 Well, it's late, so… Good night. 
 OK! Good night! 
-… good. Now Iris should be able to sleep peacefully. 
+Good… Now Iris should be able to sleep peacefully. 
 Yes. I'm really glad we found it. 
 Well, shall we continue our rounds? 
 Iris… 
-Mon Frère… Sakura… you didn't find Jean-Paul? 
+Mon Frère… Sakura… You didn't find Jean-Paul? 
 I'm sorry… We couldn't find him. 
 But I'm sure we'll find him right away once it's light tomorrow. Just get some sleep and don't worry. 
 OK… 
@@ -563,30 +563,30 @@ Who is it?
 Um… It's Ogami… 
 …Sir, it's quite abnormal to visit a woman's room this late at night. 
 …She sounded upset. 
-…Alright, well, let's continue our rounds. 
+…All right, well, let's continue our rounds. 
 Um… It's Ogami… 
-………… 
-… I think she's ignoring you. 
+…
+…I think she's ignoring you. 
 …Well, no sense hanging around here. Let's continue our rounds. 
 … 
 No reply. Is she not here? 
 I think she may already be asleep. 
-… Well, no sense hanging around here. Let's continue our rounds. 
+…Well, no sense hanging around here. Let's continue our rounds. 
 This must be Sumire's room. 
 Sumire's room is very beautifully decorated. 
 (Oh hey… I got a letter for Sumire from a guest earlier.) 
 Y~es? Who is it~? 
 It's Ogami… I've got something for you. 
 What is it, Ensign? And Sakura? What are you two doing here at this hour… 
-This afternoon while punching tickets, I got a letter from a man who said he was 'your biggest fan'. 
+This afternoon while punching tickets, I got a letter from a man who said he was “your biggest fan”. 
 I figured I should pass it along to you. Here you go. 
-Well… you came here just to hand this to me? Thank you very much! 
+Well… You came here just to hand this to me? Thank you very much! 
 Though I'm not used to mail deliveries in the middle of the night. 
-Sorry… it completely slipped my mind. 
+Sorry… It completely slipped my mind. 
 Well, at any rate you have my gratitude for bringing it to me. Thank you. 
-… But, may I ask what the two of you are doing together at this hour? 
+…But, may I ask what the two of you are doing together at this hour? 
 I'm helping Ogami with his nighttime rounds. 
-Hmmm… well thanks for keeping an eye out. 
+Hmmm… Well thanks for keeping an eye out. 
 Thank you for your visit, Ensign. If you'll excuse me. 
 Well, at least that fan should be happy. 
 Y~es? Who is it~? 
@@ -597,12 +597,12 @@ Um… It's Ogami…
 Y~es? Who is it~? 
 Um… It's Ogami… 
 …Come to peep at me while I change again? 
-(Craaap… she's still pissed about that…) 
-… I'm afraid I was just about to lay down. Please see me tomorrow if you have something to discuss. 
-… Ogami, what on Earth did she mean 'peep AGAIN'? 
-Well! Uh! Th- that was… 
-… never mind, let's just go. Sumire will be upset if we start arguing in front of her door. 
-R-right… 
+(Craaap… She's still pissed about that…) 
+…I'm afraid I was just about to lay down. Please see me tomorrow if you have something to discuss. 
+…Ogami, what on earth did she mean “peep AGAIN”? 
+Well! Uh! Th-That was… 
+…Never mind, let's just go. Sumire will be upset if we start arguing in front of her door. 
+R-Right… 
 Sumire! I need to speak with you! 
 I am trying to sleep! Would you please go bother someone else!? 
 Well, I don't think this is getting us anywhere… Let's go. 
@@ -612,53 +612,53 @@ And now I'm the security guard. Man, wasn't I supposed to be protecting the whol
 I remember. This is the night watchman's room. 
 Nothing seems out of place. Let's move on. 
 I remember this place. It's the manager's room. Like I could ever forget it. 
-I think I'll be seeing the words 'Imperial Assault Troupe' in my dreams… 
-… the door is locked, and there doesn't seem to be anything out of place. 
+I think I'll be seeing the words “Imperial Assault Troupe” in my dreams… 
+…The door is locked, and there doesn't seem to be anything out of place. 
 Well it's locked and I don't see anything unusual. Let's move on. 
 This is the office. I came here during the afternoon. 
-… nothing going on here. Let's keep going. 
-Doesn't look like Sakakibara or Kasumi are here… I guess that's to be expected. 
+…Nothing going on here. Let's keep going. 
+Doesn't look like Yuri or Kasumi are here… I guess that's to be expected. 
 Nothing seems to be amiss. Let's keep moving. 
 This is the kitchen. Sometimes we prepare food here ourselves. 
 Looks like it's pretty well-equipped. 
-Nothing out of the ordinary. The gas for the stoves is off too. Good. Alright, next. 
+Nothing out of the ordinary. The gas for the stoves is off too. Good. All right, next. 
 It's the kitchen. Doesn't look like anyone left the fire on. Let's move on. 
 This is the cafeteria. It's not just for us; the guests can use it too. 
-Doesn't look like anything's out of place. Let's keep moving. 
+Doesn't look like anything is out of place. Let's keep moving. 
 This is our shop. Tsubaki is always selling our pictures here. 
 I actually bought your photo here earlier. 
-What!? You did? W, which photo? 
+What!? You did? W-Which photo? 
 This one. 
-… you really did. That's… kind of embarrassing. 
+…You really did. That's… kind of embarrassing. 
 Hahaha, I'll take good care of it. 
 Anyway, let's get back to our rounds. 
-… right! 
+…Right! 
 This is our shop. Tsubaki is always selling our pictures here. 
 Doesn't look like anything is out of place. Let's keep moving. 
 It's the shop. Nothing seems to be out of place. 
 Let's go, Ogami. 
 This is the entrance to the Imperial Theater. 
-… the doors and windows are all locked up properly. 
+…The doors and windows are all locked up properly. 
 Let's head somewhere else. 
 These are the first-floor seats for the guests. That stage right there is where we hold our performances. 
 I see… 
 Everything looks fine here. Let's keep moving, Ogami. 
 It's a little spooky seeing a place that's normally so lively all quiet and empty like this… 
-L, let's continue our rounds, Ogami. This place seems a little frightening, now. 
+L-Let's continue our rounds, Ogami. This place seems a little frightening, now. 
 This is the dressing room. We keep our costumes for the performances here. 
-Hmm… wow. 
+Hmm… Wow. 
 Everything looks fine. Let's keep going. 
 This is the dressing room. 
 Nothing looks out of place. Let's keep going. 
-We call this a 'wing'. We wait here for our turn to go out on stage. 
-Oh… so that's what this spot is called. 
-This is a 'wing', right? The performers wait for their turn on stage here. 
+We call this a “wing”. We wait here for our turn to go out on stage. 
+Oh… So that's what this spot is called. 
+This is a “wing”, right? The performers wait for their turn on stage here. 
 That's right. You're a quick learner! 
-… nothing looks out of place here. Let's move on. 
+…Nothing looks out of place here. Let's move on. 
 This is the stage. This is where we work our magic. 
-(Here I thought the 'Imperial Assault Troupe' would be a combat unit… I guess this was someone's idea of a joke.) 
+(Here I thought the “Imperial Assault Troupe” would be a combat unit… I guess this was someone's idea of a joke.) 
 Is something wrong, Ogami? 
-No… it's nothing. Doesn't look like there's anything out of place here. Let's keep moving. 
+No… It's nothing. Doesn't look like there's anything out of place here. Let's keep moving. 
 The stage looks fine. 
 Let's get back to our rounds. 
 This is the prop room. We store all the props we use in our performances here. 
@@ -667,11 +667,11 @@ Well, you'll have to do that on your own time. Let's keep going.
 This is the prop room. 
 Right. Everything looks fine, so let's keep going. 
 This is the large prop room. 
-'Large props'? 
+“Large props”? 
 Yes, that refers to all the larger objects we use to set the performance's scene. We store all that here.
 I see… 
 Everything appears to be in order. Let's keep going. 
-… the floor looks very dusty… We'll need to clean it again. 
+…The floor looks very dusty… We'll need to clean it again. 
 But it doesn't look like there's anything out of place. Let's keep going. 
 We call this the hall. It's where the guests with seats on the 2nd floor enter. 
 Man, that's one heck of a chandelier… 
@@ -684,12 +684,12 @@ Hey Sakura, I can see the lobby down there.
 This is our green room. Everyone in the Flower Division gets together here often. 
 So this is where you all come to relax. 
 Right. I'd love to stop and drink some tea here, but… 
-We're on duty at the moment… let's keep going. 
+We're on duty at the moment… Let's keep going. 
 You should come relax with us here when you have some free time, Ogami. 
 Well, it doesn't look like anything is out of place, so let's keep going. 
 …It's my room. 
 Our rounds aren't done yet. Come on, let's keep going. 
-This is… wait, whose room is this? 
+This is… Wait, whose room is this? 
 Well… Honestly, I don't really know either. 
 But it's locked, so I don't think we'll be able to check. 
 Well, no use worrying about it then. Shall we go? 
@@ -697,7 +697,7 @@ Well, no use worrying about it then. Shall we go?
 We should ask someone about it. But for now let's get back to our rounds. 
 This is my room. 
 Oh? 
-Come visit some time when you're free. But for now let's just keep going. 
+Come visit sometime when you're free. But for now let's just keep going. 
 So this is Sakura's room. I'll keep that in mind. 
 Let's keep going. 
 This room belongs to Kohran Li. She's another member of the Flower Division. 
@@ -713,9 +713,9 @@ Ogami, let's continue our rounds.
 I heard Kanna will be joining us at the theater two months from now. 
 So this room will be empty until then. Let's move on. 
 This is the 2nd floor seating for our guests. 
-Whoa… the view from here is amazing. 
+Whoa… The view from here is amazing. 
 Some of these seats are reserved by some of our regulars from the upper class. 
-I see… impressive. 
+I see… Impressive. 
 Nothing seems to be out of place. Let's continue our rounds, Ogami. 
 It's so open and dark… I almost feel like I could get sucked in… 
 Ogami, let's get a move on. 

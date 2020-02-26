@@ -1,4 +1,4 @@
-﻿﻿﻿﻿It's a photo of Sakura. Her gaze is so intense. I wonder what she's thinking?
+﻿﻿﻿﻿﻿It's a photo of Sakura. Her gaze is so intense. I wonder what she's thinking?
 It's a photo of Sumire. It shows a side of her that's usually hidden.
 It's a photo of Maria. She's lost in thought and seems a bit sad…
 It's a photo of Kanna. She looks energetic and confident. I can't wait to meet her.
@@ -26,7 +26,7 @@ It's Kohran in a maid outfit. She looks great with her hair down.
 It's Ayame in Japanese-style clothing. I wish she'd smile like that all the time.
 It's Ayame's gun. What am I supposed to do with it?
 It's Jean Paul, Iris's beloved teddy bear.
-Phew …The play's about to start. I'm ready to punch some tickets. 
+Phew… The play's about to start. I'm ready to punch some tickets. 
 I still can't believe they put me to work punching tickets… 
 Hello, Ensign. You're doing a wonderful job. 
 Hi, Sumire. What's up? 
@@ -48,9 +48,9 @@ I see…
 Ah, look at the time! I'm needed onstage. Please excuse me. 
 Oh? Is she cute? 
 You can decide that for yourself! Now, if you'll excuse me… 
-W-wait, Sumire! …Was it something I said? 
+W-Wait, Sumire! …Was it something I said? 
 You seem out of sorts, Ensign. Are you unwell? 
-S-sorry! I was just lost in thought. 
+S-Sorry! I was just lost in thought. 
 Oh? What were you thinking about? 
 The new member <br> Punching tickets <br> Tonight's dinner 
 Um, I was thinking about the new member… 
@@ -59,7 +59,7 @@ You're beginning to think like a captain, Ensign Ogami.
 Hahaha! Thanks. 
 Ah, look at the time! I'm needed onstage. Please excuse me. 
 I was thinking about how much I hate punching tickets… 
-While I don't disagree with you, Ensign, 
+While I don't disagree with you, Ensign… 
 I am far too busy to discuss such trivial matters! Please excuse me. 
 …Guess I shouldn't have said that. 
 I was thinking about what to have for dinner tonight… 
@@ -67,10 +67,10 @@ What?! How dare you waste my time with such nonsense!
 You are utterly infuriating! Goodbye!! 
 Yikes! That didn't go well… 
 …Ensign? You're staring into space. Are you all right? 
-S-sorry! I was just lost in thought. 
+S-Sorry! I was just lost in thought. 
 Lost in thought? That simply will not do. 
 As Captain of the Flower Division, you must always stay alert. 
-S-sorry… 
+S-Sorry… 
 Now then, I am needed onstage. Please excuse me. 
 So I guess we're getting a new member. 
 Apparently she's been here before. I wonder what she's like? 
@@ -88,42 +88,42 @@ Kaboom?
 Yeah! She got totally covered in ash! 
 Yikes! She sounds bonkers… 
 Oh no! The play's starting! I've gotta go! 
-Bye bye, Mon Frère! 
+Bye-bye, Mon Frère! 
 What about the play, Iris? It's almost curtain time. 
 Oh, you're right! I hope Kohran gets here soon! 
 You can't keep waiting like this. Get a move on or Maria will fuss at you. 
 Right! I don't wanna make Maria mad again! 
-Bye bye, Mon Frère! 
+Bye-bye, Mon Frère! 
 …You OK, Mon Frère? You seem kinda spaced out. 
-S-sorry! I was just lost in thought. 
+S-Sorry! I was just lost in thought. 
 Huh? You mean talking to me is boring?! 
 No, of course not… 
 Hmph! Bye, Mon Frère! 
 Oops… I made her angry. 
 So I guess we're getting a new member. 
 Her name's Kohran. I wonder what she's like…? 
-W-whoa! What was that racket?! 
-Y-yes… 
-U-um… 
+W-Whoa! What was that racket?! 
+Y-Yes… 
+U-Um… 
 Are you OK? <br> What's with that messy bike? 
 …Are you OK? Oh, and just who are you, anyway? 
 What's with that mess of a bike…? 
 I-I see… 
 I'm sorry. 
 Er… 
-I'm Imperial Japanese Navy Ensign Ichiro Ogami. 
+I'm Imperial Navy Ensign Ichiro Ogami. 
 You could say I'm the captain-in-training of the Imperial Assault Troupe. 
 I'll be happy to escort you. <br> I'm rather busy right now… 
 I'll be happy to escort you. This way, please. 
 Oh, what about your bike…? 
 I'm rather busy right now, so I can't escort you. 
-S-she's gone…! 
+S-She's gone…! 
 Ogami! 
 Tsubaki… 
 You mustn't let Kohran run off by herself! She's sure to get lost. 
 I'll handle punching tickets. Please go with Kohran. 
 …OK. Sounds good to me. 
-W-wait! 
+W-Wait! 
 …She's gone. 
 Ogami! 
 Tsubaki… 
@@ -139,7 +139,7 @@ I do not want excuses!
 Our apologies, Master Tenkai… 
 The fact is they are quite skilled… 
 Silence, Satan! We are supposed to be invincible! 
-I've devised a way to destroy the capital's barrier! …A spell called the "Hexagram of Infernal Summoning." 
+I've devised a way to destroy the capital's barrier! A spell called the "Hexagram of Infernal Calling"! 
 Complete this spell and destroy the capital! Your first target shall be Shiba Park! 
 Yes, master! 
 Wait! This time I shall come along. I'm sure you would like to watch me fight. 
@@ -147,13 +147,13 @@ Don't you agree, Satan?
 Yes, master… 
 Hmph! Your days are numbered, you old fool… 
 Unused
-*Cough cough* Um, this is the Imperial Theater, right? 
-*Cough* Jeez Louise… My Steam Bike's trashed… 
+*cough, cough* Um, this is the Imperial Theater, right? 
+*cough* Jeez Louise… My steam bike's trashed… 
 The name's Kohran Li. I've been transferred here from the Hanayashiki Branch. 
 Unused
 Unused
 Huh?! Are you blind or what?! 
-This Steam Bike is my very own invention! It's got a 16v engine and can do 200 kph at 100 hp! 
+This steam bike is my very own invention! It's got a 16v engine and can do 200 kph at 100 hp! 
 Does that sound like a mess to you?! Keep talkin' crap about my bike… 
 …and I'll knock your block off! 
 It's all good! I'm Kohran Li, scientific genius. 

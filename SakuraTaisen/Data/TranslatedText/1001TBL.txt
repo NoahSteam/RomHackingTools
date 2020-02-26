@@ -1,6 +1,6 @@
-﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
-It's a photo of Maria. …She's lost in thought and looks kind of sad…
+It's a photo of Maria. She's lost in thought and looks kind of sad…
 A photo of Kanna. Her signature strength comes through clearly.
 A photo of Iris. She's surrounded by flowers and flashing a radiant smile.
 A photo of Kohran. She's looking pretty in profile with her face dyed red by the evening sun.
@@ -96,13 +96,13 @@ Asakusa…
 No matter where you look, the damage is catastrophic… 
 It seems the Sacred Demon Castle has risen again. It's only a matter of time before Tokyo is gone. 
 If we don't stop this, the whole world might be in danger… 
-But… How can we fight that leviathan of a castle!? 
+But… how can we fight that leviathan of a castle!? 
 That castle oozes sheer power… 
 And no one had any idea it was hidden under the sea all this time… 
 It's like we've woken up in a nightmare. 
 Yeah… 
 How can we even fight that thing…? 
-And… look at how it wreaks havoc! 
+And look at how it wreaks havoc! 
 It just rose from the sea, and look what it's done! 
 If it gets to fire that Spirit Cannon thing, it might destroy the whole city! 
 What are we supposed to do against it? 
@@ -112,24 +112,24 @@ What are we going to do?
 So… that's the Sacred Demon Castle thingy? It's full of bad guys, isn't it? 
 I can feel it… The bad guys in there are charging up an incredible power. 
 I'm scared… What are we gonna do? 
-Don't worry… It'll be fine, Iris. 
+Don't worry… it'll be fine, Iris. 
 That's right, Iris. There's no need to worry. 
-…Fine. 
-Mon Frère… You'll be OK, right? 
-Tenkai's Six Star Summoning… The return of the Kouma… The Pandemonium Regalia… 
-So all of this… the rise of the Sacred Demon Castle… all of this was Cerulean Satan's plan all along? 
+…OK. 
+Mon Frère… you'll be OK, right? 
+Tenkai's Hexagram of Infernal Calling… The return of the Kouma… The Pandemonium Regalia…
+So all of this… the rise of the Sacred Demon Castle… all of this was Cerulean Satan's plan from the beginning? 
 Yeah, it seems that way… 
-The Sacred Demon Castle is sucking up power like a living thing! We have to stop it… 
+The Sacred Demon Castle is absorbing power like a living thing! We have to stop it… 
 Cerulean Satan… The Pandemonium Regalia taken by Ayame… The Sacred Demon Castle which has risen from the sea… 
 Damn it! I should have realized sooner what Cerulean Satan was up to! 
-Yeah… It really seems like it's too late to stop it now… 
-But… even if we had noticed it sooner… What could we have done? 
+Yeah… it does feel like it's too late to stop everything now… 
+But… even if we had noticed Satan’s plans sooner… what could we have done? 
 The castle is their HQ. We have to come up with a plan to attack it. 
 I don't think this is purely a question of size! 
 How are we supposed to fight something like that? It would be suicide! 
 Why do we have to fight that thing? 
 Sumire… 
-Sumire… If we don't do it, who will? We're the Imperial Assault Troupe. 
+Sumire… if we don't do it, who will? We're the Imperial Assault Troupe. 
 I know that much… 
 I just… I just want it to be over… 
 I never thought it'd come to this… 
@@ -138,7 +138,7 @@ All this time we defended Tokyo from the demons. But still, the Sacred Demon Cas
 Doesn't that mean… everything we've accomplished so far has been meaningless? 
 That's not true! <br> What do you think? 
 That's not true! 
-Y-yes, I suppose so. It wasn't meaningless at all. I'm sorry, I shouldn't have said that. 
+Y-Yes, I suppose so. It wasn't meaningless at all. I'm sorry, I shouldn't have said that. 
 You're right, Sakura. It's too early to throw in the towel. There must still be a way. 
 Yes. 
 What do you think, Sakura? 
@@ -147,17 +147,17 @@ Sakura. It was far from meaningless.
 If we hadn't fought, there would have been a lot more casualties. 
 …You're right. What we did wasn't meaningless! 
 I guess… 
-Ogami… Don't talk like that. 
+Ogami… don't talk like that. 
 That's right, Boss. We, the Flower Division, trust you with our lives. 
 If you give up, think about how that'd make us feel. 
-Yes! You're our Captain. Get a grip, Ogami! 
+Yes! You're our captain. Get a grip, Ogami! 
 Yeah… I'm sorry. 
 It's no use wallowing in self-pity. We have to figure out a plan of action. 
 There's a feeling that all the members of the Flower Division share. 
 Ogami… It's no wonder those girls are feeling anxious… 
 Listen to their worries and try to calm their spirits. 
 You're the only one who can help them right now. 
-But… To think that the Sacred Demon Castle really appeared… 
+But… to think that the Sacred Demon Castle really appeared… 
 Hey, Ogami, wait a minute! Where are you going all alone? 
 If you're acting like that, it's only natural everyone else will despair too. 
 What are you going to do, Captain? 
@@ -177,7 +177,7 @@ We must attack! <br> Doesn't anyone have an idea?
 There's no other way but attack! 
 With every minute that passes, the damage gets bigger! 
 Doesn't anyone have an idea? 
-But… If we do nothing… 
+But… if we do nothing… 
 …Captain. Let's think about this whole thing together. Maybe we can find a way. 
 Hm… If you ask me, I can't come up with anything other than a full frontal attack. 
 No matter who I'm up against… I just can't run away. 
@@ -197,7 +197,7 @@ The most important thing is to strike at them and not miss, so we can't take any
 Sumire is right. Listen, Kanna… We need to come up with a plan first. 
 OK… Got it. 
 A full frontal attack… 
-That's one strategy, but it's a little to risky. 
+That's one strategy, but it's a little too risky. 
 I guess so… But this is going to be dangerous no matter how we do it. 
 And it's still better than talking about it endlessly. 
 Let's think about this some more. If we can't figure out anything else, then we'll have to do it that way. 
@@ -211,19 +211,19 @@ I see… I was hoping one of your inventions could save us.
 Sorry I couldn't be more helpful… 
 I can't think of a way… 
 Mon Frère! I'll think about it too! I'll think so, SO hard! 
-And… can I ask something? 
+And… Can I ask something? 
 What is it? 
 Well, I had one idea… 
 In that Sacred Demon Thingy, there's this Satan guy, right? 
 Yeah… 
-So, if we beat Satan, then Ayame will come back…right? 
+So, if we beat Satan, then Ayame will come back… right? 
 Yes… <br> What do you think, Iris? 
 Of course. 
-Destroy the castle… Fix the town… And voila, happy end! 
+Destroy the castle… fix the town… and voila, happy end! 
 Yeah, that's right. <br> It's not that easy… 
 Yeah, that's right. 
 Yes, Iris. 
-But… Will that really be the end of it? Will we be happy ever after? 
+But… will that really be the end of it? Will we be happy ever after? 
 Hm… Good question… 
 That's pretty sharp… 
 If I'll never be happy, then… I just can't keep going! 
@@ -246,9 +246,9 @@ Not bad, Maria… Not bad.
 Thanks, Maria… You really helped me out there. 
 …You're welcome, Captain. 
 What do you think, Iris? 
-Well, I…I think Ayame will come back for sure! 
+Well, I… I think Ayame will come back for sure! 
 Why do you believe that? 
-Well…it's because Ayame is our friend. 
+Well… it's because Ayame is our friend. 
 What she said must have been a lie. I know it! 
 'Cause Auntie Ayame is bad at lying! 
 …A lie? 
@@ -260,11 +260,11 @@ Boss… Why aren't you saying anything?
 (Ayame… Could she really just come back to us?) 
 It's all right. You needn't worry. 
 Really…? Ayame will come back? In that case, I'm gonna do my best! 
-Iris…… 
-I'm gonna do my best…for everyone! 
+Iris… 
+I'm gonna do my best… for everyone! 
 A strategy? I can't think of anything… 
 Aw, this isn't like you at all, Maria. 
-Yeah! Weren't you the original captain of the Flower Division? Pull yerself together! 
+Yeah! Weren't you the original captain of the Flower Division? Pull yourself together! 
 …You're right. 
 The castle is heavily defended, that much is certain. But if we could get inside, we'd have a chance… 
 We just have to find a way to get into the castle… 
@@ -272,12 +272,12 @@ We have to get… inside?
 If we can make use of our mobility and attack from within, there's a good chance we could beat them! 
 A strategy? And we're supposed to come up with it just by standing here and talking? 
 I have no desire to risk my life fighting a battle we can't win! 
-S-Sumire…what are you saying? 
+S-Sumire… what are you saying? 
 Just think about it! Some enemies pop up, we go and fight them. How long is this supposed to continue? 
 We're not machines, you know. I've had enough of this! Let's just get away while we can. 
 Fleeing is always a valid option in a war. 
 Maria! 
-But Sumire…if we were to run, then what would become of the people who we left behind? 
+But Sumire… if we were to run, then what would become of the people who we left behind? 
 We are the only thing standing between the citizens of Tokyo and destruction. We are a wall that must not be broken! 
 Such absurdity… 
 Alone, none of us could do anything. But the seven of us, together? 
@@ -285,12 +285,12 @@ Isn't that the purpose of the Flower Division?
 …You are right, Ensign. 
 I, Sumire Kanzaki, shall not surrender to such a trivial affair. 
 To be honest, I have no idea how we should fight them. 
-But no matter, how invincible they look, they must have some weak point. 
-If we just find that, we stand a chance. 
+But no matter how invincible they look, they must have a weak point. 
+If we can just find that, we stand a chance. 
 A weak point? 
 Hmmm… 
 There's no other way… But… 
-Ogami… You're the only one we can rely on right now. Please be there for us… 
+Ogami… you're the only one we can rely on right now. Please be there for us… 
 Calm down, Ogami. What good will it do if you're like this? 
 Listen, everyone. There's only one path open to us. 
 What we fear most right now is the Spirit Cannon firing. 
@@ -300,7 +300,7 @@ We must get into the castle and destroy the Spirit Cannon before it's fully char
 Then we will stand a chance to win this fight. But still… 
 That seems to be the only way. 
 The Sacred Demon Castle is the enemies' HQ! We can't even imagine how many of them we'll face there! 
-And on top of that… The Spirit Cannon is probably installed in the very center of the castle. 
+And on top of that… the Spirit Cannon is probably installed in the very center of the castle. 
 The power of the Kouma has been strengthened by negative emotions. They're much stronger than before. 
 Even if this plan works out… I… I can't promise you we'll survive this! 
 I'm aware of that, of course. 
@@ -311,19 +311,19 @@ No matter what they throw at us, I'll crush it… with my own fists!
 Hear, hear! You should know that you're in safe hands with me! 
 There's no way we're gonna lose! 
 The Imperial Assault Troupe will give anything for peace and for a good show! 
-Y-you all… 
+Y-You all… 
 And besides that… We'll go, no matter who wants to stop us. 
 The Imperial Assault Troupe, Flower Division will protect this city! 
 … 
-…Lieutenant General! 
-…Alright, I won't try to stop you. Be victorious! For the future of the Imperial capital! 
+…Commander! 
+…All right, I won't try to stop you. Be victorious! For the future of the Imperial Capital! 
 OK, let's go, everyone! Imperial Assault Troupe, move out! 
-Yes sir! 
+Yes, sir! 
 We've entered enemy airspace! The Demon Castle is on our starboard bow! Maintaining an altitude of 2,000 ft.
-We'll engage the enemy soon. Cerulean Satan will probably be our last, and our most awesome foe. 
+We'll engage the enemy soon. Cerulean Satan will probably be our last and our most awesome foe. 
 But we will save Tokyo, save the world! And then… 
 We'll all come back here safe and sound! 
-…Yes sir! 
+…Yes, sir! 
 OK, move out, Flower Division! Direct route to the Sacred Demon Castle! 
 Roger! Our target is the Sacred Demon Castle! Full speed starboard! 
 We have to get through that gate, no matter what! 
@@ -341,8 +341,8 @@ That's crazy! What a destructive force!
 Look! There's nothing left of the castle gates! 
 Lieutenant General Yoneda! 
 I forgot to tell you one thing… 
-Once we're back home, we'll have a big party! So don't take too long! 
-…Yes sir! 
+Once we return home, we'll have a big party! So don't take too long! 
+…Yes, sir! 
 Kanna! Land the Soaring Whale where the castle gate used to be! We'll enter the castle from there! 
 Roger! 
 I wish you luck… 
@@ -352,21 +352,21 @@ We have to draw the Kouma towards us until the Flower Division has reached the S
 Roger! 
 We can't allow the Spirit Cannon to fire! 
 You monsters… Don't underestimate us humans! 
-I guess we should be happy we have the Mikasa. 
-This is the end of the world… the end… 
-Greed… wrath… envy… The spirit cannon is powered by all of humanity's vices. 
+I suppose the Mikasa has come to save the day. 
+This is the end of the world… The end… 
+Greed… wrath… envy… The Spirit Cannon is powered by all of humanity's vices. 
 When Lord Satan's prayer is completed, this fire will mark the 12th hour… 
 And then, the light of darkness will wash over the world and turn it black! 
 HAHAHA! 
 Hehehe… The Soaring Whale’s measly cannons can't even scratch the castle's front gate. 
 And what did I do? I just sat in my chair, sending those girls into battle… 
 I'm a failure as a soldier. 
-But still, I loved you more than anyone and would have done anything to protect your lives… 
-Ayame… We cannot leave this world to the demons! 
+But still, I loved you all more than anyone and would have done anything to protect your lives… 
+Ayame… we cannot leave this world to the demons! 
 Looks like Yoneda pulled out his trump card. 
 Even so, it will all be in vain. 
-Let's get out our trump card as well, then… 
-Go and give them my regards, "Three Knights of Twilight"… 
+Let’s reveal our own trump card, then… 
+Go and give the Flower Division my regards, Three Knights of Twilight… 
 Unused
 Unused
 Unused
@@ -483,7 +483,7 @@ Ogami. What are you doing here?
 I can see in your face that's not true. There's something, I don't know… 
 Something sad about it… 
 But… Ogami! What happened!? Why are you so… 
-You see? My heart… It's pounding like crazy. 
+You see? My heart… it's pounding like crazy. 
 We're all in this together. And I bet we all feel the same, more or less. 
 I'm afraid too. If I was alone, I'd probably be petrified… 
 I'm not as strong as everyone else yet… not as strong as my father. 
@@ -493,7 +493,7 @@ Don't ever call yourself pathetic!
 You keep me going… 
 And that's why you have to fight! No one else will protect the capital, and the future of mankind! 
 Let's keep fighting, Ogami… You and me together! 
-Everyone's on the bridge. They're waiting for their captain… for you! 
+Everyone's on the bridge. They're waiting for their captain… They’re waiting for you! 
 Ogami! 
 Yes, sir! 
 Unused

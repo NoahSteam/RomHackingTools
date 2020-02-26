@@ -2645,7 +2645,11 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 								finalPrintedCount += (numCharsPrintedInLine - originalTimingCount) + numPrefixBytes;
 							}
 
-							numCharsPrintedFortTBL += finalPrintedCount;
+							if( finalPrintedCount >= 65536 )
+							{
+								printf("FinalPrintedCount is too big for %s line %i\n", sakuraFile.mFileNameInfo.mNoExtension.c_str(), inTranslatedLineIndex);
+							}
+							numCharsPrintedFortTBL += (unsigned short)finalPrintedCount;
 
 							//Add extra byte to make things two byte aligned
 							if( !bIsMESFile && finalPrintedCount%2 != 0 )

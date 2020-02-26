@@ -1,6 +1,6 @@
-﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
+﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
 It's a photo of Sumire. This is a side of her you don't see too often. 
-It's a photo of Maria. …She's lost in thought and looks kind of sad… 
+It's a photo of Maria. She's lost in thought and looks kind of sad… 
 It's a photo of Kanna. Her signature strength comes through clearly. 
 It's a photo of Iris. She's surrounded by flowers and flashing a radiant smile. 
 It's a photo of Kohran. She's looking pretty in profile with her face dyed red by the evening sun. 
@@ -37,7 +37,7 @@ Those girls need someone to rely on right now… And that someone is you.
 Would you mind checking on everyone? 
 …Understood! 
 Just talk to all of them, then come back to me. 
-Ogami… This can't be right. Ayame can't have been our enemy… 
+Ogami… this can't be right. Ayame can't have been our enemy… 
 That's… That's just not possible! 
 Ogami… 
 How could everything come to this? 
@@ -50,25 +50,25 @@ Is this a dream? Then I want to wake up…
 This is… 
 How could this happen? 
 What… What should I do? 
-Ayame, tell me… What should I do? 
+Ayame, tell me… what should I do? 
 Chief… Why did it come to this? 
-Auntie Ayame looked SO scary back then… What was up with her? 
-Mon Frère… Tell me, what happened? 
-Our trusted vice commander… I refuse to believe it! If this is a dream, please wake me up… 
-Boss… Just… why?! 
+Auntie Ayame looked SO scary back there… What was up with her? 
+Mon Frère… tell me, what happened? 
+Our trusted deputy commander… I refuse to believe it! If this is a dream, please wake me up… 
+Boss… Just…why?! 
 How could something like this happen…? 
-Ogami… You shouldn't blame yourself. You did nothing wrong. 
+Ogami… you shouldn't blame yourself. You did nothing wrong. 
 Sakura! So this is where you were. 
 (This doesn't look good… The morale of the whole Flower Division has hit rock bottom…) 
 … 
-You've… grown strong. 
+You've…grown strong. 
 No… <br> That may be it. 
 No… I… just admired her as my superior, that's all. 
 … 
 You're right… I was certainly drawn to Ayame. 
 Sakura… 
 I don't know… 
-…… 
+… 
 When… When I met Ayame she was like a goddess to me. 
 She was so kind, so noble… I couldn't help but admire her big heart. 
 And that same Ayame, she… she abandoned us… It breaks my heart… 
@@ -78,26 +78,26 @@ I'm… I'm fine, Sakura!
 I have faith in Ayame! Her true heart can't be evil. I refuse to believe that! 
 Yes! Let's show them what the Flower Division can do as a team, Sakura! 
 Sakura… 
-…… 
+… 
 Should we head back? It's freezing here. 
 … 
 Ah… It even started snowing… 
-Ayame… Where are you? Are you watching this snow right now, as I am? 
+Ayame… where are you? Are you watching this snow right now, as I am? 
 Maria's room… 
 I guess it's about time to go. 
 Let's leave her alone for now. 
 It's me, Ogami… 
 …Can I come in? 
 … 
-Maria… Aren't you tired? You should rest, too. 
+Maria… aren't you tired? You should rest, too. 
 … 
 Maria… 
 …Thanks for telling me. It… It must have been tough on you, too. 
 … 
 Maybe I can't do much… but… 
 Maria… 
-You're… a strong person. 
-No… It's OK. 
+You're…a strong person. 
+No… it's OK. 
 That's good… 
 …What's the matter, Maria? 
 Sumire… 
@@ -145,8 +145,8 @@ You'll take me on your first test flight, right?
 Of course you can. I don't doubt it for a second! 
 Yes! 
 Yes, that would be great. 
-Iris… What are you doing here? 
-Let's get you back to your room. You'll catch death out here. 
+Iris… what are you doing here? 
+Let's get you back to your room. You'll catch your death of cold out here. 
 …What did you dream of? 
 Huh…? 
 Iris… 
@@ -160,10 +160,10 @@ Sweet dreams…
 This is Iris' room… 
 Let's go somewhere else. 
 Let's leave her alone for now. 
-Iris… Are you up? 
+Iris… are you up? 
 …Huh? The door isn't locked… 
 …Iris? 
-Iris…… 
+Iris… 
 Kanna… 
 You can't fight on an empty stomach, right? 
 True. 
@@ -181,10 +181,10 @@ We know Ayame. She wouldn't die so easily… We can still save her, I'm sure of 
 Yes, whatever it takes! 
 …Hm? 
 Kanna… 
-Kanna… You should get some rest. 
+Kanna… you should get some rest. 
 What about you, Boss? Shouldn't you rest, too? 
 If you're resting, I'll get some rest too. 
-After I eat this… Please… Don't concern yourself with me. 
+After I eat this… Please… don't concern yourself with me. 
 …Yeah, sorry. I'm off. 
 The Pandemonium Regalia is no longer here. Ayame took it and… brought it to Satan. 
 (I'm in front of Ayame's room.) 
@@ -196,7 +196,7 @@ Ayame…
 (A mirror in a room without much in the way of other furniture… You can tell a woman lives here.) 
 (I think there's a glass window behind this paper screen.) 
 (There's no one here anymore who would open that window…) 
-(There are 3 books lying on the desk. Maybe she wrote something down in one of them?) 
+(There are three books lying on the desk. Maybe she wrote something down in one of them?) 
 "Imperial Theater, Flower Division, Reporting Journal", "January 1st, 1924", "Kouma War, 1917"… 
 (Dressers are often handed down through the generations. Did Ayame receive this one from her mother?) 
 (This dresser is looking exactly as before… Only Ayame isn't here anymore.) 
@@ -207,10 +207,10 @@ Ayame…
 (A Japanese-style lamp. It's giving off a calming light.) 
 (Is this… electrical? Kohran must have given it to her.) 
 (A photograph? Let's see…) 
-Yoneda and… Ayame? Is this the anti-demon unit? 
+Yoneda and… Ayame? Is this the Anti-Kouma Corp? 
 The man on the right looks a bit like Sakura. It must be Colonel Shinguji. 
 Yoneda looks exactly like he does now. And in the middle, Ayame… Those were happier times for her. 
-(A photograph of the anti-demon unit…) 
+(A photograph of the Anti-Kouma Corp…) 
 It looks like Ayame is snuggling up to the man on the left… 
 Maybe this is Shinnosuke Yamazaki, who later disappeared? 
 Hm, is this…? The man on the left, I think… maybe… I've seen him somewhere before? 
@@ -218,39 +218,39 @@ Let's take a look… <br> Let's leave it.
 Kouma War, 1917 <br> Reporting Journal <br> January 1st, 1924 
 (I shouldn't just read this without permission…) 
 It's dated… seven years ago. 
-"Kouma War documents" - Taisho 7 (1918), Imperial Infantry" - "Top secret" 
+“Kouma War Documents” <br> Taisho 7 (1918), Imperial Infantry <br> “Top Secret” 
 "Kouma War" is a term used for combat operations against the creatures called "Kouma" that occurred from Taisho 6 to 7. 
 About one square mile in the Nihonbashi area was totally destroyed, including all buildings. 
-According to internal calculations from the Infantry, damages amount to hundreds of millions of Yen. 
+According to internal calculations from the Infantry, damages amount to hundreds of millions of yen. 
 The intelligence bureau's historians found out that evidence of the Kouma existed even in ancient China. 
 Kouma are demons that latch onto living beings and feed on their negative emotions. 
 Low-level Kouma consist only of a head, but they feed and grow stronger, eventually gaining human appearance. 
 The giant monsters witnessed during the Kouma War are presumed to be very large low-level Kouma. 
 During the final stage of the Kouma War, an independent unit chased the giant Kouma underground. 
-It was known as the "anti-demon unit" and suffered one dead and one MIA. It was dispersed thereafter. 
-Commanding officer of this unit was Lieutenant General Ikki Yoneda of the Imperial Infantry. 
+It was known as the "Anti-Kouma Corp" and suffered one death and one MIA. It was dispersed thereafter. 
+The commanding officer of this unit was Lieutenant General Ikki Yoneda of the Imperial Infantry. 
 The Flower Division… This is about us? 
 Fourth of April, fair weather. 
-Imperial Navy Lt. Ogami Ichiro will arrive in our Ginza HQ by recommendation of Count Hanakoji. 
-Anniversary performance of "Evening of the Camellia Lady" was resounding success. Theater is in a good spot. 
+Imperial Navy Ensign Ichiro Ogami will arrive in our Ginza HQ by recommendation of Count Hanakoji. 
+Anniversary performance of "The Eve of Lady Camellia" was resounding success. The theater is in a good spot. 
 April 5th, fair, then cloudy. 
-Reports of Hive of Darkness at Ueno Park. Presumed leader is present. First real test for Flower Division. 
+Reports of the Hive of Darkness at Ueno Park. Presumed leader is present. First real test for Flower Division. 
 Ensign Ogami's performance deemed "pretty good for his first try" by Yoneda. 
 May 12th, a calm Japanese spring day. 
 Kohran Li has started in the Ginza HQ. Seems enthusiastic about her work. 
-Yoneda gave orders to ready the Soaring Whale. Will head to the Flower Mansion by Thunderstrike. 
+Yoneda gave orders to ready the Soaring Whale. Will head to the Hanayashiki Branch by Thunderstrike. 
 May 13th, fair weather. 
 Met Ichiro Ogami last night. He was how I imagined him, more or less. Hope he meets our expectations. 
 Contact-free piloting system is ready. Iris' Koubu will be ready soon. 
-Maiden voyage of the Soaring Whale. Damages to mansion from scrambling impossible to predict. 
+Maiden voyage of the Soaring Whale. Damages to Hanayashiki Branch from scrambling impossible to predict. 
 June 9th, rain. 
-Lt. Ogami wounded in battle of Hex Mech, but nothing serious. Kanna Kirishima back from Okinawa. 
+Ensign Ogami was wounded in the battle with the Hex Mechs, but nothing serious. Kanna Kirishima back from Okinawa. 
 Maria acting strange, seems vexed by something. Have to talk to her ASAP. 
 June 9th, rain. 
-Sakura wounded in battle of Hex Mech, but nothing serious. Kanna Kirishima back from Okinawa. 
+Sakura was wounded in the battle with the Hex Mechs, but nothing serious. Kanna Kirishima back from Okinawa. 
 Maria acting strange, seems vexed by something. Have to talk to her ASAP. 
 June 13th, rain. 
-After Maria's rogue action, Yoneda was summoned before committee of inquiry. 
+After Maria's rogue action, Yoneda was summoned before a committee of inquiry. 
 Count Hanakoji and Mr. Tadayoshi Kanzaki are doing their best to influence military authorities. 
 June 14th, fair weather. 
 Yoneda returned to Ginza. Refuses to talk about inquiry. 
@@ -258,37 +258,37 @@ Says I'm not to tell anyone, including Ogami. Won't begrudge him his drink today
 Read on. <br> Put the book back. 
 July 5th, fair weather. 
 Iris is out of control. First division has orders to eliminate her if we can't stop her before sundown. 
-If we get through this, we have to take up Iris' training a notch. 
+If we get through this, we have to take Iris' training up a notch. 
 July 6th, fair weather. 
 Story of Iris' rampage is all over the newspapers. Yoneda in a foul mood. 
-No one is called before committee of inquiry this time. Perhaps pressure from all sides is high enough? 
+No one is called before a committee of inquiry this time. Perhaps pressure from all sides is high enough? 
 August 2nd, cloudy. 
-Thanks to reports from citizens, we know of Hive of Darkness's plans in advance for the first time. 
-Will recommend Lt. Ogami, Sumire and Kanna as investigation team into abandoned Hex Mech mansion. 
+Thanks to reports from citizens, we know of the Hive of Darkness's plans in advance for the first time. 
+Will recommend Ensign Ogami, Sumire and Kanna to investigate the abandoned Fukagawa mansion as a team. 
 August 3rd, cloudy. 
-Investigation in Fukagawa is complete. Looks like I sent the right people. Lt. Ogami has proven his worth. 
+Investigation in Fukagawa is complete. Looks like I sent the right people. Ensign Ogami has proven his worth. 
 Maitreya Hosokawa said something about "enemy's plan". Must find out what it means. 
 August 29th, fair weather. 
-Steam processor has calculated position of Hive of Darkness's HQ. 
+Steam processor has calculated the position of the Hive of Darkness's HQ. 
 Feeling very uneasy the last few days. Hope that nothing bad will happen. 
 October 10th, fair weather. 
 Last month went by like a storm. At last, the capital’s facilities are functional again. 
-Lt. Ogami and Flower Division are busy preparing celebratory performance, "Flaming Touch of the Snake Woman". 
+Ensign Ogami and Flower Division are busy preparing celebratory performance, "Flaming Touch of the Snake Woman". 
 November 23th, fair weather. 
-Today marked last performance of "Wings". Various problems arose, but Kohran did well in starring role. 
-Kohran dreams of constructing flying machine. Has been gathering parts since time in Flower Mansion. 
+Today marked the last performance of "Wings". Various problems arose, but Kohran did well in the starring role. 
+Kohran dreams of constructing a flying machine. She has been gathering parts since her time at the Hanayashiki Branch. 
 December 31st, snow. 
 New Year's Eve. The end of an eventful year. 
-Lt. Ogami and Flower Divison are listening to "Old Year, New Year" on radio. 
+Ensign Ogami and the Flower Division are listening to "Old Year, New Year" on the radio. 
 Hope next year will be a good one. 
 January 2nd, fair weather. 
-My fears became reality: Kouma have appeared. Monsters that were hidden underground. 
-"Kouma War". That tragedy must never be repeated. 
+My fears have become reality: the Kouma have appeared. Monsters that were hidden underground. 
+The "Kouma War". That tragedy must never be repeated. 
 …That's the last entry. 
 "January 1st, 1924." I wonder what this is… 
 January 1st, fair weather. 
 Everyone from the Flower Division went out for a shrine visit. I guess I'm the only one who's thinking about him. 
-It's six years ago now. Lieutenant General Yoneda, Colonel Shinguji, and… him. 
+It was six years ago now. Lieutenant General Yoneda, Colonel Shinguji, and… him. 
 How long did I search for him? 
 How long did I hold out hope he'd return? 
 I still can't forget him. How could I? You can't erase your own memories. 
@@ -305,17 +305,17 @@ February 2nd, fair weather.
 Horrible headaches. Yoneda is worried about me. I'll rest in the afternoon. 
 February 9th, rain. 
 I remembered Kanna has a navigator's license, so I'm teaching her how to control the Soaring Whale. 
-I'll teach Kohran everything about running the Flower Mansion. So she can take over when I'm gone. 
+I'll teach Kohran everything about running the Hanayashiki Branch. So she can take over when I'm gone. 
 February 18th, rain. 
 When I look at that photo in the evening, I can't stop crying. It was our first and last photo. 
-The Imperial anti-demon unit. Everything seemed shiny and new back then. Those days will never return. 
+The Imperial Anti-Kouma Corp. Everything seemed shiny and new back then. Those days will never return. 
 February 22nd, rain. 
 I've been having a strange dream. I see myself from outside, and something behind me. What could it be? 
 …That's the last entry. 
 …Who is it? 
 It's me, Ogami. 
 Oh, I see. Come in. 
-Please look how everyone's doing. 
+Please check up on how everyone is doing. 
 Lieutenant General… 
 So, Ogami… What's the state of the Flower Division? 
 Well… 
@@ -325,21 +325,21 @@ Right, I've got something I wanted to ask of you.
 Yes, what is it? 
 It's just… I want to write my report… 
 But I can't find the report forms. Do you know where they are? 
-The… the report forms? 
+The… The report forms? 
 Yeah, they must be somewhere in that cupboard, but… 
 In the cupboard? 
 …Hah… 
 Pitiful, isn't it? Until now, Ayame did all of that for me… 
-…… 
-Seems like I am helpless with no woman around, eh? 
+…
+I lose one woman and I become completely helpless… 
 Lieutenant General… 
 Let me tell you, Ogami… 
 … 
 Ever since she stood here before me for the first time… 
 I've thought of Ayame almost as a daughter. 
-Of course I knew we'd eventually part our ways, but… 
+Of course I knew we'd eventually part ways, but… 
 Ayame will return to us! I'm sure of it! 
-I'll get her myself if I have to! 
+I'll bring her back myself if I have to! 
 …Please excuse me! 
 Damn it, Ogami… Don't talk like you've got it all figured out! 
 …Ayame. 
@@ -351,7 +351,7 @@ What… What should I do?
 No matter the outcome… 
 …you should strive to live without regrets. 
 No regrets, huh? You were right, Ayame… 
-…… 
+… 
 Can you guess why I gathered you all here? 
 The thing we all feared has finally come to pass… 
 What's that? In Tokyo Bay…? 
@@ -362,18 +362,18 @@ And that god-machine will turn all the lands to ashes with the light of judgment
 It's a book of prophecies passed down in the noblest families of the capital, along with the Pandemonium Regalia. 
 The noblest families? You don't mean… 
 Then that is… 
-Yes… The Sacred Demon Castle. 
+Yes… the Sacred Demon Castle. 
 The Sacred Demon Castle… 
-"God-machine" must refer to the spirit cannon that has been rumoured since ancient times. 
-Spirit cannon? 
+"God-machine" must refer to the Spirit Cannon that has been rumoured since ancient times. 
+Spirit Cannon? 
 Its light rends the skies and dissolves solid land into mist… allegedly. 
 It will be just like the war 400 years ago. The fabled sealed land "Yamato" will rise again. 
 There's no time to spare! We must hurry to Tokyo Bay and prevent the Sacred Demon Castle from reappearing! 
-Yes sir! 
+Yes, sir! 
 ! 
 What? 
 Come out of that dirty hut, dogs of the capital! 
-That… that voice… 
+That… That voice… 
 Ayame… 
 We can't dawdle any longer… Let's go, everyone! 
 There's nothing to do in my room. I should check on the others. 
@@ -382,7 +382,7 @@ I wonder if Sakura is in.
 She doesn't seem to be here. Must have gone someplace else. 
 Who is it…? 
 Sakura… It's me, Ogami… 
-Ogami… Could you leave me alone for a while? 
+Ogami… could you leave me alone for a while? 
 …OK, I'll do that. 
 Let's try some other place… 
 Let's leave her for now. 
@@ -439,7 +439,7 @@ No one here, huh? Let's go somewhere else.
 No one here, huh? Let's go somewhere else. 
 When there's no performance, this room becomes meaningless. 
 Maybe I should try someplace else… 
-The Jinbu… With the Pandemonium Regalia, these Spirit Armors are the only thing we can rely on… 
+The Jinbu… With the Pandemonium Regalia gone, these Spirit Armors are the only thing we can rely on… 
 There doesn't seem to be anyone down here. 
 You don't see Kanna or Sumire train here anymore… 
 There doesn't seem to be anyone down here. 
@@ -448,7 +448,7 @@ I should go somewhere else.
 There's no one here… 
 Maybe I should try someplace else… 
 There's no one here. I should go somewhere else… 
-No one's using this place now. 
+No one's using this place right now. 
 There's no one here. I should go somewhere else… 
 Only the steam processor keeps on working as if nothing happened… 
 There doesn't seem to be anyone down here. 
@@ -466,7 +466,7 @@ I should leave Maria alone for now.
 I'm in front of Iris' room… 
 … 
 Iris… It's me, Ogami… 
-…… 
+…
 She must have fallen asleep… 
 Let's leave her in peace for now. 
 Kohran isn't here anymore… 
@@ -575,23 +575,23 @@ Every day we must fight! Kill, kill, kill!
 My hands are… already sticky with blood! 
 How can you be this calm!? Become like a normal girl!? Be happy the flowers are blooming!? 
 Who made me what I am? Wasn't it Ayame!? Certainly not you lot! 
-But even though… She just double-crossed us… 
+But even though…she just double-crossed us… 
 And here I was thinking we were fighting on the same side… If this is supposed to be a joke, it's not funny! 
 Call me childish, but I can't see any good in Ayame even if I tried. 
 ! 
-I'm sorry… Captain… Please leave me be for a while… 
+I'm sorry, Captain… Please leave me be for a while… 
 Auntie Ayame… 
 I've calmed down a bit… 
 This is exactly what Satan wanted, isn't it? We should know better than this. 
 Unused
-Ogami… You liked Ayame, right? 
-But… It didn't look like that to me. 
+Ogami… you liked Ayame, right? 
+But… it didn't look like that to me. 
 As for me… I liked her a lot. I always strived to become a person just like her. 
 Unused
-Sorry… I'm sure I don't make sense… 
+Sorry… I'm sure I’m not making sense… 
 Unused
 That's it! Ayame must simply be under Satan's control! 
-We have to save her! The Imperial Floral Assault Troupe wouldn't be the same without her! 
+We have to save her! The Imperial Assault Troupe wouldn't be the same without her! 
 Thank you, Ogami. 
 I… I liked her a lot, too. She was a big inspiration. 
 I could only dream of becoming like her one day… 
@@ -600,7 +600,7 @@ Come on, Ogami! Let's save Ayame!
 Ayame must be under Satan's control. I'm sure there's a way to free her. We can't just abandon her! 
 Muahahaha…! The castle that will fulfill all my ambitions is about to return. Aya-me! 
 Yes. 
-It will be some time until the Sacred Demon Castle will be reborn. Distract those girls until the time has come. 
+It will be some time until the Sacred Demon Castle is reborn. Distract those girls until the time has come. 
 Yes, master! 
 Show me what you can do. 
 Please wait. 
@@ -610,7 +610,7 @@ Hmph… Very well. Do as you please…
 Thank you kindly… 
 Hehehe… 
 Why are you laughing? 
-Hehe, it's just… I'm looking forward to a demonstration of your skill. 
+Hehe, it's just… I'm looking forward to a demonstration of your skills. 
 I will fulfill my ambition together with Lord Satan… I won't allow you to interfere! 
 Unused
 Unused
@@ -628,8 +628,8 @@ Unused
 Unused
 Why? Why you, Ayame… After we've fought together, side by side! 
 We can't throw in the towel just yet. This fight is only just beginning! 
-But… What are you saying!? This isn't like you at all, Ogami! 
-Yes! No matter what happened, you managed to get us through so far! 
+But… what are you saying!? This isn't like you at all, Ogami! 
+Yes! No matter what happened, you managed to get us through somehow! 
 Please cheer up! 
 Don't give up, Ogami. You're the only one we can rely on right now. 
 Hm? Boss…? 
@@ -639,7 +639,7 @@ If I'd just been stronger, then… All of this wouldn't have happened.
 I'm really pathetic… The one thing I'm good at, and still I couldn't do anything. 
 You can stop trying to make me feel better, Boss. I've failed, that's a fact. 
 I know I'm a big klutz of a woman. My strength was my one redeeming quality. 
-So… What are you saying? 
+So… what are you saying? 
 I can't cook, my dancing is lousy… 
 I'm pretty sure you'll grow tired of being around me soon enough… 
 Huh? 
@@ -651,16 +651,16 @@ Thank you.
 Having someone to lean on at a time like this… That's priceless. 
 To tell you the truth, I felt like I couldn't go on. 
 Ayame… that such a thing could happen to her… 
-I can't even get any sleep. If I try to, the nightmares are so bad I'm happy when I wake up again. 
+I can't get any sleep. If I try to, the nightmares are so bad that I'm happy when I wake up again. 
 There's no one there… 
 Sakura… Kasumi… 
-Everyone's gone. Just like auntie Ayame… Everyone… 
+Everyone's gone. Just like Auntie Ayame… Everyone… 
 Mon Frère… You won't leave me, right? Promise you'll never leave me! 
 I don't want to be alone! I would die! 
 Mon Frère… 
 I just… I don't want to be alone… 
 Can you promise me, Mon Frère? That you'll never leave me alone? 
-That you'll always… be there? 
+That you'll always… be here? 
 *sniff* Ah, Chief… 
 You know me… I can't do anything right. 
 I can't shoot a gun like Maria, and I'm not strong like Kanna. 
@@ -671,7 +671,7 @@ She was always so good to me… But then… *sniff*
 *sniff* How did it come to this…? 
 Can you tell me that, Chief? 
 *sniff* Really? 
-You're right… Gotta keep smiling! Nothing good's ever come of moping. 
+You're right… Gotta keep smiling! Nothing good has ever come from moping. 
 Thanks, Chief. I should head back to my room and get some shut-eye. 
 OK, Chief… Good night. 
 Unused

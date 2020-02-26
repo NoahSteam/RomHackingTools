@@ -1,6 +1,6 @@
-﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
-It's a photo of Maria. …She's lost in thought and looks kind of sad…
+It's a photo of Maria. She's lost in thought and looks kind of sad…
 A photo of Kanna. Her signature strength comes through clearly.
 A photo of Iris. She's surrounded by flowers and flashing a radiant smile.
 A photo of Kohran. She's looking pretty in profile with her face dyed red by the evening sun.
@@ -31,7 +31,7 @@ Jean-Paul the teddy bear. Iris's best friend. She always carries him with her an
 I'm Ichiro Ogami. <br> …Who are YOU? 
 …Who are YOU? 
 I'm Ichiro Ogami. I used to be an ensign in the Navy, but now I'm the captain of the Imperial Assault Troupe. 
-Mr. Yoneda… Who is this person? 
+Mr. Yoneda… who is this person? 
 (Kanna Kirishima… So she's our final member?) 
 …And so I noticed I had somehow learned to split rocks… 
 When the ship began to sink, I was quite surprised. 
@@ -50,7 +50,7 @@ Come with you where?
 The training room obviously! 
 Sure thing. I don't know where you want to go, but I'll join you. 
 That's what I wanted to hear! 
-…… 
+… 
 Let's not waste any time then! I can't stand slowpokes! 
 They say you were number one in your class at the academy. 
 Wanna show me how they fight in the navy? 
@@ -74,7 +74,7 @@ I'll guard my head! <br> I'll guard my back! <br> I'll guard my stomach!
 A thrust to the stomach… Blocked! 
 You blocked my thrust! I guess I underestimated you. 
 OK, now block my final attack! 
-…an upper two-step kick! <br> …a middle roundhouse kick! <br> …an upper roundhouse kick! 
+An upper two-step kick! <br> A middle roundhouse kick! <br> An upper roundhouse kick! 
 Ha, I did it! I blocked all the techniques! 
 Not bad, Boss! I guess you earned that number one place at the academy! 
 You managed to block all my techniques… You're the real deal, Boss! 
@@ -85,27 +85,27 @@ How about I serve you my super awesome specialty?
 What do you say? Wanna eat together? 
 Guaaaah!! 
 B-Boss! Are you all right? 
-Cough, cough… 
-That was… a nice kick… I heard the angels sing there for a moment. 
+*cough, cough*… 
+That was…a nice kick… I heard the angels sing there for a moment. 
 Sorry about that… You look pretty strong, so I didn't hold back. 
 But still, I can see why you were in first place at the academy. You're not bad at all! 
 Even though I pulled my punches a little, I'm impressed how you blocked my techniques. 
 Mmphhh! 
 B-Boss! Are you all right? 
-That… hah… was a beautiful punch… 
+That…hah…was a beautiful punch… 
 I'm really sorry. You blocked nicely before, so I didn't hold back. 
 Gaaah! 
 B-Boss! Are you all right? 
-Cough, cough… 
+*cough, cough*… 
 Ouch… That one hit where it hurts. 
-But, Boss… Why didn't you block it? Didn't you listen to what I said? 
+But, Boss… why didn't you block it? Didn't you listen to what I said? 
 Karate can be deadly, you know! I pulled my punches this time, but if I didn't, you could be seriously hurt. 
-Oh, by the way… Aren't you hungry too, now after the training? 
+Oh, by the way… Aren't you hungry now after the training? 
 How about I serve you my super awesome specialty? 
 What do you say? Wanna eat together? 
 I could eat a cow! <br> What IS your specialty? <br> Nah, thank you. 
 I know, right! I feel absolutely starved! 
-Okey-dokey! Off to the kitchen then! 
+Okey dokey! Off to the kitchen then! 
 What exactly IS your specialty? 
 Hehe… You'll see. Off to the kitchen! 
 Nah, thank you. I couldn't eat anything right now. 
@@ -118,22 +118,22 @@ Good night, Boss.
 So, while I'm preparing the food, why don't you wait in the canteen? 
 OK. I can't wait to see what you'll whip up! 
 Let's wait here until she's finished her cooking. 
-…… 
+…
 …She's taking her sweet time. 
 Is she still not done yet? 
 Kanna! Are you still not done yet? 
 Sorry! Can you wait just a little longer? 
 Hm, I guess I'll have to be patient. 
-…… 
-…… 
+… 
+…
 …How long can one person spend on a meal for two? 
 Please hurry up! 
 Kanna, please hurry up! I'm starving! 
 Oh, shut your mouth and wait in silence, like a man! 
-Y-yes, sir! 
+Y-Yes, sir! 
 (She's scary… I should wait in silence.) 
 Sorry I kept you waiting! Enjoy! 
-What… what's this? 
+What… What's this? 
 (There's… some sort of reddish black object lying on the rice.) 
 It's black pork and bitter gourd fried with red and black pepper. 
 It goes great with barley rice. 
@@ -142,7 +142,7 @@ Ahaha! Don't worry, just try it!
 I-I think I will, thank you… 
 (Phew… This is HOT…) 
 (It's not raw, but extremely salty…) 
-(But… wait… Once you survived the first bite, it's actually super tasty!) 
+(But…wait… Once you survive the first bite, it's actually super tasty!) 
 This is awesome! I love it! 
 Haha! I'd be the first to admit it's rather crude as far as fine cuisine goes. 
 But all I've been doing since I was little is study karate, so it shouldn't surprise you. 
@@ -157,24 +157,24 @@ Oh… One more thing I forgot to say…
 What is it? 
 Sakura and Kohran, they're good kids. I really like 'em. 
 As for you, Boss… I like you too. 
-Oh, really? …Thanks. 
+Oh… Really? Thanks. 
 And there aren't that many people I really like, be it guys or gals. 
 Well, I'm off then. Good night, Boss. 
-…… 
+…
 So she likes me… That doesn't feel too bad. 
 Well… Now that I'm stuffed, I should go rest in my room. 
 I'm sure you already noticed, but Maria's really acting strange lately. Could you try to help her? 
 …I will. 
 OK, it was nice hanging out. See you tomorrow! 
-She noticed something's up with Maria… Must be female intuition. And they HAVE known each other for a long time. 
+She noticed something's up with Maria… must be female intuition. And they HAVE known each other for a long time. 
 Hm… But I still don't really know what's eating her. 
 But anyway… Now that I'm stuffed, I should go rest in my room. 
 Huh? Didn't you just ask me the same thing a minute ago? 
 What does karate mean to you? 
 Hm… That's difficult to answer. 
-I don't know how to put it, but… Everyone has their own path in life, right? 
+I don't know how to put it, but… everyone has their own path in life, right? 
 Some people plow the fields, some go fishing, some get rich… 
-As for me, I always had this idea "I wanna get strong". That's MY thing, you know? 
+As for me, I always had this idea "I wanna get strong." That's MY thing, you know? 
 Anyway that's what I've always thought… 
 Ahaha! That's a terrible answer, isn't it? 
 To be honest I really can't say WHY I wanna be strong. 
@@ -183,7 +183,7 @@ Huh? Didn't you just ask me the same thing a minute ago?
 How did you end up here? 
 Hm… Where to start? 
 … 
-Until this year… All I did was karate. 
+Until this year… all I did was karate. 
 That's all I had. Or maybe, that's the only thing I was any good at. 
 At least that's what I thought for a long time. I'd never have imagined myself on a stage! 
 But it's true, I CAN do other things besides karate. I can make people smile. 
@@ -207,9 +207,9 @@ I'm sure we will, Kanna!
 Hehe… You saying it like that almost makes me blush. 
 It must be… somewhere around here… 
 Maria… What happened? 
-S-sir… 
+S-Sir… 
 It's… It's nothing. 
-Maria…… 
+Maria… 
 Hm? Did my foot hit something? 
 What is this? 
 Sir! That's… 
@@ -221,8 +221,8 @@ Thank you…
 It's a beautiful locket. <br> Is there anything inside? <br> Is it your good luck charm? 
 It's a beautiful locket. 
 …Do you think so? 
-To call it beautiful… That's… 
-…huh? 
+To call it beautiful… that's… 
+…Huh? 
 No… It's nothing. 
 Is there anything inside? 
 Well… 
@@ -231,15 +231,15 @@ Well…
 Is it your good luck charm? 
 A… good luck charm? 
 Haha… I suppose you could call it that. 
-…… 
-Thank you. And… See you later. 
-Maria…… 
+… 
+Thank you. And… see you later. 
+Maria… 
 Thank you. See you later. 
-Maria…… 
+Maria… 
 That locket… It seems to be connected to what's troubling her. 
 That reminds me… What was all that about dreaming of the past? 
 Maria… I wonder what dream you'll be having tonight… 
-Man…I was wondering what that ruckus was about! 
+Man… I was wondering what that ruckus was about! 
 Huh? 
 Huh? Who're you? 
 Kanna! Did ya bring me anything? 
@@ -248,13 +248,13 @@ Oh, Kanna! So all this time you've been fine?
 Well, the boat from Okinawa sunk. I ended up swimming back. 
 As indomitable as ever, I see. 
 Looks like we've got one… two… three newbies! 
-So who's this guy making all the fuss? … Mind telling me your name? 
+So who's this guy making all the fuss? Mind telling me your name? 
 Whoa, you're the boss?! You sure have got the look for it! Man, I like you!! 
 Kanna, these are our new recruits Sakura and Kohran. 
 Yo! 
 Sakura Shinguji. Pleased to meet you! 
 And I'm Kohran Li! Hey, if you don't mind me saying… you're a pretty handsome guy. 
-Hehe… well, thanks for that but I'm actually a girl. But no hard feelings, yeah? 
+Hehe… Well, thanks for that but I'm actually a girl. But no hard feelings, yeah? 
 Kanna Kirishima… successor of Ryukyu Kirishima Karate. Now that she's here, the Flower Division is fully assembled! 
 Yo, Manager! It's been a while! 
 We're glad to have you back, Kanna! 
@@ -336,7 +336,7 @@ Unused
 Unused
 Unused
 Hey, I'm the one asking, here. 
-Eh, no worries…I'm Kanna Kirishima. Who're you? 
+Eh, no worries… I'm Kanna Kirishima. Who're you? 
 Kanna, this is Ensign Ichiro Ogami. He's the current leader of the Flower Division. 
 What? Hey, Maria, when did we get a new leader? 
 A lot of things happened while you were gone. Let's just leave it at that. 

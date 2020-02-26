@@ -1,6 +1,6 @@
-﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
-It's a photo of Maria. …She's lost in thought and looks kind of sad…
+It's a photo of Maria. She's lost in thought and looks kind of sad…
 A photo of Kanna. Her signature strength comes through clearly.
 A photo of Iris. She's surrounded by flowers and flashing a radiant smile.
 A photo of Kohran. She's looking pretty in profile with her face dyed red by the evening sun.
@@ -26,35 +26,35 @@ A photo of Kohran. I don't get to see her with her braids undone very often. It'
 A photo of Ayame in a traditional outfit. I hope she'll always be as happy and content as she is here.
 Ayame's gun. Why…? Why did it have to turn out like this…?
 Jean-Paul the teddy bear. Iris's best friend. She always carries him with her and takes good care of him.
-… just a dream. 
+…Just a dream. 
 Why… do I keep going back to that day… 
-…… 
-…an enemy!? 
-…it seems misfortune breeds misfortune… 
+…
+…An enemy!? 
+…It seems misfortune breeds misfortune… 
 Is everyone here? 
 No… Maria still hasn't arrived. 
 Maria is late? She's never late. 
-Forgive me for being late! 
+I’m sorry to have kept you all waiting! 
 Talk to Kanna. <br> Talk to Maria. 
-Kanna, it's been a while since you sortied, right? Take care out there. 
+Kanna, it's been awhile since you sortied, right? Take care out there. 
 Thanks, Boss. I'm looking forward to seeing your fighting style. 
 You should be able to fight harder than ever before, with my special cooking in you. 
 Commander Yoneda, what information do we have on the enemy? 
-Maria… are you alright? You don't look so good… 
-…thank you, but I'm fine. 
+Maria… are you all right? You don't look so good… 
+…Thank you, but I'm fine. 
 Commander Yoneda, please update us on the Hive of Darkness. 
 Hey, don't just stand there like a moron, Ogami! 
-R-right! Sorry, sir! 
+R-Right! Sorry, sir! 
 Commander Yoneda, will you tell us about the enemy, please? 
 Right. Looks like everyone's here, so let's start our strategy meeting. 
 We've received reports from some civilians that Hive of Darkness Hex Mechs have appeared in Tsukiji. 
 Tsujiki? 
 The Hex Mechs have gathered in a block of abandoned buildings near the mouth of the river. 
 There doesn't seem to be a civilian threat, but we need to put this down quietly before it causes a panic. 
-I see… understood. 
+I see… Understood. 
 Kanna's been out of the saddle for a while. Make sure to take good care of her, Ogami! 
-Roger… thanks! 
-Alright, everyone! Time to show the world the might of the fully assembled Imperial Assault Troupe! 
+Roger… Thanks! 
+All right, everyone! Time to show the world the might of the fully assembled Imperial Assault Troupe! 
 Imperial Assault Troupe, move out!! 
 Unused
 Unused

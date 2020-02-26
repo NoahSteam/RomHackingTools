@@ -1,6 +1,6 @@
-﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
-It's a photo of Maria. …She's lost in thought and looks kind of sad…
+It's a photo of Maria. She's lost in thought and looks kind of sad…
 A photo of Kanna. Her signature strength comes through clearly.
 A photo of Iris. She's surrounded by flowers and flashing a radiant smile.
 A photo of Kohran. She's looking pretty in profile with her face dyed red by the evening sun.
@@ -37,24 +37,24 @@ Jean-Paul the teddy bear. Iris's best friend. She always carries him with her an
 (Why was Kanna in such a rush?) 
 (Oho?! Maybe it's my imagination, but it seems like I can see more than usual…) 
 (No! I can't believe I'm staring at Kanna's chest while she's upset…What am I doing?!) 
-(O-oh nooo! My eyes are drawn like a magnet to her breasts!) 
+(O-Oh nooo! My eyes are drawn like a magnet to her breasts!) 
 Where the hell do you think you're looking, Boss!? 
 I don't think there's anything here we need for the party. 
 I don't really have time to stand around reading right now. 
 No place like my own room for relaxing… 
-…but it's kind of boring here. I should go give everyone a hand with the preparations. 
-Huh…I wonder if Sakura is in her room. 
+…But it's kind of boring here. I should go give everyone a hand with the preparations. 
+Huh… I wonder if Sakura is in her room. 
 Why don't I go check somewhere else. 
-…looks like she's not here. She's probably helping everyone else get ready. 
-Hmm…I wonder if Kanna is in her room? 
+…Looks like she's not here. She's probably helping everyone else get ready. 
+Hmm… I wonder if Kanna is in her room? 
 Guess I'll head somewhere else. 
-…nope. She probably hasn't come back yet. 
+…Nope. She probably hasn't come back yet. 
 Hmm… I wonder if Maria is in her room? 
 Why don't I go check somewhere else. 
-…looks like she's not here. She's probably helping everyone else get ready. 
+…Looks like she's not here. She's probably helping everyone else get ready. 
 I wonder if Iris is on her way back… 
 OK, guess I'll head somewhere else. 
-…looks like she's not here. She's probably helping everyone else get ready. 
+…Looks like she's not here. She's probably helping everyone else get ready. 
 I wonder if Sumire is inside. 
 No sense standing around here. I should get going. 
 …Seems there's no one here. 
@@ -68,7 +68,7 @@ There's no one here. All the guests have left for the day.
 No sense standing around here. I should get going. 
 Maybe I should take a little afternoon nap… 
 …Actually, I should really be helping everyone else get ready. 
-…there's no one here. Everyone is probably getting things ready for the party… 
+…There's no one here. Everyone is probably getting things ready for the party… 
 No sense standing around here. I should get going. 
 No matter when I come here it's always a disaster. 
 No sense standing around here. I should get going. 
@@ -89,7 +89,7 @@ Nothing to do here. I'll check somewhere else.
 I can still feel the energy from the performance in the air. 
 …I should probably get moving. 
 There's all kinds of stuff stashed here, same as always… 
-…but it looks like no one's here. I should head somewhere else. 
+…But it looks like no one's here. I should head somewhere else. 
 Seeing all this exercise equipment reminds me of my days training at the officers' school. 
 No sense standing around here reminiscing. I should head somewhere else. 
 The air is kind of chilly. It feels nice. 
@@ -98,8 +98,8 @@ The Koubu are all ready to launch at a moment's notice.
 No one's around… guess I'll head somewhere else. 
 There's no one here… 
 Should I check another room? I came here kind of absentmindedly. 
-…there's no one here. Everyone is probably getting things ready for the party… 
-…no sense standing around here. I'll go elsewhere. 
+…There's no one here. Everyone is probably getting things ready for the party… 
+…No sense standing around here. I'll go elsewhere. 
 I've heard these medical pods can move using the underground steam engine if the situation calls for it… 
 …I just pray we won't ever need to use them… 
 Everyone gets together here before we sortie. 
@@ -109,25 +109,25 @@ We hold our strategy meetings here, and this machine displays all sorts of infor
 Nobody here. Off to somewhere else. 
 Oh, Ogami. Welcome. 
 Let's talk about something fun. 
-Alright. 
+All right. 
 Do you need me for anything? 
 (She's got her scarf pinned with a brooch.) 
 (I wonder what it's made of… Couldn't be a real jewel, right?) 
-…are you interested in this brooch? Oh, hey, listen to this, I actually got it super cheap at a bargain sale. 
-…… 
-(The way Yuri's hair curls away from her face is one of her charm points…) 
+…Are you interested in this brooch? Oh, hey, listen to this. I actually got it super cheap at a bargain sale. 
+… 
+(The way Yuri's hair curls away from her face is so charming…)
 (That bouncy look is pretty trendy.) 
-Is something odd about my hair? Oh no~! I've got some split ends! 
+Is something odd about my hair? Oh nooo, I've got some split ends! 
 (She's got a nice, small face. I think even a model would be jealous…) 
 (It doesn't seem like she uses much make-up. Well, she's got a nice foundation, I don't think she needs it…) 
-What's the matter, Ogami? You're staring at my face… Oh, I see. You've fallen for me, right? 
-Hey, you shouldn't tease your elders! 
-Hehehe… sorry, Ogami. 
+What's wrong, Ogami? You've been staring at my face for a while. Haha, you're in love with me, aren't you! 
+Hey, you shouldn't be teasing an adult. 
+Hehehe… Sorry, Ogami. 
 (Her eyes are shining with curiosity.) 
 (Yumi's got a reputation for loving juicy gossip…) 
 Hey, Ogami. Have you heard any good rumors lately? 
 (Her clothes are pretty colorful.) 
-Do you like this outfit? It's called the 'bus guide' look. It's really popular right now. 
+Do you like this outfit? It's called the “bus guide” look. It's really popular right now. 
 (Goodness… that's certainly an aggressive neckline…) 
 (But… isn't this supposed to be a uniform?) 
 Ahaha, Ogami. I see you've been stricken by my allure~! 
@@ -162,24 +162,24 @@ Maria's fans basically fall into two groups. Either they're young students or gi
 Looks like you and Iris have been hitting it off lately, Ogami. 
 It's pretty obvious what makes Iris popular. Most of her fans are older folks. 
 Ogami, seems like you've been pretty friendly with Kohran lately. 
-Honestly… I really don't get where Kohran-san's popularity comes from… 
+Honestly… I really don't get where Kohran's popularity comes from… 
 Seems like you've gotten pretty close to Kanna lately, huh, Ogami? 
 Kanna's really popular with children. 
 Do you need something? 
 (That ribbon in her hair… it really suits her.) 
-(I'd say that's a good charm point to go with Kasumi's mature looks.) 
+(It’s a charming look on someone as mature as Kasumi.) 
 (Not a hair out of place.) 
-(She really does have beautiful hair… she must spend a lot of time getting ready every day.) 
-(She's got such a serene expression on her face.) 
-(She looks nice, but I bet she's scary if you get her angry… She's kind of the reliable older sister type.) 
-…is something the matter, Ogami? 
+(She really does have beautiful hair… She must spend a lot of time getting ready every day.) 
+(Kasumi has a very calm expression…) 
+(She looks gentle, but I bet she's scary if you make her angry… she's kind of the reliable older sister type.) 
+…Is something the matter, Ogami? 
 Oh, no, it's nothing, Kasumi. 
 (There's a quiet, calm look in her eyes.) 
 (Kasumi always looks people right in the eyes when she talks to them.) 
 (Those traditional Japanese clothes look great on her.) 
-(Even though she's relaxed, I can't see any openings… I wonder if she's had martial training?) 
+(Her demeanor is so calm, but her movements have no openings I can see… I wonder if she has experience with martial arts.) 
 (Gotta love the chest areas on traditional Japanese clothes…) 
-…… 
+…
 (She's actually got quite a…) 
 Ogami! Please, I'd rather you didn't… 
 Oh, sorry… 
@@ -201,14 +201,14 @@ Are you done for the day, Tsubaki?
 Yep, and starting tomorrow I'm taking a few days off. 
 Oh, Ogami. Did you need something else? 
 (A shopkeeper's outfit. Tsubaki looks good in it.) 
-H-hey, Ogami! Where do you think you're looking? Stop! 
+H-Hey, Ogami! Where do you think you're looking? Stop! 
 Ogami… come on, don't stare at me like that. It's embarrassing. 
 Is there something on my face? 
 Thanks for your business! Come again! 
-Hello? … I see. Thanks for doing that. We've got our processor working on it too. 
+Hello?… I see. Thanks for doing that. We've got our processor working on it too. 
 I see, so they're wedges… OK, we'll try running that through our processor. 
 The Flower Division? Right now they're throwing a party, I think. They should be fine. 
-… yes. We should see some results soon… thanks… 
+…Yes. We should see some results soon… thanks… 
 I wonder if the manager is around. 
 I guess I'll try somewhere else. 
 Zzz… zzz… zzz… zzz… 
@@ -224,7 +224,7 @@ I… um…
 Hey Ogami. Once the party's over go buy me some drinks, OK? 
 Then bring it on down to the Command Room. I'll pay you back there. 
 Uh… OK. 
-Alright. Dismissed. 
+All right. Dismissed. 
 Yes, sir… Wait, what? Why the Command Room? 
 Is Ayame around? 
 I guess I'll try somewhere else. 
@@ -233,8 +233,8 @@ Oh, Ogami. Did you need me for something?
 Oh, yes. I wanted to speak with you. 
 …I'm afraid I'm a little busy right now. Sorry. 
 Dang it. I came here just to talk to her. 
-…oh well. Guess I'll head somewhere else. 
-It's Ogami…do you have a moment? 
+…Oh well. Guess I'll head somewhere else. 
+It's Ogami… do you have a moment? 
 Oh, Ogami? Come right in. How can I help you? 
 Excuse me. 
 Everyone's planning to throw a party, so I was wondering… 
@@ -243,7 +243,7 @@ You came here just to personally invite me? Why thank you, Ogami.
 I'm flattered, but unfortunately I still have reports I need to finish. Sorry. 
 I think you'll all have more fun if us older folks stay out of it. 
 Don't say that! You're still way too young to be one of the 'older folks', Ayame. 
-Haha… well thank you, Ogami. You're quite talented at flattery. 
+Haha… Well thank you, Ogami. You're quite talented at flattery. 
 Setting that aside, is there anything you'd like to discuss, as the leader of the Flower Division? 
 Situation Report <br> Member Report <br> It's nothing 
 I'd like to hear about how our last battle impacted the area, please. 
@@ -265,7 +265,7 @@ Kohran's attack skills are weak, but she can do range attacks. Make sure you und
 As captain, you must provide support. Your aid is what will strengthen the unit's bonds. 
 We took a lot of damage… You need to take better care of your subordinates or you'll lose their trust. 
 We took far too much damage in that last battle. You need to make better use of everyone's talents. 
-If you keep handling battles this way… well, let's set that aside 
+If you keep handling battles this way… Well, let's set that aside 
 There were no casualties to the Flower Division. Well done, Ogami. 
 I think you made excellent use of the Flower Division during the Fukagawa battle. 
 Your evaluation of the battle and tactical decisions were spot on. 
@@ -278,10 +278,10 @@ The one with the most enemies shot down during the last battle was Sumire.
 Sumire's technique is especially powerful when she is surrounded by enemies. 
 However, that doesn't mean you should send her off alone. 
 The one with the most enemies shot down during the last battle was Maria. 
-Maria is great as a back-line fighter. She excels when she's firing over the shoulders on the front line. 
+Maria is perfect for the rear guard. She excels when she's firing over the shoulders of the front line. 
 With her skills, you can trust that she'll never accidentally hit an ally. 
 The one with the most enemies shot down during the last battle was Kanna. 
-Kanna has great attacks, so she can fight at the front line. However, this means she shouldn't be at the back. 
+Kanna has powerful attacks, so she can fight at the front line. However, her abilities are wasted if she is placed in the back.
 The one with the most enemies shot down during the last battle was Iris. 
 Since she is able to move around the battlefield freely, she might be best suited for supporting the others. 
 The one with the most enemies shot down during the last battle was Kohran. 
@@ -293,13 +293,13 @@ I think that's all there is to report about that. Did you need anything else?
 No, thank you, ma'am. 
 It seems Kanna and Sumire have changed somewhat since they returned. 
 You think so? I haven't really noticed anything. 
-Oh, they've definitely changed. I suppose they aren't showing on the surface, though. 
+Oh, they've definitely changed. I suppose they aren't showing it on the surface, though. 
 I think they've accepted one another, deep down… They've become a little more honest about their feelings. 
 And you're the one who brought about this change, Ogami. 
 Me? But I didn't do anything. 
 I wonder about that… hehe. 
 Keep up the good work, Ensign. 
-…doesn't look like Yuri's here. I think maybe she was helping a lost kid or something. 
+…Doesn't look like Yuri's here. I think maybe she was helping a lost kid or something. 
 I should try somewhere else. 
 Hey there, Ogami. We're finally done with the summer performance. 
 I'm on duty today. 
@@ -308,21 +308,21 @@ Aw man, that's too bad. Well, see you around.
 Do you need me for anything? 
 (She's got her scarf pinned with a brooch.) 
 (I wonder what it's made of… Couldn't be a real jewel, right?) 
-…are you interested in this brooch? Oh, hey, listen to this, I actually got it super cheap at a bargain sale. 
-…… 
-(The way Yuri's hair curls away from her face is one of her charm points…) 
+…Are you interested in this brooch? Oh, hey, listen to this, I actually got it super cheap at a bargain sale. 
+… 
+(The way Yuri's hair curls away from her face is so charming…) 
 (That bouncy look is pretty trendy.) 
-Is something odd about my hair? Oh no~, I've got some split ends! 
+Is something odd about my hair? Oh nooo, I've got some split ends!  
 (She's got a nice, small face. I think even a model would be jealous…) 
 (It doesn't seem like she uses much make-up. Well, she's got a nice foundation, I don't think she needs it…) 
-What's the matter, Ogami? You're staring at my face… Oh, I see. You've fallen for me, right? 
-Hey, you shouldn't tease your elders! 
-Hehehe… sorry, Ogami. 
+What's wrong, Ogami? You've been staring at my face for a while. Haha, you're in love with me, aren't you! 
+Hey, you shouldn't be teasing an adult.
+Hehehe… Sorry, Ogami. 
 (Her eyes are shining with curiosity.) 
 (Yumi's got a reputation for loving juicy gossip…) 
 Hey, Ogami. Have you heard any good rumors lately? 
 (Her clothes are pretty colorful.) 
-Do you like this outfit? It's called the 'bus guide' look. It's really popular right now. 
+Do you like this outfit? It's called the “bus guide” look. It's really popular right now. 
 (Goodness… that's certainly an aggressive neckline…) 
 (But… isn't this supposed to be a uniform?) 
 Ahaha, Ogami. I see you've been stricken by my allure~! 
@@ -347,7 +347,7 @@ I need to get out and buy some new clothing for the fall. I wonder what will be 
 Sumire hasn't been near the prop room ever since you guys went to Fukagawa. 
 Hmm? Why? 
 Well, think about it. There's stuff piled all over in that room. The kind of place you'd find… 
-…find what? Oh… Oh I get it. 
+…Find what? Oh… Oh I get it. 
 Looks like you and Sakura have been hitting it off lately, Ogami. 
 Sakura's popular with just about everyone. I think it's because she comes off as nice and approachable. 
 Ogami, seems like you've been pretty friendly with Sumire lately. 
@@ -418,32 +418,32 @@ You'd like to buy that? Thank you!
 Hmm… Kohran's fanbase is a bit of a mystery. 
 Well we should get things started. Where are we going to hold this party? 
 Why don't we do it in the green room? There are tatami mats in there, so it could be pretty relaxing. 
-Hm, holding a party in the green room after the performance is ended. I think that's a splendid idea. 
-Alrighty, I'll go grab some tables out of storage downstairs. 
+Hm, holding a party in the green room after the performance has ended. I think that's a splendid idea. 
+All righty, I'll go grab some tables out of storage downstairs. 
 I'll go get started with the cooking. 
 Well I can hardly just laze around while you all work… 
 So I suppose I'll prepare the green room and set out the dinnerware. 
 OK. Iris, you help Sumire, please. 
 Oka~y! 
-As for me… well, don't you worry about what I'll be working on. 
+As for me… Well, don't you worry about what I'll be working on. 
 I'll go buy the drinks and snacks. 
 (Oh man… Sakura might still be upset from earlier… should I do something?) 
 Call out to her. <br> Go after her. 
-W, wait, Sakura. I… I wanted to talk to you. 
+W-Wait, Sakura. I… I wanted to talk to you. 
 …I'm listening. 
 Whoa. What the heck happened? Where'd all this tension come from? 
 Sorry, everyone. I'll come help out after we talk, but could you leave us alone for a minute? 
 Hmmm. Seems like the Ensign wants some alone time with Sakura. I suppose we'd best get out of their way. 
 Captain… 
-…alright, let's give them some space, everyone. 
-…alright everyone, let's move it. Guess the Boss wants some alone time with Sakura. 
+…All right, let's give them some space, everyone. 
+…All right everyone, let's move it. Guess the Boss wants some alone time with Sakura. 
 How come you're being all secret with Sakura, Mon Frère? Hmph, I don't care! …Let's go, everyone! 
-R-roger that, Chief… C'mon folks, let's give these two some room. 
+R-Roger that, Chief… C'mon folks, let's give these two some room. 
 OK, it's just the two of us… Listen, Sakura, about what happened earlier… 
 Oh, uh, thanks… 
 Tsubaki was quite busy today, right? I just thought it would be nice to treat her to dinner. 
 I promise I had the purest of intentions. 
-…oh I know. Good grief, what's wrong with me? I jumped to some awful conclusions… 
+…Oh I know. Good grief, what's wrong with me? I jumped to some awful conclusions… 
 So… are we OK? 
 Yes. I believe we are. 
 Phew, glad that's over. Honestly I was hoping we could smooth things over quickly. 
@@ -454,13 +454,13 @@ OK, see you.
 I'm heading out! 
 Well… guess I'd better go help out too. 
 Sakura! Wait! I need to talk to you! 
-O.. Ogami? 
-*Pant pant*… S-Sakura… about what happened earlier… 
+O-Ogami? 
+*pant, pant*… S-Sakura… about what happened earlier… 
 Oh, uh, thanks… 
 Well… see, the truth is… 
 Tsubaki was quite busy today, right? I just thought it would be nice to treat her to dinner. 
 I promise I had the purest of intentions. 
-…so that's what that was. I'm sorry. I… jumped to some conclusions. 
+…So that's what that was. I'm sorry. I…jumped to some conclusions. 
 So… are we OK? 
 Yes. I believe we are. 
 Phew, glad that's over. Honestly I was hoping we could smooth things over quickly. 
@@ -470,19 +470,19 @@ Oh no! I need to hurry and get the shopping done! I'll see you later, Ogami.
 OK, see you. 
 I'm heading out! 
 Well… guess I'd better go help out too. 
-…… 
+… 
 …I'd better get going. 
-Alright! See you later! 
+All right! See you later! 
 We should get started ourselves. 
 (Damn… I missed my chance to explain things to Sakura…) 
-Um…Ogami. 
+Um… Ogami. 
 S-Sakura!? I thought you left to go shopping… 
 Well… I wanted to talk to you about what happened with Tsubaki… 
-W, wait, please let me explain about that! 
+W-Wait, please let me explain about that! 
 Oh, uh, thanks… 
 Tsubaki was quite busy today, right? I just thought it would be nice to treat her to dinner. 
 I promise I had the purest of intentions. 
-…oh, I know. Heavens, what's wrong with me? I jumped to some awful conclusions… 
+…Oh, I know. Heavens, what's wrong with me? I jumped to some awful conclusions… 
 So… are we OK? 
 Yes. I believe we are. 
 Phew, glad that's over. Honestly I was hoping we could smooth things over quickly. 
@@ -498,14 +498,14 @@ Help Sakura with the shopping. <br> Help someone else. <br> Wait in my room.
 I'll help with the shopping. Mind if I join you, Sakura? 
 Really? Thanks, I could use the help. 
 That's probably a good idea. It looks like we might get some evening showers. 
-…what? It, it's going to rain? Um, listen Ogami, I think I'll be fine on my own! 
-Whoa… what's the matter? 
-If it rains, then my… you know what, never mind that. 
-I'll just get going… excuse me! 
+…What? It… It's going to rain? Um, listen Ogami, I think I'll be fine on my own! 
+Whoa… What's the matter? 
+If it rains, then my… You know what, never mind that. 
+I'll just get going… Excuse me! 
 What's up with Sakura? She seemed awful jumpy about something. 
 Well whatever, let's get started setting up for the party. Get to it, folks! 
 Well… guess I'd better go help out too. 
-Alright, I'll lend a hand to whoever could use one. 
+All right, I'll lend a hand to whoever could use one. 
 I'll get started on the shopping. See you! 
 Take care. It looks like rain. 
 Well, I guess I'll go crash in my room until everything's ready… 
@@ -516,20 +516,20 @@ And certainly don't party either!
 Oh come on, Mon Frère! Even I'm helping out! Don't be lazy! 
 Everyone's right, sir. 
 I can't prevent you from taking a break, but please try to remember your position as leader. 
-Alright everyone, get to your tasks. Once everything's ready, we'll meet up at the green room. 
+All right everyone, get to your tasks. Once everything's ready, we'll meet up at the green room. 
 Well, that could have gone better… What should I do now? 
-Alright everyone, get to your tasks. Once everything's ready, we'll meet up at the green room. 
-…huh…? Crap, everyone took off while I was spacing out. 
+All right everyone, get to your tasks. Once everything's ready, we'll meet up at the green room. 
+Huh…? Crap, everyone took off while I was spacing out. 
 Well… what should I do now? 
 Hey Chief, mind giving me a hand? 
 Sure, what do you need? 
 Don't sweat the details! Just follow me to my room, OK? 
-…alright. 
+…All right. 
 OK, let's go! 
 Hey Chief, if you're looking for something to do, would you mind giving me a hand? 
 Sure, what do you need? 
 Don't sweat the details! Just follow me to my room, OK? 
-…alright. 
+…All right. 
 OK, let's go! 
 Hey Boss, could you help me out? 
 Sure, I'm happy to help with anything that needs some extra muscle! I'll try not to slow you down! 
@@ -553,33 +553,33 @@ Ensign, would you and Iris please bring the cups and other utensils we'll need f
 Just a moment… I'll write down everything we need. 
 OK, so I just need to get the stuff on this note, right? 
 Correct. 
-…are you thinking dirty thoughts again, Mon Perv? 
-…Frère what? Ensign, what is she talking about? 
+…Are you thinking dirty thoughts again, Mon Perv? 
+…What? Ensign, what is she talking about? 
 Wha!? Uh, it's nothing! 
 …I see. At any rate, as far as what we need for the party… 
 Ensign, would you and Iris please bring the cups and other utensils we'll need for the party? 
 Just a moment… I'll write down everything we need. 
-…here you go, Iris. Please bring the things written on this note. 
-…and here are your assignments, Ensign. 
+…Here you go, Iris. Please bring the things written on this note. 
+…And here are your assignments, Ensign. 
 Hm, let's see… cups, knives, and matches. 
 Most of this stuff should be in the kitchen. 
-Alright you two, I'm leaving this in your hands. 
+All right you two, I'm leaving this in your hands. 
 Once you have everything, please bring it all to the green room. 
 I'll be getting the room ready. 
 Let's go, Mon Frère! 
-Alright. See you at the green room. 
-…and here is your list, ENSIGN. 
+All right. See you at the green room. 
+…And here is your list, ENSIGN. 
 Oh, uh, thanks… 
 …Sumire looks su~per mad. Did you say something weird to her, Mon Frère? 
-Uh, no, of course not… let's see here, what's on my list… 
+Uh, no, of course not… Let's see here, what's on my list… 
 Hm, let's see… cups, knives, and matches. 
 Most of this stuff should be in the kitchen. 
-Alright you two, I'm leaving this in your hands. 
+All right you two, I'm leaving this in your hands. 
 Once you have everything, please bring it all to the green room. 
 I'll be getting the room ready. 
 Let's go, Mon Frère! 
-Alright. See you at the green room. 
-…hey, Mon Frère? 
+All right. See you at the green room. 
+…Hey, Mon Frère? 
 Hm? Oh, what's up, Iris? 
 Do you want to pair up with me? Come on, let's be partners! 
 Hahaha, sure! So, what should I do? 
@@ -590,25 +590,25 @@ Yep! Once you get everything, bring it to the green room.
 Here's your list. I'm counting on you, Mon Frère. 
 Hmm, let's see… cups, knives and matches. 
 I'd say most of that should be in the kitchen. 
-Oh! Wait just a sec Mon Frère! 
+Oh! Wait just a sec, Mon Frère! 
 Whoa! What's the matter, Iris? Did you forget to tell me something? 
-Yeah. Um… thanks for being my partner, Mon Frère! 
-Hehe… see you, Mon Frère! 
-…and there she goes. Well, guess I'd better go grab these things on the list. 
+Yeah. Um… Thanks for being my partner, Mon Frère! 
+Hehe… See you, Mon Frère! 
+…And there she goes. Well, guess I'd better go grab these things on the list. 
 Well then, perhaps I'll ask you to lend me a hand, Ensign! 
-…sure. 
-What on Earth? May I ask where that lukewarm response came from? 
+…Sure. 
+What on earth? May I ask where that lukewarm response came from? 
 Oh, uh, it's nothing. 
 I see. Well, let's discuss our tasks for the party. 
 I'll be getting the green room ready. Would you two help me with that? 
 OK, what can I do? 
 Could you bring the cups, plates and other dinnerware we'll be needing? 
 Wait just a moment, I'll write you a list of what we need. 
-…here you go, Iris. Please bring the things written on this note. 
+…Here you go, Iris. Please bring the things written on this note. 
 Oka~y! Later Sumire! Later Mon Frère! 
 Well, shall we get started, Ensign? It should be quite easy with the two of us. 
-…well then, I suppose we should get started. 
-(…oh man, she's definitely not in a good mood…) 
+…Well then, I suppose we should get started. 
+(…Oh man, she's definitely not in a good mood…) 
 See you later, Sumire! 
 …I don't want to spend a single second with Mon Perv, so I'm gonna do this by myself. See you! 
 …Ensign, what did Iris mean by that? 
@@ -626,14 +626,14 @@ I believe I'll finish the preparations on my own, thank you very much!… Excuse
 Ah… S-Sumire! Dammit, now Iris AND Sumire are mad at me… 
 Not just mad… I don't think they'll forgive me anytime soon… 
 I wasn't peeping, I swear! You've gotta believe me! 
-…strange, that peeping should come into the conversation. Something you'd like to confess, Ensign? 
-Ehh?! W-well… 
+…Strange that peeping should come into the conversation. Something you'd like to confess, Ensign? 
+Ehh?! W-Well… 
 I'll hazard a guess. You decided to take a look at Iris while she was in the bath, am I correct? 
 I thought you were different from other men, that you would never betray our trust like this, clearly I was mistaken. 
 I believe I'll finish the preparations on my own, thank you very much!… Excuse me! 
 Ah… S-Sumire! Dammit, now Iris AND Sumire are mad at me… 
 Not just mad… I don't think they'll forgive me anytime soon… 
-…you don't intend to make any excuses? 
+…You don't intend to make any excuses? 
 No, I won't. I'm not going to lie. Please just listen, Sumire. 
 I was walking around in the basement when I heard Iris scream from the bathroom… 
 I ran in to see what was the matter, and Iris took it as me coming to peep. 
@@ -642,21 +642,21 @@ I'm telling the truth, I swear! That's all that happened!
 Well, without hearing Iris's version, I can't pass judgment, but… 
 You don't seem to be lying… I suppose I'll believe your story, for now. 
 (Phew… I'm glad I decided to be honest.) 
-…well, we've spent quite a bit of time talking. Let's go get started on the green room, Ensign. 
+…Well, we've spent quite a bit of time talking. Let's go get started on the green room, Ensign. 
 Ensign, a moment if you please? 
 Sure, what do you need? 
 Would you help me get the green room ready? 
 Of course, I'd be happy to help. 
 Oh thank you! I wasn't too pleased to be stuck with getting that room ready. 
-But if you're with me, I think it will be quite a pleasant. 
+But if you're with me, I think it will be quite pleasant. 
 Well, thank you very much. Shall we head over to the green room? 
 Yes, let's. 
-… sir, might I ask you to help me with the cooking? 
+…Sir, might I ask you to help me with the cooking? 
 The c-cooking!? I'm not proud of it but… I suck at cooking. 
 Don't worry, I'll teach you. Would that be unacceptable, sir? 
 Oh, no, I mean if you're going to go that far I don't mind. Just don't blame me if it turns out terrible. 
 Thank you. Shall we head to the kitchen? 
-…sir. 
+…Sir. 
 …Oh, Maria. Weren't you going to go get started on the cooking? 
 Well, yes, but… Would you mind lending me a hand, sir? 
 Me? Cooking!? I'm not proud of it but… I suck at cooking. 
@@ -664,12 +664,12 @@ Don't worry, I'll teach you. Would that be unacceptable, sir?
 Oh, no, I mean if you're going to go that far I don't mind. Just don't blame me if it turns out terrible. 
 I actually didn't know you had a talent for cooking, Maria. 
 Between that and what happened in the wardrobe room, I'm seeing all sorts of new sides to you today… 
-S-sir! I believe I asked you to forget about that, did I not!? 
+S-Sir! I believe I asked you to forget about that, did I not!? 
 Hey, it's nothing to be ashamed of. 
 I'm kind of glad I got to see your girly side. 
 Oh sir, please don't tease me. 
-A-anyway… let's head for the kitchen. 
-Thank you, sir! …Let's make our way to the kitchen. 
+A-Anyway… let's head for the kitchen. 
+Thank you, sir! Let's make our way to the kitchen. 
 I will take care of cleaning the floor if you see to arranging the room itself, Ensign. 
 There are props from the performance scattered here and there, would you please return them to their proper room? 
 Roger that. Let's see… I'll take these swords and other props first. 
@@ -702,7 +702,7 @@ Uh, yeah! Sorry!
 Well you seem to have your hands free, staring off into space like that, so why don't you help me. 
 Hey, I never said I was fr-… 
 No excuses! Come here and get to work! 
-Y-yes, ma'am! 
+Y-Yes, ma'am! 
 Good grief, we're finally done. 
 Yes. All that's left now is to await the party. 
 Ensign, could you please check how they're doing? 
@@ -711,22 +711,22 @@ Looks like the green room is all ready.
 Yes. All that's left now is to await the party. 
 Ensign, could you please check how they're doing? 
 OK, I'll do that. 
-Alright, we're at your room. Do I get to hear what we're working on now? 
-…nothing that's going to explode like last time, I hope? 
+All right, we're at your room. Do I get to hear what we're working on now? 
+…Nothing that's going to explode like last time, I hope? 
 Oh don't you worry, Chief. This time there won't be any explosions. 
-But… Hmm… Lemme think for a sec. 
-…actually, Chief, I think I'm good. You don't need to help. 
+But… Hmm, lemme think for a sec. 
+…Actually, Chief, I think I'm good. You don't need to help. 
 Huh? Why'd you change your mind? 
 Well, ya see I was hoping to do a little show for the party, and I wanted to practice. 
 I was hoping to give you a preview and get your thoughts on it, but… 
 All of a sudden I'm feelin' shy. I think I'll just practice on my own. You just wait for the real thing. 
 Oh come on, show me! <br> I look forward to seeing it. <br> Gonna do a striptease? 
 Oh come on, show me! I'd love to see it. 
-Well thanks, Chief, but… nah, I just can't do it for ya right now. 
+Well thanks, Chief, but… Nah, I just can't do it for ya right now. 
 I got a lot to get ready, too… You'll just have to wait for the real thing. 
 I'd better get to it. See ya at the party. 
 Hmm… I wonder what kind of performance it's going to be. 
-…Alright, I look forward to seeing it. 
+…All right, I look forward to seeing it. 
 Thanks, Chief! Sorry for dragging you all the way here just to give you the boot. 
 Well, you'd better just be sure the performance lives up to the hype. 
 C'mon Chief, don't make me more nervous than I already am! 
@@ -734,8 +734,8 @@ I'd better get to it. See ya at the party.
 Hmm… I wonder what kind of performance it's going to be. 
 Oh, a hidden talent, huh? You gonna do a striptease or something? 
 You got a screw loose or something, Chief? 
-Alright, get outta here! I've got a lot of prepping to do. Why don't YOU go practice a nice striptease, Chief? 
-…aw, come on, at least let me know what kind of performance it's going to be. 
+All right, get outta here! I've got a lot of prepping to do. Why don't YOU go practice a nice striptease, Chief? 
+…Aw, come on, at least let me know what kind of performance it's going to be. 
 Nope. Sorry for dragging you all the way here just to give you the boot, but shoo! 
 Hmm… I wonder what kind of performance it's going to be. 
 This is Kohran's room. 
@@ -743,33 +743,33 @@ No answer… I guess she's not here.
 Sorry, I'm super busy right now. If you need something, come back later, OK? 
 Coming! Wait just a sec. 
 Oh, hey Chief! What's up? 
-… Oh, hey Chief. Weren't you helping out Sakura? 
-… Oh, hey Chief. Weren't you helping out Sumire? 
-… Oh, hey Chief. Weren't you helping out Maria? 
-… Oh, hey Chief. Weren't you helping out Kanna? 
-… Oh, hey Chief. Weren't you helping out Iris? 
+…Oh, hey Chief. Weren't you helping out Sakura? 
+…Oh, hey Chief. Weren't you helping out Sumire? 
+…Oh, hey Chief. Weren't you helping out Maria? 
+…Oh, hey Chief. Weren't you helping out Kanna? 
+…Oh, hey Chief. Weren't you helping out Iris? 
 I thought I'd lend a hand. <br> Oh, never mind. 
 Well, I thought I'd come give you a hand… Can I help? 
-Oh, really? Wow! That… makes me really happy. 
-…but, sorry Chief. I don't really have anything I need help with. 
+Oh, really? Wow! That…makes me really happy. 
+…But, sorry Chief. I don't really have anything I need help with. 
 Seriously? I can move stuff or whatever. Don't be shy, just tell me what you need. 
 Nah, all I'm doing is practicing my performance for the party. 
 So there's nothing I need help with. If you saw my performance now there'd be no surprise for the party, right? 
 Sorry. Thanks for coming to check on me though. 
-… OK. Well I'm sorta in the middle of something so I'll see ya later. 
-Hmm… what's she doing in there? 
+…OK. Well I'm sorta in the middle of something so I'll see ya later. 
+Hmm… What's she doing in there? 
 Hey Chief, now really isn't the time for jokes. 
 I'm super busy here, so if you don't need me for anything I'll see you later! 
-… Whoa, she's still in a really bad mood. 
+…Whoa, she's still in a really bad mood. 
 What're ya going all quiet for? Weirdo. 
 Listen, I'm super busy so I'll see ya later, Chief. 
 'Super busy'? What's she doing in there? 
 Ensign, are you done putting away the props? 
 Oh, uh, no. Sorry, I'm not done yet. 
-I… see. Was it too difficult for you? 
+I…see. Was it too difficult for you? 
 Never mind. Do it later. The party is already beginning. 
 Come in, Ensign. Kohran is already kicking things off. 
-Ensign! What on Earth took you so long? Are you done putting away the props? 
+Ensign! What on earth took you so long? Are you done putting away the props? 
 Uh…no, sorry. 
 You aren't? What have you been doing this whole time? 
 Well… I got a little sidetracked. 
@@ -779,15 +779,15 @@ Ensign, are you done putting away the props?
 Yep, finally. Sorry, it took me a while. 
 Well thank you, it was a big help. 
 The party is already starting, Ensign, so please come inside. 
-…oh, were you waiting for me? 
-Hahaha… of course. What else would you expect from a lady of my caliber…? 
+…Oh, were you waiting for me? 
+Hahaha… Of course. What else would you expect from a lady of my caliber…? 
 …Thank you. 
 You're very welcome. Well, Ensign, shall we? 
-… Ensign, I think perhaps you are over-estimating yourself. 
+…Ensign, I think perhaps you are overestimating yourself. 
 Oh, yeah… sorry. 
 The party is starting. Please, go on inside. 
 Hey, come to think of it, has Sakura made it back from doing the shopping yet? 
-…she hasn't returned yet. Honestly, that girl. Where on Earth could she be? 
+…She hasn't returned yet. Honestly, that girl. Where on Earth could she be? 
 (Sakura's pretty late… I wonder what she's doing.) 
 Iris, sorry to keep you waiting! I brought the cups, knives and matches! 
 Thanks, Mon Frère! I was waiting here for you the whole time! The party's already starting. 
@@ -797,15 +797,15 @@ Thanks, Iris. Sorry I took so long.
 Hehe, stop Mon Frère, I'm blushing. C'mon, let's go in! 
 What took you so long, Mon Frère? Did you bring the cups and things you were supposed to? 
 Well, yeah, I brought it all. Sorry for taking so long, Iris. 
-…… 
+.. 
 I've been acting mean this whole time, but you helped me and got the things I asked… 
 I'm sorry for saying so many mean things to you, Mon Frère. 
 Nah, it's OK. I'll just be glad if we can be friends again and put this all behind us. 
-Come on, let's go inside. You're probably hungry, right. 
+Come on, let's go inside. You're probably hungry, right? 
 Yeah! I'm starving! Let's go, Mon Frère! 
 Sorry, Iris… I haven't found everything yet. 
 What? Are you kidding? It's all right there in the kitchen! 
-The kitchen? …Of course! OK, I'll go get it all right now. 
+The kitchen?… Of course! OK, I'll go get it all right now. 
 Oh forget about it! I just want you here, Mon Frère! 
 Everyone's waiting for us. Let's go inside! 
 Hey, come to think of it, has Sakura made it back from doing the shopping yet? 
@@ -819,17 +819,17 @@ Oh, Ensign, I wouldn't be so cold as to start the party without you.
 So you waited for me. Thank you. 
 You're very welcome. Well, Ensign, shall we? 
 Hey, come to think of it, has Sakura made it back from doing the shopping yet? 
-…she hasn't returned yet. Honestly, that girl. Where on Earth could she be? 
+…She hasn't returned yet. Honestly, that girl. Where on Earth could she be? 
 (Sakura's pretty late… I wonder what she's doing.) 
 Well you were taking your sweet time to arrive, so I thought I would go see where you were. 
 So you were waiting for me. Sorry. 
 You're very welcome. Well, Ensign, shall we? 
 Hey, come to think of it, has Sakura made it back from doing the shopping yet? 
-…she hasn't returned yet. Honestly, that girl. Where on Earth could she be? 
+…She hasn't returned yet. Honestly, that girl. Where on Earth could she be? 
 (Sakura's pretty late… I wonder what she's doing.) 
 Ah… Captain. Everyone's already inside. You should head in as well. 
 Nice, the party's finally starting. Can't wait to get in there and relax. 
-…wait, how come you're out here, Maria? 
+…Wait, how come you're out here, Maria? 
 I didn't feel comfortable relaxing knowing you were still out getting things ready, sir. 
 Aw, you didn't have to do that for me. Thanks, Maria. 
 Oh, it was nothing. 
@@ -839,7 +839,7 @@ Though… I'm worried that Sakura hasn't returned yet.
 (Maria's right, Sakura definitely should have been back by now…) 
 I didn't feel comfortable relaxing knowing you were still out getting things ready, sir. 
 Oh, well thanks for waiting for me, Maria. 
-Not at all… it's not something you need thank me for. 
+Not at all… it's not something you need to thank me for. 
 Though… I'm worried that Sakura hasn't returned yet. 
 (Oh that's right, Sakura went out to do the shopping…) 
 (Maria's right, Sakura definitely should have been back by now…) 
@@ -866,15 +866,15 @@ I see…
 (Sakura's pretty late… I wonder what she's doing.) 
 Iris… what are you doing out here? 
 …Mon Frère, the party already started. 
-…are you still mad at me? 
-…no. I… I want to be friends again, Mon Frère. 
+…Are you still mad at me? 
+…No. I… I want to be friends again, Mon Frère. 
 I don't want to fight with you and spoil the party. 
-Iris…… 
+Iris… 
 Sorry, Mon Frère… I've said a lot of mean things to you. 
 You don't hate me, do you? 
 Don't worry about it, Iris. I'm the one who should be apologizing. 
 Well, I'm guessing you're hungry. Shall we go inside and get something to eat? 
-Y-yeah! *Sniffle… I'm glad we're friends again. 
+Y-Yeah! *sniffle*… I'm glad we're friends again. 
 Hey, come to think of it, has Sakura made it back from doing the shopping yet? 
 I don't think so. 
 I see… 
@@ -895,7 +895,7 @@ Hey Kohran. What are you doing out here?
 I was waiting for you, duh! 
 Oh, thanks. What's with that plate in your hand? 
 This? Oh, haha… it's a secret. 
-You'll just have to wait and see. Alright, c'mon Chief, let's get inside! 
+You'll just have to wait and see. All right, c'mon Chief, let's get inside! 
 Hey, come to think of it, has Sakura made it back from doing the shopping yet? 
 Nope… haven't seen her around. She's not in the green room either. 
 I see… 
@@ -907,7 +907,7 @@ Sumire wrote a list of the stuff I need to bring.
 But there's 2 pages, so I thought we could split it, half and half. 
 Sorry, I'm busy. <br> Sure, I'll help you! 
 I really want to help, but I've got other things I need to do. Sorry, Iris. 
-…*sniff* That's OK if you've got other stuff to do. I'll be OK on my own. 
+*sniff*… That's OK if you've got other stuff to do. I'll be OK on my own. 
 I'm really sorry. I'll see you at the party. 
 Got it. OK, so I just need to grab the things on this list, right? 
 Yep! Once you get everything, bring it to the green room. 
@@ -915,7 +915,7 @@ Here's your list. I'm counting on you, Mon Frère.
 Hmm, let's see… cups, knives and matches. 
 I'd say most of that should be in the kitchen. 
 Oh yeah, Mon Frère! 
-Whoa, you startled me! Wh-what is it, Iris? 
+Whoa, you startled me! Wh-What is it, Iris? 
 I'm really happy you're helping me. Thank you so much. 
 Hahaha, she's so excited she took off running. Well, guess I'd better look for this stuff. 
 … 
@@ -929,7 +929,7 @@ Oh look, it's Mon Perv.
 Uh, listen… are you still angry about that? 
 Of course I am! You were peeping on me in the shower! 
 Well, you're just so cute… <br> You've got it all wrong! 
-…well, it's just I think you're so adorable, and… 
+…Well, it's just that I think you're so adorable, and… 
 I wasn't in control of my own actions. Before I knew what was happening, I was in the shower room. 
 When I thought about you being there in the shower… I just lost control. 
 Oh, Mon Frère… If that's what happened, I guess I can forgive you… 
@@ -942,12 +942,12 @@ Scream…? Did I scream…?
 Oh, you mean when I mixed up the hot and cold water? I guess I sorta screamed… 
 That must have been it! I was just worried about you! Please believe me! 
 OK. I should have known you weren't the kind of boy who peeks in the shower… 
-…sorry for not believing you, Mon Frère. 
+…Sorry for not believing you, Mon Frère. 
 Oh, you don't need to apologize. It was my fault too. But I'm glad to see you back to normal. 
 By the way, what are you getting ready for the party? 
 … 
 What's the matter, Mon Frère? 
-I just figure you won't believe me, no matter what I say. 
+I just figured you won't believe me, no matter what I say. 
 I didn't go there to see you in the shower. That's the truth. But… I know you don't believe me. 
 Mon Frère… 
 It just really gets me down, thinking that a member of my own squad doesn't trust me… 
@@ -975,7 +975,7 @@ Oh, hello sir. Thank you for earlier. How are your preparations coming?
 Well, I could probably speed up a little. How are you doing? 
 Good. I believe I should be done soon. 
 I'm looking forward to it. Let's make this a great party. 
-Oh, hello sir. How are you preparations coming along? 
+Oh, hello sir. How are your preparations coming along? 
 Well, I could probably speed up a little. How are you doing? 
 Good. I believe I should be done soon. 
 I'm looking forward to it. Let's make this a great party. 
@@ -992,7 +992,7 @@ Oh, hello sir. How are your preparations coming along?
 Well, I could probably speed up a little. How are you doing? 
 Good. I believe I should be done soon. 
 I'm looking forward to it. Let's make this a great party. 
-Alright, sir, shall we get started with the cooking? 
+All right, sir, shall we get started with the cooking? 
 Sure, Maria. What do you need me to make? 
 I thought I'd have you make some borscht, in other words… 
 Borscht…? <br> That's a Russian stew, right? <br> That's a Russian bread, right? 
@@ -1000,24 +1000,24 @@ Borscht…? I've never heard of a dish called that.
 Borscht is a type of Russian stew where you boil the meat nice and slow. 
 You don't see it often in Japan, but it's delicious. 
 From a Japanese perspective, I guess it's sort of like miso soup? 
-…well, it's a bit different, but I suppose it's similar in that it's a distinctive local dish. 
+…Well, it's a bit different, but I suppose it's similar in that it's a distinctive local dish. 
 That's right, sir. You're just as cultured as I expected. 
 That said, I've never actually seen it or tasted it. 
 I'm looking forward to seeing what kind of stew you create. 
 That's a type of bread from Russia, right? Oh man, that stuff is delicious. 
-…that's incorrect, sir. Borscht is a type of Russian stew. 
+…That's incorrect, sir. Borscht is a type of Russian stew. 
 Oh… oh. I see. 
 Uh, well, I think I must have gotten it mixed up with something else. Ha ha… hahaha… 
 It's unsightly to pretend to know something you do not, sir. 
-…you're right. I'm sorry. 
+…You're right. I'm sorry. 
 No need to think about it that hard, sir. 
 Just think of it as a type of stew. I'll teach you how to make it. 
 OK. I'll follow your instructions. 
-Alright, let's get started. I'm going to make some pirozhki. That's a type of Russian bread. 
+All right, let's get started. I'm going to make some pirozhki. That's a type of Russian bread. 
 Wait a second. I thought you just said you were going to teach me how to make this!? 
-Of course I will. I will instruct you while I make the pirozhki. 
-We're making food for quite a large group, so we'll both need to work at it. 
-I get that, but… that'll only work if I don't mess anything up. 
+Of course I will. I’ll instruct you while I make the pirozhki. 
+We're making food for quite a large group, so we'll need to divide the work. 
+I get that, but…that'll only work if I don't mess anything up. 
 Oh, don't worry, sir. No matter how it turns out I'm sure everyone will be happy to eat your hand-made food. 
 Well, let's both work hard and make some delicious food for everyone! 
 Oh my, sir, you're very good at cooking! I mean no offense, but I'm honestly surprised. 
@@ -1034,7 +1034,7 @@ I'm sure everyone who eats it will be able to sense that.
 Thanks, that makes me feel a little better. 
 But, I had no idea you were skilled at this kind of cooking, Maria. 
 Between this and that thing in the dressing room, I'm seeing all sorts of new sides to you today. 
-S-sir! You promised to keep that a secret!! 
+S-Sir! You promised to keep that a secret!! 
 Ahaha, I know, I know. Well, I'm looking forward to your cooking. I'm heading out. 
 Sir, I'm serious, please don't tell anyone about that. 
 Surprised, sir? Pirozhki and borscht are classic dishes of Russia, my homeland. 
@@ -1048,14 +1048,14 @@ OK, got the knives. Next is matches. Where might they be?
 Sir, the matches are over here. Here you are. 
 Oh, Maria, I didn't realize you were here. OK, that's everything. Thanks. 
 Oh, Maria, you're cooking some food for the party, right? 
-That's correct. Though, cooking for 6 is more difficult than I expected. 
+That's correct. Though, cooking for six is more difficult than I expected. 
 Want me to help out? <br> I'm looking forward to it. 
-Really? It would be a big help if you would join me. 
+Really? It would be a big help if you could assist me. 
 My cooking skills aren't exactly impressive, but if I can help out, I'd love to. 
 Thank you! Don't worry about your skills, I'll teach you everything you need to know! 
 Wow, a home-cooked meal by Maria, huh? I'm looking forward to it. 
 Thank you. I hope you find it to your liking. 
-…… 
+…
 Is something the matter, sir? 
 Oh, nothing, I just thought it smelled really good. 
 Hahaha, I suppose you're hungry, right? 
@@ -1066,7 +1066,7 @@ Please tell everyone I'll just be a little longer.
 OK. I'm really looking forward to trying out your cooking. 
 Good grief. Same as always, this place is just full of random junk. 
 You've got that right. Oh, there's a table over there. 
-Alrighty, here we go. Lift it up with me, one, two, three! 
+All righty, here we go. Lift it up with me, one, two, three! 
 Hup! OK, let's take it slow. 
 Hey Boss, you came just in time! I actually need to carry this table all the way to the green room. 
 It's a little too big for me to carry alone. 
@@ -1078,25 +1078,25 @@ I need to carry this table to the green room, but it's pretty heavy.
 Want some help? <br> Well, good luck. <br> Want me to call someone? 
 Want some help? 
 Really? That'd be great! These are the times when it's handy to have a man around! 
-Alrighty, here we go. Lift it up with me, one, two, three! 
+All righty, here we go. Lift it up with me, one, two, three! 
 Hup! OK, let's take it slow. 
 Oh. Well, good luck. 
-Uh, OK… not going to offer me a hand? 
+Uh, OK… Not going to offer me a hand? 
 Hey! It's Kanna and Mon Frère. Whatcha doing? 
 Hey Iris, you actually came at a good time. Use your powers to carry this table to the green room for me! 
 No problem! You just need this table in the green room, right? 
 Kay, here I go. Ya! 
-Whoa! Th, the whole table… I guess that's our Iris for you. 
+Whoa! Th-The whole table… I guess that's our Iris for you. 
 Thanks Iris, you're a lifesaver. 
 Unlike a certain person I could mention, you're actually helpful. 
 Well I didn't have to carry the table, but I feel kind of bad. 
-Hmm… looks pretty heavy. Should I call for some help? 
+Hmm… Looks pretty heavy. Should I call for some help? 
 Well that'd be nice, but everyone else is busy doing their own preparations. 
 Hey! It's Kanna and Mon Frère. Whatcha doing? 
 Hey Iris, you actually came at a good time. Use your powers to carry this table to the green room for me! 
 No problem! You just need this table in the green room, right? 
 Kay, here I go. Ya! 
-Whoa! Th-the whole table… I guess that's our Iris for you. 
+Whoa! Th-The whole table… I guess that's our Iris for you. 
 Thanks Iris, you're a lifesaver. 
 Alrighty Boss, I'm gonna run off and help out the others! 
 Man that kid's powerful. I'll have to remember to invite her next time I move. 
@@ -1106,23 +1106,23 @@ Hey! It's Kanna and Mon Frère. Whatcha doing?
 Hey Iris, you actually came at a good time. Use your powers to carry this table to the green room for me! 
 No problem! You just need this table in the green room, right? 
 Kay, here I go. Ya! 
-Whoa! Th-the whole table… I guess that's our Iris for you. 
+Whoa! Th-The whole table… I guess that's our Iris for you. 
 Thanks Iris, you're a lifesaver. 
 Unlike a certain person I could mention, you're actually helpful. 
 Well I didn't have to carry the table, but I feel kind of bad. 
-K-Kanna, are you alright? It's not too… heavy… is it? 
+K-Kanna, are you all right? It's not too…heavy…is it? 
 I'm fine. How about you, Boss? 
 (Good grief. I knew Kanna was strong, but she's not even showing any strain lifting this heavy of a table.) 
 Oh, Mon Frère! That table looks heavy. 
 Oh, uh, hi Iris. 
 Hey Mon Frère, want me to help? 
-Y-yes please. <br> No, I don't think so. <br> No… I'm… fine… 
-Y-yes please! 
+Y-Yes please. <br> No, I don't think so. <br> No… I'm…fine… 
+Y-Yes please! 
 Oh come on, Boss, don't be such a wimp. This is nothing. 
-Honestly Mon Frère, what would you do without me. 
+Honestly Mon Frère, what would you do without me? 
 Kay, here I go. Ya! 
 Ah! 
-Th-the whole table vanished! 
+Th-The whole table vanished! 
 Yep, I just made it 'te-le-port' to the green room. Easy as pie. 
 (Good grief, this kid has some amazing powers. I'll have to call her next time I need to move.) 
 No, I don't think you'd be able to help with this, Iris. 
@@ -1130,27 +1130,27 @@ Ahhh! You're treating me like a kid again!
 I can move that table super easy! Just you watch! 
 Kay, here I go. Ya! 
 Ah! 
-Th-the whole table vanished! 
+Th-The whole table vanished! 
 Yep, I just made it 'te-le-port' to the green room. Easy as pie. 
-We… we made it! 
+We… We made it! 
 I… I'm fine… 
 Attaboy Boss! Let's see those muscles. 
-Ha, just leave it to me… ha ha… hahaha. 
+Ha, just leave it to me… Ha ha… hahaha. 
 You look like you're really struggling though. 
-Alright, let's get this thing moved before my arms give-… I mean before the sun sets. 
-Hmm… what should I do? 
+All right, let's get this thing moved before my arms give-… I mean before the sun sets. 
+Hmm… What should I do? 
 Come on, Mon Frère, no need to be shy. It's OK to ask me for help! 
 Kay, here I go. Ya! 
 Ah! 
-Th-the whole table vanished! 
+Th-The whole table vanished! 
 Yep, I just made it 'te-le-port' to the green room. Easy as pie. 
-We… we made it! 
-Alright! That's it for the table preparations! 
+We… We made it! 
+All right! That's it for the table preparations! 
 Now we just need to wait for the food and silverware. 
-Alrighty, I'm gonna head off and help out the others. 
+All righty, I'm gonna head off and help out the others. 
 Ah! I was still in the middle of my job! I'll see you later, Mon Frère! 
 I should probably see if I can help someone too. 
-(Come to think of it, she said she was going to go grab a meal at Renga,) 
+(Come to think of it, she said she was going to go grab a meal at Renga.) 
 The shops are all closed today. I should head somewhere else. 
 Good work holding down the fort. Don't let it get you down. 
 I'm on duty today. 
@@ -1165,7 +1165,7 @@ There was no reason to come here. I'll go elsewhere.
 OK, just gotta leave this wig here… 
 The rest of the stuff should be in the prop room. I should head out. 
 All done. Guess I'll go meet up with Sumire. 
-…there's no one here. Everyone is probably getting things ready for the party… 
+…There's no one here. Everyone is probably getting things ready for the party… 
 There was no reason to come here. I'll go elsewhere. 
 Unused
 Unused

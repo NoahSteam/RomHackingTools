@@ -1,6 +1,6 @@
-﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
+﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
 It's a photo of Sumire. This is a side of her you don't see too often. 
-It's a photo of Maria. …She's lost in thought and looks kind of sad… 
+It's a photo of Maria. She's lost in thought and looks kind of sad… 
 A photo of Kanna. Her signature strength comes through clearly. 
 A photo of Iris. She's surrounded by flowers and flashing a radiant smile. 
 A photo of Kohran. She's looking pretty in profile with her face dyed red by the evening sun. 
@@ -26,7 +26,7 @@ A photo of Iris in her swimsuit. She's holding a rubber ring and looks ready to 
 A photo of Kohran. I don't get to see her with her braids undone very often. It's a nice look. 
 A photo of Ayame in a traditional outfit. I hope she'll always be as happy and content as she is here. 
 Ayame's gun. Why…? Why did it have to turn out like this…? 
-Raaaaaghhh! Wretched Imperial Assault Troupe… how dare you… how dare you do such a thing to my brother! 
+Raaaaaghhh! Wretched Imperial Assault Troupe… How dare you… How dare you do such a thing to my brother! 
 To avenge my brother… I, Argent Rasetsu, will repay you in kind! 
 Those two… I'm sure they'll think up something interesting for us. 
 Hey, Kohran. Know what day it is tomorrow? 
@@ -39,8 +39,8 @@ Iris. Chattering during rehearsal is prohibited.
 How boring. 
 I'm gonna go play with Mon Frère! 
 Ah Iris! Where are you going?! We're rehearsing right now! Come back! 
-I don't wanna! Bye bye! 
-Sheesh… just when I think I've gotten out of ticket punching, I get roped into sorting pay slips… 
+I don't wanna! Bye-bye! 
+Sheesh… Just when I think I've gotten out of ticket punching, I get roped into sorting pay slips… 
 And here I thought I could take it easy until the performance of "Love is a Diamond" starts next week… 
 That's enough of your grumbling, if you don't mind. You're nearly finished anyway, isn't that right? 
 Yeah, you're right… 
@@ -55,12 +55,12 @@ Um, Ogami… have you seen Iris?
 Yeah, I did. <br> No… I haven't. 
 Yeah, I did. 
 Really? Where was she? 
-Um… where was it, again… 
+Um… Where was it, again… 
 …Did you REALLY see her? 
 Sorry… looks like I was mistaken. 
-I see… where on earth could she have gone… ? 
+I see… Where on Earth could she have gone… ? 
 No… I haven't. 
-I see… honestly, where could she have gone off to? 
+I see… Honestly, where could she have gone off to? 
 …I suppose you haven't seen her. I wonder where she could have gone… 
 Did something happen with Iris? 
 Yes… she ran off somewhere right in the middle of rehearsal. 
@@ -81,8 +81,8 @@ Mon Frère!
 Huh? That voice… is that Iris? 
 Ehehe… Mon Frère! 
 Hey, Mon Frère. Let's go on a date tomorrow! 
-Eep… a date?! 
-A… date?! 
+Eep… A date?! 
+A…date?! 
 So… you'll come, right? 
 OK, let's do it. <br> What to do… <br> Sorry, I can't go tomorrow. 
 What to do… 
@@ -117,7 +117,7 @@ OK! Thank you, Sakura!
 I really can't make it. I have other plans tomorrow. 
 Mon Frère… 
 You must hate me… 
-N-no, Iris, I… 
+N-No, Iris, I… 
 Forget it! Mon Frère, you meanie! 
 Iris… 
 Ogami… maybe it would've been best to humor her? 
@@ -129,7 +129,7 @@ Her birthday… I feel pretty bad for her.
 I'll go apologize to her tomorrow. 
 Sakura, do you mind? 
 Ogami, please go along with Iris tomorrow. 
-We can clean anytime, but a birthday only comes once a year. 
+We can clean any time, but a birthday only comes once a year. 
 Sakura… 
 Yeah, Sakura's right! Hooray! Mon Frère and I are going on a date! 
 I'm heading back to the stage, so I'll be on my way. 
@@ -145,7 +145,7 @@ Well then, Ogami, I'll be on my way.
 Her birthday… I feel pretty bad for her. 
 I'll go apologize to her tomorrow… 
 Ogami, please go along with Iris tomorrow. 
-We can clean anytime, but a birthday only comes once a year. 
+We can clean any time, but a birthday only comes once a year. 
 Sakura… 
 Yeah, Sakura's right! Hooray! Mon Frère and I are going on a date! 
 Guess I have no choice… 
@@ -157,7 +157,7 @@ Yaaay! Thank you, Mon Frère! I'm so happy!
 Oh, I see, Ogami. You can't be bothered to help me out, but you have enough time to spend with Iris? 
 Eep?! That's not what I… 
 Ogami, you just promised me you'd help me with cleaning! 
-Eep! W-well, I… 
+Eep! W-Well, I… 
 No way! Sakura, stop trying to steal Mon Frère away! 
 I mean, tomorrow is my birthday, after all! 
 Eh? Really? 
@@ -175,8 +175,8 @@ Huuh? That's no fun!
 You wouldn't want to oversleep for tomorrow, right? Best to go to bed early tonight. 
 OK, I got it… 
 Right, so tomorrow, you should come to my room to pick me up. 
-Bye bye! 
-A date with Iris tomorrow, huh… ? Wonder what we'll end up doing… 
+Bye-bye! 
+A date with Iris tomorrow, huh… Wonder what we'll end up doing…? 
 Hmm… I don't know all that much about clothes. 
 That's OK! Let's go, let's go! 
 Leave it to me! I'll pick out something that looks great on you, Iris. 
@@ -191,17 +191,17 @@ Of course! He's my friend, so we're always together.
 (Jean-Paul, eh? It certainly is a French sounding name.) 
 Eheheh… Isn't this ribbon sooo cute? It's my favorite! 
 Eheheh… Isn't this ribbon sooo cute? It's my favorite! 
-Blonde hair… how lovely. 
+Blonde hair… How lovely. 
 Good grief, Ogami! 
-Blonde hair… how lovely. 
+Blonde hair… How lovely. 
 Good grief, Ogami! 
 (She seems really happy for some reason.) 
 She looks pretty happy. Did something good happen? 
-Hee hee… what are you looking at? 
+Hee hee… What are you looking at? 
 (She seems really happy for some reason.) 
 Mon Frère, wait! Where are you going? 
 Sheesh, what're you looking at? 
-This is the wardrobe room… you're going to choose your outfit from here? 
+This is the wardrobe room… You're going to choose your outfit from here? 
 Yep. I brought some of my own clothes from my room in here. 
 OK, Mon Frère. Pick out something that'll look good on me! 
 You've got great taste. I'm kinda surprised! 
@@ -239,7 +239,7 @@ It's Ogami… Iris, you there?
 Good morning, Mon Frère! You came right on time! 
 Good morning, Mon Frère. I see you came to get me! 
 Mon Frère, you're super late! 
-S sorry… I got caught up in getting ready… 
+S-Sorry… I got caught up in getting ready… 
 Sheesh… I'll let you off easy this time, since today is my birthday. 
 Are you bringing Jean-Paul along on our date, too? 
 That's right. Jean-Paul wants to go out too, you see. 
@@ -253,28 +253,28 @@ Um, not really.
 Is that so? You can tell me the truth, Mon Frère. 
 But, I'm sorry… Jean-Paul gets really lonely by himself. 
 So, is it OK if we bring him along? He promises he won't get in the way! 
-I see… all right, then. 
+I see… All right, then. 
 Can't you leave him here? He won't even know the difference. 
 You're horrible! Jean-Paul is my friend! 
 There's no way I can leave him here! 
 Oh! You're acting all shy, Mon Frère! Hee hee, it's so cute~! 
-(So she's bringing Jean-Paul… that's fine, as long as she doesn't lose him… ) 
+(So she's bringing Jean-Paul… That's fine, as long as she doesn't lose him… ) 
 Your ribbon looks as cute as ever. 
 Mon Frère, don't keep staring at the same spot. 
 Your ribbon looks as cute as ever. 
 Mon Frère, don't keep staring at the same spot. 
-Hey hey, isn't there somewhere else you want to look at? 
-Hey hey, isn't there somewhere else you want to look at? 
-(Her eyes are sparkling. She must really be enjoying this date.) 
-(Her eyes are sparkling. She must really be enjoying this date.) 
+Hey hey, isn't there somewhere else you want to look? 
+Hey hey, isn't there somewhere else you want to look? 
+(Her eyes are sparkling. She must be really excited about this date.) 
+(Her eyes are sparkling. She must be really excited about this date.) 
 You're wearing something different from usual today. 
 So, I was able to help by choosing an outfit last night? 
 Yep! I liked this one best. 
 Say, Mon Frère. What do you think of this outfit? 
-It's very cute. <br> It's pretty nice, I guess. <br> Your usual outfit's better. 
+It's very cute. <br> It's pretty nice, I guess. <br> Your usual outfit is better. 
 It's very cute. It suits you well, Iris. 
-Really?! Thank you, Mon Frère… that makes me so happy! 
-I wore them just for you. I'm glad you like them! 
+Really?! Thank you, Mon Frère…. That makes me so happy!
+I wore this outfit just for you. I'm glad you like it! 
 Well now, shall we get going? 
 Yeah! Let's go, let's go! Mon Frère, this way! Hurryyyy! 
 It's pretty nice, I guess. It looks good on you. 
@@ -287,9 +287,9 @@ Mon Frère, do you not like this outfit?
 Oh, no… I didn't mean that… 
 It's OK. Anyway, let's hurry up and go! We're wasting time! 
 Umm… I never know what to say in situations like this. 
-Jeez, Mon Frère… you don't understand a girl's heart at all! 
+Jeez, Mon Frère… You don't understand a girl's heart at all! 
 But… that's just one of the charming things about you! 
-W-well, why don't we get a move on? 
+W-Well, why don't we get a move on? 
 Yeah! Let's go, let's go! Mon Frère, this way! Hurryyyy! 
 Well, shall we get going? Let's head outside for now. 
 Oh, Mon Frère! Wait a second! 
@@ -303,36 +303,36 @@ Oh, but…
 What's wrong? 
 Um, Mon Frère… I wanna go to Asakusa. 
 Asakusa? 
-Yeah. Kohran said that when she was at the Hanayashiki branch, she went to Asakusa all the time. 
+Yeah. Kohran said that when she was at the Hanayashiki Branch, she went to Asakusa all the time. 
 She said there's lots of shops and that it's really interesting. So, let's go to Asakusa! 
 Got it. To Asakusa we'll go, then. 
 Yeah! Let's go, right now! 
 Would you like to go see a movie in Asakusa? 
 OK! As long as we go to Asakusa I'm happy! 
 So you wanted to go there anyway? 
-Yeah. Kohran said that when she was at the Hanayashiki branch, she went to Asakusa all the time. 
+Yeah. Kohran said that when she was at the Hanayashiki Branch, she went to Asakusa all the time. 
 She said there's lots of shops and that it's really interesting. So, let's go to Asakusa! 
 All right. To Asakusa we'll go, then. 
 Yeah! Let's go, let's go, right now! 
 How about we go to the Ueno Zoo? I've heard they have all kinds of rare animals there, like kangaroos. 
-Yaay, the zoo! Let's go, let's go!… Oh, but… 
+Yaay, the zoo! Let's go, let's go! Oh, but… 
 Hey, Mon Frère… I wanna go to Asakusa. 
 Asakusa? 
-Yeah. Kohran said that when she was at the Hanayashiki branch, she went to Asakusa all the time. 
+Yeah. Kohran said that when she was at the Hanayashiki Branch, she went to Asakusa all the time. 
 She said there's lots of shops and that it's really interesting. So, let's go to Asakusa! 
 All right. To Asakusa we'll go, then. 
 Yeah! Let's go, let's go, right now! 
-Hmm… where should we go… 
+Hmm… Where should we go… 
 Come on, Mon Frère. When you're on a date, you're supposed to lead the lady around. 
 So… why don't you take me to Asakusa? OK? 
 Asakusa? 
-Yeah. Kohran said that when she was at the Hanayashiki branch, she went to Asakusa all the time. 
+Yeah. Kohran said that when she was at the Hanayashiki Branch, she went to Asakusa all the time. 
 She said there's lots of shops and that it's really interesting. So, let's go to Asakusa! 
 All right. To Asakusa we'll go, then. 
 Yeah! Let's go, let's go, right now! 
 We've arrived in Asakusa. Where do you want to go, Iris? 
 I'll go anywhere you wanna go, Mon Frère. 
-OK then… wonder where we should go first. 
+OK then… I wonder where we should go first? 
 Let's take a walk in the park. <br> Let's go to the movie theater. <br> Let's go shopping. 
 Let's take a walk in the park. <br> Let's go to the movie theater. 
 Let's take a walk in the park. <br> Let's go shopping. 
@@ -351,25 +351,25 @@ Hold her hand. <br> Link arms with her. <br> Give her a piggyback ride.
 All right, let's walk holding hands. 
 OK! Don't let go, Mon Frère. 
 OK, let's walk with our arms linked. 
-Eh? Really?! Hee hee… my heart's racing! 
+Eh? Really?! Hee hee, my heart's racing! 
 Oh, but… your arm won't reach that high, will it? 
 Oh… 
 You're right. OK then… why don't we hold hands instead? 
 Ah, good idea. 
 We'll try linking arms when you get a little bigger. 
-I hope I can grow up soon, so that I can walk with my arm linked in yours, Mon Frère… 
+I hope I can grow up soon, so that I can walk with you arm-in-arm, Mon Frère… 
 All right, I'll give you a piggyback ride. 
 Piggyback?! 
 Mon Frère, what sort of couple gives piggyback rides? 
 You still think of me as a child, don't you! 
-S-sorry, Iris… that's not what I meant… 
+S-Sorry, Iris… that's not what I meant… 
 Forget it! I've had it with you, Mon Frère! 
 Iris, wait! You're gonna get lost! 
 I am not a child! I won't get lost! 
 Are you shy, Mon Frère? I'll just take your hand myself! 
 Oh…! 
-Eheheh… it's like we're really a couple. 
-Y-yeah, it is. 
+Eheheh… It's like we're really a couple. 
+Y-Yeah, it is. 
 Walking along holding hands with you like this is a dream come true! 
 Why don't we take a short rest here, Iris? 
 OK then. But make sure you don't let go of my hand. 
@@ -386,71 +386,71 @@ So… how old do you think I'm turning today?
 Hmm… 8 years old? 
 Wrong! I'm not some little kid! 
 I'm turning 10 years old today! I won't be a kid forever! 
-S-sorry… 
+S-Sorry… 
 I'm sorry. Forgive me, Iris. 
 OK. As long as you understand, it's fine. Hey, Mon Frère… why don't we go somewhere else? 
 I'm tired of this place! 
 Hmm… 10 years old? 
 Ding ding! You're smart, Mon Frère! You got it exactly right. 
 With this, I'm in the same decade of life as Sakura and the others! 
-Sure enough… if they're in their teens, then that makes you a pre teen. 
+Sure enough… if they're in their teens, then that makes you a preteen. 
 Yep, that's right! Hey, Mon Frère… why don't we go somewhere else? 
 I'm tired of this place! 
 Hm… 12 years old? 
 Eh?! Do I really look that grown up? 
 I'm turning 10 years old today. 
-I see… sorry, guess I got it wrong. 
+I see… Sorry, guess I got it wrong. 
 Oh, that's OK. Because that means you think I look really grown up, right? 
-Y-yeah… 
+Y-Yeah… 
 Yup! Hey, Mon Frère… why don't we go somewhere else? 
 I'm tired of this place! 
 You don't know, Mon Frère? I'm turning 10 years old today. 
 10 years old, huh… 
 With this, I'm in the same decade of life as Sakura and the others! 
-Sure enough… if they're in their teens, then that makes you a pre teen. 
+Sure enough… if they're in their teens, then that makes you a preteen. 
 Yep, that's right! Hey, Mon Frère… why don't we go somewhere else? 
 I'm tired of this place! 
-Whoa… looks like it's nearly time for the movie to start. 
+Whoa… Looks like it's nearly time for the movie to start. 
 Iris, let's make our way to the movie theater. 
 OK! 
 We're just in time. Let's go inside. 
 For some reason, my heart is pounding. 
 OK, let's go over to the movie theater. 
 This is the movie theater. They're something of a rival to our own theater. 
-Hmm… it's a place where they show movies, which are like plays made from moving pictures… sort of. 
+Hmm… It's a place where they show movies, which are like plays made from moving pictures… sort of. 
 Looks like today, they're playing one called "Breakthrough of the Century: Introducing a Rare Creature!" 
 Sure thing. Let's go inside. 
 OK, let's go over to the movie theater. 
 This is the movie theater. They're a rival to our own theater. 
-Hmm… it's a place where they show movies, which are like plays made from moving pictures… sort of. 
+Hmm… It's a place where they show movies, which are like plays made from moving pictures… sort of. 
 Looks like today, they're playing one called "Breakthrough of the Century: Introducing a Rare Creature!" 
 Sure thing. Let's go inside. 
 Huh? There's still about an hour before the start of the next film screening. 
 No point in hanging around here… let's go somewhere else, Iris. 
 All right, let's go shopping. 
 OK! I wanna go to that jewelry shop over there! 
-Huh?! H-hang on, Iris. I can't buy any jewelry! 
+Huh?! H-Hang on, Iris. I can't buy any jewelry! 
 It's fine! Hurry, hurry! 
 Welcome sir, and young miss. Take your time and look around. 
 What the… it's an accessory store. I thought it was for jewelry… 
-Hey, fella… why don't you buy something for the young lady here? 
+Hey, fella… Why don't you buy something for the young lady here? 
 Yeah! Present, present! 
 My, you two seem close. She your little sister? 
 She's my daughter. <br> She's my coworker. <br> She's my girlfriend. 
 No, she's my daughter. 
 Mon Frère! What do you mean, I'm your daughter?! 
-S-sorry. I was only kidding. 
-Jeez! Don't say such weird stuff; we're out on a date and everything! 
+S-Sorry. I was only kidding. 
+Jeez! Don't say such weird stuff. We're out on a date and everything! 
 Frère, eh… that means “brother” right? So the two of you ARE related? You don't look alike at all… 
 No way! He's my boyfriend! 
-B-boyfriend? 
+B-Boyfriend? 
 I-Iris?! 
 No… she's a coworker. 
 A coworker? Hm, so what sort of work does a young girl such as this do? 
-Uh… well, you see… 
+Uh… Well, you see… 
 Ah, it's not important. Take your time and look around! 
 No… she's my girlfriend. 
-G-girlfriend?! Really, now? These foreigners sure are open to anything… 
+G-Girlfriend?! Really, now? These foreigners sure are open to anything… 
 …Mon Frère. 
 Thank you… that makes me so happy. 
 Well then, sir! How about buying something for your cute little girlfriend, here? 
@@ -462,15 +462,15 @@ Thank you, Mon Frère!
 Do you like it? 
 Yeah! I'm gonna treasure it! 
 So, where should we go now, Mon Frère? 
-That hairpin's a great choice. It'll look fantastic in that golden hair of hers, won't it? 
-The hair accessory, then? Here you are, thanks for the business! 
+That hairpin is a great choice. It'll look fantastic in that golden hair of hers, won't it? 
+The hair accessory, then? Here you are, thank you for the business! 
 Happy birthday, Iris. Here's my present to you. 
 Thank you, Mon Frère! 
 Do you like it? 
 Yeah! I'm gonna treasure it! 
 So, where should we go now, Mon Frère? 
 That hair accessory is a good choice. Wouldn't it look nice in the young lady's hair instead of that ribbon? 
-The pendant, then? Excellent choice, sir! Thanks for your patronage! 
+The pendant, then? Excellent choice, sir! Thank you for your patronage! 
 Happy birthday, Iris. Here's my present to you. 
 Thank you, Mon Frère… I was just thinking of how much I wanted this. 
 I'm really happy! 
@@ -479,7 +479,7 @@ Yeah! I'm gonna treasure it!
 So, where should we go now, Mon Frère? 
 How can you call yourself a man and refuse to buy this for your lady? Come on, sir! I'll even give you a nice discount. 
 Huh?! Mon Frère, will you buy it for me? 
-Whoa… looks like it's nearly time for the movie to start. 
+Whoa… Looks like it's nearly time for the movie to start. 
 Iris, let's make our way to the movie theater. 
 Mmhmm! 
 Right, it's almost time. Let's go inside, Iris. 
@@ -492,25 +492,25 @@ Since the movie doesn't have any sound, the narrator tells us what's happening o
 Oh, it's starting. 
 (Quite atmospheric…) 
 Huh!? 
-… … 
+…
 (Iris is squeezing my hand… is she frightened?) 
 Grasp her hand. <br> Speak to her. 
 (Well… I'll try taking her hand.) 
 … 
 (Huh… Iris has pulled her hand away…) 
-Iris… you OK? Do you want to go outside? 
-That's all right… But don't feel like we have to stay. 
+Iris… You OK? Do you want to go outside? 
+That's all right… but don't feel like we have to stay. 
 (I'd better keep an eye on her for now.) 
 …!! 
 Iris? Are you OK?! 
 Iris, calm down! 
 Iris?! 
 Whaaaaaaah! 
-Wh-what was that? An earthquake?! 
+Wh-What was that? An earthquake?! 
 Iris! Please, calm down! 
-Th-this is bad! At this rate, the building's gonna come down… 
+Th-This is bad! At this rate, the building's gonna come down… 
 Iris, it's not safe here! Let’s get out! 
-Ohhh, the theater… this is awful… 
+Ohhh, the theater… This is awful… 
 Just what kind of power does Iris have… ? 
 …Yes? 
 Hey, Sakura. What's up? 
@@ -520,7 +520,7 @@ Sure, I'll help. <br> But I wanted to sleep in…
 Sure, I'll help. I'm not busy. 
 Thank you so much! All right, let's get going. 
 Sorry, I wanted to sleep in… 
-I see… sorry to bother you so early in the morning. 
+I see… Sorry to bother you so early in the morning. 
 Well, I'll be going. 
 I wonder if that was rude of me… but, I'm so sleepy… 
 OK, guess I'll try to grab a few more winks… 
@@ -555,26 +555,26 @@ There. I've changed my shirt and I'm all freshened up.
 What to do now…? 
 (Who is that? They sure are rowdy… ) 
 I'm coming… 
-Wh-what the… why are you all here? 
-Wh… what is this? 
-Captain… would you happen to know where Iris might've gone? 
+Wh-What the… Why are you all here? 
+Wh-What is this? 
+Captain… Would you happen to know where Iris might've gone? 
 We've searched the theater, but she's nowhere to be found. 
 Don't lie to us if you know what's good for you, Boss! 
 I know. <br> I don't know! 
-Y-yeah, I know. 
+Y-Yeah, I know. 
 You mean it? Where the heck is she? 
-W-well… 
+W-Well… 
 Everyone just wait a second! I have just the right thing for this occasion. 
 What is that? 
-You'll see in just a sec! Gimme your head, Ogami. 
-Wh-what're you doing?! 
+You'll see in just a sec! Gimme your head, Chief. 
+Wh-What're you doing?! 
 I don't know! She asked me on a date earlier, but that doesn't mean I know where she went… 
 Are you being truthful? If you're lying, you will regret it! 
 I'm not lying… you have to believe me! 
 Everyone just wait a second! I have just the right thing for this occasion. 
 What is that? 
 You'll see in just a sec! Gimme your head, Chief. 
-Wh-what're you doing?! 
+Wh-What're you doing?! 
 I… Well… 
 Ogami… if you know, please tell us! 
 I feel like this may be partially my fault, too… 
@@ -582,14 +582,14 @@ What do you mean?
 Everyone just wait a second! I have just the right thing for this occasion. 
 What is that? 
 You'll see in just a sec! Gimme your head, Chief. 
-Wh-what're you doing?! 
+Wh-What're you doing?! 
 What… is this?! 
 My newest invention! It's a lie detector I call "Mr. Truth". 
 A lie detector? That's pretty crazy! 
 It's super easy to use. Just answer our questions and it will tell whether or not you're lying. 
 You really are good at coming up with strange machines like this. 
-Ahm, it says here "self destruction mechanism", what exactly does that mean? 
-Isn't that self explanatory? Utter a lie and the machine will blow up. 
+Uh… It says here "self-destruction mechanism", what exactly does that mean? 
+Isn't it self-explanatory? Utter a lie and the machine will blow up. 
 If someone's lying, there has to be some punishment after all! 
 Wait a second. You're kidding, right? 
 OK, let's get started. How 'bout a simple question as a warm up? 
@@ -600,18 +600,18 @@ That was an easy one. If you had answered no, you would have been blown up.
 Kohran! Can you please take this thing off of me? 
 Here comes question number 2! 
 No! 
-Mr. Ogami! 
+Ogami! 
 …Huh? How come it didn't go bang? 
-Are you sure that thing is working? Because no matter how you look at it, that was a clear lie. 
-…Weird. Maybe there's a loose contact somewhere… 
-…Anyway. I'm sure it will work now. Here comes question number 2. 
-S-sir! 
-…Oops! I didn't know that it would explode when you take too much time to answer… that's strange. 
+Are you sure that thing is working? Because no matter how you look at it, that was clearly a lie. 
+Weird… Maybe there's a loose contact somewhere… 
+Anyway… I'm sure it will work now. Here comes question number 2. 
+C-Captain! 
+…Huh? It should explode if you take too much time to answer… that's strange. 
 Are you sure this thing is working properly? 
-…Weird. Maybe there's a loose contact somewhere… 
-…Anyway. I'm sure it will work now. Here comes question number 2. 
+Weird… Maybe there's a loose contact somewhere… 
+Anyway… I'm sure it will work now. Here comes question number 2. 
 Wait! I want to ask the next question! 
-H, hey, Kanna! 
+H-Hey, Kanna! 
 No worries, we're still in the test phase after all, aren't we? 
 OK. The second question. Do you like tomboys? 
 Yes! <br> No! 
@@ -621,8 +621,8 @@ Well, look at that. So the Boss likes tomboys, huh?
 I trust this machine less with every second. Are you really sure it works? 
 Yeah, I gotta say, that last question made me a bit skeptical, too. 
 Ah… I forgot to turn it on! So, now it should work! 
-What… that's a real bummer. 
-All right! With that out of the way let's cut to the chase. 
+What… That's a real bummer. 
+All right! With that out of the way, let's cut to the chase. 
 … 
 Do you know where Iris is? 
 No! 
@@ -648,78 +648,78 @@ All right! With that out of the way, let's cut to the chase.
 Do you know where Iris is? 
 Yes! <br> No! 
 Yes! 
-It works! I knew my inventions are perfection! 
+It works! I knew it, my inventions are perfection! 
 Ogami! Are you OK!? 
-It blew up even though you said that you knew where she is, so… 
-So, he has no idea where she is… what a waste of time. 
-Well if the Boss doesn't know it either, we better get going and look somewhere else. 
+The device blew up even though the Captain said he knew where Iris is, so that means… 
+That means that he truly has no idea where she is… What a waste of time. 
+Well, if the Boss doesn't know anything, we better get going and look somewhere else. 
 No! 
 …It didn't explode. 
-So if he doesn't know and it didn't blow up, that means… 
-He really doesn't know. What a waste of time. 
-Well if the Boss doesn't know it either, we better get going and look somewhere else. 
-If you weren't lying, why did you behave so suspiciously? 
+So if the Captain said he doesn't know and it didn't blow up, that means… 
+He really doesn't know where Iris is. What a waste of time. 
+Well, if the Boss doesn't know anything, we better get going and look somewhere else. 
+I was telling the truth, so how come I'm getting treated like this? 
 Ogami! 
-It works! I knew my inventions are perfection! 
+It works! I knew it, my inventions are perfection! 
 Ogami! Are you OK!? 
-Since it exploded because you took too long, we still don't know if you're lying or not. 
+Since the device exploded because the Captain took too long, we still don't know if he’s lying or not. 
 Mr. Truth is history as well. We're right back where we started. 
 …Come on, everybody. Let's go look somewhere else. 
 Oh boy… What did I do to deserve this? 
 But… where could Iris be? I'm worried too. 
-Let's try searching inside the theater for now. 
+I’ll try searching inside the theater for now. 
 There are tons of stuffed animals in here… 
 OK. Sorry for snooping around, Iris, but I really need to find some kind of clue. 
 The summer sun is blinding… 
 The window is locked. I doubt she could've gotten out from here. 
-Iris loves that teddy bear of hers… looks like she loves rabbits, too. 
+Iris loves that teddy bear of hers… Looks like she loves rabbits, too. 
 …This really isn't the time to be looking at this. 
 Maybe she is hiding in here? 
 …No. I'd feel bad for opening this without asking. 
 Is this… a photo of Iris's parents? 
 There's a huge castle behind them. I wonder where this was taken? 
-Iris loves that teddy bear of hers… looks like she loves rabbits, too. 
+Iris loves that teddy bear of hers… Looks like she loves rabbits, too. 
 …This really isn't the time to be looking at this. 
 This is a cute lamp. What's it look like turned on? 
 Hmm, I can't find the switch. Kind of a shame, but I guess I'll leave it. 
 For now, I need to look for any clues to Iris's whereabouts. 
-On the bed, she's got stuffed animals, and… hm? 
+On the bed, she's got stuffed animals, and… Hm? 
 This is… a picture diary! 
 Asakusa…? 
 I see! So Iris was planning for us to go on a date to Asakusa! 
 If we can't find her inside the theater, then… 
 …she probably went to Asakusa on her own! 
 Right. Since it's come to this, I'd better head to Asakusa as well! 
-I have to take the steam train Ginza line to get there 
+I have to take the steam train’s Ginza line to get there 
 Wait for me, Iris. I'm on my way! 
-Phew… finally made it to Asakusa. 
+Phew… Finally made it to Asakusa. 
 It's really a nice place for a date. A moving picture theater, an amusement park… No wonder it's crowded. 
-…In the diary she wrote something about a fountain in the park. That's over there… 
+…Iris’ diary mentioned something about going to a fountain in the park. That's it over there… 
 …She's not here. Was this the wrong place? 
 Oh… Iris?! 
 …!! 
 Iris… so you were here. 
-Don't be silly. I was worried sick you'd gotten lost. 
-I Iris… calm down! 
-Whooooaaa! Th the fountain! 
+Don't be silly. I was worried sick that you had gotten lost. 
+I-Iris… calm down! 
+Whooooaaa! Th-The fountain! 
 Iris, stop! Stoooop! 
-There's no performance today, so that means no patrons, either. 
+There's no performance today, so that means no patrons either. 
 There's no one here… guess I'll go somewhere else. 
 There's no show today, so there's no reason for anyone to be here. 
 I should go after Iris. 
 It's already July… the summer sun is blisteringly hot. 
 It's too hot here! I'll go someplace else. 
-The girls love to relax here. Especially Sumire often comes here for a cup of tea… 
+The girls love to relax here. Sumire in particular often comes here for a cup of tea… 
 It would be a shame to spend a nice day like this alone in the library. 
 I still have to meet up with Iris. I shouldn't keep her waiting so long. 
 I wonder if Ayame is in. 
 Ma'am… may I ask where you're going? 
 Where, indeed? I'm afraid that's a secret. 
-Oh… there she goes. 
-Hmm… where's she off to? 
+Oh… There she goes. 
+Hmm… Where's she off to? 
 I really should go pick up Iris. I kept her waiting long enough already. 
 It doesn't seem like Ayame has returned yet. 
-Phew… coming back to your room after a job well done feels good. 
+Phew… Coming back to your room after a job well done feels good. 
 …But I don't have time to rest. I need to go and see Iris. 
 Wonder if Sakura's in her room? 
 …On second thought, I should go somewhere else. 
@@ -733,7 +733,7 @@ Maybe I can have a little chat with Maria.
 I wonder if Kohran is in her room? 
 I should go somewhere else. 
 Ahem! It's me… 
-…Sorry, Boss, but I'm right in the middle of a new invention. Come back later. 
+…Sorry, Chief, but I'm right in the middle of a new invention. Come back later. 
 Iris must be waiting for me. 
 I still have some time to kill before I go and see Iris. 
 Maybe Sumire is in her room? 
@@ -742,7 +742,7 @@ It's me, Ogami…
 I'm busy writing a letter at the moment. If you have need of me, come back another time. 
 There's no show today, so there's no reason for anyone to be here. 
 There's no one here… I should go. 
-This place actually looks pretty spacious, with no guests around. 
+This place actually looks pretty spacious with no guests around. 
 If I run any later, Iris will be really mad at me. 
 On a day like this it's really peaceful here. 
 If I don't hurry up, Iris won't let me hear the end of it. 
@@ -757,9 +757,9 @@ I'd better check somewhere else…
 (I guess I'll leave her to it for now.) 
 There's no show today, so everything is peaceful here. 
 …Nothing to be done here. I should go somewhere else. 
-…Huh? I can hear voices from inside. 
+…Huh? I hear voices coming from Yoneda’s office. 
 Listen… I can only repeat what I already told you! 
-…I already sent you a report regarding that incident. 
+…I sent you a report regarding the incident. 
 Maria Tachibana never used her Koubu without permission. It was all part of a tactical diversion. 
 Maria defeated one of the leading figures of the Hive of Darkness on my orders. So what's the problem? 
 …An inquiry? Do what you must. 
@@ -770,7 +770,7 @@ It's Ogami… do you have a moment?
 Oh, Ogami. Door's open. 
 zzZZZZzzz zzzzZZZZZzz 
 Manager Yoneda… seems to be sleeping. 
-This room has no use at all. After all I'm doing rounds every night. 
+This room has no use at all. After all, I'm doing rounds every night. 
 …I should go somewhere else. 
 I helped Iris pick out her dress here just yesterday. 
 I wonder what she'll be wearing today. 
@@ -788,7 +788,7 @@ Sakura said she'd go get some water.
 Ah, Ogami. 
 Hey, Sakura. What are you doing here? 
 I could ask the same of you. Shouldn't you be on a date with Iris? 
-Ah… well, I just… 
+Ah… Well, I just… 
 Hahaha, just kidding. 
 I figured since there's no show today, I'd use the time to clean the stage and this room. 
 Keep up the good work. <br> Need any help? 
@@ -813,44 +813,44 @@ This is so inviting. I wish I had the time to go for a swim…
 …Looks like Ayame is gone. There isn't anyone here. 
 …Oh well. I'd better go, too. 
 Oh, ma'am… you're done already? 
-Oh, ma'am… So it was you in the shower. 
+Oh, ma'am… so it was you in the shower. 
 Yes. It was so refreshing. There really isn't anything like it on a hot summer day like this. 
-But… how did you know that I took a shower? 
+But… How did you know that I took a shower? 
 Well… I… I had a hunch… 
 A hunch you say… really? 
 Well, let's hope that you'll use these kind of hunches in your next battle as well. 
 Yes, of course… 
 Teehehe, I'm just kidding. See you later, Ogami. 
 Phew, looks like I've gotten away with it. 
-There is nobody here… Guess, I'll have to look somewhere else. 
-Wait… is that a shower running? 
+There is nobody here… Guess I'll have to look somewhere else. 
+Wait… Is that a shower running? 
 Someone is taking a shower! 
 I'm outta here! <br> I'm drawn to the shower… 
 Going into the shower right now would be crossing the line. I'm outta here! 
 Phew… I managed to get myself under control… 
 But I'd really like to know who that was in the shower. 
-No… my body… it's moving on it's own… toward the shower… 
-(That… that's Ayame!) 
-Ah… what a wonderful feeling. 
+No… My body…it's moving on its own…toward the shower… 
+(That… That's Ayame!) 
+Ah… What a wonderful feeling. 
 (She really looks stunning… ) 
 OK, time to get out. 
 (Whoa… If I stay here I'll be discovered!) 
 (I'm done for! I need to run!) 
 Phew, I think she didn't see me. 
-But I have to say, seeing Ayame like this… what a lucky day… 
-C-crap… I can't decide what to do! 
+But I have to say, seeing Ayame like that… What a lucky day… 
+C-Crap… I can't decide what to do! 
 …? Anybody there? 
 I'm dead! I need to get out of here! 
 Phew, I think she didn't see me. 
 But I'd really like to know who that was in the shower. 
-There's no one here… there isn't any humidity either so I don't think anyone used it. 
+There's no one here… There isn't any humidity either so I don't think anyone used it. 
 There's nothing for me to do here… I should go somewhere else. 
 There's a faint scent of soap in the air, and it's really humid in here. 
 Ayame must have taken a shower here only minutes ago… 
-Stop it! What are you thinking there, Ogami. 
+Stop it! What are you thinking there, Ogami? 
 …I should hurry and pick up Iris! 
-This medical pod is powered by the steam machines in the basement… 
-Let's hope we'll never need to use it! 
+The medical pods are powered by the steam machines in the basement… 
+Let's hope we'll never need to use them! 
 Ah, the heart of the Flower Division, the Command Room. This is where we assemble when the alarm sounds. 
 But… there's no one here. I'll check another room. 
 This is where our strategy meetings are held. 
@@ -865,11 +865,11 @@ Where are you, Iris?
 …Wait a second. The others said that her room was empty… 
 It's July already… What a nice sunny summer day it is. 
 It's too hot here! I'll go someplace else. 
-Ah, Ogami… Did you find Iris? 
+Ah, Ogami… did you find Iris? 
 No, not yet. 
 …Maybe she didn't take it so well that you rejected going on a date with her? 
 In that case it might be my fault that she has vanished. If I hadn't asked for your help… 
-…There's no use in putting blame on anyone. Finding Iris is all that matters now. 
+…There's no use in putting blame on anyone. Finding Iris is all that matters right now. 
 …Yes. 
 This is the parlor. Sumire often drinks tea here. 
 But no sign of Iris. 
@@ -881,8 +881,8 @@ I heard. She's disappeared.
 …This is not the time for these kind of deliberations. We need to find Iris. 
 Yes. 
 Iris can't be in Ayame's room. I should look somewhere else. 
-Phew… coming back to your room after a job well done feels good. 
-…but I don't have time to rest. I need to find Iris. 
+Phew… Coming back to your room after a job well done feels good. 
+…But I don't have time to rest. I need to find Iris. 
 I wonder if Sakura is in her room? 
 …On second thought, I should go somewhere else. 
 …She isn't here. I wonder where she is. 
@@ -894,17 +894,17 @@ I should talk with Maria for a bit.
 …She doesn't seem to be here. 
 I wonder if Kohran is in her room? 
 …I guess I'll go somewhere else. 
-…nobody home. 
+…Nobody home. 
 Iris… where are you? 
-…That's it. I should go to Iris' room and see if I can find some clue. 
+…That's it. I should go to Iris' room and see if I can find some clues. 
 Maybe Sumire is in her room? 
 I really should go somewhere else. 
 …Seems there's no one here. 
 Sir… have you found Iris? 
 …No luck. I have looked everywhere. 
 I see… 
-But maybe I can find some clue in her room. 
-Iris isn't here. I should look for her somewhere else. 
+But maybe we can find some clues in her room. 
+Iris isn't here so I’ll search for her somewhere else. 
 I guess she isn't here. Better look somewhere else. 
 The theater's closed today, so there aren't any patrons… 
 Iris really is nowhere to be found… this isn't good. 
@@ -923,10 +923,10 @@ Iris… where did you go?
 This place is so quiet when there's not a performance going on. 
 …It's no good. I'd better go somewhere else. 
 Yuri, Kasumi, have you seen Iris? 
-No! …Ogami, where might she have gone to? 
-I just heard earlier that she has vanished. 
-Really… so you two don't know, either. 
-Of course we're going to worry. We'll help you look, too. 
+No!… Ogami, where might she have gone? 
+I just heard earlier that she’s vanished. 
+Really… so you two don't know where she is either. 
+I’m starting to get worried. We'll help look for her as well. 
 Please do. 
 Yuri and Kasumi are helping with the search as well… but still no sign of Iris. 
 zzZZZZzzz zzzzZZZZZzz 
@@ -941,8 +941,8 @@ No, not yet.
 She asked me if I knew of a good date spot… 
 Maybe she has gone out all on her own? 
 … 
-But the Imperial Capital is huge. Without any clue where to look we'll never find her. 
-A clue… Hmmm… 
+But the Imperial capital is huge. We’ll never find her unless we have a clue of where to begin looking. 
+A clue… hmmm… 
 Iris used to sit here often… 
 But she isn't anywhere to be seen. Maybe I should ask around a bit? 
 Iris used to sit here often… 
@@ -951,15 +951,15 @@ She isn't here either. I had hoped that maybe she was practicing.
 Let's head somewhere else. 
 Boss… found Iris yet? 
 No, I haven't. 
-Really… she's not around here, either. 
+I see… She's not around here either. 
 OK, I'm gonna try another room. 
 Iris… where are you? 
 Guess she isn't here. 
-I'll try searching another room. 
+I'll try searching in another room. 
 Maybe she's hiding behind the sets? 
 …Nope, not there. Iris, where are you? 
 If she were in such an obvious place, we'd have found her already. 
-Hmm… where did she go? 
+Hmm… Where did she go? 
 Hey, Iris! Come on out! 
 …No response. I thought she might be hiding in here… 
 Oh well. I'll try another room. 
@@ -970,11 +970,11 @@ Man… I'd love to take a swim, but searching for Iris comes first.
 No one here. Guess I'd better go elsewhere. 
 Iris! Come out! 
 …No response. Looks like she's not here. 
-This medical pod is powered by the steam machines in the basement… 
+The medical pods are powered by the steam machines in the basement… 
 …I just pray we won't ever need to use them… 
 Iris… where are you? 
-…Maybe I'll find some clue in her room… 
-She isn't here either… dammit Iris, where are you? 
+…Maybe I'll find some clues in her room… 
+She isn't here either… Dammit Iris, where are you? 
 Maybe the steam processor can tell me Iris' whereabouts… 
 No use in moping around. I have to find Iris. 
 Ensign… Iris isn't here either. 
@@ -984,7 +984,7 @@ I guess I was wrong. I'll look somewhere else for her.
 Iris… where are you? 
 Iris~! 
 … 
-Doesn't seem like she's here, either. 
+Doesn't seem like she's here either. 
 How about it, Kohran? Found Iris yet? 
 That's a negative. I searched the whole dang basement, but she's not down there. 
 Ogami, did ya try looking in her room yet? 
@@ -992,7 +992,7 @@ Maybe she left some sort of clue behind.
 Her room, huh…? 
 You'd like to buy this photo? Thank you! 
 Oh, are you done? 
-Ogami, I appreciate your interest, but… 
+Chief, I appreciate your interest, but… 
 These photos are mainly for guests, so please just take one. 
 Oh, I guess that's true. I'll come again some other time. 
 Ogami, I appreciate your interest, but… 
@@ -1018,69 +1018,69 @@ That's a photo of Iris. That'll be 50 zeni.
 You'd like to buy that? Thank you! 
 Most of the guys buying Iris's photo are older gentlemen. 
 They always glance around nervously when they buy it. I wonder if they're worried what people will think? 
-H, hey, Ogami! Where do you think you're looking? Stop! 
+H-Hey, Ogami! Where do you think you're looking? Stop! 
 Ogami… come on, don't stare at me like that. It's embarrassing. 
 (A shopkeeper's outfit. Tsubaki looks good in it.) 
 Tsubaki, if you happen to see Iris, please let one of us know. 
-Sure thing, but… did something happen with her? 
+Sure thing, but…did something happen with her? 
 Ogami… did something happen with Iris? 
 No… it's nothing. 
 This month's performance is called "Love is a Diamond"! 
-Kanna and Sumire are playing the leads… Let's hope this works… 
-…those two get along like cats and dogs, so I hope everything goes well. 
+Kanna and Sumire are playing the leads… let's hope everything works out… 
+Those two get along like cats and dogs, so I hope everything goes well. 
 No kidding… 
 Excuse me, ma'am. 
 Oh, Ogami. Come in. 
-Can I help you with something? I was just writing a report 
+Can I help you with something? I was just writing a report. 
 Oh… I see… I'm sorry to interrupt you. 
 No, no, don't worry. I'm almost done anyway… 
 Do you have any questions about leading the squad? 
 Ask for a battle report. <br> Ask for a casualty report. <br> No, thanks. 
 I'd like to hear about how our last battle impacted the surrounding area. 
 There was only minimal damage to the surroundings. 
-We were lucky that the battle took place in a storage facility. 
-This Setsuna person… That was the first time we beat one of the Hive of Darkness' leaders without letting them escape. 
-He did give us considerable trouble though, given his extraordinary speed… 
-It was taking a heavy toll on the squad members, so it's good you defeated him as fast as you did. 
+We were lucky that the battle took place near a series of abandoned buildings. 
+That Setsuna character… His defeat marked the first time we beat one of the Hive's leaders without letting them escape. 
+He did give us considerable trouble however, given his extraordinary speed… 
+The battle was taking a heavy toll on the squad members, so it’s good you defeated him as fast as you did. 
 You took a long time to defeat him, considering it was only a single enemy. 
-Reinforcements could have arrived any minute, so you should have finished it more quickly. 
+Reinforcements could have arrived at any moment, so you should have finished the battle more quickly. 
 …Yes. 
 I suppose that summarizes the situation regarding the last battle… Is there anything else? 
 No, thank you, ma'am. 
 I'd like to hear the casualty report for the Flower Division from the last battle. 
 The damage to the Flower Division was minimal. You did well, Ogami. 
-You cared for those in your command and your judgments were spot on. 
-…o-of course! Thank you, ma'am! 
-The Flower Division consists of only seven members. Losing even one of them is a severe disadvantage. 
+You cared for those in your command and your judgment was spot on. 
+…O-Of course! Thank you, ma'am! 
+The Flower Division consists of only seven members. Losing even one of them leaves us at a severe disadvantage. 
 Though we should be grateful their life was spared. 
 Of course… 
-Sakura certainly isn’t weak, but she also isn’t the strongest. She shouldn't be sent without proper support. 
+Sakura certainly isn’t weak, but she also isn’t the strongest. Make sure she has support when she is sent out on her own.
 Sumire has excellent combat capabilities, but you mustn't overestimate her. She needs proper support. 
 Maria's defenses are weak, so you should avoid placing her in close quarters combat situations. 
-Kanna has the strength to even our own in close quarters combat. She's cut out to be an advance guard. 
+Kanna has the strength to take on multiple Troupe members in close-quarters combat. She's cut out to be an advance guard. 
 It's a good idea to have her operate together with Maria or Sumire. 
 Iris was angry. She still can't fight by herself, so we have to protect her… 
-Kohran's attack power is weak, but she has wide range. Take that into consideration when giving her orders. 
+Kohran's attack power is weak, but she has a wide range. Take that into consideration when giving her orders. 
 As the captain, you must provide sufficient support. Your aid strengthens the bonds of the unit. 
 I'm trusting you to look after them, Ogami. 
 Yes, ma'am! 
-We took extensive damage… provide better support, or they'll lose their faith in you. 
+We took quite a lot of damage… You need to provide better support or your comrades will lose their faith in you. 
 Yes, ma'am… it was my failure. 
-The damage was vast. If you continue with this style of battle… Ogami, you aren’t fit to be captain! 
+There were far too many casualties. Ogami… you're a failure as a leader! 
 I need you to do better than this. 
-Yes, ma'am… it was my failure. 
+Yes, ma'am… It was my failure. 
 Oh yes, about Maria… I couldn't help but notice something. 
 Huh? What about her? 
-Did you notice that she doesn't call you 'Ensign' anymore? She's using "Captain" instead. 
-Oh… now that you mention it… 
+Did you notice that she doesn't call you “Ensign” anymore? She's using “Captain” instead. 
+Oh… Now that you mention it… 
 Seems like she has finally started to accept you. 
 Actually, she has been a lot friendlier in general. 
 I think this is thanks to your influence. 
-You… you think so? 
+You…You think so? 
 …Haha. Oh, and one more thing… 
-…Yes. 
+…Yes? 
 Iris told me that you're going on a date with her today. 
-O-of course. 
+Y-Yes I am. 
 Behave yourself, Ogami. 
 Oh, Ogami. Welcome! 
 Oh, what can I help you with? 
@@ -1088,17 +1088,17 @@ Oh, you're leaving already?
 Yeah. See you! 
 Do you need something? 
 (Those traditional Japanese clothes look great on her.) 
-(Even though she's relaxed, I can't see any openings… I wonder if she's had martial training?) 
+(Her demeanor is so calm, but her movements have no openings I can see… I wonder if she has experience with martial arts.)  
 (Gotta love the chest areas on traditional Japanese clothes… ) 
-… … 
+…
 (She's actually got quite a…) 
-Ogami! Please, I'd rather you didn't… 
+Ogami! This is really inappropriate… 
 Oh, sorry… 
 (Not a hair out of place.) 
-(She really does have beautiful hair… she must spend a lot of time getting ready every day.) 
-(She's got such a serene expression on her face.) 
-(She looks nice, but I bet she's scary if you get her angry… She's kind of the reliable older sister type.) 
-…is something the matter, Ogami? 
+(She really does have beautiful hair… She must spend a lot of time getting ready every day.) 
+(Kasumi has a very calm expression…) 
+(She looks gentle, but I bet she's scary if you make her angry… She's kind of the reliable older sister type.) 
+…Is something the matter, Ogami? 
 Oh, no, it's nothing, Kasumi. 
 (There's a quiet, calm look in her eyes.) 
 (Kasumi always looks people right in the eyes when she talks to them.) 
@@ -1108,14 +1108,14 @@ It's the perfect piece for Kanna and Sumire.
 …That reminds me, what are the other girls doing? 
 Everyone else, including Iris, is working behind the scenes. 
 That must be really boring for Iris… 
-It seems like it. Please have an extra eye out for Iris, will you, Ogami? 
+It seems like it. Please keep an extra eye on her, will you, Ogami? 
 So, what are they going to play next month? 
 The August show is "Journey to the West". Kanna will be playing Son Goku. 
-Journey to the West… Classical opera material. 
-The kids will be on summer break, so something family friendly will draw many visitors to us. 
+“Journey to the West”… Classical opera material. 
+The kids will be on summer break, so something family friendly is sure to draw a lot of visitors to the theater. 
 I hope we don't have too many lost children this time. 
 (That ribbon in her hair… it really suits her.) 
-(I'd say that's a good charm point to go with Kasumi's mature looks.) 
+(It’s a charming look on someone as mature as Kasumi.) 
 Do you need me for anything? 
 (Her clothes are pretty colorful.) 
 (Maybe she's going for that popular bus guide look?) 
@@ -1123,87 +1123,87 @@ Something the matter, Ogami?
 No I was just thinking… your outfit is pretty cute. 
 Oh, you noticed? I'm glad you like it! I actually coordinated this outfit myself. 
 Is that so? 
-(Goodness… that's certainly an aggressive neckline… ) 
+(Goodness… that's certainly an aggressive neckline…) 
 (But… isn't this supposed to be a uniform?) 
-Ahaha, Ogami. I see you've been stricken by my allure~! 
+Ahaha, Ogami. I see you've been stricken by my allure! 
 Hey, hey! 
-(The way Yuri's hair curls away from her face is one of her charming points… ) 
+(The way Yuri's hair curls away from her face is so charming…) 
 (That bouncy look is pretty trendy.) 
-Is something odd about my hair? Oh no~, I've got some split ends! 
+Is something odd about my hair? Oh nooo, I've got some split ends! 
 (Her face is small and balanced. I think even a model would be jealous.) 
-(It doesn't seem like she uses a lot of makeup… she's got a nice foundation, doubt she really needs it… ) 
-What's the matter, Ogami? You're staring at my face… Oh, I see. You've fallen for me, right? 
+(It doesn't seem like she uses a lot of make-up. Well, she's got a nice foundation, I don't think she needs it…) 
+What's wrong, Ogami? You've been staring at my face for a while. Haha, you're in love with me, aren't you! 
 Hey, you shouldn't be teasing an adult. 
-Hehehe… Sorry, Ogami! 
+Hehehe… Sorry, Ogami. 
 (Her eyes are shining with curiosity.) 
 (Yumi's got a reputation for loving juicy gossip…) 
 Hey, Ogami. Have you heard any good rumors lately? 
 Lately, you can hear loud explosions coming from Kohran's room. 
 I bet she's working on some suspicious machinery again. Exciting, isn't it? 
 I wonder what it'll be this time? 
-No idea… she was saying something about brains and sweat though. 
+No idea… She was saying something about brains and sweat though. 
 What the heck…? 
 How are things going with Kanna? 
-What do you mean… how are they going? 
-She's a kind of no holds barred type of character, isn't she? 
-She doesn't mean ill, but there are just people she rubs the wrong way, right? 
+What do you mean, how are they going? 
+She's a kind of a no-holds-barred type of person, isn't she? 
+She doesn't mean ill, but there are just some people she rubs the wrong way, right? 
 I don't know about everyone else, but at least Sumire is constantly fighting with her. 
-Anyway, it's nice that the Flower Division is finally united again. 
-Thank you. 
-Ever since that incident, Maria appears to be a totally different person. 
-You think? 
-Of course! She's much gentler now. 
-She even smiles when guests ask her for her autograph… 
+Anyway, it's nice that the Flower Division is finally united again. Ogami, I hope you give it your all out there. 
+I will, thank you. 
+Ever since the incident with Setsuna, Maria appears to be a totally different person. 
+You think so? 
+Oh, without a doubt. She's much gentler now. 
+She even smiles when guests ask her for an autograph… 
 Before, she'd always treat it as a chore. I wonder what happened. 
-I'd love to know that too! 
+I'd love to know that too.
 (She's got her scarf pinned with a brooch.) 
-(I wonder what it's made of… Couldn't be a real jewel, right?) 
+(I wonder what it's made of… couldn't be a real jewel, right?) 
 …Do you like my brooch? This thing was a bargain, I got it super cheap! 
 …Oh. 
 Looks like you and Sakura have been hitting it off lately, Ogami. 
-R-really, you think so? 
+R-Really, you think so? 
 She's really popular, with adults and children alike. 
 Looks like you and Sumire have been hitting it off lately, Ogami. 
-R-really, you think so? 
+R-Really, you think so? 
 Most people see her as hard to approach, but they also feel that's what makes her attractive. 
 She often gets flowers from high ranking young men. 
 Looks like you and Maria have been hitting it off lately, Ogami. 
-R-really, you think so? 
+R-Really, you think so? 
 Maria is really popular with men and women alike. Especially with young high school girls, actually. 
 Ogami, seems like you've been pretty friendly with Iris lately. 
-R-really, you think so? 
+R-Really, you think so? 
 It's really easy to see her appeal. Older people are especially smitten by her. 
 Seems like you've gotten pretty close to Kohran lately, huh, Ogami? 
-Y-you think so? 
+Y-You think so? 
 I don't really know what people like about her… Her fans are strange. 
 Seems like you've gotten pretty close to Kanna lately, huh, Ogami? 
-Y-you think so? 
+Y-You think so? 
 Kanna's really popular with children. 
 I guess she's like a hero they can relate to. 
 It's Ogami… Kohran, are you there? 
 Oh, hey Chief! Just a sec… 
 Oh, drat! 
-Whoa! Wh-what is it? 
-Cough, cough… Oh… Hi, Chief… What's the matter? 
-Is everything alright, Kohran? 
+Whoa! Wh-What is it? 
+*cough, cough* Oh… Hi, Chief… What's the matter? 
+Is everything all right, Kohran? 
 I was just in the process of finishing my latest invention… That's when you showed up… 
-I just had pulled out some wire when I got up to open the door. 
-A-are you OK? <br> What are you making? 
-A-are you OK, Kohran? That was quite an explosion. 
+I had just pulled out some wire when I got up to open the door. 
+A-Are you OK? <br> What are you making? 
+A-Are you OK, Kohran? That was quite an explosion. 
 Yeah, everything's fine. I'm used to things blowing up around me… 
 It's basically business as usual for me. Nothing that would bring me down. 
 OK, Chief, I have to get back to work. So excuse me, please. 
 Seems like she eats explosions for breakfast… Not sure whether I should be impressed or worried. 
 Anyway, I'd better get out of here. Kohran doesn't seem to be in the mood for a chat. 
 …What are you making? 
-It's a lie detector. I call him "Mr. Truth." 
-What? What do you want to use this thing for? 
-Well, what do you think, what for? Detecting lies of course! 
+It's a lie detector. I call him "Mr. Truth". 
+A lie detector? What are you going to use that for? 
+Well… I don't really know…
 …Huh? 
-I'm sure this invention will come in handy in an emergency! 
-You never know when you're gonna need to know if someone's lying. Better be prepared. 
+But I'm sure it will be useful in an emergency situation! 
+You never know when you're gonna need to detect if someone's lying. Better to be prepared. 
 OK, Chief, I have to get back to work. So excuse me, please. 
-Who knows… Maybe she's right and there really will be a time when it’ll be of use. 
+Who knows… maybe she's right and there really will be a time when we need a lie detector. 
 OK, I have to get back to work. So excuse me, please. 
 She's still continuing after what happened?! I guess she never learns… 
 Anyway, I'd better get out of here. Kohran doesn't seem to be in the mood for a chat. 
@@ -1214,7 +1214,7 @@ Hi, Sumire. What are you up to?
 I'm writing a letter. After all, July is also called "Fumizuki", the month of letters. 
 Oh yes. There was something I wanted to ask you, Ensign. 
 I'm writing a letter to a friend I haven't met since school. What should I write as the closing? 
-Yours faithfully. <br> Best regards. <br> Yours eternally. 
+Yours faithfully <br> Best regards <br> Yours eternally 
 You usually write "Yours faithfully", don't you? 
 Hm, I'm sure you're right, but isn't that a little too formal? 
 Well, no matter. I'll ask Ayame for advice later. 
@@ -1222,7 +1222,7 @@ If you would excuse me, Ensign? I still have a letter to write…
 Oh, sure. See you later. 
 Why don't you write "Best regards"? 
 Ah! Yes, that sounds right! Not too formal and not too familiar. 
-But I have to say… You know your stuff. 
+I have to say… you know your stuff. 
 I'm honestly impressed. 
 Hahaha, thank you. I'm glad I could help. 
 I'll finish up the letter now… Thanks a lot, Ensign. 
@@ -1231,10 +1231,10 @@ Why not something like "Yours eternally"?
 …Ensign, I'm not writing to a long lost lover. 
 We really need to refine your manners… 
 I'm sorry I couldn't be of help. 
-It's alright. 
+It's all right. 
 But I should really get back to finishing this letter… Would you mind, Ensign? 
 Sorry… I'll see myself out then. 
-So you don't know either? … Ah, well I'll just go and ask Ayame for advice later. 
+So you don't know either…? Ah, well I'll just go and ask Ayame for advice later. 
 But I should really get back to finishing this letter… Would you mind, Ensign? 
 Sorry… I'll see myself out then. 
 Hi, Maria. 
@@ -1243,38 +1243,38 @@ I heard that the Japanese people celebrate something called "Tanabata".
 Apparently it's the day after tomorrow, but I'm still not sure what exactly people do on that day. 
 We decorate dolls. <br> We write wishes on paper. <br> We put up pine trees. 
 We decorate dolls and eat lots of colorful mochi. 
-Wait isn't that "Doll's Day"? I thought that was on March the third. 
-Oh… yeah… you are right… 
-Captain, even I know that, and I'm from Russia. Please stop fooling around, OK? 
-Well then, I'll… take my leave. 
+Wait isn't that “Hinamatsuri”, the Doll Festival? I thought that was celebrated on March 3rd. 
+Oh, yeah… you are right… 
+Captain, even I know that and I'm from Russia. Please stop fooling around, OK? 
+Well then… I'll take my leave. 
 Tanabata… so, summer really is here. 
 That reminds me, I totally forgot about Iris. I better get going. 
 We write wishes on paper strips and tie them to tree branches. 
 Oh, right, now that you mention it, I think Ayame told me about that before. 
 Wishes… So what are you going to write on your paper strip this year, Captain? 
 Wishes for the Division. <br> Wishes for Maria. <br> Wishes for myself. 
-I'll write down my wishes for the Flower Division; that nobody gets hurt and we continue to have fun. 
-I see; how very like you. I suppose I would wish for much the same thing. 
+I'll write down my wishes for the Flower Division, that everyone remains happy and healthy. 
+I see, how very like you. I suppose I would wish for much the same thing. 
 You've taught me a great deal, sir. I must thank you. Well, I'll be going now. 
 Tanabata… so, summer really is here. 
 That reminds me, I totally forgot about Iris. I better get going. 
-I'd write that I want to be better friends with you and we continue to have fun. 
+I'd write that I want to be better friends with you and that we continue to have fun. 
 Really… Thank you, sir. 
-I… I have to go now, thank you for the chat… Bye. 
+I… I have to go now, thank you for the chat… goodbye. 
 Tanabata… so, summer really is here. 
 That reminds me, I totally forgot about Iris. I better get going. 
 I guess I would wish to stay healthy. 
-That's right. There is nothing more important than health. 
+That's right. There is nothing more important than one’s health. 
 You've taught me a great deal, sir. I must thank you. Well, I'll be going now. 
 Tanabata… so, summer really is here. 
 That reminds me, I totally forgot about Iris. I better get going. 
-Hmm… I fear that I have way to many things I would wish for. 
+Hmm… I fear that I have way too many things I would wish for. 
 Hahaha, really? I wonder what everyone else would write. 
 You've taught me a great deal, sir. I must thank you. Well, I'll be going now. 
 Tanabata… so, summer really is here. 
 That reminds me, I totally forgot about Iris. I better get going. 
 We put little pine trees in front of our houses, eat mochi and drink sake with herbs. 
-Wait, isn't that what you do on New Year's? Even I know THAT. 
+Wait, isn't that what you do to celebrate New Year's? Even I know that much. 
 I guess I'll find out myself soon enough. I have to go now. 
 Tanabata… so, summer really is here. 
 That reminds me, I totally forgot about Iris. I better get going. 
@@ -1299,15 +1299,15 @@ Rice and miso soup. Can't get my morning started without them.
 You too?! We're so much alike! 
 I tell you, if I don't eat at least ten bowls of rice in the morning I'm just useless. Hahahaha! 
 I… I'm not sure we're on the same page… 
-W-well, take it easy. I'd better get going. 
+W-Well, take it easy. I'd better get going. 
 Bye, Boss! 
 I eat lots of bread. Maybe some coffee, too. 
 Huh… I don't hate bread myself, but… 
 I just need some rice and miso soup in the morning. Otherwise I'm useless and have no energy the entire day. 
-Ten bowls of rice, that what it takes to get me going! Ahahaha! 
+Ten bowls of rice, that's what it takes to get me going! Ahahaha! 
 Wow. I could never eat that much in the morning… 
 It's never too late for a change! Hey, another bowl please! Over here! 
-W-well, take it easy. I'd better get going. 
+W-Well, take it easy. I'd better get going. 
 Bye, Boss! 
 I don't eat breakfast. 
 Whaaaat!? How do you keep up your energy if you don't eat something in the morning? 
@@ -1316,11 +1316,11 @@ It might be none of my business… but Boss… you really need to eat breakfast!
 Well, take it easy. I'd better get going. 
 Oh yeah? Bye, Boss! 
 Hey, Boss! What's the matter? 
-Uh… sorry about that. I sort of spaced out. 
-Still not entirely awake, huh? Come on, snap out of it! 
-Y-yes ma-am! 
-Hehe. Seems to have worked. OK, go get'em, tiger! 
-OK… 
+Uh… Sorry about that. I sort of spaced out. 
+Still not entirely awake, huh? Come on, snap out of it!! 
+Y-Yes ma'am! 
+Hehe. Now you seem much more awake. OK, go get'em, tiger! 
+R-Right… 
 Do you want some help cleaning? It must be tough on your own, Sakura. 
 Yes, but… I thought you were going on a date with Iris today. 
 I'm sure it's no problem if I help you out for a short while. 
@@ -1330,13 +1330,13 @@ This floor's cleaner than ever, thanks to you.
 Oh no, I didn't do that much. You're the one working so hard, Sakura. 
 Yes, but it was a lot more fun working together, so thank you for that. 
 But you better hurry and go see Iris now. 
-Phew.. that was quite the workout. 
+Phew.. That was quite the workout. 
 OK… That ate up more time than I thought, I better go pick up Iris right now. 
 Good work, Ogami. 
 Oh no, I didn't do that much. You're the one working so hard, Sakura. 
 Yes, but it was a lot more fun working together, so thank you for that. 
 But you better hurry and go see Iris now. 
-Phew.. that was quite the workout. 
+Phew.. That was quite the workout. 
 OK… That ate up more time than I thought, I better go pick up Iris right now. 
 You're already thinking about your date with Iris, aren't you, Ogami? 
 You seemed to be really absent-minded during the cleaning… 
@@ -1353,7 +1353,7 @@ Unused
 Unused
 Unused
 Unused
-There's so many people… what's this place? 
+There's so many people… What is this place? 
 What's that? 
 I wanna see! I wanna see it! Can we?! 
 Hey, what kind of story will it be? 
@@ -1361,23 +1361,23 @@ Mon Frère, who's that person?
 Ohhh… 
 Now then, we open at a laboratory deep, deeeeep within the mountains. 
 In it lives a single scientist, obsessed with his research. 
-I… I'm no little girl anymore. And this isn't scary at all. 
+I… I'm not a little girl anymore. And this isn't scary at all. 
 I'm… fine. 
 Waah… I'm scared! 
-Please… Make it stop… 
+Please… make it stop… 
 Unused
 Unused
 No, stay away! 
 Eeeeek! 
 Don't give us that! Take a look at this! 
 Stop acting like it's nothing!! What do you make of this! 
-You wanna explain this, Ogami?! 
+You wanna explain this, Chief?! 
 Goodbye. I'm going off to live by myself. 
 I DID turn 10 years old today. Don't come looking for me. 
-Stupid Mon Frère! 
+Stupid Mon Frère! <br>- Iris
 Tomorrow is my birthday and Mon Frère will take me on a date to Asakusa. 
 I'm gonna look so pretty that he'll surely fall in love with me. 
-And he will kiss me in front of the fountain in the park. 
+And he will kiss me in front of the fountain in the park. Tee-hee. 
 Unused
 You don't care about me, Mon Frère! You don't love me! 
 I'm not stupid! I'm not a kid! I hate you, Mon Frère! 

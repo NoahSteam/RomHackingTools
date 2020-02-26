@@ -1,4 +1,4 @@
-﻿﻿﻿Ready~ 
+﻿﻿﻿﻿Ready~ 
 Victory pose… Yeah! 
 Heh heh heh… Terror, confusion, the government in disarray… What a beautiful sight. 
 The capital is ours! 
@@ -38,7 +38,7 @@ Once you're within range of the enemy, it's time to attack.
 After you're finished moving and attacking, that unit's turn will end. 
 Sumire, you're up next. 
 Haha, it's time for the real star to take the stage, Ensign. 
-Grace, beauty… my techniques are art in its purest form. Please hold your applause for after the show. 
+Grace, beauty… My techniques are art in its purest form. Please hold your applause for after the show. 
 Koubus have no problem jumping down from higher areas. 
 But, going up they can only handle single steps. They can't climb anything 2 levels or higher above them. 
 I'll teach you the folly of a pup baring its fangs at a goddess! 
@@ -51,7 +51,7 @@ Move, then Attack. Or, Attack, then Move…
 Consider carefully what will work best for the situation at hand. 
 However, remember that you can't take the same action twice in one turn. 
 You can neither Attack twice, nor Move twice. 
-Alright, Ensign Ogami. Go ahead and move your Koubu. 
+All right, Ensign Ogami. Go ahead and move your Koubu. 
 Sakura! We still don't know the extent of the enemy's strength. Focus on your defense. 
 Got it! 
 Do you understand, Ensign? 
@@ -76,7 +76,7 @@ Allow me to demonstrate with my own Special Ability.
 Podozhdi! 
 My Special Ability is Podozhdi. 
 Enemies I hit with it will be paralyzed, and unable to move for a while. 
-Alright, from here on I'll leave it to you to give us orders, sir. 
+All right, from here on I'll leave it to you to give us orders, sir. 
 First, let's annihilate the enemy Hex Mechs and Rear Guard. 
 That appears to be one of the enemy commanders. Make sure to keep everyone healed up while we face them. 
 I think everyone will be fine without my protection. 
@@ -88,7 +88,7 @@ Don't worry, Kohran! I'll protect you!
 Kanna! I've got your back! 
 They got away… but, we were able to protect the Capital!! Let's return to base, everyone!! 
 Just a moment, Ogami. It's not time for the Flower Division's curtain call just yet! 
-W-what? 
+W-What? 
 Ensign Ogami, those are members of the Hive of Darkness. 
 <LIPS> Please explain. <br> I'm already aware. 
 I see, that's reassuring. Then I'll leave all the instructions up to you from here on. 
@@ -118,7 +118,7 @@ Thank you!
 Get them, Ogami! 
 I'm counting on you, Ogami! 
 Kyaaa! 
-Y-you've not seen the last of me! 
+Y-You've not seen the last of me! 
 Ogami… I'm sorry… 
 It's my turn now. 
 Hahahaha… 
@@ -164,7 +164,7 @@ Take 'em down, Boss!
 Uwahhh… 
 Dangit… they got me… 
 Sorry Chief… 
-Alright! Let's do this!! 
+All right! Let's do this!! 
 Full power! Hiyaaaaa! 
 Feast your eyes on the killer techniques of the Kirishima! 
 Let's take 'em down, Boss!! 
@@ -175,7 +175,7 @@ Let's see what you can do!
 Uwahhh… 
 Damn. Guess I still haven't trained enough… 
 I've gotta keep fighting… for the Boss. 
-Alright! 
+All right! 
 We did it! 
 We did it! 
 Phew! 
@@ -186,9 +186,9 @@ Hm?
 It feels strange fighting here. 
 <LIPS> Why? <br> This is where I first met you. <br> You became a news story here. 
 Why? 
-…oh, well I guess you didn't really think it was important, so never mind… 
+…Oh, well I guess you didn't really think it was important, so never mind… 
 This is where I first met you. 
-Hehe… that's right. Strange that we're having our first battle together where we first met… or maybe it's destiny… 
+Hehe… That's right. Strange that we're having our first battle together where we first met… or maybe it's destiny… 
 This is where you had that article written about you: 'Mysterious Young Lady Cuts Down Monster'. 
 Oh, come on! Please just forget about that, it's embarrassing! 
 Huh…? 

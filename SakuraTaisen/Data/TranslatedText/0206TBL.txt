@@ -1,6 +1,6 @@
-﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
-It's a photo of Maria. …She's lost in thought and looks kind of sad…
+It's a photo of Maria. She's lost in thought and looks kind of sad…
 A photo of Kanna. She looks strong and reliable. I can't wait to meet her.
 A photo of Iris. She's surrounded by flowers and flashing a radiant smile.
 A photo of Kohran. She's looking pretty in profile with her face dyed red by the evening sun.
@@ -26,23 +26,23 @@ A photo of Kohran. I don't get to see her with her braids undone very often. It'
 A photo of Ayame in a traditional outfit. I hope she'll always be as happy and content as she is here.
 Ayame's gun. Why…? Why did it have to turn out like this…?
 Jean-Paul the teddy bear. Iris's best friend. She always carries him with her and takes good care of him.
-So that's Kohran. I guess she'll be working here from now on. Should I go take a peek at the Manager's Office? 
-That girl said her name was Kohran, right? I guess she's in the Manager's Office by now. 
+So that's Kohran. I guess she'll be working here from now on. Should I go take a peek at the manager's office? 
+That girl said her name was Kohran, right? I guess she's in the manager's office by now. 
 Oh, you sure? 
 Oh, you sure? 
 Ogami, I appreciate your interest, but… 
 These photos are mainly for guests, so please just take one. 
 Don't get all greedy, Mr. Ensign. You can always buy one another time. 
-I see, I guess that's true…I'll come again. 
+I see, I guess that's true… I'll come again. 
 You'd like to buy this photo? Thank you! 
 That's Sakura's picture, isn't it? That will be 50 zeni. 
 We need to leave some for the guests, so just take one for now, OK? 
 Ogami, I appreciate your interest, but… 
 These photos are mainly for guests, so please just take one. 
-I see, I guess that's true…I'll come again. 
+I see, I guess that's true… I'll come again. 
 You'd like to buy that? Thank you! 
 Sakura is playing the part of the town girl this month and sales are amazing. 
-Hmm… never seen her before, she a newbie? 
+Hmm… Never seen her before, she a newbie? 
 That's right. She arrived a little before I did. 
 Great, the more the merrier. I hope we can be friends. 
 You'd like to buy this photo? Thank you! 
@@ -63,7 +63,7 @@ I see, I guess that's true… I'll come again.
 You'd like to buy that? Thank you! 
 Maria is playing a male role this month. She looks really good in her military costume! 
 Back when I was here before, Maria was the captain. 
-A captain's work is rough, but good luck with it, Ensign. 
+A captain's work is rough, but good luck with it, Mr. Ensign. 
 You'd like to buy this photo? Thank you! 
 That's a photo of Kanna. That'll be 50 zeni. 
 We need to leave some for the guests, so just take one for now, OK? 
@@ -84,23 +84,23 @@ These photos are mainly for guests, so please just take one.
 I see, I guess that's true… I'll come again. 
 You'd like to buy that? Thank you! 
 Seems like Iris is really happy that you joined up with us. 
-Oh hey! I was actually working on weapon development at the Hanayashiki Branch, 
-and I think Iris's Koubu will be finished and sent over here to Ginza sometime in July. 
+Oh hey! I was actually working on weapon development at the Hanayashiki Branch… 
+…and I think Iris's Koubu will be finished and sent over here to Ginza sometime in July. 
 You'd like to buy this photo? Thank you! 
 That's a photo of Kohran. That'll be 50 zeni. 
 We need to leave some for the guests, so just take one for now, OK? 
 Hey, come on now, Ensign. That's embarrassing. Don't buy that. 
-Huh? …but Ogami, you already bought a copy of Kohran's picture, didn't you? 
+Huh?… But Ogami, you already bought a copy of Kohran's picture, didn't you? 
 Whaa? You serious? Why're you picking up my picture when ya haven't even met me yet? 
 Just sort of caught my eye… <br> I thought you looked cute… <br> I needed some change… 
 I mean there wasn't any special reason. It just sort of caught my eye… 
-Huh. I guess you're just a curious person, aren't you Ensign. 
+Huh. I guess you're just a curious person, aren't you Mr. Ensign. 
 But that actually makes me kinda happy. 
 I thought you looked cute. I bought one just a little while ago. 
 Oh come on, Ensign! Me, cute? You're embarrassing me here! 
-… but, thanks, Ensign. Even if it is just flattery. 
+…But, thanks, Ensign. Even if it is just flattery. 
 I needed some change… I only had large bills at the time and I needed to break them. 
-What. So you just grabbed my picture so you could break a bill? 
+What? So you just grabbed my picture so you could break a bill? 
 C'mon Ensign, couldn't you have put that a little more delicately? 
 What's the matter, Ensign? You got all quiet… 
 Kohran, I'm sure Ogami is just embarrassed. 
@@ -131,7 +131,7 @@ Oh my goodness! Kohran! It's been a long time hasn't it!
 Sumire, you're looking great! Starting today I'll be crashing here with you guys. 
 I was just having Mr. Ensign here show me to the manager's office. I totally forgot where it was. 
 The manager's office? If you want the manager's office it is on the first floor. 
-… Ensign, please try not to lead her too far astray! 
+…Ensign, please try not to lead her too far astray! 
 What, we're not even on the right floor? C'mon Mr. Ensign, get it together… 
 Well, Kohran, let's catch up over some tea later. 
 Sounds good! See ya, Sumire. It'll be great working here with you. 
@@ -140,7 +140,7 @@ Iris! Good to see you! How've you been?
 Good! Hey hey Kohran, come to my room and let's play. 
 Sorry, I gotta go to the manager's office first. I'll see you later, Iris. 
 What!? Bo~ring! 
-… huh? But Mr. Yoneda's room is on the first floor. How come you're up here? 
+…Huh? But Mr. Yoneda's room is on the first floor. How come you're up here? 
 What, we're not even on the right floor? C'mon Mr. Ensign, get it together… 
 Kohran, come play with me when you're free. 
 You got it. See ya, Iris. 
@@ -152,7 +152,7 @@ Why don't I go check somewhere else.
 Oh, hey Mr. Ensign. What's up? 
 Oh, I just thought it'd be best for me to show you the way to the manager's office after all… 
 Oh, that'd be great! I'm totally lost. This place is gigantic. 
-Alright, I'll show you the way so just follow me. 
+All right, I'll show you the way so just follow me. 
 Thank you, that would be great. 
 …She's not here it seems, and not on the stage. 
 Dang it… where the heck did she go? 
@@ -163,21 +163,21 @@ Right, right. No time for getting sidetracked.
 Well she didn't return here. I guess that's to be expected. 
 Ok, I'll look in another room. 
 Hey Mr. Ensign, weren't you sitting at the reception desk there earlier? 
-… yeah, my normal job in the theater is punching folks' tickets. 
-Is that right! So that's what you do. 
-Sorry to butt in on your work. Let's just get to the manager's office quick so you can get back to it. 
-… Mr. Ensign, if you keep getting sidetracked we won't get there before guests start arriving. 
+…Yeah, my normal job in the theater is punching patron’s tickets. 
+Is that right, so that's what you do. 
+Sorry to butt in on your work. Let's just get to the manager's office quickly so you can get back to it. 
+…Mr. Ensign, if you keep getting sidetracked we won't get there before guests start arriving. 
 True. We should head straight for the manager's office. 
-She's not outside… though the remains of the bike she rode in on are still there. 
-Come to think of it, is it OK leaving it out there like that? 
+She's not outside… All that’s left are the remains of Kohran’s bike. 
+Come to think of it, is it OK to just leave that bike out there like that? 
 Yeah, no problem! After I report in and things settle down I'll come out here and fix it right up. 
-Chief, if you get too sidetracked the guests are gonna start showing up. 
+Mr. Ensign, if you get too sidetracked the guests are gonna start showing up. 
 True. We should head straight for the manager's office. 
 Hmmm… Not in the dining room. 
 Ok, I'll have to look in another room. 
 It was no trouble at all. <br> It was a bit rough. 
 It was no big deal. We handled it just fine. 
-… it was a bit rough. 
+…It was a bit rough. 
 We've already been here, Mr. Ensign. Are you hungry or something? 
 Well, no, but… 
 Well if you're hungry, just run me over to the office quick and then you can come back and pig out or whatever. 
@@ -188,22 +188,22 @@ I prefer tinkering with machines over cooking if I'm being honest.
 Is there something you need to do here, Mr. Ensign? 
 Uh no, not especially. 
 Ok then, why don't we go to the manager's office? 
-Ah, Chief. What's up? 
+Ah, Mr. Esign. What's up? 
 I was looking for you! <br> Just strolling around… <br> I snuck away from work. 
 I was looking for you! I figured it would be best to show you to the manager's office after all. 
 Cool! I was just saying hello to Yuri and Kasumi here. 
 Now that Kohran is back the theater will be even more lively. 
 Oh, listen, Ogami. Kohran and I actually joined up at the same time. I'm so happy she's back with us. 
-Hey Kohran! Is it true the Hanayashiki Branch is always running as an amusement park!? 
+Hey Kohran! Is it true that the Hanayashiki Branch also operates as an amusement park!? 
 You'll have to show me which rides are best next time we go there! 
 You got it! See you two later. 
-Ok then Okami. I hope to see you again sometime. 
+Ok then Ogami. I hope to see you again sometime. 
 Sure. OK then Kohran, shall we head to the manager's office? 
 See ya Yuri, Kasumi. I'll talk with you two later. 
 I was just walking around. What are you doing here? 
 Who me? I'm just saying hi to Yuri and Kasumi. 
 Oh, listen, Ogami. Kohran and I actually joined up at the same time. I'm so happy she's back with us. 
-Hey Kohran! Is it true the Hanayashiki Branch is always running as an amusement park!? 
+Hey Kohran! Is it true that the Hanayashiki Branch also operates as an amusement park!? 
 You'll have to show me which rides are best next time we go there! 
 You got it! See you two later. 
 Say, Ogami, why don't you show Kohran to the manager's office? 
@@ -216,11 +216,11 @@ Ogami, if you have free time, then there is work to do! Please come to the offic
 Uh, sure. 
 See ya Yuri, Kasumi. I'll talk with you two later. 
 Ok Kohran, see you later! 
-… what's the matter, Mr. Ensign? You're spacing out. 
+…What's the matter, Mr. Ensign? You're spacing out. 
 Forget about that, Kohran! Tell me about the Hanayashiki Branch! 
 The Hanayashiki Branch is in an amusement park, right? What are the best rides there? 
 Oh, I can tell you all sorts of stuff about the rides! I actually worked on a bunch of them myself! 
-Yuri, I know you're happy to be with a friend who joined you, but she has other things she needs to be doing. 
+Yuri, I know you're happy to see your friend again but she has other things she needs to be doing. 
 Actually, Ogami, why don't you show Kohran to the manager's office? 
 Sure. OK then, Kohran, shall we head to the manager's office? 
 See ya Yuri, Kasumi. I'll talk with you two later. 
@@ -233,7 +233,7 @@ Yep, Kohran and I joined up at the same time.
 Forget about that, Kohran! Tell me about the Hanayashiki Branch! 
 The Hanayashiki Branch is in an amusement park right? What are the best rides there? 
 Oh, I can tell you all sorts of stuff about the rides! I actually worked on a bunch of them myself! 
-Yuri, I know you're happy to be with a friend who joined you, but she has other things she needs to be doing. 
+Yuri, I know you're happy to see your friend again but she has other things she needs to be doing. 
 Say, Ogami, why don't you show Kohran to the manager's office? 
 Sure. OK then, Kohran, shall we head to the manager's office? 
 See ya Yuri, Kasumi. I'll talk with you two later. 
@@ -242,7 +242,7 @@ The manager's office is right next door. Are you getting sidetracked?
 Seriously, Mr. Ensign. We shouldn't keep Yoneda waiting. 
 Yes, yes, that's right. Well, let's go! 
 Wait a minute, Mr. Ensign! This isn't the manager's office! 
-Oh… uh, right… Sorry, I just sorta-… 
+Oh… Uh, right… Sorry, I just sorta-… 
 …Jeez, Mr. Ensign. You've got a few screws loose. 
 Ogami! 
 Hmmm? That voice… 
@@ -253,7 +253,7 @@ I should go look for Kohran. She may have gotten lost on the way here.
 It's Ogami, I'm coming in. 
 What! Kohran hasn't come yet? 
 Hmm, looks like she hasn't come yet. Do you suppose she got lost somewhere? 
-Hmmm… that's worrisome. 
+Hmmm… That's worrisome. 
 Idiot! Kohran's the worried one right now! Get out there and find her! 
 Ah Yes! I apologize! 
 Ugh, Ogami, you still haven't found Kohran? 
@@ -262,35 +262,35 @@ Oh, hey, Mr. Ensign. What's up?
 Oh, I just thought it'd be best for me to show you the way to the manager's office after all… 
 But, you actually just passed the manager's office. Didn't you see it there? 
 Huh? Seriously? Oh man I must've been spacing out. 
-Oh, Mr. Ogami, hello. 
+Oh, Ogami, hello. 
 The current play is called "For Love". It is a French play. 
 Maria and Sakura play the leads. Maria in the role of Sir Andre is quite the spectacle… 
 I've got to say, she looks quite charming in men's clothes! 
-Whoa… that sounds fun. 
+Whoa… That sounds fun. 
 Ogami, you still haven't found Kohran? 
 No… I wonder where she went. 
 It's been a while since Kohran has been here, she's probably walking around and being nostalgic. 
 Oh, Ogami, Kohran! Welcome! 
 (A shopkeeper's outfit. Tsubaki looks good in it.) 
-H, hey, Ogami! Where do you think you're looking? Stop! 
+H-Hey, Ogami! Where do you think you're looking? Stop! 
 Ogami… come on, don't stare at me like that. It's embarrassing. 
 Kohran! Good to see you! 
 Tsubaki, you look really good. I'm gonna be joining up here, so I look forward to working with you. 
 Same here. Really good to see you. 
 I heard you arrived by bike, Kohran. Why didn't you take the capital railway? 
-Eh, the steam trains are always so crowded, the weather's great, and it's not too far from Asakusa. 
+Eh, the steam trains are always so crowded. The weather's great and it's not too far from Asakusa so I rode here myself. 
 OK, well, I'll get your bike carried in. Good luck on the stage! 
 Ogami, have you found Kohran yet? 
 Well… not yet. Where could she have gone? 
-When you meet her, please guide her right to the manager's office, ok? 
+When you find her, please guide her right to the manager's office, ok? 
 Is something wrong, Ogami? 
 Are you staring at Tsubaki because she's so cute? 
 No way, Kohran! Don't tease me! 
 Mr. Ensign, don't you think that staring at women like that interferes with their work a bit? 
 Is something wrong, Ogami? 
-… Shouldn't you be looking for Kohran? 
-What the… why is there already a poster of me up there!? 
-How embarrassing… don't look at it, Mr. Ensign! 
+…Shouldn't you be looking for Kohran? 
+What the… Why is there already a poster of me up there!? 
+How embarrassing… Don't look at it, Mr. Ensign! 
 What is that…? 
 That is a poster of Kohran. After all, she is a member of the Flower Division. 
 Thanks for your business! Come again! 
@@ -308,15 +308,15 @@ Ogami… can you please stop staring at me like that? It's embarrassing!
 …Hey, Mr. Ensign! You know if you stare at someone like that, you should at least say something! 
 (Whoa, that blouse shows a lot of skin.) 
 (…But compared to what Sumire wears, it's still pretty tame.) 
-(… Though, now that I think about it, compared to Sumire's usual get up, this is still pretty tame.) 
-… Ogami, would you mind not staring at me like that? 
-S-sorry. 
+(…Though, now that I think about it, compared to Sumire's usual get up, this is still pretty tame.) 
+…Ogami, would you mind not staring at me like that? 
+S-Sorry. 
 Hey, Mr. Ensign, where do you think you are going? 
 I'll be playing a girl from the streets this time. 
 How do you like my outfit? 
 It really suits you. <br> A bit racy, isn't it? <br> I like your normal outfit. 
 It really suits you. Very cute! 
-You think so? …Thank you. 
+You think so…? Thank you. 
 It really is! Totally cute. 
 A bit racy, isn't it? Showing so much skin… 
 Really? I thought it was one of the tamer outfits, to be honest… 
@@ -324,7 +324,7 @@ Yeah, Mr. Ensign, there are way more extreme outfits than this!
 Hm… I like your normal outfit better. 
 Is that so…? 
 Hey, Mr. Ensign! Don't say stuff like that! 
-I… erm… well… 
+I…erm… Well… 
 Hahaha! Look at you, Mr. Ensign, getting all red in the face! 
 …Ogami? Who is that? 
 Hi there! I'm Kohran Li! 
@@ -332,7 +332,7 @@ I just arrived here from the Hanayashiki Branch. Nice to meet you!
 Hi, my name is Sakura Shinguji. I joined the squad just recently. Nice to meet you too. 
 You two are going to be comrades in the Flower Division, so here's hoping you can be good friends. 
 Of course! 
-OK, then… I have to get to the performance. Ogami, Ms. Li, if you'd excuse me. 
+OK, then… I have to get to the performance. Ogami, Miss Li, if you'll excuse me. 
 Oh stop it with that "Miss Li". Way too formal. 
 Just "Kohran" suits me fine. 
 … Is that so? See you later… Kohran. 
@@ -347,25 +347,25 @@ Not so good, I'm afraid. I guess we are pretty different…
 …Hey, Mr. Ensign. You know, with you being the captain here and all, you really shouldn't say stuff like that! 
 I'd expect more from the captain of the Imperial Assault Troupe. 
 You're right. I shouldn't have said that. 
-I… hmm… well… 
+I…hmm… Well… 
 Oh, sorry Mr. Ensign. That was a weird thing to ask, I guess. 
 But no need to fib, Mr. Ensign. You can always be honest with me. 
-… By the way, Mr. Ensign, do you mind if I just call you Chief? 
-Of course. <br> No way! <br> Call me 'lover boy'. 
+…By the way, Mr. Ensign, do you mind if I just call you Chief? 
+Of course. <br> No way! <br> Call me “lover boy”. 
 Of course. 
-Thanks. I always have trouble calling Yoneda 'Lieutenant General' too. 
+Thanks. I always have trouble calling Yoneda “Lieutenant General” too. 
 I just love how relaxed the Flower Division of the Troupe is about things like that. 
 …What?! I kind of like being called Ensign… 
 Oh, come on! No need to fuss about a title, right? 
 All right then! Chief it is! 
 You know… how about you call me lover boy? 
 What are you talking about? Cut it out, ya weirdo! 
-… nice joke, though. I actually thought you were serious there for a second! Hahaha! 
+…Nice joke, though. I actually thought you were serious there for a second! Hahaha! 
 Glad that you have a sense of humor, then. I can tell we'll be getting along great! 
 Well… That's a good question… 
-Looks like it is all the same to you. Chief it is! 
+If it’s all the same to you, I’ll go ahead and call you Chief then! 
 OK, Chief? 
-Of… of course. 
+Of… Of course. 
 So shall we go inside then, Chief? Yoneda must be waiting. 
 Yes, let's go in. 
 …Chief, where are you going? 
@@ -382,28 +382,28 @@ And after that, go to the administration office to help Kasumi.
 I look forward to serving with you, Chief! 
 It was no trouble at all. <br> It was a bit rough. 
 It was no big deal. We handled it just fine. 
-… it was a bit rough. 
-Well, look at that… you're one smooth operator, aren't you, Chief? Be careful or Sakura will get jealous. 
-Well, look at that… you're one smooth operator, aren't you, Chief? Be careful or Sumire will get jealous. 
-Well, look at that… you're one smooth operator, aren't you, Chief? Be careful or Maria will get jealous. 
-Well, look at that… you're one smooth operator, aren't you, Chief? Be careful or Kanna will get jealous. 
-Well, look at that… you're one smooth operator, aren't you, Chief? Be careful or Iris will get jealous. 
-Well, look at that… you're one smooth operator, aren't you, Chief? Be careful or Kohran will get jealous. 
+…It was a bit rough. 
+Well, look at that… You're one smooth operator, aren't you, Chief? Be careful or Sakura will get jealous. 
+Well, look at that… You're one smooth operator, aren't you, Chief? Be careful or Sumire will get jealous. 
+Well, look at that… You're one smooth operator, aren't you, Chief? Be careful or Maria will get jealous. 
+Well, look at that… You're one smooth operator, aren't you, Chief? Be careful or Kanna will get jealous. 
+Well, look at that… You're one smooth operator, aren't you, Chief? Be careful or Iris will get jealous. 
+Well, look at that… You're one smooth operator, aren't you, Chief? Be careful or Kohran will get jealous. 
 Ah, Kohran! You have returned from the Hanayashiki Branch, I see. 
 Maria! You really DO look good in men's clothing. 
 The Chief here is showing me to my room. 
 Is that so? I'll leave her in your hands then, sir. 
 (What wonderful platinum blonde hair she has.) 
 (Maybe it is because she knows Kohran from before, but there is a warmth in her eyes I've never seen before.) 
-(… If I keep staring like that, she'll get angry.) 
+(…If I keep staring like that, she'll get angry.) 
 Hey Chief, don't gape at women like that! 
-… Sir. I think I already told you that you shouldn't stare at women in such a manner. 
-Gotta listen to what people say, Ogami. You deserved that one. 
-Hey Ogami, don't gape at women like that! 
+…Sir. I think I already told you that you shouldn't stare at women in such a manner. 
+Gotta listen to what people say, Chief. You deserved that one. 
+Hey Chief, don't gape at women like that! 
 That outfit is awesome. What role are you playing? 
 A French soldier named Andre. 
 (But man, she really does look great in men's clothing.) 
-…Sir. Where do you think are you going with Kohran? 
+…Sir. Where do you think you are going with Kohran? 
 Sir. Have a good day. 
 I need to be at the stage and prepare for the show. Thank you for taking care of this for me. 
 My duty as a leader. <br> My duty as a man. 
@@ -413,16 +413,16 @@ She's right, Chief! You’re helping me a great deal here.
 As a man, that goes without saying. If I see a woman in need, I simply have to help her. 
 Stop it, you'll make me blush. I'm not used to being treated like this. 
 But… it does make me kind of happy. 
-…… 
+…
 …Chief, you know you gotta say something, otherwise it isn't much of a conversation. 
-Oh… sorry… my mind wandered off there for a bit. 
+Oh… Sorry… my mind wandered off there for a bit. 
 …I'm really sorry, Kohran, but the show is about to start very soon. 
 When you're ready, just come to the dressing room. I'll go ahead. 
 What!? Is it really that late, already? I can't be late for my very first show. 
 Huh, you'll participate in the show, even though you just arrived? 
 Don't worry. I've been a member of the Flower Division for a while now. I'm used to making stuff up as I go. 
 And besides, I only have a small role with barely any lines. Easy peasy! 
-Anyway. Thanks for showing me the way, Chief. See you later! 
+Anyway, thanks for showing me the way, Chief. See you later! 
 So… looks like the Flower Division just got reinforcements. I can't wait to see Kohran in action. 
 Ensign~! 
 That voice… 
@@ -434,13 +434,13 @@ So Ensign, now that you have met her, what is your first impression?
 She's a bit strange. <br> She's cute! <br> I think she's funny. 
 Well… what can I say? She's a bit strange. 
 You read people like books, don't you, Ensign? 
-I guess she really is strange. Her speech could use some refinement, and her inventions can be a bit dangerous. 
+I guess she really is strange. Her speech could use some refinement and her inventions can be a bit dangerous. 
 But she really knows a lot about machines. You can count on her in that regard. 
 …She's cute, wouldn't you say? 
 Cute? Kohran? 
 Well… What can I say? It really isn't my place to judge people's taste. 
 Hmm… I think she is funny. 
-That is certainly true. That speech of her could use some refinement, though. 
+That is certainly true. That speech of hers could use some refinement, though. 
 She was born in China, you would think they would have taught her some manners there. 
 Well, I apologize for putting you on the spot with a question out of the blue like that. 
 Anyway, Ensign, the manager sent me to tell you that you should go help in the administration office. 
@@ -459,7 +459,7 @@ That's wonderful! I like her a lot, too.
 But, before I forget. Mr. Yoneda said you should help out in the administration office. 
 Gotta go! See you later! 
 Hard to say. I just met her, after all. 
-… I see. But I'm sure you'll get to know her soon! 
+…I see. But I'm sure you'll get to know her soon! 
 Of course. 
 But, before I forget. Mr. Yoneda said you should help out in the administration office. 
 Gotta go! See you later! 
@@ -469,18 +469,18 @@ I'm sorry. I didn't mean it. I'll do my best to like her. Please stop crying…
 OK… Promise you'll try! 
 But before I forget. Mr. Yoneda said you should help out in the administration office. 
 Gotta go! See you later! 
-…… 
+… 
 Did you hear me? 
 Yes… I heard you… 
-… Mr. Yoneda said that you should go and help in the administration office. 
+…Mr. Yoneda said that you should go and help in the administration office. 
 Gotta go! See you later! 
-… I guess I DID promise to help… I better go the administration office, then. 
+…I guess I DID promise to help… I better go to the administration office, then. 
 Ah, Ogami. 
 OK, I'm here, what do you want me to do? 
 You see those files? They need sorting. 
 Got it. Leave it to me. 
 Phew! This is such a relief. Now I can go home without having to worry. 
-… huh? 
+…Huh? 
 Since we had the early shift today, Yoneda said we should leave the paperwork to you. 
 What!? 
 Thank you very much, Ogami! 
@@ -587,8 +587,8 @@ Er, you don't have to talk about it if you don't want to.
 After all, everybody's gone through stuff they'd rather forget! 
 Say no more, say no more. 
 Just give it all you've got next time, Mr. Ensign! 
-I-is that my photo?! Gee, how embarrassing! 
-Um, Ensign? I want to go to the Manager's Office… 
+I-Is that my photo?! Gee, how embarrassing! 
+Um, Mr. Ensign? I want to go to the manager's office… 
 I'll be on this stage very soon… 
 Unused
 Unused

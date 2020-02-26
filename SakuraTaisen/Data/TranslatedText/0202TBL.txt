@@ -1,6 +1,6 @@
-﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
-It's a photo of Maria. …She's lost in thought and looks kind of sad…
+It's a photo of Maria. She's lost in thought and looks kind of sad…
 A photo of Kanna. She looks strong and reliable. I can't wait to meet her.
 A photo of Iris. She's surrounded by flowers and flashing a radiant smile.
 A photo of Kohran. She's looking pretty in profile with her face dyed red by the evening sun.
@@ -27,13 +27,13 @@ A photo of Ayame in a traditional outfit. I hope she'll always be as happy and c
 Ayame's gun. Why…? Why did it have to turn out like this…?
 Jean-Paul the teddy bear. Iris's best friend. She always carries him with her and takes good care of him.
 It's this late already…? Soon it'll be time to put out the lights in the theater. 
-I only have time to inspect 3 more rooms…What should I do? 
+I only have time to inspect three more rooms… What should I do? 
 Continue patrol. <br> Go to sleep. 
 I guess I'll keep going a little longer. 
 It's been a long day…I think I'll go back to my room and sleep. 
 It's almost time for the theater lights to go out. My watch is over. 
-Phew…It's been a long day. I think I'll go back to my room and sleep. 
-Hmm…Should I call it a night? 
+Phew… It's been a long day. I think I'll go back to my room and sleep. 
+Hmm… Should I call it a night? 
 I'd like to find a book to borrow, but I'm on patrol. Better leave it for now. 
 OK, looks like all is well. I'll go check out another room. 
 I wonder if Sakura's in there? 
@@ -41,9 +41,9 @@ Doesn't matter if she is. I have to continue my patrol.
 …No answer. Is she already asleep? 
 …The room is empty. I have a feeling that another member of the Flower Division lives here… 
 No point in loafing around in a place like this. I'd better continue my patrol. 
-…No answer. Well, of course not--it's an empty room. 
+…No answer. Well, of course not, it's an empty room. 
 I wonder if Maria's in her room? 
-Maria…might be asleep. Guess I'll go to another room. 
+Maria might be asleep. Guess I'll go to another room. 
 …No answer, huh? 
 I guess this is going to be Kohran's room from now on. 
 I'm still on patrol, so why don't I check out another room? 
@@ -67,8 +67,8 @@ Everything seems fine here. I'll continue my patrol.
 The theater's entrance hall. It's so quiet that it's hard to believe how lively the place is during the day. 
 …Everything seems fine here. I'll check out another room. 
 Aah, a futon on a tatami mat. Maybe I could sleep here… 
-…But I definitely shouldn't… Guess I'll continue my patrol. 
-The director's office… Looks like Manager Yoneda isn't here. 
+But I definitely shouldn't… Guess I'll continue my patrol. 
+The director's office. Looks like Manager Yoneda isn't here. 
 The door is locked, and everything seems fine. I'll continue my patrol. 
 …Yoneda's probably somewhere getting hammered again. 
 They were running me ragged in here today. 
@@ -77,21 +77,21 @@ Sakura's and Maria's costumes have been left here…
 …Everything seems fine. Why don't I go to another room? 
 These must be for use on stage… The makeup smells nice. 
 …Everything seems fine here. I'll go to another room. 
-But man…what an amazing number of props. 
+But man… what an amazing number of props. 
 How can anyone tell where anything is in here? 
 Anyway, everything seems fine. I'll continue my patrol. 
 …The stage backdrops and supports have been left in here. 
 …There's no one around. Well, it's unlikely that anyone would steal this stuff. I'll go to another room. 
-Everything looks OK here. …The only ones who would want to break into this room are mice. 
+Everything looks OK here. The only ones who would want to break into this room are mice. 
 I guess I'll continue my patrol. I only have so much time. 
 The cafeteria is bustling during the day, but it's dead quiet now. 
 There's no one here, and no point in sticking around any longer. 
-The merchandise is still where it was when the store was open…That's pretty careless. 
-I'd like to grab just one photo… But that would be a terrible idea. 
+The merchandise is still where it was when the store was open… That's pretty careless. 
+I'd like to grab just one photo… but that would be a terrible idea. 
 Anyway, no problem here. I guess I'll continue my patrol. 
 I've spent more time than I care to remember punching tickets in this place. 
 Now, why don't I continue my work as night watchman? 
-Is the entrance locked? …Check. It's securely fastened. 
+Is the entrance locked…? Check. It's securely fastened. 
 I don't see any other problems. I'll continue my patrol. 
 Aww… I missed seeing Kohran's first play. 
 I'll make sure to go see it tomorrow. 
@@ -103,7 +103,7 @@ It's so quiet here now. All the commotion from earlier feels like a dream.
 Sumire almost drowned tonight and it was terrible… 
 So I can't afford to be careless when I'm on patrol. Right, that's the spirit! 
 This is the hangar where the Koubu are kept. 
-The Koubu have to be ready for action at all times, so they're left on standby. …Nothing out of place here. 
+The Koubu have to be ready for action at all times, so they're left on standby. Nothing out of place here. 
 This is where we change before using the training room, pool, and showers. 
 My locker is the third from the right. OK, no problems here. I'll continue my patrol. 
 I've heard these showers use water heated by a steam machine in the Imperial Theater's basement. 
@@ -129,16 +129,16 @@ Hey, Kohran…
 Ogami isn't in right now! 
 …Oh, yeah? Then just who am I talking to? 
 I knew it! You're totally in here, Chief. 
-It's you, Kohran? S-sorry about that. 
-…… 
-(Oh, great…I'm exhausted…Just let me get some sleep…) 
-…… 
+It's you, Kohran? S-Sorry about that. 
+… 
+(Oh great, I'm exhausted. Just let me get some sleep…) 
+…
 (It's gone quiet…) 
 (Ooof, today's a wash. I'm going to bed…) 
 What's up? You look like death warmed over. 
 Did ya eat something nasty? 
 No… It's not that. I'm just a little worn out from today's work. 
-…You OK? If I'm being a nuisance… 
+You OK…? If I'm being a nuisance… 
 No, it's fine. But what did you want at this time of night? 
 Hmm? Well, first of all, did you see my play, Chief? 
 I was too busy to make it. <br> I-I saw it. <br> You were lovely, Kohran. 
@@ -149,11 +149,11 @@ Yeah, sure thing. By the way, what did you want at this time of night?
 Right, right, I forgot! 
 I-I saw it. 
 Wow, thanks. But didn't I flub that one line? 
-…huh? 
+…Huh? 
 You were lovely, Kohran. 
 Cut it out, Ogami! You're making me blush! 
 But didn't I flub that one line? 
-… huh? 
+…Huh? 
 You know… the scene where I call Maria's name. 
 How'd I manage to screw that one up? I bet you wouldn't get the name wrong, Chief. 
 Kandre? <br> Andre? <br> Andora? 
@@ -163,24 +163,24 @@ What are you talking about? Maria's character was named Andre.
 …Chief. You didn't really go, did you? There's no way you'd get that wrong if you had. 
 …I'm sorry. You're right, I wasn't there. 
 I get that you were trying to be nice, but you shouldn't tell whoppers, Chief! 
-…That kinda killed the mood. I think I'll head home. 
+…That kinda killed the mood. I think I'll head back to my room. 
 You're wrong, Chief. Maria's character was Andre! 
 It… It was?! 
-You just told me how pretty I was… But you weren't even there, were you?! 
+You just told me how pretty I was… but you weren't even there, were you?! 
 Sweet talk will get you nowhere with me! I can't stand that kind of thing! 
 Uh, no, I mean… 
 Never mind! Good night, Chief! 
 Um… Andre, I think? 
 You got it! Good memory you have there. 
 But it's just like me to get hung up on mistakes, eh? 
-That's true. Just try to do better next time. You shouldn't worry about it. 
+Don’t worry about it. Just try to do better next time. 
 …For sure. We've been having such a nice chat, I totally forgot where we started. 
 …What about you, Chief? You remember? 
 No… sorry. 
 …It's cool. Just as well you forgot, since I did too. 
 …For sure. We've been having such a nice chat, I totally forgot where we started. 
 …What's the matter, Chief? You've been real quiet… 
-S-sorry… 
+S-Sorry… 
 What's up, Chief? You've seemed kinda down. 
 …I know! I've got an idea. 
 Chief, you got anything else on your plate today? 
@@ -194,15 +194,15 @@ Now that you mention it… I'd like to see your room, Kohran.
 For real? You're a smooth one, Chief! 
 But that's great. Wanna have some fun with me? 
 Man, you seem kind of down. Wanna have some fun with me? 
-W-what kind of… fun?! 
+W-What kind of… fun?! 
 So, how about it? Come on, I'll be waiting in my room! 
-Ah…She's gone. 
+Ah… She's gone. 
 Hmm… What to do… 
 Stay up a little longer. <br> Go to bed. 
 …Talking to Kohran made my sleepiness disappear. 
 OK. Might as well take the chance to check out Kohran's room while I'm on patrol. 
 Today was exhausting, so I guess I'll just sleep. 
-Sorry, Kohran, but… my body… won't… move… 
+Sorry, Kohran, but…my body…won't…move… 
 Phew… I'm just beat. I think I'll call it a night… 
 Stay up a little longer. <br> Go to bed. 
 Why not stay up a little longer? There's still time before the lights go out. 
@@ -224,29 +224,29 @@ I'll be going now, sir. I leave the patrolling of the theater to you.
 What about you, Maria? 
 I'm in love. 
 Huh?! 
-I'm in love with the view from this place at night… 
-(W-whoa there. She was talking about the scenery…) 
-Sir… Each of city lights that we can see from here represents the daily lives of the citizens. 
+I'm in love with the view from the terrace at night… 
+(W-Whoa there. She was talking about the scenery…) 
+Sir, every light we can see in the city before us represents the daily life of a citizen. 
 Yes… So they do. 
-Under those lights, so many people are mourning, laughing, raging, rejoicing… living. 
-Sir, I… I think of this view as a precious treasure. 
-But…the fact that I think of it this way… perhaps it's because… of what I have survived. 
+Under those many lights, people are mourning, laughing, raging, rejoicing… living. 
+Sir, this view is like a precious treasure to me… 
+But… the fact that I think of it this way… perhaps it's because of what I have survived. 
 …Maria? 
-Ah… my apologies. I've interfered with your work. …I'll be on my way. 
-She said…she had survived. I wonder what she meant by that. 
+Ah… My apologies. I've interfered with your work. I'll be on my way… 
+What has she survived…? I wonder what she meant by that. 
 …Maria's gone. I guess I'll continue my patrol. 
 It's grown quite late, sir. I think it would be best if you retired for the night. 
-I will… be going now myself. 
+I will be going now myself… 
 …Maria's gone. I guess I'll continue my patrol. 
 (Sakura… She's practicing alone at this hour?) 
-This is where I run over… Um… The next line is… 
+This is where I run over… Um, the next line is… 
 (Haha, she's totally absorbed. I'd better not say anything.) 
 (Sakura… Is she still practicing? …Now that's dedication.) 
-(She's concentrating so hard. I'll won't disturb her.) 
+(She's concentrating so hard. I won't disturb her.) 
 I guess this is going to be Kohran's room from now on. 
 I'm still on patrol, so why don't I check out another room? 
-…Looks like she's not here. Come to think of it, we left her room together earlier… 
-…Looks like she's not here. Come to think of it, we went to the basement hangar together earlier… 
+Looks like she's not here. Come to think of it, we left her room together earlier… 
+Looks like she's not here. Come to think of it, we went to the basement hangar together earlier… 
 …Who's there? 
 It's Ogami… I'm sorry about earlier. I shouldn't have lied… 
 … 
@@ -254,7 +254,7 @@ It's Ogami… I'm sorry about earlier. I shouldn't have lied…
 OK… I'm coming in. 
 Whoa… How did all this stuff get here…? 
 I had all my things sent over yesterday. 
-But I gotta say… Lies won't fly with me, Captain. 
+But I gotta say… lies won't fly with me, Chief. 
 False flattery will never make me happy! 
 …I'm sorry. I'll try to do better. 
 Hey, as long as you get it! Go ahead and relax. 
@@ -267,7 +267,7 @@ I had all my stuff sent over yesterday.
 …Hey. Is that you, Chief? 
 It is. May I come in? 
 …You sure took your time getting here. Where have you been? 
-S-sorry… I was on patrol. 
+S-Sorry… I was on patrol. 
 Hmph… Well, OK. Come on in. 
 Whoa… How did all these bags get here…? 
 I had all my stuff sent over yesterday. 
@@ -279,7 +279,7 @@ Wow… That's a heavy-looking chest.
 I brought that with me from China. It's an antique. 
 Huh… An unusual bed you've got here. 
 Take a good look at the pillow. Pretty cool pattern, right? 
-So it is… a very Chinese feel. 
+So it is… A very Chinese feel. 
 Can I lie on it for a bit? 
 Ahahaha! Cut the crazy talk, Chief. As if I'd let you do that. 
 What a large chest… What do you keep in there? 
@@ -291,9 +291,9 @@ Hehe, you wanna see, Chief?
 I don't wear them in the play I'm doing right now, so you can come see tomorrow. 
 Well, I'll be wearing a hat this time, so you might not get a great view. 
 (I wonder what she'd look like with the glasses off…) 
-H-hold it, Chief! What are you doing?! 
+H-Hold it, Chief! What are you doing?! 
 Oh, I just wondered what your face would look like with your glasses off… 
-Dumbass! You better stop messing with me! 
+Blockhead! You better stop messing with me! 
 …Even jokes can go too far! Jeez, what were you thinking? 
 (I should lay off the horseplay.) 
 (Kohran's freckles are adorable…) 
@@ -302,17 +302,17 @@ Oh come on, Chief. You can't explain that kind of stuff verbally!
 If it's hard to explain, I can just try it on! 
 …Chief, you're getting a little too excited here! 
 (But those are such form-fitting clothes. You can see the shape of her bosom, and…) 
-(S-stop it, Ogami! What are you thinking?!) 
+(S-Stop it, Ogami! What are you thinking?!) 
 (Mmm… I can't stop my eyes from going to her chest…) 
 …Chief. What have you been gawking at all this time? 
-Ah… S-sorry… 
+Ah, s-sorry… 
 When you're talking to someone, you should be looking at their face. 
-(I don't want to make her mad again… Better stop staring.) 
+(I don't want to make her mad again… better stop staring.) 
 I'm on patrol, so I should get going… 
 Hey, don't be such a stick in the mud! Chill out here for a while. 
-B-by the way… What was this fun thing you wanted to do? 
+B-By the way… What was this fun thing you wanted to do? 
 Right, I forgot. Chief, you want to play cards with me? 
-C-cards? That was what you meant? 
+C-Cards? That was what you meant? 
 Sure was. There's a game called Koi-Koi that's a blast once you get into it. 
 If you don't know the rules, I can teach you while we're playing. How about it, Chief? 
 Oh, hey, Chief! Wanna play cards with me? 
@@ -325,11 +325,11 @@ Of course not! There'd be no fun in that! Now let's get started!
 OK then, teach me the rules. I don't know how to play. 
 No problem! I'll just teach you the rules while we're playing. 
 When I'm done explaining, we'll get serious! I'm not going easy on you! 
-I don't know…I'm not really in the mood. Sorry, and thanks for inviting me. 
+I don't know… I'm not really in the mood. Sorry, and thanks for inviting me. 
 Really…? Well, OK, then. 
 Wait! I know. I'd been meaning to check out the hangar in the basement… 
 If you want, I could take you along. 
-You don't seem too excited about this…If that's how you feel, we don't have to. 
+You don't seem too excited about this. If that's how you feel, we don't have to… 
 Wait! I know. I'd been meaning to check out the hangar in the basement… 
 If you want, I could take you along. 
 Sure. Let's go. <br> I'm on patrol… 
@@ -351,9 +351,9 @@ Yeah, just you wait. I won't lose next time!
 Ahahaha, that's the spirit. 
 Whoa, it's later than I thought. Sorry I held you up so long, Chief. 
 No worries, I had fun too… 
-For real? That's a relief. The truth is, I…was kind of worried. 
+For real? That's a relief. The truth is, I… was kind of worried. 
 Huh? 
-When I transferred to Ginza Headquarters…I wasn't sure showing up out of the blue would go over so well… 
+When I transferred to Ginza Headquarters… I wasn't sure showing up out of the blue would go over so well… 
 …Kohran… 
 …But now I can relax. Everybody in the Flower Division has made me feel welcome… 
 …And its captain has kept me company late into the night, despite being tired. 
@@ -376,7 +376,7 @@ Well, if it isn't the Chief. What are you doing down here?
 I'm in the middle of patrolling the theater. What are you doing here at this hour, Kohran? 
 Isn't it obvious? I came to see my adorable Koubu! 
 Adorable…? 
-Damn right. A well-made mecha fills me with love. 
+Ya got that right. A well-made mecha fills me with love. 
 Anyway, the equipment here is better than I expected. Not as good as Hanayashiki's, though… 
 Does Hanayashiki really have such great equipment? 
 Hehe, it's supposed to be a secret, but their machines and techno-power are the talk of the East. 
@@ -384,7 +384,7 @@ It sure brings back memories. Makes me think of when I was working on the Koubu.
 …What?! You're the one who created the Koubu?! 
 Oh, no! We just handled the construction. The blueprints were made a long, long time ago. 
 Who made them? 
-Beats me… But I wish I could have met that person. That was some real genius work! 
+Beats me… but I wish I could have met that person. That was some real genius work! 
 Is that so? 
 To begin with… When the Spirit Armor was in the design stage… 
 (Uh-oh… This is shaping up to be a long story.) 
@@ -392,7 +392,7 @@ Listen in silence. <br> Get back on patrol. <br> Ask Kohran about herself.
 Is this your unit, Chief? 
 Mmhmm, looks like you haven't modified the frame. 
 No, I didn't want to mess with it too much… 
-You value safety and reliability…right? Makes sense for a former soldier. It's a solid way of thinking. 
+You value safety and reliability… right? Makes sense for a former soldier. It's a solid way of thinking. 
 Come to think of it… What about your Koubu, Kohran? 
 I've arranged to have it brought in on the Thunderstrike bullet train. 
 …Thunderstrike? Oh, you mean the train we ride when we sortie…? 
@@ -407,19 +407,19 @@ I'm gonna stay and look at the Koubu a little longer
 OK. Take care, then. 
 …Kohran. If it's all right, could you tell me about yourself? 
 …Huh? About me? 
-Sure, for instance…Why you joined the Assault Troupe… 
-…… 
+Sure, for instance, why did you join the Assault Troupe? 
+…
 …Until recently, I'd been living in China. 
-Then I met the Hanayashiki branch’s chief, who is also the deputy commander of the Troupe, and came to Japan.
+Then I met Hanayashiki’s branch manager, who is also the deputy commander of the Troupe, and came to Japan.
 The deputy commander was also the one that scouted Maria and Iris while traveling around the world. 
 Wow… I had no idea. So that's what happened. 
-So, that's about it for my story. …I'll say it again, Chief… I’m glad I met you. 
+That's about it for my story. I'll say it again, Chief… I’m glad I met you. 
 I'm glad too, Kohran. 
 Well, I'm gonna stay and look at the Koubu a little longer. 
 OK. In that case, I'll get back to my patrol. 
 Good night, and good luck with the patrol. 
 …So that's the story. Chief, did you get all that? 
-…H-huh? What's that now? 
+…H-Huh? What's that now? 
 Really? You didn't follow any of it? 
 …Sorry. 
 Eh, it's OK. I'm gonna stay and look at the Koubu a little longer. 
@@ -428,13 +428,13 @@ Good night, and good luck with the patrol.
 I wonder if Sumire's here? 
 My my, Ensign! What are you up to? 
 I'm in the middle of my nightly patrol. What about you, Sumire? Where are you going at this hour? 
-O-of course. I'm going to the basement for a little routine I've taken up… 
+O-Of course. I'm going to the basement for a little routine I've taken up… 
 Routine? 
 Um… I'm in a bit of a hurry… If you'll excuse me, Ensign. 
 What kind of routine… is she following at this time of night…? 
 Anyway… This patrol is my routine, so I'd better get back to it. 
 It's Sumire's room… I wonder if she's back yet? 
-She said she was going down to the basement for her "routine"… What on earth could that be? 
+She said she was going down to the basement for her "routine". What on earth could that be…? 
 It's Sumire's room… I wonder if she's already turned in? 
 It's Sumire's room… I wonder if she's still mad? 
 Looks like Sumire's not here, so I guess I'll get back on patrol. 
@@ -445,10 +445,10 @@ This is, uhh… Ogami.
 …I'm going to bed now. Pardon me, but your business will have to wait until tomorrow. 
 It's, uh… Ogami. 
 Please come back tomorrow. 
-Sumire… It's Ogami… 
+Sumire… it's Ogami… 
 … 
 She won't answer… 
-Ah…Sumire! That swimsuit… 
+Ah… Sumire! That swimsuit… 
 Ah, Ensign. What do you want at this time of night? 
 Huh? Looks like your hair isn't wet. 
 Well, of course not. I haven't gone swimming yet. 
@@ -460,22 +460,22 @@ You should give your eyes a good wash when you're done.
 I'm well aware of that. I'm not a child, you know. 
 (Yowza… Sumire's pale skin sure is easy on the eyes…) 
 Ensign, I prefer a little less staring. 
-O-of course. Sorry, I couldn't help looking… 
+O-Of course. Sorry, I couldn't help looking… 
 It's quite all right. Of course your gaze would be arrested by such beauty. 
 Ensign. Go ahead and feast your eyes, but don't take it to the point of rudeness. 
-Ensign, this swimsuit…What do you think of it? 
-It looks good on you. <br> What an unusual design. <br> Isn't it's too revealing? 
+Ensign, this swimsuit… What do you think of it? 
+It looks good on you. <br> What an unusual design. <br> Isn't it too revealing? 
 It looks good on you. I don't see a problem? 
 I didn't need you to tell me that. 
 What I wanted was a detailed opinion on the design and such. 
-S-sorry. 
+S-Sorry. 
 You really ought to educate yourself a little, Ensign… 
 It's an unusual design. The suit is very stiff around the edges. 
-Well well, you do have a decent eye. Your opinion pleases me. 
-Isn't it a little too revealing? …I don't have a safe place to look here. 
+Well, well, you do have a decent eye. Your opinion pleases me. 
+Isn't it a little too revealing? I don't have a safe place to look here… 
 My, how innocent. You're a surprisingly bashful man, Ensign. 
 …Ensign. Are you listening to me? 
-Ah… s-sorry. I got a bit distracted… 
+Ah… S-Sorry. I got a bit distracted… 
 Honestly… I shouldn't have asked your opinion. 
 (But I never thought I'd get to see Sumire in a swimsuit… Patrol duty has its advantages…) 
 Well, I'd better get back on patrol… 
@@ -483,59 +483,59 @@ Wait a moment, Ensign! It's quite rude to depart without a proper conversation!
 I'm in the middle of a patrol… Do you have some special training in here, Sumire? 
 Training? Hmph… That's not what I would call it. 
 What are you doing in here, then? 
-W-well, it's… just… a diversion of mine! 
+W-Well, it's…just…a diversion of mine! 
 But at your room earlier, you said something about taking up a routine… 
-T-that's enough out of you! A real man doesn't quibble over such trivial things! 
-…right. 
+T-That's enough out of you! A real man doesn't quibble over such trivial things! 
+…Right. 
 Ensign, I'm going to take a quick swim. There are mini mines floating in the water. 
 Mines? Whoa there… Is it OK for you to use those? 
 They're false mines from the storehouse, used for above-ground drills and that sort of thing. 
 But if you touch them, they will indeed explode. I believe they're called oxygen bombs. 
 I see… Isn't it still too dangerous, though? 
-Aah! But I find the thrill of it intriguing…Won't you swim with me, Ensign? 
+Aah! But I find the thrill of it intriguing… Won't you swim with me, Ensign? 
 I'm still on patrol… <br> Sure, let's swim! <br> …I can't swim. 
 I'm still on patrol… I'm afraid I'll have to decline. 
 Do you mean to refuse my invitation? 
 Very well, then! I hope you have the most marvelous time on your patrol! 
-Aww… She's gone. …Oh well. I'll continue my patrol. 
-Sure, let's swim! Gotta get some exercise now and then. 
+Aww… She's gone. Oh well, I'll continue my patrol. 
+Sure, let's go for a swim! Gotta get some exercise now and then. 
 A fine answer! I'd expect nothing less from you! 
 I'll get in first… Come along once you've gotten changed. 
 Hey, you should do some warm-ups before you swim. 
 Don't be silly! I'm not a child, am I? No need to bother with that! 
 Thank you for inviting me, but… I can't swim. 
-Oh, is that so? …In that case, I'll give you a lesson. 
+Oh, is that so…? In that case, I'll give you a lesson. 
 I'm going in first. Hurry and get changed so you can join me. 
 Hey, you should do some warm-ups before you swim. 
 Don't be silly! I'm not a child, am I? No need to bother with that! 
 Hmm, I'm not sure about this… 
 …Oh, you try my patience! Could you stop fretting over every little thing?! 
 Never mind! I'm going swimming by myself! 
-Ah, Sumire…Shouldn't you do some warm-ups first…? 
+Ah, Sumire… Shouldn't you do some warm-ups first? 
 That's none of your concern! 
-Yeesh…oh well. I guess I'll get back to my patrol. 
-Was that…Sumire screaming?! 
+Yeesh… Oh well. I guess I'll get back to my patrol. 
+Was that… Sumire screaming?! 
 S-Sumire! 
 Hold on, I'm coming! <br> I'm going to get help! 
 I'm going to get help! Hang on, Sumire! 
-E-Ensign! I can't…My leg!! 
-Damn it…There's no time! I'll… have to save her… 
+E-Ensign! I can't…my leg!! 
+Damn it… There's no time! I'll… have to save her… 
 …All right! Hang in there, Sumire! I'm going to save you!
 E-Ensign! Please hurry! 
 Hmph… I somehow managed to get to the pool's edge on my own… 
 Hold on! I'm on my way! 
 Honestly… I thought I was done for! 
 Some help you turned out to be! 
-S-sorry… 
+S-Sorry… 
 I'm leaving! 
 Ah… She's gone. 
 …Nothing I can do now. I might as well get back on patrol. 
 You saved my life, Ensign. 
 Even though you can't swim, you rushed in to save me… 
-I…don't know how to thank you… 
+I… don't know how to thank you… 
 Are you all right? <br> Be more careful, you idiot! 
 Are you all right? You'd better get some rest. Shall we go back to your room? 
-No…I'm fine. 
+No… I'm fine. 
 I still have my pride, you know. 
 Being fussed over after making a spectacle of myself just adds to the humiliation… 
 Please don't take this the wrong way, but… I want to be alone for a while. 
@@ -546,23 +546,23 @@ Please leave me alone now. Thank you again.
 I'll be going back to my room… Good night, Ensign. 
 …OK. Take care, then. 
 …Well, how about I continue my patrol. 
-You need to be be more careful, you idiot! 
+You need to be more careful, you idiot! 
 E-Ensign… 
-Didn't I tell you that you needed to do warmups?! 
+Didn't I tell you that you needed to do warm-ups?! 
 It's a good thing I was here, but… how could you be so careless?! 
 …Ensign, I'm so sorry… It was my mistake. 
 …As long as you understand. Take better care of yourself next time, OK? 
 …Well, I need to get back to my patrol work… Good night, Sumire. 
-U-um… 
+U-Um… 
 Hm…? What is it, Sumire? 
-…Um, Ensign. Would you mind…escorting me to my room? 
+…Um, Ensign. Would you mind… escorting me to my room? 
 Sure thing. <br> I'm on patrol… 
 Sorry… I'm still on patrol. 
 I see… I suppose there's no getting out of work. 
 Take care now. 
 I will. Thank you again, Ensign. 
 …Well, how about I continue my patrol. 
-…You don't sound very interested…Well, fine then. 
+…You don't sound very interested… Well, fine then. 
 I'll take a shower and return to my room… 
 All right. Take care, then. 
 …Well, how about I continue my patrol. 
@@ -572,22 +572,22 @@ I'll take a shower and come back here… Please wait for me.
 …Sumire is getting changed in the next room. 
 Enter the changing room. 
 Sumire… She's taking way too long. 
-She might have collapsed in there…All right, I'm going in! 
+She might have collapsed in there… All right, I'm going in! 
 …Is Sumire in the shower…? 
 Yikes…! 
-…T-the bathing suit Sumire was just wearing is in that locker… 
-C-crap… blood is rushing to my head… make good choices, Ogami! 
+…T-The bathing suit Sumire was just wearing is in that locker… 
+C-Crap… Blood is rushing to my head… Make good choices, Ogami! 
 Back to the training room! <br> I'm…going to the showers… 
 Barging into the showers would be inexcusably rude. I'm going back on patrol! 
 Phew… I managed to get myself under control… 
-C-crap… I can't decide what to do! 
+C-Crap… I can't decide what to do! 
 …Now then, time to get out… 
-T-this is bad! Gotta get out of here! 
+T-This is bad! Gotta get out of here! 
 Phew… I managed to get myself under control… 
-No… my body… it's moving on it's own… toward the showers… 
+No… My body…it's moving on its own…toward the showers… 
 Uwaaah! S-Sumire! 
-T-that voice… E-Ensign?! What are you doing in here?! 
-S-sorry! I'll leave right away! 
+T-That voice… E-Ensign?! What are you doing in here?! 
+S-Sorry! I'll leave right away! 
 …Aah, you startled me. 
 …I'd say I'm the one who was startled! 
 S-Sumire… 
@@ -598,7 +598,7 @@ Sumire… Oh, what have I done…
 Thank you for waiting, Ensign. 
 Were you able to get warmed up? 
 Yes, thank you. Did I keep you waiting long? 
-Oh no… not at all. 
+Oh no… Not at all. 
 You're such a kind man. 
 …Ensign. May I ask you a favor? 
 What is it? 
@@ -606,22 +606,22 @@ Could you… keep it a secret that I almost drowned in the pool tonight?
 …Certainly. Now let's get going. 
 Yes. 
 See you later then… 
-Um…Ensign. Would you perhaps like some tea? 
+Um… Ensign. Would you perhaps like some tea? 
 I would, thank you… <br> Sorry, but I'm on patrol. 
 I'm sorry, but I'm in the middle of my patrol. I have to get back to it soon… 
 You do…? That's a shame, after you went to the trouble of escorting me here. 
-Thank you for everything you did today…Good night, Ensign. 
+Thank you for everything you did today… Good night, Ensign. 
 …Well, time to get back on patrol. 
 Oh come now, it's perfectly fine. Don't be bashful. 
 Hmm… I still have my patrol work to finish… 
-There's no need for such hesitation…Come on in. 
+There's no need for such hesitation… Come on in. 
 I-I think I will, thank you… 
-Oh? …Ogami? 
+Oh? Ogami…? 
 Well, if it isn't Sakura. Good evening. 
 Ogami… What are you doing in front of Sumire's room? 
 It's none of your business what he's doing here. 
 Get flustered. <br> Make excuses. <br> Tell the truth. 
-Ah… well, y-you see, I… 
+Ah… Well, y-you see, I… 
 Hehe… I can't tease him too much without feeling bad. 
 Sakura. The truth is, there's a broken light in my room. 
 I called the Ensign here to fix it for me. 
@@ -633,25 +633,25 @@ I understand. Sorry for jumping to conclusions…
 Sumire… 
 Well, then… See you later. 
 …That was thanks for before, Ensign. And to put a stop to Sakura's funny ideas. 
-T-thank you. 
+T-Thank you. 
 Oh, it was nothing. Now, come on in. 
 You're got it wrong, Sakura! This isn't… I-I mean… 
 I don't want to hear your excuses! 
 Oh… Sakura. 
-It's her fault for not giving you a chance to explain…Don't worry about it, Ensign. 
+It's her fault for not giving you a chance to explain… Don't worry about it, Ensign. 
 Now, come on in. 
 …The truth is, Sumire was drowning in the pool. I escorted her back to her room. 
 E-Ensign! You promised not to tell! 
-B-but… what was I supposed to say? 
+B-But… What was I supposed to say? 
 Is that it? How kind of you, Ogami. 
-W-what a joke. As if I'd ever drown… If you'll excuse me!! 
+W-What a joke. As if I'd ever drown… If you'll excuse me!! 
 I-I'm sorry, Ogami. We… really made Sumire angry. 
 All I did was tell the truth… 
 …Well, I'll be going now. 
 …OK, then. Take care. 
 …Well, I guess I'll get back on patrol. 
 …I see you have nothing to say for yourself, Ogami! 
-The two of you, at this time of night… disgusting!! 
+The two of you, at this time of night… Disgusting!! 
 Dear me, Sakura, what nasty thoughts have gotten into your head? 
 Looks like you're the nasty one, Sumire! 
 What did you say?! 
@@ -665,35 +665,35 @@ Hohoho… I went to the trouble of calling a craftsman to rework the interior.
 Sumire, why do you hide the training you've been doing? 
 …A swan may float on the water with grace and elegance… 
 But only because it's swimming as hard as it can beneath the surface. 
-Besides, as I keep telling you, swimming is merely a diversion…I wouldn't call it training. 
-…… 
+Besides, as I keep telling you, swimming is merely a diversion… I wouldn't call it training. 
+… 
 Oh my… Look at the time… 
 The lights will be off soon. 
 I'm sorry, Ensign. I didn't mean to detain you for so long… 
 Although I wish we could have had more time… 
 Oh no, I had lots of fun. Got a chance to exercise, too. 
-Oh, Ensign… Don't be a tease. 
+Oh, Ensign… don't be a tease. 
 Hahaha… Well, good night. 
 …Good night, Ensign. 
 …It's really gotten late. Should I call it a night? 
 Hmm… Should I call it a night? 
 Looks like no one else is up… 
-Sumire's silhouette in the shower…I won't forget this anytime soon… 
+Sumire's silhouette in the shower… I won't forget this anytime soon… 
 Hey… I can hear the shower going… and this locker is open. 
 Yikes…! 
-…D-does that mean that…Sumire's clothes are in the locker? 
-C-crap… blood is rushing to my head… make good choices, Ogami! 
+…D-Does that mean that… Sumire's clothes are in the locker? 
+C-Crap… Blood is rushing to my head… Make good choices, Ogami! 
 Get back on patrol! <br> I'm…going to the showers… 
 Barging into the showers would be inexcusably rude. I'm going back on patrol! 
 Phew… I managed to get myself under control… 
-C-crap… I can't decide what to do! 
+C-Crap… I can't decide what to do! 
 …Now then, time to get out… 
-T-this is bad! Gotta get back to the hallway! 
+T-This is bad! Gotta get back to the hallway! 
 Phew… I managed to get myself under control… 
-No… my body… it's moving on it's own… toward the showers… 
+No… My body…it's moving on its own…toward the showers… 
 Uwaaah! S-Sumire! 
-T-that voice…E-Ensign?! What are you doing in here?! 
-S-sorry! I'll leave right away! 
+T-That voice… E-Ensign?! What are you doing in here?! 
+S-Sorry! I'll leave right away! 
 …Aah, you startled me. 
 …I'd say I'm the one who was startled! 
 S-Sumire… 
@@ -701,15 +701,15 @@ Should we really be employing a peeping tom as a night watchman?
 …I've had quite enough. I'm going back to my room. 
 Sumire… Oh, what have I done… 
 …Chief? Don't tell me you're asleep. 
-… … 
-'scuse me, coming in… 
+… 
+'Scuse me, coming in… 
 …I thought you were taking your sweet time, and sure enough! Wake up, you jerk! 
 Guwaah!! 
 …Chief? Hey, Chief? 
-… … 
+…
 Oops… He passed out. Maybe I used too much force? 
 Oh well. Guess it's time for me to hit the sack too. 
-… … 
+…
 Iris… Is she already asleep? 
 Iris has probably gone to sleep… 
 Guess I'll get back to my patrol. 
@@ -722,7 +722,7 @@ Wow… You have so many stuffed animals.
 Yeah! They're all my buddies! 
 This is a cute lamp. 
 Sure is! I asked for it to be put in here. 
-And over there… that's where my clothes are! 
+And over there… That's where my clothes are! 
 …Can I look inside? 
 Ehehe… No way! 
 You've sure got a lot of stuffed animals… 
@@ -731,7 +731,7 @@ Yeah! My mom and dad sent them over from France.
 (Could it be… a photo of Iris's parents?) 
 I'm sorry… Did I wake you up? 
 Nah! I couldn't get to sleep either. 
-Hey… you wear a hat when you're sleeping? 
+Hey… You wear a hat when you're sleeping? 
 Yup! It's called a nightcap. 
 (A nightcap… There's no such custom in Japan.) 
 Iris… Do you take off your ribbon when you go to bed? 
@@ -746,27 +746,27 @@ They look good on you. You're very cute.
 Really? Thank you, Mon Frère! That makes me happy. 
 There's something… unusual about the design. 
 …There's nothing weird about it. You have no sense of style, do you, Mon Frère? 
-…S-sorry. 
+…S-Sorry. 
 I… tend to prefer a negligee to pajamas. 
 …Ah, but pajamas look great on you! 
 Yaaaay! Thank you, Mon Frère! 
 …Mon Frère. You're not listening to me, are you? 
-Ah… sorry. I spaced out for a minute… 
+Ah… Sorry. I spaced out for a minute… 
 Jeez! Get a grip, Mon Frère! 
-These pajamas… my mom sent them, you know. 
+These pajamas… My mom sent them, you know. 
 I see… You're living apart from your parents, right? 
-By the way… where does your family live, Iris? 
+By the way… Where does your family live, Iris? 
 They're in France. Way over on the other side of the ocean… 
 …Do you get lonely? 
-Yeah… I did at first… But I'm used to it now. 
+Yeah… I did at first… but I'm used to it now. 
 See, when I was little, I didn't know how to use my power and I was a real handful… 
 …Power? 
 Yeah. My power is called spirit energy. 
-…"Spirit energy"? Oh… You mean the "Spirit Power" that makes the Koubu run. 
+…"Spirit energy"? Oh… You mean the Spirit Power that makes the Koubu run. 
 Back then, I was invited to come to Japan. 
-I didn't want to cause more trouble for Mom and Dad…so I came over here. 
+I didn't want to cause more trouble for Mom and Dad… so I came over here. 
 Iris… 
-Sniff… But now you're here with me, so it's all fine. 
+*sniff*… But now you're here with me, so it's all fine. 
 Well… I'm gonna go to bed now. 
 …Good night, Iris. Sweet dreams. 
 Thanks, Mon Frère… and good night… 
@@ -783,7 +783,7 @@ Could you tell me about how the battle went?
 In the last battle, we were able to take down the enemy quickly, and I see no particular problems. 
 The enemy leader escaped us, but you showed excellent leadership. 
 In the previous battle… We took too long to take down the enemy. 
-The people in the park were evacuated, so there were no casualties… But I can't say our tactics were good. 
+The people in the park were evacuated, so there were no casualties… but I can't say our tactics were good. 
 We all have methods of attack that utilize our individual strengths, and you must make proper use of them. 
 Only four Koubu took part in the last battle. 
 In those conditions, if even one unit withdraws from the front, our overall fighting power will greatly diminish. 
@@ -812,20 +812,20 @@ Well then, please excuse me.
 My own judgment, huh… 
 …Anyway, I guess I'll get back on patrol. 
 Ow ow ow… I woke up with this lump on my head… What the heck did I hit it on? 
-Oof… finally done with punching tickets. 
+Oof… Finally done with punching tickets. 
 The Flower Division must be onstage… I think I'll go check out the performance. 
 They're in the middle of the play. It looks like the climax is happening right now. 
 Look, Chief. Sakura's acting her heart out. 
-Maria, though… this role fits her like a glove. 
-Damn, it's more than a girl can handle. I could just swoon. 
+Maria, though… This role fits her like a glove. 
+Whew, it's more than a girl can handle. I could just swoon. 
 Oh dear, what a provincial performance. I can't bear to watch. 
 Of course, it's terribly sad that she has to compete with my prodigious talent. 
 Be quiet, Sumire! 
-Honestly… why should I have to make do with such a minor role? 
+Honestly… Why should I have to make do with such a minor role? 
 A leading lady's spotlight suits me best. Wouldn't you agree, Ensign? 
-S-sure. 
-Shh! …The big scene is coming! 
-Eyaaah! …The stage is falling apaaart! 
+S-Sure. 
+Shh…! The big scene is coming! 
+Eyaaah! The stage is falling apaaart! 
 …I've had quite enough of this! 
 No, Sumire! You can't! 
 Sumire! The show is still on! 
@@ -834,7 +834,7 @@ Sakura! Look what you've done to the stage! What do you have to say for yourself
 Unbelievable! You certainly have a knack for tripping over your own feet! The mark of a true bumpkin… 
 You're crude, clumsy… and on top of that, rustic… A perfect trifecta of incompetence! 
 …If we're counting personal flaws, I think the winner will be you, Sumire. 
-W-what was that?! 
+W-What was that?! 
 That's enough, you two! We have an audience. Stop it! 
 Yikes! Chief, you've gotta stop them! 
 Mon Frère, do something! 
@@ -846,10 +846,10 @@ I came out here to give Sumire a warning. Sumire, the play is still on!
 No play or anything else will be happening with the stage in this condition!! 
 Besides, didn't you just jump up onstage yourself?! 
 …Ah?! 
-I'm… well, uh… 
+I'm… Well, uh… 
 You're the best, Sumire! 
 Get outta here, ticket boy! 
-Good lord… why is this happening…? 
+Good lord… Why is this happening…? 
 Calm down, Sakura! 
 O-Ogami?! 
 Sir! What are you doing here…? 
@@ -858,31 +858,31 @@ I'm sorry… I apologize for breaking the stage.
 But you didn't have to scold me in the middle of the performance! 
 You tell him, Sakura! 
 Andre! Get rid of this obnoxious man! 
-Good lord… why is this happening…? 
+Good lord… Why is this happening…? 
 …No, they're still performing. Let's leave them be. 
 …I hear you. Cool and calm as always, Chief. 
 Mon Frère, you're so smart! 
 Hmm… But it doesn't look like this fight will end anytime soon. 
-That sound just now… oh no, Ogami! The stage is gonna break down even more! 
-W-what did you say?! 
+That sound just now… Oh no, Ogami! The stage is gonna break down even more! 
+W-What did you say?! 
 Mon Frère! They're in trouble! 
 Got it! I'll make sure they get away! 
 Heeeey! Listen up! You're in danger! 
 Sir! 
-…I-it's the stage again! 
+…I-It's the stage again! 
 It's coming down! 
-O-oh no! Everybody run!! 
+O-Oh no! Everybody run!! 
 …Wait a minute! Sir, that sound… 
-…I-it's the stage again! 
+…I-It's the stage again! 
 It's coming down! 
-O-oh no! Everybody run!! 
+O-Oh no! Everybody run!! 
 Uwaaaaaaah!! 
 Eyaaaaaaah!! 
 Aiiiiieeee!! 
-Our stage… what a disaster… 
-Oh boy… that was a doozy of a performance… 
+Our stage… What a disaster… 
+Oh boy… That was a doozy of a performance… 
 …We're fortunate that no one was hurt. 
-But, man… just look at that stage… 
+But, man… Just look at that stage… 
 Sakura! What do you intend to do about this set you've destroyed?! 
 …I'm sorry. 
 Sorry isn't going to cut it. We have another performance tomorrow. I want you to fix it during the night! 
@@ -910,7 +910,7 @@ I knew it, you're nothing but talk. Anyone can say the right words if they don't
 That's not fair. Chief’s right, it's not his job to fix this. 
 That's enough. Tomorrow, we'll all fix it together. You're dismissed for today. 
 OK! 
-…… 
+…
 If you've got nothing to say, you shouldn't have butted in in the first place!! 
 …Sumire. He can't very well do it all himself, can he? 
 Hey, I know. Let's all just fix it together tomorrow. 
@@ -961,7 +961,7 @@ Unused
 Unused
 Unused
 Lord Andre, my love! Please… run away with me. 
-If I were to abandon my mission and my men to escape with you…I would no longer be myself. 
+If I were to abandon my mission and my men to escape with you… I would no longer be myself. 
 Would you still love me then? 
 Oh, Lord Andre! 
 Unused

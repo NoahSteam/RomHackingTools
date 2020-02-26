@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿It's a photo of Sakura. Her gaze is so intense. I wonder what she's thinking? 
+﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. Her gaze is so intense. I wonder what she's thinking? 
 It's a photo of Sumire. It shows a side of her that's usually hidden. 
 It's a photo of Maria. She's lost in thought and seems a bit sad… 
 It's a photo of Kanna. In it, she looks as energetic and confident as ever. 
@@ -42,9 +42,9 @@ No no no! I love it because you picked it out, Mon Frère!
 Next time, though, try to pick one that's a little cuter! 'Kay? 
 Whew! It feels great to go swimming again! 
 Were the mines to your liking? 
-Huh? D-did you put those mines there, Sumire? 
+Huh? D-Did you put those mines there, Sumire? 
 Indeed I did. After all, swimming by itself is dreadfully boring. 
-(*Sigh* I beg to differ…) 
+(*sigh* I beg to differ…) 
 Well, there's no performance today, so I can take it easy. 
 Leave the room <br> Zone out 
 Finally, a day off! I'll go join the others. 
@@ -138,8 +138,8 @@ I understand. Come by whenever you like.
 Yes, I'd like to listen to more music. 
 Great! Pick out which song you want to hear. 
 Hi, Ogami! 
-Uh, Tsubaki, why are you in the Gift Shop on our day off? 
-Oh… Force of habit, I guess… Eheheheh! 
+Hey, Tsubaki. What are you doing here today? The theater is closed and this isn't the Gift Shop. 
+Oh… You're right. Guess I came here out of a force of habit… Eheheheh. 
 By the way, Ogami, I have some jumbo-sized photos… 
 They're larger versions of photos you've already purchased. Would you like to see them? 
 Hey, Ogami. I have some jumbo-sized photos. Would you like to see them? 
@@ -159,7 +159,7 @@ Sure thing! Here are the photos you've purchased so far.
 It's empty… Maybe everyone's in their rooms. 
 Staying here would be a waste of time. I'll try another room. 
 Hey, Ogami! Would you like to play Koi-Koi with us? 
-Pardon me, Ensign… Would you care to play Koi-Koi with us? 
+Pardon me, Ensign. Would you care to play Koi-Koi with us? 
 Captain, would you like to play Hanafuda with us on our day off? 
 Hey, Boss! Wanna play Hanafuda with us? 
 Hey, Mon Frère! Come play Hanafuda with us! 
@@ -173,7 +173,7 @@ Oh… Maybe another time, then.
 Pfft! You're no fun. Come back if you change your mind, Boss. 
 How lame! C'mon, Mon Frère, play with us! 
 Hmph! Not cool, Ogami. Well, come back if you change your mind. 
-W-why is everyone gathered here…? 
+W-Why is everyone gathered here…? 
 Ahem! …I've brought Ogami with me. 
 Yay! Mon Frère!! 
 You managed to pass Ayame's quiz? That's impressive, Boss. 
@@ -185,10 +185,10 @@ I, Sumire Kanzaki, shall use this opportunity to demonstrate my genius intellect
 Hanafuda is similar to combat. It's a strategy game in which you advance or withdraw. 
 Woo hoo! What a groovy way to spend our day off! 
 Well, Ogami. Let's see if you can defeat all seven of us… 
-at Hanafuda! 
+…at Hanafuda! 
 Hi, Ogami. What are you doing here? 
 Lieutenant General Yoneda? What are YOU doing here? 
-Heh! …I just wanted a change of scenery. I assume you do, too. 
+Heh! I just wanted a change of scenery… I assume you do, too. 
 What kind of scenery are you in the mood for? 
 Hi, Ogami. Care for another change of scenery? 
 What kind of scenery are you in the mood for? 
@@ -196,17 +196,17 @@ Flower Division <br> Childish <br> Koubu
 Hmm… I think I'll pick Flower Division. 
 Flower Division, eh? You got it. Now close your eyes! 
 Hmm… I think I'll pick Flower Division. 
-*Sigh* Ogami, that's your current background. 
+*sigh* Ogami, that's your current background. 
 We may have the day off, but that's no reason to space out. 
 Hmm… I think I'll pick Childish. 
 Childish, eh? You got it. Now close your eyes! 
 Hmm… I think I'll pick Childish. 
-*Sigh* Ogami, that's your current background. 
+*sigh* Ogami, that's your current background. 
 We may have the day off, but that's no reason to space out. 
 Hmm… I think I'll pick Koubu. 
 Koubu, eh? You got it. Now close your eyes! 
 Hmm… I think I'll pick Koubu. 
-*Sigh* Ogami, that's your current background. 
+*sigh* Ogami, that's your current background. 
 We may have the day off, but that's no reason to space out. 
 Hellooo? Earth to Ogami! 
 Just take a deep breath and collect your thoughts. 
@@ -244,7 +244,7 @@ What a shame. Perhaps another time.
 …Do you want to stop, Ogami? 
 Keep going <br> Give up 
 I can't stop now! I'm a man, not a mouse! 
-Mmm… That's the spirit, Ogami. Let's begin! 
+Mmm… that's the spirit, Ogami. Let's begin! 
 …I give up. These questions are really hard. 
 …I see. Well, come back if you want to give it another shot. 
 Well done, Ogami! You made it through the Advanced Round! 
@@ -289,7 +289,7 @@ Do come visit me afterwards.
 Boy, I'm really sleepy… 
 I hope I'll *yawn* have good dreams… 
 Yes, I am. I'm exhausted… 
-Oh… Then I bid you good night, Ensign. 
+Oh… Then I bid you goodnight, Ensign. 
 …I shall see you in my dreams. 
 Sir, are you headed to bed already? 
 No, of course not! <br> I thought I'd take a nap. <br> Yes, I am. 
@@ -327,7 +327,7 @@ I'll be in my room, so come play with me! 'Kay?
 Where should I go now? 
 I thought I'd take a little nap… 
 Hmph… OK. Come play with me after, though! 
-Bye bye! 
+Bye-bye! 
 Boy, I'm really sleepy… 
 I hope I'll *yawn* have good dreams… 
 Yes, I am. I'm exhausted… 
@@ -390,7 +390,7 @@ Hey, Boss. I appreciate you comin' to see me and all,
 but I'm about to take a nap. Sorry… 
 You are? OK, I'll come back later. 
 Hey, Kanna? It's me… 
-…… 
+…
 She's probably fast asleep. No sense in waking her up. 
 Hi, Kanna. 
 Hey, Boss! Good to see you! 
@@ -429,7 +429,7 @@ Hi, Maria.
 Sir… I was thinking of doing some cooking. 
 Would you mind giving me a hand? 
 Hi, Maria. 
-Sir… It's good to see you! I was thinking of doing some cooking. 
+Sir… it's good to see you! I was thinking of doing some cooking. 
 Would you mind giving me a hand? 
 Sir… I was thinking of doing some cooking. 
 Would you mind giving me a hand? 
@@ -443,7 +443,7 @@ Let's try making borscht. Focus, sir!
 Let's make borscht again. I'll try to do a better job this time. 
 Heh, very well. We'll give it another shot. 
 Say, Maria, you looked cute in that apron… 
-S-sir! Please don't tease me! 
+S-Sir! Please don't tease me! 
 Heh! It's nothing to be embarrassed about. 
 Bye, Maria. I'll come back later. 
 Perhaps we can cook together again sometime, sir. 
@@ -473,7 +473,7 @@ Let's play again, Kohran!
 That's the spirit! Game on! 
 (I had fun playing Hanafuda with Kohran.) 
 (Plus, she looks kinda sultry when she plays…) 
-…… 
+…
 …What's wrong, Chief? 
 Oh, uh, um… Nothing. Hahaha! 
 Bye, Kohran. I'll come back later. 
@@ -482,7 +482,7 @@ Where should I go next?
 Hi, Iris. I came to spend time with you. 
 Wow, you sure look tired… 
 Yeah, I'm super sleepy, so I'm gonna take a nap. 
-Bye bye, Mon Frère! 
+Bye-bye, Mon Frère! 
 And just like that, she's fast asleep… 
 I should try another room. 
 Iris is probably still asleep. 
@@ -532,8 +532,8 @@ I'd love to! <br> Maybe later.
 Go swimming <br> Picture Sumire in her swimsuit <br> Go to another room 
 Swim a bit more <br> Go to another room 
 Swim a bit more <br> Ogle Sumire <br> Go to another room 
-I'd love to. Just don't forget to do your warm-up first. 
-*Sigh* Ensign, please don't bring up such dreadful memories. 
+I'd love to. Just don't forget to do your warm-ups first. 
+*sigh* Ensign, please don't bring up such dreadful memories. 
 Today I'll be watching you swim. 
 I'd like to swim a bit more. 
 I admire your spirit, Ensign! I'm right here with you! 
@@ -553,7 +553,7 @@ Shiba Park <br> Ueno Park <br> Hibiya Park
 What type of flower was on the wallpaper in Episode Two? 
 Lily <br> Lily of the Valley <br> Morning Glory 
 What's the name of Sakura's Special Attack? If you don’t get this right, you aren’t fit to be captain. 
-Mocha Hoshin <br> Ouka Hoshin <br> Hoka Oshin 
+Floral Divinity <br> Floral Fatality <br> Floral Divider 
 What was Maria's old code name? 
 Accessory <br> Calamity Jane <br> Cassowary 
 What is Sakura's father's name? 
@@ -561,7 +561,7 @@ Ryoma Shinguji <br> Kozuma Shinguji <br> Kazuma Shinguji
 What is the name of Crimson Miroku's Hex Mech? 
 Silver Horn <br> Peafowl <br> Amaterasu 
 What motion picture was playing when you went on your date with Iris? 
-A Rare Animal Emerges <br> A Yeti Emerges <br> A Slime Approaches 
+Introducing a Rare Creature <br> A Yeti Emerges <br> A Slime Approaches 
 What was Kohran doing while you were in Fukagawa? 
 Inventing <br> Rehearsing <br> Modifying the Koubu 
 How much does a photo from the Gift Shop cost? 
@@ -585,7 +585,7 @@ How much money did the Tenkai demand from the government?
 Which of the following rooms is located underground? 
 Night Watchman's Room <br> Infirmary <br> Large Prop Room 
 What are the blue Hex Mechs called? 
-Infantry <br> Matchlock <br> Artillery 
+Infantry <br> Matchlock <br> Cannon 
 Which of these girls has a photo for sale in the Gift Shop? 
 Kasumi <br> Tsubaki <br> Yuri 
 This is a visual question. 
@@ -616,12 +616,12 @@ When the Four Lords of Death assembled in Ueno Park, which one was on the far ri
 Crimson Miroku <br> Azure Setsuna <br> Sable Satan 
 In Episode Two, who helped repair the set at night? 
 Maria <br> Kohran <br> Sakura 
-In which room of Fukagawa Mansion was Kanna bitten by a snake? 
+In which room of the Fukagawa mansion was Kanna bitten by a snake? 
 Living Room <br> Dining Room <br> Parlor 
 When you first meet Kanna, what is the final karate move she demonstrates? 
-Double High Kick <br> Triple Aerial Kick <br> High Roundhouse 
+Double High Kick <br> Triple Aerial Kick <br> Upper Roundhouse Kick 
 What is the name of Sakura's sword? 
-Arataka <br> Arawashi <br> Arauma 
+Reiken-Arataka <br> Reiken-Arawashi <br> Reiken-Arauma 
 What is the length of the aerial battleship Mikasa? 
 80 meters <br> 800 meters <br> 8000 meters 
 In the War Room, who always sits in the left front seat? 
@@ -629,11 +629,11 @@ Iris <br> Kohran <br> Sumire
 Who was once classmates with Yuri? 
 Sumire <br> Kanna <br> Kohran 
 What is the title of Sumire's mini-game? 
-The Flying Fish of Teito <br> The Flying Fish of Taisho <br> The Flying Fish of Fujiyama 
+The Capital's Flying Fish <br> Taisho’s Flying Fish <br> The Flying Fish of Fujiyama 
 Which room has an electric fan in it? 
 Salon <br> Night Watchman's Room <br> Backstage 
 Which of these is not one of Kohran's inventions? 
-Mr. Bomb <br> Mr. Truth <br> Mr. Party 
+Mr. Bomb <br> Mr. Truth <br> Party Boy 
 This is a visual question. 
 Which play features this set? 
 "For Love" <br> "Journey to the West" <br> "Adventure Island" 
@@ -645,14 +645,14 @@ Party preparation <br> A play <br> A meal
 This is a visual question. 
 Whose door is this? 
 Sakura's <br> Sumire's <br> Iris's 
-What does the Hive of Darkness chant when burying Vessels? 
-On-kiri-kiri-basara-un-datta <br> On-kiri-kiri-basara-un-batta <br> On-kiri-kiri-basara-un-tatta 
-Where is Hanayashiki Branch located? 
+What does the Hive of Darkness chant when burying the Connectors? 
+Om khili khili basara um datta <br> Om khili khili vajra hum phat <br> Om khili khili vajra hum tatta 
+Where is the Hanayashiki Branch located? 
 Asakusa <br> Ginza <br> Nihonbashi 
 This is a visual question. 
 Why was Sakura placed in the medical treatment pod? 
 Hurt trying to save a child <br> Went into a trance <br> Caught a cold 
-How much horsepower does Kohran's Steam Bike have? 
+How much horsepower does Kohran's steam bike have? 
 50 <br> 100 <br> 200 
 When is Kanna's birthday? 
 August 7th <br> September 7th <br> October 7th 

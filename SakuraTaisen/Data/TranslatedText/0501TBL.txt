@@ -1,6 +1,6 @@
-﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
-It's a photo of Maria. …She's lost in thought and looks kind of sad…
+It's a photo of Maria. She's lost in thought and looks kind of sad…
 A photo of Kanna. Her signature strength comes through clearly.
 A photo of Iris. She's surrounded by flowers and flashing a radiant smile.
 A photo of Kohran. She's looking pretty in profile with her face dyed red by the evening sun.
@@ -44,11 +44,11 @@ Gotta hurry to the War Room in the basement.
 No answer. Guess she's already headed for the War Room. 
 Is Ayame still in her room? 
 She probably already headed for the War Room in the basement. 
-…nobody home. 
+…Nobody home. 
 It's nice to relax and drink some tea here… 
 But right now I need to get to the War Room in the basement. 
 Looks like nobody's here. I should head to the War Room in the basement. 
-We've been sold out every day recently, so this area's always packed with guests. 
+We've been sold out every day recently, so this area is always packed with guests. 
 I'd better head to the War Room in the basement. 
 This place was packed with guests just a little while ago. 
 I'd better head to the War Room in the basement. 
@@ -153,8 +153,8 @@ Oh, I guess that's true. I'll come again some other time.
 You'd like to buy that? Thank you! 
 Hmm… Kohran's fanbase is a bit of a mystery. 
 Sometime in August, 1923… Headquarters of the Hive of Darkness 
-…… 
-…… 
+…
+…
 24 hours later, somewhere in the Imperial capital 
 Kuh… It seems I can't just force my way through… 
 And here I thought it was merely a broken down old building… This power is nothing to sniff at. 
@@ -162,37 +162,37 @@ And here I thought it was merely a broken down old building… This power is not
 36 hours later, Imperial Theatre 
 I say it every time but… Sumire sure does steal the show. 
 Kanna is a perfect fit for Son Goku, and Sumire's great as that demoness… 
-Totally, but I bet Sumire’ll start yelling 'Why am I always the villain!?' afterward! 
+Totally, but I bet Sumire’ll start yelling “Why am I always the villain!?” afterward! 
 Haha, I bet you're right. 
-Whoa… now they've done it! 
+Whoa… Now they've done it! 
 Uh-oh… 
-…good grief, you two, you really wrecked the place, didn't you? 
-…… 
-…… 
+…Good grief, you two, you really wrecked the place, didn't you? 
+…
+…
 Oh, Ogami… those two have been like that ever since the performance ended… 
 They look like the tiniest little thing could set them off! You have to do something about this! 
-(Whoa… look at the state she's in… were they actually beating each other up?) 
+(Whoa… Look at the state she's in… were they actually beating each other up?) 
 (Judging from their clothes… this was no ordinary argument.) 
 (Jeez, look at that nasty shiner… just how bad was this fight?) 
 (I can't believe Sumire managed to survive a fight against Kanna.) 
 (Getting in a knock-down drag-out fight in that outfit… that must have been a sight.) 
-(Wait… crap. Now isn't the time to be thinking things like that.) 
+(Wait… crap. Now isn't the time to be thinking about things like that.) 
 Ensign! May I ask where you think you're looking!? 
 Oh, uh… I was just wondering… if you're injured, is all… 
 I'm JUST fine, thank you VERY much! 
 (Jeez, her clothes are all messed up.) 
 (What the heck kind of fight was it, for Kanna's clothes to be this bad?) 
-(Whoa… her face is pretty scary right now.) 
+(Whoa… Her face is pretty scary right now.) 
 (It'll be hard making peace when these two are so stubborn in their own ways…) 
-(…of course, nothing has changed that awesome rack of hers…) 
-Captain! What the hell do you think you're staring at? 
+(…Of course, nothing has changed that awesome rack of hers…) 
+Boss! What the hell do you think you're staring at? 
 Oh, no! I was just thinking it's bad that your clothes got torn up… that's all. 
 Don't waste everyone's time worrying about crap like that! 
 What do you want, Ensign? As you can see, I'm in quite a foul mood at the moment! 
 And the one that's fouled my mood is none other than that she-gorilla over there! 
 Come say that to my face, you mannequin! 
 What did you just call me?! 
-Now ain't the time, captain! I'm too pissed off to talk with you right now! 
+Now ain't the time, Boss! I'm too pissed off to talk with you right now! 
 This stuck-up idiot had the whole crowd laughing at me! I've never been so embarrassed! 
 That's MY line, you macho tomboy! 
 Care to say that again, you poisonous witch?! 
@@ -200,7 +200,7 @@ Ogami, where are you going!?
 You've got to stop those two! 
 You make it sound so easy… 
 The problem is your performances! No one wants to see a wild child like you trying to act! 
-…thanks to you my perfect, refined performances are thrown completely off kilter! 
+…Thanks to you, my perfect and refined performances are thrown completely off kilter! 
 Oh, don't make me laugh! How many times have you tripped over your own fancy costume now? 
 People are starting to think you've got a fetish for falling flat on your face! 
 Rrrrrrgh! Say that again, and see what happens!! 
@@ -212,9 +212,9 @@ Cut it out, you two! <br> Stay out of it. <br> Let them get it out.
 Cut it out, you two! 
 Shut up and butt out!! 
 You stay out of this, Ensign!! 
-Y-yes ma'am! 
+Y-Yes ma'am! 
 Well, that sure didn't look like it worked… 
-I… am NOT sticking my nose in this. 
+…I am NOT sticking my nose in this. 
 Wait, Ogami! Where do you think you're going!? 
 Well… I don't think anyone can stop them now. Might as well just let them fight it out. 
 What!? Ogami, is that really something a captain should be saying!? 
@@ -222,28 +222,28 @@ Well, calm down, Sakura. Ogami's sorta right, you know?
 If he just sticks his nose in, it might get busted off. Sometimes you just gotta let folks blow off some steam. 
 Yeah! Fight, fight, fight!! 
 Iris! Don't egg them on! 
-Alright, you two! Just get all this out of your systems!! 
+All right, you two! Just get all this out of your systems!! 
 Ogami! What are you saying!? 
 Sometimes it's best just to let them vent. 
 But that's crazy! 
 Nah, I agree with Chief. When you're working with machines, you gotta know when to let them blow off some steam. 
 So it might be best for Sumire and Kanna to just get all that stress and anger off their chests. 
-Back in the city, I was letting off some steam too! 
+Back in Asakusa, I was letting off some steam too! 
 That wasn't blowing off, that was blowing UP, Iris! You can't go around destroying parts of the city! 
-…oh, fine. 
+…Oh, fine. 
 Ogami! You've got to say something. 
-Y-yeah… 
+Y-Yeah… 
 Come on, be a man, Chief. You're not gonna say anything? 
 Looks like even Mon Frère is scared of those two. 
 Everyone, stop this at once!! Do you really think this is the time or place for this kind of nonsense!? 
 Ah… Maria. 
 Sumire, Kanna, get a hold of yourselves!! How long are you planning to go on fighting?! 
 …Captain, you should say something too. 
-Ah… um… well, ladies, you shouldn't fight. 
+Ah…um… Well, ladies, you shouldn't fight. 
 That's it!? Even Iris could say it better than that! 
 I hate fighting! 
 See? She said it. 
-How many times do I need to say this…? Control yourselves. 
+How many times do I need to say this? Control yourselves. 
 Maria… 
 Setting that aside, did you need us for something, Maria? 
 Oh, yes, you're correct. Commander Yoneda has summoned us all. 
@@ -252,26 +252,26 @@ What's up?
 I'm afraid I don't know, he didn't tell me. For now, we should assemble in the War Room in the basement! 
 OK! 
 …I'm gonna run to my room and change first. 
-As am I… though I think that torn, dirty look suits you. 
-'the hell did you just say!? 
+As am I… Though I think that torn, dirty look suits you. 
+'The hell did you just say!? 
 Would you two stop it already! You are dismissed! 
-…looks like she's not around. She probably already went to the War Room. I should head that way too. 
-…looks like she's not around. She probably already went to the War Room. I should head that way too. 
-Get outta here! I got nothing to say to you, captain! 
+…Looks like she's not around. She probably already went to the War Room. I should head that way too. 
+…Looks like she's not around. She probably already went to the War Room. I should head that way too. 
+Get outta here! I got nothing to say to you, Boss! 
 Crap… I don't think there's any getting through to her. Guess I should head somewhere else. 
 Hey, Kanna. Open up! 
-Shut up! I got nothing to say to you, captain! 
+Shut up! I got nothing to say to you, Boss! 
 Who is it? 
-Um… it's Ogami… 
-…you need something? 
-Oh… not really. I was just walking around. 
+Um, it's Ogami… 
+…You need something? 
+Oh… Not really. I was just walking around. 
 Come in, it's open. 
-Yo, captain. Shouldn't you be headed for the War Room? 
-…… 
-…did you need me for something? 
+Yo, Boss. Shouldn't you be headed for the War Room? 
+…
+…Did you need me for something? 
 I was worried about you… <br> Nothing in particular. <br> We need to talk. 
-…… 
-W, what's the matter? It's weird if you just come in here and stare at me like that… 
+…
+W-What's the matter? It's weird if you just come in here and stare at me like that… 
 Kanna, I… 
 Ahhh, I can't stand your face right now!! Get outta here!! 
 Well… the truth is, I was worried about you. 
@@ -280,67 +280,67 @@ Well, having a fight right after what happened during the performance… I just 
 That's why you came? 
 Yeah… are you OK? 
 Yeah, I'm fine. But… I'm kinda happy you were worried about me. 
-Of course I was. Oh… that reminds me… 
+Of course I was. Oh, that reminds me… 
 No, nothing in particular. 
 Oh really. 
-…… 
-…… 
-Listen, captain, if you don't need me for anything could you leave? 
+…
+…
+Listen, Boss, if you don't need me for anything could you leave? 
 (Crap! I've got to say something!) 
 Kanna, there's something we need to address. 
-…… 
-Listen, you can't just fight with people like this. Would you please make up with her? 
+…
+Listen, you can't just fight with people like this. Would you please make up with Sumire? 
 I know I shouldn't be fighting! But she just… 
 Kanna… if you get stuck on who was right or wrong, you'll never patch things up. 
 Who says I need to patch things up with her! 
 Kanna! 
-…… 
-…sorry, I didn't mean to upset you… 
+…
+…Sorry, I didn't mean to upset you… 
 Come to the War Room? <br> Want us to go somewhere? <br> I'm going to the War Room. 
-Should we go hang out somewhere, just the two of us sometime? … I know! Let's go to the beach! 
+Should we go hang out somewhere, just the two of us sometime? …I know! Let's go to the beach! 
 Great idea! It's so busy around here I haven't been to the beach in ages. 
-…well, unfortunately for now we should just head to the War Room. 
+…Well, unfortunately for now we should just head to the War Room. 
 Hahaha! True! 
 … 
-…thanks, captain. Thanks for worrying about me. 
+…Thanks, Boss. Thanks for worrying about me. 
 Well… it was nothing… 
 You don't need to say anything. It's just… it made me happy. 
-See ya, captain. I'm going to head to the meeting. 
-Um… thanks for talking to me. I feel better now. 
-…looks like Kanna cheered up a bit… I guess I should head for the meeting too. 
+See ya, Boss. I'm going to head to the meeting. 
+Um… Thanks for talking to me. I feel better now. 
+…Looks like Kanna cheered up a bit… I guess I should head for the meeting too. 
 It's almost time for the meeting, so I'm going to head over there. 
 Right, I'll be right behind you. See you there. 
-…… 
+… 
 What're you trailing off for! That just makes me suspicious. 
 No, it's nothing. 
 Hmmm, really? Well, I'm going to head to the meeting. See you there. 
 OK… I'd better head to the meeting too. 
-…captain, I'm glad you're worried about me, but… 
+…Boss, I'm glad you're worried about me, but… 
 I'd just like to be alone for now… 
 But… 
 I'll head to the meeting soon. Don't worry. 
 …OK. I understand. 
-…right. See you there. 
+…Right. See you there. 
 Well… how about we go together? 
 Are you done getting ready? 
 Yep, all done. Looks like I took longer than I thought. We'd better hurry! 
-…no answer. Did she already head for the meeting? I guess I should too. 
-…no answer. Did she already head for the meeting? I guess I should too. 
+…No answer. Did she already head for the meeting? I guess I should too. 
+…No answer. Did she already head for the meeting? I guess I should too. 
 I'm afraid I've heard enough from you for the time being, Ensign Ogami! 
 Crap… I don't think there's any getting through to her. Guess I should head somewhere else. 
 Hey, Sumire! Open up! 
 Could you please be a little quieter, Ensign? 
 Who is it? 
-Um… it's Ogami… 
-…may I help you? 
+Um, it's Ogami… 
+…May I help you? 
 Oh, no… I just happened to be passing by. 
-…you may come in, it's unlocked. 
+…You may come in, it's unlocked. 
 Ensign, shouldn't you be heading for the meeting? 
-…… 
-…did you need something from me? 
+…
+…Did you need something from me? 
 I was worried about you… <br> Nothing in particular. <br> We need to talk. 
-…… 
-Wh-what on Earth is the matter? Don't just walk in and stare at me like that. 
+…
+Wh-What on earth is the matter? Don't just walk in and stare at me like that. 
 Oh, um… 
 Ensign! I'm afraid I'm not in a terribly good mood at the moment. Would you please leave me be? 
 …I understand. 
@@ -348,31 +348,31 @@ Well… I was worried about you.
 What? You were? 
 Yes. What with that big fight right after how that performance went, I figured you might be feeling down… 
 And so… you came to see me? 
-Yes… Are you alright? 
+Yes… are you all right? 
 Of course! But I must say I'm flattered to have you worrying over me. 
-Of course I would worry. Oh… also… 
+Of course I would worry. Oh, also… 
 No, nothing in particular. 
 Oh, is that so? 
-Uh… yes. 
-…… 
+Uh… Yes. 
+…
 Might I ask that you leave, if you have no business with me, Ensign? 
 (Crap! I've got to say something!) 
 Sumire, there's something we need to discuss. 
-…… 
-You really shouldn't be fighting with your comrade, Sumire. 
+…
+You really shouldn't be fighting with your comrades, Sumire. 
 Do you think I don't know that!… I was not the one who started it. 
 Sumire… if we only focus on who's to blame you'll never be able to patch this up. 
 I have no interest in patching this up! 
 Sumire! 
-…… 
-…sorry, I didn't mean to upset you… 
+…
+…Sorry, I didn't mean to upset you… 
 Come to the War Room? <br> Want us to go somewhere? <br> I'm going to the War Room. 
 How would you like to go hang out somewhere, just the two of us? 
 Oh, that sounds wonderful… I haven't been on a trip in ages. 
 I think a drive by the beach would be lovely this time of year. 
-…well, unfortunately for now we should just head to the War Room. 
+…Well, unfortunately for now we should just head to the War Room. 
 Oh my, I had completely forgotten. 
-…… 
+…
 But, I must thank you, Ensign. It makes me very happy to have you going out of your way to cheer me up like this… 
 Well… it was nothing… 
 Well, I suppose I should leave for the meeting. See you there, Ensign. 
@@ -380,17 +380,17 @@ Thank you for taking the time to talk to me.
 Looks like Sumire perked up a little… I should head for the meeting myself. 
 It's almost time for the meeting, so I'm going to head over there. 
 Of course. I'll be heading that way myself. I'll see you at the meeting. 
-…… 
+…
 Ensign! It's quite alarming if you trail off like that. 
 If you have something you'd like to say, say it clearly! 
 No, it's nothing. 
-…oh? Well then you'll have to excuse me, I'm going to head for the meeting. 
+…Oh? Well then you'll have to excuse me, I'm going to head for the meeting. 
 OK… I'd better head to the meeting too. 
 …I'm flattered that you're worried for me, but… 
 Please could you leave me alone, for a while longer? 
 But… 
 Please don't worry, I'll be heading to the War Room shortly. 
-Alright. 
+All right. 
 I'm glad we were able to talk… excuse me. 
 Of course… Would you like to accompany me to the meeting? 
 Are you all ready? 
@@ -399,47 +399,47 @@ Oh, Ogami. Welcome.
 Oh, do you need anything, Ogami? 
 Please come again. 
 Let's talk about some juicy gossip next time. 
-Alright. 
+All right. 
 Do you need something? 
 (That ribbon in her hair… it really suits her.) 
-(I'd say that's a good charm point to go with Kasumi's mature looks.) 
+(It’s a charming look on someone as mature as Kasumi.)  
 (Not a hair out of place.) 
-(She really does have beautiful hair… she must spend a lot of time getting ready every day.) 
-(Kasumi's expression is so relaxed…) 
-(She looks nice, but I bet she's scary if you get her angry… She's kind of the reliable older sister type.) 
-…is something the matter, Ogami? 
+(She really does have beautiful hair… She must spend a lot of time getting ready every day.) 
+(Kasumi has a very calm expression…)  
+(She looks gentle, but I bet she's scary if you make her angry… she's kind of the reliable older sister type.) 
+…Is something the matter, Ogami? 
 Oh, no, it's nothing, Kasumi. 
 (There's a quiet, calm look in her eyes.) 
 (Kasumi always looks people right in the eyes when she talks to them.) 
 (Those traditional Japanese clothes look great on her.) 
-(Even though she's relaxed, I can't see any openings… I wonder if she's had martial training?) 
+(Her demeanor is so calm, but her movements have no openings I can see… I wonder if she has experience with martial arts.) 
 (Gotta love the chest areas on traditional Japanese clothes…) 
-…… 
+… 
 (She's actually got quite a…) 
-Ogami! Please, I'd rather you didn't… 
+Ogami! This is really inappropriate… 
 Oh, sorry… 
 Looks like the performance went exactly the way we thought it would. 
 Huh? 
 Kanna and Sumire are like oil and water. 
 Though I don't think anyone could have predicted they'd get into that big of a fight on stage… 
-But the guests are actually eating it up. Some people come just to watch that. The kids love it too. 
-Kanna's especially popular with the kids. We'll probably have a lot of kids getting separated from her parents. 
+But the guests were actually eating it up. Some people come just to see those two fight it out. The kids were getting a kick out of it too. 
+Kanna's especially popular with the kids. We'll probably have a lot of kids getting separated from their parents after her performances. 
 We're at the busiest time of year for the theater, Ogami. 
-'Journey to the West' will run all summer, but after that's done we'll close for a bit. A slightly late summer break. 
-We get lost kids every year during the performances. It's always a big deal trying to track them down. 
+“Journey to the West” will run all summer, but after that's done we'll close for a bit. A slightly late summer break. 
+We get lost kids every year during the performances. It's always a big deal trying to track them all down. 
 Do you need me for anything? 
 (She's got her scarf pinned with a brooch.) 
-(I wonder what it's made of… Couldn't be a real jewel, right?) 
-…are you interested in this brooch? Oh, hey, listen to this, I actually got it super cheap at a bargain sale. 
-…… 
-(The way Yuri's hair curls away from her face is one of her charm points…) 
+(I wonder what it's made of… couldn't be a real jewel, right?) 
+…Are you interested in this brooch? Oh, hey, listen to this, I actually got it super cheap at a bargain sale. 
+…
+(The way Yuri's hair curls away from her face is so charming…)  
 (That bouncy look is pretty trendy.) 
-Is something odd about my hair? Oh no~, I've got some split ends! 
+Is something odd about my hair? Oh nooo, I've got some split ends! 
 (Her face is small and balanced. I think even a model would be jealous.) 
-(Doesn't seem like she uses a lot of make-up. Well, she's got a nice foundation, I don't think she needs it…) 
-What's the matter, Ogami? You're staring at my face… Oh, I see. You've fallen for me, right? 
+(It doesn't seem like she uses a lot of make-up. Well, she's got a nice foundation, I don't think she needs it…) 
+What's wrong, Ogami? You've been staring at my face for a while. Haha, you're in love with me, aren't you! 
 Hey, you shouldn't be teasing an adult. 
-Hehehe… sorry, Ogami. 
+Hehehe… Sorry, Ogami. 
 (Her eyes are shining with curiosity.) 
 (Yumi's got a reputation for loving juicy gossip…) 
 Hey, Ogami. Have you heard any good rumors lately? 
@@ -451,9 +451,9 @@ Oh you noticed? I'm glad you like it! I actually coordinated this outfit myself.
 Is that so? 
 (Goodness… that's certainly an aggressive neckline…) 
 (But… isn't this supposed to be a uniform?) 
-Ahaha, Ogami. I see you've been stricken by my allure~! 
+Ahaha, Ogami. I see you've been stricken by my allure! 
 Ogami, what do you think about Kanna? 
-…what do you mean by that? 
+…What do you mean by that? 
 She's been a member of the Assault Troupe since before I got here. 
 She sorta looked after me ever since I was a newbie. 
 She may look like your typical tomboy, but… she's actually surprisingly feminine. 
@@ -467,26 +467,26 @@ Well… it's an embarrassing story, but essentially Sumire and I… well…
 They had this huge fight. It happened right before you got here, Ogami. 
 It was something else. 
 I'm quite ashamed of how I acted. It was quite childish. 
-Hey it turned out alright in the end, right? You both realized you'd made a mistake. 
+Hey it turned out all right in the end, right? You both realized you'd made a mistake. 
 And now you two are good friends again… 
 Huh, interesting. 
 Looks like you and Sakura have been hitting it off lately, Ogami. 
-Ms. Sumire's got this aura that makes her hard to approach, but that's one of her selling points. 
-Lady Maria's popular among men AND women. Her performances are just that good. 
+Sumire's got this aura that makes her hard to approach, but that's also one of her selling points. 
+Maria's popular among men AND women. Her performances are just that good. 
 It's pretty easy to see why Iris is so popular, though mostly just among our more elderly guests. 
-Honestly… I really don't get where Ms. Kohran's popularity comes from… 
+Honestly… I really don't get where Kohran's popularity comes from… 
 Kanna's super popular among the kids. 
 Ogami, you can't make Iris cry anymore! 
 Looks like you're as up-to-date on gossip as ever. 
 Oh I know everything, for example, the other day you… 
 Uh, that's OK, I'd rather not hear, thanks… 
-Oh, Mr. Ogami, hello. 
+Oh, Ogami, hello. 
 Looks like Kanna and Sumire are still co-starring again this month. 
 Didn't those two have some kind of argument on stage? 
 I could hear it all the way out here, even though the doors were closed. 
 Oh, Ogami. Did you need something else? 
 (A shopkeeper's outfit. Tsubaki looks good in it.) 
-H, hey, Ogami! Where do you think you're looking? Stop! 
+H-Hey, Ogami! Where do you think you're looking? Stop! 
 Ogami… come on, don't stare at me like that. It's embarrassing. 
 Is there something on my face? 
 Thanks for your business! Come again! 
@@ -498,16 +498,16 @@ Of course…
 Rend ye skies! Shatter ye earth! Ye tears shall be as a great river, ye blood an ocean, and offer your power! 
 Go forth, Miroku, Satan!! 
 At once!! 
-Hey hey hey hey hey! All you demons and monsters out there listen up! 
+Hey, hey, hey, hey, hey! All you demons and monsters out there listen up! 
 You've got guts picking a fight with me, Son Goku, first disciple of Sanzo Hoshi. 
 I'll send the lot of you to the other side. Give thanks and rest in peace!! 
 Ha! Know your place, you stone monkey! Such impertinence to the personification of beauty and love you see before you! 
-I, the demoness, will send you to the depths of Hell!! Ohohoho!! 
-Prepare yourself! You…you god damn…s-s-snake of a woman! 
+I, The Demoness, will send you to the depths of Hell!! Ohohoho!! 
+Prepare yourself! You, you goddamn… s-s-snake of a woman! 
 What the?! You big, stupid monkey!! 
 What!? 
-Eeeeeeeh!?… *Whack*… 
-What on Earth are you doing!? Do you even know how to act!? 
+Eeeeeeeh!?… *whack*… 
+What on earth are you doing!? Do you even know how to act!? 
 What!? You're the one messing it all up!! Stupid hag!! 
 What did you just call me? You stupid monkey! Imbecile! I'll teach you some manners! 
 Oh here we go! Bring it on! 
