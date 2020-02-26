@@ -2466,7 +2466,7 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 
 	//Get all files containing dialog
 	vector<FileNameContainer> textFiles;
-//	GetAllFilesOfType(allFiles, "TBL.BIN", textFiles);
+	GetAllFilesOfType(allFiles, "TBL.BIN", textFiles);
 	GetAllFilesOfType(allFiles, "MES.BIN", textFiles);
 
 	//Extract the text
