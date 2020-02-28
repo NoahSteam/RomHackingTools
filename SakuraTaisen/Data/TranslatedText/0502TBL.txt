@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
 It's a photo of Maria. She's lost in thought and looks kind of sad…
 A photo of Kanna. Her signature strength comes through clearly.
@@ -265,7 +265,7 @@ Kanna… please keep going, I'd like to hear what you have to say.
 Then, suddenly, I saw one of the enemies turning a corner in the hall ahead. 
 …Are we to believe that the Hive’s minions are just waltzing around a broken down old mansion like this? 
 Well, considering the seals plastered all over the walls and the evil energy you sensed from the mansion earlier… 
-I'd say there's definitely something going on here. Something that may be connected to the Hive of Darkness. 
+I'd say there's definitely something going on here and it might be connected to the Hive.
 Kanna, that's some good work. You've given us some vital intel. 
 Nah, hahaha. No need for the thanks. 
 …
@@ -595,7 +595,7 @@ There… that should keep the poison from spreading to the rest of your body.
 …Thanks, Boss. 
 Hey, Boss… am I gonna die? 
 Kanna! Pull yourself together! What happened to the brave, confident Kanna I know!? 
-Weren’t you the one that declared just a few moments ago that nothing on Earth could scare you? What happened to that!? 
+Just a few moments ago you were declaring that nothing on Earth could scare you. What happened to that courage? 
 Snakes… I can't handle snakes… 
 …B-Boss!! Wh-What are you…!? 
 Hold still… I'm going to suck the poison from the wound, just in case… 
@@ -621,7 +621,7 @@ G-Got it.
 There… that should keep the poison from spreading to the rest of your body. 
 Hey, Boss… am I gonna die? 
 Kanna! Pull yourself together! What happened to the brave, confident Kanna I know!? 
-Weren’t you the one that declared just a few moments ago that nothing on Earth could scare you? What happened to that!?
+Just a few moments ago you were declaring that nothing on Earth could scare you. What happened to that courage?
 Snakes… I can't handle snakes… 
 …
 B-Boss… Ugh… 
@@ -648,7 +648,7 @@ G-Got it.
 There… that should keep the poison from spreading to the rest of your body. 
 Hey, Boss… am I gonna die? 
 Kanna! Pull yourself together! What happened to the brave, confident Kanna I know!? 
-Weren’t you the one that declared just a few moments ago that nothing on Earth could scare you? What happened to that!?  
+Just a few moments ago you were declaring that nothing on Earth could scare you. What happened to that courage? 
 Snakes… I can't handle snakes… 
 Kanna… I don't think there are many people who like snakes… 
 But you seem unusually afraid of them. 
@@ -825,9 +825,9 @@ O-Of course.
 There… that should keep the poison from spreading to the rest of your body. 
 Ensign… Do you think…I will die here? 
 Sumire! Pull yourself together! The Sumire I know would never break down like this! 
-Weren’t you just boasting about how there wasn't a single thing on Earth that could scare you? What happened to that!? 
+Weren’t you just boasting about how nothing on Earth could scare you? What happened!? 
 But spiders… I cannot handle spiders… 
-(Sumire got bit by a spider, and Kanna's run off on her own…) 
+(Sumire got bit by a spider, and Kanna has run off on her own…) 
 (What the hell am I supposed to do!? Should I try to help Sumire? Or should I be chasing after Kanna!?) 
 Ow! Aaah! The spider… it bit me!! 
 Sumire, are you all right!? 
@@ -844,7 +844,7 @@ There… that should keep the poison from spreading to the rest of your body.
 …Thank you, Ensign… 
 Ensign… Do you think…I will die here? 
 Sumire! Pull yourself together! The Sumire I know would never break down like this! 
-Weren’t you just boasting about how there wasn't a single thing on Earth that could scare you? What happened to that!? 
+Weren’t you just boasting about how nothing on Earth could scare you? What happened!? 
 But spiders… I cannot handle spiders… 
 …
 Ensign… please…say something… 
@@ -877,7 +877,7 @@ For now, we need to get a tourniquet on your arm before the poison spreads. Here
 There… that should keep the poison from spreading to the rest of your body. 
 Ensign… Do you think…I will die here? 
 Sumire! Pull yourself together! The Sumire I know would never break down like this! 
-Weren’t you just boasting about how there wasn't a single thing on Earth that could scare you? What happened to that!? 
+Weren’t you just boasting about how nothing on Earth could scare you? What happened!? 
 But spiders… I cannot handle spiders… 
 …I've never seen you this afraid of anything. Why spiders? 
 … 

@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
+﻿﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
 It's a photo of Sumire. This is a side of her you don't see too often. 
 It's a photo of Maria. She's lost in thought and looks kind of sad… 
 It's a photo of Kanna. Her signature strength comes through clearly. 
@@ -234,7 +234,7 @@ Fourth of April, fair weather.
 Imperial Navy Ensign Ichiro Ogami will arrive in our Ginza HQ by recommendation of Count Hanakoji. 
 Anniversary performance of "The Eve of Lady Camellia" was resounding success. The theater is in a good spot. 
 April 5th, fair, then cloudy. 
-Reports of the Hive of Darkness at Ueno Park. Presumed leader is present. First real test for Flower Division. 
+Reports of Hive activity at Ueno Park. Presumed leader is present. First real test for the division. 
 Ensign Ogami's performance deemed "pretty good for his first try" by Yoneda. 
 May 12th, a calm Japanese spring day. 
 Kohran Li has started in the Ginza HQ. Seems enthusiastic about her work. 
@@ -273,9 +273,9 @@ Steam processor has calculated the position of the Hive of Darkness's HQ.
 Feeling very uneasy the last few days. Hope that nothing bad will happen. 
 October 10th, fair weather. 
 Last month went by like a storm. At last, the capital’s facilities are functional again. 
-Ensign Ogami and Flower Division are busy preparing celebratory performance, "Flaming Touch of the Snake Woman". 
+Ogami and the Flower Division are busy preparing for their debut of "Flaming Touch of the Snake Woman". 
 November 23th, fair weather. 
-Today marked the last performance of "Wings". Various problems arose, but Kohran did well in the starring role. 
+Today marked the last performance of "Wings". Despite some issues, Kohran did well in the starring role.
 Kohran dreams of constructing a flying machine. She has been gathering parts since her time at the Hanayashiki Branch. 
 December 31st, snow. 
 New Year's Eve. The end of an eventful year. 

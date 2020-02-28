@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
+﻿﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
 It's a photo of Sumire. This is a side of her you don't see too often. 
 It's a photo of Maria. She's lost in thought and looks kind of sad… 
 It's a photo of Kanna. Her signature strength comes through clearly.
@@ -345,7 +345,7 @@ Did you already forget? Their weapons are no match for the Hive of Darkness…
 Plus, they've got their hands full evacuating all the citizens. 
 No… This time, there might be no way out. They're just too many… 
 How many do you think there are? 
-They're spilling out of seven places in the capital simultaneously. There are more than 1,000 units at each location.  
+They're spilling out of seven places in the capital simultaneously. Each location has over a 1,000 units..  
 So at least 7,000 in total… 
 Damn it! There's no way we can fight them all… 
 And all that without Sakura… What should we do, Mon Frère? 
@@ -391,7 +391,7 @@ Yes! Ignore all the underlings and go straight for Tenkai. One decisive strike, 
 Hm, one hour might just be enough time to do that. 
 …But how will we ever find out where Tenkai is? 
 Leave that to me! At times like this, the steam processor comes in handy! 
-It's hard to verify if it's Tenkai, but we can localize the spiritual force and project it on a map of the capital. 
+It's hard to verify if it's Tenkai, but we can localize the energy and project it on a map of the capital. 
 OK, do it! 
 Yeah! Let's all gather in the steam processor room! 
 Hehehe… Seems like we don't have to step in, Ayame. 

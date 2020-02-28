@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+﻿﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
 It's a photo of Maria. She's lost in thought and looks kind of sad…
 A photo of Kanna. Her signature strength comes through clearly.
@@ -149,7 +149,7 @@ Heeey, what are you doing, Sakura? You're not a little girl, so pull yourself to
 S-Sorry… I'm acting all weird, aren't I? 
 Did your special training work out? 
 Yes! 
-I had to work really hard. Maybe my sword skills deteriorated a bit due to us only practicing for our shows lately.
+I had to work really hard. Maybe my sword skills deteriorated a bit due to all the shows I've been doing.
 It went great for me! I wrestled down a wild bull with my bare hands. 
 A… A bull!? 
 Impressive… 
@@ -381,6 +381,7 @@ Why do you make that kind of face?
 I don't even know what to say… 
 I beg your pardon? 
 So… you were just going out and having fun all this time
+Well, you don't even know how I feel.
 Well… it looks like you succeeded. 
 … 
 …? 

@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
 It's a photo of Maria. She's lost in thought and looks kind of sad…
 A photo of Kanna. She looks strong and reliable. I can't wait to meet her.
@@ -277,8 +277,8 @@ Ogami… come on, don't stare at me like that. It's embarrassing.
 Kohran! Good to see you! 
 Tsubaki, you look really good. I'm gonna be joining up here, so I look forward to working with you. 
 Same here. Really good to see you. 
-I heard you arrived by bike, Kohran. Why didn't you take the capital railway? 
-Eh, the steam trains are always so crowded. The weather's great and it's not too far from Asakusa so I rode here myself. 
+I heard you arrived by bike, Kohran. Why didn't you take the capital railway to the theater? 
+Eh, the steam trains are always so crowded. Plus the weather's great today and it's not too far coming from Asakusa. 
 OK, well, I'll get your bike carried in. Good luck on the stage! 
 Ogami, have you found Kohran yet? 
 Well… not yet. Where could she have gone? 
@@ -335,7 +335,7 @@ Of course!
 OK, then… I have to get to the performance. Ogami, Miss Li, if you'll excuse me. 
 Oh stop it with that "Miss Li". Way too formal. 
 Just "Kohran" suits me fine. 
-… Is that so? See you later… Kohran. 
+…Is that so? See you later… Kohran. 
 Sakura, huh? She seems like a nice girl. 
 So how do you get along with her, Mr. Ensign? 
 Very well! <br> Normal, I guess. <br> Not so good, I'm afraid. 

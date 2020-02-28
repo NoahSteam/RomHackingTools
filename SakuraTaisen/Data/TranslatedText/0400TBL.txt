@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
+﻿﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
 It's a photo of Sumire. This is a side of her you don't see too often. 
 It's a photo of Maria. She's lost in thought and looks kind of sad… 
 A photo of Kanna. Her signature strength comes through clearly. 
@@ -1039,7 +1039,7 @@ Ask for a battle report. <br> Ask for a casualty report. <br> No, thanks.
 I'd like to hear about how our last battle impacted the surrounding area. 
 There was only minimal damage to the surroundings. 
 We were lucky that the battle took place near a series of abandoned buildings. 
-That Setsuna character… His defeat marked the first time we beat one of the Hive's leaders without letting them escape. 
+That Setsuna character… His defeat marked the first time we beat one of the Hive's leaders before they escaped. 
 He did give us considerable trouble however, given his extraordinary speed… 
 The battle was taking a heavy toll on the squad members, so it’s good you defeated him as fast as you did. 
 You took a long time to defeat him, considering it was only a single enemy. 
@@ -1054,10 +1054,10 @@ You cared for those in your command and your judgment was spot on.
 The Flower Division consists of only seven members. Losing even one of them leaves us at a severe disadvantage. 
 Though we should be grateful their life was spared. 
 Of course… 
-Sakura certainly isn’t weak, but she also isn’t the strongest. Make sure she has support when she is sent out on her own.
+Sakura certainly isn’t weak, but she also isn’t the strongest. Make sure she gets proper support.
 Sumire has excellent combat capabilities, but you mustn't overestimate her. She needs proper support. 
 Maria's defenses are weak, so you should avoid placing her in close quarters combat situations. 
-Kanna has the strength to take on multiple Troupe members in close-quarters combat. She's cut out to be an advance guard. 
+Kanna has the strength of multiple Troupe members in close-quarters combat. She's cut out for the front lines. 
 It's a good idea to have her operate together with Maria or Sumire. 
 Iris was angry. She still can't fight by herself, so we have to protect her… 
 Kohran's attack power is weak, but she has a wide range. Take that into consideration when giving her orders. 
@@ -1148,7 +1148,7 @@ What do you mean, how are they going?
 She's a kind of a no-holds-barred type of person, isn't she? 
 She doesn't mean ill, but there are just some people she rubs the wrong way, right? 
 I don't know about everyone else, but at least Sumire is constantly fighting with her. 
-Anyway, it's nice that the Flower Division is finally united again. Ogami, I hope you give it your all out there. 
+Anyway, it's nice that the Flower Division is finally united again. Give it your all, Ogami. 
 I will, thank you. 
 Ever since the incident with Setsuna, Maria appears to be a totally different person. 
 You think so? 

@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
 It's a photo of Maria. She's lost in thought and looks kind of sad…
 A photo of Kanna. She looks strong and reliable. I can't wait to meet her.
@@ -276,7 +276,7 @@ I'd like to hear the casualty report for the Flower Division from the last battl
 Ogami… In a small unit like yours, the loss of a single member can cause irreparable damage. 
 Though we should be grateful their life was spared. 
 Of course… 
-Sakura certainly isn’t weak, but she also isn’t the strongest. She shouldn't be sent out without proper support. 
+Sakura certainly isn’t weak, but she also isn’t the strongest. She needs proper support. 
 Sumire has excellent combat capabilities, but you mustn't overestimate her. She needs proper support. 
 Maria's defenses are weak, so you should avoid placing her in close-quarters combat situations. 
 Kohran's attack power is weak, but she has a wide range. Take that into consideration when giving her orders. 
@@ -364,9 +364,9 @@ Please try to remember what it was like to be a child when you interact with her
 Of course… Understood, ma'am. 
 Ogami… about Kohran… 
 Kohran? 
-The truth is… Kohran was originally meant to enter the Flower Division, but was instead assigned to the Hanayashiki Branch. 
+The truth is… Kohran was originally meant to enter the Flower Division, but was sent to Hanayashiki instead. 
 I see… 
-The engineers at Hanayashiki were crazy about Kohran as soon as she arrived from China. 
+The engineers at the Hanayashiki Branch were crazy about Kohran as soon as she arrived from China. 
 (As I'd expect from Kohran…) 
 After that, Kohran worked together with me in the Hanayashiki Support Department. 
 …I doubt we would have completed the Koubus without her help. 

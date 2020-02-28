@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+﻿﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
 It's a photo of Maria. She's lost in thought and looks kind of sad…
 A photo of Kanna. Her signature strength comes through clearly.
@@ -281,7 +281,7 @@ The one with the most enemies shot down during the last battle was Maria.
 Maria is perfect for the rear guard. She excels when she's firing over the shoulders of the front line. 
 With her skills, you can trust that she'll never accidentally hit an ally. 
 The one with the most enemies shot down during the last battle was Kanna. 
-Kanna has powerful attacks, so she can fight at the front line. However, her abilities are wasted if she is placed in the back.
+Kanna has powerful attacks, so she can fight at the front line, but her abilities are wasted in the rear guard.
 The one with the most enemies shot down during the last battle was Iris. 
 Since she is able to move around the battlefield freely, she might be best suited for supporting the others. 
 The one with the most enemies shot down during the last battle was Kohran. 

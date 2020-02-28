@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
 It's a photo of Maria. She's lost in thought and looks kind of sad…
 A photo of Kanna. Her signature strength comes through clearly.
@@ -27,11 +27,11 @@ A photo of Ayame in a traditional outfit. I hope she'll always be as happy and c
 Ayame's gun. Why…? Why did it have to turn out like this…?
 Jean-Paul the teddy bear. Iris's best friend. She always carries him with her and takes good care of him.
 January 2nd. Imperial City Daily Report. News Extra 
-"A New Enemy Has Appeared"! "Mass Chaos at Meiji Shrine"! 
-Hideous monsters appeared at Meiji Shrine the other day. It was a desperate struggle for the Assault Troupe to fight them off.
-The bizarre beasts appeared at the crowded Shrine during New Years Day celebrations and caused mass hysteria in the area. 
-The Troupe was dispatched, and victorious, yet seriously injured. Were the group’s battlesuits, the Koubu, destroyed?
-It seems that the citizens of the imperial capital are unable to hide their shock at the appearance of this new threat. 
+"A New Enemy Has Appeared!" "Mass Chaos at Meiji Shrine!" 
+Hideous monsters appeared at Meiji Shrine the other day. It was a desperate struggle for the Imperial Flower Division.
+Bizarre beasts appeared during New Years Day celebrations at the crowded Shrine, causing mass hysteria. 
+The Flower Division was dispatched, and victorious, yet seriously injured. Were the group’s battlesuits destroyed?
+Citizens of the Imperial capital are unable to hide their shock at the appearance of this new threat. 
 With all due respect… <br> It's my responsibility… 
 With all due respect, Lt. General Yoneda, the Koubu were no match for that enemy. 
 Ogami! What the hell are you saying?! Aren't you the commanding officer of the Flower Division!? 
@@ -79,7 +79,7 @@ And frankly, even if I could fix them… they wouldn’t stand a chance against 
 …So we need a weapon other than the Koubu, you mean… 
 Well, that won’t be easy, either. The Imperial Assault Troupe sucks up tons of money and makes almost nothing back. 
 Developing, maintaining and improving the Spirit Armor… who knows how much all that’ll cost us. 
-Not only are the Koubu ruined but, to make matters worse, the capital’s economy is also shaky 'cause of this new enemy.
+Not only are the Koubu in pieces but the capital’s economy is also shaky 'cause of this new enemy.
 There's just no way we could make new Spirit Armor at a time like this… 
 What about a loan…? 
 …Hm?! 

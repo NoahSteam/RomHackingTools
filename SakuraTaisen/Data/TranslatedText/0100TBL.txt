@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
+﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
 It's a photo of Sumire. This is a side of her you don't see too often. 
 It's a photo of Maria. She's lost in thought and looks kind of sad… 
 It's a photo of Kanna. She looks strong and reliable. I can't wait to meet her. 
@@ -60,7 +60,7 @@ Ahem… Excuse me, but you are…?
 (I was told someone would meet me here… but who would have thought it would be a girl!) 
 You, uh… Are you a member of the Imperial Assault Troop!? 
 Ah… I'm Imperial Navy Ensign Ichiro Ogami. 
-But… To tell the truth, I'm surprised that a young woman such as yourself is a squad member. 
+But… to be honest, I'm surprised that a young woman such as yourself is a squad member. 
 N-No. That's not what I meant… 
 (It's a top-secret unit after all… Maybe it's not so strange that there are female members.) 
 What?! A theater…!? 
@@ -86,7 +86,7 @@ At any rate… It's really quiet here.
 (Night performance…? Is that supposed to be a night-time drill?) 
 Waah!? 
 (Who is this child…!?) 
-Ah… I'm…Imperial Navy Ensign Ichiro Ogami. 
+Ah… I'm… Imperial Navy Ensign Ichiro Ogami. 
 (Don't tell me this child is a member of the secret unit.) 
 What is the deal with that girl…? 
 Sakura has gone as well… Damn. 
@@ -98,14 +98,14 @@ Y-Yes, ma'am…
 Why should I have to do that? <br> Yes, right away! 
 Why should I have to do such a thing…? I refuse! 
 And in any case, is that any way to ask for someone's help? 
-…I'm Imperial Navy Ensign Ichiro Ogami. I was transferred to the Imperial Assault Troop, effective today. 
+…I'm Imperial Navy Ensign Ichiro Ogami. I was transferred to the Assault Troop, effective today. 
 Try and have me fired all you want, but without an order from the Navy headquarters, I'm not leaving. 
 …! 
 …It's Ogami. Can you tell me where I might find Lieutenant General Yoneda? 
 Through this way? Thank you very much. 
 Yes, right away! …Here, there you go. 
 (Phew…) 
-…I'm Imperial Navy Ensign Ichiro Ogami. I was transferred to the Imperial Assault Troop, effective today. 
+…I'm Imperial Navy Ensign Ichiro Ogami. I was transferred to the Assault Troop, effective today. 
 I'd like to report to Lieutenant General Yoneda… 
 …! 
 Waah! Wh-What are you doing all of a sudden!?! 

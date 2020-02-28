@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
 It's a photo of Maria. She's lost in thought and looks kind of sad…
 A photo of Kanna. Her signature strength comes through clearly.
@@ -86,7 +86,7 @@ No matter when I come here, this place always seems rather gloomy.
 I'd better get to the first-floor entrance. 
 Did Kanna drop by here on her way out…? I guess not. 
 I'd better get to the entrance. 
-Maybe I should grab a quick bite. Can’t start a mission on an empty stomach… Huh, I sounded like Kanna there for a moment. 
+Maybe I should grab a quick bite. Can't work on an empty stomach… Huh, I kind of sounded like Kanna. 
 …Ahh, this is bad! If I don't hurry and get to the entrance, they're going to complain. 
 I'm pretty sure the meeting place was the entrance hall. 
 This area is very lonely when there are no patrons. 
@@ -189,15 +189,15 @@ Why investigate Fukagawa?
 Did you say… sorcery? 
 Sorcery…? As in paper fortunes and yin-yangs? This is the Taisho era… 
 Sorcery is not simply old-fashioned thinking, Ogami. 
-Supernatural explanations for things beyond science, that is sorcery. It is the ancient power that underlies all history… 
-Perhaps the Hive of Darkness is planning to put a spell on Tokyo. 
+It is supernatural explanations for things beyond science. The ancient power that underlies all history…
+Perhaps the Hive of Darkness is planning to use some kind of sorcery to cast a spell on Tokyo. 
 On the capital itself… 
 Why investigate Fukagawa? 
-We've received a report from the townspeople. The other night, a suspicious group was seen around the abandoned mansion. 
-We've confirmed that something resembling a Hex Mech was also present. It is highly likely that the group was indeed the Hive.
+Townspeople have reported that a suspicious group was seen around the abandoned mansion the other night. 
+Something resembling a Hex Mech was also confirmed to be with the group so it was most likely the Hive.
 But why Fukagawa…? 
 Up till now, every location where the Hive of Darkness has appeared has been one of Tokyo's spiritual hot spots. 
-Fukagawa may be an industrial zone now, but it was once a sacred place that famously housed many shrines and temples. 
+Fukagawa may be an industrial zone now, but it was once a sacred place that was famous for its shrines and temples. 
 The mansion may seem unremarkable to us, but there must be something there that the Hive wants. 
 What exactly is their motive? 
 To be honest… I haven’t a clue what their motive could be. 
@@ -205,7 +205,7 @@ C-Commander?!
 Now wait a minute, Ogami. Based on what we know about the Hive, we can make an educated guess. 
 The Hive of Darkness is an organization aiming for the reinstatement of the Shogunate and the destruction of Tokyo. 
 Consequently, attacking specific spots in the capital might hold some kind of profound significance. 
-We don't have enough information yet, but this is the perfect opportunity to look into our enemy's movements. 
+We don't have enough information yet, but this is the perfect time to look into our enemy's movements. 
 Absolutely… 
 Spying is not technically the responsibility of the Assault Troupe but… 
 This is a great chance to learn more about what the Hive of Darkness is up to. 
@@ -407,12 +407,12 @@ Your enemy's actions, the movement of your troops… Being able to quickly asses
 …You can do it, Captain. 
 I'd like to hear about the troops' fighting style in our last battle. 
 Ogami… 
-The Assault Troupe only has seven members. Even lacking one member is an extraordinarily large loss, don't you agree? 
+The Assault Troupe only has seven members. Even lacking one member is a huge loss, don't you agree? 
 Though we should be grateful their life was spared. 
-Sakura certainly isn’t weak, but she also isn’t the strongest. She shouldn't be sent out without proper support. 
+Sakura certainly isn’t weak, but she also isn’t the strongest. She needs proper support when sent out. 
 Sumire has excellent combat capabilities, but you mustn't overestimate her. She needs proper support. 
 Maria's defenses are weak, so you should avoid placing her in close-quarters combat situations. 
-Kanna has the strength to fight in close-quarters combat. She's cut out to be an advance guard. 
+Kanna has the strength to fight in close-quarters combat. She's cut out to be an advanced guard. 
 Iris was angry. She still can't fight by herself, so we have to protect her… 
 Kohran's attack power is weak, but she has a wide range. Take that into consideration when giving her orders. 
 As the captain, you must provide sufficient support. You are what strengthens the bonds of the unit. 
@@ -432,7 +432,7 @@ The one that destroyed the most enemies during the last battle was Maria.
 Maria is perfect for the rear guard. She excels when she's firing over the shoulders of the front line. 
 With her skills, you can trust that she'll never accidentally hit an ally. 
 The one that destroyed the most enemies during the last battle was Kanna. 
-Kanna has powerful attacks, so she can fight at the front line. However, her abilities are wasted if she is placed in the back. 
+Kanna has powerful attacks, so she can fight at the front line, but her abilities are wasted in the rear guard. 
 The one that destroyed the most enemies during the last battle was Iris. 
 Since she is able to move around the battlefield freely, she might be best suited for supporting the others. 
 The one that destroyed the most enemies during the last battle was Kohran. 
@@ -446,12 +446,12 @@ Oh, but… Ogami. About the upcoming mission…
 …Please be careful. I’ve heard nothing but bad rumors about that abandoned mansion. 
 Huh…? W-What do you mean? 
 At the time of westernization, a noble family apparently hired an engineer from England to build the mansion. 
-Eventually, strange rumors began to spread. Even after the owner of the mansion left… mysterious incidents continued to occur.
+Soon, strange rumors began to spread and even after the owner left… mysterious incidents continued to occur.
 For that reason, the mansion has been abandoned ever since… The inside must be in ruins. 
 The floor plan won't be constructed in the Taisho style, so don't get lost. 
 Understood… though I have enough to worry about with Sumire and Kanna coming along. 
 Our group has many people with different origins and backgrounds living under one roof… 
-Inevitably there is going to be some conflict. It is something we will always have to deal with… now and in the future. 
+Inevitably there is going to be some conflict. It is something we will always have to deal with… 
 Ogami. I'm counting on you to take care of them. 
 This is the door to Iris's room. 
 …She might be sleeping already. I should be quiet. 
@@ -492,7 +492,7 @@ Once upon a time, in a far off place…
 And then… 
 However… 
 And so… 
-…Finally, the crab, the monkey, the bee, and the mortar traveled to the island where the demon resided in his fortress. 
+…Finally, the crab, monkey, bee, and mortar traveled to the island where the demon resided in his fortress. 
 The crab courageously defeated the demon and returned home with the treasure. And they all lived happily ever after!
 Yay! It all worked out! 
 What did you think of the story, Iris? 
@@ -506,7 +506,7 @@ Yay! Tell me! Tell me!
 And then… 
 However… 
 And so… 
-…Finally, the crab chose the small wicker basket and was surprised to discover vast riches inside when he returned home. 
+…Finally, the crab chose the small wicker basket and discovered vast riches inside when he returned home. 
 The monkey greedily chose the big wicker basket, however, the only thing inside was the bee which stung him. The end!
 …What did you think of the story, Iris? 
 Ahahahaa! That was really funny! I laughed so hard my stomach hurts! 
@@ -519,8 +519,8 @@ Thanks, Mon Frère! Tell me another interesting story sometime, OK? Good night!
 OK, I'll tell you the story. The tale of "The Quarrel of the Monkey and the Crab" starts now! 
 Yay! Tell me! Tell me! 
 …And so the crab and monkey went head to head in an epic duel. 
-The game was Rock, Paper, Scissors! The two battled until they were out of breath. Their fists were flying! And then… 
-..the crab defeated the monkey with “scissors”! And that is why crabs’ hands look like scissors to this day. 
+The game was Rock, Paper, Scissors! The two battled until they were out of breath. Their fists were flying! But… 
+…the crab defeated the monkey with “scissors”! And that is why crabs’ hands look like scissors to this day. 
 And they all lived happily ever after! …I don't think that was exactly how the story went. 
 Ahahahahaa! That was really funny! I laughed so hard my stomach hurts! 
 I'm glad you liked it. OK, I'm going to get going. Sweet dreams. 
@@ -544,7 +544,7 @@ Yay! Tell me! Tell me!
 And then… 
 However… 
 And so… 
-Finally… they ended up becoming a really wonderful person and lived happily ever after. What did you think, Iris…? 
+…Finally, they became a really wonderful person and lived happily ever after. What did you think, Iris? 
 …That was boring. 
 O-Oh… Sorry. 
 W-Well, I gotta get going. Sweet dreams! 
@@ -617,7 +617,7 @@ Alone inside an abandoned mansion… just the two of you searching… It's just 
 Sumire is strong and independent, but I’m sure she must want someone by her side. 
 I haven’t heard good things about that Fukagawa mansion… 
 What have you heard…? 
-Strange figures seen around the mansion, horrible moaning coming from the building night after night. That kind of stuff… 
+Strange figures seen around the mansion, horrible moaning coming from the building night after night. Stuff like that.
 Hey, hey… don't frighten me… 
 Sakura is very popular with both children and adults. 
 Sumire often receives flowers from young members of the nobility. 
@@ -641,7 +641,7 @@ H-Hey, Ogami! Where do you think you're looking? Stop!
 Ogami… come on, don't stare at me like that. It's embarrassing. 
 Thanks for your business! Come again! 
 Is there something on my face? 
-Chief, thanks for your help with the Koubu! Those upgrades will be ready lickety-split. Hope you’re looking forward to it! 
+Chief, thanks for your help with the Koubu! Those upgrades will be ready lickety-split. Look forward to it! 
 (I don't want to get in the way. I guess I'll leave the hangar for now.) 
 Chief, you're just in time. I want your opinion on the Koubu maintenance… 
 What's this? Leaving without hardly saying a word? Bit rude, doncha think?… 
@@ -719,7 +719,7 @@ Goodbye!
 Good luck with Sumire and Kanna. 
 Iris is able to move through walls by teleporting. 
 Yeah… 
-If she gets separated from everyone and ends up in a dangerous situation, please make sure she retreats to a safe location. 
+If she gets separated from everyone in a dangerous situation, make sure she retreats to a safe location. 
 You know what they say, "one pair of heels is often worth two pairs of hands". 
 Wait, I know where that’s from… 
 Ancient China? <br> Shingen Takeda? <br> Napoleon? 
@@ -752,7 +752,7 @@ She's doing so well, even though she's still a child.
 That's true. When I was ten, all I did was play outside in the fields and mountains… 
 When I think about it… I feel a little bad for her. 
 Sakura, I don’t think you need to worry. Iris is much more of an adult than you give her credit for. 
-And Captain, I must warn against treating Iris too much like a child, or we’re sure to have another incident like before. 
+And Captain, I advise against treating Iris too much like a child, lest we have a repeat of the incident from July. 
 Y-Yes, you're right. 
 But we can't push her too hard. We have to protect her. 
 Yes… Unfortunately, on the battlefield, we still have to treat her with kid gloves. 
@@ -804,7 +804,7 @@ Punctuality is the politeness of princes. I only ask that the Ensign keep to the
 Well, it's doubtful whether an insensitive woman such as you has any sense of time at all. 
 What did you say?! 
 Hold on, I was the one who was late. Please stop fighting. 
-All right, we're headed to the mansion. Our objective is to scout and investigate. And knock it off with the fighting. 
+All right, we're heading for the mansion. Our objective is to scout and investigate. So knock off all the fighting. 
 Hmph! 
 Siiiigh, I can’t say I’m excited for this. 
 (Jeez… It's like last time…) 
@@ -879,7 +879,7 @@ Unused
 Unused
 Unused
 But isn't it the job of the captain to resolve trouble amongst the troops? 
-Don’t you think the commander chose those particular members for the mission because he expects you to resolve their issue? 
+Don't you think the commander assigned those members to you because he expects you to resolve their issue? 
 Even I don't know what the enemy plans to do once they have cast a spell on the capital. 
 Isn't it your responsibility to find that out, Ogami? 
 Ogami… I understand how hard it is with Sumire and Kanna, and the Hive of Darkness. 

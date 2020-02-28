@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
+﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
 It's a photo of Sumire. This is a side of her you don't see too often. 
 It's a photo of Maria. She's lost in thought and looks kind of sad… 
 It's a photo of Kanna. She looks strong and reliable. I can't wait to meet her. 
@@ -441,7 +441,7 @@ Ah, Sumire, wait!
 Sumire, could you tell me about the Imperial Assault Troop? 
 Imperial Assault Troop… 
 By the look of it, this is just an ordinary theater. 
-I have a hard time believing it's the HQ for a secret military force. Sumire, won't you tell me what's really going on? 
+I have a hard time believing this is the HQ of a secret assault force. Sumire, please tell me what's going on? 
 Well… 
 …Pardon me. There are some pressing matters I must attend to. 
 I hate to leave after you took the time to come and see me, but I must bid you adieu for now. 
@@ -508,13 +508,13 @@ Ask about the Troop. <br> Ask Sumire about herself. <br> Hand her the letter.
 Sumire, could you tell me about the Imperial Assault Troop? 
 Imperial Assault Troop… 
 By the look of it, this is just an ordinary theater. 
-I have a hard time believing it's the HQ for a secret military force. Sumire, won't you tell me what's really going on? 
+I have a hard time believing this is the HQ of a secret assault force. Sumire, please tell me what's going on? 
 Well… 
 I hope it's not too forward of me to say, but I'd love to know more about you… 
 My my, Ensign… How unexpectedly straight to the point you are. 
 As I mentioned before, I am the daughter of the Kanzaki family, which controls the Kanzaki Group. 
 Originally, the only stage I stood upon was the stage of high society. 
-But then Kanzaki Heavy Industries became linked with this theater due to their efforts, and so I came to live here. 
+Then Kanzaki Heavy Industries and the theater began collaborating with each other, and so I came to live here. 
 Kanzaki Heavy Industries? Why would a theater collaborate with an industrial manufacturing company? 
 Ah, w-well now… 
 While taking tickets earlier, I was entrusted this letter by someone calling himself a devoted fan. 
