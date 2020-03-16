@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
+﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
 It's a photo of Sumire. This is a side of her you don't see too often. 
 It's a photo of Maria. She's lost in thought and looks kind of sad… 
 It's a photo of Kanna. She looks strong and reliable. I can't wait to meet her. 
@@ -145,7 +145,7 @@ Does my position here help protect our nation's peace at all?
 Ask about the theater <br> Ask Sakura about herself <br> Ask about the Troupe 
 Sakura, what do you do here at the theater? 
 The Troupe puts on a new show at the Imperial Theater every month. 
-This month's performance is "The Eve of Lady Camellia", with Sumire in the lead role. 
+This month's performance is "The Eve of Lady Camellia," with Sumire in the lead role. 
 We also put on court plays, musicals, sketch comedies, and various other sorts of performances. 
 Wow… Seems like a lot of fun. 
 Onstage, we can dazzle the audience by leading them into a different world. 
@@ -158,7 +158,7 @@ Ogami…
 Huh? …Seems like someone's here. 
 Tell me about yourself, Sakura. What's it like living here? 
 About me, you say? To tell the truth, I'm still fairly new here, too. 
-On performance days, I'm up on stage. Our play for this month is "The Eve of Lady Camellia", with Sumire in the lead role. 
+On performance days, I'm up on stage. Our play for this month is "The Eve of Lady Camellia," with Sumire in the lead role. 
 On our days off… Well, I do a lot of rehearsing. 
 Aside from that, there's cleaning, laundry… and my sword training. 
 Sword training? 
@@ -209,7 +209,7 @@ Does my position here help protect our nation's peace at all?
 Come in, it's open. 
 Sumire… what is it? 
 Ensign, terribly sorry to bother you while you're off-duty. 
-Truthfully, the play I'm to star in, "The Eve of Lady Camellia", is due to begin quite soon, but… 
+Truthfully, the play I'm to star in, "The Eve of Lady Camellia," is due to begin quite soon, but… 
 …we've been waiting for Sakura to show up backstage. Would you happen to have seen her? 
 Oh! I completely forgot! 
 S-Sakura… 
@@ -432,7 +432,7 @@ I'm begging you! I can't have been sent here just to take tickets all day, right
 Aren't I meant to be captain of the Imperial Assault Troop? 
 Gracious me, what a pest you are! I am forbidden to speak of… 
 …!! 
-"Forbidden"? Did you say "forbidden"?! 
+"Forbidden?" Did you say "forbidden?!" 
 Sumire, what do you mean? What are you forbidden to speak of, and by whom?! 
 …P-Pardon me. There are some pressing matters I must attend to. 
 I hate to leave after you took the time to come and see me, but I must bid you adieu for now. 
@@ -481,7 +481,7 @@ Oh, pardon me. I know - I'll call you "Ensign" from now on, to simplify things.
 (Such silky, perfectly straight hair…) 
 (What would you call this hair color?) 
 (…Looking more closely, there appears to be a beauty mark beneath her eye.) 
-(I think it's called a "tear mark". It's pretty alluring…) 
+(I think it's called a "tear mark." It's pretty alluring…) 
 Ensign, you've been gazing at my face for some time now. 
 Oh, I, uh… S-Sorry. 
 Not to worry. 
@@ -769,8 +769,8 @@ Ogami… come on, don't stare at me like that. It's embarrassing.
 Tsubaki, could I ask you about this theater? 
 Oh? If you want to know something about the theater, then I'm the girl to ask! 
 Its official title is the Grand Imperial Theater, but most people just call it the Imperial Theater for short. 
-We put on a different kind of performance each month! This month is a play called "The Eve of Lady Camellia". 
-My name means "camellia flower", so hearing the play’s title makes me kind of happy! 
+We put on a different kind of performance each month! This month is a play called "The Eve of Lady Camellia." 
+My name means "camellia flower," so hearing the play’s title makes me kind of happy! 
 (That's not exactly what I wanted to ask about…) 
 Um, Tsubaki… 
 Ogami! Since you're here, why not buy a photo? 
@@ -785,7 +785,7 @@ I see. Thanks.
 (…Is she angry with me for what happened earlier?) 
 … 
 Mon Frère, sorry about before… 
-…'cause it's not good to "eavesdrop". 
+…'cause it's not good to "eavesdrop." 
 Iris… 
 Maria scolded me earlier. 
 Mon Frère… Please don't hate me. 

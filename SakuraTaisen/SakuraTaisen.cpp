@@ -2625,7 +2625,7 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 					}
 
 #if FIX_TIMING_DATA
-					if( 1 )//!bIsMESFile )
+					if( !bIsMESFile )
 					{
 						if( (int)sakuraFile.mLineTimingData.size() < inTranslatedLineIndex )
 						{
@@ -3049,7 +3049,7 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 					continue;
 				}
 
-				if( 0 )//bIsMESFile )
+				if( bIsMESFile )
 				{
 					const size_t numChars = translatedString.mChars.size() - 1; //.size includes null terminator
 					int numProcessed = 0;
@@ -7271,6 +7271,20 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 		newVPD1Value = origVDP1Value + battleMenuDelta + textDelta;
 		slgFile.WriteData(0x0000FF68, (char*)&newVPD1Value, sizeof(newVPD1Value), true);
 
+		//Battle reaction sprites
+		{
+			slgFile.ReadData(0x0000FF78, (char*)&origVDP1Value, sizeof(origVDP1Value), true);
+			newVPD1Value = origVDP1Value + battleMenuDelta + textDelta;
+			slgFile.WriteData(0x0000FF78, (char*)&newVPD1Value, sizeof(newVPD1Value), true);
+
+			slgFile.ReadData(0x00001070, (char*)&origVDP1Value, sizeof(origVDP1Value), true);
+			newVPD1Value = origVDP1Value + battleMenuDelta + textDelta;
+			slgFile.WriteData(0x00001070, (char*)&newVPD1Value, sizeof(newVPD1Value), true);
+
+			slgFile.ReadData(0x00010FE4, (char*)&origVDP1Value, sizeof(origVDP1Value), true);
+			newVPD1Value = origVDP1Value + battleMenuDelta + textDelta;
+			slgFile.WriteData(0x00010FE4, (char*)&newVPD1Value, sizeof(newVPD1Value), true);
+		}
 
 		//Fixup 2 byte offsets
 		unsigned short origVDP1Offset = 0;
@@ -10283,12 +10297,12 @@ bool PatchLoadScreen(const string& patchedSakuraDirectory, const string& inTrans
 				const int newValue = adjustedPointerMap[ origValue ];
 				sakuraFile.WriteData(i, (char*)&newValue, sizeof(newValue), true);
 
-				printf("     %0x to %0x at %0x\n", origValue, SwapByteOrder(newValue), i);
+			//	printf("     %0x to %0x at %0x\n", origValue, SwapByteOrder(newValue), i);
 				numFixed++;
 			}
 		}
 
-		printf("Num Fixed: %i\n", numFixed);
+		//printf("Num Fixed: %i\n", numFixed);
 
 		//Patch button formatting
 		const unsigned int formattingAddress = GIsDisc2 ? 0x00059da8 : 0x00059c70;

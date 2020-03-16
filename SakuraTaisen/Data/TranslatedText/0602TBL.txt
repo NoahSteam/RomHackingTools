@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+﻿﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
 It's a photo of Maria. She's lost in thought and looks kind of sad…
 A photo of Kanna. Her signature strength comes through clearly.
@@ -45,7 +45,7 @@ What the hell! Are you still playing the evil hag off stage? Want me to beat you
 Excuse me? I only allowed you to defeat me on stage because the script demanded it! 
 Huh, well that suits me just fine… Let's go! Ya evil hag!! 
 With pleasure, you stupid ape! 
-Oh! Nice! We're getting a special 'Journey to the East' bonus chapter! 
+Oh! Nice! We're getting a special “Journey to the East” bonus chapter! 
 (I guess everyone's all fired up now that the performance is over.) 
 Um… Sakura? I was trying to say-… 
 Oh, Kohran. About what we were talking about earlier… 
@@ -57,7 +57,7 @@ What do you want, Ogami?
 What's up you two? We've barely closed the curtains and you're already havin' a fight? 
 Everyone's going to get together to talk about how this performance went. 
 You all did great. I'm really looking forward to the next performance, considering how well this one went. 
-Next will be our fall performance already. I can't believe how fast the time is going… 
+Next will be our fall performance already. I can't believe how fast the year is going by… 
 Sir… if you could, please keep what happened earlier confidential… 
 Oh, hey Maria. Sorry about earlier. 
 Oh, no… I should be the one to apologize. 
@@ -70,12 +70,12 @@ Respond humbly. <br> Show honest gratitude. <br> Joke as camouflage.
 I don't think so. I just did what came naturally. 
 Heh… I'd say the ability to handle things like this naturally is a commendable quality. 
 I don't think I could ever get those two to reconcile. 
-Well, thanks. Do you… do you think I've become a little more like a real captain? 
+Well, thanks. Do you… Do you think I've become a little more like a real captain? 
 Come now, sir. You're already a great captain for the Flower Division. Have more confidence in yourself. 
-Yep, you all should let me give you stage directions too… ha. 
-Heh… yes, please. We'll be expecting your orders to guide us through the next performance, then. 
+Yep, you all should let me give you stage directions too… Ha. 
+Heh… Yes, please. We'll be expecting your orders to guide us through the next performance, then. 
 It takes a special kind of director to manage those two. 
-Maria~… you talkin' about us behind our backs~? 
+Maria~… You talkin' about us behind our backs~? 
 Could it be you're spreading rumors about us? 
 Of course not. I was merely exchanging opinions on the performance with the captain, here. 
 (Ha! If I'm a great director… Maria's a great actress.) 
@@ -84,17 +84,17 @@ What's the matter, sir? You suddenly went quiet…
 …I was just thinking, it makes me glad to see everyone smiling again… that's all. 
 It's the ordinary, peaceful days like these that can be the happiest for us… 
 I, for one, am just glad to have the whole thing done with. 
-I believe our autumn performance should be 'Inferno of the Naga', with song and dance by Sumire Kanzaki! 
-I may've been evil in 'Journey to the West', but next time I'll be an alluring snake woman! Don't miss it, Kanna! 
-S-Snake!? I… I'm out! No way am I gonna be in that play! 
+I believe our autumn performance should be “Inferno of the Naga,” with song and dance by Sumire Kanzaki! 
+I may've been evil in “Journey to the West,” but next time I'll be an alluring snake woman! Don't miss it, Kanna! 
+S-Snake!? I-I'm out! No way am I gonna be in that play! 
 Ohohoho! You are my preeeey! I won't let you escape. 
 Why don't you play a spider? <br> You'd make a good snake. <br> I'd love to be prey myself… 
-Then Kanna should be a spider woman. Spider woman vs. snake woman; an epic rivalry for the ages. 
+Then Kanna should be a spider woman. Spider Woman vs. Snake Woman; an epic rivalry for the ages. 
 Hey, there's a plan! All right! I'm gonna wrap the snake woman up in my web! 
 A-A spider woman!? Please don't give her any strange ideas, Ensign! 
 Hey, that sounds great! Just leave it to me, I'll make you guys some awesome suits! 
 You'd make a pretty good snake. I can just see it now, so sensual and tempting. 
-Between the demoness and this snake, I'd say you're world class at erotic roles, Sumire. 
+Between the Demoness and this snake, I'd say you're world class at erotic roles, Sumire. 
 …That praise doesn't please me in the slightest, Ensign… 
 Hey, I'll be your prey anytime you want… 
 Oh my, what a lovely thought. Once I have you in my coils, you won't escape, my cute little snack… 
@@ -102,7 +102,7 @@ Stooooop! You can't have Mon Frère! He's mine!
 Hmph, and here comes the little ragamuffin to spoil the wonderful adult mood… 
 Don't worry about it… 
 (Sumire as a snake, huh. I can just see her wrapping her body around her prey, letting her tongue play on her lips…) 
-(And then she GULPS you down!… Oh man. That's horrific, but I can't stop thinking about it!) 
+(And then she GULPS you down! Oh man… That's horrific, but I can't stop thinking about it!) 
 Are you feeling unwell, Ensign? The color has gone from your face. 
 N-No! I'm good! Hahaha! 
 Looks like this'll be my happiest birthday yet! 
@@ -115,11 +115,11 @@ Hey, take a guess, Boss. How old do you think I'll be turning?
 …18? 
 18! Hahaha! No way! Was that supposed to be a compliment? 
 Oh, no, I really thought… 
-Well you'll be surprised to hear I'm turning 20, then. Yep, 20. Next year's my Coming of Age Ceremony. 
+Well you'll be surprised to hear I'm turning 20, then. Yep, 20. Next year will be my Coming of Age Ceremony. 
 Oh, really? Sorry, I had no idea. 
 Hey, no need to apologize. No way I'd get upset over someone thinking I look younger! 
 Well, Kanna, in your case I would describe you as childish, rather than youthful. 
-Hey I'm fine with that… nothing wrong with being a kid at heart. 
+Hey I'm fine with that… Nothing wrong with being a kid at heart. 
 It's gonna be weird to have everyone suddenly treating me like an adult just because I turn 20… 
 And I don't want to forget what it's like to be a kid; honest, straightforward… 
 20? 
@@ -136,26 +136,26 @@ Get it together. You should at least know the ages of the members in your comman
 …
 Hey why'd you go all quiet… 
 Oh, it's just that I thought it would be rude to try and guess a lady's age. 
-…'Lady'? Are we still talking about me? 
+…“Lady?” Are we still talking about me? 
 Ahahaha! Nice one, Boss! 
 Was it really that funny? 
 …No, well, I mean… nobody's ever called me a lady before. I mean it's not bad at all. 
-I'm just not used to paying any mind to that kind of thing, so it feels a little strange. Just treat me normal. 
+I'm just not used to paying attention to that kind of thing, so it feels a little weird. Just treat me normally.
 All right. I'll remember that. 
 Hey there, you ready to party! Let's raise the roof! Party! 
 Oh… Chief… Hey, listen, sorry about earlier… 
 I'm fine, but how are you, Kohran? That must have been a shock. 
 …Yeah, it was. I was so close I could taste it… 
-Aww… If only I hadn't mixed up that wiring… gosh darnit. 
+Aww… If only I hadn't mixed up that wiring… Gosh darnit. 
 Maaaan… 
 What's the matter, Kohran? You're looking down… 
-Oh, Chief… sorry. You're right, I should be partying with everyone else… 
+Oh, Chief… Sorry. You're right, I should be partying with everyone else… 
 But I accidentally busted this great new robot I'd been building for a whole month. 
 I mean, it was my own fault, but I was just so close to finishing it… I just feel bad for the poor little guy… 
 Sorry, shouldn't have said it. <br> Let's see a smile! 
 Sorry, I shouldn't have brought it up. 
 Hey, nothing for you to be apologizing for, Chief. 
-Everything breaks eventually. 'Dust to dust' and all that. Just gotta pick up the pieces and start again! 
+Everything breaks eventually. “Dust to dust” and all that. Just gotta pick up the pieces and start again! 
 Sorry for getting you worried, Chief… but thanks, you helped me get back on my feet. 
 Let's see a smile, Kohran! It's sad you lost your robot, but… 
 Everyone makes mistakes. What's important is dusting yourself off and trying again. 
@@ -165,7 +165,7 @@ Thanks, Chief! You helped kick my gears back into drive!
 Oh, sorry. I didn't mean to drag you down, pushing my problems onto you… 
 But it felt good just to get it off my chest. 
 Kohran… I'm really sorry about earlier… 
-…My invention… My cute little Partybot 2000 is dead… 
+…My invention… My cute little Party Boy is dead… 
 …All because a certain party pooper messed up! 
 I'm really, really sorry! <br> I'll buy you something nice? 
 I'm really, really sorry! 
@@ -187,7 +187,7 @@ Oh man…
 Aw, don't look so downhearted, Chief. I'm just joking! Don't worry about it. 
 Kohran, I'm really sorry. 
 Hey I'm already over it. If that one's busted I just gotta make a new one. 
-It's not inventing unless stuff explodes!… Oh, and I've got a patent on that, so don't go using it. 
+It's not inventing unless stuff explodes! Oh, and I've got a patent on that, so don't go using it. 
 Anyway there's a party going on and we should be partying! 
 Go away… Mon Perv! 
 (Looks like she hasn't forgiven me for seeing her in the shower room…) 
@@ -204,31 +204,31 @@ Hey now, don't go doing that while you're on stage please…
 OK! Don't forget, Mon Frère! You promised! 
 Heck no. That's my job! 
 Awww! You're no fun!! 
-Whoa! Are you finally taking this ticket-punching thing seriously, Chief? 
+Whoa! Are you finally taking this ticket punching thing seriously, Chief? 
 After all that complaining, it seems these are your true colors? 
-Oh, no… I just…kinda got caught up in the moment… 
+Oh, no… I just… kinda got caught up in the moment… 
 Hey, nothing to be ashamed of Boss! You gotta take pride in your job, no matter what it is. 
 You go and punch those tickets, Chief. We're counting on you! 
 Hey cut it out, you guys… 
 …It's no walk in the park, Iris… 
 …? What's the matter, Mon Frère? 
-The days of a ticket-puncher are rough. Day in, day out. Through wind, rain and storms… 
+The days of a ticket puncher are rough. Day in, day out. Through wind, rain and storms… 
 I punch tickets… and I keep punching! Punch! Punch! All day long! 
-And if the numbers don't match up… if I missed even a single ticket, the office calls for my head on a platter. 
+And if the numbers don't match up, if I missed even a single ticket… the office calls for my head on a platter. 
 Mon Frère you're scaring me… 
 Not good! The light's gone out in Chief’s eyes! 
 It seems things have been more difficult for you than I would have imagined, Ensign. 
 Oh come on, it's not that bad. Suck it up, Boss! 
-…Anyway, ticket-punching isn't something you want to do for fun. 
-OK, Mon Frère… please stop… 
+…Anyway, ticket clipping isn't something you want to do for fun. 
+OK, Mon Frère… Please stop… 
 … 
 Hey Chief, how come you went all quiet? 
 Did I say something weird? 
-Hey, being a ticket-puncher is nothing to be ashamed of, Boss. 
-Kanna is right. If you apply yourself and do your best as a ticket-puncher, eventually you'll work your way up… 
+Hey, being a ticket puncher is nothing to be ashamed of, Boss. 
+Kanna is right. If you apply yourself and do your best at clipping tickets, eventually you'll work your way up… 
 Work his way up to what? 
-To a ticket-puncher…? I'm afraid it's not a position with much upward mobility. 
-Haha! Then Mon Frère's gonna be a ticket-puncher forever! 
+…I’m not sure. I'm afraid it's not a position with much upward mobility. 
+Haha! Then Mon Frère's gonna be a ticket puncher forever! 
 … 
 Uh-oh… I think we crushed his spirit. 
 Excuse me, Ensign? Are you planning to leave me here by myself? 
@@ -275,7 +275,7 @@ What's up, Boss? You went all quiet…
 Oh, I was just wondering. Is it really all right for me to come? It's not like I was part of the performance. 
 Oh come on! You don't need to worry about that, Ogami! 
 Don't be so stand-offish, Chief! You're a fine member of the theater! 
-…The member that punches people's tickets. 
+…The member that clips people's tickets. 
 We all need to relax, every once in a while, sir. 
 But everyone is still underage, so no alcohol. I'm especially looking at you, Sumire. 
 What? But what's the point of a party with no alcohol? 

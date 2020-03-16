@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
 It's a photo of Maria. She's lost in thought and looks kind of sad…
 A photo of Kanna. Her signature strength comes through clearly.
@@ -78,7 +78,7 @@ The chefs and their assistants have all gone home.
 No sense standing around here. I should get going. 
 Tsubaki has already gone home for the day. 
 I wonder where everyone is. I'll check somewhere else. 
-I'm finally free from my ticketing duties now that the show is over. 
+I'm finally free from my ticket punching duties now that the show is over. 
 I guess I'll rest my weary bones today. 
 All the guests have gone home for the day. 
 There's nobody here. I should head somewhere else. 
@@ -100,7 +100,7 @@ There's no one here…
 Should I check another room? I came here kind of absentmindedly. 
 …There's no one here. Everyone is probably getting things ready for the party… 
 …No sense standing around here. I'll go elsewhere. 
-I've heard these medical pods can move using the underground steam engine if the situation calls for it… 
+I've heard these medical pods can be moved using the underground railway system if the situation calls for it… 
 …I just pray we won't ever need to use them… 
 Everyone gets together here before we sortie. 
 But… there's no one here. I'll check another room. 
@@ -121,7 +121,7 @@ Is something odd about my hair? Oh nooo, I've got some split ends!
 (She's got a nice, small face. I think even a model would be jealous…) 
 (It doesn't seem like she uses much make-up. Well, she's got a nice foundation, I don't think she needs it…) 
 What's wrong, Ogami? You've been staring at my face for a while. Haha, you're in love with me, aren't you! 
-Hey, you shouldn't be teasing an adult. 
+Hey now… You shouldn't tease adults!
 Hehehe… Sorry, Ogami. 
 (Her eyes are shining with curiosity.) 
 (Yumi's got a reputation for loving juicy gossip…) 
@@ -137,8 +137,8 @@ Really?
 Just a while ago there was a report of a cat-sized monster around the Suehirocho depot. 
 I just hope this doesn't turn into something really bad… 
 After we finish our summer performances, the theater is opened up for public use. 
-There will be all sorts of attractions, including a special preview of The Three Musketeers. 
-Directed by Fred Niblo and starring Douglas Fairbanks… you should definitely check it out! 
+There will be all sorts of attractions, including a special preview of “The Three Musketeers.” 
+Directed by Fred Niblo and starring Douglas Fairbanks… You should definitely check it out! 
 So Ogami, how are things going with Kanna? 
 What do you mean? 
 I mean something happened between you two at Fukagawa, right? 
@@ -151,7 +151,7 @@ I need to get out and buy some new clothing for the fall. I wonder what will be 
 Sumire hasn't been near the prop room ever since you guys went to Fukagawa. 
 Really? Why? 
 Well, think about it. There's stuff piled all over in that room. The kind of place you'd find… 
-Find what? Oh… Oh, I get it. 
+Find what? Oh… I get it. 
 Looks like you and Sakura have been hitting it off lately, Ogami. 
 Sakura's popular with just about everyone. I think it's because she comes off as nice and approachable. 
 Looks like you and Sumire have been hitting it off lately, Ogami. 
@@ -181,7 +181,7 @@ Oh, no, it's nothing, Kasumi.
 (Gotta love the chest areas on traditional Japanese clothes…) 
 …
 (She's actually got quite a…) 
-Ogami! Please, I'd rather you didn't… 
+Ogami! This is really inappropriate… 
 Oh, sorry… 
 Thanks for all your hard work, Ogami. 
 Hey, you've been working hard too. I'm glad we're finally done with the summer performance. 
@@ -191,7 +191,7 @@ The summer performance went over very well. I think the children in particular r
 My goodness. I'm glad that's finally over. Thanks for all the help, Ogami. 
 But we're going to need to start preparation for the next performance right away… 
 What are we doing next? 
-Sumire's going to star in: "Inferno of the Naga". 
+Sumire's going to star in: "Inferno of the Naga." 
 She hasn't been the main star for a while, so she's in high spirits. 
 So she's going to play a snake woman… I think she'll be pretty popular. 
 Good work out there, Ogami. 
@@ -205,7 +205,7 @@ H-Hey, Ogami! Where do you think you're looking? Stop!
 Ogami… come on, don't stare at me like that. It's embarrassing. 
 Is there something on my face? 
 Thanks for your business! Come again! 
-Hello?… I see. Thanks for doing that. We've got our processor working on it too. 
+Hello? …I see. Thanks for doing that. We've got our processor working on it too. 
 I see, so they're wedges… OK, we'll try running that through our processor. 
 The Flower Division? Right now they're throwing a party, I think. They should be fine. 
 …Yes. We should see some results soon… thanks… 
@@ -242,24 +242,24 @@ Would you like to go with me?
 You came here just to personally invite me? Why thank you, Ogami. 
 I'm flattered, but unfortunately I still have reports I need to finish. Sorry. 
 I think you'll all have more fun if us older folks stay out of it. 
-Don't say that! You're still way too young to be one of the 'older folks', Ayame. 
+Don't say that! You're still way too young to be one of the “older folks,” Ayame. 
 Haha… Well thank you, Ogami. You're quite talented at flattery. 
 Setting that aside, is there anything you'd like to discuss, as the leader of the Flower Division? 
 Situation Report <br> Member Report <br> It's nothing 
 I'd like to hear about how our last battle impacted the area, please. 
 You did splendid at wrapping this up quickly. You have a good grasp of the strengths of your division. 
-We will continue to expect great things of you as a leader. 
+We will continue to expect great things from you as a leader. 
 Thankfully there were no civilian homes nearby during this last battle, but… 
 You must remember that the longer a battle drags on, the more damage is done to the surrounding area. 
 Please try to keep that in mind, and plan a strategy that will eliminate all threats as quickly as possible. 
 I'd like to hear about the casualties from the last battle. 
 Ogami… 
-In a seven-person Assault Troupe, even lacking one member is an extraordinarily large loss, don't you agree? 
+In a seven-person team, even lacking one member is an extraordinarily large loss, don't you agree? 
 Though we should be grateful their life was spared. 
 Sakura certainly isn’t weak, but she also isn’t the strongest. She shouldn't be sent without proper support. 
 Sumire has excellent combat capabilities, but you mustn't overestimate her. She needs proper support. 
 Maria's defenses are weak, so you should avoid placing her in close-quarters combat situations. 
-Kanna has the strength to fight in close-quarters combat. She's cut out to be an advance guard. 
+Kanna has the strength to fight in close-quarters combat. She's cut out for the front lines. 
 Iris was angry. She still can't fight by herself, so we have to protect her… 
 Kohran's attack skills are weak, but she can do range attacks. Make sure you understand that, Ogami. 
 As captain, you must provide support. Your aid is what will strengthen the unit's bonds. 
@@ -316,7 +316,7 @@ Is something odd about my hair? Oh nooo, I've got some split ends!
 (She's got a nice, small face. I think even a model would be jealous…) 
 (It doesn't seem like she uses much make-up. Well, she's got a nice foundation, I don't think she needs it…) 
 What's wrong, Ogami? You've been staring at my face for a while. Haha, you're in love with me, aren't you! 
-Hey, you shouldn't be teasing an adult.
+Hey now… You shouldn't tease adults!
 Hehehe… Sorry, Ogami. 
 (Her eyes are shining with curiosity.) 
 (Yumi's got a reputation for loving juicy gossip…) 
@@ -333,8 +333,8 @@ Just a while ago there was a report of a cat-sized monster around the Suehirocho
 I just hope this doesn't turn into something really bad… 
 After we finish our summer performances, the theater is opened up for public use. 
 People hold advance screenings of motion pictures and all sorts of stuff. 
-They're actually doing an advance screening of 'The Three Musketeers' this time. 
-Directed by Fred Niblo and starring Douglas Fairbanks… you should definitely check it out! 
+They're actually doing an advance screening of “The Three Musketeers” this time. 
+Directed by Fred Niblo and starring Douglas Fairbanks… You should definitely check it out! 
 So Ogami, how are things going with Kanna? 
 What do you mean? 
 I mean something happened between you two at Fukagawa, right? 
@@ -347,7 +347,7 @@ I need to get out and buy some new clothing for the fall. I wonder what will be 
 Sumire hasn't been near the prop room ever since you guys went to Fukagawa. 
 Hmm? Why? 
 Well, think about it. There's stuff piled all over in that room. The kind of place you'd find… 
-…Find what? Oh… Oh I get it. 
+…Find what? Oh… I get it. 
 Looks like you and Sakura have been hitting it off lately, Ogami. 
 Sakura's popular with just about everyone. I think it's because she comes off as nice and approachable. 
 Ogami, seems like you've been pretty friendly with Sumire lately. 
@@ -419,7 +419,7 @@ Hmm… Kohran's fanbase is a bit of a mystery.
 Well we should get things started. Where are we going to hold this party? 
 Why don't we do it in the green room? There are tatami mats in there, so it could be pretty relaxing. 
 Hm, holding a party in the green room after the performance has ended. I think that's a splendid idea. 
-All righty, I'll go grab some tables out of storage downstairs. 
+Alrighty, I'll go grab some tables out of storage downstairs. 
 I'll go get started with the cooking. 
 Well I can hardly just laze around while you all work… 
 So I suppose I'll prepare the green room and set out the dinnerware. 
@@ -427,7 +427,7 @@ OK. Iris, you help Sumire, please.
 Oka~y! 
 As for me… Well, don't you worry about what I'll be working on. 
 I'll go buy the drinks and snacks. 
-(Oh man… Sakura might still be upset from earlier… should I do something?) 
+(Oh man… Sakura might still be upset from earlier… Should I do something?) 
 Call out to her. <br> Go after her. 
 W-Wait, Sakura. I… I wanted to talk to you. 
 …I'm listening. 
@@ -437,13 +437,13 @@ Hmmm. Seems like the Ensign wants some alone time with Sakura. I suppose we'd be
 Captain… 
 …All right, let's give them some space, everyone. 
 …All right everyone, let's move it. Guess the Boss wants some alone time with Sakura. 
-How come you're being all secret with Sakura, Mon Frère? Hmph, I don't care! …Let's go, everyone! 
+How come you're being all secretive with Sakura, Mon Frère? Hmph, I don't care! …Let's go, everyone! 
 R-Roger that, Chief… C'mon folks, let's give these two some room. 
 OK, it's just the two of us… Listen, Sakura, about what happened earlier… 
-Oh, uh, thanks… 
+Y-Yes… 
 Tsubaki was quite busy today, right? I just thought it would be nice to treat her to dinner. 
 I promise I had the purest of intentions. 
-…Oh I know. Good grief, what's wrong with me? I jumped to some awful conclusions… 
+…I understand. Good grief, what's wrong with me? I jumped to some awful conclusions… 
 So… are we OK? 
 Yes. I believe we are. 
 Phew, glad that's over. Honestly I was hoping we could smooth things over quickly. 
@@ -456,11 +456,11 @@ Well… guess I'd better go help out too.
 Sakura! Wait! I need to talk to you! 
 O-Ogami? 
 *pant, pant*… S-Sakura… about what happened earlier… 
-Oh, uh, thanks… 
-Well… see, the truth is… 
+Y-Yes… 
+Well… See, the truth is… 
 Tsubaki was quite busy today, right? I just thought it would be nice to treat her to dinner. 
 I promise I had the purest of intentions. 
-…So that's what that was. I'm sorry. I…jumped to some conclusions. 
+…So that's what that was. I'm sorry. I was jumping to conclusions… 
 So… are we OK? 
 Yes. I believe we are. 
 Phew, glad that's over. Honestly I was hoping we could smooth things over quickly. 
@@ -478,11 +478,11 @@ We should get started ourselves.
 Um… Ogami. 
 S-Sakura!? I thought you left to go shopping… 
 Well… I wanted to talk to you about what happened with Tsubaki… 
-W-Wait, please let me explain about that! 
-Oh, uh, thanks… 
+W-Wait, please let me explain myself! 
+Oh, uh, all right… 
 Tsubaki was quite busy today, right? I just thought it would be nice to treat her to dinner. 
 I promise I had the purest of intentions. 
-…Oh, I know. Heavens, what's wrong with me? I jumped to some awful conclusions… 
+…I understand now. Heavens, what's wrong with me? I jumped to some awful conclusions… 
 So… are we OK? 
 Yes. I believe we are. 
 Phew, glad that's over. Honestly I was hoping we could smooth things over quickly. 
@@ -547,7 +547,7 @@ Hey hey Mon Frère! Let's prepare for the party together, OK?
 Sure. Let's see what Maria's got for us. 
 Let's see. Would you please handle setting out the utensils? 
 Yay! I'm partners with Mon Frère! 
-Yep… so, what should I do? 
+Yep… So, what should I do? 
 Hmph, how nice to be so carefree. 
 Ensign, would you and Iris please bring the cups and other utensils we'll need for the party? 
 Just a moment… I'll write down everything we need. 
@@ -612,30 +612,30 @@ Well, shall we get started, Ensign? It should be quite easy with the two of us.
 See you later, Sumire! 
 …I don't want to spend a single second with Mon Perv, so I'm gonna do this by myself. See you! 
 …Ensign, what did Iris mean by that? 
-I sorta saw her in the bath… <br> Huh!? <br> I wasn't peeping, I swear! 
-Uh, I sorta saw her in the bath… I mean-! No! That was an accident! 
+I sorta saw her in the shower… <br> Huh!? <br> I wasn't peeping, I swear! 
+Uh, I sorta saw her in the shower… I mean-! No! That was an accident! 
 You did WHAT!? How could you, Ensign!? 
 I can't believe you, Ensign. You're a liar and a louse… Excuse me! 
 Ah… S-Sumire! Dammit, now Iris AND Sumire are mad at me… 
 Not just mad… I don't think they'll forgive me anytime soon… 
 Huh!? 
-Well now… that's the reaction you tend to give when you're feeling guilty. 
+Well now… That's the reaction you tend to give when you're feeling guilty. 
 Which means something DID happen. Something you're ashamed of, perhaps? 
 I thought you were different from other men, that you would never betray our trust like this, clearly I was mistaken. 
-I believe I'll finish the preparations on my own, thank you very much!… Excuse me! 
+I believe I'll finish the preparations on my own, thank you very much! …Excuse me! 
 Ah… S-Sumire! Dammit, now Iris AND Sumire are mad at me… 
 Not just mad… I don't think they'll forgive me anytime soon… 
 I wasn't peeping, I swear! You've gotta believe me! 
 …Strange that peeping should come into the conversation. Something you'd like to confess, Ensign? 
 Ehh?! W-Well… 
-I'll hazard a guess. You decided to take a look at Iris while she was in the bath, am I correct? 
+I'll hazard a guess. You decided to take a look at Iris while she was in the shower, am I correct? 
 I thought you were different from other men, that you would never betray our trust like this, clearly I was mistaken. 
-I believe I'll finish the preparations on my own, thank you very much!… Excuse me! 
+I believe I'll finish the preparations on my own, thank you very much! …Excuse me! 
 Ah… S-Sumire! Dammit, now Iris AND Sumire are mad at me… 
 Not just mad… I don't think they'll forgive me anytime soon… 
 …You don't intend to make any excuses? 
 No, I won't. I'm not going to lie. Please just listen, Sumire. 
-I was walking around in the basement when I heard Iris scream from the bathroom… 
+I was walking around in the basement when I heard Iris scream from the shower room… 
 I ran in to see what was the matter, and Iris took it as me coming to peep. 
 Turns out she got the hot and cold water faucets confused and was surprised by the temperature. 
 I'm telling the truth, I swear! That's all that happened! 

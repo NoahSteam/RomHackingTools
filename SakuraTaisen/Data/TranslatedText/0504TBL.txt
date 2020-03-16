@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
 It's a photo of Maria. She's lost in thought and looks kind of sad…
 A photo of Kanna. Her signature strength comes through clearly.
@@ -412,7 +412,7 @@ Though we should be grateful their life was spared.
 Sakura certainly isn’t weak, but she also isn’t the strongest. She needs proper support when sent out. 
 Sumire has excellent combat capabilities, but you mustn't overestimate her. She needs proper support. 
 Maria's defenses are weak, so you should avoid placing her in close-quarters combat situations. 
-Kanna has the strength to fight in close-quarters combat. She's cut out to be an advanced guard. 
+Kanna has the strength to fight in close-quarters combat. She's cut out for the front lines. 
 Iris was angry. She still can't fight by herself, so we have to protect her… 
 Kohran's attack power is weak, but she has a wide range. Take that into consideration when giving her orders. 
 As the captain, you must provide sufficient support. You are what strengthens the bonds of the unit. 
@@ -465,7 +465,7 @@ Hey, hey, Mon Frère. I can't sleep… Tell me a story.
 A story? Hmm… 
 "The Monkey and the Crab" <br> The Western "Cinderella" <br> "Stories of my Past" 
 Great, OK, I'll tell you the story of “The Quarrel of the Monkey and the Crab”! 
-Yay! I don't know that one! Hey, what's a "quarrel"? 
+Yay! I don't know that one! Hey, what's a "quarrel?" 
 That's right, you were born in France, weren't you? 
 A "quarrel" is like… an argument, but in this story, it means something like a battle. 
 Huh.. Mr. Monkey and Mr. Crab are having a battle? So, what happens? 
@@ -539,7 +539,7 @@ I-Iris!? She fell asleep almost immediately… S-Somehow I feel like this is my 
 Oh well. I should leave the room quietly, so I don't wake her… 
 …
 What's wrong, Mon Frère? 
-W-Well, how about I tell the story of… "The Amazing Person"? 
+W-Well, how about I tell the story of… "The Amazing Person?" 
 Yay! Tell me! Tell me! 
 And then… 
 However… 
@@ -580,7 +580,7 @@ I hope they don't keep up their fighting in Fukagawa… I'm worried.
 Ogami, I'm sure it'll be a challenge, but try your best. 
 Do you need me for anything? 
 (She's got her scarf pinned with a brooch.) 
-(I wonder what it's made of… couldn't be a real jewel, right?) 
+(I wonder what it's made of… Couldn't be a real jewel, right?) 
 …Are you interested in this brooch? Oh, hey, listen to this. I actually got it super cheap at a bargain sale. 
 …
 (The way Yuri's hair curls away from her face is so charming…) 
@@ -589,7 +589,7 @@ Is something odd about my hair? Oh nooo, I've got some split ends!
 (Her face is small and balanced. I think even a model would be jealous.) 
 (It doesn't seem like she uses a lot of make-up. Well, she's got a nice foundation, I don't think she needs it…) 
 What's wrong, Ogami? You've been staring at my face for a while. Haha, you're in love with me, aren't you! 
-Hey, you shouldn't be teasing an adult. 
+Hey now… You shouldn't tease adults! 
 Hehehe… Sorry, Ogami. 
 (Her eyes are shining with curiosity.) 
 (Yumi's got a reputation for loving juicy gossip…) 
@@ -720,7 +720,7 @@ Good luck with Sumire and Kanna.
 Iris is able to move through walls by teleporting. 
 Yeah… 
 If she gets separated from everyone in a dangerous situation, make sure she retreats to a safe location. 
-You know what they say, "one pair of heels is often worth two pairs of hands". 
+You know what they say, "one pair of heels is often worth two pairs of hands." 
 Wait, I know where that’s from… 
 Ancient China? <br> Shingen Takeda? <br> Napoleon? 
 That's an ancient Chinese war strategy, isn't it? 

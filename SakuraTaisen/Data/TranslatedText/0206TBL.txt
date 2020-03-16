@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
 It's a photo of Maria. She's lost in thought and looks kind of sad…
 A photo of Kanna. She looks strong and reliable. I can't wait to meet her.
@@ -263,7 +263,7 @@ Oh, I just thought it'd be best for me to show you the way to the manager's offi
 But, you actually just passed the manager's office. Didn't you see it there? 
 Huh? Seriously? Oh man I must've been spacing out. 
 Oh, Ogami, hello. 
-The current play is called "For Love". It is a French play. 
+The current play is called "For Love." It is a French play. 
 Maria and Sakura play the leads. Maria in the role of Sir Andre is quite the spectacle… 
 I've got to say, she looks quite charming in men's clothes! 
 Whoa… That sounds fun. 
@@ -278,7 +278,7 @@ Kohran! Good to see you!
 Tsubaki, you look really good. I'm gonna be joining up here, so I look forward to working with you. 
 Same here. Really good to see you. 
 I heard you arrived by bike, Kohran. Why didn't you take the capital railway to the theater? 
-Eh, the steam trains are always so crowded. Plus the weather's great today and it's not too far coming from Asakusa. 
+Eh, the steam trains are always so crowded. Plus the weather's great today and the trip from Asakusa isn't far.
 OK, well, I'll get your bike carried in. Good luck on the stage! 
 Ogami, have you found Kohran yet? 
 Well… not yet. Where could she have gone? 
@@ -333,7 +333,7 @@ Hi, my name is Sakura Shinguji. I joined the squad just recently. Nice to meet y
 You two are going to be comrades in the Flower Division, so here's hoping you can be good friends. 
 Of course! 
 OK, then… I have to get to the performance. Ogami, Miss Li, if you'll excuse me. 
-Oh stop it with that "Miss Li". Way too formal. 
+Oh stop it with that "Miss Li." Way too formal. 
 Just "Kohran" suits me fine. 
 …Is that so? See you later… Kohran. 
 Sakura, huh? She seems like a nice girl. 

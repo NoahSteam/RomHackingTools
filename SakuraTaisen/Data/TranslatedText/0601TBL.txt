@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
 It's a photo of Maria. She's lost in thought and looks kind of sad…
 A photo of Kanna. Her signature strength comes through clearly.
@@ -30,7 +30,7 @@ Jean-Paul the teddy bear. Iris's best friend. She always carries him with her an
 (…She must have come here in a big hurry after the play ended.) 
 (As always, that's some wild hair.) 
 (It's Kanna's trademark headband. It always looks so good on her.) 
-(I've heard that the store even sells "Kanna's headbands" marketed to children.) 
+(I've heard that the store even sells "Kanna Headbands" marketed to children.) 
 (Wow… You don't usually see Kanna looking like this.) 
 (I wonder what happened here…? Kanna's got a troubled look in her eyes.) 
 (I wonder if she ran out of time… Her clothes are all over the place.) 
@@ -45,13 +45,13 @@ Ahh, it's nice and sunny today, but it'd be nice to relax here even on a rainy d
 Phew… Coming back to your room after a job well done feels good. 
 …Nothing going on here either. I should try and meet up with everyone else. 
 Huh… I wonder if Sakura is in her room. 
-Why don't I go check somewhere else. 
+How about I go check elsewhere.
 …It seems she isn't here. Didn't everyone say they were getting together today? 
 Hmm… I wonder if Kanna is in her room? 
-Why don't I go check somewhere else? 
+How about I go check elsewhere.
 …Seems like she's not here. I guess she hasn't returned to her room yet. 
 Hmm… I wonder if Maria is in her room? 
-Why don't I go check elsewhere? 
+How about I go check elsewhere. 
 …Seems like she's not here. I guess she hasn't returned to her room yet. 
 I wonder if Iris is on her way back… 
 OK, guess I'll head somewhere else. 
@@ -63,39 +63,39 @@ This room is kind of useless now, isn't it?
 Nobody here either. Off to somewhere else. 
 The room is full of costumes. 
 But… there's no one here. I'll go check somewhere else. 
-Sumire still isn't here. Everyone said they would gather in the parlor but… 
+Sumire still isn't here. Everyone said they would gather in the salon but… 
 Not much I can do about it. I'll be leaving. 
 No matter when I come here it's always a mess. 
 There was no reason to come here. I'll go elsewhere. 
 All the sets from the performance are stored away here… 
 Nobody here. I'll be going then. 
-In summertime, we have to be all the more careful to keep the kitchen in sanitary condition. 
+In summertime, we have to be extra careful about keeping the kitchen clean and sanitary. 
 …Or at least, I can't help but feel that way. I'll head somewhere else. 
 It's always lively when a performance is going, but it's quiet now that we're closed. 
-There was no reason to come here. I'll go elsewhere. 
-I'm finally free from my ticketing duties now that the show is over. 
+There was no reason to come here. I better go elsewhere. 
+I'm finally free from my ticket collecting duties now that the show is over. 
 I guess I'll rest my weary bones today. 
 Even the regular customers came and greeted me. 
 I wonder if that means I've finally become accustomed to this place… 
 Even after the curtain falls and the last of the audience has left, I can still feel the enthusiasm of the stage… 
-What is everyone doing, I wonder. They must have gathered in the parlor by now. 
+What is everyone doing, I wonder. They must have gathered in the salon by now. 
 There's nobody here. The performance has already ended but no one's come yet. 
 Nothing to do here. I'll check somewhere else. 
 I can still feel the energy from the performance in the air. 
 I guess it's about time to go. 
 Even in the afternoon this storage room is pretty dark… 
 Nothing to do here either. I suppose I'll check elsewhere. 
-The show is almost finished so it makes sense that no one's practicing here. 
+The show just finished so it makes sense that no one's practicing here. 
 …I guess I'll go somewhere else. 
 Nothing beats a good swim in the summer. I figured someone might be swimming here… 
-Nothing going on here. I'll try to check another room. 
+Nothing going on here. I'll go check another room. 
 The Koubu are in excellent condition, all thanks to Kohran. 
 Kohran is usually here… Oh well, I'll check somewhere else. 
 There's no one here… 
 Should I check another room? I came here kind of absentmindedly. 
 It seems like Iris was taking a shower until just a moment ago. 
 There was no reason to come here. I'll go elsewhere. 
-I've heard these medical pods can move using the underground steam engine if the situation calls for it… 
+I've heard these medical pods can be moved using the underground railway system if the situation calls for it… 
 …I just pray we won't ever need to use them… 
 The backbone of the Assault Troupe: the Command Room. When the alarm sounds, we all gather here. 
 But… there's no one here. I'll check another room. 
@@ -165,20 +165,20 @@ Speak with Tsubaki. <br> Go back to my room. <br> Go meet up with everyone.
 I'll chat with Tsubaki, since I'm done with work for today. 
 Ah, Ogami! Great work today. Will you be finishing soon? 
 Yup, I'll be leaving soon. 
-Thanks for your hard work todaaaay! 
+Thanks for your hard work today~! 
 (No matter when I see her, Tsubaki is always so energetic.) 
 What's wrong, Ogami? You were staring at me a little… 
 (Tsubaki is always energetic, isn't she? She doesn't seem even a little tired.) 
 Are you all right, Ogami? You look a little dazed. Aren't you tired? 
 I'm done with work, but you're still here, eh, Tsubaki? 
-Yep. We have to see out the customers. This is the busiest time of the night! 
+Yep. We have to see the customers out. This is the busiest time of the night! 
 That's true… Well then, I'll get out of your hair. 
 Go back to your room. <br> Invite Tsubaki out. <br> Meet up with everyone. 
 Well then, I'll be heading out. 
-Thanks for all your hard work! Oh, and everyone from the Flower Division should be in the parlor! 
+Thanks for all your hard work! Oh, and everyone from the Flower Division should be in the salon! 
 Everyone gave their all in today's performance, so please give them some kind words, OK? 
 I'll do that. Anyway, keep up the good work. 
-Eh?! Really?! Ah… Well… what should I do…? 
+Eh?! Really?! Ah, well… What should I do…? 
 What's wrong? 
 Actually… I had promised Kasumi that I would go eat with her at Renga. 
 Oh, really… Well, if you've got a prior engagement, then there's nothing we can do about it. 
@@ -186,31 +186,31 @@ I'm very sorry! I've already made plans this time, but please invite me out agai
 All right… Next time it is! Well, I'll be going then. 
 It's a promise, then! And again, thank you for your hard work today! 
 If that's all, I'm heading home. 
-Thanks for all your hard work! Oh, and everyone from the Flower Division should be in the parlor! 
+Thanks for all your hard work! Oh, and everyone from the Flower Division should be in the salon! 
 Everyone gave their all in today's performance, so please give them some kind words, OK? 
 I'll do that. Anyway, keep up the good work. 
 What's wrong Ogami? You look a little out of it. 
 Hey, Miss! Give me that picture! 
 Yes, welcome! Kanna Kirishima's picture, right? That'll be 50 zeni please! 
 We'll be performing a new show in the fall, so please come see us again! 
-You look busy… I'll head out now. Keep up the good work, ok? 
+You look busy… I'll head out now. Keep up the good work, OK? 
 Of course. Thank you for working hard as well. 
 Phew… I'm beat. I'll go back to my room and take a rest. 
 All right, I guess I should meet up with everyone and at least show my face. 
-Everyone should be relaxing near the parlor after they finish changing. 
+Everyone should be relaxing near the salon after they finish changing. 
 Ahh… No good… I'm really sleepy all of a sudden. 
 I'm all done clipping tickets for now, so I'll head out. 
 Well, you're surprisingly close to Tsubaki, aren't you Ogami?! 
 Huh!? S-Sakura! W-When did you get here!? 
 Hmph! I had just come here to look for you. 
-Looking for…m-me…? 
+Looking for m-me…? 
 After the performance, we were planning to have an after party with everyone from the Flower Division, but… 
 …I'll just have to tell everyone that you'll be absent due to your dinner with Tsubaki! 
 Hey! W-Wait a minute! 
 She didn't accept my invite! <br> That was just a joke! <br> Hey, listen for a second! 
 She didn't accept my invitation. She had already made other plans… 
 So if she hadn't made plans in advance, then you'd be going to eat with her? I can't believe it! 
-You can't believe it? It's just going for dinner… 
+You can't believe it? It's just going out for dinner… 
 That doesn't matter! And to think I came here to invite you to the after party… I'll be taking my leave! 
 Oh… She's gone. She came here just to ask me to join her, and now this… What a bummer. 
 Oh, that was just a joke! I wasn't being serious. 
@@ -218,17 +218,17 @@ I didn't take you for the type to invite girls out as a joke!
 Well, I came here to invite you to the after party but… Just kidding! I'll be taking my leave. 
 Oh… She's gone. She came here just to ask me to join her, and now this…What a bummer. 
 Sakura! Please wait! Just listen to me for a minute. 
-What is it? What did you want to tell me? 
+Yes, what is it?
 Tsubaki was quite busy today, right? I just thought it would be nice to treat her to dinner. 
 Then that's when you called me. This isn't a fib or a joke… I'm being serious. 
 I understand. I can believe that. 
 You're so kind, Ogami. But sometimes… that kindness… 
-Hmm? My kindness…? 
+Hmm? What about my kindness…? 
 No, no. It's nothing. Anyway… 
 Since our summer performance is over, we're having a big after party with everyone! 
 Please come and at least show your face. 
 Thank you, of course I'll go. Where is everyone meeting? 
-Everyone is resting in the parlor now. Anyway, I'll be going. 
+Everyone is resting in the salon now. Anyway, I'll be going. 
 (Right, the after party… Regardless, I'm glad I was able to avoid a fight with Sakura.) 
 … 
 What is it? If you don't have anything to say to me, then please don't call after me! 
@@ -262,14 +262,14 @@ Aww! I believe you!
 (Phew…) 
 But… Mon Frère. You're lucky it was me… if it were someone else, then… 
 They might've been super duper mad! Be careful, OK? 
-Anyway, I'm gonna go meet up with everyone else! Bye~Bye~! 
+Anyway, I'm gonna go meet up with everyone else! Bye-bye~! 
 S-She's right… I'd better be careful. 
 … 
 Mon Frère… don't make that face! 
 I'm not angry, OK? 
 I'm sorry, Iris. It was a little careless of me to run in here like that. 
 No, no, it's OK, Mon Frère. 
-Anyway, I'm gonna go meet up with everyone else! Bye~Bye~! 
+Anyway, I'm gonna go meet up with everyone else! Bye-bye~! 
 I'm sorry I made you worry, Mon Frère. 
 It's OK, really. I just heard your screams and thought something might've happened to you. 
 Honestly, I'm just glad it wasn't anything serious. 
@@ -283,7 +283,7 @@ I should be asking you that. I was walking through the corridor and heard quite 
 …Huh? Ohhhh… 
 I mixed up the hot and cold water, so I shouted… Maybe that's what you heard? 
 Are you kidding me? I'm glad I didn't rush in here. 
-I think you just wanted to come into my stall, isn't that right? 
+I think you just wanted to come into my shower stall, isn't that right? 
 That's not it at all. <br> …You're right. <br> Leave it to your imagination. 
 That's not it at all. I wasn't trying to catch a peek or anything. 
 Mon Frère… 
@@ -299,15 +299,15 @@ Aww, Mon Frère's being shy! How cuuuute!
 Well… Uh… 
 Next time… Let's get in together! OK, Mon Frère? 
 …Hey now! 
-Anyway, I'm gonna go meet up with everyone else! Bye~Bye~! 
+Anyway, I'm gonna go meet up with everyone else! Bye-bye~! 
 Ahh… This is no good. What am I saying?! 
 …I'll leave that to your imagination. 
-You were just itching to come to my stall, weren't you, Mon Frère? 
+You were just itching to come to my shower stall, weren't you, Mon Frère? 
 … 
 See?! I knew it! 
 I-Iris! Hold on a second! 
 Don't be shy, don't be shy! 
-Anyway, I'm gonna go meet up with everyone else! Bye~Bye~! 
+Anyway, I'm gonna go meet up with everyone else! Bye-bye~! 
 I… I can't deny it though… Maybe I did want to sneak in… I'm scaring myself. 
 … 
 See! You're thinking about it, aren't you? You wanted to sneak a peek! 
@@ -315,16 +315,16 @@ N-No, actually…
 It would've been fine if you came in, y'know? 
 H-Hey! I-Iris! You shouldn't tease adults like that! 
 Don't be shy! Don't be shy! 
-Anyway, I'm gonna go meet up with everyone else! Bye~Bye~! 
+Anyway, I'm gonna go meet up with everyone else! Bye-bye~! 
 She's right though… I was thinking about it… I'm scaring myself. 
 Kyaaaaah!! 
 Huh!? That scream… That was Iris! It sounded like it was coming from the dressing room. 
-Hurry to the dressing room. <br> Shout "What's wrong!?". 
+Hurry to the dressing room. <br> Shout "What's wrong!?" 
 Iris isn't here?! That must mean… the shower room?! 
 Damnit… What should I do!? 
-Hurry to the shower room. <br> Shout "What's wrong!?". 
+Hurry to the shower room. <br> Shout "What's wrong!?" 
 If Iris isn't here… she must be in the shower room… This is bad… 
-The hell with it! I can't just abandon Iris! I'm busting into that shower! 
+The hell with it! I can't just abandon Iris! I'm busting into the shower room! 
 Iris! Are you all right?! 
 Huh?! Oh! Mon Frère! Get out of here! 
 Huh? What the!? Uwaaaaaah! 
@@ -333,7 +333,7 @@ I wanted to go and help her but… I've been mistaken for a peeping tom…
 Iris! What's wrong!? Are you OK!? 
 Huh!? That voice… Mon Frère?! Mon Frère, what's wrong? 
 I heard someone screaming and thought something was wrong! 
-Well…uh… I… I thought I would take a shower but I accidentally mixed up the hot and cold water. 
+Well… Uh… I… I thought I would take a shower but I accidentally mixed up the hot and cold water. 
 I got super surprised and shouted real loud. 
 Are you kidding? That's it…? I was more surprised than you were! 
 I'm sorry, Mon Frère. Were you worried about me~? 
@@ -345,7 +345,7 @@ First things first, I need to figure out what's going on.
 Iris! What's wrong!? Are you OK!? 
 Huh!? That voice… Mon Frère?! Mon Frère, what's wrong? 
 I heard someone screaming and thought something was wrong! 
-Well…uh… I… I thought I would take a shower but I accidentally mixed up the hot and cold water. 
+Well… Uh… I… I thought I would take a shower but I accidentally mixed up the hot and cold water. 
 I got super surprised and shouted real loud. 
 Are you kidding? That's it…? I was more surprised than you were! 
 I'm sorry, Mon Frère. Were you worried about me~? 
@@ -357,8 +357,8 @@ First things first, I need to figure out what's going on.
 Hey, Boss… 
 I feel bad about just leaving Kanna in the lurch, but… guess I'd better go elsewhere. 
 What's wrong, Kanna? You have a worried look on your face. 
-Well, I've heard that a bunch o' kids tend to get separated when people are leaving after the show. 
-So I started wondering if I could do anything to help, and I rushed here once the play ended. 
+Well, I've heard that a bunch o' kids tend to get separated from their families whenever shows let out. 
+So I started wondering if I could do anything to help, and I rushed over here once the play ended. 
 All right! Let's do it. <br> Kanna… you're so kind. <br> I'm in a bit of a rush… 
 All right! Let's help these lost kids find their parents! 
 Boss! So you'll help me?! 
@@ -377,25 +377,25 @@ I know it's rude but… I'm in a bit of a hurry.
 See you later… 
 Boss! You don't look like you're doing anything important. Can you give me a hand with a little something? 
 Huh? H-Hey, I never said I had nothing to do! 
-Aw, come on, don't make such a fuss! These kids are in a pinch, so we should help 'em out! 
+Aw, come on, don't make such a fuss! These kids are in a pinch, we should help 'em out! 
 I'm no match for you, am I? Got it, I'll help too! 
 We've got this! Having you around is as good as having a hundred average guys! Let's do it! 
 The play's run is ending today, yeah? Kids keep getting separated from their parents in the crowd. 
 All right! Let's help these lost kids find their parents. 
 Yo, Boss! If you're here, that means you came to help me, right? 
 I mean… it's not like that, but… 
-Boss… you wouldn't leave these poor kids alone, would you? 
+Boss… You wouldn't leave these poor kids alone, would you? 
 W-Well… 
 I know you aren't that kind of guy, Boss. All right! Let's help these kids out. 
 …Got it! Let's help them out! 
 All right! Having you around is as good as having a hundred average men! Let's do it, Boss! 
-Ogami, Kanna! Thank you so very much for helping me today. 
+Ogami, Kanna! Thank you so much for helping me today. 
 It sure took a while, didn't it? 
-Don't worry about that one bit! Your help today really saved my bacon. 
+Don't be so modest! Your help today really saved my bacon. 
 Exactly, Kanna. Sure it took some time, but at least all the kids were able to find their parents. 
 That's true. I'm really grateful for everyone's help. 
 As expected from the Boss! Your judgment and memory were fantastic! 
-It's nothing, really. I'm just relieved all the kids were able to find their parents. 
+It was nothing, really. I'm just relieved all the kids were able to find their parents. 
 I know it well… what it feels like to lose sight of your parents… 
 You just can’t stop thinking “did they leave without me?” and it makes you wanna start crying. 
 I don't want kids to ever think about crying when they come here to see the Flower Division's performances. 
@@ -406,40 +406,40 @@ Exactly. We can give those kids a dream to work towards.
 Even if bad things happen, they can think back to our performances with a smile on their faces. 
 Every time I'm on the stage, I tell myself that I want to create those kinds of memories with my performance. 
 …Or something like that. Hope I'm not actin' like a show-off? 
-No, not at all. Actually, it was really fantastic. 
+No, not at all. That’s a wonderful mindset to have. 
 Aw, c'mon. I appreciate it, but flattery will get you nowhere. 
-Well, I'd better get going, then. Everyone should be in the parlor by now. 
+Well, I'd better get going, then. Everyone should be in the salon by now. 
 Boss… thank you for helping me. 
 That's true. But fighting is still our most important job. 
 Of course! Protecting everyone from evil is the Imperial Assault Troupe's most important job! 
 Everything that's precious to these kids… their families, homes and even their dreams… I'll protect them all! 
 …Or something like that. Hope I'm not actin' like a show-off? 
-No, not at all. Actually, it was really fantastic. 
+No, not at all. That’s a wonderful mindset to have. 
 Aw, c'mon. I appreciate it, but flattery will get you nowhere. 
-Well, I'd better get going, then. Everyone should be in the parlor by now. 
+Well, I'd better get going, then. Everyone should be in the salon by now. 
 Boss… thank you for helping me. 
 That's just like you, Kanna. 
 Really? I just figure, I hate feeling lonely… 
 Life's a lot better with a smile on your face and a spring in your step! 
 Yeah. And that's the kind of place this theater is. 
 Yep. For my part, I wanna keep this theater overflowing with smiling faces. 
-Well, I'd better get going, then. Everyone should be in the parlor by now. 
+Well, I'd better get going, then. Everyone should be in the salon by now. 
 Boss… thank you for helping me. 
 …Or something like that. Hope I'm not actin' like a show-off? 
-Well, I'd better get going, then. Everyone should be in the parlor by now. 
+Well, I'd better get going, then. Everyone should be in the salon by now. 
 Boss… thank you for helping me. 
-Kanna's performance is always a hit with the kids. No doubt it's the energy and brightness she brings to the stage… 
-…But I bet it's also because Kanna just loves kids. 
+Kanna is always a hit with the kids. No doubt it's because of the energy and brightness she brings to the stage…
+…but I bet it's also just because of how much she loves children. 
 Oh, Ogami! Kanna! Why don't you let me take care of the kids? 
 Dammit! I couldn't get any of those kids back to their parents! 
 I should've tried a little harder, myself… I'm sorry, Kanna. 
 What're you sayin', Boss? You gave it your best shot, didn't you? 
 Yuri'll take over finding their parents from here. She's good at this kind of thing. 
-As for me, I'll just be happy to put smiles back on their faces. 
-…Or something. Hahaha! A-Anyway, I'm gonna head to the parlor. 
+As for me, I'll be happy to just put smiles back on their faces. 
+…Or something. Hahaha! A-Anyway, I'm gonna head to the salon. 
 Thanks for the help, Boss. 
-Kanna's performance is always a hit with the kids. No doubt it's the energy and brightness she brings to the stage… 
-…But I bet it's also because Kanna just loves kids. 
+Kanna is always a hit with the kids. No doubt it's because of the energy and brightness she brings to the stage…
+…but I bet it's also just because of how much she loves children.  
 Yo, Boss! Looks like we made it through the performance unscathed. 
 Nicely done. Playing the lead part couldn't have been easy, either. 
 Heheh… Thanks. I'm just happy that the kids enjoyed this one. 
@@ -449,7 +449,7 @@ What's the hurry? <br> …Your kids? <br> Well, I'll see you later.
 What's got you in such a hurry? 
 Looks like there's some lost kids in the lobby and it's causin' problems for Yuri. I'm gonna go back her up. 
 When you say kids… you don't mean… your kids, do you? 
-Don't be an idiot! I don't have any kids, OK!? 
+Don't be an idiot! I don't have any kids! 
 Looks like there's some lost kids in the lobby and it's causin' problems for Yuri. I'm gonna go back her up. 
 Give it your all, OK? <br> Well, I'll see you later. <br> Mind if I give you a hand? 
 Oh really? That seems tough… Well, be sure to give it your all! 
@@ -460,8 +460,8 @@ The fact that she's so kind and dependable must be why the kids love her.
 Hmm, really…? Well, I'll see you later. 
 …Tch! That's cold, Boss. If you've really got nothing to do, can't you gimme a hand? 
 Hmph!! Well then, Boss… 
-(That might've been a little harsh of me.) 
-Is it all right if I give you a hand, then? I'm not really doing anything now… 
+(Maybe I was being a little too flippant.) 
+Is it all right if I give you a hand, then? I'm not really doing anything right now… 
 Really?! Thanks for helping me out, Boss. All right, let's head to the lobby! 
 … 
 Boss! You don't look like you're doing anything important. Can you give me a hand with a little something? 
@@ -472,13 +472,13 @@ That's more like it! Right, let's get over to the lobby!
 Hmm… I'm not really sure but… I'll see you later. 
 All right. Later then, Boss! 
 I'm in a bit of a rush, so I'll catch you later! 
-Hey, Kanna!… The play just ended, where's she going in such a hurry? 
+Hey, Kanna! …The play just ended, where's she going in such a hurry? 
 Oh, Ogami! Nice work today. 
 Hey, Sakura. Today was rough, what with so many customers! 
 Well, today was the last run of our summer play. By the way, about that… 
-Everyone should be gathering in the parlor by now. 
+Everyone should be gathering in the salon by now. 
 If you don't mind, Ogami… would you please come with me? 
-Sure, I'll come along. <br> I've got plans… sorry. <br> I can go on my own. 
+Sure, I'll come along. <br> I've got plans… Sorry. <br> I can go on my own. 
 Sure, I'll come along. Let's go. 
 OK! It looks like coming to get you was a good idea after all. 
 Oh? Sakura… did you come here just to get me? 
@@ -487,24 +487,24 @@ Huh?! I just figured that you'd be tired from work is all…
 I-It's nothing, really. S-Should we get going Ogami? 
 Come on!! Don't be like this! Everyone's already waiting, so let's hurry up and go! 
 Ah, Sakura! Could you stop pulling my hand?! 
-Heheh, if you're not going, then I'll just have to pull you all the way to the parlor! 
+Heheh, if you're not going, then I'll just have to pull you all the way to the salon! 
 I appreciate it, but… I have something I really need to do… I'll definitely come by a little later. 
-…Is that so? I understand. Well, everyone is already in the parlor, so please stop by, OK? 
+…Is that so? I understand. Well, everyone is already in the salon, so please stop by, OK? 
 …I'm holding you to that, Ogami! 
-Everyone's meeting in the parlor, eh? I should try and show my face later on. 
-The parlor, right? All right, I'll head over by myself. 
-…is that so?! Even though I came here just to invite you down?! 
+Everyone's meeting in the salon, eh? I should try and show my face later on. 
+The salon, right? OK, I'll head over there by myself. 
+…Is that so?! Even though I came here just to invite you?! 
 Fine, Ogami. Go by yourself for all I care! …I'm leaving! 
 Uh-oh… I made her angry, didn't I? 
 Hey, Sumire. What's with that sullen face of yours? 
 Ensign… I'm in something of a rotten mood at the moment. 
 About Kanna? <br> About the play? <br> About me? 
-I suppose… It's about Kanna, right? 
+I’m guessing… this is about Kanna, right? 
 …Yes. You're quite perceptive. 
 I thought you two had made peace with each other recently? 
 This is an issue I have with the casting. It's a completely separate matter. 
 How on earth could Yoneda cast Kanna as the lead, and I as the villain?! 
-I suppose… It's about the play, right? 
+I’m guessing… this is about the play, right? 
 That's exactly it! Perceptive as always, Ensign. That saves me the need to explain! 
 Curse Yoneda, that crusty old man! He's been casting me in nothing but supporting roles as of late… 
 It's as though he has no eye for talent whatsoever! 
@@ -523,46 +523,46 @@ I don't think that's true.
 What was that, Ensign? Whatever do you mean? 
 This may sound patronizing coming from someone who knows next to nothing about theater, but… 
 No matter how good the lead actor is, you couldn't put on a play without a supporting cast. 
-The villainess is a splendid role. And I don't think there's anyone who could pull it off like you, Sumire. 
+The Demoness is a splendid role and I don't think there's anyone who could pull it off like you, Sumire. 
 Ensign… you've made your point quite well. 
 I was mistaken. A splendid supporting role… it's just as you said. 
 And someone who excels at playing supporting roles is the real power on the stage! 
-That's right! Exactly what I wanted to say. 
+Right! That’s Exactly what I wanted to say. 
 Thank you so very much, Ensign. Speaking with you has lifted my spirits. 
-Well then, I will make my way to the parlor. Please do drop by later. 
+Well then, I will make my way to the salon. Please do drop by later. 
 …I wonder if my advice was of any use? 
 … 
 What is it, Ensign? Don't just stand there and say nothing! 
-Well, I know next to nothing about theater…and I wasn't sure whether I should butt in… 
+Well, I know next to nothing about theater… and I wasn't sure whether I should butt in… 
 …I'm sorry that I bothered you with my complaints, Ensign. 
-But, well… I loved you as the villainess, Sumire. It was very…you. 
-Is… is that so? 
+But, well… I loved you as the Demoness, Sumire. It was very… you. 
+Is… Is that so? 
 Indeed, complaining about the role I was cast is unbefitting of a star actress like myself. 
 Thank you so very much, Ensign. Speaking with you has lifted my spirits. 
-Well then, I will make my way to the parlor. Please do drop by later. 
+Well then, I will make my way to the salon. Please do drop by later. 
 …I wonder if my advice was of any use? 
 … 
 What is it, Ensign? You turned silent all of a sudden. 
-Well, I suppose my ill temper has nothing to do with you. 
-Please do excuse me. 
+Well, I suppose my ill mood has nothing to do with you. 
+Please, do excuse me. 
 …I was just wondering why I always end up getting the short end of the stick! 
 …So you're upset about role distribution for the shows? 
 Oh, Ensign… it's not as if I'm angry at YOU or anything. 
 After all, we two are friends, right? 
-Of… of course. 
+Of… Of course. 
 …It's true I was a tiny bit unhappy with the roles I've been getting lately… 
 But I shouldn't bother you with my complaints… Please excuse me. 
 So she was unhappy with her roles? Sounds complicated… 
-Aren't you a little too self-conscious? 
+Aren't you being a little too self-conscious? 
 Oh, erm… So I was wrong? Hahaha… 
 I see, I have ruined the mood. Please excuse me, I'll go ahead. 
 Hmmm… I wonder what that was all about. 
 I was really surprised earlier seeing that side of Maria… 
 Ahh! Ma…Maria!? 
-Ensign! I… 
-(Oh… that costume. Where did I see that before…?) 
-(Could it be… isn't that the costume that Sakura wore for her role as the French city girl?) 
-Ensign… this is… 
+Captain! I… 
+(Oh… That costume. Where have I seen it before…?) 
+(Could it be… isn't that the outfit Sakura wore for her role as the French city girl?) 
+Captain… this is… 
 (Maria seems uncharacteristically nervous.) 
 (She's not as intimidating as usual. I guess underneath it all she's just a normal girl.) 
 (She looks flustered…) 
@@ -571,25 +571,25 @@ Captain… please don't look at me like that.
 I-I'm sorry! It's my fault… I shouldn't have entered the women's dressing room in the first place. 
 A gentleman as always, I see. I am grateful for your sincere apology. 
 But… I mean… It's really me who is to blame. 
-I was just sorting through the costumes when Sakura's fell into my hands. 
+I was just sorting through the costumes when Sakura's outfit fell into my hands. 
 It looked so cute and… Well… I just… 
 That was unprofessional of me. Please forget about this. 
 I understand, it's all right. 
-Ensign… Please, do not speak of this to anyone. Promise me. 
+Captain… Please, do not speak of this to anyone. Promise me. 
 W-Well then… I'll take my leave. 
 All right, I'll see you later. 
 Who'd have thought Maria would ever act like that? 
-So underneath that exterior, she's just a girl after all. 
+So underneath her usual exterior, she's just a girl after all. 
 Maria… What are you doing? 
-Ensign… I was sorting the costumes and I came across this… 
+Captain… I was sorting the costumes and I came across Sakura's outfit… 
 And then, well… 
 This is a really cute dress, so I… 
 It really suits you. <br> You startled me. <br> It's a bit small… 
 It really suits you. 
-E-Ensign, please don't tease me like that! 
+C-Captain, please don't tease me like that! 
 I'm not joking around at all. You are a woman after all, you should wear clothes like this more often. 
 What? No… Things like this don't suit me at all. 
-Nonsense… You are really beautiful, you should dress up every now and then! 
+Nonsense… You’re really beautiful, so you should dress up every now and then! 
 …I'm just not used to… 
 You startled me, Maria. 
 I-I'm sorry to have caught you off-guard… 
@@ -609,7 +609,7 @@ I wasn't teasing you. You're beautiful, Maria. You should wear feminine clothes 
 That's impossible for me. Besides, the patrons all expect me to dress like a man, right? 
 Really? Well, there certainly isn't anyone that plays the male roles as well as you do. 
 No… that's not what I mean… 
-Well then… Ensign… 
+Well then… Captain… 
 …What is it, Maria? 
 You won't tell anyone else about this, will you? 
 Hmmm, but what if I did? <br> It's our secret. <br> It'll make for good gossip! 
@@ -620,9 +620,9 @@ I'd be happy if you would.
 All right… then it'll be just between the two of us. 
 …Thank you. I just got carried away a bit after the show. 
 Well, I think getting carried away might actually be good for you. Relax a little. 
-Really…? Hehe, maybe you are right. 
+Really…? Hehe, maybe you’re right. 
 This will make for some good gossip! 
-Ensign… people with loose lips don't tend to live for very long… 
+Captain… people with loose lips don't tend to live for very long… 
 (Gulp…) 
 No, no! Haha. It was just a joke! A joke! 
 … 
@@ -639,72 +639,72 @@ Ogami, nice work today.
 You as well. But… What are you doing here? 
 I'm escorting the guests to the exit. 
 We've closed off the doors so that the guests don't wander off into the rest of the building. 
-Would you be so kind as to go through the first floor if you want to go to the second? 
+Would you be so kind as to use the other staircase if you want to go to the second floor? 
 Really? What a bother. 
-Haha, Sorry, but we can't have our guests confuse the exits, THAT would be even more bothersome. 
-Yes, being a guide to our guests truly is an important responsibility. 
-…OK. I'll go through the first floor to get to the second. Keep up the good work. 
-Thank you very much. And thank you for all your hard work today, Ogami. 
-Kohran must have gone to the parlor by now. She's not here either. 
+Haha, sorry, but we can't have our guests leave through the wrong exit. That would be even more bothersome. 
+True enough, being a guide to our guests certainly is an important responsibility. 
+…OK. I'll use the other staircase to get to the second floor. Keep up the good work. 
+Thank you very much. And thank you for all your hard work today as well, Ogami. 
+Kohran must have gone to the salon by now. She's not here either. 
 This is Kohran's room. 
-Who could that be… I'm…a little tied up right now… Hold on, gimme a sec… 
+Who could that be… I'm… a little tied up right now… Hold on, gimme a sec… 
 Open the door anyway. 
-…Hmmmm. This wire should go here, right? And…Come on! Get in there! 
+…Hmmmm. This wire should go here, right? And… Come on! Get in there! 
 All right, I'm coming in! 
 Kohran, what're you up to? 
-Shh!… I'm in the middle of making a totally new type of robot… 
+Shh! …I'm in the middle of making a totally new type of robot… 
 I'm trying to connect a really important wire right now… I can't concentrate so… can you stop being so nosy? 
 What kind of robot? <br> I'm not going to say a word. <br> You're building noses? 
 Wow… What kind of robot? 
 Didn't I just tell you to shut your trap for one second?! Aaaah… 
-Wh… what's wrong? 
+Wh-What's wrong? 
 Ah… Damn it… 
 Don't worry. I'm not gonna say a single word. 
 That was nine words just there! Aaah… 
-Wh… What's wrong? 
+Wh-What's wrong? 
 Ah… Damn it… 
 You're building noses? 
-You dimwitted…! What are you talking about?! I said "nosey"! 
+You dimwitted…! What are you talking about?! I said "nosey!" 
 Oh, I just shoved it right in without thinking about it! 
-K… Kohran! If you scream like that… 
+K-Kohran! If you scream like that… 
 Ah… Damn it… 
 … 
 …Thanks a bunch, Ogami. 
 At this part of the construction, even the smallest distraction can lead to a grave mistake. 
 So, thanks for… Whoa! 
-Wh… what's wrong? 
+Wh-What's wrong? 
 Ah… Damn it… 
-*cough*…*cough*! 
+*cough*… *cough*! 
 What the hell! Now "Party Boy" has gone bust! 
 A-Are you all right, Kohran? 
 Noooo! I'd fitted him with a steam processor that could do both sides of a double act routine… 
 He was equipped with an arm just for card tricks… He had the body of a stripper and the mind of a philosopher… 
-And now my Party Boy… an entertainment robot built to perform party routines from 12 countries… lies in pieces… 
+And now my Party Boy, an entertainment robot built to perform party routines from 12 countries, lies in pieces… 
 Didn't I tell you not to distract me?! 
 Thanks to you I connected the wrong wire and boom! There he goes! 
 S-Sorry… 
 I slaved away on him for a month! What a mess… I'll go see the others. 
-Chief… next time someone tells you to shut up, you better listen. Please, I mean it… 
-I'll go and meet up with the others. They're probably in the parlor. You better not follow me! 
-What are you talking about? What is this "Party Boy"? 
+Chief… Next time someone tells you to shut up, you better listen. Please, I mean it… 
+I'll go and meet up with the others. They're probably in the salon. You better not follow me! 
+What are you talking about? What is this "Party Boy?" 
 Today was the last show of the summer season. And I promised I'd have him ready for the celebrations… 
 For an entire month I spent my nights working to create the perfect party trick robot… 
 Oh, dear Party Boy… Please forgive me. 
-And I was SO close to finishing! I'm such an idiot! 
-Kohran… I'm sorry about your robot, but the most important part is that you didn't get hurt… 
+And I was SO close to finishing it! I'm such an idiot! 
+Kohran… I'm sorry about your robot, but the most important thing is that you didn't get hurt… 
 If you'd been hurt, there'd be no celebration at all. So, I'm really glad. 
 Oh, cut it out… You're gonna make me blush… 
-I… I think I better…go to the parlor…look for the others… 
+I… I think I better go to the salon… and meet with the others… 
 Oh, and… I'm really sorry you had to witness this disaster… Sorry. 
 Nonsense! But… I really would have liked to see Party Boy in action. 
 … 
 In that case, I'm gonna show you a little secret later. You can look forward to it! 
-And off she goes… What did she mean by "secret"? 
+And off she goes… What did she mean by "secret?" 
 I'm coming in, Kohran… 
 Kohran… What do you think you're doing? 
-C… Chief!? How long have you been here? 
+C-Chief!? How long have you been here? 
 Ah… Damn it… 
-Would you look at this freaking mess! Now my Party Boy's in pieces! 
+Would you look at this freakin' mess! Now my Party Boy's in pieces! 
 A-Are you all right, Kohran? 
 Chief!! Don't just enter someone else's room like that! 
 You made me drop my screwdriver, and now look! This disaster is your fault! 
@@ -713,14 +713,14 @@ Sorry, I didn't do it on purpose.
 Well, of course not. That would have made it even worse! 
 What were you even thinking just coming in here without asking? 
 I'm sorry… 
-Don't you "Sorry" me! Just look what you did to Party Boy! He's a pile of bolts now! 
+Don't you "sorry" me! Just look what you did to Party Boy! He's a pile of bolts now! 
 There's no way I'll ever be able to fix him again… This is bad. 
 Kohran, are you hurt? 
 I'm fine. But look! Look what happened to Party Boy… He's in a million pieces! 
 I'm sorry… 
-Don't you "Sorry" me! We're lucky he was just an entertainment robot. 
-If I'd been working on my Spirit Power Bomb, all of Ginza might be gone now. 
-"Party Boy"? What's that? 
+Don't you "sorry" me! We're lucky he was just an entertainment robot. 
+If I'd been working on my Spirit Energy Bomb, all of Ginza might be gone now. 
+"Party Boy?" What's that? 
 Hm? You wanna know about Party Boy? 
 See these pieces everywhere? That's the most advanced entertainment robot the world has ever seen. 
 Entertainment robot? 
@@ -731,33 +731,33 @@ A customized card-trick arm, a family-friendly exotic dance function, and even a
 Thanks to my "life of the party" circuitry, his tricks would have become ever wilder! 
 And on top of that… 
 OK, OK, I get it! I'm really sorry. 
-…Well… maybe I got carried away a bit, but anyway, you need to be more careful! 
+Well… Maybe I got carried away a bit, but anyway, you need to be more careful! 
 … 
 … 
 Come on, Chief! You don't have to make such a serious face. 
-You can always fix up something that's broken. 
-But… really, showing at least a minimum of manners shouldn't be too hard. 
+You can always fix something that's broken. 
+But really… exercising the bare minimum of decorum shouldn't be too hard. 
 Ahh… I'm really, really sorry. 
 From now on, you oughta be careful when entering other people's rooms. Got it, Chief?! 
 Y-Yeah. 
-Hmph… Well, I promised I'd meet everyone in the parlor, so I'll be going. Later, Chief. 
+Hmph… Well, I promised I'd meet everyone in the salon, so I'll be going. Later, Chief. 
 I wonder if Ayame is in her room. 
 I guess I'll try somewhere else. 
 It's Ogami… do you have a moment? 
 Oh, Ogami? Come right in. How can I help you? 
 Excuse me. 
 Ayame! The performance just ended so… 
-If you'd like… would you uh… would you want to grab dinner with me or something? 
+If you'd like… would you uh… Would you like to go out to dinner with me or something? 
 Oh! You came here to invite me out? Thank you, Ogami. 
 I'm happy but… I've still got a report to write. I'm really sorry. 
-Anyway, everyone is probably gathering in the parlor by now. 
+Anyway, everyone is probably gathering in the salon by now. 
 Please head over there while I quickly finish up this report. I'm sure everyone is waiting for you. 
 Oh, Ogami. Welcome. 
 Let's talk about something fun. 
 All right. 
 Do you need me for anything? 
 (She's got her scarf pinned with a brooch.) 
-(I wonder what it's made of… couldn't be a real jewel, right?) 
+(I wonder what it's made of… Couldn't be a real jewel, right?) 
 …Are you interested in this brooch? Oh, hey, listen to this, I actually got it super cheap at a bargain sale. 
 … 
 (The way Yuri's hair curls away from her face is so charming…) 
@@ -766,13 +766,13 @@ Is something odd about my hair? Oh no~, I've got some split ends!
 (She's got a nice, small face. I think even a model would be jealous…) 
 (It doesn't seem like she uses much make-up. Well, she's got a nice foundation, I don't think she needs it…) 
 What's wrong, Ogami? You've been staring at my face for a while. Haha, you're in love with me, aren't you!
-Hey, you shouldn't be teasing an adult. 
+Hey now… You shouldn't tease adults! 
 Hehehe… Sorry, Ogami. 
 (Her eyes are shining with curiosity.) 
 (Yumi's got a reputation for loving juicy gossip…) 
 Hey, Ogami. Have you heard any good rumors lately? 
 (Her clothes are pretty colorful.) 
-Do you like this outfit? It's called the 'bus guide' look. It's really popular right now. 
+Do you like this outfit? It's called the “bus guide” look. It's really popular right now. 
 (Goodness… that's certainly an aggressive neckline…) 
 (But… isn't this supposed to be a uniform?) 
 Ahaha. I see you've been stricken by my allure! 
@@ -782,8 +782,8 @@ Really?
 Just a while ago there was a report of a cat-sized monster around the Suehirocho depot. 
 I just hope this doesn't turn into something really bad… 
 After we finish our summer performances, the theater is opened up for public use. 
-There will be all sorts of attractions, including a special preview of The Three Musketeers. 
-Directed by Fred Niblo and starring Douglas Fairbanks… you should definitely check it out! 
+There will be all sorts of attractions, including a special preview of “The Three Musketeers.” 
+It’s a film directed by Fred Niblo and starring Douglas Fairbanks… You should definitely check it out! 
 So Ogami, how are things going with Kanna? 
 What do you mean? 
 I mean something happened between you two at Fukagawa, right? 
@@ -792,11 +792,11 @@ Oh come on, seriously? You guys are no fun!
 Hey now… 
 Finally, we're done for the summer! I can't believe I missed the summer festival and the Sumida River fireworks. 
 Yeah, summer's almost over… 
-I need to get out and buy some new clothing for the fall. I wonder what will be popular this year? 
+I need to get out and buy some new clothes for the fall. I wonder what will be popular this year? 
 Sumire hasn't been near the prop room ever since you guys went to Fukagawa. 
 Hmm? Why? 
 Well, think about it. There's all sorts of stuff here and in that room. Seems like the kind of place you'd find… 
-Find what? Oh… Oh, I get it. 
+Find what? Oh… I get it. 
 Looks like you and Sakura have been hitting it off lately, Ogami. 
 Sakura's popular with just about everyone. I think it's because she comes off as nice and approachable. 
 Looks like you and Sumire have been hitting it off lately, Ogami. 
@@ -836,7 +836,7 @@ The summer performance went over very well. I think the children in particular r
 My goodness. I'm glad that's finally over. Thanks for all the help, Ogami. 
 But we're going to need to start preparation for the next performance right away… 
 What are we doing next? 
-Sumire's going to star in "Inferno of the Naga". 
+Sumire's going to star in "Inferno of the Naga." 
 She hasn't been the main star for a while, so she's in high spirits. 
 So she's going to play a snake woman… I think she'll be pretty popular. 
 Good work out there, Ogami. 
@@ -887,24 +887,24 @@ Would you like to go with me?
 You came here just to personally invite me? Why thank you, Ogami. 
 I'm flattered, but unfortunately I still have reports I need to finish. Sorry. 
 I think you'll all have more fun if us older folks stay out of it. 
-Don't say that! You're still way too young to be one of the 'older folks', Ayame. 
+Don't say that! You're still way too young to be one of the “older folks,” Ayame. 
 Haha… Well thank you, Ogami. You're quite talented at flattery. 
 Setting that aside, is there anything you'd like to discuss with me as the leader of the Flower Division? 
 Situation Report <br> Member Report <br> It's nothing 
 I'd like to hear about how our last battle impacted the area, please. 
 You did a great job quickly wrapping up the battle. You have a good grasp of the strengths of your division. 
-We will continue to expect great things of you as a leader. 
+We will continue to expect great things from you as a leader. 
 Thankfully there were no civilian homes nearby during this last battle, but… 
 You must remember that the longer a battle drags on, the more damage is done to the surrounding area. 
 Please try to keep that in mind, and plan a strategy that will eliminate all threats as quickly as possible. 
 I'd like to hear about the casualties from the last battle. 
 Ogami… 
-In a seven-person Assault Troupe, even lacking one member is an extraordinarily large loss, don't you agree? 
+In a seven-person team, even lacking one member is an extraordinarily large loss, don't you agree? 
 Though we should be grateful their life was spared. 
 Sakura certainly isn’t weak, but she also isn’t the strongest. She shouldn't be sent without proper support. 
 Sumire has excellent combat capabilities, but you mustn't overestimate her. She needs proper support. 
 Maria's defenses are weak, so you should avoid placing her in close-quarters combat situations. 
-Kanna has the strength to fight in close-quarters combat. She's cut out to be an advance guard. 
+Kanna has the strength to fight in close-quarters combat. She's cut out for the front lines. 
 Iris was angry. She still can't fight by herself, so we have to protect her… 
 Kohran's attack skills are weak, but she can do range attacks. Make sure you understand that, Ogami. 
 As captain, you must provide support. Your aid is what will strengthen the unit's bonds. 
@@ -933,16 +933,16 @@ The one with the most enemies shot down during the last battle was Kohran.
 Her bombs have a wide area of effect. Let her aim at clusters of enemies. 
 She was absolutely wonderful! 
 That means she trusts you as a captain, Ogami. 
-You think so?… Well, thank you, ma'am. 
+You think so? Well, thank you, ma'am. 
 I think that's all there is to report about that. Did you need anything else? 
 No, thank you, ma'am. 
 It seems Kanna and Sumire have changed somewhat since they returned. 
 You think so? I haven't really noticed anything. 
 Oh, they've definitely changed. I suppose they aren't showing on the surface, though. 
-Somewhere in their hearts they came to recognize their own maturity… I think they became a little more headstrong. 
+I think they've accepted one another, deep down… They've become a little more honest about their feelings.
 And you're the one who brought about this change, Ogami. 
 Me? But I didn't do anything. 
-I wonder about that… hehehe. 
+I wonder about that… hehe. 
 Keep up the good work, Ensign. 
 …Doesn't look like Yuri's here. I think maybe she was helping a lost kid or something. 
 I should try another room. 
@@ -961,8 +961,8 @@ Is something odd about my hair? Oh no…! I've got some split ends!
 (She's got a nice, small face. I think even a model would be jealous…) 
 (It doesn't seem like she uses make-up. Well, she's got such a nice foundation, I don't think she really needs it…) 
 What's wrong, Ogami? You've been staring at my face for a while. Haha, you're in love with me, aren't you! 
-Hey, you shouldn't be teasing an adult.  
-Hehehe… sorry, Ogami. 
+Hey now… You shouldn't tease adults!  
+Hehehe… Sorry, Ogami. 
 (Her eyes are shining with curiosity.) 
 (Yumi's got a reputation for loving juicy gossip…) 
 Hey, Ogami. Have you heard any good rumors lately? 
@@ -978,8 +978,8 @@ Just a while ago there was a report of a cat-sized monster around the Suehirocho
 I just hope this doesn't turn into something really bad… 
 After we finish our summer performances, the theater is opened up for public use. 
 There are early movie screenings and things like that. It's used for all sorts of entertainment purposes! 
-They're actually doing an advance screening of 'The Three Musketeers' this time. 
-Directed by Fred Niblo and starring Douglas Fairbanks… you should definitely check it out! 
+They're actually doing an advance screening of “The Three Musketeers” this time. 
+Directed by Fred Niblo and starring Douglas Fairbanks… You should definitely check it out! 
 So Ogami, how are things going with Kanna? 
 What do you mean? 
 I mean something happened between you two at Fukagawa, right? 
@@ -992,7 +992,7 @@ I need to get out and buy some new clothing for the fall. I wonder what will be 
 Sumire hasn't been near the prop room ever since you guys went to Fukagawa. 
 Hmm? Why? 
 Well, think about it. There's all sorts of stuff here and in that room. Seems like the kind of place you'd find… 
-…Find what? Oh… Oh I get it. 
+…Find what? Oh… I get it. 
 Ogami, seems like you've been pretty friendly with Sakura lately. 
 Sakura's popular with just about everyone. I think it's because she comes off as nice and approachable. 
 Ogami, seems like you've been pretty friendly with Sumire lately. 
@@ -1009,7 +1009,7 @@ Kanna's really popular with children.
 I expect that you will not fail me, Miroku? 
 Indeed not… leave everything to me. Their headquarters are within my sights… 
 Only one ley line remains! Our Hexagram of Infernal Calling nears its completion! 
-The imperial capital shall be destroyed by the fires of judgment unlike anything the world has ever seen. 
+The Imperial capital shall be destroyed by the fires of judgment unlike anything the world has ever seen. 
 We'll burn the corruption the West has brought to Japan! 
 And from the ashes, the Tokugawa Shogunate shall rise reborn! 
 Go now! Strike down all that is westernized! 

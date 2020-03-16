@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
+﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
 It's a photo of Sumire. This is a side of her you don't see too often. 
 It's a photo of Maria. She's lost in thought and looks kind of sad… 
 It's a photo of Kanna. She looks strong and reliable. I can't wait to meet her. 
@@ -254,10 +254,10 @@ Huh? Didn't you hear from Manager Yoneda?
 Our new captain will work as a ticket puncher. That's what Manager Yoneda told us. 
 Ticket punching? What is that supposed to mean? 
 Well, you punch the admission tickets of the guests, of course. 
-What? Punching tickets? How is that supposed to be a "special mission"? 
+What? Punching tickets? How is that supposed to be a "special mission?" 
 Well… I don't have an answer for that, sorry. 
 Excuse me, young man. How long do you expect us to wait? Punch our tickets! 
-Today Sumire is starring in "The Eve of Lady Camellia". I can't wait! 
+Today Sumire is starring in "The Eve of Lady Camellia." I can't wait! 
 Ah… Ogami. I'm sorry, but I have to go. Do your best! 
 (What the… This must be a misunderstanding!) 
 Clipper…? What am I supposed to do with it?  
@@ -266,7 +266,7 @@ OK, practice is about to start so I have to excuse myself. Do your best, Ogami.
 …Aaaand she’s gone. 
 …But I really wanted to know what I'm supposed to use the clipper for. 
 Excuse me, young man. How long do you expect us to wait? Punch our tickets! 
-Today Sumire is starring in "The Eve of Lady Camellia". I can't wait! 
+Today Sumire is starring in "The Eve of Lady Camellia." I can't wait! 
 What do you mean? I'm not responsible for tickets. 
 But… that's the ticket puncher’s uniform you’re wearing. And don't you have a clipper as well? 
 Whaaa…!? Does that mean… My secret mission is just… 
@@ -283,7 +283,7 @@ What job am I supposed to do? <br> Clipper? <br> Good luck with your practice!
 …By the way, what kind of work am I supposed to be doing here? 
 No clue! Mr. Yoneda said something about punching tickets. 
 I guess you punch the guests' tickets with that clipper. 
-What? Punching tickets? How is that supposed to be a "special mission"? 
+What? Punching tickets? How is that supposed to be a "special mission?" 
 Aren't you glad you have such a nice job? Well, I'm off then. 
 …What is the meaning of this? I thought I came here to be captain of the Imperial Assault Troop… 
 Clipper…? What am I supposed to do with those? 
@@ -297,7 +297,7 @@ Thanks, Mon Frère. You're such a nice guy! Bye-bye!
 …Haha, that carefreeness is kind of cute. 
 …Aaaand she’s gone. 
 Excuse me, young man. How long do you expect us to wait? Punch our tickets! 
-Today Sumire is starring in "The Eve of Lady Camellia". I can't wait! 
+Today Sumire is starring in "The Eve of Lady Camellia." I can't wait! 
 What do you mean? I'm not responsible for tickets. 
 But… that's the ticket puncher’s uniform you’re wearing. And don't you have a clipper as well? 
 Whaaa…!? Does that mean… My secret mission is just… 
@@ -314,10 +314,10 @@ Huh? Didn't the manager tell you?
 Mr. Yoneda said he was gonna have you punch the tickets. 
 Punch tickets? What tickets? 
 Well, the admission tickets of the guests, of course. 
-What? …What’s that supposed to mean? This is my "secret mission"? 
+What? …What’s that supposed to mean? This is my "secret mission?" 
 Well, I don't know anything about that, sorry. 
 Excuse me, young man. How long do you expect us to wait? Punch our tickets! 
-Today Sumire is starring in "The Eve of Lady Camellia". I can't wait! 
+Today Sumire is starring in "The Eve of Lady Camellia." I can't wait! 
 Sakura, if we don't get going, practice is gonna start without us. 
 Ah… You're right. W-Well, Ogami, please excuse us. 
 (What the… This must be a misunderstanding!) 
@@ -328,7 +328,7 @@ Hey, Iris. If we're not off to practice soon…
 Oh, right. Bye-bye! 
 …But I really wanted to know what I'm supposed to use the clipper for. 
 Excuse me, young man. How long do you expect us to wait? Punch our tickets! 
-Today Sumire is starring in "The Eve of Lady Camellia". I can't wait!
+Today Sumire is starring in "The Eve of Lady Camellia." I can't wait!
 What do you mean? I'm not responsible for tickets. 
 But… that's the ticket puncher’s uniform you’re wearing. And don't you have a clipper as well? 
 Whaaa…!? Does that mean… My secret mission is just… 
@@ -352,10 +352,10 @@ Ensign Ogami… hasn't the manager told you?
 He said you’re supposed to work as a ticket puncher… 
 Ticket puncher? What is that supposed to mean? 
 You just punch the tickets of our guests. 
-What…? Punching tickets? This is my "secret mission"? 
+What…? Punching tickets? This is my "secret mission?" 
 …Ensign, the guests are already lining up. 
 Excuse me, young man. How long do you expect us to wait? Punch our tickets! 
-Today Sumire is starring in "The Eve of Lady Camellia". I can't wait! 
+Today Sumire is starring in "The Eve of Lady Camellia." I can't wait! 
 Working with the audience directly is a very important job. I expect you to do your best. 
 (What the… This must be a misunderstanding!) 
 Clipper…? What am I supposed to do with those? 
@@ -371,7 +371,7 @@ Now, if you'll excuse me, Ensign. Do your best.
 Th-Thank you. 
 …By the way. This work… What am I supposed to do? 
 Excuse me, young man. How long do you expect us to wait? Punch our tickets! 
-Today Sumire is starring in "The Eve of Lady Camellia". I can't wait! 
+Today Sumire is starring in "The Eve of Lady Camellia." I can't wait! 
 What do you mean? I'm not responsible for tickets. 
 But… that's the ticket puncher’s uniform you’re wearing. And don't you have a clipper as well? 
 Whaaa…!? Does that mean… My secret mission is just… 
@@ -425,7 +425,7 @@ Are you sure you should glare at the guests like that?
 (This brat… I wish he'd just get lost.) 
 What? You've got something to say? 
 (Stupid brat! Just because I didn't say anything, he thinks he can treat me like this.) 
-…No matter how I look at it, this is weird. How is ticket punching connected to my secret mission!? 
+…No matter how I look at it, this is weird. How does punching tickets connect to my secret mission!? 
 …OK! I'm gonna have a talk with the squad. Maybe then I'll get some sort of explanation. 
 If I'm still not convinced, I'll have to ask Lieutenant General Yoneda! 
 So… Where should I go first? 
@@ -502,7 +502,7 @@ Hey, come on in!
 I've ‘eard about you from Count ‘anakoji. No need for formalities, hic. 
 Remember, dis is the Great Imperial Theater, hic. Cut da military talk! 
 How 'bout a drink? 
-What the…! What do you mean, "really”? 
+What the…! What do you mean, "really?” 
 Can't you recognize people without a badge of rank? Hic! I'm Army Lieutenant General Ikki Yoneda! 
 Idiot! 
 Good! Glad we cleared that up. So, let me give you ya’ first assignment. 

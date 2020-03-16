@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
 It's a photo of Maria. She's lost in thought and looks kind of sad…
 A photo of Kanna. Her signature strength comes through clearly.
@@ -223,7 +223,7 @@ Chief… Guess you're still not doing so hot.
 Welp, take care… sorry to intrude. 
 How are you feeling, Ensign? 
 Sumire… 
-Here, a get-well gift for you. It's a flower called a "hibiscus". 
+Here, a get-well gift for you. It's a flower called a "hibiscus.” 
 Thank you. What a lovely flower. 
 Hohohoh… I had them sent all the way from the south seas. 
 Its vibrant red hue shines brightly amidst the gloom of the rainy season. 
@@ -288,7 +288,7 @@ Now, I've got guts to spare… more than just about anyone.
 But when the moment came, you were the one who put your life on the line without a second thought… Just you, Boss. 
 Honestly… I'm kinda frustrated with myself. 
 … 
-But it made me think, "Now THAT'S a real man!"… 
+But it made me think, "Now THAT'S a real man!" 
 Heheh… It's frustrating, but I feel sorta good about it, too. Man, I'm a weirdo. 
 Kanna… 
 …A-Anyway, that's why you better get back on your feet soon, Boss. 
@@ -613,7 +613,7 @@ Oh man… I can't believe I let myself get fooled by Sumire of all people…
 Why ma'am, you're terribly stiff here. 
 Ahh… Just like that, Ensign. How…wonderful… 
 Ensign, you certainly are skilled at giving shoulder rubs… Quite the captain, indeed. 
-(How does giving shoulder rubs make me "quite the captain"?) 
+(How does giving shoulder rubs make me "quite the captain?") 
 Oh… A bit more at the base of my neck, if you please… 
 Certainly, ma'am. Right around here? 
 Why yes, right there. Ahh, how wonderful. Very well, next is… 
@@ -822,7 +822,7 @@ Unused
 Unused
 Unused
 Maria Tachibana! Member of the Imperial Assault Troupe, soldier of the Russian Revolution… 
-Or perhaps, I should call you "Cassowary"?! 
+Or perhaps, I should call you "Cassowary?!" 
 The Hive of Darkness has seen through to your true identity! 
 Your position as a soldier who defends justice is but a mere facade. In truth… you are a stone-hearted savage! 
 Tch…! 

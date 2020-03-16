@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
 It's a photo of Maria. She's lost in thought and looks kind of sad…
 A photo of Kanna. Her signature strength comes through clearly.
@@ -61,7 +61,7 @@ Iris, on the other hand, looked like she was handling some kind of clay.
 We ate toshikoshi soba here yesterday to celebrate the new year. 
 Kanna had dozens of bowls and stacked them up in little towers when they were empty. 
 Tsubaki is on vacation too? I'd hoped I could buy some photos today… 
-Thanks to this holiday, I'm free from my ticket puncher duties for once. 
+Thanks to this holiday, I'm free from my ticket punching duties for once. 
 Maybe I shouldn't waste this chance to ask someone out to visit the shrine. 
 Whoa… A small mountain of New Year's cards! 
 I guess the Flower Division has a lot of fans who send them cards. 
@@ -151,7 +151,7 @@ Maybe that was a little too harsh…
 Oh, Kohran? What's with the long face? 
 It's just… I was taking care of the Koubu, and we've got a teensy problem. 
 Problem? 
-See, even though we call them "Spirit Armor", they're still machines. They’re gonna wear out at some point. 
+See, even though we call them "Spirit Armor," they're still machines. They’re gonna wear out at some point. 
 The Koubu are pretty beat up after the fight against the Hive of Darkness… 
 In my professional opinion, they won't stand another big fight like that. 
 What!? So if we keep being attacked… 
@@ -190,23 +190,23 @@ Cheers! After all, what's New Year's Day without some booze?
 …You idiot! 
 …E-Excuse me? 
 …Don't get carried away with your New Year's spirit. 
-"In prosperity, prepare for adversary". If you haven't mastered that, you're not fit to be a captain. 
+"In prosperity, prepare for adversary." If you haven't mastered that, you're not fit to be a captain. 
 …I'm sorry. 
 With all due respect… I'll have to decline. 
 Right. You probably should. 
-"In prosperity, prepare for adversary". If you haven't mastered that, you're not fit to be a captain, you know. 
+"In prosperity, prepare for adversary." If you haven't mastered that, you're not fit to be a captain, you know. 
 Yes. 
 Please tell me why I'm here. 
 Why are you in such a hurry, Ogami? Very suspicious… 
 Haha! You're itching to go meet the girls, aren't you? 
 I… No, it's… 
 Wahahaha! Seems like I hit the mark! 
-But remember, "In prosperity, prepare for adversary". Even in times of peace, we can't let our guard down. 
+But remember, "In prosperity, prepare for adversary." Even in times of peace, we can't let our guard down. 
 Yes. 
 Attention, man! What's with that “gone fishing” expression on your face!? 
 Oh… Sorry. 
 New Year's Eve really did a number on you, huh? 
-"In prosperity, prepare for adversary". If you haven't mastered that, you're not fit to be a captain. 
+"In prosperity, prepare for adversary." If you haven't mastered that, you're not fit to be a captain. 
 …I'm sorry. 
 …That said, I guess it's only natural that you want to relax a little on New Year's Day. 
 Anyway, you don't have to work today. Catch some fresh air or something. 
@@ -466,7 +466,7 @@ Omi… what?
 That's right… You're from France, so you wouldn't know. 
 Omikuji are strips of paper we draw to have our fortune told. They have words like "Kichi" or "Kyo" on them. 
 Mon Frère… 
-What does that mean, "Kichi" and "Kyo"? 
+What does that mean, "Kichi" and "Kyo?" 
 You know what? It's easier if we just go there and I’ll show you. 
 We go there to have fun while playing games and eating food at the various stalls. 
 Yay, that sounds fun! I love stalls at festivals! 
@@ -541,7 +541,7 @@ Kohran, I wonder… Do you want to go visit the shrine with me?
 What? You want to go with me? 
 Hmm… I'd love to go, but… there's something I need to check. 
 What are you talking about? 
-See, even though we call them "Spirit Armor", they're still machines. They’re gonna wear out at some point. 
+See, even though we call them "Spirit Armor," they're still machines. They’re gonna wear out at some point. 
 The Koubu are pretty beat up after the fight against the Hive of Darkness… 
 In my professional opinion, they won't stand another big fight like that. 
 What!? It can't be that bad, right…? 
@@ -864,7 +864,7 @@ But… I'm sorry. I can't really leave my post right now.
 You should invite one of the girls. Didn't some of them ask you already? 
 Everyone wanted to go with you. 
 You shouldn't let them wait too long. 
-Oh, and one more thing… "He who runs after two hares will catch neither". Keep that in mind. 
+Oh, and one more thing… "He who runs after two hares will catch neither." Keep that in mind. 
 Haha, why not? It's only New Year's Day once a year; it would be a waste not to celebrate. 
 Take care of the girls! Don't mess this up, Ogami. 
 Unused

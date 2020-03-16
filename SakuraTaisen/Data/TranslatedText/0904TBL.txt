@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
 It's a photo of Sumire. This is a side of her you don't see too often. 
 It's a photo of Maria. She's lost in thought and looks kind of sad… 
 It's a photo of Kanna. Her signature strength comes through clearly. 
@@ -197,7 +197,7 @@ Ayame…
 (I think there's a glass window behind this paper screen.) 
 (There's no one here anymore who would open that window…) 
 (There are three books lying on the desk. Maybe she wrote something down in one of them?) 
-"Imperial Theater, Flower Division, Reporting Journal", "January 1st, 1924", "Kouma War, 1917"… 
+"Imperial Theater, Flower Division, Reporting Journal," "January 1st, 1924," "Kouma War, 1917"… 
 (Dressers are often handed down through the generations. Did Ayame receive this one from her mother?) 
 (This dresser is looking exactly as before… Only Ayame isn't here anymore.) 
 (This crucifix has an overbearing presence in this room. I wonder why…) 
@@ -267,15 +267,15 @@ Thanks to reports from citizens, we know of the Hive of Darkness's plans in adva
 Will recommend Ensign Ogami, Sumire and Kanna to investigate the abandoned Fukagawa mansion as a team. 
 August 3rd, cloudy. 
 Investigation in Fukagawa is complete. Looks like I sent the right people. Ensign Ogami has proven his worth. 
-Maitreya Hosokawa said something about "enemy's plan". Must find out what it means. 
+Maitreya Hosokawa said something about "enemy's plan." Must find out what it means. 
 August 29th, fair weather. 
 Steam processor has calculated the position of the Hive of Darkness's HQ. 
 Feeling very uneasy the last few days. Hope that nothing bad will happen. 
 October 10th, fair weather. 
 Last month went by like a storm. At last, the capital’s facilities are functional again. 
-Ogami and the Flower Division are busy preparing for their debut of "Flaming Touch of the Snake Woman". 
+Ensign Ogami and the Flower Division are busy preparing for their debut of "Inferno of the Naga." 
 November 23th, fair weather. 
-Today marked the last performance of "Wings". Despite some issues, Kohran did well in the starring role.
+Today marked the last performance of "Wings." Despite some issues, Kohran did well in the starring role.
 Kohran dreams of constructing a flying machine. She has been gathering parts since her time at the Hanayashiki Branch. 
 December 31st, snow. 
 New Year's Eve. The end of an eventful year. 
@@ -283,7 +283,7 @@ Ensign Ogami and the Flower Division are listening to "Old Year, New Year" on th
 Hope next year will be a good one. 
 January 2nd, fair weather. 
 My fears have become reality: the Kouma have appeared. Monsters that were hidden underground. 
-The "Kouma War". That tragedy must never be repeated. 
+The "Kouma War." That tragedy must never be repeated. 
 …That's the last entry. 
 "January 1st, 1924." I wonder what this is… 
 January 1st, fair weather. 
@@ -357,7 +357,7 @@ The thing we all feared has finally come to pass…
 What's that? In Tokyo Bay…? 
 Hmmm… 
 On the night of the red moon, when the seal breaks, the sacred land will return with a god-machine of destruction. 
-And that god-machine will turn all the lands to ashes with the light of judgment… Thus is written in "Abandon the Gods". 
+And that god-machine will turn all the lands to ashes with the light of judgment… Thus is written in "Abandon the Gods." 
 "Abandon the Gods"…? 
 It's a book of prophecies passed down in the noblest families of the capital, along with the Pandemonium Regalia. 
 The noblest families? You don't mean… 
@@ -425,7 +425,7 @@ This room always feels empty when no one's here, but now, the feeling is overwhe
 Everyone seems to have gone someplace else… 
 It's too late for Tsubaki to still be here… 
 Everyone seems to have gone someplace else… 
-After the crowds that came to see "Dinosaur Island", it's eerily quiet here now… 
+After the crowds that came to see "Dinosaur Island," it's eerily quiet here now… 
 I should leave. If I stay here any longer, I'll just feel depressed. 
 This place can get crowded, but now it's completely deserted. 
 I wonder where everyone is… 

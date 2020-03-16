@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
 It's a photo of Sumire. This is a side of her you don't see too often. 
 It's a photo of Maria. She's lost in thought and looks kind of sad… 
 A photo of Kanna. Her signature strength comes through clearly. 
@@ -487,7 +487,7 @@ Yaay! I'm getting so excited!
 Why don't we sit here? Careful, it's dark. 
 I don't know either, but I bet it'll be interesting. 
 Ahem… 
-He's called a "narrator". He's the person who explains the story. 
+He's called a "narrator." He's the person who explains the story. 
 Since the movie doesn't have any sound, the narrator tells us what's happening on-screen. 
 Oh, it's starting. 
 (Quite atmospheric…) 
@@ -584,11 +584,11 @@ What is that?
 You'll see in just a sec! Gimme your head, Chief. 
 Wh-What're you doing?! 
 What… is this?! 
-My newest invention! It's a lie detector I call "Mr. Truth". 
+My newest invention! It's a lie detector I call "Mr. Truth." 
 A lie detector? That's pretty crazy! 
 It's super easy to use. Just answer our questions and it will tell whether or not you're lying. 
 You really are good at coming up with strange machines like this. 
-Uh… It says here "self-destruction mechanism", what exactly does that mean? 
+Uh… It says here "self-destruction mechanism," what exactly does that mean? 
 Isn't it self-explanatory? Utter a lie and the machine will blow up. 
 If someone's lying, there has to be some punishment after all! 
 Wait a second. You're kidding, right? 
@@ -1025,7 +1025,7 @@ Tsubaki, if you happen to see Iris, please let one of us know.
 Sure thing, but…did something happen with her? 
 Ogami… did something happen with Iris? 
 No… it's nothing. 
-This month's performance is called "Love is a Diamond"! 
+This month's performance is called "Love is a Diamond!" 
 Kanna and Sumire are playing the leads… let's hope everything works out… 
 Those two get along like cats and dogs, so I hope everything goes well. 
 No kidding… 
@@ -1102,7 +1102,7 @@ Oh, sorry…
 Oh, no, it's nothing, Kasumi. 
 (There's a quiet, calm look in her eyes.) 
 (Kasumi always looks people right in the eyes when she talks to them.) 
-So, have you seen this month's play, "Love is a Diamond"? 
+So, have you seen this month's play, "Love is a Diamond?" 
 No, not yet. I've been rather busy. 
 It's the perfect piece for Kanna and Sumire. 
 …That reminds me, what are the other girls doing? 
@@ -1110,7 +1110,7 @@ Everyone else, including Iris, is working behind the scenes.
 That must be really boring for Iris… 
 It seems like it. Please keep an extra eye on her, will you, Ogami? 
 So, what are they going to play next month? 
-The August show is "Journey to the West". Kanna will be playing Son Goku. 
+The August show is "Journey to the West." Kanna will be playing Son Goku. 
 “Journey to the West”… Classical opera material. 
 The kids will be on summer break, so something family friendly is sure to draw a lot of visitors to the theater. 
 I hope we don't have too many lost children this time. 
@@ -1133,7 +1133,7 @@ Is something odd about my hair? Oh nooo, I've got some split ends!
 (Her face is small and balanced. I think even a model would be jealous.) 
 (It doesn't seem like she uses a lot of make-up. Well, she's got a nice foundation, I don't think she needs it…) 
 What's wrong, Ogami? You've been staring at my face for a while. Haha, you're in love with me, aren't you! 
-Hey, you shouldn't be teasing an adult. 
+Hey now… You shouldn't tease adults! 
 Hehehe… Sorry, Ogami. 
 (Her eyes are shining with curiosity.) 
 (Yumi's got a reputation for loving juicy gossip…) 
@@ -1157,7 +1157,7 @@ She even smiles when guests ask her for an autograph…
 Before, she'd always treat it as a chore. I wonder what happened. 
 I'd love to know that too.
 (She's got her scarf pinned with a brooch.) 
-(I wonder what it's made of… couldn't be a real jewel, right?) 
+(I wonder what it's made of… Couldn't be a real jewel, right?) 
 …Do you like my brooch? This thing was a bargain, I got it super cheap! 
 …Oh. 
 Looks like you and Sakura have been hitting it off lately, Ogami. 
@@ -1196,7 +1196,7 @@ OK, Chief, I have to get back to work. So excuse me, please.
 Seems like she eats explosions for breakfast… Not sure whether I should be impressed or worried. 
 Anyway, I'd better get out of here. Kohran doesn't seem to be in the mood for a chat. 
 …What are you making? 
-It's a lie detector. I call him "Mr. Truth". 
+It's a lie detector. I call him "Mr. Truth." 
 A lie detector? What are you going to use that for? 
 Well… I don't really know…
 …Huh? 
@@ -1211,23 +1211,23 @@ It's Ogami… Are you there, Sumire?
 Oh, is that you, Ensign? Do come in, the door is open. 
 Pardon me. 
 Hi, Sumire. What are you up to? 
-I'm writing a letter. After all, July is also called "Fumizuki", the month of letters. 
+I'm writing a letter. After all, July is also called "Fumizuki," the month of letters. 
 Oh yes. There was something I wanted to ask you, Ensign. 
 I'm writing a letter to a friend I haven't met since school. What should I write as the closing? 
 Yours faithfully <br> Best regards <br> Yours eternally 
-You usually write "Yours faithfully", don't you? 
+You usually write "Yours faithfully," don't you? 
 Hm, I'm sure you're right, but isn't that a little too formal? 
 Well, no matter. I'll ask Ayame for advice later. 
 If you would excuse me, Ensign? I still have a letter to write… 
 Oh, sure. See you later. 
-Why don't you write "Best regards"? 
+Why don't you write "Best regards?" 
 Ah! Yes, that sounds right! Not too formal and not too familiar. 
 I have to say… you know your stuff. 
 I'm honestly impressed. 
 Hahaha, thank you. I'm glad I could help. 
 I'll finish up the letter now… Thanks a lot, Ensign. 
 I'll be going then. 
-Why not something like "Yours eternally"? 
+Why not something like "Yours eternally?" 
 …Ensign, I'm not writing to a long lost lover. 
 We really need to refine your manners… 
 I'm sorry I couldn't be of help. 
@@ -1239,7 +1239,7 @@ But I should really get back to finishing this letter… Would you mind, Ensign?
 Sorry… I'll see myself out then. 
 Hi, Maria. 
 …Captain. Isn't this a wonderful summer's day? 
-I heard that the Japanese people celebrate something called "Tanabata". 
+I heard that the Japanese people celebrate something called "Tanabata." 
 Apparently it's the day after tomorrow, but I'm still not sure what exactly people do on that day. 
 We decorate dolls. <br> We write wishes on paper. <br> We put up pine trees. 
 We decorate dolls and eat lots of colorful mochi. 
