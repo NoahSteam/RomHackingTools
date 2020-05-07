@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
 It's a photo of Sumire. This is a side of her you don't see too often. 
 It's a photo of Maria. She's lost in thought and looks kind of sad… 
 It's a photo of Kanna. Her signature strength comes through clearly. 
@@ -37,31 +37,31 @@ Those girls need someone to rely on right now… And that someone is you.
 Would you mind checking on everyone? 
 …Understood! 
 Just talk to all of them, then come back to me. 
-Ogami… this can't be right. Ayame can't have been our enemy… 
+Ogami… this can't be right. Ayame couldn’t have been our enemy… 
 That's… That's just not possible! 
 Ogami… 
-How could everything come to this? 
+How did it come to this? 
 I'll never forgive her for trying to trick me… 
 Sumire… 
 She must think I'm stupid… 
 Ensign, that was a brilliant reaction… To shoot in that situation… 
 But… Ayame, she… 
-Is this a dream? Then I want to wake up… 
+Is this a dream? If it is, then I want to wake up… 
 This is… 
 How could this happen? 
 What… What should I do? 
-Ayame, tell me… what should I do? 
+Ayame, tell me… What should I do? 
 Chief… Why did it come to this? 
 Auntie Ayame looked SO scary back there… What was up with her? 
-Mon Frère… tell me, what happened? 
+Mon Frère… Tell me, what happened? 
 Our trusted deputy commander… I refuse to believe it! If this is a dream, please wake me up… 
-Boss… Just…why?! 
+Boss… Just… why?! 
 How could something like this happen…? 
-Ogami… you shouldn't blame yourself. You did nothing wrong. 
+Ogami… You shouldn't blame yourself. You did nothing wrong. 
 Sakura! So this is where you were. 
 (This doesn't look good… The morale of the whole Flower Division has hit rock bottom…) 
 … 
-You've…grown strong. 
+You've… grown strong. 
 No… <br> That may be it. 
 No… I… just admired her as my superior, that's all. 
 … 
@@ -82,7 +82,7 @@ Sakura…
 Should we head back? It's freezing here. 
 … 
 Ah… It even started snowing… 
-Ayame… where are you? Are you watching this snow right now, as I am? 
+Ayame… Where are you? Are you watching this snow right now, as I am? 
 Maria's room… 
 I guess it's about time to go. 
 Let's leave her alone for now. 
@@ -96,7 +96,7 @@ Maria…
 … 
 Maybe I can't do much… but… 
 Maria… 
-You're…a strong person. 
+You're… a strong person. 
 No… it's OK. 
 That's good… 
 …What's the matter, Maria? 
@@ -145,7 +145,7 @@ You'll take me on your first test flight, right?
 Of course you can. I don't doubt it for a second! 
 Yes! 
 Yes, that would be great. 
-Iris… what are you doing here? 
+Iris… What are you doing here? 
 Let's get you back to your room. You'll catch your death of cold out here. 
 …What did you dream of? 
 Huh…? 
@@ -176,12 +176,12 @@ If either of us can't do it alone, let's just do it together, you and me.
 Together, we can achieve just about anything. 
 … 
 Let's go, all together, and get Ayame back. 
-We owe her so much… every single one of us. 
+We owe her so much… Every single one of us. 
 We know Ayame. She wouldn't die so easily… We can still save her, I'm sure of it! 
 Yes, whatever it takes! 
 …Hm? 
 Kanna… 
-Kanna… you should get some rest. 
+Kanna… You should get some rest. 
 What about you, Boss? Shouldn't you rest, too? 
 If you're resting, I'll get some rest too. 
 After I eat this… Please… don't concern yourself with me. 
@@ -197,9 +197,9 @@ Ayame…
 (I think there's a glass window behind this paper screen.) 
 (There's no one here anymore who would open that window…) 
 (There are three books lying on the desk. Maybe she wrote something down in one of them?) 
-"Imperial Theater, Flower Division, Reporting Journal," "January 1st, 1924," "Kouma War, 1917"… 
+"Imperial Theater, Flower Division, Reporting Journal." "January 1, 1924." "Kouma War, 1917"… 
 (Dressers are often handed down through the generations. Did Ayame receive this one from her mother?) 
-(This dresser is looking exactly as before… Only Ayame isn't here anymore.) 
+(This dresser is exactly as it was before… Only Ayame isn't here anymore.) 
 (This crucifix has an overbearing presence in this room. I wonder why…) 
 (Ayame had this crucifix in her room, and yet she's with the demons now… I still can't believe it.) 
 (Even with Ayame gone, these flowers refuse to wilt away.) 
@@ -215,24 +215,24 @@ It looks like Ayame is snuggling up to the man on the left…
 Maybe this is Shinnosuke Yamazaki, who later disappeared? 
 Hm, is this…? The man on the left, I think… maybe… I've seen him somewhere before? 
 Let's take a look… <br> Let's leave it. 
-Kouma War, 1917 <br> Reporting Journal <br> January 1st, 1924 
+Kouma War, 1917 <br> Reporting Journal <br> January 1, 1924 
 (I shouldn't just read this without permission…) 
 It's dated… seven years ago. 
-“Kouma War Documents” <br> Taisho 7 (1918), Imperial Infantry <br> “Top Secret” 
+“Kouma War Documents” <br> Taisho 7, Imperial Infantry <br>TOP SECRET 
 "Kouma War" is a term used for combat operations against the creatures called "Kouma" that occurred from Taisho 6 to 7. 
 About one square mile in the Nihonbashi area was totally destroyed, including all buildings. 
 According to internal calculations from the Infantry, damages amount to hundreds of millions of yen. 
 The intelligence bureau's historians found out that evidence of the Kouma existed even in ancient China. 
 Kouma are demons that latch onto living beings and feed on their negative emotions. 
-Low-level Kouma consist only of a head, but they feed and grow stronger, eventually gaining human appearance. 
+Low-level Kouma consist only of a head, but they feed and grow stronger, eventually gaining human appearances. 
 The giant monsters witnessed during the Kouma War are presumed to be very large low-level Kouma. 
 During the final stage of the Kouma War, an independent unit chased the giant Kouma underground. 
 It was known as the "Anti-Kouma Corp" and suffered one death and one MIA. It was dispersed thereafter. 
 The commanding officer of this unit was Lieutenant General Ikki Yoneda of the Imperial Infantry. 
 The Flower Division… This is about us? 
-Fourth of April, fair weather. 
-Imperial Navy Ensign Ichiro Ogami will arrive in our Ginza HQ by recommendation of Count Hanakoji. 
-Anniversary performance of "The Eve of Lady Camellia" was resounding success. The theater is in a good spot. 
+April 4th, fair weather. 
+Imperial Navy Ensign Ichiro Ogami will arrive at our Ginza HQ by recommendation of Count Hanakoji. 
+Anniversary performance of "The Eve of Lady Camellia" was a resounding success. The theater is in a good spot. 
 April 5th, fair, then cloudy. 
 Reports of Hive activity at Ueno Park. Presumed leader is present. First real test for the division. 
 Ensign Ogami's performance deemed "pretty good for his first try" by Yoneda. 
@@ -310,7 +310,7 @@ February 18th, rain.
 When I look at that photo in the evening, I can't stop crying. It was our first and last photo. 
 The Imperial Anti-Kouma Corp. Everything seemed shiny and new back then. Those days will never return. 
 February 22nd, rain. 
-I've been having a strange dream. I see myself from outside, and something behind me. What could it be? 
+I've been having a strange dream. I see myself from outside, and there’s something behind me. What could it be? 
 …That's the last entry. 
 …Who is it? 
 It's me, Ogami. 
@@ -362,9 +362,9 @@ And that god-machine will turn all the lands to ashes with the light of judgment
 It's a book of prophecies passed down in the noblest families of the capital, along with the Pandemonium Regalia. 
 The noblest families? You don't mean… 
 Then that is… 
-Yes… the Sacred Demon Castle. 
+Yes… The Sacred Demon Castle. 
 The Sacred Demon Castle… 
-"God-machine" must refer to the Spirit Cannon that has been rumoured since ancient times. 
+"God-machine" must refer to the Spirit Cannon that has been rumored to reside in the castle since ancient times.  
 Spirit Cannon? 
 Its light rends the skies and dissolves solid land into mist… allegedly. 
 It will be just like the war 400 years ago. The fabled sealed land "Yamato" will rise again. 
@@ -378,7 +378,7 @@ Ayame…
 We can't dawdle any longer… Let's go, everyone! 
 There's nothing to do in my room. I should check on the others. 
 I wonder if Sakura is in. 
-I wonder if Sakura is in. 
+I'm in front of Sakura's room… 
 She doesn't seem to be here. Must have gone someplace else. 
 Who is it…? 
 Sakura… It's me, Ogami… 
@@ -388,7 +388,7 @@ Let's try some other place…
 Let's leave her for now. 
 I wonder how Kanna is doing. 
 I'm in front of Kanna's room… 
-She doesn't seem to be here. Where would she be? The canteen, maybe? 
+She doesn't seem to be here. Where would she be? The dining hall, maybe? 
 Who is it…? 
 Kanna… It's me, Ogami… 
 Boss? I'm sorry, but I don't feel like talking right now. 
@@ -413,7 +413,7 @@ Ensign… Please excuse me, but could you give me some time to reflect on my own
 …All right. 
 Let's try some other place… 
 Let's leave her for now. 
-This auditorium… this whole theater is like a barometer measuring the peace in the capital. Must keep it high. 
+This auditorium… This whole theater is like a barometer measuring the peace in the capital. Must keep it high. 
 Everyone seems to have gone someplace else… 
 We have to fill this room with spectators again… That's our most important mission. 
 Everyone seems to have gone someplace else… 
@@ -559,7 +559,7 @@ Unused
 Unused
 Unused
 O black rain, o devilish wind, o wicked sea, open the seal for us… Grant us power! 
-At last, it will return to this world… the Sacred Demon Castle! 
+At last, it will return to this world… The Sacred Demon Castle! 
 Hehehe… 
 Ensign… 
 You think I'm depressed!? Ha! Ridiculous! 
@@ -575,7 +575,7 @@ Every day we must fight! Kill, kill, kill!
 My hands are… already sticky with blood! 
 How can you be this calm!? Become like a normal girl!? Be happy the flowers are blooming!? 
 Who made me what I am? Wasn't it Ayame!? Certainly not you lot! 
-But even though…she just double-crossed us… 
+But even though… she just double-crossed us… 
 And here I was thinking we were fighting on the same side… If this is supposed to be a joke, it's not funny! 
 Call me childish, but I can't see any good in Ayame even if I tried. 
 ! 
@@ -584,7 +584,7 @@ Auntie Ayame…
 I've calmed down a bit… 
 This is exactly what Satan wanted, isn't it? We should know better than this. 
 Unused
-Ogami… you liked Ayame, right? 
+Ogami… You liked Ayame, right? 
 But… it didn't look like that to me. 
 As for me… I liked her a lot. I always strived to become a person just like her. 
 Unused
@@ -635,7 +635,7 @@ Don't give up, Ogami. You're the only one we can rely on right now.
 Hm? Boss…? 
 Well, it's true… If we sit here and cry, that won't make Ayame come back, right? 
 No worries! I'll bring her back, even if I have to drag her kicking and screaming! 
-If I'd just been stronger, then… All of this wouldn't have happened. 
+If I'd just been stronger, then… all of this wouldn't have happened. 
 I'm really pathetic… The one thing I'm good at, and still I couldn't do anything. 
 You can stop trying to make me feel better, Boss. I've failed, that's a fact. 
 I know I'm a big klutz of a woman. My strength was my one redeeming quality. 
@@ -650,7 +650,7 @@ Boss…
 Thank you. 
 Having someone to lean on at a time like this… That's priceless. 
 To tell you the truth, I felt like I couldn't go on. 
-Ayame… that such a thing could happen to her… 
+Ayame… That such a thing could happen to her… 
 I can't get any sleep. If I try to, the nightmares are so bad that I'm happy when I wake up again. 
 There's no one there… 
 Sakura… Kasumi… 
@@ -696,7 +696,7 @@ I was completely lost back then. I was this close to getting into wetwork.
 It was Ayame who saved me… 
 Even back then, she was always fighting for others. 
 What a sad life… 
-Ha… Then again, who am I to say that about her? I should stop talking about that ancient history. 
+Ha… Then again, who am I to say that about her? I should stop talking about ancient history. 
 It was ages ago… Back when I was still only fighting for myself. 
 Now it's different… I have friends who fight by my side. 
 No… Not at all! 

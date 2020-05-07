@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿I've got to focus!
+﻿﻿﻿﻿﻿﻿I've got to focus!
 Here I go!
 Leave it to me!!
 Watch this, Ogami.
@@ -90,7 +90,7 @@ Ensign, look there! The enemy is using the blizzard to conceal their movements!
 What?!
 Geheheh! Now, I can summon my Kouma to ravage your headquarters!
 Damn! They're trying to infiltrate the theater! Everyone, protect the theater!
-There seem to be strange objects summoning the Kouma in all four directions. Let's destroy them all!
+There seem to be strange objects summoning the Kouma in the four corners of the town. Let's destroy them all!
 Go, my underlings! Infiltrate the theater!
 Three left!
 Three more!
@@ -146,10 +146,10 @@ Damn!
 It's fine! We thought this might happen, so we set up a trap!
 Gah?! Waaaaaaah!
 Yeah! That worked!
-I see… you set a trap to prevent the enemy from getting in.
-But… How did you know the Kouma would attack the Imperial Theater?
+I see… You set a trap to prevent the enemy from getting in.
+But… how did you know the Kouma would attack the Imperial Theater?
 Sorry… there's a top-secret object hidden in this theater that the enemy is after.
-But because it's top-secret, I couldn't even tell you guys about it.
+But because it's top-secret, I couldn't tell any of you about it.
 Anyway, heads up, guys! We've still got more of 'em incomin'!
 This trap won't hold them forever! Don't let any more come in!
 Gaaaaaah!
@@ -191,12 +191,12 @@ Are you… making fun of me?! Graaaah! I'll k-k-k-kill yooooouuuu!
 Good job, Ogami! He seems to get sloppy when he loses his composure.
 What's up? So star-struck you can't say anything? Geheheh!
 Oh no! You should never encourage guys like him!
-Listen, Ogami… what's that top-secret thing you mentioned? I promise I won't tell anyone!
+Listen, Ogami… What's that top-secret thing you mentioned? I promise I won't tell anyone!
 By the way, Ensign… What's that top-secret affair you mentioned? Can't you tell little old me?
 By the way, Captain… That secret you mentioned… what kind of a thing is it?
-Listen up, Chief… couldn't ya let me in on that top-secret thing you mentioned is all about? I won't tell!
-Hey, Boss… what about that top-secret thing? Can't you tell me?
-Mon Frère, what's that secret you talked about? I'm sooo curious!
+Listen up, Chief… Couldn't ya let me in on what that top-secret thing is all about? I won't tell!
+Hey, Boss… What’s up with that top-secret thing you mention earlier? Can't you tell me?
+Mon Frère, what's that secret you were talking about? I'm sooo curious!
 Well, it's…<br>No!
 Well, it's…
 Yes.
@@ -209,7 +209,7 @@ You're sooo mean! You couldn't tell ME!
 How nice of you! Yet you couldn't tell ME, apparently.
 Are you sure, Captain? It IS top secret, after all…
 But ya couldn't tell it to ME! You're the worst, Chief! Go hang yourself!
-Not cool, Boss! You couldn't tell ME, remember?
+Not cool, Boss! You couldn't even tell ME, remember?
 I hate you soooooo much! Why couldn't you tell ME, huh?
 What's that… He's spilling his guts.
 What's that… He's spilling his guts.
@@ -221,7 +221,7 @@ Oh… Oh no! The channel was turned on!
 You dumbass! Flapping your yap like that… and you call yourself a soldier?!
 Y-Yes, sir! So sorry, sir! It won't happen again!
 No! Our communications might leak to the enemy. I'll tell you after we destroy them!
-I see… sorry I asked.
+I see… Sorry I asked.
 That's true. I apologize.
 Absolutely true. I'm sorry for my thoughtlessness.
 Yeah, guess you're right. Shouldn't have asked ya.

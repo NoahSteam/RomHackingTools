@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
 It's a photo of Maria. She's lost in thought and looks kind of sad…
 A photo of Kanna. Her signature strength comes through clearly.
@@ -27,7 +27,7 @@ A photo of Ayame in a traditional outfit. I hope she'll always be as happy and c
 Ayame's gun. Why…? Why did it have to turn out like this…?
 Jean-Paul the teddy bear. Iris's best friend. She always carries him with her and takes good care of him.
 The alarm!? The Kouma are here! 
-…All right. Let's show them our special training paid off! 
+…All right. Let's show them the results of our special training! 
 Phew… It's really relaxing to be alone in your own room once in a while… 
 I'd love to just sit down for a minute, but I guess I should talk to everyone first. 
 OK, let's go. 
@@ -40,7 +40,7 @@ Guess I'll head somewhere else.
 No one here, it seems. 
 Maria's room… It's been a while since I've been here. 
 Why don't I go check somewhere else. 
-…She's not here? We just came back together. I wonder where she could have run off to. 
+…She's not here? We just arrived together a moment ago. I wonder where she could have run off to? 
 I hope Sumire is in her room… 
 Guess I'll head somewhere else. 
 She doesn't seem to be here. 
@@ -49,20 +49,20 @@ I should go somewhere else.
 Ayame seems to be away. 
 It's no use. I should leave. 
 Sumire seems to be gone already. 
-I didn't know about her reasons, but still… I'm afraid I was too harsh. 
+I don’t understand her reasons, but still… I'm afraid I was too harsh. 
 At first glance, the capital looks peaceful. People are going about their daily lives as if nothing's wrong. 
 If the Kouma attacked for real, they would turn this town into a living hell in an instant. 
 I really wonder what we can do against them without our Koubu. 
 The Imperial Theater was closed while everyone was away for their special training. 
 No one here, so I should probably leave. 
-The strong sunlight of Winter is even coming in here. 
+Even here, you can feel the strong sunlight of winter. 
 The weather is nice. Perfect day to go out. 
 …There's no one here. Is everyone in their rooms? 
 There's nothing to do here, so I should check another room. 
 I wonder if the manager is around. 
 …Nothing to do here. Let's go. 
 Yoneda doesn't seem to be in. Probably gone out to restock his booze… 
-Huh…? They're both not here, even though the New Year's holiday should be over now… 
+Huh…? Neither of them are here, even though the New Year's holiday should be over now… 
 Are they working somewhere else? 
 In any case, if they aren't here, there's no point in me hanging around. 
 No one here. Looks like I have to go someplace else. 
@@ -81,25 +81,25 @@ I haven't worked as a ticket puncher for three weeks…
 I almost miss it. 
 No shows in the theater. I was happy we were closed on New Year. 
 Since everyone was doing special training, all the January shows were canceled. 
-The Great Imperial Theater is bound to have a massive loss of revenue. 
+The theater is bound to have a massive loss of revenue. 
 …No one here. 
-I wonder when the shows will start again… 
-When I look at the costumes, I can't wait… But oh well. 
+I wonder when we’ll get back to doing shows… 
+When I look at the costumes, I can't wait for the performances to begin again… Oh well. 
 I guess there's no reason why anyone would be here. 
 I should move on. 
-No one here. Exercising alone is no fun… 
+No one here. Exercising by yourself is no fun… 
 I should get going. Let's see where everyone is. 
 This pool is heated by steam engines in the basement. 
 I'd like to go for a swim, but I guess I should talk to the other Flower Division members first… 
 It's empty now that Sakura left. 
 …Oh well. I'd better go, too. 
 There's a pleasant soapy smell here, and the air feels warm. 
-Probably because Sakura took a shower here. 
+Probably because Sakura took a shower recently. 
 I should leave before the warm air makes me dizzy. 
 I hope no one has to use these medical pods this year…
-Good health is the most important thing after all. 
+It’s important that everyone remains in good health. 
 This is where the Flower Division assembles when the alarm goes off. 
-Let's pray that it doesn't, as long as our Koubu are in the garage… 
+Let's pray that it doesn't ring, as long as our Koubu are in the garage… 
 Even the mighty steam processor couldn't warn us about the appearance of the Kouma. 
 They were sealed six years ago… No one could have anticipated their return. 
 Around New Year's Day, all of us were here discussing what we could do against the Kouma… 
@@ -107,10 +107,10 @@ The Kouma… What a formidable enemy.
 I haven't been here for three weeks. 
 It's been some time since we've been at the Imperial Theater. 
 Captain… I'd like to speak with you. 
-Wh-What!? Why are you so formal, all of a sudden? 
+Wh-What is it!? Why are you acting so formal, all of a sudden? 
 I wanted to give you my sincerest thanks for allowing me to accompany you on the special training. 
-I haven't had such a productive training in ages. 
-No, no! I should be the one thanking YOU, Maria. 
+I haven't had such productive training in ages. 
+No, no! I should be the one thanking you, Maria. 
 This special training was my idea, but you stuck with it till the end. I'm really grateful! 
 Thank you. By the way, do you still remember our instructor at the shooting range? 
 That Lieutenant Commander who got all starry-eyed in front of you? Of course I remember him! 
@@ -130,15 +130,15 @@ Don't worry, Sakura. It  just shows how hard you've been training.
 (It's her usual outfit…) 
 (Her black hair looks nice and silky.) 
 (Long and beautiful hair… She's a true Japanese beauty.) 
-(There's a fire in her eyes. The worried look she had before on her face has been wiped away by her training!) 
+(There's a fire in her eyes. The worried look she had before has been wiped away by her training!) 
 What is it, Ogami? 
 I was just thinking you have such a determined look about you. 
 Hehe… Really? 
 (Her eyes are sparkling.) 
 (She looks like a different person compared to New Year's Day.) 
 Is there something wrong with my face? 
-You look like you're ready to take on anything. 
-Oh, you think so? …You'll make me blush! 
+You look like you're ready to take on the world. 
+Oh, you think so? …You’re making me blush! 
 (She looks lean.) 
 Ogami… at last I get to see you again… 
 What's wrong, Sakura? 
@@ -158,7 +158,7 @@ I've lost a little weight due to my training. I feel lighter than I have in a lo
 Let's do some sparring together again some time, Boss. 
 You'll have to hold back against me! 
 (Kanna… She looks even stronger than before.) 
-(She's so big, but not a gram of fat on her body… Impressive!) 
+(She's so big, but there isn’t a single gram of fat on her body… Impressive!) 
 (Even her hair is wild and independent.) 
 (She's certainly found her own style.) 
 (Whoa, there are blood stains on her chest!) 
@@ -172,14 +172,14 @@ I was just thinking, I like that determined look in your eyes.
 Of course. The training would have been worthless otherwise. 
 (Her eyes are brimming with confidence.) 
 (What a gallant face.) 
-(There's a cut on her cheek. It must have been an arduous special training.) 
+(There's a cut on her cheek. Her special training must have been arduous.) 
 Boss… 
 What is it, Kanna? 
 … 
 I have to admit… I was thinking about you during my training… 
 Huh…? 
 After all, we had to start the special training right after our New Year's shrine visit. 
-I felt bad because I hadn't even said thank you for inviting me… 
+I felt bad because I hadn't even thanked you for inviting me… 
 Please… there's no need to thank me. 
 Hehe… But seeing you again now like this… it's like a dream come true. 
 Kanna… 
@@ -196,7 +196,7 @@ Oh boy…
 I expect you'll want to check on all of them? 
 You're right, that's a good idea. 
 The alarm!? The Kouma are here! 
-…All right. Let's show them our special training paid off! 
+…All right. Let's show them the results of our special training! 
 I wonder if Iris is all right. I haven't seen her in a while. 
 She's probably still sleeping. 
 I should go somewhere else. 
@@ -231,7 +231,7 @@ Iris is at that age now where kids can never get enough sleep. I'm sure you were
 Why are YOU here? 
 Me? I just went to check on Iris. 
 Iris is in the middle of a growth spurt. When I come here, I often find her sleeping like this. 
-Hehe… Did you some to see Iris? 
+Hehe… Did you come to see Iris? 
 …Y-Yes. 
 Ogami. You should tell Iris you're home. 
 Iris, I'm back. 
@@ -243,9 +243,9 @@ Iris needs her sleep right now.
 It's important for her growth, both mentally and physically. 
 All right, see you later. I'll be in my room if you need me. 
 Mentally and physically? Hmmm… 
-That really is more important for her right now than any special training could ever be, huh? 
+That really is more important for her right now than any kind of special training, huh? 
 See you, Iris… Sweet dreams. 
-So, I checked up on Iris… Let's see how everyone else is doing. 
+OK, I checked up on Iris… Let's see how everyone else is doing. 
 …Enemies!? The Kouma have finally made their move! 
 Wake up, Iris! We have to move out! 
 Uh… Huh…? Is that you, Mon Frère? 
@@ -270,29 +270,29 @@ How are the Koubu? Did you come up with a way to repair them?
 Well, to be honest… I haven't even touched the Koubu. 
 What!? But how will we be able to fight the Kouma? 
 No matter how much we trained, fighting the enemy without Spirit Armour would be madness! 
-…I'm not allowed to tell you anything about that. 
+…I'm not at liberty to discuss that. 
 I see… 
 I'm sorry, Chief. That's the only explanation I can give you… 
-Since you're finally back, let's do something fun!… Wanna play Hanafuda? 
+Since you're finally back, let's do something fun! …Wanna play Hanafuda? 
 Kohran… you sound very optimistic. 
 Yeah! I'm in a good mood because I've just completed the assignment old man Yoneda gave me! 
 An assignment… from Yoneda? 
 Oh, shoot! That was supposed to be a secret! 
 …? 
-It's… it's nothing. Back to work! 
+It's… It's nothing. Back to work! 
 I wanted to see you, Kohran. After all, we've been apart for three weeks. 
 Yep… I also really wanted to see you, Chief. 
 And… to be honest, I was a little afraid. 
 …Afraid? 
 Yeah… if those demons attacked while you were still gone… 
 We'd have been helpless. That's a scary thought! 
-…I'm sorry I had you worried, Kohran. 
+…I'm sorry I caused you to worry, Kohran. 
 Nah, it's all good! You're back safe and sound, that's all that counts! 
 And just when I finished the assignment from old man Yoneda. Perfect timing! 
 An assignment… from Yoneda? 
 Oh, shoot! That was supposed to be a secret! 
 …? 
-It's… it's nothing. Back to work! 
+It's… It's nothing. Back to work! 
 Did you see Iris and Sumire yet? If not, you should go say hello. 
 …OK, you're right. 
 I should get going then… I have to say hello to everyone. 
@@ -309,20 +309,20 @@ Yeah…
 I… I have a dream, you know… 
 That sounds more grandiose than it is… I just… I wanna fly in the sky. 
 But you can take a ride on the Soaring Whale whenever you want, can't you? 
-That's floating, not flying! I wanna fly on the wings of freedom! 
+That's floating, not flying! I wanna soar on the wings of freedom! 
 Do you know the kind of scrap most people fly in, the airplanes we have now? 
 I've seen a few of the Navy's airplanes… 
 Yep, exactly! 
-Just crash after crash after crash! 
+Just crash, after crash, after crash! 
 Their design, their engines… nothing works like it should! 
 Yeah, but with the technology used in our Spirit Armors… 
-It would be possible to fly all the way to China. 
+It would be possible to fly all the way to China! 
 But… I knew someone. Someone who trusted his life to one of those scrap planes… 
 When I was little, he… he said he'd fly to Japan in a plane he'd made himself. 
 Hehe… And then he just flew away. 
 I couldn't say anything. And of course he'd never made any promises. 
 I don't know what happened after. 
-If I could just fly and go after him… 
+If only I could just fly and go after him… 
 That's what I've been thinking ever since then. 
 …I see. 
 To develop better planes? <br> So you loved him… 
@@ -341,7 +341,7 @@ Of course… I'd be happy to!
 See you around, Kohran. 
 So you loved him… 
 Wha…? Me? 
-I… No! Or…maybe…I did? 
+I… No! Or… maybe I did? 
 Could you, maybe… give me some time to myself? 
 I want to be alone with my thoughts for a bit. Please… 
 …All right. 
@@ -368,60 +368,60 @@ Sumire…
 Why, Ensign. It's been a while since I had the pleasure. 
 How did you spend these past three weeks? 
 Hohohoho, I went to town! I treated myself to a dress, jewelry, perfume… and some really nice dinners! 
-Heh… To polish my beauty to a sheen, that's MY special training. 
+Heh… To polish my beauty to a sheen, that was MY special training. 
 You're unbelievable! <br> I don't know what to say… <br> It looks like you succeeded. 
-You're unbelievable! What good's that gonna do for protecting the capital? 
+You're unbelievable! How is your beauty going to protect the capital? 
 What do you mean? 
 Sakura and the others steeled themselves in arduous training… 
 And you!? What have you achieved during that time? 
 I only did what I'm good at! 
 Anyway, what is it to you? 
 Oh boy… 
-Why do you make that kind of face? 
+What’s with that puzzled expression on your face…? 
 I don't even know what to say… 
 I beg your pardon? 
-So… you were just going out and having fun all this time
+So, all this time… you were just going out and having fun?
 Well, you don't even know how I feel.
 Well… it looks like you succeeded. 
 … 
 …? 
-You say exactly the same things as the other gentlemen. 
+You sound exactly like all the other gentlemen. 
 …Huh? 
 No… it's nothing. If you'll excuse me now… 
 Sumire… What's the matter? 
 … 
-Ensign… I know it all too well… 
-I know what you're thinking. 
-"We trained by the sweat of our brow, and what have you been doing?" 
+Ensign… I know what you’re thinking… 
+I can tell by your expression what you want to say to me. 
+"We trained by the sweat of our brow for three weeks, but what have you been doing?" 
 … 
 I just did what I'm good at. 
 …What do you mean? 
 It's nothing… Please excuse me. 
 Captain? What are you doing here of all places? 
 I could ask you the same thing… You just got back, and you're already in the library. 
-It feels like forever ago… even though it's only been three weeks. 
-I was just running around without ever taking a rest. 
-I understand… I'm the same, really. 
-Hehe, I thought you'd be. Well, I'm off. Excuse me. 
+Even though it's only been three weeks… it feels like we’ve been gone a lifetime. 
+It was just so nice being back I couldn’t sit still and ended up wandering around. 
+I understand… I feel the same, really. 
+Hehe, I thought you might. Well, I'm off. Excuse me. 
 I've been away for a while, so I want to walk around the theater some more. 
 Maria was right here earlier… 
 Now it's deserted. I should go somewhere else. 
 Oh, Ogami. It's good to see you again. So you're back from your special training? 
-Yes, we just returned. Tell me, Kasumi… what exactly are you doing here? 
+Yes, we just returned. Tell me, Kasumi… What exactly are you doing here? 
 This underground hangar is off limits for the time being. 
 I'm posted here so no one wanders in by accident. 
 Off limits? Why’s that!? 
-I'm sorry, but I can't answer that. 
-I can just tell you that entry is not permitted at the moment, even for you. 
+I'm sorry, but I’m not at liberty to answer that. 
+All I can say is that no one is permitted to enter the hanger at this time, even you. 
 Ogami, the hangar is off limits, so please refrain from entering. 
 What's going on in there? I'd sure like to know… 
 I'm sorry, but I can't answer that. 
-Listen, Ogami… 
-Hey, Yuri! What are you doing here? 
-Listen, Ogami… You shouldn't be too hard on Sumire. 
+Um, Ogami… 
+Hey, Yuri. What are you doing here? 
+Ogami, listen… You shouldn't be too hard on Sumire. 
 Huh? 
 I saw her. She was working very hard all day, every day. 
-She sweet-talked everyone and their brother in this city in order to raise funds for developing new weapons. 
+She sweet-talked everyone in the city and their brother in order to raise funds for developing new weapons. 
 What!? 
 Parties in the financial world at night, government offices during the day… 
 She couldn’t have gotten much sleep lately. 
@@ -431,15 +431,15 @@ But despite that, she went home to make amends.
 All to raise money from the Kanzaki conglomerate and others. 
 So that's what she was doing… 
 And she was successful. 
-It was only thanks to her that the Flower Division could restart their weapon development program. 
+It was only thanks to her that the Flower Division could restart their weapons development program. 
 And on top of that, someone had to take care of the Imperial Theater while you were all gone, right? 
 … 
-Sumire, she…can be a little difficult sometimes… 
-I'm sure she just didn't want you to worry about her. 
+Sumire can be a little difficult sometimes… 
+But I'm sure she just didn't want you to worry about her. 
 Really? 
-It's not like I want you to give her a free pass for anything. 
+It's not like I want you to give her a free pass or anything. 
 But, if you really care about her, Ogami… 
-Then you should always remember that there's a reason for her to behave like she does. 
+Then you should always remember that there's a reason Sumire behaves the way she does. 
 Sumire… 
 I hope Sumire is in her room… 
 Sumire said she'd take a nap. 
@@ -450,10 +450,10 @@ It's me, Ogami… Are you there, Sumire?
 Oh, Ensign… Can I help you with anything? 
 I wanted to talk to you. Could you please let me in? 
 Please do. The door is open. 
-If it's a lecture you want to give me, you can keep it to yourself though. 
-No… it's not that… I came here to apologize. 
+However, if it's a lecture you want to give me, you can keep it to yourself. 
+No… It's not that… I came here to apologize. 
 …Huh? 
-I heard about what you did while I wasn't here… How hard you worked to raise money… 
+I heard about what you did while we were away… How hard you worked to raise money… 
 … 
 I haven't the faintest idea what you are referring to. 
 I don't know who told you that, but I just went out to have fun, nothing else. 
@@ -471,16 +471,16 @@ Excuse me.
 I suppose you're here for a strategy review? 
 But to be honest, there's not much to talk about regarding the battle at Meiji Shrine. 
 …I'm sorry. 
-Don't blame yourself. You were up against Kouma, after all! 
+Don't blame yourself. You were up against the Kouma, after all. 
 You can't imagine how much we struggled in the Kouma War six years ago… 
 … 
-I'm sorry, but I can't give you any advice this time. 
+I'm sorry, but this time I don’t have any advice that can help you. 
 I understand. Please excuse me. 
-Ogami… I'm happy you come see me so often… 
+Ogami… I'm happy you come to see me so often… 
 But did you already talk to the rest of the Flower Division? 
 Erm, I… 
 Everyone was looking forward to seeing you again. 
-Please go see them, why don't you. 
+Please go visit them, why don't you. 
 …Understood. 
 Hey, Maria. What's going on? 
 Looking at Tokyo like this sure brings back memories… I got lost in thought. 
@@ -508,7 +508,7 @@ How are the girls doing?
 Oh… Looks like you really worry about your squadmates. 
 Especially… Sakura, right? 
 Especially… Sumire, right? 
-Maria accompanied you, so… you get lucky? 
+Maria accompanied you, so… You get lucky? 
 Especially… Kanna, right? 
 Especially… Iris, right? 
 Especially… Kohran, right? 
@@ -528,13 +528,13 @@ You seem to be enjoying your food.
 No matter what anyone says, eating good is the best way to grow strong. 
 Not being fussy and just gobbling up everything… It sounds easy, but it's the hardest training there is. 
 Is there anything you really like or dislike? 
-Nah, I'll eat anything. <br> There are some I don't like… <br> I like masculine women. 
+Nah, I'll eat anything. <br> Some things I don't like… <br> I like masculine women. 
 Nah, I'll eat anything. Even as a child, I wasn't fussy about food. 
 Wow, you can be proud of that! If you're gonna eat something, might as well enjoy it. 
 To be honest, there are some things I don't like… 
 Wow, I wouldn't have expected that. 
-But… to be honest, what happened at Fukagawa really changed the way I feel. 
-Everyone has their weaknesses, don't you think? 
+But… to be honest, what happened at Fukagawa really changed the way I think about things. 
+Everyone has their weaknesses, right? 
 Thanks to you, I've come to accept that fact. 
 Well, I… I really like masculine women. 
 Oh, shut up, you! I'm talking about food, of course. 
@@ -562,7 +562,7 @@ Oh, wait! We've got some special portrait cards that we only sell around New Yea
 You can choose one you like for free. 
 Really? Are you sure? 
 Yes, because you're always buying so many portrait cards. 
-We've got 7 different ones in stock. Whose portrait would you like? 
+We've got seven different ones in stock. Whose portrait would you like? 
 Sakura's please! <br> Sumire's please! <br> Maria's please! 
 Iris' please! <br> Kanna's please! <br> Kohran's please! 
 Sakura's special portrait card? Here you go! 
@@ -603,9 +603,9 @@ Hey, Boss!
 Looks like you're hard at work, Kanna! Back to training already? 
 Well, if our last battle taught us one thing, it's to never let our guard down, right? 
 …That's true. 
-Come to think of it… we didn't have time to talk like this since the New Year's shrine visit. 
+Come to think of it… We haven’t had time to talk like this since the New Year's shrine visit. 
 You know what, you're right. 
-That was so nice… Going to the shrine just with you… 
+That was so nice… Going to the shrine, just you and me… 
 I'm happy you see it that way, too. 
 B-By the way, was the special training successful? 
 Hey, Boss! 
@@ -613,7 +613,7 @@ Looks like you're hard at work, Kanna! Back to training already?
 Well, if our last battle taught us one thing, it's to never let our guard down, right? 
 …That's true. 
 Earlier… you said you wrestled with a bull. Are you sure it was… I mean, a BULL!? 
-Come on, why should I lie about something like that? 
+Come on, why would I lie about something like that? 
 I'm pretty sure it wasn't a bunny rabbit. He almost killed me… Yeah, he was definitely pretty strong. 
 Wow… Not bad, Kanna… 
 My father would have laughed at something like that… He once wrestled a bear! 
@@ -631,23 +631,23 @@ But don't worry, Boss! I can make up for a hundred others!
 Hahaha… 
 …? 
 …I can't really tell if it was effective or not. 
-What, really? What have you been doing all those weeks? 
+What, really? What were you doing for all those weeks? 
 Well, all sorts of things… 
-OK then… let's give it our best, Boss. 
-Yes, let's do that! 
+OK then… Let's give it our best, Boss. 
+Yes, let's do it! 
 But… I really wish I could handle guns… Then I could have been the one to go with you… 
-… huh? 
-Ah, no… it's nothing! I… I'll be going now. 
+…Huh? 
+Ah, no… It's nothing! I- I'll be going now. 
 OK. See you later, Kanna! 
 B-Boss… 
 Hm? What is it, Kanna? 
 You… You were all alone with Maria for several weeks, right? 
-Yeah, because we were always together there at the training camp. 
+Yeah, because we were always together at the training camp. 
 During that time, did you… er… 
 …Sorry! It's nothing. See you later! 
-Kanna… what was she trying to say? 
+Kanna… What was she trying to say? 
 …By the way, were you together with Maria the whole time? 
-Yeah, because we were always together there at the Navy training camp. 
+Yeah, we were pretty much always together at the Navy training camp.  
 I see… 
 …What's up, Kanna? 
 No, it's nothing. I have to get going… 
@@ -657,7 +657,7 @@ I hope you take good care of Maria! She… She really needs a man she can rely o
 Huh? Hey, hold on… 
 Well, I have to get going. See you, Boss. 
 OK, see you later. 
-Huh… Is the shower running?… There's an open locker… 
+Huh… Is the shower running? There's an open locker… 
 …! 
 …Those are Sakura's clothes in the locker… That means… 
 What is this sudden dizzy feeling? You better keep it together, Ogami! 
@@ -670,7 +670,7 @@ I'm dead! I need to get out of here!
 Phew… I managed to escape before she noticed. 
 It's no use. It's like some strange force is pulling me towards the showers… 
 (Sa… Sakura's taking a shower…) 
-Lalala~… Whaaaat is the puurrrpose of our lives… 
+Lalala~… <br> For what~ are~ people born? <br> For what~ do~ people live? 
 (Sakura…) 
 Phew… Guess it's time to finish. 
 (I'm done for! I need to run!) 
@@ -679,7 +679,7 @@ Man, seeing Sakura taking a shower… I have a feeling this is going to be an aw
 Oh, Ogami! What are you doing here? 
 Whoa! You… You finished your shower already? 
 Yes! It feels like I washed away all the exhaustion from my special training! 
-But… how did you know I was taking a shower? 
+But… How did you know I was taking a shower? 
 Well, it's just… I heard the shower running, so… 
 You didn't peek, did you? 
 Eeeek! Wh-What… 

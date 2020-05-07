@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
 It's a photo of Maria. She's lost in thought and looks kind of sad…
 A photo of Kanna. Her signature strength comes through clearly.
@@ -41,9 +41,9 @@ I'm sorry… It's my fault. I am fully prepared to receive the punishment I dese
 You damn fool! What good will it do us if you resign your post?! 
 And… the Koubu were totally destroyed! 
 …I have no words. 
-Jeez… we’re going to have to face this new enemy somehow with our precious Spirit Armor in pieces… 
+Jeez… We’re going to have to face this new enemy somehow with our precious Spirit Armor in pieces… 
 I… I'm so ashamed…! 
-First the Hive of Darkness, and now this new threat… the citizens are terrified… 
+First the Hive of Darkness, and now this new threat… The citizens are terrified… 
 And because everyone is hiding away in their houses out of fear, the economy has totally broken down. 
 The big shots up in government have been giving me nothing but grief about this incident since yesterday. 
 No wonder my stomach is killing me. 
@@ -52,7 +52,7 @@ Did you just say something?
 No, I didn't say anything! 
 Better not have, Ogami! 
 We can't just assume there'll be peace because we defeated the Hive of Darkness! 
-If I see any more shameful behavior out of you, I'll be demoting you to full-time ticket collector! 
+If I see any more shameful behavior out of you, I'll be demoting you to a full-time ticket collector! 
 Fu… Full-time ticket collector!? 
 If you don't like it, I suggest you hurry up and think of a counterattack against these monsters quick-like! 
 Y-Yes, sir! 
@@ -63,29 +63,29 @@ Even so… if there are monsters like that still alive out there…
 The Kouma… 
 Six years ago… Lt. General Yoneda and the Anti-Kouma Corps managed to seal away the Kouma beneath the earth… 
 I wonder if Cerulean Satan's minions have been resurrected in the city now… 
-If the Koubu aren’t repaired quickly… it will be real trouble for the capital. 
+If the Koubu aren’t repaired quickly… the capital is going to be in real trouble. 
 Yes, just a minute… 
-Chief… sorry for comin' in so late. 
+Chief… sorry for coming in so late. 
 …What's wrong, Kohran? 
-…I, uh, got somethin' I wanna talk to ya about. Mind if I… come in? 
+…I, uh, got something I wanna talk to you about. Mind if I come in…? 
 …All right. Come inside then. 
 …Kohran? 
-Kohran… what could she possibly wish to talk with the Ensign about at this hour… 
+What could she possibly wish to talk with the Ensign about at this hour…? 
 …So then, Kohran. What exactly did you want to talk about? 
-Lemme cut right to the chase… there isn't much chance of the Koubu getting repaired. 
+Lemme cut right to the chase… the chances of the Koubu getting repaired are pretty slim. 
 What? 
-I took a look at them, but the Koubu’s spirit engines are totally busted. It'll be real difficult to fix… 
+I gave them a once-over, and it looks like the Koubu's spirit engines are totally shot. It won't be a quick fix… 
 And frankly, even if I could fix them… they wouldn’t stand a chance against the enemy next time. 
-…So we need a weapon other than the Koubu, you mean… 
+…So you’re telling me we need a new weapon other than the Koubu…
 Well, that won’t be easy, either. The Imperial Assault Troupe sucks up tons of money and makes almost nothing back. 
 Developing, maintaining and improving the Spirit Armor… who knows how much all that’ll cost us. 
 Not only are the Koubu in pieces but the capital’s economy is also shaky 'cause of this new enemy.
 There's just no way we could make new Spirit Armor at a time like this… 
 What about a loan…? 
 …Hm?! 
-What's up, Chief? Ya look a bit scary… 
+What's up, Chief? You look a bit scary… 
 Sorry… Did you hear something just now? 
-Nope, I didn't hear nothin'. Maybe it was just your imagination? 
+Nope, I didn't hear anything. Maybe it was just your imagination? 
 Maybe… 
 Chief… What are we gonna do? 
 Go and talk to Yoneda. <br> Go and talk to Ayame. 
@@ -117,7 +117,7 @@ I can't solve this problem alone. I'll ask Ayame for help.
 …All right. I'll go and get everyone from the Flower Division together in the War Room. 
 Please do. 
 OK… I should go see Ayame. 
-It's Ogami… do you have a minute? 
+It's Ogami… Do you have a minute? 
 Oh, Ogami? Come right in. How can I help you? 
 I'm sorry to disturb you so late. To be honest, I need your help… 
 …About the Koubu, right? 
@@ -125,7 +125,7 @@ Yes… It pains me to say it, but I have no idea what we should do…
 Don't beat yourself up about it. This problem is just too big. 
 Producing entirely new Spirit Armors… that would be a national effort. 
 Yes… 
-I'll have a word with Lieutenant General Yoneda about the Koubu. I think he had some kind of idea. 
+I'll have a word with Lt. General Yoneda about the Koubu. I think he had some kind of idea. 
 But, Ogami… could I offer you a word of advice? 
 I mentioned it before, but the most important thing for a leader is to not waver in your decision-making. 
 …Understood. 
@@ -138,7 +138,7 @@ I'm sure you can figure out the rest yourself. Good luck, Ogami.
 …All right. 
 Everyone should be in the War Room by now. 
 Looks as though everyone's gathered. 
-Yes… all right, let’s begin.
+Yes… All right, let’s begin.
 We need a strategy to fight those monsters… the Kouma. 
 First off, let’s hear your thoughts, Boss. 
 What can we do to stand against those monsters? 
@@ -151,11 +151,11 @@ That's a tough one, Chief…
 … 
 Oh, right… I already asked for help with that problem. 
 All right… it seems we have to come up with a different solution. 
-Captain… the fighting capabilities of the Spirit Armor grows in proportion with the abilities of their pilots. 
+Captain… The fighting capabilities of the Spirit Armor grows in proportion with the abilities of their pilots. 
 Even using the same Koubu as before, if we grow stronger, we'll be much more powerful in battle. 
-Chief! This is an important meeting, so how can you space out like that!? 
+Chief! This is an important meeting! How can you space out like that!? 
 Yes, er… Sorry… 
-Oh boy… are we really out of ideas? 
+Oh boy… Are we really out of ideas? 
 …I have a proposal. 
 The fighting capabilities of the Spirit Armor grows in proportion with the abilities of the pilot. 
 Even if we use the same Koubu as before, if we grow stronger ourselves, we'll be much more powerful in battle. 
@@ -189,7 +189,7 @@ Different strokes for different folks. That's true for mind and body. Right, Chi
 Even if you think this is good for some of us, it might not be ideal for everyone. 
 But… 
 Besides, I'm busy with a new invention at the moment. 
-All right, enough of this! If someone doesn't agree, I won't force them to do anything. 
+All right, enough of this! If anyone doesn't agree, I won't force them to do anything. 
 It's obvious to all of us that we can't win against the Kouma as we are now. 
 …OK. I’ll leave it to your discretion. 
 Ogami? 

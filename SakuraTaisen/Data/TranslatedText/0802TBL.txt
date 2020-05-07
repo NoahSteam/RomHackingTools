@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
 It's a photo of Maria. She's lost in thought and looks kind of sad…
 A photo of Kanna. Her signature strength comes through clearly.
@@ -54,22 +54,22 @@ Come, Maria. Watch your step when you get in.
 Thank you, Captain. 
 OK, Kohran. Slow and steady wins the race. 
 Just leave it to me! I know the streets of this city like the back of my hand. We'll be at Meiji Shrine in no time! 
-All right then… let's go to Meiji Shrine for our visit. 
+All right then… Let's go to Meiji Shrine for our visit. 
 You want to walk to the station, Iris? 
 Yup! Let's go, Mon Frère! 
-OK… How should we get to Meiji Shrine…? 
+OK… How should we get to Meiji Shrine? 
 Taking the steam train would be the fastest… 
 Are you serious, Boss?! We'll run there, of course! 
 What?! You want to run all the way to Meiji Shrine? 
 Sure! The air is wonderful on New Year's Day. It'll be a fun jog. 
 Let's go! Or do you want to be left behind? 
-Oh boy… this New Year is off to a good start… 
+Oh boy… This New Year is off to a good start… 
 Oh, really? 
 No, no… I just wouldn't have expected that. 
 What?! No, that's not… 
 I just figured you'd get lots of invitations from young counts and princes. 
 …? 
-Oh really?… Those circles are like a whole other world to me. 
+Oh really? …Those circles are like a whole other world to me. 
 Y-You think so? 
 Dancing? I wouldn't remember a single step… 
 Hahaha… I'd only step on your feet and embarrass myself. 
@@ -78,7 +78,7 @@ You've got a deal, Sumire!
 Yeah… Just a short time ago, it seemed like the fighting would never stop. 
 Whatever happened, it's over now. The world is finally at peace. 
 (Back then…?) 
-Er, then… why don't you tell me how you celebrate the New Year in Russia? 
+Er, then… Why don't you tell me how you celebrate the New Year in Russia? 
 I'm sure you don't visit any shrines. So… what do you do on New Year's Eve? 
 …A prayer? 
 That's a custom I can really picture in cold, cold Russia. 
@@ -109,15 +109,15 @@ Oh, really? What did you write about?
 …WHAT!? 
 Well I suppose so, but… No… that's not the issue here! 
 …Yeah, yeah. OK. 
-Huff… Huff… What…are you doing…this early… 
-Running…from Ginza…to the Meiji Shrine… Anyone would be…exhausted! 
+Huff… Huff… What… are you doing… this early… 
+Running… from Ginza… to the Meiji Shrine… Anyone would be… exhausted! 
 R-Really? 
 So that's why you turned out to be so strong. 
 (I don't think there are many men who're stronger than you…) 
 …? 
 Hahaha… No wonder this is a leisurely stroll for you. 
 Heeey, Kanna! Wait up! You're too fast for me! 
-Oh boy… if she's like that at Meiji Shrine, she'll probably make me swim to Okinawa… 
+Oh boy… If she's like that at Meiji Shrine, she'll probably make me swim to Okinawa… 
 Yes. This is the peace you all fought so hard for. 
 Yeah. 
 I don't want to lose you in the crowd, so let's hold hands. 
@@ -135,11 +135,11 @@ Wait, Iris! If you run around like that, you'll hurt yourself.
 Hey! You're bumping into people! Watch where you're going! 
 Waaaait! If you run off alone, you'll get lost. 
 This just makes you realize how peaceful this city has become. And it's all thanks to you guys. 
-Thank you… Kanna… but… 
+Thank you, Kanna… but… 
 In order to keep this peace, we'll have to work even harder. 
-Yeah… sorry. 
+Yeah… Sorry. 
 … 
-(Let's see… what should I wish for?) 
+(Let's see… What should I wish for?) 
 That this peace is eternal. <br> That Sakura likes me. 
 (Please let this peace go on forever.) 
 (Please let Sakura like me.) 
@@ -147,7 +147,7 @@ That this peace is eternal. <br> That Sakura likes me.
 … 
 So, Sakura… What did you wish for? 
 … 
-(Let's see… what should I wish for?) 
+(Let's see… What should I wish for?) 
 That this peace is eternal. <br> That Sumire likes me. 
 (Please let this peace go on forever.) 
 (Please let Sumire like me.) 
@@ -155,7 +155,7 @@ That this peace is eternal. <br> That Sumire likes me.
 …
 So, Sumire… What did you wish for? 
 … 
-(Let's see… what should I wish for?) 
+(Let's see… What should I wish for?) 
 That this peace is eternal. <br> That Maria likes me. 
 (Please let this peace go on forever.) 
 (Please let Maria like me.) 
@@ -164,7 +164,7 @@ That this peace is eternal. <br> That Maria likes me.
 OK, should we go? 
 What did you wish for, Maria? 
 … 
-(Let's see… what should I wish for?) 
+(Let's see… What should I wish for?) 
 That this peace is eternal. <br> That Kohran likes me. 
 (Please let this peace go on forever.) 
 (Please let Kohran like me.) 
@@ -172,15 +172,15 @@ That this peace is eternal. <br> That Kohran likes me.
 … 
 So, Kohran… What did you wish for? 
 … 
-(Let's see… what should I wish for?) 
+(Let's see… What should I wish for?) 
 That this peace is eternal. <br> That Iris likes me. 
 (Please let this peace go on forever.) 
 (Please let Iris like me.) 
 … 
 … 
-By the way… what was your wish? 
+By the way… What was your wish? 
 … 
-(Let's see… what should I wish for?) 
+(Let's see… What should I wish for?) 
 That this peace is eternal.. <br> That Kanna likes me. 
 (Please let this peace go on forever.) 
 (Please let Kanna like me.) 
@@ -218,7 +218,7 @@ OK. Should we move on then?
 You really like that monkey, huh? 
 Oh, how lovely! So… does it do anything? 
 (I see. Maria has never seen a trained monkey before.) 
-Explain about trained monkeys. <br> Tell her a fib. 
+Explain what it is. <br> Tell her a fib. 
 A trainer taught him all sorts of tricks, like making back-flips and climbing ladders. 
 …Oh, really? That sounds amazing. 
 They always have them at festivals like this, just like cork shooting ranges and stuff. 
@@ -227,7 +227,7 @@ Should we take a look at the other stalls too?
 …Yes, let's go. 
 It's a super smart monkey who has trained a human to do little tricks for him. 
 Really!? That sounds unbelievable. 
-You really didn't know that? The monkey beats his drum to command his human. 
+You really hadn't heard of them before? See, the monkey beats the drum to issue commands to his human. 
 I have to see that for myself! Let's stay here and watch. 
 …What? Uh, that's… 
 Hey, Maria! See that over there!? Let's check it out! 
@@ -241,14 +241,14 @@ In China, you mean? <br> Looks just like you, Kohran!
 Trained monkeys in China, you mean? I wonder what they can do… 
 You don't know them, Chief? They can throw knives, or… 
 K-Knives!? 
-Or ride on unicycles, walk on tightropes… 
+…or ride on unicycles, walk on tightropes… 
 Are you serious!? 
 The monkey looks just like you, Kohran! 
 Beg your pardon? In what way do I resemble that monkey!? 
 No, no, I just meant… You're just as cute as him! 
 Nice save, Chief. 
 But don't take me for some stupid little thing, and watch what you say! 
-Sorry about that… let's move on, Kohran. 
+Sorry about that… Let's move on, Kohran. 
 What is it, Chief? You look like you're completely mesmerized! 
 Are you lost in deep thought after seeing the monkey’s performance? 
 Ah, no, I… 
@@ -257,12 +257,12 @@ Looking at that monkey again, Mon Frère?
 Whoa, what a cute monkey! 
 Yeah, kind of. 
 Are they in France, too? <br> Looks just like you, Iris! 
-By the way… are there monkeys in France, too? 
+By the way… Are there monkeys in France, too? 
 Yep! And they all have blonde hair like me! 
 Wha…!? 
 Hehehe… Gotcha! 
-Wait a second… so you were just kidding? 
-Now I want to get a monkey stuffed animal.
+Wait a second… So you were just kidding? 
+Now I really want to get a monkey stuffed animal.
 It looks just like you, Iris! 
 What!? What do you mean, Mon Frère? 
 Oh, er… I just meant that the monkey is almost as cute as you, Iris. 
@@ -275,7 +275,7 @@ OK, let's go!
 Don't you think there's still other stuff to see? 
 Wow, he's really agile! 
 Who's more agile, him or you? <br> Know monkey-style kung fu? 
-I wonder… who do you think is more agile, him or you? 
+I wonder… Who do you think is more agile, him or you? 
 Wait, don't talk about me like I'm an ape! But yeah, I guess he's faster than me. 
 I see… 
 But it's not all about speed. In a fight, you also need to punch hard. I'd beat him hands down. 
@@ -284,7 +284,7 @@ Oh, er… Would you now?
 Do you know monkey-style kung fu? 
 What's that supposed to be? 
 Well, kung fu where you move like a monkey. Seeing this little guy, it just came to my mind. 
-Interesting… you sure know a lot of stuff, Boss. 
+Interesting… You sure know a lot of stuff, Boss. 
 Hahaha… 
 Ahaha… If you look at them like this, monkeys are pretty cute. 
 Absolutely. And clever, too! 
@@ -336,7 +336,7 @@ But you know, you already gave me a cactus before…
 Whoops, you're right. Sorry, I didn't mean to give you the same thing twice… 
 Oh, don't worry. I'm sure they'll look lovely next to each other! 
 A cactus. It's so nostalgic… My father loved them… 
-Ah, right… 
+Oh, really… 
 Ogami, in the language of flowers, the cactus means "passion." 
 Even without water, they grow strong. 
 I see… 
@@ -349,7 +349,7 @@ Haha… Don't make me blush.
 This is for you, Sumire! 
 My, what a nice doll! But what's this pole for? 
 I think it's called a Knitting Nancy? 
-How do you use it? I have to ask Sakura when we're back. 
+How do you use it? I’ll have to ask Sakura when we get back. 
 I've received many presents in my life… 
 But a toy? That's a first. 
 I will treasure it. Thank you, Ensign. 
@@ -369,12 +369,12 @@ Whoa, that pendant is a looker! Thanks so much, Chief!
 This is for you, Kohran! 
 A toy set? Thanks, Chief. 
 This is for you, Kohran! 
-Oh, a cactus! Thanks, Chief. I'll take good care of it. 
+Oh, a cactus! Thanks, Chief. I'll take real good care of it. 
 Good job! Here's your prize. Why don't you give it to your lovely lady? 
 Here, Iris… this is for you! 
 Mon Frère… you gave me a pendant before, don't you remember? 
 Oh, sorry! I didn't mean to give you the same thing again… 
-OK! Another addition to my treasure pile! 
+It’s OK! Another addition to my treasure pile! 
 Whoa, what a beautiful pendant! Thank you, Mon Frère! 
 Hehehe… This is my precious treasure now! 
 Here, Iris… this is for you! 
@@ -387,8 +387,8 @@ Not a flower? Then these are leaves?
 That's… Ah, it doesn't matter. Let's go, Iris! 
 Good job! Here's your prize. Why don't you give it to your lovely lady? 
 This is for you, Kanna! 
-Thank you, Boss! I've never gotten anything like this! 
-I'm not one to care for plants, but I'll give it my best! 
+Thank you, Boss! I've never gotten anything like this before! 
+I don’t know if this kind of gift suits me, but I'll treasure it all the same! 
 This is for you, Kanna! 
 That's one cute doll! When I was little, I kind of… I always wanted a doll… 
 Thanks, Boss. I'll always keep it close. 
@@ -398,7 +398,7 @@ You look like you're really into it.
 Whoa, Ogami… this takes me back! 
 Used to play with them a lot. <br> Never really tried it before. 
 I used to play with these things a lot. 
-You too? When we had one of our country festivals, there were always lots of stalls. 
+You too? When we had our festivals in the country, there were always lots of stalls like this. 
 I would always get really into it. 
 Hehe… I was the same way. 
 Sorry, I've never really tried it before. 
@@ -431,7 +431,7 @@ It's something to eat.
 …So, it's like rusk bread? 
 Er, not really… 
 …Hm, it doesn't taste of anything. 
-Oh… you really ate it? 
+Oh… You really ate it? 
 It's sort of a game, see? You cut out shapes. 
 Oh, really? It doesn't look that difficult. 
 Oh dear… I've missed. 
@@ -455,7 +455,7 @@ By the way, Kohran… What games did you play as a kid?
 Like I told you before, I've only played Hanafuda. 
 Interesting… 
 Stalls in Japan really have the weirdest stuff. 
-This takes me back… I used to do it all the time as a kid. 
+This takes me back… I used to play this all the time as a kid. 
 Wow. I always thought you'd been born a full-grown adult, Chief. 
 H-How do you mean? 
 I… I was only kidding! No hard feelings, eh? 
@@ -517,7 +517,7 @@ Hm…? No, nothing particular…
 (We can't leave the theater unattended for so long…) 
 OK, let's go! <br> We can't leave it unattended… 
 …OK, let's go! It's New Year's Day, so let's have some fun! 
-We shouldn't leave the theater unattended… New Year's Day or not, we never know when we have to deploy. 
+We shouldn't leave the theater unattended… New Year's Day or not, we never know when we’ll have to deploy. 
 (Hm… What should we do…?) 
 Sa… Sakura! 
 Er… Hi, Sakura… What a coincidence! 
@@ -642,7 +642,7 @@ Thank you, really.
 Ah! The train's here! Let's get on! 
 What a crowd! So this is what New Year's Day is like in Tokyo! 
 I'm so glad Tokyo is finally at peace… 
-OK… let's get going! 
+OK… Let's get going! 
 What a crowd… 
 Of course… 
 Unused
@@ -658,9 +658,9 @@ I hope you appreciate my efforts.
 Come on, Ensign! Let's go. 
 Quickly! 
 Oh, not bad! Very festive. 
-Oh, stop it… you really went all out there. 
+Oh, stop it… You really went all out there. 
 You're a great guy. 
-Hey… do you have to talk shop when it's just the two of us? 
+Hey… Do you have to talk shop when it's just the two of us? 
 But… that's just what I like about you. 
 Come on, let's go. 
 So… this is what you do on New Year's Day? Sure is somber. 
@@ -725,7 +725,7 @@ Unused
 Wh-Wh-Why is everyone here all of a sudden!? 
 Come on, Chief… Where else would we go on New Year's Day but the shrine? 
 That's right! Isn't it nice for all of the Flower Division to celebrate the New Year together? 
-I agreed… the more the merrier. 
+I agreed… The more the merrier. 
 Phew… There's a bunch of people everywhere. Really makes me tired. 
 Thanks. Tell me one thing, Chief… 
 Are you happy you visited the shrine with me? 
@@ -752,7 +752,7 @@ Why's everyone here?
 Come on, Chief… Where else would we go on New Year's Day but the shrine? 
 Yeah, let's have a roaring good time together! 
 That's right! Isn't it nice for all of the Flower Division to celebrate the New Year together? 
-Oh, look… a manifestation of the North Star Buddha! 
+Oh, look… A manifestation of the North Star Buddha! 
 I have to pay my respects, as a user of the Hokushin Itto style. 
 Daaaaaaaa! 
 Whoa… 
@@ -786,7 +786,7 @@ What!?
 Heheheh… Come to me, all ye children of the gutter, all ye oppressed and evil! 
 I am the great liberator of demons! Come forth, Kouma! 
 That's…!? 
-Gigiyah… gigigigyahhhh! 
+Gigiyah… Gigigigyahhhh! 
 What in blazes are these crazy looking monsters? 
 Look out, everyone! 
 Unused
@@ -861,7 +861,7 @@ And then, when the day is dawning across the snowy fields, we turn towards it an
 We pray to have another good year. 
 Maybe not, but… am I really that different now? 
 Heheh… I'm sorry. Back then, I was just… 
-But even so… that greenhorn Ensign Ogami risked his life to save me. 
+But even so… that greenhorn Ensign risked his life to save me. 
 Don't play it down, Captain. I'm really grateful. 
 Heheh, I guess you're right. 
 Unused
@@ -882,7 +882,7 @@ Pathetic… In Okinawa, the men aren't that weak.
 Yeah, my old man was very strong, too. He'd never gripe and moan. Always training like a fiend. 
 Ha! But, as a woman I can't really brag about this. That's why I like strong men. 
 And I'm not talking about karate and stuff. 
-A guy who doesn't give up, no matter what… that's real strength. 
+A guy who doesn't give up, no matter what… That's real strength. 
 Heheh… You should do some exercising under Okinawa's scorching sun, too! 
 I just love the place! Every time I go back there, I forget about all my troubles. 
 I'd really like to take you there someday. That endless sky, the azure sea… 

@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿Hey everyone, let's do it! 
+﻿﻿﻿﻿﻿﻿Hey everyone, let's do it! 
 Victory pose… Yeah! 
 I've got to focus! 
 Here I go! 
@@ -79,7 +79,7 @@ The Imperial Assault Troupe has arrived!
 What…? 
 All right, that's the last of the enemies. 
 No, look at that!! 
-Wh… What on earth? Look at the demonic energy pouring out of it! Is it some kind of monster…!? 
+Wh… What on earth? Look at the demonic energy pouring out of it! Is it some kind of monster!? 
 I see… So these are the ones who defeated Satan… 
 Who are you?! 
 I am Tenkai! Leader of the glorious Hive of Darkness… The ultimate and absolute ruler of this empire! 
@@ -108,12 +108,12 @@ We'll lose if we try to face it head-on. We need to get up on that steam stand a
 That voice… Who on earth is it? 
 Here we go! Time for my first battle! 
 Dammit! This thing's a monster!! 
-!? It's on a completely different level from the ones we faced earlier! 
+!? This thing’s on a completely different level compared to the Hex Mechs we faced earlier! 
 Impossible… I can't believe the damage it dealt me… 
 No way! This thing's too strong! 
 Man, no kidding, this thing is crazy strong! 
-We've located the main body! The Soaring Whale is starting bombardment! Get out of the bombing area! 
-So that's it… If we eliminate that, the enemy should disperse. I'll leave the rest to you, Captain Ogami. 
+We've located the Shadow Hex Mech’s main body! The Soaring Whale is starting bombardment! Get out of the blast area! 
+So that's it… If we eliminate the main body, the enemy should disperse. I'll leave the rest to you, Captain Ogami. 
 R-Roger that. Everyone, focus your attacks on the main body! 
 We did it! 
 Of course, with me here, it was a given that we would win. 
@@ -126,22 +126,22 @@ Ensign Ogami… I think I may have overestimated you.
 What on earth!? Those movements are so strange… 
 What's the matter!? It looks like it's heading somewhere. 
 Ensign Ogami, the main body seems to be heading for Teito Tower. You need to destroy it before it gets there! 
-What?! Curse you…! You think I'll let you do that?! 
+What?! Curse you…! You think I'll let you get away with this?! 
 This is bad! It's gonna blow itself up when it gets to Teito Tower!! We've gotta stop it!! 
 Oh no! It's going to self-destruct when it reaches Teito Tower! We need to stop it before it gets there!! 
 Ensign, you need to stop its movements somehow!! 
 Dammit! Things aren't looking good… 
-Ensign Ogami! Surround the enemy with allied Koubus and halt their advance!  
+Ensign Ogami! Surround the enemy with allied units and halt their advance!  
 Ensign Ogami! If you surround the enemy with our units, we can halt its movement! 
 Right. Everyone! Surround the enemy with your Koubu and keep it from moving! 
 Kohran and I can destroy the enemy cannon installations with our ranged attacks. 
 Kohran and I can take down the cannons set up by the enemy from a distance. 
 The enemy looks quite formidable. We should focus on defense and look for an opening. 
-Let's focus our attacks on the main body of the enemy. We should also periodically stop its movements with our units. 
+Let's focus our attacks on the Shadow’s main body. We should also periodically stop its movements with our units. 
 All right, we did it! My first gold star!! 
 Good! Let's keep this up! 
-Ensign Ogami. The enemy's strength is incomparable to anything before. Focus on defensive tactics. 
-So wait, that means this mission's a failure if we let Teito Tower get destroyed? 
+Ensign Ogami. The enemy's strength is incomparable to anything we've faced before. Focus on defensive tactics.
+So basically, the mission's a failure if we let Teito Tower get destroyed? 
 Curse you! Teito Tower can wait. Focus on crushing them!! 
 .
 Hey Chief, how should I be fightin'?
@@ -162,7 +162,7 @@ Well… I'm just gonna give it my all. You just do the same, got it, Chief?
 Wait, sir! It appears the enemy has had plenty of time to prepare for this battle. 
 Wait a moment, Ensign! It looks like the enemy has already made preparations for battle here. 
 These installations look like cannons. They'll aim at anything in sight. Destroy them to open the path forward. 
-This is a 'steam stand'. It can recover your durability. They're a beneficial spot to hold. 
+This is a “steam stand.” It can recover your durability. They're a beneficial spot to hold. 
 I understand. OK everyone, let's move out!! 
 Ogami, you skipped out on helping repair the stage today! 
 Ogami, I noticed you didn't come to help repair the stage today! 
@@ -175,6 +175,6 @@ Ogami! Women are sensitive to those kinds of lies!
 Did you really need to lie? Just be honest next time! 
 You're right, now's not the time for that kind of question. 
 And… I believe in you, Ogami! Let's focus and fight hard!! 
-Those are 'rockets'. They were developed back in my country during the 10th century! 
-Rockets…? You mean those flying bombs they talked about in Officer School!? 
+Those are “rockets.” They were developed back in my country during the 10th century! 
+Rockets…? You mean those flying bombs they talked about in Officer Academy!? 
 That's right… But this is my first time seeing a real one. Better be careful, everyone! 

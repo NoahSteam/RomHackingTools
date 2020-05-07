@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+﻿﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
 It's a photo of Maria. She's lost in thought and looks kind of sad…
 A photo of Kanna. Her signature strength comes through clearly.
@@ -464,8 +464,8 @@ Ok, I'll come in just for a little bit.
 Hey, hey, Mon Frère. I can't sleep… Tell me a story. 
 A story? Hmm… 
 "The Monkey and the Crab" <br> The Western "Cinderella" <br> "Stories of my Past" 
-Great, OK, I'll tell you the story of “The Quarrel of the Monkey and the Crab”! 
-Yay! I don't know that one! Hey, what's a "quarrel?" 
+Great, OK, I'll tell you the story of “The Quarrel of the Monkey and the Crab!” 
+Yay! I don't know that one! Hey, what's a "quarrel"? 
 That's right, you were born in France, weren't you? 
 A "quarrel" is like… an argument, but in this story, it means something like a battle. 
 Huh.. Mr. Monkey and Mr. Crab are having a battle? So, what happens? 
@@ -520,7 +520,7 @@ OK, I'll tell you the story. The tale of "The Quarrel of the Monkey and the Crab
 Yay! Tell me! Tell me! 
 …And so the crab and monkey went head to head in an epic duel. 
 The game was Rock, Paper, Scissors! The two battled until they were out of breath. Their fists were flying! But… 
-…the crab defeated the monkey with “scissors”! And that is why crabs’ hands look like scissors to this day. 
+…the crab defeated the monkey with “scissors!” And that is why crabs’ hands look like scissors to this day. 
 And they all lived happily ever after! …I don't think that was exactly how the story went. 
 Ahahahahaa! That was really funny! I laughed so hard my stomach hurts! 
 I'm glad you liked it. OK, I'm going to get going. Sweet dreams. 
@@ -539,7 +539,7 @@ I-Iris!? She fell asleep almost immediately… S-Somehow I feel like this is my 
 Oh well. I should leave the room quietly, so I don't wake her… 
 …
 What's wrong, Mon Frère? 
-W-Well, how about I tell the story of… "The Amazing Person?" 
+W-Well, how about I tell the story of… "The Amazing Person"? 
 Yay! Tell me! Tell me! 
 And then… 
 However… 
@@ -644,7 +644,7 @@ Is there something on my face?
 Chief, thanks for your help with the Koubu! Those upgrades will be ready lickety-split. Look forward to it! 
 (I don't want to get in the way. I guess I'll leave the hangar for now.) 
 Chief, you're just in time. I want your opinion on the Koubu maintenance… 
-What's this? Leaving without hardly saying a word? Bit rude, doncha think?… 
+What's this? Leaving without hardly saying a word? Bit rude, doncha think? 
 If you’re not even gonna listen to me, then why are you still here goggling at everything? 
 If it's something I can help with then please let me know. 
 OK, well, I do have something I want to ask. 
@@ -824,7 +824,7 @@ Unused
 Unused
 Unused
 Ah!?
-Hieeeeee!?… *whack*…
+Hieeeeee…!? *whack*…
 Unused
 What!? You're the one messing it all up!! Stupid hag!!
 Unused

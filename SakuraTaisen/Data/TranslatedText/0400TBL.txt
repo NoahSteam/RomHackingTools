@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
 It's a photo of Sumire. This is a side of her you don't see too often. 
 It's a photo of Maria. She's lost in thought and looks kind of sad… 
 A photo of Kanna. Her signature strength comes through clearly. 
@@ -923,7 +923,7 @@ Iris… where did you go?
 This place is so quiet when there's not a performance going on. 
 …It's no good. I'd better go somewhere else. 
 Yuri, Kasumi, have you seen Iris? 
-No!… Ogami, where might she have gone? 
+No! …Ogami, where might she have gone? 
 I just heard earlier that she’s vanished. 
 Really… so you two don't know where she is either. 
 I’m starting to get worried. We'll help look for her as well. 
@@ -1025,7 +1025,7 @@ Tsubaki, if you happen to see Iris, please let one of us know.
 Sure thing, but…did something happen with her? 
 Ogami… did something happen with Iris? 
 No… it's nothing. 
-This month's performance is called "Love is a Diamond!" 
+This month's performance is called "Love is a Diamond"! 
 Kanna and Sumire are playing the leads… let's hope everything works out… 
 Those two get along like cats and dogs, so I hope everything goes well. 
 No kidding… 
@@ -1102,7 +1102,7 @@ Oh, sorry…
 Oh, no, it's nothing, Kasumi. 
 (There's a quiet, calm look in her eyes.) 
 (Kasumi always looks people right in the eyes when she talks to them.) 
-So, have you seen this month's play, "Love is a Diamond?" 
+So, have you seen this month's play, "Love is a Diamond"? 
 No, not yet. I've been rather busy. 
 It's the perfect piece for Kanna and Sumire. 
 …That reminds me, what are the other girls doing? 
@@ -1184,7 +1184,7 @@ It's Ogami… Kohran, are you there?
 Oh, hey Chief! Just a sec… 
 Oh, drat! 
 Whoa! Wh-What is it? 
-*cough, cough* Oh… Hi, Chief… What's the matter? 
+*cough* *cough* Oh… Hi, Chief… What's the matter? 
 Is everything all right, Kohran? 
 I was just in the process of finishing my latest invention… That's when you showed up… 
 I had just pulled out some wire when I got up to open the door. 
@@ -1220,14 +1220,14 @@ Hm, I'm sure you're right, but isn't that a little too formal?
 Well, no matter. I'll ask Ayame for advice later. 
 If you would excuse me, Ensign? I still have a letter to write… 
 Oh, sure. See you later. 
-Why don't you write "Best regards?" 
+Why don't you write, "Best regards"? 
 Ah! Yes, that sounds right! Not too formal and not too familiar. 
 I have to say… you know your stuff. 
 I'm honestly impressed. 
 Hahaha, thank you. I'm glad I could help. 
 I'll finish up the letter now… Thanks a lot, Ensign. 
 I'll be going then. 
-Why not something like "Yours eternally?" 
+Why not something like, "Yours eternally"? 
 …Ensign, I'm not writing to a long lost lover. 
 We really need to refine your manners… 
 I'm sorry I couldn't be of help. 

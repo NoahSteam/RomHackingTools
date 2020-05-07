@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
+﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
 It's a photo of Sumire. This is a side of her you don't see too often. 
 It's a photo of Maria. She's lost in thought and looks kind of sad… 
 It's a photo of Kanna. She looks strong and reliable. I can't wait to meet her. 
@@ -314,7 +314,7 @@ Huh? Didn't the manager tell you?
 Mr. Yoneda said he was gonna have you punch the tickets. 
 Punch tickets? What tickets? 
 Well, the admission tickets of the guests, of course. 
-What? …What’s that supposed to mean? This is my "secret mission?" 
+What? …What’s that supposed to mean? This is my "secret mission"? 
 Well, I don't know anything about that, sorry. 
 Excuse me, young man. How long do you expect us to wait? Punch our tickets! 
 Today Sumire is starring in "The Eve of Lady Camellia." I can't wait! 
@@ -336,7 +336,7 @@ Punching tickets!? You gotta be kidding me!
 Have fun at practice, you two! …Even if I don't know what kind of practice we're talking about. 
 Thanks, Mon Frère. You should come by later and see, too! 
 Thank you! I hope your ticket punching goes well too, Ogami! 
-(Ticket punching?…) 
+(Ticket punching…?) 
 Hey, Iris. If we're not off to practice soon… 
 You're right. Well, Mon Frère, bye-bye! 
 …Aaaaand they're gone. 
@@ -352,7 +352,7 @@ Ensign Ogami… hasn't the manager told you?
 He said you’re supposed to work as a ticket puncher… 
 Ticket puncher? What is that supposed to mean? 
 You just punch the tickets of our guests. 
-What…? Punching tickets? This is my "secret mission?" 
+What…? Punching tickets? This is my "secret mission"? 
 …Ensign, the guests are already lining up. 
 Excuse me, young man. How long do you expect us to wait? Punch our tickets! 
 Today Sumire is starring in "The Eve of Lady Camellia." I can't wait! 
@@ -502,7 +502,7 @@ Hey, come on in!
 I've ‘eard about you from Count ‘anakoji. No need for formalities, hic. 
 Remember, dis is the Great Imperial Theater, hic. Cut da military talk! 
 How 'bout a drink? 
-What the…! What do you mean, "really?” 
+What the…! What do you mean, "really”? 
 Can't you recognize people without a badge of rank? Hic! I'm Army Lieutenant General Ikki Yoneda! 
 Idiot! 
 Good! Glad we cleared that up. So, let me give you ya’ first assignment. 

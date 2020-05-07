@@ -1,4 +1,4 @@
-﻿I've got to focus!
+﻿﻿I've got to focus!
 Here I go!
 Leave it to me!!
 Watch this, Ogami.
@@ -63,7 +63,7 @@ Get in there, Boss!
 Let's see what you can do!
 Uwahhh…
 Damn. Guess I still haven't trained enough…
-I've gotta keep fighting… for the boss.
+I've gotta keep fighting… for the Boss.
 All right!
 We did it!
 We did it!
@@ -76,16 +76,16 @@ Wh-What?! There's something wrong with my Koubu!
 Everyone, eject! The Koubu… they've hit their limit!
 Roger!
 Ogami, these enemies seem a lot stronger than the ones we've always faced before!
-Ensign, our previous enemies do not hold a candle to these beasts!
+Ensign, our previous enemies don’t hold a candle to these beasts!
 Sir, these are formidable foes!
 Man, these guys can really put up a fight!
 Mon Frère, I'm scared!
 These monsters really aren't messin' around, Chief!
-(Their strength is on a completely different level than ours… what do we do?!)
+(Their strength is on a completely different level than ours… What do we do?!)
 Damn, they're so powerful!
 Ogami, we can't keep this up!
 Ensign, this isn't looking good…
-Sir! As things stand, there's no way we can win! Do you have any strategies in mind?
+Captain! As things stand, there's no way we can win! Do you have any strategies in mind?
 This is bad, Boss! We're gonna get destroyed at this rate!
 This isn't good, Mon Frère! We're losing!
 This is bad, Chief! Our Koubu can't take much more of this!
@@ -113,7 +113,7 @@ I am Deer, of the Three Knights of Twilight. Even if you survive this, you will 
 I am Butterfly, of the Three Knights of Twilight. The lot of you should feel fortunate to have even met me.
 Hohohoho. Be sure to give thanks to your god for our encounter before you die.
 I'm afraid I won't be dirtying my hands this time, either.
-But I imagine they'll offer you enough hospitality in my absence. Now, if you'll excuse me…
+But I imagine these fellows will offer you more than enough hospitality in my absence. If you'll excuse me…
 Sakura trusts you from the depths of her heart. Try attacking with her when you have enough Willpower.
 Sumire trusts you from the depths of her heart. Try attacking with her when you have enough Willpower.
 Maria trusts you from the depths of her heart. Try attacking with her when you have enough Willpower.

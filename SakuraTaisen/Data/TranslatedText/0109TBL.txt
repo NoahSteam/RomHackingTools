@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. Her gaze is so intense. I wonder what she's thinking? 
+﻿﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. Her gaze is so intense. I wonder what she's thinking? 
 It's a photo of Sumire. It shows a side of her that's usually hidden. 
 It's a photo of Maria. She's lost in thought and seems a bit sad… 
 It's a photo of Kanna. In it, she looks as energetic and confident as ever. 
@@ -450,8 +450,8 @@ Perhaps we can cook together again sometime, sir.
 Where should I go next? 
 Hi, Kohran. I came to spend time with you. 
 Hiya, Chief. Sorry, but I'm busy as a bee right now! 
-I'm developing an automated Hanafuda board called "Mr. Koi-Koi!" 
-"Mr. Koi-Koi?" 
+I'm developing an automated Hanafuda board called "Mr. Koi-Koi"! 
+"Mr. Koi-Koi"? 
 Can you maybe come back later? 
 …You're as odd as ever, Kohran. 
 Kohran, it's me… 
@@ -672,7 +672,7 @@ What special ability does Setsuna's Hex Mech have?
 Piercing rounds <br> Double turns <br> Summon allies 
 Who appears in a photo with a dog? 
 Sumire <br> Iris <br> Kohran 
-What did Sumire do to prepare for the party after "Journey to the West?" 
+What did Sumire do to prepare for the party after "Journey to the West"? 
 Moved a table <br> Cleaned up the green room <br> Cooked a meal 
 This is a visual question. 
 What did you do after this? 

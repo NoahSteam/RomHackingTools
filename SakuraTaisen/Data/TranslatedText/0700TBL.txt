@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
 It's a photo of Sumire. This is a side of her you don't see too often. 
 It's a photo of Maria. She's lost in thought and looks kind of sad… 
 It's a photo of Kanna. Her signature strength comes through clearly.
@@ -27,9 +27,9 @@ It's a photo of Kohran. I don't get to see her with her braids undone very often
 It's a photo of Ayame in a traditional outfit. I hope she'll always be as happy and content as she is here. 
 Ayame's gun. Why…? Why did it have to turn out like this…? 
 Ayame! How is Sakura? 
-We brought her straight to the infirmary… But she hasn't regained consciousness yet. 
+We brought her straight to the infirmary… but she hasn't regained consciousness yet. 
 I see… I really wonder why she passed out… 
-Ogami… you worrying about her shows how close you two are. 
+Ogami… your worry for her shows how close the two of you are. 
 No, it's just… 
 Well, no matter. Please, go in. 
 Y-Yes. 
@@ -39,13 +39,13 @@ We brought her to the infirmary straight away…
 Please, check how she's doing. 
 (I thought nothing could ever upset Ayame, but even she seems worried…) 
 Where are you going, Ogami!? Don't you want to see how Sakura's doing? 
-Cut that out please, Ogami! Just go and see how Sakura is doing. 
+Please cut that out, Ogami! Just go and see how Sakura is doing. 
 Sakura! It's me, Ogami! 
 … 
 Sakura! It's me, Ogami! 
 …
 Sakura… Please, answer me… 
-It's no use, she's out for good. Even if a bomb fell down on us, she wouldn't notice. 
+It's no use, she's out like a light. Even if a bomb fell down on us, she wouldn't notice. 
 (She doesn’t appear to have any physical injuries…) 
 (It's heartbreaking to see her like this…) 
 (Damn! Is there nothing I can do?) 
@@ -62,24 +62,24 @@ So, please… wake up! Sakura…
 Why… Why won’t you wake up? What's causing this? 
 (*gulp* No! I can’t be staring at Sakura at a time like this, that would be just wrong!) 
 (But still… it's impossible not to look…) 
-Ogami… what are you staring at? 
+Ogami… What are you staring at? 
 Er, me?! 
 (Ayame's going to get angry. I'd better avert my eyes.) 
 (Not a stitch of clothing on her…) 
 (I shouldn't think like this, but… she’s really beautiful!) 
 Hmph… This reflection is really annoying… 
-Do you realize you said that out loud? 
+You do realize you said that out loud just now? 
 Wha…?! I'm… I'm sorry! 
 (Ayame's going to get angry. I'd better avert my eyes.) 
 Where are you going, Ogami!? Don't you want to see how Sakura's doing? 
-Cut that out please, Ogami! Just go and see how Sakura is doing. 
+Please cut that out, Ogami! Just go and see how Sakura is doing. 
 Why doesn't she wake up if she's not even injured…? 
-No idea… The only thing I know is the energy flow in her body is extremely high. 
+I have no idea… The only thing we do know is that the energy flow within her body is extremely high right now. 
 Even though she's unconscious? 
 This is just a theory, but… 
 Perhaps the shock earlier put her in a state of trance… 
-What's happening to her? <br> What's a state of trance? 
-So… what's happening to her? 
+What happens to Sakura now? <br> What's a state of trance? 
+So… what happens to Sakura now? 
 We don't have any way to wake her up currently… 
 That means the Flower Division has lost an important part of its fighting capabilities. 
 That can't be! Ayame… please tell me that's not true! 
@@ -97,17 +97,17 @@ You have to be strong, especially at a time like this.
 Y-Yes… 
 …Sakura seems to be in some sort of hypnosis and won't wake up. 
 As long as she doesn't want to wake up of her own will… there's not much we can do. 
-No… It can't be! 
+No… it can't be! 
 Sakura! Are you all right?! 
 Mon Frère! What's up with Sakura? Please say she's OK! 
 …Ensign. What's her status? 
 W-Well… 
 Tell the truth. <br> Dodge the question. <br> Act cheerfully. 
-Sakura…seems to be in a state of trance. 
+Sakura… seems to be in a state of trance. 
 What?! 
 …A state of trance?! 
 Sakura… 
-Hey, Kanna. What's a "state of trance?" 
+Hey, Kanna. What's a "state of trance"? 
 Well, er… 
 It’s when someone falls asleep and doesn't wake up. 
 No worries. She isn't hurt… She's just sleeping. 
@@ -121,7 +121,7 @@ For real? I was worried for a sec…
 Then, that means we can see her soon. 
 Er, yeah, that’s right. 
 But… I'm still a bit worried. 
-There's nothing to worry about. This is Sakura we're talking about. She's tough. 
+There's nothing to worry about. This is Sakura we're talking about. Nothing can put her down for long. 
 …Exactly. Sumire is right. 
 … 
 She's not really all right, is she? 
@@ -138,7 +138,7 @@ I know we're all worried about Sakura, but let's start the strategy meeting.
 You're right. Come on, everyone. To the War Room. 
 …
 (The city is under threat and Sakura is still unconscious… This isn't good…) 
-Captain… is everything OK? You're frowning… 
+Boss… Everything OK? You're frowning… 
 Kanna… 
 Smile. <br> Confess your worries. 
 Hahaha, I'm fine! The fight is only just beginning. We can't be moping around now. 
@@ -147,13 +147,13 @@ Hm, well… not really, to be honest.
 The Hive of Darkness is acting up, and Sakura's in that pitiful state… 
 Oh shoot… I wanted to cheer you up, but now I'm only contributing to the doom and gloom… 
 A frown doesn't suit you, Kanna! Come on, cheer up! 
-OK. Thanks, Captain! 
-Well… I'd be lying if I said I wasn't worried. 
-Captain! Please stop! 
+OK. Thanks, Boss! 
+Well, I am a bit worried… I'd be lying if I said I wasn't afraid. 
+Boss! Please stop! 
 K-Kanna… 
-Worried, afraid… Those are words I didn't want to hear from your mouth. 
-I was sure you'd know what to do… 
-…I'll go ahead. See you there, Captain. 
+Worried, afraid… Those are not the words I wanted to hear from you. 
+As our captain, I wanted to believe that you’d know what to do in a time like this… 
+Anyway… I'll go on ahead. See you there, Boss. 
 Kanna… 
 She's right… I shouldn't let everyone see my insecurities. I have to keep their spirits up. 
 … 
@@ -180,8 +180,8 @@ Kohran…
 OK, see ya, Chief… 
 Somehow I find it hard to be as energetic as you, Kohran… 
 You've been something of a stranger lately, Chief. 
-Sorry. 
-I'm scared stiff, you know… I just act like this to make it go away… 
+…Sorry. 
+I'm scared stiff, you know… I just act like this to make those fears go away… 
 Haha… 
 Look, let's try again, OK? Woohoo! 
 Er… Woohoo! 
@@ -196,7 +196,7 @@ Sorry.
 It's OK, Chief… I know you have to deal with more than we can imagine. 
 And you're all alone while doing it. 
 Kohran… 
-You've grown strong, Chief. But… You can depend on us once in a while, you know? 
+You've grown strong, Chief. But… you can depend on us once in a while, you know? 
 That's what friends are for. 
 Thanks, Kohran. 
 OK, see ya, Chief… 
@@ -205,7 +205,7 @@ Is that you, Kohran? <br> Is that you, Maria? <br> Is that you, Sumire?
 Is that you, Kohran? 
 You can't be serious! Do I talk as sloppy as that street kid?! 
 Is that you, Maria? 
-Did you forget that Maria is always wearing gloves? Don't tell me you forgot my hands. 
+Did you forget that Maria always wears gloves? How could you mistaken my elegant hands for coarse leather?
 Is that you, Sumire? 
 Hohoho… There's no mistaking my sonorous voice, is there? 
 Hahaha, no doubt about it. It's you, Sumire! 
@@ -241,17 +241,17 @@ Bzzzzt! Wrong! It's me, Iris!
 Wha…?! 
 Hehehe! Did I surprise you, Mon Frère? 
 Is that you, Iris? 
-Hehehe… You caught me! Not bad, Frère! 
+Hehehe… You caught me! Not bad, Mon Frère! 
 How could I mistake you for someone else? 
 Hehe, that makes me happy! 
 (Iris…) 
-(Wait a second… how did she reach up to my eyes!?) 
+(Wait a second… How did she reach up to my eyes!?) 
 Is that you, Sakura? 
 Come on! Why would Sakura be here? 
 …
 Oh… Sorry, Iris. 
 Iris… 
-(Wait a second… how did she reach up to my eyes!?) 
+(Wait a second… How did she reach up to my eyes!?) 
 … 
 Are you mad, Mon Frère? 
 I'm sorry… You looked all gloomy, so I thought… 
@@ -261,13 +261,13 @@ Iris…
 Scold her. <br> Play along. 
 Iris! This is hardly the time for fun and games! 
 I… *sniff*… I just thought you looked so sad, and… 
-That's why I… I wanted to…cheer you up. 
+That's why I… I wanted to cheer you up. 
 Wait, please hold on… Don't cry, Iris! 
 …? 
 I didn't understand what you were up to, I'm sorry! 
 So… *sniff*… you're not mad, Mon Frère? 
 Of course not! 
-Are you feeling…better? 
+Are you feeling… better? 
 I'm fine, I'm fine! 
 Yay, I'm so happy! 
 (I have to make it up to her…) 
@@ -276,7 +276,7 @@ Huh? Hahaha! I can't see anything! Is this your revenge for earlier?
 Exactly… So, who am I? 
 Hahahaha! Mon Frère of course! 
 Ding dong! Correct answer! 
-That was fun! You look much happier now, Frère! And that makes ME happy! 
+That was fun! You look much happier now, Mon Frère! And that makes ME happy! 
 Ah… Iris. Were you worried about me? 
 Of course I was… After all, we're gonna be married someday! 
 I have to look out for my future husband! 
@@ -291,7 +291,7 @@ I love you, so I want to help you…
 So… please cheer up, OK? 
 Iris… 
 Hehehe… 
-See you later, Frère! 
+See you later, Mon Frère! 
 Thank you, Iris. 
 Captain… are you OK? You look a bit pale. 
 Maria… 
@@ -299,15 +299,15 @@ Smile. <br> Confess your worries.
 Hahaha, I'm fine! The fight is only just beginning. We can't be moping around now. 
 Sorry to make you worry, Maria. 
 It's all right. This is about all I can do right now. 
-We're in a right pickle, aren't we, Captain Ogami? 
+We're in pretty dire straits, aren't we, Captain? 
 You see right through me, Maria. 
 But at a time like this, you have to be stronger than ever in order to keep up morale. 
 Please do your best! 
 You're right… I will! 
 I have to admit, I'm a bit worried. 
 Captain… That's… 
-You, Maria? Whatever happens, you stay calm. I envy you. 
-To tell you the truth, Captain… I'm worried myself. 
+What about you, Maria? No matter what happens, you always stay calm. I envy you. 
+To tell you the truth, Captain… I'm very worried myself. 
 … 
 But I made a decision. Never falter, never hesitate… 
 And above all, no regrets. You should stop moping, Captain. 
@@ -319,9 +319,9 @@ You've really grown strong, Captain.
 Huh…? 
 Until a while ago, you would have depended on someone else in such a situation. 
 You're right… 
-But I figured I'm the one who should talk to you then. 
+But I've always been the one you come to at times like that. Or so I thought, at least. 
 Maria… 
-And I'm… No… forget about it. 
+And I'm… No, forget about it. 
 Please excuse me. 
 (Everyone's here. Well, except Sakura.) 
 I won't budge! <br> Calm down, Commander! 
@@ -329,7 +329,7 @@ I won't budge! We can't let you go alone, Commander!
 What!? 
 You shouldn't go meet Tenkai alone… We should all go, as the Imperial Assault Troupe, Flower Division! 
 And we won't go there to lay down and die. 
-The Flower Division will move out to defeat Tenkai…and to protect the capital! 
+The Flower Division will move out to defeat Tenkai… and to protect the capital! 
 Ogami… 
 Please calm down, Commander! We haven't lost yet! 
 Sakura might not be there, but the Flower Division is as strong as ever. The Koubu and the Soaring Whale are ready! 
@@ -370,7 +370,7 @@ I hate to say it… but Sumire is right. The difference in numbers is just too o
 We'll be dead at four o'clock. 
 Hey, Mon Frère! You already thought of a plan, right? Right? 
 (Iris…) 
-(Tenkai announced he'd destroy the capital at four in the morning. That's only…about one hour from now.) 
+(Tenkai announced he'd destroy the capital at four in the morning. That's only… about one hour from now.) 
 (You gotta think, Ogami. What… What should we do!?) 
 If we attack their base… <br> Strengthen Tokyo's defenses. 
 I know! We attack their base! We just ignore their underlings and go straight for Tenkai himself! 
@@ -384,9 +384,9 @@ How about we strengthen Tokyo's defenses and evacuate all the civilians?
 But if Tenkai's magical force field is activated, it will probably destroy the entire capital. 
 Not everyone will get out in time. To be blunt, that's not a good plan at all. 
 …Damn it. We have to think of something! 
-But… Everyone… Everyone's going to die!? 
-There's only one hour left… Once Tenkai's magical force field activates, the whole of Tokyo will be destroyed. 
-Wait… doesn't that mean we just have to do something about the force field itself? 
+But… everyone… everyone's going to die!? 
+There's only one hour left… Once Tenkai's magical force field activates, all of Tokyo will be destroyed. 
+Wait… Doesn't that mean we just have to do something about the force field itself? 
 Yes! Ignore all the underlings and go straight for Tenkai. One decisive strike, just like in karate! 
 Hm, one hour might just be enough time to do that. 
 …But how will we ever find out where Tenkai is? 
@@ -415,7 +415,7 @@ Sumire, please…
 Hmph! 
 What do you think, Captain? That large dot sure looks suspicious… 
 I think that's Tenkai. <br> I don't think it's Tenkai. 
-That large power spike… That must be Tenkai, leader of the Hive of Darkness! 
+That large power spike… That must be the leader of the Hive of Darkness, Tenkai! 
 Finally we've got him! Just you wait, Tenkai… 
 Captain. The Thunderstrike and the Koubu are ready for deployment! 
 Understood. 
@@ -426,7 +426,7 @@ Something's not right there…
 …No clue. Based on this, I really can't say. 
 But whatever’s emitting that strong spiritual force must be stopped, regardless. 
 Time's running out. We have to go with our gut on this one. 
-We can't go wrong if we take down the strongest of the bunch. It's just like brawling! 
+We can't go wrong if we take down the strongest of the bunch. Same rule applies in a brawl! 
 I think so, too! 
 Captain… I agree with everyone. 
 Anyway, we don't have time to think about this any longer. Let's move out! 

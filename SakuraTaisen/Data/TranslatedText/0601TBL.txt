@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
 It's a photo of Maria. She's lost in thought and looks kind of sad…
 A photo of Kanna. Her signature strength comes through clearly.
@@ -244,7 +244,7 @@ Pervert!
 Degenerate! 
 What are you saying? And how do you know those words?! 
 I-I dunno! 
-Ah! Iris!… She left… Well, that's a shame. 
+Ah! Iris…! She left… Well, that's a shame. 
 …I've been caught, have I? Oh well, what can you do, ahahaha… 
 Grrrrrrr! Mon Frère is such an idiot! Pervert! Dirty old man! I can't believe this! 
 Uggh! Get out of here! 
@@ -664,7 +664,7 @@ That was nine words just there! Aaah…
 Wh-What's wrong? 
 Ah… Damn it… 
 You're building noses? 
-You dimwitted…! What are you talking about?! I said "nosey!" 
+You dimwitted…! What are you talking about?! I said "nosey"! 
 Oh, I just shoved it right in without thinking about it! 
 K-Kohran! If you scream like that… 
 Ah… Damn it… 
@@ -686,7 +686,7 @@ S-Sorry…
 I slaved away on him for a month! What a mess… I'll go see the others. 
 Chief… Next time someone tells you to shut up, you better listen. Please, I mean it… 
 I'll go and meet up with the others. They're probably in the salon. You better not follow me! 
-What are you talking about? What is this "Party Boy?" 
+What are you talking about? What is this "Party Boy"? 
 Today was the last show of the summer season. And I promised I'd have him ready for the celebrations… 
 For an entire month I spent my nights working to create the perfect party trick robot… 
 Oh, dear Party Boy… Please forgive me. 
@@ -699,7 +699,7 @@ Oh, and… I'm really sorry you had to witness this disaster… Sorry.
 Nonsense! But… I really would have liked to see Party Boy in action. 
 … 
 In that case, I'm gonna show you a little secret later. You can look forward to it! 
-And off she goes… What did she mean by "secret?" 
+And off she goes… What did she mean by "secret"? 
 I'm coming in, Kohran… 
 Kohran… What do you think you're doing? 
 C-Chief!? How long have you been here? 
@@ -720,7 +720,7 @@ I'm fine. But look! Look what happened to Party Boy… He's in a million pieces!
 I'm sorry… 
 Don't you "sorry" me! We're lucky he was just an entertainment robot. 
 If I'd been working on my Spirit Energy Bomb, all of Ginza might be gone now. 
-"Party Boy?" What's that? 
+"Party Boy"? What's that? 
 Hm? You wanna know about Party Boy? 
 See these pieces everywhere? That's the most advanced entertainment robot the world has ever seen. 
 Entertainment robot? 

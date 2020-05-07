@@ -1,4 +1,4 @@
-﻿﻿﻿﻿Ready~ 
+﻿﻿﻿﻿﻿Ready~ 
 Victory pose… Yeah! 
 Heh heh heh… Terror, confusion, the government in disarray… What a beautiful sight. 
 The capital is ours! 
@@ -19,13 +19,13 @@ Retreat!
 We'll settle this another day, Imperial Assault Troupe! 
 Woo-hoooo! 
 Phew… No problem for me. 
-That…wasn't so bad. 
+That… wasn't so bad. 
 Ogami, that was fantastic! 
 Looks like you're starting to shape up. 
 You'd better keep up this pace from here on, sir. 
 We'll show no mercy to those who would threaten the safety of the capital! 
 Come at me anytime! 
-Everybody pay attention. I'm going to explain how to operate your Koubu. 
+Everybody, pay attention. I'm going to explain how to operate your Koubu. 
 Sakura, we'll start with you. 
 Here I go! 
 Turn order is determined by Movement. Put simply, units with stronger willpower will get to act sooner. 
@@ -39,30 +39,30 @@ After you're finished moving and attacking, that unit's turn will end.
 Sumire, you're up next. 
 Haha, it's time for the real star to take the stage, Ensign. 
 Grace, beauty… My techniques are art in its purest form. Please hold your applause for after the show. 
-Koubus have no problem jumping down from higher areas. 
-But, going up they can only handle single steps. They can't climb anything 2 levels or higher above them. 
+The Koubu have no problem jumping down from higher areas. 
+But, when going up, they can only handle single steps. They can't climb anything 2 levels or higher above them. 
 I'll teach you the folly of a pup baring its fangs at a goddess! 
 You can take 2 actions per turn. 
-Sakura and Sumire Moved and then Attacked, but… 
-It is also possible to Attack, then Move. 
+Sakura and Sumire moved and then attacked, but… 
+It is also possible to attack, then move. 
 That's what I'll do right now. 
-So, you see, you are free to Move and Attack in any order you wish. 
-Move, then Attack. Or, Attack, then Move… 
+So, you see, you are free to move and attack in any order you wish. 
+Move, then attack. Or, attack, then move… 
 Consider carefully what will work best for the situation at hand. 
 However, remember that you can't take the same action twice in one turn. 
-You can neither Attack twice, nor Move twice. 
+You can neither attack twice, nor move twice. 
 All right, Ensign Ogami. Go ahead and move your Koubu. 
 Sakura! We still don't know the extent of the enemy's strength. Focus on your defense. 
 Got it! 
 Do you understand, Ensign? 
 Koubu have the ability to repair damage. 
 This can be used on allied units, as well as your own unit. 
-If you use the Defense action, you can lessen the damage you take from enemy attacks. 
+If you use the Defend action, you can lessen the damage you take from enemy attacks. 
 How dare you miserable curs put a scratch on my Koubu. 
 Pray to your gods for forgiveness, as you'll have none from me! 
 As you can see, Ensign Ogami… 
 Taking damage causes your Willpower to increase. 
-You can also use an action to gather your own Willpower as Sumire just demonstrated. 
+You can also select the Rest command to gather your own Willpower as Sumire just demonstrated. 
 Once your Willpower is full, you can use a Special Attack. 
 Taste my wrath! 
 Kanzaki Fujin-ryu! Butterfly Waltz! 
@@ -77,7 +77,7 @@ Podozhdi!
 My Special Ability is Podozhdi. 
 Enemies I hit with it will be paralyzed, and unable to move for a while. 
 All right, from here on I'll leave it to you to give us orders, sir. 
-First, let's annihilate the enemy Hex Mechs and Rear Guard. 
+First, let's annihilate the Rearguard Hex Mechs. 
 That appears to be one of the enemy commanders. Make sure to keep everyone healed up while we face them. 
 I think everyone will be fine without my protection. 
 I will protect you, Sakura! 
@@ -86,14 +86,14 @@ Let me watch your back for you, Maria.
 I'll always be there for you, Iris. 
 Don't worry, Kohran! I'll protect you! 
 Kanna! I've got your back! 
-They got away… but, we were able to protect the Capital!! Let's return to base, everyone!! 
+They got away… but, we were able to protect the capital!! Let's return to base, everyone!! 
 Just a moment, Ogami. It's not time for the Flower Division's curtain call just yet! 
 W-What? 
 Ensign Ogami, those are members of the Hive of Darkness. 
 <LIPS> Please explain. <br> I'm already aware. 
 I see, that's reassuring. Then I'll leave all the instructions up to you from here on. 
 A single mistake can cost lives on the battlefield!! Focus, sir!! 
-Two actions can be taken on a single turn. Once you've 'moved' and 'attacked', your turn is over. 
+Two actions can be taken on a single turn. Once you've “moved” and “attacked,” your turn is over. 
 Next is my turn. 
 Once your Willpower has reached its maximum, you can use a Special Attack. 
 You can also choose to accumulate Willpower, as you just saw. It also raises as you take damage. 
@@ -102,11 +102,11 @@ Wait, Sumire. Please heal Sakura.
 Honestly! Here I was all fired up for my moment in the spotlight, but no, the country girl needs some help. 
 Sorry for being from the country! 
 Please be aware of the limits on the number of actions you can take. 
-There is also a 'Defend' action, which will reduce incoming damage from enemy attacks. 
-The effect of 'Defend' lasts until your next turn. 
-During battle you can take 2 actions each turn, but you may only use the same action type 1 time per turn. 
+There is also a “Defend” action, which will reduce incoming damage from enemy attacks. 
+The effect of “Defend” lasts until your next turn. 
+During battle you can take two actions each turn, but you may only use the same action type once per turn. 
 Normal and Special Attacks are considered the same type, so you can't use them both on the same turn. 
-'Rest', 'Defend' and 'Restore' are also considered the same type, so you cannot use 2 in the same turn. 
+“Rest,” “Defend” and “Restore” are also considered the same type, so you cannot use two in the same turn. 
 However, you are free to use them in any order you wish. You could move then attack, or you could attack then move. 
 I will now explain the operation of Koubu. Please pay attention. 
 I need to focus! 
@@ -188,8 +188,8 @@ It feels strange fighting here.
 Why? 
 …Oh, well I guess you didn't really think it was important, so never mind… 
 This is where I first met you. 
-Hehe… That's right. Strange that we're having our first battle together where we first met… or maybe it's destiny… 
-This is where you had that article written about you: 'Mysterious Young Lady Cuts Down Monster'. 
+Hehe… That's right. Strange that we're having our first battle together where we first met… Maybe it's destiny… 
+This is where you defeated the Hex Mech and became a news story. “Mysterious Young Lady Cuts Down Monster.”
 Oh, come on! Please just forget about that, it's embarrassing! 
 Huh…? 
 …Oh, well I guess you didn't really think it was important, so never mind… 

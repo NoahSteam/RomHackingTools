@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
 It's a photo of Maria. She's lost in thought and looks kind of sad…
 A photo of Kanna. Her signature strength comes through clearly.
@@ -171,7 +171,7 @@ Do you need something?
 (Not a hair out of place.) 
 (She really does have beautiful hair… She must spend a lot of time getting ready every day.) 
 (Kasumi has a very calm expression…) 
-(She looks gentle, but I bet she's scary if you make her angry… she's kind of the reliable older sister type.) 
+(She looks gentle, but I bet she's scary if you make her angry… She's kind of the reliable older sister type.) 
 …Is something the matter, Ogami? 
 Oh, no, it's nothing, Kasumi. 
 (There's a quiet, calm look in her eyes.) 
@@ -455,7 +455,7 @@ I'm heading out!
 Well… guess I'd better go help out too. 
 Sakura! Wait! I need to talk to you! 
 O-Ogami? 
-*pant, pant*… S-Sakura… about what happened earlier… 
+*pant* *pant*… S-Sakura… about what happened earlier… 
 Y-Yes… 
 Well… See, the truth is… 
 Tsubaki was quite busy today, right? I just thought it would be nice to treat her to dinner. 
@@ -805,7 +805,7 @@ Come on, let's go inside. You're probably hungry, right?
 Yeah! I'm starving! Let's go, Mon Frère! 
 Sorry, Iris… I haven't found everything yet. 
 What? Are you kidding? It's all right there in the kitchen! 
-The kitchen?… Of course! OK, I'll go get it all right now. 
+The kitchen? …Of course! OK, I'll go get it all right now. 
 Oh forget about it! I just want you here, Mon Frère! 
 Everyone's waiting for us. Let's go inside! 
 Hey, come to think of it, has Sakura made it back from doing the shopping yet? 
@@ -922,7 +922,7 @@ Hahaha, she's so excited she took off running. Well, guess I'd better look for t
 Here's your list. I'm counting on you, Mon Frère. 
 Huh?! Hang on, Iris, I never said I'd help you. 
 Oh yes you will, I already asked you so no backing out. Bring it all to the green room once you have it. 
-Iris, w-wait!… Well, there she goes. Oh well. 
+Iris, w-wait! …Well, there she goes. Oh well. 
 Hmm, let's see… cups, knives and matches. 
 They should all be in the kitchen or dining room. I should look for them there. 
 Oh look, it's Mon Perv. 

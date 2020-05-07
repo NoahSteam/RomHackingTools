@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
 It's a photo of Sumire. This is a side of her you don't see too often. 
 It's a photo of Maria. She's lost in thought and looks kind of sad… 
 It's a photo of Kanna. Her signature strength comes through clearly.
@@ -36,9 +36,9 @@ Yes…
 Since the cat is out of the bag now, there's something I have to tell you. 
 Take a look at this… 
 Why are there Kouma in a picture as old as this!? 
-This is the oldest one we know of right now. 
+This is the oldest known record of those demons that we have right now. 
 The war against the Kouma didn't just start recently. 
-Four hundred years ago, a large scale conflict between man and Kouma took place right here on this land. 
+Four hundred years ago, a large-scale conflict between man and Kouma took place right here on this land. 
 Back then, we won. We struggled but managed to seal them away deep beneath the earth. 
 However, even while hidden from us, the Kouma continued to plot their return to the surface. 
 A few times during those four hundred years, they broke the magic barrier and carried out small attacks. 
@@ -49,7 +49,7 @@ The Imperial Anti-Kouma Corps was put together for precisely that reason.
 We're talking long ago… No one seriously considered demons a threat to the capital back then. 
 Sakura's father, Kazuma Shinguji, and myself gathered allies in secret. 
 For us, the Kouma’s presence was all too real. 
-B-But… Even though you didn't have Spirit Armor, you managed to fight them? 
+B-But… you managed to fight them, even though you didn't have Spirit Armor? 
 Of course, back then we couldn't dream of fighting the Kouma on a level playing field, like we can now. 
 We had to rely on the strength of our arms and the blades of our swords… 
 By the time the Kouma War was over, we had lost both Kazuma Shinguji and Shinnosuke Yamazaki. 
@@ -57,11 +57,11 @@ That was six years ago…
 Kazuma Shinguji possessed an unparalleled spiritual force… the "Power of Purification." 
 But Kazuma didn't die in vain… He sealed the Kouma. 
 The Power of Purification? 
-I think I told you before, but the Demon Hunters have passed down the Power of Purification since ancient times. 
-But only a small number of their bloodline remains… The Shinguji family is one of them. 
+I mentioned them before, but the demon hunters have passed down the Power of Purification since ancient times. 
+But only a small number of their bloodline still remains… The Shinguji family is one of them. 
 The Shinguji bloodline… 
 …So Sakura should have the same power? 
-Yes… but unleashing that power requires knowledge of ancient secrets. 
+Yes… But unleashing that power requires knowledge of ancient secrets. 
 Perhaps Colonel Shinguji was planning to teach them to Sakura once she'd come of age. 
 That means together with Shinguji, we have also lost our means to fight back against the Kouma… 
 But one last trump card still remains… 
@@ -70,7 +70,7 @@ Yes! One last desperate measure. I'm talking about… this!
 Th-This is…! 
 These are what we call the Pandemonium Regalia. 
 Pande-what? 
-As you can see, the Pandemonium Regalia are ancient ritual items comprised of a sword, jewel and mirror. 
+As you can see, the Pandemonium Regalia are ancient ritual items consisting of a sword, jewel and mirror. 
 If someone with a pure heart holds them, they can suppress the power of the Kouma. They're super effective! 
 …!? 
 But they may only be used in exceptional circumstances. That's very important! 
@@ -80,7 +80,7 @@ No, it's nothing…
 Now that the force field holding the Kouma has been opened by the Hive’s Hexagram of Infernal Calling… 
 The Pandemonium Regalia is the only thing keeping them from breaking out onto the surface. 
 The Pandemonium Regalia is our last resort. 
-Our…last resort? 
+Our… last resort? 
 But listen, Ogami… The Pandemonium Regalia are at the same time our biggest threat. 
 If they were to fall into the wrong hands… 
 …Then the Kouma would come to the surface with their powers strengthened tenfold! 
@@ -93,13 +93,13 @@ What's this?
 Sacred what? 
 As their name indicates, the Pandemonium Regalia contains the powers of all demons and gods, of good and evil. 
 I didn't tell you before, but our true mission is to protect the Pandemonium Regalia from those with sinister ambitions. 
-…!? 
-As long as the key to unsealing the Castle is in our hands, they will surely try to take it. 
-Ogami… the Kouma will come here sooner or later. 
+…!!
+As long as the key to unsealing the Sacred Demon Castle is in our hands, they will surely try to take it.  
+Ogami… The Kouma will come here sooner or later. 
 That's why you and Ayame have to ensure the Regalia's safety at all costs. 
 Yes! 
 This is a top-secret mission, so you mustn't tell anyone. Not even your own squadmates! 
-Sakura… does she know how her father died? 
+Sakura… Does she know how her father died? 
 No… he didn't tell me. Ogami, can you say it? 
 You're saying the monster we're fighting now is the same one that killed Kazuma?! 
 It is too heavy a burden for a young woman of 18 years. If she knew… 
@@ -128,7 +128,7 @@ Mon Frère? I saw him and Auntie Ayame go downstairs a while ago.
 Downstairs? 
 What are they doing there? 
 I wonder what's going on. 
-Ogami… 
+Ensign… 
 It may seem fun at first, but comedy's hard work, too. 
 Let the Boss bring you some medicine. 
 That's the thing. Ogami isn't here. 
@@ -148,7 +148,7 @@ Mon Frère? I saw him and Auntie Ayame go downstairs a while ago.
 Downstairs? 
 What's going on? 
 That sounds suspicious. 
-Ogami… 
+Chief… 
 It may seem fun at first, but comedy's hard work, too. 
 Let the Boss bring you some medicine. 
 That's the thing. Ogami isn't here. 
@@ -168,7 +168,7 @@ Mon Frère? I saw him and Auntie Ayame go downstairs a while ago.
 Downstairs? 
 What are they doing there? 
 That sounds suspicious. 
-Captain… 
+Boss… 
 If we place a trap here, the enemy won't reach the underground storage room even if they invade the theater. 
 …A trap? But what kind of trap? 
 Let's use a bucket of water! <br> Let's spray them with steam! <br> Let's dig a pitfall! 
@@ -176,7 +176,7 @@ Let's see… How about having a bucket of water fall on their heads? That'd be f
 … 
 …I'm sorry. 
 Hehehe… 
-Ha…hahaha… 
+Ha… hahaha… 
 Hehehe…You're funny, Ogami. 
 Phew… (That wasn't supposed to be a joke…) 
 Hehehe… I like that about you. You're always so easygoing… 
@@ -197,7 +197,7 @@ How about a pitfall?
 A pitfall?! 
 That's a tried and trusted method since the dawn of time. 
 But Ogami, how exactly do you intend to dig a hole into the floor of the theater? 
-…Well… 
+Well… 
 It's a nice idea, but the walls and floor are made of Celesteel… 
 Without some heavy machinery, you can't even scratch it. 
 Celes-what? 
@@ -207,15 +207,15 @@ Hmmm…
 I can't think of anything at the moment… 
 Sorry… 
 No need to apologize, Ogami. It was me who put you on the spot like that. 
-By the way… the storage room has pretty strong spiritual protection, doesn't it? 
+By the way… The storage room has pretty strong spiritual protection, doesn't it? 
 Yes, exactly. Only a fairly powerful Kouma could break through here. 
 But we should prepare any counter measures we can, so we're ready for whatever comes our way.
 …I suppose. 
 Oh, you've… you've got oil on your face. 
 No, please… I'll wipe it off myself! 
-Oh, don't be childish! You have to take better care of your appearance from now on. 
+Oh, don't be childish! You ought to take better care of your appearance from now on. 
 (She always smells so nice…) 
-Remember when we first met? How I did the same for you then? 
+Remember when we first met? How I did something similar back then? 
 …Ah, you're right. Sakura was mad at me after that. 
 Hehe… 
 Ahahaha. 
@@ -299,7 +299,7 @@ Unused
 Unused
 Unused
 Unused
-That man… Cerulean Satan… maybe his true goal is the Pandemonium Regalia. 
+That man… Cerulean Satan… Maybe his true goal is the Pandemonium Regalia. 
 The Pandemonium Regalia are the key to the gates of the Sacred Demon Castle. 
 They're in our possession right now. 
 No one except me and Ayame can open this vault. 

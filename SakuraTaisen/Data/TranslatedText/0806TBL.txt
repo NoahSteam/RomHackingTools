@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
 It's a photo of Maria. She's lost in thought and looks kind of sad…
 A photo of Kanna. Her signature strength comes through clearly.
@@ -44,14 +44,14 @@ Kohran's special training was building this very device.
 Hehehe… And now you know. 
 OK, Ogami! Give the dispatch order! 
 Ready to move out! <br> Show them our training! 
-Imperial Assault Troupe, ready to move out! Let's send those Kouma back to hell! 
+Imperial Assault Troupe, ready to move out! Let's send the Kouma back to hell! 
 Roger! 
-We spent three weeks with special training… 
-Now is the time to show them the results! 
+We each spent the last three weeks getting stronger in our own way…
+Now is the time to show the enemy the results of our training! 
 I'll do my best, too! 
 We'll show them the true power of the Flower Division! 
 Jinbu… The time has finally come to demonstrate your capabilities! 
-Come on, everyone! Let's show them the results of our special training! 
+Come on, everyone! Let's show the Kouma our newfound strength! 
 Roger! 
 We'll strike them down in one fell swoop! 
 Let's do this, Ogami! 
@@ -61,7 +61,7 @@ Erm… Imperial  Assault Troupe, ready to move out!
 What power! The Koubu doesn’t even compare… With these, we can win! 
 Ogami! 
 Let's do our best, Sakura. Show me the results of your special training! 
-Yes!… Ogami, I wanted to ask you… during your special training, did you and Maria… 
+Yes! …Ogami, I wanted to ask you… during your special training, did you and Maria… 
 What is it? 
 …No, it's nothing! Sorry to bother you at a time like this… 
 All right! Activate Jinbu Spirit Armor! 
@@ -83,9 +83,9 @@ Imperial Assault Troupe, move out!
 Yes, sir! 
 …Boss! 
 Kanna? I hope you'll show me the results of your special training! 
-Hehe… You didn't dilly-dally during these past three weeks, did you? 
+Hehe… You didn’t spend the last three weeks goofing off, did you? 
 Of course not! I'm counting on you! 
-Yes! On the battlefield, I always give it all I've got! 
+You bet! On the battlefield, I always give it all I've got! 
 All right! Activate Jinbu Spirit Armor! 
 Imperial Assault Troupe, move out! 
 Yes, sir! 
@@ -97,7 +97,7 @@ Imperial Assault Troupe, move out!
 Rooooger! 
 …Chief! 
 Kohran, this machine is incredible! 
-'Course it is! I poured a lotta my love into your Jinbu, Chief! 
+'Course it is! I poured a lotta of love into your Jinbu, Chief! 
 …Huh? 
 Er… My love for the Jinbu, of course! I hope you didn't think anything weird. 
 You got it. 

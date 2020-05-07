@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
+﻿﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
 It's a photo of Sumire. This is a side of her you don't see too often. 
 It's a photo of Maria. She's lost in thought and looks kind of sad… 
 It's a photo of Kanna. She looks strong and reliable. I can't wait to meet her. 
@@ -432,7 +432,7 @@ I'm begging you! I can't have been sent here just to take tickets all day, right
 Aren't I meant to be captain of the Imperial Assault Troop? 
 Gracious me, what a pest you are! I am forbidden to speak of… 
 …!! 
-"Forbidden?" Did you say "forbidden?!" 
+"Forbidden"? Did you say "forbidden"?! 
 Sumire, what do you mean? What are you forbidden to speak of, and by whom?! 
 …P-Pardon me. There are some pressing matters I must attend to. 
 I hate to leave after you took the time to come and see me, but I must bid you adieu for now. 
@@ -785,7 +785,7 @@ I see. Thanks.
 (…Is she angry with me for what happened earlier?) 
 … 
 Mon Frère, sorry about before… 
-…'cause it's not good to "eavesdrop." 
+…'Cause it's not good to "eavesdrop." 
 Iris… 
 Maria scolded me earlier. 
 Mon Frère… Please don't hate me. 

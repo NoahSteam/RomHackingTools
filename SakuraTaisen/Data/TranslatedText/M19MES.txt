@@ -1,4 +1,4 @@
-﻿﻿﻿﻿You've grown strong… It seems like I didn't misjudge you.
+﻿﻿﻿﻿﻿You've grown strong… It seems like I didn't misjudge you.
 Hehehe, but still…
 That's it? This is how determined… How strong you are?
 Are you that afraid of hurting me?
@@ -12,7 +12,7 @@ Yes!
 Ogami…
 Ensign…
 Chief…
-Captain…
+Boss…
 Sir!
 Mon Frère…
 Ogami… You have to win… You have to…
@@ -23,7 +23,7 @@ Mon Frère… You can't lose… You can't!
 Sir… You have to win… Please…
 Impossible! The likes of you could never beat me…!
 No! I won't have this!!
-Hehehe… I'll release all of the Castle's power at once!
+Hehehe… I'll release all of the castle's power at once!
 Fear will rain down on the whole world!
 Goodbye, Imperial Assault Troupe! It looks like… you lost in the end!
 You'll pay for all of the sins humans have committed!
@@ -69,7 +69,7 @@ Hehehe… Cat got your tongue?
 Guah!
 Ogami!
 Ensign!
-Captain!
+Boss!
 Sir!
 Chief!
 Mon Frère!
@@ -153,7 +153,7 @@ We did it…!
 Gah…
 Ogami?!
 Ensign?!
-Captain?!
+Boss?!
 Chief?!
 Sir?!
 Mon Frère?!
@@ -166,7 +166,7 @@ I'll send you all to hell… And there, you can apologize to Aya-me!
 …
 Ogami…
 Ensign…
-Captain…
+Boss…
 Chief…
 Sir…
 Mon Frère…
@@ -187,17 +187,17 @@ We won't forgive you, Cerulean Satan… The Imperial Assault Troupe will deal yo
 Hahahahaha! You're one to speak, after being helped by your enemy!
 Don't worry… I'll send you all to hell, where Aya-me is already waiting for you…
 I'm fine now. Let's defeat Satan together, Ogami!
-Sakura!… OK, let's do this!
+Sakura! …OK, let's do this!
 I'm fine now. Let's defeat Satan together, Ensign!
-Sumire!… OK, let's do this!
-I'm fine now. Let's defeat Satan, captain!
-Maria!… OK, let's do this!
+Sumire! …OK, let's do this!
+I'm fine now. Let's defeat Satan, Captain!
+Maria! …OK, let's do this!
 I'm fine now. Let's defeat that a-hole together, Boss!
-Kanna!… OK, let's do this!
+Kanna! …OK, let's do this!
 I'm fine now. Let's defeat Satan together, Chief!
-Kohran!… OK, let's do this!
+Kohran! …OK, let's do this!
 I'm fine now. Let's give that guy a beating, Mon Frère!
-Iris!… OK, let's do this!
+Iris! …OK, let's do this!
 The world will be gone in just a few moments! Your lives, your struggle, your deaths will all be meaningless!
 Hahahaha…
 What… are you trying to do?
@@ -215,7 +215,7 @@ Flower Blizzard!
 To ensure this world has a future!
 Ogami… don't give up.
 Ensign… I won't forgive you if you lose.
-Captain… Please fight with all your strength.
+Boss… Please fight with all your strength.
 Chief… you can't give up now!
 Mon Frère… do your best!
 Sir… you can't lose now!

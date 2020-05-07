@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
 It's a photo of Sumire. This is a side of her you don't see too often. 
 It's a photo of Maria. She's lost in thought and looks kind of sad… 
 It's a photo of Kanna. Her signature strength comes through clearly. 
@@ -32,43 +32,43 @@ Hehehe…
 Who is it? Speak! 
 Huh? Waaah! 
 Hah… Hah… Hah… 
-Erm… Demons that come from the dark shall manifest into this our realm… and do evil… 
-From the lands of darkness, by the seal of Yamato… 
+Erm… “Demons that come from the dark shall manifest into our realm… and do evil…” 
+“From the lands of darkness, by the seal of Yamato…” 
 This is hard to understand… 
 What are you reading there, Chief? 
 I wanted to research the Kouma. 
 And what kind of book is that? 
-It's a manuscript called "Abandon the Gods." Lieutenant General Yoneda lent it to me. 
+It's a manuscript called "Abandon the Gods." Lt. General Yoneda lent it to me. 
 Lemme see that… 
 Hey, be careful! It's a priceless book! 
 Ah, here you are, Captain. It's about Yoneda… 
 Hm? That book…! 
-Maria, do you know about this old thing? 
+Maria, have you seen this dusty old tome before? 
 Yoneda lent it to me when I became captain of the Flower Division. 
 He lent it to you too? 
-He just said there's something in here that every captain of the Flower Division should know. 
-Ayame explained it to me back then, so I was able to read it… 
+Yes, he told me that the book contained information that every captain of the Flower Division should know.
+Back then, I was able to parse its difficult text thanks to Ayame taking the time to walk me through it…  
 Ask Maria about the contents. <br> Ask Ayame about the contents. 
 Maria… Could you tell me what's written in it? 
 I wouldn't mind personally, but… if Yoneda lent it to you directly… 
-Didn't he mean for you to find out yourself? 
-Should I ask Ayame for help, too? 
-I don't know… Ayame is strict with things like this. 
+Doesn’t that mean he meant for you to decipher its contents on your own?
+Should I ask Ayame for help as well? 
+I don't know… Ayame can be strict about things like this. 
 Don't you think you're supposed to find out what it means by yourself? 
 … 
 Good luck, Captain. 
 Oh boy… I should take a break. 
-Captain… you shouldn't leave an important book like that lying around on the floor… 
+Captain… You shouldn't leave an important book like that lying around on the floor… 
 Mon Frère, I brought you some juice! 
 Hm? Oh, thank you, Iris. 
 Hey, Iris! Mind your step! 
-Huh?… Ah! 
+Huh? …Ah! 
 Ah, Iris! 
 Stop Iris from falling. <br> Protect the priceless book. 
 Ah, Captain! I almost forgot… Yoneda wants to see you. 
-Hm… OK! And where? 
+Hm… OK! Where is he? 
 He's waiting for you in the underground storage room. 
-The underground storage room? I hope he doesn't want me to clean up the storage this time… 
+The underground storage room? I hope he doesn't want me to clean up the storage or something… 
 He seemed to be in a hurry, so you should go see him as soon as possible. 
 Ah…! 
 Ah… 
@@ -95,13 +95,13 @@ It's a little sticky, but it'll wash off.
 Well… 
 Maria, are you all right? 
 Yes… 
-Chief, why did you put the book there of all places? 
+Chief, why did you put the book on the floor of all places? 
 …Sorry. 
 Oh, it's time! We have to start practicing for the show… 
-Oh dear, so late already? 
+Oh dear, it’s that late already? 
 What are you performing today? 
-"Dinosaur Island." Me and Iris play the main parts. 
-For Kohran, it's the first leading role since "Wings." 
+"Dinosaur Island." Me and Iris are playing the leading roles. 
+For Kohran, it's her first starring role since "Wings." 
 Dinosaur Island? What is it about? 
 Well, er… It's about an explorer! 
 …? 
@@ -113,7 +113,7 @@ Right, a farce! Comedy is the very foundation of mass entertainment.
 A comedy? A farce? And… Maria is in it, too? 
 No, I'm not in it. This time, I'm working behind the scenes. 
 Oh… I see. 
-(Somehow I'm curious how Maria would be in a comedy…) 
+(I'm curious how Maria would be in a comedy…) 
 OK, let's go. 
 Oh, but… Maria, she… 
 Sorry, but you go ahead. I'll have to wash my hair first. 
@@ -150,8 +150,8 @@ Ah… hahaha…
 Oh, it's time! We have to start practicing for the show… 
 Oh dear, so late already? 
 What are you playing today? 
-"Dinosaur Island." Me and Iris play the main parts. 
-For Kohran, it's the first leading role since "Wings." 
+"Dinosaur Island." Me and Iris are playing the leading roles. 
+For Kohran, it's her first starring role since "Wings." 
 Dinosaur Island? What is it about? 
 Well, er… It's about an explorer! 
 …? 
@@ -163,12 +163,12 @@ Right, a farce! Comedy is the very foundation of mass entertainment.
 A comedy? A farce? And… Maria is in it, too? 
 No, I'm not in it. This time, I'm working behind the scenes. 
 Oh… I see. 
-(Somehow I'm curious how Maria would be in a comedy…) 
+(I'm curious how Maria would be in a comedy…) 
 OK, let's go. 
 …Ah! 
 Whoa! The… The… The book! 
 Sorry, Mon Frère. 
-"Abandon the Gods" is an exceedingly rare and valuable book… 
+"Abandon the Gods" is an exceedingly rare and valuable manuscript… 
 Ah, don't worry! The Chief can just pay for it out of his pocket, can't he? 
 Yes… Hahaha… Hey, wait a second! What about my living expenses? 
 I didn't realize you even had a life. 
@@ -176,8 +176,8 @@ Enough…
 Oh, it's time! We have to start practicing for the show… 
 Oh dear, so late already? 
 What are you playing today? 
-"Dinosaur Island." Me and Iris play the main parts. 
-For Kohran, it's the first leading role since "Wings." 
+"Dinosaur Island." Me and Iris are playing the leading roles. 
+For Kohran, it's her first starring role since "Wings." 
 Dinosaur Island? What is it about? 
 Well, er… It's about an explorer! 
 …? 
@@ -189,7 +189,7 @@ Right, a farce! Comedy is the very foundation of mass entertainment.
 A comedy? A farce? And… Maria is in it, too? 
 No, I'm not in it. This time, I'm working behind the scenes. 
 Oh… I see. 
-(Somehow I'm curious how Maria would be in a comedy…) 
+(I'm curious how Maria would be in a comedy…) 
 OK, let's go. 
 Oh, Ogami. Let me handle the reception today. 
 You should rest. 
@@ -203,7 +203,7 @@ Oh, sorry…
 (Not a hair out of place.) 
 (She really does have beautiful hair… She must spend a lot of time getting ready every day.) 
 (Kasumi has a very calm expression…) 
-(She looks gentle, but I bet she's scary if you make her angry… she's kind of the reliable older sister type.) 
+(She looks gentle, but I bet she's scary if you make her angry… She's kind of the reliable older sister type.) 
 …Is something the matter, Ogami? 
 Oh, no, it's nothing, Kasumi. 
 (There's a quiet, calm look in her eyes.) 
@@ -212,26 +212,26 @@ Will the administration office be fine?
 Yes, I left the office to Yuri in the meantime… 
 Are you worried Yuri won't manage on her own? 
 No. She's well-organized, plus she's got a good eye for detail. 
-Really? But yeah, perhaps that's why she's suited for administrative tasks. 
+Really? But yeah, I suppose that's why she's suited for administrative tasks. 
 (Because she loves rumors like nobody else.) 
 There are more children attending the show than usual… 
 You're not really comfortable around kids, are you? Don't worry, I'll handle the reception. 
 Thank you. Last time was terrible, with how much I was pushed around. 
-My shirt got torn by everyone grabbing me and shouting "It's the ticket puncher!" 
+My shirt got torn by everyone grabbing me and shouting, "It's the ticket puncher!" 
 Hehehe… Look who's popular. You should be happy! 
 By the way, there's something I wanted to talk to you about… 
 What is it? 
 It's… It's about Ayame. She doesn't seem herself lately… 
 Huh…? 
-And… Everyone's a bit worried about her. 
+And… everyone's a bit worried about her. 
 She always managed to cheer us up, no matter what happened. But now… 
 I wonder if she's worried about something. 
 I don't really know… But anyway, I have to get back to work. 
 OK. See you later. 
 (That ribbon in her hair… it really suits her.) 
 (It’s a charming look on someone as mature as Kasumi.) 
-Ah, Ogami? Manager Yoneda was looking for you! 
-Oh, by the way… Lieutenant General Yoneda is waiting in the underground storage room. 
+Ah, Ogami. Wasn’t Manager Yoneda looking for you? 
+Oh, yeah… Lt. General Yoneda is waiting for me in the underground storage room. 
 Sorry, I have to get going… 
 I hope you're not in trouble. Well, see you around… 
 Oh, Ogami. Hi! 
@@ -239,7 +239,7 @@ How can I help you?
 (Her clothes are pretty colorful.) 
 (Maybe she's going for that popular bus guide look?) 
 Something the matter, Ogami? 
-No I was just thinking… your outfit is pretty cute. 
+No I was just thinking… Your outfit is pretty cute. 
 Oh you noticed? I'm glad you like it! I actually coordinated this outfit myself. 
 Huh… 
 (Goodness… that's certainly an aggressive neckline…) 
@@ -262,19 +262,19 @@ Of course! Ordering stage equipment is part of my job description after all.
 Oh, really? 
 It's a pretty grand-scale show called "Dinosaur Island." 
 The sets are gigantic. I'm sure it's just as expensive as "For Love." 
-We're putting a lot of effort in, so I'm sure it will be a huge success. 
+We're putting a lot of effort into it, so I'm sure it will be a huge success. 
 Did you notice? How Ayame is behaving, I mean… 
 Ayame? 
 Yes, don't you think she's looking awfully pale? She looks like she hasn't slept in a month. 
 I wonder what's up with her. 
-March already… time never stops, huh? 
-Thinking about it… it's almost a year since I came here. 
+March already… Time never stops, huh? 
+Now that I think about it… it's been almost a year since I first arrived here. 
 The cherry blossoms seem to be late this year. I wonder why. 
-The season for strolls in the park is still ahead of us. Ueno Park will become busy. 
-The fear that had this city in its grip seems to have all but vanished. 
-Now it's March, things are looking pretty good again. 
-You mean like clearing your name? 
-And all thanks to the Jinbu! 
+The season for strolls in the park is still ahead of us. Ueno Park is sure to become very busy. 
+The fear and anxiety that had its grip on the capital seems to have all but vanished. 
+Now it's March, the economy has improved and things are looking pretty good again. 
+Do I sense an oncoming compliment? 
+And it’s all thanks to the Jinbu! 
 Hey, hey… 
 Hehehe… I'm kidding of course. It's all thanks to you guys! 
 Last month's show, "My Fair Lady," drew in a very one-sided crowd. 
@@ -286,9 +286,9 @@ Of course! Ordering stage equipment is part of my job description after all.
 Oh, really? 
 It's a pretty grand-scale show called "Dinosaur Island." 
 The sets are gigantic. I'm sure it's just as expensive as "For Love." 
-We're putting a lot of effort in, so I'm sure it will be a huge success. 
+We're putting a lot of effort into it, so I'm sure it will be a huge success. 
 Oh, by the way… the manager was looking for you, Ogami. 
-Ah… You're right, I remember. 
+Ah… You're right, I almost forgot. 
 (She's got her scarf pinned with a brooch.) 
 (I wonder what it's made of… Couldn't be a real jewel, right?) 
 …Do you like my brooch? This thing was a bargain, I got it super cheap! 
@@ -300,16 +300,16 @@ Hm? Ogami…
 (Tsubaki is always taking care of the shop all by herself…) 
 Is something wrong, Ogami? 
 I was just thinking how well you're managing the shop all on your own. 
-Hehehe… Do I hear praise from your mouth? Why, thank you! 
+Hehehe… Are you praising me? Thank you for the compliment! 
 (I really should control myself! Tsubaki is still a child…) 
 (It's all right! Tsubaki still has a ways to go…) 
 (Tsubaki is wearing her hair short, very dynamic.) 
 (What a cute hairstyle. It really suits her.) 
-(Her freckles look lovely. There's still a bit of a child in her face.) 
-(That said, she's in fact only 15 after all…) 
+(Her freckles look lovely. They add a certain youthfulness to her appearance.)
+(That being said, Tsubaki is still only 15, so of course she looks youthful…) 
 (She's got lively eyes.) 
 (Despite her young age, she's got a serious look in her eyes.) 
-Oh, by the way… did you like the portrait card from last time? 
+Oh, by the way… Did you like the portrait card from last time? 
 Of course! Thanks for giving me such a nice one! 
 Hehe… It was my pleasure. 
 Thanks to "Dinosaur Island," there's loads of people here today who brought their children. 
@@ -317,15 +317,15 @@ There's no end to kids who're bugging their parents to buy them Kanna's portrait
 Really? I guess Kanna is very popular with the kids. 
 Of course! Kanna loves kids, and they totally idolize her. 
 I see. 
-The most popular one with children is definitely Kanna, followed by Sakura and… Kohran, in that order. 
+Kanna is definitely the most popular with children, followed by Sakura and… Kohran, in that order. 
 What, Kohran? 
-Yeah, Kohran is always doing magic tricks and comedy skits during the intermission… 
-She always makes the kids laugh themselves silly… And her way of speaking is also very relatable to them. 
+Yeah, Kohran is always doing magic tricks and comedy skits during intermissions… 
+She always makes the kids laugh themselves silly… and her way of speaking is also very relatable to them. 
 Hmm… 
 …By the way, Manager Yoneda was looking for you earlier. 
 Yes… I have to go to the underground storage room. I was just on my way there. 
 Please come again. 
-Oh? Didn't you need something from me? 
+Oh? Did you need something from me? 
 Yeah, but… it's fine. I'll be back. 
 What is it? Can I help you, Ogami? 
 …Yes, who is it? 
@@ -336,7 +336,7 @@ Er… Excuse me. It's me, Ogami.
 …Ogami? Please don't scare me like that. 
 Oh, I'm… I'm sorry… (I seem to have surprised her. Was she thinking about something?) 
 Hehe… No matter, I'll forgive you. By the way… 
-…Didn't I tell you before that you shouldn't intrude on a lady's room too much? 
+…Didn't I tell you before that you shouldn't intrude on a lady's room? 
 (As always, everything's in its proper place. Huh…? What's with that book on the desk?) 
 (I can't see it properly because of Ayame's shadow, but I can make out the word "Kouma.") 
 Ogami? 
@@ -345,7 +345,7 @@ Earth to Ogami! Can you hear me?
 Ah… I'm sorry! What did you want to talk about? 
 Ogami… Is my room really that interesting to you? 
 Well, I… I was just curious about that book on your desk… 
-The "Kouma War Chronicles?" Sure, I'll show it to you as soon as I have some free time. 
+The "Kouma War Chronicles"? Sure, I'll show it to you as soon as I have some free time. 
 I would appreciate that. 
 Oh no! Is it that late already? 
 Yoneda is waiting for you in the underground storage room. 
@@ -371,13 +371,13 @@ What's up, Ogami?
 Ayame… are you all right? 
 …Me? I'm fine, thank you. 
 …I see. 
-Hehe… A strange one, you are. 
+Hehe… You’re a strange one. 
 (When she looks at you, you always feel reassured.) 
 (The color of those eyes… I could drown in them.) 
 Something the matter, Ogami? You've been staring me in the eyes for a while. 
 Ah… I'm sorry! 
 By the way… I heard Yoneda lent you that book, "Abandon the Gods." 
-Yes… although I haven't read much of it yet… 
+Yes… Although I haven't read much of it yet… 
 I guess it's pretty hard to get into… 
 But more importantly, I've got the Kouma War Chronicles here. I'll lend them to you. 
 Yes, please do! I can't make heads or tails of that old book… 
@@ -388,12 +388,12 @@ Y-Yes, sir!
 Everything ready, Ogami? 
 Yes. 
 Wait a second, Ogami! Didn't you want to talk to me about something? 
-No… it's all right. I'll come back some other time. 
-A strange one, you are. By the way, I hear Yoneda has been looking for you. 
+No… It's all right. I'll come back some other time. 
+You're a strange one. By the way, I hear Yoneda has been looking for you. 
 Oh, shoot! I was supposed to go to the underground storage room! 
 Well… I guess that means you shouldn't loaf about here. 
 …I'm sorry. 
-Get a grip, Captain! 
+Pull yourself together, Captain. 
 Huh? There's someone there… 
 Peek in the shower room. <br> Go back to the corridor. 
 I wonder who's in there… 
@@ -421,7 +421,7 @@ Ma-Manager!
 … 
 (What's with that look? Something you wanna tell me?) 
 …
-Both of you… you're hopeless… 
+Both of you… You're hopeless… 
 A-Ayame… 
 What a spry gentleman you are, Lieutenant General… 
 Hm… Ahem! You're late, Ogami. I was looking for you. 
@@ -453,7 +453,7 @@ Sure…
 I prefer a different costume. 
 Really? What kind of costume should I wear then? 
 I'd say you should dress like a feisty princess. That would suit you! 
-"Feisty?!" That's not fair, I'm very ladylike I’ll have you know! 
+"Feisty"?! That's not fair, I'm very ladylike I’ll have you know! 
 Haha, yes… but… feisty is cute, in your case… 
 … 
 What's up Ogami? Cat got your tongue? 
@@ -469,7 +469,7 @@ Oh boy, is it this late already? I've gotta change!
 Ogami? It's just, as long as you're there, I can't change… 
 Ah, sorry. See you later… 
 The typical outfit of an explorer. 
-(That makes me shiver just from looking. February is too early for such a get-up.) 
+(That makes me shiver just from looking. February is too chilly for such a get-up.) 
 (The rucksack of an intrepid explorer.) 
 (Hehe… I'm surprised they found one in Iris' size.) 
 Hehe! Not bad, is it? 
@@ -533,9 +533,9 @@ Ehehe… You're flattering me, Chief.
 Hehehe… If we cut this rope, he'll fall into the canyon head first… 
 (Sounds scary… So it's a thriller, I guess?) 
 (Kohran looks like she's enjoying herself.) 
-(The explorer looks completely different from the scientist though…) 
+(The explorer look is certainly a big change in character from her usual science-loving self…) 
 Look at this, Chief! This is my climbing machine, Cliffy! 
-(I see…) 
+(Never mind…) 
 I'm pretty sure Yoneda wanted to see you, Chief. 
 The typical outfit of an explorer. 
 (…Isn't she cold?) 
@@ -549,7 +549,7 @@ What, you're done? That was fast.
 By the by, Chief… Did you take a good look at Ayame lately? 
 Hm… Come to think of it, I haven't seen her around lately. 
 She doesn't look herself at all these days. She seems to be lost in thought a lot… 
-…Is she feeling bad? 
+…Is she feeling unwell? 
 Nah, I can't imagine that's it. Ayame is someone who never gets sick. 
 I see… 
 But… I've never seen her down like that, ever. 
@@ -558,35 +558,35 @@ Would you do that? Thanks…
 See you around. 
 I'm worried about the show… 
 You really are a worrywart, Chief. 
-That piece called "Dinosaur Island"… it's pretty spectacular, apparently… 
+That piece called "Dinosaur Island"… I heard it's pretty spectacular, apparently… 
 I explained it to you before, didn't I? We've got something arranged for the show. 
 Arranged…? 
 A bold foray into new waters, by Imperial Theater standards. A fusion of comedy and musical show! 
 Huh… 
 After the comedy part, there will be a mixed children's choir. Exciting, isn't it? 
 I'm looking forward to it! Can't wait! 
-Hehe, you won't be disappointed! By the way, Chief… weren't you going to the underground storage room? 
+Hehe, you won't be disappointed! By the way, Chief… Weren't you going to the underground storage room? 
 Ah… You're right. OK, I'm off. 
 Later! 
 I thought you weren't in the play? 
-Are you kidding? You know I'm a member of the Flower Division, right? I'll rock any role you want. 
-Don't you remember "Wings?" Wasn't it the same back then? 
-…It was? 
+Are you kidding? You know I'm a member of the Flower Division, right? I'll rock any part you give me. 
+Don't you remember "Wings?" I knocked that role out of the park! 
+…You did? 
 Come on, Chief! Don't tell me you've forgotten!? 
-The Imperial Theater's November piece "Wings" was a true epic starring yours truly as a brave WW2 plane pilot. 
+The Imperial Theater's November piece "Wings" was a true epic starring yours truly as a brave WWII plane pilot. 
 We used more pyrotechnics than ever before! In the grand finale, we had a full-scale biplane on the stage! 
 Ah, now I remember! You mean when the explosion was so big that part of the auditorium was destroyed, right? 
 Th-That wasn't my fault! Who could have known the machine gun was loaded with live bullets? 
 Yeah, who could have known… 
-Don't give me that look! Oh, and… Weren't you supposed to go to the underground storage room, Chief? 
-Oh, right!… Wait a second. Nice try changing the subject! 
+Don't give me that look! Oh, by the way… Weren't you supposed to go to the underground storage room, Chief? 
+Oh, right! …Wait a second. Nice try, changing the subject! 
 Ahaha… Better hurry! 
 …OK, I'm off. 
 … 
 Chief? Aren't you supposed to be in the underground storage room? 
-Really. 
+Ah, right. 
 Oh dear, you have to keep your appointment… or you'll get in trouble! 
-I know. I'll go there. 
+I know. I’ll go right now. 
 Manual labor, me?! This is the worst day of my life! 
 It can't be helped, it's all hands on deck right now. 
 Those voices… Sumire and Kanna? I wonder what's going on. 
@@ -597,9 +597,9 @@ Usually, we have our stage hands for this kind of work!
 For some reason they've all left, and someone has to do the work. 
 But why me of all people? Yoneda, that dirty old… 
 That was an order, unless you want to quit? If not, shut up and do your work! 
-Hmph!… Hey, Kanna, that totem is upside down. 
-Oh, I see!… Sumire! There's a trap door on the stage, so watch out! 
-I know, I know. What kind of fool do you think I am to fall into such an obvious hazard? 
+Hmph! …Hey, Kanna, that totem is upside down. 
+Oh, I see… Sumire! There's a trap door on the stage, so watch out! 
+I know, I know. Do you think I’d fall into such an obvious hazard? What kind of fool do you think I am?
 (They seem to be on top of things here…) 
 OK, I'll head to the underground storage room. Hang in there, you two! 
 Yes, sir… 
@@ -617,7 +617,7 @@ I should go to the underground storage room, too.
 Oh, Ogami, I was looking for you. Come, quickly, the manager is already fuming! 
 Oh, I see…! But Ayame, what's down there in the storage room? 
 Just come with me, all right? It's rude to keep others waiting. 
-OK… sorry. 
+OK… Sorry. 
 What are you doing!? You're already late! Get a move on! 
 I'm a little busy right now… <br> How might I be of service? 
 I'm a little busy right now… I'll head there later. 

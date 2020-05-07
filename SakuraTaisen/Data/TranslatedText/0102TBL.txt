@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. Her gaze is so intense. I wonder what she's thinking? 
+﻿﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. Her gaze is so intense. I wonder what she's thinking? 
 It's a photo of Sumire. It shows a side of her that's usually hidden. 
 It's a photo of Maria. She's lost in thought and seems a bit sad… 
 It's a photo of Kanna. She looks energetic and confident. I can't wait to meet her. 
@@ -578,7 +578,7 @@ Sumire's room is very beautifully decorated.
 Y~es? Who is it~? 
 It's Ogami… I've got something for you. 
 What is it, Ensign? And Sakura? What are you two doing here at this hour… 
-This afternoon while punching tickets, I got a letter from a man who said he was “your biggest fan”. 
+This afternoon while punching tickets, I got a letter from a man who said he was “your biggest fan.” 
 I figured I should pass it along to you. Here you go. 
 Well… You came here just to hand this to me? Thank you very much! 
 Though I'm not used to mail deliveries in the middle of the night. 
@@ -599,7 +599,7 @@ Um… It's Ogami…
 …Come to peep at me while I change again? 
 (Craaap… She's still pissed about that…) 
 …I'm afraid I was just about to lay down. Please see me tomorrow if you have something to discuss. 
-…Ogami, what on earth did she mean “peep AGAIN”? 
+…Ogami, what on earth did she mean “peep AGAIN?” 
 Well! Uh! Th-That was… 
 …Never mind, let's just go. Sumire will be upset if we start arguing in front of her door. 
 R-Right… 
@@ -650,9 +650,9 @@ Hmm… Wow.
 Everything looks fine. Let's keep going. 
 This is the dressing room. 
 Nothing looks out of place. Let's keep going. 
-We call this a “wing”. We wait here for our turn to go out on stage. 
+We call this a “wing.” We wait here for our turn to go out on stage. 
 Oh… So that's what this spot is called. 
-This is a “wing”, right? The performers wait for their turn on stage here. 
+This is a “wing,” right? The performers wait for their turn on stage here. 
 That's right. You're a quick learner! 
 …Nothing looks out of place here. Let's move on. 
 This is the stage. This is where we work our magic. 
@@ -667,7 +667,7 @@ Well, you'll have to do that on your own time. Let's keep going.
 This is the prop room. 
 Right. Everything looks fine, so let's keep going. 
 This is the large prop room. 
-“Large props”? 
+“Large props?” 
 Yes, that refers to all the larger objects we use to set the performance's scene. We store all that here.
 I see… 
 Everything appears to be in order. Let's keep going. 

@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+﻿﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often. 
 It's a photo of Maria. She's lost in thought and looks kind of sad… 
 It's a photo of Kanna. Her signature strength comes through clearly.
@@ -26,15 +26,15 @@ It's a photo of Iris in her swimsuit. She's holding a rubber ring and looks read
 It's a photo of Kohran. I don't get to see her with her braids undone very often. It's a nice look. 
 It's a photo of Ayame in a traditional outfit. I hope she'll always be as happy and content as she is here. 
 Ayame's gun. Why…? Why did it have to turn out like this…? 
-Sakura! Thank God you regained consciousness…! 
+Sakura! Thank God you regained consciousness! 
 Ogami… Sorry, I'm late. 
 Not at all! We escaped from the clutches of death thanks to you… 
-I-It looks like I was unconscious. I thought I'd never be able to open my eyes again. 
-That is… I've become used to your power.. that's why I can talk to you like this.. 
+It looks like I was unconscious… I thought I'd never be able to open my eyes again. 
+I-I'm just so glad. So glad I could be of use to you, and so glad I could talk with you again like this. 
 Sakura… 
 O-Ogami… I… 
 Ah! It's Sakura! Everyone, Sakura is here! Come quickly! 
-…Looks like we've been found out. Just…when the two of us were finally alone. 
+…Looks like we've been found out. Just when the two of us were finally alone. 
 We were able to make it out just by a hair's breadth. Thank goodness all of us are safe! 
 Ah! It's Sakura! Everyone, Sakura is here! Come quickly! 
 Iris… Everyone! 
@@ -44,9 +44,9 @@ Seriously… Always making us worry!
 But… Sakura, how did you regain consciousness? 
 Uh… I was actually having a dream. 
 A dream…? 
-What kind of a dream? <br> Weren't you feeling cold? 
+What kind of a dream? <br> Weren't you cold? 
 What kind of a dream was it? 
-More importantly, You were sleeping naked… weren't you cold? 
+More importantly, you were sleeping naked… Weren't you cold? 
 Jeez… Ogami! Don't tease me! Aren't you embarrassed? 
 Now that you mention it, Ogami… You were staring at Sakura quite intently. 
 O-Ogami?! 
@@ -55,12 +55,12 @@ Heheh… Sorry.
 Hey, Sakura. What kind of a dream did you have? 
 Hey, Sakura. What kind of a dream did you have? 
 Uh… It was nostalgic and warm… but mysterious too. 
-Demons sealed behind a…gate?! 
+Demons sealed behind a… gate?! 
 What?! Sakura! What did you just say? 
 Y-Yes… The Hive’s base is located above a gate that seals an ancient evil… 
 Do you know something about this, Commander Yoneda? 
 Yeah… 
-Five years ago, a battle called "The Kouma War" took place… 
+Five years ago, a battle called the “Kouma War" took place… 
 The Kouma…War… 
 On one side was the Kouma, an ancient force of demons. On the other was the military's Anti-Kouma Corps. 
 I established the special unit with my old comrade Kazuma Shinguji, gathering the elite of the military’s infantry. 
@@ -73,13 +73,13 @@ Thus, we managed to seal the Kouma deep in the earth under the capital.
 But we paid a hefty price… 
 The Kouma War… I had never heard of it before. 
 Ogami… You look like you have many questions. 
-The Anti-Kouma Corps…? <br> An ancient spell…? <br> Kazuma Shinguji…? 
-The Anti-Kouma Corps…? <br> An ancient spell…? 
-The Anti-Kouma Corps…? <br> Kazuma Shinguji…? 
-The Anti-Kouma Corps…? 
-An ancient spell…? <br> Kazuma Shinguji…? 
-An ancient spell…? 
-Kazuma Shinguji…? 
+The Anti-Kouma Corps? <br> An ancient spell? <br> Kazuma Shinguji? 
+The Anti-Kouma Corps? <br> An ancient spell? 
+The Anti-Kouma Corps? <br> Kazuma Shinguji? 
+The Anti-Kouma Corps? 
+An ancient spell? <br> Kazuma Shinguji? 
+An ancient spell? 
+Kazuma Shinguji? 
 The Anti-Kouma Corps… What kind of an outfit was it? 
 We didn't have the Koubu back then. We were just a group of warriors who fought the Kouma with our swords. 
 It was the predecessor of the Imperial Assault Troupe. 
@@ -159,7 +159,7 @@ Unused
 Unused
 Unused
 This is… 
-Huh!… Oh… 
+Huh…! Oh… 
 If you want to protect someone you love… you have to stand up and fight! 
 With love in our hearts, we can overcome any difficulty. 
 Truly loving someone… that means putting your life on the line! 
