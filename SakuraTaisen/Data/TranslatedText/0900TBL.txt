@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
 It's a photo of Sumire. This is a side of her you don't see too often. 
 It's a photo of Maria. She's lost in thought and looks kind of sad… 
 It's a photo of Kanna. Her signature strength comes through clearly. 
@@ -570,7 +570,7 @@ Ah… You're right. OK, I'm off.
 Later! 
 I thought you weren't in the play? 
 Are you kidding? You know I'm a member of the Flower Division, right? I'll rock any part you give me. 
-Don't you remember "Wings?" I knocked that role out of the park! 
+Don't you remember "Wings"? I knocked that role out of the park! 
 …You did? 
 Come on, Chief! Don't tell me you've forgotten!? 
 The Imperial Theater's November piece "Wings" was a true epic starring yours truly as a brave WWII plane pilot. 
@@ -578,7 +578,7 @@ We used more pyrotechnics than ever before! In the grand finale, we had a full-s
 Ah, now I remember! You mean when the explosion was so big that part of the auditorium was destroyed, right? 
 Th-That wasn't my fault! Who could have known the machine gun was loaded with live bullets? 
 Yeah, who could have known… 
-Don't give me that look! Oh, by the way… Weren't you supposed to go to the underground storage room, Chief? 
+Don't give me that look! Oh, by the way… Weren't you supposed to go to the underground storage room? 
 Oh, right! …Wait a second. Nice try, changing the subject! 
 Ahaha… Better hurry! 
 …OK, I'm off. 
@@ -700,7 +700,7 @@ And after everything is dead and gone, new life will be born!
 Destruction is only the prelude to new life! 
 On the night of the crimson moon, the strongest of all the Kouma will be born again… 
 And they will join us in our ecstasy of extermination! 
-Kouma “Deer!” 
+Kouma “Deer”! 
 Yes, master! 
 You will buy us the time we need. 
 As you command. 

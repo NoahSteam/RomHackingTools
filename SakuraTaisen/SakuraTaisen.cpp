@@ -7236,6 +7236,9 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 		unsigned long origVDP1Value = 0;
 		unsigned long newVPD1Value  = 0;
 
+		unsigned short origVDP1Value_Short = 0;
+		unsigned short newVPD1Value_Short  = 0;
+
 		//Cursor image VDP1 offset
 		slgFile.ReadData(0x00014058, (char*)&origVDP1Value, sizeof(origVDP1Value), true);
 		newVPD1Value = origVDP1Value + battleMenuDelta;
@@ -7271,7 +7274,8 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 		newVPD1Value = origVDP1Value + battleMenuDelta + textDelta;
 		slgFile.WriteData(0x0000FF68, (char*)&newVPD1Value, sizeof(newVPD1Value), true);
 
-		//Battle reaction sprites
+		//Battle reaction sprites 2
+		if( !GIsDisc2 )
 		{
 			slgFile.ReadData(0x0000FF78, (char*)&origVDP1Value, sizeof(origVDP1Value), true);
 			newVPD1Value = origVDP1Value + battleMenuDelta + textDelta;
@@ -7285,6 +7289,40 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 			newVPD1Value = origVDP1Value + battleMenuDelta + textDelta;
 			slgFile.WriteData(0x00010FE4, (char*)&newVPD1Value, sizeof(newVPD1Value), true);
 		}
+
+#if 0
+		//Battle reaction sprites 3
+		if( 0 )
+		{
+			slgFile.ReadData(0x0000FF70, (char*)&origVDP1Value, sizeof(origVDP1Value), true);
+			newVPD1Value = origVDP1Value + battleMenuDelta + textDelta;
+			slgFile.WriteData(0x0000FF70, (char*)&newVPD1Value, sizeof(newVPD1Value), true);
+
+			slgFile.ReadData(0x00001044, (char*)&origVDP1Value, sizeof(origVDP1Value), true);
+			newVPD1Value = origVDP1Value + battleMenuDelta + textDelta;
+			slgFile.WriteData(0x00001044, (char*)&newVPD1Value, sizeof(newVPD1Value), true);
+
+			slgFile.ReadData(0x0000CCCC, (char*)&origVDP1Value, sizeof(origVDP1Value), true);
+			newVPD1Value = origVDP1Value + battleMenuDelta + textDelta;
+			slgFile.WriteData(0x0000CCCC, (char*)&newVPD1Value, sizeof(newVPD1Value), true);
+
+			slgFile.ReadData(0x000169B0, (char*)&origVDP1Value, sizeof(origVDP1Value), true);
+			newVPD1Value = origVDP1Value + battleMenuDelta + textDelta;
+			slgFile.WriteData(0x000169B0, (char*)&newVPD1Value, sizeof(newVPD1Value), true);
+		}
+
+		//Battle reaction sprites 4
+		if( 1 )
+		{
+			slgFile.ReadData(0x0000FF80, (char*)&origVDP1Value, sizeof(origVDP1Value), true);
+			newVPD1Value = origVDP1Value + battleMenuDelta + textDelta;
+			slgFile.WriteData(0x0000FF80, (char*)&newVPD1Value, sizeof(newVPD1Value), true);
+
+			slgFile.ReadData(0x0001109C, (char*)&origVDP1Value, sizeof(origVDP1Value), true);
+			newVPD1Value = origVDP1Value + battleMenuDelta + textDelta;
+			slgFile.WriteData(0x0001109C, (char*)&newVPD1Value, sizeof(newVPD1Value), true);
+		}
+#endif
 
 		//Fixup 2 byte offsets
 		unsigned short origVDP1Offset = 0;

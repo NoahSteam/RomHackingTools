@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
+﻿﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
 It's a photo of Sumire. This is a side of her you don't see too often. 
 It's a photo of Maria. She's lost in thought and looks kind of sad… 
 It's a photo of Kanna. She looks strong and reliable. I can't wait to meet her. 
@@ -254,7 +254,7 @@ Huh? Didn't you hear from Manager Yoneda?
 Our new captain will work as a ticket puncher. That's what Manager Yoneda told us. 
 Ticket punching? What is that supposed to mean? 
 Well, you punch the admission tickets of the guests, of course. 
-What? Punching tickets? How is that supposed to be a "special mission?" 
+What? Punching tickets? How is that supposed to be a "special mission"? 
 Well… I don't have an answer for that, sorry. 
 Excuse me, young man. How long do you expect us to wait? Punch our tickets! 
 Today Sumire is starring in "The Eve of Lady Camellia." I can't wait! 
@@ -283,7 +283,7 @@ What job am I supposed to do? <br> Clipper? <br> Good luck with your practice!
 …By the way, what kind of work am I supposed to be doing here? 
 No clue! Mr. Yoneda said something about punching tickets. 
 I guess you punch the guests' tickets with that clipper. 
-What? Punching tickets? How is that supposed to be a "special mission?" 
+What? Punching tickets? How is that supposed to be a "special mission"? 
 Aren't you glad you have such a nice job? Well, I'm off then. 
 …What is the meaning of this? I thought I came here to be captain of the Imperial Assault Troop… 
 Clipper…? What am I supposed to do with those? 
