@@ -7219,7 +7219,7 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 	const int textDelta            = (textBytes - origTextBytes);
 	
 	//Clipping for the battle menu, change 0x0030 to 0xffa0 (48 to -96)
-	unsigned short newBattleMenuClippingValue = 0xFFA0;
+	unsigned short newBattleMenuClippingValue = 0xA0FF;//Big Endian: 0xFFA0;
 	
 	for(const string& slgFileName : slgFiles)
 	{
@@ -7235,9 +7235,6 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 		//Fixup 4 byte offsets
 		unsigned long origVDP1Value = 0;
 		unsigned long newVPD1Value  = 0;
-
-		unsigned short origVDP1Value_Short = 0;
-		unsigned short newVPD1Value_Short  = 0;
 
 		//Cursor image VDP1 offset
 		slgFile.ReadData(0x00014058, (char*)&origVDP1Value, sizeof(origVDP1Value), true);
@@ -7275,8 +7272,46 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 		slgFile.WriteData(0x0000FF68, (char*)&newVPD1Value, sizeof(newVPD1Value), true);
 
 		//Battle reaction sprites 2
-		if( !GIsDisc2 )
+		//All Disc2 values found by TrekkiesUnite118
+		if( GIsDisc2 )
 		{
+#define FixSLGAddress(InAddress) slgFile.ReadData(InAddress, (char*)&origVDP1Value, sizeof(origVDP1Value), true); \
+			             newVPD1Value = origVDP1Value + battleMenuDelta + textDelta;\
+                 		 slgFile.WriteData(InAddress, (char*)&newVPD1Value, sizeof(newVPD1Value), true);
+
+			FixSLGAddress(0x1044);
+			FixSLGAddress(0x1070);
+			FixSLGAddress(0x10A4);
+			FixSLGAddress(0x889C);
+			FixSLGAddress(0x88AC);
+			FixSLGAddress(0x8C74);
+			FixSLGAddress(0x8C84);
+			FixSLGAddress(0x8F4C);
+			FixSLGAddress(0x8F5C);
+			FixSLGAddress(0xCCCC);
+			FixSLGAddress(0xFF70);
+			FixSLGAddress(0xFF78);
+			FixSLGAddress(0xFF80);
+			FixSLGAddress(0x10FE4);
+			FixSLGAddress(0x11094);
+			FixSLGAddress(0x1109C);
+			FixSLGAddress(0x16920);
+			FixSLGAddress(0x169B0);
+			FixSLGAddress(0x33438);
+
+			//Hard coded value here.  We just need to shift this pointer[0x25C49100] to a free block of memory.
+			const unsigned int freeVDP1RamOffset = 0x25C4A500;
+			const unsigned int freeRamOffset     = 0x0004A500;
+			slgFile.WriteData(0x43E8,  (char*)&freeVDP1RamOffset, sizeof(freeVDP1RamOffset), true);
+			slgFile.WriteData(0x9350,  (char*)&freeRamOffset,     sizeof(freeRamOffset),     true);
+			slgFile.WriteData(0x9360,  (char*)&freeVDP1RamOffset, sizeof(freeVDP1RamOffset), true);
+			slgFile.WriteData(0xE390,  (char*)&freeVDP1RamOffset, sizeof(freeVDP1RamOffset), true);
+			slgFile.WriteData(0x1ED10, (char*)&freeVDP1RamOffset, sizeof(freeVDP1RamOffset), true);
+			slgFile.WriteData(0x1EDD8, (char*)&freeVDP1RamOffset, sizeof(freeVDP1RamOffset), true);
+		}
+		else
+		{
+			//All of these are for the pointer 0002B600
 			slgFile.ReadData(0x0000FF78, (char*)&origVDP1Value, sizeof(origVDP1Value), true);
 			newVPD1Value = origVDP1Value + battleMenuDelta + textDelta;
 			slgFile.WriteData(0x0000FF78, (char*)&newVPD1Value, sizeof(newVPD1Value), true);
@@ -7288,41 +7323,11 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 			slgFile.ReadData(0x00010FE4, (char*)&origVDP1Value, sizeof(origVDP1Value), true);
 			newVPD1Value = origVDP1Value + battleMenuDelta + textDelta;
 			slgFile.WriteData(0x00010FE4, (char*)&newVPD1Value, sizeof(newVPD1Value), true);
+
+			slgFile.ReadData(0x000010A4, (char*)&origVDP1Value, sizeof(origVDP1Value), true);
+			newVPD1Value = origVDP1Value + battleMenuDelta + textDelta;
+			slgFile.WriteData(0x000010A4, (char*)&newVPD1Value, sizeof(newVPD1Value), true);
 		}
-
-#if 0
-		//Battle reaction sprites 3
-		if( 0 )
-		{
-			slgFile.ReadData(0x0000FF70, (char*)&origVDP1Value, sizeof(origVDP1Value), true);
-			newVPD1Value = origVDP1Value + battleMenuDelta + textDelta;
-			slgFile.WriteData(0x0000FF70, (char*)&newVPD1Value, sizeof(newVPD1Value), true);
-
-			slgFile.ReadData(0x00001044, (char*)&origVDP1Value, sizeof(origVDP1Value), true);
-			newVPD1Value = origVDP1Value + battleMenuDelta + textDelta;
-			slgFile.WriteData(0x00001044, (char*)&newVPD1Value, sizeof(newVPD1Value), true);
-
-			slgFile.ReadData(0x0000CCCC, (char*)&origVDP1Value, sizeof(origVDP1Value), true);
-			newVPD1Value = origVDP1Value + battleMenuDelta + textDelta;
-			slgFile.WriteData(0x0000CCCC, (char*)&newVPD1Value, sizeof(newVPD1Value), true);
-
-			slgFile.ReadData(0x000169B0, (char*)&origVDP1Value, sizeof(origVDP1Value), true);
-			newVPD1Value = origVDP1Value + battleMenuDelta + textDelta;
-			slgFile.WriteData(0x000169B0, (char*)&newVPD1Value, sizeof(newVPD1Value), true);
-		}
-
-		//Battle reaction sprites 4
-		if( 1 )
-		{
-			slgFile.ReadData(0x0000FF80, (char*)&origVDP1Value, sizeof(origVDP1Value), true);
-			newVPD1Value = origVDP1Value + battleMenuDelta + textDelta;
-			slgFile.WriteData(0x0000FF80, (char*)&newVPD1Value, sizeof(newVPD1Value), true);
-
-			slgFile.ReadData(0x0001109C, (char*)&origVDP1Value, sizeof(origVDP1Value), true);
-			newVPD1Value = origVDP1Value + battleMenuDelta + textDelta;
-			slgFile.WriteData(0x0001109C, (char*)&newVPD1Value, sizeof(newVPD1Value), true);
-		}
-#endif
 
 		//Fixup 2 byte offsets
 		unsigned short origVDP1Offset = 0;
@@ -7345,7 +7350,7 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 		}
 
 		//Clipping for the battle menu, change 0x0030 to 0xffb8 (48 to -72)
-		slgFile.WriteData(0x000253DC, (char*)&newBattleMenuClippingValue, sizeof(newBattleMenuClippingValue), true);
+		slgFile.WriteData(0x000253DC, (char*)&newBattleMenuClippingValue, sizeof(newBattleMenuClippingValue), false);
 
 		//Battle menu formatting
 		slgFile.WriteData(0x00046c60, battleMenuFormattingData.GetData(), battleMenuFormattingData.GetDataSize());
@@ -7390,7 +7395,7 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 
 	evtFile.WriteData(origEvtFile.GetData(), origEvtFile.GetDataSize());
 	evtFile.WriteDataAtOffset(evt01TutorialPatch.GetData(), evt01TutorialPatch.GetDataSize(), 0x000120F0);
-	evtFile.WriteDataAtOffset(&newBattleMenuClippingValue, sizeof(newBattleMenuClippingValue), 0x000004F8, true);
+	evtFile.WriteDataAtOffset(&newBattleMenuClippingValue, sizeof(newBattleMenuClippingValue), 0x000004F8, false);
 
 	//unsigned long origEvtVDP1WriteAddress = 0;
 	//unsigned long newEvtVDP1WriteAddress  = 0;

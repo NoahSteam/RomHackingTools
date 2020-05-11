@@ -748,23 +748,37 @@ bool FileReadWriter::WriteData(unsigned long inFileOffset, const char* pInData, 
 	return numElemsWritten == inDataSize;
 }
 
-bool FileReadWriter::WriteData(unsigned long inFileOffset, char* pInData, unsigned long inDataSize, bool bSwapEndianness)
+bool FileReadWriter::WriteData(unsigned long inFileOffset, const char* pInData, unsigned long inDataSize, bool bSwapEndianness)
 {
 	if( !mpFileHandle )
 	{
 		return false;
 	}
 
+	const char* pWriteData = pInData;
+	bool bFreeWriteData = false;
 	if( bSwapEndianness )
 	{
-		SwapByteOrderInPlace(pInData, inDataSize);
+		char* pSwapBuffer = new char[inDataSize];
+		bool bFreeWriteData = true;
+
+		memcpy_s((void*)pSwapBuffer, inDataSize, pInData, inDataSize);
+		SwapByteOrderInPlace(pSwapBuffer, inDataSize);
+
+		pWriteData = pSwapBuffer;
 	}
 
 	fseek(mpFileHandle, inFileOffset, SEEK_SET);
 	
-	const unsigned long numElemsWritten = (unsigned long)fwrite(pInData, sizeof(char), inDataSize, mpFileHandle);
+	const unsigned long numElemsWritten = (unsigned long)fwrite(pWriteData, sizeof(char), inDataSize, mpFileHandle);
 
 	fseek(mpFileHandle, 0, SEEK_SET);
+
+	if( bFreeWriteData )
+	{
+		delete[] pWriteData;
+		pWriteData = nullptr;
+	}
 
 	return numElemsWritten == inDataSize;
 }
