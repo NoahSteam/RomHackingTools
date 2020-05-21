@@ -24,7 +24,7 @@ FindDialogOrder d:\Rizwan\SakuraWars\Disc1 D:\Rizwan\SakuraWars\ExtractedData\Di
 CreateTBLSpreadsheets D:\Rizwan\SakuraWars\ExtractedData\Disc1\Dialog D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\Duplicates.txt D:\Rizwan\SakuraWars\Disc1\SAKURA1
 CreateWKLSpreadsheets D:\Rizwan\SakuraWars\ExtractedData\Disc1\WKL D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\WKLDuplicates.txt D:\Rizwan\SakuraWars\Disc1\SAKURA2
 ExtractImages d:\Rizwan\SakuraWars\Test\Search.bin D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\Palette.bin 88 46 d:\Rizwan\SakuraWars\TestExtractImages d:\Rizwan\SakuraWars\Test\Search.bin D:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\Palette.bin 88 46 d:\Rizwan\SakuraWars\Test
-Extract8BitImage d:\Rizwan\SakuraWars\UncompressedDataResults\00002800.BIN d:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\OptionsFontPalette.bin 0 16 16 256 d:\Rizwan\SakuraWars\UncompressedDataResults
+ExtractPalettedImage d:\Rizwan\SakuraWars\UncompressedDataResults\00002800.BIN d:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\OptionsFontPalette.bin 0 16 16 1 256 d:\Rizwan\SakuraWars\UncompressedDataResults
 ExtractFaceFiles d:\Rizwan\SakuraWars\Disc1 d:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\FacePalette.bin d:\Rizwan\SakuraWars\ExtractedData\Disc1\Faces
 ExtractTMapSP d:\Rizwan\SakuraWars\Disc1 d:\Rizwan\Programming\RomHackingTools\SakuraTaisen\Data\TheaterMapPalette.bin d:\Rizwan\SakuraWars\ExtractedData\Disc1\TMapSP
 CreateTMapSpSpreadsheet d:\Rizwan\SakuraWars\ExtractedData\Disc1\TMapSP
@@ -70,8 +70,8 @@ ExtractFCEFiles a:\SakuraTaisen\Disc1 A:\NoahSteam\RomPatchingTools\SakuraTaisen
 ExtractTMapSP a:\SakuraTaisen\Disc1 A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\TheaterMapPalette.bin a:\SakuraTaisen\ExtractedData\Disc1\TMAPSP
 CreateTMapSpSpreadsheet a:\SakuraTaisen\ExtractedData\Disc1\TMapSP
 PatchTMapSp a:\SakuraTaisen\Disc1 A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\TMapSP
-Extract8BitImage a:\SakuraTaisen\ExtractedData\Disc1\Test\UncompressedFace.bin A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\BattleFacePalette.bin 0 40 48 128 1 a:\SakuraTaisen\ExtractedData\Disc1\Test
-Extract8BitImage a:\SakuraTaisen\UncompressedDataResults\0000ff20.bin A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\Palette.bin 0 16 16 256 1 a:\SakuraTaisen\UncompressedDataResults
+ExtractPalettedImage a:\SakuraTaisen\ExtractedData\Disc1\Test\UncompressedFace.bin A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\BattleFacePalette.bin 0 40 48 128 1 a:\SakuraTaisen\ExtractedData\Disc1\Test
+ExtractPalettedImage a:\SakuraTaisen\UncompressedDataResults\0000ff20.bin A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\Palette.bin 0 16 16 1 256 1 a:\SakuraTaisen\UncompressedDataResults
 ExtractFACEFiles a:\SakuraTaisen\Disc1 a:\SakuraTaisen\ExtractedData\Disc1\FACE
 ExtractWKLFiles a:\SakuraTaisen\Disc1 a:\SakuraTaisen\ExtractedData\Disc1\WKL
 CopySharedWklImages a:\SakuraTaisen\ExtractedData\Disc1\WKL A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\WKL

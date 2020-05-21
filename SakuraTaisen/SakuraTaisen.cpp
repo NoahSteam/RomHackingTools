@@ -5910,7 +5910,8 @@ bool CreateWKLSpreadSheets(const string& dialogImageDirectory, const string& dup
 	return true;
 }
 
-void Extract8BitImage(const string& fileName, const string& paletteFileName, const int offset, const int width, const int height, const int numColors, const bool bForceBitmap, const string& outDirectory)
+void ExtractPalettedImage(const string& fileName, const string& paletteFileName, const int offset, const int width, const int height, const int numTilesPerRow, const int numColors, const bool bForceBitmap, 
+	                      const string& outDirectory)
 {
 	FileNameContainer imageFileNameInfo(fileName.c_str());
 	FileNameContainer paletteFileNameInfo(paletteFileName.c_str());
@@ -5922,7 +5923,7 @@ void Extract8BitImage(const string& fileName, const string& paletteFileName, con
 
 	const string outFileName = outDirectory + imageFileNameInfo.mNoExtension + string(".bmp");
 
-	ExtractImage(imageFileNameInfo, outFileName, paletteFile, width, height, 1, numColors, offset, true, bForceBitmap);
+	ExtractImage(imageFileNameInfo, outFileName, paletteFile, width, height, numTilesPerRow, numColors, offset, true, bForceBitmap);
 }
 
 //FCE files contain faces that appear during the story dialog
@@ -11662,7 +11663,7 @@ void PrintHelp()
 	printf("CreateWKLSpreadsheets dialogImageDirectory duplicatesFile rootSakuraTaisenDirectory\n");
 	printf("CreateTMapSpSpreadsheet imageDirectory\n");
 	printf("ExtractImages fileName paletteFile width height outDirectory\n");
-	printf("Extract8BitImage fileName paletteFile offset width height numColors[256, 128] pngOrBmp[0 png, 1 bmp] outDirectory\n");
+	printf("ExtractPalettedImage fileName paletteFile offset width height numTilesPerRow numColors[256, 128] pngOrBmp[0 png, 1 bmp] outDirectory\n");
 	printf("ExtractFCEFiles rootSakuraTaisenDirectory paletteFile outDirectory\n");
 	printf("ExtractFACEFiles rootSakuraTaisenDirectory outDirectory\n");
 	printf("ExtractWKLFiles rootSakuraTaisenDirectory outDirectory\n");
@@ -11847,18 +11848,19 @@ int main(int argc, char *argv[])
 
 		CreateTMapSpSpreadsheet(imageDirectory);
 	}
-	else if(command == "Extract8BitImage" && argc == 10 )
+	else if(command == "ExtractPalettedImage" && argc == 11 )
 	{
-		const string fileName     = string(argv[2]);
-		const string paletteFile  = string(argv[3]);
-		const int    offset       = atoi(argv[4]);
-		const int    width        = atoi(argv[5]);
-		const int    height       = atoi(argv[6]);
-		const int    numColors    = atoi(argv[7]);
-		const int    pngOrBmp     = atoi(argv[8]);
-		const string outDirectory = string(argv[9]) + Seperators;
+		const string fileName       = string(argv[2]);
+		const string paletteFile    = string(argv[3]);
+		const int    offset         = atoi(argv[4]);
+		const int    width          = atoi(argv[5]);
+		const int    height         = atoi(argv[6]);
+		const int    numTilesPerRow = atoi(argv[7]);
+		const int    numColors      = atoi(argv[8]);
+		const int    pngOrBmp       = atoi(argv[9]);
+		const string outDirectory   = string(argv[10]) + Seperators;
 
-		Extract8BitImage(fileName, paletteFile, offset, width, height, numColors, pngOrBmp == 1, outDirectory);
+		ExtractPalettedImage(fileName, paletteFile, offset, width, height, numTilesPerRow, numColors, pngOrBmp == 1, outDirectory);
 	}
 	else if(command == "ExtractFCEFiles" && argc == 5 )
 	{
