@@ -654,3 +654,6 @@ TO fix wars, change @0x020a2d0, change to ffa0 00
 
 Sakura x=44 y = 70
 Wars x=144, y = 108
+
+THE END image:
+In SA_SG.bin at 0x552A4 along with some others (search for the data in those files).  Stored in 8bit color mode.
