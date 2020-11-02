@@ -6202,7 +6202,7 @@ bool PatchFACEFiles(const string& rootSakuraDirectory, const string& rootTransla
 	{
 		return false;
 	}
-
+	
 	//Offset palette because original data uses only 128 colors
 	for(unsigned int i = 0; i < patchedObstacleImage.GetImageDataSize(); ++i)
 	{
@@ -6273,7 +6273,7 @@ bool PatchFACEFiles(const string& rootSakuraDirectory, const string& rootTransla
 
 				//Now copy over the patched image
 				memcpy_s(pDataBuffer + offsetToImageData, uncompressedImage.mUncompressedDataSize - offsetToImageData, patchedObstacleImage.GetImageData(), patchedObstacleImage.GetImageDataSize());
-
+				
 				//Compress the data
 				SakuraCompressedData patchedObstacleData;
 				patchedObstacleData.PatchDataInMemory(pDataBuffer, uncompressedImage.mUncompressedDataSize, true, false, origObstacleImage.mCompressedSize);
@@ -6281,7 +6281,7 @@ bool PatchFACEFiles(const string& rootSakuraDirectory, const string& rootTransla
 				//Verify the size fits
 				if( patchedObstacleData.mDataSize > uncompressedImage.mCompressedSize )
 				{
-					printf("Patched obstacle image data is too big when compressed\n");
+					printf("Patched obstacle image data is too big when compressed. Needs to be <= %i.  Is %i \n", uncompressedImage.mCompressedSize, patchedObstacleData.mDataSize);
 					return false;
 				}
 
@@ -7278,8 +7278,11 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 		{
 #define FixSLGAddress(InAddress) slgFile.ReadData(InAddress, (char*)&origVDP1Value, sizeof(origVDP1Value), true); \
 			             newVPD1Value = origVDP1Value + battleMenuDelta + textDelta;\
-                 		 slgFile.WriteData(InAddress, (char*)&newVPD1Value, sizeof(newVPD1Value), true);
+                         slgFile.WriteData(InAddress, (char*)&newVPD1Value, sizeof(newVPD1Value), true);
 
+#define SetValueAtSLGAddress(InAddress, InNewValue, InType) {const InType newValue = (InType)InNewValue; \
+                                                               slgFile.WriteData(InAddress, (char*)&newValue, sizeof(InType), true);}
+		
 			FixSLGAddress(0x1044);
 			FixSLGAddress(0x1070);
 			FixSLGAddress(0x10A4);
@@ -7299,6 +7302,11 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 			FixSLGAddress(0x16920);
 			FixSLGAddress(0x169B0);
 			FixSLGAddress(0x33438);
+
+			//Fixes battle map
+			SetValueAtSLGAddress(0xC7AC, 0x91229142, unsigned long);
+			SetValueAtSLGAddress(0xC84A, 0x87F2, unsigned short);
+			SetValueAtSLGAddress(0xCF24, 0x8822, unsigned short);
 
 			//Hard coded value here.  We just need to shift this pointer[0x25C49100] to a free block of memory.
 			const unsigned int freeVDP1RamOffset = 0x25C4A500;
@@ -7827,7 +7835,7 @@ bool PatchTheaterView(const string& sakuraDirectory, const string& patchDataPath
 		}
 
 		bool bIsEmptyRoomImage = patchedImages[imageIndex].mNoExtension == emptyRoom;
-		if( bIsEmptyRoomImage )		
+		if( bIsEmptyRoomImage )
 		{
 			if( newImageWidth != 56 && newImageHeight != 24 )
 			{
@@ -8970,6 +8978,11 @@ bool CopyOriginalFiles(const string& rootSakuraTaisenDirectory, const string& pa
 	CopyOriginalFile("SAKURA3\\HANAMAIN.BIN");
 	CopyOriginalFile("SAKURA1\\TMapSP.BIN");
 	CopyOriginalFile("SAKURA1\\FUKAGAWA.BIN");
+	CopyOriginalFile("SAKURA1\\AI_CG.BIN");
+	CopyOriginalFile("SAKURA1\\KA_CG.BIN");
+	CopyOriginalFile("SAKURA1\\MA_CG.BIN");
+	CopyOriginalFile("SAKURA1\\SA_CG.BIN");
+	CopyOriginalFile("SAKURA1\\SU_CG.BIN");
 
 	return true;
 }
@@ -10151,6 +10164,45 @@ bool PatchMiniGames(const string& rootSakuraDirectory, const string& patchedSaku
 	return bResult;
 }
 
+bool PatchTheEndLogo(const string& patchedSakuraDirectory, const string& inTranslatedDataDirectory)
+{
+	//Open translated fontsheet
+	const string patchedImagePath = inTranslatedDataDirectory + "\\TheEndImage.bmp";
+	BmpToSakuraConverter patchedImage;
+	const unsigned int tileDims = 8;
+	if( !patchedImage.ConvertBmpToSakuraFormat(patchedImagePath, false, 0, &tileDims, &tileDims) )
+	{
+		printf("PatchStatusScreen: Couldn't convert image: %s.\n", patchedImagePath.c_str());
+		return false;
+	}
+
+	patchedImage.PackTiles();
+
+	if( patchedImage.mPackedTileSize > 64*64 )
+	{
+		printf("Compressed TheEndImage is too big.  Should be %i, is %i", 64*64, patchedImage.mPackedTileSize);
+		return false;
+	}
+
+	const int NumFiles = 5;
+	const char* pFileNames[NumFiles] = {"AI_CG.BIN", "KA_CG.BIN", "MA_CG.BIN", "SA_CG.BIN", "SU_CG.BIN"};
+	
+	for(int i = 0; i < NumFiles; ++i)
+	{
+		const string gameFilePath = patchedSakuraDirectory + Seperators + "SAKURA1" + Seperators + pFileNames[i];
+
+		FileReadWriter gameFile;
+		if( !gameFile.OpenFile(gameFilePath) )
+		{
+			return false;
+		}
+
+		gameFile.WriteData(0x000552a4, patchedImage.mpPackedTiles, patchedImage.mPackedTileSize);
+	}
+
+	return true;
+}
+
 bool PatchLoadScreen(const string& patchedSakuraDirectory, const string& inTranslatedDataDirectory)
 {
 	printf("Patch Load Screen\n");
@@ -10213,14 +10265,15 @@ bool PatchLoadScreen(const string& patchedSakuraDirectory, const string& inTrans
 	}
 
 	//Patch lookup table
+	if( 0 )
 	{
 		MiniGameTextIndiceFinder indiceFinder;
 		const unsigned int indiceOffset = GIsDisc2 ? 0x0005a1d6 : 0x0005a09e;
 		indiceFinder.FindIndices(sakuraFileData.GetData(), indiceOffset, 144);
 	//	indiceFinder.DumpIndices("d:\\rizwan\\indices.txt");
-		if( indiceFinder.indiceAddresses.size() != 45 )
+		if( indiceFinder.indiceAddresses.size() < 45 )
 		{
-			printf("PatchLoadScreen: Couldn't find text indices for tutorial\n");
+			printf("PatchLoadScreen: Couldn't find text indices for load screen\n");
 			return false;
 		}
 
@@ -11629,6 +11682,13 @@ bool PatchGame(const string& rootSakuraTaisenDirectory,
 	if( !PatchLoadScreen(patchedSakuraTaisenDirectory, inTranslatedDataDirectory) )
 	{
 		printf("Patching LoadSave Screen Failed.\n");
+		return false;
+	}
+
+	//Step 15
+	if( !PatchTheEndLogo(patchedSakuraTaisenDirectory, inTranslatedDataDirectory) )
+	{
+		printf("Patching End Logo Failed.\n");
 		return false;
 	}
 

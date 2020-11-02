@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
+﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
 It's a photo of Sumire. This is a side of her you don't see too often. 
 It's a photo of Maria. She's lost in thought and looks kind of sad… 
 It's a photo of Kanna. She looks strong and reliable. I can't wait to meet her. 
@@ -147,7 +147,7 @@ Reporting for duty!
 (What the… Who is this drunkard?) 
 (Don't tell me this is…) 
 Are you really General Yoneda? <br> Why're you drinking right now! 
-…Are…you really Lieutenant General Yoneda? 
+Are you really… Lieutenant General Yoneda? 
 I… I'm sorry! 
 How can you drink sake in the middle of the day!? 
 Are you really Lieutenant General Yoneda? You're different from the stories I heard… 
@@ -170,7 +170,7 @@ You shouldn't eavesdrop! <br> Where’s the reception desk?
 Hey! You shouldn't eavesdrop! 
 …Sorry. 
 What? We just wanted to see if you needed help! 
-I don't want anything to do with you any more! Bye-bye! 
+I don't want anything to do with you anymore! Bye-bye! 
 Iris! Wait! 
 Call after Iris. <br> Have Sakura lead the way. 
 Iris, please wait! I didn't mean it. I'm sorry! 
@@ -415,7 +415,7 @@ W-Well, I've got to be going… I'm counting on you!
 H-Hey! Wait a moment! 
 (What am I going to do with this letter?) 
 Hey! Ticket puncher guy, here's my ticket! 
-Y-Yes! Ahem… Where do I punch a children's ticket? 
+Y-Yes! Ahem… Where do I punch a child's ticket? 
 This guy's new here! He doesn't even know how to punch tickets! 
 Handle the situation calmly. <br> Glare at the boy. 
 There you go, boy. Here's your ticket back. 

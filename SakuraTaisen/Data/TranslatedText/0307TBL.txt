@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
 It's a photo of Maria. She's lost in thought and looks kind of sad…
 A photo of Kanna. Her signature strength comes through clearly.
@@ -149,7 +149,7 @@ Wow! Thank you!
 Ogami, do you know what red roses mean in the language of flowers? 
 The language of flowers? Hmm… What does it mean? 
 Uh… If you don't know, then that's fine. 
-But, I'm…very happy. 
+But, I'm… very happy. 
 Because you came to see me… 
 Sorry you got hurt… <br> How are your injuries? <br> Maria is angry at me. 
 I'm really sorry. Because of me, you got hurt. 
@@ -443,9 +443,9 @@ Wait up… I… the airplane…
 Hey, Kohran. You'll catch a cold sleeping here like this. 
 Uhnn… mm… 
 Kohran. 
-Didja happen to…make a…new airplane? 
+Didja happen to… make a… new airplane? 
 Airplane? Kohran… still half-asleep, I see. 
-Huh? Why…is Chief…in the airplane? 
+Huh? Why… is Chief… in the airplane? 
 …Eh?! Chief?! 
 C-Chief, it's you! Sorry 'bout that! I wasn't fully awake! 
 Hey, it's OK. More importantly, you'll catch a cold sleeping out here. 
@@ -456,7 +456,7 @@ Oh well. I'd better carry her to her room.
 …Huh? 
 Kohran… I'm gonna pick you up now. 
 Up we go… 
-…Huh? She's…lighter than I expected. 
+…Huh? She's… lighter than I expected. 
 … 
 She may be a member of the Flower Division, riding a Koubu into battle… 
 …But she's still just an ordinary girl. 
@@ -466,7 +466,7 @@ OK, let's get Kohran to her room. It's pretty close by.
 Kohran. We're at your room. Hey, Kohran, wake up. 
 Uhnn…mm… 
 Agh, Chief?! W-Why am I here? 
-H-huh? This…isn't the library. It's the door to my room. 
+H-Huh? This… isn't the library. It's the door to my room. 
 I found you asleep in the library, so I carried you here. 
 I figured you might catch a cold otherwise… 
 Is that right? Thanks, Chief! I owe you one. 
@@ -484,7 +484,7 @@ Yes. I'm a bit thirsty, so I got up to get some water. Um, by the way…
 …Ogami. Where were you taking Kohran? 
 Uh, nothing, never mind… 
 So she's asleep. All right… I'll take her to her room. 
-B-but… 
+B-But… 
 "But" nothing! Leaving her with you would just cause me to worry! 
 Come on now, Kohran. Let's go. 
 Uhnn…mm… 
@@ -528,7 +528,7 @@ Say, Sumire. Since I'm rubbing your shoulders, would you mind if I asked you som
 Have you seen Maria? I've been searching for her. 
 Maria, you say? Very well, give me another 100 rubs and I shall answer you. 
 S-Seriously? Well, OK then. I'll give this massage my all! 
-Ahh… Just like that, Ensign. How…wonderful… 
+Ahh… Just like that, Ensign. How… wonderful… 
 Thank you so very much, Ensign. I shall sleep quite well thanks to this. 
 I will take my leave of you. Please excuse me. 
 H-Hey, Sumire! You promised me you'd tell me where Maria went! 
@@ -540,7 +540,7 @@ A plea of ignorance is still an answer. With that, excuse me.
 …I fell for that hook, line, and sinker. 
 Oh man… I can't believe I let myself get fooled by Sumire of all people… 
 Why ma'am, you're terribly stiff here. 
-Ahh… Just like that, Ensign. How…wonderful… 
+Ahh… Just like that, Ensign. How… wonderful… 
 Ensign, you certainly are skilled at giving shoulder rubs… Quite the captain, indeed. 
 (How does giving shoulder rubs make me "quite the captain"?) 
 Oh… A bit more at the base of my neck, if you please… 
@@ -617,7 +617,7 @@ C-Crap… I can't decide what to do!
 …Whew, all freshened up. Time to get outta here. 
 I'm dead! I need to get out of here! 
 Phew… I managed to escape before she noticed. 
-No… My body…it's moving on its own…toward the shower… 
+No… My body… it's moving on its own… toward the shower… 
 (K-Kanna's in the shower…) 
 …Hm? 
 Who's there… is that you, Boss? 
@@ -680,7 +680,7 @@ C-Crap… I can't decide what to do!
 …Whew, all freshened up. Time to get outta here. 
 I'm dead! I need to get out of here! 
 Phew… I managed to escape before she noticed. 
-No… My body…it's moving on its own…toward the shower… 
+No… My body… it's moving on its own… toward the shower… 
 (K-Kanna's in the shower…) 
 …Hm? 
 Who's there… Is that you, Boss? 

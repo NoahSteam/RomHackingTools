@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿Hey everyone, let's do it! 
+﻿Hey everyone, let's do it! 
 Victory pose… Yeah! 
 I've got to focus! 
 Here I go! 
@@ -104,7 +104,7 @@ Kanna! I've got your back!
 OK, let's defend Teito Tower! 
 Wh-What!? 
 Sir, this enemy is stronger than anything we've faced up to now. You should concentrate our formation on defense. 
-We'll lose if we try to face it head-on. We need to get up on that steam stand and look for an opening! 
+We'll lose if we try to face the enemy head-on. Make sure to use the "steam stand" and look for an opening! 
 That voice… Who on earth is it? 
 Here we go! Time for my first battle! 
 Dammit! This thing's a monster!! 
@@ -112,7 +112,7 @@ Dammit! This thing's a monster!!
 Impossible… I can't believe the damage it dealt me… 
 No way! This thing's too strong! 
 Man, no kidding, this thing is crazy strong! 
-We've located the Shadow Hex Mech’s main body! The Soaring Whale is starting bombardment! Get out of the blast area! 
+We've located the enemy’s main body! The Soaring Whale will begin bombardment! Evacuate the blast area! 
 So that's it… If we eliminate the main body, the enemy should disperse. I leave the rest to you, Captain Ogami. 
 R-Roger that. Everyone, focus your attacks on the main body! 
 We did it! 
@@ -176,5 +176,5 @@ Did you really need to lie? Just be honest next time!
 You're right, now's not the time for that kind of question. 
 And… I believe in you, Ogami! Let's focus and fight hard!! 
 Those are “rockets.” They were developed back in my country during the 10th century! 
-Rockets…? You mean those flying bombs they talked about in Officer Academy!? 
+Rockets…? You mean those flying bombs they talked about at the Military Academy!? 
 That's right… But this is my first time seeing a real one. Better be careful, everyone! 

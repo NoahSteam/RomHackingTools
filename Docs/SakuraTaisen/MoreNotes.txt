@@ -89,6 +89,46 @@ PatchGame 0 a:\SakuraTaisen\Disc1 a:\SakuraTaisen\Disc1_Translated A:\NoahSteam\
 PatchGame 1 a:\SakuraTaisen\Disc2 a:\SakuraTaisen\Disc2_Translated A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\TranslatedText A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\8x12.bmp A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\Palette.bin A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\MainMenuFont2.bmp A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\MainMenuPatched.bmp A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\OptionsBgndPatched.bmp A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data a:\SakuraTaisen\ExtractedData\Disc1\WKL
 FindData.exe a:\SakuraTaisen\Disc1 a:\SakuraTaisen\Search.bin
 
+ExtractFontSheets a:\SakuraWars\Disc1\ a:\SakuraWars\ExtractedData\Disc1\FontSheets\Palette.bin a:\SakuraWars\ExtractedData\Disc1\FontSheets
+ExtractFontSheets a:\SakuraWars\Disc2\ a:\SakuraWars\ExtractedData\Disc1\FontSheets\Palette.bin a:\SakuraWars\ExtractedData\Disc2\FontSheets
+ExtractFontSheets a:\SakuraWars\PatchedData\TranslatedFontSheet A:\SakuraWars\PatchedData\TranslatedFontSheet\OutPalette.BIN a:\SakuraWars\PatchedData\TranslatedFontSheet
+ExtractRawText a:\SakuraWars\Disc1\ a:\SakuraWars\ExtractedData\Disc1\ExtractedText
+ExtractRawText a:\SakuraWars\Disc1_Translated\ a:\SakuraWars\ExtractedData\Disc1_Translated\ExtractedText
+ExtractText a:\SakuraWars\Disc1 a:\SakuraWars\ExtractedData\Disc1\FontSheets\Palette.bin a:\SakuraWars\ExtractedData\Disc1\Dialog
+ExtractText a:\SakuraWars\Disc2 a:\SakuraWars\ExtractedData\Disc1\FontSheets\Palette.bin a:\SakuraWars\ExtractedData\Disc2\Dialog
+ExtractText a:\SakuraWars\Disc1_Translated a:\SakuraWars\ExtractedData\Disc1\FontSheets\Palette.bin a:\SakuraWars\ExtractedData\Disc1_Translated\Dialog
+InsertText a:\SakuraWars\Disc1 A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\TranslatedText a:\SakuraWars\PatchedData\TranslatedTBL
+CreateTranslatedFontSheets A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\8x12.bmp a:\SakuraWars\PatchedData\TranslatedFontSheet
+PatchPalettes a:\SakuraWars\Disc1 A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\Palette.bin A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\OutPalette.BIN a:\SakuraWars\PatchedData\Palettes
+PatchGameKNJ a:\SakuraWars\Disc1 A:\SakuraWars\PatchedData\TranslatedFontSheet\TranslatedKNJ.BIN a:\SakuraWars\PatchedData\KNJ
+FindDuplicateText A:\SakuraWars\ExtractedData\Disc1\Dialog a:\SakuraWars\ExtractedData\Disc1\Dialog\Duplicates.txt
+FindDuplicateText A:\SakuraWars\ExtractedData\Disc1\WKL A:\SakuraWars\ExtractedData\WKL\duplicates.txt
+CreateTBLSpreadsheets a:\SakuraWars\ExtractedData\Disc1\Dialog A:\SakuraWars\ExtractedData\Disc1\Dialog\Duplicates.txt a:\SakuraWars\Disc1\SAKURA1
+CreateMesSpreadsheets a:\SakuraWars\ExtractedData\Disc1\Dialog a:\SakuraWars\Disc1\
+CreateWKLSpreadsheets a:\SakuraWars\ExtractedData\Disc1\WKL A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\WKLDuplicates.txt A:\SakuraWars\Disc1\SAKURA2
+ExtractFCEFiles a:\SakuraWars\Disc1 A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\FacePalette.bin a:\SakuraWars\ExtractedData\Disc1\Faces
+ExtractTMapSP a:\SakuraWars\Disc1 A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\TheaterMapPalette.bin a:\SakuraWars\ExtractedData\Disc1\TMAPSP
+CreateTMapSpSpreadsheet a:\SakuraWars\ExtractedData\Disc1\TMapSP
+PatchTMapSp a:\SakuraWars\Disc1 A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\TMapSP
+ExtractPalettedImage a:\SakuraWars\ExtractedData\Disc1\Test\UncompressedFace.bin A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\BattleFacePalette.bin 0 40 48 128 1 a:\SakuraWars\ExtractedData\Disc1\Test
+ExtractPalettedImage a:\SakuraWars\UncompressedDataResults\0000ff20.bin A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\Palette.bin 0 16 16 1 256 1 a:\SakuraWars\UncompressedDataResults
+ExtractFACEFiles a:\SakuraWars\Disc1 a:\SakuraWars\ExtractedData\Disc1\FACE
+ExtractWKLFiles a:\SakuraWars\Disc1 a:\SakuraWars\ExtractedData\Disc1\WKL
+CopySharedWklImages a:\SakuraWars\ExtractedData\Disc1\WKL A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\WKL
+ExtractMiniGameData a:\SakuraWars\Disc1  A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data a:\SakuraWars\ExtractedData\Disc1\Minigames\
+ExtractTiledImages a:\SakuraWars\Disc1  a:\SakuraWars\ExtractedData\Disc1\TiledImages\
+FindDuplicateText  a:\SakuraWars\ExtractedData\Disc1\WKL A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\WKLDuplicates.txt
+DumpTranslationFilesWithoutUnusedLines a:\SakuraWars\Disc1 A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\TranslatedText A:\SakuraWars\TranslationFiles\
+CreateFontSheetEntries a:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\MiniHana_TutorialText.txt
+PatchFACEFiles a:\SakuraWars\Disc1 a:\SakuraWars\Disc1_Translated a:\NoahSteam\RomPatchingTools\SakuraTaisen\Data
+AddShadowsToWKLText A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\WKL\WKL14
+ExtractLoadScreen A:\SakuraWars\Disc1 A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data A:\SakuraWars\ExtractedData\Disc1\LoadScreen
+FindCompressedData a:\SakuraWars\Disc1\SAKURA1\LOGO.SH2 a:\SakuraWars\Uncompressed.bin a:\SakuraWars\UncompressedDataResults
+FindCMPData a:\SakuraWars\Disc1\SAKURA1\LOGO.SH2 a:\SakuraWars\Search.bin a:\SakuraWars\UncompressedDataResults
+PatchGame 0 a:\SakuraWars\Disc1 a:\SakuraWars\Disc1_Translated A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\TranslatedText A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\8x12.bmp A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\Palette.bin A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\MainMenuFont2.bmp A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\MainMenuPatched.bmp A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\OptionsBgndPatched.bmp A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data a:\SakuraWars\ExtractedData\Disc1\WKL
+PatchGame 1 a:\SakuraWars\Disc2 a:\SakuraWars\Disc2_Translated A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\TranslatedText A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\8x12.bmp A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\Palette.bin A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\MainMenuFont2.bmp A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\MainMenuPatched.bmp A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\OptionsBgndPatched.bmp A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data a:\SakuraWars\ExtractedData\Disc1\WKL
+FindData.exe a:\SakuraWars\Disc1 a:\SakuraWars\Search.bin
+
 UPDATE TBLFiles SET English = REPLACE(English, '\\n', ' ')
 
 SELECT *

@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
 It's a photo of Maria. She's lost in thought and looks kind of sad…
 A photo of Kanna. Her signature strength comes through clearly.
@@ -86,13 +86,13 @@ What do you say? Wanna eat together?
 Guaaaah!! 
 B-Boss! Are you all right? 
 *cough* *cough*… 
-That was…a nice kick… I heard the angels sing there for a moment. 
+That was… a nice kick… I heard the angels sing there for a moment. 
 Sorry about that… You look pretty strong, so I didn't hold back. 
 But still, I can see why you were in first place at the academy. You're not bad at all! 
 Even though I pulled my punches a little, I'm impressed how you blocked my techniques. 
 Mmphhh! 
 B-Boss! Are you all right? 
-That…hah…was a beautiful punch… 
+That… hah… was a beautiful punch… 
 I'm really sorry. You blocked nicely before, so I didn't hold back. 
 Gaaah! 
 B-Boss! Are you all right? 
@@ -142,7 +142,7 @@ Ahaha! Don't worry, just try it!
 I-I think I will, thank you… 
 (Phew… This is HOT…) 
 (It's not raw, but extremely salty…) 
-(But…wait… Once you survive the first bite, it's actually super tasty!) 
+(But… wait… Once you survive the first bite, it's actually super tasty!) 
 This is awesome! I love it! 
 Haha! I'd be the first to admit it's rather crude as far as fine cuisine goes. 
 But all I've been doing since I was little is study karate, so it shouldn't surprise you. 
