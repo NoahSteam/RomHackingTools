@@ -181,7 +181,7 @@ Oh, Iris… again with the crocodile tears. Of all the nerve.
 By the way, I thought one of you two might know this… 
 Where's the reception desk? I'm to go there for my first assignment. 
 I may have been a little too harsh, but I can't let a thing like that slide… 
-I'm sorry, I should have kept an eye on her.. 
+I'm sorry, I should have kept an eye on her…   
 No need to apologize, Sakura. Would you mind showing me the way to the reception? 
 I have to go there because… Well, I guess you already heard, right? 
 Hmph! Please stop being mean, Ogami. 
@@ -602,4 +602,4 @@ Unused
 Unused
 Unused
 Unused
-My name is Sakura Shinguji. I just arrived from Sendai and newly joined the troop. 
+My name is Sakura Shinguji. I just arrived from Sendai and newly joined the troop.

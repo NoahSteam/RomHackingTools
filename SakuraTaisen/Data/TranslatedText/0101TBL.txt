@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
+﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
 It's a photo of Sumire. This is a side of her you don't see too often. 
 It's a photo of Maria. She's lost in thought and looks kind of sad… 
 It's a photo of Kanna. She looks strong and reliable. I can't wait to meet her. 
@@ -585,7 +585,7 @@ No problem. Let's see… Will this do?
 Yes, that's fine. Thanks very much. 
 Manager Yoneda is in his office, right next door. 
 Thank you. 
-(Ah…Someone's here!) 
+(Ah… Someone's here!) 
 The pleasure's all mine. 
 It's nice to meet you. I look forward to working with you. 
 (This is the secretary's office. Yuri and Kasumi are here.) 
@@ -639,18 +639,18 @@ I thought you would've remembered my voice by now…
 I'm… I'm sorry. 
 Oh, it's fine. Just try to remember it from here on. 
 Well, I should get going. 
-Ah - Sakura, hold on! There's something I wanted to ask you. 
+Ah, Sakura… Hold on! There's something I wanted to ask you. 
 What is it? 
 That voice… is that you, Sakura? 
 Hehe… You got me. 
 …So it was you. Boy, you sure startled me. 
 Even you have a mischievous side, then, huh? 
 Hehe… Sorry about that. 
-But…it makes me so happy that you remembered my voice. 
+But… it makes me so happy that you remembered my voice. 
 Huh?… 
 Uh… S-Sorry. I guess that was a strange thing to say. 
 W-Well, I should get going… 
-Ah - Sakura, hold on! There's something I wanted to ask you. 
+Ah, Sakura… Hold on! There's something I wanted to ask you. 
 What is it? 
 That voice… is that Maria? 
 …Wrong. 
@@ -670,7 +670,7 @@ I mean… It does seem very like you to be startled by someone's touch.
 Huh?… 
 Uh… I-I'm sorry. What a strange thing for me to say… 
 W-Well, I should get going… 
-Ah - Sakura, hold on! There's something I wanted to ask you. 
+Ah, Sakura… Hold on! There's something I wanted to ask you. 
 What is it? 
 Tell me about the Troop! <br> Where are you headed? <br> …Do you have a boyfriend? 
 Sakura, could you please tell me about the Imperial Assault Troop? 

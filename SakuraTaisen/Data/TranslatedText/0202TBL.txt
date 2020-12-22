@@ -262,15 +262,15 @@ Hey, as long as you get it! Go ahead and relax.
 It is. May I come in? 
 I knew you'd come visit me soon. 
 Sure, make yourself at home. 
-Whoa… How did all these bags get here…? 
-I had all my stuff sent over yesterday. 
+Whoa… How did all this stuff get here…? 
+I had all my things sent over yesterday. 
 …Hey. Is that you, Chief? 
 It is. May I come in? 
 …You sure took your time getting here. Where have you been? 
 S-Sorry… I was on patrol. 
 Hmph… Well, OK. Come on in. 
-Whoa… How did all these bags get here…? 
-I had all my stuff sent over yesterday. 
+Whoa… How did all this stuff get here…? 
+I had all my things sent over yesterday. 
 What are these papers? The equations look tough. 
 You interested in this stuff, Chief? I can start by explaining the formulas… 
 I-I think I'll pass on that tonight. Maybe some other time… 
@@ -483,7 +483,7 @@ Wait a moment, Ensign! It's quite rude to depart without a proper conversation!
 I'm in the middle of a patrol… Do you have some special training in here, Sumire? 
 Training? Hmph… That's not what I would call it. 
 What are you doing in here, then? 
-W-Well, it's…just…a diversion of mine! 
+W-Well… it's just a… diversion of mine! 
 But at your room earlier, you said something about taking up a routine… 
 T-That's enough out of you! A real man doesn't quibble over such trivial things! 
 …Right. 
@@ -664,7 +664,7 @@ Whoa… What a gorgeous room.
 Hohoho… I went to the trouble of calling a craftsman to rework the interior. 
 Sumire, why do you hide the training you've been doing? 
 …A swan may float on the water with grace and elegance… 
-But only because it's swimming as hard as it can beneath the surface. 
+…but only because it's swimming as hard as it can beneath the surface. 
 Besides, as I keep telling you, swimming is merely a diversion… I wouldn't call it training. 
 … 
 Oh my… Look at the time… 

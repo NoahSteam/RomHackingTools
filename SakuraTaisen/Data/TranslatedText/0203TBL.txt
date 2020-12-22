@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
 It's a photo of Maria. She's lost in thought and looks kind of sad…
 A photo of Kanna. She looks strong and reliable. I can't wait to meet her.
@@ -198,7 +198,7 @@ I-It wasn't… She wasn't my girlfrien-
 Huh? Sakura!? Wait a second! 
 Ah… She's gone. 
 …Huh? This is… 
-Whoa! A bento box… It's so well-made as well. 
+Whoa! A bento box… It's so well made as well. 
 Could this… Did she make this for me? 
 Go to your room. <br> Go to Sakura's room. <br> Continue working. 
 Phew, I'm kinda tired. I guess I'll head back to my room. 

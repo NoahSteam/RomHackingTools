@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
 It's a photo of Maria. She's lost in thought and looks kind of sad…
 A photo of Kanna. Her signature strength comes through clearly.
@@ -317,7 +317,7 @@ Hmm… I get it. The two of you are taking a cozy walk together. Whatever.
 This is a misunderstanding! <br> This isn't what it… <br> Don't say things like that! 
 Kanna, this is a misunderstanding! 
 Oh, a misunderstanding! How’s that!? 
-I only reached out to Sumire as her commanding officer.. 
+I only reached out to Sumire as her commanding officer… 
 It's not relevant to whether we get along or not. 
 Hmmm, I see. As captain, you were only feeling sorry for Sumire. 
 …! 
@@ -468,7 +468,7 @@ Great, OK, I'll tell you the story of “The Quarrel of the Monkey and the Crab!
 Yay! I don't know that one! Hey, what's a "quarrel"? 
 That's right, you were born in France, weren't you? 
 A "quarrel" is like… an argument, but in this story, it means something like a battle. 
-Huh.. Mr. Monkey and Mr. Crab are having a battle? So, what happens? 
+Huh… Mr. Monkey and Mr. Crab are having a battle? So, what happens? 
 (Uhhh… Huh? Who appears in the story, again?) 
 Bee, Chestnut, Mortar <br> Bee, Demon, Mortar <br> Sparrow, Chestnut, Mortar 
 (That's right! It was a bee, a chestnut, and a mortar!) 

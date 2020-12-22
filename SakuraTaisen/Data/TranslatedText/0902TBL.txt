@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
+﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
 It's a photo of Sumire. This is a side of her you don't see too often. 
 It's a photo of Maria. She's lost in thought and looks kind of sad… 
 It's a photo of Kanna. Her signature strength comes through clearly. 
@@ -591,7 +591,7 @@ Ayame! Stop it, will you!
 …Uhhh. 
 Gah… *cough* *cough* 
 Are you OK, Ensign? 
-I'm fine, don't worry! But you must give the dispatch order! Go! I'll follow right behind you…. 
+I'm fine, don't worry! But you must give the dispatch order! Go! I'll follow right behind you… 
 B-But…! 
 Please, just go! I'll explain later! 
 Understood! But you have to come too, Ensign! 

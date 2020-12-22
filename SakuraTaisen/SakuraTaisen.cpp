@@ -25,7 +25,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include <string>
 #include <list>
 #include <map>
+#include <unordered_map>
 #include <algorithm>
+#include <utility>
 #include "..\Utils\Utils.h"
 #include "..\Utils\decompress_rtns.c"
 #include <assert.h>
@@ -40,6 +42,7 @@ using std::map;
 #define USE_4_BYTE_OFFSETS 1
 #define USE_TREKKIS_MINIGAME_DATA 1
 #define FIX_TIMING_DATA 1
+#define FIX_EVT_FILES 0
 
 const unsigned char OutTileSpacingX = 8;
 const unsigned char OutTileSpacingY = 12;
@@ -4666,7 +4669,7 @@ bool CreateMesSpreadSheets(const string& dialogImageDirectory, const string& sak
 	return true;
 }
 
-bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& duplicatesFileName, const string& sakura1Directory)
+bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& duplicatesFileName, const string& sakura1Directory, const string& translatedTextDirectory, bool bForRelease)
 {
 	printf("Parsing duplicates file\n");
 
@@ -4712,6 +4715,9 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& dup
 	vector<SakuraTextFile> sakuraTextFiles;
 	FindAllSakuraText(tableFiles, sakuraTextFiles);
 
+	vector<FileNameContainer> translatedTextFiles;
+	FindAllFilesWithinDirectory(translatedTextDirectory, translatedTextFiles);
+
 	//Create map of table file name to the file (0100TBL => 0100TBL file)
 	map<string, const SakuraTextFile*> sakuraTableFileMap;
 	for(const SakuraTextFile& sakuraFile : sakuraTextFiles)
@@ -4723,11 +4729,14 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& dup
 	map<string, vector<FileNameContainer>> directoryMap;
 	for(const FileNameContainer& imageFileNameInfo : imageFiles)
 	{
-		const size_t lastOf = imageFileNameInfo.mPathOnly.find_last_of('\\');
-		const string leaf   = imageFileNameInfo.mPathOnly.substr(lastOf+1);
-		if( lastOf != string::npos && leaf.size() > 0 )
+		if( imageFileNameInfo.mPathOnly.find_first_of("TBL") != string::npos )
 		{
-			directoryMap[leaf].push_back(imageFileNameInfo);
+			const size_t lastOf = imageFileNameInfo.mPathOnly.find_last_of('\\');
+			const string leaf = imageFileNameInfo.mPathOnly.substr(lastOf + 1);
+			if (lastOf != string::npos && leaf.size() > 0)
+			{
+				directoryMap[leaf].push_back(imageFileNameInfo);
+			}
 		}
 	}
 
@@ -4875,389 +4884,393 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& dup
 
 		//Common header stuff
 		htmlFile.WriteString(htmlHeader);
-		fprintf(htmlFile.GetFileHandle(), "\n<div id=\"FileName\" style=\"display: none;\">%s</div>\n", tblFileName.c_str());
-		fprintf(htmlFile.GetFileHandle(), "\n<div id=\"LastImageIndex\" style=\"display: none;\">%i</div>\n", numImageFiles);
-		fprintf(htmlFile.GetFileHandle(), "\n<div id=\"NumberOfDuplicates\" style=\"display: none;\">%i</div>\n", numberOfDuplicatesFound);
 
-		htmlFile.WriteString("<script src=\"https://ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js\">\n\n");
-
-		//Load Data on startup
-		htmlFile.WriteString("\t$( window ).on( \"load\", function()\n {\n\t\tOnStartup();\n});\n\n");
-		htmlFile.WriteString("</script>\n\n");
-
-		//Begin functions
-		htmlFile.WriteString("<script type=\"text/javascript\">\n");
-
-		//SaveDuplicateData function
-		htmlFile.WriteString("function SaveDuplicateData(inDialogImageName, inEnglish, inDivID, inCRC)\n");
-		htmlFile.WriteString("{\n");
-		htmlFile.WriteString("     var fileName = document.getElementById(\"FileName\").innerHTML;\n");
-		htmlFile.WriteString("     	$.ajax({\n");
-		htmlFile.WriteString("          type: \"POST\",\n");
-		htmlFile.WriteString("          url: \"UpdateTranslationTest.php\",\n");
-		htmlFile.WriteString("          data: { inTBLFileName: fileName, inImageName:inDialogImageName, inTranslation:inEnglish, inDivId:inDivID, inCrc:inCRC },\n");
-		htmlFile.WriteString("          success: function(result)\n");
-		htmlFile.WriteString("          {\n");
-		htmlFile.WriteString("               var trId = \"tr_\" + inDivID;\n");
-		htmlFile.WriteString("               if( inEnglish != \"Untranslated\" && inEnglish != \"<div>Untranslated</div>\")\n");
-		htmlFile.WriteString("               {\n");
-		htmlFile.WriteString("                    if( document.getElementById(trId).bgColor != \"#fec8c8\" )\n");
-		htmlFile.WriteString("                    {\n");
-		htmlFile.WriteString("                         document.getElementById(trId).bgColor = \"#e3fec8\";\n");
-		htmlFile.WriteString("                    }\n");
-		htmlFile.WriteString("               }\n");
-		htmlFile.WriteString("               else\n");
-		htmlFile.WriteString("               {\n");
-		htmlFile.WriteString("                    document.getElementById(trId).bgColor = \"#fefec8\";\n");
-		htmlFile.WriteString("               }\n");
-		htmlFile.WriteString("          }\n");
-		htmlFile.WriteString("     });\n");
-		htmlFile.WriteString("}\n\n");
-
-		//SaveData function
-		htmlFile.WriteString("function SaveData(inDialogImageName, inDivID, inCRC)\n");
-		htmlFile.WriteString("{\n");
-		htmlFile.WriteString("     var translatedText = document.getElementById(inDivID).value;\n");
-		htmlFile.WriteString("     var fileName = document.getElementById(\"FileName\").innerHTML;\n");
-		htmlFile.WriteString("     $.ajax({\n");
-		htmlFile.WriteString("          type: \"POST\",\n");
-		htmlFile.WriteString("          url: \"UpdateTranslationTest.php\",\n");
-		htmlFile.WriteString("          data: { inTBLFileName: fileName, inImageName:inDialogImageName, inTranslation:translatedText, inDivId:inDivID, inCrc:inCRC },\n");
-		htmlFile.WriteString("          success: function(result)\n");
-		htmlFile.WriteString("          {\n");
-		htmlFile.WriteString("                var trId = \"tr_\" + inDivID;\n");
-		htmlFile.WriteString("                if( translatedText != \"Untranslated\" && translatedText != \"<div>Untranslated</div>\")\n");
-		htmlFile.WriteString("                {\n");
-		htmlFile.WriteString("                     if( document.getElementById(trId).bgColor != \"#fec8c8\" )\n");
-		htmlFile.WriteString("                     {\n");
-		htmlFile.WriteString("                          document.getElementById(trId).bgColor = \"#e3fec8\";\n");
-		htmlFile.WriteString("                     }\n");
-		htmlFile.WriteString("                }\n");
-		htmlFile.WriteString("                else\n");
-		htmlFile.WriteString("                {\n");
-		htmlFile.WriteString("                     document.getElementById(trId).bgColor = \"#fefec8\";\n");
-		htmlFile.WriteString("                }\n");
-		htmlFile.WriteString("         }\n");
-		htmlFile.WriteString("    });\n");
-		htmlFile.WriteString("}\n");
-
-		//SaveEdits function
-		htmlFile.WriteString("function SaveEdits(inDialogImageName, inDivID, inCRC)\n");
-		htmlFile.WriteString("{\n");
-		htmlFile.WriteString("     SaveData(inDialogImageName, inDivID, inCRC);\n\n");
-		htmlFile.WriteString("     var translatedText = document.getElementById(inDivID).value;\n");
-		
-		//Print out array containing all available duplicate
-		if( duplicatesMap.size() )
+		if( !bForRelease )
 		{
-			htmlFile.WriteString("     var allDups = [\n");
-		}
-		else
-		{
-			htmlFile.WriteString("     var allDups = [];\n");
-		}
-		
-		bool firstDupPrinted = false;
-		for(map<string, vector<string>>::const_iterator mapIter = duplicatesMap.begin(); mapIter != duplicatesMap.end(); ++mapIter)
-		{
-			if( firstDupPrinted )
+			fprintf(htmlFile.GetFileHandle(), "\n<div id=\"FileName\" style=\"display: none;\">%s</div>\n", tblFileName.c_str());
+			fprintf(htmlFile.GetFileHandle(), "\n<div id=\"LastImageIndex\" style=\"display: none;\">%i</div>\n", numImageFiles);
+			fprintf(htmlFile.GetFileHandle(), "\n<div id=\"NumberOfDuplicates\" style=\"display: none;\">%i</div>\n", numberOfDuplicatesFound);
+
+			htmlFile.WriteString("<script src=\"https://ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js\">\n\n");
+
+			//Load Data on startup
+			htmlFile.WriteString("\t$( window ).on( \"load\", function()\n {\n\t\tOnStartup();\n});\n\n");
+			htmlFile.WriteString("</script>\n\n");
+
+			//Begin functions
+			htmlFile.WriteString("<script type=\"text/javascript\">\n");
+
+			//SaveDuplicateData function
+			htmlFile.WriteString("function SaveDuplicateData(inDialogImageName, inEnglish, inDivID, inCRC)\n");
+			htmlFile.WriteString("{\n");
+			htmlFile.WriteString("     var fileName = document.getElementById(\"FileName\").innerHTML;\n");
+			htmlFile.WriteString("     	$.ajax({\n");
+			htmlFile.WriteString("          type: \"POST\",\n");
+			htmlFile.WriteString("          url: \"UpdateTranslationTest.php\",\n");
+			htmlFile.WriteString("          data: { inTBLFileName: fileName, inImageName:inDialogImageName, inTranslation:inEnglish, inDivId:inDivID, inCrc:inCRC },\n");
+			htmlFile.WriteString("          success: function(result)\n");
+			htmlFile.WriteString("          {\n");
+			htmlFile.WriteString("               var trId = \"tr_\" + inDivID;\n");
+			htmlFile.WriteString("               if( inEnglish != \"Untranslated\" && inEnglish != \"<div>Untranslated</div>\")\n");
+			htmlFile.WriteString("               {\n");
+			htmlFile.WriteString("                    if( document.getElementById(trId).bgColor != \"#fec8c8\" )\n");
+			htmlFile.WriteString("                    {\n");
+			htmlFile.WriteString("                         document.getElementById(trId).bgColor = \"#e3fec8\";\n");
+			htmlFile.WriteString("                    }\n");
+			htmlFile.WriteString("               }\n");
+			htmlFile.WriteString("               else\n");
+			htmlFile.WriteString("               {\n");
+			htmlFile.WriteString("                    document.getElementById(trId).bgColor = \"#fefec8\";\n");
+			htmlFile.WriteString("               }\n");
+			htmlFile.WriteString("          }\n");
+			htmlFile.WriteString("     });\n");
+			htmlFile.WriteString("}\n\n");
+
+			//SaveData function
+			htmlFile.WriteString("function SaveData(inDialogImageName, inDivID, inCRC)\n");
+			htmlFile.WriteString("{\n");
+			htmlFile.WriteString("     var translatedText = document.getElementById(inDivID).value;\n");
+			htmlFile.WriteString("     var fileName = document.getElementById(\"FileName\").innerHTML;\n");
+			htmlFile.WriteString("     $.ajax({\n");
+			htmlFile.WriteString("          type: \"POST\",\n");
+			htmlFile.WriteString("          url: \"UpdateTranslationTest.php\",\n");
+			htmlFile.WriteString("          data: { inTBLFileName: fileName, inImageName:inDialogImageName, inTranslation:translatedText, inDivId:inDivID, inCrc:inCRC },\n");
+			htmlFile.WriteString("          success: function(result)\n");
+			htmlFile.WriteString("          {\n");
+			htmlFile.WriteString("                var trId = \"tr_\" + inDivID;\n");
+			htmlFile.WriteString("                if( translatedText != \"Untranslated\" && translatedText != \"<div>Untranslated</div>\")\n");
+			htmlFile.WriteString("                {\n");
+			htmlFile.WriteString("                     if( document.getElementById(trId).bgColor != \"#fec8c8\" )\n");
+			htmlFile.WriteString("                     {\n");
+			htmlFile.WriteString("                          document.getElementById(trId).bgColor = \"#e3fec8\";\n");
+			htmlFile.WriteString("                     }\n");
+			htmlFile.WriteString("                }\n");
+			htmlFile.WriteString("                else\n");
+			htmlFile.WriteString("                {\n");
+			htmlFile.WriteString("                     document.getElementById(trId).bgColor = \"#fefec8\";\n");
+			htmlFile.WriteString("                }\n");
+			htmlFile.WriteString("         }\n");
+			htmlFile.WriteString("    });\n");
+			htmlFile.WriteString("}\n");
+
+			//SaveEdits function
+			htmlFile.WriteString("function SaveEdits(inDialogImageName, inDivID, inCRC)\n");
+			htmlFile.WriteString("{\n");
+			htmlFile.WriteString("     SaveData(inDialogImageName, inDivID, inCRC);\n\n");
+			htmlFile.WriteString("     var translatedText = document.getElementById(inDivID).value;\n");
+
+			//Print out array containing all available duplicate
+			if (duplicatesMap.size())
 			{
-				fprintf(htmlFile.GetFileHandle(), ",\n");
+				htmlFile.WriteString("     var allDups = [\n");
 			}
+			else
+			{
+				htmlFile.WriteString("     var allDups = [];\n");
+			}
+		
+			bool firstDupPrinted = false;
+			for(map<string, vector<string>>::const_iterator mapIter = duplicatesMap.begin(); mapIter != duplicatesMap.end(); ++mapIter)
+			{
+				if( firstDupPrinted )
+				{
+					fprintf(htmlFile.GetFileHandle(), ",\n");
+				}
 
-			fprintf(htmlFile.GetFileHandle(), "                    \"edit_%s\"", mapIter->first.c_str());
+				fprintf(htmlFile.GetFileHandle(), "                    \"edit_%s\"", mapIter->first.c_str());
 			
-			//Print dups of this entry (contained in mapIter->first)
-			const size_t numDups = mapIter->second.size();
-			for(size_t dupIndex = 0; dupIndex < numDups; ++dupIndex)
-			{
-				fprintf(htmlFile.GetFileHandle(), ", \"edit_%s\"", mapIter->second[dupIndex].c_str());
-			}
-
-			firstDupPrinted = true;
-
-		}
-		if( duplicatesMap.size() )
-		{
-			htmlFile.WriteString("];\n\n");
-		}
-
-		for(map<string, vector<string>>::const_iterator mapIter = duplicatesMap.begin(); mapIter != duplicatesMap.end(); ++mapIter)
-		{
-			fprintf(htmlFile.GetFileHandle(), "     var edit_%s_duplicates = [", mapIter->first.c_str());
-
-			const size_t numDups = mapIter->second.size();
-			for(size_t dupIndex = 0; dupIndex < numDups; ++dupIndex)
-			{
-				fprintf(htmlFile.GetFileHandle(), "\"%s\"", mapIter->second[dupIndex].c_str());
-				if(dupIndex + 1 < numDups)
+				//Print dups of this entry (contained in mapIter->first)
+				const size_t numDups = mapIter->second.size();
+				for(size_t dupIndex = 0; dupIndex < numDups; ++dupIndex)
 				{
-					fprintf(htmlFile.GetFileHandle(), ",");
-				}
-			}
-			fprintf(htmlFile.GetFileHandle(), "];\n");
-
-			//Now print vars for all of the dups
-			for(size_t dupIndex = 0; dupIndex < numDups; ++dupIndex)
-			{
-				fprintf(htmlFile.GetFileHandle(), "     var edit_%s_duplicates = [\"%s\"", mapIter->second[dupIndex].c_str(), mapIter->first.c_str());
-
-				if( numDups > 1 )
-				{
-					fprintf(htmlFile.GetFileHandle(), ",");
+					fprintf(htmlFile.GetFileHandle(), ", \"edit_%s\"", mapIter->second[dupIndex].c_str());
 				}
 
-				size_t numDupsPrinted = 0;
-				for(size_t dupIndex2 = 0; dupIndex2 < numDups; ++dupIndex2)
+				firstDupPrinted = true;
+
+			}
+			if( duplicatesMap.size() )
+			{
+				htmlFile.WriteString("];\n\n");
+			}
+
+			for(map<string, vector<string>>::const_iterator mapIter = duplicatesMap.begin(); mapIter != duplicatesMap.end(); ++mapIter)
+			{
+				fprintf(htmlFile.GetFileHandle(), "     var edit_%s_duplicates = [", mapIter->first.c_str());
+
+				const size_t numDups = mapIter->second.size();
+				for(size_t dupIndex = 0; dupIndex < numDups; ++dupIndex)
 				{
-					if( dupIndex == dupIndex2 )
+					fprintf(htmlFile.GetFileHandle(), "\"%s\"", mapIter->second[dupIndex].c_str());
+					if(dupIndex + 1 < numDups)
 					{
-						continue;
+						fprintf(htmlFile.GetFileHandle(), ",");
 					}
+				}
+				fprintf(htmlFile.GetFileHandle(), "];\n");
 
-					fprintf(htmlFile.GetFileHandle(), "\"%s\"", mapIter->second[dupIndex2].c_str());
-					if(numDupsPrinted + 1 < numDups - 1)
+				//Now print vars for all of the dups
+				for(size_t dupIndex = 0; dupIndex < numDups; ++dupIndex)
+				{
+					fprintf(htmlFile.GetFileHandle(), "     var edit_%s_duplicates = [\"%s\"", mapIter->second[dupIndex].c_str(), mapIter->first.c_str());
+
+					if( numDups > 1 )
 					{
 						fprintf(htmlFile.GetFileHandle(), ",");
 					}
 
-					++numDupsPrinted;
+					size_t numDupsPrinted = 0;
+					for(size_t dupIndex2 = 0; dupIndex2 < numDups; ++dupIndex2)
+					{
+						if( dupIndex == dupIndex2 )
+						{
+							continue;
+						}
+
+						fprintf(htmlFile.GetFileHandle(), "\"%s\"", mapIter->second[dupIndex2].c_str());
+						if(numDupsPrinted + 1 < numDups - 1)
+						{
+							fprintf(htmlFile.GetFileHandle(), ",");
+						}
+
+						++numDupsPrinted;
+					}
+					fprintf(htmlFile.GetFileHandle(), "];\n");
 				}
-				fprintf(htmlFile.GetFileHandle(), "];\n");
 			}
-		}
 
-		htmlFile.WriteString("     var dynName = inDivID + \"_duplicates\";\n\n");
-		htmlFile.WriteString("     if( allDups.includes(inDivID) )\n");
-		htmlFile.WriteString("     {\n");
-		htmlFile.WriteString("          var dupArray = eval(dynName);\n");
-		htmlFile.WriteString("          for(var i = 0; i < dupArray.length; i++)\n");
-		htmlFile.WriteString("          {\n");
-		htmlFile.WriteString("               var lookupName = \"#edit_\" + dupArray[i];\n");
-		htmlFile.WriteString("               $(lookupName).html(translatedText)\n");
-		htmlFile.WriteString("               var dupImageName = dupArray[i] + \".bmp\";\n");
-		htmlFile.WriteString("               var dupDivID     = \"edit_\" + dupArray[i];\n\n");
-		htmlFile.WriteString("               SaveData(dupImageName, dupDivID, 0)\n");
-		htmlFile.WriteString("          }\n");
-		htmlFile.WriteString("     }\n");
-		htmlFile.WriteString("}\n");
+			htmlFile.WriteString("     var dynName = inDivID + \"_duplicates\";\n\n");
+			htmlFile.WriteString("     if( allDups.includes(inDivID) )\n");
+			htmlFile.WriteString("     {\n");
+			htmlFile.WriteString("          var dupArray = eval(dynName);\n");
+			htmlFile.WriteString("          for(var i = 0; i < dupArray.length; i++)\n");
+			htmlFile.WriteString("          {\n");
+			htmlFile.WriteString("               var lookupName = \"#edit_\" + dupArray[i];\n");
+			htmlFile.WriteString("               $(lookupName).html(translatedText)\n");
+			htmlFile.WriteString("               var dupImageName = dupArray[i] + \".bmp\";\n");
+			htmlFile.WriteString("               var dupDivID     = \"edit_\" + dupArray[i];\n\n");
+			htmlFile.WriteString("               SaveData(dupImageName, dupDivID, 0)\n");
+			htmlFile.WriteString("          }\n");
+			htmlFile.WriteString("     }\n");
+			htmlFile.WriteString("}\n");
 
-		//Export data function
-		htmlFile.WriteString("function ExportData()\n");
-		htmlFile.WriteString("{\n");
-		htmlFile.WriteString("     $(\"textarea\").each ( function ()\n");
-		htmlFile.WriteString("     {\n");
-		htmlFile.WriteString("          var thisText = $(this).text();\n");
-		htmlFile.WriteString("          thisText = thisText.replace(/<br>/g, '&ltbr&gt');\n");
-		htmlFile.WriteString("          thisText = thisText.replace(/<sp>/g, '&ltsp&gt');\n");
-		htmlFile.WriteString("          document.write(thisText + \"<br>\");\n");
-		htmlFile.WriteString("     });\n");
-		htmlFile.WriteString("}\n");
+			//Export data function
+			htmlFile.WriteString("function ExportData()\n");
+			htmlFile.WriteString("{\n");
+			htmlFile.WriteString("     $(\"textarea\").each ( function ()\n");
+			htmlFile.WriteString("     {\n");
+			htmlFile.WriteString("          var thisText = $(this).text();\n");
+			htmlFile.WriteString("          thisText = thisText.replace(/<br>/g, '&ltbr&gt');\n");
+			htmlFile.WriteString("          thisText = thisText.replace(/<sp>/g, '&ltsp&gt');\n");
+			htmlFile.WriteString("          document.write(thisText + \"<br>\");\n");
+			htmlFile.WriteString("     });\n");
+			htmlFile.WriteString("}\n");
 
-		//UpdateLoadingBar function
-		htmlFile.WriteString("function UpdateLoadingBar(inLoadPercentage)\n");
-		htmlFile.WriteString("{\n");
-		htmlFile.WriteString("     var elem            = document.getElementById(\"myBar\");\n");
-		htmlFile.WriteString("     var loadPercentElem = document.getElementById(\"LoadPercent\");\n");
-		htmlFile.WriteString("     inLoadPercentage    = Math.floor( inLoadPercentage*100 + 0.5);\n");
-		htmlFile.WriteString("     elem.style.width = inLoadPercentage + '%';\n");
-		htmlFile.WriteString("     loadPercentElem.innerHTML = (inLoadPercentage).toString() + \"%\";\n");
-		htmlFile.WriteString("}\n");
+			//UpdateLoadingBar function
+			htmlFile.WriteString("function UpdateLoadingBar(inLoadPercentage)\n");
+			htmlFile.WriteString("{\n");
+			htmlFile.WriteString("     var elem            = document.getElementById(\"myBar\");\n");
+			htmlFile.WriteString("     var loadPercentElem = document.getElementById(\"LoadPercent\");\n");
+			htmlFile.WriteString("     inLoadPercentage    = Math.floor( inLoadPercentage*100 + 0.5);\n");
+			htmlFile.WriteString("     elem.style.width = inLoadPercentage + '%';\n");
+			htmlFile.WriteString("     loadPercentElem.innerHTML = (inLoadPercentage).toString() + \"%\";\n");
+			htmlFile.WriteString("}\n");
 
-		//AttemptToLoadDuplicateData function
-		htmlFile.WriteString("function AttemptToLoadDuplicateData(inDivID, inCRC, inTrID, inPercentComplete)\n");
-		htmlFile.WriteString("{\n");
-		htmlFile.WriteString("     $.ajax({\n");
-		htmlFile.WriteString("     type: \"POST\",\n");
-		htmlFile.WriteString("     url: \"GetTranslationFromCRC.php\",\n");
-		htmlFile.WriteString("     data: { inCrc: inCRC},\n");
-		htmlFile.WriteString("     success: function(result)\n");
-		htmlFile.WriteString("     {\n");
-		htmlFile.WriteString("          UpdateLoadingBar(inPercentComplete);\n\n");
-		htmlFile.WriteString("          var json = $.parseJSON(result);\n");
-		htmlFile.WriteString("          var i;\n");
-		htmlFile.WriteString("          for (i = 0; i < json.length; i++)\n");
-		htmlFile.WriteString("          {\n");
-		htmlFile.WriteString("               var jsonEntry = json[i];\n");
-		htmlFile.WriteString("               var english   = jsonEntry.English.replace(/\\\\/g, \'\');\n");
-		htmlFile.WriteString("               if( english != \"Untranslated\" )\n");
-		htmlFile.WriteString("               {\n");
-		htmlFile.WriteString("                    if( document.getElementById(inTrID).bgColor != \"#fec8c8\" )\n");
-		htmlFile.WriteString("                    {\n");
-		htmlFile.WriteString("                         document.getElementById(inTrID).bgColor = \"#e3fec8\";\n");
-		htmlFile.WriteString("                    }\n");
-		htmlFile.WriteString("                    $(inDivID).html(english);\n");
-		htmlFile.WriteString("                    var divID = inDivID.replace(\"#\", \"\");\n");
-		htmlFile.WriteString("                    var imageName = divID.replace(\"edit_\", \"\") + \".bmp\";\n");
-		htmlFile.WriteString("                    SaveDuplicateData(imageName, english, divID, inCRC);\n");
-		htmlFile.WriteString("                    return;\n");
-		htmlFile.WriteString("               }\n");
-		htmlFile.WriteString("          }\n");
-		htmlFile.WriteString("     },\n");
-		htmlFile.WriteString("     error: function()\n");
-		htmlFile.WriteString("     {\n");
-		htmlFile.WriteString("     }\n");
-		htmlFile.WriteString("   });\n");
-		htmlFile.WriteString("}\n");
+			//AttemptToLoadDuplicateData function
+			htmlFile.WriteString("function AttemptToLoadDuplicateData(inDivID, inCRC, inTrID, inPercentComplete)\n");
+			htmlFile.WriteString("{\n");
+			htmlFile.WriteString("     $.ajax({\n");
+			htmlFile.WriteString("     type: \"POST\",\n");
+			htmlFile.WriteString("     url: \"GetTranslationFromCRC.php\",\n");
+			htmlFile.WriteString("     data: { inCrc: inCRC},\n");
+			htmlFile.WriteString("     success: function(result)\n");
+			htmlFile.WriteString("     {\n");
+			htmlFile.WriteString("          UpdateLoadingBar(inPercentComplete);\n\n");
+			htmlFile.WriteString("          var json = $.parseJSON(result);\n");
+			htmlFile.WriteString("          var i;\n");
+			htmlFile.WriteString("          for (i = 0; i < json.length; i++)\n");
+			htmlFile.WriteString("          {\n");
+			htmlFile.WriteString("               var jsonEntry = json[i];\n");
+			htmlFile.WriteString("               var english   = jsonEntry.English.replace(/\\\\/g, \'\');\n");
+			htmlFile.WriteString("               if( english != \"Untranslated\" )\n");
+			htmlFile.WriteString("               {\n");
+			htmlFile.WriteString("                    if( document.getElementById(inTrID).bgColor != \"#fec8c8\" )\n");
+			htmlFile.WriteString("                    {\n");
+			htmlFile.WriteString("                         document.getElementById(inTrID).bgColor = \"#e3fec8\";\n");
+			htmlFile.WriteString("                    }\n");
+			htmlFile.WriteString("                    $(inDivID).html(english);\n");
+			htmlFile.WriteString("                    var divID = inDivID.replace(\"#\", \"\");\n");
+			htmlFile.WriteString("                    var imageName = divID.replace(\"edit_\", \"\") + \".bmp\";\n");
+			htmlFile.WriteString("                    SaveDuplicateData(imageName, english, divID, inCRC);\n");
+			htmlFile.WriteString("                    return;\n");
+			htmlFile.WriteString("               }\n");
+			htmlFile.WriteString("          }\n");
+			htmlFile.WriteString("     },\n");
+			htmlFile.WriteString("     error: function()\n");
+			htmlFile.WriteString("     {\n");
+			htmlFile.WriteString("     }\n");
+			htmlFile.WriteString("   });\n");
+			htmlFile.WriteString("}\n");
 
-		//LoadData function
-		htmlFile.WriteString("function LoadData(){\n");
-		htmlFile.WriteString("     var fileName = document.getElementById(\"FileName\").innerHTML;\n");
-		htmlFile.WriteString("     $.ajax({\n");
-		htmlFile.WriteString("          type: \"POST\",\n");
-		htmlFile.WriteString("          url: \"GetTranslationData.php\",\n");
-		htmlFile.WriteString("          data: { inTBLFileName: fileName},\n");
-		htmlFile.WriteString("          success: function(result)\n");
-		htmlFile.WriteString("          {\n");
-		htmlFile.WriteString("               var numDupsPendingLoad = document.getElementById(\"NumberOfDuplicates\").innerHTML;\n");
-		htmlFile.WriteString("               var json = $.parseJSON(result);\n");
-		htmlFile.WriteString("               var i;\n");
-		htmlFile.WriteString("               for (i = 0; i < json.length; i++)\n");
-		htmlFile.WriteString("               {\n");
-		htmlFile.WriteString("                    var jsonEntry = json[i];\n");
-		htmlFile.WriteString("                    var english   = jsonEntry.English.replace(/\\\\/g, \'\');\n");
-		htmlFile.WriteString("                    var divId     = \"#\" + jsonEntry.DivId;\n");
-		htmlFile.WriteString("                    var trId      = \"tr_\" + jsonEntry.DivId;\n");
-		htmlFile.WriteString("                    if( english != \"Untranslated\" && english != \"<div>Untranslated</div>\")\n");
-		htmlFile.WriteString("                    {\n");
-		htmlFile.WriteString("                         if( document.getElementById(trId).bgColor != \"#fec8c8\" )\n");
-		htmlFile.WriteString("                         {\n");
-		htmlFile.WriteString("                              document.getElementById(trId).bgColor = \"#e3fec8\";\n");
-		htmlFile.WriteString("                         }  \n");
-		htmlFile.WriteString("                         $(divId).html(english);\n\n");
-		htmlFile.WriteString("                         var idNum     = jsonEntry.DivId.replace(\"edit_\", \"\");\n");
-		htmlFile.WriteString("                         var dupId     = \"dup_\" + idNum;\n");
-		htmlFile.WriteString("                         var dupValue  = document.getElementById(dupId).innerHTML;\n");
-		htmlFile.WriteString("                         if( dupValue == \"true\" )\n");
-		htmlFile.WriteString("                              numDupsPendingLoad--;\n");
-		htmlFile.WriteString("                    }\n");
-		htmlFile.WriteString("               }\n\n");
-		htmlFile.WriteString("               ////Load duplicates\n");
-		htmlFile.WriteString("               if( numDupsPendingLoad <= 0 )\n");
-		htmlFile.WriteString("               {\n");
-		htmlFile.WriteString("                    UpdateLoadingBar(1);\n\n");
-		htmlFile.WriteString("               }\n");
-		htmlFile.WriteString("               else\n");
-		htmlFile.WriteString("               {\n");
-		htmlFile.WriteString("                    var lastImageIndex  = document.getElementById(\"LastImageIndex\").innerHTML;\n");
-		htmlFile.WriteString("                    var numDupProcessed = 0;\n");
-		htmlFile.WriteString("                    for(i = 1; i < lastImageIndex; ++i)\n");
-		htmlFile.WriteString("                    {\n");
-		htmlFile.WriteString("                         var dupId    = \"dup_\" + i;\n");
-		htmlFile.WriteString("                         var dupValue = document.getElementById(dupId).innerHTML;\n");
-		htmlFile.WriteString("                         if( dupValue == \"false\" )\n");
-		htmlFile.WriteString("                         {\n");
-		htmlFile.WriteString("                              continue;\n");
-		htmlFile.WriteString("                         }\n");
-		htmlFile.WriteString("                         var divId    = \"#edit_\" + i;\n");
-		htmlFile.WriteString("                         var trId     = \"tr_edit_\" + i;\n");
-		htmlFile.WriteString("                         var crcId    = \"crc_\" + i;\n");
-		htmlFile.WriteString("                         var crcValue = document.getElementById(crcId).innerHTML;\n");
-		htmlFile.WriteString("                         var translatedText = document.getElementById(\"edit_\" + i).value;\n");
-		htmlFile.WriteString("                         crcValue     = parseInt(crcValue, 16)\n");
-		htmlFile.WriteString("                         if( translatedText == \"Untranslated\" )\n");
-		htmlFile.WriteString("                         {\n");
-		htmlFile.WriteString("                              var percentComplete = (numDupProcessed+1)/numDupsPendingLoad;\n");
-		htmlFile.WriteString("                              numDupProcessed = numDupProcessed + 1;\n");
-		htmlFile.WriteString("                              AttemptToLoadDuplicateData(divId, crcValue, trId, percentComplete);\n");
-		htmlFile.WriteString("                         }\n");
-		htmlFile.WriteString("                    }\n");
-		htmlFile.WriteString("               }\n");
-		htmlFile.WriteString("          },\n");
-		htmlFile.WriteString("          error: function()\n");
-		htmlFile.WriteString("          {\n");
-		htmlFile.WriteString("               alert('Unable to load data');\n");
-		htmlFile.WriteString("          }\n");
-		htmlFile.WriteString("     });\n");
-		htmlFile.WriteString("}\n");
+			//LoadData function
+			htmlFile.WriteString("function LoadData(){\n");
+			htmlFile.WriteString("     var fileName = document.getElementById(\"FileName\").innerHTML;\n");
+			htmlFile.WriteString("     $.ajax({\n");
+			htmlFile.WriteString("          type: \"POST\",\n");
+			htmlFile.WriteString("          url: \"GetTranslationData.php\",\n");
+			htmlFile.WriteString("          data: { inTBLFileName: fileName},\n");
+			htmlFile.WriteString("          success: function(result)\n");
+			htmlFile.WriteString("          {\n");
+			htmlFile.WriteString("               var numDupsPendingLoad = document.getElementById(\"NumberOfDuplicates\").innerHTML;\n");
+			htmlFile.WriteString("               var json = $.parseJSON(result);\n");
+			htmlFile.WriteString("               var i;\n");
+			htmlFile.WriteString("               for (i = 0; i < json.length; i++)\n");
+			htmlFile.WriteString("               {\n");
+			htmlFile.WriteString("                    var jsonEntry = json[i];\n");
+			htmlFile.WriteString("                    var english   = jsonEntry.English.replace(/\\\\/g, \'\');\n");
+			htmlFile.WriteString("                    var divId     = \"#\" + jsonEntry.DivId;\n");
+			htmlFile.WriteString("                    var trId      = \"tr_\" + jsonEntry.DivId;\n");
+			htmlFile.WriteString("                    if( english != \"Untranslated\" && english != \"<div>Untranslated</div>\")\n");
+			htmlFile.WriteString("                    {\n");
+			htmlFile.WriteString("                         if( document.getElementById(trId).bgColor != \"#fec8c8\" )\n");
+			htmlFile.WriteString("                         {\n");
+			htmlFile.WriteString("                              document.getElementById(trId).bgColor = \"#e3fec8\";\n");
+			htmlFile.WriteString("                         }  \n");
+			htmlFile.WriteString("                         $(divId).html(english);\n\n");
+			htmlFile.WriteString("                         var idNum     = jsonEntry.DivId.replace(\"edit_\", \"\");\n");
+			htmlFile.WriteString("                         var dupId     = \"dup_\" + idNum;\n");
+			htmlFile.WriteString("                         var dupValue  = document.getElementById(dupId).innerHTML;\n");
+			htmlFile.WriteString("                         if( dupValue == \"true\" )\n");
+			htmlFile.WriteString("                              numDupsPendingLoad--;\n");
+			htmlFile.WriteString("                    }\n");
+			htmlFile.WriteString("               }\n\n");
+			htmlFile.WriteString("               ////Load duplicates\n");
+			htmlFile.WriteString("               if( numDupsPendingLoad <= 0 )\n");
+			htmlFile.WriteString("               {\n");
+			htmlFile.WriteString("                    UpdateLoadingBar(1);\n\n");
+			htmlFile.WriteString("               }\n");
+			htmlFile.WriteString("               else\n");
+			htmlFile.WriteString("               {\n");
+			htmlFile.WriteString("                    var lastImageIndex  = document.getElementById(\"LastImageIndex\").innerHTML;\n");
+			htmlFile.WriteString("                    var numDupProcessed = 0;\n");
+			htmlFile.WriteString("                    for(i = 1; i < lastImageIndex; ++i)\n");
+			htmlFile.WriteString("                    {\n");
+			htmlFile.WriteString("                         var dupId    = \"dup_\" + i;\n");
+			htmlFile.WriteString("                         var dupValue = document.getElementById(dupId).innerHTML;\n");
+			htmlFile.WriteString("                         if( dupValue == \"false\" )\n");
+			htmlFile.WriteString("                         {\n");
+			htmlFile.WriteString("                              continue;\n");
+			htmlFile.WriteString("                         }\n");
+			htmlFile.WriteString("                         var divId    = \"#edit_\" + i;\n");
+			htmlFile.WriteString("                         var trId     = \"tr_edit_\" + i;\n");
+			htmlFile.WriteString("                         var crcId    = \"crc_\" + i;\n");
+			htmlFile.WriteString("                         var crcValue = document.getElementById(crcId).innerHTML;\n");
+			htmlFile.WriteString("                         var translatedText = document.getElementById(\"edit_\" + i).value;\n");
+			htmlFile.WriteString("                         crcValue     = parseInt(crcValue, 16)\n");
+			htmlFile.WriteString("                         if( translatedText == \"Untranslated\" )\n");
+			htmlFile.WriteString("                         {\n");
+			htmlFile.WriteString("                              var percentComplete = (numDupProcessed+1)/numDupsPendingLoad;\n");
+			htmlFile.WriteString("                              numDupProcessed = numDupProcessed + 1;\n");
+			htmlFile.WriteString("                              AttemptToLoadDuplicateData(divId, crcValue, trId, percentComplete);\n");
+			htmlFile.WriteString("                         }\n");
+			htmlFile.WriteString("                    }\n");
+			htmlFile.WriteString("               }\n");
+			htmlFile.WriteString("          },\n");
+			htmlFile.WriteString("          error: function()\n");
+			htmlFile.WriteString("          {\n");
+			htmlFile.WriteString("               alert('Unable to load data');\n");
+			htmlFile.WriteString("          }\n");
+			htmlFile.WriteString("     });\n");
+			htmlFile.WriteString("}\n");
 
 
-		//FixOnChangeEditableElements - A function that saves the data whenever input happens
-		htmlFile.WriteString("function FixOnChangeEditableElements()\n{\n");
-		htmlFile.WriteString("\tvar tags = document.querySelectorAll('[contenteditable=true][onChange]');//(requires FF 3.1+, Safari 3.1+, IE8+)\n");
-		htmlFile.WriteString("\tfor (var i=tags.length-1; i>=0; i--) if (typeof(tags[i].onblur)!='function')\n{\n");
-		htmlFile.WriteString("\t\ttags[i].onfocus = function()\n{\n");
-		htmlFile.WriteString("\t\tthis.data_orig=this.innerHTML;\n};\n");
-		htmlFile.WriteString("\t\ttags[i].onblur = function()\n{\n");
-		htmlFile.WriteString("\t\tif( this.innerHTML != this.data_orig)\n");
-		htmlFile.WriteString("\t\t\tthis.onchange();\n");
-		htmlFile.WriteString("\tdelete this.data_orig;\n};\n}\n}\n");
+			//FixOnChangeEditableElements - A function that saves the data whenever input happens
+			htmlFile.WriteString("function FixOnChangeEditableElements()\n{\n");
+			htmlFile.WriteString("\tvar tags = document.querySelectorAll('[contenteditable=true][onChange]');//(requires FF 3.1+, Safari 3.1+, IE8+)\n");
+			htmlFile.WriteString("\tfor (var i=tags.length-1; i>=0; i--) if (typeof(tags[i].onblur)!='function')\n{\n");
+			htmlFile.WriteString("\t\ttags[i].onfocus = function()\n{\n");
+			htmlFile.WriteString("\t\tthis.data_orig=this.innerHTML;\n};\n");
+			htmlFile.WriteString("\t\ttags[i].onblur = function()\n{\n");
+			htmlFile.WriteString("\t\tif( this.innerHTML != this.data_orig)\n");
+			htmlFile.WriteString("\t\t\tthis.onchange();\n");
+			htmlFile.WriteString("\tdelete this.data_orig;\n};\n}\n}\n");
 
-		//Startup function
-		htmlFile.WriteString("function OnStartup()\n{\n");
-		htmlFile.WriteString("\tFixOnChangeEditableElements();\n}\n");
+			//Startup function
+			htmlFile.WriteString("function OnStartup()\n{\n");
+			htmlFile.WriteString("\tFixOnChangeEditableElements();\n}\n");
 
-		//End scripts
-		htmlFile.WriteString("</script>\n\n");
-		htmlFile.WriteString("</head>\n\n");
+			//End scripts
+			htmlFile.WriteString("</script>\n\n");
+			htmlFile.WriteString("</head>\n\n");
 
-		//Call startup function
-		htmlFile.WriteString("<body>\n");
+			//Call startup function
+			htmlFile.WriteString("<body>\n");
 
-		htmlFile.WriteString("<?php include 'GetUserPermissions.php';\n");
-		htmlFile.WriteString("\t$bPermissionFound = false;\n");
-		htmlFile.WriteString("\tforeach ($allowedFiles as $value)\n{");
-		fprintf(htmlFile.GetFileHandle(), "\t\tif( $value == \"%s\" )\n\t\t{\n", tblFileName.c_str());
-		htmlFile.WriteString("\t\t\t$bPermissionFound = true;\n");
-		htmlFile.WriteString("\t\t\tbreak;\n\t\t}\n\t}");
-		htmlFile.WriteString("if( $bPermissionFound )\n{\n?>");
+			htmlFile.WriteString("<?php include 'GetUserPermissions.php';\n");
+			htmlFile.WriteString("\t$bPermissionFound = false;\n");
+			htmlFile.WriteString("\tforeach ($allowedFiles as $value)\n{");
+			fprintf(htmlFile.GetFileHandle(), "\t\tif( $value == \"%s\" )\n\t\t{\n", tblFileName.c_str());
+			htmlFile.WriteString("\t\t\t$bPermissionFound = true;\n");
+			htmlFile.WriteString("\t\t\tbreak;\n\t\t}\n\t}");
+			htmlFile.WriteString("if( $bPermissionFound )\n{\n?>");
 
-		fprintf(htmlFile.GetFileHandle(), "<article><header align=\"center\"><h1>Dialog For %s</h1></header></article>\n", iter->first.c_str());
+			fprintf(htmlFile.GetFileHandle(), "<article><header align=\"center\"><h1>Dialog For %s</h1></header></article>\n", iter->first.c_str());
 
-		htmlFile.WriteString("<br>\n");
-		htmlFile.WriteString("<b>Instructions:</b><br>\n");
-		htmlFile.WriteString("-Please let me know once the file is complete by emailing me @ sakurataisentranslation@gmail.com<br>\n");
-		htmlFile.WriteString("-This page is best displayed using Chrome.  Otherwise some of the table borders are missing for some reason.<br>\n");
-		htmlFile.WriteString("-Skip any row that is grayed out.<br>\n");
-		htmlFile.WriteString("-Your changes are automatically saved.<br>\n");
-		htmlFile.WriteString("-Press the Load Data button when you come back to the page to load your changes.<br>\n");
-		htmlFile.WriteString("-Please wait for the Load Bar to complete.  It's a bit slow, but as more of the file is translated, it will speed up.  If it gets stuck in the 90's, that's fine, consider it done. I'll fix this bug soon.<br><br>\n");
+			htmlFile.WriteString("<br>\n");
+			htmlFile.WriteString("<b>Instructions:</b><br>\n");
+			htmlFile.WriteString("-Please let me know once the file is complete by emailing me @ sakurataisentranslation@gmail.com<br>\n");
+			htmlFile.WriteString("-This page is best displayed using Chrome.  Otherwise some of the table borders are missing for some reason.<br>\n");
+			htmlFile.WriteString("-Skip any row that is grayed out.<br>\n");
+			htmlFile.WriteString("-Your changes are automatically saved.<br>\n");
+			htmlFile.WriteString("-Press the Load Data button when you come back to the page to load your changes.<br>\n");
+			htmlFile.WriteString("-Please wait for the Load Bar to complete.  It's a bit slow, but as more of the file is translated, it will speed up.  If it gets stuck in the 90's, that's fine, consider it done. I'll fix this bug soon.<br><br>\n");
 
-		htmlFile.WriteString("<b>Style:</b><br>\n");
-		htmlFile.WriteString("-Use only a single space after a period.<br>\n");
-		htmlFile.WriteString("-You do not need to worry about line breaks.  Just translate the text as one line.  The text insertion tool will automatically add newlines as needed.<br>\n");
-		htmlFile.WriteString("-There is a 160 character limit for each dialog entry.<br><br>\n\n");
+			htmlFile.WriteString("<b>Style:</b><br>\n");
+			htmlFile.WriteString("-Use only a single space after a period.<br>\n");
+			htmlFile.WriteString("-You do not need to worry about line breaks.  Just translate the text as one line.  The text insertion tool will automatically add newlines as needed.<br>\n");
+			htmlFile.WriteString("-There is a 160 character limit for each dialog entry.<br><br>\n\n");
 
-		htmlFile.WriteString("<b>LIPS Events</b><br>\n");
-		htmlFile.WriteString("-Pink rows are LIPS events where the user has to pick which line to say.  When translating these, insert a \" &lt;br&gt; \" without the quotes to signigy the next option.<br><br>\n");
-		htmlFile.WriteString("For example: The following line has two options.<br>\n");
-		htmlFile.WriteString("<img src=\"..\\ExtractedData\\Dialog\\0100TBL\\67.png\"><br>\n");
-		htmlFile.WriteString("It would be translated as: <br>\n");
-		htmlFile.WriteString("I'm on duty! &lt;br&gt; First I'd like to know more about you.<br><br>\n\n");
+			htmlFile.WriteString("<b>LIPS Events</b><br>\n");
+			htmlFile.WriteString("-Pink rows are LIPS events where the user has to pick which line to say.  When translating these, insert a \" &lt;br&gt; \" without the quotes to signigy the next option.<br><br>\n");
+			htmlFile.WriteString("For example: The following line has two options.<br>\n");
+			htmlFile.WriteString("<img src=\"..\\ExtractedData\\Dialog\\0100TBL\\67.png\"><br>\n");
+			htmlFile.WriteString("It would be translated as: <br>\n");
+			htmlFile.WriteString("I'm on duty! &lt;br&gt; First I'd like to know more about you.<br><br>\n\n");
 
-		htmlFile.WriteString("<b>Naming Conventions:</n><br>\n");
-		htmlFile.WriteString("<a href=\"https://docs.google.com/spreadsheets/d/1rgafQe78vML_xbxnYuOSlO8P5C8nuhgLjMJOExUQsm0/edit?usp=sharing\" target=\"_blank\">Click here to view the naming conventions for Characters, Locations, and Terms</a> <br>\n");
+			htmlFile.WriteString("<b>Naming Conventions:</n><br>\n");
+			htmlFile.WriteString("<a href=\"https://docs.google.com/spreadsheets/d/1rgafQe78vML_xbxnYuOSlO8P5C8nuhgLjMJOExUQsm0/edit?usp=sharing\" target=\"_blank\">Click here to view the naming conventions for Characters, Locations, and Terms</a> <br>\n");
 
-		htmlFile.WriteString("<?php\n");
-		htmlFile.WriteString("$currUser = $_SERVER['PHP_AUTH_USER'];\n");
-		htmlFile.WriteString("if( $currUser == \"swtranslator\" )\n");
-		htmlFile.WriteString("{\n");
-		htmlFile.WriteString("echo \"<input align=\\\"center\\\" type=\\\"button\\\" value=\\\"Export Data\\\" onclick=\\\"ExportData()\\\"/>\";\n");
-		htmlFile.WriteString("}\n");
-		htmlFile.WriteString("?>\n\n");
+			htmlFile.WriteString("<?php\n");
+			htmlFile.WriteString("$currUser = $_SERVER['PHP_AUTH_USER'];\n");
+			htmlFile.WriteString("if( $currUser == \"swtranslator\" )\n");
+			htmlFile.WriteString("{\n");
+			htmlFile.WriteString("echo \"<input align=\\\"center\\\" type=\\\"button\\\" value=\\\"Export Data\\\" onclick=\\\"ExportData()\\\"/>\";\n");
+			htmlFile.WriteString("}\n");
+			htmlFile.WriteString("?>\n\n");
 
-		//Load Data button
-		htmlFile.WriteString("<table align=\"center\">\n");
-		htmlFile.WriteString("     <tr>\n");
-		htmlFile.WriteString("          <td>\n");
-		htmlFile.WriteString("               <input align=\"center\" type=\"button\" value=\"Load Data\" onclick=\"LoadData()\"/>\n");
-		htmlFile.WriteString("          </td>\n");
-		htmlFile.WriteString("     </tr>\n");
-		htmlFile.WriteString("     <tr>\n");
-		htmlFile.WriteString("          <td>\n");
-		htmlFile.WriteString("               Duplicate Load Progress\n");
-		htmlFile.WriteString("          </td>\n");
-		htmlFile.WriteString("          <td width=\"400\">\n");
-		htmlFile.WriteString("               <div id=\"myProgress\">\n");
-		htmlFile.WriteString("               <div id=\"myBar\"></div>\n");
-		htmlFile.WriteString("          </div>\n");
-		htmlFile.WriteString("          </td>\n");
-		htmlFile.WriteString("          <td>\n");
-		htmlFile.WriteString("               <div id=\"LoadPercent\">0</div>\n");
-		htmlFile.WriteString("          </td>\n");
-		htmlFile.WriteString("     </tr>\n");
-		htmlFile.WriteString("</table><br>\n\n");
+			//Load Data button
+			htmlFile.WriteString("<table align=\"center\">\n");
+			htmlFile.WriteString("     <tr>\n");
+			htmlFile.WriteString("          <td>\n");
+			htmlFile.WriteString("               <input align=\"center\" type=\"button\" value=\"Load Data\" onclick=\"LoadData()\"/>\n");
+			htmlFile.WriteString("          </td>\n");
+			htmlFile.WriteString("     </tr>\n");
+			htmlFile.WriteString("     <tr>\n");
+			htmlFile.WriteString("          <td>\n");
+			htmlFile.WriteString("               Duplicate Load Progress\n");
+			htmlFile.WriteString("          </td>\n");
+			htmlFile.WriteString("          <td width=\"400\">\n");
+			htmlFile.WriteString("               <div id=\"myProgress\">\n");
+			htmlFile.WriteString("               <div id=\"myBar\"></div>\n");
+			htmlFile.WriteString("          </div>\n");
+			htmlFile.WriteString("          </td>\n");
+			htmlFile.WriteString("          <td>\n");
+			htmlFile.WriteString("               <div id=\"LoadPercent\">0</div>\n");
+			htmlFile.WriteString("          </td>\n");
+			htmlFile.WriteString("     </tr>\n");
+			htmlFile.WriteString("</table><br>\n\n");
 
+		}//if( !bForRelease )
 
 		//Write table
 		htmlFile.WriteString("<table>\n");
@@ -5278,6 +5291,36 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& dup
 		map<string, DialogOrder>::const_iterator dialogOrderIter = dialogOrder.find(infoFileName);
 		const bool bDialogOrderExists = dialogOrderIter != dialogOrder.end();
 
+		//****Find Translated Text File****
+		//Search for the corresponding translated file name
+		const FileNameContainer* pMatchingTranslatedFileName = nullptr;
+		for(const FileNameContainer& translatedFileName : translatedTextFiles)
+		{
+			if( translatedFileName.mNoExtension.find(iter->first) != string::npos )
+			{
+				pMatchingTranslatedFileName = &translatedFileName;
+				break;
+			}
+		}
+
+
+		//Open translated text file
+		bool bCanUseTranslatedFile = true;
+		TextFileData translatedFile(*pMatchingTranslatedFileName);
+		if( !translatedFile.InitializeTextFile(true, false) )
+		{
+			printf("Unable to open the translation file %s.\n", pMatchingTranslatedFileName->mFullPath.c_str());
+			bCanUseTranslatedFile = false;
+		}
+
+		//Make sure we have the correct amount of lines
+		if( bCanUseTranslatedFile && iter->second.size() < translatedFile.mLines.size() )
+		{
+			printf("Unable to use tranlsted file: %s because the translation line count is incorrect.\n", pMatchingTranslatedFileName->mNoExtension.c_str());
+			bCanUseTranslatedFile = false;
+		}
+		//****Done Finding Translated Text File****
+
 		//Create entries for all images
 		int num = 0;
 		for(const FileNameContainer& fileNameInfo : iter->second)
@@ -5287,7 +5330,7 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& dup
 			const unsigned short id   = sakuraFileIter->second->mStringInfoArray[num].mStringId;
 			const vector<int>* pOrder = bDialogOrderExists && dialogOrderIter->second.idAndOrder.find(id) != dialogOrderIter->second.idAndOrder.end() ? &dialogOrderIter->second.idAndOrder.find(id)->second : nullptr;
 			const bool bIsLipsEntry   = pOrder ? dialogOrderIter->second.idAndLips.find(id)->second : false;
-			const char* bgColor       = "fefec8";
+			const char* bgColor       = bForRelease ? "e3fec8" : "fefec8";
 			if( bIsLipsEntry )
 			{
 				bgColor = "fec8c8"; //LIPS event are highlighted in pink
@@ -5322,7 +5365,8 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& dup
 			htmlFile.WriteString(string(buffer));
 
 			//snprintf(buffer, 2048, "<td width=480><div id=\"edit_%s\" contenteditable=\"true\" onChange=\"SaveEdits('%i.bmp', 'edit_%i')\">Untranslated</div></td>", pVarSuffix, num + 1, num + 1);
-			snprintf(buffer, 2048, "<td width=\"480\"><textarea id=\"edit_%s\" contenteditable=true onchange=\"SaveEdits('%i.bmp', 'edit_%i', '%lu')\" style=\"border: none; width: 100%%; -webkit-box-sizing: border-box; -moz-box-sizing: border-box; box-sizing: border-box;\">Untranslated</textarea></td>", pVarSuffix, num + 1, num + 1, crc);
+			const char *pEnglishText = bCanUseTranslatedFile ? translatedFile.mLines[num].mFullLine.c_str() : "Untranslated";
+			snprintf(buffer, 2048, "<td width=\"480\"><textarea id=\"edit_%s\" contenteditable=true onchange=\"SaveEdits('%i.bmp', 'edit_%i', '%lu')\" style=\"border: none; width: 100%%; -webkit-box-sizing: border-box; -moz-box-sizing: border-box; box-sizing: border-box;\">%s</textarea></td>", pVarSuffix, num + 1, num + 1, crc, pEnglishText);
 			htmlFile.WriteString(string(buffer));
 
 			snprintf(buffer, 2048, "<td align=\"center\" width=\"120\">%02x (%i)</td>", id, id);
@@ -6202,7 +6246,7 @@ bool PatchFACEFiles(const string& rootSakuraDirectory, const string& rootTransla
 	{
 		return false;
 	}
-	
+
 	//Offset palette because original data uses only 128 colors
 	for(unsigned int i = 0; i < patchedObstacleImage.GetImageDataSize(); ++i)
 	{
@@ -6273,7 +6317,7 @@ bool PatchFACEFiles(const string& rootSakuraDirectory, const string& rootTransla
 
 				//Now copy over the patched image
 				memcpy_s(pDataBuffer + offsetToImageData, uncompressedImage.mUncompressedDataSize - offsetToImageData, patchedObstacleImage.GetImageData(), patchedObstacleImage.GetImageDataSize());
-				
+
 				//Compress the data
 				SakuraCompressedData patchedObstacleData;
 				patchedObstacleData.PatchDataInMemory(pDataBuffer, uncompressedImage.mUncompressedDataSize, true, false, origObstacleImage.mCompressedSize);
@@ -7222,10 +7266,44 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 	//Clipping for the battle menu, change 0x0030 to 0xffa0 (48 to -96)
 	unsigned short newBattleMenuClippingValue = 0xA0FF;//Big Endian: 0xFFA0;
 	
+	std::unordered_map<unsigned long, unsigned long> addressesFixedInSlg;        //originalValue, newValue
+	std::unordered_map<unsigned short, unsigned short> packedVDP1AddressesToFix; //originalValue, newValue
+	bool bEvtFilesFixed = false;
+
 	for(const string& slgFileName : slgFiles)
 	{
 		//Open the original file
 		const string filePath = outDirectory + slgFileName;
+
+		printf("File: %s\n", slgFileName.c_str());
+
+		//DEBUG 
+		FileData slgData;
+		slgData.InitializeFileData("SLG.BIN", filePath.c_str());
+		//debug
+		if (!bEvtFilesFixed && 0)
+		{
+			FileData slgData;
+			slgData.InitializeFileData("SLG.BIN", filePath.c_str());
+
+			std::map<unsigned long, unsigned long> slgVdp1Addresses;
+			for (unsigned long s = 0; s < slgData.GetDataSize(); s += 4)
+			{
+				unsigned long sData;
+				slgData.ReadData(s, (char*)&sData, 4, true);
+				if ((sData & 0xfff00000) == 0x25c00000 && sData >= 0x25c17b00)//0x25c2b600)
+				{
+					slgVdp1Addresses[s] = sData;
+				}
+			}
+
+			for (std::map<unsigned long, unsigned long>::iterator sIter = slgVdp1Addresses.begin(); sIter != slgVdp1Addresses.end(); ++sIter)
+			{
+				printf("   SLG VDP1: %x at %x\n", sIter->second, sIter->first);
+			}
+		}
+		//end debug
+
 		FileReadWriter slgFile;
 		if( !slgFile.OpenFile(filePath.c_str()) )
 		{
@@ -7233,75 +7311,121 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 			return false;
 		}
 
+		addressesFixedInSlg.clear();
+		packedVDP1AddressesToFix.clear();
+
 		//Fixup 4 byte offsets
 		unsigned long origVDP1Value = 0;
 		unsigned long newVPD1Value  = 0;
 
 		//Cursor image VDP1 offset
-		slgFile.ReadData(0x00014058, (char*)&origVDP1Value, sizeof(origVDP1Value), true);
+		slgFile.ReadData(0x14058, (char*)&origVDP1Value, sizeof(origVDP1Value), true);
 		newVPD1Value = origVDP1Value + battleMenuDelta;
-		slgFile.WriteData(0x00014058, (char*)&newVPD1Value, sizeof(newVPD1Value), true);
+		slgFile.WriteData(0x14058, (char*)&newVPD1Value, sizeof(newVPD1Value), true);
 
 		//Cursor image VDP1 offset
-		slgFile.ReadData(0x000140f0, (char*)&origVDP1Value, sizeof(origVDP1Value), true);
+		slgFile.ReadData(0x140f0, (char*)&origVDP1Value, sizeof(origVDP1Value), true);
 		newVPD1Value = origVDP1Value + battleMenuDelta;
-		slgFile.WriteData(0x000140f0, (char*)&newVPD1Value, sizeof(newVPD1Value), true);
+		slgFile.WriteData(0x140f0, (char*)&newVPD1Value, sizeof(newVPD1Value), true);
 
 		//Cursor image VDP1 offset
-		slgFile.ReadData(0x00014528, (char*)&origVDP1Value, sizeof(origVDP1Value), true);
+		slgFile.ReadData(0x14528, (char*)&origVDP1Value, sizeof(origVDP1Value), true);
 		newVPD1Value = origVDP1Value + battleMenuDelta;
-		slgFile.WriteData(0x00014528, (char*)&newVPD1Value, sizeof(newVPD1Value), true);
+		slgFile.WriteData(0x14528, (char*)&newVPD1Value, sizeof(newVPD1Value), true);
 
 		//Dialog text VDP1 address [05C16480]
-		slgFile.ReadData(0x00021590, (char*)&origVDP1Value, sizeof(origVDP1Value), true);
+		slgFile.ReadData(0x21590, (char*)&origVDP1Value, sizeof(origVDP1Value), true);
 		newVPD1Value = origVDP1Value + battleMenuDelta;
-		slgFile.WriteData(0x00021590, (char*)&newVPD1Value, sizeof(newVPD1Value), true);
+		slgFile.WriteData(0x21590, (char*)&newVPD1Value, sizeof(newVPD1Value), true);
 
 		//Dialog text VDP1 address [05C16480]
-		slgFile.ReadData(0x000219c4, (char*)&origVDP1Value, sizeof(origVDP1Value), true);
+		slgFile.ReadData(0x219C4, (char*)&origVDP1Value, sizeof(origVDP1Value), true);
 		newVPD1Value = origVDP1Value + battleMenuDelta;
-		slgFile.WriteData(0x000219c4, (char*)&newVPD1Value, sizeof(newVPD1Value), true);
+		slgFile.WriteData(0x219C4, (char*)&newVPD1Value, sizeof(newVPD1Value), true);
 
 		//Battle Sprites VDP1 address[05C17B00]
-		slgFile.ReadData(0x00010f8c, (char*)&origVDP1Value, sizeof(origVDP1Value), true);
+		slgFile.ReadData(0x10f8c, (char*)&origVDP1Value, sizeof(origVDP1Value), true);
 		newVPD1Value = origVDP1Value + battleMenuDelta + textDelta;
-		slgFile.WriteData(0x00010f8c, (char*)&newVPD1Value, sizeof(newVPD1Value), true);
+		slgFile.WriteData(0x10f8c, (char*)&newVPD1Value, sizeof(newVPD1Value), true);
 
 		//Battle sprites VDP1 read address[05C17B00]
-		slgFile.ReadData(0x0000FF68, (char*)&origVDP1Value, sizeof(origVDP1Value), true);
+		slgFile.ReadData(0xFF68, (char*)&origVDP1Value, sizeof(origVDP1Value), true);
 		newVPD1Value = origVDP1Value + battleMenuDelta + textDelta;
-		slgFile.WriteData(0x0000FF68, (char*)&newVPD1Value, sizeof(newVPD1Value), true);
+		slgFile.WriteData(0xFF68, (char*)&newVPD1Value, sizeof(newVPD1Value), true);
 
-		//Battle reaction sprites 2
-		//All Disc2 values found by TrekkiesUnite118
-		if( GIsDisc2 )
+		//Battle reaction sprites
+		if( 0 )//GIsDisc2 )
 		{
-#define FixSLGAddress(InAddress) slgFile.ReadData(InAddress, (char*)&origVDP1Value, sizeof(origVDP1Value), true); \
-			             newVPD1Value = origVDP1Value + battleMenuDelta + textDelta;\
-                         slgFile.WriteData(InAddress, (char*)&newVPD1Value, sizeof(newVPD1Value), true);
+			auto FixSLGAddress = [&slgFile, &newVPD1Value, &origVDP1Value, &battleMenuDelta, &addressesFixedInSlg, &packedVDP1AddressesToFix, &textDelta](unsigned long InAddress)
+			{
+				slgFile.ReadData(InAddress, (char*)&origVDP1Value, sizeof(origVDP1Value), true);
+				
+				if( origVDP1Value == 0x25C49100 ||
+					((origVDP1Value & 0xfff00000) == 0 && origVDP1Value == 0x49100)
+					)
+				{
+					return;
+				}
+				
+				newVPD1Value = origVDP1Value + battleMenuDelta + textDelta;
+				slgFile.WriteData(InAddress, (char*)&newVPD1Value, sizeof(newVPD1Value), true);
+			//	addressesFixedInSlg[origVDP1Value] = newVPD1Value;
+				if( (origVDP1Value & 0xfff00000) == 0x25c00000 )
+				{
+					packedVDP1AddressesToFix[ (unsigned short)((origVDP1Value & 0x000fffff) / 8)] = (unsigned short)((newVPD1Value & 0x000fffff) / 8);
+				}
+				printf("FixSLGAddress Original Address: 0x%x to 0x%x at 0x%x\n", origVDP1Value, newVPD1Value, InAddress);
+			};
+
+			auto SetSLGAddress = [&slgFile, &origVDP1Value, &addressesFixedInSlg, &packedVDP1AddressesToFix, &textDelta](unsigned long InAddress, unsigned int InNewValue)
+			{
+				slgFile.ReadData(InAddress, (char*)&origVDP1Value, sizeof(origVDP1Value), true);
+				slgFile.WriteData(InAddress, (char*)&InNewValue, sizeof(InNewValue), true);
+				//addressesFixedInSlg[origVDP1Value] = InNewValue;
+				if ((origVDP1Value & 0xfff00000) == 0x25c00000)
+				{
+					packedVDP1AddressesToFix[(unsigned short)((origVDP1Value & 0x000fffff) / 8)] = (unsigned short)((InNewValue & 0x000fffff) / 8);
+				}
+				printf("SetSLGAddress Original Address: %x\n", origVDP1Value);
+			};
 
 #define SetValueAtSLGAddress(InAddress, InNewValue, InType) {const InType newValue = (InType)InNewValue; \
                                                                slgFile.WriteData(InAddress, (char*)&newValue, sizeof(InType), true);}
 		
 			FixSLGAddress(0x1044);
 			FixSLGAddress(0x1070);
-			FixSLGAddress(0x10A4);
-			FixSLGAddress(0x889C);
+			FixSLGAddress(0x43E8); //*
 			FixSLGAddress(0x88AC);
-			FixSLGAddress(0x8C74);
 			FixSLGAddress(0x8C84);
-			FixSLGAddress(0x8F4C);
 			FixSLGAddress(0x8F5C);
+			FixSLGAddress(0x9350); //*
+			FixSLGAddress(0x9360); //*
 			FixSLGAddress(0xCCCC);
-			FixSLGAddress(0xFF70);
-			FixSLGAddress(0xFF78);
-			FixSLGAddress(0xFF80);
+			FixSLGAddress(0xE390); //*
+		//	FixSLGAddress(0xF720); //
+		//	FixSLGAddress(0xF724); //
+		//	FixSLGAddress(0xFF48); //
+			FixSLGAddress(0xFF68);
+		//	FixSLGAddress(0x10F38); //
+			FixSLGAddress(0x10F8C);
 			FixSLGAddress(0x10FE4);
 			FixSLGAddress(0x11094);
 			FixSLGAddress(0x1109C);
-			FixSLGAddress(0x16920);
 			FixSLGAddress(0x169B0);
+			FixSLGAddress(0x1ED10); //*
+			FixSLGAddress(0x1EDD8); //*
 			FixSLGAddress(0x33438);
+		//	FixSLGAddress(0x34CD0); //
+
+			//Packed addresses (fullAddress/8) with format 0x00XXXXXXXX
+			FixSLGAddress(0x10A4);
+			FixSLGAddress(0x889C);
+			FixSLGAddress(0x8C74);
+			FixSLGAddress(0x8F4C);
+			FixSLGAddress(0xFF70);
+			FixSLGAddress(0xFF78);
+			FixSLGAddress(0xFF80);
+			FixSLGAddress(0x16920);
 
 			//Fixes battle map
 			SetValueAtSLGAddress(0xC7AC, 0x91229142, unsigned long);
@@ -7310,15 +7434,40 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 
 			//Hard coded value here.  We just need to shift this pointer[0x25C49100] to a free block of memory.
 			const unsigned int freeVDP1RamOffset = 0x25C4A500;
-			const unsigned int freeRamOffset     = 0x0004A500;
-			slgFile.WriteData(0x43E8,  (char*)&freeVDP1RamOffset, sizeof(freeVDP1RamOffset), true);
-			slgFile.WriteData(0x9350,  (char*)&freeRamOffset,     sizeof(freeRamOffset),     true);
-			slgFile.WriteData(0x9360,  (char*)&freeVDP1RamOffset, sizeof(freeVDP1RamOffset), true);
-			slgFile.WriteData(0xE390,  (char*)&freeVDP1RamOffset, sizeof(freeVDP1RamOffset), true);
-			slgFile.WriteData(0x1ED10, (char*)&freeVDP1RamOffset, sizeof(freeVDP1RamOffset), true);
-			slgFile.WriteData(0x1EDD8, (char*)&freeVDP1RamOffset, sizeof(freeVDP1RamOffset), true);
+			const unsigned int freeRamOffset = 0x0004A500;
+			SetSLGAddress(0x43E8,  freeVDP1RamOffset);
+			SetSLGAddress(0x9350,  freeRamOffset);
+			SetSLGAddress(0x9360,  freeVDP1RamOffset);
+			SetSLGAddress(0xE390,  freeVDP1RamOffset);
+			SetSLGAddress(0x1ED10, freeVDP1RamOffset);
+			SetSLGAddress(0x1EDD8, freeVDP1RamOffset);
+
+			//debug
+			if (!bEvtFilesFixed && 0)
+			{
+				std::map<unsigned long, unsigned long> slgVdp1Addresses;
+				for (unsigned long s = 0; s < slgData.GetDataSize(); s += 4)
+				{
+					unsigned long sData;
+					slgData.ReadData(s, (char*)&sData, 4, true);
+					if ((sData & 0xfff00000) == 0 )
+					{
+						const unsigned long searchVal = 0x25c00000 + sData;
+						if(addressesFixedInSlg.find(searchVal) != addressesFixedInSlg.end())
+						{
+							slgVdp1Addresses[s] = sData;
+						}
+					}
+				}
+
+				for (std::map<unsigned long, unsigned long>::iterator sIter = slgVdp1Addresses.begin(); sIter != slgVdp1Addresses.end(); ++sIter)
+				{
+					printf("   SLG VDP1 PACKED: %x at %x\n", sIter->second, sIter->first);
+				}
+			}
+			//end debug
 		}
-		else
+		else if(!GIsDisc2)
 		{
 			//All of these are for the pointer 0002B600
 			slgFile.ReadData(0x0000FF78, (char*)&origVDP1Value, sizeof(origVDP1Value), true);
@@ -7363,94 +7512,140 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 
 		//Battle menu formatting
 		slgFile.WriteData(0x00046c60, battleMenuFormattingData.GetData(), battleMenuFormattingData.GetDataSize());
-		/*
-		
-		*/
-		//Value: 2000 
-	//	slgFile.ReadData(0x00012d90, (char*)&origVDP1Offset, sizeof(origVDP1Offset), true);
-	//	newVDP1Offset = ((origVDP1Offset<<3) + battleMenuDelta) >> 3;
-	//	slgFile.WriteData(0x00012d90, (char*)&newVDP1Offset, sizeof(newVDP1Offset), true);
-
-		//Value: 4000 
-	//	slgFile.ReadData(0x00012d92, (char*)&origVDP1Offset, sizeof(origVDP1Offset), true);
-	//	newVDP1Offset = ((origVDP1Offset<<3) + battleMenuDelta) >> 3;
-	//	slgFile.WriteData(0x00012d92, (char*)&newVDP1Offset, sizeof(newVDP1Offset), true);
 	}
 	//***Done with SLG files***
 
-	const string evtFilePath     = outDirectory + "EVT01.BIN";
-	const string evtOrigFilePath = sakuraDirectory + "SAKURA2\\EVT01.BIN";
-	FileWriter evtFile;
-	FileData origEvtFile;
-	if( !evtFile.OpenFileForWrite(evtFilePath.c_str()) )
+	//***Fixup addresses in EVT files***
+	if( !bEvtFilesFixed && FIX_EVT_FILES )
 	{
-		printf("PatchWKL: Unable to open %s file.\n", evtFilePath.c_str());
-		return false;
-	}
-	if( !origEvtFile.InitializeFileData(evtOrigFilePath.c_str()) )
-	{
-		printf("PatchWKL: Unable to open %s file.\n", evtOrigFilePath.c_str());
-		return false;
-	}
+		struct EVTAddressesToFix
+		{
+			union EVTAddressValue
+			{
+				EVTAddressValue(unsigned long f) : full(f){}
+				EVTAddressValue(unsigned short p) : packed(p) {}
 
-	const string tutorialPatchPath = inTranslatedDirectory + "EVT01_Tutorial.bin";
-	FileData evt01TutorialPatch;
-	if( !evt01TutorialPatch.InitializeFileData(tutorialPatchPath.c_str()) )
-	{
-		printf("PatchWKL: Unable to open %s file.\n", tutorialPatchPath.c_str());
-		return false;
+				unsigned long  full;
+				unsigned short packed;
+			};
+
+			EVTAddressesToFix(unsigned long inOriginal, unsigned long inNew, unsigned long inOffset) : 
+			originalValue(inOriginal), newValue(inNew), offsetInFile(inOffset), bIsPacked(false) {}
+
+			EVTAddressesToFix(unsigned short inOriginal, unsigned short inNew, unsigned long inOffset) :
+				originalValue(inOriginal), newValue(inNew), offsetInFile(inOffset), bIsPacked(true) {}
+
+			EVTAddressValue originalValue;
+			EVTAddressValue newValue;
+			unsigned long   offsetInFile;
+			bool            bIsPacked;
+		};
+
+		//Fixup evt files
+		{
+			std::string Sakura2("SAKURA2\\");
+			std::vector<FileNameContainer> allFiles;
+			std::vector<FileNameContainer> evtFiles;
+			FindAllFilesWithinDirectory(inPatchedDirectory, allFiles);
+			GetAllFilesOfType(allFiles, "EVT", evtFiles);
+			for (const FileNameContainer& evtFileNameContainer : evtFiles)
+			{
+				FileData evtFileData;
+				if (!evtFileData.InitializeFileData(evtFileNameContainer))
+				{
+					return false;
+				}
+
+				//Find addresses in evt file that need to be fixed
+				std::vector< EVTAddressesToFix > addressesToFix;
+				for (unsigned long a = 0; a < evtFileData.GetDataSize() - 2; ++a)
+				{
+					unsigned long evtValue;
+					evtFileData.ReadData(a, (char*)&evtValue, sizeof(evtValue), true);
+
+					//VDP1 address are stored as shorts where their full address as been divided by 8
+					if ((evtValue >> 16) == 0xf610)
+					{
+						unsigned short packedAddress;
+						evtFileData.ReadData(a + 3, (char*)&packedAddress, sizeof(packedAddress), true);
+
+						if (packedVDP1AddressesToFix.find(packedAddress) != packedVDP1AddressesToFix.end())
+						{
+							addressesToFix.push_back(EVTAddressesToFix(packedAddress, packedVDP1AddressesToFix[packedAddress], a + 3));
+						}
+					}
+
+					//Addresses at 4byte boundaries can contain the 4byte values stores in addressesFixedInSlg
+					if (a % 4 == 0 && ((evtValue & 0xfff00000) == 0x25c00000))
+					{
+						if (addressesFixedInSlg.find(evtValue) != addressesFixedInSlg.end())
+						{
+							addressesToFix.push_back(EVTAddressesToFix(evtValue, addressesFixedInSlg[evtValue], a));
+						}
+					}
+				}
+
+				FileReadWriter evtFile;
+				if (!evtFile.OpenFile(evtFileNameContainer.mFullPath))
+				{
+					return false;
+				}
+
+				for (const EVTAddressesToFix& addressToFix : addressesToFix)
+				{
+					if (addressToFix.bIsPacked)
+					{
+						evtFile.WriteData(addressToFix.offsetInFile, (char*)&addressToFix.newValue.packed, sizeof(addressToFix.newValue.packed), true);
+
+						printf("Fixing address at 0x%0x from 0x%0x to 0x%0x in %s\n", addressToFix.offsetInFile, addressToFix.originalValue.packed, addressToFix.newValue.packed, evtFileNameContainer.mNoExtension.c_str());
+					}
+					else
+					{
+						evtFile.WriteData(addressToFix.offsetInFile, (char*)&addressToFix.newValue.full, sizeof(addressToFix.newValue.full), true);
+
+						printf("Fixing address at 0x%0x from 0x%0x to 0x%0x in %s\n", addressToFix.offsetInFile, addressToFix.originalValue.full, addressToFix.newValue.full, evtFileNameContainer.mNoExtension.c_str());
+					}
+				}
+			}
+		}
 	}
+	//***Done Fixing Addresses in EVT Files***
+	
+	//***Fix battle 1 tutorial code in Evt01***
+	if( !bEvtFilesFixed )
+	{
+		const string evtFilePath     = outDirectory + "EVT01.BIN";
+		const string evtOrigFilePath = sakuraDirectory + "SAKURA2\\EVT01.BIN";
+		FileWriter evtFile;
+		FileData origEvtFile;
+		if( !evtFile.OpenFileForWrite(evtFilePath.c_str()) )
+		{
+			printf("PatchWKL: Unable to open %s file.\n", evtFilePath.c_str());
+			return false;
+		}
+		if( !origEvtFile.InitializeFileData(evtOrigFilePath.c_str()) )
+		{
+			printf("PatchWKL: Unable to open %s file.\n", evtOrigFilePath.c_str());
+			return false;
+		}
+
+		const string tutorialPatchPath = inTranslatedDirectory + "EVT01_Tutorial.bin";
+		FileData evt01TutorialPatch;
+		if( !evt01TutorialPatch.InitializeFileData(tutorialPatchPath.c_str()) )
+		{
+			printf("PatchWKL: Unable to open %s file.\n", tutorialPatchPath.c_str());
+			return false;
+		}
 	
 
-	evtFile.WriteData(origEvtFile.GetData(), origEvtFile.GetDataSize());
-	evtFile.WriteDataAtOffset(evt01TutorialPatch.GetData(), evt01TutorialPatch.GetDataSize(), 0x000120F0);
-	evtFile.WriteDataAtOffset(&newBattleMenuClippingValue, sizeof(newBattleMenuClippingValue), 0x000004F8, false);
-
-	//unsigned long origEvtVDP1WriteAddress = 0;
-	//unsigned long newEvtVDP1WriteAddress  = 0;
-
-	//VDP1 Write address
-	{
-		/*
-		origEvtFile.ReadData(0x00006d9c, (char*)&origEvtVDP1WriteAddress, sizeof(origEvtVDP1WriteAddress), true);
-		newEvtVDP1WriteAddress = (origEvtVDP1WriteAddress + (unsigned short)((battleMenuDelta)>>3));
-		evtFile.WriteData(0x00006d9c, (char*)&newEvtVDP1WriteAddress, sizeof(newEvtVDP1WriteAddress), true);*/
-
-		//25CF100
-		//origEvtFile.ReadData(0x000077d4, (char*)&origEvtVDP1WriteAddress, sizeof(origEvtVDP1WriteAddress), true);
-		//newEvtVDP1WriteAddress = (origEvtVDP1WriteAddress + (unsigned short)((battleMenuDelta + textDelta)));
-		//evtFile.WriteData(0x000077d4, (char*)&newEvtVDP1WriteAddress, sizeof(newEvtVDP1WriteAddress), true);
-
-		/*
-		origEvtFile.ReadData(0x00000c1c, (char*)&origEvtVDP1WriteAddress, sizeof(origEvtVDP1WriteAddress), true);
-		newEvtVDP1WriteAddress = (origEvtVDP1WriteAddress + (unsigned short)((battleMenuDelta + textDelta)>>3));
-		evtFile.WriteData(0x00000c1c, (char*)&newEvtVDP1WriteAddress, sizeof(newEvtVDP1WriteAddress), true);
-
-		origEvtFile.ReadData(0x00001128, (char*)&origEvtVDP1WriteAddress, sizeof(origEvtVDP1WriteAddress), true);
-		newEvtVDP1WriteAddress = (origEvtVDP1WriteAddress + (unsigned short)((battleMenuDelta + textDelta)>>3));
-		evtFile.WriteData(0x00001128, (char*)&newEvtVDP1WriteAddress, sizeof(newEvtVDP1WriteAddress), true);
-
-		origEvtFile.ReadData(0x00001320, (char*)&origEvtVDP1WriteAddress, sizeof(origEvtVDP1WriteAddress), true);
-		newEvtVDP1WriteAddress = (origEvtVDP1WriteAddress + (unsigned short)((battleMenuDelta + textDelta)>>3));
-		evtFile.WriteData(0x00001320, (char*)&newEvtVDP1WriteAddress, sizeof(newEvtVDP1WriteAddress), true);*/
-		/*
-		Found a match in EVT01.BIN @0x00006d9a
-		Found a match in EVT02.BIN @0x000087aa
-		Found a match in EVT03.BIN @0x00007536
-		Found a match in EVT04.BIN @0x00007aca
-		Found a match in EVT05.BIN @0x000063ea
-		Found a match in EVT06.BIN @0x00008472
-		Found a match in EVT07.BIN @0x00008b12
-		Found a match in EVT08.BIN @0x00008ee6
-		Found a match in EVT08.BIN @0x0001172e
-		Found a match in EVT09.BIN @0x0000325e
-		Found a match in EVT10.BIN @0x00003b32
-		Found a match in EVT11.BIN @0x00005306
-		Found a match in EVT21.BIN @0x00003a96
-		Found a match in EVT22.BIN @0x0000972e
-		Found a match in EVT27.BIN @0x00009852
-		*/
+		evtFile.WriteData(origEvtFile.GetData(), origEvtFile.GetDataSize());
+		evtFile.WriteDataAtOffset(evt01TutorialPatch.GetData(), evt01TutorialPatch.GetDataSize(), 0x000120F0);
+		evtFile.WriteDataAtOffset(&newBattleMenuClippingValue, sizeof(newBattleMenuClippingValue), 0x000004F8, false);
 	}
+	//***Done Fixing Tutorial Code***
+
+	bEvtFilesFixed = true;
+
 	return true;
 }
 
@@ -8983,6 +9178,20 @@ bool CopyOriginalFiles(const string& rootSakuraTaisenDirectory, const string& pa
 	CopyOriginalFile("SAKURA1\\MA_CG.BIN");
 	CopyOriginalFile("SAKURA1\\SA_CG.BIN");
 	CopyOriginalFile("SAKURA1\\SU_CG.BIN");
+	CopyOriginalFile("SAKURA2\\SLG.BIN");
+	CopyOriginalFile("SAKURA2\\0SLG.BIN");
+
+	std::string Sakura2("SAKURA2\\");
+	std::vector<FileNameContainer> allFiles;
+	std::vector<FileNameContainer> evtFiles;
+	FindAllFilesWithinDirectory(rootSakuraTaisenDirectory, allFiles);
+	GetAllFilesOfType(allFiles, "EVT", evtFiles);
+	for(const FileNameContainer& evtFile : evtFiles)
+	{
+		std::string evtFileName = Sakura2 + evtFile.mFileName;
+		
+		CopyOriginalFile(evtFileName);
+	}
 
 	return true;
 }
@@ -11718,7 +11927,7 @@ void PrintHelp()
 	printf("FindDuplicateText dialogDirectory outFile\n");
 	printf("FindDialogOrder rootSakuraTaisenDirectory outDirectory\n");
 	printf("ParseEVTFiles rootSakuraTaisenDirectory\n");
-	printf("CreateTBLSpreadsheets dialogImageDirectory duplicatesFile sakura1Directory\n");
+	printf("CreateTBLSpreadsheets dialogImageDirectory duplicatesFile sakura1Directory translatedTextDirectory forRelease\n");
 	printf("CreateMesSpreadsheets dialogImageDirectory rootSakuraTaisenDirectory\n");
 	printf("CreateWKLSpreadsheets dialogImageDirectory duplicatesFile rootSakuraTaisenDirectory\n");
 	printf("CreateTMapSpSpreadsheet imageDirectory\n");
@@ -11879,13 +12088,15 @@ int main(int argc, char *argv[])
 		PatchGame(rootSakuraTaisenDirectory, patchedSakuraTaisenDirectory, translatedTextDirectory, fontSheet, originalPalette, mainMenuFontSheetPath, mainMenuTranslatedBgnd, patchedOptionsImage, 
 				  translatedDataDirectory, extractedWklDirectory);
 	}
-	else if(command == "CreateTBLSpreadsheets" && argc == 5 )
+	else if(command == "CreateTBLSpreadsheets" && argc == 7 )
 	{
 		const string dialogImageDirectory = string(argv[2]);
 		const string duplicatesFile       = string(argv[3]);
 		const string sakura1Directory     = string(argv[4]) + Seperators;
+		const string translatedDirectory  = string(argv[5]) + Seperators;
+		const bool bForRelease            = atoi(argv[6]) != 0;
 
-		CreateTBLSpreadsheets(dialogImageDirectory, duplicatesFile, sakura1Directory);
+		CreateTBLSpreadsheets(dialogImageDirectory, duplicatesFile, sakura1Directory, translatedDirectory, bForRelease);
 	}
 	else if(command == "CreateMesSpreadsheets" && argc == 4 )
 	{

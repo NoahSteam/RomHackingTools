@@ -432,7 +432,7 @@ bool FileData::ReadData(unsigned long inDataOffset, char* pOutData, unsigned lon
 //////////////////////////////
 //        TextFileData      //
 //////////////////////////////
-bool TextFileData::InitializeTextFile(bool bFixupSpecialCharacters)
+bool TextFileData::InitializeTextFile(bool bFixupSpecialCharacters, bool bCollapseDots)
 {
 	FILE* pFile              = nullptr;
 	const errno_t errorValue = fopen_s(&pFile, mFileNameInfo.mFullPath.c_str(), "r");
@@ -479,7 +479,17 @@ bool TextFileData::InitializeTextFile(bool bFixupSpecialCharacters)
 				else if( bFixupSpecialCharacters && pToken[t] == (char)0xe2 && pToken[t+1] == (char)0x80 && pToken[t+2] == (char)0xa6 )
 				{
 					t += 3;
-					fixedString[f++] = '@';
+
+					if( bCollapseDots )
+					{
+						fixedString[f++] = '@';
+					}
+					else
+					{
+						fixedString[f++] = '.';
+						fixedString[f++] = '.';
+						fixedString[f++] = '.';
+					}
 				}
 				else if( bFixupSpecialCharacters && pToken[t] == (char)0xe2 && pToken[t+1] == (char)0x80 && pToken[t+2] == (char)0x99 )
 				{
@@ -760,7 +770,7 @@ bool FileReadWriter::WriteData(unsigned long inFileOffset, const char* pInData, 
 	if( bSwapEndianness )
 	{
 		char* pSwapBuffer = new char[inDataSize];
-		bool bFreeWriteData = true;
+		bFreeWriteData = true;
 
 		memcpy_s((void*)pSwapBuffer, inDataSize, pInData, inDataSize);
 		SwapByteOrderInPlace(pSwapBuffer, inDataSize);

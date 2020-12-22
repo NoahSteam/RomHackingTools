@@ -6,7 +6,7 @@ A photo of Iris. She's surrounded by flowers and flashing a radiant smile.
 A photo of Kohran. She's looking pretty in profile with her face dyed red by the evening sun. 
 A letter given to me by a patron. I was asked to give it to Sumire. I have a bad feeling about this… 
 Maria's pistol. This may help me escape from here… 
-A hair ornament. It's decorated with flowers and looks very elegant. 
+A hair ornament. It's shaped like a flower and looks very cute. 
 A pretty pendant. The delicate workmanship is gorgeous. 
 A hairpin for use in a traditional bun hairstyle. It would complement a formal outfit well. 
 Jean-Paul the teddy bear. Iris's best friend. She always carries him with her and takes good care of him. 
@@ -38,7 +38,7 @@ Hey, Maria. Know what…?
 Iris. Chattering during rehearsal is prohibited. 
 How boring. 
 I'm gonna go play with Mon Frère! 
-Ah Iris! Where are you going?! We're rehearsing right now! Come back! 
+Ah, Iris! Where are you going?! We're rehearsing right now! Come back! 
 I don't wanna! Bye-bye! 
 Sheesh… Just when I think I've gotten out of ticket punching, I get roped into sorting pay slips… 
 And here I thought I could take it easy until the performance of "Love is a Diamond" starts next week… 
@@ -58,7 +58,7 @@ Really? Where was she?
 Um… Where was it, again… 
 …Did you REALLY see her? 
 Sorry… looks like I was mistaken. 
-I see… Where on Earth could she have gone… ? 
+I see… Where on Earth could she have gone…? 
 No… I haven't. 
 I see… Honestly, where could she have gone off to? 
 …I suppose you haven't seen her. I wonder where she could have gone… 
@@ -273,7 +273,7 @@ Yep! I liked this one best.
 Say, Mon Frère. What do you think of this outfit? 
 It's very cute. <br> It's pretty nice, I guess. <br> Your usual outfit is better. 
 It's very cute. It suits you well, Iris. 
-Really?! Thank you, Mon Frère…. That makes me so happy!
+Really?! Thank you, Mon Frère… That makes me so happy!
 I wore this outfit just for you. I'm glad you like it! 
 Well now, shall we get going? 
 Yeah! Let's go, let's go! Mon Frère, this way! Hurryyyy! 
@@ -432,7 +432,7 @@ OK! I wanna go to that jewelry shop over there!
 Huh?! H-Hang on, Iris. I can't buy any jewelry! 
 It's fine! Hurry, hurry! 
 Welcome sir, and young miss. Take your time and look around. 
-What the… it's an accessory store. I thought it was for jewelry… 
+What the… It's an accessory store. I thought it was for jewelry… 
 Hey, fella… Why don't you buy something for the young lady here? 
 Yeah! Present, present! 
 My, you two seem close. She your little sister? 
@@ -511,7 +511,7 @@ Iris! Please, calm down!
 Th-This is bad! At this rate, the building's gonna come down… 
 Iris, it's not safe here! Let’s get out! 
 Ohhh, the theater… This is awful… 
-Just what kind of power does Iris have… ? 
+Just what kind of power does Iris have…? 
 …Yes? 
 Hey, Sakura. What's up? 
 Um, I'm about to go clean the large prop room… 
@@ -1330,13 +1330,13 @@ This floor's cleaner than ever, thanks to you.
 Oh no, I didn't do that much. You're the one working so hard, Sakura. 
 Yes, but it was a lot more fun working together, so thank you for that. 
 But you better hurry and go see Iris now. 
-Phew.. That was quite the workout. 
+Phew… That was quite the workout. 
 OK… That ate up more time than I thought, I better go pick up Iris right now. 
 Good work, Ogami. 
 Oh no, I didn't do that much. You're the one working so hard, Sakura. 
 Yes, but it was a lot more fun working together, so thank you for that. 
 But you better hurry and go see Iris now. 
-Phew.. That was quite the workout. 
+Phew… That was quite the workout. 
 OK… That ate up more time than I thought, I better go pick up Iris right now. 
 You're already thinking about your date with Iris, aren't you, Ogami? 
 You seemed to be really absent-minded during the cleaning… 

@@ -138,7 +138,7 @@ public:
 
 	TextFileData(const FileNameContainer& inFileNameInfo) : mFileNameInfo(inFileNameInfo){}
 
-	bool InitializeTextFile(bool bFixupSpecialCharacters = true);
+	bool InitializeTextFile(bool bFixupSpecialCharacters = true, bool bCollapseDots = true);
 };
 
 class FileWriter

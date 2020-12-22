@@ -103,7 +103,7 @@ PatchPalettes a:\SakuraWars\Disc1 A:\NoahSteam\RomPatchingTools\SakuraTaisen\Dat
 PatchGameKNJ a:\SakuraWars\Disc1 A:\SakuraWars\PatchedData\TranslatedFontSheet\TranslatedKNJ.BIN a:\SakuraWars\PatchedData\KNJ
 FindDuplicateText A:\SakuraWars\ExtractedData\Disc1\Dialog a:\SakuraWars\ExtractedData\Disc1\Dialog\Duplicates.txt
 FindDuplicateText A:\SakuraWars\ExtractedData\Disc1\WKL A:\SakuraWars\ExtractedData\WKL\duplicates.txt
-CreateTBLSpreadsheets a:\SakuraWars\ExtractedData\Disc1\Dialog A:\SakuraWars\ExtractedData\Disc1\Dialog\Duplicates.txt a:\SakuraWars\Disc1\SAKURA1
+CreateTBLSpreadsheets a:\SakuraWars\ExtractedData\Disc1\Dialog A:\SakuraWars\ExtractedData\Disc1\Dialog\Duplicates.txt a:\SakuraWars\Disc1\SAKURA1 A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\TranslatedText 1
 CreateMesSpreadsheets a:\SakuraWars\ExtractedData\Disc1\Dialog a:\SakuraWars\Disc1\
 CreateWKLSpreadsheets a:\SakuraWars\ExtractedData\Disc1\WKL A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\WKLDuplicates.txt A:\SakuraWars\Disc1\SAKURA2
 ExtractFCEFiles a:\SakuraWars\Disc1 A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\FacePalette.bin a:\SakuraWars\ExtractedData\Disc1\Faces
