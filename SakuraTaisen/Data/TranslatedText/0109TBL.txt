@@ -9,7 +9,7 @@ It's Maria's gun. I wonder if I can use it to escape?
 It's a cute flower-shaped hairpin. 
 It's a beautiful, finely-crafted brooch. 
 A hairpin that looks best with traditional Japanese clothing and hairstyles. 
-It's Jean-Paul, Iris' beloved teddy bear. 
+It's Jean-Paul, Iris's beloved teddy bear. 
 This key will let me enter rooms I couldn't before. 
 I found this in a bedroom on the second floor. I can use it to access the back room. 
 This is the cup Iris asked for. It's a cute little thing. 
@@ -576,7 +576,7 @@ What is Ikki Yoneda's official army rank?
 Major General <br> Lieutenant General <br> Admiral 
 What is the name of the Magic Circle that the Tenkai invoked? 
 Hexagram of Infernal Calling <br> Heptagram of Infernal Calling <br> Octogram of Infernal Calling 
-What is Iris' last name? 
+What is Iris's last name? 
 Champagne <br> Chateaubriand <br> Jardin 
 Where did Iris run off to alone in her Koubu? 
 Tsukiji <br> Fukagawa <br> Asakusa 

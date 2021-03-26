@@ -7287,19 +7287,35 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 			slgData.InitializeFileData("SLG.BIN", filePath.c_str());
 
 			std::map<unsigned long, unsigned long> slgVdp1Addresses;
+			std::map<unsigned long, unsigned long> slgVdp1AddressesUnique;
 			for (unsigned long s = 0; s < slgData.GetDataSize(); s += 4)
 			{
 				unsigned long sData;
 				slgData.ReadData(s, (char*)&sData, 4, true);
-				if ((sData & 0xfff00000) == 0x25c00000 && sData >= 0x25c17b00)//0x25c2b600)
+				if ((sData & 0xfff00000) == 0x25c00000 && sData >= 0x25C15100 )//0x25c17b00)//0x25c2b600)
 				{
 					slgVdp1Addresses[s] = sData;
+					slgVdp1AddressesUnique[sData] = sData;
+				}
+			}
+
+			for (unsigned long s = 0; s < slgData.GetDataSize(); s += 4)
+			{
+				unsigned long sData;
+				slgData.ReadData(s, (char*)&sData, 4, true);
+				
+				for(std::map<unsigned long, unsigned long>::iterator iter = slgVdp1AddressesUnique.begin(); iter != slgVdp1AddressesUnique.end(); ++iter)
+				{
+					if( (iter->second & 0x000fffff) == sData )
+					{
+						printf("   SLG Packed VDP1: 0x%x at 0x%x\n", iter->second, s);
+					}
 				}
 			}
 
 			for (std::map<unsigned long, unsigned long>::iterator sIter = slgVdp1Addresses.begin(); sIter != slgVdp1Addresses.end(); ++sIter)
 			{
-				printf("   SLG VDP1: %x at %x\n", sIter->second, sIter->first);
+				printf("   SLG VDP1: 0x%x at 0x%x\n", sIter->second, sIter->first);
 			}
 		}
 		//end debug
@@ -7318,6 +7334,8 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 		unsigned long origVDP1Value = 0;
 		unsigned long newVPD1Value  = 0;
 
+		//IF THE DISC2 FIXES BELOW ARE ENABLED, THEN THIS BLOCK NEEDS TO BE DISABLED
+#if 1
 		//Cursor image VDP1 offset
 		slgFile.ReadData(0x14058, (char*)&origVDP1Value, sizeof(origVDP1Value), true);
 		newVPD1Value = origVDP1Value + battleMenuDelta;
@@ -7352,24 +7370,26 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 		slgFile.ReadData(0xFF68, (char*)&origVDP1Value, sizeof(origVDP1Value), true);
 		newVPD1Value = origVDP1Value + battleMenuDelta + textDelta;
 		slgFile.WriteData(0xFF68, (char*)&newVPD1Value, sizeof(newVPD1Value), true);
+#endif
 
 		//Battle reaction sprites
-		if( 0 )//GIsDisc2 )
+		if( 0 && GIsDisc2 )
 		{
 			auto FixSLGAddress = [&slgFile, &newVPD1Value, &origVDP1Value, &battleMenuDelta, &addressesFixedInSlg, &packedVDP1AddressesToFix, &textDelta](unsigned long InAddress)
 			{
 				slgFile.ReadData(InAddress, (char*)&origVDP1Value, sizeof(origVDP1Value), true);
 				
+				/*
 				if( origVDP1Value == 0x25C49100 ||
 					((origVDP1Value & 0xfff00000) == 0 && origVDP1Value == 0x49100)
 					)
 				{
 					return;
-				}
+				}*/
 				
-				newVPD1Value = origVDP1Value + battleMenuDelta + textDelta;
+				newVPD1Value = origVDP1Value >= 0x25C17B00 ? (origVDP1Value + battleMenuDelta + textDelta) : (origVDP1Value + battleMenuDelta);
 				slgFile.WriteData(InAddress, (char*)&newVPD1Value, sizeof(newVPD1Value), true);
-			//	addressesFixedInSlg[origVDP1Value] = newVPD1Value;
+				addressesFixedInSlg[origVDP1Value] = newVPD1Value;
 				if( (origVDP1Value & 0xfff00000) == 0x25c00000 )
 				{
 					packedVDP1AddressesToFix[ (unsigned short)((origVDP1Value & 0x000fffff) / 8)] = (unsigned short)((newVPD1Value & 0x000fffff) / 8);
@@ -7381,7 +7401,7 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 			{
 				slgFile.ReadData(InAddress, (char*)&origVDP1Value, sizeof(origVDP1Value), true);
 				slgFile.WriteData(InAddress, (char*)&InNewValue, sizeof(InNewValue), true);
-				//addressesFixedInSlg[origVDP1Value] = InNewValue;
+				addressesFixedInSlg[origVDP1Value] = InNewValue;
 				if ((origVDP1Value & 0xfff00000) == 0x25c00000)
 				{
 					packedVDP1AddressesToFix[(unsigned short)((origVDP1Value & 0x000fffff) / 8)] = (unsigned short)((InNewValue & 0x000fffff) / 8);
@@ -7394,6 +7414,74 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 		
 			FixSLGAddress(0x1044);
 			FixSLGAddress(0x1070);
+			FixSLGAddress(0x43E8);
+			FixSLGAddress(0x88AC);
+			FixSLGAddress(0x8C84);
+			FixSLGAddress(0x8F5C);
+			FixSLGAddress(0x9360);
+			FixSLGAddress(0xCCCC);
+			FixSLGAddress(0xCF7C);
+			FixSLGAddress(0xE390);
+			FixSLGAddress(0xF720);
+			FixSLGAddress(0xF724);
+			FixSLGAddress(0xFF48);
+			FixSLGAddress(0x10F38);
+			FixSLGAddress(0x10F8C);
+			FixSLGAddress(0x10FE4);
+			FixSLGAddress(0x11094);
+			FixSLGAddress(0x1109C);
+			FixSLGAddress(0x127F0);
+			FixSLGAddress(0x127FC);
+			FixSLGAddress(0x12804);
+			FixSLGAddress(0x1280C);
+			FixSLGAddress(0x12814);
+			FixSLGAddress(0x13C64);
+			FixSLGAddress(0x13C7C);
+			FixSLGAddress(0x13D04);
+			FixSLGAddress(0x14058);
+			FixSLGAddress(0x14528);
+		//	FixSLGAddress(0x15924);
+		//	FixSLGAddress(0x15994);
+		//	FixSLGAddress(0x159A0);
+			FixSLGAddress(0x15F8C);
+			FixSLGAddress(0x169B0);
+			FixSLGAddress(0x1ED10);
+			FixSLGAddress(0x1EDD8);
+			FixSLGAddress(0x21590);
+		//	FixSLGAddress(0x216A8);
+		//	FixSLGAddress(0x217E0);
+		//	FixSLGAddress(0x2183C);
+		//	FixSLGAddress(0x21928);
+			FixSLGAddress(0x219C4);
+			FixSLGAddress(0x33438);
+			FixSLGAddress(0x34CD0);
+			
+			//Packed values
+			FixSLGAddress(0x10A4);
+			FixSLGAddress(0x889C);
+			FixSLGAddress(0x8C74);
+			FixSLGAddress(0x8F4C);
+			FixSLGAddress(0x9350);
+			FixSLGAddress(0xFF68);
+			FixSLGAddress(0xFF70);
+			FixSLGAddress(0xFF78);
+			FixSLGAddress(0xFF80);
+			FixSLGAddress(0x140F0);
+			FixSLGAddress(0x16920);
+		//	FixSLGAddress(0x43D70);
+		//	FixSLGAddress(0x43D78);
+		//	FixSLGAddress(0x43D88);
+		//	FixSLGAddress(0x43D90);
+		//	FixSLGAddress(0x43DA0);
+		//	FixSLGAddress(0x43DA8);
+		//	FixSLGAddress(0x43DB8);
+		//	FixSLGAddress(0x43DC8);
+		//	FixSLGAddress(0x43DD0);
+		//	FixSLGAddress(0x49114);
+
+			/*
+			FixSLGAddress(0x1044);
+			FixSLGAddress(0x1070);
 			FixSLGAddress(0x43E8); //*
 			FixSLGAddress(0x88AC);
 			FixSLGAddress(0x8C84);
@@ -7402,11 +7490,11 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 			FixSLGAddress(0x9360); //*
 			FixSLGAddress(0xCCCC);
 			FixSLGAddress(0xE390); //*
-		//	FixSLGAddress(0xF720); //
-		//	FixSLGAddress(0xF724); //
-		//	FixSLGAddress(0xFF48); //
+			FixSLGAddress(0xF720); //
+			FixSLGAddress(0xF724); //
+			FixSLGAddress(0xFF48); //
 			FixSLGAddress(0xFF68);
-		//	FixSLGAddress(0x10F38); //
+			FixSLGAddress(0x10F38); //
 			FixSLGAddress(0x10F8C);
 			FixSLGAddress(0x10FE4);
 			FixSLGAddress(0x11094);
@@ -7425,13 +7513,14 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 			FixSLGAddress(0xFF70);
 			FixSLGAddress(0xFF78);
 			FixSLGAddress(0xFF80);
-			FixSLGAddress(0x16920);
+			FixSLGAddress(0x16920);*/
 
 			//Fixes battle map
 			SetValueAtSLGAddress(0xC7AC, 0x91229142, unsigned long);
 			SetValueAtSLGAddress(0xC84A, 0x87F2, unsigned short);
 			SetValueAtSLGAddress(0xCF24, 0x8822, unsigned short);
 
+			/*
 			//Hard coded value here.  We just need to shift this pointer[0x25C49100] to a free block of memory.
 			const unsigned int freeVDP1RamOffset = 0x25C4A500;
 			const unsigned int freeRamOffset = 0x0004A500;
@@ -7440,7 +7529,7 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 			SetSLGAddress(0x9360,  freeVDP1RamOffset);
 			SetSLGAddress(0xE390,  freeVDP1RamOffset);
 			SetSLGAddress(0x1ED10, freeVDP1RamOffset);
-			SetSLGAddress(0x1EDD8, freeVDP1RamOffset);
+			SetSLGAddress(0x1EDD8, freeVDP1RamOffset);*/
 
 			//debug
 			if (!bEvtFilesFixed && 0)
@@ -7467,7 +7556,7 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 			}
 			//end debug
 		}
-		else if(!GIsDisc2)
+		else if( !GIsDisc2 )
 		{
 			//All of these are for the pointer 0002B600
 			slgFile.ReadData(0x0000FF78, (char*)&origVDP1Value, sizeof(origVDP1Value), true);
@@ -7562,6 +7651,12 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 				{
 					unsigned long evtValue;
 					evtFileData.ReadData(a, (char*)&evtValue, sizeof(evtValue), true);
+
+					if( evtValue == 0x25c40000 || evtValue == 0x25c4f100 )
+					{
+						addressesToFix.push_back(EVTAddressesToFix(evtValue, evtValue + battleMenuDelta + textDelta, a));
+						continue;
+					}
 
 					//VDP1 address are stored as shorts where their full address as been divided by 8
 					if ((evtValue >> 16) == 0xf610)
@@ -10474,7 +10569,7 @@ bool PatchLoadScreen(const string& patchedSakuraDirectory, const string& inTrans
 	}
 
 	//Patch lookup table
-	if( 0 )
+	if( 1 )
 	{
 		MiniGameTextIndiceFinder indiceFinder;
 		const unsigned int indiceOffset = GIsDisc2 ? 0x0005a1d6 : 0x0005a09e;
@@ -10609,15 +10704,15 @@ bool PatchLoadScreen(const string& patchedSakuraDirectory, const string& inTrans
 		}
 
 		//printf("Num Fixed: %i\n", numFixed);
+	}
 
-		//Patch button formatting
-		const unsigned int formattingAddress = GIsDisc2 ? 0x00059da8 : 0x00059c70;
-		sakuraFile.WriteData(formattingAddress, formattingData.GetData(), formattingData.GetDataSize());
+	//Patch button formatting
+	const unsigned int formattingAddress = GIsDisc2 ? 0x00059da8 : 0x00059c70;
+	sakuraFile.WriteData(formattingAddress, formattingData.GetData(), formattingData.GetDataSize());
 
-		unsigned char arrowFormatting = 0xec;
-		const unsigned int formattingAddress2 = GIsDisc2 ? 0x0005a193 : 0x0005a05b;
-		sakuraFile.WriteData(formattingAddress2, (char*)&arrowFormatting, sizeof(arrowFormatting));
-	}	
+	unsigned char arrowFormatting = 0xec;
+	const unsigned int formattingAddress2 = GIsDisc2 ? 0x0005a193 : 0x0005a05b;
+	sakuraFile.WriteData(formattingAddress2, (char*)&arrowFormatting, sizeof(arrowFormatting));
 
 	return true;
 }
@@ -11749,6 +11844,41 @@ bool PatchIntroLogo(const string& patchedSakuraDirectory, const string& patchedD
 	return true;
 }
 
+bool CopyChangesFromTrekkies(const string& inPatchedSakuraDirectory, const string& inTranslatedDataDirectory)
+{
+	printf("CopyChangesFromTrekkies\n");
+
+	const string sakuraFilePath = inPatchedSakuraDirectory + "\\SAKURA";
+	FileReadWriter sakuraFile;
+	if( !sakuraFile.OpenFile(sakuraFilePath) )
+	{
+		return false;
+	}
+
+	const string trekkiesFilePath = inTranslatedDataDirectory + string("\\FromTrekkies") + (GIsDisc2 ? string("\\Disc2") : string("\\Disc1")) + "\\SAKURA";
+	FileData trekkiesFile;
+	if( !trekkiesFile.InitializeFileData("SAKURA", trekkiesFilePath.c_str()) )
+	{
+		return false;
+	}
+
+	{
+		unsigned long offset = GIsDisc2 ? 0x51D20 : 0x51BF0;
+		unsigned long size = 0x2FC;
+		const char* pSourceData = trekkiesFile.GetData() + offset;
+		sakuraFile.WriteData(offset, pSourceData, size, false);
+	}
+
+	{
+		unsigned long offset = GIsDisc2 ? 0x521DC : 0x5209F;
+		unsigned long size = 0x3A3;
+		const char* pSourceData = trekkiesFile.GetData() + offset;
+		sakuraFile.WriteData(offset, pSourceData, size, false);
+	}
+
+	return true;
+}
+
 bool PatchGame(const string& rootSakuraTaisenDirectory, 
 			   const string& patchedSakuraTaisenDirectory, 
 			   const string& translatedTextDirectory, 
@@ -11901,6 +12031,12 @@ bool PatchGame(const string& rootSakuraTaisenDirectory,
 		return false;
 	}
 
+	//Step 16
+	if( !CopyChangesFromTrekkies(patchedSakuraTaisenDirectory, inTranslatedDataDirectory) )
+	{
+		printf("Unabled to copy changes from Trekkies\n");
+		return false;
+	}
 	//Step 14
 	/*if( !PatchIntroLogo(patchedSakuraTaisenDirectory, inTranslatedDataDirectory) )
 	{

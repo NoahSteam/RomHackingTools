@@ -564,11 +564,11 @@ Really? Are you sure?
 Yes, because you're always buying so many portrait cards. 
 We've got seven different ones in stock. Whose portrait would you like? 
 Sakura's please! <br> Sumire's please! <br> Maria's please! 
-Iris' please! <br> Kanna's please! <br> Kohran's please! 
+Iris's please! <br> Kanna's please! <br> Kohran's please! 
 Sakura's special portrait card? Here you go! 
 Sumire's special portrait card? Here you go! 
 Maria's special portrait card? Here you go! 
-Iris' special portrait card? Here you go! 
+Iris's special portrait card? Here you go! 
 Kanna's special portrait card? Here you go! 
 Kohran's special portrait card? Here you go! 
 …OK, just for you, I have an extra-special, secret portrait card here! 

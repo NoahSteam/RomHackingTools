@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
+﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking… 
 It's a photo of Sumire. This is a side of her you don't see too often. 
 It's a photo of Maria. She's lost in thought and looks kind of sad… 
 It's a photo of Kanna. Her signature strength comes through clearly. 
@@ -157,7 +157,7 @@ No one here would ever think of leaving you alone. Don't worry. We're all in thi
 I'll be by your side. Always. So stop worrying and sleep well… 
 I'm here for you, Iris. I'll always watch over you. 
 Sweet dreams… 
-This is Iris' room… 
+This is Iris's room… 
 Let's go somewhere else. 
 Let's leave her alone for now. 
 Iris… are you up? 
@@ -241,7 +241,7 @@ Kohran Li has started in the Ginza HQ. Seems enthusiastic about her work.
 Yoneda gave orders to ready the Soaring Whale. Will head to the Hanayashiki Branch by Thunderstrike. 
 May 13th, fair weather. 
 Met Ichiro Ogami last night. He was how I imagined him, more or less. Hope he meets our expectations. 
-Contact-free piloting system is ready. Iris' Koubu will be ready soon. 
+Contact-free piloting system is ready. Iris's Koubu will be ready soon. 
 Maiden voyage of the Soaring Whale. Damages to Hanayashiki Branch from scrambling impossible to predict. 
 June 9th, rain. 
 Ensign Ogami was wounded in the battle with the Hex Mechs, but nothing serious. Kanna Kirishima back from Okinawa. 
@@ -258,9 +258,9 @@ Says I'm not to tell anyone, including Ogami. Won't begrudge him his drink today
 Read on. <br> Put the book back. 
 July 5th, fair weather. 
 Iris is out of control. First division has orders to eliminate her if we can't stop her before sundown. 
-If we get through this, we have to take Iris' training up a notch. 
+If we get through this, we have to take Iris's training up a notch. 
 July 6th, fair weather. 
-Story of Iris' rampage is all over the newspapers. Yoneda in a foul mood. 
+Story of Iris's rampage is all over the newspapers. Yoneda in a foul mood. 
 No one is called before a committee of inquiry this time. Perhaps pressure from all sides is high enough? 
 August 2nd, cloudy. 
 Thanks to reports from citizens, we know of the Hive of Darkness's plans in advance for the first time. 
@@ -463,7 +463,7 @@ Maria… It's me, Ogami…
 I'm sorry, Captain, but please leave me alone for a while. 
 …All right. 
 I should leave Maria alone for now. 
-I'm in front of Iris' room… 
+I'm in front of Iris's room… 
 … 
 Iris… It's me, Ogami… 
 …
@@ -711,4 +711,4 @@ Ayame, who always used to guide me…
 Good and evil… I wonder which side of Ayame that was. 
 Until now… No, until you were here, Ogami… 
 Hehe… Ayame always was the only one I could talk with about these things. 
-No, not at all. 
+No, not at all.

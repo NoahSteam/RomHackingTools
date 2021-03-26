@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
 It's a photo of Maria. She's lost in thought and looks kind of sad…
 A photo of Kanna. Her signature strength comes through clearly.
@@ -152,14 +152,14 @@ These photos are mainly for guests, so please just take one.
 Oh, I guess that's true. I'll come again some other time. 
 You'd like to buy that? Thank you! 
 Hmm… Kohran's fanbase is a bit of a mystery. 
-Sometime in August, 1923… Headquarters of the Hive of Darkness 
+Sometime in August, 1923 <br> Hive of Darkness HQ 
 …
 …
-24 hours later, somewhere in the Imperial capital 
+24 Hours Later <br> Somewhere within the Capital
 Kuh… It seems I can't just force my way through… 
 And here I thought it was merely a broken down old building… This power is nothing to sniff at. 
-…I suppose there is no way around it. First we must seal this place… this building… 
-36 hours later, Imperial Theatre 
+…I suppose there is no way around it. First we must seal this place… This building… 
+36 Hours Later <br> The Imperial Theater 
 I say it every time but… Sumire sure does steal the show. 
 Kanna is a perfect fit for Son Goku, and Sumire's great as that demoness… 
 Totally, but I bet Sumire’ll start yelling “Why am I always the villain!?” afterward! 
@@ -239,7 +239,7 @@ Everyone, stop this at once!! Do you really think this is the time or place for 
 Ah… Maria. 
 Sumire, Kanna, get a hold of yourselves!! How long are you planning to go on fighting?! 
 …Captain, you should say something too. 
-Ah…um… Well, ladies, you shouldn't fight. 
+Ah… Um… Well, ladies, you shouldn't fight. 
 That's it!? Even Iris could say it better than that! 
 I hate fighting! 
 See? She said it. 

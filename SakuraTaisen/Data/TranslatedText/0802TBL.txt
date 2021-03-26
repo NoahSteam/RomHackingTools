@@ -28,7 +28,7 @@ Ayame's gun. Why…? Why did it have to turn out like this…?
 Jean-Paul the teddy bear. Iris's best friend. She always carries him with her and takes good care of him.
 …! 
 …What is it, Maria? 
-What's that voice!? 
+What's that laugh!? 
 Wait, you’re…! 
 Damned Hive of Darkness! So we didn't get all of them…? 
 What…?! 
@@ -63,7 +63,7 @@ Are you serious, Boss?! We'll run there, of course!
 What?! You want to run all the way to Meiji Shrine? 
 Sure! The air is wonderful on New Year's Day. It'll be a fun jog. 
 Let's go! Or do you want to be left behind? 
-Oh boy… This New Year is off to a good start… 
+Oh boy… This is going to be one heck of a New Year... 
 Oh, really? 
 No, no… I just wouldn't have expected that. 
 What?! No, that's not… 
@@ -109,7 +109,7 @@ Oh, really? What did you write about?
 …WHAT!? 
 Well I suppose so, but… No… that's not the issue here! 
 …Yeah, yeah. OK. 
-Huff… Huff… What… are you doing… this early… 
+Huff... Huff... Jeez... Why are we doing this first thing... on New Year's Day...? 
 Running… from Ginza… to the Meiji Shrine… Anyone would be… exhausted! 
 R-Really? 
 So that's why you turned out to be so strong. 
@@ -117,7 +117,7 @@ So that's why you turned out to be so strong.
 …? 
 Hahaha… No wonder this is a leisurely stroll for you. 
 Heeey, Kanna! Wait up! You're too fast for me! 
-Oh boy… If she's like that at Meiji Shrine, she'll probably make me swim to Okinawa… 
+Oh boy... If this is how we're getting to Meiji Shrine, she'll probably make me swim to Okinawa... 
 Yes. This is the peace you all fought so hard for. 
 Yeah. 
 I don't want to lose you in the crowd, so let's hold hands. 
@@ -545,7 +545,7 @@ Even you, Maria…
 Ahaha… Yes, you're right. <br> It's fun once in a while. 
 Ahaha… Yes, you're right. 
 No really, it's been fun. 
-But running here all the way… I mean, what a date! 
+Running all the way here… I mean, what a date! 
 … 
 It's fun once in a while. 
 Oh… No, I didn't mean it that way! Kanna, please wait! 
@@ -717,7 +717,7 @@ That's right! Isn't it nice for all of the Flower Division to celebrate the New 
 Exactly. We wanted to have fun together. 
 That was fun! Something like this isn't bad once in a while. A bit like a date. 
 What? What is it? What's with that artificial laugh? 
-So being with me really isn't enough…? 
+So I’m only fun to be around “once in a while,” huh…? 
 Oh, Captain! And Kanna, too. 
 S-Sakura!? 
 Unused
@@ -725,7 +725,7 @@ Unused
 Wh-Wh-Why is everyone here all of a sudden!? 
 Come on, Chief… Where else would we go on New Year's Day but the shrine? 
 That's right! Isn't it nice for all of the Flower Division to celebrate the New Year together? 
-I agreed… The more the merrier. 
+I agree… The more the merrier. 
 Phew… There's a bunch of people everywhere. Really makes me tired. 
 Thanks. Tell me one thing, Chief… 
 Are you happy you visited the shrine with me? 
@@ -875,14 +875,14 @@ You're an ensign, after all. You must at least have learned ballroom dancing, ri
 Just say the word, and it would be my pleasure to help you remember… 
 Hohoho, impossible! I could teach you all the secret techniques of ballroom dancing. 
 We should definitely give it a go sometime. As I said… whenever you want! 
-You're late, Ensign! Didn't you practice running in the Navy? 
-Ahaha… This feels so good, I got a bit carried away. 
-Come on! This little stroll is enough to make you huff and puff like you're about to die? 
+You're slow, Boss! Didn't you practice running in the Navy? 
+Hahaha… Man, I'm feelin' pretty great right now! 
+C'mon, don't tell me you're all worn out after a little jog! You're a man, aren'cha? 
 Pathetic… In Okinawa, the men aren't that weak. 
 Yeah, my old man was very strong, too. He'd never gripe and moan. Always training like a fiend. 
-Ha! But, as a woman I can't really brag about this. That's why I like strong men. 
+Heh… Still, as a woman, it's nothin' to brag about. That's why I like strong men. 
 And I'm not talking about karate and stuff. 
-A guy who doesn't give up, no matter what… That's real strength. 
+A guy who never gets discouraged or gives up… that's real strength. 
 Heheh… You should do some exercising under Okinawa's scorching sun, too! 
 I just love the place! Every time I go back there, I forget about all my troubles. 
 I'd really like to take you there someday. That endless sky, the azure sea… 

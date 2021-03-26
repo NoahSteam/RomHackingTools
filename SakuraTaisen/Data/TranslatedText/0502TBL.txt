@@ -167,7 +167,7 @@ Let's see, “Shishido Pharmaceuticals, Sigma Doll”. It says it's just for sna
 So no help for my spider bite? How disheartening… 
 All right… we'll just need to search the other rooms. 
 Yes… 
-This is…the room where the spider came out just now. 
+This is… the room where the spider came out just now. 
 This looks like a room for the servants. 
 This certainly isn't a very pleasant room. 
 Could we please move on to another room? I-I couldn't take it if more spiders appeared. 
@@ -692,7 +692,7 @@ What's wrong, Kanna? Is the bite hurting?
 …Boss. I've got a request for you… 
 What is it? 
 If… If I can't make it… Please protect Sumire for me. 
-She…acts tough but… I know she's lonely. She needs your help. 
+She acts tough but… I know she's lonely. She needs your help. 
 …Things aren't looking great for me, so… if it comes to that, please take care of her. 
 Don't talk like that! <br> …Understood. 
 Hey! I don't want to hear you talking like that! 
@@ -806,7 +806,7 @@ Uh, wait, Kanna!
 Help Sumire. <br> Chase after Kanna. 
 Ow! Aaah! The spider… it bit me!! 
 Are you all right, Sumire!? Here, I'll get the spider for you!! 
-This…is the end for me… 
+This… is the end for me… 
 Kanna, wait! I'm coming too! 
 Kanna? Hey! Kanna!! 
 Damn, I was too slow. She ran off somewhere after the enemy. 
@@ -919,7 +919,7 @@ Sumire? What's wrong? Is the wound hurting?
 …Yes… I feel a bit faint… 
 … 
 (Oh no… is it the spider venom!? It's already affecting her this badly…!?) 
-…Ensign… would you…listen to my request? 
+Ensign… would you listen to my request? 
 What is it? 
 If I should… fall here, I want you to take care of Kanna… Please… 
 She's like a big child so… she needs someone mature by her side… 

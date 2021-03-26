@@ -896,7 +896,7 @@ I wonder if Kohran is in her room?
 …I guess I'll go somewhere else. 
 …Nobody home. 
 Iris… where are you? 
-…That's it. I should go to Iris' room and see if I can find some clues. 
+…That's it. I should go to Iris's room and see if I can find some clues. 
 Maybe Sumire is in her room? 
 I really should go somewhere else. 
 …Seems there's no one here. 
@@ -975,7 +975,7 @@ The medical pods are powered by the steam machines in the basement…
 Iris… where are you? 
 …Maybe I'll find some clues in her room… 
 She isn't here either… Dammit Iris, where are you? 
-Maybe the steam processor can tell me Iris' whereabouts… 
+Maybe the steam processor can tell me Iris's whereabouts… 
 No use in moping around. I have to find Iris. 
 Ensign… Iris isn't here either. 
 I see… 

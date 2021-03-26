@@ -673,8 +673,8 @@ Thank you, sir! Let's make our way to the kitchen.
 I will take care of cleaning the floor if you see to arranging the room itself, Ensign. 
 There are props from the performance scattered here and there, would you please return them to their proper room? 
 Roger that. Let's see… I'll take these swords and other props first. 
-Oh, those swords and shields and that crown are from our performance of 'Seventh Heaven'. 
-Oh, and this is from 'Seventh Heaven' too. It's Kohran's maid hairpiece. 
+Oh, those swords and shields and that crown are from our performance of “Seventh Heaven.” 
+Oh, and this is from “Seventh Heaven” too. It's Kohran's maid hairpiece. 
 Where should these go? 
 We use them for performances, so they should be kept in the wardrobe room or the prop storage room. 
 Got it. I'll see you in a minute. 
@@ -750,7 +750,7 @@ Oh, hey Chief! What's up?
 …Oh, hey Chief. Weren't you helping out Iris? 
 I thought I'd lend a hand. <br> Oh, never mind. 
 Well, I thought I'd come give you a hand… Can I help? 
-Oh, really? Wow! That…makes me really happy. 
+Oh, really? Wow! That makes me really happy. 
 …But, sorry Chief. I don't really have anything I need help with. 
 Seriously? I can move stuff or whatever. Don't be shy, just tell me what you need. 
 Nah, all I'm doing is practicing my performance for the party. 
@@ -1017,7 +1017,7 @@ All right, let's get started. I'm going to make some pirozhki. That's a type of 
 Wait a second. I thought you just said you were going to teach me how to make this!? 
 Of course I will. I’ll instruct you while I make the pirozhki. 
 We're making food for quite a large group, so we'll need to divide the work. 
-I get that, but…that'll only work if I don't mess anything up. 
+I get that, but… that'll only work if I don't mess anything up. 
 Oh, don't worry, sir. No matter how it turns out I'm sure everyone will be happy to eat your hand-made food. 
 Well, let's both work hard and make some delicious food for everyone! 
 Oh my, sir, you're very good at cooking! I mean no offense, but I'm honestly surprised. 
@@ -1066,7 +1066,7 @@ Please tell everyone I'll just be a little longer.
 OK. I'm really looking forward to trying out your cooking. 
 Good grief. Same as always, this place is just full of random junk. 
 You've got that right. Oh, there's a table over there. 
-All righty, here we go. Lift it up with me, one, two, three! 
+Alrighty, here we go. Lift it up with me, one, two, three! 
 Hup! OK, let's take it slow. 
 Hey Boss, you came just in time! I actually need to carry this table all the way to the green room. 
 It's a little too big for me to carry alone. 
@@ -1078,7 +1078,7 @@ I need to carry this table to the green room, but it's pretty heavy.
 Want some help? <br> Well, good luck. <br> Want me to call someone? 
 Want some help? 
 Really? That'd be great! These are the times when it's handy to have a man around! 
-All righty, here we go. Lift it up with me, one, two, three! 
+Alrighty, here we go. Lift it up with me, one, two, three! 
 Hup! OK, let's take it slow. 
 Oh. Well, good luck. 
 Uh, OK… Not going to offer me a hand? 
@@ -1110,7 +1110,7 @@ Whoa! Th-The whole table… I guess that's our Iris for you.
 Thanks Iris, you're a lifesaver. 
 Unlike a certain person I could mention, you're actually helpful. 
 Well I didn't have to carry the table, but I feel kind of bad. 
-K-Kanna, are you all right? It's not too…heavy…is it? 
+K-Kanna, are you all right? It's not too… heavy… is it? 
 I'm fine. How about you, Boss? 
 (Good grief. I knew Kanna was strong, but she's not even showing any strain lifting this heavy of a table.) 
 Oh, Mon Frère! That table looks heavy. 
@@ -1123,7 +1123,7 @@ Honestly Mon Frère, what would you do without me?
 Kay, here I go. Ya! 
 Ah! 
 Th-The whole table vanished! 
-Yep, I just made it 'te-le-port' to the green room. Easy as pie. 
+Yep, I just made it te-le-port to the green room. Easy as pie. 
 (Good grief, this kid has some amazing powers. I'll have to call her next time I need to move.) 
 No, I don't think you'd be able to help with this, Iris. 
 Ahhh! You're treating me like a kid again! 
@@ -1131,7 +1131,7 @@ I can move that table super easy! Just you watch!
 Kay, here I go. Ya! 
 Ah! 
 Th-The whole table vanished! 
-Yep, I just made it 'te-le-port' to the green room. Easy as pie. 
+Yep, I just made it te-le-port to the green room. Easy as pie. 
 We… We made it! 
 I… I'm fine… 
 Attaboy Boss! Let's see those muscles. 
@@ -1143,11 +1143,11 @@ Come on, Mon Frère, no need to be shy. It's OK to ask me for help!
 Kay, here I go. Ya! 
 Ah! 
 Th-The whole table vanished! 
-Yep, I just made it 'te-le-port' to the green room. Easy as pie. 
+Yep, I just made it te-le-port to the green room. Easy as pie. 
 We… We made it! 
 All right! That's it for the table preparations! 
 Now we just need to wait for the food and silverware. 
-All righty, I'm gonna head off and help out the others. 
+Alrighty, I'm gonna head off and help out the others. 
 Ah! I was still in the middle of my job! I'll see you later, Mon Frère! 
 I should probably see if I can help someone too. 
 (Come to think of it, she said she was going to go grab a meal at Renga.) 

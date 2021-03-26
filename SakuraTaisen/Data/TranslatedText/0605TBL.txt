@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
 It's a photo of Maria. She's lost in thought and looks kind of sad…
 A photo of Kanna. Her signature strength comes through clearly.
@@ -76,7 +76,7 @@ A mere five units can't hold out for long against so many enemies.
 At this rate… we're all done for! 
 Captain Ogami… Sakura… Please hurry! 
 Hold on, Sakura!! 
-(This sound isn't thunder… it's explosions. It can't be… the Hive of Darkness?!) 
+(This sound isn't thunder… it's explosions. It can't be… The Hive of Darkness?!) 
 O-Oh no! Sakura, get down! 
 C-Crap! The entrance is covered with debris! 
 …Sakura! 
@@ -127,7 +127,7 @@ That's… Maria's training gun…
 …It must have burst out of her locker when the wall collapsed. 
 Bullets… Oh! As luck would have it, this thing is loaded! 
 All right… With this, we just might be able to break that wall! 
-Really?! So we can free ourselves and go help the others! 
+Really?! So we can free ourselves and go help the others? 
 Yeah… let's hurry! I'm worried about them. 
 Ohohohohohohoho! Finished already? It seems the Imperial Theater is all bark and no bite! 
 It's time for you and your precious theater to go to sleep… forever. 
