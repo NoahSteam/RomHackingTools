@@ -7335,6 +7335,10 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 		unsigned long newVPD1Value  = 0;
 
 		//IF THE DISC2 FIXES BELOW ARE ENABLED, THEN THIS BLOCK NEEDS TO BE DISABLED
+		if( battleMenuDelta < 0 )
+		{
+			battleMenuDelta = 0;
+		}
 #if 1
 		//Cursor image VDP1 offset
 		slgFile.ReadData(0x14058, (char*)&origVDP1Value, sizeof(origVDP1Value), true);
@@ -11580,6 +11584,80 @@ void AddShadowsToWKLText(const string& wklDirectory)
 	printf("Success\n");
 }
 
+void BoldWKLText(const string& wklDirectory)
+{
+	vector<FileNameContainer> allFiles;
+	FindAllFilesWithinDirectory(wklDirectory, allFiles);
+
+	vector<FileNameContainer> bmpFiles;
+	GetAllFilesOfType(allFiles, ".bmp", bmpFiles);
+
+	for (const FileNameContainer& fileName : bmpFiles)
+	{
+		BitmapReader bmpData;
+		if (!bmpData.ReadBitmap(fileName.mFullPath))
+		{
+			printf("Failed to read %s\n", fileName.mFullPath.c_str());
+			return;
+		}
+
+		const int numBytes = bmpData.mBitmapData.mColorData.mSizeInBytes;
+		char* pModifiedData = new char[numBytes];
+		const char* pOriginalData = bmpData.mBitmapData.mColorData.mpRGBA;
+		memcpy_s(pModifiedData, numBytes, pOriginalData, numBytes);
+
+		//Flip image
+		const int imageHeight = abs(bmpData.mBitmapData.mInfoHeader.mImageHeight);
+		for (int y = 0; y < imageHeight; ++y)
+		{
+			for (int x = 0; x < bmpData.mBitmapData.mInfoHeader.mImageWidth / 2; ++x)
+			{
+				const int currentPixel = y * bmpData.mBitmapData.mInfoHeader.mImageWidth / 2 + x;
+				const int outPixel = ((imageHeight - 1) - y) * bmpData.mBitmapData.mInfoHeader.mImageWidth / 2 + x;
+				pModifiedData[outPixel] = pOriginalData[currentPixel];
+			}
+		}
+
+		const char grayColor = 1;
+		const char boldedGray = 0xC;
+
+		//Bold colors
+		for (int y = 0; y < imageHeight; ++y)
+		{
+			if(y == 3)
+			{
+				int k = 0;
+				++k;
+			}
+
+			for(int x = 0; x < bmpData.mBitmapData.mInfoHeader.mImageWidth / 2; ++x)
+			{
+				const int currentPixel = y * bmpData.mBitmapData.mInfoHeader.mImageWidth / 2 + x;
+				
+				const char colorValue1 = (pModifiedData[currentPixel] & 0xf0) >> 4;
+				if( colorValue1 == grayColor )
+				{
+					pModifiedData[currentPixel] = (pModifiedData[currentPixel] & 0x0f) + (boldedGray << 4);
+				
+				}//if( colorValue1 == 1)
+
+				char colorValue2 = pModifiedData[currentPixel] & 0x0f;
+				if( colorValue2 == grayColor )
+				{
+					pModifiedData[currentPixel] = (pModifiedData[currentPixel] & 0xf0) + boldedGray;
+				}
+
+			} //for x
+		}
+
+		BitmapWriter outBitmap;
+		outBitmap.CreateBitmap(fileName.mFullPath, bmpData.mBitmapData.mInfoHeader.mImageWidth, -abs(imageHeight), 4, pModifiedData, numBytes,
+							   bmpData.mBitmapData.mPaletteData.mpRGBA, bmpData.mBitmapData.mPaletteData.mSizeInBytes, true);
+	}
+
+	printf("Success\n");
+}
+
 bool PatchTiledData(FileReadWriter& outFile, const string& fontSheetPath, const string& lookupTablePath, unsigned int fontSheetAddress, unsigned int lutAddress, 
 					unsigned int fontCompressedSize, unsigned int lutCompressedSize)
 {		
@@ -12418,6 +12496,12 @@ int main(int argc, char *argv[])
 		const string wklDir = string(argv[2]) + Seperators;
 
 		AddShadowsToWKLText(wklDir);
+	}
+	else if(command == "BoldWKLText" && argc == 3)
+	{
+		const string wklDir = string(argv[2]) + Seperators;
+
+		BoldWKLText(wklDir);
 	}
 	else if( command == "PatchFACEFiles" && argc == 5 )
 	{
