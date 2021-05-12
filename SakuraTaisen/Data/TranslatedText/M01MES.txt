@@ -106,7 +106,7 @@ There is also a “Defend” action, which will reduce incoming damage from enem
 The effect of “Defend” lasts until your next turn. 
 During battle you can take two actions each turn, but you may only use the same action type once per turn. 
 Normal and Special Attacks are considered the same type, so you can't use them both on the same turn. 
-“Rest,” “Defend” and “Restore” are also considered the same type, so you cannot use two in the same turn. 
+“Rest,” “Defend,” and “Heal” are also considered the same type, so you cannot use two in the same turn. 
 However, you are free to use them in any order you wish. You could move then attack, or you could attack then move. 
 I will now explain the operation of Koubu. Please pay attention. 
 I need to focus! 

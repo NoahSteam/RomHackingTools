@@ -43,6 +43,8 @@ using std::map;
 #define USE_TREKKIS_MINIGAME_DATA 1
 #define FIX_TIMING_DATA 1
 #define FIX_EVT_FILES 0
+#define USE_LARGE_BATTLE_MENU 0
+#define FIX_SLG_FONT_DRAWING_SIZE 1
 
 const unsigned char OutTileSpacingX = 8;
 const unsigned char OutTileSpacingY = 12;
@@ -62,6 +64,7 @@ const string NewLineWord("<br>");
 const string LipsWord("<LIPS>");
 const string SpaceWord("<sp>");
 const string BMPExtension(".bmp");
+const string SlgFontFileSuffix("_SLG");
 const unsigned short SpecialDialogIndicator = 0xC351;
 
 void PrintPaletteColors(const string& paletteFile)
@@ -1460,6 +1463,7 @@ bool ExtractImage(const FileNameContainer& inFileNameContainer, const string& ou
 
 bool ExtractFontSheetAsBitmap(const FileNameContainer& inFileNameContainer, const string& outFileName, const FileData& inPaletteFile)
 {
+//	return ExtractImage(inFileNameContainer, outFileName, inPaletteFile, 8, 12, 255, 16, 0, false, true);
 	return ExtractImage(inFileNameContainer, outFileName, inPaletteFile, 16, 16, 255);
 }
 
@@ -1964,7 +1968,7 @@ void ExtractText(const string& inSearchDirectory, const string& inPaletteFileNam
 	}
 }
 
-bool CreateTranslatedFontSheet(const string& inTranslatedFontSheet, const string& outPath, bool bAutoName = true)
+bool CreateTranslatedFontSheet(const string& inTranslatedFontSheet, const string& outPath, bool bAutoName = true, bool bIsSLGFont = false)
 {
 	//Read in translated font sheet
 	BitmapReader origTranslatedBmp;
@@ -1973,8 +1977,10 @@ bool CreateTranslatedFontSheet(const string& inTranslatedFontSheet, const string
 		return false;
 	}
 
+	unsigned int tileDimX = bIsSLGFont ? 8 : 16;
+	unsigned int tileDimY = bIsSLGFont ? 12 : 16;
 	TileExtractor tileExtractor;
-	if( !tileExtractor.ExtractTiles(16, 16, 16, 16, origTranslatedBmp) )
+	if( !tileExtractor.ExtractTiles(tileDimX, tileDimY, tileDimX, tileDimY, origTranslatedBmp) )
 	{
 		return false;
 	}
@@ -1982,6 +1988,11 @@ bool CreateTranslatedFontSheet(const string& inTranslatedFontSheet, const string
 	//Convert it to the SakuraTaisen format
 	PaletteData sakuraPalette;
 	sakuraPalette.CreateFrom32BitData(origTranslatedBmp.mBitmapData.mPaletteData.mpRGBA, origTranslatedBmp.mBitmapData.mPaletteData.mSizeInBytes, false);
+	if( sakuraPalette.GetNumColors() != 16 )
+	{
+		printf("CreateTranslatedFontSheet %s has %i colors.  Needs to be a 4bit 16 color image.\n", inTranslatedFontSheet.c_str(), sakuraPalette.GetNumColors());
+		return false;
+	}
 
 	//Fix up palette
 	//First index needs to have the transparent color, in our case that's white
@@ -2008,8 +2019,9 @@ bool CreateTranslatedFontSheet(const string& inTranslatedFontSheet, const string
 		indexOfAlphaColor = 0;
 	}
 
-	const string outPaletteName = bAutoName ? outPath + PatchedPaletteName : outPath + "Palette.bin";
-	const string outTableName   = bAutoName ? outPath + PatchedKNJName : outPath + ".bin";
+	const string slgFontFileSuffix = bIsSLGFont ? SlgFontFileSuffix : "";
+	const string outPaletteName = bAutoName ? outPath + PatchedPaletteName + slgFontFileSuffix : outPath + "Palette.bin";
+	const string outTableName   = bAutoName ? outPath + PatchedKNJName + slgFontFileSuffix : outPath + ".bin";
 
 	//Ouptut the palette
 	FileWriter outPalette;
@@ -2150,8 +2162,14 @@ bool PatchKNJ(const string& rootDirectory, const string& newKNJ, const string& o
 	GetAllFilesOfType(allFiles, "MES.FNT", originalFontsheets);
 
 	//Load patched file
-	FileData newFileData;
-	if( !newFileData.InitializeFileData(newKNJ.c_str(), newKNJ.c_str()) )
+	FileData patchedFontData;
+	if( !patchedFontData.InitializeFileData(newKNJ.c_str(), newKNJ.c_str()) )
+	{
+		return false;
+	}
+
+	FileData patchedSLGFontData;
+	if( !patchedSLGFontData.InitializeFileData((newKNJ + SlgFontFileSuffix).c_str(), (newKNJ + SlgFontFileSuffix).c_str()) )
 	{
 		return false;
 	}
@@ -2177,7 +2195,14 @@ bool PatchKNJ(const string& rootDirectory, const string& newKNJ, const string& o
 		FileWriter patchedFile;
 		if( patchedFile.OpenFileForWrite(outFileName) )
 		{
-			patchedFile.WriteData(newFileData.GetData(), newFileData.GetDataSize());
+			if( bIsMESFnt )
+			{
+				patchedFile.WriteData(patchedSLGFontData.GetData(), patchedSLGFontData.GetDataSize());
+			}
+			else
+			{
+				patchedFile.WriteData(patchedFontData.GetData(), patchedFontData.GetDataSize());
+			}
 		}
 		else
 		{
@@ -7187,7 +7212,7 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 			printf("PatchWKL: Battle menu data is not at a four byte boundary for the file %s\n", originalWklFileName.mFileName.c_str());
 		}
 
-		if( bCalculatedBattleDelta )
+		if( bCalculatedBattleDelta && USE_LARGE_BATTLE_MENU )
 		{
 			assert(newBattleMenuDelta == battleMenuDelta);
 		}
@@ -7261,7 +7286,7 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 	const int maxCharactersPerLine = maxMultiplier;
 	const int textBytes            = maxCharactersPerLine*MaxLines*((16*16)/2);
 	const int origTextBytes        = ((240/16))*3*((16*16)/2);
-	const int textDelta            = (textBytes - origTextBytes);
+	const int textDelta            = FIX_SLG_FONT_DRAWING_SIZE ? 0 : (textBytes - origTextBytes);
 	
 	//Clipping for the battle menu, change 0x0030 to 0xffa0 (48 to -96)
 	unsigned short newBattleMenuClippingValue = 0xA0FF;//Big Endian: 0xFFA0;
@@ -7335,10 +7360,6 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 		unsigned long newVPD1Value  = 0;
 
 		//IF THE DISC2 FIXES BELOW ARE ENABLED, THEN THIS BLOCK NEEDS TO BE DISABLED
-		if( battleMenuDelta < 0 )
-		{
-			battleMenuDelta = 0;
-		}
 #if 1
 		//Cursor image VDP1 offset
 		slgFile.ReadData(0x14058, (char*)&origVDP1Value, sizeof(origVDP1Value), true);
@@ -7600,11 +7621,14 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 			slgFile.WriteData(0x0001444C, (char*)&newVDP1Offset, sizeof(newVDP1Offset), true);
 		}
 
-		//Clipping for the battle menu, change 0x0030 to 0xffb8 (48 to -72)
-		slgFile.WriteData(0x000253DC, (char*)&newBattleMenuClippingValue, sizeof(newBattleMenuClippingValue), false);
+		if( USE_LARGE_BATTLE_MENU )
+		{
+			//Clipping for the battle menu, change 0x0030 to 0xffb8 (48 to -72)
+			slgFile.WriteData(0x000253DC, (char*)&newBattleMenuClippingValue, sizeof(newBattleMenuClippingValue), false);
 
-		//Battle menu formatting
-		slgFile.WriteData(0x00046c60, battleMenuFormattingData.GetData(), battleMenuFormattingData.GetDataSize());
+			//Battle menu formatting
+			slgFile.WriteData(0x00046c60, battleMenuFormattingData.GetData(), battleMenuFormattingData.GetDataSize());
+		}
 	}
 	//***Done with SLG files***
 
@@ -7711,7 +7735,7 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 	//***Done Fixing Addresses in EVT Files***
 	
 	//***Fix battle 1 tutorial code in Evt01***
-	if( !bEvtFilesFixed )
+	if( !bEvtFilesFixed && USE_LARGE_BATTLE_MENU )
 	{
 		const string evtFilePath     = outDirectory + "EVT01.BIN";
 		const string evtOrigFilePath = sakuraDirectory + "SAKURA2\\EVT01.BIN";
@@ -9175,7 +9199,7 @@ bool FixupSLG(const string& rootDir, const string& outDir, const string& inTrans
 		const int offsetLipsMaxCharsOffset_2   = 0x0002178B; //Change the command from MOV 0x0F(E20F) to SHLL1(E21E)
 		const int offsetLipsNumCharsPerLine_1  = 0x000217B9;
 		const int offsetLipsNumCharsPerLine_2  = 0x000217BF;
-		const int offsetLipsStartLocationY     = 0x0002173D; //Change the cpommand from MOV 0xCC(-52), r11 to 0xCE(-50)
+		const int offsetLipsStartLocationY     = 0x0002173D; //Change the command from MOV 0xCC(-52), r11 to 0xCE(-50)
 		const int offsetItemCountXOffset       = 0x0002512B;
 		const int offsetOptionsFontSheet       = 0x0004a740;
 	//	const int offsetBgndImagePalette       = 0x0004a1b8;
@@ -9203,11 +9227,48 @@ bool FixupSLG(const string& rootDir, const string& outDir, const string& inTrans
 		memcpy_s((void*)(origSlgData.GetData() + offsetLipsNumCharsPerLine_1),	  origSlgData.GetDataSize(), (void*)&maxCharsPerLipsLine,					sizeof(maxCharsPerLipsLine));
 		memcpy_s((void*)(origSlgData.GetData() + offsetLipsNumCharsPerLine_2),	  origSlgData.GetDataSize(), (void*)&maxCharsPerLipsLine,					sizeof(maxCharsPerLipsLine));
 		memcpy_s((void*)(origSlgData.GetData() + offsetLipsStartLocationY),	      origSlgData.GetDataSize(), (void*)&lipsStartLocY,							sizeof(lipsStartLocY));
-		memcpy_s((void*)(origSlgData.GetData() + offsetItemCountXOffset),	      origSlgData.GetDataSize(), (void*)&itemCountXOffset,						sizeof(itemCountXOffset));
 		memcpy_s((void*)(origSlgData.GetData() + offsetOptionsFontSheet),		  origSlgData.GetDataSize(), (void*)optionsCompressedData.mpCompressedData, optionsCompressedData.mDataSize);
 		memcpy_s((void*)(origSlgData.GetData() + ofsetBgndImage),		          origSlgData.GetDataSize(), (void*)translatedBgndData.mpCompressedData,    translatedBgndData.mDataSize);
+	
+	#if !FIX_SLG_FONT_DRAWING_SIZE
+		memcpy_s((void*)(origSlgData.GetData() + offsetItemCountXOffset), origSlgData.GetDataSize(), (void*)&itemCountXOffset, sizeof(itemCountXOffset));
+	#endif
 		//memcpy_s((void*)(origSlgData.GetData() + offsetBgndImagePalette),		  origSlgData.GetDataSize(), (void*)patchedBgndImage.mPalette.GetData(),    patchedBgndImage.mPalette.GetSize());
 		//***Done Fixing Max Character Lengths***
+
+		//Assembly to change the size of the text tiles from 16x16 to 8x12 - Done by Trekkies
+		if( FIX_SLG_FONT_DRAWING_SIZE )
+		{
+			/*
+			basically you're making changes to how the game calculates the VRAM addresses for the sprites
+			at 16x16 each letter was 0x80 bytes
+			but at 8x12 they're 0x30 bytes
+			so those changes will make it calculate things correctly
+			*/
+			const int offsetCMDSize          = 0x0002158A; //Change the command 0x210 to 0x010C.  This changes the drawing size of the text tiles
+			const int offsetToTextResizeCmd1 = 0x000214F4;
+			const int offsetToTextResizeCmd2 = offsetToTextResizeCmd1 + sizeof(short);
+			const int offsetToTextResizeCmd3 = offsetToTextResizeCmd2 + sizeof(short);
+			const int offsetToTextResizeCmd4 = offsetToTextResizeCmd3 + sizeof(short);
+			const int offsetToTextResizeCmd5 = offsetToTextResizeCmd4 + sizeof(short);
+			const int offsetToTextResizeCmd6 = 0x000219B6;
+
+			const unsigned short tileSizeCmd    = SwapByteOrder<unsigned short>(0x010C); //Changing from 0x0210 to 0x010C.  Original 02 = width of 2 tiles, 0x10 = height of 16 pixels
+			const unsigned short textResizeCmd1 = SwapByteOrder<unsigned short>(0x6163);
+			const unsigned short textResizeCmd2 = SwapByteOrder<unsigned short>(0xE630);
+			const unsigned short textResizeCmd3 = SwapByteOrder<unsigned short>(0x0167);
+			const unsigned short textResizeCmd4 = SwapByteOrder<unsigned short>(0x061A);
+			const unsigned short textResizeCmd5 = SwapByteOrder<unsigned short>(0x0009);
+			const unsigned short textResizeCmd6 = SwapByteOrder<unsigned short>(0x0030);
+
+			memcpy_s((void*)(origSlgData.GetData() + offsetCMDSize),          origSlgData.GetDataSize(), (void*)&tileSizeCmd,    sizeof(tileSizeCmd));
+			memcpy_s((void*)(origSlgData.GetData() + offsetToTextResizeCmd1), origSlgData.GetDataSize(), (void*)&textResizeCmd1, sizeof(textResizeCmd1));
+			memcpy_s((void*)(origSlgData.GetData() + offsetToTextResizeCmd2), origSlgData.GetDataSize(), (void*)&textResizeCmd2, sizeof(textResizeCmd2));
+			memcpy_s((void*)(origSlgData.GetData() + offsetToTextResizeCmd3), origSlgData.GetDataSize(), (void*)&textResizeCmd3, sizeof(textResizeCmd3));
+			memcpy_s((void*)(origSlgData.GetData() + offsetToTextResizeCmd4), origSlgData.GetDataSize(), (void*)&textResizeCmd4, sizeof(textResizeCmd4));
+			memcpy_s((void*)(origSlgData.GetData() + offsetToTextResizeCmd5), origSlgData.GetDataSize(), (void*)&textResizeCmd5, sizeof(textResizeCmd5));
+			memcpy_s((void*)(origSlgData.GetData() + offsetToTextResizeCmd6), origSlgData.GetDataSize(), (void*)&textResizeCmd6, sizeof(textResizeCmd6));
+		}
 
 		//***Fix the palette***
 		const int paletteAddress1 = 0x000158A4;
@@ -11957,6 +12018,41 @@ bool CopyChangesFromTrekkies(const string& inPatchedSakuraDirectory, const strin
 	return true;
 }
 
+bool DumpBitmap(const string& inputFilePath, const string& outDir)
+{
+	BmpToSakuraConverter inputImage;
+	if( !inputImage.ConvertBmpToSakuraFormat(inputFilePath, false) )
+	{
+		return false;
+	}
+
+	FileNameContainer inFileName(inputFilePath.c_str());
+	
+	//Output image data
+	{
+		std::string outfileName = outDir + inFileName.mNoExtension + "_Image.bin";
+		FileWriter outFile;
+		if( !outFile.OpenFileForWrite(outfileName) )
+		{
+			return false;
+		}
+
+		outFile.WriteData(inputImage.GetImageData(), inputImage.GetImageDataSize());
+	}
+
+	//Output palette data
+	{
+		std::string outfileName = outDir + inFileName.mNoExtension + "_Palette.bin";
+		FileWriter outFile;
+		if (!outFile.OpenFileForWrite(outfileName))
+		{
+			return false;
+		}
+
+		outFile.WriteData(inputImage.mPalette.GetData(), inputImage.mPalette.GetSize());
+	}
+}
+
 bool PatchGame(const string& rootSakuraTaisenDirectory, 
 			   const string& patchedSakuraTaisenDirectory, 
 			   const string& translatedTextDirectory, 
@@ -11992,6 +12088,13 @@ bool PatchGame(const string& rootSakuraTaisenDirectory,
 		return false;
 	}
 
+	const string slgFontFileName = inTranslatedDataDirectory + string("8x12_SLG.bmp");
+	if (!CreateTranslatedFontSheet(slgFontFileName, tempDir, true, true))
+	{
+		printf("CreateTranslatedFontSheet failed.  Patch unsuccessful.\n");
+		return false;
+	}
+
 	//Step2
 	const string newPaletteFileName = tempDir + PatchedPaletteName; //Created by CreateTranslatedFontSheet
 	/**
@@ -12009,7 +12112,8 @@ bool PatchGame(const string& rootSakuraTaisenDirectory,
 	}
 
 	//Step 4
-	if( !FixupSLG(rootSakuraTaisenDirectory, patchedSakuraTaisenDirectory, inTranslatedDataDirectory, newPaletteFileName, tempDir) )
+	const string slgFontPaletteFileName = FIX_SLG_FONT_DRAWING_SIZE ? newPaletteFileName + SlgFontFileSuffix : newPaletteFileName;
+	if( !FixupSLG(rootSakuraTaisenDirectory, patchedSakuraTaisenDirectory, inTranslatedDataDirectory, slgFontPaletteFileName, tempDir) )
 	{
 		printf("FixupSLG failed.  Patch unsuccessful.\n");
 		return false;
@@ -12159,7 +12263,57 @@ void PrintHelp()
 	printf("ExtractMiniGameData rootSakuraDirectory patchedDataDirectory outDirectory\n");
 	printf("ExtractStatusScreen rootSakuraDirectory patchedDataDirectory outDirectory\n");
 	printf("YabauseToMednafen yabauseFilePath outFile\n");
+	printf("DumpBitmap inputFilePath outDirectory\n");
 	printf("PatchGame isDisc2 rootSakuraTaisenDirectory patchedSakuraTaisenDirectory translatedTextDirectory fontSheet originalPalette patchedTMapSpDataPath mainMenuFontSheetPath mainMenuBgndPatchedImage optionsImagePatched translatedDataDirectory extractedWklDir\n");
+}
+
+void SizeTest(const string& wklDir1, const string& wklDir2)
+{
+	vector<FileNameContainer> allFiles1;
+	FindAllFilesWithinDirectory(wklDir1, allFiles1);
+
+	vector<FileNameContainer> bmpFiles1;
+	GetAllFilesOfType(allFiles1, ".bmp", bmpFiles1);
+
+	vector<FileNameContainer> allFiles2;
+	FindAllFilesWithinDirectory(wklDir2, allFiles2);
+
+	vector<FileNameContainer> bmpFiles2;
+	GetAllFilesOfType(allFiles2, ".bmp", bmpFiles2);
+
+	for(FileNameContainer& file1 : bmpFiles1)
+	{
+		FileData fileData1;
+		fileData1.InitializeFileData(file1);
+
+		for (FileNameContainer& file2 : bmpFiles2)
+		{
+			if(file2.mFileName == file1.mFileName)
+			{
+				FileData fileData2;
+				if( fileData2.InitializeFileData(file2) )
+				{
+					BitmapReader bmpData1;
+					if( !bmpData1.ReadBitmap(file1.mFullPath) )
+					{
+						break;
+					}
+
+					BitmapReader bmpData2;
+					if (!bmpData2.ReadBitmap(file2.mFullPath))
+					{
+						break;
+					}
+
+					if( bmpData1.mBitmapData.mInfoHeader.mImageWidth != bmpData2.mBitmapData.mInfoHeader.mImageWidth || 
+					    abs(bmpData1.mBitmapData.mInfoHeader.mImageHeight) != abs(bmpData2.mBitmapData.mInfoHeader.mImageHeight) )
+					{
+						printf("%s\n", file1.mFileName.c_str());
+					}
+				}
+			}
+		}
+	}
 }
 
 int main(int argc, char *argv[])
@@ -12526,6 +12680,13 @@ int main(int argc, char *argv[])
 		const string outDir            = string(argv[4]) + Seperators;
 
 		ExtractLoadScreen(rootSakuraDir, translatedDataDir, outDir);
+	}
+	else if( command == "DumpBitmap" && argc == 4 )
+	{
+		const string inputFilePath = string(argv[2]);
+		const string outDir        = string(argv[3]) + Seperators;
+
+		DumpBitmap(inputFilePath, outDir);
 	}
 	else
 	{
