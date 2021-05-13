@@ -12051,6 +12051,8 @@ bool DumpBitmap(const string& inputFilePath, const string& outDir)
 
 		outFile.WriteData(inputImage.mPalette.GetData(), inputImage.mPalette.GetSize());
 	}
+
+	return true;
 }
 
 bool PatchGame(const string& rootSakuraTaisenDirectory, 

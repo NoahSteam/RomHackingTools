@@ -68,7 +68,7 @@ If you tell a soul, you'll feel my wrath! Got it, Ogami!
 Whoa!! OK, I got it! I won't say a word to anyone! 
 “Old lady”!? You… You little brat!! 
 OK, I got it. <br> Do I have to keep it a secret? 
-Chief! There's camouflaged Crimson Wasps hidden with the equipment! 
+Chief! There are camouflaged Crimson Wasps hidden among the equipment! 
 I trust you, Ogami! 
 I feel much stronger when you're with me! 
 So… please fight by my side! 
@@ -154,4 +154,4 @@ Woo! We did it!!
 Hey Kohran, what're those things over there that look like Koubus? 
 We keep spare parts and equipment here for repairing the Koubu, including extra pieces of Koubu armor. 
 …But was there really always this many of 'em in here? 
-Kuuuuuu~! 
+Kuuuuuu~!
