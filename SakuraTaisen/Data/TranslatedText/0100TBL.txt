@@ -56,7 +56,7 @@ Wait a second, that girl…
 She's coming this way…! 
 Y-Yes. I’m Ogami… 
 Ahem… Excuse me, but you are…? 
-…From Lieutenant General Yoneda? 
+…From Lt. General Yoneda? 
 (I was told someone would meet me here… but who would have thought it would be a girl!) 
 You, uh… Are you a member of the Imperial Assault Troop!? 
 Ah… I'm Imperial Navy Ensign Ichiro Ogami. 
@@ -64,11 +64,11 @@ But… to be honest, I'm surprised that a young woman such as yourself is a squa
 N-No. That's not what I meant… 
 (It's a top-secret unit after all… Maybe it's not so strange that there are female members.) 
 What?! A theater…!? 
-I'm on duty! <br> First tell me more about you. 
+I'm on duty! <br> Tell me about yourself. 
 I'm on duty! Sadly, I don't have time for such diversions. 
 What?! You're telling me there's a secret base inside the theater?! Wait a second… 
 I get it! In order to hide from the enemy, we must also hide from our own people, right? 
-First tell me more about you. 
+First, tell me more about yourself. 
 I see, that's the right attitude! Happy to hear that. No wonder you're a member of the secret squad. 
 …So the Imperial Assault Troop has something like a secret weapon, right? 
 (Koubu? Ah, that's what the secret weapon is called. I wonder what it is.) 
@@ -90,26 +90,26 @@ Ah… I'm… Imperial Navy Ensign Ichiro Ogami.
 (Don't tell me this child is a member of the secret unit.) 
 What is the deal with that girl…? 
 Sakura has gone as well… Damn. 
-I guess I'll have to find Lieutenant General Yoneda on my own… 
+I guess I'll have to find Lt. General Yoneda on my own… 
 …Who was that? I think it came from the dining hall… 
 (What the…! Isn't that get-up a bit too revealing…?) 
 …Are you talking to me!? 
 Y-Yes, ma'am… 
-Why should I have to do that? <br> Yes, right away! 
-Why should I have to do such a thing…? I refuse! 
+Why should I? <br> Yes, right away! 
+Why should I have to do such a thing? I refuse! 
 And in any case, is that any way to ask for someone's help? 
 …I'm Imperial Navy Ensign Ichiro Ogami. I was transferred to the Assault Troop, effective today. 
 Try and have me fired all you want, but without an order from the Navy headquarters, I'm not leaving. 
 …! 
-…It's Ogami. Can you tell me where I might find Lieutenant General Yoneda? 
+…It's Ogami. Can you tell me where I might find Lt. General Yoneda? 
 Through this way? Thank you very much. 
 Yes, right away! …Here, there you go. 
 (Phew…) 
 …I'm Imperial Navy Ensign Ichiro Ogami. I was transferred to the Assault Troop, effective today. 
-I'd like to report to Lieutenant General Yoneda… 
+I'd like to report to Lt. General Yoneda… 
 …! 
 Waah! Wh-What are you doing all of a sudden!?! 
-Ahem… Where might I find Lieutenant General Yoneda? 
+Ahem… Where might I find Lt. General Yoneda? 
 …My name is Ogami. 
 Y-Yes, ma'am… 
 Why should I have to do such a thing…? I refuse! 
@@ -119,16 +119,16 @@ And in any case, is that any way to ask for someone's help?
 I’m Imperial Navy Ensign Ichiro Ogami. I transferred to the Imperial Assault Troop, effective today.
 Try and have me fired all you want, but without a written order from the Navy headquarters, I'm not leaving. 
 …! 
-…It's Ogami. Can you tell me where I might find Lieutenant General Yoneda? 
+…It's Ogami. Can you tell me where I might find Lt. General Yoneda? 
 Through this way? Thank you very much. 
-…So this is Lieutenant General Yoneda's room, commanding officer of the Imperial Assault Troop… 
+…So this is Lt. General Yoneda's room, commanding officer of the Imperial Assault Troop… 
 Lieutenant General Ikki Yoneda, the great strategist from the Russo-Japanese War. I wonder what kind of man he is. 
 Ah… Excuse me. I'm Imperial Navy Ensign Ichiro Ogami. 
-I would like to see Lieutenant General Yoneda… 
+I would like to see Lt. General Yoneda… 
 Miss Maria Tachibana… 
 What a rigid person… but finally someone who looks a bit like a soldier. 
 But what type of practice was she talking about? 
-Well then… I'll finally meet Lieutenant General Yoneda. 
+Well then… I'll finally meet Lt. General Yoneda. 
 (What a speckless display of uniform and posture.) 
 (…She's in good shape.) 
 (I guess you call this color platinum blonde.) 
@@ -146,7 +146,7 @@ I’m Imperial Navy Ensign Ichiro Ogami. Starting today at 12:00, I am part of t
 Reporting for duty! 
 (What the… Who is this drunkard?) 
 (Don't tell me this is…) 
-Are you really General Yoneda? <br> Why're you drinking right now! 
+Are you really Yoneda? <br> Are you drinking midday?  
 Are you really… Lieutenant General Yoneda? 
 I… I'm sorry! 
 How can you drink sake in the middle of the day!? 
@@ -248,7 +248,7 @@ Ogami, this is the reception.
 Thank you for your help, Sakura. You're a lifesaver. 
 The clipper should be inside the desk. I have practice, so I'll be going now… 
 Hey… Sakura. Wait a second. 
-What job am I supposed to do? <br> Clipper? <br> Good luck with your practice! 
+What am I supposed to do? <br> Clipper? <br> Good luck with practice! 
 …By the way, what kind of work am I supposed to be doing here? 
 Huh? Didn't you hear from Manager Yoneda? 
 Our new captain will work as a ticket puncher. That's what Manager Yoneda told us. 
@@ -279,7 +279,7 @@ Here we are, Mon Frère!
 Thank you for showing me the way. 
 OK, I'm off to practice. Here's your clipper. See ya! 
 Iris, w-wait…! 
-What job am I supposed to do? <br> Clipper? <br> Good luck with your practice! 
+What am I supposed to do? <br> Clipper? <br> Good luck with practice! 
 …By the way, what kind of work am I supposed to be doing here? 
 No clue! Mr. Yoneda said something about punching tickets. 
 I guess you punch the guests' tickets with that clipper. 
@@ -307,7 +307,7 @@ I see. Thank you for showing me the way.
 Mon Frère, the clipper is inside the desk! Come on, Sakura, let's go! 
 You're right, Iris. Ogami, we have practice, so… please excuse us. 
 H-Hey you two, wait a second… 
-What job am I supposed to do? <br> Clipper? <br> Good luck with your practice! 
+What am I supposed to do? <br> Clipper? <br> Good luck with practice! 
 …Aaaaand they're gone. 
 …By the way, what kind of work am I supposed to be doing here? 
 Huh? Didn't the manager tell you? 
@@ -345,7 +345,7 @@ Thank you, Miss Maria.
 …Since you are my superior, just “Maria” is fine. 
 The clipper should be in the desk. OK, I have to be at the practice. Please excuse me. 
 Hey, Miss Mar… I mean, Maria. Please wait a moment! 
-What job am I supposed to do? <br> Clipper? <br> Good luck with your practice! 
+What am I supposed to do? <br> Clipper? <br> Good luck with practice! 
 …By the way, what kind of work am I supposed to be doing here? 
 …Aaaand she’s gone. 
 Ensign Ogami… hasn't the manager told you? 
@@ -427,7 +427,7 @@ What? You've got something to say?
 (Stupid brat! Just because I didn't say anything, he thinks he can treat me like this.) 
 …No matter how I look at it, this is weird. How does punching tickets connect to my secret mission!? 
 …OK! I'm gonna have a talk with the squad. Maybe then I'll get some sort of explanation. 
-If I'm still not convinced, I'll have to ask Lieutenant General Yoneda! 
+If I'm still not convinced, I'll have to ask Lt. General Yoneda! 
 So… Where should I go first? 
 Y-Yes. What is it? 
 Miss Tsubaki, is it? 
@@ -449,7 +449,7 @@ Unused
 I still feel like I'm causing everybody nothing but trouble. 
 But I'd give my life in order to protect the capital. 
 Operating a “Koubu” can be pretty difficult. So we newbies should stick together and do our best. 
-But we shouldn't keep Lieutenant General Yoneda waiting! Let's go! 
+But we shouldn't keep Lt. General Yoneda waiting! Let's go! 
 Since it’s your first time, let's enter through the main lobby. 
 Unused
 That's because today there is only a night performance. 
@@ -466,7 +466,7 @@ I… hate fighting.
 Unused
 Oh, don’t worry, Iris. Let’s go back to your room and I'll read you stories from that Mother Goose book. 
 OK. 
-Ah, Ensign Ogami. Lieutenant General Yoneda is in the manager's office. 
+Ah, Ensign Ogami. Lt. General Yoneda is in the manager's office. 
 Please excuse me for now. 
 Can someone lend me a hand over here?! 
 Ah! You there! 
@@ -496,7 +496,7 @@ Who might you be?
 So you're Ichiro Ogami, newly transferred to the Troop. 
 Nice to meet you. My name is Maria Tachibana. 
 Do I have something on my face? 
-Lieutenant General Yoneda is in the manager's office. I have training, so I must leave you… 
+Lt. General Yoneda is in the manager's office. I have training, so I must leave you… 
 But I have one piece of advice for you. Don't stare at women like that! And now excuse me. 
 Hey, come on in! 
 I've ‘eard about you from Count ‘anakoji. No need for formalities, hic. 
@@ -572,7 +572,7 @@ Unused
 Unused
 What is it? You seem distracted. 
 Unused
-Now then, let's go. Lieutenant General Yoneda is waiting. 
+Now then, let's go. Lt. General Yoneda is waiting. 
 But we're opening soon. There'll be loads of guests here in a minute. 
 Hey, you! Didn't you hear what I said? 
 Don't dilly-dally and pick up that fork! 

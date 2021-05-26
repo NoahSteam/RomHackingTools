@@ -754,7 +754,7 @@ OK… I'm applying the medicine.
 I know this isn't an antivenom, but we'll have to make do with this for now. 
 …I dunno if it's the medicine or what, but I feel better already. 
 …Thanks, Boss. I could tell you were really serious about finding this medicine for me. 
-I'm the captain, after all. <br> Just did what anyone would do. 
+I'm the captain, after all. <br> I did what anyone would do. 
 I'm the captain of the Flower Division. It's my duty to protect you all. 
 Hehe… Right. Just doing your duty… 
 …? 
@@ -959,7 +959,7 @@ OK… I'm applying the medicine.
 I know this isn't an antivenom, but we'll have to make do with this for now. 
 …I suppose it could just be my imagination, but I do believe I feel better already. 
 Thank you, Ensign… It made me happy to see you rushing around so flustered on my account… 
-I'm the captain, after all. <br> Just did what anyone would do. 
+I'm the captain, after all. <br> I did what anyone would do. 
 I'm the captain of the Flower Division. It's my duty to protect you all. 
 …Oh, so it was your duty? …So that is all it was… 
 …? 

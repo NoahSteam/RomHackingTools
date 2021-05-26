@@ -48,7 +48,7 @@ Yoneda lent it to me when I became captain of the Flower Division.
 He lent it to you too? 
 Yes, he told me that the book contained information that every captain of the Flower Division should know.
 Back then, I was able to parse its difficult text thanks to Ayame taking the time to walk me through it…  
-Ask Maria about the contents. <br> Ask Ayame about the contents. 
+Ask Maria about the book. <br> Ask Ayame about the book. 
 Maria… Could you tell me what's written in it? 
 I wouldn't mind personally, but… if Yoneda lent it to you directly… 
 Doesn’t that mean he meant for you to decipher its contents on your own?
@@ -442,15 +442,15 @@ Yes. It's finished, Iris.
 Thank you, Sakura. 
 Hey, Ogami, isn’t this outfit cute? The ribbon around the neck is the height of fashion. 
 I wear this "extravagant" costume well, don’t I, Mon Frère? 
-It looks great on you. <br> I prefer your normal clothes. <br> I prefer a different costume. 
+It looks great on you. <br> I prefer your normal outfit. <br> I'd prefer something else. 
 It looks great on you. 
 Right, right? Everything looks good on me, no matter what! 
 Don't get carried away now, Iris! 
-I prefer your normal clothes. 
+I prefer your normal outfit. 
 Really, Mon Frère? 
 You think so? I think wearing something like this is fun, every once in a while… 
 Sure… 
-I prefer a different costume. 
+I’d prefer a different costume. 
 Really? What kind of costume should I wear then? 
 I'd say you should dress like a feisty princess. That would suit you! 
 "Feisty"?! That's not fair, I'm very ladylike I’ll have you know! 
@@ -619,7 +619,7 @@ Oh, I see…! But Ayame, what's down there in the storage room?
 Just come with me, all right? It's rude to keep others waiting. 
 OK… Sorry. 
 What are you doing!? You're already late! Get a move on! 
-I'm a little busy right now… <br> How might I be of service? 
+I'm a little busy right now. <br> How might I be of service? 
 I'm a little busy right now… I'll head there later. 
 Hey, hey, Ogami! 
 How might I be of service, Lieutenant General Yoneda? 

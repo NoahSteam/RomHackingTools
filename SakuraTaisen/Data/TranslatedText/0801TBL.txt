@@ -1,4 +1,4 @@
-﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
+﻿﻿It's a photo of Sakura. She's looking right at me. I wonder what she's thinking…
 It's a photo of Sumire. This is a side of her you don't see too often.
 It's a photo of Maria. She's lost in thought and looks kind of sad…
 A photo of Kanna. Her signature strength comes through clearly.
@@ -279,7 +279,7 @@ Sorry to keep you waiting, Ensign. Let us leave.
 Oh? Aren't you going to wear the dress from before? 
 Well… I got worried I'd stand out too much in such a crowd… 
 The two of us are finally spending some time alone together. I didn't want it to get in the way. 
-You're right. <br> I liked the other one better. <br> …You'll still stand out. 
+You're right. <br> I liked the other outfit. <br> …You'll still stand out. 
 You're right. Let's just enjoy New Year's Day together, the two of us. 
 Yes… I have a feeling this will be an excellent year! 
 OK, should we leave? I guess Meiji Shrine is the place to go. 
@@ -360,7 +360,7 @@ Hey, Maria. I wanted to ask… are you busy?
 I was just reading a book, I don't really have any other plans yet. 
 I'd like to continue reading, so would you mind telling me what you want now? 
 It's just… I… 
-Come visit the shrine with me. <br> …Never mind. 
+Visit the shrine with me. <br> …Never mind. 
 Come visit the shrine with me. What do you say? 
 I'm sorry, but I'll have to decline that offer. 
 It's just… Even though it's New Year's Day, I feel a strange sense of unease. 
@@ -394,7 +394,7 @@ Today I want to eat a lot, play a lot… and sleep a lot!
 Hahaha, that's just like you, Kanna! You know the dream you have tonight will be your first dream of the new year. 
 Oh, that's true. Your first dream predicts how your year will go…  
 What would you want your first dream of the year to be, Boss? 
-Of a peaceful Tokyo. <br> Of you, Kanna. <br> I’ll surely have a nightmare. 
+Of a peaceful Tokyo. <br> Of you, Kanna. <br> I'll have a nightmare. 
 Of a peaceful Tokyo. Even with the Hive of Darkness gone, this city still hasn't fully recovered. 
 I want everything rebuilt, so the people can forget what happened and live in peace. 
 It's more than just my first dream of the new year, it’s my hope for the future. 
@@ -425,7 +425,7 @@ Pardon me!
 So, what's up? 
 By the way… did you want anything in particular? 
 Listen… 
-Come visit the shrine with me. <br> …Never mind. 
+Visit the shrine with me. <br> …Never mind. 
 Would you maybe… join me for visiting the shrine? 
 With me? Oh, stop it! That's not for me. 
 I'm sure there's someone else you could ask who'd be better suited to go with you. 
@@ -464,7 +464,7 @@ Not telling! Come on now, let's go already!
 We go there to draw omikuji. 
 Omi… what? 
 That's right… You're from France, so you wouldn't know. 
-Omikuji are strips of paper that have fortunes written on them. They say things like "kichi" or " kyo" on them.  
+Omikuji are strips of paper that have fortunes written on them. They say things like "kichi" or "kyo" on them.  
 Mon Frère… 
 What does that mean, "kichi" and "kyo"? 
 You know what? It's easier if we just go there and I’ll show you. 
@@ -485,7 +485,7 @@ Pardon me!
 What is it, Mon Frère? 
 What do you want this time? 
 Listen… 
-Come visit the shrine with me. <br> …Never mind. 
+Visit the shrine with me. <br> …Never mind. 
 Iris… do you want to go visit the shrine with me? 
 The shrine? What would we want to do there? 
 I see… You don't know about that part of Japanese culture yet. 
@@ -536,7 +536,7 @@ Pardon me.
 So, what's up, Chief? Can I help you with anything? 
 I'm a little busy, you know. If you want something, keep it snappy. 
 Listen… 
-Come visit the shrine with me. <br> …Never mind. 
+Visit the shrine with me. <br> …Never mind. 
 Kohran, I was wondering… would you like to visit the shrine with me? 
 What? You want to go with me? 
 Hmm… I'd love to go, but… there's something I need to check. 

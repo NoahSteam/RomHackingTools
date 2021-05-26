@@ -37,7 +37,7 @@ Sounds like he finished his call.
 Please excuse me! Ogami, reporting in! 
 Ah, good to see you, Ogami. That uniform looks good on you. 
 How's your work going? Have you gotten the hang of punching tickets all right? 
-Please explain my assignment. <br> Were you on the phone? 
+Explain my assignment! <br> Were you on the phone? 
 Can you please explain my assignment? No one told me anything about taking tickets at a theater! 
 And all of my squad members are women! One of them, I think her name was Iris, is just a little girl! 
 I thought I was accepting the post as captain of a secret strike team. This is nothing like what I imagined! 
@@ -142,7 +142,7 @@ Being promoted to captain of my own squad straight out of the academy was like a
 It didn't even matter what my assignment was. I'd be satisfied with any post if it meant protecting the capital. 
 I thought I was taking control of a crack assault force, so when I found an exclusively female theater troupe, well… 
 Does my position here help protect our nation's peace at all? 
-Ask about the theater <br> Ask Sakura about herself <br> Ask about the Troupe 
+Ask about the theater. <br> Ask Sakura about herself. <br> Ask about the Troupe. 
 Sakura, what do you do here at the theater? 
 The Troupe puts on a new show at the Imperial Theater every month. 
 This month's performance is "The Eve of Lady Camellia," with Sumire in the lead role. 
@@ -589,7 +589,7 @@ Thank you.
 The pleasure's all mine. 
 It's nice to meet you. I look forward to working with you. 
 (This is the secretary's office. Yuri and Kasumi are here.) 
-I came by to see you. <br> There's no particular reason. 
+I came by to see you. <br> No particular reason. 
 Actually, I did come by to see you. There's a few things I wanted to ask about… 
 Y-Yes, but I wasn't… 
 There's no particular reason. 
@@ -899,7 +899,7 @@ Ensign, do you need me for something?
 Ensign, I believe I previously instructed you not to leer at people. 
 Ensign, do you need me for something? 
 …Did you need something from me? 
-Tell me about the Troop. <br> Tell me about yourself, Maria. 
+Tell me about the Troop. <br> Tell me about yourself. 
 Maria, tell me something. I was assigned here as the captain of a secret combat squad. 
 …Yes. I heard as much from Manager Yoneda. 
 But the only duty I've been given is that of a ticket puncher. What's the meaning of this? 

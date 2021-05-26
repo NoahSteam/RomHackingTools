@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿The Imperial Assault Troupe has arrived! 
+﻿﻿﻿﻿﻿﻿﻿The Imperial Assault Troupe has arrived! 
 Captain! There are more enemies coming in from our flank! We should divide our forces!! 
 Roger! 
 Roger! 
@@ -87,7 +87,7 @@ I'll always be there for you, Iris.
 Don't worry, Kohran! I'll protect you! 
 Kanna! I've got your back! 
 Fight by my side. <br> You need to stay here. 
-Of course. <br> Sumire, you need to stay here. 
+Of course. <br> Sumire, you are needed here. 
 Fight beside me. <br> Stop the enemy’s advance. 
 All right, let's go, Maria. <br> I need you to stay here. 
 OK, let's go, Iris! <br> I need you to stay here. 

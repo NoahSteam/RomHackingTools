@@ -494,7 +494,7 @@ I'm heading out!
 Well… guess I'd better go help out too. 
 I'll go buy the drinks and snacks. 
 OK… what should I do? 
-Help Sakura with the shopping. <br> Help someone else. <br> Wait in my room. 
+Help with the shopping. <br> Help someone else. <br> Wait in my room. 
 I'll help with the shopping. Mind if I join you, Sakura? 
 Really? Thanks, I could use the help. 
 That's probably a good idea. It looks like we might get some evening showers. 
@@ -612,7 +612,7 @@ Well, shall we get started, Ensign? It should be quite easy with the two of us.
 See you later, Sumire! 
 …I don't want to spend a single second with Mon Perv, so I'm gonna do this by myself. See you! 
 …Ensign, what did Iris mean by that? 
-I sorta saw her in the shower… <br> Huh!? <br> I wasn't peeping, I swear! 
+I saw her in the shower… <br> Huh!? <br> I wasn't peeping, I swear! 
 Uh, I sorta saw her in the shower… I mean-! No! That was an accident! 
 You did WHAT!? How could you, Ensign!? 
 I can't believe you, Ensign. You're a liar and a louse… Excuse me! 
@@ -995,7 +995,7 @@ I'm looking forward to it. Let's make this a great party.
 All right, sir, shall we get started with the cooking? 
 Sure, Maria. What do you need me to make? 
 I thought I'd have you make some borscht, in other words… 
-Borscht…? <br> That's a Russian stew, right? <br> That's a Russian bread, right? 
+Borscht…? <br> A Russian stew, right? <br> A Russian bread, right? 
 Borscht…? I've never heard of a dish called that. 
 Borscht is a type of Russian stew where you boil the meat nice and slow. 
 You don't see it often in Japan, but it's delicious. 

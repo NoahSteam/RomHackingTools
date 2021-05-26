@@ -1,4 +1,4 @@
-﻿You've grown strong… It seems like I didn't misjudge you.
+﻿﻿You've grown strong… It seems like I didn't misjudge you.
 Hehehe, but still…
 That's it? This is how determined… How strong you are?
 Are you that afraid of hurting me?
@@ -57,7 +57,7 @@ Grugh… H-haaa…!
 Goodbye… Ogami.
 Not bad… Come on then! I want you to be the one to finish me off!
 Here we go, Ogami!
-Go back to normal!<br>Satan is using you!
+Go back to normal! <br> Satan is using you!
 Miss Ayame, please go back to normal!
 The Ayame you knew is dead… She died along with that red moon!
 The Ayame you knew is dead… She died by your gun!
@@ -75,7 +75,7 @@ Chief!
 Mon Frère!
 Stay away! Please… don't touch me.
 Hehehe…
-I don't wanna fight you.<br>No, the real Ayame…
+I don't wanna fight you. <br> No, the real Ayame…
 I don't want to fight you. My goal is to defeat Satan. Stay back, Ayame!
 I told you I won't let you get in Lord Satan's way. Don't you see it's foolish to oppose us?
 No! The real Ayame always stood by us when we were in trouble.
@@ -92,7 +92,7 @@ Oh no! The Captain will…
 Oh no! The Chief will…
 Oh no! The Boss will…
 Oh no! Mon Frère will…
-Miss Ayame, please stop!<br>Why are you doing this?
+Miss Ayame, please stop! <br> Why are you doing this?
 Miss Ayame, please stop!
 What's the matter? Tonight will be a ball just for the two of us… A joyous banquet of blood…
 Why… Why are you doing this? Do you really wish for the world to be destroyed?!

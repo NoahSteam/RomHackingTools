@@ -333,12 +333,12 @@ Yeah! Let's go, let's go, right now!
 We've arrived in Asakusa. Where do you want to go, Iris? 
 I'll go anywhere you wanna go, Mon Frère. 
 OK then… I wonder where we should go first? 
-Let's take a walk in the park. <br> Let's go to the movie theater. <br> Let's go shopping. 
-Let's take a walk in the park. <br> Let's go to the movie theater. 
-Let's take a walk in the park. <br> Let's go shopping. 
-Let's take a walk in the park. 
-Let's go to the movie theater. <br> Let's go shopping. 
-Let's go to the movie theater. 
+Let's walk in the park. <br> Let's go see a movie. <br> Let's go shopping. 
+Let's walk in the park. <br> Let's go see a movie. 
+Let's walk in the park. <br> Let's go shopping. 
+Let's walk in the park. 
+Let's go see a movie. <br> Let's go shopping. 
+Let's go see a movie. 
 Let's go shopping. 
 All right, let's take a walk in the park. 
 OK! Let's go, let's go! 

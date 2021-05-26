@@ -274,7 +274,7 @@ I've seen everything around here, so let's go somewhere else, please!
 OK, let's go! 
 Don't you think there's still other stuff to see? 
 Wow, he's really agile! 
-Who's more agile, him or you? <br> Know monkey-style kung fu? 
+Who's more agile? <br> Know monkey-style kung fu? 
 I wonder… Who do you think is more agile, him or you? 
 Wait, don't talk about me like I'm an ape! But yeah, I guess he's faster than me. 
 I see… 
@@ -396,7 +396,7 @@ This is for you, Kanna!
 Oh, a cactus? Thanks. I'll take good care of it. 
 You look like you're really into it. 
 Whoa, Ogami… this takes me back! 
-Used to play with them a lot. <br> Never really tried it before. 
+I used to play this a lot. <br> Never really tried it. 
 I used to play with these things a lot. 
 You too? When we had our festivals in the country, there were always lots of stalls like this. 
 I would always get really into it. 
@@ -487,7 +487,7 @@ Hm… I'll explain it to you some other time.
 Hm…? Now I’m even more curious. 
 Haven't you seen enough of this? You really like it, huh? 
 I'm not good with fiddly stuff like that… 
-This takes me back… <br> Should we get the biggest one? 
+This takes me back… <br> Should we get a bigger one?
 This takes me back… I used to play this game all the time as a kid. 
 I don't like eensy-weensy stuff. 
 Really? But that's the fun thing about it… 
@@ -515,7 +515,7 @@ No, I… I just showed you around…
 Hm…? No, nothing particular… 
 (What should I do? If we go now, we'll be back pretty late…) 
 (We can't leave the theater unattended for so long…) 
-OK, let's go! <br> We can't leave it unattended… 
+OK, let's go! <br> Theater can't be unattended. 
 …OK, let's go! It's New Year's Day, so let's have some fun! 
 We shouldn't leave the theater unattended… New Year's Day or not, we never know when we’ll have to deploy. 
 (Hm… What should we do…?) 
