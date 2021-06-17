@@ -15,34 +15,8 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="Utils.cpp">
+    <ClCompile Include="SakuraTaisen.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\ExternalTools\lodepng.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="prs.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="prs-decomp.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="prs-comp.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="decompress_rtns.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-  </ItemGroup>
-  <ItemGroup>
-    <ClInclude Include="Utils.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\ExternalTools\lodepng.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="decompress_rtns.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
   </ItemGroup>
 </Project>
