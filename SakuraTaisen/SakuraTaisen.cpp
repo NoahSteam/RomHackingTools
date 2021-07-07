@@ -11239,7 +11239,7 @@ bool PatchScreens(const string& rootSakuraTaisenDirectory, const string& patched
 			kType_BG,
 		};
 
-		char* pName;
+		const char* pName;
 		int   offset;
 		EType type;
 	};

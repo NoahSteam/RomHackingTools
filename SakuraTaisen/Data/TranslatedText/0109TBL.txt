@@ -565,7 +565,7 @@ Introducing a Rare Creature <br> A Yeti Emerges <br> A Slime Approaches
 What was Kohran doing while you were in Fukagawa? 
 Inventing <br> Rehearsing <br> Modifying the Koubu 
 How much does a photo from the Gift Shop cost? 
-30 zeni <br> 50 zeni <br> 70 zeni
+30 sen <br> 50 sen <br> 70 sen
 What is the name of Sakura's childhood friend? 
 Takeshi <br> Takashi <br> Tsuyoshi 
 Which of the following does Sumire especially dislike? 
