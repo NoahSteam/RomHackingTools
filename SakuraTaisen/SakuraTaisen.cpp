@@ -12583,7 +12583,8 @@ int main(int argc, char *argv[])
 
 		for(FileNameContainer& fc : fileNames)
 		{	
-			if( fc.mFileName == "SAKURA4" || fc.mFileName == "VCEADV" || fc.mFileName == "OTOMEADP.DAT" || fc.mFileName == "SLG1ADP.DAT" || fc.mFileName == "MINIADP.DAT")
+			if( fc.mFileName == "SAKURA4" || fc.mFileName == "VCEADV" || fc.mFileName == "OTOMEADP.DAT" || fc.mFileName == "SLG1ADP.DAT" || fc.mFileName == "MINIADP.DAT" ||
+			    fc.mFileName.find_first_of("ADV") != std::string::npos)
 			{
 				continue;
 			}

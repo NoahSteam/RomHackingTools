@@ -1,0 +1,5 @@
+Header:
+0x08 - 4 byte offset that will take us to the text header
+0x0c - 4 byte offset that will take us to the text entries
+0x10 - 4 byte offset that will take us to the font sheet
+0x14 - 4 byte size in bytes of the font sheet
