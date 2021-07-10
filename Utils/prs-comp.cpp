@@ -22,6 +22,8 @@
     DEFLATE and specifically from zlib.
  ******************************************************************************/
 
+#pragma warning( disable : 4244 4189 4311 4302 4312 4706)
+
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>

@@ -30,9 +30,6 @@
     <ClCompile Include="prs-comp.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="decompress_rtns.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Utils.h">

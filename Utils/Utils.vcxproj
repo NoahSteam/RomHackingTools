@@ -76,6 +76,9 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <OutDir>$(SolutionDir)\Libs\</OutDir>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <TargetName>$(ProjectName)D</TargetName>
+  </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
@@ -90,7 +93,7 @@
       <SDLCheck>true</SDLCheck>
     </ClCompile>
     <Lib>
-      <OutputFile>$(OutDir)$(TargetName)D$(TargetExt)</OutputFile>
+      <OutputFile>$(OutDir)$(TargetName)$(TargetExt)</OutputFile>
     </Lib>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -127,7 +130,6 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\ExternalTools\lodepng.cpp" />
-    <ClCompile Include="decompress_rtns.c" />
     <ClCompile Include="prs-comp.cpp" />
     <ClCompile Include="prs-decomp.cpp" />
     <ClCompile Include="prs.cpp" />

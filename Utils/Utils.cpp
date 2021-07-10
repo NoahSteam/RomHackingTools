@@ -127,7 +127,7 @@ void FindAllFilesWithinDirectory(const string& inDirectoryPath, vector<FileNameC
 
 	while (result != INVALID_HANDLE_VALUE)
 	{
-		unsigned nameLength = static_cast<unsigned> (strlen(fileData.cFileName));
+		//unsigned nameLength = static_cast<unsigned> (strlen(fileData.cFileName));
 
 		//skip if the file is just a '.'
 		if (fileData.cFileName[0] == '.')
@@ -165,7 +165,7 @@ void FindAllDirectoriesWithinDirectory(const std::string& inDirectoryPath, std::
 
 	while (result != INVALID_HANDLE_VALUE)
 	{
-		unsigned nameLength = static_cast<unsigned> (strlen(fileData.cFileName));
+		//unsigned nameLength = static_cast<unsigned> (strlen(fileData.cFileName));
 
 		//skip if the file is just a '.'
 		if (fileData.cFileName[0] == '.')
@@ -454,7 +454,7 @@ bool TextFileData::InitializeTextFile(bool bFixupSpecialCharacters, bool bCollap
 	while( fgets(buffer, bufferSize, pFile) != nullptr )
 	{
 		TextLine newLineOfText;
-		char *pNextToken   = nullptr;;
+	//	char *pNextToken   = nullptr;;
 		char* pContext     = nullptr;
 		const char* pDelim = " \n";
 
@@ -466,17 +466,17 @@ bool TextFileData::InitializeTextFile(bool bFixupSpecialCharacters, bool bCollap
 			const size_t tokenLen = strlen(pToken);
 			for(size_t t = 0, f = 0; t < tokenLen; t)
 			{	
-				if( pToken[t] == (char)0xef || pToken[t] == (char)0xbb || pToken[t] == (char)0xbf )
+				if( pToken[t] == (unsigned char)0xef || pToken[t] == (unsigned char)0xbb || pToken[t] == (unsigned char)0xbf )
 				{
 					t += 1;
 				}
 				//Skip past UTF8 byte order marker
-				else if( pToken[t] == (char)0xc3 && pToken[t+1] == (char)0xa8 )
+				else if( pToken[t] == (unsigned char)0xc3 && pToken[t+1] == (unsigned char)0xa8 )
 				{
 					t += 2;
-					fixedString[f++] = (char)232;
+					fixedString[f++] = (unsigned char)232;
 				}
-				else if( bFixupSpecialCharacters && pToken[t] == (char)0xe2 && pToken[t+1] == (char)0x80 && pToken[t+2] == (char)0xa6 )
+				else if( bFixupSpecialCharacters && pToken[t] == (unsigned char)0xe2 && pToken[t+1] == (unsigned char)0x80 && pToken[t+2] == (unsigned char)0xa6 )
 				{
 					t += 3;
 
@@ -491,27 +491,27 @@ bool TextFileData::InitializeTextFile(bool bFixupSpecialCharacters, bool bCollap
 						fixedString[f++] = '.';
 					}
 				}
-				else if( bFixupSpecialCharacters && pToken[t] == (char)0xe2 && pToken[t+1] == (char)0x80 && pToken[t+2] == (char)0x99 )
+				else if( bFixupSpecialCharacters && pToken[t] == (unsigned char)0xe2 && pToken[t+1] == (unsigned char)0x80 && pToken[t+2] == (unsigned char)0x99 )
 				{
 					t += 3;
 					fixedString[f++] = '\'';
 				}
-				else if( bFixupSpecialCharacters && pToken[t] == (char)0xe2 && pToken[t+1] == (char)0x80 && pToken[t+2] == (char)0x9c )
+				else if( bFixupSpecialCharacters && pToken[t] == (unsigned char)0xe2 && pToken[t+1] == (unsigned char)0x80 && pToken[t+2] == (unsigned char)0x9c )
 				{
 					t += 3;
 					fixedString[f++] = '\"';
 				}
-				else if( bFixupSpecialCharacters && pToken[t] == (char)0xe2 && pToken[t+1] == (char)0x80 && pToken[t+2] == (char)0x9d )
+				else if( bFixupSpecialCharacters && pToken[t] == (unsigned char)0xe2 && pToken[t+1] == (unsigned char)0x80 && pToken[t+2] == (unsigned char)0x9d )
 				{
 					t += 3;
 					fixedString[f++] = '\"';
 				}
-				else if( bFixupSpecialCharacters && pToken[t] == (char)0xe2 && pToken[t+1] == (char)0x80 && pToken[t+2] == (char)0x98 )
+				else if( bFixupSpecialCharacters && pToken[t] == (unsigned char)0xe2 && pToken[t+1] == (unsigned char)0x80 && pToken[t+2] == (unsigned char)0x98 )
 				{
 					t += 3;
 					fixedString[f++] = '\'';
 				}
-				else if( bFixupSpecialCharacters && pToken[t] == (char)0xe2 )
+				else if( bFixupSpecialCharacters && pToken[t] == (unsigned char)0xe2 )
 				{
 					printf("Unhandled multi-byte character in string %s in %s", pToken, mFileNameInfo.mFileName.c_str());
 
@@ -845,9 +845,9 @@ bool PaletteData::CreateFrom15BitData(const char* pInPaletteData, int inPaletteS
 		
 		//Ugly conversion of 5bit values to 8bit.  Probably a better way to do this.
 		//Masking the r,g,b components and then bringing the result into a [0,255] range.
-		mpPaletteData[i+2] = (char)floor( ( ((color & 0x001f)/full5BitValue) * 255.f) + 0.5f);
-		mpPaletteData[i+1] = (char)floor( ( ( ((color & 0x03E0) >> 5)/full5BitValue) * 255.f) + 0.5f);
-		mpPaletteData[i+0] = (char)floor( ( ( ((color & 0x7C00) >> 10)/full5BitValue) * 255.f) + 0.5f);
+		mpPaletteData[i+2] = (char)floorf( ( ((color & 0x001f)/full5BitValue) * 255.f) + 0.5f);
+		mpPaletteData[i+1] = (char)floorf( ( ( ((color & 0x03E0) >> 5)/full5BitValue) * 255.f) + 0.5f);
+		mpPaletteData[i+0] = (char)floorf( ( ( ((color & 0x7C00) >> 10)/full5BitValue) * 255.f) + 0.5f);
 		mpPaletteData[i+3] = 0;
 	}
 
@@ -902,9 +902,9 @@ bool PaletteData::CreateFrom32BitData(const char* pInPaletteData, int inPaletteS
 	{
 		assert(outIndex + 1 < mNumBytesInPalette);
 
-		const unsigned char r = (unsigned char)floor( ((unsigned char)(pInPaletteData[i+0])/255.f)*31.f + 0.5f);
-		const unsigned char g = (unsigned char)floor( ((unsigned char)(pInPaletteData[i+1])/255.f)*31.f + 0.5f);
-		const unsigned char b = (unsigned char)floor( ((unsigned char)(pInPaletteData[i+2])/255.f)*31.f + 0.5f);
+		const unsigned char r = (unsigned char)floorf( ((unsigned char)(pInPaletteData[i+0])/255.f)*31.f + 0.5f);
+		const unsigned char g = (unsigned char)floorf( ((unsigned char)(pInPaletteData[i+1])/255.f)*31.f + 0.5f);
+		const unsigned char b = (unsigned char)floorf( ((unsigned char)(pInPaletteData[i+2])/255.f)*31.f + 0.5f);
 
 		//Swap byte order so data is written in big endian order.  Drop off the first bit if needed.
 		unsigned short outColor = ((r << 10) + (g << 5) + b) & bitMask;
@@ -947,7 +947,7 @@ bool BitmapWriter::CreateBitmap(const string& inFileName, int inWidth, int inHei
 		fileHeader.Initialize(fileSize, offsetToColorData);
 
 		BitmapData::InfoHeader infoHeader;
-		infoHeader.Initialize(inWidth, inHeight, bitsPerPixel);
+		infoHeader.Initialize(inWidth, inHeight, (short)bitsPerPixel);
 
 		outFile.WriteData(&fileHeader, sizeof(fileHeader));
 		outFile.WriteData(&infoHeader, sizeof(infoHeader));
@@ -966,7 +966,7 @@ bool BitmapWriter::CreateBitmap(const string& inFileName, int inWidth, int inHei
 			{
 				const int blankBytes = numExpectedBytes - inColorSize;
 				char* pRemainingPixels = new char[blankBytes];
-				memset(pRemainingPixels, 0, sizeof(blankBytes));
+				memset(pRemainingPixels, 0, blankBytes);
 
 				outFile.WriteData(pRemainingPixels, blankBytes);
 
@@ -981,7 +981,7 @@ bool BitmapWriter::CreateBitmap(const string& inFileName, int inWidth, int inHei
 	return true;
 }
 
-bool BitmapWriter::SaveAsPNG(const string& inFileName, int inWidth, int inHeight, int bitsPerPixel, const char* pInColorData, int inColorSize, const char* pInPaletteData, int inPaletteSize)
+bool BitmapWriter::SaveAsPNG(const string& inFileName, int inWidth, int inHeight, int bitsPerPixel, const char* pInColorData, int /*inColorSize*/, const char* pInPaletteData, int inPaletteSize)
 {
 	//create encoder and set settings and info (optional)
 	lodepng::State state;
@@ -1132,7 +1132,7 @@ bool BitmapSurface::CreateSurface(int width, int height, EBitsPerPixel bitsPerPi
 	return true;
 }
 
-void BitmapSurface::AddTile(const char* pInData, int dataSize, int inX, int inY, int width, int height)
+void BitmapSurface::AddTile(const char* pInData, int inDataSize, int inX, int inY, int width, int height)
 {
 	const int startX = inX/2;
 	const int offset = (inY*mBytesPerRow + startX);
@@ -1143,10 +1143,11 @@ void BitmapSurface::AddTile(const char* pInData, int dataSize, int inX, int inY,
 	int inDataOffset = 0;
 	for(int y = 0; y < height; ++y)
 	{
-		for(int x = 0; x < 8; ++x)
+		for(int x = 0; x < width; ++x) //used to be 8 insntead of width
 		{
 			assert( offset + y*mBytesPerRow + x < mBufferSize );
 
+			assert(inDataOffset < inDataSize);
 			pOutData[y*mBytesPerRow + x] = pInData[inDataOffset++];
 		}
 	}
