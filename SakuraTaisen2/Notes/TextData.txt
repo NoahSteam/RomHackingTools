@@ -3,3 +3,12 @@ Header:
 0x0c - 4 byte offset that will take us to the text entries
 0x10 - 4 byte offset that will take us to the font sheet
 0x14 - 4 byte size in bytes of the font sheet
+
+Text Header - Header for lines of dialog
+4 Bytes - Size of text header / 4
+Then for each entry - 4 byte number of characters preceeding this entry
+
+Text Entries - Entry for each line of dialog
+2 byte per character - Index into font sheet.  1st byte = row, 2nd byte = column (1 based)
+FFFE = New Line
+FFFF = End of Entry
