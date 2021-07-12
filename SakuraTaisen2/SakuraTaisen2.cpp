@@ -11375,7 +11375,7 @@ bool PatchScreens(const string& rootSakuraTaisenDirectory, const string& patched
 	return true;
 }
 
-void ExtractTiledImage(const char* pFileName, const char* pOutFileName, int dataOffset)
+void ExtractTiledImage(const char* pFileName, const char* pOutFileName, int dataOffset, int paletteOffset)
 {
 	const FileNameContainer inFileName(pFileName);
 	const string outFileName(pOutFileName);
@@ -11387,19 +11387,38 @@ void ExtractTiledImage(const char* pFileName, const char* pOutFileName, int data
 		return;
 	}
 
-	ExtractImageFromData(inFileData.GetData(), 8*8*(320/8)*(224/8) + dataOffset, outFileName, inFileData.GetData(), 512, 8, 8, 320/8, 256, dataOffset, true, true);
+	ExtractImageFromData(inFileData.GetData(), 8*8*(320/8)*(224/8) + dataOffset, outFileName, inFileData.GetData() + paletteOffset, 512, 8, 8, 320/8, 256, dataOffset, true, true);
 }
 
 void ExtractTitleScreens(const string& rootSakuraDir, const string& outDir)
 {
 	const string outTitleDirectory = outDir + string("WPALL1\\");
-	CreateDirectoryHelper(outDir);
+	CreateDirectoryHelper(outTitleDirectory);
  
-	//Extract title files
-//	sprintf_s(buffer0, 1024, "%sSAKURA1\\TITLE%i.bin", rootSakuraDir.c_str(), i);
-//	sprintf_s(buffer1, 1024, "%sTITLE%i.bmp", outTitleDirectory.c_str(), i);
-	
-//	ExtractTiledImage(buffer0, buffer1, 0x13c0);
+	//Extract title files	
+	const int initialOffset = 0x40;
+	const int paletteOffset = 320*224 + 2048;
+	const int paletteSize   = 512;
+	const int imageStride   = 0x12800;
+	const string wpallFileName = rootSakuraDir + "SAKURA1\\WPALL1.ALL";
+	char outputImagePath[1024];
+
+	//Backdrop images
+	const int NumBackgrops = 19;
+	for(int imageNum = 0; imageNum < NumBackgrops; ++imageNum)
+	{
+		sprintf_s(outputImagePath, 1024, "%s\\WPALL%i.bmp", outTitleDirectory.c_str(), imageNum + 1);
+		ExtractTiledImage(wpallFileName.c_str(), outputImagePath, imageStride * (imageNum+1) + initialOffset, imageStride * (imageNum+1) + paletteOffset);
+	}
+
+	//Title cards
+	const int titleCardOffset = 0x190000;
+	const int NumTitleCards = 12;
+	for (int imageNum = 0; imageNum < NumTitleCards; ++imageNum)
+	{
+		sprintf_s(outputImagePath, 1024, "%s\\WPALL%i.png", outTitleDirectory.c_str(), imageNum + NumBackgrops + 1);
+		ExtractTiledImage(wpallFileName.c_str(), outputImagePath, titleCardOffset + imageStride * (imageNum + 1) + initialOffset, titleCardOffset + imageStride * (imageNum + 1) + paletteOffset);
+	}
  
 #if 0
 	//Extract LOAD.BIN
