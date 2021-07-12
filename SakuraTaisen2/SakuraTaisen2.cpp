@@ -11412,8 +11412,8 @@ void ExtractTitleScreens(const string& rootSakuraDir, const string& outDir)
 	}
 
 	//Title cards
-	const int titleCardOffset = 0x190000;
-	const int NumTitleCards = 12;
+	const int titleCardOffset = 0x17D800;
+	const int NumTitleCards = 13;
 	for (int imageNum = 0; imageNum < NumTitleCards; ++imageNum)
 	{
 		sprintf_s(outputImagePath, 1024, "%s\\WPALL%i.png", outTitleDirectory.c_str(), imageNum + NumBackgrops + 1);
