@@ -41,3 +41,6 @@
 *.opendb
 *.ipch
 *.idb
+*.db-shm
+*.db-wal
+*.recipe
