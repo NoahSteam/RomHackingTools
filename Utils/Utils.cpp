@@ -1143,7 +1143,7 @@ void BitmapSurface::AddTile(const char* pInData, int inDataSize, int inX, int in
 	int inDataOffset = 0;
 	for(int y = 0; y < height; ++y)
 	{
-		for(int x = 0; x < width; ++x) //used to be 8 insntead of width
+		for(int x = 0; x < 8; ++x) //used to be 8 insntead of width
 		{
 			assert( offset + y*mBytesPerRow + x < mBufferSize );
 

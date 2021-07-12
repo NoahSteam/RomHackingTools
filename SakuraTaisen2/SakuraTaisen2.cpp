@@ -272,7 +272,7 @@ public:
 
 		if( inChar == '\n' )
 		{
-			return 0x0a0d;
+			return 0xfffe;
 		}
 
 		if( inChar == 0xA0 )
@@ -633,7 +633,7 @@ public:
 
 	const char* GetCharacterTile(const SakuraString::SakuraChar& sakuraChar) const
 	{	
-		int tileIndex = sakuraChar.mIndex - 1;
+		int tileIndex = sakuraChar.mIndex;// -1;
 		assert(tileIndex >= 0);
 		//assert(tileIndex < (int)mCharacterTiles.size());
 		if( tileIndex >= (int)mCharacterTiles.size() )
@@ -1153,7 +1153,7 @@ private:
 			int currentIndex            = 0;
 			
 			//The dialog starting at 0xC531 has a special starting tag instead of the usual 00 00
-			if( 1 )//mStringInfoArray[i].mStringId == SpecialDialogIndicator || bIsMESFile )//&& !bIsMESFile )
+			if( 0 )//mStringInfoArray[i].mStringId == SpecialDialogIndicator || bIsMESFile )//&& !bIsMESFile )
 			{
 				//First byte
 				unsigned short currValue = pWordBuffer[currentIndex++];
@@ -1186,7 +1186,7 @@ private:
 					newLineOfText.AddChar(currValue);
 				}
 
-				if(EndOfLineCharacter)
+				if(EndOfLineCharacter == currValue)
 				{
 					break;
 				}
@@ -1930,6 +1930,8 @@ void ExtractText(const string& inSearchDirectory, const string& inPaletteFileNam
 	//Find all the scenario text files
 	vector<FileNameContainer> scenarioFiles;
 	GetAllFilesOfType(allFiles, "SK0", scenarioFiles);
+	GetAllFilesOfType(allFiles, "SK1", scenarioFiles);
+	GetAllFilesOfType(allFiles, "SKC", scenarioFiles);
 
 	//Extract the text
 	vector<SakuraTextFile> sakuraTextFiles;
@@ -11388,40 +11390,18 @@ void ExtractTiledImage(const char* pFileName, const char* pOutFileName, int data
 	ExtractImageFromData(inFileData.GetData(), 8*8*(320/8)*(224/8) + dataOffset, outFileName, inFileData.GetData(), 512, 8, 8, 320/8, 256, dataOffset, true, true);
 }
 
-void ExtractTiledImages(const string& rootSakuraDir, const string& outDir)
+void ExtractTitleScreens(const string& rootSakuraDir, const string& outDir)
 {
-	const string outTitleDirectory = outDir + string("TitleFiles\\");
-	const string outLoadDirectory  = outDir + string("LoadFiles\\");
-	const string outMiscDirectory  = outDir + string("MiscFiles\\");
-	const string outBGDirectory  = outDir + string("BGFiles\\");
+	const string outTitleDirectory = outDir + string("WPALL1\\");
 	CreateDirectoryHelper(outDir);
-	CreateDirectoryHelper(outTitleDirectory);
-	CreateDirectoryHelper(outLoadDirectory);
-	CreateDirectoryHelper(outMiscDirectory);
-	CreateDirectoryHelper(outBGDirectory);
  
 	//Extract title files
-	char buffer0[1024];
-	char buffer1[1024];
-	for(int i = 1; i <= 10; ++i)
-	{
-		sprintf_s(buffer0, 1024, "%sSAKURA1\\TITLE%i.bin", rootSakuraDir.c_str(), i);
-		sprintf_s(buffer1, 1024, "%sTITLE%i.bmp", outTitleDirectory.c_str(), i);
+//	sprintf_s(buffer0, 1024, "%sSAKURA1\\TITLE%i.bin", rootSakuraDir.c_str(), i);
+//	sprintf_s(buffer1, 1024, "%sTITLE%i.bmp", outTitleDirectory.c_str(), i);
 	
-		ExtractTiledImage(buffer0, buffer1, 0x13c0);
-		/*
-		FileData inFileData;
-		if( !inFileData.InitializeFileData(inFileName) )
-		{
-			printf("ExtractTiledImage failed\n");
-			return;
-		}
+//	ExtractTiledImage(buffer0, buffer1, 0x13c0);
  
-		const int dataOffset = 0x1380;
-		ExtractImageFromData(inFileData.GetData(), 8*8*(320/8)*(224/8) + dataOffset, outFileName, inFileData.GetData(), 512, 8, 8, 320/8, 256, dataOffset, true, true);
-		*/
-	}
- 
+#if 0
 	//Extract LOAD.BIN
 	{
 		sprintf_s(buffer0, 1024, "%sSAKURA1\\LOAD.bin", rootSakuraDir.c_str());
@@ -11514,6 +11494,7 @@ void ExtractTiledImages(const string& rootSakuraDir, const string& outDir)
 			ExtractImageFromData(inFileData.GetData(), 8*8*(288/8)*(144/8) + 0x50, outFileName, inFileData.GetData() + 0x50 + (288*144), 512, 8, 8, 288/8, 256, 0x50, true, false);
 		}
 	}
+#endif
 }
 
 void ConvertYabauseSaveToMednafen(const string& yabauseFileName, const string& outFileName)
@@ -12683,12 +12664,12 @@ int main(int argc, char *argv[])
 
 		ConvertYabauseSaveToMednafen(yabauseFile, outFile);
 	}
-	else if( command == "ExtractTiledImages" && argc == 4 )
+	else if( command == "ExtractTitleScreens" && argc == 4 )
 	{
 		const string rootSakuraDir = string(argv[2]) + Seperators;
 		const string outDir        = string(argv[3]) + Seperators;
 
-		ExtractTiledImages(rootSakuraDir, outDir);
+		ExtractTitleScreens(rootSakuraDir, outDir);
 	}
 	else if( command == "AddShadowsToWKLText" && argc == 3 ) 
 	{

@@ -1,0 +1,5 @@
+All of them are contained in WPALL1.ALL
+
+Format:
+Image data (320 * 240 @8bpp)
+Palette (512 byes)

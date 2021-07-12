@@ -1,1 +1,4 @@
 ExtractText C:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1\SAKURA1 C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data\StoryTextPalette.bin C:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\Disc1\Text
+FindDuplicateText C:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\Disc1\Text C:\Users\16306\Desktop\Rizwan\SakuraWars2\
+
+FindData.exe C:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1 C:\Users\16306\Desktop\Rizwan\SakuraWars2\find.bin
