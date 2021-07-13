@@ -11390,9 +11390,17 @@ void ExtractTiledImage(const char* pFileName, const char* pOutFileName, int data
 	ExtractImageFromData(inFileData.GetData(), 8*8*(320/8)*(224/8) + dataOffset, outFileName, inFileData.GetData() + paletteOffset, 512, 8, 8, 320/8, 256, dataOffset, true, true);
 }
 
-void ExtractTitleScreens(const string& rootSakuraDir, const string& outDir)
+void ExtractTitleScreens(const string& rootSakuraDir, int discNumber, const string& outDir)
 {
-	const string outTitleDirectory = outDir + string("WPALL1\\");
+	if( discNumber < 1 || discNumber > 3 )
+	{
+		printf("ExtractTitleScreens failed.  DiscNumber must be 1 2 or 3.\n");
+		return;
+	}
+
+	char outDirectoryPath[1024];
+	sprintf_s(outDirectoryPath, 1024, "%s\\Disc%i\\WPALL%i", outDir.c_str(), discNumber, discNumber);
+	const string outTitleDirectory(outDirectoryPath);
 	CreateDirectoryHelper(outTitleDirectory);
  
 	//Extract title files	
@@ -11400,26 +11408,78 @@ void ExtractTitleScreens(const string& rootSakuraDir, const string& outDir)
 	const int paletteOffset = 320*224 + 2048;
 	const int paletteSize   = 512;
 	const int imageStride   = 0x12800;
-	const string wpallFileName = rootSakuraDir + "SAKURA1\\WPALL1.ALL";
+
+	sprintf_s(outDirectoryPath, 1024, "%s\\SAKURA1\\WPALL%i.ALL", rootSakuraDir.c_str(), discNumber);
+	const string wpallFileName = outDirectoryPath;
 	char outputImagePath[1024];
 
-	//Backdrop images
-	const int NumBackgrops = 19;
-	for(int imageNum = 0; imageNum < NumBackgrops; ++imageNum)
+	if( discNumber == 1 )
 	{
-		sprintf_s(outputImagePath, 1024, "%s\\WPALL%i.bmp", outTitleDirectory.c_str(), imageNum + 1);
-		ExtractTiledImage(wpallFileName.c_str(), outputImagePath, imageStride * (imageNum+1) + initialOffset, imageStride * (imageNum+1) + paletteOffset);
+		//Backdrop images
+		const int NumBackgrops = 19;
+		int imageId = 1;
+		for (int imageNum = 0; imageNum < NumBackgrops; ++imageNum)
+		{
+			sprintf_s(outputImagePath, 1024, "%s\\WPALL%i.bmp", outTitleDirectory.c_str(), imageId++);
+			ExtractTiledImage(wpallFileName.c_str(), outputImagePath, imageStride * (imageNum + 1) + initialOffset, imageStride * (imageNum + 1) + paletteOffset);
+		}
+
+		//Title cards
+		const int titleCardOffset = 0x17D800;
+		const int NumTitleCards = 5;
+		for (int imageNum = 0; imageNum < NumTitleCards; ++imageNum)
+		{
+			sprintf_s(outputImagePath, 1024, "%s\\WPALL%i.bmp", outTitleDirectory.c_str(), imageId++);
+			ExtractTiledImage(wpallFileName.c_str(), outputImagePath, titleCardOffset + imageStride * (imageNum + 1) + initialOffset, titleCardOffset + imageStride * (imageNum + 1) + paletteOffset);
+		}
+
+		//Title cards
+		const int miscCardOffset = 0x1FB800;
+		const int NumMiscImages = 6;
+		for (int imageNum = 0; imageNum < NumMiscImages; ++imageNum)
+		{
+			sprintf_s(outputImagePath, 1024, "%s\\WPALL%i.bmp", outTitleDirectory.c_str(), imageId++);
+			ExtractTiledImage(wpallFileName.c_str(), outputImagePath, miscCardOffset + imageStride * (imageNum + 1) + initialOffset, miscCardOffset + imageStride * (imageNum + 1) + paletteOffset);
+		}
+	}
+	else if (discNumber == 2)
+	{
+		//Backdrop images
+		int numCards = 3;
+		int imageId  = 1;
+		for (int imageNum = 0; imageNum < numCards; ++imageNum)
+		{
+			sprintf_s(outputImagePath, 1024, "%s\\WPALL%i.bmp", outTitleDirectory.c_str(), imageId++);
+			ExtractTiledImage(wpallFileName.c_str(), outputImagePath, imageStride * (imageNum + 1) + initialOffset, imageStride * (imageNum + 1) + paletteOffset);
+		}
+
+		//Set 2
+		int cardsOffset = 0x52000;
+		numCards = 3;
+		for (int imageNum = 0; imageNum < numCards; ++imageNum)
+		{
+			sprintf_s(outputImagePath, 1024, "%s\\WPALL%i.bmp", outTitleDirectory.c_str(), imageId++);
+			ExtractTiledImage(wpallFileName.c_str(), outputImagePath, cardsOffset + imageStride * (imageNum + 1) + initialOffset, cardsOffset + imageStride * (imageNum + 1) + paletteOffset);
+		}
+
+		//Title cards
+		cardsOffset = 0xA0000;
+		numCards = 19;
+		for (int imageNum = 0; imageNum < numCards; ++imageNum)
+		{
+			sprintf_s(outputImagePath, 1024, "%s\\WPALL%i.bmp", outTitleDirectory.c_str(), imageId++);
+			ExtractTiledImage(wpallFileName.c_str(), outputImagePath, cardsOffset + imageStride * (imageNum + 1) + initialOffset, cardsOffset + imageStride * (imageNum + 1) + paletteOffset);
+		}
+
+		cardsOffset = 0x2BF000;
+		numCards = 4;
+		for (int imageNum = 0; imageNum < numCards; ++imageNum)
+		{
+			sprintf_s(outputImagePath, 1024, "%s\\WPALL%i.bmp", outTitleDirectory.c_str(), imageId++);
+			ExtractTiledImage(wpallFileName.c_str(), outputImagePath, cardsOffset + imageStride * (imageNum + 1) + initialOffset, cardsOffset + imageStride * (imageNum + 1) + paletteOffset);
+		}
 	}
 
-	//Title cards
-	const int titleCardOffset = 0x17D800;
-	const int NumTitleCards = 13;
-	for (int imageNum = 0; imageNum < NumTitleCards; ++imageNum)
-	{
-		sprintf_s(outputImagePath, 1024, "%s\\WPALL%i.png", outTitleDirectory.c_str(), imageNum + NumBackgrops + 1);
-		ExtractTiledImage(wpallFileName.c_str(), outputImagePath, titleCardOffset + imageStride * (imageNum + 1) + initialOffset, titleCardOffset + imageStride * (imageNum + 1) + paletteOffset);
-	}
- 
 #if 0
 	//Extract LOAD.BIN
 	{
@@ -12306,6 +12366,7 @@ void PrintHelp()
 	printf("FindCompressedDataInDir inDirectory uncompressedFile outDirectory\n");
 	printf("ExtractMiniGameData rootSakuraDirectory patchedDataDirectory outDirectory\n");
 	printf("ExtractStatusScreen rootSakuraDirectory patchedDataDirectory outDirectory\n");
+	printf("ExtractTitleScreens rootSakuraDir discNumber outDir\n");
 	printf("YabauseToMednafen yabauseFilePath outFile\n");
 	printf("DumpBitmap inputFilePath outDirectory\n");
 	printf("PatchGame isDisc2 rootSakuraTaisenDirectory patchedSakuraTaisenDirectory translatedTextDirectory fontSheet originalPalette patchedTMapSpDataPath mainMenuFontSheetPath mainMenuBgndPatchedImage optionsImagePatched translatedDataDirectory extractedWklDir\n");
@@ -12683,12 +12744,13 @@ int main(int argc, char *argv[])
 
 		ConvertYabauseSaveToMednafen(yabauseFile, outFile);
 	}
-	else if( command == "ExtractTitleScreens" && argc == 4 )
+	else if( command == "ExtractTitleScreens" && argc == 5 )
 	{
 		const string rootSakuraDir = string(argv[2]) + Seperators;
-		const string outDir        = string(argv[3]) + Seperators;
+		const int discNumber       = atoi(argv[3]);
+		const string outDir        = string(argv[4]) + Seperators;
 
-		ExtractTitleScreens(rootSakuraDir, outDir);
+		ExtractTitleScreens(rootSakuraDir, discNumber, outDir);
 	}
 	else if( command == "AddShadowsToWKLText" && argc == 3 ) 
 	{
