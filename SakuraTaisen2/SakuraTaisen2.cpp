@@ -11449,8 +11449,10 @@ void ExtractTitleScreens(const string& rootSakuraDir, int discNumber, const stri
 		int imageId  = 1;
 		for (int imageNum = 0; imageNum < numCards; ++imageNum)
 		{
-			sprintf_s(outputImagePath, 1024, "%s\\WPALL%i.bmp", outTitleDirectory.c_str(), imageId++);
-			ExtractTiledImage(wpallFileName.c_str(), outputImagePath, imageStride * (imageNum + 1) + initialOffset, imageStride * (imageNum + 1) + paletteOffset);
+			sprintf_s(outputImagePath, 1024, "%s\\WPALL%i.bmp", outTitleDirectory.c_str(), imageId);
+			ExtractTiledImage(wpallFileName.c_str(), outputImagePath, imageStride * imageId + initialOffset, imageStride * imageId + paletteOffset);
+			printf("ExtractImage %i at %08x\n", imageId, imageStride * imageId + initialOffset);
+			++imageId;
 		}
 
 		//Set 2
@@ -11458,8 +11460,10 @@ void ExtractTitleScreens(const string& rootSakuraDir, int discNumber, const stri
 		numCards = 3;
 		for (int imageNum = 0; imageNum < numCards; ++imageNum)
 		{
-			sprintf_s(outputImagePath, 1024, "%s\\WPALL%i.bmp", outTitleDirectory.c_str(), imageId++);
-			ExtractTiledImage(wpallFileName.c_str(), outputImagePath, cardsOffset + imageStride * (imageNum + 1) + initialOffset, cardsOffset + imageStride * (imageNum + 1) + paletteOffset);
+			sprintf_s(outputImagePath, 1024, "%s\\WPALL%i.bmp", outTitleDirectory.c_str(), imageId);
+			ExtractTiledImage(wpallFileName.c_str(), outputImagePath, imageStride * imageNum + cardsOffset + initialOffset, imageStride * imageNum + cardsOffset + paletteOffset);
+			printf("ExtractImage %i at %08x\n", imageId, imageStride * imageNum + cardsOffset + initialOffset);
+			++imageId;
 		}
 
 		//Title cards
@@ -11467,16 +11471,20 @@ void ExtractTitleScreens(const string& rootSakuraDir, int discNumber, const stri
 		numCards = 19;
 		for (int imageNum = 0; imageNum < numCards; ++imageNum)
 		{
-			sprintf_s(outputImagePath, 1024, "%s\\WPALL%i.bmp", outTitleDirectory.c_str(), imageId++);
-			ExtractTiledImage(wpallFileName.c_str(), outputImagePath, cardsOffset + imageStride * (imageNum + 1) + initialOffset, cardsOffset + imageStride * (imageNum + 1) + paletteOffset);
+			sprintf_s(outputImagePath, 1024, "%s\\WPALL%i.bmp", outTitleDirectory.c_str(), imageId);
+			ExtractTiledImage(wpallFileName.c_str(), outputImagePath, imageStride * imageNum + cardsOffset + initialOffset, imageStride * imageNum + +cardsOffset + paletteOffset);
+			printf("ExtractImage %i at %08x\n", imageId, imageStride * imageNum + cardsOffset + initialOffset);
+			++imageId;
 		}
 
-		cardsOffset = 0x2BF000;
-		numCards = 4;
+		cardsOffset = 0x221000;
+		numCards = 6;
 		for (int imageNum = 0; imageNum < numCards; ++imageNum)
 		{
-			sprintf_s(outputImagePath, 1024, "%s\\WPALL%i.bmp", outTitleDirectory.c_str(), imageId++);
-			ExtractTiledImage(wpallFileName.c_str(), outputImagePath, cardsOffset + imageStride * (imageNum + 1) + initialOffset, cardsOffset + imageStride * (imageNum + 1) + paletteOffset);
+			sprintf_s(outputImagePath, 1024, "%s\\WPALL%i.bmp", outTitleDirectory.c_str(), imageId);
+			ExtractTiledImage(wpallFileName.c_str(), outputImagePath, imageStride * imageNum + cardsOffset + initialOffset, imageStride * imageNum + cardsOffset + paletteOffset);
+			printf("ExtractImage %i at %08x\n", imageId, imageStride * imageNum + cardsOffset + initialOffset);
+			++imageId;
 		}
 	}
 
