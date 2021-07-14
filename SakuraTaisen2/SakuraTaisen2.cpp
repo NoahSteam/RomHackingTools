@@ -633,7 +633,7 @@ public:
 
 	const char* GetCharacterTile(const SakuraString::SakuraChar& sakuraChar) const
 	{	
-		int tileIndex = sakuraChar.mIndex;// -1;
+		int tileIndex = sakuraChar.mIndex;// - 1;
 		assert(tileIndex >= 0);
 		//assert(tileIndex < (int)mCharacterTiles.size());
 		if( tileIndex >= (int)mCharacterTiles.size() )
@@ -1137,41 +1137,29 @@ private:
 
 	void ParseStrings()
 	{
+		static const unsigned short EndOfLineCharacter = 0xffff;
+
 		const unsigned int NumBytesPerCharacter = 2;
 
 		const size_t numStrings = mStringInfoArray.size();
 		const bool bIsMESFile   = mFileNameInfo.mFileName.find("MES.BIN", 0, 6) != string::npos;
-		
+		const int TextDataSize  = mFileHeader.OffsetToFontSheet - mFileHeader.OffsetToText; //Size of the text block can be calculated this way
+
+		assert(TextDataSize >= 0);
+
 		for(size_t i = 0; i < numStrings; ++i)
 		{
-			const unsigned int offsetToString = mStringInfoArray[i].mNumCharactersPrecedingThisString*NumBytesPerCharacter + mFileHeader.OffsetToText;
+			const unsigned int offsetToEntry  = mStringInfoArray[i].mNumCharactersPrecedingThisString * NumBytesPerCharacter;
+			const unsigned int offsetToString = mFileHeader.OffsetToText + offsetToEntry;
 			assert(offsetToString < mFileSize);
 
 			SakuraString newLineOfText;
 			unsigned short* pWordBuffer = (unsigned short*)&mpBuffer[offsetToString];
 			bool bNonZeroValueFound     = false;
 			int currentIndex            = 0;
-			
-			//The dialog starting at 0xC531 has a special starting tag instead of the usual 00 00
-			if( 0 )//mStringInfoArray[i].mStringId == SpecialDialogIndicator || bIsMESFile )//&& !bIsMESFile )
-			{
-				//First byte
-				unsigned short currValue = pWordBuffer[currentIndex++];
-				currValue                = SwapByteOrder(currValue);  //Convert to big endian
-				newLineOfText.AddChar(currValue);
-
-				//Second byte
-				currValue = pWordBuffer[currentIndex++];
-				currValue = SwapByteOrder(currValue);  //Convert to big endian
-				newLineOfText.AddChar(currValue);
-
-				//assert(currValue == 0);
-			}
-
+		
 			while(1)
 			{
-				static const unsigned short EndOfLineCharacter = 0xffff;
-
 				const unsigned short currValue = SwapByteOrder(pWordBuffer[currentIndex++]);
 				
 				if( bIsMESFile )
@@ -1190,10 +1178,20 @@ private:
 				{
 					break;
 				}
+
+				if( (currentIndex + offsetToEntry) >= (unsigned int)TextDataSize )
+				{
+					break;
+				}
 			}
 			
 			newLineOfText.mOffsetToStringData = 2;
 			mLines.push_back(newLineOfText);
+
+			if((currentIndex + offsetToEntry) >= (unsigned int)TextDataSize)
+			{
+				break;
+			}
 		}	
 	}
 
@@ -1531,24 +1529,50 @@ bool ExtractFontSheetAsBitmap(const FileNameContainer& inFileNameContainer, cons
 	return ExtractImage(inFileNameContainer, outFileName, inPaletteFile, 16, 16, 255);
 }
 
-void ExtractAllFontSheets(const vector<FileNameContainer>& inAllFiles, const string& inPaletteFileName, const string& outDir)
+void ExtractAllFontSheets(const vector<FileNameContainer>& inAllFiles, const string& inPaletteFileName, const string& inOutputDirectory)
 {
+	if (!CreateDirectoryHelper(inOutputDirectory))
+	{
+		printf("Output directory %s not found.\n", inOutputDirectory.c_str());
+		return;
+	}
+
+	//Get the palette
 	FileData paletteFile;
-	if( !paletteFile.InitializeFileData(inPaletteFileName.c_str(), inPaletteFileName.c_str()) )
+	if (!paletteFile.InitializeFileData(inPaletteFileName.c_str(), inPaletteFileName.c_str()))
 	{
 		return;
 	}
 
-	vector<FileNameContainer> textFiles;
-	GetAllFilesOfType(inAllFiles, "KNJ.BIN", textFiles);
-	GetAllFilesOfType(inAllFiles, "MES.FNT", textFiles);
+	//Find all the scenario text files
+	vector<FileNameContainer> scenarioFiles;
+	GetAllFilesOfType(inAllFiles, "SK0", scenarioFiles);
+	GetAllFilesOfType(inAllFiles, "SK1", scenarioFiles);
+	GetAllFilesOfType(inAllFiles, "SKC", scenarioFiles);
 
-	const string bmpExtension(".bmp");
-	string outFileName;
-	for(const FileNameContainer& fileNameInfo : textFiles)
+	//Extract the text
+	vector<SakuraTextFile> sakuraTextFiles;
+	FindAllSakuraText(scenarioFiles, sakuraTextFiles);
+
+	const string extension(".bmp");
+
+	//Write out bitmaps for all of the lines found in the sakura text files
+	const size_t numFiles = sakuraTextFiles.size();
+	for (size_t i = 0; i < numFiles; ++i)
 	{
-		outFileName = outDir + fileNameInfo.mNoExtension + bmpExtension;
-		ExtractFontSheetAsBitmap(fileNameInfo, outFileName, paletteFile);
+		const SakuraTextFile& sakuraText = sakuraTextFiles[i];
+
+		//Create output directory for this file
+		const string outFileName = inOutputDirectory + sakuraText.mFileNameInfo.mNoExtension + extension;
+
+		SakuraFontSheet sakuraFontSheet;
+		if (!sakuraFontSheet.CreateFontSheetFromData(sakuraText.mFontSheetData.mpData, sakuraText.mFontSheetData.mDataSize))
+		{
+			continue;
+		}
+
+		ExtractImageFromData(sakuraText.mFontSheetData.mpData, sakuraText.mFontSheetData.mDataSize, outFileName, paletteFile.GetData(), paletteFile.GetDataSize(), 
+							16, 16, 255, 256, 0, true, true);
 	}
 }
 
@@ -4738,7 +4762,7 @@ bool CreateMesSpreadSheets(const string& dialogImageDirectory, const string& sak
 	return true;
 }
 
-bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& duplicatesFileName, const string& sakura1Directory, const string& translatedTextDirectory, bool bForRelease)
+bool CreateStoryTextSpreadsheets(const string& dialogImageDirectory, const string& duplicatesFileName, const string& sakura1Directory, const string& translatedTextDirectory, bool bForRelease)
 {
 	printf("Parsing duplicates file\n");
 
@@ -4777,12 +4801,14 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& dup
 	FindAllFilesWithinDirectory(sakura1Directory, allSakura1Files);
 
 	//Find all dialog files
-	vector<FileNameContainer> tableFiles;
-	GetAllFilesOfType(allSakura1Files, "TBL.BIN", tableFiles);
+	vector<FileNameContainer> scenarioFiles;
+	GetAllFilesOfType(allSakura1Files, "SK0", scenarioFiles);
+	GetAllFilesOfType(allSakura1Files, "SK1", scenarioFiles);
+	GetAllFilesOfType(allSakura1Files, "SKC", scenarioFiles);
 
 	//Parse the TBL files
 	vector<SakuraTextFile> sakuraTextFiles;
-	FindAllSakuraText(tableFiles, sakuraTextFiles);
+	FindAllSakuraText(scenarioFiles, sakuraTextFiles);
 
 	vector<FileNameContainer> translatedTextFiles;
 	FindAllFilesWithinDirectory(translatedTextDirectory, translatedTextFiles);
@@ -4798,7 +4824,7 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& dup
 	map<string, vector<FileNameContainer>> directoryMap;
 	for(const FileNameContainer& imageFileNameInfo : imageFiles)
 	{
-		if( imageFileNameInfo.mPathOnly.find_first_of("TBL") != string::npos )
+		if( imageFileNameInfo.mPathOnly.find_first_of("SK") != string::npos )
 		{
 			const size_t lastOf = imageFileNameInfo.mPathOnly.find_last_of('\\');
 			const string leaf = imageFileNameInfo.mPathOnly.substr(lastOf + 1);
@@ -4830,11 +4856,12 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& dup
 
 	//Find dialog order info
 	map<string, DialogOrder> dialogOrder;
+	/* TODO
 	if( !FindDialogOrder(sakura1Directory, dialogOrder) )
 	{
 		printf("Unable to find dialog files(0100.BIN, 0101.BIN, etc.) in directory: %s", sakura1Directory.c_str());
 		return false;
-	}
+	}*/
 
 	for(map<string, vector<FileNameContainer>>::const_iterator iter = directoryMap.begin(); iter != directoryMap.end(); ++iter)
 	{
@@ -5287,7 +5314,7 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& dup
 
 			htmlFile.WriteString("<br>\n");
 			htmlFile.WriteString("<b>Instructions:</b><br>\n");
-			htmlFile.WriteString("-Please let me know once the file is complete by emailing me @ sakurataisentranslation@gmail.com<br>\n");
+			htmlFile.WriteString("-Please let me know on Discord once the file is complete.<br>\n");
 			htmlFile.WriteString("-This page is best displayed using Chrome.  Otherwise some of the table borders are missing for some reason.<br>\n");
 			htmlFile.WriteString("-Skip any row that is grayed out.<br>\n");
 			htmlFile.WriteString("-Your changes are automatically saved.<br>\n");
@@ -5355,10 +5382,10 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& dup
 		htmlFile.WriteString("\t</tr>\n");
 
 		//Get name of info file (0100.BIN, etc.)
-		const size_t lastIndex    = iter->first.find_first_of("TBL");
-		const string infoFileName = iter->first.substr(0, lastIndex);
+	//	const size_t lastIndex    = iter->first.find_first_of("SK");
+		const string infoFileName = iter->first;//.substr(0, lastIndex);
 		map<string, DialogOrder>::const_iterator dialogOrderIter = dialogOrder.find(infoFileName);
-		const bool bDialogOrderExists = dialogOrderIter != dialogOrder.end();
+		const bool bDialogOrderExists = false;//dialogOrderIter != dialogOrder.end();
 
 		//****Find Translated Text File****
 		//Search for the corresponding translated file name
@@ -5374,18 +5401,18 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& dup
 
 
 		//Open translated text file
-		bool bCanUseTranslatedFile = true;
-		TextFileData translatedFile(*pMatchingTranslatedFileName);
-		if( !translatedFile.InitializeTextFile(true, false) )
+		bool bCanUseTranslatedFile = pMatchingTranslatedFileName ? true : false;
+		TextFileData translatedFile( (pMatchingTranslatedFileName ? *pMatchingTranslatedFileName : "") );
+		if (!translatedFile.InitializeTextFile(true, false))
 		{
-			printf("Unable to open the translation file %s.\n", pMatchingTranslatedFileName->mFullPath.c_str());
+			//	printf("Unable to open the translation file %s.\n", pMatchingTranslatedFileName->mFullPath.c_str());
 			bCanUseTranslatedFile = false;
 		}
 
 		//Make sure we have the correct amount of lines
-		if( bCanUseTranslatedFile && iter->second.size() < translatedFile.mLines.size() )
+		if (bCanUseTranslatedFile && iter->second.size() < translatedFile.mLines.size())
 		{
-			printf("Unable to use tranlsted file: %s because the translation line count is incorrect.\n", pMatchingTranslatedFileName->mNoExtension.c_str());
+			//	printf("Unable to use tranlsted file: %s because the translation line count is incorrect.\n", pMatchingTranslatedFileName->mNoExtension.c_str());
 			bCanUseTranslatedFile = false;
 		}
 		//****Done Finding Translated Text File****
@@ -5417,8 +5444,8 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& dup
 			int faceImageId = 0;
 			if( bDialogOrderExists )
 			{
-				DialogOrder::IdAndImageMap::const_iterator imageIdIter = dialogOrderIter->second.idAndImage.find(id);
-				faceImageId = imageIdIter != dialogOrderIter->second.idAndImage.end() ? imageIdIter->second : 0;
+			//	DialogOrder::IdAndImageMap::const_iterator imageIdIter = dialogOrderIter->second.idAndImage.find(id);
+			//	faceImageId = imageIdIter != dialogOrderIter->second.idAndImage.end() ? imageIdIter->second : 0;
 			}
 			if( faceImageId != 0 )
 			{
@@ -5430,7 +5457,7 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& dup
 			}
 			htmlFile.WriteString(string(buffer));
 
-			snprintf(buffer, 2048, "<td width=\"240\"><img src=\"..\\ExtractedData\\Dialog\\%sTBL\\%s\"></td>", infoFileName.c_str(), fileNameInfo.mFileName.c_str());
+			snprintf(buffer, 2048, "<td width=\"240\"><img src=\"..\\ExtractedData\\Disc1\\Text\\%s\\%s\"></td>", infoFileName.c_str(), fileNameInfo.mFileName.c_str());
 			htmlFile.WriteString(string(buffer));
 
 			//snprintf(buffer, 2048, "<td width=480><div id=\"edit_%s\" contenteditable=\"true\" onChange=\"SaveEdits('%i.bmp', 'edit_%i')\">Untranslated</div></td>", pVarSuffix, num + 1, num + 1);
@@ -11413,6 +11440,19 @@ void ExtractTitleScreens(const string& rootSakuraDir, int discNumber, const stri
 	const string wpallFileName = outDirectoryPath;
 	char outputImagePath[1024];
 
+	auto ExtractImagesAtOffset = [&](int& InImageId, int InNumCards, int InOffset)
+	{
+		for (int imageNum = 0; imageNum < InNumCards; ++imageNum)
+		{
+			const int colorDataOffset = imageStride* imageNum + InOffset + initialOffset;
+
+			sprintf_s(outputImagePath, 1024, "%s\\WPALL%i.bmp", outTitleDirectory.c_str(), InImageId);
+			ExtractTiledImage(wpallFileName.c_str(), outputImagePath, colorDataOffset, colorDataOffset + paletteOffset - initialOffset);
+			printf("ExtractImage %i at %08x\n", InImageId, colorDataOffset + initialOffset);
+			++InImageId;
+		}
+	};
+
 	if( discNumber == 1 )
 	{
 		//Backdrop images
@@ -11447,47 +11487,32 @@ void ExtractTitleScreens(const string& rootSakuraDir, int discNumber, const stri
 		//Backdrop images
 		int numCards = 3;
 		int imageId  = 1;
-		for (int imageNum = 0; imageNum < numCards; ++imageNum)
-		{
-			sprintf_s(outputImagePath, 1024, "%s\\WPALL%i.bmp", outTitleDirectory.c_str(), imageId);
-			ExtractTiledImage(wpallFileName.c_str(), outputImagePath, imageStride * imageId + initialOffset, imageStride * imageId + paletteOffset);
-			printf("ExtractImage %i at %08x\n", imageId, imageStride * imageId + initialOffset);
-			++imageId;
-		}
+		int cardsOffset = 0;
+		ExtractImagesAtOffset(imageId, numCards, cardsOffset);
 
 		//Set 2
-		int cardsOffset = 0x52000;
+		cardsOffset = 0x52000;
 		numCards = 3;
-		for (int imageNum = 0; imageNum < numCards; ++imageNum)
-		{
-			sprintf_s(outputImagePath, 1024, "%s\\WPALL%i.bmp", outTitleDirectory.c_str(), imageId);
-			ExtractTiledImage(wpallFileName.c_str(), outputImagePath, imageStride * imageNum + cardsOffset + initialOffset, imageStride * imageNum + cardsOffset + paletteOffset);
-			printf("ExtractImage %i at %08x\n", imageId, imageStride * imageNum + cardsOffset + initialOffset);
-			++imageId;
-		}
+		ExtractImagesAtOffset(imageId, numCards, cardsOffset);
 
-		//Title cards
+		//Set 3
 		cardsOffset = 0xA0000;
 		numCards = 19;
-		for (int imageNum = 0; imageNum < numCards; ++imageNum)
-		{
-			sprintf_s(outputImagePath, 1024, "%s\\WPALL%i.bmp", outTitleDirectory.c_str(), imageId);
-			ExtractTiledImage(wpallFileName.c_str(), outputImagePath, imageStride * imageNum + cardsOffset + initialOffset, imageStride * imageNum + +cardsOffset + paletteOffset);
-			printf("ExtractImage %i at %08x\n", imageId, imageStride * imageNum + cardsOffset + initialOffset);
-			++imageId;
-		}
+		ExtractImagesAtOffset(imageId, numCards, cardsOffset);
 
+		//Set 4
 		cardsOffset = 0x221000;
 		numCards = 6;
-		for (int imageNum = 0; imageNum < numCards; ++imageNum)
-		{
-			sprintf_s(outputImagePath, 1024, "%s\\WPALL%i.bmp", outTitleDirectory.c_str(), imageId);
-			ExtractTiledImage(wpallFileName.c_str(), outputImagePath, imageStride * imageNum + cardsOffset + initialOffset, imageStride * imageNum + cardsOffset + paletteOffset);
-			printf("ExtractImage %i at %08x\n", imageId, imageStride * imageNum + cardsOffset + initialOffset);
-			++imageId;
-		}
+		ExtractImagesAtOffset(imageId, numCards, cardsOffset);
 	}
-
+	else if (discNumber == 3)
+	{
+		//Backdrop images
+		int numCards = 19;
+		int imageId = 1;
+		int cardsOffset = 0x10E000;
+		ExtractImagesAtOffset(imageId, numCards, cardsOffset);
+	}
 #if 0
 	//Extract LOAD.BIN
 	{
@@ -12577,7 +12602,7 @@ int main(int argc, char *argv[])
 		const string translatedDirectory  = string(argv[5]) + Seperators;
 		const bool bForRelease            = atoi(argv[6]) != 0;
 
-		CreateTBLSpreadsheets(dialogImageDirectory, duplicatesFile, sakura1Directory, translatedDirectory, bForRelease);
+		CreateStoryTextSpreadsheets(dialogImageDirectory, duplicatesFile, sakura1Directory, translatedDirectory, bForRelease);
 	}
 	else if(command == "CreateMesSpreadsheets" && argc == 4 )
 	{
