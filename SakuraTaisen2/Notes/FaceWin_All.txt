@@ -1,0 +1,14 @@
+0x80 Palette 512 bytes
+976 bytes unknown
+
+64x56 main image (0x650 bytes)
+48x16 blinking images (2 of them)
+
+8 images per character
+
+0x35ffe0 is where Oneda's image starts
+
+5c01008
+06010a7a //Move into r7 a value that is used to determine offset into face header
+
+See what is writing Yoneda's face image at 060c05e0

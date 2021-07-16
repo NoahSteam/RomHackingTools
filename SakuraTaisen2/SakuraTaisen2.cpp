@@ -1185,7 +1185,7 @@ private:
 				}
 			}
 			
-			newLineOfText.mOffsetToStringData = 2;
+			newLineOfText.mOffsetToStringData = 0; //0 in SW2 because there is no ID to each dialog entry
 			mLines.push_back(newLineOfText);
 
 			if((currentIndex + offsetToEntry) >= (unsigned int)TextDataSize)

@@ -6,6 +6,7 @@ ExtractFontSheets a:\SakuraWars2\Disc1_Original\SAKURA1 a:\NoahSteam\RomPatching
 
 ExtractText C:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1\SAKURA1 C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data\StoryTextPalette.bin C:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\Disc1\Text
 FindDuplicateText C:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\Disc1\Text C:\Users\16306\Desktop\Rizwan\SakuraWars2\
-ExtractTitleScreens :\Users\16306\Desktop\Rizwan\SakuraWars2\Disc2 2 :\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData
+ExtractTitleScreens c:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc2 2 :\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData
+ExtractFontSheets c:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1_Original\SAKURA1 C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data\StoryTextPalette.bin C:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\Disc1\FontSheets
 
 FindData.exe C:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1 C:\Users\16306\Desktop\Rizwan\SakuraWars2\find.bin
