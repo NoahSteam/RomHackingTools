@@ -5457,7 +5457,7 @@ bool CreateStoryTextSpreadsheets(const string& dialogImageDirectory, const strin
 			}
 			htmlFile.WriteString(string(buffer));
 
-			snprintf(buffer, 2048, "<td width=\"240\"><img src=\"..\\ExtractedData\\Disc1\\Text\\%s\\%s\"></td>", infoFileName.c_str(), fileNameInfo.mFileName.c_str());
+			snprintf(buffer, 2048, "<td width=\"240\"><img src=\"..\\ExtractedData\\SakuraWars2\\Disc1\\Text\\%s\\%s\"></td>", infoFileName.c_str(), fileNameInfo.mFileName.c_str());
 			htmlFile.WriteString(string(buffer));
 
 			//snprintf(buffer, 2048, "<td width=480><div id=\"edit_%s\" contenteditable=\"true\" onChange=\"SaveEdits('%i.bmp', 'edit_%i')\">Untranslated</div></td>", pVarSuffix, num + 1, num + 1);
