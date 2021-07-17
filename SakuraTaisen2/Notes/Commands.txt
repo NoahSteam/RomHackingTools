@@ -3,6 +3,7 @@ ExtractTitleScreens a:\sakurawars2\Disc1_Original 1 a:\SakuraWars2\ExtractedData
 FindDuplicateText a:\sakurawars2\ExtractedData\Disc1\Text a:\SakuraWars2\DuplicatesDisc1.txt
 CreateTBLSpreadsheets a:\SakuraWars2\ExtractedData\Disc1\Text A:\SakuraWars2\ExtractedData\Disc1\Text\Duplicates_Disc1.txt a:\SakuraWars2\Disc1_Original\SAKURA1 A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\TranslatedText 0
 ExtractFontSheets a:\SakuraWars2\Disc1_Original\SAKURA1 a:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\StoryTextPalette.bin a:\sakurawars2\ExtractedData\Disc1\FontSheets
+ExtractFaceWinFiles a:\SakuraWars2\Disc1_Original 1 a:\sakurawars2\ExtractedData\Disc1\FaceWin
 
 ExtractText C:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1\SAKURA1 C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data\StoryTextPalette.bin C:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\Disc1\Text
 FindDuplicateText C:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\Disc1\Text C:\Users\16306\Desktop\Rizwan\SakuraWars2\

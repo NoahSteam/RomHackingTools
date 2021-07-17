@@ -6308,6 +6308,52 @@ void ExtractFACEFiles(const string& sakuraDirectory, const string& outDirectory)
 	}
 }
 
+void ExtractFaceWinFiles(const string& inRootSakuraDirectory, int inDiscNumber, const string& inOutputDirectory)
+{
+	if( !CreateDirectoryHelper(inOutputDirectory) )
+	{
+		return;
+	}
+
+	//Original Obstacle image 
+	FileData faceFile;
+	const string faceFilePath = inRootSakuraDirectory + "\\SAKURA1\\FACEWIN.ALL";
+	if (!faceFile.InitializeFileData(FileNameContainer(faceFilePath.c_str())))
+	{
+		return;
+	}
+
+	const int NumCharacters         = 126;
+	const int NumImagesPerCharacter = 9;
+	const int PaletteOffset         = 0x80;
+	const int PaletteSize           = 512;
+	const int UnknownDataSize       = 976;
+	const int ImageDataSetStride    = (64 * 56 + 48 * 16 * 2);
+	const int FooterSize            = 1456;
+	const int CharacterStride       = PaletteOffset + PaletteSize + UnknownDataSize + ImageDataSetStride * NumImagesPerCharacter + FooterSize;
+	for(int charIndex = 0; charIndex < NumCharacters; ++charIndex)
+	{
+		const char* pPaletteData = faceFile.GetData() + CharacterStride*charIndex + PaletteOffset;
+		const char* pColorData = faceFile.GetData() + CharacterStride*charIndex + PaletteOffset + PaletteSize + UnknownDataSize;
+
+		printf("Extracting Character: %i at %08x \n", charIndex, CharacterStride * charIndex);
+
+		for(int i = 0; i < NumImagesPerCharacter; ++i)
+		{
+			const string baseImageName = inOutputDirectory + string("Char") + std::to_string(charIndex) + string("_Face_") + std::to_string(i);
+			const string outFileName = baseImageName + string(".bmp");
+			const unsigned int offsetToColorData = i*ImageDataSetStride;
+			ExtractImageFromData(pColorData + offsetToColorData, 64*56, outFileName, pPaletteData, 512, 64, 56, 1, 256, 0, false, false);
+
+			//Extract lips
+			const string outFileNameLips = baseImageName + string("_Lips.bmp");
+			const unsigned int offsetToColorDataLips = offsetToColorData + 64*56;
+			ExtractImageFromData(pColorData + offsetToColorDataLips, 48 * 16 * 2, outFileNameLips, pPaletteData, 512, 48, 16, 2, 256, 0, false, false);
+		}
+	}
+	
+}
+
 bool PatchFACEFiles(const string& rootSakuraDirectory, const string& rootTranslatedSakuraDirectory, const string& dataDirectory)
 {
 	printf("Patching FACE files\n");
@@ -12821,6 +12867,15 @@ int main(int argc, char *argv[])
 
 		ExtractLoadScreen(rootSakuraDir, translatedDataDir, outDir);
 	}
+	else if( command == "ExtractFaceWinFiles" && argc == 5 )
+	{
+		const string rootSakuraDir = string(argv[2]) + Seperators;
+		const int discNumber       = atoi(argv[3]);
+		const string outDir        = string(argv[4]) + Seperators;
+
+		ExtractFaceWinFiles(rootSakuraDir, discNumber, outDir);
+	}
+
 	else if( command == "DumpBitmap" && argc == 4 )
 	{
 		const string inputFilePath = string(argv[2]);

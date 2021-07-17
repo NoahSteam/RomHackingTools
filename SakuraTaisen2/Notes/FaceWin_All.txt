@@ -1,14 +1,37 @@
-0x80 Palette 512 bytes
-976 bytes unknown
+Header Size: 0x50 or 0x80 bytes
+@0x08: 4 byte value - num images
+@0x0c: 4 byte value num bytes for Image Data Set Header
+@0x10: 4 byte value - num images
+@0x14: 4 byte value num bytes for Image Data Set Header
+@0x34: 4 byte num colors in palette?
+@0x38: 4 byte offset to Unkown Header 1
+@0x3C: 4 byte offset to yet another header
+@0x40: 4 byte offset to header
+@0x44: 4 byte offset to another header
+@0x48: 4 byte offset to color data
+@0x50: 0x30 more bytes of unknown data sometimes.  Might be compressed data.  To detect if present, check to see if palette is starting (first two bytes being 7FE0, otherwise skip 0x30 lines)
 
+Palette is 512 bytes
+
+Each Image Set Contains:
 64x56 main image (0x650 bytes)
-48x16 blinking images (2 of them)
+48x16 blinking images (2 of them 0x300 bytes)
 
-8 images per character
+Variable number of images per character (Count is found in @0x08 in the header)
 
-0x35ffe0 is where Oneda's image starts
+Image Data Set Header:
+Width: 2 byte value
+Height: 2 byte value
+Unkown: 12 bytes
+
+Unkown Header 1:
+After the Image Data Set Header & Before Color Data
+
+Some Notes:
+0x36000 is where Oneda's image starts
 
 5c01008
 06010a7a //Move into r7 a value that is used to determine offset into face header
 
 See what is writing Yoneda's face image at 060c05e0
+
