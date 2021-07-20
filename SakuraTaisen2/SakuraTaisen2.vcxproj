@@ -130,6 +130,11 @@
   <ItemGroup>
     <ClCompile Include="SakuraTaisen2.cpp" />
   </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Source\SakuraConstants.h" />
+    <ClInclude Include="Source\SakuraString.h" />
+    <ClInclude Include="Source\SakuraTextFile.h" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

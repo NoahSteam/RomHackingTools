@@ -10,5 +10,6 @@ ExtractText C:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1\SAKURA1 C:\Users\163
 FindDuplicateText C:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\Disc1\Text C:\Users\16306\Desktop\Rizwan\SakuraWars2\
 ExtractTitleScreens c:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc2 2 :\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData
 ExtractFontSheets c:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1_Original\SAKURA1 C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data\StoryTextPalette.bin C:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\Disc1\FontSheets
-
+FindDialogOrder c:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1 c:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\Disc1\DialogOrder
+ExtractFaceWinFiles c:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1 1 c:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\Disc1\FaceWin
 FindData.exe C:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1 C:\Users\16306\Desktop\Rizwan\SakuraWars2\find.bin
