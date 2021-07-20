@@ -12,3 +12,47 @@ Text Entries - Entry for each line of dialog
 2 byte per character - Index into font sheet.  1st byte = row, 2nd byte = column (1 based)
 FFFE = New Line
 FFFF = End of Entry
+
+SK file in Memory
+@00210000
+
+Sync File in Memory
+@00260000
+
+Text Data in Memory:
+@00217418
+
+Sequence Data in Memory:
+@00210518
+
+Address of string that will be displayed next is written at code address @0x0602C376
+
+In this example, the text address is 0021745E stored in R01
+
+Something is writing 0002 at 060A8562. 2 is the index into the text table.  Will be multiplied by 4 to get final offset.
+See what is writing this two.
+
+002 written at 2020fe (4 byte write?)
+
+06029a38
+
+SAKURA.bin loaded @6005000
+
+In ghidra, 45370 is saddress of the code at 0602C376 in yabause
+
+Start of sequence(?) data is in memory @00210518 (@0x518 in SK0101)
+Index into text table is gotten by offset in r3 @ code 060321C0
+Code @060321CE, ands r1&r2 where r2 is going to contain the index of the line
+060A855A has index written to it that will eventually be written to r4
+Code @0602A184 has text index written to r4
+
+2107C8 is read (C009) to get the 9th string.  That's
+
+In memory 2107C0:
+C004 C000 0102 7FFE C009* C3ED 0103 7FFE C039*(image id)  
+
+Dialog index: 0102 7FFE ####
+Image index: 0103(or other code) 7FFE ####
+
+Solution: Look for 0102 7FFE for dialog code, and then look the previous 7FFE value to see what the associated image index was
+
