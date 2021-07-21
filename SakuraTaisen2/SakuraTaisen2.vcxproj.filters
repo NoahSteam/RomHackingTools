@@ -29,5 +29,11 @@
     <ClInclude Include="Source\SakuraConstants.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Source\FaceWinAll.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\ImageExtraction.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

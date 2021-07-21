@@ -24,11 +24,11 @@ Width: 2 byte value
 Height: 2 byte value
 Unkown: 12 bytes
 
-Unkown Header 1:
+Unnkown Header 1:
 After the Image Data Set Header & Before Color Data
 
 Some Notes:
-0x36000 is where Oneda's image starts
+0x360000 is where Oneda's image starts
 
 5c01008
 06010a7a //Move into r7 a value that is used to determine offset into face header

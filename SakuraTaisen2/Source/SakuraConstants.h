@@ -29,3 +29,7 @@ const string SpaceWord("<sp>");
 const string BMPExtension(".bmp");
 const string SlgFontFileSuffix("_SLG");
 const unsigned short SpecialDialogIndicator = 0xC351;
+
+typedef unsigned int   uint32;
+typedef unsigned short uint16;
+typedef unsigned char  uint8;
