@@ -53,8 +53,18 @@ In memory 2107C0:
 C004 C000 0102 7FFE C009* C3ED 0103 7FFE C039*(image id)  
 
 Dialog index: 0102 7FFE ####
-Image index: 0103(or other code) 7FFE #### C004 ####(idx from set)
+Image index: 0103(or other code) 7FFE CAAA CBBB CDDD(idx from set)
+AAA: Character index - 4
+BBB: Image set
+CCC: Expression
 
 Solution: Look for 0102 7FFE for dialog code, and then look the previous 7FFE value to see what the associated image index was
 
 Face Image calculations around code 0605A066
+
+Once 0xC000 is found at 603218A (Ghidra: 4b1f8), jump to code 602A17C( G: 43176). 
+0602A182, @r1, r4 //r4 will now contain image id (0039 for example), then jump to code 0602A198( g: 43192)
+0039 written to 2020FE
+Then written to 060A8564
+0039 eventually used to calculate something at 0605A068
+Ending with r0 containing FFFFD929
