@@ -92,21 +92,13 @@ bool CreateStoryTextSpreadsheets(const string& dialogImageDirectory, const strin
 		std::sort(iter->second.begin(), iter->second.end());
 	}
 
-	//Find dialog order info
-	map<string, DialogOrder> dialogOrder;
-	/* TODO
-	if( !FindDialogOrder(sakura1Directory, dialogOrder) )
+	//Create html files
+	for (map<string, vector<FileNameContainer>>::const_iterator directoryMapIter = directoryMap.begin(); directoryMapIter != directoryMap.end(); ++directoryMapIter)
 	{
-		printf("Unable to find dialog files(0100.BIN, 0101.BIN, etc.) in directory: %s", sakura1Directory.c_str());
-		return false;
-	}*/
-
-	for (map<string, vector<FileNameContainer>>::const_iterator iter = directoryMap.begin(); iter != directoryMap.end(); ++iter)
-	{
-		printf("Creating html file for %s\n", iter->first.c_str());
+		printf("Creating html file for %s\n", directoryMapIter->first.c_str());
 
 		//Find sakura file for this dialog
-		const string tblFileName = iter->first;
+		const string tblFileName = directoryMapIter->first;
 		map<string, const SakuraTextFile*>::const_iterator sakuraFileIter = sakuraTableFileMap.find(tblFileName);
 		if (sakuraFileIter == sakuraTableFileMap.end())
 		{
@@ -114,18 +106,18 @@ bool CreateStoryTextSpreadsheets(const string& dialogImageDirectory, const strin
 			continue;
 		}
 
-		if (iter->second.size() != sakuraFileIter->second->mStringInfoArray.size())
+		if (directoryMapIter->second.size() != sakuraFileIter->second->mStringInfoArray.size())
 		{
 			printf("Unable to create html file for %s.  StringInfo to dialog file count mismatch.", tblFileName.c_str());
 			continue;
 		}
 
 		//Store all crcs based on FileNameContainer*
-		const size_t numImageFiles = iter->second.size();
+		const size_t numImageFiles = directoryMapIter->second.size();
 		map<const FileNameContainer*, unsigned long> crcMap;
 		for (size_t fileIndex = 0; fileIndex < numImageFiles; ++fileIndex)
 		{
-			const FileNameContainer* pFileContainer = &iter->second[fileIndex];
+			const FileNameContainer* pFileContainer = &directoryMapIter->second[fileIndex];
 			FileData fileData;
 			if (!fileData.InitializeFileData(*pFileContainer))
 			{
@@ -137,12 +129,12 @@ bool CreateStoryTextSpreadsheets(const string& dialogImageDirectory, const strin
 		}
 
 		//Find all duplicates within this file. That is, duplicates that are internal to only this file.
-		printf("Finding Duplicates for %s \n", iter->first.c_str());
+		printf("Finding Duplicates for %s \n", directoryMapIter->first.c_str());
 		int numberOfDuplicatesFound = 0;
 		map<string, vector<string>> duplicatesMap; //FileName, Vector<Duplicate FileNames>
 		for (size_t fileIndex = 0; fileIndex < numImageFiles; ++fileIndex)
 		{
-			const FileNameContainer& firstImageName = iter->second[fileIndex];
+			const FileNameContainer& firstImageName = directoryMapIter->second[fileIndex];
 
 			if (crcMap.find(&firstImageName) == crcMap.end())
 			{
@@ -193,7 +185,7 @@ bool CreateStoryTextSpreadsheets(const string& dialogImageDirectory, const strin
 			//Check all other files
 			for (size_t secondFileIndex = fileIndex + 1; secondFileIndex < numImageFiles; ++secondFileIndex)
 			{
-				const FileNameContainer* pSecondFile = &iter->second[secondFileIndex];
+				const FileNameContainer* pSecondFile = &directoryMapIter->second[secondFileIndex];
 				if (crcMap.find(pSecondFile) == crcMap.end())
 				{
 					printf("Crc data not found.  Unable to generate web files.\n");
@@ -202,12 +194,12 @@ bool CreateStoryTextSpreadsheets(const string& dialogImageDirectory, const strin
 
 				if (crcMap[pSecondFile] == imageCrc)
 				{
-					duplicatesMap[firstImageName.mNoExtension].push_back(iter->second[secondFileIndex].mNoExtension);
+					duplicatesMap[firstImageName.mNoExtension].push_back(directoryMapIter->second[secondFileIndex].mNoExtension);
 				}
 			}
 		}
 
-		const string htmlFileName = outputDirectory + iter->first + string(".php");
+		const string htmlFileName = outputDirectory + directoryMapIter->first + string(".php");
 
 		TextFileWriter htmlFile;
 		if (!htmlFile.OpenFileForWrite(htmlFileName))
@@ -548,7 +540,7 @@ bool CreateStoryTextSpreadsheets(const string& dialogImageDirectory, const strin
 			htmlFile.WriteString("\t\t\tbreak;\n\t\t}\n\t}");
 			htmlFile.WriteString("if( $bPermissionFound )\n{\n?>");
 
-			fprintf(htmlFile.GetFileHandle(), "<article><header align=\"center\"><h1>Dialog For %s</h1></header></article>\n", iter->first.c_str());
+			fprintf(htmlFile.GetFileHandle(), "<article><header align=\"center\"><h1>Dialog For %s</h1></header></article>\n", directoryMapIter->first.c_str());
 
 			htmlFile.WriteString("<br>\n");
 			htmlFile.WriteString("<b>Instructions:</b><br>\n");
@@ -576,7 +568,7 @@ bool CreateStoryTextSpreadsheets(const string& dialogImageDirectory, const strin
 
 			htmlFile.WriteString("<?php\n");
 			htmlFile.WriteString("$currUser = $_SERVER['PHP_AUTH_USER'];\n");
-			htmlFile.WriteString("if( $currUser == \"swtranslator\" )\n");
+			htmlFile.WriteString("if( $currUser == \"rahmed\" )\n");
 			htmlFile.WriteString("{\n");
 			htmlFile.WriteString("echo \"<input align=\\\"center\\\" type=\\\"button\\\" value=\\\"Export Data\\\" onclick=\\\"ExportData()\\\"/>\";\n");
 			htmlFile.WriteString("}\n");
@@ -613,7 +605,6 @@ bool CreateStoryTextSpreadsheets(const string& dialogImageDirectory, const strin
 		htmlFile.WriteString("\t<th>Speaker</th>\n");
 		htmlFile.WriteString("\t<th>Japanese</th>\n");
 		htmlFile.WriteString("\t<th>English</th>\n");
-		htmlFile.WriteString("\t<th>ID</th>\n");
 		htmlFile.WriteString("\t<th>Appearance Order</th>\n");
 		htmlFile.WriteString("\t<th>CRC</th>\n");
 		htmlFile.WriteString("\t<th>Has a Duplicate</th>\n");
@@ -624,7 +615,7 @@ bool CreateStoryTextSpreadsheets(const string& dialogImageDirectory, const strin
 		const FileNameContainer* pMatchingTranslatedFileName = nullptr;
 		for (const FileNameContainer& translatedFileName : translatedTextFiles)
 		{
-			if (translatedFileName.mNoExtension.find(iter->first) != string::npos)
+			if (translatedFileName.mNoExtension.find(directoryMapIter->first) != string::npos)
 			{
 				pMatchingTranslatedFileName = &translatedFileName;
 				break;
@@ -641,47 +632,52 @@ bool CreateStoryTextSpreadsheets(const string& dialogImageDirectory, const strin
 		}
 
 		//Make sure we have the correct amount of lines
-		if (bCanUseTranslatedFile && iter->second.size() < translatedFile.mLines.size())
+		if (bCanUseTranslatedFile && directoryMapIter->second.size() < translatedFile.mLines.size())
 		{
 			//	printf("Unable to use tranlsted file: %s because the translation line count is incorrect.\n", pMatchingTranslatedFileName->mNoExtension.c_str());
 			bCanUseTranslatedFile = false;
 		}
 		//****Done Finding Translated Text File****
 
-		//Create entries for all images
-		int num = 0;
-		for (const FileNameContainer& fileNameInfo : iter->second)
+		//Create a map that gives us an index into the dialog entries when given a number
+		const SakuraTextFile* pSakuraFile = sakuraFileIter->second;
+		map<size_t, size_t> dialogOrder;
+		const size_t numLinesOfDialog = pSakuraFile->mLines.size();
+		const size_t numSequenceEntries = pSakuraFile->mSequenceEntries.size();
+		for (size_t dialogEntry = 0; dialogEntry < numLinesOfDialog && dialogEntry < numSequenceEntries; ++dialogEntry)
 		{
-			const unsigned long crc = crcMap[&iter->second[num]];
+			const uint16 textIndex = 0x0fff & pSakuraFile->mSequenceEntries[dialogEntry].mTextIndex;
+			dialogOrder[textIndex] = dialogEntry;
+		}
+
+		//Create entries for all images
+		int imageNumber = 0;
+		for (const FileNameContainer& fileNameInfo : directoryMapIter->second)
+		{
+			const unsigned long crc = crcMap[&directoryMapIter->second[imageNumber]];
 			const bool bIsDuplicate = dupCrcMap.find(crc) != dupCrcMap.end();
-			const SakuraTextFile* pSakuraFile = sakuraFileIter->second;
-			const unsigned short id = pSakuraFile->mStringInfoArray[num].mStringId;
-		//	const vector<int>* pOrder = bDialogOrderExists && dialogOrderIter->second.idAndOrder.find(id) != dialogOrderIter->second.idAndOrder.end() ? &dialogOrderIter->second.idAndOrder.find(id)->second : nullptr;
 			const bool bIsLipsEntry = false;// pOrder ? dialogOrderIter->second.idAndLips.find(id)->second : false;
 			const char* bgColor = bForRelease ? "e3fec8" : "fefec8";
+			const bool bHasDialogEntry = dialogOrder.find(imageNumber + 1) != dialogOrder.end(); //Image ids in the game are 1 based, not 0 based
+
 			if (bIsLipsEntry)
 			{
 				bgColor = "fec8c8"; //LIPS event are highlighted in pink
 			}
-			else if (!pOrder)
+			else if (!bHasDialogEntry)
 			{
 				bgColor = "B9B9B9"; //Gray out rows that don't need translations
 			}
 
 			const char* pVarSuffix = fileNameInfo.mNoExtension.c_str();
-			fprintf(htmlFile.GetFileHandle(), "<tr id=\"tr_edit_%i\" bgcolor=\"#%s\">\n", num + 1, bgColor);
-			snprintf(buffer, 2048, "<td align=\"center\" width=\"20\">%i</td>", num + 1);
+			fprintf(htmlFile.GetFileHandle(), "<tr id=\"tr_edit_%i\" bgcolor=\"#%s\">\n", imageNumber + 1, bgColor);
+			snprintf(buffer, 2048, "<td align=\"center\" width=\"20\">%i</td>", imageNumber + 1);
 			htmlFile.WriteString(string(buffer));
 
-			int faceImageId = 0;
-			if (bDialogOrderExists)
+			string faceImageId = pSakuraFile->GetFaceImageId(imageNumber + 1);
+			if (faceImageId.size())
 			{
-				//	DialogOrder::IdAndImageMap::const_iterator imageIdIter = dialogOrderIter->second.idAndImage.find(id);
-				//	faceImageId = imageIdIter != dialogOrderIter->second.idAndImage.end() ? imageIdIter->second : 0;
-			}
-			if (faceImageId != 0)
-			{
-				snprintf(buffer, 2048, "<td width=\"48\"><img src=\"..\\ExtractedData\\Faces\\%sFCE\\%04x.png\"></td>", infoFileName.c_str(), faceImageId);
+				snprintf(buffer, 2048, "<td width=\"48\"><img src=\"..\\ExtractedData\\FaceWin\\%s.png\"></td>", faceImageId.c_str());
 			}
 			else
 			{
@@ -689,30 +685,21 @@ bool CreateStoryTextSpreadsheets(const string& dialogImageDirectory, const strin
 			}
 			htmlFile.WriteString(string(buffer));
 
-			snprintf(buffer, 2048, "<td width=\"240\"><img src=\"..\\ExtractedData\\SakuraWars2\\Disc1\\Text\\%s\\%s\"></td>", infoFileName.c_str(), fileNameInfo.mFileName.c_str());
+			snprintf(buffer, 2048, "<td width=\"240\"><img src=\"..\\ExtractedData\\SakuraWars2\\Disc1\\Text\\%s\\%s\"></td>", pSakuraFile->mFileNameInfo.mNoExtension.c_str(), fileNameInfo.mFileName.c_str());
 			htmlFile.WriteString(string(buffer));
 
 			//snprintf(buffer, 2048, "<td width=480><div id=\"edit_%s\" contenteditable=\"true\" onChange=\"SaveEdits('%i.bmp', 'edit_%i')\">Untranslated</div></td>", pVarSuffix, num + 1, num + 1);
-			const char* pEnglishText = bCanUseTranslatedFile ? translatedFile.mLines[num].mFullLine.c_str() : "Untranslated";
-			snprintf(buffer, 2048, "<td width=\"480\"><textarea id=\"edit_%s\" contenteditable=true onchange=\"SaveEdits('%i.bmp', 'edit_%i', '%lu')\" style=\"border: none; width: 100%%; -webkit-box-sizing: border-box; -moz-box-sizing: border-box; box-sizing: border-box;\">%s</textarea></td>", pVarSuffix, num + 1, num + 1, crc, pEnglishText);
+			const char* pEnglishText = bCanUseTranslatedFile ? translatedFile.mLines[imageNumber].mFullLine.c_str() : "Untranslated";
+			snprintf(buffer, 2048, "<td width=\"480\"><textarea id=\"edit_%s\" contenteditable=true onchange=\"SaveEdits('%i.bmp', 'edit_%i', '%lu')\" style=\"border: none; width: 100%%; -webkit-box-sizing: border-box; -moz-box-sizing: border-box; box-sizing: border-box;\">%s</textarea></td>", pVarSuffix, imageNumber + 1, imageNumber + 1, crc, pEnglishText);
 			htmlFile.WriteString(string(buffer));
 
-			snprintf(buffer, 2048, "<td align=\"center\" width=\"120\">%02x (%i)</td>", id, id);
-			htmlFile.WriteString(string(buffer));
-
-			if (pOrder)
+			if (bHasDialogEntry)
 			{
 				htmlFile.WriteString("<td align=\"center\" width=\"120\">");
 
-				for (size_t orderIndex = 0; orderIndex < pOrder->size(); ++orderIndex)
-				{
-					snprintf(buffer, 2048, "Order: %i", (*pOrder)[orderIndex]);
-					htmlFile.WriteString(string(buffer));
-					if (orderIndex + 1 < pOrder->size())
-					{
-						htmlFile.WriteString(", ");
-					}
-				}
+				snprintf(buffer, 2048, "Order: %i", dialogOrder[imageNumber]);
+				htmlFile.WriteString(string(buffer));
+
 				htmlFile.WriteString("</td>");
 			}
 			else
@@ -721,15 +708,15 @@ bool CreateStoryTextSpreadsheets(const string& dialogImageDirectory, const strin
 				htmlFile.WriteString(string(buffer));
 			}
 
-			snprintf(buffer, 2048, "<td id=\"crc_%i\" align=\"center\" width=\"20\">%08x</td>", num + 1, crc);
+			snprintf(buffer, 2048, "<td id=\"crc_%i\" align=\"center\" width=\"20\">%08x</td>", imageNumber + 1, crc);
 			htmlFile.WriteString(string(buffer));
 
-			snprintf(buffer, 2048, "<td id=\"dup_%i\" align=\"center\" width=\"20\">%s</td>", num + 1, bIsDuplicate ? "true" : "false");
+			snprintf(buffer, 2048, "<td id=\"dup_%i\" align=\"center\" width=\"20\">%s</td>", imageNumber + 1, bIsDuplicate ? "true" : "false");
 			htmlFile.WriteString(string(buffer));
 
 			htmlFile.WriteString("</tr>\n");
 
-			++num;
+			++imageNumber;
 		}
 		htmlFile.WriteString("</table><br>\n");
 

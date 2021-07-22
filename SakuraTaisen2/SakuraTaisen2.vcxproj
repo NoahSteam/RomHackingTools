@@ -134,6 +134,7 @@
     <ClInclude Include="Source\CreateStorySpreadhseets.h" />
     <ClInclude Include="Source\FaceWinAll.h" />
     <ClInclude Include="Source\ImageExtraction.h" />
+    <ClInclude Include="Source\SakuraCommon.h" />
     <ClInclude Include="Source\SakuraConstants.h" />
     <ClInclude Include="Source\SakuraString.h" />
     <ClInclude Include="Source\SakuraTextFile.h" />

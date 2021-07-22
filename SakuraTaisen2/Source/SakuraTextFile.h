@@ -16,8 +16,8 @@ Character Index 0 Note: Image Set is offset by 4.  So subtract 4 from BBB to get
 
 const uint16 NumSetsPerCharacter[] =
 {
-	5, //Ogami
-	9, //Sakura
+	6, //Ogami
+	10, //Sakura
 	9, //Hairband girl
 	6, //Maria
 	7, //Kanna
@@ -289,10 +289,10 @@ struct SakuraTextFile
 
 	struct SequenceEntry
 	{
-		unsigned short mTextIndex{ 0 };
-		unsigned short mImageId_CharIndex{ 0 };
-		unsigned short mImageId_SetIndex{ 0 };
-		unsigned short mImageId_ExpressionIndex{ 0 };
+		uint16 mTextIndex{ 0 };
+		uint16 mImageId_CharIndex{ 0 };
+		uint16 mImageId_SetIndex{ 0 };
+		uint16 mImageId_ExpressionIndex{ 0 };
 	};
 
 	FileNameContainer          mFileNameInfo;
@@ -442,8 +442,30 @@ public:
 		return -1;
 	}
 
-private:
+	string GetFaceImageId(int InLineIndex) const
+	{
+		for(const SequenceEntry& sequenceEntry : mSequenceEntries)
+		{
+			if( (sequenceEntry.mTextIndex & 0x0fff) == (InLineIndex) )
+			{
+				const int characterSetIndex = GetCharacterImageSetIndexFromCharIndex(sequenceEntry.mImageId_CharIndex & 0x0fff);
+				int faceSetIndex            = sequenceEntry.mImageId_SetIndex & 0x0fff;
+			//	if( characterSetIndex < 9 )
+				{
+					faceSetIndex -= 4;
+				}
+				const int portraitIndex = characterSetIndex + faceSetIndex;
+				
+				const string imageId = string("Char") + std::to_string(portraitIndex) + string("_") + std::to_string(sequenceEntry.mImageId_ExpressionIndex & 0x0fff);
 
+				return imageId;
+			}
+		}
+
+		return "";
+	}
+
+private:
 	void ParseHeader()
 	{
 		//Read in file header
@@ -724,4 +746,45 @@ private:
 			}
 		}
 	}
+
+	int GetCharacterImageSetIndexFromCharIndex(uint16 InIndex) const
+	{	
+		uint16 numPrecedingFaceEntries = 0;
+		for(uint16 i = 0; i < InIndex; ++i)
+		{
+			numPrecedingFaceEntries += NumSetsPerCharacter[i];
+		}
+
+		return numPrecedingFaceEntries;
+	}
 };
+
+void FindAllSakuraText(const vector<FileNameContainer>& inFiles, vector<SakuraTextFile>& outText)
+{
+	const std::string SkipFileName("SK0000");
+
+	for (const FileNameContainer& fileName : inFiles)
+	{
+		if (fileName.mNoExtension == SkipFileName)
+		{
+			continue;
+		}
+
+		printf("Extracting: %s\n", fileName.mFileName.c_str());
+
+		SakuraTextFile sakuraFile(fileName);
+		if (!sakuraFile.OpenFile())
+		{
+			continue;
+		}
+
+		if (sakuraFile.GetFileSize() == 0)
+		{
+			continue;
+		}
+
+		sakuraFile.ReadInText();
+
+		outText.push_back(std::move(sakuraFile));
+	}
+}

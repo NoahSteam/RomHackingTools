@@ -38,5 +38,8 @@
     <ClInclude Include="Source\CreateStorySpreadhseets.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Source\SakuraCommon.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

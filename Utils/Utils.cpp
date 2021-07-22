@@ -245,6 +245,21 @@ bool AreFilesTheSame(const FileData& file1Data, const FileNameContainer& file2Na
 
 	return false;
 }
+
+void GetAllFilesOfType(const vector<FileNameContainer>& allFiles, const char* pInFileType, vector<FileNameContainer>& outFiles)
+{
+	const string validTextFile(pInFileType);
+
+	for (const FileNameContainer& fileName : allFiles)
+	{
+		std::size_t found = fileName.mFileName.find(validTextFile);
+		if (found != std::string::npos)
+		{
+			outFiles.push_back(fileName);
+		}
+	}
+}
+
 ////////////////////////////
 //        FileData        //
 ////////////////////////////

@@ -411,6 +411,7 @@ bool CreateDirectoryHelper(const std::string& dirName);
 bool AreFilesTheSame(const FileData& file1, const FileNameContainer& file2Name);
 bool FindDataWithinBuffer(const char* pBuffer, unsigned long bufferSize, const char* pSearchData, const unsigned int searchDataSize, unsigned long& outIndex);
 bool CreateTemporaryDirectory(std::string& outDir);
+void GetAllFilesOfType(const std::vector<FileNameContainer>& allFiles, const char* pInFileType, std::vector<FileNameContainer>& outFiles);
 //unsigned long prs_decompress_size(void* source);
 //unsigned long prs_decompress(void* source, void* dest, unsigned long destSize);
 //unsigned long prs_compress(void* source, void* dest, unsigned long size);

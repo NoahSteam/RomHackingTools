@@ -37,6 +37,7 @@ using std::vector;
 using std::string;
 using std::list;
 using std::map;
+using std::unordered_map;
 
 #include "Source/SakuraConstants.h"
 #include "Source/SakuraTextFile.h"
@@ -468,65 +469,6 @@ struct SakuraTextFileFixedHeader
 		return true;
 	}
 };
-
-void FindAllSakuraText(const vector<FileNameContainer>& inFiles, vector<SakuraTextFile>& outText)
-{
-	const std::string SkipFileName("SK0000");
-
-	for(const FileNameContainer& fileName : inFiles)
-	{
-		if (fileName.mNoExtension == SkipFileName)
-		{
-			continue;
-		}
-
-		printf("Extracting: %s\n", fileName.mFileName.c_str());
-
-		SakuraTextFile sakuraFile(fileName);
-		if( !sakuraFile.OpenFile() )
-		{
-			continue;
-		}
-
-		if( sakuraFile.GetFileSize() == 0 )
-		{
-			continue;
-		}
-
-		sakuraFile.ReadInText();
-		
-		outText.push_back( std::move(sakuraFile) );
-	}
-}
-
-const FileNameContainer* FindSakuraFile(const vector<FileNameContainer>& allFiles, const char* pFileName)
-{
-	const string searchName(pFileName);
-
-	for(const FileNameContainer& fileNameInfo : allFiles)
-	{
-		if( fileNameInfo.mFileName == searchName )
-		{
-			return &fileNameInfo;
-		}
-	}
-
-	return nullptr;
-}
-
-void GetAllFilesOfType(const vector<FileNameContainer>& allFiles, const char* pInFileType, vector<FileNameContainer>& outFiles)
-{
-	const string validTextFile(pInFileType);
-
-	for(const FileNameContainer& fileName : allFiles)
-	{
-		std::size_t found = fileName.mFileName.find(validTextFile);
-		if (found != std::string::npos)
-		{
-			outFiles.push_back(fileName);
-		}
-	}
-}
 
 void DumpExtractedSakuraText(const vector<SakuraTextFile>& inSakuraTextFiles, const string& outDirectory)
 {
