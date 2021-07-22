@@ -54,8 +54,8 @@ C004 C000 0102 7FFE C009* C3ED 0103 7FFE C039*(image id)
 
 Dialog index: 0102 7FFE ####
 Image index: 0103(or other code) 7FFE CAAA CBBB CDDD(idx from set)
-AAA: Character index - 4
-BBB: Image set
+AAA: Character index
+BBB: Image set - 4
 CCC: Expression
 
 Solution: Look for 0102 7FFE for dialog code, and then look the previous 7FFE value to see what the associated image index was

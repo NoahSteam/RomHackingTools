@@ -131,6 +131,7 @@
     <ClCompile Include="SakuraTaisen2.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Source\CreateStorySpreadhseets.h" />
     <ClInclude Include="Source\FaceWinAll.h" />
     <ClInclude Include="Source\ImageExtraction.h" />
     <ClInclude Include="Source\SakuraConstants.h" />

@@ -35,5 +35,8 @@
     <ClInclude Include="Source\ImageExtraction.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Source\CreateStorySpreadhseets.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

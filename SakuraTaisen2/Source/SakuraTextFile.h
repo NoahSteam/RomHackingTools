@@ -1,6 +1,117 @@
 #pragma once
+//SakuraTextFile is used to extract SK files (SK0101.bin, etc.)
 
 #include "SakuraString.h"
+
+
+/*
+Dialog index : 0102 7FFE ####
+Image index : 0103(or other code) 7FFE CAAA CBBB CDDD(idx from set)
+AAA : Character index
+BBB : Image set
+CCC : Expression
+
+Character Index 0 Note: Image Set is offset by 4.  So subtract 4 from BBB to get actual image set.
+*/
+
+const uint16 NumSetsPerCharacter[] =
+{
+	5, //Ogami
+	9, //Sakura
+	9, //Hairband girl
+	6, //Maria
+	7, //Kanna
+	9, //Iris
+	8, //Kohran
+	9, //Orihime
+	8, //Reni
+	3, //Yoneda
+	4, //Kayama
+	3, //Lobby girl
+	3, //Lobby girl 2
+	3, //Lobby girl 3
+	2, //Kaede (Image Char: 88)
+	2, //(90, 91)
+	1, //92
+	2, //93
+	1, //95
+	1, //96
+	1, //97
+	1, //98
+	1, //99
+	3, //100
+	1, //103
+	1, //104
+	1, //105
+	2, //106
+	1, //108
+	1, //109
+	1, //110
+	1, //111
+	1, //112
+	1, //113
+	1, //114
+	1, //115
+	1, //116
+	1, //117
+	1, //118
+	1, //119
+	1, //120
+	1, //121
+	1, //122
+	1, //123
+	1, //124
+	1, //125
+	1, //126
+	1, //127
+	1, //128
+	1, //129
+	1, //130
+	1, //131
+	1, //132
+	1, //133
+	1, //134
+	1, //135
+	1, //136
+	2, //137
+	1, //139
+	1, //140
+	1, //141
+	1, //142
+	1, //143
+	1, //144
+	1, //145
+	1, //146
+	1, //147
+	1, //148
+	1, //149
+	1, //150
+	1, //151
+	1, //152
+	1, //153
+	1, //154
+	1, //155
+	1, //156
+	1, //157
+	1, //158
+	1, //159
+	1, //160
+	1, //161
+	1, //162
+	1, //163
+	1, //164
+	1, //165
+	1, //166
+	1, //167
+	1, //168
+	1, //169
+	1, //170
+	1, //171
+	1, //172
+	1, //173
+	1, //174
+	1, //175
+};
 
 struct SakuraTextFile
 {
@@ -179,7 +290,9 @@ struct SakuraTextFile
 	struct SequenceEntry
 	{
 		unsigned short mTextIndex{ 0 };
-		unsigned short mImageId{ 0 };
+		unsigned short mImageId_CharIndex{ 0 };
+		unsigned short mImageId_SetIndex{ 0 };
+		unsigned short mImageId_ExpressionIndex{ 0 };
 	};
 
 	FileNameContainer          mFileNameInfo;
@@ -576,7 +689,7 @@ private:
 		const unsigned short DataEntryId = 0x7FFE;
 
 		unsigned int index = 1;
-		unsigned short prevId = 0;
+		unsigned short prevIdIndex = 0;
 
 		//Go to the second to last entry as we require index + 1 to be valid in this loop
 		while (index < (SequenceDataNumEntries - 1))
@@ -591,14 +704,16 @@ private:
 				if (prevValue == TextEntryId)
 				{
 					SequenceEntry newEntry;
-					newEntry.mTextIndex = SwapByteOrder(pSequenceData[index + 1]);
-					newEntry.mImageId = prevId;
+					newEntry.mTextIndex               = SwapByteOrder(pSequenceData[index + 1]);
+					newEntry.mImageId_CharIndex       = SwapByteOrder(pSequenceData[index - 4]);
+					newEntry.mImageId_SetIndex        = SwapByteOrder(pSequenceData[index - 3]);
+					newEntry.mImageId_ExpressionIndex = SwapByteOrder(pSequenceData[index - 2]);
 
 					mSequenceEntries.push_back(newEntry);
 				}
 				else
 				{
-					prevId = SwapByteOrder(pSequenceData[index + 1]);
+					prevIdIndex = index + 1;
 				}
 
 				index += 2;
