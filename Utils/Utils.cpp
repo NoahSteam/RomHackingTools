@@ -1147,7 +1147,7 @@ bool BitmapSurface::CreateSurface(int width, int height, EBitsPerPixel bitsPerPi
 	return true;
 }
 
-void BitmapSurface::AddTile(const char* pInData, int inDataSize, int inX, int inY, int width, int height)
+void BitmapSurface::AddTile(const char* pInData, int inDataSize, int inX, int inY, int/* width*/, int height)
 {
 	const int startX = inX/2;
 	const int offset = (inY*mBytesPerRow + startX);

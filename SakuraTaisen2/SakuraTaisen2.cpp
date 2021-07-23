@@ -3089,7 +3089,11 @@ void OutputDialogOrder(const string& rootSakuraTaisenDirectory, const string& ou
 		{
 			for (size_t i = 0; i < sakuraFile.mSequenceEntries.size(); ++i)
 			{
-				sprintf_s(buffer, 1024, "%04x Image[%04x %04x %04x]\n", sakuraFile.mSequenceEntries[i].mTextIndex, sakuraFile.mSequenceEntries[i].mImageId_CharIndex, sakuraFile.mSequenceEntries[i].mImageId_SetIndex, sakuraFile.mSequenceEntries[i].mImageId_ExpressionIndex);
+				sprintf_s(buffer, 1024, "%04x Image[%04x %04x %04x]\n", 
+					sakuraFile.mSequenceEntries[i].mTextIndex | 0xc000, 
+					sakuraFile.mSequenceEntries[i].mImageId_CharIndex | 0xc000, 
+					sakuraFile.mSequenceEntries[i].mImageId_SetIndex | 0xc000,
+					sakuraFile.mSequenceEntries[i].mImageId_ExpressionIndex | 0xc000);
 				writer.WriteString(string(buffer));
 			}
 		}

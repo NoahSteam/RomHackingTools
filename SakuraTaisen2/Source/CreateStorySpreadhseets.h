@@ -641,13 +641,15 @@ bool CreateStoryTextSpreadsheets(const string& dialogImageDirectory, const strin
 
 		//Create a map that gives us an index into the dialog entries when given a number
 		const SakuraTextFile* pSakuraFile = sakuraFileIter->second;
-		map<size_t, size_t> dialogOrder;
+		map<size_t, size_t> dialogOrder_SeqIdToImageNum;
+		map<size_t, size_t> dialogOrder_ImageNumToEntry;
 		const size_t numLinesOfDialog = pSakuraFile->mLines.size();
 		const size_t numSequenceEntries = pSakuraFile->mSequenceEntries.size();
-		for (size_t dialogEntry = 0; dialogEntry < numLinesOfDialog && dialogEntry < numSequenceEntries; ++dialogEntry)
+		for (size_t dialogEntry = 0; dialogEntry < numSequenceEntries; ++dialogEntry)
 		{
-			const uint16 textIndex = 0x0fff & pSakuraFile->mSequenceEntries[dialogEntry].mTextIndex;
-			dialogOrder[textIndex] = dialogEntry;
+			const uint16 textIndex = pSakuraFile->mSequenceEntries[dialogEntry].mTextIndex;
+			dialogOrder_SeqIdToImageNum[textIndex] = dialogEntry;
+			dialogOrder_ImageNumToEntry[dialogEntry] = textIndex;
 		}
 
 		//Create entries for all images
@@ -656,9 +658,10 @@ bool CreateStoryTextSpreadsheets(const string& dialogImageDirectory, const strin
 		{
 			const unsigned long crc = crcMap[&directoryMapIter->second[imageNumber]];
 			const bool bIsDuplicate = dupCrcMap.find(crc) != dupCrcMap.end();
-			const bool bIsLipsEntry = false;// pOrder ? dialogOrderIter->second.idAndLips.find(id)->second : false;
 			const char* bgColor = bForRelease ? "e3fec8" : "fefec8";
-			const bool bHasDialogEntry = dialogOrder.find(imageNumber + 1) != dialogOrder.end(); //Image ids in the game are 1 based, not 0 based
+			const bool bHasDialogEntry = dialogOrder_SeqIdToImageNum.find(imageNumber + 1) != dialogOrder_SeqIdToImageNum.end(); //Image ids in the game are 1 based, not 0 based
+			const size_t seqIndex = dialogOrder_ImageNumToEntry[imageNumber];
+			const bool bIsLipsEntry = bHasDialogEntry ? pSakuraFile->mSequenceEntries[seqIndex].mbIsLips : false;// pOrder ? dialogOrderIter->second.idAndLips.find(id)->second : false;
 
 			if (bIsLipsEntry)
 			{
@@ -697,7 +700,7 @@ bool CreateStoryTextSpreadsheets(const string& dialogImageDirectory, const strin
 			{
 				htmlFile.WriteString("<td align=\"center\" width=\"120\">");
 
-				snprintf(buffer, 2048, "Order: %i", dialogOrder[imageNumber]);
+				snprintf(buffer, 2048, "Order: %zi", imageNumber + 1);
 				htmlFile.WriteString(string(buffer));
 
 				htmlFile.WriteString("</td>");

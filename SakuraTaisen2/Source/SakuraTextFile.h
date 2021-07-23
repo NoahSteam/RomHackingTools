@@ -293,6 +293,7 @@ struct SakuraTextFile
 		uint16 mImageId_CharIndex{ 0 };
 		uint16 mImageId_SetIndex{ 0 };
 		uint16 mImageId_ExpressionIndex{ 0 };
+		bool   mbIsLips{ false };
 	};
 
 	FileNameContainer          mFileNameInfo;
@@ -444,21 +445,26 @@ public:
 
 	string GetFaceImageId(int InLineIndex) const
 	{
+		const int NarratorIndex = 141;
+
 		for(const SequenceEntry& sequenceEntry : mSequenceEntries)
 		{
-			if( (sequenceEntry.mTextIndex & 0x0fff) == (InLineIndex) )
+			if( (sequenceEntry.mTextIndex) == (InLineIndex) )
 			{
-				const int characterSetIndex = GetCharacterImageSetIndexFromCharIndex(sequenceEntry.mImageId_CharIndex & 0x0fff);
-				int faceSetIndex            = sequenceEntry.mImageId_SetIndex & 0x0fff;
-				if( ( sequenceEntry.mImageId_CharIndex & 0x0fff ) > 8 )
+				const int characterSetIndex = GetCharacterImageSetIndexFromCharIndex(sequenceEntry.mImageId_CharIndex);
+				int faceSetIndex            = sequenceEntry.mImageId_SetIndex;
+				if( ( sequenceEntry.mImageId_CharIndex ) > 8 )
 				{
 					faceSetIndex -= 4;
 				}
-				assert(faceSetIndex >= 0);
+				if (faceSetIndex < 0 && (sequenceEntry.mImageId_ExpressionIndex) != 0)
+				{
+					faceSetIndex = 4;
+				}
 
-				const int portraitIndex = characterSetIndex + faceSetIndex;
+				const int portraitIndex = faceSetIndex < 0 ? NarratorIndex : characterSetIndex + faceSetIndex;
 				
-				const string imageId = string("Char") + std::to_string(portraitIndex) + string("_") + std::to_string(sequenceEntry.mImageId_ExpressionIndex & 0x0fff);
+				const string imageId = string("Char") + std::to_string(portraitIndex) + string("_") + std::to_string(sequenceEntry.mImageId_ExpressionIndex);
 
 				return imageId;
 			}
@@ -709,11 +715,13 @@ private:
 		const unsigned int SequenceDataNumEntries = (mFileHeader.OffsetToTextHeader - mFileHeader.OffsetToSequenceData) / sizeof(short);
 		assert((int)SequenceDataNumEntries > 0);
 
-		const unsigned short TextEntryId = 0x0102;
-		const unsigned short DataEntryId = 0x7FFE;
+		const uint16 TextEntryId    = 0x0102;
+		const uint16 SpecialEntryId = 0x0103;
+		const uint16 SpecialEntryId2 = 0xF04A;
+		const uint16 DataEntryId    = 0x7FFE;
+		const uint16 LipsId         = 0xC13F;
 
 		unsigned int index = 1;
-		unsigned short prevIdIndex = 0;
 
 		//Go to the second to last entry as we require index + 1 to be valid in this loop
 		while (index < (SequenceDataNumEntries - 1))
@@ -722,25 +730,50 @@ private:
 			const unsigned short prevValue = SwapByteOrder(pSequenceData[index - 1]);
 
 			//if 7FFE detected
-			if (sequenceValue == DataEntryId)
+			if (sequenceValue == DataEntryId || sequenceValue == SpecialEntryId2)
 			{
 				//if prev value was 0x0102, then the next value is the text id
 				if (prevValue == TextEntryId)
 				{
 					SequenceEntry newEntry;
-					newEntry.mTextIndex               = SwapByteOrder(pSequenceData[index + 1]);
-					newEntry.mImageId_CharIndex       = SwapByteOrder(pSequenceData[index - 4]);
-					newEntry.mImageId_SetIndex        = SwapByteOrder(pSequenceData[index - 3]);
-					newEntry.mImageId_ExpressionIndex = SwapByteOrder(pSequenceData[index - 2]);
+					newEntry.mTextIndex               = SwapByteOrder(pSequenceData[index + 1]) & 0x0fff;
+					newEntry.mImageId_CharIndex       = SwapByteOrder(pSequenceData[index - 4]) & 0x0fff;
+					newEntry.mImageId_SetIndex        = SwapByteOrder(pSequenceData[index - 3]) & 0x0fff;
+					newEntry.mImageId_ExpressionIndex = SwapByteOrder(pSequenceData[index - 2]) & 0x0fff;
 
 					mSequenceEntries.push_back(newEntry);
 				}
-				else
+				else if (prevValue == SpecialEntryId || 
+						(sequenceValue == SpecialEntryId2 && SwapByteOrder(pSequenceData[index+1]) == LipsId) 
+						)
 				{
-					prevIdIndex = index + 1;
+					uint16 nextValue = SwapByteOrder(pSequenceData[index + 1]);
+					if (nextValue == LipsId)
+					{
+						//Grab previous text entry because lips will use the same image ids as that one
+						const SequenceEntry prevEntry = mSequenceEntries.back();
+
+						index += 2; //Go to first entry within lips
+						nextValue = SwapByteOrder(pSequenceData[index]);
+
+						do
+						{
+							SequenceEntry newEntry;
+							newEntry.mTextIndex               = nextValue & 0x0fff;
+							newEntry.mImageId_CharIndex       = prevEntry.mImageId_CharIndex;
+							newEntry.mImageId_SetIndex        = prevEntry.mImageId_SetIndex;
+							newEntry.mImageId_ExpressionIndex = prevEntry.mImageId_ExpressionIndex;
+							newEntry.mbIsLips                 = true;
+
+							mSequenceEntries.push_back(newEntry);
+
+							++index;
+							nextValue = SwapByteOrder(pSequenceData[index]);
+						} while (!(nextValue == 0xC000 || nextValue == 0xC003));
+					}
 				}
 
-				index += 2;
+				index += 1;
 			}
 			else
 			{

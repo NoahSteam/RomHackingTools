@@ -35,7 +35,7 @@ struct FileNameContainer
 
 		const size_t lastIndex = mFileName.find_last_of(".");
 		mNoExtension           = mFileName.substr(0, lastIndex);
-		mExtention             = lastIndex != 0xffffffff ? mFileName.substr(lastIndex, mFileName.size() - 1) : "";
+		mExtention             = lastIndex != -1 ? mFileName.substr(lastIndex, mFileName.size() - 1) : "";
 
 		const char sep = '\\';
 		size_t i = mFullPath.rfind(sep, mFullPath.length());
