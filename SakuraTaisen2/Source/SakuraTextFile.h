@@ -450,10 +450,12 @@ public:
 			{
 				const int characterSetIndex = GetCharacterImageSetIndexFromCharIndex(sequenceEntry.mImageId_CharIndex & 0x0fff);
 				int faceSetIndex            = sequenceEntry.mImageId_SetIndex & 0x0fff;
-			//	if( characterSetIndex < 9 )
+				if( ( sequenceEntry.mImageId_CharIndex & 0x0fff ) > 8 )
 				{
 					faceSetIndex -= 4;
 				}
+				assert(faceSetIndex >= 0);
+
 				const int portraitIndex = characterSetIndex + faceSetIndex;
 				
 				const string imageId = string("Char") + std::to_string(portraitIndex) + string("_") + std::to_string(sequenceEntry.mImageId_ExpressionIndex & 0x0fff);
