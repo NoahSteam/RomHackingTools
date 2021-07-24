@@ -8,10 +8,10 @@ FindDialogOrder a:\SakuraWars2\Disc1_Original a:\sakurawars2\ExtractedData\Disc1
 FindData.exe a:\SakuraWars2\Disc1 a:\SakuraWars2\find.bin
 
 ExtractText C:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1\SAKURA1 C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data\StoryTextPalette.bin C:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\Disc1\Text
-FindDuplicateText C:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\Disc1\Text C:\Users\16306\Desktop\Rizwan\SakuraWars2\
+FindDuplicateText C:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\AllText C:\Users\16306\Desktop\Rizwan\SakuraWars2\AllDuplicates.txt
 ExtractTitleScreens c:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc2 2 :\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData
 ExtractFontSheets c:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1_Original\SAKURA1 C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data\StoryTextPalette.bin C:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\Disc1\FontSheets
 FindDialogOrder c:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1 c:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\Disc1\DialogOrder
-CreateTBLSpreadsheets c:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\Disc1\Text C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data\Duplicates_Disc1.txt C:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1\SAKURA1 A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\TranslatedText 0
+CreateTBLSpreadsheets c:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\AllText C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data\AllDuplicates.txt C:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1\SAKURA1 1 A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\TranslatedText 0
 ExtractFaceWinFiles c:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1 c:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\Disc1\FaceWin
 FindData.exe C:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1 C:\Users\16306\Desktop\Rizwan\SakuraWars2\find.bin

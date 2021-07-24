@@ -10668,52 +10668,14 @@ void PrintHelp()
 	printf("PatchGame isDisc2 rootSakuraTaisenDirectory patchedSakuraTaisenDirectory translatedTextDirectory fontSheet originalPalette patchedTMapSpDataPath mainMenuFontSheetPath mainMenuBgndPatchedImage optionsImagePatched translatedDataDirectory extractedWklDir\n");
 }
 
-void SizeTest(const string& wklDir1, const string& wklDir2)
+void GenerateIndexPhp(const string& phpDirectory)
 {
-	vector<FileNameContainer> allFiles1;
-	FindAllFilesWithinDirectory(wklDir1, allFiles1);
+	vector<FileNameContainer> allFiles;
+	FindAllFilesWithinDirectory(phpDirectory, allFiles);
 
-	vector<FileNameContainer> bmpFiles1;
-	GetAllFilesOfType(allFiles1, ".bmp", bmpFiles1);
-
-	vector<FileNameContainer> allFiles2;
-	FindAllFilesWithinDirectory(wklDir2, allFiles2);
-
-	vector<FileNameContainer> bmpFiles2;
-	GetAllFilesOfType(allFiles2, ".bmp", bmpFiles2);
-
-	for(FileNameContainer& file1 : bmpFiles1)
+	for (const FileNameContainer& file : allFiles)
 	{
-		FileData fileData1;
-		fileData1.InitializeFileData(file1);
-
-		for (FileNameContainer& file2 : bmpFiles2)
-		{
-			if(file2.mFileName == file1.mFileName)
-			{
-				FileData fileData2;
-				if( fileData2.InitializeFileData(file2) )
-				{
-					BitmapReader bmpData1;
-					if( !bmpData1.ReadBitmap(file1.mFullPath) )
-					{
-						break;
-					}
-
-					BitmapReader bmpData2;
-					if (!bmpData2.ReadBitmap(file2.mFullPath))
-					{
-						break;
-					}
-
-					if( bmpData1.mBitmapData.mInfoHeader.mImageWidth != bmpData2.mBitmapData.mInfoHeader.mImageWidth || 
-					    abs(bmpData1.mBitmapData.mInfoHeader.mImageHeight) != abs(bmpData2.mBitmapData.mInfoHeader.mImageHeight) )
-					{
-						printf("%s\n", file1.mFileName.c_str());
-					}
-				}
-			}
-		}
+		printf("<tr bgcolor = \"#f6f6eb\"><td align = \"center\"><a href = \"%s\">%s</a></td><td align = \"center\">Unassigned</td><td align = \"center\">Incomplete</td></tr>\n", file.mFileName.c_str(), file.mNoExtension.c_str());
 	}
 }
 
@@ -10857,15 +10819,16 @@ int main(int argc, char *argv[])
 		PatchGame(rootSakuraTaisenDirectory, patchedSakuraTaisenDirectory, translatedTextDirectory, fontSheet, originalPalette, mainMenuFontSheetPath, mainMenuTranslatedBgnd, patchedOptionsImage, 
 				  translatedDataDirectory, extractedWklDirectory);
 	}
-	else if(command == "CreateTBLSpreadsheets" && argc == 7 )
+	else if(command == "CreateTBLSpreadsheets" && argc == 8 )
 	{
 		const string dialogImageDirectory = string(argv[2]);
 		const string duplicatesFile       = string(argv[3]);
 		const string sakura1Directory     = string(argv[4]) + Seperators;
-		const string translatedDirectory  = string(argv[5]) + Seperators;
-		const bool bForRelease            = atoi(argv[6]) != 0;
+		const int    discNumber           = atoi(argv[5]);
+		const string translatedDirectory  = string(argv[6]) + Seperators;
+		const bool bForRelease            = atoi(argv[7]) != 0;
 
-		CreateStoryTextSpreadsheets(dialogImageDirectory, duplicatesFile, sakura1Directory, translatedDirectory, bForRelease);
+		CreateStoryTextSpreadsheets(dialogImageDirectory, duplicatesFile, sakura1Directory, discNumber, translatedDirectory, bForRelease);
 	}
 	else if(command == "CreateMesSpreadsheets" && argc == 4 )
 	{
@@ -11098,6 +11061,11 @@ int main(int argc, char *argv[])
 		const string outDir        = string(argv[3]) + Seperators;
 
 		DumpBitmap(inputFilePath, outDir);
+	}
+	else if (command == "GenerateIndexPhp" && argc == 3)
+	{
+		const string phpDir = string(argv[2]);
+		GenerateIndexPhp(phpDir);
 	}
 	else
 	{

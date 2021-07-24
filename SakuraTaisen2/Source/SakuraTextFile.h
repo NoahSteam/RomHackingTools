@@ -453,7 +453,7 @@ public:
 			{
 				const int characterSetIndex = GetCharacterImageSetIndexFromCharIndex(sequenceEntry.mImageId_CharIndex);
 				int faceSetIndex            = sequenceEntry.mImageId_SetIndex;
-				if( ( sequenceEntry.mImageId_CharIndex ) > 8 )
+				if( sequenceEntry.mImageId_CharIndex == 0 || sequenceEntry.mImageId_CharIndex > 8 )
 				{
 					faceSetIndex -= 4;
 				}
@@ -748,7 +748,10 @@ private:
 						)
 				{
 					uint16 nextValue = SwapByteOrder(pSequenceData[index + 1]);
-					if (nextValue == LipsId)
+					uint16 nextNextValue = SwapByteOrder(pSequenceData[index + 2]);
+					if (nextValue == LipsId && 
+						!(nextNextValue == 0xC000 || nextNextValue == 0xC001 || nextNextValue == 0xC002 || nextNextValue == 0xC003 || nextNextValue == 0xC004 || ((nextValue & 0xF000) != 0xC000))
+						)
 					{
 						//Grab previous text entry because lips will use the same image ids as that one
 						const SequenceEntry prevEntry = mSequenceEntries.back();
@@ -769,7 +772,7 @@ private:
 
 							++index;
 							nextValue = SwapByteOrder(pSequenceData[index]);
-						} while (!(nextValue == 0xC000 || nextValue == 0xC003));
+						} while (!(nextValue == 0xC000 || nextValue == 0xC001 || nextValue == 0xC002 || nextValue == 0xC003 || nextValue == 0xC004 || ((nextValue & 0xF000) != 0xC000)));
 					}
 				}
 

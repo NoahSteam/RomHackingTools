@@ -1,0 +1,9 @@
+M_Name1.CG:
+In Sakura.bin
+Lookup table starts at 0x21C08
+
+uint16 offsetToImageIn_M_Name1.CG / 8
+uint16 reserved1
+uint8 width/2
+uint8 height/2
+uint16 reserved

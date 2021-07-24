@@ -1,6 +1,6 @@
 #pragma once
 
-bool CreateStoryTextSpreadsheets(const string& dialogImageDirectory, const string& duplicatesFileName, const string& sakura1Directory, const string& translatedTextDirectory, bool bForRelease)
+bool CreateStoryTextSpreadsheets(const string& dialogImageDirectory, const string& duplicatesFileName, const string& sakura1Directory, int discNumber, const string& translatedTextDirectory, bool bForRelease)
 {
 	printf("Parsing duplicates file\n");
 
@@ -102,13 +102,13 @@ bool CreateStoryTextSpreadsheets(const string& dialogImageDirectory, const strin
 		map<string, const SakuraTextFile*>::const_iterator sakuraFileIter = sakuraTableFileMap.find(tblFileName);
 		if (sakuraFileIter == sakuraTableFileMap.end())
 		{
-			printf("Unable to find corresponding sakura file for: %s", tblFileName.c_str());
+			printf("Unable to find corresponding sakura file for: %s\n", tblFileName.c_str());
 			continue;
 		}
 
 		if (directoryMapIter->second.size() != sakuraFileIter->second->mStringInfoArray.size())
 		{
-			printf("Unable to create html file for %s.  StringInfo to dialog file count mismatch.", tblFileName.c_str());
+			printf("Unable to create html file for %s.  StringInfo to dialog file count mismatch.\n", tblFileName.c_str());
 			continue;
 		}
 
@@ -554,17 +554,13 @@ bool CreateStoryTextSpreadsheets(const string& dialogImageDirectory, const strin
 			htmlFile.WriteString("<b>Style:</b><br>\n");
 			htmlFile.WriteString("-Use only a single space after a period.<br>\n");
 			htmlFile.WriteString("-You do not need to worry about line breaks.  Just translate the text as one line.  The text insertion tool will automatically add newlines as needed.<br>\n");
-			htmlFile.WriteString("-There is a 160 character limit for each dialog entry.<br><br>\n\n");
+			htmlFile.WriteString("-There is a 120 character limit for each dialog entry.<br><br>\n\n");
 
 			htmlFile.WriteString("<b>LIPS Events</b><br>\n");
-			htmlFile.WriteString("-Pink rows are LIPS events where the user has to pick which line to say.  When translating these, insert a \" &lt;br&gt; \" without the quotes to signigy the next option.<br><br>\n");
-			htmlFile.WriteString("For example: The following line has two options.<br>\n");
-			htmlFile.WriteString("<img src=\"..\\ExtractedData\\Dialog\\0100TBL\\67.png\"><br>\n");
-			htmlFile.WriteString("It would be translated as: <br>\n");
-			htmlFile.WriteString("I'm on duty! &lt;br&gt; First I'd like to know more about you.<br><br>\n\n");
-
+			htmlFile.WriteString("-Pink rows are LIPS events where the user has to pick which line to say.<br><br>\n");
+		
 			htmlFile.WriteString("<b>Naming Conventions:</n><br>\n");
-			htmlFile.WriteString("<a href=\"https://docs.google.com/spreadsheets/d/1rgafQe78vML_xbxnYuOSlO8P5C8nuhgLjMJOExUQsm0/edit?usp=sharing\" target=\"_blank\">Click here to view the naming conventions for Characters, Locations, and Terms</a> <br>\n");
+			htmlFile.WriteString("<a href=\"https://docs.google.com/spreadsheets/d/1imZZn_SfbmMxBpEnyj8_oZ1BEnMN0q0Ck1XYQgKggm4/edit?usp=sharing target=\"_blank\">Click here to view the naming conventions for Characters, Locations, and Terms</a> <br>\n");
 
 			htmlFile.WriteString("<?php\n");
 			htmlFile.WriteString("$currUser = $_SERVER['PHP_AUTH_USER'];\n");
@@ -642,14 +638,18 @@ bool CreateStoryTextSpreadsheets(const string& dialogImageDirectory, const strin
 		//Create a map that gives us an index into the dialog entries when given a number
 		const SakuraTextFile* pSakuraFile = sakuraFileIter->second;
 		map<size_t, size_t> dialogOrder_SeqIdToImageNum;
-		map<size_t, size_t> dialogOrder_ImageNumToEntry;
+		map<size_t, size_t> dialogOrder_SeqIdToLips;
 		const size_t numLinesOfDialog = pSakuraFile->mLines.size();
 		const size_t numSequenceEntries = pSakuraFile->mSequenceEntries.size();
 		for (size_t dialogEntry = 0; dialogEntry < numSequenceEntries; ++dialogEntry)
 		{
 			const uint16 textIndex = pSakuraFile->mSequenceEntries[dialogEntry].mTextIndex;
 			dialogOrder_SeqIdToImageNum[textIndex] = dialogEntry;
-			dialogOrder_ImageNumToEntry[dialogEntry] = textIndex;
+
+			if (pSakuraFile->mSequenceEntries[dialogEntry].mbIsLips)
+			{
+				dialogOrder_SeqIdToLips[textIndex] = textIndex;
+			}
 		}
 
 		//Create entries for all images
@@ -660,8 +660,7 @@ bool CreateStoryTextSpreadsheets(const string& dialogImageDirectory, const strin
 			const bool bIsDuplicate = dupCrcMap.find(crc) != dupCrcMap.end();
 			const char* bgColor = bForRelease ? "e3fec8" : "fefec8";
 			const bool bHasDialogEntry = dialogOrder_SeqIdToImageNum.find(imageNumber + 1) != dialogOrder_SeqIdToImageNum.end(); //Image ids in the game are 1 based, not 0 based
-			const size_t seqIndex = dialogOrder_ImageNumToEntry[imageNumber];
-			const bool bIsLipsEntry = bHasDialogEntry ? pSakuraFile->mSequenceEntries[seqIndex].mbIsLips : false;// pOrder ? dialogOrderIter->second.idAndLips.find(id)->second : false;
+			const bool bIsLipsEntry = bHasDialogEntry ? dialogOrder_SeqIdToLips.find(imageNumber + 1) != dialogOrder_SeqIdToLips.end() : false;// pOrder ? dialogOrderIter->second.idAndLips.find(id)->second : false;
 
 			if (bIsLipsEntry)
 			{
@@ -688,7 +687,7 @@ bool CreateStoryTextSpreadsheets(const string& dialogImageDirectory, const strin
 			}
 			htmlFile.WriteString(string(buffer));
 
-			snprintf(buffer, 2048, "<td width=\"240\"><img src=\"..\\ExtractedData\\SakuraWars2\\Disc1\\Text\\%s\\%s\"></td>", pSakuraFile->mFileNameInfo.mNoExtension.c_str(), fileNameInfo.mFileName.c_str());
+			snprintf(buffer, 2048, "<td width=\"240\"><img src=\"..\\ExtractedData\\SakuraWars2\\Disc%i\\Cache0\\Text\\%s\\%s\"></td>", discNumber, pSakuraFile->mFileNameInfo.mNoExtension.c_str(), fileNameInfo.mFileName.c_str());
 			htmlFile.WriteString(string(buffer));
 
 			//snprintf(buffer, 2048, "<td width=480><div id=\"edit_%s\" contenteditable=\"true\" onChange=\"SaveEdits('%i.bmp', 'edit_%i')\">Untranslated</div></td>", pVarSuffix, num + 1, num + 1);
@@ -700,7 +699,7 @@ bool CreateStoryTextSpreadsheets(const string& dialogImageDirectory, const strin
 			{
 				htmlFile.WriteString("<td align=\"center\" width=\"120\">");
 
-				snprintf(buffer, 2048, "Order: %zi", imageNumber + 1);
+				snprintf(buffer, 2048, "Order: %i", imageNumber + 1);
 				htmlFile.WriteString(string(buffer));
 
 				htmlFile.WriteString("</td>");
