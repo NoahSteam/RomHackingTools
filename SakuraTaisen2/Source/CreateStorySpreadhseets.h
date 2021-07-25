@@ -560,7 +560,7 @@ bool CreateStoryTextSpreadsheets(const string& dialogImageDirectory, const strin
 			htmlFile.WriteString("-Pink rows are LIPS events where the user has to pick which line to say.<br><br>\n");
 		
 			htmlFile.WriteString("<b>Naming Conventions:</n><br>\n");
-			htmlFile.WriteString("<a href=\"https://docs.google.com/spreadsheets/d/1imZZn_SfbmMxBpEnyj8_oZ1BEnMN0q0Ck1XYQgKggm4/edit?usp=sharing target=\"_blank\">Click here to view the naming conventions for Characters, Locations, and Terms</a> <br>\n");
+			htmlFile.WriteString("<a href=\"https://docs.google.com/spreadsheets/d/1imZZn_SfbmMxBpEnyj8_oZ1BEnMN0q0Ck1XYQgKggm4/edit?usp=sharing\" target=\"_blank\">Click here to view the naming conventions for Characters, Locations, and Terms</a> <br>\n");
 
 			htmlFile.WriteString("<?php\n");
 			htmlFile.WriteString("$currUser = $_SERVER['PHP_AUTH_USER'];\n");

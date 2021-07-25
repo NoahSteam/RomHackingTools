@@ -44,6 +44,7 @@ using std::unordered_map;
 #include "Source/ImageExtraction.h"
 #include "Source/FaceWinAll.h"
 #include "Source/CreateStorySpreadhseets.h"
+#include "Source/MNameCG.h"
 
 void PrintPaletteColors(const string& paletteFile)
 {
@@ -10648,7 +10649,7 @@ void PrintHelp()
 	printf("CreateTBLSpreadsheets dialogImageDirectory duplicatesFile sakura1Directory translatedTextDirectory forRelease\n");
 	printf("CreateMesSpreadsheets dialogImageDirectory rootSakuraTaisenDirectory\n");
 	printf("CreateWKLSpreadsheets dialogImageDirectory duplicatesFile rootSakuraTaisenDirectory\n");
-	printf("CreateTMapSpSpreadsheet imageDirectory\n");
+	printf("CreateNameCG1Spreadsheet imageDirectory\n");
 	printf("ExtractImages fileName paletteFile width height outDirectory\n");
 	printf("ExtractPalettedImage fileName paletteFile offset width height numTilesPerRow numColors[256, 128] pngOrBmp[0 png, 1 bmp] outDirectory\n");
 	printf("ExtractFCEFiles rootSakuraTaisenDirectory paletteFile outDirectory\n");
@@ -10845,11 +10846,11 @@ int main(int argc, char *argv[])
 
 		CreateWKLSpreadSheets(dialogImageDirectory, duplicatesFile, sakuraDirectory);
 	}
-	else if(command == "CreateTMapSpSpreadsheet" && argc == 3 )
+	else if(command == "CreateNameCG1Spreadsheet" && argc == 3 )
 	{
-		const string imageDirectory = string(argv[2]);
+		const string imageDirectory = string(argv[2]) + Seperators;
 
-		CreateTMapSpSpreadsheet(imageDirectory);
+		CreateNameCG1Spreadsheet(imageDirectory);
 	}
 	else if(command == "ExtractPalettedImage" && argc == 11 )
 	{
@@ -10887,13 +10888,13 @@ int main(int argc, char *argv[])
 
 		ExtractWKLFiles(rootSakuraTaisenDirectory, outDirectory);
 	}
-	else if(command == "ExtractTMapSP" && argc == 5 )
+	else if(command == "ExtractMNameCGFiles" && argc == 5 )
 	{
 		const string rootSakuraTaisenDirectory = string(argv[2]) + Seperators;
 		const string paletteFile               = string(argv[3]);
 		const string outDirectory              = string(argv[4]) + Seperators;
 
-		ExtractTMapSP(rootSakuraTaisenDirectory, paletteFile, outDirectory);
+		ExtractNameCG(rootSakuraTaisenDirectory, paletteFile, outDirectory);
 	}
 	else if(command == "PatchTMapSP" && argc == 4 )
 	{

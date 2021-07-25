@@ -41,5 +41,8 @@
     <ClInclude Include="Source\SakuraCommon.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Source\MNameCG.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
