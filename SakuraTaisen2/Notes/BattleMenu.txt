@@ -1,0 +1,28 @@
+Battle Menu Main Options:
+uint16 offsetDiv8;
+uint16 reserved1;
+uint8  widthDiv8;
+uint8  height;
+uint16 reserved2;
+
+In Memory: 0x05c26000
+
+In Game Files:
+Found a match in GOVERKV1.BIN @0x000011c0
+Found a match in GOVERTV1.BIN @0x000011c0
+Found a match in M00VDP1.BIN @0x00019000
+Found a match in M01VDP1.BIN @0x00019000
+Found a match in M02VDP1.BIN @0x00019000
+Found a match in M03VDP1.BIN @0x00019000
+Found a match in M04VDP1.BIN @0x00019000
+Found a match in M05VDP1.BIN @0x00019000
+Found a match in M26VDP1.BIN @0x00019000
+Found a match in M27VDP1.BIN @0x00019000
+Found a match in M29VDP1.BIN @0x00019000
+Found a match in M31VDP1.BIN @0x00019000
+Found a match in M33VDP1.BIN @0x00019000
+Found a match in M34VDP1.BIN @0x00019000
+
+Batte Menu Main Options:
+GOVERTV1 @0x000011c0
+Table in ETCDATA.BIN  @0x000000e0
