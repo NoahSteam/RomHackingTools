@@ -44,5 +44,8 @@
     <ClInclude Include="Source\MNameCG.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Source\BattleMenuExtraction.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

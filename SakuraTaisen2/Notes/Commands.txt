@@ -16,4 +16,6 @@ CreateTBLSpreadsheets c:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\Al
 ExtractFaceWinFiles c:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1 c:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\Disc1\FaceWin
 ExtractMNameCGFiles c:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1 C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data\MNameCG1_Palette.bin C:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\Disc1\MNameCG\
 CreateNameCG1Spreadsheet C:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\Disc1\MNameCGPNG\1
+CreateNameGOVERSpreadsheet C:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\Disc1\BattleMenu\GOVERTV1_TranslationFiles
+ExtractBattleMenu c:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1 C:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\Disc1\BattleMenu\
 FindData.exe C:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1 C:\Users\16306\Desktop\Rizwan\SakuraWars2\find.bin

@@ -25,4 +25,4 @@ Found a match in M34VDP1.BIN @0x00019000
 
 Batte Menu Main Options:
 GOVERTV1 @0x000011c0
-Table in ETCDATA.BIN  @0x000000e0
+Table in ETCDATA.BIN  @0x000000a0

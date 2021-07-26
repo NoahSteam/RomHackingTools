@@ -1,145 +1,86 @@
 #pragma once
 
 #pragma pack(push, 1)
-struct MNameCGHeader
+struct BattleMenuImageInfo
 {
-	uint16 offsetToImage;// * 8 to get to actual offset
-	uint16 reserved1; //*2
-	uint8  width; //*8 to get actual height
+	uint16 offsetDiv8;
+	uint16 reserved1;
+	uint8  widthDiv8;
 	uint8  height;
-	uint16 reserved;
+	uint16 reserved2;
 };
 #pragma pack(pop)
 
-void ExtractNameCG(const string& rootSakuraDirectory, const string& paletteFileName, const string& outDirectory)
+void ExtractBattleMenu(const string& rootSakuraDirectory, bool bBmp, const string& outDirectory)
 {
 	CreateDirectoryHelper(outDirectory);
 
-	const string sakuraFilePath = rootSakuraDirectory + string("SAKURA.BIN");
+	const string sakuraFilePath = rootSakuraDirectory + string("SAKURA2\\ETCDATA.BIN");
 	FileNameContainer sakuraFileNameInfo(sakuraFilePath.c_str());
-
-	FileNameContainer paletteFileNameInfo(paletteFileName.c_str());
-	FileData paletteFile;
-	if (!paletteFile.InitializeFileData(paletteFileNameInfo))
-	{
-		return;
-	}
-
 	FileData sakuraFileData;
 	if (!sakuraFileData.InitializeFileData(sakuraFileNameInfo))
 	{
 		return;
 	}
 
-	PaletteData paletteData;
-	if (!paletteData.CreateFrom15BitData(paletteFile.GetData(), paletteFile.GetDataSize()))
+	const string bmpExt = bBmp ? string(".bmp") : (".png");
+
+	const char* filesToExtract[2] = { "GOVERKV1", "GOVERTV1" };
+
+	//GOVERTV1
+	for(int fileIndex = 0; fileIndex < 2; ++fileIndex)
 	{
-		printf("Unable to create palette.\n");
-		return;
-	}
+		const string dataFilePath = rootSakuraDirectory + string("SAKURA2\\") + string(filesToExtract[fileIndex]) + string(".BIN");
+		FileNameContainer dataFileNameInfo(dataFilePath.c_str());
 
-	const string bmpExt(".bmp");
-
-	//CG File 1
-	{
-		const string cgFilePath = rootSakuraDirectory + string("SAKURA1\\M_NAME1.CG");
-		FileNameContainer cgFileNameInfo(cgFilePath.c_str());
-
-		FileData cgFileData;
-		if (!cgFileData.InitializeFileData(cgFileNameInfo))
+		FileData fileData;
+		if (!fileData.InitializeFileData(dataFileNameInfo))
 		{
 			return;
 		}
 
-		const string cg1OutputDirectory = outDirectory + std::to_string(1) + string("\\");
-		CreateDirectoryHelper(cg1OutputDirectory);
+		const int paletteSize = 32;
 
-		const int numEntries = 49;
-		MNameCGHeader lookupTable[numEntries];
-		const unsigned int offsetToData = 0x00021C08;
-		memcpy_s(lookupTable, sizeof(lookupTable), sakuraFileData.GetData() + offsetToData, sizeof(lookupTable));
-
-		for (int i = 0; i < numEntries; ++i)
+		PaletteData paletteData1;
+		if (!paletteData1.CreateFrom15BitData(fileData.GetData() + 0x41E00, paletteSize))
 		{
-			lookupTable[i].offsetToImage = SwapByteOrder(lookupTable[i].offsetToImage) * 8;
-			lookupTable[i].width *= 8;
-
-			const string outFileName = cg1OutputDirectory + std::to_string(i) + bmpExt;
-
-			BitmapWriter outBmp;
-			outBmp.CreateBitmap(outFileName, lookupTable[i].width, -lookupTable[i].height, 4, cgFileData.GetData() + lookupTable[i].offsetToImage, (lookupTable[i].width * lookupTable[i].height) / 2, paletteData.GetData(), paletteData.GetSize(), true);
-		}
-	}
-
-	//CG File 2
-	{
-		const string cgFilePath = rootSakuraDirectory + string("SAKURA1\\M_NAME2.CG");
-		FileNameContainer cgFileNameInfo(cgFilePath.c_str());
-
-		FileData cgFileData;
-		if (!cgFileData.InitializeFileData(cgFileNameInfo))
-		{
+			printf("Unable to create palette 1.\n");
 			return;
 		}
 
-		const string cg1OutputDirectory = outDirectory + std::to_string(2) + string("\\");
-		CreateDirectoryHelper(cg1OutputDirectory);
-
-		const int numEntries = 7;
-		MNameCGHeader lookupTable[numEntries];
-		const unsigned int offsetToData = 0x000222EC;
-		memcpy_s(lookupTable, sizeof(lookupTable), sakuraFileData.GetData() + offsetToData, sizeof(lookupTable));
-
-		for (int i = 0; i < numEntries; ++i)
+		PaletteData paletteData2;
+		if (!paletteData2.CreateFrom15BitData(fileData.GetData() + 0x41E20, paletteSize))
 		{
-			lookupTable[i].offsetToImage = SwapByteOrder(lookupTable[i].offsetToImage) * 8;
-			lookupTable[i].width *= 8;
-
-			const string outFileName = cg1OutputDirectory + std::to_string(i) + bmpExt;
-
-			BitmapWriter outBmp;
-			outBmp.CreateBitmap(outFileName, lookupTable[i].width, -lookupTable[i].height, 4, cgFileData.GetData() + lookupTable[i].offsetToImage, (lookupTable[i].width * lookupTable[i].height) / 2, paletteData.GetData(), paletteData.GetSize(), true);
-		}
-	}
-
-	//CG File 3
-	{
-		const string cgFilePath = rootSakuraDirectory + string("SAKURA1\\M_NAME3.CG");
-		FileNameContainer cgFileNameInfo(cgFilePath.c_str());
-
-		FileData cgFileData;
-		if (!cgFileData.InitializeFileData(cgFileNameInfo))
-		{
+			printf("Unable to create palette 2.\n");
 			return;
 		}
 
-		const string cg1OutputDirectory = outDirectory + std::to_string(3) + string("\\");
-		CreateDirectoryHelper(cg1OutputDirectory);
+		const string finalOutputDirectory = outDirectory + string(filesToExtract[fileIndex]) + string("\\");
+		CreateDirectoryHelper(finalOutputDirectory);
 
-		const int numEntries = 15;
-		MNameCGHeader lookupTable[numEntries];
-		const unsigned int offsetToData = 0x000223F0;
+		const int numEntries = 170;
+		BattleMenuImageInfo lookupTable[numEntries];
+		const unsigned int offsetToData = 0x000000A0;
 		memcpy_s(lookupTable, sizeof(lookupTable), sakuraFileData.GetData() + offsetToData, sizeof(lookupTable));
 
 		for (int i = 0; i < numEntries; ++i)
 		{
-			lookupTable[i].offsetToImage = SwapByteOrder(lookupTable[i].offsetToImage) * 8;
-			lookupTable[i].width *= 8;
+			lookupTable[i].offsetDiv8 = SwapByteOrder(lookupTable[i].offsetDiv8) * 8;
+			lookupTable[i].widthDiv8 *= 8;
 
-			const string outFileName = cg1OutputDirectory + std::to_string(i) + bmpExt;
+			const string outFileName = finalOutputDirectory + std::to_string(i) + bmpExt;
 
+			PaletteData& palette = i < 78 ? paletteData1 : paletteData2;
 			BitmapWriter outBmp;
-			outBmp.CreateBitmap(outFileName, lookupTable[i].width, -lookupTable[i].height, 4, cgFileData.GetData() + lookupTable[i].offsetToImage, (lookupTable[i].width * lookupTable[i].height) / 2, paletteData.GetData(), paletteData.GetSize(), true);
+			outBmp.CreateBitmap(outFileName, lookupTable[i].widthDiv8, -lookupTable[i].height, 4, fileData.GetData() + lookupTable[i].offsetDiv8, (lookupTable[i].widthDiv8 * lookupTable[i].height) / 2, palette.GetData(), palette.GetSize(), bBmp);
 		}
 	}
-
-	printf("Success\n");
 }
 
-bool CreateNameCG1Spreadsheet(const string& imageDirectory)
+bool CreateNameGOVERSpreadsheet(const string& imageDirectory)
 {
 	TextFileWriter htmlFile;
-	const string htmlFileName = imageDirectory + string("..\\..\\Translation\\MNameCG3.php");
+	const string htmlFileName = imageDirectory + string("..\\..\\Translation\\GoverKV.php");
 	if (!htmlFile.OpenFileForWrite(htmlFileName))
 	{
 		printf("Unable to create an html file: %s", htmlFileName.c_str());
@@ -148,7 +89,7 @@ bool CreateNameCG1Spreadsheet(const string& imageDirectory)
 
 	htmlFile.WriteString("<html>\n");
 	htmlFile.WriteString("	<head><style>textarea {width: 100%;top: 0; left: 0; right: 0; bottom: 0; position: absolute; resize: none;-webkit-box-sizing: border-box; -moz-box-sizing: border-box; box-sizing: border-box;} table {border-collapse: collapse;} table, th, td { position: relative; border: 1px solid black;}#myProgress {width: 100%;	background-color: #ddd;} #myBar {width: 1%;height: 30px; background-color: #4CAF50;}</style>\n");
-	htmlFile.WriteString("	<div id=\"FileName\" style=\"display: none;\">MNameCG3</div>\n");
+	htmlFile.WriteString("	<div id=\"FileName\" style=\"display: none;\">GoverKV</div>\n");
 	htmlFile.WriteString("	<script src=\"https://ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js\">\n");
 	htmlFile.WriteString("		$( window ).on( \"load\", function()\n");
 	htmlFile.WriteString("		{\n");
@@ -257,14 +198,14 @@ bool CreateNameCG1Spreadsheet(const string& imageDirectory)
 	htmlFile.WriteString("	$bPermissionFound = false;\n");
 	htmlFile.WriteString("	foreach ($allowedFiles as $value)\n");
 	htmlFile.WriteString("	{\n");
-	htmlFile.WriteString("		if( $value == \"MNameCG3\" )\n");
+	htmlFile.WriteString("		if( $value == \"GoverKV\" )\n");
 	htmlFile.WriteString("		{\n");
 	htmlFile.WriteString("			$bPermissionFound = true;\n");
 	htmlFile.WriteString("			break;\n");
 	htmlFile.WriteString("		}\n");
 	htmlFile.WriteString("	}\n");
 	htmlFile.WriteString("	if( $bPermissionFound )\n\t{\n?>");
-	htmlFile.WriteString("		<article><header align=\"center\"><h1>File: MNameCG3</h1></header></article>\n");
+	htmlFile.WriteString("		<article><header align=\"center\"><h1>File: GoverKV</h1></header></article>\n");
 	htmlFile.WriteString("			<br>\n");
 	htmlFile.WriteString("			<b>Instructions:</b><br>\n");
 	htmlFile.WriteString("			-This page is best displayed using Chrome.  Otherwise some of the table borders are missing for some reason.<br>\n");
@@ -293,13 +234,19 @@ bool CreateNameCG1Spreadsheet(const string& imageDirectory)
 	htmlFile.WriteString("					<th>English</th>\n");
 	htmlFile.WriteString("				</tr>\n");
 
-	const int firstImage = 0;
-	const int lastImage = 14;
-	for (int i = firstImage; i <= lastImage; ++i)
+	vector<FileNameContainer> fileNames;
+	FindAllFilesWithinDirectory(imageDirectory, fileNames);
+
+	int i = 0;
+	for (const FileNameContainer& fileName : fileNames)
 	{
+		const char* pImageNumber = fileName.mNoExtension.c_str();
+
 		fprintf(htmlFile.GetFileHandle(), "				<tr id=\"tr_edit_%i\" bgcolor=\"#fefec8\">\n", i);
-		fprintf(htmlFile.GetFileHandle(), "					<td align=\"center\" width=\"20\">%i</td><td width=\"88\"><img src=\"..\\ExtractedData\\SakuraWars2\\Disc1\\MNameCG\\3\\%i.png\"></td><td width=\"480\"><textarea id=\"edit_%i\" contenteditable=true onchange=\"SaveEdits('%i.bmp', 'edit_%i')\" style=\"border: none; width: 100%%; -webkit-box-sizing: border-box; -moz-box-sizing: border-box; box-sizing: border-box;\">Untranslated</textarea></td>\n", i, i, i, i, i);
+		fprintf(htmlFile.GetFileHandle(), "					<td align=\"center\" width=\"20\">%s</td><td width=\"88\"><img src=\"..\\ExtractedData\\SakuraWars2\\Disc1\\GoverKV\\%s.png\"></td><td width=\"480\"><textarea id=\"edit_%i\" contenteditable=true onchange=\"SaveEdits('%i.bmp', 'edit_%i')\" style=\"border: none; width: 100%%; -webkit-box-sizing: border-box; -moz-box-sizing: border-box; box-sizing: border-box;\">Untranslated</textarea></td>\n", pImageNumber, pImageNumber, i, i, i);
 		fprintf(htmlFile.GetFileHandle(), "				</tr>\n");
+	
+		++i;
 	}
 
 	htmlFile.WriteString("			</table><br>\n");
