@@ -5,7 +5,9 @@ CreateTBLSpreadsheets a:\SakuraWars2\ExtractedData\Disc1\Text A:\SakuraWars2\Ext
 ExtractFontSheets a:\SakuraWars2\Disc1_Original\SAKURA1 a:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\StoryTextPalette.bin a:\sakurawars2\ExtractedData\Disc1\FontSheets
 ExtractFaceWinFiles a:\SakuraWars2\Disc1_Original a:\sakurawars2\ExtractedData\Disc1\FaceWin
 FindDialogOrder a:\SakuraWars2\Disc1_Original a:\sakurawars2\ExtractedData\Disc1\DialogOrder
-FindData.exe a:\SakuraWars2\Disc1 a:\SakuraWars2\find.bin
+ExtractBattleMenu a:\SakuraWars2\Disc1_Original 1 a:\sakurawars2\ExtractedData\Disc1\BattleMenu\
+ExtractMainMenu a:\SakuraWars2\Disc1_Original 1 a:\sakurawars2\ExtractedData\Disc1\MainMenu\
+FindData.exe a:\SakuraWars2\Disc1_Original a:\SakuraWars2\find.bin
 
 ExtractText C:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1\SAKURA1 C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data\StoryTextPalette.bin C:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\Disc1\Text
 FindDuplicateText C:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\AllText C:\Users\16306\Desktop\Rizwan\SakuraWars2\AllDuplicates.txt
@@ -17,5 +19,5 @@ ExtractFaceWinFiles c:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1 c:\Users\163
 ExtractMNameCGFiles c:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1 C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data\MNameCG1_Palette.bin C:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\Disc1\MNameCG\
 CreateNameCG1Spreadsheet C:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\Disc1\MNameCGPNG\3
 CreateNameGOVERSpreadsheet C:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\Disc1\BattleMenu\GOVERTV1_TranslationFiles
-ExtractBattleMenu c:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1 C:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\Disc1\BattleMenu\
+ExtractBattleMenu c:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1 1 C:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\Disc1\BattleMenu\
 FindData.exe C:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1 C:\Users\16306\Desktop\Rizwan\SakuraWars2\find.bin

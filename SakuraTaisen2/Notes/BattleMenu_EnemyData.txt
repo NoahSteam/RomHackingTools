@@ -1,0 +1,17 @@
+Battle Menu: Enemy Data
+Texture address: 00032900
+
+Found a match in INFONAME.BIN @0x000701e0
+Another image  @0x000741e0
+
+Dimensions of the enemy name sprite are:
+ETCDATA.BIN @0x000019d4
+
+uint8 widthDiv8;
+uint8 height;
+
+INFONAME:
+
+64*16 4bpp
+48*16
+128*16 ? @0x380

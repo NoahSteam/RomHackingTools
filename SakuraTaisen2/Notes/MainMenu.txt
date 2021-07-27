@@ -1,0 +1,18 @@
+Main Menu image dimensions written at:
+06096E6A
+
+Coming from 2121C0 in memory
+Code@ 060484C0
+Code@ 060494BE, r1 has the dimensions
+
+Image in question:
+PBOOK_FL.CG @0x0003fa80
+
+Images start at @3EF60
+
+Title.bin:
+Image Table: @E1C0
+uint16 reserved;
+uint16 widthDiv8;
+uint16 heightDiv8;
+uint16 offsetDiv8;
