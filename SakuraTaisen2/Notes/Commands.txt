@@ -21,4 +21,8 @@ ExtractMNameCGFiles c:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1 C:\Users\163
 CreateNameCG1Spreadsheet C:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\Disc1\MNameCGPNG\3
 CreateNameGOVERSpreadsheet C:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\Disc1\BattleMenu\GOVERTV1_TranslationFiles
 ExtractBattleMenu c:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1 1 C:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\Disc1\BattleMenu\
+ExtractMainMenu c:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1 1 C:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\Disc1\MainMenu\
+CreateNamePBookFLSpreadsheet C:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\Disc1\MainMenu_PNG\PBOOK_FL
+ExtractInfoName c:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1 C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data\InfoName_Palette.bin 1 C:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\Disc1\InfoName
+
 FindData.exe C:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1 C:\Users\16306\Desktop\Rizwan\SakuraWars2\find.bin

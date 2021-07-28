@@ -81,7 +81,7 @@ bool CreateNamePBookFLSpreadsheet(const string& imageDirectory)
 	}
 
 	htmlFile.WriteString("<html>\n");
-	htmlFile.WriteString("	<head><style>textarea {width: 100%;top: 0; left: 0; right: 0; bottom: 0; position: absolute; resize: none;-webkit-box-sizing: border-box; -moz-box-sizing: border-box; box-sizing: border-box;} table {border-collapse: collapse;} table, th, td { position: relative; border: 1px solid black;}#myProgress {width: 100%;	background-color: #ddd;} #myBar {width: 1%;height: 30px; background-color: #4CAF50;}</style>\n");
+	htmlFile.WriteString("	<head><style>textarea {width: 100%;top: 0; left: 0; right: 0; bottom: 0; position: absolute; resize: none;-webkit-box-sizing: border-box; -moz-box-sizing: border-box; box-sizing: border-box;} table {border-collapse: collapse;} table, th, td { position: relative; border: 1px solid black;}#myProgress {width: 100%;	background-color: #ddd;} #myBar {width: 1%;height: 30px; background-color: #4CAF50;} .rotate90{ -webkit - transform: rotate(270deg); -moz - transform: rotate(270deg); -o - transform: rotate(270deg); -ms - transform: rotate(270deg); transform: rotate(270deg); }</style>\n");
 	htmlFile.WriteString("	<div id=\"FileName\" style=\"display: none;\">GovePBOOK_FLrKV</div>\n");
 	htmlFile.WriteString("	<script src=\"https://ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js\">\n");
 	htmlFile.WriteString("		$( window ).on( \"load\", function()\n");
@@ -236,7 +236,7 @@ bool CreateNamePBookFLSpreadsheet(const string& imageDirectory)
 		const char* pImageNumber = fileName.mNoExtension.c_str();
 
 		fprintf(htmlFile.GetFileHandle(), "				<tr id=\"tr_edit_%i\" bgcolor=\"#fefec8\">\n", i);
-		fprintf(htmlFile.GetFileHandle(), "					<td align=\"center\" width=\"20\">%s</td><td width=\"88\"><img src=\"..\\ExtractedData\\SakuraWars2\\Disc1\\PBOOK_FL\\%s.png\"></td><td width=\"480\"><textarea id=\"edit_%i\" contenteditable=true onchange=\"SaveEdits('%i.bmp', 'edit_%i')\" style=\"border: none; width: 100%%; -webkit-box-sizing: border-box; -moz-box-sizing: border-box; box-sizing: border-box;\">Untranslated</textarea></td>\n", pImageNumber, pImageNumber, i, i, i);
+		fprintf(htmlFile.GetFileHandle(), "					<td align=\"center\" width=\"20\">%s</td><td width=\"128\" height=\"16\" align=\"center\"><img src=\"..\\ExtractedData\\SakuraWars2\\Disc1\\PBOOK_FL\\%s.png\" class=\"rotate90\" ></td><td width=\"480\"><textarea id=\"edit_%i\" contenteditable=true onchange=\"SaveEdits('%i.bmp', 'edit_%i')\" style=\"border: none; width: 100%%; -webkit-box-sizing: border-box; -moz-box-sizing: border-box; box-sizing: border-box;\">Untranslated</textarea></td>\n", pImageNumber, pImageNumber, i, i, i);
 		fprintf(htmlFile.GetFileHandle(), "				</tr>\n");
 
 		++i;

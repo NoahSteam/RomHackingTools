@@ -47,6 +47,7 @@ using std::unordered_map;
 #include "Source/MNameCG.h"
 #include "Source/BattleMenuExtraction.h"
 #include "Source/MainMenuExtraction.h"
+#include "Source/InfoNameExtraction.h"
 
 void PrintPaletteColors(const string& paletteFile)
 {
@@ -10925,6 +10926,15 @@ int main(int argc, char *argv[])
 		const string outDirectory = string(argv[4]) + Seperators;
 
 		ExtractMainMenu(rootSakuraTaisenDirectory, bmpFormat, outDirectory);
+	}
+	else if (command == "ExtractInfoName" && argc == 6)
+	{
+		const string rootSakuraTaisenDirectory = string(argv[2]) + Seperators;
+		const string paletteFileName           = string(argv[3]);
+		const bool   bmpFormat                 = atoi(argv[4]);
+		const string outDirectory              = string(argv[5]) + Seperators;
+
+		ExtractInfoName(rootSakuraTaisenDirectory, paletteFileName, bmpFormat, outDirectory);
 	}
 	else if(command == "PatchTMapSP" && argc == 4 )
 	{

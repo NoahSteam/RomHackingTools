@@ -50,5 +50,8 @@
     <ClInclude Include="Source\MainMenuExtraction.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Source\InfoNameExtraction.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

@@ -12,6 +12,13 @@ uint8 height;
 
 INFONAME:
 
-64*16 4bpp
-48*16
-128*16 ? @0x380
+64*15 4bpp
+48*15 1f8
+128*15 @0x360
+40x46 8bpp @1840 (character portrait)
+40x32 8bpp @1f80 (character eyes)
+40x46 8bpp @2740 (portrait 2
+40x32 8bpp @2e80 (eyes 2)
+
+Code@0606A69A reads 003C from (8, 0x0021E1C8) [0021E1D0]
+Code@0606A69E add r2. r1 (0x3c, 0x64e4) [6520] => stores at 06001F24 => 06040148
