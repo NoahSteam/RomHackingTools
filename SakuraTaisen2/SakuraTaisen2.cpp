@@ -48,6 +48,7 @@ using std::unordered_map;
 #include "Source/BattleMenuExtraction.h"
 #include "Source/MainMenuExtraction.h"
 #include "Source/InfoNameExtraction.h"
+#include "Source/SakuraFontSheet.h"
 #include "Source/SysFileExtraction.h"
 
 void PrintPaletteColors(const string& paletteFile)
@@ -240,113 +241,6 @@ struct SakuraCompressedData
 		PatchDataInMemory(fileData.GetData(), fileData.GetDataSize(), bPad);
 
 		return true;
-	}
-};
-
-class SakuraFontTile
-{
-	char* mpData;
-
-public:
-	SakuraFontTile(const char* pInData, int dataSize)
-	{
-		mpData = new char[dataSize];
-		memcpy(mpData, pInData, dataSize);
-	}
-
-	SakuraFontTile(SakuraFontTile&& other) : mpData(other.mpData)
-	{
-		other.mpData = nullptr;
-	}
-
-	SakuraFontTile& operator=(SakuraFontTile&& other)
-	{
-		if (this != &other)
-		{
-			delete[] mpData;
-			mpData       = other.mpData;
-			other.mpData = nullptr;
-		}
-
-		return *this;
-	}
-
-	~SakuraFontTile()
-	{
-		delete[] mpData;
-		mpData = nullptr;
-	}
-
-	const char* GetFontTileData() const
-	{
-		return mpData;
-	}
-};
-
-class SakuraFontSheet
-{
-	vector<SakuraFontTile> mCharacterTiles;
-
-public:
-	bool CreateFontSheetFromData(const char* pInData, unsigned int inDataSize)
-	{
-		const int numBytesPerTile = 128;
-		if( inDataSize % 128 != 0 )
-		{
-			printf("CreateFontSheet: Invalid size for data.  Should be multiple of 128, is %u", inDataSize);
-			return false;
-		}
-
-		const int numTilesInFile = inDataSize / numBytesPerTile;
-		for(int currTile = 0; currTile < numTilesInFile; ++currTile)
-		{
-			mCharacterTiles.push_back( std::move(SakuraFontTile(&pInData[currTile*numBytesPerTile], numBytesPerTile)) );
-		}
-
-		return true;
-	}
-
-	bool CreateFontSheet(const FileNameContainer& inFileNameInfo)
-	{
-		FileData fontFile;
-		if( !fontFile.InitializeFileData(inFileNameInfo) )
-		{
-			return false;
-		}
-
-		const int numBytesPerTile = 128;
-		if( fontFile.GetDataSize() % 128 != 0 )
-		{
-			printf("CreateFontSheet: Invalid size for file %s", inFileNameInfo.mFileName.c_str());
-			return false;
-		}
-
-		const char* pFontSheetData = fontFile.GetData();
-		const int numTilesInFile   = fontFile.GetDataSize() / numBytesPerTile;
-		for(int currTile = 0; currTile < numTilesInFile; ++currTile)
-		{
-			mCharacterTiles.push_back( std::move(SakuraFontTile(&pFontSheetData[currTile*numBytesPerTile], numBytesPerTile)) );
-		}
-
-		return true;
-	}
-
-	const char* GetCharacterTile(const SakuraString::SakuraChar& sakuraChar) const
-	{	
-		int tileIndex = sakuraChar.mIndex;// - 1;
-		assert(tileIndex >= 0);
-		//assert(tileIndex < (int)mCharacterTiles.size());
-		if( tileIndex >= (int)mCharacterTiles.size() )
-		{
-			tileIndex = 0;
-		}
-
-		return tileIndex < (int)mCharacterTiles.size() ? mCharacterTiles[tileIndex].GetFontTileData() : nullptr;
-	}
-
-	unsigned long GetTileSizeInBytes() const
-	{
-		return 128;
 	}
 };
 
@@ -10943,19 +10837,17 @@ int main(int argc, char *argv[])
 
 		ExtractInfoName(rootSakuraTaisenDirectory, paletteFileName, bmpFormat, outDirectory);
 	}
-	else if(command == "PatchTMapSP" && argc == 4 )
+	else if (command == "ExtractSysFontSheets" && argc == 5)
 	{
-		const string sakuraDirectory = string(argv[2]) + Seperators;
-		const string patchDataPath   = string(argv[3]) + Seperators;
+		const string rootSakuraTaisenDirectory = string(argv[2]) + Seperators + string("SAKURA2\\SYS00.MES");
+		const string paletteFileName           = string(argv[3]);
+		const string outDirectory              = string(argv[4]) + Seperators;
 
-		PatchTMapSP(sakuraDirectory, patchDataPath);
-	}
-	else if(command == "ParseEVTFiles" && argc == 3)
-	{
-		const string sakuraDirectory = string(argv[2]) + Seperators;
-	
-		std::vector<EVTFileData> outData;
-		ParseEvtFiles(sakuraDirectory, outData);
+		SysFileExtractor extractor;
+		if( extractor.Initialize(rootSakuraTaisenDirectory, paletteFileName) )
+		{
+			extractor.DumpText(outDirectory);
+		}
 	}
 	else if(command == "CompressFile" && argc == 4)
 	{

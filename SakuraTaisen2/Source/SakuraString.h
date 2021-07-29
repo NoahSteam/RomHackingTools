@@ -58,6 +58,11 @@ struct SakuraString
 	static const int   MaxCharsPerLine = 15;
 	unsigned short     mOffsetToStringData = 0;
 
+	void Clear()
+	{
+		mChars.clear();
+	}
+
 	bool AddChar(unsigned short index, bool bPushFront = false)
 	{
 		if (bPushFront)

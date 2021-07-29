@@ -10,6 +10,7 @@ ExtractMainMenu a:\SakuraWars2\Disc1_Original 1 a:\sakurawars2\ExtractedData\Dis
 CreateNamePBookFLSpreadsheet A:\SakuraWars2\ExtractedData\Disc1\MainMenu_PNG\PBOOK_FL
 ExtractInfoName a:\SakuraWars2\Disc1_Original a:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\InfoName_Palette.bin 1 a:\sakurawars2\ExtractedData\Disc1\InfoName
 CreateNameInfoNameSpreadsheet A:\SakuraWars2\ExtractedData\Disc1\InfoNamePNG
+ExtractSysFontSheets a:\SakuraWars2\Disc1_Original a:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\StoryTextPalette.bin a:\sakurawars2\ExtractedData\Disc1\Sys
 FindData.exe a:\SakuraWars2\Disc1_Original a:\SakuraWars2\find.bin
 
 ExtractText C:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1\SAKURA1 C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data\StoryTextPalette.bin C:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\Disc1\Text

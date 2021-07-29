@@ -140,6 +140,7 @@
     <ClInclude Include="Source\MNameCG.h" />
     <ClInclude Include="Source\SakuraCommon.h" />
     <ClInclude Include="Source\SakuraConstants.h" />
+    <ClInclude Include="Source\SakuraFontSheet.h" />
     <ClInclude Include="Source\SakuraString.h" />
     <ClInclude Include="Source\SakuraTextFile.h" />
     <ClInclude Include="Source\SysFileExtraction.h" />
