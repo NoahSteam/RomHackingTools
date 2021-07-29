@@ -1312,20 +1312,6 @@ const FileNameContainer* FindSakuraFile(const vector<FileNameContainer>& allFile
 	return nullptr;
 }
 
-void GetAllFilesOfType(const vector<FileNameContainer>& allFiles, const char* pInFileType, vector<FileNameContainer>& outFiles)
-{
-	const string validTextFile(pInFileType);
-
-	for(const FileNameContainer& fileName : allFiles)
-	{
-		std::size_t found = fileName.mFileName.find(validTextFile);
-		if (found != std::string::npos)
-		{
-			outFiles.push_back(fileName);
-		}
-	}
-}
-
 void DumpExtractedSakuraText(const vector<SakuraTextFile>& inSakuraTextFiles, const string& outDirectory)
 {
 	const string txt(".txt");

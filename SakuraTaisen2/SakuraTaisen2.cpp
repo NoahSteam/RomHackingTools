@@ -10867,6 +10867,12 @@ int main(int argc, char *argv[])
 
 		CreateNamePBookFLSpreadsheet(imageDirectory);
 	}
+	else if (command == "CreateNameInfoNameSpreadsheet" && argc == 3)
+	{
+		const string imageDirectory = string(argv[2]) + Seperators;
+
+		CreateNameInfoNameSpreadsheet(imageDirectory);
+	}
 	else if(command == "ExtractPalettedImage" && argc == 11 )
 	{
 		const string fileName       = string(argv[2]);
