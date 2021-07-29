@@ -46,6 +46,7 @@ public:
 	void ParseStrings()
 	{
 		static const unsigned short EndOfLineCharacter = 0xffff;
+		const uint16 idTag = 0x7fff;
 		const unsigned int NumBytesPerCharacter = 2;
 
 		const int offsetToString = 0xE39C;
@@ -56,10 +57,24 @@ public:
 		while (1)
 		{
 			const unsigned short currValue = SwapByteOrder(pWordBuffer[currentIndex++]);
+			const unsigned short nextValue = SwapByteOrder(pWordBuffer[currentIndex]);
+
+			if( nextValue == idTag)
+			{
+				++currentIndex;
+				continue;
+			}
+
 			if( currValue == 0 )
 			{
 				break;
 			}
+
+			if( newLineOfText.mChars.size() == 0 )
+			{
+				printf("Line:%i at %08x\n", newLineOfText.GetNumberOfLines(), currentIndex + offsetToString);
+			}
+
 			newLineOfText.AddChar(currValue);
 			
 			if (EndOfLineCharacter == currValue)
