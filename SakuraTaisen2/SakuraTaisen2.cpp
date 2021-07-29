@@ -48,6 +48,7 @@ using std::unordered_map;
 #include "Source/BattleMenuExtraction.h"
 #include "Source/MainMenuExtraction.h"
 #include "Source/InfoNameExtraction.h"
+#include "Source/SysFileExtraction.h"
 
 void PrintPaletteColors(const string& paletteFile)
 {

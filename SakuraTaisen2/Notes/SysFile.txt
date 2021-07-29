@@ -1,0 +1,5 @@
+Sys files:
+
+0x0 4bpp 16x16 font sheet up to 0xE000
+0xE000 to 0xE3A0 text table
+0xE398 start of text entries up to 0x104cA
