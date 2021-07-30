@@ -2367,8 +2367,8 @@ void FindDuplicateText(const string& dialogImageDirectory, const string& outFile
 
 	//Seperate all files into their own directories
 	printf("Calculating CRCs...\n");
-	map<string, vector<const FileNameContainer*>> directoryMap;
-	map<const FileNameContainer*, unsigned long> crcMap;
+	unordered_map<string, vector<const FileNameContainer*>> directoryMap;
+	unordered_map<const FileNameContainer*, unsigned long> crcMap;
 	for(const FileNameContainer& imageFileNameInfo : imageFiles)
 	{
 		const size_t lastOf = imageFileNameInfo.mPathOnly.find_last_of('\\');
@@ -2389,15 +2389,17 @@ void FindDuplicateText(const string& dialogImageDirectory, const string& outFile
 	}	
 
 	printf("Finding Duplicates\n");
-	map<const FileNameContainer*, vector<string>> duplicatesMap; //FileName, Vector<Duplicate FileNames>
+	unordered_map<const FileNameContainer*, vector<string>> duplicatesMap; //FileName, Vector<Duplicate FileNames>
 	const size_t numImageFiles = imageFiles.size();
 	for(size_t fileIndex = 0; fileIndex < numImageFiles; ++fileIndex)
 	{
+		printf("File %i of %i\n", fileIndex, numImageFiles);
+
 		const FileNameContainer& firstImageName = imageFiles[fileIndex];
 
 		//Make sure we haven't already found a match for this file
 		bool bExistingDupFound = false;
-		for(map<const FileNameContainer*, vector<string>>::const_iterator mapIter = duplicatesMap.begin(); mapIter != duplicatesMap.end(); ++mapIter)
+		for(unordered_map<const FileNameContainer*, vector<string>>::const_iterator mapIter = duplicatesMap.begin(); mapIter != duplicatesMap.end(); ++mapIter)
 		{
 			const size_t numDups = mapIter->second.size();
 			for(size_t dupIndex = 0; dupIndex < numDups; ++dupIndex)
@@ -2447,7 +2449,7 @@ void FindDuplicateText(const string& dialogImageDirectory, const string& outFile
 
 	//Print out duplicate info
 	const string newLine("\n");
-	for(map<const FileNameContainer*, vector<string>>::const_iterator mapIter = duplicatesMap.begin(); mapIter != duplicatesMap.end(); ++mapIter)
+	for(unordered_map<const FileNameContainer*, vector<string>>::const_iterator mapIter = duplicatesMap.begin(); mapIter != duplicatesMap.end(); ++mapIter)
 	{
 		fprintf(outFile.GetFileHandle(), "%s %lu\n", mapIter->first->mFullPath.c_str(), crcMap[mapIter->first]);
 
@@ -10839,15 +10841,11 @@ int main(int argc, char *argv[])
 	}
 	else if (command == "ExtractSysFontSheets" && argc == 5)
 	{
-		const string rootSakuraTaisenDirectory = string(argv[2]) + Seperators + string("SAKURA2\\SYS00.MES");
+		const string rootSakuraTaisenDirectory = string(argv[2]) + Seperators;
 		const string paletteFileName           = string(argv[3]);
 		const string outDirectory              = string(argv[4]) + Seperators;
 
-		SysFileExtractor extractor;
-		if( extractor.Initialize(rootSakuraTaisenDirectory, paletteFileName) )
-		{
-			extractor.DumpText(outDirectory);
-		}
+		ExtractSysFiles(rootSakuraTaisenDirectory, paletteFileName, outDirectory);
 	}
 	else if(command == "CompressFile" && argc == 4)
 	{

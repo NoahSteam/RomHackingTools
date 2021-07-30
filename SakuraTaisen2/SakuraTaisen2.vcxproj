@@ -133,6 +133,7 @@
   <ItemGroup>
     <ClInclude Include="Source\BattleMenuExtraction.h" />
     <ClInclude Include="Source\CreateStorySpreadhseets.h" />
+    <ClInclude Include="Source\CreateSysSpreadsheets.h" />
     <ClInclude Include="Source\FaceWinAll.h" />
     <ClInclude Include="Source\ImageExtraction.h" />
     <ClInclude Include="Source\InfoNameExtraction.h" />

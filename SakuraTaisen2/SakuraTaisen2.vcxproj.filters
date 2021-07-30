@@ -59,5 +59,8 @@
     <ClInclude Include="Source\SakuraFontSheet.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Source\CreateSysSpreadsheets.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

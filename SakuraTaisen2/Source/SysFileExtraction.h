@@ -3,6 +3,8 @@
 //0xE000 to 0xE3A0 text table
 //0xE39C start of text entries up to 0x104cA
 
+const int TextTableStart = 0xE000;
+
 class SysFileExtractor
 {
 	struct FontSheet
@@ -21,12 +23,11 @@ class SysFileExtractor
 
 	FileNameContainer    mFileName;
 	FileData             mFileData;
-	FileData             mPaletteFileData;
 	FontSheet            mFontSheetData;
 	vector<SakuraString> mLines;
 
 public:
-	bool Initialize(const string& inFileName, const string &inPaletteFileName)
+	bool Initialize(const string& inFileName)
 	{
 		mFileName = FileNameContainer(inFileName.c_str());
 		if( !mFileData.InitializeFileData(mFileName) )
@@ -34,13 +35,12 @@ public:
 			return false;
 		}
 
-		FileNameContainer paletteFileName(inPaletteFileName.c_str());
-		if( !mPaletteFileData.InitializeFileData(paletteFileName) )
-		{
-			return false;
-		}
-
 		return true;
+	}
+
+	size_t GetFileSize() const
+	{
+		return mFileData.GetDataSize();
 	}
 
 	void ParseStrings()
@@ -49,7 +49,26 @@ public:
 		const uint16 idTag = 0x7fff;
 		const unsigned int NumBytesPerCharacter = 2;
 
-		const int offsetToString = 0xE39C;
+		//Find start of text entries
+		const int offsetToStringHeader = TextTableStart;// : 0xE39C;
+		int offsetToString = 0;
+		{
+			uint16* pWordBuffer = (uint16*)(mFileData.GetData() + offsetToString);
+			const int numValues = (mFileData.GetDataSize() - offsetToString)/2;
+			assert(numValues >= 0);
+
+			int currentIndex = 0;
+			while(currentIndex < numValues)
+			{
+				const unsigned short currValue = SwapByteOrder(pWordBuffer[currentIndex++]);
+				if( currValue == idTag )
+				{
+					offsetToString = currentIndex * 2;
+					break;
+				}
+			}
+		}
+
 		uint16* pWordBuffer      = (uint16*)(mFileData.GetData() + offsetToString);
 		int currentIndex         = 0;
 		SakuraString newLineOfText;
@@ -65,15 +84,16 @@ public:
 				continue;
 			}
 
-			if( currValue == 0 )
+			if( currValue == 0 && nextValue == 0 )
 			{
 				break;
 			}
 
+			/*
 			if( newLineOfText.mChars.size() == 0 )
 			{
-				printf("Line:%i at %08x\n", newLineOfText.GetNumberOfLines(), currentIndex + offsetToString);
-			}
+				printf("Line:%i at %08x\n", mLines.size(), currentIndex*2 + offsetToString);
+			}*/
 
 			newLineOfText.AddChar(currValue);
 			
@@ -86,11 +106,18 @@ public:
 		}
 	}
 
-	void ExtractFontSheet(const string& inOutputDirectory)
+	void ExtractFontSheet(const string& inOutputDirectory, const string& inPaletteFileName)
 	{
 		if (!CreateDirectoryHelper(inOutputDirectory))
 		{
 			printf("Output directory %s not found.\n", inOutputDirectory.c_str());
+			return;
+		}
+		
+		FileData paletteFileData;
+		FileNameContainer paletteFileName(inPaletteFileName.c_str());
+		if (!paletteFileData.InitializeFileData(paletteFileName))
+		{
 			return;
 		}
 
@@ -104,13 +131,18 @@ public:
 		SakuraFontSheet sakuraFontSheet;
 		if (sakuraFontSheet.CreateFontSheetFromData(mFontSheetData.mpData, mFontSheetData.mDataSize))
 		{
-			ExtractImageFromData(mFontSheetData.mpData, mFontSheetData.mDataSize, outFileName, mPaletteFileData.GetData(), mPaletteFileData.GetDataSize(),
+			ExtractImageFromData(mFontSheetData.mpData, mFontSheetData.mDataSize, outFileName, paletteFileData.GetData(), paletteFileData.GetDataSize(),
 				16, 16, 255, 256, 0, true, true);
 		}
 	}
 
-	void DumpText(const string& inOutputDirectory)
+	void DumpText(const string& inOutputDirectory, const PaletteData& inPaletteData)
 	{
+		if( mFileData.GetDataSize() < TextTableStart)
+		{
+			return;
+		}
+
 		ReadInFontSheetData();
 		ParseStrings();
 
@@ -120,9 +152,6 @@ public:
 		{
 			return;
 		}
-
-		PaletteData paletteData;
-		paletteData.CreateFrom15BitData(mPaletteFileData.GetData(), mPaletteFileData.GetDataSize());
 
 		const string extension(".png");
 
@@ -141,7 +170,7 @@ public:
 
 			BitmapSurface sakuraStringBmp;
 			sakuraStringBmp.CreateSurface(SakuraString::MaxCharsPerLine * tileDim, tileDim * numSakuraLines, BitmapSurface::EBitsPerPixel::kBPP_4, 
-										  paletteData.GetData(), paletteData.GetSize());
+										  inPaletteData.GetData(), inPaletteData.GetSize());
 
 			int currRow = 0;
 			int currCol = 0;
@@ -175,7 +204,9 @@ public:
 		}
 	}
 
-private:	void ReadInFontSheetData()
+private:
+
+void ReadInFontSheetData()
 	{
 		delete[] mFontSheetData.mpData;
 
@@ -185,3 +216,68 @@ private:	void ReadInFontSheetData()
 		memcpy_s(mFontSheetData.mpData, mFontSheetData.mDataSize, mFileData.GetData(), mFontSheetData.mDataSize);
 	}
 };
+
+void ExtractSysFiles(const string& rootSakuraDirectory, const string& inPaletteFileName, const string& outDirectory)
+{
+	CreateDirectoryHelper(outDirectory);
+
+	const string sakura2Directory = rootSakuraDirectory + "SAKURA2\\";
+
+	//Find all files within the requested directory
+	vector<FileNameContainer> allFiles;
+	FindAllFilesWithinDirectory(sakura2Directory, allFiles);
+
+	vector<FileNameContainer> scenarioFiles;
+	GetAllFilesOfType(allFiles, ".MES", scenarioFiles);
+
+	//Create palette data
+	FileData paletteFileData;
+	FileNameContainer paletteFileName(inPaletteFileName.c_str());
+	if (!paletteFileData.InitializeFileData(paletteFileName))
+	{
+		return;
+	}
+
+	PaletteData paletteData;
+	paletteData.CreateFrom15BitData(paletteFileData.GetData(), paletteFileData.GetDataSize());
+	//
+
+	//Dump files
+	for(const FileNameContainer& fileName : scenarioFiles)
+	{
+		printf("Extracting %s\n", fileName.mFileName.c_str());
+
+		SysFileExtractor extractor;
+		if (extractor.Initialize(fileName.mFullPath))
+		{
+			const string sysOutDirectory = outDirectory + fileName.mNoExtension + Seperators;
+			CreateDirectoryHelper(sysOutDirectory);
+
+			extractor.DumpText(sysOutDirectory, paletteData);
+		}
+	}
+}
+
+void ParseAllSysFiles(const vector<FileNameContainer>& inFiles, vector<SysFileExtractor>& outText)
+{
+	outText.reserve(inFiles.size());
+
+	for (const FileNameContainer& fileName : inFiles)
+	{
+		printf("Extracting: %s\n", fileName.mFileName.c_str());
+
+		outText.emplace_back();
+		SysFileExtractor& extractor = outText.back();
+		if (!extractor.Initialize(fileName.mFullPath))
+		{
+			continue;
+		}
+
+		if (extractor.GetFileSize() == 0)
+		{
+			continue;
+		}
+
+		extractor.ParseStrings();
+	}
+}
