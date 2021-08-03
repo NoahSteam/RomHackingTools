@@ -21,16 +21,16 @@ class SysFileExtractor
 		}
 	};
 
-	FileNameContainer    mFileName;
+public:
+	FileNameContainer    mFileNameInfo;
 	FileData             mFileData;
 	FontSheet            mFontSheetData;
 	vector<SakuraString> mLines;
 
-public:
 	bool Initialize(const string& inFileName)
 	{
-		mFileName = FileNameContainer(inFileName.c_str());
-		if( !mFileData.InitializeFileData(mFileName) )
+		mFileNameInfo = FileNameContainer(inFileName.c_str());
+		if( !mFileData.InitializeFileData(mFileNameInfo) )
 		{
 			return false;
 		}
@@ -78,22 +78,22 @@ public:
 			const unsigned short currValue = SwapByteOrder(pWordBuffer[currentIndex++]);
 			const unsigned short nextValue = SwapByteOrder(pWordBuffer[currentIndex]);
 
-			if( nextValue == idTag)
+			/*
+			if( nextValue == idTag )
 			{
 				++currentIndex;
 				continue;
 			}
-
+			*/
 			if( currValue == 0 && nextValue == 0 )
 			{
 				break;
 			}
 
-			/*
 			if( newLineOfText.mChars.size() == 0 )
 			{
-				printf("Line:%i at %08x\n", mLines.size(), currentIndex*2 + offsetToString);
-			}*/
+			//	printf("Line:%i at %08x\n", mLines.size(), currentIndex*2 + offsetToString);
+			}
 
 			newLineOfText.AddChar(currValue);
 			
@@ -102,6 +102,8 @@ public:
 				newLineOfText.mOffsetToStringData = 0; //0 in SW2 because there is no ID to each dialog entry
 				mLines.push_back(newLineOfText);
 				newLineOfText.Clear();
+
+				currentIndex += 2;
 			}
 		}
 	}
@@ -126,7 +128,7 @@ public:
 		const string extension(".bmp");
 
 		//Create output directory for this file
-		const string outFileName = inOutputDirectory + mFileName.mNoExtension + extension;
+		const string outFileName = inOutputDirectory + mFileNameInfo.mNoExtension + extension;
 
 		SakuraFontSheet sakuraFontSheet;
 		if (sakuraFontSheet.CreateFontSheetFromData(mFontSheetData.mpData, mFontSheetData.mDataSize))

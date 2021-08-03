@@ -50,6 +50,7 @@ using std::unordered_map;
 #include "Source/InfoNameExtraction.h"
 #include "Source/SakuraFontSheet.h"
 #include "Source/SysFileExtraction.h"
+#include "Source/CreateSysSpreadsheets.h"
 
 void PrintPaletteColors(const string& paletteFile)
 {
@@ -10549,6 +10550,7 @@ void PrintHelp()
 	printf("CreateTBLSpreadsheets dialogImageDirectory duplicatesFile sakura1Directory translatedTextDirectory forRelease\n");
 	printf("CreateMesSpreadsheets dialogImageDirectory rootSakuraTaisenDirectory\n");
 	printf("CreateWKLSpreadsheets dialogImageDirectory duplicatesFile rootSakuraTaisenDirectory\n");
+	printf("CreateSysSpreadsheets dialogImageDirectory duplicatesFile sakura2Directory\n");
 	printf("CreateNameCG1Spreadsheet imageDirectory\n");
 	printf("ExtractImages fileName paletteFile width height outDirectory\n");
 	printf("ExtractPalettedImage fileName paletteFile offset width height numTilesPerRow numColors[256, 128] pngOrBmp[0 png, 1 bmp] outDirectory\n");
@@ -10746,6 +10748,14 @@ int main(int argc, char *argv[])
 
 		CreateWKLSpreadSheets(dialogImageDirectory, duplicatesFile, sakuraDirectory);
 	}
+	else if( command == "CreateSysSpreadsheets" && argc == 5 )
+	{
+		const string dialogImageDirectory = string(argv[2]);
+		const string duplicatesFile = string(argv[3]);
+		const string sakura2Directory = string(argv[4]) + Seperators;
+
+		CreateSysSpreadsheets(dialogImageDirectory, duplicatesFile, sakura2Directory);
+	}
 	else if(command == "CreateNameCG1Spreadsheet" && argc == 3 )
 	{
 		const string imageDirectory = string(argv[2]) + Seperators;
@@ -10839,7 +10849,7 @@ int main(int argc, char *argv[])
 
 		ExtractInfoName(rootSakuraTaisenDirectory, paletteFileName, bmpFormat, outDirectory);
 	}
-	else if (command == "ExtractSysFontSheets" && argc == 5)
+	else if (command == "ExtractSysFiles" && argc == 5)
 	{
 		const string rootSakuraTaisenDirectory = string(argv[2]) + Seperators;
 		const string paletteFileName           = string(argv[3]);
