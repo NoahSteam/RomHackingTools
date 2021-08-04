@@ -11,7 +11,7 @@ CreateNamePBookFLSpreadsheet A:\SakuraWars2\ExtractedData\Disc1\MainMenu_PNG\PBO
 ExtractInfoName a:\SakuraWars2\Disc1_Original a:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\InfoName_Palette.bin 1 a:\sakurawars2\ExtractedData\Disc1\InfoName
 CreateNameInfoNameSpreadsheet A:\SakuraWars2\ExtractedData\Disc1\InfoNamePNG
 ExtractSysFiles a:\SakuraWars2\Disc1_Original a:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\StoryTextPalette.bin a:\sakurawars2\ExtractedData\Disc1\Sys
-CreateSysSpreadsheets a:\SakuraWars2\ExtractedData\All\Sys A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\Duplicates_Sys.txt a:\SakuraWars2\Disc1_Original\SAKURA2
+CreateSysSpreadsheets A:\SakuraWars2\ExtractedData\All\Sys A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\Duplicates_Sys.txt a:\SakuraWars2\Disc_All\Mes
 FindData.exe a:\SakuraWars2\Disc1_Original a:\SakuraWars2\find.bin
 
 ExtractText C:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1\SAKURA1 C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data\StoryTextPalette.bin C:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\Disc1\Text

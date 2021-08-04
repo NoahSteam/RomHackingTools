@@ -1,0 +1,14 @@
+INST_OH.CG @0x00004c80
+
+Size info:
+Found a match in 0000DAIF.BIN @0x0000ca48
+Found a match in 0000IRIS.BIN @0x0000c7f4
+Found a match in 0000KANN.BIN @0x0000c10c
+Found a match in 0000KORA.BIN @0x0000c6ac
+Found a match in 0000MARI.BIN @0x00008aac
+Found a match in 0000ORIH.BIN @0x0000c6b0
+Found a match in 0000RENI.BIN @0x00009ed8
+Found a match in 0000SAKU.BIN @0x000086e4
+Found a match in 0000SUMI.BIN @0x0000c804
+
+0000ORIH.BIN0xCBD0 has address and size for the logo image (0990 offset/8, 1210 is the size)
