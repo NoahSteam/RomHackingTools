@@ -692,6 +692,20 @@ bool TextFileWriter::OpenFileForWrite(const string& inFileName)
 	return true;
 }
 
+void TextFileWriter::Printf(const char* fmt, ...) 
+{
+	assert(mpFileHandle);
+	if (!mpFileHandle)
+	{
+		return;
+	}
+
+	va_list args;
+	va_start(args, fmt);
+	vfprintf(mpFileHandle, fmt, args);
+	va_end(args);
+}
+
 void TextFileWriter::WriteString(const string& inString)
 {
 	assert(mpFileHandle);
@@ -704,6 +718,12 @@ void TextFileWriter::WriteString(const string& inString)
 	{
 		printf("Unable to write string: %s in file: %s", inString.c_str(), mFileName.c_str());
 	}
+}
+
+void TextFileWriter::WriteStringWithNewLine(const string& inString)
+{
+	WriteString(inString);
+	AddNewLine();
 }
 
 void TextFileWriter::AddNewLine()

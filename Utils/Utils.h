@@ -167,7 +167,9 @@ public:
 	~TextFileWriter();
 
 	bool  OpenFileForWrite(const std::string& outFileName);
+	void  Printf(const char* fmt, ...);
 	void  WriteString(const std::string& inString);
+	void  WriteStringWithNewLine(const std::string& inString);
 	void  AddNewLine();
 	void  Close();
 	FILE* GetFileHandle() { return mpFileHandle; }

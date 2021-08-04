@@ -204,7 +204,7 @@ bool CreateNameGOVERSpreadsheet(const string& imageDirectory)
 	htmlFile.WriteString("			break;\n");
 	htmlFile.WriteString("		}\n");
 	htmlFile.WriteString("	}\n");
-	htmlFile.WriteString("	if( $bPermissionFound )\n\t{\n?>");
+	htmlFile.WriteString("	if( $bPermissionFound || $masterUnlock )\n\t{\n?>");
 	htmlFile.WriteString("		<article><header align=\"center\"><h1>File: GoverKV</h1></header></article>\n");
 	htmlFile.WriteString("			<br>\n");
 	htmlFile.WriteString("			<b>Instructions:</b><br>\n");

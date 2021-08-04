@@ -538,7 +538,7 @@ bool CreateStoryTextSpreadsheets(const string& dialogImageDirectory, const strin
 			fprintf(htmlFile.GetFileHandle(), "\t\tif( $value == \"%s\" )\n\t\t{\n", tblFileName.c_str());
 			htmlFile.WriteString("\t\t\t$bPermissionFound = true;\n");
 			htmlFile.WriteString("\t\t\tbreak;\n\t\t}\n\t}");
-			htmlFile.WriteString("if( $bPermissionFound )\n{\n?>");
+			htmlFile.WriteString("if( $bPermissionFound || $masterUnlock )\n{\n?>");
 
 			fprintf(htmlFile.GetFileHandle(), "<article><header align=\"center\"><h1>Dialog For %s</h1></header></article>\n", directoryMapIter->first.c_str());
 
