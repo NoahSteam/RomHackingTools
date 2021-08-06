@@ -289,7 +289,7 @@ struct SakuraTextFile
 
 	struct SequenceEntry
 	{
-		uint16 mTextIndex{ 0 };
+		uint16 mTextIndex{ 0xffff };
 		uint16 mImageId_CharIndex{ 0 };
 		uint16 mImageId_SetIndex{ 0 };
 		uint16 mImageId_ExpressionIndex{ 0 };
@@ -740,6 +740,9 @@ private:
 
 		unsigned int index = 1;
 
+		std::map<uint16, int> mProcessedIdsToSequenceIndex;
+		std::map<uint16, int> mProcessedIdsToSequenceIndex_ExtraEntries;
+
 		//Go to the second to last entry as we require index + 1 to be valid in this loop
 		while (index < (SequenceDataNumEntries - 1))
 		{
@@ -759,19 +762,44 @@ private:
 					newEntry.mImageId_SetIndex        = SwapByteOrder(pSequenceData[index - 3]) & 0x0fff;
 					newEntry.mImageId_ExpressionIndex = SwapByteOrder(pSequenceData[index - 2]) & 0x0fff;
 
-					mSequenceEntries.push_back(newEntry);
+					if (mProcessedIdsToSequenceIndex_ExtraEntries.find(newEntry.mTextIndex) != mProcessedIdsToSequenceIndex_ExtraEntries.end())
+					{
+						mSequenceEntries[ mProcessedIdsToSequenceIndex_ExtraEntries[newEntry.mTextIndex] ] = newEntry;
+						mProcessedIdsToSequenceIndex_ExtraEntries.erase( mProcessedIdsToSequenceIndex_ExtraEntries.find(newEntry.mTextIndex) );
+					}
+					else
+					{
+						mSequenceEntries.push_back(newEntry);
+					}
+				
+					mProcessedIdsToSequenceIndex[newEntry.mTextIndex] = (int)(mSequenceEntries.size() - 1);
 
+					/*
 					//We might have an extra entry after the 0102 entry in this form:
 					//0102 7FFE C### C### 0103 7FFE C### < --Last one there is the line number
 					if( (SwapByteOrder(pSequenceData[index + 2]) & 0xF000) == 0xC000 && 
+						(SwapByteOrder(pSequenceData[index + 2]) & 0x0FF0) != 0 &&
 					    SwapByteOrder(pSequenceData[index + 3]) == 0x0103 && 
 						SwapByteOrder(pSequenceData[index + 4]) == 0x7FFE )
 					{
-				//		SequenceEntry newEntry2 = newEntry;
-				//		newEntry2.mTextIndex = SwapByteOrder(pSequenceData[index + 5]) & 0x0fff;
-					
-			//			mSequenceEntries.push_back(newEntry2);
-					}
+						
+						const uint16 anotherTextEntry = SwapByteOrder(pSequenceData[index + 5]) & 0x0fff;
+						
+						//Make sure we haven't already found an entry for this text id
+						if( mProcessedIdsToSequenceIndex.find(anotherTextEntry) == mProcessedIdsToSequenceIndex.end() &&
+							mProcessedIdsToSequenceIndex_ExtraEntries.find(anotherTextEntry) == mProcessedIdsToSequenceIndex_ExtraEntries.end()
+						  )
+						{
+							if( mProcessedIdsToSequenceIndex.find(anotherTextEntry - 1) != mProcessedIdsToSequenceIndex.end() )
+							{
+								SequenceEntry newEntry2 = mSequenceEntries[mProcessedIdsToSequenceIndex[anotherTextEntry - 1]];
+								newEntry2.mTextIndex = anotherTextEntry;
+								mSequenceEntries.push_back(newEntry2);
+
+								mProcessedIdsToSequenceIndex_ExtraEntries[newEntry2.mTextIndex] = (int)(mSequenceEntries.size() - 1);
+							}
+						}
+					}*/
 				}
 				//Lips entries
 				else if (prevValue == SpecialEntryId || 
