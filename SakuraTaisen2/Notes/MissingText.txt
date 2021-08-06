@@ -1,0 +1,11 @@
+Examples in SK0102
+C001 C000 C005 0102 7FFE C005[lineNumber] => C56E 0103 7FFE C006[line] C56F 0103 7FFE [C039 C004 C00]imageID
+
+C570-C571 between with missing lines appear
+C572-C573
+...
+
+C00C C004 C002 0102 7FFE C0A5[lineNumber] => C6E2 0103 7FFE C00C[line] [C004 C008 C000]imageID
+
+
+
