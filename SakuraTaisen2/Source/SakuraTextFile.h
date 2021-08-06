@@ -273,12 +273,12 @@ struct SakuraTextFile
 		}
 	};
 
-	struct SakuraFontSheet
+	struct FontSheetData
 	{
 		char* mpData{ nullptr };
 		unsigned int mDataSize{ 0 };
 
-		~SakuraFontSheet()
+		~FontSheetData()
 		{
 			delete[] mpData;
 			mpData = nullptr;
@@ -300,7 +300,7 @@ struct SakuraTextFile
 	SakuraHeader               mFileHeader;
 	vector<SakuraString>       mLines;
 	SakuraHeaderForTextEntries mHeaderForTextEntries;
-	SakuraFontSheet            mFontSheetData;
+	FontSheetData              mFontSheetData;
 	vector<SakuraHeaderForTextEntries> mDataSegments;
 	vector<SakuraStringInfo>  mStringInfoArray;
 	vector<SakuraTimingData>  mLineTimingData;
@@ -467,6 +467,24 @@ public:
 				const string imageId = string("Char") + std::to_string(portraitIndex) + string("_") + std::to_string(sequenceEntry.mImageId_ExpressionIndex);
 
 				return imageId;
+			}
+		}
+
+		return "";
+	}
+
+	string GetFaceImageValues(int InLineIndex) const
+	{
+		const int NarratorIndex = 141;
+
+		char buffer[50];
+		for (const SequenceEntry& sequenceEntry : mSequenceEntries)
+		{
+			if ((sequenceEntry.mTextIndex) == (InLineIndex))
+			{
+				snprintf(buffer, 50, "%04x %04x %04x", sequenceEntry.mImageId_CharIndex | 0xC000, sequenceEntry.mImageId_SetIndex | 0xC000, sequenceEntry.mImageId_ExpressionIndex | 0xC000);
+
+				return string(buffer);
 			}
 		}
 
@@ -714,11 +732,11 @@ private:
 		const unsigned int SequenceDataNumEntries = (mFileHeader.OffsetToTextHeader - mFileHeader.OffsetToSequenceData) / sizeof(short);
 		assert((int)SequenceDataNumEntries > 0);
 
-		const uint16 TextEntryId    = 0x0102;
-		const uint16 SpecialEntryId = 0x0103;
+		const uint16 TextEntryId     = 0x0102;
+		const uint16 SpecialEntryId  = 0x0103;
 		const uint16 SpecialEntryId2 = 0xF04A;
-		const uint16 DataEntryId    = 0x7FFE;
-		const uint16 LipsId         = 0xC13F;
+		const uint16 DataEntryId     = 0x7FFE;
+		const uint16 LipsId          = 0xC13F;
 
 		unsigned int index = 1;
 
@@ -726,10 +744,11 @@ private:
 		while (index < (SequenceDataNumEntries - 1))
 		{
 			const unsigned short sequenceValue = SwapByteOrder(pSequenceData[index]);
-			const unsigned short prevValue = SwapByteOrder(pSequenceData[index - 1]);
+			const unsigned short prevValue     = SwapByteOrder(pSequenceData[index - 1]);
 
 			//if 7FFE detected
-			if (sequenceValue == DataEntryId || sequenceValue == SpecialEntryId2)
+			if (sequenceValue == DataEntryId /*0x7FFE*/ ||
+			    sequenceValue == SpecialEntryId2 /*0xF04A*/)
 			{
 				//if prev value was 0x0102, then the next value is the text id
 				if (prevValue == TextEntryId)
@@ -741,7 +760,20 @@ private:
 					newEntry.mImageId_ExpressionIndex = SwapByteOrder(pSequenceData[index - 2]) & 0x0fff;
 
 					mSequenceEntries.push_back(newEntry);
+
+					//We might have an extra entry after the 0102 entry in this form:
+					//0102 7FFE C### C### 0103 7FFE C### < --Last one there is the line number
+					if( (SwapByteOrder(pSequenceData[index + 2]) & 0xF000) == 0xC000 && 
+					    SwapByteOrder(pSequenceData[index + 3]) == 0x0103 && 
+						SwapByteOrder(pSequenceData[index + 4]) == 0x7FFE )
+					{
+				//		SequenceEntry newEntry2 = newEntry;
+				//		newEntry2.mTextIndex = SwapByteOrder(pSequenceData[index + 5]) & 0x0fff;
+					
+			//			mSequenceEntries.push_back(newEntry2);
+					}
 				}
+				//Lips entries
 				else if (prevValue == SpecialEntryId || 
 						(sequenceValue == SpecialEntryId2 && SwapByteOrder(pSequenceData[index+1]) == LipsId) 
 						)
@@ -823,5 +855,105 @@ void FindAllSakuraText(const vector<FileNameContainer>& inFiles, vector<SakuraTe
 		sakuraFile.ReadInText();
 
 		outText.push_back(std::move(sakuraFile));
+	}
+}
+
+void ExtractText(const string& inSearchDirectory, const string& inPaletteFileName, const string& inOutputDirectory)
+{
+	//Get the palette
+	FileData paletteFile;
+	if (!paletteFile.InitializeFileData(inPaletteFileName.c_str(), inPaletteFileName.c_str()))
+	{
+		return;
+	}
+
+	//Create 32bit palette data
+	PaletteData paletteData;
+	paletteData.CreateFrom15BitData(paletteFile.GetData(), paletteFile.GetDataSize());
+
+	//Find all files within the requested directory
+	vector<FileNameContainer> allFiles;
+	FindAllFilesWithinDirectory(inSearchDirectory, allFiles);
+
+	//Find all the scenario text files
+	vector<FileNameContainer> scenarioFiles;
+	GetAllFilesOfType(allFiles, "SK0", scenarioFiles);
+	GetAllFilesOfType(allFiles, "SK1", scenarioFiles);
+	GetAllFilesOfType(allFiles, "SKC", scenarioFiles);
+
+	//Extract the text
+	vector<SakuraTextFile> sakuraTextFiles;
+	FindAllSakuraText(scenarioFiles, sakuraTextFiles);
+
+	const string extension(".bmp");
+
+	//Write out bitmaps for all of the lines found in the sakura text files
+	const size_t numFiles = sakuraTextFiles.size();
+	for (size_t i = 0; i < numFiles; ++i)
+	{
+		const SakuraTextFile& sakuraText = sakuraTextFiles[i];
+
+		//Create output directory for this file
+		string fileOutputDir = inOutputDirectory + sakuraText.mFileNameInfo.mNoExtension + string("\\");
+		if (!CreateDirectoryHelper(fileOutputDir))
+		{
+			continue;
+		}
+
+		printf("Dumping dialog for: %s\n", sakuraText.mFileNameInfo.mNoExtension.c_str());
+
+		//Create font sheet
+		SakuraFontSheet sakuraFontSheet;
+		if (!sakuraFontSheet.CreateFontSheetFromData(sakuraText.mFontSheetData.mpData, sakuraText.mFontSheetData.mDataSize))
+		{
+			continue;
+		}
+
+		//Dump out the dialog for each line
+		int stringIndex = 0;
+		const int tileDim = 16;
+		for (size_t lineIndex = 0; lineIndex < sakuraText.mLines.size(); ++lineIndex)
+		{
+			const SakuraString& sakuraString = sakuraText.mLines[lineIndex];
+			if (sakuraString.mChars.size() > 255)
+			{
+				continue;
+			}
+
+			const int numSakuraLines = sakuraString.GetNumberOfLines();
+
+			BitmapSurface sakuraStringBmp;
+			sakuraStringBmp.CreateSurface(SakuraString::MaxCharsPerLine * tileDim, tileDim * numSakuraLines, BitmapSurface::EBitsPerPixel::kBPP_4, paletteData.GetData(), paletteData.GetSize());
+
+			int currRow = 0;
+			int currCol = 0;
+			for (size_t charIndex = sakuraString.mOffsetToStringData; charIndex < sakuraString.mChars.size(); ++charIndex)
+			{
+				const SakuraString::SakuraChar& sakuraChar = sakuraString.mChars[charIndex];
+
+				if (sakuraChar.IsNewLine())
+				{
+					++currRow;
+					currCol = 0;
+					continue;
+				}
+
+				if (sakuraChar.mIndex == 0xFFFF || sakuraChar.mIndex > 255 * 4)
+				{
+					continue;
+				}
+
+				const char* pData = sakuraFontSheet.GetCharacterTile(sakuraChar);
+
+				sakuraStringBmp.AddTile(pData, sakuraFontSheet.GetTileSizeInBytes(), currCol * 16, currRow * 16, tileDim, tileDim);
+
+				++currCol;
+			}
+
+			const string bitmapName = fileOutputDir + std::to_string(stringIndex + 1) + extension;
+			sakuraStringBmp.WriteToFile(bitmapName);
+
+			++stringIndex;
+		}
 	}
 }

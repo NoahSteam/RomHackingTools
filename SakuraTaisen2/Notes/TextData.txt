@@ -58,6 +58,13 @@ AAA: Character index
 BBB: Image set - 4
 CCC: Expression
 
+Special Entries Entries:
+0102 7FFE C### #### 0103 7FFE C### <--Last one there is the line number
+C3EA 0103 7FFE C005 C3EB
+C3F5 0103 7FFE C011 C3F6
+C3FE 0103 7FFE C022 C3FF
+C40A 0103 7FFE C041 C000
+
 Solution: Look for 0102 7FFE for dialog code, and then look the previous 7FFE value to see what the associated image index was
 
 Face Image calculations around code 0605A066

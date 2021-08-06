@@ -546,7 +546,6 @@ bool CreateStoryTextSpreadsheets(const string& dialogImageDirectory, const strin
 			htmlFile.WriteString("<b>Instructions:</b><br>\n");
 			htmlFile.WriteString("-Please let me know on Discord once the file is complete.<br>\n");
 			htmlFile.WriteString("-This page is best displayed using Chrome.  Otherwise some of the table borders are missing for some reason.<br>\n");
-			htmlFile.WriteString("-Skip any row that is grayed out.<br>\n");
 			htmlFile.WriteString("-Your changes are automatically saved.<br>\n");
 			htmlFile.WriteString("-Press the Load Data button when you come back to the page to load your changes.<br>\n");
 			htmlFile.WriteString("-Please wait for the Load Bar to complete.  It's a bit slow, but as more of the file is translated, it will speed up.  If it gets stuck in the 90's, that's fine, consider it done. I'll fix this bug soon.<br><br>\n");
@@ -604,6 +603,7 @@ bool CreateStoryTextSpreadsheets(const string& dialogImageDirectory, const strin
 		htmlFile.WriteString("\t<th>Appearance Order</th>\n");
 		htmlFile.WriteString("\t<th>CRC</th>\n");
 		htmlFile.WriteString("\t<th>Has a Duplicate</th>\n");
+		htmlFile.WriteString("\t<th>Image ID</th>\n");
 		htmlFile.WriteString("\t</tr>\n");
 
 		//****Find Translated Text File****
@@ -715,6 +715,17 @@ bool CreateStoryTextSpreadsheets(const string& dialogImageDirectory, const strin
 
 			snprintf(buffer, 2048, "<td id=\"dup_%i\" align=\"center\" width=\"20\">%s</td>", imageNumber + 1, bIsDuplicate ? "true" : "false");
 			htmlFile.WriteString(string(buffer));
+
+			if(faceImageId.size())
+			{
+				snprintf(buffer, 2048, "<td align=\"center\" width=\"120\">%s (%s)</td>", pSakuraFile->GetFaceImageValues(imageNumber + 1).c_str(), faceImageId.c_str());
+				htmlFile.WriteString(string(buffer));
+			}
+			else
+			{
+				snprintf(buffer, 2048, "<td align=\"center\" width=\"120\">N/A</td>");
+				htmlFile.WriteString(string(buffer));
+			}
 
 			htmlFile.WriteString("</tr>\n");
 

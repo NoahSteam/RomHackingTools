@@ -40,6 +40,8 @@ using std::map;
 using std::unordered_map;
 
 #include "Source/SakuraConstants.h"
+#include "Source/SakuraString.h"
+#include "Source/SakuraFontSheet.h"
 #include "Source/SakuraTextFile.h"
 #include "Source/ImageExtraction.h"
 #include "Source/FaceWinAll.h"
@@ -48,7 +50,6 @@ using std::unordered_map;
 #include "Source/BattleMenuExtraction.h"
 #include "Source/MainMenuExtraction.h"
 #include "Source/InfoNameExtraction.h"
-#include "Source/SakuraFontSheet.h"
 #include "Source/SysFileExtraction.h"
 #include "Source/CreateSysSpreadsheets.h"
 #include "Source/CreateIndexFile.h"
@@ -57,8 +58,6 @@ void PrintHelp()
 {
 	printf("usage: SakuraTaisen [command]\n");
 	printf("Commands:\n");
-	printf("ExtractRawText rootSakuraTaisenDirectory outDirectory\n");
-	printf("ExtractFontSheets rootSakuraTaisenDirectory paletteFileName outDirectory\n");
 	printf("ExtractText rootSakuraTaisenDirectory paletteFileName outDirectory\n");
 	printf("CreateTranslatedFontSheets translatedFontSheet outDirectory\n");
 	printf("ConvertTranslatedText translatedTextDir outDirectory\n");
@@ -112,7 +111,16 @@ int main(int argc, char *argv[])
 	}
 
 	const string command(argv[1]);
-	if(command == "CreateTBLSpreadsheets" && argc == 8 )
+
+	if (command == string("ExtractText") && argc == 5)
+	{
+		const string searchDirectory = string(argv[2]);
+		const string paletteFileName = string(argv[3]);
+		const string outDirectory = string(argv[4]) + Seperators;
+
+		ExtractText(searchDirectory, paletteFileName, outDirectory);
+	}
+	else if(command == "CreateTBLSpreadsheets" && argc == 8 )
 	{
 		const string dialogImageDirectory = string(argv[2]);
 		const string duplicatesFile       = string(argv[3]);
