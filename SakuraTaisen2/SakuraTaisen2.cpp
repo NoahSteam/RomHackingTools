@@ -53,6 +53,7 @@ using std::unordered_map;
 #include "Source/SysFileExtraction.h"
 #include "Source/CreateSysSpreadsheets.h"
 #include "Source/CreateIndexFile.h"
+#include "Source/MiniGameExtraction.h"
 
 void PrintHelp()
 {
@@ -88,6 +89,7 @@ void PrintHelp()
 	printf("ExtractTitleScreens rootSakuraDir discNumber outDir\n");
 	printf("YabauseToMednafen yabauseFilePath outFile\n");
 	printf("DumpBitmap inputFilePath outDirectory\n");
+	printf("ExtractMiniGames rootSakuraDirectory outDir\n");
 	printf("PatchGame isDisc2 rootSakuraTaisenDirectory patchedSakuraTaisenDirectory translatedTextDirectory fontSheet originalPalette patchedTMapSpDataPath mainMenuFontSheetPath mainMenuBgndPatchedImage optionsImagePatched translatedDataDirectory extractedWklDir\n");
 }
 
@@ -203,6 +205,13 @@ int main(int argc, char *argv[])
 		const string outDirectory              = string(argv[4]) + Seperators;
 
 		ExtractSysFiles(rootSakuraTaisenDirectory, paletteFileName, outDirectory);
+	}
+	else if (command == "ExtractMiniGames" && argc == 4)
+	{
+		const string rootSakuraTaisenDirectory = string(argv[2]) + Seperators;
+		const string outDirectory = string(argv[3]) + Seperators;
+
+		ExtractMiniGames(rootSakuraTaisenDirectory, outDirectory);
 	}
 	else if (command == "CreateIndexFile" && argc == 5)
 	{
