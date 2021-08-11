@@ -34,3 +34,12 @@ Tables:
 0000RENI.BIN @0x0000a3f4
 0000SAKU.BIN @0x00008c00
 0000SUMI.BIN @0x0000cd20
+
+//Selectable Options Image:
+Found a match in MGMRDATA.BIN @0x00005900
+Found a match in MGRNDATA.BIN @0x00005900
+Found a match in MGSKDATA.BIN @0x00005900
+Found a match in MINIGAME.CG @0x00005900
+
+4 images at 64x46
+more to follow at different sizes
