@@ -89,7 +89,7 @@ void PrintHelp()
 	printf("ExtractTitleScreens rootSakuraDir discNumber outDir\n");
 	printf("YabauseToMednafen yabauseFilePath outFile\n");
 	printf("DumpBitmap inputFilePath outDirectory\n");
-	printf("ExtractMiniGames rootSakuraDirectory outDir\n");
+	printf("ExtractMiniGames rootSakuraDirectory isBmp outDir\n");
 	printf("PatchGame isDisc2 rootSakuraTaisenDirectory patchedSakuraTaisenDirectory translatedTextDirectory fontSheet originalPalette patchedTMapSpDataPath mainMenuFontSheetPath mainMenuBgndPatchedImage optionsImagePatched translatedDataDirectory extractedWklDir\n");
 }
 
@@ -206,12 +206,13 @@ int main(int argc, char *argv[])
 
 		ExtractSysFiles(rootSakuraTaisenDirectory, paletteFileName, outDirectory);
 	}
-	else if (command == "ExtractMiniGames" && argc == 4)
+	else if (command == "ExtractMiniGames" && argc == 5)
 	{
 		const string rootSakuraTaisenDirectory = string(argv[2]) + Seperators;
-		const string outDirectory = string(argv[3]) + Seperators;
+		const bool   bmpFormat                 = atoi(argv[3]);
+		const string outDirectory              = string(argv[4]) + Seperators;
 
-		ExtractMiniGames(rootSakuraTaisenDirectory, outDirectory);
+		ExtractMiniGames(rootSakuraTaisenDirectory, bmpFormat, outDirectory);
 	}
 	else if (command == "CreateIndexFile" && argc == 5)
 	{
