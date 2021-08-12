@@ -25,15 +25,6 @@ struct MiniGameFiles
 
 void ExtractMiscMiniGameImages(const string& inSakuraDirectory, bool bInIsBmp, const PaletteData& inPalette, const string& inOutputDirectory)
 {
-	//Use standardPalette from above
-
-	/*
-	* MGMRDATA.BIN @0x00005900
-	  MGRNDATA.BIN @0x00005900
-	  MGSKDATA.BIN @0x00005900
-	  MINIGAME.CG @0x00005900
-	*/
-
 	struct MiscImageData
 	{
 		uint16 numImages;
@@ -42,10 +33,21 @@ void ExtractMiscMiniGameImages(const string& inSakuraDirectory, bool bInIsBmp, c
 		uint8  bpp;
 	};
 
-	const int NumImageEntries = 19;
+	const int NumImageEntries = 31;
 	MiscImageData imageEntries[NumImageEntries] =
 	{
 		//MGMRDATA
+		1, 144, 144, 4,
+		1, 160, 24, 4,
+		1, 264, 32, 4,
+		2, 144, 8, 4,
+		2, 8, 136, 4,
+		1, 160, 24, 4,
+		1, 72, 24, 4,
+		1, 24, 24, 4,
+		3, 16, 16, 4,
+		1, 16, 24, 4,
+		3, 16, 16, 4,
 		4, 64, 16, 4,
 		1, 48, 16, 4,
 		1, 64, 16, 4,
@@ -55,35 +57,35 @@ void ExtractMiscMiniGameImages(const string& inSakuraDirectory, bool bInIsBmp, c
 		10, 16, 16, 4,
 		1, 136,144,8, //0x7080
 		1, 144,16, 4, //0xBD20
-		4, 128,16, 4,
+		1, 128,64, 4,
 		1, 80, 16, 4,
 		1, 96, 16, 4,  //0xD420
 		1, 80, 16, 4,
 		1, 96, 16, 4,
 		10,16, 16, 4,
-		4, 8,  8,  4,
+		2, 8,  8,  4,
+		1, 8, 16, 4,
 		2, 16, 16, 4,
 		1, 32, 16, 4,
 		1, 16, 16, 4,
-	//	11,40, 48, 4// (character sprites)
+		//	11,40, 48, 4// (character sprites)
 	};
 
 	const int NumFiles = 4;
-	const char* pFileNames[NumFiles] = 
+	const char* pFileNames[NumFiles] =
 	{
 		"MGMRDATA",
 		"MGRNDATA",
 		"MGSKDATA",
 		"MINIGAME" //.CG
 	};
-
+	
+	const string Sakura3Directory = inSakuraDirectory + string("SAKURA3\\");
 	const string imageExt = bInIsBmp ? ".bmp" : ".png";
 	const string cgExt(".CG");
-	const string Sakura3Directory = inSakuraDirectory + string("SAKURA3\\");
 
 	char nameBuffer[20];
-
-	for(int fileIndex = 0; fileIndex < NumFiles; ++fileIndex)
+	for( int fileIndex = 0; fileIndex < NumFiles; ++fileIndex )
 	{
 		printf("Extracting: %s\n", pFileNames[fileIndex]);
 
@@ -94,21 +96,30 @@ void ExtractMiscMiniGameImages(const string& inSakuraDirectory, bool bInIsBmp, c
 		const string fileExt = fileIndex < 3 ? ".BIN" : ".CG";
 		FileNameContainer fileName((Sakura3Directory + string(pFileNames[fileIndex]) + fileExt).c_str());
 		FileData fileData;
-		if (!fileData.InitializeFileData(fileName))
+		if( !fileData.InitializeFileData(fileName) )
 		{
 			return;
 		}
 
-		int offset = 0x5900;
-		for(int entry = 0; entry < NumImageEntries; ++entry)
+		int imageCount = 1;
+		uint32 offset = 0;
+		for( int entry = 0; entry < NumImageEntries; ++entry )
 		{
 			const MiscImageData& imageSet = imageEntries[entry];
 
-			for(uint16 imageIndex = 0; imageIndex < imageSet.numImages; ++imageIndex)
+			bool endOfFileDetected = false;
+			for( uint16 imageIndex = 0; imageIndex < imageSet.numImages; ++imageIndex )
 			{
-				if (imageSet.bpp == 4)
+				if( imageSet.bpp == 4 )
 				{
-					snprintf(nameBuffer, 20, "%08x", offset);
+
+					if( offset + (imageSet.width * imageSet.height) / 2  > fileData.GetDataSize() )
+					{
+						endOfFileDetected = true;
+						break;
+					}
+
+					snprintf(nameBuffer, 20, "%i_%08x", imageCount++, offset);
 					const string outFileName = finalOutputDir + string(nameBuffer) + imageExt;
 
 					BitmapWriter outBmp;
@@ -120,6 +131,11 @@ void ExtractMiscMiniGameImages(const string& inSakuraDirectory, bool bInIsBmp, c
 				{
 					offset += 0x20;
 				}
+			}
+
+			if( endOfFileDetected )
+			{
+				break;
 			}
 		}
 	}
