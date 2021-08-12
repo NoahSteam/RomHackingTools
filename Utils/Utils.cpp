@@ -211,7 +211,7 @@ bool CreateDirectoryHelper(const std::string& dirName)
 		return true;
 	}
 	
-	printf("Unable to create directory: %s", dirName.c_str());
+	printf("Unable to create directory: %s\n", dirName.c_str());
 
 	return false;
 }

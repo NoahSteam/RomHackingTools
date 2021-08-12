@@ -23,6 +23,108 @@ struct MiniGameFiles
 	uint16      imageInfoTableOffset;
 };
 
+void ExtractMiscMiniGameImages(const string& inSakuraDirectory, bool bInIsBmp, const PaletteData& inPalette, const string& inOutputDirectory)
+{
+	//Use standardPalette from above
+
+	/*
+	* MGMRDATA.BIN @0x00005900
+	  MGRNDATA.BIN @0x00005900
+	  MGSKDATA.BIN @0x00005900
+	  MINIGAME.CG @0x00005900
+	*/
+
+	struct MiscImageData
+	{
+		uint16 numImages;
+		uint16  width;
+		uint16  height;
+		uint8  bpp;
+	};
+
+	const int NumImageEntries = 19;
+	MiscImageData imageEntries[NumImageEntries] =
+	{
+		//MGMRDATA
+		4, 64, 16, 4,
+		1, 48, 16, 4,
+		1, 64, 16, 4,
+		1, 32, 16, 4,
+		6, 16, 16, 4,
+		1, 96, 16, 4,
+		10, 16, 16, 4,
+		1, 136,144,8, //0x7080
+		1, 144,16, 4, //0xBD20
+		4, 128,16, 4,
+		1, 80, 16, 4,
+		1, 96, 16, 4,  //0xD420
+		1, 80, 16, 4,
+		1, 96, 16, 4,
+		10,16, 16, 4,
+		4, 8,  8,  4,
+		2, 16, 16, 4,
+		1, 32, 16, 4,
+		1, 16, 16, 4,
+	//	11,40, 48, 4// (character sprites)
+	};
+
+	const int NumFiles = 4;
+	const char* pFileNames[NumFiles] = 
+	{
+		"MGMRDATA",
+		"MGRNDATA",
+		"MGSKDATA",
+		"MINIGAME" //.CG
+	};
+
+	const string imageExt = bInIsBmp ? ".bmp" : ".png";
+	const string cgExt(".CG");
+	const string Sakura3Directory = inSakuraDirectory + string("SAKURA3\\");
+
+	char nameBuffer[20];
+
+	for(int fileIndex = 0; fileIndex < NumFiles; ++fileIndex)
+	{
+		printf("Extracting: %s\n", pFileNames[fileIndex]);
+
+		//Create output directory
+		const string finalOutputDir = inOutputDirectory + string(pFileNames[fileIndex]) + Seperators;
+		CreateDirectoryHelper(finalOutputDir);
+
+		const string fileExt = fileIndex < 3 ? ".BIN" : ".CG";
+		FileNameContainer fileName((Sakura3Directory + string(pFileNames[fileIndex]) + fileExt).c_str());
+		FileData fileData;
+		if (!fileData.InitializeFileData(fileName))
+		{
+			return;
+		}
+
+		int offset = 0x5900;
+		for(int entry = 0; entry < NumImageEntries; ++entry)
+		{
+			const MiscImageData& imageSet = imageEntries[entry];
+
+			for(uint16 imageIndex = 0; imageIndex < imageSet.numImages; ++imageIndex)
+			{
+				if (imageSet.bpp == 4)
+				{
+					snprintf(nameBuffer, 20, "%08x", offset);
+					const string outFileName = finalOutputDir + string(nameBuffer) + imageExt;
+
+					BitmapWriter outBmp;
+					outBmp.CreateBitmap(outFileName, imageSet.width, -imageSet.height, imageSet.bpp, fileData.GetData() + offset, (imageSet.width * imageSet.height) / 2, inPalette.GetData(), inPalette.GetSize(), bInIsBmp);
+				}
+
+				offset += imageSet.bpp == 4 ? imageSet.width * imageSet.height / 2 : imageSet.width * imageSet.height;
+				if(imageSet.bpp == 8)
+				{
+					offset += 0x20;
+				}
+			}
+		}
+	}
+}
+
 void ExtractMiniGames(const string& inSakuraDirectory, bool bInIsBmp, const string& inOutputDirectory)
 {
 	CreateDirectoryHelper(inOutputDirectory);
@@ -73,6 +175,8 @@ void ExtractMiniGames(const string& inSakuraDirectory, bool bInIsBmp, const stri
 	const string Sakura3Directory = inSakuraDirectory + string("SAKURA3\\");
 	for(int i = 0; i < NumMiniGames; ++i)
 	{
+		printf("Extracting: %s\n", miniGameFiles[i].pCGFileName);
+
 		const string miniGameOutputDir = inOutputDirectory + miniGameFiles[i].pCGFileName + Seperators;
 		CreateDirectoryHelper(miniGameOutputDir);
 
@@ -102,18 +206,8 @@ void ExtractMiniGames(const string& inSakuraDirectory, bool bInIsBmp, const stri
 
 			BitmapWriter outBmp;
 			if( imageNumber == 0 )
-			{ 
-				char* pData = new char[imageInfo.widthDiv8*8 * imageInfo.height];
-				memcpy_s(pData, imageInfo.widthDiv8*8 * imageInfo.height, cgFileData.GetData() + imageInfo.offsetDiv8*8, imageInfo.widthDiv8*8 * imageInfo.height);
-
-				for(int k = 0; k < imageInfo.widthDiv8*8 * imageInfo.height; ++k )
-					pData[k] = pData[k];
-
-				outBmp.CreateBitmap(outFileName, imageInfo.widthDiv8*8, -imageInfo.height, 8, pData, (imageInfo.widthDiv8*8 * imageInfo.height), firstImagePalette.GetData(), firstImagePalette.GetSize(), bInIsBmp);
-		
-				delete[] pData;
-
-				//outBmp.CreateBitmap(outFileName, imageInfo.widthDiv8*8, -imageInfo.height, 8, cgFileData.GetData() + imageInfo.offsetDiv8*8, (imageInfo.widthDiv8*8 * imageInfo.height), firstImagePalette.GetData(), firstImagePalette.GetSize(), bInIsBmp);
+			{
+				outBmp.CreateBitmap(outFileName, imageInfo.widthDiv8*8, -imageInfo.height, 8, cgFileData.GetData() + imageInfo.offsetDiv8*8, (imageInfo.widthDiv8*8 * imageInfo.height), firstImagePalette.GetData(), firstImagePalette.GetSize(), bInIsBmp);
 			}
 			else if( imageNumber == 1 )
 			{
@@ -132,16 +226,6 @@ void ExtractMiniGames(const string& inSakuraDirectory, bool bInIsBmp, const stri
 			++imageNumber;
 		}
 	}
-}
 
-void ExtractMiscMiniGameImages()
-{
-	//Use standardPalette from above
-
-	/*
-	* MGMRDATA.BIN @0x00005900
-	  MGRNDATA.BIN @0x00005900
-	  MGSKDATA.BIN @0x00005900
-	  MINIGAME.CG @0x00005900
-	*/
+	ExtractMiscMiniGameImages(inSakuraDirectory, bInIsBmp, standardPalette, inOutputDirectory);
 }
