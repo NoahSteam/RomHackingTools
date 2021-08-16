@@ -33,42 +33,62 @@ void ExtractMiscMiniGameImages(const string& inSakuraDirectory, bool bInIsBmp, c
 		uint8  bpp;
 	};
 
-	const int NumImageEntries = 31;
-	MiscImageData imageEntries[NumImageEntries] =
+	const int NumCommonImageEntries = 22;
+	MiscImageData imageEntriesCommon[NumCommonImageEntries] =
 	{
 		//MGMRDATA
 		1, 144, 144, 4,
 		1, 160, 24, 4,
 		1, 264, 32, 4,
 		2, 144, 8, 4,
-		2, 8, 136, 4,
+		2, 8,   136, 4,
 		1, 160, 24, 4,
-		1, 72, 24, 4,
-		1, 24, 24, 4,
-		3, 16, 16, 4,
-		1, 16, 24, 4,
-		3, 16, 16, 4,
-		4, 64, 16, 4,
-		1, 48, 16, 4,
-		1, 64, 16, 4,
-		1, 32, 16, 4,
-		6, 16, 16, 4,
-		1, 96, 16, 4,
+		1, 72,  24, 4,
+		1, 24,  24, 4,
+		3, 16,  16, 4,
+		1, 16,  24, 4,
+		3, 16,  16, 4,
+		4, 64,  16, 4,
+		1, 48,  16, 4,
+		1, 64,  16, 4,
+		1, 32,  16, 4,
+		6, 16,  16, 4,
+		1, 96,  16, 4,
 		10, 16, 16, 4,
-		1, 136,144,8, //0x7080
-		1, 144,16, 4, //0xBD20
-		1, 128,64, 4,
-		1, 80, 16, 4,
-		1, 96, 16, 4,  //0xD420
+		1, 136, 144,8, //0x7080
+		1, 144, 16, 4, //0xBD20
+		1, 128, 64, 4,
+		1, 80,  16, 4,
+	};
+
+	//Starting at 0xD420
+	const int NumMgrmEntries = 9;
+	MiscImageData imageEntriesMgrm[NumMgrmEntries] =
+	{
+		1, 96, 16, 4,
 		1, 80, 16, 4,
 		1, 96, 16, 4,
 		10,16, 16, 4,
 		2, 8,  8,  4,
-		1, 8, 16, 4,
+		1, 8,  16, 4,
 		2, 16, 16, 4,
 		1, 32, 16, 4,
 		1, 16, 16, 4,
 		//	11,40, 48, 4// (character sprites)
+	};
+
+	//Starting at 0xd420
+	const int NumMgrnEntries = 8;
+	MiscImageData imageEntriesMgrn[NumMgrnEntries] =
+	{	
+		1, 64, 16,  4,
+		1, 80, 16,  4,
+		1, 64, 16,  4,
+		1, 16, 160, 4,
+		1, 8,  32,  4,
+		1, 16, 32,  4,
+		1, 32, 16,  4,
+		1, 16, 16,  4,
 	};
 
 	const int NumFiles = 4;
@@ -83,8 +103,42 @@ void ExtractMiscMiniGameImages(const string& inSakuraDirectory, bool bInIsBmp, c
 	const string Sakura3Directory = inSakuraDirectory + string("SAKURA3\\");
 	const string imageExt = bInIsBmp ? ".bmp" : ".png";
 	const string cgExt(".CG");
-
 	char nameBuffer[20];
+
+	auto ExtractImagesFromFile = 
+	[&cgExt, &imageExt, &inPalette, &nameBuffer, bInIsBmp](int NumImageEntries, MiscImageData* pImageEntries, uint32& offset, int& imageCount, const string& finalOutputDir, const FileData& fileData)->bool
+	{
+		for (int entry = 0; entry < NumImageEntries; ++entry)
+		{
+			const MiscImageData& imageSet = pImageEntries[entry];
+
+			for (uint16 imageIndex = 0; imageIndex < imageSet.numImages; ++imageIndex)
+			{
+				if (imageSet.bpp == 4)
+				{
+					if (offset + (imageSet.width * imageSet.height) / 2 > fileData.GetDataSize())
+					{
+						return false;
+					}
+
+					snprintf(nameBuffer, 20, "%i_%08x", imageCount++, offset);
+					const string outFileName = finalOutputDir + string(nameBuffer) + imageExt;
+
+					BitmapWriter outBmp;
+					outBmp.CreateBitmap(outFileName, imageSet.width, -imageSet.height, imageSet.bpp, fileData.GetData() + offset, (imageSet.width * imageSet.height) / 2, inPalette.GetData(), inPalette.GetSize(), bInIsBmp);
+				}
+
+				offset += imageSet.bpp == 4 ? imageSet.width * imageSet.height / 2 : imageSet.width * imageSet.height;
+				if (imageSet.bpp == 8)
+				{
+					offset += 0x20;
+				}
+			}
+		}
+
+		return true;
+	};
+	
 	for( int fileIndex = 0; fileIndex < NumFiles; ++fileIndex )
 	{
 		printf("Extracting: %s\n", pFileNames[fileIndex]);
@@ -103,40 +157,16 @@ void ExtractMiscMiniGameImages(const string& inSakuraDirectory, bool bInIsBmp, c
 
 		int imageCount = 1;
 		uint32 offset = 0;
-		for( int entry = 0; entry < NumImageEntries; ++entry )
+		
+		ExtractImagesFromFile(NumCommonImageEntries, imageEntriesCommon, offset, imageCount, finalOutputDir, fileData);
+
+		if( fileIndex == 0 )
 		{
-			const MiscImageData& imageSet = imageEntries[entry];
-
-			bool endOfFileDetected = false;
-			for( uint16 imageIndex = 0; imageIndex < imageSet.numImages; ++imageIndex )
-			{
-				if( imageSet.bpp == 4 )
-				{
-
-					if( offset + (imageSet.width * imageSet.height) / 2  > fileData.GetDataSize() )
-					{
-						endOfFileDetected = true;
-						break;
-					}
-
-					snprintf(nameBuffer, 20, "%i_%08x", imageCount++, offset);
-					const string outFileName = finalOutputDir + string(nameBuffer) + imageExt;
-
-					BitmapWriter outBmp;
-					outBmp.CreateBitmap(outFileName, imageSet.width, -imageSet.height, imageSet.bpp, fileData.GetData() + offset, (imageSet.width * imageSet.height) / 2, inPalette.GetData(), inPalette.GetSize(), bInIsBmp);
-				}
-
-				offset += imageSet.bpp == 4 ? imageSet.width * imageSet.height / 2 : imageSet.width * imageSet.height;
-				if(imageSet.bpp == 8)
-				{
-					offset += 0x20;
-				}
-			}
-
-			if( endOfFileDetected )
-			{
-				break;
-			}
+			ExtractImagesFromFile(NumMgrmEntries, imageEntriesMgrm, offset, imageCount, finalOutputDir, fileData);
+		}
+		else if( fileIndex == 1 || fileIndex == 2 )
+		{
+			ExtractImagesFromFile(NumMgrnEntries, imageEntriesMgrn, offset, imageCount, finalOutputDir, fileData);
 		}
 	}
 }
