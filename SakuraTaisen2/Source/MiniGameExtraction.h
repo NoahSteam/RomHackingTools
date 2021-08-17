@@ -57,7 +57,7 @@ void ExtractMiscMiniGameImages(const string& inSakuraDirectory, bool bInIsBmp, c
 		10, 16, 16, 4,
 		1, 136, 144,8, //0x7080
 		1, 144, 16, 4, //0xBD20
-		1, 128, 64, 4,
+		4, 128, 16, 4,
 		1, 80,  16, 4,
 	};
 
@@ -89,6 +89,18 @@ void ExtractMiscMiniGameImages(const string& inSakuraDirectory, bool bInIsBmp, c
 		1, 16, 32,  4,
 		1, 32, 16,  4,
 		1, 16, 16,  4,
+	};
+
+	//Starting at 0xd420
+	const int NumMgskEntries = 6;
+	MiscImageData imageEntriesMgsk[NumMgrnEntries] =
+	{
+		3, 40, 16,  4,
+		1, 16, 160, 4,
+		1, 8,  32,  4,
+		2, 16, 16,  4,
+		1, 32, 16,  4,
+		1, 16, 16,  4
 	};
 
 	const int NumFiles = 4;
@@ -164,9 +176,13 @@ void ExtractMiscMiniGameImages(const string& inSakuraDirectory, bool bInIsBmp, c
 		{
 			ExtractImagesFromFile(NumMgrmEntries, imageEntriesMgrm, offset, imageCount, finalOutputDir, fileData);
 		}
-		else if( fileIndex == 1 || fileIndex == 2 )
+		else if( fileIndex == 1 )
 		{
 			ExtractImagesFromFile(NumMgrnEntries, imageEntriesMgrn, offset, imageCount, finalOutputDir, fileData);
+		}
+		else if( fileIndex == 2 )
+		{
+			ExtractImagesFromFile(NumMgskEntries, imageEntriesMgsk, offset, imageCount, finalOutputDir, fileData);
 		}
 	}
 }
