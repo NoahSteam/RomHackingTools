@@ -21,6 +21,7 @@ struct MiniGameFiles
 	const char* pCGFileName;
 	const char* pDataFileName;
 	uint16      imageInfoTableOffset;
+	uint32      standardPaletteOffset;
 };
 
 void ExtractMiscMiniGameImages(const string& inSakuraDirectory, bool bInIsBmp, const PaletteData& inPalette, const string& inOutputDirectory)
@@ -192,15 +193,8 @@ void ExtractMiniGames(const string& inSakuraDirectory, bool bInIsBmp, const stri
 	CreateDirectoryHelper(inOutputDirectory);
 
 	FileData nbgFile;
-	if (!nbgFile.InitializeFileData("NBGFILE1.ALL", (inSakuraDirectory + string("SAKURA3\\0000ORIH.BIN")).c_str()))
+	if (!nbgFile.InitializeFileData("0000ORIH.BIN", (inSakuraDirectory + string("SAKURA3\\0000ORIH.BIN")).c_str()))
 	{
-		return;
-	}
-
-	PaletteData firstImagePalette;
-	if (!firstImagePalette.CreateFrom15BitData(nbgFile.GetData() + 0x000331f8, 512))
-	{
-		printf("Unable to create palette.\n");
 		return;
 	}
 
@@ -211,25 +205,27 @@ void ExtractMiniGames(const string& inSakuraDirectory, bool bInIsBmp, const stri
 		return;
 	}
 
-	PaletteData logoPalette;
-	if (!logoPalette.CreateFrom15BitData(nbgFile.GetData() + 0x00033038, 32))
+	/*
+	PaletteData firstImagePalette;
+	if (!firstImagePalette.CreateFrom15BitData(nbgFile.GetData() + 0x000331f8, 512))
 	{
 		printf("Unable to create palette.\n");
 		return;
 	}
+	*/
 
 	const int NumMiniGames = 9;
 	MiniGameFiles miniGameFiles[NumMiniGames] =
 	{
-		"INST_AL", "0000DAIF.BIN", 0xcf64,
-		"INST_IR", "0000IRIS.BIN", 0xcd10,
-		"INST_KN", "0000KANN.BIN", 0xc628,
-		"INST_KR", "0000KORA.BIN", 0xcbc8,
-		"INST_MR", "0000MARI.BIN", 0x8fc8,
-		"INST_OH", "0000ORIH.BIN", 0xcbcc,
-		"INST_RN", "0000RENI.BIN", 0xa3f4,
-		"INST_SK", "0000SAKU.BIN", 0x8c00,
-		"INST_SM", "0000SUMI.BIN", 0xcd20,
+		"INST_AL", "0000DAIF.BIN", 0xcf64, 0x46770,
+		"INST_IR", "0000IRIS.BIN", 0xcd10, 0x339e0,
+		"INST_KN", "0000KANN.BIN", 0xc628, 0x3afc4,
+		"INST_KR", "0000KORA.BIN", 0xcbc8, 0x3c478,
+		"INST_MR", "0000MARI.BIN", 0x8fc8, 0x35178,
+		"INST_OH", "0000ORIH.BIN", 0xcbcc, 0x33058,
+		"INST_RN", "0000RENI.BIN", 0xa3f4, 0x30e34,
+		"INST_SK", "0000SAKU.BIN", 0x8c00, 0x38f00,
+		"INST_SM", "0000SUMI.BIN", 0xcd20, 0x31dac,
 	};
 
 	const string imageExt = bInIsBmp ? ".bmp" : ".png";
@@ -260,6 +256,27 @@ void ExtractMiniGames(const string& inSakuraDirectory, bool bInIsBmp, const stri
 		MiniGameImageInfo imageInfo;
 		memcpy_s(&imageInfo, sizeof(imageInfo), binFileData.GetData() + offsetToTable, sizeof(imageInfo));
 		imageInfo.SwapEndianess();
+
+		PaletteData standardPalette;
+		if (!standardPalette.CreateFrom15BitData(binFileData.GetData() + miniGameFiles[i].standardPaletteOffset, 32))
+		{
+			printf("Unable to create palette.\n");
+			return;
+		}
+
+		PaletteData logoPalette;
+		if (!logoPalette.CreateFrom15BitData(binFileData.GetData() + miniGameFiles[i].standardPaletteOffset - 32, 32))
+		{
+			printf("Unable to create palette.\n");
+			return;
+		}
+
+		PaletteData firstImagePalette;
+		if (!firstImagePalette.CreateFrom15BitData(binFileData.GetData() + miniGameFiles[i].standardPaletteOffset + 96, 512))
+		{
+			printf("Unable to create palette.\n");
+			return;
+		}
 
 		int imageNumber = 0;
 		while(imageInfo.unknown != 0)
