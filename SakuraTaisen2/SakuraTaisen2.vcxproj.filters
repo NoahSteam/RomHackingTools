@@ -68,5 +68,14 @@
     <ClInclude Include="Source\MiniGameExtraction.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="CreateMinigameSpreadsheets.h\Header.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\CreateMinigameSpreadsheets.h\Header.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\CreateMiniGameSpreadsheets.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

@@ -131,8 +131,11 @@
     <ClCompile Include="SakuraTaisen2.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="CreateMinigameSpreadsheets.h\Header.h" />
     <ClInclude Include="Source\BattleMenuExtraction.h" />
     <ClInclude Include="Source\CreateIndexFile.h" />
+    <ClInclude Include="Source\CreateMiniGameSpreadsheets.h" />
+    <ClInclude Include="Source\CreateMinigameSpreadsheets.h\Header.h" />
     <ClInclude Include="Source\CreateStorySpreadhseets.h" />
     <ClInclude Include="Source\CreateSysSpreadsheets.h" />
     <ClInclude Include="Source\FaceWinAll.h" />

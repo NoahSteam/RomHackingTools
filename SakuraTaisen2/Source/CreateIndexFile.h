@@ -1,6 +1,6 @@
 #pragma once
 
-void CreateIndexFile(const string& inMesFileDirectory, const string& inSKFileDirectory, const string& outFilePath)
+void CreateIndexFile(const string& inMesFileDirectory, const string& inSKFileDirectory, const string& inMiniGameDirectory, const string& outFilePath)
 {
 	TextFileWriter htmlFile;
 	if (!htmlFile.OpenFileForWrite(outFilePath))
@@ -191,6 +191,30 @@ void CreateIndexFile(const string& inMesFileDirectory, const string& inSKFileDir
 		htmlFile.Printf("				<tr bgcolor = <?php echo \"$progressColor\" ?> ><td align = \"center\"><a href = \"%s.php\">%s</a></td><td align = \"center\"> <?php echo $fileOwners; ?> </td><td align = \"center\"><?php echo \"(\".$linesTranslated.\" of %i)\" ?></td><td><button onclick = \"TakeOwnershipOfFile('%s')\">Take Ownership</button></td></tr>\n", pFileName, pFileName, numFiles, pFileName);
 	}
 
+	//Minigames
+	{
+		vector<string> miniGameDirectories;
+		FindAllDirectoriesWithinDirectory(inMiniGameDirectory, miniGameDirectories);
+
+		for (const string& miniGameDirectory : miniGameDirectories)
+		{
+			FileNameContainer miniGameDirectoryName((inMiniGameDirectory + miniGameDirectory).c_str());
+
+			//Get number of files within each minigame
+			vector<FileNameContainer> miniGameImages;
+			FindAllFilesWithinDirectory(miniGameDirectoryName.mFullPath, miniGameImages);
+
+			const char* pFileName = miniGameDirectoryName.mNoExtension.c_str();
+			const int numFiles = (int)miniGameImages.size();
+			htmlFile.Printf("			<?php\n");
+			htmlFile.Printf("				$searchFile = \"%s\";\n", pFileName);
+			htmlFile.Printf("				include 'GetFileOwners.php';\n");
+			htmlFile.Printf("				include 'GetFileProgress.php';\n");
+			htmlFile.Printf("			?>\n");
+			htmlFile.Printf("\n");
+			htmlFile.Printf("				<tr bgcolor = <?php echo \"$progressColor\" ?> ><td align = \"center\"><a href = \"%s.php\">%s</a></td><td align = \"center\"> <?php echo $fileOwners; ?> </td><td align = \"center\"><?php echo \"(\".$linesTranslated.\" of %i)\" ?></td><td><button onclick = \"TakeOwnershipOfFile('%s')\">Take Ownership</button></td></tr>\n", pFileName, pFileName, numFiles, pFileName);
+		}
+	}
 
 	htmlFile.WriteStringWithNewLine("		</table>");
 	htmlFile.WriteStringWithNewLine("	</body>");

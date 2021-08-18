@@ -13,6 +13,8 @@ CreateNameInfoNameSpreadsheet A:\SakuraWars2\ExtractedData\Disc1\InfoNamePNG
 ExtractSysFiles a:\SakuraWars2\Disc1_Original a:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\StoryTextPalette.bin a:\sakurawars2\ExtractedData\Disc1\Sys
 CreateSysSpreadsheets A:\SakuraWars2\ExtractedData\All\Sys A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\Duplicates_Sys.txt a:\SakuraWars2\Disc_All\Mes
 ExtractMiniGames a:\SakuraWars2\Disc1_Original 0 a:\SakuraWars2\ExtractedData\Disc1\MiniGames\
+CreateMiniGameSpreadsheets a:\SakuraWars2\ExtractedData\Disc1\MiniGames\ForWebsite
+CreateIndexFile a:\SakuraWars2\Disc_All\Mes a:\SakuraWars2\Disc_All\Sk a:\SakuraWars2\ExtractedData\Disc1\MiniGames\ForWebsite a:\SakuraWars2\Index.php
 FindData.exe a:\SakuraWars2\Disc1_Original a:\SakuraWars2\find.bin
 
 ExtractText C:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1\SAKURA1 C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data\StoryTextPalette.bin C:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\Disc1\Text

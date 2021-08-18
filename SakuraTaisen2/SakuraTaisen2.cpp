@@ -54,6 +54,7 @@ using std::unordered_map;
 #include "Source/CreateSysSpreadsheets.h"
 #include "Source/CreateIndexFile.h"
 #include "Source/MiniGameExtraction.h"
+#include "Source/CreateMiniGameSpreadsheets.h"
 
 void PrintHelp()
 {
@@ -90,6 +91,7 @@ void PrintHelp()
 	printf("YabauseToMednafen yabauseFilePath outFile\n");
 	printf("DumpBitmap inputFilePath outDirectory\n");
 	printf("ExtractMiniGames rootSakuraDirectory isBmp outDir\n");
+	printf("CreateMiniGameSpreadsheets miniGameImageDirectory\n");
 	printf("PatchGame isDisc2 rootSakuraTaisenDirectory patchedSakuraTaisenDirectory translatedTextDirectory fontSheet originalPalette patchedTMapSpDataPath mainMenuFontSheetPath mainMenuBgndPatchedImage optionsImagePatched translatedDataDirectory extractedWklDir\n");
 }
 
@@ -165,6 +167,12 @@ int main(int argc, char *argv[])
 
 		CreateNameInfoNameSpreadsheet(imageDirectory);
 	}
+	else if (command == "CreateMiniGameSpreadsheets" && argc == 3)
+	{
+		const string miniGameImagesDirectory = string(argv[2]) + Seperators;
+
+		CreateMinigameSpreadsheets(miniGameImagesDirectory);
+	}
 	else if(command == "ExtractMNameCGFiles" && argc == 5 )
 	{
 		const string rootSakuraTaisenDirectory = string(argv[2]) + Seperators;
@@ -214,13 +222,14 @@ int main(int argc, char *argv[])
 
 		ExtractMiniGames(rootSakuraTaisenDirectory, bmpFormat, outDirectory);
 	}
-	else if (command == "CreateIndexFile" && argc == 5)
+	else if (command == "CreateIndexFile" && argc == 6)
 	{
-		const string mesFileDirectory = string(argv[2]) + Seperators;
-		const string skFileDirectory  = string(argv[3]) + Seperators;
-		const string outFilePath      = string(argv[4]);
+		const string mesFileDirectory  = string(argv[2]) + Seperators;
+		const string skFileDirectory   = string(argv[3]) + Seperators;
+		const string miniGameDirectory = string(argv[4]) + Seperators;
+		const string outFilePath       = string(argv[5]);
 
-		CreateIndexFile(mesFileDirectory, skFileDirectory, outFilePath);
+		CreateIndexFile(mesFileDirectory, skFileDirectory, miniGameDirectory, outFilePath);
 	}
 	else
 	{
