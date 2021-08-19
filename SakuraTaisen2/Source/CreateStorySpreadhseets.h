@@ -456,6 +456,12 @@ bool CreateStoryTextSpreadsheets(const string& dialogImageDirectory, const strin
 			htmlFile.WriteString("                    var english   = jsonEntry.English.replace(/\\\\/g, \'\');\n");
 			htmlFile.WriteString("                    var divId     = \"#\" + jsonEntry.DivId;\n");
 			htmlFile.WriteString("                    var trId      = \"tr_\" + jsonEntry.DivId;\n");
+			htmlFile.WriteString("                    \n");
+			htmlFile.WriteString("                    if (!document.getElementById(trId))\n");
+			htmlFile.WriteString("                    {\n");
+			htmlFile.WriteString("                         continue;\n");
+			htmlFile.WriteString("                    }\n");
+			htmlFile.WriteString("                    \n");
 			htmlFile.WriteString("                    if( english != \"Untranslated\" && english != \"<div>Untranslated</div>\")\n");
 			htmlFile.WriteString("                    {\n");
 			htmlFile.WriteString("                         if( document.getElementById(trId).bgColor != \"#fec8c8\" )\n");
@@ -490,6 +496,12 @@ bool CreateStoryTextSpreadsheets(const string& dialogImageDirectory, const strin
 			htmlFile.WriteString("                         var divId    = \"#edit_\" + i;\n");
 			htmlFile.WriteString("                         var trId     = \"tr_edit_\" + i;\n");
 			htmlFile.WriteString("                         var crcId    = \"crc_\" + i;\n");
+			htmlFile.WriteString("                         \n");
+			htmlFile.WriteString("                         if (!document.getElementById(trId) || !document.getElementById(crcId))\n");
+			htmlFile.WriteString("                         {\n");
+			htmlFile.WriteString("                              continue;\n");
+			htmlFile.WriteString("                         }\n");
+			htmlFile.WriteString("                         \n");
 			htmlFile.WriteString("                         var crcValue = document.getElementById(crcId).innerHTML;\n");
 			htmlFile.WriteString("                         var translatedText = document.getElementById(\"edit_\" + i).value;\n");
 			htmlFile.WriteString("                         crcValue     = parseInt(crcValue, 16)\n");
