@@ -398,6 +398,8 @@ bool CreateSysSpreadsheets(const string& dialogImageDirectory, const string& dup
 			htmlFile.WriteString("}\n");
 
 			//AttemptToLoadDuplicateData function
+			htmlFile.WriteString("var TotalPendingDupLoads = 0;\n");
+			htmlFile.WriteString("var NumDupsLoaded = 0;\n");
 			htmlFile.WriteString("function AttemptToLoadDuplicateData(inDivID, inCRC, inTrID, inPercentComplete)\n");
 			htmlFile.WriteString("{\n");
 			htmlFile.WriteString("     $.ajax({\n");
@@ -406,7 +408,8 @@ bool CreateSysSpreadsheets(const string& dialogImageDirectory, const string& dup
 			htmlFile.WriteString("     data: { inCrc: inCRC},\n");
 			htmlFile.WriteString("     success: function(result)\n");
 			htmlFile.WriteString("     {\n");
-			htmlFile.WriteString("          UpdateLoadingBar(inPercentComplete);\n\n");
+			htmlFile.WriteString("          NumDupsLoaded = NumDupsLoaded + 1;\n");
+			htmlFile.WriteString("          UpdateLoadingBar(NumDupsLoaded/TotalPendingDupLoads);\n\n");
 			htmlFile.WriteString("          var json = $.parseJSON(result);\n");
 			htmlFile.WriteString("          var i;\n");
 			htmlFile.WriteString("          for (i = 0; i < json.length; i++)\n");
@@ -472,6 +475,7 @@ bool CreateSysSpreadsheets(const string& dialogImageDirectory, const string& dup
 			htmlFile.WriteString("               }\n");
 			htmlFile.WriteString("               else\n");
 			htmlFile.WriteString("               {\n");
+			htmlFile.WriteString("                    TotalPendingDupLoads = numDupsPendingLoad;\n\n");
 			htmlFile.WriteString("                    var lastImageIndex  = document.getElementById(\"LastImageIndex\").innerHTML;\n");
 			htmlFile.WriteString("                    var numDupProcessed = 0;\n");
 			htmlFile.WriteString("                    for(i = 1; i < lastImageIndex; ++i)\n");

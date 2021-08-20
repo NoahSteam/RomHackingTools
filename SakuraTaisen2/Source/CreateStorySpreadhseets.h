@@ -403,6 +403,8 @@ bool CreateStoryTextSpreadsheets(const string& dialogImageDirectory, const strin
 			htmlFile.WriteString("}\n");
 
 			//AttemptToLoadDuplicateData function
+			htmlFile.WriteString("var TotalPendingDupLoads = 0;\n");
+			htmlFile.WriteString("var NumDupsLoaded = 0;\n");
 			htmlFile.WriteString("function AttemptToLoadDuplicateData(inDivID, inCRC, inTrID, inPercentComplete)\n");
 			htmlFile.WriteString("{\n");
 			htmlFile.WriteString("     $.ajax({\n");
@@ -411,7 +413,8 @@ bool CreateStoryTextSpreadsheets(const string& dialogImageDirectory, const strin
 			htmlFile.WriteString("     data: { inCrc: inCRC},\n");
 			htmlFile.WriteString("     success: function(result)\n");
 			htmlFile.WriteString("     {\n");
-			htmlFile.WriteString("          UpdateLoadingBar(inPercentComplete);\n\n");
+			htmlFile.WriteString("          NumDupsLoaded = NumDupsLoaded + 1;\n");
+			htmlFile.WriteString("          UpdateLoadingBar(NumDupsLoaded/TotalPendingDupLoads);\n\n");
 			htmlFile.WriteString("          var json = $.parseJSON(result);\n");
 			htmlFile.WriteString("          var i;\n");
 			htmlFile.WriteString("          for (i = 0; i < json.length; i++)\n");
@@ -483,6 +486,7 @@ bool CreateStoryTextSpreadsheets(const string& dialogImageDirectory, const strin
 			htmlFile.WriteString("               }\n");
 			htmlFile.WriteString("               else\n");
 			htmlFile.WriteString("               {\n");
+			htmlFile.WriteString("                    TotalPendingDupLoads = numDupsPendingLoad;\n\n");
 			htmlFile.WriteString("                    var lastImageIndex  = document.getElementById(\"LastImageIndex\").innerHTML;\n");
 			htmlFile.WriteString("                    var numDupProcessed = 0;\n");
 			htmlFile.WriteString("                    for(i = 1; i < lastImageIndex; ++i)\n");
@@ -558,7 +562,7 @@ bool CreateStoryTextSpreadsheets(const string& dialogImageDirectory, const strin
 			htmlFile.WriteString("<b>Instructions:</b><br>\n");
 			htmlFile.WriteString("-Please let me know on Discord once the file is complete.<br>\n");
 			htmlFile.WriteString("-This page is best displayed using Chrome.  Otherwise some of the table borders are missing for some reason.<br>\n");
-			htmlFile.WriteString("-Your changes are automatically saved.<br>\n");
+			htmlFile.WriteString("-Your changes are automatically saved.  You need to be connected to the internet.<br>\n");
 			htmlFile.WriteString("-Press the Load Data button when you come back to the page to load your changes.<br>\n");
 			htmlFile.WriteString("-Please wait for the Load Bar to complete.  It's a bit slow, but as more of the file is translated, it will speed up.  If it gets stuck in the 90's, that's fine, consider it done. I'll fix this bug soon.<br><br>\n");
 
