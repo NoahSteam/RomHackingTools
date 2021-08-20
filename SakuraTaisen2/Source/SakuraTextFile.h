@@ -515,7 +515,7 @@ private:
 
 			const unsigned int* pDialogEntryHeader = (unsigned int*)(mpTextHeader)+1;
 			const int numBytesPerEntry = 4;
-			const int numStrings = (textHeaderSize / numBytesPerEntry);
+			const int numStrings = (textHeaderSize / numBytesPerEntry) - 1; //First entry is just the 4 byte value saying how big the table is
 			for (int i = 0; i < numStrings; ++i)
 			{
 				const unsigned int stringInfo = SwapByteOrder(pDialogEntryHeader[i]);

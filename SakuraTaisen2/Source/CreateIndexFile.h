@@ -66,6 +66,19 @@ void CreateIndexFile(const string& inMesFileDirectory, const string& inSKFileDir
 	htmlFile.WriteStringWithNewLine("				Claim");
 	htmlFile.WriteStringWithNewLine("			</th>");
 
+	auto AddRowForFile = [&htmlFile](const char* pFileName, const int numLines)
+	{
+		htmlFile.Printf("			<?php\n");
+		htmlFile.Printf("				$searchFile = \"%s\";\n", pFileName);
+		htmlFile.Printf("				$numLines = \"%i\";\n", numLines);
+		htmlFile.Printf("				include 'GetFileOwners.php';\n");
+		htmlFile.Printf("				include 'GetFileProgress.php';\n");
+		htmlFile.Printf("			?>\n");
+		htmlFile.Printf("\n");
+		htmlFile.Printf("				<tr bgcolor = <?php echo \"$progressColor\" ?> ><td align = \"center\"><a href = \"%s.php\">%s</a></td><td align = \"center\"> <?php echo $fileOwners; ?> </td><td align = \"center\"><?php echo \"(\".$linesTranslated.\" of %i)\" ?></td><td><button onclick = \"TakeOwnershipOfFile('%s')\">Take Ownership</button></td></tr>\n", pFileName, pFileName, numLines, pFileName);
+	
+	};
+
 	//Write entries
 	{
 		vector<FileNameContainer> skFiles;
@@ -84,14 +97,11 @@ void CreateIndexFile(const string& inMesFileDirectory, const string& inSKFileDir
 		for (const SakuraTextFile& skFile : sakuraTextFiles)
 		{
 			const char* pFileName = skFile.mFileNameInfo.mNoExtension.c_str();
-
-			htmlFile.Printf("			<?php\n");
-			htmlFile.Printf("				$searchFile = \"%s\";\n", pFileName);
-			htmlFile.Printf("				include 'GetFileOwners.php';\n");
-			htmlFile.Printf("				include 'GetFileProgress.php';\n");
-			htmlFile.Printf("			?>\n");
-			htmlFile.Printf("\n");
-			htmlFile.Printf("				<tr bgcolor = <?php echo \"$progressColor\" ?> ><td align = \"center\"><a href = \"%s.php\">%s</a></td><td align = \"center\"> <?php echo $fileOwners; ?> </td><td align = \"center\"><?php echo \"(\".$linesTranslated.\" of %i)\" ?></td><td><button onclick = \"TakeOwnershipOfFile('%s')\">Take Ownership</button></td></tr>\n", pFileName, pFileName, (int)skFile.mLines.size(), pFileName);
+			const int numLines = (int)skFile.mLines.size();
+			if( numLines > 0 )
+			{
+				AddRowForFile(pFileName, numLines);
+			}
 		}
 
 		for (const SysFileExtractor& sysFile : sysFiles)
@@ -102,93 +112,40 @@ void CreateIndexFile(const string& inMesFileDirectory, const string& inSKFileDir
 			}
 
 			const char* pFileName = sysFile.mFileNameInfo.mNoExtension.c_str();
+			const int numLines = (int)sysFile.mLines.size();
 
-			htmlFile.Printf("			<?php\n");
-			htmlFile.Printf("				$searchFile = \"%s\";\n", pFileName);
-			htmlFile.Printf("				include 'GetFileOwners.php';\n");
-			htmlFile.Printf("				include 'GetFileProgress.php';\n");
-			htmlFile.Printf("			?>\n");
-			htmlFile.Printf("\n");
-			htmlFile.Printf("				<tr bgcolor = <?php echo \"$progressColor\" ?> ><td align = \"center\"><a href = \"%s.php\">%s</a></td><td align = \"center\"> <?php echo $fileOwners; ?> </td><td align = \"center\"><?php echo \"(\".$linesTranslated.\" of %i)\" ?></td><td><button onclick = \"TakeOwnershipOfFile('%s')\">Take Ownership</button></td></tr>\n", pFileName, pFileName, (int)sysFile.mLines.size(), pFileName);
+			AddRowForFile(pFileName, numLines);
 		}
 	}
 
 	//Infoname
 	{
-		const char* pFileName = "InfoName";
-		const int numFiles = 267;
-		htmlFile.Printf("			<?php\n");
-		htmlFile.Printf("				$searchFile = \"%s\";\n", pFileName);
-		htmlFile.Printf("				include 'GetFileOwners.php';\n");
-		htmlFile.Printf("				include 'GetFileProgress.php';\n");
-		htmlFile.Printf("			?>\n");
-		htmlFile.Printf("\n");
-		htmlFile.Printf("				<tr bgcolor = <?php echo \"$progressColor\" ?> ><td align = \"center\"><a href = \"%s.php\">%s</a></td><td align = \"center\"> <?php echo $fileOwners; ?> </td><td align = \"center\"><?php echo \"(\".$linesTranslated.\" of %i)\" ?></td><td><button onclick = \"TakeOwnershipOfFile('%s')\">Take Ownership</button></td></tr>\n", pFileName, pFileName, numFiles, pFileName);
+		AddRowForFile("InfoName", 267);
 	}
 
 	//GoverKV
 	{
-		const char* pFileName = "GoverKV";
-		const int numFiles = 53;
-		htmlFile.Printf("			<?php\n");
-		htmlFile.Printf("				$searchFile = \"%s\";\n", pFileName);
-		htmlFile.Printf("				include 'GetFileOwners.php';\n");
-		htmlFile.Printf("				include 'GetFileProgress.php';\n");
-		htmlFile.Printf("			?>\n");
-		htmlFile.Printf("\n");
-		htmlFile.Printf("				<tr bgcolor = <?php echo \"$progressColor\" ?> ><td align = \"center\"><a href = \"%s.php\">%s</a></td><td align = \"center\"> <?php echo $fileOwners; ?> </td><td align = \"center\"><?php echo \"(\".$linesTranslated.\" of %i)\" ?></td><td><button onclick = \"TakeOwnershipOfFile('%s')\">Take Ownership</button></td></tr>\n", pFileName, pFileName, numFiles, pFileName);
+		AddRowForFile("GoverKV", 53);
 	}
 
 	//MNameCG1
 	{
-		const char* pFileName = "MNameCG1";
-		int numFiles = 49;
-		htmlFile.Printf("			<?php\n");
-		htmlFile.Printf("				$searchFile = \"%s\";\n", pFileName);
-		htmlFile.Printf("				include 'GetFileOwners.php';\n");
-		htmlFile.Printf("				include 'GetFileProgress.php';\n");
-		htmlFile.Printf("			?>\n");
-		htmlFile.Printf("\n");
-		htmlFile.Printf("				<tr bgcolor = <?php echo \"$progressColor\" ?> ><td align = \"center\"><a href = \"%s.php\">%s</a></td><td align = \"center\"> <?php echo $fileOwners; ?> </td><td align = \"center\"><?php echo \"(\".$linesTranslated.\" of %i)\" ?></td><td><button onclick = \"TakeOwnershipOfFile('%s')\">Take Ownership</button></td></tr>\n", pFileName, pFileName, numFiles, pFileName);
+		AddRowForFile("MNameCG1", 49);
 	}
 
 	//MNameCG2
 	{
-		const char* pFileName = "MNameCG2";
-		const int numFiles = 7;
-		htmlFile.Printf("			<?php\n");
-		htmlFile.Printf("				$searchFile = \"%s\";\n", pFileName);
-		htmlFile.Printf("				include 'GetFileOwners.php';\n");
-		htmlFile.Printf("				include 'GetFileProgress.php';\n");
-		htmlFile.Printf("			?>\n");
-		htmlFile.Printf("\n");
-		htmlFile.Printf("				<tr bgcolor = <?php echo \"$progressColor\" ?> ><td align = \"center\"><a href = \"%s.php\">%s</a></td><td align = \"center\"> <?php echo $fileOwners; ?> </td><td align = \"center\"><?php echo \"(\".$linesTranslated.\" of %i)\" ?></td><td><button onclick = \"TakeOwnershipOfFile('%s')\">Take Ownership</button></td></tr>\n", pFileName, pFileName, numFiles, pFileName);
+		AddRowForFile("MNameCG2", 7);
 	}
 
 	//MNameCG3
 	{
-		const char* pFileName = "MNameCG3";
-		const int numFiles = 15;
-		htmlFile.Printf("			<?php\n");
-		htmlFile.Printf("				$searchFile = \"%s\";\n", pFileName);
-		htmlFile.Printf("				include 'GetFileOwners.php';\n");
-		htmlFile.Printf("				include 'GetFileProgress.php';\n");
-		htmlFile.Printf("			?>\n");
-		htmlFile.Printf("\n");
-		htmlFile.Printf("				<tr bgcolor = <?php echo \"$progressColor\" ?> ><td align = \"center\"><a href = \"%s.php\">%s</a></td><td align = \"center\"> <?php echo $fileOwners; ?> </td><td align = \"center\"><?php echo \"(\".$linesTranslated.\" of %i)\" ?></td><td><button onclick = \"TakeOwnershipOfFile('%s')\">Take Ownership</button></td></tr>\n", pFileName, pFileName, numFiles, pFileName);
+		AddRowForFile("MNameCG3", 15);
 	}
 
 	//PBOOK_FL
 	{
-		const char* pFileName = "PBOOK_FL";
-		const int numFiles = 98;
-		htmlFile.Printf("			<?php\n");
-		htmlFile.Printf("				$searchFile = \"%s\";\n", pFileName);
-		htmlFile.Printf("				include 'GetFileOwners.php';\n");
-		htmlFile.Printf("				include 'GetFileProgress.php';\n");
-		htmlFile.Printf("			?>\n");
-		htmlFile.Printf("\n");
-		htmlFile.Printf("				<tr bgcolor = <?php echo \"$progressColor\" ?> ><td align = \"center\"><a href = \"%s.php\">%s</a></td><td align = \"center\"> <?php echo $fileOwners; ?> </td><td align = \"center\"><?php echo \"(\".$linesTranslated.\" of %i)\" ?></td><td><button onclick = \"TakeOwnershipOfFile('%s')\">Take Ownership</button></td></tr>\n", pFileName, pFileName, numFiles, pFileName);
+		AddRowForFile("PBOOK_FL", 98);
 	}
 
 	//Minigames
@@ -206,13 +163,8 @@ void CreateIndexFile(const string& inMesFileDirectory, const string& inSKFileDir
 
 			const char* pFileName = miniGameDirectoryName.mNoExtension.c_str();
 			const int numFiles = (int)miniGameImages.size();
-			htmlFile.Printf("			<?php\n");
-			htmlFile.Printf("				$searchFile = \"%s\";\n", pFileName);
-			htmlFile.Printf("				include 'GetFileOwners.php';\n");
-			htmlFile.Printf("				include 'GetFileProgress.php';\n");
-			htmlFile.Printf("			?>\n");
-			htmlFile.Printf("\n");
-			htmlFile.Printf("				<tr bgcolor = <?php echo \"$progressColor\" ?> ><td align = \"center\"><a href = \"%s.php\">%s</a></td><td align = \"center\"> <?php echo $fileOwners; ?> </td><td align = \"center\"><?php echo \"(\".$linesTranslated.\" of %i)\" ?></td><td><button onclick = \"TakeOwnershipOfFile('%s')\">Take Ownership</button></td></tr>\n", pFileName, pFileName, numFiles, pFileName);
+
+			AddRowForFile(pFileName, numFiles);
 		}
 	}
 
