@@ -82,7 +82,7 @@ bool CreateNamePBookFLSpreadsheet(const string& imageDirectory)
 
 	htmlFile.WriteString("<html>\n");
 	htmlFile.WriteString("	<head><style>textarea {width: 100%;top: 0; left: 0; right: 0; bottom: 0; position: absolute; resize: none;-webkit-box-sizing: border-box; -moz-box-sizing: border-box; box-sizing: border-box;} table {border-collapse: collapse;} table, th, td { position: relative; border: 1px solid black;}#myProgress {width: 100%;	background-color: #ddd;} #myBar {width: 1%;height: 30px; background-color: #4CAF50;} .rotate90{ -webkit - transform: rotate(270deg); -moz - transform: rotate(270deg); -o - transform: rotate(270deg); -ms - transform: rotate(270deg); transform: rotate(270deg); }</style>\n");
-	htmlFile.WriteString("	<div id=\"FileName\" style=\"display: none;\">GovePBOOK_FLrKV</div>\n");
+	htmlFile.WriteString("	<div id=\"FileName\" style=\"display: none;\">PBOOK_FL</div>\n");
 	htmlFile.WriteString("	<script src=\"https://ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js\">\n");
 	htmlFile.WriteString("		$( window ).on( \"load\", function()\n");
 	htmlFile.WriteString("		{\n");
