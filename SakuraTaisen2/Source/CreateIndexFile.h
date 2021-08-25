@@ -62,9 +62,6 @@ void CreateIndexFile(const string& inMesFileDirectory, const string& inSKFileDir
 	htmlFile.WriteStringWithNewLine("			<th>");
 	htmlFile.WriteStringWithNewLine("				Progress");
 	htmlFile.WriteStringWithNewLine("			</th>");
-	htmlFile.WriteStringWithNewLine("			<th>");
-	htmlFile.WriteStringWithNewLine("				Claim");
-	htmlFile.WriteStringWithNewLine("			</th>");
 
 	auto AddRowForFile = [&htmlFile](const char* pFileName, const int numLines)
 	{
@@ -75,7 +72,7 @@ void CreateIndexFile(const string& inMesFileDirectory, const string& inSKFileDir
 		htmlFile.Printf("				include 'GetFileProgress.php';\n");
 		htmlFile.Printf("			?>\n");
 		htmlFile.Printf("\n");
-		htmlFile.Printf("				<tr bgcolor = <?php echo \"$progressColor\" ?> ><td align = \"center\"><a href = \"%s.php\">%s</a></td><td align = \"center\"> <?php echo $fileOwners; ?> </td><td align = \"center\"><?php echo \"(\".$linesTranslated.\" of %i)\" ?></td><td><button onclick = \"TakeOwnershipOfFile('%s')\">Take Ownership</button></td></tr>\n", pFileName, pFileName, numLines, pFileName);
+		htmlFile.Printf("				<tr bgcolor = <?php echo \"$progressColor\" ?> ><td align = \"center\"><a href = \"%s.php\">%s</a></td><td align = \"center\"> <?php echo $fileOwners; ?> </td><td align = \"center\"><?php echo \"(\".$linesTranslated.\" of %i)\" ?></td></tr>\n", pFileName, pFileName, numLines);
 	
 	};
 
