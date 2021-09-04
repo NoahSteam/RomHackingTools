@@ -466,6 +466,7 @@ bool TextFileData::InitializeTextFile(bool bFixupSpecialCharacters, bool bCollap
 	const string space(" ");
 	const string newLine("<br>");
 	char* pToken   = nullptr;
+
 	while( fgets(buffer, bufferSize, pFile) != nullptr )
 	{
 		TextLine newLineOfText;
@@ -481,17 +482,28 @@ bool TextFileData::InitializeTextFile(bool bFixupSpecialCharacters, bool bCollap
 			const size_t tokenLen = strlen(pToken);
 			for(size_t t = 0, f = 0; t < tokenLen; t)
 			{	
-				if( pToken[t] == (unsigned char)0xef || pToken[t] == (unsigned char)0xbb || pToken[t] == (unsigned char)0xbf )
+				unsigned char uToken = (unsigned char)pToken[t];
+
+				//Skip past UTF8 byte order marker
+				if( uToken == (unsigned char)0xef || uToken == (unsigned char)0xbb || uToken == (unsigned char)0xbf )
 				{
 					t += 1;
 				}
-				//Skip past UTF8 byte order marker
-				else if( pToken[t] == (unsigned char)0xc3 && pToken[t+1] == (unsigned char)0xa8 )
+				
+				//è
+				else if( bFixupSpecialCharacters &&
+						uToken >= 0x80 &&
+						t + 1 < tokenLen && 
+						(unsigned char)(pToken[t+1]) <= 0xbf )
 				{
+					const unsigned char uTokenNext = (unsigned char)pToken[t+1];
+					const unsigned char fontSheetIndex = 192 + (uTokenNext - 0x80);
+
 					t += 2;
-					fixedString[f++] = (unsigned char)232;
+					fixedString[f++] = fontSheetIndex;
 				}
-				else if( bFixupSpecialCharacters && pToken[t] == (unsigned char)0xe2 && pToken[t+1] == (unsigned char)0x80 && pToken[t+2] == (unsigned char)0xa6 )
+
+				else if( bFixupSpecialCharacters && uToken == (unsigned char)0xe2 && (unsigned char)pToken[t+1] == (unsigned char)0x80 && (unsigned char)pToken[t+2] == (unsigned char)0xa6 )
 				{
 					t += 3;
 
@@ -506,27 +518,27 @@ bool TextFileData::InitializeTextFile(bool bFixupSpecialCharacters, bool bCollap
 						fixedString[f++] = '.';
 					}
 				}
-				else if( bFixupSpecialCharacters && pToken[t] == (unsigned char)0xe2 && pToken[t+1] == (unsigned char)0x80 && pToken[t+2] == (unsigned char)0x99 )
+				else if( bFixupSpecialCharacters && uToken == (unsigned char)0xe2 && (unsigned char)pToken[t+1] == (unsigned char)0x80 && (unsigned char)pToken[t+2] == (unsigned char)0x99 )
 				{
 					t += 3;
 					fixedString[f++] = '\'';
 				}
-				else if( bFixupSpecialCharacters && pToken[t] == (unsigned char)0xe2 && pToken[t+1] == (unsigned char)0x80 && pToken[t+2] == (unsigned char)0x9c )
+				else if( bFixupSpecialCharacters && uToken == (unsigned char)0xe2 && (unsigned char)pToken[t+1] == (unsigned char)0x80 && (unsigned char)pToken[t+2] == (unsigned char)0x9c )
 				{
 					t += 3;
 					fixedString[f++] = '\"';
 				}
-				else if( bFixupSpecialCharacters && pToken[t] == (unsigned char)0xe2 && pToken[t+1] == (unsigned char)0x80 && pToken[t+2] == (unsigned char)0x9d )
+				else if( bFixupSpecialCharacters && uToken == (unsigned char)0xe2 && (unsigned char)pToken[t+1] == (unsigned char)0x80 && (unsigned char)pToken[t+2] == (unsigned char)0x9d )
 				{
 					t += 3;
 					fixedString[f++] = '\"';
 				}
-				else if( bFixupSpecialCharacters && pToken[t] == (unsigned char)0xe2 && pToken[t+1] == (unsigned char)0x80 && pToken[t+2] == (unsigned char)0x98 )
+				else if( bFixupSpecialCharacters && uToken == (unsigned char)0xe2 && (unsigned char)pToken[t+1] == (unsigned char)0x80 && (unsigned char)pToken[t+2] == (unsigned char)0x98 )
 				{
 					t += 3;
 					fixedString[f++] = '\'';
 				}
-				else if( bFixupSpecialCharacters && pToken[t] == (unsigned char)0xe2 )
+				else if( bFixupSpecialCharacters && uToken == (unsigned char)0xe2 )
 				{
 					printf("Unhandled multi-byte character in string %s in %s", pToken, mFileNameInfo.mFileName.c_str());
 
