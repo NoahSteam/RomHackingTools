@@ -1,0 +1,44 @@
+[Wein intro dialog]
+83 45 83 46 83 43 83 93 97 6C 81 42 83 74 83 40 83 93 83 5F 83 8A 83 41 0D 92 E9 8D 91 82 CC 8F EE 95 F1 82 CD 81 41 0D 05 0D 82 E0 82 A4 8E A8 82 C9 82 C8 82 B3 82 EA 82 DC 82 B5 82 BD 82 A9 
+
+//PS2
+Found a match in DATA.0 @0x07c4e9f1
+Found a match in DATA.0 @0x0a3e8343
+
+In memory:
+20323070
+2089b343
+
+Code that reads text is in:
+READY.BIN @0x0003bdf0 []
+
+003BC6FC[in memory] is where text type (eng or japanese) is determined (3bdfc in Ready.bin) 
+   //Put a breakpoint at 3bc77c to catch this
+   //Modify 3BD384 to be a nop instead of sll v0,v0,0x1 to change the spacing of the text
+
+//Function to space out Japanese text is 0x003B2B0 in runtime memory
+Which is the same as 0x0003c9b0 in READY.BIN
+
+//Function to space out English text is 0x003bd478 in runtime memory [0x0003CB78 Readby.bin]
+
+//Loaded in PS2 memory
+Found a match in Regions.m0400 @0x004bc35a
+Found a match in Regions.m0400 @0x00c63408
+
+//Loaded in Saturn memory
+Found a match in EV001.BMP @0x05e40000
+Found a match in FACEFONT.GRP @0x00230000
+Found a match in CLUT.GRP @0x05c0da00
+Found a match in DFWORK0.BIN @0x00200100
+Found a match in FACEFONT.GRP @0x00230000
+Found a match in FIELD0.BIN @0x06010000
+Found a match in ICON.GRP @0x05c0dd00
+Found a match in ITEM.GRP @0x05c17920
+Found a match in LOAD.BMP @0x0600e000
+Found a match in MT_VDP0.GRP @0x05c0da00
+Found a match in PANEL.GRP @0x05c57ce0
+Found a match in SIRO.GRP @0x05c1b160
+Found a match in STRING.GRP @0x05c0e7a0
+Found a match in TEN.BMP @0x0600f80c
+Found a match in WIN.GRP @0x05c102e0
+Found a match in 16.LNK @0x05a0b000

@@ -1,0 +1,53 @@
+Eng:
+05c0024a
+060FC24A
+002E8F52
+002B48D2 (read)
+
+JpMod:
+05c0024a
+060FC24A
+002E8F52
+002B46A8 (read)
+
+
+JP:
+05c0024a
+060FC24A
+???
+2b4442 (read at 2b431c)
+
+082C 0110[width/8, height] 002E
+Found a match in READY.BIN @0x0000cc34
+Found a match in READY0.BIN @0x00011c70
+Found a match in READY1.BIN @0x00011c70
+Found a match in READY2.BIN @0x00011c70
+Found a match in READY3.BIN @0x00011c70
+Found a match in READY4.BIN @0x00011c70
+Found a match in READY5.BIN @0x00011c70
+Found a match in READY6.BIN @0x00011c70
+Found a match in READY7.BIN @0x00011c70
+
+Japanese and English READY files have same rendering functions, but they are being swapped depending on the game.
+
+Eng Version
+Found a match in READY.BIN @0x0000cb5e
+Found a match in READY0.BIN @0x00011b9a
+Found a match in READY1.BIN @0x00011b9a
+Found a match in READY2.BIN @0x00011b9a
+Found a match in READY3.BIN @0x00011b9a
+Found a match in READY4.BIN @0x00011b9a
+Found a match in READY5.BIN @0x00011b9a
+Found a match in READY6.BIN @0x00011b9a
+Found a match in READY7.BIN @0x00011b9a
+
+JP Version: US rendering code:
+Found a match in READY.BIN @0x0000cb5e
+Found a match in READY0.BIN @0x0001185a
+Found a match in READY1.BIN @0x0001185a
+Found a match in READY2.BIN @0x0001185a
+Found a match in READY3.BIN @0x0001185a
+Found a match in READY4.BIN @0x0001185a
+Found a match in READY5.BIN @0x0001185a
+Found a match in READY6.BIN @0x0001185a
+Found a match in READY7.BIN @0x0001185a
