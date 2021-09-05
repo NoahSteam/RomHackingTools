@@ -265,10 +265,11 @@ class SakuraTranslationTable
 public:
 	const unsigned short GetIndex(unsigned char inChar) const
 	{
+		/*
 		if( inChar == '@' )
 		{
-			return 'u' + 16;// + 1;//'…' + 1;
-		}
+			return 133;//'u' + 16;// + 1;//'…' + 1;
+		}*/
 
 		if( inChar == '\n' )
 		{

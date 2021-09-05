@@ -473,7 +473,7 @@ bool TextFileData::InitializeTextFile(bool bFixupSpecialCharacters, bool bCollap
 	//	char *pNextToken   = nullptr;;
 		char* pContext     = nullptr;
 		const char* pDelim = " \n";
-
+		const unsigned char specialToken = 0x80;
 		pToken = strtok_s(buffer, pDelim, &pContext);
 		while(pToken != NULL)
 		{
@@ -492,8 +492,9 @@ bool TextFileData::InitializeTextFile(bool bFixupSpecialCharacters, bool bCollap
 				
 				//è
 				else if( bFixupSpecialCharacters &&
-						uToken >= 0x80 &&
+						uToken == 0xc3 &&
 						t + 1 < tokenLen && 
+						(unsigned char)(pToken[t+1]) >= 0x80 &&
 						(unsigned char)(pToken[t+1]) <= 0xbf )
 				{
 					const unsigned char uTokenNext = (unsigned char)pToken[t+1];
@@ -509,7 +510,7 @@ bool TextFileData::InitializeTextFile(bool bFixupSpecialCharacters, bool bCollap
 
 					if( bCollapseDots )
 					{
-						fixedString[f++] = '@';
+						fixedString[f++] = (unsigned char)133;//'@';
 					}
 					else
 					{
