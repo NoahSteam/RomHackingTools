@@ -20,6 +20,33 @@ READY.BIN @0x0003bdf0 []
 Which is the same as 0x0003c9b0 in READY.BIN
 
 //Function to space out English text is 0x003bd478 in runtime memory [0x0003CB78 Readby.bin]
+at the end v1 contains Y coordinate (3bd5bc)
+a0 contains the index of the character at start of function
+
+Text being read at 0x3074 in Ready.bin and 0x383974 in runtime memory 
+3bd49c possible x coord calc
+a3 appears to have x coords during this function?
+
+Code @ 3bd498 (sll t4,a1,0x05) modifies spacing ?
+
+Messing with code around 129e40 
+
+129e38 sll	v0,t1,0x01 modifies spacing?
+
+v1 contains character index at 3bc6e0
+
+383974 addu v0,a0,0x20
+
+129d8c a1, s2, s4, s7 contain character index
+129e64 index read into t0
+
+Modify spacing: 3bd544 to addiu	v0,0x4
+Modifying spacing for empty spaces: (003bc828 in memory)
+
+//Code exists here for spacing:
+Found a match in DATA.0 @0x002b4c2c
+Found a match in READY.BIN @0x0003cc2c
+
 
 //Loaded in PS2 memory
 Found a match in Regions.m0400 @0x004bc35a
