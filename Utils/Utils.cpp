@@ -1340,6 +1340,106 @@ bool TileExtractor::ExtractTiles(unsigned int inTileWidth, int inTileHeight, uns
 	return true;
 }
 
+////////////////////////////////////////
+//        BmpToSaturnConverter        //
+////////////////////////////////////////
+
+BmpToSaturnConverter::~BmpToSaturnConverter()
+{
+	delete mpPackedTiles;
+	mpPackedTiles = nullptr;
+	mPackedTileSize = 0;
+}
+
+bool BmpToSaturnConverter::ConvertBmpToSakuraFormat(const string& inBmpPath, bool bFixupAlphaColor, const unsigned short inAlphaColor, const unsigned int* pTileWidth, const unsigned int* pTileHeight)
+{
+	//Read in translated font sheet
+	BitmapReader origBmp;
+	if (!origBmp.ReadBitmap(inBmpPath))
+	{
+		return false;
+	}
+
+	const unsigned int imageWidth = pTileWidth ? *pTileWidth : origBmp.mBitmapData.mInfoHeader.mImageWidth;
+	const int imageHeight = pTileHeight ? *pTileHeight : origBmp.mBitmapData.mInfoHeader.mImageHeight;
+
+	if (!mTileExtractor.ExtractTiles(imageWidth, imageHeight, imageWidth, abs(imageHeight), origBmp))
+	{
+		return false;
+	}
+
+	mTileExtractor.mImageWidth = origBmp.mBitmapData.mInfoHeader.mImageWidth;
+	mTileExtractor.mImageHeight = origBmp.mBitmapData.mInfoHeader.mImageHeight;
+
+	//Convert it to the SakuraTaisen format
+	if (!mPalette.CreateFrom32BitData(origBmp.mBitmapData.mPaletteData.mpRGBA, origBmp.mBitmapData.mPaletteData.mSizeInBytes, false))
+	{
+		return false;
+	}
+
+	//Fix up palette
+	if (bFixupAlphaColor)
+	{
+		//First index needs to have the transparent color
+		int indexOfAlphaColor = -1;
+		for (int i = 0; i < mPalette.GetNumColors(); ++i)
+		{
+			assert(i * 2 < mPalette.GetSize());
+
+			const unsigned short color = *((short*)(mPalette.GetData() + i * 2));
+			if (color == inAlphaColor)
+			{
+				const unsigned short oldColor0 = *((unsigned short*)mPalette.GetData());
+				mPalette.SetValue(0, inAlphaColor);
+				mPalette.SetValue(i, oldColor0);
+				indexOfAlphaColor = i;
+				break;
+			}
+		}
+
+		if (indexOfAlphaColor == -1)
+		{
+			printf("Alpha Color not found.  Palette will not be correct. \n");
+			indexOfAlphaColor = 0;
+		}
+
+		//Fix up color data now that the palette has been modified
+		if (indexOfAlphaColor != -1)
+		{
+			mTileExtractor.FixupIndexOfAlphaColor((unsigned short)indexOfAlphaColor, origBmp.mBitmapData.mInfoHeader.mBitCount == 4);
+		}
+	}
+
+	return true;
+}
+
+void BmpToSaturnConverter::PackTiles()
+{
+	if (mTileExtractor.mTiles.size())
+	{
+		mPackedTileSize = mTileExtractor.mTiles.size() * mTileExtractor.mTiles[0].mTileSize;
+		mpPackedTiles = new char[mPackedTileSize];
+
+		int packedTileOffset = 0;
+		for (const TileExtractor::Tile& tile : mTileExtractor.mTiles)
+		{
+			memcpy_s(mpPackedTiles + packedTileOffset, mPackedTileSize - packedTileOffset, tile.mpTile, tile.mTileSize);
+
+			packedTileOffset += tile.mTileSize;
+		}
+	}
+}
+
+const char* BmpToSaturnConverter::GetImageData() const
+{
+	return mTileExtractor.mTiles[0].mpTile;
+}
+
+unsigned int BmpToSaturnConverter::GetImageDataSize() const
+{
+	return mTileExtractor.mTiles[0].mTileSize;
+}
+
 ////////////////////////////////
 //        MemoryBlocks        //
 ////////////////////////////////

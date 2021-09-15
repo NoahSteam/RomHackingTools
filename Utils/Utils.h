@@ -347,6 +347,25 @@ public:
 	void FixupIndexOfAlphaColor(const unsigned short inIndexOfAlphaColor, bool bInIs4bit);
 };
 
+struct BmpToSaturnConverter
+{
+	TileExtractor mTileExtractor;
+	PaletteData   mPalette;
+	char*         mpPackedTiles = nullptr;
+	unsigned int  mPackedTileSize = 0;
+
+	static const unsigned short CYAN = 0xe07f; //In little endian order
+	static const unsigned short WHITE = 0xff7f;
+	static const unsigned short BLACK = 0;
+
+	~BmpToSaturnConverter();
+
+	bool ConvertBmpToSakuraFormat(const std::string& inBmpPath, bool bFixupAlphaColor, const unsigned short inAlphaColor = CYAN, const unsigned int* pTileWidth = 0, const unsigned int* pTileHeight = 0);
+	void PackTiles();
+	const char* GetImageData() const;
+	unsigned int GetImageDataSize() const;
+};
+
 class MemoryBlocks
 {
 public:

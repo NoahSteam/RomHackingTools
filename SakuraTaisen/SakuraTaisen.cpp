@@ -88,114 +88,6 @@ void PrintPaletteColors(const string& paletteFile)
 	}
 }
 
-struct BmpToSakuraConverter
-{
-	TileExtractor mTileExtractor;
-	PaletteData   mPalette;
-	char*         mpPackedTiles = nullptr;
-	unsigned int  mPackedTileSize = 0;
-
-	static const unsigned short CYAN  = 0xe07f; //In little endian order
-	static const unsigned short WHITE = 0xff7f;
-	static const unsigned short BLACK = 0;
-
-	~BmpToSakuraConverter()
-	{
-		delete mpPackedTiles;
-		mpPackedTiles   = nullptr;
-		mPackedTileSize = 0;
-	}
-
-	bool ConvertBmpToSakuraFormat(const string& inBmpPath, bool bFixupAlphaColor, const unsigned short inAlphaColor = CYAN, const unsigned int* pTileWidth = 0, const unsigned int* pTileHeight = 0)
-	{
-		//Read in translated font sheet
-		BitmapReader origBmp;
-		if(!origBmp.ReadBitmap(inBmpPath))
-		{
-			return false;
-		}
-
-		const unsigned int imageWidth = pTileWidth ? *pTileWidth : origBmp.mBitmapData.mInfoHeader.mImageWidth;
-		const int imageHeight         = pTileHeight ? *pTileHeight : origBmp.mBitmapData.mInfoHeader.mImageHeight;
-
-		if(!mTileExtractor.ExtractTiles(imageWidth, imageHeight, imageWidth, abs(imageHeight), origBmp))
-		{
-			return false;
-		}
-
-		mTileExtractor.mImageWidth  = origBmp.mBitmapData.mInfoHeader.mImageWidth;
-		mTileExtractor.mImageHeight = origBmp.mBitmapData.mInfoHeader.mImageHeight;
-
-		//Convert it to the SakuraTaisen format
-		if( !mPalette.CreateFrom32BitData(origBmp.mBitmapData.mPaletteData.mpRGBA, origBmp.mBitmapData.mPaletteData.mSizeInBytes, false) )
-		{
-			return false;
-		}
-
-		//Fix up palette
-		if( bFixupAlphaColor )
-		{	
-			//First index needs to have the transparent color
-			int indexOfAlphaColor = -1;
-			for(int i = 0; i < mPalette.GetNumColors(); ++i)
-			{
-				assert(i * 2 < mPalette.GetSize());
-
-				const unsigned short color = *((short*)(mPalette.GetData() + i * 2));
-				if(color == inAlphaColor)
-				{
-					const unsigned short oldColor0 = *((unsigned short*)mPalette.GetData());
-					mPalette.SetValue(0, inAlphaColor);
-					mPalette.SetValue(i, oldColor0);
-					indexOfAlphaColor = i;
-					break;
-				}
-			}
-
-			if(indexOfAlphaColor == -1)
-			{
-				printf("Alpha Color not found.  Palette will not be correct. \n");
-				indexOfAlphaColor = 0;
-			}
-
-			//Fix up color data now that the palette has been modified
-			if( indexOfAlphaColor != -1 )
-			{
-				mTileExtractor.FixupIndexOfAlphaColor((unsigned short)indexOfAlphaColor, origBmp.mBitmapData.mInfoHeader.mBitCount == 4);
-			}
-		}
-
-		return true;
-	}
-
-	void PackTiles()
-	{
-		if( mTileExtractor.mTiles.size() )
-		{
-			mPackedTileSize = mTileExtractor.mTiles.size() * mTileExtractor.mTiles[0].mTileSize;
-			mpPackedTiles = new char[mPackedTileSize];
-
-			int packedTileOffset = 0;
-			for(const TileExtractor::Tile& tile : mTileExtractor.mTiles)
-			{
-				memcpy_s(mpPackedTiles + packedTileOffset, mPackedTileSize - packedTileOffset, tile.mpTile, tile.mTileSize);
-				
-				packedTileOffset += tile.mTileSize;
-			}
-		}
-	}
-
-	const char* GetImageData() const
-	{
-		return mTileExtractor.mTiles[0].mpTile;
-	}
-
-	unsigned int GetImageDataSize() const
-	{
-		return mTileExtractor.mTiles[0].mTileSize;
-	}
-};
-
 struct SakuraCompressedData
 {
 	char*         mpCompressedData = nullptr;
@@ -3488,8 +3380,8 @@ struct CompressedImagePatcher
 			   const unsigned long inBufferSize)
 	{
 		const string patchedOptionsSubmenuImagePath = inTranslatedDataDirectory + pTranlsatedImageName;
-		BmpToSakuraConverter patchedOptionsSubmenuImage;
-		if( !patchedOptionsSubmenuImage.ConvertBmpToSakuraFormat(patchedOptionsSubmenuImagePath, true, BmpToSakuraConverter::CYAN) )
+		BmpToSaturnConverter patchedOptionsSubmenuImage;
+		if( !patchedOptionsSubmenuImage.ConvertBmpToSakuraFormat(patchedOptionsSubmenuImagePath, true, BmpToSaturnConverter::CYAN) )
 		{
 			printf("CompressedImagePatcher: Couldn't convert image: %s.\n", patchedOptionsSubmenuImagePath.c_str());
 			return false;
@@ -3766,8 +3658,8 @@ bool FixupSakura(const string& rootDir, const string& inTranslatedOptionsBmp, co
 
 	//****Patch Options Image****
 	//Compress bgnd image
-	BmpToSakuraConverter patchedOptionsImage;
-	if( !patchedOptionsImage.ConvertBmpToSakuraFormat(inTranslatedOptionsBmp, true, BmpToSakuraConverter::CYAN) )
+	BmpToSaturnConverter patchedOptionsImage;
+	if( !patchedOptionsImage.ConvertBmpToSakuraFormat(inTranslatedOptionsBmp, true, BmpToSaturnConverter::CYAN) )
 	{
 		printf("FixupSakura: Couldn't convert image: %s.\n", inTranslatedOptionsBmp.c_str());
 		return false;
@@ -3857,8 +3749,8 @@ bool FixupSakura(const string& rootDir, const string& inTranslatedOptionsBmp, co
 		uncompressedData.UncompressData((void*)(origSakuraData.GetData() + origOffset), origCompressedSize);
 		
 		const string translatedImagePath = inTranslatedDataDirectory + "LoadMenu.bmp";
-		BmpToSakuraConverter translatedImage;
-		if( !translatedImage.ConvertBmpToSakuraFormat(translatedImagePath, true, BmpToSakuraConverter::CYAN) )
+		BmpToSaturnConverter translatedImage;
+		if( !translatedImage.ConvertBmpToSakuraFormat(translatedImagePath, true, BmpToSaturnConverter::CYAN) )
 		{
 			printf("FixupSakura: Couldn't convert image: %s.\n", translatedImagePath.c_str());
 			return false;
@@ -3866,8 +3758,8 @@ bool FixupSakura(const string& rootDir, const string& inTranslatedOptionsBmp, co
 
 		//Backup ram
 		const string cartRamImagePath = inTranslatedDataDirectory + "CartridgeRam.bmp";
-		BmpToSakuraConverter cartRamImage;
-		if( !cartRamImage.ConvertBmpToSakuraFormat(cartRamImagePath, true, BmpToSakuraConverter::CYAN) )
+		BmpToSaturnConverter cartRamImage;
+		if( !cartRamImage.ConvertBmpToSakuraFormat(cartRamImagePath, true, BmpToSaturnConverter::CYAN) )
 		{
 			printf("FixupSakura: Couldn't convert image: %s.\n", cartRamImagePath.c_str());
 			return false;
@@ -3875,8 +3767,8 @@ bool FixupSakura(const string& rootDir, const string& inTranslatedOptionsBmp, co
 
 		//Backup ram
 		const string copyFileImagePath = inTranslatedDataDirectory + "CopyFile.bmp";
-		BmpToSakuraConverter copyFileImage;
-		if( !copyFileImage.ConvertBmpToSakuraFormat(copyFileImagePath, true, BmpToSakuraConverter::CYAN) )
+		BmpToSaturnConverter copyFileImage;
+		if( !copyFileImage.ConvertBmpToSakuraFormat(copyFileImagePath, true, BmpToSaturnConverter::CYAN) )
 		{
 			printf("FixupSakura: Couldn't convert image: %s.\n", copyFileImagePath.c_str());
 			return false;
@@ -3931,8 +3823,8 @@ bool FixupSakura(const string& rootDir, const string& inTranslatedOptionsBmp, co
 		const unsigned int origDialogOptionsOffset = GIsDisc2 ? 0x00059838 : 0x00059700;
 
 		string translatedPausedOptionsImagePath = inTranslatedDataDirectory + string("PauseOptions.bmp");
-		BmpToSakuraConverter patchedPausedOptionsImage;
-		if( !patchedPausedOptionsImage.ConvertBmpToSakuraFormat(translatedPausedOptionsImagePath, false, BmpToSakuraConverter::WHITE) )
+		BmpToSaturnConverter patchedPausedOptionsImage;
+		if( !patchedPausedOptionsImage.ConvertBmpToSakuraFormat(translatedPausedOptionsImagePath, false, BmpToSaturnConverter::WHITE) )
 		{
 			printf("FixupSakura: Couldn't convert image: %s.\n", translatedPausedOptionsImagePath.c_str());
 			return false;
@@ -3951,9 +3843,9 @@ bool FixupSakura(const string& rootDir, const string& inTranslatedOptionsBmp, co
 		const unsigned int origGameOptionsOffset = GIsDisc2 ? 0x000599b0 : 0x00059878;
 
 		string translatedImagePath = inTranslatedDataDirectory + string("GameOptions.bmp");
-		BmpToSakuraConverter patchedImage;
+		BmpToSaturnConverter patchedImage;
 		const unsigned int gameOptionTileDim = 16;
-		if( !patchedImage.ConvertBmpToSakuraFormat(translatedImagePath, false, BmpToSakuraConverter::WHITE, &gameOptionTileDim, &gameOptionTileDim) )
+		if( !patchedImage.ConvertBmpToSakuraFormat(translatedImagePath, false, BmpToSaturnConverter::WHITE, &gameOptionTileDim, &gameOptionTileDim) )
 		{
 			printf("FixupSakura: Couldn't convert image: %s.\n", translatedImagePath.c_str());
 			return false;
@@ -6253,7 +6145,7 @@ bool PatchFACEFiles(const string& rootSakuraDirectory, const string& rootTransla
 	}
 	
 	//Patched obstacle image
-	BmpToSakuraConverter patchedObstacleImage;
+	BmpToSaturnConverter patchedObstacleImage;
 	if( !patchedObstacleImage.ConvertBmpToSakuraFormat(dataDirectory + Seperators + "Obstacle.bmp", false) )
 	{
 		return false;
@@ -6790,7 +6682,7 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 	//Done creating map
 
 	//Load patched image data
-	BmpToSakuraConverter patchedStatsMenu;
+	BmpToSaturnConverter patchedStatsMenu;
 	if( !patchedStatsMenu.ConvertBmpToSakuraFormat(patchedStatsImagePath, false) )
 	{
 		return false;
@@ -6981,7 +6873,7 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 				//const string patchedBattleImagePath = translatedSharedDirectory + pBattleImage->mPrefix + BMPExtension;
 				
 				//Load patched image data
-				BmpToSakuraConverter patchedBattleImage;
+				BmpToSaturnConverter patchedBattleImage;
 				if( !patchedBattleImage.ConvertBmpToSakuraFormat(patchedBattleImagePath, false) )
 				{
 					return false;
@@ -8810,7 +8702,7 @@ bool PatchMainMenu(const string& inPatchedSakuraRootDirectory, const string& inT
 	memcpy_s(pCompressedFontSheet, patchedFontSheetSize, compressor.mpCompressedData, compressor.mCompressedSize);
 
 	//Compress bgnd image
-	BmpToSakuraConverter patchedBgndImage;
+	BmpToSaturnConverter patchedBgndImage;
 	if( !patchedBgndImage.ConvertBmpToSakuraFormat(inMainMenuTranslatedBgnd, true) )
 	{
 		printf("PatchMainMenu: Couldn't convert image: %s.\n", inMainMenuTranslatedBgnd.c_str());
@@ -8822,7 +8714,7 @@ bool PatchMainMenu(const string& inPatchedSakuraRootDirectory, const string& inT
 
 	//Intermediate Screen
 	const string intermediateScreenPath = inTranslatedDataDirectory + "IntermediateScreen.bmp";
-	BmpToSakuraConverter patchedIntermediateScreen;
+	BmpToSaturnConverter patchedIntermediateScreen;
 	unsigned int intermediateScreenTileDim = 16;
 	if( !patchedIntermediateScreen.ConvertBmpToSakuraFormat(intermediateScreenPath, false, 0, &intermediateScreenTileDim, &intermediateScreenTileDim) )
 	{
@@ -9045,8 +8937,8 @@ bool FixupSLG(const string& rootDir, const string& outDir, const string& inTrans
 	const string translatedWKLDirectory  = inTranslatedDirectory + string("WKL\\");
 	const string patchedStatsImagePath   = translatedWKLDirectory + string("StatsMenuPatched.bmp");
 
-	BmpToSakuraConverter statsImage;
-	if( !statsImage.ConvertBmpToSakuraFormat(patchedStatsImagePath, true, BmpToSakuraConverter::BLACK) )
+	BmpToSaturnConverter statsImage;
+	if( !statsImage.ConvertBmpToSakuraFormat(patchedStatsImagePath, true, BmpToSaturnConverter::BLACK) )
 	{
 		printf("FixupSLG: Unable to convert stats image %s to sakura format.\n", patchedStatsImagePath.c_str());
 		return false;
@@ -9138,7 +9030,7 @@ bool FixupSLG(const string& rootDir, const string& outDir, const string& inTrans
 
 		//Convert patched options bgnd image to sakura format
 		const string mainMenuTranslatedBgnd = inTranslatedDirectory + "OptionsBgndPatched.bmp";
-		BmpToSakuraConverter patchedBgndImage;
+		BmpToSaturnConverter patchedBgndImage;
 		if( !patchedBgndImage.ConvertBmpToSakuraFormat(mainMenuTranslatedBgnd, false) )
 		{
 			printf("PatchMainMenu: Couldn't convert image: %s.\n", mainMenuTranslatedBgnd.c_str());
@@ -9529,7 +9421,7 @@ bool PatchMiniCook(const string& patchedSakuraDirectory, const string& inTransla
 
 	//Open translated logo
 	const string logoFileName = inTranslatedDataDirectory + "MiniCookLogo.bmp";
-	BmpToSakuraConverter patchedLogo;
+	BmpToSaturnConverter patchedLogo;
 	if( !patchedLogo.ConvertBmpToSakuraFormat(logoFileName, false) )
 	{
 		printf("PatchMiniCook: Couldn't convert image: %s.\n", logoFileName.c_str());
@@ -9547,7 +9439,7 @@ bool PatchMiniCook(const string& patchedSakuraDirectory, const string& inTransla
 #if !USE_TREKKIS_MINIGAME_DATA
 	//Open translated fontsheet
 	const string fontSheetFileName = inTranslatedDataDirectory + "MiniCookFontSheet.bmp";
-	BmpToSakuraConverter patchedFontSheet;
+	BmpToSaturnConverter patchedFontSheet;
 	const unsigned int tileDim = 16;
 	if( !patchedFontSheet.ConvertBmpToSakuraFormat(fontSheetFileName, false, 0, &tileDim, &tileDim) )
 	{
@@ -9609,7 +9501,7 @@ bool PatchMiniMaig(const string& patchedSakuraDirectory, const string& inTransla
 
 	//Open translated logo
 	const string logoFileName = inTranslatedDataDirectory + "MiniMaigLogo.bmp";
-	BmpToSakuraConverter patchedLogo;
+	BmpToSaturnConverter patchedLogo;
 	if( !patchedLogo.ConvertBmpToSakuraFormat(logoFileName, false) )
 	{
 		printf("PatchMiniMaig: Couldn't convert image: %s.\n", logoFileName.c_str());
@@ -9627,7 +9519,7 @@ bool PatchMiniMaig(const string& patchedSakuraDirectory, const string& inTransla
 #if !USE_TREKKIS_MINIGAME_DATA
 	//Open translated fontsheet
 	const string fontSheetFileName = inTranslatedDataDirectory + "MiniMaigFontSheet.bmp";
-	BmpToSakuraConverter patchedFontSheet;
+	BmpToSaturnConverter patchedFontSheet;
 	const unsigned int tileDim = 16;
 	if( !patchedFontSheet.ConvertBmpToSakuraFormat(fontSheetFileName, false, 0, &tileDim, &tileDim) )
 	{
@@ -9689,7 +9581,7 @@ bool PatchMiniShot(const string& patchedSakuraDirectory, const string& inTransla
 
 	//Open translated logo
 	const string logoFileName = inTranslatedDataDirectory + "MiniShotLogo.bmp";
-	BmpToSakuraConverter patchedLogo;
+	BmpToSaturnConverter patchedLogo;
 	if (!patchedLogo.ConvertBmpToSakuraFormat(logoFileName, false))
 	{
 		printf("PatchMiniShot: Couldn't convert image: %s.\n", logoFileName.c_str());
@@ -9707,7 +9599,7 @@ bool PatchMiniShot(const string& patchedSakuraDirectory, const string& inTransla
 #if !USE_TREKKIS_MINIGAME_DATA
 	//Open translated fontsheet
 	const string fontSheetFileName = inTranslatedDataDirectory + "MiniShotFontSheet.bmp";
-	BmpToSakuraConverter patchedFontSheet;
+	BmpToSaturnConverter patchedFontSheet;
 	const unsigned int tileDim = 16;
 	if (!patchedFontSheet.ConvertBmpToSakuraFormat(fontSheetFileName, false, 0, &tileDim, &tileDim))
 	{
@@ -9769,7 +9661,7 @@ bool PatchMiniSlot(const string& patchedSakuraDirectory, const string& inTransla
 
 	//Open translated logo
 	const string logoFileName = inTranslatedDataDirectory + "MiniSlotLogo.bmp";
-	BmpToSakuraConverter patchedLogo;
+	BmpToSaturnConverter patchedLogo;
 	if (!patchedLogo.ConvertBmpToSakuraFormat(logoFileName, false))
 	{
 		printf("PatchMiniSlot: Couldn't convert image: %s.\n", logoFileName.c_str());
@@ -9787,7 +9679,7 @@ bool PatchMiniSlot(const string& patchedSakuraDirectory, const string& inTransla
 #if !USE_TREKKIS_MINIGAME_DATA
 	//Open translated fontsheet
 	const string fontSheetFileName = inTranslatedDataDirectory + "MiniSlotFontSheet.bmp";
-	BmpToSakuraConverter patchedFontSheet;
+	BmpToSaturnConverter patchedFontSheet;
 	const unsigned int tileDim = 16;
 	if (!patchedFontSheet.ConvertBmpToSakuraFormat(fontSheetFileName, false, 0, &tileDim, &tileDim))
 	{
@@ -9849,7 +9741,7 @@ bool PatchMiniSoji(const string& patchedSakuraDirectory, const string& inTransla
 
 	//Open translated logo
 	const string logoFileName = inTranslatedDataDirectory + "MiniSojiLogo.bmp";
-	BmpToSakuraConverter patchedLogo;
+	BmpToSaturnConverter patchedLogo;
 	if (!patchedLogo.ConvertBmpToSakuraFormat(logoFileName, false))
 	{
 		printf("PatchMiniSoji: Couldn't convert image: %s.\n", logoFileName.c_str());
@@ -9867,7 +9759,7 @@ bool PatchMiniSoji(const string& patchedSakuraDirectory, const string& inTransla
 #if !USE_TREKKIS_MINIGAME_DATA
 	//Open translated fontsheet
 	const string fontSheetFileName = inTranslatedDataDirectory + "MiniSojiFontSheet.bmp";
-	BmpToSakuraConverter patchedFontSheet;
+	BmpToSaturnConverter patchedFontSheet;
 	const unsigned int tileDim = 16;
 	if (!patchedFontSheet.ConvertBmpToSakuraFormat(fontSheetFileName, false, 0, &tileDim, &tileDim))
 	{
@@ -9941,7 +9833,7 @@ bool PatchMiniHana(const string& patchedSakuraDirectory, const string& inTransla
 	//Found a match in HANAMAIN.BIN @0x000261e8
 	//Found a match in MINIHANA.BIN @0x00044e30
 	const string pointsImageFileName = inTranslatedDataDirectory + "MiniGamePoints.bmp";
-	BmpToSakuraConverter pointsImage;
+	BmpToSaturnConverter pointsImage;
 	if( !pointsImage.ConvertBmpToSakuraFormat(pointsImageFileName, false) )
 	{
 		printf("PatchMiniHana: Couldn't convert image: %s.\n", pointsImageFileName.c_str());
@@ -9954,7 +9846,7 @@ bool PatchMiniHana(const string& patchedSakuraDirectory, const string& inTransla
 	//Found a match in HANAMAIN.BIN @0x000267e8
 	//Found a match in MINIHANA.BIN @0x00045430
 	const string dealerImageFileName = inTranslatedDataDirectory + "MiniGameDealer.bmp";
-	BmpToSakuraConverter dealerImage;
+	BmpToSaturnConverter dealerImage;
 	if( !dealerImage.ConvertBmpToSakuraFormat(dealerImageFileName, false) )
 	{
 		printf("PatchMiniHana: Couldn't convert image: %s.\n", dealerImageFileName.c_str());
@@ -9967,7 +9859,7 @@ bool PatchMiniHana(const string& patchedSakuraDirectory, const string& inTransla
 	//Found a match in HANAMAIN.BIN @0x00026568
 	//Found a match in MINIHANA.BIN @0x000451b0
 	const string roundImageFileName = inTranslatedDataDirectory + "MiniGameRound.bmp";
-	BmpToSakuraConverter roundsImage;
+	BmpToSaturnConverter roundsImage;
 	if( !roundsImage.ConvertBmpToSakuraFormat(roundImageFileName, false) )
 	{
 		printf("PatchMiniHana: Couldn't convert image: %s.\n", roundImageFileName.c_str());
@@ -9978,7 +9870,7 @@ bool PatchMiniHana(const string& patchedSakuraDirectory, const string& inTransla
 
 	//Open translated logo
 	const string logoFileName = inTranslatedDataDirectory + "MiniHanaLogo.bmp";
-	BmpToSakuraConverter patchedLogo;
+	BmpToSaturnConverter patchedLogo;
 	if( !patchedLogo.ConvertBmpToSakuraFormat(logoFileName, false) )
 	{
 		printf("PatchMiniHana: Couldn't convert image: %s.\n", logoFileName.c_str());
@@ -9997,7 +9889,7 @@ bool PatchMiniHana(const string& patchedSakuraDirectory, const string& inTransla
 	//Open translated fontsheet
 	{
 		const string fontSheetFileName = inTranslatedDataDirectory + "MiniHanaFontSheet.bmp";
-		BmpToSakuraConverter patchedFontSheet;
+		BmpToSaturnConverter patchedFontSheet;
 		const unsigned int tileDim = 16;
 		if( !patchedFontSheet.ConvertBmpToSakuraFormat(fontSheetFileName, false, 0, &tileDim, &tileDim) )
 		{
@@ -10106,7 +9998,7 @@ bool PatchMiniHana(const string& patchedSakuraDirectory, const string& inTransla
 	//Tutorial fontsheet
 	{
 		const string fontSheetFileName = inTranslatedDataDirectory + "MiniHana_TutorialFontSheet.bmp";
-		BmpToSakuraConverter patchedFontSheet;
+		BmpToSaturnConverter patchedFontSheet;
 		const unsigned int tileDim = 16;
 		if( !patchedFontSheet.ConvertBmpToSakuraFormat(fontSheetFileName, false, 0, &tileDim, &tileDim) )
 		{
@@ -10299,7 +10191,7 @@ bool PatchMiniSwim(const string& patchedSakuraDirectory, const string& inTransla
 
 	//Open translated logo
 	const string logoFileName = inTranslatedDataDirectory + "SwimLogo.bmp";
-	BmpToSakuraConverter patchedLogo;
+	BmpToSaturnConverter patchedLogo;
 	if( !patchedLogo.ConvertBmpToSakuraFormat(logoFileName, false) )
 	{
 		printf("PatchMiniSwim: Couldn't convert image: %s.\n", logoFileName.c_str());
@@ -10317,7 +10209,7 @@ bool PatchMiniSwim(const string& patchedSakuraDirectory, const string& inTransla
 #if !USE_TREKKIS_MINIGAME_DATA
 	//Open translated fontsheet
 	const string fontSheetFileName = inTranslatedDataDirectory + "MiniSwimFontsheet.bmp";
-	BmpToSakuraConverter patchedFontSheet;
+	BmpToSaturnConverter patchedFontSheet;
 	const unsigned int tileDim = 16;
 	if( !patchedFontSheet.ConvertBmpToSakuraFormat(fontSheetFileName, false, 0, &tileDim, &tileDim) )
 	{
@@ -10356,7 +10248,7 @@ bool PatchMiniGames(const string& rootSakuraDirectory, const string& patchedSaku
 
 	//Open translated option 1 (start)
 	const string imageBatch1FileName = inTranslatedDataDirectory + "MiniGameImages1.bmp";
-	BmpToSakuraConverter patchedImageBatch1;
+	BmpToSaturnConverter patchedImageBatch1;
 	if( !patchedImageBatch1.ConvertBmpToSakuraFormat(imageBatch1FileName, false) )
 	{
 		printf("PatchMiniGames: Couldn't convert image: %s.\n", imageBatch1FileName.c_str());
@@ -10365,7 +10257,7 @@ bool PatchMiniGames(const string& rootSakuraDirectory, const string& patchedSaku
 
 	//Open translated time image
 	const string timeImageFileName = inTranslatedDataDirectory + "MiniGameTime.bmp";
-	BmpToSakuraConverter patchedTimeImage;
+	BmpToSaturnConverter patchedTimeImage;
 	if( !patchedTimeImage.ConvertBmpToSakuraFormat(timeImageFileName, false) )
 	{
 		printf("PatchMiniGames: Couldn't convert image: %s.\n", timeImageFileName.c_str());
@@ -10374,7 +10266,7 @@ bool PatchMiniGames(const string& rootSakuraDirectory, const string& patchedSaku
 
 	//Open translated seconds image
 	const string secondsImageFileName = inTranslatedDataDirectory + "MiniGameSeconds.bmp";
-	BmpToSakuraConverter patchedSecondsImage;
+	BmpToSaturnConverter patchedSecondsImage;
 	if( !patchedSecondsImage.ConvertBmpToSakuraFormat(secondsImageFileName, false) )
 	{
 		printf("PatchMiniGames: Couldn't convert image: %s.\n", secondsImageFileName.c_str());
@@ -10383,7 +10275,7 @@ bool PatchMiniGames(const string& rootSakuraDirectory, const string& patchedSaku
 
 	//Open translated seconds image
 	const string minutesImageFileName = inTranslatedDataDirectory + "MiniGameMinutes.bmp";
-	BmpToSakuraConverter patchedMinutesImage;
+	BmpToSaturnConverter patchedMinutesImage;
 	if( !patchedMinutesImage.ConvertBmpToSakuraFormat(minutesImageFileName, false) )
 	{
 		printf("PatchMiniGames: Couldn't convert image: %s.\n", minutesImageFileName.c_str());
@@ -10392,7 +10284,7 @@ bool PatchMiniGames(const string& rootSakuraDirectory, const string& patchedSaku
 
 	//Open translated N\A image
 	const string naImageFileName = inTranslatedDataDirectory + "MiniGameNAPatched.bmp";
-	BmpToSakuraConverter naImage;
+	BmpToSaturnConverter naImage;
 	if (!naImage.ConvertBmpToSakuraFormat(naImageFileName, false))
 	{
 		printf("PatchMiniGames: Couldn't convert image: %s.\n", naImageFileName.c_str());
@@ -10401,7 +10293,7 @@ bool PatchMiniGames(const string& rootSakuraDirectory, const string& patchedSaku
 
 	//Open translated Practicing image
 	const string scrollingTextImageFileName = inTranslatedDataDirectory + "MiniGameScrollingText.bmp";
-	BmpToSakuraConverter scrollingTextImage;
+	BmpToSaturnConverter scrollingTextImage;
 	if( !scrollingTextImage.ConvertBmpToSakuraFormat(scrollingTextImageFileName, false) )
 	{
 		printf("PatchMiniGames: Couldn't convert image: %s.\n", scrollingTextImageFileName.c_str());
@@ -10410,7 +10302,7 @@ bool PatchMiniGames(const string& rootSakuraDirectory, const string& patchedSaku
 
 	//Open translated RankingText image
 	const string rankingTextImageFileName = inTranslatedDataDirectory + "MiniGameRankingText.bmp";
-	BmpToSakuraConverter rankingTextImage;
+	BmpToSaturnConverter rankingTextImage;
 	if( !rankingTextImage.ConvertBmpToSakuraFormat(rankingTextImageFileName, false) )
 	{
 		printf("PatchMiniGames: Couldn't convert image: %s.\n", rankingTextImageFileName.c_str());
@@ -10419,7 +10311,7 @@ bool PatchMiniGames(const string& rootSakuraDirectory, const string& patchedSaku
 
 	//Open translated RankingLogo image
 	const string rankingLogoImageFileName = inTranslatedDataDirectory + "MiniGameRankingLogo.bmp";
-	BmpToSakuraConverter rankingLogoImage;
+	BmpToSaturnConverter rankingLogoImage;
 	if( !rankingLogoImage.ConvertBmpToSakuraFormat(rankingLogoImageFileName, false) )
 	{
 		printf("PatchMiniGames: Couldn't convert image: %s.\n", rankingLogoImageFileName.c_str());
@@ -10428,7 +10320,7 @@ bool PatchMiniGames(const string& rootSakuraDirectory, const string& patchedSaku
 
 	//Open translated RankingLogo image
 	const string miniHanaPopupText = inTranslatedDataDirectory + "MiniHanaPopupText.bmp";
-	BmpToSakuraConverter miniHanaImage;
+	BmpToSaturnConverter miniHanaImage;
 	if( !miniHanaImage.ConvertBmpToSakuraFormat(miniHanaPopupText, false) )
 	{
 		printf("PatchMiniGames: Couldn't convert image: %s.\n", miniHanaPopupText.c_str());
@@ -10437,7 +10329,7 @@ bool PatchMiniGames(const string& rootSakuraDirectory, const string& patchedSaku
 
 	//Open translated Minihana colored images
 	const string miniHanaColoredImagesPath = inTranslatedDataDirectory + "MiniHanaColoredImages.bmp";
-	BmpToSakuraConverter miniHanaColoredImages;
+	BmpToSaturnConverter miniHanaColoredImages;
 	if( !miniHanaColoredImages.ConvertBmpToSakuraFormat(miniHanaColoredImagesPath, false) )
 	{
 		printf("PatchMiniGames: Couldn't convert image: %s.\n", miniHanaColoredImagesPath.c_str());
@@ -10524,7 +10416,7 @@ bool PatchTheEndLogo(const string& patchedSakuraDirectory, const string& inTrans
 {
 	//Open translated fontsheet
 	const string patchedImagePath = inTranslatedDataDirectory + "\\TheEndImage.bmp";
-	BmpToSakuraConverter patchedImage;
+	BmpToSaturnConverter patchedImage;
 	const unsigned int tileDims = 8;
 	if( !patchedImage.ConvertBmpToSakuraFormat(patchedImagePath, false, 0, &tileDims, &tileDims) )
 	{
@@ -10588,7 +10480,7 @@ bool PatchLoadScreen(const string& patchedSakuraDirectory, const string& inTrans
 #if 1
 		//Open translated fontsheet
 		const string fontSheetFileName = inTranslatedDataDirectory + "\\LoadSaveScreen.bmp";
-		BmpToSakuraConverter patchedFontSheet;
+		BmpToSaturnConverter patchedFontSheet;
 		const unsigned int tileDim = 16;
 		if( !patchedFontSheet.ConvertBmpToSakuraFormat(fontSheetFileName, false, 0, &tileDim, &tileDim) )
 		{
@@ -10797,7 +10689,7 @@ bool PatchStatusScreen(const string& patchedSakuraDirectory, const string& inTra
 	{
 		//Open translated fontsheet
 		const string imagePath = inTranslatedDataDirectory + "\\StatusScreen.bmp";
-		BmpToSakuraConverter patchedImage;
+		BmpToSaturnConverter patchedImage;
 		const unsigned int tileWidth  = 144;
 		const unsigned int tileHeight = 64;
 		if( !patchedImage.ConvertBmpToSakuraFormat(imagePath, false, 0, &tileWidth, &tileHeight) )
@@ -10821,7 +10713,7 @@ bool PatchStatusScreen(const string& patchedSakuraDirectory, const string& inTra
 
 	//Open translated fontsheet
 	const string fontSheetFileName = inTranslatedDataDirectory + "\\StatusScreenFontSheet.bmp";
-	BmpToSakuraConverter patchedFontSheet;
+	BmpToSaturnConverter patchedFontSheet;
 	const unsigned int tileDim = 16;
 	if( !patchedFontSheet.ConvertBmpToSakuraFormat(fontSheetFileName, false, 0, &tileDim, &tileDim) )
 	{
@@ -11153,7 +11045,7 @@ bool PatchSubtitles(const string& /*rootSakuraTaisenDirectory*/, const string& p
 	char buffer[255];
 	int imageDataSize = 0;
 	unsigned int offsetFromStart = 0;
-	BmpToSakuraConverter patchedSubtitles[numSubtitles];
+	BmpToSaturnConverter patchedSubtitles[numSubtitles];
 	for(int i = 0; i < numSubtitles; ++i)
 	{
 		snprintf(buffer, 255, "\\Subtitles\\%i.bmp", i);
@@ -11259,7 +11151,7 @@ bool PatchScreens(const string& rootSakuraTaisenDirectory, const string& patched
 			return false;
 		}
 
-		BmpToSakuraConverter patchedScreen;
+		BmpToSaturnConverter patchedScreen;
 		snprintf(buffer, MAX_PATH, "%s\\Screens\\%s.bmp", patchedDataDirectory.c_str(), filesToPatch[i].pName);
 
 		const unsigned int tileDim = 8;
@@ -11711,8 +11603,8 @@ bool PatchTiledData(FileReadWriter& outFile, const string& fontSheetPath, const 
 {		
 	//Create image data
 	const unsigned int tileDim = 8;
-	BmpToSakuraConverter fontSheet;
-	if( !fontSheet.ConvertBmpToSakuraFormat(fontSheetPath, false, BmpToSakuraConverter::CYAN, &tileDim, &tileDim) )
+	BmpToSaturnConverter fontSheet;
+	if( !fontSheet.ConvertBmpToSakuraFormat(fontSheetPath, false, BmpToSaturnConverter::CYAN, &tileDim, &tileDim) )
 	{
 		return false;
 	}
@@ -11910,8 +11802,8 @@ bool PatchIntroLogo(const string& patchedSakuraDirectory, const string& patchedD
 
 		//Create image data
 		const unsigned int tileDim = 8;
-		BmpToSakuraConverter fontSheet;
-		if( !fontSheet.ConvertBmpToSakuraFormat(fontSheetPath, false, BmpToSakuraConverter::CYAN, &tileDim, &tileDim) )
+		BmpToSaturnConverter fontSheet;
+		if( !fontSheet.ConvertBmpToSakuraFormat(fontSheetPath, false, BmpToSaturnConverter::CYAN, &tileDim, &tileDim) )
 		{
 			return false;
 		}
@@ -12007,7 +11899,7 @@ bool CopyChangesFromTrekkies(const string& inPatchedSakuraDirectory, const strin
 
 bool DumpBitmap(const string& inputFilePath, const string& outDir)
 {
-	BmpToSakuraConverter inputImage;
+	BmpToSaturnConverter inputImage;
 	if( !inputImage.ConvertBmpToSakuraFormat(inputFilePath, false) )
 	{
 		return false;
