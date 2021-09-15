@@ -1,0 +1,23 @@
+Code that writes fontsheet to VDP1
+
+Found a match in READY.BIN @0x000193c8
+Found a match in READY0.BIN @0x00021ef0
+Found a match in READY1.BIN @0x00021ef0
+Found a match in READY2.BIN @0x00021ef0
+Found a match in READY3.BIN @0x00021ef0
+Found a match in READY4.BIN @0x00021ef0
+Found a match in READY5.BIN @0x00021ef0
+Found a match in READY6.BIN @0x00021ef0
+Found a match in READY7.BIN @0x00021ef0
+
+Put a breakpoint at 2C4BE0, this will branch to a function that uncompresses into VDP1
+
+READY.bin 0xba9c appears to be writing the 7s used for fontsheets
+
+Take a look at whats writing into 2e8edd (0207) cause 07 appears to be part of decompression
+
+Font Sheet coming from:
+Found a match in FACEFONT.GRP @0x000719e0
+Found a match in FACEFONT.GRP @0x000719e0
+
+FACEFONT.GRP lives at 0x06d10000 in DATA.0 in PS2 version

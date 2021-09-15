@@ -1,0 +1,3 @@
+Text appearing around 1B199CEF
+
+Font sheet at 0x01bc8051 in DATA.0
