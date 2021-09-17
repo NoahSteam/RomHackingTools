@@ -1417,9 +1417,9 @@ void BmpToSaturnConverter::PackTiles()
 {
 	if (mTileExtractor.mTiles.size())
 	{
-		mPackedTileSize = mTileExtractor.mTiles.size() * mTileExtractor.mTiles[0].mTileSize;
+		mPackedTileSize = (unsigned int)mTileExtractor.mTiles.size() * mTileExtractor.mTiles[0].mTileSize;
 		mpPackedTiles = new char[mPackedTileSize];
-
+		
 		int packedTileOffset = 0;
 		for (const TileExtractor::Tile& tile : mTileExtractor.mTiles)
 		{

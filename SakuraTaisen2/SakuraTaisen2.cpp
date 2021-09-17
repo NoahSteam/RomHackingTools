@@ -1,7 +1,7 @@
 /*******************************************************************************
 SakuraTaisen2.cpp - Tools for modifying Sakura Taisen 2
 
-(c) Copyright 2021 Rizwan Ahmed aka NoahSteam
+(c) Copyright 2021 NoahSteam
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by

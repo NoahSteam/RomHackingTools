@@ -1,5 +1,9 @@
 #pragma once
 
+typedef unsigned int   uint32;
+typedef unsigned short uint16;
+typedef unsigned char  uint8;
+
 template<typename T>
 T SwapByteOrder(const T inData)
 {
@@ -20,7 +24,7 @@ struct MatchInfo
 	bool          mbFoundMatch;
 
 	MatchInfo() : mOffset(0), mbFoundMatch(false) {}
-	MatchInfo(const std::string& inString, unsigned long inOffset) : mFileName(inString), mOffset(inOffset) {}
+	MatchInfo(const std::string& inString, unsigned long inOffset) : mFileName(inString), mOffset(inOffset), mbFoundMatch(false) {}
 };
 
 struct FileNameContainer
