@@ -93,16 +93,15 @@ public:
 			mTiles[destTileIndex].pBuffer = new char[bufferSize];
 			char* pTileBuffer = mTiles[destTileIndex].pBuffer;
 	
-			assert(pTile->mTileSize*2 == bufferSize);
+			assert(pTile->mTileSize == bufferSize);
 			for( uint32 t = 0; t < pTile->mTileSize; ++t )
 			{
-				pTileBuffer[t*2 + 1] = (pTile->mpTile[t] & 0x0f) << 4;
-				pTileBuffer[t*2 + 0] = (pTile->mpTile[t] & 0xf0);
+				pTileBuffer[t] = (pTile->mpTile[t]);
 			}
 
 			if( pNextTile )
 			{
-				assert(pNextTile->mTileSize*2 == bufferSize);
+				assert(pNextTile->mTileSize == bufferSize);
 				for( uint32 t = 0; t < pNextTile->mTileSize; ++t )
 				{
 			//		pTileBuffer[t*2 + 1]     |= (pNextTile->mpTile[t] & 0x0f);
