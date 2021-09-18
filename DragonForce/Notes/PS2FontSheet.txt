@@ -1,3 +1,5 @@
 Text appearing around 1B199CEF
 
-Font sheet at 0x1BCBE51 in DATA.0 (16 x 32 8bpp)
+Font sheet at 0x1BCBDE0 in DATA.0 (16 x 32 8bpp)
+
+@ sign is missing in our font sheet

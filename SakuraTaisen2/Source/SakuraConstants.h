@@ -22,7 +22,6 @@ const string PatchedPaletteName("PatchedPalette.BIN");
 const string PatchedKNJName("PatchedKNJ.BIN");
 const string Disc1("\\Disc1");
 const string Disc2("\\Disc2");
-const string Seperators("\\");
 const string NewLineWord("<br>");
 const string LipsWord("<LIPS>");
 const string SpaceWord("<sp>");

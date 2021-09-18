@@ -33,6 +33,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "..\..\Utils\Utils.h"
 
 using std::vector;
+using std::string;
 
 //Fontsheets in Dragon Force on PS2 are stored as 8bpp images where each tile contains two characters.
 //The first character is in the lower 4 bits and the second is in the upper 4 bits.
@@ -104,8 +105,10 @@ public:
 				assert(pNextTile->mTileSize == bufferSize);
 				for( uint32 t = 0; t < pNextTile->mTileSize; ++t )
 				{
-			//		pTileBuffer[t*2 + 1]     |= (pNextTile->mpTile[t] & 0x0f);
-			//		pTileBuffer[t*2 + 0] |= (pNextTile->mpTile[t] & 0xf0) >> 4;
+					if(pNextTile->mpTile[t] > 0)
+					{
+						pTileBuffer[t] += (pNextTile->mpTile[t] + 153);
+					}
 				}
 			}
 		}
@@ -135,21 +138,21 @@ public:
 	}
 };
 
-void PatchFontSheets()
+void PatchFontSheets(const string& inDiscDirectory, const string& inDataDirectory, const string& inOutputDirectory)
 {
 	FileReadWriter f;
-	if( !f.OpenFile("C:\\Users\\16306\\Desktop\\Rizwan\\DragonForce\\Game\\Disc_Patched\\Data.0") )
+	if( !f.OpenFile((inDiscDirectory + "DATA.0").c_str()) )
 	{
 		return;
 	}
 
 	BmpToDragonForcePS2FontSheet fontSheetConverter;
-	if( !fontSheetConverter.ConvertBmpToFontSheet("C:\\Users\\16306\\Desktop\\Rizwan\\RomHackingTools\\DragonForce\\Data\\PS2EnglishFontSheet.bmp", 16, 32) )
+	if( !fontSheetConverter.ConvertBmpToFontSheet( (inDataDirectory + "PS2EnglishFontSheet.bmp").c_str(), 16, 32) )
 	{
 		return;
 	}
 
-	fontSheetConverter.OutputToFile("C:\\Users\\16306\\Desktop\\Rizwan\\RomHackingTools\\DragonForce\\Data\\PS2EnglishFontSheet.bin");
+	fontSheetConverter.OutputToFile( (inOutputDirectory + "PS2EnglishFontSheet.bin").c_str() );
 	
 	uint32 offset = 0;
 	int numWritten = 0;
@@ -160,7 +163,7 @@ void PatchFontSheets()
 			break;
 		}
 
-		f.WriteData(0x1BCBE51 + offset, tile.pBuffer, fontSheetConverter.GetTileSize());
+		f.WriteData(0x1BCBE00 + offset, tile.pBuffer, fontSheetConverter.GetTileSize());
 
 		offset += fontSheetConverter.GetTileSize();
 
@@ -170,7 +173,29 @@ void PatchFontSheets()
 	numWritten = numWritten + 1;
 }
 
-void main()
+bool PatchData(const string& inDiscDirectory, const string& inDataDirectory, const string& inOutputDirectory)
 {
-	PatchFontSheets();
+	PatchFontSheets(inDiscDirectory, inDataDirectory, inOutputDirectory);
+
+	return true;
+}
+
+int main(int argc, char* argv[])
+{
+	if (argc == 1)
+	{
+//		PrintHelp();
+		return 1;
+	}
+
+	const string command(argv[1]);
+
+	if (command == string("PatchData") && argc == 5)
+	{
+		const string discDirectory = string(argv[2]) + Seperators;
+		const string dataDirectory = string(argv[3]) + Seperators;
+		const string outDirectory  = string(argv[4]) + Seperators;
+
+		PatchData(discDirectory, dataDirectory, outDirectory);
+	}
 }

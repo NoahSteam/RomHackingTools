@@ -3,6 +3,7 @@
 typedef unsigned int   uint32;
 typedef unsigned short uint16;
 typedef unsigned char  uint8;
+extern const std::string Seperators;
 
 template<typename T>
 T SwapByteOrder(const T inData)

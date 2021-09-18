@@ -32,6 +32,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 using std::string;
 using std::vector;
 
+const string Seperators("\\");
+
 //CRC Code is from: https://www.codeguru.com/cpp/cpp/algorithms/checksum/article.php/c5103/CRC32-Generating-a-checksum-for-a-file.htm
 // Static CRC table
 DWORD GCrc32Table[256] =
