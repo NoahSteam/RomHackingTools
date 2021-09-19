@@ -35,6 +35,42 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 using std::vector;
 using std::string;
 
+class SaturnFontToPS2Font
+{
+	bool ConvertSaturnFontSheetToPS2(const string& inSaturnFontPath, const string& inOutputFontPath, uint32 inSaturnFontWidth, uint32 inSaturnFontHeight, 
+									 uint32 inPs2FontWidth, uint32 inPs2FontHeight)
+	{
+		BmpToSaturnConverter imageConverter;
+		if (!imageConverter.ConvertBmpToSakuraFormat(inSaturnFontPath.c_str(), false, 0, &inSaturnFontWidth, &inSaturnFontHeight))
+		{
+			return false;
+		}
+
+		const size_t numTiles  = imageConverter.mTileExtractor.mTiles.size();
+		const size_t ps2TileStride = inPs2FontWidth * inPs2FontHeight;
+		const size_t colorDataSize = numTiles * ps2TileStride;
+		const char* pColorData = new char[colorDataSize];
+		memset(pColorData, 0, numTiles);
+
+		//Copy tiles over
+		size_t colorOffset = 0;
+		for(size_t tileIndex = 0; tileIndex < numTiles; ++tileIndex)
+		{
+			const TileExtractor::Tile& tile = imageConverter.mTileExtractor.mTiles[tileIndex];
+			memcpy_s(pColorData + colorOffset, tile.mTileSize, tile.mpTile, tile.mTileSize);
+
+			colorOffset += ps2TileStride;
+		}
+
+		const int paletteSize;
+		char* pPaletteData = new char[];
+		BitmapWriter writer;
+		writer.CreateBitmap(inOutputFontPath.c_str(), inPs2FontWidth, inPs2FontHeight, 8, pColorData, (int)colorDataSize, pPaletteData, paletteSize, true);
+
+		delete[] pColorData;
+	}
+};
+
 //Fontsheets in Dragon Force on PS2 are stored as 8bpp images where each tile contains two characters.
 //The first character is in the lower 4 bits and the second is in the upper 4 bits.
 class BmpToDragonForcePS2FontSheet
