@@ -37,37 +37,73 @@ using std::string;
 
 class SaturnFontToPS2Font
 {
+public:
 	bool ConvertSaturnFontSheetToPS2(const string& inSaturnFontPath, const string& inOutputFontPath, uint32 inSaturnFontWidth, uint32 inSaturnFontHeight, 
 									 uint32 inPs2FontWidth, uint32 inPs2FontHeight)
 	{
 		BmpToSaturnConverter imageConverter;
-		if (!imageConverter.ConvertBmpToSakuraFormat(inSaturnFontPath.c_str(), false, 0, &inSaturnFontWidth, &inSaturnFontHeight))
+		if( !imageConverter.ConvertBmpToSakuraFormat(inSaturnFontPath, false, 0, &inSaturnFontWidth, &inSaturnFontHeight) )
 		{
 			return false;
 		}
 
-		const size_t numTiles  = imageConverter.mTileExtractor.mTiles.size();
-		const size_t ps2TileStride = inPs2FontWidth * inPs2FontHeight;
-		const size_t colorDataSize = numTiles * ps2TileStride;
-		const char* pColorData = new char[colorDataSize];
-		memset(pColorData, 0, numTiles);
+		const uint32 numTiles = (uint32)imageConverter.mTileExtractor.mTiles.size();
+		const uint32 colorDataSize = inPs2FontWidth * inPs2FontHeight * numTiles;
+		char* pColorData = new char[colorDataSize];
+		memset(pColorData, 0, colorDataSize);
+
+		const uint32 numBytesInDestTile = inPs2FontWidth * inPs2FontHeight;
+		const uint32 numBytesInDestRow  = inPs2FontWidth;
 
 		//Copy tiles over
-		size_t colorOffset = 0;
-		for(size_t tileIndex = 0; tileIndex < numTiles; ++tileIndex)
+		const uint32 numBytesInSaturnRow = inSaturnFontWidth / 2;
+		for( int tileIndex = 0; tileIndex < numTiles; ++tileIndex )
 		{
-			const TileExtractor::Tile& tile = imageConverter.mTileExtractor.mTiles[tileIndex];
-			memcpy_s(pColorData + colorOffset, tile.mTileSize, tile.mpTile, tile.mTileSize);
+			for( int y = 0; y < inSaturnFontHeight; ++y )
+			{
+				char* pDest = pColorData + (numTiles - tileIndex - 1) * numBytesInDestTile + (inSaturnFontHeight - y - 1)*numBytesInDestRow;
 
-			colorOffset += ps2TileStride;
+				for( uint32 x = 0; x < numBytesInSaturnRow; ++x )
+				{
+					const uint32 tilePixelIndex = x + y*numBytesInSaturnRow;
+					const char src = imageConverter.mTileExtractor.mTiles[tileIndex].mpTile[tilePixelIndex];
+
+					char firstPixel  = (src & 0xf0) >> 4;
+					char secondPixel = src & 0x0f;
+
+					if( firstPixel != 0 )
+					{
+						*pDest = 0x33;
+					}
+					++pDest;
+
+					if( secondPixel != 0 )
+					{
+						*pDest = 0x33;
+					}
+					++pDest;
+				}
+			}
 		}
 
-		const int paletteSize;
-		char* pPaletteData = new char[];
+		const int paletteSize = 256 * 4;
+		unsigned char* pPaletteData = new unsigned char[paletteSize];
+		for( int colorIndex = 0; colorIndex < 256; ++colorIndex )
+		{
+			const int paletteIndex = colorIndex * 4;
+			pPaletteData[paletteIndex + 0] = (unsigned char)colorIndex;
+			pPaletteData[paletteIndex + 1] = (unsigned char)colorIndex;
+			pPaletteData[paletteIndex + 2] = (unsigned char)colorIndex;
+			pPaletteData[paletteIndex + 3] = 0;//(unsigned char)colorIndex;
+		}
+
 		BitmapWriter writer;
-		writer.CreateBitmap(inOutputFontPath.c_str(), inPs2FontWidth, inPs2FontHeight, 8, pColorData, (int)colorDataSize, pPaletteData, paletteSize, true);
+		writer.CreateBitmap(inOutputFontPath.c_str(), inPs2FontWidth, (int)inPs2FontHeight * numTiles, 8, pColorData, (int)colorDataSize, (char*)pPaletteData, paletteSize, true);
 
 		delete[] pColorData;
+		delete[] pPaletteData;
+
+		return true;
 	}
 };
 
@@ -174,18 +210,18 @@ public:
 	}
 };
 
-void PatchFontSheets(const string& inDiscDirectory, const string& inDataDirectory, const string& inOutputDirectory)
+bool PatchFontSheets(const string& inDiscDirectory, const string& inDataDirectory, const string& inOutputDirectory)
 {
 	FileReadWriter f;
 	if( !f.OpenFile((inDiscDirectory + "DATA.0").c_str()) )
 	{
-		return;
+		return false;
 	}
 
 	BmpToDragonForcePS2FontSheet fontSheetConverter;
 	if( !fontSheetConverter.ConvertBmpToFontSheet( (inDataDirectory + "PS2EnglishFontSheet.bmp").c_str(), 16, 32) )
 	{
-		return;
+		return false;
 	}
 
 	fontSheetConverter.OutputToFile( (inOutputDirectory + "PS2EnglishFontSheet.bin").c_str() );
@@ -207,12 +243,18 @@ void PatchFontSheets(const string& inDiscDirectory, const string& inDataDirector
 	}
 
 	numWritten = numWritten + 1;
+
+	return true;
 }
 
 bool PatchData(const string& inDiscDirectory, const string& inDataDirectory, const string& inOutputDirectory)
 {
-	PatchFontSheets(inDiscDirectory, inDataDirectory, inOutputDirectory);
+	if( !PatchFontSheets(inDiscDirectory, inDataDirectory, inOutputDirectory) )
+	{
+		return false;
+	}
 
+	printf("PatchData Succeeded\n");
 	return true;
 }
 
@@ -233,5 +275,13 @@ int main(int argc, char* argv[])
 		const string outDirectory  = string(argv[4]) + Seperators;
 
 		PatchData(discDirectory, dataDirectory, outDirectory);
+	}
+	else if(command == string("FontFromSaturnToPS2") && argc == 4)
+	{
+		const string saturnFontPath = string(argv[2]);
+		const string outputPath = string(argv[3]);
+
+		SaturnFontToPS2Font c;
+		c.ConvertSaturnFontSheetToPS2(saturnFontPath, outputPath, 8, 24, 8, 32);
 	}
 }
