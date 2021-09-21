@@ -40,13 +40,16 @@ v1 contains character index at 3bc6e0
 129d8c a1, s2, s4, s7 contain character index
 129e64 index read into t0
 
-Modify spacing: 3bd544 to addiu	v0,0x4
+Modify spacing for text: 3bd544 to addiu	v0,0x4
 Modifying spacing for empty spaces: (003bc828 in memory)
 
-//Code exists here for spacing:
+//Code exists here for spacing text:
 Found a match in DATA.0 @0x002b4c2c
 Found a match in READY.BIN @0x0003cc2c
 
+//Code for spacing blank spaces
+Found a match in DATA.0 @0x002b3f29
+Found a match in READY.BIN @0x0003bf29
 
 //Loaded in PS2 memory
 Found a match in Regions.m0400 @0x004bc35a

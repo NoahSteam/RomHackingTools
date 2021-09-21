@@ -47,7 +47,7 @@ public:
 			return false;
 		}
 
-		const uint32 numTiles = (uint32)imageConverter.mTileExtractor.mTiles.size();
+		const int numTiles = (int)imageConverter.mTileExtractor.mTiles.size();
 		const uint32 colorDataSize = inPs2FontWidth * inPs2FontHeight * numTiles;
 		char* pColorData = new char[colorDataSize];
 		memset(pColorData, 0, colorDataSize);
@@ -59,9 +59,9 @@ public:
 		const uint32 numBytesInSaturnRow = inSaturnFontWidth / 2;
 		for( int tileIndex = 0; tileIndex < numTiles; ++tileIndex )
 		{
-			for( int y = 0; y < inSaturnFontHeight; ++y )
+			for( int y = 0; y < (int)inSaturnFontHeight; ++y )
 			{
-				char* pDest = pColorData + (numTiles - tileIndex - 1) * numBytesInDestTile + (inSaturnFontHeight - y - 1)*numBytesInDestRow;
+				char* pDest = pColorData + (numTiles - tileIndex - 1) * numBytesInDestTile + (inPs2FontHeight - y - 1)*numBytesInDestRow;
 
 				for( uint32 x = 0; x < numBytesInSaturnRow; ++x )
 				{
@@ -247,15 +247,62 @@ bool PatchFontSheets(const string& inDiscDirectory, const string& inDataDirector
 	return true;
 }
 
-bool PatchData(const string& inDiscDirectory, const string& inDataDirectory, const string& inOutputDirectory)
+bool PatchTextSpacing(const string& inPatchedDiscDirectory)
 {
-	if( !PatchFontSheets(inDiscDirectory, inDataDirectory, inOutputDirectory) )
+	FileReadWriter patchedDataFile;
+	FileReadWriter patchedReadyFile;
+	if( !patchedDataFile.OpenFile((inPatchedDiscDirectory + "DATA.0")) )
 	{
 		return false;
 	}
 
+	if( !patchedReadyFile.OpenFile((inPatchedDiscDirectory + "READY.BIN")) )
+	{
+		return false;
+	}
+	
+	//Code exists here for spacing text:
+	//DATA.0 @0x002b4c44
+	//READY.BIN @0x0003cc44
+	const char textSpacing = 6;
+	patchedDataFile.WriteData(0x002b4c44, &textSpacing, 1);
+	patchedReadyFile.WriteData(0x0003cc44, &textSpacing, 1);
+
+	//Code for spacing blank spaces
+	//DATA.0 @0x002b3f28
+	//READY.BIN @0x0003bf28
+	const char spaceSpacing = 4;
+	patchedDataFile.WriteData(0x002b3f28, &spaceSpacing, 1);
+	patchedReadyFile.WriteData(0x0003bf28, &spaceSpacing, 1);
+}
+
+bool PatchData(const string& inPatchedDiscDirectory, const string& inDataDirectory, const string& inOutputDirectory)
+{
+	if( !PatchFontSheets(inPatchedDiscDirectory, inDataDirectory, inOutputDirectory) )
+	{
+		return false;
+	}
+
+	PatchTextSpacing(inPatchedDiscDirectory);
+
 	printf("PatchData Succeeded\n");
 	return true;
+}
+
+bool CopyOriginalFiles(const string& inDiscDirectory, const string& inPatchedDiscDirectory)
+{
+	#define CopyOriginalFile(fileName)\
+	{\
+		const string originalFile = inDiscDirectory + fileName;\
+		const string patchedFile  = inPatchedDiscDirectory + fileName;\
+		if( !CopyFile(originalFile.c_str(), patchedFile.c_str(), FALSE) )\
+		{\
+			return false;\
+		}\
+	}
+
+	CopyOriginalFile("DATA.O");
+	CopyOriginalFile("READY.BIN");
 }
 
 int main(int argc, char* argv[])
@@ -270,11 +317,11 @@ int main(int argc, char* argv[])
 
 	if (command == string("PatchData") && argc == 5)
 	{
-		const string discDirectory = string(argv[2]) + Seperators;
-		const string dataDirectory = string(argv[3]) + Seperators;
-		const string outDirectory  = string(argv[4]) + Seperators;
+		const string patchedDiscDirectory = string(argv[2]) + Seperators;
+		const string dataDirectory        = string(argv[3]) + Seperators;
+		const string outDirectory         = string(argv[4]) + Seperators;
 
-		PatchData(discDirectory, dataDirectory, outDirectory);
+		PatchData(patchedDiscDirectory, dataDirectory, outDirectory);
 	}
 	else if(command == string("FontFromSaturnToPS2") && argc == 4)
 	{
@@ -282,6 +329,9 @@ int main(int argc, char* argv[])
 		const string outputPath = string(argv[3]);
 
 		SaturnFontToPS2Font c;
-		c.ConvertSaturnFontSheetToPS2(saturnFontPath, outputPath, 8, 24, 8, 32);
+		if( c.ConvertSaturnFontSheetToPS2(saturnFontPath, outputPath, 8, 32, 16, 32) )
+		{
+			printf("Success\n");
+		}
 	}
 }
