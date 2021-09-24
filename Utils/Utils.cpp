@@ -322,7 +322,8 @@ bool FileData::IsDataTheSame(const char* pData1, const char* pData2, const unsig
 {
 	for(unsigned long currIndex = 0; currIndex < memSize; ++currIndex)
 	{
-		if( pData1[currIndex] != pData2[currIndex] )
+		if( (uint8)pData1[currIndex] != (uint8)pData2[currIndex] &&
+		    !((uint8)pData1[currIndex] == 0xff && (uint8)pData2[currIndex] == 0))
 		{
 			return false;
 		}

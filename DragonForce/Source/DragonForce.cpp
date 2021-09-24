@@ -276,6 +276,69 @@ bool PatchTextSpacing(const string& inPatchedDiscDirectory)
 	patchedReadyFile.WriteData(0x0003bf28, &spaceSpacing, 1);
 }
 
+bool PatchMenus(const string& inPatchedDiscDirectory, const string& inDataDirectory)
+{
+	FileReadWriter patchedDataFile;
+	if( !patchedDataFile.OpenFile((inPatchedDiscDirectory + "DATA.0")) )
+	{
+		return false;
+	}
+
+	FileData patchedMenuFile;
+	if( !patchedMenuFile.InitializeFileData("Menus1.Bin", (inDataDirectory + "Menus1.BIN").c_str()) )
+	{
+		return false;
+	}
+	
+	patchedDataFile.WriteData(0x07ec22c0, patchedMenuFile.GetData(), patchedMenuFile.GetDataSize());
+	patchedDataFile.WriteData(0x07f11d78, patchedMenuFile.GetData(), patchedMenuFile.GetDataSize());
+	patchedDataFile.WriteData(0x07f62b54, patchedMenuFile.GetData(), patchedMenuFile.GetDataSize());
+	patchedDataFile.WriteData(0x07fb3ce4, patchedMenuFile.GetData(), patchedMenuFile.GetDataSize());
+	patchedDataFile.WriteData(0x08004a5c, patchedMenuFile.GetData(), patchedMenuFile.GetDataSize());
+	patchedDataFile.WriteData(0x08055c0c, patchedMenuFile.GetData(), patchedMenuFile.GetDataSize());
+	patchedDataFile.WriteData(0x080a69ac, patchedMenuFile.GetData(), patchedMenuFile.GetDataSize());
+	patchedDataFile.WriteData(0x080f7df4, patchedMenuFile.GetData(), patchedMenuFile.GetDataSize());
+
+	//0x080fa6bc
+	FileData patchedMenuFile2;
+	if( !patchedMenuFile2.InitializeFileData("Menus2.Bin", (inDataDirectory + "Menus2.BIN").c_str()) )
+	{
+		return false;
+	}
+	patchedDataFile.WriteData(0x080f7df4, patchedMenuFile2.GetData(), patchedMenuFile2.GetDataSize());
+
+	FileData fieldMenu1;
+	if( !fieldMenu1.InitializeFileData("FieldMenu1.Bin", (inDataDirectory + "FieldMenu1.BIN").c_str()) )
+	{
+		return false;
+	}
+	patchedDataFile.WriteData(0x06e3d330, fieldMenu1.GetData(), fieldMenu1.GetDataSize());
+	patchedDataFile.WriteData(0x06ef7b70, fieldMenu1.GetData(), fieldMenu1.GetDataSize());
+	patchedDataFile.WriteData(0x06fb614c, fieldMenu1.GetData(), fieldMenu1.GetDataSize());
+	patchedDataFile.WriteData(0x07073918, fieldMenu1.GetData(), fieldMenu1.GetDataSize());
+	patchedDataFile.WriteData(0x07130e18, fieldMenu1.GetData(), fieldMenu1.GetDataSize());
+	patchedDataFile.WriteData(0x071edb64, fieldMenu1.GetData(), fieldMenu1.GetDataSize());
+	patchedDataFile.WriteData(0x072ac1a8, fieldMenu1.GetData(), fieldMenu1.GetDataSize());
+	patchedDataFile.WriteData(0x0736aefc, fieldMenu1.GetData(), fieldMenu1.GetDataSize());
+
+	FileData fieldMenu2;
+	if( !fieldMenu2.InitializeFileData("FieldMenu2.Bin", (inDataDirectory + "FieldMenu2.BIN").c_str()) )
+	{
+		return false;
+	}
+	patchedDataFile.WriteData(0x001e00f4, fieldMenu2.GetData(), fieldMenu2.GetDataSize());
+	patchedDataFile.WriteData(0x06e3f660, fieldMenu2.GetData(), fieldMenu2.GetDataSize());
+	patchedDataFile.WriteData(0x06ef9ea0, fieldMenu2.GetData(), fieldMenu2.GetDataSize());
+	patchedDataFile.WriteData(0x06fb847c, fieldMenu2.GetData(), fieldMenu2.GetDataSize());
+	patchedDataFile.WriteData(0x07075c48, fieldMenu2.GetData(), fieldMenu2.GetDataSize());
+	patchedDataFile.WriteData(0x07133148, fieldMenu2.GetData(), fieldMenu2.GetDataSize());
+	patchedDataFile.WriteData(0x071efe94, fieldMenu2.GetData(), fieldMenu2.GetDataSize());
+	patchedDataFile.WriteData(0x072ae4d8, fieldMenu2.GetData(), fieldMenu2.GetDataSize());
+	patchedDataFile.WriteData(0x0736d22c, fieldMenu2.GetData(), fieldMenu2.GetDataSize());
+
+	return true;
+}
+
 bool PatchData(const string& inPatchedDiscDirectory, const string& inDataDirectory, const string& inOutputDirectory)
 {
 	if( !PatchFontSheets(inPatchedDiscDirectory, inDataDirectory, inOutputDirectory) )
@@ -284,6 +347,12 @@ bool PatchData(const string& inPatchedDiscDirectory, const string& inDataDirecto
 	}
 
 	PatchTextSpacing(inPatchedDiscDirectory);
+
+	if( !PatchMenus(inPatchedDiscDirectory, inDataDirectory) )
+	{
+		printf("PatchMenus failed\n");
+		return false;
+	}
 
 	printf("PatchData Succeeded\n");
 	return true;
