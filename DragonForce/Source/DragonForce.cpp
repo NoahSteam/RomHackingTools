@@ -34,6 +34,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 using std::vector;
 using std::string;
+using std::unordered_map;
+using std::map;
 
 class SaturnFontToPS2Font
 {
@@ -274,6 +276,8 @@ bool PatchTextSpacing(const string& inPatchedDiscDirectory)
 	const char spaceSpacing = 4;
 	patchedDataFile.WriteData(0x002b3f28, &spaceSpacing, 1);
 	patchedReadyFile.WriteData(0x0003bf28, &spaceSpacing, 1);
+
+	return true;
 }
 
 bool PatchMenus(const string& inPatchedDiscDirectory, const string& inDataDirectory)
@@ -358,6 +362,132 @@ bool PatchData(const string& inPatchedDiscDirectory, const string& inDataDirecto
 	return true;
 }
 
+//Extract text from Ready.bin
+bool ExtractReadyFile(const string& inDiscDirectory, const string& inOutputDirectory)
+{
+	FileData readyFile;
+	if( !readyFile.InitializeFileData("Ready0.bin", (inDiscDirectory + "Ready0.bin").c_str()) )
+	{
+		return false;
+	}
+
+	FileWriter outFile;
+	if( !outFile.OpenFileForWrite((inOutputDirectory + "Ready.txt")) )
+	{
+		return false;
+	}
+
+	uint32 fileOffset = 0x4bac0;//0x7a728;
+	const char* pData = readyFile.GetData();
+	while( fileOffset < readyFile.GetDataSize() )
+	{
+		if( pData[fileOffset] == 0 || (uint8)pData[fileOffset] == 0xff )
+		{
+			++fileOffset;
+			continue;
+		}
+
+		outFile.WriteData(&pData[fileOffset], 1);
+		++fileOffset;
+
+		if( pData[fileOffset] == 0 )
+		{
+			char newLine = '\n';
+			outFile.WriteData(&newLine, 1);
+		}
+	}
+
+	return true;
+}
+
+void ExtractTextFromStream(const char* pInData, uint32 inOffset, uint32 inDataSize, unordered_map<string, uint32>& outData, 
+						   map<uint32, string>& outLineToText)
+{
+	char buffer[1024];
+	memset(buffer, 0, sizeof(buffer));
+
+	uint32 bufferIndex = 0;
+	uint32 fileOffset  = inOffset;
+	uint32 entryNumber = 0;
+	while( fileOffset < inDataSize )
+	{
+		if( pInData[fileOffset] == 0 )
+		{
+			++fileOffset;
+			continue;
+		}
+
+		buffer[bufferIndex++] = pInData[fileOffset++];
+		if( bufferIndex > 1024 )
+		{
+			printf("Buffer too small\n");
+			return;
+		}
+
+		if( pInData[fileOffset] == 0 )
+		{
+			string newString(buffer);
+			outData[newString]         = entryNumber;
+			outLineToText[entryNumber] = newString;
+
+			memset(buffer, 0, sizeof(buffer));
+
+			++entryNumber;
+			bufferIndex = 0;
+		}
+	}
+}
+
+bool MatchUpTextFromReadyFiles(const string& inPs2ReadyFilePath, const string& inSaturnEngReadyFilePath, const string& inSaturnJpReadyFilePath,
+							   const string& inOutputDirectory)
+{
+	FileData ps2ReadyFile;
+	if( !ps2ReadyFile.InitializeFileData("Ready.bin", inPs2ReadyFilePath.c_str()) )
+	{
+		return false;
+	}
+
+	FileData engReadyFile;
+	if( !engReadyFile.InitializeFileData("Ready0.bin", inSaturnEngReadyFilePath.c_str()) )
+	{
+		return false;
+	}
+
+	FileData jpnReadyFile;
+	if( !jpnReadyFile.InitializeFileData("Ready0.bin", inSaturnJpReadyFilePath.c_str()) )
+	{
+		return false;
+	}
+
+	TextFileWriter outFile;
+	if( !outFile.OpenFileForWrite((inOutputDirectory + "ReadyMatches.txt")) )
+	{
+		return false;
+	}
+
+	unordered_map<string, uint32> ps2Text, engText, jpText;
+	map<uint32, string> ps2TextLineToText, engTextLineToText, jpTextLineToText;
+	ExtractTextFromStream(ps2ReadyFile.GetData(), 0x7a728, ps2ReadyFile.GetDataSize(), ps2Text, ps2TextLineToText);
+	ExtractTextFromStream(engReadyFile.GetData(), 0x4c30c, engReadyFile.GetDataSize(), engText, engTextLineToText);
+	ExtractTextFromStream(jpnReadyFile.GetData(), 0x4bd64, jpnReadyFile.GetDataSize(), jpText,  jpTextLineToText);
+
+	for( map<uint32, string>::iterator iter = jpTextLineToText.begin(); iter != jpTextLineToText.end(); ++iter )
+	{
+		//if( engTextLineToText.find(iter->first) != engTextLineToText.end() )
+		{
+		//	outFile.Printf("%s, %s\n", iter->second.c_str(), engTextLineToText[iter->first].c_str());
+		}
+	//	else
+		{
+		//	outFile.Printf("%s, NotFound\n", iter->second.c_str());
+		}
+
+		outFile.Printf("%s\n", iter->second.c_str());
+	}
+
+	return true;
+}
+
 bool CopyOriginalFiles(const string& inDiscDirectory, const string& inPatchedDiscDirectory)
 {
 	#define CopyOriginalFile(fileName)\
@@ -372,6 +502,8 @@ bool CopyOriginalFiles(const string& inDiscDirectory, const string& inPatchedDis
 
 	CopyOriginalFile("DATA.O");
 	CopyOriginalFile("READY.BIN");
+
+	return true;
 }
 
 int main(int argc, char* argv[])
@@ -402,5 +534,28 @@ int main(int argc, char* argv[])
 		{
 			printf("Success\n");
 		}
+	}
+	else if( command == string("ExtractReadyFile") && argc == 4 )
+	{
+		const string discDirectory = string(argv[2]) + Seperators;
+		const string outputDirectory = string(argv[3]) + Seperators;
+
+		if( ExtractReadyFile(discDirectory, outputDirectory) )
+		{
+			printf("Success\n");
+		}
+		else
+		{
+			printf("Failed\n");
+		}
+	}
+	else if( command == string("MatchUpTextFromReadyFiles") && argc == 6 )
+	{
+		const string ps2Ready = string(argv[2]);
+		const string engReady = string(argv[3]);
+		const string jpnReady = string(argv[4]);
+		const string outDirectory = string(argv[5]) + Seperators;
+
+		MatchUpTextFromReadyFiles(ps2Ready, engReady, jpnReady, outDirectory);
 	}
 }

@@ -2,4 +2,6 @@ PatchData A:\DragonForce\PS2\DragonForce_Modded\Disc A:\NoahSteam\RomPatchingToo
 
 FontFromSaturnToPS2 C:\Users\16306\Desktop\Rizwan\RomHackingTools\DragonForce\Data\SaturnFontSheet.bmp C:\Users\16306\Desktop\Rizwan\RomHackingTools\DragonForce\Data\PS2EnglishFontSheet.bmp
 PatchData C:\Users\16306\Desktop\Rizwan\DragonForce\Game\Disc_Patched C:\Users\16306\Desktop\Rizwan\RomHackingTools\DragonForce\Data C:\Users\16306\Desktop\Rizwan\DragonForce\Game\PatchingOutput
+ExtractReadyFile C:\Users\16306\Desktop\Rizwan\DragonForce\Game\Disc C:\Users\16306\Desktop\Rizwan\DragonForce\Game\ExtractedData\JP
+MatchUpTextFromReadyFiles c:\Users\16306\Desktop\Rizwan\DragonForce\Game\Disc\Ready.bin C:\Users\16306\Desktop\Rizwan\DragonForce\Game\Saturn\Disc\GAME\Ready0.bin C:\Users\16306\Desktop\Rizwan\DragonForce\Game\Saturn\Japanese\Disc\GAME\Ready0.bin C:\Users\16306\Desktop\Rizwan\DragonForce\Game\ExtractedData
 FindData.exe C:\Users\16306\Desktop\Rizwan\DragonForce\Game\Disc C:\Users\16306\Desktop\Rizwan\SakuraWars2\find.bin
