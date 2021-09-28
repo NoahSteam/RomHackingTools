@@ -363,21 +363,22 @@ bool PatchData(const string& inPatchedDiscDirectory, const string& inDataDirecto
 }
 
 //Extract text from Ready.bin
-bool ExtractReadyFile(const string& inDiscDirectory, const string& inOutputDirectory)
+bool ExtractFileText(const string& inFilePath, uint32 inFileOffset, const string& inOutputFilePath)
 {
+	FileNameContainer inFileName(inFilePath.c_str());
 	FileData readyFile;
-	if( !readyFile.InitializeFileData("Ready0.bin", (inDiscDirectory + "Ready0.bin").c_str()) )
+	if( !readyFile.InitializeFileData(inFileName) )
 	{
 		return false;
 	}
 
 	FileWriter outFile;
-	if( !outFile.OpenFileForWrite((inOutputDirectory + "Ready.txt")) )
+	if( !outFile.OpenFileForWrite(inOutputFilePath) )
 	{
 		return false;
 	}
 
-	uint32 fileOffset = 0x4bac0;//0x7a728;
+	uint32 fileOffset = inFileOffset;//0x4bac0;//0x7a728;
 	const char* pData = readyFile.GetData();
 	while( fileOffset < readyFile.GetDataSize() )
 	{
@@ -535,12 +536,13 @@ int main(int argc, char* argv[])
 			printf("Success\n");
 		}
 	}
-	else if( command == string("ExtractReadyFile") && argc == 4 )
+	else if( command == string("ExtractFileText") && argc == 5 )
 	{
-		const string discDirectory = string(argv[2]) + Seperators;
-		const string outputDirectory = string(argv[3]) + Seperators;
+		const string discDirectory = string(argv[2]);
+		const uint32 offset = (uint32)strtol(argv[3], nullptr, 16);
+		const string outputDirectory = string(argv[4]);
 
-		if( ExtractReadyFile(discDirectory, outputDirectory) )
+		if( ExtractFileText(discDirectory, offset, outputDirectory) )
 		{
 			printf("Success\n");
 		}
