@@ -1,0 +1,3065 @@
+¼Ş­É°İ,Junon,Junon
+ºŞİºŞ½,Gongos,Gongos
+Úµİ,Leon,Leon
+Ú²Å°Ä,Late,Reinhart
+Ğ¶ÂŞ·,Mikanoki,Mikhal
+Ã¨Ø½,Tirisu,Teiris
+ºŞÙÀŞ¸,Goldaku,Goldark
+³ª²İ,Wayne,Wein
+V‹K,New,
+XV,update,
+•¡Ê,copy,
+Á‹,erase,
+I—¹,end,
+‘Ò‹@‚³‚¹‚Ü‚·‚©H,Do you want to wait?,
+æÁ,Cancel,
+Œˆ’è,Decide,
+‘Ş‹p,retreat,
+î•ñ,information,
+ow,Departure,
+MEMORYCARD·Œû‚Q,MEMORYCARD outlet 2,MEMORYCARD SLOT 2
+MEMORYCARD·Œû‚P,MEMORYCARD outlet 1,MEMORYCARD SLOT 1
+ŒMÍö—^‚ğ‚â‚ß‚é,Stop awarding medals,End Awards
+%2d,% 2d,% 2d
+%3d %3d,% 3d% 3d,% 3d% 3d
+ƒAƒCƒeƒ€ö—^‚ğ‚â‚ß‚é,Stop awarding items,End Items
+‘•”õ‚ğ‚Í‚¸‚·,Remove equipment,Unequip
+Á,Erase,Erase
+‘•,Outfit,Outfit
+‰ïŒ©‚ğ‚â‚ß‚é,Stop the press conference,End Audience
+ˆê——•\¦‚ğ‚â‚ß‚é,Stop displaying the list,End General Info
+—Ã—{’†,recovering,Recovering
+•ß—¸,POW,Captive
+ŒNå,Monarch,Monarch
+%-12s %-6s %-12s,% -12s% -6s% -12s,% -12s% -6s% -12s
+’n}‚É–ß‚é,Return to map,Return to map
+%-12s %-6s     %2d,% -12s% -6s% 2d,% -12s% -6s% 2d
+%3d,% 3d,% 3d
+’TõI—¹,End of search,End Search
+’zéI—¹,The construction of the castle is completed,End Fortify
+I    —¹,end,End View
+‘S‘Ì‚ğŒ©‚é,See the whole,View All
+ERROR : List_Select(:win),ERROR: List_Select (: win),
+"SEL %3d/%3d, HEAD %3u","SEL% 3d /% 3d, HEAD% 3u",
+"DMAX %3u, ENTRY %3u","DMAX% 3u, ENTRY% 3u",
+"LIST[%3u] %3u, Sts %x","LIST [% 3u]% 3u, Sts% x",
+Cnt %u chk %X,Cnt% u chk% X,
+•ö‰ó‚Ì•ó•¨,Collapse treasure,
+—Fî‚ÌƒRƒCƒ“,Friendship coin,Faith Coin
+—E‹C‚ÌƒRƒCƒ“,Courage coin,Bravery Coin
+½À‚ÌƒRƒCƒ“,Sincere coin,Honor Coin
+ƒAƒXƒeƒA‚Ì‘œ,Statue of Astea,Astea's Statue
+ƒhƒ‰ƒSƒ“‚Ì‘œ,Dragon statue,Dragon Statue
+bím‹JÍ,Beast Warrior Emblem,Savage Crest
+‰…—ì‹JÍ,Grief emblem,Spirit Crest
+”òs‹JÍ,Flight emblem,Flying Crest
+‘m•º‹JÍ,Monk soldier emblem,Cleric Crest
+˜‹JÍ,Samurai emblem,Samurai Crest
+–‚“±‹JÍ,Magical emblem,Magic Crest
+‹|‹JÍ,Bow emblem,Arrow Crest
+‹Rm‹JÍ,Knight emblem,Honor Crest
+ím‹JÍ,Warrior emblem,Soldier Crest
+—³‹Rm‹JÍ,Dragoon emblem,Dragon Crest
+ƒAƒXƒeƒA‚ÌS,Astea's heart,Astea's Herb
+l“¿‚Ì‘,Book of human virtue,Virtuous Runes
+ŒÃ‘ã‚Ì‘,Ancient book,Ancient Runes
+•º–@‚Ì‘,Book of military art,Strategy Runes
+”j–Å‚Ì•ó•¨,Treasure of ruin,Ruined Treasure
+¯‚Ì•ó“,Star treasure sword,Stargem Sword
+Œ‚Ìñ,Moon wand,Moon Cane
+‘¾—z‚Ì˜rŠÂ,Arm ring of the sun,Sun Bracelet
+’mŒb‚Ì˜rŠÂ,Arm ring of wisdom,Wisdom Armlet
+Œ«Ò‚Ì˜r—Ö,Sage's bracelet,Sage Bracelet
+“ª—Ì‚Ì˜rŠÂ,Arm ring of the head,Knowledge Armlet
+ƒ~ƒXƒgƒ‰ƒ‹,Mistral,Mistral
+ƒeƒ“ƒyƒXƒg,Tempest,Tempest
+ƒ~ƒ‰ƒNƒ‹ƒƒbƒh,Miracle rod,Miracle Rod
+ƒWƒ…ƒGƒ‹ƒƒbƒh,Jewel rod,Jeweled Rod
+ƒGƒƒ[ƒh,Emerode,Emerald
+–ìS‚Ìw—Ö,Ring of ambition,Ambition Ring
+ƒgƒD[ƒ‹‚Ìw—Ö,Tour ring,True Ring
+ƒAƒXƒeƒA‚Ìw—Ö,Astea Ring,Astea's Ring
+—_‚Ì—Ü,Goddess tears,Goddess Tear
+ƒhƒ‰ƒSƒ“ƒYƒAƒC,Dragon's Eye,Dragon's Eye
+ŒR_‚Ìç‚è,Guardian of the war god,Valhart's Charm
+ƒŠƒtƒŒƒNƒ^[,Reflector,Battle Armor
+ƒSƒbƒYƒA[ƒ}[,Gods Armor,Gauze Armor
+«ŒR‚ÌƒˆƒƒC,Shogun Yoroi,Shogun Armor
+g‘ã‚í‚è‚Ì|,Substitute shield,Sacrifice Shield
+‰ÁŒì‚Ì|,Shield of blessing,Divine Shield
+¯—³‚Ì•óñ,Star Dragon Treasure Wand,Star Dragon Cane
+¯—³‚Ì˜rŠÂ,Star Dragon Arm Ring,Star Dragon Armlet
+¯—³‚Ì‘åŒ•,Star Dragon's Great Sword,Star Dragon Sword
+ƒvƒ‰ƒYƒ}ƒNƒ[,Plasma claw,Wicked Claw
+ƒfƒXƒNƒ[,Desk low,Dark Claw
+ƒr[ƒXƒgƒNƒ[,Beast claw,Beast Claw
+ƒ}ƒWƒbƒNƒ‰ƒ“ƒX,Magic lance,Magical Lance
+ƒ‹[ƒ“ƒ‰ƒ“ƒX,Rune lance,Rune Lance
+ƒoƒgƒ‹ƒXƒsƒA,Battle spear,Battle Spear
+ƒWƒƒƒxƒŠƒ“,Javelin,Javelin
+‘å’n‚Ì•€,Earth ax,Earth Axe
+ƒCƒOƒjƒX‚Ì•€,Ignis ax,Igneous Axe
+—‹–Â‚Ì•€,Thunder ax,Thunder Axe
+–‚_‚Ì•€,Genie Ax,Dark Axe
+_ˆĞ,Kamui,Kamui Blade
+_Œ“,God moon sword,Moon God Sword
+—d“@•s’m‰Î,Shiranui,Kamui Blade
+ŒŒõ,moonlight,Moonbeam Sword
+‘“â,Kusanagi,Kusanagi Blade
+‘º‰J,Village rain,Phantom Sword
+ƒGƒNƒŠƒNƒVƒX,Ecrixis,Eclisis
+ƒKƒCƒAƒ\[ƒh,Gaia Sword,Gaia Sword
+ƒTƒCƒRƒ\[ƒh,Psycho sword,Psycho Sword
+ƒ\ƒEƒ‹ƒoƒXƒ^[,Soul Buster,Soul Buster
+ƒ}ƒ‹ƒXƒMƒA,Mars Gear,Mars Blade
+‚È‚µ,none,
+ƒAƒ„ƒEƒ}ƒcƒŠ,Ayame Matsuri,Ayame & Matsuri
+ƒn[ƒZƒ‹ƒh,Herseld,Harseld
+ƒ‹ƒtƒX,Rufus,Rufas
+ƒUƒbƒN,Zack,Zakk
+ƒZƒ‹ƒsƒA,Serpia,Sylphia
+ƒXƒeƒBƒA,Steer,Fyffer
+ƒƒO,log,Rog
+ƒ”ƒHƒCƒh,Void,Voitt
+ƒMƒBƒ‹ƒe,Guilte,Gilette
+ƒGƒi,Ena,Enya
+ƒtƒFƒŠ[ƒi,Felina,Fern
+ƒNƒŒƒCƒ“,Klein,Kulien
+ƒ\ƒEƒK,Souga,Stegalt
+ƒŠƒ”ƒBƒIƒ“,Revion,Livion
+ƒKƒhƒ‹,Gaddle,Gator
+ƒo[ƒ‰ƒbƒg,Barrat,Barat
+ƒT[ƒoƒX,Servers,Slythis
+ƒ[ƒEƒ^,Zeuta,Zatai
+ƒoƒ‹ƒi[ƒN,Balnark,Narrak
+ƒXƒŒƒCƒh,Slade,Slate
+ƒVƒ…ƒŒƒCƒo,Shreiba,Shadow
+ƒƒ‹ƒfƒX,Waldes,Gekai
+ƒ‰ƒCƒh[,Rideau,Raitt
+ƒWƒ“,gin,Hagar
+ƒCƒVƒ…ƒ[ƒ‹,Issuer,Ishtar
+ƒLƒ‹ƒŒƒCƒ“,Kilrane,Kilrein
+ƒtƒH[ƒŠƒX,Foris,Farilis
+ƒAƒŒƒCƒN,Arrayk,Alex
+ƒtƒB[ƒi,Fina,Fiina
+ƒƒA,Mare,Mea
+—³l,Ryujin,Ryujin
+ƒ}ƒhƒ‹ƒN,Madruk,Madruk
+ƒ‰ƒ€ƒ_,lambda,Ramda
+ƒj[ƒ‹,Neil,Neil
+ƒoƒ‰ƒh,Balad,Barat
+ƒ‹[ƒxƒ“ƒX,Rubens,Ruix
+ƒ}ƒ‹ƒ`ƒi,Martina,Marina
+ƒ}ƒOƒ‰[ƒh,Maglad,Phylla
+ƒVƒFƒ‰ƒT[ƒh,Sherasard,Saharzad
+ƒwƒ‹ƒƒX,Hermes,Paine
+ƒSƒ‹ƒfƒBƒAƒX,Gordias,Agonni
+ƒMƒ…ƒ“ƒg,Gunto,Grudar
+ƒAƒgƒLƒ“ƒX,Atkins,Atakin
+‚Ç‚­‚ë‚Æ‚¤,Skull,Skull
+ƒpƒ“ƒ^ƒŠƒIƒ“,Pantalion,Bastion
+ƒOƒ‹[ƒ_[,Gluder,Gruder
+ƒxƒ‹ƒ^[ƒi,Bertana,Veltarna
+ƒ†ƒŠƒVƒX,Ulysses,Yuri
+ƒ[ƒmƒ“,Zenon,Zanon
+ƒoƒjƒ‰,vanilla,Varshyl
+ƒjƒJƒ‹ƒ‚,Nikarmo,Nyvkall
+ƒp[ƒVƒ‹,Persil,Piper
+ƒ‰ƒCƒI[ƒl,Rione,Laine
+ƒ~ƒŒ[ƒk,Milene,Mileen
+ƒGƒŠ[ƒk,Erine,Erin
+ƒnƒKƒl,Hagane,Hagane
+ƒlƒ‹ƒ\ƒ“,Nelson,Nelson
+ƒZƒ‹ƒWƒI,Sergio,Viper
+ƒoƒOƒtƒB[,Bug fee,Bagril
+ƒAƒC[ƒVƒƒ,Aisha,Aisha
+ƒ^ƒCƒŒƒ‹,Tyrell,Talon
+ƒTƒ^[ƒi,Satana,Santana
+ƒMƒK,Giga,Gigg
+ƒWƒƒƒƒ€,Jalom,Ardor
+ƒEƒŠƒ‹,Uril,Uryll
+ƒLƒbƒh,Kid,Kidd
+ƒ‰ƒ€ƒ[ƒC,Ramsey,Ramzal
+ƒMƒ[ƒ‹ƒ_[ƒN,Giselle Dark,Gyzzdark
+ƒm[ƒ}ƒŠƒB,Normaly,Wriph
+ƒ~ƒ…ƒŠƒA,Muria,Myria
+ƒRƒnƒN,Amber,Kodiak
+ƒ_ƒCƒ“,Dyne,Dayn
+ƒTƒ„ƒJ,Sayaka,Sayaka
+ƒ‰ƒ“ƒZƒc,Lansetsu,Sliver
+ƒNƒ‚ƒ“,Kumon,Kumonn
+ƒLƒ‡ƒEƒGƒ“,Kyoen,Kyoem
+ƒmƒCƒLƒX,Neukis,Norse
+ƒVƒ‹ƒr[,Silvie,Silva
+ƒfƒBƒAƒ“ƒh,Diand,Diablo
+ƒnƒŠƒ‹,Haril,Faliel
+ƒdƒoƒ“,Duban,Tzuvan
+ƒwƒ€,Heme,Helm
+ƒKƒXƒp[,Gaspar,Gaspar
+ƒ}[ƒVƒƒƒ‹,Marshall,Rykker
+ƒKƒ“ƒ‰ƒh,Ganrad,Gunner
+ƒˆ[ƒO,Yog,Yuug
+ƒOƒXƒ^ƒt,Gustav,Gustav
+ƒMƒ‡ƒ‹,Gyeol,Golem
+ƒUƒh,Zado,Zado
+ƒOƒCƒ“ƒKƒ‹,Guingal,Vangal
+ƒVƒFƒ‹ƒ“,Sheln,Cher
+ƒqƒbƒNƒX,Hicks,Hikkis
+ƒJƒgƒ}ƒ“ƒhƒD,Kathmandu,Katmando
+ƒZ[ƒ‰,Sarah,Sierra
+ƒGƒ“ƒhƒŠƒ…[,Endrew,Lone
+ƒƒbƒN,rock,Rock
+ƒqƒ‹ƒ_,Hilda,Hilga
+ƒ{ƒ‹ƒKƒm,Volgano,Borgon
+ƒJƒeƒBƒX,Katis,Katis
+ƒrƒ…[ƒl,Bune,Phylicia
+ƒ~ƒ‹ƒeƒBƒA,Miltia,Milishea
+ƒNƒƒtƒH[ƒh,Crawford,Crawford
+ƒ‰ƒ“ƒhƒ‹ƒt,Randolph,Randolph
+ƒVƒh,Sid,Saul
+ƒ^ƒEƒU,Tauza,Taulus
+ƒCƒOƒ‰ƒVƒI,Igracio,Ogredd
+ƒŠƒXƒL[ƒ},Reschema,Ryskim
+ƒnƒCƒ€,Heim,Vlad
+ƒVƒƒE,Shirou,Shirou
+ƒnƒ„ƒe,Hayate,Hayate
+ƒWƒ‡ƒVƒ…ƒA,Joshua,Scar
+ƒIƒ‹ƒeƒK,Ortega,Ortega
+ƒLƒŠƒR,Chirico,Cinna
+ƒAƒCƒƒX,Airos,Ayrios
+ƒ†ƒj,Uni,Yuni
+ƒ}ƒj,Mani,Katt
+ƒoƒM,Bugi,Baghib
+ƒ‰ƒM,Ragi,Rygar
+ƒ‰ƒCƒUƒbƒN,Lizak,Raizak
+ƒVƒƒƒCƒA,Shire,Shaia
+ƒ†ƒCƒJ,Yuika,Yanna
+ƒKƒŠƒEƒX,Garius,Garyus
+ƒƒmƒ‹ƒJ,Menorca,Bardal
+ƒgƒCƒX,Toys,Tsugal
+ƒ\ƒtƒB[,Sophie,Sophie
+ƒ‰EƒfƒŠ,La Deli,Presto
+ƒzƒEƒ‰ƒC,Horai,Mistal
+ƒVƒIƒ“,Zion,Shione
+ƒoƒNƒ‰,Bakura,Jackal
+ƒWƒ…ƒEƒxƒG,Juubee,Zagat
+ƒ‰ƒCƒ“ƒm[ƒ‹,Reinnor,Reiner
+ƒfƒ…ƒ‰ƒ“,Durand,Duran
+ƒ}ƒmƒA,Manoa,Manoa
+ƒOƒŒƒ“,Glen,Gulen
+ƒŠƒŠƒA,Lilia,Lyria
+ƒOƒŒƒCƒX,Grace,Scythe
+ƒJƒ‹ƒnƒU[ƒh,Cal Hazard,Kharhaz
+ƒMƒfƒIƒ“,Gideon,Gaul
+ƒŠƒ“ƒN,Link,Link
+ƒj[ƒi,Nina,Nina
+ƒ\ƒ}ƒŠƒIƒ“,Somalion,Galam
+ƒƒE,Rowe,Rudger
+ƒWƒ…ƒm[ƒ“,Junon,Junon
+ƒSƒ“ƒSƒX,Gongos,Gongos
+ƒŒƒIƒ“,Leon,Leon
+ƒŒƒCƒi[ƒg,Reinert,Reinhart
+ƒ~ƒJƒdƒL,Mikazuki,Mikhal
+ƒeƒBƒŠƒX,Tyris,Teiris
+ƒSƒ‹ƒ_[ƒN,Gordark,Goldark
+ƒEƒFƒCƒ“,Wayne,Wein
+±ÔÒ¥ÏÂØ,Ame Manri,Ayame & Matsuri
+Ê°¾ÙÄŞ,Hasseld,Harseld
+ÙÌ½,Rufus,Rufas
+»Ş¯¸,Backpack,Zakk
+¾ÙËß±,Selfia,Sylphia
+½Ã¨±,Steer,Fyffer
+Û¸Ş,Log,Rog
+³Ş«²ÄŞ,Void,Voitt
+·Ş¨ÙÃ,Guilte,Gilette
+´Å,Ena,Enya
+ÌªØ°Å,Felina,Fern
+¸Ú²İ,Crane,Kulien
+¿³¶Ş,Souga,Stegalt
+Ø³Ş¨µİ,Lion,Livion
+¶ŞÄŞÙ,Gaddle,Gator
+ÊŞ°×¯Ä,Barrat,Barat
+»°ÊŞ½,Service,Slythis
+¾Ş³À,Zeuta,Zatai
+ÊŞÙÅ°¸,Balnak,Narrak
+½Ú²ÄŞ,Slade,Slate
+¼­Ú²ÊŞ,Shreber,Shadow
+ÜÙÃŞ½,Worlds,Gekai
+×²ÄŞ°,Ride,Raitt
+¼Şİ,Gin,Hagar
+²¼­Ò°Ù,Ishimeru,Ishtar
+·ÙÚ²İ,Kilrane,Kilrein
+Ì«°Ø½,Foris,Farilis
+±Ú²¸,Arake,Alex
+Ì¨°Å,Finer,Fiina
+Ò±,Mare,Mea
+Ø­³¼Şİ,Ryujin,Ryujin
+ÏÄŞÙ¸,Madruk,Madruk
+×ÑÀŞ,Lambda,Ramda
+Æ°Ù,Neil,Neil
+ÊŞ×ÄŞ,Balad,Barat
+Ù°ÍŞİ½,Rubens,Ruix
+ÏÙÁÅ,Multina,Marina
+Ï¸Ş×°ÄŞ,Maglad,Phylla
+¼ª×»°ÄŞ,Sheller Sard,Saharzad
+ÍÙÒ½,Hermes,Paine
+ºŞÙÃŞ¨±½,Gordias,Agonni
+·Ş­İÄ,Gunto,Grudar
+±Ä·İ½,Atkins,Atakin
+ÄŞ¸ÛÄ³,Dokuroto,Skull
+ÊßİÀØµİ,Pantalion,Bastion
+¸ŞÙ°ÀŞ°,Grunder,Gruder
+ÍŞÙÀ°Å,Beltana,Veltarna
+ÕØ¼½,Ulysses,Yuri
+¾ŞÉİ,Zenon,Zanon
+ÊŞÆ×,Vanilla,Varshyl
+Æ¶ÙÓ,Nikarmo,Nyvkall
+Êß°¼Ù,Persill,Piper
+×²µ°È,Rione,Laine
+ĞÚ°Ç,Milene,Mileen
+´Ø°Ç,Erine,Erin
+Ê¶ŞÈ,Hagan,Hagane
+ÈÙ¿İ,Nelson,Nelson
+¾Ù¼Şµ,Cellgio,Viper
+ÊŞ¸ŞÌ¨°,Baggie,Bagril
+±²°¼¬,Aisha,Aisha
+À²ÚÙ,Tyrell,Talon
+»À°Å,Satana,Santana
+·Ş¶Ş,Giga,Gigg
+¼Ş¬ÛÑ,Jarom,Ardor
+³ØÙ,Uril,Uryll
+·¯ÄŞ,Kid,Kidd
+×Ñ¾Ş²,Ramsey,Ramzal
+·Ş¾ŞÙÀŞ°¸,Gizel Dark,Gyzzdark
+É°ÏØ¨,Nomary,Wriph
+Ğ­Ø±,Muriah,Myria
+ºÊ¸,Amber,Kodiak
+ÀŞ²İ,Dyne,Dayn
+»Ô¶,Sayaka,Sayaka
+×İ¾Â,Lanset,Sliver
+¸Óİ,Kumon,Kumonn
+·®³´İ,Kyouen,Kyoem
+É²·½,Neux,Norse
+¼ÙËŞ°,Silvie,Silva
+ÃŞ¨±İÄŞ,Dear and,Diablo
+ÊØÙ,Haril,Faliel
+ÂŞÊŞİ,Tsuban,Tzuvan
+ÍÑ,Heme,Helm
+¶Ş½Êß°,Gasper,Gaspar
+Ï°¼¬Ù,Marshall,Rykker
+¶Şİ×ÄŞ,Ganrad,Gunner
+Ö°¸Ş,Neg,Yuug
+¸Ş½ÀÌ,Gustav,Gustav
+·Ş®Ù,Gyor,Golem
+»ŞÄŞ,Zado,Zado
+¸Ş²İ¶ŞÙ,Gingal,Vangal
+¼ªÙİ,Sherun,Cher
+Ë¯¸½,Hix,Hikkis
+¶ÄÏİÄŞ©,Catmand,Katmando
+¾°×,Sera,Sierra
+´İÄŞØ­°,Endry,Lone
+Û¯¸,Rock,Rock
+ËÙÀŞ,Hilda,Hilga
+ÎŞÙ¶ŞÉ,Volgano,Borgon
+¶Ã¨½,Katiss,Katis
+ËŞ­°È,View,Phylicia
+ĞÙÃ¨±,Miltia,Milishea
+¸ÛÌ«°ÄŞ,Croford,Crawford
+×İÄŞÙÌ,Landolf,Randolph
+¼ÄŞ,Sid,Saul
+À³»Ş,Town,Taulus
+²¸Ş×¼µ,Iglacio,Ogredd
+Ø½·°Ï,Risker,Ryskim
+Ê²Ñ,High,Vlad
+¼Û³,White,Shirou
+ÊÔÃ,Hate,Hayate
+¼Ş®¼­±,Joshua,Scar
+µÙÃ¶Ş,Ortega,Ortega
+·Øº,Chirico,Cinna
+±²Û½,Airos,Ayrios
+ÕÆ,Uni,Yuni
+ÏÆ,Mani,Katt
+ÊŞ·Ş,Bagi,Baghib
+×·Ş,Ragi,Rygar
+×²»Ş¯¸,Rizak,Raizak
+¼¬²±,Shire,Shaia
+Õ²¶,Yuika,Yanna
+¶ŞØ³½,Garius,Garyus
+ÒÉÙ¶,Minorca,Bardal
+Ä²½,Toys,Tsugal
+¿Ì¨°,Sophie,Sophie
+×¥ÃŞØ,La Deli,Presto
+Î³×²,Howley,Mistal
+¼µİ,Sion,Shione
+ÊŞ¸×,Bakura,Jackal
+¼Ş­³ÍŞ´,Juve,Zagat
+×²İÉ°Ù,Line Noll,Reiner
+ÃŞ­×İ,Duran,Duran
+ÏÉ±,Manoa,Manoa
+¸ŞÚİ,Glen,Gulen
+ØØ±,Lilia,Lyria
+¸ŞÚ²½,Grace,Scythe
+¶ÙÊ»Ş°ÄŞ,Cal Hazard,Kharhaz
+·ŞÃŞµİ,Gideon,Gaul
+Øİ¸,Link,Link
+Æ°Å,Nina,Nina
+¿ÏØµİ,Somalion,Galam
+Û³,Row,Rudger
+¼Ş­É°İ,Junon,Junon
+ºŞİºŞ½,Gongos,Gongos
+Úµİ,Leon,Leon
+Ú²Å°Ä,Late,Reinhart
+Ğ¶ÂŞ·,Mikanoki,Mikhal
+Ã¨Ø½,Tirisu,Teiris
+ºŞÙÀŞ°¸,Goldark,Goldark
+³ª²İ,Wayne,Wein
+“ƒ,Tower,Tower
+‰e‚Ì“ƒ,Shadow Tower,Shadow Tower
+á‚Ì_“a,Temple of snow,Snow Shrine
+–¦‚Ì_“a,Cape temple,Cape Shrine
+X‚Ì_“a,Forest temple,Forest Shrine
+–‚‚Ì“ƒ,Devil's Tower,Fiend Tower
+ƒƒŠƒEƒFƒ‹é,Meriwell Castle,Maryware Castle
+ƒIƒCƒ“ƒcé,Oints Castle,Ogrekeep Castle
+ƒAƒCƒlƒXé,INES Castle,Estonia Castle
+ƒ~ƒPƒ‰ƒ‹é,Michelal Castle,Mikeral Castle
+ƒjƒPƒ‰ƒ‹é,Nikeral Castle,Nikeral Castle
+ƒgƒ‰ƒ“ƒoƒ“é,Trang Bang Castle,Travan Castle
+ƒAƒ“ƒré,Ambi Castle,Starfall Castle
+ƒK[ƒ‰ƒ“é,Garlan Castle,Crystal Castle
+ƒ\ƒvƒjƒJé,Sopnica Castle,Sophnyk Castle
+ƒfƒ‹ƒ†[ƒhé,Del Ude Castle,Blazart Castle
+ƒT[ƒfƒBƒAé,Sadia Castle,Sardia Castle
+ƒƒEƒ‰ƒ“é,Laurent Castle,Roguewar Castle
+ƒKƒXƒy[ƒ‹é,Gaspar Castle,Gasparl Castle
+ƒ‰ƒCƒgƒjƒAé,Lightnia Castle,Lightan Castle
+ƒAƒOƒjƒEƒXé,Agnius Castle,Stalwart Castle
+ƒfƒCƒiƒ“é,Dainan Castle,Danyan Castle
+ƒƒCƒ„ƒ‹é,Royal castle,Royal Castle
+ƒGƒ^[ƒiƒ‹é,Eternal Castle,Eternal Castle
+ƒGƒ‹ƒƒ“ƒgé,Elment Castle,Magicka Castle
+ƒNƒŒƒXƒgƒAé,Cresta Castle,Claystal Castle
+ƒI[ƒ”ƒCƒGé,Auvie Castle,Orvue Castle
+ƒW[ƒié,Gina Castle,Ginan Castle
+ƒuƒ‰ƒbƒhƒŠƒBé,Bradley Castle,Bloodly Castle
+ƒqƒƒCƒbƒNé,Heroic Castle,Stoic Castle
+ƒfƒB[ƒhé,Deed Castle,Daiden Castle
+ƒK[ƒtƒB[ƒ‹é,Garfir Castle,Galfiel Castle
+ƒgƒŠƒXƒ^ƒ“é,Tristan Castle,Tristan Castle
+ƒ{ƒUƒbƒNé,Bossack Castle,Bozack Castle
+ƒgƒp[ƒYé,Topaz Castle,Topaz Castle
+ƒgƒ‰ƒbƒhƒmƒAé,Trad Noah Castle,Tradnor Castle
+ƒCƒYƒ‚é,Izumo Castle,Izumo Castle
+ƒ€[ƒ“ƒpƒŒƒXé,Moon Palace Castle,Palemoon Castle
+ƒtƒ@ƒ“ƒ_ƒŠƒAé,Fundaria Castle,Fandaria Castle
+ƒnƒCƒ‰ƒ“ƒhé,Highland Castle,Highland Castle
+Ä³,Tow,Tow
+¶¹ŞÉÄ³,Kanoto,Kanoto
+Õ·É¼İÃŞİ,Ukinosinden,Ukinosinden
+Ğ»·É¼İÃŞİ,Misaki no Shinden,Misaki no Shinden
+ÓØÉ¼İÃŞİ,Morino Shinden,Morino Shinden
+ÊÏÉÄ³,Hamanoto,Hamanoto
+ÒØ³ªÙ,Meriwell,Maryware
+µ²İÂ,Oin',Ogrekeep
+±²È½,INES,Estonia
+Ğ¹×Ù,Miral,Mikeral
+Æ¹×Ù,Natural,Nikeral
+Ä×İÊŞİ,Tramban,Traven
+±İËŞ,Ambi,Starfall
+¶Ş°×İ,Garlan,Crystal
+¿ÌßÆ¶,Sopnica,Sophnik
+ÃŞÙÕ°ÄŞ,Del mode,Blazart
+»°ÃŞ¨±,Sardia,Sardia
+Û³×İ,Rowlan,Roguewar
+¶Ş½Íß°Ù,Gaspar,Gasparl
+×²ÄÆ±,Litenia,Lightan
+±¸ŞÆ³½,Agnius,Stalwart
+ÃŞ²Åİ,Dyna,Danyan
+Û²ÔÙ,Royal,Royal
+´À°ÅÙ,Eternal,Eternal
+´ÙÒİÄ,Elment,Magicka
+¸Ú½Ä±,Crestor,Claystal
+µ°³Ş²´,Ovie,Orvue
+¼Ş°Å,Jeana,Ginan
+ÌŞ×¯ÄŞØ¨,Bloody,Bloodly
+ËÛ²¯¸,Heroic,Stoic
+ÃŞ¨°ÄŞ,Deed,Daiden
+¶Ş°Ì¨°Ù,Garfield,Galfiel
+ÄØ½Àİ,Tristan,Tristan
+ÎŞ»Ş¯¸,Bossack,Bozack
+ÄÊß°½Ş,Topaz,Topaz
+Ä×¯ÄŞÉ±,Trad Noah,Tradnor
+²½ŞÓ,Ismo,Izumo
+Ñ°İÊßÚ½,Moon Palace,Palemoon
+Ì§İÀŞØ±,Fundaria,Fandaria
+Ê²×İÄŞ,Highland,Highland
+²İ¼Ş­Ø°,Injury,Injured
+ÌßØ½ŞÅ°,Prisoner,Captive
+É°ÏÙ,Normal,Normal
+Ã¨±Ï¯Ä,Tiamat,Astral Dragon
+¸ŞÚ°ÄÄŞ×ºŞİ,Great dragon,Great Dragon
+ÊŞÊÑ°Ä,Bahamut,Blood Dragon
+Ú¯»°ÄŞ×ºŞİ,Lesser dragon,Razor Dragon
+ÄŞ×ºŞİ,Dragon,Dragon
+³Ş§İÊß²±,Vampire,Vampire
+»·­ÊŞ½,Succubus,Succubus
+?????,?????,
+ËŞ°½ÄÏ½À°,Beast Master,Beast Master
+ËŞ°½Ä·İ¸Ş,Beast King,Beast King
+ËŞ°½ÄÛ°ÄŞ,Beast load,Beast Lord
+ËŞ°½ÄÏİ,Beastman,Beast
+ÊŞ°ÊŞØ±İ,Barbarian,Barbarian
+Ï½À°¼°Ì,Master thief,Racketeer
+Û°¸ŞØ°ÀŞ°,Log leader,Marauder
+ÊŞİÃŞ¯Ä,Bandit,Highwayman
+¼°Ì,Thief,Thief
+Û-¸Ş,Log,Rogue
+¾°¼ŞÏ½À°,Sage master,Saint
+¾°¼Ş,Sage,Arch Bishop
+ËŞ¼®¯Ìß,Bishop,Bishop
+Ê²ÌßØ°½Ä,Hyperist,High Priest
+ÌßØ°½Ä,Priest,Priest
+ÊŞÄÙÏ½À°,Battle Master,Arch Monk
+Ï½À°Óİ¸,Master monk,Kung Fucius
+¸İÌ°Ï½À°,Kung Fu Master,Kungfu Master
+ºÏİÄŞ,Command,
+Úİ¼Ş¬°,Ranger,
+¼¬ÄŞ³Ï½À°,Shadow Master,Shadow Lord
+Æİ¼Ş¬Ï½À°,Ninja Master,Arch Ninja
+Ê²Æİ¼Ş¬,Ninja,High Ninja
+±»¼İ,Assassin,Assassin
+Æİ¼Ş¬,Ninja,Ninja
+»Ñ×²Ï½À°,Samurai Master,Samurai Lord
+¹İºŞ³,Kengou,Blood Samurai
+¼ÊİÀŞ²,Shihandai,High Samurai
+»Ñ×²,Samurai,Samurai
+½Û³Æİ,Slow Nin,Shogun
+Ï¼Ş¯¸Ï½À°,Magic Master,Magic Lord
+±°¸Ò²¼Ş,Ark Mage,Necromancer
+³²»Ş°ÄŞ,Wizard,Illusionist
+¿°»×-,Sosara-,Sorcerer
+Ï¼Ş¼¬İ,Magician,Magician
+»ÓİÏ½À°,Sammon Star,Summon Lord
+Û°ÄŞÏİ»°,Roadmancer,Spirit Master
+»ÓÅ-,Samona-,Summoner
+ÄŞÙ²ÄŞ,Druid,Druid
+¼¬-Ïİ,Sha-man,Shaman
+Å²ÄÏ½À°,Night master,Spirit User
+Êß×ÃŞ¨İ,Paladin,Paladin
+¼ÙÊŞ°Å²Ä,Silver Night,Silver Knight
+ÎÜ²ÄÅ²Ä,White Knight,White Knight
+Å²Ä,Night,Knight
+¿°ÄŞÏ½À°,Sword Master,Blademaster
+Ê²×İÀŞ°,British longhair,Highlander
+³«°Ø±°,Warrior,Warrior
+¿-ÄŞÏİ,Swordsman,Swordsman
+Ì§²À°,Fighter,Fighter
+´İÍß×°,Emperor,Emperor
+½À°Û°ÄŞ,Star Road,Star Lord
+Ê²Û°ÄŞ,Hirodo,High Lord
+Û°ÄŞ,Road,Lord
+¼ŞªÈ×Ù,General,General
+ƒeƒBƒAƒ}ƒbƒg,Tiamat,Astral Dragon
+ƒOƒŒ[ƒgƒhƒ‰ƒSƒ“,Great dragon,Great Dragon
+ƒoƒnƒ€[ƒg,Bahamut,Blood Dragon
+ƒŒƒbƒT[ƒhƒ‰ƒSƒ“,Lesser dragon,Razor Dragon
+ƒhƒ‰ƒSƒ“,Dragon,Dragon
+ƒ”ƒ@ƒ“ƒpƒCƒA,Vampire,Vampire
+ƒTƒLƒ…ƒoƒX,Succubus,Succubus
+HHHHH,?? ?? ?? ?? ??,
+ƒr[ƒXƒgƒ}ƒXƒ^[,Beast Master,Beast Master
+ƒr[ƒXƒgƒLƒ“ƒO,Beast King,Beast King
+ƒr[ƒXƒgƒ[ƒh,Beast Road,Beast Lord
+ƒr[ƒXƒgƒ}ƒ“,Beastman,Beast
+ƒo[ƒoƒŠƒAƒ“,Barbarian,Barbarian
+ƒ}ƒXƒ^[ƒV[ƒt,Master thief,Racketeer
+ƒ[ƒOƒŠ[ƒ_[,Rogue leader,Marauder
+ƒoƒ“ƒfƒbƒg,Bandit,Highwayman
+ƒV[ƒt,Thief,Thief
+ƒ[ƒO,Rogue,Rogue
+ƒZ[ƒWƒ}ƒXƒ^[,Sage master,Saint
+ƒZ[ƒW,Sage,Arch Bishop
+ƒrƒVƒ‡ƒbƒv,Bishop,Bishop
+ƒnƒCƒvƒŠ[ƒXƒg,High priest,High Priest
+ƒvƒŠ[ƒXƒg,Priest,Priest
+ƒoƒgƒ‹ƒ}ƒXƒ^[,Battle master,Arch Monk
+ƒ}ƒXƒ^[ƒ‚ƒ“ƒN,Master monk,Kung Fucius
+ƒNƒ“ƒt[ƒ}ƒXƒ^[,Kung Fu Master,Kungfu Master
+ƒRƒ}ƒ“ƒh,command,Officer
+ƒŒƒ“ƒWƒƒ[,Ranger,Ranger
+ƒVƒƒƒhƒEƒ}ƒXƒ^[,Shadow Master,Shadow Lord
+ƒjƒ“ƒWƒƒƒ}ƒXƒ^[,Ninja Master,Arch Ninja
+ƒnƒCƒjƒ“ƒWƒƒ,High Ninja,High Ninja
+ƒAƒTƒVƒ“,Assassin,Assassin
+ƒjƒ“ƒWƒƒ,Ninja,Ninja
+ƒTƒ€ƒ‰ƒCƒ}ƒXƒ^[,Samurai Master,Samurai Lord
+ƒPƒ“ƒSƒE,Kengo,Blood Samurai
+ƒVƒnƒ“ƒ_ƒC,Shihandai,High Samurai
+ƒTƒ€ƒ‰ƒC,Samurai,Samurai
+ƒXƒƒEƒjƒ“,Slownin,Shogun
+ƒ}ƒWƒbƒNƒ}ƒXƒ^[,Magic master,Magic Lord
+ƒA[ƒNƒƒCƒW,Ark Mage,Necromancer
+ƒEƒCƒU[ƒh,wizard,Illusionist
+ƒ\[ƒTƒ‰[,Sorcerer,Sorcerer
+ƒ}ƒWƒVƒƒƒ“,magician,Magician
+ƒTƒ‚ƒ“ƒ}ƒXƒ^[,Summon Master,Summon Lord
+ƒ[ƒhƒ}ƒ“ƒi[,Roadmanner,Spirit Master
+ƒTƒ‚ƒi[,Summoner,Summoner
+ƒhƒ‹ƒCƒh,Druid,Druid
+ƒVƒƒ[ƒ}ƒ“,Shaman,Shaman
+ƒiƒCƒgƒ}ƒXƒ^[,Night master,Spirit User
+ƒpƒ‰ƒfƒBƒ“,Paladin,Paladin
+ƒVƒ‹ƒo[ƒiƒCƒg,Silver night,Silver Knight
+ƒzƒƒCƒgƒiƒCƒg,White knight,White Knight
+ƒiƒCƒg,Night,Knight
+ƒ\[ƒhƒ}ƒXƒ^[,Sword Master,Blademaster
+ƒnƒCƒ‰ƒ“ƒ_[,Highlander,Highlander
+ƒEƒH[ƒŠƒA[,Warrior,Warrior
+ƒ\[ƒhƒ}ƒ“,Swordsman,Swordsman
+ƒtƒ@ƒCƒ^[,Fighter,Fighter
+ƒGƒ“ƒyƒ‰[,Emperor,Emperor
+ƒXƒ^[ƒ[ƒh,Star Road,Star Lord
+ƒnƒCƒ[ƒh,High road,High Lord
+ƒ[ƒh,Load,Lord
+ƒWƒFƒlƒ‰ƒ‹,general,General
+‘åç,Taishou,Officer
+t’c’·,Division leader,Leader
+•«,Warlord,Warlord
+¿ŞİËŞ,Zombie,Zombie
+ÄŞ×ºŞÆ±,Dragonia,Dragon
+ËŞ°½Ä,Beast,Beast
+Ê°Ëß°,Harpy,Harpy
+Óİ¸,Monk,Monk
+±°Á¬°,Archer,Archer
+±¼¶ŞÙ,Ashigal,Samurai
+Ò²¼Ş,Mage,Mage
+Î-½Ïİ,Hossman,Cavalry
+¿Ù¼Ş¬-,SoulJa-,Soldier
+-----,-----,
+ƒ]ƒ“ƒr,zombie,Zombie
+ƒhƒ‰ƒSƒjƒA,Dragonia,Dragon
+ƒr[ƒXƒg,Beast,Beast
+ƒn[ƒs[,Harpy,Harpy
+ƒ‚ƒ“ƒN,Monk,Monk
+ƒA[ƒ`ƒƒ[,Archer,Archer
+ƒAƒVƒKƒ‹,Ashigal,Samurai
+ƒƒCƒW,Mage,Mage
+ƒz[ƒXƒ}ƒ“,Horseman,Cavalry
+ƒ\ƒ‹ƒWƒƒ[,Soldier,Soldier
+[[[[[,--------,
+ƒgƒŠƒXƒ^ƒ“,Tristan,Tristan
+ƒ{ƒUƒbƒN,Bossack,Bozack
+ƒgƒp[ƒY,Topaz,Topaz
+ƒgƒ‰ƒbƒhƒmƒA,Trad Noah,Tradnor
+ƒCƒYƒ‚,Izumo,Izumo
+ƒ€[ƒ“ƒpƒŒƒX,Moon Palace,Palemoon
+ƒtƒ@ƒ“ƒ_ƒŠƒA,Fundaria,Fandaria
+ƒnƒCƒ‰ƒ“ƒh,Highland,Highland
+Óİ½À°,Monster,Monster
+¿-»×-,So-Sara-,
+»ÓÅ°,Samon-kun,
+·İ¸Ş,King,
+ÀŞĞ°,Dummy,Dummy
+¿Æ¯¸ÌŞ°Ò×İ,Sonic boomerang,Sonic Boomerang
+ÒÀÓÙÌ«°¾Ş,Metamorphose,Summon Guardian
+Ì§İÀ½ŞÑ,Phantasm,Phantasm
+Ğ×°¼Ş­½À°,Mirajuster,Mirage Star
+Î°Ø°¼°ÙÄŞ,Holly shield,Holy Shield
+Ø»ŞÚ¸¼®İ,Resurrection,Resurrect
+»ÓİÄŞ×ºŞİ,Sun Dragon,Summon Dragon
+»ÓİÜ²ÊŞ°İ,Sam Wyvern,Summon Wyvern
+»ÓİÃŞ°Óİ,Daemon,Ensnare
+º°ÙµÌŞÃŞ½,Call of dess,Summon Reaper
+»ÓİºŞ¯ÄŞ,Samongod,Thor's Fist
+»Óİ´İ¼ŞªÙ,San Angel,Summon Angel
+ºŞ°ÚÑ,Golem,Summon Golem
+³İÃŞ¨°È,Undine,Trident's Daughter
+¼ÙÌ¨°ÄŞ,Silpheed,Wind Dancer
+»×ÏİÀŞ°,Salamander,Dante's Inferno
+ÄŞ×ºŞİ×¯¼­,Dragon Rush,Dragon Rush
+¸Û½×¯¼­,Crosslash,Cross Rush
+ÄŞ×ºŞİ½Ëßİ,Dragon spin,Dragon Spin
+½¶²ÄŞ×²ÊŞ°,Skid driver,Sky Driver
+ÄŞ×ºŞİ¸Û½,Dragon Cross,Dragon Cross
+¿°ÄŞ½×¯¼­,Sword slash,Sword Rush
+¹Ş²ÙÌŞÚ°ÄŞ,Gail blade,Gale Blast
+¸Û½Ì×¯¼­,Cross flash,Cross Flash
+Î°Ø°ÌŞ×½Ä,Holly blast,Holy Blast
+Ìª±Ø°Ú²,Fairy Ray,Dark Vortex
+ÃŞ¯ÄŞØ°Ú²,Deadly Ray,Solar Flare
+¼°ÌŞ½ÀŞ¶Ş°,Sheaves Dagger,Shiva's Dagger
+±»¼İÀŞ¶Ş°,Assassin Dagger,Assassin's Star
+ÄŞ×ºŞİ¿Æ¯¸,Dragon sonic,Sonic Dragon
+¿Æ¯¸ÌŞÚ½Ä,Sonic Breast,Sonic Blast
+¿Æ¯¸³ª°ÌŞ,Sonic Wave,Sonic Wave
+¿Æ¯¸ÌŞ°Ñ,Sonic boom,Sonic Boom
+ÒÃµ½Ä°Ñ,Meteor Storm,Meteor Storm
+»İÀŞ°Ì«°Ù,Thunderfor,Thunder Fall
+ÌÛ¯¶Ş°ÎŞÑ,Flogger bomb,Reptile Cannon
+µ°×¼­°Ä,Aura Shoot,Aura Assault
+ÌÚ²Ñ·¬Éİ,Frame Cannon,Flame Cannon
+Ò¶ŞÄÙÈ°ÄŞ,Megatorned,Mega Tornado
+Ê²Êß°½Ä°Ñ,Hyperstorm,Hyper-Storm
+¶Ş²±ÌŞÚ²¸,Guy break,Stone Pedestal
+±°½¸´²¸,Earth Quake,Quagmire
+—¼•«,Both warlords,All Gen
+“G‘SŒR,All enemy army,All Foe
+“G•«,Enemy warlord,Foe Gen
+‘S•ºm,All soldiers,All Men
+“G•ºm,Enemy soldier,Foe Men
+©•ºm,Own soldier,Our Men
+8É;,8 no;,
+8É;,8 no;,
+ˆÌ;,Wei;,
+ÀÌ;,Tough;,
+ÀÈ;,Seed;,
+pÈ;,p È;,
+ØÈ;,Lineage;,
+É;,No;,
+ È;,  È;,
+°Í;,-He;,
+Î;,E;,
+hÎ;,h ho;,
+ˆÎ;,ˆÎ;,
+Î;,E;,
+ˆÎ;,ˆÎ;,
+ØÎ;,Reho;,
+èÎ;,èÎ;,
+`Ï;,`Ma;,
+Ğ;,Mi;,
+PĞ;,Pmi;,
+PĞ;,Pmi;,
+PĞ;,Pmi;,
+PĞ;,Pmi;,
+PĞ;,Pmi;,
+0Ğ;,0 Ğ;,
+MEET03.BMP,MEET03.BMP,
+MEET01.BMP,MEET01.BMP,
+MEET02.BMP,MEET02.BMP,
+MEET00.BMP,MEET00.BMP,
+MT_VDP7.GRP,MT_VDP7.GRP,
+MT_VDP6.GRP,MT_VDP6.GRP,
+MT_VDP5.GRP,MT_VDP5.GRP,
+MT_VDP4.GRP,MT_VDP4.GRP,
+MT_VDP3.GRP,MT_VDP3.GRP,
+MT_VDP2.GRP,MT_VDP2.GRP,
+MT_VDP1.GRP,MT_VDP1.GRP,
+MT_VDP0.GRP,MT_VDP0.GRP,
+¿ŞİËŞ,Zombie,Zombie
+ÄŞ×ºŞÆ±,Dragonia,Dragon
+ËŞ°½Ä,Beast,Beast
+Ê°Ëß°,Harpy,Harpy
+Óİ¸,Monk,Monk
+±°Á¬°,Archer,Archer
+±¼¶ŞÙ,Ashigal,Samurai
+Ò²¼Ş,Mage,Mage
+Î°½Ïİ,Horseman,Cavalry
+¿Ù¼Ş¬°,Soldier,Soldier
+PANEL.GRP,PANEL.GRP,
+ğÛ;,ğÛ;,
+E;,;,
+8İ;,8;,
+Xİ;,Xn;,
+xİ;,xn;,
+Ş;,;;,
+PŞ;,P;,
+pŞ;,p;,
+ Ş;, ;,
+°Ş;,-;,
+`ß;,`K;,
+˜ß;,˜ß;,
+á;,snow;,
+Èß;,N;,
+E,,
+E,,
+°E,-.,
+èà;,èà;,
+á;,snow;,
+PE,P.,
+pE,p.,
+Œ÷˜JÒ,Meritorious person,
+%3d   %3d   %3d,% 3d% 3d% 3d,
+‚ ‚è,can be,
+‚È‚µ,none,
+%3d,% 3d,
+%3d”N%3dŒ%2dT‚Ìí‰Ê,% 3d Year% 3d Month% 2d Week Results,
+íÑ     í    Ÿ    ”s,Battle record Battle victory or defeat,
+Œ÷Ñ          ‘Œ÷Ñ,Achievement Total Achievement,
+‘ŒMÍ”,Total number of medals,
+:,::,
+:%s,:% s,
+:%d,:% d,
+x%3d,x% 3d,
+‚Å ‚¥ ‚½,Deta,
+‚¢‚×‚ñ‚Æ,Event,
+‹L    ˜^,record,
+¨—Í’n},Power map,
+“à­I—¹,End of domestic affairs,
+“à­Às,Domestic affairs execution,
+%4u”N%2uŒ%1uT,% 4u years% 2u months% 1u weeks,
+%s’é‘,% s empire,
+%s‰¤‘,% s kingdom,
+ŒNå: %s,Monarch:% s,
+‘•«”,Total number of warlords,
+%3dl,% 3d people,
+‘é”,Total number of castles,
+%2dŒÂ,% 2d,
+‘í“¬”    %4d‰ñ,Total number of battles% 4d times,
+‘Ÿ—˜”    %4d‰ñ,Total number of wins% 4d times,
+‘”s–k”    %4d‰ñ,Total number of defeats% 4d times,
+I    —¹,end,
+’z    é,Castle,
+’T    õ,Search,
+•«î•ñ,Military commander information,
+•«‰ïŒ©,Military commander interview,
+ƒAƒCƒeƒ€,item,
+ŒMÍö—^,Awarding a medal,
+æ‚èÁ‚µ,cancel,
+Š‘®  %s,Affiliation% s,
+ƒtƒŠ[,free,
+ŒNå  %s,Monarch% s,
+‘¾ç  %s,Taishou% s,
+‹K–Í  ÚÍŞÙ %d,Scale level% d,
+•«  %3d/%-3d l,Warlords% 3d /% -3d people,
+•ºm  %3d/%-3d l,Soldier% 3d /% -3d people,
+•ß—¸      %3d l,POW% 3d people,
+Š‘®    ‹ó    é,Affiliation Sky Castle,
+ŒNå    ‚È    ‚µ,Monarch,
+‘¾ç    ‚È    ‚µ,Taishou,
+•«  ---/%-3d l,Warlords --- /% -3d people,
+•ºm  ---/%-3d l,Soldier --- /% -3d people,
+•ß—¸      --- l,POWs --- People,
+h<,h <,
+x<,x <,
+0<,0 <,
+p<,p <,
+P<,P <,
+E<,<,
+h <,h <,
+  <,  <,
+x!<,x! <,
+"""<",,
+%4d,% 4d,
+Æ­³²İÏÁ,New Win Machi,
+Êİ×İ,Hanran,
+Æ­³²İ,New Win,
+ÎØ®ÏÁ,Holly Machi,
+ÎØ®,Holly,
+¿İ»Ş²,Sonsai,
+¶¸Ú,Kakure,
+ĞÄ³Û¸,Mitouroku,
+¶İ¾Şİ¼®³ÒÂ,Kanzenshomen,
+À²¼­,Taishu,
+¼ÀŞİÁ®³,Shidancho,
+²¯ÊßİÌŞ¼®³,Ippanbusho,
+NAME %3d:%s,NAME% 3d:% s,
+SEX     :%s,SEX:% s,
+MALE,MALE,
+FEMALE,FEMALE,
+STATUS  :%s,STATUS:% s,
+HOSP    :%d,HOSP:% d,
+CLASS   :%s,CLASS:% s,
+JOB     :%s,JOB:% s,
+KING %3d:%s,KING% 3d:% s,
+LOCATE  :%s,LOCATE:% s,
+FACE    :%d,FACE:% d,
+HP   %3d:%3d/%d,HP% 3d:% 3d /% d,
+MP      :%3d/%d,MP:% 3d /% d,
+ATKP    :%d,ATKP:% d,
+DEFP    :%d,DEFP:% d,
+ESCP    :%d,ESCP:% d,
+LEADP   :%d,LEADP:% d,
+INT     :%d,INT:% d,
+CHUSEIP :%d,CHUSEIP:% d,
+WIN     :%3d/%d,WIN:% 3d /% d,
+LOST    :%3d/%d,LOST:% 3d /% d,
+LEVEL   :%d,LEVEL:% d,
+EXP     :%5d/%d,EXP:% 5d /% d,
+NAISEI  :%02x,NAISEI:% 02x,
+:%2d %3d,:% 2d% 3d,
+---------------,---------------,
+%s,% s,
+:   %3d,:% 3d,
+"FATKP : %d,%d,%d","FATKP:% d,% d,% d",
+I  —¹,end,Zombie
+•«ƒŠƒXƒg‚É–ß‚é,Return to the military commander list,Dragon
+¿ŞİËŞ,Zombie,Beast
+ÄŞ×ºŞÆ±,Dragonia,Harpy
+ËŞ°½Ä,Beast,Monk
+Ê°Ëß°,Harpy,Archer
+Óİ¸,Monk,Samurai
+±°Á¬°,Archer,Mage
+±¼¶ŞÙ,Ashigal,Cavalry
+Ò²¼Ş,Mage,Soldier
+Î°½Ïİ,Horseman,
+¿Ù¼Ş¬°,Soldier,
+íŒ÷ˆê——•\,War merit list,
+cŒMÍ” %3d,Number of remaining medals% 3d,
+%3d   %3d   %3d,% 3d% 3d% 3d,
+‚ ‚è,can be,
+‚È‚µ,none,
+%3d,% 3d,
+0     0     0,0 0 0,
+‚È‚µ              0,None 0,
+0,0,
+%3d”N%3dŒ%2dT‚Ìí‰Ê,% 3d Year% 3d Month% 2d Week Results,
+íÑ     í    Ÿ    ”s,Battle record Battle victory or defeat,
+Œ÷Ñ          ‘Œ÷Ñ,Achievement Total Achievement,
+‘ŒMÍ”,Total number of medals,
+0C<,0C <,
+E<,<,
+¸D<,Ku D <,
+ğD<,ğD <,
+(E<,(E <,
+€E<,E <,
+ĞE<,Mi E <,
+ö    —^,Awarded,
+æ‚èÁ‚µ,cancel,
+:%s,:% s,
+ƒtƒŠ[,free,
+:%d,:% d,
+Œ÷Ñ,Achievement,
+‘Œ÷Ñ   %3d,Total Achievement% 3d,
+---,---,
+x,x,
+%2d,% 2d,
+N<,Invasion <,
+XP<,XP <,
+E<,<,
+ÀP<,Ta P <,
+Q<,Q <,
+pQ<,pQ <,
+ĞU<,Mi U <,
+ÀQ<,Ta Q <,
+0R<,0R <,
+àR<,àR <,
+T<,Shin <,
+0U<,0U <,
+é‚Å‚Ì‰ñ•œ‚ª‘‚¢,Fast recovery in the castle,
+‹ÃŒÅŠÔ‚Ì’Zk,Shortening of coagulation time,
+Å‘å‚g‚o %3d   %3d,Maximum HP% 3d% 3d,
+Å‘å‚l‚o %3d   %3d,Maximum MP% 3d% 3d,
+‘Ş‰@‚Å‚«‚é,Can be discharged,
+ƒ]ƒ“ƒrŒÙ—p‰Â”\,Zombies can be hired,
+ƒhƒ‰ƒSƒjƒAŒÙ—p‰Â”\,Dragonia can be hired,
+ƒr[ƒXƒgŒÙ—p‰Â”\,Beast can be hired,
+ƒn[ƒs[ŒÙ—p‰Â”\,Harpy can be hired,
+ƒ‚ƒ“ƒNŒÙ—p‰Â”\,Monk can be hired,
+ƒA[ƒ`ƒƒ[ŒÙ—p‰Â”\,Archer can be hired,
+ƒAƒVƒKƒ‹ŒÙ—p‰Â”\,Ashigal can be hired,
+ƒƒCƒWŒÙ—p‰Â”\,Mage can be hired,
+ƒz[ƒXƒ}ƒ“ŒÙ—p‰Â”\,Horseman can be hired,
+ƒ\ƒ‹ƒWƒƒ[ŒÙ—p‰Â”\,Soldier can be hired,
+’‰½S‚ğã‚°‚é,Raise loyalty,
+“à­”\—Í %3d   %3d,Internal affairs ability% 3d% 3d,
+wŠö”\—Í %3d   %3d,Command ability% 3d% 3d,
+–hŒä—Í‚ğã‚°‚é,Increase defense,
+UŒ‚—Í   %3d   %3d,Attack power% 3d% 3d,
+‚g‚o     %3d   %3d,HP% 3d% 3d,
+•ºm     %3d   %3d,Soldier% 3d% 3d,
+ŠK‹‰     %3d   %3d,Class% 3d% 3d,
+é‚Å‚Ì‰ñ•œ‚ª‘‚¢,Fast recovery in the castle,
+‹ÃŒÅŠÔ‚Ì’Zk,Shortening of coagulation time,
+Å‘å‚g‚o‚ğã‚°‚é,Increase maximum HP,
+Å‘å‚l‚o‚ğã‚°‚é,Increase maximum MP,
+‘Ş‰@‚Å‚«‚é,Can be discharged,
+¿ŞİËŞŒÙ—p‰Â”\,Zombie can be hired,
+ÄŞ×ºŞÆ±ŒÙ—p‰Â”\,Dragonia can be hired,
+ËŞ°½ÄŒÙ—p‰Â”\,Beast employment available,
+Ê°Ëß°ŒÙ—p‰Â”\,Harpy can be hired,
+Óİ¸ŒÙ—p‰Â”\,Monk can be hired,
+±°Á¬°ŒÙ—p‰Â”\,Archer can be hired,
+±¼¶ŞÙŒÙ—p‰Â”\,Ashigal can be hired,
+Ò²¼ŞŒÙ—p‰Â”\,Mage can be hired,
+Î°½ÏİŒÙ—p‰Â”\,Horseman can be hired,
+¿Ù¼Ş¬°ŒÙ—p‰Â”\,Soldier can be hired,
+’‰½S‚ğã‚°‚é,Raise loyalty,
+“à­—Í‚ğã‚°‚é,Raise domestic power,
+wŠö”\—Í‚ğã‚°‚é,Increase command ability,
+–hŒä—Í‚ğã‚°‚é,Increase defense,Recover HP
+UŒ‚—Í‚ğã‚°‚é,Increase attack power,
+‚g‚o‚ğ‰ñ•œ‚·‚é,Recover HP,
+•ºm‚ğ•â[‚·‚é,Replenish soldiers,Recruit Zombies
+ŠK‹‰‚ğã‚°‚é,Raise the rank,Recruit Beasts
+ƒ]ƒ“ƒrŒÙ—p‰Â”\,Zombies can be hired,Recruit Harpies
+ƒr[ƒXƒgŒÙ—p‰Â”\,Beast can be hired,Recruit Monks
+ƒn[ƒs[ŒÙ—p‰Â”\,Harpy can be hired,Recruit Samurai
+ƒ‚ƒ“ƒNŒÙ—p‰Â”\,Monk can be hired,Recruit Mages
+ƒAƒVƒKƒ‹ŒÙ—p‰Â”\,Ashigal can be hired,
+ƒƒCƒWŒÙ—p‰Â”\,Mage can be hired,Increase Rank
+%3d   %3d,% 3d% 3d,Award Items
+ŠK‹‰‚ğã‚°‚é,Raise the rank,
+ƒAƒCƒeƒ€ö—^,Item award,
+t<,t <,
+Øu<,Li u <,
+(v<,(v <,
+€v<,v <,
+¸v<,Ku v <,
+w<,w <,
+Xw<,Xw <,
+}<,} <,
+E<,<,
+à~<,à~ <,
+(<,(<,
+p<,p <,
+Ø<,Ri <,
+(€<,(<,
+g    —p,Use,
+‘•    ”õ,Equipment,
+‚Í ‚¸ ‚·,Hazusu,
+æ‚èÁ‚µ,cancel,
+E,<,
+0E,0,
+¨E,?,
+ØE,Ri,
+`E,`,
+‰ïŒ©I—¹,Press conference end,
+•ß—¸‘I‘ğ,POW selection,
+•«‘I‘ğ,Warlord selection,
+%4u”N%2uŒ%1uT,% 4u years% 2u months% 1u weeks,
+€E,,
+ØE,Ri,
+E,,
+XE,X.,
+E<,<,
+ø–<,ø– <,
+HE,H.,
+x,x,
+%3dl,% 3d people,
+E,,
+@E,@,
+`E,`,
+E<,<,
+ÀE,Ta,
+E,,
+PE,P.,
+•«ˆê——•\,List of military commanders,
+•«”,Number of military commanders,
+•ß—¸ˆê——•\,POW list,
+•ß—¸”,Number of prisoners,
+:%s,:% s,
+:%d,:% d,
+:,::,
+%d,% d,
+è <,è  <,
+à£<,à£ <,
+H¤<,"H, <",
+¸¤<,"Ku, <",
+¨¥<,I E <,
+•«“o—p,Appointment of military commander,
+æ‚èÁ‚µ,cancel,
+•ß—¸•«,POW warlord,
+˜«<,˜« <,
+x¬<,x ¬ <,
+H°<,H- <,
+ğ¬<,ğ¬ <,
+P­<,Pyu <,
+X¯<,X <,
+¸¯<,Cook <,
+•«ˆê——•\,List of military commanders,
+•«”,Number of military commanders,
+’T  õ,Search,
+8¼<,8,
+è½<,è½ <,
+ ¾<,  <,
+Ø¾<,Lycee <,
+¿<,So <,
+h¿<,h so <,
+¨¿<,Iso <,
+ˆÁ<,An <an <,
+0Â<,0 Â <,
+Â<,Blue <,
+•«’Tõ,Warlord search,
+•«”,Number of military commanders,
+x,x,
+%3dl,% 3d people,
+Í<,Analysis <,
+ĞÎ<,Miho <,
+øÎ<,øÎ <,
+(Ï<,(Ma <,
+`Ï<,`Ma <,
+¸Ï<,Bear <,
+Ğ<,Mi <,
+’T    õ,Search,
+æ‚èÁ‚µ,cancel,
+%4u”N%2uŒ%1uT,% 4u years% 2u months% 1u weeks,
+%s,% s,
+Lv  %3d,Lv% 3d,
+Int,Int,
+%3d,% 3d,
+ÈÛ<,Nero <,
+0Ü<,0 W <,
+èÜ<,Shoes <,
+@İ<,@N <,
+¸İ<,Kun <,
+PŞ<,P <,
+pŞ<,p <,
+Pß<,P K <,
+°ß<,[ ß <,
+E,,
+˜à<,˜à <,
+E,,
+¨E,?,
+@E,@,
+˜ã<,˜ã <,
+èä<,Bellows <,
+ˆå<,ˆå <,
+E,,
+E,<,
+pE,p. <,
+`E,`  <,
+èì<,Bug <,
+pE,p.,
+E,,
+’z  é,Castle,
+’z    é,Castle,
+æ‚èÁ‚µ,cancel,
+%4u”N%2uŒ%1uT,% 4u years% 2u months% 1u weeks,
+%s,% s,
+Lv  %3d,Lv% 3d,
+Int,Int,
+%3d,% 3d,
+¨E,?,
+ğù<,ğù <,
+ˆú<,Indecent <,
+E,,
+HE,H.,
+ÈE,Ne.,
+HE,H.,
+°E,-.,
+0ş<,0ş <,
+xş<,xş <,
+<,<,
+ <,  <,
+,,
+#ERROR!,#ERROR!,
+E=,#ERROR!,
+,,
+t’c,Division,
+é,castle,
+%3d,% 3d,
+:   /%d,: /% d,
+=,#ERROR!,
+=,#ERROR!,
+0=,0 =,
+H=,H =,
+`=,`=,
+¨=,I =,
+E=,#ERROR!,
+E=,#ERROR!,
+E=,#ERROR!,
+E=,#ERROR!,
+E=,#ERROR!,
+E=,#ERROR!,
+E=,#ERROR!,
+E=,#ERROR!,
+E=,#ERROR!,
+Ğ=,Mi =,
+E=,#ERROR!,
+=,#ERROR!,
+0=,0 =,
+P=,P =,
+`=,`=,
+E=,#ERROR!,
+E=,#ERROR!,
+E=,#ERROR!,
+E=,#ERROR!,
+€=,#ERROR!,
+E=,#ERROR!,
+Ø=,Li =,
+X#=,X # =,
+h#=,h # =,
+x#=,x # =,
+ #=,  # =,
+°#=,[ # =,
+¨$=,I $ =,
+¸$=,Ku $ =,
+E=,#ERROR!,
+E=,#ERROR!,
+%=,% =,
+0%=,0% =,
+&=,& =,
+&=,& =,
+0&=,0 & =,
+X&=,X & =,
+h&=,h & =,
+h'=,h'=,
+x'=,x'=,
+E=,#ERROR!,
+°'=,['=,
+À'=,Ta'=,
+E=,#ERROR!,
+(=,(= =,
+(=,(= =,
+@(=,@ (=,
+P(=,P (=,
+°(=,-(= =,
+E=,#ERROR!,
+)=,) =,
+)=,) =,
+@)=,@) =,
+`)=,`) =,
+H*=,H * =,
+X*=,X * =,
+h*=,h * =,
+x*=,x * =,
+E=,#ERROR!,
+°*=,[ * =,
+À*=,Ta * =,
+E=,#ERROR!,
+E=,#ERROR!,
+E=,#ERROR!,
+ -=, -=,
+À-=,Ta- =,
+Ğ-=,Mi-=,
+E=,#ERROR!,
+.=,. =,
+0.=,0. =,
+P.=,P. =,
+E=,#ERROR!,
+E=,#ERROR!,
+/=,/ =,
+/=,/ =,
+@/=,@ / =,
+h/=,h / =,
+x/=,x / =,
+E=,#ERROR!,
+°/=,[ /=,
+Ğ/=,Mi / =,
+E=,#ERROR!,
+0=,0 =,
+E,,
+E,,
+¨=,I =,
+,,
+,,
+,,
+,,
+,,
+°=,-=,
+,,
+,,
+,,
+,,
+,,
+,,
+8=,8 =,
+,,
+,,
+!,!!,
+#ERROR!,#ERROR!,
+5,Five,
+?,??,
+I,I,
+,,
+,,
+,,
+ =,#ERROR!,
+,,
+,,
+,,
+,,
+,,
+¨ =,I =,
+,,
+,,
+,,
+,,
+,,
+E=,#ERROR!,
+,,
+,,
+,,
+E=,#ERROR!,
+*,*,
+*,*,
+*,*,
+8$=,8 $ =,
+4,Four,
+4,Four,
+4,Four,
+E=,#ERROR!,
+>,>,
+>,>,
+>,>,
+E=,#ERROR!,
+H,H,
+H,H,
+H,H,
+Ø)=,Li) =,
+,,
+_,_,
+c,c,
+c,c,
+c,c,
+ +=,  + =,
+,,
+f,f,
+g,g,
+p,p,
+t,t,
+g,g,
+g,g,
+"8,=","8, =",
+,,
+x,x,
+5,Five,
+y,y,
+z,z,
+y,y,
+y,y,
+"°,=","[, =",
+,,
+EEEE,,
+(-=,(-=,
+,,
+V,V,
+,,
+ , ,
+ , ,
+ , ,
+E=,#ERROR!,
+,,
+Ê,Ha,
+Ë,Hi,
+Ë,Hi,
+Ë,Hi,
+X0=,X0 =,
+,,
+EEEE,,
+1=,1 =,
+,,
+9,9,
+<,<,
+<<,<<,
+2=,2 =,
+,,
+Q,Q,
+UVX,U V X,
+VV,V V,
+E=,#ERROR!,
+,,
+X,X,
+UVZ,U V Z,
+ZZ,Z Z,
+E=,#ERROR!,
+,,
+`,``,
+c,c,
+cc,c c,
+84=,84 =,
+i,i,
+ii,i i i,
+E=,#ERROR!,
+,,
+EE,,
+E,,
+EE,,
+È5=,È 5 =,
+E,,
+EE,,
+@6=,@ 6 =,
+,,
+E,,
+EE,,
+EE,,
+E=,#ERROR!,
+E,,
+E=,#ERROR!,
+,,
+,.,
+,,
+,,
+,,
+,,
+,,
+,,
+,.,
+,.,
+,,
+,,
+,,
+x:=,x: =,
+E=,#ERROR!,
+¨:=,I: =,
+È:=,È: =,
+E=,#ERROR!,
+;=,; = =,
+(;=,(; =,
+H;=,H; =,
+x;=,x; =,
+¸B=,B =,
+èB=,èB =,
+øB=,øB =,
+C=,C =,
+8C=,8C =,
+E,,
+E,,
+E=,#ERROR!,
+,,
+,,
+,,
+,,
+,,
+,,
+,,
+E=,#ERROR!,
+,,
+,,
+,,
+,,
+,,
+:=,: =,
+,,
+,,
+,,
+,,
+,,
+@<=,@ <=,
+,,
+,,
+,,
+,,
+,,
+#ERROR!,#ERROR!,
+,,
+,,
+,,
+,,
+,,
+P>=,P> =,
+,,
+"
+#
+#
+#
+Ø>=
+
+,
+-
+-
+-
+`?=
+
+6
+7
+7
+7
+@=
+
+@
+A
+A
+A
+˜@=
+
+J
+K
+K
+K
+ A=
+
+e
+f
+f
+f
+ØA=
+
+l
+m
+n
+n
+n
+PB=
+
+Ê
+Ë
+Ë
+Ë
+€C=
+
+EEEE
+D=
+E
+E=
+
+
+
+
+
+
+
+
+
+
+
+
+
+ØF=
+èF=
+G=
+(G=
+XG=
+ H=
+0H=
+XH=
+hH=
+E=
+¨H=
+ÈH=
+èH=
+I=
+pM=
+€M=
+¨M=
+¸M=
+ØM=
+øM=
+N=
+HN=
+ O=
+°O=
+ØO=
+èO=
+P=
+(P=
+HP=
+xP=
+PQ=
+`Q=
+€Q=
+Q=
+°Q=
+ĞQ=
+ğQ=
+R=
+HR=
+@S=
+xR=
+ R=
+ÀR=
+àR=
+S=
+ S=
+8T=
+HT=
+pT=
+€T=
+T=
+ T=
+°T=
+°Z=
+ÀZ=
+ĞZ=
+àZ=
+ğZ=
+[=
+([=
+H[=
+X[=
+E=
+(\=
+E
+E
+øD=
+
+
+
+
+
+
+
+ğE=
+
+
+
+
+
+hF=
+
+
+ 
+ 
+ 
+°G=
+*
+*
+*
+xI=
++
+*
++
++
+€J=
+
+
+5
+6
+5
+5
+M=
+6
+
+6
+6
+¨N=
+
+6
+
+7
+7
+7
+0O=
+>
+>
+>
+ØP=
+
+
+A
+A
+A
+ÈS=
+H
+H
+H
+èT=
+
+
+K
+K
+K
+€V=
+
+_
+c
+c
+c
+XW=
+
+f
+g
+p
+t
+g
+g
+ğW=
+
+;
+y
+z
+y
+y
+hX=
+
+EEEE
+àX=
+ 
+ 
+ 
+Z=
+
+Ê
+Ë
+Ë
+Ë
+p\=
+
+EEEE
+X]=
+
+EEEE
+H^=
+
+EEEE
+_=
+
+`
+c
+cc
+ `=
+i
+ii
+Ğ`=
+
+E
+E
+EE
+°a=
+E
+E=
+
+
+
+
+
+
+
+
+àh=
+ğh=
+i=
+(i=
+Hi=
+hi=
+E=
+¸i=
+pm=
+€m=
+ m=
+°m=
+Ğm=
+àm=
+n=
+0n=
+Èn=
+Øn=
+èn=
+øn=
+ o=
+Ho=
+Xo=
+po=
+o=
+°o=
+Ào=
+ğo=
+E
+E
+Xb=
+
+
+
+
+
+Pc=
+
+
+
+
+
+d=
+
+
+ 
+ 
+ 
+e=
+
+
+*
+*
+*
+ f=
+
+
+4
+4
+4
+(g=
+
+
+>
+>
+>
+ph=
+H
+H
+H
+j=
+
+_
+c
+c
+c
+€k=
+
+f
+g
+p
+t
+g
+g
+l=
+
+x
+5
+y
+z
+y
+y
+l=
+
+EEEE
+m=
+
+V
+ 
+ 
+ 
+xn=
+
+Ê
+Ë
+Ë
+Ë
+8p=
+
+EEEE
+q=
+
+Ş
+EEE
+ğq=
+
+Q
+UVX
+VV
+ s=
+
+X
+UVZ
+ZZ
+@t=
+
+`
+c
+cc
+àt=
+i
+ii
+Xu=
+
+EE
+E
+EE
+8v=
+E
+EE
+°v=
+
+E
+EE
+EE
+`w=
+E
+E=
+
+
+
+
+
+
+
+
+
+Ø=
+E=
+€=
+€=
+@€=
+€E
+ƒ=
+ E
+°E
+ØE
+E
+E
+(E
+HE
+hE
+xE
+¨E
+E
+E
+x=
+
+
+
+y=
+
+
+
+
+
+
+Øy=
+ 
+ 
+ 
+Pz=
+
+!
+
+","
+#
+#
+#
+Ri> =
+ 
+,
+---
+---
+---
+`? =
+ 
+6
+7
+7
+7
+ @ =
+ 
+@
+A
+A
+A
+Lotus =
+ 
+J
+K
+K
+K
+ A =
+ 
+e
+f
+f
+f
+Li A =
+ 
+l
+m
+n
+n
+n
+PB =
+ 
+Ha
+Hi
+Hi
+Hi
+ C =
+ 
+      
+ D =
+   
+   =
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+Li F =
+Buriki =
+ G =
+(G =
+XG =
+ H =
+0H =
+XH =
+hH =
+   =
+H =
+È H =
+èH =
+ I =
+pM =
+ M =
+M =
+Ku M =
+Li M =
+øM =
+ N =
+HN =
+  O =
+-O =
+Li O =
+èO =
+ P =
+(P =
+HP =
+xP =
+PQ =
+`Q =
+ Q =
+Sleep =
+-Q =
+Mi Q =
+ğQ =
+ R =
+HR =
+@ S =
+xR =
+  R =
+Ta R =
+àR =
+S =
+ S =
+8T =
+HT =
+pT =
+ T =
+Shin =
+  T =
+-T =
+-Z =
+Ta Z =
+Mi Z =
+àZ =
+ğZ =
+ [=
+([=
+H [=
+X [=
+   =
+(\ =
+   
+   
+øD =
+ 
+
+
+ 
+.
+ 
+  
+ğE =
+ 
+ 
+ 
+ 
+  
+hF =
+ 
+ 
+ 
+ 
+  
+-G =
+*
+*
+*
+xI =
++
+*
++
++
+ J =
+ 
+ 
+Five
+6
+Five
+Five 
+M =
+6
+ 
+6
+6
+N =
+ 
+6
+ 
+7
+7
+7
+0O =
+>
+>
+>
+Li P =
+ 
+ 
+A
+A
+A
+È S =
+H
+H
+H
+Sabi =
+ 
+ 
+K
+K
+K
+ V =
+ 
+_
+c
+c
+c
+XW =
+ 
+f
+g
+p
+t
+g
+g
+ğW =
+ 
+;
+y
+z
+y
+y
+hX =
+ 
+      
+àX =
+ 
+ 
+ 
+ Z =
+ 
+Ha
+Hi
+Hi
+Hi
+p \ =
+ 
+      
+X] =
+ 
+      
+H ^ =
+ 
+      
+ _ =
+ 
+``
+c
+c c
+ `=
+i
+i i i
+Mi` =
+ 
+   
+   
+    
+[ a =
+   
+   =
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+Filter =
+ğh =
+ i =
+(i =
+Hi =
+hi =
+   =
+Ku i =
+pm =
+ m =
+  m =
+-M =
+Mm =
+Taki =
+ n =
+0n =
+N =
+Li n =
+èn =
+øn =
+ o =
+Ho =
+Xo =
+po =
+Dust =
+[ o =
+Ta o =
+ğo =
+   
+   
+Xb =
+ 
+ 
+.
+.
+.
+Pc =
+ 
+.
+ 
+ 
+  
+ d =
+ 
+.
+ 
+ 
+  
+ e =
+ 
+.
+*
+*
+*
+ f =
+ 
+.
+Four
+Four
+Four 
+(g =
+ 
+.
+>
+>
+>
+ph =
+H
+H
+H
+ j =
+ 
+_
+c
+c
+c
+ k =
+ 
+f
+g
+p
+t
+g
+g
+ l =
+ 
+x
+Five
+y
+z
+y
+y
+Person =
+ 
+      
+ m =
+ 
+V
+ 
+ 
+ 
+xn =
+ 
+Ha
+Hi
+Hi
+Hi
+8p =
+ 
+      
+q =
+ 
+G
+     
+ğq =
+ 
+Q
+U V X
+V V
+  s =
+ 
+X
+U V Z
+Z Z
+@ t =
+ 
+``
+c
+c c
+àt =
+i
+i i i
+Xu =
+ 
+    
+   
+    
+8v =
+   
+    
+[ V =
+ 
+   
+    
+    
+`w =
+   
+   =
+ 
+ 
+ 
+ 
+ 
+.
+ 
+ 
+ 
+Li =
+   =
+  = =
+  = =
+@ =
+    
+Marshal =
+ .
+-.
+Ri
+   
+    
+(.
+H.
+h.
+x.
+?
+   
+   
+ x =
+ 
+ 
+  
+y =
+ 
+ 
+.
+ 
+ 
+  
+Li y =
+ 
+ 
+  
+Pz =
+ 
+!!
+
+",
+"
+","
+",
+({=,({=,
+,,
+*,*,
+#ERROR!,#ERROR!,
+#ERROR!,#ERROR!,
+#ERROR!,#ERROR!,
+ {=,  {=,
+4,Four,
+4,Four,
+4,Four,
+Ğ|=,Mi | =,
+,,
+5,Five,
+,,
+6,6,
+6,6,
+6,6,
+¨}=,I} =,
+>,>,
+>,>,
+>,>,
+~=,~ =,
+,,
+?,??,
+,,
+@,@,
+@,@,
+@,@,
+ğ~=,ğ~ =,
+H,H,
+H,H,
+H,H,
+h=,h =,
+,,
+I,I,
+,,
+J,J,
+J,J,
+J,J,
+ €=,  =,
+,,
+_,_,
+c,c,
+c,c,
+c,c,
+E,,
+,,
+f,f,
+g,g,
+p,p,
+t,t,
+g,g,
+g,g,
+°E,-.,
+,,
+,,
+#,#,
+7,7,
+A,A,
+K,K,
+y,y,
+z,z,
+y,y,
+y,y,
+(E,(.,
+,,
+EEEE,,
+ E, .,
+,,
+E , ,
+ , ,
+ , ,
+0E,0,
+,,
+Ê,Ha,
+Ë,Hi,
+Ë,Hi,
+Ë,Hi,
+ğ„=,ğ„ =,
+,,
+EEEE,,
+ØE,Ri =,
+,,
+Q,Q,
+UVX,U V X,
+VV,V V,
+ÈE,N =,
+,,
+X,X,
+UVZ,U V Z,
+ZZ,Z Z,
+hE,h.,
+,,
+`,``,
+c,c,
+cc,c c,
+E,,
+},},
+}|,} |,
+¸E,Ku,
+,,
+},},
+~,~,
+~~,~ ~,
+PE,P.,
+,,
+,,
+€,,
+€€,,
+°E,-.,
+,,
+EE,,
+E,,
+EE,,
+pE,p.,
+,,
+E,,
+E,,
+EE,,
+è‹=,è‹ =,
+E,,
+E=,#ERROR!,
+,,
+,,
+,,
+,,
+,,
+,,
+,.,
+,,
+,,
+HE,H.,
+XE,X.,
+E=,#ERROR!,
+¸E,Ku,
+ØE,Ri,
+E,,
+E,,
+@E,@,
+E,,
+(E,(.,
+PE,P.,
+`E,`,
+ÀE,Ta,
+ğ=,ğ =,
+E,,
+0E,0,
+PE,P.,
+pE,p.,
+XE,X.,
+hE,h.,
+E=,#ERROR!,
+E=,#ERROR!,
+ÀE,Ta,
+ĞE,Mi.,
+ÀE,Ta,
+ĞE,Mi.,
+à•=,à• =,
+E,,
+E,,
+8E,8,
+XE,X.,
+xE,x.,
+E=,#ERROR!,
+ø–=,ø– =,
+(E,(.,
+HE,H.,
+hE,h.,
+E=,#ERROR!,
+¨E,?,
+èš=,èš =,
+øš=,øš =,
+E,,
+(E,(.,
+HE,H.,
+XE,X.,
+E=,#ERROR!,
+¨E,?,
+XE,X.,
+hE,h.,
+xE,x.,
+E=,#ERROR!,
+°E,-.,
+ÀE,Ta,
+ØE,Ri,
+ø=,ø =,
+E,,
+(E,(.,
+XE,X.,
+ø=,ø =,
+E,,
+E,,
+`E,`,
+,,
+,,
+,,
+,,
+,,
+,,
+,,
+XE,X.,
+,,
+,,
+,,
+,,
+,,
+ĞE,Mi.,
+,,
+,,
+,,
+ E, .,
+,,
+,,
+,,
+è‘=,è‘ =,
+*,*,
+*,*,
+*,*,
+XE,X.,
+4,Four,
+5,Five,
+5,Five,
+5,Five,
+`E,`,
+>,>,
+>,>,
+>,>,
+HE,H.,
+,,
+L,L,
+M,M,
+M,M,
+M,M,
+E,,
+,,
+_,_,
+c,c,
+c,c,
+c,c,
+ø˜=,ø˜ =,
+,,
+f,f,
+g,g,
+p,p,
+t,t,
+g,g,
+g,g,
+™=,Sugi =,
+,,
+,,
+!,!!,
+.,..,
+6,6,
+?,??,
+EEy,y,
+z,z,
+y,y,
+y,y,
+E,,
+,,
+EEEE,,
+€E,,
+,,
+EEEE,,
+ğ›=,ğ› =,
+,,
+,,
+E , ,
+ , ,
+ , ,
+E,,
+,,
+Ê,Ha,
+Ë,Hi,
+Ë,Hi,
+Ë,Hi,
+HE,H.,
+,,
+EEEE,,
+0 =,0  =,
+,,
+`,``,
+c,c,
+cc,c c,
+¡=,!=,
+i,i,
+ii,i i i,
+Ğ¡=,Mi. =,
+,,
+E,,
+E,,
+EE,,
+°¢=,"-""=",
+E,,
+E=,#ERROR!,
+,,
+,,
+,,
+,,
+,,
+,,
+,,
+,,
+,,
+,,
+°¥=,-=,
+À¥=,Ta = =,
+à¥=,à¥ =,
+¦=,¦ =,
+¦=,¦ =,
+H±=,H a =,
+X±=,X a =,
+h±=,h a =,
+x±=,x a =,
+ˆ±=,Horse mackerel =,
+E,,
+E,,
+Ğ£=,"Mi ""=",
+,,
+,,
+,,
+,,
+,,
+,,
+,,
+È¤=,"N, =",
+,,
+,,
+,,
+,,
+,,
+@¥=,@ ¥ =,
+,,
+,,
+,,
+,,
+,,
+,,
+ ¦=,  ¦ =,
+,,
+,,
+,,
+,,
+,,
+ §=,  § =,
+,,
+,,
+,,
+¨=,I =,
+,,
+.,..,
+/,/,
+/,/,
+/,/,
+è¨=,è¨ =,
+8,8,
+8,8,
+8,8,
+¨©=,? =,
+,,
+#ERROR!,#ERROR!,
+>,>,
+?,??,
+>,>,
+>,>,
+ˆª=,ˆª =,
+,,
+?,??,
+@,@,
+@,@,
+@,@,
+«=,Oh =,
+,,
+B,B,
+C,C,
+C,C,
+C,C,
+¸«=,Quo =,
+,,
+D,D,
+E,E,
+E,E,
+E,E,
+0¬=,0 ? =,
+,,
+_,_,
+c,c,
+c,c,
+c,c,
+­=,Yu =,
+,,
+f,f,
+g,g,
+p,p,
+t,t,
+g,g,
+g,g,
+˜­=,˜­ =,
+y,y,
+z,z,
+y,y,
+y,y,
+®=,Yo =,
+,,
+EEEE,,
+ğ®=,ğ® =,
+,,
+E , ,
+ , ,
+ , ,
+ø°=,ø° =,
+,,
+Ê,Ha,
+Ë,Hi,
+Ë,Hi,
+Ë,Hi,
+Ø±=,Rear =,
+,,
+EEEE,,
+ ²=,  =,
+,,
+`,``,
+c,c,
+cc,c c,
+€³=,U =,
+i,i,
+ii,i i i,
+0´=,0 ? =,
+,,
+EE,,
+E,,
+EE,,
+µ=,Oh =,
+E,,
+EE,,
+ˆµ=,Handling =,
+,,
+E,,
+E,,
+EE,,
+8¶=,8 =,
+E,,
+E=,#ERROR!,
+,,
+,,
+,,
+,,
+,,
+,,
+,,
+,,
+,,
+,,
+,,
+,,
+,,
+,,
+º=,Ko =,
+º=,Ko =,
+Hº=,H co =,
+Xº=,X co =,
+xº=,x co =,
+Øº=,Rico =,
+»=,Sa =,
+(»=,(Sa =,
+H»=,H,
+h»=,h sa =,
+ˆ»=,Aya =,
+x¼=,x shi =,
+ˆ¼=,Ayu =,
+¨¼=,Ishi =,
+Ğ¼=,Mishi =,
+à¼=,Japanese Chin =,
+½=,Su =,
+`½=,`Su =,
+½=,Makoto =,
+°½=,Use =,
+Ğ½=,Miss =,
+ğ½=,ğ½ =,
+¾=,Se =,
+xÂ=,x Â =,
+ˆÂ=,Proportion =,
+˜Â=,˜Â =,
+ÀÂ=,Tatsu =,
+ĞÂ=,Mitsu =,
+ğÂ=,ğÂ =,
+Ã=,Te =,
+0Ã=,0 te =,
+PÃ=,P te =,
+ĞÃ=,Mite =,
+Ä=,To =,
+Ä=,To =,
+@Ä=,@To =,
+`Ä=,`to =,
+€Ä=,To =,
+°Ê=,-Ha =,
+ÀÊ=,Taha =,
+ĞÊ=,Miha =,
+àÊ=,àÊ =,
+Ë=,Hi =,
+Ë=,Hi =,
+0Ë=,0 hi =,
+PË=,P Hi =,
+pË=,p hi =,
+€Ë=,Hi =,
+°Ë=,-Hi =,
+`Ì=,`F =,
+pÌ=,p f =,
+ Ì=,  F =,
+°Ì=,-F =,
+ĞÌ=,Miff =,
+E,,
+E,,
+P·=,P key =,
+,,
+,,
+,.,
+,.,
+,.,
+H¸=,H =,
+,,
+,,
+,,
+,,
+¹=,Ke =,
+,,
+,,
+,,
+,,
+˜¹=,˜¹ =,
+,,
+,,
+,,
+,,
+¼=,Shi =,
+,,
+,,
+,,
+¾=,Oath =,
+*,*,
+*,*,
+*,*,
+Ø¿=,Riso =,
+4,Four,
+4,Four,
+4,Four,
+ğÀ=,ğÀ =,
+>,>,
+>,>,
+>,>,
+Â=,Â =,
+,,
+G,G,
+H,H,
+I,I,
+H,H,
+H,H,
+øÄ=,øÄ =,
+,,
+I,I,
+M,M,
+M,M,
+M,M,
+pÅ=,pna =,
+,,
+S,S,
+T,T,
+T,T,
+T,T,
+(Æ=,(D =,
+,,
+U,U,
+V,V,
+V,V,
+V,V,
+ Æ=,  ni =,
+,,
+_,_,
+c,c,
+c,c,
+c,c,
+˜Ç=,˜Ç =,
+,,
+f,f,
+g,g,
+p,p,
+t,t,
+g,g,
+g,g,
+0È=,0 ? =,
+y,y,
+z,z,
+y,y,
+y,y,
+¨È=,Line =,
+,,
+EEEE,,
+ÀÉ=,Tano =,
+,,
+,,
+!,!!,
+#ERROR!,#ERROR!,
+5,Five,
+?,??,
+M,M,
+¨,I,
+ , ,
+ , ,
+ , ,
+`Ê=,`ha =,
+,,
+§,§,
+¨,I,
+¨,I,
+¨,I,
+øË=,øË =,
+,,
+EEEE,,
+PÍ=,P f =,
+,,
+9,9,
+:,::,
+::,:::,
+@Î=,@Ho =,
+,,
+Q,Q,
+UVX,U V X,
+VV,V V,
+ØÎ=,Reho =,
+,,
+X,X,
+UVZ,U V Z,
+ZZ,Z Z,
+xÏ=,x ma =,
+,,
+`,``,
+c,c,
+cc,c c,
+Ğ=,Mi =,
+E,,
+EE,,
+ÈĞ=,Nemi =,
+,,
+E,,
+E,,
+EE,,
+xÑ=,xm =,
+E,,
+E=,#ERROR!,
+,,
+,,
+,.,
+,.,
+,.,
+,,
+,,
+,,
+,,
+,,
+,,
+,,
+,,
+,,
+MEJE%04d,MEJE% 04d,
+DDev%03d +,DDev% 03d +,
+EVENT,EVENT,
+ğá=,ğá =,
+hE,h.,
+˜â=,˜â =,
+E,,
+(E,(.,
+HE,H.,
+xE,x.,
+EVNO.%03d,EVNO.% 03d,
+BGMNO.%03d,BGMNO.% 03d,
+#ERROR!,#ERROR!,
+8,8,
+9,9,
+:,::,
+;,;,
+?,??,
+U,U,
+x,x,
+y,y,
+~,~,
+EEŒø‰Ê:%s,Effect:% s,
+POWER:%2d,POWER:% 2d,
+Á”ïMP:%2d,MP consumption:% 2d,
+:%s,:% s,
+ƒ}ƒhƒ‹ƒN,Madruk,
+ƒtƒŠ[,free,
+:%d,:% d,
+:%3d/%d,:% 3d /% d,
+EXP:%d,EXP:% d,
+NEXT:%d,NEXT:% d,
+x  0    0,x 0 0,
+x %2d  %3d,x% 2d% 3d,
+x %3d,x% 3d,
+:,::,
+%3d,% 3d,
+:%3d,:% 3d,
+`E,`,
+xE,x.,
+àû=,Gourd =,
+@E,@,
+E=,#ERROR!,
