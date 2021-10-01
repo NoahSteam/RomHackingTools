@@ -440,6 +440,62 @@ void ExtractTextFromStream(const char* pInData, uint32 inOffset, uint32 inDataSi
 	}
 }
 
+class DragonForceTextFinder
+{
+public:
+	struct LineData
+	{
+		string Line;
+		uint32 Offset{0};
+	};
+
+	bool FindText(const string& inFilePath)
+	{
+		FileData dataFile;
+		if (!dataFile.InitializeFileData(FileNameContainer(inFilePath.c_str())))
+		{
+			return false;
+		}
+
+		char buffer[1024];
+		memset(buffer, 0, sizeof(buffer));
+
+		uint32 bufferIndex = 0;
+		uint32 fileOffset = inOffset;
+		uint32 entryNumber = 0;
+		while (fileOffset < inDataSize)
+		{
+			if (pInData[fileOffset] == 0)
+			{
+				++fileOffset;
+				continue;
+			}
+
+			buffer[bufferIndex++] = pInData[fileOffset++];
+			if (bufferIndex > 1024)
+			{
+				printf("Buffer too small\n");
+				return;
+			}
+
+			if (pInData[fileOffset] == 0)
+			{
+				LineData lineData;
+				lineData.Line = string(buffer);
+				lineData.Offset = fileOffset;
+
+				memset(buffer, 0, sizeof(buffer));
+
+				++entryNumber;
+				bufferIndex = 0;
+			}
+		}
+	}
+
+private:
+	vector<LineData> Lines;
+};
+
 bool PatchTextInFile(const string& inCsvFilePath, const string& inPatchedFilePath)
 {
 	DragonForceCSVReader csvReader;
@@ -448,12 +504,11 @@ bool PatchTextInFile(const string& inCsvFilePath, const string& inPatchedFilePat
 		return false;
 	}
 
-	FileData dataFile;
-	if( !dataFile.InitializeFileData(FileNameContainer(inPatchedFilePath.c_str())) )
+	DragonForceTextFinder textFinder;
+	if( !textFinder.FindText(inPatchedFilePath) )
 	{
 		return false;
 	}
-
 	
 }
 
