@@ -21,6 +21,9 @@
   <ItemGroup>
     <ClCompile Include="Source\DragonForce.cpp" />
   </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Source\DragonForceCSVReader.h" />
+  </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>15.0</VCProjectVersion>
     <ProjectGuid>{70274296-5AA3-447B-BC0F-29850D58C46E}</ProjectGuid>
