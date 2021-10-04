@@ -31,12 +31,14 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include <assert.h>
 
 #include "..\..\Utils\Utils.h"
-#include "DragonForceCSVReader.h"
 
 using std::vector;
 using std::string;
 using std::unordered_map;
 using std::map;
+
+#include "DragonForceCSVReader.h"
+#include "DragonForceTextFinder.h"
 
 class SaturnFontToPS2Font
 {
@@ -440,77 +442,131 @@ void ExtractTextFromStream(const char* pInData, uint32 inOffset, uint32 inDataSi
 	}
 }
 
-class DragonForceTextFinder
+class DragonForceTextInserter
 {
 public:
-	struct LineData
+	bool PatchTextInFile(const string& inCsvFilePath, const string& inPatchedFilePath, const uint32 inOffset)
 	{
-		string Line;
-		uint32 Offset{0};
-	};
-
-	bool FindText(const string& inFilePath)
-	{
-		FileData dataFile;
-		if (!dataFile.InitializeFileData(FileNameContainer(inFilePath.c_str())))
+		if( !mCsvReader.InitializeFile(inCsvFilePath) )
+		{
+			return false;
+		}
+		
+		if( !mTextFinder.FindText(inPatchedFilePath, inOffset) )
+		{
+			return false;
+		}
+	
+		if( !mFileData.InitializeFileData(FileNameContainer(inPatchedFilePath.c_str())) )
 		{
 			return false;
 		}
 
-		char buffer[1024];
-		memset(buffer, 0, sizeof(buffer));
+		mFileToPatch.OpenFile(inPatchedFilePath);
 
-		uint32 bufferIndex = 0;
-		uint32 fileOffset = inOffset;
-		uint32 entryNumber = 0;
-		while (fileOffset < inDataSize)
-		{
-			if (pInData[fileOffset] == 0)
+		for( const DragonForceCSVReader::LineEntry& csvEntry : mCsvReader.mLines )
+		{	
+			if( csvEntry.bShouldPatch && mTextFinder.DoesDataExistForLine(csvEntry.japanese) )
 			{
-				++fileOffset;
+				const string lineToInsert = csvEntry.english.empty() ? csvEntry.google : csvEntry.english;
+
+				InsertLine(csvEntry, lineToInsert);
+			}
+		}
+
+		//Copy data over
+		mFileToPatch.WriteData(0, mFileData.GetData(), mFileData.GetDataSize());
+
+		return true;
+	}
+
+private:
+	void InsertLineOld(const DragonForceCSVReader::LineEntry& inCsvEntry, const string& inLineToInsert)
+	{
+		const vector<const DragonForceTextFinder::LineData*>& japaneseLineData = mTextFinder.GetLineDataFromString(inCsvEntry.japanese);
+		
+		const char zero = 0;
+		for( const DragonForceTextFinder::LineData* pLineData : japaneseLineData )
+		{
+			const uint32 numAvailableBytes = pLineData->NumBytes + pLineData->NumZerosAfterLine;
+			if( numAvailableBytes < inLineToInsert.length() + 1 )
+			{
+				printf("Warning:%s [%s] as is too long.  Expected %i, got %zi\n", inLineToInsert.c_str(), pLineData->Line.c_str(), numAvailableBytes, inLineToInsert.length() + 1);
+			
+				mFileToPatch.WriteData(pLineData->Offset, inLineToInsert.c_str(), numAvailableBytes - 1);
+
+				//Null terminate entry
+				mFileToPatch.WriteData(pLineData->Offset + inLineToInsert.length(), &zero, 1);
 				continue;
 			}
 
-			buffer[bufferIndex++] = pInData[fileOffset++];
-			if (bufferIndex > 1024)
+			mFileToPatch.WriteData(pLineData->Offset, inLineToInsert.c_str(), (unsigned long)inLineToInsert.length());
+
+			//Null terminate entry
+			mFileToPatch.WriteData(pLineData->Offset + inLineToInsert.length(), &zero, 1);
+		}
+	}
+
+	void InsertLine(const DragonForceCSVReader::LineEntry& inCsvEntry, const string& inLineToInsert)
+	{
+		const vector<const DragonForceTextFinder::LineData*>& japaneseLineData = mTextFinder.GetLineDataFromString(inCsvEntry.japanese);
+		
+		const char zero = 0;
+		char* pFileData = const_cast<char*>(mFileData.GetData());
+
+		for( const DragonForceTextFinder::LineData* pLineData : japaneseLineData )
+		{	
+			//See if we can move this back to get more space
+			uint32 newOffset = pLineData->Offset - 1;
+			if( pLineData->Offset > 0x70e10 )
 			{
-				printf("Buffer too small\n");
-				return;
+				const bool bFoundSpace = pFileData[newOffset] == 0;
+				while( pFileData[newOffset] == 0 )
+				{
+					--newOffset;
+				}
+
+				if( bFoundSpace )
+				{
+					++newOffset;
+				}
+			}
+			
+			++newOffset;
+
+			const uint32 numExtraBytes = pLineData->Offset - newOffset;
+
+			///
+			const uint32 numAvailableBytes = pLineData->NumBytes + pLineData->NumZerosAfterLine + numExtraBytes;
+			if( numAvailableBytes < inLineToInsert.length() + 1 )
+			{
+				printf("Warning:%s [%s] as is too long.  Expected %i, got %zi\n", inLineToInsert.c_str(), pLineData->Line.c_str(), numAvailableBytes, inLineToInsert.length() + 1);
+			
+				memcpy_s(&pFileData[newOffset], numAvailableBytes - 1, inLineToInsert.c_str(), numAvailableBytes - 1);
+			
+				//Null terminate entry
+				memcpy_s(&pFileData[newOffset + inLineToInsert.length()], 1, &zero, 1);
+				
+				continue;
 			}
 
-			if (pInData[fileOffset] == 0)
-			{
-				LineData lineData;
-				lineData.Line = string(buffer);
-				lineData.Offset = fileOffset;
-
-				memset(buffer, 0, sizeof(buffer));
-
-				++entryNumber;
-				bufferIndex = 0;
-			}
+			memcpy_s(&pFileData[newOffset], (unsigned long)inLineToInsert.length(), inLineToInsert.c_str(), (unsigned long)inLineToInsert.length());
+		
+			//Null terminate entry
+			memcpy_s(&pFileData[newOffset + inLineToInsert.length()], 1, &zero, 1);
+			
+			//Todo clear out everything from here till next string
+			//Todo: Why is it becoming Gogonos
 		}
 	}
 
 private:
-	vector<LineData> Lines;
+	DragonForceTextFinder mTextFinder;
+	DragonForceCSVReader  mCsvReader;
+	FileReadWriter        mFileToPatch;
+	FileData              mFileData;
 };
 
-bool PatchTextInFile(const string& inCsvFilePath, const string& inPatchedFilePath)
-{
-	DragonForceCSVReader csvReader;
-	if( !csvReader.InitializeFile(inCsvFilePath) )
-	{
-		return false;
-	}
-
-	DragonForceTextFinder textFinder;
-	if( !textFinder.FindText(inPatchedFilePath) )
-	{
-		return false;
-	}
-	
-}
 
 bool MatchUpTextFromReadyFiles(const string& inPs2ReadyFilePath, const string& inSaturnEngReadyFilePath, const string& inSaturnJpReadyFilePath,
 							   const string& inOutputDirectory)
@@ -635,5 +691,23 @@ int main(int argc, char* argv[])
 		const string outDirectory = string(argv[5]) + Seperators;
 
 		MatchUpTextFromReadyFiles(ps2Ready, engReady, jpnReady, outDirectory);
+	}
+	else if( command == string("PatchTextInFile") && argc == 5 )
+	{
+		const string csvFilePath     = string(argv[2]);
+		const string patchedFilePath = string(argv[3]);
+		const uint32 fileOffset      = (uint32)strtol(argv[4], nullptr, 16);
+
+		DragonForceTextInserter inserter;
+		bool bResult = inserter.PatchTextInFile(csvFilePath, patchedFilePath, fileOffset);
+
+		if( bResult )
+		{
+			printf("Success\n");
+		}
+		else
+		{
+			printf("Failed\n");
+		}
 	}
 }

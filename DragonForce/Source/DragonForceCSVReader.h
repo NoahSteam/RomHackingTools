@@ -9,16 +9,18 @@ public:
 		string japanese;
 		string google;
 		string english;
+		bool bShouldPatch{false};
 
 		void Clear()
 		{
 			japanese.clear();
 			google.clear();
 			english.clear();
+			bShouldPatch = false;
 		}
 	};
 
-	vector<LineEntry> lines;
+	vector<LineEntry> mLines;
 
 	bool InitializeFile(const string& fileName)
 	{
@@ -50,7 +52,7 @@ public:
 				{
 					entry.google = string(buffer);
 				}
-				else
+				else if(entryType == 2)
 				{
 					entry.english = string(buffer);
 				}
@@ -59,14 +61,23 @@ public:
 
 				++entryType;
 			}
-			else if( pData[index] == 0xA )
+
+			//Newline
+			else if( pData[index] == '\n' || pData[index] == '\r' )
 			{
-				lines.push_back(entry);
+				entry.bShouldPatch = buffer[0] != '0';
+				mLines.push_back(entry);
 				entry.Clear();
 
 				memset(buffer, 0, sizeof(buffer));
 				bufferIndex = 0;
 				entryType = 0;
+
+				//Skip next newline character
+				if( pData[index + 1] == '\n' || pData[index + 1] == '\r' )
+				{
+					++index;
+				}
 			}
 			else
 			{
@@ -74,5 +85,8 @@ public:
 			}
 			++index;
 		}
+
+		return true;
 	}
+
 };
