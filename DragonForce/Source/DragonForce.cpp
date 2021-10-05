@@ -517,46 +517,33 @@ private:
 		for( const DragonForceTextFinder::LineData* pLineData : japaneseLineData )
 		{	
 			//See if we can move this back to get more space
-			uint32 newOffset = pLineData->Offset - 1;
-			if( pLineData->Offset > 0x70e10 )
+			uint32 newOffset = pLineData->Offset;
+			if( pLineData->Offset >= 0x7aa20 && pLineData->Offset <= 0x7b480)//pLineData->Offset != 0x70e10 && pLineData->Offset != 0x7a728 )
 			{
-				const bool bFoundSpace = pFileData[newOffset] == 0;
-				while( pFileData[newOffset] == 0 )
+				while( pFileData[newOffset - 2] == 0 )
 				{
-					--newOffset;
-				}
-
-				if( bFoundSpace )
-				{
-					++newOffset;
+			//		--newOffset;
 				}
 			}
-			
-			++newOffset;
 
 			const uint32 numExtraBytes = pLineData->Offset - newOffset;
+			const uint32 numOriginalBytes = pLineData->NumBytes + pLineData->NumZerosAfterLine;
+			const uint32 numAvailableBytes = numOriginalBytes + numExtraBytes;
+			
+			//Null terminate entry
+			memcpy_s(&pFileData[pLineData->Offset], numOriginalBytes, &mZeros, numOriginalBytes);
 
-			///
-			const uint32 numAvailableBytes = pLineData->NumBytes + pLineData->NumZerosAfterLine + numExtraBytes;
+			//Make sure we have enough space
 			if( numAvailableBytes < inLineToInsert.length() + 1 )
 			{
 				printf("Warning:%s [%s] as is too long.  Expected %i, got %zi\n", inLineToInsert.c_str(), pLineData->Line.c_str(), numAvailableBytes, inLineToInsert.length() + 1);
 			
 				memcpy_s(&pFileData[newOffset], numAvailableBytes - 1, inLineToInsert.c_str(), numAvailableBytes - 1);
-			
-				//Null terminate entry
-				memcpy_s(&pFileData[newOffset + inLineToInsert.length()], 1, &zero, 1);
 				
 				continue;
 			}
 
 			memcpy_s(&pFileData[newOffset], (unsigned long)inLineToInsert.length(), inLineToInsert.c_str(), (unsigned long)inLineToInsert.length());
-		
-			//Null terminate entry
-			memcpy_s(&pFileData[newOffset + inLineToInsert.length()], 1, &zero, 1);
-			
-			//Todo clear out everything from here till next string
-			//Todo: Why is it becoming Gogonos
 		}
 	}
 
@@ -565,8 +552,9 @@ private:
 	DragonForceCSVReader  mCsvReader;
 	FileReadWriter        mFileToPatch;
 	FileData              mFileData;
+	static const char     mZeros[2048];
 };
-
+const char DragonForceTextInserter::mZeros[2048] = {0};
 
 bool MatchUpTextFromReadyFiles(const string& inPs2ReadyFilePath, const string& inSaturnEngReadyFilePath, const string& inSaturnJpReadyFilePath,
 							   const string& inOutputDirectory)

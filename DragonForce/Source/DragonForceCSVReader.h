@@ -22,6 +22,20 @@ public:
 
 	vector<LineEntry> mLines;
 
+	bool DoesEntryExist(const LineEntry& inEntry) const
+	{
+		for( const LineEntry& existingEntry : mLines )
+		{
+			if( existingEntry.japanese == inEntry.japanese )
+			{
+				printf("Ignoring entry for: %s with Google: %s and Eng: %s \n", inEntry.japanese.c_str(), inEntry.google.c_str(), inEntry.english.c_str());
+				return true;
+			}
+		}
+
+		return false;
+	}
+
 	bool InitializeFile(const string& fileName)
 	{
 		FileNameContainer fileNameInfo(fileName.c_str());
@@ -65,8 +79,15 @@ public:
 			//Newline
 			else if( pData[index] == '\n' || pData[index] == '\r' )
 			{
+				//Should patch
 				entry.bShouldPatch = buffer[0] != '0';
-				mLines.push_back(entry);
+
+				if( entry.bShouldPatch && !DoesEntryExist(entry) )
+				{
+					mLines.push_back(entry);
+				}
+
+				//Reset entry
 				entry.Clear();
 
 				memset(buffer, 0, sizeof(buffer));

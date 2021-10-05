@@ -7,3 +7,6 @@ ExtractFileText C:\Users\16306\Desktop\Rizwan\DragonForce\Game\Disc 0x70e10 C:\U
 MatchUpTextFromReadyFiles c:\Users\16306\Desktop\Rizwan\DragonForce\Game\Disc\Ready.bin C:\Users\16306\Desktop\Rizwan\DragonForce\Game\Saturn\Disc\GAME\Ready0.bin C:\Users\16306\Desktop\Rizwan\DragonForce\Game\Saturn\Japanese\Disc\GAME\Ready0.bin C:\Users\16306\Desktop\Rizwan\DragonForce\Game\ExtractedData
 PatchTextInFile C:\Users\16306\Desktop\Rizwan\RomHackingTools\DragonForce\Data\Translation\Ready.csv C:\Users\16306\Desktop\Rizwan\DragonForce\Game\Disc_Patched\Ready.bin 0x70e10
 FindData.exe C:\Users\16306\Desktop\Rizwan\DragonForce\Game\Disc C:\Users\16306\Desktop\Rizwan\SakuraWars2\find.bin
+
+//Story text
+ExtractFileText C:\Users\16306\Desktop\Rizwan\DragonForce\Game\Saturn\Disc\GAME\MT_VDP0.grp 0x15d40 C:\Users\16306\Desktop\Rizwan\DragonForce\Game\ExtractedData\Eng\MT_VDP0.txt

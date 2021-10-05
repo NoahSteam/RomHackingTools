@@ -1,3 +1,4 @@
+Japanese,GoogleTranslation,English,ShouldPatch
 ¼Ş­É°İ,Junon,Junon,1
 ºŞİºŞ½,Gongos,Gongos,1
 Úµİ,Leon,Leon,1
@@ -729,25 +730,6 @@ hÎ;,h ho;,,0
 ØÎ;,Reho;,,0
 èÎ;,èÎ;,,0
 `Ï;,`Ma;,,0
-Ğ;,Mi;,,0
-PĞ;,Pmi;,,0
-PĞ;,Pmi;,,0
-PĞ;,Pmi;,,0
-PĞ;,Pmi;,,0
-PĞ;,Pmi;,,0
-0Ğ;,0 Ğ;,,0
-MEET03.BMP,MEET03.BMP,,0
-MEET01.BMP,MEET01.BMP,,0
-MEET02.BMP,MEET02.BMP,,0
-MEET00.BMP,MEET00.BMP,,0
-MT_VDP7.GRP,MT_VDP7.GRP,,0
-MT_VDP6.GRP,MT_VDP6.GRP,,0
-MT_VDP5.GRP,MT_VDP5.GRP,,0
-MT_VDP4.GRP,MT_VDP4.GRP,,0
-MT_VDP3.GRP,MT_VDP3.GRP,,0
-MT_VDP2.GRP,MT_VDP2.GRP,,0
-MT_VDP1.GRP,MT_VDP1.GRP,,0
-MT_VDP0.GRP,MT_VDP0.GRP,,0
 ¿ŞİËŞ,Zombie,Zombie,1
 ÄŞ×ºŞÆ±,Dragonia,Dragon,1
 ËŞ°½Ä,Beast,Beast,1
@@ -762,9 +744,9 @@ MT_VDP0.GRP,MT_VDP0.GRP,,0
 %3d   %3d   %3d,% 3d% 3d% 3d,,0
 ‚ ‚è,can be,,1
 ‚È‚µ,none,None,1
-%3d”N%3dŒ%2dT‚Ìí‰Ê,% 3d Year% 3d Month% 2d Week Results,,0
-íÑ     í    Ÿ    ”s,Battle record Battle victory or defeat,,1
-Œ÷Ñ          ‘Œ÷Ñ,Achievement Total Achievement,,1
+%3d”N%3dŒ%2dT‚Ìí‰Ê,% 3d Year% 3d Month% 2d Week Results,Y:%3d M:%3d W:%2d,1
+íÑ     í    Ÿ    ”s,Battle record Battle victory or defeat,Battles  Fought Won  Lost,1
+Œ÷Ñ          ‘Œ÷Ñ,Achievement Total Achievement,Merits:         Merits:,1
 ‘ŒMÍ”,Total number of medals,,1
 ‚Å ‚¥ ‚½,Deta,Data,1
 ‚¢‚×‚ñ‚Æ,Event,Event,1
@@ -772,7 +754,7 @@ MT_VDP0.GRP,MT_VDP0.GRP,,0
 ¨—Í’n},Power map,Map,1
 “à­I—¹,End of domestic affairs,End,1
 “à­Às,Domestic affairs execution,Domestic,1
-%4u”N%2uŒ%1uT,% 4u years% 2u months% 1u weeks,,0
+%4u”N%2uŒ%1uT,% 4u years% 2u months% 1u weeks,Y:%4u M:%2u W:%1u,0
 %s’é‘,%s Empire,,1
 %s‰¤‘,%s Kingdom,Kingdom %s,1
 ŒNå: %s,Monarch:%s,,1
@@ -864,9 +846,6 @@ NAISEI  :%02x,NAISEI:% 02x,,0
 ‚È‚µ,none,None,1
 %3d,% 3d,,0
 ‚È‚µ              0,None 0,,0
-%3d”N%3dŒ%2dT‚Ìí‰Ê,% 3d Year% 3d Month% 2d Week Results,,0
-íÑ     í    Ÿ    ”s,Battle record Battle victory or defeat,,1
-Œ÷Ñ          ‘Œ÷Ñ,Achievement Total Achievement,,1
 ‘ŒMÍ”,Total number of medals,Medals,1
 ö    —^,Awarded,Awarded,1
 æ‚èÁ‚µ,cancel,Cancel,1
@@ -936,7 +915,6 @@ NAISEI  :%02x,NAISEI:% 02x,,0
 ‰ïŒ©I—¹,End Audience,End,1
 •ß—¸‘I‘ğ,POW selection,Captives,1
 •«‘I‘ğ,Warlord selection,Generals,1
-%4u”N%2uŒ%1uT,% 4u years% 2u months% 1u weeks,%4uY%2uM%1uW,1
 %3dl,% 3d people,%3d,1
 •«ˆê——•\,Commanders?,Generals,1
 •«”,NumCommanders?,NumCmdr,1
@@ -953,13 +931,11 @@ NAISEI  :%02x,NAISEI:% 02x,,0
 %3dl,% 3d people,%3d,1
 ’T    õ,Search,,1
 æ‚èÁ‚µ,cancel,,1
-%4u”N%2uŒ%1uT,% 4u years% 2u months% 1u weeks,%4uY%2uM%1uW,1
 Lv  %3d,Lv% 3d,,0
 %3d,% 3d,,0
 ’z  é,Castle,Fortify,1
 ’z    é,Castle,Fortify,1
 æ‚èÁ‚µ,Cancel,,1
-%4u”N%2uŒ%1uT,% 4u years% 2u months% 1u weeks,%4uY%2uM%1uW,1
 %s,% s,,0
 Lv  %3d,Lv% 3d,,0
 t’c,Division,,1
