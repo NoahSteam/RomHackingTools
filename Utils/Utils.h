@@ -34,20 +34,14 @@ struct FileNameContainer
 	{
 	}
 
+	FileNameContainer(const std::string& inPath) : mFullPath(inPath)
+	{
+		InitializeFromFullPath();
+	}
+
 	FileNameContainer(const char* pFullPath) : mFullPath(pFullPath) 
 	{
-		mFileName = mFullPath.substr(mFullPath.find_last_of("/\\") + 1);
-
-		const size_t lastIndex = mFileName.find_last_of(".");
-		mNoExtension           = mFileName.substr(0, lastIndex);
-		mExtention             = lastIndex != -1 ? mFileName.substr(lastIndex, mFileName.size() - 1) : "";
-
-		const char sep = '\\';
-		size_t i = mFullPath.rfind(sep, mFullPath.length());
-		if( i != std::string::npos )
-		{
-			mPathOnly = mFullPath.substr(0, i);
-		}
+		InitializeFromFullPath();
 	}
 
 	FileNameContainer(const char* pFileName, const char* pFullPath) : mFileName(pFileName), mFullPath(pFullPath) 
@@ -84,6 +78,23 @@ struct FileNameContainer
 	std::string mPathOnly;
 	std::string mNoExtension;
 	std::string mExtention;
+
+private:
+	void InitializeFromFullPath()
+	{
+		mFileName = mFullPath.substr(mFullPath.find_last_of("/\\") + 1);
+
+		const size_t lastIndex = mFileName.find_last_of(".");
+		mNoExtension           = mFileName.substr(0, lastIndex);
+		mExtention             = lastIndex != -1 ? mFileName.substr(lastIndex, mFileName.size() - 1) : "";
+
+		const char sep = '\\';
+		size_t i = mFullPath.rfind(sep, mFullPath.length());
+		if( i != std::string::npos )
+		{
+			mPathOnly = mFullPath.substr(0, i);
+		}
+	}
 };
 
 class FileData
