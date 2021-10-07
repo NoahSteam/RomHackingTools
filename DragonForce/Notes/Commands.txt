@@ -1,5 +1,6 @@
 PatchData A:\DragonForce\PS2\DragonForce_Modded\Disc A:\NoahSteam\RomPatchingTools\DragonForce\Data A:\DragonForce\PS2\
 ExtractFileText A:\DragonForce\PS2\DragonForce_JP\Disc\Ready.bin 0x7a728 A:\DragonForce\PS2\ExtractedData\Ready_JP.txt
+ExtractSaturnStoryText A:\DragonForce\US\Disc\ A:\DragonForce\ExtractedData\Meeting
 
 FontFromSaturnToPS2 C:\Users\16306\Desktop\Rizwan\RomHackingTools\DragonForce\Data\SaturnFontSheet.bmp C:\Users\16306\Desktop\Rizwan\RomHackingTools\DragonForce\Data\PS2EnglishFontSheet.bmp
 PatchData C:\Users\16306\Desktop\Rizwan\DragonForce\Game\Disc_Patched C:\Users\16306\Desktop\Rizwan\RomHackingTools\DragonForce\Data C:\Users\16306\Desktop\Rizwan\DragonForce\Game\PatchingOutput

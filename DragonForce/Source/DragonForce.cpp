@@ -520,9 +520,6 @@ int main(int argc, char* argv[])
 		return 1;
 	}
 
-	DragonForceCSVReader reader;
-	reader.InitializeFile("C:\\Users\\16306\\Desktop\\Rizwan\\RomHackingTools\\DragonForce\\Data\\Translation\\Ready.csv");
-
 	const string command(argv[1]);
 
 	if (command == string("PatchData") && argc == 5)
@@ -578,6 +575,21 @@ int main(int argc, char* argv[])
 		bool bResult = inserter.PatchTextInFile(csvFilePath, patchedFilePath, fileOffset);
 
 		if( bResult )
+		{
+			printf("Success\n");
+		}
+		else
+		{
+			printf("Failed\n");
+		}
+	}
+	else if (command == string("ExtractSaturnStoryText") && argc == 4)
+	{
+		const string inRootDirectory = string(argv[2]) + Seperators;
+		const string outDirectory = string(argv[3]) + Seperators;
+
+		const bool bResult = DumpSaturnStoryText(inRootDirectory, outDirectory);
+		if (bResult)
 		{
 			printf("Success\n");
 		}
