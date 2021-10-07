@@ -26,5 +26,11 @@
     <ClInclude Include="Source\DragonForceTextFinder.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Source\DragonForceReadyFilePatcher.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\DragonForceStoryTextExtractor.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
