@@ -2,25 +2,14 @@
 
 class DragonForceStoryTextExtractor
 {
-	bool IsFirstByteOfJis(uint8 u)
+	bool IsFirstByteOfJis(uint8 inByte)
 	{
-		return (u > 0x81 && u < 0xa0) || (u >= 0xe0 && u <= 0xef);
+		return (inByte > 0x80 && inByte < 0xa0) || (inByte >= 0xe0 && inByte <= 0xfc);
 	}
 
-	bool IsValidCharacter(char c, char prevByte)
+	bool IsValidSingleByteCharacter(uint8 inByte)
 	{
-		//return ((uint8)c >= 0x20 && (uint8)c < 0x7f) || (uint8)c > 0x80;
-		const uint8 currU = (uint8)c;
-		const uint8 prevU = (uint8)prevByte;
-
-		const bool bIsSingleByteChar = (currU >= 0x20 && currU < 0x7f) || (currU > 0xa0 && currU < 0xe0);
-		const bool bIsFirstByteOfJis = IsFirstByteOfJis(currU);
-
-		const bool bWasPrevValidFirst  = IsFirstByteOfJis(prevU);
-		const bool bIsSecondOddJisByte = bWasPrevValidFirst && (currU >= 0x40 && currU <= 0x9e && currU != 0x7f);
-		const bool bIsSecondJisByte    = bWasPrevValidFirst && ((bIsSecondOddJisByte && prevU%2 != 0) || (!bIsSecondOddJisByte && prevU%2 == 0));
-
-		return bIsSingleByteChar || bIsFirstByteOfJis || bIsSecondOddJisByte || bIsSecondJisByte;
+		return (inByte >= 0x20 && inByte < 0x7f) || (inByte >= 0xa1 && inByte <= 0xdf);
 	}
 
 public:
@@ -42,7 +31,7 @@ public:
 public:
 	DragonForceStoryTextExtractor(const FileNameContainer& inFilePath) : mFileName(inFilePath){}
 
-	bool ParseText()
+	bool ParseText(uint32 inOffset)
 	{	
 		FileData fileData;
 		if( !fileData.InitializeFileData(mFileName) )
@@ -52,35 +41,71 @@ public:
 
 		const char* pData = fileData.GetData();
 		const uint32 fileSize = (uint32)fileData.GetDataSize();
-		uint32 offset = 0x15d40;
+		uint32 offset = inOffset;//0x15d40;
 		LineData newLine;
-		char byte = 0;
-		char prevByte = 0;
+		vector<char> postFix;
+		uint8 byte = 0;
 		while( offset < fileSize)
 		{
-			prevByte = byte;
-			byte = pData[offset];
-			if( !IsValidCharacter(byte, prevByte) )
-			{
-				vector<char> postFix;
+			byte = (uint8)pData[offset];
 
-				char nextByte = 0;
-				do
-				{
-					byte     = pData[offset];
-					nextByte = pData[++offset];
-					postFix.push_back(byte);
-				}while(!IsValidCharacter(nextByte, byte) && (offset < fileSize));
-
-				newLine.postfix = postFix;
-				mLines.push_back(newLine);
-
-				newLine.Reset();
-			}
-			else
+			if(IsValidSingleByteCharacter(byte))
 			{
 				newLine.line += byte;
+				++offset;
+			}
+			else if(byte < 0x20)
+			{
+				uint8 nextByte = (uint8)pData[offset + 1];
+				if (byte == 0x0d || byte == 0x06)
+				{
+					if (byte == 0x06 || (!IsValidSingleByteCharacter(nextByte) && !IsFirstByteOfJis(nextByte)))
+					{
+						postFix.push_back(byte);
 
+						const uint32 startOffset = offset;
+
+						//while(!IsValidSingleByteCharacter(nextByte) && !IsFirstByteOfJis(nextByte))
+						while(	(byte == 0x02 && !IsFirstByteOfJis(nextByte)) ||
+								 byte == 0x01 ||
+								(byte < 0x04 && (nextByte == 0x71 || nextByte == 0x28 || nextByte == 0x29 || nextByte == 0x2a || nextByte == 0x2b || nextByte == 0x3d)) ||
+								!(IsValidSingleByteCharacter(nextByte) || IsFirstByteOfJis(nextByte)) )
+						{
+							postFix.push_back(nextByte);
+							byte     = nextByte;
+							nextByte = (uint8)pData[++offset];
+						}
+
+						if( startOffset == offset )
+						{
+							++offset;
+						}
+
+						//End of line
+						newLine.postfix = postFix;
+						mLines.push_back(newLine);
+
+						postFix.clear();
+						newLine.Reset();
+
+						continue;
+					}
+					else
+					{
+						newLine.line += byte;
+						++offset;
+					}
+				}
+				else
+				{
+					postFix.push_back(byte);
+					++offset;
+				}
+			}
+			else if( IsFirstByteOfJis(byte) )
+			{
+				newLine.line += byte;
+				newLine.line += (uint8)pData[++offset];
 				++offset;
 			}
 		}
@@ -89,7 +114,7 @@ public:
 	}
 };
 
-bool ParseSaturnStoryText(const string& inRootDirectory, vector<DragonForceStoryTextExtractor>& outData)
+bool ParseSaturnStoryText(const string& inRootDirectory, vector<DragonForceStoryTextExtractor>& outData, uint32 inOffset)
 {
 	//Find all files within the requested directory
 	vector<FileNameContainer> allFiles;
@@ -102,7 +127,7 @@ bool ParseSaturnStoryText(const string& inRootDirectory, vector<DragonForceStory
 	for(const FileNameContainer& fileName : meetingFiles)
 	{
 		DragonForceStoryTextExtractor newFile(fileName);
-		if( !newFile.ParseText() )
+		if( !newFile.ParseText(inOffset) )
 		{
 			return false;
 		}
@@ -113,13 +138,13 @@ bool ParseSaturnStoryText(const string& inRootDirectory, vector<DragonForceStory
 	return true;
 }
 
-bool DumpSaturnStoryText(const string& inRootDirectory, const string& inOutputPath)
+bool DumpSaturnStoryText(const string& inRootDirectory, const string& inOutputPath, uint32 inOffsetToText)
 {
 	CreateDirectoryHelper(inOutputPath);
 
 	vector<DragonForceStoryTextExtractor> storyText;
 
-	if( !ParseSaturnStoryText(inRootDirectory, storyText) )
+	if( !ParseSaturnStoryText(inRootDirectory, storyText, inOffsetToText) )
 	{
 		return false;
 	}
@@ -155,7 +180,7 @@ bool DumpSaturnStoryText(const string& inRootDirectory, const string& inOutputPa
 			for(auto iter = lineData.line.cbegin(); iter != lineData.line.cend(); ++iter)
 			{
 				if( *iter == 0x0d )
-				{	
+				{
 					outFile.WriteData(&spaceChar, 1);
 				}
 				else
@@ -164,15 +189,15 @@ bool DumpSaturnStoryText(const string& inRootDirectory, const string& inOutputPa
 				}
 			}
 
-			const char colon = ':';
-			outFile.WriteData(&colon, 1);
+		//	const char colon = ':';
+		//	outFile.WriteData(&colon, 1);
 			
 			//Print postfix
 			for(const char byte : lineData.postfix)
 			{
-				const string& strValue = ByteToStringLUT[(uint8)byte];
-				outFile.WriteData(strValue.c_str(), strValue.length());
-				outFile.WriteData(&spaceChar, 1);
+		//		const string& strValue = ByteToStringLUT[(uint8)byte];
+		//		outFile.WriteData(strValue.c_str(), strValue.length());
+		//		outFile.WriteData(&spaceChar, 1);
 			}
 
 			const char newLine = '\n';

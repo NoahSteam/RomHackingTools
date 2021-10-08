@@ -1,0 +1,22 @@
+Text starting points
+Found a match in DATA.0 @0x07c2fd40
+Found a match in DATA.0 @0x07c6dd40
+Found a match in DATA.0 @0x07ca7d40
+Found a match in DATA.0 @0x07ce3d40
+Found a match in DATA.0 @0x07d1fd40
+Found a match in DATA.0 @0x07d5cd40
+Found a match in DATA.0 @0x07d99540
+Found a match in DATA.0 @0x07dd3540
+Found a match in DATA.0 @0x0a3f2551
+Found a match in DATA.0 @0x0a422595
+Found a match in DATA.0 @0x0a454cf2
+Found a match in DATA.0 @0x0a4875c3
+Found a match in DATA.0 @0x0a4bab1b
+Found a match in DATA.0 @0x0a4ee25f
+Found a match in DATA.0 @0x0a51e5fd
+Found a match in DATA.0 @0x0a5528c7
+
+
+//MT_VPD0 around:
+Found a match in DATA.0 @0x07c4f655
+Found a match in DATA.0 @0x07c4fd19 (0x07c2fd40 to be exact)

@@ -23,6 +23,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Source\DragonForceCSVReader.h" />
+    <ClInclude Include="Source\DragonForceMeetingsPatcher.h" />
     <ClInclude Include="Source\DragonForceReadyFilePatcher.h" />
     <ClInclude Include="Source\DragonForceStoryTextExtractor.h" />
     <ClInclude Include="Source\DragonForceTextFinder.h" />

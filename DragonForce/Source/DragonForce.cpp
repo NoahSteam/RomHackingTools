@@ -41,6 +41,7 @@ using std::map;
 #include "DragonForceTextFinder.h"
 #include "DragonForceReadyFilePatcher.h"
 #include "DragonForceStoryTextExtractor.h"
+#include "DragonForceMeetingsPatcher.h"
 
 class SaturnFontToPS2Font
 {
@@ -565,7 +566,7 @@ int main(int argc, char* argv[])
 
 		MatchUpTextFromReadyFiles(ps2Ready, engReady, jpnReady, outDirectory);
 	}
-	else if( command == string("PatchTextInFile") && argc == 5 )
+	else if( command == string("PatchReadyFileText") && argc == 5 )
 	{
 		const string csvFilePath     = string(argv[2]);
 		const string patchedFilePath = string(argv[3]);
@@ -583,12 +584,28 @@ int main(int argc, char* argv[])
 			printf("Failed\n");
 		}
 	}
-	else if (command == string("ExtractSaturnStoryText") && argc == 4)
+	else if (command == string("ExtractSaturnStoryText") && argc == 5)
 	{
 		const string inRootDirectory = string(argv[2]) + Seperators;
 		const string outDirectory = string(argv[3]) + Seperators;
+		const uint32 offsetToText = (uint32)strtol(argv[4], nullptr, 16);
 
-		const bool bResult = DumpSaturnStoryText(inRootDirectory, outDirectory);
+		const bool bResult = DumpSaturnStoryText(inRootDirectory, outDirectory, offsetToText);
+		if (bResult)
+		{
+			printf("Success\n");
+		}
+		else
+		{
+			printf("Failed\n");
+		}
+	}
+	else if (command == string("PatchMeetingFiles") && argc == 4)
+	{
+		const string ps2DataFilePath  = string(argv[2]);
+		const string inSaturnGamePath = string(argv[3]) + Seperators;
+
+		const bool bResult = PatchMeetingFiles(ps2DataFilePath, inSaturnGamePath);
 		if (bResult)
 		{
 			printf("Success\n");
