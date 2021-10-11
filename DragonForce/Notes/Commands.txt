@@ -6,6 +6,9 @@ PatchMeetingFiles A:\DragonForce\PS2\DragonForce_Modded\Disc\DATA.0 A:\DragonFor
 FindData.exe A:\DragonForce\PS2\DragonForce_JP\Disc A:\SakuraWars2\find.bin
 
 FontFromSaturnToPS2 C:\Users\16306\Desktop\Rizwan\RomHackingTools\DragonForce\Data\SaturnFontSheet.bmp C:\Users\16306\Desktop\Rizwan\RomHackingTools\DragonForce\Data\PS2EnglishFontSheet.bmp
+ExtractSaturnStoryText C:\Users\16306\Desktop\Rizwan\DragonForce\Game\Saturn\Disc C:\Users\16306\Desktop\Rizwan\DragonForce\Game\ExtractedData\Eng 0x12000 3920 0x15d40
+ExtractSaturnStoryText C:\Users\16306\Desktop\Rizwan\RomHackingTools\DragonForce\Data\PS2Files\Meetings\Data C:\Users\16306\Desktop\Rizwan\RomHackingTools\DragonForce\Data\PS2Files\Meetings\Extracted 0x41a0 4166 0x8340
+
 PatchData C:\Users\16306\Desktop\Rizwan\DragonForce\Game\Disc_Patched C:\Users\16306\Desktop\Rizwan\RomHackingTools\DragonForce\Data C:\Users\16306\Desktop\Rizwan\DragonForce\Game\PatchingOutput
 ExtractFileText C:\Users\16306\Desktop\Rizwan\DragonForce\Game\Disc 0x70e10 C:\Users\16306\Desktop\Rizwan\DragonForce\Game\ExtractedData\Eng\Ready_Eng.txt
 MatchUpTextFromReadyFiles c:\Users\16306\Desktop\Rizwan\DragonForce\Game\Disc\Ready.bin C:\Users\16306\Desktop\Rizwan\DragonForce\Game\Saturn\Disc\GAME\Ready0.bin C:\Users\16306\Desktop\Rizwan\DragonForce\Game\Saturn\Japanese\Disc\GAME\Ready0.bin C:\Users\16306\Desktop\Rizwan\DragonForce\Game\ExtractedData

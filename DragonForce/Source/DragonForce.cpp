@@ -584,13 +584,15 @@ int main(int argc, char* argv[])
 			printf("Failed\n");
 		}
 	}
-	else if (command == string("ExtractSaturnStoryText") && argc == 5)
+	else if (command == string("ExtractSaturnStoryText") && argc == 7)
 	{
 		const string inRootDirectory = string(argv[2]) + Seperators;
-		const string outDirectory = string(argv[3]) + Seperators;
-		const uint32 offsetToText = (uint32)strtol(argv[4], nullptr, 16);
+		const string outDirectory    = string(argv[3]) + Seperators;
+		const uint32 offsetToText    = (uint32)strtol(argv[4], nullptr, 16);
+		const uint32 numEntries      = (uint32)strtol(argv[5], nullptr, 10);
+		const uint32 offsetToStrings = (uint32)strtol(argv[6], nullptr, 16);
 
-		const bool bResult = DumpSaturnStoryText(inRootDirectory, outDirectory, offsetToText);
+		const bool bResult = DumpStoryTextData(inRootDirectory, outDirectory, offsetToText, numEntries, offsetToStrings);
 		if (bResult)
 		{
 			printf("Success\n");

@@ -13,15 +13,26 @@ class DragonForceStoryTextExtractor
 	}
 
 public:
+	struct Header_OffsetData
+	{
+		uint32 Offset;
+	};
+	
 	struct LineData
 	{
 		string line;
 		vector<char> postfix;
+		vector<char> byteData;
+		uint32 offset;
+		uint32 crc;
 
 		void Reset()
 		{
 			line.clear();
 			postfix.clear();
+			byteData.clear();
+			offset = 0;
+			crc = 0;
 		}
 	};
 
@@ -31,7 +42,72 @@ public:
 public:
 	DragonForceStoryTextExtractor(const FileNameContainer& inFilePath) : mFileName(inFilePath){}
 
-	bool ParseText(uint32 inOffset)
+	bool ParseText(uint32 offsetToHeader, const uint32 inNumEntriesInHeader, const uint32 inOffsetToStrings)
+	{
+		FileData fileData;
+		if( !fileData.InitializeFileData(mFileName) )
+		{
+			return false;
+		}
+
+		//Read offsets for all strings
+		Header_OffsetData* pOffsetsToStrings = new Header_OffsetData[inNumEntriesInHeader];
+		memcpy_s(pOffsetsToStrings, inNumEntriesInHeader * sizeof(Header_OffsetData), fileData.GetData() + offsetToHeader, inNumEntriesInHeader * sizeof(Header_OffsetData));
+		for( uint32 stringIndex = 0; stringIndex < inNumEntriesInHeader; ++stringIndex )
+		{
+			pOffsetsToStrings[stringIndex].Offset = SwapByteOrder(pOffsetsToStrings[stringIndex].Offset); //Fix endianness
+		}
+
+		const uint8* pData = (uint8*)fileData.GetData();
+		const uint32 offsetToStringTable = inOffsetToStrings;
+
+		//Parse strings
+		for( uint32 stringIndex = 0; stringIndex < inNumEntriesInHeader; ++stringIndex )
+		{
+			const uint32 stringStart = pOffsetsToStrings[stringIndex].Offset + offsetToStringTable;
+			const uint32 stringEnd   = offsetToStringTable + (stringIndex + 1 < inNumEntriesInHeader ? pOffsetsToStrings[stringIndex + 1].Offset : fileData.GetDataSize());
+
+			LineData newLine;
+			uint32 currOffset = stringStart;
+			while( currOffset < stringEnd )
+			{
+				uint8 byte = (uint8)pData[currOffset];
+
+				newLine.byteData.push_back(byte);
+				if(IsValidSingleByteCharacter(byte) || byte == 0x0d)
+				{
+					if( byte == 0x0d )
+						newLine.line += ' ';
+					else
+						newLine.line += byte;
+					++currOffset;
+				}
+				else if( IsFirstByteOfJis(byte) )
+				{
+					newLine.line += byte;
+					newLine.line += (uint8)pData[++currOffset];
+					++currOffset;
+				}
+				else
+				{
+					newLine.postfix.push_back(byte);
+					++currOffset;
+				}
+			}
+
+			newLine.offset = stringStart - offsetToStringTable;
+			newLine.crc = CalculateDataCRC(newLine.byteData.data(), (uint32)newLine.byteData.size());
+
+			mLines.push_back(newLine);
+		}
+
+		//Free memory
+		delete[] pOffsetsToStrings;
+
+		return true;
+	}
+
+	bool ParseTextOld(uint32 inOffset, uint32 inNumEntries)
 	{	
 		FileData fileData;
 		if( !fileData.InitializeFileData(mFileName) )
@@ -114,11 +190,11 @@ public:
 	}
 };
 
-bool ParseSaturnStoryText(const string& inRootDirectory, vector<DragonForceStoryTextExtractor>& outData, uint32 inOffset)
+bool ParseSaturnStoryText(const string& inRootDirectory, vector<DragonForceStoryTextExtractor>& outData, uint32 inOffsetToHeader, uint32 inNumEntries, uint32 inOffsetToStrings)
 {
 	//Find all files within the requested directory
 	vector<FileNameContainer> allFiles;
-	FindAllFilesWithinDirectory( (inRootDirectory + "\\Game"), allFiles);
+	FindAllFilesWithinDirectory(inRootDirectory, allFiles);
 
 	//Find all the font sheet files
 	vector<FileNameContainer> meetingFiles;
@@ -127,7 +203,7 @@ bool ParseSaturnStoryText(const string& inRootDirectory, vector<DragonForceStory
 	for(const FileNameContainer& fileName : meetingFiles)
 	{
 		DragonForceStoryTextExtractor newFile(fileName);
-		if( !newFile.ParseText(inOffset) )
+		if( !newFile.ParseText(inOffsetToHeader, inNumEntries, inOffsetToStrings) )
 		{
 			return false;
 		}
@@ -138,13 +214,13 @@ bool ParseSaturnStoryText(const string& inRootDirectory, vector<DragonForceStory
 	return true;
 }
 
-bool DumpSaturnStoryText(const string& inRootDirectory, const string& inOutputPath, uint32 inOffsetToText)
+bool DumpSaturnStoryText(const string& inRootDirectory, const string& inOutputPath, uint32 inOffsetToToHeader, uint32 inNumEntries, uint32 inOffsetToStringTable)
 {
 	CreateDirectoryHelper(inOutputPath);
 
 	vector<DragonForceStoryTextExtractor> storyText;
 
-	if( !ParseSaturnStoryText(inRootDirectory, storyText, inOffsetToText) )
+	if( !ParseSaturnStoryText(inRootDirectory, storyText, inOffsetToToHeader, inNumEntries, inOffsetToStringTable) )
 	{
 		return false;
 	}
@@ -176,6 +252,11 @@ bool DumpSaturnStoryText(const string& inRootDirectory, const string& inOutputPa
 
 		for(const DragonForceStoryTextExtractor::LineData& lineData : textData.mLines)
 		{
+			//print offset
+			char offsetBuffer[20] = {0};
+			snprintf(offsetBuffer, 20, "%04x ", lineData.offset);
+			outFile.WriteData(offsetBuffer, strnlen_s(offsetBuffer, 20));
+
 			//Print text
 			for(auto iter = lineData.line.cbegin(); iter != lineData.line.cend(); ++iter)
 			{
@@ -189,19 +270,56 @@ bool DumpSaturnStoryText(const string& inRootDirectory, const string& inOutputPa
 				}
 			}
 
-		//	const char colon = ':';
-		//	outFile.WriteData(&colon, 1);
+			const char colon = ':';
+			outFile.WriteData(&colon, 1);
 			
 			//Print postfix
 			for(const char byte : lineData.postfix)
 			{
-		//		const string& strValue = ByteToStringLUT[(uint8)byte];
-		//		outFile.WriteData(strValue.c_str(), strValue.length());
-		//		outFile.WriteData(&spaceChar, 1);
+				const string& strValue = ByteToStringLUT[(uint8)byte];
+				outFile.WriteData(strValue.c_str(), strValue.length());
+				outFile.WriteData(&spaceChar, 1);
 			}
 
 			const char newLine = '\n';
 			outFile.WriteData(&newLine, 1);
+		}
+	}
+
+	return true;
+}
+
+bool DumpStoryTextData(const string& inRootDirectory, const string& inOutputPath, uint32 inOffsetToToHeader, uint32 inNumEntries, uint32 inOffsetToStringTable)
+{
+	CreateDirectoryHelper(inOutputPath);
+
+	vector<DragonForceStoryTextExtractor> storyText;
+
+	if( !ParseSaturnStoryText(inRootDirectory, storyText, inOffsetToToHeader, inNumEntries, inOffsetToStringTable) )
+	{
+		return false;
+	}
+
+	const char spaceChar = ' ';
+	const string outExt(".bin");
+	for(const DragonForceStoryTextExtractor& textData : storyText)
+	{
+		//Create output file
+		FileWriter outFile;
+		const string& outPath = inOutputPath + textData.mFileName.mNoExtension + outExt;
+		if (!outFile.OpenFileForWrite(outPath))
+		{
+			continue;
+		}
+
+		const uint32 numEntries = (uint32)textData.mLines.size();
+		outFile.WriteData(&numEntries, sizeof(numEntries));
+
+		for(const DragonForceStoryTextExtractor::LineData& lineData : textData.mLines)
+		{
+			outFile.WriteData(&lineData.crc, sizeof(lineData.crc));
+		//	outFile.WriteData(&lineData.offset, sizeof(lineData.offset));
+		//	outFile.WriteData(lineData.byteData.data(), (unsigned long)lineData.byteData.size());
 		}
 	}
 
