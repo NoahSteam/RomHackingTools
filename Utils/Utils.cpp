@@ -112,6 +112,17 @@ void CalcCrc32(const BYTE byte, DWORD &dwCrc32)
 	dwCrc32 = ((dwCrc32) >> 8) ^ GCrc32Table[(byte) ^ ((dwCrc32) & 0x000000FF)];
 }
 
+uint32 CalculateDataCRC(char* pData, uint32 dataSize)
+{
+	DWORD crc = 0xffffffff;
+	for(uint32 i = 0; i < dataSize; ++i)
+	{
+		CalcCrc32(pData[i], crc);
+	}
+
+	return (uint32)crc;
+}
+
 void SwapByteOrderInPlace(char* pData, unsigned int numBytes)
 {
 	std::reverse(pData, (pData + numBytes));

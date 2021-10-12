@@ -20,3 +20,6 @@ Found a match in DATA.0 @0x0a5528c7
 //MT_VPD0 around:
 Found a match in DATA.0 @0x07c4f655
 Found a match in DATA.0 @0x07c4fd19 (0x07c2fd40 to be exact)
+
+0x0a3e8340 is Wein story text
+0x0a3e41a0 is Wein story text header

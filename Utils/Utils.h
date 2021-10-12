@@ -18,6 +18,8 @@ T SwapByteOrder(const T inData)
 
 void SwapByteOrderInPlace(char* pData, unsigned int numBytes);
 
+extern uint32 CalculateDataCRC(char* pData, uint32 dataSize);
+
 struct MatchInfo
 {
 	std::string   mFileName;
