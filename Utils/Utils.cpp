@@ -1199,7 +1199,7 @@ bool BitmapSurface::CreateSurface(int width, int height, EBitsPerPixel bitsPerPi
 	return true;
 }
 
-void BitmapSurface::AddTile(const char* pInData, int inDataSize, int inX, int inY, int/* width*/, int height)
+void BitmapSurface::AddTile(const char* pInData, int inDataSize, int inX, int inY, int/* width*/, int height, EFlipFlag flipFlag)
 {
 	const int startX = mBytesPerRow == kBPP_4 ? inX/2 : inX;
 	const int offset = (inY*mBytesPerRow + startX);
@@ -1208,14 +1208,57 @@ void BitmapSurface::AddTile(const char* pInData, int inDataSize, int inX, int in
 	assert(offset < mBufferSize);
 
 	int inDataOffset = 0;
-	for(int y = 0; y < height; ++y)
-	{
-		for(int x = 0; x < 8; ++x) //used to be 8 insntead of width
-		{
-			assert( offset + y*mBytesPerRow + x < mBufferSize );
 
-			assert(inDataOffset < inDataSize);
-			pOutData[y*mBytesPerRow + x] = pInData[inDataOffset++];
+	if( flipFlag == EFlipFlag::kFlipNone )
+	{
+		for (int y = 0; y < height; ++y)
+		{
+			for (int x = 0; x < 8; ++x) //used to be 8 insntead of width
+			{
+				assert(offset + y * mBytesPerRow + x < mBufferSize);
+
+				assert(inDataOffset < inDataSize);
+				pOutData[y * mBytesPerRow + x] = pInData[inDataOffset++];
+			}
+		}
+	}
+	else if(flipFlag == EFlipFlag::kFlipVert)
+	{
+		for (int y = height - 1; y >= 0; --y)
+		{
+			for (int x = 0; x < 8; ++x) //used to be 8 insntead of width
+			{
+				assert(offset + y * mBytesPerRow + x < mBufferSize);
+
+				assert(inDataOffset < inDataSize);
+				pOutData[y * mBytesPerRow + x] = pInData[inDataOffset++];
+			}
+		}
+	}
+	else if (flipFlag == EFlipFlag::kFlipHoriz)
+	{
+		for (int y = 0; y < height; ++y)
+		{
+			for (int x = 7; x >= 0; --x) //used to be 8 insntead of width
+			{
+				assert(offset + y * mBytesPerRow + x < mBufferSize);
+
+				assert(inDataOffset < inDataSize);
+				pOutData[y * mBytesPerRow + x] = pInData[inDataOffset++];
+			}
+		}
+	}
+	else
+	{
+		for (int y = height - 1; y >= 0; --y)
+		{
+			for (int x = 7; x >= 0; --x) //used to be 8 insntead of width
+			{
+				assert(offset + y * mBytesPerRow + x < mBufferSize);
+
+				assert(inDataOffset < inDataSize);
+				pOutData[y * mBytesPerRow + x] = pInData[inDataOffset++];
+			}
 		}
 	}
 }

@@ -323,6 +323,12 @@ public:
 		kBPP_8 = 8
 	};
 
+	enum EFlipFlag : uint8
+	{
+		kFlipNone = 0,
+		kFlipHoriz = 1 << 1,
+		kFlipVert  = 1 << 2,
+	};
 private:
 	int           mWidth        = 0;
 	int           mHeight       = 0;
@@ -337,7 +343,7 @@ public:
 	~BitmapSurface();
 
 	bool CreateSurface(int width, int height, EBitsPerPixel bitsPerPixel, const char* pPalette, int paletteSize);
-	void AddTile(const char* pData, int dataSize, int x, int y, int width, int height);
+	void AddTile(const char* pData, int dataSize, int x, int y, int width, int height, EFlipFlag flipFlag = kFlipNone);
 	bool WriteToFile(const std::string& fileName, bool bForceBitmap = false);
 };
 

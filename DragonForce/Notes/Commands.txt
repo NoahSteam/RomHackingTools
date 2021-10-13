@@ -3,7 +3,7 @@ ExtractSaturnStoryText A:\DragonForce\JP\Disc\ A:\DragonForce\ExtractedData\Meet
 PatchData A:\DragonForce\PS2\DragonForce_Modded\Disc A:\NoahSteam\RomPatchingTools\DragonForce\Data A:\DragonForce\PatchingOutput
 PatchReadyFileText A:\NoahSteam\RomPatchingTools\DragonForce\Data\Translation\Ready.csv A:\DragonForce\PS2\DragonForce_Modded\Disc\Ready.bin 0x70e10
 PatchMeetingFiles A:\DragonForce\PS2\DragonForce_Modded\Disc\DATA.0 A:\DragonForce\US\Disc\GAME
-ExtractMap A:\NoahSteam\RomPatchingTools\DragonForce\Data\Saturn\SaturnMap_Indices.bin A:\DragonForce\US\Disc\GAME\FLVRAM.bin A:\NoahSteam\RomPatchingTools\DragonForce\Data\Saturn\SaturnMap_Palette.bin A:\DragonForce\ExtractedData\Map.bmp
+ExtractMap A:\NoahSteam\RomPatchingTools\DragonForce\Data\Saturn\SaturnMap_Indices.bin A:\DragonForce\US\Disc\GAME\FLVRAM.bin A:\NoahSteam\RomPatchingTools\DragonForce\Data\Saturn\SaturnMap_Palette.bin A:\DragonForce\ExtractedData\
 FindData.exe A:\DragonForce\PS2\DragonForce_JP\Disc A:\SakuraWars2\find.bin
 
 FontFromSaturnToPS2 C:\Users\16306\Desktop\Rizwan\RomHackingTools\DragonForce\Data\SaturnFontSheet.bmp C:\Users\16306\Desktop\Rizwan\RomHackingTools\DragonForce\Data\PS2EnglishFontSheet.bmp

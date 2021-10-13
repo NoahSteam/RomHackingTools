@@ -623,7 +623,7 @@ int main(int argc, char* argv[])
 		const string indicePath    = string(argv[2]);
 		const string colorDataPath = string(argv[3]);
 		const string palettePath   = string(argv[4]);
-		const string outPath       = string(argv[5]);
+		const string outPath       = string(argv[5]) + Seperators;
 
 		ExtractMap(indicePath, colorDataPath, palettePath, outPath);
 	}
