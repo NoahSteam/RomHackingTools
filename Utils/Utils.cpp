@@ -1201,7 +1201,7 @@ bool BitmapSurface::CreateSurface(int width, int height, EBitsPerPixel bitsPerPi
 
 void BitmapSurface::AddTile(const char* pInData, int inDataSize, int inX, int inY, int/* width*/, int height)
 {
-	const int startX = inX/2;
+	const int startX = mBytesPerRow == kBPP_4 ? inX/2 : inX;
 	const int offset = (inY*mBytesPerRow + startX);
 	char* pOutData   = mpBuffer + offset;
 	
@@ -1457,6 +1457,64 @@ const char* BmpToSaturnConverter::GetImageData() const
 unsigned int BmpToSaturnConverter::GetImageDataSize() const
 {
 	return mTileExtractor.mTiles[0].mTileSize;
+}
+
+///////////////////////////
+//        TileMap        //
+///////////////////////////
+bool TileMap::CreateFontSheetFromData(const char* pInData, unsigned int inDataSize)
+{
+	const int numBytesPerTile = 8 * 8;
+	if (inDataSize % numBytesPerTile != 0)
+	{
+		printf("CreateFontSheet: Invalid size for data.  Should be multiple of 64, is %u", inDataSize);
+		return false;
+	}
+
+	const int numTilesInFile = inDataSize / numBytesPerTile;
+	for (int currTile = 0; currTile < numTilesInFile; ++currTile)
+	{
+		mTiles.push_back(std::move(TileData(&pInData[currTile * numBytesPerTile], numBytesPerTile)));
+	}
+
+	return true;
+}
+
+bool TileMap::CreateFontSheet(const FileNameContainer& inFileNameInfo)
+{
+	FileData fontFile;
+	if (!fontFile.InitializeFileData(inFileNameInfo))
+	{
+		return false;
+	}
+
+	const int numBytesPerTile = 64*64;
+	if (fontFile.GetDataSize() % numBytesPerTile != 0)
+	{
+		printf("CreateFontSheet: Invalid size for file %s", inFileNameInfo.mFileName.c_str());
+		return false;
+	}
+
+	const char* pFontSheetData = fontFile.GetData();
+	const int numTilesInFile = fontFile.GetDataSize() / numBytesPerTile;
+	for (int currTile = 0; currTile < numTilesInFile; ++currTile)
+	{
+		mTiles.push_back(std::move(TileData(&pFontSheetData[currTile * numBytesPerTile], numBytesPerTile)));
+	}
+
+	return true;
+}
+
+const char* TileMap::GetTileData(int inTileIndex) const
+{
+	int tileIndex = inTileIndex;
+	assert(inTileIndex >= 0 && inTileIndex < (int)mTiles.size());
+	if (inTileIndex >= (int)mTiles.size())
+	{
+		inTileIndex = 0;
+	}
+
+	return inTileIndex < (int)mTiles.size() ? mTiles[inTileIndex].GetFontTileData() : nullptr;
 }
 
 ////////////////////////////////

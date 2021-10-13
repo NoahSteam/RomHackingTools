@@ -319,7 +319,8 @@ class BitmapSurface
 public:
 	enum EBitsPerPixel : int
 	{
-		kBPP_4 = 4
+		kBPP_4 = 4,
+		kBPP_8 = 8
 	};
 
 private:
@@ -382,6 +383,57 @@ struct BmpToSaturnConverter
 	void PackTiles();
 	const char* GetImageData() const;
 	unsigned int GetImageDataSize() const;
+};
+
+class TileMap
+{
+	class TileData
+	{
+		char* mpData;
+
+	public:
+		TileData(const char* pInData, int dataSize)
+		{
+			mpData = new char[dataSize];
+			memcpy(mpData, pInData, dataSize);
+		}
+
+		TileData(TileData&& other) : mpData(other.mpData)
+		{
+			other.mpData = nullptr;
+		}
+
+		TileData& operator=(TileData&& other)
+		{
+			if (this != &other)
+			{
+				delete[] mpData;
+				mpData = other.mpData;
+				other.mpData = nullptr;
+			}
+
+			return *this;
+		}
+
+		~TileData()
+		{
+			delete[] mpData;
+			mpData = nullptr;
+		}
+
+		const char* GetFontTileData() const
+		{
+			return mpData;
+		}
+	};
+
+	std::vector<TileData> mTiles;
+
+public:
+	bool          CreateFontSheetFromData(const char* pInData, unsigned int inDataSize);
+	bool          CreateFontSheet(const FileNameContainer& inFileNameInfo);
+	const char*   GetTileData(int inIndex) const;
+	int           GetNumTiles() const {(int)mTiles.size();}	
 };
 
 class MemoryBlocks

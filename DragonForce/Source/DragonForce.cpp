@@ -42,6 +42,7 @@ using std::map;
 #include "DragonForceReadyFilePatcher.h"
 #include "DragonForceStoryTextExtractor.h"
 #include "DragonForceMeetingsPatcher.h"
+#include "DragonForceSaturnMapExtractor.h"
 
 class SaturnFontToPS2Font
 {
@@ -616,5 +617,14 @@ int main(int argc, char* argv[])
 		{
 			printf("Failed\n");
 		}
+	}
+	else if(command == string("ExtractMap") && argc == 6)
+	{
+		const string indicePath    = string(argv[2]);
+		const string colorDataPath = string(argv[3]);
+		const string palettePath   = string(argv[4]);
+		const string outPath       = string(argv[5]);
+
+		ExtractMap(indicePath, colorDataPath, palettePath, outPath);
 	}
 }

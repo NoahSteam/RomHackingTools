@@ -27,6 +27,7 @@
     <ClInclude Include="Source\DragonForceReadyFilePatcher.h" />
     <ClInclude Include="Source\DragonForceStoryTextExtractor.h" />
     <ClInclude Include="Source\DragonForceTextFinder.h" />
+    <ClInclude Include="Source\DragonForceSaturnMapExtractor.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>15.0</VCProjectVersion>
