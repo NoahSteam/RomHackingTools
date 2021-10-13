@@ -1,0 +1,7 @@
+Cell = 8x8 pixels
+Page = 32x32 or 64x64 Cells
+Plane = 1x1 page (or other formats not used in DF)
+
+-The palette format treats display color data as color RAM address data
+selected by the dot color code within cell data, and palette number within pattern
+name data.

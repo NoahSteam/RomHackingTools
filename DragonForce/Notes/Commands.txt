@@ -13,6 +13,7 @@ PatchData C:\Users\16306\Desktop\Rizwan\DragonForce\Game\Disc_Patched C:\Users\1
 ExtractFileText C:\Users\16306\Desktop\Rizwan\DragonForce\Game\Disc 0x70e10 C:\Users\16306\Desktop\Rizwan\DragonForce\Game\ExtractedData\Eng\Ready_Eng.txt
 MatchUpTextFromReadyFiles c:\Users\16306\Desktop\Rizwan\DragonForce\Game\Disc\Ready.bin C:\Users\16306\Desktop\Rizwan\DragonForce\Game\Saturn\Disc\GAME\Ready0.bin C:\Users\16306\Desktop\Rizwan\DragonForce\Game\Saturn\Japanese\Disc\GAME\Ready0.bin C:\Users\16306\Desktop\Rizwan\DragonForce\Game\ExtractedData
 PatchReadyFileText C:\Users\16306\Desktop\Rizwan\RomHackingTools\DragonForce\Data\Translation\Ready.csv C:\Users\16306\Desktop\Rizwan\DragonForce\Game\Disc_Patched\Ready.bin 0x70e10
+ExtractMap C:\Users\16306\Desktop\Rizwan\RomHackingTools\DragonForce\Data\Saturn\SaturnMap_Indices.bin C:\Users\16306\Desktop\Rizwan\DragonForce\Game\Saturn\Disc\GAME\FLVRAM.bin C:\Users\16306\Desktop\Rizwan\RomHackingTools\DragonForce\Data\Saturn\SaturnMap_Palette.bin C:\Users\16306\Desktop\Rizwan\DragonForce\Game\ExtractedData\Map.bmp
 FindData.exe C:\Users\16306\Desktop\Rizwan\DragonForce\Game\Disc C:\Users\16306\Desktop\Rizwan\SakuraWars2\find.bin
 
 //Story text
