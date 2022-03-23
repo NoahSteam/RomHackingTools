@@ -124,6 +124,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="..\ExternalTools\CRC.h" />
     <ClInclude Include="..\ExternalTools\lodepng.h" />
     <ClInclude Include="decompress_rtns.h" />
     <ClInclude Include="Utils.h" />

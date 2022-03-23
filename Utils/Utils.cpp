@@ -28,6 +28,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "Utils.h"
 #include "..\ExternalTools\lodepng.h"
 #include "decompress_rtns.h"
+#include "..\ExternalTools\crc.h"
 
 using std::string;
 using std::vector;
@@ -114,13 +115,7 @@ void CalcCrc32(const BYTE byte, DWORD &dwCrc32)
 
 uint32 CalculateDataCRC(char* pData, uint32 dataSize)
 {
-	DWORD crc = 0xffffffff;
-	for(uint32 i = 0; i < dataSize; ++i)
-	{
-		CalcCrc32(pData[i], crc);
-	}
-
-	return (uint32)crc;
+	return CRC::Calculate(pData, dataSize, CRC::CRC_32());
 }
 
 void SwapByteOrderInPlace(char* pData, unsigned int numBytes)

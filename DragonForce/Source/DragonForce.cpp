@@ -26,6 +26,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include <list>
 #include <map>
 #include <unordered_map>
+#include <unordered_set>
 #include <algorithm>
 #include <utility>
 #include <assert.h>
@@ -593,7 +594,8 @@ int main(int argc, char* argv[])
 		const uint32 numEntries      = (uint32)strtol(argv[5], nullptr, 10);
 		const uint32 offsetToStrings = (uint32)strtol(argv[6], nullptr, 16);
 
-		const bool bResult = DumpStoryTextData(inRootDirectory, outDirectory, offsetToText, numEntries, offsetToStrings);
+		const bool bResult = DumpSaturnStoryText(inRootDirectory, outDirectory, offsetToText, numEntries, offsetToStrings);//DumpStoryTextData(inRootDirectory, outDirectory, offsetToText, numEntries, offsetToStrings);
+		//const bool bResult = DumpStoryTextData(inRootDirectory, outDirectory, offsetToText, numEntries, offsetToStrings);
 		if (bResult)
 		{
 			printf("Success\n");
@@ -626,5 +628,11 @@ int main(int argc, char* argv[])
 		const string outPath       = string(argv[5]) + Seperators;
 
 		ExtractMap(indicePath, colorDataPath, palettePath, outPath);
+	}
+	else if(command == string("FindMatchesInMeetingFiles") && argc == 4)
+	{
+		const string file1 = string(argv[2]);
+		const string file2 = string(argv[3]);
+		FindMatchesInMeetingFiles(file1, file2);
 	}
 }
