@@ -132,18 +132,22 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="CreateMinigameSpreadsheets.h\Header.h" />
+    <ClInclude Include="Source\BatchedImageExtractor.h" />
     <ClInclude Include="Source\BattleMenuExtraction.h" />
     <ClInclude Include="Source\CreateIndexFile.h" />
     <ClInclude Include="Source\CreateMiniGameSpreadsheets.h" />
     <ClInclude Include="Source\CreateMinigameSpreadsheets.h\Header.h" />
     <ClInclude Include="Source\CreateStorySpreadhseets.h" />
     <ClInclude Include="Source\CreateSysSpreadsheets.h" />
+    <ClInclude Include="Source\CreateTranslatedFontSheet.h" />
     <ClInclude Include="Source\FaceWinAll.h" />
     <ClInclude Include="Source\ImageExtraction.h" />
     <ClInclude Include="Source\InfoNameExtraction.h" />
+    <ClInclude Include="Source\InsertText.h" />
     <ClInclude Include="Source\MainMenuExtraction.h" />
     <ClInclude Include="Source\MiniGameExtraction.h" />
     <ClInclude Include="Source\MNameCG.h" />
+    <ClInclude Include="Source\PatchGame.h" />
     <ClInclude Include="Source\SakuraCommon.h" />
     <ClInclude Include="Source\SakuraConstants.h" />
     <ClInclude Include="Source\SakuraFontSheet.h" />

@@ -4,6 +4,9 @@ Header:
 0x10 - 4 byte offset that will take us to the font sheet
 0x14 - 4 byte size in bytes of the font sheet
 
+SequenceEntries:
+-Contains an index to the text string as well as character image data
+
 Text Header - Header for lines of dialog
 4 Bytes - Size of text header / 4
 Then for each entry - 4 byte number of characters preceeding this entry
@@ -75,3 +78,10 @@ Once 0xC000 is found at 603218A (Ghidra: 4b1f8), jump to code 602A17C( G: 43176)
 Then written to 060A8564
 0039 eventually used to calculate something at 0605A068
 Ending with r0 containing FFFFD929
+
+Something wrote texture offsets for each text entry to 060a5180 (06012e78 & 06012eb4 contains a pointer to this.  Try changing offset to 060a5100)
+060a51a6
+
+06012ece => mov 0xd, r10 => loop to print out empty line
+
+Can't clobber data around 060a525a

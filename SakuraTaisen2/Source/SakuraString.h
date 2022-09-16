@@ -213,6 +213,11 @@ struct SakuraString
 		}
 	}
 
+	int GetNumBytes() const
+	{
+		return mChars.size() * 2; //2 bytes per entry
+	}
+
 	unsigned short GetSingleByteDataSize() const
 	{
 		if (mChars.size() > 3)

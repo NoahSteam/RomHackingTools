@@ -1,0 +1,18 @@
+06096eac
+05c01080 => ffd0
+
+06001F70
+
+06012e20 <= font spacing code starts here
+06012e26 => change this to 4100 (SHLL instead of SHLL2) *to fix horizontal spacing*
+
+06012dec <= vertical spacing
+
+starting from 0x06012de8
+mov 0x0c, r10 (ea0c)
+mul r10, r9 (29af)
+sts MACL, R10 (0a1a)
+add0x30, r10 (7a30)
+
+////when to add new line///
+06012e44

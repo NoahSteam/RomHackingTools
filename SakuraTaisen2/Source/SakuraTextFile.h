@@ -253,23 +253,28 @@ struct SakuraTextFile
 
 	struct SakuraHeader
 	{
-		unsigned int OffsetToSequenceData;
-		unsigned int OffsetToUnknown2;
-		unsigned int OffsetToTextHeader;
-		unsigned int OffsetToText;
-		unsigned int OffsetToFontSheet;
-		unsigned int FontSheetDataSize;
+		unsigned int OffsetToSequenceData; //1
+		unsigned int OffsetToUnknown2;     //2
+		unsigned int OffsetToTextHeader;   //3
+		unsigned int OffsetToText;         //4
+		unsigned int OffsetToFontSheet;    //5
+		unsigned int FontSheetDataSize;    //6
 
 		void InitializeFileHeader(const char* pInBuffer, const size_t InBufferSize)
 		{
 			memcpy_s(this, sizeof(SakuraHeader), pInBuffer, sizeof(SakuraHeader));
 
 			//Convert to big endian
+			SwapByteOrder();
+		}
+
+		void SwapByteOrder()
+		{
 			SwapByteOrderInPlace((char*)(&OffsetToSequenceData), sizeof(OffsetToSequenceData));
-			SwapByteOrderInPlace((char*)(&OffsetToTextHeader), sizeof(OffsetToTextHeader));
-			SwapByteOrderInPlace((char*)(&OffsetToText), sizeof(OffsetToText));
-			SwapByteOrderInPlace((char*)(&OffsetToFontSheet), sizeof(OffsetToFontSheet));
-			SwapByteOrderInPlace((char*)(&FontSheetDataSize), sizeof(FontSheetDataSize));
+			SwapByteOrderInPlace((char*)(&OffsetToTextHeader),   sizeof(OffsetToTextHeader));
+			SwapByteOrderInPlace((char*)(&OffsetToText),         sizeof(OffsetToText));
+			SwapByteOrderInPlace((char*)(&OffsetToFontSheet),    sizeof(OffsetToFontSheet));
+			SwapByteOrderInPlace((char*)(&FontSheetDataSize),    sizeof(FontSheetDataSize));
 		}
 	};
 
@@ -305,6 +310,8 @@ struct SakuraTextFile
 	vector<SakuraStringInfo>  mStringInfoArray;
 	vector<SakuraTimingData>  mLineTimingData;
 	vector<SequenceEntry>     mSequenceEntries;
+	char*                     mpHeaderToText{0};
+	int                       mHeaderToTextSize{0};
 
 private:
 	unsigned long       mFileSize;
@@ -314,32 +321,37 @@ private:
 public:
 	SakuraTextFile(const FileNameContainer& fileName) : mFileNameInfo(fileName), mFileSize(0), mpFile(nullptr), mpBuffer(nullptr) {}
 
-	SakuraTextFile(SakuraTextFile&& rhs) : mFileNameInfo(std::move(rhs.mFileNameInfo)), mLines(std::move(rhs.mLines)), mHeaderForTextEntries(std::move(rhs.mHeaderForTextEntries)),
-		mDataSegments(std::move(rhs.mDataSegments)), mStringInfoArray(std::move(rhs.mStringInfoArray)), mFileSize(rhs.mFileSize),
-		mpFile(rhs.mpFile), mpBuffer(std::move(rhs.mpBuffer)), mLineTimingData(std::move(rhs.mLineTimingData)), mFontSheetData(std::move(rhs.mFontSheetData)),
-		mSequenceEntries(rhs.mSequenceEntries)
+	SakuraTextFile(SakuraTextFile&& rhs) : mFileNameInfo(std::move(rhs.mFileNameInfo)), mFileHeader(rhs.mFileHeader), mLines(std::move(rhs.mLines)), mHeaderForTextEntries(std::move(rhs.mHeaderForTextEntries)),
+		mDataSegments(std::move(rhs.mDataSegments)), mStringInfoArray(std::move(rhs.mStringInfoArray)), mpHeaderToText(std::move(rhs.mpHeaderToText)),
+		mHeaderToTextSize(rhs.mHeaderToTextSize), mFileSize(rhs.mFileSize),	mpFile(rhs.mpFile), mpBuffer(std::move(rhs.mpBuffer)), 
+		mLineTimingData(std::move(rhs.mLineTimingData)), mFontSheetData(std::move(rhs.mFontSheetData)), mSequenceEntries(rhs.mSequenceEntries)
 	{
-		rhs.mpBuffer = nullptr;
-		rhs.mpFile = nullptr;
+		rhs.mpBuffer              = nullptr;
+		rhs.mpFile                = nullptr;
 		rhs.mFontSheetData.mpData = nullptr;
+		rhs.mpHeaderToText        = nullptr;
 	}
 
 	SakuraTextFile& operator=(SakuraTextFile&& rhs)
 	{
-		mFileNameInfo = std::move(rhs.mFileNameInfo);
-		mLines = std::move(rhs.mLines);
-		mDataSegments = std::move(rhs.mDataSegments);
-		mStringInfoArray = std::move(rhs.mStringInfoArray);
+		mFileNameInfo         = std::move(rhs.mFileNameInfo);
+		mLines                = std::move(rhs.mLines);
+		mFileHeader           = rhs.mFileHeader;
+		mDataSegments         = std::move(rhs.mDataSegments);
+		mStringInfoArray      = std::move(rhs.mStringInfoArray);
 		mHeaderForTextEntries = std::move(rhs.mHeaderForTextEntries);
-		mLineTimingData = std::move(rhs.mLineTimingData);
-		mFileSize = rhs.mFileSize;
-		mpFile = rhs.mpFile;
-		mpBuffer = std::move(rhs.mpBuffer);
-		mFontSheetData = std::move(rhs.mFontSheetData);
-		mSequenceEntries = std::move(rhs.mSequenceEntries);
+		mLineTimingData       = std::move(rhs.mLineTimingData);
+		mFileSize             = rhs.mFileSize;
+		mpFile                = rhs.mpFile;
+		mpBuffer              = std::move(rhs.mpBuffer);
+		mFontSheetData        = std::move(rhs.mFontSheetData);
+		mSequenceEntries      = std::move(rhs.mSequenceEntries);
+		mpHeaderToText        = std::move(rhs.mpHeaderToText);
+		mHeaderToTextSize     = rhs.mHeaderToTextSize;
 
 		rhs.mpFile = nullptr;
 		rhs.mpBuffer = nullptr;
+		rhs.mpHeaderToText = nullptr;
 	}
 
 	~SakuraTextFile()
@@ -351,6 +363,9 @@ public:
 			mDataSegments[i].pData = nullptr;
 		}
 		mDataSegments.clear();
+
+		delete[] mpHeaderToText;
+		mpHeaderToText = nullptr;
 
 		Close();
 	}
@@ -394,6 +409,11 @@ public:
 		//	ParseFooter();
 		ReadInFontSheetData();
 		ReadInSequenceData();
+
+		//Misc data between the header and start of the text header
+		mHeaderToTextSize = mFileHeader.OffsetToTextHeader - sizeof(mFileHeader);
+		mpHeaderToText = new char[mHeaderToTextSize];
+		memcpy_s(mpHeaderToText, mHeaderToTextSize, mpBuffer + sizeof(mFileHeader), mHeaderToTextSize);
 
 		assert(mStringInfoArray.size() == mLines.size());
 	}
@@ -985,3 +1005,4 @@ void ExtractText(const string& inSearchDirectory, const string& inPaletteFileNam
 		}
 	}
 }
+

@@ -56,6 +56,8 @@ public:
 
 		void AddSection(uint32 inStartOffset, uint32 inEndOffset, const uint8* pInData)
 		{
+			//TODO
+		/*
 			Section newSection;
 			uint32 currOffset = entryStart;
 			while (currOffset < entryEnd)
@@ -85,10 +87,12 @@ public:
 					++currOffset;
 				}
 			}
+		*/
 		}
 	};
 
 	vector<Entry> entries;
+	FileNameContainer mFileName;
 
 public:
 	DragonForceStoryTextExtractorNew(const FileNameContainer& inFilePath) : mFileName(inFilePath) {}

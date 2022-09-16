@@ -134,7 +134,7 @@ public:
 		if (sakuraFontSheet.CreateFontSheetFromData(mFontSheetData.mpData, mFontSheetData.mDataSize))
 		{
 			ExtractImageFromData(mFontSheetData.mpData, mFontSheetData.mDataSize, outFileName, paletteFileData.GetData(), paletteFileData.GetDataSize(),
-				16, 16, 255, 256, 0, true, true);
+								 paletteFileData.GetDataSize() == 32, 16, 16, 255, 256, 0, true, true);
 		}
 	}
 

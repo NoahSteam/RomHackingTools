@@ -1,9 +1,11 @@
 #pragma once
 
-bool ExtractImageFromData(const char* pInColorData, const unsigned int inColorDataSize, const string& outFileName, const char* pInPaletteData, const unsigned int inPaletteDataSize, const int inTextureDimX, const int inTextureDimY,
-	const int inNumTexturesPerRow, const int inNumColors = 256, const int inDataOffset = 0, bool bInFillEmptyData = true, bool bForceBitmapFormat = false)
+bool ExtractImageFromData(const char* pInColorData, const unsigned int inColorDataSize, const string& outFileName, const char* pInPaletteData, 
+	const unsigned int inPaletteDataSize, bool bOutput4BitImage, const int inTextureDimX, const int inTextureDimY,
+	const int inNumTexturesPerRow, const int inNumColors = 256, const int inDataOffset = 0, bool bInFillEmptyData = true, bool bForceBitmapFormat = false,
+	PaletteData* pInPreMadePalette = nullptr)
 {
-	const int divisor = inPaletteDataSize == 32 ? 2 : 1; //4bit images only have half the pixels
+	const int divisor = bOutput4BitImage ? 2 : 1; //4bit images only have half the pixels
 	const int tileDimX = inTextureDimX;
 	const int tileDimY = inTextureDimY;
 	const int tileBytes = (tileDimX * tileDimY) / divisor; //4bits per pixel, so only half the amount of bytes as pixels
@@ -18,7 +20,15 @@ bool ExtractImageFromData(const char* pInColorData, const unsigned int inColorDa
 
 	//Create 32bit palette from the 16 bit(5:5:5 bgr) palette in SakuraTaisen
 	PaletteData paletteData;
-	paletteData.CreateFrom15BitData(pInPaletteData, inPaletteDataSize);
+	PaletteData* pPaletteData = &paletteData;
+	if (!pInPreMadePalette)
+	{
+		paletteData.CreateFrom15BitData(pInPaletteData, inPaletteDataSize);
+	}
+	else
+	{
+		pPaletteData = pInPreMadePalette;
+	}
 
 	//Allocate space for tiled data
 	int numTiles = dataSize / tileBytes;
@@ -37,10 +47,10 @@ bool ExtractImageFromData(const char* pInColorData, const unsigned int inColorDa
 	//Fill in data
 	for (int tileIndex = 0; tileIndex < numTiles; ++tileIndex)
 	{
-		const char* pTile = pInColorData + inDataOffset + tileIndex * tileBytes;
+		const char* pTile       = pInColorData + inDataOffset + tileIndex * tileBytes;
 		const int outTileOffset = currTileRow * bytesPerHorizontalLine * tileDimY + currTileCol * bytesInEachTilesWidth;
-		char* pOutTile = pOutTiledData + outTileOffset;
-		int tilePixel = 0;
+		char* pOutTile          = pOutTiledData + outTileOffset;
+		int tilePixel           = 0;
 		for (int r = 0; r < tileDimY; ++r)
 		{
 			for (int c = 0; c < bytesInEachTilesWidth; ++c)
@@ -58,15 +68,16 @@ bool ExtractImageFromData(const char* pInColorData, const unsigned int inColorDa
 	}
 
 	BitmapWriter fontBitmap;
-	fontBitmap.CreateBitmap(outFileName, imageWidth, -imageHeight, inPaletteDataSize == 32 ? 4 : 8, pOutTiledData, numTiledBytes, paletteData.GetData(), paletteData.GetSize(), bForceBitmapFormat);
-
+	fontBitmap.CreateBitmap(outFileName, imageWidth, -imageHeight, bOutput4BitImage ? 4 : 8, pOutTiledData, numTiledBytes, pPaletteData->GetData(), pPaletteData->GetSize(), bForceBitmapFormat);
+	
 	delete[] pOutTiledData;
 
 	return true;
 }
 
-bool ExtractImage(const FileNameContainer& inFileNameContainer, const string& outFileName, const FileData& inPaletteFile, const int inTextureDimX, const int inTextureDimY, const int inNumTexturesPerRow, const int inNumColors = 256,
-	const int inDataOffset = 0, bool bInFillEmptyData = true, bool bForceBitmap = false)
+bool ExtractImage(const FileNameContainer& inFileNameContainer, const string& outFileName, const FileData& inPaletteFile, const int inTextureDimX, 
+	const int inTextureDimY, const int inNumTexturesPerRow, const int bInIs4BitImage, const int inNumColors = 256,
+	const int inDataOffset = 0, bool bInFillEmptyData = true, bool bForceBitmap = false, PaletteData* pInPreMadePalette = nullptr)
 {
 	FileData fontSheet;
 	if (!fontSheet.InitializeFileData(inFileNameContainer))
@@ -76,12 +87,14 @@ bool ExtractImage(const FileNameContainer& inFileNameContainer, const string& ou
 
 	printf("Extracting: %s\n", inFileNameContainer.mFileName.c_str());
 
-	return ExtractImageFromData(fontSheet.GetData(), fontSheet.GetDataSize(), outFileName, inPaletteFile.GetData(), inPaletteFile.GetDataSize(), inTextureDimX, inTextureDimY, inNumTexturesPerRow,
-		inNumColors, inDataOffset, bInFillEmptyData, bForceBitmap);
+	return ExtractImageFromData(fontSheet.GetData(), fontSheet.GetDataSize(), outFileName, inPaletteFile.GetData(), inPaletteFile.GetDataSize(), bInIs4BitImage, 
+								inTextureDimX, inTextureDimY, inNumTexturesPerRow,
+								inNumColors, inDataOffset, bInFillEmptyData, bForceBitmap, pInPreMadePalette);
 }
 
 bool ExtractFontSheetAsBitmap(const FileNameContainer& inFileNameContainer, const string& outFileName, const FileData& inPaletteFile)
 {
+	const bool bOutput4BitImage = inPaletteFile.GetDataSize() == 32;
 	//	return ExtractImage(inFileNameContainer, outFileName, inPaletteFile, 8, 12, 255, 16, 0, false, true);
-	return ExtractImage(inFileNameContainer, outFileName, inPaletteFile, 16, 16, 255);
+	return ExtractImage(inFileNameContainer, outFileName, inPaletteFile, 16, 16, 255, bOutput4BitImage);
 }

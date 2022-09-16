@@ -970,10 +970,42 @@ bool PaletteData::CreateFrom32BitData(const char* pInPaletteData, int inPaletteS
 
 		//Swap byte order so data is written in big endian order.  Drop off the first bit if needed.
 		unsigned short outColor = ((r << 10) + (g << 5) + b) & bitMask;
-		std::reverse((char*)&outColor, ((char*)&outColor + 2));
+	//	std::reverse((char*)&outColor, ((char*)&outColor + 2));
 
 		//copy data over to the palette
 		memcpy(&mpPaletteData[outIndex], &outColor, 2);
+	}
+
+	return true;
+}
+
+bool PaletteData::CreateFromMicrosoftPalette(const char* pInPaletteData, int inPaletteSize)
+{
+	if (!(inPaletteSize == 1024))
+	{
+		printf("PaletteData::CreateFrom32BitData: Unsupported palette type");
+		return false;
+	}
+
+	mNumColors = inPaletteSize / 4;
+	const int numBytesPerColor = 4;
+
+	mNumBytesInPalette = mNumColors * numBytesPerColor;
+	mpPaletteData = new char[mNumBytesInPalette];
+
+	for (int i = 0, outIndex = 0; i < inPaletteSize; i += 4, outIndex += 4)
+	{
+		assert(outIndex + 1 < mNumBytesInPalette);
+
+		const unsigned char r = (unsigned char)(pInPaletteData[i + 0]);
+		const unsigned char g = (unsigned char)(pInPaletteData[i + 1]);
+		const unsigned char b = (unsigned char)(pInPaletteData[i + 2]);
+		const unsigned char a = (unsigned char)(pInPaletteData[i + 4]);
+
+		mpPaletteData[outIndex + 0] = b;
+		mpPaletteData[outIndex + 1] = g;
+		mpPaletteData[outIndex + 2] = r;
+		mpPaletteData[outIndex + 3] = a;
 	}
 
 	return true;
@@ -984,6 +1016,28 @@ void PaletteData::SetValue(int index, unsigned short value)
 	assert(index*2 + 1 < mNumBytesInPalette);
 
 	memcpy(mpPaletteData + index*2, &value, sizeof(value));
+}
+
+////////////////////////////////////////
+//        MicrosoftPaletteData        //
+////////////////////////////////////////
+bool MicrosoftPaletteData::CreatePaletteData(const FileData& inData, PaletteData& outData)
+{
+	if( inData.GetDataSize() <= sizeof(MicrosoftPaletteData::Header) )
+	{
+		printf("MicrosoftPaletteData size is too small\n");
+		return false;
+	}
+
+	Header header;
+	memcpy_s(&header, sizeof(header), inData.GetData(), sizeof(header));
+
+	const int numColors = header.paletteSize;
+	const int dataOffset = sizeof(header);
+
+	outData.CreateFromMicrosoftPalette(inData.GetData() + dataOffset, numColors*4);
+
+	return true;
 }
 
 ////////////////////////////////
@@ -1360,7 +1414,7 @@ bool TileExtractor::ExtractTiles(unsigned int inTileWidth, int inTileHeight, uns
 	const unsigned int divisor              = inBitmap.mBitmapData.mInfoHeader.mBitCount == 4 ? 2 : 1;
 	const unsigned int numBytesPerTileWidth = inTileWidth/divisor;
 	const unsigned int stride               = numBytesPerTileWidth*numColumns;
-	const unsigned int numBytesPerTile      = (outTileWidth*outTileHeight)/divisor;//(inTileWidth*inTileHeight)/2; //4bits per pixel
+	mTileByteSize                           = (outTileWidth*outTileHeight)/divisor;//(inTileWidth*inTileHeight)/2; //4bits per pixel
 	unsigned int currTile                   = 0;
 	const bool bReadInReverse               = inTileHeight >= 0 ? true : false;
 
@@ -1369,11 +1423,12 @@ bool TileExtractor::ExtractTiles(unsigned int inTileWidth, int inTileHeight, uns
 	{
 		for(unsigned int x = 0; x < numColumns; ++x)
 		{
-			mTiles[currTile].mpTile    = new char[numBytesPerTile];
-			mTiles[currTile].mTileSize = numBytesPerTile;
+			mTiles[currTile].mpTile    = new char[mTileByteSize];
+			mTiles[currTile].mTileSize = mTileByteSize;
 			mTiles[currTile].mX        = x;
 			mTiles[currTile].mY        = y;
-			memset(mTiles[currTile].mpTile, 0, numBytesPerTile);
+			mDataSize                 += mTileByteSize;
+			memset(mTiles[currTile].mpTile, 0, mTileByteSize);
 
 			unsigned int linearDataIndex = y*stride*inAbsTileHeight + x*numBytesPerTileWidth;
 			for(unsigned int tilePixelY = 0; tilePixelY < inAbsTileHeight; ++tilePixelY)
@@ -1382,7 +1437,7 @@ bool TileExtractor::ExtractTiles(unsigned int inTileWidth, int inTileHeight, uns
 				{
 					const unsigned int linearY = bReadInReverse ? inAbsTileHeight - tilePixelY - 1 : tilePixelY;
 					assert( (int)linearY >= 0 );
-					assert(tilePixelY*numBytesPerTileWidth + tilePixelX < numBytesPerTile);
+					assert(tilePixelY*numBytesPerTileWidth + tilePixelX < mTileByteSize);
 					assert(linearDataIndex + linearY*stride + tilePixelX < (unsigned int)inBitmap.mBitmapData.mColorData.mSizeInBytes);
 
 					const unsigned char linearColorValue = pLinearData[linearDataIndex + linearY*stride + tilePixelX];
@@ -1395,6 +1450,25 @@ bool TileExtractor::ExtractTiles(unsigned int inTileWidth, int inTileHeight, uns
 	}
 
 	return true;
+}
+
+void TileExtractor::OutputTiles(FileWriter& outFile, int inStartingTile)
+{
+	//Negative values mean that the first tile should be repeated x amount of times
+	while(inStartingTile < 0)
+	{
+		const Tile& tile = mTiles[0];
+		outFile.WriteData(tile.mpTile, tile.mTileSize);
+
+		inStartingTile++;
+	}
+
+	const int numTiles = (int)mTiles.size();
+	for(int i = inStartingTile; i < numTiles; ++i)
+	{
+		const Tile& tile = mTiles[i];
+		outFile.WriteData(tile.mpTile, tile.mTileSize);
+	}
 }
 
 ////////////////////////////////////////

@@ -1260,7 +1260,8 @@ void DumpExtractedSakuraText(const vector<SakuraTextFile>& inSakuraTextFiles, co
 }
 
 bool ExtractImageFromData(const char* pInColorData, const unsigned int inColorDataSize, const string& outFileName, const char* pInPaletteData, const unsigned int inPaletteDataSize, const int inTextureDimX, const int inTextureDimY, 
-	const int inNumTexturesPerRow, const int inNumColors = 256, const int inDataOffset = 0, bool bInFillEmptyData = true, bool bForceBitmapFormat = false)
+	const int inNumTexturesPerRow, const int inNumColors = 256, const int inDataOffset = 0, bool bInFillEmptyData = true, bool bForceBitmapFormat = false, 
+	PaletteData* pInPreMadePaletteData = nullptr)
 {
 	const int divisor            = inPaletteDataSize == 32 ? 2 : 1; //4bit images only have half the pixels
 	const int tileDimX           = inTextureDimX;
@@ -1277,7 +1278,11 @@ bool ExtractImageFromData(const char* pInColorData, const unsigned int inColorDa
 
 	//Create 32bit palette from the 16 bit(5:5:5 bgr) palette in SakuraTaisen
 	PaletteData paletteData;
-	paletteData.CreateFrom15BitData(pInPaletteData, inPaletteDataSize);
+	PaletteData* pPaletteData = pInPreMadePaletteData ? pInPreMadePaletteData : &paletteData;
+	if(!pInPreMadePaletteData)
+	{
+		paletteData.CreateFrom15BitData(pInPaletteData, inPaletteDataSize);
+	}
 
 	//Allocate space for tiled data
 	int numTiles                     = dataSize/tileBytes;
@@ -1317,7 +1322,7 @@ bool ExtractImageFromData(const char* pInColorData, const unsigned int inColorDa
 	}
 
 	BitmapWriter fontBitmap;
-	fontBitmap.CreateBitmap(outFileName, imageWidth, -imageHeight, inPaletteDataSize == 32 ? 4 : 8, pOutTiledData, numTiledBytes, paletteData.GetData(), paletteData.GetSize(), bForceBitmapFormat);
+	fontBitmap.CreateBitmap(outFileName, imageWidth, -imageHeight, inPaletteDataSize == 32 ? 4 : 8, pOutTiledData, numTiledBytes, pPaletteData->GetData(), pPaletteData->GetSize(), bForceBitmapFormat);
 
 	delete[] pOutTiledData;
 

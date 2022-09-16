@@ -217,13 +217,39 @@ class PaletteData
 public:
 	~PaletteData();
 
+	//These functions will create a palette into a BGR 5:5:5 format
 	bool        CreateFrom15BitData(const char* pInData, int inSize);
 	bool        CreateFrom24BitData(const char* pInData, int inSize);
 	bool        CreateFrom32BitData(const char* pInData, int inSize, bool bDropFirstBit);
+	
+	//This one will create a standard palette from a MS 32bit rbga palette
+	bool        CreateFromMicrosoftPalette(const char* pInData, int inSize);
+
 	const char* GetData() const {return mpPaletteData;}
 	int         GetSize() const {return mNumBytesInPalette;}
 	int         GetNumColors() const {return mNumColors;}
 	void        SetValue(int index, unsigned short value);
+};
+
+class MicrosoftPaletteData
+{
+public:
+#pragma pack(push, 1)
+	struct Header
+	{
+		char riff[4];
+		int fileSize;
+		char palData[8];
+		int fileSize2;
+		char zero;
+		char three;
+		unsigned short paletteSize;
+	};
+#pragma pack(pop)
+
+	Header mHeader;
+
+	static bool CreatePaletteData(const FileData& inData, PaletteData& outData);
 };
 
 struct BitmapData
@@ -368,8 +394,16 @@ public:
 	unsigned int mImageWidth = 0;
 	unsigned int mImageHeight = 0;
 
+private:
+	int mDataSize = 0;
+	unsigned int mTileByteSize = 0;
+	
+public:
 	bool ExtractTiles(unsigned int inTileDimX, int inTileDimY, unsigned int outTileDimX, unsigned int outTileDimY, const BitmapReader& inBitmap);
 	void FixupIndexOfAlphaColor(const unsigned short inIndexOfAlphaColor, bool bInIs4bit);
+	int GetDataSize() const {return mDataSize;}
+	void OutputTiles(FileWriter& outFile, int inStartingTile);
+	unsigned int GetSizeOfSingleTile() const {return mTileByteSize;}
 };
 
 struct BmpToSaturnConverter

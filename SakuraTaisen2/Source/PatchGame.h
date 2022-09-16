@@ -1,0 +1,176 @@
+#pragma once
+
+static bool BringOverOriginalFiles(const string& inRootSakuraDirectory, const string& inPatchedDirectory)
+{
+	printf("BringOverOriginalFiles\n");
+
+	vector<FileNameContainer> allFiles;
+	FindAllFilesWithinDirectory(inRootSakuraDirectory, allFiles);
+
+	//Find all the scenario text files
+	vector<FileNameContainer> originalFiles;
+	GetAllFilesOfType(allFiles, "SK0", originalFiles);
+	GetAllFilesOfType(allFiles, "SK1", originalFiles);
+	GetAllFilesOfType(allFiles, "SKC", originalFiles);
+
+	//Bring over scenario files
+	const string outputDirectory = inPatchedDirectory + Seperators + "SAKURA1\\";
+	for(const FileNameContainer& scenarioFile : originalFiles)
+	{
+		const string outputFile = outputDirectory + scenarioFile.mFileName;
+		if (!CopyFile(scenarioFile.mFullPath.c_str(), outputFile.c_str(), FALSE))\
+		{
+			printf("Unable to copy over %s\n", scenarioFile.mFullPath.c_str());
+			return false;
+		}
+	}
+
+#define CopySingleFile(InFileName)\
+	{\
+		const string sourceFile = inRootSakuraDirectory + Seperators + InFileName;\
+		const string destFile = inPatchedDirectory + Seperators + InFileName;\
+		if (!CopyFile(sourceFile.c_str(), destFile.c_str(), FALSE))\
+		{\
+			printf("Unable to copy over %s to %s\n", sourceFile.c_str(), destFile.c_str());\
+			return false;\
+		}\
+	}
+	
+	CopySingleFile("SAKURADA");
+	CopySingleFile("SAKURA.BIN");
+
+	return true;
+}
+
+bool PatchTextDrawingCode(const string& inSourceGameDirectory, const string& inPatchedDirectory)
+{
+	uint32 writeAddress = 0;
+	uint16 newCommand = 0;
+	uint8 newCommand1Byte = 0;
+	#define WriteCommand(address, cmd) {writeAddress = address; newCommand = cmd; sakuraBin.WriteData(writeAddress, (char*)&newCommand, sizeof(newCommand), true);}
+	#define WriteByte(address, cmd) {writeAddress = address; newCommand1Byte = cmd; sakuraBin.WriteData(writeAddress, (char*)&newCommand1Byte, sizeof(newCommand1Byte), false);}
+
+	//SAKURA.BIN
+	{
+		const string sakuraBinFilePath = inPatchedDirectory + Seperators + string("SAKURA.BIN");
+		FileReadWriter sakuraBin;
+		if (!sakuraBin.OpenFile(sakuraBinFilePath))
+		{
+			return false;
+		}
+
+		//Fix spacing for text drawing
+		{
+			const uint32 StartAddresses[] = { 0xdde8, 0x4ca20 };
+			for (const uint32 startAddress : StartAddresses)
+			{
+				//Vertical Spacing : starting from 0x06012de8 in memory
+				WriteCommand(startAddress + 0, 0xea0c); //mov 0x0c, r10 (ea0c)
+				WriteCommand(startAddress + 2, 0x29af); //mul r10, r9 (29af)
+				WriteCommand(startAddress + 4, 0x0a1a); //sts MACL, R10 (0a1a)
+				WriteCommand(startAddress + 6, 0x7a30); //add 0x30, r10 (7a30)
+
+				//Horizontal Spacing : 06012e26 = > change this to 4100 (SHLL instead of SHLL2)
+				WriteCommand(startAddress + 0x3e, 0x4100); //add 0x30, r10 (7a30)
+			}
+		}//Done fixing spacing
+
+		//Fix max characters per line
+		{
+			const uint32 startAddressInFile = 0xd795;
+			const uint32 modifyAddresses[] = {0xd795, 0xd84b, 0xd945, 0xd9e3, 0xdb63, 0xdc17, 0xddf1,0xde9b};//, 0x4b5f9, 0x4b641};
+
+			//starting 06012794 in memory
+			for (const uint32 addressToModify : modifyAddresses)
+			{
+				WriteByte(addressToModify, 0x1c);
+			}
+
+			//change 0x06012e44 0xE11A, change 0x06012E4A 0xE11C
+			WriteCommand(0xde44, 0xe11a);
+			WriteCommand(0xde4a, 0xe11c);
+
+			//Change number of lines to 4 (03 but it's 0 based) (0x06012E53)
+			WriteCommand(0xde52, 0xe103);
+
+			//Printing number of empty lines
+			{
+				//Need a bigger buffer for empty lines, so start writing from 060a5100 instead of 060a5180 
+				WriteCommand(0xde7a, 0x5100);
+				WriteCommand(0xdeb6, 0x5100);
+
+				//06012ece
+				WriteByte(0xdecf, 0x1b); //num chars per line
+				WriteByte(0xdeed, 0x03); //num lines (0 based)
+			}
+		}
+	}
+
+	//SAKURADA
+	{
+		const string sakuradaFilePath = inPatchedDirectory + Seperators + string("SAKURADA");
+		FileReadWriter sakuraBin;
+		if (!sakuraBin.OpenFile(sakuradaFilePath))
+		{
+			return false;
+		}
+
+		//Fix spacing for text drawing
+		{
+			const uint32 StartAddresses[] = 
+			{
+				0x0000ca20, 0x0004ca20, 0x0008ca20, 0x000cca20, 0x0010ca20, 0x0014ca20, 0x0018ca20, 0x001cca20, 0x0020ca20, 0x0024ca20, 0x0028ca20,
+				0x002cca20, 0x0030ca20
+			};
+
+			for (const uint32 startAddress : StartAddresses)
+			{
+				//Vertical Spacing : starting from 0x06012de8 in memory
+				WriteCommand(startAddress + 0, 0xea0c); //mov 0x0c, r10 (ea0c)
+				WriteCommand(startAddress + 2, 0x29af); //mul r10, r9 (29af)
+				WriteCommand(startAddress + 4, 0x0a1a); //sts MACL, R10 (0a1a)
+				WriteCommand(startAddress + 6, 0x7a30); //add 0x30, r10 (7a30)
+
+				//Horizontal Spacing : 06012e26 = > change this to 4100 (SHLL instead of SHLL2)
+				WriteCommand(startAddress + 0x3e, 0x4100); //add 0x30, r10 (7a30)
+			}
+		}//Done fixing spacing
+
+	}
+
+	return true;
+}
+
+bool PatchGame(const string& inSourceGameDirectory, const string& inTranslatedDirectory, const string& inPatchedDirectory)
+{
+	if( !BringOverOriginalFiles(inSourceGameDirectory, inPatchedDirectory) )
+	{
+		printf("Unable to copy original files\n");
+		return false;
+	}
+
+	if(!PatchTextDrawingCode(inSourceGameDirectory, inPatchedDirectory))
+	{
+		printf("Unable to patch drawing code\n");
+		return false;
+	}
+
+	//Create translated font sheet
+	const string translatedFontSheetPath = inTranslatedDirectory + Seperators + "8x12.bmp";
+	TileExtractor translatedFontSheet;
+	PaletteData translatedFontSheetPalette;
+	if( !CreateTranslatedFontSheet(translatedFontSheetPath, translatedFontSheet, translatedFontSheetPalette) )
+	{
+		printf("Unable to create font sheet");
+		return false;
+	}
+
+	//Insert scenario text
+	if( !InsertText(inSourceGameDirectory, inTranslatedDirectory, inPatchedDirectory, translatedFontSheet, false) )
+	{
+		printf("Text insertion failed\n");
+		return false;
+	}
+
+	return true;
+}

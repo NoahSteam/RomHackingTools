@@ -1,0 +1,15 @@
+06012e44 => e11c (num chars pers line)
+06012e4a => e11b (num chars pers line)
+06012E53 => 03 (num lines to 4 (0 based))
+
+06012d6a (code: going to line drawing)
+06012d60 => 1c?
+
+----
+06081da (callstack higher)
+
+060657b2 mov 0xf, r3 
+0605a974 mov 0xf, r4
+0605ac46
+
+06012e26 shll r1

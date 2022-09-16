@@ -1,17 +1,17 @@
 #pragma once
 
 #define OPTIMIZE_INSERTION_DEBUGGING 0
-#define USE_SINGLE_BYTE_LOOKUPS 1
-#define USE_4_BYTE_OFFSETS 1
+#define USE_SINGLE_BYTE_LOOKUPS 0
+#define USE_4_BYTE_OFFSETS 0
 #define USE_TREKKIS_MINIGAME_DATA 1
-#define FIX_TIMING_DATA 1
+#define FIX_TIMING_DATA 0
 #define FIX_EVT_FILES 0
 #define USE_LARGE_BATTLE_MENU 0
-#define FIX_SLG_FONT_DRAWING_SIZE 1
+#define FIX_SLG_FONT_DRAWING_SIZE 0
 
 const unsigned char OutTileSpacingX = 8;
 const unsigned char OutTileSpacingY = 12;
-const unsigned long MaxTBLFileSize = 0x20000;
+const unsigned long MaxTBLFileSize = 0x3f7f7;
 const unsigned long MaxMESFileSize = 0x1A800;
 const unsigned long MaxWKLFileSize = 0x82E00;
 const char          MaxLines = 4;

@@ -42,6 +42,7 @@ using std::unordered_map;
 #include "Source/SakuraConstants.h"
 #include "Source/SakuraString.h"
 #include "Source/SakuraFontSheet.h"
+#include "Source/CreateTranslatedFontSheet.h"
 #include "Source/SakuraTextFile.h"
 #include "Source/ImageExtraction.h"
 #include "Source/FaceWinAll.h"
@@ -55,6 +56,9 @@ using std::unordered_map;
 #include "Source/CreateIndexFile.h"
 #include "Source/MiniGameExtraction.h"
 #include "Source/CreateMiniGameSpreadsheets.h"
+#include "Source/BatchedImageExtractor.h"
+#include "Source/InsertText.h"
+#include "Source/PatchGame.h"
 
 void PrintHelp()
 {
@@ -92,7 +96,8 @@ void PrintHelp()
 	printf("DumpBitmap inputFilePath outDirectory\n");
 	printf("ExtractMiniGames rootSakuraDirectory isBmp outDir\n");
 	printf("CreateMiniGameSpreadsheets miniGameImageDirectory\n");
-	printf("PatchGame isDisc2 rootSakuraTaisenDirectory patchedSakuraTaisenDirectory translatedTextDirectory fontSheet originalPalette patchedTMapSpDataPath mainMenuFontSheetPath mainMenuBgndPatchedImage optionsImagePatched translatedDataDirectory extractedWklDir\n");
+	printf("BatchImageExtractor filePath outputDirectory\n");
+	printf("PatchGame sourceGameDirectory translationDataDirectory patchedGameDirectory\n");
 }
 
 int main(int argc, char *argv[])
@@ -116,7 +121,15 @@ int main(int argc, char *argv[])
 
 	const string command(argv[1]);
 
-	if (command == string("ExtractText") && argc == 5)
+	if (command == string("PatchGame") && argc == 5)
+	{
+		const string inSourceGameDirectory = string(argv[2]);
+		const string inTranslatedDirectory = string(argv[3]);
+		const string inPatchedDirectory    = string(argv[4]);
+
+		PatchGame(inSourceGameDirectory, inTranslatedDirectory, inPatchedDirectory);
+	}
+	else if (command == string("ExtractText") && argc == 5)
 	{
 		const string searchDirectory = string(argv[2]);
 		const string paletteFileName = string(argv[3]);
@@ -230,6 +243,14 @@ int main(int argc, char *argv[])
 		const string outFilePath       = string(argv[5]);
 
 		CreateIndexFile(mesFileDirectory, skFileDirectory, miniGameDirectory, outFilePath);
+	}
+	else if(command == "BatchImageExtractor" && argc == 5)
+	{
+		const string filePath = string(argv[2]);
+		const string palettePath = string(argv[3]);
+		const string outDir   = string(argv[4]) + Seperators;
+
+		BatchExtractImagesFromFile(filePath.c_str(), palettePath.c_str(), outDir);
 	}
 	else
 	{
