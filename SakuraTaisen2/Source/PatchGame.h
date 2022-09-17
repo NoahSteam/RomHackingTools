@@ -102,6 +102,9 @@ bool PatchTextDrawingCode(const string& inSourceGameDirectory, const string& inP
 				//06012ece
 				WriteByte(0xdecf, 0x1b); //num chars per line
 				WriteByte(0xdeed, 0x03); //num lines (0 based)
+
+				//Another place for line counting 06012962
+				WriteByte(0xd963, 0x03);
 			}
 		}
 	}
