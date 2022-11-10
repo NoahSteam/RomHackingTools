@@ -95,5 +95,8 @@
     <ClInclude Include="Source\IntroScreenExtractor.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Source\TitleScreens.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

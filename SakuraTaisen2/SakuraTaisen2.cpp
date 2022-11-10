@@ -58,6 +58,7 @@ using std::unordered_map;
 #include "Source/CreateMiniGameSpreadsheets.h"
 #include "Source/BatchedImageExtractor.h"
 #include "Source/InsertText.h"
+#include "Source/TitleScreens.h"
 #include "Source/PatchGame.h"
 #include "Source/ExportTranslationData.h"
 #include "Source/IntroScreenExtractor.h"
@@ -102,7 +103,8 @@ void PrintHelp()
 	printf("PatchGame sourceGameDirectory translationDataDirectory patchedGameDirectory\n");
 }
 
-int FUN_06009df8(const unsigned char* param_1, unsigned char* param_2)
+//FUN_06009df8
+int SW2PRSDecompressor(const unsigned char* param_1, unsigned char* param_2)
 
 {
 	char cVar1;
@@ -227,7 +229,7 @@ void TestDecompressor()
 
 	char* outBuffer = new char[1024*1024];
 	memset(outBuffer, 0, 1024*1024);
-	FUN_06009df8((unsigned char*)(fileData.GetData() + 0x400), (unsigned char*)outBuffer);
+	SW2PRSDecompressor((unsigned char*)(fileData.GetData() + 0x400), (unsigned char*)outBuffer);
 
 	FileWriter outData;
 	outData.OpenFileForWrite("a:\\SakuraWars2\\testOutput.bin");
@@ -292,9 +294,9 @@ int main(int argc, char *argv[])
 
 	if (command == string("PatchGame") && argc == 5)
 	{
-		const string inSourceGameDirectory = string(argv[2]);
-		const string inTranslatedDirectory = string(argv[3]);
-		const string inPatchedDirectory    = string(argv[4]);
+		const string inSourceGameDirectory = string(argv[2]) + Seperators;
+		const string inTranslatedDirectory = string(argv[3]) + Seperators;
+		const string inPatchedDirectory    = string(argv[4]) + Seperators;
 
 		PatchGame(inSourceGameDirectory, inTranslatedDirectory, inPatchedDirectory);
 	}

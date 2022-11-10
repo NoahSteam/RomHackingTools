@@ -12,6 +12,7 @@ static bool BringOverOriginalFiles(const string& inRootSakuraDirectory, const st
 	GetAllFilesOfType(allFiles, "SK0", originalFiles);
 	GetAllFilesOfType(allFiles, "SK1", originalFiles);
 	GetAllFilesOfType(allFiles, "SKC", originalFiles);
+	GetAllFilesOfType(allFiles, "WPALL", originalFiles);
 
 	//Bring over scenario files
 	const string outputDirectory = inPatchedDirectory + Seperators + "SAKURA1\\";
@@ -108,6 +109,12 @@ bool PatchTextDrawingCode(const string& inSourceGameDirectory, const string& inP
 			}
 		}
 
+		//Fix regular lips spacing
+		{
+			WriteByte(0xdff3, 0x08); //horizontal spacing increment by 10, from 7110 to 7108 in memory at 06012ff2
+			WriteByte(0xdfdf, 0x91); //vertical spacing offset by 0x92, from 7190 to 7192 in memory at 06012fde
+		}
+
 		//Fix special lips (where text changes midway) code to allow for more characters
 		{
 			const unsigned short offsetToLipsCharSpriteData = 80 + MaxCharsPerLine*32;
@@ -187,6 +194,14 @@ bool PatchGame(const string& inSourceGameDirectory, const string& inTranslatedDi
 	if( !InsertText(inSourceGameDirectory, inTranslatedDirectory, inPatchedDirectory, translatedFontSheet, false) )
 	{
 		printf("Text insertion failed\n");
+		return false;
+	}
+
+	//Patch title screens
+	const string wpallDirectory = inTranslatedDirectory + "Disc\\1\\WPALL1\\";
+	if(!PatchTitleScreens(inPatchedDirectory, wpallDirectory))
+	{
+		printf("PatchTitleScreens failed");
 		return false;
 	}
 
