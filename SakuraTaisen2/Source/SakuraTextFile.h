@@ -1006,3 +1006,59 @@ void ExtractText(const string& inSearchDirectory, const string& inPaletteFileNam
 	}
 }
 
+void ExtractTextCode(const string& inSearchDirectory, const string& inOutputDirectory)
+{
+	//Find all files within the requested directory
+	vector<FileNameContainer> allFiles;
+	FindAllFilesWithinDirectory(inSearchDirectory, allFiles);
+
+	//Find all the scenario text files
+	vector<FileNameContainer> scenarioFiles;
+	GetAllFilesOfType(allFiles, "SK0", scenarioFiles);
+	GetAllFilesOfType(allFiles, "SK1", scenarioFiles);
+	GetAllFilesOfType(allFiles, "SKC", scenarioFiles);
+
+	//Extract the text
+	vector<SakuraTextFile> sakuraTextFiles;
+	FindAllSakuraText(scenarioFiles, sakuraTextFiles);
+
+	CreateDirectoryHelper(inOutputDirectory);
+
+	//Write out hex code for all of the lines found in the sakura text files
+	const string txt(".txt");
+	const size_t numFiles = sakuraTextFiles.size();
+	for (size_t i = 0; i < numFiles; ++i)
+	{
+		const SakuraTextFile& sakuraText = sakuraTextFiles[i];
+		const string outFileName = inOutputDirectory + sakuraText.mFileNameInfo.mNoExtension + txt;
+
+		FILE* pOutFile = nullptr;
+		errno_t errorValue = fopen_s(&pOutFile, outFileName.c_str(), "w");
+		if (errorValue)
+		{
+			printf("Unable to open out file: %s.  Error code: %i \n", outFileName.c_str(), errorValue);
+			continue;
+		}
+
+		printf("Dumping dialog for: %s\n", sakuraText.mFileNameInfo.mNoExtension.c_str());
+
+		//Dump out the dialog for each line
+		int stringIndex = 0;
+		const int tileDim = 16;
+		for (size_t lineIndex = 0; lineIndex < sakuraText.mLines.size(); ++lineIndex)
+		{
+			const SakuraString& sakuraString = sakuraText.mLines[lineIndex];
+			if (sakuraString.mChars.size() > 255)
+			{
+				continue;
+			}
+			
+			for (const SakuraString::SakuraChar& sakuraChar : sakuraString.mChars)
+			{
+				fprintf(pOutFile, "%02x%02x ", sakuraChar.mRow, sakuraChar.mColumn);
+			}
+
+			fprintf(pOutFile, "\n");
+		}
+	}
+}

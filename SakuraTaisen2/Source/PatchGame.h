@@ -107,6 +107,21 @@ bool PatchTextDrawingCode(const string& inSourceGameDirectory, const string& inP
 				WriteByte(0xd963, 0x03);
 			}
 		}
+
+		//Fix special lips (where text changes midway) code to allow for more characters
+		{
+			const unsigned short offsetToLipsCharSpriteData = 80 + MaxCharsPerLine*32;
+			WriteCommand(0xe704, offsetToLipsCharSpriteData + 0); //from 0x01d0 in memory at 06013704
+			WriteCommand(0xe706, offsetToLipsCharSpriteData + 2); //from 0x01d2 in memory at 06013706
+			WriteCommand(0xe482, offsetToLipsCharSpriteData + 4); //from 0x01d4 in memory at 06013482
+
+			WriteCommand(0xe5ce, offsetToLipsCharSpriteData + 0); //from 0x01d0 in memory at 060135ce
+			WriteCommand(0xe5d0, offsetToLipsCharSpriteData + 2); //from 0x01d2 in memory at 060135d0
+
+			//Fix special lips horizontal spacing
+			WriteCommand(0xdf56, 0x4200); //from SHLL2 to SHLL in memory at 06012F56
+			WriteByte(0xe4f5, 0x08); //from add 0x10,r1 to add 0x08,r1
+		}
 	}
 
 	//SAKURADA
@@ -175,5 +190,6 @@ bool PatchGame(const string& inSourceGameDirectory, const string& inTranslatedDi
 		return false;
 	}
 
+	printf("Patching Successfull!\n");
 	return true;
 }

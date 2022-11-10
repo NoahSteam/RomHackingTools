@@ -9,6 +9,7 @@
 #define USE_LARGE_BATTLE_MENU 0
 #define FIX_SLG_FONT_DRAWING_SIZE 0
 
+const unsigned char MaxCharsPerLine = 27;
 const unsigned char OutTileSpacingX = 8;
 const unsigned char OutTileSpacingY = 12;
 const unsigned long MaxTBLFileSize = 0x3f7f7;

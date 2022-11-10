@@ -154,14 +154,14 @@ static int GetNumBytesInLines(const vector<SakuraString>& inTranslatedLines)
 }
 
 bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTranslatedTextDirectory, const string& outDirectory, 
-                TileExtractor& inTranslatedFontSheet, bool bInOutputToCorrespondingDirectory = false)
+                TileExtractor& inTranslatedFontSheet, bool bInOutputToCorrespondingDirectory = false, bool bInCreateOutput = true)
 {
 #define IncrementLine()\
     ++currLine;\
     charCount = 0;\
     if( currLine > maxLines ) \
 	{\
-		printf("Unable to fully insert line because it is longer than %i characters: %s\n", maxLines*maxCharsPerLine, textLine.mFullLine.c_str());\
+		printf("Doesn't Fit: %s\n", textLine.mFullLine.c_str());\
 		bFailedToAddLine = true;\
 	}\
     translatedString.AddChar( GTranslationLookupTable.GetIndex('\n') );
@@ -208,6 +208,7 @@ bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTrans
 	const string UnusedEnglishString("Unused");
 	const bool bIsMESFile = false;
 	const string outputDirectory = outDirectory + Seperators + "SAKURA1\\";
+	CreateDirectoryHelper(outputDirectory);
 
 	//Insert text
 	for (const SakuraTextFile& sakuraFile : sakuraTextFiles)
@@ -258,12 +259,12 @@ bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTrans
 			//Make sure we have the correct amount of lines
 			if (sakuraFile.mLines.size() < translatedFile.mLines.size())
 			{
-				printf("Unable to translate file: %s because the translation has too many lines.\n", pMatchingTranslatedFileName->mNoExtension.c_str());
+				printf("Unable to translate file: %s because the translation has too many lines. Expected: %i Got: %i\n", pMatchingTranslatedFileName->mNoExtension.c_str(), sakuraFile.mLines.size(), translatedFile.mLines.size());
 				return false;
 			}
 
 			//Get converted lines of text
-			const int maxCharsPerLine             = 27;//(240 / OutTileSpacingX);
+			const int maxCharsPerLine             = MaxCharsPerLine;//(240 / OutTileSpacingX);
 			const int maxLines                    = MaxLines;
 			const size_t numTranslatedLines       = translatedFile.mLines.size();
 			unsigned short numCharsPrintedForMES  = 0;
@@ -357,8 +358,10 @@ bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTrans
 					}
 				}
 
-				if (textLine.mWords[0] == UntranslatedEnglishString ||
+				if (numWords && 
+					(textLine.mWords[0] == UntranslatedEnglishString ||
 					(textLine.mWords[0] == UnusedEnglishString && !bIsUnused)
+					)
 					)
 				{
 					printf("Error: Untranslated line. (File: %s Line: %u)\n", sakuraFile.mFileNameInfo.mFileName.c_str(), currSakuraStringIndex + 1);
@@ -366,8 +369,8 @@ bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTrans
 
 				//If untranslated, then write out the file and line number
 				if (// bIsUnused ||
-					textLine.mWords.size() == 0 ||
-					(textLine.mWords.size() == 1 && (textLine.mWords[0] == UntranslatedEnglishString || textLine.mWords[0] == UnusedEnglishString))
+					numWords == 0 ||
+					(numWords == 1 && (textLine.mWords[0] == UntranslatedEnglishString || textLine.mWords[0] == UnusedEnglishString))
 					)
 				{
 					bool bUseShorthand = false;
@@ -378,7 +381,7 @@ bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTrans
 					}
 #endif
 
-					if (textLine.mWords.size() == 0)
+					if (numWords == 0)
 					{
 						printf("Warning: Blank line. (File: %s Line: %u)\n", sakuraFile.mFileNameInfo.mFileName.c_str(), currSakuraStringIndex + 1);
 					}
@@ -394,6 +397,7 @@ bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTrans
 					const string untranslatedString = bUseShorthand && !timingData ? "U" : baseUntranslatedString + std::to_string(translatedLineIndex + 1); //Just print out a U for unused lines to save space
 
 					translatedSakuraString.AddString(untranslatedString, sakuraFile.mLines[currSakuraStringIndex].mChars[0].mIndex, timingData, true);
+					translatedSakuraString.AddChar(0xffff); //End of line
 					UpdateNumTimingCharsPrinted(translatedLineIndex, translatedSakuraString);
 
 					translatedLines.push_back(translatedSakuraString);
@@ -535,6 +539,7 @@ bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTrans
 
 				const size_t currSakuraStringIndex = i + translatedFile.mLines.size();
 				translatedSakuraString.AddString(untranslatedString, sakuraFile.mLines[currSakuraStringIndex].mChars[0].mIndex, timingData, !bIsMESFile);
+				translatedSakuraString.AddChar(0xffff); //End of line
 
 				UpdateNumTimingCharsPrinted(currSakuraStringIndex, translatedSakuraString);
 
@@ -551,6 +556,7 @@ bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTrans
 				const string untranslatedString = baseUntranslatedString + std::to_string(i + 1);
 				SakuraString translatedSakuraString;
 				translatedSakuraString.AddString(untranslatedString, sakuraFile.mLines[i].mChars[0].mIndex, 0, !bIsMESFile);
+				translatedSakuraString.AddChar(0xffff); //End of line
 				translatedLines.push_back(translatedSakuraString);
 			}
 		}
@@ -579,7 +585,7 @@ bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTrans
 #else
 		//Create file header
 		SakuraTextFile::SakuraHeader newFileHeader = sakuraFile.mFileHeader;
-		newFileHeader.OffsetToFontSheet = GetNumBytesInLines(translatedLines) + newFileHeader.OffsetToText;
+		newFileHeader.OffsetToFontSheet = FourByteAlign(GetNumBytesInLines(translatedLines) + newFileHeader.OffsetToText);
 		newFileHeader.FontSheetDataSize = inTranslatedFontSheet.GetDataSize() + inTranslatedFontSheet.GetSizeOfSingleTile(); //repeat first tile
 		newFileHeader.SwapByteOrder(); //Convert to little endian
 
@@ -596,7 +602,6 @@ bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTrans
 		unsigned int numSingleBytesWritten = 0;
 		while (1)
 		{
-
 			if (translationIndex < numInsertedLines)
 			{
 #if USE_SINGLE_BYTE_LOOKUPS
@@ -628,10 +633,17 @@ bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTrans
 			}
 		}
 
-		if (numSingleBytesWritten > 0 && numSingleBytesWritten % 2 != 0)
+		//Font data needs to be at a 4 byte aligned address
+		const int actualOffsetToFontSheet = SwapByteOrder(newFileHeader.OffsetToFontSheet);
+		assert(actualOffsetToFontSheet >= (int)outFile.GetFileSize());
+		if (actualOffsetToFontSheet != (int)outFile.GetFileSize())
 		{
-			char dummy = 0;
-			outFile.WriteData(&dummy, sizeof(dummy));
+			const int numBytesToPad = actualOffsetToFontSheet - (int)outFile.GetFileSize();
+			for(int n = 0; n < numBytesToPad; ++n)
+			{
+				const char dummy = 0;
+				outFile.WriteData(&dummy, sizeof(dummy));
+			}
 		}
 
 		inTranslatedFontSheet.OutputTiles(outFile, -1);
@@ -640,9 +652,38 @@ bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTrans
 		{
 			printf("WARNING: TBL file %s is too big: %lu.\n", sakuraFile.mFileNameInfo.mFileName.c_str(), outFile.GetFileSize());
 		}
+
+		if(!bInCreateOutput)
+		{
+			outFile.Close();
+			DeleteFile(outFile.GetFileName().c_str());
+		}
 	}
 
 	printf("InsertText Succeeded\n");
 
+	return true;
+}
+
+bool VerifyText(const std::string& inTranslatedDirectory, const std::string& inSourceGameDirectory, const std::string& inPatchedDirectory)
+{
+	//Create translated font sheet
+	const string translatedFontSheetPath = inTranslatedDirectory + Seperators + "8x12.bmp";
+	TileExtractor translatedFontSheet;
+	PaletteData translatedFontSheetPalette;
+	if (!CreateTranslatedFontSheet(translatedFontSheetPath, translatedFontSheet, translatedFontSheetPalette))
+	{
+		printf("Unable to create font sheet");
+		return false;
+	}
+
+	//Insert scenario text
+	if (!InsertText(inSourceGameDirectory, inTranslatedDirectory, inPatchedDirectory, translatedFontSheet, false, false))
+	{
+		printf("Text insertion failed\n");
+		return false;
+	}
+
+	printf("Verification Complete\n");
 	return true;
 }

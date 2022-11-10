@@ -1,0 +1,3 @@
+Read 060a86c0, wait till r5 us 25c15000
+
+06007e8c see what's stored at the address here

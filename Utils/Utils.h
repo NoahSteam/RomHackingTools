@@ -17,6 +17,7 @@ T SwapByteOrder(const T inData)
 }
 
 void SwapByteOrderInPlace(char* pData, unsigned int numBytes);
+int FourByteAlign(int InValue);
 
 extern uint32 CalculateDataCRC(char* pData, uint32 dataSize);
 
@@ -174,6 +175,7 @@ public:
 	void          Close();
 	unsigned long GetFileSize() const {return mDataSize;}
 	FILE*         GetHandle() {return mpFileHandle;}
+	const std::string& GetFileName() const {return mFileName;}
 };
 
 class TextFileWriter

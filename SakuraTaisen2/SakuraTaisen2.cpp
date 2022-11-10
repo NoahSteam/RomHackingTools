@@ -59,6 +59,8 @@ using std::unordered_map;
 #include "Source/BatchedImageExtractor.h"
 #include "Source/InsertText.h"
 #include "Source/PatchGame.h"
+#include "Source/ExportTranslationData.h"
+#include "Source/IntroScreenExtractor.h"
 
 void PrintHelp()
 {
@@ -100,17 +102,184 @@ void PrintHelp()
 	printf("PatchGame sourceGameDirectory translationDataDirectory patchedGameDirectory\n");
 }
 
+int FUN_06009df8(const unsigned char* param_1, unsigned char* param_2)
+
+{
+	char cVar1;
+	uint32 iVar2;
+	const unsigned char* pcVar3;
+	const unsigned char* pcVar4;
+	unsigned char* pcVar5;
+	uint32 uVar6;
+	uint32 uVar7;
+	uint32 uVar8;
+	uint32 iVar9;
+	uint32 uVar10;
+	uint32 uVar11;
+
+	uVar11 = 0xffffff00;
+	uVar10 = 0xffffe000;
+	uVar6 = (uint8)*param_1;
+	pcVar3 = param_1 + 1;
+	iVar9 = 9;
+	pcVar5 = param_2;
+	int outIndex = 0;
+	do 
+	{
+		while (true) 
+		{
+			iVar9 = iVar9 + -1;
+			pcVar4 = pcVar3;
+			uVar7 = uVar6;
+			if (iVar9 == 0) 
+			{
+				uVar7 = (uint8)*pcVar3;
+				pcVar4 = pcVar3 + 1;
+				iVar9 = 8;
+			}
+			uVar6 = uVar7 >> 1;
+			if ((uVar7 & 1) != 1) 
+			{
+				break;
+			}
+			pcVar3 = pcVar4 + 1;
+			*pcVar5 = *pcVar4;
+			pcVar5 = pcVar5 + 1;
+			outIndex++;
+		}
+		iVar9 = iVar9 + -1;
+		uVar7 = uVar7 >> 2;
+		uVar8 = uVar6;
+		if (iVar9 == 0) 
+		{
+			uVar8 = (uint8)*pcVar4;
+			pcVar4 = pcVar4 + 1;
+			iVar9 = 8;
+			uVar7 = uVar8 >> 1;
+		}
+		uVar6 = uVar7;
+		if ((uVar8 & 1) == 1)
+		{
+			pcVar3 = pcVar4 + 2;
+			uVar7 = (uint8)*pcVar4 & 0xffU | (uint8)pcVar4[1] << 8;
+			if (uVar7 == 0) 
+			{
+				return (int)pcVar5 - (int)param_2;
+			}
+			uVar8 = (uint8)*pcVar4 & 7;
+			uVar7 = uVar7 >> 3 | uVar10;
+			if (uVar8 != 0)
+			{
+				goto LAB_06009e50;
+			}
+			cVar1 = *pcVar3;
+			pcVar3 = pcVar4 + 3;
+			pcVar4 = pcVar5 + uVar7;
+			iVar2 = ((uint8)cVar1 & 0xffU) + 1;
+		}
+		else 
+		{
+			iVar9 = iVar9 + -1;
+			if (iVar9 == 0) 
+			{
+				uVar6 = (uint8)*pcVar4;
+				pcVar4 = pcVar4 + 1;
+				iVar9 = 8;
+			}
+			uVar7 = uVar6 & 1;
+			uVar8 = uVar6 >> 1;
+			iVar9 = iVar9 + -1;
+			uVar6 = uVar6 >> 2;
+			if (iVar9 == 0)
+			{
+				uVar8 = (uint8)*pcVar4;
+				pcVar4 = pcVar4 + 1;
+				iVar9 = 8;
+				uVar6 = uVar8 >> 1;
+			}
+			pcVar3 = pcVar4 + 1;
+			uVar8 = (uint8)(uVar7 == 1) << 1 | (uint8)((uVar8 & 1) == 1);
+			uVar7 = (uint8)*pcVar4 | uVar11;
+		LAB_06009e50:
+			iVar2 = uVar8 + 2;
+			pcVar4 = pcVar5 + uVar7;
+		}
+		do 
+		{
+			cVar1 = *pcVar4;
+			pcVar4 = pcVar4 + 1;
+			iVar2 = iVar2 + -1;
+			*pcVar5 = cVar1;
+			pcVar5 = pcVar5 + 1;
+			++outIndex;
+		} while (iVar2 != 0);
+	} while (true);
+}
+
+void TestDecompressor()
+{
+	FileData fileData;
+	FileNameContainer fileNameInfo("A:\\SakuraWars2\\Disc1_Original\\SAKURA1\\TTL2CGB.BIN");
+	if(!fileData.InitializeFileData(fileNameInfo))
+	{
+		return;
+	}
+
+	char* outBuffer = new char[1024*1024];
+	memset(outBuffer, 0, 1024*1024);
+	FUN_06009df8((unsigned char*)(fileData.GetData() + 0x400), (unsigned char*)outBuffer);
+
+	FileWriter outData;
+	outData.OpenFileForWrite("a:\\SakuraWars2\\testOutput.bin");
+	outData.WriteData(outBuffer, 1024*1024);
+
+	delete[] outBuffer;
+}
+
+void VerifyText()
+{
+	char exePath[MAX_PATH] = { 0 };
+	GetModuleFileName(NULL, exePath, MAX_PATH);
+	std::string::size_type pos = std::string(exePath).find_last_of("\\/");
+
+	const string currentDirectory = std::string(exePath).substr(0, pos) + Seperators; //"A:\\SakuraWars2\\TextVerification\\"
+	const string gameSourceDirectory = currentDirectory + "SourceFiles\\";
+	const string translatedTextDirectory = currentDirectory + "TranslationData\\";
+	VerifyText(translatedTextDirectory, gameSourceDirectory, currentDirectory);
+}
+
+void OutputUncompressedData(const string& InFileName, const string& OutFileName, int InOffset)
+{
+	const FileNameContainer inFileName(InFileName);
+	FileData compressedFile;
+	if(!compressedFile.InitializeFileData(inFileName))
+	{
+		return;
+	}
+
+	if((unsigned long)InOffset >= compressedFile.GetDataSize())
+	{
+		printf("Failed: Offset is larger than the file.\n");
+		return;
+	}
+
+	FileWriter outFile;
+	if(!outFile.OpenFileForWrite(OutFileName))
+	{
+		return;
+	}
+
+	PRSDecompressor decompressed;
+	decompressed.UncompressData((void*)(compressedFile.GetData() + InOffset), compressedFile.GetDataSize() - InOffset);
+
+	outFile.WriteData((void*)decompressed.mpUncompressedData, decompressed.mUncompressedDataSize);
+}
+
 int main(int argc, char *argv[])
 {
 #if 0
-	FindDiff();
-
-	if(argc == 2)
 	{
-		string command(argv[1]);
-		command = "";
-
-		return 1;
+		TestDecompressor();
 	}
 #else
 	if(argc == 1)
@@ -136,6 +305,13 @@ int main(int argc, char *argv[])
 		const string outDirectory = string(argv[4]) + Seperators;
 
 		ExtractText(searchDirectory, paletteFileName, outDirectory);
+	}
+	else if (command == string("ExtractTextCode") && argc == 4)
+	{
+		const string searchDirectory = string(argv[2]);
+		const string outDirectory = string(argv[3]) + Seperators;
+
+		ExtractTextCode(searchDirectory, outDirectory);
 	}
 	else if(command == "CreateTBLSpreadsheets" && argc == 8 )
 	{
@@ -251,6 +427,36 @@ int main(int argc, char *argv[])
 		const string outDir   = string(argv[4]) + Seperators;
 
 		BatchExtractImagesFromFile(filePath.c_str(), palettePath.c_str(), outDir);
+	}
+	else if(command == "ExportTranslationData" && argc == 4)
+	{
+		const string filePath = string(argv[2]);
+		const string outDir = string(argv[3]) + Seperators;
+
+		ExportTranslationData(filePath, outDir);
+	}
+	else if(command == "VerifyText" && argc == 5)
+	{
+		const string inSourceGameDirectory = string(argv[2]);
+		const string inTranslatedDirectory = string(argv[3]);
+		const string inPatchedDirectory = string(argv[4]);
+
+		VerifyText(inSourceGameDirectory, inTranslatedDirectory, inPatchedDirectory);
+	}
+	else if(command == "ExtractIntroImages" && argc == 4)
+	{
+		const string inSourceGameDirectory = string(argv[2]) + Seperators;
+		const string inOutputDirectory = string(argv[3]) + Seperators;
+
+		ExtractIntrosScreens(inSourceGameDirectory, inOutputDirectory);
+	}
+	else if(command == "OutputUncompressedData" && argc == 5)
+	{
+		const string inSourceFile = string(argv[2]);
+		const string inOutputFile = string(argv[3]);
+		const int inOffset        = atoi(argv[4]);
+
+		OutputUncompressedData(inSourceFile, inOutputFile, inOffset);
 	}
 	else
 	{

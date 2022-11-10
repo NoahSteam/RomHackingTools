@@ -1,0 +1,7 @@
+image 
+Climber Climber 
+I've got the speed, and you've got the high jump. Let's get going so we don't fall down! 
+Unused 
+Switch Character 
+Unused 
+Jump! 

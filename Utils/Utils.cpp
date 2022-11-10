@@ -123,6 +123,11 @@ void SwapByteOrderInPlace(char* pData, unsigned int numBytes)
 	std::reverse(pData, (pData + numBytes));
 }
 
+int FourByteAlign(int InValue)
+{
+	return InValue + (4 - (InValue % 4));
+}
+
 void FindAllFilesWithinDirectory(const string& inDirectoryPath, vector<FileNameContainer>& outFileNames)
 {
 	WIN32_FIND_DATA fileData;
@@ -555,7 +560,7 @@ bool TextFileData::InitializeTextFile(bool bFixupSpecialCharacters, bool bCollap
 				}
 				else if( bFixupSpecialCharacters && uToken == (unsigned char)0xe2 )
 				{
-					printf("Unhandled multi-byte character in string %s in %s", pToken, mFileNameInfo.mFileName.c_str());
+					printf("Unhandled multi-byte character in string %s in %s\n", pToken, mFileNameInfo.mFileName.c_str());
 
 					t += 3;
 				}

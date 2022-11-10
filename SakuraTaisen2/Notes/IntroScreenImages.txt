@@ -1,0 +1,40 @@
+229fd0 > TTL2CGB.bin and TTL2CGB1.bin @ 0x400
+
+020448c calls 06009e58
+
+Intro screen logo compression:
+Results:
+Found: 00000400 00000000 Size: 384 CompressedSize: 13302
+
+Uncompressed result:
+192x64
+256x24 @3000
+80x88 @4800
+40x8 @6380
+8x8 @64c0
+8x32 @6500
+208x16 @6600
+96x8 @7300
+160x16 @7600
+
+//Animated title screen data is in TITLE.BIN
+Found: startAt:00018158 00006700 Size: 224 CompressedSize: 37571
+
+48x16
+128x20 @300
+88x24 @d00
+40x24 @1540
+48x16 @1900
+120x20 @1c00
+80x14 @2560
+48x94 @29c0
+skip
+32x15 @6700
+104x24 @9600
+24x40 @72c0
+56x24 @7680
+24x16 @7bc0
+64x16 @7d40
+64x32 @8140
+56x16 @8940
+48x32 @8cc0

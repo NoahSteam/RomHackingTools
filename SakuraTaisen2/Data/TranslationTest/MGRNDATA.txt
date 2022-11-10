@@ -1,0 +1,12 @@
+Jaws! 
+Grab the targets that swim 
+in the bottom. 
+Beware of the increasing 
+sea mines. 
+Dive Right and Left 
+Dive Left 
+Unused 
+Dive Left 
+min.\nsec. 
+remain 
+score 
