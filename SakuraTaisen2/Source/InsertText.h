@@ -166,14 +166,13 @@ bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTrans
 	}\
     translatedString.AddChar( GTranslationLookupTable.GetIndex('\n') );
 
+	///*printf("LIPS too long[D Line:%i]: %s\n", translatedLineIndex + 1, textLine.mFullLine.c_str());\bAlreadyShowedError = true;\*/
 	//Insert new line if needed
 #define ConditionallyAddNewLine()\
 	if( word.size() + charCount > maxCharsPerLine )\
 	{\
 		if( bIsLipsEntry && !bAlreadyShowedError )\
 		{\
-			printf("LIPS line is too long[D %i].  Needs to be a max of %i characters long. %s\n", translatedLineIndex + 1, maxCharsPerLine, textLine.mFullLine.c_str());\
-			bAlreadyShowedError = true;\
 		}\
 		else\
 		{\
@@ -347,7 +346,9 @@ bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTrans
 
 				//Figure out if this is a lips entry
 				const size_t currSakuraStringIndex = translatedLineIndex;
-				const bool bIsLipsEntry =  false;//sakuraFile.mSequenceEntries[currSakuraStringIndex].mbIsLips;
+				const size_t sequenceIndex = translatedLineIndex + 1; //sequence ids are 1 based, not 0 based
+				const unordered_map<uint16, SakuraTextFile::SequenceEntry>::const_iterator sequenceEntry = sakuraFile.mTextIdToSequenceEntryMap.find(sequenceIndex);
+				const bool bIsLipsEntry = sequenceEntry != sakuraFile.mTextIdToSequenceEntryMap.end() ? sequenceEntry->second.mbIsLips : false;
 				const bool bIsUnused = false;
 
 				if (bIsLipsEntry)
@@ -422,7 +423,7 @@ bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTrans
 						{
 							if (bIsLipsEntry)
 							{
-								printf("LIPS line is too long[A].  Needs to be a max of %i characters long. %s\n", maxCharsPerLine, textLine.mFullLine.c_str());
+								printf("LIPS too long[A Line: %i]:  %s\n", translatedLineIndex, textLine.mFullLine.c_str());
 								//break;
 							}
 							else
@@ -454,9 +455,9 @@ bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTrans
 					{
 						if (bIsLipsEntry && !bAlreadyShowedError)
 						{
-							printf("LIPS line is too long [B].  Needs to be a max of %i characters long. %s\n", maxCharsPerLine, textLine.mFullLine.c_str());
+							printf("LIPS too long [B Line: %i]: %s\n", translatedLineIndex, textLine.mFullLine.c_str());
 							bAlreadyShowedError = true;
-							//	break;
+							break;
 						}
 						else
 						{
@@ -467,6 +468,12 @@ bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTrans
 					const char* pWord = word.c_str();
 					for (size_t letterIndex = 0; letterIndex < numLettersInWord; ++letterIndex)
 					{
+						if (bIsLipsEntry && charCount > maxCharsPerLine)
+						{
+							printf("LIPS too long [E Line: %i]: %s\n", translatedLineIndex, textLine.mFullLine.c_str());
+							break;
+						}
+
 						translatedString.AddChar(GTranslationLookupTable.GetIndex(pWord[letterIndex]));
 						++charCount;
 					}
@@ -477,13 +484,19 @@ bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTrans
 						break;
 					}
 
-					//Add sapce
+					//Add space
 					if (wordIndex + 1 < numWords)
 					{
 						//Insert new line if needed
 						const string& nextWord = textLine.mWords[wordIndex + 1];
 						if (nextWord != NewLineWord)
 						{
+							if (bIsLipsEntry && charCount + nextWord.size() > maxCharsPerLine)
+							{
+								printf("LIPS too long [F Line: %i]: %s\n", translatedLineIndex, textLine.mFullLine.c_str());
+								break;
+							}
+
 							//If adding the next word will put us over the word limit, add a new line
 							if (nextWord.size() + charCount > maxCharsPerLine)
 							{
@@ -495,9 +508,9 @@ bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTrans
 								{
 									if (bIsLipsEntry && !bAlreadyShowedError)
 									{
-										printf("LIPS line is too long[C].  Needs to be a max of %i characters long. %s\n", maxCharsPerLine, textLine.mFullLine.c_str());
+										printf("LIPS too long[C Line: %i]: %s\n", translatedLineIndex, textLine.mFullLine.c_str());
 										bAlreadyShowedError = true;
-										//		break;
+										break;
 									}
 									else
 									{
@@ -512,7 +525,7 @@ bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTrans
 							}
 						}
 					}
-				}
+				}//for(wordIndex < numWords)
 
 #if USE_SINGLE_BYTE_LOOKUPS
 				if ((translatedString.mChars.size()) % 2 != 0)

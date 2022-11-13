@@ -299,6 +299,16 @@ struct SakuraTextFile
 		uint16 mImageId_SetIndex{ 0 };
 		uint16 mImageId_ExpressionIndex{ 0 };
 		bool   mbIsLips{ false };
+
+		bool operator==(const SequenceEntry& rhs) const 
+		{
+			return 
+			mTextIndex == rhs.mTextIndex && 
+			mImageId_CharIndex == rhs.mImageId_CharIndex && 
+			mImageId_SetIndex == rhs.mImageId_SetIndex && 
+			mImageId_ExpressionIndex == rhs.mImageId_ExpressionIndex &&
+			mbIsLips == rhs.mbIsLips;
+		}
 	};
 
 	FileNameContainer          mFileNameInfo;
@@ -310,6 +320,7 @@ struct SakuraTextFile
 	vector<SakuraStringInfo>  mStringInfoArray;
 	vector<SakuraTimingData>  mLineTimingData;
 	vector<SequenceEntry>     mSequenceEntries;
+	unordered_map<uint16, SequenceEntry> mTextIdToSequenceEntryMap;
 	char*                     mpHeaderToText{0};
 	int                       mHeaderToTextSize{0};
 
@@ -324,7 +335,8 @@ public:
 	SakuraTextFile(SakuraTextFile&& rhs) : mFileNameInfo(std::move(rhs.mFileNameInfo)), mFileHeader(rhs.mFileHeader), mLines(std::move(rhs.mLines)), mHeaderForTextEntries(std::move(rhs.mHeaderForTextEntries)),
 		mDataSegments(std::move(rhs.mDataSegments)), mStringInfoArray(std::move(rhs.mStringInfoArray)), mpHeaderToText(std::move(rhs.mpHeaderToText)),
 		mHeaderToTextSize(rhs.mHeaderToTextSize), mFileSize(rhs.mFileSize),	mpFile(rhs.mpFile), mpBuffer(std::move(rhs.mpBuffer)), 
-		mLineTimingData(std::move(rhs.mLineTimingData)), mFontSheetData(std::move(rhs.mFontSheetData)), mSequenceEntries(rhs.mSequenceEntries)
+		mLineTimingData(std::move(rhs.mLineTimingData)), mFontSheetData(std::move(rhs.mFontSheetData)), mSequenceEntries(rhs.mSequenceEntries), 
+		mTextIdToSequenceEntryMap(rhs.mTextIdToSequenceEntryMap)
 	{
 		rhs.mpBuffer              = nullptr;
 		rhs.mpFile                = nullptr;
@@ -346,6 +358,7 @@ public:
 		mpBuffer              = std::move(rhs.mpBuffer);
 		mFontSheetData        = std::move(rhs.mFontSheetData);
 		mSequenceEntries      = std::move(rhs.mSequenceEntries);
+		mTextIdToSequenceEntryMap = std::move(rhs.mTextIdToSequenceEntryMap);
 		mpHeaderToText        = std::move(rhs.mpHeaderToText);
 		mHeaderToTextSize     = rhs.mHeaderToTextSize;
 
@@ -789,7 +802,22 @@ private:
 					}
 					else
 					{
-						mSequenceEntries.push_back(newEntry);
+						bool bIsUnique = true;
+						if(mTextIdToSequenceEntryMap.find(newEntry.mTextIndex) != mTextIdToSequenceEntryMap.end())
+						{
+							bIsUnique = false;
+							if(!(mTextIdToSequenceEntryMap[newEntry.mTextIndex] == newEntry))
+							{
+								int dfk = 0;
+								++dfk;
+							}
+						}
+
+						if(bIsUnique)
+						{
+							mSequenceEntries.push_back(newEntry);
+							mTextIdToSequenceEntryMap[newEntry.mTextIndex] = newEntry;
+						}
 					}
 				
 					mProcessedIdsToSequenceIndex[newEntry.mTextIndex] = (int)(mSequenceEntries.size() - 1);
@@ -826,7 +854,8 @@ private:
 						(sequenceValue == SpecialEntryId2 && SwapByteOrder(pSequenceData[index+1]) == LipsId) 
 						)
 				{
-					uint16 nextValue = SwapByteOrder(pSequenceData[index + 1]);
+					uint16 lipsTestIndex = index + 1;
+					uint16 nextValue = SwapByteOrder(pSequenceData[lipsTestIndex]);
 					uint16 nextNextValue = SwapByteOrder(pSequenceData[index + 2]);
 					if (nextValue == LipsId && 
 						!(nextNextValue == 0xC000 || nextNextValue == 0xC001 || nextNextValue == 0xC002 || nextNextValue == 0xC003 || nextNextValue == 0xC004 || ((nextValue & 0xF000) != 0xC000))
@@ -840,18 +869,36 @@ private:
 
 						do
 						{
-							SequenceEntry newEntry;
-							newEntry.mTextIndex               = nextValue & 0x0fff;
-							newEntry.mImageId_CharIndex       = prevEntry.mImageId_CharIndex;
-							newEntry.mImageId_SetIndex        = prevEntry.mImageId_SetIndex;
-							newEntry.mImageId_ExpressionIndex = prevEntry.mImageId_ExpressionIndex;
-							newEntry.mbIsLips                 = true;
+							if(!(nextValue == 0xC000 || nextValue == 0xC001 || nextValue == 0xC002 || nextValue == 0xC003 || nextValue == 0xC004))
+							{
 
-							mSequenceEntries.push_back(newEntry);
+								SequenceEntry newEntry;
+								newEntry.mTextIndex = nextValue & 0x0fff;
+								if ((newEntry.mTextIndex >> 0xb) != 0)
+								{
+									newEntry.mTextIndex += 0xf000;
+								}
+								newEntry.mImageId_CharIndex = prevEntry.mImageId_CharIndex;
+								newEntry.mImageId_SetIndex = prevEntry.mImageId_SetIndex;
+								newEntry.mImageId_ExpressionIndex = prevEntry.mImageId_ExpressionIndex;
+								newEntry.mbIsLips = true;
+
+								mSequenceEntries.push_back(newEntry);
+
+								if (mTextIdToSequenceEntryMap.find(newEntry.mTextIndex) != mTextIdToSequenceEntryMap.end())
+								{
+									if (!(mTextIdToSequenceEntryMap[newEntry.mTextIndex] == newEntry))
+									{
+										int dfk = 0;
+										++dfk;
+									}
+								}
+								mTextIdToSequenceEntryMap[newEntry.mTextIndex] = newEntry;
+							}
 
 							++index;
 							nextValue = SwapByteOrder(pSequenceData[index]);
-						} while (!(nextValue == 0xC000 || nextValue == 0xC001 || nextValue == 0xC002 || nextValue == 0xC003 || nextValue == 0xC004 || ((nextValue & 0xF000) != 0xC000)));
+						} while ((nextValue & 0x8000) != 0);//!(nextValue == 0xC000 || nextValue == 0xC001 || nextValue == 0xC002 || nextValue == 0xC003 || nextValue == 0xC004 || ((nextValue & 0xF000) != 0xC000)));
 					}
 				}
 
@@ -906,8 +953,10 @@ void FindAllSakuraText(const vector<FileNameContainer>& inFiles, vector<SakuraTe
 	}
 }
 
-void ExtractText(const string& inSearchDirectory, const string& inPaletteFileName, const string& inOutputDirectory)
+void ExtractText(const string& inSearchDirectory, const string& inPaletteFileName, const string& inOutputDirectory, bool bInOnlyFontSheet = false)
 {
+	CreateDirectoryHelper(inOutputDirectory);
+
 	//Get the palette
 	FileData paletteFile;
 	if (!paletteFile.InitializeFileData(inPaletteFileName.c_str(), inPaletteFileName.c_str()))
@@ -934,12 +983,28 @@ void ExtractText(const string& inSearchDirectory, const string& inPaletteFileNam
 	FindAllSakuraText(scenarioFiles, sakuraTextFiles);
 
 	const string extension(".bmp");
-
+	
 	//Write out bitmaps for all of the lines found in the sakura text files
 	const size_t numFiles = sakuraTextFiles.size();
 	for (size_t i = 0; i < numFiles; ++i)
 	{
 		const SakuraTextFile& sakuraText = sakuraTextFiles[i];
+
+		//Create font sheet
+		SakuraFontSheet sakuraFontSheet;
+		if (!sakuraFontSheet.CreateFontSheetFromData(sakuraText.mFontSheetData.mpData, sakuraText.mFontSheetData.mDataSize))
+		{
+			continue;
+		}
+
+		if (bInOnlyFontSheet)
+		{
+			const string bitmapFileName = inOutputDirectory + sakuraText.mFileNameInfo.mNoExtension + extension;
+			ExtractImageFromData(sakuraText.mFontSheetData.mpData, sakuraText.mFontSheetData.mDataSize, 
+			  					bitmapFileName, nullptr, 0, true, 16, 16,
+			 					255, 256, 0, true, true, &paletteData);
+			continue;
+		}
 
 		//Create output directory for this file
 		string fileOutputDir = inOutputDirectory + sakuraText.mFileNameInfo.mNoExtension + string("\\");
@@ -949,13 +1014,6 @@ void ExtractText(const string& inSearchDirectory, const string& inPaletteFileNam
 		}
 
 		printf("Dumping dialog for: %s\n", sakuraText.mFileNameInfo.mNoExtension.c_str());
-
-		//Create font sheet
-		SakuraFontSheet sakuraFontSheet;
-		if (!sakuraFontSheet.CreateFontSheetFromData(sakuraText.mFontSheetData.mpData, sakuraText.mFontSheetData.mDataSize))
-		{
-			continue;
-		}
 
 		//Dump out the dialog for each line
 		int stringIndex = 0;
@@ -1061,4 +1119,11 @@ void ExtractTextCode(const string& inSearchDirectory, const string& inOutputDire
 			fprintf(pOutFile, "\n");
 		}
 	}
+}
+
+bool ExtractFontSheets(const string& inSearchDirectory, const string& inPaletteFileName, const string& inOutputDirectory)
+{
+	ExtractText(inSearchDirectory, inPaletteFileName, inOutputDirectory, true);
+
+	return true;
 }

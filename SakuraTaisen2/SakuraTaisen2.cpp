@@ -43,8 +43,8 @@ using std::unordered_map;
 #include "Source/SakuraString.h"
 #include "Source/SakuraFontSheet.h"
 #include "Source/CreateTranslatedFontSheet.h"
-#include "Source/SakuraTextFile.h"
 #include "Source/ImageExtraction.h"
+#include "Source/SakuraTextFile.h"
 #include "Source/FaceWinAll.h"
 #include "Source/CreateStorySpreadhseets.h"
 #include "Source/MNameCG.h"
@@ -281,7 +281,7 @@ int main(int argc, char *argv[])
 {
 #if 0
 	{
-		TestDecompressor();
+		VerifyText();
 	}
 #else
 	if(argc == 1)
@@ -308,9 +308,17 @@ int main(int argc, char *argv[])
 
 		ExtractText(searchDirectory, paletteFileName, outDirectory);
 	}
-	else if (command == string("ExtractTextCode") && argc == 4)
+	else if (command == string("ExtractFontSheets") && argc == 5)
 	{
 		const string searchDirectory = string(argv[2]);
+		const string paletteFileName = string(argv[3]);
+		const string outDirectory = string(argv[4]) + Seperators;
+
+		ExtractFontSheets(searchDirectory, paletteFileName, outDirectory);
+	}
+	else if (command == string("ExtractTextCode") && argc == 4)
+	{
+		const string searchDirectory = string(argv[2]) + Seperators;
 		const string outDirectory = string(argv[3]) + Seperators;
 
 		ExtractTextCode(searchDirectory, outDirectory);

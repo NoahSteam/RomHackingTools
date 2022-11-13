@@ -1,3 +1,4 @@
-Read 060a86c0, wait till r5 us 25c15000
+0609035a is being read to see if is a feed byte, but it's got mem stomped data
 
-06007e8c see what's stored at the address here
+06007e70 writes correct value in there (DEAD)
+06013422 overwrites it with 2010

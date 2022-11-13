@@ -91,9 +91,11 @@ bool PatchTextDrawingCode(const string& inSourceGameDirectory, const string& inP
 			WriteCommand(0xde44, 0xe11a);
 			WriteCommand(0xde4a, 0xe11c);
 
-			//Change number of lines to 4 (03 but it's 0 based) (0x06012E53)
-			WriteCommand(0xde52, 0xe103);
-
+			//Change number of lines to 4 (03 but it's 0 based)
+			WriteCommand(0xde52, 0xe103); //0x06012E53
+			WriteByte(0xd7b5, 0x03); //0x060127b5
+			WriteByte(0xdb83, 0x03); //0x06012b83 (untested)
+			
 			//Printing number of empty lines
 			{
 				//Need a bigger buffer for empty lines, so start writing from 060a5100 instead of 060a5180 

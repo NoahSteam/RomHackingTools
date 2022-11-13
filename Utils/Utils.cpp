@@ -523,7 +523,10 @@ bool TextFileData::InitializeTextFile(bool bFixupSpecialCharacters, bool bCollap
 					fixedString[f++] = fontSheetIndex;
 				}
 
-				else if( bFixupSpecialCharacters && uToken == (unsigned char)0xe2 && (unsigned char)pToken[t+1] == (unsigned char)0x80 && (unsigned char)pToken[t+2] == (unsigned char)0xa6 )
+				else if( bFixupSpecialCharacters && 
+						(uToken == (unsigned char)0xe2 && (unsigned char)pToken[t+1] == (unsigned char)0x80 && (unsigned char)pToken[t+2] == (unsigned char)0xa6 ) ||
+						(uToken == (unsigned char)'.' && (unsigned char)pToken[t + 1] == (unsigned char)'.' && (unsigned char)pToken[t + 2] == (unsigned char)'.')
+						)
 				{
 					t += 3;
 
@@ -1255,7 +1258,7 @@ bool BitmapSurface::CreateSurface(int width, int height, EBitsPerPixel bitsPerPi
 
 void BitmapSurface::AddTile(const char* pInData, int inDataSize, int inX, int inY, int/* width*/, int height, EFlipFlag flipFlag)
 {
-	const int startX = mBytesPerRow == kBPP_4 ? inX/2 : inX;
+	const int startX = mBitsPerPixel == kBPP_4 ? inX/2 : inX;
 	const int offset = (inY*mBytesPerRow + startX);
 	char* pOutData   = mpBuffer + offset;
 	
