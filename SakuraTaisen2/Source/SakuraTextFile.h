@@ -770,6 +770,7 @@ private:
 		const uint16 SpecialEntryId2 = 0xF04A;
 		const uint16 DataEntryId     = 0x7FFE;
 		const uint16 LipsId          = 0xC13F;
+		const uint16 LipsId2         = 0xC180;
 
 		unsigned int index = 1;
 
@@ -857,8 +858,9 @@ private:
 					uint16 lipsTestIndex = index + 1;
 					uint16 nextValue = SwapByteOrder(pSequenceData[lipsTestIndex]);
 					uint16 nextNextValue = SwapByteOrder(pSequenceData[index + 2]);
-					if (nextValue == LipsId && 
-						!(nextNextValue == 0xC000 || nextNextValue == 0xC001 || nextNextValue == 0xC002 || nextNextValue == 0xC003 || nextNextValue == 0xC004 || ((nextValue & 0xF000) != 0xC000))
+					if ((nextValue == LipsId || nextValue == LipsId2) && 
+						((nextNextValue&0xF000) == 0xC000) &&
+						!(nextNextValue == 0xC000 || nextNextValue == 0xC001 || nextNextValue == 0xC002 || nextNextValue == 0xC003 || nextNextValue == 0xC004)
 						)
 					{
 						//Grab previous text entry because lips will use the same image ids as that one
@@ -869,7 +871,8 @@ private:
 
 						do
 						{
-							if(!(nextValue == 0xC000 || nextValue == 0xC001 || nextValue == 0xC002 || nextValue == 0xC003 || nextValue == 0xC004))
+							if(((nextValue&0xF000) == 0xC000) &&
+							   !(nextValue == 0xC000 || nextValue == 0xC001 || nextValue == 0xC002 || nextValue == 0xC003 || nextValue == 0xC004))
 							{
 
 								SequenceEntry newEntry;

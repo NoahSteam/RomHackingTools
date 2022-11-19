@@ -1,0 +1,41 @@
+06097D6E <-need to change counter from 0xf to 0x1c
+06001F72
+06051a68 <y value written here: mov.w r10, @r11
+
+//These two are needed for full line to draw
+06051a7c E10D to E11B
+06050640 mov 0xE, R2
+
+--Reading--
+060a68f0 is buffer into which character data is written to
+This is read at 06051a38
+The pointer 060a68f0 is stored in memory at 06051ab0
+06051a28 will specify a stride of 0xe for number of characters, this needs to be 1c
+
+Code that iterates through all of this is in 06051a18.  This needs to be fixed up.
+
+--Writing--
+06051ae0 writes to 060a68f0
+060a68f0 (buffer pointer) is also stored here 06051aec
+06051ad2 will specify a stride of 0xe for number of characters, this needs to be 1c
+
+Writing is iterated at 06051b00, this needs fixing for iteration
+
+-----------------
+Final Solution
+-----------------
+Reading Code:
+06051a28 mov 0xe,r1 needs to be 0x1c
+06051a7c mov 0xd,r1 needs to be 0x1b
+06051a82 mov 0xe,r1 needs to be 0x1c
+06051a8a mov 0x2,r1 needs to be 0x3
+
+Writing Code:
+06050640 mov 0xe,r2 needs to be 0x1c (stride)
+06051ad2 mov 0xe,r1 needs to be 0x1c (stride)
+06051b06 mov 0xd,r10 needs to be 0x1b (char count)
+06051b24 mov 0x2,r1 needs to be 0x3 (num lines)
+
+Buffer address:
+Read:  06051ab0 needs to be 060a6700
+Write: 06051aec needs to be 060a6700

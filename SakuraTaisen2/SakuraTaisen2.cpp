@@ -245,6 +245,7 @@ void VerifyText()
 	std::string::size_type pos = std::string(exePath).find_last_of("\\/");
 
 	const string currentDirectory = std::string(exePath).substr(0, pos) + Seperators; //"A:\\SakuraWars2\\TextVerification\\"
+//	const string currentDirectory = "A:\\SakuraWars2\\TextVerification\\";
 	const string gameSourceDirectory = currentDirectory + "SourceFiles\\";
 	const string translatedTextDirectory = currentDirectory + "TranslationData\\";
 	VerifyText(translatedTextDirectory, gameSourceDirectory, currentDirectory);
@@ -277,11 +278,95 @@ void OutputUncompressedData(const string& InFileName, const string& OutFileName,
 	outFile.WriteData((void*)decompressed.mpUncompressedData, decompressed.mUncompressedDataSize);
 }
 
+void Func_0605A12C()
+{
+	//shar r4 8 times
+}
+
+void RadioCompression(uint32* param_1, int param_2)
+{
+	uint32 uVar1;
+	int iVar2;
+	int iVar3 = 0;
+	uint32 uVar4;
+	int iVar5;
+	uint32 uVar6;
+	uint32 uVar7;
+
+	iVar2 = 0xAC53AC53;//DAT_060333c0; r8
+	uVar1 = 0xAAAA5555;//DAT_060333bc; r9
+
+	char* pStart = (char*)param_1;
+
+	/* Top of COMMFILE 060c0000 in memory */
+	uVar6 = SwapByteOrder(param_1[1]); //param_1 = r7
+	uVar7 = SwapByteOrder(*param_1); //uVar7 = r6
+	while (true) 
+	{
+		iVar5 = param_2; //r4 = r10
+		if (iVar5 < 0)
+		{
+			iVar5 += 0x00ff0009;//PTR_DAT_060333b8._0_2_; r1 = 0x00ff0009
+		}
+
+		//iVar3 = r0
+		//iVar3 = iVar5 >> 8;//(*(code*)PTR_FUN_060333c4)(); shar r4, 8 times
+		iVar5 = iVar5 >> 8;
+
+		if (iVar5 + 1 <= iVar3) 
+		{
+			break;
+		}
+		
+		iVar5 = 0;
+		uVar4 = uVar7;
+		do 
+		{
+			iVar5 = iVar5 + 1;
+			uint32 param_1Value = SwapByteOrder(*param_1);
+			*param_1 = SwapByteOrder(param_1Value ^ uVar4);
+			param_1 = param_1 + 1;
+			uVar4 = (uVar4 ^ uVar1) + iVar2;
+		} while (iVar5 < 0x40);
+		uVar4 = (uVar7 ^ 0x13579BDF) + uVar6; //uVar7 = r6
+		uVar6 = uVar7;
+		uVar7 = uVar4;
+		iVar3 += 1;
+	//	param_2 = uVar4;
+	}
+	return;
+}
+
+void TestRadio()
+{
+	FileNameContainer name("a:\\SakuraWars2\\Disc1_Original\\SAKURA1\\COMMFILE.ALL");
+	FileData commFile;
+	if(!commFile.InitializeFileData(name))
+	{
+		return;
+	}
+
+	const int dataSize = commFile.GetDataSize() + 1024*1024;
+	char* pData = new char[dataSize];
+	char* pDataStart = pData;
+	memcpy_s(pData, dataSize, commFile.GetData() + 0x7800, commFile.GetDataSize() - 0x7800);
+	RadioCompression((uint32*)pData, 0xd74c);//0x7594);
+
+	FileWriter outData;
+	if(outData.OpenFileForWrite("a:\\SakuraWars2\\radioOut.bin"))
+	{
+		outData.WriteData(pDataStart, dataSize);
+	}
+
+	delete[] pData;
+}
+
 int main(int argc, char *argv[])
 {
 #if 0
 	{
-		VerifyText();
+		TestRadio();
+	//	VerifyText();
 	}
 #else
 	if(argc == 1)

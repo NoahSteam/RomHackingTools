@@ -1,9 +1,9 @@
-Ever since the attack on Ginza last month, it seems like something's been weighing on Mr. Yoneda's mind. 
+Ever since the attack on Ginza last month, something seems to be weighing on Mr. Yoneda's mind.
 Whenever I've asked him about it, he just gives me some vague response. I wonder what I should do... 
-Oh! Look like a call's coming in. Who could it be? 
-Ah, Ogami, you're there. 
-Sir! What is it? 
-There's something I wanted to discuss with you. Would you mind coming to the command room down in the basement? 
+Oh! Looks like a call's coming in. Who could it be? 
+Ah, Ogami, there you are. 
+Sir! What's the matter? 
+Yeah, I just wanted to discuss something with you. Would you mind coming down to the Command Room? 
 Right, understood. 
 Mr. Yoneda... 
 What on earth is going on? He even contacted me by communicator... 
@@ -16,16 +16,16 @@ S-Sir! This man is...
 Yes. The man who orchestrated the attack on the theater last month... 
 His name is Shinnosuke Yamazaki. He and I were once comrades who fought side by side. 
 A new enemy has emerged in the capital once again, I wonder just who it could be. 
-And I've been wondering, too, about why he appeared before us as that way. 
+And why did Yamazaki appear before us as an enemy... I've been giving it a lot of thought. 
 Have anything to ask me? If you don't mind me speculating about a few things, go ahead. 
-Ask about the new adversary. 
-Ask about Shinnosuke Yamazaki. 
+Ask about the new enemy. 
+Ask about Yamazaki. 
 Nothing to ask about. 
 What is the nature of this enemy that appeared recently? 
-I'm not really sure, myself. I know zilch about this organization or what their objective may be. 
-But based on what Yamazaki said, that the capital is a cursed city... 
-And whoever that masked man was that killed him with a single strike was... 
-It's likely that his objective, whatever it may be, has to do with Tokyo. 
+I'm not really sure, myself. I know zilch about this organization or what their ambitions may be. 
+But Yamazaki mentioned the capital being cursed... 
+And then that masked man killed him in a single blow... 
+I can only guess that their objective, whatever it may be, has to do with Tokyo. 
 Do you know anything about the man called Shinnosuke Yamazaki? 
 Yes, I do. 
 Just the name... 
@@ -35,25 +35,25 @@ Yes, I do. He was a friend and fellow soldier of yours who fought with you durin
 I know the name, but not much more than that. 
 I might've mentioned him before, but I'll tell you about him. 
 No, nothing at all. 
-Yeah, I'm not surprised you don't know. 
+Yeah, I'm not surprised you don't know him. 
 ... 
 Well, no surprise there. It was... a long time ago. 
 Ten years ago, a special squad was established in the Imperial Army called the "Anti-Kouma Corps." 
-It was a combat squad with the mission of defending the capital from demonic forces, much like the current-day troupe. 
+It was a combat squad that defended the capital from demonic forces, much like the current-day troupe. 
 Seven years ago, we went into battle with an enormous Kouma that appeared in Nihonbashi. 
-That was the start of what's called the "Kouma War." 
+That was the start of what's now called the "Kouma War." 
 But that war turned out to be the Anti-Kouma Corps' final battle. 
-This here's a photo from back then. As you can see, Ayame Fujieda, who was once part of our troupe, is here too. 
+Here's a photo from back then. As you can see, Ayame Fujieda, who was once part of our troupe, is here too. 
 After the Kouma War, Ayame served as the Assault Troupe's deputy commander... 
-But in our previous battle, she gave everything she had to keep the peace, and lost her life for it. 
+But in our battle two years ago, she gave everything she had to keep the peace, and lost her life for it. 
 ... 
-The man on the far right there is Kazuma Shinguji, Sakura's father. He died at the very end of the Kouma War. 
+The man on the far right there is Kazuma Shinguji, Sakura's father. He died at the very end of the war. 
 Ayame and I are in the middle, and the man on the left is... Yamazaki. 
 Did you know that the one who originally came up with the design for Spirit Armor was Yamazaki? 
 He was more than just a warrior, he was a genius in the truest sense of the word. 
 But after the Kouma War was over, he vanished. 
 What he got up to after that... Well, I have no idea. 
-Still, I never imagined I'd end up meeting him again in that form, or that we'd wind up parting how we did... 
+Still, I never imagined I'd meet him again in that form, or that we'd wind up parting how we did... 
 ... 
 Kazuma, Ayame, and even Yamazaki... They've all left this world. 
 And in the end, I'm the only one still alive... 
@@ -67,7 +67,7 @@ What are you saying?! You're not alone, sir.
 What's that? 
 All of us in the Flower Division are here for you. 
 Being away from the theater meant that I was separated from all my allies who I'd fought together with. 
-But because I kept on living, I was able to reunite with everyone and enjoy being together with them again. 
+But because I kept on living, I was able to reunite with everyone and enjoy being together again.
 Ogami... 
 There's nothing shameful about being the one who survived. 
 So please, don't talk like you should have died already. 
@@ -84,8 +84,8 @@ Huh?! No, that's not what I... Uh...
 Ah, it's fine. Let's just leave it at that. 
 Yeah, that is pathetic. 
 ...What was that? 
-Sir, you taught me that so long as I didn't gripe about every little thing, the way forward would open up to me. 
-So how can you just sit there whining like that?! 
+Sir, you taught me that in any situation, if you remain strong, the path forward will open up. 
+So how can you sit there now acting so defeated?! 
 ... 
 Wahahaha! You moron, I was only jokin' around. Don't take me so seriously. 
 ...Right. 
@@ -98,7 +98,7 @@ You're the captain. You walk around lookin' like that, it'll affect your squad's
 I've still got plenty of stuff I need you to do. 
 I'm gonna work ya hard starting today, Ogami, so better get yourself prepared! 
 Y-Yes, sir! 
-Now then, I'm gonna be here a while longer. But you oughta go get the newcomer's welcome party ready. 
+Now then, I'm gonna be here a while longer. You oughta go get the newcomer's welcome party ready. 
 Huh? We've got another new member coming in?! 
 That's right. Today at 12 o'clock sharp, we have one new member joining our ranks. So get going! 
 Y-Yes, sir! Please excuse me! 
@@ -147,7 +147,7 @@ Although, it's too bad everyone else can't be here for all these parties.
 (Maybe I'll see if I can contact them later on the Cinematron when I get back to my room.) 
 Hey Mon Frère, what time should we hold the party? 
 According to Manager Yoneda, she'll be arriving around 12 o'clock. 
-It's 11 right now, so that gives us about an hour. We should started preparing immediately. 
+It's 11 right now, so that gives us about an hour. We should start preparing immediately. 
 OK, let's divide up the work and get everything ready. 
 We can use this backstage room like we did for the last party. 
 Ogami, would you mind lending one of us a hand? 
@@ -203,10 +203,10 @@ Yep! I can work real hard because I'm with you, Mon Frère!
 ...I simply do not see what is so wonderful about Japanese men. Unbelievable. 
 A-Anyway, let's get started preparing for this party. Get to work, everyone! 
 The jewel of the Pandemonium Regalia, entrusted to us by the Rose Division. 
-Spirit Sword Arataka. The secret sword of the Shinguji family. 
-Divine sword Shirohatori. Entrusted to me by Kaede. A secret sword passed down in the Fujieda family. 
-An intangible light sword. Shinnosuke Yamazaki is the original owner. A secret sword entrusted to him by Kazuma. 
-Shintou Annihilation. A secret sword entrusted to him by Yoneda. 
+Spirit Sword Arataka. The special sword of the Shinguji family. 
+Divine Sword Shirahatori. Entrusted to me by Kaede. A special sword passed down by the Fujieda family. 
+Luminous Blade Mukei. A special sword entrusted to us by Kazuma that once belonged to Major Yamazaki. 
+Divide Blade Mekkyaku. A special sword entrusted to me by Yoneda. 
 The uniform I wear at the theater. Good for both summer and winter. 
 A lighter borrowed from the inn. 
 The flower crown that Iris made for Reni. 
@@ -227,10 +227,10 @@ A photo of Orihime.
 A photo of Orihime. This one is a limited edition only available at New Year's. 
 A photo of Reni. 
 A photo of Reni. This one is a limited edition only available at New Year's. 
-A decorative paper ball from the welcome party. 
-A flower vase from the welcome party. 
-The banner from the welcome party. 
-The Cinematron. A communication machine invented by Kohran that lets you see and talk to someone from far away. 
+A decorative paper ball for the welcome party called a kusudama. 
+A flower vase for the welcome party.
+The banner for the welcome party.
+The Cinematron. One of Kohran's inventions that lets you see and talk to someone from far away. 
 The sword of the Pandemonium Regalia, recovered from the Demon King. 
 The mirror of the Pandemonium Regalia, recovered from the Demon King. 
 Fragments of the broken Cinematron. Seems like the kids at the inn picked them up along the shore. 

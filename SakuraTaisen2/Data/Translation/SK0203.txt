@@ -1,11 +1,11 @@
 Ahh, what nice weather. We're finally getting a break in the clouds after all the rain. 
 A break in the clouds...? How do you break a cloud? 
 It means to have a good change in the weather. 
-This time of year is the rainy season in Japan, so we always appreciate a sunny day amidst the storms. 
+It's the rainy season this time of year in Japan, so a sunny day amidst the storms is always welcome.
 Hm, I don't really get it, but I love it when the sky is clear and sunny! 
 Hahaha. I hope our new member will be something of a break in the clouds for the Flower Division, too. 
 Ah, you made it here safely. This is the Grand Imperial Theater. Well, come inside. 
-Ah! Mon FrËre, it soundss like someone's here. Maybe it's the new member? 
+Ah! Mon FrËre, it sounds like someone's here. Maybe it's the new member? 
 We were so busy talking up here that I completely forgot we were supposed to call out to them. 
 Oh well. I guess we'll have to go meet them in the entryway. 
 Oh, Sakura. Do you know where that Ogami got off to? I told him we had a new member coming in today. 
@@ -54,7 +54,7 @@ Come on, we'll show you the way there. Follow us.
 Now then, these are your fellow Flower Division members. 
 This is Orihime Soletta. 
 Reni! Ciao! It's been a while! 
-Yes. 
+...Hello. 
 Oh, that's right, you two were originally in the Star Division together. 
 These two are Kasumi Fujii and Yuri Sakakibara. They take care of office work. 
 And this is Tsubaki Takamura, who runs the gift shop. 
@@ -66,7 +66,7 @@ Milchstraﬂe.
 Mihilstraﬂe. Everyone, please be kind to him. 
 Milchstraze. Everyone, please be kind to him. 
 O-Ogami, Reni's last name is Milchstraﬂe. 
-You cannot even remember a person's name? Just like I thought, Ensign, you're even more uncouth than a monkey! 
+You can't even remember a person's name, Ensign? You're even dumber than una scimmia, a monkey! 
 I'm sorry, Reni. How rude of me to misremember your name... 
 It's fine... A name is nothing more than a signifier. 
 R-Right... 
@@ -79,7 +79,7 @@ It's fine... A name is nothing more than a signifier.
 R-Right... 
 If I recall, Reni was born in Germany. 
 In German, "Milch" means "milk", and "straﬂe" is "road"... 
-So it means "Milky Way" like the galaxy, or "ama no gawa" in your Japanese. 
+So it means "Milky Way" like the galaxy, or "Amanogawa" in your Japanese.
 I see. What a lovely name. 
 Well, it's quite a tongue-twister of a name, that. So why don't we just stick with Reni for now? 
 ... Yes. 
@@ -110,8 +110,8 @@ Yaay! Yaay! It's a party, it's a party!
 Aww... So much for our party. 
 What's this alarm? 
 It's to warn us of an attack. 
-This alarm is the Flower Division's cue to change from the Imperial Assault Troupe into the Imperial Assault Troop. 
-Then what is the scope of our enemy? Location of appearance? What weaponry do they use? 
+This alarm is the Flower Division's cue to change from the Assault Troupe into the Assault Troop. 
+Then what is the scope of our enemy? Location of appearance? What weaponry are they using? 
 Huh? We don't know any of that just yet... 
 R-Reni, where are you going?! 
 Where is the Flower Division rendezvous point? Where is my Eisenkleid? 
@@ -129,7 +129,7 @@ More importantly Commander, do we know the enemy's location or number?
 The number of enemies is still unknown, but it seems they've appeared at a resort in Uguisudani. 
 Uguisu... dani? 
 Uguisudani is a neighborhood located in the northeastern part of the capital. 
-According to reports, a great number of citizens, including children, are attempting to evacuate the area. 
+According to reports, a great number of citizens, including children, are evacuating the area. 
 Oh no! If we don't hurry, all those townspeople could become victims... 
 Reni, I know it's pretty sudden to have to dispatch on a mission right after arriving here... 
 ... but please, lend us your strength! For the sake of the capital's citizens! 
@@ -150,9 +150,9 @@ Now, Ogami. I need you to decide on the strategy for this mission.
 If we focus on offense, the Soaring Whale will provide backup via air bombardment. 
 If we focus on defense, the Soaring Whale can airdrop healing supplies for you. 
 So, Ogami. What will we do? 
-Let's focus our strategy on offense! 
-Let's focus our strategy on defense! 
-Let's focus our strategy on offense! I want to try and take out all the weaker enemies in one blow with a bombardment. 
+Focus on offense! 
+Focus on defense! 
+Let's focus our strategy on offense! I want to take out the weaker enemies in one blow with a bombardment.
 All right, then. Leave the bombardment to us! 
 Let's focus our strategy on defense! I want us to fight carefully using those healing supplies. 
 All right, then. The Soaring Whale will be sure to airdrop those provisions for you. 
@@ -173,13 +173,13 @@ Uh... R-Right.
 I-Imperial Assault Troupe, move out! Our destination is, uh... Where was it, again? 
 ...Captain. At this rate, we'll all be killed. 
 Reni, you can find our Eisenkleids over this way. 
-... I know. After their activation, I will remain on standby until stowage in the Soaring Whale is complete. 
+...I know. After their activation, I will remain on standby until stowage in the Soaring Whale is done. 
 All right Reni, Orihime! Eisenklieds, move out! 
 The jewel of the Pandemonium Regalia, entrusted to us by the Rose Division. 
-Spirit Sword Arataka. The secret sword of the Shinguji family. 
-Divine sword Shirohatori. Entrusted to me by Kaede. A secret sword passed down in the Fujieda family. 
-An intangible light sword. Shinnosuke Yamazaki is the original owner. A secret sword entrusted to him by Kazuma. 
-Shintou Annihilation. A secret sword entrusted to him by Yoneda. 
+Spirit Sword Arataka. The special sword of the Shinguji family. 
+Divine Sword Shirahatori. Entrusted to me by Kaede. A special sword passed down by the Fujieda family. 
+Luminous Blade Mukei. A special sword entrusted to us by Kazuma that once belonged to Major Yamazaki. 
+Divide Blade Mekkyaku. A special sword entrusted to me by Yoneda. 
 The uniform I wear at the theater. Good for both summer and winter. 
 A lighter borrowed from the inn. 
 The flower crown that Iris made for Reni. 
@@ -200,10 +200,10 @@ A photo of Orihime.
 A photo of Orihime. This one is a limited edition only available at New Year's. 
 A photo of Reni. 
 A photo of Reni. This one is a limited edition only available at New Year's. 
-A decorative paper ball from the welcome party. 
-A flower vase from the welcome party. 
-The banner from the welcome party. 
-The Cinematron. A communication machine invented by Kohran that lets you see and talk to someone from far away. 
+A decorative paper ball for the welcome party called a kusudama. 
+A flower vase for the welcome party.
+The banner for the welcome party.
+The Cinematron. One of Kohran's inventions that lets you see and talk to someone from far away. 
 The sword of the Pandemonium Regalia, recovered from the Demon King. 
 The mirror of the Pandemonium Regalia, recovered from the Demon King. 
 Fragments of the broken Cinematron. Seems like the kids at the inn picked them up along the shore. 

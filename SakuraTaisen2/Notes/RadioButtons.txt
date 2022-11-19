@@ -1,0 +1,6 @@
+05c78fa0
+060ca380 <-compressed data is written here and decompressed here as well
+
+06086986 has 7594 which is param_2 used during decompression in 06033354
+
+0x11b80 COMMFILE.ALL has compressed data

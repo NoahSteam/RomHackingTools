@@ -14,7 +14,7 @@ Be hopeful and encouraging.
 Get them fired up. 
 Aren't you all forgetting something important? 
 WE are the "Imperial Assault Troupe." If we put on a show, people will come to see us. 
-If the summer production is a success this month, our money problem will work itself out! Right, everyone? 
+If the summer play is a success, our money problem will work itself out! Right, everyone? 
 You're right! We can put on a play! 
 Mon Frère, you're so smart! 
 Well, I guess it is better than doing nothing at all. 
@@ -28,7 +28,7 @@ I'm gonna work real hard too!
 OK then. Let's get started on rehearsals for the summer production right away! 
 ...Are you serious, Ensign? Here you are, the captain, and yet you have given no thought to this at all? 
 I... I have thought about it! I was just trying to figure out how to bring it up. 
-I was just thinking that if we work hard enough at the summer production, we'll be able to get by financially... 
+I was just thinking that if we work hard enough at the summer play, we'll be able to get by financially...
 You're right. We could put on a play. 
 Yeah! Let's all do our best! 
 You should have said so in the first place instead of beating about the bush. 
@@ -60,7 +60,7 @@ It's pretty sudden, but... the troupe is going to lose all its outside funding.
 So we all wanted to do whatever we can while Yoneda is in the hospital. 
 I gotcha, Boss. 
 All right, enough with all this doom an' gloom! 
-Let's put on a show that'll fill every seat in the house. That'll give ol' Yoneda one helluva surprise once he's back! 
+Let's put on a show that'll fill every seat in the house. That'll be a helluva surprise for ol' Yoneda!
 An actress has to be able to smile, no matter how bad things get! 
 Oh, we gotta couple o' new faces. 
 This is Orihime Soletta and Reni Milchstraße, both originally from the Star Division. 
@@ -79,11 +79,11 @@ All right! Now that's decided, we better get training started right away!
 Kanna, it's not training, it's rehearsal! 
 Ah shoot. I'm so used to talkin' about my karate training that it just slipped out. 
 Anyways, it's rehearsal time, everyone! Let's do this! 
-And with that, the rehearsal for the Flower Division's summer production was finally underway. 
+And with that, the rehearsal for the Flower Division's summer play was finally underway. 
 Whoa, so you're a girl? 
-I didn't realize at all... 
+I never realized... 
 If that's the case, I wish you'd said something from the beginning... 
-Living creatures all begin from the same place. Gender is only finalized during one's gestation in the womb. 
+All living creatures begin the same. Gender is only finalized during one's gestation in the womb. 
 In that sense, gender means little when examining one individual among a species. 
 Aw, forget it. I got no idea what you're talkin' about. 
 W-Well, I guess whether Reni's a boy or a girl, it doesn't change much in the end. 
@@ -91,7 +91,7 @@ Hee hee, yep. Reni is still Reni! Nothing's changed at all!
 Kanna's cheer seemed to rub off on the entire Flower Division, and rehearsals were going well. 
 And the Flower Division decided to add their own spin on the story of King Lear. 
 Hmm... 
-Hm? What's the matter, Kanna? 
+...? <br> What's the matter, Kanna? 
 Ol' King Lear meets a pretty tragic fate in the end, don't he? 
 Why are you sounding so surprised? King Lear is a tragedy; it's always been this way. 
 I mean, I guess so... 
@@ -102,8 +102,8 @@ I agree! Hey Reni, you think so too, right?
 That's fine. 
 Changing King Lear into a happy ending... Are you all right in your heads? 
 Aww, it's fine. 'Sides, ain't it like Manager Yoneda's always sayin'? 
-Lighten up a little!" We gotta run headfirst towards what we're wishin' for! 
-Right! 
+"Lighten up a little!" We gotta run headfirst towards what we're wishin' for! 
+Yeah! 
 Right... I can't sit back on my heels, either. 
 With the commander gone, I have to step up and protect this theater. 
 Yo, Boss! 
@@ -119,9 +119,9 @@ You didn't forget, didja Boss? We made a promise before I left for Okinawa.
 I want ya to see just how much stronger I've gotten. 
 To put it plainly, I wanna do a bit of sparrin' with ya. 
 All right, let's do this! 
-Sure, if you think I'm enough of a challenge. 
+Am I enough of a challenge? 
 Anything but that! 
-Sure, if you think I'm enough of a challenge. 
+Am I enough of a challenge?
 Anything but that! 
 All right, let's do this! Go ahead and show me the fruits of your training. I can take it. 
 That's the spirit! You sure know how to speak my language, Boss. 
@@ -132,7 +132,7 @@ Nope, don't think you can wriggle your way outta this one! Come at me with every
 What, too scared to even respond? Chill out, Boss, you're not gonna die or anything. 
 All right, I'll explain how this is gonna work. 
 I'll attack from one of three positions: up high, in the middle, and from below. 
-If I attack from up high, I'll go for your head. If I'm attacking from the middle, I'll strike your abdomen. 
+If I attack high, I'll go for your head. If I'm attacking from the middle, I'll strike your abdomen. 
 And if I come from below, I'll attack your legs. Easy, yeah? 
 OK, let's do a quick test run. First off... Up high! 
 Guard your head. 
@@ -287,7 +287,7 @@ The way you were sparrin' just now...
 You took a whole lotta hits head-on. You're usually better than that. 
 Heh, not much of a Navy Ensign, are ya? You need to train a bit harder! 
 Easy for you to say, your strength is on another level, Kanna. 
-The way you were sparrin' with me earlier... You're pretty strong, Boss. Kinda makes me take a new look at ya. 
+The way you were sparrin'... You're pretty strong, Boss. Kinda makes me take a new look at ya. 
 A-Anyways, see ya later! 
 Kanna... 
 At any rate, the entire Flower Division has some new pep in their step thanks to Kanna. 
@@ -328,10 +328,10 @@ I'm sorry, Ogami, but each customer is only allowed to purchase one photo at a t
 Oh, really? That's too bad... 
 ... "" "" () - . , ! ? ?! !! 
 The jewel of the Pandemonium Regalia, entrusted to us by the Rose Division. 
-Spirit Sword Arataka. The secret sword of the Shinguji family. 
-Divine sword Shirohatori. Entrusted to me by Kaede. A secret sword passed down in the Fujieda family. 
-An intangible light sword. Shinnosuke Yamazaki is the original owner. A secret sword entrusted to him by Kazuma. 
-Shintou Annihilation. A secret sword entrusted to him by Yoneda. 
+Spirit Sword Arataka. The special sword of the Shinguji family. 
+Divine Sword Shirahatori. Entrusted to me by Kaede. A special sword passed down by the Fujieda family. 
+Luminous Blade Mukei. A special sword entrusted to us by Kazuma that once belonged to Major Yamazaki. 
+Divide Blade Mekkyaku. A special sword entrusted to me by Yoneda. 
 The uniform I wear at the theater. Good for both summer and winter. 
 A lighter borrowed from the inn. 
 The flower crown that Iris made for Reni. 
@@ -352,10 +352,10 @@ A photo of Orihime.
 A photo of Orihime. This one is a limited edition only available at New Year's. 
 A photo of Reni. 
 A photo of Reni. This one is a limited edition only available at New Year's. 
-A decorative paper ball from the welcome party. 
-A flower vase from the welcome party. 
-The banner from the welcome party. 
-The Cinematron. A communication machine invented by Kohran that lets you see and talk to someone from far away. 
+A decorative paper ball for the welcome party called a kusudama. 
+A flower vase for the welcome party.
+The banner for the welcome party.
+The Cinematron. One of Kohran's inventions that lets you see and talk to someone from far away. 
 The sword of the Pandemonium Regalia, recovered from the Demon King. 
 The mirror of the Pandemonium Regalia, recovered from the Demon King. 
 Fragments of the broken Cinematron. Seems like the kids at the inn picked them up along the shore. 
@@ -369,4 +369,4 @@ A letter from Orihime.
 A letter from Reni. 
 A scarf given to me by Sakura. It's knitted with red yarn - my favorite color. 
 A scarf given to me by Sakura. It's knitted with blue yarn - my favorite color. 
-A scarf given to me by Sakura. It's knitted with yellow yarn - my favorite color. 
+A scarf given to me by Sakura. It's knitted with yellow yarn - my favorite color.

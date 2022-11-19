@@ -6,11 +6,11 @@ I see.
 I wonder why she snapped like that. 
 I do think Orihime went too far... 
 But it's not often you see Iris lose her temper that badly. 
-She was in a good mood earlier today, too... 
-Maybe she just happened to be in a bad mood. 
-She was in a good mood earlier today, too... 
-Maybe she just happened to be in a bad mood. 
-Come to think of it, after the battle... 
+She was doing fine earlier… 
+Maybe she's in a bad mood. 
+She was doing fine earlier… 
+Maybe she's in a bad mood. 
+Actually, after the battle… 
 She seemed to be in a good mood earlier when we were getting ready for the party. 
 Yes. I wonder, what on earth could be the reason for it? 
 Well, there's no point wondering about it until we can have a talk with her. 
@@ -40,8 +40,8 @@ It's just like Tsubaki to keep everything tidied up like this.
 The dining hall is so lonely when no one's here eating. 
 Iris isn't here, either. I'll try looking in another room. 
 Not in here... Well, if she were here, we'd have found her already. 
-Earlier, she and I were in here to look for some plates to use at the party... 
-I wouldn't have thought I'd be back here later looking for her, instead. 
+Iris and I were here earlier today looking for plates to use at the party…
+I didn’t expect I’d be back later looking for her, instead. 
 I wonder if Iris is hiding somewhere out of sight... 
 Shoot, she's not here. Guess I better go check a different room. 
 The door's locked tight. I doubt she'd have been able to get outside from here. 
@@ -66,9 +66,9 @@ I-I appreciate the offer, sir, but I'm in something of a hurry right now...
 Ehn? You're talking about Iris, I bet? 
 Wait, how did you know that? 
 Even the thickest of blockheads couldn't have missed all the commotion she made. 
-I'm so sorry I let things get this far. 
+I'm so sorry I let things get so out of hand. 
 She was in a good mood earlier today, so I can't imagine why this happened... 
-Ogami, just because someone's outwardly cheerful doesn't always mean they feel the same way on the inside. 
+Ogami, just because someone is cheerful on the outside doesn't mean they feel the same on the inside. 
 Consider this. Why did she act so pleasant during the day? 
 Why did she suddenly seem depressed when she saw that family after the battle... 
 ...and how are you going to handle this going forward? Think it all over carefully. 
@@ -87,10 +87,10 @@ Speak to Orihime.
 Watch her quietly. 
 Speak to Orihime. 
 Watch her quietly. 
-Cover her eyes and ask "Guess who?" 
+Playfully cover her eyes. 
 Hey, Orihime. 
 Kyah! 
-Oh, so it's you, Ensign. I ask you do not startle me like that. 
+Oh, so it's you, Ensign. I ask that you not startle me like that. 
 Orihime, what are you doing here? 
 ... 
 (Huh, now she's peeking inside the backstage room.) 
@@ -117,21 +117,21 @@ In any case, just what in the world was she doing over here?
 (I'll try watching her quietly.) 
 (Anyway, searching for Iris should come first.) 
 Were you looking for Iris? 
-Helping with the nighttime patrol? 
+Helping with night patrol? 
 Were you, by any chance, looking for Iris? 
 ...N-Not at all. 
 OK then, what were you doing? 
 ...Whatever I was doing is no business of yours, Ensign! 
 Why do you not save your breath, and go search for Iris yourself? 
-You're right. If I have time to be standing around chatting like this, I should be off looking for her. 
+You're right. If I have time to stand around chatting like this, I should be off looking for her.
 Still though, just what were you doing, Orihime? 
 Were you, by any chance, helping with the nighttime patrol? 
 I am not so cruel as to take your precious chores away from you, Ensign. 
 If I did it in place of you, you really would be useless. 
 U-Useless? 
-If you have the time to stand around and shoot breezes with me, would it not be better to go look for Iris? 
+If you have time to shoot the breeze with me, would it not be better spent looking for Iris instead? 
 I will be going now, if you please. 
-You're right. If I have time to be standing around chatting like this, I should be off looking for her. 
+You're right. If I have time to stand around chatting like this, I should be off looking for her. 
 Still though, just what were you doing, Orihime? 
 I think whatever I was doing has nothing to do with you. 
 And now I will be going, so do pardon me. 
@@ -143,7 +143,7 @@ No one's in here, and nothing has changed since the last time I was here.
 Guess I'll go check a different room. 
 No Iris here. Hmm, where could she have gotten to? 
 Well, I've got to keep searching. I'll try going somewhere else. 
-Yeah, doesn't look like she's in here. I'll try another room. 
+Yeah, it doesn't look like she's in here. I'll try another room. 
 Iris was so cheerful earlier today. I wonder what happened? 
 Doesn't seem like she's in here, either... Time to try somewhere else. 
 I've already tried looking here. I'd better go somewhere else. 
@@ -170,13 +170,13 @@ Yeah, she's not here. I guess she didn't go to the courtyard.
 (He went downstairs. What's he going to do in the basement?) 
 It's already 11 o'clock. I wonder where Iris could've gone. 
 Wait. Kayama said something earlier... 
-I think it was... "try going to the attic." 
+I think it was... "Try checking the attic." 
 Well, what have I got to lose? Guess I'll try the attic. 
 (Hmm? Reni?) 
 (What could he be doing here?) 
 Say something. 
 Leave. 
-Cover his eyes and ask "Guess who?" 
+Playfully cover his eyes.
 Hey, Reni. What're you doing - 
 ...! 
 Uwaaahhhh!! 
@@ -260,12 +260,12 @@ Oh my... Ensign, is that you?
 How lovely. Why not join in our little discussion? 
 Yes, hello? 
 Hey, Sumire. It's Ogami. 
-Oh my, Ensign?! Allow me to switch over my screen. Would you wait just one moment? 
+Oh my, Ensign?! Allow me to switch on my screen. Would you wait just one moment? 
 Now then, was there something you needed? 
 Yes, hello? 
 Oh, Sumire! So this was your number, then? 
 Ah, Ensign?! Then you can hear me. How lovely. 
-Could you wait for just one moment? I will switch over my screen. 
+Could you wait for just one moment? I will switch over to my screen. 
 Now then, was there something you needed? 
 Yeah, I wanted to talk a bit. 
 I wanted to wish you goodnight. 
@@ -298,19 +298,19 @@ Ahh, shoot. I bungled that one.
 Kohran and I were just discussing the Flower Division. 
 You guys had a dustup with the Black Demon Society today over in Uguisudani, am I right? 
 So how'd it go, anyways? 
-It was a surprisingly easy win. 
-It was a pretty tough fight. 
-They managed to "mech" a mess of things... 
+It was surprisingly easy.
+It was pretty tough. 
+Made a "mech" of things... 
 It was a surprisingly easy win. Our newest member, Reni, really pulled his weight out there. 
-Wowee, he sure does sound promising! I was getting a bit worried about you all, but hearing that makes me feel better. 
+Wowee, he sure sounds promising! I was a bit worried, but hearing that makes me feel better. 
 Still... How disappointing to hear that victory came so easily even without us. 
-Ah, don't get all down in the dumps, Sumire. The important thing is that they won, not how they did it. 
+Ah, don't get all down in the dumps. All that's important is that they won, not how they did it. 
 It was a pretty tough fight. I'm sure if you two had been here, we would've had an easier time of it. 
 I would imagine so. Without me there, the Flower Division cannot display its true power, after all. 
 Hoo-wee... Just as full of can-do as ever, eh Sumire? 
 Still, if it's enough to make the Chief worry... 
 ...then it sounds like these guys are nothing to sneeze at. 
-They really managed to "mech" a mess of things. 
+They really managed to make a "mech" of things. 
 Ahahaha! Aw Chief, you're such a hoot! 
 Look at you makin' puns... How do you come up with this stuff? 
 You got my joke, huh? Thanks, Kohran. 
@@ -319,7 +319,7 @@ I do wish you had more of a highbrow sense of humor.
 R-Right... 
 Well, we've only fought them once so far, so I can't exactly say for sure. 
 Yup, I do suppose that's true. 
-Anywho, it's gonna be a bit longer before Sumire and me come on back to the theater... 
+Anywho, it's gonna be a bit longer before Sumire and me come back to the theater... 
 ...so you take good care of things until then, Chief. 
 Ensign, I trust that you will eagerly await my return. 
 Yeah, of course. 
@@ -393,7 +393,7 @@ Man, she really let me have it.
 We had a new member named Orihime join the Flower Division recently. 
 She hardly listens to a thing I say. I'm not sure how to handle her. 
 I haven't met this Orihime myself, so I can't say anything for certain. However... 
-If you can make it clear to her that you're a captain who cares for his subordinates, I'm certain she'll come around. 
+If you show her you are a captain that cares for his subordinates, I'm certain she'll come around. 
 Have confidence in yourself, Captain. I have faith that you can do this. 
 All right. I'll give it some more time. 
 Well, I must be going. 
@@ -420,23 +420,23 @@ It's morning where she is now. She probably went to eat breakfast or something.
 Good evening. It's time for Capital News. 
 Hex Mechs appeared shortly after noon today among a crowd of vacationers in Uguisudani. 
 They engaged in combat with the Imperial Assault Troupe, who were dispatched to the scene. 
-At the time of the incident, a number of sightseers who had come to view the wisterias were present at the scene. 
+At the time, a number of sightseers were present at the scene who had come to view the wisterias.
 Now, we'll hear comments from some people who witnessed the Hex Mechs. 
-Yeah, I was just laying back, taking in the flowers and enjoying some sake when those things showed up out of nowhere. 
+Yeah. I was just taking in the flowers, enjoying some sake, when those things appeared out of nowhere.
 Sheesh, it completely killed my buzz. How're they planning to make up for this, huh? 
 ...You can hear the anger in his voice. 
 Thanks to the efforts of the Imperial Assault Troupe... 
 ...the incident was put to rest without any casualties. 
 The unusual Spirit Armor sighted during last month's battle in Ginza... 
 ...appears of a similar type to the one which showed up in Uguisudani. 
-The Ministry of Communications recently instated regular airmail service for the capital, Osaka, and Fukuoka regions. 
+The Ministry of Communications has instated regular airmail service for Tokyo, Osaka, and Fukuoka.
 Hopes are high that this will enable faster delivery of mail over long distances... 
 But, due to high costs, it will likely be utilized primarily by government agencies and businesses. 
-It may take some time for this next-generation airmail service to be useful to the general public. 
+It may take some time before airmail service will be useful to the general public. 
 Finally, it's time for this week's weather forecast. 
-A high-pressure system will advance over the Sea of Japan this week, leading to more clear early summer skies. 
-However, there is speculation that turnouts of vacationers to resorts will be reduced... 
-...in no small part due to the incident with today's Hex Mech attack. 
+A high-pressure system will advance over the Sea of Japan this week, leading to more clear summer skies.
+However, there is speculation that turnouts of vacationers to resorts will be reduced. 
+This is due in no small part to the incident with today’s Hex Mech attack. 
 That's it for Capital News, brought to you by the Capital Daily Report. 
 That concludes today's broadcast. We hope you will look forward to tomorrow's programming. 
 A red shadow opposes the evildoers lurking in the darkness of the capital. His name is Masked Red! 
@@ -466,7 +466,7 @@ Well you see, I wanted to speak to you alone.
 But perhaps not here... Could you please follow me? 
 Shoot, it's already this late?! 
 I don't have time to be doing this. I have to look for Iris! 
-If I recall, Kayama said to try going to the attic. 
+If I recall, Kayama said to try checking the attic. 
 Well, what have I got to lose? Guess I'll try the attic. 
 This isn't the time to be loafing around. 
 Right now as I'm standing here, Iris is all by herself, feeling lonely. 
@@ -554,7 +554,7 @@ But... I don't think I can face you with an honest smile.
 Sakura... 
 So, I can't open the door. I'm sorry, Ogami. 
 But by tomorrow, I'm sure I'll be able to greet you with a smile again. 
-...OK. 
+...Fair enough. 
 Well, I'll be going. See you in the morning, Sakura. 
 Yes. Sorry, Ogami. 
 Sakura, just listen to me! 
@@ -570,7 +570,7 @@ But... I don't think I can face you with an honest smile.
 Sakura... 
 So... please excuse me for today. 
 By tomorrow, I'm sure I'll be able to show you a smile again. 
-...OK. 
+...Fair enough.
 Then, I'll be going. See you... in the morning. 
 ...Yes. 
 (I should probably leave her be for now...) 
@@ -609,7 +609,7 @@ Did you perhaps come here to talk about what happened with Iris?
 Ask how she's doing. 
 Give her a warning. 
 Orihime, is something the matter? Earlier, you got so angry all of a sudden. 
-...There is nothing, particularly. 
+...There’s nothing in particular. 
 It sure seemed like there was something, if you ask me. 
 You call me out here, and only for this, Ensign?! 
 Having this discussion with you is only a waste of my time. I will be excusing myself. 
@@ -652,14 +652,14 @@ Iris isn't here. I thought she might be, but...
 Oh well. I'll go somewhere else for now. 
 (Ah, there's Iris!) 
 ... 
-Iris, if you stay here too long, you're going to catch cold. 
+Iris, if you stay here too long, you're going to catch a cold. 
 Oh, Mon Frère... 
 You... You came looking for me? 
 Of course. I just had a feeling I might find you here. 
 Mon Frère, thank you... 
 (Ah, there's Iris!) 
 ... 
-Iris, if you stay here too long, you're going to catch cold. 
+Iris, if you stay here too long, you're going to catch a cold. 
 Oh, Mon Frère... 
 You... You came looking for me? 
 Yeah. Sorry it took me some time to come. 
@@ -692,13 +692,13 @@ Okaaay! Coming in now!
 Hee hee. Thanks for waiting, Mon Frère. 
 It's already 11 o'clock. I wonder where Iris could've gone. 
 Wait. Kayama said something earlier... 
-I think it was... "try going to the attic." 
+I think it was... "Try checking the attic." 
 Well, what have I got to lose? Guess I'll try the attic. 
 I'm not sure if Iris would come to a place like this, but it wouldn't hurt to check. 
 Yeah, she isn't here. I'll try a different room. 
 If another enemy appeared right now, it would be pretty bad. I need to find her, fast. 
 Where could Iris be, I wonder, and why did she get so agitated all of a sudden? 
-There's only a few of these processing machines in Japan but I doubt even a machine this advanced could help me now. 
+There's only a few processing machines in Japan but I doubt even this advanced tech could help me now.
 If only I could think as clearly as a machine to find a solution... 
 No, that's no good. People can get stronger precisely because we struggle. 
 And right now, what I need to do is lend Iris my strength. 
@@ -707,16 +707,16 @@ Just to be certain, I'll try checking all the way in the back of the intensive c
 This room is ordinarily off-limits. It seems pretty suspicious... 
 ... 
 Nope. She's not in here, after all. 
-Yeah, definitely not in here. And it seems there's no sign of anyone else having entered this room, either. 
+Yeah, definitely not in here. There's no sign of anyone else entering this room, either.
 Oh well. I'll go try another room. 
 Hm? Is someone taking a bath? 
 Maybe it's Iris... 
 Huh? Those flashy clothes, aren't these Orihime's?! 
 S-So then... Orihime is in there r-right now. 
-My body is moving towards the bathroom on its own... 
+I'm drawn to the bath…
 Go back outside. 
 Oh no, my body is moving towards the bathroom on its own... 
-Ahhh. I'm surprised; Japanese bathrooms aren't all that bad. 
+Ahhh. I'm surprised. Japanese bathrooms aren't all that bad. 
 (Orihime is... in the b-bath.) 
 ...! Is someone there?! 
 (Crap, did she see me?!) 
@@ -735,7 +735,7 @@ Ohh, and I had just washed away all my feelings of irritation. Now I'm even angr
 From now on, I will make sure to lock you in your room before I enter the bath. 
 Oh yes. Maybe even to be safe, I will tie some rope around you as well! 
 H-Hey, wait... 
-Anyway, the next time you peek, you will wish I was using a bath bucket. 
+Anyway, the next time you peek, you will WISH I was using a bath bucket. 
 Sheesh... I know I brought it on myself, but that was awful. 
 (I gotta get out of here before she sees me!) 
 Phew... I think I got away before she realized I was there. 
@@ -752,7 +752,7 @@ Ohh, and I had just washed away all my feelings of irritation. Now I'm even angr
 From now on, I will make sure to lock you in your room before I enter the bath. 
 Oh yes. Maybe even to be safe, I will tie some rope around you as well! 
 H-Hey, wait... 
-Anyway, do not expect to be let off so easy the next time you peek. 
+Anyway, do not expect to be let off so easily the next time you peek. 
 Sheesh... I know I brought it on myself, but that was awful. 
 (I'd better get out of here before Orihime sees me.) 
 ...Looks like I got out without her realizing. 
@@ -771,7 +771,7 @@ When I was in the bath, I had a sense that someone was close by.
 N-No... Must've been your imagination. 
 How very strange. I would have sworn that someone was in there. 
 So, what do you think of Japanese baths? 
-It wasn't as bad as I thought it would be, even if the picture of Mt. Fuji on the wall is nothing in the way of style. 
+It wasn't as bad as I thought it would be, even if the picture of Mt. Fuji on the wall is a bit tacky.
 But my feelings of irritation have all washed away. I feel very refreshed. 
 I will be going now, if you please. 
 (Thank goodness, looks like she didn't notice anything.) 
@@ -827,7 +827,7 @@ I should get back to searching for Iris, myself.
 (Looks like he went back downstairs. Is he headed for the hangar?) 
 It's already 11 o'clock. I wonder where Iris could've gone. 
 Wait. Kayama said something earlier... 
-I think it was... "try going to the attic." 
+I think it was... "Try checking the attic." 
 Well, what have I got to lose? Guess I'll try the attic. 
 Ogami... 
 Hm? 
@@ -872,7 +872,7 @@ Eeek!
 S-Saki?! 
 I understand how you're feeling, but I must refuse. 
 Me doing this might seem like an easy fix for you, but all it would do is gloss over your troubles. 
-You'll get used to being here soon enough. Your anxiety will clear away even without me holding you. 
+You'll get used to being here soon enough. Your anxiety will clear even without me holding you. 
 Ogami... 
 Well, I should go. I'm in the middle of searching for Iris. 
 Ah, Ogami, please wait... 
@@ -906,7 +906,7 @@ Oh my, thank you very much.
 (She has gorgeous black hair.) 
 Hair (press) 
 Eek! Ogami, please, don't touch me there. 
-(It must hurt when she fell. Her face is scrunched up in pain.) 
+(It must have hurt when she fell. Her face is scrunched up in pain.) 
 Oh no... Please, don't look at my face when I'm like this. 
 My ankle hurts. I wonder if I twisted it. 
 Ogami, could you please massage my ankle? 
@@ -927,7 +927,7 @@ Chest (press)
 Saki, is this where it hurts? 
 Ah, that's my chest. 
 Ogami, you're unexpectedly bold. 
-You mustn't take advantage of this situation to do anything strange. 
+You mustn't take advantage of this situation to do anything indecent.
 (Damn... She saw right through me.) 
 Chest (peek) 
 (Phew, it really is big...) 
@@ -999,10 +999,10 @@ Ah, yes. Ogami, why not try checking the attic?
 You may just find what you're looking for up there... 
 Kayama... 
 The jewel of the Pandemonium Regalia, entrusted to us by the Rose Division. 
-Spirit Sword Arataka. The secret sword of the Shinguji family. 
-Divine sword Shirohatori. Entrusted to me by Kaede. A secret sword passed down in the Fujieda family. 
-An intangible light sword. Shinnosuke Yamazaki is the original owner. A secret sword entrusted to him by Kazuma. 
-Shintou Annihilation. A secret sword entrusted to him by Yoneda. 
+Spirit Sword Arataka. The special sword of the Shinguji family. 
+Divine Sword Shirahatori. Entrusted to me by Kaede. A special sword passed down by the Fujieda family. 
+Luminous Blade Mukei. A special sword entrusted to us by Kazuma that once belonged to Major Yamazaki. 
+Divide Blade Mekkyaku. A special sword entrusted to me by Yoneda. 
 The uniform I wear at the theater. Good for both summer and winter. 
 A lighter borrowed from the inn. 
 The flower crown that Iris made for Reni. 
@@ -1023,10 +1023,10 @@ A photo of Orihime.
 A photo of Orihime. This one is a limited edition only available at New Year's. 
 A photo of Reni. 
 A photo of Reni. This one is a limited edition only available at New Year's. 
-A decorative paper ball from the welcome party. 
-A flower vase from the welcome party. 
-The banner from the welcome party. 
-The Cinematron. A communication machine invented by Kohran that lets you see and talk to someone from far away. 
+A decorative paper ball for the welcome party called a kusudama. 
+A flower vase for the welcome party.
+The banner for the welcome party.
+The Cinematron. One of Kohran's inventions that lets you see and talk to someone from far away. 
 The sword of the Pandemonium Regalia, recovered from the Demon King. 
 The mirror of the Pandemonium Regalia, recovered from the Demon King. 
 Fragments of the broken Cinematron. Seems like the kids at the inn picked them up along the shore. 

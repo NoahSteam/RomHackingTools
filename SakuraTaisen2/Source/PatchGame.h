@@ -131,6 +131,11 @@ bool PatchTextDrawingCode(const string& inSourceGameDirectory, const string& inP
 			WriteCommand(0xdf56, 0x4200); //from SHLL2 to SHLL in memory at 06012F56
 			WriteByte(0xe4f5, 0x08); //from add 0x10,r1 to add 0x08,r1
 		}
+
+		//Fix item drawing code
+		{
+
+		}
 	}
 
 	//SAKURADA

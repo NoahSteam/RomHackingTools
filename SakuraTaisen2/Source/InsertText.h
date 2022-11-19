@@ -455,7 +455,7 @@ bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTrans
 					{
 						if (bIsLipsEntry && !bAlreadyShowedError)
 						{
-							printf("LIPS too long [B Line: %i]: %s\n", translatedLineIndex, textLine.mFullLine.c_str());
+							printf("LIPS too long [B Line: %i]: %s\n", translatedLineIndex + 1, textLine.mFullLine.c_str());
 							bAlreadyShowedError = true;
 							break;
 						}
@@ -470,7 +470,7 @@ bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTrans
 					{
 						if (bIsLipsEntry && charCount > maxCharsPerLine)
 						{
-							printf("LIPS too long [E Line: %i]: %s\n", translatedLineIndex, textLine.mFullLine.c_str());
+							printf("LIPS too long [E Line: %i]: %s\n", translatedLineIndex + 1, textLine.mFullLine.c_str());
 							break;
 						}
 
@@ -493,7 +493,7 @@ bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTrans
 						{
 							if (bIsLipsEntry && charCount + nextWord.size() > maxCharsPerLine)
 							{
-								printf("LIPS too long [F Line: %i]: %s\n", translatedLineIndex, textLine.mFullLine.c_str());
+								printf("LIPS too long [F Line: %i]: %s\n", translatedLineIndex + 1, textLine.mFullLine.c_str());
 								break;
 							}
 
@@ -508,7 +508,7 @@ bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTrans
 								{
 									if (bIsLipsEntry && !bAlreadyShowedError)
 									{
-										printf("LIPS too long[C Line: %i]: %s\n", translatedLineIndex, textLine.mFullLine.c_str());
+										printf("LIPS too long[C Line: %i]: %s\n", translatedLineIndex + 1, textLine.mFullLine.c_str());
 										bAlreadyShowedError = true;
 										break;
 									}

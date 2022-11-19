@@ -1,24 +1,24 @@
-Looks nice outside considering that storm last night. The cherry blossoms seem to have made it through OK. 
+Looks nice outside considering that storm last night. The cherry blossoms are no worse for wear. 
 Thanks to that, today's sake is extra delicious, right, Ogami? 
 Yes, sir. I'm just glad to see you're doing well, General Yoneda. 
 Darn straight I am! I see you're still as uptight as ever, though. 
-Well, anyway, it's been a whole year since we last saw each other, so here's a toast to our reunion. Drink up! 
+Anyway, it's been a whole year since we last saw each other, so here's a toast to our reunion. Drink up! 
 Yes, sir! 
 ...Oh ho, I see! A naval exercise off the coast of South America? Good work. 
 It'd been so long since I'd trained at sea. It really put me through the wringer. 
 Good, good. By the way, Ogami, how's the capital look after being away for so long? 
-Well, it looks as lively as ever. Everything looks so peaceful. 
+Well, it appears to be as lively as ever. Everything looks so peaceful. 
 Peace, huh. It's an easy word to say, but a delicate thing. Fragile as a sugar sculpture... 
 Listen, Ogami... 
 I called you here today for one reason and one reason alone. We need you back in the troupe. 
-But sir, I'm still assigned to the Imperial Navy! 
-I've got your transfer papers right here, signed by the Minister of the Navy and General Staff Headquarters. 
-Ensign Ichiro Ogami of the Imperial Japanese Navy, your orders for this new, special mission are to take command of the following unit: 
+But sir, I'm still assigned to the Imperial Navy. 
+I have your transfer papers right here, signed by the Minister of the Navy and General Staff Headquarters. 
+Navy Ensign Ichiro Ogami, you are hereby assigned the special duty of leading the following unit: 
 Imperial Assault Troupe, Anti-Kouma Assault Corps: Flower Division! 
 I'm putting you back to work, Ogami. 
-I'll give it my all! Until my very last breath! 
+I'll give it my all! 
 I'm looking forward to it. 
-So I'm a ticket puncher again, huh... 
+I'm punching tickets again?
 Understood, sir! I, Ichiro Ogami, will give it my all! Until my very last breath! 
 All right, hold your horses, Ogami. 
 If you start out this fired-up, you'll end up burning the candle at both ends, you know. 
@@ -51,7 +51,7 @@ That's right, you did chase after her train that one time...
 Y-Yeah... 
 I see. It's already been a whole year since then, huh. 
 So how is Sakura doing, anyway? 
-She was overjoyed when she heard you were coming back. Been a long time since you've seen each other, after all. 
+She was overjoyed when she heard you were coming back. You've been separated for a long time, after all. 
 Ogamiiii! 
 W-Was that voice...? It couldn't be! 
 S-Sakura!! 
@@ -76,8 +76,8 @@ Sakura...
 Sakura, I've missed you. 
 Ogami... 
 The first time we met, the cherry blossoms were also in full bloom, right? 
-Yes, that's right. 
-That was... Two years ago, right? 
+Yes, they were. 
+That was... Two years ago, I think. 
 ... 
 S-Sorry. I, well... I just can't find the words. 
 How about we just... Start with hello. 
@@ -95,7 +95,7 @@ Y-Yes, sir...
 Keeping the peace isn't an easy job. You need to be ready for anything at any given moment. 
 So that we never have to repeat... the tragedy of losing those we hold dear. 
 General Yoneda... 
-You two can be friendly with each other like before, I don't mind. I just wanted to make things clear. 
+You two can be friendly with each other, I don't mind. I just wanted to make things clear. 
 Yes, sir. Understood. 
 Oops, it's about that time. Sakura, take Ogami to the theater, if you'd please. 
 Understood. Well then, Ogami, let's head over to the Grand Imperial Theater. 
@@ -118,9 +118,9 @@ I'm back, Sumire. You seem to be doing well.
 Oh, enough with the frivolities, Ensign. 
 Don't you have a more appropriate greeting for me? 
 (More appropriate?) 
-You've grown more beautiful. 
+You're even more beautiful. 
 I've been dying to see you. 
-Your attendance is appreciated. 
+Thank you for coming...
 Sumire, you've grown even more beautiful. 
 Oh my, not bad. Stating the obvious won't get you far, though. 
 No, I, uh... I was trying to tell you my honest feelings. 
@@ -157,11 +157,11 @@ Come on, Sumire, listen to me. This is serious.
 Keeping the peace isn't an easy job. You need to be ready for anything at any given moment. 
 That way we never have to repeat the tragedy of losing those we hold dear... 
 General Yoneda... 
-You two can be friendly with each other like before, I don't mind. I just wanted to make things clear. 
+You two can be friendly with each other, I don't mind. I just wanted to make things clear. 
 Besides, Sumire, you two won't be seeing each other for a little while. 
 I know it's hard, but it's times like this that you need to keep your emotions under control. 
 ... 
-Won't be seeing each other"? What do you mean, General? 
+"Won't be seeing each other"? What do you mean, General? 
 You'll have to ask Sumire yourself later. 
 Now then, Sumire, if you could escort Ogami to the Grand Imperial Theater. 
 ...Of course. Understood, sir. 
@@ -186,11 +186,11 @@ Maria, have you been well?
 Yes. I'm relieved to see you're doing well, too. 
 I look forward to having you as our captain again. 
 Likewise. 
-Looking forward to a fresh start. 
+Gonna be a fresh start.
 Likewise. I'm happy to be back in the Flower Division again. 
 So am I. It's an honor to be working with you again, Captain. 
 Let's work together to keep the capital safe. 
-Yeah, I'm looking forward to a fresh start. 
+Yeah, it's gonna be a fresh start. 
 At any rate, it's my first time back in over a year. I'll need to keep my wits about me. 
 Haha, it's all right. I know you'll be able to bring the Flower Division together. 
 Let's both do what we can to keep the capital safe. 
@@ -214,7 +214,7 @@ That way we never have to repeat the tragedy of losing those we hold dear...
 General Yoneda... 
 ... 
 Maria already knows, so I'll leave it at that. 
-I know you won't be seeing each other again for a while, but don't let that get in the way of your work. 
+I know you won't see each other again for a while, but don't let that get in the way of your work. 
 Understood. It's just as you say, sir. 
 Glad to hear it. Now then, Maria, if you could escort Ogami to the Grand Imperial Theater. 
 Yes, sir. Once I escort the captain, I'll be headed straight for New York. I'll be back come July. 
@@ -242,7 +242,7 @@ Kanna, you seem as upbeat as ever.
 Heheh! My energy's my strong suit. 
 Y'know, Boss, I've gotten way better at karate over the past year. 
 How 'bout it? Let's have a sparring match! 
-All right, let's go a round! 
+Let's go a round! 
 H-Hold on a sec! 
 All right, let's go a round! I've gotten stronger myself, too! 
 Heheh, that's my Boss! Straight to the point. OK, here I come!! 
@@ -273,8 +273,8 @@ Keeping the peace isn't an easy job. You need to be ready for anything at any gi
 That way we never have to repeat the tragedy of losing those we hold dear... 
 General Yoneda... 
 ... 
-You two can be friendly with each other like before, I don't mind. I just wanted to make things clear. 
-I know you won't be seeing each other again for a while, but don't let that get in the way of your work. 
+You two can be friendly with each other, I don't mind. I just wanted to make things clear. 
+I know you won't see each other again for a while, but don't let that get in the way of your work. 
 ... Yeah, I got it. It's important to set boundaries. 
 So we're clear, then. Now, Kanna, if you could escort Ogami to the Grand Imperial Theater. 
 Got it, leave it to me. Oh yeah, sir? 
@@ -287,7 +287,7 @@ Now that you mention it, you two went to France together.
 Y-Yeah. We took a special holiday... 
 I see. It's been a year since you last saw her. 
 So how is Iris doing? 
-She was overjoyed when she heard you were coming back. Been a long time since you two have seen each other, after all. 
+She was overjoyed when she heard you were coming back. You've been separated for a long time, after all. 
 Mon Frèèère! 
 W-Was that voice...? It couldn't be! 
 Ah, Mon Frère! Over here, over here! 
@@ -366,9 +366,9 @@ R-right.
 I see. It's been a year since you last saw her. 
 So how is Kohran doing, anyway? 
 Kohran's currently stationed at the Hanayashiki Branch. 
-You remember the Hanayashiki Branch, don't you? They design and manufacture the troupe's weapons over there. 
+You remember Hanayashiki, don't you? They design and manufacture the troupe's weapons over there. 
 She's not ready to become head of Hanayashiki just yet, but she seems really popular over there. 
-And she's been keeping up their morale over the past year since they've been left without any leadership. 
+And she's been keeping up their morale since they haven't had any leadership for over a year. 
 I see. So I won't get to see her when I get back to the theater... 
 That is, she was supposed to be headed there, but she told me she just had to see you. 
 She's heading over here to greet you. 
@@ -387,8 +387,8 @@ So you just got back from the Navy, huh?
 To be totally honest, I was hoping I could give you a big welcome with a new invention of mine. 
 This was all so sudden, I didn't have time to get anything ready. Sorry about that. 
 Kohran... 
-Getting to see you is enough. 
-You'll have to show me sometime. 
+Seeing you is enough. 
+Show it to me sometime.
 Don't worry about it. Just being able to see you is more than enough. 
 Th-That's real bold of you to say. 
 Chief. Are you really OK with just this? 
@@ -396,7 +396,7 @@ I'm gonna be at Hanayashiki, so we won't be able to see each other for a while, 
 We've been apart for a year already. What's a little longer? 
 Besides, you're coming back to the Flower Division eventually, right? 
 O-Of course I am! Once my work's all wrapped up, I'll be right there! 
-I see. Well, that's too bad. You'll have to show me sometime. 
+I see. Well, that's too bad. You'll have to show me your invention sometime. 
 Yeah! Sure! I'll have it all ready for next time! 
 Look forward to it, OK? 
 ... 
@@ -415,8 +415,8 @@ Wh-What are you talking about? What's that supposed to mean?
 Keeping the peace isn't an easy job. You need to be ready for anything at any given moment. 
 That way we never have to repeat the tragedy of losing those we hold dear... 
 General Yoneda... 
-You two can be friendly with each other like before, I don't mind. I just wanted to make things clear. 
-I know you won't be seeing each other again for a while, but don't let that get in the way of your work. 
+You two can be friendly with each other, I don't mind. I just wanted to make things clear. 
+I know you won't see each other again for a while, but don't let that get in the way of your work. 
 ... 
 Don't worry, Yoneda, I got it. 
 Glad to hear it. Now, Kohran, if you could escort Ogami to the Grand Imperial Theater. 
@@ -426,7 +426,7 @@ Got it. Tell the guys at Hanayashiki I said hi.
 Thanks a bunch, Yoneda! I'll be back as soon as I can! See ya! 
 What?! "Not particularly"? Did you forget about everyone in the Flower Division? 
 Oh well, I suppose it has been a year. 
-We can't have you forgetting your way back to the theater, though, so I brought over a guide for you. 
+We can't have you getting lost on your back way to the theater, though, so I brought over a guide. 
 Ogamiiii! 
 S-Sakura!! 
 When I told her you were coming back, she said she absolutely had to be here for it. 
@@ -475,7 +475,7 @@ Um, Ogami?
 What is it, Sakura? 
 You know how the manager just told us to "keep our feelings in check", right? 
 It's like he said. While we work as stage performers as part of the troupe... 
-We also have to put our lives on the line as members of the troop to defend the capital from harm. 
+We also have to put our lives on the line to defend the capital from harm. 
 We can't afford to get distracted like that. 
 Sakura... 
 So I'm going to restrain myself, just like the manager told us to. 
@@ -510,7 +510,7 @@ Oh, that's right! I have something I need to take care of, you go on ahead.
 What is it? 
 Heehee, it's a secret. We'll have a nice long chat later, OK? 
 What was that all about? Now I'm curious. 
-Oh well, might as well head inside. Starting today, I'll be working at the Grand Imperial Theater once again. 
+Oh well, might as well head inside. As of today, I'll be working at the Imperial Theater once again. 
 Ensign... 
 What is it, Sumire? 
 Ensign, doesn't this bother you? 
@@ -525,7 +525,7 @@ I agree with him.
 Nothing we can do about it. 
 I agree with him. 
 Nothing we can do about it. 
-I don't agree with him either. 
+I don't agree either. 
 It was awfully sudden, but I agree with him. 
 ... 
 I'm the captain of the Flower Division. I can't be giving special treatment to any of my subordinates. 
@@ -543,7 +543,7 @@ Does he not trust me?
 Ensign, you're gravely mistaken. 
 He deeply values your capabilities as captain of the Flower Division. 
 Sumire... 
-Sorry. To be honest, I don't really know, myself. 
+Sorry. To be honest, I don't really know myself. 
 It's all so sudden, I'm still trying to process it. 
 I think I know just how you feel, Ensign. 
 ...Huh? 
@@ -706,7 +706,7 @@ I'm looking forward to it.
 I can't wait. 
 I'm looking forward to it. 
 I can't wait. 
-What's this "secret project"? 
+What "secret project"? 
 I'm looking forward to your return to the theater once you're done with your work. 
 Thanks a bunch, Chief. You saying that makes my work feel worth it. 
 I see. Honestly though, I can't wait. 
@@ -749,7 +749,7 @@ Leave it to me.
 I'll do what I can for now. 
 Leave it to me. 
 I'll do what I can for now. 
-I don't know if I can do this... 
+I feel kinda nervous... 
 Leave it to me. Everyone in the Flower Division can count on me. 
 Thank you so much! You truly are dependable, Ogami. 
 I'm still not used to being back yet, so I'll just do what I can for now. 
@@ -771,9 +771,9 @@ I see. That's too bad.
 So sorry, Ogami, but each customer is only allowed to purchase one photo at a time. 
 Ah, right. That's too bad. 
 The jewel of the Pandemonium Regalia, entrusted to us by the Rose Division. 
-Spirit Sword Arataka. The secret sword of the Shinguji family. 
-Divine Sword Shirahatori. Entrusted to me by Kaede. A secret sword passed down by the Fujieda family. 
-Luminous Blade Mukei. Shinnosuke Yamazaki is the original owner. A secret sword entrusted to us by Kazuma. 
+Spirit Sword Arataka. The special sword of the Shinguji family. 
+Divine Sword Shirahatori. Entrusted to me by Kaede. A special sword passed down by the Fujieda family. 
+Luminous Blade Mukei. A special sword entrusted to us by Kazuma that once belonged to Major Yamazaki. 
 Divide Blade Mekkyaku. A special sword entrusted to me by Yoneda. 
 The uniform I wear at the theater. Good for both summer and winter. 
 A lighter borrowed from the inn. 
@@ -795,10 +795,10 @@ A photo of Orihime.
 A photo of Orihime. This one is a limited edition only available at New Year's. 
 A photo of Reni. 
 A photo of Reni. This one is a limited edition only available at New Year's. 
-A decorative paper ball from the welcome party. 
-A flower vase from the welcome party. 
-The banner from the welcome party. 
-The Cinematron. A communication machine invented by Kohran that lets you see and talk to someone from far away. 
+A decorative paper ball for the welcome party called a kusudama. 
+A flower vase for the welcome party.
+The banner for the welcome party.
+The Cinematron. One of Kohran's inventions that lets you see and talk to someone from far away. 
 The sword of the Pandemonium Regalia, recovered from the Demon King. 
 The mirror of the Pandemonium Regalia, recovered from the Demon King. 
 Fragments of the broken Cinematron. Seems like the kids at the inn picked them up along the shore. 
@@ -813,4 +813,4 @@ A letter from Reni.
 A scarf given to me by Sakura. It's knitted with red yarn - my favorite color. 
 A scarf given to me by Sakura. It's knitted with blue yarn - my favorite color. 
 A scarf given to me by Sakura. It's knitted with yellow yarn - my favorite color. 
-... "" "" () - . , ! ? ?! !! 
+... "" "" () - . , ! ? ?! !!
