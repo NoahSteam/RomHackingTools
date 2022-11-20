@@ -170,7 +170,7 @@ public:
 	~FileWriter();
 
 	bool          OpenFileForWrite(const std::string& outFileName);
-	bool          WriteData(const void* pData, unsigned long size);
+	bool          WriteData(const void* pData, unsigned long size, bool bSwapEndinanness = false);
 	bool          WriteDataAtOffset(const void* pData, unsigned long size, unsigned long offset, bool bSwapEndianness = false);
 	void          Close();
 	unsigned long GetFileSize() const {return mDataSize;}

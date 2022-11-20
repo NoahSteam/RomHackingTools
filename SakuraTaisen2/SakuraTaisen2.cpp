@@ -283,24 +283,24 @@ void Func_0605A12C()
 	//shar r4 8 times
 }
 
-void RadioCompression(uint32* param_1, int param_2)
+void RadioCompression(uint32* pEncodedData, int param_2)
 {
 	uint32 uVar1;
 	int iVar2;
 	int iVar3 = 0;
-	uint32 uVar4;
+	uint32 key;
 	int iVar5;
-	uint32 uVar6;
-	uint32 uVar7;
+	uint32 secondValue;
+	uint32 firstValue;
 
 	iVar2 = 0xAC53AC53;//DAT_060333c0; r8
 	uVar1 = 0xAAAA5555;//DAT_060333bc; r9
 
-	char* pStart = (char*)param_1;
+	char* pStart = (char*)pEncodedData;
 
 	/* Top of COMMFILE 060c0000 in memory */
-	uVar6 = SwapByteOrder(param_1[1]); //param_1 = r7
-	uVar7 = SwapByteOrder(*param_1); //uVar7 = r6
+	firstValue = SwapByteOrder(*pEncodedData); //uVar7 = r6
+	secondValue = SwapByteOrder(pEncodedData[1]); //param_1 = r7
 	while (true) 
 	{
 		iVar5 = param_2; //r4 = r10
@@ -319,18 +319,17 @@ void RadioCompression(uint32* param_1, int param_2)
 		}
 		
 		iVar5 = 0;
-		uVar4 = uVar7;
+		key = firstValue;
 		do 
 		{
-			iVar5 = iVar5 + 1;
-			uint32 param_1Value = SwapByteOrder(*param_1);
-			*param_1 = SwapByteOrder(param_1Value ^ uVar4);
-			param_1 = param_1 + 1;
-			uVar4 = (uVar4 ^ uVar1) + iVar2;
-		} while (iVar5 < 0x40);
-		uVar4 = (uVar7 ^ 0x13579BDF) + uVar6; //uVar7 = r6
-		uVar6 = uVar7;
-		uVar7 = uVar4;
+			const uint32 encodedValue = SwapByteOrder(*pEncodedData);
+			*pEncodedData = SwapByteOrder(encodedValue ^ key);
+			key = (key ^ 0xAAAA5555) + 0xAC53AC53;
+			++pEncodedData;
+		} while (++iVar5 < 0x40);
+		key = (firstValue ^ 0x13579BDF) + secondValue; //uVar7 = r6
+		secondValue = firstValue;
+		firstValue = key;
 		iVar3 += 1;
 	//	param_2 = uVar4;
 	}
@@ -340,16 +339,18 @@ void RadioCompression(uint32* param_1, int param_2)
 void TestRadio()
 {
 	FileNameContainer name("a:\\SakuraWars2\\Disc1_Original\\SAKURA1\\COMMFILE.ALL");
+//	FileNameContainer name("a:\\SakuraWars2\\COMMFILE2.ALL");
 	FileData commFile;
 	if(!commFile.InitializeFileData(name))
 	{
 		return;
 	}
 
-	const int dataSize = commFile.GetDataSize() + 1024*1024;
+	const int dataSize = commFile.GetDataSize() - 0x7800;
 	char* pData = new char[dataSize];
 	char* pDataStart = pData;
 	memcpy_s(pData, dataSize, commFile.GetData() + 0x7800, commFile.GetDataSize() - 0x7800);
+//	memcpy_s(pData, dataSize, commFile.GetData(), commFile.GetDataSize());
 	RadioCompression((uint32*)pData, 0xd74c);//0x7594);
 
 	FileWriter outData;
@@ -361,10 +362,94 @@ void TestRadio()
 	delete[] pData;
 }
 
+void EncodeRadio()
+{
+	uint32 c1 = 0xAAAA5555;
+	uint32 c2 = 0xAC53AC53;
+	uint32 k = 0x0b17;
+
+	uint32 uVar4 = (k ^ 0xAAAA5555) + 0xAC53AC53;
+	uint32 a = 0x26;
+	uint32 b = a ^ uVar4;
+	b += 0;
+
+	uint32 uVar5 = (uVar4 ^ 0xAAAA5555) + 0xAC53AC53;
+	uint32 c = 0xa841e45b;
+	uint32 d = c ^ uVar5;
+	d += 0;
+
+	uint32 given = 0x56fe0ab3;
+	uint32 calculatedKey = (0x0b17 ^ 0xAAAA5555) + 0xac53ac53;
+	uint32 encoded = given ^ calculatedKey;
+	encoded += 0;
+
+	uint32 given2 = 0x00e9e848;
+	uint32 calculatedKey2 = (calculatedKey ^ 0xAAAA5555) + 0xac53ac53;
+	uint32 encoded2 = given2 ^ calculatedKey2;
+	encoded2 += 0;
+
+	uint32 given3 = 0x8b14961b;
+	uint32 calculatedKey3 = (calculatedKey2 ^ 0xAAAA5555) + 0xac53ac53;
+	uint32 encoded3 = given3 ^ calculatedKey3;
+	encoded3 += 0;
+
+	FileNameContainer decodedFileName("a:\\SakuraWars2\\radioOut.bin");
+	FileData decodedFile;
+	if(!decodedFile.InitializeFileData(decodedFileName))
+	{
+		return;
+	}
+
+	FileWriter outFile;
+	if(!outFile.OpenFileForWrite("a:\\SakuraWars2\\Encoded.bin"))
+	{
+		return;
+	}
+
+	uint32* pDecodedStream = (uint32*)(decodedFile.GetData());
+	uint32 prevKey = 0xb17;
+	
+	bool bCalcSecond = true;
+	uint32 decodedIndex = 0;
+	uint32 secondValue = 0;
+	const uint32 numEntriesInData = decodedFile.GetDataSize() >> 2;
+	while(decodedIndex < numEntriesInData)
+	{
+		const uint32 firstEncodedValueInBlock = SwapByteOrder(pDecodedStream[decodedIndex++]) ^ prevKey;
+		outFile.WriteData(&firstEncodedValueInBlock, sizeof(uint32), true);
+
+		const uint32 numEntriesInBlock = 0x40;
+		uint32 entryIndex = 1;
+		while (entryIndex < numEntriesInBlock)
+		{
+			const uint32 given = SwapByteOrder(pDecodedStream[decodedIndex]);
+			const uint32 key = (prevKey ^ 0xAAAA5555) + 0xac53ac53;
+			const uint32 encoded = given ^ key;
+			prevKey = key;
+
+			if(bCalcSecond)
+			{
+				secondValue = encoded;
+				bCalcSecond = false;
+			}
+
+			outFile.WriteData(&encoded, sizeof(uint32), true);
+			++decodedIndex;
+			++entryIndex;
+		}
+		
+		prevKey = (firstEncodedValueInBlock ^ 0x13579BDF) + secondValue;
+		secondValue = firstEncodedValueInBlock;//SwapByteOrder(pDecodedStream[decodedIndex]) ^ prevKey;
+	//	bCalcSecond = true;
+	}
+}
+
 int main(int argc, char *argv[])
 {
-#if 0
+#if 1
 	{
+		EncodeRadio();
+		
 		TestRadio();
 	//	VerifyText();
 	}

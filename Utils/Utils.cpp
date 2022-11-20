@@ -656,17 +656,35 @@ bool FileWriter::OpenFileForWrite(const string& inFileName)
 	return true;
 }
 
-bool FileWriter::WriteData(const void* pInData, unsigned long inDataSize)
+bool FileWriter::WriteData(const void* pInData, unsigned long inDataSize, bool bInSwapEndianness)
 {
 	if( !mpFileHandle )
 	{
 		return false;
 	}
 
-	const unsigned long numElemsWritten = (unsigned long)fwrite(pInData, sizeof(char), inDataSize, mpFileHandle);
-	mDataSize                          += numElemsWritten*sizeof(char);
+	if (bInSwapEndianness)
+	{
+		char* pSwappedData = new char[inDataSize];
+		memcpy_s(pSwappedData, inDataSize, pInData, inDataSize);
+		SwapByteOrderInPlace(pSwappedData, inDataSize);
 
-	return numElemsWritten == inDataSize;
+		const unsigned long numElemsWritten = (unsigned long)fwrite(pSwappedData, sizeof(char), inDataSize, mpFileHandle);
+		mDataSize += numElemsWritten * sizeof(char);
+
+		delete[] pSwappedData;
+
+		return numElemsWritten == inDataSize;
+	}
+	else
+	{
+		const unsigned long numElemsWritten = (unsigned long)fwrite(pInData, sizeof(char), inDataSize, mpFileHandle);
+		mDataSize                          += numElemsWritten*sizeof(char);
+
+		return numElemsWritten == inDataSize;
+	}
+
+	return false;
 }
 
 bool FileWriter::WriteDataAtOffset(const void* pInData, unsigned long inSize, unsigned long inOffset, bool bSwapEndianness)
