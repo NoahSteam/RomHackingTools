@@ -49,7 +49,7 @@ using std::unordered_map;
 #include "Source/CreateStorySpreadhseets.h"
 #include "Source/MNameCG.h"
 #include "Source/BattleMenuExtraction.h"
-#include "Source/MainMenuExtraction.h"
+#include "Source/MainMenu.h"
 #include "Source/InfoNameExtraction.h"
 #include "Source/SysFileExtraction.h"
 #include "Source/CreateSysSpreadsheets.h"
@@ -301,6 +301,7 @@ void RadioCompression(uint32* pEncodedData, int param_2)
 	/* Top of COMMFILE 060c0000 in memory */
 	firstValue = SwapByteOrder(*pEncodedData); //uVar7 = r6
 	secondValue = SwapByteOrder(pEncodedData[1]); //param_1 = r7
+	key = firstValue;
 	while (true) 
 	{
 		iVar5 = param_2; //r4 = r10
@@ -319,7 +320,6 @@ void RadioCompression(uint32* pEncodedData, int param_2)
 		}
 		
 		iVar5 = 0;
-		key = firstValue;
 		do 
 		{
 			const uint32 encodedValue = SwapByteOrder(*pEncodedData);
@@ -408,16 +408,16 @@ void EncodeRadio()
 
 	uint32* pDecodedStream = (uint32*)(decodedFile.GetData());
 	uint32 prevKey = 0xb17;
-	
+
+	uint32 firstEncodedValueInBlock = SwapByteOrder(pDecodedStream[0]) ^ prevKey;
+	outFile.WriteData(&prevKey, sizeof(uint32), true);
+
 	bool bCalcSecond = true;
-	uint32 decodedIndex = 0;
+	uint32 decodedIndex = 1;
 	uint32 secondValue = 0;
 	const uint32 numEntriesInData = decodedFile.GetDataSize() >> 2;
 	while(decodedIndex < numEntriesInData)
-	{
-		const uint32 firstEncodedValueInBlock = SwapByteOrder(pDecodedStream[decodedIndex++]) ^ prevKey;
-		outFile.WriteData(&firstEncodedValueInBlock, sizeof(uint32), true);
-
+	{	
 		const uint32 numEntriesInBlock = 0x40;
 		uint32 entryIndex = 1;
 		while (entryIndex < numEntriesInBlock)
@@ -439,14 +439,18 @@ void EncodeRadio()
 		}
 		
 		prevKey = (firstEncodedValueInBlock ^ 0x13579BDF) + secondValue;
-		secondValue = firstEncodedValueInBlock;//SwapByteOrder(pDecodedStream[decodedIndex]) ^ prevKey;
-	//	bCalcSecond = true;
+		secondValue = firstEncodedValueInBlock;
+		firstEncodedValueInBlock = prevKey;
+		
+		uint32 nextVal = SwapByteOrder(pDecodedStream[decodedIndex++]);
+		uint32 nextEncoded = nextVal ^ prevKey;
+		outFile.WriteData(&nextEncoded, sizeof(uint32), true);
 	}
 }
 
 int main(int argc, char *argv[])
 {
-#if 1
+#if 0
 	{
 		EncodeRadio();
 		

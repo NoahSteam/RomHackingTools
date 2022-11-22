@@ -13,6 +13,7 @@ static bool BringOverOriginalFiles(const string& inRootSakuraDirectory, const st
 	GetAllFilesOfType(allFiles, "SK1", originalFiles);
 	GetAllFilesOfType(allFiles, "SKC", originalFiles);
 	GetAllFilesOfType(allFiles, "WPALL", originalFiles);
+	GetAllFilesOfType(allFiles, "PBOOK_FL", originalFiles);
 
 	//Bring over scenario files
 	const string outputDirectory = inPatchedDirectory + Seperators + "SAKURA1\\";
@@ -46,10 +47,12 @@ static bool BringOverOriginalFiles(const string& inRootSakuraDirectory, const st
 bool PatchTextDrawingCode(const string& inSourceGameDirectory, const string& inPatchedDirectory)
 {
 	uint32 writeAddress = 0;
+	uint32 newLong = 0;
 	uint16 newCommand = 0;
 	uint8 newCommand1Byte = 0;
-	#define WriteCommand(address, cmd) {writeAddress = address; newCommand = cmd; sakuraBin.WriteData(writeAddress, (char*)&newCommand, sizeof(newCommand), true);}
-	#define WriteByte(address, cmd) {writeAddress = address; newCommand1Byte = cmd; sakuraBin.WriteData(writeAddress, (char*)&newCommand1Byte, sizeof(newCommand1Byte), false);}
+	#define WriteLong(address, cmd)    {writeAddress = address; newLong = cmd;         sakuraBin.WriteData(writeAddress, (char*)&newLong, sizeof(newLong), true);}
+	#define WriteCommand(address, cmd) {writeAddress = address; newCommand = cmd;      sakuraBin.WriteData(writeAddress, (char*)&newCommand, sizeof(newCommand), true);}
+	#define WriteByte(address, cmd)    {writeAddress = address; newCommand1Byte = cmd; sakuraBin.WriteData(writeAddress, (char*)&newCommand1Byte, sizeof(newCommand1Byte), false);}
 
 	//SAKURA.BIN
 	{
@@ -134,7 +137,21 @@ bool PatchTextDrawingCode(const string& inSourceGameDirectory, const string& inP
 
 		//Fix item drawing code
 		{
-
+			//Reading Code :
+			WriteByte(0x4ca29, 0x1c);//06051a28 mov 0xe, r1 needs to be 0x1c
+			WriteByte(0x4ca7d, 0x1b);//06051a7c mov 0xd, r1 needs to be 0x1b
+			WriteByte(0x4ca83, 0x1c);//06051a82 mov 0xe, r1 needs to be 0x1c
+			WriteByte(0x4ca8b, 0x03);//06051a8a mov 0x2, r1 needs to be 0x3
+			
+			//Writing Code :
+			WriteByte(0x4B641, 0x1C);//06050640 mov 0xe, r2 needs to be 0x1c (stride)
+			WriteByte(0x4cad3, 0x1C);//06051ad2 mov 0xe, r1 needs to be 0x1c (stride)
+			WriteByte(0x4cb07, 0x1b);//06051b06 mov 0xd, r10 needs to be 0x1b (char count)
+			WriteByte(0x4cb25, 0x03);//06051b24 mov 0x2, r1 needs to be 0x3 (num lines)
+			
+			//Buffer address :
+			WriteLong(0x4cab0, 0x060a6700);//Read:  06051ab0 needs to be 060a6700
+			WriteLong(0x4caec, 0x060a6700);//Write : 06051aec needs to be 060a6700
 		}
 	}
 
@@ -187,13 +204,19 @@ bool PatchGame(const string& inSourceGameDirectory, const string& inTranslatedDi
 		return false;
 	}
 
+	if(!PatchMainMenu(inPatchedDirectory, inTranslatedDirectory))
+	{
+		printf("Unable to patch main menu\n");
+		return false;
+	}
+
 	//Create translated font sheet
-	const string translatedFontSheetPath = inTranslatedDirectory + Seperators + "8x12.bmp";
+	const string translatedFontSheetPath = inTranslatedDirectory + "8x12.bmp";
 	TileExtractor translatedFontSheet;
 	PaletteData translatedFontSheetPalette;
 	if( !CreateTranslatedFontSheet(translatedFontSheetPath, translatedFontSheet, translatedFontSheetPalette) )
 	{
-		printf("Unable to create font sheet");
+		printf("Unable to create font sheet\n");
 		return false;
 	}
 

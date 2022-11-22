@@ -4,3 +4,7 @@
 06086986 has 7594 which is param_2 used during decompression in 06033354
 
 0x11b80 COMMFILE.ALL has compressed data
+
+060c0490
+
+0608F815 has 0101, if this is 01, then data is decoded,  This is checked at 0603bb86

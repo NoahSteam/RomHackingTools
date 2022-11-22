@@ -146,7 +146,7 @@
     <ClInclude Include="Source\InfoNameExtraction.h" />
     <ClInclude Include="Source\InsertText.h" />
     <ClInclude Include="Source\IntroScreenExtractor.h" />
-    <ClInclude Include="Source\MainMenuExtraction.h" />
+    <ClInclude Include="Source\MainMenu.h" />
     <ClInclude Include="Source\MiniGameExtraction.h" />
     <ClInclude Include="Source\MNameCG.h" />
     <ClInclude Include="Source\PatchGame.h" />

@@ -119,6 +119,7 @@ public:
 	
 	void  Close();
 	bool  InitializeFileData(const FileNameContainer& inFileData);
+	bool  InitializeFileData(const std::string& inFullPath);
 	bool  InitializeFileData(const char* pFileName, const char* pFullPath);
 	void  WriteToFile(const char* pFileName) const;
 	bool  DoesThisFileContain(const FileData& otherFile, std::vector<unsigned long>* pOutOffsets, bool bFindMultiple) const;	
@@ -423,6 +424,8 @@ struct BmpToSaturnConverter
 
 	bool ConvertBmpToSakuraFormat(const std::string& inBmpPath, bool bFixupAlphaColor, const unsigned short inAlphaColor = CYAN, const unsigned int* pTileWidth = 0, const unsigned int* pTileHeight = 0);
 	void PackTiles();
+	int GetImageWidth() const {return mTileExtractor.mImageWidth;}
+	int GetImageHeight() const {return (int)mTileExtractor.mImageHeight < 0 ? -1 * mTileExtractor.mImageHeight : mTileExtractor.mImageHeight;}
 	const char* GetImageData() const;
 	unsigned int GetImageDataSize() const;
 };

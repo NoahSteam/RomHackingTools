@@ -364,6 +364,13 @@ bool FileData::InitializeFileData(const char* pFileName, const char* pFullPath)
 	return ReadInFileData(mFullPath.c_str());
 }
 
+bool FileData::InitializeFileData(const string& inFullPath)
+{
+	const FileNameContainer nameInfo(inFullPath);
+
+	return InitializeFileData(nameInfo);
+}
+
 void FileData::WriteToFile(const char* pFileName) const
 {
 	FileWriter outFile;
