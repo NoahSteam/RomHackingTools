@@ -199,7 +199,6 @@ void FindAllDirectoriesWithinDirectory(const std::string& inDirectoryPath, std::
 	}
 }
 
-
 bool DoesDirectoryExist(const std::string& dirName)
 {
 	DWORD fileAttributes = GetFileAttributesA(dirName.c_str());
@@ -214,7 +213,17 @@ bool DoesDirectoryExist(const std::string& dirName)
 	}
 
 	return false;
+}
 
+bool DoesFileExist(const std::string& dirName)
+{
+	DWORD fileAttributes = GetFileAttributesA(dirName.c_str());
+	if (fileAttributes == INVALID_FILE_ATTRIBUTES || fileAttributes == INVALID_FILE_SIZE)
+	{
+		return false;
+	}
+
+	return true;
 }
 
 bool CreateDirectoryHelper(const std::string& dirName)
@@ -493,8 +502,9 @@ bool TextFileData::InitializeTextFile(bool bFixupSpecialCharacters, bool bCollap
 	const string newLine("<br>");
 	char* pToken   = nullptr;
 
+	int lineCount = 1;
 	while( fgets(buffer, bufferSize, pFile) != nullptr )
-	{
+	{	
 		TextLine newLineOfText;
 	//	char *pNextToken   = nullptr;;
 		char* pContext     = nullptr;
@@ -634,6 +644,7 @@ bool TextFileData::InitializeTextFile(bool bFixupSpecialCharacters, bool bCollap
 		}
 
 		mLines.push_back(std::move(newLineOfText));
+		++lineCount;
 	}
 
 	fclose(pFile);

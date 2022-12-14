@@ -7629,7 +7629,7 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 			printf("PatchWKL: Unable to open %s file.\n", evtFilePath.c_str());
 			return false;
 		}
-		if( !origEvtFile.InitializeFileData(evtOrigFilePath.c_str()) )
+		if( !origEvtFile.InitializeFileData(evtOrigFilePath) )
 		{
 			printf("PatchWKL: Unable to open %s file.\n", evtOrigFilePath.c_str());
 			return false;
@@ -7637,7 +7637,7 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 
 		const string tutorialPatchPath = inTranslatedDirectory + "EVT01_Tutorial.bin";
 		FileData evt01TutorialPatch;
-		if( !evt01TutorialPatch.InitializeFileData(tutorialPatchPath.c_str()) )
+		if( !evt01TutorialPatch.InitializeFileData(tutorialPatchPath) )
 		{
 			printf("PatchWKL: Unable to open %s file.\n", tutorialPatchPath.c_str());
 			return false;

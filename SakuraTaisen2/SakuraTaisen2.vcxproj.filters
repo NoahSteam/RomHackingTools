@@ -44,7 +44,7 @@
     <ClInclude Include="Source\MNameCG.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Source\BattleMenuExtraction.h">
+    <ClInclude Include="Source\BattleMenu.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Source\MainMenu.h">
@@ -96,6 +96,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Source\TitleScreens.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\SakuraWars2Utils.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

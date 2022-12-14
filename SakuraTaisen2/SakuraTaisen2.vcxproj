@@ -133,7 +133,7 @@
   <ItemGroup>
     <ClInclude Include="CreateMinigameSpreadsheets.h\Header.h" />
     <ClInclude Include="Source\BatchedImageExtractor.h" />
-    <ClInclude Include="Source\BattleMenuExtraction.h" />
+    <ClInclude Include="Source\BattleMenu.h" />
     <ClInclude Include="Source\CreateIndexFile.h" />
     <ClInclude Include="Source\CreateMiniGameSpreadsheets.h" />
     <ClInclude Include="Source\CreateMinigameSpreadsheets.h\Header.h" />
@@ -155,6 +155,7 @@
     <ClInclude Include="Source\SakuraFontSheet.h" />
     <ClInclude Include="Source\SakuraString.h" />
     <ClInclude Include="Source\SakuraTextFile.h" />
+    <ClInclude Include="Source\SakuraWars2Utils.h" />
     <ClInclude Include="Source\SysFileExtraction.h" />
     <ClInclude Include="Source\TitleScreens.h" />
   </ItemGroup>

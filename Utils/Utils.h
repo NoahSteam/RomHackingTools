@@ -543,6 +543,7 @@ struct MednafinToYabause
 void FindAllFilesWithinDirectory(const std::string& inDirectoryPath, std::vector<FileNameContainer>& outFileNames);
 void FindAllDirectoriesWithinDirectory(const std::string& inDirectoryPath, std::vector<std::string>& outDirectories);
 bool DoesDirectoryExist(const std::string& dirName);
+bool DoesFileExist(const std::string& dirName);
 bool CreateDirectoryHelper(const std::string& dirName);
 bool AreFilesTheSame(const FileData& file1, const FileNameContainer& file2Name);
 bool FindDataWithinBuffer(const char* pBuffer, unsigned long bufferSize, const char* pSearchData, const unsigned int searchDataSize, unsigned long& outIndex);

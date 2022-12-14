@@ -14,12 +14,21 @@ static bool BringOverOriginalFiles(const string& inRootSakuraDirectory, const st
 	GetAllFilesOfType(allFiles, "SKC", originalFiles);
 	GetAllFilesOfType(allFiles, "WPALL", originalFiles);
 	GetAllFilesOfType(allFiles, "PBOOK_FL", originalFiles);
+	GetAllFilesOfType(allFiles, "VDP1.BIN", originalFiles);
+	GetAllFilesOfType(allFiles, "GOVER", originalFiles);
 
 	//Bring over scenario files
-	const string outputDirectory = inPatchedDirectory + Seperators + "SAKURA1\\";
+	const string outputDirectory = inPatchedDirectory + Seperators;
 	for(const FileNameContainer& scenarioFile : originalFiles)
 	{
-		const string outputFile = outputDirectory + scenarioFile.mFileName;
+		string subDirectory = "";
+		const size_t lastIndex = scenarioFile.mPathOnly.find_last_of("\\");
+		if(lastIndex != std::string::npos)
+		{
+			subDirectory = scenarioFile.mPathOnly.substr(lastIndex, scenarioFile.mPathOnly.size()) + Seperators;
+		}
+
+		const string outputFile = outputDirectory + subDirectory + scenarioFile.mFileName;
 		if (!CopyFile(scenarioFile.mFullPath.c_str(), outputFile.c_str(), FALSE))\
 		{
 			printf("Unable to copy over %s\n", scenarioFile.mFullPath.c_str());
@@ -207,6 +216,12 @@ bool PatchGame(const string& inSourceGameDirectory, const string& inTranslatedDi
 	if(!PatchMainMenu(inPatchedDirectory, inTranslatedDirectory))
 	{
 		printf("Unable to patch main menu\n");
+		return false;
+	}
+
+	if(!PatchBattleMenu(inPatchedDirectory, inTranslatedDirectory))
+	{
+		printf("Unable to patch battle menu\n");
 		return false;
 	}
 

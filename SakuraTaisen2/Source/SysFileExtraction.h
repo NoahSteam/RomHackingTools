@@ -3,6 +3,8 @@
 //0xE000 to 0xE3A0 text table
 //0xE39C start of text entries up to 0x104cA
 
+//Second Long value specifies offset to start of text.  Skip 4 bytes past that to get to text
+
 const int TextTableStart = 0xE000;
 
 class SysFileExtractor
@@ -49,9 +51,24 @@ public:
 		const uint16 idTag = 0x7fff;
 		const unsigned int NumBytesPerCharacter = 2;
 
+		if(mFileData.GetDataSize() <= TextTableStart)
+		{
+			return;
+		}
+
 		//Find start of text entries
 		const int offsetToStringHeader = TextTableStart;// : 0xE39C;
 		int offsetToString = 0;
+		{
+			uint32* pWordBuffer = (uint32*)(mFileData.GetData() + offsetToStringHeader);
+			offsetToString = TextTableStart + SwapByteOrder(pWordBuffer[1]) + 4;
+		}
+		if((unsigned long)offsetToString >= mFileData.GetDataSize())
+		{
+			return;
+		}
+
+		/*
 		{
 			uint16* pWordBuffer = (uint16*)(mFileData.GetData() + offsetToString);
 			const int numValues = (mFileData.GetDataSize() - offsetToString)/2;
@@ -67,7 +84,7 @@ public:
 					break;
 				}
 			}
-		}
+		}*/
 
 		uint16* pWordBuffer      = (uint16*)(mFileData.GetData() + offsetToString);
 		int currentIndex         = 0;
@@ -223,7 +240,7 @@ void ExtractSysFiles(const string& rootSakuraDirectory, const string& inPaletteF
 {
 	CreateDirectoryHelper(outDirectory);
 
-	const string sakura2Directory = rootSakuraDirectory + "SAKURA2\\";
+	const string sakura2Directory = rootSakuraDirectory;// + "SAKURA2\\";
 
 	//Find all files within the requested directory
 	vector<FileNameContainer> allFiles;

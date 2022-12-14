@@ -415,6 +415,21 @@ bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTrans
 						continue;
 					}
 
+					//Check to see if this is a newline
+					const bool bNewLineWord = word == NewLineWord;
+					if (bNewLineWord)
+					{
+						IncrementLine();
+
+						//bFailedToAddLine set inside IncrementLine
+						if (bFailedToAddLine)
+						{
+							//	break;
+						}
+
+						continue;
+					}
+
 					//Check to see if this is a space
 					const bool bSpaceWord = word == SpaceWord;
 					if (bSpaceWord)

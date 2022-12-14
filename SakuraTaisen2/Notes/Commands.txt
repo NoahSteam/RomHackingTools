@@ -12,6 +12,7 @@ CreateNamePBookFLSpreadsheet A:\SakuraWars2\ExtractedData\Disc1\MainMenu_PNG\PBO
 ExtractInfoName a:\SakuraWars2\Disc1_Original a:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\InfoName_Palette.bin 1 a:\sakurawars2\ExtractedData\Disc1\InfoName
 CreateNameInfoNameSpreadsheet A:\SakuraWars2\ExtractedData\Disc1\InfoNamePNG
 ExtractSysFiles a:\SakuraWars2\Disc1_Original a:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\StoryTextPalette.bin a:\sakurawars2\ExtractedData\Disc1\Sys
+ExtractSysFiles a:\SakuraWars2\Disc_All\Mes a:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\StoryTextPalette.bin a:\sakurawars2\ExtractedData\All\SkFiles2
 CreateSysSpreadsheets A:\SakuraWars2\ExtractedData\All\Sys A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\Duplicates_Sys.txt a:\SakuraWars2\Disc_All\Mes
 ExtractMiniGames a:\SakuraWars2\Disc1_Original 0 a:\SakuraWars2\ExtractedData\Disc1\MiniGames\
 CreateMiniGameSpreadsheets a:\SakuraWars2\ExtractedData\Disc1\MiniGames\ForWebsite
@@ -19,6 +20,8 @@ CreateIndexFile a:\SakuraWars2\Disc_All\Mes a:\SakuraWars2\Disc_All\Sk a:\Sakura
 ExportTranslationData A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\TBLFiles.csv A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\TranslationTest
 ExtractIntroImages a:\SakuraWars2\Disc1_Original A:\SakuraWars2\ExtractedData\Disc1\IntroImages
 OutputUncompressedData A:\SakuraWars2\Disc1_Original\SAKURA1\TITLE.BIN A:\SakuraWars2\ExtractedData\Disc1\Title\Uncompressed.bin 98648
+FixupWKLImageColors A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\WKL\WKL01 a:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\GOVER\ A:\SakuraWars2\ExtractedData\Disc1\BattleMenu\GOVERKV1\87.bmp
+ExtractMNameCGFiles a:\SakuraWars2\Disc1_Original a:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\MNameCG1_Palette.bin A:\SakuraWars2\ExtractedData\Disc1\MNameCG\
 PatchGame A:\SakuraWars2\Disc1_Original A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data A:\SakuraWars2\Patched\Disc1
 FindData.exe a:\SakuraWars2\Disc1_Original a:\SakuraWars2\find.bin
 

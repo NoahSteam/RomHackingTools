@@ -48,7 +48,7 @@ using std::unordered_map;
 #include "Source/FaceWinAll.h"
 #include "Source/CreateStorySpreadhseets.h"
 #include "Source/MNameCG.h"
-#include "Source/BattleMenuExtraction.h"
+#include "Source/BattleMenu.h"
 #include "Source/MainMenu.h"
 #include "Source/InfoNameExtraction.h"
 #include "Source/SysFileExtraction.h"
@@ -62,6 +62,7 @@ using std::unordered_map;
 #include "Source/PatchGame.h"
 #include "Source/ExportTranslationData.h"
 #include "Source/IntroScreenExtractor.h"
+#include "Source/SakuraWars2Utils.h"
 
 void PrintHelp()
 {
@@ -452,10 +453,10 @@ int main(int argc, char *argv[])
 {
 #if 0
 	{
-		EncodeRadio();
+	//	EncodeRadio();
 		
-		TestRadio();
-	//	VerifyText();
+	//	TestRadio();
+		VerifyText();
 	}
 #else
 	if(argc == 1)
@@ -641,6 +642,14 @@ int main(int argc, char *argv[])
 		const int inOffset        = atoi(argv[4]);
 
 		OutputUncompressedData(inSourceFile, inOutputFile, inOffset);
+	}
+	else if(command == "FixupWKLImageColors" && argc == 5)
+	{
+		const string inWklDir = string(argv[2]) + Seperators;
+		const string inOutputDir = string(argv[3]) + Seperators;
+		const string inNewPaletteImage = string(argv[4]);
+
+		FixupWKLImageColors(inWklDir, inNewPaletteImage, inOutputDir);
 	}
 	else
 	{

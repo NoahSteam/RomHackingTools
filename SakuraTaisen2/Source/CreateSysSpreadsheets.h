@@ -624,7 +624,7 @@ bool CreateSysSpreadsheets(const string& dialogImageDirectory, const string& dup
 			snprintf(buffer, 2048, "<td width=\"48\"><img src=\"..\\ExtractedData\\Faces\\UnknownFace.png\"></td>");
 			htmlFile.WriteString(string(buffer));
 
-			snprintf(buffer, 2048, "<td width=\"240\"><img src=\"..\\ExtractedData\\SakuraWars2\\Disc1\\SysFiles\\Cache0\\%s\\%s\"></td>", pSakuraFile->mFileNameInfo.mNoExtension.c_str(), fileNameInfo.mFileName.c_str());
+			snprintf(buffer, 2048, "<td width=\"240\"><img src=\"..\\ExtractedData\\SakuraWars2\\Disc1\\SysFiles\\Cache1\\%s\\%s\"></td>", pSakuraFile->mFileNameInfo.mNoExtension.c_str(), fileNameInfo.mFileName.c_str());
 			htmlFile.WriteString(string(buffer));
 
 			//snprintf(buffer, 2048, "<td width=480><div id=\"edit_%s\" contenteditable=\"true\" onChange=\"SaveEdits('%i.bmp', 'edit_%i')\">Untranslated</div></td>", pVarSuffix, num + 1, num + 1);
