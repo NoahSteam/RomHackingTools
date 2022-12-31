@@ -168,7 +168,7 @@ int SW2PRSDecompressor(const unsigned char* param_1, unsigned char* param_2)
 			uVar7 = (uint8)*pcVar4 & 0xffU | (uint8)pcVar4[1] << 8;
 			if (uVar7 == 0) 
 			{
-				return (int)pcVar5 - (int)param_2;
+				return reinterpret_cast<int>(pcVar5) - reinterpret_cast<int>(param_2);
 			}
 			uVar8 = (uint8)*pcVar4 & 7;
 			uVar7 = uVar7 >> 3 | uVar10;

@@ -100,7 +100,7 @@ struct SakuraTextFileFixedHeader
 		}
 
 		mOffsetToTable = inSakuraFile.mFileHeader.OffsetToTextHeader;
-		mOffsetToTable8Bytes = (sizeof(int) + sizeof(int) + sizeof(int) * inInfo.size() + sizeof(int) * inInfo.size()) >> 1;
+		mOffsetToTable8Bytes = (sizeof(int) + sizeof(int) + sizeof(int) * (int)inInfo.size() + sizeof(int) * (int)inInfo.size()) >> 1;
 
 		unsigned long timingDataL = ((mOffsetToTable << 1) + stringTableSize) >> 1;
 		unsigned long timingData8Bytes = ((mOffsetToTable8Bytes << 1) + stringTableSize) >> 1;
@@ -258,7 +258,7 @@ bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTrans
 			//Make sure we have the correct amount of lines
 			if (sakuraFile.mLines.size() < translatedFile.mLines.size())
 			{
-				printf("Unable to translate file: %s because the translation has too many lines. Expected: %i Got: %i\n", pMatchingTranslatedFileName->mNoExtension.c_str(), sakuraFile.mLines.size(), translatedFile.mLines.size());
+				printf("Unable to translate file: %s because the translation has too many lines. Expected: %zi Got: %zi\n", pMatchingTranslatedFileName->mNoExtension.c_str(), sakuraFile.mLines.size(), translatedFile.mLines.size());
 				return false;
 			}
 
@@ -355,7 +355,7 @@ bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTrans
 				{
 					if (textLine.GetNumberOfLines() != sakuraFile.mLines[currSakuraStringIndex].GetNumberOfLines())
 					{
-						printf("LIPS ERROR - Translated LIPS line does not have expected number of options. Expected: %i, Has: %i (File: %s Line: %u)\n", sakuraFile.mLines[currSakuraStringIndex].GetNumberOfLines(), textLine.GetNumberOfLines(), sakuraFile.mFileNameInfo.mFileName.c_str(), currSakuraStringIndex + 1);
+						printf("LIPS ERROR - Translated LIPS line does not have expected number of options. Expected: %i, Has: %i (File: %s Line: %zu)\n", sakuraFile.mLines[currSakuraStringIndex].GetNumberOfLines(), textLine.GetNumberOfLines(), sakuraFile.mFileNameInfo.mFileName.c_str(), currSakuraStringIndex + 1);
 					}
 				}
 
@@ -365,7 +365,7 @@ bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTrans
 					)
 					)
 				{
-					printf("Error: Untranslated line. (File: %s Line: %u)\n", sakuraFile.mFileNameInfo.mFileName.c_str(), currSakuraStringIndex + 1);
+					printf("Error: Untranslated line. (File: %s Line: %zu)\n", sakuraFile.mFileNameInfo.mFileName.c_str(), currSakuraStringIndex + 1);
 				}
 
 				//If untranslated, then write out the file and line number
@@ -384,7 +384,7 @@ bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTrans
 
 					if (numWords == 0)
 					{
-						printf("Warning: Blank line. (File: %s Line: %u)\n", sakuraFile.mFileNameInfo.mFileName.c_str(), currSakuraStringIndex + 1);
+						printf("Warning: Blank line. (File: %s Line: %zu)\n", sakuraFile.mFileNameInfo.mFileName.c_str(), currSakuraStringIndex + 1);
 					}
 
 					SakuraString translatedSakuraString;
@@ -411,7 +411,7 @@ bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTrans
 					bool bFailedToAddLine = false;
 					if (word.size() > maxCharsPerLine)
 					{
-						printf("Unable to insert word because it is longer than %i characters: %s[%i]\n", maxCharsPerLine, word.c_str(), word.size());
+						printf("Unable to insert word because it is longer than %i characters: %s[%zi]\n", maxCharsPerLine, word.c_str(), word.size());
 						continue;
 					}
 
@@ -438,7 +438,7 @@ bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTrans
 						{
 							if (bIsLipsEntry)
 							{
-								printf("LIPS too long[A Line: %i]:  %s\n", translatedLineIndex, textLine.mFullLine.c_str());
+								printf("LIPS too long[A Line: %zi]:  %s\n", translatedLineIndex, textLine.mFullLine.c_str());
 								//break;
 							}
 							else
@@ -470,7 +470,7 @@ bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTrans
 					{
 						if (bIsLipsEntry && !bAlreadyShowedError)
 						{
-							printf("LIPS too long [B Line: %i]: %s\n", translatedLineIndex + 1, textLine.mFullLine.c_str());
+							printf("LIPS too long [B Line: %zi]: %s\n", translatedLineIndex + 1, textLine.mFullLine.c_str());
 							bAlreadyShowedError = true;
 							break;
 						}
@@ -485,7 +485,7 @@ bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTrans
 					{
 						if (bIsLipsEntry && charCount > maxCharsPerLine)
 						{
-							printf("LIPS too long [E Line: %i]: %s\n", translatedLineIndex + 1, textLine.mFullLine.c_str());
+							printf("LIPS too long [E Line: %zi]: %s\n", translatedLineIndex + 1, textLine.mFullLine.c_str());
 							break;
 						}
 
@@ -508,7 +508,7 @@ bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTrans
 						{
 							if (bIsLipsEntry && charCount + nextWord.size() > maxCharsPerLine)
 							{
-								printf("LIPS too long [F Line: %i]: %s\n", translatedLineIndex + 1, textLine.mFullLine.c_str());
+								printf("LIPS too long [F Line: %zi]: %s\n", translatedLineIndex + 1, textLine.mFullLine.c_str());
 								break;
 							}
 
@@ -523,7 +523,7 @@ bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTrans
 								{
 									if (bIsLipsEntry && !bAlreadyShowedError)
 									{
-										printf("LIPS too long[C Line: %i]: %s\n", translatedLineIndex + 1, textLine.mFullLine.c_str());
+										printf("LIPS too long[C Line: %zi]: %s\n", translatedLineIndex + 1, textLine.mFullLine.c_str());
 										bAlreadyShowedError = true;
 										break;
 									}

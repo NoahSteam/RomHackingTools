@@ -506,12 +506,15 @@ public:
 struct PuyoPrsCompressor
 {
 	void CompressData(void* pInData, const unsigned long inDataSize);
+	const std::vector<uint8>& GetCompressedData() const {return mCompressedData;}
 
 private:
-	byte ReadByte(Stream stream);
-	void Flush(ref byte controlByte, ref byte bitPos, MemoryStream data, Stream destination);
-	void PutControlBit(int bit, ref byte controlByte, ref byte bitPos, MemoryStream data, Stream destination);
-	void Copy(int offset, int size, ref byte controlByte, ref byte bitPos, MemoryStream data, Stream destination)
+	byte ReadByte(std::vector<uint8>& stream);
+	void Flush(uint8& controlByte, uint8& bitPos, std::vector<uint8>& data, std::vector<uint8>& destination);
+	void PutControlBit(int bit, uint8& controlByte, uint8& bitPos, std::vector<uint8>& data, std::vector<uint8>& destination);
+	void Copy(int offset, int size, uint8& controlByte, uint8& bitPos, std::vector<uint8>& data, std::vector<uint8>& destination);
+
+	std::vector<uint8> mCompressedData;
 };
 
 struct PRSCompressor

@@ -694,15 +694,12 @@ bool FileWriter::WriteData(const void* pInData, unsigned long inDataSize, bool b
 
 		return numElemsWritten == inDataSize;
 	}
-	else
-	{
-		const unsigned long numElemsWritten = (unsigned long)fwrite(pInData, sizeof(char), inDataSize, mpFileHandle);
-		mDataSize                          += numElemsWritten*sizeof(char);
+	
+	const unsigned long numElemsWritten = (unsigned long)fwrite(pInData, sizeof(char), inDataSize, mpFileHandle);
+	mDataSize                          += numElemsWritten*sizeof(char);
 
-		return numElemsWritten == inDataSize;
-	}
+	return numElemsWritten == inDataSize;
 
-	return false;
 }
 
 bool FileWriter::WriteDataAtOffset(const void* pInData, unsigned long inSize, unsigned long inOffset, bool bSwapEndianness)
@@ -1663,7 +1660,6 @@ bool TileMap::CreateFontSheet(const FileNameContainer& inFileNameInfo)
 
 const char* TileMap::GetTileData(int inTileIndex) const
 {
-	int tileIndex = inTileIndex;
 	assert(inTileIndex >= 0 && inTileIndex < (int)mTiles.size());
 	if (inTileIndex >= (int)mTiles.size())
 	{
@@ -1748,20 +1744,19 @@ bool MemoryBlocks::WriteInBlock(unsigned int blockIndex, unsigned int offset, co
 /////////////////////////////////////
 void PuyoPrsCompressor::CompressData(void* pInData, const unsigned long inDataSize)
 {
+	uint8* pSourceData = (uint8*)pInData;
+
 	// Get the source length
-	int sourceLength = inDataSize;//(int)(source.Length - source.Position);
-
-	byte[] sourceArray = new byte[sourceLength];
-	source.Read(sourceArray, 0, sourceLength);
-
-	byte bitPos = 0;
-	byte controlByte = 0;
+	int sourceLength = inDataSize;
+	
+	uint8 bitPos = 0;
+	uint8 controlByte = 0;
 
 	int position = 0;
 	int currentLookBehindPosition, currentLookBehindLength;
 	int lookBehindOffset, lookBehindLength;
 
-	MemoryStream data = new MemoryStream();
+	std::vector<uint8> data;
 
 	while (position < sourceLength)
 	{
@@ -1772,14 +1767,14 @@ void PuyoPrsCompressor::CompressData(void* pInData, const unsigned long inDataSi
 		for (currentLookBehindPosition = position - 1; (currentLookBehindPosition >= 0) && (currentLookBehindPosition >= position - 0x1FF0) && (lookBehindLength < 256); currentLookBehindPosition--)
 		{
 			currentLookBehindLength = 1;
-			if (pInData[currentLookBehindPosition] == pInData[position])
+			if (pSourceData[currentLookBehindPosition] == pSourceData[position])
 			{
 				do
 				{
 					currentLookBehindLength++;
 				} while ((currentLookBehindLength <= 256) &&
-					(position + currentLookBehindLength <= inDataSize) &&
-					pInData[currentLookBehindPosition + currentLookBehindLength - 1] == pInData[position + currentLookBehindLength - 1]);
+					(position + currentLookBehindLength <= (int)inDataSize) &&
+					pSourceData[currentLookBehindPosition + currentLookBehindLength - 1] == pSourceData[position + currentLookBehindLength - 1]);
 
 				currentLookBehindLength--;
 				if (((currentLookBehindLength >= 2 && currentLookBehindPosition - position >= -0x100) || currentLookBehindLength >= 3) && currentLookBehindLength > lookBehindLength)
@@ -1792,79 +1787,78 @@ void PuyoPrsCompressor::CompressData(void* pInData, const unsigned long inDataSi
 
 		if (lookBehindLength == 0)
 		{
-			data.WriteByte(pInData[position++]);
-			PutControlBit(1, ref controlByte, ref bitPos, data, destination);
+			data.push_back(pSourceData[position++]);
+			PutControlBit(1, controlByte, bitPos, data, mCompressedData);
 		}
 		else
 		{
-			Copy(lookBehindOffset, lookBehindLength, ref controlByte, ref bitPos, data, destination);
+			Copy(lookBehindOffset, lookBehindLength, controlByte, bitPos, data, mCompressedData);
 			position += lookBehindLength;
 		}
 	}
 
-	PutControlBit(0, ref controlByte, ref bitPos, data, destination);
-	PutControlBit(1, ref controlByte, ref bitPos, data, destination);
+	PutControlBit(0, controlByte, bitPos, data, mCompressedData);
+	PutControlBit(1, controlByte, bitPos, data, mCompressedData);
 	if (bitPos != 0)
 	{
 		controlByte = (byte)((controlByte << bitPos) >> 8);
-		Flush(ref controlByte, ref bitPos, data, destination);
+		Flush(controlByte, bitPos, data, mCompressedData);
 	}
 
-	destination.WriteByte(0);
-	destination.WriteByte(0);
+	mCompressedData.push_back(0);
+	mCompressedData.push_back(0);
 }
 
-void PuyoPrsCompressor::Copy(int offset, int size, ref byte controlByte, ref byte bitPos, MemoryStream data, Stream destination)
+void PuyoPrsCompressor::Copy(int offset, int size, uint8& controlByte, uint8& bitPos, std::vector<uint8>& data, std::vector<uint8>& destination)
 {
 	if ((offset >= -0x100) && (size <= 5))
 	{
 		size -= 2;
-		PutControlBit(0, ref controlByte, ref bitPos, data, destination);
-		PutControlBit(0, ref controlByte, ref bitPos, data, destination);
-		PutControlBit((size >> 1) & 1, ref controlByte, ref bitPos, data, destination);
-		data.WriteByte((byte)(offset & 0xFF));
-		PutControlBit(size & 1, ref controlByte, ref bitPos, data, destination);
+		PutControlBit(0, controlByte, bitPos, data, destination);
+		PutControlBit(0, controlByte, bitPos, data, destination);
+		PutControlBit((size >> 1) & 1, controlByte, bitPos, data, destination);
+		data.push_back((uint8)(offset & 0xFF));
+		PutControlBit(size & 1, controlByte, bitPos, data, destination);
 	}
 	else
 	{
 		if (size <= 9)
 		{
-			PutControlBit(0, ref controlByte, ref bitPos, data, destination);
-			data.WriteByte((byte)(((offset << 3) & 0xF8) | ((size - 2) & 0x07)));
-			data.WriteByte((byte)((offset >> 5) & 0xFF));
-			PutControlBit(1, ref controlByte, ref bitPos, data, destination);
+			PutControlBit(0, controlByte, bitPos, data, destination);
+			data.push_back((uint8)(((offset << 3) & 0xF8) | ((size - 2) & 0x07)));
+			data.push_back((uint8)((offset >> 5) & 0xFF));
+			PutControlBit(1, controlByte, bitPos, data, destination);
 		}
 		else
 		{
-			PutControlBit(0, ref controlByte, ref bitPos, data, destination);
-			data.WriteByte((byte)((offset << 3) & 0xF8));
-			data.WriteByte((byte)((offset >> 5) & 0xFF));
-			data.WriteByte((byte)(size - 1));
-			PutControlBit(1, ref controlByte, ref bitPos, data, destination);
+			PutControlBit(0, controlByte, bitPos, data, destination);
+			data.push_back((uint8)((offset << 3) & 0xF8));
+			data.push_back((uint8)((offset >> 5) & 0xFF));
+			data.push_back((uint8)(size - 1));
+			PutControlBit(1, controlByte, bitPos, data, destination);
 		}
 	}
 }
 
-void PuyoPrsCompressor::PutControlBit(int bit, ref byte controlByte, ref byte bitPos, MemoryStream data, Stream destination)
+void PuyoPrsCompressor::PutControlBit(int bit, uint8& controlByte, uint8& bitPos, std::vector<uint8>& data, std::vector<uint8>& destination)
 {
 	controlByte >>= 1;
 	controlByte |= (byte)(bit << 7);
 	bitPos++;
 	if (bitPos >= 8)
 	{
-		Flush(ref controlByte, ref bitPos, data, destination);
+		Flush(controlByte, bitPos, data, destination);
 	}
 }
 
-void PuyoPrsCompressor::Flush(ref byte controlByte, ref byte bitPos, MemoryStream data, Stream destination)
+void PuyoPrsCompressor::Flush(uint8& inControlByte, uint8& inBitPos, std::vector<uint8>& inData, std::vector<uint8>& inDestination)
 {
-	destination.WriteByte(controlByte);
-	controlByte = 0;
-	bitPos = 0;
+	inDestination.push_back(inControlByte);
+	inControlByte = 0;
+	inBitPos = 0;
 
-	byte[] bytes = data.ToArray();
-	destination.Write(bytes, 0, bytes.Length);
-	data.SetLength(0);
+	inDestination.insert(std::end(inDestination), std::begin(inData), std::end(inData));
+	inData.clear();
 }
 
 /////////////////////////////////
@@ -1879,10 +1873,14 @@ void PRSCompressor::CompressData(void* pInData, const unsigned long inDataSize, 
 {
 	Reset();
 
-	mpCompressedData = new char[inDataSize];
+	PuyoPrsCompressor puyoCompressor;
+	puyoCompressor.CompressData(pInData, inDataSize);
 
+	mCompressedSize = (unsigned long)puyoCompressor.GetCompressedData().size();
+	mpCompressedData = new char[mCompressedSize];
+	memcpy_s(mpCompressedData, mCompressedSize, puyoCompressor.GetCompressedData().data(), mCompressedSize);
 	//mCompressedSize = prs_compress(const uint8_t *src, uint8_t **dst, size_t src_len)
-	mCompressedSize = prs_compress((uint8_t*)pInData, (uint8_t**)&mpCompressedData, inDataSize);
+	//mCompressedSize = prs_compress((uint8_t*)pInData, (uint8_t**)&mpCompressedData, inDataSize);
 
 	if( compressOption != PRSCompressor::kCompressOption_None )
 	{

@@ -36,16 +36,13 @@ bool PatchSplashScreen(const string& inPatchedSakuraDirectory, const string& inT
 		return false;
 	}
 	patchedFullscreenImageData.PackTiles();
-
-	FileData w;
-	w.InitializeFileData(std::string("a:\\sakurawars2\\c.bin"));
 	
 	PRSCompressor compressor;
-//	compressor.CompressData((void*)patchedFullscreenImageData.mpPackedTiles, patchedFullscreenImageData.mPackedTileSize, PRSCompressor::kCompressOption_None);
-//	if(compressor.mCompressedSize > 1599)
+	compressor.CompressData((void*)patchedFullscreenImageData.mpPackedTiles, patchedFullscreenImageData.mPackedTileSize, PRSCompressor::kCompressOption_None);
+	if(compressor.mCompressedSize > 1599)
 	{
-//		printf("CESALOGO.BMP is too large when compressed.  Should be less that 1599, is %i.\n", compressor.mCompressedSize);
-//		return false;
+		printf("CESALOGO.BMP is too large when compressed.  Should be less that 1599, is %i.\n", compressor.mCompressedSize);
+		return false;
 	}
 
 	const string tileCsvPath = inTranslatedDataDirectory + string("SplashScreen\\CesaLogoTileMap.csv");
@@ -57,13 +54,13 @@ bool PatchSplashScreen(const string& inPatchedSakuraDirectory, const string& inT
 
 	if (tileData.mTileEntries.size() != (320 / 8) * (224 / 8))
 	{
-		printf("CesaLogoTileMap.csv does not have the expected number of tiles [40 * 28].  Found %u instead.\n", tileData.mTileEntries.size());
+		printf("CesaLogoTileMap.csv does not have the expected number of tiles [40 * 28].  Found %zu instead.\n", tileData.mTileEntries.size());
 		return false;
 	}
 
 	//Write image data
 	cesaFile.WriteData(0xb020, patchedImageData.mpPackedTiles, patchedImageData.mPackedTileSize, false);
-	titleFile.WriteData(0x23b80, w.GetData(), w.GetDataSize(), false);
+	titleFile.WriteData(0x23b80, compressor.mpCompressedData, compressor.mCompressedSize, false);
 
 	//Write tile info
 	tileData.SwapEndianess();

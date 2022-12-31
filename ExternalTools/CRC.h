@@ -127,6 +127,8 @@
 #   define crcpp_constexpr const
 #endif
 
+#pragma warning(disable : 4127)
+
 #ifdef CRCPP_USE_NAMESPACE
 namespace CRCPP
 {
