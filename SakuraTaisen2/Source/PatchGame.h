@@ -16,6 +16,8 @@ static bool BringOverOriginalFiles(const string& inRootSakuraDirectory, const st
 	GetAllFilesOfType(allFiles, "PBOOK_FL", originalFiles);
 	GetAllFilesOfType(allFiles, "VDP1.BIN", originalFiles);
 	GetAllFilesOfType(allFiles, "GOVER", originalFiles);
+	GetAllFilesOfType(allFiles, "CESALOGO.ALL", originalFiles);
+	GetAllFilesOfType(allFiles, "TITLE.BIN", originalFiles);
 
 	//Bring over scenario files
 	const string outputDirectory = inPatchedDirectory + Seperators;
@@ -246,7 +248,14 @@ bool PatchGame(const string& inSourceGameDirectory, const string& inTranslatedDi
 	const string wpallDirectory = inTranslatedDirectory + "Disc\\1\\WPALL1\\";
 	if(!PatchTitleScreens(inPatchedDirectory, wpallDirectory))
 	{
-		printf("PatchTitleScreens failed");
+		printf("PatchTitleScreens failed\n");
+		return false;
+	}
+
+	//Patch splash screen
+	if(!PatchSplashScreen(inPatchedDirectory, inTranslatedDirectory))
+	{
+		printf("PatchSplashScreen failed\n");
 		return false;
 	}
 

@@ -1,0 +1,4 @@
+In CESALOGO.ALL
+Image data at B020
+Palette at d800
+Tiles at C000

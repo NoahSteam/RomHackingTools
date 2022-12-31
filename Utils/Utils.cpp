@@ -1743,6 +1743,130 @@ bool MemoryBlocks::WriteInBlock(unsigned int blockIndex, unsigned int offset, co
 	return true;
 }
 
+/////////////////////////////////////
+//        PuyoPRSCompressor        //
+/////////////////////////////////////
+void PuyoPrsCompressor::CompressData(void* pInData, const unsigned long inDataSize)
+{
+	// Get the source length
+	int sourceLength = inDataSize;//(int)(source.Length - source.Position);
+
+	byte[] sourceArray = new byte[sourceLength];
+	source.Read(sourceArray, 0, sourceLength);
+
+	byte bitPos = 0;
+	byte controlByte = 0;
+
+	int position = 0;
+	int currentLookBehindPosition, currentLookBehindLength;
+	int lookBehindOffset, lookBehindLength;
+
+	MemoryStream data = new MemoryStream();
+
+	while (position < sourceLength)
+	{
+		currentLookBehindLength = 0;
+		lookBehindOffset = 0;
+		lookBehindLength = 0;
+
+		for (currentLookBehindPosition = position - 1; (currentLookBehindPosition >= 0) && (currentLookBehindPosition >= position - 0x1FF0) && (lookBehindLength < 256); currentLookBehindPosition--)
+		{
+			currentLookBehindLength = 1;
+			if (pInData[currentLookBehindPosition] == pInData[position])
+			{
+				do
+				{
+					currentLookBehindLength++;
+				} while ((currentLookBehindLength <= 256) &&
+					(position + currentLookBehindLength <= inDataSize) &&
+					pInData[currentLookBehindPosition + currentLookBehindLength - 1] == pInData[position + currentLookBehindLength - 1]);
+
+				currentLookBehindLength--;
+				if (((currentLookBehindLength >= 2 && currentLookBehindPosition - position >= -0x100) || currentLookBehindLength >= 3) && currentLookBehindLength > lookBehindLength)
+				{
+					lookBehindOffset = currentLookBehindPosition - position;
+					lookBehindLength = currentLookBehindLength;
+				}
+			}
+		}
+
+		if (lookBehindLength == 0)
+		{
+			data.WriteByte(pInData[position++]);
+			PutControlBit(1, ref controlByte, ref bitPos, data, destination);
+		}
+		else
+		{
+			Copy(lookBehindOffset, lookBehindLength, ref controlByte, ref bitPos, data, destination);
+			position += lookBehindLength;
+		}
+	}
+
+	PutControlBit(0, ref controlByte, ref bitPos, data, destination);
+	PutControlBit(1, ref controlByte, ref bitPos, data, destination);
+	if (bitPos != 0)
+	{
+		controlByte = (byte)((controlByte << bitPos) >> 8);
+		Flush(ref controlByte, ref bitPos, data, destination);
+	}
+
+	destination.WriteByte(0);
+	destination.WriteByte(0);
+}
+
+void PuyoPrsCompressor::Copy(int offset, int size, ref byte controlByte, ref byte bitPos, MemoryStream data, Stream destination)
+{
+	if ((offset >= -0x100) && (size <= 5))
+	{
+		size -= 2;
+		PutControlBit(0, ref controlByte, ref bitPos, data, destination);
+		PutControlBit(0, ref controlByte, ref bitPos, data, destination);
+		PutControlBit((size >> 1) & 1, ref controlByte, ref bitPos, data, destination);
+		data.WriteByte((byte)(offset & 0xFF));
+		PutControlBit(size & 1, ref controlByte, ref bitPos, data, destination);
+	}
+	else
+	{
+		if (size <= 9)
+		{
+			PutControlBit(0, ref controlByte, ref bitPos, data, destination);
+			data.WriteByte((byte)(((offset << 3) & 0xF8) | ((size - 2) & 0x07)));
+			data.WriteByte((byte)((offset >> 5) & 0xFF));
+			PutControlBit(1, ref controlByte, ref bitPos, data, destination);
+		}
+		else
+		{
+			PutControlBit(0, ref controlByte, ref bitPos, data, destination);
+			data.WriteByte((byte)((offset << 3) & 0xF8));
+			data.WriteByte((byte)((offset >> 5) & 0xFF));
+			data.WriteByte((byte)(size - 1));
+			PutControlBit(1, ref controlByte, ref bitPos, data, destination);
+		}
+	}
+}
+
+void PuyoPrsCompressor::PutControlBit(int bit, ref byte controlByte, ref byte bitPos, MemoryStream data, Stream destination)
+{
+	controlByte >>= 1;
+	controlByte |= (byte)(bit << 7);
+	bitPos++;
+	if (bitPos >= 8)
+	{
+		Flush(ref controlByte, ref bitPos, data, destination);
+	}
+}
+
+void PuyoPrsCompressor::Flush(ref byte controlByte, ref byte bitPos, MemoryStream data, Stream destination)
+{
+	destination.WriteByte(controlByte);
+	controlByte = 0;
+	bitPos = 0;
+
+	byte[] bytes = data.ToArray();
+	destination.Write(bytes, 0, bytes.Length);
+	data.SetLength(0);
+}
+
 /////////////////////////////////
 //        PRSCompressor        //
 /////////////////////////////////
@@ -1830,6 +1954,45 @@ bool PRSDecompressor::UncompressData(void* pInData, unsigned int inDataSize)
 		++k;
 	}
 	*/
+}
+
+/////////////////////////////////
+//        CsvTileReader        //
+/////////////////////////////////
+bool CsvTileReader::ReadInTiles(const string& inFilePath)
+{
+	FILE* tileFile = nullptr;
+	errno_t errorValue = fopen_s(&tileFile, inFilePath.c_str(), "r");
+	if (errorValue)
+	{
+		printf("Unable to open %s\n", inFilePath.c_str());
+		return false;
+	}
+
+	while (feof(tileFile) != EOF)
+	{
+		char comma;
+		int tileIndex;
+
+		if (fscanf_s(tileFile, "%i%c", &tileIndex, &comma, 2) == EOF)
+		{
+			break;
+		}
+
+		mTileEntries.push_back(SwapByteOrder(tileIndex));
+	}
+
+	fclose(tileFile);
+
+	return true;
+}
+
+void CsvTileReader::SwapEndianess()
+{
+	for(int& t : mTileEntries)
+	{
+		t = SwapByteOrder(t);
+	}
 }
 
 /////////////////////////////////////

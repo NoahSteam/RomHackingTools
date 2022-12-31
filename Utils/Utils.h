@@ -503,6 +503,17 @@ public:
 	bool         WriteInBlock(unsigned int blockIndex, unsigned int offset, const char* pData, unsigned int dataSize);
 };
 
+struct PuyoPrsCompressor
+{
+	void CompressData(void* pInData, const unsigned long inDataSize);
+
+private:
+	byte ReadByte(Stream stream);
+	void Flush(ref byte controlByte, ref byte bitPos, MemoryStream data, Stream destination);
+	void PutControlBit(int bit, ref byte controlByte, ref byte bitPos, MemoryStream data, Stream destination);
+	void Copy(int offset, int size, ref byte controlByte, ref byte bitPos, MemoryStream data, Stream destination)
+};
+
 struct PRSCompressor
 {
 	enum ECompressOption
@@ -528,6 +539,14 @@ struct PRSDecompressor
 
 	~PRSDecompressor();
 	bool UncompressData(void* pInData, unsigned int inDataSize);
+};
+
+struct CsvTileReader
+{
+	std::vector<int> mTileEntries;
+
+	bool ReadInTiles(const std::string& inFilePath);
+	void SwapEndianess();
 };
 
 struct YabauseToMednafin

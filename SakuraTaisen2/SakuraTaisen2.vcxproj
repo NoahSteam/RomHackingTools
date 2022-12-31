@@ -156,6 +156,7 @@
     <ClInclude Include="Source\SakuraString.h" />
     <ClInclude Include="Source\SakuraTextFile.h" />
     <ClInclude Include="Source\SakuraWars2Utils.h" />
+    <ClInclude Include="Source\SplashScreen.h" />
     <ClInclude Include="Source\SysFileExtraction.h" />
     <ClInclude Include="Source\TitleScreens.h" />
   </ItemGroup>
