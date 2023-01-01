@@ -1540,8 +1540,8 @@ bool BmpToSaturnConverter::ConvertBmpToSakuraFormat(const string& inBmpPath, boo
 		return false;
 	}
 
-	mTileExtractor.mImageWidth = origBmp.mBitmapData.mInfoHeader.mImageWidth;
-	mTileExtractor.mImageHeight = origBmp.mBitmapData.mInfoHeader.mImageHeight;
+	mTileExtractor.mImageWidth = abs(origBmp.mBitmapData.mInfoHeader.mImageWidth);
+	mTileExtractor.mImageHeight = abs(origBmp.mBitmapData.mInfoHeader.mImageHeight);
 
 	//Convert it to the SakuraTaisen format
 	if (!mPalette.CreateFrom32BitData(origBmp.mBitmapData.mPaletteData.mpRGBA, origBmp.mBitmapData.mPaletteData.mSizeInBytes, false))
@@ -1707,6 +1707,14 @@ void MemoryBlocks::AddBlock(const MemoryBlocks& inBlock)
 	{
 		AddBlock(inBlock.GetBlock(b).pData, 0, inBlock.GetBlock(b).blockSize);
 	}
+}
+
+void MemoryBlocks::CombineBlocks()
+{
+	delete[] mpCombinedBlocks;
+	mpCombinedBlocks = nullptr;
+	
+
 }
 
 size_t MemoryBlocks::GetNumberOfBlocks() const
@@ -1879,8 +1887,9 @@ void PRSCompressor::CompressData(void* pInData, const unsigned long inDataSize, 
 	mCompressedSize = (unsigned long)puyoCompressor.GetCompressedData().size();
 	mpCompressedData = new char[mCompressedSize];
 	memcpy_s(mpCompressedData, mCompressedSize, puyoCompressor.GetCompressedData().data(), mCompressedSize);
-	//mCompressedSize = prs_compress(const uint8_t *src, uint8_t **dst, size_t src_len)
-	//mCompressedSize = prs_compress((uint8_t*)pInData, (uint8_t**)&mpCompressedData, inDataSize);
+	
+//	mpCompressedData = new char[inDataSize];
+//	mCompressedSize = prs_compress((uint8_t*)pInData, (uint8_t**)&mpCompressedData, inDataSize);
 
 	if( compressOption != PRSCompressor::kCompressOption_None )
 	{

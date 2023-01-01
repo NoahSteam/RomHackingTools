@@ -1,3 +1,22 @@
+struct TTL2ImageData
+{
+	int width;
+	int height;
+};
+
+static const TTL2ImageData TTL2ImageTable[] =
+{
+	{192,64},
+	{256,24},
+	{80,88},
+	{40,8},
+	{8, 8},
+	{8, 32},
+	{208, 16},
+	{96, 8},
+	{160, 16}
+};
+
 void ExtractTTL2(const string& InSakuraRootDir, const string& OutDirectory)
 {
 	const string tt2lOutDirectory = OutDirectory + "TTL2\\";
@@ -16,42 +35,19 @@ void ExtractTTL2(const string& InSakuraRootDir, const string& OutDirectory)
 		return;
 	}
 
-	FileWriter outFile;
-	outFile.OpenFileForWrite("a:\\SakuraWars2\\UncompressedResults\\TTL2CGB.BIN");
-	outFile.WriteData(decompressor.mpUncompressedData, decompressor.mUncompressedDataSize, false);
-
-	struct ImageData
-	{
-		int width;
-		int height;
-	};
-
-	ImageData images[] =
-	{
-		{192,64},
-		{256,24},
-		{80,88},
-		{40,8},
-		{8, 8},
-		{8, 32},
-		{208, 16},
-		{96, 8},
-		{160, 16}
-	};
-
 	int imageOffset = 0;
-	const int numImages = sizeof(images) / sizeof(ImageData);
+	const int numImages = sizeof(TTL2ImageTable) / sizeof(TTL2ImageData);
 	for (int i = 0; i < numImages; ++i)
 	{
 		const string outputFile = tt2lOutDirectory + string("image_") + std::to_string(i) + string(".bmp");
 		const char* pImageData = decompressor.mpUncompressedData;
 
-		ExtractImageFromData(pImageData + imageOffset, images[i].width * images[i].height, outputFile,
+		ExtractImageFromData(pImageData + imageOffset, TTL2ImageTable[i].width * TTL2ImageTable[i].height, outputFile,
 			ttl2cgbData.GetData() + 0x200,
-			512, false, images[i].width, images[i].height,
+			512, false, TTL2ImageTable[i].width, TTL2ImageTable[i].height,
 			1, 256, 0, true, true);
 
-		imageOffset += images[i].width * images[i].height;
+		imageOffset += TTL2ImageTable[i].width * TTL2ImageTable[i].height;
 	}
 }
 
@@ -72,10 +68,6 @@ void ExtractTitle(const string& InSakuraRootDir, const string& OutDirectory)
 	{
 		return;
 	}
-
-	FileWriter outFile;
-	outFile.OpenFileForWrite("a:\\SakuraWars2\\UncompressedResults\\TITLE.BIN");
-	outFile.WriteData(decompressor.mpUncompressedData, decompressor.mUncompressedDataSize, false);
 
 	struct ImageData
 	{
@@ -158,4 +150,77 @@ void ExtractIntrosScreens(const string& InSakuraRootDir, const string& OutDirect
 
 	ExtractTTL2(InSakuraRootDir, OutDirectory);
 	ExtractTitle(InSakuraRootDir, OutDirectory);
+}
+
+bool PatchTTL2(const string& inPatchedSakuraDirectory, const string& inTranslatedDataDirectory)
+{
+	const string ttl2Path = inPatchedSakuraDirectory + string("SAKURA1\\TTL2CGB.BIN");
+	FileData ttl2Data;
+	if (!ttl2Data.InitializeFileData(ttl2Path))
+	{
+		return false;
+	}
+
+	FileReadWriter ttl2File;
+	if (!ttl2File.OpenFile(ttl2Path))
+	{
+		return false;
+	}
+
+	const string titlePath = inPatchedSakuraDirectory + string("SAKURA1\\TITLE.BIN");
+	FileReadWriter titleFile;
+	if (!titleFile.OpenFile(titlePath))
+	{
+		return false;
+	}
+
+	const string titleFormattingPath = inTranslatedDataDirectory + string("IntroImages\\TTL2\\DisplayFormatting.bin");
+	FileData titleFormattingData;
+	if(!titleFormattingData.InitializeFileData(titleFormattingPath))
+	{
+		return false;
+	}
+
+	titleFile.WriteData(0xdee0, titleFormattingData.GetData(), titleFormattingData.GetDataSize(), false);
+
+	PRSDecompressor decompressor;
+	if (!decompressor.UncompressData((void*)(ttl2Data.GetData() + 0x400), ttl2Data.GetDataSize() - 0x400))
+	{
+		return false;
+	}
+	
+	const string ttl2ImageDir = inTranslatedDataDirectory + "IntroImages\\TTL2\\";
+	int imageOffset = 0;
+	const int numImages = sizeof(TTL2ImageTable) / sizeof(TTL2ImageData);
+	for (int i = 0; i < numImages; ++i)
+	{
+		const string inputImagePath = ttl2ImageDir + string("image_") + std::to_string(i) + string(".bmp");
+		BmpToSaturnConverter patchedImageData;
+		if (!patchedImageData.ConvertBmpToSakuraFormat(inputImagePath, false))
+		{
+			return false;
+		}
+		patchedImageData.PackTiles();
+
+		memcpy_s(decompressor.mpUncompressedData + imageOffset, patchedImageData.mPackedTileSize, patchedImageData.mpPackedTiles, patchedImageData.mPackedTileSize);
+		imageOffset += patchedImageData.GetImageDataSize();
+	}
+
+	//Technically our images are bigger than the original, but there is a bunch of extra space in the file so 33792 is our actual limit
+	PRSCompressor compressor;
+	compressor.CompressData(decompressor.mpUncompressedData, decompressor.mUncompressedDataSize, PRSCompressor::kCompressOption_None);
+	if(compressor.mCompressedSize > 33792)
+	{
+		printf("PatchTTL2: Compressed data is too large. Expected: %zi, Got: %zi\n", 33792, compressor.mCompressedSize);
+		return false;
+	}
+
+	ttl2File.WriteData(0x400, compressor.mpCompressedData, compressor.mCompressedSize, false);
+
+	return true;
+}
+
+bool PatchIntroScreens(const string& inPatchedSakuraDirectory, const string& inTranslatedDataDirectory)
+{
+	return PatchTTL2(inPatchedSakuraDirectory, inTranslatedDataDirectory);
 }

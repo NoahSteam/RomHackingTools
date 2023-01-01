@@ -60,10 +60,10 @@ using std::unordered_map;
 #include "Source/InsertText.h"
 #include "Source/TitleScreens.h"
 #include "Source/SplashScreen.h"
-#include "Source/PatchGame.h"
 #include "Source/ExportTranslationData.h"
 #include "Source/IntroScreenExtractor.h"
 #include "Source/SakuraWars2Utils.h"
+#include "Source/PatchGame.h"
 
 void PrintHelp()
 {
