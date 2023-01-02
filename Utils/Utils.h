@@ -493,6 +493,7 @@ public:
 private:
 	std::vector<Block> mBlocks;
 	char* mpCombinedBlocks = nullptr;
+	unsigned int mCombinedSize = 0;
 
 public:
 	~MemoryBlocks();
@@ -500,6 +501,8 @@ public:
 	char*        AddBlock(const char* pOriginalData, unsigned int offset, unsigned int blockSize, bool bReverseBytes = false);
 	void         AddBlock(const MemoryBlocks& inBlock);
 	void         CombineBlocks();
+	const char*  GetCombinedData() const {return mpCombinedBlocks;}
+	unsigned int GetTotalSize() const {return mCombinedSize;}
 	size_t       GetNumberOfBlocks() const;
 	const Block& GetBlock(unsigned int blockIndex) const;
 	bool         WriteInBlock(unsigned int blockIndex, unsigned int offset, const char* pData, unsigned int dataSize);
@@ -507,7 +510,7 @@ public:
 
 struct PuyoPrsCompressor
 {
-	void CompressData(void* pInData, const unsigned long inDataSize);
+	void CompressData(const void* pInData, const unsigned long inDataSize);
 	const std::vector<uint8>& GetCompressedData() const {return mCompressedData;}
 
 private:
@@ -532,7 +535,7 @@ struct PRSCompressor
 	unsigned long mCompressedSize  = 0;
 
 	~PRSCompressor();
-	void CompressData(void* pInData, const unsigned long inDataSize, ECompressOption compressOption = kCompressOption_None);
+	void CompressData(const void* pInData, const unsigned long inDataSize, ECompressOption compressOption = kCompressOption_None);
 	void Reset();
 };
 

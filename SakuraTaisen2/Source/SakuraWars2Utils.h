@@ -99,3 +99,18 @@ bool FixupWKLImageColors(const string& WklDirectory, const string& InNewPaletteB
 
 	return true;
 }
+
+void ExtractTiledImage(const char* pFileName, const char* pOutFileName, int dataOffset, int paletteOffset)
+{
+	const FileNameContainer inFileName(pFileName);
+	const string outFileName(pOutFileName);
+
+	FileData inFileData;
+	if( !inFileData.InitializeFileData(inFileName) )
+	{
+		printf("ExtractTiledImage %s failed\n", pFileName);
+		return;
+	}
+
+	ExtractImageFromData(inFileData.GetData(), inFileData.GetDataSize(), outFileName, inFileData.GetData() + paletteOffset, 512, false, 8, 8, 320/8, 256, dataOffset, true, true);
+}

@@ -64,6 +64,7 @@ using std::unordered_map;
 #include "Source/IntroScreenExtractor.h"
 #include "Source/SakuraWars2Utils.h"
 #include "Source/PatchGame.h"
+#include "Source/Demo.h"
 
 void PrintHelp()
 {
@@ -651,6 +652,13 @@ int main(int argc, char *argv[])
 		const string inNewPaletteImage = string(argv[4]);
 
 		FixupWKLImageColors(inWklDir, inNewPaletteImage, inOutputDir);
+	}
+	else if( command == "ExtractDemoWPALL" && argc == 4 )
+	{
+		const string inSrcDir = string(argv[2]) + Seperators;
+		const string inOutputDir = string(argv[3]) + Seperators;
+
+		ExtractDemoWPALL(inSrcDir, inOutputDir);
 	}
 	else
 	{

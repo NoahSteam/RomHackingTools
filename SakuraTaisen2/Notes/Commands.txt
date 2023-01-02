@@ -41,5 +41,7 @@ CreateNamePBookFLSpreadsheet C:\Users\16306\Desktop\Rizwan\SakuraWars2\Extracted
 ExtractInfoName c:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1 C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data\InfoName_Palette.bin 1 C:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\Disc1\InfoName
 CreateIndexFile C:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc_All\MesFiles C:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc_All\SKFiles C:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\Disc1\MiniGames\ForWebsite C:\Users\16306\Desktop\Rizwan\SakuraWars2\Index.php
 ExtractMiniGames c:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1 0 c:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\Disc1\MiniGames\
+ExtractIntroImages C:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1_Original\ c:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\Disc1\IntroImages\
+ExtractDemoWPALL C:\Users\16306\Desktop\Rizwan\SakuraWars2\DemoDisc_Original C:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\DemoDisc\WPALL\
 PatchGame c:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1 C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data c:\Users\16306\Desktop\Rizwan\SakuraWars2\Patched\Disc1
 FindData.exe C:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1 C:\Users\16306\Desktop\Rizwan\SakuraWars2\find.bin

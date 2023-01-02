@@ -189,8 +189,8 @@ bool PatchTTL2(const string& inPatchedSakuraDirectory, const string& inTranslate
 		return false;
 	}
 	
+	MemoryBlocks patchedImageBuffer;
 	const string ttl2ImageDir = inTranslatedDataDirectory + "IntroImages\\TTL2\\";
-	int imageOffset = 0;
 	const int numImages = sizeof(TTL2ImageTable) / sizeof(TTL2ImageData);
 	for (int i = 0; i < numImages; ++i)
 	{
@@ -202,16 +202,18 @@ bool PatchTTL2(const string& inPatchedSakuraDirectory, const string& inTranslate
 		}
 		patchedImageData.PackTiles();
 
-		memcpy_s(decompressor.mpUncompressedData + imageOffset, patchedImageData.mPackedTileSize, patchedImageData.mpPackedTiles, patchedImageData.mPackedTileSize);
-		imageOffset += patchedImageData.GetImageDataSize();
+		patchedImageBuffer.AddBlock(patchedImageData.mpPackedTiles, 0, patchedImageData.mPackedTileSize);
 	}
+
+	//Combine patched data into contiguous block
+	patchedImageBuffer.CombineBlocks();
 
 	//Technically our images are bigger than the original, but there is a bunch of extra space in the file so 33792 is our actual limit
 	PRSCompressor compressor;
-	compressor.CompressData(decompressor.mpUncompressedData, decompressor.mUncompressedDataSize, PRSCompressor::kCompressOption_None);
+	compressor.CompressData(decompressor.mpUncompressedData, decompressor.mUncompressedDataSize);
 	if(compressor.mCompressedSize > 33792)
 	{
-		printf("PatchTTL2: Compressed data is too large. Expected: %zi, Got: %zi\n", 33792, compressor.mCompressedSize);
+		printf("PatchTTL2: Compressed data is too large. Expected: %i, Got: %zi\n", 33792, compressor.mCompressedSize);
 		return false;
 	}
 

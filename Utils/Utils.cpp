@@ -1681,6 +1681,9 @@ MemoryBlocks::~MemoryBlocks()
 	}
 
 	mBlocks.clear();
+
+	delete[] mpCombinedBlocks;
+	mpCombinedBlocks = nullptr;
 }
 
 char* MemoryBlocks::AddBlock(const char* pOriginalData, unsigned int offset, unsigned int blockSize, bool bReverseBytes)
@@ -1690,6 +1693,7 @@ char* MemoryBlocks::AddBlock(const char* pOriginalData, unsigned int offset, uns
 	MemoryBlocks::Block& newBlock = mBlocks[mBlocks.size() - 1];
 	newBlock.pData                = new char[blockSize];
 	newBlock.blockSize            = blockSize;
+	mCombinedSize += blockSize;
 
 	memcpy_s(newBlock.pData, blockSize, pOriginalData + offset, blockSize);
 
@@ -1714,7 +1718,14 @@ void MemoryBlocks::CombineBlocks()
 	delete[] mpCombinedBlocks;
 	mpCombinedBlocks = nullptr;
 	
-
+	//Combine data into a contiguous block
+	unsigned int totalOffset = 0;
+	mpCombinedBlocks = new char[mCombinedSize];
+	for(const MemoryBlocks::Block& block : mBlocks)
+	{
+		memcpy_s(mpCombinedBlocks + totalOffset, mCombinedSize - totalOffset, block.pData, block.blockSize);
+		totalOffset += block.blockSize;
+	}
 }
 
 size_t MemoryBlocks::GetNumberOfBlocks() const
@@ -1750,9 +1761,9 @@ bool MemoryBlocks::WriteInBlock(unsigned int blockIndex, unsigned int offset, co
 /////////////////////////////////////
 //        PuyoPRSCompressor        //
 /////////////////////////////////////
-void PuyoPrsCompressor::CompressData(void* pInData, const unsigned long inDataSize)
+void PuyoPrsCompressor::CompressData(const void* pInData, const unsigned long inDataSize)
 {
-	uint8* pSourceData = (uint8*)pInData;
+	const uint8* pSourceData = (const uint8*)pInData;
 
 	// Get the source length
 	int sourceLength = inDataSize;
@@ -1877,7 +1888,7 @@ PRSCompressor::~PRSCompressor()
 	Reset();
 }
 
-void PRSCompressor::CompressData(void* pInData, const unsigned long inDataSize, ECompressOption compressOption)
+void PRSCompressor::CompressData(const void* pInData, const unsigned long inDataSize, ECompressOption compressOption)
 {
 	Reset();
 
