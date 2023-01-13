@@ -309,5 +309,4 @@ bool CreateNameCG1Spreadsheet(const string& imageDirectory)
 	htmlFile.WriteString("	</html>\n");
 
 	return true;
-
 }

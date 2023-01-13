@@ -65,6 +65,7 @@ using std::unordered_map;
 #include "Source/SakuraWars2Utils.h"
 #include "Source/PatchGame.h"
 #include "Source/Demo.h"
+#include "Source/TextInImage.h"
 
 void PrintHelp()
 {
@@ -659,6 +660,15 @@ int main(int argc, char *argv[])
 		const string inOutputDir = string(argv[3]) + Seperators;
 
 		ExtractDemoWPALL(inSrcDir, inOutputDir);
+	}
+	else if(command == "WriteTextIntoImage" && argc == 6)
+	{
+		const string inFontSheetName = string(argv[2]);
+		const string inPatchedImagePath = string(argv[3]);
+		const string inTranslatedTextFile = string(argv[4]);
+		const string inOutputDir = string(argv[5]) + Seperators;
+
+		WriteTextIntoImage(inFontSheetName, inPatchedImagePath, inTranslatedTextFile, inOutputDir);
 	}
 	else
 	{

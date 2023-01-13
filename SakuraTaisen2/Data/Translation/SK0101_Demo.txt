@@ -1,0 +1,157 @@
+Hello there!<br>I'm Sakura Shinguji.
+Sakura Wars 2's development is progressing smoothly. I hope you're looking forward to it.
+Huh? You want to know what's in Sakura Wars 2?
+All right then, allow me to introduce to you this special edition of Sakura Wars 2, just for you!
+...Well, it's more of a preview for the full game, really.
+That means I can only show you a teeny tiny part of it. I hope you understand.
+All right, which would you like to learn about first? Our new recruits or the new dialogue systems?
+New recruits
+New systems
+OK then, let me introduce you to the two new recruits joining the Flower Division.
+First is Reni Milchstraße, the second male member of the Flower Divsion!
+...
+...Hello.<br>...I'm Reni.
+...
+...
+U-Um... I'm sorry, Reni's not very talkative.
+Anyway, Reni used to be a part of an elite squad known as the Star Division! Isn't that right, Reni?
+...
+...It's not that big of a deal, really.
+...
+...W-Well, while you're here, why not introduce yourself?
+...
+...I came here from Germany to fight.
+Human emotion is unnecessary when it comes to combat...
+That's all I have to say.
+Hang on a second! What are you two up to?
+Ah, Orihime! Thank goodness, I didn't know how I was going to continue that conversation...
+Anyway, let me introduce you to our other new recruit, Orihime Soletta!
+I'm Orihime Soletta. I came here from Italy. Pleased to meet you.
+And may I say, Sakura, it was reckless of you to introduce Reni before me.
+R-Right...
+My dislikes are waking up early and Japanese men!
+Japanese men are irresponsible, shallow, just the absolute worst!
+OK, it's time for my siesta, so I'll be going now.
+W-Well then, Reni, before you go, is there anything you hope to accomplish in Sakura Wars 2?
+...I never exert any unnecessary effort. I win whenever I can. That's all.
+Ah... A-Anyway, I hope you got to know our new recruits better.
+With that, the introductions are over!
+All right, let's go over the dialogue systems in Sakura Wars 2.
+First up is LIPS (Live and Interactive Picture System), which you might know from the last game.
+LIPS is a system where you have to make a choice in a limited amount of time.
+You can experience some thrilling conversations thanks to these time limits.
+OK, let's give it a try.<br>Do you remember my name?
+Sakura Shinguji
+Sumire Kanzaki
+Yes, that's right! I'm Sakura Shinguji of the Imperial Assault Troupe's Flower Division.
+In-cor-rect! I did introduce myself, didn't I? I'm Sakura Shinguji.
+...Jeez, don't tell me you forgot already!
+My name is "Sakura Shinguji." Try to remember it, OK?
+How was that? Do you understand how the LIPS system works now?
+Right, now I'll go over one of the new systems, "Timing LIPS."
+For Timing LIPS, after a certain amount of time has passed, your options will change.
+You may get more options, fewer options, or some may get replaced entirely.
+With this system, you can act on your impulses or exercise delicate timing.
+OK, let's give it a try. Think veeeery carefully about what you're going to say.
+Which do you find more important: me, or the peace of the Imperial Capital?
+You're more important.
+Peace is more important.
+You're more important.
+Peace is more important.
+They're both important.
+Thank you. I'm very happy to hear you say that.
+However, the peace of the capital is extremely important as well.
+Had you waited to answer just now...
+A choice saying "They're both important" would've appeared, which would have been a perfect answer.
+Indeed, the peace of the capital is very important.
+But I have to say, I feel just a little let down...
+Girls love to hear things like, "You're more important to me than the entire world."
+Had you waited to answer just now...
+A choice saying "They're both important" would've appeared, which would have been a perfect answer.
+Yes! I'm so happy to hear you say that!
+...Was that question too hard for you? I'm sorry.
+OK, one more example... An enemy is attacking you from out of nowhere!
+What should you do in order to avoid taking damage?!
+Bolster my defense.
+Dodge quickly.
+Panic.
+Bolster my defense.
+Panic.
+I see. It's true that bolstering your defense would protect you from some harm...
+But that doesn't mean you would totally avoid taking damage, does it?
+Wow, amazing! You dodged the enemy's attack so nimbly!
+The "Dodge quickly" option you picked just now...
+Don't panic! You won't be able to avoid the enemy's attack otherwise!
+When you're in trouble, it's vital that you act quickly yet calmly.
+Hey, you didn't do anything! You can't avoid the enemy's attack like that!
+When you're in trouble, it's vital that you act quickly yet calmly.
+In this conversation, if you pick "Dodge quickly"...
+You avoid the enemy's attack without taking any damage.
+However, if you don't pick "Dodge quickly" fast enough...
+That option totally disappears right in the middle of the time limit.
+If you don't act quickly to avoid the enemy's attack, you won't make it in time.
+Being able to make snap decisions like that will definitely prove to be valuable.
+Well? Do you feel like you understand it now?
+Picking your words carefully sometimes, making quick decisions at other times...
+That's the kind of action you can experience with the new Timing LIPS!
+Finally, I'll go over one last LIPS, "Double LIPS."
+Double LIPS happens when you have to do multiple things within a set amount of time.
+A giant LIPS gauge will appear along the edges of the screen to show you the overall time limit.
+OK, let's give it a try. For this example, you're running late for work.
+Hurry and put on your shirt, necktie, and pants within the allotted time!
+We won't make it in time if you don't hurry!<br>OK, start!
+Put on pants.
+Take off pajamas.
+Ah, wait! You haven't taken off your pajamas yet!
+Oh, gosh, you put your pants on over your pajamas...
+That's right! You have to take your pajamas off first before putting on your pants!
+OK, so now your pants are on. What next?
+Hey! Snap out of it or you'll be late! Hurry up and get dressed!
+Put on necktie.
+Put on shirt.
+All right, we'll start by putting on a necktie...
+Ah, wait! You have to put on your shirt first before your necktie!
+Huh? You've already finished tying your tie? ...Well that's a problem.
+That's right. You can't put on your tie without putting on a shirt first.
+OK, now you've got a shirt on. What to do next?
+Come on! Why aren't you getting dressed?
+If you don't hurry, we'll really be late!
+Put on necktie.
+Undo necktie.
+Wait, you've already got a necktie on!
+Oh boy...<br>Now you've got two neckties.
+That's right. Fasten that necktie and you're all done getting dressed.
+You've got a necktie on already, even though you don't have a shirt on?
+...It's going to eat up some time, but take the tie off and put a shirt on.
+All right, necktie's off. What next?
+Huh?! What do you mean, you aren't even wearing a necktie!
+We're running out of time.<br>We have to get going...
+We have to get going, we're running out of time!
+Let's go!
+Let's go!
+...Let me brush my teeth.
+OK, we managed to leave in time.
+That's right. Give them a good brushing, then we'll get going.
+All done brushing? Then let's go!
+Hurry, now, hurry! Let's get going!
+Ah... We didn't make it in time.
+You took too long getting dressed and now we're late.
+So, how was that? Do you understand Double LIPS now?
+Not only did you get dressed, but you even brushed your teeth, too! I'm speechless!
+You got properly dressed and made it in time. That was excellent!
+You didn't even put on any pants and you're still in your pajamas? Oh, boy... That's not good.
+I see you've got your pants on.
+Huh, you put your pants on over your pajamas?! You rushed way too much!
+You panicked and put on two neckties...
+And you're not even wearing a shirt, either... You sure look funny right now.
+You're not even wearing a shirt, yet you've got a necktie on... That's quite the odd getup.
+Just like that, Double LIPS can give an entire event its own time limit.
+And there you have it!
+Timing LIPS and Double LIPS, the new dialogue systems in Sakura Wars 2!
+Well, how was it? Did you enjoy Sakura Wars 2: Special Edition?
+But remember, this was nothing more than a preview.
+Orihime Soletta...
+Reni Milchstraße...
+What part will these two play in this story?
+Sakura Wars 2, a dramatic adventure!
+A storm of romance among the Taisho cherry blossoms! Let's meet again at the Grand Imperial Theater!
