@@ -213,7 +213,7 @@ bool PatchTTL2(const string& inPatchedSakuraDirectory, const string& inTranslate
 	compressor.CompressData(decompressor.mpUncompressedData, decompressor.mUncompressedDataSize);
 	if(compressor.mCompressedSize > 33792)
 	{
-		printf("PatchTTL2: Compressed data is too large. Expected: %i, Got: %zi\n", 33792, compressor.mCompressedSize);
+		printf("PatchTTL2: Compressed data is too large. Expected: %i, Got: %li\n", 33792, compressor.mCompressedSize);
 		return false;
 	}
 

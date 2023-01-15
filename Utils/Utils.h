@@ -374,6 +374,7 @@ public:
 	bool CreateSurface(int width, int height, EBitsPerPixel bitsPerPixel, const char* pPalette, int paletteSize);
 	void AddTile(const char* pData, int dataSize, int x, int y, int width, int height, EFlipFlag flipFlag = kFlipNone);
 	bool WriteToFile(const std::string& fileName, bool bForceBitmap = false);
+	int GetWidth() const {return mWidth;}
 };
 
 class TileExtractor
@@ -385,6 +386,8 @@ public:
 		unsigned int mTileSize = 0;
 		unsigned int mX        = 0;
 		unsigned int mY        = 0;
+		unsigned int mWidthOfContent = 0;
+		unsigned int mBytesInWidthOfContent = 0;
 
 		~Tile()
 		{

@@ -1485,6 +1485,20 @@ bool TileExtractor::ExtractTiles(unsigned int inTileWidth, int inTileHeight, uns
 
 					const unsigned char linearColorValue = pLinearData[linearDataIndex + linearY*stride + tilePixelX];
 					mTiles[currTile].mpTile[tilePixelY*numBytesPerTileWidth + tilePixelX] = linearColorValue;
+
+					if( linearColorValue != 0 )
+					{
+						if( mTiles[currTile].mBytesInWidthOfContent < tilePixelX && linearColorValue != 0 )
+						{
+							mTiles[currTile].mBytesInWidthOfContent = tilePixelX;
+						}
+
+						const unsigned int rightPixelX = tilePixelX*2 + ((linearColorValue & 0xf0) ? 1 : 0);
+						if( rightPixelX > mTiles[currTile].mWidthOfContent )
+						{
+							mTiles[currTile].mWidthOfContent = rightPixelX;
+						}
+					}
 				}
 			}
 

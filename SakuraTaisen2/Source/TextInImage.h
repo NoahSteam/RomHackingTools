@@ -5,17 +5,6 @@ class TextInImage
 public:
 	~TextInImage()
 	{
-		if(mHDC)
-		{
-			ReleaseDC(NULL, mHDC);
-			mHDC = 0;
-		}
-		
-		if(mHFont)
-		{
-			DeleteObject(mHFont);
-			mHFont = 0;
-		}
 	}
 
 	bool Initialize(const char* pInFontSheetImagePath)
@@ -25,19 +14,19 @@ public:
 			return false;
 		}
 
-		mHDC = CreateDC("DISPLAY", NULL, NULL, NULL);
-		HFONT mHFont = CreateFont(13, 0, 0, 0, FW_NORMAL, 0, 0, 0, ANSI_CHARSET, OUT_CHARACTER_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
-								 DEFAULT_PITCH | FF_DONTCARE, "Calibri");
-		SelectObject(mHDC, mHFont);
-		
-		int offset = 0;
+		mTileExtractor;
+		if( !mTileExtractor.ExtractTiles(16, 16, 16, 16, mFontSheet) )
+		{
+			return false;
+		}
+
 		for(char letter = ' '; letter <= '~'; ++letter)
 		{
-			const SIZE size = GetCharacterDimension(letter);
-			mCharacterXOffset[letter] = offset;
-			mCharacterSizes[letter] = size;
-			offset += size.cx + 1; //2 for empty space on left & right of character
+			const TileExtractor::Tile& tile = mTileExtractor.mTiles[letter-1];
+			mCharacterSizes[letter].cx = tile.mWidthOfContent;
 		}
+
+		mCharacterSizes[' '].cx = 2;
 
 		return true;
 	}
@@ -47,50 +36,40 @@ public:
 		SIZE totalSize;
 		totalSize.cx = totalSize.cy = 0;
 
-		GetTextExtentPoint32(mHDC, inString.c_str(), inString.length(), &totalSize);
-
+		const int numCharacters = inString.length() - 1;
+		for( int i = 0; i < numCharacters; ++i )
+		{
+			totalSize.cx += GetCharacterDimension(inString[i]).cx;
+		}
 		return totalSize.cx;
 	}
 
 	void GetCharacterData(char inLetter, std::vector<char>& outData)
 	{
-		const SIZE characterDimension = GetCharacterDimension(inLetter);
-		const int divisor = mFontSheet.mBitmapData.mInfoHeader.mBitCount == 4 ? 2 : 1;
-		const int startX = mCharacterXOffset[inLetter] / divisor;
-		const int bytesPerRowInImage = mFontSheet.mBitmapData.mInfoHeader.mImageWidth / divisor;
-		const int bytesPerRowInTile = (characterDimension.cx + (characterDimension.cx % 2)) / divisor; //needs to be even amount
-		char* pImageData   = mFontSheet.mBitmapData.mColorData.mpRGBA;
-	
-		assert(startX < mFontSheet.mBitmapData.mColorData.mSizeInBytes);
+		const TileExtractor::Tile& tile = mTileExtractor.mTiles[inLetter];
+		const int maxX = tile.mBytesInWidthOfContent;
 
-		for (int y = 0; y < mFontSheet.mBitmapData.mInfoHeader.mImageHeight; ++y)
+		for (int y = 0; y < 16; ++y)
 		{
-			for (int x = 0; x < bytesPerRowInTile; ++x) //used to be 8 insntead of width
+			for (int x = 0; x <= maxX; ++x) //used to be 8 insntead of width
 			{
-				const int dataIndex = x + startX + (y * bytesPerRowInImage);
-				assert(dataIndex < mFontSheet.mBitmapData.mColorData.mSizeInBytes);
+				const int dataIndex = x + (y * 8);
+				assert(dataIndex < tile.mTileSize);
 
-				outData.push_back(pImageData[dataIndex]);
+				outData.push_back(tile.mpTile[dataIndex]);
 			}
 		}
 	}
 
 	SIZE GetCharacterDimension(char inLetter) const
 	{
-		static char buffer[3] = { 0, 0, 0 };
-		snprintf(buffer, 3, "%c", inLetter);
-
-		SIZE size;
-		GetTextExtentPoint32(mHDC, (char*)(&buffer[0]), 1, &size);
-
+		SIZE size = mCharacterSizes.find(inLetter)->second;
 		return size;
 	}
 
 private:
-	HDC mHDC{0};
-	HFONT mHFont{0};
 	BitmapReader mFontSheet;
-	std::map<char, int> mCharacterXOffset;
+	TileExtractor mTileExtractor;
 	std::map<char, SIZE> mCharacterSizes;
 };
 
@@ -120,12 +99,10 @@ bool WriteTextIntoImage(const std::string& pInFontSheetName, const std::string& 
 	for(size_t i = 0; i < numLines; ++i)
 	{
 		const int textWidth = textInImageInterface.GetTextWidth(textFile.mLines[i].mFullLine);
-		const int startX = outputImageData.mBitmapData.mInfoHeader.mImageWidth/2 - textWidth/2;
-		assert(startX >= 0);
-
-		if(textWidth > outputImageData.mBitmapData.mInfoHeader.mImageWidth)
+		int startX = outputImageData.mBitmapData.mInfoHeader.mImageWidth/2 - textWidth/2;
+		if( startX < 0 )
 		{
-			continue;
+			startX = 0;
 		}
 
 		BitmapSurface createdImage;
@@ -142,10 +119,19 @@ bool WriteTextIntoImage(const std::string& pInFontSheetName, const std::string& 
 		{
 			std::vector<char> characterData;
 			textInImageInterface.GetCharacterData(textFile.mLines[i].mFullLine[letterIndex], characterData);
+			if( !characterData.size() )
+			{
+				continue;
+			}
 			const char* pCharacterData = &characterData.front();
 			const SIZE characterDim = textInImageInterface.GetCharacterDimension(textFile.mLines[i].mFullLine[letterIndex]);
-			createdImage.AddTile(pCharacterData, (int)characterData.size(), currentX, 0, characterDim.cx, outputImageData.mBitmapData.mInfoHeader.mImageHeight, BitmapSurface::kFlipVert);
-			currentX += characterDim.cx;
+			const int characterDimX = characterDim.cx;
+			if( characterDimX + currentX >= createdImage.GetWidth() )
+			{
+				break;
+			}
+			createdImage.AddTile(pCharacterData, (int)characterData.size(), currentX, 0, characterDimX, outputImageData.mBitmapData.mInfoHeader.mImageHeight, BitmapSurface::kFlipNone);
+			currentX += characterDimX + 1;
 		}
 
 		std::string outFileName = pInOutputPath + std::to_string(i) + ".bmp";
