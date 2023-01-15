@@ -1292,14 +1292,14 @@ bool BitmapSurface::CreateSurface(int width, int height, EBitsPerPixel bitsPerPi
 void BitmapSurface::AddTile(const char* pInData, int inDataSize, int inX, int inY, int width, int height, EFlipFlag flipFlag)
 {
 	const int startX = mBitsPerPixel == kBPP_4 ? inX/2 : inX;
-	const int maxX = mBitsPerPixel == kBPP_4 ? width/2 : width;
+	const int maxX = (width + (width%2))/2 ;//mBitsPerPixel == kBPP_4 ? width/2 : width;
 	const int offset = (inY*mBytesPerRow + startX);
 	char* pOutData   = mpBuffer + offset;
 	
 	assert(offset < mBufferSize);
 
 	int inDataOffset = 0;
-
+	int numBytesWritten = 0;
 	if( flipFlag == EFlipFlag::kFlipNone )
 	{
 		for (int y = 0; y < height; ++y)
@@ -1310,6 +1310,7 @@ void BitmapSurface::AddTile(const char* pInData, int inDataSize, int inX, int in
 
 				assert(inDataOffset < inDataSize);
 				pOutData[y * mBytesPerRow + x] = pInData[inDataOffset++];
+				++numBytesWritten;
 			}
 		}
 	}

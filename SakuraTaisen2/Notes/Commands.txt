@@ -22,7 +22,7 @@ ExtractIntroImages a:\SakuraWars2\Disc1_Original A:\SakuraWars2\ExtractedData\Di
 OutputUncompressedData A:\SakuraWars2\Disc1_Original\SAKURA1\TITLE.BIN A:\SakuraWars2\ExtractedData\Disc1\Title\Uncompressed.bin 98648
 FixupWKLImageColors A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\WKL\WKL01 a:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\GOVER\ A:\SakuraWars2\ExtractedData\Disc1\BattleMenu\GOVERKV1\87.bmp
 ExtractMNameCGFiles a:\SakuraWars2\Disc1_Original a:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\MNameCG1_Palette.bin A:\SakuraWars2\ExtractedData\Disc1\MNameCG\
-WriteTextIntoImage a:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\Calibri_11.bmp A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\MNameCG\64.bmp A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\Translation\MNameCG1.txt A:\
+WriteTextIntoImage a:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\Calibri_11.bmp A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\MNameCG\64.bmp A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\Translation\MNameCG1.txt A:\SakuraWars2\Output\
 PatchGame A:\SakuraWars2\Disc1_Original A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data A:\SakuraWars2\Patched\Disc1
 FindData.exe a:\SakuraWars2\Disc1_Original a:\SakuraWars2\find.bin
 
@@ -45,6 +45,6 @@ ExtractMiniGames c:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1 0 c:\Users\1630
 ExtractIntroImages C:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1_Original\ c:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\Disc1\IntroImages\
 ExtractDemoWPALL C:\Users\16306\Desktop\Rizwan\SakuraWars2\DemoDisc_Original C:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\DemoDisc\WPALL\
 PatchGame c:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1 C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data c:\Users\16306\Desktop\Rizwan\SakuraWars2\Patched\Disc1 C:\Users\16306\Desktop\Rizwan\SakuraWars2\Output\
+WriteTextIntoImage C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data\Calibri_11.bmp C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data\MNameCG\64.bmp C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data\Translation\MNameCG1.txt A:\
 FindData.exe C:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1 C:\Users\16306\Desktop\Rizwan\SakuraWars2\find.bin
 
-WriteTextIntoImage C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data\Calibri_11.bmp C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data\MNameCG\64.bmp C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data\Translation\MNameCG1.txt A:\

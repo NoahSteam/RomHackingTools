@@ -26,15 +26,17 @@ public:
 		}
 
 		mHDC = CreateDC("DISPLAY", NULL, NULL, NULL);
-		HFONT mHFont = CreateFont(11, 0, 0, 0, FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
+		HFONT mHFont = CreateFont(13, 0, 0, 0, FW_NORMAL, 0, 0, 0, ANSI_CHARSET, OUT_CHARACTER_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
 								 DEFAULT_PITCH | FF_DONTCARE, "Calibri");
 		SelectObject(mHDC, mHFont);
 		
 		int offset = 0;
 		for(char letter = ' '; letter <= '~'; ++letter)
 		{
-			mCharacterXOffset[letter] = offset + 2;
-			offset += GetCharacterDimension(letter).cx; //2 for empty space on left & right of character
+			const SIZE size = GetCharacterDimension(letter);
+			mCharacterXOffset[letter] = offset;
+			mCharacterSizes[letter] = size;
+			offset += size.cx + 1; //2 for empty space on left & right of character
 		}
 
 		return true;
@@ -55,22 +57,20 @@ public:
 		const SIZE characterDimension = GetCharacterDimension(inLetter);
 		const int divisor = mFontSheet.mBitmapData.mInfoHeader.mBitCount == 4 ? 2 : 1;
 		const int startX = mCharacterXOffset[inLetter] / divisor;
-		const int bytesPerPixel = 
-		const int stride = mFontSheet.mBitmapData.mInfoHeader.mImageWidth * bytesPerPixel;
-		const int offset = startX;
-		const int bytesPerRow = mFontSheet.mBitmapData.mInfoHeader.mBitCount == 4 ? mFontSheet.mBitmapData.mInfoHeader.mImageWidth / 2 : mFontSheet.mBitmapData.mInfoHeader.mImageWidth;   
-		char* pImageData   = mFontSheet.mBitmapData.mColorData.mpRGBA + offset;
+		const int bytesPerRowInImage = mFontSheet.mBitmapData.mInfoHeader.mImageWidth / divisor;
+		const int bytesPerRowInTile = (characterDimension.cx + (characterDimension.cx % 2)) / divisor; //needs to be even amount
+		char* pImageData   = mFontSheet.mBitmapData.mColorData.mpRGBA;
 	
-		assert(offset < mFontSheet.mBitmapData.mColorData.mSizeInBytes);
-
-		int inDataOffset = 0;
+		assert(startX < mFontSheet.mBitmapData.mColorData.mSizeInBytes);
 
 		for (int y = 0; y < mFontSheet.mBitmapData.mInfoHeader.mImageHeight; ++y)
 		{
-			for (int x = 0; x < characterDimension.cx/2 + 1; ++x) //used to be 8 insntead of width
+			for (int x = 0; x < bytesPerRowInTile; ++x) //used to be 8 insntead of width
 			{
-				assert(offset + y * bytesPerRow + x < mFontSheet.mBitmapData.mColorData.mSizeInBytes);
-				outData.push_back(pImageData[x + offset + y * bytesPerRow]);
+				const int dataIndex = x + startX + (y * bytesPerRowInImage);
+				assert(dataIndex < mFontSheet.mBitmapData.mColorData.mSizeInBytes);
+
+				outData.push_back(pImageData[dataIndex]);
 			}
 		}
 	}
@@ -91,6 +91,7 @@ private:
 	HFONT mHFont{0};
 	BitmapReader mFontSheet;
 	std::map<char, int> mCharacterXOffset;
+	std::map<char, SIZE> mCharacterSizes;
 };
 
 bool WriteTextIntoImage(const std::string& pInFontSheetName, const std::string& pPatchedImagePath, const std::string& pTextFilePath, const std::string& pInOutputPath)
@@ -143,7 +144,7 @@ bool WriteTextIntoImage(const std::string& pInFontSheetName, const std::string& 
 			textInImageInterface.GetCharacterData(textFile.mLines[i].mFullLine[letterIndex], characterData);
 			const char* pCharacterData = &characterData.front();
 			const SIZE characterDim = textInImageInterface.GetCharacterDimension(textFile.mLines[i].mFullLine[letterIndex]);
-			createdImage.AddTile(pCharacterData, (int)characterData.size(), currentX, 0, characterDim.cx, characterDim.cy);
+			createdImage.AddTile(pCharacterData, (int)characterData.size(), currentX, 0, characterDim.cx, outputImageData.mBitmapData.mInfoHeader.mImageHeight, BitmapSurface::kFlipVert);
 			currentX += characterDim.cx;
 		}
 
