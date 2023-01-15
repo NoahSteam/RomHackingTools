@@ -20,8 +20,7 @@ public:
 
 	bool Initialize(const char* pInFontSheetImagePath)
 	{
-		BitmapReader patchedImageData;
-		if(!patchedImageData.ReadBitmap(pInFontSheetImagePath))
+		if(!mFontSheet.ReadBitmap(pInFontSheetImagePath))
 		{
 			return false;
 		}
@@ -34,8 +33,8 @@ public:
 		int offset = 0;
 		for(char letter = ' '; letter <= '~'; ++letter)
 		{
-			mCharacterXOffset[letter] = offset;
-			offset += GetCharacterDimension(letter).cx + 2; //2 for empty space on left & right of character
+			mCharacterXOffset[letter] = offset + 2;
+			offset += GetCharacterDimension(letter).cx; //2 for empty space on left & right of character
 		}
 
 		return true;
@@ -51,9 +50,29 @@ public:
 		return totalSize.cx;
 	}
 
-	const char* GetCharacterData(char inLetter)
+	void GetCharacterData(char inLetter, std::vector<char>& outData)
 	{
-		return nullptr;
+		const SIZE characterDimension = GetCharacterDimension(inLetter);
+		const int divisor = mFontSheet.mBitmapData.mInfoHeader.mBitCount == 4 ? 2 : 1;
+		const int startX = mCharacterXOffset[inLetter] / divisor;
+		const int bytesPerPixel = 
+		const int stride = mFontSheet.mBitmapData.mInfoHeader.mImageWidth * bytesPerPixel;
+		const int offset = startX;
+		const int bytesPerRow = mFontSheet.mBitmapData.mInfoHeader.mBitCount == 4 ? mFontSheet.mBitmapData.mInfoHeader.mImageWidth / 2 : mFontSheet.mBitmapData.mInfoHeader.mImageWidth;   
+		char* pImageData   = mFontSheet.mBitmapData.mColorData.mpRGBA + offset;
+	
+		assert(offset < mFontSheet.mBitmapData.mColorData.mSizeInBytes);
+
+		int inDataOffset = 0;
+
+		for (int y = 0; y < mFontSheet.mBitmapData.mInfoHeader.mImageHeight; ++y)
+		{
+			for (int x = 0; x < characterDimension.cx/2 + 1; ++x) //used to be 8 insntead of width
+			{
+				assert(offset + y * bytesPerRow + x < mFontSheet.mBitmapData.mColorData.mSizeInBytes);
+				outData.push_back(pImageData[x + offset + y * bytesPerRow]);
+			}
+		}
 	}
 
 	SIZE GetCharacterDimension(char inLetter) const
@@ -70,6 +89,7 @@ public:
 private:
 	HDC mHDC{0};
 	HFONT mHFont{0};
+	BitmapReader mFontSheet;
 	std::map<char, int> mCharacterXOffset;
 };
 
@@ -94,6 +114,7 @@ bool WriteTextIntoImage(const std::string& pInFontSheetName, const std::string& 
 		return false;
 	}
 
+	//Go through all lines of text
 	const size_t numLines = textFile.mLines.size();
 	for(size_t i = 0; i < numLines; ++i)
 	{
@@ -106,15 +127,28 @@ bool WriteTextIntoImage(const std::string& pInFontSheetName, const std::string& 
 			continue;
 		}
 
+		BitmapSurface createdImage;
+		createdImage.CreateSurface(outputImageData.mBitmapData.mInfoHeader.mImageWidth, 
+								   outputImageData.mBitmapData.mInfoHeader.mImageHeight, 
+								   BitmapSurface::kBPP_4, 
+								   outputImageData.mBitmapData.mPaletteData.mpRGBA, 
+								   outputImageData.mBitmapData.mPaletteData.mSizeInBytes);
+
+		//Print each letter
 		int currentX = startX;
-		const size_t numLetters = textFile.mLines[i].mFullLine.size();
-		for(size_t letterIndex = 0; letterIndex < numLetters; ++letterIndex)
+		const int numLetters = (int)textFile.mLines[i].mFullLine.size() - 1;
+		for(int letterIndex = 0; letterIndex < numLetters; ++letterIndex)
 		{
-			const char* pCharacterData = textInImageInterface.GetCharacterData(textFile.mLines[i].mFullLine[letterIndex]);
+			std::vector<char> characterData;
+			textInImageInterface.GetCharacterData(textFile.mLines[i].mFullLine[letterIndex], characterData);
+			const char* pCharacterData = &characterData.front();
 			const SIZE characterDim = textInImageInterface.GetCharacterDimension(textFile.mLines[i].mFullLine[letterIndex]);
-			printf("%i\n", characterDim.cx);
-		//	outputImageData.WriteTile(pCharacterData, currentX, characterDim.cx, characterDim.cy);
+			createdImage.AddTile(pCharacterData, (int)characterData.size(), currentX, 0, characterDim.cx, characterDim.cy);
+			currentX += characterDim.cx;
 		}
+
+		std::string outFileName = pInOutputPath + std::to_string(i) + ".bmp";
+		createdImage.WriteToFile(outFileName, true);
 	}
 
 	return true;

@@ -1289,9 +1289,10 @@ bool BitmapSurface::CreateSurface(int width, int height, EBitsPerPixel bitsPerPi
 	return true;
 }
 
-void BitmapSurface::AddTile(const char* pInData, int inDataSize, int inX, int inY, int/* width*/, int height, EFlipFlag flipFlag)
+void BitmapSurface::AddTile(const char* pInData, int inDataSize, int inX, int inY, int width, int height, EFlipFlag flipFlag)
 {
 	const int startX = mBitsPerPixel == kBPP_4 ? inX/2 : inX;
+	const int maxX = mBitsPerPixel == kBPP_4 ? width/2 : width;
 	const int offset = (inY*mBytesPerRow + startX);
 	char* pOutData   = mpBuffer + offset;
 	
@@ -1303,7 +1304,7 @@ void BitmapSurface::AddTile(const char* pInData, int inDataSize, int inX, int in
 	{
 		for (int y = 0; y < height; ++y)
 		{
-			for (int x = 0; x < 8; ++x) //used to be 8 insntead of width
+			for (int x = 0; x < maxX; ++x) //used to be 8 insntead of maxX
 			{
 				assert(offset + y * mBytesPerRow + x < mBufferSize);
 
@@ -1316,7 +1317,7 @@ void BitmapSurface::AddTile(const char* pInData, int inDataSize, int inX, int in
 	{
 		for (int y = height - 1; y >= 0; --y)
 		{
-			for (int x = 0; x < 8; ++x) //used to be 8 insntead of width
+			for (int x = 0; x < maxX; ++x) //used to be 8 insntead of maxX
 			{
 				assert(offset + y * mBytesPerRow + x < mBufferSize);
 
