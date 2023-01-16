@@ -2,8 +2,98 @@
 
 class TextInImage
 {
+	HFONT mhFont;
+
 public:
 	~TextInImage()
+	{
+		// Release the font
+		DeleteObject(mhFont);
+	}
+
+	bool Initialize(const char* pFontSheetName)
+	{
+		HBITMAP hBitmap = (HBITMAP)LoadImage(NULL, pFontSheetName, IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
+		if(!hBitmap)
+		{
+			return false;
+		}
+
+		// Create a device context for the image
+		HDC hdcImage = CreateCompatibleDC(NULL);
+		SelectObject(hdcImage, hBitmap);
+
+		// Set the text color
+		SetTextColor(hdcImage, RGB(0, 0, 0));
+
+		// Set the text background color
+		SetBkColor(hdcImage, TRANSPARENT);
+		SetBkMode(hdcImage, TRANSPARENT);
+
+		// Set the font
+		mhFont = CreateFont(13, 0, 0, 0, FW_DONTCARE, FALSE, FALSE, FALSE, ANSI_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+			ANTIALIASED_QUALITY, DEFAULT_PITCH | FF_DONTCARE, "Calibri");
+
+		SelectObject(hdcImage, mhFont);
+
+		// Get Bitmap Info
+		BITMAP bitmap;
+		GetObject(hBitmap, sizeof(BITMAP), &bitmap);
+
+		SIZE textSize;
+		GetTextExtentPoint32(hdcImage, "Hello", strlen("Hello"), &textSize);
+
+		// Draw the text on the image
+		TextOut(hdcImage, bitmap.bmWidth/2 - (textSize.cx/2), bitmap.bmHeight/2 - (textSize.cy/2), "Hello", 5);
+
+		const int numColors = 256;
+		RGBQUAD* palette = new RGBQUAD[numColors];
+		GetDIBColorTable(hdcImage, 0, numColors, palette);
+
+		const int colorBufferSize = bitmap.bmHeight * bitmap.bmWidthBytes;
+		char* pColorBuffer = new char[colorBufferSize];
+		char* pColorBuffer2 = new char[colorBufferSize];
+		GetBitmapBits(hBitmap, colorBufferSize, pColorBuffer);
+
+		int origY = 0;
+		for(int y = bitmap.bmHeight - 1; y >= 0; --y, origY++)
+		{
+			for(int x = 0; x < bitmap.bmWidthBytes; ++x)
+			{
+				const int offset = y*bitmap.bmWidthBytes + x;
+				
+				pColorBuffer2[offset] = pColorBuffer[origY*bitmap.bmWidthBytes + x];
+			}
+		}
+
+		BitmapWriter outBitmap;
+		outBitmap.CreateBitmap("a:\\SakuraWars2\\Output\\Test.bmp", bitmap.bmWidth, bitmap.bmHeight, bitmap.bmBitsPixel, pColorBuffer2,
+			colorBufferSize, (char*)palette, sizeof(RGBQUAD) * numColors, true);
+
+		// Save the image
+		DeleteDC(hdcImage);
+		
+		delete[] pColorBuffer;
+		delete[] pColorBuffer2;
+		delete[] palette;
+
+		return true;
+	}
+};
+
+bool WriteTextIntoImage(const std::string& pInFontSheetName, const std::string& pPatchedImagePath, const std::string& pTextFilePath, const std::string& pInOutputPath)
+{	
+	TextInImage outputImage;
+	outputImage.Initialize(pPatchedImagePath.c_str());
+
+	return true;
+}
+
+
+class TextInImageOld
+{
+public:
+	~TextInImageOld()
 	{
 	}
 
@@ -53,7 +143,7 @@ public:
 		{
 			for (int x = 0; x < maxX; ++x) //used to be 8 insntead of width
 			{
-				const int dataIndex = x + (y * 8);
+				const unsigned int dataIndex = x + (y * 8);
 				assert(dataIndex < tile.mTileSize);
 
 				outData.push_back(tile.mpTile[dataIndex]);
@@ -73,9 +163,9 @@ private:
 	std::map<char, SIZE> mCharacterSizes;
 };
 
-bool WriteTextIntoImage(const std::string& pInFontSheetName, const std::string& pPatchedImagePath, const std::string& pTextFilePath, const std::string& pInOutputPath)
+bool WriteTextIntoImageOld(const std::string& pInFontSheetName, const std::string& pPatchedImagePath, const std::string& pTextFilePath, const std::string& pInOutputPath)
 {
-	TextInImage textInImageInterface;
+	TextInImageOld textInImageInterface;
 	if(!textInImageInterface.Initialize(pInFontSheetName.c_str()))
 	{
 		return false;
