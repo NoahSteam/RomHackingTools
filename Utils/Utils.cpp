@@ -1292,7 +1292,7 @@ bool BitmapSurface::CreateSurface(int width, int height, EBitsPerPixel bitsPerPi
 void BitmapSurface::AddTile(const char* pInData, int inDataSize, int inX, int inY, int width, int height, EFlipFlag flipFlag)
 {
 	const int startX = mBitsPerPixel == kBPP_4 ? inX/2 : inX;
-	const int maxX = (width + (width%2))/2 ;//mBitsPerPixel == kBPP_4 ? width/2 : width;
+	const int maxX = 8;//(width + (width%2))/2 ;//mBitsPerPixel == kBPP_4 ? width/2 : width;
 	const int offset = (inY*mBytesPerRow + startX);
 	char* pOutData   = mpBuffer + offset;
 	
@@ -1309,7 +1309,18 @@ void BitmapSurface::AddTile(const char* pInData, int inDataSize, int inX, int in
 				assert(offset + y * mBytesPerRow + x < mBufferSize);
 
 				assert(inDataOffset < inDataSize);
-				pOutData[y * mBytesPerRow + x] = pInData[inDataOffset++];
+
+				const int index = y * mBytesPerRow + x;
+				const char inValue = pInData[inDataOffset];
+				const char existingValue = pOutData[index];
+				const char outValue = inValue + existingValue;
+
+				if( outValue )
+				{
+					pOutData[index] = pInData[inDataOffset];
+				}
+				
+				++inDataOffset;
 				++numBytesWritten;
 			}
 		}
@@ -1488,12 +1499,12 @@ bool TileExtractor::ExtractTiles(unsigned int inTileWidth, int inTileHeight, uns
 
 					if( linearColorValue != 0 )
 					{
-						if( mTiles[currTile].mBytesInWidthOfContent < tilePixelX && linearColorValue != 0 )
+						if( mTiles[currTile].mBytesInWidthOfContent < tilePixelX)
 						{
 							mTiles[currTile].mBytesInWidthOfContent = tilePixelX;
 						}
 
-						const unsigned int rightPixelX = tilePixelX*2 + ((linearColorValue & 0xf0) ? 1 : 0);
+						const unsigned int rightPixelX = (tilePixelX)*2 + ((linearColorValue & 0xf0) ? 2 : 1);
 						if( rightPixelX > mTiles[currTile].mWidthOfContent )
 						{
 							mTiles[currTile].mWidthOfContent = rightPixelX;

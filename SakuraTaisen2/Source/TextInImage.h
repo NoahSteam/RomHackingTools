@@ -22,7 +22,7 @@ public:
 
 		for(char letter = ' '; letter <= '~'; ++letter)
 		{
-			const TileExtractor::Tile& tile = mTileExtractor.mTiles[letter-1];
+			const TileExtractor::Tile& tile = mTileExtractor.mTiles[letter];
 			mCharacterSizes[letter].cx = tile.mWidthOfContent;
 		}
 
@@ -47,11 +47,11 @@ public:
 	void GetCharacterData(char inLetter, std::vector<char>& outData)
 	{
 		const TileExtractor::Tile& tile = mTileExtractor.mTiles[inLetter];
-		const int maxX = tile.mBytesInWidthOfContent;
+		const int maxX = 8;//tile.mBytesInWidthOfContent;
 
 		for (int y = 0; y < 16; ++y)
 		{
-			for (int x = 0; x <= maxX; ++x) //used to be 8 insntead of width
+			for (int x = 0; x < maxX; ++x) //used to be 8 insntead of width
 			{
 				const int dataIndex = x + (y * 8);
 				assert(dataIndex < tile.mTileSize);
@@ -131,7 +131,7 @@ bool WriteTextIntoImage(const std::string& pInFontSheetName, const std::string& 
 				break;
 			}
 			createdImage.AddTile(pCharacterData, (int)characterData.size(), currentX, 0, characterDimX, outputImageData.mBitmapData.mInfoHeader.mImageHeight, BitmapSurface::kFlipNone);
-			currentX += characterDimX + 1;
+			currentX += characterDimX;
 		}
 
 		std::string outFileName = pInOutputPath + std::to_string(i) + ".bmp";
