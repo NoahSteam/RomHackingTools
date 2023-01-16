@@ -341,6 +341,7 @@ public:
 
 	bool ReadBitmap(const std::string& inFileName);
 	bool Save();
+	const std::string& GetFileName() {return mFilename; }
 };
 
 class BitmapSurface
