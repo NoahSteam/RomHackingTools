@@ -160,7 +160,7 @@ public:
 		//Output 4pbb image
 		BitmapWriter outBitmap;
 		outBitmap.CreateBitmap(pInOutputImageName, bitmap.bmWidth, bitmap.bmHeight, 4, pPalettedImage,
-			colorBufferSize, mSourceImage.mBitmapData.mPaletteData.mpRGBA, mSourceImage.mBitmapData.mPaletteData.mSizeInBytes, true);
+			palettedImageSize, mSourceImage.mBitmapData.mPaletteData.mpRGBA, mSourceImage.mBitmapData.mPaletteData.mSizeInBytes, true);
 
 		// Save the image
 		DeleteDC(hdcImage);
