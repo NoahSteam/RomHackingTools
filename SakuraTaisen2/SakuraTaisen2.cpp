@@ -664,12 +664,12 @@ int main(int argc, char *argv[])
 	}
 	else if(command == "WriteTextIntoImage" && argc == 6)
 	{
-		const string inFontSheetName = string(argv[2]);
-		const string inPatchedImagePath = string(argv[3]);
-		const string inTranslatedTextFile = string(argv[4]);
-		const string inOutputDir = string(argv[5]) + Seperators;
+		const string inTranslatedTextFile = string(argv[2]);
+		const string inImageSizesFile = string(argv[3]);
+		const string inOriginalImagesDirectory = string(argv[4]) + Seperators;
+		const string inOutputPath = string(argv[5]) + Seperators;
 
-		WriteTextIntoImage(inFontSheetName, inPatchedImagePath, inTranslatedTextFile, inOutputDir);
+		WriteTextIntoImage(inTranslatedTextFile, inImageSizesFile, inOriginalImagesDirectory, inOutputPath);
 	}
 	else
 	{

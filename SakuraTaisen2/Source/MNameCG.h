@@ -136,6 +136,77 @@ void ExtractNameCG(const string& rootSakuraDirectory, const string& paletteFileN
 	printf("Success\n");
 }
 
+bool PatchMNameCG(const std::string& inPatchedSakuraDirectory, const std::string& inTranslatedDataDirectory)
+{
+	printf("Patching PatchMNameCG\n");
+
+	const string sakuraFilePath = inPatchedSakuraDirectory + string("SAKURA.BIN");
+	FileNameContainer sakuraFileNameInfo(sakuraFilePath.c_str());
+
+	FileData sakuraFileData;
+	if (!sakuraFileData.InitializeFileData(sakuraFileNameInfo))
+	{
+		return false;
+	}
+
+	struct CGFilesToPatch
+	{
+		const char* pTranslatedDirectory;
+		const char* pCGFileName;
+		int numEntries;
+		unsigned int offsetToData;
+	};
+
+	const int MaxEntries = 49;
+	const int numCGFiles = 3;
+	CGFilesToPatch cgFilesToPatch[numCGFiles] = 
+	{
+		{"1\\", "SAKURA1\\M_NAME1.CG", 49, 0x00021C08},
+		{"2\\", "SAKURA1\\M_NAME2.CG", 7, 0x000222EC},
+		{"3\\", "SAKURA1\\M_NAME3.CG", 15, 0x000223F0},
+	};
+
+	//CG Files
+	for(int cgIndex = 0; cgIndex < numCGFiles; ++cgIndex)
+	{
+		const string cgFilePath = inPatchedSakuraDirectory + cgFilesToPatch[cgIndex].pCGFileName;
+		FileReadWriter cgFileData;
+		if (!cgFileData.OpenFile(cgFilePath))
+		{
+			return false;
+		}
+
+		const std::string translatedDirectory = inTranslatedDataDirectory + std::string("MNameCG\\Translated\\") + cgFilesToPatch[cgIndex].pTranslatedDirectory;
+
+		const std::string bmpExt(".bmp");
+		MNameCGHeader lookupTable[MaxEntries];
+		const unsigned int offsetToData = cgFilesToPatch[cgIndex].offsetToData;
+		memcpy_s(lookupTable, sizeof(lookupTable), sakuraFileData.GetData() + offsetToData, sizeof(MNameCGHeader)*cgFilesToPatch[cgIndex].numEntries);
+
+		for (int i = 0; i < cgFilesToPatch[cgIndex].numEntries; ++i)
+		{
+			lookupTable[i].offsetToImage = SwapByteOrder(lookupTable[i].offsetToImage) * 8;
+			lookupTable[i].width *= 8;
+
+			const string imageName = translatedDirectory + std::to_string(i) + bmpExt;
+			BmpToSaturnConverter patchedImage;
+			if( !patchedImage.ConvertBmpToSakuraFormat(imageName, false) )
+			{
+				if( patchedImage.GetImageHeight() != lookupTable[i].height || patchedImage.GetImageWidth() != lookupTable[i].width )
+				{
+					printf("Image dimensions don't match original: %s\n", imageName.c_str());
+				}
+				return false;
+			}
+			
+			cgFileData.WriteData(lookupTable[i].offsetToImage, patchedImage.GetImageData(), patchedImage.GetImageDataSize());
+		}
+	}
+
+	printf("Succeeded patching CG files\n");
+	return true;
+}
+
 bool CreateNameCG1Spreadsheet(const string& imageDirectory)
 {
 	TextFileWriter htmlFile;

@@ -63,6 +63,7 @@ public:
 		HBITMAP hBitmap = (HBITMAP)LoadImage(NULL, mSourceImage.GetFileName().c_str(), IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
 		if(!hBitmap)
 		{
+			printf("Unable to LoadImage %s. Try resaving in MS Paint.\n", mSourceImage.GetFileName().c_str());
 			return false;
 		}
 
@@ -171,6 +172,8 @@ public:
 		return true;
 	}
 
+	unsigned int GetImageWidth() const {return mSourceImage.mBitmapData.mInfoHeader.mImageWidth;}
+
 private:
 	HFONT mhFont;
 	std::map<unsigned int, unsigned int> mOrigPaletteColorToIndex;
@@ -178,10 +181,13 @@ private:
 
 };
 
-bool WriteTextIntoImage(const std::string& pInFontSheetName, const std::string& pPatchedImagePath, const std::string& pTextFilePath, const std::string& pInOutputPath)
+//Used to create translated images for MName_CG and InfoName files
+bool WriteTextIntoImage(const std::string& pTextFilePath,
+						const std::string& inImageSizesFile,
+						const std::string& inOriginalImagesDirectory,
+						const std::string& pInOutputPath)
 {	
-	TextInImage outputImageInterface;
-	outputImageInterface.Initialize(pPatchedImagePath.c_str());
+	CreateDirectoryHelper(pInOutputPath);
 
 	FileNameContainer textFileName(pTextFilePath);
 	TextFileData textFile(textFileName);
@@ -189,156 +195,54 @@ bool WriteTextIntoImage(const std::string& pInFontSheetName, const std::string& 
 	{
 		return false;
 	}
+	
+	FileNameContainer imageSizesFileName(inImageSizesFile);
+	TextFileData imageSizesFile(imageSizesFileName);
+	if(!imageSizesFile.InitializeTextFile(false, false))
+	{
+		return false;
+	}
+
+	// Blank images in which to write text
+	typedef std::map<unsigned int, TextInImage*> ImageWidthToTextInImage;
+	ImageWidthToTextInImage imageWidthTextInImage;
+	const size_t numImages = imageSizesFile.mLines.size();
+	for( size_t i = 0; i < numImages; ++i )
+	{
+		const std::string sourceImagePath = imageSizesFileName.mPathOnly + Seperators + imageSizesFile.mLines[i].mFullLine;
+		TextInImage* pOutputImageInterface = new TextInImage;
+		if( !pOutputImageInterface->Initialize(sourceImagePath.c_str()) )
+		{
+			printf("Unable to load bitmap: %s.  Try resaving in Paint.\n", sourceImagePath.c_str());
+			return false;
+		}
+
+		imageWidthTextInImage[pOutputImageInterface->GetImageWidth()] = pOutputImageInterface;
+	}
 
 	//Go through all lines of text
+	const std::string bmpExt(".bmp");
 	const size_t numLines = textFile.mLines.size();
 	for(size_t i = 0; i < numLines; ++i)
 	{
-		std::string outFileName = pInOutputPath + std::to_string(i) + ".bmp";
-		outputImageInterface.OutputImageWithText(textFile.mLines[i].mFullLine.c_str(), outFileName.c_str());
+		std::string outFileName = pInOutputPath + std::to_string(i) + bmpExt;
+		std::string originalImagePath = inOriginalImagesDirectory + std::to_string(i) + bmpExt;
+		BitmapReader originalImage;
+		if( !originalImage.ReadBitmap(originalImagePath) )
+		{
+			continue;
+		}
+
+		ImageWidthToTextInImage::iterator interfaceIter = imageWidthTextInImage.find(originalImage.mBitmapData.mInfoHeader.mImageWidth);
+		if( interfaceIter == imageWidthTextInImage.end() )
+		{
+			printf("Unable to find interface for image of width: %i for image: %s", originalImage.mBitmapData.mInfoHeader.mImageWidth, originalImagePath.c_str());
+			continue;
+		}
+		interfaceIter->second->OutputImageWithText(textFile.mLines[i].mFullLine.c_str(), outFileName.c_str());
 	};
 
-	return true;
-}
-
-
-class TextInImageOld
-{
-public:
-	~TextInImageOld()
-	{
-	}
-
-	bool Initialize(const char* pInFontSheetImagePath)
-	{
-		if(!mFontSheet.ReadBitmap(pInFontSheetImagePath))
-		{
-			return false;
-		}
-
-		mTileExtractor;
-		if( !mTileExtractor.ExtractTiles(16, 16, 16, 16, mFontSheet) )
-		{
-			return false;
-		}
-
-		for(char letter = ' '; letter <= '~'; ++letter)
-		{
-			const TileExtractor::Tile& tile = mTileExtractor.mTiles[letter];
-			mCharacterSizes[letter].cx = tile.mWidthOfContent;
-		}
-
-		mCharacterSizes[' '].cx = 2;
-
-		return true;
-	}
-
-	int GetTextWidth(const std::string& inString)
-	{
-		SIZE totalSize;
-		totalSize.cx = totalSize.cy = 0;
-
-		const int numCharacters = inString.length() - 1;
-		for( int i = 0; i < numCharacters; ++i )
-		{
-			totalSize.cx += GetCharacterDimension(inString[i]).cx;
-		}
-		return totalSize.cx;
-	}
-
-	void GetCharacterData(char inLetter, std::vector<char>& outData)
-	{
-		const TileExtractor::Tile& tile = mTileExtractor.mTiles[inLetter];
-		const int maxX = 8;//tile.mBytesInWidthOfContent;
-
-		for (int y = 0; y < 16; ++y)
-		{
-			for (int x = 0; x < maxX; ++x) //used to be 8 insntead of width
-			{
-				const unsigned int dataIndex = x + (y * 8);
-				assert(dataIndex < tile.mTileSize);
-
-				outData.push_back(tile.mpTile[dataIndex]);
-			}
-		}
-	}
-
-	SIZE GetCharacterDimension(char inLetter) const
-	{
-		SIZE size = mCharacterSizes.find(inLetter)->second;
-		return size;
-	}
-
-private:
-	BitmapReader mFontSheet;
-	TileExtractor mTileExtractor;
-	std::map<char, SIZE> mCharacterSizes;
-};
-
-bool WriteTextIntoImageOld(const std::string& pInFontSheetName, const std::string& pPatchedImagePath, const std::string& pTextFilePath, const std::string& pInOutputPath)
-{
-	TextInImageOld textInImageInterface;
-	if(!textInImageInterface.Initialize(pInFontSheetName.c_str()))
-	{
-		return false;
-	}
-
-	BitmapReader outputImageData;
-	if (!outputImageData.ReadBitmap(pPatchedImagePath))
-	{
-		return false;
-	}
-
-	FileNameContainer textFileName(pTextFilePath);
-	TextFileData textFile(textFileName);
-	if(!textFile.InitializeTextFile(false, false))
-	{
-		return false;
-	}
-
-	//Go through all lines of text
-	const size_t numLines = textFile.mLines.size();
-	for(size_t i = 0; i < numLines; ++i)
-	{
-		const int textWidth = textInImageInterface.GetTextWidth(textFile.mLines[i].mFullLine);
-		int startX = outputImageData.mBitmapData.mInfoHeader.mImageWidth/2 - textWidth/2;
-		if( startX < 0 )
-		{
-			startX = 0;
-		}
-
-		BitmapSurface createdImage;
-		createdImage.CreateSurface(outputImageData.mBitmapData.mInfoHeader.mImageWidth, 
-								   outputImageData.mBitmapData.mInfoHeader.mImageHeight, 
-								   BitmapSurface::kBPP_4, 
-								   outputImageData.mBitmapData.mPaletteData.mpRGBA, 
-								   outputImageData.mBitmapData.mPaletteData.mSizeInBytes);
-
-		//Print each letter
-		int currentX = startX;
-		const int numLetters = (int)textFile.mLines[i].mFullLine.size() - 1;
-		for(int letterIndex = 0; letterIndex < numLetters; ++letterIndex)
-		{
-			std::vector<char> characterData;
-			textInImageInterface.GetCharacterData(textFile.mLines[i].mFullLine[letterIndex], characterData);
-			if( !characterData.size() )
-			{
-				continue;
-			}
-			const char* pCharacterData = &characterData.front();
-			const SIZE characterDim = textInImageInterface.GetCharacterDimension(textFile.mLines[i].mFullLine[letterIndex]);
-			const int characterDimX = characterDim.cx;
-			if( characterDimX + currentX >= createdImage.GetWidth() )
-			{
-				break;
-			}
-			createdImage.AddTile(pCharacterData, (int)characterData.size(), currentX, 0, characterDimX, outputImageData.mBitmapData.mInfoHeader.mImageHeight, BitmapSurface::kFlipNone);
-			currentX += characterDimX;
-		}
-
-		std::string outFileName = pInOutputPath + std::to_string(i) + ".bmp";
-		createdImage.WriteToFile(outFileName, true);
-	}
+	printf("Finished\n");
 
 	return true;
 }

@@ -18,7 +18,8 @@ static bool BringOverOriginalFiles(const string& inRootSakuraDirectory, const st
 	GetAllFilesOfType(allFiles, "GOVER", originalFiles);
 	GetAllFilesOfType(allFiles, "CESALOGO.ALL", originalFiles);
 	GetAllFilesOfType(allFiles, "TITLE.BIN", originalFiles);
-	GetAllFilesOfType(allFiles, "TTL2CGB.BIN", originalFiles);
+	GetAllFilesOfType(allFiles, "TTL2CGB.BIN", originalFiles);	
+	GetAllFilesOfType(allFiles, "M_NAME", originalFiles);
 
 	//Bring over scenario files
 	const string outputDirectory = inPatchedDirectory + Seperators;
@@ -207,6 +208,11 @@ bool PatchGame(const string& inSourceGameDirectory, const string& inTranslatedDi
 	if( !BringOverOriginalFiles(inSourceGameDirectory, inPatchedDirectory) )
 	{
 		printf("Unable to copy original files\n");
+		return false;
+	}
+
+	if( !PatchMNameCG(inPatchedDirectory, inTranslatedDirectory) )
+	{
 		return false;
 	}
 

@@ -1,0 +1,6 @@
+64.bmp
+72.bmp
+80.bmp
+88.bmp
+96.bmp
+112.bmp
