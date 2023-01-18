@@ -18,14 +18,20 @@ public:
 			return foundValue->second; //return index into palette
 		}
 	
-		unsigned int closestMatch = 0;
+		unsigned int closestMatch = InColorValue;
 		unsigned int closestMatchDiff = 0xffffffff;
 		unsigned int closestIndex = 0;
 		for( std::map<unsigned int, unsigned int>::const_iterator iter = mOrigPaletteColorToIndex.begin(); iter != mOrigPaletteColorToIndex.end(); ++iter )
 		{
+			//0 is assumed to be the alpha color, so ignore it
+			if(iter->second == 0 || iter->second == 15)
+			{
+				continue;
+			}
+
 			unsigned int colorValue = iter->first;
-			const unsigned int bigValue = colorValue > closestMatch ? colorValue : closestMatch;
-			const unsigned int smallValue = colorValue > closestMatch ? closestMatch : colorValue;
+			const unsigned int bigValue = colorValue > InColorValue ? colorValue : InColorValue;
+			const unsigned int smallValue = colorValue > InColorValue ? InColorValue : colorValue;
 			if( bigValue - smallValue < closestMatchDiff )
 			{
 				closestMatch = colorValue;
@@ -52,10 +58,51 @@ public:
 			mOrigPaletteColorToIndex[colorValue] = i;
 		}
 
-		mhFont = CreateFont(13, 0, 0, 0, FW_MEDIUM, FALSE, FALSE, FALSE, ANSI_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-			NONANTIALIASED_QUALITY, DEFAULT_PITCH | FF_DONTCARE, "Calibri");
+		mhFont = CreateFont(13, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, ANSI_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+			ANTIALIASED_QUALITY, DEFAULT_PITCH | FF_DONTCARE, "Calibri");
 
 		return true;
+	}
+
+	void AntiAliasImage(char* pInImageData, const unsigned int inWidth, const unsigned int inHeight)
+	{
+		const unsigned int channels = 4;
+
+		char* pOriginal = new char[channels * inWidth * inHeight];
+		memcpy_s(pOriginal, channels * inWidth * inHeight, pInImageData, channels * inWidth * inHeight);
+
+		for (unsigned int y = 1; y < inHeight - 1; y++)
+		{
+			for (unsigned int x = 1; x < inWidth - 1; x++)
+			{
+				// Get the color of the current pixel
+				unsigned int r = (uint8)pOriginal[y * inWidth * channels + x * channels + 0];
+				unsigned int g = (uint8)pOriginal[y * inWidth * channels + x * channels + 1];
+				unsigned int b = (uint8)pOriginal[y * inWidth * channels + x * channels + 2];
+				unsigned int a = (uint8)pOriginal[y * inWidth * channels + x * channels + 3];
+
+				// Average the color values of the current pixel and its neighbours
+				unsigned int r_total = 0, g_total = 0, b_total = 0, a_total = 0;
+				for (int i = -1; i <= 1; i++)
+				{
+					for (int j = -1; j <= 1; j++)
+					{
+						r_total += (uint8)pOriginal[(y + i) * inWidth * channels + (x + j) * channels + 0];
+						g_total += (uint8)pOriginal[(y + i) * inWidth * channels + (x + j) * channels + 1];
+						b_total += (uint8)pOriginal[(y + i) * inWidth * channels + (x + j) * channels + 2];
+						a_total += (uint8)pOriginal[(y + i) * inWidth * channels + (x + j) * channels + 3];
+					}
+				}
+
+				// Set the new color values of the current pixel
+				pInImageData[y * inWidth * channels + x * channels + 0] = (uint8)(r_total / 9);
+				pInImageData[y * inWidth * channels + x * channels + 1] = (uint8)(g_total / 9);
+				pInImageData[y * inWidth * channels + x * channels + 2] = (uint8)(b_total / 9);
+				pInImageData[y * inWidth * channels + x * channels + 3] = (uint8)(a_total / 9);
+			}
+		}
+
+		delete[] pOriginal;
 	}
 
 	bool OutputImageWithText(const char* pInText, const char* pInOutputImageName)
@@ -72,7 +119,7 @@ public:
 		SelectObject(hdcImage, hBitmap);
 
 		// Set the text color
-		SetTextColor(hdcImage, RGB(0, 0, 0));
+		SetTextColor(hdcImage, RGB(255, 255, 255));
 
 		// Set the text background color
 		SetBkColor(hdcImage, TRANSPARENT);
@@ -128,6 +175,9 @@ public:
 			}
 		}
 
+		//AntiAlias
+	//	AntiAliasImage(pFlippedImage, bitmap.bmWidth, bitmap.bmHeight);
+
 		const unsigned int palettedImageSize = (bitmap.bmWidth * bitmap.bmHeight) / 2;
 		char* pPalettedImage = new char[palettedImageSize];
 
@@ -182,7 +232,7 @@ private:
 };
 
 //Used to create translated images for MName_CG and InfoName files
-bool WriteTextIntoImage(const std::string& pTextFilePath,
+bool WriteTextIntoImage2(const std::string& pTextFilePath,
 						const std::string& inImageSizesFile,
 						const std::string& inOriginalImagesDirectory,
 						const std::string& pInOutputPath)
@@ -237,6 +287,82 @@ bool WriteTextIntoImage(const std::string& pTextFilePath,
 		if( interfaceIter == imageWidthTextInImage.end() )
 		{
 			printf("Unable to find interface for image of width: %i for image: %s", originalImage.mBitmapData.mInfoHeader.mImageWidth, originalImagePath.c_str());
+			continue;
+		}
+		interfaceIter->second->OutputImageWithText(textFile.mLines[i].mFullLine.c_str(), outFileName.c_str());
+	};
+
+	printf("Finished\n");
+
+	return true;
+}
+
+//Used to create translated images for MName_CG and InfoName files
+bool WriteTextIntoImage(const std::string& pTextFilePath,
+	const std::string& inImageSizesFile,
+	const std::string& inOriginalImagesDirectory,
+	const std::string& pInOutputPath)
+{
+	CreateDirectoryHelper(pInOutputPath);
+
+	FileNameContainer textFileName(pTextFilePath);
+	TextFileData textFile(textFileName);
+	if (!textFile.InitializeTextFile(false, false))
+	{
+		return false;
+	}
+
+	FileNameContainer imageSizesFileName(inImageSizesFile);
+	TextFileData imageSizesFile(imageSizesFileName);
+	if (!imageSizesFile.InitializeTextFile(false, false))
+	{
+		return false;
+	}
+
+	// Blank images in which to write text
+	typedef std::map<unsigned int, TextInImage*> ImageWidthToTextInImage;
+	ImageWidthToTextInImage imageWidthTextInImage;
+	const size_t numImages = imageSizesFile.mLines.size();
+	for (size_t i = 0; i < numImages; ++i)
+	{
+		const std::string sourceImagePath = imageSizesFileName.mPathOnly + Seperators + imageSizesFile.mLines[i].mFullLine;
+		TextInImage* pOutputImageInterface = new TextInImage;
+		if (!pOutputImageInterface->Initialize(sourceImagePath.c_str()))
+		{
+			printf("Unable to load bitmap: %s.  Try resaving in Paint.\n", sourceImagePath.c_str());
+			return false;
+		}
+
+		imageWidthTextInImage[pOutputImageInterface->GetImageWidth()] = pOutputImageInterface;
+	}
+
+	vector<FileNameContainer> allFiles;
+	FindAllFilesWithinDirectory(inOriginalImagesDirectory, allFiles);
+
+	vector<FileNameContainer> bmpFiles;
+	GetAllFilesOfType(allFiles, ".bmp", bmpFiles);
+
+	if(bmpFiles.size() != allFiles.size())
+	{
+		printf("File and translation mismatch\n");
+		return false;
+	}
+
+	//Go through all lines of text
+	const size_t numLines = textFile.mLines.size();
+	for (size_t i = 0; i < numLines; ++i)
+	{
+		std::string outFileName = pInOutputPath + bmpFiles[i].mFileName;
+		BitmapReader originalImage;
+		if (!originalImage.ReadBitmap(bmpFiles[i].mFullPath))
+		{
+			continue;
+		}
+
+		ImageWidthToTextInImage::iterator interfaceIter = imageWidthTextInImage.find(originalImage.mBitmapData.mInfoHeader.mImageWidth);
+		if (interfaceIter == imageWidthTextInImage.end())
+		{
+			printf("Unable to find interface for image of width: %i for image: %s", originalImage.mBitmapData.mInfoHeader.mImageWidth, bmpFiles[i].mFileName.c_str());
 			continue;
 		}
 		interfaceIter->second->OutputImageWithText(textFile.mLines[i].mFullLine.c_str(), outFileName.c_str());

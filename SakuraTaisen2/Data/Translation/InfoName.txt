@@ -1,267 +1,267 @@
-Koubu Mk. II 
-Ogami 
-Rouko Mekkyaku - Tenchi Isshin 
-Tenbu 
-Sakura 
-Haja Kensei - Hyakka Seihou 
-Tenbu 
-Sumire 
-Kanzaki Fujin Ryu - Dance of Dragon 
-Eisenkleid 
-Reni 
-Das Rheingold 
-Tenbu 
-Maria 
-Troitsa 
-Tenbu 
-Kanna 
-Rouhai Go-dan 
-Tenbu 
-Iris 
-Iris Boîte de Secours 
-Tenbu 
-Kohran 
-Lightning Ball Robot 
-Tenbu 
-Orihime 
-Il Flauto Magico 
-Tenbu 
-Reni 
-Die Walküre 
-Koubu Mk. II 
-Ogami 
-Rouko Mekkyaku - Tenrou Tenge 
-Koubu Mk. II 
-Sakura 
-Haja Kensei - Ouka Ranman 
-Koubu Mk. II 
-Sakura 
-Haja Kensei - Ouka Mushou 
-Koubu Mk. II 
-Sumire 
-Kanzaki Fujin Ryu - Dance of Phoenix 
-Koubu Mk. II 
-Maria 
-Shchelkunchik/Nutcracker 
-Koubu Mk. II 
-Kanna 
-Sansei Ruushou 
-Koubu Mk. II 
-Iris 
-Iris Grande Jean-Paul 
-Koubu Mk. II 
-Kohran 
-Seiju Robo Kai 
-Koubu Mk. II 
-Orihime 
-Viaggio rose 
-Koubu Mk. II 
-Reni 
-Siegfried 
-Wakiji Mk.II 
-Untranslated
-None 
-Wakiji Mk.II 
-Untranslated
-None 
-Wakiji Mk.II 
-Untranslated
-None 
-Koubu Mk. II 
-Sumire 
-Waxwing Waltz 
-Wakiji Mk.II 
-Untranslated
-None 
-Wakiji Mk.II 
-Untranslated
-None 
-Wakiji Mk.II 
-Untranslated
-None 
-Wakiji Mk.II 
-Untranslated
-None 
-Wakiji Mk.II 
-Untranslated
-None 
-Wakiji Mk.II 
-Untranslated
-None 
-Wakiji Mk.II 
-Untranslated
-None 
-Untranslated
-Kasha 
-Untranslated
-Untranslated
-Suiko 
-Untranslated
-Untranslated
-Mokujiki 
-Untranslated
-Koubu Mk. II 
-Maria 
-Pikovaya dama 
-Untranslated
-Yaksha 
-None 
-Untranslated
-Kongou 
-Untranslated
-Untranslated
-Tsuchigumo 
-Untranslated
-Untranslated
-Oni-Ou 
-Untranslated
-Untranslated
-Oni-Ou 
-Ouka Houshin 
-Untranslated
-Kyogoku 
-Untranslated
-Untranslated
-Kyogoku 
-None 
-Untranslated
-Kyogoku 
-None 
-Untranslated
-Kyogoku 
-Untranslated
-Untranslated
-Untranslated
-None 
-Koubu Mk. II 
-Kanna 
-Sanchin Tenshou 
-Untranslated
-Thunderstorm 
-None 
-Untranslated
-Gale 
-None 
-Untranslated
-Untranslated
-None 
-Untranslated
-Untranslated
-None 
-Untranslated
-Untranslated
-None 
-Untranslated
-Untranslated
-None 
-Untranslated
-Untranslated
-None 
-Untranslated
-Untranslated
-None 
-Untranslated
-Untranslated
-None 
-Untranslated
-Untranslated
-None 
-Koubu Mk. II 
-Iris 
-Iris Petit Jean-Paul 
-Untranslated
-Untranslated
-None 
-Untranslated
-Untranslated
-None 
-Untranslated
-Untranslated
-None 
-Untranslated
-Untranslated
-None 
-Untranslated
-Untranslated
-None 
-Untranslated
-Untranslated
-None 
-Untranslated
-Untranslated
-None 
-Untranslated
-Untranslated
-None 
-Untranslated
-Untranslated
-None 
-Untranslated
-Untranslated
-None 
-Koubu Mk. II 
-Kohran 
-Jiangpai Robots 
-Untranslated
-Untranslated
-None 
-Untranslated
-Kyogoku 
-None 
-Untranslated
-Untranslated
-None 
-Untranslated
-Untranslated
-None 
-Untranslated
-Untranslated
-None 
-Untranslated
-Untranslated
-None 
-Untranslated
-Untranslated
-None 
-Untranslated
-Untranslated
-None 
-Untranslated
-Untranslated
-None 
-Untranslated
-Untranslated
-None 
-Eisenkleid 
-Orihime 
-Quattro Stagioni 
-Untranslated
-Untranslated
-None 
-Untranslated
-Untranslated
-None 
-Untranslated
-Untranslated
-None 
-Untranslated
-Steam Stand 
-None 
-Untranslated
-Material 
-None 
-Untranslated
-Obstacle 
-None 
-Untranslated
-Flame 
-None 
-Untranslated
-Flame 
-None 
-Eisenkleid 
-Reni 
-Das Rheingold 
-Tenbu 
-Ogami 
-Rouko Mekkyaku - Sanjin Seiko 
+Koubu Kai
+Ogami
+Rouko Mekkyaku - Tenchi Isshin
+Tenbu
+Sakura
+Haja Kensei - Hyakka Seihou
+Tenbu
+Sumire
+Kanzaki Fujin Ryu - Dance of Dragon
+Eisenkleid
+Reni
+Das Rheingold
+Tenbu
+Maria
+Troitsa
+Tenbu
+Kanna
+Rouhai Go-dan
+Tenbu
+Iris
+Iris BoÃ®te de Secours
+Tenbu
+Kohran
+Lightning Ball Robot
+Tenbu
+Orihime
+Il Flauto Magico
+Tenbu
+Reni
+Die WalkÃ¼re
+Koubu Kai
+Ogami
+Rouko Mekkyaku - Tenrou Tenge
+Koubu Kai
+Sakura
+Haja Kensei - Ouka Ranman
+Koubu Kai
+Sakura
+Haja Kensei - Ouka Mushou
+Koubu Kai
+Sumire
+Kanzaki Fujin Ryu - Dance of Phoenix
+Koubu Kai
+Maria
+Shchelkunchik/Nutcracker
+Koubu Kai
+Kanna
+Sansei Ruushou
+Koubu Kai
+Iris
+Iris Grande Jean-Paul
+Koubu Kai
+Kohran
+Seiju Robo Kai
+Koubu Kai
+Orihime
+Viaggio rose
+Koubu Kai
+Reni
+Siegfried
+Wakiji Kai
+I-type Kou
+None
+Wakiji Kai
+I-type Otsu
+None
+Wakiji Mk.II
+RO-type Kou
+None
+Koubu Kai
+Sumire
+Waxwing Waltz
+Wakiji Mk.II
+RO-type Otsu
+None
+Wakiji Mk.II
+HA-type Kou
+None
+Wakiji Mk.II
+NI-type Special
+None
+Wakiji Mk.II
+I-type Kei
+None
+Wakiji Mk.II
+L Special
+None
+Wakiji Mk.II
+Shoujin
+None
+Wakiji Mk.II
+Oudouji
+None
+Goko
+Kasha
+Guren Karinsou
+Hougyou
+Suiko
+Sekka Hamon Jukki
+Chiken
+Mokujiki
+Koushinenrin Enbu
+Koubu Kai
+Maria
+Pikovaya dama
+Dark Kamui
+Satan
+None
+Dainichiken
+Kongou
+Kishin Goutensatsu
+Hachou
+Tsuchigumo
+Kuin Mandala
+Dark Kamui
+Demon King
+Houma Seishin
+Dark Kamui
+Demon King
+Ouka Houshin
+Shinnou (Head)
+Kyogoku
+Onteki Taisan
+Shinnou (Arm)
+Kyogoku
+None
+Shinnou (Arm)
+Kyogoku
+None
+Shinnou (Tail)
+Kyogoku
+Holy Demon Magic Circle
+Kouma Weapon
+Banrai
+None
+Koubu Kai
+Kanna
+Sanchin Tenshou
+Kouma Weapon
+Kairai
+None
+Kouma Weapon
+Reppuu
+None
+Kouma Weapon
+Gufuu
+None
+Kouma Weapon
+Senkou
+None
+Kouma Weapon
+Ryukou
+None
+Kouma Weapon
+Shuu
+None
+Kouma Weapon
+Jinrai
+None
+Kouma Weapon
+Inazuma
+None
+Weapon
+Steam Rocket
+None
+Weapon
+Enku
+None
+Koubu Kai
+Iris
+Iris Petit Jean-Paul
+Weapon
+Obeyer
+None
+Car
+Fancy Car
+None
+Weapon
+Homura
+None
+Weapon
+Thunder Cannon
+None
+Weapon
+Black Demon Cannon
+None
+Weapon
+Assault Cannon
+None
+Weapon
+Dimension Cannon
+None
+Weapon
+Grudge Cord
+None
+Terrain
+Summoner
+None
+Weapon
+Karan
+None
+Koubu Kai
+Kohran
+Jiangpai Robots
+Weapon
+Cross Homura
+None
+Shinnou (Arm)
+Kyogoku
+None
+Weapon
+Cross Homura
+None
+Terrain
+Engine
+None
+Weapon
+Grudge Cord
+None
+Terrain
+Defense Wall
+None
+Terrain
+Guide Light
+None
+Terrain
+Boulder Stopper
+None
+Terrain
+Illuminator
+None
+Weapon
+Grudge Cord
+None
+Eisenkleid
+Orihime
+Quattro Stagioni
+Terrain
+Statue
+None
+Terrain
+AA Gun
+None
+Terrain
+Pillar
+None
+Terrain
+Steam Stand
+None
+Terrain
+Material
+None
+Terrain
+Obstacle
+None
+Weapon
+Homura
+None
+Weapon
+Homura
+None
+Eisenkleid
+Reni
+Das Rheingold
+Tenbu
+Ogami
+Rouko Mekkyaku - Sanjin Seiko
