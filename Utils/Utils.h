@@ -341,7 +341,14 @@ public:
 
 	bool ReadBitmap(const std::string& inFileName);
 	bool Save();
-	const std::string& GetFileName() {return mFilename; }
+	const std::string& GetFileName() const {return mFilename; }
+	char* GetColorData() const {return mBitmapData.mColorData.mpRGBA;}
+	int GetColorDataSize() const {return mBitmapData.mColorData.mSizeInBytes;}
+	char* GetPaletteData() const {return mBitmapData.mPaletteData.mpRGBA;}
+	int GetPaletteDataSize() const {return mBitmapData.mPaletteData.mSizeInBytes;}
+	int GetWidth() const {return mBitmapData.mInfoHeader.mImageWidth;}
+	int GetHeight() const {return mBitmapData.mInfoHeader.mImageHeight;}
+	int GetBitCount() const {return mBitmapData.mInfoHeader.mBitCount;}
 };
 
 class BitmapSurface
@@ -376,6 +383,38 @@ public:
 	void AddTile(const char* pData, int dataSize, int x, int y, int width, int height, EFlipFlag flipFlag = kFlipNone);
 	bool WriteToFile(const std::string& fileName, bool bForceBitmap = false);
 	int GetWidth() const {return mWidth;}
+};
+
+class BitmapFormatConverter
+{
+public:
+	~BitmapFormatConverter();
+
+	bool ConvertFrom4BitTo8Bit(const char* pIn8BitBmpPath);
+	bool ConvertFrom4BitTo8Bit(const BitmapReader& InSourceBitmap);
+
+	bool ConvertFrom8BitTo4Bit(const char* pIn8BitBmpPath);
+	
+	char* GetConvertedData() {return mpConvertedData;}
+	size_t GetConvertedDataSize() const {return mConvertedDataSize;}
+
+	char* GetPaletteData() const {return mpPaletteData;}
+	size_t GetPaletteDataSize() const {return mPaletteDataSize;}
+
+	void WriteToFile(const char* pInOutputPath);
+
+private:
+	bool ConvertColorDataFrom4BitTo8Bit(const char* pInData, const size_t inDataSize);
+	bool ConvertColorDataFrom8BitTo4Bit(const char* pInData, const size_t inDataSize);
+
+	char* mpConvertedData = nullptr;
+	char* mpPaletteData = nullptr;
+	size_t mConvertedDataSize = 0;
+	size_t mPaletteDataSize = 0;
+
+	int mWidth = 0;
+	int mHeight = 0;
+	int mBitCount = 0;
 };
 
 class TileExtractor

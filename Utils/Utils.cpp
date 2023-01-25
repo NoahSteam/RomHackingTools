@@ -1292,7 +1292,7 @@ bool BitmapSurface::CreateSurface(int width, int height, EBitsPerPixel bitsPerPi
 void BitmapSurface::AddTile(const char* pInData, int inDataSize, int inX, int inY, int width, int height, EFlipFlag flipFlag)
 {
 	const int startX = mBitsPerPixel == kBPP_4 ? inX/2 : inX;
-	const int maxX = 8;//(width + (width%2))/2 ;//mBitsPerPixel == kBPP_4 ? width/2 : width;
+	const int tileStride = mBitsPerPixel == kBPP_4 ? width/2 : width;
 	const int offset = (inY*mBytesPerRow + startX);
 	char* pOutData   = mpBuffer + offset;
 	
@@ -1302,25 +1302,18 @@ void BitmapSurface::AddTile(const char* pInData, int inDataSize, int inX, int in
 	int numBytesWritten = 0;
 	if( flipFlag == EFlipFlag::kFlipNone )
 	{
-		for (int y = 0; y < height; ++y)
+		for (int y = 0; y < height && y < mHeight; ++y)
 		{
-			for (int x = 0; x < maxX; ++x) //used to be 8 insntead of maxX
+			for (int x = 0; x < tileStride; ++x) //used to be 8 insntead of maxX
 			{
 				assert(offset + y * mBytesPerRow + x < mBufferSize);
 
 				assert(inDataOffset < inDataSize);
 
-				const int index = y * mBytesPerRow + x;
-				const char inValue = pInData[inDataOffset];
-				const char existingValue = pOutData[index];
-				const char outValue = inValue + existingValue;
-
-				if( outValue )
-				{
-					pOutData[index] = pInData[inDataOffset];
-				}
+				const int outIndex = y * mBytesPerRow + x;
+				pOutData[outIndex] = pInData[inDataOffset];
 				
-				++inDataOffset;
+				inDataOffset = y*tileStride + x;
 				++numBytesWritten;
 			}
 		}
@@ -1329,7 +1322,7 @@ void BitmapSurface::AddTile(const char* pInData, int inDataSize, int inX, int in
 	{
 		for (int y = height - 1; y >= 0; --y)
 		{
-			for (int x = 0; x < maxX; ++x) //used to be 8 insntead of maxX
+			for (int x = 0; x < tileStride; ++x) //used to be 8 insntead of maxX
 			{
 				assert(offset + y * mBytesPerRow + x < mBufferSize);
 
@@ -1342,7 +1335,7 @@ void BitmapSurface::AddTile(const char* pInData, int inDataSize, int inX, int in
 	{
 		for (int y = 0; y < height; ++y)
 		{
-			for (int x = 7; x >= 0; --x) //used to be 8 insntead of width
+			for (int x = tileStride - 1; x >= 0; --x) //used to be 8 insntead of width
 			{
 				assert(offset + y * mBytesPerRow + x < mBufferSize);
 
@@ -1355,7 +1348,7 @@ void BitmapSurface::AddTile(const char* pInData, int inDataSize, int inX, int in
 	{
 		for (int y = height - 1; y >= 0; --y)
 		{
-			for (int x = 7; x >= 0; --x) //used to be 8 insntead of width
+			for (int x = tileStride - 1; x >= 0; --x) //used to be 8 insntead of width
 			{
 				assert(offset + y * mBytesPerRow + x < mBufferSize);
 
@@ -1371,6 +1364,135 @@ bool BitmapSurface::WriteToFile(const std::string& fileName, bool bForceBitmap)
 	BitmapWriter bitmap;
 
 	return bitmap.CreateBitmap(fileName, mWidth, -mHeight, mBitsPerPixel, mpBuffer, mBufferSize, mpPalette, mPaletteSize, bForceBitmap);
+}
+
+/////////////////////////////////////////
+//        BitmapFormatConverter        //
+/////////////////////////////////////////
+BitmapFormatConverter::~BitmapFormatConverter()
+{
+	delete[] mpConvertedData;
+	delete[] mpPaletteData;
+
+	mpConvertedData = nullptr;
+	mpPaletteData = nullptr;
+}
+
+bool BitmapFormatConverter::ConvertFrom4BitTo8Bit(const BitmapReader& InSource4BitBitmap)
+{
+	if( InSource4BitBitmap.GetBitCount() != 4 )
+	{
+		printf("%s needs to be 4bpp image.  Is %ibpp instead.\n", InSource4BitBitmap.GetFileName().c_str(), InSource4BitBitmap.GetBitCount());
+		return false;
+	}
+
+	if( !ConvertColorDataFrom4BitTo8Bit(InSource4BitBitmap.GetColorData(), InSource4BitBitmap.GetColorDataSize()) )
+	{
+		return false;
+	}
+
+	
+	mPaletteDataSize = sizeof(int)*256;
+	mpPaletteData = new char[mPaletteDataSize];
+	memset(mpPaletteData, 0, mPaletteDataSize);
+	memcpy_s(mpPaletteData, mPaletteDataSize, InSource4BitBitmap.GetPaletteData(), InSource4BitBitmap.GetPaletteDataSize());
+
+	mWidth = InSource4BitBitmap.GetWidth();
+	mHeight = InSource4BitBitmap.GetHeight();
+
+	mBitCount = 8;
+
+	return true;
+
+}
+
+bool BitmapFormatConverter::ConvertFrom4BitTo8Bit(const char* pIn4BitBmpPath)
+{
+	BitmapReader bitmap4Bit;
+	if( !bitmap4Bit.ReadBitmap(pIn4BitBmpPath) )
+	{
+		return false;
+	}
+
+	return ConvertFrom4BitTo8Bit(bitmap4Bit);
+}
+
+bool BitmapFormatConverter::ConvertFrom8BitTo4Bit(const char* pIn8BitBmpPath)
+{
+	BitmapReader bitmap8Bit;
+	if( !bitmap8Bit.ReadBitmap(pIn8BitBmpPath) )
+	{
+		return false;
+	}
+
+	if( !ConvertColorDataFrom8BitTo4Bit(bitmap8Bit.GetColorData(), bitmap8Bit.GetColorDataSize()) )
+	{
+		return false;
+	}
+
+	//Copy over the first 16 colors
+	mPaletteDataSize = sizeof(int)*16;
+	mpPaletteData = new char[mPaletteDataSize];
+	memset(mpPaletteData, 0, mPaletteDataSize);
+	memcpy_s(mpPaletteData, mPaletteDataSize, bitmap8Bit.GetPaletteData(), mPaletteDataSize);
+
+	mWidth = bitmap8Bit.GetWidth();
+	mHeight = bitmap8Bit.GetHeight();
+
+	mBitCount = 4;
+
+	return true;
+}
+
+bool BitmapFormatConverter::ConvertColorDataFrom4BitTo8Bit(const char* pInData, const size_t inDataSize)
+{
+	if( inDataSize == 0 )
+	{
+		return false;
+	}
+
+	delete[] mpConvertedData;
+
+	mConvertedDataSize = inDataSize*2;
+	mpConvertedData = new char[mConvertedDataSize];
+
+	//4bit color data has 2 pixels per byte
+	for( size_t sourceIndex = 0, destIndex = 0; sourceIndex < inDataSize; ++sourceIndex, destIndex+=2 )
+	{
+		mpConvertedData[destIndex+0] = (char)(pInData[sourceIndex] >> 4);
+		mpConvertedData[destIndex+1] = (char)(pInData[sourceIndex] & 0x0f);
+	}
+
+	return true;
+}
+
+bool BitmapFormatConverter::ConvertColorDataFrom8BitTo4Bit(const char* pInData, const size_t inDataSize)
+{
+	delete[] mpConvertedData;
+
+	if( inDataSize == 0 )
+	{
+		return false;
+	}
+
+	//Take into account a non-even 8bit data set
+	mConvertedDataSize = (inDataSize/2) + (inDataSize%2);
+	mpConvertedData = new char[mConvertedDataSize];
+
+	for( size_t sourceIndex = 0, destIndex = 0; sourceIndex < inDataSize; sourceIndex += 2, ++destIndex )
+	{
+		const char value4Bit = (pInData[sourceIndex] << 4) + pInData[sourceIndex+1];
+		mpConvertedData[destIndex] = value4Bit;
+	}
+
+	return true;
+}
+
+void BitmapFormatConverter::WriteToFile(const char* pInOutputPath)
+{
+	BitmapWriter w;
+	w.CreateBitmap(pInOutputPath, mWidth, mHeight, mBitCount, mpConvertedData, mConvertedDataSize, 
+				   (char*)mpPaletteData, mPaletteDataSize, true);
 }
 
 /////////////////////////////////
@@ -1445,7 +1567,7 @@ bool TileExtractor::ExtractTiles(unsigned int inTileWidth, int inTileHeight, uns
 		return false;
 	}
 
-	if( !(inBitmap.mBitmapData.mInfoHeader.mBitCount == 4 || inBitmap.mBitmapData.mInfoHeader.mBitCount == 8) )
+	if( !(inBitmap.GetBitCount() == 4 || inBitmap.GetBitCount() == 8) )
 	{
 		printf("Can't extract tiles.  Only 4 and 8 bit paletted bitmaps supported\n");
 		return false;
@@ -1465,7 +1587,8 @@ bool TileExtractor::ExtractTiles(unsigned int inTileWidth, int inTileHeight, uns
 	//Allocate tiles
 	mTiles.resize(numTiles);
 
-	const unsigned int divisor              = inBitmap.mBitmapData.mInfoHeader.mBitCount == 4 ? 2 : 1;
+	const bool bIs4Bit                      = inBitmap.GetBitCount() == 4;
+	const unsigned int divisor              = bIs4Bit ? 2 : 1;
 	const unsigned int numBytesPerTileWidth = inTileWidth/divisor;
 	const unsigned int stride               = numBytesPerTileWidth*numColumns;
 	mTileByteSize                           = (outTileWidth*outTileHeight)/divisor;//(inTileWidth*inTileHeight)/2; //4bits per pixel
@@ -1504,7 +1627,7 @@ bool TileExtractor::ExtractTiles(unsigned int inTileWidth, int inTileHeight, uns
 							mTiles[currTile].mBytesInWidthOfContent = tilePixelX;
 						}
 
-						const unsigned int rightPixelX = (tilePixelX)*2 + ((linearColorValue & 0xf0) ? 2 : 1);
+						const unsigned int rightPixelX = bIs4Bit ? (tilePixelX)*2 + ((linearColorValue & 0xf0) ? 2 : 1) : rightPixelX;
 						if( rightPixelX > mTiles[currTile].mWidthOfContent )
 						{
 							mTiles[currTile].mWidthOfContent = rightPixelX;

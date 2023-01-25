@@ -110,5 +110,8 @@
     <ClInclude Include="Source\TextInImage.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Source\TextInImageUsingFontSheet.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

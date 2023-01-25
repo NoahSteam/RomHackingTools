@@ -67,6 +67,7 @@ using std::unordered_map;
 #include "Source/PatchGame.h"
 #include "Source/Demo.h"
 #include "Source/TextInImage.h"
+#include "Source/TextInImageUsingFontSheet.h"
 
 void PrintHelp()
 {
