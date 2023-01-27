@@ -375,12 +375,14 @@ private:
 	char*         mpBuffer      = nullptr;
 	const char*   mpPalette     = nullptr;
 	int           mPaletteSize  = 0;
+	bool          mbOwnsPalette = false;
 
 public:
 	~BitmapSurface();
 
-	bool CreateSurface(int width, int height, EBitsPerPixel bitsPerPixel, const char* pPalette, int paletteSize);
+	bool CreateSurface(int width, int height, EBitsPerPixel bitsPerPixel, const char* pPalette, int paletteSize, bool bDuplicatePalette = false);
 	void AddTile(const char* pData, int dataSize, int x, int y, int width, int height, EFlipFlag flipFlag = kFlipNone);
+	void AddPartialTile(const char* pData, int dataSize, int x, int y, int numBytesInWidthToCopy, int width, int height);
 	bool WriteToFile(const std::string& fileName, bool bForceBitmap = false);
 	int GetWidth() const {return mWidth;}
 };
@@ -426,6 +428,8 @@ public:
 		unsigned int mTileSize = 0;
 		unsigned int mX        = 0;
 		unsigned int mY        = 0;
+		unsigned int mTileWidth = 0;
+		unsigned int mTileHeight = 0;
 		unsigned int mWidthOfContent = 0;
 		unsigned int mBytesInWidthOfContent = 0;
 
@@ -445,7 +449,7 @@ private:
 	unsigned int mTileByteSize = 0;
 	
 public:
-	bool ExtractTiles(unsigned int inTileDimX, int inTileDimY, unsigned int outTileDimX, unsigned int outTileDimY, const BitmapReader& inBitmap);
+	bool ExtractTiles(unsigned int inTileDimX, int inTileDimY, unsigned int outTileDimX, unsigned int outTileDimY, const BitmapReader& inBitmap, int inAlphaIndex = 0);
 	void FixupIndexOfAlphaColor(const unsigned short inIndexOfAlphaColor, bool bInIs4bit);
 	int GetDataSize() const {return mDataSize;}
 	void OutputTiles(FileWriter& outFile, int inStartingTile);

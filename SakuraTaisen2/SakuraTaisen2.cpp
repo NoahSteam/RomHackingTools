@@ -672,6 +672,17 @@ int main(int argc, char *argv[])
 
 		WriteTextIntoImage(inTranslatedTextFile, inImageSizesFile, inOriginalImagesDirectory, inOutputPath);
 	}
+	else if(command == "WriteTextIntoImageUsingFontSheet" && argc == 7 )
+	{
+		const string inTextFilePath = string(argv[2]);
+		const string inFontSheetPath = string(argv[3]);
+		const string inBgndImageDirectory = string(argv[4]) + Seperators;
+		const string inOriginalImagesDirectory = string(argv[5]) + Seperators;
+		const string inOutputPath = string(argv[6]) + Seperators;
+		
+		WriteTextIntoImageUsingFontSheet(inTextFilePath, inFontSheetPath, inBgndImageDirectory, 
+										 inOriginalImagesDirectory, inOutputPath);
+	}
 	else
 	{
 		PrintHelp();

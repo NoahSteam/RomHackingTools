@@ -591,6 +591,7 @@ bool TextFileData::InitializeTextFile(bool bFixupSpecialCharacters, bool bCollap
 			}
 
 			//Split out newLine characters
+			bool bConditionallyAddSpaceAtEnd = false;
 			string testString(fixedString);
 			size_t pos = testString == newLine ? std::string::npos : testString.find(newLine);
 			if( pos != std::string::npos )
@@ -629,10 +630,15 @@ bool TextFileData::InitializeTextFile(bool bFixupSpecialCharacters, bool bCollap
 			else
 			{
 				newLineOfText.mWords.push_back(fixedString);
-				newLineOfText.mFullLine += string(fixedString) + space;
+				newLineOfText.mFullLine += string(fixedString);
+				bConditionallyAddSpaceAtEnd = true;
 			}
 
 			pToken = strtok_s(NULL, pDelim, &pContext);
+			if(pToken && bConditionallyAddSpaceAtEnd)
+			{
+				newLineOfText.mFullLine += space;
+			}
 		}
 
 		for(const std::string& word : newLineOfText.mWords)
@@ -1266,9 +1272,16 @@ BitmapSurface::~BitmapSurface()
 	delete[] mpBuffer;
 	mpBuffer    = nullptr;
 	mBufferSize = 0;
+
+	if( mbOwnsPalette )
+	{
+		delete[] mpPalette;
+		mpPalette = nullptr;
+	}
 }
 
-bool BitmapSurface::CreateSurface(int width, int height, EBitsPerPixel bitsPerPixel, const char* pPalette, int paletteSize)
+bool BitmapSurface::CreateSurface(int width, int height, EBitsPerPixel bitsPerPixel, const char* pPalette,
+								  int paletteSize, bool bDuplicatePalette)
 {
 	const int numPixels = width*height;
 	const int numBytes  = bitsPerPixel == kBPP_4 ? numPixels*4 : numPixels;
@@ -1281,7 +1294,17 @@ bool BitmapSurface::CreateSurface(int width, int height, EBitsPerPixel bitsPerPi
 	mpBuffer    = new char[numBytes];
 	mBufferSize = numBytes;
 
-	mpPalette    = pPalette;
+	if( bDuplicatePalette )
+	{
+		mbOwnsPalette = true;
+
+		mpPalette = new char[paletteSize];
+		memcpy_s(const_cast<char*>(mpPalette), paletteSize, pPalette, paletteSize);
+	}
+	else
+	{
+		mpPalette = pPalette;
+	}
 	mPaletteSize = paletteSize;
 
 	memset(mpBuffer, 0, numBytes);
@@ -1355,6 +1378,28 @@ void BitmapSurface::AddTile(const char* pInData, int inDataSize, int inX, int in
 				assert(inDataOffset < inDataSize);
 				pOutData[y * mBytesPerRow + x] = pInData[inDataOffset++];
 			}
+		}
+	}
+}
+
+void BitmapSurface::AddPartialTile(const char* pInData, int inDataSize, int inX, int inY, 
+								   int numBytesInWidthToCopy, int inWidth, int inHeight)
+{
+	if( mBitsPerPixel != kBPP_8 )
+	{
+		printf("BitmapSurface::AddPartialTile: Only 8bit surfaces supported\n");
+	}
+	
+	for (int y = 0; y < inHeight && y < mHeight; ++y)
+	{
+		for (int x = 0; x < numBytesInWidthToCopy; ++x) //used to be 8 insntead of maxX
+		{
+			const int writeOffset = ((inY + y)*mBytesPerRow + inX + x);
+			const int readOffset = (y*inWidth + x);
+			assert(writeOffset < mBufferSize);
+			assert(readOffset < inDataSize);
+;
+			mpBuffer[writeOffset] = pInData[readOffset];
 		}
 	}
 }
@@ -1552,7 +1597,8 @@ void TileExtractor::FixupIndexOfAlphaColor(const unsigned short inIndexOfAlphaCo
 	}
 }
 
-bool TileExtractor::ExtractTiles(unsigned int inTileWidth, int inTileHeight, unsigned int outTileWidth, unsigned int outTileHeight, const BitmapReader& inBitmap)
+bool TileExtractor::ExtractTiles(unsigned int inTileWidth, int inTileHeight, unsigned int outTileWidth, 
+								 unsigned int outTileHeight, const BitmapReader& inBitmap, int inAlphaIndex)
 {
 	if( inTileHeight < 0 )
 	{
@@ -1604,6 +1650,9 @@ bool TileExtractor::ExtractTiles(unsigned int inTileWidth, int inTileHeight, uns
 			mTiles[currTile].mTileSize = mTileByteSize;
 			mTiles[currTile].mX        = x;
 			mTiles[currTile].mY        = y;
+			mTiles[currTile].mTileWidth = inTileWidth;
+			mTiles[currTile].mTileHeight = inAbsTileHeight;
+
 			mDataSize                 += mTileByteSize;
 			memset(mTiles[currTile].mpTile, 0, mTileByteSize);
 
@@ -1620,17 +1669,17 @@ bool TileExtractor::ExtractTiles(unsigned int inTileWidth, int inTileHeight, uns
 					const unsigned char linearColorValue = pLinearData[linearDataIndex + linearY*stride + tilePixelX];
 					mTiles[currTile].mpTile[tilePixelY*numBytesPerTileWidth + tilePixelX] = linearColorValue;
 
-					if( linearColorValue != 0 )
+					if( linearColorValue != inAlphaIndex )
 					{
-						if( mTiles[currTile].mBytesInWidthOfContent < tilePixelX)
+						if( mTiles[currTile].mBytesInWidthOfContent < tilePixelX + 1)
 						{
-							mTiles[currTile].mBytesInWidthOfContent = tilePixelX;
+							mTiles[currTile].mBytesInWidthOfContent = tilePixelX + 1;
 						}
 
-						const unsigned int rightPixelX = bIs4Bit ? (tilePixelX)*2 + ((linearColorValue & 0xf0) ? 2 : 1) : rightPixelX;
-						if( rightPixelX > mTiles[currTile].mWidthOfContent )
+						const unsigned int rightPixelX = bIs4Bit ? (tilePixelX)*2 + ((linearColorValue & 0xf0) ? 2 : 1) : tilePixelX;
+						if( mTiles[currTile].mWidthOfContent < rightPixelX + 1)
 						{
-							mTiles[currTile].mWidthOfContent = rightPixelX;
+							mTiles[currTile].mWidthOfContent = rightPixelX + 1;
 						}
 					}
 				}

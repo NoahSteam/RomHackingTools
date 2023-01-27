@@ -1,12 +1,12 @@
 Koubu Kai
 Ogami
-Rouko Mekkyaku - Tenchi Isshin
+Tenchi Isshin
 Tenbu
 Sakura
-Haja Kensei - Hyakka Seihou
+Hyakka Seihou
 Tenbu
 Sumire
-Kanzaki Fujin Ryu - Dance of Dragon
+Dance of the Dragon
 Eisenkleid
 Reni
 Das Rheingold
@@ -30,31 +30,31 @@ Reni
 Die Walküre
 Koubu Kai
 Ogami
-Rouko Mekkyaku - Tenrou Tenge
+Tenrou Tenge
 Koubu Kai
 Sakura
-Haja Kensei - Ouka Ranman
+Ouka Ranman
 Koubu Kai
 Sakura
-Haja Kensei - Ouka Mushou
+Ouka Mushou
 Koubu Kai
 Sumire
-Kanzaki Fujin Ryu - Dance of Phoenix
+Dance of the Phoenix
 Koubu Kai
 Maria
-Shchelkunchik/Nutcracker
+Shchelkunchik
 Koubu Kai
 Kanna
 Sansei Ruushou
 Koubu Kai
 Iris
-Iris Grande Jean-Paul
+Iris Grand Jean-Paul
 Koubu Kai
 Kohran
 Seiju Robo Kai
 Koubu Kai
 Orihime
-Viaggio rose
+Viaggio Rose
 Koubu Kai
 Reni
 Siegfried
@@ -64,31 +64,31 @@ None
 Wakiji Kai
 I-type Otsu
 None
-Wakiji Mk.II
+Wakiji Kai
 RO-type Kou
 None
 Koubu Kai
 Sumire
 Waxwing Waltz
-Wakiji Mk.II
+Wakiji Kai
 RO-type Otsu
 None
-Wakiji Mk.II
+Wakiji Kai
 HA-type Kou
 None
-Wakiji Mk.II
+Wakiji Kai
 NI-type Special
 None
-Wakiji Mk.II
+Wakiji Kai
 I-type Kei
 None
-Wakiji Mk.II
+Wakiji Kai
 L Special
 None
-Wakiji Mk.II
+Wakiji Kai
 Shoujin
 None
-Wakiji Mk.II
+Wakiji Kai
 Oudouji
 None
 Goko
@@ -102,7 +102,7 @@ Mokujiki
 Koushinenrin Enbu
 Koubu Kai
 Maria
-Pikovaya dama
+Pikovaya Dama
 Dark Kamui
 Satan
 None
@@ -118,16 +118,16 @@ Houma Seishin
 Dark Kamui
 Demon King
 Ouka Houshin
-Shinnou (Head)
+Shinnou (H)
 Kyogoku
 Onteki Taisan
-Shinnou (Arm)
+Shinnou (A)
 Kyogoku
 None
-Shinnou (Arm)
+Shinnou (A)
 Kyogoku
 None
-Shinnou (Tail)
+Shinnou (T)
 Kyogoku
 Holy Demon Magic Circle
 Kouma Weapon
@@ -161,7 +161,7 @@ Kouma Weapon
 Inazuma
 None
 Weapon
-Steam Rocket
+Rocket
 None
 Weapon
 Enku
@@ -172,7 +172,7 @@ Iris Petit Jean-Paul
 Weapon
 Obeyer
 None
-Car
+Automobile
 Fancy Car
 None
 Weapon
@@ -191,7 +191,7 @@ Weapon
 Dimension Cannon
 None
 Weapon
-Grudge Cord
+Cord
 None
 Terrain
 Summoner
@@ -203,34 +203,34 @@ Koubu Kai
 Kohran
 Jiangpai Robots
 Weapon
-Cross Homura
+X Homura
 None
-Shinnou (Arm)
+Shinnou (A)
 Kyogoku
 None
 Weapon
-Cross Homura
+X Homura
 None
 Terrain
 Engine
 None
 Weapon
-Grudge Cord
+Cord
 None
 Terrain
-Defense Wall
+D. Curtain
 None
 Terrain
 Guide Light
 None
 Terrain
-Boulder Stopper
+Rock Stop
 None
 Terrain
 Illuminator
 None
 Weapon
-Grudge Cord
+Cord
 None
 Eisenkleid
 Orihime
@@ -264,4 +264,4 @@ Reni
 Das Rheingold
 Tenbu
 Ogami
-Rouko Mekkyaku - Sanjin Seiko
+Sanjin Seiko

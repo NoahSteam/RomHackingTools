@@ -3,9 +3,11 @@
 class Tiled8BitFontSheet
 {
 public:
-	bool CreateFontSheet(const std::string& inFontSheetPath, const std::string& inTempOutputPath)
+	bool CreateFontSheet(const std::string& inFontSheetPath, const std::string& inTempOutputPath, char inStartingLetter)
 	{
 		CreateDirectoryHelper(inTempOutputPath);
+
+		mStartingLetter = inStartingLetter;
 
 		BitmapReader fontSheet;
 		if( !fontSheet.ReadBitmap(inFontSheetPath) )
@@ -33,7 +35,9 @@ public:
 			}
 
 			//Extract the tiles
-			mFontSheet.ExtractTiles(16, 16, 16, 16, createdFontReader);
+			mFontSheet.ExtractTiles(16, 16, 16, 16, createdFontReader, 1);
+
+			DeleteFile(createdFontSheetPath.c_str());
 		}
 		else if( fontSheet.GetBitCount() != 8 )
 		{
@@ -46,10 +50,63 @@ public:
 			mFontSheet.ExtractTiles(16, 16, 16, 16, fontSheet);
 		}
 
+		const int numTiles = (int)mFontSheet.mTiles.size();
+		for( int tileIndex = 0; tileIndex < numTiles; ++tileIndex )
+		{
+			int width = mFontSheet.mTiles[tileIndex].mBytesInWidthOfContent;
+			if( width == 0 )
+			{
+				width = 4;
+			}
+
+			mLetterToWidth[mStartingLetter + tileIndex] = width;
+		}
+
 		return true;
+	}
+	
+	const TileExtractor::Tile* GetTileForCharacter(char InLetter)
+	{
+		const int index = (int)(InLetter) - (int)(mStartingLetter);
+		if( index < 0 || index >= mFontSheet.mTiles.size() )
+		{
+			printf("GetTileForCharacter: Invalid letter %c\n", InLetter);
+			return nullptr;
+		}
+
+		return &mFontSheet.mTiles[index];
+	}
+
+	int GetWidthOfCharacter(char InLetter) const
+	{
+		std::map<int, int>::const_iterator iter = mLetterToWidth.find(InLetter);
+		if( iter != mLetterToWidth.end() )
+		{
+			return iter->second;
+		}
+
+		printf("GetWidthOfCharacter: %c\n", InLetter);
+		return 0;
+	}
+
+	int GetWidthOfText(const std::string& InString) const
+	{
+		int width = 0;
+
+		const size_t numLetters = InString.length();
+		for(size_t i = 0; i < numLetters; ++i )
+		{
+			width += GetWidthOfCharacter(InString[i]);
+		}
+
+		return width;
 	}
 
 	TileExtractor mFontSheet;
+
+private:
+	std::map<int, int> mLetterToWidth;
+	char mStartingLetter{0};
 };
 
 class TextInImageUsingFontSheet
@@ -85,14 +142,27 @@ public:
 		}
 
 		mImageCanvas.CreateSurface(bgndImage.GetWidth(), bgndImage.GetHeight(), 
-								   BitmapSurface::EBitsPerPixel::kBPP_8, pPalette, paletteDataSize);
+								   BitmapSurface::EBitsPerPixel::kBPP_8, pPalette, paletteDataSize, true);
 
 		mImageCanvas.AddTile(pColorData, colorDataSize, 0, 0, bgndImage.GetWidth(), bgndImage.GetHeight());
+
+		return true;
 	}
 
-	void AddTile()
+	bool AddTile(int inXLocation, const TileExtractor::Tile& inTile, int inWidthOfCharacter)
 	{
+		if( inXLocation + inWidthOfCharacter > mImageCanvas.GetWidth() )
+		{
+			return false;
+		}
 
+		mImageCanvas.AddPartialTile(inTile.mpTile, inTile.mTileSize, inXLocation, 0, inWidthOfCharacter, inTile.mTileWidth, inTile.mTileHeight);
+		return true;
+	}
+
+	void OutputBitmap(const std::string& inOutputPath)
+	{
+		mImageCanvas.WriteToFile(inOutputPath, true);
 	}
 
 private:
@@ -109,7 +179,7 @@ bool WriteTextIntoImageUsingFontSheet(
 	CreateDirectoryHelper(pInOutputPath);
 
 	Tiled8BitFontSheet fontSheet;
-	if( !fontSheet.CreateFontSheet(inFontSheetPath, pInOutputPath) )
+	if( !fontSheet.CreateFontSheet(inFontSheetPath, pInOutputPath, ' ') )
 	{
 		return false;
 	}
@@ -138,24 +208,33 @@ bool WriteTextIntoImageUsingFontSheet(
 		}
 
 		BitmapReader canvasImage;
-		if( canvasImage.GetBitCount() != 8 )
+		if(canvasImage.ReadBitmap(canvasFile.mFullPath.c_str()))
 		{
-			printf("Warning: Canvas image needs to be 8bits.  This canvas can't be used: %s\n", canvasFile.mFileName.c_str());
-			continue;
+			canvasSizeToPathName[canvasImage.GetWidth()] = canvasFile;
 		}
-
-		canvasSizeToPathName[canvasImage.GetWidth()] = canvasFile;
 	}
 
+	//Create translated version of all original images
 	std::vector<FileNameContainer> allOriginalImages;
 	FindAllFilesWithinDirectory(inOriginalImagesDirectory, allOriginalImages);
-	for( const FileNameContainer& originalFileName : allOriginalImages )
+
+	if( textFile.mLines.size() != allOriginalImages.size() )
 	{
+		printf("Image and translation mismatch.  Images:%i TranslationLine:%i\n", (int)allOriginalImages.size(), (int)textFile.mLines.size());
+		return false;
+	}
+
+	const size_t numImages = allOriginalImages.size();
+	for( size_t imageIndex = 0; imageIndex < numImages; ++imageIndex )
+	{
+		const TextFileData::TextLine& textLine = textFile.mLines[imageIndex];
+		const FileNameContainer& originalFileName = allOriginalImages[imageIndex];
 		if( originalFileName.mExtention != bmpExt )
 		{
 			continue;
 		}
 
+		// Read in orginal image so we can determine which canvas size to use
 		BitmapReader originalImage;
 		if( !originalImage.ReadBitmap(originalFileName.mFullPath) )
 		{
@@ -169,8 +248,43 @@ bool WriteTextIntoImageUsingFontSheet(
 			continue;
 		}
 
-		//Todo, read in translation and add it into the translatedImage
+		//Create canvas
 		TextInImageUsingFontSheet translatedImage;
-		translatedImage.InitializeImage(canvasToUse->second.mFullPath.c_str());
+		if( !translatedImage.InitializeImage(canvasToUse->second.mFullPath.c_str()) )
+		{
+			continue;
+		}
+
+		//Draw text into image
+		const int textWidth = fontSheet.GetWidthOfText(textLine.mFullLine);
+		int xLocation = (originalImage.GetWidth()/2) - (textWidth/2);
+		if( xLocation < 0 )
+		{
+			xLocation = 0;
+		}
+
+		//Print out letters
+		const size_t numLetters = textLine.mFullLine.size();
+		for( size_t letterIndex = 0; letterIndex < numLetters; ++letterIndex )
+		{
+			const TileExtractor::Tile* pTile = fontSheet.GetTileForCharacter(textLine.mFullLine[letterIndex]);
+			if( !pTile )
+			{
+				continue;
+			}
+
+			const int widthOfCharacter = fontSheet.GetWidthOfCharacter(textLine.mFullLine[letterIndex]);
+
+			if( !translatedImage.AddTile(xLocation, *pTile, widthOfCharacter) )
+			{
+				printf("Unable to fit %s\n", originalFileName.mFileName.c_str());
+				break;
+			}
+			xLocation += widthOfCharacter;
+		}
+
+		translatedImage.OutputBitmap(pInOutputPath + originalFileName.mFileName);
 	}
+
+	return true;
 }
