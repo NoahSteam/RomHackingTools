@@ -392,6 +392,9 @@ class BitmapFormatConverter
 public:
 	~BitmapFormatConverter();
 
+	bool ConvertFrom15BitTo32Bit(const char* pInData, int InDataSize);
+	bool ConvertFrom32BitTo15Bit(const char* pInBGRAData, int InDataSize);
+
 	bool ConvertFrom4BitTo8Bit(const char* pIn8BitBmpPath);
 	bool ConvertFrom4BitTo8Bit(const BitmapReader& InSourceBitmap);
 

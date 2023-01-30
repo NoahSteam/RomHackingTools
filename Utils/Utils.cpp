@@ -1423,6 +1423,63 @@ BitmapFormatConverter::~BitmapFormatConverter()
 	mpPaletteData = nullptr;
 }
 
+bool BitmapFormatConverter::ConvertFrom15BitTo32Bit(const char* pInData, int InDataSize)
+{
+	delete[] mpConvertedData;
+
+	const unsigned short* pColorData = (unsigned short*)(pInData);
+	mConvertedDataSize = InDataSize*2;
+	mpConvertedData = new char[mConvertedDataSize];
+	int destIndex = 0;
+	const float full5BitValue = (float)0x1f;
+
+	for( int sourceIndex = 0; sourceIndex < InDataSize/2; sourceIndex++)
+	{	
+		const unsigned short sourceColor = SwapByteOrder(pColorData[sourceIndex]);
+		const char b = (sourceColor >> 10) & (0x1f);
+		const char g = (sourceColor >> 5) & (0x1f);
+		const char r = sourceColor & (0x1f);
+		mpConvertedData[destIndex + 0] = (char)floorf( ( ((b)/full5BitValue) * 255.f) + 0.5f);
+		mpConvertedData[destIndex + 1] = (char)floorf( ( ((g)/full5BitValue) * 255.f) + 0.5f);
+		mpConvertedData[destIndex + 2] = (char)floorf( ( ((r)/full5BitValue) * 255.f) + 0.5f);
+		mpConvertedData[destIndex + 3] = 0;
+
+		destIndex += 4;
+	}
+
+	return true;
+}
+
+bool BitmapFormatConverter::ConvertFrom32BitTo15Bit(const char* pInBGRAData, int InDataSize)
+{
+	delete[] mpConvertedData;
+
+	mConvertedDataSize = InDataSize >> 1;
+	mpConvertedData = new char[mConvertedDataSize];
+
+	const float maxFullValue = (float)0xff;
+	const float max5BitValue = (float )(1 << 5);
+	int destIndex = 0;
+	for( int i = 0; i < InDataSize; i += 4 )
+	{
+		if( *(int*)&pInBGRAData[i] != 0 )
+		{
+			int k = 0;
+			++k;
+		}
+		const uint32 b = (uint32)(floorf( ((float)pInBGRAData[i + 0]/maxFullValue) * max5BitValue + 0.5f) );
+		const uint32 g = (uint32)(floorf( ((float)pInBGRAData[i + 1]/maxFullValue) * max5BitValue + 0.5f) );
+		const uint32 r = (uint32)(floorf( ((float)pInBGRAData[i + 2]/maxFullValue) * max5BitValue + 0.5f) );
+
+		const unsigned short convertedValue = (b << 10) + (g << 5) + r;
+		mpConvertedData[destIndex + 0] = (char)((convertedValue & (unsigned short)0xff00) >> 8);
+		mpConvertedData[destIndex + 1] = (char)(convertedValue & (unsigned short)0x00ff);
+		destIndex += 2;
+	}
+
+	return true;
+}
+
 bool BitmapFormatConverter::ConvertFrom4BitTo8Bit(const BitmapReader& InSource4BitBitmap)
 {
 	if( InSource4BitBitmap.GetBitCount() != 4 )
@@ -1536,8 +1593,8 @@ bool BitmapFormatConverter::ConvertColorDataFrom8BitTo4Bit(const char* pInData, 
 void BitmapFormatConverter::WriteToFile(const char* pInOutputPath)
 {
 	BitmapWriter w;
-	w.CreateBitmap(pInOutputPath, mWidth, mHeight, mBitCount, mpConvertedData, mConvertedDataSize, 
-				   (char*)mpPaletteData, mPaletteDataSize, true);
+	w.CreateBitmap(pInOutputPath, mWidth, mHeight, mBitCount, mpConvertedData, (int)mConvertedDataSize, 
+				   (char*)mpPaletteData, (int)mPaletteDataSize, true);
 }
 
 /////////////////////////////////

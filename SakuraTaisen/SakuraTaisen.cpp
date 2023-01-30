@@ -12204,15 +12204,7 @@ void SizeTest(const string& wklDir1, const string& wklDir2)
 int main(int argc, char *argv[])
 {
 #if 0
-	FindDiff();
 
-	if(argc == 2)
-	{
-		string command(argv[1]);
-		command = "";
-
-		return 1;
-	}
 #else
 	if(argc == 1)
 	{

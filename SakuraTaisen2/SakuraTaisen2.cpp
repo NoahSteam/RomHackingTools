@@ -454,14 +454,41 @@ void EncodeRadio()
 	}
 }
 
+void FixupStellarAssultLoadScreens()
+{
+	const FileNameContainer inFileName("C:\\Users\\16306\\Desktop\\Rizwan\\Emulators\\Games\\StellarAssault\\Raw\\Loading2.sp");
+	const string outFileName("c:\\Users\\16306\\Desktop\\Test46.bmp");
+
+	FileData inFileData;
+	if( !inFileData.InitializeFileData(inFileName) )
+	{
+		printf("ExtractTiledImage %s failed\n", "test.bmp");
+		return;
+	}
+	BitmapFormatConverter c;
+	c.ConvertFrom15BitTo32Bit(inFileData.GetData() + 8, inFileData.GetDataSize() - 8);
+
+	BitmapFormatConverter c2;
+	c2.ConvertFrom32BitTo15Bit(c.GetConvertedData(), c.GetConvertedDataSize());
+
+	BitmapFormatConverter c3;
+	c3.ConvertFrom15BitTo32Bit(c2.GetConvertedData(), c2.GetConvertedDataSize());
+
+	BitmapWriter b;
+	b.CreateBitmap(outFileName, 208, -87, 32, c3.GetConvertedData(), c3.GetConvertedDataSize(), nullptr, 0, true);
+}
+
 int main(int argc, char *argv[])
 {
-#if 0
+#if 1
 	{
 	//	EncodeRadio();
 		
 	//	TestRadio();
-		VerifyText();
+	
+	//	VerifyText();
+
+		FixupStellarAssultLoadScreens();
 	}
 #else
 	if(argc == 1)
