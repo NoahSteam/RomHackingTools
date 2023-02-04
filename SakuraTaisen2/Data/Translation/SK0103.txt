@@ -1,18 +1,18 @@
-It's already 9 o'clock...
+﻿It’s already 9 o’clock…
 I guess this will be my first night back at the theater. 
-But man, today was already pretty crazy... 
-W-What's that noise?! 
+But man, today was already pretty crazy… 
+W-What’s that noise?! 
 The sound seems to be coming from this machine. What is it? 
 Whoa! Something appeared on the screen! 
-A-hoy, Chief! Can ya hear me? Kohran here! 
+A-hoy, Chief! Can you hear me? Kohran here! 
 Man, it's really you, Chief. 
 Haven't seen you for so long. 
 Kohran... It has been a long time. Glad to see that you're doing good. 
 Is that you, Kohran? Thanks for coming to greet me earlier today. 
 Hehe, it's not a big deal, Chief. 
 By the way, what's this machine? 
-Heh heh! Surprised, ain'tcha? Behold my latest invention, the "Cinematron"! 
-I see... So this is the present you were talking about. 
+Heh heh! Surprised, ain'tcha? Behold my latest invention, the “Cinematron”! 
+I see… So this is the present you were talking about. 
 Yup! I hope you like it. 
 This is a steam-powered communication device called the Cinematron. 
 I'll teach you how to use it. 
@@ -22,20 +22,20 @@ If you want to end your call, press the "Power" button.
 On the right are "Speed Dials." These buttons let you quickly call a person you've talked to before.
 There may be some times where the person can't respond to your call, though. Easy, right? 
 Uhm... I get it, kind of. 
-Okie-dokie! Why don't we take it for a spin. After all, practice makes perfect! 
+Okie-dokie! Why don’t we take it for a spin. After all, practice makes perfect! 
 How about you try to reach me over at Hanayashiki, Chief? 
-The branch's call number is "13700."
-I'll wait for yer call. You can do it, Chief. 
-All right, time to test it. Tune the dial first, then press the "Call" button. 
-13700, right? OK, I'll give it a try.
+The branch’s call number is “13700.”
+I'll wait for your call. You can do it, Chief. 
+All right, time to test this out. Tune the dial first, then press the "Call" button. 
+13700, right? OK, I’ll give it a try.
 Oops, I should press this button later when I'm gonna end the call. 
 I can't reach her. Did I dial the wrong number? 
 Hanayashiki's number was 13700, right? Let's try again. 
 Hello? This is Hanayashiki. 
 Oh, Chief! You were able to call me all by yourself!
 Well, I managed somehow. 
-All right, let's chat on the big screen.
-Can ya hear me, Chief? 
+All right, let’s chat on the big screen.
+Can you hear me, Chief? 
 Yeah, I can hear you. And I can see your face as well.
 Great! I can hear you loud and clear on my end, too. 
 This is amazing. Being able to communicate while seeing the other person's face is really something. 
@@ -47,17 +47,17 @@ Of course I'll call.
 What a pain... 
 Of course, no problem. I'll call you again, 13700. 
 Thanks, Chief. I'm... looking forward to it. 
-Ugh, operating this thing is so complicated. This'll be a pain in the neck to learn. 
+Ugh, operating this thing is so complicated. This'll be a pain in the neck to figure out. 
 You won't learn anything with that attitude, Chief. 
 Besides, isn't it rude to say something's "a pain" when people ask you for something? 
 Uh, well... You have a point. 
 Oh well, you can just gimme a call whenever you feel like it. 
 OK, Kohran, got it. 
-Earth to Chief, can ya hear me? 
+Earth to Chief, can you hear me? 
 Ah, s-sorry. I spaced out for a moment... 
 Thank you for giving me this amazing device, Kohran.
-Aww, quit exaggerating. It ain't a big deal. Anything for you, Chief. 
-Heeeey, Boss! Can you hear me? It's Kanna Kirishima. 
+Aww, quit exaggerating. It ain’t a big deal. Anything for you, Chief. 
+Heeeey, Boss! Can ya hear me? It's Kanna Kirishima. 
 Kanna? Is that really you? 
 Hehe, you bet. Long time no see, Boss. 
 Heh, well, I say that but we just saw each other earlier today. 
@@ -71,9 +71,9 @@ You can talk to a bunch of people at the same time with this machine.
 I also gave the others one before they left, too. 
 Huh? So, that means... 
 Ohohohoho! You haven't forgotten about me, have you, Ensign? 
-It is I, the Top Star of the Imperial Theater, Sumire Kanzaki. 
+It is I, the top star of the Imperial Theater, Sumire Kanzaki. 
 Thank you for sending me off earlier, Ensign. 
-It is I, the Top Star of the Imperial Theater, Sumire Kanzaki. 
+It is I, the top star of the Imperial Theater, Sumire Kanzaki. 
 Pardon me for not contacting you earlier, Ensign. 
 Sumire. 
 How does it feel to return to the theater after so long? 
@@ -85,52 +85,52 @@ That's enough, both of you!
 Can you hear my voice, Captain? It's me, Maria Tachibana. 
 Maria! Of course I can hear you. 
 Captain, thank you for seeing me off earlier. 
-It's been a long time, Captain. Seeing you lively as ever relieves me. 
+It's been a long time, Captain. I'm relieved to see that you're as lively as ever. 
 Great to see you doing well too, Maria. 
 I'm contacting you from a ship heading to New York. 
 Amazing, isn't it? 
 Even when I'm atop the waves, I can talk with you like this. 
 It really is amazing. All thanks to Kohran's Cinematron. 
-And because it's one of her inventions, we need to watch out in case they blow up in our faces. 
+And because it’s one of her inventions, we need to watch out in case they blow up in our faces. 
 Aw man, that's a low blow, Sumire. 
 Ahahahaha... 
 Anyways, Boss, I'm still training and won't be able to return for a while. 
 Hit me up sometime, OK? 
 OK. Good luck, Kanna. 
-Thanks, Boss! See you later. 
-Listen to this, Ensign. I heard my grandfather, Tadayoshi, had fallen ill, so I rushed home...
-But he's as sprightly as can be! It was just a ruse to trick me into returning home. 
-I-Is that so... 
-Well, I'll be out of here soon anyway. 
+Thanks, Boss! See ya later. 
+Listen to this, Ensign. I heard my grandfather, Tadayoshi, had fallen ill, so I rushed home…
+But he’s as sprightly as can be! It was just a ruse to trick me into returning home. 
+I-Is that so… 
+Well, I’ll be out of here soon anyway. 
 In time, I hope we can be reunited at the theater once again. Now then, excuse me. 
 Things must be very hectic for you, Captain. And just when you returned. 
 Please, take care of everyone in the Flower Division. 
 Of course, leave it to me. 
 Thank you very much, Captain. I'll be going now. 
-Me too, Chief, I have to go as well. 
+Me too, Chief, I gotta run as well. 
 Thanks, Kohran. I'll make good use of this Cinematron. 
 Glad to hear it! That makes all the hard work worth it. 
-Well then, Chief. I'll see ya later. 
-The Cinematron, huh... This thing sure is handy. 
-Despite being one of Kohran's inventions, it doesn't look like I'm in danger of it exploding. 
+Well then, Chief. I’ll see you later. 
+The Cinematron, huh… This thing sure is handy. 
+Despite being one of Kohran’s inventions, it doesn’t look like I’m in danger of it exploding. 
 ...Ensign. 
 Wah! You surprised me, Sumire! Is there something else you needed? 
 I forgot to tell you something important. 
-I never gave you my Call Number. 
-My Call Number is "13800." May I ask you to give me a call? 
+I never gave you my call number. 
+My number is "13800." May I ask you to give me a call? 
 It's 13800, right? OK, I'll set it to my Speed Dial. 
 Please reach me out when you have a moment, Ensign. I'll wait for your call. 
 ...Captain. 
 Wah! You surprised me, Maria! Is there something else you needed? 
 Sorry to bother you again, but I forgot to tell you something important. 
-I want to give you my Call Number. 
-My Call Number is "13900." Please let me know if anything happens. 
+I want to give you my call number. 
+My number is "13900." Please let me know if anything happens. 
 It's 13900, right? OK, I'll set it to my Speed Dial. 
 I'm going to go now. Good night, Captain. 
 ...Boss! 
 Wah! You surprised me, Kanna! Is there something else you needed? 
-Oh, my bad, sorry. I forgot to tell you something important. 
-I was gonna give you my Call Number. 
+Oh, my bad, sorry. I forgot to tell ya something important. 
+I was gonna give you my call number. 
 Let's see, my number is... Aha, there it is, "14000"! 
 It's 14000, right? OK, I'll set it to my Speed Dial. 
 Bye, Boss! Sleep well tonight! 
@@ -139,46 +139,46 @@ Now, what should I do next?
 ...Hm? At this hour? Who could that be? 
 Yes? I'm coming! 
 Good evening, Ogami. 
-Good evening, Sakura. What is it? 
+Good evening. What’s the matter, Sakura? 
 I was sent by the manager to ask if you would perform the night watch.
 The patrol will only last till 10 o'clock. So you have 30 minutes to inspect the theater. 
 Night patrol, huh... 
-I'll join you, Ogami. Let's go together. 
+I'll be joining you, Ogami. Let's go together. 
 I know! Let's ask Orihime to come along with us. It would be a good opportunity to talk with her.
 OK, let's go. 
-...Orihime? 
+...Invite Orihime? 
 I just wanna sleep... 
-OK, let's go. It'll be my first job as the captain, so I should do my best. 
+OK, let's go. This'll be my first job back as captain, so I’ll do my best. 
 I'm concerned about Orihime, too. 
-I'm relieved you feel the same. Thank you so much! 
+Thank you so much! I’m relieved you feel the same. 
 Let's head to Orihime's room, then. 
-Talk with Orihime? Wouldn't that just create more trouble between us? 
+…Invite Orihime? Wouldn't that just lead to more trouble between us? 
 Ogami, solving problems among your peers is one of your duties as captain! 
 Now let's head to her room. Follow me. 
-I-I get it. I'm going, I'm going.
+I-I get it. I’m going, I’m going.
 Actually, I just want to head to bed. A lot of things have happened today, and I'm exhausted. 
-Is that so... And here I thought you would have accepted...
+Is that so… And here I thought you would have accepted…
 Sorry for disturbing you. Well, good night. 
 ... 
 Guess I might have overdone it. 
-Well, what's done is done. Guess I'll hit the hay, then. 
+Well, what’s done is done. Guess I’ll hit the hay, then. 
 Ogami, if you keep hesitating it'll be midnight. 
-Let's just talk to her before she goes to sleep. 
+Let's just talk to Orihime before she goes to sleep. 
 Hmmm... What should we do? 
-All right, then. I'm just going to have to drag you over there by force. 
+All right, then. I’m just going to have to drag you over there by force. 
 H-Hey, Sakura! Don't pull my sleeve! W-Wait! 
 So, this is Orihime's room. I wonder if she's still awake. 
-Ogami! Where do you think you're going? You need to talk to her! 
-The name plate has a simple design, but it sure looks classy. 
+Ogami! Where do you think you're going? You need to invite Orihime! 
+The nameplate has a simple design, but it sure looks classy. 
 Yeees? Who is it? 
 It's Ogami. Could I talk to you for a moment? 
-Ensign? What's so urgent that you would come knocking at this hour?! 
+Ensign? What’s so urgent that you would come knocking at this hour?! 
 Orihime, it's Sakura. Sorry for disturbing you so late at night. 
 Um, there's something we wanted to talk with you about. 
 ... 
 I don't know what you want, but I'm about to go to sleep. So please keep this brief. 
 If this takes too long, I may excuse myself from this conversation. 
-(Looks like she's not in a great mood. For now, I'll try inviting her to patrol the theater with us.) 
+(Looks like she's not in a great mood. For now, I’ll try inviting her to patrol the theater with us.) 
 (I need to be careful with what I say, or else she might just leave. All right. let's do this.) 
 Where do you think you're looking?! Did you call me out here just to subject me to this rudeness?! 
 Uh... N-No. You're mistaken. 
@@ -188,25 +188,25 @@ Y-Yeah, you're right.
 (Orihime... She's glaring at me.) 
 Look away. 
 O-Orihime... Don't stare at me like that, please. 
-Oho... You averted your gaze, just as I expected.
+Oho… You averted your gaze, just as I expected.
 Avoiding eye contact shows a lack of self-confidence. 
 Is that all you got, Ensign? 
 Urk... 
 ... 
-Oho... So you're not going to avert your gaze, huh? 
+Oho… So you’re not going to avert your gaze, huh? 
 Avoiding eye contact shows a lack of self-confidence. 
-Not that I'm implying you have any, that is.
+Not that I’m implying you have any, that is.
 Well? What do you want to talk about? 
-Wow, Orihime, I didn't know Italians like you could have such beautiful black hair. 
+Wow, Orihime, I didn’t know Italians like you could have such beautiful black hair. 
 ...Mind your own business! Kindly leave my hair alone! 
 Yikes! D-Did I say something to make her mad? 
 (She'll just get angry if I bring up her hair. Let's just leave it.) 
 I always wear a negligee to bed. 
 Sakura, why don't you try to wear one sometime? 
-That'd be sexy! 
+She’d look attractive!
 I'm sure it would suit her. 
-That'd be too adult for her. 
-If Sakura wore a negligee... I'm sure she'd look quite attractive! 
+That'd be too much for her.
+If Sakura wore a negligee... I’m sure she’d look quite attractive! 
 Ogami, come on... Don't tease me like that. 
 I bet a negligee would suit you well, Sakura.
 Do you think so? Wouldn't this look a little too mature for me? 
@@ -214,14 +214,14 @@ No, of course not.
 Ogami... Thank you. 
 If you two want to flirt, do it somewhere else, would you? 
 A negligee, huh? I think that'd be too much for Sakura. 
-...Are you trying to say I'm too childish to wear one? 
+...Are you trying to say I’m too childish to wear one? 
 If you two want to squabble, do it somewhere else, would you? 
 ...I-I think that's a bit too mature for me. 
 Oho... Well, perhaps you're right. 
-So, what did you want to talk about? You didn't come here just to see me in my negligee, right? 
+So, what did you want to talk about? You didn't come here just to see me in my negligee, did you? 
 Hey, Ensign! Where were you staring just now?! 
 N-No, that's... I-I didn't do it on purpose. 
-So you came here just to ogle other people's bodies? Goodness! 
+So you came here just to ogle other people’s bodies? Goodness! 
 (I'll be in serious trouble if I stare again.) 
 These are my favorite earrings. 
 I only take them off before going to sleep. 
@@ -243,8 +243,8 @@ We go around the theater to check if there is anything out of the ordinary.
 Would you like to join us? After all... 
 You have spare time, right?
 It'd be a change of pace.
-You have time to spare, right? You were just going to head to bed anyway, so... 
-Just because I have time on my hands doesn't mean I have to spend it patrolling the theater. 
+You have time to spare, right? You were just going to head to bed anyway, so… 
+Just because I have time on my hands doesn’t mean I have to spend it patrolling the theater. 
 ...It'll be a good change of pace. Perfect for killing boredom, right? 
 Hm... I wonder about that. 
 Um... I think it'll be a good change of pace. 
@@ -262,7 +262,7 @@ Well, which is it? Just tell me already!
 Until 12 o'clock. 
 You got it wrong, Ogami! I told you already, it's until 10 o'clock. 10 o'clock. 
 Well, which is it? Just tell me already! 
-Ogami, did you forget? We're going to patrol the theater until 10 o'clock.
+Ogami, did you forget? We’re going to patrol the theater until 10 o’clock.
 10 o'clock, huh... I suppose I could spare the time. 
 But still, why did you want to invite me? 
 I want to talk with you. 
@@ -270,38 +270,38 @@ I want to show you around.
 I wanted to talk with you some more. We haven't had the chance to since this afternoon. 
 ...What kind of reason is that? 
 I have nothing to talk with you about. 
-I wanted to show you around. There may be other things that catch your interest, like the tatami.
+I wanted to show you around. There may be things you are curious about like the tatami from earlier.
 Good idea. I guess I'll join you, then. 
 Why? Um... How should I put it... 
 Is there something you're not telling me? How suspicious. 
 Come on, Orihime, let's go. Is there a problem? 
 To put it bluntly, I do not want to go anywhere with the ensign. 
 Don't say that. Let's go. 
-I didn't mean to be pushy.
-Don't say that, Orihime. Come on, let's go. 
-You know what, I'm leaving. It's against my principles to take orders from a Japanese man. 
+I won’t force you.
+Don't say that, Orihime. Come on, let’s go. 
+You know what, I’m leaving. It’s against my principles to take orders from a Japanese man. 
 I shall be taking my leave now. Good luck with your night watch, you two. 
 Ugh... That could have gone better. 
 That's too bad. And it would have been a good chance to talk with her, too. 
 Well, there'll be more chances to talk with her. Let's just continue with the two of us. 
 You're right, let's go. 
-Well, it can be a tough job, so I won't force you or anything.
-...I don't like your tone. 
-All right, fine. Just for tonight, I'll join you on your patrol. 
+Well, it can be a tough job, so I won’t force you or anything.
+...I don’t like your tone. 
+All right, fine. Just for tonight, I’ll join you on your patrol. 
 Really? Thank goodness! 
 Way to go, Ogami. You managed to persuade Orihime even though she was so harsh on you. 
 What are you two whispering about? 
 N-Nothing! It's nothing! Don't worry about it. 
 A-Anyway, let's go out on night patrol! 
 Orihime... Why do you hate Japanese men so much? 
-That's none of your business! I don't need to explain myself to you. 
+That's none of your business! I don’t need to explain myself to you. 
 I shall be taking my leave now. Good luck with your night watch, you two. 
 Ugh... That could have gone better. 
 Did I just... say something that I shouldn't have? 
 No, I don't think so. I guess it's just that she can be hard to approach. 
 Well, there'll be more chances to talk with her. Let's just continue with the two of us. 
 You're right, let's go. 
-All right, fine. Just for tonight, I'll join you on your patrol.
+All right, fine. Just for tonight, I’ll join you on your patrol.
 But mind you, only for this one time, OK? 
 Really? Thank goodness! 
 Way to go, Ogami! You somehow managed to persuade Orihime.
@@ -314,83 +314,83 @@ Ugh... That's not good. I should have just gotten straight to the point with her
 That's too bad. And it would have been a good chance to talk with her, too. 
 Well, there'll be more chances to talk with her. Let's just continue with the two of us. 
 You're right, let's go. 
-Ah! Mon Fr�re, Sakura... 
+Ah! Mon Frère, Sakura... 
 And Orihime, too... 
 Iris... 
 What are you doing up? 
 You should be in bed. 
 Iris, what are you doing up at this hour? 
-I was looking for you, Mon Fr�re, so we could patrol the theater together! 
-Iris, it's late. You should be in bed. 
-You guys are always patrolling the theater by yourselves! It's not fair! 
-I was looking for you, Mon Fr�re, so I could patrol too. 
+I was looking for you, Mon Frère, so we could patrol the theater together! 
+Iris, it’s late. You should be in bed. 
+You guys are always patrolling the theater by yourselves! It’s not fair! 
+I was looking for you, Mon Frère, so I could patrol too. 
 At any rate, what are you getting up to so late at night? 
-Anyway... What are you doing up so late, Iris? 
-I was looking for Mon Fr�re so we could patrol the theater together. 
+Anyway… What are you doing up so late, Iris? 
+I was looking for Mon Frère so we could patrol the theater together. 
 Is that so? Sorry, Iris, but... 
-It's already very late. For now, why don't you head back to your room and get some sleep. 
-Well, I'll go back if... 
-Oh, I know! I'll go back to my room if you can find me in a game of hide-and-seek. 
+It’s already very late. For now, why don’t you head back to your room and get some sleep. 
+Well, I’ll go back if… 
+Oh, I know! I’ll go back to my room if you can find me in a game of hide-and-seek. 
 This time, it's your turn to seek. 
 OK, I'm gonna hide in the costume room. Catch me if you can!
 Oho, looks like Iris has got you wrapped around her little finger, Ensign. 
 Looks like Iris got you, Ogami. 
 There's no helping it. I'll just play along with her. 
-Now.. Where could Iris be hiding?
+Now... Where could Iris be hiding?
 There's a shadow right here. Could it be Iris? 
 Whaaat? You found me already? 
-I thought I would never get caught in this hiding spot... How did you know I was here? 
-Your shadow on the floor gave you away. That's how I was able to find you. 
+I thought I would never get caught in this hiding spot… How did you know I was here? 
+Your shadow on the floor gave you away. That’s how I was able to find you. 
 If the room had been a bit darker, Ogami may never have known you were there. 
 Could it be that she's... hiding among the costumes? 
 It's quite hard to tell from here, isn't it? 
 It's quite hard to tell from here... 
-Hmm... It's hard to tell since there are so many outfits. 
+Hmm… It’s hard to tell since there are so many outfits. 
 Don't tell me, she's inside this box... 
-O-Ogami, I know that Iris is small, but even she wouldn't be able to fit in that box. 
+O-Ogami, I know Iris is small, but even she wouldn't be able to fit in that box. 
 She's not in there, Ogami. 
 Let me guess, she's inside... this shoe. 
 Ensign, are you out of your mind? 
 Seriously, Ogami? 
-...Do you think we're looking for a fairy, Ensign?
+...Do you think we’re looking for a fairy, Ensign?
 I get that she's small, but there's no way she would be able to fit inside that shoe. 
 The shadow next to the shelf looks suspicious. 
 We looked there earlier and didn't find her. 
 If she's not here, where could she be hiding? 
-"Make sure to return used costumes to their original place." 
+“Make sure to return used costumes to their original place." 
 Everyone makes sure to follow the rules. Thanks to that, this room is always clean and tidy. 
-Wash hands before handling costumes." 
+“Wash hands before handling costumes." 
 Are your hands suitably clean, Ensign? 
 Be careful not to dirty the costumes. 
 What a big mirror... I can see my whole body. 
-A man admiring himself in the mirror... How tacky.
-Ogami... Don't get distracted by the mirror. We need to find Iris. 
-You promised, Ogami, so let's keep looking for Iris. 
-Time's up, Mon Fr�re! 
+A man admiring himself in the mirror… How tacky.
+Ogami… Don’t get distracted by the mirror. We need to find Iris. 
+You promised, Ogami, so let’s keep looking for Iris. 
+Time's up, Mon Frère! 
 Ah, Ogami! There was a shadow on the floor by the costumes!
 I see... So she was hiding behind the costumes. 
 Ehehe! Too late now! 
 You didn't find me in time, so I win! 
 Oh... You got me. 
-Ya, that was fun! Playing hide-and-seek at night like this is so exciting.
+Yay, that was fun! Playing hide-and-seek at night like this is so exciting.
 Hehe... Good for you, Iris. 
 It's getting late, so please go back to your room now. 
-Okaaay! Well, good niiight! 
+OOOK! Well, good niiight! 
 Does your job entail being a playmate for children as well, Ensign?
 She may be young but Iris is a member of the Flower Division, just like the rest of us. 
-Well, we got a little distracted there. Let's continue our patrol of the theater. 
+Well, we got a little distracted there. Let’s continue our patrol of the theater. 
 That was great, Ogami. Iris seems to be a lot cheerier now. 
-Yeah, but I didn't expect she'd want to play hide-and-seek with me. 
-Well, we got a little distracted there. Let's continue our patrol of the theater.
+Yeah, but I didn’t expect she’d want to play hide-and-seek with me. 
+Well, we got a little distracted there. Let’s continue our patrol of the theater.
 Looks like there's nothing out of the ordinary. Let's head to the next room. 
 This is the music room, we just added it recently. 
 There's a piano. I wonder if we know anyone who can play it. 
-Iris is very good at playing the piano. I'm still learning the basics, so I have a ways to go.
+Iris is very good at playing the piano. I’m still learning the basics, so I have a ways to go.
 I believe Orihime can play the piano as well. 
 If Orihime is ever with us, maybe she can play a song for us. 
 OK, let's move on. We need to check the other rooms. 
 This is the music room, we just added it recently. 
-Wow... This theater has a proper piano!
+Wow… This theater has a proper piano!
 May I take a moment to play it? 
 Yes, go ahead. 
 Ohoho. Well then, I'm gonna play my heart out! 
@@ -401,22 +401,22 @@ Wow, amazing! That was really great, Orihime!
 Oho, grazie mille! 
 As expected, Orihime, you're very talented.
 Hmmm, so you understand music, huh, Ensign? 
-Then you must know the name of the song I just played. 
+In that case, you must know the name of the song I just played. 
 Was it "German March"? 
 Was it "Italian March"? 
 Was it "Turkish March"? 
 I think it's called... "German March"? 
-Wrooong! I knew you wouldn't get it. 
+Wrooong! I knew you wouldn’t get it. 
 I was playing Mozart's "Turkish March." 
 O-Oh... Is that so? 
 I think it's called... "Italian March"? 
-Wrooong! I knew you wouldn't get it. 
+Wrooong! I knew you wouldn’t get it. 
 I was playing Mozart's "Turkish March." 
 O-Oh... Is that so? 
 I think it's called... "Turkish March"? 
-Oh... You know more about music than I was expecting, Ensign. 
+Oh… You know more about music than I was expecting, Ensign. 
 I don't really remember the song's name, but I think your piano playing was great. 
-Ohoho, I knew you wouldn't know. 
+Ohoho, I knew you wouldn't get it. 
 Still, I'm impressed that you didn't pretend to know the answer. 
 I was playing Mozart's "Turkish March." 
 It's common knowledge. Make sure to remember it, Ensign. 
@@ -427,33 +427,33 @@ I-It's not like that!
 Let's just continue your night patrol, Ensign! 
 Y-Yeah, right. Let's head to the next room. 
 Everything seems to be in order. Let's check the next room. 
-This is the costume room. All of our play costumes are stored here. 
+This is the costume room. All of the outfits for our plays are stored here. 
 This is where we played hide-and-seek with Iris, isn't it? 
 Well, with all these costumes hanging around, there's certainly plenty of places to hide. 
 Looks like everything is in order, let's move on. 
-This is the costume room. All of our play costumes are stored here. 
-Isn't this where we were playing hide-and-seek with Iris earlier? 
+This is the costume room. All of the outfits for our plays are stored here. 
+Isn’t this where we were playing hide-and-seek with Iris earlier? 
 After all that, I wish she had at least picked a better hiding spot. 
 Seems like there's nothing strange going on in here. Let's check another room. 
 This is the dressing room where we held that welcome party. 
 You guys organized that party just for us. Thank you. It really made me happy. 
 Too bad that Orihime didn't seem to like it very much... 
 Yeah, that was too bad. In time though, I think she'll appreciate what we did. 
-How about we go on to the next room? There are still plenty of rooms we haven't checked. 
+How about we go on to the next room? There are still plenty of places we haven't checked. 
 This is the dressing room where we held that welcome party. 
 Orihime, can I ask why you were in such a bad mood earlier? 
-...I don't have to explain myself to you, Ensign.
+...I don’t have to explain myself to you, Ensign.
 Nothing strange here. Let's head to the next room, shall we? 
 There's nothing strange in here, let's head to another room. 
 This is the stage wing. This is where the actors wait before going up on stage. 
 I wonder why they call it a "wing." 
 ...Oh well, there's no need to think too much about it. Let's go somewhere else. 
 This is the stage wing. This is where the actors wait before going up on stage. 
-"Wing"? That's a weird way to say it. 
+“Wing"? That's a weird way to say it. 
 Hahaha, yeah, no idea why it's called that. 
 Well, nothing strange here. Let's go on to the next room. 
 Doesn't look like anyone is behind the backdrop. Looks like everything is as it should be. 
-This is the Prop Room. We store props and settings for our performances here. 
+This is the prop room. We store props and settings for our performances here. 
 I see. Looks like there's some interesting stuff in here. 
 I'd like to take the time to look around, but we're still on patrol. Maybe some other time. 
 From what I can tell, this looks like the prop room. 
@@ -462,7 +462,7 @@ Looks like everything's organized. Even a rat wouldn't be able to hide in here.
 (I hope Orihime won't make another fuss at tomorrow's rehearsal.) 
 Ogami? You've been a bit silent, is something wrong? 
 N-No, everything's fine. How about we head to the next room? 
-So this is the Stage, huh? The Flower Division always holds their performances in this place, right? 
+So this is the stage, huh? The Flower Division always holds their performances in this place, right? 
 It just got renovated. Before, some of the sets had collapsed. 
 Oh, I know! We're going to rehearse here tomorrow. 
 I'll try to invite Orihime. 
@@ -473,7 +473,7 @@ That's a nice idea. I'm sure she'll accept.
 Yes. I think it'll be a good chance to get to know her better. 
 Are you sure that's a good idea? I don't know if she'll accept right away. 
 It'll be fine! Orihime is a stage actress, just like us. 
-I'm sure she'll join us for rehearsals.
+I’m sure she’ll join us for rehearsals.
 I don't think we should. She'll just make a scene like she did earlier today. 
 Ogami. Orihime will never open up with that kind attitude, no matter how much time passes.
 R-Right... 
@@ -482,33 +482,33 @@ Ah, I'm sorry for talking so much... We're still in the middle of patrolling.
 ...Now let's get back to our night watch. 
 This is the stage, huh? This is where the Flower Division holds their performances. 
 It just got renovated. Before, some of the sets had collapsed. 
-Oh, right. Orihime, we're going to be rehearsing here tomorrow.
+Oh, right. Orihime, we’re going to be rehearsing here tomorrow.
 Would you like to join us? 
 Rehearsal, you say? 
-I can't say I'm interested, but I'll tag along. 
+I can’t say I’m interested, but I’ll tag along. 
 Besides, I want to see what you and Iris are made of. 
 O-OK. We're looking forward to it. 
 Good luck tomorrow, you two. 
 Let's continue our patrol, then. 
 Zzzzzzzz... Zzzzzzzz... 
 Sounds like Mr. Yoneda is asleep. Guess we'll just head to another room. 
-This is the Manager's Office. I wonder if he's still here. 
+This is the manager's office. I wonder if he's still here. 
 Zzzzzzzz... Zzzzzzzz... 
 Sounds like he's asleep. 
 Mamma mia, that's a loud snore. 
 Hehe, it really is, now that you mention it. 
 It'd be bad if we woke him up, so we'll just leave him be. Let's check another room. 
-This is the Secretarial Office. I filled out my arrival form here earlier this afternoon. 
+This is the secretarial office. I filled out my arrival form here earlier this afternoon. 
 Seems like Kasumi and Yuri already went home. 
 You sometimes help them sort their receipts here, right, Ogami? 
-Oh boy... Japanese men do so much work whether it's day or night, just like ants.
+Oh boy… Japanese men do so much work whether it's day or night, just like ants.
 Hahaha... Sorting the receipts is an important job, just like patrolling the theater. 
 OK, doors are locked and nothing's out of place. Let's get going. 
-Nothing strange in the Secretarial Office. Let's continue our patrol. 
-This is the Visitor's Entrance. We welcome our special guests here. 
+Nothing strange in the secretarial office. Let's continue our patrol. 
+This is the VIP entrance. We welcome our special guests here. 
 Let's check the door... Yep, it's locked tight. 
 There's nothing odd in here. Let's get going, then. 
-This is the Visitor's Entrance. We welcome our special guests here. 
+This is the VIP entrance. We welcome our special guests here. 
 Let's check the door... Yep, it's locked tight. 
 So you have to check the locks yourself? Does this theater have a shortage of workers or something? 
 It's the captain's duty.
@@ -535,19 +535,19 @@ Yeah, it was delicious.
 Is that so? I'm glad to hear that. 
 OK, the gas is off, let's get going. 
 OK, the gas is off, let's head to the next room. 
-The Dining Hall has been renovated, so now it gives a different atmosphere. 
+The dining hall has been renovated, so now it gives a different atmosphere. 
 It feels rather quiet at night, don't you think? 
 It does feel like that compared to how lively it usually is in the afternoon. 
 Looks like there's nothing out of place, so let's get going. 
-The Dining Hall has been renovated, so now it gives off a different atmosphere. 
-So this is the Dining Hall? It seems rather cramped to me. 
+The dining hall has been renovated, so now it gives off a different atmosphere. 
+So this is the dining hall? It seems rather cramped to me. 
 Is that so? I think it's spacious enough already. 
 Perhaps you feel that way because you come from a noble family. 
 I can't help it. Now then, how about we get going? 
 No one's around, let's check another room. 
 The animals that have been hibernating are definitely going to wake up this season. 
 Meanwhile, I'd get in trouble just for wanting to stay in bed a little longer than usual. 
-Hahaha, you're right. It's tough to get out of bed when it's Spring. 
+Hahaha, you're right. It's tough to get out of bed when it's spring. 
 Let's get going. We can still catch a cold even if the weather's gotten warmer. 
 No one's around. Makes sense, since it's already this late. 
 Nothing odd in here. Let's get going. 
@@ -566,32 +566,32 @@ Shakespeare?
 Mozart? 
 It was... Dostoyevsky, wasn't it? 
 Dostoyevsky was a Russian novelist. You got it completely wrong! 
-"King Lear" was written by Shakespeare. Isn't that common knowledge? 
+“King Lear" was written by Shakespeare. Isn't that common knowledge? 
 O-Oh... Is that so? 
 I'm tired of talking with such uncultured people, let's get back to your patrol. 
 It was... Shakespeare, wasn't it? 
-Huh, so you do know it, Ensign. 
-However, I highly doubt you know the entire story. 
+Hmph… So even the ensign knows of Shakespeare. 
+However, I highly doubt you’re familiar with the details of the story. 
 L-Let's put this topic aside and get back to our patrol. 
 It was... Mozart, wasn't it? 
 Mozart?! Seriously? Are you joking right now? 
-It was Shakespeare who wrote "King Lear." He was a playwright, 
-while Mozart was a composer. Each of them are from a completely different field, you know. 
+It was Shakespeare who wrote "King Lear." He was a playwright… 
+While Mozart was a composer. Each of them are from a completely different field, you know. 
 O-Oh... Is that so? 
 If you want to act like a know-it-all, I suggest you do a better job of it. 
 L-Let's put this topic aside and get back to our patrol. 
 I... don't know who wrote it. 
 But seriously, I'm looking forward to your performance of "King Lear." 
-Uh-huh... I suppose that's better than you acting like a know-it-all. 
-Anyway, it was Shakespeare who wrote "King Lear." It's common knowledge, you know. 
+Uh-huh… I suppose that’s better than you acting like a know-it-all. 
+Anyway, it was Shakespeare who wrote “King Lear.” It's common knowledge, you know. 
 Both of you, let's put this topic aside and get back to our patrol. 
 Nothing unusual here. Let's head out. 
 The lobby sure is quiet now. It's usually crowded with people. 
-Looks like everything is in order, so let's check another room. 
+Looks like everything is in order, so let’s check another room. 
 The lobby sure is quiet now. It's usually crowded with people. 
 There's no point in staying here. 
 Yeah. Let's check another room. 
-Not a soul in sight or a hair out of place. Let's go to another room. 
+Not a soul in sight or a hair out of place. Let’s go to another room. 
 Tsubaki sells photos at this gift shop during the day. 
 Right, I already bought one. And it's your photo, Sakura. 
 Huh?! Really? 
@@ -621,15 +621,15 @@ Ogami...
 Hmm... You make it sound so noble. 
 Let's continue our patrol. Which room should we check after this? 
 I know, right? And this is my first day back at the theater, too.
-Ogami, that's a very selfish attitude to have!
+Ogami, that’s a very selfish attitude to have!
 It was worth coming along after all. I got to confirm what Japanese men are truly like.
-WNo use in complaining. I just need to focus on doing the job right. 
+No use in complaining. I just need to focus on doing the job right. 
 OK, everything's good here. Let's continue patrolling. 
 Yes! 
 Uh-huh... 
 The doors have been locked. OK, let's check the next room. 
 The doors have been locked. OK, let's check the next room. 
-Ogami, the Basement is undergoing renovations right now, so access is restricted. 
+Ogami, the basement is undergoing renovations right now, so access is restricted. 
 Renovations, huh? I wonder what they're working on down there. 
 The pool and infirmary are being redone. They're also changing the shower into a Japanese-style bath house. 
 Nothing beats a bath house. 
@@ -638,52 +638,52 @@ Nothing beats a bath house.
 I hope it's mixed gender...
 Nothing beats a Japanese bath house. The large tub's warm water just melts away all of your troubles.
 Agreed, I can't wait to see it when they're finished. 
-...A Japanese bath house? Don't tell me this will also be made out of grass.
+...A Japanese bath house? Don’t tell me this will also be made out of grass.
 Don't worry. I'm positive that you'll like it. 
-Anyway, please keep in mind that the Basement is a restricted area for now. 
+Anyway, please keep in mind that the basement is a restricted area for now. 
 Bath house, eh? 
-Ogami... Are you thinking of something obscene?
-N-No, I... I was just imagining what the finished bath house would look like. 
-Your expression tells a different story... 
-Y-You're just being paranoid! L-Let's just continue our patrol! 
+Ogami… Are you thinking of something obscene?
+N-No, I… I was just imagining what the finished bath house would look like. 
+Your expression tells a different story… 
+Y-You're just being paranoid! L-Let's continue our patrol! 
 I hope it'll be mixed gender... 
 Ogami, you shouldn't say things like that out loud! 
 So this is the real you, huh?! Just as I thought, Japanese men are deceptive and shallow! 
 I-I'm kidding! Just kidding! Don't take it so seriously! 
-Well, you sounded serious enough to me...
-Anyways, Ogami, the Basement is a restricted area for now. Get it? 
+Well, you sounded serious enough to me…
+Anyways, Ogami, the basement is a restricted area for now. Got it? 
 Y-Yeah. Got it. 
-OK then, let's get back to doing the night watch.. 
-Ogami, I already said that the Basement access is restricted for now. 
+OK then, let's get back to doing the night watch. 
+Ogami, I already said that access to the basement is restricted for now. 
 Ah... R-Right. I totally forgot about that. 
 You're not pretending to forget, are you? 
 L-Let's get back to patrol! Where should we head next? 
-This is the Library. It has quite a lot of books. 
+This is the library. It has quite a lot of books. 
 Mr. Yoneda told me that some of Japan's rarest books are kept here. 
 Interesting. I'll try to read a few next time. 
-This is the Library. It has quite a lot of books. 
-Ohhhh... I wouldn't have expected the theater to have this kind of space.
+This is the library. It has quite a lot of books. 
+Ohhhh… I wouldn't have expected the theater to have this kind of space.
 Mr. Yoneda told me that some of Japan's rarest books are kept here. 
 Interesting. I'll try to read a few next time. 
-Why don't you start by reading some Shakespeare, Ensign. 
+Why don’t you start by reading some Shakespeare, Ensign. 
 Everything's fine in here, let's continue patrolling. 
-This is... This used to be Ayame's room. 
-Right... Ayame's not with us anymore. 
-Even if she's gone, our memory of her will never fade. 
-Ayame's smiling face... will live on in our hearts. 
-This is... This used to be Ayame's room. 
+This is… This used to be Ayame’s room. 
+That’s right. Ayame is… no longer with us. 
+Even if she’s gone, our memory of her will never fade. 
+Ayame’s smiling face… will live on in our hearts. 
+This is… This used to be Ayame’s room. 
 Ayame? Who's that? 
-She used to be the Deputy Commander of the Imperial Assault Troupe. 
-Right... Ayame's not with us anymore.
-Even if she's gone, our memory of her will never fade. 
-Ayame's smiling face... will live on in our hearts. 
-This room is still empty. There's no need to check it out, then. 
-Ogami, we're in the middle of our patrol. 
+She was the Imperial Assault Troupe’s Deputy Commander. 
+That’s right. Ayame is… no longer with us.
+Even if she’s gone, our memory of her will never fade. 
+Ayame’s smiling face… will live on in our hearts. 
+This room is still empty. There's no need to inspect it. 
+Ogami, we’re in the middle of our patrol. 
 We need to keep inspecting the theater until 10 o'clock. 
 S-Sorry. 
-Ogami, we're in the middle of our patrol. 
+Ogami, we’re in the middle of our patrol. 
 We need to keep inspecting the theater until 10 o'clock. 
-So, were you planning to go back to your own room? 
+Are you really going back to your room after inviting someone to patrol with you? 
 S-Sorry. 
 Ogami, remember, we're still on patrol. 
 This is the game room. It recently got added to the theater. 
@@ -698,7 +698,7 @@ Ooh, this room is quite stylish.
 This is the salon. We recently redecorated it with new furniture and other additions.
 Sumire was giving out all kinds of orders while we were remodeling. 
 Hahaha, that certainly sounds like her. 
-Well, the salon is Sumire's favorite place to spend time, so she was very particular. 
+Well, the salon is Sumire’s favorite place to spend time, so she was very particular. 
 OK, we better get going. Everything's in order. 
 Nobody's here. Let's continue our patrol. 
 This is second floor seating. 
@@ -714,7 +714,7 @@ Oh, wow. Ginza at night...
 Two years ago, when I just arrived in Tokyo, I didn't know anything about the city. 
 This view was the first thing I fell in love with here. 
 Since then I... I wanted to shine like the street lights down there. 
-I wanted my performances to be as beautiful as the lights that illuminate this city... 
+I wanted my performances to be as beautiful as the lights that illuminate this city… 
 I swore to be a beacon of strength and warmth, just like how they guide people on their way.
 My dream was to be that kind of light. Even now, that's what I strive to become. 
 Orihime may seem pretty hostile, but I understand her feelings. 
@@ -744,78 +744,78 @@ This room is empty, Ogami.
 Is that so? Well, we better check another area. 
 This is my room. We're still in the middle of patrol, so let's check somewhere else. 
 This is my room. 
-Ensign, are you trying to weasel your way into Sakura's room?
+Ensign, are you trying to weasel your way into Sakura’s room?
 Just for inspection. 
 H-How did you know?! 
 Just for inspection. I have no intentions other than that. 
 Is that so? A convenient excuse. 
-Anyway, there doesn't seem to be anything out of the ordinary. Let's continue our patrol.
+Anyway, there doesn’t seem to be anything out of the ordinary. Let’s continue our patrol.
 H-How did you know?! 
 You're a Japanese man, I figured you were up to no good. 
 Looks like my assumptions were spot on. 
-Ogami... Did you really come here just to get into my room? 
+Ogami… Did you really come here just to get into my room? 
 Ah, no, that's... 
-We're leaving... Our patrol isn't finished yet. 
+We’re leaving… Our patrol isn’t finished yet. 
 Oooh, she's angry at you, Ensign. Well, you reap what you sow. 
-...Are you ignoring me?! That really gets on my nerves!!
+...Are you ignoring me?! That really gets on my nerves!
 Now, now, Orihime. He fell silent because you asked him something so unexpectedly.
 Let's get going, OK? There are still some rooms we need to check. 
 I don't think there's anything wrong with my room. Let's go somewhere else. 
 This is Kanna's room. Right now she's back home in Okinawa. 
 I see, so we can't get inside then. 
-Yep. Members of the theater need to lock their rooms if they aren't going to be here. 
+Yep. Members of the theater need to lock their rooms if they aren't going to be around. 
 Then we just have to move on. Let's head to another room. 
 Guess we just have to move on. Let's head to another room. 
 Oh right, Kanna's not here. We'll just go to another room then. 
 This is Orihime's room. 
 Yes? Who is it? 
 Uh, it's Ogami. 
-I thought I already told you. I'm not patrolling the theater with you! 
-Now kindly never ask me again! I'm going to bed! 
+I thought I already told you. I’m not patrolling the theater with you! 
+Now kindly never ask me again! I’m going to bed! 
 Let's just get going, Ogami. She'll get angry again if we keep insisting. 
 Ogami, she'll just get angry if we keep pestering her. 
-The name plate has a simple design, but it sure looks classy. 
+The nameplate has a simple design, but it sure looks classy. 
 ...How about we check another room.
 This is Orihime's room. 
-Oh, right... Wait here a minute.
-Orihime... I wonder if she's all right.
+Oh, right… Wait here a minute.
+Orihime… I wonder if she’s all right.
 Open the door. 
 Knock first. 
 Open the door. 
 I'm worried about her, let's go inside. 
 Ogami! It's rude to enter someone's room without permission! 
 I can't wait any longer. Come on, we're going in. 
-E-Ensign?! What are you doing here? 
+E-Ensign?! What are you doing in here? 
 Uh, it's... I was worried why you hadn't left your room... 
 I was just fixing my hair! 
-I can't believe you would just barge into a lady's room like that!
+I can't believe you would barge into a lady’s room like this!
 Get out! I'm not doing your stupid patrol anymore! 
 I knew Orihime would get angry at you, Ogami. 
 Looks like we'll have to continue the patrol with just the two of us. 
 Orihime, is everything OK in there? 
 Just one moment, pleeease.
 Thank you for waiting patiently. I just had to fix my hair. 
-(Her hair? That's the reason we were waiting so long?)
+(Her hair? That’s the reason we were waiting so long?)
 OK, let's continue our patrol! 
 Thanks for waiting! I was just fixing my hair. 
-(Her hair? That's the reason we were waiting so long?)
+(Her hair? That’s the reason we were waiting so long?)
 OK, let's continue our patrol! 
-Everything's all right in my room. Let's check another! 
-This is Maria's room. She's visiting America right now. 
+Everything's all right in my room. Let's check another. 
+This is Maria's room. She’s visiting America right now. 
 Oh, so she left before I got here. 
 We can't go inside, then. 
-Yep. Members of the theater need to lock their rooms if they aren't going to be here. 
+Yep. Members of the theater need to lock their rooms if they aren't going to be around. 
 We can't do much right now, so we better check another room. 
 Maria is in America, huh. Let's check another room, then. 
 Huh? The door's open. 
 I wonder if something happened, let's peek inside. 
-Iris isn't here. Where would she go at this hour? 
+Iris isn't here. Where could she be at this hour? 
 Perhaps she is visiting the lavatory? 
 Ogami, let's look for her while we check the rest of the theater. 
 Yeah, let's go. 
 I wonder where Iris went. 
 Hmmm... She's not here. 
-I wonder, where is she? 
+I wonder, where she is? 
 Maybe she already went back to bed.
 Zzz... Zzz... 
 Hehe, sounds like Iris is sleeping soundly.
@@ -823,29 +823,29 @@ My goodness, children are so carefree.
 That's a relief. OK, let's get back to our patrol. 
 Ogami, Iris is sleeping, so let's leave her alone. 
 You're right. Let's continue our patrol, then. 
-This is Kohran's room. She's at the Hanayashiki Branch for work right now. 
+This is Kohran's room. She's working at the Hanayashiki Branch right now. 
 Hanayashiki Branch? What's that? 
 It's the Imperial Assault Troupe's research lab in Asakusa. 
 On the surface it's an amusement park, but the workshop and labs are located below ground. 
-Ah, I see...
+Ah, I see…
 Since Kohran is away, we can't go inside. 
-Yep. Members of the theater need to lock their rooms if they aren't going to be here. 
+Yep. Members of the theater need to lock their rooms if they aren't going to be around. 
 Guess we just have to move on. Let's head to another room. 
 Kohran's at Hanayashiki right now. Guess we'll have to check another room. 
 This is Sumire's room. At the moment she's back home with her family. 
 Can't she still commute to the theater if she lives so close by?
 I think she has a lot of family matters to attend to right now. 
 Her door's locked. Let's head to another room. 
-Sumire went back to her family home. Guess we'll just have to check another room. 
-This is the Attic. Seems that no one's here. 
+Sumire went back to her family’s home. Guess we'll just have to check another room. 
+This is the attic. Seems that no one's here. 
 The windows are all locked tight as well. 
 Everything's fine, then. Let's check another room. 
-This is the Attic. Seems that no one's here. 
+This is the attic. Seems that no one's here. 
 The windows are all locked tight as well. 
 Hmmm... 
 Huh? Something wrong, Orihime? 
 Oh, no. It's nothing. 
-Let's move along and go to the next room. 
+Let’s move along and go to the next room. 
 Looks like everything's in order here. Let's check another room. 
 It's 10 o'clock. 
 We finished our night watch. Great job, Ogami. 
@@ -856,7 +856,7 @@ Good night.
 I'll walk you back to your room. 
 But Ogami, we're already at my room. 
 Ah, right, now that you mention it. 
-Hehe... You're as funny as always.
+Hehe… You’re as funny as always.
 But I appreciate the offer. Thank you, Ogami.
 Now, if you excuse me. Good night. 
 Yeah, good night. 
@@ -864,13 +864,13 @@ Now, I better get back to my room, too.
 ...Is that all right with you? 
 Of course. Let's go. 
 Thank you so much for taking me back to my room. 
-Tomorrow, I'll ask Orihime to join us for rehearsal. 
+Tomorrow, I'll ask Orihime to join us for rehearsals. 
 It'll be a good chance to chat with her. 
 Thanks again, Ogami. Good night. 
 Yeah, good night. 
 Now, I better get back to my room, too. 
 Well, take care on your way back, Sakura. Good night. 
-Thank you, Ogami. Now if you excuse me, good night. 
+Thank you, Ogami. Now if you’ll excuse me, good night. 
 Now, I better get back to my room, too. 
 I'll excuse myself now. Good night, Ogami. 
 Yeah, good night. 
@@ -885,14 +885,14 @@ Good night, you two.
 I'll walk you both back to your rooms. 
 But Ogami, we're already at my room. 
 Ah, right, now that you mention it. 
-Hehe... You're as funny as always.
-"Funny"? Seems more "oblivious" to me. 
+Hehe… You’re as funny as always.
+“Funny”? Seems more “oblivious” to me. 
 Ogami, would you like to escort Orihime so she won't get lost? 
 Thank you, but I vehemently reject that idea. 
 Imagining myself being escorted by a Japanese man makes my hair stand on end. 
 I'll take my leave now. Good night. 
 Oh, boy... Seems that she really hates me. 
-Tomorrow, I'll ask Orihime to join us for rehearsal. 
+Tomorrow, I'll ask Orihime to join us for rehearsals. 
 It'll be a good chance to chat with her. 
 Thanks again, Ogami. Good night. 
 Yeah, good night. 
@@ -905,9 +905,9 @@ Imagining myself being escorted by a Japanese man makes my hair stand on end.
 I'll take my leave now. Good night. 
 Oh, boy... Seems that she really hates me. 
 I'll walk you to your room, Sakura. 
-Thank you very much. I'll take you up on that offer.
+Thank you very much. I’ll take you up on that offer.
 Thanks for taking me back to my room. 
-Tomorrow, I'll ask Orihime to join us for rehearsal. 
+Tomorrow, I'll ask Orihime to join us for rehearsals. 
 It'll be a good chance to chat with her. 
 Thanks again, Ogami. Good night. 
 Yeah, good night. 
@@ -919,48 +919,48 @@ Imagining myself being escorted by a Japanese man makes my hair stand on end.
 I'll take my leave now. Good night. 
 Oh, boy... Seems that she really hates me. 
 I'll walk you to your room, Sakura. 
-Thank you very much. I'll take you up on that offer.
+Thank you very much. I’ll take you up on that offer.
 Thanks for taking me back to my room. 
-Tomorrow, I'll ask Orihime to join us for rehearsal. 
+Tomorrow, I'll ask Orihime to join us for rehearsals. 
 It'll be a good chance to chat with her. 
 Thanks again, Ogami. Good night. 
 Yeah, good night. 
 Now, I better get back to my room, too. 
 Well, take care on your way back, Sakura. Good night. 
-No need to say anything to me, I'm heading back right now.
+No need to say anything to me, I’m heading back right now.
 I'm leaving too, Ogami. Good night. 
 Now, I better get back to my room, too. 
 Excuse us for now. Good night, Ogami. 
 Yeah, good night. 
 Now, I better get back to my room, too. 
 I wonder if Orihime and I can ever get along... 
-It is my duty as captain to make sure that happens. But, we still have a long way to go... 
+It’s my duty as captain to make sure that happens. But, we still have a long way to go… 
 Ogami, have you finished sorting those receipts? 
 Just a few more to go!
-Phew... Been a while since I've done this. It's hard work. 
+Phew… Been a while since I’ve done this. It’s hard work. 
 OK, just need to finish counting these receipts and we're done. 
-Let's see, how many receipts do we have? 126, 127, 128...
+Let’s see, how many receipts do we have? 126, 127, 128…
 Ogami, are you done yet? 
-Just a minute, almost done
+Just a minute, almost done.
 ...Uh-oh, how many receipts did I count? What was the next number? 
 127? 
 129? 
 131? 
-I think it was 127. All right... 128, 129, 130, 131, 132...
+I think it was 127. All right… 128, 129, 130, 131, 132...
 OK, all done! I'm free at last! 
-I think it was 129. All right... 130, 131, 132, 133, 134... 
+I think it was 129. All right… 130, 131, 132, 133, 134… 
 OK, all done! I'm free at last! 
-I think it was 131. All right... 132, 133, 134, 135, 136... 
+I think it was 131. All right… 132, 133, 134, 135, 136… 
 OK, all done! I'm free at last! 
-...Dang it! I can't remember how many receipts I counted! 
-Guess I'll just have to wing it. All right, 401, 402, 403... 
+...Dang it! I can’t remember how many receipts I counted! 
+Guess I’ll just have to wing it. All right, 401, 402, 403… 
 Great work, Ogami. 
 I haven't sorted receipts in a while. Sorry it took me so long. 
 Too bad our performance hasn't started yet, you couldn't do your "actual" job as a ticket puncher.
-Well, it's not that big a disappointment to me. 
+Well, it's not that big of a disappointment to me. 
 Ogami, I double-checked the receipts and it seems that you were short by two.
 Really? Looks like I miscounted somewhere, sorry. 
-No, it's fine. I understand you haven't done this in a while.
+No, it's fine. I understand you haven’t done this in a while.
 Thank you very much. We'll reach out to you again if there's something we need help with. 
 Your count matches with our records, Ogami. Thank you so much for helping us. 
 Oh, glad to hear that. I was worried I might have miscounted them or something. 
@@ -968,7 +968,7 @@ Way to go, Ogami! You're great at doing all sorts of odd-jobs.
 Uh-huh... I wonder if I should be happy about that. 
 Ogami, I double-checked the receipts and it seems that you counted two extra.
 Really? Looks like I miscounted somewhere, sorry. 
-No, it's fine. I understand you haven't done this in a while. 
+No, it's fine. I understand you haven’t done this in a while. 
 Thank you very much. We'll reach out to you again if there's something we need help with. 
 Ogami, I double-checked the receipts, and your count was way off. 
 I'm sorry, the truth is I lost count while I was working on it. 
@@ -986,7 +986,7 @@ Buy a photo.
 Talk to Tsubaki. 
 Leave. 
 Could I buy a photo? 
-Ogami, didn't you already buy one? 
+Ogami, didn’t you already buy one? 
 We need to keep enough in stock for the other customers, so please enjoy the one you bought for now. 
 You'd like to buy a photo? Thank you very much! 
 Oh, right, I have a request to make, Ogami... 
@@ -1030,26 +1030,26 @@ Well, I should be going. Keep up the good work.
 Thank you very much! Come back again soon! 
 Thank you very much! Come back and buy another photo next month! 
 I'll visit the rehearsal next. I wonder if Orihime is getting along with the others. 
-Mon Fr�re!! 
+Mon Frère!! 
 Iris, what happened? Why are you over here? 
-Listen, we were doing rehearsal onstage. 
-And then, Orihime started fighting with Sakura. It's a huge mess!
+Listen, we were doing rehearsals onstage. 
+And then, Orihime started fighting with Sakura. It’s a huge mess!
 Wha... What did you say? 
-Please break up their fight, Mon Fr�re. Please! 
-OK, I understand. I'll be right there! 
-Over here, Mon Fr�re! Quick!
+Please break up their fight, Mon Frère. Please! 
+OK, I understand. I’ll be right there! 
+Over here, Mon Frère! Quick!
 Like I said! No matter how many times you do it, this rehearsal is pointless! 
 It's just like Iris said. The situation is getting pretty heated.
 It's not useless! Rehearsing our lines is very important. 
 How do you expect us to perform without doing a read-through beforehand? 
 Inspirazzione is the most important part of performing on stage. 
-Acting is all about talent. I don't need your little rehearsal. 
+Acting is all about talent. I don’t need your little rehearsal. 
 But going over our lines together helps us stay in sync with each other. 
 I want us to get along and coordinate for our upcoming performance. 
 That's why I suggested a rehearsal so our acting can synchronize with each other. 
 MY acting and yours are on completely different levels. 
 You all have the wrong idea. The stage is just like any battlefield.
-I'm through with pretending to get along with all of you. I'm going home. 
+I’m through with pretending to get along with all of you. I’m going home. 
 Ah, Orihime! Wait, please! 
 Orihime! 
 Oh, Ensign? Eavesdropping on us? What a nice hobby. 
@@ -1057,23 +1057,23 @@ Y-You got it all wrong! I'm just worried about you two!
 Just as I thought. Japanese men are the worst. 
 You're a meddlesome coward. On top of that, you like to stick your nose in other people's business. 
 And Cherry- Er, Sakura lacks any sense at all. Non ha senso! I can't stand her! 
-I'm going back home to Italy! Now, out of my way, please. 
+I’m going back home to Italy! Now, out of my way, please. 
 Stand your ground.
 Move out of the way. 
 No, I'm staying right here. 
 Are you deaf? I said, get out of my way! 
-No, I won't budge. I can't let you leave like this. 
+No, I won’t budge. I can’t let you leave like this. 
 Hmph... Seems that my words aren't enough to make you understand. 
 Uwah! 
-Ah, Mon fr�re! 
+Ah, Mon Frère! 
 O-Ogami! 
 There, now you're dripping with charm. 
-I don't care if you're the captain or whatever, stop meddling in other people's business. 
-From your perspective, it may look like I'm just sticking my nose in when it's not wanted. 
+I don't care if you're the captain or whatever, stop meddling in other people’s business. 
+From your perspective, it may look like I’m just sticking my nose in when it's not wanted. 
 But, my only wish was for you to get along with everyone in the Flower Division. 
 Orihime, I'm asking you as a fellow member of the division, please stand with us. 
 Stand together, in the Imperial Theater and on the battlefield. 
-Mon Fr�re... 
+Mon Frère... 
 Ogami... 
 ... 
 OK, I'll move. 
@@ -1084,7 +1084,7 @@ Hold it, Orihime! Aren't you being a hypocrite by running away like this?
 What do you mean by that, Sakura? 
 To quit and run away in the middle of rehearsal, you're a coward, too! 
 ... 
-It's true that I may look like an amateur in front of you. 
+It's true that I may look like an amateur compared to you. 
 But, that's why I want to rehearse, so that I can learn from you! 
 Please stand with us on the stage, Orihime! 
 And please stand together with us on the battlefield! Become one of our comrades in the Flower Division! 
@@ -1097,34 +1097,34 @@ It's time to suit up for a mission! We have enemies incoming!
 I'm asking you once again, Orihime. 
 Please fight together with us, as a member of the Flower Division. 
 ... 
-Sounds like fun. I've always wanted to run wild in Japan at least once.
-I'll show you guys my true power, the power of a world class actress! 
-So you'll fight with us? Thank you, Orihime. 
-But just to let you know, I'm only joining you this one time. 
-OK, Orihime, let's head to the Command Room right away! 
+Sounds like fun. I’ve always wanted to run wild in Japan at least once.
+I'll show you all my true power, the power of a world-class actress! 
+So you’ll fight with us? Thank you, Orihime. 
+But just to let you know, I’m only joining you this one time. 
+OK, Orihime, let's head to the command room right away! 
 Imperial Assault Troupe, Flower Division, all hands reporting for duty! 
 Hm, great work. Seems like Orihime even managed to get here as well. 
 Ooooh. So we have a room like this in the basement, huh? 
-This is our Command Room, the heart of the Imperial Assault Troupe. 
+This is our command room, the heart of the Imperial Assault Troupe. 
 The theater is just a cover to keep out of the public eye. The troupe's real job is to protect the capital. 
 This will be your first battle since coming back to us, Ogami. 
-It's strange...When you're by our side, Ogami, I'm not afraid of anything. 
+It’s strange… When you're by our side, Ogami, I’m not afraid of anything. 
 I know that we won't lose as long as you're here! 
-Let's do our best to protect the peace, Ogami! 
-If you're in danger, I'll come to save you, Mon Fr�re! 
+Let’s do our best to protect the peace, Ogami! 
+If you're in danger, I'll come to save you, Mon Frère! 
 Let's do our best together! 
-I'll show all of you all my bountiful abilities! 
+I'll show all of you my bountiful abilities! 
 I can't believe I'm tagging along. Guess I'm curious, too. 
 Thanks, everyone. I'm counting on you! 
 Good. Now then, Ogami, is there anything you want to ask? 
 About the enemy 
 About Orihime's uniform 
 Nothing in particular 
-I'd like to know more about the enemy. What are we up against? 
-Right... The truth is, we still don't know their identity. 
+I’d like to know more about the enemy. What are we up against? 
+Right… The truth is, we still don’t know their identity. 
 But someone with a strong demonic energy reading is heading straight towards us. 
 What? Then their target must be... 
-That's right. They're after the Grand Imperial Theater... After the Imperial Assault Troupe. 
+That’s right. They’re after the Grand Imperial Theater… After the Imperial Assault Troupe. 
 Also, the sun has set. It's going to be a nighttime battle, so be on your guard. 
 Orihime, why do you have a different combat uniform than everyone else? 
 This is the uniform for the Star Division, the elite squad I was previously assigned to. 
@@ -1135,39 +1135,39 @@ That's right! In terms of experience, I'm your senior!
 Now, one more thing I need to tell you before deployment.
 We can't fight the monsters who attack Tokyo with just our bodies. 
 That's why you're all piloting mechanical armor, or rather, "Spirit Armor." 
-Even I have my own fighting suit! 
+Even I have my own fighting armor! 
 Now then, time to introduce you to our new Spirit Armor. Follow me to the hangar. 
 T-These are our new Spirit Armor!? 
 Correct. These are new revisions of the old "Koubu" models. Thus we've named them the "Koubu Kai." 
 They've got increased power output after we studied and modified the ones we lost in our previous battle. 
 Just like the previous model, only those with strong spiritual power can pilot them. 
 The power that everyone in the Flower Division possesses.
-Ogami, the safety of Tokyo depends on the Flower Division. We're all counting on you! 
+Ogami, the safety of Tokyo depends on the Flower Division. We’re all counting on you! 
 Roger! 
 Ogami! 
 What is it, Sakura? Did something happen? 
 Orihime said that she was moving out by herself and then left! 
-Wha... Are you serious?!
+Wha… Are you serious?!
 That's... That's the sound of a Spirit Armor's engine! 
 It's coming from the hangar. It must be her! 
 Wh-What is that?! 
 Heya, Ensign! I'm going to head out first! 
-So long as I have my "Eisenkleid" from the Star Division, I can take care of the enemy all by myself! 
+So long as I have my “Eisenkleid” from the Star Division, I can take care of the enemy all by myself! 
 W-Wait up, Orihime!! 
-Now's the perfect chance to show you all what I can really do!
+Now’s the perfect chance to show you all what I can really do!
 Orihime Soletta, moving out! See you there, everyoooone!
 What in the world? Heading off alone into battle is reckless! 
-Orihime's quite the handful, huh? 
-Don't forget, a captain must not only protect his squadmates but open up their hearts as well. 
+Orihime’s quite the handful, huh? 
+Don’t forget, a captain must not only protect his squadmates but open up their hearts as well. 
 Now go, Ogami! I'm leaving Ginza and Orihime in your hands! 
 Ogami, give the order! 
-Imperial Assault Troupe, Flower Division, move out! 
-Prepare for cherry blossom viewing! 
+Assault Troupe, move out! 
+View the cherry blossoms! 
 We're going to join up with Orihime and take out the enemy! Imperial Assault Troupe, move out! 
 Understood! 
-Let's do this, Mon Fr�re! 
+Let's do this, Mon Frère! 
 We're gonna protect the capital! 
-OK, we're gonna prepare for cherry blossom viewing! 
+OK, we're gonna prepare for viewing the cherry blossoms! 
 Whaaat!? We're going to see the cherry blossoms now? 
 I get it! We're going to redo Orihime's welcoming party after we win this battle, right? 
 General Yoneda, please get things ready for our cherry blossom party! 
@@ -1178,13 +1178,13 @@ Oh... R-Right.
 Here goes... Imperial Assault Troupe, Flower Division, move out! Our destination is... 
 Uh... Where was it, again? 
 I told you, it's Ginza! Ginza! Right in front of the theater! 
-Are you all right, Mon Fr�re? 
-He's just got back to the Flower Division, so he probably hasn't gotten used to being in battle yet. 
+Are you all right, Mon Frère? 
+He's just gotten back to the Flower Division, so he probably isn’t used to being in battle yet. 
 We're going now, Ogami! Flower Division, move out! 
-Sorry, Ogami, but each customer is only allowed to purchase one photo at a time. 
-I see. That's too bad... 
-My apologies, Ogami, but each customer is only allowed to purchase one photo at a time. 
-Oh, really? That's too bad... 
+Sorry, Ogami. I can only sell you one photo per month. 
+I see. That's too bad. 
+So sorry, Mr. Ogami, but each customer is only allowed to purchase one photo at a time.
+Oh, really? That's too bad. 
 The jewel of the Pandemonium Regalia, entrusted to us by the Rose Division. 
 Spirit Sword Arataka. The special sword of the Shinguji family. 
 Divine Sword Shirahatori. Entrusted to me by Kaede. A special sword passed down by the Fujieda family. 

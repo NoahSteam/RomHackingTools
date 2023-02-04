@@ -1,21 +1,21 @@
-Well, we're safely on the road. 
+﻿Well, we're safely on the road. 
 Yes, it looks like it'll be another few hours before we reach Atami. 
 Got it. Guess I'll just sit back and enjoy a peaceful bus ride. 
-Hey, Mon Fr�re? 
+Hey, Mon Frère? 
 Hm? What is it, Iris? 
 I was playing cards just now in the back of the bus, with Sakura and the others. 
 If you want, you and Maria can come join us! 
 Oh, me too? What game are we playing? 
 We're playing Tycoon. You two seem like you'd be great at it! 
-Come on, Mon Fr�re, play with us! 
+Come on, Mon Frère, play with us! 
 Sure, let's play! 
 What are the rules? 
 Let's not. 
 Sure, let's play! It'll be a nice way to pass the time till we reach Atami. 
-Really? I'm so glad we asked you, Ogami. 
+Really? I’m so glad we asked then.
 All right, but I won't lose! 
 I won't hold anything back, either. 
-Ok then, let the game begin! 
+OK then, let the game begin! 
 Tycoon, huh? Could you tell me the rules? 
 Sure. I'll explain it as simply as I can. 
 The least we could do is join them, Captain. 
@@ -26,40 +26,40 @@ He can't help it if he's tired, Iris.
 We'll play a round of Old Maid with Saki instead, all right? 
 OK... 
 Sorry about that, Ogami. Get plenty of rest. 
-*yawn* Now that I've turned them down, I actually feel really sleepy. 
-It'll be some time before we get there, so I'll just take a quick nap. 
+*yawn* Now that I've turned them down, I’m starting to feel really sleepy. 
+It'll be some time before we get to Atami, so I'll just take a quick nap. 
 Boss? Wake up, Boss. 
 Mm... Mmrrgh... 
 *yawn* I slept like a log. 
 Hmmm... What should I do? 
-C'mon, let's play! Don't you wanna play? 
-Ogami's probably tired, Iris. He'll play with you some other time. 
+C’mon, it’ll be fun! Don’t you want to play, Mon Frère?
+Ogami's probably tired, Iris. He’ll join us for a game some other time.
 We'll play a round of Old Maid with Saki instead, OK? 
 Ah, Boooriiiing... 
 Sorry about that, Ogami. Get plenty of rest. 
-*yawn* Now that I've turned them down, I actually feel really sleepy. 
+*yawn* Now that I've turned them down, I’m starting to feel really sleepy. . 
 It'll be some time before we get there, so I'll just take a quick nap. 
 Boss? Wake up, Boss. 
 Mm... Mmrrgh... 
 *yawn* I slept like a log. 
-Figures you'd be good at cards, Ogami. 
-It's true! You're so good, Mon Fr�re! 
+Figures you’d be a talented card player, Ogami.
+It's true! You're so good, Mon Frère! 
 You really know how to use your head, don't you? 
 Hahaha, thanks. 
 That wasn't bad, Ogami. 
 Well, that's the way it goes, I guess. 
 But it was a great way to pass the time all the same. 
-That was fun, Mon Fr�re! Let's play again sometime! 
+That was fun, Mon Frère! Let's play again sometime! 
 That's too bad, Ogami. 
 Oof, that wasn't great. 
-Cheer up, Mon Fr�re. 
+Cheer up, Mon Frère. 
 It's all a matter of luck... 
 You're right. Thanks, everyone. 
 Yo, Boss! We're almost there! 
 Really? Time sure flew by. 
 We'll be able to see the ocean shortly. 
 This looks to be the place. We're here! 
-Kenrokuen", was it called? You can really feel the history behind this building. 
+“Kenrokuen," was it called? You can really feel the history behind this building. 
 Ken... roku... en? 
 I'm told this inn is quite famous, and has been in operation since the Edo period. 
 We appear to be the only guests staying here, so we can be at ease. 
@@ -74,16 +74,16 @@ Hmmmm... We just got here. I'd like to take a break first.
 C'mon, Cap, don't be such a downer. 
 We might as well have a look, Ogami. 
 A walk and a breath of fresh ocean air should do us some good. 
-Yeah, Mon Fr�re! Let's go to the beach! 
+Yeah, Mon Frère! Let's go to the beach! 
 Well, if you all insist... Why not? 
 Hmmm... What should I do? 
 C'mon, Boss, we've got plenty of time before dinner. 
 A walk will get us nice and hungry, and we'll be back just in time to eat! 
-Yeah, Mon Fr�re! Let's go to the beach! 
+Yeah, Mon Frère! Let's go to the beach! 
 You're right. OK, let's go. 
 Alrighty then, let's drop off our bags and head to the beach. 
 The beach, huh? Can't wait. 
-That's right, you probably never went to the beach much in Russia, did you? 
+Oh, yeah... You probably never went to the beach much in Russia, did you? 
 That's right. It's so cold in Russia, going to the beach would be ludicrous. 
 Heh! That means now's your chance! 
 OK, Flower Division, to the beach! Move out! 
@@ -108,7 +108,7 @@ I guess we could all smash a few watermelons?
 OK! I love watermelon smashing! 
 That'd be my pick, too. It's great for getting everyone fired up! 
 OK then, we'll smash some watermelons when we head down to the beach for a swim. 
-All right! I'll go get some watermelons ready for then. 
+All right! I'll go get some watermelons ready then. 
 Heeheehee! Yay! I can't wait! 
 What's wrong, Chief? 
 Oh. Sorry. Guess I kinda spaced out... 
@@ -121,9 +121,9 @@ What was that?!
 Ohohohoho! Come and get me! 
 Grr, now you've done it! Wait right there, dammit! 
 Good grief... Those two never change. 
-OK, everyone, let's start heading back. 
-OK. Come on, Reni, let's go. 
-...OK. 
+Well then, everyone, let's start heading back. 
+Yeah. Come on, Reni, let's go. 
+...OK.
 I can't wait to get back and take a shower. 
 Heehee, don't you mean go in the hot springs, Orihime? 
 Alrighty, let's go. We'll go on ahead, Chief. 
@@ -134,9 +134,9 @@ Wh-Who's there?!
 K-Kayama?! 
 Hey, Ogami. Ahh, how lovely the actual ocean is... 
 Getting to gaze at the sea with you like this... What a joy it is! 
-Yes, the sea sure is lovely. 
+Yes, the sea is lovely. 
 What are you doing here? 
-Yes, the sea sure is lovely. 
+Yes, the sea is lovely. 
 Indeed. 
 What are you doing here? 
 Ogami, please. Does a man need a reason to come gaze at the sea? 
@@ -147,10 +147,10 @@ You're here with me, and we have the ocean in front of us. That's more than enou
 R-Right... 
 A man's heart must be vast and wide like the ocean. 
 And he must have the perspective broad enough to gaze upon such a vast body of water. 
-They say "the frog in the well knows not of the ocean." You must never be that frog. 
-I get what you're trying to say, but... What's your deal? 
+They say, "The frog in the well knows not of the ocean." You must never be that frog. 
+I get what you're trying to say, but... what's your deal? 
 Hahaha! Well, I must be going now! 
-Adi�s, Ogami! Until we meet again! 
+Adiòs, Ogami! Until we meet again! 
 Kayama... Seriously, what's with that guy? 
 Let's eat! 
 All right, time to chow down! 
@@ -159,14 +159,14 @@ Kanna, you'll choke on your food if you don't slow down.
 See? Enough said! 
 Hahaha, relax, Kanna, the food's not going anywhere. 
 Th-This fish is... It's raw!! 
-We call that "sashimi", Orihime. 
+We call that "sashimi," Orihime. 
 Sa-shi-mi? How am I supposed to eat this?! 
 You eat it as-is. 
-Put some wasabi and soy sauce on it. 
-It's decorative, you don't eat it. 
+With wasabi and soy sauce.
+You don't, it's decorative. 
 You eat it as-is. 
-Put some wasabi and soy sauce on it. 
-I'll have it if you don't want it. 
+With wasabi and soy sauce.
+I'll eat yours if you want.
 You just eat it the way it is, Orihime. 
 Really? Well, here goes... 
 ... 
@@ -190,17 +190,17 @@ It tastes great when you add a little soy sauce to it, Orihime.
 How dare you trick me, Ensign! 
 S-Sorry, I was just joking. 
 I'll have it if you don't want it, I love sashimi. 
-I don't not want it! I'm not about to give any to a Japanese man! 
+I don't NOT want it! I’m not about to surrender any of my food to a Japanese man!
 O-OK... 
-I'll give you my sashimi, Mon Fr�re! 
+I'll give you my sashimi, Mon Frère! 
 Huh? Are you sure, Iris? 
 Sheesh, and now you're leeching off of a child? You're terrible. 
-C'mon, Orihime, stop bullying him so much. 
+C'mon, Orihime, stop bullying the chief so much. 
 Orihime, you eat sashimi with soy sauce and a little wasabi. 
 Hmm... Well, here goes nothing. 
 ... 
 Urk! My nose! It stings! 
-That's the wasabi kicking in. Startled me, too, the first time I tried it. 
+That's the wasabi kickin’ in. Startled me, too, the first time I tried it. 
 Once you get used to it, though, you can't get enough of that tingling sensation! 
 Phew... It's so intense, my eyes are starting to water. 
 But it's got a fresh flavor you can't find in Europe. I think I like it. 
@@ -209,14 +209,14 @@ Wasabi... A perennial herb of the Brassicaceae family. Its roots contain irritan
 So long as you can receive nutrition from it, it doesn't matter how it tastes. 
 Same as ever, I see, Reni... 
 Hey! I need a refill! 
-Heehee... And she's the same as ever, too. 
+Heehee... And Kanna’s the same as ever, too. 
 Hahahaha... 
 Ahh, that was yummy! I'm so full! 
 Heh, suppose I should eat in moderation and cut it off here. 
 Goodness, you ate three pots' worth of rice... You're inhuman! 
 By the way, where's the bedroom? 
 In a traditional Japanese inn like this, Orihime, we roll out futons and sleep on the floor together. 
-Huh?! Together?! You mean with the Ensign, too?! 
+Huh?! Together?! You mean with the ensign, too?! 
 O-Of course not! I'm sleeping in a different room! 
 Well, why not? Let's all sleep together. How about it, Ogami? 
 Well, if you insist... 
@@ -251,7 +251,7 @@ Look out!
 Cover Sakura. 
 Cover Iris. 
 Cover Kanna. 
-Sakura... I will protect you! 
+Sakura... I’ll protect you! 
 You handle this one! 
 Leave it to me! 
 Gwargh! 
@@ -260,7 +260,7 @@ Iris... You can relax, I'm at your side.
 You handle this one! 
 Leave it to me! 
 Gwargh! 
-You came for me! 
+You came to my rescue! 
 Kanna, I'll protect you with all I've got! 
 You handle this one! 
 Leave it to me! 
@@ -338,7 +338,7 @@ Eh, it's no big deal.
 You're right. Sorry. I'll be more careful from now on. 
 Very well. As long as you're sorry, then. 
 Eh, it's no big deal. What happens in Atami, stays in Atami, right? 
-What are you saying, sir?! What can we do if we can't even follow the simplest of rules?! 
+What are you saying?! What kind of guests would we be if we can’t even follow the simplest of rules?! 
 You're the captain, now start acting like it! 
 Y-Yes, ma'am! I apologize. 
 ... 
@@ -349,7 +349,7 @@ Yes, ma'am! Let's roll out the futons, then.
 Sorry for speaking so harshly, sir. 
 It's OK, Maria. You were right. 
 I'll head over to my room, then. Good night, everybody. 
-Good night, Mon Fr�re! 
+Good night, Mon Frère! 
 Good night, Captain. 
 Phew... What a day it's been. 
 Still, it was pretty fun. 
@@ -365,7 +365,7 @@ S-Sumi--
 Shh, quiet. 
 Did you... need something? 
 Did you have a nightmare? 
-You shouldn't be up this late! 
+You shouldn't be up!
 Did you... need something? 
 Did you have a nightmare? You can sleep next to me, if you're scared. 
 Alas, I haven't had any nightmares. 
@@ -384,9 +384,9 @@ Hold it right there!
 Eep! N-No way... 
 Sumire... Trying to pull a fast one, huh? 
 My, whatever could you mean? 
-Quit hogging Mon Fr�re all to yourself! 
+Quit hogging Mon Frère all to yourself! 
 Seriously, that's pretty low, Sumire! 
-Hmph, I was just inviting the Ensign to come with us tomorrow! Is that so wrong?! 
+Hmph, I was just inviting the ensign to come with us tomorrow! Is that so wrong?! 
 Wh-What did you say?! 
 Well, it doesn't seem like Ogami minds. 
 *sigh* Just goes to show, you can't be too careful around Japanese men. 
@@ -425,7 +425,7 @@ Uh-huh! We were just talking about where we're gonna go after breakfast!
 We've decided we're all going to the beach tomorrow... 
 But since everyone wants to go to different places today, we're splitting up into three groups. 
 Kohran, Orihime, and I are headed for the mountains. A hike oughta be pretty fun! 
-I'll be taking Iris and Reni and going to the beach, like I told you last night. 
+I'll be taking Iris and Reni to the beach, like I told you last night.
 Maria, Saki, and I are planning on staying here and relaxing in the hot springs. 
 What are you going to do, Ogami? 
 Go to the beach. 
@@ -434,22 +434,22 @@ Relax at the inn.
 I'll go to the beach. It's been a while since I've had a swim in the ocean. 
 You're just saying that because you want to see my swimsuit, don't you? 
 Haha, sure, whatever you say. 
-Yaaay, Mon Fr�re's coming with us! Isn't that great, Reni? 
+Yaaay, Mon Frère's coming with us! Isn't that great, Reni? 
 ...I guess. 
-I'll go hiking. Hiking's pretty fun, every now and then. 
+I'll go hiking. Mountain hiking's pretty fun, every now and then. 
 Right? We're going to the beach tomorrow, anyway! 
-Oh? If the Ensign's coming, then maybe I should stay here. 
+Oh? If the ensign's coming, then maybe I should stay here. 
 C'mon, don't be like that! Let's all get along! 
 I think I'll stay at the inn and relax in the hot spring. 
 I see, so you'll be here with us, then. 
 Try to relax as much as you can, Captain. 
-Ogami's staying here with us? Heehee, I'm looking forward to it. 
+Ogami is staying here with us? Heehee, I'm looking forward to it. 
 All right, once breakfast is over, everyone get ready and meet up at the entrance if you're heading out! 
-Okaaay! 
-Sorry, Ogami, but each customer is only allowed to purchase one photo at a time. 
-I see. That's too bad... 
-My apologies, Ogami, but each customer is only allowed to purchase one photo at a time. 
-Oh, really? That's too bad... 
+OOOK! 
+Sorry, Ogami. I can only sell you one photo per month. 
+I see. That's too bad. 
+So sorry, Mr. Ogami, but each customer is only allowed to purchase one photo at a time.
+Oh, really? That's too bad.  
 Shiro 
 Hanamaru 
 Dai 
@@ -473,10 +473,10 @@ Kohran
 Orihime 
 Reni 
 The jewel of the Pandemonium Regalia, entrusted to us by the Rose Division. 
-Spirit Sword Arataka. The secret sword of the Shinguji family. 
-Divine Sword Shirahatori. Entrusted to me by Kaede. A secret sword passed down in the Fujieda family. 
-Luminous Blade Mukei. Shinnosuke Yamazaki is the original owner. A secret sword entrusted to me by Kazuma. 
-Divine Blade Mekkyaku. A secret sword entrusted to me by Yoneda. 
+Spirit Sword Arataka. The special sword of the Shinguji family. 
+Divine Sword Shirahatori. Entrusted to me by Kaede. A special sword passed down by the Fujieda family. 
+Luminous Blade Mukei. A special sword entrusted to us by Kazuma that once belonged to Major Yamazaki. 
+Divide Blade Mekkyaku. A special sword entrusted to me by Yoneda. 
 The uniform I wear at the theater. Good for both summer and winter. 
 A lighter borrowed from the inn. 
 The flower crown that Iris made for Reni. 
@@ -497,10 +497,10 @@ A photo of Orihime.
 A photo of Orihime. This one is a limited edition only available at New Year's. 
 A photo of Reni. 
 A photo of Reni. This one is a limited edition only available at New Year's. 
-A decorative paper ball from the welcome party. 
-A flower vase from the welcome party. 
-The banner from the welcome party. 
-The Cinematron. A communication machine invented by Kohran that lets you see and talk to someone from far away. 
+A decorative paper ball for the welcome party called a kusudama. 
+A flower vase for the welcome party.
+The banner for the welcome party.
+The Cinematron. One of Kohran's inventions that lets you see and talk to someone from far away. 
 The sword of the Pandemonium Regalia, recovered from the Demon King. 
 The mirror of the Pandemonium Regalia, recovered from the Demon King. 
 Fragments of the broken Cinematron. Seems like the kids at the inn picked them up along the shore. 
@@ -514,5 +514,5 @@ A letter from Orihime.
 A letter from Reni. 
 A scarf given to me by Sakura. It's knitted with red yarn - my favorite color. 
 A scarf given to me by Sakura. It's knitted with blue yarn - my favorite color. 
-A scarf given to me by Sakura. It's knitted with yellow yarn - my favorite color. 
-... "" "" () - . , ! ? ?! !! 
+A scarf given to me by Sakura. It's knitted with yellow yarn - my favorite color.
+... "" "" () - . , ! ? ?! !!

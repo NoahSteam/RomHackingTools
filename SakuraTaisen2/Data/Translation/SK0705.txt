@@ -1,8 +1,8 @@
-You're hurting me, Ensign! You don't have to be so aggressive! 
-I'm sorry, Orihime, but you have to come with me, even by force if I have to. 
+﻿You're hurting me, Ensign! You don't have to be so aggressive! 
+I’m sorry, Orihime… But you’re coming with me, even if I have to take you by force. 
 You have to talk to Mr. Ogata. 
-Cut it out! I want nothing to do with him! 
-You can't talk about your father that way, Orihime! 
+Cut it out! I want nothing to do with that man!
+You shouldn’t talk about your father that way, Orihime! 
 It's because of him and your mother that you're even here, right? 
 You should have an honest conversation with him. 
 ... 
@@ -41,20 +41,20 @@ Papa...
 Thank you, Orihime... You... You actually... called me "Papa"... 
 Orihime! Mr. Ogata! Are you all right?! 
 Oh my, it seems we have more trash. 
-...!! It's you, Kasha! 
+...!! <br> It's you, Kasha! 
 Seems like you're just a bit too late. I've already claimed these two. 
 What? What do you plan to do with them?! 
-Trash must be burned, of course. However, I'll make it the ultimate spectacle. Heheheh... 
+Naturally, trash must be burned. However, I'll make this the ultimate spectacle. Heheheh... 
 Urgh. You coward! 
 Ensign. I'll be all right. 
 Hurry, go and get the others! 
-But Orihime, what... what about you?! 
+But Orihime, what... What about you?! 
 I'm staying here. 
 I can't... I can't leave my papa behind! 
 Orihime... 
-I'll be right back to save you! 
+I'll be back to save you!
 I can't leave you here! 
-...OK. I'll head to the theater right away. 
+...Understood. I'll head to the theater right away. 
 But I swear... I'll come back and save you! Just hold on, Orihime!! 
 OK... Ensign... 
 Don't be silly! I can't just leave you here! 
@@ -67,13 +67,13 @@ What are you doing, Ensign?!
 You have to keep the capital safe! Go, now! 
 Orihime... 
 OK, but I'll come right back to save you! Just hold on, Orihime! 
-Heheheh... Think you can make it back before I turn this trash into ash? 
+Heheheh... Think you can make it back before I reduce this garbage to ashes? 
 I'll save Orihime, you'll see. 
 And when I do, it'll be the end for you, Kasha. Prepare yourself!! 
-Sorry, Ogami, but each customer is only allowed to purchase one photo at a time. 
+Sorry, Ogami. I can only sell you one photo per month. 
 I see. That's too bad. 
-Sorry, Ogami, but each customer is only allowed to purchase one photo at a time. 
-Oh, really? That's too bad. 
+So sorry, Mr. Ogami, but each customer is only allowed to purchase one photo at a time.
+Oh, really? That's too bad.  
 Shiro 
 Hanamaru 
 Dai 
@@ -105,10 +105,10 @@ Kohran
 Orihime 
 Reni 
 The jewel of the Pandemonium Regalia, entrusted to us by the Rose Division. 
-Spirit Sword Arataka. The secret sword of the Shinguji family. 
-Divine sword Shirahatori. Entrusted to me by Kaede. A secret sword passed down in the Fujieda family. 
-Luminous blade Mukei. Shinnosuke Yamazaki is the original owner. A secret sword entrusted to us by Kazuma. 
-Divine blade Mekkyaku. A secret sword entrusted to me by Yoneda. 
+Spirit Sword Arataka. The special sword of the Shinguji family. 
+Divine Sword Shirahatori. Entrusted to me by Kaede. A special sword passed down by the Fujieda family. 
+Luminous Blade Mukei. A special sword entrusted to us by Kazuma that once belonged to Major Yamazaki. 
+Divide Blade Mekkyaku. A special sword entrusted to me by Yoneda. 
 The uniform I wear at the theater. Good for both summer and winter. 
 A lighter borrowed from the inn. 
 The flower crown that Iris made for Reni. 
@@ -129,10 +129,10 @@ A photo of Orihime.
 A photo of Orihime. This one is a limited edition only available at New Year's. 
 A photo of Reni. 
 A photo of Reni. This one is a limited edition only available at New Year's. 
-A decorative paper ball from the welcome party. 
-A flower vase from the welcome party. 
-The banner from the welcome party. 
-The Cinematron. A communication machine invented by Kohran that lets you see and talk to someone from far away. 
+A decorative paper ball for the welcome party called a kusudama. 
+A flower vase for the welcome party.
+The banner for the welcome party.
+The Cinematron. One of Kohran's inventions that lets you see and talk to someone from far away. 
 The sword of the Pandemonium Regalia, recovered from the Demon King. 
 The mirror of the Pandemonium Regalia, recovered from the Demon King. 
 Fragments of the broken Cinematron. Seems like the kids at the inn picked them up along the shore. 
@@ -148,4 +148,4 @@ A scarf given to me by Sakura. It's knitted with red yarn - my favorite color.
 A scarf given to me by Sakura. It's knitted with blue yarn - my favorite color. 
 A scarf given to me by Sakura. It's knitted with yellow yarn - my favorite color. 
 ... "" "" () - . , ! ? ?! !! 
-Whaaaaa?! 
+Whaaaaa?!

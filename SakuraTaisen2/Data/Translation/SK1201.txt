@@ -1,4 +1,4 @@
-We've made it quite far inside, Captain. 
+﻿We've made it quite far inside, Captain. 
 Yeah. We're definitely getting closer to Musashi's core, little by little. 
 ...! 
 What's wrong, Sakura? 
@@ -14,21 +14,21 @@ Wait!
 Father... It's me! <br> It's Sakura! 
 ... 
 Father! Why are you doing this?! 
-The father I knew went so far as to sacrifice his own life to fight evil... So why?! 
+The father I knew fought evil at the expense of his own life… So why?!
 ...Is that all you have to say? 
 Father?! 
 Protecting Lord Kyogoku is my sworn duty... 
-I fight to realize Lord Kyogoku's ideals... 
-I will strike down anyone who dares get in his way! 
+I fight to realize his ideals…
+If anyone dares to get in his way… I will strike them down!
 Colonel Shinguji... 
-Wake up! 
-We have no choice but to fight. 
-Colonel Shinguji, please, wake up! 
+Open your eyes!
+We have to fight him…
+Colonel Shinguji, please, open your eyes!
 Have you forgotten about Sakura... Your own daughter?! 
-If you won't come to me... Then I'll come to you. 
+If you won't come to me... Then I shall take the fight to you.
 Colonel Shinguji... 
 That man... A powerful spell has taken over his mind. 
-You'd need an even greater power to break the spell controlling him. 
+You'd need an even greater power to break what’s controlling him. 
 But we don't have the time to figure that out right now. We have no choice but to fight. 
 Urgh... Damn it! 
 Sakura... We have no choice but to fight him. 
@@ -36,25 +36,25 @@ Ogami?!
 Colonel Shinguji... A powerful spell has taken over his mind. 
 But we don't have time to figure out how to break it. All we can do for now is fight! 
 That man... A powerful spell has taken over his mind. 
-You'd need an even greater power to break the spell controlling him. 
+You'd need an even greater power to break what’s controlling him. 
 In order to do that... We have no choice but to fight him. 
 Urgh... Damn it! 
 Father... 
 ... 
-Father... I'll do it... I'll fight you. 
+Father... <br> I'll do it... I'll fight you. 
 And... I will defeat you! 
 Sakura... 
 All right, let's go, everyone! 
-Sorry, Ogami, but each customer is only allowed to purchase one photo at a time. 
+Sorry, Ogami. I can only sell you one photo per month. 
 I see. That's too bad. 
-Sorry, Ogami, but each customer is only allowed to purchase one photo at a time. 
+So sorry, Mr. Ogami, but each customer is only allowed to purchase one photo at a time.  
 Oh, really? That's too bad. 
 ... "" "" () - . , ! ? ?! !! 
 The jewel of the Pandemonium Regalia, entrusted to us by the Rose Division. 
-Spirit Sword Arataka. The secret sword of the Shinguji family. 
-Divine sword Shirahatori. Entrusted to me by Kaede. A secret sword passed down in the Fujieda family. 
-Luminous blade Mukei. Shinnosuke Yamazaki is the original owner. A secret sword entrusted to us by Kazuma. 
-Divine blade Mekkyaku. A secret sword entrusted to me by Yoneda. 
+Spirit Sword Arataka. The special sword of the Shinguji family. 
+Divine Sword Shirahatori. Entrusted to me by Kaede. A special sword passed down by the Fujieda family. 
+Luminous Blade Mukei. A special sword entrusted to us by Kazuma that once belonged to Major Yamazaki. 
+Divide Blade Mekkyaku. A special sword entrusted to me by Yoneda. 
 The uniform I wear at the theater. Good for both summer and winter. 
 A lighter borrowed from the inn. 
 The flower crown that Iris made for Reni. 
@@ -75,10 +75,10 @@ A photo of Orihime.
 A photo of Orihime. This one is a limited edition only available at New Year's. 
 A photo of Reni. 
 A photo of Reni. This one is a limited edition only available at New Year's. 
-A decorative paper ball from the welcome party. 
-A flower vase from the welcome party. 
-The banner from the welcome party. 
-The Cinematron. A communication machine invented by Kohran that lets you see and talk to someone from far away. 
+A decorative paper ball for the welcome party called a kusudama. 
+A flower vase for the welcome party.
+The banner for the welcome party.
+The Cinematron. One of Kohran's inventions that lets you see and talk to someone from far away. 
 The sword of the Pandemonium Regalia, recovered from the Demon King. 
 The mirror of the Pandemonium Regalia, recovered from the Demon King. 
 Fragments of the broken Cinematron. Seems like the kids at the inn picked them up along the shore. 
@@ -92,4 +92,4 @@ A letter from Orihime.
 A letter from Reni. 
 A scarf given to me by Sakura. It's knitted with red yarn - my favorite color. 
 A scarf given to me by Sakura. It's knitted with blue yarn - my favorite color. 
-A scarf given to me by Sakura. It's knitted with yellow yarn - my favorite color. 
+A scarf given to me by Sakura. It's knitted with yellow yarn - my favorite color.

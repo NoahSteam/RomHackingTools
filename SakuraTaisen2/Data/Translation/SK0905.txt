@@ -1,4 +1,4 @@
-Good morning, Ogami. 
+ÔªøGood morning, Ogami. 
 Good morning. 
 Well? Ready to give your answer? 
 ... 
@@ -51,17 +51,17 @@ Yes. Please, Sakura.
 The one I've picked for the lead role... is Sumire. 
 Ensign... I knew you'd pick me! 
 Yes. Please, Sumire. 
-...OK! 
+...Of course! 
 The one I've picked for the lead role... is Maria. 
 Captain... Are you really sure? 
 Yes. Please, Maria. 
 ...Yes, sir! I'll do my best to live up to your expectations! 
 The one I've picked for the lead role... is Kanna. 
-Whaaa?! Boss... Me? Are you sure? 
+Whaaa?! Boss... Me? Are ya sure? 
 Yes. Please, Kanna. 
-All right, you got it! I'll give it everything I've got for you, Boss! 
+All right, you got it! I'll give it everythin‚Äô I've got for you, Boss! 
 The one I've picked for the lead role... is Iris. 
-Really, Mon FrËre? Are you sure? 
+Really, Mon Fr√®re? Are you sure? 
 Yes. Please, Iris. 
 OK! I'll do it! I'll do my best! 
 The one I've picked for the lead role... is Kohran. 
@@ -83,7 +83,7 @@ You got this! We'll light up the stage!
 I'll do my best too as one of the angels! 
 This play's gonna be great! I can't wait! 
 Don't let your guard down, or I'll snatch the lead role away from you! 
-It's all right. The god of the stage is with is. 
+It's all right. The god of the stage is with us. 
 The lead isn't alone. The entire Flower Division together is the true star. 
 Everyone... Let's make this a Christmas play to remember! 
 Sir, yes, sir! 
@@ -91,9 +91,9 @@ And so, rehearsals for "The Miracle Bells" began.
 After having picked the lead, I was put in charge of the entire production. 
 Ogami, what mood should we aim for with our set design? 
 Let's see... 
-Let's go for a cheery mood. 
-Let's go for a solemn mood. 
-Let's go for an ominous mood. 
+Go for a cheery mood. 
+Go for a solemn mood. 
+Go for an ominous mood. 
 Let's go for a cheery mood befitting of Christmas. 
 OK, got it. We'll go for a cheery, flashy feel. 
 All right, leave it to me! I'll set up the lights so the stage is positively radiant! 
@@ -103,13 +103,13 @@ All right, leave it to me! I'll build us a nice, solemn set!
 Rather, what if we went with an ominous mood? 
 Huh?! Did... Did you say "ominous"? 
 Ahahaha! Why not, Sakura? That could be interesting! 
-Besides, this is Chief's play this time around, it's all up to him! 
+Besides, this is the chief's play this time around, it's all up to him! 
 All right, I'll go fix up the lights to give the stage an ominous feel. 
 Ensign, what kind of play is this going to be? 
-Hmm... 
-Let's make it emotional. 
-Let's make it action-packed. 
-Let's make it comedic. 
+Hmm‚Ä¶ 
+Make it emotional. 
+Make it action-packed. 
+Make it comedic. 
 We should make it emotional and stir up the crowd. 
 That's an excellent idea. We'll put on a show that'll warm the hearts of the entire audience. 
 OK, let's make the necessary rewrites, then. 
@@ -126,14 +126,14 @@ All right, let's start our rehearsals over, from the top!
 Day in, day out, the Flower Division passionately continued their rehearsals. 
 The direction started to take shape, and the play finally started moving along. 
 And now, at last, it's time to direct all the performers. 
-In "The Miracle Bells, the seven people aside from the heroine will portray angels. 
-Hey, Mon FrËre. About the angel roles... 
+In "The Miracle Bells,‚Äù the seven people aside from the heroine will portray angels. 
+Hey, Mon Fr√®re. About the angel roles... 
 What kind of performance should we be giving? 
 Captain, about the angel roles... 
 What kind of performance should we be giving? 
-Act in total sync with each other. 
-Act as restrained as possible. 
-Everyone can act as they please. 
+Act in sync.
+Act restrained.
+Act as you please.
 What if you all acted in sync with each other, in total unison? 
 I think it would look very pretty to have all seven of you lined up and performing together. 
 OK, got it! We'll all dance in a neat line! 
@@ -144,10 +144,10 @@ Roger. As restrained as possible.
 I'll leave it up to you, everyone can act as they please. 
 OK, got it! Eheheh, I hope I do well! 
 ...Roger. We'll leave it to everyone's own judgment. 
-Then finally... The direction of 
-the heroine's performance. 
+And finally... The directions for  
+'s performance as the heroine. 
 Ogami... Opening day is finally approaching. 
-Give me your final direction for my performance. 
+Please, give me your final directions for my performance. 
 Act purely. 
 Act cheerily. 
 Act gracefully. 
@@ -157,16 +157,16 @@ I'll do my best to give a pure-hearted performance!
 Sakura... 
 Let's go for a bright, cheery feel. I think it suits you perfectly. 
 Ogami... Thank you. 
-I'll do my best to give a bright, cheery performance! 
+I'll do my best to give a lively, cheerful performance! 
 Sakura... 
 Let's go for a graceful, refined feel. I know you can do it, Sakura. 
 Graceful, huh? Heehee, you're making me blush. 
 It's thanks to you we've made it this far. 
 Thank you, Ogami... I mean it. 
 Sakura... 
-We'll make this play amazing, for your sake, too! 
+For everyone's sake and yours‚Ä¶ We'll make this an amazing play! 
 Ensign... Opening day is finally approaching. 
-Please give me your final direction for my performance. 
+Please give me your final directions for my performance. 
 Act purely. 
 Act cheerily. 
 Act gracefully. 
@@ -186,9 +186,9 @@ Hahaha... You're so reliable.
 It's all thanks to you that we've made it as far as we have. 
 Ensign... Truly, you have my thanks. 
 Sumire... 
-We'll make this a wonderful play, for your sake, too! 
+For the sake of everyone and yourself... We'll make this a wonderful play! 
 Captain... Opening day is finally approaching. 
-Please give me your final direction for my performance. 
+Please give me your final directions for my performance. 
 Act purely. 
 Act cheerily. 
 Act gracefully. 
@@ -210,7 +210,7 @@ Thank you, Captain. I mean it.
 Maria... 
 Let's make this an incredible play, for everyone's sake. 
 Hey Boss... The big day's almost here. 
-Would ya give me your final direction for my performance? 
+Would ya give me your final directions for my performance? 
 Act purely. 
 Act cheerily. 
 Act gracefully. 
@@ -219,7 +219,7 @@ Pure, huh? Heheh, you're makin' me kind of embarrassed.
 It's OK, I know you can do it, Kanna. 
 ...Got it. If you say so, then I'll give it a shot. 
 Thank you, Kanna. 
-This is you we're talking about, so how about a bright, cheerful feel? 
+This is a Kanna performance, so how about a bright, cheerful feel? 
 Heheh, that's what I'm talkin' about! No one's got me beat when it comes to cheer! 
 I'm gonna put on the cheeriest performance you've ever seen, Boss, so look forward to it! 
 Hahaha... I can't wait, Kanna. 
@@ -232,10 +232,10 @@ Hahaha... I can't wait, Kanna.
 Boss... It's thanks to you that we've made it this far. 
 So thanks... Really. Once again, you have my gratitude. 
 Kanna... 
-We'll make this an amazing show, for your sake too! 
-Mon FrËËËËre! 
+For you and for everyone... We'll make this an amazing show! 
+Hey-Mon-Fr√®re!
 Heehee! It's almost time for the Christmas play! 
-How should I act up on stage, Mon FrËre? 
+How should I act up on stage, Mon Fr√®re? 
 Act purely. 
 Act cheerily. 
 Act gracefully. 
@@ -251,12 +251,12 @@ Uhhh... How should I put this...
 I guess... like a grown-up? 
 Like a grown-up? OK! I'll give it a try! 
 Really? I'm looking forward to it, Iris. 
-Mon FrËre... Thank you. Really, thank you. 
-It's thanks to you that we made it this far. 
+Mon Fr√®re... Thank you. Really, thank you. 
+It's because of you that we‚Äôve made it this far. 
 Iris... 
-We'll do our very best, for your sake too! 
+For your sake and everybody else... We'll do our very best! 
 The opening day's finally approaching, Chief. 
-Could I ask you for your final direction for my performance? 
+Could I ask you for your final directions for my performance? 
 Act purely. 
 Act cheerily. 
 Act gracefully. 
@@ -278,25 +278,25 @@ Hahaha, I can't wait, Kohran!
 It's thanks to you that we've made it this far. 
 So thanks, Chief. Seriously. I'm grateful. 
 Kohran... 
-We're gonna make this an amazing show, for your sake too! 
+For you and everyone else... We‚Äôre gonna make this an amazing show! 
 Ensign, the Christmas play is finally approaching. 
 Just this once, I'll let you direct my performance. 
 Act purely. 
 Act cheerily. 
 Act gracefully. 
 Let's go for a pure feel. I think it suits you perfectly. 
-Understood! I'll do my best, for your sake too. 
+Understood. I'll do my best, for you, Ensign. 
 Thank you, Orihime. 
 How about we try a bright, cheerful performance, just this once. 
-Leave it to me! I can handle any performance you want me to do! 
+Leave it to me. I can handle any performance you want me to do. 
 I'm looking forward to it, Orihime. 
-Since it's you we're talking about, Orihime, how about a graceful, refined feel? 
+Since this will be an Orihime performance, how about a graceful, refined feel? 
 Understood. I don't have any problem with my usual routine. 
 Hahaha... What confidence. 
 It's thanks to you that we've made it this far, Ensign. 
-We'll make this a wonderful play, for your sake too! 
+For the sake of you and everyone else‚Ä¶ We'll make this a wonderful play! 
 Captain... Opening day has drawn near. 
-Please give me your direction. 
+Please give me your directions. 
 Act purely. 
 Act cheerily. 
 Act gracefully. 
@@ -312,9 +312,9 @@ I know what the word means, so I'll do some research.
 I see... I can't wait. 
 It's thanks to you that we've made it this far. 
 We'll put on a good play for you, Captain. 
-Sorry, Ogami, but each customer is only allowed to purchase one photo at a time. 
+Sorry, Ogami. I can only sell you one photo per month. 
 I see. That's too bad. 
-Sorry, Ogami, but each customer is only allowed to purchase one photo at a time. 
+So sorry, Mr. Ogami, but each customer is only allowed to purchase one photo at a time.
 Oh, really? That's too bad. 
 Shiro 
 Hanamaru 
@@ -347,10 +347,10 @@ Kohran
 Orihime 
 Reni 
 The jewel of the Pandemonium Regalia, entrusted to us by the Rose Division. 
-Spirit Sword Arataka. The secret sword of the Shinguji family. 
-Divine sword Shirahatori. Entrusted to me by Kaede. A secret sword passed down in the Fujieda family. 
-Luminous blade Mukei. Shinnosuke Yamazaki is the original owner. A secret sword entrusted to us by Kazuma. 
-Divine blade Mekkyaku. A secret sword entrusted to me by Yoneda. 
+Spirit Sword Arataka. The special sword of the Shinguji family. 
+Divine Sword Shirahatori. Entrusted to me by Kaede. A special sword passed down by the Fujieda family. 
+Luminous Blade Mukei. A special sword entrusted to us by Kazuma that once belonged to Major Yamazaki. 
+Divide Blade Mekkyaku. A special sword entrusted to me by Yoneda. 
 The uniform I wear at the theater. Good for both summer and winter. 
 A lighter borrowed from the inn. 
 The flower crown that Iris made for Reni. 
@@ -371,10 +371,10 @@ A photo of Orihime.
 A photo of Orihime. This one is a limited edition only available at New Year's. 
 A photo of Reni. 
 A photo of Reni. This one is a limited edition only available at New Year's. 
-A decorative paper ball from the welcome party. 
-A flower vase from the welcome party. 
-The banner from the welcome party. 
-The Cinematron. A communication machine invented by Kohran that lets you see and talk to someone from far away. 
+A decorative paper ball for the welcome party called a kusudama. 
+A flower vase for the welcome party.
+The banner for the welcome party.
+The Cinematron. One of Kohran's inventions that lets you see and talk to someone from far away. 
 The sword of the Pandemonium Regalia, recovered from the Demon King. 
 The mirror of the Pandemonium Regalia, recovered from the Demon King. 
 Fragments of the broken Cinematron. Seems like the kids at the inn picked them up along the shore. 
@@ -389,4 +389,4 @@ A letter from Reni.
 A scarf given to me by Sakura. It's knitted with red yarn - my favorite color. 
 A scarf given to me by Sakura. It's knitted with blue yarn - my favorite color. 
 A scarf given to me by Sakura. It's knitted with yellow yarn - my favorite color. 
-... "" "" () - . , ! ? ?! !! 
+... "" "" () - . , ! ? ?! !!

@@ -20,6 +20,7 @@ static bool BringOverOriginalFiles(const string& inRootSakuraDirectory, const st
 	GetAllFilesOfType(allFiles, "TITLE.BIN", originalFiles);
 	GetAllFilesOfType(allFiles, "TTL2CGB.BIN", originalFiles);	
 	GetAllFilesOfType(allFiles, "M_NAME", originalFiles);
+	GetAllFilesOfType(allFiles, "INFONAME.BIN", originalFiles);
 
 	//Bring over scenario files
 	const string outputDirectory = inPatchedDirectory + Seperators;
@@ -211,15 +212,22 @@ bool PatchGame(const string& inSourceGameDirectory, const string& inTranslatedDi
 		return false;
 	}
 
-	if( !PatchMNameCG(inPatchedDirectory, inTranslatedDirectory) )
+	if( !PatchInfoName(inPatchedDirectory, inTranslatedDirectory) )
 	{
+		printf("Unable to patch PatchInfoName\n");
 		return false;
 	}
 
-	if(!PatchIntroScreens(inPatchedDirectory, inTranslatedDirectory))
+	if( !PatchMNameCG(inPatchedDirectory, inTranslatedDirectory) )
 	{
-		printf("Unable to patch Title Screens\n");
+		printf("Unable to patch MNameCG\n");
 		return false;
+	}
+
+	//if(!PatchIntroScreens(inPatchedDirectory, inTranslatedDirectory))
+	{
+	//	printf("Unable to patch Title Screens\n");
+	//	return false;
 	}
 
 	if(!PatchTextDrawingCode(inSourceGameDirectory, inPatchedDirectory))

@@ -111,16 +111,16 @@ class FileData
 	bool          mbCrcCalculated;
 	
 private:
-	bool ReadInFileData(const char* pFileName);
+	bool ReadInFileData(const char* pFileName, bool bInErrorOnFail);
 
 public:
 	FileData() : mFileSize(0), mBufferSize(0), mCrc(0xffffffff), mpData(nullptr), mbCrcCalculated(false) {}
 	~FileData();
 	
 	void  Close();
-	bool  InitializeFileData(const FileNameContainer& inFileData);
-	bool  InitializeFileData(const std::string& inFullPath);
-	bool  InitializeFileData(const char* pFileName, const char* pFullPath);
+	bool  InitializeFileData(const FileNameContainer& inFileData, bool bInErrorOnFail = true);
+	bool  InitializeFileData(const std::string& inFullPath, bool bInFailOnError = true);
+	bool  InitializeFileData(const char* pFileName, const char* pFullPath, bool bInErrorOnFail = true);
 	void  WriteToFile(const char* pFileName) const;
 	bool  DoesThisFileContain(const FileData& otherFile, std::vector<unsigned long>* pOutOffsets, bool bFindMultiple) const;	
 	bool  FindDataIndex(const char* pData, unsigned long dataLength, unsigned long& outIndex) const;
@@ -339,7 +339,7 @@ class BitmapReader
 public:
 	BitmapData mBitmapData;
 
-	bool ReadBitmap(const std::string& inFileName);
+	bool ReadBitmap(const std::string& inFileName, bool bInErrorOnFail = true);
 	bool Save();
 	const std::string& GetFileName() const {return mFilename; }
 	char* GetColorData() const {return mBitmapData.mColorData.mpRGBA;}
@@ -384,7 +384,13 @@ public:
 	void AddTile(const char* pData, int dataSize, int x, int y, int width, int height, EFlipFlag flipFlag = kFlipNone);
 	void AddPartialTile(const char* pData, int dataSize, int x, int y, int numBytesInWidthToCopy, int width, int height);
 	bool WriteToFile(const std::string& fileName, bool bForceBitmap = false);
+	
+	const char* GetPaletteData() const {return mpPalette;}
+	char* GetColorData() const {return mpBuffer;}
+	int GetColorDataSize() const {return mBufferSize;}
+	EBitsPerPixel GetBitsPerPixel() const {return mBitsPerPixel;}
 	int GetWidth() const {return mWidth;}
+	int GetHeight() const {return mHeight;}
 };
 
 class BitmapFormatConverter
@@ -408,10 +414,10 @@ public:
 
 	void WriteToFile(const char* pInOutputPath);
 
-private:
 	bool ConvertColorDataFrom4BitTo8Bit(const char* pInData, const size_t inDataSize);
 	bool ConvertColorDataFrom8BitTo4Bit(const char* pInData, const size_t inDataSize);
 
+private:
 	char* mpConvertedData = nullptr;
 	char* mpPaletteData = nullptr;
 	size_t mConvertedDataSize = 0;

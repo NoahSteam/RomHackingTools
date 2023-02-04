@@ -1,4 +1,4 @@
-Well, I suppose I'll head back to my room for the time being. 
+﻿Well, I suppose I'll head back to my room for the time being. 
 Um, Ogami... Do you have a moment? 
 Hm? 
 Hey, Sakura. Did you need something? 
@@ -7,9 +7,9 @@ And, um... It may be brazen of me to ask this, but...
 By any chance... Would you like to come with me? 
 Huh?! 
 You see, I'd like to introduce you to my mother... If that's all right. 
-If you'll have me, I'd love to. 
-I'm not sure I'm mentally prepared... 
-...It's almost like we're engaged. 
+I'd love to.
+T-This is so sudden…
+It's like we're engaged… 
 If you'll have me, I'd love to come along. 
 Do you mean it? Thank you! 
 I'm so glad I worked up the courage to ask you. 
@@ -37,18 +37,18 @@ Hm?
 Hey Sumire. What is it? 
 As I mentioned not long ago, I plan to return to the Kanzaki estate over the New Years' holiday. 
 That said... I would like to extend a special invitation for you to accompany me. 
-If you'll have me, I'd love to. 
-Are you sure you want me along? 
-I'd love to. Ever since the marriage arrangement business, I've wanted a chance to sit down and talk with your family. 
+I'd love to.
+You sure you want me along?
+I'd love to. Ever since the marriage arrangement, I've been hoping to sit down and talk with your family.
 Is that so? It would be just lovely to have you there for the new year. 
-Are you sure you want me along? 
+Are you sure you want me tagging along? 
 I made a real mess of your marriage arrangement a while back... 
 Worry not, Ensign. This time, you will be coming on my invitation. 
 Should anyone have an issue, you can respond with your head held high. 
 I see... In that case, maybe I'll take the plunge and accept your invitation. 
 Good, I am pleased to hear it. 
 Hmm, what to do... 
-Ensign... If you are holding back due to the business with the marriage arrangement, there's truly no need. 
+Ensign… If you are holding back due to the business with the arranged marriage, there's truly no need.
 You would be coming along on my invitation, and thus an honored guest. 
 We could pass through the gates of the Kanzaki estate together, with your head held high. 
 I see... In that case, maybe I'll take the plunge and accept your invitation. 
@@ -63,12 +63,12 @@ Hey Maria. What do you need?
 How would you feel about visiting Count Hanakoji with me? 
 I'm sure the count would be pleased if you were to come along with me. 
 All right, let's go. 
-What a pain... 
+That may be a hassle... 
 All right, let's go. I'd be happy to come along. 
 Really? I'd appreciate it. 
 Hmm, for New Years'? That may be a hassle... 
 You know Captain... I can understand wanting to relax over the New Years' holiday. 
-But the count is a very busy man. If we don't take the opportunity now, it could be a while before we get another. 
+But the count is a busy man... If we don't visit now, it could be a while before we can again.
 I-I understand. OK, I'll go with you. 
 I appreciate it, Captain. 
 Hmm, what to do... 
@@ -87,13 +87,13 @@ Erm... Y'know how I said before that I'm goin' home to Okinawa?
 Any chance you'd wanna tag along? 
 Wait, to Okinawa? 
 Yeah. How's that sound? 
-If you'll have me, I'd love to. 
-Just how would we get there? 
+I'd love to.
+How would we get there?
 If you'll have me, I'd love to. Spending New Years' in Okinawa doesn't sound too bad. 
 Heheh, you know it! Winter in Okinawa is always niiice and warm! 
 Okinawa, huh?... Just how would we get there? 
 By boat. A nice leisurely boat trip sounds pretty good, eh? 
-Though I guess the boat might capsize if the sea's too rough. 
+Though I guess the ship might capsize if the sea's too rough. 
 Huh?! What would we do THEN? 
 In that case, it'd be time to go for a swim! Ahahaha! 
 (...Are we really gonna get there in one piece?) 
@@ -104,20 +104,20 @@ Winter in Okinawa's always relaxing 'cause of how warm it is. C'mon Boss, come w
 Heheh, now that's the spirit! 
 All right, come an' get me when you're ready to hit the road. 
 I'll be in my room. See ya soon! 
-So I'm going to Okinawa with Kanna... If I recall, she said she wanted to visit her old man's grave, too. 
+So I'm going to Okinawa with Kanna… If I recall, she said she wanted to visit her father's grave.
 I'd better get dressed properly for the occasion. 
 OK, I'll head back to my room and change clothes, then meet up with Kanna in her room. 
-Mon Fr�re!! 
+Mon Frère!! 
 Hm? 
 Hey, Iris. Did you need something? 
-Hey Mon Frere, are you doing anything for New Years'? 
+Hey Mon Frère, are you doing anything for New Years'? 
 Oh... No, not particularly. 
-Then why don't you come home with me to meet my papa and mama? 
+Then why don't you come with me to meet my papa and mama? 
 Wait, me?! 
 Yep! They both said they wanted to meet you! 
-What do you think, Mon Frere? 
-If you'll have me, I'd love to. 
-I'm not sure I'm mentally prepared... 
+What do you think, Mon Frère? 
+I'd love to.
+T-This is so sudden…
 Yeah, sure. I'd be glad to. 
 Really? Yay! Yay! 
 I can't believe you, me, papa, and mama are all gonna be together for New Years'! 
@@ -165,11 +165,11 @@ OK, I'll head to my room to change my clothes, then meet up with Kohran at her r
 Oh Ennnsign! 
 Hm? 
 Hey, Orihime. Did you need something? 
-As I said so before, my mamma will be coming to visit Japan. 
+As I said before, my mamma will be coming to visit Japan. 
 And since my papa is all healed now and leaving the hospital... 
 We all plan to meet at a hotel in the capital. How would you like to come along, Ensign? 
 I'd be pleased to join you. 
-Are you sure you want me to come? 
+Are you sure?
 I wouldn't want to intrude. 
 If you'll have me, I'd be pleased to join you. I'd really like to meet your mother. 
 My thanks! My mamma is sure to be pleased, too! 
@@ -224,15 +224,15 @@ Sure, will do.
 It'll be fun for you to get dressed up and go out on occasion, too. 
 That's true... Since I'm going out, I may as well put on something nicer. 
 OK, I'll head to my room for a change of clothes, then meet Reni at her room. 
-Sorry, Ogami, but each customer is only allowed to purchase one photo at a time. 
+Sorry, Ogami. I can only sell you one photo per month. 
 I see. That's too bad. 
-My apologies, Ogami, but each customer is only allowed to purchase one photo at a time. 
+So sorry, Mr. Ogami, but each customer is only allowed to purchase one photo at a time.  
 Oh, really? That's too bad. 
 The jewel of the Pandemonium Regalia, entrusted to us by the Rose Division. 
-Spirit Sword Arataka. The secret sword of the Shinguji family. 
-Divine sword Shirahatori. Entrusted to me by Kaede. A secret sword passed down in the Fujieda family. 
-Luminous blade Mukei. Shinnosuke Yamazaki is the original owner. A secret sword entrusted to us by Kazuma. 
-Divine blade Mekkyaku. A secret sword entrusted to me by Yoneda. 
+Spirit Sword Arataka. The special sword of the Shinguji family. 
+Divine Sword Shirahatori. Entrusted to me by Kaede. A special sword passed down by the Fujieda family. 
+Luminous Blade Mukei. A special sword entrusted to us by Kazuma that once belonged to Major Yamazaki. 
+Divide Blade Mekkyaku. A special sword entrusted to me by Yoneda. 
 The uniform I wear at the theater. Good for both summer and winter. 
 A lighter borrowed from the inn. 
 The flower crown that Iris made for Reni. 
@@ -253,10 +253,10 @@ A photo of Orihime.
 A photo of Orihime. This one is a limited edition only available at New Year's. 
 A photo of Reni. 
 A photo of Reni. This one is a limited edition only available at New Year's. 
-A decorative paper ball from the welcome party. 
-A flower vase from the welcome party. 
-The banner from the welcome party. 
-The Cinematron. A communication machine invented by Kohran that lets you see and talk to someone from far away. 
+A decorative paper ball for the welcome party called a kusudama. 
+A flower vase for the welcome party.
+The banner for the welcome party.
+The Cinematron. One of Kohran's inventions that lets you see and talk to someone from far away. 
 The sword of the Pandemonium Regalia, recovered from the Demon King. 
 The mirror of the Pandemonium Regalia, recovered from the Demon King. 
 Fragments of the broken Cinematron. Seems like the kids at the inn picked them up along the shore. 
@@ -270,7 +270,7 @@ A letter from Orihime.
 A letter from Reni. 
 A scarf given to me by Sakura. It's knitted with red yarn - my favorite color. 
 A scarf given to me by Sakura. It's knitted with blue yarn - my favorite color. 
-A scarf given to me by Sakura. It's knitted with yellow yarn - my favorite color. 
+A scarf given to me by Sakura. It's knitted with yellow yarn - my favorite color.
 Macro complete. 
 Proceed to the next macro. 
 Repeat this macro. 
@@ -281,4 +281,4 @@ Execute random macro.
 4. Free Walk 
 5. Returning Home 
 6. Kyogoku Alive 
-... [] [] () /. , ! ? ?! !! 
+... [] [] () /. , ! ? ?! !!

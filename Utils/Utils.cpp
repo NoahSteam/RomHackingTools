@@ -297,14 +297,18 @@ void FileData::Close()
 	mpData = nullptr;
 }
 
-bool FileData::ReadInFileData(const char* pFileName)
+bool FileData::ReadInFileData(const char* pFileName, bool bInErrorOnFail)
 {
 	//Open file in read-binary mode
 	FILE* pFile = nullptr;
 	errno_t errorValue = fopen_s(&pFile, pFileName, "rb");
 	if( errorValue )
 	{
-		printf("Unable to open file: %s.  Error code: %i \n", pFileName, errorValue);
+		if(bInErrorOnFail)
+		{
+			printf("Unable to open file: %s.  Error code: %i \n", pFileName, errorValue);
+		}
+		
 		return false;
 	}
 
@@ -357,27 +361,27 @@ bool FileData::IsDataTheSame(const char* pData1, const char* pData2, const unsig
 	return true;
 }
 
-bool FileData::InitializeFileData(const FileNameContainer& inFileData)
+bool FileData::InitializeFileData(const FileNameContainer& inFileData, bool bInErrorOnFail)
 {
 	mFileName = inFileData.mFileName;
 	mFullPath = inFileData.mFullPath;
 
-	return ReadInFileData(mFullPath.c_str());
+	return ReadInFileData(mFullPath.c_str(), bInErrorOnFail);
 }
 
-bool FileData::InitializeFileData(const char* pFileName, const char* pFullPath)
+bool FileData::InitializeFileData(const char* pFileName, const char* pFullPath, bool bInErrorOnFail)
 {
 	mFileName = pFileName;
 	mFullPath = pFullPath;
 
-	return ReadInFileData(mFullPath.c_str());
+	return ReadInFileData(mFullPath.c_str(), bInErrorOnFail);
 }
 
-bool FileData::InitializeFileData(const string& inFullPath)
+bool FileData::InitializeFileData(const string& inFullPath, bool bInErrorOnFail)
 {
 	const FileNameContainer nameInfo(inFullPath);
 
-	return InitializeFileData(nameInfo);
+	return InitializeFileData(nameInfo, bInErrorOnFail);
 }
 
 void FileData::WriteToFile(const char* pFileName) const
@@ -1193,10 +1197,10 @@ bool BitmapWriter::SaveAsPNG(const string& inFileName, int inWidth, int inHeight
 /////////////////////////////////
 //        BitmapReader        //
 /////////////////////////////////
-bool BitmapReader::ReadBitmap(const string& inBitmapName)
+bool BitmapReader::ReadBitmap(const string& inBitmapName, bool bInErrorOnFail)
 {
 	FileData inFile;
-	if( !inFile.InitializeFileData(inBitmapName.c_str(), inBitmapName.c_str()) )
+	if( !inFile.InitializeFileData(inBitmapName.c_str(), inBitmapName.c_str(), bInErrorOnFail) )
 	{
 		return false;
 	}
@@ -1220,25 +1224,42 @@ bool BitmapReader::ReadBitmap(const string& inBitmapName)
 		return false;	
 	}
 
-	//Read in palette
-	const int numColorsInPalette          = (int)pow(2, mBitmapData.mInfoHeader.mBitCount);
-	const int numBytesPerColor            = 4;
-	mBitmapData.mPaletteData.mSizeInBytes = numColorsInPalette*numBytesPerColor;
-	mBitmapData.mPaletteData.mpRGBA       = new char[mBitmapData.mPaletteData.mSizeInBytes];
-	int offsetToPalette             = mBitmapData.mFileHeader.mOffsetToData - mBitmapData.mPaletteData.mSizeInBytes;
-	if( offsetToPalette < 0 )
+	if(mBitmapData.mInfoHeader.mBitCount == 32)
 	{
-		printf("%s has an invalid offset to palette [%i]", inBitmapName.c_str(), offsetToPalette);
-		offsetToPalette = sizeof(mBitmapData.mFileHeader) + sizeof(mBitmapData.mInfoHeader);
-	}
-	memcpy(mBitmapData.mPaletteData.mpRGBA, pFileData + offsetToPalette, mBitmapData.mPaletteData.mSizeInBytes);
+		const int numColorBytes = abs(mBitmapData.mInfoHeader.mImageHeight) * mBitmapData.mInfoHeader.mImageWidth * 4;
+		if (mBitmapData.mFileHeader.mOffsetToData + numColorBytes != inFile.GetDataSize())
+		{
+			printf("%s doesn't have the correct amount of data.\n", inBitmapName.c_str());
+			return false;
+		}
 
-	//Read in color data
-	const int divisor                   = mBitmapData.mInfoHeader.mBitCount == 4 ? 2 : 1;
-	const int numColorBytes             = abs(mBitmapData.mInfoHeader.mImageHeight)*mBitmapData.mInfoHeader.mImageWidth / divisor;
-	mBitmapData.mColorData.mSizeInBytes = numColorBytes;
-	mBitmapData.mColorData.mpRGBA       = new char[numColorBytes];
-	memcpy(mBitmapData.mColorData.mpRGBA, pFileData + mBitmapData.mFileHeader.mOffsetToData, numColorBytes);
+		mBitmapData.mColorData.mSizeInBytes = numColorBytes;
+		mBitmapData.mColorData.mpRGBA = new char[numColorBytes];
+		memcpy(mBitmapData.mColorData.mpRGBA, pFileData + mBitmapData.mFileHeader.mOffsetToData, numColorBytes);	
+	}
+	else
+	{
+		//Read in palette
+		const int numColorsInPalette          = (int)pow(2, mBitmapData.mInfoHeader.mBitCount);
+		const int numBytesPerColor            = 4;
+		mBitmapData.mPaletteData.mSizeInBytes = numColorsInPalette * numBytesPerColor;
+		mBitmapData.mPaletteData.mpRGBA       = new char[mBitmapData.mPaletteData.mSizeInBytes];
+		int offsetToPalette                   = mBitmapData.mFileHeader.mOffsetToData - mBitmapData.mPaletteData.mSizeInBytes;
+		if (offsetToPalette < 0)
+		{
+			printf("%s has an invalid offset to palette [%i]", inBitmapName.c_str(), offsetToPalette);
+			offsetToPalette = sizeof(mBitmapData.mFileHeader) + sizeof(mBitmapData.mInfoHeader);
+		}
+		memcpy(mBitmapData.mPaletteData.mpRGBA, pFileData + offsetToPalette, mBitmapData.mPaletteData.mSizeInBytes);
+
+		//Read in color data
+		const int divisor                   = mBitmapData.mInfoHeader.mBitCount == 4 ? 2 : 1;
+		const int numColorBytes             = abs(mBitmapData.mInfoHeader.mImageHeight) * mBitmapData.mInfoHeader.mImageWidth / divisor;
+		mBitmapData.mColorData.mSizeInBytes = numColorBytes;
+		mBitmapData.mColorData.mpRGBA       = new char[numColorBytes];
+		memcpy(mBitmapData.mColorData.mpRGBA, pFileData + mBitmapData.mFileHeader.mOffsetToData, numColorBytes);
+	}
+
 
 	return true;
 }
@@ -1462,11 +1483,6 @@ bool BitmapFormatConverter::ConvertFrom32BitTo15Bit(const char* pInBGRAData, int
 	int destIndex = 0;
 	for( int i = 0; i < InDataSize; i += 4 )
 	{
-		if( *(int*)&pInBGRAData[i] != 0 )
-		{
-			int k = 0;
-			++k;
-		}
 		const uint32 b = (uint32)(floorf( ((float)pInBGRAData[i + 0]/maxFullValue) * max5BitValue + 0.5f) );
 		const uint32 g = (uint32)(floorf( ((float)pInBGRAData[i + 1]/maxFullValue) * max5BitValue + 0.5f) );
 		const uint32 r = (uint32)(floorf( ((float)pInBGRAData[i + 2]/maxFullValue) * max5BitValue + 0.5f) );
@@ -1561,8 +1577,8 @@ bool BitmapFormatConverter::ConvertColorDataFrom4BitTo8Bit(const char* pInData, 
 	//4bit color data has 2 pixels per byte
 	for( size_t sourceIndex = 0, destIndex = 0; sourceIndex < inDataSize; ++sourceIndex, destIndex+=2 )
 	{
-		mpConvertedData[destIndex+0] = (char)(pInData[sourceIndex] >> 4);
-		mpConvertedData[destIndex+1] = (char)(pInData[sourceIndex] & 0x0f);
+		mpConvertedData[destIndex+0] = (char)((unsigned char)pInData[sourceIndex] >> 4);
+		mpConvertedData[destIndex+1] = (char)((unsigned char)pInData[sourceIndex] & 0x0f);
 	}
 
 	return true;
@@ -1583,7 +1599,7 @@ bool BitmapFormatConverter::ConvertColorDataFrom8BitTo4Bit(const char* pInData, 
 
 	for( size_t sourceIndex = 0, destIndex = 0; sourceIndex < inDataSize; sourceIndex += 2, ++destIndex )
 	{
-		const char value4Bit = (pInData[sourceIndex] << 4) + pInData[sourceIndex+1];
+		const char value4Bit = (char)(((unsigned char)pInData[sourceIndex] << 4) + (unsigned char)pInData[sourceIndex+1]);
 		mpConvertedData[destIndex] = value4Bit;
 	}
 

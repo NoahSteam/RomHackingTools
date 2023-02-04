@@ -1,17 +1,17 @@
-... 
+﻿... 
 Demon King... What is it you need of me? 
 It seems that the assassination of Ikki Yoneda... was a failure. 
 Yes... According to Suiko, Yoneda seems to have regained consciousness. 
 However, this, too, falls within my calculations. You need not worry. 
 For the time being, Yoneda can't lift a finger against us. Nuhuhuhuh... 
-This is our golden opportunity to wipe out both the Assault Troupe and the other interloper in one fell swoop. 
+This is our opportunity to wipe out both the troupe and the other interloper in one fell swoop. 
 Kazutoyo Yamaguchi, you mean? 
 I'll do it! 
-Ichiro Ogami... He was pretty good. I'll crush him this time! 
-Even though she's just a girl, she was really good with a sword. I wanna fight her again! 
-That girl who shot out those weird lights... She'll make for a hell of a fight!! 
+Ichiro Ogami… He was pretty good but, this time, I’ll crush him!!
+That one with the sword, she was pretty skilled for a girl. I wanna fight her again!!
+That girl who attacks with those weird lights… She'll make for a helluva fight!!
 That yellow one, zipping around all over the place... I'll take her out in one blow! 
-That blue one... He was crazy strong. I wanna fight him for real this time! 
+That blue guy... He was crazy strong. I wanna fight him for real this time!
 Let's not be hasty, Kongo. The first step in any battle is getting to know your enemy... 
 Then taking what you've learned and seizing victory through careful calculation. 
 Kongo, you've already fought them once before. 
@@ -25,11 +25,11 @@ Well then... I leave it to you, Kasha.
 Heheheh... Behold as my flames consume all... 
 ...Oh, that time already, huh? Guess I should get started on my night watch. 
 It's Kohran's first night back in a long time. I wonder what she's up to? 
-Mon Fr�re! Mon Fr���re!! 
-Boss, we have a situation here. You got a minute? 
+Mon Frère! Mon Frèreee!! 
+Boss, we have a situation here. Ya got a minute?
 What is it? 
-Kanna, Iris... What's the situation? 
-Mon Fr�re... Sakura and Kohran, they... 
+Kanna, Iris… What’s the problem?
+Mon Frère... Sakura and Kohran, they... 
 They said they were gonna have a talk with some guy named Kyogoku, then they left. 
 Wh-What?! 
 Everyone's gathered in the salon, you should head over there too. 
@@ -44,14 +44,14 @@ Ogami, we have quite the problem on our hands.
 I'm sorry! It's all my fault! 
 What are you talking about, Saki? 
 I heard a rumor earlier today when I was at the Ministry of the Army. 
-They said Minister Kyogoku would be hosting a private gathering tonight at a ryotei restaurant in Fukagawa. 
+They said Minister Kyogoku would be hosting a private gathering tonight at a ryotei in Fukagawa… 
 I told Sakura and Kohran about it without thinking... 
 And then... They both left. 
 (I see. Must be because of what happened earlier today.) 
 Seriously, though, talk about reckless! 
 Right then, Ogami. What do you think we should do? 
-We have to go after them, now! 
-Leave them, they'll be fine. 
+We have to go after them!
+They'll be fine. 
 We have to go after them, now! They could get in big trouble! 
 You're right. They're probably both a little worked up. 
 All right, now that that's settled, let's go after 'em! 
@@ -59,17 +59,17 @@ Not so fast, Kanna. We'll cause a scene if too many of us go.
 Ogami. I have a favor to ask of you. Please bring both of them back. 
 We'll be on standby here at the theater. If anything happens, we'll be right there. 
 ...Understood. 
-Keep it together, Ogami! 
+It’s up to you, Ogami! 
 Yes, ma'am! OK, I'm off! 
 Those two can take care of themselves. We've got nothing to worry about. 
-You can't be saying things like that as captain, Ogami. 
+Ogami… It’s irresponsible to say something like that as the captain.
 What would happen if those two got in some kind of trouble? 
 Y-You're right... 
 Protecting the Flower Division is your sworn duty, isn't it? 
 I'll ask you again, Ogami. Please, bring them back. 
 We'll be on standby here at the theater. If anything happens, we'll be right there. 
 ...Understood. 
-Keep it together, Ogami! 
+It’s up to you, Ogami!
 Yes, ma'am! OK, I'm off! 
 ... 
 Ogami, I know you're worried about what to do, but we don't have much time. 
@@ -79,7 +79,7 @@ It's your duty as captain of the Flower Division to look out for your squad.
 I'll ask you again, Ogami. Please, bring them back. 
 We'll be on standby here at the theater. If anything happens, we'll be right there. 
 ...Understood. 
-Keep it together, Ogami! 
+It’s up to you, Ogami!
 Yes, ma'am! OK, I'm off! 
 This must be the restaurant Saki was talking about. 
 Then... Kyogoku must be here, right? 
@@ -92,7 +92,7 @@ Kohran... Thanks.
 Right, now there's just the issue of actually getting to this Kyogoku guy. 
 A couple girls like us snooping around will just get thrown out... 
 You're right. What should we do? 
-...! All right, I got an idea! 
+...! <br> All right, I got an idea! 
 Come with me, Sakura. I've got just the thing! 
 You're a genius, Kohran! 
 Heheheh... Leave it to me! 
@@ -109,14 +109,14 @@ I have to bring them back, and quick!
 Wh-What should I do...? This place looks way too fancy, I'm starting to lose my nerve... 
 No, I can't be saying things like that. I'll just go in and see. 
 Is this really the place? Doesn't seem like the kind of restaurant the girls could even get into... 
-Saki said this was the place, though, so I'll just go in and check. 
+Saki said this was it, though, so I'll just go in and check. 
 How does it look, Kohran? 
-I'm not sure, but it sounds like there's a bunch of guys in there talking about something. 
-Seems kinda fishy... This might the room that Kyogoku guy's staying in. 
+I'm not sure, but it sounds like there's a bunch of people in there talking about something.
+Seems kinda fishy... This might be the room that Kyogoku guy's staying in. 
 Think we should go for it? 
-Yeah. All right, here goes.. 
+Yeah. All right, here goes.
 Gooood evening! 
-I'm Koyakko! 
+I'm Beniyakko! 
 A-And I'm Sakurayakko... 
 Huh? Who the hell are you?! 
 Ah! I-I think we have the wrong room! 
@@ -133,8 +133,8 @@ C'mon, geisha girls! Lighten up a little! Guh-huh-huh-huh!
 P-Please stop. 
 Huh, that geisha... She sounded kind of like Sakura. 
 All right, then... Which room? 
-The room in the back with the geisha 
-The quiet room right in front 
+In the back with the geisha
+The quiet room up ahead
 There's no mistaking it, that voice just now was Sakura's! All right, to the room in the back! 
 Oh! You there, sonny. I'm all outta drink! Get me a cold one! 
 H-Huh? Sorry, I don't actually work here, sir. 
@@ -143,7 +143,7 @@ Do you know which room a man named Kyogoku is staying in?
 Kyogoku? Nawww, I'm Yamaguchi! 
 O-OK...? 
 Hey now, no need to be so uptight. C'mon, let's share a drink. 
-Sorry, but I'm in a hurry... Ah! Wait! Please stopping pulling me... 
+Sorry, but I'm in a hurry... Ah! Wait! Please stop pulling me... 
 All right, time to steel myself and enter this room. 
 Excuse me. 
 ...Whaaa? 
@@ -167,17 +167,17 @@ Do you know which room a man named Kyogoku is staying in?
 Kyogoku? Nawww, I'm Yamaguchi! 
 O-OK...? 
 Hey now, no need to be sho uptight. C'mon, let'sh share a drink. 
-Sorry, but I'm in a hurry... Ah! Wait! Please stopping pulling me... 
+Sorry, but I'm in a hurry... Ah! Wait! Please stop pulling me... 
 Eeeeeek! 
 N-No! Stop iiiit!! 
 Heheheh... Relax, you won't be sayin' "no" for long! 
 I got this, Sakura! 
-I brought along my Mr. Smoke Bomb for just such an occasion! 
+I brought along Mr. Smoke Bomb for just such an occasion!
 All right, here goes! Brace yourself! 
 *cough* *cough* Wh-What the hell was that?! 
 Jeez, how long are you going to hold on for?! Let go of me! 
-You want some more? Then have some more! 
-Thanks, Koyakko, you're a lifesaver. 
+You want some more? Then have some of this! 
+Thanks, Beniyakko, you're a lifesaver. 
 Leave it to me, Sakurayakko! 
 All right, now let's get outta here and go look for Kyogoku! 
 They're sure making a lot of noise next door... 
@@ -187,9 +187,9 @@ Say, why the long face?
 How about you tell me your story, son? 
 What are ya doin' in a restaurant like this? 
 Well, you see... 
-I'm looking for a man named Kyogoku. 
+I'm looking for Kyogoku.
 I'm looking for my friends. 
-I'm looking for a man named Kyogoku. 
+I'm looking for Kyogoku.
 I'm looking for my friends. 
 I came for a drink. 
 I'm looking for the Minister of the Army, a man by the name of Kyogoku. 
@@ -214,14 +214,14 @@ M-Mr. Yamaguchi!
 Y-Yes... I'm told Minister Kyogoku booked a private room at this restaurant. 
 Well... I haven't heard nothin' 'bout Kyogoku comin' here... 
 What? 
-FIRE! The restaurant's on fire!! 
-FIIIIIRE! Someone's set fires all over the place! 
+FIRE!<br>The restaurant’s in flames!! 
+IT’S ARSON!<br>Someone's set fires all over the place!
 Huh? Fire?! 
 F-Fire?! No, you don't think...?! 
 Don't look at me! My "Mr. Smoke Bomb" is totally safe and non-combustible! 
 Someone else set fire to this place! 
 Fire... Flames... 
-Ahhhh!! H-Heeeeelp!! 
+Ahhhh! H-Help meeeee! 
 Settle down, everyone! Calmly proceed to the exits, and don't rush! 
 Kohran, if we don't hurry, the patrons of this ryotei will get hurt! 
 It's just like... Back then... 
@@ -231,9 +231,9 @@ K-Kohran! Where are you going?!
 Sakura, you round everyone up and lead 'em to safety! 
 I'm... I'm going after whoever did this! 
 Wh-What?! Are you serious, Kohran?! 
-I won't let anyone get away with something so cowardly and cruel! 
-I'll never let anyone indiscriminately kill innocent people! 
-I'm not... I'm not gonna lose to this fire!! 
+I’ll never let anyone get away with something so cowardly and cruel! 
+I won’t let someone indiscriminately kill innocent people!
+I can’t... I can’t lose to this fire!! 
 Kohran, wait! Kohraaan!! 
 Dammit! Of all the times for a fire to break out! 
 Hrrrm... We've got no choice but to run. 
@@ -242,9 +242,9 @@ Go find the girls.
 Mr. Yamaguchi, we have to evacuate, now! 
 You're right, it's too dangerous in here. Let's go outside. 
 I'm going to go help the girls. Please evacuate, Mr. Yamaguchi. 
-The girls? I don't know who you're talking about, but for now, let's get out of here. This room's burning, too. 
+The girls? I'm not sure who you mean, but let's get out of here for now. This room's starting to burn. 
 The girls? You mean those friends of yours you were talking about? 
-Hrrrm, I know you're worried, but for now, let's get out of here. This room's starting to catch fire, too. 
+Hrm, I know you're worried, but for now, let's get out of here. This room's starting to catch fire. 
 Son? Sonny? What are you doing? There's a cloud of cinders coming your way. 
 Ow, hot hot hot!! 
 It's gotten too dangerous to stick around here. Let's go outside, son. 
@@ -263,8 +263,8 @@ What should we do, Ogami?
 I'll go save her! 
 Let's both go save her! 
 Let's evacuate! 
-I'll go save her! Sakura, you take Mr. Yamaguchi here and take him someplace safe! 
-I'll go with you! 
+I'll go save her! Sakura, you take Mr. Yamaguchi somewhere safe! 
+Wait, I’ll go with you!
 Don't be reckless, miss. You're just asking to catch fire with an outfit like that. 
 Don't worry, Sakura! I'll save Kohran! 
 ...OK, understood! 
@@ -272,7 +272,7 @@ Be careful, Ogami! Bring Kohran back with you!
 Got it! OK, I'm going! 
 OK, Sakura, let's both go help Kohran. 
 Now hold on a second, son. Think this through a bit more. 
-With the young lady dressed like that, she'd just be asking to catch on fire. 
+With the young lady dressed like that, she'd just be asking to catch fire. 
 Besides, I don't think I can make it out of here alone. 
 OK then, I'll take this man someplace safe! 
 Very good. My name is Yamaguchi, miss. Charmed. 
@@ -293,7 +293,7 @@ What's wrong, son? We don't have time to think things through.
 R-Right... I just don't know what I should do... 
 Ogami, please! 
 We don't have a choice. All right, son, how about this? 
-The young lady can't do anything dressed like that. You'll have to go in there yourself to save your friend. 
+The young lady can't do anything dressed like this. You'll have to go save your friend yourself.
 Let's both get someplace safe, miss. 
 ...OK then. Looks like we're out of options. 
 Now hurry up, son! Your friend's waiting for you! 
@@ -345,8 +345,8 @@ Good. Now let's get out of here before the whole place burns down.
 Chief, do you know the way out? 
 If we follow the way I came, we ought to be fine... 
 We don't have a lot of time. We'll have to rely on your memory. 
-We should be fine if I remember which doors I opened and reverse the order. 
-Watch out, though. The doors you opened would be flipped around, too, so left is right and right is left. 
+We should be all right if I remember which doors I opened and reverse the order. 
+But watch out. The doors you opened would be flipped around, too, so left is right and right is left. 
 OK, let's go! We've got to escape before the restaurant burns down! 
 All right, which door do I open first? 
 Open the door on the right. 
@@ -373,7 +373,7 @@ Open the door on the left.
 OK, opening the door on the right! 
 No good! It's a sea of flames in there! 
 Damn, was that not the right door? 
-All right, opening the door straight ahead! 
+OK, opening the door straight ahead! 
 All right! Looks like that was the right door! 
 Way to go, Chief! Keep it up! 
 OK, let's hurry, Kohran! 
@@ -383,7 +383,7 @@ Whoa! No good, it's full of fire in there!
 All right, if it wasn't that door, then... 
 Uhh... Which door was it, again? 
 Chief! If you dawdle around too much, we'll both be burnt to a crisp! 
-You're right. OK, it's do or die... 
+You're right. All right, it's do or die... 
 Open the door on the right. 
 Open the door ahead. 
 Open the door on the left. 
@@ -397,7 +397,7 @@ All right, opening the door straight ahead!
 No good! There's no way we're getting through there! 
 Was that not it? Damn, we're running out of time! 
 OK, opening the door on the left! 
-Hot hot hot! That's a no go!! 
+Hot hot hot! That's a bust!! 
 Damn, wrong one! 
 Uhh... Which door was it, again? 
 There's no time, Chief! You'll just have to guess and go for it! 
@@ -430,40 +430,40 @@ Heheheheh...
 Now then, time to incinerate the Imperial Assault Troupe, along with that trash, Yamaguchi. 
 Yamaguchi? Why are you after him?! 
 Heheheh. "Why" indeed. 
-You'll have plenty of time to think about it in hell. Have fun with my flames, won't you? 
+You’ll have plenty of time to ponder that question in hell! Have fun playing with my flames, won't you? 
 Kasha, wait!! 
 Th-This is bad, Chief! We're totally surrounded by fire! 
-...! There's a gap in the fire! 
+...! There's a gap in the flames! 
 We've got no choice, it's do or die. We have to go for it and jump through! 
 All right! We escaped! 
 Wh-What's that noise?! 
 All right! It's the Soaring Whale! 
-Ogami, Kohran! Thank goodness you're all right! 
+Ogami, Kohran!! Thank goodness you’re safe!
 Sakura! 
 Thanks a million, Sakura! 
 Oh, right! Sakura, where's Yamaguchi?! 
-Yamaguchi's evacuating in his car. 
-No! Yamaguchi's being targeted by the Black Demons! 
-Leaving by car's only going to make him a sitting duck for the Hex Mechs! 
+Yamaguchi is evacuating by car. 
+That’s not good! He's being targeted by the Black Demons! 
+Leaving by car will only make him a sitting duck for the Hex Mechs! 
 Huh?! Th-Then... 
 ...I can think of two potential plans. 
-One, I could act as a decoy and draw the enemy, during which Yamaguchi can escape. 
+One, I could act as a decoy and draw the enemy’s attention, during which Yamaguchi can escape.
 There's also the option of escorting Yamaguchi and defeating any hostiles that try to approach. 
 All right, then, what should we do? 
-Let's go with the decoy plan. 
-Let's go with the escort plan. 
-Okay, let's go with the decoy plan. That'll give Yamaguchi an opening to escape! 
-Okay, let's go with the escort plan. We'll defend him from the Black Demons, no matter what! 
+Go with the decoy plan. 
+Go with the escort plan. 
+OK, let's go with the decoy plan. That'll give Yamaguchi an opening to escape! 
+OK, let's go with the escort plan. We must protect Yamaguchi from the Society, no matter what! 
 Roger! Let's hop to it, Chief! 
 Ogami, Kohran, good luck out there! 
-Sorry Ogami, but each customer is only allowed to purchase one photo at a time. 
-I see. That's too bad... 
-So sorry, Ogami, but each customer is only allowed to purchase one photo at a time. 
-Oh, really? That's too bad... 
+Sorry, Ogami. I can only sell you one photo per month. 
+I see. That's too bad. 
+So sorry, Mr. Ogami, but each customer is only allowed to purchase one photo at a time.
+Oh, really? That's too bad.  
 The jewel of the Pandemonium Regalia, entrusted to us by the Rose Division. 
-Spirit Sword Arataka. The secret sword of the Shinguji family. 
-Divine sword Shirahatori. Entrusted to me by Kaede. A secret sword passed down in the Fujieda family. 
-Luminous Blade Mukei. Shinnosuke Yamazaki is the original owner. A secret sword entrusted to us by Kazuma. 
+Spirit Sword Arataka. The special sword of the Shinguji family. 
+Divine Sword Shirahatori. Entrusted to me by Kaede. A special sword passed down by the Fujieda family. 
+Luminous Blade Mukei. A special sword entrusted to us by Kazuma that once belonged to Major Yamazaki. 
 Divide Blade Mekkyaku. A special sword entrusted to me by Yoneda. 
 The uniform I wear at the theater. Good for both summer and winter. 
 A lighter borrowed from the inn. 
@@ -485,10 +485,10 @@ A photo of Orihime.
 A photo of Orihime. This one is a limited edition only available at New Year's. 
 A photo of Reni. 
 A photo of Reni. This one is a limited edition only available at New Year's. 
-A decorative paper ball from the welcome party. 
-A flower vase from the welcome party. 
-The banner from the welcome party. 
-The Cinematron. A communication machine invented by Kohran that lets you see and talk to someone from far away. 
+A decorative paper ball for the welcome party called a kusudama. 
+A flower vase for the welcome party.
+The banner for the welcome party.
+The Cinematron. One of Kohran's inventions that lets you see and talk to someone from far away. 
 The sword of the Pandemonium Regalia, recovered from the Demon King. 
 The mirror of the Pandemonium Regalia, recovered from the Demon King. 
 Fragments of the broken Cinematron. Seems like the kids at the inn picked them up along the shore. 
@@ -502,5 +502,5 @@ A letter from Orihime.
 A letter from Reni. 
 A scarf given to me by Sakura. It's knitted with red yarn - my favorite color. 
 A scarf given to me by Sakura. It's knitted with blue yarn - my favorite color. 
-A scarf given to me by Sakura. It's knitted with yellow yarn - my favorite color. 
-... "" "" () - . , ! ? ?! !! 
+A scarf given to me by Sakura. It's knitted with yellow yarn - my favorite color.
+... "" "" () - . , ! ? ?! !!

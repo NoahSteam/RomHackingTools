@@ -68,7 +68,7 @@ public:
 	const TileExtractor::Tile* GetTileForCharacter(char InLetter)
 	{
 		const int index = (int)(InLetter) - (int)(mStartingLetter);
-		if( index < 0 || index >= mFontSheet.mTiles.size() )
+		if( index < 0 || index >= (int)mFontSheet.mTiles.size() )
 		{
 			printf("GetTileForCharacter: Invalid letter %c\n", InLetter);
 			return nullptr;
@@ -160,9 +160,27 @@ public:
 		return true;
 	}
 
-	void OutputBitmap(const std::string& inOutputPath)
+	bool OutputBitmap(const std::string& inOutputPath, bool b4Bit)
 	{
-		mImageCanvas.WriteToFile(inOutputPath, true);
+		if(b4Bit)
+		{
+			BitmapFormatConverter converter;
+			if(!converter.ConvertColorDataFrom8BitTo4Bit(mImageCanvas.GetColorData(), mImageCanvas.GetColorDataSize()))
+			{
+				printf("Unable to output %s\n", inOutputPath.c_str());
+				return false;
+			}
+
+			BitmapWriter outBmp;
+			outBmp.CreateBitmap(inOutputPath, mImageCanvas.GetWidth(), -1*mImageCanvas.GetHeight(), 4, converter.GetConvertedData(), 
+			                    converter.GetConvertedDataSize(), mImageCanvas.GetPaletteData(), 16*4, true);
+		}
+		else
+		{
+			mImageCanvas.WriteToFile(inOutputPath, true);
+		}
+
+		return true;
 	}
 
 private:
@@ -277,13 +295,13 @@ bool WriteTextIntoImageUsingFontSheet(
 
 			if( !translatedImage.AddTile(xLocation, *pTile, widthOfCharacter) )
 			{
-				printf("Unable to fit %s\n", originalFileName.mFileName.c_str());
+				printf("Unable to fit %s. %i/%i : %s\n", originalFileName.mFileName.c_str(), textWidth, originalImage.GetWidth(), textLine.mFullLine.c_str());
 				break;
 			}
 			xLocation += widthOfCharacter;
 		}
 
-		translatedImage.OutputBitmap(pInOutputPath + originalFileName.mFileName);
+		translatedImage.OutputBitmap(pInOutputPath + originalFileName.mFileName, true);
 	}
 
 	return true;

@@ -1,9 +1,9 @@
-... 
-(Huh? Isn't that the portrait artist from earlier?) 
+﻿... 
+(Huh? Isn't that the portrait artist from the festival?) 
 (Is this who Tsubomi was talking about?) 
 *sigh*... 
 Um... Excuse me, sir. 
-Huh? Oh, it's you, the one from before. 
+Huh? Oh, it's you, the young man from before. 
 My name is Ichiro Ogami, I work here at this theater. 
 I apologize for all the commotion earlier. 
 No, that's all right. I wasn't getting any customers anyway. I had time to kill. 
@@ -32,9 +32,9 @@ When I heard someone was standing outside the theater, I thought it might be...
 Oh well, I'll go back to my room. 
 ... 
 I understand. If that's what you want, then I'll tell you. 
-...?! That voice... It can't be! 
+...?! <br> That voice... It can't be! 
 I may be a lowly caricaturist now, but back in the day, I dreamed of becoming an artist. 
-I traveled to Italy, wandering from place to place, spending every passing day by drawing. 
+I traveled to Italy, wandering from place to place, spending every passing day painting. 
 That's when... I met her. 
 Her name was Carino Soletta... Orihime's mother. 
 I see, so that's how that happened... 
@@ -49,7 +49,7 @@ However, Carino belonged to a wealthy Italian family...
 The Soletta family, also known as "The Red Nobles." 
 There was no way they'd ever allow me, a mere artist, to be with Carino. 
 However, Orihime had already been born by then. 
-They separated us, and forbid me from ever seeing my daughter. 
+They separated us, and forbade me from ever seeing my daughter. 
 I had to think of Carino and Orihime's happiness, and so, I had no choice but to leave them. 
 With my dream of living as an artist also in shambles, I returned to Japan. 
 Mr. Ogata... 
@@ -69,7 +69,7 @@ That voice!
 Everything you just said is total nonsense! You're nothing but a liar! 
 O-Orihime! 
 You think I don't know the truth? 
-You're... You're the scumbag who abandoned Mama and I! 
+You're... You're the scumbag who abandoned Mamma and I! 
 Just go! Get out of my sight! And don't you ever come back! 
 Orihime! 
 I... I can never forgive him for what he did to us! 
@@ -82,9 +82,9 @@ Mr. Ogata...
 I'm sorry for causing such a disturbance. I'll be going now. 
 Ogami... Please... Take care of Orihime. 
 ... 
-Sorry, Ogami, but each customer is only allowed to purchase one photo at a time. 
+Sorry, Ogami. I can only sell you one photo per month. 
 I see. That's too bad. 
-So sorry, Mr. Ogami. I can only sell one per person. 
+So sorry, Mr. Ogami, but each customer is only allowed to purchase one photo at a time.
 Oh, really? That's too bad. 
 Shiro 
 Hanamaru 
@@ -117,10 +117,10 @@ Kohran
 Orihime 
 Reni 
 The jewel of the Pandemonium Regalia, entrusted to us by the Rose Division. 
-Spirit Sword Arataka. The secret sword of the Shinguji family. 
-Divine Sword Shirahatori. Entrusted to me by Kaede. A secret sword passed down in the Fujieda family. 
-Luminous Blade Mukei. Shinnosuke Yamazaki is the original owner. A secret sword entrusted to me by Kazuma. 
-Divine Blade Mekkyaku. A secret sword entrusted to me by Yoneda. 
+Spirit Sword Arataka. The special sword of the Shinguji family. 
+Divine Sword Shirahatori. Entrusted to me by Kaede. A special sword passed down by the Fujieda family. 
+Luminous Blade Mukei. A special sword entrusted to us by Kazuma that once belonged to Major Yamazaki. 
+Divide Blade Mekkyaku. A special sword entrusted to me by Yoneda. 
 The uniform I wear at the theater. Good for both summer and winter. 
 A lighter borrowed from the inn. 
 The flower crown that Iris made for Reni. 
@@ -141,10 +141,10 @@ A photo of Orihime.
 A photo of Orihime. This one is a limited edition only available at New Year's. 
 A photo of Reni. 
 A photo of Reni. This one is a limited edition only available at New Year's. 
-A decorative paper ball from the welcome party. 
-A flower vase from the welcome party. 
-The banner from the welcome party. 
-The Cinematron. A communication machine invented by Kohran that lets you see and talk to someone from far away. 
+A decorative paper ball for the welcome party called a kusudama. 
+A flower vase for the welcome party.
+The banner for the welcome party.
+The Cinematron. One of Kohran's inventions that lets you see and talk to someone from far away. 
 The sword of the Pandemonium Regalia, recovered from the Demon King. 
 The mirror of the Pandemonium Regalia, recovered from the Demon King. 
 Fragments of the broken Cinematron. Seems like the kids at the inn picked them up along the shore. 
@@ -160,4 +160,4 @@ A scarf given to me by Sakura. It's knitted with red yarn - my favorite color.
 A scarf given to me by Sakura. It's knitted with blue yarn - my favorite color. 
 A scarf given to me by Sakura. It's knitted with yellow yarn - my favorite color. 
 ... "" "" () - . , ! ? ?! !! 
-Whaaaaa?! 
+Whaaaaa?!

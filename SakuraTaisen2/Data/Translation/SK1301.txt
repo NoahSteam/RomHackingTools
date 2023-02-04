@@ -1,13 +1,13 @@
-A month had passed since then... 
+ï»¿A month has passed since then... 
 It was a bright spring day like any other. 
- 
+1 
 Strange for Mr. Yoneda to summon me out of the blue like this... 
 What could he want with me? 
 Ah, Ogami? 
 Sakura? What are you doing here? 
 Mr. Yoneda told me to come here right away. 
-Huh?! I actually got called down here too... 
-Huh?! You too, Ogami? 
+Huh?! Actually, I also got called down here... 
+What?! You too, Ogami? 
 Hmmm... What's this all about? 
 Anyway, let's just hear what the manager has to say. 
 Oh my, is that you, Ensign? 
@@ -20,26 +20,26 @@ Hmm... Let's hear what the manager has to say.
 Is that you, Maria? What are you doing here? 
 Yes, Mr. Yoneda summoned me to his office. 
 Huh, you too? I was also called down here by the manager. 
-Huh?! You too, sir? 
-Hmm, why'd he call the two of us down at the same time? 
+What?! You as well, sir? 
+Hmm, why'd he ask both of us to come here at the same time? 
 Anyway, let's just hear what the manager has to say. 
-Huh? Well if it ain't the Boss. 
+Huh? Well if it ain't the boss. 
 Yo, Boss. What are you doing here? 
 I actually just got called down to meet with Mr. Yoneda. 
-Huh, you too? I also got asked to come down to the manager's office. 
-So he called for you too, huh? 
-What's the big idea, calling for the both of us at the same time? 
+Huh, you too? I was also asked to come to the manager's office. 
+So he summoned you as well, huh? 
+What's the big idea, callinâ€™ for the both of us at the same time? 
 Anyway, let's just hear what the manager has to say. 
-Ah, Mon Frère! 
+Ah, Mon FrÃ¨re! 
 What are you doing here? 
 I was actually called down here by Mr. Yoneda... 
-Huh, you too, Mon Frère?! Uncle Yoneda called me down here too. 
+Huh, you too, Mon FrÃ¨re?! Uncle Yoneda also asked me to meet him here. 
 Huh, really? Hmmm... What's this all about? 
 Hey, what do you think he wants to talk about? Heheh, now I'm curious! 
 Hahaha... Let's go inside for now. 
-Oh? Well if it ain't the Chief. 
+Oh? Well if it ain't the chief. 
 Whatcha doing here, anyway? 
-Did you get in trouble and the manager's making you stand outside his office? 
+Did you get in trouble and now the manager's making you stand outside his office? 
 O-Of course not! I'm not in grade school! 
 I was summoned by Mr. Yoneda. Don't know what for, though. 
 Say what?! Yoneda called me here too. 
@@ -49,18 +49,18 @@ You're right. OK, let's head inside.
 Ah, Ensiiign! 
 Hey, Orihime. What are you doing here? 
 Yoneda called me here. I don't know what for, though. 
-Huh?! I actually got called down here too... 
+Huh?! I actually got called down here as well... 
 Huh?! You too, Ensign? 
-If he called for you too, then... What could this be about? 
+If he called for the both of us, then... What could this be about? 
 Maybe... He wants us to get married or something? 
 I-I don't think that's it... 
 Anyway, let's go inside. 
 ...Captain? 
 Hey, Reni. What are you doing here? 
-I was called here by Mr. Yoneda. 
+I was summoned by Mr. Yoneda. 
 Huh? So was I, actually... 
 ...You too, sir? 
-What could the manager want to have called us at the same time? 
+Calling us both at the same timeâ€¦ What could the manager want? 
 Anyway, let's go inside and hear what he has to say. 
 Mr. Yoneda, it's Ogami. 
 Oh, you're here? Come on in. 
@@ -73,17 +73,17 @@ Yeah, we ran into each other outside your office.
 Uh-huh! We ran into each other right in front of your door! 
 Yep, that's right. Just so happened to bump into each other outside your office. 
 That's right. We ran into each other before coming inside. 
-We ran into each other just now. 
+We just happened to meet a moment ago. 
 I see... 
 Actually, there's two things I wanted to tell the both of you. 
 Huh, what could that be? 
 Ogami. As of today, you've been promoted to the rank of Navy Lieutenant, Junior Grade. 
 Huh?! <br> Me? <br> Lieutenant Junior Grade?! 
 Ogami, your combat record this past year has been truly exceptional. 
-The navy is extremely impressed with how you led the Troupe to victory while minimizing casualties. 
+The Navy is extremely impressed with how you led the troupe to victory while minimizing casualties. 
 Heheh, so, whaddaya think? 
-I'll give it my all! Until my very last breath! 
-This still doesn't feel real... 
+I'll give it my all!
+This doesn't feel realâ€¦
 Yessir! I'll give it my all! Until my very last breath! 
 Whoa, whoa, still as uptight as ever, huh? 
 Well, I guess that's just how you are. 
@@ -100,12 +100,12 @@ But I guess that's pretty typical for you.
 Just keep it up, in your own way. Don't overexert yourself. 
 Y-Yes, sir. 
 Congratulations, Ogami. 
-I'm so glad all your hard work's finally paid off. 
+I'm so happy that all your hard work has finally paid off. 
 Sakura... Thank you. 
 Congratulations, Ensign. 
 I'm glad your hard work has finally been recognized. 
-Hold on there, Sumire. Ogami's not an Ensign anymore, he's a lieutenant now. 
-O-Oh my, my mistake... Force of habit... 
+Hold on there, Sumire. Ogami's not an ensign anymore, he's a lieutenant now. 
+O-Oh yes, my mistake... Force of habit... 
 ...Lieutenant. Once again, congratulations. 
 Sumire... Thanks. 
 Congratulations, Captain. 
@@ -117,8 +117,8 @@ So you're a big fancy navy lieutenant now, huh? Way to go!
 Kanna... Thank you. 
 Loo-ten-int... Is that better than ensign? 
 Yeah, it's one rank higher. Ogami's moving on up. 
-I get it! Mon Frère's becoming important now, huh! 
-Congratulations, Mon Frère! I'm happy for you too! 
+I get it! Mon FrÃ¨re's becoming important now, huh! 
+Congratulations, Mon FrÃ¨re! I'm happy for you too! 
 Iris... Thank you. 
 Not bad, Chief! Way to go, getting promoted to lieutenant! 
 Well, this was way overdue anyway. For real, congrats! 
@@ -127,7 +127,7 @@ That's amazing, Ensign! I guess I have to start calling you "Lieutenant" now, hu
 Lieutenant... Congratulations! 
 Thanks, Orihime. Hahaha... You're making me blush. 
 That's great, Captain. 
-I'm glad your hard work's being recognized, sir. 
+I'm glad your hard work is being recognized, sir. 
 Reni... Thanks. 
 ... 
 By the way, sir, what was the other thing you wanted to tell us? 
@@ -139,8 +139,8 @@ Then that means... <br> Ogami...
 Th-That means... <br> It can't be... 
 Th-Then that means... 
 Wh-What?! Hold on, you don't mean... 
-Huh?! <br> Then... <br> Then Mon Frère... 
-S-Say what?! <br> Then that means the Chief's... 
+Huh?! <br> Then... <br> Then Mon FrÃ¨re... 
+S-Say what?! <br> Then that means the chief's... 
 P-Paris?! <br> Then that means... No... 
 So... In other words... 
 ...That's right. He'll be leaving the theater. 
@@ -158,35 +158,35 @@ Ogami. <br> Go see the world. <br> Broaden your horizons and grow.
 What'll we do, Sakura? 
 Sakura... What do we do? 
 I understand that you don't want to leave Sakura or the Flower Division. 
-I don't want to leave the theater, the Flower Division or Sakura! 
+I don't want to leave the theater, the Flower Division, or Sakura! 
 What'll we do, Sumire? 
 Sumire... What do we do? 
 I understand that you don't want to leave Sumire or the Flower Division. 
-I don't want to leave the theater, the Flower Division or Sumire! 
+I don't want to leave the theater, the Flower Division, or Sumire! 
 What'll we do, Maria? 
 Maria... What do we do? 
 I understand that you don't want to leave Maria or the Flower Division. 
-I don't want to leave the theater, the Flower Division or Maria! 
+I don't want to leave the theater, the Flower Division, or Maria! 
 What'll we do, Kanna? 
 Kanna... What do we do? 
 I understand that you don't want to leave Kanna or the Flower Division. 
-I don't want to leave the theater, the Flower Division or Kanna! 
+I don't want to leave the theater, the Flower Division, or Kanna! 
 What'll we do, Iris? 
 Iris... What do we do? 
 I understand that you don't want to leave Iris or the Flower Division. 
-I don't want to leave the theater, the Flower Division or Iris! 
+I don't want to leave the theater, the Flower Division, or Iris! 
 What'll we do, Kohran? 
 Kohran... What do we do? 
 I understand that you don't want to leave Kohran or the Flower Division. 
-I don't want to leave the theater, the Flower Division or Kohran! 
+I don't want to leave the theater, the Flower Division, or Kohran! 
 What'll we do, Orihime? 
 Orihime... What do we do? 
 I understand that you don't want to leave Orihime or the Flower Division. 
-I don't want to leave the theater, the Flower Division or Orihime! 
+I don't want to leave the theater, the Flower Division, or Orihime! 
 What'll we do, Reni? 
 Reni... What do we do? 
 I understand that you don't want to leave Reni or the Flower Division. 
-I don't want to leave the theater, the Flower Division or Reni! 
+I don't want to leave the theater, the Flower Division, or Reni! 
 ...I understand. 
 ...I don't want to go. 
 ...I understand. 
@@ -195,7 +195,7 @@ Ogami...
 ... 
 Captain... 
 Boss... 
-Mon Frère... 
+Mon FrÃ¨re... 
 ... 
 ... 
 ... 
@@ -213,14 +213,14 @@ I-I...
 ... 
 ... 
 I-I... 
-NO! <br> I wanna be with Mon Frère! 
+NO! <br> I wanna be with Mon FrÃ¨re! 
 I-I... 
 I-I... 
 ... 
 Ogami... 
-However, I want you to remember something, Ogami. 
+Listen, I want you to remember something, Ogami. 
 It's not just this theater or the Flower Division we're protecting. 
-Protecting the lives and happiness of the people... That's the sworn duty of the Imperial Assault Troupe. 
+Protecting the lives and happiness of the people... That's the sworn duty of the Assault Troupe. 
 Mr. Yoneda... 
 Our fight never truly ends. <br> We have to keep protecting this peace. 
 So please, Ogami, try to understand. 
@@ -229,7 +229,7 @@ So please, Ogami, try to understand.
 I know this is all rather sudden. I don't blame you for being at a loss right now. 
 However, I want you to remember something, Ogami. 
 It's not just this theater or the Flower Division we're protecting. 
-Protecting the lives and happiness of the people... That's the sworn duty of the Imperial Assault Troupe. 
+Protecting the lives and happiness of the people... That's the sworn duty of the Assault Troupe. 
 Mr. Yoneda... 
 Our fight never truly ends. <br> We have to keep protecting this peace. 
 So please, Ogami, try to understand. 
@@ -268,7 +268,7 @@ I'd be lying if I said I wasn't also sad.
 But this is a great opportunity for you. 
 It was the same for me. Getting to visit a foreign country can be a great experience. 
 ... 
-...I'll be all right. 
+...I'll be fine.
 After all, this doesn't mean we'll never see each other again. 
 Besides, whenever I feel lonely... I'll always have my locket. 
 Maria... 
@@ -278,17 +278,17 @@ Kanna...
 Well, now that I think about it, I did ditch you to go train in Okinawa... 
 So I guess now it's your turn to go train in France. 
 ... 
-Well if you're gonna go, then give it everything you got while you're there! 
+Well if you're gonna go, then give it everythinâ€™ you got while you're there! 
 You don't have to worry about the theater while I'm here. 
 I can't wait to see you lookin' big and strong after all that training, Boss! 
 Kanna... 
 *sob*... <br> Eh... Eh... 
 Iris... 
-I wanna stay with you, Mon Frère... 
+I wanna stay with you, Mon FrÃ¨re... 
 I don't want you to leave... 
 ... 
 You promised me when you came back, remember?! 
-You said you'd never leave me again... You said we'd be together forever... 
+You said you'd never leave me again... You said we'd always be together... 
 I'm staying with you forever, no matter what! 
 I don't care if you're going to France or whatever! 
 Iris... 
@@ -296,7 +296,7 @@ Congrats, Chief.
 You get to go study in France... Way to go. 
 ... 
 I always knew this day would come. 
-A guy like you was always bound to spread your wings and see the world. 
+A guy like you was bound to spread his wings and see the world. 
 Kohran... 
 ... 
 ... 
@@ -319,7 +319,7 @@ And I wish I could've stayed with you longer.
 ... 
 Reni... 
 I wanted to go to all kinds of places with you... 
-I wanted you to teach me more things. 
+I wanted you to teach me all kinds of thingsâ€¦
 ... 
 But Europe is more advanced than Japan in a lot of ways... 
 So I know you'll see great results from your studies there. 
@@ -334,14 +334,14 @@ And then... <br> The day before departure...
 As you're all aware, Ogami's finally leaving for Paris tomorrow. 
 Ogami, if you could say something to everyone. 
 ... 
-Express your resolve 
-Address everyone 
+Express your resolve. 
+Address everyone. 
 It's hard saying goodbye to everyone, but I've decided to go to France. 
 I will use this opportunity to see a whole new world and test myself. 
 I don't know what France has in store for me... 
 But as a member of the Imperial Assault Troupe, just like all of you, I will do my absolute best. 
 Sakura... Sumire... Maria... Kanna... 
-Iris... Kohran... Orihime... And Reni... 
+Iris... Kohran... Orihime... and Reni... 
 I truly enjoyed this past year I spent with all of you. 
 I may be leaving for France tomorrow... 
 But I'll never forget the memories I made with you for as long as I live. 
@@ -362,13 +362,13 @@ Take care of yourself, all right, Chief?
 You'll have to tell me all about how it is over there sometime. 
 No matter how far apart we may be... 
 Our hearts will always be as one. 
-Uhh... *sob*... Mon Frère... 
+Uhh... <br> *sob*... Mon FrÃ¨re... 
 Come, now, Iris, don't cry. 
-Mon Frère... Don't forget about me... OK? 
+Mon FrÃ¨re... Don't forget about me... OK? 
 I'll always... Always... 
 *sob*... Uhh... 
-It's OK, Iris. There's no way the Boss would forget about us. 
-Heheh, you better not half-ass your training while you're in France, Boss. 
+It's OK, Iris. There's no way the boss would forget about us. 
+Heheh, you better not half-ass your traininâ€™ while you're in France, Boss. 
 I want you to come back even stronger and more reliable than you are now. 
 And while you're there... 
 Do your best to become a proper Parisian gentleman. 
@@ -377,10 +377,10 @@ I'll never forget any of it for as long as I live.
 I'm sure the day will come when we'll be able to see each other again. 
 We'll keep working hard until that day comes. 
 Ogami... Have a safe trip. 
-Everyone... Thanks. 
+Everyone... Thank you. 
 All right! Now that we've congratulated Ogami on his promotion and transfer to France... 
 It's time for Ogami's going-away party! Now let's party hard! 
-Awright! Let's have fun, people! For the Boss! 
+Awright! Let's have fun, people! For the boss! 
 The going-away party was so much fun. Even Kasumi and the others joined in. 
 I'm finally setting off tomorrow. 
 Tonight's the last night I'll be spending at the Imperial Theater... 
@@ -424,16 +424,16 @@ Kanna... Thank you.
 Heheh, no, thank YOU for taking it. 
 Well, see ya, Boss. G'night. 
 Kanna... 
-Mon Frère... 
+Mon FrÃ¨re... 
 Iris... 
-I... wrote you a letter, Mon Frère. 
+I... wrote you a letter, Mon FrÃ¨re. 
 Iris... 
 Don't read it until you're on the boat... OK? 
 Iris... Thank you. 
-Mon Frère... 
+Mon FrÃ¨re... 
 ... 
 Don't worry about me. I'll try not to feel too lonely. 
-Well... Good night, Mon Frère. 
+Well... Good night, Mon FrÃ¨re. 
 Iris... 
 Sorry for bugging you so late at night, Chief. 
 Kohran... 
@@ -450,7 +450,7 @@ Orihime...
 Um... I actually have something for you. 
 Something for me? 
 What's this? 
-It's a letter I wrote... For you. 
+I wrote a letter for youâ€¦ Lieutenant.
 Read it once you're on the boat to France. 
 Orihime... Thank you. 
 All right, then, Lieutenant... Good night. 
@@ -488,7 +488,7 @@ As I write this letter, I can't help but remember when we first met in Ueno duri
 It's hard to say goodbye, but I'll always carry in my heart the joy I felt at that moment. 
 I wish I could join you on your trip to Paris... 
 But I don't think you'd be very happy if I did. 
-You always keep moving forward, so I'll follow your example and keep working hard in the Flower Division. 
+You always keep moving forward, so I'll follow your example and keep working hard in the troupe. 
 I'll keep improving myself so that I can be the Sakura you deserve. 
 I'll always cherish the memories I shared with you and the things I learned from you. 
 I'll write you plenty of letters, and I'll keep your room clean. 
@@ -517,7 +517,7 @@ The future of Japan rests on your shoulders, Captain. Study hard and come back t
 The water in Europe isn't very clean, so do be careful. 
 I'll be praying for your safety and success, from the bottom of my heart. 
 P.S. I've started learning how to swim. Perhaps we can swim together someday. 
-Yours truly from the capital, <br> Imperial Assault Troupe, Flower Division <br> Maria Tachibana 
+Yours truly from Tokyo, <br> Imperial Assault Troupe, Flower Division <br> Maria Tachibana 
 Yo! Congrats on the promotion to lieutenant. I'm just as happy for you as I'd be for myself. 
 I was shocked to hear you were leaving for Paris so soon. I'm gonna miss ya. 
 The theater without you is like a hinomaru bento without the plum. 
@@ -531,7 +531,7 @@ No matter when, no matter where, you'll always be our captain.
 I'm rooting for you, from the bottom of my heart. Never give up! I'll always be in your corner! 
 See ya later. <br> Imperial Assault Troupe, Flower Division <br> Kanna Kirishima 
 I'm in my room right now, writing you this letter. 
-I'm really gonna miss you while you're away in Paris, Mon Frère. 
+I'm really gonna miss you while you're away in Paris, Mon FrÃ¨re. 
 I'm totally against it! You shouldn't have to go to Paris at all! 
 I've cried about it so much... But I'm a grown up. 
 I'm not gonna cry in front of you. I promised Jean-Paul I wouldn't. 
@@ -541,21 +541,21 @@ You'd be better off staying here with me, don't you agree?
 I know that's just me being selfish, though. 
 Being a grown up means not acting sad even when you really are. 
 I'll be brave about it, so write me back, OK? I'll be waiting. 
-I love you, Mon Frère. <br> Imperial Assault Troupe, Flower Division <br> Iris 
-Dear Chief, <br> So, you're a lieutenant now! <br> For real, congrats. 
+I love you, Mon FrÃ¨re. <br> Imperial Assault Troupe, Flower Division <br> Iris 
+Dear Chief, <br> So, you're a lieutenant now! For real, congrats. 
 I'm really gonna miss you while you're off in Paris, though. 
 Hey, what kind of place do you think Paris is? Think they got some neat inventions there? 
-Paris, the city of flowers! <br> Paris, capital of the world! <br> Ahh, I wanna go so bad. 
+Paris, the city of flowers! Paris, capital of the world! Ahh, I wanna go so bad. 
 If we ever get the chance, I wanna go exploring the city with you, Chief. 
 Oh yeah, I've got a new dream! I'm building an airplane! 
 A plane capable of continuous flight around the world. If I ever finish it, I'm coming for ya! 
 Then I'll snatch you up, and we'll travel around the world together! 
 Ah, jeez. <br> There I go, talking nonsense again. 
 But y'know, none of your dreams will come true if you don't work hard for them. 
-I'm gonna do my best. <br> You do your best too, Chief. <br> Take care of yourself. 
+I'm gonna do my best. You do your best too, Chief. Take care of yourself. 
 See you again someday. <br> Imperial Assault Troupe, Flower Division <br> Kohran Li 
 Ciao, Ensign. <br> Wait, no, you've been promoted to Lieutenant now, huh? 
-Congratulations, and grazie! <br> You're probably reading this on the boat, huh? 
+Congratulations, and grazie! You're probably reading this on the boat, huh? 
 How's the boat ride been so far? Feeling lonely? Want me to come join you? 
 Just kidding. <br> I'm busy right now with requests from all over the world to come perform. 
 Even though we're so far apart, we're together in our hearts. 
@@ -577,16 +577,16 @@ January 1926. <br> We spent New Year's alone together, and took part in that fin
 A lot has happened in the year I've spent with you. You've changed me, Captain. 
 You're a big part of my life now. Perhaps you always will be. 
 Congratulations once again on your promotion. I await the day we can meet again. 
-April 1926. <br> Imperial Assault Troupe, Flower Division <br> Reni Milchstraße 
-Sorry, Ogami, but each customer is only allowed to purchase one photo at a time. 
+April 1926. <br> Imperial Assault Troupe, Flower Division <br> Reni MilchstraÃŸe 
+Sorry, Ogami. I can only sell you one photo per month. 
 I see. That's too bad. 
-My apologies, Ogami, but each customer is only allowed to purchase one photo at a time. 
+So sorry, Mr. Ogami, but each customer is only allowed to purchase one photo at a time.  
 Oh, really? That's too bad. 
 The jewel of the Pandemonium Regalia, entrusted to us by the Rose Division. 
-Spirit Sword Arataka. The secret sword of the Shinguji family. 
-Divine sword Shirahatori. Entrusted to me by Kaede. A secret sword passed down in the Fujieda family. 
-Luminous blade Mukei. Shinnosuke Yamazaki is the original owner. A secret sword entrusted to us by Kazuma. 
-Divine blade Mekkyaku. A secret sword entrusted to me by Yoneda. 
+Spirit Sword Arataka. The special sword of the Shinguji family. 
+Divine Sword Shirahatori. Entrusted to me by Kaede. A special sword passed down by the Fujieda family. 
+Luminous Blade Mukei. A special sword entrusted to us by Kazuma that once belonged to Major Yamazaki. 
+Divide Blade Mekkyaku. A special sword entrusted to me by Yoneda. 
 The uniform I wear at the theater. Good for both summer and winter. 
 A lighter borrowed from the inn. 
 The flower crown that Iris made for Reni. 
@@ -607,10 +607,10 @@ A photo of Orihime.
 A photo of Orihime. This one is a limited edition only available at New Year's. 
 A photo of Reni. 
 A photo of Reni. This one is a limited edition only available at New Year's. 
-A decorative paper ball from the welcome party. 
-A flower vase from the welcome party. 
-The banner from the welcome party. 
-The Cinematron. A communication machine invented by Kohran that lets you see and talk to someone from far away. 
+A decorative paper ball for the welcome party called a kusudama. 
+A flower vase for the welcome party.
+The banner for the welcome party.
+The Cinematron. One of Kohran's inventions that lets you see and talk to someone from far away. 
 The sword of the Pandemonium Regalia, recovered from the Demon King. 
 The mirror of the Pandemonium Regalia, recovered from the Demon King. 
 Fragments of the broken Cinematron. Seems like the kids at the inn picked them up along the shore. 
@@ -625,4 +625,4 @@ A letter from Reni.
 A scarf given to me by Sakura. It's knitted with red yarn - my favorite color. 
 A scarf given to me by Sakura. It's knitted with blue yarn - my favorite color. 
 A scarf given to me by Sakura. It's knitted with yellow yarn - my favorite color. 
-... "" "" () - . , ! ? ?! !! 
+... "" "" () - . , ! ? ?! !!

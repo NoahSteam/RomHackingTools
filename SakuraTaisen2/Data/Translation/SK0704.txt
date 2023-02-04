@@ -1,11 +1,11 @@
-Your Excellency, the time has finally come to enact our plan. 
+﻿Your Excellency, the time has finally come to enact our plan. 
 A state ruled by the Imperial Army... 
-We of the Taisho Restoration Army will gladly sacrifice ourselves for your ideals, Your Excellency! 
+We of the Taisho Restoration Army will gladly sacrifice ourselves for your ideals!
 Well said, Amagasa. 
 The future of the capital rests on our shoulders. 
 We make our move November 9th! You will be in charge of seizing the Grand Imperial Theater. 
-Yoneda's a traitor who belittles the very existence of our legitimate army. You will deal with him. 
-And... You will capture Sakura Shinguji of the Flower Division. 
+Yoneda is a traitor who belittles the existence of our legitimate army. You will deal with him.
+And... you will capture Sakura Shinguji of the Flower Division. 
 If she attempts to resist... Kill her. I don't care either way. 
 Yessir! Leave it to me, sir! 
 Heheheh... The hour approaches. 
@@ -17,7 +17,7 @@ That voice...
 Oh, Kayama. What do you want? 
 That's cold, Ogami. After I came all this way, too. I'm crushed! 
 ...Just come inside. 
-Hmph, very well. Alley OOP! 
+Hmph, very well. Alley-OOP! 
 Say, Ogami, you're looking as troubled as ever. 
 Yeah... A lot's happened. 
 Come now, Ogami, have you forgotten that old saying? "After rain comes fair weather." 
@@ -25,7 +25,7 @@ The more two people quarrel, the stronger their relationship will become in the 
 Ahh, humans are truly complicated creatures. 
 That's true, no matter how much they fight, Orihime and Ogata are still family. 
 Thanks, Kayama. I appreciate the advice. 
-Attaboy, Ogami. Well then, farewell! Alley OOP! 
+Attaboy, Ogami. Well then, farewell! Alley-OOP! 
 All right, I'll stop by Orihime's room while I'm doing my rounds. 
 It's 9:30 right now... That gives me a half hour till 10. 
 The door's shut tight. It's properly locked. 
@@ -33,18 +33,18 @@ OK, onto the next room.
 Nothing unusual out in the lobby. 
 OK, continuing the night watch, then. 
 The merchandise is neatly organized. Tsubomi's pretty tidy. 
-OK, nothing out of the ordinary here. Continuing my night watch. 
+All right, nothing out of the ordinary here. Continuing my night watch. 
 Yo, Boss. Out on your rounds? 
 What are you up to, Kanna? 
 Heheh, I got a little hungry, so I'm having a quick meal. 
 Oh yeah, I didn't see Orihime come down here at all this evening. 
 I don't know what's up with her, but she shouldn't be skipping out on meals. 
 That's true. 
-It's OK to not have an appetite. 
+It's understandable.
 That's true. Skipping meals is bad for your health. 
 Glad you agree, Boss. 
 All right, if she still hasn't come out by tomorrow, I'll bring her something instead. 
-No, there's times where you just don't feel like eating. Like when you're worried about something, for example. 
+It's understandable. Sometimes people lose their appetite when they're worried about something. 
 Y-Ya think so? I eat like a pig when I get nervous. 
 Well, everyone's different. 
 All right, if she still hasn't come out by tomorrow, I'll bring her something instead. 
@@ -57,14 +57,14 @@ All right, I'm headin' to my room. Night, Boss.
 Right, I should get back to my night watch. 
 Seems like Kanna's back in her room. 
 Nothing particularly unusual here. I'll check another room. 
-Gotta check for fire hazards... Can't be too careful about fires. 
+Gotta check for fire hazards... Can't be too careful. 
 All right, we're clear. Let's check another room. 
 Let's check this door... 
 All right, it's properly locked. No issues here. 
-Kasumi and Yuri have long since gone already. 
+Kasumi and Yuri have long since left the theater.
 Nothing out of the ordinary here. I'll go somewhere else. 
 Zzzzzzz... Zzzzzzz... 
-Sounds like the manager's asleep. Hope he doesn't catch a cold, falling asleep in his chair like that... 
+Sounds like the manager is sleeping. Hope he doesn't catch a cold, falling asleep in his chair...
 Well, I suppose I don't need to check in there. 
 Nobody's here. Nothing out of the ordinary, either. 
 I should get back to patrolling. 
@@ -75,7 +75,7 @@ Nobody's here and nothing's unusual. I should go.
 (Huh? It's Sumire.) 
 (Where's she headed to at this hour?) 
 (It looked like she went towards the stage...) 
-Hm? I think I can hear something from over by the stage. 
+Hm? I think I can hear something over by the stage. 
 Sumire? 
 Ah?! 
 E-Ensign! 
@@ -93,7 +93,7 @@ And now you're going to help me with said dance practice.
 I want you to move the spotlight and have it follow me as I dance. 
 W-Wait, I'm still on my night watch... 
 No excuses! Now get to it! 
-Right. Bugs do tend to appear more often in the fall. 
+…Right. Bugs do tend to appear more often in the fall. 
 Sorry to bother you, then. I'll be going now. 
 Ah, Ensign... Wait a moment. 
 You see, I... I actually WAS practicing my dancing. 
@@ -144,12 +144,12 @@ Sumire had me help her with her dance practice here just a moment ago.
 So typical of her, not letting anyone see her exerting any effort. 
 This place is always deserted, both day and night. 
 Nothing out of the ordinary here. Back to my night watch. 
-Oh, Mon Fr�re! Reni was just teaching me about the stars! 
-Reni knows all sorts of stuff about stars! 
+Oh, Mon Frère! Reni was just teaching me about the stars! 
+She knows all sorts of stuff about them!
 ...The position of the stars can help you keep your bearings in battle. 
-Guess what, Mon Fr�re? She taught me about the "bigdipper." 
+Guess what, Mon Frère? She taught me about the large dipper in the stars.
 Oh, you mean the Big Dipper? 
-If you follow the handle of the bigdipper alllll the way down... 
+If you follow the handle of the dipper alllll the way down…
 ...there's a star you can find at the very end. Do you know what it's called? 
 The North Star? 
 The South Star? 
@@ -157,39 +157,39 @@ The North Star?
 The South Star? 
 The Star of Happiness? 
 The North Star, right? I learned that in the Navy. 
-Wow, Mon Fr�re, you're so smart! 
+Wow, Mon Frère, you're so smart! 
 Not bad, Captain. 
 I'm pretty sure it was the South Star, right? 
 ...Wrong. There is no such thing as the "South Star." The correct answer is the "North Star." 
-Mon Fr�re, if you don't know something, don't pretend that you do! 
+Mon Frère, if you don't know something, don't pretend that you do! 
 Hmmm, maybe it's the Star of Happiness? Hahahaha! 
-Hahahaha! You're so funny, Mon Fr�re! 
+Hahahaha! You're so funny, Mon Frère! 
 Wasn't that funny, Reni? 
 Y... Yes. 
 Bzzzt! Time's up! 
-It's called the "North Star." That one, over there! 
-Alpha Ursae Minoris, more commonly known as The North Star. 
-The Big Dipper is a chain of stars that partially constitute Ursa Major. 
-Huh... They're a family of bears! 
+It's called the North Star. That one, over there! 
+Alpha Ursae Minoris, or the North Star, is one of the bodies that make up Ursa Minor, the Little Bear.
+The Big Dipper is a chain of seven stars contained within the Great Bear constellation, Ursa Major.
+Heh… They’re like a family of bears!
 Even though the night sky is so big, they're so close to each other. They must get along great. 
 ...Yeah, you're right. 
-All right, I have to get back to my night watch. See you later, you two. 
+All right, I have to get back to my patrol. See you later, you two. 
 OK! Good luck with your night watch! 
 A family, huh? 
 Even in the vast night sky, you can find families who are close to each other, just as Iris said... 
 But some families don't get along, no matter how close to each other they are. 
 Could Mr. Ogata and Orihime ever patch things up? 
-Oh, Mon Fr�re! Reni and I were just making our own Jean-Paul constellation! 
+Oh, Mon Frère! Reni and I were just making our own Jean-Paul constellation! 
 Hahaha... Don't go to bed too late, OK? 
-Okaaay! 
+OOOK! 
 Right, now back to my night watch. 
-Past ten already, huh? I should call it here. 
+Past 10 already, huh? I should call it here. 
 OK, guess I'll go talk to Orihime now. 
 Oh, Ogami. 
 On your night watch, Chief? Thanks for your hard work. 
 Kohran, Sakura? What's up? 
 It's Orihime. She didn't come out of her room for dinner. 
-We tried going to her room, but she wouldn't let us in. 
+We tried to check up on her, but she wouldn’t let us into her room.
 I was on my way to maintain the Koubu, so I thought I'd give her a holler, too... 
 ...But no matter what we tried, she wouldn't budge. Got any ideas? 
 I'll try talking to her. 
@@ -234,11 +234,11 @@ I see. Understood.
 Well then, good night, Kaede. 
 Good night, Ogami. 
 Kaede said she was writing her report, right? I shouldn't bother her. 
-Brr, it's cold. The nights have started to get chillier, as expected. 
+Brr, it's cold. As you’d expect, the nights have started to get chillier.
 I don't see anything unusual here, so let's go somewhere else right away. Brr, cold... 
 I'd love to take some time to flip through a book, but I'm on patrol right now... 
 Perhaps I'll come back to read some other time. 
-Reni... Is she inside? 
+I wonder if Reni is in her room?
 No answer... 
 Her nameplate's just a piece of notebook paper, as usual. 
 Let's check another room. 
@@ -248,11 +248,11 @@ It's Ogami...
 Ogami? Thanks for going on your night watch. 
 There's nothing unusual in my room, if you were wondering. 
 I see. OK then, good night. 
-OK. Good night, Ogami. 
-She said she's already going to bed. If there's anything I need from her, I'll just bring it up tomorrow. 
+All right. Good night, Ogami. 
+She said she was going to bed. If there's anything I need from her, I'll just bring it up tomorrow.
 What a cute nameplate, typical of Sakura. 
 Let's check another room. 
-I wonder if Kanna is inside. 
+I wonder if Kanna is in her room.
 No answer. Did she go somewhere? 
 Zzz... No, I couldn't eat another bite... 
 Sounds like even Kanna's asleep. 
@@ -265,7 +265,7 @@ Um... It's Ogami.
 Captain? Did you need something? 
 I'm here on my night watch. 
 I'm here to hang out. 
-I'm here to talk about Orihime. 
+I wanna talk about Orihime.
 I'm here on my night watch. Noticed anything unusual? 
 Good work, sir. Nothing particularly out of the ordinary here. 
 I'm reading right now, but I'll be going to bed in a moment. 
@@ -299,15 +299,15 @@ Good night, Captain.
 Right, back to the night watch, then. 
 It's Maria's nameplate. 
 OK, onto the next room. 
-Iris... Is she inside? 
+Iris… Is she in her room?
 No answer... 
 So Iris's nameplate is shaped like Jean-Paul. 
 Let's check another room. 
-I wonder if Kohran is inside. 
+I wonder if Kohran is in her room.
 No answer... 
 A gear-shaped nameplate, huh? It's just Kohran's style. 
 Let's check another room. 
-I wonder if Sumire is inside. 
+I wonder if Sumire is in her room.
 Doesn't look like Sumire's in. 
 ...Who is it? 
 It's Ogami... 
@@ -324,11 +324,11 @@ Right, time to get back to my night watch.
 Sumire said she's going to bed already. I should leave her alone. 
 This is a pretty subtle design, considering it's Sumire. 
 Let's check another room. 
-Past ten already, huh? I should call it here. 
+Past 10 already, huh? I should call it here. 
 OK, guess I'll go talk to Orihime now. 
 Nobody's here, and everything seems normal. Better get going. 
 Even when all the humans are asleep, the machines down here never stop working. 
-Right, I should get back to work on my night watch, myself. 
+Right, I should get back to work myself and patrol the theater. 
 It feels like a hospital at nighttime here, I don't like it. 
 Nothing out of the ordinary here. I should get going. 
 Looks like no one's taking a bath right now. 
@@ -338,31 +338,31 @@ I'm starting to feel kinda funny... I should get back to my patrol.
 Huh? Looks like someone's in the bathroom. 
 These are... Sumire's clothes. 
 So that means... Sumire's in the bath right now... 
-My body is moving towards the bathroom on its own... 
+I am drawn to the bath…
 Go back outside. 
-Oh no, my body is moving towards the bathroom on its own... 
+O-Oh no… My body is moving towards the bathroom on its own... 
 Ahh, this feels so good. There's nothing better than a bath after a rehearsal. 
 (Sumire...) 
 (Hmm, I can't see very well through all this steam. Maybe if I get a little closer...) 
 (C-Crap!) 
-...! Who goes there?! 
+...! <br> Who goes there?! 
 Make an excuse. 
 Run away. 
 Make an excuse. 
 S-Sumire... I can explain. 
 E-Ensign?! 
-I was on my night watch, so I thought I'd check the bathroom for anything unusual, and-- 
+I was doing my rounds, so I thought I'd check the bathroom for anything unusual, and-- 
 E-Enough of your excuses! Get out this instant!! 
 Y-Yes, ma'am! 
 ... 
 I'm sorry, Sumire. I walked in without thinking... 
-Sorry" isn't good enough! 
+“Sorry” isn't good enough! 
 I can't believe you'd walk in on a lady in the middle of her bath! 
 I know... I really am sorry. 
 ...And here I thought you were different from other men, that you were a true gentleman. 
 What a shame. Now then, I have to go. 
 Serves me right, I guess... Man, I screwed up. 
-I don't feel great, but I guess I'll just go back to my rounds for now. 
+I don't feel great, but I guess I'll just go back to my patrol for now. 
 (I gotta get out of here before she sees me!) 
 Phew, I think I got away before she realized I was there. 
 If I'd been just a moment slower, I might not have made it. That was too close... 
@@ -374,20 +374,20 @@ Get out! Get out this instant!
 Y-Yes, ma'am! 
 ... 
 I'm sorry, Sumire. I walked in without thinking... 
-Sorry" isn't good enough! 
+“Sorry” isn't good enough! 
 I can't believe you'd walk in on a lady in the middle of her bath! 
 I know... I really am sorry. 
 ...And here I thought you were different from other men, that you were a true gentleman. 
 What a shame. Now then, I have to go. 
 Serves me right, I guess... Man, I screwed up. 
-I don't feel great, but I guess I'll just go back to my rounds for now. 
-She must be relaxing in the bath after working hard at rehearsal. 
+I don't feel great, but I guess I'll just go back to my patrol for now. 
+She must be relaxing in the bath after practicing so hard. 
 I should go. I wouldn't want to bother her. 
 OK, doesn't seem like Sumire noticed I'm here. 
 I'm still on patrol, so I should go somewhere else. 
 Phew, that was refreshing. 
 I suppose I should be getting out. 
-(Oh crap!! It looks like she's getting out of the water!) 
+(Oh crap!! It looks like she's leaving the bathroom!) 
 (I gotta get out of here before she sees me!) 
 Phew, I think I got away before she realized I was there. 
 If I'd been just a moment slower, I might not have made it. That was too close... 
@@ -398,7 +398,7 @@ Perhaps you should take a bath too, Ensign? You seem to be working up quite the 
 No, I'm still on patrol, so I'll do it later. 
 I see. Well then, I'll be taking my leave. 
 Take care, Ensign. Good luck on your night watch. 
-I should do as Sumire says and get back to my night watch in earnest. 
+I should do as Sumire says and get back to my patrol in earnest. 
 Looks like no one's taking a bath right now. 
 I'll go to a different room. I wonder where everyone else is? 
 Apparently the pool down here can heat up the water using underground boilers. 
@@ -406,7 +406,7 @@ Leave it to the Imperial Theater to have a pool you can use even during the wint
 The training room... Nobody's here at the moment. 
 Well, nothing unusual here. Onto the next stop. 
 It's a total mess in here, as usual. 
-Nothing unusual here, apart from the smell of roses. Right, onto the next room. 
+Nothing out of the ordinary here, apart from the smell of roses. Right, onto the next room. 
 G-Good evening. 
 Oh my, Ensign Ogami. What did you need at this hour? 
 Uh, I'm here on my night watch. 
@@ -418,7 +418,7 @@ It's so cold and lonely this time of year... You can stay here if you'd like, Ic
 I'll be sure to steal a kiss from you by sunrise! 
 Y-Yokihiko! You... You can't do that! 
 That's right, Yokihiko! Ensign Ogami belongs to everyone! 
-I... I'm in the middle of my night watch, so... I have to go. 
+I... I'm in the middle of my rounds, so... I have to go. 
 Ah, Ichiro! 
 Sheesh... I was in trouble for a second, there. 
 At any rate, better pull myself together and continue my night watch. 
@@ -438,11 +438,11 @@ Seriously, thanks for always taking the time to chat with me.
 I brought some manju today. Ya want some? 
 Manju? Well, since you offered, why not? 
 ...Wow, delicious! These manju are great, Kohran! 
-I bought 'em from Tsurukamedo. Glad to hear you like 'em. 
+I bought 'em from Tsurukamedo. Glad to hear you like them. 
 By the way, you really like the Koubu, huh? 
 We humans have to eat food and take baths, right? 
 It's the exact same with the Koubu. 
-You keep 'em nice and clean, and once they're finished fighting, you give 'em a good meal. 
+You keep them nice and clean, and once they're finished fighting, you give them a good meal. 
 I'm just doing the obvious, that's all. 
 Still, I'm sure the Koubu are very happy that you do so much for them. 
 Heheh, well they ARE called Koubu, it's only natural they'd be Kou-verjoyed! 
@@ -473,7 +473,7 @@ Thanks, Chief.
 All right, I'm gonna get back to work. Good luck with your rounds! 
 Looks like Kohran's still working. 
 I should get back to my night watch, too. 
-Past ten already, huh? I should call it here. 
+Past 10 already, huh? I should call it here. 
 OK, guess I'll go talk to Orihime now. 
 I wonder if Orihime will even listen to me? 
 ...Who is it? 
@@ -493,7 +493,7 @@ Orihime... If you won't listen to me, then please let me hear your side of the s
 Could you tell me what you think about your father? 
 You're so stubborn! This has nothing to do with you! 
 Actually, it does! 
-You're right, it doesn't, but... 
+You're right, but…
 Actually, it does! I can't leave one of my partners in the Flower Division alone like this! 
 Partner this, partner that... You're a broken record! 
 I don't recall ever being partners with Japanese men! 
@@ -504,12 +504,12 @@ Ensign...
 ...Ensign? Are you still there?! 
 I already told you, I'm not opening this door! 
 Orihime, please! 
-That's cowardly of you, Orhime! 
+That's cowardly, Orhime!
 Orihime, please! Open the door! 
 Argh, shut up! I don't want to hear another word! 
 Orihime! 
 ... 
-That's cowardly of you, Orihime! If you truly believe what you think is right, then say it to my face! 
+That's cowardly, Orihime! If you truly believe what you think is right, then say it to my face! 
 ...I don't care what you say, I don't feel like talking to any Japanese men! 
 Orihime! 
 Argh, shut up! I don't want to hear another word! 
@@ -521,7 +521,7 @@ Give up and leave.
 Oh well. It's late. I'll go back to my room for tonight. 
 But Orihime, I want you to know one thing. 
 I don't think it's right to hate your father like this forever. 
-I just want to help you and your father patch things up, that's all. 
+I just want to help you two patch things up, that's all. 
 All right, I'll be going now. Good night, Orihime. 
 ... 
 ... 
@@ -538,7 +538,7 @@ It's late, just go to bed already. You're being a nuisance.
 Oh well. You're right, it's late. I'll go back to my room for tonight. 
 But Orihime, I want you to know one thing. 
 I don't think it's right to hate your father like this forever. 
-I just want to help you and your father patch things up, that's all. 
+I just want to help you two patch things up, that's all. 
 All right, I'll be going now. Good night, Orihime. 
 ... 
 ... 
@@ -552,7 +552,7 @@ If you don't mind, could you tell me more about Carino?
 I don't know what that man told you, Ensign... 
 But it's his fault that Mamma became so sad... 
 Mamma... She tried so hard not to cry in front of me... 
-But she was always crying whenever she was alone. 
+But she was always in tears whenever she was alone.
 All because of him... All because he wasn't faithful... 
 There's no way I could ever forgive him! 
 I'll never forgive him for making Mamma so sad... Never! 
@@ -565,12 +565,12 @@ So how do you know Mr. Ogata is your father?
 ...Before I came to Japan, Mamma gave me a photograph. 
 She must've wanted me to make him apologize, if I ever met him. 
 There, is that good enough for you? Now go back to your room, Ensign! 
-Orihime, can't you patch things up with Mr. Ogata? 
+Orihime, can't you make amends with Mr. Ogata?
 Of course not! He's the man who abandoned Mamma and I! 
 Now please leave, Ensign! 
 ... 
 Orihime... 
-It's like Kayama said, the only way to get the two of them to make up is for them to talk to each other. 
+It's just like Kayama said, those two will never make up unless they talk to each other.
 Is there really nothing I can do? 
 I have no right to call myself her father. 
 I... I won't be fooled by him! Never! 
@@ -578,9 +578,9 @@ I... I won't be fooled by him! Never!
 If only there was a way I could get them to talk face to face... 
 I know! I'll take Orihime to see Mr. Ogata tomorrow, by force if I have to! 
 That's all I CAN do. All right, I'll just have to try! 
-Sorry, Ogami, but each customer is only allowed to purchase one photo at a time. 
+Sorry, Ogami. I can only sell you one photo per month. 
 I see. That's too bad. 
-Sorry, Ogami, but each customer is only allowed to purchase one photo at a time. 
+So sorry, Mr. Ogami, but each customer is only allowed to purchase one photo at a time.
 Oh, really? That's too bad. 
 Shiro 
 Hanamaru 
@@ -613,10 +613,10 @@ Kohran
 Orihime 
 Reni 
 The jewel of the Pandemonium Regalia, entrusted to us by the Rose Division. 
-Spirit Sword Arataka. The secret sword of the Shinguji family. 
-Divine sword Shirohatori. Entrusted to me by Kaede. A secret sword passed down in the Fujieda family. 
-Luminous blade Mukei. Shinnosuke Yamazaki is the original owner. A secret sword entrusted to me by Kazuma. 
-Spirit blade Mekkyaku. A secret sword entrusted to me by Yoneda. 
+Spirit Sword Arataka. The special sword of the Shinguji family. 
+Divine Sword Shirahatori. Entrusted to me by Kaede. A special sword passed down by the Fujieda family. 
+Luminous Blade Mukei. A special sword entrusted to us by Kazuma that once belonged to Major Yamazaki. 
+Divide Blade Mekkyaku. A special sword entrusted to me by Yoneda. 
 The uniform I wear at the theater. Good for both summer and winter. 
 A lighter borrowed from the inn. 
 The flower crown that Iris made for Reni. 
@@ -637,10 +637,10 @@ A photo of Orihime.
 A photo of Orihime. This one is a limited edition only available at New Year's. 
 A photo of Reni. 
 A photo of Reni. This one is a limited edition only available at New Year's. 
-A decorative paper ball from the welcome party. 
-A flower vase from the welcome party. 
-The banner from the welcome party. 
-The Cinematron. A communication machine invented by Kohran that lets you see and talk to someone from far away. 
+A decorative paper ball for the welcome party called a kusudama. 
+A flower vase for the welcome party.
+The banner for the welcome party.
+The Cinematron. One of Kohran's inventions that lets you see and talk to someone from far away. 
 The sword of the Pandemonium Regalia, recovered from the Demon King. 
 The mirror of the Pandemonium Regalia, recovered from the Demon King. 
 Fragments of the broken Cinematron. Seems like the kids at the inn picked them up along the shore. 
@@ -656,4 +656,4 @@ A scarf given to me by Sakura. It's knitted with red yarn - my favorite color.
 A scarf given to me by Sakura. It's knitted with blue yarn - my favorite color. 
 A scarf given to me by Sakura. It's knitted with yellow yarn - my favorite color. 
 ... "" "" () - . , ! ? ?! !! 
-Whaaaaa?! 
+Whaaaaa?!

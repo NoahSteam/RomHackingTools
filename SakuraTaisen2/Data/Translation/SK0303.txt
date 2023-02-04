@@ -1,4 +1,4 @@
-Is everyone here? 
+﻿Is everyone here? 
 What did you want to tell us, Ogami? 
 The truth is, I have some bad news. 
 The Imperial Assault Troupe's financial backers are going to discontinue their support all at once. 
@@ -16,7 +16,7 @@ Aren't you all forgetting something important?
 WE are the "Imperial Assault Troupe." If we put on a show, people will come to see us. 
 If the summer play is a success, our money problem will work itself out! Right, everyone? 
 You're right! We can put on a play! 
-Mon Fr�re, you're so smart! 
+Mon Frère, you're so smart! 
 Well, I guess it is better than doing nothing at all. 
 OK then. Let's get started on rehearsals for the summer production right away! 
 Now's the time for all of us to give it everything we've got! 
@@ -48,10 +48,10 @@ Whassamatter? You're the Flower Division, this ain't like you! Shape up, people!
 Kanna, is that you?! 
 Yo, I'm back! 
 Wahhh, Kanna! 
-Aww, Iris... What's wrong? 
+Hey, hey, Iris... What's wrong? 
 Kanna, the manager... Commander Yoneda was shot! 
 Wh-What the hell?! How is he? Is he alive or dead?! 
-Manager Yoneda is at the army hospital. He's confined to bed right now. 
+Manager Yoneda is at the Army Hospital. He's confined to bed right now. 
 Sorry, Kanna. This isn't a very warm welcome... 
 I get how you're feelin', Boss. We just gotta figure out what to do from here. 
 ... 
@@ -63,7 +63,7 @@ All right, enough with all this doom an' gloom!
 Let's put on a show that'll fill every seat in the house. That'll be a helluva surprise for ol' Yoneda!
 An actress has to be able to smile, no matter how bad things get! 
 Oh, we gotta couple o' new faces. 
-This is Orihime Soletta and Reni Milchstra�e, both originally from the Star Division. 
+This is Orihime Soletta and Reni Milchstraße, both originally from the Star Division. 
 Nice to meetcha! 
 Ciao! 
 Likewise... 
@@ -72,7 +72,7 @@ Wait a sec, I don't see Sumire anywhere.
 Sumire is at her family's home right now. 
 Sheesh, and at a time like this. What kinda "top star" is she, anyway?! 
 Hahaha, it really bothers you that Sumire's not here, doesn't it? 
-C'mon, don't gimme that crap! Not like I care if she's around or not! 
+C-C'mon, don't gimme that crap! Not like I care if she's around or not! 
 Well, at least we have you back now, Kanna. 
 With Kanna in the role of King Lear, we can finally put on our summer production! 
 All right! Now that's decided, we better get training started right away! 
@@ -91,18 +91,18 @@ Hee hee, yep. Reni is still Reni! Nothing's changed at all!
 Kanna's cheer seemed to rub off on the entire Flower Division, and rehearsals were going well. 
 And the Flower Division decided to add their own spin on the story of King Lear. 
 Hmm... 
-...? <br> What's the matter, Kanna? 
+…? <br> What's the matter, Kanna? 
 Ol' King Lear meets a pretty tragic fate in the end, don't he? 
-Why are you sounding so surprised? King Lear is a tragedy; it's always been this way. 
+Why are you sounding so surprised? “King Lear” is a tragedy; it's always been this way. 
 I mean, I guess so... 
 I know! Why don't we take a risk and change the ending into a happy one? 
 We can run a play where King Lear is a vibrant older man, full of life and determination. 
 We all want Mr. Yoneda to be well and healthy again, so we can put all those feelings into the play. 
 I agree! Hey Reni, you think so too, right? 
 That's fine. 
-Changing King Lear into a happy ending... Are you all right in your heads? 
+Giving “King Lear'' a happy ending... Are you all right in your heads? 
 Aww, it's fine. 'Sides, ain't it like Manager Yoneda's always sayin'? 
-"Lighten up a little!" We gotta run headfirst towards what we're wishin' for! 
+“Lighten up a little!" We gotta run headfirst towards what we're wishin' for! 
 Yeah! 
 Right... I can't sit back on my heels, either. 
 With the commander gone, I have to step up and protect this theater. 
@@ -186,7 +186,7 @@ Yeeeowch! That was a lot stronger than before.
 Yep, I'm comin' at ya for real this time. 
 If you don't dodge properly from here on, I'll blow right past your guard! 
 Ulp... Guess I better make sure to dodge. 
-(Uh... What was I supposed to do?! Jump?... Or duck?...) 
+(Uh... What was I supposed to do?! Jump…? Or duck…?) 
 Gwaahhh! 
 C'mon, Boss! Ya gotta duck when I come from above, and jump when I come from below! 
 Now I'm comin' from below! Hiyyyahh! 
@@ -285,7 +285,7 @@ Oh, there's somethin' I forgot to mention.
 What is it? 
 The way you were sparrin' just now... 
 You took a whole lotta hits head-on. You're usually better than that. 
-Heh, not much of a Navy Ensign, are ya? You need to train a bit harder! 
+Hehe, not much of a Navy Ensign, are ya? You need to train a bit harder! 
 Easy for you to say, your strength is on another level, Kanna. 
 The way you were sparrin'... You're pretty strong, Boss. Kinda makes me take a new look at ya. 
 A-Anyways, see ya later! 
@@ -302,30 +302,30 @@ Wh-What in the world? This came out of nowhere.
 Please, answer me, Ensign. 
 Sumire... 
 You are, Sumire. 
-The Imperial Assault Troupe. 
+The Assault Troupe. 
 I mean... Both are important to me. But if I had to, I'd choose you, Sumire. 
 Ensign... 
 I mean... Both are important to me. But if I had to, I'd choose the Imperial Assault Troupe. 
 ... 
 Yes, of course. You are the Flower Division's captain, after all. 
 ... 
-Sumire, you're important to me... and the Troupe is important to me, too. 
+Sumire, you're important to me... and the troupe is important to me, too. 
 I really don't think I could ever choose between the two. 
 Ensign... 
 ... 
-Ah, E-Ensign... 
+Ah, um… Ensign... 
 What is it? Is something wrong? 
 ...No, nothing at all. 
 Well then, do pardon me. 
-Hey, Sumire! 
+H-Hey, Sumire! 
 ... 
 Ensign... Farewell. 
 Hey, wait! Sumire! 
-Farewell"? Why would she say that? 
-Sorry Ogami, but each customer is only allowed to purchase one photo at a time. 
-I see. That's too bad... 
-I'm sorry, Ogami, but each customer is only allowed to purchase one photo at a time. 
-Oh, really? That's too bad... 
+“Farewell"? Why would she say that? 
+Sorry, Ogami. I can only sell you one photo per month. 
+I see. That's too bad. 
+So sorry, Mr. Ogami, but each customer is only allowed to purchase one photo at a time.
+Oh, really? That's too bad. 
 ... "" "" () - . , ! ? ?! !! 
 The jewel of the Pandemonium Regalia, entrusted to us by the Rose Division. 
 Spirit Sword Arataka. The special sword of the Shinguji family. 

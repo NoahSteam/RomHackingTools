@@ -1,4 +1,4 @@
-Phew, a new member arrived today, and we fought a battle. This has been quite a day. 
+﻿Phew, a new member arrived today, and we fought a battle. This has been quite a day. 
 (Hm? It seems like someone's here.) 
 Um... It's Sakura. Is now a good time, Ogami? 
 Sakura? The door's unlocked, so come in. 
@@ -11,19 +11,19 @@ So I came to ask if you'd like to attend as well.
 Sure, let's go. 
 What a pain... 
 Sure, let's go. It'd be a shame if we never got to finish the party just because of that. 
-Yes. I want to put on a proper welcome party for him. 
+Yes. I want to put on a proper welcome party for Reni. 
 Then let's get going. Everyone else is already there. 
 What a pain... We had the party earlier, isn't that good enough? 
 Ogami, come on, don't you feel even a little bad for Reni? 
 Just come with me. Everyone is already gathered in the salon. 
-I-I get it. We're going, we're going. 
+I-I get it. I’m going, I’m going. 
 ... 
 I understand that you're tired, but don't you think you could come for Reni's sake? Please? 
 All right. Let's head over. 
 OK. Thanks so much. 
-Thanks for waiting, everyone. Well then, let's continue the party. 
+Thank you for waiting, everyone. Well then, let's continue the party. 
 Yeah! I brought some sweets with me. 
-Ah, these are cookies from Linz, is that not right? I will have one, thank you! 
+Ah, these are Lindt cookies from France, are they not? I will have one, thank you!
 Hey, Reni, you try one, too! 
 ... 
 What do you think? Yummy, right? 
@@ -31,13 +31,13 @@ What do you think? Yummy, right?
 Th-That's Reni for you... 
 How did you come upon these sweets, Iris? 
 So, my papa sent them to me, along with a letter he wrote! 
-Oh, so your parents sent them from France. I was just thinking how rare it is to see sweets like this.
+Oh, your parents sent them to you from France. I was just thinking how rare it is to see sweets like this.
 Yep! I love my papa a whole lot! 
 ... 
 How wonderful, Iris. 
-Who do you like more, your papa, or me? 
+Who do you like more? 
 How wonderful, Iris. 
-Who do you like more, your papa, or me? 
+Who do you like more? 
 ...Orihime? 
 How wonderful, Iris. He sent you a letter, and even some sweets to go with it. 
 Uh-huh! Whenever I read a letter from my papa, it really lifts my spirits! 
@@ -160,4 +160,4 @@ A letter from Reni.
 A scarf given to me by Sakura. It's knitted with red yarn - my favorite color. 
 A scarf given to me by Sakura. It's knitted with blue yarn - my favorite color. 
 A scarf given to me by Sakura. It's knitted with yellow yarn - my favorite color. 
-... "" "" () - . , ! ? ?! !! 
+... "" "" () - . , ! ? ?! !!

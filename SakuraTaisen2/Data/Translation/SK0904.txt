@@ -1,10 +1,10 @@
-Right, I should get started on my night watch. 
+ï»¿Right, I should get started on my night watch. 
 It's cold out tonight, but I've got a job to do. 
 (I should check everyone's rooms first.) 
 (I wonder if Iris is asleep already?) 
 Who is it? 
 It's Ogami. Were you still up, Iris? 
-Mon Frère... I can't sleep. Can you come in? 
+Mon FrÃ¨re... I can't sleep. Can you come in? 
 I see... All right, I'll come in for a second. 
 What's the matter, Iris? Why the long face? 
 Well... Jean-Paul and I have been talking. 
@@ -14,57 +14,57 @@ We were wondering if I can even play the lead at all, since I'm so little...
 I'm no good for the lead right now. 
 That's not true. 
 Maybe that's a good thing. 
-True, it might be a bit much. 
+True, it might be too much. 
 That's not true at all, Iris. 
 There's nothing that says a child can't play the role of an adult. 
 I know you'd give a pure, innocent performance. 
-...You really think so, Mon Frère? 
-I'm no playwright, so I can't say much, but that's what I really think. 
-Mon Frère... 
-Thank you, Mon Frère. Now I feel like I can do it! 
+...You really think so, Mon FrÃ¨re? 
+I'm no playwright, so I can't say for certain, but that's what I truly believe. 
+Mon FrÃ¨re... 
+Thank you, Mon FrÃ¨re. Now I feel like I can do it! 
 No matter what role I wind up with, I'll do my very best! 
 Good. Break a leg, Iris. 
-All right, I have to get back to my night watch. Good night, Iris. 
+All right, I have to get back to my patrol. Good night, Iris. 
 Good niiiight! 
 Maybe that's actually a good thing. 
 ...Huh? 
 Someone as small as you playing the role of an adult might be interesting, no? 
 Besides, I know you'd give a pure, innocent performance. 
-...You really think so, Mon Frère? 
-I'm no playwright, so I can't say much, but that's what I really think. 
-Mon Frère... 
-Thank you, Mon Frère. Now I feel like I can do it! 
+...You really think so, Mon FrÃ¨re? 
+I'm no playwright, so I can't say for certain, but that's what I truly believe. 
+Mon FrÃ¨re... 
+Thank you, Mon FrÃ¨re. Now I feel like I can do it! 
 No matter what role I wind up with, I'll do my very best! 
 Good. Break a leg, Iris. 
-All right, I have to get back to my night watch. Good night, Iris. 
+All right, I have to get back to my patrol. Good night, Iris. 
 Good niiiight! 
 True... This might be a bit too much for you. 
 You think so too, huh? 
-Everyone was telling me I could do it too... 
-But it's still too hard for me. 
-...I'm sorry, Mon Frère. I'm interrupting your night watch. 
+Everyone was telling me I could do it, butâ€¦ 
+It's still too hard for me. 
+...I'm sorry, Mon FrÃ¨re. I'm interrupting your night watch. 
 No, it's all right, Iris. 
 I might not be good enough now, but I'll keep on practicing... 
 And when I grow up, I'll do my best to get the lead role! 
 I see... That's great, Iris. 
-All right, I have to get back to my night watch. Good night, Iris. 
-OK. Good night, Mon Frère. 
+All right, I have to get back to my patrol. Good night, Iris. 
+OK. Good night, Mon FrÃ¨re. 
 Sorry, Iris. As the person picking the lead, there's nothing I can tell you. 
-Ah, that's right... Sorry, Mon Frère. 
+Ah, that's right... Sorry, Mon FrÃ¨re. 
 I'm sorry I couldn't be of any help... 
 It's OK. I'll be fine. 
 Just talking to you cheered me up a little. 
 I see... 
-All right, I should get back to my night watch. Good night, Iris. 
-OK. Good night, Mon Frère. 
+All right, I should get back to my patrol. Good night, Iris. 
+OK. Good night, Mon FrÃ¨re. 
 Nothing unusual in the salon. 
 I should take a peek in the game room while I'm at it. 
 ... 
 Oh, if it isn't Sumire. 
-...! E-Ensign?! 
+...! <br> E-Ensign?! 
 What are you doing in a place like this? 
 W-Well... I was just listening to a record. 
-I was thinking of how I'm going to portray the lead role while I was listening to it. 
+I was imagining how I'd portray the lead role while the music played. Ohohohoho... 
 I see... That sounds about right for you, Sumire. 
 ... 
 ... 
@@ -91,11 +91,11 @@ Well then, I'll be taking my leave.
 Good night, Sumire. 
 Good night, Ensign. Good luck with your night watch. 
 ... 
-Right, back to my night watch. 
+Right, back to my patrol.
 I'm still thinking it over. 
 I see... 
-You're really thinking hard about this, aren't you, Ensign. 
-If you're putting this much thought into it... 
+You're really giving this a lot of thought, aren't you, Ensign. 
+If you're putting this much effort into choosing the lead... 
 Then I know it'll be a wonderful play. 
 ... 
 I'm looking forward to your answer tomorrow. 
@@ -103,7 +103,7 @@ Thanks, Sumire.
 Of course, I can promise you that I'll put on the greatest show you've ever seen if you pick me. 
 Well then, I'll be taking my leave. Good night, Ensign. 
 All right, good night, Sumire. 
-Right, back to my night watch. 
+Right, back to my patrol.
 I can't tell you, not until tomorrow. 
 Y-You're right. What's gotten into me? 
 I'll just have to look forward to your answer tomorrow. 
@@ -126,37 +126,37 @@ Apologies, sir. I was reading this script and got caught up in it.
 I completely lost track of what time it was. 
 Hahaha, how passionate of you. 
 So much has happened this past year... 
-This will be the final performance to cap the year off. 
+This will be the final performance to cap it all off.
 ... 
 A special performance where I get to spend Christmas Eve with you... 
 I want to make this play a success... No matter what. 
 Maria... 
-It's all right, it's going to be a success. 
-This is a big responsibility for me, huh? 
+It's going to be a success. 
+Big responsibility, huh?
 You should get some sleep. 
 It's all right, Maria. It's going to be a success. I know the audience will recognize your feelings. 
-Sir... Thank you. 
+Captainâ€¦ Thank you.
 Now come on, you'll catch a cold if you stay out here. Let's get back inside. 
-Yes, sir. 
+Right. 
 Let's make the Christmas play a hit, Captain. 
 Yeah. Let's do this, Maria. 
 Yes, sir. 
-This is a big responsibility for me, huh? I have to pick who's going to lead in such an important play... 
-It'll be all right, Captain. Everyone in the Flower Division has their own unique skills and character. 
+This is a big responsibility, huh? I have to pick who's going to lead in such an important playâ€¦ 
+It'll be OK, sir. Everyone in the Flower Division has their own unique skills and character.
 They'll all put on a wonderful performance that I'm sure will meet your expectations. 
 All that will be left is for you to give them a little push. 
 ... 
 All right then, sir, I'll be heading back to my room. 
 OK. Good night, Maria. 
 Good night, Captain. Good luck with your night watch. 
-OK, let's continue with the night watch. 
+All right, letâ€™s continue with my rounds.
 I know exactly how you feel, Maria, but you should call it a night. 
 Besides, it's freezing out here, you should head back inside. 
 Yes, you're exactly right. Let's get back inside. 
 All right then, sir, I'll be heading back to my room. 
 OK. Good night, Maria. 
 Good night, Captain. Good luck with your night watch. 
-OK, let's continue with the night watch. 
+All right, letâ€™s continue with my rounds.
 I'm being allowed to help out with the play this time. 
 So I want this to be a success just as much as you do, Maria. 
 Right. Do your best, sir. 
@@ -164,7 +164,7 @@ Yeah. Thanks, Maria.
 All right then, sir, I'll be heading back to my room. 
 OK. Good night, Maria. 
 Good night, Captain. Good luck with your night watch. 
-OK, let's continue with the night watch. 
+All right, letâ€™s continue with my rounds. 
 OK, where to next? 
 Hm? Seems like someone's out in the yard. 
 ... 
@@ -174,7 +174,7 @@ I just felt like moving around all of a sudden... So I came here.
 Captain... If you don't mind, could you watch me dance? 
 Sure, no problem. 
 Watch you... dance? 
-I'm in the middle of my night watch... 
+I'm patrolling right nowâ€¦
 Sure, no problem. 
 Thank you. All right... Here I go. 
 Hah! 
@@ -213,13 +213,13 @@ Thanks. All right, I'm going back to my room.
 I see. Good night, Reni. 
 Good night, Captain. 
 Well... I ought to get going, too. 
-I appreciate the offer, but I'm in the middle of my night watch. 
+I appreciate the offer, but I'm in the middle of my patrol. 
 I see... Sorry. 
-All right, I'm going to go. Try not to stay up too late, OK, Reni? 
+All right, I gotta go. Try not to stay up too late, OK, Reni? 
 Yes, understood. 
 Sorry, Reni. As the person picking the lead, I can't watch only you dance. 
 I see... Sorry. 
-All right, I'm going to go. Try not to stay up too late, OK, Reni? 
+All right, I gotta go. Try not to stay up too late, OK, Reni? 
 Yes, understood. 
 OK... Time to start patrolling underground. 
 Hm? Is that you, Kanna? 
@@ -231,7 +231,7 @@ Of course you do!
 Well, who knows? 
 True, that might be tough. 
 Of course you do! You'd be great, Kanna. 
-Huh? R-really? 
+Huh? R-Really? 
 Yeah, really. Don't think about it so hard. 
 Just throw yourself into it like you always do, Kanna. 
 Boss... 
@@ -240,18 +240,18 @@ It's true, there's some performances only I can do in the Flower Division.
 I just gotta do things my own way. Maybe a boyish heroine wouldn't be so bad. 
 Heheh, now I'm lookin' forward to how this play turns out, too. 
 Kanna... 
-Thanks, Boss! Whether I get the lead or not, I think I can put in a good performance. 
+Thanks, Boss! Whether I get the lead or not, I think I can put on a good show. 
 All right, time for me to hit the hay already. Night, Boss! 
 Yeah, good night. 
 Well... I ought to get going, too. 
-Well, who knows? Nobody knows how things will turn out. 
+Well, who knows? Nobody can predict how things will turn out.
 But no matter what role you wind up with, so long as you give it your all, I know it'll turn out great. 
 Boss... 
 You're right. Worrying's not gonna get me anywhere. 
 I'll do my best, in my own way. 
 Heheh, they might even like that the lead's more boyish than they expected. 
 Kanna... 
-Thanks, Boss! Whether I get the lead or not, I think I can put in a good performance. 
+Thanks, Boss! Whether I get the lead or not, I think I can put on a good show. 
 All right, time for me to hit the hay already. Night, Boss! 
 Yeah, good night. 
 Well... I ought to get going, too. 
@@ -280,22 +280,22 @@ But whenever I think about playing it... I just can't do it.
 Huh? 
 To play the piano, you need not only your fingers, but your heart, too. 
 Usually I just move my fingers without having to think... 
-Maybe it's because I don't have a good mental image for the lead role of "The Miracle Bells"... 
+Maybe it's because I don't have a good mental image of the lead role for "The Miracle Bells"... 
 Orihime... 
-Believe in yourself, Orihime. 
+Believe in yourself.
 It happens. 
 You should get to bed. 
 Believe in yourself, Orihime. Tell yourself you can do it. 
 Try to remember the usual Orihime, overflowing with confidence. 
 Ensign... 
 ... 
-...! I did it! 
+...! <br> I did it! 
 See, Orihime? You were able to play the piano just now. 
 Ensign... Thank you. 
 You don't have to worry about me anymore, Ensign. 
 I'm back to my normal self! Overflowing with confidence! 
 Hahaha... Glad to hear it. 
-I've got the perfect mental image of the lead role for the Christmas play. 
+I can even visualize the lead role for the Christmas play perfectly in my mind. 
 You can relax, Ensign, the play's in buone mani! 
 (...Buone mani? Does she mean to say the play's in good hands?) 
 It happens. Don't rush things, just wait it out. 
@@ -326,13 +326,13 @@ Oh... Kohran?
 Ah, Chief! 
 Couldn't sleep? 
 Y-Yeah... 
-I was just thinkin' about the Christmas play... 
+I was just thinking about the Christmas play... 
 Chief... What do you think will happen if I'm the star? 
 You can't tell when it's all tied up in braids, but my hair's actually super frizzy. 
 On top of that, I can't see a thing without my glasses, so I gotta wear them on stage. 
 The Holy Mother, wearing glasses... That'd just be weird, huh? 
 Of course not. 
-That might actually make it better. 
+That might make it better.
 You might be right. 
 Of course not. You're worrying too much. 
 Your glasses, your hair, that's not what matters. 
@@ -347,7 +347,7 @@ Thanks a bunch, Chief. I mean it. Good luck with your night watch!
 Kohran... 
 Actually... That might make it even better. 
 A heroine wearing glasses? That's fresh and new! 
-Y-Ya think so...? 
+Y-You think so...? 
 Sure I do! Have a little faith in yourself, Kohran. 
 Your cheerfulness is the best thing about you. Bring that with you up on stage! 
 Chief... 
@@ -375,7 +375,7 @@ Kohran...
 Sorry, Kohran. I've been worrying about who to pick, myself. 
 I can't be having this discussion with you if I'm going to remain impartial. 
 Ah... R-Right! 
-You're totally right. Sorry 'bout that. 
+You're totally right. Sorry about that. 
 All right, Chief, I'm gonna head back to my room. 
 Sure. Good night, Kohran. 
 Night, Chief. Good luck with your night watch. 
@@ -390,23 +390,23 @@ Ogami...
 Sorry, Sakura. Didn't mean to interrupt your dance practice. 
 No, it's all right. I was thinking about wrapping up anyway. 
 I see... 
-Were you practicing for the upcoming play? 
+Were you rehearsing for the upcoming play? 
 N-No, that was just a dance I learned a long time ago. 
 Whenever I feel like I'm about to lose track of my current role or the play... 
 I always repeat that dance. 
 Sakura... 
 You've got this, Sakura. 
-The fundamentals are important. 
+Fundamentals are important.
 You should get to bed. 
 You've got this, Sakura. 
 Thank you. I'll do my best. 
-I'll go back to basics, start fresh and do my utmost best. 
-That way I won't regret not having given it everything I got. 
+I'll go back to basics, start fresh and do the best I can.
+That wayâ€¦ If I give it everything I got, I wonâ€™t have any regrets.
 Sakura... 
 All right, Ogami, I'll be going back to my room. Good work on your night watch. 
 Yeah, thanks. Good night, Sakura. 
 Of course. Good night, Ogami. 
-OK, it's about time I wrapped up my night watch. I should head back to my room, too. 
+OK, it's about time I wrapped up my patrol. I should head back to my room, too. 
 The fundamentals are important. Sometimes you just have to go back to basics. 
 Yes, that's true. 
 I remember the first time I danced... How nervous I felt, how much fun I had... 
@@ -416,25 +416,25 @@ Sakura...
 All right, Ogami, I'll be going back to my room. Good work on your night watch. 
 Yeah, thanks. Good night, Sakura. 
 Of course. Good night, Ogami. 
-OK, it's about time I wrapped up my night watch. I should head back to my room, too. 
+OK, it's about time I wrapped up my patrol. I should head back to my room, too. 
 Don't overdo it, it's bad for your health. You should get to bed. 
 ...OK. Understood. 
 Good work on your night watch, Ogami. Good night. 
 Yeah, good night, Sakura. 
-OK, it's about time I wrapped up my night watch. I should head back to my room, too. 
+OK, it's about time I wrapped up my patrol. I should head back to my room, too. 
 Sorry, Sakura. As the person picking the lead, there's nothing I can tell you. 
-Ah... S-Sorry, I said some weird things, didn't I? 
+Ah... S-Sorry, I started talking about some weird things, didn't I? 
 Don't worry about what I said just now. 
 All right, Ogami, I'll be going back to my room. Good work on your night watch. 
 Yeah, thanks. Good night, Sakura. 
 Of course. Good night, Ogami. 
-OK, it's about time I wrapped up my night watch. I should head back to my room, too. 
+OK, it's about time I wrapped up my patrol. I should head back to my room, too. 
 Phew, finally done with my night watch. 
 Still, everyone's doing their best for this Christmas play. 
 Just who should I pick...? 
-Sorry, Ogami, but each customer is only allowed to purchase one photo at a time. 
+Sorry, Ogami. I can only sell you one photo per month. 
 I see. That's too bad. 
-Sorry, Ogami, but each customer is only allowed to purchase one photo at a time. 
+So sorry, Mr. Ogami, but each customer is only allowed to purchase one photo at a time.
 Oh, really? That's too bad. 
 Shiro 
 Hanamaru 
@@ -467,10 +467,10 @@ Kohran
 Orihime 
 Reni 
 The jewel of the Pandemonium Regalia, entrusted to us by the Rose Division. 
-Spirit Sword Arataka. The secret sword of the Shinguji family. 
-Divine sword Shirahatori. Entrusted to me by Kaede. A secret sword passed down in the Fujieda family. 
-Luminous blade Mukei. Shinnosuke Yamazaki is the original owner. A secret sword entrusted to us by Kazuma. 
-Divine blade Mekkyaku. A secret sword entrusted to me by Yoneda. 
+Spirit Sword Arataka. The special sword of the Shinguji family. 
+Divine Sword Shirahatori. Entrusted to me by Kaede. A special sword passed down by the Fujieda family. 
+Luminous Blade Mukei. A special sword entrusted to us by Kazuma that once belonged to Major Yamazaki. 
+Divide Blade Mekkyaku. A special sword entrusted to me by Yoneda. 
 The uniform I wear at the theater. Good for both summer and winter. 
 A lighter borrowed from the inn. 
 The flower crown that Iris made for Reni. 
@@ -491,10 +491,10 @@ A photo of Orihime.
 A photo of Orihime. This one is a limited edition only available at New Year's. 
 A photo of Reni. 
 A photo of Reni. This one is a limited edition only available at New Year's. 
-A decorative paper ball from the welcome party. 
-A flower vase from the welcome party. 
-The banner from the welcome party. 
-The Cinematron. A communication machine invented by Kohran that lets you see and talk to someone from far away. 
+A decorative paper ball for the welcome party called a kusudama. 
+A flower vase for the welcome party.
+The banner for the welcome party.
+The Cinematron. One of Kohran's inventions that lets you see and talk to someone from far away. 
 The sword of the Pandemonium Regalia, recovered from the Demon King. 
 The mirror of the Pandemonium Regalia, recovered from the Demon King. 
 Fragments of the broken Cinematron. Seems like the kids at the inn picked them up along the shore. 
@@ -509,4 +509,4 @@ A letter from Reni.
 A scarf given to me by Sakura. It's knitted with red yarn - my favorite color. 
 A scarf given to me by Sakura. It's knitted with blue yarn - my favorite color. 
 A scarf given to me by Sakura. It's knitted with yellow yarn - my favorite color. 
-... "" "" () - . , ! ? ?! !! 
+... "" "" () - . , ! ? ?! !!

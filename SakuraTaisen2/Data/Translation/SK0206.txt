@@ -1,4 +1,4 @@
-It's locked, so she must be somewhere in the theater. 
+ï»¿It's locked, so she must be somewhere in the theater. 
 She's not here. Where could she have gone? 
 Ah, Ogami... Have you found Iris yet? 
 No, not yet. 
@@ -6,11 +6,11 @@ I see.
 I wonder why she snapped like that. 
 I do think Orihime went too far... 
 But it's not often you see Iris lose her temper that badly. 
-She was doing fine earlier… 
+She was doing fine earlierâ€¦ 
 Maybe she's in a bad mood. 
-She was doing fine earlier… 
+She was doing fine earlierâ€¦ 
 Maybe she's in a bad mood. 
-Actually, after the battle… 
+Actually, after the battleâ€¦ 
 She seemed to be in a good mood earlier when we were getting ready for the party. 
 Yes. I wonder, what on earth could be the reason for it? 
 Well, there's no point wondering about it until we can have a talk with her. 
@@ -40,8 +40,8 @@ It's just like Tsubaki to keep everything tidied up like this.
 The dining hall is so lonely when no one's here eating. 
 Iris isn't here, either. I'll try looking in another room. 
 Not in here... Well, if she were here, we'd have found her already. 
-Iris and I were here earlier today looking for plates to use at the party…
-I didn’t expect I’d be back later looking for her, instead. 
+Iris and I were here earlier today looking for plates to use at the partyâ€¦
+I didnâ€™t expect Iâ€™d be back later looking for her, instead. 
 I wonder if Iris is hiding somewhere out of sight... 
 Shoot, she's not here. Guess I better go check a different room. 
 The door's locked tight. I doubt she'd have been able to get outside from here. 
@@ -123,7 +123,7 @@ Were you, by any chance, looking for Iris?
 OK then, what were you doing? 
 ...Whatever I was doing is no business of yours, Ensign! 
 Why do you not save your breath, and go search for Iris yourself? 
-You're right. If I have time to stand around chatting like this, I should be off looking for her.
+You're right. If I have time to chat like this, I should instead be looking for Iris.
 Still though, just what were you doing, Orihime? 
 Were you, by any chance, helping with the nighttime patrol? 
 I am not so cruel as to take your precious chores away from you, Ensign. 
@@ -131,7 +131,7 @@ If I did it in place of you, you really would be useless.
 U-Useless? 
 If you have time to shoot the breeze with me, would it not be better spent looking for Iris instead? 
 I will be going now, if you please. 
-You're right. If I have time to stand around chatting like this, I should be off looking for her. 
+You're right. If I have time to chat like this, I should instead be looking for Iris. 
 Still though, just what were you doing, Orihime? 
 I think whatever I was doing has nothing to do with you. 
 And now I will be going, so do pardon me. 
@@ -166,7 +166,7 @@ Maybe I'll try looking one more time.
 ... 
 ... 
 Yeah, she's not here. I guess she didn't go to the courtyard. 
-(Oh, it's Reni. It looks like he doesn't realize I'm here.) 
+(Oh, it's Reni. Looks like he doesn't realize I'm here.) 
 (He went downstairs. What's he going to do in the basement?) 
 It's already 11 o'clock. I wonder where Iris could've gone. 
 Wait. Kayama said something earlier... 
@@ -214,7 +214,7 @@ Um, sorry... It's me, Reni.
 ... 
 Did you... need something? 
 Well, I'm searching for Iris, and I was wondering if you've happened to have seen her? 
-...I don't know. 
+...I have not. 
 Goodbye, then. 
 Reni, wait! 
 And he's already gone... Oh well. I should get going, too. 
@@ -248,13 +248,13 @@ OK, I've powered on the Cinematron, so... I wonder who I should call?
 OK. I'll try calling someone. 
 Hmm... I getcha. 
 Essentially, I... 
-But ya see... 
+But you see... 
 Hey, that sounds like Sumire. 
 Whoa, Chief? I'm gabbin' a bit with Sumire right now. 
 Perfect timing. How's about the three of us chat? 
 Kohran's not picking up. Maybe she isn't near the Cinematron. 
 Essentially, I... 
-But ya see... 
+But you see... 
 Hey, is that Kohran? 
 Oh my... Ensign, is that you? 
 How lovely. Why not join in our little discussion? 
@@ -267,8 +267,8 @@ Oh, Sumire! So this was your number, then?
 Ah, Ensign?! Then you can hear me. How lovely. 
 Could you wait for just one moment? I will switch over to my screen. 
 Now then, was there something you needed? 
-Yeah, I wanted to talk a bit. 
-I wanted to wish you goodnight. 
+I wanted to talk a bit. 
+Just wishing you goodnight. 
 It's a prank call. 
 Yeah, I wanted to talk for a bit, if that's OK... 
 I do hope you'll forgive me Ensign, but I must change and be away to bed soon. 
@@ -300,7 +300,7 @@ You guys had a dustup with the Black Demon Society today over in Uguisudani, am 
 So how'd it go, anyways? 
 It was surprisingly easy.
 It was pretty tough. 
-Made a "mech" of things... 
+They made a mech of things... 
 It was a surprisingly easy win. Our newest member, Reni, really pulled his weight out there. 
 Wowee, he sure sounds promising! I was a bit worried, but hearing that makes me feel better. 
 Still... How disappointing to hear that victory came so easily even without us. 
@@ -308,19 +308,19 @@ Ah, don't get all down in the dumps. All that's important is that they won, not 
 It was a pretty tough fight. I'm sure if you two had been here, we would've had an easier time of it. 
 I would imagine so. Without me there, the Flower Division cannot display its true power, after all. 
 Hoo-wee... Just as full of can-do as ever, eh Sumire? 
-Still, if it's enough to make the Chief worry... 
+Still, if it's enough to make the chief worry... 
 ...then it sounds like these guys are nothing to sneeze at. 
 They really managed to make a "mech" of things. 
 Ahahaha! Aw Chief, you're such a hoot! 
 Look at you makin' puns... How do you come up with this stuff? 
 You got my joke, huh? Thanks, Kohran. 
-...Really, now. You know, they do say that puns are the lowest form of joke. 
-I do wish you had more of a highbrow sense of humor. 
+...Really, now. You know, they do say that puns are the lowest form of humor. 
+I do wish you had more of a highbrow sense of comedy. 
 R-Right... 
 Well, we've only fought them once so far, so I can't exactly say for sure. 
 Yup, I do suppose that's true. 
 Anywho, it's gonna be a bit longer before Sumire and me come back to the theater... 
-...so you take good care of things until then, Chief. 
+So you take good care of things until then, Chief. 
 Ensign, I trust that you will eagerly await my return. 
 Yeah, of course. 
 Now then, I must take my leave. Ensign, Kohran, I bid you good evening. 
@@ -400,8 +400,8 @@ Well, I must be going.
 It may be morning here, but have a good night, Captain. 
 I know what she said, but something tells me it won't be that easy. 
 No... Nothing in particular. 
-Really? Are you taking care not to do anything that would cause me undue worry? 
-Yes, we're fine here. Don't worry about a thing, Maria. Just focus on doing your best in New York. 
+Really? Are you sure there's nothing I should be concerned about? 
+No, we're fine here. Don't worry about a thing, Maria. Just focus on doing your best in New York. 
 I see. All right, then. 
 Well, I must be going. 
 It may be morning here, but have a good night, Captain. 
@@ -414,46 +414,46 @@ Get off the line with me and go find her, right now!
 O-OK, I get it. 
 I guess I ought to do as she says and keep looking... 
 ...Maria's not picking up. 
-Guess I'll have to give up on it for now. 
+Guess I'll have to give up on calling her for now. 
 Maria's not picking up. 
 It's morning where she is now. She probably went to eat breakfast or something. 
 Good evening. It's time for Capital News. 
 Hex Mechs appeared shortly after noon today among a crowd of vacationers in Uguisudani. 
-They engaged in combat with the Imperial Assault Troupe, who were dispatched to the scene. 
+They engaged in combat with the Imperial Assault Troop, who were dispatched to the scene. 
 At the time, a number of sightseers were present at the scene who had come to view the wisterias.
 Now, we'll hear comments from some people who witnessed the Hex Mechs. 
 Yeah. I was just taking in the flowers, enjoying some sake, when those things appeared out of nowhere.
 Sheesh, it completely killed my buzz. How're they planning to make up for this, huh? 
 ...You can hear the anger in his voice. 
-Thanks to the efforts of the Imperial Assault Troupe... 
+Thanks to the efforts of the Imperial Assault Troop... 
 ...the incident was put to rest without any casualties. 
 The unusual Spirit Armor sighted during last month's battle in Ginza... 
 ...appears of a similar type to the one which showed up in Uguisudani. 
 The Ministry of Communications has instated regular airmail service for Tokyo, Osaka, and Fukuoka.
 Hopes are high that this will enable faster delivery of mail over long distances... 
 But, due to high costs, it will likely be utilized primarily by government agencies and businesses. 
-It may take some time before airmail service will be useful to the general public. 
+It may take some time before airmail services will be useful to the general public. 
 Finally, it's time for this week's weather forecast. 
 A high-pressure system will advance over the Sea of Japan this week, leading to more clear summer skies.
 However, there is speculation that turnouts of vacationers to resorts will be reduced. 
-This is due in no small part to the incident with today’s Hex Mech attack. 
+This is due in no small part to the incident with todayâ€™s Hex Mech attack. 
 That's it for Capital News, brought to you by the Capital Daily Report. 
 That concludes today's broadcast. We hope you will look forward to tomorrow's programming. 
 A red shadow opposes the evildoers lurking in the darkness of the capital. His name is Masked Red! 
 Masked Red, the boy wonder of justice! Today he continues his fight for peace in the capital! 
 Serial Radio Drama Masked Red, The Terrifying Mummy, Part 1 
 On a hot summer's eve, a girl walks briskly down a gloomy, barren street. 
-Oh no. I'm going to be late for my koto lesson..." 
+â€œOh no. I'm going to be late for my koto music lesson..." 
 She turns down a narrow alleyway, only to find a figure standing there. 
 Suddenly a huge man looms over her, standing at least 2 meters tall. 
-What's more, for reasons unknown he's wrapped head to toe in pale brown bandages. 
-The mystery figure's eye seems to glint red, and a massive hand reaches down for the girl! 
-Eeeek! Someone, help me!" she screams. Then, at that very moment... 
-Stop right there!" calls a voice from atop a blazing red steam bike! 
-Oh, it's Masked Red!" <br> "No need to worry, Miss, I'm here to help!" 
+What's more, for reasons unknown, he's wrapped head to toe in pale brown bandages. 
+The mysterious figure's eye seems to glint red, and a massive hand reaches down for the girl! 
+â€œEeeek! Someone, help me!" she screams. Then, at that very moment... 
+â€œStop right there!" calls a voice from atop a blazing red steam bike! 
+â€œOh my, it's Masked Red!" <br> "No need to worry, Miss, I'm here to help!" 
 Masked Red leaps from his bike, looking dashing as his cape billows in the wind. 
 Will our hero be able to rescue this damsel in distress? 
-Fight on, Masked Red! You're our hero, Masked Red! <br> The End 
+Fight on, Masked Red! You're our hero, Masked Red! <br> -The End 
 Go, Masked Red! Fight on, Masked Red! Tune in next time! 
 This isn't the time to be making calls. 
 I need to look for Iris. 
@@ -495,7 +495,7 @@ Uh, sorry. I didn't mean any offense.
 It's fine... 
 In any case, did you need me? 
 Have you seen Iris? 
-Tell me about yourself, Reni. 
+Tell me about yourself. 
 Have you seen Iris? She ran off, and we can't find her anywhere. 
 ...That has nothing to do with me. 
 What do you mean, "nothing to do with you"? Iris is your teammate, isn't she? 
@@ -511,7 +511,7 @@ There is no such thing as "excessive emotion"!
 ...How can you make sound decisions when you're that worked up? 
 Uh... 
 Well, there's somewhere I must go. 
-You have a point. Excessive emotion can be deadly on the battlefield. 
+You have a point... Excessive emotion can be deadly on the battlefield. 
 Just as I'd expect from you, Reni. I'm impressed. 
 ...I also believe it is necessary to take a cautious attitude and question things. 
 Uh... 
@@ -609,7 +609,7 @@ Did you perhaps come here to talk about what happened with Iris?
 Ask how she's doing. 
 Give her a warning. 
 Orihime, is something the matter? Earlier, you got so angry all of a sudden. 
-...There’s nothing in particular. 
+...Thereâ€™s nothing in particular. 
 It sure seemed like there was something, if you ask me. 
 You call me out here, and only for this, Ensign?! 
 Having this discussion with you is only a waste of my time. I will be excusing myself. 
@@ -653,18 +653,18 @@ Oh well. I'll go somewhere else for now.
 (Ah, there's Iris!) 
 ... 
 Iris, if you stay here too long, you're going to catch a cold. 
-Oh, Mon Frère... 
+Oh, Mon FrÃ¨re... 
 You... You came looking for me? 
 Of course. I just had a feeling I might find you here. 
-Mon Frère, thank you... 
+Mon FrÃ¨re, thank you... 
 (Ah, there's Iris!) 
 ... 
 Iris, if you stay here too long, you're going to catch a cold. 
-Oh, Mon Frère... 
+Oh, Mon FrÃ¨re... 
 You... You came looking for me? 
-Yeah. Sorry it took me some time to come. 
+Yeah. Sorry it took me some time to find you. 
 It's OK... I'm happy you came to get me. 
-...I'm sorry, Mon Frère. 
+...I'm sorry, Mon FrÃ¨re. 
 We went to all that trouble for Reni's party, and then I messed it up. 
 It's OK, Iris. I'm sure Reni wasn't bothered by it. 
 Orihime may have said some nasty things... 
@@ -674,10 +674,10 @@ I think maybe... I got a little bit too angry.
 I see. 
 It's getting pretty late. Come on, let's get you back to your room. 
 ...OK. 
-Oh yeah, I have to write back to papa and mama. 
+Oh yeah, I have to write back to Papa and Mama. 
 Wait, you're going to write them now? But it's already time for bed. 
 ...No, I want to write it today. 
-Ooh! Mon Frère, why don't you write them a letter, too! 
+Ooh! Mon FrÃ¨re, why don't you write them a letter, too! 
 Hang on a sec! I can't exactly write in French! 
 That's OK! You just tell me what you wanna say. 
 And then I'll write it down for you. 
@@ -685,11 +685,11 @@ I'm gonna go get changed, and then I'll come to your room! I'll be right there, 
 H-Hey, Iris! 
 Oh boy. She rushed off looking completely thrilled. 
 I guess there's no helping it. I may as well spend the rest of the evening with Iris. 
-OK, I'd better start cleaning off my desk. 
+All right, I'd better start cleaning off my desk. 
 It's Iris. Can I come in? 
 Yeah, go ahead. It's not locked. 
-Okaaay! Coming in now! 
-Hee hee. Thanks for waiting, Mon Frère. 
+OOOK! Coming in now! 
+Hee hee. Thanks for waiting, Mon FrÃ¨re. 
 It's already 11 o'clock. I wonder where Iris could've gone. 
 Wait. Kayama said something earlier... 
 I think it was... "Try checking the attic." 
@@ -698,7 +698,7 @@ I'm not sure if Iris would come to a place like this, but it wouldn't hurt to ch
 Yeah, she isn't here. I'll try a different room. 
 If another enemy appeared right now, it would be pretty bad. I need to find her, fast. 
 Where could Iris be, I wonder, and why did she get so agitated all of a sudden? 
-There's only a few processing machines in Japan but I doubt even this advanced tech could help me now.
+There's only a few machines like this in Japan but I doubt even this advanced tech could help me now.
 If only I could think as clearly as a machine to find a solution... 
 No, that's no good. People can get stronger precisely because we struggle. 
 And right now, what I need to do is lend Iris my strength. 
@@ -713,9 +713,9 @@ Hm? Is someone taking a bath?
 Maybe it's Iris... 
 Huh? Those flashy clothes, aren't these Orihime's?! 
 S-So then... Orihime is in there r-right now. 
-I'm drawn to the bath…
+I'm drawn to the bathâ€¦
 Go back outside. 
-Oh no, my body is moving towards the bathroom on its own... 
+O-Oh noâ€¦ My body is moving towards the bathroom on its own... 
 Ahhh. I'm surprised. Japanese bathrooms aren't all that bad. 
 (Orihime is... in the b-bath.) 
 ...! Is someone there?! 
@@ -898,7 +898,7 @@ Hips (look)
 Leg (peek) 
 High heels (look) 
 Offscreen (walk) 
-Ogami, my ankle hurts more than there. Could you massage it, please? 
+Ogami, my ankle hurts more than that area. Could you massage it, please? 
 (I should probably take her arm and try to help her stand.) 
 Arm (grab) 
 Saki, I'll lend you my arm. Here, try to stand up. 
@@ -977,7 +977,7 @@ My ankle appears to have made a complete recovery thanks to your efforts, Ogami.
 How dreadful that Sakura became angry with you, though. Well, I bid you goodnight. 
 S-Saki... 
 The only reason this happened in the first place is because Saki forced me to come along with her... 
-...but I guess I did get a little too carried away. 
+But I guess I did get a little too carried awayâ€¦ 
 Even so, I wish Sakura hadn't lost her temper at me like that. 
 Oh man, I give up. 
 Why Ogami, it's been an age! How good it is to see you well. Yes, that puts a smile on my face! 
@@ -1042,80 +1042,80 @@ A scarf given to me by Sakura. It's knitted with red yarn - my favorite color.
 A scarf given to me by Sakura. It's knitted with blue yarn - my favorite color. 
 A scarf given to me by Sakura. It's knitted with yellow yarn - my favorite color. 
 ... "" "" () - . , ! ? ?! !! 
-Welcome to Pompadour Chikamatsu's guide to fortune...This is your destiny. 
+Welcome to Pompadour Chikamatsu's Fortune Telling. Here is what fate has in store for you. 
 Your lucky color is peach. A fateful encounter will bring good luck. 
 Your lucky color is purple. If you're a wise shopper, you'll be in luck. 
 Your lucky color is red. Now is the time to move forward. Take the first bold step. 
 Your lucky color is black. Choose stylish clothes for a different look. 
-Yellow is your lucky color. Rather than thinking about it go with your intuition. 
-Your lucky color is green. You can't do what you always do. Challenge yourself with ideas. 
+Your lucky color is yellow. Rather than thinking about things, go with your gut. 
+Your lucky color is green. You can't do what you always do. Challenge yourself with new ideas. 
 Your lucky color is pink. Don't get too worked up. Take a nap to improve your luck. 
-Your lucky color is blue. Talking may ruin your luck. Be quiet once in a while. 
-Your lucky color is white. People around you will help you. Make the most of new encounters. 
+Your lucky color is blue. Talking may ruin your luck. Stay silent every once in a while. 
+Your lucky color is white. You will surely receive help from those around you. 
 Cherish new encounters. But don't neglect your existing relationships. 
-There will be a big wall in front of you. But there will always be a way. 
-The place closest to heaven. That's your lucky place today. You will find what you are looking for. The people closest to you 
-The people closest to us are the least likely to understand. Maybe time will tell. 
+You will find a big wall before you, but there will always be a way forward. 
+The place closest to Heaven is your lucky place today. You will find what you are looking for. 
+The people closest to us are the least likely to understand. Time may solve your problems. 
 It is the boldest action that will bring you luck. Act with your heart, not your head. 
 You will have a strong partner to help you. It is good to rely on them. 
 Today you will meet someone who will affect you for the rest of your life. Be careful. 
-There are people who need your help. Cherish your kindness. 
+There are people who seek your help. Cherish your kindness. 
 You're showing ripples in your water. Bold action will bring you luck. 
-You have a lot on your mind. You've been through so much...Why don't you take a break from it all? 
-Sometimes it's important to take a rest. 
-The more silent a person is, the more deeply they think about things. Be supportive of them. You're about to experience a major turning point. 
-A major turning point for you. You may be betrayed by someone you trusted. 
-People can always understand each other. Never give up. 
+You've been through so much. Why not take a break from it all among nature? 
+Cherish the opportunity to rest. Sometimes it's important to take a break. 
+The more silent a person is, the more deeply they think about things. Be supportive of them. 
+A major turning point awaits you. You may be betrayed by someone you trusted. 
+People can always come to an understanding. Never give up. 
 You have a fire hazard in your life. Be careful not to get burned. 
-Tell them honestly how you feel. I'm sure they will understand you. 
+Tell them your honest feelings. They're sure to understand you. 
 The white snow will bring you and your lover closer together. Go out on a snowy night. 
 The key word is waves. Take a trip to the beach today. You may have a fateful encounter. 
-Your independence and ambition will be strengthened. If you are passionate about your love life, you will be victorious. 
+Independence and ambition will be strengthened. Passion in your love life will lead to victory.
 Your studies and work will go well. Being proactive in your ambitions will lead to increased luck. 
 This week's money luck is wasteful. When in doubt, don't buy. 
 Be careful with food. Try to avoid foods that cool you down. 
 Your luck is at its peak this month. Especially this week, your love life is at its best. Be proactive! 
-Good luck and success will come your way. Start something new this week and it will bring you good luck. 
-You will have the best luck with success and completion. You will get the approval and results you wanted. 
-Now is the time to do what you've been hesitating to do.. 
+Luck and success will come your way. Start something new this week and it will bring you good luck. 
+You will have luck with success and completion. You will get the approval and results you wanted. 
+Now is the time to do what you've been hesitating to do. Things will go the way you think they will. 
 Be careful with food. Try to avoid foods that cool you down. 
-Your luck in love will soar this month. Venus, the planet of love, is at a good angle. You'll be surrounded by wonderful people. 
-You'll get another chance. There are suggestions that you may get back together with your ex-lover or friend. Be proactive this week. 
-This week, if you are proactive. You'll be noticed by those around you. You'll see new developments. 
-There is a feeling of extra income. It's time to broaden your interests. Be careful with your spending. 
-There is a phase of hitting your pinky toe against the wardrobe. Please be careful. 
-If you have a crush, attack! The trick is to push and then pull a little. 
-Be cautious with your choices. If you are tempted by something dangerous on the spot You may regret it. 
+Your luck in love will soar this month. Venus is at a good angle. You'll be surrounded by good people. 
+You'll get another chance. There are suggestions that you may get back together with an ex-lover or friend.  
+This week, if you are proactive, you'll be noticed by those around you and see new developments. 
+I sense extra income in your future. It's time to broaden your interests. Be careful with your spending. 
+It seems you might hit your pinky toe against a wardrobe. Please be careful. 
+If you have a crush, go on the attack! The trick is to push and then pull a little. 
+Be cautious with your choices. If you are tempted by something dangerous, you may regret it. 
 It's a time when circumstances are likely to change. Don't act rashly. Be cautious. 
 If you're too aggressive, you might end up spinning out of control. It's good to take a look at yourself. 
-Your health will gradually improve over the weekend. But don't stay up too late. This is a time when your integrity will shine through. 
+Your health will gradually improve over the weekend. But don't stay up too late.
 It's time for your integrity to shine. Your love life will take a turn for the better. 
-You will become a person who can be counted on. Your doubts will disappear, misunderstandings will be cleared up. 
-Your doubts will disappear, your misunderstandings will be cleared up. Your fortune will gradually improve. Be cautious for now. 
+You will become a person who can be counted on, working hard for others and giving them advice. 
+Your doubts will disappear, misunderstandings will be cleared. Your fortune will improve but be cautious.
 Maintain the status quo rather than moving forward. Indiscretion and vanity are a recipe for failure. 
 Saving is hard. You'll have what you want by the end of the month. 
 You'll meet a lot of people. But it may not lead to love. Take it easy this week. 
-There is a hint of self-doubt...Don't make a move. It's a good way to keep your luck alive. 
-This is the time to take it easy. Don't be in a hurry. Let's go with the flow. 
-If you spend money generously this week you may get twice as much back. But be wary how you spend it. 
-Your health will gradually improve over the weekend. But don't stay up too late. This is a time when your integrity will shine through. 
-Popularity is focused on one's mellow stories. Your love life is on the rise. But you'll only love one person. 
+There is a hint of self-doubt. Don't make a move. It's a good way to keep your luck alive. 
+Now is the time to take it easy. Don't rush, just go with the flow. 
+If you spend money generously this week you may get twice as much back. But be wary. 
+Your health will gradually improve over the weekend. But don't stay up too late.
+Popularity is focused on one's mellow stories. Your love life is on the rise but only with one person.
 It's a turning of the stars. Be careful of love triangles. 
-Secrets are revealed, trust is lost, and there are other pitfalls... 
-Entertainment expenses are likely to be high. Don't be stingy and think of it as an investment. 
-Injuries and illnesses resulting from carelessness. A small accumulation could become a big deal. 
-You are devoted to your partner. Your feelings have been conveyed. All you have to do is wait for their response. 
-Your lack of experience may cause you to stumble. Advice from an older person can be the start of your luck. 
-Your luck is going down...Humble attitude and calm judgment are the key to survive. 
+Secrets are revealed, trust is lost, and unexpected pitfalls appear... 
+Entertainment expenses are likely to be high. Don't be stingy, think of it as an investment. 
+Be mindful of injuries and illness caused by carelessness. They'll add up and bring you trouble.
+You are a devoted partner. Your feelings are clear. All you have to do is wait for their response.
+Your lack of experience may cause you to stumble. Advice from an older person can turn your luck around. 
+Your luck is going down... A humble attitude and calm judgment are the key to survival. 
 You need to spread out your activities. Hang out with a lot of good people. Cherish the small encounters. 
 Ride your bike along the river. You may come across some interesting incidents. 
 This week, you will meet your ideal person. Your favorite restaurant will be the place to meet someone. 
-There may be a lot of opposition from people around you. Don't be too hard on yourself. Try to listen to their opinions. 
+There may be opposition from those around you. Don't be hard on yourself. Try to listen to them.
 A balanced relationship and a serious approach to socializing will help you. 
 If you try to do things out in the open, you might get sidetracked and end up striking out... 
 Your money luck is going down this week. When in doubt, don't buy anything. 
-There's a chance to make progress in your relationship. A date at an intellectual place such as a museum or art gallery is also recommended. 
+Your relationship may progress. A date at a smart place like a museum or art gallery is recommended. 
 Energy floods your whole body. You can be active in any situation. In love, you will be compatible. 
-All your hard work has paid off. My work and relationships are going well. You are in good physical and mental health. 
-Your luck is at its peak. There may be times when you go too far. It's important to be considerate of those around you. 
-Careful with your fingertips. A small injury could lead to something worse. 
+Your hard work has paid off. Work and relationships are going well. You are in good health. 
+Your luck is at its peak. There may be times when you go too far. It's important to be considerate.
+Be careful with your fingertips. The slightest injury could become a serious problem.

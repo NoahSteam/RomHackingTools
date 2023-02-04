@@ -1,15 +1,15 @@
-The Flower Division finally entered full-blown rehearsals in preparation for the real thing. 
-The play is "The Miracle Bells." A story about the miracle that happened on that holy night. 
+﻿The Flower Division has finally begun to rehearse in earnest for the upcoming show. 
+The play is "The Miracle Bells." A story about a miracle that took place on a holy night. 
 The date is set for December 24th. Christmas Eve. A one-night-only engagement. 
-We've got two weeks left. Even in rehearsal, the Flower Division effortlessly liven up the stage. 
-All hands rehearsing on stage during the day... 
-And nighttime spent on costume coordination, lighting maintenance, setbuilding... 
-Everyone in the Flower Division barely even took the time to sleep. 
+We have two weeks left. Even in rehearsal, the troupe effortlessly livens up the stage.
+During the day, each and every member practices on stage… 
+And at night, costumes are coordinated, lighting is adjusted, and sets are built... 
+Everyone in the Flower Division was working hard, barely taking time to sleep. 
 And so, the days and nights passed... 
-At long last, the day has finally arrived. 
+At long last, the premiere has arrived. 
 December 24th... The date for the Imperial Assault Troupe's production of "The Miracle Bells." 
 The Grand Imperial Theater was swarming with patrons before the show even began... 
-There was so much anticipation and excitement, the air in the seats was practically stifling with passion. 
+There was so much excitement, the air in the seats was practically stifling with anticipation.
 The audience loved the bright, brilliant set. 
 The play proceeded upon a dazzling stage befitting Christmas. 
 You could hear the crowd's surprise at the solemn, large-scale set design. 
@@ -40,10 +40,10 @@ No matter how much time passed, the applause ringing throughout the theater woul
 The dreams of the Flower Division on the stage... And the dreams of the audience in the stands... 
 So many dreams came together and resonated on this night. 
 On this holy night... "The Miracle Bells" rang throughout the theater. 
-Sorry, Ogami, but each customer is only allowed to purchase one photo at a time. 
+Sorry, Ogami. I can only sell you one photo per month. 
 I see. That's too bad. 
-Sorry, Ogami, but each customer is only allowed to purchase one photo at a time. 
-Oh, really? That's too bad. 
+So sorry, Mr. Ogami, but each customer is only allowed to purchase one photo at a time.
+Oh, really? That's too bad.  
 Shiro 
 Hanamaru 
 Dai 
@@ -75,10 +75,10 @@ Kohran
 Orihime 
 Reni 
 The jewel of the Pandemonium Regalia, entrusted to us by the Rose Division. 
-Spirit Sword Arataka. The secret sword of the Shinguji family. 
-Divine sword Shirahatori. Entrusted to me by Kaede. A secret sword passed down in the Fujieda family. 
-Luminous blade Mukei. Shinnosuke Yamazaki is the original owner. A secret sword entrusted to us by Kazuma. 
-Divine blade Mekkyaku. A secret sword entrusted to me by Yoneda. 
+Spirit Sword Arataka. The special sword of the Shinguji family. 
+Divine Sword Shirahatori. Entrusted to me by Kaede. A special sword passed down by the Fujieda family. 
+Luminous Blade Mukei. A special sword entrusted to us by Kazuma that once belonged to Major Yamazaki. 
+Divide Blade Mekkyaku. A special sword entrusted to me by Yoneda. 
 The uniform I wear at the theater. Good for both summer and winter. 
 A lighter borrowed from the inn. 
 The flower crown that Iris made for Reni. 
@@ -99,10 +99,10 @@ A photo of Orihime.
 A photo of Orihime. This one is a limited edition only available at New Year's. 
 A photo of Reni. 
 A photo of Reni. This one is a limited edition only available at New Year's. 
-A decorative paper ball from the welcome party. 
-A flower vase from the welcome party. 
-The banner from the welcome party. 
-The Cinematron. A communication machine invented by Kohran that lets you see and talk to someone from far away. 
+A decorative paper ball for the welcome party called a kusudama. 
+A flower vase for the welcome party.
+The banner for the welcome party.
+The Cinematron. One of Kohran's inventions that lets you see and talk to someone from far away. 
 The sword of the Pandemonium Regalia, recovered from the Demon King. 
 The mirror of the Pandemonium Regalia, recovered from the Demon King. 
 Fragments of the broken Cinematron. Seems like the kids at the inn picked them up along the shore. 
@@ -117,4 +117,4 @@ A letter from Reni.
 A scarf given to me by Sakura. It's knitted with red yarn - my favorite color. 
 A scarf given to me by Sakura. It's knitted with blue yarn - my favorite color. 
 A scarf given to me by Sakura. It's knitted with yellow yarn - my favorite color. 
-... "" "" () - . , ! ? ?! !! 
+... "" "" () - . , ! ? ?! !!

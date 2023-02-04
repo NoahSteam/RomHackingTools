@@ -17,6 +17,18 @@ struct InfoNameImageInfo
 	int paletteOffset;
 };
 
+const int NumImagesInSet = 7;
+InfoNameImageInfo InfoNameImageSet[7] =
+{
+	{64, 16, 0, 0},
+	{48, 15, 0x1E0, 0},
+	{128, 15, 0x360, 0},
+	{40, 46, 0x1840, 0x1700},// (character portrait)
+	{40, 32, 0x1f80, 0x1700},//(character eyes)
+	{40, 46, 0x2740, 0x2600},// (portrait 2
+	{40, 32, 0x2e80, 0x2600}// (eyes 2)
+};
+
 void ExtractInfoName(const string& rootSakuraDirectory, const string& paletteFileName, bool bBmp, const string& outDirectory)
 {
 	CreateDirectoryHelper(outDirectory);
@@ -38,18 +50,6 @@ void ExtractInfoName(const string& rootSakuraDirectory, const string& paletteFil
 
 	const string bmpExt = bBmp ? string(".bmp") : (".png");
 
-	const int NumImagesInSet = 7;
-	InfoNameImageInfo ImageSet[7] =
-	{
-		{64, 16, 0, 0},
-		{48, 15, 0x1E0, 0},
-		{128, 15, 0x360, 0},
-		{40, 46, 0x1840, 0x1700},// (character portrait)
-		{40, 32, 0x1f80, 0x1700},//(character eyes)
-		{40, 46, 0x2740, 0x2600},// (portrait 2
-		{40, 32, 0x2e80, 0x2600}// (eyes 2)
-	};
-
 	{
 		PaletteData palette;
 		if (!palette.CreateFrom15BitData(paletteFileData.GetData(), 32))
@@ -66,11 +66,11 @@ void ExtractInfoName(const string& rootSakuraDirectory, const string& paletteFil
 
 			for(int setIndex = 0; setIndex < 3; ++setIndex)
 			{
-				const int offset         = ImageSet[setIndex].offset + baseOffset;
-				const int width          = ImageSet[setIndex].width;
-				const int height         = ImageSet[setIndex].height;
-				const int paletteOffset  = ImageSet[setIndex].paletteOffset + baseOffset;
-				const int paletteSize    = ImageSet[setIndex].paletteOffset == 0 ? palette.GetSize() : 512;
+				const int offset         = InfoNameImageSet[setIndex].offset + baseOffset;
+				const int width          = InfoNameImageSet[setIndex].width;
+				const int height         = InfoNameImageSet[setIndex].height;
+				const int paletteOffset  = InfoNameImageSet[setIndex].paletteOffset + baseOffset;
+				const int paletteSize    = InfoNameImageSet[setIndex].paletteOffset == 0 ? palette.GetSize() : 512;
 				const int divisor        = paletteSize == 64 ? 2 : 1;
 				const int bpp            = paletteSize == 64 ? 4 : 8;
 
@@ -94,6 +94,59 @@ void ExtractInfoName(const string& rootSakuraDirectory, const string& paletteFil
 			baseOffset += 0x4000;
 		}
 	}
+}
+
+bool PatchInfoName(const string& inPatchedSakuraDirectory, const string& inTranslatedDataDirectory)
+{
+	const string sakuraFilePath = inPatchedSakuraDirectory + string("SAKURA2\\INFONAME.BIN");
+	FileReadWriter infoNameFile;
+	if (!infoNameFile.OpenFile(sakuraFilePath))
+	{
+		return false;
+	}
+
+	const string translatedDirectory = inTranslatedDataDirectory + "\\InfoName\\Translated\\";
+
+	const string bmpExt(".bmp");
+	const int numEntries = 129;
+	int baseOffset = 0;
+	for (int i = 0; i < numEntries; ++i)
+	{
+		const string setName = string("Char") + std::to_string(i) + string("_");
+
+		for (int setIndex = 0; setIndex < 3; ++setIndex)
+		{
+			const int offset = InfoNameImageSet[setIndex].offset + baseOffset;
+			const int width = InfoNameImageSet[setIndex].width;
+			const int height = InfoNameImageSet[setIndex].height;
+			
+			const string translatedFileName = translatedDirectory + setName + std::to_string(setIndex) + bmpExt;
+
+			BitmapReader translatedFile;
+			if(!translatedFile.ReadBitmap(translatedFileName, false))
+			{
+				continue;
+			}
+
+			if(translatedFile.GetBitCount() != 4)
+			{
+				printf("%s needs to be 4bpp\n", translatedFileName.c_str());
+				continue;
+			}
+
+			if(translatedFile.mBitmapData.mInfoHeader.mImageWidth != width || abs(translatedFile.mBitmapData.mInfoHeader.mImageHeight) != height)
+			{
+				printf("Dimensions for %s should be %ix%i, but are %ix%i\n", translatedFileName.c_str(), width, height, translatedFile.mBitmapData.mInfoHeader.mImageWidth, abs(translatedFile.mBitmapData.mInfoHeader.mImageHeight));
+				continue;
+			}
+
+			infoNameFile.WriteData(offset, translatedFile.mBitmapData.mColorData.mpRGBA, translatedFile.mBitmapData.mColorData.mSizeInBytes);
+		}
+
+		baseOffset += 0x4000;
+	}
+
+	return true;
 }
 
 bool CreateNameInfoNameSpreadsheet(const string& imageDirectory)

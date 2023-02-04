@@ -1,13 +1,13 @@
-It's gotten really cold outside. 
+﻿It's gotten really cold outside. 
 This year has been so long, yet it's also flown by so quickly. 
 I remember this place being packed with guests over the last few seasons. 
-And now we're going to have a one-day only Christmas performance. I hope it'll be packed again. 
+And now we're going to have a one-night only Christmas performance. I hope it'll be packed again. 
 Hello there, Ogami! Would you like to buy something? 
 Buy a photo. 
 Talk to Tsubaki. 
 Leave. 
 Could I buy a photo? 
-Sorry, Ogami. I can only sell one photo to a customer per month. 
+Sorry, Ogami. I can only sell you one photo per month.
 Please understand, we need to keep some for the other patrons. 
 You'd like to buy a photo? Thank you very much! 
 That's a photo of Sakura. 
@@ -35,25 +35,25 @@ That's Reni's photo.
 Let's see... Reni's photo, right? 
 That'll be 50 sen. Thank you very much! 
 Oh, so you're not going to buy any? 
-It's been a while since the last time you worked here, Tsubaki. 
-Yep, it's been a while, but I'm back now. 
-When you contacted me in Hokkaido... 
-Your message was really encouraging. Thank you very much! 
-Aw, it's not a big deal. 
-Anyway, how does it feel to be back at the gift shop? 
-Even though I was only gone for a little bit, it feels like forever ago. 
-Getting back here after just a few months... 
-My heart was swelling. I shouted to myself "I'm finally home!" 
+This is the first time I've seen you working here in a few months, Tsubaki.
+Yep! I was away from the theater for quite a while, but now I’m back.
+When you went out of your way to contact me in Hokkaido…
+It was really encouraging. Thank you so much!
+Oh no, it was nothing.
+Anyway, are you happy to be back at the gift shop?
+Absolutely! I was only gone for a relatively short time but I really missed it!
+When I got back and stood behind the gift shop counter for the first time in months…
+My heart began to swell and I thought to myself, “I’m finally home.” 
 Tsubaki... 
 I'll never forget that feeling, I'm determined to work even harder now! 
-Take care, Ogami! 
+I look forward to working with you again, Ogami!
 Yeah, likewise. 
-Looks like Tsubomi worked hard while I was away, didn't she? 
+I heard that Tsubomi worked hard while I was away.
 Yeah, although she was a bit clumsy. 
 Oh, by the way, Tsubomi now works in the dining hall. 
-Be sure to say hi to her. 
+When you have the time, be sure to say hi to her.
 At first, when I received orders to go to Hokkaido, I felt really nervous... 
-But thanks to you contacting me, I had a great experience there. I'm glad that I went. 
+But, in the end, I had a great experience there. I'm glad that I went.
 Well, I should be going. Keep up the good work. 
 Thank you very much! Come back soon! 
 Tsubaki is putting in her best effort. 
@@ -61,26 +61,26 @@ OK, I'm gonna do my best to punch tickets as well!
 Thank you very much! Come back and buy another photo next month! 
 Tsubaki is putting in her best effort. 
 OK, I'm gonna do my best to punch tickets as well! 
-Ah, Ogami! Good afternoon! 
+Ah, Mr. Ogami! Good afternoon! 
 Tsu-Tsubomi?! What's with that outfit? 
 Starting today, I'm working in the dining hall! 
-Tsubaki came back to run the gift shop! 
-Being a server is wonderful! I get to see the customers' smiles on their face as I do my job! 
+After all, Tsubaki’s back to running the gift shop!
+Being a waitress is so wonderful! I get to see the customers' smiling faces as I do my job!
 I see. Good luck, Tsubomi. 
 Yes! Thank you very much! 
 ...Huh? I think I smell something burning. 
 Aaah! I left a pot on the stove! 
-Hey, Tsubomi, kitchen is over here! Not there! 
-Aaahh! I took the wrong way! Thank you very much, and excuse me! 
-Oh boy... She's acting just like her usual self. 
-Ah, Ogami! Good afternoon! 
+Hey Tsubomi! You’re going the wrong way! The kitchen is over here!
+Aaah, I got all mixed up! Thank you very much! Please, excuse me!
+Oh boy… She’s still her usual clumsy self.
+Ah, Mr. Ogami! Good afternoon! 
 Tsubomi... The theater is closed, do we still have guests? 
-No, but it's OK. This is a good chance for me to train. 
-I'm planning to become the perfect server for our Christmas performance! 
-I see, isn't that great. Good luck, then. 
+No, but that’s OK. This is a good chance for me to practice.
+I’m planning to become the perfect waitress in time for our Christmas performance!
+I see, that’s great. Good luck, then. 
 Thanks! Please come again! 
-Hahaha, Tsubomi is full of spirit. 
-I should work hard as a ticket puncher, too. 
+Hahaha, Tsubomi sure is full of spirit.
+I need to work hard at my ticket punching job as well.
 No one's in the kitchen. 
 Everyone must be at the stage right now. 
 The theater is closed until Christmas, so this room is closed too. 
@@ -97,27 +97,27 @@ I've got plenty of new, juicy gossip for you. Ask away!
 Listen to some rumors. 
 I'll come back later. 
 Keigo Kyogoku... To think that he would end his own life! 
-Right, no one had saw that ending coming. 
+Right… It was a surprising conclusion, for sure.
 Still, who would have thought that he had a connection with the Black Demon Society? 
 I was shocked too. No one would have guessed that the Army Minister led an evil organization like that. 
 Guess it's like they say, truth is stranger than fiction. 
 It's been a month since then and the Army has settled down. 
 A new minister has been appointed, and Kyogoku's officers have been purged. 
-Is that so? That's great. 
+I see… That's good.
 Boy, it was really snowy back when that coup happened. 
-It said that a lot of political turmoil happens in Japan when it snows. 
+I’ve heard that political turmoil has often occurred during snowfall throughout Japan’s history.
 The revenge of the 47 ronin... The Sakuradamon Incident... All of them happened on snowy days. 
-I see... Now that you mention it, it's true. 
-Thank goodness that last month's attempt ended before it spread too far. 
+I see… Now that you mention it, I suppose that’s true.
+Thank goodness last month's attempt ended before it spread too far. 
 To think, Tsubaki went to Hokkaido to transport the Tenbu... 
 Why wasn't I the one to go? We're both Wind Division. 
-Tsubaki is less experienced than us, maybe that's why? 
+I wonder if she was chosen because, among the Wind Division, she has the least amount of experience.
 Anyone would grow after a mission like that. 
-Well, since you put it that way, you're right. 
-Hmph. But still, it's Hokkaido... I envy her. 
+Well, when you put it that way, you may be right.
+Hmph. But still, she got to go to Hokkaido… I’m so jealous.
 I was wondering, Ogami, what do you know about sailor suits? 
-They're clothes that seamen wear onboard ships. I wore one during my training. 
-Why do you ask? 
+Ah, you mean the clothes seamen wear onboard ships. I wore one during my training.
+What about them?
 The thing is, sailor suits have gotten very popular as schoolgirl uniforms recently. 
 Huh?! Is that true? 
 It seems that a lot of private schools in Tokyo have already adopted them as their uniform. 
@@ -125,29 +125,29 @@ We might see the city overflowing with schoolgirls in sailor suits pretty soon.
 I see... You never know what's going to be the next trend. 
 I heard that back when the coup happened, traffic in Tokyo was brought to a standstill. 
 Yeah, that's right. The railroads were completely buried under snow. 
-Tokyo has a reputation for being weak to snow. 
-Not much to be done about that. Heavy snow like that rarely ever happens here. 
+Tokyo has an unfortunate reputation for being weak against snow.
+I suppose not much can be done about that. The city rarely gets heavy snowfall.
 Ogami, have you ever heard of something called "television"? 
-Television"? 
-I read about it in the newspaper. It's a device that sends movies across electro-magnetic waves. 
-The article said that the first test broadcast in England was a success... 
-and in the future, there will be broadcasting stations like we have with radios. 
-Oh, I see. That'll be just like Kohran's Cinematron. 
+Television? 
+Ah, you mean that system for sending moving pictures across electromagnetic waves. I read about it.
+As I understand, the first test broadcast was successfully conducted in England…
+According to the article, there will be broadcasting stations like we have with radios in the future.
+Heh, is that so? Sounds just like Kohran's Cinematron.
 Seems like Kohran's ahead of the curve compared to England. 
-Get this, Nippon Railway has began operating the "Yamanote Loop Line." 
-Oh yeah! The "Yamanote Line." 
+By the way, Nippon Railway has begun operating the "Yamanote Loop."
+Ah, you mean the Yamanote railway line.
 Now we can easily go to places that used to be hard to reach. It's really convenient. 
 I heard that it was really crowded on the first day. 
 Why don't you try riding the train, Ogami? 
-You're right. I'll try to ride it sometime. 
+You’re right. I’ll give it a try sometime.
 If you're interested in hearing more rumors, I'm all out. Sorry. 
 I see... That's too bad. 
 I'll have some more interesting tidbits for you another time, so look forward to it! 
 I'll be back. Good luck with the rest of your work. 
 OK. Thanks for coming, Ogami. 
-Tell us if you hear any juicy stories! 
-OK, now... Where should I go next? 
-I wonder if Mr. Yoneda is in here. 
+Let us know if you hear any juicy stories!
+All right… Now, where should I go next? 
+I wonder if Mr. Yoneda is in his office. 
 I better check another room, I guess. 
 It's Ogami. Mr. Yoneda, are you there? 
 Oh, Ogami. Yeah, come on in. 
@@ -158,67 +158,67 @@ Me? I'm thinking about Kyogoku...
 Keigo Kyogoku... Just what was he trying to accomplish? 
 What do you think, Ogami? 
 To take over Japan? 
-Reasons unknown... 
-Seize the Regalia? 
+Something unknown…
+To seize the Regalia? 
 Do you think he wanted to take over Japan? 
-Mmm, likely. Given that he was pushing militarism for such a long time. 
+Hmm… That’s likely, given that he was pushing militarism for such a long time.
 But even so, to think he'd orchestrate a coup... 
-Such an extreme measure from an ordinarily cautious man. 
+That was such an extreme measure for someone that was usually so cautious.
 ... 
 Perhaps he had other motives we simply don't know about. 
 Mm-hmm. It's definitely a possibility. 
 But, he's dead now. The truth may never be unveiled. 
 ... 
-Could it be he intended to steal the Pandemonium Regalia? 
-But if so, why he leave the theater with only two of them? 
+Could it be that he simply wanted to steal the Pandemonium Regalia?
+But if that’s so, why would he leave the theater with only two of them?
 Now that you mentioned it, you're right... 
 If his intention was to prevent us from using the Regalia, then it makes sense. 
-In other words,to prevent Sakura from using her Power of Purification. 
+In other words, to prevent Sakura from using her Power of Purification. 
 If that were so, then seizing only two of them was enough. 
 I see... That may be possible. 
 But, he's dead now. The truth may never be unveiled. 
 ... 
 I can't think of a reason... 
-I see... Now that he's dead, seems the truth died with him. 
-However, this conclusion isn't satisfying. 
-I don't believe him to be the kind of man to die that way. 
+I see… Now that he’s gone, it seems that the truth has died with him.
+However, there’s just something about all this that doesn’t sit right with me.
+I never knew him to be a man that would take his own life.
 ... 
-Whoops, sorry to make you listen to me for so long. 
-No need to worry about it, Ogami. Just give your all into the Christmas performance for now. 
+Whoops, sorry to make you listen to my ramblings for so long. 
+No need to worry about it, Ogami. Just put everything you got into the Christmas performance for now.
 Right, understood. 
 Kyogoku's objective, huh... 
-Now I'm wondering what was he up to... 
-Ogami, I want to be alone for a bit. 
-I'd like to contemplate on some matters. 
+I wonder, what is it he was trying to achieve…?
+Ogami, mind leaving for a bit?
+I’ve got a lot on my mind right now.
 ...Yes, sir. Understood. 
-(Yoneda... He's concerned about Kyogoku's actions.) 
+(Yoneda… He's really concerned about Kyogoku's actions.)
 I thought they were doing some song rehearsals, but no one's here. 
 I should just go to another room. 
 Oh, Captain. 
 Yo. Need something, Boss? 
 Oh, Kanna, Reni. What are you doing in here? 
-We're writing down material orders to make costumes for "Miracle Bells." 
-We're using special-ordered materials for the Holy Mother and supporting angels' costumes. 
-Uh-huh... I can't wait for it. 
+We’re writin’ down costume materials that need to be ordered for “The Miracle Bells.”
+The outfits for both the Holy Mother and the angels are gonna require custom-made materials.
+Uh-huh, I can’t wait to see them.
 Hehe, me too. What kind of costumes do you think they'll be, Boss? 
 Beautiful costumes. 
 Flashy costumes. 
 Men's costumes. 
 I bet you guys are gonna wear beautiful costumes. 
-Yeah. We're gonna wear really beautiful costumes that fit with the Christmas theme. 
+Yeah. We’re gonna wear real pretty outfits that match the Christmas theme.
 I bet you guys are gonna wear flashy costumes. 
 Nah, we won't do that. If anything, they'll be pretty modest. 
 If you two are gonna wear them, I bet they'll be men's costumes. 
-Hey, hey, we're not the only ones who're gonna wear them, Boss. 
-We're going to be wearing beautiful women's costumes, you know. 
-Oh, now that you say it like that, guess that was a bit rude. 
+Hey, hey. We're not the only ones who're gonna wear them, Boss. 
+We're gonna be wearin’ beautiful women's costumes, you know. 
+Oh, when you put it that way, guess that was a bit rude.
 But, if you're looking at just us two, I can see why you'd think that. 
-Hey, Reni, don't say that. Jeez... 
+Come on, not you too Reni. Jeez…
 So, what kind of costumes are you going to wear? 
 I have no idea. What kind of costumes are you going to wear? 
 Haha, it's a bit hard for you to tell, ain't it? 
-We're wearing the most beautiful costumes to go with the holiday. 
-After discussing it with the group, we decided on making them emanate purity. 
+We’ll be wearin’ the most beautiful costumes to go with the holiday. 
+After discussing it with the group, we decided to go with outfits that give an image of purity.
 Thing is, the main lead still hasn't been decided yet... 
 I see... I wonder who it'll be. 
 Well, that's... 
@@ -231,69 +231,69 @@ Hmm. For some reason, when the lead role came up, they got all quiet.
 Anyway, I better head to another room so I won't get in their way. 
 The total cost of materials for the angel costumes would be... 
 Reni... Don't you get sleepy after working with your thinkin' cap on for so long? 
-That won't be a problem as long you stay focus. 
+That won't be a problem as long as you stay focused. 
 (Hahaha... Those two are working hard.) 
-They're focused on their work, let's not bother them. 
+They're focused on their work, better not bother them. 
 Now... Let's go somewhere else. 
-Ah, Mon Fr�re! 
+Ah, Mon Frère! 
 My... 
 What're you two doing? 
 Maria and the others are preparing for the show, so we're taking a rest. 
 We're talking about birthdays right now! 
-We're holding the Christmas performance on December 24th... 
-And we have a member whose birthday is on that day. Do you know who is it? 
+We're holding the Christmas performance on December 24th, but also…
+Someone in the Flower Division has a birthday on the same day. Do you know who?
 Sakura? 
 Kohran? 
 Iris? 
 Sumire? 
 Orihime? 
 Reni? 
-Uh... Sakura? 
+Let’s see… Is it Sakura?
 Wrong answer! Sakura's birthday is July 28th! 
 December 24th is Reni's birthday. 
 Oh, is that so? 
-Uh... Kohran? 
+Let’s see… Is it Kohran?
 Wrong answer! Kohran's birthday is March 3rd! 
 December 24th is Reni's birthday. 
 Oh, is that so? 
-Uh... is it yours, Iris? 
-Mine is July 5th, Mon Fr�re! 
-I-Is it? Whoops. 
-Ohohohoho... You seem to have forgotten about her birthday. 
-Oooh, I hate you, Mon Fr�re! 
+Let’s see… Is it yours, Iris?
+...Mon Frère! My birthday is July 5th!
+O-Oh, that’s right… Sorry.
+Ohohohoho… It appears you’ve completely forgotten Iris’s birthday, haven't you, Ensign?
+Oooh, I hate you, Mon Frère! 
 Bleeeh! 
-(Oh boy, that was bad.) 
+(Oh boy, that went poorly.)
 December 24th is Reni's birthday, Ensign. 
 Oh, is that so? 
-Uh... is it yours, Sumire? 
-That's wrong, Ensign! Are you telling me that you forgot when my birthday is?! 
+Let’s see... Is it yours, Sumire?
+No, Ensign! Don’t tell me you’ve forgotten?!
 My birthday is January 8th! 
-I-Is it? Whoops. 
-Jeez, forgetting my birthday, that's beyond rude. 
-December 24th is Reni's birthday, Mon Fr�re. 
+O-Oh, that’s right… Sorry. 
+Honestly… Forgetting my birthday, that's beyond rude.
+December 24th is Reni's birthday, Mon Frère. 
 Oh, is that so? 
-Uh... Orihime? 
+Let’s see… Is it Orihime?
 Wrong answer! Orihime's birthday is July 7th! 
 December 24th is Reni's birthday. 
 Oh, is that so? 
-Uh... Reni? 
-Correct! Way to go, Mon Fr�re! 
-Hahaha, of course. I'm the captain. 
-Time's up! Too bad, Mon Fr�re. 
+Let’s see… Is it Reni?
+You got it! Way to go, Mon Frère! 
+Hahaha. Well, it’s only natural for the captain to know everyone’s birthdays.
+Time's up! Too bad, Mon Frère. 
 December 24th is Reni's birthday, Ensign. 
 Oh, is that so? 
 What a coincidence, to think that her birthday is on the same day as the performance. 
-Perhaps we should throw a celebration for her that day. 
-Let's do it! Let's have a birthday party for her! 
-I see... Good idea. 
-Keep it a secret from Reni, OK? 
+Perhaps we should do something to celebrate her special day.
+Let's do it! Let's throw a birthday party for Reni!
+I see… That sounds like a great idea.
+And don’t tell Reni, Mon Frère. It’ll be a surprise party, OK?
 Hahaha... Got it. 
 So the performance will be on the same day as Reni's birthday. 
 It's looking like the 24th will be a very busy day. 
 So, Sumire, what kind of birthday party should we have? 
 We can hold it during the closing party, and... 
 (Looks like they're talking about Reni's birthday party.) 
-Let's not interrupt them. 
+Better not interrupt them. 
 Now... Where should I head next? 
 Kohran, I want to measure the length right here. Can you help me? 
 Oh, OK. Wait up, I'm coming. 
@@ -302,8 +302,8 @@ Looks like they're doing something on the stage.
 How many meters is there, Maria? 
 5 meters and 45 centimeters. Or about 5 and a half meters. 
 Those two are working hard... 
-Looks like arranging stage sets are a lot of work. 
-Huh? Look who's coming. 
+Looks like arranging sets on the stage is a tough job.
+Huh? Look who it is.
 Ah, Ogami! 
 Are you preparing props for the play? 
 Yes. We're inspecting the props and sets for "The Miracle Bells." 
@@ -312,92 +312,92 @@ I see... It's December already, huh.
 Oh, right. Now that it's December, I just remembered something I wanted to ask. 
 I heard that this month has another name in the old Japanese calendar. 
 What's it called? 
-Shisou. 
-Shiwasu. 
-Shibashiri. 
+It’s called “Shisou.”
+It’s called “Shiwasu.”
+It’s called “Shibashiri.”
 It's called "Shisou." 
-Oh... "Shisou", huh? 
+Oh… Shisou, huh? 
 O-Ogami, you got it wrong! 
-The 12th month of the lunisolar calendar is called "Shiwasu." 
-Oh, so you lied, huh? Pretending like you know everything isn't very nice, you know. 
-I-Is it? Whoops. 
+The 12th month of the old lunisolar calendar is called "Shiwasu."
+Oh, so you lied, huh? Quit acting like you know things when you clearly don’t, Ensign.
+I-Is that what it was? Whoops. 
 It's called "Shiwasu." 
-Oh... "Shiwasu", huh? 
+Oh... Shiwasu, huh? 
 It's called "Shibashiri." 
-Oh... "Shibashiri", huh? 
+Oh... Shibashiri, huh? 
 O-Ogami, you got it wrong! 
-The 12th month of the lunisolar calendar is called "Shiwasu." 
-Oh, so you lied, huh? Pretending like you know everything isn't very nice, you know. 
-I-Is it? Whoops. 
+The 12th month of the old lunisolar calendar is called "Shiwasu."
+Oh, so you lied, huh? Quit acting like you know things when you clearly don’t, Ensign.
+I-Is that what it was? Whoops. 
 Uh... What was it called again? 
-It's called "Shiwasu", the 12th month on the old lunisolar calendar. 
-Oh... "Shiwasu", huh? 
-You get a chance to learn something new too, Ensign. How nice for you. 
+The 12th month of the old lunisolar calendar is called "Shiwasu."
+Oh… Shiwasu, huh? 
+That was nice. You and I both learned something new today, Ensign.
 Ah, haha... You're right. 
-It's said that in the past, the 12th month was the busiest time for schools. Even the teachers were dashing around. 
-Which is why it's called "Shiwasu", or "dashing teachers." I wonder how true it really is. 
-Well, this month we're also busy with the performance, so it must be true! 
+It was said that the 12th month was the busiest time for schools. Even teachers were dashing around.
+Which is why it's called "Shiwasu," or "dashing teachers." I wonder how true it really is. 
+Well, this month we're also busy with the performance, so it must be true. 
 Hehe, you do have a point. 
-Well, let's go back to our tasks now, Orihime. 
-OK, got it! 
+Well, let's return to our tasks now, Orihime.
+All right, back to work.
 I'm going now. Keep up the good work, guys. 
 OK. Thanks for stopping by. 
 December, huh... So much has happened this year... 
-As the final play this year, I hope the Christmas performance will be as big a success as any. 
+I hope that the Christmas performance will close out the year as a big success.
 Sakura, this tree prop is broken. 
 The tree prop is damaged... OK, thanks for letting me know. 
 (Looks like those two are inspecting the stuff back there.) 
-Better not to interrupt them. 
+Better not interrupt them. 
 Now then, where should I spend my time next? 
-Maria, how about we put this set a little bit more forward? 
-Right. With the proper lighting, that spot would work better. 
+Maria, what do you think about moving this set a bit more towards the front? 
+Good idea. With the proper lighting, that spot would work better. 
 Great work, you two. 
 Oh, Captain. 
 Are you preparing the stage for "The Miracle Bells"? 
 Yes. Just a little before we start rehearsal... 
-Well, what we're doing is more like "pre-preparing" rather than preparing. 
+Well, you could say that we're just doing a bit of prep work. Nothing final.
 Hehe, right, Maria? 
-Um.... Heh, yeah. 
-Why only pre-preparation? 
+Um... Heh, yeah. 
+Why only prep work?
 I can't wait. 
-Why only pre-preparation? 
+Why only prep work?
 I can't wait. 
 Are you hiding something? 
-Why only pre-preparation? 
-That's because, you know, the final parts of the set will be done by a certain person. 
+Why are you only doing prep work?
+That’s because, you know, we have to wait for a certain someone to give us the final set directions.
 Kohran... 
-Uh-oh. The rest is still a secret. 
+...Ah, oops. The rest is still a secret.
 Captain, we still have some work to do, so... 
-If you don't mind, could you look on the others as well? 
-Right, good idea! Everyone else is in the dressing or prop room. 
-Anyway, thanks for visiting us, Captain. 
-Somehow I feel like I'm being driven out... 
+If you don't mind, could you please check on the others?
+Yeah, that's a great idea! I think everyone else is either in the dressing or prop room.
+Anyway, thank you for visiting, Captain.
+I can’t help but feel like I just got kicked out.
 Anyway, I guess I should go to another room. 
 I can't wait to see what kind of set it will be. 
-Ahaha, I think so too. How about you, Maria? 
-Heh, I agree. 
-'Kay then, let's get back to work. 
-Well, Captain. I'm afraid we have to get back to work. 
+Ahaha! I’m also looking forward to it. What about you, Maria?
+Heh, I feel the same.
+Alrighty then, Maria. Let’s get back to work.
+Well, Captain. I’m afraid we still have a lot to do.
 Yeah, good luck. 
 Everyone has been working really hard for the Christmas performance. 
 I should practice my ticket collecting... 
 Are you two hiding something? The way you're laughing is making me curious. 
-Huh? Chief... You're a sharp one. 
-Kohran, don't say anything about that for now. 
+Eh? Chief... You're pretty sharp.
+Kohran. We can’t say anything yet, remember?
 Captain, we still have some work to do, so... 
-If you'd like, please check on the others as well. 
-Yeah, that's a great idea! I think everyone else is backstage or in the prop room. 
+If you don't mind, could you please check on the others?
+Yeah, that's a great idea! I think everyone else is either in the dressing or prop room.
 I-Is that so? 
-Of course, Captain. Now, excuse us... 
-Somehow I feel like I'm being driven out... 
+Indeed. So please, go visit them, Captain.
+I can’t help but feel like I just got kicked out.
 Anyway, I guess I should go to another room. 
-'Kay then, let's get back to work. 
+...Alrighty then, Maria. Let’s get back to work.
 ...You're right. 
 Captain, we still have some work to do, so... 
-If you'd like, please check on the others as well. 
+If you don't mind, could you please check on the others?
 Yeah, you're right. OK then, keep at it, you two. 
 Thanks, Chief! 
-Thank you for accompanying us too, Captain. 
+Thank you for visiting us, Captain.
 Everyone has been working really hard for the Christmas performance. 
 I should practice my ticket collecting... 
 Maria... If we put that there, won't it make it harder for the audience to see? 
@@ -406,9 +406,9 @@ Hmm... It's a bit hard to say.
 They're still working. I better not interrupt them. 
 OK, let's check another room. 
 The Christmas performance will be our final play for the year. 
-The Miracle Bells, huh... I wonder what kind of play it will be. 
+“The Miracle Bells,” huh... I wonder what kind of play it will be. 
 Arf, arf! 
-His leash is a bit tilted. 
+Change value of dog flag.
 Hey, Shiro. You're still energetic, even in this cold weather. 
 Hey, Hanamaru. You're still energetic, even in this cold weather. 
 Hey, Dai. You're still energetic, even in this cold weather. 
@@ -420,10 +420,10 @@ Arf!
 By the way, I heard that you're sleeping in front of the salon's fireplace at night. 
 Woof. 
 Hahaha. Well, aren't you a smart boy. 
-Be careful not to catch cold. 
+Be careful not to catch a cold. 
 Arf, arf! 
 Aw-wooo! 
-His leash is a bit tilted. 
+Change value of dog flag.
 Shiro is working hard to dig a hole. Is he burying bones or something? 
 Hanamaru is working hard to dig a hole. Is he burying bones or something? 
 Dai is working hard to dig a hole. Is he burying bones or something? 
@@ -431,7 +431,7 @@ Torte is working hard to dig a hole. Is he burying bones or something?
 Long is working hard to dig a hole. Is he burying bones or something? 
 Altair is working hard to dig a hole. Is he burying bones or something? 
 Hund is working hard to dig a hole. Is he burying bones or something? 
-...! Arf, arf, arf! 
+...! <br> Arf, arf, arf! 
 Oh, you found me. I won't steal them. Don't worry. 
 Arf, arf, arf! 
 OK, OK. I'll stay away. Bye, Shiro. 
@@ -441,7 +441,7 @@ OK, OK. I'll stay away. Bye, Torte.
 OK, OK. I'll stay away. Bye, Long. 
 OK, OK. I'll stay away. Bye, Altair. 
 OK, OK. I'll stay away. Bye, Hund. 
-Ah! 4:45's passed already, where'd the time go? 
+Ah! It’s already past 4:45! Where'd the time go?
 I forgot I had an appointment with Kaede! 
 I gotta hurry to her room. I hope she'll forgive me for being a little late. 
 Yo, Ogami. 
@@ -449,21 +449,21 @@ That voice... Kayama?
 Exactly! It's been a while, Ogami. 
 Kayama... Can't you just come in through the entrance hall? 
 Come on, come on. It's fine. 
-Spending the end of the year with you just like this, how lucky I am. 
+Being able to spend the end of the year like this with you, I sure am lucky. 
 So many things have happened to us all, but I'd still call it a good year. 
 I wonder what the next one will bring. 
-There's a saying I know. "Don't look a gift horse in the mouth." 
+There’s a proverb I know. "Speak of next year and the devils laugh.”
 Don't worry about what the future might bring. Living for the present is what's more important. 
 You're right. Thanks, Kayama. 
-Now that's the Ogami that I know. 
-Later, Ogami. Adios. 
+Now that's the Ogami I know. 
+Later, Ogami. Adiós. 
 And... Merry Christmas. 
 Christmas is still pretty far away, you know. 
-Ugggh, so cold... Winter came so suddenly. 
-We've only got a few weeks left before new year. 
+Ugh, it’s really cold... Winter came so suddenly. 
+We've only got a few weeks left before the new year. 
 It's empty. Nobody's here. 
 Everyone said they were going to be around the stage. 
-I hope these seats will be filled with guests when the Christmas performance comes. 
+I hope these seats will be filled with guests when the Christmas play premieres. 
 Well, it is a Flower Division performance. I think we'll be OK. 
 I just talked with everyone in here earlier. 
 I'm sure they're at the stage right now. 
@@ -474,18 +474,18 @@ Now, what should I do...
 Make a call. 
 Maybe next time. 
 I know, why don't I make a call? 
-OK, who to call? 
-Good afternoon. This is Capital News. 
-On the previous coup incident, Tokyo was under the rebel force's control. 
-The Imperial Assault Troupe was found battling with the Black Demon Society at Ginza and Shinjuku. 
-Additionally, the Imperial Assault Troupe was seen piloting what appeared to be new spirit armor. 
+OK, who should I contact?
+Good afternoon. It's time for Capital News. 
+During the attempted coup d'etat, Tokyo was under the rebel force’s control.
+The Imperial Assault Troop was found battling with the Black Demon Society at Ginza and Shinjuku. 
+Additionally, the troop was seen piloting what appeared to be new Spirit Armor.
 It's possible that they have developed a new model for capital defense. 
-Nippon Railway Co. has opened Yamanote Loop Line for business starting today. 
+Today, the Nippon Railway company has opened the Yamanote Loop Line for business.
 The new line connecting Kanda and Ueno has finished, which completes the full-circle railway. 
-Passengers can now reach neighboring towns and villages efficiently without having to transfer trains. 
+Passengers can now reach neighboring towns efficiently without having to transfer trains. 
 The Cabinet has approved a new code bill for The Imperial Army in today's meeting. 
 This bill is mainly supported by the conservative faction in the House of Peers. 
-Meanwhile, due to the recent coup, many in the House of Representatives desire an even stricter bill. 
+Meanwhile, due to the recent coup, many in the House desire an even stricter bill. 
 The Imperial Diet is likely to remain in turmoil for some time. 
 Finally, it's time for this week's weather forecast. 
 December's come and winter is about to arrive in Tokyo in full force. 
@@ -495,143 +495,143 @@ That's it for Capital News, brought to you by the Capital Daily Report.
 This concludes today's broadcast. We hope you will tune in for tomorrow's program. 
 A red shadow opposes the evildoers lurking in the darkness of the capital. His name is Masked Red! 
 Masked Red, the boy wonder of justice! Today he continues his fight for peace in the capital! 
-Serial Radio Drama: Masked Red Special Episode - Masked Red's 7 Secrets, Last Chapter. 
-Secret #5: What does Masked Red drive? 
+Serial Radio Drama Masked Red, Special Episode: The Seven Secrets of Masked Red, Last Chapter. 
+Masked Red's Secrets, #5: What does Masked Red drive? 
 His vehicle of choice is an all-purpose motorcycle called the Mach Red. 
 Equipped with a special steam engine, it can go from Asakusa to Ginza in five minutes. 
-Secret #6: Who are Masked Red's friends? 
-His biggest supporters are Professor Yukawa, a brilliant scientists, and his daughter, Miss Masae. 
+Masked Red's Secrets, #6: Who are Masked Red's friends? 
+His biggest supporters are Professor Yukawa, a brilliant scientist, and his daughter, Miss Masae. 
 Professor Yukawa made all of Masked Red's equipment such as the Mach Red and his twin Colt 1911's. 
 Miss Masae meanwhile is a kind girl who helps Masked Red with his injuries. 
-Secret #7: Where does Masked Red come from? 
+Masked Red's Secrets, #7: Where does Masked Red come from? 
 He comes out of nowhere and leaves in the blink of an eye. 
 Whenever you're in trouble, just call out his name. He'll surely come to the rescue. 
 It's his duty. Fight on, Masked Red! You're our hero, Masked Red! 
 Well then, loyal followers, I hope we get the chance to meet again. Farewell. 
 Go, Masked Red! Fight on, Masked Red! Till we meet again! 
-Huh? Sounds like someone's coming. 
+Huh? Sounds like someone's approaching. 
 Yes? Who is it? 
 Uhm... Ogami, is this a good time? 
 Oh, Kasumi. Just a minute. 
 Hi, Kasumi. Do you need something? 
-Uhm... If you have the time, could you help me sort some paperwork? 
+Well… If you have the time, do you think you could help me sort receipts later today?
 You can come to the secretarial office at 5 o'clock. 
-Sorting paperwork, huh... 
+Sorting receipts, huh…
 I'm sure you're busy. If it turns out you don't have time, that's fine. 
 Well, excuse me for now. 
 5 o'clock at the secretarial office. What to do? 
-Huh? Sounds like someone's coming. 
+Huh? Sounds like someone's approaching. 
 Who is it? 
 It's Yuri. Ogami, can I ask for your help? 
 Oh, Yuri. Just a minute? 
-Yuri... What kind of help can I do? 
-I need some help putting up posters at the VIP entrance around 5 o'clock. 
+Yuri… What kind of help do you need?
+I need some help switching out the posters over by the VIP entrance around 5 o’clock.
 You can come if you have the time. It's all right if you're already too busy, though. 
-(5 o'clock... Wasn't Kasumi asking for help at that time too?) 
-I'll leave it up to you, OK? Just come by if you have the time! 
+(5 o'clock... Wasn't Kasumi also asking for help at that time?)
+I'll leave it up to you, OK? Just come by if you’re available! 
 Ah, Yuri! 
-Oh brother. Both want my help at 5 o'clock, talk about bad timing. 
-Huh? Sounds like someone's coming. 
+Oh boy... Both of them want my help at 5 o'clock. Talk about bad timing. 
+Huh? Sounds like someone's approaching. 
 Yes? 
 It's Tsubaki. Can I ask you something, Ogami? 
 Now it's Tsubaki, huh? 
 Hi, Tsubaki. By any chance, are you here to ask for my help? 
-Eehh?! How did you know that, Ogami? 
+Eehh?! How’d you know, Ogami?
 I was planning to arrange some merchandise at 5 o'clock to prepare for the Christmas performance. 
-I was going to ask if you wanted to help... 
-(Of all the things, even Tsubaki wants me...) 
-I'm sure you're busy. So if it turns out you don't have the time, that's perfectly fine! 
+I was thinking about asking you for help, if that’s all right with you, Ogami.
+(Of all the times, even Tsubaki needs me at 5…)
+I'm sure you're busy. So if it turns out you can’t make it, that's perfectly fine! 
 I'm going back to the gift shop now, so please excuse me! 
 Aah, Tsubaki! 
-Jeez, all three of them were asking for my help at the same time. 
-I've got an appointment with Kaede too, let's just get there. 
+…What am I going to do? All three of them want my help at the same time.
+First, I have an appointment with Kaede… So let’s focus on that for now.
 Now... Where should I head next? 
-Ah! 4:45's passed already, where'd the time go? 
+Ah! It’s already past 4:45! Where'd the time go?
 I forgot I had an appointment with Kaede! 
 I gotta hurry to her room. I hope she'll forgive me for being a little late. 
 Let's do this later. I still have other stuff to do. 
 I wonder if Kaede's in her room right now? 
 Let's come back a little bit later. 
-Ah, it's already time. I better hurry to Kaede's room... 
+Ah, it’s getting late. I better hurry to Kaede's room…
 Oh, wait. I'm already here. 
-I wonder what she's gonna talk about, anyway. 
+I wonder what she wants to talk about, anyway.
 Uh... It's Ogami. 
 Oh, Ogami. You're rather early. 
-I still haven't finished my tasks yet. Could you wait for me a little more? 
+I still haven't finished my tasks yet. Could you wait for me a little longer? 
 I see. Understood. 
 Looks like I came a bit earlier than I was supposed to. 
 I think I'll go somewhere else to kill some time. 
 Nobody's here, huh? Well, it's not like many people usually come here anyway. 
 There's nothing I can do in here, so I better get going. 
-No one's in the library. 
-Guess everyone's off to the stage... Nobody's around. 
-I wonder if Reni's inside. 
+Is anyone in the library…? 
+No one’s around… I suppose everyone went to the stage.
+I wonder if Reni is in her room.
 She's not here... I guess she's at the stage. 
 Reni... Still using notebook paper as a nameplate, I see. 
 OK, let's check another room. 
-I wonder if Sakura's inside. 
+I wonder if Sakura is in her room.
 It's just like Sakura to have a cute nameplate like this. 
 I better check another room, I guess. 
 She's not here... I guess she's at the stage. 
-I wonder if Kanna's inside. 
+I wonder if Kanna is in her room.
 Kanna's nameplate... It looks more like a nametag to me. 
 I better check another room, I guess. 
 She's not here... I guess she's at the stage. 
-I wonder if Orihime's inside. 
+I wonder if Orihime is in her room.
 She's not here... I guess she's at the stage. 
-The name plate has a simple design, but it sure looks classy. 
+The nameplate has a simple design, but it sure looks classy. 
 Let's go check another room. 
-I wonder if Maria's inside. 
-It's Maria's nameplate. It has simplistic design. 
+I wonder if Maria is in her room.
+It's Maria's nameplate. It has a simplistic design. 
 I better check another room, I guess. 
 She's not here... I guess she's at the stage. 
-I wonder if Iris is inside. 
+I wonder if Iris is in her room. 
 So Iris's nameplate is shaped like Jean-Paul. 
 Guess I'll go somewhere else. 
 She's not here... I guess she's at the stage. 
-I wonder if Kohran's inside. 
+I wonder if Kohran is in her room.
 A gear-shaped nameplate, huh? It's just Kohran's style. 
 I better check another room, I guess. 
 She's not here... I guess she's at the stage. 
-I wonder if Sumire's inside. 
+I wonder if Sumire is in her room.
 This is a pretty subtle design, considering it's Sumire. 
 I better check another room, I guess. 
 She's not here... I guess she's at the stage. 
-Ah! 4:45's passed already, where'd the time go? 
+Ah! It’s already past 4:45! Where'd the time go?
 I forgot I had an appointment with Kaede! 
 I gotta hurry to her room. I hope she'll forgive me for being a little late. 
 With the Black Demon Society gone, the Flower Division won't be deployed for a while. 
 Seems that we can finish this year safe and sound. What a relief. 
 This spirit radar was really useful when we were detecting the Pandemonium Regalia's whereabouts. 
-The steam processor, being one of very few in Japan, is indeed awesome. We can always rely on it in times of trouble. 
+There are only a handful of steam processors like this in Japan. We can always rely on it in a pinch.
 Hmm... Guess no one's here. 
 I probably shouldn't stick around here. 
 I thought someone might be taking a bath right now, but I guess not. 
 Oh well, I'll just go somewhere else. 
 No one's in the dressing room. Looks like nobody's in the bathroom either. 
 Well, I guess everyone must be at the stage now. 
-This pool is still warm even during the winter. I can swim here year-round. 
+This pool remains warm even during the winter. I can swim here year-round. 
 I heard that it uses heat from an underground boiler. 
 Looks like no one's in the training room. 
-Guess everyone's off to the stage... Nobody's around. 
+Guess everyone's gone to the stage... Nobody's around.
 The wall that got blown up by the coup forces has already been repaired. 
 I was surprised to see that the Rose Division was protecting the Regalia... 
 Aaah, Ichiro! Welcome! 
-We lost the Pandemonium Regalia, the items that we were supposed to protect... 
-We decided to stay here and support you guys for a bit longer anyways! 
-I'm so happy... I can still stay with you... 
+Even though we have nothing to guard now that the Pandemonium Regalia is gone...
+We’ve decided to stay here a bit longer and support you guys!
+Ogami… I’m so happy… I can stay here with you…
 R-Right... 
 Anyway, there's one thing I'd like to ask you, Ensign Ogami... 
-By any chance, do you have any regrets destroying the Pandemonium Regalia? 
-I don't. 
-A little bit... 
-No, I don't. 
-We can protect Tokyo with our own power, without relying on that thing. 
+Deep down, do you harbor any regrets about destroying the Regalia?
+I don’t have any regrets.
+I do have some regrets. 
+No, I don’t have any regrets.
+We can protect Tokyo with our own strength, without relying on the power of the Regalia…
 Even now, my mind hasn't changed. 
 Wow! You're so cool, Ichiro! 
 That's wonderful to hear, Ogami... 
 We're relieved to hear that answer, Ensign Ogami... 
-The truth is, I do regret it a bit. 
+The truth is… I do have some regrets.
 Did I get carried away and doom us all? 
 No, I don't believe that to be the truth. 
 The Pandemonium Regalia shouldn't exist... We all agreed on that. 
@@ -640,15 +640,15 @@ Uh... I don't really know.
 Ensign Ogami... Have some confidence in your actions. 
 The Pandemonium Regalia shouldn't exist... We all agreed on that. 
 We believe that... you made the right decision... 
-To protect the capital with our own power... 
-We were so preoccupied with the Regalia sitting so close to us, that we forgot what we should have been doing. 
+Our mission is to protect the capital with our own strength…
+We were so preoccupied with the Regalia’s power, that we forgot that simple fact.
 Kotone... 
 Our point is, we'll keep working together with you guys, for the sake of Tokyo! 
 We'll always be in this room... So please visit us again. 
-Please take care and see us, the Rose Division, the secret division of love and beauty, again! 
+The Rose Division, the secret unit of love and beauty, look forward to seeing you again soon!
 Uh-huh... OK. 
-Oh boy... Looks like the Rose Division are going to be sticking around. 
-Well, the more the merrier. I guess it'll be fine. 
+Oh boy... Looks like the Rose Division is going to be sticking around. 
+Well, the more the merrier, I suppose. I guess it'll be fine.
 Ah, Ichiro! You came back! 
 W-Well... Somehow I ended up back here... 
 To be honest with you, we can't return to the Imperial Army right now. 
@@ -659,20 +659,20 @@ Which is why, we'll be in your care once again, Ensign Ogami.
 We wouldn't mind staying in the theater forever, if you're OK with it! 
 Yokihiko... That's a wonderful idea! 
 Uh... Uh-huh... Anyway, I need to get going. 
-My, that's too bad. You could stay here for a while, you know. 
-Don't hesitate to drop by this room anytime. 
-Whew... Those guys are acting their usual selves. 
+My, that's too bad. You can stay here as long as you want, you know.
+Don't hesitate to drop by our room anytime.
+Whew… Those guys are the same as they ever were.
 They're right, though. If they returned to the Army, it would just cause a big mess. 
-The Flower Division's new spirit armors, the Tenbu... 
-They're strengthening our strike capability, so that's pretty reassuring. 
-Ah! 4:45's passed already, where'd the time go? 
+The Assault Troupe’s new Spirit Armor, the Tenbu…
+Thanks to these, our combat capabilities have grown even stronger which is reassuring.
+Ah! It’s already past 4:45! Where'd the time go?
 I forgot I had an appointment with Kaede! 
 I gotta hurry to her room. I hope she'll forgive me for being a little late. 
 Uhm... Ogami... 
 Hi, Kasumi. Do you need something? 
-Uhm... If you have the time, could you help me sort some paperwork? 
+Well… If you have the time, do you think you could help me sort receipts later today?
 You can come to the secretarial office at 5 o'clock. 
-Sorting paperwork, huh... 
+Sorting receipts, huh…
 I'm sure you're busy. If it turns out you don't have time, that's fine. 
 Well, excuse me for now. 
 5 o'clock at the secretarial office. What to do? 
@@ -680,27 +680,27 @@ Ogamiiii. Wait up!
 Do you need something, Yuri? 
 Ogami, can I ask you for a little help? 
 A little help? 
-Yes. I'm going to be putting up some posters at the VIP entrance around 5 o'clock. 
+Yeah. Around 5 o’clock, I’ll be switching out the posters over by the VIP entrance.
 You can come if you have the time. It's all right if you're already too busy, though. 
 (5 o'clock... Wasn't Kasumi asking for help at that time too?) 
-I'll leave it up to you, OK? Just come by if you have the time! 
+I'll leave it up to you, OK? Just come by if you’re available
 Ah, Yuri! 
-Oh brother. Both want my help at 5 o'clock, talk about bad timing. 
+Oh boy... Both of them want my help at 5 o'clock. Talk about bad timing.
 Oh, right! Ogami, wait up. 
-Tsubaki... Don't tell me. You're asking me for some help too. 
+Tsubaki… Don’t tell me. Do you need help with something?
 Ogamiii! 
-Tsubaki... Don't tell me. You're asking me for some help too. 
-Eehh?! How did you know that, Ogami? 
+Tsubaki… Don’t tell me. Do you need help with something?
+Eehh?! How’d you know, Ogami?
 I was planning to arrange some merchandise at 5 o'clock to prepare for the Christmas performance. 
-I was going to ask if you wanted to help... 
-(Of all the things, even Tsubaki wants me...) 
-I'm sure you're busy. So if it turns out you don't have the time, that's perfectly fine! 
+I was thinking about asking you for help, if that’s all right with you, Ogami.
+(Of all the times, even Tsubaki needs me at 5…)
+I'm sure you're busy. So if it turns out you can’t make it, that's perfectly fine! 
 I'm going back to the gift shop now, so please excuse me! 
 Aah, Tsubaki! 
-Jeez, all three of them were asking for my help at the same time. 
-Sorry, Ogami, but each customer is only allowed to purchase one photo at a time. 
+…What am I going to do? All three of them want my help at the same time.
+Sorry, Ogami. I can only sell you one photo per month. 
 I see. That's too bad. 
-I'm sorry, Ookami. I can only sell you one piece at a time to the same person. 
+So sorry, Mr. Ogami, but each customer is only allowed to purchase one photo at a time.
 Oh, really? That's too bad. 
 Shiro 
 Hanamaru 
@@ -733,10 +733,10 @@ Kohran
 Orihime 
 Reni 
 The jewel of the Pandemonium Regalia, entrusted to us by the Rose Division. 
-Spirit Sword Arataka. The secret sword of the Shinguji family. 
-Divine sword Shirohatori. Entrusted to me by Kaede. A secret sword passed down in the Fujieda family. 
-An intangible light sword. Shinnosuke Yamazaki is the original owner. A secret sword entrusted to him by Kazuma. 
-Shintou Annihilation. A secret sword entrusted to him by Yoneda. 
+Spirit Sword Arataka. The special sword of the Shinguji family. 
+Divine Sword Shirahatori. Entrusted to me by Kaede. A special sword passed down by the Fujieda family. 
+Luminous Blade Mukei. A special sword entrusted to us by Kazuma that once belonged to Major Yamazaki. 
+Divide Blade Mekkyaku. A special sword entrusted to me by Yoneda. 
 The uniform I wear at the theater. Good for both summer and winter. 
 A lighter borrowed from the inn. 
 The flower crown that Iris made for Reni. 
@@ -757,10 +757,10 @@ A photo of Orihime.
 A photo of Orihime. This one is a limited edition only available at New Year's. 
 A photo of Reni. 
 A photo of Reni. This one is a limited edition only available at New Year's. 
-A decorative paper ball from the welcome party. 
-A flower vase from the welcome party. 
-The banner from the welcome party. 
-The Cinematron. A communication machine invented by Kohran that lets you see and talk to someone from far away. 
+A decorative paper ball for the welcome party called a kusudama. 
+A flower vase for the welcome party.
+The banner for the welcome party.
+The Cinematron. One of Kohran's inventions that lets you see and talk to someone from far away. 
 The sword of the Pandemonium Regalia, recovered from the Demon King. 
 The mirror of the Pandemonium Regalia, recovered from the Demon King. 
 Fragments of the broken Cinematron. Seems like the kids at the inn picked them up along the shore. 
@@ -774,82 +774,82 @@ A letter from Orihime.
 A letter from Reni. 
 A scarf given to me by Sakura. It's knitted with red yarn - my favorite color. 
 A scarf given to me by Sakura. It's knitted with blue yarn - my favorite color. 
-A scarf given to me by Sakura. It's knitted with yellow yarn - my favorite color. 
+A scarf given to me by Sakura. It's knitted with yellow yarn - my favorite color.
 ... "" "" () - . , ! ? ?! !! 
-Welcome to Pompadour Chikamatsu's guide to fortune. ���� This is your destiny. 
+Welcome to Pompadour Chikamatsu's Fortune Telling. Here is what fate has in store for you. 
 Your lucky color is peach. A fateful encounter will bring good luck. 
-Your lucky color is Purple. If you're a wise shopper, you'll be in luck. 
+Your lucky color is purple. If you're a wise shopper, you'll be in luck. 
 Your lucky color is red. Now is the time to move forward. Take the first bold step. 
-The lucky color is black. Choose stylish clothes for a different look. 
-Yellow is your lucky color. Rather than thinking about it go with your intuition. 
-Your lucky color is green. You can't do what you always do. Challenge yourself with ideas. 
+Your lucky color is black. Choose stylish clothes for a different look. 
+Your lucky color is yellow. Rather than thinking about things, go with your gut. 
+Your lucky color is green. You can't do what you always do. Challenge yourself with new ideas. 
 Your lucky color is pink. Don't get too worked up. Take a nap to improve your luck. 
-Your lucky color is blue. Talking may ruin your luck. Be quiet once in a while. 
-Your lucky color is white. People around you will help you. Make the most of new encounters. 
+Your lucky color is blue. Talking may ruin your luck. Stay silent every once in a while. 
+Your lucky color is white. You will surely receive help from those around you. 
 Cherish new encounters. But don't neglect your existing relationships. 
-There will be a big wall in front of you. But there will always be a way. 
-The place closest to heaven. That's your lucky place today. You will find what you are looking for. The people closest to you 
-The people closest to us are the least likely to understand. Maybe time will tell. 
+You will find a big wall before you, but there will always be a way forward. 
+The place closest to Heaven is your lucky place today. You will find what you are looking for. 
+The people closest to us are the least likely to understand. Time may solve your problems. 
 It is the boldest action that will bring you luck. Act with your heart, not your head. 
 You will have a strong partner to help you. It is good to rely on them. 
 Today you will meet someone who will affect you for the rest of your life. Be careful. 
-There are people who need your help. Cherish your kindness. 
+There are people who seek your help. Cherish your kindness. 
 You're showing ripples in your water. Bold action will bring you luck. 
-You have a lot on your mind. You've been through so much...Why don't you take a break from it all? 
-Sometimes it's important to take a rest. 
-The more silent a person is, the more deeply they think about things. Be supportive of them. You're about to experience a major turning point. 
-A major turning point for you. You may be betrayed by someone you trusted. 
-People can always understand each other. Never give up. 
+You've been through so much. Why not take a break from it all among nature? 
+Cherish the opportunity to rest. Sometimes it's important to take a break. 
+The more silent a person is, the more deeply they think about things. Be supportive of them. 
+A major turning point awaits you. You may be betrayed by someone you trusted. 
+People can always come to an understanding. Never give up. 
 You have a fire hazard in your life. Be careful not to get burned. 
-Tell them honestly how you feel. I'm sure they will understand you. 
+Tell them your honest feelings. They're sure to understand you. 
 The white snow will bring you and your lover closer together. Go out on a snowy night. 
 The key word is waves. Take a trip to the beach today. You may have a fateful encounter. 
-Your independence and ambition will be strengthened. If you are passionate about your love life, you will be victorious. 
+Independence and ambition will be strengthened. Passion in your love life will lead to victory.
 Your studies and work will go well. Being proactive in your ambitions will lead to increased luck. 
 This week's money luck is wasteful. When in doubt, don't buy. 
 Be careful with food. Try to avoid foods that cool you down. 
 Your luck is at its peak this month. Especially this week, your love life is at its best. Be proactive! 
-Good luck and success will come your way. Start something new this week and it will bring you good luck. 
-You will have the best luck with success and completion. You will get the approval and results you wanted. 
-Now is the time to do what you've been hesitating to do.. 
+Luck and success will come your way. Start something new this week and it will bring you good luck. 
+You will have luck with success and completion. You will get the approval and results you wanted. 
+Now is the time to do what you've been hesitating to do. Things will go the way you think they will. 
 Be careful with food. Try to avoid foods that cool you down. 
-Your luck in love will soar this month. Venus, the planet of love, is at a good angle. You'll be surrounded by wonderful people. 
-You'll get another chance. There are suggestions that you may get back together with your ex-lover or friend. Be proactive this week. 
-This week, if you are proactive. You'll be noticed by those around you. You'll see new developments. 
-There is a feeling of extra income. It's time to broaden your interests. Be careful with your spending. 
-There is a phase of hitting your pinky toe against the wardrobe. Please be careful. 
-If you have a crush, attack! The trick is to push and then pull a little. 
-Be cautious with your choices. If you are tempted by something dangerous on the spot You may regret it. 
+Your luck in love will soar this month. Venus is at a good angle. You'll be surrounded by good people. 
+You'll get another chance. There are suggestions that you may get back together with an ex-lover or friend.  
+This week, if you are proactive, you'll be noticed by those around you and see new developments. 
+I sense extra income in your future. It's time to broaden your interests. Be careful with your spending. 
+It seems you might hit your pinky toe against a wardrobe. Please be careful. 
+If you have a crush, go on the attack! The trick is to push and then pull a little. 
+Be cautious with your choices. If you are tempted by something dangerous, you may regret it. 
 It's a time when circumstances are likely to change. Don't act rashly. Be cautious. 
 If you're too aggressive, you might end up spinning out of control. It's good to take a look at yourself. 
-Your health will gradually improve over the weekend. But don't stay up too late. This is a time when your integrity will shine through. 
+Your health will gradually improve over the weekend. But don't stay up too late.
 It's time for your integrity to shine. Your love life will take a turn for the better. 
-You will become a person who can be counted on. Your doubts will disappear, misunderstandings will be cleared up. 
-Your doubts will disappear, your misunderstandings will be cleared up. Your fortune will gradually improve. Be cautious for now. 
+You will become a person who can be counted on, working hard for others and giving them advice. 
+Your doubts will disappear, misunderstandings will be cleared. Your fortune will improve but be cautious.
 Maintain the status quo rather than moving forward. Indiscretion and vanity are a recipe for failure. 
 Saving is hard. You'll have what you want by the end of the month. 
 You'll meet a lot of people. But it may not lead to love. Take it easy this week. 
-There is a hint of self-doubt...Don't make a move. It's a good way to keep your luck alive. 
-This is the time to take it easy. Don't be in a hurry. Let's go with the flow. 
-If you spend money generously this week you may get twice as much back. But be wary how you spend it. 
-Your health will gradually improve over the weekend. But don't stay up too late. This is a time when your integrity will shine through. 
-Popularity is focused on one's mellow stories. Your love life is on the rise. But you'll only love one person. 
+There is a hint of self-doubt. Don't make a move. It's a good way to keep your luck alive. 
+Now is the time to take it easy. Don't rush, just go with the flow. 
+If you spend money generously this week you may get twice as much back. But be wary. 
+Your health will gradually improve over the weekend. But don't stay up too late.
+Popularity is focused on one's mellow stories. Your love life is on the rise but only with one person.
 It's a turning of the stars. Be careful of love triangles. 
-Secrets are revealed, trust is lost, and there are other pitfalls... 
-Entertainment expenses are likely to be high. Don't be stingy and think of it as an investment. 
-Injuries and illnesses resulting from carelessness. A small accumulation could become a big deal. 
-You are devoted to your partner. Your feelings have been conveyed. All you have to do is wait for their response. 
-Your lack of experience may cause you to stumble. Advice from an older person can be the start of your luck. 
-Your luck is going down...Humble attitude and calm judgment are the key to survive. 
+Secrets are revealed, trust is lost, and unexpected pitfalls appear... 
+Entertainment expenses are likely to be high. Don't be stingy, think of it as an investment. 
+Be mindful of injuries and illness caused by carelessness. They'll add up and bring you trouble.
+You are a devoted partner. Your feelings are clear. All you have to do is wait for their response.
+Your lack of experience may cause you to stumble. Advice from an older person can turn your luck around. 
+Your luck is going down... A humble attitude and calm judgment are the key to survival. 
 You need to spread out your activities. Hang out with a lot of good people. Cherish the small encounters. 
 Ride your bike along the river. You may come across some interesting incidents. 
 This week, you will meet your ideal person. Your favorite restaurant will be the place to meet someone. 
-There may be a lot of opposition from people around you. Don't be too hard on yourself. Try to listen to their opinions. 
+There may be opposition from those around you. Don't be hard on yourself. Try to listen to them.
 A balanced relationship and a serious approach to socializing will help you. 
-If you try to do things out in the open, you might get sidetracked and end up striking out..." 
+If you try to do things out in the open, you might get sidetracked and end up striking out... 
 Your money luck is going down this week. When in doubt, don't buy anything. 
-There's a chance to make progress in your relationship. A date at an intellectual place such as a museum or art gallery is also recommended. 
+Your relationship may progress. A date at a smart place like a museum or art gallery is recommended. 
 Energy floods your whole body. You can be active in any situation. In love, you will be compatible. 
-All your hard work has paid off. My work and relationships are going well. You are in good physical and mental health. 
-Your luck is at its peak. There may be times when you go too far. It's important to be considerate of those around you. 
-Watch your fingertips, even a little injury may bring a trouble. 
+Your hard work has paid off. Work and relationships are going well. You are in good health. 
+Your luck is at its peak. There may be times when you go too far. It's important to be considerate.
+Be careful with your fingertips. The slightest injury could become a serious problem.

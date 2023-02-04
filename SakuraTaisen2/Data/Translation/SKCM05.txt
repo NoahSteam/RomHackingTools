@@ -1,21 +1,21 @@
-OK... Which number should I reach? 
-Good afternoon. This is Capital News. 
-Today, Fukagawa Police held a press conference regarding the fire in the traditional Japanese restaurant "Murasame." 
-They determined that the fire that occurred last month was arson by an unknown party. 
-They found that Navy Minister, Yamaguchi, was visiting the traditional restaurant at the time of the incident. 
-Tokyo Metropolitan Police plans to investigate the possibility of any political reason behind the arson. 
-We're going to feature Izu Peninsula for today's "Summer Tourist Resort." 
-Izu Peninsula has sea, mountain, and hot spring, which makes it a must-go destination for summer holiday. 
-Why don't you try to visit Izu for this Summer? 
+﻿All right… Which number should I dial?
+Good afternoon. It's time for Capital News.
+Today, the Fukagawa Police held a conference regarding the fire that broke out at the Murasame restaurant.
+They determined that last month’s fire was a case of arson carried out by an unknown party.
+The Navy Minister Yamaguchi was found to have been visiting the restaurant at the time of the incident.
+Therefore, the police plan to investigate the possibility that the arson was politically motivated.
+For today’s “Summer Tourist Resort,” we are going to spotlight the Izu Peninsula.
+Izu has sea, mountains, and hot springs, which makes it a must-go destination for the holiday.
+Why not try visiting the peninsula this summer?
 Next, we're going to feature this week's cultural corner. 
-The Imperial Assault Troupe will open their autumn performance, "Blue Bird", starting next month. 
-This autumn performance will mark first appearance of world's famous star, Reni Milchstra�e in Japan... 
-as she joined the troupe in May. 
-Even if you are not a fan of the troupe, you may be interested in what kind of performance it will be. 
+Next month, the Assault Troupe will be performing their autumn production of “The Blue Bird.”
+This production will mark the first appearance of the world-famous star, Reni Milchstraße. 
+Milchstraße joined the troupe in May and this play will mark their theatrical debut in Japan.
+Even if you are not a fan of the troupe, you may want to see what kind of performance this will be.
 Finally, it's time for this week's weather forecast. 
-Summer weather will likely to continue for a while due to Pacific high-pressure system's influence. 
-As summer holiday comes, people are filling tourist destinations to cool down. 
-Sumida River and Mikasa Memorial Park are now packed with tourists. 
+The hot summer weather will likely continue due to a high-pressure system from the Pacific. 
+As the summer holiday begins, people are sure to flock to tourist spots in order to cool down.
+Sumida River and Mikasa Memorial Park are already packed with visitors.
 Please be careful not to get exhausted from the summer heat, and have a nice holiday. 
 That's it for Capital News, brought to you by the Capital Daily Report. 
 That concludes today's broadcast. We hope you will look forward to tomorrow's programming. 
@@ -24,36 +24,36 @@ Masked Red, the boy wonder of justice! Today he continues his fight for peace in
 Serial Radio Drama Masked Red, The Terrifying Mummy, Part 4 
 The cries of horrifying beasts echo through the dimly lit underground canal. 
 Masked Red advances, knocking down the attacking serpents and man-eating alligators. 
-Eventually, he finds an underground prison deep in the canal. There are girls inside. 
+Eventually, he finds an underground prison deep in the canal with the missing girls locked inside.
 Is everyone all right?" <br> Masked Red destroys the lock with his Colt. 
-Thank you for rescuing us. Professor Kurogane was about to sell us overseas!" 
-Is that right? I won't forgive such wrongdoing!" 
-There's a secret ladder to the professor's room behind here!" 
-I understand. Everyone, this will be dangerous, so please stay here!" 
-Masked Red climbs the ladder. It leads to the fireplace in Professor Kurogane's laboratory. 
-Masked Red prepares his Colt, then barges into the laboratory, <br> "Hold it right there, Professor Kurogane!" 
-At last, the final clash between Masked Red and Professor Kurogane. Can Masked Red defeat the mysterious mummy? 
+“Thank you for rescuing us. Professor Kurogane was about to sell us overseas!" 
+“Is that right? I won't forgive such wrongdoing!" 
+“There's a secret ladder to the professor's room behind here!" 
+“I understand. Everyone, this will be dangerous, so please stay here!" 
+Masked Red climbs the ladder which leads to a fireplace inside the professor’s laboratory.
+Masked Red prepares his Colt, then barges into the laboratory. "Hold it right there, Professor Kurogane!" 
+At last, the final clash between Masked Red and Professor Kurogane. Can Red defeat the mummy? 
 Fight on, Masked Red! You're our hero, Masked Red! <br> -The End 
 Go, Masked Red! Fight on, Masked Red! Tune in next time! 
 I don't want to be late for our trip, so I better cut the transmission. 
 OK, let's hurry to the entrance hall! 
-Whoops, I forgot about this fellow I just used. 
-And now... We're good. OK, let's hurry! 
+Whoops, I almost forgot to bring this guy with me.
+...There we go. All right, let's hurry!
 ...Ah! It's already time to leave! 
 I gotta hurry to the entrance hall, or else I'll be late for our trip! 
-Welcome to Pompadour Chikamatsu's Fortune Telling... Here is what fate has in store for you. 
+Welcome to Pompadour Chikamatsu's Fortune Telling. Here is what fate has in store for you. 
 Your lucky color is peach. A fateful encounter will bring good luck. 
-Your lucky color is Purple. If you're a wise shopper, you'll be in luck. 
+Your lucky color is purple. If you're a wise shopper, you'll be in luck. 
 Your lucky color is red. Now is the time to move forward. Take the first bold step. 
-The lucky color is black. Choose stylish clothes for a different look. 
-Yellow is your lucky color. Rather than thinking about things, go with your gut. 
+Your lucky color is black. Choose stylish clothes for a different look. 
+Your lucky color is yellow. Rather than thinking about things, go with your gut. 
 Your lucky color is green. You can't do what you always do. Challenge yourself with new ideas. 
 Your lucky color is pink. Don't get too worked up. Take a nap to improve your luck. 
 Your lucky color is blue. Talking may ruin your luck. Stay silent every once in a while. 
 Your lucky color is white. You will surely receive help from those around you. 
 Cherish new encounters. But don't neglect your existing relationships. 
 You will find a big wall before you, but there will always be a way forward. 
-The place closest to heaven is your lucky place today. You will find what you are looking for. 
+The place closest to Heaven is your lucky place today. You will find what you are looking for. 
 The people closest to us are the least likely to understand. Time may solve your problems. 
 It is the boldest action that will bring you luck. Act with your heart, not your head. 
 You will have a strong partner to help you. It is good to rely on them. 
@@ -69,57 +69,57 @@ You have a fire hazard in your life. Be careful not to get burned.
 Tell them your honest feelings. They're sure to understand you. 
 The white snow will bring you and your lover closer together. Go out on a snowy night. 
 The key word is waves. Take a trip to the beach today. You may have a fateful encounter. 
-Your independence and ambition will be strengthened. If you are passionate about your love life, you will be victorious. 
+Independence and ambition will be strengthened. Passion in your love life will lead to victory.
 Your studies and work will go well. Being proactive in your ambitions will lead to increased luck. 
 This week's money luck is wasteful. When in doubt, don't buy. 
 Be careful with food. Try to avoid foods that cool you down. 
 Your luck is at its peak this month. Especially this week, your love life is at its best. Be proactive! 
-Good luck and success will come your way. Start something new this week and it will bring you good luck. 
-You will have the best luck with success and completion. You will get the approval and results you wanted. 
+Luck and success will come your way. Start something new this week and it will bring you good luck. 
+You will have luck with success and completion. You will get the approval and results you wanted. 
 Now is the time to do what you've been hesitating to do. Things will go the way you think they will. 
 Be careful with food. Try to avoid foods that cool you down. 
-Your luck in love will soar this month. Venus, the planet of love, is at a good angle. You'll be surrounded by wonderful people. 
-You'll get another chance. There are suggestions that you may get back together with your ex-lover or friend. 
-This week, if you are proactive, you'll be noticed by those around you. You'll see new developments. 
-I am sensing extra income in your future. It's time to broaden your interests. Be careful with your spending. 
+Your luck in love will soar this month. Venus is at a good angle. You'll be surrounded by good people. 
+You'll get another chance. There are suggestions that you may get back together with an ex-lover or friend.  
+This week, if you are proactive, you'll be noticed by those around you and see new developments. 
+I sense extra income in your future. It's time to broaden your interests. Be careful with your spending. 
 It seems you might hit your pinky toe against a wardrobe. Please be careful. 
 If you have a crush, go on the attack! The trick is to push and then pull a little. 
-Be cautious with your choices. If you are tempted by something dangerous on the spot, you may regret it. 
+Be cautious with your choices. If you are tempted by something dangerous, you may regret it. 
 It's a time when circumstances are likely to change. Don't act rashly. Be cautious. 
 If you're too aggressive, you might end up spinning out of control. It's good to take a look at yourself. 
-Your health will gradually improve over the weekend. But don't stay up too late. This is a time when your integrity will shine through. 
+Your health will gradually improve over the weekend. But don't stay up too late.
 It's time for your integrity to shine. Your love life will take a turn for the better. 
 You will become a person who can be counted on, working hard for others and giving them advice. 
-Your doubts will disappear, your misunderstandings will be cleared up. Your fortune will gradually improve. Be cautious for now. 
+Your doubts will disappear, misunderstandings will be cleared. Your fortune will improve but be cautious.
 Maintain the status quo rather than moving forward. Indiscretion and vanity are a recipe for failure. 
 Saving is hard. You'll have what you want by the end of the month. 
 You'll meet a lot of people. But it may not lead to love. Take it easy this week. 
-There is a hint of self-doubt... Don't make a move. It's a good way to keep your luck alive. 
+There is a hint of self-doubt. Don't make a move. It's a good way to keep your luck alive. 
 Now is the time to take it easy. Don't rush, just go with the flow. 
-If you spend money generously this week you may get twice as much back. But be wary how you spend it. 
-Your health will gradually improve over the weekend. But don't stay up too late. This is a time when your integrity will shine through. 
-Popularity is focused on one's mellow stories. Your love life is on the rise. But you'll only love one person. 
+If you spend money generously this week you may get twice as much back. But be wary. 
+Your health will gradually improve over the weekend. But don't stay up too late.
+Popularity is focused on one's mellow stories. Your love life is on the rise but only with one person.
 It's a turning of the stars. Be careful of love triangles. 
 Secrets are revealed, trust is lost, and unexpected pitfalls appear... 
 Entertainment expenses are likely to be high. Don't be stingy, think of it as an investment. 
-Injuries and illnesses resulting from carelessness. A small accumulation could become a big deal. 
-You are devoted to your partner. Your feelings have been conveyed. All you have to do is wait for their response. 
+Be mindful of injuries and illness caused by carelessness. They'll add up and bring you trouble.
+You are a devoted partner. Your feelings are clear. All you have to do is wait for their response.
 Your lack of experience may cause you to stumble. Advice from an older person can turn your luck around. 
 Your luck is going down... A humble attitude and calm judgment are the key to survival. 
 You need to spread out your activities. Hang out with a lot of good people. Cherish the small encounters. 
 Ride your bike along the river. You may come across some interesting incidents. 
 This week, you will meet your ideal person. Your favorite restaurant will be the place to meet someone. 
-There may be a lot of opposition from people around you. Don't be too hard on yourself. Try to listen to their opinions. 
+There may be opposition from those around you. Don't be hard on yourself. Try to listen to them.
 A balanced relationship and a serious approach to socializing will help you. 
 If you try to do things out in the open, you might get sidetracked and end up striking out... 
 Your money luck is going down this week. When in doubt, don't buy anything. 
-There's a chance to make progress in your relationship. A date at an intellectual place such as a museum or art gallery is also recommended. 
+Your relationship may progress. A date at a smart place like a museum or art gallery is recommended. 
 Energy floods your whole body. You can be active in any situation. In love, you will be compatible. 
-All your hard work has paid off. Your work and relationships are going well. You are in good physical and mental health. 
-Your luck is at its peak. There may be times when you go too far. It's important to be considerate of those around you. 
+Your hard work has paid off. Work and relationships are going well. You are in good health. 
+Your luck is at its peak. There may be times when you go too far. It's important to be considerate.
 Be careful with your fingertips. The slightest injury could become a serious problem. 
 ... "" "" () - . , ! ? ?! !! 
-Sorry, Ogami, but each customer is only allowed to purchase one photo at a time. 
+Sorry, Ogami. I can only sell you one photo per month. 
 I see. That's too bad. 
-My apologies, Ogami, but each customer is only allowed to purchase one photo at a time. 
-Oh, really? That's too bad. 
+So sorry, Mr. Ogami, but each customer is only allowed to purchase one photo at a time.
+Oh, really? That's too bad.

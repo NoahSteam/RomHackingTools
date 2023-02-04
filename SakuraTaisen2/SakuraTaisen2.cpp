@@ -456,31 +456,61 @@ void EncodeRadio()
 
 void FixupStellarAssultLoadScreens()
 {
-	const FileNameContainer inFileName("C:\\Users\\16306\\Desktop\\Rizwan\\Emulators\\Games\\StellarAssault\\Raw\\Loading2.sp");
-	const string outFileName("c:\\Users\\16306\\Desktop\\Test46.bmp");
+	char exePath[MAX_PATH] = { 0 };
+	GetModuleFileName(NULL, exePath, MAX_PATH);
+	std::string::size_type pos = std::string(exePath).find_last_of("\\/");
 
-	FileData inFileData;
-	if( !inFileData.InitializeFileData(inFileName) )
+	//const string currentDirectory = "A:\\SakuraWars2\\BuiltTools\\StellarAssault\\FixupLoadScreens\\";//std::string(exePath).substr(0, pos) + Seperators;
+	const string currentDirectory = std::string(exePath).substr(0, pos) + Seperators;
+
+	vector<FileNameContainer> allFiles;
+	vector<FileNameContainer> bmpFiles;
+	FindAllFilesWithinDirectory(currentDirectory, allFiles);
+	GetAllFilesOfType(allFiles, ".bmp", bmpFiles);
+
+	const char header[8] = {0, 0, 0, 1, 0, (char)0xd0, 0, (char)0x57};
+
+	for(const FileNameContainer& bmpFileName : bmpFiles)
 	{
-		printf("ExtractTiledImage %s failed\n", "test.bmp");
-		return;
+		BitmapReader bmpReader;
+		if(!bmpReader.ReadBitmap(bmpFileName.mFullPath))
+		{
+			continue;
+		}
+
+		BitmapFormatConverter convertedData;
+		convertedData.ConvertFrom32BitTo15Bit(bmpReader.GetColorData(), bmpReader.GetColorDataSize());
+
+		const std::string outFileName = currentDirectory + bmpFileName.mNoExtension + std::string(".SP");
+		FileWriter outFile;
+		if(!outFile.OpenFileForWrite(outFileName))
+		{
+			continue;
+		}
+		outFile.WriteData(&header[0], sizeof(header));
+		outFile.WriteData(convertedData.GetConvertedData(), convertedData.GetConvertedDataSize());
 	}
-	BitmapFormatConverter c;
-	c.ConvertFrom15BitTo32Bit(inFileData.GetData() + 8, inFileData.GetDataSize() - 8);
 
-	BitmapFormatConverter c2;
-	c2.ConvertFrom32BitTo15Bit(c.GetConvertedData(), c.GetConvertedDataSize());
+	/*
+	vector<FileNameContainer> spFiles;
+	GetAllFilesOfType(allFiles, ".SP", spFiles);
+	for (const FileNameContainer& spFileName : spFiles)
+	{
+		FileData spFile;
+		spFile.InitializeFileData(spFileName);
 
-	BitmapFormatConverter c3;
-	c3.ConvertFrom15BitTo32Bit(c2.GetConvertedData(), c2.GetConvertedDataSize());
+		BitmapFormatConverter convertedData;
+		convertedData.ConvertFrom15BitTo32Bit(spFile.GetData() + 8, spFile.GetDataSize() - 8);
 
-	BitmapWriter b;
-	b.CreateBitmap(outFileName, 208, -87, 32, c3.GetConvertedData(), c3.GetConvertedDataSize(), nullptr, 0, true);
+		const std::string outFileName = currentDirectory + spFileName.mNoExtension + std::string("_.bmp");
+		BitmapWriter outBmp;
+		outBmp.CreateBitmap(outFileName, 208, -87, 32, convertedData.GetConvertedData(), convertedData.GetConvertedDataSize(), nullptr, 0, true);
+	}*/
 }
 
 int main(int argc, char *argv[])
 {
-#if 1
+#if 0
 	{
 	//	EncodeRadio();
 		

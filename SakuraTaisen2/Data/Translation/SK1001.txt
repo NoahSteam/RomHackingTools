@@ -1,29 +1,29 @@
-Year 15 of the Taisho Era, the first evening of the new year. 
+﻿Taisho 15, New Year’s Day
 Happy New year! 
-Happy New Year. I hope we can get along this year as well. 
-Let's do our best this year too, guys. 
-Yes! We'll be in your care for this year too. 
-Let's get along this year too, Reni! 
+Happy New Year everyone. I look forward to working with you all again this year.
+Let’s give it our all this year, everyone.
+Yes! Here’s to another year together!
+I hope you have a happy New Year, Reni!
 Likewise. 
-Oh Reni, you haven't changed since last year! 
-Come on, it's fine! A gentle girl is way better than a noisy one! 
-Hearing it from you doesn't seem to convincing at all, Kanna. 
-Come on, you two. Are you starting a fight as the new year just begun? 
-Ahahaha... Everyone's still the same. 
-Let's have a rice cake pounding contest with my invention, "Mr. Pounder"! 
-And you're just like usual, Kohran. Don't blow things up again right in the new year! 
-Oh, you want to get pounded in rice cake's stead, huh? 
+Oh, Reni. You’re the same as you were last year!
+Hey, now, what’s wrong with that? Quiet girls like her are far better than noisy ones!
+That’s not very convincing coming from you of all people, Kanna.
+All right you two. Are you planning to start a fight this soon into the new year?
+Ahahaha... Everyone's the same as they ever were.
+Alrighty then, how about we have a mochi-pounding party with my invention, “Mr. Mochi”!
+K-Kohran hasn’t changed a bit either... Let’s not start the new year with an explosion.
+Oh-ho. Forget the mochi. Sounds like the chief would rather get a pounding instead.
 Eeehh?! I'm kidding, I'm kidding!! 
 Hahahaha... 
-Sorry, Ogami, but each customer is only allowed to purchase one photo at a time. 
-I see. That's too bad. 
-My apologies, Ogami, but each customer is only allowed to purchase one photo at a time. 
-Oh, really? That's too bad. 
+Sorry, Ogami. I can only sell you one photo per month.
+I see. That's too bad.
+So sorry, Mr. Ogami, but each customer is only allowed to purchase one photo at a time.
+Oh, really? That's too bad.
 The jewel of the Pandemonium Regalia, entrusted to us by the Rose Division. 
-Spirit Sword Arataka. The secret sword of the Shinguji family. 
-Divine sword Shirahatori. Entrusted to me by Kaede. A secret sword passed down in the Fujieda family. 
-Luminous blade Mukei. Shinnosuke Yamazaki is the original owner. A secret sword entrusted to us by Kazuma. 
-Divine blade Mekkyaku. A secret sword entrusted to me by Yoneda. 
+Spirit Sword Arataka. The special sword of the Shinguji family. 
+Divine Sword Shirahatori. Entrusted to me by Kaede. A special sword passed down by the Fujieda family. 
+Luminous Blade Mukei. A special sword entrusted to us by Kazuma that once belonged to Major Yamazaki. 
+Divide Blade Mekkyaku. A special sword entrusted to me by Yoneda. 
 The uniform I wear at the theater. Good for both summer and winter. 
 A lighter borrowed from the inn. 
 The flower crown that Iris made for Reni. 
@@ -44,10 +44,10 @@ A photo of Orihime.
 A photo of Orihime. This one is a limited edition only available at New Year's. 
 A photo of Reni. 
 A photo of Reni. This one is a limited edition only available at New Year's. 
-A decorative paper ball from the welcome party. 
-A flower vase from the welcome party. 
-The banner from the welcome party. 
-The Cinematron. A communication machine invented by Kohran that lets you see and talk to someone from far away. 
+A decorative paper ball for the welcome party called a kusudama. 
+A flower vase for the welcome party.
+The banner for the welcome party.
+The Cinematron. One of Kohran's inventions that lets you see and talk to someone from far away. 
 The sword of the Pandemonium Regalia, recovered from the Demon King. 
 The mirror of the Pandemonium Regalia, recovered from the Demon King. 
 Fragments of the broken Cinematron. Seems like the kids at the inn picked them up along the shore. 
@@ -72,4 +72,4 @@ Execute random macro.
 4. Free Walk 
 5. Returning Home 
 6. Kyogoku Alive 
-... "" "" () - . , ! ? ?! !! 
+... "" "" () - . , ! ? ?! !!

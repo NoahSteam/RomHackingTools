@@ -1,15 +1,15 @@
-Huh?! <br> Musashi... It suddenly started moving! 
+﻿Huh?! <br> Musashi... It suddenly started moving! 
 It's leaving the capital's airspace. It's headed towards the Pacific Ocean! 
 What on earth is going on? 
-Musashi needs to absorb city energy", so for it to leave the capital's airspace is... strange. 
+The Musashi needs to absorb city energy, so for it to fly away from the capital is... most strange. 
 Could it be? Did Ichiro and the others pull it off? 
 In that case... Musashi's... 
-Yes... <br> If that is indeed the case. 
+Right...<br>If that is indeed the case. 
 Yes. There's the possibility that it's lost control. 
-It appears that Ogami and the others have finally reached Musashi's core. 
-We're finally at the end of the end, eh? 
-OK! Mikasa, after Musashi! 
-We need to be ready to rescue them whenever! 
+It appears that Ogami and the others have finally arrived at the Musashi's core. 
+At long last, we’ve reached the grand finale, eh?
+OK! Mikasa, pursue the Musashi!
+We have to be ready to come in for the rescue at a moment’s notice!
 Roger! 
 Don't you die on me, Ogami. 
 I'm getting a strong spirit energy reading up ahead. 
@@ -30,17 +30,17 @@ You could never hope to understand... MY IDEALS!
 I don't want to hear it! 
 Your... ideals? 
 I don't want to hear it! I don't give a damn about your ideals! 
-You've lost control over Musashi! <br> Prepare yourself, Kyogoku! 
+You've lost control over Musashi! Prepare yourself, Kyogoku! 
 I'll admit, I underestimated you worms. 
-But I won't simply die here! <br> I'll drag you all to hell with me! 
+But I won't simply die here! I'll drag you all to hell with me! 
 I'll admit, I underestimated you worms. 
-But I won't simply die here! <br> I'll drag you all to hell with me! 
+But I won't simply die here! I'll drag you all to hell with me! 
 Your... ideals?! 
-You wish to know? <br> Very well, then. I'll tell you. 
+You wish to know? Very well, then. I'll tell you. 
 My dream... is to build a true capital on this land! 
-A... TRUE capital? 
-How are you going to do that? 
-A... TRUE capital? What are you talking about?! 
+A... true capital? 
+How will you do that? 
+A... true capital? What are you talking about?! 
 The true capital... A world where man and demon can coexist... 
 Wh... What?! 
 A true capital? How do you plan to build such a thing? 
@@ -49,7 +49,7 @@ Everything can only begin once I've purified the capital... By destroying it!
 Wh... What?! 
 Hahaha! I don't expect a lowly worm like you to understand! 
 Deep below the capital... <br> There rest the vengeful spirits we call "Kouma." 
-Humans took the power of these spirits, calling it "city energy, and used it to establish their capital! 
+Humans took the power of these spirits, calling it "city energy,” and used it to establish their capital! 
 Nobody can claim such a place isn't inherently tainted! 
 I have no need for this tainted city! The capital must be cleansed, destroyed by my hand! 
 Destroyed by my hand, <br> reborn by my hand, <br> and ruled by my hand! 
@@ -70,17 +70,17 @@ But doesn't Musashi also require city energy to function?
 You just came up with whatever excuse was the most convenient for you! 
 Heh... <br> I don't expect the likes of you to understand the truth. 
 It was a mistake to allow you maggots to get this far. 
-But I won't simply die here! <br> I'll drag you all to hell with me! 
-Sorry, Ogami, but each customer is only allowed to purchase one photo at a time. 
+But I won't simply die here! I'll drag you all to hell with me! 
+Sorry, Ogami. I can only sell you one photo per month. 
 I see. That's too bad. 
-Sorry, Ogami, but each customer is only allowed to purchase one photo at a time. 
+So sorry, Mr. Ogami, but each customer is only allowed to purchase one photo at a time.  
 Oh, really? That's too bad. 
 ... "" "" () - . , ! ? ?! !! 
 The jewel of the Pandemonium Regalia, entrusted to us by the Rose Division. 
-Spirit Sword Arataka. The secret sword of the Shinguji family. 
-Divine sword Shirahatori. Entrusted to me by Kaede. A secret sword passed down in the Fujieda family. 
-Luminous blade Mukei. Shinnosuke Yamazaki is the original owner. A secret sword entrusted to us by Kazuma. 
-Divine blade Mekkyaku. A secret sword entrusted to me by Yoneda. 
+Spirit Sword Arataka. The special sword of the Shinguji family. 
+Divine Sword Shirahatori. Entrusted to me by Kaede. A special sword passed down by the Fujieda family. 
+Luminous Blade Mukei. A special sword entrusted to us by Kazuma that once belonged to Major Yamazaki. 
+Divide Blade Mekkyaku. A special sword entrusted to me by Yoneda. 
 The uniform I wear at the theater. Good for both summer and winter. 
 A lighter borrowed from the inn. 
 The flower crown that Iris made for Reni. 
@@ -101,10 +101,10 @@ A photo of Orihime.
 A photo of Orihime. This one is a limited edition only available at New Year's. 
 A photo of Reni. 
 A photo of Reni. This one is a limited edition only available at New Year's. 
-A decorative paper ball from the welcome party. 
-A flower vase from the welcome party. 
-The banner from the welcome party. 
-The Cinematron. A communication machine invented by Kohran that lets you see and talk to someone from far away. 
+A decorative paper ball for the welcome party called a kusudama. 
+A flower vase for the welcome party.
+The banner for the welcome party.
+The Cinematron. One of Kohran's inventions that lets you see and talk to someone from far away. 
 The sword of the Pandemonium Regalia, recovered from the Demon King. 
 The mirror of the Pandemonium Regalia, recovered from the Demon King. 
 Fragments of the broken Cinematron. Seems like the kids at the inn picked them up along the shore. 
@@ -118,4 +118,4 @@ A letter from Orihime.
 A letter from Reni. 
 A scarf given to me by Sakura. It's knitted with red yarn - my favorite color. 
 A scarf given to me by Sakura. It's knitted with blue yarn - my favorite color. 
-A scarf given to me by Sakura. It's knitted with yellow yarn - my favorite color. 
+A scarf given to me by Sakura. It's knitted with yellow yarn - my favorite color.

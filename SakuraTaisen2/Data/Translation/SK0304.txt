@@ -1,4 +1,4 @@
-I see you have gathered, my Five Black Demons. 
+﻿I see you have finally arrived… Five Elements of the Black Demon Society… 
 Are you out of your damn mind, Demon King?! 
 If we've got time to meet up like this, we ought to be out there disposing of those fools! 
 What a shameful display, Kongo. You've already lost once, so hold your tongue! 
@@ -7,10 +7,10 @@ Fwohoho... Harsh as ever you are, Tsuchigumo...
 Still, that loss will by no means be in vain. All is within my calculations. 
 Who cares about wins or losses, how we kill them is the real issue at hand. 
 How fares Suiko? 
-She has already taken up her post. And quite gracefully, indeed. 
+She has already taken up her post. And quite gracefully, I might add. 
 I see... 
 Now, as to the reason I have gathered you all here today... 
-Through our master's influence, the Assault Troupe's financial backers have withdrawn their support. 
+Through our master's influence, the troupe's financial backers have withdrawn their support. 
 Hm, attacking the enemy's supply lines. A fitting way to dispose of the trash, wouldn't you say? 
 Hah! What a cheap trick. How dull. 
 Yet there are still those who would give them funding. 
@@ -20,7 +20,7 @@ We must bring them down.
 Leave this task to me! 
 Hmph! Your Dainichiken isn't even finished with repairs yet. 
 Allow me to handle this one, as only I can. 
-I'm fed up with chasing prey that tries to escape. Finding prey that will face you makes the hunt all the more fun! 
+I'm fed up with chasing prey that runs away. The hunt is far more fun if the game fights back!
 Very well... Go now, Tsuchigumo. 
 Hey! The repairs for my Dainichiken are almost done, let me at 'em! 
 Stand down, Kongo. 
@@ -32,13 +32,13 @@ Yes, you're right. Why don't we have some tea while we're at it?
 ... 
 What's up, Boss? You're lookin' a bit gloomy. 
 (I wonder if I should tell the others about Sumire's call. Or...) 
-Tell them about the call 
-Change the subject 
-Tell them about the call 
+Tell them about the call. 
+Change the subject. 
+Tell them about the call. 
 To tell the truth, I got a call from Sumire last night. 
 Huh! What'd she wanna talk about? 
 Well, I'm not too sure. 
-She asked whether she or the Imperial Assault Troupe was more important to me, and then hung up suddenly after that. 
+She asked what I thought was more important, her or the troupe, and then suddenly hung up. 
 Hmmm, that's disturbing. 
 Oh, Ensign! You are a man without a shred of tact within you! 
 ...I was thinking the same thing. 
@@ -58,23 +58,23 @@ Right. Why don't we continue on with the second half of...
 Ogamiii! I've got some big news! This is serious!! 
 Yuri? What kind of big news? 
 Don't tell me some other horrible thing has happened... 
-Well, I don't know whether it's a good thing or a bad thing. 
-I only heard about it a moment ago. 
+Well, I don't know whether it's good news or bad news. 
+I only heard about it a moment ago… 
 Apparently, Sumire is... getting married!! 
 Huh?! 
 Wh-What the hell?! 
 Her suitor is the son of Viscount Makibishi. 
 Apparently, if Sumire marries him, the Kanzaki Group will restore funding to the troupe. 
-I see now. That's why she must have made that call yesterday! 
+I see now… That must be why she made that call yesterday!
 She called yesterday? 
 I got a call from Sumire last night. 
 She didn't say anything specific, but she seemed... off. 
 Sumire... 
 Damn it, what a load of crap! 
-That dumbass... Sumire must be plannin' to give herself up to save the troupe by doin' this. 
+That dumbass... Sumire must be plannin' to give herself up to save the troupe. 
 Boss, what should we do? 
-Let's go rescue Sumire! 
-Let's go congratulate Sumire! 
+Let's go rescue her! 
+Let's go congratulate her! 
 Isn't it obvious? We have to go rescue Sumire! 
 If she's being married against her will, we've got to put a stop to it! 
 Now that's what I'm talkin' about! 
@@ -89,12 +89,12 @@ OK, everyone! We're off to the Kanzaki estate!
 All right! Heheh, I'm itchin' to get started. 
 This is great news! We should go congratulate Sumire, everyone! 
 What the hell're you sayin' Boss?! 
-That isn't funny, Mon Fr�re! 
+That isn't funny, Mon Frère! 
 Do you have any idea at all how Sumire must feel, Ogami?! 
 Come on now, Sakura. You must know that all Japanese men are this way deep down. 
 We gotta go rescue Sumire, you guys. And then there's somethin' we gotta tell her: 
-We're gonna protect the troupe with our own strength! 
-All right, time for our assault on the Kanzaki estate! Better not dawdle, Boss, or we'll leave ya behind! 
+That we’re gonna protect the troupe with our own strength!
+OK, time for our assault on the Kanzaki estate! Better not dawdle, Boss, or we'll leave ya behind! 
 Uh... W-Wait a sec! 
 ... 
 Boss, with things bein' how they are, I get you wantin' to be careful. 
@@ -103,13 +103,13 @@ But there's one thing I am sure of: there's no way her heart's in this!
 If she was excited about gettin' hitched, you know she'd be over here braggin' about it to us! 
 I see... 
 We gotta go rescue Sumire, Boss. And then there's somethin' we gotta tell her: 
-We're gonna protect the troupe with our own strength! 
+That we’re gonna protect the troupe with our own strength! 
 All right. Everyone, let's head for the Kanzaki estate! 
 All right! Heheh, I'm itchin' to get started. 
 ... 
 ...Yes. 
 My lady, Lord Makibishi has arrived. 
-He, as well as Lord Shigeki and Lady Hinako have been awaiting you in the banquet room for some time. 
+He, as well as Lord Shigeki and Lady Hinako have been awaiting you in the banquet hall for some time. 
 Very well. Please tell them... I will be along shortly. 
 As you wish. 
 ...Miyata, what are your feelings on this marriage interview? 
@@ -151,13 +151,13 @@ That's easy enough to say, but then how're we supposed to get this gate open?
 Hmm... 
 ...! What the?! 
 The gate, it opened! 
-Mon Fr�re, let's go inside! 
+Mon Frère, let's go inside! 
 Wait. It could be a trap. 
 Wh-What? Why has the gate been opened?! 
-If he's acting that way, then it probably isn't a trap. 
+If the butler’s acting that way, then it probably isn't a trap. 
 All right, guys! Time to storm the Kanzaki estate! 
 How did the gate open from the inside? 
-If you wait long enough, the weather will be clear enough to go by sea!" Isn't that what they say, Ogami? 
+“If you wait long enough, the weather will be clear enough to go by sea!" Isn't that what they say, Ogami? 
 K-Kayama! Why in the world are you here?! 
 But of course, in the literal sense it means that good things come to those who wait. 
 I myself am as the sun, shining upon the ocean blue! Hahahaha! 
@@ -174,7 +174,7 @@ Hrrraaahhhhh!
 There we go! 
 W-Whoa... 
 Un... Unbelievable! The Kanzaki estate's front gate, how can this be?! 
-Heheh, so you've finally had a taste of the power of a single kick from the great Kanna Kirishima, eh? 
+Heheh, don’t underestimate the kick of the mighty Kanna Kirishima, ya hear? 
 The way forward's open, you guys. Let's go! 
 Right! 
 OK, time to infiltrate the Kanzaki estate! 
@@ -184,7 +184,7 @@ Hrrraaahhhhh!
 There we go! 
 Well, she sure handled it. 
 Un... Unbelievable! The Kanzaki estate's front gate, how can this be?! 
-Heheh, so you've finally had a taste of the power of a single kick from the great Kanna Kirishima, eh? 
+Heheh, don’t underestimate the kick of the mighty Kanna Kirishima, ya hear? 
 The way forward's open, you guys. Let's go! 
 Right! 
 Guess there's nothing else to do but to dash in. 
@@ -202,13 +202,13 @@ We'll have to fight them off to have a chance at stopping Sumire's marriage.
 Right, leave it to me! 
 Boss, get your head outta the clouds if you don't wanna get clobbered! 
 Uh, right... 
-Don't mind getting your hands a little dirty! Do whatever you must to stop these hooligans in their tracks! 
+Don't mind getting your hands dirty! Do whatever you must to stop these hooligans in their tracks! 
 That's a laugh! All right, if ya think you can stop us, then just try it! 
 Haaaaaahh! Take THIS!! 
 That all ya got? C'mon, who's next?! 
 Nghh... Come now, what are you lot doing? Keep going, don't stop now! 
 Damn, they just keep on coming... 
-...! Boss, behind you! 
+...! <br> Boss, behind you! 
 Crap!! 
 They're comin' at you from above! You gotta dodge!! 
 Guard your head! 
@@ -255,7 +255,7 @@ No, we'll stay here.
 Sakura, Iris, Orihime, Reni! We'll leave this to you all! 
 The two of us will go after Sumire instead! 
 Right! 
-Do your best, Mon Fr�re! 
+Do your best, Mon Frère! 
 ... 
 If you have the time to bark orders, then you have the time to be running! 
 Kanna, let's go! 
@@ -263,9 +263,9 @@ Right!
 Go a bit easy on them, everyone. 
 Otherwise they might give us some nasty medical bills to pay back later. 
 Hahaha! Right, understood! 
-Ensign and Kanna, you should take care as well! Make sure you do not break any buildings along the way. 
+Ensign and Kanna, you two be careful as well! Make sure to not break any buildings along the way.
 Hahaha! If I'm bein' honest, that's the one thing I ain't too confident about. 
-Well, since we won't have any money after losin' all our financial backin' anyway, we better be real careful. 
+Well, we’re already dirt poor after losing all our financial support, so I’ll be as careful as I can. 
 OK, let's go, Kanna. 
 Right! 
 No, we'll stay here. We can't just leave you all behind. 
@@ -293,7 +293,7 @@ Yep, leave it to me!
 Heheh. Man, this entryway alone musta cost a fortune. 
 Well, in we go. Hoo boy, the inside of this place is just as fancy. 
 ...Good, looks like there's no one inside. 
-Let's get a move on, Boss. We gotta find out which room Sumire's marriage interview is taking place in. 
+Let's get a move on, Boss. We gotta find out which room the marriage interview is taking place in. 
 This really is an enormous house. Just where could Sumire be? 
 Ehn? Hang on a sec. 
 Hey, Boss... Looks like your finger's bleedin'. 
@@ -304,10 +304,10 @@ Heheh, just leave this to me.
 Here we go... Ahaha, wait. I think I messed up the wrapping a bit. Looks kinda weird. 
 I wrap up my own wounds all the time, but it's hard doin' it on someone else. 
 Thank you, Kanna. 
-You are kinda bad at this. 
+You’re kinda bad at this. 
 Thank you, Kanna. I... appreciate you taking care of me like this. 
 Aw, c'mon, Boss. No need to make a big deal of it, you're gonna make me blush. 
-Hahaha, you are kinda bad at this, aren't you, Kanna? 
+Hahaha, you’re kinda bad at this, aren't you, Kanna? 
 Aw, c'mon! That's kinda rude to say, ain't it? 
 Hahaha. Sorry, sorry. 
 Still, I'm not even any good at tellin' other people about how I feel... 
@@ -329,7 +329,7 @@ Don't just sit there silently, Sumire. Say something.
 ... 
 Sumire, your grandfather is right. 
 Now, dear. There's no need for that... 
-Sumire, if you don't at least try speaking to him, you won't learn anything about him. 
+Sumire, if you don't at least try speaking to the young man, you won't learn anything about him. 
 Lord Makibishi, are you truly all right with this? With things being decided without your input? 
 W-Well, I- 
 Young master Makibishi, you have no objections, do you? 
@@ -339,7 +339,7 @@ Yoichiro would be fortunate indeed to be wed to the fair young Lady Kanzaki!
 Now that young master Makibishi's wishes have been made known... What say you, Sumire? 
 I... I... 
 Wait just a damn minute! 
-...!! That voice, it couldn't be?! 
+...!! <br> That voice, it couldn't be! 
 Who are you people? 
 I am Captain Ichiro Ogami of the Imperial Assault Troupe, Flower Division! 
 And I'm Kanna Kirishima, also from the Flower Division! 
@@ -352,7 +352,7 @@ Surely you have not come here in order to embarrass me...
 No. And the troupe is eternally grateful for the support you've given us. 
 But this is a completely separate matter! 
 I must object to Sumire being forced into a marriage she doesn't want! 
-That's right, gramps! If you think things're gonna go just how you wanted, you're in for a rude awakening! 
+That's right, gramps! If you think things're gonna go your way, you're in for a rude awakening!
 Fu... Fwahahaha! Such bravado! I suppose I should expect as much, since you've come all this way. 
 But Ogami, what would you say to this? 
 You are aware that the troupe's financiers are pulling back their funding, are you not? 
@@ -366,7 +366,7 @@ Be silent, women!
 ... 
 Now then, what will you do, Ogami? 
 We're taking Sumire back. 
-I can't make this decision myself. 
+I can't decide on my own.
 I understand. 
 We're taking Sumire back with us. 
 Ensign! 
@@ -374,7 +374,7 @@ Boss!
 I... can't make this decision myself. There's too much riding on it. 
 B-Boss, what the hell're you saying?! 
 ... 
-You said it yourself, didn't you, Boss?! No matter how tough things might be, we gotta do this with our own strength! 
+You said it yourself, Boss! No matter how tough things get, we gotta do this with our own strength!
 Sumire's an important part of the Flower Division! 
 ...Yes. You're absolutely right, Kanna. 
 We're taking Sumire back with us! 
@@ -391,7 +391,7 @@ Grandfather. I... I'm returning to the Imperial Assault Troupe.
 Were I not to go with them, I am certain I would regret it later. 
 Sumire! 
 Very well. Take Sumire with you, then. 
-However, the Kanzaki Group will no longer provide any funding to the Imperial Assault Troupe. Will you accept this? 
+However, the Kanzaki Group will no longer provide any funding to the troupe. Will you accept this? 
 Yes! We will continue on, using our own power! 
 What is that sound? 
 Could it be... the enemy?! 
@@ -401,12 +401,12 @@ You knew?!
 Your Koubu are all onboard the Soaring Whale, Sumire's included. 
 Now, let us depart! 
 All right, Boss! We gotta drive any enemies outta the mansion! 
-There are still a fair number of people in the estate's garden. Evacuating them should be our first priority. 
-Let's take care of the enemies first! 
-Ensuring civilians' safety takes priority! 
-Let's take care of the enemies first! We should eliminate any enemies on the grounds of the Kanzaki estate! 
+The estate's garden still has quite a few people in it. Evacuating them should be our first priority.
+Take out the enemy first!
+Civilians take priority! 
+Let's take care of the enemy first! We should eliminate any threats on the grounds of the estate! 
 Then it should be safe to start evacuating people. 
-Ensuring civilians' safety takes priority! Don't allow even a single enemy to approach the grounds of the estate! 
+Civilians' safety takes priority! Don't allow even a single enemy to approach the grounds of the estate!
 We need to wait until everyone is safely evacuated before engaging the enemy! 
 Sumire, wait! 
 Father, Mother, I'm going now. 
@@ -423,16 +423,16 @@ That is how I wish to live!
 Heheh. Y'know, Sumire, it's been a while since ya went out on a mission. Ya better not get in my way! 
 And I would ask that you take care not to destroy my home with that brutish strength of yours. 
 OK, let's go! The others are waiting for us! 
-Sorry Ogami, but each customer is only allowed to purchase one photo at a time. 
-I see. That's too bad... 
-I'm sorry, Ogami. I can only sell one photo at a time to the same person. 
-Oh, really? That's too bad... 
+Sorry, Ogami. I can only sell you one photo per month. 
+I see. That's too bad. 
+So sorry, Mr. Ogami, but each customer is only allowed to purchase one photo at a time.
+Oh, really? That's too bad.
 ... "" "" () - . , ! ? ?! !! 
 The jewel of the Pandemonium Regalia, entrusted to us by the Rose Division. 
-Spirit Sword Arataka. The secret sword of the Shinguji family. 
-Divine sword Shirohatori. Entrusted to me by Kaede. A secret sword passed down in the Fujieda family. 
-An intangible light sword. Shinnosuke Yamazaki is the original owner. A secret sword entrusted to him by Kazuma. 
-Shintou Annihilation. A secret sword entrusted to him by Yoneda. 
+Spirit Sword Arataka. The special sword of the Shinguji family. 
+Divine Sword Shirahatori. Entrusted to me by Kaede. A special sword passed down by the Fujieda family. 
+Luminous Blade Mukei. A special sword entrusted to us by Kazuma that once belonged to Major Yamazaki. 
+Divide Blade Mekkyaku. A special sword entrusted to me by Yoneda. 
 The uniform I wear at the theater. Good for both summer and winter. 
 A lighter borrowed from the inn. 
 The flower crown that Iris made for Reni. 
@@ -453,10 +453,10 @@ A photo of Orihime.
 A photo of Orihime. This one is a limited edition only available at New Year's. 
 A photo of Reni. 
 A photo of Reni. This one is a limited edition only available at New Year's. 
-A decorative paper ball from the welcome party. 
-A flower vase from the welcome party. 
-The banner from the welcome party. 
-The Cinematron. A communication machine invented by Kohran that lets you see and talk to someone from far away. 
+A decorative paper ball for the welcome party called a kusudama. 
+A flower vase for the welcome party.
+The banner for the welcome party.
+The Cinematron. One of Kohran's inventions that lets you see and talk to someone from far away. 
 The sword of the Pandemonium Regalia, recovered from the Demon King. 
 The mirror of the Pandemonium Regalia, recovered from the Demon King. 
 Fragments of the broken Cinematron. Seems like the kids at the inn picked them up along the shore. 
@@ -470,4 +470,4 @@ A letter from Orihime.
 A letter from Reni. 
 A scarf given to me by Sakura. It's knitted with red yarn - my favorite color. 
 A scarf given to me by Sakura. It's knitted with blue yarn - my favorite color. 
-A scarf given to me by Sakura. It's knitted with yellow yarn - my favorite color. 
+A scarf given to me by Sakura. It's knitted with yellow yarn - my favorite color.
