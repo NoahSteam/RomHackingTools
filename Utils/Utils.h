@@ -461,7 +461,7 @@ public:
 	bool ExtractTiles(unsigned int inTileDimX, int inTileDimY, unsigned int outTileDimX, unsigned int outTileDimY, const BitmapReader& inBitmap, int inAlphaIndex = 0);
 	void FixupIndexOfAlphaColor(const unsigned short inIndexOfAlphaColor, bool bInIs4bit);
 	int GetDataSize() const {return mDataSize;}
-	void OutputTiles(FileWriter& outFile, int inStartingTile);
+	void OutputTiles(FileWriter& outFile, int inStartingTile) const;
 	unsigned int GetSizeOfSingleTile() const {return mTileByteSize;}
 };
 

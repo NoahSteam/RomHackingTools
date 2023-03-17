@@ -42,6 +42,7 @@ bool CreateSysSpreadsheets(const string& dialogImageDirectory, const string& dup
 	//Find all dialog files
 	vector<FileNameContainer> scenarioFiles;
 	GetAllFilesOfType(allSakura1Files, ".MES", scenarioFiles);
+	GetAllFilesOfType(allSakura1Files, "LOW.BIN", scenarioFiles);
 
 	//Parse the TBL files
 	vector<SysFileExtractor> sakuraTextFiles;

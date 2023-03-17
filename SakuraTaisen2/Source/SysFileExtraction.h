@@ -23,11 +23,46 @@ class SysFileExtractor
 		}
 	};
 
+	struct TextHeader
+	{
+		int mNumEntries{0};
+		std::vector<int> mOffsetsToTextEntries;
+	};
+
+	struct SysLineId
+	{
+		uint16 mId;
+		uint16 mEnder;
+	};
+
 public:
 	FileNameContainer    mFileNameInfo;
 	FileData             mFileData;
 	FontSheet            mFontSheetData;
+	TextHeader           mTextHeader;
 	vector<SakuraString> mLines;
+	vector<SysLineId>    mLineIds;
+
+	SysFileExtractor(){}
+
+	SysFileExtractor(SysFileExtractor&& rhs) : 
+		mFileNameInfo(std::move(rhs.mFileNameInfo)), 
+		mFontSheetData(std::move(rhs.mFontSheetData)),
+		mTextHeader(std::move(rhs.mTextHeader)),
+		mLines(std::move(rhs.mLines)),
+		mLineIds(std::move(rhs.mLineIds))
+	{
+		rhs.mFontSheetData.mpData = nullptr;
+	}
+
+	SysFileExtractor& operator=(SysFileExtractor&& rhs)
+	{
+		mFileNameInfo = std::move(rhs.mFileNameInfo);
+		mLines = std::move(rhs.mLines);
+		mLineIds = std::move(rhs.mLineIds);
+		mFontSheetData = std::move(rhs.mFontSheetData);
+		mTextHeader = rhs.mTextHeader;
+	}
 
 	bool Initialize(const string& inFileName)
 	{
@@ -36,7 +71,7 @@ public:
 		{
 			return false;
 		}
-
+		
 		return true;
 	}
 
@@ -45,8 +80,27 @@ public:
 		return mFileData.GetDataSize();
 	}
 
+	void ParseTextHeader()
+	{
+		if (mFileData.GetDataSize() <= TextTableStart)
+		{
+			return;
+		}
+
+		uint32* pTextEntry = (uint32*)(mFileData.GetData() + TextTableStart);
+		mTextHeader.mNumEntries = SwapByteOrder(*pTextEntry);
+
+		for(int i = 1; i <= mTextHeader.mNumEntries; ++i)
+		{
+			const int offsetToEntry = SwapByteOrder(*(pTextEntry + i));
+			mTextHeader.mOffsetsToTextEntries.push_back(offsetToEntry);
+		}
+	}
+
 	void ParseStrings()
 	{
+		ParseTextHeader();
+
 		static const unsigned short EndOfLineCharacter = 0xffff;
 		const uint16 idTag = 0x7fff;
 		const unsigned int NumBytesPerCharacter = 2;
@@ -57,51 +111,26 @@ public:
 		}
 
 		//Find start of text entries
-		const int offsetToStringHeader = TextTableStart;// : 0xE39C;
+		const int offsetToStringHeader = TextTableStart;
 		int offsetToString = 0;
 		{
 			uint32* pWordBuffer = (uint32*)(mFileData.GetData() + offsetToStringHeader);
-			offsetToString = TextTableStart + SwapByteOrder(pWordBuffer[1]) + 4;
+			offsetToString = TextTableStart + SwapByteOrder(pWordBuffer[1]);
 		}
 		if((unsigned long)offsetToString >= mFileData.GetDataSize())
 		{
 			return;
 		}
 
-		/*
-		{
-			uint16* pWordBuffer = (uint16*)(mFileData.GetData() + offsetToString);
-			const int numValues = (mFileData.GetDataSize() - offsetToString)/2;
-			assert(numValues >= 0);
-
-			int currentIndex = 0;
-			while(currentIndex < numValues)
-			{
-				const unsigned short currValue = SwapByteOrder(pWordBuffer[currentIndex++]);
-				if( currValue == idTag )
-				{
-					offsetToString = currentIndex * 2;
-					break;
-				}
-			}
-		}*/
-
 		uint16* pWordBuffer      = (uint16*)(mFileData.GetData() + offsetToString);
 		int currentIndex         = 0;
 		SakuraString newLineOfText;
-
+		bool bIsNewEntry = true;
 		while (1)
 		{
-			const unsigned short currValue = SwapByteOrder(pWordBuffer[currentIndex++]);
-			const unsigned short nextValue = SwapByteOrder(pWordBuffer[currentIndex]);
+			const unsigned short currValue = SwapByteOrder(pWordBuffer[currentIndex]);
+			const unsigned short nextValue = SwapByteOrder(pWordBuffer[++currentIndex]);
 
-			/*
-			if( nextValue == idTag )
-			{
-				++currentIndex;
-				continue;
-			}
-			*/
 			if( currValue == 0 && nextValue == 0 )
 			{
 				break;
@@ -112,6 +141,18 @@ public:
 			//	printf("Line:%i at %08x\n", mLines.size(), currentIndex*2 + offsetToString);
 			}
 
+			//Each entry needs starts with an id
+			if (bIsNewEntry)
+			{
+				SysLineId id;
+				id.mId = currValue;
+				id.mEnder = nextValue;
+				mLineIds.push_back(id);
+				bIsNewEntry = false;
+				currentIndex++;
+				continue;
+			}
+
 			newLineOfText.AddChar(currValue);
 			
 			if (EndOfLineCharacter == currValue)
@@ -119,10 +160,11 @@ public:
 				newLineOfText.mOffsetToStringData = 0; //0 in SW2 because there is no ID to each dialog entry
 				mLines.push_back(newLineOfText);
 				newLineOfText.Clear();
-
-				currentIndex += 2;
+				bIsNewEntry = true;
 			}
 		}
+
+		assert(mLineIds.size() == mLines.size());
 	}
 
 	void ExtractFontSheet(const string& inOutputDirectory, const string& inPaletteFileName)
@@ -225,7 +267,7 @@ public:
 
 private:
 
-void ReadInFontSheetData()
+	void ReadInFontSheetData()
 	{
 		delete[] mFontSheetData.mpData;
 
@@ -248,6 +290,7 @@ void ExtractSysFiles(const string& rootSakuraDirectory, const string& inPaletteF
 
 	vector<FileNameContainer> scenarioFiles;
 	GetAllFilesOfType(allFiles, ".MES", scenarioFiles);
+	GetAllFilesOfType(allFiles, "LOW.BIN", scenarioFiles);
 
 	//Create palette data
 	FileData paletteFileData;

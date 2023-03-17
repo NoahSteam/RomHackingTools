@@ -9205,6 +9205,7 @@ bool CopyOriginalFiles(const string& rootSakuraTaisenDirectory, const string& pa
 		const string newSakuraFile      = patchedSakuraTaisenDirectory + fileName;\
 		if( !CopyFile(originalSakuraFile.c_str(), newSakuraFile.c_str(), FALSE) )\
 		{\
+			printf("Unable to copy %s to %s\n", originalSakuraFile.c_str(), newSakuraFile.c_str());\
 			return false;\
 		}\
 	}

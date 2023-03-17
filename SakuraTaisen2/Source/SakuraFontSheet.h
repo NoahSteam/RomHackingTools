@@ -47,8 +47,8 @@ class SakuraFontSheet
 public:
 	bool CreateFontSheetFromData(const char* pInData, unsigned int inDataSize)
 	{
-		const int numBytesPerTile = 8*8;//128;
-		if (inDataSize % 64 != 0) //128
+		const int numBytesPerTile = 128;
+		if (inDataSize % 128 != 0) //128
 		{
 			printf("CreateFontSheet: Invalid size for data.  Should be multiple of 128, is %u", inDataSize);
 			return false;

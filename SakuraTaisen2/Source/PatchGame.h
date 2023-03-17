@@ -21,6 +21,7 @@ static bool BringOverOriginalFiles(const string& inRootSakuraDirectory, const st
 	GetAllFilesOfType(allFiles, "TTL2CGB.BIN", originalFiles);	
 	GetAllFilesOfType(allFiles, "M_NAME", originalFiles);
 	GetAllFilesOfType(allFiles, "INFONAME.BIN", originalFiles);
+	GetAllFilesOfType(allFiles, ".MES", originalFiles);
 
 	//Bring over scenario files
 	const string outputDirectory = inPatchedDirectory + Seperators;
@@ -255,6 +256,13 @@ bool PatchGame(const string& inSourceGameDirectory, const string& inTranslatedDi
 	if( !CreateTranslatedFontSheet(translatedFontSheetPath, translatedFontSheet, translatedFontSheetPalette) )
 	{
 		printf("Unable to create font sheet\n");
+		return false;
+	}
+
+	//Insert scenario text
+	if (!InsertSysFileText(inSourceGameDirectory, inTranslatedDirectory, inPatchedDirectory, translatedFontSheet, false))
+	{
+		printf("Text insertion failed\n");
 		return false;
 	}
 

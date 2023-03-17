@@ -59,6 +59,7 @@ using std::unordered_map;
 #include "Source/CreateMiniGameSpreadsheets.h"
 #include "Source/BatchedImageExtractor.h"
 #include "Source/InsertText.h"
+#include "Source/SysFilePatcher.h"
 #include "Source/TitleScreens.h"
 #include "Source/SplashScreen.h"
 #include "Source/ExportTranslationData.h"

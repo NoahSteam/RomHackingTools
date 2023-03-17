@@ -1021,7 +1021,7 @@ bool PaletteData::CreateFrom32BitData(const char* pInPaletteData, int inPaletteS
 
 		//Swap byte order so data is written in big endian order.  Drop off the first bit if needed.
 		unsigned short outColor = ((r << 10) + (g << 5) + b) & bitMask;
-	//	std::reverse((char*)&outColor, ((char*)&outColor + 2));
+		std::reverse((char*)&outColor, ((char*)&outColor + 2));
 
 		//copy data over to the palette
 		memcpy(&mpPaletteData[outIndex], &outColor, 2);
@@ -1765,7 +1765,7 @@ bool TileExtractor::ExtractTiles(unsigned int inTileWidth, int inTileHeight, uns
 	return true;
 }
 
-void TileExtractor::OutputTiles(FileWriter& outFile, int inStartingTile)
+void TileExtractor::OutputTiles(FileWriter& outFile, int inStartingTile) const
 {
 	//Negative values mean that the first tile should be repeated x amount of times
 	while(inStartingTile < 0)

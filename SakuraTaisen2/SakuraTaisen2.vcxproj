@@ -159,6 +159,7 @@
     <ClInclude Include="Source\SakuraWars2Utils.h" />
     <ClInclude Include="Source\SplashScreen.h" />
     <ClInclude Include="Source\SysFileExtraction.h" />
+    <ClInclude Include="Source\SysFilePatcher.h" />
     <ClInclude Include="Source\TextInImage.h" />
     <ClInclude Include="Source\TextInImageUsingFontSheet.h" />
     <ClInclude Include="Source\TitleScreens.h" />
