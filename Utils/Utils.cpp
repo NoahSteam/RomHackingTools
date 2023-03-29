@@ -737,6 +737,11 @@ bool FileWriter::WriteDataAtOffset(const void* pInData, unsigned long inSize, un
 	return bSuccess;
 }
 
+void FileWriter::SeekToStart()
+{
+	fseek(mpFileHandle, 0, SEEK_SET);
+}
+
 void FileWriter::Close()
 {
 	if( mpFileHandle )
@@ -853,6 +858,18 @@ void FileReadWriter::Close()
 	}
 
 	mpFileHandle = nullptr;
+}
+
+bool FileReadWriter::WriteData(const char* pInData, unsigned long inDataSize)
+{
+	if (!mpFileHandle)
+	{
+		return false;
+	}
+
+	const unsigned long numElemsWritten = (unsigned long)fwrite(pInData, sizeof(char), inDataSize, mpFileHandle);
+
+	return numElemsWritten == inDataSize;
 }
 
 bool FileReadWriter::WriteData(unsigned long inFileOffset, const char* pInData, unsigned long inDataSize)
@@ -1763,6 +1780,27 @@ bool TileExtractor::ExtractTiles(unsigned int inTileWidth, int inTileHeight, uns
 	}
 
 	return true;
+}
+
+void TileExtractor::OutputTiles(FileReadWriter& outFile, int inStartingTile, int inOffset) const
+{
+	fseek(outFile.GetFileHandle(), inOffset, SEEK_SET);
+
+	//Negative values mean that the first tile should be repeated x amount of times
+	while (inStartingTile < 0)
+	{
+		const Tile& tile = mTiles[0];
+		outFile.WriteData(tile.mpTile, tile.mTileSize);
+
+		inStartingTile++;
+	}
+
+	const int numTiles = (int)mTiles.size();
+	for (int i = inStartingTile; i < numTiles; ++i)
+	{
+		const Tile& tile = mTiles[i];
+		outFile.WriteData(tile.mpTile, tile.mTileSize);
+	}
 }
 
 void TileExtractor::OutputTiles(FileWriter& outFile, int inStartingTile) const

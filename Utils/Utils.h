@@ -177,6 +177,7 @@ public:
 	unsigned long GetFileSize() const {return mDataSize;}
 	FILE*         GetHandle() {return mpFileHandle;}
 	const std::string& GetFileName() const {return mFileName;}
+	void          SeekToStart();
 };
 
 class TextFileWriter
@@ -206,6 +207,7 @@ public:
 
 	bool  OpenFile(const std::string& inFileName);
 	void  Close();
+	bool  WriteData(const char* pInData, unsigned long inDataSize);
 	bool  WriteData(unsigned long fileOffset, const char* pData, unsigned long dataSize);
 	bool  WriteData(unsigned long fileOffset, const char* pData, unsigned long dataSize, bool bSwapEndianness);
 	bool  ReadData(unsigned long inFileOffset, char* pData, unsigned long dataSize, bool bSwapEndianness = false);
@@ -462,6 +464,7 @@ public:
 	void FixupIndexOfAlphaColor(const unsigned short inIndexOfAlphaColor, bool bInIs4bit);
 	int GetDataSize() const {return mDataSize;}
 	void OutputTiles(FileWriter& outFile, int inStartingTile) const;
+	void OutputTiles(FileReadWriter& outFile, int inStartingTile, int inOffset) const;
 	unsigned int GetSizeOfSingleTile() const {return mTileByteSize;}
 };
 

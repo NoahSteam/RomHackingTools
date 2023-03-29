@@ -22,6 +22,7 @@ static bool BringOverOriginalFiles(const string& inRootSakuraDirectory, const st
 	GetAllFilesOfType(allFiles, "M_NAME", originalFiles);
 	GetAllFilesOfType(allFiles, "INFONAME.BIN", originalFiles);
 	GetAllFilesOfType(allFiles, ".MES", originalFiles);
+	GetAllFilesOfType(allFiles, "LOW.BIN", originalFiles);
 
 	//Bring over scenario files
 	const string outputDirectory = inPatchedDirectory + Seperators;

@@ -40,12 +40,12 @@ struct FixedSysFileHeader
 		}
 	}
 
-	void OutputToFile(FileWriter& InOutputFile)
+	void OutputToFile(FileReadWriter& InOutputFile)
 	{
 		if(mpOffsetsToTextEntries)
 		{
-			InOutputFile.WriteDataAtOffset(&mNumEntries, sizeof(mNumEntries), SysFilePatcher::OffsetToText, true);
-			InOutputFile.WriteDataAtOffset((void*)mpOffsetsToTextEntries, sizeof(int)*mNumEntries, SysFilePatcher::OffsetToText + sizeof(mNumEntries));
+			InOutputFile.WriteData(SysFilePatcher::OffsetToText, (const char*)&mNumEntries, sizeof(mNumEntries), true);
+			InOutputFile.WriteData(SysFilePatcher::OffsetToText + sizeof(mNumEntries), (const char*)mpOffsetsToTextEntries, sizeof(int)*mNumEntries);
 		}
 	}
 };
@@ -122,8 +122,8 @@ bool InsertTextForSysFile(SysFileExtractor& inSysFile,
 	const string outFileName = inOutputDirectory + inSysFile.mFileNameInfo.mFileName;
 
 	//Create output file
-	FileWriter outFile;
-	if (!outFile.OpenFileForWrite(outFileName))
+	FileReadWriter outFile;
+	if (!outFile.OpenFile(outFileName))
 	{
 		printf("Unable to open the output file %s.\n", outFileName.c_str());
 
@@ -359,7 +359,6 @@ bool InsertTextForSysFile(SysFileExtractor& inSysFile,
 	}
 
 	//Write header
-	const int OffsetToText = 0xE000;
 	FixedSysFileHeader fixedHeader;
 	fixedHeader.CreateFixedHeader(translatedLines);
 	fixedHeader.OutputToFile(outFile);
@@ -376,7 +375,7 @@ bool InsertTextForSysFile(SysFileExtractor& inSysFile,
 		{
 			vector<unsigned short> translationData;
 			translatedLines[translationIndex].GetDataArray(translationData);
-			outFile.WriteDataAtOffset(translationData.data(), translationData.size() * sizeof(short), writeOffset);
+			outFile.WriteData(writeOffset, (const char*)translationData.data(), translationData.size() * sizeof(short));
 
 			const unsigned int byteCount = translationData.size() * sizeof(short);
 			numBytesWritten += byteCount;
@@ -398,7 +397,7 @@ bool InsertTextForSysFile(SysFileExtractor& inSysFile,
 	}
 
 	//Output fontsheet
-	inTranslatedFontSheet.OutputTiles(outFile, -1);
+	inTranslatedFontSheet.OutputTiles(outFile, -1, 0);
 	
 	return true;
 }
@@ -416,6 +415,7 @@ bool InsertSysFileText(const string& inRootSakuraTaisenDirectory, const string& 
 	//Find all the scenario text files
 	vector<FileNameContainer> sysFiles;
 	GetAllFilesOfType(allFiles, ".MES", sysFiles);
+	GetAllFilesOfType(allFiles, "LOW.BIN", sysFiles);
 
 	//Extract all sys files
 	vector<SysFileExtractor> extractedSysFiles;
