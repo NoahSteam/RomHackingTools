@@ -1,0 +1,18 @@
+05C7B780
+0500194c
+06040a4c
+
+0602063e will write up to 0xf characters per line (mov 0x0f, r3)
+060893E0 will multiply by 16 (width spacing) (make this 4100 shll1)
+060893fc is characters per line (make this E11B)
+06089408 is num lines (make this e103)
+060893b0 multiplying by 16 (height spacing) (make this 4b00)
+
+06089264 checking for 0xe, change to 0x1b
+
+0xe, oxd, fixup neeeded around here
+06081972
+0608901a
+0608912e
+
+06089451 multiplies by 0xe to get to next line write buffer, change to 0x1c
