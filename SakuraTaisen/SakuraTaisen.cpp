@@ -11655,7 +11655,7 @@ bool PatchTiledData(FileReadWriter& outFile, const string& fontSheetPath, const 
 
 	if( tileEntries.size() != (320 / 8)*(224 / 8) )
 	{
-		printf("IntroCredits.csv does not have the expected number of tiles [40 * 28].  Found %u instead.\n", tileEntries.size());
+		printf("IntroCredits.csv does not have the expected number of tiles [40 * 28].  Found %zu instead.\n", tileEntries.size());
 		return false;
 	}
 
