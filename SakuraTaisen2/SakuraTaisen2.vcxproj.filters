@@ -116,5 +116,8 @@
     <ClInclude Include="Source\SysFilePatcher.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Source\PatchBattleTextDrawCode.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

@@ -150,6 +150,7 @@
     <ClInclude Include="Source\MainMenu.h" />
     <ClInclude Include="Source\MiniGameExtraction.h" />
     <ClInclude Include="Source\MNameCG.h" />
+    <ClInclude Include="Source\PatchBattleTextDrawCode.h" />
     <ClInclude Include="Source\PatchGame.h" />
     <ClInclude Include="Source\SakuraCommon.h" />
     <ClInclude Include="Source\SakuraConstants.h" />

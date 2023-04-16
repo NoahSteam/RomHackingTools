@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Source/PatchBattleTextDrawCode.h"
+
 static bool BringOverOriginalFiles(const string& inRootSakuraDirectory, const string& inPatchedDirectory)
 {
 	printf("BringOverOriginalFiles\n");
@@ -23,6 +25,7 @@ static bool BringOverOriginalFiles(const string& inRootSakuraDirectory, const st
 	GetAllFilesOfType(allFiles, "INFONAME.BIN", originalFiles);
 	GetAllFilesOfType(allFiles, ".MES", originalFiles);
 	GetAllFilesOfType(allFiles, "LOW.BIN", originalFiles);
+	GetAllFilesOfType(allFiles, "PRG.BIN", originalFiles);
 
 	//Bring over scenario files
 	const string outputDirectory = inPatchedDirectory + Seperators;
@@ -172,6 +175,7 @@ bool PatchTextDrawingCode(const string& inSourceGameDirectory, const string& inP
 	}
 
 	//SAKURADA
+	if(0)
 	{
 		const string sakuradaFilePath = inPatchedDirectory + Seperators + string("SAKURADA");
 		FileReadWriter sakuraBin;
@@ -206,6 +210,8 @@ bool PatchTextDrawingCode(const string& inSourceGameDirectory, const string& inP
 	return true;
 }
 
+
+
 bool PatchGame(const string& inSourceGameDirectory, const string& inTranslatedDirectory, const string& inPatchedDirectory)
 {
 	if( !BringOverOriginalFiles(inSourceGameDirectory, inPatchedDirectory) )
@@ -235,6 +241,12 @@ bool PatchGame(const string& inSourceGameDirectory, const string& inTranslatedDi
 	if(!PatchTextDrawingCode(inSourceGameDirectory, inPatchedDirectory))
 	{
 		printf("Unable to patch drawing code\n");
+		return false;
+	}
+
+	if( !PatchBattleTextDrawingCode(inPatchedDirectory) )
+	{
+		printf("Unable to patch battle text drawing code\n");
 		return false;
 	}
 
