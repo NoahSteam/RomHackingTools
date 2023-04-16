@@ -12,9 +12,11 @@
 0x06089451 multiplies by 0xe to get to next line write buffer, change to 0x1b
 
 0xe, oxd, fixup neeeded around here
-06081972
 0608901a
 0608912e
+
+060894b0 is 0xa7f.  This is the amount of bytes to clear in vdp1 when clearing the text box.
+Change this to 27*4 * 64(bytes)
 
 0x06089264:
 M00PRG.BIN 0x0002fc1e
