@@ -11,6 +11,11 @@
 0x06089408 is num lines (make this e103)
 0x06089451 multiplies by 0xe to get to next line write buffer, change to 0x1b
 
+0608905c change to 0x1a
+06089176 change to 0x1a
+0608912e change to 0x1b
+060892a2 change to 0x1a
+
 0xe, oxd, fixup neeeded around here
 0608901a
 0608912e
@@ -120,4 +125,19 @@ SLGGOVER.BIN 0x0001bf78
 "M33PRG.BIN", 0x0002e540,
 "M34PRG.BIN", 0x0002d61c,
 "SLGGOVER.BIN", 0x0001bfc0,
+
+//060894b0 is 0xa7f
+"M00PRG.BIN", 0x000300b0, (27*4*66),
+"M01PRG.BIN", 0x00029150, (27*4*66),
+"M02PRG.BIN", 0x0002d8f0, (27*4*66),
+"M03PRG.BIN", 0x0002e8d4, (27*4*66),
+"M04PRG.BIN", 0x0002f084, (27*4*66),
+"M05PRG.BIN", 0x0002dbf8, (27*4*66),
+"M26PRG.BIN", 0x0002f9fc, (27*4*66),
+"M27PRG.BIN", 0x0002d7ac, (27*4*66),
+"M29PRG.BIN", 0x000275e8, (27*4*66),
+"M31PRG.BIN", 0x0002da30, (27*4*66),
+"M33PRG.BIN", 0x0002e5a0, (27*4*66),
+"M34PRG.BIN", 0x0002d67c, (27*4*66),
+"SLGGOVER.BIN", @0x0001c020, (27*4*66),
 
