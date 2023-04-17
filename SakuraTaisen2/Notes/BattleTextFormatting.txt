@@ -2,7 +2,7 @@
 0500194c
 06040a4c
 
-0602063e will write up to 0xf characters per line (mov 0x0f, r3)
+0602063e will write up to 0xf characters per line (mov 0x0f, r3) change to 0x1c
 
 0x06089264 checking for 0xe, change to 0x1b
 0x060893b0 multiplying by 16 (height spacing) (make this 4b00)
@@ -11,11 +11,11 @@
 0x06089408 is num lines (make this e103)
 0x06089451 multiplies by 0xe to get to next line write buffer, change to 0x1b
 
-0608905c change to 0x1a
-06089176 change to 0x1a
-0608912e change to 0x1b
+0608905c change to 0x1b
+06089176 change to 0x1b
+0608912e change to 0x1c
 06089264 change to 0x1b
-060892a2 change to 0x1a
+060892a2 change to 0x1b
 
 
 0xe, oxd, fixup neeeded around here
@@ -143,3 +143,58 @@ SLGGOVER.BIN 0x0001bf78
 "M34PRG.BIN", 0x0002d67c, (27*4*66),
 "SLGGOVER.BIN", @0x0001c020, (27*4*66),
 
+//060892a2
+"M00PRG.BIN", 0x0002fc5c, 0x1a,
+"M00PRG.BIN", 0x0002fd76, 0x1a,
+"M00PRG.BIN", 0x0002fea2, 0x1a,
+"M01PRG.BIN", 0x00028cfc, 0x1a,
+"M01PRG.BIN", 0x00028e16, 0x1a,
+"M01PRG.BIN", 0x00028f42, 0x1a,
+"M02PRG.BIN", 0x0002d49c, 0x1a,
+"M02PRG.BIN", 0x0002d5b6, 0x1a,
+"M02PRG.BIN", 0x0002d6e2, 0x1a,
+"M03PRG.BIN", 0x0002e480, 0x1a,
+"M03PRG.BIN", 0x0002e59a, 0x1a,
+"M03PRG.BIN", 0x0002e6c6, 0x1a,
+"M04PRG.BIN", 0x0002ec30, 0x1a,
+"M04PRG.BIN", 0x0002ed4a, 0x1a,
+"M04PRG.BIN", 0x0002ee76, 0x1a,
+"M05PRG.BIN", 0x0002d7a4, 0x1a,
+"M05PRG.BIN", 0x0002d8be, 0x1a,
+"M05PRG.BIN", 0x0002d9ea, 0x1a,
+"M26PRG.BIN", 0x0002f5a8, 0x1a,
+"M26PRG.BIN", 0x0002f6c2, 0x1a,
+"M26PRG.BIN", 0x0002f7ee, 0x1a,
+"M27PRG.BIN", 0x0002d358, 0x1a,
+"M27PRG.BIN", 0x0002d472, 0x1a,
+"M27PRG.BIN", 0x0002d59e, 0x1a,
+"M29PRG.BIN", 0x00027194, 0x1a,
+"M29PRG.BIN", 0x000272ae, 0x1a,
+"M29PRG.BIN", 0x000273da, 0x1a,
+"M31PRG.BIN", 0x0002d5dc, 0x1a,
+"M31PRG.BIN", 0x0002d6f6, 0x1a,
+"M31PRG.BIN", 0x0002d822, 0x1a,
+"M33PRG.BIN", 0x0002e14c, 0x1a,
+"M33PRG.BIN", 0x0002e266, 0x1a,
+"M33PRG.BIN", 0x0002e392, 0x1a,
+"M34PRG.BIN", 0x0002d228, 0x1a,
+"M34PRG.BIN", 0x0002d342, 0x1a,
+"M34PRG.BIN", 0x0002d46e, 0x1a,
+"SLGGOVER.BIN", 0x0001bbcc, 0x1a,
+"SLGGOVER.BIN", 0x0001bce6, 0x1a,
+"SLGGOVER.BIN", 0x0001be12, 0x1a,
+
+0602063e will write up to 0xf characters per line (mov 0x0f, r3):
+//Change to 0x1c
+SAKURA.BIN @0x000607b2
+0.SLG @0x0001b63e
+0000DAIF.BIN", 0x0003426a
+0000ENDI.BIN", 0x0001e00e
+0000IRIS.BIN", 0x000213a6
+0000KANN.BIN", 0x0002a786
+0000KORA.BIN", 0x00029f82
+0000MARI.BIN", 0x000200a2
+0000ORIH.BIN", 0x00020b12
+0000RENI.BIN", 0x0001f8ea
+0000SAKU.BIN", 0x0001ef62
+0000SUMI.BIN", 0x0001f766
