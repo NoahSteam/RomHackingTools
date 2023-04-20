@@ -304,6 +304,58 @@ bool PatchBattleTextDrawingCode(const string& inPatchedDirectory)
 		"SLGGOVER.BIN", 0x0001bb8e, 0x1c,
 		"SLGGOVER.BIN", 0x0001bc9e, 0x1c,
 		"SLGGOVER.BIN", 0x0001bdd4, 0x1c,
+
+		//0608903c and 06089282 change to 0x03 (number of lines)
+		"M00PRG.BIN", 0x0002fc3c, 0x03,
+		"M00PRG.BIN", 0x0002fe82, 0x03,
+		"M01PRG.BIN", 0x00028cdc, 0x03,
+		"M01PRG.BIN", 0x00028f22, 0x03,
+		"M02PRG.BIN", 0x0002d47c, 0x03,
+		"M02PRG.BIN", 0x0002d6c2, 0x03,
+		"M03PRG.BIN", 0x0002e460, 0x03,
+		"M03PRG.BIN", 0x0002e6a6, 0x03,
+		"M04PRG.BIN", 0x0002ec10, 0x03,
+		"M04PRG.BIN", 0x0002ee56, 0x03,
+		"M05PRG.BIN", 0x0002d784, 0x03,
+		"M05PRG.BIN", 0x0002d9ca, 0x03,
+		"M26PRG.BIN", 0x0002f588, 0x03,
+		"M26PRG.BIN", 0x0002f7ce, 0x03,
+		"M27PRG.BIN", 0x0002d338, 0x03,
+		"M27PRG.BIN", 0x0002d57e, 0x03,
+		"M29PRG.BIN", 0x00027174, 0x03,
+		"M29PRG.BIN", 0x000273ba, 0x03,
+		"M31PRG.BIN", 0x0002d5bc, 0x03,
+		"M31PRG.BIN", 0x0002d802, 0x03,
+		"M33PRG.BIN", 0x0002e12c, 0x03,
+		"M33PRG.BIN", 0x0002e372, 0x03,
+		"M34PRG.BIN", 0x0002d208, 0x03,
+		"M34PRG.BIN", 0x0002d44e, 0x03,
+		"SLGGOVER.BIN", 0x0001bbac, 0x03,
+		"SLGGOVER.BIN", 0x0001bdf2, 0x03,
+
+		// 0608914c
+		"M00PRG.BIN", 0x0002fd4c, 0x03,
+		"M01PRG.BIN", 0x00028dec, 0x03,
+		"M02PRG.BIN", 0x0002d58c, 0x03,
+		"M03PRG.BIN", 0x0002e570, 0x03,
+		"M04PRG.BIN", 0x0002ed20, 0x03,
+		"M05PRG.BIN", 0x0002d894, 0x03,
+		"M26PRG.BIN", 0x0002f698, 0x03,
+		"M27PRG.BIN", 0x0002d448, 0x03,
+		"M29PRG.BIN", 0x00027284, 0x03,
+		"M31PRG.BIN", 0x0002d6cc, 0x03,
+		"M33PRG.BIN", 0x0002e23c, 0x03,
+		"M34PRG.BIN", 0x0002d318, 0x03,
+		"SLGGOVER.BIN", 0x0001bcbc, 0x03,
+
+		/*Making space for a bigger text buffer
+		06034760 (3 instances need to be changed to 06033f50 in 0.slg)
+		- at 0600739c, 06007400, 060074e0[@0x0000239c, 0x2400, 0x24e0]
+		0600735a need to change 0x3f to 6f(edited)[0.SLG @0x0000235a]*/
+		"0.SLG", 0x0000239e, 0x3f50,
+		"0.SLG", 0x00002402, 0x3f50,
+		"0.SLG", 0x000024e2, 0x3f50,
+		"0.SLG", 0x0000235a, 0x6f,
 	};
 
 	const int numEntries = sizeof(patchingInfo) / sizeof(patchingInfo[0]);

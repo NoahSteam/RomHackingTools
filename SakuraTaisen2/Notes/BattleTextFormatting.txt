@@ -17,13 +17,23 @@
 06089264 change to 0x1b
 060892a2 change to 0x1b
 
-
-0xe, oxd, fixup neeeded around here
-0608901a
-0608912e
+0608903c change to 0x03
+06089282 change to 0x03
+0608914c change to 0x03
 
 060894b0 is 0xa7f.  This is the amount of bytes to clear in vdp1 when clearing the text box.
 Change this to 27*4 * 64(bytes)
+
+//Making space for a bigger text buffer
+06034760 (3 instances need to be changed to 06033f50 in 0.slg)
+	-at 0600739c, 06007400, 060074e0 [@0x0000239c, 0x2400, 0x24e0]
+0600735a need to change 0x3f to 6f (edited) [0.SLG @0x0000235a]
+
+//Lips spacing
+060d1502 is X spacing.  Set this to 0x08
+060d146c is calculation to center text.  Set this to 4200 (shll r2)
+060d16bf is another horizontal offset. Set this to f8
+060d14ef is vertical offset.  Change to 0x93
 
 0x06089264:
 M00PRG.BIN 0x0002fc1e
