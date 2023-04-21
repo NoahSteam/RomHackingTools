@@ -244,7 +244,7 @@ bool PatchGame(const string& inSourceGameDirectory, const string& inTranslatedDi
 		return false;
 	}
 
-	if( !PatchBattleTextDrawingCode(inPatchedDirectory) )
+	if( !PatchBattleTextDrawingCode(inPatchedDirectory, inTranslatedDirectory) )
 	{
 		printf("Unable to patch battle text drawing code\n");
 		return false;

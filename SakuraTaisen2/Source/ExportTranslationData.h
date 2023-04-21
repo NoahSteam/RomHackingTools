@@ -23,6 +23,8 @@ void ExportTranslationData(const string& InSourceFilePath, const string& OutputD
 	const string Quote("\"");
 	const string UntranslatedText("Untranslated");
 
+	const string teststring("M00LOW");
+
 	//Populate map
 	int lineNum = 0;
 	int prevTextEntryNum = 1;
@@ -33,7 +35,20 @@ void ExportTranslationData(const string& InSourceFilePath, const string& OutputD
 		size_t position2 = sourceEntry.mFullLine.find_first_of(",", position1 + 1);
 		const SourceFileName fileName = sourceEntry.mFullLine.substr(0, position1);
 		const int textEntryNum = atoi(sourceEntry.mFullLine.substr(position1 + 1, position2).c_str());
-		const string translatedText = sourceEntry.mFullLine.substr(position2 + 1);
+		string translatedText = sourceEntry.mFullLine.substr(position2 + 1);
+
+		if (fileName != teststring)
+		{
+			continue;
+		}
+
+		if(translatedText.size() > 2)
+		{
+			if (translatedText.front() == '\"' && translatedText.back() == '\"') 
+			{
+				translatedText = translatedText.substr(1, translatedText.length() - 2);
+			}
+		}
 
 		if(prevFileName != fileName)
 		{
@@ -59,10 +74,11 @@ void ExportTranslationData(const string& InSourceFilePath, const string& OutputD
 			printf("Line with a missing quote: %i: %s\n", lineNum, translatedText.c_str());
 		}
 
+		//Todo: Can't expect lines to be in sequential order.  So make a map of lines based on their line numbers
 		for(int k = prevTextEntryNum + 1; k < textEntryNum; ++k)
 		{
 			fileDataMap[fileName].push_back(UntranslatedText);
-		}
+		}		
 
 		fileDataMap[fileName].push_back(translatedText);
 		++lineNum;

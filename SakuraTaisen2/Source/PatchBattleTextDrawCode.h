@@ -1,6 +1,6 @@
 #pragma once
 
-bool PatchBattleTextDrawingCode(const string& inPatchedDirectory)
+bool PatchBattleTextDrawingCode(const string& inPatchedDirectory, const string& inDataDirectory)
 {
 	struct PatchingData
 	{
@@ -19,6 +19,13 @@ bool PatchBattleTextDrawingCode(const string& inPatchedDirectory)
 		const char* pFileName;
 		PatchingData data;	
 	};
+
+	const string lipPatchPath = inDataDirectory + Seperators + "BattleLipsPatching.bin";
+	FileData lipsPatchData;
+	if(!lipsPatchData.InitializeFileData(lipPatchPath))
+	{
+		return false;
+	}
 
 	PatchingEntry patchingInfo[] = 
 	{
@@ -356,6 +363,133 @@ bool PatchBattleTextDrawingCode(const string& inPatchedDirectory)
 		"0.SLG", 0x00002402, 0x3f50,
 		"0.SLG", 0x000024e2, 0x3f50,
 		"0.SLG", 0x0000235a, 0x6f,
+
+		/*Lips spacing
+		060d1503 is X spacing.Set this to 0x08
+		060d146c is calculation to center text.Set this to 4200 (shll r2)
+		060d16bf is another horizontal offset.Set this to f8
+		060d14ef is vertical offset.Change to 0x93*/
+		"EV00001.BIN", 0x000071f0, 0xffff,
+		"EV00002.BIN", 0x00005af4, 0xffff,
+		"EV00050.BIN", 0x00005af4, 0xffff,
+		"EV00051.BIN", 0x00005af4, 0xffff,
+		"EV00052.BIN", 0x00005af4, 0xffff,
+		"EV00054.BIN", 0x00005af4, 0xffff,
+		"EV00055.BIN", 0x00005af4, 0xffff,
+		"EV00060.BIN", 0x00005af4, 0xffff,
+		"EV01001.BIN", 0x00005c00, 0xffff,
+		"EV01002.BIN", 0x00005af4, 0xffff,
+		"EV01020.BIN", 0x00006118, 0xffff,
+		"EV01021.BIN", 0x00005f2c, 0xffff,
+		"EV01022.BIN", 0x00005af4, 0xffff,
+		"EV01023.BIN", 0x00005af4, 0xffff,
+		"EV01030.BIN", 0x00005af4, 0xffff,
+		"EV01050.BIN", 0x00005af4, 0xffff,
+		"EV01054.BIN", 0x00005af4, 0xffff,
+		"EV01055.BIN", 0x00005af4, 0xffff,
+		"EV02001.BIN", 0x00005af4, 0xffff,
+		"EV02002.BIN", 0x00005af4, 0xffff,
+		"EV02010.BIN", 0x00005af4, 0xffff,
+		"EV02021.BIN", 0x00005af4, 0xffff,
+		"EV02025.BIN", 0x00005af4, 0xffff,
+		"EV02050.BIN", 0x00005af4, 0xffff,
+		"EV02051.BIN", 0x00005af4, 0xffff,
+		"EV02052.BIN", 0x00005af4, 0xffff,
+		"EV02053.BIN", 0x00005af4, 0xffff,
+		"EV02054.BIN", 0x00005af4, 0xffff,
+		"EV03001.BIN", 0x00005cc0, 0xffff,
+		"EV03002.BIN", 0x00005b68, 0xffff,
+		"EV03005.BIN", 0x00005b20, 0xffff,
+		"EV03010.BIN", 0x00005b04, 0xffff,
+		"EV03020.BIN", 0x00005b04, 0xffff,
+		"EV03021.BIN", 0x00005b04, 0xffff,
+		"EV03023.BIN", 0x00005b1c, 0xffff,
+		"EV03024.BIN", 0x00005b1c, 0xffff,
+		"EV03025.BIN", 0x00005b30, 0xffff,
+		"EV03050.BIN", 0x00005f34, 0xffff,
+		"EV03051.BIN", 0x00005b58, 0xffff,
+		"EV03052.BIN", 0x00005bc4, 0xffff,
+		"EV03053.BIN", 0x00005b80, 0xffff,
+		"EV04001.BIN", 0x000069ac, 0xffff,
+		"EV04002.BIN", 0x00005b70, 0xffff,
+		"EV04003.BIN", 0x00005ca4, 0xffff,
+		"EV04005.BIN", 0x00005af4, 0xffff,
+		"EV04010.BIN", 0x00005b68, 0xffff,
+		"EV04020.BIN", 0x00005af4, 0xffff,
+		"EV04022.BIN", 0x00005afc, 0xffff,
+		"EV04050.BIN", 0x00005b9c, 0xffff,
+		"EV04053.BIN", 0x00005af4, 0xffff,
+		"EV04055.BIN", 0x00005b68, 0xffff,
+		"EV05001.BIN", 0x00005b0c, 0xffff,
+		"EV05002.BIN", 0x00005af4, 0xffff,
+		"EV05003.BIN", 0x00005cd0, 0xffff,
+		"EV05004.BIN", 0x00005af4, 0xffff,
+		"EV05005.BIN", 0x00005af4, 0xffff,
+		"EV05007.BIN", 0x00005af4, 0xffff,
+		"EV05010.BIN", 0x00005af4, 0xffff,
+		"EV05011.BIN", 0x00005af4, 0xffff,
+		"EV05018.BIN", 0x00005af4, 0xffff,
+		"EV05019.BIN", 0x00005b1c, 0xffff,
+		"EV05020.BIN", 0x00005af4, 0xffff,
+		"EV05021.BIN", 0x00005af4, 0xffff,
+		"EV05022.BIN", 0x00005af4, 0xffff,
+		"EV05023.BIN", 0x00005af4, 0xffff,
+		"EV05025.BIN", 0x00005af4, 0xffff,
+		"EV05026.BIN", 0x00005af4, 0xffff,
+		"EV05027.BIN", 0x00005af4, 0xffff,
+		"EV05051.BIN", 0x00005af4, 0xffff,
+		"EV05052.BIN", 0x00005af4, 0xffff,
+		"EV05053.BIN", 0x00005af4, 0xffff,
+		"EV05054.BIN", 0x00005af4, 0xffff,
+		"EV05060.BIN", 0x00005af4, 0xffff,
+		"EV26001.BIN", 0x00006900, 0xffff,
+		"EV26002.BIN", 0x00005e9c, 0xffff,
+		"EV26020.BIN", 0x00005af4, 0xffff,
+		"EV26021.BIN", 0x00005af4, 0xffff,
+		"EV27001.BIN", 0x00005b00, 0xffff,
+		"EV27002.BIN", 0x00005ba8, 0xffff,
+		"EV27054.BIN", 0x00005af4, 0xffff,
+		"EV28001.BIN", 0x00005af4, 0xffff,
+		"EV28025.BIN", 0x00005af4, 0xffff,
+		"EV28050.BIN", 0x00005af4, 0xffff,
+		"EV28051.BIN", 0x00005af4, 0xffff,
+		"EV29001.BIN", 0x00005b18, 0xffff,
+		"EV29002.BIN", 0x00005b18, 0xffff,
+		"EV29021.BIN", 0x00005af4, 0xffff,
+		"EV29050.BIN", 0x00005af4, 0xffff,
+		"EV30003.BIN", 0x00006b3c, 0xffff,
+		"EV30020.BIN", 0x00005b04, 0xffff,
+		"EV30026.BIN", 0x00005b04, 0xffff,
+		"EV30027.BIN", 0x00005b04, 0xffff,
+		"EV31001.BIN", 0x00005d9c, 0xffff,
+		"EV31002.BIN", 0x00005cf4, 0xffff,
+		"EV31023.BIN", 0x00005b1c, 0xffff,
+		"EV31024.BIN", 0x00005b1c, 0xffff,
+		"EV32002.BIN", 0x00005b28, 0xffff,
+		"EV32020.BIN", 0x00005af4, 0xffff,
+		"EV32055.BIN", 0x00005b68, 0xffff,
+		"EV33001.BIN", 0x00006048, 0xffff,
+		"EV33002.BIN", 0x00005db0, 0xffff,
+		"EV33022.BIN", 0x00005afc, 0xffff,
+		"EV33054.BIN", 0x00005af4, 0xffff,
+		"EV34001.BIN", 0x00005b18, 0xffff,
+		"EV34002.BIN", 0x00005b30, 0xffff,
+		"EV34003.BIN", 0x00005b18, 0xffff,
+		"EV34004.BIN", 0x00005b70, 0xffff,
+		"EV34005.BIN", 0x00005b70, 0xffff,
+		"EV34006.BIN", 0x00005ba8, 0xffff,
+		"EV34007.BIN", 0x00005b18, 0xffff,
+		"EV34008.BIN", 0x00005ba8, 0xffff,
+		"EV34020.BIN", 0x00005af4, 0xffff,
+		"EV34030.BIN", 0x00005af4, 0xffff,
+		"EV34040.BIN", 0x00005af4, 0xffff,
+		"EV34041.BIN", 0x00005af4, 0xffff,
+		"EV34042.BIN", 0x00005af4, 0xffff,
+		"EV34043.BIN", 0x00005af4, 0xffff,
+		"EV34044.BIN", 0x00005af4, 0xffff,
+		"M00PRG.BIN", 0x000795f0, 0xffff,
+		"M26PRG.BIN", 0x00078d00, 0xffff,
+		"TUTORI0.BIN", 0x00005c6c, 0xffff,
 	};
 
 	const int numEntries = sizeof(patchingInfo) / sizeof(patchingInfo[0]);
@@ -366,6 +500,13 @@ bool PatchBattleTextDrawingCode(const string& inPatchedDirectory)
 		if (!sakuraBin.OpenFile(sakuraBinFilePath))
 		{
 			return false;
+		}
+
+		//Lips Patching
+		if(patchingInfo[i].data.command.word == 0xffff)
+		{
+			sakuraBin.WriteData(patchingInfo[i].data.address, lipsPatchData.GetData(), lipsPatchData.GetDataSize(), false);
+			continue;
 		}
 
 		const bool bIsWord = (patchingInfo[i].data.command.word & 0xff00) != 0;

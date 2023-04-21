@@ -17,7 +17,7 @@ CreateSysSpreadsheets A:\SakuraWars2\ExtractedData\All\Sys A:\NoahSteam\RomPatch
 ExtractMiniGames a:\SakuraWars2\Disc1_Original 0 a:\SakuraWars2\ExtractedData\Disc1\MiniGames\
 CreateMiniGameSpreadsheets a:\SakuraWars2\ExtractedData\Disc1\MiniGames\ForWebsite
 CreateIndexFile a:\SakuraWars2\Disc_All\Mes a:\SakuraWars2\Disc_All\Sk a:\SakuraWars2\ExtractedData\Disc1\MiniGames\ForWebsite a:\SakuraWars2\Index.php
-ExportTranslationData A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\TBLFiles.csv A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\TranslationTest
+ExportTranslationData A:\SakuraWars2\DatabaseExport\TBLFiles.csv A:\SakuraWars2\DatabaseExport\TextFiles\
 ExtractIntroImages a:\SakuraWars2\Disc1_Original A:\SakuraWars2\ExtractedData\Disc1\IntroImages
 OutputUncompressedData A:\SakuraWars2\Disc1_Original\SAKURA1\TITLE.BIN A:\SakuraWars2\ExtractedData\Disc1\Title\Uncompressed.bin 98648
 FixupWKLImageColors A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\WKL\WKL01 a:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\GOVER\ A:\SakuraWars2\ExtractedData\Disc1\BattleMenu\GOVERKV1\87.bmp

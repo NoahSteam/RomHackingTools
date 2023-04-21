@@ -30,6 +30,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include <utility>
 #include <set>
 #include <assert.h>
+#include <iostream>
+#include <fstream>
+#include <sstream>
+#include <unordered_set>
 
 #include "..\Utils\Utils.h"
 #include "..\Utils\decompress_rtns.c"
@@ -69,6 +73,7 @@ using std::unordered_map;
 #include "Source/Demo.h"
 #include "Source/TextInImage.h"
 #include "Source/TextInImageUsingFontSheet.h"
+#include "Source/ExportTranslationToFiles.h"
 
 void PrintHelp()
 {
