@@ -1,180 +1,229 @@
-Moving as swift as the wind, this strategy focuses on mobility! 
-This order is currently in effect. We'll deftly outmaneuver our opponents as we fight. 
-Attention all units! Initiating the "Wind" strategy! 
-Become serene like the forest and draw out your innate power! 
-This order is currently in effect. We'll face the enemy with our innate power. 
-Attention all units! Initiating the "Forest" strategy! 
-Burning hot like raging flames, this strategy focuses on offense! 
-This order is currently in effect. We'll overpower our opponents as we fight. 
-Attention all units! Initiating the "Fire" strategy! 
-Immovable like a mountain, this strategy focuses on defense! 
-This order is currently in effect. We'll fight our opponents unflinchingly. 
-Attention all units! Initiating the "Mountain" strategy! 
-We're sticking with the current strategy! 
-Understood! 
-Untranslated
-Untranslated
-0 Message 1-3 
-Untranslated
-Untranslated
-0 Message 2-3 
-Untranslated
-0 Message 3-2 
-0 Message 3-3 
-Ichiro Ogami, Flower Division captain. Highly proficient in combat and brave-hearted. 
-Sakura Shinguji, practitioner of the Hokushin Itto style. She moves swiftly, cleaving enemies in two with her sword. 
-Sumire Kanzaki, practicioner of the Kanzaki Fujin style. She inspires awe in all who witness her naginata technique. 
-Maria Tachibana, sharpshooter. Once she's set her sights on her prey, they can't escape her icy bullets. 
-Kanna Kirishima, practitioner of Kirishima-style karate. Pulverizes enemies with her overwhelming power. 
-Iris, the Flower Division's mascot. She fights enemies with her mysterious supernatural powers. 
-Kohran Li, inventor. Startles friend and foe alike with the inventions she employs. 
-Orihime Soletta, ex-member of the Star Division. Known as one of the "Red Nobles, riding an Italian rose armor." 
-Reni Milchstraße. A combat professional, attacking accurately without a single wasted movement. 
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Black Demon Society Hex Mech: Wakiji Kai. The ones equipped with large cannons are referred to as HA-type. 
-Black Demon Society Hex Mech: Wakiji Kai. It's actually not very loyal, so it lacks motivation. 
-Untranslated
-Message 18 
-Message 19 
-Message 20 
-Doesn't look like I need to cover anyone right now. 
-Sakura... I will protect you! 
-Sumire... <br> Let me be your shield. 
-Maria... <br> I've got your back. 
-Kanna... <br> I'll protect you with all my might! 
-Iris... <br> Don't worry, I'm right here. 
-Kohran... <br> I'll always be there to help you. 
-Orihime... <br> You can always call on me when things get tough! 
-Reni... <br> You don't mind if I protect you now and then, do you? 
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-... 
-... 
+Moving as swift as the wind, this strategy focuses on mobility!
+This order is currently in effect. We'll deftly outmaneuver our opponents as we fight.
+Attention all units! Initiating the "Wind" strategy!
+Become serene like the forest and draw out your innate power!
+This order is currently in effect. We'll face the enemy with our innate power.
+Attention all units! Initiating the "Forest" strategy!
+Burning hot like raging flames, this strategy focuses on offense!
+This order is currently in effect. We'll overpower our opponents as we fight.
+Attention all units! Initiating the "Fire" strategy!
+Immovable like a mountain, this strategy focuses on defense!
+This order is currently in effect. We'll fight our opponents unflinchingly.
+Attention all units! Initiating the "Mountain" strategy!
+We're sticking with the current strategy!
+Understood!
+The aerial assault has significantly thinned out the enemy numbers.
+Now seize this opportunity and eliminate all the enemy Wakiji!
+0 Message 1-3
+Compressed steam airdrop complete!
+There are lots of enemies, but now that the Kobu have recovered, eliminate all the Wakiji!
+0 Message 2-3
+0 Message 3-1
+0 Message 3-2
+0 Message 3-3
+Ichiro Ogami, Flower Division captain. Highly proficient in combat and brave-hearted.
+Sakura Shinguji, practitioner of the Hokushin Itto style. She moves swiftly, cleaving enemies in two with her sword.
+Sumire Kanzaki, practicioner of the Kanzaki Fujin style. She inspires awe in all who witness her naginata technique.
+Maria Tachibana, sharpshooter. Once she's set her sights on her prey, they can't escape her icy bullets.
+Kanna Kirishima, practitioner of Kirishima-style karate. Pulverizes enemies with her overwhelming power.
+Iris, the Flower Division's mascot. She fights enemies with her mysterious supernatural powers.
+Kohran Li, inventor. Startles friend and foe alike with the inventions she employs.
+Orihime Soletta, ex-member of the Star Division. Known as one of the "Red Nobles," riding an Italian rose armor.
+Reni Milchstraße. A combat professional, attacking accurately without a single wasted movement.
+Hex Mech: Wakiji Kai. The close range attack types are referred to as I-type.
+Hex Mech: Wakiji Kai. The ones equipped with guns are referred to as RO-type.
+Steam Rocket. A weapon built by Mokujiki with high firepower.
+Hex Mech: Dainichiken. Piloted by Kongou of the Five Elements, it excels in close-range combat.
+Wakiji Kai: Oudouji. Part of Kongou's personal squad, painted the same color as his Dainichiken.
+Black Demon Society Hex Mech: Wakiji Kai. The ones equipped with large cannons are referred to as HA-type.
+Black Demon Society Hex Mech: Wakiji Kai. It's actually not very loyal, so it lacks motivation.
+Black Demon Society Hex Mech: Wakiji Kai. The ones equipped with guns are referred to as RO-type.
+Message 18
+Message 19
+Message 20
+Doesn't look like I need to cover anyone right now.
+Sakura… <br> I will protect you!
+Sumire… <br> Let me be your shield.
+Maria… <br> I've got your back.
+Kanna… <br> I'll protect you with all my might!
+Iris… <br> Don't worry, I'm right here.
+Kohran… <br> I'll always be there to help you.
+Orihime… <br> You can always call on me when things get tough!
+Reni… <br> You don't mind if I protect you now and then, do you?
+Good luck, Ogami!
+I know I can count on you, Ogami!
+Don't be reckless, Ogami…
+I'll do my best!
+I'm doing this for you, Ogami!
+I have to try my hardest!
+I won't… lose…
+…Thank you, Ogami.
+With you around, Ogami, I can do my best!
+Are you all right, Ogami?
+Ogami… I'm sorry.
+I'll leave this to you, Ogami… I'm sorry.
+Way to go, Ogami!
+There's something different about you today, Ogami.
+I did it!
+It was all thanks to you, Ogami!
+Ogami… I believe in you.
+My time to shine has come, Ensign.
+Please, do your best for me…
+You mustn't overexert yourself…
+Now, here I come!
+Watch me, Ensign!
+What would you do without me?
+I-If this keeps up…
+Ensign… I'm so glad…
+You're the only one I know who can protect me, Ensign.
+M-My body moved on its own, that's all.
+How could I be so careless…?
+I can't bear to… leave you behind, Ensign!
+Splendid, Ensign.
+My, Ensign, so gallant!
+That was nothing.
+Did you see that, Ensign?
+Hm hm, what a trifle. <br> Isn't that right, Ensign?
+Your orders, Captain.
+Captain… I believe in you.
+Let's tread with caution, sir.
+Prepare yourself.
+The captain is with me…
+I have to keep it together…
+Urgh, I can… still fight!
+Apologies, Captain.
+I know I can rely on you, sir.
+Thank goodness you're safe, sir.
+Captain… My apologies…
+I wish I could stay with you… a little longer…
+Well done, sir.
+Thank goodness you're here, sir…
+Hmph! Is that all you've got?
+An excellent order, Captain!
+You give me strength, Captain!
+Go get 'em, Boss!
+I'm right here with ya, Boss!
+Show me what ya got, Boss!
+Looks like I'm up!
+Watch this, Boss!
+We'll take care of 'em together!
+C'mon, keep 'em comin'!
+Sorry 'bout that, Boss.
+Heheh, guess bein' protected ain't so bad.
+Heheh, that ain't like ya, Boss!
+Dammit… <br> Not like this…
+Sorry, Boss. <br> Go get 'em for me!
+Nice goin', Boss!
+Lookin' good, Boss!
+Is that all ya got?
+Heheh! How was that, Boss?
+Ain't nobody stoppin' us now!
+Let's do our best, Mon Frère!
+Go, Mon Frère!
+Don't give up, Mon Frère!
+Here I go!
+Eheheh, I'm giving it all I've got!
+I gotta try my hardest!
+I can't go on anymore…
+You came for me!
+You're my knight in shining armor, Mon Frère!
+It's OK, Mon Frère, I'm here with you.
+Ah… It stopped…
+I'm sorry, Mon Frère…
+Yaaaay! You did it, Mon Frère!
+Wow, Mon Frère! You're sooo cool!
+I'm amazing, huh?
+C'mon, praise me! Praise me!
+With you around, Mon Frère, I'm not scared of anything!
+Countin' on ya, Chief!
+Lemme show ya what I'm made of!
+Y-You OK, Chief?
+Alrighty, let's give this a shot!
+Just leave it to me, Chief!
+I gotta try my hardest!
+Th-This is bad…
+Th-Thanks, Chief…
+Jeez, if you keep doing that, I just might…
+I'd be in a bind without you around, Chief.
+I can't keep this up…
+Sorry, Chief.
+Way to go, Chief!
+Looking good, Chief!
+Problem solved!
+Look, Chief, I did it!
+With our strength combined, we're unstoppable!
+Show me what you've got, Mr. Ensign!
+Let's end this quickly so we can go home.
+I think we might be in trouble!
+This is fun!
+Eyes on me, please!
+You just can't rely on Japanese men!
+I'd kill for a shower!
+To think I'd be shielded by a Japanese man…
+Don't overdo it, Mr. Ensign…
+Sheesh, you're hopeless!
+I can't take it anymore!
+I have to retreat. I can't keep going… Captain…
+Not bad!
+That was super cool, Mr. Ensign!
+That was easy!
+Heehee! Give me a big round of applause!
+We're an unstoppable duo!
+…Commencing operation.
+…Commencing operation.
+…Danger.
+You can only ever rely on yourself…
+You can only ever rely on yourself…
+You can only ever rely on yourself…
+Critical damage sustained…
+…
+…
+Captain… Keep it together…
+Making a temporary retreat…
+Making a temporary retreat…
+Target confirmed destroyed.
+Target confirmed destroyed.
+Target eliminated.
+Target eliminated.
+This is… Our power…!
+Awright, here I go!
+C'mon, try not to bore me.
+The real fight starts now!
+You're pretty good!
+Interesting…
+You OK, Suiko?
+You'll burn brilliantly…
+Prepare yourselves.
+Ahahahahaha!
+I'll burn you to a crisp!
+You… Pieces of trash…
+I'll show you what I've got.
+I'll be gentle.
+Hm hm hm… I won't lose.
+Not bad. Just as I expected, Assault Troupe.
+Urgh… So strong…
+Now it's my turn.
+My calculations are flawless.
+I-I won't let it end like this…
+This, too, falls within my calculations.
+Ngh… This was not part of my calculations…
+I'll hunt you down!
+I'll make this quick.
+I'll squash you like a bug!
+Don't think you've won…!
+This isn't over yet!
+I'll end this.
+Here I come, Assault Troupe!
+No, not yet!
+You've improved…
+Urgh… I'll have my revenge…
+You shan't be forgiven…
+Know thy sins…
+Battle is always uncertain…
+Love is dead…
+Ngh… Not bad…
+Don't touch me!
+You haven't even begun to feel this city's grudge…
+In the end… I'll be the last one standing!
+At this rate, I'll… Ngh!!
+Don't get cocky, you hypocrites!

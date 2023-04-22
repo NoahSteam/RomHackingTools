@@ -1,8 +1,8 @@
-Skip 
-Piano Lessons? 
-Cast  to raise the note, or  to lower it. 
-Move Ogami 
-Cast  
-Unused 
-Cast  
-Move Cursor 
+Skip
+Piano Lessons?
+Cast  to raise musical notes or  to lower them. Match the colors of the notes with the boxes!
+Move Ogami
+Cast 
+Unused
+Cast 
+Move Cursor

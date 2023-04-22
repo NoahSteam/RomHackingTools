@@ -1,7 +1,7 @@
-image 
-If We Run Into The Rain 
-Let's head back to the theater while paying attention to the wind. Use the umbrella so we don't get wet. 
-Unused 
-Move Left (press repeatedly) 
-Unused 
-Move Right (press repeatedly) 
+image
+If We Run Into The Rain
+Let's head back to the theater while paying attention to the wind. Use the umbrella so we don't get wet.
+Unused
+Move Left (press repeatedly)
+Unused
+Move Right (press repeatedly)

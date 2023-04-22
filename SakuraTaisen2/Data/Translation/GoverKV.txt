@@ -1,53 +1,53 @@
-Ichiro Ogami 
-Sakura Shinguji 
-Sumire Kanzaki 
-Maria Tachibana 
-Kanna Kirishima 
-Iris 
-Kohran Li 
-Soletta Orihime 
-Reni Milchstrasse 
-Ogami 
-Sakura 
-Sumire 
-Maria 
-Kanna 
-Iris 
-Kohran 
-Orihime 
-Reni 
-DEF 
-Return 
-MOV 
-ATK 
-DEF 
-No. <number> 
-Wind 
-Unit: 
-Stamina\n\nSpirit 
-Armor - ? - Trust - ? / Total 
-Forest 
-Recover 
-Fire 
-Command 
-Mountain 
-Move 
-Combination 
-Move - Attack - Defend - Info - End - Special (Ogami only) 
-Sp. Atk. 
-Normal 
-Recover 
-Rest 
-Defend 
-Map 
-Order 
-Info 
-Finish 
-Transmission 
-Command 
-Cover 
-Wind 
-Forest 
-Fire 
-Mountain 
-MOV - ATK - DEF 
+Ichiro Ogami
+Sakura Shinguji
+Sumire Kanzaki
+Maria Tachibana
+Kanna Kirishima
+Iris
+Kohran Li
+Orihime Soletta
+Reni Milchstraﬂe
+Ogami
+Sakura
+Sumire
+Maria
+Kanna
+Iris
+Kohran
+Orihime
+Reni
+DEF
+Return
+MOV
+ATK
+DEF
+No. <number>
+Wind
+Unit:
+Stamina - Spirit
+Armor Pilot Trust Captain/Total
+Forest
+Recover
+Fire
+Command
+Mountain
+Move
+Combination
+Move - Attack - Defend - Info - End - Special (Ogami only)
+Sp. Atk.
+Normal
+Recover
+Rest
+Defend
+Map
+Order
+Info
+Finish
+Transmission
+Command
+Cover
+Wind
+Forest
+Fire
+Mountain
+MOV - ATK - DEF

@@ -1,4 +1,4 @@
-Ogami 
+Ogami
 Untranslated
 Untranslated
 Untranslated
@@ -12,7 +12,7 @@ Untranslated
 Untranslated
 Untranslated
 Untranslated
-Koubu 
+Koubu
 Untranslated
 Untranslated
 Untranslated
@@ -21,16 +21,16 @@ Untranslated
 Untranslated
 Untranslated
 Untranslated
-Koubu 
+Koubu
 Untranslated
 Untranslated
 Untranslated
-Koubu 
+Koubu
 Untranslated
 Untranslated
 Untranslated
 Untranslated
-Sakura 
+Sakura
 Untranslated
 Untranslated
 Untranslated
@@ -40,7 +40,7 @@ Untranslated
 Untranslated
 Untranslated
 Untranslated
-Podozhdi 
+Podozhdi
 Untranslated
 Untranslated
 Untranslated
@@ -53,7 +53,7 @@ Untranslated
 Untranslated
 Untranslated
 Untranslated
-Kanna 
+Kanna
 Untranslated
 Untranslated
 Untranslated
@@ -61,7 +61,7 @@ Untranslated
 Untranslated
 Untranslated
 Untranslated
-Rear Guard 
+Rear Guard
 Untranslated
 Untranslated
 Untranslated
@@ -70,11 +70,11 @@ Untranslated
 Untranslated
 Untranslated
 Untranslated
-None 
+None
 Untranslated
 Untranslated
 Untranslated
-Acid Shot 
+Acid Shot
 Untranslated
 Untranslated
 Untranslated
@@ -92,9 +92,9 @@ Untranslated
 Untranslated
 Untranslated
 Untranslated
-None 
+None
 Untranslated
-Turn Over 
+Turn Over
 Untranslated
 Untranslated
 Untranslated
@@ -105,7 +105,7 @@ Untranslated
 Untranslated
 Untranslated
 Untranslated
-Recover 
+Recover
 Untranslated
 Untranslated
 Untranslated
@@ -125,10 +125,10 @@ Untranslated
 Untranslated
 Untranslated
 Untranslated
-Combo 
+Combo
 Untranslated
 Untranslated
 Untranslated
 Untranslated
 Untranslated
-No 
+No

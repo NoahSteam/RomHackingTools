@@ -1,14 +1,14 @@
-Start Game 
-Untranslated 
-Stop Game 
-Restart Game 
-Retry 
-Delete Record 
-Top 
-2nd 
-3rd 
-Rank 
-min. 
-sec. 
-Score 
-Beginning Operation Practice... 
+Start Game
+Untranslated
+Stop Game
+Restart Game
+Retry
+Delete Record
+Top
+2nd
+3rd
+Rank
+min.
+sec.
+Score
+Beginning Operation Practice…

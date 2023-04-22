@@ -1,95 +1,98 @@
-Untranslated
-Untranslated
-Episode 1 
-Episode 2 
-Episode 3 
-Episode 4 
-Episode 5 
-Episode 6 
-Episode 7 
-Episode 8 
-Episode 9 
-Episode 10 
-Untranslated
-Episode 11 
-Episode 12 
-Untranslated
-Untranslated
-System RAM 
-Untranslated
-Cartridge RAM 
-Untranslated
-Continue 
-Delete 
-Copy 
-Cursor Speed 
-Untranslated
-Untranslated
-Time 
-Minute 
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Slow 
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Fast 
-Sounds/SFX 
-Stereo 
-Mono 
-Voice 
-On 
-Off 
-Untranslated
-Normal 
-Untranslated
-Fast 
-To Options 
-Untranslated
-Move 
-Defend 
-Finish 
-Rest 
-Options 
-Untranslated
-Untranslated
-Settings 
-Normal Attack 
-Special Attack 
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Options 
-Untranslated
-Settings 
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-LIPS Speed 
-Untranslated
-Normal 
-Slow 
-Untranslated
-Untranslated
-Untranslated
-Hard 
-Untranslated
-System RAM 
-Cartridge RAM 
-Untranslated
-Cartridge RAM 
-System RAM 
+Tonight's Programme
+New Game
+Button Settings
+Game Settings
+Episode 1
+Episode 2
+Episode 3
+Episode 4
+Episode 5
+Episode 6
+Episode 7
+Episode 8
+Episode 9
+Episode 10
+Return to Tonight's Programme
+Episode 11
+Episode 12
+Available
+Unavailable
+System RAM
+File
+Cartridge RAM
+Config
+Continue
+Delete
+Copy
+Cursor Speed
+Return To File List
+Time Elapsed
+Hour(s)
+Minute(s)
+Episode One <br> The Capital in Full Bloom
+Episode Two <br> Iris's Letter
+Episode Three <br> Ahh, A Marriage Interview
+Episode Four <br> Rampage! Fireball Geisha Girls
+Episode Five <br> An Enjoyable, Embarrassing Summer Break
+Slow
+Episode Six <br> Reni, Get Your Gun
+Episode Seven <br> Out-Of-Season Tanabata
+Episode Eight <br> The Capital's Longest Day?!
+Episode Nine <br> Merry Christmas at the Theater
+Episode Ten <br> As If it Snowed in the Streets
+Episode Eleven <br> The Greatest Mission on Earth
+Final Episode <br> Maiden's Elegy
+Fast
+Sounds/SFX
+Stereo
+Mono
+Voice
+On
+Off
+Battle Movement Speed
+Normal
+Continue
+Fast
+To Options
+Button Settings
+Move
+Defend
+Finish
+Rest
+Options
+Heal
+Map
+Confirm
+Normal Attack
+Special Attack
+Order
+Captain
+Cover
+Comms
+No setting
+Long Day in the Imperial Theater
+Control Settings
+Right-handed
+Left-handed
+Options
+Adventure: <br> Battle: 
+Settings
+Info
+Cancel
+Misc Settings
+Trust Sound Effects
+LIPS Speed
+Config
+Normal
+Slow
+Personality Parameters
+Chapter Opening Movies
+Combat Difficulty
+Hard
+File List
+System RAM
+Cartridge RAM
+Change
+Cartridge RAM
+System RAM
+Return to Tonight's Programme

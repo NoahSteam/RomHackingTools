@@ -1,12 +1,12 @@
 Koubu Kai
 Ogami
-Tenchi Isshin
+Rouko Mekkyaku - Tenchi Isshin
 Tenbu
 Sakura
-Hyakka Seihou
+Haja Kensei - Hyakka Seihou
 Tenbu
 Sumire
-Dance of the Dragon
+Kanzaki Fujin Ryu - Dance of Dragon
 Eisenkleid
 Reni
 Das Rheingold
@@ -18,7 +18,7 @@ Kanna
 Rouhai Go-dan
 Tenbu
 Iris
-Iris BoÃ®te de Secours
+Iris Boîte de Secours
 Tenbu
 Kohran
 Lightning Ball Robot
@@ -27,34 +27,34 @@ Orihime
 Il Flauto Magico
 Tenbu
 Reni
-Die WalkÃ¼re
+Die Walküre
 Koubu Kai
 Ogami
-Tenrou Tenge
+Rouko Mekkyaku - Tenrou Tenge
 Koubu Kai
 Sakura
-Ouka Ranman
+Haja Kensei - Ouka Ranman
 Koubu Kai
 Sakura
-Ouka Mushou
+Haja Kensei - Ouka Mushou
 Koubu Kai
 Sumire
-Dance of the Phoenix
+Kanzaki Fujin Ryu - Dance of Phoenix
 Koubu Kai
 Maria
-Shchelkunchik
+Shchelkunchik/Nutcracker
 Koubu Kai
 Kanna
 Sansei Ruushou
 Koubu Kai
 Iris
-Iris Grand Jean-Paul
+Iris Grande Jean-Paul
 Koubu Kai
 Kohran
 Seiju Robo Kai
 Koubu Kai
 Orihime
-Viaggio Rose
+Viaggio rose
 Koubu Kai
 Reni
 Siegfried
@@ -80,7 +80,7 @@ Wakiji Kai
 NI-type Special
 None
 Wakiji Kai
-I-type Kei
+I-type Light
 None
 Wakiji Kai
 L Special
@@ -102,7 +102,7 @@ Mokujiki
 Koushinenrin Enbu
 Koubu Kai
 Maria
-Pikovaya Dama
+Pikovaya dama
 Dark Kamui
 Satan
 None
@@ -118,16 +118,16 @@ Houma Seishin
 Dark Kamui
 Demon King
 Ouka Houshin
-Shinnou (H)
+Shinnou (Head)
 Kyogoku
 Onteki Taisan
-Shinnou (A)
+Shinnou (Arm)
 Kyogoku
 None
-Shinnou (A)
+Shinnou (Arm)
 Kyogoku
 None
-Shinnou (T)
+Shinnou (Tail)
 Kyogoku
 Holy Demon Magic Circle
 Kouma Weapon
@@ -161,7 +161,7 @@ Kouma Weapon
 Inazuma
 None
 Weapon
-Rocket
+Steam Rocket
 None
 Weapon
 Enku
@@ -172,7 +172,7 @@ Iris Petit Jean-Paul
 Weapon
 Obeyer
 None
-Automobile
+Car
 Fancy Car
 None
 Weapon
@@ -191,7 +191,7 @@ Weapon
 Dimension Cannon
 None
 Weapon
-Cord
+Grudge Cord
 None
 Terrain
 Summoner
@@ -203,34 +203,34 @@ Koubu Kai
 Kohran
 Jiangpai Robots
 Weapon
-X Homura
+Cross Homura
 None
-Shinnou (A)
+Shinnou (Arm)
 Kyogoku
 None
 Weapon
-X Homura
+Cross Homura
 None
 Terrain
 Engine
 None
 Weapon
-Cord
+Grudge Cord
 None
 Terrain
-D. Curtain
+Defense Wall
 None
 Terrain
 Guide Light
 None
 Terrain
-Rock Stop
+Boulder Stopper
 None
 Terrain
-Illuminator
+Illuminator [?]
 None
 Weapon
-Cord
+Grudge Cord
 None
 Eisenkleid
 Orihime
@@ -264,4 +264,4 @@ Reni
 Das Rheingold
 Tenbu
 Ogami
-Sanjin Seiko
+Rouko Mekkyaku - Sanjin Seiko

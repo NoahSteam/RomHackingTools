@@ -1,0 +1,13 @@
+Captain, are we changing our strategy?
+Oh, Reni…
+Let's go with the Wind strategy!
+Let's go with the Mountain strategy!
+Let's stick with our current strategy.
+OK, let's go with the Wind strategy!
+Understood! Switching over to the Wind strategy!
+OK, let's go with the Mountain strategy!
+Understood! Switching over to the Mountain strategy!
+No, let's stick with our current strategy.
+Understood! Continuing with our current strategy!
+…No, let's stick with the current strategy.
+…Understood. Continuing with our current strategy.

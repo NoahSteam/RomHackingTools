@@ -1,4 +1,9 @@
 Untranslated
+Flame Wall
+Untranslated
+Untranslated
+Untranslated
+K. Punch
 Untranslated
 Untranslated
 Untranslated
@@ -7,13 +12,4 @@ Untranslated
 Untranslated
 Untranslated
 Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Musket 
-Flame Wall 
-Untranslated
-Untranslated
-Untranslated
-K. Punch 
+Musket

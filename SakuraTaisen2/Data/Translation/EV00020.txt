@@ -6,7 +6,7 @@ Yes, I remember. We made a lot of memories in these Koubu. I wouldn't forget tha
 Just what I thought you'd say. In that case, we'll leave the command to you. Lead us well!
 I wouldn't mind a refresher; it's been so long since I used one. Things could turn dire if I made a mistake.
 All right, then. In that case, try and watch how we handle our Koubu first.
-...
+…
 What's the matter? Are you nervous since you haven't fought in a long time?
 Just to be safe, try and watch how we handle our Koubu first.
 Let's go!
@@ -23,19 +23,19 @@ Hmhm, this will be a cake walk!
 Did you see that, Ogami? That was Orihime's special attack!
 Each of us has a special attack we can use when our spirit level is at its maximum.
 Special attacks are much stronger than regular attacks. After using one, your spirit level returns to 0.
-But that level will increase each time you're attacked or use "Rest," so...
-...don't be afraid to use your special attack when you think you might need to!
+But that level will increase each time you're attacked or use "Rest," so…
+…don't be afraid to use your special attack when you think you might need to!
 Eeek!
 Are you OK, Sakura? Hang on, I can heal you!
-Mon FrÃ¨re, our Koubu have the ability to recover damage that we take in battle.
+Mon Frère, our Koubu have the ability to recover damage that we take in battle.
 But there's a limit to how many times we can do it, so unless you're careful, you may run out before you know it!
 Mamma mia, if that little attack was all it took to shake you up, then you have much training to do!
 And Sakura, you ought to learn to properly "Defend" yourself instead of always attacking!
 When you defend, you will take far less damage until your next turn rolls around.
-R-Right! I'll be careful...
+R-Right! I'll be careful…
 However, the "Defend" and "Heal" commands can't both be used at once.
 In fact, commands that are similar to each other can only be used once per turn.
 For example, since "Normal" attack and "Special" attack are both similar, you can only use one at a time.
 And "Heal," "Defend," and "Rest" are all similar enough that they can't be used at the same time.
-So... Do you remember how to pilot the Koubu now?
+So… Do you remember how to pilot the Koubu now?
 From here on out, we'll be counting on you to give us our orders!

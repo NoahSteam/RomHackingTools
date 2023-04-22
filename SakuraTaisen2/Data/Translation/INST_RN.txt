@@ -1,7 +1,7 @@
-image 
-Jaws! 
-Grab the targets swimming in the pool. Watch out for the ever increasing number of mines. 
-Dive Right and Left 
-Dive 
-Unused 
-Dive Right 
+image
+Jaws!
+Grab the targets swimming in the pool. Watch out for the ever increasing number of mines.
+Dive Right and Left
+Dive
+Unused
+Dive Right

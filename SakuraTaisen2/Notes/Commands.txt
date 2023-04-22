@@ -49,5 +49,6 @@ ExtractDemoWPALL C:\Users\16306\Desktop\Rizwan\SakuraWars2\DemoDisc_Original C:\
 PatchGame c:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1 C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data c:\Users\16306\Desktop\Rizwan\SakuraWars2\Patched\Disc1
 WriteTextIntoImage C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data\Translation\MNameCG1.txt C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data\MNameCG\ImageSizes.txt C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data\MNameCG\Original\1\ C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data\MNameCG\Translated\1\
 WriteTextIntoImageUsingFontSheet C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data\Translation\InfoName.txt C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data\HudFontSheetWide.bmp C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data\InfoName\Canvas C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data\InfoName\Original C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data\InfoName\Translated
+ExportTranslationData C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data\TBLFiles.csv C:\Users\16306\Desktop\Rizwan\SakuraWars2\ExportedText
 FindData.exe C:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1 C:\Users\16306\Desktop\Rizwan\SakuraWars2\find.bin
 

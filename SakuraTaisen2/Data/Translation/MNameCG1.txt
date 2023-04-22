@@ -4,8 +4,8 @@ Lobby
 Large Prop Room
 Stage
 Stage Wing
-Costume Room
-Backstage
+Wardrobe
+Dressing Room
 Music Room
 Manager's Office
 Secretarial Office
@@ -35,9 +35,9 @@ Orihime's Room
 Reni's Room
 To Attic
 To 1st Floor
-Storage
+Storeroom
 Training Room
-Dressing Room
+Locker Room
 Bathroom
 Swimming Pool
 Infirmary
@@ -45,5 +45,5 @@ Steam Processor
 Command Room
 Rose Division's Quarter
 To 1st Floor
-To Hangar
+Underground Hangar
 ???

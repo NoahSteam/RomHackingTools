@@ -1,74 +1,74 @@
 Untranslated
 Untranslated
-Koubu 
 Untranslated
+Koubu
 Untranslated
 Untranslated
 Untranslated
 Untranslated
-Flame Wall[Inferno Barrier] 
 Untranslated
+Flame Wall[Inferno Barrier]
 Untranslated
-Koubu 
 Untranslated
+Koubu
 Untranslated
-Maria 
 Untranslated
+Maria
 Untranslated
-Iris Marionette 
 Untranslated
+Iris Marionette
 Untranslated
-Mini-Bots 
 Untranslated
-Kohran 
-K. Punch[Kanna Combo] 
+Mini-Bots
 Untranslated
+Kohran
+K. Punch[Kanna Combo]
 Untranslated
 Untranslated
 Untranslated
 Untranslated
-None 
 Untranslated
-Musket 
+None
 Untranslated
-None 
+Musket
 Untranslated
-Cannon 
+None
 Untranslated
+Cannon
 Untranslated
 Untranslated
 Untranslated
 Untranslated
 Untranslated
-Talon 
 Untranslated
+Talon
 Untranslated
 Untranslated
 Untranslated
 Untranslated
 Untranslated
-None 
 Untranslated
+None
 Untranslated
-Straight Slash 
-None 
 Untranslated
+Straight Slash
+None
 Untranslated
 Untranslated
 Untranslated
 Untranslated
 Untranslated
 Untranslated
-None 
 Untranslated
+None
 Untranslated
-Dash 
 Untranslated
+Dash
 Untranslated
-Decided 
 Untranslated
-Defense 
+Decided
 Untranslated
+Defense
 Untranslated
 Untranslated
 Untranslated
@@ -80,24 +80,25 @@ Untranslated
 Untranslated
 Untranslated
 Untranslated
-Special 
-Special 
 Untranslated
+Special
+Special
 Untranslated
 Untranslated
-Move 
 Untranslated
+Move
 Untranslated
 Untranslated
-Normal 
 Untranslated
+Normal
 Untranslated
 Untranslated
 Untranslated
 Untranslated
 Untranslated
 Untranslated
-Resume the Battle? 
 Untranslated
+Resume the Battle?
 Untranslated
-Resume Battle 
+Untranslated
+Resume Battle

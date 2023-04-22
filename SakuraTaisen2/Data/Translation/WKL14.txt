@@ -1,4 +1,4 @@
-Ogami 
+Ogami
 Untranslated
 Untranslated
 Untranslated
@@ -9,7 +9,7 @@ Untranslated
 Untranslated
 Untranslated
 Untranslated
-Koubu 
+Koubu
 Untranslated
 Untranslated
 Untranslated
@@ -59,7 +59,7 @@ Untranslated
 Untranslated
 Untranslated
 Untranslated
-Rear Guard 
+Rear Guard
 Untranslated
 Untranslated
 Untranslated
@@ -86,7 +86,7 @@ Untranslated
 Untranslated
 Untranslated
 Untranslated
-Terrain 
+Terrain
 Untranslated
 Untranslated
 Untranslated
@@ -112,4 +112,4 @@ Untranslated
 Untranslated
 Untranslated
 Untranslated
-Wait 
+Wait

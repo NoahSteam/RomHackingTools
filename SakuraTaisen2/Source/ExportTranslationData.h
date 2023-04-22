@@ -15,15 +15,16 @@ void ExportTranslationData(const string& InSourceFilePath, const string& OutputD
 	}
 
 	typedef string SourceFileName;
-	typedef vector<string> LinesOfText;
+	typedef map<int, string> LinesOfText;
 	typedef unordered_map<SourceFileName, LinesOfText> FileDataMap;
 	FileDataMap fileDataMap;
 
-	printf("--Populting map--\n");
+	printf("--Populating map--\n");
 	const string Quote("\"");
 	const string UntranslatedText("Untranslated");
-
-	const string teststring("M00LOW");
+	const string TxtExtension(".txt");
+	const string CompletedFilesDirectory = OutputDirectory + Seperators + "CompletedFiles\\";
+	CreateDirectoryHelper(CompletedFilesDirectory);
 
 	//Populate map
 	int lineNum = 0;
@@ -36,11 +37,6 @@ void ExportTranslationData(const string& InSourceFilePath, const string& OutputD
 		const SourceFileName fileName = sourceEntry.mFullLine.substr(0, position1);
 		const int textEntryNum = atoi(sourceEntry.mFullLine.substr(position1 + 1, position2).c_str());
 		string translatedText = sourceEntry.mFullLine.substr(position2 + 1);
-
-		if (fileName != teststring)
-		{
-			continue;
-		}
 
 		if(translatedText.size() > 2)
 		{
@@ -61,30 +57,12 @@ void ExportTranslationData(const string& InSourceFilePath, const string& OutputD
 			printf("%s\n", fileName.c_str());
 		}
 
-		size_t numQuotes = 0;
-		size_t quoteLoc = translatedText.find(Quote, 0);
-		while(quoteLoc != std::string::npos)
-		{
-			++numQuotes;
-			quoteLoc = translatedText.find(Quote, quoteLoc + 1);
-		}
-
-		if(numQuotes%2 != 0)
-		{
-			printf("Line with a missing quote: %i: %s\n", lineNum, translatedText.c_str());
-		}
-
-		//Todo: Can't expect lines to be in sequential order.  So make a map of lines based on their line numbers
-		for(int k = prevTextEntryNum + 1; k < textEntryNum; ++k)
-		{
-			fileDataMap[fileName].push_back(UntranslatedText);
-		}		
-
-		fileDataMap[fileName].push_back(translatedText);
+		fileDataMap[fileName][textEntryNum] = translatedText;
 		++lineNum;
 		prevTextEntryNum = textEntryNum;
 	}
 
+	//Now write out the files
 	const string txtExt(".txt");
 	for(FileDataMap::iterator iter = fileDataMap.begin(); iter != fileDataMap.end(); ++iter)
 	{
@@ -97,9 +75,37 @@ void ExportTranslationData(const string& InSourceFilePath, const string& OutputD
 
 		printf("Writing file: %s\n", iter->first.c_str());
 
-		for(string& translation : iter->second)
+		//Write out lines
+		int expectedLine = 1;
+		bool bIsFileCompleted = true;
+		for(LinesOfText::iterator linesIter = iter->second.begin(); linesIter != iter->second.end(); ++linesIter)
 		{
+			//Write out "Untranslated" for any lines that were not translated
+			for( int missingIndex = expectedLine; missingIndex < linesIter->first; ++missingIndex )
+			{
+				outFile.WriteStringWithNewLine(UntranslatedText);
+				bIsFileCompleted = false;
+			}
+
+			const string& translation = linesIter->second;
 			outFile.WriteStringWithNewLine(translation);
+
+			expectedLine = linesIter->first + 1;
+		}
+
+		//Write out all completed files
+		if(bIsFileCompleted)
+		{
+			const string destFile = CompletedFilesDirectory + iter->first + TxtExtension;
+			TextFileWriter outFile;
+			if( outFile.OpenFileForWrite(destFile) )
+			{
+				for( LinesOfText::iterator linesIter = iter->second.begin(); linesIter != iter->second.end(); ++linesIter )
+				{
+					const string& translation = linesIter->second;
+					outFile.WriteStringWithNewLine(translation);
+				}
+			}
 		}
 	}
 }

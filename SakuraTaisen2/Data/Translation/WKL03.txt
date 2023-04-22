@@ -1,95 +1,100 @@
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Sumire 
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Viens Ici 
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Mini-Bots 
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-None 
-Untranslated
-Untranslated
-Untranslated
-None 
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Setsuna 
-Untranslated
-Untranslated
-Untranslated
-Terrain 
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Recover 
-Untranslated
-Untranslated
-Untranslated
-Map 
-Untranslated
-Untranslated
-Wait 
-Untranslated
-Untranslated
-Cover 
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Attack 
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Resume Battle 
+Ogami
+Cover
+Parting Steel
+Koubu
+Floral Divinity
+Koubu
+Sakura
+Dash
+Sumire
+Koubu
+Butterfly Waltz
+Flame Wall[Inferno Barrier]
+Koubu
+Snegurochka
+Podozhdi
+Maria
+Koubu
+Iris Marionette
+Viens Ici
+Iris
+Earthquake
+Koubu
+Kohran
+Mini-Bots
+K. Punch[Kanna Combo]
+Kanna
+Bamboo Rain
+Koubu
+Foot Soldier
+None
+None
+Rear Guard
+Rear Guard
+Musket
+None
+None
+Rear Guard
+None
+None
+Cannon
+Demon
+None
+None
+Talon
+Demon
+None
+None
+Liquid Shot
+None
+None
+Acid Shot
+Demon
+None
+Shadow Slash
+Blue Horn[Azure Horn]
+Setsuna
+Drum[Metal Drum]
+None
+None
+Terrain
+Return to Title
+Decided
+Defense
+Defense
+Build Up
+Build Up
+Defend
+Defend
+Recover
+Recover
+Info
+Information
+Map
+Consult
+End
+Wait
+Special
+Special
+Cover
+Move
+Move
+Move
+Attack
+Attack
+Normal
+Normal
+Special
+Special
+Combo
+Combo
+Resume Battle
+Suspend Play?
+Resume the Battle?
+Yes
+No
+Resume Battle
+Operation
+Turn Over
+Taking Turn
+#
