@@ -42,7 +42,7 @@ struct SakuraTextFileFixedHeader
 		//mStringInfo.push_back( SwapByteOrder(inInfo[0].mFullValue) );
 		mStringInfo.push_back(StringInfo(inInfo[0].mStringId, inInfo[0].mNumCharactersPrecedingThisString));
 		mStringInfo8Bytes.push_back(StringInfo8Bytes(inInfo[0].mStringId, inInfo[0].mNumCharactersPrecedingThisString));
-
+		
 		int totalCharCount = 0;
 		unsigned short prevValue = 0;
 		unsigned int   prevValue8Bytes = 0; prevValue8Bytes = 0;
@@ -50,15 +50,22 @@ struct SakuraTextFileFixedHeader
 		for (size_t i = 0; i < numEntries; ++i)
 		{
 #if USE_SINGLE_BYTE_LOOKUPS
-			const unsigned short newOffset = bIsMesFile ? (unsigned short)inStrings[i].mChars.size() + prevValue : (unsigned short)inStrings[i].mChars.size() + 3 + prevValue; //+ trailingZeros;
-			const unsigned int   newOffset8bytes = inStrings[i].mChars.size() + 3 + prevValue8Bytes; //+ trailingZeros;
-			totalCharCount += inStrings[i].mChars.size() + 3;
+			unsigned short newOffset = bIsMesFile ? (unsigned short)inStrings[i].mChars.size() + prevValue : ((unsigned short)inStrings[i].mChars.size() + prevValue); //+ trailingZeros;
+			unsigned int   newOffset8bytes = (inStrings[i].mChars.size() + prevValue8Bytes); //+ trailingZeros;
+			assert(newOffset8bytes % 2 == 0);
+
+			totalCharCount += inStrings[i].mChars.size();
 			prevValue8Bytes = newOffset8bytes;
+			prevValue = newOffset;
+
+			newOffset8bytes /= 2;
+			newOffset /= 2;
 #else
 			const unsigned short newOffset = (unsigned short)inStrings[i].mChars.size() + prevValue; //+ trailingZeros;
 			totalCharCount += (unsigned short)inStrings[i].mChars.size();
-#endif
 			prevValue = newOffset;
+#endif
+			
 			mStringInfo.push_back(StringInfo(inInfo[i + 1].mStringId, newOffset));
 
 #if USE_4_BYTE_OFFSETS
@@ -66,7 +73,7 @@ struct SakuraTextFileFixedHeader
 #endif
 		}
 
-		const bool bCheckTotalCharError = !USE_4_BYTE_OFFSETS || bIsMesFile;
+		const bool bCheckTotalCharError = false;//SW2 uses a 4byte lookup table instead of 2 bytes in SW1 !USE_4_BYTE_OFFSETS || bIsMesFile;
 		if (bCheckTotalCharError && totalCharCount > 0xffff)
 		{
 			printf("\nERROR:Translated file %s exceeds max char count. Max is %u.  File has %i\n", inSakuraFile.mFileNameInfo.mFileName.c_str(), 0xffff, totalCharCount);
@@ -131,6 +138,16 @@ struct SakuraTextFileFixedHeader
 
 	void OutputToFile(FileWriter& outFile)
 	{
+#if USE_4_BYTE_OFFSETS
+		const int totalSize = SwapByteOrder(mStringInfo8Bytes.size() * sizeof(SakuraTextFileFixedHeader::StringInfo));
+		outFile.WriteData(&totalSize, sizeof(totalSize));
+
+		for (StringInfo8Bytes& stringInfo : mStringInfo8Bytes)
+		{
+			outFile.WriteData(&stringInfo.stringId, sizeof(stringInfo.stringId));
+			outFile.WriteData(&stringInfo.offsetFromTableStart, sizeof(stringInfo.offsetFromTableStart));
+		}
+#else
 		const int totalSize = SwapByteOrder(mStringInfo.size() * sizeof(SakuraTextFileFixedHeader::StringInfo));
 		outFile.WriteData(&totalSize, sizeof(totalSize));
 
@@ -139,7 +156,9 @@ struct SakuraTextFileFixedHeader
 			outFile.WriteData(&stringInfo.stringId, sizeof(stringInfo.stringId));
 			outFile.WriteData(&stringInfo.offsetFromTableStart, sizeof(stringInfo.offsetFromTableStart));
 		}
+#endif
 	}
+	
 };
 
 static int GetNumBytesInLines(const vector<SakuraString>& inTranslatedLines)
@@ -375,7 +394,7 @@ bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTrans
 					)
 				{
 					bool bUseShorthand = false;
-#if USE_SINGLE_BYTE_LOOKUPS && USE_4_BYTE_OFFSETS 
+#if USE_SINGLE_BYTE_LOOKUPS// && USE_4_BYTE_OFFSETS 
 					if (numTranslatedLines > 1200)
 					{
 						bUseShorthand = true;
@@ -543,7 +562,7 @@ bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTrans
 				}//for(wordIndex < numWords)
 
 #if USE_SINGLE_BYTE_LOOKUPS
-				if ((translatedString.mChars.size()) % 2 != 0)
+				if ((translatedString.mChars.size()) % 2 == 0)
 				{
 					translatedString.AddChar(' ');
 				}
@@ -592,8 +611,10 @@ bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTrans
 		SakuraTextFileFixedHeader fixedHeader;
 		fixedHeader.CreateFixedHeader(sakuraFile.mStringInfoArray, sakuraFile, translatedLines, bIsMESFile);
 
-		//Write header
-#if USE_4_BYTE_OFFSETS
+		//Create file header
+		SakuraTextFile::SakuraHeader newFileHeader = sakuraFile.mFileHeader;
+
+#if USE_4_BYTE_OFFSETS&0
 		if (bIsMESFile)
 		{
 			const unsigned short bigEndianOffsetToTable = SwapByteOrder(fixedHeader.mOffsetToTable);
@@ -604,15 +625,14 @@ bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTrans
 		}
 		else
 		{
-			const unsigned int bigEndianOffsetToTable = SwapByteOrder(fixedHeader.mOffsetToTable8Bytes);
-			const unsigned int bigEndianTableEnd = SwapByteOrder(fixedHeader.mTableEnd8Bytes);
-			outFile.WriteData(&bigEndianOffsetToTable, sizeof(bigEndianOffsetToTable));
-			outFile.WriteData(&bigEndianTableEnd, sizeof(bigEndianTableEnd));
-			outFile.WriteData(&fixedHeader.mStringInfo8Bytes[0], fixedHeader.mStringInfo8Bytes.size() * sizeof(fixedHeader.mStringInfo8Bytes[0]));
+			newFileHeader.OffsetToFontSheet = FourByteAlign(GetNumBytesInLines(translatedLines) + newFileHeader.OffsetToText);
+			newFileHeader.FontSheetDataSize = inTranslatedFontSheet.GetDataSize() + inTranslatedFontSheet.GetSizeOfSingleTile(); //repeat first tile
+
+			outFile.WriteData(&newFileHeader, sizeof(newFileHeader));
+			outFile.WriteData(sakuraFile.mpHeaderToText, sakuraFile.mHeaderToTextSize);
+			fixedHeader.OutputToFile(outFile);
 		} 
-#else
-		//Create file header
-		SakuraTextFile::SakuraHeader newFileHeader = sakuraFile.mFileHeader;
+#else	
 		newFileHeader.OffsetToFontSheet = FourByteAlign(GetNumBytesInLines(translatedLines) + newFileHeader.OffsetToText);
 		newFileHeader.FontSheetDataSize = inTranslatedFontSheet.GetDataSize() + inTranslatedFontSheet.GetSizeOfSingleTile(); //repeat first tile
 		newFileHeader.SwapByteOrder(); //Convert to little endian
@@ -653,8 +673,10 @@ bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTrans
 #endif		
 			}
 
+			++dataIndex;
 			++translationIndex;
 
+//			if (dataIndex >= numDataSegments && translationIndex >= numInsertedLines)
 			if (translationIndex >= numInsertedLines)
 			{
 				break;

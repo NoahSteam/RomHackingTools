@@ -236,7 +236,7 @@ struct SakuraString
 		int count = 0;
 		for (const SakuraChar& sakuraChar : mChars)
 		{
-			if (count < 2)
+		/*	if (count < 2)
 			{
 				//Change endianness so that it gets written in big endian order
 				const char value1 = (char)((sakuraChar.mIndex & 0xff00) >> 8);// ((sakuraChar.mIndex & 0xff00) >> 8) + ((sakuraChar.mIndex & 0x00ff) << 8);
@@ -244,7 +244,7 @@ struct SakuraString
 				outData.push_back(value1);
 				outData.push_back(value2);
 			}
-			else
+			else*/
 			{
 				const char value1 = (char)((sakuraChar.mIndex & 0xff00) >> 8);
 				const char value2 = (char)(sakuraChar.mIndex & 0x00ff);

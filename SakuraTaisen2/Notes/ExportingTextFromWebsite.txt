@@ -1,0 +1,7 @@
+-In PhpMyAdmin, select Structure
+-Select columns to export
+-Set format to CSV with utf-8
+-Clear out "Columns encluded with" and "Columns escaped with"
+-Export
+-Replace \' with ' and \" with " via notepad
+-Run export tool
