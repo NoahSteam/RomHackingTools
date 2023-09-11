@@ -13,9 +13,9 @@ Wouldn't want to be rude.
 How do I look? 
 I'm meeting your mother, after all. Wouldn't want to be rude. 
 Heehee, you really didn't have to... 
-But I think it looks great on you, Ogami. 
+But I think that suit looks great on you, Ogami. 
 R-Really? Thanks. 
-I figured I'd dress nicely, since we're going out. How do I look? 
+I figured I'd put on something nice, since we're going out. How do I look? 
 It suits you very well. 
 You actually dressed up for me... 
 I'm so glad... 
@@ -25,7 +25,7 @@ Heehee, no need to be shy, Ogami.
 I think that suit looks great on you. 
 Y-You think so? Thanks, Sakura. 
 Well then, let's say goodbye to the manager and be on our way. 
-OK, got it. We'll ask him to hold down the fort for us. 
+OK, got it. We'll ask him to hold down the fort while we’re away. 
 Right! Let's head to his office. 
 I wonder if Sakura's in her room? 
 Oh, Ogami? Did you need something? 
@@ -43,7 +43,7 @@ Y-Yeah, right. Sorry.
 I'll be going, then. Have a pleasant New Year's vacation, Ogami. 
 Yeah, see you. 
 She left... 
-I should get dressed and get ready to leave, too. 
+I should get dressed and get ready to leave, myself. 
 Sakura just left for Sendai, right? 
 No use staying here with her gone. I'll go visit another room. 
 Whoops, I still haven't changed. 
@@ -54,14 +54,14 @@ This is a pretty subtle design, considering it's Sumire.
 Sumire, I'm here. 
 Yes, just a moment. 
 Apologies for the wait, Ensign. 
-Well, aren't you well dressed, Ensign. 
+Well, Ensign… Aren't you well dressed. 
 Wouldn't want to be rude.
 How do I look? 
 I am meeting your parents, after all. Wouldn't want to be rude. 
 Oh, Ensign. You shouldn't worry about that. 
 But I must say, that's a fabulous suit. 
 Y-You think so? Thanks, Sumire. 
-I figured I'd dress nicely, since we're going out. How do I look? 
+I figured I'd put on something nice, since we're going out. How do I look? 
 Yes, it suits you very well. 
 There's not a doubt in my mind that together we'll be the center of attention. 
 R-Really? Now I'm feeling kinda shy... 
@@ -93,7 +93,7 @@ N-No, not really...
 Then I'll be on my way. Have a lovely New Year, Ensign. 
 Yeah, thanks. 
 She left... 
-I should get dressed and get ready to leave, too. 
+I should get dressed and get ready to leave, myself. 
 Sumire just went back home, right? 
 No use staying here, then. I should visit another room. 
 Whoops, I still haven't changed. 
@@ -109,7 +109,7 @@ Wouldn't want to be rude.
 How do I look? 
 I'm going to be meeting Count Hanakoji. Wouldn't want to be rude. 
 I see. Considerate as always, sir. 
-I figured I'd dress nicely, since we're going out. How do I look? 
+I figured I'd put on something nice, since we're going out. How do I look? 
 Yes, it suits you quite well. 
 Really? Hearing you say that makes it worth having changed. 
 Captain... Um... 
@@ -124,7 +124,7 @@ On your way out, Maria?
 Yes. I'm going to give Count Hanakoji my New Year's greetings. 
 Give him my regards. 
 That's a lot of trouble.
-I'm sad I can't go with you, but make sure to give him my regards. 
+I'm sad I can't go with you, but make sure to give the count my regards. 
 All right, understood. I'll give him your well wishes. 
 Sounds like a lot of trouble for a New Year's greeting. 
 Yes, but I owe a lot to Count Hanakoji. 
@@ -132,7 +132,7 @@ If you don't need anything, sir, then I'll be going.
 R-Right. Sorry. 
 Well then, I'm off. Have a pleasant New Year's holiday, Captain. 
 Yeah, thanks. See you. 
-Right, I should get dressed and get ready to leave, too. 
+Right. I should get dressed and get ready to leave, myself. 
 Maria left to visit Count Hanakoji, right? 
 No use staying here, then. I should go to another room. 
 Whoops, I still haven't changed. 
@@ -142,8 +142,8 @@ We can't wait around too much longer, so I'll call out to her.
 Kanna's nameplate... It looks more like a nametag to me. 
 Kanna, I'm here. 
 Hey, I've been waitin' for ya! I'll be right out. 
-Yo, sorry to keep you waiting! 
-Ooh, all dressed up, eh, Boss? 
+Yo, sorry to keep you waitin’! 
+Ooh! You're all decked out, eh, Boss? 
 Figured I'd dress up. 
 How do I look? 
 We're traveling all the way to Okinawa, so I figured I'd dress for the occasion. 
@@ -179,7 +179,7 @@ All right, I'm off. See ya when I get back!
 Yeah. Have a safe trip, OK? 
 Yeah, yeah, I know. See ya, Boss. 
 Kanna's gone now, huh? 
-I should get dressed and get ready to leave, too. 
+I should get dressed and get ready to leave, myself. 
 Kanna already left for Okinawa. 
 There's no use staying around here. I should go somewhere else. 
 Whoops, I still haven't changed. 
@@ -188,19 +188,19 @@ I wonder if Iris is ready?
 We can't wait around too much longer, so I'll call out to her. 
 So Iris's nameplate is shaped like Jean-Paul. 
 Iris, I'm here. 
-OOOK! Just a second! 
+Okey-dokey! Just a second! 
 Sorry to keep you waiting, Mon Frère. 
 Wooow! You look cool, Mon Frère! 
 Wouldn't want to be rude. 
 How do I look? 
 I'm meeting your parents, after all. I wouldn't want to be rude. 
-Thanks, Mon Frère. I'm sure Papa and Mama will be happy about that. 
-I figured I'd dress nicely, since we're going out. How do I look? 
+Thanks, Mon Frère. I'm sure Papa and Mama will be impressed. 
+I figured I'd put on something nice, since we're going out. How do I look? 
 You look super cool! 
 Kinda feels like we're going on a date! 
 Hahaha, thank you Iris. 
 Thanks for dressing up so nicely for me, Mon Frère... 
-Hahaha, I'm always wearing the same old thing, so I figured I'd change things up. 
+Hahaha, I'm always wearing the same old uniform, so I figured I'd change things up. 
 Right, we should get going, Iris. 
 Let's go say bye to Uncle Yoneda before we go! 
 Yeah, you're right. We'll let him know we're leaving. 
@@ -211,19 +211,19 @@ Uh-huh! Jean-Paul's coming along too!
 Papa and Mama came all the way from France by boat, so I'm meeting them at the harbor. 
 Tell them I said hi. 
 Can you get there alone? 
-Sorry I can't be there to greet them, but tell them I said hi, all right? 
+Sorry I can't be there to greet them, but tell your parents I said hi, all right? 
 OK. I'm gonna tell them so much about you! 
 Hahaha, thanks. 
-Can you get there by yourself? 
+Can you get to your parents by yourself? 
 Auntie Kaede told me how to get there, so I'll be all right! 
-Papa and Mama are gonna be so surprised when they find out I made it there by myself! 
-Hahaha, I see now. Just be careful on the way there, OK? 
+Papa and Mama are gonna be so surprised when they see I made it all the way to the harbor by myself!
+Hahaha, I see now. Just be careful on the way, OK? 
 OK! Thanks, Mon Frère! 
 I'm gonna have lunch with Papa and Mama... 
 And then I'm gonna tell them all kindsa stories... And then... And then... 
 I'm gonna be with them the whole time! 
 Hahaha, I see. Have fun. 
-All right, I'm gonna go now. Bye-bye, Mon Frère! 
+All right, I gotta go now. Bye-bye, Mon Frère! 
 Yeah, see you. 
 She left... 
 I should get dressed and ready to go, myself. 
@@ -240,9 +240,9 @@ Heheh, all right, let's go...
 Ch-Chief? What's with the getup? 
 Thought I'd dress up.  
 How do I look? 
-Since we're going out to Kobe, I thought I'd dress up for the occasion. 
+Since we're traveling to Kobe, I thought I'd dress up for the occasion. 
 I see... Thanks a bunch, Chief! 
-You got all nice and dressed up, just for me. For real, thanks. 
+You dressed to the nines, just for me. For real, thanks. 
 Kohran... 
 I thought I'd dress in something more formal... How do I look? 
 I was kinda shocked at first, but it looks great on you! 
@@ -252,7 +252,7 @@ At any rate, I never knew you had an outfit like this.
 I'm so used to your regular vest and suspenders, this feels kinda fresh.
 Hahaha, well, I haven't had many opportunities to dress up like this.
 All right, let's go talk to Yoneda before we duck out. 
-Yeah, OK. Let’s stop by his office before we go. 
+Yeah, OK. Let’s stop by his office before we leave. 
 Ah, Chief! 
 Hey, Kohran. Heading out? 
 Yep. Going on a leisurely boat ride straight to Kobe. 
@@ -260,7 +260,7 @@ It's been ages since I last saw Mr. Howard, I can't wait.
 Give him my regards. 
 What kind of person is he? 
 Give Mr. Howard my regards. 
-Sure, leave it to me. I'm gonna tell him all about ya. 
+Sure, leave it to me. I'm gonna tell him all about you. 
 A-All about me? What kinds of stories, exactly? 
 Hahaha! Who can say? 
 What kind of person is this Mr. Howard? 
@@ -273,7 +273,7 @@ All right, I gotta catch my boat, so I'm heading out.
 Take it easy, all right? 
 Yeah, I will. OK, I'm off! 
 Mr. Howard... Just what kind of person is he, exactly? 
-Well, I should get dressed and get ready to leave, too. 
+Well, I should get dressed and get ready to leave, myself. 
 Kohran just left, right? 
 There's no use staying around here. I should go somewhere else. 
 Whoops, I still haven't changed. 
@@ -283,20 +283,20 @@ We can't wait around too much longer, so I'll call out to her.
 The nameplate has a simple design, but it sure looks classy. 
 Orihime, I'm here. 
 OK, coming! 
-Sorry to keep you waiting, Ensign. 
-Ah, Ensign, you changed clothes? 
+Sorry to keep you waiting, Mr. Ensign. 
+Ah, Mr. Ensign, you changed clothes? 
 Wouldn't want to be rude.
 How do I look? 
 I figured I should, since I'm meeting your parents. Wouldn't want to be rude. 
-A true gentiluomo as always, Ensign. 
+A true gentiluomo as always, Mr. Ensign. 
 I'm sure Mamma will take a liking to you, too. 
 Hahaha, that'd be nice. 
 I thought I'd dress in something more formal... How do I look? 
-I think it looks great on you! 
+I think it looks fabulous on you! 
 You'd fit right into European high society! 
 Hahaha, thanks, Orihime. 
 P-Please don't stare like that, I'm getting embarrassed. 
-There's nothing to be embarrassed about, Ensign. 
+There's nothing to be embarrassed about, Mr. Ensign. 
 A man's appearance is one of his finest weapons, after all! 
 I-I see... 
 That reminds me, since we're leaving the theater... 
@@ -304,7 +304,7 @@ We should talk to Yoneda first, just to be safe.
 Yeah, you're right. OK then, let's stop by his office. 
 There, door's shut tight. 
 Hey, Orihime. Heading out already?
-Ah, Ensign. 
+Ah, Mr. Ensign. 
 You're going to see your mother, right? 
 Yes, that's right. Mamma came to Japan all the way from Italy. 
 At last… Mamma and Papa finally get to be together again!
@@ -313,22 +313,22 @@ I'm happy for you.
 I won't be able to see them, but give them my regards, OK? 
 Yes, certainly. I'll be telling Mamma all about you.
 I'm happy for you, Orihime. Your parents are finally being reunited after so long.
-Yes! And it's all thanks to you, Ensign. 
+Yes! And it's all thanks to you, Mr. Ensign. 
 I'm sorry I can't be there to see them... 
 But you have a nice long chat with them, as a family. 
-Ensign... Thank you. 
+Mr. Ensign... <br> Thank you so much. 
 I truly wish we could go together... 
 I'm sorry, Orihime. I probably should go and meet them, but... 
 It's OK! 
 I'll tell Papa and Mamma all about you! 
-Well then, Ensign, I should get going now. 
+Well then, Mr. Ensign, I should get going now. 
 All right, be careful. See you soon. 
 Orihime must be so happy. Her parents are finally being reunited after over a dozen years.
 Well, I should get dressed and ready to go, myself. 
 Orihime just left, right? 
 I should get ready to head out, too. 
 Whoops, I still haven't changed. 
-I ought to dress nicely for my first shrine visit of the year. 
+I ought to put on something nice for my first shrine visit of the year. 
 I wonder if Reni's in her room? 
 Since it's New Year's, I'll try inviting her out for a shrine visit. 
 Reni... Still using notebook paper as a nameplate, I see. 
@@ -336,12 +336,12 @@ Reni, are you there? It's Ogami.
 Captain? Just a second. 
 Sorry to keep you waiting. 
 Captain... Your clothes are different. 
-Yeah. I was going to invite you out to a New Year's shrine visit, so I thought I'd change clothes. 
+Yeah. I was going to invite you out to a New Year's shrine visit, so I thought I'd change my outfit. 
 A shrine visit... With me? 
 Yeah. It's New Year's, so why not? 
 But... 
 Don't worry, let's go. 
-Do you not want to go? 
+You don’t want to go? 
 Don't worry, let's go. Meiji Shrine is practically next door. 
 This will be your first New Year's shrine visit, right? There's all kinds of interesting things to see. 
 True, I might be able to observe many customs unknown to me. 
@@ -372,7 +372,7 @@ This is your first Japanese New Year, right? Have fun on your shrine visit.
 OK, I will. 
 Which shrine are you going to visit? 
 It's a place called Meiji Shrine. 
-I see, tons of people flock there for New Year's every year. 
+I see, tons of people flock there for New Year's at the start of every January. 
 By the way, sir, did you need me for something? 
 No, not particularly... 
 I see. That's fine. 
@@ -389,7 +389,7 @@ That voice... Is that you, Kayama?
 The first of January is lovely, isn’t it, Ogami?
 What a joy it is to greet the new year with you! 
 You never change, do you? Is the Moon Division on break for New Year's, too? 
-Yes. However, should anything happen, we'll still deploy immediately. 
+Indeed. However, should anything happen, we'll still deploy immediately. 
 They say, "New Year's Day is the key to the year." You must steel yourself for the coming year.
 I see... 
 Now then, farewell, Ogami. Here's hoping we both enjoy a pleasant New Year. 
@@ -403,10 +403,10 @@ Go to Kanna's room.
 Go to Iris's room. 
 Go to Kohran's room. 
 Go to Orihime's room. 
-Grab Cinematron. 
-Oops, better bring the Cinematron if I'm heading out. 
+Grab Kinematron. 
+Oops, better bring the Kinematron if I'm heading out. 
 That way, if anything happens, we can get in touch with the theater right away. 
-Eh, no need to bring the Cinematron. All right, let's go. 
+Eh, no need to bring the Kinematron. All right, let's go. 
 Right, I'll go to Reni's room. 
 Kaede? Are you in there? 
 All right, I'm gonna go somewhere else. 
@@ -423,45 +423,45 @@ Hey, Tsubaki. Happy New Year.
 Heehee, you came at just the right time, Ogami. 
 Huh? 
 You see, we have a special gift for our most loyal customers: 
-A special photo, only available on New Year's! 
-I prepared these specially for you as thanks for always buying our photos. 
+A special bromide, only available on New Year's! 
+I prepared these specially for you as thanks for always buying our bromides. 
 All right, Ogami, you can only pick one. 
-That's Sakura's special photo. 
+That's Sakura's special bromide. 
 It's a cute photo of Sakura in her swimsuit, with a teasing smile on her face. 
 All right, I'll take Sakura's. 
-Here you go, Sakura's special photo! Thank you, come again! 
-That's Sumire's special photo. 
+Here you go, Sakura's special bromide! Thank you, come again! 
+That's Sumire's special bromide. 
 It's a rare photo of Sumire in her role as Goneril in “King Lear.” 
 All right, I'll take Sumire's. 
-Here you go, Sumire's special photo! Thank you, come again! 
-That's Maria's special photo. 
+Here you go, Sumire's special bromide! Thank you, come again! 
+That's Maria's special bromide. 
 The sight of Maria in a yukata is quite titillating. 
 All right, I'll take Maria's. 
-Here you go, Maria's special photo! Thank you, come again! 
-That's Kanna's special photo. 
+Here you go, Maria's special bromide! Thank you, come again! 
+That's Kanna's special bromide. 
 That King Lear costume is so cool! 
 All right, I'll take Kanna's. 
-Here you go, Kanna's special photo! Thank you, come again! 
-That's Iris's special photo. 
+Here you go, Kanna's special bromide! Thank you, come again! 
+That's Iris's special bromide. 
 It's a really cute photo of Iris as Mytyl in "The Blue Bird." 
 All right, I'll take Iris's. 
-Here you go, Iris's special photo! Thank you, come again! 
-That's Kohran's special photo. 
+Here you go, Iris's special bromide! Thank you, come again! 
+That's Kohran's special bromide. 
 This is a private photo of Kohran in her work clothes. Truly one-of-a-kind! 
 All right, I'll take Kohran's. 
-Here you go, Kohran's special photo! Thank you, come again! 
-That's Orihime's special photo. 
+Here you go, Kohran's special bromide! Thank you, come again! 
+That's Orihime's special bromide. 
 It's a photo of Orihime in her distinctively stylish swimsuit. 
 All right, I'll take Orihime's. 
-Here you go, Orihime's special photo! Thank you, come again! 
-That's Reni's special photo. 
+Here you go, Orihime's special bromide! Thank you, come again! 
+That's Reni's special bromide. 
 It's a photo of Reni in her role as Tyltyl in "The Blue Bird." 
 All right, I'll take Reni's. 
-Here you go, Reni's special photo! Thank you, come again! 
-Don't be shy, Ogami. Pick whichever photo you'd like. 
-Thanks, Tsubaki. I'll cherish this photo. 
+Here you go, Reni's special bromide! Thank you, come again! 
+Don't be shy, Ogami. Pick whichever bromide you'd like. 
+Thanks, Tsubaki. I'll cherish this bromide. 
 No, I should be the one thanking you for your continued patronage. 
-I'll be getting a lot of new photos this year, so I hope you look forward to them! 
+I'll be getting a lot of new bromides this year, so I hope you look forward to them! 
 OK, I have to get back to work, so I'll be going now. 
 Right. Good luck. 
 Now... What to do next? 
@@ -469,15 +469,15 @@ Ah, Ogami!
 Hey, Tsubaki. Happy New Year. 
 Happy New Year! Looking forward to working with you for another year! 
 Huh? Not running the store today? 
-That's right. The store's closed for the New Year's holiday. 
+That's right. The gift shop is closed for the New Year's holiday. 
 I-I see. That's too bad. 
-You can always buy a photo once the holiday's over. 
+You can always buy a bromide once the holiday's over. 
 Please be patient until then. 
-Fair enough. All right, I'll come back once the holiday's over, then. 
+Fair enough. All right, I'll come back after New Year’s, then. 
 OK! I'll be waiting! 
 Right then, what to do next? 
 Hey Tsubaki. Hard at work, I see. 
-Yes! That’s because, starting tomorrow, I'll also be on vacation.
+Absolutely! That’s because, starting tomorrow, I'll also be on vacation.
 I'm getting everything sorted now so I can start work on the right foot once we return! 
 I see. Good luck. 
 Ah, Mr. Ogami! Happy New Year! 
@@ -486,25 +486,25 @@ It's been a month since I started working as a waitress.
 I think I'm beginning to get used to this job. 
 I see. That's great. 
 My resolution this year is to be less scatterbrained! 
-What's your New Year's resolution, Ogami? 
-Strive to keep the peace. 
+What's your New Year's resolution, Mr. Ogami? 
+Strive to safeguard peace. 
 Perfect my ticket punching. 
 Smile-smile! 
-My resolution is to keep working hard to protect the peace. I'll do my best as captain of the division.
+As captain, my resolution is to continue striving to safeguard peace in the capital.
 You're always so cool, Mr. Ogami! 
-I'll try my hardest to be like everyone in the Flower Division, too! 
+I'll also try my hardest to be more like everyone in the Flower Division! 
 Hmm, I'd like to perfect my ticket punching skills this year. 
 The path of the ticket puncher is a long and treacherous one... 
 Whaaa? There's a path for ticket punchers? That's so deep... 
 OK, then I'll try to perfect my waitressing, too! 
 My resolution is to do my best with a "smile-smile," just like you, Tsubomi. 
-OK! I'll be working hard with a smile-smile, too! 
+OK! I'll be working hard with a smile-smile, as well! 
 Hmm... I haven't really decided yet. 
 That's no good, Mr. Ogami. It's important to set goals, you know. 
 You're right. I'll have to take some time to think about it. 
 That would be for the best! 
 Last month I burned all the food by leaving the pot on the flame... 
-But this year, I'll cure myself of my scatterbrain so that I’ll never... 
+But this year, I'll cure myself of my scatterbrain so that I’ll never-
 Ah! 
 Wh-What is it? 
 I forgot to light the fire this time! Aww, I really messed up! 
@@ -515,12 +515,12 @@ Sorry you had to see me like that earlier, Mr. Ogami...
 Hahaha, looks like that scatterbrain of yours got you again. 
 Well no more! I absolutely won't be scatterbrained ever again! 
 Haha, I see. At any rate, good luck. 
-Oh, do you need something, Ogami?
-You're gonna listen to my gossip, right, Ogami? 
+Oh, Ogami. Do you need something?
+You came here to listen to my gossip, right, Ogami? 
 My, you came here like clockwork, Ogami. 
-If you're asking about rumors, I'm all out. Sorry. 
+If you're interested in hearing more gossip, I'm all out. Sorry. 
 I see. That's too bad. 
-I'll have some more interesting tidbits for you another time, so look forward to it! 
+I'll have some more interesting tidbits to share another time, so look forward to it! 
 Ah, Ogami! Happy New Year! 
 Here's to another year of working together. 
 Happy New Year to you two as well. 
@@ -541,7 +541,7 @@ Yokihiko.
 Kikunojo. 
 If I was forced to pick, then... I guess Kotone? 
 Just as I expected, Ensign. You have a discerning eye. 
-This beauty of mine, so potent it drives even men mad with love... 
+This beauty of mine is so potent it drives even men mad with love... 
 To call it criminal wouldn't even be an exaggeration. 
 Ogami... 
 Hmph! You have no taste in men, Ichiro! 
@@ -587,13 +587,13 @@ H-Hey! Where do you think you're going, Ogami!
 It's no good! I... can't... stop! 
 Phew, it's nice to take a bath first thing in the morning. 
 (Kaede...) 
-(Dammit, Ogami, get back here!) 
+(...Dammit, Ogami, get back here!) 
 (Hey, you're staring too, aren't you?!) 
-(That's beside the point! Get back here before she sees you!) 
+(That's beside the point! Get outta here before she sees you!) 
 Ow ow ow! I get it already, please let go of me, sir! 
 N-Not so loud, dumbass! 
 ...!! 
-Those voices... Don't tell me...?! 
+Those voices... <br> Don't tell me...?! 
 (C-Crap!) 
 Make an excuse. 
 Run away. 
@@ -620,12 +620,12 @@ L-Let's get out of here, sir!
 R-Right! Hurry, Ogami! 
 Phew... Looks like we made it out of there. That was close... 
 You don't think she noticed us, do you, sir? 
-It's fine, relax. We got out of there right away. She didn't see us. 
+It's fine, relax. We hightailed it out of there right away. She didn't see us. 
 R-Right... 
 Kaede's skilled with martial arts, you know, just like Ayame was... 
 So if she REALLY got mad, we would've been in big trouble. 
 I-Is that so... I think I broke out in a cold sweat just hearing that. 
-Those voices... It's you, Ogami and the manager! 
+Those voices… Ogami and the manager, it's you! 
 Ogami! We got caught thanks to you dawdling around! 
 H-Hey! That was only because you wouldn't stop pulling on me! 
 Whatever! Just get out!! 
@@ -654,14 +654,14 @@ OK, time to get out of this bath.
 Eep! This is bad, sir! 
 Dammit, no choice but to run! 
 Good grief... I don't think she saw us. 
-We would've really been in for it if we were a second too late. 
+We would've really been in for it if we had left even a second too late. 
 Kaede's skilled with martial arts, you know, just like Ayame was... 
 So if she REALLY got mad, we would've been in big trouble. 
 I-Is that so... I think I broke out in a cold sweat just hearing that. 
 Oh, Ogami? Are you here to take a bath? 
 Um, no, not exactly... 
-That reminds me, I was taking a bath just now... 
-And I could've sworn I heard you and the manager's voices... 
+That reminds me, I was bathing just a moment ago… 
+And I could've sworn I heard the voices of you and the manager... 
 Huh?! Uh, w-well... 
 Must've been my imagination. I know you'd never do anything like that. 
 Hm hm, all right, I'll be going now. Take care, Ogami. 
@@ -673,7 +673,7 @@ Kaede was taking a bath in here just a moment ago, right...?
 Now I feel kind of funny. I'd better leave. 
 It's the New Year and everyone walking down the street looks bright and cheery. 
 I'm truly glad we can enjoy a peaceful New Year. 
-The theater's been on break ever since the Christmas play. 
+The theater's been on break ever since the Christmas performance. 
 I hope the Flower Division's plays draw big crowds again this year. 
 The Christmas play was a smashing success. 
 I'm glad we were able to pull it off. 
@@ -695,7 +695,7 @@ Guess Orihime's taking a vacation from the piano for New Year's Day.
 Well, she did say her mother was coming to visit, so I guess now's not the time for piano. 
 The costumes for "The Miracle Bells" sure were incredible. 
 I still can't believe we managed to put together a play like that. 
-Doesn't look like anyone's backstage anymore. 
+Doesn't look like anyone's in the dressing room anymore. 
 Everyone must've gone back to their rooms to get ready for their trips. 
 It's the New Year holiday, so rehearsals are also on hold for the time being. 
 Everyone must be busy getting ready for their trips right about now. 
@@ -745,14 +745,14 @@ Mr. Yoneda...
 Heading out, you two? 
 Kaede... 
 You forgot this, Ogami. 
-Ah! The Cinematron! 
+Ah! The Kinematron! 
 You'd better make sure to take it with you while you're out, in case of emergency. 
 R-Right. Understood, ma'am. 
 Be careful, and have a fun New Year's holiday. 
 Y-Yes, ma'am! We're off! 
-Sorry, Ogami. I can only sell you one photo per month. 
+Sorry, Ogami. I can only sell you one bromide per month. 
 I see. That's too bad. 
-So sorry, Mr. Ogami, but each customer is only allowed to purchase one photo at a time.
+So sorry, Mr. Ogami, but each customer is only allowed to purchase one bromide at a time.
 Oh, really? That's too bad. 
 The jewel of the Pandemonium Regalia, entrusted to us by the Rose Division. 
 Spirit Sword Arataka. The special sword of the Shinguji family. 
@@ -763,29 +763,29 @@ The uniform I wear at the theater. Good for both summer and winter.
 A lighter borrowed from the inn. 
 The flower crown that Iris made for Reni. 
 A plate used at the welcome party. I was asked to bring it to Sakura. 
-A photo of Sakura. 
-A photo of Sakura. This one is a limited edition only available at New Year's. 
-A photo of Sumire. 
-A photo of Sumire. This one is a limited edition only available at New Year's. 
-A photo of Maria. 
-A photo of Maria. This one is a limited edition only available at New Year's. 
-A photo of Kanna. 
-A photo of Kanna. This one is a limited edition only available at New Year's. 
-A photo of Iris. 
-A photo of Iris. This one is a limited edition only available at New Year's. 
-A photo of Kohran. 
-A photo of Kohran. This one is a limited edition only available at New Year's. 
-A photo of Orihime. 
-A photo of Orihime. This one is a limited edition only available at New Year's. 
-A photo of Reni. 
-A photo of Reni. This one is a limited edition only available at New Year's. 
+A bromide of Sakura. 
+A bromide of Sakura. This one is a limited edition only available at New Year's. 
+A bromide of Sumire. 
+A bromide of Sumire. This one is a limited edition only available at New Year's. 
+A bromide of Maria. 
+A bromide of Maria. This one is a limited edition only available at New Year's. 
+A bromide of Kanna. 
+A bromide of Kanna. This one is a limited edition only available at New Year's. 
+A bromide of Iris. 
+A bromide of Iris. This one is a limited edition only available at New Year's. 
+A bromide of Kohran. 
+A bromide of Kohran. This one is a limited edition only available at New Year's. 
+A bromide of Orihime. 
+A bromide of Orihime. This one is a limited edition only available at New Year's. 
+A bromide of Reni. 
+A bromide of Reni. This one is a limited edition only available at New Year's. 
 A decorative paper ball for the welcome party called a kusudama. 
 A flower vase for the welcome party.
 The banner for the welcome party.
-The Cinematron. One of Kohran's inventions that lets you see and talk to someone from far away. 
+The Kinematron. One of Kohran's inventions that lets you see and talk to someone from far away. 
 The sword of the Pandemonium Regalia, recovered from the Demon King. 
 The mirror of the Pandemonium Regalia, recovered from the Demon King. 
-Fragments of the broken Cinematron. Seems like the kids at the inn picked them up along the shore. 
+Fragments of the broken Kinematron. Seems like the kids at the inn picked them up along the shore. 
 A letter from Sakura. 
 A letter from Sumire. 
 A letter from Maria. 
@@ -839,7 +839,7 @@ Execute random macro.
 5. Returning Home 
 6. Kyogoku Alive 
 ... "" "" () - . , ! ? ?! !! 
-Listen to a rumor. 
+Listen to some gossip. 
 I'll come back later. 
 The Christmas play was so emotional! 
 Your direction was exceptional, Ogami. 
@@ -879,7 +879,7 @@ And every household will be equipped with steam telephones.
 Wow, really? 
 Well, the article's just speculation. 
 Heehee, there'd be daily flights to America or England... 
-And television devices like Kohran's Cinematron would be commonplace. 
+And television devices like Kohran's Kinematron would be commonplace. 
 Hahaha, that all sounds like the far future to me. 
 Is it true that residential applications for those apartments in Mukojima have opened up? 
 Yes, and even though they won't be available for six months, there's already a rush of applicants. 
@@ -895,13 +895,13 @@ Mr. Yoneda has arranged it so our library always has the newest volume, but they
 The print's way too small and I don't understand all the words... 
 Really? I find many of them quite fascinating. 
 I'll just stick with Harold Lloyd and Buster Keaton pictures, thanks. 
-That reminds me, Ogami, New Year's Eve was pretty hectic, wasn't it? 
+That reminds me, Ogami. New Year's Eve was pretty hectic, wasn't it? 
 Yeah, we were really busy cleaning up and getting ready for the New Year. 
 I still can't believe Kanna ate 50 bowls of toshikoshi soba. 
 And Orihime caused quite a scene when she looked at the soba and said, "This pasta's gone bad!" 
 What a lively way to end the year. 
 Sorry, Ogami, but I'm all out of gossip for now. 
-I'll have some more interesting tidbits for you another time, so look forward to it! 
+I'll have some more interesting tidbits to share another time, so look forward to it!
 All right, I'll come back later. Best of luck this year, you two. 
 Thank you very much. 
 I'll get you all kinds of juicy gossip this year!

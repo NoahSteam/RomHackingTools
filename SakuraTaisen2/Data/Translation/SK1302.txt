@@ -1,6 +1,6 @@
-﻿Sorry, Ogami. I can only sell you one photo per month. 
+﻿Sorry, Ogami. I can only sell you one bromide per month. 
 I see. That's too bad. 
-So sorry, Mr. Ogami, but each customer is only allowed to purchase one photo at a time.  
+So sorry, Mr. Ogami, but each customer is only allowed to purchase one bromide at a time.  
 Oh, really? That's too bad. 
 ... "" "" () - . , ! ? ?! !! 
 *yawn* <br> Ahh, I slept great. 
@@ -43,15 +43,15 @@ Have a pleasant day off, Ogami.
 Ah, Ogami! Welcome! 
 Hey, Tsubaki. You seem chipper as ever. 
 Absolutely! I just got some new stock in today! 
-They're special photos of the Flower Division, bigger than the normal ones! 
+They're special bromides of the Flower Division, bigger than the normal ones! 
 These are just display units, not for sale, but you can take a look if you want. 
-Welcome, Ogami! Want to see the extra-large photos? 
+Welcome, Ogami! Want to see the extra-large bromides? 
 Please show me. 
 Maybe some other time. 
 Wow, that sounds neat. Please, show me. 
 OK! Here you go.
 Did you enjoy them, Ogami? 
-You can look at them again, if you want. 
+You can look at the bromides again, if you want. 
 All right, once more. 
 That's enough for now. 
 No, that's enough for now. Thanks, Tsubaki. 
@@ -95,7 +95,7 @@ I see. Come back anytime!
 All right, I suppose I'll listen to some more while I'm here. 
 OK, got it! What song should we play next? 
 I appreciate the offer, but maybe some other time. 
-I see. <br> That's too bad. 
+I see. That's too bad. 
 You'll have to listen to some the next time you stop by, OK? That's a promise! 
 Arf, arf! Woof! 
 Oh, Ogami, is that you? 
@@ -177,16 +177,16 @@ Ask about Flower Division.
 Ask about everyone else.
 Go somewhere else. 
 You haven't seen the rest of the Flower Division, have you? 
-Well, if it's a member you're particularly close with... 
+Well, if it's a division member you're particularly close with... 
 I think you might spot her if you walk around a bit on the first floor. 
 Do you know what everyone outside the Flower Division is up to? 
-If you go to the gift shop, Tsubaki will show you some special photos. 
+If you go to the gift shop, Tsubaki will show you some special bromides. 
 Kasumi and Yuri are in the secretarial office... 
 But I've also seen them around the stage and music room. 
 All right, I'll get going. See you later, Tsubomi. 
 Yes! Thank you very much! 
 Are you there, sir? It's Ogami. 
-Zzz... <br> Zzz... 
+Zzzz… Zzzz... 
 Good grief... Sounds like he's enjoying an afternoon nap. 
 I'll leave him be and not wake him up. 
 Hey, Ogami. Have you tried the battle simulator yet?
@@ -221,13 +221,13 @@ I'm sure that'll make Mr. Howard back in Kobe happy.
 Mr. Howard, huh? That brings me back. 
 Oh yeah, we went to see him together in Kobe, huh. 
 The only reason I've made it this far is because your smiling face is always there for me. 
-Ogami... Stay with me, forever... 
+Ogami... <br> Stay with me, forever... 
 ...ran... <br> Hey... Kohran. 
 ...Hm? 
 Ch-Chief! Sorry, guess I was spacing out a bit. 
 Ahahaha, what's the matter, Kohran? 
 Chief... 
-...Hm? <br> What, is there something on my face? 
+...Hm? What, is there something on my face? 
 N-Nope, it's nothing! 
 R-Right, well, I gotta get going. Later, Chief! 
 Did my smiling creep her out or something? 
@@ -246,7 +246,7 @@ We could only stay in Sendai for a short while, but it was so much fun...
 ... 
 ...Sakura? <br> What's the matter? 
 Ah! 
-Oh... Oh gosh... I'm sorry, Ogami. 
+Oh... Oh gosh... <br> I'm sorry, Ogami. 
 W-Well I have to get going now. 
 Look forward to some tasty miso soup, OK? 
 ...Miso soup? She was just cleaning, why is she talking about miso soup now? 
@@ -261,15 +261,15 @@ You had two big roles back to back between the Christmas and spring plays.
 The Christmas play, huh? 
 Heheh, now I feel kinda nostalgic. 
 Back then, I was so conflicted over whether or not I could play the lead role. 
-I was so nervous, reading that script the night before I got picked... 
+I was so nervous, readin’ that script the night before I got picked... 
 It's all thanks to you, Boss, that I was able to take the stage as the star of the Christmas play. 
 Thank you, Boss. It really means a lot to me. 
 ...Kanna? What's up? 
 ...H-Huh? Where... am I? 
 What do you mean, where? This is the kitchen. 
-Ah... Ahaha... Y-Yeah, you're right. 
+Ah... Ahaha... <br> Y-Yeah, you're right. 
 W-Welp, I gotta go. Seeya, Boss! 
-Kanna... What was up with her? 
+Kanna... <br> What was up with her? 
 I thought she came here to get something to eat... 
 Doesn't look like Kanna's here. 
 Oh well, guess I should go to another room. 
@@ -286,14 +286,14 @@ We were trapped in that cave together...
 I decided I would stay behind. 
 But then you told me you weren't going to leave me. 
 ... 
-...Maria? <br> What's the matter? 
-Hm hm... <br> It's nothing. 
+...Maria? What's the matter? 
+Hm hm… It's nothing. 
 Well then, Captain, I'll be going now. 
 Let's both enjoy our day off. 
 Yeah. See you later, Maria. 
 Maria seemed lost in thought about something that whole time. 
 Must've been reminiscing like she mentioned before. 
-Looks like Maria's gone somewhere else already. 
+Looks like Maria's already gone somewhere else. 
 Oh well, guess I should go to another room. 
 Figures nobody'd be here today, since it's a holiday and all. 
 Oh well, I'll go somewhere else. 
@@ -306,7 +306,7 @@ Right, that was for "The Blue Bird," wasn't it?
 Back then... You and all the others... You taught me something. 
 To fight for myself... To fight for the ones I love. 
 ... 
-Captain... Thanks. 
+Captain... Thank you. 
 Huh? 
 Well... I'll be going now. 
 ...? 
@@ -331,17 +331,17 @@ I'm gonna go now, Mon Frère. Bye-bye!
 Hmm, I wonder what she was thinking about. 
 Well, no use staying here, at any rate. I'll go somewhere else. 
 Iris isn't here anymore. 
-Oh well. <br> Guess I'll get going. 
+Oh well. Guess I'll get going. 
 Nobody here in the dressing room, since it's our day off. 
 Oh well. I'll go somewhere else. 
 Huh? What are you up to, Orihime? 
-That voice... Is that you, Ensign? 
+That voice... <br> Is that you, Mr. Ensign? 
 I was just stretching my legs on top of the tatami. 
 Tatami mats feel great once you get used to them. 
 That sounds nice. I think I'll stretch my legs a bit too. 
 Still, I remember, back when you first got here... 
 You didn’t have a lot of nice things to say about tatami mats. 
-Come on, that's ancient history! You're such a bully, Ensign. 
+Come on, that's ancient history! You're such a bully, Mr. Ensign. 
 Hahaha, you've sure changed a lot over the past year, Orihime. 
 Now that you mention it... <br> You might be right. 
 ...Orihime? 
@@ -352,26 +352,26 @@ That reminds me, back when Papa and Mamma came to visit...
 Ah! Wh-Where am I? 
 Seems like the tatami mat felt so good you dozed off for a second. 
 I see... <br> So that was... a dream. 
-...A dream? <br> What kind of dream were you having? 
+...A dream? What kind of dream were you having? 
 I-I'm not telling! 
 W-Well, I have places to be, so I have to get going! 
 Right... <br> She sure left in a huff. 
 I wonder what she was dreaming about... 
 Orihime's not here anymore. 
-Oh well. <br> Guess I'll head somewhere else. 
-Nobody here in the costume room, since it's our day off. 
+Oh well. Guess I'll head somewhere else. 
+Nobody here in the wardrobe room, since it's our day off. 
 Oh well. I'll go somewhere else. 
 ... 
 Sumire? 
 Ensign? 
 Pardon me, Ensign. 
 I was just looking at this costume and thinking back to our summer production. 
-Our summer production, huh? <br> That was right after we barged into your family’s estate. 
+Our summer production, huh? That was right after we barged into your family’s estate. 
 Yes... 
 ... 
-Sumire? <br> You've been quiet for a long time. What's wrong? 
+Sumire? You've been quiet for a long time. What's wrong? 
 ...Huh? 
-O-Oh my... What's come over me? 
+O-Oh my... <br> What's come over me? 
 I was simply lost in thought... I do apologize. 
 What were you thinking about? 
 N-Nothing at all! 
@@ -385,12 +385,12 @@ I'm sorry, Ogami. I know you went out of your way to come see me...
 But I'm in the middle of writing a letter to my mother. 
 I see. That's OK. I'll come back some other time. 
 I'm sorry. Let's practice our swordplay next time. 
-Sakura? <br> It's Ogami. 
-Sorry, Ogami. <br> I'm in the middle of writing a letter. 
+Sakura? It's Ogami. 
+Sorry, Ogami. I'm in the middle of writing a letter. 
 I see... Oh well, then. 
 Ah, Ogami, you're here! 
-Yeah. <br> I'm not interrupting anything, am I? 
-No, not at all. <br> I've been waiting for you, actually. 
+Yeah. I'm not interrupting anything, am I? 
+No, not at all. I've been waiting for you, actually. 
 I was thinking we could head to the yard and practice our swordplay. Want to come along? 
 Oh, Ogami. 
 Hey Sakura, thought I'd come hang out. 
@@ -401,15 +401,15 @@ Care to join me again for some sword practice?
 Join her for practice. 
 Recall past practice. 
 Maybe next time. 
-Yeah, sure. <br> If you don't mind, then I'd love to join you. 
-You would? <br> Thank you! 
+Yeah, sure. If you don't mind, then I'd love to join you. 
+You would? Thank you! 
 Right then, let's head to the yard right away. 
 Nice job, Ogami. You were a great help. 
 Join her for practice. 
 Recall past practice. 
 Go somewhere else. 
 If you don't mind, then I can stick around for some more practice. 
-Really? <br> Thank you! 
+Really? Thank you! 
 OK then, please stick around! 
 (Training with Sakura was rough, but a lot of fun...) 
 Ogami? Is there something wrong? 
@@ -459,13 +459,13 @@ Go somewhere else.
 If you want, I could practice with you some more. 
 Are you sure? It's your day off, after all. 
 Yeah, don't worry about it. Besides, I've gotten pretty good at controlling the lights. 
-Ohohohoho... Well then, if you insist. 
+Ohohohoho... <br> Well then, if you insist. 
 (Sumire sure looked beautiful dancing in the spotlight...) 
 What's the matter, Ensign? You seem to be in a trance.
 ...N-No, it's nothing. 
 Could it be you were daydreaming of my beautiful dancing figure? 
 You... <br> Yeah, you nailed it. 
-Ohohoho... I've learned a lot about you these past two years, Ensign. 
+Ohohoho... <br> I've learned a lot about you these past two years, Ensign. 
 All right, I'm gonna get going. Nice job, Sumire. 
 Remember, these practice sessions are our secret.
 (Sumire sure was pretty dancing in the spotlight...) 
@@ -529,7 +529,7 @@ Sorry, Boss.
 It's Ogami... 
 ... 
 Doesn't look like she's here. Oh well, guess I'll go somewhere else. 
-Hey, Boss! You here to hang out? 
+Hey, Boss! Ya here to hang out? 
 Yeah, it's my day off, so I've got time. What were you up to just now? 
 Heh, I was just thinkin' about the past for a change. 
 Like that time you and I had to climb through the attic to fix the roof. 
@@ -548,17 +548,17 @@ Now that you mention it, there was that one time we had to run through the attic
 You should tag along again the next time I go up to fix the roof! 
 Haha, all right, sure. 
 Think back once more. 
-Remember how Kanna looked.
+Recall how Kanna looked.
 Go somewhere else. 
 It was pretty grueling, but still fun. 
 We made it up to the roof after we got through the attic. 
-Nothing beats lying on the roof and looking up at the sky, huh? 
-When you've got time, Boss, we should climb up there again. 
+Nothin’ beats lyin’ on the roof and lookin’ up at the sky, huh? 
+When ya got time, Boss, we should climb up there again. 
 All right, I should get going. Later, Kanna. 
 Gotcha. Come back and hang sometime! 
 We made it up to the roof after we got through the attic. 
-Nothing beats lying on the roof and looking up at the sky, huh? 
-When you've got time, Boss, we should climb up there again. 
+Nothin’ beats lyin’ on the roof and lookin’ up at the sky, huh? 
+When ya got time, Boss, we should climb up there again. 
 All right, I should get going. Later, Kanna. 
 Gotcha. Come back and hang sometime! 
 Ah, Mon frère! 
@@ -608,25 +608,25 @@ All right, I should get going. See you later, Iris.
 OK! Bye-bye, Mon Frère! 
 Oh, Chief, I was wondering who that was. 
 Hey, Kohran. Thought I'd come hang out. 
-You came at just the right time! I'm about to take my newest invention for a test drive. 
+You came at just the right time! I'm about to take my newest invention out for a test drive. 
 ...Wanna be my guinea pig, Chief? 
 Eep?! <br> G-Guinea pig?! 
 Relax, it's fine! Even if it blows up, you'll just get covered in soot at worst. 
 Getting covered in soot is bad enough as it is! 
 Actually, I just remembered, there's something urgent I have to do, so... Later, Kohran! 
-Ah, Chief! W-Wait a second! 
+Ah, Chief! <br> W-Wait a second! 
 (Seemed like Kohran was in the middle of inventing something.) 
 (She'll make me her guinea pig if I just wander in there... I should go somewhere else.) 
 Hey Chief! Here to hang out? 
 Yeah, it's my day off and all, plus I just wanted to talk to you. 
 Now that the fighting's over, the Koubu are also taking a much-needed break. 
 Looks like I'll be spending my time in the garden for a while, then. 
-I'll be able to grow some yummy tomatoes for ya by summer, Chief. 
+I'll be able to grow some yummy tomatoes for you by summer, Chief. 
 Hey, Kohran. Thought I'd come hang out. 
 Great timing, Chief. <br> I've also got time to kill. 
 Now that the fighting's over, the Koubu are also taking a much-needed break. 
 Looks like I'll be spending my time in the garden for a while, then. 
-I'll be able to grow some yummy tomatoes for ya by summer, Chief. 
+I'll be able to grow some yummy tomatoes for you by summer, Chief. 
 Oh, Chief. Back so soon? 
 Wanted to talk some more about that time we harvested those tomatoes? 
 Think back on the harvest. 
@@ -644,28 +644,28 @@ Aw, cut it out, Chief. You remember the weirdest things.
 Hahaha, what, it's a nice memory.
 ...You're right. Here's to growing more nice tomatoes together, Chief. 
 I should get going. Thanks for having me over, Kohran. 
-Come back to hang out whenever ya like! 
+Come back to hang out whenever you like! 
 I can still remember how much you smiled while we were harvesting those tomatoes... 
 Aw, cut it out, Chief. You remember the weirdest things. 
 Hahaha, what, it's a nice memory. 
 ...You're right. Here's to growing more nice tomatoes together, Chief. 
 I should get going. Thanks for having me over, Kohran. 
-Come back to hang out whenever ya like! 
-Oh, Ensign. Did you need something? 
+Come back to hang out whenever you like! 
+Oh, Mr. Ensign. Did you need something? 
 I have the day off, so I thought I'd stop by and chat with you. 
-Ensign... I was actually just about to have my siesta. 
-“Siesta"...? <br> Oh, you're going to take a nap, huh? 
+Mr. Ensign... I was actually just about to have my siesta. 
+“Siesta"...? Oh, you're going to take a nap, huh? 
 I'm sorry. Stop by some other time, OK? 
 Orihime? It's Ogami. 
-Zzzz... <br> Zzzz... 
+Zzzz… Zzzz... 
 Sounds like she's already started napping. 
 Hi, Orihime. 
-Oh, Ensign! Are you here to visit? 
+Oh, Mr. Ensign! Are you here to visit? 
 I was just about to go down to play the piano. Want to join me? 
 Hey, Orihime. Thought I'd come hang out. 
-You look like you have a lot of free time on your hands, Ensign, as usual. 
+You look like you have a lot of free time on your hands, Mr. Ensign, as usual. 
 Oh yeah, I was just about to go down to play the piano. Want to join me? 
-Oh, Ensign. <br> You're back? 
+Oh, Mr. Ensign. <br> You're back? 
 If you've got time to kill, then how about we go play some piano? 
 Go together. 
 Remember Orihime's playing.
@@ -676,14 +676,14 @@ OK, let's go to the music room right away!
 (That was... Last summer, right?) 
 ... 
 (I can't believe it's already been half a year since then...) 
-Ensiiiign? Are you listening to my piano playing? 
+Mr. Ensiiiign? Are you listening to my piano playing? 
 Y-Yeah, I'm listening. 
 Remember the music test. 
 Look at Orihime. 
 Go somewhere else. 
 (I can still remember it clearly...) 
 ... 
-Ensign, you've been spacing out for a while now. Are you even listening to me?! 
+Mr. Ensign, you've been spacing out for a while now. Are you even listening to me?! 
 I-I was just caught up in your piano playing, Orihime... 
 ...Really, now? Well, I guess that's fine. 
 ... 
@@ -697,7 +697,7 @@ If you're leaving then I'll be leaving as well.
 Let's come back here again sometime! 
 Yeah, I'm looking forward to it. 
 (Even looking at her like this, I can picture her playing the piano...) 
-...Ensign? You've been dead silent ever since you got here. 
+...Mr. Ensign? You've been dead silent ever since you got here. 
 ...Oh, sorry, my bad. Just spaced out a bit. 
 Feeling listless now that the battle's over, is that it? 
 Listening to my piano playing might make for a nice change of pace. 
@@ -708,9 +708,9 @@ S-Sorry... I'm busy with other stuff...
 Captain... 
 Hey Reni. Thought I'd come hang out. 
 ...Sorry. I'm about to go take a bath. 
-O-Oh... <br> Can't exactly join you for that one, can I? 
+O-Oh... Can't exactly join you for that one, can I? 
 All right, take it easy, then. Later, Reni. 
-...OK. <br> Sorry, Captain. 
+...OK. Sorry, Captain. 
 It's Ogami... 
 ... 
 Looks like she's not back yet. I'll go somewhere else. 
@@ -723,13 +723,13 @@ Hey, Reni. <br> Going somewhere?
 Yeah. I was just about to head to the pool for my swimming practice. 
 ...Will you be coming too? 
 Hey, Reni. Going to the pool again? 
-Yeah. <br> Will you be coming too, Captain? 
+Yeah. Will you be coming too, Captain? 
 Go swimming. 
 Recall Reni's swimsuit.
 Go somewhere else. 
 OK, today's my day off, so I'm ready to swim my heart out! 
 ...OK. <br> Let's go, Captain. 
-Phew... That was refreshing. 
+Phew... <br> That was refreshing. 
 Are you not going to swim more, Captain? 
 Swim some more. 
 Look at Reni. 
@@ -764,7 +764,7 @@ You've got to play with me some other time, then, OK?
 Well, Ogami? Are you giving up, or do you want to try again? 
 I'll keep going! 
 ...I'll come back later. 
-I'll keep going! <br> Hit me with the questions, Tsubaki! 
+I'll keep going! Hit me with the questions, Tsubaki! 
 OK! Well then, here we go! 
 ...I give up. <br> I'll come back later. 
 ...I see. Come back and try again when you feel like it. 
@@ -782,20 +782,20 @@ Ah, Ogami! Hm hm, I've been waiting for you.
 Hey, Yuri. Need me for something? 
 This is your first day off in a while, right? I thought we could play a game together... 
 So I've prepared a 10-question battle quiz, just for you, Ogami! 
-Ready to put your pride as the Flower Division's captain on the line? 
+Ready to put your pride on the line as the Flower Division's captain? 
 Ah, Ogami! You came back! 
 Want to give my battle quiz a shot? 
 All right, let's do it! 
 ...Maybe next time. 
 Sounds like fun. <br> All right, let's do it! 
-Hm hm, got it. OK, then... Here we go! 
+Hm hm, got it. <br> OK, then... Here we go! 
 I appreciate it, but maybe next time. 
-Jeez, Ogami! Now I feel all awkward having gone through the effort of preparing this quiz. 
+Jeez, Ogami! I went to the trouble of preparing a quiz for you but now you're leaving me high and dry! 
 Next time you come here, you gotta give it a try, OK? 
 Well, Ogami? Are you giving up, or do you want to try again? 
 I'll keep going! 
 ...I'll come back later. 
-I can keep going! <br> Keep the questions coming, Yuri! 
+I can keep going! Keep the questions coming, Yuri! 
 That’s the Ogami I know! You've got guts! OK, here they come! 
 ...I give up. <br> I'll come back later. 
 Huhhh? Quitting already? 
@@ -803,16 +803,16 @@ Next time you stop by, I want you to give the quiz a serious shot, OK?
 You did it, Ogami! You answered every question correctly! 
 Hahaha, thanks. 
 Of course, these are only beginner-level questions, Ogami. 
-If you want to give advanced-level questions a try, head up to the terrace. 
+If you want to give the advanced-level questions a try, head up to the terrace. 
 So there's advanced-level questions too, huh? OK, I'll give it a shot! 
-Good luck! I'm rooting for you! 
+Good luck! <br> I'm rooting for you! 
 That's the Ogami I know! You got them all right! 
 This level of quiz is too easy for you at this point, huh? 
 Still, they're a lot of fun. 
 Really? Thank you! 
 Come back and play again sometime, Ogami! 
 It's feeling more and more like spring lately with the sun out like this... 
-Today's looking like it'll be a great holiday with great weather. 
+Today's looking like it'll be a great holiday with pleasant weather. 
 Oh... Kasumi? 
 It seems as though you've cleared Yuri's beginner-level battle quiz. 
 I've prepared an even harder combat quiz for you. 
@@ -835,7 +835,7 @@ OK, understood. Right, then, without further ado, here they come.
 ...I give up. <br> I'll come back later. 
 Hm hm, I won this round. 
 Come back to challenge me again whenever you like. 
-Amazing, Ogami! You got them all right. 
+Amazing, Ogami! <br> You got them all right. 
 Phew... Looks like I managed to defend my honor as captain of the Flower Division. 
 Now then, Ogami, please make your way to Kaede's room. 
 Kaede's room? Is there another quiz after this? 
@@ -849,29 +849,29 @@ No use sticking around. I'll go somewhere else.
 Huh? Nobody's here. 
 Tsubaki told me to come here, though... That's odd. 
 Yo, Ogami! <br> I've been waiting for you! 
-Th-That voice... <br> Kayama?! 
+Th-That voice... Kayama?! 
 Haha, indeed! Alley-OOP! 
 Seeing you here must mean you've passed Tsubaki's quiz! 
 However, Ogami, Tsubaki's quiz was merely beginner-level questions. 
 Think you can handle these stumpers prepared for you by the Moon Division recon unit? 
 Yo, Ogami. Back again, I see? 
 Ahh, what a joy it is to spend a holiday together with you like this... 
-Right then, Ogami. <br> Are you ready to take on my advance-level 10 question quiz? 
+Right then, Ogami. Are you ready to take on my advanced-level 10-question quiz? 
 Of course I am! 
 ...Maybe next time. 
 Of course I am! 
-Good. <br> That right there is why you're the Flower Division’s captain. 
+Good. That right there is why you're the Flower Division’s captain. 
 Well then, Ogami... <br> Here I come! 
 I appreciate it, but maybe next time. 
-C-Come on, now, Ogami! <br> You're leaving without answering a single question?! 
-Yeah, not really in the mood. <br> I'll do it some other time. 
-I-I see... <br> And here I was, raring to go... 
+C-Come on, now, Ogami! You're leaving without answering a single question?! 
+Yeah, not really in the mood. I'll do it some other time. 
+I-I see... And here I was, raring to go... 
 I'll be waiting for you here, Ogami. Come back whenever you please! 
 Giving up already? Or would you like to try again? 
 I'm just getting started! 
 ...I'll come back later. 
 I'm just getting started! <br> Bring it on, Kayama! 
-Well said, Ogami! <br> All right then, without further ado, here goes! 
+Well said, Ogami! All right then, without further ado, here goes! 
 ...I give up. <br> I'll come back later. 
 “Not knowing is a temporary shame; not learning, an eternal one." 
 Even if you can't answer 10 questions in a row correctly right now, I know you can eventually. 
@@ -889,14 +889,14 @@ Come, now, no need to thank me. A diversion like this on a day off isn't so bad.
 Well then, Ogami, till we meet again! 
 Nobody here in the salon. 
 Thought everyone would be here, since we have the day off, but I guess not. 
-Wha-? What are you all doing here? 
-Ah, Ogami. <br> Will you be joining us for cards? 
+Wha- What are you all doing here? 
+Ah, Ogami. Will you be joining us for cards? 
 Cards? 
 You came 'round to all our rooms earlier and called for us, right? 
-But when we opened our doors, there was nobody there! Are you a ninja or something, Ensign? 
+But when we opened our doors, there was nobody there! Are you a ninja or something, Mr. Ensign? 
 (I get it… This must be Kayama's doing.) 
 OK, since everyone's here already, let's play some cards. 
-Yaaaay! I'll go get some sweets from my room! 
+Yaaay, yaaay! <br> I'll go get some sweets from my room! 
 In that case, I'll brew us a delicious pot of tea. 
 It's not every day we have the time to play together like this. 
 Just know that I won't lose. 
@@ -909,8 +909,8 @@ We've been waiting for you, Ensign. How about a game of cards with everyone?
 Captain, seeing as we're on holiday, how about we all play cards together for a change? 
 We've been waitin' for ya, Boss! Since we're all here now, how's about a game of cards? 
 We've been waiting for you, Mon Frère! C'mon, let's play cards already! 
-We've been waiting for ya, Chief! C'mon, let's hop to it and play some cards! 
-Ensign, we've been waiting! Now, let's all play some cards together! 
+We've been waiting for you, Chief! C'mon, let's hop to it and play some cards! 
+Mr. Ensign, we've been waiting! Now, let's all play some cards together! 
 Apparently we're just about to play some cards. Will you join us, Captain? 
 All right, let's do it! 
 Some other time... 
@@ -918,8 +918,8 @@ OK! Go easy on me, will you?
 Observe my brilliant card-playing skills! 
 Hm hm... Just so you know, I won't go down easily. 
 Heheh, that's what I'm talkin' 'bout! OK, but just lettin' ya know, I'm gonna win this thing! 
-Eheheh! I'm not gonna lose! 
-All right! Just so you know, I'm not gonna go easy on you! 
+Eheheh! <br> I'm not gonna lose! 
+All right! Just so you know, I'm not gonna hold back! 
 Europe is the home of card games. I'll show you my true skill! 
 Even in play, there is strategy. Know that I won't lose. 
 Nice job, Ogami. 
@@ -949,7 +949,7 @@ OK, I'll try it out!
 Good answer, Ogami. I thought you'd say that. 
 Well then, take all the time you want, and enjoy. 
 I appreciate the offer, but maybe some other time. 
-Oh, I see... And after all the trouble we went through to set it up, too. What a shame. 
+Oh, I see... <br> And after all the trouble we went through to set it up, too. What a shame. 
 Well, if you ever change your mind, come to my room. 
 OK, understood. Thank you very much. 
 Oh, Ogami. Would you like to use the battle simulator? 
@@ -970,25 +970,25 @@ Go somewhere else.
 You haven't seen the rest of the Flower Division, have you? 
 Everyone ought to be in their rooms right now. 
 Since you have the day off today, you could go play games with them... 
-…or simply reminiscing with them might be fun, too. 
+…or simply reminiscing with everyone might be fun, too. 
 What's everyone else doing? 
 Right, they said they were getting quizzes ready for you. 
 If you can beat all the quizzes, then the Flower Division... 
 Ah, whoops! I'm not supposed to share that!
 I'm sorry, Mr. Ogami. I can't tell you anything more, since it's a secret and all. 
 N-Now I'm getting a little concerned... C'mon, tell me, Tsubomi. 
-Smile-smile! 
+Smile, smile! 
 Hey, Tsubomi. <br> About earlier... 
-Smile-smile! 
-Sheesh... <br> Doesn't look like I'll be getting anything out of her. 
-Ah, Ogami! <br> You solved everyone's quizzes! 
+Smile, smile! 
+Sheesh... Doesn't look like I'll be getting anything out of her. 
+Ah, Ogami! You solved everyone's quizzes! 
 Congratulations! 
-Thank you. <br> It made for a fun holiday. 
+Thank you. It made for a fun holiday. 
 All right, I'll get going. See you later, Tsubomi. 
 Thanks! Please come again! 
 Well, if it isn't Ichiro! Did you come to see lil' ol' me? 
 Enough, Yokihiko! I told you not to cause a scene now that we're above ground! 
-H-He's right, Yokihiko... You're embarrassing us... 
+H-He's right, Yokihiko... <br> You're embarrassing us... 
 By the way, Ensign Ogami. It's your first day off in a long while, right? 
 I'm sure you have a lot of games to play with the rest of the Flower Division today... 
 But we of the Rose Division, the secret unit of love and beauty, have acquired some useful intel. 
@@ -1004,7 +1004,7 @@ Ask Kikunojo.
 All right, then… Kotone, if you'd be so kind. 
 Hm hm, a man of taste, I see. I'll tell you my top secret info. 
 ...Or rather, I would, but none of my intel would be of any use to you right now. 
-We all need to take detours in life. You have to create more memories. 
+We all need to take detours in life. You need to get out there and create some more memories. 
 O-OK... 
 First, I'll tell you some tips on sword training with Sakura. 
 When two bundles fly out at the same time, that's your chance for a simultaneous strike. 
@@ -1027,7 +1027,7 @@ That's all for Maria's shopping trip.
 All right, then… Yokihiko, if you'd be so kind. 
 You've got it! I'll tell you my special tips! 
 ...Oh dear! Seems like my info's useless to you! 
-Look, Ichiro, I understand that you’d wanting to beeline things... 
+Look, Ichiro, I understand that you’d want to beeline things... 
 But you have to look after the other members of the Flower Division more, OK? 
 O-OK... 
 OK, first, here's some tips for when you go to the attic with Kanna. 
@@ -1070,7 +1070,7 @@ Um... Do you have any other information to share with me?
 Yes, of course. Who would you like to hear about? 
 Thank you very much. <br> I have to get going now. 
 Come by whenever you'd like to hear any more intel. 
-Phew... <br> Nothing's more relaxing than being in your own room... 
+Phew... Nothing's more relaxing than being in your own room... 
 Go somewhere else. 
 Write in journal and sleep. 
 Now that I've taken a quick break, I'll get going. 
@@ -1084,22 +1084,22 @@ A flower crown made by Iris. Given to me to match Reni's.
 A scarf given to me by Sakura. It's knitted with red yarn - my favorite color. 
 A scarf given to me by Sakura. It's knitted with blue yarn - my favorite color. 
 A scarf given to me by Sakura. It's knitted with yellow yarn - my favorite color. 
-A photo of Sakura. 
-A photo of Sakura. This one is a limited edition only available at New Year's. 
-A photo of Sumire. 
-A photo of Sumire. This one is a limited edition only available at New Year's. 
-A photo of Maria. 
-A photo of Maria. This one is a limited edition only available at New Year's. 
-A photo of Kanna. 
-A photo of Kanna. This one is a limited edition only available at New Year's. 
-A photo of Iris. 
-A photo of Iris. This one is a limited edition only available at New Year's. 
-A photo of Kohran. 
-A photo of Kohran. This one is a limited edition only available at New Year's. 
-A photo of Orihime. 
-A photo of Orihime. This one is a limited edition only available at New Year's. 
-A photo of Reni. 
-A photo of Reni. This one is a limited edition only available at New Year's. 
+A bromide of Sakura. 
+A bromide of Sakura. This one is a limited edition only available at New Year's. 
+A bromide of Sumire. 
+A bromide of Sumire. This one is a limited edition only available at New Year's. 
+A bromide of Maria. 
+A bromide of Maria. This one is a limited edition only available at New Year's. 
+A bromide of Kanna. 
+A bromide of Kanna. This one is a limited edition only available at New Year's. 
+A bromide of Iris. 
+A bromide of Iris. This one is a limited edition only available at New Year's. 
+A bromide of Kohran. 
+A bromide of Kohran. This one is a limited edition only available at New Year's. 
+A bromide of Orihime. 
+A bromide of Orihime. This one is a limited edition only available at New Year's. 
+A bromide of Reni. 
+A bromide of Reni. This one is a limited edition only available at New Year's. 
 The jewel of the Pandemonium Regalia, entrusted to us by the Rose Division. 
 Spirit Sword Arataka. The special sword of the Shinguji family.
 Divine Sword Shirahatori. Entrusted to me by Kaede. A special sword passed down by the Fujieda family. 
@@ -1109,10 +1109,10 @@ A plate used at the welcome party. I was asked to bring it to Sakura.
 A decorative paper ball for the welcome party called a kusudama. 
 A flower vase for the welcome party.
 The banner for the welcome party.
-The Cinematron. One of Kohran's inventions that lets you see and talk to someone from far away. 
+The Kinematron. One of Kohran's inventions that lets you see and talk to someone from far away. 
 The sword of the Pandemonium Regalia, recovered from the Demon King. 
 The mirror of the Pandemonium Regalia, recovered from the Demon King. 
-Fragments of the broken Cinematron. Seems like the kids at the inn picked them up along the shore. 
+Fragments of the broken Kinematron. Seems like the kids at the inn picked them up along the shore. 
 A letter from Sakura. 
 A letter from Sumire. 
 A letter from Maria. 

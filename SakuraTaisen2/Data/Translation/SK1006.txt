@@ -9,17 +9,17 @@ And... Demon King.
 At long last, the day has arrived for the capital to kneel at my feet. 
 To kneel before... Kyogoku. 
 Yes, sir... 
-Demon King... I trust that our vanguard is ready to deploy? 
+Demon King... <br> I trust that our vanguard is ready to deploy? 
 Of course. Right this way... 
 During the Kouma War, the Army gathered Kouma corpses in total secrecy... 
 By extracting the Spirit Power from their tissue, their bodies were rebuilt into the ultimate weapons.
-“Kouma Weapons"... Finally, the day has come for you to trample the capital beneath your might. 
+“Kouma Weapons"... <br> Finally, the day has come for you to trample the capital beneath your might. 
 GRAAAAWL! 
 Kongo… Tsuchigumo… <br> I leave the Imperial Assault Troupe to you. 
 Those vermin are certain to appear. I expect you to make up for your failures at Akasaka. 
 Yessir! Even if it costs me my life! 
 I'll bury the Imperial Assault Troupe with my own hands! 
-Now go! <br> To the site of the final seal... To Ouji! 
+Now go! To the site of the final seal... To Ouji! 
 The time has come to activate the Octagram of Demonic Calling! 
 The time... for Musashi's return!! 
 Yes, my lord! 
@@ -34,7 +34,7 @@ Sleep in a bit longer.
 OK, time to get up. I can't keep sleeping forever. 
 Oh, Ogami. <br> Good morning. 
 Good morning. Did you sleep well last night? 
-Good morning. <br> I slept like a log thanks to your hospitality. 
+Good morning. I slept like a log thanks to your hospitality. 
 Breakfast is almost ready, so wait just a little longer. 
 Thanks. I'll go get changed, then. 
 *yawn*... <br> I'm still drowsy. I'll sleep in just a bit longer... 
@@ -42,15 +42,15 @@ Wake up, Ogami, it's morning.
 Good morning, Sakura. 
 Just 5 more minutes... 
 Ah, good morning, Sakura. 
-Good morning. Did you sleep well? 
-Yeah, I slept like a log. 
+Good morning. <br> Did you sleep well? 
+Yeah, I slept like a log thanks to your hospitality.
 Really? Hmhm, glad to hear it. 
 We finished making breakfast, so get changed and come to the living room, OK? 
 Breakfast at Sakura's, huh? 
 Just 5 more minutes... 
 Oh, Ogami, you're hopeless. 
 We finished making breakfast, so get changed and come to the living room, OK? 
-Hurry up before it gets cold. 
+If you don’t hurry, your miso soup will get cold. 
 C-Crap, my breakfast is gonna get cold! 
 I gotta get changed, quick! 
 ... 
@@ -65,20 +65,20 @@ OK, let's eat.
 There's plenty to go around, so eat as much as you'd like! 
 Sakura made this breakfast almost entirely by herself. 
 Hmhm, I tried to make it just like Mother's! 
-*chew* *chew* 
+*chew* *chew*...  
 Well, Ogami...? <br> How does it taste? 
 It's great! 
 Um... It's OK. 
 It's great! This is delicious, Sakura! 
 Really? Thank you so much! 
 You've gotten quite good at seasoning, haven't you, Sakura? 
-Yes, I practiced to make it taste just like yours! 
-Though I do think the miso soup could stand to be a bit lighter. 
-Huh, really? <br> OK, you'll have to teach me how afterward! 
+Thanks! I practiced to make it taste just like your recipes, Mother!  
+Though, I do think the miso soup could stand to be a bit lighter. 
+Huh, you think so? <br> …In that case, you'll have to teach me how sometime! 
 (So this is the taste of a family, huh?) 
 (This must be how a flavor gets passed down to future generations...) 
 Um... It's OK. 
-I... I see... 
+I-Is that right...?
 I think the miso soup should've been a bit lighter. 
 I'll teach you the trick to making it later. 
 Your father was always so fussy about his miso soup... 
@@ -93,29 +93,29 @@ It was nothing.
 Sakura, when you have a minute, go visit your father's grave, will you? 
 …Huh? <br> But Mother... 
 Please, take care. 
-...OK! <br> Well then, Ogami, let's go right away. 
+...OK! Well then, Ogami, let's go right away. 
 We're here, Ogami. This is my father's grave. 
-W-Whoa... There's a tomb in this rock! 
-Ogami... The truth is... 
+W-Whoa… There's a tomb in this rock! 
+Ogami… The truth is... 
 Nobody outside of the Shinguji family has ever been allowed to see the Shinguji family tomb. 
 Huh?! Then... does that mean that I'm...? 
-...L-Let's go inside, Ogami. 
-Y-Yeah. 
+...O-Ogami, how about we head inside now. 
+Y-Yeah, sure. 
 Father, it's Sakura. I'm finally back home. 
 The captain of the Imperial Assault Troupe's Flower Division, Ichiro Ogami, is with me today. 
 ... 
 Father. We... 
-We're carrying out your final wish and fighting our hardest to protect the peace in the capital. 
+We're carrying out your final wish and fighting with all we have to protect peace in the capital. 
 So please, keep watching over us... Over the Imperial Assault Troupe. 
 ... 
-…OK, Ogami, let's go. 
-Yeah... 
+…All right, Ogami. Let us depart. 
+…OK. 
 ...! 
-That noise... Is that the Cinematron ringing?! 
-Ogami, let's answer it right away! 
-Ogami? <br> Thank goodness, I finally got through. 
+That noise… Is that the Kinematron ringing?! 
+Ogami, we should answer it right away! 
+Ogami? Thank goodness, I finally got through. 
 Kaede! What on earth is going on?! 
-We have an emergency. <br> Hostiles have been sighted in Ouji! 
+We have an emergency. Hostiles have been sighted in Ouji! 
 Wha... <br> What did you just say?! 
 We still don't know all the details. The rest of the Flower Division have already deployed. 
 The Soaring Whale is en route to your location. Return here ASAP! 
@@ -143,12 +143,12 @@ Mother...
 I'll teach you how to make miso soup then, Sakura. 
 ...OK! 
 I'll be all right, Mother. With Ogami at my side, I can give it my all! 
-That sound... It's the Soaring Whale! 
+That sound... <br> It's the Soaring Whale! 
 We're going now, Mother! 
 Come back safely, Sakura. 
 Ogami, look after my daughter. 
 ...Yes, ma'am! 
-Phew... My stomach's finally settled. 
+Phew… My stomach's finally settled. 
 Speaking of which, Sumire's still not back yet... 
 Oh, Master Ogami. <br> Are you alone? 
 Yeah. Do you know where Sumire's gone? 
@@ -176,7 +176,7 @@ Sumire… I have something I wanted to tell you.
 ...! 
 Could that voice be...? 
 (I knew it, it's Sumire and Hinako.) 
-What is it, Mother? 
+…What is it, Mother? 
 I wanted to apologize for the arranged marriage. 
 We should have stopped your grandfather. 
 ... 
@@ -193,45 +193,45 @@ Do as you wish. You're still young, after all.
 But you just recently received those new Spirit Armors, the Tenbu, didn't you? 
 Their development was very expensive, and the one who backed it... was your grandfather. 
 ...! 
-Sumire... Love takes many forms. 
+Sumire... <br> Love takes many forms. 
 It can be clumsy, overbearing, or cold... 
 But accepting that is also its own form of love. 
 Your father, your grandfather... And myself, of course... 
 We all truly love you. 
 Mother... 
 (...) 
-I see... So the Tenbu were financed by the Kanzaki Group... 
-Oh, Master Ogami! There you are! 
+I see... <br> So the Tenbu were financed by the Kanzaki Group... 
+Oh, Master Ogami! <br> There you are! 
 What's the matter, Miyata? 
 There's a strange beeping noise coming from Mistress Sumire's room. 
 Beeping noise? 
-The Cinematron! 
+The Kinematron! 
 The alarm clock? 
-Oh, right! That must be the Cinematron ringing! 
-The cinema... What now? 
+Oh, right! That must be the Kinematron ringing! 
+The kinema... What now? 
 It's, well, did you see a strangely shaped device in there? 
 Yes, yes I did! I brought it out to the entrance for the time being. 
 A beeping noise from Sumire’s room? That must be an alarm clock then, right? 
 P-Preposterous! There's no need for an alarm clock to be as boisterous as this thing! 
 It's a strange little contraption making all that racket. 
-Wait, what?! Then that beeping might be... the Cinematron! 
+Wait, what?! Then that beeping might be... the Kinematron! 
 For the time being, I brought it out to the entrance. 
 Let's see, was there anything in Sumire’s room that you think could be making that sound? 
 Well, the noise seems to be coming from some strange contraption.
-Wait, what?! Then that beeping might be... the Cinematron! 
+Wait, what?! Then that beeping might be... the Kinematron! 
 For the time being, I brought it out to the entrance. 
 I see, thank you! 
 Miyata, go get Sumire! She should still be in the yard! 
 Yes, sir! Understood! 
-So it was the Cinematron after all! 
-But then... What on earth is going on?! 
+So it was the Kinematron after all! 
+But then... <br> What on earth is going on?! 
 Ensign! 
-Miyata told me everything. We're getting a call on the Cinematron, right? 
-We must answer it, right away! 
+Miyata told me everything. We're receiving a call on the Kinematron, am I right? 
+We must answer it immediately! 
 Yeah. OK, I'm picking up... 
-Ogami? <br> Thank goodness, I finally got through. 
+Ogami? Thank goodness, I finally got through. 
 Kaede! What on earth is going on?! 
-We have an emergency. <br> Hostiles have been sighted in Ouji! 
+We have an emergency. Hostiles have been sighted in Ouji! 
 Wha... <br> What did you just say?! 
 We still don't know all the details. The rest of the Flower Division have already deployed. 
 The Soaring Whale is en route to your location. Return here ASAP! 
@@ -240,18 +240,18 @@ Roger, ma'am!
 There's no time to dawdle about, Ensign. 
 Yeah. We have to get to Ouji, fast! 
 ... 
-Sumire... Go and live your life to the fullest. 
+Sumire… Go and live your life to the fullest. 
 ...I will. 
-S-Sumire... When will you come by to visit again? We should have a party when you do. 
+S-Sumire... <br> When will you come by to visit again? We should have a party when you do. 
 A party just for you. We'll hire chefs from around the world, and then... Uhh... 
 I'll buy you all the things you want... And then... Sumire... We love you. 
 Father... 
-Ogami... Please, take care of Sumire. 
+Ogami… Please, take care of Sumire. 
 Yes, ma'am! 
 We'll stop by again. 
 Yes, ma'am! I swear to protect Sumire! 
 Ensign... 
-Ogami... Thank you very much. 
+Ogami... <br> Thank you very much. 
 Sumire and I will stop by again sometime. 
 Right, Sumire? 
 ...Yes. We'll come back... if I feel like it. 
@@ -261,14 +261,14 @@ With the ensign by my side, I have nothing to fear.
 Sumire... 
 Father, Mother… I'm going. 
 Be safe. Come visit us again sometime. 
-Sumire, um... Maybe you can treat us to some of your cooking next time? 
+Sumire, um… Maybe you can treat us to some of your cooking next time? 
 ...Of course, I will. Look forward to it. 
-Mother... Give Grandfather my regards. 
+Mother… Give Grandfather my regards. 
 …Yes, I understand. I'll be sure to tell him. 
 Let us be off, Ensign! It's time for our grand entrance! 
 Yeah, let's go, Sumire! 
 ... 
-Ogami... Please, protect my dear Sumire! 
+Ogami… Please, protect my dear Sumire. 
 The smell of the ocean sure takes me back. Reminds me of my time in the Naval Academy. 
 Oh, looks like one of the ships is just about to leave port. 
 Judging by its size, I'm guessing it's headed abroad. 
@@ -281,13 +281,13 @@ Was I tired of all the fighting and poverty? Did I yearn for personal freedom?
 Even now... I'm not really sure. 
 ... 
 But nevertheless, I did run away... From myself as well. Now I'm but a wanderer. 
-*sigh*... Sometimes I hate how weak I can be... I have to be stronger. 
+*sigh*... <br> Sometimes I hate how weak I can be... I have to be stronger. 
 Not just for myself, but for the Flower Division as well... Right, Captain? 
 (Maria...) 
 Say something to Maria. 
 Maria... 
 ... 
-Captain... Do you mind if I cry...? 
+Captain... <br> Do you mind if I cry...? 
 N-Not at all... 
 ... 
 ... 
@@ -295,13 +295,13 @@ N-Not at all...
 (Maria...) 
 Moya rodina... <br> (My motherland...) 
 ... 
-...! <br> Is that the Cinematron ringing?! 
+...! <br> Is that the Kinematron ringing?! 
 ...Captain. 
 Yeah, seems like we're receiving a transmission. 
 What could it be? 
-Ogami? <br> Thank goodness, I finally got through. 
+Ogami? Thank goodness, I finally got through. 
 Kaede! What on earth is going on?! 
-We have an emergency. <br> Hostiles have been sighted in Ouji! 
+We have an emergency. Hostiles have been sighted in Ouji! 
 Wha... <br> What did you just say?! 
 We still don't know all the details. The rest of the Flower Division have already deployed. 
 The Soaring Whale is en route to your location. Return here ASAP! 
@@ -313,7 +313,7 @@ Yeah, I'm still not sure what's going on, but we have to get back, and fast.
 The fighting's starting once again. 
 Maria... 
 Gently cheer her up. 
-Forcefully cheer her up. 
+Boldly cheer her up. 
 I know it won't replace your family or your homeland, Maria... 
 But I'm here to support you. 
 ...Yes, Captain. 
@@ -333,15 +333,15 @@ We'll make sure everyone knows the joy of peace!
 Yes, Captain! 
 All right, let's go! To protect our capital... and our Flower Division! 
 U... Uh... 
-...Huh? Guess I must've dozed off. 
+...Huh? <br> Guess I must've dozed off. 
 Right, we were having a drink-off in front of the tomb... 
 And I passed out as soon as we got back to Kanna's house. 
 Huh? Kanna's not here. 
-Go look for Kanna. 
+Go look for her. 
 I'm worried about Kanna... All right, I'll go look for her. 
 Eh, this is Kanna we're talking about, she'll be fine. 
 ... 
-... 
+… ... 
 Nope, too worried to sleep after all. 
 Well, I'm wide awake, so I might as well go for a walk and look for her. 
 She's not anywhere around the house... 
@@ -386,26 +386,26 @@ R-Right...
 What's with you, Boss? I'm gettin' a little concerned, now. 
 Don't worry about it, Kanna. It's nothing, really. 
 But more importantly, is it time for breakfast yet? 
-Yeah, it's all ready. Now, shall we eat? 
+Yeah, it's all ready. Ya ready to chow down? 
 Was that just... a dream? 
 Hey, Boss, you still half-asleep? 
 C'mon, go wash up. Breakfast is ready. 
 R-Right... 
 ...Hm? 
-That sound... No way! 
-It's the Cinematron! It's ringing! 
+That sound... <br> No way! 
+It's the Kinematron! It's ringing! 
 All the way out here? What the hell's goin' on?! 
 No clue. Let's answer it and see. 
-Ogami? <br> Thank goodness, I finally got through. 
+Ogami? Thank goodness, I finally got through. 
 Kaede! What on earth is going on?! 
-We have an emergency. <br> Hostiles have been sighted in Ouji! 
+We have an emergency. Hostiles have been sighted in Ouji! 
 Wha... <br> What did you just say?! 
 We still don't know all the details. The rest of the Flower Division have already deployed. 
 The Soaring Whale is en route to your location. Return here ASAP! 
 Get back to the theater immediately, you two! 
 Roger, ma'am! 
-Looks like we got a situation here, Boss. 
-Yeah. Time to fight again, Kanna. 
+Boss… Sounds like somethin’ big’s goin’ down. 
+Yeah. Time to get back into action, Kanna. 
 I'll be all right. As long as we're together, Boss, I'm not afraid of anything. 
 As long as we're together, we're not losin' to anybody! 
 Kanna... 
@@ -423,7 +423,7 @@ Yeah, you're right.
 No matter who we're up against, we're not gonna lose! 
 We'll protect our friends! That's what the Imperial Assault Troupe fights for! 
 Zzz... Zzz... 
-Iris is sound asleep. 
+Looks like Iris is sound asleep. 
 She probably tired herself out from all that romping around. 
 At any rate, that girl's grown to be so cheerful. 
 Yes, indeed. 
@@ -450,20 +450,20 @@ Ogami... Thank you so much.
 We'll definitely come back... Definitely. 
 Iris... 
 Uhhh... Mm... 
-Ah... Was I... asleep? 
+Ah... <br> Was I... asleep? 
 Oh my. Sorry for waking you up, Iris. 
 I heard Mon Frère's voice and woke up. 
 Hahaha, like Sleeping Beauty awoken by the prince's kiss. 
 Huh? What did you say? Did Mon Frère... kiss me? 
 ...Wha? 
-Hm hm hm... Maybe when you're a little older, Iris. 
+Hm hm hm… Maybe when you're a little older, Iris. 
 N-Not you too... 
 Huh? Is that an alarm clock I'm hearing? 
-No, that’s not it. It's the Cinematron ringing! 
+No, that’s not it. It's the Kinematron ringing! 
 What could've possibly happened? All right, let me take it out. 
-Ogami? <br> Thank goodness, I finally got through. 
+Ogami? Thank goodness, I finally got through. 
 Kaede! What on earth is going on?! 
-We have an emergency. <br> Hostiles have been sighted in Ouji! 
+We have an emergency. Hostiles have been sighted in Ouji! 
 Wha... <br> What did you just say?! 
 We still don't know all the details. The rest of the Flower Division have already deployed. 
 The Soaring Whale is en route to your location. Return here ASAP! 
@@ -492,7 +492,7 @@ Really? Is that OK?
 Yeah. Go to them. 
 OK! Thank you, Mon Frère! 
 I'm... starting to feel a little seasick. 
-Huh? <br> Are you OK, Mon Frère? 
+…Huh? <br> Are you OK, Mon Frère? 
 Yeah, I'll be fine. It'll blow over eventually. 
 So... Why don't you go talk to your parents until I feel better? 
 Mon Frère... 
@@ -503,12 +503,12 @@ OK! Thank you, Mon Frère!
 Papaaa! Mamaaa! 
 Iris! 
 Iris! 
-I promise... I'm coming back! 
+I promise... <br> I'm coming back! 
 I'll be back for you, Papa, and you, Mama! 
-Iris... Thank you. 
-Iris... Your papa and mama will wait for you as long as it takes! 
+Iris... <br> Thank you. 
+Iris… Your papa and mama will wait for you as long as it takes! 
 OK! 
-All right, Papa, Mama... I'll be baaaack! 
+All right, Papa, Mama... <br> I'll be baaaack!! 
 By the way, you're the one who formally taught Kohran mechanics, right, Mr. Howard? 
 That's right! She's probably better than me at this point, though. 
 What are you saying, Howard? I'm still only learning. 
@@ -516,7 +516,7 @@ Besides, you'll always be my teacher, no matter how much time passes.
 Oh, that's right! I still have a bunch of Kohran's inventions from way back! 
 Wanna see 'em, Ogami? 
 Absolutely, please! 
-I'll pass. 
+I'm not interested. 
 They won't blow up, right? 
 Absolutely, please! 
 You still got all that stuff, Pops? 
@@ -534,7 +534,7 @@ All right, Chief, let's go see 'em right away.
 Hmm, what to do... 
 Quit fussing, Chief. C'mon, let's go! 
 Right then, follow me, you two! 
-Wow... So many nostalgic inventions! 
+Wowee… So many nostalgic inventions! 
 Go ahead, Ogami, take a gander! 
 All right, let's have a look. 
 That's a steam gramophone. It lets you listen to records using steam power. 
@@ -544,25 +544,25 @@ The concept was sound, but it wasn't practical in the end.
 I see... A gramophone. 
 If I could get the vibration problem solved, it'd totally work, though. 
 That's a steam-powered pressure cooker! 
-It's one of the rare successful inventions of mine from that time. 
+It was one of the rare inventions of mine from this period that was actually a success.
 Wow. What can you make with it? 
 You can cook rice, steam potatoes... 
 You can make all sortsa stuff! It's a multipurpose cooking machine! 
 (A cooking machine, huh? Guess even Kohran makes some practical inventions from time to time.) 
 That's the steam cleaner. It's a machine that runs around and picks up garbage fully automatically! 
 Wow, that's amazing. So why didn't it work out? 
-Hmmm... Well, it ran around a little TOO fast. 
-Once you'd start it up, you weren't able to catch it... 
+Hmmm… Well, it ran around a little TOO fast. 
+Once you started it up, you’d never be able to catch it again... 
 Not only that, but time after time it mistook my important documents as garbage. 
 Hahaha, that's unfortunate. 
 Still, this could work if you refined it, don't you think? 
 Yeah, you're right. I'll try making it again once we get back to the theater. 
-This is a steam camera. It takes full-colored photos... 
+This is a steam camera. It takes full-colored photographs... 
 But it's so heavy, it's exhausting to carry around. 
-Kohran always had me carry it for her. That camera's the cause of so much suffering. 
-It's not so bad, Howard. You got to take pictures and exercise! Ya killed two birds with one stone! 
-In the end, it served as the model for the Koubu's camera scope. 
-I see... So all that work didn't go to waste. 
+And Kohran always had me carry it for her. That camera's the cause of so much suffering. 
+It's not so bad, Howard. You got to take pictures AND exercise! You killed two birds with one stone! 
+In the end, this invention served as the model for the Koubu's camera scope. 
+Is that so? I guess all that work didn't go to waste, then. 
 This here's a steam clock. Steam power makes the hands move when you wind it up. 
 The steam whistle makes for a good alarm, but... 
 It was so loud, it shattered all the glass in the house. 
@@ -575,14 +575,14 @@ However, there was a problem with the steam power used to run it.
 It repelled mosquitoes well enough, but it was so hot and noisy, it actually made it HARDER to sleep. 
 Hahaha, putting the cart before the horse, eh? 
 Man, that takes me back. I made all kindsa stuff, didn't I... 
-This here's a steam-powered transceiver. Guess you could call it the prototype for the Cinematron. 
+This here's a steam-powered transceiver. Guess you could call it the prototype for the Kinematron. 
 I wasn't able to get the screens working in the end, so I had to shelve it. 
-There was a lot leading up to the Cinematron, huh? 
+There was a lot leading up to the Kinematron, huh? 
 (I guess even inventions can be long-term endeavors sometimes.) 
 (Kohran looks so happy, her eyes are practically twinkling.) 
 (She truly loves machines, from the bottom of her heart.) 
 Stop looking at ME, Chief, look at my inventions! 
-Where are ya going, Chief? Check out my inventions while you're here! 
+Where are you going, Chief? Check out my inventions while you're here! 
 As you can see, I made all kindsa stuff. 
 You've really loved machines for a long time, haven't you? 
 Yeah. I'd get caught up building these and stay up all night. 
@@ -590,7 +590,7 @@ In the end, most of them were total failures...
 But it's thanks to all that passion and all those failures that I am who I am today. 
 Kohran... 
 Hey, Kohran, I brought ya somethin' nice. 
-Wow... Now this brings me back. 
+Wow... <br> Now this brings me back. 
 What's that watch? 
 It's the pocket watch Kohran keeps as a memento of her father. 
 She asked me to take very good care of it. 
@@ -612,17 +612,17 @@ When I moved to the theater, I left it here with the rest of my inventions.
 I wanted to start fresh, from square one. 
 But all my inventing started here, with this little watch. 
 Kohran... 
-Oh yeah, Pops, lemme show you the Cinematron. 
+Oh yeah, Pops, lemme show you the Kinematron. 
 Oh, that's the communicator you wrote about in your letters, right? I absolutely must see it! 
-Here you go, Kohran, the Cinematron. 
+Here you go, Kohran, the Kinematron. 
 Thanks a bunch. Now, this beauty lets you talk to people while being able to look at their faces. 
 Once you receive a transmission, it'll start ringing... 
-Whoa! Th-That scared me! 
-The Cinematron's getting a call! 
+Whoa! <br> Th-That scared me! 
+The Kinematron's getting a call! 
 What the heck could it be? Let's answer it, quick! 
-Ogami? <br> Thank goodness, I finally got through. 
+Ogami? Thank goodness, I finally got through. 
 Kaede! What on earth is going on?! 
-We have an emergency. <br> Hostiles have been sighted in Ouji! 
+We have an emergency. Hostiles have been sighted in Ouji! 
 Wha... <br> What did you just say?! 
 We still don't know all the details. The rest of the Flower Division have already deployed. 
 The Soaring Whale is en route to your location. Return here ASAP! 
@@ -633,7 +633,7 @@ Yeah. We have to get back to the capital, pronto.
 Hey, Pops... I was hoping to stick around a bit longer, but... 
 I gotta go back. I'm real sorry. 
 Kohran... 
-Ya better not die. Ya gotta keep living. 
+…Ya better not die. <br> Ya gotta keep living. 
 Keep living so that you can keep making all kindsa new things. 
 Making people happy with the things you make... 
 Is the greatest joy an inventor can know. 
@@ -645,35 +645,35 @@ That's why I'm not gonna lose... I CAN'T lose!
 Kohran... 
 All right, let's go! 
 I'll protect you, Kohran! 
-All right, let's go! To protect the capital... the Flower Division! 
+All right, let's go! <br> To protect the capital... <br> To protect the Flower Division! 
 And to protect our future! 
 Yeah! Let's do this, Chief! 
 I swear I'll protect you, Kohran! 
-That way you can keep on inventing lots of things from here on out! 
+That way you can keep on inventing all sorts of new creations from here on out! 
 Chief... Thanks a bunch! With you around, I'm not scared of nothin'! 
 There's nothing left to say, Kohran. 
-We're gonna win this fight and go home, like we always do! 
+We're gonna win this fight and go home, just like we always do! 
 Yeah! Let's do this, Chief! 
 No matter who we're up against, we'll never lose! That's what the Imperial Assault Troupe's all about! 
-I'm so sorry, you two. You left because you were trying to be considerate, right? 
-No, it's fine. I just needed to talk to Ensign about something. 
+I'm so sorry, you two. You both left the room out of consideration for us, didn't you?
+No, it's fine. I just needed to talk to Mr. Ensign about something. 
 By the way, Ogami. Do you remember the promise you made? 
 Yes, I remember. 
 What promise? 
 Yes, I remember. 
-You mean the promise we made to model for one of your portraits, right? 
+I believe Orihime and I promised to model for one of your portraits together, am I right?
 Yes, that's the one. I'm glad you remembered. 
 What promise? Do you know what he's talking about, Orihime? 
 Don't tell me you forgot already! We promised we'd model for one of his portraits, remember?! 
 Oh, that's right! I remember now. 
 Sheesh! You shouldn't forget such an important promise! 
-Now, now, Orihime, it WAS over a month ago, it's perfectly understandable. 
+Now, now, Orihime, it WAS over a month ago. It's perfectly understandable. 
 Hmmm... I'm not sure if I do remember it or not... 
-Seriously, Ensign, you have nessuna memoria, no memory at all! 
+Seriously, Mr. Ensign, you have nessuna memoria, no memory at all! 
 We promised we'd model for one of his portraits, remember?! 
 Oh yeah, that's right! I finally remembered. 
 You shouldn't forget such an important promise! 
-Now, now, Orihime, it WAS over a month ago, it's perfectly understandable. 
+Now, now, Orihime, it WAS over a month ago. It's perfectly understandable. 
 I'll ask you again, Ogami. 
 Would you and Orihime model for me? 
 Yes, with pleasure. 
@@ -690,26 +690,26 @@ No, that's not true. You and Orihime have a certain... radiance about you.
 When a person's accomplished something, they shine brightly. 
 Seeing you two now... I want to capture that radiance in my art. 
 Please, Ogami. 
-How can you say no after all that, Ensign? 
+How can you say no after all that, Mr. Ensign? 
 ...All right, I get it, Orihime. 
 Mr. Ogata, I'd be more than happy to model for you. 
 Oh, so you'll do it, then? Thank you. 
 When you say "modeling"... Does that mean we have to be nude? 
-E-Ensign! What are you saying?! 
-What makes you think we'd do that here where a bunch of strangers can see us?! 
-I-I see. You've got a point. 
-Hahaha... You're as entertaining as ever, Ogami. 
-Don't worry, the way you are right now will do just fine. 
-Hmmm... What should I do? 
-What are you hesitating for, Ensign? 
+M-Mr. Ensign! What are you saying?! 
+There's no way we could do that in such a public place where all these strangers can gawk at us!
+T-That’s true. You make a good point. 
+Hahaha… You're as entertaining as ever, Ogami. 
+Do not worry, you can stay dressed just the way you are.
+Hmmm… What should I do? 
+What are you hesitating for, Mr. Ensign? 
 You and I are perfectly qualified to be models! 
-Wow, Orihime... That's some confidence. 
+Wow, Orihime... <br> That's some confidence. 
 All right then, Orihime, if you could sit in that chair over there. 
 Ogami, you stand next to the chair. 
 OK, got it. 
 Good, Orihime, let's go with that expression. 
 Now, what expression should I have you do, Ogami... 
-(Expression?) 
+(An expression, huh?) 
 Look natural. 
 Flash a toothy smile. 
 Give a gallant expression. 
@@ -717,63 +717,63 @@ Look natural.
 Flash a toothy smile. 
 Smile with your whole face. 
 (Maybe I should just stick with a natural expression?) 
-That's a good expression, Ogami. 
-Yes, you look your best with your usual, natural expression. Wouldn't you agree, Carino? 
+That expression will do just fine, Ogami. 
+Yes, you look your best with your usual, natural countenance. Wouldn't you agree, Carino? 
 Indeed, I think it perfectly conveys his personality. 
 (I should probably smile, right?) 
-Hmm... That smile seems a bit forced. 
+Hmm… That smile seems a bit forced. 
 I... I see... 
 I think you should just act natural, look how you always do. 
 ...Like this? 
 Yes, that's it! It perfectly conveys your sincere personality. 
 (Maybe an expression like this, befitting the captain of the Flower Division!) 
-O-Ogami... That expression's a bit much. 
+O-Ogami… That expression's a bit much. 
 R-Really? Did I overdo it? 
 What if you put on your usual, natural expression instead? 
 ...Like this? 
 Yes, that's it! It perfectly conveys your sincere personality. 
 (All right, might as well smile with my whole face, then.) 
 H-How's this? 
-O-Ogami... Your face is twitching. 
+O-Ogami... <br> Your face is twitching. 
 Oh, s-sorry. I thought I'd try smiling... 
 What if you put on your usual, natural expression instead? 
 ...Like this? 
 Yes, that's it! It perfectly conveys your sincere personality. 
 (Hmm... What kind of expression should I go with?) 
-That's a good expression, Ogami. 
+That expression will do just fine, Ogami. 
 Yes, it perfectly conveys his natural charm. 
 I... I see... 
 All right, we'll go with this. Now then, you two, stay just like that. 
 OK, got it. 
 Papa! Draw me extra beautiful, OK? 
-Ensign... 
+Mr. Ensign... 
 Hm? What is it? 
 Modeling for one of Papa's pictures with you like this... 
 It feels so... enigmatic. 
 ... 
-Why are you talking like that, Orihime? 
-I was thinking... I want to be like Mamma... 
+Enigmatic? Why are you talking like that, Orihime? 
+I… I was just thinking... <br> I want to be more like Mamma... 
 Someone who can shine in front of the people I love, like she does. 
-So I figured I'd try to use prettier words... More beautiful language around you, Ensign. 
+So I figured I'd try to use prettier words... More beautiful language around you, Mr. Ensign. 
 Orihime... 
 The way you talk is fine.
 That makes me happy. 
 I appreciate it, but the way you normally talk is fine the way it is. 
 I'll admit, I was pretty surprised by it at first... 
 But I'm totally used to it now. The way you normally talk suits you better, Orihime. 
-Ensign... 
+Mr. Ensign... 
 You don't have to try so hard for my sake. Just be yourself. 
-Ensign... Thank you so much! 
+Mr. Ensign... <br> Thank you so much! 
 Thank you, that makes me happy. 
-Hm hm, if you're happy, then I'm happy too... Happy as well. 
+Hm hm, if you're happy, then I'm happy... I mean, I am jubilant as well. 
 Don't wear yourself out over it, though, OK? 
 Non preoccupatevi! I mean, relaaaax! No, wait, I mean... 
-Orihime... You really don't have to go that far. 
+Orihime… You really don't have to go that far. 
 I like you just the way you always are. 
 R-Really? Thank you. 
-Ensign... You don't like it? 
-W-Well, it's just... Kind of weird. 
-Hmph! You don't understand women at all, Ensign! 
+Mr. Ensign... <br> You don't like it? 
+W-Well, it's just… kind of weird. 
+Hmph! You don't understand women at all, Mr. Ensign! 
 Well fine! I'll just go back to talking the way I usually do. 
 All right, that'll do for now. 
 Great work, you two. You were excellent. 
@@ -783,28 +783,28 @@ Huh? But I wanna see it now!
 Hahaha, come on, Orihime, we can wait and have something to look forward to. 
 ...! 
 Oh? What's that noise? 
-Ensign! Could that be...? 
-Yeah. That's the Cinematron ringing. 
+Mr. Ensign! Could that be...? 
+Yeah. That's the Kinematron ringing. 
 Let's bring it out and see what's up! 
-Ogami? <br> Thank goodness, I finally got through. 
+Ogami? Thank goodness, I finally got through. 
 Kaede! What on earth is going on?! 
-We have an emergency. <br> Hostiles have been sighted in Ouji! 
+We have an emergency. Hostiles have been sighted in Ouji! 
 Wha... <br> What did you just say?! 
 We still don't know all the details. The rest of the Flower Division have already deployed. 
 The Soaring Whale is en route to your location. Return here ASAP! 
 Get back to the theater immediately, you two! 
 Roger, ma'am! 
-Ensign, we have to go, quickly! 
+Mr. Ensign, we have to go, quickly! 
 I don't know who these guys think they are... 
 But I'm going to slap whoever decided to interrupt Papa and Mamma's long-awaited reunion!
 Yeah. We have to regroup with the Flower Division, stat. 
 ...So you're leaving, Orihime? 
-Yes, Papa. 
+…Yes, Papa. 
 I won't stop you. This is the path you've chosen. 
 However, my portrait is still incomplete. 
 Seeing as you modeled for it, you'll need to be there to see the finished piece. 
 Papa... 
-Orihime... Make sure you come back with Ogami. 
+Orihime… Make sure you come back with Ogami. 
 You're our most precious treasure. You realize that, right? 
 Yes, Mamma! 
 Please look after Orihime for me, Ogami. 
@@ -812,17 +812,17 @@ And for me as well. <br> Please... <br> Please take care of her.
 Leave it to me. 
 Can't wait for the picture.
 Just leave it to me, sir. I'll protect Orihime, no matter what! 
-Ensign... Thank you! 
-Papa, Mamma, I'll be fine. The ensign is with me! 
+Mr. Ensign... <br> Thank you! 
+Papa, Mamma, I'll be fine. Mr. Ensign is with me! 
 Let's go, Orihime. Everyone's waiting for us. 
 Roger that! All right Papa, Mamma, I'll see you later! 
 I can't wait to see the finished picture, Mr. Ogata. 
 ...Yes, of course! Look forward to it! 
-Ensign… <br> I can't wait to see our picture, either. 
+Mr. Ensign… <br> I can't wait to see our picture, either. 
 Yeah, but before that, we've got a job to do. 
 Roger that! All right Papa, Mamma, I'll see you later! 
-Papa, Mamma... You don't have to worry about me. 
-We'll be coming back together! Isn't that right, Ensign? 
+Papa, Mamma... <br> You don't have to worry about me. 
+We'll be coming back together! Isn't that right, Mr. Ensign? 
 Yeah. All right, let's go, Orihime! 
 Roger that! All right Papa, Mamma, I'll see you later! 
 Now that we're done with the shrine, why don't we take a walk around the outer grounds? 
@@ -834,13 +834,13 @@ Are you tired?
 Why are you so quiet? 
 Reni? Are you not having fun? 
 Huh? Why do you ask? 
-No, it's just... You seem kind of down. 
+No, it's just... <br> You seem kind of down. 
 I was thinking maybe you weren't enjoying yourself... 
 No, that's not it. 
 OK... So then why are you... 
 Reni? Are you tired? 
 Huh? Why do you ask? 
-No, it's just... You seem kind of down. 
+No, it's just... <br> You seem kind of down. 
 I was thinking maybe the New Year's crowd wore you out or something. 
 No, that's not it. 
 OK... So then why are you... 
@@ -857,7 +857,7 @@ We still have time before we have to go back to the theater, right, Captain?
 Yeah, that’s right. Well then, let's go for a little walk before we go. 
 ...Captain, look! 
 Oh no! That girl's going to fall into the pond! 
-She's going too fast, she won't be able to stop on her own! 
+She's running too fast, she won't be able to stop on her own! 
 Jump over and save her! 
 We have to save her, Reni. Let's get over to the shore! 
 Roger! 
@@ -873,13 +873,13 @@ Whoooooa!
 Captain! 
 Achoo! 
 Are you all right, sir? 
-Yeah... I'm fine, somehow. 
-Hahaha... So I guess that's what the fortune meant by "beware of drowning," huh? 
+Yeah... <br> I'm fine, somehow. 
+Hahaha... <br> So I guess that's what the fortune meant by "beware of drowning," huh? 
 Hahaha, but "after bad luck comes good fortune," right? 
 Reni... 
 Hahahaha... 
 Hahahaha... 
-Good grief... Even my fortune made a fool of me. 
+Good grief… Even my fortune made a fool of me. 
 ... 
 But there are two good things that came from it. 
 …What? 
@@ -903,11 +903,11 @@ Because I care about you too.
 Captain... 
 So will you protect me too, then? 
 Of course, isn't that obvious? 
-I see... Thanks, Reni. 
+I see… Thanks, Reni. 
 I know how you feel, Reni. 
 You don't need to say anything. Let's just stay like this for a while. 
 ...Yeah. 
-By the way, what was the other good thing? 
+By the way, what was the other good thing that came from your fortune? 
 The second good thing was... being able to see your smile. 
 Captain... 
 ...! 
@@ -921,7 +921,7 @@ What the hell just happened, Kaede?
 We have an emergency, Ogami. Hostiles have appeared in Ouji. 
 Hostiles?! Who could it be?! The Black Demons are gone... 
 ...I don't know. 
-I contacted all the other Flower Division members via the Cinematron and told them to come back. 
+I contacted all the other Flower Division members via the Kinematron and told them to return immediately. 
 They've already deployed via the Thunderstrike. 
 Got it. Let's move out too, Reni. 
 I'm ready whenever. 
@@ -936,21 +936,21 @@ Reni...
 Yeah, we will! 
 We've got a job to do. 
 Yeah, we will! I promise, Reni. 
-Let's see... Maybe next time we can dress in yukata and visit a festival? 
-Captain... Thanks. 
+Let's see… Maybe next time we can dress in yukata and visit a festival? 
+Captain… Thank you. 
 First things first, we've got a job to do before we can think about that. 
 Otherwise, they'll just keep interrupting us like they did today. 
 ...Yeah, you're right. 
 Do you really need me to answer that? 
 Of course we will, Reni. 
-OK... Thanks. 
+OK... Thank you. 
 And that's why we're gonna make it back to the theater alive, Reni. 
 Roger! 
 OK, Tenbu online!<br>Destination, Ouji! 
 Ogami, Reni, moving out! 
-Sorry, Ogami. I can only sell you one photo per month. 
+Sorry, Ogami. I can only sell you one bromide per month. 
 I see. That's too bad. 
-So sorry, Mr. Ogami, but each customer is only allowed to purchase one photo at a time.  
+So sorry, Mr. Ogami, but each customer is only allowed to purchase one bromide at a time.  
 Oh, really? That's too bad. 
 The jewel of the Pandemonium Regalia, entrusted to us by the Rose Division. 
 Spirit Sword Arataka. The special sword of the Shinguji family. 
@@ -961,29 +961,29 @@ The uniform I wear at the theater. Good for both summer and winter.
 A lighter borrowed from the inn. 
 The flower crown that Iris made for Reni. 
 A plate used at the welcome party. I was asked to bring it to Sakura. 
-A photo of Sakura. 
-A photo of Sakura. This one is a limited edition only available at New Year's. 
-A photo of Sumire. 
-A photo of Sumire. This one is a limited edition only available at New Year's. 
-A photo of Maria. 
-A photo of Maria. This one is a limited edition only available at New Year's. 
-A photo of Kanna. 
-A photo of Kanna. This one is a limited edition only available at New Year's. 
-A photo of Iris. 
-A photo of Iris. This one is a limited edition only available at New Year's. 
-A photo of Kohran. 
-A photo of Kohran. This one is a limited edition only available at New Year's. 
-A photo of Orihime. 
-A photo of Orihime. This one is a limited edition only available at New Year's. 
-A photo of Reni. 
-A photo of Reni. This one is a limited edition only available at New Year's. 
+A bromide of Sakura. 
+A bromide of Sakura. This one is a limited edition only available at New Year's. 
+A bromide of Sumire. 
+A bromide of Sumire. This one is a limited edition only available at New Year's. 
+A bromide of Maria. 
+A bromide of Maria. This one is a limited edition only available at New Year's. 
+A bromide of Kanna. 
+A bromide of Kanna. This one is a limited edition only available at New Year's. 
+A bromide of Iris. 
+A bromide of Iris. This one is a limited edition only available at New Year's. 
+A bromide of Kohran. 
+A bromide of Kohran. This one is a limited edition only available at New Year's. 
+A bromide of Orihime. 
+A bromide of Orihime. This one is a limited edition only available at New Year's. 
+A bromide of Reni. 
+A bromide of Reni. This one is a limited edition only available at New Year's. 
 A decorative paper ball for the welcome party called a kusudama. 
 A flower vase for the welcome party.
 The banner for the welcome party.
-The Cinematron. One of Kohran's inventions that lets you see and talk to someone from far away. 
+The Kinematron. One of Kohran's inventions that lets you see and talk to someone from far away. 
 The sword of the Pandemonium Regalia, recovered from the Demon King. 
 The mirror of the Pandemonium Regalia, recovered from the Demon King. 
-Fragments of the broken Cinematron. Seems like the kids at the inn picked them up along the shore. 
+Fragments of the broken Kinematron. Seems like the kids at the inn picked them up along the shore. 
 A letter from Sakura. 
 A letter from Sumire. 
 A letter from Maria. 

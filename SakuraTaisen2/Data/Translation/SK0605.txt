@@ -2,7 +2,7 @@
 Iris?! What are you doing up this late?! 
 I stopped by Reni's room just now. 
 I knocked on the door, but she didn't answer. 
-That's strange, where could she be at this hour? 
+That's strange… Where could she be at this hour? 
 I feel nervous for some reason. My heart won't stop pounding. 
 Almost like... Reni's going to leave us. 
 Like she's going somewhere far away. 
@@ -62,10 +62,10 @@ Zzzzzz... Zzzzzz...
 The manager's snoring so loud, it's giving the storm a run for its money. 
 I don't think I need to check on this room. 
 Nobody's here... 
-I should go. If the piano starts playing itself, I'm going to freak out. 
-The costume room at night... It's kinda creepy, I don't think I want to stick around here too long. 
+I should go. If the piano starts playing by itself, I'm gonna freak out. 
+The wardrobe room at night... It's kinda creepy, I don't think I want to stick around here too long. 
 Doesn't seem like anything's out of the ordinary. I should get going. 
-Feels kinda lonely to be backstage with no one else around. 
+Feels kinda lonely to be in the dressing room with no one else around. 
 Nothing unusual here. I should keep moving. 
 The door to the courtyard's shut tight. 
 I don't think I'd want to go out in the pouring rain anyway. Guess I'll get going. 
@@ -78,12 +78,12 @@ Nothing unusual. Moving on.
 I wonder what Sakura's up to? 
 Sakura? It's me, Ogami. 
 Oh, Ogami... 
-You really came. I'm glad... 
+You really came. I'm so glad... 
 What's wrong, Sakura? Are you all right? 
 KYAAAAH! 
 Sakura! Are you OK?! 
 N-No... Not really. 
-I thought I got used to the thunder, but... I guess I'm still scared of it after all. 
+I thought I'd gotten used to the thunder, but... I guess I'm still scared of it after all. 
 Sakura... 
 Go inside and hold her. 
 Cheer her up from outside. 
@@ -131,7 +131,7 @@ You've got this, Sakura.
 (Oh well, better move on.) 
 It's just like Sakura to have a cute nameplate like this. 
 OK, let's check another room. 
-Iris… Is she in her room?
+I wonder if Iris is in her room.
 ...Who is it? 
 It's me, Ogami. You still awake? 
 Mon Frère... 
@@ -145,7 +145,7 @@ H-Hey, Iris!
 Reniiii... Are you in there? 
 Reni! Answer me, Reni! 
 Iris... 
-Hm? Hold on, Iris. The door's open... 
+Hm? Hold on a second. The door's open... 
 ...OK, Iris, let’s go inside.
 ...Right.
 So Iris's nameplate is shaped like Jean-Paul. 
@@ -184,7 +184,7 @@ Keep up the good work, Captain.
 (Maria's reading in there. I probably shouldn't call out to her.) 
 It's Maria's nameplate. 
 OK, time to check another room. 
-I wonder if Kanna is inside. 
+I wonder if Kanna’s in her room. 
 Zzz... No, I couldn't eat another bite... 
 Huh, guess she's already asleep. 
 No answer. Did she go somewhere? 
@@ -196,17 +196,17 @@ Sounds like she's already fast asleep.
 Sumire's already asleep. I should leave her be. 
 This is a pretty subtle design, considering it's Sumire. 
 Let's check another room. 
-I wonder if Kohran is in her room. 
+I wonder if Kohran’s in her room. 
 No answer... 
 A gear-shaped nameplate, huh? It's just Kohran's style. 
 Let's check another room. 
-Orihime... Is she in her room? 
+I wonder if Orihime is in her room.
 Yeeees? Who is it? 
 It's Ogami, I'm here on my night watch. 
-You're a pretty hard worker, Ensign. 
+You're a pretty hard worker, Mr. Ensign. 
 I'm all right. I was just enjoying the typhoon's melody. 
 The rhythm and tempo are simply wonderful. I'd love to play it on the piano sometime. 
-Hahaha, the typhoon's no match for you, Orihime. 
+Hahaha. The typhoon's no match for you, Orihime. 
 All right, I have to go. Good night, Orihime. 
 Good luck with your evening stroll. 
 She'll get mad at me if I keep bugging her. I should leave her be. 
@@ -252,9 +252,9 @@ Stop right there! Boss, is that you?!
 (C-Crap! I can't believe she already spotted me!) 
 Peepin’ on me in the bath and trying to sneak away... That's real low, Boss! 
 I-I'm sorry! I'll be leaving now!! 
-Whoa! Is... Is that you, Boss?! 
+Whoa! Is... <br> Is that you, Boss?! 
 (Crap! No use in running now!) 
-Wh-What the hell are you doing just standing there?! 
+Wh-What the hell are you doin’ just standin’ there?! 
 I, uh... I didn't know what to do, so... 
 Just get the hell out of here! 
 Yes, ma'am! Right away, ma'am! 
@@ -262,10 +262,10 @@ Yes, ma'am! Right away, ma'am!
 I'm sorry, Kanna. I just sorta found my way in there, and... 
 You walked in fully aware, you didn't just "find your way in there." 
 Y-You're right. I really am sorry. 
-Well, I'm not gonna chew you out for this one... 
-But I'm a woman, too, y'know. You gotta be more considerate. 
+Well, I'm not gonna chew ya out for this one... 
+But I'm a woman, too, y'know. Ya gotta be more considerate. 
 Kanna... 
-All right, I'm gonna get going. Quit peepin’ during your night watch, all right? 
+All right, I'm gonna get goin’. Quit peepin’ during your night watch, all right? 
 Hmm... That went about as poorly as I expected. 
 But it's true, Kanna is a woman, after all. 
 (I have to get out of here before Kanna sees me!) 
@@ -277,11 +277,11 @@ Phew! Welp, time to get out.
 Phew, I think I got away before she realized I was there. 
 If I was even a second too late, I would be in big trouble. 
 Yo, Boss! Lookin' to take a bath? 
-No, I'm in the middle of my nightly rounds. 
+No, I'm in the middle of my night watch. 
 I see. Thanks for working so hard this late. 
-I just got out of the bath, myself. Nothing unusual to report in there. 
+I just got out of the bath, myself. Nothin’ unusual to report in there. 
 Welp, good luck with your patrol. Night, Boss. 
-Right then, I should get back to my night watch. 
+Right then, I should get back to my rounds. 
 Kanna already left, and there's nobody else in here. 
 Nothing out of the ordinary here. I should get going. 
 Oh, if it ain't the chief. 
@@ -308,13 +308,13 @@ Oh, a wise guy, eh?
 Ahahaha! Not bad, Chief! 
 You're a proper straight man, now! You've improved a lot! 
 Y-You think so? 
-Oh, oh jeez... Not funny, huh? Sorry. 
+Oh, oh jeez... <br> Not funny, huh? Sorry. 
 N-No, I just didn't know how to respond. 
 Well, you don't have to laugh if you don't find it funny. Maybe try following it up instead. 
 It's kinda lonely when only one of us is cracking jokes, y'know? 
 I-I see. I'll remember that for next time. 
 Well, that's enough for today, I'm calling it here. 
-All right, I gotta clean up, Chief, so I'll see ya later. 
+All right. I gotta clean up, Chief, so I'll see ya later. 
 Yeah, good work today. 
 Right, I should get back to my rounds. 
 Oh, if it ain't the chief. 
@@ -327,7 +327,7 @@ I appreciate the hard work, but it's too late for this.
 S-Sorry. I guess I kinda went overboard. 
 Glad to see you taking your night watch seriously, Chief. Nice going. 
 Well, I am the captain, it's all part of the job. 
-All right, I gotta clean up, Chief, so I'll see ya later. 
+All right. I gotta clean up, Chief, so I'll see ya later. 
 Yeah, good work today. 
 Right, I should get back to my rounds. 
 Don't overdo it, OK? We wouldn't want you to catch a cold or something. 
@@ -336,7 +336,7 @@ All right, I gotta clean up, Chief, so I'll see ya later.
 Yeah, good work today. 
 Right, I should get back to my rounds. 
 Well, that's enough for today, I'm calling it here. 
-All right, I gotta clean up, Chief, so I'll see ya later. 
+All right. I gotta clean up, Chief, so I'll see ya later. 
 Yeah, good work today. 
 Right, I should get back to my rounds. 
 Oh, Chief. It's gonna take me a bit longer to clean up. 
@@ -359,7 +359,7 @@ Ah, Ichiro!
 Good grief... Holding a meeting like that in the dead of night... 
 That room is truly terrifying... 
 Oh, Ogami! So you've decided to join our meeting after all? 
-EEEEK! Ichiro! I'm so happy! 
+EEEEK! <br> Ichiro! I'm so happy! 
 N-Nope, just checking in! I have to go! 
 Ah, Ichiro! 
 Wh-Why do I keep going in there...? 
@@ -386,7 +386,7 @@ Knowing that, all of the Black Demon Society's moves up till now start to make s
 The arson at Fukagawa, the surprise attack during our vacation... 
 They couldn't have done any of that if they weren't being fed information. 
 So the one who shot Yoneda, and the one who just kidnapped Reni... It was Saki this whole time?! 
-I can't believe Saki was a spy this whole time... 
+I can't believe Saki was actually a spy... 
 Dammit! Those Black Demons fight dirty! 
 We have to hurry and go after Reni. 
 But first, is there anything you wanted to ask me, Ogami? 
@@ -434,11 +434,11 @@ Sir, yes, sir!
 Keep it together, Ogami! You're the captain, remember?! 
 Now give the order! 
 Reni! Where are you? Answer me! 
-Reniiii! Reeeeeniiii! Where are you?! 
-Iris, can you use your powers to find out where Iris is? 
+Reniiii! Reeeeeniiii! <br> Where are you?! 
+Iris, can you use your powers to find out where Reni is? 
 OK, I'll try. 
 ... 
-Reni, where are you? If you can hear me, answer me! 
+Reni, where are you? If you can hear me, please answer! 
 ...!! <br> Reni! 
 What's wrong, Iris? 
 Mon Frère, I can feel a super strong power coming from over there! 
@@ -448,18 +448,18 @@ Ah!! Mon Frère! Over there!
 Reni! Reni, are you all right?! 
 ... 
 Reni... 
-Heheheheheh. Reni's heart is already mine. 
-Reni's my cute little puppet now. She'll make a great gift for our master, too. 
+Heheheheheh. <br> Her heart is already mine. 
+Reni's my cute little puppet now. She'll make a great gift for our master. 
 A souvenir of the return of Saki Kageyama; of Suiko, one of the Black Demon Society's Five Elements. 
 Saki. I didn't want to believe you were truly Suiko. 
 But if you really are the same Saki who was our friend, you'll stop this right now! 
-It's not too late! Give Reni back, and go back to the Saki you used to be! 
+It's not too late! Give Reni back, and return to the Saki you used to be! 
 Heheheh. Naive as ever. 
 Reni. Those two are your enemies. Now kill them. 
 ...RO-GER. 
 Heheheh. Well, Ogami? What will you do? 
 Rrgh... How could you?! 
-Mon Frère... What... What should I do? 
+Mon Frère... What... <br> What should I do? 
 Go get the others. 
 Come with me. 
 Iris, go get the others! 
@@ -483,29 +483,29 @@ The uniform I wear at the theater. Good for both summer and winter.
 A lighter borrowed from the inn. 
 The flower crown that Iris made for Reni. 
 A plate used at the welcome party. I was asked to bring it to Sakura. 
-A photo of Sakura. 
-A photo of Sakura. This one is a limited edition only available at New Year's. 
-A photo of Sumire. 
-A photo of Sumire. This one is a limited edition only available at New Year's. 
-A photo of Maria. 
-A photo of Maria. This one is a limited edition only available at New Year's. 
-A photo of Kanna. 
-A photo of Kanna. This one is a limited edition only available at New Year's. 
-A photo of Iris. 
-A photo of Iris. This one is a limited edition only available at New Year's. 
-A photo of Kohran. 
-A photo of Kohran. This one is a limited edition only available at New Year's. 
-A photo of Orihime. 
-A photo of Orihime. This one is a limited edition only available at New Year's. 
-A photo of Reni. 
-A photo of Reni. This one is a limited edition only available at New Year's. 
+A bromide of Sakura. 
+A bromide of Sakura. This one is a limited edition only available at New Year's. 
+A bromide of Sumire. 
+A bromide of Sumire. This one is a limited edition only available at New Year's. 
+A bromide of Maria. 
+A bromide of Maria. This one is a limited edition only available at New Year's. 
+A bromide of Kanna. 
+A bromide of Kanna. This one is a limited edition only available at New Year's. 
+A bromide of Iris. 
+A bromide of Iris. This one is a limited edition only available at New Year's. 
+A bromide of Kohran. 
+A bromide of Kohran. This one is a limited edition only available at New Year's. 
+A bromide of Orihime. 
+A bromide of Orihime. This one is a limited edition only available at New Year's. 
+A bromide of Reni. 
+A bromide of Reni. This one is a limited edition only available at New Year's. 
 A decorative paper ball for the welcome party called a kusudama. 
 A flower vase for the welcome party.
 The banner for the welcome party.
-The Cinematron. One of Kohran's inventions that lets you see and talk to someone from far away. 
+The Kinematron. One of Kohran's inventions that lets you see and talk to someone from far away. 
 The sword of the Pandemonium Regalia, recovered from the Demon King. 
 The mirror of the Pandemonium Regalia, recovered from the Demon King. 
-Fragments of the broken Cinematron. Seems like the kids at the inn picked them up along the shore. 
+Fragments of the broken Kinematron. Seems like the kids at the inn picked them up along the shore. 
 A letter from Sakura. 
 A letter from Sumire. 
 A letter from Maria. 

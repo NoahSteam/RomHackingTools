@@ -1,10 +1,10 @@
-Ogami, should we change our battle strategy?
-Let's go with the Wind strategy!
-Let's go with the Mountain strategy!
-Let's keep it like this.
-Let's go with the Fire strategy!
-Let's go with the Forest strategy!
-Let's keep it like this.
+Ogami, do you think we should change our battle strategy? 
+Let's go with Wind!
+Let's go with Mountain!
+Don't change strategy.
+Let's go with Fire!
+Let’s go with Forest!
+Don't change strategy.
 OK, let's go with the Wind strategy!
 Roger!
 OK, let's go with the Fire strategy!
@@ -13,7 +13,7 @@ OK, Let's go with the Forest strategy!
 Roger!
 OK, let's go with the Mountain strategy!
 Roger!
-No, let's just keep it like this.
+No, let's stick with our current strategy.
 Yes, sir! Understood!
 …No. I think we should keep going with our current formation.
 Yes, sir! Understood.

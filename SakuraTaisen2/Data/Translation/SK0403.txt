@@ -15,13 +15,13 @@ That blue guy... He was crazy strong. I wanna fight him for real this time!
 Let's not be hasty, Kongo. The first step in any battle is getting to know your enemy... 
 Then taking what you've learned and seizing victory through careful calculation. 
 Kongo, you've already fought them once before. 
-Perhaps we should leave this one to Kasha, he has yet to cross swords with them. 
-I'll fight those pieces of trash, if I truly must... 
+Perhaps we should leave this one to Kasha, he has yet to cross swords with the Assault Troupe. 
+I'll fight those little girls in their trash bins, if I truly must… 
 I trust you've already arranged a way to get Yamaguchi and the rest of the garbage in one place? 
 Indeed, Suiko is already on it. It's all going exactly as planned. 
 Suiko? I don't like this one bit. Can that girl really get the job done? 
 Don't be like that, Tsuchigumo. No one's better than Suiko when it comes to this sorta thing. 
-Well then... I leave it to you, Kasha. 
+Well then... <br> I leave it to you, Kasha. 
 Heheheh... Behold as my flames consume all... 
 ...Oh, that time already, huh? Guess I should get started on my night watch. 
 It's Kohran's first night back in a long time. I wonder what she's up to? 
@@ -30,7 +30,7 @@ Boss, we have a situation here. Ya got a minute?
 What is it? 
 Kanna, Iris… What’s the problem?
 Mon Frère... Sakura and Kohran, they... 
-They said they were gonna have a talk with some guy named Kyogoku, then they left. 
+Apparently they walked out of the theater sayin' they were gonna have a talk with some guy named Kyogoku.
 Wh-What?! 
 Everyone's gathered in the salon, you should head over there too. 
 OK, got it! 
@@ -38,7 +38,7 @@ But my night watch...
 OK, got it. 
 B-But my night watch... 
 Who cares about that! Just get your ass over there! 
-Now's not the time to be spacing out! Get your ass over there! 
+Now's not the time to be spacin’ out! Get your ass over there! 
 Ow ow ow ow! I'm coming, I'm coming. Please just stop pulling on my ear! 
 Ogami, we have quite the problem on our hands. 
 I'm sorry! It's all my fault! 
@@ -106,13 +106,13 @@ All right, let's go!
 Wh-What should I do... 
 All right, let's go! There's no use mulling it over! 
 I have to bring them back, and quick! 
-Wh-What should I do...? This place looks way too fancy, I'm starting to lose my nerve... 
+Wh-What should I do...? <br> This place looks way too fancy, I'm starting to lose my nerve... 
 No, I can't be saying things like that. I'll just go in and see. 
 Is this really the place? Doesn't seem like the kind of restaurant the girls could even get into... 
 Saki said this was it, though, so I'll just go in and check. 
 How does it look, Kohran? 
 I'm not sure, but it sounds like there's a bunch of people in there talking about something.
-Seems kinda fishy... This might be the room that Kyogoku guy's staying in. 
+Seems kinda fishy... <br> This might be the room that Kyogoku guy's staying in. 
 Think we should go for it? 
 Yeah. All right, here goes.
 Gooood evening! 
@@ -131,8 +131,8 @@ Phew, I've searched just about every room...
 All that's left is the room right in front and the room in the back. 
 C'mon, geisha girls! Lighten up a little! Guh-huh-huh-huh! 
 P-Please stop. 
-Huh, that geisha... She sounded kind of like Sakura. 
-All right, then... Which room? 
+Huh, that geisha... <br> She sounded kind of like Sakura. 
+All right, then... <br> Which room? 
 In the back with the geisha
 The quiet room up ahead
 There's no mistaking it, that voice just now was Sakura's! All right, to the room in the back! 
@@ -140,7 +140,7 @@ Oh! You there, sonny. I'm all outta drink! Get me a cold one!
 H-Huh? Sorry, I don't actually work here, sir. 
 Actually, sir, if I could ask you a question... 
 Do you know which room a man named Kyogoku is staying in? 
-Kyogoku? Nawww, I'm Yamaguchi! 
+Kyogoku? <br> Nawww, I'm Yamaguchi! 
 O-OK...? 
 Hey now, no need to be so uptight. C'mon, let's share a drink. 
 Sorry, but I'm in a hurry... Ah! Wait! Please stop pulling me... 
@@ -174,7 +174,7 @@ Heheheh... Relax, you won't be sayin' "no" for long!
 I got this, Sakura! 
 I brought along Mr. Smoke Bomb for just such an occasion!
 All right, here goes! Brace yourself! 
-*cough* *cough* Wh-What the hell was that?! 
+*cough* *cough* <br> Wh-What the hell was that?! 
 Jeez, how long are you going to hold on for?! Let go of me! 
 You want some more? Then have some of this! 
 Thanks, Beniyakko, you're a lifesaver. 
@@ -233,7 +233,7 @@ I'm... I'm going after whoever did this!
 Wh-What?! Are you serious, Kohran?! 
 I’ll never let anyone get away with something so cowardly and cruel! 
 I won’t let someone indiscriminately kill innocent people!
-I can’t... I can’t lose to this fire!! 
+I can’t... <br> I can’t lose to this fire!! 
 Kohran, wait! Kohraaan!! 
 Dammit! Of all the times for a fire to break out! 
 Hrrrm... We've got no choice but to run. 
@@ -282,7 +282,7 @@ Got it! OK, I'm going!
 All right, in that case, let's both evacuate! 
 Ogami! Now is not the time for jokes! 
 What about Kohran? She's still in there! 
-You can't go help her dressed like that. This young man's the only one left who can save her. 
+You can't go help your friend dressed like that. This young man's the only one left who can save her. 
 Let's both get someplace safe, miss. 
 ...OK then. Looks like we're out of options. 
 Now hurry up, son! Your friend's waiting for you! 
@@ -326,7 +326,7 @@ I said let go of me! Stay out of my way!
 Ah! 
 Kohran... 
 O... gami...? 
-I'm sorry. I did that without thinking... But please, Kohran, you have to understand. 
+I'm sorry. I did that without thinking... <br> But please, Kohran, you have to understand. 
 ... 
 I should be the one apologizing, Chief. 
 It's just... When I saw all this fire, it reminded me of my childhood... 
@@ -424,21 +424,21 @@ Still, though, how did the fire get this strong?
 Oh, do I spy some stragglers? 
 Who's there?! 
 Heheheheh... 
-My name... is Kasha. One of the Five Elements of the Black Demon Society. 
+My name... is Kasha. <br> One of the Five Elements of the Black Demon Society. 
 The Black Demon Society?! So this fire was your doing! 
 Heheheheh... 
 Now then, time to incinerate the Imperial Assault Troupe, along with that trash, Yamaguchi. 
 Yamaguchi? Why are you after him?! 
 Heheheh. "Why" indeed. 
-You’ll have plenty of time to ponder that question in hell! Have fun playing with my flames, won't you? 
+You’ll have plenty of time to ponder that question in Hell! Have fun playing with my flames, won't you? 
 Kasha, wait!! 
 Th-This is bad, Chief! We're totally surrounded by fire! 
-...! There's a gap in the flames! 
+...! <br> There's a gap in the flames! 
 We've got no choice, it's do or die. We have to go for it and jump through! 
 All right! We escaped! 
 Wh-What's that noise?! 
 All right! It's the Soaring Whale! 
-Ogami, Kohran!! Thank goodness you’re safe!
+Ogami, Kohran!! <br> Thank goodness you’re safe!
 Sakura! 
 Thanks a million, Sakura! 
 Oh, right! Sakura, where's Yamaguchi?! 
@@ -456,9 +456,9 @@ OK, let's go with the decoy plan. That'll give Yamaguchi an opening to escape!
 OK, let's go with the escort plan. We must protect Yamaguchi from the Society, no matter what! 
 Roger! Let's hop to it, Chief! 
 Ogami, Kohran, good luck out there! 
-Sorry, Ogami. I can only sell you one photo per month. 
+Sorry, Ogami. I can only sell you one bromide per month. 
 I see. That's too bad. 
-So sorry, Mr. Ogami, but each customer is only allowed to purchase one photo at a time.
+So sorry, Mr. Ogami, but each customer is only allowed to purchase one bromide at a time.
 Oh, really? That's too bad.  
 The jewel of the Pandemonium Regalia, entrusted to us by the Rose Division. 
 Spirit Sword Arataka. The special sword of the Shinguji family. 
@@ -469,29 +469,29 @@ The uniform I wear at the theater. Good for both summer and winter.
 A lighter borrowed from the inn. 
 The flower crown that Iris made for Reni. 
 A plate used at the welcome party. I was asked to bring it to Sakura. 
-A photo of Sakura. 
-A photo of Sakura. This one is a limited edition only available at New Year's. 
-A photo of Sumire. 
-A photo of Sumire. This one is a limited edition only available at New Year's. 
-A photo of Maria. 
-A photo of Maria. This one is a limited edition only available at New Year's. 
-A photo of Kanna. 
-A photo of Kanna. This one is a limited edition only available at New Year's. 
-A photo of Iris. 
-A photo of Iris. This one is a limited edition only available at New Year's. 
-A photo of Kohran. 
-A photo of Kohran. This one is a limited edition only available at New Year's. 
-A photo of Orihime. 
-A photo of Orihime. This one is a limited edition only available at New Year's. 
-A photo of Reni. 
-A photo of Reni. This one is a limited edition only available at New Year's. 
+A bromide of Sakura. 
+A bromide of Sakura. This one is a limited edition only available at New Year's. 
+A bromide of Sumire. 
+A bromide of Sumire. This one is a limited edition only available at New Year's. 
+A bromide of Maria. 
+A bromide of Maria. This one is a limited edition only available at New Year's. 
+A bromide of Kanna. 
+A bromide of Kanna. This one is a limited edition only available at New Year's. 
+A bromide of Iris. 
+A bromide of Iris. This one is a limited edition only available at New Year's. 
+A bromide of Kohran. 
+A bromide of Kohran. This one is a limited edition only available at New Year's. 
+A bromide of Orihime. 
+A bromide of Orihime. This one is a limited edition only available at New Year's. 
+A bromide of Reni. 
+A bromide of Reni. This one is a limited edition only available at New Year's. 
 A decorative paper ball for the welcome party called a kusudama. 
 A flower vase for the welcome party.
 The banner for the welcome party.
-The Cinematron. One of Kohran's inventions that lets you see and talk to someone from far away. 
+The Kinematron. One of Kohran's inventions that lets you see and talk to someone from far away. 
 The sword of the Pandemonium Regalia, recovered from the Demon King. 
 The mirror of the Pandemonium Regalia, recovered from the Demon King. 
-Fragments of the broken Cinematron. Seems like the kids at the inn picked them up along the shore. 
+Fragments of the broken Kinematron. Seems like the kids at the inn picked them up along the shore. 
 A letter from Sakura. 
 A letter from Sumire. 
 A letter from Maria. 

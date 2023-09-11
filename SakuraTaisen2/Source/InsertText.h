@@ -100,11 +100,12 @@ struct SakuraTextFileFixedHeader
 		}
 		//Done figuring out table size
 
+		/*
 		if ((unsigned short)(sizeof(int) + sizeof(int) + sizeof(int) * inInfo.size() + sizeof(int) * inInfo.size()) >> 1 > 0xffff)
 		{
 			printf("\nERROR:Translated file %s string table exceeds 2 byte limit\n", inSakuraFile.mFileNameInfo.mFileName.c_str());
 			return false;
-		}
+		}*/
 
 		mOffsetToTable = inSakuraFile.mFileHeader.OffsetToTextHeader;
 		mOffsetToTable8Bytes = (sizeof(int) + sizeof(int) + sizeof(int) * (int)inInfo.size() + sizeof(int) * (int)inInfo.size()) >> 1;

@@ -2,7 +2,7 @@
 Um, Ogami... Do you have a moment? 
 Hm? 
 Hey, Sakura. Did you need something? 
-W-Well... I'll be returning to my family's home in Sendai for New Years'. 
+W-Well... I'll be returning to my family's home in Sendai for New Year’s. 
 And, um... It may be brazen of me to ask this, but... 
 By any chance... Would you like to come with me? 
 Huh?! 
@@ -38,7 +38,7 @@ Hey Sumire. What is it?
 As I mentioned not long ago, I plan to return to the Kanzaki estate over the New Years' holiday. 
 That said... I would like to extend a special invitation for you to accompany me. 
 I'd love to.
-You sure you want me along?
+Are you sure I should go?
 I'd love to. Ever since the marriage arrangement, I've been hoping to sit down and talk with your family.
 Is that so? It would be just lovely to have you there for the new year. 
 Are you sure you want me tagging along? 
@@ -68,7 +68,7 @@ All right, let's go. I'd be happy to come along.
 Really? I'd appreciate it. 
 Hmm, for New Years'? That may be a hassle... 
 You know Captain... I can understand wanting to relax over the New Years' holiday. 
-But the count is a busy man... If we don't visit now, it could be a while before we can again.
+But the count is a busy man... If we don't visit now, it could be a while before we get another chance.
 I-I understand. OK, I'll go with you. 
 I appreciate it, Captain. 
 Hmm, what to do... 
@@ -91,7 +91,7 @@ I'd love to.
 How would we get there?
 If you'll have me, I'd love to. Spending New Years' in Okinawa doesn't sound too bad. 
 Heheh, you know it! Winter in Okinawa is always niiice and warm! 
-Okinawa, huh?... Just how would we get there? 
+Okinawa, huh? Just how would we get there? 
 By boat. A nice leisurely boat trip sounds pretty good, eh? 
 Though I guess the ship might capsize if the sea's too rough. 
 Huh?! What would we do THEN? 
@@ -119,7 +119,7 @@ What do you think, Mon Frère?
 I'd love to.
 T-This is so sudden…
 Yeah, sure. I'd be glad to. 
-Really? Yay! Yay! 
+Really? Yaaay, yaaay! 
 I can't believe you, me, papa, and mama are all gonna be together for New Years'! 
 Hahaha, seeing you so excited brings a smile to my face, too. 
 Th-This is so sudden. I'm not sure I'm mentally prepared... 
@@ -128,7 +128,7 @@ Don't worry, I'll be with you!
 (Yeah, that's not the issue here...) 
 Hmm, what to do... 
 Oh, come on! You're not busy anyway, right? 
-Unless... you don't wanna go with me? 
+Unless... You don't wanna go with me? 
 N-No, that's not it... 
 Then we're going, and that's that! 
 (Ohh boy... Looks like my vacation has been decided for me.) 
@@ -156,18 +156,18 @@ Heheh... I'll let you find that out for yourself once you meet him.
 O-Oh yeah? Now I'm kind of nervous. 
 Hmm, what to do... 
 Just humor me, will ya? Vacation's the perfect time to go on a little trip! 
-You can even bring the Cinematron with you for a little peace of mind. 
+You can even bring the Kinematron with you for a little peace of mind. 
 Yeah... I suppose you're right. 
 Alrighty, I'll be hanging around my room. 
 Come and grab me when you're ready to go. 
 If I'm going to meet the man who took care of Kohran, I should probably be dressed a bit nicer. 
 OK, I'll head to my room to change my clothes, then meet up with Kohran at her room. 
-Oh Ennnsign! 
+Oh Mr. Ennnsign! 
 Hm? 
 Hey, Orihime. Did you need something? 
 As I said before, my mamma will be coming to visit Japan. 
 And since my papa is all healed now and leaving the hospital... 
-We all plan to meet at a hotel in the capital. How would you like to come along, Ensign? 
+We all plan to meet at a hotel in the capital. How would you like to come along, Mr. Ensign? 
 I'd be pleased to join you. 
 Are you sure?
 I wouldn't want to intrude. 
@@ -175,18 +175,18 @@ If you'll have me, I'd be pleased to join you. I'd really like to meet your moth
 My thanks! My mamma is sure to be pleased, too! 
 Are you sure it's all right for me to barge in on a family reunion, though? 
 But of course! 
-My parents were only reunited at all because of you, Ensign. 
+My parents were only reunited at all because of you, Mr. Ensign. 
 I see... Then I suppose I'll take you up on your offer. 
 So you will be coming? Grazie! 
 Oh, I wouldn't want to intrude. You haven't seen each other in so long, after all... 
 What are you saying?! We could hardly even start the reunion without you! 
-My parents were only reunited at all because of you, Ensign! 
+My parents were only reunited at all because of you, Mr. Ensign! 
 Sure, but... 
 I insist, now! Let us be off! 
 ...In that case, I suppose I'll take you up on your offer. 
 So you will be coming? Grazie! 
 Hmm, what to do... 
-Oh, come now, Ensign! 
+Oh, come now, Mr. Ensign! 
 Papa and Mamma will be so disappointed if I do not bring you along. 
 I see... Then I suppose I'll take you up on your offer. 
 Then you will be coming with me? Grazie! 
@@ -203,7 +203,7 @@ I see... Poor Reni...
 I was wondering if you might be willing to spend some time with her. 
 Since it's New Years', perhaps you two could go on the first shrine visit of the year together? 
 Sure, will do. 
-Is Reni... OK with that? 
+Is Reni OK with that? 
 Sure, will do. I'll go invite her now. 
 Thank you, Ogami. I'm sure Reni will appreciate it, too. 
 Is that really something Reni would want to do? 
@@ -224,9 +224,9 @@ Sure, will do.
 It'll be fun for you to get dressed up and go out on occasion, too. 
 That's true... Since I'm going out, I may as well put on something nicer. 
 OK, I'll head to my room for a change of clothes, then meet Reni at her room. 
-Sorry, Ogami. I can only sell you one photo per month. 
+Sorry, Ogami. I can only sell you one bromide per month. 
 I see. That's too bad. 
-So sorry, Mr. Ogami, but each customer is only allowed to purchase one photo at a time.  
+So sorry, Mr. Ogami, but each customer is only allowed to purchase one bromide at a time.  
 Oh, really? That's too bad. 
 The jewel of the Pandemonium Regalia, entrusted to us by the Rose Division. 
 Spirit Sword Arataka. The special sword of the Shinguji family. 
@@ -237,29 +237,29 @@ The uniform I wear at the theater. Good for both summer and winter.
 A lighter borrowed from the inn. 
 The flower crown that Iris made for Reni. 
 A plate used at the welcome party. I was asked to bring it to Sakura. 
-A photo of Sakura. 
-A photo of Sakura. This one is a limited edition only available at New Year's. 
-A photo of Sumire. 
-A photo of Sumire. This one is a limited edition only available at New Year's. 
-A photo of Maria. 
-A photo of Maria. This one is a limited edition only available at New Year's. 
-A photo of Kanna. 
-A photo of Kanna. This one is a limited edition only available at New Year's. 
-A photo of Iris. 
-A photo of Iris. This one is a limited edition only available at New Year's. 
-A photo of Kohran. 
-A photo of Kohran. This one is a limited edition only available at New Year's. 
-A photo of Orihime. 
-A photo of Orihime. This one is a limited edition only available at New Year's. 
-A photo of Reni. 
-A photo of Reni. This one is a limited edition only available at New Year's. 
+A bromide of Sakura. 
+A bromide of Sakura. This one is a limited edition only available at New Year's. 
+A bromide of Sumire. 
+A bromide of Sumire. This one is a limited edition only available at New Year's. 
+A bromide of Maria. 
+A bromide of Maria. This one is a limited edition only available at New Year's. 
+A bromide of Kanna. 
+A bromide of Kanna. This one is a limited edition only available at New Year's. 
+A bromide of Iris. 
+A bromide of Iris. This one is a limited edition only available at New Year's. 
+A bromide of Kohran. 
+A bromide of Kohran. This one is a limited edition only available at New Year's. 
+A bromide of Orihime. 
+A bromide of Orihime. This one is a limited edition only available at New Year's. 
+A bromide of Reni. 
+A bromide of Reni. This one is a limited edition only available at New Year's. 
 A decorative paper ball for the welcome party called a kusudama. 
 A flower vase for the welcome party.
 The banner for the welcome party.
-The Cinematron. One of Kohran's inventions that lets you see and talk to someone from far away. 
+The Kinematron. One of Kohran's inventions that lets you see and talk to someone from far away. 
 The sword of the Pandemonium Regalia, recovered from the Demon King. 
 The mirror of the Pandemonium Regalia, recovered from the Demon King. 
-Fragments of the broken Cinematron. Seems like the kids at the inn picked them up along the shore. 
+Fragments of the broken Kinematron. Seems like the kids at the inn picked them up along the shore. 
 A letter from Sakura. 
 A letter from Sumire. 
 A letter from Maria. 

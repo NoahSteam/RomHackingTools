@@ -1,16 +1,16 @@
 This is your first battle in quite a while, right Ogami?
 Do you remember how to operate the Koubu?
-No, I wouldn't mind a refresher.
+A refresher wouldn't hurt.
 Yes, I remember.
 Yes, I remember. We made a lot of memories in these Koubu. I wouldn't forget that easily.
 Just what I thought you'd say. In that case, we'll leave the command to you. Lead us well!
-I wouldn't mind a refresher; it's been so long since I used one. Things could turn dire if I made a mistake.
+It's been a while, so a refresher wouldn't hurt. Things could turn dire if I made a mistake.
 All right, then. In that case, try and watch how we handle our Koubu first.
 …
 What's the matter? Are you nervous since you haven't fought in a long time?
 Just to be safe, try and watch how we handle our Koubu first.
 Let's go!
-After choosing "Move" like I just did, you'll choose which space to move to within the range that appears.
+After selecting "Move" like I just did, you'll choose which space to move to within the displayed range.
 If you make a mistake when moving, then use "Return" to go back and choose a different space.
 Just choose "Return," then make your selection again.
 Now's our chance to attack!
@@ -28,7 +28,7 @@ But that level will increase each time you're attacked or use "Rest," so…
 Eeek!
 Are you OK, Sakura? Hang on, I can heal you!
 Mon Frère, our Koubu have the ability to recover damage that we take in battle.
-But there's a limit to how many times we can do it, so unless you're careful, you may run out before you know it!
+But there's a limit to how much we can use it, so if you're not careful, it'll run out before you know it.
 Mamma mia, if that little attack was all it took to shake you up, then you have much training to do!
 And Sakura, you ought to learn to properly "Defend" yourself instead of always attacking!
 When you defend, you will take far less damage until your next turn rolls around.

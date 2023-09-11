@@ -4,14 +4,14 @@ On the other hand, Sakura, you seem to be doing just fine in this heat.
 Hehe. It’s thanks to my summer dress. How do you think it looks on me, Ogami? 
 It suits you. 
 I like your usual outfit.
-It fits you well. It's a nice change of pace from your usual clothing. 
+It suits you well. It's a nice change of pace from your usual clothing. 
 Thank you very much. I'm... glad you like it, Ogami. 
 Thank goodness. I’m happy I decided to try out this outfit.
 Hmm… I like your usual outfit a bit more.
 Japanese-style clothes suit you better, in my opinion. 
 Is that so… What a shame… And just when I had gotten a chance to try it on.
-S-Sorry, I don't really know much about women's clothes. 
-Ah, I apologize... I didn’t mean to put you on the spot like that, Ogami. 
+S-Sorry, I don't really know much about women's clothing. 
+Ah, I apologize... <br> I didn’t mean to put you on the spot like that, Ogami. 
 Although, honestly, I had a feeling you would say something like that. Hehe. 
 A-Anyway, how about we go inside the hospital now.
 Arf, arf! 
@@ -44,14 +44,14 @@ W-We're OK. Sort of...
 I leapt out into the road without thinking, but… it seems like that was the right call. 
 Ow, I think I sprained my leg… I jumped at an awkward angle. 
 Oof... 
-Hahaha, I hope you're thankful for the rescue little guy.
+Hahaha, I hope you're thankful for the rescue, little guy.
 Thank goodness, neither of you are hurt too bad. 
 You there!
 What the hell do you think you’re doing, leaping in front of our car like that?! 
 What would you have done if we had gotten hurt? You better think carefully before you answer! 
 I had to... You would have run over this dog at the speed you were driving. 
 What was that? You mean to tell me that the life of that mutt is more important than our own?! 
-Would you stop this! Your insults are uncalled for! 
+Would you stop this! Your attitude is uncalled for! 
 You bastards... How dare you talk like that in front of Imperial soldiers. 
 That rank insignia… Are you a commissioned officer in the Army? 
 Oh… So you’re military, too, are you? State your name and rank. 
@@ -59,19 +59,19 @@ Ensign Ichiro Ogami!
 Like hell I'm telling you! 
 I am Imperial Navy Ensign, Ichiro Ogami! 
 Aha... Ichiro Ogami, huh? I've heard your name before. 
-You're the captain of that garbage unit full of women. The "Imperial Assault Troupe." 
+You're the captain of that rotten unit overrun by women. The Imperial Assault Troupe. 
 What did you just say!? 
 Like hell I'm telling you!
 What was that, you bastard?! 
 Wait... I recognize your face. 
-You're Ichiro Ogami, the captain of that garbage unit full of women. The "Imperial Assault Troupe." 
+You're Ichiro Ogami, the captain of that rotten unit overrun by women. The Imperial Assault Troupe. 
 ... 
 ... 
 Answer my question, bastard!! 
 Wait... I recognize your face. 
-You're Ichiro Ogami, the captain of that garbage unit full of women. The "Imperial Assault Troupe." 
+You're Ichiro Ogami, the captain of that rotten unit overrun by women. The Imperial Assault Troupe. 
 ... 
-Look at you, cavorting with young women in broad daylight.
+Look at you, cavorting with young girls in broad daylight.
 And on top of that, you dare to block our way?! Disgraceful!!
 For all you've done, you deserve corporal punishment! Vermin like you are ruining Japan.
 W-What!? What are you going to do to Ogami!? 
@@ -85,7 +85,7 @@ Ogami! I've got your back!!
 Wait, Sakura! If this escalates any further, it will cause an incident between the Army and Navy.
 Commander Yoneda is still absent, too. It'll just make things even worse for us. 
 Ogami... 
-Heh, what a complete idiot! We're leaving!! 
+Heh, what a complete idiot! Now, take this!!! 
 ... 
 Insolent cur! Salute His Excellency! This is Keigo Kyogoku, Minister of the Army! 
 Keigo... Kyougoku? 
@@ -104,7 +104,7 @@ H-How can you say that!?
 Excuse us for now. 
 Stop right there!! 
 Sakura! 
-Unacceptable. He just mocked my father. I absolutely will not let that stand! 
+Unforgivable… <br> How dare he mock my father… I absolutely will not let that stand!! 
 Sakura... 
 Ogami, are you hurt? 
 I'm fine, it's not a big deal. 
@@ -119,7 +119,7 @@ I don’t want to cause him any undue stress while he’s still hospitalized.
 Ogami... 
 Let's go inside the manager's room. 
 Our apologies, Commander. None of this would have happened if we had been more careful. 
-...Hm? I hear people talking…. Sounds like someone’s in the manager’s room.
+...Hm? <br> I hear people talking… <br> Sounds like someone’s in the manager’s room.
 Don’t give it a second thought. I never would’ve dreamed of getting shot in a place like that. 
 Guess I was just too stubborn to die. Wahahahaha! 
 Now, get back to your job. No need to dwell on the matter. 
@@ -135,7 +135,7 @@ What were you discussing?
 ...This is a hospital.
 The beach in the summertime, huh? That sure does sound lovely.
 R-Right, Ogami! Swimming in the ocean is the ideal summer hot spot! 
-Ah, it’s wonderful to have a friend that understands me so well.
+Ah, what a joy it is to have a friend that understands me so well.
 What were you discussing with the manager?
 W-Wha... We were just talking about work. 
 ...Work? Come to think of it, what kind of work do you do exactly?
@@ -144,12 +144,12 @@ O-Oh, come on now. Don't worry yourself over every little detail.
 Urk... 
 Th-The hospital is great, too! My heart is filled with joy when I breathe in the smell of disinfectants. 
 Wh-What's with you... 
-What’s wrong, Origami? Do you not share my sentiment? 
+What’s wrong, Ogami? Do you not share my sentiment? 
 How am I supposed to respond when you start talking about the sea out of nowhere? 
-Hahaha, you’re hopeless. Some Navy Ensign you are! 
+Hahaha, you’re hopeless. Some Navy ensign you are! 
 W-Well then, I must be going. 
-Tell Yoneda to get well soon. And remember, “To err is human, to forgive keeps the doctor away.” Farewell!
-Uh, isn’t an apple a day supposed to keep the doctor away? 
+Tell Yoneda to get well soon. Remember, “To err is human, to forgive keeps the doctor away.” Farewell!
+Isn’t an apple a day supposed to keep the doctor away? 
 You said his name was Kayama, right? He’s an interesting character. 
 Well, he’s a character, that’s for sure.
 All right then, shall we head inside?
@@ -163,18 +163,18 @@ Ah... I may be able to leave next month.
 I see. In any case, please take care of yourself. 
 By the way, Ogami... What's with the bruises? You get into a fight? 
 Ah, t-this is... I just tripped and fell over while we were walking here. 
-Uh-huh... Now that's suspicious. Did you get caught two-timing, Chief? 
+Uh-huh... <br> Now that's suspicious. <br> Did you get caught two-timing, Chief? 
 Huh!? 
-Yoohoo!! Been forever since I saw you guys. You all doing good? 
+Yoohoo!! <br> Long time no see. <br> How’ve you all been?  
 Kohran!! 
-Oh , Kohran! Didn’t you have work to do at the Hanayashiki Branch?
-My work over there finally calmed down. Now I can return to the theater. 
-So I figured I oughta visit Yoneda on my way back. 
+Oh, Kohran! Didn’t you have work to do at the Hanayashiki Branch?
+My job there's finally done and dusted. Now I can return to the theater.
+So, I figured I oughta visit Yoneda on my way back. 
 Heh, I told you all I’m perfectly fine but you keep coming anyway.
-So, Chief, are you sure nothing happened to you? Your handsome face is all messed up. 
+But, Chief, are you sure nothing happened to you? Your handsome face is all messed up. 
 ... 
 ... 
-Sorry, Ogami, but I can't stay silent any more. 
+…Sorry, Ogami, but I can't stay silent any more. 
 Sakura! 
 Excuse me… Mr. Yoneda. Do you know the Minister of the Army, a man named Keigo Kyogoku? 
 ...Yeah, I know 'em all right. Did something happen? 
@@ -187,7 +187,7 @@ He advocates for a more militaristic government despite the public calling for d
 This ideology and his strong personality has led to him gaining support from young like-minded officers. 
 Well, sounds like you held your own out there, Ogami. Very impressive.
 As they say, “The wealthy do not fight”... Oh wait, we don't have money, do we? Hahaha-- Ow, ow, ow.
-But he spoke ill of my father! I can’t let that stand…
+But that man spoke ill of my father! I can’t just let that go…
 So, he said something about Kazuma, too. 
 Well, endure it for now. We can't afford to get provoked by their taunting. Got it? 
 But... 
@@ -197,7 +197,7 @@ N-No, it was no problem at all.
 I’m fine, so head on home already. I can’t even enjoy a bit of sake with you all watching over me. 
 Don't go overboard, Yoneda. You’re still an injured man after all. Well, see ya next time!
 Excuse us then, sir. 
-‘Kay… Oh, wait a minute. Ogami, you stick around for a bit. We need to talk.
+Sure… Oh, wait a minute. Ogami, you stick around for a bit. We need to talk.
 Y-Yes, sir. 
 ... 
 What did you want to discuss with me, Mr. Yoneda?
@@ -209,9 +209,9 @@ I will take care of it.
 I can’t accept this.
 ...Why me?
 Understood… I will accept the Divine Blade Mekkyaku and keep it in my care.
-OK, Ogami. I'm counting on you. 
-I… I can’t accept this. A sword is equal to its wielder's life…
-It makes me feel like you're giving me a memento to remember you by…
+Hm… I'm counting on you, Ogami. 
+I… I can’t accept this. For a warrior, a sword is equal to its wielder's life…
+It feels like you're giving me a memento to remember you by…
 Wha, a memento? You idiot! I’m not dead yet!
 I'm just asking you to hold on to this for me. Now quit your grumbling and take it!! 
 Y-Yes, sir. Understood. I will take care of it.
@@ -222,7 +222,7 @@ Y-Yes. I understand. Then I will accept the Mekkyaku.
 What? You don't want it, Ogami? 
 General Yoneda, is there any reason why you're entrusting this priceless item to me? 
 Eh, I just feel like it. I’ll be more at ease knowing it’s with you instead of at the hospital.
-O-OK... Understood. I will take care of it. 
+Y-Yes, sir... Understood. I will take care of it. 
 ...Mm. All right, off you go. Head on back with the others, Ogami.
 Roger! Well, I hope you take good care of yourself, sir. 
 Will do! Take care of the gang at the theater while I’m gone!
@@ -232,13 +232,13 @@ Huh, you’re holding a sword. Where did that come from?
 Well, it’s… a long story. Ah, anyway, thank you for waiting. 
 Arf! 
 Oh, it's you! 
-Aaah… What a cute dog! Is it yours, Chief?
+Aaah… What a cute pup! Is it yours, Chief?
 Actually… He appears to be a stray.
 I rescued him earlier today from almost getting hit by a car.
 He must have been waiting here this whole time just to see you.
 Arf! 
 Aw, looks like the little guy isn’t going to leave your side anytime soon, Chief.
-Hey, Ogami! Couldn’t we keep him at the theater with us?
+I know, Ogami! What if we kept the puppy at the theater with us?
 Good idea, let's keep him! 
 That’s out of the question.
 I'm more of a cat person. 
@@ -252,8 +252,8 @@ Arf, arf!
 That’s out of the question. Keeping a pet is a lot more responsibility than you think. 
 But I’m sure everyone would gladly share that responsibility. Please, Ogami?
 Right, we'll all pitch in to take care of him! Please, Chief? 
-Uhm... Well... OK, if you insist. 
-Hurraaaay! It's a deal, then! 
+Uhm... Well... <br> OK, if you insist. 
+Hurraaaay! <br> It's a deal, then! 
 Isn't that great, boy? Let's go home together! 
 Arf, arf! 
 I’d rather have a cat. I’m more of a cat person.
@@ -261,14 +261,14 @@ Don’t say that, Ogami! Come on, please?
 She’s got a point, Chief. You can’t just leave him here like this.
 I'll make sure to take care of him along with Sakura. So can we keep him, please? 
 Well... OK. If you insist. 
-Hurraaaay! It's a deal, then! 
+Hurraaaay! <br> It's a deal, then! 
 Isn't that great, boy? Let's go home together! 
 Arf, arf! 
 ... 
 We'll make sure to look after him. Please, Ogami? 
 Right, we'll take care of him. Don't worry, you can leave it all to us! 
-Uhm... Well... OK, if you insist. 
-Hurraaaay! It's a deal, then! 
+Uhm... Well... <br> OK, if you insist. 
+Hurraaaay! <br> It's a deal, then! 
 Isn't that great, boy? Let's go home together! 
 Arf, arf! 
 Tell me some gossip. 
@@ -295,10 +295,10 @@ Um, Cafe... what now? No, I haven't.
 It’s a place that serves delicious coffee and donuts.
 The cafe is wonderful, but all of the customers seem to be a bunch of writer types.
 Whenever I go, I always end up having some kind of high-minded conversation… It gets tiring sometimes. 
-By the way, I heard that there are some female bus conductors these days!
-It's great to see women working alongside men. 
-I think it is pretty admirable.
-Now that I think about it, you’re a man working among mostly women, aren’t you Oagmi? 
+By the way, I've heard that there are quite a few female bus conductors these days!
+Women that work alongside men are pretty cool, don't you think?
+I kind of admire them.
+Ah, now that I think about it, Ogami, you’re a man working among mostly women, aren’t you? 
 By the way, Maria is scheduled to return from America soon. 
 Huh, is that so? It will be a huge relief to have her back.
 You look happy to hear that, Ogami. Were you lonely without Maria? 
@@ -313,22 +313,22 @@ O-OK... Thanks.
 Speaking of which, summer break is coming up next month. 
 I'm thinking of buying the latest swimsuit and going to the beach! How about we go together, Kasumi? 
 Um... I think I'll pass... By the way, do you have any plans for summer break, Ogami? 
-Uh… We don’t really get days off. Not sure if we’ll even go on vacation this summer, either…
+Hmm… In this line of work, we don’t really get days off. Who knows if we’ll get a vacation this summer…
 Sorry, Ogami, but I'm all out of gossip for now. 
 I'll have some more interesting tidbits to share another time, so look forward to it!
-Oh, Ogami, I see you bought Maria's photo. 
-Since she's in America, I thought I should at least get her photo.
-How about I give you Maria's call number, Ogami? 
-Are you sure? 
-It's fine. She gave me her number in case of emergencies. 
+Oh… Ogami, I see you bought Maria's bromide.
+I thought I should at least get her bromide since she’s off in America right now. 
+Would you like me to give you her call number, Ogami? 
+…Really? 
+She actually gave me her number in case of emergencies. 
 You can talk to her if you dial "13900." 
 13900, OK. Thanks, Yuri! 
 I'll come back another time. Good luck with your work. 
 OK. Thanks for coming, Ogami. 
 Tell us if you hear any juicy stories! 
-Sorry, Ogami. I can only sell you one photo per month. 
+Sorry, Ogami. I can only sell you one bromide per month. 
 I see. That's too bad. 
-So sorry, Mr. Ogami, but each customer is only allowed to purchase one photo at a time.
+So sorry, Mr. Ogami, but each customer is only allowed to purchase one bromide at a time.
 Oh, really? That's too bad.  
 Shiro 
 Hanamaru 
@@ -361,29 +361,29 @@ The uniform I wear at the theater. Good for both summer and winter.
 A lighter borrowed from the inn. 
 The flower crown that Iris made for Reni. 
 A plate used at the welcome party. I was asked to bring it to Sakura. 
-A photo of Sakura. 
-A photo of Sakura. This one is a limited edition only available at New Year's. 
-A photo of Sumire. 
-A photo of Sumire. This one is a limited edition only available at New Year's. 
-A photo of Maria. 
-A photo of Maria. This one is a limited edition only available at New Year's. 
-A photo of Kanna. 
-A photo of Kanna. This one is a limited edition only available at New Year's. 
-A photo of Iris. 
-A photo of Iris. This one is a limited edition only available at New Year's. 
-A photo of Kohran. 
-A photo of Kohran. This one is a limited edition only available at New Year's. 
-A photo of Orihime. 
-A photo of Orihime. This one is a limited edition only available at New Year's. 
-A photo of Reni. 
-A photo of Reni. This one is a limited edition only available at New Year's. 
+A bromide of Sakura. 
+A bromide of Sakura. This one is a limited edition only available at New Year's. 
+A bromide of Sumire. 
+A bromide of Sumire. This one is a limited edition only available at New Year's. 
+A bromide of Maria. 
+A bromide of Maria. This one is a limited edition only available at New Year's. 
+A bromide of Kanna. 
+A bromide of Kanna. This one is a limited edition only available at New Year's. 
+A bromide of Iris. 
+A bromide of Iris. This one is a limited edition only available at New Year's. 
+A bromide of Kohran. 
+A bromide of Kohran. This one is a limited edition only available at New Year's. 
+A bromide of Orihime. 
+A bromide of Orihime. This one is a limited edition only available at New Year's. 
+A bromide of Reni. 
+A bromide of Reni. This one is a limited edition only available at New Year's. 
 A decorative paper ball for the welcome party called a kusudama. 
 A flower vase for the welcome party.
 The banner for the welcome party.
-The Cinematron. One of Kohran's inventions that lets you see and talk to someone from far away. 
+The Kinematron. One of Kohran's inventions that lets you see and talk to someone from far away. 
 The sword of the Pandemonium Regalia, recovered from the Demon King. 
 The mirror of the Pandemonium Regalia, recovered from the Demon King. 
-Fragments of the broken Cinematron. Seems like the kids at the inn picked them up along the shore. 
+Fragments of the broken Kinematron. Seems like the kids at the inn picked them up along the shore. 
 A letter from Sakura. 
 A letter from Sumire. 
 A letter from Maria. 

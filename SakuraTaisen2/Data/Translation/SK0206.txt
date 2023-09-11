@@ -13,11 +13,11 @@ Maybe she's in a bad mood.
 Actually, after the battle… 
 She seemed to be in a good mood earlier when we were getting ready for the party. 
 Yes. I wonder, what on earth could be the reason for it? 
-Well, there's no point wondering about it until we can have a talk with her. 
+Well, we can theorize all we want but we won't know for sure until we talk with Iris.
 Right. In that case, I'll try searching a bit more. 
 Who knows? Maybe she just happened to be in a bad mood. 
-Maybe so, but I feel like there must be some reason for it. 
-Well, there's no point wondering about it until we can have a talk with her. 
+Maybe so, but I feel like there must be some reason behind it. 
+Well, we can theorize all we want but we won't know for sure until we talk with Iris. 
 Right. In that case, I'll try searching a bit more. 
 Hang on... Come to think of it, after the battle... 
 ...Iris seemed kind of down. 
@@ -26,10 +26,10 @@ When she caught sight of one of the families we rescued, she suddenly got quiet.
 Maybe that has something to do with what just happened here. 
 I'm impressed you noticed a tiny detail like that, Ogami. I wouldn't expect any less from you. 
 No, it's nothing more than a guess right now. 
-Well, there's no point wondering about it until we can have a talk with her. 
+Well, we can theorize all we want but we won't know for sure until we talk with Iris. 
 Right! In that case, I'll try searching a bit more. 
 What could've gotten Iris so upset...? I'm not sure, myself. 
-Still, there's no point wondering about it until we can have a talk with her. 
+Still, we can theorize all we want but we won't know for sure until we talk with Iris. 
 ...Yes, that's true. 
 In that case, I'll try searching a bit more. I'll see you later. 
 Looks like Iris isn't here... 
@@ -55,7 +55,7 @@ Mr. Yoneda... Wonder if he's still up.
 Though I doubt he knows anything about where Iris could be... 
 I should get a move on and keep looking for her. 
 Mr. Yoneda, do you have a moment? 
-Snooooore, snooooore... 
+Snooooore… Snooooore... 
 Ah, sounds like he's asleep. 
 Oh well. I'll check somewhere else. 
 Mr. Yoneda, are you in? It's Ogami. 
@@ -66,7 +66,7 @@ I-I appreciate the offer, sir, but I'm in something of a hurry right now...
 Ehn? You're talking about Iris, I bet? 
 Wait, how did you know that? 
 Even the thickest of blockheads couldn't have missed all the commotion she made. 
-I'm so sorry I let things get so out of hand. 
+I'm so sorry, I let things get so out of hand. 
 She was in a good mood earlier today, so I can't imagine why this happened... 
 Ogami, just because someone is cheerful on the outside doesn't mean they feel the same on the inside. 
 Consider this. Why did she act so pleasant during the day? 
@@ -81,7 +81,7 @@ Iris isn't here. I thought for sure she would be.
 Guess I'll go somewhere else. 
 No one here. Maybe I'll try another room. 
 (Wait, isn't that Orihime?) 
-(She's coming out of the costume room. What was she doing in there?) 
+(She's coming out of the wardrobe room. What was she doing in there?) 
 ... 
 Speak to Orihime. 
 Watch her quietly. 
@@ -90,14 +90,14 @@ Watch her quietly.
 Playfully cover her eyes. 
 Hey, Orihime. 
 Kyah! 
-Oh, so it's you, Ensign. I ask that you not startle me like that. 
+Oh, so it's you, Mr. Ensign. I ask you do not startle me like that. 
 Orihime, what are you doing here? 
 ... 
-(Huh, now she's peeking inside the backstage room.) 
+(Huh, now she's peeking inside the dressing room.) 
 (She's been going around, looking in different rooms for a while now.) 
 ...Who's there?! 
 (Oh crap, she found me!!) 
-E-Ensign?! 
+M-Mr. Ensign?! 
 How disgusting you are! Sneaking around and spying on people! 
 You have not a single ounce of regret for peeking into the bath, do you, you human refuse! 
 I-I'm sorry. That wasn't my intention... 
@@ -106,7 +106,7 @@ In any case, just what were you doing around here, Orihime?
 (I know. Why don't I tease her a little?) 
 Guess whooo? 
 Kyaahhh!! 
-E-Ensign! What do you think you are doing, jumping out of nowhere?! 
+M-Mr. Ensign! What do you think you are doing, jumping out of nowhere?! 
 Do not be touching me with your grimy little hands! 
 I didn't mean... It was just a joke... 
 There is quite a difference between the good jokes and the bad! 
@@ -117,16 +117,16 @@ In any case, just what in the world was she doing over here?
 (I'll try watching her quietly.) 
 (Anyway, searching for Iris should come first.) 
 Were you looking for Iris? 
-Helping with night patrol? 
+Helping with night watch? 
 Were you, by any chance, looking for Iris? 
 ...N-Not at all. 
 OK then, what were you doing? 
-...Whatever I was doing is no business of yours, Ensign! 
+...Whatever I was doing is no business of yours, Mr. Ensign! 
 Why do you not save your breath, and go search for Iris yourself? 
 You're right. If I have time to chat like this, I should instead be looking for Iris.
 Still though, just what were you doing, Orihime? 
-Were you, by any chance, helping with the nighttime patrol? 
-I am not so cruel as to take your precious chores away from you, Ensign. 
+Were you, by any chance, helping with the night watch patrol? 
+I am not so cruel as to take your precious chores away from you, Mr. Ensign. 
 If I did it in place of you, you really would be useless. 
 U-Useless? 
 If you have time to shoot the breeze with me, would it not be better spent looking for Iris instead? 
@@ -163,14 +163,14 @@ Maybe she could be hiding in the shade of this tree?
 And... not over here, either. 
 I've searched the courtyard pretty thoroughly, so she must not be here. 
 Maybe I'll try looking one more time. 
-... 
-... 
+…  
+… …   
 Yeah, she's not here. I guess she didn't go to the courtyard. 
 (Oh, it's Reni. Looks like he doesn't realize I'm here.) 
 (He went downstairs. What's he going to do in the basement?) 
 It's already 11 o'clock. I wonder where Iris could've gone. 
 Wait. Kayama said something earlier... 
-I think it was... "Try checking the attic." 
+I think it was... <br> "Try checking the attic." 
 Well, what have I got to lose? Guess I'll try the attic. 
 (Hmm? Reni?) 
 (What could he be doing here?) 
@@ -225,7 +225,7 @@ There's no way she'd hide in a place with such a great view.
 Iris... Where in the world could you have gone? 
 Yeah, she's not here. She doesn't seem to be on the terrace, either. 
 Hmm... Where's another place she could have gone... 
-Iris! Iris, are you here? 
+Iris! <br> Iris, are you here? 
 ...No response. I looked over all the seats, but it doesn't seem like she's here. 
 She's definitely not here. I even looked in between all the seats. 
 It doesn't look like she's anywhere in the first floor seating, either. 
@@ -244,19 +244,19 @@ All right... What should I do from here?
 Make a call. 
 Go search for Iris. 
 Maybe calling someone would be a nice change of pace. 
-OK, I've powered on the Cinematron, so... I wonder who I should call? 
+OK, I've powered on the Kinematron, so... I wonder who I should call? 
 OK. I'll try calling someone. 
 Hmm... I getcha. 
 Essentially, I... 
 But you see... 
 Hey, that sounds like Sumire. 
-Whoa, Chief? I'm gabbin' a bit with Sumire right now. 
-Perfect timing. How's about the three of us chat? 
-Kohran's not picking up. Maybe she isn't near the Cinematron. 
+Whoa, Chief? I'm gabbing a bit with Sumire right now. 
+Perfect timing. How about the three of us chat? 
+Kohran's not picking up. Maybe she isn't near the Kinematron. 
 Essentially, I... 
 But you see... 
 Hey, is that Kohran? 
-Oh my... Ensign, is that you? 
+Oh my... <br> Ensign, is that you? 
 How lovely. Why not join in our little discussion? 
 Yes, hello? 
 Hey, Sumire. It's Ogami. 
@@ -283,12 +283,12 @@ Well then, Ensign, I bid you goodnight.
 Yeah, good night. 
 Sumire... 
 Well... It's a prank call. 
-Ohohoho. But when speaking via the Cinematron, you can see the other person's face. 
+Ohohoho. <br> But when speaking via the Kinematron, you can see the other person's face. 
 Thus revealing the identity of the prank caller, and rendering it rather moot. 
 Oh, good point. You're absolutely right. 
 Now then, I must get changed and be off to bed. 
 Good evening to you, Ensign. 
-Hmm... Seems like it'll be pretty tough to prank someone with the Cinematron. 
+Hmm... Seems like it'll be pretty tough to prank someone with the Kinematron. 
 ...Ensign, do say something, if you would. 
 It is somewhat rude to call someone and then stay silent, don't you think? 
 Oh... Sorry, sorry. 
@@ -300,7 +300,7 @@ You guys had a dustup with the Black Demon Society today over in Uguisudani, am 
 So how'd it go, anyways? 
 It was surprisingly easy.
 It was pretty tough. 
-They made a mech of things... 
+They made a mech of things…  
 It was a surprisingly easy win. Our newest member, Reni, really pulled his weight out there. 
 Wowee, he sure sounds promising! I was a bit worried, but hearing that makes me feel better. 
 Still... How disappointing to hear that victory came so easily even without us. 
@@ -312,7 +312,7 @@ Still, if it's enough to make the chief worry...
 ...then it sounds like these guys are nothing to sneeze at. 
 They really managed to make a "mech" of things. 
 Ahahaha! Aw Chief, you're such a hoot! 
-Look at you makin' puns... How do you come up with this stuff? 
+Look at you making puns... How do you come up with this stuff? 
 You got my joke, huh? Thanks, Kohran. 
 ...Really, now. You know, they do say that puns are the lowest form of humor. 
 I do wish you had more of a highbrow sense of comedy. 
@@ -350,13 +350,13 @@ I guess it is pretty late, so I'll let you go.
 I see... Well, thanks for takin' the time to call me. 
 But I'm dead tired, so why don't we talk tomorrow instead? 
 Yeah, sure thing. 
-Yaaawn... Well, g'night, Boss. 
+Yaaawn... <br> Well, g'night, Boss. 
 So, Boss... Did ya need me for somethin'? 
 Well, uh... Nothing in particular. I just wanted to talk to you. 
 C'mon Boss, gimme a break. You got any idea what time it is? 
 How 'bout we talk tomorrow? I'm... about to pass out, here... 
 S-Sure. It is getting late, so let's do that. 
-Yaaawn... Well, g'night, Boss. 
+Yaaawn... <br> Well, g'night, Boss. 
 Man, she was asleep and everything. I wish I hadn't done that. 
 It's that late already... What now? 
 ...She's not picking up. She must be asleep by now. 
@@ -530,10 +530,10 @@ But still, I wonder what he meant by "I don't know."
 If you have no need of me, there's somewhere I must go. 
 H-Hey Reni, wait a second! 
 ...Gone already. He's a quick one, that's for sure. 
-Reni and Iris both... I wonder where they went. 
+Reni and Iris both... <br> I wonder where they went. 
 ...! 
 Oh, Sakura! 
-Are you... angry about what happened earlier? 
+Are you... still angry about what happened earlier? 
 No, not really. 
 Well, excuse me. 
 Uh... 
@@ -571,7 +571,7 @@ Sakura...
 So... please excuse me for today. 
 By tomorrow, I'm sure I'll be able to show you a smile again. 
 ...Fair enough.
-Then, I'll be going. See you... in the morning. 
+Then, I'll be going. <br> See you... in the morning. 
 ...Yes. 
 (I should probably leave her be for now...) 
 Sakura, I'll be going. 
@@ -587,14 +587,14 @@ Guess I'll try a different room.
 Kanna's room is locked, so I can't go inside. 
 I wonder, what would Kanna do if she were here? 
 The door is locked. There's no way Iris could get in. 
-Orihime... Is she in her room? 
+I wonder if Orihime is in her room.
 Orihime's nameplate. It's simple, but sophisticated. 
 Guess I'll try a different room. 
 I guess Orihime isn't here. 
 (I did speak with Orihime earlier. And besides, finding Iris takes priority.) 
 Yes, who is it? 
 It's Ogami. Do you have a minute, Orihime? 
-...Could that be you, Ensign? 
+...Could that be you, Mr. Ensign? 
 I do not have a word of anything to say to you. 
 It is time for me to sleep, so be off with you now, quickly! 
 H-Hey, Orihime! 
@@ -611,7 +611,7 @@ Give her a warning.
 Orihime, is something the matter? Earlier, you got so angry all of a sudden. 
 ...There’s nothing in particular. 
 It sure seemed like there was something, if you ask me. 
-You call me out here, and only for this, Ensign?! 
+You call me out here, and only for this, Mr. Ensign?! 
 Having this discussion with you is only a waste of my time. I will be excusing myself. 
 Shoot... No good. 
 Oh well. I should get back to searching for Iris. 
@@ -688,11 +688,11 @@ I guess there's no helping it. I may as well spend the rest of the evening with 
 All right, I'd better start cleaning off my desk. 
 It's Iris. Can I come in? 
 Yeah, go ahead. It's not locked. 
-OOOK! Coming in now! 
+Okey-dokey! Coming in now! 
 Hee hee. Thanks for waiting, Mon Frère. 
 It's already 11 o'clock. I wonder where Iris could've gone. 
 Wait. Kayama said something earlier... 
-I think it was... "Try checking the attic." 
+I think it was... <br> "Try checking the attic." 
 Well, what have I got to lose? Guess I'll try the attic. 
 I'm not sure if Iris would come to a place like this, but it wouldn't hurt to check. 
 Yeah, she isn't here. I'll try a different room. 
@@ -718,18 +718,18 @@ Go back outside.
 O-Oh no… My body is moving towards the bathroom on its own... 
 Ahhh. I'm surprised. Japanese bathrooms aren't all that bad. 
 (Orihime is... in the b-bath.) 
-...! Is someone there?! 
+...! <br> Is someone there?! 
 (Crap, did she see me?!) 
 Make an excuse. 
 Run away. 
 Make an excuse. 
 H-Hey, Orihime. 
-E-Ensign?! 
+M-Mr. Ensign?! 
 Um, y-you see, there's a reason I'm here. 
 Do not feed me your excuses! Have a taste of this bucket!! 
 Yeeeowch! 
 I'm leaving right now! Please don't throw another bucket at me! Uwahhh, help!! 
-Mamma mia, coming into the bathroom when someone is bathing... Are you all right in the head, Ensign? 
+Mamma mia, coming into the bathroom when someone is bathing... Are you all right in the head, Mr. Ensign? 
 I'm sorry... 
 Ohh, and I had just washed away all my feelings of irritation. Now I'm even angrier than before!! 
 From now on, I will make sure to lock you in your room before I enter the bath. 
@@ -740,11 +740,11 @@ Sheesh... I know I brought it on myself, but that was awful.
 (I gotta get out of here before she sees me!) 
 Phew... I think I got away before she realized I was there. 
 If I'd been just a moment slower, I might not have made it. That was too close... 
-Wh-Who's there? Ensign, it couldn't be you, could it?! 
+Wh-Who's there? Mr. Ensign, it couldn't be you, could it?! 
 O-Orihime... Um, I... 
 Just get yourself out of here, right away! 
 Uh, s-sorry. I'm leaving right now. 
-Mamma mia, coming into the bathroom when someone is bathing... Are you all right in the head, Ensign? 
+Mamma mia, coming into the bathroom when someone is bathing... Are you all right in the head, Mr. Ensign? 
 I-I'm sorry, I wasn't trying to peek in on you... 
 When I realized someone was in there, I just panicked and froze up. 
 It is easy enough to see from here if someone is in the bath. 
@@ -763,7 +763,7 @@ Ahh... I think it's about time I got out.
 (I gotta get out of here before she sees me!) 
 Phew... I think I got away before she realized I was there. 
 If I'd been just a moment slower, I might not have made it. That was too close... 
-Ah, Ensign. 
+Ah, Mr. Ensign. 
 H-Hey, Orihime. Were you taking a bath? 
 Why, yes. I just got out. 
 You would not happen to have been peeking inside, were you? 
@@ -823,11 +823,11 @@ H-Hey, Reni! Hold on a minute!
 ...There he goes. Man, I couldn't really strike up a conversation with him at all. 
 It looks like Reni is still performing his inspection. 
 I should get back to searching for Iris, myself. 
-(I wonder where Reni went off to.) 
-(Looks like he went back downstairs. Is he headed for the hangar?) 
+(Reni… Just where are you going?) 
+(Looks like he went downstairs again. Is he headed for the hangar?) 
 It's already 11 o'clock. I wonder where Iris could've gone. 
 Wait. Kayama said something earlier... 
-I think it was... "Try checking the attic." 
+I think it was... <br> "Try checking the attic." 
 Well, what have I got to lose? Guess I'll try the attic. 
 Ogami... 
 Hm? 
@@ -915,10 +915,10 @@ My ankle hurts. I don't think I can do it alone.
 (It seems like she might have twisted her ankle.) 
 Ankle (press) 
 Saki, is this where it hurts? 
-Ah... Yes, there... Ohh, that feels good... 
+Ah... Yes, there... <br> Ohh, that feels good... 
 Just keep going... Massage it softly... Like that... 
 Ohh, how nice... 
-A little... harder... Please... 
+A little... harder... <br> Please... 
 No... Don't press it that hard... 
 Gently, Ogami... 
 (Wow, her chest is quite large...) 
@@ -934,17 +934,17 @@ Chest (peek)
 Saki, is your hip OK? 
 Yes, my ankle is what got injured. 
 But since you're checking me over, would you mind massaging my hip as well? 
-Huhh?! Ohh, shoot. What now? 
+Huhh?! <br> Ohh, shoot. What now? 
 Hips (press) 
-Ahh, yes... Softly... Like that... 
+Ahh, yes... <br> Softly... Like that... 
 Mhmhm... Ogami, you give such lovely massages. 
 Y-You think so? Hahaha... 
-Ahh, yes... Softly... Like that... 
+Ahh, yes... <br> Softly... Like that... 
 (Ohh man, this is getting pretty sensual...) 
 Oh, Ogami, please don't look at me that way. It's embarrassing. 
 Leg (press) 
 Saki, is this where it hurts? 
-Ah, lower... Right on my ankle... 
+Ah, lower... <br> Right on my ankle... 
 Ah... No... Ogami... 
 Don't press right there... 
 Ogami, where are you going? 
@@ -980,14 +980,14 @@ The only reason this happened in the first place is because Saki forced me to co
 But I guess I did get a little too carried away… 
 Even so, I wish Sakura hadn't lost her temper at me like that. 
 Oh man, I give up. 
-Why Ogami, it's been an age! How good it is to see you well. Yes, that puts a smile on my face! 
+Why Ogami, it's been an age! How good it is to see you well. Yes, what a joy this is!
 Wh-Who's there? Who're you?! 
 What?! Oh come now, come now! Did you forget all about me? What sort of friend are you? 
 How could you forget me, Yuichi Kayama? I sat right next to you during our time in the naval academy! 
 ...Kayama?! 
 So it's you, Kayama! Wow, you're looking a lot cooler these days. 
 Anyway, what are you doing in a place like this? 
-Ahh, it puts a smile on my face to see an old classmate once again... 
+Ahh, what a joy it is to see an old classmate once again... 
 Answer the question, Kayama! Why are you even here? 
 Come now, those little details hardly matter, do they? No, not at all! 
 More importantly, isn't it true what they say? How rare is unsullied joy. 
@@ -1007,29 +1007,29 @@ The uniform I wear at the theater. Good for both summer and winter.
 A lighter borrowed from the inn. 
 The flower crown that Iris made for Reni. 
 A plate used at the welcome party. I was asked to bring it to Sakura. 
-A photo of Sakura. 
-A photo of Sakura. This one is a limited edition only available at New Year's. 
-A photo of Sumire. 
-A photo of Sumire. This one is a limited edition only available at New Year's. 
-A photo of Maria. 
-A photo of Maria. This one is a limited edition only available at New Year's. 
-A photo of Kanna. 
-A photo of Kanna. This one is a limited edition only available at New Year's. 
-A photo of Iris. 
-A photo of Iris. This one is a limited edition only available at New Year's. 
-A photo of Kohran. 
-A photo of Kohran. This one is a limited edition only available at New Year's. 
-A photo of Orihime. 
-A photo of Orihime. This one is a limited edition only available at New Year's. 
-A photo of Reni. 
-A photo of Reni. This one is a limited edition only available at New Year's. 
+A bromide of Sakura. 
+A bromide of Sakura. This one is a limited edition only available at New Year's. 
+A bromide of Sumire. 
+A bromide of Sumire. This one is a limited edition only available at New Year's. 
+A bromide of Maria. 
+A bromide of Maria. This one is a limited edition only available at New Year's. 
+A bromide of Kanna. 
+A bromide of Kanna. This one is a limited edition only available at New Year's. 
+A bromide of Iris. 
+A bromide of Iris. This one is a limited edition only available at New Year's. 
+A bromide of Kohran. 
+A bromide of Kohran. This one is a limited edition only available at New Year's. 
+A bromide of Orihime. 
+A bromide of Orihime. This one is a limited edition only available at New Year's. 
+A bromide of Reni. 
+A bromide of Reni. This one is a limited edition only available at New Year's. 
 A decorative paper ball for the welcome party called a kusudama. 
 A flower vase for the welcome party.
 The banner for the welcome party.
-The Cinematron. One of Kohran's inventions that lets you see and talk to someone from far away. 
+The Kinematron. One of Kohran's inventions that lets you see and talk to someone from far away. 
 The sword of the Pandemonium Regalia, recovered from the Demon King. 
 The mirror of the Pandemonium Regalia, recovered from the Demon King. 
-Fragments of the broken Cinematron. Seems like the kids at the inn picked them up along the shore. 
+Fragments of the broken Kinematron. Seems like the kids at the inn picked them up along the shore. 
 A letter from Sakura. 
 A letter from Sumire. 
 A letter from Maria. 

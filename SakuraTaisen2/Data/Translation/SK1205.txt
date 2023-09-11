@@ -19,7 +19,7 @@ You can look forward to learning that once you come to the salon. Until then, go
 What could it be? <br> Hmm, now I'm curious. 
 OK, guess I'll head over to the salon. 
 Hey, Maria. What's up? 
-Captain, um... Are you free right now? 
+Captain, um... <br> Are you free right now? 
 Yeah, sure, but... What's up? 
 You remember how we went to Yokohama, right? 
 Yeah, I remember. We went together for New Year's. 
@@ -33,25 +33,25 @@ A date with Maria in Yokohama, huh? Can't wait.
 Right, guess I should head over to the entrance. 
 Yo, Boss. 
 Hey, Kanna. Need something? 
-Well... Ya got a minute? 
+Well... <br> Ya got a minute? 
 If you're free, would ya wanna come to the beach with me? 
 The beach? It's a little early in the year to go swimming, isn't it? 
 We wouldn't be swimming, but... Well... I just wanna go look at the ocean with ya. 
 Heheh, I know this ain't really like me. 
-So, Boss... Whaddya say? 
+So, Boss... <br> Whaddya say? 
 Yeah, sure. <br> I'd be glad to. 
 Really? <br> Thanks, Boss! 
 All right, I'll be waitin’ over by the entrance. See ya later! 
 A beach trip with Kanna, huh? Can't wait. 
 OK, guess I'll head over to the entrance, then. 
-Hehehe. Hey-Mon-Frère!
+Hehehe. Hey. Mon. Frère!
 Hey, Iris. Did you need something? 
 Uh-huh! Let's go on a date, Mon Frère, right now! 
 You promised we'd go on one after we got back, remember? 
 Hahaha, now that you mention it, I guess I did. 
 Sure, let's go. I'd be more than happy to. 
-Yaaaaay! <br> Thanks, Mon Frère! 
-Leave all the planning to me!
+Yaaay, yaaay! <br> Thanks, Mon Frère! 
+Just leave all the planning to me!
 Really? All right then, go ahead. 
 Come to my room once you're ready, OK? 
 All right, see you later! Bye-byyye! 
@@ -70,9 +70,9 @@ For real?! <br> Thanks a bunch, Chief!
 All right, just swing by my room when you're ready to go! I'll be waiting! 
 An amusement park date with Kohran, huh? Can't wait. 
 OK, guess I'll head over to Kohran's room, then. 
-Ciao, Ensign. 
+Ciao, Mr. Ensign. 
 Hey, Orihime. Did you need something? 
-Actually, Ensign, there's something I wanted to show you. 
+Actually, Mr. Ensign, there's something I wanted to show you. 
 Come by my room later, please! 
 Something to show me? 
 Heehee, whatever could it be? 
@@ -80,14 +80,14 @@ OK then, I'll be waiting!
 Orihime has something to show me, huh? I wonder what it is. 
 All right, guess I'll head over to her room, then. 
 Hey, Reni. Did you need something? 
-Captain... Are you free right now? 
+Captain... <br> Are you free right now? 
 Yeah, I’m available.
 There's... a festival nearby today. 
 So... 
 ... 
 Reni... 
 We could go together, if you want. 
-Yeah... Thank you, Captain.
+Yeah... <br> Thank you, Captain.
 All right then, come to my room later. I'll be on standby. 
 On standby, huh? Hahaha, some things never change with her. 
 OK, guess I ought to head over to Reni's room. 
@@ -95,34 +95,34 @@ Ahh... What nice weather.
 The spring breeze is so refreshing. 
 Ogamiiii! 
 Hey, Sakura. Is that...? 
-Yes, it's a bicycle. I was hoping we could ride it together. 
+Yes, it's a bicycle. I was hoping we could go on a ride together. 
 I see... So that's what this was all about. 
-I figured we might be going somewhere, since you wanted to meet by the entrance. 
-Ever since that battle, I've been thinking about how much I wanted to go out on a date. 
+I kind of figured we might be going somewhere, since you wanted to meet by the entrance. 
+Ever since our last battle, I've been thinking about how much I wanted to go out on a date. 
 I thought we could go to a fancy restaurant or shop at a high-end boutique or something... 
 But during that fight... We were together the whole time... And it made me realize something. 
-I'm happy just being with you, Ogami. 
+I'm happy just having you by my side, Ogami… 
 ... 
 I want to be with you just the way I always am, without trying to impress you. 
 I want to treasure every moment I get to spend with you. 
 Sakura... 
-OK, Ogami, let's get going. 
-Now, could you please hold the back of the bike up for me? 
+…OK, Ogami, let's get going. 
+Now, could you please hold the back of the bike for me? 
 Huh?! W-Wait, then... That favor of yours... 
 That's right! I want you to help me practice. 
-Heh, I only just bought this bike, I don't actually know how to ride it yet. 
+Heheh, I only just bought this bike, I don't actually know how to ride it yet. 
 S-Say what?! 
-Thanks for offering to teach me! Now, full steam aheeead! 
+Thanks for offering to teach me, Ogami! Now, full steam aheeead! 
 Whoa! S-Sakura, waaaaait! 
 Oops, I don't think this outfit's gonna cut it for a date. 
 Better get changed while I'm at it. 
 There, that should do it. Let's get going. 
 Hey, Maria. Did I keep you waiting? 
-No, you're all right. We have plenty of time. 
+No, you're all right. <br> We have plenty of time. 
 Now, how about we take a steam taxi over to Yokohama? 
 Sure, let's do that. 
 Here you go, Maria. 
-Thank you. 
+…Thank you. 
 Tonight, how about we go see the ocean? 
 The view is bound to be lovely. 
 I see. Can't wait. 
@@ -137,18 +137,18 @@ Hahaha. Sorry, sorry.
 Driver, I'm ready to go now. 
 W-Wait a second, Maria, don't leave me here! 
 Hm hm hm, I'm just kidding, Captain. 
-After all, nothing makes me happier than being with you. 
-Yo, Boss! You came! 
+After all, nothing makes me happier than being with you… 
+Yo, Boss! <br> Ya made it! 
 Of course I did. Right, so which beach are we going to? 
-I was thinking 'bout going to the beach over in Shonan. 
-Shonan? Sounds good. 
-Heheh, so, uh... Does this count as a date? 
+I was thinkin’ 'bout going to the beach over in Shonan. 
+Shonan, huh? Sounds good. 
+Heheh, so, uh... <br> Does this count as a date? 
 I'm getting a little embarrassed... 
 Kanna... 
-R-Right, let's get goin'! Race you to Shonan! 
-Whoa, wait, Kanna! <br> Are we running all the way to Shonan?! 
-Wh-Whoops. <br> Force of habit. <br> Guess I'm a little nervous... 
-Hahaha, the train's just arrived, so how ‘bout we hitch a ride instead. 
+R-Right, let's get goin'! Race ya to Shonan! 
+Whoa, wait, Kanna! Are we running all the way to Shonan?! 
+Wh-Whoops… Force of habit… Guess I'm a little nervous... 
+Hahaha, the train's just arrived, so how about we hitch a ride instead. 
 Woohoo! <br> Look, Boss, the ocean! <br> I can see the ocean! 
 You're right. Ah, the smell of the ocean sure brings me back... 
 I've always loved looking at the sea, ever since I was a kid. 
@@ -160,15 +160,15 @@ It gives me the courage to take on anythin’, with everythin’ I got.
 I wanted to see the ocean so I could feel brave enough to... Um... Tell you how I, uh... 
 What is it, Kanna? 
 Heheh, nope, still can't do it! Too embarrassed to say it! 
-All right, Boss, race you to the water! 
+All right, Boss, race ya to the water! 
 Wait, Kanna. Tell me, I wanna know now! 
-C'mon, better start running or you're gonna get left behind! Hahahaha! 
+C'mon, better start runnin’ or you're gonna get left behind! Hahahaha! 
 The spring sunlight is pouring into the theater. 
 Looks like we're gonna have great weather all day today. 
 Orihime often plays piano here. 
 What is it that she wants to show me, anyway? 
 Hey, is that you, Orihime? 
-Ciao, Ensign. <br> Did you come to listen to me play piano? 
+Ciao, Mr. Ensign. Did you come to listen to me play piano? 
 No, that's not why I'm here. 
 Aww, that's a little disappointing. 
 I've come up with all sorts of new music ideas since we returned from our last battle. 
@@ -188,7 +188,7 @@ And now... Kazuma can truly rest in peace.
 Everyone put their lives on the line to defend this city... 
 So you better keep defendin' it, no slackin' off! Hahahaha! 
 ...Yes, sir. 
-Mr. Yoneda. <br> It's Ogami... 
+Mr. Yoneda. It's Ogami... 
 Zzzzzzzz... Zzzzzzzz... 
 Sounds like the manager's fallen asleep. 
 That makes sense, what with all his drinking and this warm weather. 
@@ -226,7 +226,7 @@ My second spring since coming back to the Imperial Theater... How time flies.
 Oh, is that you, Reni? 
 ...Captain. 
 What are you doing out here? 
-I was just... looking at the theater. 
+I was just... gazing at the theater. 
 Standing here, looking at it... It makes me feel calm. 
 This... is where I belong. 
 Reni... 
@@ -241,7 +241,7 @@ Hahaha, nope. Although, I see you're having a feast like you always do.
 Yeah, the food here really is great! 
 OK, onto bowl number eleven! 
 N-Number eleven?! 
-You want some, Boss? 
+Ya want some, Boss? 
 N-No thanks, I'm good. <br> Enjoy your food. 
 Gotcha. <br> Later, Boss! 
 Oh, Boss. You're back. 
@@ -262,7 +262,7 @@ I'll work hard and smile-smile until I can stand on top of this stage one day!
 Oh, I almost forgot! Could I please get a handshake, Mr. Ogami? 
 Yeah, sure... 
 EEK! I got to shake hands with the Flower Division's captain! Everyone's gonna be so jealous!
-Thank you so much! And... goodbye! 
+Thank you so much! <br> And... goodbye! 
 Good luck out there, Tsubomi. 
 Did Tsubomi already leave for the Maidens' Academy? 
 Tsubomi may stumble at a lot of things but, if I know her like I think I do... 
@@ -277,8 +277,8 @@ Hahaha, thanks.
 All right, keep up the good work. See you later, Tsubaki. 
 Thank you, come again! 
 Ah, welcome, Ogami! 
-Could I get a photo, Tsubaki? 
-Sorry, Ogami. We’re in the middle of replacing the old photos right now.
+Could I get a bromide, Tsubaki? 
+Sorry, Ogami. We’re in the middle of replacing the old bromides right now.
 You'll have to wait until the new ones come in. 
 I see... Oh well, then. 
 All right, I'll stop by some other time. Keep up the good work, Tsubaki. 
@@ -334,10 +334,10 @@ Anyway, Ogami, this peace sure is lovely, isn't it?
 This peace we fight so hard to protect is truly, truly wonderful! 
 Kayama... You didn't get hurt fighting the Kouma, did you? 
 I told you I'd be fine. Don't underestimate the Moon Division! 
-But hold on, Ogami... Does that mean you were worried about me? 
+But hold on, Ogami… Does that mean you were worried about me? 
 Well of course I was. We're both part of the Imperial Assault Troupe. We're partners, aren't we? 
 Ogami... Thank you. What a joy it is to be able to fight at your side! 
-However, there is an old saying: "Tighten your helmet strings in the hour of victory." 
+However, there is an old saying, "Tighten your helmet strings in the hour of victory." 
 As captains of the Flower and Moon Divisions, let's both strive to do our best! 
 Yeah! 
 Well then, farewell, Ogami! Alley-OOP! 
@@ -345,17 +345,17 @@ Adiòs! <br> Till we meet again!
 Kayama's not here anymore. 
 Eh, knowing him, I'm sure he'll pop up out of nowhere again at some point. 
 Reni? It's Ogami. 
-Captain? Can you wait a second? 
+Captain? <br> Can you wait a second? 
 Yeah, sure. 
 ... 
 ...Reni? What's wrong? 
 Sorry. I'm coming out now. 
-Wow! That's a yukata, isn't it? 
+Wow… That's a yukata, isn't it? 
 Kaede picked this out for me when I told her about the festival. 
 She said that it was a special occasion, so I should wear this...
 I see... I’m sure it will look great on you, Reni. 
-Thank you... <br> I was eager to try it on as soon as I could. 
-Before… <br> I used to think all clothes were the same. 
+Thank you... I was eager to try it on as soon as I could. 
+Before… I used to think all clothes were the same. 
 ... 
 But now I realize that isn't true.
 When I put on the same Flower Division uniform as the others, I felt a strong sense of courage... 
@@ -367,21 +367,21 @@ Reni? It's Ogami.
 ... 
 Hmm, doesn't seem like she's in. 
 I wonder if Iris plans on going to a fancy restaurant or something... 
-I should dress nicely, just in case. 
+I should put on something nice, just in case. 
 There, that should do it. 
 Iris? It's Ogami. 
 Ah, Mon Frère? Come in! 
 OK, then. Excuse me... 
-Wow, Mon Frère, you look so cool! 
+Wooow! Mon Frère, you look so cool! 
 I didn't know where we were going for our date, so I thought I'd play it safe. 
-Heheh, I've also been thinking about what to wear this whole time! 
+Tee-hee! <br> I've also been thinking about what to wear this whooole time! 
 Hahaha, this whole time, huh? Sounds like you had your hands full. 
 Well yeah, I've been looking forward to this day for so long!
-You promised we’d go on a date after the battle was over and I’ve been waiting ever since!
+You promised we’d go on a date after the battle was over and I’ve been waiting forever and ever!
 Mon Frère... I'm so happy we’re done fighting.
 Iris... 
-Heheh! OK, I'm gonna put this on and then we can go! 
-This date's gonna go great, Mon Frère. 
+Tee-hee! <br> Okey-dokey, I'm gonna put this on and then we can go! 
+This date's gonna go great, don'tcha think, Mon Frère? 
 Yeah, it definitely will. 
 By the way, aren't you going to tell me where we're going? 
 Well... That's. A. Secret! Heeheehee!
@@ -403,17 +403,17 @@ Yep. Best to wear something a bit more flexible.
 After all, we're gonna go on one heck of a ride. 
 “One heck of a ride"? 
 I designed it during my time at Hanayashiki, just for such an occasion. 
-I call it... The Fun-derstrike! 
+I call it... <br> “The Fun-derstrike”! 
 The... Fun-derstrike? 
 That... sure sounds like one heck of a ride, all right. 
 Now that the fighting's over, I'm gonna keep on inventing all sortsa stuff! 
-I wanna make people happy with all the things I invent. 
+I wanna make people happy with all the things I make. 
 I wanna see everyone's smiling faces. 
 But most of all, I wanna see YOUR smiling face, Chief. 
 Kohran... 
 The Fun-derstrike might be a little intense for you the first time around... 
 But it's a ton of fun, you'll be addicted once you get used to it! 
-I see... Looking forward to it. 
+I see... <br> Looking forward to it. 
 By the way, Kohran, just asking to be sure, but... 
 It's not going to explode, right? 
 Hahahaha! Relax, Chief! Your safety is guaranteed! 
@@ -422,16 +422,16 @@ Kohran? It's Ogami.
 ... 
 Huh? Doesn't look like Kohran's in her room. 
 Orihime? It's Ogami. 
-Is that you, Ensign? Please, come in. 
+Is that you, Mr. Ensign? Please, come in. 
 OK, then. Excuse me... 
 So, Orihime, what is it you wanted to show me? 
 Well, I don't know... Should I show it to you? No, maybe I shouldn't after all... 
-O-Orihime... Don't tease me like that. 
+O-Orihime... <br> Don't tease me like that. 
 Heehee, all right, I'll show you. 
-Here it is! 
+Without further ado… <br> Here it is! 
 Is this... From back when... 
 That's right! It's the portrait Papa drew at the Imperial Hotel on New Year's! 
-You know, the one of us! 
+You know, the one of the two of us! 
 I just received it from Papa yesterday. 
 I see... So Mr. Ogata finally finished it. 
 When he gave it to me, he said, “You came back, just like you said you would…” 
@@ -439,25 +439,25 @@ When he gave it to me, he said, “You came back, just like you said you would�
 ... 
 Anyway, it's a wonderful portrait, as expected of my papa! 
 Yeah... I feel kind of embarrassed looking at a painting of myself, though. 
-Really? I've been staring at it all day and can't get enough. 
-Looking at this painting brings back so many memories of you... 
+Do you really? I've been staring at it all day and can't get enough. 
+Looking at this painting brings back so many memories of you and me... 
 Orihime... 
 We'll always be together, just like in this portrait. 
 Orihime? It's Ogami. 
 ... 
 Hmmm, it doesn't seem like she's in her room. 
-Ensign. <br> I've been waiting for you. 
+Ensign… <br> I've been waiting for you. 
 What did you need me for, Sumire? 
-Ensign... Do you remember the promise you made aboard the Mikasa? 
+…Ensign. <br> Do you remember the promise you made aboard the Mikasa? 
 You promised you'd join me for a shopping trip once we got back from that battle. 
 There's just so many dresses... I'd like to go buy them right away. 
 I see, so that's what this is all about. 
 If you want me to, then sure, I'd love to tag along. 
-Ensign... My deepest thanks. 
+Ensign... <br> My deepest thanks. 
 I don't know if I'll be much help when it comes to picking out dresses, though. 
 Oh, that's not why you're coming along. 
 You're going to help carry my things! Ohohohoho! 
-Oh brother... I figured as much. 
+Oh brother... <br> I figured as much. 
 ... 
 Actually... I couldn't care less about shopping. 
 I'm perfectly happy just being able to spend time with you. 
@@ -481,7 +481,7 @@ The day I came back to the Imperial Theater was also a warm spring day, wasn't i
 It's almost been a whole year since then already... 
 Oh, Captain. 
 Hey, Maria. What were you doing? 
-Oh, I was just... gazing at the streets. 
+Oh, I was just... looking upon the streets. 
 They're the same streets as always... The same view as always... 
 But... It's perhaps the most relieving view I can imagine. 
 Maria... 
@@ -529,8 +529,8 @@ Hard to believe when you see an attic made of wood like this.
 It's thanks to the Koubu that we were able to seize victory. 
 Thank you, Koubu. <br> You can rest now. 
 Oh, well if it isn't the chief. 
-Kohran? <br> Still working on the Koubu even though the fight's over? 
-Yep. <br> They need maintenance now more than ever, after a job like that. 
+Kohran? Still working on the Koubu even though the fight's over? 
+Yep. They need maintenance now more than ever, after a job like that. 
 The Koubu and the Tenbu... <br> They all did great. 
 Now they get to take a little break while they heal their wounds. 
 I see, so they're on vacation for a little while. 
@@ -540,7 +540,7 @@ I don't see Kohran anywhere. She must be under a Koubu, fixing it up.
 I wouldn't want to get in the way of her work, so I'll go somewhere else. 
 Hello, everyone. 
 Ensign Ogami! Fabulous work in that last battle! 
-You managed to topple both the Musashi and Kyogoku without a single casualty… Simply beautiful!
+You managed to topple both Musashi and Kyogoku without a single casualty… Simply beautiful!
 R-Right... Thank you. 
 That's my Ichiro! I knew we could count on you! 
 Now, let me give you a smooch as your reward! 
@@ -548,16 +548,16 @@ Waaahhh! H-Heeelp!
 So now... peace has... finally returned. 
 But unfortunately... we have to say... goodbye... 
 G-Goodbye? 
-Yes. Now that Kyogoku is dead, we're to return to the Army to help get it up and running again. 
-Our time together was brief, but we are truly in your debt. 
+…Yes. Now that Kyogoku is dead, we're to return to the Army to help get it up and running again. 
+Our time together was brief… But we are truly in your debt. 
 I see... 
 Let's both do what we can to protect the peace of this city. 
-Ensign Ogami. Never forget the Rose Division, secret unit of love and beauty. 
+Ensign Ogami. <br> Never forget the Rose Division, secret unit of love and beauty. 
 Let's have our passionate smooch next time, Ichiro! 
-Ogami... No matter how far apart we may be... we'll always be rooting for you. 
+Ogami... <br> No matter how far apart we may be... we'll always be rooting for you. 
 ...Thank you. 
 All right, everyone, take care! Goodbye! 
-Let's go, everybody! 
+…Let's go, everybody! 
 Hooray, hooray, Ogami! <br> Hooray, hooray, Ogami! <br> Waaahhh! I feel so emotional! Again!!
 I'll take this chair, so if you could grab that one, Yokihiko. 
 Ooooh, I can't carry something this big! 
@@ -581,9 +581,9 @@ We've had a lot of strategy meetings in this room, even aboard the Mikasa.
 Now that the fighting's over, I don't think we'll be using this room for a while. 
 The fighting might be over, but the steam processor keeps on working, as always. 
 We'll both need to keep working hard to protect the peace. 
-Sorry, Ogami. I can only sell you one photo per month. 
+Sorry, Ogami. I can only sell you one bromide per month. 
 I see. That's too bad. 
-So sorry, Mr. Ogami, but each customer is only allowed to purchase one photo at a time.  
+So sorry, Mr. Ogami, but each customer is only allowed to purchase one bromide at a time.  
 Oh, really? That's too bad. 
 Shiro 
 Hanamaru 
@@ -625,29 +625,29 @@ The uniform I wear at the theater. Good for both summer and winter.
 A lighter borrowed from the inn. 
 The flower crown that Iris made for Reni. 
 A plate used at the welcome party. I was asked to bring it to Sakura. 
-A photo of Sakura. 
-A photo of Sakura. This one is a limited edition only available at New Year's. 
-A photo of Sumire. 
-A photo of Sumire. This one is a limited edition only available at New Year's. 
-A photo of Maria. 
-A photo of Maria. This one is a limited edition only available at New Year's. 
-A photo of Kanna. 
-A photo of Kanna. This one is a limited edition only available at New Year's. 
-A photo of Iris. 
-A photo of Iris. This one is a limited edition only available at New Year's. 
-A photo of Kohran. 
-A photo of Kohran. This one is a limited edition only available at New Year's. 
-A photo of Orihime. 
-A photo of Orihime. This one is a limited edition only available at New Year's. 
-A photo of Reni. 
-A photo of Reni. This one is a limited edition only available at New Year's. 
+A bromide of Sakura. 
+A bromide of Sakura. This one is a limited edition only available at New Year's. 
+A bromide of Sumire. 
+A bromide of Sumire. This one is a limited edition only available at New Year's. 
+A bromide of Maria. 
+A bromide of Maria. This one is a limited edition only available at New Year's. 
+A bromide of Kanna. 
+A bromide of Kanna. This one is a limited edition only available at New Year's. 
+A bromide of Iris. 
+A bromide of Iris. This one is a limited edition only available at New Year's. 
+A bromide of Kohran. 
+A bromide of Kohran. This one is a limited edition only available at New Year's. 
+A bromide of Orihime. 
+A bromide of Orihime. This one is a limited edition only available at New Year's. 
+A bromide of Reni. 
+A bromide of Reni. This one is a limited edition only available at New Year's. 
 A decorative paper ball for the welcome party called a kusudama. 
 A flower vase for the welcome party.
 The banner for the welcome party.
-The Cinematron. One of Kohran's inventions that lets you see and talk to someone from far away. 
+The Kinematron. One of Kohran's inventions that lets you see and talk to someone from far away. 
 The sword of the Pandemonium Regalia, recovered from the Demon King. 
 The mirror of the Pandemonium Regalia, recovered from the Demon King. 
-Fragments of the broken Cinematron. Seems like the kids at the inn picked them up along the shore. 
+Fragments of the broken Kinematron. Seems like the kids at the inn picked them up along the shore. 
 A letter from Sakura. 
 A letter from Sumire. 
 A letter from Maria. 

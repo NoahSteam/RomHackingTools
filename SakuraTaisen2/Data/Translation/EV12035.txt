@@ -1,8 +1,8 @@
 Captain, are we changing our strategy?
 Oh, Reni…
-Let's go with the Wind strategy!
-Let's go with the Mountain strategy!
-Let's stick with our current strategy.
+Let's go with Wind!
+Let’s go with Mountain!
+Don't change strategy.
 OK, let's go with the Wind strategy!
 Understood! Switching over to the Wind strategy!
 OK, let's go with the Mountain strategy!

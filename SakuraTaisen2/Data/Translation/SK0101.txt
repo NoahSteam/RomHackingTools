@@ -1,7 +1,7 @@
 ﻿Looks nice outside considering that storm last night. The cherry blossoms are no worse for wear. 
 Thanks to that, today's sake is extra delicious, right, Ogami? 
 Yes, sir. I'm just glad to see you're doing well, General Yoneda. 
-Darn straight I am! I see you're still as uptight as ever, though. 
+Damn straight I am! I see you're still as uptight as ever, though. 
 Anyway, it's been a whole year since we last saw each other, so here's a toast to our reunion. Drink up! 
 Yes, sir! 
 ...Oh ho, I see! A naval exercise off the coast of South America? Good work. 
@@ -13,8 +13,8 @@ Listen, Ogami...
 I called you here today for one reason and one reason alone. We need you back in the troupe. 
 But sir, I'm still assigned to the Imperial Navy. 
 I have your transfer papers right here, signed by the Minister of the Navy and General Staff Headquarters. 
-Navy Ensign Ichiro Ogami, you are hereby assigned the special duty of leading the following unit: 
-Imperial Assault Troupe, Anti-Kouma Assault Corps: Flower Division! 
+Ensign Ichiro Ogami! For your new mission, you are hereby appointed command of the following unit:
+Imperial Assault Troupe, Anti-Demon Defense Corps: Flower Division! 
 I'm putting you back to work, Ogami. 
 I'll give it my all! 
 I'm looking forward to it. 
@@ -28,7 +28,7 @@ Heheh, there you go getting all formal again.
 Ya got that right. The Flower Division's captain has to be a ticket puncher. It's tradition. 
 I dunno whether to be happy or sad about this... 
 Snap out of it, Ogami! What're you spacing out for?! 
-Ah... A-Apologies, sir! I was just taken aback... 
+Ah... A-Apologies, sir! <br> I was just taken aback... 
 Sheesh, you're just like you were a year ago. You haven't changed a bit. 
 ...By the way, Ogami, there's something I want to ask you before you resume your position as captain. 
 Is there anyone in the Flower Division you have strong feelings for? 
@@ -53,7 +53,7 @@ I see. It's already been a whole year since then, huh.
 So how is Sakura doing, anyway? 
 She was overjoyed when she heard you were coming back. You've been separated for a long time, after all. 
 Ogamiiii! 
-W-Was that voice...? It couldn't be! 
+W-Was that voice...? <br> It couldn't be! 
 S-Sakura!! 
 When I told her you were coming back, she said she absolutely had to be here for it. 
 All right now, get going. She's been waiting a long time for this, you know. 
@@ -75,12 +75,12 @@ Now we can be together again. I'm so happy.
 Sakura... 
 Sakura, I've missed you. 
 Ogami... 
-The first time we met, the cherry blossoms were also in full bloom, right? 
+The first time we met, the cherry blossoms were also in full bloom, weren’t they? 
 Yes, they were. 
-That was... Two years ago, I think. 
+That was... <br> Two years ago, I think. 
 ... 
 S-Sorry. I, well... I just can't find the words. 
-How about we just... Start with hello. 
+How about we just... start with hello. 
 R-Right. We haven't even properly greeted each other yet. 
 Welcome back, Ogami. I look forward to working with you again. 
 Likewise. Let's both do our best as members of the Flower Division. 
@@ -93,7 +93,7 @@ You'll have to put your lives on the line when you're fighting out there.
 I understand how happy you two feel right now, but you'll need to keep your feelings in check. 
 Y-Yes, sir... 
 Keeping the peace isn't an easy job. You need to be ready for anything at any given moment. 
-So that we never have to repeat... the tragedy of losing those we hold dear. 
+That way, we never have to repeat... the tragedy of losing those we hold dear. 
 General Yoneda... 
 You two can be friendly with each other, I don't mind. I just wanted to make things clear. 
 Yes, sir. Understood. 
@@ -107,7 +107,7 @@ I see. It's already been a whole year since then, huh.
 So... How is Sumire doing, anyway? 
 She seemed quite happy to hear you were coming back. 
 She even told me she'd come here specially to meet you. 
-Huh? Th-Then that means- 
+Huh? Th-Then that means… 
 Yup, and it's just about that time, too. 
 S-Sumire! 
 What a touching reunion. Well, it's been a while. You two take your time. 
@@ -124,7 +124,7 @@ Thank you for coming…
 Sumire, you've grown even more beautiful. 
 Oh my, not bad. Stating the obvious won't get you far, though. 
 No, I, uh... I was trying to tell you my honest feelings. 
-Ohohoho. Straightforward as ever. I see, Ensign. 
+Ohohoho. <br> Straightforward as ever, I see, Ensign. 
 You, too, have grown more handsome since last we met. 
 Th-Thanks. 
 Sumire, I've been dying to see you again. 
@@ -136,7 +136,7 @@ R-Right. Sorry.
 Thank you for coming, your attendance is greatly appreciated. 
 What are you on about, Ensign? What do you think this is, a wedding? 
 No, I just... When you asked if there was a more appropriate greeting, I thought maybe... 
-Ohohohoho! I see your sense of humor is as lively as ever, Ensign. 
+Ohohohoho! <br> I see your sense of humor is as lively as ever, Ensign. 
 I yield, Ensign. You truly are different from other men. 
 ... 
 ...Ensign? Is something the matter? You're so quiet. 
@@ -146,7 +146,7 @@ Indeed. Words don't suffice for something like this.
 I know how you feel, Ensign. Thank you. 
 OK, looks like the touching reunion's over and done with. 
 Excuse me, sir, but we were having a moment! Could you refrain from spoiling it? 
-Wahahaha! Sorry, sorry, didn't mean to tease you. 
+Wahahaha! <br> Sorry, sorry, wasn’t trying to tease you. 
 I don't mean to rain on your long-awaited parade, but there's something I need to tell you two. 
 The Flower Division is a combat unit that fights demons to protect the peace of the capital... 
 You'll have to put your lives on the line when you're fighting out there. 
@@ -155,7 +155,7 @@ F-Feelings, you say? S-Since when have I had such feelings for the ensign?
 Come on, Sumire, listen to me. This is serious. 
 ... 
 Keeping the peace isn't an easy job. You need to be ready for anything at any given moment. 
-That way we never have to repeat the tragedy of losing those we hold dear... 
+That way, we never have to repeat... the tragedy of losing those we hold dear. 
 General Yoneda... 
 You two can be friendly with each other, I don't mind. I just wanted to make things clear. 
 Besides, Sumire, you two won't be seeing each other for a little while. 
@@ -181,7 +181,7 @@ M-Maria!!
 What a touching reunion. Well, it's been a while. You two take your time. 
 Yes, sir! 
 Maria... 
-Captain... It's been a long time. 
+Captain... <br> It's been a long time. 
 Maria, have you been well? 
 Yes. I'm relieved to see you're doing well, too. 
 I look forward to having you as our captain again. 
@@ -210,7 +210,7 @@ You'll have to put your lives on the line when you're fighting out there.
 I understand how happy you two feel right now, but you'll need to keep your feelings in check. 
 ...Yes, sir. 
 Keeping the peace isn't an easy job. You need to be ready for anything at any given moment. 
-That way we never have to repeat the tragedy of losing those we hold dear... 
+That way, we never have to repeat... the tragedy of losing those we hold dear.  
 General Yoneda... 
 ... 
 Maria already knows, so I'll leave it at that. 
@@ -241,7 +241,7 @@ Yo, Boss! Long time no see!
 Kanna, you’re as fired up as ever. 
 Heheh! My energy's my strong suit. 
 Y'know, Boss, I've gotten way better at karate over the past year. 
-How 'bout it? Let's have a sparring match! 
+How 'bout it? Let's have a sparrin’ match! 
 Let's go a round! 
 H-Hold on a sec! 
 All right, let's go a round! I've gotten stronger myself, too! 
@@ -255,7 +255,7 @@ R-Really? Still, if worse comes to worst...
 I mean, I don't think the others would forgive me if I wrecked you. Hahaha! 
 Anyway, we’ll all be countin’ on ya, Boss! 
 ... 
-Ah, my bad. Challenging you to a fight right away is kinda weird, huh? 
+Ah, my bad. Challengin’ you to a fight right off the bat is kinda weird, huh? 
 ...Sorry, Boss. I'm not good at this kinda stuff. 
 I'm glad I get to see you, but I have no idea what to say. 
 I understand. It's OK. That's just how you are. 
@@ -268,9 +268,9 @@ I don't mean to rain on your long-awaited parade, but there's something I need t
 The Flower Division is a combat unit that fights demons to protect the peace of the capital. 
 You'll have to put your lives on the line when you're fighting out there. 
 I understand how happy you two feel right now, but you'll need to keep your feelings in check. 
-Whoa whoa whoa! Since when do Boss and I have feelings for each other? 
+Whoa, whoa, whoa! <br> Since when do Boss and I have feelings for each other? 
 Keeping the peace isn't an easy job. You need to be ready for anything at any given moment. 
-That way we never have to repeat the tragedy of losing those we hold dear... 
+That way, we never have to repeat... the tragedy of losing those we hold dear.  
 General Yoneda... 
 ... 
 You two can be friendly with each other, I don't mind. I just wanted to make things clear. 
@@ -288,22 +288,22 @@ Y-Yeah. We took a special holiday...
 I see. It's been a year since you last saw her. 
 So how is Iris doing? 
 She was overjoyed when she heard you were coming back. You've been separated for a long time, after all. 
-Mon Frèèère! 
-W-Was that voice...? It couldn't be! 
-Ah, Mon Frère! Over here, over here! 
+Mon Frèreee! 
+W-Was that voice...? <br> It couldn't be! 
+Ah, Mon Frère! <br> Over here, over here! 
 I-Iris?! What's she doing here?! 
 When I told her you were coming back, she said she absolutely had to be here for it. 
 All right now, get going. She's been waiting a long time for this, you know. 
 Y-Yes, sir! 
 Iris... 
 Mon Frère... 
-Heehee, Mon Frère! It really is you! 
+Heehee, Mon Frère! <br> It really is you! 
 Have you been doing well? 
 Yeah, of course. Looks like you've been doing well, too. 
 Uh-huh! Jean-Paul also came to see you! 
 Is that so? Thanks. 
 ... 
-Mon Frère... 
+Hey, Mon Frère... 
 Hm? 
 Don't leave again. OK? 
 I don't want to be left behind anymore... 
@@ -314,8 +314,8 @@ I can't promise that.
 I promise. I won't abandon you ever again. 
 Really? 
 Yes, really. 
-Really really? 
-Really really. 
+Really, really? 
+Really, really. 
 Thanks, Mon Frère. It's a promise! 
 Yes, it's a promise. 
 Sorry, but I can't promise that. 
@@ -338,12 +338,12 @@ You're back, and that's all that matters.
 Thanks, Iris. 
 OK, looks like the touching reunion's over and done with. 
 Uh-huh! Thank you, Uncle Yoneda! 
-Now, now, no need to thank me. 
+Now, now. No need to thank me. 
 I don't mean to rain on your long-awaited parade, but there's something I need to tell you two. 
 The Flower Division is a combat unit that fights demons to protect the peace of the capital. 
 You'll have to put your lives on the line when you're fighting out there. 
 I understand how happy you two feel right now, but you'll need to keep your feelings in check. 
-I don't understand a single thing you're saying! 
+...I don't understand a single thing you're saying! 
 Hrm... Basically, don't act too lovey-dovey. 
 No! 
 Noooo way! I'm Mon Frère's girlfriend! 
@@ -372,7 +372,7 @@ And she's been keeping up their morale since they haven't had any leadership for
 I see. So I won't get to see her when I get back to the theater... 
 That is, she was supposed to be headed there, but she told me she just had to see you. 
 She's heading over here to greet you. 
-Huh?! Th-Then that means...?! 
+Huh?! Th-Then that means... 
 Yep. Looks like it's about that time. 
 Ogamiiii! 
 K-Kohran!! 
@@ -406,21 +406,21 @@ Like, what it would've done to me...
 Heyyy, what's that supposed to mean? 
 OK, looks like the touching reunion's over and done with. 
 Thanks a bunch for calling me over at Hanayashiki, Yoneda. 
-Now, now, no need to thank me. 
+Now, now. No need to thank me. 
 I don't mean to rain on your long-awaited parade, but there's something I need to tell you two. 
 The Flower Division is a combat unit that fights demons to protect the peace of the capital... 
 You'll have to put your lives on the line when you're fighting out there. 
 I understand how happy you two feel right now, but you'll need to keep your feelings in check. 
 Wh-What are you talking about? What's that supposed to mean? 
 Keeping the peace isn't an easy job. You need to be ready for anything at any given moment. 
-That way we never have to repeat the tragedy of losing those we hold dear... 
+That way, we never have to repeat... the tragedy of losing those we hold dear.  
 General Yoneda... 
 You two can be friendly with each other, I don't mind. I just wanted to make things clear. 
 I know you won't see each other again for a while, but don't let that get in the way of your work. 
 ... 
 Don't worry, Yoneda, I got it. 
 Glad to hear it. Now, Kohran, if you could escort Ogami to the Grand Imperial Theater. 
-Alrighty, roger that! C'mon, Chief, let's go. 
+Alrighty, roger that! <br> C'mon, Chief, let's go. 
 Oh yeah, Yoneda, I'll be heading straight back to Hanayashiki after this, so please excuse me. 
 Got it. Tell the guys at Hanayashiki I said hi. 
 Thanks a bunch, Yoneda! I'll be back as soon as I can! See ya! 
@@ -550,7 +550,7 @@ I think I know just how you feel, Ensign.
 The love we fostered shall never be extinguished... 
 And anyone who gets in the way of our romance can get trampled to death by horses for all I care! 
 Ohhhhohoho! 
-Ha... Haha... W-Well, in any case, let's just carry on like we used to. 
+Ha... Haha... <br> W-Well, in any case, let's just carry on like we used to. 
 Understood, Ensign. 
 All right then, Sumire, how about we head inside now? 
 ... 
@@ -615,13 +615,13 @@ What's up, Kanna?
 It's about time for me to head out. 
 Ah, right, you're heading over to Okinawa. 
 Heh, karate's all I got, y'know. 
-I've been doing nothing but acting this past year, I'm starting to get rusty. 
+I've been doin’ nothin’ but acting this past year, I'm startin’ to get rusty. 
 I'll train a ton in Okinawa. I'm gonna get way stronger, and then I'll come right back. 
 I see... 
 Good luck! 
-Why do you have to go train? 
-Let's spar when you get back. 
-Why do you have to go train? 
+Why do you have to train? 
+Let's spar when you return.  
+Why do you have to train? 
 All right, I understand. I'm sure you have a good reason. 
 Good luck over there, Kanna. I'll be waiting. 
 Heh, thanks, Boss. 
@@ -633,12 +633,12 @@ Hmmm, figures you wouldn't understand.
 Long story short, I can't settle for how strong I currently am. 
 Kanna... 
 All right then, let's spar once you get back! 
-Oh? You sure, boss? You might get hurt! 
+Oh? You sure, Boss? You might get hurt! 
 Haha, don't forget, I'm a soldier! 
 Don't think I'll go down easy, even with all your training! 
 Haha! Lookin' forward to it! Be sure to work out a ton while I'm gone! 
 ... 
-C'mon, Boss, I can't leave on a high note if you're looking at me like that. 
+C'mon, Boss, I can't leave on a high note if you're lookin’ at me like that. 
 S-Sorry, I just couldn't think of what to say. 
 I don't have any cool quips or anything, but... I'll be waiting for you, Kanna. 
 Yeah, there we go! That's the spirit! This ain't goodbye forever! 
@@ -654,28 +654,28 @@ Heheh, we're together again. I get to be with you again!
 Hahaha, that's right, Iris. 
 Hey, Mon Frère. Don't you think I've changed? 
 ...You have? 
-You're prettier now. 
+You're even prettier now. 
 ...You have? 
-You're prettier now. 
-You're more grown up now. 
+You're even prettier now.
+You're more grown-up now. 
 ...You have? 
-C'mon, Mon Frère! It's been so long since we last saw each other! 
-You're supposed to say that I'm prettier, or more grown up, or something! 
+C'mon, Mon Frère! <br> It's been so long since we last saw each other! 
+You're supposed to say that I'm prettier, or more grown-up, or something! 
 I-I see. I'm sorry. 
 You're just the same as always. You just don't understand a lady's heart at all! 
 R-Right. 
 You're right. You're even prettier now than you used to be. 
-Hee hee hee, really? Yaaay! I'm so happy! 
+Hee hee hee, really? <br>Yaaay! I'm so happy! 
 Um, but Mon Frère, did you notice anything else? 
 Huh? Did something else happen? 
 Yep! I'm 11 years old now. 
 Don't you think I'm more grown-up now? 
 Y-Yeah. 
-You're right. You're more grown up now. 
+You're right. You're more grown-up now. 
 Really? So you did notice! I knew you would, Mon Frère! 
 I'm 11 years old now. I'm a real adult now, huh? 
 Hahaha, that you are. 
-Heehee. Thank you, Mon Frère. 
+Hee hee… <br> Thank you, Mon Frère. 
 Mon Frère, why won't you say something?! 
 Uh... S-Sorry. You asked me so suddenly. 
 Sheesh, you're so dense! 
@@ -684,17 +684,17 @@ C'mon, Mon Frère, let's go inside!
 Right. I wonder how the others are doing? 
 Um, so right now, it's just me and Sakura here. 
 Huh?! Where are the others? 
-Sumire went home to her family because her grandpa fell ill. 
+Sumire went home to her family because her grandpa fell ill. She's there now. 
 Kanna went to Okinawa to train... 
 Maria has work to do in New York... 
 ...and Kohran is also working at the Hanayashiki Branch. 
 I see. So I won't get to see everyone, huh? 
-It's OK! Everyone's gonna be back by summer! 
+But it's OK, 'cause everyone will be back by this summer!  
 Besides, now that you're here, I won't be so lonely anymore. 
-Is that so? That's great, Iris. 
+Is that so? I’m glad to hear that, Iris.
 Oh, that's right! I have to go get ready now. 
 Later, Mon Frère, I'll be going now! Bye-bye!! 
-Hey, Iris! And she's gone. 
+Hey, Iris! <br> And she's gone. 
 But I wonder what she's getting ready for? Now I'm curious. 
 Chief? 
 What's up, Kohran? 
@@ -733,7 +733,7 @@ Want me to walk you to the bus stop, Kohran?
 Nah, don't worry about me. I came here on my steam bike, just in case. 
 All right, Chief, I'm heading back to Hanayashiki now. 
 Good luck, Kohran. I'm looking forward to your "secret project." 
-Thanks a bunch... Oh, right, I almost forgot. 
+Thanks a bunch... <br> Oh, right, I almost forgot. 
 I left a present for you in your room, try not to forget about it! 
 A... present? 
 Yep, one of my inventions. It's real handy, too, so take good care of it! 
@@ -766,9 +766,9 @@ What is it?
 Heehee, it's a secret. We'll have a nice long chat later, OK? 
 What was that all about? Now I'm curious. 
 All right, then, time to head inside. This is my workplace from now on. 
-Sorry, Ogami. I can only sell you one photo per month. 
+Sorry, Ogami. I can only sell you one bromide per month. 
 I see. That's too bad. 
-So sorry, Mr. Ogami, but each customer is only allowed to purchase one photo at a time.
+So sorry, Mr. Ogami, but each customer is only allowed to purchase one bromide at a time.
 Oh, really? That's too bad. 
 The jewel of the Pandemonium Regalia, entrusted to us by the Rose Division. 
 Spirit Sword Arataka. The special sword of the Shinguji family. 
@@ -779,29 +779,29 @@ The uniform I wear at the theater. Good for both summer and winter.
 A lighter borrowed from the inn. 
 The flower crown that Iris made for Reni. 
 A plate used at the welcome party. I was asked to bring it to Sakura. 
-A photo of Sakura. 
-A photo of Sakura. This one is a limited edition only available at New Year's. 
-A photo of Sumire. 
-A photo of Sumire. This one is a limited edition only available at New Year's. 
-A photo of Maria. 
-A photo of Maria. This one is a limited edition only available at New Year's. 
-A photo of Kanna. 
-A photo of Kanna. This one is a limited edition only available at New Year's. 
-A photo of Iris. 
-A photo of Iris. This one is a limited edition only available at New Year's. 
-A photo of Kohran. 
-A photo of Kohran. This one is a limited edition only available at New Year's. 
-A photo of Orihime. 
-A photo of Orihime. This one is a limited edition only available at New Year's. 
-A photo of Reni. 
-A photo of Reni. This one is a limited edition only available at New Year's. 
+A bromide of Sakura. 
+A bromide of Sakura. This one is a limited edition only available at New Year's. 
+A bromide of Sumire. 
+A bromide of Sumire. This one is a limited edition only available at New Year's. 
+A bromide of Maria. 
+A bromide of Maria. This one is a limited edition only available at New Year's. 
+A bromide of Kanna. 
+A bromide of Kanna. This one is a limited edition only available at New Year's. 
+A bromide of Iris. 
+A bromide of Iris. This one is a limited edition only available at New Year's. 
+A bromide of Kohran. 
+A bromide of Kohran. This one is a limited edition only available at New Year's. 
+A bromide of Orihime. 
+A bromide of Orihime. This one is a limited edition only available at New Year's. 
+A bromide of Reni. 
+A bromide of Reni. This one is a limited edition only available at New Year's. 
 A decorative paper ball for the welcome party called a kusudama. 
 A flower vase for the welcome party.
 The banner for the welcome party.
-The Cinematron. One of Kohran's inventions that lets you see and talk to someone from far away. 
+The Kinematron. One of Kohran's inventions that lets you see and talk to someone from far away. 
 The sword of the Pandemonium Regalia, recovered from the Demon King. 
 The mirror of the Pandemonium Regalia, recovered from the Demon King. 
-Fragments of the broken Cinematron. Seems like the kids at the inn picked them up along the shore. 
+Fragments of the broken Kinematron. Seems like the kids at the inn picked them up along the shore. 
 A letter from Sakura. 
 A letter from Sumire. 
 A letter from Maria. 

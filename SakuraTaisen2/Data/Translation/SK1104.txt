@@ -15,12 +15,12 @@ And Musashi's sucking it all up into the air over Tokyo.
 And in turn, the Tenbu are absorbing all that energy. 
 At this rate, the Tenbu will go completely haywire... Rendering themselves and their pilots kaput. 
 No... We've come so far, and now we can't use the Tenbu anymore? 
-Mon Frère... What should we do? 
+Mon Frère... <br> What should we do? 
 Abandon the Tenbu. 
 Fight, even if it's risky! 
 Give up. 
 I can't let anyone put themselves at any further risk. 
-But then... How are we gonna fight? 
+But then... <br> How are we gonna fight? 
 Uh, well... 
 We have to keep fighting, even if it's risky! The Tenbu's all we've got! 
 Captain! If we do that, we'll all die before the battle's even begun! 
@@ -35,12 +35,12 @@ But thankfully I also loaded the Koubu Kai into the hangar, just for such an occ
 Plus, I prepared Koubu units for Orihime and Reni as well!
 Huh?! Kohran, are you serious?! 
 Yep, I never lie. You'll see once we get to the hangar. 
-Yaaay! C'mon, everybody, let's go see the Koubu! 
+Yaaay, yaaay! <br> C'mon, everybody, let's go see the Koubu! 
 It's true! The Koubu... They're all there, ready to go! 
-The city energy won't have any effect on the Koubu. 
+The city energy won't have any effect on these babies. 
 We should be able to fight within Musashi with no problems! 
-The Tenbu fought hard for us. 
-We can’t let their effort go to waste, so let’s get in there and give it everything we got!
+The Tenbu have fought hard for us up to this point. 
+We can’t let their effort go to waste… So let’s get in there and give it everything we got!
 Yeah, let's do our best! 
 Won't we be weaker, though? 
 Yeah, let's do our best, everyone! We've still got the Koubu! 
@@ -56,20 +56,20 @@ But if the pilots are tough, then the Koubu are more than capable.
 We're all way stronger than we used to be! We've got a fighting chance! 
 Hey, everyone! If we could have your attention, please! 
 Well, how do we look? Now we have Flower Division uniforms, just like everyone else! 
-Wow... Where did you get those? 
+Wow... <br> Where did you get those? 
 They had these made for us to go with our Koubu. 
 They look great on you. 
 Now you're truly one of us.
 They look great on you two. 
-...Thanks, Captain. 
+...Thank you, Captain. 
 Of course it does! There's not an outfit in the world that looks bad on me! 
 With these uniforms, you two are now truly part of the Flower Division. 
-...Yes.
-Heehee, well said, Ensign! 
-Heehee, I see you're speechless by how perfectly it fits, Ensign! 
-We share the same Spirit Armor, the same uniform, and the same emotion. 
-The Flower Division is now fully united, wouldn't you say, Captain? 
-Yeah. Now the real battle begins. 
+...Yeah.
+Heehee, well said, Mr. Ensign! 
+Heehee, I see my uniform fits so well that it has left you speechless, Mr. Ensign.
+We share one Spirit Armor, one uniform, and one emotion. 
+Now the Flower Division is fully united, wouldn't you say, Captain?
+…Yeah. Now the real battle begins. 
 Right then, let's get back to the bridge. 
 Commander Yoneda's likely waiting for us. 
 Good, you're all here. 
@@ -78,7 +78,7 @@ We'll ram into Musashi and you'll destroy it from the inside. It'll be extremely
 I don't want to sugarcoat anything, so I'll be blunt. 
 The odds of your success are… extremely low. 
 Does... Does that mean we might die? 
-To put it simply, yes. 
+…To put it simply, yes. 
 But at the same time, I believe in you. 
 I believe that you'll come back from this. 
 The future of the capital rests on your shoulders. We're all counting on you. 
@@ -87,7 +87,7 @@ We'll show 'em what we're made of!
 Good. Now then, you're dismissed. 
 Everyone get some rest and prepare yourselves for the infiltration mission! 
 Yes, sir! 
-(1 hour until the infiltration mission... This battle is about to reach its climax.)
+(One hour until the infiltration mission... This battle is about to reach its climax.)
 Ogami. 
 Kaede? What is it? 
 The final battle is almost at hand.
@@ -118,16 +118,16 @@ Sorry, you shouldn't have to see me like this...
 ... 
 You're worried about your father, aren't you? 
 ...Yes. I'd be lying if I said I wasn't worried. 
-My father taught me how to use a sword. I know how strong he is. 
+My father taught me how to use a sword… I know how strong he is. 
 When we fought in Shinjuku and Akasaka... I think he might have felt some hesitation back then. 
 But now... I'm certain he'll be coming at me with everything he's got. 
 ... 
-I have to defeat him. He's the Demon King now. He's not my father. 
+I have to defeat him. He's the Demon King now. He's not my father… 
 If I vanquish the Demon King... My father's soul will return. That's what I believe. 
 Right. We'll win this! 
 We don't have a choice. 
 You're right. We'll win this! No, we HAVE to win this! 
-For your sake as well! 
+For your sake as well, Sakura! 
 Ogami... 
 It'll be difficult, but... We don't have a choice. 
 We have to believe in justice! We can't lose to evil! 
@@ -143,26 +143,26 @@ OK. Thank you.
 I'll see you later, Ogami. 
 Sakura... This must be so hard for her, but she's really trying her best. 
 Right, I should get going too. 
-I'm so glad you're here, Ogami. 
-It's because you're here, that I... 
+Ogami... I'm so glad you're here with me.
+It's because you're by my side, that I... 
 Sakura... 
 Ogami... 
 ... 
-Sometimes... I wonder. 
-I wonder what things would be like if I had never met you. 
-But no matter how much I think about it, I never come up with an answer. 
-I can't imagine a world without you, Ogami. 
+You know… <br> Sometimes I wonder. 
+I wonder what things would be like… if I had never met you. 
+But… No matter how much I think about it, I never come up with an answer. 
+Because… <br> I can't imagine a world without you, Ogami. 
 Sakura... 
-So please, Ogami, stay with me... 
-Stay with me... forever... 
-Sumire. What are you doing in a place like this? 
+So please, Ogami… <br> From here on… Stay with me. 
+Stay with me… <br> Now… and forever... 
+Sumire… What are you doing in a place like this? 
 ...Huh? 
-O-Oh, Ensign. How long have you been standing there? 
+O-Oh, Ensign… How long have you been standing there? 
 I just got here. 
 I-Is that so? My apologies. 
 I was just looking at this perfume catalog, and I was so caught up, I didn't notice you. 
 But... that's a clothing catalog. 
-...Huh? O-Oh my... 
+...Huh? <br> O-Oh my... 
 ... 
 Are you nervous? 
 This isn't like you. 
@@ -172,22 +172,22 @@ Am I not allowed to be?
 ...Huh? 
 This isn't like you, Sumire. 
 ... 
-What exactly do you mean by that? 
+This isn't like me? What exactly do you mean by that? 
 ...Huh? 
-Must I always be brave? 
-Do you find it odd that I'm feeling anxious? Is that what you're trying to say? 
+Must I… Must I always put on a brave face? 
+Do you find it odd that I'm feeling anxious? Is that what you're trying to say, Ensign? 
 Sumire... 
 ... 
 ... 
-Even I get nervous sometimes. 
-As a member of the Flower Division... As a woman... Even I feel nervous. 
+Even someone such as I… can feel nervous at times.
+As a member of the Flower Division... As a woman… Even I can have a loss of heart. 
 ... 
-I'm sorry, Ensign. I didn't want you to see me like this. 
+…I'm sorry, Ensign. I didn't want you to see me like this. 
 Sumire... 
 I'll be all right now. I feel better having talked to you. 
 Right then, I'll be taking my leave, Ensign. 
 Sumire... 
-Even I… Even I don't want to lose! 
+Even I… <br> Even I don't want to lose! 
 I want to live and be with you, Ensign! 
 Sumire... 
 Ensign... 
@@ -196,55 +196,55 @@ We're about to go to battle. I'm nervous too, see?
 I don't want to die yet, either. I want to be with you. 
 Ensign... 
 Sumire, all of us are going to make it through this alive.
-We're going to return, side by side. Together, always.  
+We're going to return, side by side. Together, now and forever.  
 Yes, Ensign... 
-We'll return from this... together. 
+We'll return from this... <br> We’ll return together. 
 Right then, I'll be taking my leave. 
 Sure. Go to your quarters and get some rest. 
 ... 
 Ensign... I found a lovely outfit in this catalog. 
-Perhaps when we get back... You could join me for some shopping? 
+Perhaps, when we get back... You could join me for some shopping? 
 Of course, that sounds great. 
 But I thought you said this was a perfume catalog. 
-Goodness, Ensign! You're such a tease. 
+Goodness, Ensign! <br> You're such a tease. 
 Anyway, good day, Ensign. 
 Right, I ought to get going, too. 
-Ciao, Ensign! 
+Ciao, Mr. Ensign! 
 Hi, Orihime. 
-Even in the Mikasa you're just wandering around, as usual. 
-Can I guess what it is you're doing? 
+Mr. Ensign, even in the Mikasa you're just wandering around, as usual. 
+Can I take a guess at what you're up to? 
 Sure, go ahead. 
-You're trying to cheer everyone up. I'm right, aren't I? 
-That's right, ya got me. 
-I've gotten to know you pretty well, Ensign. 
+You're walking about trying to cheer up everyone in the Flower Division. I'm right, aren't I? 
+That's correct, ya got me. 
+I've gotten to know you pretty well, Mr. Ensign. 
 Now it's your turn to guess. 
 My turn? 
-What do you think I was doing here? 
-Getting a snack? 
+What do you think I’m getting up to? 
+Looking for a snack? 
 Waiting for me? 
-You have free time right now, so... I guess you were getting a snack? 
-*sigh* <br> You're so clueless, Ensign. 
+You have free time right now, so... I guess you were looking for a snack? 
+*sigh* <br> You're so clueless, Mr. Ensign. 
 Even though I was waiting here this whole time to cheer you up... 
 Huh? You waited for me? 
 Could it be that you were waiting for me? 
-Correct! Way to go, Ensign, you got it. 
+Correct! Way to go, Mr. Ensign, you got it. 
 Huh, really? 
 Hmmm... Don't have a clue. 
-Heehee, you're so clueless when it comes to these things, Ensign. 
+Heehee, you're so clueless when it comes to these things, Mr. Ensign. 
 I was waiting for you here so I could cheer you up. 
 Huh? You waited for me? 
-This battle's going to be the fiercest one we've ever fought. 
-But I believe in you, that you'll lead us to victory. 
+I have no doubt the battle before us will be the fiercest we've ever fought.
+But I believe in you, Mr. Ensign. I believe that you'll lead us all to victory.
 Orihime... 
 The theater's become a very important place for me. 
-Everyone in the Flower Division's important to me. 
-Ensign... Let's make sure we all come back from this together. 
-Yeah, of course. We're all coming back to the theater together. 
-All right, Ensign, I'll be going now. 
+Everyone in the Flower Division is important to me. 
+Mr. Ensign... <br> Let's make sure we all come back from this together. 
+Yeah, of course. We'll all return to the theater together. 
+…All right, Mr. Ensign, I'll be going now. 
 Right. Get plenty of rest before the mission. 
-You got it. Well, see you later! 
-Ah, I forgot something very important! 
-Something important? What is it? 
+You got it. <br> Well, see you later! 
+Ah… I forgot something very important! 
+Something important? What’s that? 
 ...Hm hm hm. 
 …*kiss* 
 O... Orihime... 
@@ -253,7 +253,7 @@ So that you make it through this alive...
 So that we can be together forever... 
 A good luck charm from me. 
 Orihime... 
-All right, Ensign, I'll be going now. 
+All right, Mr. Ensign, I'll be going now. 
 Right. Thanks for the good luck charm. 
 It's our little secret, you got that? 
 Orihime... 
@@ -273,7 +273,7 @@ Yeah, of course we can!
 If we combine all our strength, there's no way we can lose! 
 ...Yes. I think so too. 
 It might be hard. Kyogoku's unlike any enemy we've faced before. 
-To be frank... It'll probably be an uphill battle. 
+To be frank… It'll probably be an uphill battle. 
 Yes, it's just as you say. 
 But with the way we are now... I have no doubt that we can win. 
 We don't know what the enemy's capable of, so I can't really say. 
@@ -294,7 +294,7 @@ Yeah, we will.
 I'll be going now. Excuse me, Captain. 
 We'll meet here again before the mission starts. 
 Right, I should get going too. 
-OK... 
+Yes... 
 ... 
 Captain... I have a favor to ask of you. 
 What is it, Maria? 
@@ -308,7 +308,7 @@ When we go back, it'll be the two of us together, along with the rest of the Flo
 Sir... Thank you. 
 By the way, do you still not feel like showing me what's in your locket? 
 I'm sorry, but no matter how much you ask... 
-Aw, that's not fair, Maria. I asked nicely and everything! 
+Aw, that's not fair, Maria. I asked nicely and everything. 
 Hm hm hm, forgive me, sir. 
 I'll be going now. Excuse me, Captain. 
 We'll meet here again before the mission starts. 
@@ -327,15 +327,15 @@ You should get some rest.
 Is there anything I can do? 
 You should get some rest, Kanna. Our battle in Musashi is likely to be the hardest we've ever fought. 
 ...Yeah, you're right. 
-Thanks, Boss. I feel a bit calmer now that I've talked with you. 
+Thank you, Boss. I feel a bit calmer now that I've talked with you. 
 ...I see. 
 All right then, get plenty of rest, OK, Kanna? 
 Is there anything I can do to help? 
 I could talk with you, spar with you, whatever you need. 
-Hahahaha! A sparring match sounds good right about now, but I'll have to pass. 
-I'd feel bad beatin' you to a pulp right before the final battle.
+Hahahaha! A sparrin’ match sounds good right about now, but I'll have to pass. 
+I'd feel bad beatin' ya to a pulp right before the final battle.
 Hahaha, you've got a point. 
-Thanks, Boss. I feel a bit calmer now that I've talked with you. 
+Thank you, Boss. I feel a bit calmer now that I've talked with you. 
 ...I see. 
 All right then. Get plenty of rest, OK, Kanna? 
 Haha, my bad. Didn't mean to make you worry. 
@@ -344,7 +344,7 @@ When the final battle comes, I'll show you what these fists of mine can really d
 I see. I'm looking forward to it, Kanna. 
 Boss... Thanks. 
 With you here, I feel confident in myself. 
-With you here, I feel confident that I can't lose, no matter who I'm up against. 
+With you here, I feel confident that I won’t lose, no matter who I'm up against. 
 Kanna... 
 Get some rest before the mission, OK? 
 Yeah. See ya, Boss. 
@@ -358,7 +358,7 @@ I've... never been good at expressing myself with words.
 I want to lend you spiritual strength... The strength of an Unaigami. 
 Kanna... Thanks. 
 Boss... 
-Right... I'm gonna rest for a bit. 
+Right... <br> I'm gonna rest for a bit. 
 Yeah... 
 ... 
 Let's make it back alive, Boss. Let's make it back together! 
@@ -368,7 +368,7 @@ And I'll protect you too. I'll protect my dear captain.
 Kanna... 
 Kanna said she was going to take a rest, right? 
 I'll leave her alone till it's time for the mission. 
-Oh, Mon Frère... 
+Ah… Mon Frère... 
 Iris? What's wrong? What are you doing here? 
 ... 
 I was just... looking outside. 
@@ -376,13 +376,13 @@ It's not every day you get to see the top of the clouds like this, huh.
 I always thought that Heaven was on top of the clouds. 
 But where we're going... It's not Heaven, is it? 
 ... 
-If we die... Where do you think we'll go? 
-Mon Frère... Do you know where Heaven is? 
-Who knows? 
+If we die… Where do you think we'll go? 
+Mon Frère… Do you know where Heaven is? 
+Who can really say. 
 We can’t go to Heaven yet. 
-Who knows? Not me. 
+Who can really say. I don’t have an answer for you. 
 I see... So you don't know either, huh... 
-But if everyone knew where Heaven was, everyone would be trying to go there, right? 
+But if we knew where Heaven was, everyone would be trying to go there, right? 
 Then Heaven would get overcrowded. 
 Heheh... That's true. 
 We're not going to Heaven just yet. There's still all kinds of stuff you want to do, right, Iris? 
@@ -390,7 +390,7 @@ I... I want to go on a date with you.
 Hahaha, I see. Then it's way too early for us to go to Heaven. 
 ...Yeah. 
 Iris... You don't have to think about that kind of stuff yet. 
-We're still alive. We don't need to worry about being dead. 
+We're still alive. We don't need to worry about death just yet. 
 Y-Yeah... 
 So long as we're alive, there's all kinds of happy, fun things we can do. 
 So don't think about dying, OK? 
@@ -402,19 +402,19 @@ Thanks, Mon Frère. I feel a little better after talking with you.
 OK, I'm gonna go now. Bye-bye, Mon Frère! 
 Heaven, huh...? 
 Right, about time for me to go, too. 
-Hey, Mon Frère? Could you... hug me? 
+Hey, Mon Frère? <br> Could you... hug me? 
 ...Huh? 
 I want you to hug me... 
 ...Yeah, sure. 
-Heehee! Yaaaay! 
-We'll be together forever, Mon Frère! 
-Let’s make sure we both make it back from this fight.
-We're going home together no matter what! 
+Tee-hee! <br> Yaaay, yaaay! 
+We'll be together forever and ever and ever! 
+Mon Frère. Let’s make sure we both get back from this fight.
+We're absolutely going home together no matter what! 
 Yeah. No matter what. 
 Uh-huh! That's a promise, Mon Frère. 
 Thanks, Mon Frère. I'm gonna go now. 
 All right, get some rest before the mission, OK? 
-OOOK! See you later, Mon Frère! Bye-byyye! 
+Okey-dokey! <br> See you later, Mon Frère! Bye-byyye! 
 Let's go on a date when we get back! 
 Hahaha. So it's a date, huh? 
 Right, I'd better get going. 
@@ -422,7 +422,7 @@ I can see the capital down below.
 We can't afford to lose. We have to defend the city. 
 Doesn't look like anyone's in the hangar. Guess I'll go somewhere else. 
 Chieeef! 
-That voice... Is that you, Kohran? 
+That voice... <br> Is that you, Kohran? 
 Sorry I'm not in uniform, Chief. Been kinda busy. 
 Kohran... Maintaining the Koubu, I take it? 
 This final battle's gonna be the Koubu Kai's shining moment. 
@@ -432,7 +432,7 @@ We can always count on you.
 Don't overdo it. 
 I'm sure the Koubu will give it 120% now that you've serviced them. 
 We can always count on you, Kohran. 
-Aww, Chief... You don't need to say that. 
+Aww, Chief... <br> You don't need to say that. 
 It's only because you're here that I'm able to work this hard. 
 Kohran, servicing the Koubu's all well and good, but don't overdo it, OK? 
 I'll be fine. I always feel the most at ease when I'm fiddling around with machines. 
@@ -458,12 +458,12 @@ I hate to admit it, but as much as I love machines, they don't have the same war
 It's because you're alive that your hand's so warm... 
 And it's because I'm alive that I can feel that warmth. 
 Kohran... 
-Ogami... No matter what happens... Let's make it out of there alive. 
+Ogami… No matter what happens... Let's make it out of there alive. 
 I want to keep feeling this warmth. 
 Yeah. We will. We're getting out of there alive. 
 Yeah. 
-Ah... Ahahaha! Sorry for saying all that weird stuff, Chief. 
-Right, well... Back to work, back to work. 
+Ah... Ahahaha! <br> Sorry for saying all that weird stuff, Chief. 
+Right, well... <br> Back to work, back to work. 
 OK, I'll be going, then. Good luck with your maintenance, Kohran. 
 All right, see ya later in the command room. 
 Kohran must be working on the Koubu somewhere where I can't see her. 
@@ -493,25 +493,25 @@ I'd only ever read about this in books before.
 So this is what it's like... to be nervous. 
 My present symptoms do seem to match. 
 ... 
-I was thinking about a lot of things just now. 
-What would happen if we lost... If we died... 
-I'd never thought about that sort of thing before. 
-And when I did... My heart rate got faster. 
+Just now… <br> A lot of thoughts were racing through my head. 
+If we lost this battle... <br> If we were to die... <br> What would happen to us? 
+Until now, I had never thought about these kinds of things before. 
+And when I did… My heart rate suddenly increased. 
 That happens to me too whenever I think about losing a battle or dying. 
 It's because I don't want to lose. Because I don't want to die. 
 Because I don't want to be apart from the people I care about. 
 ... 
 I... don't want to be apart from everyone, either. 
-I don't want to lose. I don't want to die yet. 
+I don't want to lose. <br> I don't want to die yet. 
 It's all right, Reni. We won't lose, and we won't die. 
-I'll protect everyone in the Flower Division... and you. 
+I'll protect everyone in the Flower Division... Including you. 
 Captain... 
-I think the symptoms of my nervousness have cleared up. 
+…I think the symptoms of my nervousness have cleared up. 
 Hahaha, glad to be of some help. 
 Get some rest while you can. I'll be going. 
-...Thanks, Captain. 
-Captain... I'm actually fine, right? 
-I'm not sick or anything... right? 
+...Thank you, Captain. 
+Actually, Captain... <br> I'm really OK, right? 
+I'm not sick or anything... Right? 
 Reni... 
 OK, let me see your face, then. 
 Ah... 
@@ -521,7 +521,7 @@ You don't have to worry, Reni. So long as you believe in me... in everyone... yo
 ...Yeah. 
 Though... It feels like my pulse has gotten even faster than before. 
 All right, I'll be going now, Reni. 
-OK. <br> Captain... Thanks. 
+OK. <br> Captain... Thank you. 
 Reni said she'd be resting before we have to depart, right? 
 I'll leave her alone till it's time for the mission. 
 Wh-What is this place?! 
@@ -631,15 +631,15 @@ Oh well, guess I should go to another room.
 Orihime's taking her siesta until the mission starts. 
 You don't have a lot of time, but get plenty of rest, OK? 
 All hands reporting for duty, Commander Yoneda. 
-Hm. Everyone's looking a lot better. 
+…Hm. Everyone's looking a lot better. 
 Good. It's finally time to put our plan into motion, then. 
 Commander. <br> I have just one question. 
-The inside of Musashi is bound to be crawling with a countless number of Kouma. 
+The inside of Musashi is bound to be crawling with a countless number of Kouma.
 How are we supposed to make it through a swarm of enemies like that? 
 An astute observation, Maria. Just as I'd expect from you. 
 But not to worry. <br> I've come up with a plan. 
-There's just one way left to seal away evil. 
-It's called... "The Rite of Four Swords." 
+There is but one way to contain an evil such as this.
+It's called... <br> "The Rite of Four Swords." 
 The Rite of... Four Swords? 
 A technique capable of sealing away evil, using four spirit swords passed down since antiquity. 
 These four weapons are made up of two swords and two blades. 
@@ -652,9 +652,9 @@ That's right. They're all members of the Anti-Kouma Corps, the precursor to the 
 The Anti-Kouma Corps was made up of the inheritors of each of these swords. 
 Eight years ago, during the Kouma War, when the Kouma appeared in the capital... 
 The four of us attempted the Rite of Four Swords in an effort to seal them away. 
-However... <br> We unfortunately lacked the power needed for the ritual. 
+However… We unfortunately lacked the power needed for the ritual. 
 The Rite of Four Swords had failed, and we couldn't seal away the Kouma. 
-In the end, Kazuma... He sacrificed his life and used the Power of Purification. 
+In the end, Kazuma… He sacrificed his life and used the Power of Purification. 
 ... 
 Ogami already has my Divine Blade Mekkyaku, and Sakura has the Spirit Sword Arataka. 
 I'd like you two to perform the Rite of Four Swords. 
@@ -662,7 +662,7 @@ Huh?! <br> You want... US to do it?
 You two are the only ones who know how to wield a sword. 
 Besides... With you two performing the rite, I know it'll succeed this time. 
 Deep within Musashi must lie the source of the demonic energy powering it. 
-If you can destroy that power source with the Rite of Four Swords, you can seal away the evil. 
+If you can destroy that power source with the Rite of Four Swords, you can seal away all this evil. 
 ... 
 …Understood. 
 …Understood. I'll give it a shot. 
@@ -678,10 +678,10 @@ Thank you, both of you.
 We're entrusting all of our futures to you two. 
 Commander Yoneda. We've finished our inspection of our six main engines. 
 Preparations are complete, ready to begin the mission! 
-It's finally time. Right, to the bridge! 
+It's finally time… <br> Right, to the bridge! 
 Awaiting your orders, Commander. 
 This ship is about to engage in a full-scale assault against Musashi! 
-After we hit the Musashi with the main cannon, we'll ram directly into it! 
+After we hit Musashi with the main cannon, we'll ram directly into it! 
 Following that, we'll launch the Thunderstrike, loaded with all your Koubu. 
 The Mikasa will then withdraw immediately thereafter. 
 Finally, the Flower Division will infiltrate the core of Musashi and destroy it from the inside! 
@@ -693,10 +693,10 @@ Mikasa, full speed ahead. <br> Destination: Musashi!!
 Destination: Musashi! 
 Commander! The main cannon is ready to fire! 
 It's finally time, Commander. 
-Yeah... <br> Time to give 'em one hell of a show! 
+Yeah… Time to give 'em one hell of a show! 
 Whoooooa! 
 S-Status report, now! 
-Main engines... <br> All operational! No anomalies detected! 
+Main engines... <br> All operational! <br> No anomalies detected! 
 No anomalies detected in the spirit energy systems, either! 
 The Mikasa has successfully penetrated Musashi! 
 Good, so we did it, huh? 
@@ -707,9 +707,9 @@ To all of you in the Flower Division: even in the midst of battle, never forget 
 Ichirooo! I'm gonna give you so many smooches when you get back! 
 I'll be praying... for your safety. 
 I know you can do it, everyone. 
-You'll have to tell me aaaall about what the inside of Musashi was like once we get back home! 
-Please... Make sure to come back home! 
-Thanks, everyone! 
+You'll have to tell me aaaall about what it was like inside Musashi once we get back!
+Please... Please, make sure to come back home! 
+Everyone… Thank you! 
 The time has finally come. 
 Kaede... 
 Before you go off to fight... There's something I want to ask you. 
@@ -724,32 +724,32 @@ Huh?!
 What's your answer, Ogami? 
 R-Right, it's kind of a difficult question, so I was just thinking hard about it…
 ...Keep it together. You're going to make me worried if you go out like that. 
-That battle two years ago... My older sister, Ayame, was the troupe's deputy commander at the time. 
+During the battle two years ago... My older sister, Ayame, was the troupe's deputy commander. 
 Ayame gave her life to put an end to that battle. 
-But we can't keep protecting peace at the cost of people sacrificing their lives. 
+But we can't keep sacrificing people's lives for the sake of defending peace.
 I think you know how that feels for the ones left behind. 
 ... 
 Promise me, Ogami. 
 Promise me that you and the others will come back home alive. 
 Kaede... 
-You must not die. <br> You mustn't even think it's OK to die. 
+You must not die. <br> You mustn't even think that death is a possibility.
 Ogami... You'll promise me that, won't you? 
 I promise. 
-I promise. <br> We're all coming back from this together! 
+I promise. We're all coming back from this together! 
 ...Thank you, Ogami. 
 Ogami... Answer me. 
 Ogami, this is one of the four swords: the Divine Sword Shirahatori. 
-The Demon King... <br> No, Colonel Kazuma Shinguji holds the Luminous Blade Mukei. 
+The Demon King... No, Colonel Kazuma Shinguji holds the Luminous Blade Mukei. 
 With it, you should be able to perform the Rite of Four Swords. 
 Yes, ma'am. 
 Now, you'd better get going. We're all waiting for your safe return. 
 OK, we'll be right back! 
 Captain, the Flower Division is ready to deploy. 
 The Thunderstrike has finished undergoing maintenance as well. 
-I see... <br> So it's finally time. 
+I see... <br> So this is really it. 
 Time for the final battle. 
 Everything's gone according to plan so far. 
-It's our turn from here on out! 
+It's up to us from here on out!
 The Koubu are in tip-top shape! 
 I'm gonna do my very best! 
 The climax starts here. 
@@ -761,7 +761,7 @@ Awaiting your orders, Captain!
 Give us the order, Boss! 
 Waiting for your orders, Mon Frère! 
 Waiting on you, Chief! 
-Awaiting your orders, Ensign! 
+Awaiting your orders, Mr. Ensign! 
 Your orders, Captain! 
 Assault Troupe, move out!
 We're coming back alive!
@@ -775,9 +775,9 @@ Everyone... I don't have anything special to say.
 We're all coming back from this together, just like we always do! 
 Yes, sir! 
 All pilots aboard the Thunderstrike! Time to infiltrate Musashi! 
-Sorry, Ogami. I can only sell you one photo per month. 
+Sorry, Ogami. I can only sell you one bromide per month. 
 I see. That's too bad. 
-So sorry, Mr. Ogami, but each customer is only allowed to purchase one photo at a time.  
+So sorry, Mr. Ogami, but each customer is only allowed to purchase one bromide at a time.  
 Oh, really? That's too bad. 
 Shiro 
 Hanamaru 
@@ -810,29 +810,29 @@ The uniform I wear at the theater. Good for both summer and winter.
 A lighter borrowed from the inn. 
 The flower crown that Iris made for Reni. 
 A plate used at the welcome party. I was asked to bring it to Sakura. 
-A photo of Sakura. 
-A photo of Sakura. This one is a limited edition only available at New Year's. 
-A photo of Sumire. 
-A photo of Sumire. This one is a limited edition only available at New Year's. 
-A photo of Maria. 
-A photo of Maria. This one is a limited edition only available at New Year's. 
-A photo of Kanna. 
-A photo of Kanna. This one is a limited edition only available at New Year's. 
-A photo of Iris. 
-A photo of Iris. This one is a limited edition only available at New Year's. 
-A photo of Kohran. 
-A photo of Kohran. This one is a limited edition only available at New Year's. 
-A photo of Orihime. 
-A photo of Orihime. This one is a limited edition only available at New Year's. 
-A photo of Reni. 
-A photo of Reni. This one is a limited edition only available at New Year's. 
+A bromide of Sakura. 
+A bromide of Sakura. This one is a limited edition only available at New Year's. 
+A bromide of Sumire. 
+A bromide of Sumire. This one is a limited edition only available at New Year's. 
+A bromide of Maria. 
+A bromide of Maria. This one is a limited edition only available at New Year's. 
+A bromide of Kanna. 
+A bromide of Kanna. This one is a limited edition only available at New Year's. 
+A bromide of Iris. 
+A bromide of Iris. This one is a limited edition only available at New Year's. 
+A bromide of Kohran. 
+A bromide of Kohran. This one is a limited edition only available at New Year's. 
+A bromide of Orihime. 
+A bromide of Orihime. This one is a limited edition only available at New Year's. 
+A bromide of Reni. 
+A bromide of Reni. This one is a limited edition only available at New Year's. 
 A decorative paper ball for the welcome party called a kusudama. 
 A flower vase for the welcome party.
 The banner for the welcome party.
-The Cinematron. One of Kohran's inventions that lets you see and talk to someone from far away. 
+The Kinematron. One of Kohran's inventions that lets you see and talk to someone from far away. 
 The sword of the Pandemonium Regalia, recovered from the Demon King. 
 The mirror of the Pandemonium Regalia, recovered from the Demon King. 
-Fragments of the broken Cinematron. Seems like the kids at the inn picked them up along the shore. 
+Fragments of the broken Kinematron. Seems like the kids at the inn picked them up along the shore. 
 A letter from Sakura. 
 A letter from Sumire. 
 A letter from Maria. 

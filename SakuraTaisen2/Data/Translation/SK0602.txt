@@ -87,14 +87,14 @@ Tsubomi Nonomura, age 15.
 Ahh, I can't believe I get to work at THE Imperial Theater! It's like a dream come true! 
 Huh?! You're running the gift shop? 
 I see, so you must be the replacement Tsubaki was talking about. 
-Yep, that's me! A hard worker who always wears a smile-smile! 
+Yep, that's me! A hard worker who always wears a smile, smile! 
 Looking forward to working with you! 
 Let's do our best. 
 Smile-smile back atcha!
 I look forward to working with you. As fellow theater employees, let's both do our best.
 Yes, sir! 
 I'm a bit of a scatterbrain, so I tend to mess up a lot... 
-But I always do my utmost best with a smile-smile! I hope you'll support me! 
+But I always put my best foot forward with a smile, smile! I hope you'll support me! 
 Hahaha, you're a funny one. 
 Smile-smile right back atcha! 
 Huh... You sure talk funny, Mr. Ogami! 
@@ -102,21 +102,21 @@ R-Really? I was just trying to copy you...
 ... 
 Oh no, you've gone quiet! Does that mean you hate me?! 
 N-No, that's not it. We just met, after all. 
-Then I hope you’ll grow to like me more and more! Smile-smile! 
+Then I hope you’ll grow to like me more and more! Smile, smile! 
 A-Anyway, I look forward to working with you. As fellow theater employees, let's both do our best.
 Yes, sir. Will do! 
 By the way, I'm sure you know this, but we're a secret unit that fights against demonic forces.
 Don't ever forget what it takes to keep the capital safe. 
 Yes, sir! I know! 
 I might not look it, but I'm here with the full endorsement of the Maidens' Academy! 
-“Maidens' Academy"? 
+Maidens' Academy? 
 Yes, that's right. It's, well... A training school for the troupe, established by Mr. Yoneda. 
 I see... The manager’s involved in a lot of stuff we’re unaware of, huh. 
 Ahh, that's right! I have to report to the office! 
 I'm already super late! I have to hurry or I'm not gonna make it! Please excuse me! 
 Hey! You're going the wrong way! The office is over here! This way! 
 Ahhh, I messed up! Thank you so much! OK, goodbye! 
-Phew. Another colorful character has joined our ranks…
+Phew. Another colorful character has joined our ranks…  
 Ensign Ogami, if I could have a moment. 
 Eep! I-It's you! 
 Yes. The secret unit of love and beauty, the Rose Division! I am its captain, Kotone. 
@@ -135,7 +135,7 @@ Now then, Ensign Ogami, we must take our leave.
 A storm tonight, huh? Well, I guess that’s to be expected when a typhoon comes around.
 But boy, those three are practically a typhoon themselves. 
 Oh, Ogami... 
-You look like you have a lot of free time on your hands, Ensign, as usual. 
+You look like you have a lot of free time on your hands, Mr. Ensign, as usual. 
 Hey Sakura, Orihime. What are you two up to? 
 Actually… We were just talking about Reni.
 She's been acting kind of strange, and I was wondering what we could do to help. 
@@ -146,11 +146,11 @@ What do you think, Ogami?
 I agree with Sakura. 
 I agree with Orihime. 
 I agree with Sakura. 
-Helping our friends when they're nervous or troubled is what the Flower Division does. 
+Helping our friends when they're nervous or troubled is what the Flower Division is all about. 
 You're right. I want to be there for Reni. 
 I think Orihime has a point. 
 I'm worried about Reni, but it's true, there are some problems people can only work out on their own. 
-See? You get it, Ensign! 
+See? You get it, Mr. Ensign! 
 You can only worry so much about Reni, Sakura. Let's just leave her be. 
 ...All right then. 
 I suppose Reni might feel better by tomorrow... 
@@ -158,7 +158,7 @@ Hmmm, it's hard to say who's right.
 For now, I think I'll go talk to her. 
 We can’t even begin to help if we don’t know what’s troubling her.
 You're right. Thank you, Ogami. 
-That's what I thought you'd say. You really are nosy, Ensign. 
+That's what I thought you'd say. You really are nosy, Mr. Ensign. 
 OK, I have to go now. Good luck with Reni! 
 For now, I'll go back to my room as well. Please help Reni, Ogami. 
 Everyone’s concerned about Reni…
@@ -168,10 +168,10 @@ Reni's not here either. I'll go somewhere else.
 Oh... Mon Frère. 
 Hey Iris. Why the long face? 
 I'm worried about Reni... 
-She's looked unhappy ever since the meeting earlier today. What happened to her? 
+She's looked so unhappy ever since the meeting earlier today. What happened to her? 
 Iris... 
 Cheer her up. 
-Silently pat her head.
+Pat her on the head.
 Cheer up, Iris. Reni would be the one worrying if she saw you down in the dumps like this.
 I'll try talking to her, OK? 
 ...You will? 
@@ -215,7 +215,7 @@ No! I'm not a little kid, you know!
 R-Right. Then what are you doing? 
 Hmmm, I have no idea. 
 I give up, Iris. Tell me what you’re doing. 
-That's. Our. Little. Secret! Isn't that right, 
+That’s. Our. Little. Secret! Isn't that right, 
 ? 
 Woof. 
 OK, Mon Frère, I have to get back to it, so I'll see you later. 
@@ -227,7 +227,7 @@ Sheesh. Doesn't seem like she'll tell me, no matter how many times I try to ask.
 Oh well, I should go. I'm worried about Reni. 
 Iris is still at it, huh? 
 Heeey, Iris! The wind's gotten stronger! Be careful! 
-OOOK!
+Okey-dokey!
 Man, whatever it is she's doing, she's sure caught up in it. 
 Anyway, I should go somewhere else. 
 Arf, arf! 
@@ -249,12 +249,12 @@ Be careful out there. The typhoon seems like it's getting closer.
 Thank you, but you don't have to worry, the store's right around the corner. 
 Well then, I'll be going. 
 Eh, this is Maria we're talking about, she'll be fine. 
-Now that she's gone, I should get going to another room myself. 
+Now that she's gone, I should head to another room. 
 I don't have much time, so I'll be going. Excuse me. 
 Ah, Maria! She's gone... 
 I could've at least said, "Come back safely"... 
 Well, no use regretting that now. I'll go somewhere else. 
-We could go together, if you don't mind. 
+If you don't mind, we could go together. 
 Really? I'm just going out shopping. 
 It might be nice to take a stroll through the capital before the storm hits. 
 Hm hm, you're right. Shall we, then? 
@@ -307,7 +307,7 @@ Sounds like the wind's gotten a bit stronger.
 The typhoon's supposed to hit sometime before midnight, right? We'll have to be careful. 
 Yo, Boss! 
 Oh, Kanna. 
-I've been waitin' for ya. How do ya feel about settling our eatin’ contest once and for all? 
+I've been waitin' for ya. How do ya feel ‘bout settlin’ our eatin’ contest once and for all? 
 You're on. I'm gonna beat you this time, Kanna! 
 Heheh, that's what I like to hear! Let's do this thing! 
 The rules are the same as usual. Whoever eats three whole meals' worth of food first wins. 
@@ -319,9 +319,9 @@ Rice
 Tea 
 Rafute, huh? It really is like kakuni... Mm, delicious! 
 Heheh, it's been stewin’ for three days, just for our battle today! 
-*munch* *munch* All right, blew through that one. 
-*munch* *munch* Mm, the rice is great too! That's one bowl down. 
-*glug* *glug* OK, now that I've had a breather, onto the next one! 
+*munch* *munch* <br> All right, blew through that one. 
+*munch* *munch* <br> Mm, the rice is great too! That's one bowl down. 
+*glug* *glug* <br> OK, now that I've had a breather, onto the next one! 
 Which one should I grab first? I'm not sure... 
 What's the matter, Boss? It's our final battle! Get into it! 
 All right, I finished the first dish. How are you feeling, Kanna? 
@@ -331,15 +331,15 @@ Rafute...
 Rice... 
 Tea... 
 Rafute plate number two... This is getting pretty tough. 
-*munch* *munch*... There, done! 
+*munch* *munch*... <br> There, done! 
 This rice is starting to fill me up... 
 ...All right, that's bowl number two finished! 
 Gulp... Gulp... 
 OK, drinking some tea helped clear out my stomach a bit. I can keep going! 
 Hmm... This is getting difficult. 
-What's wrong, Boss? I don't see you moving those chopsticks. 
+What's wrong, Boss? I don't see ya movin’ those chopsticks. 
 There, that's two meals I've managed to finish! 
-Not bad, Boss! Now things are really heating up! 
+Not bad, Boss! Now things are really heatin’ up! 
 All right, meal three, last one... Here I go! 
 Ra... Rafute! 
 Rice! 
@@ -351,20 +351,20 @@ I've made it this far, I just have to power through the rest!
 D-Done! That's all the rafute dealt with! 
 Just five mouthfuls of rice left... 
 Four... Three... 
-Two... mouthfuls... Last... mouth... ful... 
+Two... mouthfuls... <br> Last... mouth... ful... 
 DONE!! That's all the rice! 
 Urgh... You got this, Ogami! This is the last one!! 
 *glug*... *glug*... *glug*! 
-PWAHHH!! D-Drank all the tea! 
+PWAHHH!! <br> D-Drank all the tea! 
 Close... So close... 
 Come on, Ogami... Just one last meal! 
 Oh, yeah! I finished the third batch!! 
 Huhhh?! Y-You already finished it all?! 
 Heheh, it's our final battle. I had to get serious. 
 Phew, I'm feelin’ pretty full, too. 
-You did a hell of a job, keeping up with me like that. 
+You did a hell of a job, keepin’ up with me like that. 
 Guess these past three months have paid off. 
-Not feeling good today, Boss? This ain't like you. 
+Not feelin’ good today, Boss? This ain't like you. 
 What the hell, Boss?! You barely ate anything! Where's your drive?! 
 I'm sorry... 
 In the end, I still couldn't beat you, Kanna. 
@@ -381,13 +381,13 @@ Yeah, me too... I didn't think you'd push me this far.
 ... 
 Boss... 
 Hm? What's up, Kanna? 
-Thanks for hanging out with me these past couple of months…
+Thanks for hangin’ out with me these past couple of months…
 My birthday's coming up, you know. 
 This was a nice memory to make before I grow a year older... 
 Kanna... 
 All right, Boss, I'm gonna go. 
 In the end, I wasn't able to beat you. 
-But you did great making it this far. 
+But ya managed to make it this far in only three months. That’s a heck of a thing. 
 Later, Boss! Let's eat together again sometime! 
 Kanna... 
 I'd like to try her Okinawan cooking again sometime... 
@@ -395,56 +395,56 @@ Kanna's... not here. Are we not having our eating contest today?
 Maybe I should try coming back some other time.
 This dining hall's going to get really busy once our autumn production begins. 
 Doesn't look like anyone's here. I should go. 
-Oh, do you need something, Ogami? 
-You're gonna listen to my gossip, right, Ogami? 
+Oh, Ogami. Do you need something? 
+You came here to listen to my gossip, right, Ogami?
 My, you came here like clockwork, Ogami. 
-If you're interested in hearing more rumors, I'm all out. Sorry. 
+If you're interested in hearing more gossip, I'm all out. Sorry. 
 I see... That's too bad. 
-I'll have some more interesting tidbits for you another time, so look forward to it! 
+I'll have some more interesting tidbits to share another time, so look forward to it! 
 Hello, Yuri and Kasumi. 
 Oh, hello, Ogami. Is there something you need? 
 I've got plenty of new, juicy gossip for you. Ask away! 
 Oh, Mr. Ogami! Welcome! 
 Hey, Tsubomi. Have you stopped by the office yet? 
 Yes, I found my way there, thanks to you! 
-While you're here, Mr. Ogami, why not buy a photo? 
-Buy a photo. 
+While you're here, Mr. Ogami, why not buy a bromide? 
+Buy a bromide. 
 Talk to Tsubomi. 
 Leave. 
-Could I buy a photo? 
-Um, Mr. Ogami? I'm afraid I can only sell you one photo at a time. 
+Could I buy a bromide? 
+Um, Mr. Ogami? I'm afraid I can only sell you one bromide at a time. 
 We have to leave some for the customers, I hope you understand. 
-A photo? Thank you very much! 
-That's Sakura's photo. 
+A bromide? Thank you very much! 
+That's Sakura's bromide. 
 She looked so pretty playing Cordelia in "King Lear" this past summer... 
-Sakura's photo? That'll be 50 sen! Thank you, come again! 
-That's Sumire's photo. 
+Sakura's bromide? That'll be 50 sen! Thank you, come again! 
+That's Sumire's bromide. 
 Her banter with Kanna in "King Lear" was fantastic! 
 I couldn't stop laughing from all the way back in the stands! 
-Sumire's photo? That'll be 50 sen! Thank you, come again! 
-That's Maria's photo. 
+Sumire's bromide? That'll be 50 sen! Thank you, come again! 
+That's Maria's bromide. 
 Maria's going to be in this month's play, right? I can't wait! 
-Maria's photo? That'll be 50 sen! Thank you, come again! 
-That's Kanna's photo. 
+Maria's bromide? That'll be 50 sen! Thank you, come again! 
+That's Kanna's bromide. 
 She was so cool as King Lear! 
 Kanna's got a lot of female fans, you know. 
-Kanna's photo? That'll be 50 sen! Thank you, come again! 
-That's Iris's photo. 
+Kanna's bromide? That'll be 50 sen! Thank you, come again! 
+That's Iris's bromide. 
 We'll finally get to see her as Mytyl this month! 
 She's gonna be so cute! I can hardly wait! 
-Iris's photo? That'll be 50 sen! Thank you, come again! 
-That's Kohran's photo. 
+Iris's bromide? That'll be 50 sen! Thank you, come again! 
+That's Kohran's bromide. 
 She's the best when it comes to comedies! 
 Remember that play she was in a while back, "Dinosaur Island"? I went and saw it five times! 
-Kohran's photo? That'll be 50 sen! Thank you, come again! 
-That's Orihime's photo. 
+Kohran's bromide? That'll be 50 sen! Thank you, come again! 
+That's Orihime's bromide. 
 Orihime's Imperial Theater debut as Regan in "King Lear" was great! 
 A perfect performance, just like you'd expect from someone who came from the birthplace of theatre! 
-Orihime's photo? That'll be 50 sen! Thank you, come again! 
-That's Reni's photo. 
+Orihime's bromide? That'll be 50 sen! Thank you, come again! 
+That's Reni's bromide. 
 With "The Blue Bird" this month, Reni finally gets to be the star! 
 I'm SO looking forward to opening day, I just can't wait! 
-Reni's photo? That'll be 50 sen! Thank you, come again! 
+Reni's bromide? That'll be 50 sen! Thank you, come again! 
 Oh, you're not gonna buy one? 
 How do you like running the shop, Tsubomi? 
 Eheheh, I messed up immediately. 
@@ -459,7 +459,7 @@ Ahhh, this really is a dream come true! I'm gonna give it my all!
 Good luck punching tickets at the next show, Mr. Ogami! 
 Well, I should be going. Keep up the good work. 
 Thank you for your patronage! Come again! 
-Thank you, come again! Make sure to buy a photo next time, OK? 
+Thank you, come again! Make sure to buy a bromide next time, OK? 
 Oh, Kohran. You're a rare sight in this room. 
 What are you talking about, Chief? I come to the music room too, sometimes. 
 Though I didn't exactly come here to practice music today. 
@@ -494,7 +494,7 @@ Nobody's here. Well, rehearsals are over, after all.
 Oh well, I'll just go somewhere else. 
 I wonder if Mr. Yoneda is in his office. 
 ...Yeah, I should go somewhere else. 
-Are you in there sir? It's Ogami. 
+Are you in there, sir? It's Ogami. 
 Snooooore, snooooore... 
 Sounds like he's asleep. Good grief. 
 Oh well, guess I'll head to another room. 
@@ -504,7 +504,7 @@ Yo, Ogami. Feel like sharing a drink?
 N-No, I'll pass. 
 Right. So, what can I do you for? 
 Ask about Tsubomi. 
-Ask about the Rose Division. 
+Ask about the Rose Div. 
 Um, about Tsubomi, the girl working the gift shop... 
 Ah, Tsubomi Nonomura? What about her? 
 She said she came from a "Maidens' Academy." 
@@ -513,7 +513,7 @@ Ah, right. You don’t know about the academy, do you, Ogami?
 The Maidens' Academy is a training school for Imperial Assault Troupe recruits. 
 A training school? For the troupe? 
 Yep. With all these demon attacks, the Flower Division will hit their limit sooner or later.
-We train young girls to be the next Flower Division, both on stage and on the battlefield. 
+We train young ladies to be the next Flower Division, both on stage and on the battlefield. 
 To this day, though, we have yet to find pilots more suitable for the program than young girls... 
 I understand the reality of the situation, but I still can't help but feel guilty about it...
 ...I see. 
@@ -531,7 +531,7 @@ You've got stuff you need to take care of, right?
 Y-Yes, sir... Reni's been acting strange lately, so I thought I'd go talk to her. 
 Good. Now I can drink my sake with peace of mind, knowing you're on top of it. 
 R-Right... I'll be going, now. 
-There's so much that goes on without me knowing about it, huh... 
+There's so much that goes on without me knowing, huh... 
 Well, no use thinking about that right now. I should go. 
 Oh, Ogami. 
 Saki? What are you doing here? 
@@ -553,19 +553,19 @@ Hmmm... Nobody's here, eh?
 Oh well. Guess I'll go somewhere else. 
 “The Blue Bird" takes place in a whimsical, dreamlike world. 
 These sets and props help breathe life into that world. 
-Thought I'd take the time to come here, but unfortunately, nobody's here. 
+Thought I'd take the time to come here, but unfortunately, nobody's around. 
 I was watching the rehearsal from here just a moment ago…
 Rehearsals are over for today, so no one's here. Oh well, I'll just go. 
 Nobody's here. I'll check another room. 
 Everyone was here for rehearsal not that long ago... 
 Why did Reni freeze up like that? 
 Our autumn production will finally open this month. 
-I'll have to get some ticket-punching practice in before then. 
+I'll have to get in some ticket-punching practice before then. 
 “King Lear” was such a hit last summer, it was standing room only. 
 I hope our fall production draws a big crowd, too. 
 Doesn't look like any of the others are here. 
 Oh well. Guess I'll go somewhere else. 
-I'll have to get some ticket-punching practice in to prepare for the fall production. 
+I better prepare for the fall production by getting some ticket-punching practice in.
 "The Blue Bird," huh? I hope we'll get a lot of people to come see it. 
 Nobody here in the lobby. 
 Oh well, better go somewhere else. 
@@ -575,14 +575,14 @@ The door's still open.
 Is Sakura in there? 
 Take a quick peek inside. 
 Leave. 
-Well, I AM curious... I should take a look real quick. 
-No, I shouldn't just barge into people's rooms uninvited. 
+Well, I AM curious... I’ll just peek inside real quick. 
+No, I shouldn't just barge into someone’s rooms uninvited. 
 I'll go somewhere else... This is really gonna bug me, though. 
 Pass this through here, then do this over here... 
-Heehee, I think I'm about halfway done now! 
+Heehee, I think I'm about halfway done now. 
 I hope Ogami will like it... 
 Hmm? Did she say my name?
-Now I'm curious. I should take a look real quick. 
+Now I'm curious. I’ll just peek inside real quick.
 Do this over here, and then... 
 Hey, Sakura, what are you up to? 
 Huh?! O-Ogami!! 
@@ -594,10 +594,10 @@ Sakura, are you holding something behind your back?
 Huh? N-No, not really... 
 Well now I'm really curious. Let me see. 
 O-Ogami! Absolutely not!! 
-Whoa whoa whoa! You don't have to chase me out. 
-Sorry, Ogami. 
+Whoa, whoa, whoa! You don't have to chase me out. 
+Sorry about this, Ogami. 
 What in the world are you doing in there, Sakura? 
-Heehee, that's a secret! Now please excuse me. 
+Heehee, it's a secret. Now please excuse me. 
 Hmm, what could it be? This is gonna bug me... 
 Doesn't seem like she'll tell me, no matter how much I ask. I guess I'll drop it for now. 
 Hey, Sakura, about earlier... 
@@ -608,7 +608,7 @@ Oh well. Guess I'll go.
 I'm curious about whatever Sakura's up to... 
 But I don't think she's going to tell me anything. I should just drop it and leave. 
 Is Sakura in her room? 
-She did just say earlier she was going to read the script over... 
+She did just say earlier she was going to read over the script... 
 I don't want to bother her, so I won't say anything. 
 ...Yes? 
 It's Ogami. May I come in, Sakura? 
@@ -626,33 +626,33 @@ Ahahahaha!
 It's OK, I'm here for you.
 Shall I check on you later?
 Ahahahaha! Right, it's gonna be pretty stormy tonight. 
-Anyway, I didn’t think you were still afraid of thunder.
+Still, I didn’t think you were still afraid of thunder.
 So what if I am still afraid?!
-I can't easily get over something that's terrified me since childhood! 
-Oh… S-Sorry, I spoke out of turn.
+I can't easily just get over something that's terrified me since childhood! 
+Oh… S-Sorry, that was kinda mean.
 O-Ogami... You don't have to tease me like that. 
-Oh... Sorry. 
-Whatever! You must think I'm weird, don't you?!
-Now, I have to read my lines, so please leave me alone. 
+Oh... Sorry about that. 
+Whatever! You must think I'm being silly, don't you?!
+I have to read my lines now, so please leave me alone. 
 R-Right. I'll be going, then. 
-*sigh* Boy, I sure made her upset. 
+*sigh*... <br> Boy, I sure made her upset. 
 ...Well, better shake it off and go somewhere else.
 It's all right, Sakura. I'm here for you. 
-If you want, would you like me to hold you again so the Thunder God doesn't take you away? 
+Worst comes to worst, I could hide your belly button again so the Thunder God can't find it.
 Jeez, Ogami... 
-Heehee, thinking about that moment makes me feel kind of calm. 
-Thank you, Ogami. 
+Heehee, thinking about that memory makes me feel a bit calmer. 
+Thanks, Ogami. 
 Ogami... Thank you. 
 I feel a little better now. 
 Worrying about the thunder was getting in the way of my line reading. 
-Now I can finally calm down and get it done. 
+Now I can finally compose myself and get it done. 
 Glad I could help. All right, I should get going now. 
 OK. Thanks again.
 Thunder, huh? She's right, it's going to get pretty stormy tonight. 
 Right, guess I'll go check a different room now. 
-If it's all right with you, maybe I could come by later tonight and check on you? 
+Maybe I could come by later tonight and check on you, if that’s all right. 
 Really? I don't want to impose... 
-It's all right, I'll be doing my rounds on the night watch anyway. 
+It's no problem, I'll be doing my rounds on the night watch anyway. 
 Thank you. In that case, I'd appreciate it. 
 Worrying about the thunder was getting in the way of my line reading. 
 Now I think I can finally concentrate on it. 
@@ -660,7 +660,7 @@ Glad I could help. All right, I should get going now.
 OK. Thank you. 
 I'll have to remember to come by tonight. 
 Right then, I should go somewhere else. 
-...You must think I'm weird, don't you, Ogami? 
+...You must think I'm being silly, don't you, Ogami? 
 N-No, of course not. 
 It's all right, Sakura, I'm sure there won't be any thunder tonight. 
 ... 
@@ -686,16 +686,16 @@ Sure you won't break it?
 You're so reliable. We can all rest easy knowing you’re on the job.
 Thanks, Boss. You can leave it all to me! 
 You, doing carpentry? You're surprisingly handy. 
-D-Don't be silly, I'm not handy. All I'm gonna be doing is pounding nails with a hammer, hahaha. 
+D-Don't be silly, I'm not handy. All I'm gonna be doin’ is poundin’ nails with a hammer, hahaha. 
 You, climbing up on the roof? 
-Yeah, and? Somethin' weird about that? 
-You don't think I'm gonna stomp around and break the roof, do you? 
+Yeah, and? Somethin' weird ‘bout that? 
+You don't think I'm gonna stomp around and break the roof, do ya? 
 N-Nobody said anything about that! 
-I'm kidding, relax. Well, wouldn't be too surprising if that happened, though. Ahahahaha! 
+I'm kiddin’, relax. Well, wouldn't be too surprisin’ if that happened, though. Ahahahaha! 
 You, climbing up on the roof? Sure you won't break it instead? 
 Tsch. That's mean, Boss. You didn't have to say that. 
 Oh... S-Sorry, I guess I took that joke a little too far. 
-What's up, Boss? Is it really that weird for me to be doing carpentry? 
+What's up, Boss? Is it really that weird for me to be doin’ carpentry? 
 N-No, that's not it at all... 
 I grew up in Okinawa, so I'm used to typhoons. 
 Fixin’ a roof like this is a piece of cake for me. 
@@ -706,10 +706,10 @@ Sure, I'll help!
 I'm busy right now. 
 I'm not good with heights... 
 Sure, I'll help! We've got this, Kanna! 
-That's my Boss! Good answer! 
+That's my boss! Good answer! 
 OK, let's not waste anymore time... 
-...is what I'd like to say. This theater's huge, so it's gonna be a hassle getting up to the roof. 
-We'll have to climb through the attic to get to the exit leading up there. 
+...Is what I'd like to say. This theater's huge, so it's gonna be a hassle gettin’ up to the roof. 
+We'll have to climb through the attic to get to the exit leadin’ up there. 
 I see. We'll be in big trouble if we fall. 
 Exactly. Watch your step. Right, let's do this!! 
 I'd love to help out, but... I'm busy right now. 
@@ -719,21 +719,21 @@ Sorry, Kanna. Try not to get hurt, OK?
 Of course, thanks! Later, Boss. 
 Fixing the roof means we have to... climb on top of it, right? 
 I'm... not good with heights. 
-Ahahahaha! What are you talking about? You ride on the Soaring Whale all the time! 
+Ahahahaha! What are you talkin’ about? You ride on the Soaring Whale all the time! 
 Let's make our way up to the roof through the attic. 
-You can get a hell of a view of the capital from up there. C'mon, let's go! 
+You can get a helluva view of the capital from up there. C'mon, let's go! 
 K-Kanna! Hold on a second!! 
 Hmmm... I don't know. 
-C'mon, Boss. You can get a hell of a view of the capital from up on the theater's roof. 
+C'mon, Boss. You can get a helluva view of the capital from up on the theater's roof. 
 True... All right, sure. I'll help. 
 That's what I'm talkin' about! All right, let's make our way up to the roof through the attic. 
 Remember to watch your step. Let's go, Boss! 
 Yahoo! We're here, Boss! 
 The view's awesome, the breeze is refreshin’... This is great! 
-I thought getting up here would be way harder, but that took no time at all! 
-All that Navy training must be how you were able to clear that with such skill. 
+I thought gettin’ up here would be way harder, but that took no time at all! 
+Those Navy skills were somethin' else, Boss. You cleared those obstacles like they were nothin'.
 We made it! Nice job, Boss. 
-Man, getting up here was a real pain... Nice job, Boss. 
+Man, gettin’ up here was a real pain... Nice job, Boss. 
 Wh-Whatever, Kanna... Let's just hurry up and get this roof fixed! 
 Oh yeah, you're bad with heights, huh? My bad. 
 All right, let's get this done, then. 
@@ -746,7 +746,7 @@ I'm glad I could be of help.
 Right then, I'm gonna go. Later, Boss. 
 Phew... That was a lot of work. 
 By the way, don't forget about our eatin’ contest. It's time to settle things once and for all! 
-I'll be waitin’ for ya in the dining hall starting from half past five. See ya! 
+I'll be waitin’ for ya in the dining hall starting from half past 5. See ya! 
 Hmm, guess that means it's time for our final battle. That was a good way to work up an appetite, then! 
 Well, I should get going too. Where to next? 
 No one's here... 
@@ -755,9 +755,9 @@ Oh, is that you, Maria? Mind teaching me some more about billiards?
 Yes, that's what I was waiting here for. 
 Right, let's not waste any time, then. 
 By the way, sir, about Reni... 
-Even before the rehearsal just now, she’s been acting strange for a while even in battles. 
+She's been acting peculiar for a while now, outside of today's rehearsal and even during battles.
 So you noticed too, huh? I figured you would. 
-That girl... She sort of reminds me of how I used to be. 
+That girl... She sort of reminds me of a former version of myself. 
 Back when all I ever did was fight... When I was unable to trust anyone. 
 Maria... 
 ...Well, now it's your turn, Captain. It's make or break. What will you do? 
@@ -781,7 +781,7 @@ It's just like with Reni, you won't be able to get through to her without a stro
 Maria... 
 Lost by a hair... 
 But you've definitely gotten better, compared to last month. 
-At this rate, you'll be able to beat me soon. 
+At this rate, you'll be able to beat me someday. 
 Thank you, Maria. Care to join me again next time? 
 Yes, with pleasure. 
 Now then, I have to take care of something, so I'll be going. 
@@ -802,13 +802,13 @@ Money.
 I'm pretty sure it's… eternal life. 
 ...Wrong. The blue bird in this work represents happiness. 
 O-Oh... Is that so... 
-Don't pretend to know what you don't know, sir. 
+Don't pretend to know what you don't, sir. 
 I'm pretty sure it's… happiness. 
 Precisely. Impressive, sir. You're quite knowledgeable. 
 I'm pretty sure it's… money. 
 ...Wrong. The blue bird in this work represents happiness. 
 O-Oh... Is that so... 
-Don't pretend to know what you don't know, sir. 
+Don't pretend to know what you don't, sir. 
 Hmmm, I have no idea. 
 Hm hm hm, that could also be the right answer, in a sense. 
 In the play, the blue bird is written to represent happiness. 
@@ -825,7 +825,7 @@ It's fall already. The perfect season for reading.
 I can wait till nighttime to read, though. I should go somewhere else. 
 Ensign... 
 Oh, Sumire. 
-I've been waiting for you, Ensign. I will teach you how to properly serve tea once again this month. 
+I've been waiting for you, Ensign. Once again, I shall teach you how to properly serve tea this month. 
 OK, let's start our lesson, then. 
 So, I've just finished steeping these tea leaves. 
 Would you be so kind as to pour me a cup, Ensign? 
@@ -865,7 +865,7 @@ Pour it gradually to the very last drop.
 That final drop is what we call the "Golden Drop." 
 That is because it has the highest concentration of delicious tea extract. 
 I-I see... How educational. 
-That's enough, Ensign. Let's stop here for this month. 
+That's enough, Ensign. Let's stop here for this lesson. 
 Thank you, Sumire. I learned a lot today.
 I'll be waiting for you here again next month. 
 Guess there's a proper method for every step of making tea, isn't there? 
@@ -883,13 +883,13 @@ Force of habit?
 Hmm, if I had to guess, I'd say it's to weaken the tea's strong flavor? 
 I see. I suppose that's one way to think of it. 
 “One way"? What's the right answer, then? 
-Ohohohoho! My apologies, Ensign, it's merely a habit of mine. 
+Ohohohoho! <br> My apologies, Ensign, it's merely a habit of mine. 
 If I had to give a reason, I suppose it's because it makes the milk easier to measure out. 
 S-Seriously? Sheesh, you had me for a second, there. 
 Hmm, if I had to guess, I'd say it's to prevent the milk from curdling? 
 Goodness, the milk doesn't curdle, even if you pour it in after the tea. 
 In that case, what's the right answer? 
-Ohohohoho! My apologies, Ensign, it's merely a habit of mine. 
+Ohohohoho! <br> My apologies, Ensign, it's merely a habit of mine. 
 If I had to give a reason, I suppose it's because it makes the milk easier to measure out. 
 S-Seriously? Sheesh, you had me for a second, there. 
 If I had to guess, I'd say it's just a force of habit? 
@@ -914,13 +914,13 @@ Take care, Ensign.
 Looks like Sumire's still enjoying her tea. 
 I shouldn't bother her, so I guess I'll just get going. 
 Sumire might have another tea lesson for me. I'll come back later. 
-Hmm... Guess no one's here. 
+Hmm... Guess no one's around. 
 I thought I might find someone here, but I guess not. Too bad. 
-Ah, Ensign. 
+Ah, Mr. Ensign. 
 You told me to ask Orihime, so I went to her right away. 
 Now I know a bunch more about pianos. Thanks a ton. 
 There's not a thing I don't know about pianos. 
-You're quite perceptive, Ensign. 
+You're quite perceptive, Mr. Ensign. 
 Hahaha, thanks. 
 By the way, Chief. It's been getting pretty windy, huh? 
 Yo, Chief. Getting kinda windy, huh? 
@@ -953,16 +953,16 @@ H-Hey, no fair, that was a trick question!
 Ahaha, sorry. At least you learned something, right? 
 Hmm... Don't know. 
 That's right! The answer is we don't know! 
-There's all kindsa theories saying it's originally Chinese or Arabic or what have you, 
-but the truth is, we still don't really know. 
-Wow, I'm impressed, Ensign. 
-Though if I didn't know any better, it almost sounded like you simply didn’t know…
+There's all kindsa theories saying it's originally Chinese or Arabic or what have you…  
+But the truth is, we still don't really know. 
+Wow, I'm impressed, Mr. Ensign. 
+Though, if I didn't know any better, it almost sounded like you simply didn’t know…
 All right, Orihime, let's split. 
-Sure. We have to get going, Ensign. See you later. 
+Sure. We have to get going, Mr. Ensign. See you later. 
 I'll be working on the Koubu later tonight, Chief, so stop by if ya got time. 
 All right, gotta go. See ya. 
 The wind's gotten stronger. I should get going, too. 
-The weather's still nice out, but the wind's getting stronger and stronger. 
+The weather outside is still nice, but the wind's getting stronger and stronger. 
 No use sticking around here. I should go. 
 I wonder if Kaede's in her room? 
 ...Yeah, I should go somewhere else. 
@@ -1019,7 +1019,7 @@ It's Maria's nameplate.
 If I remember right, Maria's going out shopping around 5:30... 
 I'll stop by the entrance later and see. 
 OK, time to check another room. 
-I wonder if Kanna is in her room.
+I wonder if Kanna’s in her room.
 ...She's not here. 
 Kanna's... Well, I guess it's more of a nametag than a nameplate. 
 OK, let's check another room. 
@@ -1027,15 +1027,15 @@ I wonder if Sumire is in her room.
 Nope, not here. 
 This is a pretty subtle design, considering it's Sumire. 
 Let's check another room. 
-Orihime... Is she in her room? 
+I wonder if Orihime is in her room.
 Hmm. Guess nobody's home. 
 The nameplate has a simple design, but it sure looks high class. 
 Let's go check another room. 
-I wonder if Kohran is inside. 
+I wonder if Kohran’s in her room. 
 There's no response. Looks like she's somewhere else. 
 A gear-shaped nameplate, huh? It's just Kohran's style. 
 Let's check another room. 
-Iris... Is she in her room? 
+I wonder if Iris is in her room. 
 No answer. Guess she's not here. 
 At any rate, it looks like today's a day off from her studies. 
 So Iris's nameplate is shaped like Jean-Paul... 
@@ -1053,10 +1053,10 @@ At any rate, the Black Demon Society somehow knew we'd be in Atami.
 Don't you find that strange, Ensign? 
 Yeah, how did they know? 
 Probably a coincidence. 
-Were they on vacation?
+Were they on vacation too?
 Could there be a spy? 
 Probably a coincidence. 
-Were they on vacation?
+Were they on vacation too?
 You're right, how did the Black Demons get a hold of that kind of information? 
 ...I see. So you don't have any guesses, then? 
 Eh, probably just a coincidence. Nothing to worry about. 
@@ -1068,12 +1068,12 @@ Well, it WAS summer, maybe they were there on vacation too?
 ...Ensign, while I don't dislike that particular brand of humor... 
 I was trying to have a serious discussion. There's a time and place for everything. 
 S-Sorry. Got a little carried away. 
-Could it be... there's a spy in our midst? 
+Could it be... There's a spy in our midst? 
 You think so too, Ensign? I was wondering the same, myself. 
 I discussed it with Maria beforehand. 
 Well, what did she say? 
-She stayed quiet for a while, at first. 
-Then she said to not cast doubts without evidence, that I'd be playing into the enemy's hand.
+Maria stayed quiet for a while, at first. 
+Then she said not to cast doubts without evidence, that I'd be playing right into the enemy's hand.
 I see... 
 Maria's right. We can't just take shots in the dark without evidence. 
 Don't tell anybody else about this, OK, Sumire? 
@@ -1081,10 +1081,10 @@ Yes, understood.
 Don't stay quiet, Ensign, please say something. 
 OK, but... I don't really know, either. 
 Oh. How disappointing. 
-At any rate, we mustn't be careless. 
+Regardless, we mustn't be careless. 
 Yeah, you're right, but we can't get riled up by their tricks, either. 
 It's important that we keep living our lives like normal. 
-Yes, I think so too. 
+Yes, I was thinking the same thing. 
 Now then, I'd better get going. Take care, Ensign. 
 Ah, that's right, come meet me in the salon later. 
 We'll continue our lessons on tea etiquette from last time. 
@@ -1099,13 +1099,13 @@ Go back outside.
 O-Oh no… My body is moving towards the bathroom on its own... 
 (Maria... She was soaking wet after that shopping trip.) 
 (She must've felt pretty chilly, what with it being September and all.) 
-(...! Uh-oh, I feel a sneeze coming on!) 
+(...! <br> Uh-oh, I feel a sneeze coming on!) 
 Sneeze. 
 (C-Crap, I can't hold it in any longer!) 
 ACHOO!! 
 ...!! <br> C-Captain?! 
 S-Sorry Maria! It's just, I, uh... 
-Captain! Get out... Get out this instant!! 
+Captain! Get out... <br> Get out this instant!! 
 Y-Yes, ma'am! Right away, ma'am! 
 ... 
 I'm sorry, Maria. I went in without really thinking... 
@@ -1133,7 +1133,7 @@ N-No... That's not it.
 I see. I just got out, myself. 
 There's nothing quite as refreshing as taking a hot bath after a hard day's work. 
 Anyway, I have to go. Take care, Captain. 
-It's true, nothing beats taking a bath after working hard. 
+It's true, nothing beats taking a bath after a long day. 
 I should get going. I've still got things I need to do. 
 Looks like no one's taking a bath right now. 
 I'll go to a different room. I wonder where everyone else is? 
@@ -1141,11 +1141,11 @@ Oh, is that you, Kanna?
 Oh, well if it ain't the boss. 
 Even I get full sometimes, so I was just doing some light post-meal exercise. 
 I was just doing some light exercise to prepare for our eating contest. 
-I come down here to train sometimes. Daily training is important, you know. 
+I come down here to train sometimes. Daily trainin’ is important, you know. 
 I see. That's our Kanna. 
 Whenever I feel nervous about anything, I just start workin' out. 
 When I work out, it feels like the sweat washes away all my worries.
-I hope Reni can get over whatever it is that's bothering her, too... 
+I hope Reni can get over whatever it is that's botherin’ her, too... 
 Kanna... 
 I know she will. 
 Hmm... Might be tough. 
@@ -1160,20 +1160,20 @@ Y-You're right. I can't be saying things like that.
 Well then, what if you helped train her? 
 No, Boss. Despite all appearances, Reni's not your average kid. 
 The way she's always on her guard, she seems pretty skilled already. 
-Now that you mention it, there was that time she threw me down to the ground like it was nothing. 
+Now that you mention it, there was that time she threw me to the ground like it was nothing. 
 She did that to YOU?! Huh... You really can't judge a book by its cover, can you? 
 I see... Still, I wonder when she picked up those combat skills? 
 Yeah... I'm definitely curious. 
 Don't just clam up like that, Boss. 
 I'm tryin' to be serious, but you're makin' me feel silly. 
-Ah... S-Sorry, I didn't mean to do that. 
+Ah... S-Sorry, I didn't mean to. 
 Welp, I worked up a decent sweat, so I'm gonna get goin'. 
 Later, Boss. Take care of Reni, all right? 
 Take care of Reni, huh... 
 Kanna's worried about Reni, in her own way. 
 I don't have time to work out right now. 
 I should go somewhere else. Where is everyone, anyway? 
-Wh-What is this...? And that smell... It reeks of roses... 
+Wh-What is this...? <br> And that smell... <br> It reeks of roses... 
 Oh my, Ogami! Welcome! 
 You actually came... I'm so happy... 
 Come on, Ichiro, don't be shy! Come in! 
@@ -1234,20 +1234,20 @@ OK, who to call?
 Hello? This is Tsubaki Takamura. 
 Hey, Tsubaki? It's me, Ogami. 
 Huh? Ogami! How'd you get my number? 
-Yuri just told me about it. 
+Yuri told me, actually. 
 Oh, I see! I'm just a little surprised, getting called out of the blue like this. 
 I just kept trying numbers till I found it. 
 Really? Well thanks for going through all that trouble! 
 OK, let's talk on the big screen! 
 Wow, I can see you so clearly! 
 Same here, I can see you very well on my end. 
-Really? This feels kind of different from our chats at the shop. 
+Really? This feels kinda different from our usual chats at the shop. 
 By the way, Ogami, did you need something from me? 
-Wish her, "good luck." 
+Wish her good luck.
 Ask what she's doing. 
 Ask her out on a date. 
-I won't ask you what you're doing, but good luck all the same, Tsubaki. 
-Y-Yes, sir! Thank you! 
+I won't ask about what you're up to… but good luck all the same, Tsubaki. 
+Y-Yes, sir! Thank you very much! 
 I can't tell you what I'm working on, due to the nature of this assignment... 
 But with you cheering me on, I know I'll do my best! 
 I know I've asked this before, but... what exactly are you up to? 
@@ -1260,21 +1260,21 @@ Huh? Hokkaido?!
 Yes. I can't say any more than that. Sorry. 
 Tsubaki, when you get back, how about we go on a date? 
 Huh? Are you serious, Ogami? 
-OK, once I get back, I'll make sure to invite you out, then! 
+OK then… Once I get back, I'll make sure to invite you out! 
 No, nothing in particular. I just wanted to talk to you. 
 O-Ogami... 
 ... 
 ... 
-I... Um... I should go, got work to do, bye! 
+I... Um... I should go. Got work to do, bye! 
 Ah! Tsubaki! 
  
-*sigh* She hung up. 
+*sigh* <br> She hung up. 
 At any rate, I wonder where she is and what she's doing? 
 All right, Ogami, I'm in the middle of work, so I have to go. 
 Tell everyone at the theater I said hi! 
 Sure. Good luck with your work! 
 Thank you! Call me again sometime! 
-Tsubaki really is working her hardest, isn't she.
+Tsubaki seems to be really giving it her all.
 But still, I wonder what she's doing? 
 ... 
 Tsubaki's not picking up. She must've gone back to work after all. 
@@ -1311,7 +1311,7 @@ Serial Radio Drama Masked Red, The Terrifying Mummy, Part 5
 Blowing steam from its mouth, the mummy begins to pursue Masked Red! 
 “I see, so that mummy was nothing more than a steam-powered contraption! In that case, take this!" 
 Masked Red fires his Colt and blows open a hole in the mummy's abdomen. 
-Water gushes forth from the hole, and before long, a hissing noise comes from the robot's body. 
+Water gushes forth from the opening, and before long, a hissing noise comes from the robot's body. 
 “You fool! You're going to make its boiler explode!" 
 Indeed, the mummy explodes, taking Dr. Kurogane's laboratory with it in the process. 
 With the girls freed from the underground prison cells, Dr. Kurogane's scheme has been foiled! 
@@ -1373,11 +1373,11 @@ Wow, really?
 That's the honest truth. They said so on the news. 
 How was your vacation last month, Ogami? 
 It got pretty crazy, but I had a lot of fun. Wish you could've come with us. 
-*sigh* I bought a new swimsuit and everything, but I never got the chance to show it off. 
+*sigh* <br> I bought a new swimsuit and everything, but I never got the chance to show it off. 
 Oh? Didn't you swim in the underground pool while everyone was on vacation? 
 Yeah, but that's just our pool. I'm not gonna find any cute boys to swim with there. 
 Sorry, Ogami, but I'm all out of gossip for now. 
-I'll have some more interesting tidbits for you another time, so look forward to it! 
+I'll have some more interesting tidbits to share another time, so look forward to it! 
 I'll be back. Good luck with your work. 
 OK. Thanks for coming, Ogami. 
 Let me know if you hear any juicy stories!
@@ -1390,29 +1390,29 @@ The uniform I wear at the theater. Good for both summer and winter.
 A lighter borrowed from the inn. 
 The flower crown that Iris made for Reni. 
 A plate used at the welcome party. I was asked to bring it to Sakura. 
-A photo of Sakura. 
-A photo of Sakura. This one is a limited edition only available at New Year's. 
-A photo of Sumire. 
-A photo of Sumire. This one is a limited edition only available at New Year's. 
-A photo of Maria. 
-A photo of Maria. This one is a limited edition only available at New Year's. 
-A photo of Kanna. 
-A photo of Kanna. This one is a limited edition only available at New Year's. 
-A photo of Iris. 
-A photo of Iris. This one is a limited edition only available at New Year's. 
-A photo of Kohran. 
-A photo of Kohran. This one is a limited edition only available at New Year's. 
-A photo of Orihime. 
-A photo of Orihime. This one is a limited edition only available at New Year's. 
-A photo of Reni. 
-A photo of Reni. This one is a limited edition only available at New Year's. 
+A bromide of Sakura. 
+A bromide of Sakura. This one is a limited edition only available at New Year's. 
+A bromide of Sumire. 
+A bromide of Sumire. This one is a limited edition only available at New Year's. 
+A bromide of Maria. 
+A bromide of Maria. This one is a limited edition only available at New Year's. 
+A bromide of Kanna. 
+A bromide of Kanna. This one is a limited edition only available at New Year's. 
+A bromide of Iris. 
+A bromide of Iris. This one is a limited edition only available at New Year's. 
+A bromide of Kohran. 
+A bromide of Kohran. This one is a limited edition only available at New Year's. 
+A bromide of Orihime. 
+A bromide of Orihime. This one is a limited edition only available at New Year's. 
+A bromide of Reni. 
+A bromide of Reni. This one is a limited edition only available at New Year's. 
 A decorative paper ball for the welcome party called a kusudama. 
 A flower vase for the welcome party.
 The banner for the welcome party.
-The Cinematron. One of Kohran's inventions that lets you see and talk to someone from far away. 
+The Kinematron. One of Kohran's inventions that lets you see and talk to someone from far away. 
 The sword of the Pandemonium Regalia, recovered from the Demon King. 
 The mirror of the Pandemonium Regalia, recovered from the Demon King. 
-Fragments of the broken Cinematron. Seems like the kids at the inn picked them up along the shore. 
+Fragments of the broken Kinematron. Seems like the kids at the inn picked them up along the shore. 
 A letter from Sakura. 
 A letter from Sumire. 
 A letter from Maria. 
@@ -1424,9 +1424,9 @@ A letter from Reni.
 A scarf given to me by Sakura. It's knitted with red yarn - my favorite color. 
 A scarf given to me by Sakura. It's knitted with blue yarn - my favorite color. 
 A scarf given to me by Sakura. It's knitted with yellow yarn - my favorite color. 
-Sorry, Ogami. I can only sell you one photo per month. 
+Sorry, Ogami. I can only sell you one bromide per month. 
 I see. That's too bad. 
-So sorry, Mr. Ogami, but each customer is only allowed to purchase one photo at a time.
+So sorry, Mr. Ogami, but each customer is only allowed to purchase one bromide at a time.
 Oh, really? That's too bad.
 ... "" "" () - . , ! ? ?! !! 
 Minigame part <br> Select results 

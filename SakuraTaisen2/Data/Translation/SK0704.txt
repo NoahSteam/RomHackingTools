@@ -7,15 +7,15 @@ We make our move November 9th! You will be in charge of seizing the Grand Imperi
 Yoneda is a traitor who belittles the existence of our legitimate army. You will deal with him.
 And... you will capture Sakura Shinguji of the Flower Division. 
 If she attempts to resist... Kill her. I don't care either way. 
-Yessir! Leave it to me, sir! 
-Heheheh... The hour approaches. 
+Yessir! <br> Leave it to me, sir! 
+Heheheh... <br> The hour approaches. 
 The Taisho Restoration, the dawn of a new Japan, is finally at hand. 
 OK, time to get started on my night watch. 
 I'm still worried about Orihime, though... 
 Yo, Ogami! 
 That voice... 
-Oh, Kayama. What do you want? 
-That's cold, Ogami. After I came all this way, too. I'm crushed! 
+Oh, Kayama. <br> What do you want? 
+That's cold, Ogami. After I traveled all this way, too. I'm crushed! 
 ...Just come inside. 
 Hmph, very well. Alley-OOP! 
 Say, Ogami, you're looking as troubled as ever. 
@@ -37,22 +37,22 @@ All right, nothing out of the ordinary here. Continuing my night watch.
 Yo, Boss. Out on your rounds? 
 What are you up to, Kanna? 
 Heheh, I got a little hungry, so I'm having a quick meal. 
-Oh yeah, I didn't see Orihime come down here at all this evening. 
-I don't know what's up with her, but she shouldn't be skipping out on meals. 
+Oh yeah, I didn't see Orihime come down here at all this evenin’. 
+I don't know what's up with her, but she shouldn't be skippin’ out on meals. 
 That's true. 
 It's understandable.
 That's true. Skipping meals is bad for your health. 
 Glad you agree, Boss. 
-All right, if she still hasn't come out by tomorrow, I'll bring her something instead. 
+All right, if she still hasn't come out by tomorrow, I'll bring her somethin’ instead. 
 It's understandable. Sometimes people lose their appetite when they're worried about something. 
 Y-Ya think so? I eat like a pig when I get nervous. 
 Well, everyone's different. 
-All right, if she still hasn't come out by tomorrow, I'll bring her something instead. 
+All right, if she still hasn't come out by tomorrow, I'll bring her somethin’ instead. 
 What's up, Boss? You're spacing out. 
 Oh, s-sorry, I was just thinking... 
 C'mon, you all right? Keep it together! 
 You should head to bed yourself, Kanna. 
-*yawn* Yeah, you're right. Eating so much has got me all sleepy anyway. 
+*yawn* <br> Yeah, you're right. Eatin’ so much has got me all sleepy anyway. 
 All right, I'm headin' to my room. Night, Boss. 
 Right, I should get back to my night watch. 
 Seems like Kanna's back in her room. 
@@ -70,7 +70,7 @@ Nobody's here. Nothing out of the ordinary, either.
 I should get back to patrolling. 
 Nothing strange here. Same as it ever was. 
 I'll go patrol elsewhere. 
-Backstage at night... You can still faintly make out the smell of makeup in the air. 
+The dressing room at night... You can still faintly make out the smell of makeup in the air. 
 Nobody's here and nothing's unusual. I should go. 
 (Huh? It's Sumire.) 
 (Where's she headed to at this hour?) 
@@ -91,12 +91,12 @@ Yes, it's true. I was practicing my dancing.
 Huh. I thought as much. 
 And now you're going to help me with said dance practice. 
 I want you to move the spotlight and have it follow me as I dance. 
-W-Wait, I'm still on my night watch... 
+W-Wait, I'm still patrolling the theater... 
 No excuses! Now get to it! 
 …Right. Bugs do tend to appear more often in the fall. 
 Sorry to bother you, then. I'll be going now. 
 Ah, Ensign... Wait a moment. 
-You see, I... I actually WAS practicing my dancing. 
+You see, I… I actually WAS practicing my dancing. 
 I didn't want anyone to see me, so that's why I said what I did earlier. 
 I don't want to lie to you, Ensign... 
 Sumire... 
@@ -122,14 +122,14 @@ How would you feel about becoming my personal lighting technician, Ensign?
 Uhh... Well... I... 
 Ohohohoho! Relax, Ensign, I'm only kidding. 
 Now then, I must be going. Take care, Ensign. 
-Lighting technician, huh? I wonder if that'd suit me better than being a ticket puncher? 
+Lighting technician, huh? I wonder if that'd suit me better than being a ticket collector? 
 ...Now's not the time to be thinking about that. I have to get back to my rounds. 
 Phew... How was that, Sumire? 
 I think you have a knack for this. 
 Perhaps it wouldn't be such a bad idea to become a lighting technician as well as a ticket puncher? 
 A lighting technician, huh? Hmmm... 
 Now then, I must be going. Take care, Ensign. 
-Lighting technician, huh? I wonder if that'd suit me better than being a ticket puncher? 
+Lighting technician, huh? I wonder if that'd suit me better than being a ticket collector? 
 ...Now's not the time to be thinking about that. I have to get back to my rounds. 
 Sorry, Sumire... I wasn't very good at controlling the spotlight. 
 Well, it was your first time. Don't worry about it too much. 
@@ -181,7 +181,7 @@ But some families don't get along, no matter how close to each other they are.
 Could Mr. Ogata and Orihime ever patch things up? 
 Oh, Mon Frère! Reni and I were just making our own Jean-Paul constellation! 
 Hahaha... Don't go to bed too late, OK? 
-OOOK! 
+Okey-dokey! 
 Right, now back to my night watch. 
 Past 10 already, huh? I should call it here. 
 OK, guess I'll go talk to Orihime now. 
@@ -242,7 +242,7 @@ I wonder if Reni is in her room?
 No answer... 
 Her nameplate's just a piece of notebook paper, as usual. 
 Let's check another room. 
-I wonder, is Sakura in her room? 
+I wonder if Sakura is in her room? 
 Yes, who is it? 
 It's Ogami... 
 Ogami? Thanks for going on your night watch. 
@@ -252,7 +252,7 @@ All right. Good night, Ogami.
 She said she was going to bed. If there's anything I need from her, I'll just bring it up tomorrow.
 What a cute nameplate, typical of Sakura. 
 Let's check another room. 
-I wonder if Kanna is in her room.
+I wonder if Kanna’s in her room.
 No answer. Did she go somewhere? 
 Zzz... No, I couldn't eat another bite... 
 Sounds like even Kanna's asleep. 
@@ -288,8 +288,8 @@ So long as Orihime keeps shutting herself off from you, the problem won't be sol
 And the one who'll get her to open up is... you, sir. You're the only one who can. 
 ... 
 It'll be all right, Captain. I know you can do it. Have a little faith. 
-Right then, I'll be going now. I'll do some more reading then go to sleep. 
-Good night, Captain. Good luck on your night watch. 
+Right then, I'll take my leave now. I'm going to read some more in my room and then call it a night. 
+Good night, Captain. Best of luck on your night watch. 
 So it really is all up to me, huh? 
 Orihime... I wonder if she'll even listen to me? 
 Are you on your night watch, sir? If so, there's nothing unusual in my room. 
@@ -299,11 +299,11 @@ Good night, Captain.
 Right, back to the night watch, then. 
 It's Maria's nameplate. 
 OK, onto the next room. 
-Iris… Is she in her room?
+I wonder if Iris is in her room.
 No answer... 
 So Iris's nameplate is shaped like Jean-Paul. 
 Let's check another room. 
-I wonder if Kohran is in her room.
+I wonder if Kohran’s in her room.
 No answer... 
 A gear-shaped nameplate, huh? It's just Kohran's style. 
 Let's check another room. 
@@ -313,7 +313,7 @@ Doesn't look like Sumire's in.
 It's Ogami... 
 I have no desire to speak with a peeping tom. 
 (Oh boy, she really is mad.) 
-(I'll just make her angrier if I persist, so I'll just leave her be.) 
+(I'll just make her angrier if I persist, so I'll leave her be.) 
 Yes, who is it? 
 It's Ogami... 
 Oh, Ensign, on your night watch, are you? Good work. 
@@ -433,9 +433,9 @@ B-But... I think...
 So basically, to sum things up... 
 (They seem to be deep in conversation, so... I think I'll just go.) 
 Kohran... You're always working so hard on maintaining the Koubu. 
-Oh, Chief. You too, with your night watch. 
+Oh, Chief. Same to you with your night watch. 
 Seriously, thanks for always taking the time to chat with me. 
-I brought some manju today. Ya want some? 
+I brought some manju today. Want some? 
 Manju? Well, since you offered, why not? 
 ...Wow, delicious! These manju are great, Kohran! 
 I bought 'em from Tsurukamedo. Glad to hear you like them. 
@@ -459,7 +459,7 @@ Oh, a wise guy, eh?
 Aww, I've done it again! 
 Ahahaha! That was a perfect straight-man response, Chief! 
 Looks like you finally found your comedic footing! 
-...N-No good, huh? I just came up with it on the spot, but I still thought it was kinda funny... 
+...N-No good, huh? I just came up with it on the spot, but I still thought it was kinda amusing... 
 Hmm... That wasn't very funny. 
 Hmm... Guess it wasn't inspired enough. 
 Alrighty then, we had ourselves a nice break, time to get back to work. 
@@ -478,8 +478,8 @@ OK, guess I'll go talk to Orihime now.
 I wonder if Orihime will even listen to me? 
 ...Who is it? 
 It's Ogami. There's something I wanted to talk to you about. 
-HE asked you to come talk to me, didn't he? 
-I don't have anything to say to you, Ensign! 
+That MAN asked you to come talk to me, didn't he? 
+I don't have anything to say to you, Mr. Ensign! 
 Orihime... 
 (I can't back down, not now!) 
 (I have to open this door and talk to her!) 
@@ -496,12 +496,12 @@ Actually, it does!
 You're right, but…
 Actually, it does! I can't leave one of my partners in the Flower Division alone like this! 
 Partner this, partner that... You're a broken record! 
-I don't recall ever being partners with Japanese men! 
+I don't recall ever being partners with a Japanese man! 
 You're right. I have nothing to do with your family, not directly. 
 But I'm worried about you! Isn't that reason enough?! 
-Ensign... 
+Mr. Ensign... 
 ...No matter what you say, I'm not opening this door. 
-...Ensign? Are you still there?! 
+...Mr. Ensign? Are you still there?! 
 I already told you, I'm not opening this door! 
 Orihime, please! 
 That's cowardly, Orhime!
@@ -525,15 +525,15 @@ I just want to help you two patch things up, that's all.
 All right, I'll be going now. Good night, Orihime. 
 ... 
 ... 
-...Are you still there, Ensign? 
+...Are you still there, Mr. Ensign? 
 Yeah. I'm not leaving here until you open this door. 
 Fine then, you can wait out there till morning. 
 ... 
-Why don't you just give up already, Ensign? 
+Why don't you just give up already, Mr. Ensign? 
 And why don't you just give up and open the door already? 
 Hmph! 
 ... 
-No matter how long you stick around, Ensign, I'm not opening this door. 
+No matter how long you stick around, Mr. Ensign, I'm not opening this door. 
 It's late, just go to bed already. You're being a nuisance. 
 Oh well. You're right, it's late. I'll go back to my room for tonight. 
 But Orihime, I want you to know one thing. 
@@ -549,25 +549,25 @@ All right, so what did you want to talk to me about, anyway?
 Ask about Carino. 
 Ask about Ogata. 
 If you don't mind, could you tell me more about Carino? 
-I don't know what that man told you, Ensign... 
+I don't know what that man told you, Mr. Ensign... 
 But it's his fault that Mamma became so sad... 
 Mamma... She tried so hard not to cry in front of me... 
-But she was always in tears whenever she was alone.
+But she was always in tears whenever she was alone…
 All because of him... All because he wasn't faithful... 
 There's no way I could ever forgive him! 
 I'll never forgive him for making Mamma so sad... Never! 
 Orihime, you called him "unfaithful" just now... 
 But it seemed to me like Mr. Ogata truly loved Carino. 
-He's tricking you, Ensign! 
-It's obvious he's lying about loving Mamma! 
+That man is tricking you, Mr. Ensign! 
+He may claim that he loved my mamma… but, it's an obvious lie!!
 You were separated from your father when you were just a child, right, Orhime? 
-So how do you know Mr. Ogata is your father? 
-...Before I came to Japan, Mamma gave me a photograph. 
-She must've wanted me to make him apologize, if I ever met him. 
-There, is that good enough for you? Now go back to your room, Ensign! 
+So how did you recognize that Mr. Ogata was your father? 
+...Before I came to Japan, I asked my mamma to give me a photograph of the man. 
+I was thinking that if I ever saw him, I'd make him apologize.
+There, is that good enough for you? Now go back to your room, Mr. Ensign! 
 Orihime, can't you make amends with Mr. Ogata?
 Of course not! He's the man who abandoned Mamma and I! 
-Now please leave, Ensign! 
+Now please leave, Mr. Ensign! 
 ... 
 Orihime... 
 It's just like Kayama said, those two will never make up unless they talk to each other.
@@ -578,9 +578,9 @@ I... I won't be fooled by him! Never!
 If only there was a way I could get them to talk face to face... 
 I know! I'll take Orihime to see Mr. Ogata tomorrow, by force if I have to! 
 That's all I CAN do. All right, I'll just have to try! 
-Sorry, Ogami. I can only sell you one photo per month. 
+Sorry, Ogami. I can only sell you one bromide per month. 
 I see. That's too bad. 
-So sorry, Mr. Ogami, but each customer is only allowed to purchase one photo at a time.
+So sorry, Mr. Ogami, but each customer is only allowed to purchase one bromide at a time.
 Oh, really? That's too bad. 
 Shiro 
 Hanamaru 
@@ -621,29 +621,29 @@ The uniform I wear at the theater. Good for both summer and winter.
 A lighter borrowed from the inn. 
 The flower crown that Iris made for Reni. 
 A plate used at the welcome party. I was asked to bring it to Sakura. 
-A photo of Sakura. 
-A photo of Sakura. This one is a limited edition only available at New Year's. 
-A photo of Sumire. 
-A photo of Sumire. This one is a limited edition only available at New Year's. 
-A photo of Maria. 
-A photo of Maria. This one is a limited edition only available at New Year's. 
-A photo of Kanna. 
-A photo of Kanna. This one is a limited edition only available at New Year's. 
-A photo of Iris. 
-A photo of Iris. This one is a limited edition only available at New Year's. 
-A photo of Kohran. 
-A photo of Kohran. This one is a limited edition only available at New Year's. 
-A photo of Orihime. 
-A photo of Orihime. This one is a limited edition only available at New Year's. 
-A photo of Reni. 
-A photo of Reni. This one is a limited edition only available at New Year's. 
+A bromide of Sakura. 
+A bromide of Sakura. This one is a limited edition only available at New Year's. 
+A bromide of Sumire. 
+A bromide of Sumire. This one is a limited edition only available at New Year's. 
+A bromide of Maria. 
+A bromide of Maria. This one is a limited edition only available at New Year's. 
+A bromide of Kanna. 
+A bromide of Kanna. This one is a limited edition only available at New Year's. 
+A bromide of Iris. 
+A bromide of Iris. This one is a limited edition only available at New Year's. 
+A bromide of Kohran. 
+A bromide of Kohran. This one is a limited edition only available at New Year's. 
+A bromide of Orihime. 
+A bromide of Orihime. This one is a limited edition only available at New Year's. 
+A bromide of Reni. 
+A bromide of Reni. This one is a limited edition only available at New Year's. 
 A decorative paper ball for the welcome party called a kusudama. 
 A flower vase for the welcome party.
 The banner for the welcome party.
-The Cinematron. One of Kohran's inventions that lets you see and talk to someone from far away. 
+The Kinematron. One of Kohran's inventions that lets you see and talk to someone from far away. 
 The sword of the Pandemonium Regalia, recovered from the Demon King. 
 The mirror of the Pandemonium Regalia, recovered from the Demon King. 
-Fragments of the broken Cinematron. Seems like the kids at the inn picked them up along the shore. 
+Fragments of the broken Kinematron. Seems like the kids at the inn picked them up along the shore. 
 A letter from Sakura. 
 A letter from Sumire. 
 A letter from Maria. 
