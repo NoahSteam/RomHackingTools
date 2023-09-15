@@ -1,0 +1,35 @@
+Dog Single Byte Crash
+
+221ab2 - Crashing reading this line of text (single byte)
+223fb4 - Orig eng
+
+//For sure
+0602c5a4 mov.w @(r0, r2), r1 change to 012c
+0602c5b2 mov.w @r3+, r1   6134
+0602c5b6 mov.w @r3, r1    6130
+
+//Yes below
+0602c5b4 mov r1, @r7 2710
+0602c5c2 mov.w r1, @r7 2710
+0602c5be add 0x2, r7 //spacing change to 7701
+0602c580 mov.w @r7, r1 6170
+0602c582 mov.w @r7, r1 6170 
+0602c58a add 2, r7     7701
+
+0602c5ea change to 00ff
+0602c584 extu.w r1, r1 change to 611c
+0602c5b8 611c
+0602c5a8 611c
+0602c5b0 add 0xfe, r1 change to 77ff
+
+0601284a e21b
+
+--Theater--
+060a84c0
+
+212890 has "I feel like"
+'I' written to 060a84bf
+'S' in Sakura written to 060a84d2
+'i in 'in my dream' written to 060a84da
+06012700 reads that 'i' that was written
+'n' written to 0608ef20

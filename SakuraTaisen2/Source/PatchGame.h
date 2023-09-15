@@ -172,6 +172,75 @@ bool PatchTextDrawingCode(const string& inSourceGameDirectory, const string& inP
 			WriteLong(0x4cab0, 0x060a6700);//Read:  06051ab0 needs to be 060a6700
 			WriteLong(0x4caec, 0x060a6700);//Write : 06051aec needs to be 060a6700
 		}
+
+		//Fixes for Single Byte Encoding
+		#if USE_SINGLE_BYTE_LOOKUPS
+		{
+			//Regular text reading
+			WriteCommand(0xdb08,  0x0009); //No-op for add r0, r0
+			WriteCommand(0xdb0a,  0x011c); //06012b0a Text Read at 06012b0a: mov.w @(r0, r1), r1  change to 011c
+			WriteCommand(0xd8dc,  0x0009); //No-op for add r0, r0
+			WriteCommand(0xd8de,  0x011c); //060128de Text Read at 060128de: mov.w @(r0, r1), r1  change to 011c //when dumping out all text
+			WriteCommand(0x1631a, 0x0009); //No-op for add r0, r0
+			WriteCommand(0x1631c, 0x011c); //Text Read at 0601B31c: mov.w @(r0, r1), r1  change to 011c //ogami's lines
+			WriteCommand(0xd6fe,  0x0009); //No-op for add r0, r0
+			WriteCommand(0xd700,  0x011c); //06012700: same change to 011c
+			
+			//Compare FFFF and FFFE changed to to FF and FE
+			WriteCommand(0xd71a, 0x631c); // Compare value to fffa extu.w r1, r3 0601271a change to 631c
+			WriteCommand(0xd78a, 0x00fa); // 06012788 fffa change to 00fa
+			WriteCommand(0xde86, 0x666c); // Compare value to fffe extu.w r6, r6 06012e86 change to 666c
+			WriteCommand(0xdeb2, 0x00fe); // 06012eb0 fffe change to 00fe
+			
+			//Lips
+			WriteCommand(0xdf4a, 0x0009);
+			WriteCommand(0xdf4c, 0x014c); //Lips Text Read at 06012f4c: mov.w @(r0, r4), r1 (add r0, r0 right above)      change to 014c
+			WriteCommand(0xdf96, 0x0009);
+			WriteCommand(0xdf98, 0x02bc); //Lips Text Read at 06012f98: mov.w @(r0, r11), r2 (add r0, r0 right above)     change to 02bc
+			WriteCommand(0xdf84, 0x61b0); //Lips Text Read at 06012f84: mov.w @r11, r1                                    change to 61b0
+			WriteCommand(0xdffe, 0x0009);
+			WriteCommand(0xe000, 0x01bc); //Lips Text Read at 06013000: mov.w @(r0, r11), r1 (add r0, r0 right above)     change to 01bc
+			WriteCommand(0xe25c, 0x0009);
+			WriteCommand(0xe25e, 0x014c); //Lips Text Read at 0601325e: mov.w @(r0, r4), r1   (add r0, r0 right above)    change to 014c
+			WriteCommand(0xe274, 0x014c); //Lips Text Read at 06013274: mov.w @(r0, r4), r1                               change to 014c
+			WriteCommand(0xe3dc, 0x61a0); //Lips Text Read at 060133dc: mov.w @r10, r1                                    change to 61a0
+			WriteCommand(0xe3f6, 0x0009);
+			WriteCommand(0xe428, 0x02ac); //Lips Text Read at 06013428: mov.w @(r0, r10), r2 (add r0, r0 060133f6)        change to 02ac
+			WriteCommand(0xe4fa, 0x0009);
+			WriteCommand(0xe4fc, 0x01ac); //Lips Text Read at 060134fc: mov.w @(r0, r10), r1 (add r0, r0 right above)     change to 01ac
+
+			//Dog Lines
+			// 0602c580	=> 27580
+			// 0602c582	=> 27582
+			// 0602c584	=> 27584
+			// 0602c58a	=> 2758A
+			// 0602c5a4	=> 275A4
+			// 0602c5a8	=> 275A8
+			// 0602c5b0	=> 275B0
+			// 0602c5b2	=> 275B2
+			// 0602c5b4	=> 275B4
+			// 0602c5b6	=> 275B6
+			// 0602c5b8	=> 275B8
+			// 0602c5be	=> 275BE
+			// 0602c5ea	=> 275EA
+			// 0602c5c2	=> 275C2
+
+			WriteCommand(0x275A4, 0x012c); // 0602c5a4 mov.w @(r0, r2), r1 change to 012c
+			WriteCommand(0x275B2, 0x6134); // 0602c5b2 mov.w @r3 + , r1   6134
+			WriteCommand(0x275B6, 0x6130); // 0602c5b6 mov.w @r3, r1    6130			
+			WriteCommand(0x275B4, 0x2710); // 0602c5b4 mov.w r1, @r7 2710
+			WriteCommand(0x275C2, 0x2710); // 0602c5c2 mov.w r1, @r7 2710
+			WriteCommand(0x275BE, 0x7701); // 0602c5be add 0x2, r7 //spacing change to 7701
+			WriteCommand(0x27580, 0x6170); // 0602c580 mov.w @r7, r1 6170
+			WriteCommand(0x27582, 0x6170); // 0602c582 mov.w @r7, r1 6170
+			WriteCommand(0x2758A, 0x7701); // 0602c58a add 2, r7     7701			
+			WriteCommand(0x275EA, 0x00ff); // 0602c5ea change to 00ff
+			WriteCommand(0x27584, 0x611c); // 0602c584 extu.w r1, r1 change to 611c
+			WriteCommand(0x275B8, 0x611c); // 0602c5b8 611c
+			WriteCommand(0x275A8, 0x611c); // 0602c5a8 611c
+			WriteCommand(0x275B0, 0x77ff); // 0602c5b0 add 0xfe, r1 change to 77ff
+		}
+		#endif
 	}
 
 	//SAKURADA

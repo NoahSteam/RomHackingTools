@@ -1,10 +1,24 @@
-Text Read at 06012b0a: mov.w @(r0, r1), r1
-Text Read at 060128de: mov.w @(r0, r1), r1  //when dumping out all text
-Text Read at 0601B31c: mov.w @(r0, r1), r1  //ogami's lines
-             06012700: same
+Text Read at 06012b0a: mov.w @(r0, r1), r1  change to 011c
+Text Read at 060128de: mov.w @(r0, r1), r1  change to 011c //when dumping out all text
+Text Read at 0601B31c: mov.w @(r0, r1), r1  change to 011c //ogami's lines
+             06012700: same change to 011c
+			 
+			           
+Text Read from Mem at 060128f4 mov.w @r1, r1 (no)
+                      06012a00 mov.w @r1, r6 61110 (no)
+					  
+					  06012b0e mov.w r1, @r2 2210 (no)
+					  060128e2 mov.w r1, @r2 (no)
+					  
+Compare FFFF and FFFE to FF and FE
+	Compare value to fffa extu.w r1, r3 0601271a change to 631c
+	0601278a fffa change to 00fa
+
+	Compare value to fffe extu.w r6, r6 06012e86 change to 666c
+	06012eb2 fffe change to 00fe
 
 Lips Text Read at 06012f4c: mov.w @(r0, r4), r1 (add r0, r0 right above)      change to 014c            
-Lips Text Read at 06012f98: mov.w @(r0, r11), r2 (add r0, r0 right above)     change to 03bc      
+Lips Text Read at 06012f98: mov.w @(r0, r11), r2 (add r0, r0 right above)     change to 02bc      
 Lips Text Read at 06012f84: mov.w @r11, r1                                    change to 61b0
 Lips Text Read at 06013000: mov.w @(r0, r11), r1 (add r0, r0 right above)     change to 01bc
 Lips Text Read at 0601325e: mov.w @(r0, r4), r1   (add r0, r0 right above)    change to 014c
@@ -31,6 +45,7 @@ Offset to end of text at 06029f1e: add r1,r1 (no)
 217e42 lips ending original eng
 2174ba ogami single byte
 217922 lips
+21ccae has 85 in single byte
 
 0602c36c reads in text offset from header and then it's multiplied by 2 at 0602c372 
 

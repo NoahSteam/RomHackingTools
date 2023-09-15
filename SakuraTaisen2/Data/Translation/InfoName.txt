@@ -1,12 +1,12 @@
 Koubu Kai
 Ogami
-Rouko Mekkyaku - Tenchi Isshin
+Heaven's Arrow
 Tenbu
 Sakura
-Haja Kensei - Hyakka Seihou
+Floral Enlightenment
 Tenbu
 Sumire
-Kanzaki Fujin Ryu - Dance of Dragon
+Dragon Dance
 Eisenkleid
 Reni
 Das Rheingold
@@ -15,13 +15,13 @@ Maria
 Troitsa
 Tenbu
 Kanna
-Rouhai Go-dan
+Crane Stance
 Tenbu
 Iris
 Iris Boîte de Secours
 Tenbu
 Kohran
-Lightning Ball Robot
+Ball Lightning Bot
 Tenbu
 Orihime
 Il Flauto Magico
@@ -30,31 +30,31 @@ Reni
 Die Walküre
 Koubu Kai
 Ogami
-Rouko Mekkyaku - Tenrou Tenge
+Sirius Awakening
 Koubu Kai
 Sakura
-Haja Kensei - Ouka Ranman
+Blossom Radiance
 Koubu Kai
 Sakura
-Haja Kensei - Ouka Mushou
+Blossom Rising
 Koubu Kai
 Sumire
-Kanzaki Fujin Ryu - Dance of Phoenix
+Phoenix Bolero
 Koubu Kai
 Maria
-Shchelkunchik/Nutcracker
+Shchelkunchik
 Koubu Kai
 Kanna
-Sansei Ruushou
+Thirty-Six Strikes
 Koubu Kai
 Iris
-Iris Grande Jean-Paul
+Iris Grand Jean-Paul
 Koubu Kai
 Kohran
-Seiju Robo Kai
+Cyber Guardians Kai
 Koubu Kai
 Orihime
-Viaggio rose
+Viaggio Rose
 Koubu Kai
 Reni
 Siegfried
@@ -77,10 +77,10 @@ Wakiji Kai
 HA-type Kou
 None
 Wakiji Kai
-NI-type Special
+NI-type SP
 None
 Wakiji Kai
-I-type Light
+I-type Kei
 None
 Wakiji Kai
 L Special
@@ -93,49 +93,49 @@ Oudouji
 None
 Goko
 Kasha
-Guren Karinsou
+Blazing Rings
 Hougyou
 Suiko
-Sekka Hamon Jukki
+Rippling Flurry
 Chiken
 Mokujiki
-Koushinenrin Enbu
+Invigorating Will
 Koubu Kai
 Maria
-Pikovaya dama
+Pikovaya Dama
 Dark Kamui
 Satan
 None
 Dainichiken
-Kongou
-Kishin Goutensatsu
+Kongo
+Roar of the Gods
 Hachou
 Tsuchigumo
-Kuin Mandala
+Nine-Seal Mandala
 Dark Kamui
 Demon King
-Houma Seishin
+Corrupted Constellation
 Dark Kamui
 Demon King
-Ouka Houshin
-Shinnou (Head)
+Blossom Smite
+Shinnou (H)
 Kyogoku
-Onteki Taisan
-Shinnou (Arm)
-Kyogoku
-None
-Shinnou (Arm)
+Mass Destruction
+Shinnou (A)
 Kyogoku
 None
-Shinnou (Tail)
+Shinnou (A)
 Kyogoku
-Holy Demon Magic Circle
+None
+Shinnou (T)
+Kyogoku
+Demonic Circle
 Kouma Weapon
 Banrai
 None
 Koubu Kai
 Kanna
-Sanchin Tenshou
+United Assault
 Kouma Weapon
 Kairai
 None
@@ -161,7 +161,7 @@ Kouma Weapon
 Inazuma
 None
 Weapon
-Steam Rocket
+Rocket
 None
 Weapon
 Enku
@@ -172,26 +172,26 @@ Iris Petit Jean-Paul
 Weapon
 Obeyer
 None
-Car
-Fancy Car
+Automobile
+Luxury Car
 None
 Weapon
 Homura
 None
 Weapon
-Thunder Cannon
+Thunder Gun
 None
 Weapon
-Black Demon Cannon
+B.Demon Gun
 None
 Weapon
-Assault Cannon
+Assault Gun
 None
 Weapon
-Dimension Cannon
+DimensionGun
 None
 Weapon
-Grudge Cord
+Cord
 None
 Terrain
 Summoner
@@ -201,36 +201,36 @@ Karan
 None
 Koubu Kai
 Kohran
-Jiangpai Robots
+Mahjong Robo
 Weapon
-Cross Homura
+X Homura
 None
-Shinnou (Arm)
+Shinnou (A)
 Kyogoku
 None
 Weapon
-Cross Homura
+X Homura
 None
 Terrain
 Engine
 None
 Weapon
-Grudge Cord
+Cord
 None
 Terrain
-Defense Wall
+D. Curtain
 None
 Terrain
-Guide Light
+Beacon
 None
 Terrain
-Boulder Stopper
+Rock Stop
 None
 Terrain
-Illuminator [?]
+Illuminator
 None
 Weapon
-Grudge Cord
+Cord
 None
 Eisenkleid
 Orihime
@@ -245,7 +245,7 @@ Terrain
 Pillar
 None
 Terrain
-Steam Stand
+Steam Pod
 None
 Terrain
 Material
@@ -264,4 +264,4 @@ Reni
 Das Rheingold
 Tenbu
 Ogami
-Rouko Mekkyaku - Sanjin Seiko
+Tiger Slash

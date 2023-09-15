@@ -158,12 +158,11 @@ struct SakuraTextFile
 	struct SakuraStringInfo
 	{
 		unsigned int   mFullValue;
-		unsigned short mStringId;
 		unsigned short mNumCharactersPrecedingThisString;
 
-		SakuraStringInfo(unsigned short inFirst, unsigned short inSecond) : mStringId(inFirst), mNumCharactersPrecedingThisString(inSecond)
+		SakuraStringInfo(unsigned int inValue) : mNumCharactersPrecedingThisString(inValue)
 		{
-			mFullValue = (inFirst << 16) + inSecond;
+			mFullValue = inValue;
 		}
 	};
 
@@ -431,19 +430,6 @@ public:
 		assert(mStringInfoArray.size() == mLines.size());
 	}
 
-	bool DoesIdExist(unsigned short inId) const
-	{
-		for (const SakuraStringInfo& info : mStringInfoArray)
-		{
-			if (info.mStringId == inId)
-			{
-				return true;
-			}
-		}
-
-		return false;
-	}
-
 	void Close()
 	{
 		if (mpFile)
@@ -551,11 +537,9 @@ private:
 			const int numStrings = (textHeaderSize / numBytesPerEntry) - 1; //First entry is just the 4 byte value saying how big the table is
 			for (int i = 0; i < numStrings; ++i)
 			{
-				const unsigned int stringInfo = SwapByteOrder(pDialogEntryHeader[i]);
-				const unsigned short first = (stringInfo & 0xffff0000) >> 16;
-				const unsigned short second = (stringInfo & 0x0000ffff);
+				const unsigned int offsetToText = SwapByteOrder(pDialogEntryHeader[i]);
 
-				mStringInfoArray.push_back(std::move(SakuraStringInfo(first, second)));
+				mStringInfoArray.push_back(std::move(SakuraStringInfo(offsetToText)));
 			}
 		}
 	}

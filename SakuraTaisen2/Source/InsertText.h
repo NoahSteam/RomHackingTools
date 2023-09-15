@@ -4,25 +4,21 @@ struct SakuraTextFileFixedHeader
 {
 	struct StringInfo
 	{
-		unsigned short stringId;
-		unsigned short offsetFromTableStart;
-
-		explicit StringInfo(unsigned short inStringId, unsigned short inOffsetFromTableStart) : stringId(SwapByteOrder(inStringId)), offsetFromTableStart(SwapByteOrder(inOffsetFromTableStart))
-		{
-		}
-	};
-
-#pragma pack(push, 2)
-	struct StringInfo8Bytes
-	{
-		unsigned int stringId;
 		unsigned int offsetFromTableStart;
 
-		explicit StringInfo8Bytes(unsigned int inStringId, unsigned int inOffsetFromTableStart) : stringId(SwapByteOrder(inStringId)), offsetFromTableStart(SwapByteOrder(inOffsetFromTableStart))
+		explicit StringInfo(unsigned int inOffsetFromTableStart) : offsetFromTableStart(SwapByteOrder(inOffsetFromTableStart))
 		{
 		}
 	};
-#pragma pack(pop)
+
+	struct StringInfo8Bytes
+	{
+		unsigned int offsetFromTableStart;
+
+		explicit StringInfo8Bytes(unsigned int inOffsetFromTableStart) : offsetFromTableStart(SwapByteOrder(inOffsetFromTableStart))
+		{
+		}
+	};
 
 	unsigned short           mOffsetToTable;
 	unsigned int             mOffsetToTable8Bytes;
@@ -40,37 +36,27 @@ struct SakuraTextFileFixedHeader
 
 		//All TBL files start with this entries
 		//mStringInfo.push_back( SwapByteOrder(inInfo[0].mFullValue) );
-		mStringInfo.push_back(StringInfo(inInfo[0].mStringId, inInfo[0].mNumCharactersPrecedingThisString));
-		mStringInfo8Bytes.push_back(StringInfo8Bytes(inInfo[0].mStringId, inInfo[0].mNumCharactersPrecedingThisString));
+		mStringInfo.push_back(StringInfo(inInfo[0].mNumCharactersPrecedingThisString));
+		mStringInfo8Bytes.push_back(StringInfo8Bytes(inInfo[0].mNumCharactersPrecedingThisString));
 		
 		int totalCharCount = 0;
-		unsigned short prevValue = 0;
-		unsigned int   prevValue8Bytes = 0; prevValue8Bytes = 0;
+		unsigned int prevValue = 0;
 		const size_t numEntries = inInfo.size() - 1;
 		for (size_t i = 0; i < numEntries; ++i)
 		{
 #if USE_SINGLE_BYTE_LOOKUPS
-			unsigned short newOffset = bIsMesFile ? (unsigned short)inStrings[i].mChars.size() + prevValue : ((unsigned short)inStrings[i].mChars.size() + prevValue); //+ trailingZeros;
-			unsigned int   newOffset8bytes = (inStrings[i].mChars.size() + prevValue8Bytes); //+ trailingZeros;
-			assert(newOffset8bytes % 2 == 0);
-
+			unsigned int newOffset = bIsMesFile ? (unsigned short)inStrings[i].mChars.size() + prevValue : (inStrings[i].mChars.size() + prevValue); //+ trailingZeros;
+			
 			totalCharCount += inStrings[i].mChars.size();
-			prevValue8Bytes = newOffset8bytes;
 			prevValue = newOffset;
-
-			newOffset8bytes /= 2;
 			newOffset /= 2;
 #else
-			const unsigned short newOffset = (unsigned short)inStrings[i].mChars.size() + prevValue; //+ trailingZeros;
+			const unsigned int newOffset = (unsigned int)inStrings[i].mChars.size() + prevValue; //+ trailingZeros;
 			totalCharCount += (unsigned short)inStrings[i].mChars.size();
 			prevValue = newOffset;
 #endif
 			
-			mStringInfo.push_back(StringInfo(inInfo[i + 1].mStringId, newOffset));
-
-#if USE_4_BYTE_OFFSETS
-			mStringInfo8Bytes.push_back(StringInfo8Bytes(inInfo[i + 1].mStringId, newOffset8bytes));
-#endif
+			mStringInfo.push_back(StringInfo(newOffset));
 		}
 
 		const bool bCheckTotalCharError = false;//SW2 uses a 4byte lookup table instead of 2 bytes in SW1 !USE_4_BYTE_OFFSETS || bIsMesFile;
@@ -139,25 +125,13 @@ struct SakuraTextFileFixedHeader
 
 	void OutputToFile(FileWriter& outFile)
 	{
-#if USE_4_BYTE_OFFSETS
-		const int totalSize = SwapByteOrder(mStringInfo8Bytes.size() * sizeof(SakuraTextFileFixedHeader::StringInfo));
-		outFile.WriteData(&totalSize, sizeof(totalSize));
-
-		for (StringInfo8Bytes& stringInfo : mStringInfo8Bytes)
-		{
-			outFile.WriteData(&stringInfo.stringId, sizeof(stringInfo.stringId));
-			outFile.WriteData(&stringInfo.offsetFromTableStart, sizeof(stringInfo.offsetFromTableStart));
-		}
-#else
 		const int totalSize = SwapByteOrder(mStringInfo.size() * sizeof(SakuraTextFileFixedHeader::StringInfo));
 		outFile.WriteData(&totalSize, sizeof(totalSize));
 
 		for(StringInfo& stringInfo : mStringInfo)
 		{
-			outFile.WriteData(&stringInfo.stringId, sizeof(stringInfo.stringId));
 			outFile.WriteData(&stringInfo.offsetFromTableStart, sizeof(stringInfo.offsetFromTableStart));
 		}
-#endif
 	}
 	
 };
