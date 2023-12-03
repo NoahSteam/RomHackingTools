@@ -48,11 +48,11 @@ Kinda intriguing, huh? Anyway, we should hear what he has to say.
 You're right. OK, let's head inside. 
 Ah, Mr. Ensiiign! 
 Hey, Orihime. What are you doing here? 
-Yoneda called me here. I don't know what for, though. 
+Yoneda called me here. Though I don't know what for. 
 Huh?! I actually got called down here as well... 
-What?! You too, Mr. Ensign? 
+What?! You too? 
 If he called for the both of us, then... What could this be about? 
-Maybe... He wants us to get married or something? 
+Maybe... He is wanting for us to get married, or something? 
 I-I don't think that's it... 
 Anyway, let's go inside. 
 ...Captain? 
@@ -72,7 +72,7 @@ Yes, we just so happened to meet outside your office.
 Yeah, we ran into each other outside your office. 
 Uh-huh! We ran into each other right in front of your door! 
 Yep, that's right. Just so happened to bump into each other outside your office. 
-That's right. We ran into each other before coming inside. 
+That's right. We ran into one another before coming inside. 
 We just happened to meet a moment ago. 
 I see... 
 Actually, there's two things I wanted to tell the both of you. 
@@ -123,8 +123,8 @@ Iris... Thank you.
 Not bad, Chief! Way to go, getting promoted to lieutenant! 
 Well, this was way overdue anyway. For real, congrats! 
 Kohran... Thanks. 
-That's amazing, Mr. Ensign! I guess I have to start calling you "Mr. Lieutenant" now, huh? 
-Lieutenant... Congratulations! 
+How amazing, Mr. Ensign! Perhaps I have to start calling you "Mr. Lieutenant" now, hm? 
+Congratulations… Mr. Lieutenant! 
 Thanks, Orihime. Hahaha... You're making me blush. 
 That's great, Captain. 
 I'm glad your hard work is being recognized, sir. 
@@ -314,8 +314,8 @@ But even when Papa and Mamma were far apart...
 They never stopped thinking about each other. 
 And I'll always be thinking about you, Mr. Ensign. 
 Orihime... 
-I wish I could've met you sooner... 
-And I wish I could've stayed with you longer. 
+I wish I could have met you sooner... 
+And I wish…that I could have stayed with you longer. 
 ... 
 Reni... 
 I wanted to go to all kinds of places with you... 
@@ -361,7 +361,7 @@ We'll keep working hard, with your words in our hearts.
 Take care of yourself, all right, Chief? 
 You'll have to tell me all about how it is over there sometime. 
 No matter how far apart we may be... 
-Our hearts will always be as one. 
+Our hearts, they will always be as one. 
 Uhh... <br> Sniff... Mon Frère... 
 Come, now, Iris, don't cry. 
 Mon Frère... <br> Don't forget about me... OK? 
@@ -445,15 +445,15 @@ Um... It's kind of embarrassing, so wait till you're on the boat to read it, 'ka
 Kohran... Thanks. 
 All right then, night, Chief. 
 Kohran... 
-Oh thank goodness, you're still up, Mr. Lieutenant. 
+Oh thank goodness, you're still awake, Mr. Lieutenant. 
 Orihime... 
-Um... I actually have something for you. 
+Um... I actually have something to give to you. 
 Something for me? 
 What's this? 
 I wrote a letter for you… Mr. Lieutenant.
 Read it once you're on the boat to France. 
 Orihime... Thank you. 
-All right, then, Mr. Lieutenant... Good night. 
+All right, then... Good night. 
 Orihime... 
 Reni... 
 I... wrote you a letter. 
@@ -578,9 +578,9 @@ A lot has happened in the year I've spent with you. You've changed me, Captain.
 You're a big part of my life now. Perhaps you always will be. 
 Congratulations once again on your promotion. I await the day we can meet again. 
 April 1926. <br> Imperial Assault Troupe, Flower Division <br> Reni Milchstraße 
-Sorry, Ogami. I can only sell you one bromide per month. 
+Sorry Ogami, but customers are only allowed to purchase one of each bromide. 
 I see. That's too bad. 
-So sorry, Mr. Ogami, but each customer is only allowed to purchase one bromide at a time.  
+So sorry, Mr. Ogami, but customers are only allowed to purchase one of each bromide.
 Oh, really? That's too bad. 
 The jewel of the Pandemonium Regalia, entrusted to us by the Rose Division. 
 Spirit Sword Arataka. The special sword of the Shinguji family. 

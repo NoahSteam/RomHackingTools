@@ -2,7 +2,7 @@
 Can't dawdle around too long. Better head to my room and get changed. 
 Whoops, I still haven't changed. 
 I'm going to visit Sakura's family, I'd better dress right. 
-I wonder if Sakura's ready yet? 
+I wonder if Sakura's ready yet. 
 It's just like Sakura to have a cute nameplate like this. 
 We can't wait around too much longer, so I'll call out to her. 
 Sakura, I'm here. 
@@ -27,7 +27,7 @@ Y-You think so? Thanks, Sakura.
 Well then, let's say goodbye to the manager and be on our way. 
 OK, got it. We'll ask him to hold down the fort while we’re away. 
 Right! Let's head to his office. 
-I wonder if Sakura's in her room? 
+I wonder if Sakura is in her room. 
 Oh, Ogami? Did you need something? 
 No, not particularly... 
 I see. That's good. I was just about to leave for Sendai. 
@@ -48,7 +48,7 @@ Sakura just left for Sendai, right?
 No use staying here with her gone. I'll go visit another room. 
 Whoops, I still haven't changed. 
 I'm going to visit Sumire's family, I'd better dress right. 
-I wonder if Sumire's ready yet? 
+I wonder if Sumire's ready yet. 
 We can't wait around too much longer, so I'll call out to her. 
 This is a pretty subtle design, considering it's Sumire. 
 Sumire, I'm here. 
@@ -98,7 +98,7 @@ Sumire just went back home, right?
 No use staying here, then. I should visit another room. 
 Whoops, I still haven't changed. 
 I'll be visiting Count Hanakoji, so I'd better dress right. 
-I wonder if Maria's ready yet? 
+I wonder if Maria's ready yet. 
 We can't wait around too much longer, so I'll call out to her. 
 It's Maria's nameplate. It has a simplistic design. 
 Maria, I'm here. 
@@ -137,7 +137,7 @@ Maria left to visit Count Hanakoji, right?
 No use staying here, then. I should go to another room. 
 Whoops, I still haven't changed. 
 Since we're going all the way to Okinawa, I'd better dress up right. 
-I wonder if Kanna's ready? 
+I wonder if Kanna's ready. 
 We can't wait around too much longer, so I'll call out to her. 
 Kanna's nameplate... It looks more like a nametag to me. 
 Kanna, I'm here. 
@@ -161,7 +161,7 @@ All right, Kanna, shall we get going?
 Before we do, how's about we tell the manager goodbye? 
 Yeah, you're right. We should let him know we’re leaving before we head out. 
 All right, let's swing by the manager's office. 
-I wonder if Kanna's in her room? 
+I wonder if Kanna is in her room. 
 Oh, Boss? What's up? 
 Nothing, I just thought you might've left already. 
 I was just thinking of headin’ out, actually. 
@@ -184,7 +184,7 @@ Kanna already left for Okinawa.
 There's no use staying around here. I should go somewhere else. 
 Whoops, I still haven't changed. 
 I'll be meeting Iris's parents, so I'd better dress up right. 
-I wonder if Iris is ready? 
+I wonder if Iris is ready. 
 We can't wait around too much longer, so I'll call out to her. 
 So Iris's nameplate is shaped like Jean-Paul. 
 Iris, I'm here. 
@@ -231,7 +231,7 @@ Iris said she was meeting her parents at the harbor, right?
 I should get ready to head out, too. 
 Whoops, I still haven't changed. 
 I'm making the trip all the way to Kobe, so I'd better dress up right. 
-I wonder if Kohran's ready? 
+I wonder if Kohran's ready. 
 We can't wait around too much longer, so I'll call out to her. 
 A gear-shaped nameplate, huh? It's just Kohran's style. 
 Kohran, I'm here. 
@@ -278,28 +278,28 @@ Kohran just left, right?
 There's no use staying around here. I should go somewhere else. 
 Whoops, I still haven't changed. 
 I'll be meeting Orihime's parents, so I'd better dress up right. 
-I wonder if Orihime's ready? 
+I wonder if Orihime's ready. 
 We can't wait around too much longer, so I'll call out to her. 
 The nameplate has a simple design, but it sure looks classy. 
 Orihime, I'm here. 
 OK, coming! 
 Sorry to keep you waiting, Mr. Ensign. 
-Ah, Mr. Ensign, you changed clothes? 
+Ah, you changed your clothes? 
 Wouldn't want to be rude.
 How do I look? 
 I figured I should, since I'm meeting your parents. Wouldn't want to be rude. 
-A true gentiluomo as always, Mr. Ensign. 
+A true gentiluomo as always. 
 I'm sure Mamma will take a liking to you, too. 
 Hahaha, that'd be nice. 
 I thought I'd dress in something more formal... How do I look? 
-I think it looks fabulous on you! 
-You'd fit right into European high society! 
+It suits you perfectly well! 
+You'd fit right into the high society of Europe! 
 Hahaha, thanks, Orihime. 
 P-Please don't stare like that, I'm getting embarrassed. 
 There's nothing to be embarrassed about, Mr. Ensign. 
 A man's appearance is one of his finest weapons, after all! 
 I-I see... 
-That reminds me, since we're leaving the theater... 
+That reminds me, since we are to leave the theater... 
 We should talk to Yoneda first, just to be safe. 
 Yeah, you're right. OK then, let's stop by his office. 
 There, door's shut tight. 
@@ -313,7 +313,7 @@ I'm happy for you.
 I won't be able to see them, but give them my regards, OK? 
 Yes, certainly. I'll be telling Mamma all about you.
 I'm happy for you, Orihime. Your parents are finally being reunited after so long.
-Yes! And it's all thanks to you, Mr. Ensign. 
+Yes! And we have you to thank for it all, Mr. Ensign. 
 I'm sorry I can't be there to see them... 
 But you have a nice long chat with them, as a family. 
 Mr. Ensign... <br> Thank you so much. 
@@ -329,7 +329,7 @@ Orihime just left, right?
 I should get ready to head out, too. 
 Whoops, I still haven't changed. 
 I ought to put on something nice for my first shrine visit of the year. 
-I wonder if Reni's in her room? 
+I wonder if Reni is in her room. 
 Since it's New Year's, I'll try inviting her out for a shrine visit. 
 Reni... Still using notebook paper as a nameplate, I see. 
 Reni, are you there? It's Ogami. 
@@ -359,7 +359,7 @@ Why would I invite you if I didn't want to go with you?
 Captain... 
 All right, Reni, let's get going. 
 O-OK. 
-I wonder if Reni's in her room? 
+I wonder if Reni is in her room.
 ...Captain. 
 Hey, Reni. Did you just get back to your room? 
 Yeah. Did you need something, sir? 
@@ -750,9 +750,9 @@ You'd better make sure to take it with you while you're out, in case of emergenc
 R-Right. Understood, ma'am. 
 Be careful, and have a fun New Year's holiday. 
 Y-Yes, ma'am! We're off! 
-Sorry, Ogami. I can only sell you one bromide per month. 
+Sorry Ogami, but customers are only allowed to purchase one of each bromide. 
 I see. That's too bad. 
-So sorry, Mr. Ogami, but each customer is only allowed to purchase one bromide at a time.
+So sorry, Mr. Ogami, but customers are only allowed to purchase one of each bromide.
 Oh, really? That's too bad. 
 The jewel of the Pandemonium Regalia, entrusted to us by the Rose Division. 
 Spirit Sword Arataka. The special sword of the Shinguji family. 

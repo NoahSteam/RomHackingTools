@@ -12,7 +12,7 @@ Yes, sir...
 Demon King... <br> I trust that our vanguard is ready to deploy? 
 Of course. Right this way... 
 During the Kouma War, the Army gathered Kouma corpses in total secrecy... 
-By extracting the Spirit Power from their tissue, their bodies were rebuilt into the ultimate weapons.
+By extracting the spirit power from their tissue, their bodies were rebuilt into the ultimate weapons.
 “Kouma Weapons"... <br> Finally, the day has come for you to trample the capital beneath your might. 
 GRAAAAWL! 
 Kongo… Tsuchigumo… <br> I leave the Imperial Assault Troupe to you. 
@@ -169,7 +169,7 @@ Once the young mistress has returned, I'll let you know right away.
 I see, that does sound nice. 
 All right, I'll follow your suggestion and go wander around a little. 
 Phew, looking for Sumire in such a huge yard sure is a hassle. 
-At any rate, I wonder what those two are talking about? 
+At any rate, I wonder what those two are talking about. 
 Ah, what great weather. Not a cloud in the sky. 
 But boy, it feels like you could easily get lost in a yard as huge as this. 
 Sumire… I have something I wanted to tell you. 
@@ -655,7 +655,7 @@ There's nothing left to say, Kohran.
 We're gonna win this fight and go home, just like we always do! 
 Yeah! Let's do this, Chief! 
 No matter who we're up against, we'll never lose! That's what the Imperial Assault Troupe's all about! 
-I'm so sorry, you two. You both left the room out of consideration for us, didn't you?
+Both of you, I must apologize. You left the room out of consideration for us, didn't you?
 No, it's fine. I just needed to talk to Mr. Ensign about something. 
 By the way, Ogami. Do you remember the promise you made? 
 Yes, I remember. 
@@ -664,13 +664,13 @@ Yes, I remember.
 I believe Orihime and I promised to model for one of your portraits together, am I right?
 Yes, that's the one. I'm glad you remembered. 
 What promise? Do you know what he's talking about, Orihime? 
-Don't tell me you forgot already! We promised we'd model for one of his portraits, remember?! 
+You have forgotten already?! We promised to model for one of his portraits, didn’t we?! 
 Oh, that's right! I remember now. 
-Sheesh! You shouldn't forget such an important promise! 
+Mamma mia! You shouldn't forget such an important promise! 
 Now, now, Orihime, it WAS over a month ago. It's perfectly understandable. 
 Hmmm... I'm not sure if I do remember it or not... 
 Seriously, Mr. Ensign, you have nessuna memoria, no memory at all! 
-We promised we'd model for one of his portraits, remember?! 
+We promised to model for one of his portraits, remember?! 
 Oh yeah, that's right! I finally remembered. 
 You shouldn't forget such an important promise! 
 Now, now, Orihime, it WAS over a month ago. It's perfectly understandable. 
@@ -682,7 +682,7 @@ Yes, with pleasure.
 ...Do we have to be nude? 
 I... can't. 
 Yes, with pleasure. 
-I'm OK with it too, of course! 
+I am fine with it, of course! 
 Thanks, you two. 
 I... can't do it. I don't have what it takes. 
 No, that's not true. You and Orihime have a certain... radiance about you. 
@@ -690,18 +690,18 @@ No, that's not true. You and Orihime have a certain... radiance about you.
 When a person's accomplished something, they shine brightly. 
 Seeing you two now... I want to capture that radiance in my art. 
 Please, Ogami. 
-How can you say no after all that, Mr. Ensign? 
+After all of that, how can you say no, Mr. Ensign? 
 ...All right, I get it, Orihime. 
 Mr. Ogata, I'd be more than happy to model for you. 
 Oh, so you'll do it, then? Thank you. 
 When you say "modeling"... Does that mean we have to be nude? 
 M-Mr. Ensign! What are you saying?! 
-There's no way we could do that in such a public place where all these strangers can gawk at us!
+There's no way we could do that in a public place such as this, with all these strangers to gawk at us!
 T-That’s true. You make a good point. 
 Hahaha… You're as entertaining as ever, Ogami. 
 Do not worry, you can stay dressed just the way you are.
 Hmmm… What should I do? 
-What are you hesitating for, Mr. Ensign? 
+You have no reason for hesitating, Mr. Ensign!
 You and I are perfectly qualified to be models! 
 Wow, Orihime... <br> That's some confidence. 
 All right then, Orihime, if you could sit in that chair over there. 
@@ -717,30 +717,30 @@ Look natural.
 Flash a toothy smile. 
 Smile with your whole face. 
 (Maybe I should just stick with a natural expression?) 
-That expression will do just fine, Ogami. 
-Yes, you look your best with your usual, natural countenance. Wouldn't you agree, Carino? 
+That face will do just fine, Ogami. 
+Yes, you look your best with your usual, natural expression. Wouldn't you agree, Carino? 
 Indeed, I think it perfectly conveys his personality. 
 (I should probably smile, right?) 
 Hmm… That smile seems a bit forced. 
 I... I see... 
-I think you should just act natural, look how you always do. 
+I believe it would be best to display your everyday countenance, simply act natural. 
 ...Like this? 
 Yes, that's it! It perfectly conveys your sincere personality. 
 (Maybe an expression like this, befitting the captain of the Flower Division!) 
 O-Ogami… That expression's a bit much. 
 R-Really? Did I overdo it? 
-What if you put on your usual, natural expression instead? 
+What if instead you simply displayed your everyday, natural countenance? 
 ...Like this? 
 Yes, that's it! It perfectly conveys your sincere personality. 
 (All right, might as well smile with my whole face, then.) 
 H-How's this? 
 O-Ogami... <br> Your face is twitching. 
 Oh, s-sorry. I thought I'd try smiling... 
-What if you put on your usual, natural expression instead? 
+What if instead you simply displayed your everyday, natural countenance? 
 ...Like this? 
 Yes, that's it! It perfectly conveys your sincere personality. 
 (Hmm... What kind of expression should I go with?) 
-That expression will do just fine, Ogami. 
+That face will do just fine, Ogami. 
 Yes, it perfectly conveys his natural charm. 
 I... I see... 
 All right, we'll go with this. Now then, you two, stay just like that. 
@@ -754,7 +754,7 @@ It feels so... enigmatic.
 Enigmatic? Why are you talking like that, Orihime? 
 I… I was just thinking... <br> I want to be more like Mamma... 
 Someone who can shine in front of the people I love, like she does. 
-So I figured I'd try to use prettier words... More beautiful language around you, Mr. Ensign. 
+So I thought I’d try to use prettier words... more eloquent prose around you, Mr. Ensign. 
 Orihime... 
 The way you talk is fine.
 That makes me happy. 
@@ -767,22 +767,22 @@ Mr. Ensign... <br> Thank you so much!
 Thank you, that makes me happy. 
 Hm hm, if you're happy, then I'm happy... I mean, I am jubilant as well. 
 Don't wear yourself out over it, though, OK? 
-Non preoccupatevi! I mean, relaaaax! No, wait, I mean... 
+Non preoccupatevi! <br> I mean, relaaaax! <br> No, wait, I mean... 
 Orihime… You really don't have to go that far. 
 I like you just the way you always are. 
 R-Really? Thank you. 
 Mr. Ensign... <br> You don't like it? 
 W-Well, it's just… kind of weird. 
-Hmph! You don't understand women at all, Mr. Ensign! 
-Well fine! I'll just go back to talking the way I usually do. 
+Hmph! You have no understanding of women, Mr. Ensign! 
+Well fine! I'll go back to my usual way of talking. 
 All right, that'll do for now. 
-Great work, you two. You were excellent. 
+Great work, the both of you. You were magnificent. 
 Really? Heehee, I can't wait for the finished piece! 
 Today was just the sketch. I still need to color it, refine it... There's still a ways to go. 
-Huh? But I wanna see it now! 
+Huh? But I want to see it now! 
 Hahaha, come on, Orihime, we can wait and have something to look forward to. 
 ...! 
-Oh? What's that noise? 
+Oh my, what is that commotion?
 Mr. Ensign! Could that be...? 
 Yeah. That's the Kinematron ringing. 
 Let's bring it out and see what's up! 
@@ -796,7 +796,7 @@ Get back to the theater immediately, you two!
 Roger, ma'am! 
 Mr. Ensign, we have to go, quickly! 
 I don't know who these guys think they are... 
-But I'm going to slap whoever decided to interrupt Papa and Mamma's long-awaited reunion!
+But I will slap whoever decided to interrupt Papa and Mamma's long-awaited reunion!
 Yeah. We have to regroup with the Flower Division, stat. 
 ...So you're leaving, Orihime? 
 …Yes, Papa. 
@@ -805,10 +805,10 @@ However, my portrait is still incomplete.
 Seeing as you modeled for it, you'll need to be there to see the finished piece. 
 Papa... 
 Orihime… Make sure you come back with Ogami. 
-You're our most precious treasure. You realize that, right? 
+You're our most precious treasure. I hope you know that.
 Yes, Mamma! 
-Please look after Orihime for me, Ogami. 
-And for me as well. <br> Please... <br> Please take care of her. 
+Please, Ogami, watch over Orihime.
+I ask you as well. Please… Please take care of our daughter. 
 Leave it to me. 
 Can't wait for the picture.
 Just leave it to me, sir. I'll protect Orihime, no matter what! 
@@ -948,9 +948,9 @@ And that's why we're gonna make it back to the theater alive, Reni.
 Roger! 
 OK, Tenbu online!<br>Destination, Ouji! 
 Ogami, Reni, moving out! 
-Sorry, Ogami. I can only sell you one bromide per month. 
+Sorry Ogami, but customers are only allowed to purchase one of each bromide. 
 I see. That's too bad. 
-So sorry, Mr. Ogami, but each customer is only allowed to purchase one bromide at a time.  
+So sorry, Mr. Ogami, but customers are only allowed to purchase one of each bromide.
 Oh, really? That's too bad. 
 The jewel of the Pandemonium Regalia, entrusted to us by the Rose Division. 
 Spirit Sword Arataka. The special sword of the Shinguji family. 

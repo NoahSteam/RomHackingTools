@@ -1,6 +1,6 @@
 Koubu Kai
 Ogami
-Heaven's Arrow
+Heavenâ€™s Arrow
 Tenbu
 Sakura
 Floral Enlightenment
@@ -18,7 +18,7 @@ Kanna
 Crane Stance
 Tenbu
 Iris
-Iris Boîte de Secours
+Iris BoÃ®te de Secours
 Tenbu
 Kohran
 Ball Lightning Bot
@@ -27,7 +27,7 @@ Orihime
 Il Flauto Magico
 Tenbu
 Reni
-Die Walküre
+Die WalkÃ¼re
 Koubu Kai
 Ogami
 Sirius Awakening
@@ -152,7 +152,7 @@ Kouma Weapon
 Ryukou
 None
 Kouma Weapon
-Shuu
+Shu'u
 None
 Kouma Weapon
 Jinrai
@@ -164,7 +164,7 @@ Weapon
 Rocket
 None
 Weapon
-Enku
+Enkuu
 None
 Koubu Kai
 Iris
@@ -182,13 +182,13 @@ Weapon
 Thunder Gun
 None
 Weapon
-B.Demon Gun
+B. Demon Gun
 None
 Weapon
 Assault Gun
 None
 Weapon
-DimensionGun
+Dimension Gun
 None
 Weapon
 Cord

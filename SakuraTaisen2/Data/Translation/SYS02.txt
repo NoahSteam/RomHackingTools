@@ -33,7 +33,7 @@ Reni Milchstraße. A combat professional, attacking accurately without a single w
 Hex Mech: Wakiji Kai. Wielding a longsword, it has strengthened its close-range combat ability.
 Hex Mech: Wakiji Kai. The ones equipped with guns are referred to as RO-type.
 Steam Rocket. A weapon built by Mokujiki with high firepower.
-Hex Mech: Dainichiken. Piloted by Kongou of the Five Elements, it excels in close-range combat.
+Hex Mech: Dainichiken. Piloted by Kongo of the Five Elements, it excels in close-range combat.
 Hex Mech: Wakiji Kai. Wielding a longsword, it has strengthened its close-range combat ability.
 Society Hex Mech: Wakiji Kai. The ones equipped with large cannons are referred to as HA-type. 
 Society Hex Mech: Wakiji Kai. It's actually not very loyal, so it lacks motivation. 
@@ -67,7 +67,7 @@ There's something different about you today, Ogami.
 I did it!
 It was all thanks to you, Ogami!
 Ogami… I believe in you.
-My time to shine has come, Ensign.
+Your time to shine has come, Ensign.
 Please, do your best for me…
 You mustn't overexert yourself…
 Now, here I come!

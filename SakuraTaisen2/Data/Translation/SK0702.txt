@@ -55,7 +55,7 @@ Buy a bromide.
 Talk to Tsubomi. 
 Leave. 
 All right, I'll take a bromide. 
-Um, Mr. Ogami? I'm afraid I can only sell you one bromide at a time. 
+Um, Mr. Ogami? I'm afraid I can only sell you one bromide per month.
 We have to leave some for the customers, I hope you understand. 
 Buying a bromide? Thank you very much! 
 That's Sakura's bromide. 
@@ -74,7 +74,7 @@ That's Orihime's bromide.
 Orihime's bromide? That'll be 50 sen! Thank you, come again! 
 That's Reni's bromide. 
 Reni's bromide? That'll be 50 sen! Thank you, come again! 
-Oh, not buying a bromide after all? 
+Oh, not buying a bromide after all?
 How was running the shop last month during our autumn production? 
 The customers just wouldn't stop coming! It was super hectic! 
 So hectic I had to ask Yuri and Kasumi for help... 
@@ -599,7 +599,7 @@ What on earth happened to her?
 Tell her what happened.
 Actually, she's been like that ever since the festival. 
 She ran straight home after we talked to a portrait artist there. 
-He seemed to recognize her, too. I wonder what that was all about? 
+He seemed to recognize her, too. I wonder what that was all about. 
 Is that truly what happened? 
 That being said... 
 I can't say I approve of you speaking about other people's private matters unprompted. 
@@ -720,13 +720,13 @@ O-Ogami...
 I... Um... I should go. Got work to do, bye! 
 Ah! Tsubaki! 
 *sigh*... <br> She hung up. 
-At any rate, I wonder where she is and what she's doing? 
+At any rate, I wonder where she is and what she's doing. 
 All right, Ogami, I'm in the middle of work, so I have to go. 
 Tell everyone at the theater I said hi! 
 Sure. Good luck with your work! 
 Thank you! Call me again sometime! 
 Tsubaki really is working her hardest, isn't she. 
-But still, I wonder what she's doing? 
+But still, I wonder what she's doing. 
 Hello? This is Tsubaki Takamura. 
 Hello, this is Ogami. 
 Oh, Ogami! You called again! 
@@ -804,7 +804,7 @@ Oops, that time already, huh?
 I should stop with the calls and talk to Orihime already. 
 Orihime's most likely in her room. 
 Right, I should go and talk to her. 
-I wonder if Kaede's in her room right now? 
+I wonder if Kaede's in her room right now. 
 Guess I'll go somewhere else. 
 It's Ogami. Are you there, Kaede? 
 Oh, Ogami. The door's unlocked, come in. 
@@ -903,11 +903,11 @@ I wonder if Reni is in her room.
 ...She's not here. 
 Reni... Still using notebook paper as a nameplate, I see. 
 OK, let's check another room. 
-I wonder if Sakura’s in her room.
+I wonder if Sakura is in her room.
 ...She's not here. 
 It's just like Sakura to have a cute nameplate like this. 
 OK, let's check another room. 
-I wonder if Kanna’s in her room.
+I wonder if Kanna is in her room.
 ...She's not here. 
 Kanna's... Well, I guess it's more of a nametag than a nameplate. 
 OK, let's check another room. 
@@ -915,7 +915,7 @@ I wonder if Orihime is in her room.
 ...Who is it? 
 It's Ogami. 
 Um, what happened back at the festival? 
-That's none of your business, Mr. Ensign! 
+That's not your business, Mr. Ensign! 
 B-But... 
 Quit butting in and leave me alone!! 
 (Sheesh, couldn't get a word in edgewise...) 
@@ -1030,7 +1030,7 @@ I'll leave her alone. Wouldn't want to wake her up.
 I believe Iris was in the middle of a nap. I'll leave her alone for now. 
 It's Ogami. Are you there, Iris? 
 Guess she's not here. Oh well, I'll go someplace else. 
-I wonder if Kohran’s in her room.
+I wonder if Kohran is in her room.
 There's no response. Looks like she's somewhere else. 
 A gear-shaped nameplate, huh? It's just Kohran's style. 
 I'll go check a different room. 
@@ -1140,7 +1140,7 @@ Oh yeah! Come study with me again sometime, OK, Mon Frère?
 That big smile of hers... Staying determined really was the right answer all along. 
 OK, I should get going myself. 
 Looks like no one's taking a bath right now. 
-I'll go to a different room. I wonder where everyone else is? 
+I'll go to a different room. I wonder where everyone else is. 
 Hey, Reni. Taking a swim? 
 ...Diving training. 
 I'm recovering robots from the bottom of the pool while avoiding dummy mines. 
@@ -1225,9 +1225,9 @@ I never imagined I'd have to fight against Reni in her Eisenkleid.
 3 o'clock already, huh? 
 I can't just keep ignoring Orihime. 
 OK, I'll head to her room and have a talk with her. 
-Sorry, Ogami. I can only sell you one bromide per month. 
+Sorry Ogami, but customers are only allowed to purchase one of each bromide. 
 I see. That's too bad. 
-So sorry, Mr. Ogami, but each customer is only allowed to purchase one bromide at a time.
+So sorry, Mr. Ogami, but customers are only allowed to purchase one of each bromide.
 Oh, really? That's too bad. 
 Shiro 
 Hanamaru 
@@ -1317,7 +1317,7 @@ I'm sure you feel the same, Ogami.
 Yes, of course. 
 So let's both do our best. 
 For my sister... <br> For everyone... 
-Yes ma'am! 
+Yes, ma'am! 
 Well, today I will tell you about the Anti-Kouma Corps. 
 The Anti-Kouma Corps was the Army's predecessor to the Imperial Assault Troupe. 
 Ikki Yoneda, Kazuma Shinguji, Shinnosuke Yamazaki, and... Ayame Fujieda. 
@@ -1343,7 +1343,7 @@ The people Ayame chose truly were the best people for the job. That includes you
 Kaede... 
 Ayame entrusted the Flower Division to me, so I'll continue to give it my all. 
 Don't give up. Even in the hardest of times, remember to never give up, Ogami. 
-Yes ma'am! I will do all I can to meet your expectations! 
+Yes, ma'am! I will do all I can to meet your expectations! 
 Now then, today I'll tell you about Ayame and Major Yamazaki. 
 Both Ayame and Major Yamazaki were members of the troupe's predecessor, the Anti-Kouma Corps.
 Major Yamazaki was a brilliant scientist who created the foundational designs for Spirit Armor... 

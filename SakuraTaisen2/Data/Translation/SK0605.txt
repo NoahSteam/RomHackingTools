@@ -41,7 +41,7 @@ You haven't seen Saki Kageyama around, have you, Ogami?
 Huh? Saki? No, can't say that I have. 
 What's wrong, Kaede? You usually never address Saki by her full name like that…
 I'll explain later. Sorry, I have to go, I'm in a hurry. 
-Kaede looked really on edge. I wonder what's wrong? 
+Kaede looked really on edge. I wonder what's wrong. 
 Nobody's here. I'm all alone in this lobby. 
 Well, this is kinda depressing. I should go somewhere else. 
 Man, it’s really stormy out. Been a while since we’ve had weather like this.
@@ -75,7 +75,7 @@ It's so quiet in here, like there wasn't even a storm at all. The room's perfect
 Well, nothing unusual here. Where to next? 
 Only thing I might find here is a mouse or something. 
 Nothing unusual. Moving on. 
-I wonder what Sakura's up to? 
+I wonder what Sakura's up to. 
 Sakura? It's me, Ogami. 
 Oh, Ogami... 
 You really came. I'm so glad... 
@@ -156,7 +156,7 @@ You haven't seen Saki Kageyama around, have you, Ogami?
 Huh? Saki? No, can't say that I have. 
 What's wrong, Kaede? You usually never address Saki by her full name like that…
 I'll explain later. Sorry, I have to go, I'm in a hurry. 
-Kaede looked really on edge. I wonder what's wrong? 
+Kaede looked really on edge. I wonder what's wrong. 
 Kaede? Are you in there? 
 I better check another room, I guess. 
 No answer. Guess there's no one in there. 
@@ -184,7 +184,7 @@ Keep up the good work, Captain.
 (Maria's reading in there. I probably shouldn't call out to her.) 
 It's Maria's nameplate. 
 OK, time to check another room. 
-I wonder if Kanna’s in her room. 
+I wonder if Kanna is in her room. 
 Zzz... No, I couldn't eat another bite... 
 Huh, guess she's already asleep. 
 No answer. Did she go somewhere? 
@@ -196,7 +196,7 @@ Sounds like she's already fast asleep.
 Sumire's already asleep. I should leave her be. 
 This is a pretty subtle design, considering it's Sumire. 
 Let's check another room. 
-I wonder if Kohran’s in her room. 
+I wonder if Kohran is in her room. 
 No answer... 
 A gear-shaped nameplate, huh? It's just Kohran's style. 
 Let's check another room. 
@@ -381,7 +381,7 @@ Flower Division, all hands reporting for duty... Aside from Reni.
 In all likelihood, the one who kidnapped Reni was… Saki Kageyama.
 She's also the sniper that shot Manager Yoneda, and is most likely a member of the Black Demons.
 Huh?! No... Saki?! 
-So she was the spy all along, huh?! 
+So she was the spy all along, then?! 
 Knowing that, all of the Black Demon Society's moves up till now start to make sense. 
 The arson at Fukagawa, the surprise attack during our vacation... 
 They couldn't have done any of that if they weren't being fed information. 
@@ -396,7 +396,7 @@ Why did Saki take Reni?
 I think it might have something to do with Reni's past. 
 Sometime during the Great War, a group of German scientists were conducting special research.
 The name of this project... was "Wachstum." 
-A project with the aim of creating soldiers wielding perfect, enhanced Spirit Power. 
+A project with the aim of creating soldiers wielding perfect, enhanced spirit power. 
 In the end, the project only saw a single survivor. That survivor... was Reni. 
 As a part of "Wachstum," Reni had only one purpose: to become an elite fighting machine. 
 All this to say, Reni grew up deprived of human contact and affection. 

@@ -35,7 +35,7 @@ RO-type Kou. A long-range attack hex mech. Only capable of attacking single targ
 HA-type Kou. A long-range attack Hex Mech. Capable of attacking multiple targets.
 L Special. A close-range attack Wakiji with restorative powers.
 Chiken. Destroy it to end this exercise.
-Enku. An unmanned support drone developed by Mokujiki.
+Enkuu. An unmanned support drone developed by Mokujiki.
 Steam Rocket. A weapon developed by Mokujiki.
 Cross Homura. A weapon developed by Mokujiki. An upgraded Homura unit.
 Summoner. A Kouma manufacturer that pumps out Kouma Weapons one after the other.
@@ -67,7 +67,7 @@ There's something different about you today, Ogami.
 I did it!
 It was all thanks to you, Ogami!
 Ogami… I believe in you.
-My time to shine has come, Ensign.
+Your time to shine has come, Ensign.
 Please, do your best for me…
 You mustn't overexert yourself…
 Now, here I come!

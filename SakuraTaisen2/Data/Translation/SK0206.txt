@@ -144,7 +144,7 @@ Guess I'll go check a different room.
 No Iris here. Hmm, where could she have gotten to? 
 Well, I've got to keep searching. I'll try going somewhere else. 
 Yeah, it doesn't look like she's in here. I'll try another room. 
-Iris was so cheerful earlier today. I wonder what happened? 
+Iris was so cheerful earlier today. I wonder what happened. 
 Doesn't seem like she's in here, either... Time to try somewhere else. 
 I've already tried looking here. I'd better go somewhere else. 
 This is where I had that strange encounter with Saki when she cornered me earlier. 
@@ -244,7 +244,7 @@ All right... What should I do from here?
 Make a call. 
 Go search for Iris. 
 Maybe calling someone would be a nice change of pace. 
-OK, I've powered on the Kinematron, so... I wonder who I should call? 
+OK, I've powered on the Kinematron, so... I wonder who I should call. 
 OK. I'll try calling someone. 
 Hmm... I getcha. 
 Essentially, I... 
@@ -453,8 +453,8 @@ The mysterious figure's eye seems to glint red, and a massive hand reaches down 
 “Oh my, it's Masked Red!" <br> "No need to worry, Miss, I'm here to help!" 
 Masked Red leaps from his bike, looking dashing as his cape billows in the wind. 
 Will our hero be able to rescue this damsel in distress? 
-Fight on, Masked Red! You're our hero, Masked Red! <br> -The End 
-Go, Masked Red! Fight on, Masked Red! Tune in next time! 
+Fight on, Masked Red! You're our hero, Red! <br> -The End 
+Go, Masked Red! <br> Fight on, Masked Red! <br> Tune in next time! 
 This isn't the time to be making calls. 
 I need to look for Iris. 
 Iris... Where could she have gone? 
@@ -579,7 +579,7 @@ But let's talk again in the morning.
 ... 
 Goodbye, then. 
 Sakura is in her room, but... I should leave her alone right now. 
-I wonder if Sakura is there? 
+I wonder if Sakura is in her room. 
 Sakura's nameplate. It has a very girlish design. 
 ...No response. I guess she's not in. 
 I guess she must be out looking for Iris, too. 
@@ -780,7 +780,7 @@ Looks like there's no one here.
 The bathroom seems to be totally empty. I should check somewhere else. 
 Orihime was in here just a little while ago. It smells nice. 
 ...No, now's not the time for that. I need to keep looking for Iris. 
-This soap smells really nice. I wonder who was using it? 
+This soap smells really nice. I wonder who was using it. 
 Well, it looks like no one's in here right now. I'd better look elsewhere. 
 Maybe I should take a break and swim in the pool. 
 She isn't here. Hmm... But where could she be, then? 

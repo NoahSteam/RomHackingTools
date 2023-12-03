@@ -35,7 +35,7 @@ RO-type Kou. Incapable of attack. Hex Mech. Stand-alone only. [incomplete string
 HA-type Kou. A long-range attack Hex Mech. Capable of attacking multiple targets.
 L Special. A close-range attack Wakiji with restorative powers.
 Hachiyou. Destroy it to end this exercise.
-Enku. Destroy it for an additional 100 points.
+Enkuu. Destroy it for an additional 100 points.
 Steam Rocket. Destroy it for an additional 100 points.
 Cross Homura. Destroy it for an additional 100 points.
 Summoner. A Kouma manufacturer that pumps out Kouma Weapons one after the other.
@@ -67,7 +67,7 @@ There's something different about you today, Ogami.
 I did it!
 It was all thanks to you, Ogami!
 Ogami… I believe in you.
-My time to shine has come, Ensign.
+Your time to shine has come, Ensign.
 Please, do your best for me…
 You mustn't overexert yourself…
 Now, here I come!

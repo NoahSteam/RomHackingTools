@@ -1261,7 +1261,7 @@ bool BitmapReader::ReadBitmap(const string& inBitmapName, bool bInErrorOnFail)
 		const int numBytesPerColor            = 4;
 		mBitmapData.mPaletteData.mSizeInBytes = numColorsInPalette * numBytesPerColor;
 		mBitmapData.mPaletteData.mpRGBA       = new char[mBitmapData.mPaletteData.mSizeInBytes];
-		int offsetToPalette                   = mBitmapData.mFileHeader.mOffsetToData - mBitmapData.mPaletteData.mSizeInBytes;
+		int offsetToPalette                   = mBitmapData.mFileHeader.mOffsetToData - mBitmapData.mInfoHeader.mNumImportantColors*numBytesPerColor;//mBitmapData.mPaletteData.mSizeInBytes;
 		if (offsetToPalette < 0)
 		{
 			printf("%s has an invalid offset to palette [%i]", inBitmapName.c_str(), offsetToPalette);

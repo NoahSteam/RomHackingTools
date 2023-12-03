@@ -1,0 +1,10 @@
+0x217fc0 - A photo of Kohran.
+0x22cf5a - single byte
+
+060505b0 add r0, r0           change to 0009  @0x0004b5b0 in Sakura.bin
+060505b2 mov.w@(r0, r1, r1)   change to 011c
+060505B8 add 0x4, r2
+060505b6 mov.w r1, @r2
+
+060505c4 add 4, r1
+060505c6 mov.w @r1, r1

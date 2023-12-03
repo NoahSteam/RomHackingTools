@@ -239,6 +239,10 @@ bool PatchTextDrawingCode(const string& inSourceGameDirectory, const string& inP
 			WriteCommand(0x275B8, 0x611c); // 0602c5b8 611c
 			WriteCommand(0x275A8, 0x611c); // 0602c5a8 611c
 			WriteCommand(0x275B0, 0x77ff); // 0602c5b0 add 0xfe, r1 change to 77ff
+
+			//Item Menu
+			WriteCommand(0x4B5B0, 0x0009); // 0602c5a4 060505b0 add r0, r0
+			WriteCommand(0x4B5B2, 0x011c); // 060505b2 mov.w@(r0, r1, r1)
 		}
 		#endif
 	}

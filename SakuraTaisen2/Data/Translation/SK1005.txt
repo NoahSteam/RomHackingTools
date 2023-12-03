@@ -180,7 +180,7 @@ I imagine your mother's scary, just like you.
 A-Am I really that scary?
 Hmm... Not lately, I guess.
 You used to be quite outspoken, though.
-C-Come on, now, that's ancient history.
+C-Come on, now, that was so very long ago.
 My mamma is very pretty, AND very nice!
 Even if you make a mistake, she won’t get mad at you. So just relax.
 Hmm... I have no idea what kind of person she could be.
@@ -189,12 +189,12 @@ And most of all, beautiful!
 I hope you're looking forward to meeting her!
 Eeek!
 Whoa... Are you all right, Orihime?
-This is my first time riding a Japanese train... It's so unstable!
+This is my first time riding a Japanese train... How unstable it is!
 Hahaha, this is your first time, huh?
 …Mr. Ensign, can I hold onto your arm so I don't fall over?
 Huh? You're not gonna use the handles?
-I'd rather hold onto you, Ensign.
-Whatever, I'll just go ahead and lock your arm with mine!
+I'd prefer to hold onto you, Ensign.
+Look, I will just lock your arm with mine!
 Hahaha, this is kind of embarrassing. But, eh, oh well.
 …Are all these people also going to visit the shrine?
 This train is headed towards Meiji Shrine, so maybe.
@@ -1103,15 +1103,15 @@ He's right, Chief, and science is a tool to make everyone happy.
 ...
 Heheh, looks like you've still got lots to learn, Ogami.
 By the way, Howard, what kinda research have you been up to lately?
-Good question! Right now I'm designing an airplane that runs off Spirit Power!
+Good question! Right now I'm designing an airplane that runs off spirit power!
 For real? That's amazing. You have to tell me all about it!
 I'm gonna stay here and talk with Howard for a minute. Make yourself at home over there, Chief.
 Sheesh, those two really are obsessed with machines.
 ...
 How long are they going to make me wait here, anyway...?
-We've arrived. This is the Grand Imperial Hotel.
+Here we are! This is the Grand Imperial Hotel.
 Your parents are meeting up here, right?
-That's correct. Now then, Mr. Ensign, let's not waste any time and get inside!
+That's correct. Now then, Mr. Ensign, let's hurry ourselves up and get inside!
 Oh, Orhime! And Ogami! Welcome.
 Ciao, Papa!
 It's been a while. How are you feeling?
@@ -1121,14 +1121,14 @@ When I heard Carino was coming, my wounds healed in an instant. Hahaha...
 C-Carino?!
 Ah, Seiya...
 Carino!
-Seiya... Finally... I finally get to see you again!
-I'm so sorry, Carino.
-I didn't have the courage to come see you... Not after I ran out on you and Orihime...
-No, that's not it. I know more than anyone just how kind you really are.
-You only left for Orihime's sake... and mine.
+Seiya... At last... <br> At last, we are reunited once more!
+Carino… I’m so sorry
+I didn’t have the courage to face you… Not after abandoning both you and Orihime...
+No, that is a falsehood. I know more than anyone the kind hearted man you truly are. 
+You cast yourself into exile for the sake of Orihime… and myself.
 ...
-But... I'll never let you go again.
-Even if it means losing everything... I'll never let you go ever again!
+But no more... I will not let you go a second time.
+Even if it means losing everything... I will never let you go ever again!
 Carino!
 Papa... <br> Mamma...
 Orihime...
@@ -1136,79 +1136,79 @@ Say something to them.
 Orihime... Let's go congratulate them.
 Mr. Ensign... Let's leave them alone for now.
 Orihime... Let's not say anything and leave them alone for now.
-Yeah… I was thinking the same thing.
-Papa and Mamma weren't able to meet for over a decade...
-But they still loved each other that whole time.
-And now they're finally together again.
-You must be Ichiro Ogami. Orihime told me all about you in her letters.
-I'm her mother, Carino. Thank you so much for being there for her.
+Yes… I was thinking the same thing.
+Papa and Mamma couldn’t meet for over a decade...
+But that whole time, they still loved each other.
+And now finally, they are together again.
+So you must be Ichiro Ogami. I have read much about you in Orihime’s correspondence.
+I am her mother, Carino. Allow me to extend my gratitude for all you’ve done for my daughter.
 No need to thank me. I only did what I could.
-Orihime truly hated Japanese men, though.
-How were you able to get her to open up to you?
+But Orihime’s hatred towards Japanese men was truly unyielding.
+How did you succeed in opening her heart to you?
 I think it was trust.
 I think it was patience.
 I think it was love.
 I think it was all trust.
 Trusting each other, and earning each other's trust in turn...
 I think that's how we came to understand one another.
-Hmhm, you're as corny as ever, Mr. Ensign.
-I understand completely. It's because I trusted in Seiya that I was able to wait until this day.
-Ogami, please keep believing in Orihime.
+Hmhm, so corny as ever, Mr. Ensign.
+I understand completely. My trust in Seiya was what allowed me to endure the wait for this day.
+Please, Ogami… Continue believing in Orihime.
 I will.
 I think it was all patience.
 At first, even I didn't think we'd be able to get along.
 But I knew the day would come where she'd open up, so I just waited until then.
 ...That makes me sound like a bad person.
-Hmhm, that's not it, Orihime. I understand what he means.
+Hmhm, that's not it, Orihime. I understand Ogami’s intentions quite well.
 I too waited a long time, just for this day... The day I could see Seiya again.
 Orihime... You should be thankful that Ogami waited for you for so long.
 Mamma...
 I think it was all love.
-W-Wait a second, Mr. Ensign! What's this all of a sudden?!
+W-Wait one second, Mr. Ensign! What's this all of the sudden?!
 Now, Orihime, expressing one's love is a very important thing.
-I think it's fantastic that Ogami is able to profess his love so openly.
+I think it's praiseworthy that Ogami is able to profess his devotion so openly.
 Mamma...
 I... don't really know, either.
 Hmhm, you're an honest man, Ogami.
-I'm sure Orihime sensed that honesty too.
-You're the man she chose. There's not a doubt in my mind that you're a wonderful person.
+I am sure Orihime sensed that honesty as well.
+You are the man my daughter chose, after all. There's not a doubt in my mind that you're a wonderful person.
 Orihime. You must always treasure Ogami's feelings for you.
 Yes, Mamma. I understand.
-Right... <br> Mr. Ensign, could you come with me for a second?
+Now then... <br> Mr. Ensign, could you come with me for a second?
 All right, sure.
 Where to?
 All right, sure.
 ...Thank you, Mr. Ensign.
 Come with you where, exactly?
-Whatever, it doesn't matter, just follow me!
+Whatever, it doesn't matter! Just follow me!
 H-Hey, Orihime, you don't need to pull!
-Come on, Mr. Ensign, quit loafing around and hurry up already.
-All right Papa, Mamma, we're going to be in the lounge upstairs.
+Come, Mr. Ensign, quit loafing around and hurry up already.
+All right Papa, Mamma, we will be in the lounge upstairs.
 Understood.
 We'll stay right here, so take your time.
 All right, let's go, Mr. Ensign.
-Thank you for being so considerate, Mr. Ensign.
+I thank you for being so considerate, Mr. Ensign.
 I bet Papa and Mamma have all kinds of things they want to talk about.
 Jeez, you're so inconsiderate, Mr. Ensign.
-Didn't you get the hint that we should leave them alone?
+Didn't you get a hint that we should leave them alone?
 S-Sorry... I didn't notice.
-...Sheesh, some things never change with you.
-Anyway, I had no idea up till now...
+...Mamma mia, some things never change with you.
+But still, I had no idea up till now...
 No idea that Papa and Mamma loved each other that much...
 Orihime...
 I really am glad for them.
 I'm jealous of them.
 I hope we end up like them.
 I'm so glad they were finally able to reunite.
-Yeah! It's great... It really is!
-And it's all because you helped Papa and I patch things up.
+Yes! I am so, so very glad for them!
+And it's all because you helped patch things up with Papa and me.
 Thank you so much, Mr. Ensign!
 I'm actually jealous of them. I've never seen such a loving couple before.
-They really are. But it's OK, I've already found myself a partner.
+Truly, they are. But it's OK, I've already found a partner for myself.
 You have? Who is it? Tell me, Orihime.
 Heehee, whoever could it be?
 I hope... we end up like them.
-...Yeah. I'm sure we will.
+...Yes. Surely, we will.
 Orihime...
 All right, Mr. Ensign, until Papa and Mamma's conversation dies down a bit...
 Let's stay up here a while, just the two of us.
@@ -1300,9 +1300,9 @@ Reni...
 Though reading one's fortune at the start of a new year does have a psychological effect.
 What the heck, Reni... You just had to go and say that as I was starting to feel better.
 *sigh* Can't believe I got bad luck... Well, after bad luck comes good fortune, though, right? Hahaha.
-Sorry, Ogami. I can only sell you one bromide per month. 
+Sorry Ogami, but customers are only allowed to purchase one of each bromide. 
 I see. That's too bad. 
-So sorry, Mr. Ogami, but each customer is only allowed to purchase one bromide at a time.  
+So sorry, Mr. Ogami, but customers are only allowed to purchase one of each bromide.
 Oh, really? That's too bad. 
 The jewel of the Pandemonium Regalia, entrusted to us by the Rose Division. 
 Spirit Sword Arataka. The special sword of the Shinguji family. 

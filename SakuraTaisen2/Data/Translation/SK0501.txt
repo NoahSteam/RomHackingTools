@@ -99,7 +99,7 @@ Is that so? Then we'll gladly take your offer.
 Traveling to a hot spring resort for a summer getaway... That doesn't sound too bad at all.
 Yeah, it sounds fun. Ooh, I'm so excited! 
 Yaaay, yaaay!! We're going on a trip! A trip! 
-It'll be my first time vacationing in Japan. 
+This will be my first time vacationing in Japan. 
 I've never gone to Atami before. I can’t wait! 
 A break is necessary at times... 
 Alllll right! We're gonna eat and play to our heart's content! 
@@ -294,7 +294,7 @@ Now then, it's almost time to meet up with everyone at the entrance. I should ge
 Kanna is already done putting the dishes away. 
 Her style is to always follow through with what she starts. 
 No one's here. I guess everyone's already had breakfast. 
-I wonder if Kanna will want to have another eating contest today?
+I wonder if Kanna will want to have another eating contest today.
 Maybe I should try coming back again some time later. 
 There's nothing much I can do in here, I better go to another place. 
 I wonder if Mr. Yoneda is in his office. 
@@ -381,7 +381,7 @@ Buy a bromide.
 Talk to Tsubaki. 
 Leave. 
 Could I buy a bromide? 
-Sorry, Ogami. I can only sell you one bromide per month. 
+Sorry, Ogami. I can only sell you one bromide per month.
 Please understand, we need to keep some for the customers. 
 You'd like to buy a bromide? Thank you very much! 
 That's a bromide of Sakura. 
@@ -408,7 +408,7 @@ That'll be 50 sen. Thank you very much!
 That's a bromide of Reni. 
 Let's see... Reni's bromide, right? 
 That'll be 50 sen. Thank you very much! 
-Hm, so... you're not going to buy anything? 
+Oh, so you're not going to buy anything?
 We won't be able to see each other for a while, Ogami... 
 But… You’ll be coming back, right? 
 ...Yeah. And when I return, please stop by again to buy some bromides. 
@@ -477,11 +477,11 @@ But I heard this limitation was removed after a recent policy revision. That's a
 However, it costs 5 yen just to take the entrance exam. Guess it's still a school for the rich. 
 So most people still can’t get in, huh? Hmph, that's no fun. 
 When summer comes around, the only thing on people’s minds is Koshien. Isn’t that right, Yuri?
-You mean the baseball tournament that's been on the radio, right? I wonder who's gonna win this year? 
+You mean the baseball tournament that's been on the radio, right? I wonder who's gonna win this year. 
 Oh, yeah. The venue for the middle school championships was changed to Koshien Stadium last year. 
 Yes. It's said to be the largest baseball stadium in all of Asia. 
 Speaking of which, you can’t help but root for your hometown team when it comes to baseball, huh? 
-Hahaha, right. Now that you mention it, I wonder if my local team made it to Koshien this year? 
+Hahaha, right. Now that you mention it, I wonder if my local team made it to Koshien this year. 
 Sorry, Ogami, but I'm all out of gossip for now. 
 I'll have some more interesting tidbits to share another time, so look forward to it! 
 See you later then. Please take care of the theater while we’re away.
@@ -537,7 +537,7 @@ I hope this place will be filled with guests during the autumn performance next 
 Well, judging from our last show, it should be fine.
 The theater's on break for the summer, so there's no customers. 
 OK, I better go to another room now. 
-I wonder if Sakura’s in her room.
+I wonder if Sakura is in her room.
 It's just like Sakura to have a cute nameplate like this. 
 OK, let's check another room. 
 Yeees? Who is it? 
@@ -586,7 +586,7 @@ Anyway, I hope we can enjoy this vacation without any issues.
 Yeah, absolutely.
 OK, I still want to pack some more things, so excuse me. 
 Yeah, got it. See you later, then. 
-I wonder if Sakura’s in her room. 
+I wonder if Sakura is in her room. 
 It's just like Sakura to have a cute nameplate like this. 
 OK, let's check another room. 
 ...She's not here. 
@@ -649,7 +649,7 @@ I see… Prepared as always, Maria.
 Now that I think about it, I don't visit your room too often. 
 I suppose that’s true. But, as you can see, there isn’t much to show.
 (Maria must have just recently gotten out of bed…)
-(I wonder what she wears when she sleeps?)
+(I wonder what she wears when she sleeps.)
 (There are a lot of possibilities... <br> Pajamas, a yukata…)
 Ask her. 
 What kind of clothes do you wear to bed, Maria? 
@@ -715,11 +715,11 @@ I wonder if Maria is in her room.
 It's Maria's nameplate. 
 OK, I'll check another room. 
 Looks like Maria's not here. 
-I wonder if Kanna’s in her room. 
+I wonder if Kanna is in her room. 
 Kanna's... Well, I guess it's more of a nametag than a nameplate. 
 OK, let's check another room. 
 Look's like Kanna's not here. 
-I wonder if Kanna’s in her room.
+I wonder if Kanna is in her room.
 Kanna's... Well, I guess it's more of a nametag than a nameplate. 
 OK, let's check another room. 
 U... Uh... 
@@ -976,17 +976,17 @@ Shout to wake her up.
 Open the door by force. 
 Leave her. 
 Heeey, Orihime! It’s almost 10 o’clock!
-Mmmm... Uh... So annoying... 
+Mmmm... So... annoying... 
 You're going to be left behind if you oversleep! 
 Left… behind?
 Huh?! It's... <br> It's already this late?! 
 Hey, now... You're not gonna make it if you don't hurry. 
-Mr. Ensign, you saved me. Just this once, thank you. 
+Mr. Ensign, you saved me. Just this once, I thank you. 
 Never mind that, just change your clothes, quick! 
 (Oh boy. That would have been terrible if I hadn't woken her up.) 
 (I have to force my way into her room!) 
 Uh...? 
-...Wa! <br> W-Who's there!? 
+...Wha! <br> W-Who's there!? 
 Oh, you're finally awake. It's me, Ogami. 
 M-Mr. Ensign?! Do you intend to become a criminal at last?! 
 Don't break into people's rooms!! 
@@ -1000,17 +1000,17 @@ She'll just get angry at me if I wake her up, so let's leave her be.
 Let sleeping dogs lie... I'll just head to another room. 
 Uh... Should I or should I not wake her up? 
 Well, she'll eventually get up on her own, so let's just leave for now. 
-I wonder if Orihime is in her room?
+I wonder if Orihime is in her room.
 The nameplate has a simple design, but it sure looks classy. 
 Let's go check another room. 
 Orihime, are you awake? 
-Y-Yes… I just managed to get my clothes on.
-Thanks... Sorry for taking up your time. 
+Y-Yes… I just finished changing into my clothes.
+My thanks... Sorry for taking up your time. 
 Don't slack off! 
 Be more careful next time. 
 ...Everything all right? 
 Don't slack off and oversleep, Orihime! 
-I-It's not like I overslept on purpose! 
+I-I did not  mean to oversleep on purpose! 
 You made it in time, but be more careful next time. 
 It's vexing to hear that warning... But this time, I suppose you're right. 
 This seems out of character for you, Orihime. Is everything all right? 
@@ -1020,8 +1020,8 @@ Never once did I ever think you'd have to wake me up, Mr. Ensign.
 I hate Japanese men, but…
 ...I hate waking up early just as much.
 I’m furious that the type of person I dislike the most is making me do the thing I dislike the most…
-But, if you hadn’t woken me up… I might have otherwise missed the trip.
-Should I be glad or mad… I don’t know anymore.
+But, had you not woken me up… I might have otherwise missed the trip.
+Should I be glad or mad…? I don’t know anymore.
 W-Well, as for me, I’m just happy you aren’t going to be late. 
 I still have some things to prepare, so I need to go. 
 Boy, looks like she was able to make it on time. 
@@ -1033,7 +1033,7 @@ Let's go check another room.
 It's Ogami... 
 I'm still getting ready! Don't talk to me! 
 (She'll just get angry if I keep asking. I better leave her alone.) 
-I wonder if Orihime is in her room?
+I wonder if Orihime is in her room.
 The nameplate has a simple design, but it sure looks classy. 
 Let's go check another room. 
 Looks like she's already gone on to the entrance to meet up with everyone. 
@@ -1086,7 +1086,7 @@ I wonder if Reni is here.
 ...It doesn’t seem like anyone is here.
 It's just a piece of paper from a notebook. I suppose that's fitting for someone like Reni. 
 OK, let's check another room. 
-I wonder if Kohran’s in her room.
+I wonder if Kohran is in her room.
 There's no response… Looks like she’s not here.
 A gear-shaped nameplate, huh? It's just Kohran's style. 
 Let's check another room. 
@@ -1215,7 +1215,7 @@ O-Oh no… My body is moving towards the bathroom on its own...
 (Kohran...) 
 (She must have taken off her glasses, so maybe she won't notice me...) 
 ...! 
-U-Uh oh! 
+U-Uh-oh! 
 Don’t panic, remain calm. 
 Get out of there.
 Don’t panic, remain calm.  
@@ -1353,9 +1353,9 @@ Well done, Mr. Yoneda. What a grand idea.
 Gwahahahaha! I told you I'd take care of everything. 
 All right, I hope you all enjoy your trip. 
 And Ogami, please watch over everyone. 
-Yes ma’am, we're off! 
+Yes, ma’am, we're off! 
 Will the theater be OK?
-Yes ma’am, we're off! Please take care of the theater in our stead! 
+Yes, ma’am, we're off! Please take care of the theater in our stead! 
 Of course, you can count on us. 
 But… Are you sure everything will be all right while we’re away?
 We’re going to be away for a while… Are you sure the theater will be OK?
@@ -1424,10 +1424,10 @@ So please, enjoy your vacation!
 P-Please… Have a safe trip... 
 Fareweeeell! 
 (Uh... Instead of taking it easy, why am I getting more worried?) 
-Sorry, Ogami. I can only sell you one bromide per month. 
+Sorry Ogami, but customers are only allowed to purchase one of each bromide. 
 I see. That's too bad. 
-So sorry, Mr. Ogami, but each customer is only allowed to purchase one bromide at a time.
-Oh, really? That's too bad.  
+So sorry, Mr. Ogami, but customers are only allowed to purchase one of each bromide.
+Oh, really? That's too bad. 
 Shiro 
 Hanamaru 
 Dai 
@@ -1508,7 +1508,7 @@ I'm sure you feel the same, Ogami.
 Yes, of course. 
 So let's both do our best. 
 For my sister... <br> For everyone... 
-Yes ma'am! 
+Yes, ma'am! 
 Well, today I will tell you about the Anti-Kouma Corps. 
 The Anti-Kouma Corps was the Army's predecessor to the Imperial Assault Troupe. 
 Ikki Yoneda, Kazuma Shinguji, Shinnosuke Yamazaki, and... Ayame Fujieda. 
@@ -1534,7 +1534,7 @@ The people Ayame chose truly were the best people for the job. That includes you
 Kaede... 
 Ayame entrusted the Flower Division to me, so I'll continue to give it my all. 
 Don't give up. Even in the hardest of times, remember to never give up, Ogami. 
-Yes ma'am! I will do all I can to meet your expectations! 
+Yes, ma'am! I will do all I can to meet your expectations! 
 Now then, today I'll tell you about Ayame and Major Yamazaki. 
 Both Ayame and Major Yamazaki were members of the troupe's predecessor, the Anti-Kouma Corps.
 Major Yamazaki was a brilliant scientist who created the foundational designs for Spirit Armor... 

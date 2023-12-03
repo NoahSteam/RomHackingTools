@@ -52,3 +52,5 @@ WriteTextIntoImageUsingFontSheet C:\Users\16306\Desktop\Rizwan\RomHackingTools\S
 ExportTranslationData C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data\TBLFiles.csv C:\Users\16306\Desktop\Rizwan\SakuraWars2\ExportedText
 FindData.exe C:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1 C:\Users\16306\Desktop\Rizwan\SakuraWars2\find.bin
 
+FL_BOOK:
+Rockwell 14

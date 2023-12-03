@@ -1,7 +1,7 @@
 ﻿Right, I should get started on my night watch. 
 It's cold out tonight, but I've got a job to do. 
 (I should check everyone's rooms first.) 
-(I wonder if Iris is asleep already?) 
+(I wonder if Iris is asleep already.) 
 Who is it? 
 It's Ogami. Were you still up, Iris? 
 Mon Frère... I can't sleep. Can you come in? 
@@ -275,12 +275,12 @@ Hm? Orihime, is that you?
 That voice... 
 Mr. Ensign… On your night watch, are you? 
 Were you playing the piano just now? 
-Yes... I came here with that intention... 
-But whenever I try to play some music... I just can't do it. 
+Yes... That is what I came here to do... 
+But whenever I try to play some music... I’m not able to. 
 Huh? 
 To play the piano, you need not only your fingers, but your heart, as well. 
-Usually, I don't even need to think and my fingers will just start moving...
-Perhaps "The Miracle Bells" is the cause. I can't picture the play's lead role clearly in my mind... 
+Usually, my fingers will move without even my thinking...
+Perhaps "The Miracle Bells" is the cause. I can't picture the lead role clear enough in my mind... 
 Believe in yourself.
 It happens. 
 You should get to bed. 
@@ -294,7 +294,7 @@ Mr. Ensign... Thank you.
 You don't have to worry about me anymore, Mr. Ensign. 
 I'm back to my normal self! Overflowing with confidence! 
 Hahaha... Glad to hear it. 
-I can even visualize the lead role for the Christmas play perfectly in my mind. 
+I can even imagine the lead role for the Christmas play perfectly in my mind. 
 You can relax, Mr. Ensign, the show's in buone mani! 
 (...Buone mani? Does she mean to say the play's in good hands?) 
 It happens. Don't rush things, just wait it out. 
@@ -310,7 +310,7 @@ OK, I should get going too.
 You must be tired. You should go to bed for today. 
 ... 
 C'mon, Orihime... 
-It's frustrating, but I'll go back to my room. 
+How frustrating this is… but I'll go back to my room. 
 All right then, Mr. Ensign, good night. 
 Yeah, good night. 
 OK, I should get going too. 
@@ -431,9 +431,9 @@ OK, it's about time I wrapped up my patrol. I should head back to my room, too.
 Phew, finally done with my night watch. 
 Still, everyone's doing their best for this Christmas play. 
 Just who should I pick...? 
-Sorry, Ogami. I can only sell you one bromide per month. 
+Sorry Ogami, but customers are only allowed to purchase one of each bromide. 
 I see. That's too bad. 
-So sorry, Mr. Ogami, but each customer is only allowed to purchase one bromide at a time.
+So sorry, Mr. Ogami, but customers are only allowed to purchase one of each bromide.
 Oh, really? That's too bad. 
 Shiro 
 Hanamaru 

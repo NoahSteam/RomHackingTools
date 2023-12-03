@@ -71,7 +71,7 @@ Yes. I’m counting on you, Kohran.
 The one I've picked for the lead role... is Orihime. 
 Mr. Ensign... <br> I knew you'd pick me! 
 Yes. I’m counting on you, Orihime. 
-Just leave it to me! I'll make this the best play ever! 
+Just you leave it to me! I'll put on the very greatest performance!
 The one I've picked for the lead role... is Reni. 
 Captain... Are you... sure? 
 Yes. I’m counting on you, Reni. 
@@ -82,7 +82,7 @@ We're all in this together. Let's make this a great Christmas play.
 You got this! We'll light up the stage! 
 I'll do my best too as one of the angels! 
 This show’s gonna rock! I can't wait! 
-Don't let your guard down, or I'll snatch the lead role away from you. 
+Don't put down your guard, or I'll snatch away the lead role from you. 
 It's all right. The god of the stage is with us. 
 The lead isn't alone. The entire Flower Division together is the true star. 
 Everyone... Let's make this a Christmas play to remember! 
@@ -246,7 +246,7 @@ You should probably act lively and cheerfully.
 OK! I'll do my best! 
 Hahaha, that's the spirit, Iris. 
 How about you try to act as gracefully as you can? 
-Gracefully? What does that mean? 
+Grays-fuh-ly? What does that mean? 
 Uhhh... How should I put this... 
 I guess... like a grown-up? 
 Like a grown-up? OK! I'll give it a try! 
@@ -279,21 +279,21 @@ It's thanks to you that we've made it this far.
 So thanks, Chief. Seriously. I'm grateful. 
 Kohran... 
 For you and everyone else... We’re gonna make this an amazing show! 
-Mr. Ensign, the Christmas play is finally approaching. 
-Just this once, I'll let you direct my performance. 
+Mr. Ensign, finally the Christmas play is approaching. 
+Only this once, I'll let you direct my performance. 
 Act purely. 
 Act cheerily. 
 Act gracefully. 
 Let's go for a pure feel. I think it suits you perfectly. 
-Understood. I'll do my best, for you, Mr. Ensign. 
+Understood. I will do my best, for you, Mr. Ensign. 
 Thank you, Orihime. 
 How about we try a bright, cheerful performance, just this once. 
-Leave it to me. I can handle any performance you want me to do. 
+Leave it to me. Any performance you want me to do, I can handle it. 
 I'm looking forward to it, Orihime. 
 Since this will be an Orihime performance, how about a graceful, refined feel? 
 Understood. I don't have any problem with my usual routine. 
 Hahaha... <br> What confidence. 
-It's thanks to you that we've made it this far, Mr. Ensign. 
+It is thanks to you that we've made it this far, Mr. Ensign. 
 For the sake of you and everyone else… We'll make this a wonderful play! 
 Captain... Opening day draws near. 
 Please give me your directions. 
@@ -312,9 +312,9 @@ I know what the word means, so I'll do some research.
 I see... I can't wait. 
 It's thanks to you that we've made it this far. 
 We'll put on a good play for you, Captain. 
-Sorry, Ogami. I can only sell you one bromide per month. 
+Sorry Ogami, but customers are only allowed to purchase one of each bromide. 
 I see. That's too bad. 
-So sorry, Mr. Ogami, but each customer is only allowed to purchase one bromide at a time.
+So sorry, Mr. Ogami, but customers are only allowed to purchase one of each bromide.
 Oh, really? That's too bad. 
 Shiro 
 Hanamaru 

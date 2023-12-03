@@ -72,7 +72,7 @@ An amusement park date with Kohran, huh? Can't wait.
 OK, guess I'll head over to Kohran's room, then. 
 Ciao, Mr. Ensign. 
 Hey, Orihime. Did you need something? 
-Actually, Mr. Ensign, there's something I wanted to show you. 
+Actually, there's something I wanted to show you. 
 Come by my room later, please! 
 Something to show me? 
 Heehee, whatever could it be? 
@@ -171,11 +171,11 @@ Hey, is that you, Orihime?
 Ciao, Mr. Ensign. Did you come to listen to me play piano? 
 No, that's not why I'm here. 
 Aww, that's a little disappointing. 
-I've come up with all sorts of new music ideas since we returned from our last battle. 
+I've come up with all sorts of new ideas for music since we returned from our last battle. 
 I have to work extra hard so I don't lose out to Papa! 
 Hahaha, I see. 
 All right, Orihime, I'm gonna go now. 
-Stay a while and listen to me play next time, OK? 
+Stay for a while and listen to me play next time, OK? 
 (Orihime's playing piano.) 
 (I'll leave her be. Wouldn't want to disturb her.) 
 Mr. Yoneda. Drinking as usual, eh? 
@@ -431,7 +431,7 @@ Heehee, all right, I'll show you.
 Without further ado… <br> Here it is! 
 Is this... From back when... 
 That's right! It's the portrait Papa drew at the Imperial Hotel on New Year's! 
-You know, the one of the two of us! 
+You know, the one of you and me! 
 I just received it from Papa yesterday. 
 I see... So Mr. Ogata finally finished it. 
 When he gave it to me, he said, “You came back, just like you said you would…” 
@@ -439,10 +439,10 @@ When he gave it to me, he said, “You came back, just like you said you would�
 ... 
 Anyway, it's a wonderful portrait, as expected of my papa! 
 Yeah... I feel kind of embarrassed looking at a painting of myself, though. 
-Do you really? I've been staring at it all day and can't get enough. 
+Do you really? All day, I have been staring at it and can't get enough. 
 Looking at this painting brings back so many memories of you and me... 
 Orihime... 
-We'll always be together, just like in this portrait. 
+We will always be together, just like in this portrait. 
 Orihime? It's Ogami. 
 ... 
 Hmmm, it doesn't seem like she's in her room. 
@@ -581,9 +581,9 @@ We've had a lot of strategy meetings in this room, even aboard the Mikasa.
 Now that the fighting's over, I don't think we'll be using this room for a while. 
 The fighting might be over, but the steam processor keeps on working, as always. 
 We'll both need to keep working hard to protect the peace. 
-Sorry, Ogami. I can only sell you one bromide per month. 
+Sorry Ogami, but customers are only allowed to purchase one of each bromide. 
 I see. That's too bad. 
-So sorry, Mr. Ogami, but each customer is only allowed to purchase one bromide at a time.  
+So sorry, Mr. Ogami, but customers are only allowed to purchase one of each bromide.
 Oh, really? That's too bad. 
 Shiro 
 Hanamaru 

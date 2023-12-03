@@ -213,7 +213,7 @@ Oh, uh, sorry. Um... What were you saying?
 I wanna talk to you about something, so I need you to meet me at my room at 4 o'clock.
 R-Right, I got it. 4 o'clock, I'll be there.
 I'll be waiting in my room then. Later gator!
-She asked that I come to her room… I wonder what Kohran wants to talk about?
+She asked that I come to her room… I wonder what Kohran wants to talk about.
 If I'm meeting her at 4, then I've got an hour to kill. Guess I'll find something to do until then.
 Oh, it's Reni.
 Hey, Reni. Nice weather, huh?
@@ -401,7 +401,7 @@ That'll be 50 sen. Thank you very much!
 It's Reni's bromide.
 OK, Reni's bromide, is it?
 That'll be 50 sen. Thank you very much!
-Oh, you're not going to buy it?
+Oh, so you're not going to buy anything?
 Oh yeah, you brought back that super cute little doggy earlier, didn't you?
 I guess he lives here at the theater with us now, huh?
 Yes, that’s right. His name is
@@ -438,7 +438,7 @@ Umm... I think she just pulled a fast one on me.
 Tch, forget it. No point in sticking around here, so I'm gonna leave.
 S-Sorry! I've... got to go!
 Ogami!
-Phew. I wonder if I ran far enough?
+Phew. I wonder if I ran far enough.
 Still, why in the world would she suddenly up and ask me something like that?
 Saki, do you have any idea what you're asking me?!
 Begging me to kiss you in the manager's office while he's in the hospital... It's completely shameless!
@@ -451,7 +451,7 @@ Hmmhmm, scared, aren't you? Then I'll start us off...
 (It... It would be really bad if anyone saw this!)
 S-Sorry! I've... got to go!
 Ogami!
-Phew. I wonder if I ran far enough?
+Phew. I wonder if I ran far enough.
 Still, why in the world would she suddenly up and ask me something like that?
 Saki is gone. I'm not sure whether to be relieved or disappointed...
 OK, enough of these stupid thoughts, Ogami. Time to go somewhere else.
@@ -688,7 +688,7 @@ I figured I'd check again, but there's still no one here...
 Oh yeah, Kohran was asking for me, wasn't she? I'd best not be late.
 ...
 (It looks like Orihime is back.)
-(I wonder what she's always doing in the attic?)
+(I wonder what she's always doing in the attic.)
 Mamma...
 Hm?
 Mamma, it has been 3 months now since I came here to Japan.
@@ -799,7 +799,7 @@ I guess we should stop, then. We'll finish the rest later.
 Yaaay! <br> All done, all done!
 You have to do it properly!
 You didn't answer, so I decided I'm finished!
-Good grief...I guess there's no point in pushing it, so we might as well leave off there.
+Good grief… I guess there's no point in pushing it, so we might as well leave off there.
 Well, looks like you're done studying for today. Nice job, Iris.
 Uh-huh! <br> Thanks, Mon Frère!
 Leave the room.
@@ -821,8 +821,8 @@ It's important to do a little more each and every day. Understand?
 Aaaall riiiight. <br> Aww, I hate this...
 Phew... I'm actually kind of tired.
 I am doing this for Iris, though. I should keep checking in on her every now and then.
-Iris... Looks like you're drifting off again.
-I should be going. See you later, Iris.
+I'm... starting to feel sleepy again.
+Well, I should be going. See you later, Iris.
 OK... Goodnight.
 Phew... I'm actually kind of tired.
 I am doing this for Iris, though. I should keep checking in on her every now and then.
@@ -1022,11 +1022,11 @@ I wonder if Reni's here.
 Nope, not here.
 It's just a piece of paper from a notebook. I suppose that's fitting for someone like Reni.
 OK, let's check another room.
-I wonder if Sakura's in her room.
+I wonder if Sakura is in her room.
 Too bad, she's not here.
 It's just like Sakura to have a cute nameplate like this.
 Let's go check another room.
-I wonder if Kanna’s in her room?
+I wonder if Kanna is in her room.
 ...She's not here.
 A nametag hangs on the door, almost as if it's standing guard over Kanna's room in her absence.
 OK, let's check another room.
@@ -1034,7 +1034,7 @@ I wonder if Sumire is in her room.
 Nope, not here.
 This is a pretty subtle design, considering it's Sumire.
 Let's check another room.
-I wonder if Orihime’s in her room?
+I wonder if Orihime is in her room.
 Seems she's not in.
 The nameplate has a simple design, but it sure looks high class.
 Let's go check another room.
@@ -1529,10 +1529,10 @@ You can talk to her if you dial "13900."
 I'll come back another time. Good luck with your work. 
 OK. Thanks for coming, Ogami. 
 Tell us if you hear any juicy stories! 
-Sorry, Ogami. I can only sell you one bromide per month. 
+Sorry Ogami, but customers are only allowed to purchase one of each bromide. 
 I see. That's too bad. 
-So sorry, Mr. Ogami, but each customer is only allowed to purchase one bromide at a time.
-Oh, really? That's too bad.
+So sorry, Mr. Ogami, but customers are only allowed to purchase one of each bromide.
+Oh, really? That's too bad. 
 Shiro
 Hanamaru
 Dai
@@ -1613,7 +1613,7 @@ I'm sure you feel the same, Ogami.
 Yes, of course. 
 So let's both do our best. 
 For my sister... <br> For everyone... 
-Yes ma'am! 
+Yes, ma'am! 
 Well, today I will tell you about the Anti-Kouma Corps. 
 The Anti-Kouma Corps was the army's predecessor to the Imperial Assault Troupe. 
 Ikki Yoneda, Kazuma Shinguji, Shinnosuke Yamazaki, and... Ayame Fujieda. 
@@ -1639,7 +1639,7 @@ The people Ayame chose truly were the best people for the job. That includes you
 Kaede... 
 Ayame entrusted the Flower Division to me, so I'll continue to give it my all. 
 Don't give up. Even in the hardest of times, remember to never give up, Ogami. 
-Yes ma'am! I will do all I can to meet your expectations! 
+Yes, ma'am! I will do all I can to meet your expectations! 
 Now then, today I'll tell you about Ayame and Major Yamazaki. 
 Both Ayame and Major Yamazaki were members of the troupe's predecessor, the Anti-Kouma Corps.
 Major Yamazaki was a brilliant scientist who created the foundational designs for Spirit Armor... 

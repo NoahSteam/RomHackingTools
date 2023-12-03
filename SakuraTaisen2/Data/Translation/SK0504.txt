@@ -94,15 +94,15 @@ Orihime insisted we try on our bathing suits right away...
 So... that we could compare them. 
 Well, Mr. Ensign, which one do you like best? 
 O-Orihime! 
-Oh yeah, and you better not say, "I like them both equally." 
+Oh yes, and I won’t accept an answer such as "I like them both equally." 
 I like Sakura's swimsuit. 
 I like Orihime's swimsuit. 
 I like them both equally. 
 I, uh... <br> I like Sakura's swimsuit. 
 Ogami... 
 Thank you, Ogami. I'm happy to hear it! 
-*sigh* <br> Figures that Mr. Ensign wouldn’t have any fashion sense. 
-Well, not like I expected much from you, anyway. 
+*sigh* <br> Figures that Mr. Ensign would have no sense of fashion. 
+Well, I did not expect much from you, anyway. 
 I, uh... <br> I like Orihime's swimsuit. 
 Heheh! I didn't think you had an eye for fashion, Mr. Ensign! 
 ... 
@@ -111,10 +111,10 @@ No, it's fine. Orihime's bathing suit IS quite nice, after all.
 I, uh... <br> I like them both equally. 
 I just told you that I wouldn't accept that answer! 
 Wh-What can I say? They're both nice... 
-Good grief, this is why you can't trust Japanese men, they're so wishy-washy! 
+Mamma mia, this is why you can't trust Japanese men, they're so wishy-washy! 
 Ah... 
 Hmmm... I don't think I can answer that question. 
-*sigh* <br> Just goes to show, Japanese men are so fickle. 
+*sigh* <br> It just goes to show, Japanese men are so indecisive. 
 Ah... 
 (Captain, let's try asking them about the Kinematron, indirectly.) 
 Right... 
@@ -146,7 +146,7 @@ What are you two muttering about?
 Oh, sorry. It's private. 
 Anyway, we have to go now. You two enjoy yourselves. 
 OK. See you at the beach. 
-Can't wait to see your swimsuit, Maria. 
+I look forward to seeing your swimsuit, Maria. 
 Hmm, doesn't sound like either of them knew. 
 I've been staying in the same room as them... 
 But I haven't seen the Kinematron in there either. 
@@ -158,7 +158,7 @@ What's wrong? Your eyes are darting all over the place.
 No, it's nothing. 
 Doesn't seem like it's here after all, Captain. 
 Apparently not. Let's check another room. 
-Looking at everything in the room EXCEPT for the girls in swimsuits... You're so weird. 
+Looking at everything in the room EXCEPT for the girls in swimsuits... What a strange man you are. 
 Hmhm, sorry, we didn't mean anything by it. 
 OK, Captain, we should go. 
 Doesn't look like it's here after all. 
@@ -676,10 +676,10 @@ Sorry to keep you waiting, Ogami! The Koubu are prepped for airdrop!
 Understood! 
 Let's go get the others, Captain! 
 Yeah. Black Demons, it's time for you to see what the Flower Division can do! 
-Sorry, Ogami. I can only sell you one bromide per month. 
+Sorry Ogami, but customers are only allowed to purchase one of each bromide. 
 I see. That's too bad. 
-So sorry, Mr. Ogami, but each customer is only allowed to purchase one bromide at a time.
-Oh, really? That's too bad.  
+So sorry, Mr. Ogami, but customers are only allowed to purchase one of each bromide.
+Oh, really? That's too bad. 
 The jewel of the Pandemonium Regalia, entrusted to us by the Rose Division. 
 Spirit Sword Arataka. The special sword of the Shinguji family. 
 Divine Sword Shirahatori. Entrusted to me by Kaede. A special sword passed down by the Fujieda family. 

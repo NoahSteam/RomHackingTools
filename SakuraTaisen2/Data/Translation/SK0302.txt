@@ -45,7 +45,7 @@ That's Reni's bromide.
 We just put that bromide up for sale recently. Get one while you can!
 Let's see... Reni's bromide, right? 
 That'll be 50 sen. Thank you very much! 
-Hm, so you're not going to buy anything?
+Oh, so you're not going to buy anything?
 Tsubaki, you look… very cheerful. 
 Absolutely. This is the theater’s entrance after all. 
 At times like this, it’s all the more important to greet visitors with a smile. 
@@ -564,8 +564,8 @@ As the monster begins to vanish into the night, Masked Red straddles his steam b
 The mummy runs amid the darkness as the Mach Red’s spotlight illuminates its back. 
 Before long, they enter a dense forest and the mummy disappears into a western house in the woods. 
 Could this be the mummy’s lair? What awaits Masked Red in the mysterious old house? 
-Fight on, Masked Red! You're our hero, Masked Red! <br> -The End 
-Go, Masked Red! Fight on, Masked Red! Tune in next time! 
+Fight on, Masked Red! You're our hero, Red! <br> -The End 
+Go, Masked Red! <br> Fight on, Masked Red! <br> Tune in next time! 
 I'm worried about everyone else, so let's end this transmission. 
 Now... Where should I head next? 
 …Huh? Sounds like someone’s at my door.
@@ -575,24 +575,24 @@ Is that Kasumi? Wait a second, I'll open the door.
 What's wrong, Kasumi? 
 Let's continue this later. Right now, I need to focus on consoling everyone at the theater. 
 ...This is Ayame’s old room, isn’t it? 
-You there... Is that you, Mr. Ensign? 
+Is that you there, Mr. Ensign? 
 Hi, Orihime. 
 I heard that this room once belonged to the previous deputy commander...
-Now we don't have a deputy commander and Mr. Yoneda has collapsed. Aren’t you feeling a bit discouraged? 
+Now we have no deputy commander and Mr. Yoneda has collapsed. You must feel discouraged, yes? 
 Actually, I am. 
 No, not at all. 
 I have you, Orihime. 
 Actually, I am discouraged. I’m worried about what I can do by myself in a situation like this. 
 Heh, just what I thought. Japanese men are so weak! 
-I can’t believe you would express your worries to your subordinates! You’re supposed to be our captain! 
+It’s unbelievable for you to express your worries to your subordinates! You’re supposed to be our captain! 
 Uh... I-I was... 
-In times like this, shouldn’t you at least try to act like a leader?
-Let me be blunt, everyone here is acting like a bunch of fools! It’s your job to set them straight! 
+In times like this, shouldn’t you at least try to act like the leader?
+Let me be blunt, everyone here is acting like a bunch of cowards! It’s your job to set them straight! 
 Ah, Orihime... 
 Sheesh… I was supposed to be the one encouraging her, not the other way around. 
 No, not at all. During tough times like this, I need to be strong and keep everyone together. 
-Uh-huh… For once, you’re actually acting like a captain. 
-Careful not to overexert yourself.
+Hmm… For once, you act like a captain. 
+Careful you do not overexert yourself.
 She's not wrong, I need to keep a calm attitude. 
 OK, I'll keep that in mind and go talk to the others. 
 I’ll be all right because… I have you, Orihime.
@@ -604,7 +604,7 @@ Oh boy... She ran away at full speed.
 Of course, I’d be lying if I said I wasn’t discouraged.
 But I know that if Ayame ever caught me talking like that as the captain…
 She’d say, “Pull yourself together!”
-Uh-huh... 
+Hmm... 
 You sound like a loser when you say it like that. 
 Well, keep at it, I suppose.
 Now, I should get going too. 
@@ -693,14 +693,14 @@ Ah, and he’s gone…
 ... 
 Reni just got up and left. Guess I better get going too.
 ... 
-Looks like Reni's not here. He mentioned that he was going somewhere, I think. 
+Looks like no one's here. I think Reni mentioned something about going somewhere.
 Looks like Reni's not here. 
-I wonder if Sakura’s in her room. 
+I wonder if Sakura is in her room. 
 Too bad, she's not here. 
 It's just like Sakura to have a cute nameplate like this. 
 Let's go check another room. 
 If Kanna was around, she would surely brighten up the mood. 
-Kanna… I wonder when she’ll be back? 
+Kanna… I wonder when she’ll be back. 
 A nametag is hanging on the door, almost as if it's standing guard over Kanna's room in her absence. 
 There's no reason to hang around since Kanna's gone. I'll go somewhere else. 
 I wonder if Orihime is in her room.
@@ -713,9 +713,9 @@ What's a siesta?
 Have a nice nap. 
 This is no time for a nap!
 What's a siesta? 
-Heheh! Oh Mr. Ensign, you don’t know what a siesta is?
+Heheh! Mr. Ensign, you don’t know what a siesta is?
 A siesta is an afternoon nap.
-My mood will sour if I don’t have one, so good night! 
+My mood will be sour if I don’t have one, so good night! 
 H-Hey, Orihime! 
 ... 
 Oh boy, she really is taking a nap.
@@ -733,8 +733,8 @@ Ugh... I've had enough of this!
 Do you actually think that Mr. Yoneda will recover if I stay awake? 
 Don’t judge a book by its cover. Naps are one of the best ways to keep your mind fresh in times of stress.
 I-I see... 
-You’re the captain, for God’s sake. You should calm down a little. 
-I'm gonna have my siesta now, so don't disturb me! 
+You’re the captain, so why don’t you calm down a little?
+I will have my siesta now, so don't disturb me! 
 Ugh... I ended up getting yelled at. 
 You have nothing to say? Well then, good night. 
 I wanted to talk with her, but I guess I’ll do it later. 
@@ -747,7 +747,7 @@ There's no reason to hang around since Maria's gone. I'll go somewhere else.
 I wonder if Iris is in her room.
 So Iris's nameplate is shaped like Jean-Paul... 
 I better check another room, I guess. 
-Iris isn’t here. I wonder where she went?
+Iris isn’t here. I wonder where she went.
 Kohran must've been shocked to hear about today's incident. 
 If I remember right… She’s at the Hanayashiki Branch right now. 
 A gear-shaped nameplate, huh? It's just like her. 
@@ -792,7 +792,7 @@ Well, Reni seems to be relaxing in his own way.
 OK, let's go check on the others. 
 I'd feel bad if I interrupted him while he's relaxing. I’ll head to another room.
 OK, I'm gonna take a quick bath too. 
-I’ll try talking with Reni while washing his back. We’re both guys after all. 
+I’ll try striking up a conversation with Reni while I help wash his back. We’re both guys after all. 
 Hi, Reni. Mind if I join you? 
 ... 
 Wash his back. 
@@ -820,7 +820,7 @@ Somehow it feels like the water’s warmth has seeped into my body and soul…
 ...I’m going to leave now. 
 Getting out already? You should take it slow and enjoy yourself. 
 This is enough. The effect of the heat and increasing blood pressure has improved my muscle circulation.
-Oh, I see… That’s just like you. 
+Oh boy… Same old Reni. 
 Phew, that was a great bath. 
 Oh no, 15 minutes have passed! 
 Hmm hmm~ Hmm~ Hmm~ 
@@ -829,7 +829,7 @@ I've never sung outside of my performances.
 Huh? So you’ve never hummed or sung a song to yourself?
 ...Correct. It’s not necessary.
 …I’m going to leave now. 
-Oh, I see… That’s just like you. 
+Oh boy… Same old Reni. 
 Phew, that was a great bath. 
 Oh no, 15 minutes have passed! 
 ... 
@@ -964,9 +964,9 @@ Let's drive away this depressing atmosphere and make the summer performance a su
 ...Yes, that just might work.
 In that case, how about we have everyone in the Flower Division gather in the dressing room? 
 All right, Kasumi. OK, let's make the summer performance a success! 
-Sorry, Ogami. I can only sell you one bromide per month. 
+Sorry Ogami, but customers are only allowed to purchase one of each bromide. 
 I see. That's too bad. 
-So sorry, Mr. Ogami, but each customer is only allowed to purchase one bromide at a time.
+So sorry, Mr. Ogami, but customers are only allowed to purchase one of each bromide.
 Oh, really? That's too bad.  
 ... "" "" () - . , ! ? ?! !! 
 Welcome to Pompadour Chikamatsu's Fortune Telling. Here is what fate has in store for you. 

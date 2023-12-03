@@ -250,7 +250,7 @@ You're right. OK, let's have a big meal to start the day!
 ...Yeah! 
 Oh, hello, everyone. Good morning.
 Hey, you’re up early, Ogami. You getting some grub too? 
-Good morning, sir. <br> Huh? What’s with that uniform? Are you going out somewhere? 
+Good morning, sir. <br> Huh? What’s with the uniform? Are you going out somewhere?
 Yup, I’ve got some things to take care of at the Ministry of the Army. Saki’s tagging along too.
 Iris, how about you ask the manager to help send your letter? 
 What’s this, a letter? Sure, I can mail this out for you. 
@@ -275,7 +275,7 @@ It's time to move out! Ogami, Iris, let's go!
 The Imperial Assault Troupe, Flower Division has assembled! 
 Where’s the enemy been sighted?
 Shibuya, according to our intel. 
-It appears that Hex Mechs have been transporting some kind of material in large quantities. 
+It appears that Hex Mechs have been transporting some kind of material in large quantities.
 If they’re in Shibuya, we can move out in the Thunderstrike! 
 Thunderstrike? What's that? 
 It's the pride of the Imperial Assault Troupe, an underground train used for transporting Koubu. 

@@ -32,14 +32,14 @@ Orihime Soletta, former Star Division member. One of the Italian Red Nobles, she
 Reni Milchstraße. A combat professional, attacking accurately without a single wasted movement.
 Hex Mech: Wakiji Kai. The ones equipped with longswords are referred to as I-type Otsu.
 Hex Mech: Wakiji Kai. These machines were successfully mass-produced with enhanced combat capability.
-Hex Mech: Chiken. Piloted by Mokujiki of the Five Elements. Equipped with the special weapon, Enku.
+Hex Mech: Chiken. Piloted by Mokujiki of the Five Elements. Equipped with the special weapon, Enkuu.
 Hex Mech: Wakiji Kai. The ones equipped with large cannons are referred to as HA-type.
 Hex Mech: Wakiji Kai. The RO-type Wakiji were designed to support the I-type Wakiji in battle.
 Untranslated
 Hex Mech: Wakiji Kai. These models, called L-Special, have the ability to restore health.
 Wakiji Kai L-Special. Like the I-type, these were originally developed as experimental units.
 Untranslated
-Enku. A support weapon developed by Mokujiki for exclusive use on his Hex Mech, Chiken.
+Enkuu. A support weapon developed by Mokujiki for exclusive use on his Hex Mech, Chiken.
 Message 20
 Doesn't look like I need to cover anyone right now.
 Sakura… <br> I will protect you!
@@ -67,7 +67,7 @@ There's something different about you today, Ogami.
 I did it!
 It was all thanks to you, Ogami!
 Ogami… I believe in you.
-My time to shine has come, Ensign.
+Your time to shine has come, Ensign.
 Please, do your best for me…
 You mustn't overexert yourself…
 Now, here I come!

@@ -122,14 +122,14 @@ How would you feel about becoming my personal lighting technician, Ensign?
 Uhh... Well... I... 
 Ohohohoho! Relax, Ensign, I'm only kidding. 
 Now then, I must be going. Take care, Ensign. 
-Lighting technician, huh? I wonder if that'd suit me better than being a ticket collector? 
+Lighting technician, huh? I wonder if that'd suit me better than being a ticket collector. 
 ...Now's not the time to be thinking about that. I have to get back to my rounds. 
 Phew... How was that, Sumire? 
 I think you have a knack for this. 
 Perhaps it wouldn't be such a bad idea to become a lighting technician as well as a ticket puncher? 
 A lighting technician, huh? Hmmm... 
 Now then, I must be going. Take care, Ensign. 
-Lighting technician, huh? I wonder if that'd suit me better than being a ticket collector? 
+Lighting technician, huh? I wonder if that'd suit me better than being a ticket collector. 
 ...Now's not the time to be thinking about that. I have to get back to my rounds. 
 Sorry, Sumire... I wasn't very good at controlling the spotlight. 
 Well, it was your first time. Don't worry about it too much. 
@@ -238,11 +238,11 @@ Brr, it's cold. As you’d expect, the nights have started to get chillier.
 I don't see anything unusual here, so let's go somewhere else right away. Brr, cold... 
 I'd love to take some time to flip through a book, but I'm on patrol right now... 
 Perhaps I'll come back to read some other time. 
-I wonder if Reni is in her room?
+I wonder if Reni is in her room.
 No answer... 
 Her nameplate's just a piece of notebook paper, as usual. 
 Let's check another room. 
-I wonder if Sakura is in her room? 
+I wonder if Sakura is in her room.
 Yes, who is it? 
 It's Ogami... 
 Ogami? Thanks for going on your night watch. 
@@ -252,7 +252,7 @@ All right. Good night, Ogami.
 She said she was going to bed. If there's anything I need from her, I'll just bring it up tomorrow.
 What a cute nameplate, typical of Sakura. 
 Let's check another room. 
-I wonder if Kanna’s in her room.
+I wonder if Kanna is in her room.
 No answer. Did she go somewhere? 
 Zzz... No, I couldn't eat another bite... 
 Sounds like even Kanna's asleep. 
@@ -291,7 +291,7 @@ It'll be all right, Captain. I know you can do it. Have a little faith.
 Right then, I'll take my leave now. I'm going to read some more in my room and then call it a night. 
 Good night, Captain. Best of luck on your night watch. 
 So it really is all up to me, huh? 
-Orihime... I wonder if she'll even listen to me? 
+Orihime... I wonder if she'll even listen to me. 
 Are you on your night watch, sir? If so, there's nothing unusual in my room. 
 I'm reading right now, but I'll be going to bed in a moment. 
 I-I see. All right, good night, Maria. 
@@ -303,7 +303,7 @@ I wonder if Iris is in her room.
 No answer... 
 So Iris's nameplate is shaped like Jean-Paul. 
 Let's check another room. 
-I wonder if Kohran’s in her room.
+I wonder if Kohran is in her room.
 No answer... 
 A gear-shaped nameplate, huh? It's just Kohran's style. 
 Let's check another room. 
@@ -332,7 +332,7 @@ Right, I should get back to work myself and patrol the theater.
 It feels like a hospital at nighttime here, I don't like it. 
 Nothing out of the ordinary here. I should get going. 
 Looks like no one's taking a bath right now. 
-I'll go to a different room. I wonder where everyone else is? 
+I'll go to a different room. I wonder where everyone else is. 
 Smells nice here, like soap... Sumire was just taking a bath here earlier, right? 
 I'm starting to feel kinda funny... I should get back to my patrol. 
 Huh? Looks like someone's in the bathroom. 
@@ -400,7 +400,7 @@ I see. Well then, I'll be taking my leave.
 Take care, Ensign. Good luck on your night watch. 
 I should do as Sumire says and get back to my patrol in earnest. 
 Looks like no one's taking a bath right now. 
-I'll go to a different room. I wonder where everyone else is? 
+I'll go to a different room. I wonder where everyone else is. 
 Apparently the pool down here can heat up the water using underground boilers. 
 Leave it to the Imperial Theater to have a pool you can use even during the winter. 
 The training room... Nobody's here at the moment. 
@@ -475,7 +475,7 @@ Looks like Kohran's still working.
 I should get back to my night watch, too. 
 Past 10 already, huh? I should call it here. 
 OK, guess I'll go talk to Orihime now. 
-I wonder if Orihime will even listen to me? 
+I wonder if Orihime will even listen to me. 
 ...Who is it? 
 It's Ogami. There's something I wanted to talk to you about. 
 That MAN asked you to come talk to me, didn't he? 
@@ -491,31 +491,31 @@ Orihime, please, listen to me!
 No means no! 
 Orihime... If you won't listen to me, then please let me hear your side of the story. 
 Could you tell me what you think about your father? 
-You're so stubborn! This has nothing to do with you! 
+How stubborn you are! This has nothing to do with you! 
 Actually, it does! 
 You're right, but…
 Actually, it does! I can't leave one of my partners in the Flower Division alone like this! 
-Partner this, partner that... You're a broken record! 
+Partner this, partner that... It is all you ever say! 
 I don't recall ever being partners with a Japanese man! 
 You're right. I have nothing to do with your family, not directly. 
 But I'm worried about you! Isn't that reason enough?! 
 Mr. Ensign... 
-...No matter what you say, I'm not opening this door. 
+...No matter what you say, I will not be opening this door. 
 ...Mr. Ensign? Are you still there?! 
 I already told you, I'm not opening this door! 
 Orihime, please! 
 That's cowardly, Orhime!
 Orihime, please! Open the door! 
-Argh, shut up! I don't want to hear another word! 
+Aghh, shut your mouth! I don't want to hear another word! 
 Orihime! 
 ... 
 That's cowardly, Orihime! If you truly believe what you think is right, then say it to my face! 
 ...I don't care what you say, I don't feel like talking to any Japanese men! 
 Orihime! 
-Argh, shut up! I don't want to hear another word! 
+Aghh, shut your mouth! I don't want to hear another word! 
 Orihime! 
 ... 
-Hmph! Giving me the silent treatment now, are you? 
+Hmph! You are giving me a silent treatment now? 
 Ah, thank goodness! Finally some peace and quiet. 
 Give up and leave. 
 Oh well. It's late. I'll go back to my room for tonight. 
@@ -527,14 +527,14 @@ All right, I'll be going now. Good night, Orihime.
 ... 
 ...Are you still there, Mr. Ensign? 
 Yeah. I'm not leaving here until you open this door. 
-Fine then, you can wait out there till morning. 
+Fine then, you can wait out there till the morning. 
 ... 
 Why don't you just give up already, Mr. Ensign? 
 And why don't you just give up and open the door already? 
 Hmph! 
 ... 
 No matter how long you stick around, Mr. Ensign, I'm not opening this door. 
-It's late, just go to bed already. You're being a nuisance. 
+The hour is late, just go to bed already. You're being a nuisance. 
 Oh well. You're right, it's late. I'll go back to my room for tonight. 
 But Orihime, I want you to know one thing. 
 I don't think it's right to hate your father like this forever. 
@@ -542,10 +542,10 @@ I just want to help you two patch things up, that's all.
 All right, I'll be going now. Good night, Orihime. 
 ... 
 ... 
-Sheesh... You really are stubborn, you know that? 
+Mamma mia... You really are stubborn, you know that? 
 ...Come on in. 
 Thanks, Orhine. 
-All right, so what did you want to talk to me about, anyway? 
+All right, what did you want to talk with me about, anyway? 
 Ask about Carino. 
 Ask about Ogata. 
 If you don't mind, could you tell me more about Carino? 
@@ -555,7 +555,7 @@ Mamma... She tried so hard not to cry in front of me...
 But she was always in tears whenever she was alone…
 All because of him... All because he wasn't faithful... 
 There's no way I could ever forgive him! 
-I'll never forgive him for making Mamma so sad... Never! 
+Never will I forgive him for making Mamma so sad... Never! 
 Orihime, you called him "unfaithful" just now... 
 But it seemed to me like Mr. Ogata truly loved Carino. 
 That man is tricking you, Mr. Ensign! 
@@ -578,9 +578,9 @@ I... I won't be fooled by him! Never!
 If only there was a way I could get them to talk face to face... 
 I know! I'll take Orihime to see Mr. Ogata tomorrow, by force if I have to! 
 That's all I CAN do. All right, I'll just have to try! 
-Sorry, Ogami. I can only sell you one bromide per month. 
+Sorry Ogami, but customers are only allowed to purchase one of each bromide. 
 I see. That's too bad. 
-So sorry, Mr. Ogami, but each customer is only allowed to purchase one bromide at a time.
+So sorry, Mr. Ogami, but customers are only allowed to purchase one of each bromide.
 Oh, really? That's too bad. 
 Shiro 
 Hanamaru 

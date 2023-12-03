@@ -34,7 +34,7 @@ That'll be 50 sen. Thank you very much!
 That's Reni's bromide. 
 Let's see... Reni's bromide, right? 
 That'll be 50 sen. Thank you very much! 
-Oh, so you're not going to buy any? 
+Oh, so you're not going to buy anything?
 This is the first time I've seen you working here in a few months, Tsubaki.
 Yep! I was away from the theater for quite a while, but now I’m back.
 When you went out of your way to contact me in Hokkaido…
@@ -303,14 +303,14 @@ How many meters is there, Maria?
 5 meters and 45 centimeters. Or about 5 and a half meters. 
 Those two are working hard... 
 Looks like arranging sets on the stage is a tough job.
-Huh? Look who it is.
+Hm? Look who it is.
 Ah, Ogami! 
 Are you preparing props for the play? 
 Yes. We're inspecting the props and sets for "The Miracle Bells." 
 We only have three weeks until the performance, after all. 
 I see... It's December already, huh. 
-Oh, right. Now that it's December, I just remembered something I wanted to ask. 
-I heard that this month has another name in the old Japanese calendar. 
+Oh, yes. Now that it's December, I just remembered something I wanted to ask. 
+I have heard this month has another name in the old Japanese calendar. 
 What's it called? 
 It’s called “Shisou.”
 It’s called “Shiwasu.”
@@ -319,7 +319,7 @@ It's called "Shisou."
 Oh… Shisou, huh? 
 O-Ogami, you got it wrong! 
 The 12th month of the old lunisolar calendar is called "Shiwasu."
-Oh, so you lied, huh? Quit acting like you know things when you clearly don’t, Mr. Ensign.
+Oh, so you lied? Quit acting like you know things when you clearly don’t, Mr. Ensign.
 I-Is that what it was? Whoops. 
 It's called "Shiwasu." 
 Oh... Shiwasu, huh? 
@@ -327,12 +327,12 @@ It's called "Shibashiri."
 Oh... Shibashiri, huh? 
 O-Ogami, you got it wrong! 
 The 12th month of the old lunisolar calendar is called "Shiwasu."
-Oh, so you lied, huh? Quit acting like you know things when you clearly don’t, Mr. Ensign.
+Oh, so you lied? Quit acting like you know things when you clearly don’t, Mr. Ensign.
 I-Is that what it was? Whoops. 
 Uh... What was it called again? 
 The 12th month of the old lunisolar calendar is called "Shiwasu."
 Oh… Shiwasu, huh? 
-That was nice. You and I both learned something new today, Mr. Ensign.
+How nice. You and I both have learned something new today, Mr. Ensign.
 Ah, haha... You're right. 
 It was said that the 12th month was the busiest time for schools. Even teachers were dashing around.
 Which is why it's called "Shiwasu," or "dashing teachers." I wonder how true it really is. 
@@ -550,7 +550,7 @@ Ah! It’s already past 4:45! Where'd the time go?
 I forgot I had an appointment with Kaede! 
 I gotta hurry to her room. I hope she'll forgive me for being a little late. 
 Let's do this later. I still have other stuff to do. 
-I wonder if Kaede's in her room right now? 
+I wonder if Kaede's in her room right now.
 Let's come back a little bit later. 
 Ah, it’s getting late. I better hurry to Kaede's room…
 Oh, wait. I'm already here. 
@@ -569,11 +569,11 @@ I wonder if Reni is in her room.
 She's not here... I guess she's at the stage. 
 Reni... Still using notebook paper as a nameplate, I see. 
 OK, let's check another room. 
-I wonder if Sakura’s in her room.
+I wonder if Sakura is in her room.
 It's just like Sakura to have a cute nameplate like this. 
 I better check another room, I guess. 
 She's not here... I guess she's at the stage. 
-I wonder if Kanna’s in her room.
+I wonder if Kanna is in her room.
 Kanna's nameplate... It looks more like a nametag to me. 
 I better check another room, I guess. 
 She's not here... I guess she's at the stage. 
@@ -589,7 +589,7 @@ I wonder if Iris is in her room.
 So Iris's nameplate is shaped like Jean-Paul. 
 Guess I'll go somewhere else. 
 She's not here... I guess she's at the stage. 
-I wonder if Kohran’s in her room.
+I wonder if Kohran is in her room.
 A gear-shaped nameplate, huh? It's just Kohran's style. 
 I better check another room, I guess. 
 She's not here... I guess she's at the stage. 
@@ -698,9 +698,9 @@ I'm sure you're busy. So if it turns out you can’t make it, that's perfectly f
 I'm going back to the gift shop now, so please excuse me! 
 Aah, Tsubaki! 
 …What am I going to do? All three of them want my help at the same time.
-Sorry, Ogami. I can only sell you one bromide per month. 
+Sorry Ogami, but customers are only allowed to purchase one of each bromide. 
 I see. That's too bad. 
-So sorry, Mr. Ogami, but each customer is only allowed to purchase one bromide at a time.
+So sorry, Mr. Ogami, but customers are only allowed to purchase one of each bromide.
 Oh, really? That's too bad. 
 Shiro 
 Hanamaru 

@@ -56,8 +56,8 @@ And it's all 'cause you gave me the courage to do it. Thanks a bunch, Chief.
 Kohran... 
 Mr. Ensign... 
 Orihime. Great job today. That was a wonderful show. 
-You did great yourself, Mr. Ensign. 
-All things considered, that was an excellent play. I bet it'd even be a success in Italy. 
+Your efforts were fantastic as well, Mr. Ensign. 
+All things considered, that was an excellent play. Even in Italy, I think it would be a success.. 
 Hahaha... Glad to hear it. 
 Captain... 
 Hey, Reni. Great job today. That was a wonderful show. 
@@ -212,7 +212,7 @@ You think maybe it's snowin’ cause I played the lead tonight? Ahahahaha!
 If that's the case, and we feel like having a snowball fight or something... 
 I guess that'd mean it was worth giving you the lead role after all. 
 ...Now you've done it, Boss. How's about we get this snowball fight underway already?! 
-Uh oh, better get outta here before she beats me up! 
+Uh-oh, better get outta here before she beats me up! 
 Heheh, I'm not lettin' you get away that easily! Wait up, Boss! Hahahaha! 
 Oh... I never knew there was a church around here. 
 Why don't we step inside, since it's Christmas and all. Might be fun. 
@@ -247,7 +247,7 @@ We made the audience super happy...
 I've never felt this ecstatic before in my life! 
 Thank you, Boss. I mean it, thanks! 
 Kanna... 
-Uh oh, it's gonna be past midnight soon! 
+Uh-oh, it's gonna be past midnight soon! 
 OK, race you to the theater, then! 
 All right, you're on! Think ya can beat me, Boss? Hahahaha! 
 What do you think we should do, Iris? 
@@ -363,9 +363,9 @@ Ahahaha! Was that supposed to be a compliment? Eh, I'll take it!
 Once again, Chief... Merry Christmas. 
 Yeah. Merry Christmas, Kohran. 
 Why don't we take this opportunity to go outside, Mr. Ensign? 
-I've been hoping to spend Christmas Eve with you for a long time. 
+I have been hoping to spend Christmas Eve with you for a long time. 
 All right, sure. It's a Christmas Eve date, then... Until midnight, anyway. 
-Now that that's decided, let's not waste any time! Come on, hurry! 
+Now that we have decided, let's not waste any time! Come now, hurry! 
 H-Hey, you don't have to pull so hard. 
 Wow... Look, Mr. Ensign, snow! 
 You're right. When did all this snow pile up, anyway? 
@@ -374,34 +374,34 @@ The snow must be giving us its blessing!
 Hahaha, you might be right. 
 At any rate, the city lights look so pretty with all this snow. 
 When I first came to Japan, Sakura told me something. 
-She said that she wanted to be like these city lights, and shine up on stage. 
+She said that she wanted to be like these city lights, and shine up on the stage. 
 She wanted to be like a strong, warm light, guiding people's way and protecting the peace. 
 At the time, I thought the lights in this city were insignificant. 
 But now... I know exactly what she meant. 
-I want to keep on shining, with you and everyone else in the Flower Division. 
+I want to keep on shining always, with you and everyone else in the Flower Division. 
 Orihime... 
 We'll be together forever. 
 You sure have changed. 
 Orihime... We'll be together forever. 
 Mr. Ensign... 
 Boy, Orihime, you sure have changed. 
-Sh-Shut up! 
+Y-You shut your mouth! 
 Keep talking like that and I'm leaving you here! 
 Hahaha, kidding, kidding. 
 But there is one big difference between Sakura and I. 
 And what's that? 
-That I'm the brightest light there is, of course! 
+That I… am the brightest light there is, of course! 
 Hahaha, there's the Orihime I know. 
-Heehee! Come on, Mr. Ensign, let's get going. 
+Heehee! Come on, Mr. Ensign, let us be going. 
 Oh, I had no idea there was a chapel around here. 
-What a pretty Christmas tree... 
+How pretty, this Christmas tree... 
 Ah, one of the stars fell off! 
-Mr. Ensign, help me put this star back! 
+Mr. Ensign, help me to put this star back! 
 All right, leave it to me! 
 Careful, Orihime... 
 Thanks, Mr. Ensign. I'll be fine. 
 All right, you, back with the rest of your little star friends... 
-We should go, Mr. Ensign. Let's get back to the others. 
+We should go, Mr. Ensign. Let us go back to the others. 
 You're right, it's almost midnight. 
 Mr. Ensign... 
 What is it? 
@@ -447,9 +447,9 @@ Yeah. That was great, Reni.
 Oh, it's almost midnight. 
 Let's go home, Reni. To the theater, where everyone's waiting for us. 
 ...OK. 
-Sorry, Ogami. I can only sell you one bromide per month. 
+Sorry Ogami, but customers are only allowed to purchase one of each bromide. 
 I see. That's too bad. 
-So sorry, Mr. Ogami, but each customer is only allowed to purchase one bromide at a time.
+So sorry, Mr. Ogami, but customers are only allowed to purchase one of each bromide.
 Oh, really? That's too bad. 
 Shiro 
 Hanamaru 

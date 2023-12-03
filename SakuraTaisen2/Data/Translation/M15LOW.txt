@@ -36,7 +36,7 @@ Untranslated
 Hex Mech: Wakiji Kai. The ones equipped with large cannons are referred to as HA-type.
 Untranslated
 Hex Mech: Wakiji Kai. It attacks using buckshot, so the power of each shot is relatively small. 
-Hex Mech: Dainichiken. Piloted by Kongou of the Five Elements, it excels in close-range combat.
+Hex Mech: Dainichiken. Piloted by Kongo of the Five Elements, it excels in close-range combat.
 Hex Mech: Wakiji Kai. These models, called L-Special, have the ability to restore health.
 Message 18
 Message 19
@@ -67,7 +67,7 @@ There's something different about you today, Ogami.
 I did it!
 It was all thanks to you, Ogami!
 Ogami… I believe in you.
-My time to shine has come, Ensign.
+Your time to shine has come, Ensign.
 Please, do your best for me…
 You mustn't overexert yourself…
 Now, here I come!

@@ -1,6 +1,6 @@
-﻿Sorry, Ogami. I can only sell you one bromide per month. 
+﻿Sorry Ogami, but customers are only allowed to purchase one of each bromide. 
 I see. That's too bad. 
-So sorry, Mr. Ogami, but each customer is only allowed to purchase one bromide at a time.  
+So sorry, Mr. Ogami, but customers are only allowed to purchase one of each bromide.
 Oh, really? That's too bad. 
 ... "" "" () - . , ! ? ?! !! 
 *yawn* <br> Ahh, I slept great. 
@@ -337,13 +337,13 @@ Oh well. I'll go somewhere else.
 Huh? What are you up to, Orihime? 
 That voice... <br> Is that you, Mr. Ensign? 
 I was just stretching my legs on top of the tatami. 
-Tatami mats feel great once you get used to them. 
+These tatami mats, they feel great once you are used to them. 
 That sounds nice. I think I'll stretch my legs a bit too. 
 Still, I remember, back when you first got here... 
 You didn’t have a lot of nice things to say about tatami mats. 
-Come on, that's ancient history! You're such a bully, Mr. Ensign. 
+Come now, that was so long ago! How very mean you are, Mr. Ensign. 
 Hahaha, you've sure changed a lot over the past year, Orihime. 
-Now that you mention it... <br> You might be right. 
+Now that you mention it... <br> Maybe you are right. 
 ...Orihime? 
 ... 
 That reminds me, back when Papa and Mamma came to visit... 
@@ -353,7 +353,7 @@ Ah! Wh-Where am I?
 Seems like the tatami mat felt so good you dozed off for a second. 
 I see... <br> So that was... a dream. 
 ...A dream? What kind of dream were you having? 
-I-I'm not telling! 
+I-I am not telling! 
 W-Well, I have places to be, so I have to get going! 
 Right... <br> She sure left in a huff. 
 I wonder what she was dreaming about... 
@@ -653,7 +653,7 @@ I should get going. Thanks for having me over, Kohran.
 Come back to hang out whenever you like! 
 Oh, Mr. Ensign. Did you need something? 
 I have the day off, so I thought I'd stop by and chat with you. 
-Mr. Ensign... I was actually just about to have my siesta. 
+Actually…I was just about to take my siesta. 
 “Siesta"...? Oh, you're going to take a nap, huh? 
 I'm sorry. Stop by some other time, OK? 
 Orihime? It's Ogami. 
@@ -661,10 +661,10 @@ Zzzz… Zzzz...
 Sounds like she's already started napping. 
 Hi, Orihime. 
 Oh, Mr. Ensign! Are you here to visit? 
-I was just about to go down to play the piano. Want to join me? 
+Just now, I am about to go down to play the piano. Want to join me? 
 Hey, Orihime. Thought I'd come hang out. 
-You look like you have a lot of free time on your hands, Mr. Ensign, as usual. 
-Oh yeah, I was just about to go down to play the piano. Want to join me? 
+You look like you have a lot of free time on your hands, as usual. 
+Oh, just now, I am about to go down to play the piano. Want to join me? 
 Oh, Mr. Ensign. <br> You're back? 
 If you've got time to kill, then how about we go play some piano? 
 Go together. 
@@ -683,7 +683,7 @@ Look at Orihime.
 Go somewhere else. 
 (I can still remember it clearly...) 
 ... 
-Mr. Ensign, you've been spacing out for a while now. Are you even listening to me?! 
+Mr. Ensign, you have seemed distracted for quite a while now. Are you even listening to me?! 
 I-I was just caught up in your piano playing, Orihime... 
 ...Really, now? Well, I guess that's fine. 
 ... 
@@ -693,18 +693,18 @@ Lala... Lala... <br> Lalala...
 (Orihime didn't listen to me very much back then...) 
 (But she looked just as serious playing the piano as she does now...) 
 I hate to leave in the middle of your performance, but I have to get going. 
-If you're leaving then I'll be leaving as well. 
+If you're leaving, then I'll be leaving as well. 
 Let's come back here again sometime! 
 Yeah, I'm looking forward to it. 
 (Even looking at her like this, I can picture her playing the piano...) 
-...Mr. Ensign? You've been dead silent ever since you got here. 
+...Mr. Ensign? You've been dead silent ever since you got here. Is there something wrong?
 ...Oh, sorry, my bad. Just spaced out a bit. 
 Feeling listless now that the battle's over, is that it? 
-Listening to my piano playing might make for a nice change of pace. 
+Maybe listening to me play the piano will make for a nice change of pace. 
 I'll be going now. Sorry to disturb you, Orihime. 
-Come on! You might as well come listen to me play the piano while you're here! 
+Come on! You might as well listen to me play while you're here! 
 S-Sorry... I'm busy with other stuff... 
-...Well, next time, make room in your schedule to listen to me play. Got it?!  
+...Well, make room in your schedule to hear me play for the next time. Got it?!  
 Captain... 
 Hey Reni. Thought I'd come hang out. 
 ...Sorry. I'm about to go take a bath. 
@@ -893,7 +893,7 @@ Wha- What are you all doing here?
 Ah, Ogami. Will you be joining us for cards? 
 Cards? 
 You came 'round to all our rooms earlier and called for us, right? 
-But when we opened our doors, there was nobody there! Are you a ninja or something, Mr. Ensign? 
+But when we opened our doors, there was nobody there! Are you perhaps a ninja, Mr. Ensign? 
 (I get it… This must be Kayama's doing.) 
 OK, since everyone's here already, let's play some cards. 
 Yaaay, yaaay! <br> I'll go get some sweets from my room! 
@@ -910,7 +910,7 @@ Captain, seeing as we're on holiday, how about we all play cards together for a 
 We've been waitin' for ya, Boss! Since we're all here now, how's about a game of cards? 
 We've been waiting for you, Mon Frère! C'mon, let's play cards already! 
 We've been waiting for you, Chief! C'mon, let's hop to it and play some cards! 
-Mr. Ensign, we've been waiting! Now, let's all play some cards together! 
+Mr. Ensign, we've been waiting! Now, let us all play cards together! 
 Apparently we're just about to play some cards. Will you join us, Captain? 
 All right, let's do it! 
 Some other time... 

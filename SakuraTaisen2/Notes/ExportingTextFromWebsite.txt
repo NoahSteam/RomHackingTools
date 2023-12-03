@@ -1,7 +1,8 @@
 -In PhpMyAdmin, select Structure
--Select columns to export
+-Select columns to export (TBLFile, ImageFileName, English)
 -Set format to CSV with utf-8
 -Clear out "Columns encluded with" and "Columns escaped with"
 -Export
 -Replace \' with ' and \" with " via notepad
--Run export tool
+-Run export tool.  This exports completed files
+-Compare with what's in the Translation directory of the project to see what new files there are

@@ -33,8 +33,8 @@ Eventually, he finds an underground prison deep in the canal with the missing gi
 Masked Red climbs the ladder which leads to a fireplace inside the professor’s laboratory.
 Masked Red prepares his Colt, then barges into the laboratory. "Hold it right there, Professor Kurogane!" 
 At last, the final clash between Masked Red and Professor Kurogane. Can Red defeat the mummy? 
-Fight on, Masked Red! You're our hero, Masked Red! <br> -The End 
-Go, Masked Red! Fight on, Masked Red! Tune in next time! 
+Fight on, Masked Red! You're our hero, Red! <br> -The End 
+Go, Masked Red! <br> Fight on, Masked Red! <br> Tune in next time! 
 I don't want to be late for our trip, so I better cut the transmission. 
 OK, let's hurry to the entrance hall! 
 Whoops, I almost forgot to bring this guy with me.
@@ -119,7 +119,7 @@ Your hard work has paid off. Work and relationships are going well. You are in g
 Your luck is at its peak. There may be times when you go too far. It's important to be considerate.
 Be careful with your fingertips. The slightest injury could become a serious problem. 
 ... "" "" () - . , ! ? ?! !! 
-Sorry, Ogami. I can only sell you one bromide per month. 
+Sorry Ogami, but customers are only allowed to purchase one of each bromide. 
 I see. That's too bad. 
-So sorry, Mr. Ogami, but each customer is only allowed to purchase one bromide at a time.
+So sorry, Mr. Ogami, but customers are only allowed to purchase one of each bromide.
 Oh, really? That's too bad.

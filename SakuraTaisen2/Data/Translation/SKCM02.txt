@@ -158,7 +158,7 @@ You two are still fighting as usual.
 ...A-Anyway! I'm going to slip away from the Kanzaki estate any day now.
 So make sure to keep my role open for this month’s summer performance.
 Good grief... I didn't get to talk much, after all.
-Sumire… I wonder if she’ll come home soon?
+Sumire… I wonder if she’ll come home soon.
 With her current situation, I think it might be difficult for her to leave.
 Now... What to do next? 
 I want to talk with Kanna... 
@@ -180,7 +180,7 @@ Huh? <br> Really, Mon Frère? <br> Yaaay, yaaay!
 ...If you wanted to talk to Iris, why bother using the Kinematron? 
 Whatever! This is stupid, we’re done here.
 Kanna. Let’s end this call.
-Yeah, I'm leaving. Later, Boss! 
+Yeah, I'm leavin’. Later, Boss! 
 Ah, those two... 
 I’ll always be here if you want to talk, Mon Frère!
 ...I know. Thanks, Iris.
@@ -273,8 +273,8 @@ The mysterious figure's eye seems to glint red, and a massive hand reaches down 
 “Oh my, it's Masked Red!" <br> "No need to worry, Miss, I'm here to help!" 
 Masked Red leaps from his bike, looking dashing as his cape billows in the wind. 
 Will our hero be able to rescue this damsel in distress? 
-Fight on, Masked Red! You're our hero, Masked Red! <br> -The End 
-Go, Masked Red! Fight on, Masked Red! Tune in next time! 
+Fight on, Masked Red! You're our hero, Red! <br> -The End 
+Go, Masked Red! <br> Fight on, Masked Red! <br> Tune in next time! 
 Ah! It's gonna be 12 o'clock in five minutes, Mon Frère! 
 Huh?! It's already that late?
 Oh well... I should end the transmission. 
@@ -287,9 +287,9 @@ But... We don't have much time...
 Yeah! 
 OK, Mon Frère, let's go to another room! 
 Yeah, let's. Where should we go next? 
-Sorry, Ogami. I can only sell you one bromide per month. 
+Sorry Ogami, but customers are only allowed to purchase one of each bromide. 
 I see. That's too bad. 
-So sorry, Mr. Ogami, but each customer is only allowed to purchase one bromide at a time.
+So sorry, Mr. Ogami, but customers are only allowed to purchase one of each bromide.
 Oh, really? That's too bad. 
 The jewel of the Pandemonium Regalia, entrusted to us by the Rose Division. 
 Spirit Sword Arataka. The special sword of the Shinguji family. 

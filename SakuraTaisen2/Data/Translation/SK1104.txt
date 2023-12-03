@@ -1,12 +1,12 @@
 ﻿How are you feeling, everyone? 
 My head still hurts a little... 
-The Tenbu are acting up. What's going on? 
+And the Tenbu are acting strange. What's going on? 
 ... 
 The problem lies with... the Tenbu themselves. 
 What?! What are you talking about, Kohran?! 
-Spirit Armors work using the Spirit Power of their pilots. 
+Spirit Armors work using the spirit power of their pilots. 
 Naturally, that means the stronger the pilot, the stronger the Spirit Armor's output. 
-But the Tenbu don't just use their pilots' Spirit Power... 
+But the Tenbu don't just use their pilots' spirit power... 
 They absorb what we call "city energy" from veins deep in the earth, and use it as power. 
 I see... So that's why they're so much stronger than the Koubu. 
 The bridge's spiritometer has been recording super high readings, the needle's ready to fly right off.
@@ -33,7 +33,7 @@ You're right. We'll find a way through this, so long as we don't give up.
 Not to worry, everyone. We may not be able to ride the Tenbu anymore... 
 But thankfully I also loaded the Koubu Kai into the hangar, just for such an occasion! 
 Plus, I prepared Koubu units for Orihime and Reni as well!
-Huh?! Kohran, are you serious?! 
+Huh?! Kohran, do you mean it?! 
 Yep, I never lie. You'll see once we get to the hangar. 
 Yaaay, yaaay! <br> C'mon, everybody, let's go see the Koubu! 
 It's true! The Koubu... They're all there, ready to go! 
@@ -54,8 +54,8 @@ We're all way stronger than we used to be! We've got a fighting chance!
 Chief, I know you might be worried about the Koubu... 
 But if the pilots are tough, then the Koubu are more than capable. 
 We're all way stronger than we used to be! We've got a fighting chance! 
-Hey, everyone! If we could have your attention, please! 
-Well, how do we look? Now we have Flower Division uniforms, just like everyone else! 
+Hey, everyone! If we could please be having your attention! 
+Well, how do we look? Now we have Flower Division uniforms, just like all of you! 
 Wow... <br> Where did you get those? 
 They had these made for us to go with our Koubu. 
 They look great on you. 
@@ -66,8 +66,8 @@ Of course it does! There's not an outfit in the world that looks bad on me!
 With these uniforms, you two are now truly part of the Flower Division. 
 ...Yeah.
 Heehee, well said, Mr. Ensign! 
-Heehee, I see my uniform fits so well that it has left you speechless, Mr. Ensign.
-We share one Spirit Armor, one uniform, and one emotion. 
+Heehee, I see you are left speechless by how perfettamente my uniform fits, Mr. Ensign.
+We share one Spirit Armor, one uniform, and one heart. 
 Now the Flower Division is fully united, wouldn't you say, Captain?
 …Yeah. Now the real battle begins. 
 Right then, let's get back to the bridge. 
@@ -211,38 +211,38 @@ Anyway, good day, Ensign.
 Right, I ought to get going, too. 
 Ciao, Mr. Ensign! 
 Hi, Orihime. 
-Mr. Ensign, even in the Mikasa you're just wandering around, as usual. 
-Can I take a guess at what you're up to? 
+Even in the Mikasa you're just wandering around, as always. 
+Can I guess what it is that you're doing? 
 Sure, go ahead. 
-You're walking about trying to cheer up everyone in the Flower Division. I'm right, aren't I? 
-That's correct, ya got me. 
-I've gotten to know you pretty well, Mr. Ensign. 
+You're walking about trying to cheer up all of us in the Flower Division. I'm right, yes? 
+That's correct, you got me. 
+I have gotten to know you pretty well, Mr. Ensign. 
 Now it's your turn to guess. 
 My turn? 
-What do you think I’m getting up to? 
+What do you think I have been doing? 
 Looking for a snack? 
 Waiting for me? 
 You have free time right now, so... I guess you were looking for a snack? 
-*sigh* <br> You're so clueless, Mr. Ensign. 
-Even though I was waiting here this whole time to cheer you up... 
+*sigh* <br> How clueless you are. 
+And I was waiting this whole time here, just to encourage you... 
 Huh? You waited for me? 
 Could it be that you were waiting for me? 
-Correct! Way to go, Mr. Ensign, you got it. 
+Correct! I knew you would figure it out. 
 Huh, really? 
 Hmmm... Don't have a clue. 
-Heehee, you're so clueless when it comes to these things, Mr. Ensign. 
-I was waiting for you here so I could cheer you up. 
+Heehee, how clueless you are when it comes to these things, Mr. Ensign. 
+I was waiting for you here so I could encourage you.
 Huh? You waited for me? 
-I have no doubt the battle before us will be the fiercest we've ever fought.
+I do not doubt the battle before us will be the fiercest we've ever fought.
 But I believe in you, Mr. Ensign. I believe that you'll lead us all to victory.
 Orihime... 
 The theater's become a very important place for me. 
-Everyone in the Flower Division is important to me. 
+And everyone in the Flower Division is important to me. 
 Mr. Ensign... <br> Let's make sure we all come back from this together. 
 Yeah, of course. We'll all return to the theater together. 
 …All right, Mr. Ensign, I'll be going now. 
 Right. Get plenty of rest before the mission. 
-You got it. <br> Well, see you later! 
+You got it. <br> Well, I will be seeing you later! 
 Ah… I forgot something very important! 
 Something important? What’s that? 
 ...Hm hm hm. 
@@ -255,7 +255,7 @@ A good luck charm from me.
 Orihime... 
 All right, Mr. Ensign, I'll be going now. 
 Right. Thanks for the good luck charm. 
-It's our little secret, you got that? 
+It's our little secret, all right? 
 Orihime... 
 Right, I should get going too. 
 Looks like Sumire and Orihime have both gone back to their quarters. 
@@ -611,7 +611,7 @@ I'll go check elsewhere.
 Sakura seems to be resting in her quarters. 
 I'll leave her alone until it's time for the mission to begin. 
 Doesn't seem like Sumire's here. 
-I wonder where she could've gone? 
+I wonder where she could've gone. 
 Sumire seems to be resting inside. 
 I should leave her alone until it's time to begin the mission. 
 Maria? I wonder where she could be... 
@@ -775,9 +775,9 @@ Everyone... I don't have anything special to say.
 We're all coming back from this together, just like we always do! 
 Yes, sir! 
 All pilots aboard the Thunderstrike! Time to infiltrate Musashi! 
-Sorry, Ogami. I can only sell you one bromide per month. 
+Sorry Ogami, but customers are only allowed to purchase one of each bromide. 
 I see. That's too bad. 
-So sorry, Mr. Ogami, but each customer is only allowed to purchase one bromide at a time.  
+So sorry, Mr. Ogami, but customers are only allowed to purchase one of each bromide.
 Oh, really? That's too bad. 
 Shiro 
 Hanamaru 

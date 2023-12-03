@@ -83,7 +83,7 @@ Oh, hello! Pleased to meet you!
 By any chance, are you... Mr. Ichiro Ogami? I knew it! It really IS you! 
 Huh?! Wh-Who are you? 
 Starting today, I'll be running the theater's gift shop. 
-Tsubomi Nonomura, age 15. 
+I’m Tsubomi Nonomura, age 15. 
 Ahh, I can't believe I get to work at THE Imperial Theater! It's like a dream come true! 
 Huh?! You're running the gift shop? 
 I see, so you must be the replacement Tsubaki was talking about. 
@@ -135,11 +135,11 @@ Now then, Ensign Ogami, we must take our leave.
 A storm tonight, huh? Well, I guess that’s to be expected when a typhoon comes around.
 But boy, those three are practically a typhoon themselves. 
 Oh, Ogami... 
-You look like you have a lot of free time on your hands, Mr. Ensign, as usual. 
+You look to have a lot of free time on your hands, Mr. Ensign, as usual. 
 Hey Sakura, Orihime. What are you two up to? 
 Actually… We were just talking about Reni.
 She's been acting kind of strange, and I was wondering what we could do to help. 
-You're overthinking things, Sakura. It's not unusual for actors to feel nervous about their performances. 
+You're overthinking things, Sakura. It's not strange for actors to feel nervous about their performances. 
 And if there is a different reason, then that's a problem only Reni herself can figure out. 
 Stop worrying and leave her alone, I say. 
 What do you think, Ogami? 
@@ -150,7 +150,7 @@ Helping our friends when they're nervous or troubled is what the Flower Division
 You're right. I want to be there for Reni. 
 I think Orihime has a point. 
 I'm worried about Reni, but it's true, there are some problems people can only work out on their own. 
-See? You get it, Mr. Ensign! 
+Mr. Ensign seems to understand what I mean.
 You can only worry so much about Reni, Sakura. Let's just leave her be. 
 ...All right then. 
 I suppose Reni might feel better by tomorrow... 
@@ -158,8 +158,8 @@ Hmmm, it's hard to say who's right.
 For now, I think I'll go talk to her. 
 We can’t even begin to help if we don’t know what’s troubling her.
 You're right. Thank you, Ogami. 
-That's what I thought you'd say. You really are nosy, Mr. Ensign. 
-OK, I have to go now. Good luck with Reni! 
+That is what I was thinking you would say. You really are nosy, Mr. Ensign. 
+Well, I have to go now. Good luck with Reni! 
 For now, I'll go back to my room as well. Please help Reni, Ogami. 
 Everyone’s concerned about Reni…
 All right, I should go too. First things first, I need to talk to Reni. 
@@ -412,7 +412,7 @@ Buy a bromide.
 Talk to Tsubomi. 
 Leave. 
 Could I buy a bromide? 
-Um, Mr. Ogami? I'm afraid I can only sell you one bromide at a time. 
+Um, Mr. Ogami? I'm afraid I can only sell you one bromide per month.
 We have to leave some for the customers, I hope you understand. 
 A bromide? Thank you very much! 
 That's Sakura's bromide. 
@@ -445,7 +445,7 @@ That's Reni's bromide.
 With "The Blue Bird" this month, Reni finally gets to be the star! 
 I'm SO looking forward to opening day, I just can't wait! 
 Reni's bromide? That'll be 50 sen! Thank you, come again! 
-Oh, you're not gonna buy one? 
+Oh, not buying a bromide after all?
 How do you like running the shop, Tsubomi? 
 Eheheh, I messed up immediately. 
 The very first customer I got, I forgot to take their money and had to chase after them. 
@@ -667,7 +667,7 @@ It's all right, Sakura, I'm sure there won't be any thunder tonight.
 I'm still a little nervous, but I'll try to take my mind off it by going over my lines. 
 I see. Well then, I should get going. 
 OK. Thank you. 
-Hmmm... I wonder if we'll get any thunder tonight? 
+Hmmm... I wonder if we'll get any thunder tonight.
 No use wasting time thinking about it. I should go to another room. 
 It's just like Sakura to have a cute nameplate like this. 
 Let's go check another room. 
@@ -956,15 +956,15 @@ That's right! The answer is we don't know!
 There's all kindsa theories saying it's originally Chinese or Arabic or what have you…  
 But the truth is, we still don't really know. 
 Wow, I'm impressed, Mr. Ensign. 
-Though, if I didn't know any better, it almost sounded like you simply didn’t know…
+Though, if I didn't know better, it almost sounded as if you simply didn’t know…
 All right, Orihime, let's split. 
-Sure. We have to get going, Mr. Ensign. See you later. 
+Oh, yes. We have to be going, Mr. Ensign. See you later. 
 I'll be working on the Koubu later tonight, Chief, so stop by if ya got time. 
 All right, gotta go. See ya. 
 The wind's gotten stronger. I should get going, too. 
 The weather outside is still nice, but the wind's getting stronger and stronger. 
 No use sticking around here. I should go. 
-I wonder if Kaede's in her room? 
+I wonder if Kaede's in her room right now.
 ...Yeah, I should go somewhere else. 
 It's Ogami. Are you there, Kaede? 
 Oh, Ogami. The door's unlocked, come in. 
@@ -1019,7 +1019,7 @@ It's Maria's nameplate.
 If I remember right, Maria's going out shopping around 5:30... 
 I'll stop by the entrance later and see. 
 OK, time to check another room. 
-I wonder if Kanna’s in her room.
+I wonder if Kanna is in her room.
 ...She's not here. 
 Kanna's... Well, I guess it's more of a nametag than a nameplate. 
 OK, let's check another room. 
@@ -1031,7 +1031,7 @@ I wonder if Orihime is in her room.
 Hmm. Guess nobody's home. 
 The nameplate has a simple design, but it sure looks high class. 
 Let's go check another room. 
-I wonder if Kohran’s in her room. 
+I wonder if Kohran is in her room. 
 There's no response. Looks like she's somewhere else. 
 A gear-shaped nameplate, huh? It's just Kohran's style. 
 Let's check another room. 
@@ -1136,7 +1136,7 @@ Anyway, I have to go. Take care, Captain.
 It's true, nothing beats taking a bath after a long day. 
 I should get going. I've still got things I need to do. 
 Looks like no one's taking a bath right now. 
-I'll go to a different room. I wonder where everyone else is? 
+I'll go to a different room. I wonder where everyone else is. 
 Oh, is that you, Kanna? 
 Oh, well if it ain't the boss. 
 Even I get full sometimes, so I was just doing some light post-meal exercise. 
@@ -1162,7 +1162,7 @@ No, Boss. Despite all appearances, Reni's not your average kid.
 The way she's always on her guard, she seems pretty skilled already. 
 Now that you mention it, there was that time she threw me to the ground like it was nothing. 
 She did that to YOU?! Huh... You really can't judge a book by its cover, can you? 
-I see... Still, I wonder when she picked up those combat skills? 
+I see... Still, I wonder when she picked up those combat skills. 
 Yeah... I'm definitely curious. 
 Don't just clam up like that, Boss. 
 I'm tryin' to be serious, but you're makin' me feel silly. 
@@ -1269,13 +1269,13 @@ I... Um... I should go. Got work to do, bye!
 Ah! Tsubaki! 
  
 *sigh* <br> She hung up. 
-At any rate, I wonder where she is and what she's doing? 
+At any rate, I wonder where she is and what she's doing. 
 All right, Ogami, I'm in the middle of work, so I have to go. 
 Tell everyone at the theater I said hi! 
 Sure. Good luck with your work! 
 Thank you! Call me again sometime! 
 Tsubaki seems to be really giving it her all.
-But still, I wonder what she's doing? 
+But still, I wonder what she's doing. 
 ... 
 Tsubaki's not picking up. She must've gone back to work after all. 
 Good afternoon. It's time for Capital News. 
@@ -1316,8 +1316,8 @@ Water gushes forth from the opening, and before long, a hissing noise comes from
 Indeed, the mummy explodes, taking Dr. Kurogane's laboratory with it in the process. 
 With the girls freed from the underground prison cells, Dr. Kurogane's scheme has been foiled! 
 However, so long as evil remains in the world, Masked Red's battle never ends! 
-Fight on, Masked Red! You're our hero, Masked Red! <br> -The End 
-Go, Masked Red! Fight on, Masked Red! Tune in next time! 
+Fight on, Masked Red! You're our hero, Red! <br> -The End 
+Go, Masked Red! <br> Fight on, Masked Red! <br> Tune in next time! 
 I'm worried about Reni... I should stop here. 
 All right, where to next? 
 Oh... 6 o'clock already... 
@@ -1363,7 +1363,7 @@ It's finally time for the autumn production to start, isn't it, Ogami.
 It's Reni's big debut, all the patrons are talking about it. 
 Ticket preorders are selling like hotcakes. 
 Really? Guess everyone's looking forward to this performance. 
-(But with Reni in the state she’s in right now, I wonder how it will turn out?) 
+(But with Reni in the state she’s in right now, I wonder how it will turn out.) 
 That's right, I heard some amazing news on the radio yesterday. 
 Oh, you mean about that steam submarine? 
 ...Steam submarine? 
@@ -1424,10 +1424,10 @@ A letter from Reni.
 A scarf given to me by Sakura. It's knitted with red yarn - my favorite color. 
 A scarf given to me by Sakura. It's knitted with blue yarn - my favorite color. 
 A scarf given to me by Sakura. It's knitted with yellow yarn - my favorite color. 
-Sorry, Ogami. I can only sell you one bromide per month. 
+Sorry Ogami, but customers are only allowed to purchase one of each bromide. 
 I see. That's too bad. 
-So sorry, Mr. Ogami, but each customer is only allowed to purchase one bromide at a time.
-Oh, really? That's too bad.
+So sorry, Mr. Ogami, but customers are only allowed to purchase one of each bromide.
+Oh, really? That's too bad. 
 ... "" "" () - . , ! ? ?! !! 
 Minigame part <br> Select results 
 Low score 
@@ -1463,7 +1463,7 @@ I'm sure you feel the same, Ogami.
 Yes, of course. 
 So let's both do our best. 
 For my sister... <br> For everyone... 
-Yes ma'am! 
+Yes, ma'am! 
 Well, today I will tell you about the Anti-Kouma Corps. 
 The Anti-Kouma Corps was the Army's predecessor to the Imperial Assault Troupe. 
 Ikki Yoneda, Kazuma Shinguji, Shinnosuke Yamazaki, and... Ayame Fujieda. 
@@ -1489,7 +1489,7 @@ The people Ayame chose truly were the best people for the job. That includes you
 Kaede... 
 Ayame entrusted the Flower Division to me, so I'll continue to give it my all. 
 Don't give up. Even in the hardest of times, remember to never give up, Ogami. 
-Yes ma'am! I will do all I can to meet your expectations! 
+Yes, ma'am! I will do all I can to meet your expectations! 
 Now then, today I'll tell you about Ayame and Major Yamazaki. 
 Both Ayame and Major Yamazaki were members of the troupe's predecessor, the Anti-Kouma Corps.
 Major Yamazaki was a brilliant scientist who created the foundational designs for Spirit Armor... 

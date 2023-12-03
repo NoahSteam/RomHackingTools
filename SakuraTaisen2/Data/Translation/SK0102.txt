@@ -1,4 +1,4 @@
-﻿Wow, it's been a long time since I was last at the theater. I wonder how everyone is? 
+﻿Wow, it's been a long time since I was last at the theater. I wonder how everyone is. 
 Oh, Ogami! 
 Ahh! Is it... <br> Is it really you, Ogami? 
 Sakura... 
@@ -86,8 +86,8 @@ Besides, now that you're here, I won't be so lonely anymore.
 Is that so? I’m glad to hear that, Iris. 
 Oh, that's right! I have to go get ready now. 
 Later, Mon Frère, I'll be going now! Bye-bye!! 
-Hey, Iris! <br> And she's gone 
-But I wonder what she's getting ready for? Now I'm curious. 
+Hey, Iris! <br> And she's gone.  
+But I wonder what she's getting ready for. Now I'm curious. 
 Hey there, Ogami. 
 Oh, General Yoneda, so you're just arriving, too? 
 Hey now, as long as we're inside the theater, I'm just the manager, so it's "Mr. Yoneda" to you. 
@@ -144,7 +144,7 @@ You don't need to worry about me. If you're busy, you should get moving.
 Is that so? All right. 
 Well, I'm in a bit of a hurry, so please excuse me. 
 Hahaha, look at her go. 
-Still, I wonder what she's in such a rush for? 
+Still, I wonder what she's in such a rush for. 
 Ogami. 
 That voice... 
 It's been quite some time, Ogami. Do you remember me? I'm Kasumi Fujii, from the secretarial office. 
@@ -195,7 +195,7 @@ I see…
 But maybe you shouldn’t worry so much about all that stuff. 
 You are who you are, Ogami. And I think you're just fine that way! 
 Well, I should be going. Come by the gift shop later if you'd like! 
-Being straight-laced, or being flirty... I wonder which is most like me? 
+Being straight-laced, or being flirty... I wonder which is most like me. 
 OK, I'd better get to the manager's office. 
 Ack! It's past 12 o'clock already! 
 If I don't get over to the manager's office right away, he'll be furious! 
@@ -873,7 +873,7 @@ In fact, none of you are worthy of more than playing the foil to my stardom!
 Wh-What'd you say?! 
 Hoho... And Mr. Ensign, when it comes to Japanese men such as yourself... 
 The thought of hanging around you gives me pelle d'oca, goosebumps!
-You are like the rainy season of Japan. I would prefer that you not follow me around! 
+You are like the rainy season of Japan. I would prefer you to not follow me around! 
 Ah, Orihime! 
 (Good grief. I only just returned to the theater, and things are already off to a bad start.) 
 Ogami, are you sure you shouldn't go after her? 
@@ -882,9 +882,9 @@ I suppose, but even so...
 Ogami, what in the world is going on with Orihime? 
 Hmm... 
 (Good grief, I only just returned to the theater, and things are already off to a bad start.) 
-Sorry, Ogami. I can only sell you one bromide per month. 
+Sorry Ogami, but customers are only allowed to purchase one of each bromide. 
 I see. That's too bad. 
-So sorry, Mr. Ogami, but each customer is only allowed to purchase one bromide at a time.
+So sorry, Mr. Ogami, but customers are only allowed to purchase one of each bromide.
 Oh, really? That's too bad. 
 The jewel of the Pandemonium Regalia, entrusted to us by the Rose Division. 
 Spirit Sword Arataka. The special sword of the Shinguji family. 

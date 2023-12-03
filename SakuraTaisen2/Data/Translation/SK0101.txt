@@ -681,7 +681,7 @@ Uh... S-Sorry. You asked me so suddenly.
 Sheesh, you're so dense! 
 Sorry, Iris. 
 C'mon, Mon Frère, let's go inside! 
-Right. I wonder how the others are doing? 
+Right. I wonder how the others are doing. 
 Um, so right now, it's just me and Sakura here. 
 Huh?! Where are the others? 
 Sumire went home to her family because her grandpa fell ill. She's there now. 
@@ -695,7 +695,7 @@ Is that so? I’m glad to hear that, Iris.
 Oh, that's right! I have to go get ready now. 
 Later, Mon Frère, I'll be going now! Bye-bye!! 
 Hey, Iris! <br> And she's gone. 
-But I wonder what she's getting ready for? Now I'm curious. 
+But I wonder what she's getting ready for. Now I'm curious. 
 Chief? 
 What's up, Kohran? 
 It's about time I headed back to the Hanayashiki Branch. 
@@ -766,9 +766,9 @@ What is it?
 Heehee, it's a secret. We'll have a nice long chat later, OK? 
 What was that all about? Now I'm curious. 
 All right, then, time to head inside. This is my workplace from now on. 
-Sorry, Ogami. I can only sell you one bromide per month. 
+Sorry Ogami, but customers are only allowed to purchase one of each bromide. 
 I see. That's too bad. 
-So sorry, Mr. Ogami, but each customer is only allowed to purchase one bromide at a time.
+So sorry, Mr. Ogami, but customers are only allowed to purchase one of each bromide.
 Oh, really? That's too bad. 
 The jewel of the Pandemonium Regalia, entrusted to us by the Rose Division. 
 Spirit Sword Arataka. The special sword of the Shinguji family. 

@@ -1,6 +1,6 @@
-﻿Sorry, Ogami. I can only sell you one bromide per month. 
+﻿Sorry Ogami, but customers are only allowed to purchase one of each bromide. 
 I see. That's too bad. 
-So sorry, Mr. Ogami, but each customer is only allowed to purchase one bromide at a time.
+So sorry, Mr. Ogami, but customers are only allowed to purchase one of each bromide.
 Oh, really? That's too bad. 
 The jewel of the Pandemonium Regalia, entrusted to us by the Rose Division. 
 Spirit Sword Arataka. The special sword of the Shinguji family. 
@@ -558,7 +558,7 @@ How many times did the Kouma fly onto the Mikasa's deck?
 Which of these weapons is NOT one of Mokujiki's inventions?
 Dimension Cannon
 Black Demon Cannon
-Enku
+Enkuu
 Maria's special attack with the Koubu Kai is called "Pikovaya Dama." What does it mean?
 The Queen of Spades
 The Queen of Snow
@@ -754,7 +754,7 @@ Surely you have not come here in order to embarrass me...
 No. And the troupe is eternally grateful for the support you've given us.
 But this is a completely separate matter!
 I must object to Sumire being forced into a marriage she doesn't want!
-That's right, gramps! If you think things're gonna go your way, you're in for a rude awakenin’!
+That's right, gramps! If you think things are gonna go your way, you're in for a rude awakenin’!
 Fu... Fwahahaha! Such bravado! I suppose I should expect as much, since you've come all this way.
 But Ogami, what would you say to this?
 You are aware that the troupe's financiers are pulling back their funding, are you not?
@@ -974,35 +974,35 @@ Oh, I-I see...
 ...O-Oh? Was that all you had to say?
 You're a lot more reserved than I expected. Japanese people really are a quiet bunch.
 Well everyone's quiet compared to you, Howard.
-You must be Ichiro Ogami. Orihime told me all about you in her letters.
-I'm her mother, Carino. Thank you so much for being there for her.
+So you must be Ichiro Ogami. I have read much about you in Orihime’s correspondence.
+I am her mother, Carino. Allow me to extend my gratitude for all you’ve done for my daughter.
 No need to thank me. I only did what I could.
-Orihime truly hated Japanese men, though.
-How were you able to get her to open up to you?
+But Orihime’s hatred towards Japanese men was truly unyielding.
+How did you succeed in opening her heart to you?
 I think it was all trust.
 Trusting each other, and earning each other's trust in turn…
 I think that's how we came to understand one another.
 Hmhm, you're as corny as ever, Mr. Ensign.
-I understand completely. It's because I trusted in Seiya that I was able to wait until this day.
-Ogami, please keep believing in Orihime.
+I understand completely. My trust in Seiya was what allowed me to endure the wait for this day.
+Please, Ogami… Continue believing in Orihime.
 I will.
 I think it was all patience.
 At first, even I didn't think we'd be able to get along.
 But I knew the day would come where she'd open up, so I just waited until then.
 ...That makes me sound like a bad person.
-Hmhm, that's not it, Orihime. I understand what he means.
+Hmhm, that's not it, Orihime. I understand Ogami’s intentions quite well.
 I too waited a long time, just for this day... The day I could see Seiya again.
 Orihime... You should be thankful that Ogami waited for you for so long.
 Mamma...
 I think it was all love.
 W-Wait a second, Mr. Ensign! What's this all of a sudden?!
 Now, Orihime, expressing one's love is a very important thing.
-I think it's fantastic that Ogami is able to profess his love so openly.
+I think it's praiseworthy that Ogami is able to profess his devotion so openly.
 Mamma...
 I... don't really know, either.
 Hmhm, you're an honest man, Ogami.
-I'm sure Orihime sensed that honesty too.
-You're the man she chose. There's not a doubt in my mind that you're a wonderful person.
+I am sure Orihime sensed that honesty as well.
+You are the man my daughter chose, after all. There's not a doubt in my mind that you're a wonderful person.
 Orihime. You must always treasure Ogami's feelings for you.
 Yes, Mamma. I understand.
 Right... <br> Mr. Ensign, could you come with me for a second?
