@@ -24,9 +24,15 @@ static bool BringOverOriginalFiles(const string& inRootSakuraDirectory, const st
 	GetAllFilesOfType(allFiles, "M_NAME", originalFiles);
 	GetAllFilesOfType(allFiles, "INFONAME.BIN", originalFiles);
 	GetAllFilesOfType(allFiles, ".MES", originalFiles);
+	GetAllFilesOfType(allFiles, "TUTORI0.BIN", originalFiles);
+
+	//Battle files
+	GetAllFilesOfType(allFiles, "COL.BIN", originalFiles);
 	GetAllFilesOfType(allFiles, "LOW.BIN", originalFiles);
 	GetAllFilesOfType(allFiles, "PRG.BIN", originalFiles);
-
+	GetAllFilesOfType(allFiles, "VDP1.BIN", originalFiles);
+	GetAllFilesOfType(allFiles, "VDP2.BIN", originalFiles);
+	
 	//Bring over scenario files
 	const string outputDirectory = inPatchedDirectory + Seperators;
 	for(const FileNameContainer& scenarioFile : originalFiles)
@@ -339,14 +345,24 @@ bool PatchGame(const string& inSourceGameDirectory, const string& inTranslatedDi
 	const string translatedFontSheetPath = inTranslatedDirectory + "8x12.bmp";
 	TileExtractor translatedFontSheet;
 	PaletteData translatedFontSheetPalette;
-	if( !CreateTranslatedFontSheet(translatedFontSheetPath, translatedFontSheet, translatedFontSheetPalette) )
+	if( !CreateTranslatedFontSheet(translatedFontSheetPath, translatedFontSheet, translatedFontSheetPalette, 16, 16) )
 	{
 		printf("Unable to create font sheet\n");
 		return false;
 	}
 
+	//Create translated font sheet for battles
+	const string translatedBattleFontSheetPath = inTranslatedDirectory + "8x12_SLG2.bmp";
+	TileExtractor translatedBattleFontSheet;
+	PaletteData translatedBattleFontSheetPalette;
+	if (!CreateTranslatedFontSheet(translatedBattleFontSheetPath, translatedBattleFontSheet, translatedBattleFontSheetPalette, 8, 12))
+	{
+		printf("Unable to create battle font sheet\n");
+		return false;
+	}
+
 	//Insert scenario text
-	if (!InsertSysFileText(inSourceGameDirectory, inTranslatedDirectory, inPatchedDirectory, translatedFontSheet, false))
+	if (!InsertSysFileText(inSourceGameDirectory, inTranslatedDirectory, inPatchedDirectory, translatedBattleFontSheet, false))
 	{
 		printf("Text insertion failed\n");
 		return false;

@@ -11420,29 +11420,25 @@ void AddShadowsToWKLText(const string& wklDirectory)
 			}
 		}
 
-		const char grayColor = 1;
-		const char shadowColor = 3;
+		const char grayColor = 15;
+		const char grayColor2 = 0xd;
+		const char shadowColor = 9;
 		//Add shadows
 		for(int y = 0; y < imageHeight ; ++y)
-		{
-			if( y == 3 )
-			{
-				int k = 0;
-				++k;
-			}
+		{	
 			for(int x = 0; x < bmpData.mBitmapData.mInfoHeader.mImageWidth/2; ++x)
 			{
 				const int currentPixel = y*bmpData.mBitmapData.mInfoHeader.mImageWidth/2 + x;
 				const int upperPixel   = y > 0 ?               (y-1)*bmpData.mBitmapData.mInfoHeader.mImageWidth/2 + x : -1;
 				const int lowerPixel   = y + 1 < imageHeight ? (y+1)*bmpData.mBitmapData.mInfoHeader.mImageWidth/2 + x : -1;
 				const char colorValue1 = (pModifiedData[currentPixel] & 0xf0) >> 4;
-				if( colorValue1 == grayColor )
+				if( colorValue1 == grayColor || colorValue1 == grayColor2)
 				{
 					//left
 					if( x > 0 )
 					{
 						const char leftValue = pModifiedData[currentPixel - 1] & 0x0f;
-						if( leftValue != grayColor )
+						if( leftValue != grayColor && leftValue != grayColor2)
 						{
 							pModifiedData[currentPixel-1] = (pModifiedData[currentPixel-1]&0xf0) + shadowColor;
 						}
@@ -11450,7 +11446,7 @@ void AddShadowsToWKLText(const string& wklDirectory)
 
 					//right
 					const char rightValue = (pModifiedData[currentPixel] & 0x0f);
-					if( rightValue != grayColor )
+					if( rightValue != grayColor && rightValue != grayColor2)
 					{
 						pModifiedData[currentPixel] = (pModifiedData[currentPixel] & 0xf0) + shadowColor;
 					}
@@ -11459,7 +11455,7 @@ void AddShadowsToWKLText(const string& wklDirectory)
 					if( upperPixel > -1 )
 					{
 						const char upValue = (pModifiedData[upperPixel] & 0xf0) >> 4;
-						if( upValue != grayColor )
+						if( upValue != grayColor && upValue != grayColor2)
 						{
 							pModifiedData[upperPixel] = (pModifiedData[upperPixel] & 0x0f) + (shadowColor << 4);
 						}
@@ -11469,7 +11465,7 @@ void AddShadowsToWKLText(const string& wklDirectory)
 					if( lowerPixel > -1 )
 					{
 						const char downValue = (pModifiedData[lowerPixel] & 0xf0) >> 4;
-						if( downValue != grayColor )
+						if( downValue != grayColor && downValue != grayColor2)
 						{
 							pModifiedData[lowerPixel] = (pModifiedData[lowerPixel] & 0x0f) + (shadowColor << 4);
 						}
@@ -11478,11 +11474,11 @@ void AddShadowsToWKLText(const string& wklDirectory)
 				}//if( colorValue1 == 1)
 
 				char colorValue2 = pModifiedData[currentPixel] & 0x0f;
-				if( colorValue2 == grayColor )
+				if( colorValue2 == grayColor || colorValue2 == grayColor2 )
 				{
 					//left
 					const char leftValue = (pModifiedData[currentPixel] & 0xf0) >> 4;
-					if( leftValue != grayColor )
+					if( leftValue != grayColor && leftValue != grayColor2 )
 					{
 						pModifiedData[currentPixel] = (pModifiedData[currentPixel]&0x0f) + (shadowColor << 4);
 					}
@@ -11491,7 +11487,7 @@ void AddShadowsToWKLText(const string& wklDirectory)
 					if( x + 1 < bmpData.mBitmapData.mInfoHeader.mImageWidth/2 )
 					{
 						const char rightValue = (pModifiedData[currentPixel + 1] & 0xf0) >> 4;
-						if( rightValue != grayColor )
+						if( rightValue != grayColor && rightValue != grayColor2 )
 						{
 							pModifiedData[currentPixel + 1] = (pModifiedData[currentPixel + 1] & 0x0f) + (shadowColor<<4);
 						}
@@ -11501,7 +11497,7 @@ void AddShadowsToWKLText(const string& wklDirectory)
 					if( upperPixel > -1 )
 					{
 						const char upValue = (pModifiedData[upperPixel] & 0x0f);
-						if( upValue != grayColor )
+						if( upValue != grayColor && upValue != grayColor2 )
 						{
 							pModifiedData[upperPixel] = (pModifiedData[upperPixel] & 0xf0) + shadowColor;
 						}
@@ -11511,7 +11507,7 @@ void AddShadowsToWKLText(const string& wklDirectory)
 					if( lowerPixel > -1 )
 					{
 						const char downValue = (pModifiedData[lowerPixel] & 0x0f);
-						if( downValue != grayColor )
+						if( downValue != grayColor && downValue != grayColor2)
 						{
 							pModifiedData[lowerPixel] = (pModifiedData[lowerPixel] & 0xf0) + shadowColor;
 						}

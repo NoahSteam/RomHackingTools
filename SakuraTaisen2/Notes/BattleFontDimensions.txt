@@ -1,0 +1,69 @@
+Text written starting at 0x05c7b400 
+Letter T is stored at 00203a00 in memory
+Read at 060071f8
+Size to read at 06033f5a in memory
+
+mov 0x40, r6 at 06089458
+06089464 shll2, r5 to calculate offset from previous letter
+06089470 byte offset shll2, r4 //starts at 0608946a with letter value and multiplies it by (4*4*2*4)
+06033f54 has vdp1 
+
+060893d0 add 0x10,r1 //needs to add 6 instead. This controls spacing in vdp1 ram *
+
+0602e762 has 0x40 which is read into r6 at 0600f822
+
+Offset into vdp1 ram for second character written at 06040a28 by code at 06020640
+
+Exclamation point written at 00202080
+Read at 060071f8.  0x40 bytes, stored in r6
+
+First line of text starts at 0020f054 (two byte version)
+
+06089464 shll2, r5 to calculate offset from previous letter
+06089470 byte offset shll2, r4 //starts at 0608946a with letter value and multiplies it by (4*4*2*4). Need to multiply by 48
+
+-----------
+060893d0 add 0x10,r1 //needs to add 6 instead. This controls spacing in vdp1 ram *
+
+Dims of sprite:
+Stored at 0608942c, read at 060893d8 // change to 010c
+
+//Bytes to copy from source file
+mov 0x40, r6 at 06089458* //change to e618
+
+//Calc offset from prev letter, write address starting at 0608945e
+mov 0x30, r1 //e130
+muls.w r5,r1 //215f
+sts macl,r5  //051a
+nop          //0009
+
+//Calc offset from prev letter, write address satrting at 0608946a
+mov 0x30, r1 //e130
+muls.w r4,r1 //214f
+sts macl,r4  //041a
+nop          //0009
+
+------LIPS------
+First letter at 20f118
+
+//Calc offset in vdp1 ram at 060d139c
+mov 0x30, r1 //e130
+muls.w r2,r1 //212f
+sts macl,r4  //021a
+nop          //0009
+
+//Calc offset from prev letter, write address starting at 060d13da
+mov 0x30, r4 //e430
+muls.w r5,r4 //245f
+sts macl,r5  //051a
+mov r9,r4    //6493
+
+//Calc offset from prev letter, write address satrting at 060d13e4
+mov 0x30, r1 //e130
+muls.w r4,r1 //214f
+sts macl,r4  //041a
+nop          //0009
+
+sprite dims stored at 060d153a //010c
+
+sprite size written at 05c015aa and 0604064a

@@ -1,5 +1,563 @@
 #pragma once
 
+//Convert tile size form 16x16 to 8x12
+/*
+//Calc offset in vdp1 ram at 060d139c
+mov 0x30, r1 //e130
+muls.w r2,r1 //212f
+sts macl,r4  //021a
+nop          //0009
+
+//Calc offset from prev letter, write address starting at 060d13da
+mov 0x30, r4 //e430
+muls.w r5,r4 //245f
+sts macl,r5  //051a
+mov r9,r4    //6493
+
+//Calc offset from prev letter, write address satrting at 060d13e4
+mov 0x30, r1 //e130
+muls.w r4,r1 //214f
+sts macl,r4  //041a
+nop          //0009
+
+0x010c //sprite dims stored at 060d153a
+*/
+#define PatchCharacterDimensionsForLips(filename, address) \
+	filename, address+0,  0xe130,\
+	filename, address+2,  0x212f,\
+	filename, address+4,  0x021a,\
+	filename, address+6,  0x0009,\
+	filename, address+62, 0xe430,\
+	filename, address+64, 0x245f,\
+	filename, address+66, 0x051a,\
+	filename, address+68, 0x6493,\
+	filename, address+72, 0xe130,\
+	filename, address+74, 0x214f,\
+	filename, address+76, 0x041a,\
+	filename, address+78, 0x0009,\
+	filename, address+414,0x010c\
+
+#define PatchCharacterDimensionsForLipsInFiles() \
+	PatchCharacterDimensionsForLips("EV00001.BIN", 0x00007120),\
+	PatchCharacterDimensionsForLips("EV00002.BIN", 0x00005a24),\
+	PatchCharacterDimensionsForLips("EV00050.BIN", 0x00005a24),\
+	PatchCharacterDimensionsForLips("EV00051.BIN", 0x00005a24),\
+	PatchCharacterDimensionsForLips("EV00052.BIN", 0x00005a24),\
+	PatchCharacterDimensionsForLips("EV00054.BIN", 0x00005a24),\
+	PatchCharacterDimensionsForLips("EV00055.BIN", 0x00005a24),\
+	PatchCharacterDimensionsForLips("EV00060.BIN", 0x00005a24),\
+	PatchCharacterDimensionsForLips("EV01001.BIN", 0x00005b30),\
+	PatchCharacterDimensionsForLips("EV01002.BIN", 0x00005a24),\
+	PatchCharacterDimensionsForLips("EV01020.BIN", 0x00006048),\
+	PatchCharacterDimensionsForLips("EV01021.BIN", 0x00005e5c),\
+	PatchCharacterDimensionsForLips("EV01022.BIN", 0x00005a24),\
+	PatchCharacterDimensionsForLips("EV01023.BIN", 0x00005a24),\
+	PatchCharacterDimensionsForLips("EV01030.BIN", 0x00005a24),\
+	PatchCharacterDimensionsForLips("EV01050.BIN", 0x00005a24),\
+	PatchCharacterDimensionsForLips("EV01054.BIN", 0x00005a24),\
+	PatchCharacterDimensionsForLips("EV01055.BIN", 0x00005a24),\
+	PatchCharacterDimensionsForLips("EV02001.BIN", 0x00005a24),\
+	PatchCharacterDimensionsForLips("EV02002.BIN", 0x00005a24),\
+	PatchCharacterDimensionsForLips("EV02010.BIN", 0x00005a24),\
+	PatchCharacterDimensionsForLips("EV02021.BIN", 0x00005a24),\
+	PatchCharacterDimensionsForLips("EV02025.BIN", 0x00005a24),\
+	PatchCharacterDimensionsForLips("EV02050.BIN", 0x00005a24),\
+	PatchCharacterDimensionsForLips("EV02051.BIN", 0x00005a24),\
+	PatchCharacterDimensionsForLips("EV02052.BIN", 0x00005a24),\
+	PatchCharacterDimensionsForLips("EV02053.BIN", 0x00005a24),\
+	PatchCharacterDimensionsForLips("EV02054.BIN", 0x00005a24),\
+	PatchCharacterDimensionsForLips("EV03000.BIN", 0x000056f8),\
+	PatchCharacterDimensionsForLips("EV03001.BIN", 0x00005bf0),\
+	PatchCharacterDimensionsForLips("EV03002.BIN", 0x00005a98),\
+	PatchCharacterDimensionsForLips("EV03005.BIN", 0x00005a50),\
+	PatchCharacterDimensionsForLips("EV03010.BIN", 0x00005a34),\
+	PatchCharacterDimensionsForLips("EV03020.BIN", 0x00005a34),\
+	PatchCharacterDimensionsForLips("EV03021.BIN", 0x00005a34),\
+	PatchCharacterDimensionsForLips("EV03023.BIN", 0x00005a4c),\
+	PatchCharacterDimensionsForLips("EV03024.BIN", 0x00005a4c),\
+	PatchCharacterDimensionsForLips("EV03025.BIN", 0x00005a60),\
+	PatchCharacterDimensionsForLips("EV03050.BIN", 0x00005e64),\
+	PatchCharacterDimensionsForLips("EV03051.BIN", 0x00005a88),\
+	PatchCharacterDimensionsForLips("EV03052.BIN", 0x00005af4),\
+	PatchCharacterDimensionsForLips("EV03053.BIN", 0x00005ab0),\
+	PatchCharacterDimensionsForLips("EV04001.BIN", 0x000068dc),\
+	PatchCharacterDimensionsForLips("EV04002.BIN", 0x00005aa0),\
+	PatchCharacterDimensionsForLips("EV04003.BIN", 0x00005bd4),\
+	PatchCharacterDimensionsForLips("EV04005.BIN", 0x00005a24),\
+	PatchCharacterDimensionsForLips("EV04010.BIN", 0x00005a98),\
+	PatchCharacterDimensionsForLips("EV04020.BIN", 0x00005a24),\
+	PatchCharacterDimensionsForLips("EV04022.BIN", 0x00005a2c),\
+	PatchCharacterDimensionsForLips("EV04050.BIN", 0x00005acc),\
+	PatchCharacterDimensionsForLips("EV04053.BIN", 0x00005a24),\
+	PatchCharacterDimensionsForLips("EV04055.BIN", 0x00005a98),\
+	PatchCharacterDimensionsForLips("EV05001.BIN", 0x00005a3c),\
+	PatchCharacterDimensionsForLips("EV05002.BIN", 0x00005a24),\
+	PatchCharacterDimensionsForLips("EV05003.BIN", 0x00005c00),\
+	PatchCharacterDimensionsForLips("EV05004.BIN", 0x00005a24),\
+	PatchCharacterDimensionsForLips("EV05005.BIN", 0x00005a24),\
+	PatchCharacterDimensionsForLips("EV05007.BIN", 0x00005a24),\
+	PatchCharacterDimensionsForLips("EV05010.BIN", 0x00005a24),\
+	PatchCharacterDimensionsForLips("EV05011.BIN", 0x00005a24),\
+	PatchCharacterDimensionsForLips("EV05018.BIN", 0x00005a24),\
+	PatchCharacterDimensionsForLips("EV05019.BIN", 0x00005a4c),\
+	PatchCharacterDimensionsForLips("EV05020.BIN", 0x00005a24),\
+	PatchCharacterDimensionsForLips("EV05021.BIN", 0x00005a24),\
+	PatchCharacterDimensionsForLips("EV05022.BIN", 0x00005a24),\
+	PatchCharacterDimensionsForLips("EV05023.BIN", 0x00005a24),\
+	PatchCharacterDimensionsForLips("EV05025.BIN", 0x00005a24),\
+	PatchCharacterDimensionsForLips("EV05026.BIN", 0x00005a24),\
+	PatchCharacterDimensionsForLips("EV05027.BIN", 0x00005a24),\
+	PatchCharacterDimensionsForLips("EV05051.BIN", 0x00005a24),\
+	PatchCharacterDimensionsForLips("EV05052.BIN", 0x00005a24),\
+	PatchCharacterDimensionsForLips("EV05053.BIN", 0x00005a24),\
+	PatchCharacterDimensionsForLips("EV05054.BIN", 0x00005a24),\
+	PatchCharacterDimensionsForLips("EV05060.BIN", 0x00005a24),\
+	PatchCharacterDimensionsForLips("EV26001.BIN", 0x00006830),\
+	PatchCharacterDimensionsForLips("EV26002.BIN", 0x00005dcc),\
+	PatchCharacterDimensionsForLips("EV26020.BIN", 0x00005a24),\
+	PatchCharacterDimensionsForLips("EV26021.BIN", 0x00005a24),\
+	PatchCharacterDimensionsForLips("EV27001.BIN", 0x00005a30),\
+	PatchCharacterDimensionsForLips("EV27002.BIN", 0x00005ad8),\
+	PatchCharacterDimensionsForLips("EV27054.BIN", 0x00005a24),\
+	PatchCharacterDimensionsForLips("EV28001.BIN", 0x00005a24),\
+	PatchCharacterDimensionsForLips("EV28025.BIN", 0x00005a24),\
+	PatchCharacterDimensionsForLips("EV28050.BIN", 0x00005a24),\
+	PatchCharacterDimensionsForLips("EV28051.BIN", 0x00005a24),\
+	PatchCharacterDimensionsForLips("EV29001.BIN", 0x00005a48),\
+	PatchCharacterDimensionsForLips("EV29002.BIN", 0x00005a48),\
+	PatchCharacterDimensionsForLips("EV29021.BIN", 0x00005a24),\
+	PatchCharacterDimensionsForLips("EV29050.BIN", 0x00005a24),\
+	PatchCharacterDimensionsForLips("EV30003.BIN", 0x00006a6c),\
+	PatchCharacterDimensionsForLips("EV30020.BIN", 0x00005a34),\
+	PatchCharacterDimensionsForLips("EV30026.BIN", 0x00005a34),\
+	PatchCharacterDimensionsForLips("EV30027.BIN", 0x00005a34),\
+	PatchCharacterDimensionsForLips("EV31001.BIN", 0x00005ccc),\
+	PatchCharacterDimensionsForLips("EV31002.BIN", 0x00005c24),\
+	PatchCharacterDimensionsForLips("EV31023.BIN", 0x00005a4c),\
+	PatchCharacterDimensionsForLips("EV31024.BIN", 0x00005a4c),\
+	PatchCharacterDimensionsForLips("EV32002.BIN", 0x00005a58),\
+	PatchCharacterDimensionsForLips("EV32020.BIN", 0x00005a24),\
+	PatchCharacterDimensionsForLips("EV32055.BIN", 0x00005a98),\
+	PatchCharacterDimensionsForLips("EV33001.BIN", 0x00005f78),\
+	PatchCharacterDimensionsForLips("EV33002.BIN", 0x00005ce0),\
+	PatchCharacterDimensionsForLips("EV33022.BIN", 0x00005a2c),\
+	PatchCharacterDimensionsForLips("EV33054.BIN", 0x00005a24),\
+	PatchCharacterDimensionsForLips("EV34001.BIN", 0x00005a48),\
+	PatchCharacterDimensionsForLips("EV34002.BIN", 0x00005a60),\
+	PatchCharacterDimensionsForLips("EV34003.BIN", 0x00005a48),\
+	PatchCharacterDimensionsForLips("EV34004.BIN", 0x00005aa0),\
+	PatchCharacterDimensionsForLips("EV34005.BIN", 0x00005aa0),\
+	PatchCharacterDimensionsForLips("EV34006.BIN", 0x00005ad8),\
+	PatchCharacterDimensionsForLips("EV34007.BIN", 0x00005a48),\
+	PatchCharacterDimensionsForLips("EV34008.BIN", 0x00005ad8),\
+	PatchCharacterDimensionsForLips("EV34020.BIN", 0x00005a24),\
+	PatchCharacterDimensionsForLips("EV34030.BIN", 0x00005a24),\
+	PatchCharacterDimensionsForLips("EV34040.BIN", 0x00005a24),\
+	PatchCharacterDimensionsForLips("EV34041.BIN", 0x00005a24),\
+	PatchCharacterDimensionsForLips("EV34042.BIN", 0x00005a24),\
+	PatchCharacterDimensionsForLips("EV34043.BIN", 0x00005a24),\
+	PatchCharacterDimensionsForLips("EV34044.BIN", 0x00005a24),\
+	PatchCharacterDimensionsForLips("M00PRG.BIN", 0x00079520),\
+	PatchCharacterDimensionsForLips("M26PRG.BIN", 0x00078c30),\
+	PatchCharacterDimensionsForLips("TUTORI0.BIN", 0x00005b9c)
+
+//Convert tile size form 16x16 to 8x12
+/*
+add 0x10,r1 //7106  controls spacing in vdp1 ram  060893d0
+0x0210      //010c  image dimensions  0608942c
+mov 0x40,r6 //e618  bytes to copy from from file for each character 06089458
+
+//Calc offset from prev letter, write address starting at 0608945e
+//Multiply by character index by 0x30 and store into r5
+mov 0x30, r1 //e130
+muls.w r5,r1 //215f
+sts macl,r5  //051a
+nop          //0009
+
+//Multiply character index by 0x30 and store into r4 (0608946a)
+mov 0x30, r1 //e130
+muls.w r4,r1 //214f
+sts macl,r4  //041a
+nop          //0009
+*/
+#define PatchCharacterDimensions(filename, address) \
+	filename, address,     0x7106,\
+	filename, address+92,  0x010c,\
+	filename, address+136, 0xe618,\
+	filename, address+142, 0xe130,\
+	filename, address+144, 0x215f,\
+	filename, address+146, 0x051a,\
+	filename, address+148, 0x0009,\
+	filename, address+154, 0xe130,\
+	filename, address+156, 0x214f,\
+	filename, address+158, 0x041a,\
+	filename, address+160, 0x0009
+
+#define PatchCharacterDimensionsForFiles() \
+	PatchCharacterDimensions("M00PRG.BIN",   0x0002ffd0),\
+	PatchCharacterDimensions("M01PRG.BIN",   0x00029070),\
+	PatchCharacterDimensions("M02PRG.BIN",   0x0002d810),\
+	PatchCharacterDimensions("M03PRG.BIN",   0x0002e7f4),\
+	PatchCharacterDimensions("M04PRG.BIN",   0x0002efa4),\
+	PatchCharacterDimensions("M05PRG.BIN",   0x0002db18),\
+	PatchCharacterDimensions("M26PRG.BIN",   0x0002f91c),\
+	PatchCharacterDimensions("M27PRG.BIN",   0x0002d6cc),\
+	PatchCharacterDimensions("M29PRG.BIN",   0x00027508),\
+	PatchCharacterDimensions("M31PRG.BIN",   0x0002d950),\
+	PatchCharacterDimensions("M33PRG.BIN",   0x0002e4c0),\
+	PatchCharacterDimensions("M34PRG.BIN",   0x0002d59c),\
+	PatchCharacterDimensions("SLGGOVER.BIN", 0x0001bf40)
+
+//PatchLipsSingleByteForFile
+/*
+	060d145e add r0, r0           //0009
+	060d1460 mov.w @(r0, r4), r1  //014c
+	060d1498 mov.w @r11, r1       //61b0
+	060d14aa add r0, r0           //0009
+	060d14ac mov.w @(r0, r11), r4 //04bc
+	060d150e add r0, r0           //0009
+	060d1510 mov.w @(r0, r11), r1 //01bc
+*/
+#define PatchLipsSingleByteForFile(filename, address) \
+	filename, address,     0x009,\
+	filename, address+2,   0x014c,\
+	filename, address+58,  0x61b0,\
+	filename, address+76,  0x009,\
+	filename, address+78,  0x04bc,\
+	filename, address+176, 0x009,\
+	filename, address+178, 0x01bc
+
+#define LipsSingleBytePatching() \
+	PatchLipsSingleByteForFile("EV00001.BIN", 0x000071e2),\
+	PatchLipsSingleByteForFile("EV00002.BIN", 0x00005ae6),\
+	PatchLipsSingleByteForFile("EV00050.BIN", 0x00005ae6),\
+	PatchLipsSingleByteForFile("EV00051.BIN", 0x00005ae6),\
+	PatchLipsSingleByteForFile("EV00052.BIN", 0x00005ae6),\
+	PatchLipsSingleByteForFile("EV00054.BIN", 0x00005ae6),\
+	PatchLipsSingleByteForFile("EV00055.BIN", 0x00005ae6),\
+	PatchLipsSingleByteForFile("EV00060.BIN", 0x00005ae6),\
+	PatchLipsSingleByteForFile("EV01001.BIN", 0x00005bf2),\
+	PatchLipsSingleByteForFile("EV01002.BIN", 0x00005ae6),\
+	PatchLipsSingleByteForFile("EV01020.BIN", 0x0000610a),\
+	PatchLipsSingleByteForFile("EV01021.BIN", 0x00005f1e),\
+	PatchLipsSingleByteForFile("EV01022.BIN", 0x00005ae6),\
+	PatchLipsSingleByteForFile("EV01023.BIN", 0x00005ae6),\
+	PatchLipsSingleByteForFile("EV01030.BIN", 0x00005ae6),\
+	PatchLipsSingleByteForFile("EV01050.BIN", 0x00005ae6),\
+	PatchLipsSingleByteForFile("EV01054.BIN", 0x00005ae6),\
+	PatchLipsSingleByteForFile("EV01055.BIN", 0x00005ae6),\
+	PatchLipsSingleByteForFile("EV02001.BIN", 0x00005ae6),\
+	PatchLipsSingleByteForFile("EV02002.BIN", 0x00005ae6),\
+	PatchLipsSingleByteForFile("EV02010.BIN", 0x00005ae6),\
+	PatchLipsSingleByteForFile("EV02021.BIN", 0x00005ae6),\
+	PatchLipsSingleByteForFile("EV02025.BIN", 0x00005ae6),\
+	PatchLipsSingleByteForFile("EV02050.BIN", 0x00005ae6),\
+	PatchLipsSingleByteForFile("EV02051.BIN", 0x00005ae6),\
+	PatchLipsSingleByteForFile("EV02052.BIN", 0x00005ae6),\
+	PatchLipsSingleByteForFile("EV02053.BIN", 0x00005ae6),\
+	PatchLipsSingleByteForFile("EV02054.BIN", 0x00005ae6),\
+	PatchLipsSingleByteForFile("EV03001.BIN", 0x00005cb2),\
+	PatchLipsSingleByteForFile("EV03002.BIN", 0x00005b5a),\
+	PatchLipsSingleByteForFile("EV03005.BIN", 0x00005b12),\
+	PatchLipsSingleByteForFile("EV03010.BIN", 0x00005af6),\
+	PatchLipsSingleByteForFile("EV03020.BIN", 0x00005af6),\
+	PatchLipsSingleByteForFile("EV03021.BIN", 0x00005af6),\
+	PatchLipsSingleByteForFile("EV03023.BIN", 0x00005b0e),\
+	PatchLipsSingleByteForFile("EV03024.BIN", 0x00005b0e),\
+	PatchLipsSingleByteForFile("EV03025.BIN", 0x00005b22),\
+	PatchLipsSingleByteForFile("EV03050.BIN", 0x00005f26),\
+	PatchLipsSingleByteForFile("EV03051.BIN", 0x00005b4a),\
+	PatchLipsSingleByteForFile("EV03052.BIN", 0x00005bb6),\
+	PatchLipsSingleByteForFile("EV03053.BIN", 0x00005b72),\
+	PatchLipsSingleByteForFile("EV04001.BIN", 0x0000699e),\
+	PatchLipsSingleByteForFile("EV04002.BIN", 0x00005b62),\
+	PatchLipsSingleByteForFile("EV04003.BIN", 0x00005c96),\
+	PatchLipsSingleByteForFile("EV04005.BIN", 0x00005ae6),\
+	PatchLipsSingleByteForFile("EV04010.BIN", 0x00005b5a),\
+	PatchLipsSingleByteForFile("EV04020.BIN", 0x00005ae6),\
+	PatchLipsSingleByteForFile("EV04022.BIN", 0x00005aee),\
+	PatchLipsSingleByteForFile("EV04050.BIN", 0x00005b8e),\
+	PatchLipsSingleByteForFile("EV04053.BIN", 0x00005ae6),\
+	PatchLipsSingleByteForFile("EV04055.BIN", 0x00005b5a),\
+	PatchLipsSingleByteForFile("EV05001.BIN", 0x00005afe),\
+	PatchLipsSingleByteForFile("EV05002.BIN", 0x00005ae6),\
+	PatchLipsSingleByteForFile("EV05003.BIN", 0x00005cc2),\
+	PatchLipsSingleByteForFile("EV05004.BIN", 0x00005ae6),\
+	PatchLipsSingleByteForFile("EV05005.BIN", 0x00005ae6),\
+	PatchLipsSingleByteForFile("EV05007.BIN", 0x00005ae6),\
+	PatchLipsSingleByteForFile("EV05010.BIN", 0x00005ae6),\
+	PatchLipsSingleByteForFile("EV05011.BIN", 0x00005ae6),\
+	PatchLipsSingleByteForFile("EV05018.BIN", 0x00005ae6),\
+	PatchLipsSingleByteForFile("EV05019.BIN", 0x00005b0e),\
+	PatchLipsSingleByteForFile("EV05020.BIN", 0x00005ae6),\
+	PatchLipsSingleByteForFile("EV05021.BIN", 0x00005ae6),\
+	PatchLipsSingleByteForFile("EV05022.BIN", 0x00005ae6),\
+	PatchLipsSingleByteForFile("EV05023.BIN", 0x00005ae6),\
+	PatchLipsSingleByteForFile("EV05025.BIN", 0x00005ae6),\
+	PatchLipsSingleByteForFile("EV05026.BIN", 0x00005ae6),\
+	PatchLipsSingleByteForFile("EV05027.BIN", 0x00005ae6),\
+	PatchLipsSingleByteForFile("EV05051.BIN", 0x00005ae6),\
+	PatchLipsSingleByteForFile("EV05052.BIN", 0x00005ae6),\
+	PatchLipsSingleByteForFile("EV05053.BIN", 0x00005ae6),\
+	PatchLipsSingleByteForFile("EV05054.BIN", 0x00005ae6),\
+	PatchLipsSingleByteForFile("EV05060.BIN", 0x00005ae6),\
+	PatchLipsSingleByteForFile("EV26001.BIN", 0x000068f2),\
+	PatchLipsSingleByteForFile("EV26002.BIN", 0x00005e8e),\
+	PatchLipsSingleByteForFile("EV26020.BIN", 0x00005ae6),\
+	PatchLipsSingleByteForFile("EV26021.BIN", 0x00005ae6),\
+	PatchLipsSingleByteForFile("EV27001.BIN", 0x00005af2),\
+	PatchLipsSingleByteForFile("EV27002.BIN", 0x00005b9a),\
+	PatchLipsSingleByteForFile("EV27054.BIN", 0x00005ae6),\
+	PatchLipsSingleByteForFile("EV28001.BIN", 0x00005ae6),\
+	PatchLipsSingleByteForFile("EV28025.BIN", 0x00005ae6),\
+	PatchLipsSingleByteForFile("EV28050.BIN", 0x00005ae6),\
+	PatchLipsSingleByteForFile("EV28051.BIN", 0x00005ae6),\
+	PatchLipsSingleByteForFile("EV29001.BIN", 0x00005b0a),\
+	PatchLipsSingleByteForFile("EV29002.BIN", 0x00005b0a),\
+	PatchLipsSingleByteForFile("EV29021.BIN", 0x00005ae6),\
+	PatchLipsSingleByteForFile("EV29050.BIN", 0x00005ae6),\
+	PatchLipsSingleByteForFile("EV30003.BIN", 0x00006b2e),\
+	PatchLipsSingleByteForFile("EV30020.BIN", 0x00005af6),\
+	PatchLipsSingleByteForFile("EV30026.BIN", 0x00005af6),\
+	PatchLipsSingleByteForFile("EV30027.BIN", 0x00005af6),\
+	PatchLipsSingleByteForFile("EV31001.BIN", 0x00005d8e),\
+	PatchLipsSingleByteForFile("EV31002.BIN", 0x00005ce6),\
+	PatchLipsSingleByteForFile("EV31023.BIN", 0x00005b0e),\
+	PatchLipsSingleByteForFile("EV31024.BIN", 0x00005b0e),\
+	PatchLipsSingleByteForFile("EV32002.BIN", 0x00005b1a),\
+	PatchLipsSingleByteForFile("EV32020.BIN", 0x00005ae6),\
+	PatchLipsSingleByteForFile("EV32055.BIN", 0x00005b5a),\
+	PatchLipsSingleByteForFile("EV33001.BIN", 0x0000603a),\
+	PatchLipsSingleByteForFile("EV33002.BIN", 0x00005da2),\
+	PatchLipsSingleByteForFile("EV33022.BIN", 0x00005aee),\
+	PatchLipsSingleByteForFile("EV33054.BIN", 0x00005ae6),\
+	PatchLipsSingleByteForFile("EV34001.BIN", 0x00005b0a),\
+	PatchLipsSingleByteForFile("EV34002.BIN", 0x00005b22),\
+	PatchLipsSingleByteForFile("EV34003.BIN", 0x00005b0a),\
+	PatchLipsSingleByteForFile("EV34004.BIN", 0x00005b62),\
+	PatchLipsSingleByteForFile("EV34005.BIN", 0x00005b62),\
+	PatchLipsSingleByteForFile("EV34006.BIN", 0x00005b9a),\
+	PatchLipsSingleByteForFile("EV34007.BIN", 0x00005b0a),\
+	PatchLipsSingleByteForFile("EV34008.BIN", 0x00005b9a),\
+	PatchLipsSingleByteForFile("EV34020.BIN", 0x00005ae6),\
+	PatchLipsSingleByteForFile("EV34030.BIN", 0x00005ae6),\
+	PatchLipsSingleByteForFile("EV34040.BIN", 0x00005ae6),\
+	PatchLipsSingleByteForFile("EV34041.BIN", 0x00005ae6),\
+	PatchLipsSingleByteForFile("EV34042.BIN", 0x00005ae6),\
+	PatchLipsSingleByteForFile("EV34043.BIN", 0x00005ae6),\
+	PatchLipsSingleByteForFile("EV34044.BIN", 0x00005ae6),\
+	PatchLipsSingleByteForFile("M00PRG.BIN",  0x000795e2),\
+	PatchLipsSingleByteForFile("M26PRG.BIN",  0x00078cf2),\
+	PatchLipsSingleByteForFile("TUTORI0.BIN", 0x00005c5e)
+
+/*
+//Memory from second battle	
+	060d212c mov.w @r11, r1       //61b0
+*/
+#define PatchLipsSingleByteForFile2(filename, address) \
+	filename, address,     0x61b0
+
+#define LipsSingleBytePatching2() \
+	PatchLipsSingleByteForFile2("EV00001.BIN", 0x0000721c),\
+	PatchLipsSingleByteForFile2("EV00002.BIN", 0x00005b20),\
+	PatchLipsSingleByteForFile2("EV00050.BIN", 0x00005b20),\
+	PatchLipsSingleByteForFile2("EV00051.BIN", 0x00005b20),\
+	PatchLipsSingleByteForFile2("EV00052.BIN", 0x00005b20),\
+	PatchLipsSingleByteForFile2("EV00054.BIN", 0x00005b20),\
+	PatchLipsSingleByteForFile2("EV00055.BIN", 0x00005b20),\
+	PatchLipsSingleByteForFile2("EV00060.BIN", 0x00005b20),\
+	PatchLipsSingleByteForFile2("EV01001.BIN", 0x00005c2c),\
+	PatchLipsSingleByteForFile2("EV01002.BIN", 0x00005b20),\
+	PatchLipsSingleByteForFile2("EV01020.BIN", 0x00006144),\
+	PatchLipsSingleByteForFile2("EV01021.BIN", 0x00005f58),\
+	PatchLipsSingleByteForFile2("EV01022.BIN", 0x00005b20),\
+	PatchLipsSingleByteForFile2("EV01023.BIN", 0x00005b20),\
+	PatchLipsSingleByteForFile2("EV01030.BIN", 0x00005b20),\
+	PatchLipsSingleByteForFile2("EV01050.BIN", 0x00005b20),\
+	PatchLipsSingleByteForFile2("EV01054.BIN", 0x00005b20),\
+	PatchLipsSingleByteForFile2("EV01055.BIN", 0x00005b20),\
+	PatchLipsSingleByteForFile2("EV02001.BIN", 0x00005b20),\
+	PatchLipsSingleByteForFile2("EV02002.BIN", 0x00005b20),\
+	PatchLipsSingleByteForFile2("EV02010.BIN", 0x00005b20),\
+	PatchLipsSingleByteForFile2("EV02021.BIN", 0x00005b20),\
+	PatchLipsSingleByteForFile2("EV02025.BIN", 0x00005b20),\
+	PatchLipsSingleByteForFile2("EV02050.BIN", 0x00005b20),\
+	PatchLipsSingleByteForFile2("EV02051.BIN", 0x00005b20),\
+	PatchLipsSingleByteForFile2("EV02052.BIN", 0x00005b20),\
+	PatchLipsSingleByteForFile2("EV02053.BIN", 0x00005b20),\
+	PatchLipsSingleByteForFile2("EV02054.BIN", 0x00005b20),\
+	PatchLipsSingleByteForFile2("EV03000.BIN", 0x000057f4),\
+	PatchLipsSingleByteForFile2("EV03001.BIN", 0x00005cec),\
+	PatchLipsSingleByteForFile2("EV03002.BIN", 0x00005b94),\
+	PatchLipsSingleByteForFile2("EV03005.BIN", 0x00005b4c),\
+	PatchLipsSingleByteForFile2("EV03010.BIN", 0x00005b30),\
+	PatchLipsSingleByteForFile2("EV03020.BIN", 0x00005b30),\
+	PatchLipsSingleByteForFile2("EV03021.BIN", 0x00005b30),\
+	PatchLipsSingleByteForFile2("EV03023.BIN", 0x00005b48),\
+	PatchLipsSingleByteForFile2("EV03024.BIN", 0x00005b48),\
+	PatchLipsSingleByteForFile2("EV03025.BIN", 0x00005b5c),\
+	PatchLipsSingleByteForFile2("EV03050.BIN", 0x00005f60),\
+	PatchLipsSingleByteForFile2("EV03051.BIN", 0x00005b84),\
+	PatchLipsSingleByteForFile2("EV03052.BIN", 0x00005bf0),\
+	PatchLipsSingleByteForFile2("EV03053.BIN", 0x00005bac),\
+	PatchLipsSingleByteForFile2("EV04001.BIN", 0x000069d8),\
+	PatchLipsSingleByteForFile2("EV04002.BIN", 0x00005b9c),\
+	PatchLipsSingleByteForFile2("EV04003.BIN", 0x00005cd0),\
+	PatchLipsSingleByteForFile2("EV04005.BIN", 0x00005b20),\
+	PatchLipsSingleByteForFile2("EV04010.BIN", 0x00005b94),\
+	PatchLipsSingleByteForFile2("EV04020.BIN", 0x00005b20),\
+	PatchLipsSingleByteForFile2("EV04022.BIN", 0x00005b28),\
+	PatchLipsSingleByteForFile2("EV04050.BIN", 0x00005bc8),\
+	PatchLipsSingleByteForFile2("EV04053.BIN", 0x00005b20),\
+	PatchLipsSingleByteForFile2("EV04055.BIN", 0x00005b94),\
+	PatchLipsSingleByteForFile2("EV05001.BIN", 0x00005b38),\
+	PatchLipsSingleByteForFile2("EV05002.BIN", 0x00005b20),\
+	PatchLipsSingleByteForFile2("EV05003.BIN", 0x00005cfc),\
+	PatchLipsSingleByteForFile2("EV05004.BIN", 0x00005b20),\
+	PatchLipsSingleByteForFile2("EV05005.BIN", 0x00005b20),\
+	PatchLipsSingleByteForFile2("EV05007.BIN", 0x00005b20),\
+	PatchLipsSingleByteForFile2("EV05010.BIN", 0x00005b20),\
+	PatchLipsSingleByteForFile2("EV05011.BIN", 0x00005b20),\
+	PatchLipsSingleByteForFile2("EV05018.BIN", 0x00005b20),\
+	PatchLipsSingleByteForFile2("EV05019.BIN", 0x00005b48),\
+	PatchLipsSingleByteForFile2("EV05020.BIN", 0x00005b20),\
+	PatchLipsSingleByteForFile2("EV05021.BIN", 0x00005b20),\
+	PatchLipsSingleByteForFile2("EV05022.BIN", 0x00005b20),\
+	PatchLipsSingleByteForFile2("EV05023.BIN", 0x00005b20),\
+	PatchLipsSingleByteForFile2("EV05025.BIN", 0x00005b20),\
+	PatchLipsSingleByteForFile2("EV05026.BIN", 0x00005b20),\
+	PatchLipsSingleByteForFile2("EV05027.BIN", 0x00005b20),\
+	PatchLipsSingleByteForFile2("EV05051.BIN", 0x00005b20),\
+	PatchLipsSingleByteForFile2("EV05052.BIN", 0x00005b20),\
+	PatchLipsSingleByteForFile2("EV05053.BIN", 0x00005b20),\
+	PatchLipsSingleByteForFile2("EV05054.BIN", 0x00005b20),\
+	PatchLipsSingleByteForFile2("EV05060.BIN", 0x00005b20),\
+	PatchLipsSingleByteForFile2("EV26001.BIN", 0x0000692c),\
+	PatchLipsSingleByteForFile2("EV26002.BIN", 0x00005ec8),\
+	PatchLipsSingleByteForFile2("EV26020.BIN", 0x00005b20),\
+	PatchLipsSingleByteForFile2("EV26021.BIN", 0x00005b20),\
+	PatchLipsSingleByteForFile2("EV27001.BIN", 0x00005b2c),\
+	PatchLipsSingleByteForFile2("EV27002.BIN", 0x00005bd4),\
+	PatchLipsSingleByteForFile2("EV27054.BIN", 0x00005b20),\
+	PatchLipsSingleByteForFile2("EV28001.BIN", 0x00005b20),\
+	PatchLipsSingleByteForFile2("EV28025.BIN", 0x00005b20),\
+	PatchLipsSingleByteForFile2("EV28050.BIN", 0x00005b20),\
+	PatchLipsSingleByteForFile2("EV28051.BIN", 0x00005b20),\
+	PatchLipsSingleByteForFile2("EV29001.BIN", 0x00005b44),\
+	PatchLipsSingleByteForFile2("EV29002.BIN", 0x00005b44),\
+	PatchLipsSingleByteForFile2("EV29021.BIN", 0x00005b20),\
+	PatchLipsSingleByteForFile2("EV29050.BIN", 0x00005b20),\
+	PatchLipsSingleByteForFile2("EV30003.BIN", 0x00006b68),\
+	PatchLipsSingleByteForFile2("EV30020.BIN", 0x00005b30),\
+	PatchLipsSingleByteForFile2("EV30026.BIN", 0x00005b30),\
+	PatchLipsSingleByteForFile2("EV30027.BIN", 0x00005b30),\
+	PatchLipsSingleByteForFile2("EV31001.BIN", 0x00005dc8),\
+	PatchLipsSingleByteForFile2("EV31002.BIN", 0x00005d20),\
+	PatchLipsSingleByteForFile2("EV31023.BIN", 0x00005b48),\
+	PatchLipsSingleByteForFile2("EV31024.BIN", 0x00005b48),\
+	PatchLipsSingleByteForFile2("EV32002.BIN", 0x00005b54),\
+	PatchLipsSingleByteForFile2("EV32020.BIN", 0x00005b20),\
+	PatchLipsSingleByteForFile2("EV32055.BIN", 0x00005b94),\
+	PatchLipsSingleByteForFile2("EV33001.BIN", 0x00006074),\
+	PatchLipsSingleByteForFile2("EV33002.BIN", 0x00005ddc),\
+	PatchLipsSingleByteForFile2("EV33022.BIN", 0x00005b28),\
+	PatchLipsSingleByteForFile2("EV33054.BIN", 0x00005b20),\
+	PatchLipsSingleByteForFile2("EV34001.BIN", 0x00005b44),\
+	PatchLipsSingleByteForFile2("EV34002.BIN", 0x00005b5c),\
+	PatchLipsSingleByteForFile2("EV34003.BIN", 0x00005b44),\
+	PatchLipsSingleByteForFile2("EV34004.BIN", 0x00005b9c),\
+	PatchLipsSingleByteForFile2("EV34005.BIN", 0x00005b9c),\
+	PatchLipsSingleByteForFile2("EV34006.BIN", 0x00005bd4),\
+	PatchLipsSingleByteForFile2("EV34007.BIN", 0x00005b44),\
+	PatchLipsSingleByteForFile2("EV34008.BIN", 0x00005bd4),\
+	PatchLipsSingleByteForFile2("EV34020.BIN", 0x00005b20),\
+	PatchLipsSingleByteForFile2("EV34030.BIN", 0x00005b20),\
+	PatchLipsSingleByteForFile2("EV34040.BIN", 0x00005b20),\
+	PatchLipsSingleByteForFile2("EV34041.BIN", 0x00005b20),\
+	PatchLipsSingleByteForFile2("EV34042.BIN", 0x00005b20),\
+	PatchLipsSingleByteForFile2("EV34043.BIN", 0x00005b20),\
+	PatchLipsSingleByteForFile2("EV34044.BIN", 0x00005b20),\
+	PatchLipsSingleByteForFile2("M00PRG.BIN",  0x0007961c),\
+	PatchLipsSingleByteForFile2("M26PRG.BIN",  0x00078d2c),\
+	PatchLipsSingleByteForFile2("TUTORI0.BIN", 0x00005c98)
+
+//Single Byte Fast Forward
+//060890e6 add r0, r0           //0009
+//060890e8 mov.w @(r0, r1), r1  //011c
+#define SingleByteFastForward(filename, address) \
+	filename, address+0, 0x0009,\
+	filename, address+2, 0x011c
+
+#define SingleByteFastForwardInFiles() \
+	SingleByteFastForward("M00PRG.BIN", 0x0002fbe0), \
+	SingleByteFastForward("M00PRG.BIN", 0x0002fce6), \
+	SingleByteFastForward("M00PRG.BIN", 0x0002fe1e), \
+	SingleByteFastForward("M01PRG.BIN", 0x00028c80), \
+	SingleByteFastForward("M01PRG.BIN", 0x00028d86), \
+	SingleByteFastForward("M01PRG.BIN", 0x00028ebe), \
+	SingleByteFastForward("M02PRG.BIN", 0x0002d420), \
+	SingleByteFastForward("M02PRG.BIN", 0x0002d526), \
+	SingleByteFastForward("M02PRG.BIN", 0x0002d65e), \
+	SingleByteFastForward("M03PRG.BIN", 0x0002e404), \
+	SingleByteFastForward("M03PRG.BIN", 0x0002e50a), \
+	SingleByteFastForward("M03PRG.BIN", 0x0002e642), \
+	SingleByteFastForward("M04PRG.BIN", 0x0002ebb4), \
+	SingleByteFastForward("M04PRG.BIN", 0x0002ecba), \
+	SingleByteFastForward("M04PRG.BIN", 0x0002edf2), \
+	SingleByteFastForward("M05PRG.BIN", 0x0002d728), \
+	SingleByteFastForward("M05PRG.BIN", 0x0002d82e), \
+	SingleByteFastForward("M05PRG.BIN", 0x0002d966), \
+	SingleByteFastForward("M26PRG.BIN", 0x0002f52c), \
+	SingleByteFastForward("M26PRG.BIN", 0x0002f632), \
+	SingleByteFastForward("M26PRG.BIN", 0x0002f76a), \
+	SingleByteFastForward("M27PRG.BIN", 0x0002d2dc), \
+	SingleByteFastForward("M27PRG.BIN", 0x0002d3e2), \
+	SingleByteFastForward("M27PRG.BIN", 0x0002d51a), \
+	SingleByteFastForward("M29PRG.BIN", 0x00027118), \
+	SingleByteFastForward("M29PRG.BIN", 0x0002721e), \
+	SingleByteFastForward("M29PRG.BIN", 0x00027356), \
+	SingleByteFastForward("M31PRG.BIN", 0x0002d560), \
+	SingleByteFastForward("M31PRG.BIN", 0x0002d666), \
+	SingleByteFastForward("M31PRG.BIN", 0x0002d79e), \
+	SingleByteFastForward("M33PRG.BIN", 0x0002e0d0), \
+	SingleByteFastForward("M33PRG.BIN", 0x0002e1d6), \
+	SingleByteFastForward("M33PRG.BIN", 0x0002e30e), \
+	SingleByteFastForward("M34PRG.BIN", 0x0002d1ac), \
+	SingleByteFastForward("M34PRG.BIN", 0x0002d2b2), \
+	SingleByteFastForward("M34PRG.BIN", 0x0002d3ea), \
+	SingleByteFastForward("SLGGOVER.BIN", 0x0001bb50),\
+	SingleByteFastForward("SLGGOVER.BIN", 0x0001bc56),\
+	SingleByteFastForward("SLGGOVER.BIN", 0x0001bd8e)
+
+/*
+	//Memory from battle 1 part 2 (When M26PRG.BIN is loaded)
+	06088a4a extu.w r1, r2 //621C -> needs to be extu.b
+	06088ae2 extu.w r6, r6 //666c -> needs to be extu.b
+	fffe stored at 06088b9c
+	ffff stored at 06088ba0
+*/
+#define PatchSingleByteHiCharacterHandling(filename, address) \
+	filename, address + 0,   0x621c,\
+	filename, address + 152, 0x666c,\
+	filename, address + 339, 0x00,\
+	filename, address + 343, 0x00  
+	
+
+#define PatchSingleByteHiCharacterHandlingInFiles() \
+	PatchSingleByteHiCharacterHandling("M00PRG.BIN", 0x0002fcfe),\
+	PatchSingleByteHiCharacterHandling("M01PRG.BIN", 0x00028d9e),\
+	PatchSingleByteHiCharacterHandling("M02PRG.BIN", 0x0002d53e),\
+	PatchSingleByteHiCharacterHandling("M03PRG.BIN", 0x0002e522),\
+	PatchSingleByteHiCharacterHandling("M04PRG.BIN", 0x0002ecd2),\
+	PatchSingleByteHiCharacterHandling("M05PRG.BIN", 0x0002d846),\
+	PatchSingleByteHiCharacterHandling("M26PRG.BIN", 0x0002f64a),\
+	PatchSingleByteHiCharacterHandling("M27PRG.BIN", 0x0002d3fa),\
+	PatchSingleByteHiCharacterHandling("M29PRG.BIN", 0x00027236),\
+	PatchSingleByteHiCharacterHandling("M31PRG.BIN", 0x0002d67e),\
+	PatchSingleByteHiCharacterHandling("M33PRG.BIN", 0x0002e1ee),\
+	PatchSingleByteHiCharacterHandling("M34PRG.BIN", 0x0002d2ca),\
+	PatchSingleByteHiCharacterHandling("SLGGOVER.BIN", 0x0001bc6e)
+
 bool PatchBattleTextDrawingCode(const string& inPatchedDirectory, const string& inDataDirectory)
 {
 	struct PatchingData
@@ -171,20 +729,20 @@ bool PatchBattleTextDrawingCode(const string& inPatchedDirectory, const string& 
 		"SLGGOVER.BIN", 0x0001bfc0, 0x1c,
 
 		//060894b0 is 0xa7f.  This is the amount of bytes to clear in vdp1 when clearing the text box.
-		//Change this to 27*4 * 64(bytes)
-		"M00PRG.BIN", 0x000300b0, (27*4*66),
-		"M01PRG.BIN", 0x00029150, (27*4*66),
-		"M02PRG.BIN", 0x0002d8f0, (27*4*66),
-		"M03PRG.BIN", 0x0002e8d4, (27*4*66),
-		"M04PRG.BIN", 0x0002f084, (27*4*66),
-		"M05PRG.BIN", 0x0002dbf8, (27*4*66),
-		"M26PRG.BIN", 0x0002f9fc, (27*4*66),
-		"M27PRG.BIN", 0x0002d7ac, (27*4*66),
-		"M29PRG.BIN", 0x000275e8, (27*4*66),
-		"M31PRG.BIN", 0x0002da30, (27*4*66),
-		"M33PRG.BIN", 0x0002e5a0, (27*4*66),
-		"M34PRG.BIN", 0x0002d67c, (27*4*66),
-		"SLGGOVER.BIN", 0x0001c020, (27*4*66),
+		//Change this to 27*4 * (48+2)(bytes) cause 48 is 8x12/2
+		"M00PRG.BIN", 0x000300b0, (27*4*50),
+		"M01PRG.BIN", 0x00029150, (27*4*50),
+		"M02PRG.BIN", 0x0002d8f0, (27*4*50),
+		"M03PRG.BIN", 0x0002e8d4, (27*4*50),
+		"M04PRG.BIN", 0x0002f084, (27*4*50),
+		"M05PRG.BIN", 0x0002dbf8, (27*4*50),
+		"M26PRG.BIN", 0x0002f9fc, (27*4*50),
+		"M27PRG.BIN", 0x0002d7ac, (27*4*50),
+		"M29PRG.BIN", 0x000275e8, (27*4*50),
+		"M31PRG.BIN", 0x0002da30, (27*4*50),
+		"M33PRG.BIN", 0x0002e5a0, (27*4*50),
+		"M34PRG.BIN", 0x0002d67c, (27*4*50),
+		"SLGGOVER.BIN", 0x0001c020, (27*4*50),
 
 		//060892a2 change to 0x1a
 		"M00PRG.BIN", 0x0002fc5c, 0x1a,
@@ -365,10 +923,11 @@ bool PatchBattleTextDrawingCode(const string& inPatchedDirectory, const string& 
 		"0.SLG", 0x0000235a, 0x6f,
 
 		/*Lips spacing
-		060d1503 is X spacing.Set this to 0x08
 		060d146c is calculation to center text.Set this to 4200 (shll r2)
+		060d14ef is vertical offset.Change to 0x93
+		060d1503 is X spacing.Set this to 0x08
 		060d16bf is another horizontal offset.Set this to f8
-		060d14ef is vertical offset.Change to 0x93*/
+		*/
 		"EV00001.BIN", 0x000071f0, 0xffff,
 		"EV00002.BIN", 0x00005af4, 0xffff,
 		"EV00050.BIN", 0x00005af4, 0xffff,
@@ -490,6 +1049,86 @@ bool PatchBattleTextDrawingCode(const string& inPatchedDirectory, const string& 
 		"M00PRG.BIN", 0x000795f0, 0xffff,
 		"M26PRG.BIN", 0x00078d00, 0xffff,
 		"TUTORI0.BIN", 0x00005c6c, 0xffff,
+
+		PatchCharacterDimensionsForFiles(),
+		PatchCharacterDimensionsForLipsInFiles(),
+
+		#if USE_SINGLE_BYTE_LOOKUPS
+		/*
+		//name subbing (orihime, sakura, etc.)
+		06088fe0 add r0, r0           //0009
+		06088fe2 mov.w @(r0, r1), r1  //011c
+		*/
+			"M00PRG.BIN", 0x0002fbe0, 0x0009,
+			"M00PRG.BIN", 0x0002fbe2, 0x011c,
+			"M01PRG.BIN", 0x00028c80, 0x0009,
+			"M01PRG.BIN", 0x00028c82, 0x011c,
+			"M02PRG.BIN", 0x0002d420, 0x0009,
+			"M02PRG.BIN", 0x0002d422, 0x011c,
+			"M03PRG.BIN", 0x0002e404, 0x0009,
+			"M03PRG.BIN", 0x0002e406, 0x011c,
+			"M04PRG.BIN", 0x0002ebb4, 0x0009,
+			"M04PRG.BIN", 0x0002ebb6, 0x011c,
+			"M05PRG.BIN", 0x0002d728, 0x0009,
+			"M05PRG.BIN", 0x0002d72a, 0x011c,
+			"M26PRG.BIN", 0x0002f52c, 0x0009,
+			"M26PRG.BIN", 0x0002f52e, 0x011c,
+			"M27PRG.BIN", 0x0002d2dc, 0x0009,
+			"M27PRG.BIN", 0x0002d2de, 0x011c,
+			"M29PRG.BIN", 0x00027118, 0x0009,
+			"M29PRG.BIN", 0x0002711a, 0x011c,
+			"M31PRG.BIN", 0x0002d560, 0x0009,
+			"M31PRG.BIN", 0x0002d562, 0x011c,
+			"M33PRG.BIN", 0x0002e0d0, 0x0009,
+			"M33PRG.BIN", 0x0002e0d2, 0x011c,
+			"M34PRG.BIN", 0x0002d1ac, 0x0009,
+			"M34PRG.BIN", 0x0002d1ae, 0x011c,
+			"SLGGOVER.BIN", 0x0001bb50, 0x0009,
+			"SLGGOVER.BIN", 0x0001bb52, 0x011c,
+
+			/*
+			//fast forward
+			060890e6 add r0, r0           //0009
+			060890e8 mov.w @(r0, r1), r1  //011c
+			*/
+			SingleByteFastForwardInFiles(),
+
+			/*
+			Text read at 0608921e
+			0608921e add r0, r0           //0009
+			06089220 mov.w @(r0, r1), r1  //011c
+			*/
+			"M00PRG.BIN", 0x0002fe1e, 0x011c,
+			"M00PRG.BIN", 0x0002fe1e+2, 0x009,
+			"M01PRG.BIN", 0x00028ebe, 0x011c,
+			"M01PRG.BIN", 0x00028ebe + 2, 0x009,
+			"M02PRG.BIN", 0x0002d65e, 0x011c,
+			"M02PRG.BIN", 0x0002d65e + 2, 0x009,
+			"M03PRG.BIN", 0x0002e642, 0x011c,
+			"M03PRG.BIN", 0x0002e642 + 2, 0x009,
+			"M04PRG.BIN", 0x0002edf2, 0x011c,
+			"M04PRG.BIN", 0x0002edf2 + 2, 0x009,
+			"M05PRG.BIN", 0x0002d966, 0x011c,
+			"M05PRG.BIN", 0x0002d966 + 2, 0x009,
+			"M26PRG.BIN", 0x0002f76a, 0x011c,
+			"M26PRG.BIN", 0x0002f76a + 2, 0x009,
+			"M27PRG.BIN", 0x0002d51a, 0x011c,
+			"M27PRG.BIN", 0x0002d51a + 2, 0x009,
+			"M29PRG.BIN", 0x00027356, 0x011c,
+			"M29PRG.BIN", 0x00027356 + 2, 0x009,
+			"M31PRG.BIN", 0x0002d79e, 0x011c,
+			"M31PRG.BIN", 0x0002d79e + 2, 0x009,
+			"M33PRG.BIN", 0x0002e30e, 0x011c,
+			"M33PRG.BIN", 0x0002e30e + 2, 0x009,
+			"M34PRG.BIN", 0x0002d3ea, 0x011c,
+			"M34PRG.BIN", 0x0002d3ea + 2, 0x009,
+			"SLGGOVER.BIN", 0x0001bd8e, 0x011c,
+			"SLGGOVER.BIN", 0x0001bd8e + 2, 0x009,
+		
+			PatchSingleByteHiCharacterHandlingInFiles(),
+			LipsSingleBytePatching(),
+			LipsSingleBytePatching2(),
+		#endif
 	};
 
 	const int numEntries = sizeof(patchingInfo) / sizeof(patchingInfo[0]);
@@ -509,7 +1148,7 @@ bool PatchBattleTextDrawingCode(const string& inPatchedDirectory, const string& 
 			continue;
 		}
 
-		const bool bIsWord = (patchingInfo[i].data.command.word & 0xff00) != 0;
+		const bool bIsWord = (patchingInfo[i].data.command.word & 0xff00) != 0 || patchingInfo[i].data.command.byte == 0x09;
 		if( bIsWord )
 		{
 			sakuraBin.WriteData(patchingInfo[i].data.address, (char*)&patchingInfo[i].data.command.word, 2, true);

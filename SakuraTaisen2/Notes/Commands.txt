@@ -25,6 +25,8 @@ ExtractMNameCGFiles a:\SakuraWars2\Disc1_Original a:\NoahSteam\RomPatchingTools\
 WriteTextIntoImage A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\Translation\MNameCG1.txt A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\MNameCG\ImageSizes.txt A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\MNameCG\Original\1\ A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\MNameCG\Translated\1\
 WriteTextIntoImage A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\Translation\InfoName.txt A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\InfoName\ImageSizes.txt A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\InfoName\Original\ A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\InfoName\Translated\
 WriteTextIntoImageUsingFontSheet A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\Translation\InfoName.txt A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\HudFontSheetWide.bmp A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\InfoName\Canvas A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\InfoName\Original A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\InfoName\Translated
+AddShadowsToWKLText A:\NoahSteam\Test
+SwapBattleFiles 26 A:\SakuraWars2\Patched\Disc1\Sakura2
 PatchGame A:\SakuraWars2\Disc1_Original A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data A:\SakuraWars2\Patched\Disc1
 FindData.exe a:\SakuraWars2\Disc1_Original a:\SakuraWars2\find.bin
 

@@ -1,6 +1,7 @@
 #pragma once
 
-bool CreateTranslatedFontSheet(const string& inTranslatedFontSheet, TileExtractor& outSheet, PaletteData& outPalette)
+bool CreateTranslatedFontSheet(	const string& inTranslatedFontSheet, TileExtractor& outSheet, PaletteData& outPalette, unsigned int inTileDimX, 
+								unsigned int inTileDimY)
 {
 	//Read in translated font sheet
 	BitmapReader origTranslatedBmp;
@@ -9,9 +10,7 @@ bool CreateTranslatedFontSheet(const string& inTranslatedFontSheet, TileExtracto
 		return false;
 	}
 
-	unsigned int tileDimX = 16;
-	unsigned int tileDimY = 16;
-	if (!outSheet.ExtractTiles(tileDimX, tileDimY, tileDimX, tileDimY, origTranslatedBmp))
+	if (!outSheet.ExtractTiles(inTileDimX, inTileDimY, inTileDimX, inTileDimY, origTranslatedBmp))
 	{
 		return false;
 	}

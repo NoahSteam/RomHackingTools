@@ -115,6 +115,44 @@ void PrintHelp()
 	printf("PatchGame sourceGameDirectory translationDataDirectory patchedGameDirectory\n");
 }
 
+//Swaps requested battle number with the first battle
+void SwapBattleFiles(const string& InBattleNumber, const string& InPatchedDir)
+{
+	const string prefix = "M";
+
+	const string colFileOrig = InPatchedDir + Seperators + "M00COL.BIN";
+	const string lowFileOrig = InPatchedDir + Seperators + "M00LOW.BIN";
+	const string prgFileOrig = InPatchedDir + Seperators + "M00PRG.BIN";
+	const string vdp1FileOrig = InPatchedDir + Seperators + "M00VDP1.BIN";
+	const string vdp2FileOrig = InPatchedDir + Seperators + "M00VDP2.BIN";
+
+	const string colFileOrigModified = InPatchedDir + Seperators + "M00OrigCOL.BIN";
+	const string lowFileOrigModified = InPatchedDir + Seperators + "M00OrigLOW.BIN";
+	const string prgFileOrigModified = InPatchedDir + Seperators + "M00OrigPRG.BIN";
+	const string vdp1FileOrigModified = InPatchedDir + Seperators + "M00OrigVDP1.BIN";
+	const string vdp2FileOrigModified = InPatchedDir + Seperators + "M00OrigVDP2.BIN";
+
+	const string colFile = InPatchedDir + Seperators + prefix + InBattleNumber + "COL.BIN";
+	const string lowFile = InPatchedDir + Seperators + prefix + InBattleNumber + "LOW.BIN";
+	const string prgFile = InPatchedDir + Seperators + prefix + InBattleNumber + "PRG.BIN";
+	const string vdp1File = InPatchedDir + Seperators + prefix + InBattleNumber + "VDP1.BIN";
+	const string vdp2File = InPatchedDir + Seperators + prefix + InBattleNumber + "VDP2.BIN";
+
+	//Rename 0 to to orig
+	rename(colFileOrig.c_str(), colFileOrigModified.c_str());
+	rename(lowFileOrig.c_str(), lowFileOrigModified.c_str());
+	rename(prgFileOrig.c_str(), prgFileOrigModified.c_str());
+	rename(vdp1FileOrig.c_str(), vdp1FileOrigModified.c_str());
+	rename(vdp2FileOrig.c_str(), vdp2FileOrigModified.c_str());
+
+	//Rename number to 0
+	rename(colFile.c_str(), colFileOrig.c_str());
+	rename(lowFile.c_str(), lowFileOrig.c_str());
+	rename(prgFile.c_str(), prgFileOrig.c_str());
+	rename(vdp1File.c_str(), vdp1FileOrig.c_str());
+	rename(vdp2File.c_str(), vdp2FileOrig.c_str());
+}
+
 //FUN_06009df8
 int SW2PRSDecompressor(const unsigned char* param_1, unsigned char* param_2)
 
@@ -745,6 +783,13 @@ int main(int argc, char *argv[])
 		
 		WriteTextIntoImageUsingFontSheet(inTextFilePath, inFontSheetPath, inBgndImageDirectory, 
 										 inOriginalImagesDirectory, inOutputPath);
+	}
+	else if(command == "SwapBattleFiles" && argc == 4)
+	{
+		const string inBattleNum = string(argv[2]);
+		const string inPatchedDir = string(argv[3]) + Seperators;
+
+		SwapBattleFiles(inBattleNum, inPatchedDir);
 	}
 	else
 	{

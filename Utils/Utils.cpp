@@ -867,6 +867,13 @@ bool FileReadWriter::WriteData(const char* pInData, unsigned long inDataSize)
 		return false;
 	}
 
+	auto position = ftell(mpFileHandle);
+	if(position > 0)
+	{
+		int k = 0;
+		++k;
+	}
+
 	const unsigned long numElemsWritten = (unsigned long)fwrite(pInData, sizeof(char), inDataSize, mpFileHandle);
 
 	return numElemsWritten == inDataSize;

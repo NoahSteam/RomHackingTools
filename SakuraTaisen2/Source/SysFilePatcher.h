@@ -26,7 +26,6 @@ struct FixedSysFileHeader
 		{
 			mpOffsetsToTextEntries = new int[mNumEntries];
 
-			const int newlineBytes = 2;
 			const int initialBytes = sizeof(int); //for number of entries
 			int currentOffset      = initialBytes + mNumEntries*sizeof(int);
 			int entryIndex         = 0;
@@ -34,7 +33,17 @@ struct FixedSysFileHeader
 			while(entryIndex < mNumEntries)
 			{	
 				mpOffsetsToTextEntries[entryIndex] = SwapByteOrder(currentOffset);
-				currentOffset += inTranslatedLines[entryIndex].GetNumBytes();
+				int numBytesForLine = inTranslatedLines[entryIndex].GetNumBytes();
+
+			#if USE_SINGLE_BYTE_LOOKUPS
+				//Divide size by half
+				numBytesForLine = numBytesForLine >> 1;
+
+				numBytesForLine += 2;
+			#endif
+
+				currentOffset += numBytesForLine;
+				
 				++entryIndex;
 			}
 		}
@@ -109,6 +118,14 @@ bool InsertTextForSysFile(SysFileExtractor& inSysFile,
 	{
 		return true;
 	}
+
+	bool bAllowSingleByte = false;
+//	if (inSysFile.mFileNameInfo.mFileName == "M00LOW.BIN")
+#if USE_SINGLE_BYTE_LOOKUPS
+	{
+		bAllowSingleByte = true;
+	}
+#endif
 
 	printf("\nInserting text for: %s\n", inSysFile.mFileNameInfo.mFileName.c_str());
 
@@ -313,7 +330,8 @@ bool InsertTextForSysFile(SysFileExtractor& inSysFile,
 			}//for(wordIndex < numWords)
 
 #if USE_SINGLE_BYTE_LOOKUPS
-			if ((translatedString.mChars.size()) % 2 != 0)
+			//Add 1 because the first byte is an identifier
+			if ((translatedString.mChars.size() + 1) % 2 != 0)
 			{
 				translatedString.AddChar(' ');
 			}
@@ -367,17 +385,35 @@ bool InsertTextForSysFile(SysFileExtractor& inSysFile,
 	size_t dataIndex = 0;
 	size_t translationIndex = 0;
 	const size_t numInsertedLines = translatedLines.size();
-	unsigned int numBytesWritten = 0;
+	unsigned int numBytesWritten = fixedHeader.GetHeaderSize();
 	int writeOffset = SysFilePatcher::OffsetToText + fixedHeader.GetHeaderSize();
+
 	while (1)
 	{	
 		if (translationIndex < numInsertedLines)
+		{
+			unsigned int byteCount = 0;
+
+	//	#if USE_SINGLE_BYTE_LOOKUPS	
+		if(bAllowSingleByte)
+		{
+			vector<unsigned char> translationData;
+			translatedLines[translationIndex].GetSingleByteDataArray(translationData, true);
+			outFile.WriteData(writeOffset, (const char*)translationData.data(), translationData.size() * sizeof(char));
+			
+			byteCount = translationData.size() * sizeof(char);
+		}
+	//	#else
+		else
 		{
 			vector<unsigned short> translationData;
 			translatedLines[translationIndex].GetDataArray(translationData);
 			outFile.WriteData(writeOffset, (const char*)translationData.data(), translationData.size() * sizeof(short));
 
-			const unsigned int byteCount = translationData.size() * sizeof(short);
+			byteCount = translationData.size() * sizeof(short);
+		}
+	//	#endif
+
 			numBytesWritten += byteCount;
 			writeOffset += byteCount;
 		}
@@ -393,7 +429,7 @@ bool InsertTextForSysFile(SysFileExtractor& inSysFile,
 	const int MaxTextSize = 0x11800 - SysFilePatcher::OffsetToText;
 	if (numBytesWritten > MaxTextSize)
 	{
-		printf("WARNING: TBL file %s is too big: %u out of %i.\n", inSysFile.mFileNameInfo.mFileName.c_str(), numBytesWritten, MaxTextSize);
+		printf("WARNING: Sys file %s is too big: %u out of %i.\n", inSysFile.mFileNameInfo.mFileName.c_str(), numBytesWritten, MaxTextSize);
 	}
 
 	//Output fontsheet

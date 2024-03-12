@@ -696,7 +696,7 @@ bool VerifyText(const std::string& inTranslatedDirectory, const std::string& inS
 	const string translatedFontSheetPath = inTranslatedDirectory + Seperators + "8x12.bmp";
 	TileExtractor translatedFontSheet;
 	PaletteData translatedFontSheetPalette;
-	if (!CreateTranslatedFontSheet(translatedFontSheetPath, translatedFontSheet, translatedFontSheetPalette))
+	if (!CreateTranslatedFontSheet(translatedFontSheetPath, translatedFontSheet, translatedFontSheetPalette, 16, 16))
 	{
 		printf("Unable to create font sheet");
 		return false;

@@ -97,19 +97,8 @@ struct SakuraString
 		return true;
 	}
 
-	void AddString(const string& inString, unsigned short specialValue, unsigned short numCharsPrinted, bool bAddPadByte)
+	void AddPlainString(const string& inString, bool bAddPadByte)
 	{
-		if (specialValue)
-		{
-			mChars.push_back(std::move(SakuraChar(specialValue)));
-			mChars.push_back(std::move(SakuraChar(numCharsPrinted)));
-		}
-		else
-		{
-			mChars.push_back(std::move(SakuraChar(0)));
-			mChars.push_back(std::move(SakuraChar(0)));
-		}
-
 		for (string::const_iterator iter = inString.begin(); iter != inString.end(); ++iter)
 		{
 			const unsigned short value = GTranslationLookupTable.GetIndex(*iter);
@@ -123,9 +112,31 @@ struct SakuraString
 #endif
 		}
 
-		mChars.push_back(std::move(SakuraChar(0)));
+		//Not needed in SW2
+	//	mChars.push_back(std::move(SakuraChar(0)));
 
-		mOffsetToStringData = 2;
+		mOffsetToStringData = 0;
+	}
+
+	void AddString(const string& inString, unsigned short specialValue, unsigned short numCharsPrinted, bool bAddPadByte)
+	{
+		//SW2 doesn't have ID's with each dialog entry
+		/*
+		if (specialValue)
+		{
+			mChars.push_back(std::move(SakuraChar(specialValue)));
+			mChars.push_back(std::move(SakuraChar(numCharsPrinted)));
+		}
+		else
+		{
+			mChars.push_back(std::move(SakuraChar(0)));
+			mChars.push_back(std::move(SakuraChar(0)));
+		}
+		*/
+		AddPlainString(inString, bAddPadByte);
+
+		//SW2 doesn't have ID's with each dialog entry
+		//mOffsetToStringData = 2;
 	}
 
 	int GetNumberOfLines() const
@@ -229,14 +240,14 @@ struct SakuraString
 		return (unsigned short)mChars.size() * sizeof(short);
 	}
 
-	void GetSingleByteDataArray(vector<unsigned char>& outData) const
+	void GetSingleByteDataArray(vector<unsigned char>& outData, bool bIsSysFile = false) const
 	{
 		outData.clear();
 
 		int count = 0;
 		for (const SakuraChar& sakuraChar : mChars)
 		{
-		/*	if (count < 2)
+			if (bIsSysFile && count < 2)
 			{
 				//Change endianness so that it gets written in big endian order
 				const char value1 = (char)((sakuraChar.mIndex & 0xff00) >> 8);// ((sakuraChar.mIndex & 0xff00) >> 8) + ((sakuraChar.mIndex & 0x00ff) << 8);
@@ -244,7 +255,7 @@ struct SakuraString
 				outData.push_back(value1);
 				outData.push_back(value2);
 			}
-			else*/
+			else
 			{
 				const char value1 = (char)((sakuraChar.mIndex & 0xff00) >> 8);
 				const char value2 = (char)(sakuraChar.mIndex & 0x00ff);
