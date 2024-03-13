@@ -22,22 +22,22 @@ Ogami, Yamazaki's too strong. Let's make a temporary retreat!
 0 Message 3-2
 0 Message 3-3
 Ichiro Ogami, Flower Division captain. Highly proficient in combat and brave-hearted.
-Sakura Shinguji, user of Hokushin Itto. She moves swiftly, cleaving enemies in two with her sword.
-Sumire Kanzaki, user of Kanzaki Fujin. She inspires awe in all who witness her naginata technique.
+Sakura Shinguji, user of the Hokushin Itto style. She moves swiftly, cleaving foes in two with her sword.
+Sumire Kanzaki, user of the Kanzaki Fujin style. All who witness her naginata technique are left in awe.
 Maria Tachibana, sharpshooter. Once she targets her prey, no one can escape her icy bullets.
 Kanna Kirishima, user of Kirishima-style karate. She pulverizes enemies with her overwhelming power.
 Iris, the Flower Division's mascot. She fights enemies with her mysterious supernatural powers.
 Kohran Li, inventor. Startles friend and foe alike with the inventions she employs.
-Orihime Soletta, former Star Division member. One of the Italian Red Nobles, she pilots a rose armor.
+Orihime Soletta, prior Star Division member. Piloting a rose armor, she is known as one of the Red Nobles.
 Reni Milchstraße. A combat professional, attacking accurately without a single wasted movement.
 Wakiji Kai: Shoujin. Exclusive unit to Kasha, it boasts both high attack and efficiency.
 Hex Mech: Wakiji Kai. The ones equipped with guns are referred to as RO-type.
-"Homura" Flamethrower. A flame weapon invented by Mokujiki.
-Hex Mech: Wakiji Kai. Due to their large cannon, they are capable of attacking multiple targets at once.
+Flamethrower: Homura. A flame weapon developed by Mokujiki
+Hex Mech: Wakiji Kai. Equipped with a large cannon, capable of hitting multiple targets at once.
 Luxury Car. The vehicle Yamaguchi is riding in. Sturdier than you might expect.
-Society Hex Mech: Wakiji Kai. The ones equipped with large cannons are referred to as HA-type. 
-Society Hex Mech: Wakiji Kai. It's actually not very loyal, so it lacks motivation. 
-Society Hex Mech: Wakiji Kai. The ones equipped with guns are referred to as RO-type. 
+Society Hex Mech: Wakiji Kai. The ones equipped with large cannons are referred to as HA-type.
+Society Hex Mech: Wakiji Kai. It's actually not very loyal, so it lacks motivation.
+Society Hex Mech: Wakiji Kai. The ones equipped with guns are referred to as RO-type.
 Message 18
 Message 19
 Message 20
@@ -130,10 +130,10 @@ You're my knight in shining armor, Mon Frère!
 It's OK, Mon Frère, I'm here with you.
 Ah… It stopped…
 I'm sorry, Mon Frère…
-Yaaaay! You did it, Mon Frère!
+Yaaaay! <br> You did it, Mon Frère!
 Wow, Mon Frère! You're sooo cool!
 I'm amazing, huh?
-C'mon, praise me! Praise me!
+C'mon, praise me! <br> Praise me!
 With you around, Mon Frère, I'm not scared of anything!
 Countin' on ya, Chief!
 Lemme show ya what I'm made of!

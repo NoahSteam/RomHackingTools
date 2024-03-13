@@ -1,5 +1,5 @@
 Ogami! The Soaring Whale is ready to attack!
 OK! Do it!
-Mission accomplished! We did it, Ogami!
+Mission accomplished! <br> We did it, Ogami!
 Thanks, Tsubaki!
-Yes, sir! The Soaring Whale will remain on standby in the air. Good luck down there!
+Yes, sir! <br> The Soaring Whale will remain on standby in the air. Good luck down there!

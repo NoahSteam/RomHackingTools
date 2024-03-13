@@ -2,7 +2,7 @@
 It’s beautiful… <br> Truly beautiful…
 Boss… We finally did it.
 The capital… We saved it from the clutches of the Black Demon Society!
-...Yeah! 
+…Yeah! 
 OK, everyone, let's head back. 
 Back to the theater, our home. 
 OK! Imperial Assault Troupe, Flower Division… Return to the Grand Imperial Theater!
@@ -11,17 +11,17 @@ Finally, we’re back home… Back at the Imperial Theater.
 We were only gone a day, yet it feels like it’s been ages since we were last here.
 Ogami, thank you for your hard work. 
 You’ve done well uniting everyone in the Flower Division… You have my gratitude.
-No, it was nothing... 
+No, it was nothing… 
 The last remnants of the Taisho Restoration Army were suppressed a few moments ago.
 With that, Tokyo is once again at peace. Well done, Ogami. 
 Th-Thank you, ma'am!
-Ogami... Truly, thank you for everything. 
+Ogami… Truly, thank you for everything. 
 I’m only here now because of you, and everyone else in the Flower Division!
 That’s right. So let’s continue doing our best together as a team. 
 Sakura, there is nothing more important than leading a cheerful, happy life!
 Oho, now that’s somethin’ we can all agree on! After all, ya gotta live life to the fullest. Hahaha! 
 Hey, hey, everyone! We should do our usual thing!
-...I agree. 
+…I agree. 
 Yeah, yeah! It won't really feel like we completed our mission until we do that!
 I must agree. This time, why don't you take the lead, Ensign? 
 Huh, me? 
@@ -34,7 +34,7 @@ Victory pose, yeah!!
 Victory pose, yeah!! 
 I-I'm too embarrassed…
 Victory pose, yeah!! 
-...I-I'm too embarrassed to say it. 
+…I-I'm too embarrassed to say it. 
 Oh brother, you're certainly an odd fellow at times. 
 Guess I'll do it. Let's go! All together… 
 Victory pose, yeah!! 
@@ -43,7 +43,7 @@ I-I'm sorry. I'm still not used to this, I guess.
 I know! How about you do it, Kaede? 
 Huh? Me?! 
 Yaaay!! Auntie Kaede, do it, do it! 
-OK, shall we... do it now? 
+OK, shall we… do it now? 
 OK, here we go. All together…
 Victory pose, yeah!! 
 Around the same time, the cornered revolutionary squads surrendered, one after the other.
@@ -56,7 +56,7 @@ Thus did the rebellion that made a snow-swept Tokyo its stage…
 And so, peace has returned to Tokyo once again.
 The curtain has fallen on the months-long battle against the Black Demon Society…
 And the Flower Division welcomed peace back into their lives. 
-It was the winter of Taisho 14... 
+It was the winter of Taisho 14… 
 And the sky over Tokyo had become a crystal-clear blue. 
  
 Sorry Ogami, but customers are only allowed to purchase one of each bromide. 
@@ -116,4 +116,4 @@ Execute random macro.
 4. Father and Daughter 
 5. Consideration 
 6. Epilogue 
-... "" "" () - . , ! ? ?! !!
+… "" "" () - . , ! ? ?! !!

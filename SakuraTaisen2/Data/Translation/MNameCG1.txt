@@ -4,7 +4,7 @@ Lobby
 Large Prop Room
 Stage
 Stage Wing
-Wardrobe
+Wardrobe Room
 Dressing Room
 Music Room
 Manager's Office
@@ -37,7 +37,7 @@ To Attic
 To 1st Floor
 Storeroom
 Training Room
-Locker Room
+Changing Room
 Bathroom
 Swimming Pool
 Infirmary

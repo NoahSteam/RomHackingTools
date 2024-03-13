@@ -1,2 +1,2 @@
-Ogami! The enemy reinforcements are only 100 meters away. We can't wait any longer!
-Urgh! This is our last shot!
+Ogami! <br> The enemy reinforcements are only 100 meters away. We can't wait any longer!
+Urgh! <br> This is our last shot!

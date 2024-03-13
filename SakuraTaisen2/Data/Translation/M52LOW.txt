@@ -22,24 +22,24 @@ Ogami, Yamazaki's too strong. Let's make a temporary retreat!
 0 Message 3-2
 0 Message 3-3
 Ichiro Ogami, Flower Division captain. Highly proficient in combat and brave-hearted.
-Sakura Shinguji, practitioner of the Hokushin Itto style. She moves swiftly, cleaving enemies in two with her sword.
-Sumire Kanzaki, practitioner of the Kanzaki Fujin style. She inspires awe in all who witness her naginata technique.
-Maria Tachibana, sharpshooter. Once she's set her sights on her prey, they can't escape her icy bullets.
-Kanna Kirishima, practitioner of Kirishima-style karate. Pulverizes enemies with her overwhelming power.
+Sakura Shinguji, user of the Hokushin Itto style. She moves swiftly, cleaving foes in two with her sword.
+Sumire Kanzaki, user of the Kanzaki Fujin style. All who witness her naginata technique are left in awe.
+Maria Tachibana, sharpshooter. Once she targets her prey, no one can escape her icy bullets.
+Kanna Kirishima, user of Kirishima-style karate. She pulverizes enemies with her overwhelming power.
 Iris, the Flower Division's mascot. She fights enemies with her mysterious supernatural powers.
 Kohran Li, inventor. Startles friend and foe alike with the inventions she employs.
-Orihime Soletta, ex-member of the Star Division. Known as one of the "Red Nobles," riding a rose-colored armor.
+Orihime Soletta, prior Star Division member. Piloting a rose armor, she is known as one of the Red Nobles.
 Reni Milchstraße. A combat professional, attacking accurately without a single wasted movement.
-RO-type Otsu. A Hex Mech designed for ranged attacks. Can only attack single targets.
-RO-type Otsu. A Hex Mech designed for ranged attacks. Can only attack single targets.
-HA-type Otsu. RO-type Otsu. A Hex Mech designed for ranged attacks. Can attack multiple targets at once.
-L-Special. <br> A close-range Wakiji unit with healing capabilities.
-Chiken <br> Once defeated, this training exercise will come to an end.
+RO-type Otsu. A long-range attack Hex Mech. Only capable of attacking single targets.
+RO-type Otsu. A long-range attack Hex Mech. Only capable of attacking single targets.
+HA-type Otsu. A Hex Mech designed for ranged attacks. Can attack multiple targets at once.
+L-Special. A close-range Wakiji unit with healing capabilities.
+Chiken. Once defeated, this training exercise will come to an end.
 Enkuu. An unmanned support drone designed by Mokujiki.
-Steam Rocket. A weapon designed by Mokujiki.
+Steam Rocket. A weapon developed by Mokujiki, boasting high attack power.
 Cross Homura. An upgraded version of the Homura designed by Mokujiki
-Summoner. A Kouma spawner that spits out Kouma Weapons continuously.
-Thunder Cannon. A long-range weapon with a longer range than the RO-type Wakiji. Boasts high firepower.
+Summoner. A demonic device that keeps spawning Kouma Weapons one after another.
+Thunder Cannon. Long-range artillery that boast high firepower and greater reach than the RO-type Wakiji.
 Message 20
 Doesn't look like I need to cover anyone right now.
 Sakura… <br> I will protect you!
@@ -67,7 +67,7 @@ There's something different about you today, Ogami.
 I did it!
 It was all thanks to you, Ogami!
 Ogami… I believe in you.
-My time to shine has come, Ensign.
+Your time to shine has come, Ensign.
 Please, do your best for me…
 You mustn't overexert yourself…
 Now, here I come!
@@ -130,10 +130,10 @@ You're my knight in shining armor, Mon Frère!
 It's OK, Mon Frère, I'm here with you.
 Ah… It stopped…
 I'm sorry, Mon Frère…
-Yaaaay! You did it, Mon Frère!
+Yaaaay! <br> You did it, Mon Frère!
 Wow, Mon Frère! You're sooo cool!
 I'm amazing, huh?
-C'mon, praise me! Praise me!
+C'mon, praise me! <br> Praise me!
 With you around, Mon Frère, I'm not scared of anything!
 Countin' on ya, Chief!
 Lemme show ya what I'm made of!

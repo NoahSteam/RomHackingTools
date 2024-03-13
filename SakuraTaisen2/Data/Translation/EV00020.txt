@@ -1,41 +1,41 @@
-This is your first battle in quite a while, right Ogami?
+This is your first battle in quite a while, isn't it Ogami?
 Do you remember how to operate the Koubu?
 A refresher wouldn't hurt.
 Yes, I remember.
-Yes, I remember. We made a lot of memories in these Koubu. I wouldn't forget that easily.
+Yes, I remember. We made a lot of memories in these Koubu. I wouldn't forget that so easily.
 Just what I thought you'd say. In that case, we'll leave the command to you. Lead us well!
-It's been a while, so a refresher wouldn't hurt. Things could turn dire if I made a mistake.
+It has been a while, so a refresher wouldn't hurt. Things could turn dire if I made a mistake.
 All right, then. In that case, try and watch how we handle our Koubu first.
 …
-What's the matter? Are you nervous since you haven't fought in a long time?
+What's the matter? Are you nervous because you haven't fought in so long?
 Just to be safe, try and watch how we handle our Koubu first.
 Let's go!
 After selecting "Move" like I just did, you'll choose which space to move to within the displayed range.
-If you make a mistake when moving, then use "Return" to go back and choose a different space.
+If you make a mistake when moving, then just use "Return" to go back and pick a different space.
 Just choose "Return," then make your selection again.
 Now's our chance to attack!
-After choosing "Normal," select which enemy to attack within the range that appears.
+After selecting "Normal," choose which enemy to attack that is within range.
 Each Koubu can take two actions per turn.
 Since I already moved and attacked, I've taken all the actions I can this turn.
-Myyy, Sakura! You certainly know your way around a Koubu.
+Myyy, Sakura! <br> You certainly know your way around a Koubu.
 But you are nothing compared to me. Just you watch and see what I can do!
 Hmhm, this will be a cake walk!
 Did you see that, Ogami? That was Orihime's special attack!
 Each of us has a special attack we can use when our spirit power is at its maximum.
-They are far more powerful than regular attacks but your spirit level drains to 0 after using a special.
-But that level will increase each time you're attacked or use "Rest," so…
+They are far more powerful than regular attacks but your spirit level drains to zero after using a special.
+But that level will increase each time you're attacked or select the "Rest" option, so…
 …don't be afraid to use your special attack when you think you might need to!
 Eeek!
-Are you OK, Sakura? Hang on, I can heal you!
+Are you OK, Sakura? <br> Hang on, I can heal you!
 Mon Frère, our Koubu have the ability to recover damage that we take in battle.
 But there's a limit to how much we can use it, so if you're not careful, it'll run out before you know it.
 Mamma mia, if that little attack was all it took to shake you up, then you have much training to do!
 And Sakura, you ought to learn to properly "Defend" yourself instead of always attacking!
 When you defend, you will take far less damage until your next turn rolls around.
 R-Right! I'll be careful…
-However, the "Defend" and "Heal" commands can't both be used at once.
-In fact, commands that are similar to each other can only be used once per turn.
-For example, since "Normal" attack and "Special" attack are both similar, you can only use one at a time.
-And "Heal," "Defend," and "Rest" are all similar enough that they can't be used at the same time.
+However, both the "Defend" and "Heal" commands cannot be used one after the other.
+In fact, commands that are similar to each other can only be performed once per turn.
+For example, "Normal" and "Special" attacks are offensive, so you need to choose between the two. 
+Just the same, "Heal," "Defend," and "Rest" are all defensive, so they can only be used one at a time.
 So… Do you remember how to pilot the Koubu now?
 From here on out, we'll be counting on you to give us our orders!

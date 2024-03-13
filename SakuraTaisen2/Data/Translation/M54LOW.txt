@@ -22,24 +22,24 @@ Ogami, Yamazaki's too strong. Let's make a temporary retreat!
 0 Message 3-2
 0 Message 3-3
 Ichiro Ogami, Flower Division captain. Highly proficient in combat and brave-hearted.
-Sakura Shinguji, practitioner of the Hokushin Itto style. She moves swiftly, cleaving enemies in two with her sword.
-Sumire Kanzaki, practitioner of the Kanzaki Fujin style. She inspires awe in all who witness her naginata technique.
-Maria Tachibana, sharpshooter. Once she's set her sights on her prey, they can't escape her icy bullets.
-Kanna Kirishima, practitioner of Kirishima-style karate. Pulverizes enemies with her overwhelming power.
+Sakura Shinguji, user of the Hokushin Itto style. She moves swiftly, cleaving foes in two with her sword.
+Sumire Kanzaki, user of the Kanzaki Fujin style. All who witness her naginata technique are left in awe.
+Maria Tachibana, sharpshooter. Once she targets her prey, no one can escape her icy bullets.
+Kanna Kirishima, user of Kirishima-style karate. She pulverizes enemies with her overwhelming power.
 Iris, the Flower Division's mascot. She fights enemies with her mysterious supernatural powers.
 Kohran Li, inventor. Startles friend and foe alike with the inventions she employs.
-Orihime Soletta, ex-member of the Star Division. Known as one of the "Red Nobles," riding a rose-colored armor.
+Orihime Soletta, prior Star Division member. Piloting a rose armor, she is known as one of the Red Nobles.
 Reni Milchstraße. A combat professional, attacking accurately without a single wasted movement.
 Ogami's Koubu Kai. <br> Once defeated, the drill will come to an end.
 Koubu Kai, Sakura Model. Exceptionally fast, balanced in offense and defense.
-Koubu Kai, Sumire Model. Its attack power is average but the range of its special attack is unmatched.
+Koubu Kai, Sumire Model. Its attack power is average but its special attack range is unmatched.
 Koubu Kai, Maria Model. Can attack single targets from a distance. However, its defense is low.
 Koubu Kai, Kanna Model. The strongest at one-on-one combat in the whole Flower Division.
 Koubu Kai, Iris Model. Its attack power is weak, but it's the only unit with a healing special move.
-Koubu Kai, Kohran Model. Can attack multiple enemies from a distance, but its offense is comparatively low.
+Koubu Kai, Kohran Model. Can attack multiple enemies from a distance, but its offense is fairly low.
 Eisenkleid, Orihime Model. Boasts the widest attack range, but is incapable of close-range attacks.
 Eisenkleid, Reni Model. Its offense is top of its class, but its defense is low in comparison.
-Thunder Cannon. A long-range weapon with a longer range than the RO-type Wakiji. Boasts high firepower.
+Thunder Cannon. Long-range artillery that boast high firepower and greater reach than the RO-type Wakiji.
 Message 20
 Doesn't look like I need to cover anyone right now.
 Sakura… <br> I will protect you!
@@ -67,7 +67,7 @@ There's something different about you today, Ogami.
 I did it!
 It was all thanks to you, Ogami!
 Ogami… I believe in you.
-My time to shine has come, Ensign.
+Your time to shine has come, Ensign.
 Please, do your best for me…
 You mustn't overexert yourself…
 Now, here I come!
@@ -130,10 +130,10 @@ You're my knight in shining armor, Mon Frère!
 It's OK, Mon Frère, I'm here with you.
 Ah… It stopped…
 I'm sorry, Mon Frère…
-Yaaaay! You did it, Mon Frère!
+Yaaaay! <br> You did it, Mon Frère!
 Wow, Mon Frère! You're sooo cool!
 I'm amazing, huh?
-C'mon, praise me! Praise me!
+C'mon, praise me! <br> Praise me!
 With you around, Mon Frère, I'm not scared of anything!
 Countin' on ya, Chief!
 Lemme show ya what I'm made of!

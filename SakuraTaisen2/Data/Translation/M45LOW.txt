@@ -22,22 +22,22 @@ Ogami, Yamazaki's too strong. Let's make a temporary retreat!
 0 Message 3-2
 0 Message 3-3
 Ichiro Ogami, Flower Division captain. Highly proficient in combat and brave-hearted.
-Sakura Shinguji, practitioner of the Hokushin Itto style. She moves swiftly, cleaving enemies in two with her sword.
-Sumire Kanzaki, practitioner of the Kanzaki Fujin style. She inspires awe in all who witness her naginata technique.
-Maria Tachibana, sharpshooter. Once she's set her sights on her prey, they can't escape her icy bullets.
-Kanna Kirishima, practitioner of Kirishima-style karate. Pulverizes enemies with her overwhelming power.
+Sakura Shinguji, user of the Hokushin Itto style. She moves swiftly, cleaving foes in two with her sword.
+Sumire Kanzaki, user of the Kanzaki Fujin style. All who witness her naginata technique are left in awe.
+Maria Tachibana, sharpshooter. Once she targets her prey, no one can escape her icy bullets.
+Kanna Kirishima, user of Kirishima-style karate. She pulverizes enemies with her overwhelming power.
 Iris, the Flower Division's mascot. She fights enemies with her mysterious supernatural powers.
 Kohran Li, inventor. Startles friend and foe alike with the inventions she employs.
-Orihime Soletta, ex-member of the Star Division. Known as one of the "Red Nobles," riding a rose-colored armor.
+Orihime Soletta, prior Star Division member. Piloting a rose armor, she is known as one of the Red Nobles.
 Reni Milchstraße. A combat professional, attacking accurately without a single wasted movement.
 Close-range combat Kouma Weapon. Attacks with bites rather than any specialized weaponry.
-Support-type Kouma Weapon. Its wings have been converted into weapons capable of mid-ranged attacks.
+Support-type Kouma Weapon. Its wings have been altered into weapons capable of mid-ranged attacks.
 Kouma Weapon: Banrai. A mid-ranged Kouma developed using Mokujiki's leftover data.
 Kouma Weapon: Reppuu. A long-ranged support-type Kouma modified by the Black Demon Society.
 Healing-type Kouma Weapon. Boasts restorative abilities to revitalize other Kouma.
-Hex Mech: Wakiji Kai. It attacks using buckshot, so the power of each individual shot is relatively small.
+Hex Mech: Wakiji Kai. Attacks using buckshot, but a single blast is relatively weak.
 Hex Mech: Wakiji Kai. These models, called L-Special, have the ability to restore health.
-Hex Mech: Wakiji Kai. This type is referred to as a NI-type Special, as it boasts a peculiar attack range.
+Hex Mech: Wakiji Kai. Classified as the NI-type Special, this unit boasts a peculiar attack range.
 Hex Mech: Hachiyou. Piloted by Tsuchigumo of the Five Elements, it attacks with its six arms in succession.
 Message 19
 Message 20
@@ -67,7 +67,7 @@ There's something different about you today, Ogami.
 I did it!
 It was all thanks to you, Ogami!
 Ogami… I believe in you.
-My time to shine has come, Ensign.
+Your time to shine has come, Ensign.
 Please, do your best for me…
 You mustn't overexert yourself…
 Now, here I come!
@@ -130,10 +130,10 @@ You're my knight in shining armor, Mon Frère!
 It's OK, Mon Frère, I'm here with you.
 Ah… It stopped…
 I'm sorry, Mon Frère…
-Yaaaay! You did it, Mon Frère!
+Yaaaay! <br> You did it, Mon Frère!
 Wow, Mon Frère! You're sooo cool!
 I'm amazing, huh?
-C'mon, praise me! Praise me!
+C'mon, praise me! <br> Praise me!
 With you around, Mon Frère, I'm not scared of anything!
 Countin' on ya, Chief!
 Lemme show ya what I'm made of!

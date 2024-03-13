@@ -1,7 +1,7 @@
 ﻿By the way, has everyone made a resolution for this year? 
 Mine’s to get stronger and stronger! That’s all there is to it.
 I want to become more grown-up!
-...Can you even call that a resolution?
+…Can you even call that a resolution?
 What about you, Ogami? Would you like to share your resolution?
 My resolution is to…
 Strive for peace. 
@@ -12,11 +12,11 @@ Hmhm, so diligent, just as you’d expect from the captain of the Flower Divisio
 My resolution this year is to get along with everyone.
 Hehe, that’s just the kind of answer I’d expect from you, Ogami.
 My resolution this year is to live a fun life full of laughter.
-My... <br> What a resolution that is. 
+My… <br> What a resolution that is. 
 That does seem like a fun way to live, certainly…
 But, as the division's captain, perhaps you should come up with something a bit more constructive.
-R-Right... 
-...I haven’t given it much thought.
+R-Right… 
+…I haven’t given it much thought.
 Oh, is that so? 
 It's the beginning of a new year, so you should try to come up with some goals you want to achieve. 
 Hmm… OK, I’ll try to think of something.
@@ -24,15 +24,15 @@ Sakura, you seem to have made a resolution. Mind sharing it with us?
 My resolution this year is to polish my swordsmanship. 
 I intend to diligently practice my kenjutsu this year, starting with the basics, my form…
 Hopefully I can get even one step closer to achieving the impenetrable stance of my father.
-I getcha... That's a nice resolution.
+I getcha… That's a nice resolution.
 As such, I’m planning to return to my hometown of Sendai during the holiday.
-I see... What about everyone else? Do you have plans for the New Year holiday?
+I see… What about everyone else? Do you have plans for the New Year holiday?
 I was thinking of going back to the Kanzaki estate, myself.
 Heh, I’m gonna visit my old man’s grave back in Okinawa.
-Is that so... <br> How about you, Maria? 
+Is that so… <br> How about you, Maria? 
 I'm planning to visit Count Hanakoji's residence for New Year's. I owe him a lot. 
 I was gonna head down to Kobe to visit the man that took care of me way back in the day.
-I see... 
+I see… 
 Mon Frère, Mon Frère! <br> You gotta hear this! 
 My papa and mama are coming all the way from France to see me! 
 You don’t say. Good for you, Iris.
@@ -47,7 +47,7 @@ Lazing in bed.
 I'll be staying here. 
 Even though we took down the Black Demon Society, I’m worried about leaving the theater unattended. 
 Hmhm, that’s quite diligent of you.
-Let's see... I also want to go somewhere. 
+Let's see… I also want to go somewhere. 
 Well, you're free to leave if you'd like. 
 This is one of only a few occasions in the year where we can take time off, so no need to hold back.
 I plan to just laze around in bed for New Year's.
@@ -114,4 +114,4 @@ Execute random macro.
 4. Free Walk 
 5. Returning Home 
 6. Kyogoku Alive 
-... "" "" () - . , ! ? ?! !!
+… "" "" () - . , ! ? ?! !!

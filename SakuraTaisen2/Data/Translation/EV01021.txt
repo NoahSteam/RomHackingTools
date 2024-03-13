@@ -4,4 +4,4 @@ Mission accomplished!
 Ogami, use the steam pod whenever you want to recover your Koubu’s durability.
 All you have to do is attack it once to break it open, then step on top of it.
 Got it. Thanks, Tsubaki!
-Yes, sir! The Soaring Whale will remain on standby in the air. Good luck down there!
+Yes, sir! <br> The Soaring Whale will remain on standby in the air. Good luck down there!

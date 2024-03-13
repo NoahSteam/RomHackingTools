@@ -12,33 +12,33 @@ This order is currently in effect. We'll fight our opponents unflinchingly.
 Attention all units! Initiating the "Mountain" strategy!
 We're sticking with the current strategy!
 Understood!
-Untranslated
-Untranslated
-Untranslated
+The shack Orihime's trapped in will explode after an unspecified number of Shoujin reach it.
+All of you, make sure to prevent the Shoujin's approach!
+In the meantime, Ogami, you yourself will have to get to the shack and save Orihime!
 Pass through the gate and defeat the enemy!
-The enemy general, [name here?], is capable of multiple attacks. Be careful!
+The enemy general, Tsuchigumo, is capable of multiple continuous attacks. Be careful!
 0 Message 2-3
 Yamazaki is very powerful, Ogami. Let's pull back for now!
 0 Message 3-2
 0 Message 3-3
 Ichiro Ogami, Flower Division captain. Highly proficient in combat and brave-hearted.
-Sakura Shinguji, user of Hokushin Itto. She moves swiftly, cleaving enemies in two with her sword.
-Sumire Kanzaki, user of Kanzaki Fujin. She inspires awe in all who witness her naginata technique.
+Sakura Shinguji, user of the Hokushin Itto style. She moves swiftly, cleaving foes in two with her sword.
+Sumire Kanzaki, user of the Kanzaki Fujin style. All who witness her naginata technique are left in awe.
 Maria Tachibana, sharpshooter. Once she targets her prey, no one can escape her icy bullets.
 Kanna Kirishima, user of Kirishima-style karate. She pulverizes enemies with her overwhelming power.
 Iris, the Flower Division's mascot. She fights enemies with her mysterious supernatural powers.
 Kohran Li, inventor. Startles friend and foe alike with the inventions she employs.
-Orihime Soletta, former Star Division member. One of the Italian Red Nobles, she pilots a rose armor.
+Orihime Soletta, prior Star Division member. Piloting a rose armor, she is known as one of the Red Nobles.
 Reni Milchstraße. A combat professional, attacking accurately without a single wasted movement.
-Untranslated
+Hex Mech: Wakiji Kai. The ones equipped with longswords are referred to as I-type Otsu.
 Hex Mech: Wakiji Kai. The ones equipped with guns are referred to as RO-type.
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
+Hex Mech: Wakiji Kai. A flame weapon developed by Mokujiki.
+Hex Mech: Wakiji Kai. The ones equipped with large cannons are referred to as HA-type.
+Hex Mech: Wakiji Kai. The RO-type Wakiji were developed to support I-type Wakiji in the field.
+Hex Mech: Wakiji Kai. Attacks using buckshot, but a single blast is relatively weak.
+Hex Mech: Wakiji Kai. These types with healing abilities are referred to as L-Special.
+Wakiji Kai: Shoujin. Part of Kasha's personal platoon, boasting both high attack and defense.
+Cross Homura. A flame weapon developed by Mokujiki. An upgraded version of the Homura.
 Message 19
 Message 20
 Doesn't look like I need to cover anyone right now.
@@ -112,7 +112,7 @@ Sorry 'bout that, Boss.
 Heheh, guess bein' protected ain't so bad.
 Heheh, that ain't like ya, Boss!
 Dammit… <br> Not like this…
-Untranslated
+My apologies, Captain. Please take on the rest in my stead!
 Nice goin', Boss!
 Lookin' good, Boss!
 Is that all ya got?
@@ -130,10 +130,10 @@ You're my knight in shining armor, Mon Frère!
 It's OK, Mon Frère, I'm here with you.
 Ah… It stopped…
 I'm sorry, Mon Frère…
-Yaaaay! You did it, Mon Frère!
+Yaaaay! <br> You did it, Mon Frère!
 Wow, Mon Frère! You're sooo cool!
 I'm amazing, huh?
-C'mon, praise me! Praise me!
+C'mon, praise me! <br> Praise me!
 With you around, Mon Frère, I'm not scared of anything!
 Countin' on ya, Chief!
 Lemme show ya what I'm made of!
@@ -160,7 +160,7 @@ Eyes on me, please!
 You just can't rely on Japanese men!
 I'd kill for a shower!
 To think I'd be shielded by a Japanese man…
-Untranslated
+Don't overdo it, Mr. Ensign…
 Sheesh, you're hopeless!
 I can't take it anymore!
 I have to retreat. I can't keep going… Captain…
@@ -226,3 +226,4 @@ Don't touch me!
 You haven't even begun to feel this city's grudge…
 In the end… I'll be the last one standing!
 At this rate, I'll… Ngh!!
+Don't get cocky, you hypocrites!

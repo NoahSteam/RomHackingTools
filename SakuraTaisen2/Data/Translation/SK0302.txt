@@ -1,49 +1,49 @@
 ﻿I can’t believe something like this would happen to Commander Yoneda… 
 With him hospitalized… What will become of the Imperial Assault Troupe?! 
-... 
-...No. I can’t just wallow like this forever.
+… 
+…No. I can’t just wallow like this forever.
 In times like this, it’s my job as captain to keep the Flower Division’s spirits up. 
 I need to check up on everyone. I’m sure they must also be feeling pretty downhearted. 
 There's no visitors. We haven’t started our summer performance, so that makes sense. 
-In a situation like this, it's a blessing that we're practically closed... 
+In a situation like this, it's a blessing that we're practically closed… 
 It's empty here. No one's around. 
-...It feels kind of lonely. I'll check another room. 
+…It feels kind of lonely. I'll check another room. 
 Looks like no one in the Flower Division is here right now.
 I'll just have to check another room. 
 Welcome, Ogami! Would you like to buy something? 
 Buy a bromide. 
 Talk to Tsubaki. 
 Leave. 
-Could I buy a bromide? 
+Could I take a look at the portraits for sale? 
 Sorry, Ogami. I can only sell you one bromide per month. 
 Please understand, we need to keep some for the customers. 
-You'd like to buy a bromide? Thank you very much! 
+You want to buy a bromide? Please, take your pick! 
 That's a bromide of Sakura. 
-Let's see... Sakura's bromide, right? 
+Let's see… <br> Sakura's bromide, right? 
 That'll be 50 sen. Thank you very much! 
 That's a bromide of Sumire. 
-Let's see... Sumire's bromide, right? 
+Let's see… <br> Sumire's bromide, right? 
 That'll be 50 sen. Thank you very much! 
 That's a bromide of Maria. 
-Let's see... Maria's bromide, right? 
+Let's see… <br> Maria's bromide, right? 
 That'll be 50 sen. Thank you very much! 
 That's a bromide of Kanna. 
-Let's see... Kanna's bromide, right? 
+Let's see… <br> Kanna's bromide, right? 
 That'll be 50 sen. Thank you very much! 
 That's a bromide of Iris. 
-Let's see... Iris's bromide, right? 
+Let's see… <br> Iris's bromide, right? 
 That'll be 50 sen. Thank you very much! 
 That's a bromide of Kohran. 
-Let's see... Kohran's bromide, right? 
+Let's see… <br> Kohran's bromide, right? 
 That'll be 50 sen. Thank you very much! 
-That's Orihime's bromide, isn't it? 
+That's a bromide of Orihime. 
 Her bromide is very popular right now. 
 So make sure to grab one before they're all gone!
-Let's see... Orihime's bromide, right? 
+Let's see… <br> Orihime's bromide, right? 
 That'll be 50 sen. Thank you very much! 
-That's Reni's bromide. 
+That's a bromide of Reni. 
 We just put that bromide up for sale recently. Get one while you can!
-Let's see... Reni's bromide, right? 
+Let's see… <br> Reni's bromide, right? 
 That'll be 50 sen. Thank you very much! 
 Oh, so you're not going to buy anything?
 Tsubaki, you look… very cheerful. 
@@ -52,10 +52,10 @@ At times like this, it’s all the more important to greet visitors with a smile
 I see… You’re so strong, Tsubaki. 
 Ehe… Thank you for saying so.
 But, you know… <br> When there aren’t a lot of patrons and I’m by myself…
-I can't help but feel... a little lonely. 
-...The manager will be fine. I’m sure he’ll return as good as new. 
+I can't help but feel… a little lonely. 
+…The manager will be fine. I’m sure he’ll return as good as new. 
 And when he does, please make sure to greet him with a bright smile! 
-...Of course! You can count on me! 
+…Of course! You can count on me! 
 I’ll make sure to greet him with the biggest, brightest smile ever! 
 Just leave it to me! I’ll give the manager a warm welcome!
 Well, I should be going. Keep up the good work. 
@@ -63,7 +63,7 @@ Thank you very much! Come back soon!
 It must be hard for her, but Tsubaki’s doing her best to stay cheerful. 
 I have to stay strong, just like her. 
 Thank you very much! Come back and buy another bromide next month! 
-...Tsubaki’s doing her best to stay cheerful.
+…Tsubaki’s doing her best to stay cheerful.
 Unsurprisingly, no one is eating at this hour. 
 There's no sign of anyone in the kitchen. Guess I'll check another room. 
 Looks like no one's come in. Oh man, what a waste of effort. 
@@ -80,12 +80,12 @@ Seems that the culprit who shot Manager Yoneda hasn't been caught yet.
 Rumor has it that the attack was organized by foreign operatives, but I wonder if that's true.
 Hmm, I wonder. 
 About the enemy that showed up several days ago, they called themselves The Black Demon Society, correct? 
-Yeah... 
+Yeah… 
 The thing is we still don't know what exactly their motive is. 
 How strange. What will happen to this city? 
-On top of everything else, I wonder when Sumire’s gonna get back to the theater... 
+On top of everything else, I wonder when Sumire’s gonna get back to the theater… 
 Right. She's been at her family's home for two months now. I'm worried about her. 
-Kanna, Kohran, and even Maria haven't returned either... 
+Kanna, Kohran, and even Maria haven't returned either… 
 What’s gonna happen to the Flower Division? 
 Now that I think about it… Saki doesn’t work in this office, does she? 
 That's correct. Saki was hired to be the manager’s personal secretary. 
@@ -93,11 +93,11 @@ That's why she's not in our office.
 But with Mr. Yoneda in the hospital, I’m sure Saki must be worried sick. 
 Our summer production, “King Lear,” is scheduled to open this month… 
 But can the troupe really put on a performance in this situation? 
-I heard this earlier... 
-When Mr. Yoneda was found... He was covered with blood in front of the Ministry of the Army.
+I heard this earlier… 
+When Mr. Yoneda was found… He was covered with blood in front of the Ministry of the Army.
 Before losing consciousness, he looked to have been crawling towards something. 
 He must have been desperately trying to return to the theater before he blacked out. 
-Mr. Yoneda... 
+Mr. Yoneda… 
 To think this tragedy would happen today of all days, just as the Flower Division mobilized for battle… 
 Under normal circumstances, the manager would have come along on the mission with everyone else.  
 Somehow the culprit knew that the manager was headed to the ministry. 
@@ -115,7 +115,7 @@ She actually gave me her number in case of emergencies.
 I'm not sure if it'd be a good idea to tell her about this whole mess… 
 But you can talk to her if you call "13900." 
 13900, right? Thanks, Yuri. 
-Oh... Ogami, did you buy Kanna's bromide? 
+Oh… Ogami, did you buy Kanna's bromide? 
 Yeah, I figured I'd get a photo of her since we're so far apart right now.  
 Right. The theater seems to have lost its pizzazz without Kanna. 
 I know, Ogami, I'll tell you her contact number! 
@@ -125,7 +125,7 @@ If you dial 14000 on the Kinematron, you can chat with her.
 Kanna’s in the middle of her training, Ogami, so she can only be reached through the Kinematron… 
 So give her a call and get her up to speed on everything as soon as possible! 
 Right, will do! Thanks, Yuri.
-Oh, Ogami... Did you buy Sumire's bromide? 
+Oh, Ogami… Did you buy Sumire's bromide? 
 Yeah. Since she's back at her home, I thought I should at least have this for myself. 
 Well, how about I give you her call number, Ogami? 
 Are you sure? 
@@ -146,82 +146,82 @@ Please let me know if you hear any news about the manager, you two.
 Yes. Thank you for all your hard work as well. 
 Come again soon! 
 Now, where should I go next? 
-... 
-Saki... 
+… 
+Saki… 
 Ah, Ogami? 
 What are you doing here? 
-I... I'm just wandering around in circles. 
+I… I'm just wandering around in circles. 
 The thing is, I was supposed to be helping the manager with his errands. 
 To think this whole incident would happen while I was with him… I’m so sorry. 
-I left him for just a split-second... It's all so upsetting. 
-... 
-...Well, it's time for me to go. See you around, Ogami. 
-Saki... 
-Ah... Ogami. 
+I left him for just a split-second… It's all so upsetting. 
+… 
+…Well, it's time for me to go. See you around, Ogami. 
+Saki… 
+Ah… Ogami. 
 Sakura, something wrong? 
-...I was looking at this photograph. 
+…I was looking at this photograph. 
 A photo? 
 Yes. I saw it sitting on the manager's desk. 
 It's from when Mr. Yoneda was fighting alongside my father. 
 My father is the one who's standing on the far left. 
-He died during The Kouma War seven years ago... 
-... 
-Other than Mr. Yoneda, everyone's... gone. 
-Sakura... 
-If we lose Mr. Yoneda, too, I... I... 
+He died during The Kouma War seven years ago… 
+… 
+Other than Mr. Yoneda, everyone's… gone. 
+Sakura… 
+If we lose Mr. Yoneda, too, I… I… 
 …Ogami! Mr. Yoneda is going to be OK, right?! 
 He’ll be back in this office before we know it, right?! 
 I'm certain he'll be back. 
-It's hard to say... 
+It's hard to say… 
 I'm certain he'll be back. 
-It's hard to say... 
+It's hard to say… 
 I'm certain he'll be back. 
-It's hard to say... 
+It's hard to say… 
 Place hand on her shoulder.
 Yes, I'm certain he’ll be back. There's no way a man like Mr. Yoneda would die so easily. 
-...You're right. He'll be back to work in his office in no time! 
+…You're right. He'll be back to work in his office in no time! 
 Back to work? Don’t you think it’s more likely he’ll be knocking back a few drinks instead?
 Hehe. Come on, Ogami. 
 Talking to you made me feel a lot better. Thank you so much, Ogami.
-Well, I'll be taking my leave now... Excuse me. 
-...Thank goodness. Hopefully Sakura is feeling a bit better now. 
+Well, I'll be taking my leave now… Excuse me. 
+…Thank goodness. Hopefully Sakura is feeling a bit better now. 
 OK, now let's go check on the others. 
-...It's hard to say. There's a good chance that he won't regain consciousness. 
-H-How could you say that?! I... I don't believe it! 
+…It's hard to say. There's a good chance that he won't regain consciousness. 
+H-How could you say that?! I… I don't believe it! 
 Mr. Yoneda… I’m sure Mr. Yoneda will come back to us! 
 S-Sakura! 
 What have I done? In times like this, I should be trying to lift everyone’s spirits… 
-... 
-Ogami... 
-...Everything will be fine, Sakura. I'm sure Manager Yoneda will come back safe and sound.
+… 
+Ogami… 
+…Everything will be fine, Sakura. I'm sure Manager Yoneda will come back safe and sound.
 In the meantime, let’s take good care of the theater while he’s away. 
-...Yes! 
+…Yes! 
 Talking to you made me feel a lot better. Thank you so much, Ogami.
-Well, I'll be taking my leave now... Excuse me. 
-...Thank goodness. Hopefully Sakura is feeling a bit better now. 
+Well, I'll be taking my leave now… Excuse me. 
+…Thank goodness. Hopefully Sakura is feeling a bit better now. 
 OK, now let's go check on the others. 
-... 
+… 
 It’s easy enough to console each other, but without action, they’re just empty words. 
 For now, let’s do the best we can and focus on taking care of the theater. 
-...OK. 
-Well, I'll be taking my leave now... Excuse me. 
+…OK. 
+Well, I'll be taking my leave now… Excuse me. 
 I should go and check on the others, too. 
 Looks like Saki has left already. Let's take a look at another room. 
-We need to take good care of the theater until Mr. Yoneda comes back... 
+We need to take good care of the theater until Mr. Yoneda comes back… 
 No one’s around. I thought Orihime would be here…  
 Oh well, I'll just check another room. 
 Just as I thought, nobody's here. Let's go to another room. 
 No one's here, huh. We don't use this room much when we don't have a play going on. 
-When we held Reni's welcoming party here, the manager looked so cheerful... 
-...Now's not the time to dwell on the past. I need to move forward. 
+When we held Reni's welcoming party here, the manager looked so cheerful… 
+…Now's not the time to dwell on the past. I need to move forward. 
 Nobody’s here. Hmm…
-...Huh? I thought I heard something coming from the stage. 
+…Huh? I thought I heard something coming from the stage. 
 It's Sakura, she's cleaning the stage floor. 
 I have to keep working hard like her. 
 No one's here. Let's check another room. 
 No one's here. I don't see any sign of Kayama popping up again either. 
 What was he doing in here anyway? 
-Ah... Is that you, Ogami? 
+Ah… Is that you, Ogami? 
 Sakura, what're you doing here? 
 Well, I was cleaning up the stage floor. 
 I just needed to do something with my hands to get my mind off things. 
@@ -234,103 +234,103 @@ Yeah, just leave it to me!
 All right… Now let’s go visit the others! 
 If you don’t mind… I can give you a hand with the cleaning. 
 Hehe, thank you. That’s very considerate of you.
-But, I'm sorry... 
+But, I'm sorry… 
 I just want to do something by myself right now. 
-I see... Got it. I know how you feel. 
+I see… Got it. I know how you feel. 
 Keep doing your best then, Sakura. 
 Of course! Thank you very much, Ogami. 
 Doing things by oneself, huh? 
 That photograph from earlier must’ve brought back memories of her father.
-... 
+… 
 Ogami? Is there something wrong? 
 No, it’s nothing… You sure are strong Sakura. To be doing all this after everything that's happened… 
-No... I'm just a weakling. 
+No… I'm just a weakling. 
 I'm still an immature little girl who can't stay still because of all this anxiety. 
 My father would laugh seeing me like this. 
-Sakura... 
+Sakura… 
 I'm sure the others are feeling down as well. Please give them your support, Ogami. 
-...Yeah, leave them to me! 
+…Yeah, leave them to me! 
 All right then… I’ll be going.
-...Yes! See you later. 
+…Yes! See you later. 
 All right… Now let’s go visit the others!
 Oh, Ogami. 
 Are you still cleaning up, Sakura? 
-Yes... I just needed to do something with my hands to get my mind off things. 
-...I see. 
+Yes… I just needed to do something with my hands to get my mind off things. 
+…I see. 
 I'll be going now. Keep at it. 
 OK. Thank you so much. 
-Sakura... She's trying her best to hide her sadness. 
+Sakura… She's trying her best to hide her sadness. 
 I need to be there for everyone, now more than ever.
 No one's here. Let's check another room. 
 At last, our summer performance is starting this month… 
 It’s bound to take the edge off this depressing mood the theater has had lately. 
 I came here again just to be sure. No one's here. 
-Sniff... Sniff... 
+Sniff… Sniff… 
 (...Iris?) 
-Hic... <br> Uncle… Sniff...
-... 
+Hic… <br> Uncle… Sniff…
+… 
 Say something. 
-Iris... Sorry, I just noticed you were crying. 
-Ah... Mon Frère! 
+Iris… Sorry, I just noticed you were crying. 
+Ah… Mon Frère! 
 I thought about letting you be by yourself for a bit… 
 But, after seeing you cry, I just couldn’t leave you alone. 
-Mon Frère... 
-I just... couldn't stop my tears no matter how hard I tried. 
+Mon Frère… 
+I just… couldn't stop my tears no matter how hard I tried. 
 Cheer up, Iris. A sad face doesn't suit you. 
 A cheerful smile fits you the best. 
-Uh-huh... <br> Thanks, Mon Frère. 
-I don't know if I can smile right away... but I'll try. 
-I hope there's something I can do to bring back her smile... 
+Uh-huh… <br> Thanks, Mon Frère. 
+I don't know if I can smile right away… but I'll try. 
+I hope there's something I can do to bring back her smile… 
 (Let's leave her be for now.) 
 (This must be especially hard for her...) 
 (Hang in there, Iris.) 
 Let's not go to the courtyard for now. 
 No one's here, huh. Let's just get going. 
-... 
-Sakura... 
-Ah! Ogami... 
-(Sakura... Is she crying?) 
-... 
-Sorry, Sakura... I'll be going. 
-Ogami, were you perhaps... worried about me? 
+… 
+Sakura… 
+Ah! Ogami… 
+(Sakura… Is she crying?) 
+… 
+Sorry, Sakura… I'll be going. 
+Ogami, were you perhaps… worried about me? 
 Y-Yeah. I thought that maybe you didn't want anyone to see you crying. 
-Ogami, you're so... That's very kind of you, Ogami. 
+Ogami, you're so… That's very kind of you, Ogami. 
 After I saw Iris just now, I just couldn’t hold back my tears either… 
-...I'll let you be. Take care. 
-...OK. 
+…I'll let you be. Take care. 
+…OK. 
 (I-It's not the time to stare at her hair.) 
-... 
+… 
 Ogami, please don't stare at me. 
-Oh, sorry... 
+Oh, sorry… 
 (Her tears, she's trying to stop them from rolling down her face...) 
 I said don't stare at me! 
-S-Sakura... 
-I-I don't want you to see me like this... 
+S-Sakura… 
+I-I don't want you to see me like this… 
 (Sakura doesn't want me looking her in the eye.) 
-(She's on the verge of sobbing... I don't know where I should look when talking to her.) 
+(She's on the verge of sobbing… I don't know where I should look when talking to her.) 
 (J-Just where do I look in this situation?!) 
-... 
+… 
 (Oh no, Sakura looks really down...) 
 (I better stop staring right now.) 
 I-It's surprisingly sunny today, even though it's the rainy season. Wouldn't you say, Sakura? 
-... 
+… 
 (I don't know where I should look while talking to her. What should I do?) 
-... 
+… 
 After I saw Iris just now, I just couldn’t hold back my tears either…
 Sorry, Ogami. I didn't mean to show you my face like this. 
-...I'll be going. 
-Ah... S-Sakura! 
+…I'll be going. 
+Ah… S-Sakura! 
 I'm sorry! 
-Sakura... 
-I should've just left her alone... 
+Sakura… 
+I should've just left her alone… 
 What a clear sky. It seems like there's a break in the rainy season. 
 I hope everyone can be cheerful and bright again, just like this blue sky. 
-...Hm? Iris and Sakura are talking to each other. 
+…Hm? Iris and Sakura are talking to each other. 
 There, there, Iris. Don't cry. 
-Hic... But, but... 
-Iris... 
-Ah... Ogami. 
-Mon Frère... <br> Is Uncle gonna die? 
+Hic… But, but… 
+Iris… 
+Ah… Ogami. 
+Mon Frère… <br> Is Uncle gonna die? 
 I don't want that to happen! Waaaaah! 
 Cheer her up. 
 Wipe her tears. 
@@ -338,52 +338,52 @@ Cheer her up.
 Imitate Iris crying.
 It'll be OK, Iris. Cheer up. 
 Mr. Yoneda won't die. He'll be back with us safe and sound soon enough. 
-...Are you sure? 
+…Are you sure? 
 Yeah, I'm sure of it. 
 You hear that, Iris? If Ogami says he’s going to be all right, then it must be true. 
-...Yeah. 
-...I’m going now but I’ll try my best to cheer up.
+…Yeah. 
+…I’m going now but I’ll try my best to cheer up.
 Thank goodness… Iris’s mood seems to have improved a bit. 
 Thank you for consoling her, Ogami.
 Somehow… I also feel a bit better. 
 Is that so? I’m glad I could help. 
 Well then, I too must be going.
-...Hopefully I was able to cheer those two up even a little bit. 
+…Hopefully I was able to cheer those two up even a little bit. 
 Iris, here. I'll wipe your tears. 
-Oh, Mon Frère... 
+Oh, Mon Frère… 
 For now, let's hold our tears. 
-...OK. 
+…OK. 
 Now, how about we smile a little.
-...OK. Tee-hee, like this? 
+…OK. Tee-hee, like this? 
 Yup, that's great. Does that make you feel a little better? 
-Yeah... Thanks, Mon Frère and Sakura. 
-...I’m going now but I’ll try my best to cheer up. 
+Yeah… Thanks, Mon Frère and Sakura. 
+…I’m going now but I’ll try my best to cheer up. 
 Thank goodness… Iris’s mood seems to have improved a bit. 
 Thank you for consoling her, Ogami. 
 It touched my heart as well. 
 Is that so? I’m glad I could help. 
 Well then, I too must be going.
-...Hopefully I was able to cheer those two up even a little bit. 
+…Hopefully I was able to cheer those two up even a little bit. 
 Is Uncle gonna die? I don't want that to happen! Waaaaah! 
-M... Mon Frère?! 
+M… Mon Frère?! 
 Hahaha. Sorry, sorry. I didn’t mean to startle you. 
 But seeing me cry like that was weird, right? 
-Y-Yeah... 
+Y-Yeah… 
 So you shouldn’t cry either, Iris. 
-Yeah... Thanks, Mon Frère and Sakura. 
-...I’m going now but I’ll try my best to cheer up. 
+Yeah… Thanks, Mon Frère and Sakura. 
+…I’m going now but I’ll try my best to cheer up. 
 Thank goodness… Iris’s mood seems to have improved a bit. 
 Thank you for consoling her, Ogami. 
 But I was really surprised when you started crying out of nowhere. 
 Hahaha… I guess I went a little overboard, huh? 
 Well then, I too must be going.
-...Hopefully I was able to cheer those two up even a little bit. 
+…Hopefully I was able to cheer those two up even a little bit. 
 Now, Iris. Don't cry. Ogami is watching. 
-Huh... Hic... 
+Huh… Hic… 
 Let's get going now. I'm sure Manager Yoneda will be just fine. 
-Yeah... Hic... OK. 
+Yeah… Hic… OK. 
 Well then. If you’ll excuse us, Ogami.
-Oh, uh... Yeah... 
+Oh, uh… Yeah… 
 Ugh… I wasn’t any help at all. I better just get going.
 No one's here. 
 I wonder where everyone is. Let's check another room. 
@@ -396,17 +396,17 @@ Anyone here? Hmmm…
 As you’d expected, no one’s in the mood to play right now. 
 Now’s not the time for me to be playing, either. Better get going. 
 As expected, nobody’s here. Guess I’ll just get going. 
-Now... What should I do? 
+Now… What should I do? 
 Call someone.
 Maybe another time. 
-I should get a hold of everyone that's away from the theater and let them know what's going on... 
+I should get a hold of everyone that's away from the theater and let them know what's going on… 
 OK, I’m gonna make the call.
 Now… Who should I contact first?
-Hello, this is the Hanayashiki Branch... 
-Kohran? This is Ogami... 
-Chief... Perfect timing! 
+Hello, this is the Hanayashiki Branch… 
+Kohran? This is Ogami… 
+Chief… Perfect timing! 
 Is it true… Is it really true that Yoneda was shot?! 
-...Yes, it’s true. 
+…Yes, it’s true. 
 Hello? This is Maria Tachibana. 
 Ah, Maria!? 
 Captain… Count Hanakoji informed me that an assassination attempt was made on Manager Yoneda.
@@ -419,50 +419,50 @@ Don’t worry, he’s OK.
 He might remain in a coma…
 Don’t worry, he’s OK. We can't visit him right now, but he'll be discharged in no time. 
 For real? You’re serious?
-...Yeah, I'm serious. 
+…Yeah, I'm serious. 
 Phew… I’m so relieved that my tears just won’t stop. 
-... 
-... 
-Thanks a lot, Chief. At last... I can calm down now. 
+… 
+… 
+Thanks a lot, Chief. At last… I can calm down now. 
 OK, I'm gonna get back to work. See ya, guys. 
-Captain, about what you said earlier... 
-Forgive me, Maria. I... I lied to her. 
-It’s all right, Captain... I would have done the same.
-You lied so she won't need to worry... I'm sure that she'll understand. 
-... 
-The doctor said that... There's a chance he may be unable to... regain consciousness. 
+Captain, about what you said earlier… 
+Forgive me, Maria. I… I lied to her. 
+It’s all right, Captain… I would have done the same.
+You lied so she won't need to worry… I'm sure that she'll understand. 
+… 
+The doctor said that… There's a chance he may be unable to… regain consciousness. 
 I knew it… He was shot, after all…
-Kohran... 
-...Thanks for not sugar coating anything, Chief, and telling me the truth.
-I'll try to pay him a visit soon... 
+Kohran… 
+…Thanks for not sugar coating anything, Chief, and telling me the truth.
+I'll try to pay him a visit soon… 
 But still… Just who in the world attacked Yoneda?!
 I’ll… I’ll never forgive them for this! 
 Captain… Are you sure telling her the truth was the right call in this situation? 
-I'm not sure, but... 
+I'm not sure, but… 
 I just want everyone to know the whole story. 
-... 
-... 
+… 
+… 
 Chief… Why aren’t you saying anything?
-... 
-I understand... I'll try to pay him a visit soon. 
+… 
+I understand… I'll try to pay him a visit soon. 
 But still… Just who in the world attacked Yoneda?! 
 I’ll… I’ll never forgive them for this! 
-Captain... 
+Captain… 
 I’m sorry, Maria… I just couldn’t find the words.
-... 
+… 
 All I can do from here is pray…
 So please, Captain, encourage everyone in the Flower Division.
 Of course, I understand.
 Well, I ended up contacting both Maria and Kohran…
-Kohran... She's not picking up. 
+Kohran… She's not picking up. 
 Wah! N-Now’s not a good time for this damn thing to start beepin’ at me! 
 Huh, Kanna!? So this is your call number… Is something happening on your end? 
 Oh, Boss! I'm dealin’ with a crowd of people right now. Sorry, I'm gonna disconnect. 
 Wah! N-Now’s not a good time for this damn thing to start beepin’ at me! 
 Kanna… Is something happening over there?
 Boss! I'm dealin’ with a crowd of people right now. Sorry, I'm gonna disconnect. 
-Ah... She cut the call. 
-It's no good... There's no response. 
+Ah… She cut the call. 
+It's no good… There's no response. 
 …Huh? Is this someone’s number? Oh well, it doesn't seem like they're picking up.
 Sumire's not picking up. Maybe she's not in her room. 
 Hmm… As I thought, no response. 
@@ -470,51 +470,51 @@ Hello, this is Maria Tachibana.
 Maria!? So this is your call number. 
 Oh, Captain. I was just about to call you. 
 I was informed about the manager’s condition by Count Hanakoji…
-... 
+… 
 This is the Hanayashiki Branch! Chief, are you there!? 
-Kohran... 
+Kohran… 
 Chief! And Maria, too! 
 Great timing. Please tell me the whole story!
 Maria? It's Ogami. 
 Captain… Count Hanakoji informed me about the manager’s condition…
 It’s midnight here, but I thought you might call so I’ve been waiting for a transmission to come in…
 This is the Hanayashiki Branch! Chief, are you there!? 
-Kohran... 
+Kohran… 
 Chief! And Maria, too! 
 Great timing. Please tell me the whole story!
 Talk to me, Ogami! Is Yoneda gonna be all right?!
 Kohran, calm yourself! 
 The manager is doing fine. I was just told by the captain that his condition is stable. 
 For real? You’re serious? 
-...Yes, I'm serious. When have I ever lied to you? 
+…Yes, I'm serious. When have I ever lied to you? 
 Yeah… You’re not one to tell tall tales.
 Phew… I’m so relieved that my tears just won’t stop.
-... 
-... 
-Anyway, Captain... Should I return to Japan? 
-Yes... Please. 
+… 
+… 
+Anyway, Captain… Should I return to Japan? 
+Yes… Please. 
 Leave this to us. 
 Yes… Please. I need your help, Maria. 
 Now wait a minute, Maria. Like the chief said, it would be great to have your help… 
 But you can’t just abandon your duty as Count Hanakoji’s escort, right? 
 So leave everything to us. We got this. 
-Kohran... 
-...I understand. I'll stay in America for now. 
+Kohran… 
+…I understand. I'll stay in America for now. 
 I know you’re worried, but you can leave this matter to us. 
 We'll take care of everything in your absence.
-Captain... 
+Captain… 
 Way to go, Chief! Now that's our captain! 
 Rest assured, Maria! Chief will take care of this mess!
-...I understand. I'll stay in America for now. 
-Uh... What would be the best... 
+…I understand. I'll stay in America for now. 
+Uh… What would be the best… 
 Maria… You can leave this to us. 
 I’ve regained my cool, and we have the captain here. I think we can handle this. 
 I know times are tough but let’s do our best! OK, Chief? 
-Kohran... 
-...I understand. I'll stay in America for now. 
+Kohran… 
+…I understand. I'll stay in America for now. 
 Well then, I gotta get back to work. See ya guys later.
 Hmhm… Kohran ended up being the one consoling me.
-Maria... 
+Maria… 
 Please take care of everyone in the Flower Division, Captain. 
 I'll pray for the manager's safety from America. 
 Well, I ended up contacting both Maria and Kohran… 
@@ -523,12 +523,12 @@ Oh, Maria!? So this is your call number.
 Captain!? So you know my number. 
 I'm going to turn the screen on. Please wait a moment. 
 Is something the matter? Is there something urgent you wish to discuss?
-No, I just... wanted to talk with you a little more. 
+No, I just… wanted to talk with you a little more. 
 I see… Actually, I was just about to turn in for the night. It’s already quite late here. 
 Oh, right… It’s midnight in America, isn’t it? 
 Yes. I'm sorry, but may I excuse myself? 
 OK. Good night, Maria. 
-Good night... Captain. 
+Good night… Captain. 
 I didn’t put much thought into it since the Kinematron makes communication so easy, but…
 It’s nighttime in America… We really are far apart, huh?
 Maria's not picking up. 
@@ -539,7 +539,7 @@ The group of villains behind these atrocities have been identified as the "Black
 This name comes from eye-witness testimonies from both incidents, making it highly credible. 
 The Metropolitan Police and Army have jointly set up a task force that is dealing with this new threat.
 Next is a follow-up report regarding the shooting of Lt. General Yoneda of the Imperial Army. 
-After being shot by an unknown assailant, General Yoneda was immediately hospitalized...
+After being shot by an unknown assailant, General Yoneda was immediately hospitalized…
 Even now, he remains in critical condition and has not yet regained consciousness.
 The Metropolitan Police Department held a press conference regarding the shooting… 
 The police stated that they will proceed to investigate the case based on evidence found at the scene.
@@ -567,17 +567,17 @@ Could this be the mummy’s lair? What awaits Masked Red in the mysterious old h
 Fight on, Masked Red! You're our hero, Red! <br> -The End 
 Go, Masked Red! <br> Fight on, Masked Red! <br> Tune in next time! 
 I'm worried about everyone else, so let's end this transmission. 
-Now... Where should I head next? 
+Now… Where should I head next? 
 …Huh? Sounds like someone’s at my door.
 Guess I'll just stop the transmission. 
 Excuse me, Ogami. I’m sorry but I have something to tell you… 
 Is that Kasumi? Wait a second, I'll open the door. 
 What's wrong, Kasumi? 
 Let's continue this later. Right now, I need to focus on consoling everyone at the theater. 
-...This is Ayame’s old room, isn’t it? 
+…This is Ayame’s old room, isn’t it? 
 Is that you there, Mr. Ensign? 
 Hi, Orihime. 
-I heard that this room once belonged to the previous deputy commander...
+I heard that this room once belonged to the previous deputy commander…
 Now we have no deputy commander and Mr. Yoneda has collapsed. You must feel discouraged, yes? 
 Actually, I am. 
 No, not at all. 
@@ -585,10 +585,10 @@ I have you, Orihime.
 Actually, I am discouraged. I’m worried about what I can do by myself in a situation like this. 
 Heh, just what I thought. Japanese men are so weak! 
 It’s unbelievable for you to express your worries to your subordinates! You’re supposed to be our captain! 
-Uh... I-I was... 
+Uh… I-I was… 
 In times like this, shouldn’t you at least try to act like the leader?
 Let me be blunt, everyone here is acting like a bunch of cowards! It’s your job to set them straight! 
-Ah, Orihime... 
+Ah, Orihime… 
 Sheesh… I was supposed to be the one encouraging her, not the other way around. 
 No, not at all. During tough times like this, I need to be strong and keep everyone together. 
 Hmm… For once, you act like a captain. 
@@ -599,71 +599,71 @@ I’ll be all right because… I have you, Orihime.
 Huuuuh?! <br> Q-Quit joking around!! 
 No, I’m not trying to tell a joke. You see… 
 J-Just stop right there!! Your words are so gross I’m getting goosebumps! 
-Oh boy... She ran away at full speed. 
-...Guess I'll get going too. 
+Oh boy… She ran away at full speed. 
+…Guess I'll get going too. 
 Of course, I’d be lying if I said I wasn’t discouraged.
 But I know that if Ayame ever caught me talking like that as the captain…
 She’d say, “Pull yourself together!”
-Hmm... 
+Hmm… 
 You sound like a loser when you say it like that. 
 Well, keep at it, I suppose.
 Now, I should get going too. 
 This room is vacant now. Let’s check another one.
-... 
+… 
 (Orihime? What’s she doing in a place like this?) 
-I'm... <br> Please... <br> May you... 
+I'm… <br> Please… <br> May you… 
 (She seems to be saying something...) 
 ...?! <br> Who’s there?! 
 M-Mr. Ensign?! How long have you been standing there?! 
-Well... I just got here. 
+Well… I just got here. 
 What are you up to in the attic of all places?
 T-That's none of your business! It has nothing to do with you!! 
-Ah... She left. 
-If I'm not mistaken, something like this happened before... 
+Ah… She left. 
+If I'm not mistaken, something like this happened before… 
 I wonder why Orihime keeps visiting the attic… 
 Oh, w-what are you doing here, Mr. Ensign? 
 I was going to ask the same question… What are you doing in the attic, Orihime? 
 Heheh! It has nothing to do with you.
 Now if you'll excuse me. 
-What's with her... <br> Now I’m curious. 
+What's with her… <br> Now I’m curious. 
 Orihime doesn’t seem to be here anymore.
 Oh well, I'll just check another room. 
 Nobody's here. I'll just have to check another room, then. 
 In times like this, I’d love to curl up with a good book and forget my troubles. 
-...But I can’t. Right now I need to encourage everyone in the troupe.
+…But I can’t. Right now I need to encourage everyone in the troupe.
 …Nobody's here, huh. There’s nothing here besides the smell of old books. 
 I wonder if Reni is here right now.
 It's just a piece of paper from a notebook. I suppose that's fitting for someone like Reni. 
 I better check another room, I guess. 
-...Who's there? 
+…Who's there? 
 It's Ogami. Can we talk for a moment? 
-... 
+… 
 Well, I’m letting myself in.
 Sorry, am I bothering you? 
-Not particularly... 
+Not particularly… 
 (Guess I’ll try talking with Reni directly.)
 (Reni’s gray hair looks unusual…)
-... 
-(What beautiful eyes... But, somehow I don't feel any emotion behind them…) 
-... 
-... 
+… 
+(What beautiful eyes… But, somehow I don't feel any emotion behind them…) 
+… 
+… 
 (I can’t help but avert my gaze when Reni stares at me with those blank eyes.)
 (Expressionless as usual…)
-... 
+… 
 (The outfit looks neat and easy to move around in. Very fitting for someone like Reni.)
-... 
+… 
 (I can’t seem to keep this conversation going… Guess I should leave.) 
 Thanks for having me, Reni. I gotta go now. 
-...I have to be somewhere as well.
+…I have to be somewhere as well.
 (What is this? I guess you would call it a brooch if it was worn by a girl.) 
 (It's framing a jewel with the same color as Reni's eyes) 
-... 
+… 
 (This room is pretty bleak…)
-Reni... Where do you usually sleep? 
+Reni… Where do you usually sleep? 
 I sleep on the chair. 
 Don't you have any other furniture, like a bed or a dresser? 
-...I don't need such superfluous items. 
-O-OK... 
+…I don't need such superfluous items. 
+O-OK… 
 (It’d be rude to look around too much.)
 Reni… How are you feeling about today’s incident?
 It must have been upsetting to hear about Mr. Yoneda getting shot… How are you feeling right now? 
@@ -674,7 +674,7 @@ How'd you figure that out?
 Must be a professional.
 How'd you figure that out? 
 T-That's not what I meant!
-So it must have been done... by a professional. 
+So it must have been done… by a professional. 
 True. It's possible that the culprit has undergone training for sharpshooting. 
 Way to go, Reni… You’re an expert on these kinds of things. 
 Reni… How were you able to figure all that out?
@@ -682,17 +682,17 @@ Because… I have first-hand experience.
 Huh?! 
 T-That’s not what I meant. What I’m trying to say is…
 Didn’t the manager's shooting upset you… or anything like that? 
-...No. 
-R-Reni... 
+…No. 
+R-Reni… 
 I answered your question. Is that enough? 
-Oh, uh... Yeah... 
+Oh, uh… Yeah… 
 (Actually, I was hoping to get a different response…)
 I have somewhere else I need to be…
-H-Hey, wait a minute... 
+H-Hey, wait a minute… 
 Ah, and he’s gone… 
-... 
+… 
 Reni just got up and left. Guess I better get going too.
-... 
+… 
 Looks like no one's here. I think Reni mentioned something about going somewhere.
 Looks like Reni's not here. 
 I wonder if Sakura is in her room. 
@@ -706,7 +706,7 @@ There's no reason to hang around since Kanna's gone. I'll go somewhere else.
 I wonder if Orihime is in her room.
 The nameplate has a simple design, but it sure looks high class. 
 I better check another room, I guess. 
-...Who is it? 
+…Who is it? 
 It's Ogami. Can I talk with you, Orihime? 
 I refuse. It's time for my "siesta." 
 What's a siesta? 
@@ -717,7 +717,7 @@ Heheh! Mr. Ensign, you don’t know what a siesta is?
 A siesta is an afternoon nap.
 My mood will be sour if I don’t have one, so good night! 
 H-Hey, Orihime! 
-... 
+… 
 Oh boy, she really is taking a nap.
 Looks like it's not a good time to talk. 
 I guess it can’t be helped… Have a nice nap, Orihime.
@@ -725,17 +725,17 @@ Good night. You shouldn’t overthink things either, Mr. Ensign…
 A nap might do you some good every once in a while. 
 Oh boy, she's being so carefree. 
 Orihime! Now’s not the time to be taking a nap! 
-...What a nuisance! Just when I was about to drift to sleep. 
+…What a nuisance! Just when I was about to drift to sleep. 
 Mr. Ensign!  What on earth are you shouting about?! 
 Manager Yoneda has just been shot! We can’t just laze around and take naps. 
 How can you sleep at a time like this? 
-Ugh... I've had enough of this! 
+Ugh… I've had enough of this! 
 Do you actually think that Mr. Yoneda will recover if I stay awake? 
 Don’t judge a book by its cover. Naps are one of the best ways to keep your mind fresh in times of stress.
-I-I see... 
+I-I see… 
 You’re the captain, so why don’t you calm down a little?
 I will have my siesta now, so don't disturb me! 
-Ugh... I ended up getting yelled at. 
+Ugh… I ended up getting yelled at. 
 You have nothing to say? Well then, good night. 
 I wanted to talk with her, but I guess I’ll do it later. 
 Orihime is having her siesta, so best to leave her be. 
@@ -745,7 +745,7 @@ Sadly that’s not possible… She’s under the skies of New York right now.
 It's Maria's nameplate. 
 There's no reason to hang around since Maria's gone. I'll go somewhere else. 
 I wonder if Iris is in her room.
-So Iris's nameplate is shaped like Jean-Paul... 
+So Iris's nameplate is shaped like Jean-Paul… 
 I better check another room, I guess. 
 Iris isn’t here. I wonder where she went.
 Kohran must've been shocked to hear about today's incident. 
@@ -772,7 +772,7 @@ Even though we have an intensive care unit in the theater, we ended up not using
 I suppose we didn’t have a choice, the manager was taken to the army hospital right after the attack.
 At any rate, I wonder how Mr. Yoneda is doing right now… 
 The smell of medicines reminds me of when we visited the manager at the hospital earlier today. 
-Manager Yoneda... 
+Manager Yoneda… 
 Reni took a bath in here earlier. 
 But jeez, I was really surprised to discover that she was actually a girl. 
 This humid weather makes me want to take a quick bath. 
@@ -787,37 +787,37 @@ How's the water, Reni?
 Let's check another room. 
 I'll take a quick bath too.
 Hey, Reni! How’s the water temperature?
-...Good. 
+…Good. 
 Well, Reni seems to be relaxing in his own way. 
 OK, let's go check on the others. 
 I'd feel bad if I interrupted him while he's relaxing. I’ll head to another room.
 OK, I'm gonna take a quick bath too. 
 I’ll try striking up a conversation with Reni while I help wash his back. We’re both guys after all. 
 Hi, Reni. Mind if I join you? 
-... 
+… 
 Wash his back. 
 Soak in the bathtub. 
 Sing a song. 
 All right, Reni. Let me wash your back for you.
-...Huh? I didn’t expect your body to be so slender. 
+…Huh? I didn’t expect your body to be so slender. 
 You almost look like a girl.
-... 
-And, is this just me, or does your chest... 
-... 
-R-Reni... D-Don't tell me you're actually, a... 
-...I am female.
+… 
+And, is this just me, or does your chest… 
+… 
+R-Reni… D-Don't tell me you're actually, a… 
+…I am female.
 Wh-Whaaaaaaaatttt!? 
 S-Sorry! I didn’t know you were a girl when I got into the bath! I’m really sorry for barging in!
-...I'm not bothered. No need to apologize. 
+…I'm not bothered. No need to apologize. 
 There are only a few functional differences between male and females. 
 A-Anyway, I'm getting out right away. Sorry again!! 
-Huff... Huff... I thought my heart was going to jump out of my chest. 
-But still... To think that Reni is a girl... Uh... 
+Huff… Huff… <br> I thought my heart was going to jump out of my chest. 
+But still… To think that Reni is a girl… Uh… 
 If that’s true, how did a girl like her learn so much about combat and warfare?
 Uhm, I don’t think she’d give me an answer even if I asked… 
 Phew, this bath feels great. 
 Somehow it feels like the water’s warmth has seeped into my body and soul…
-...I’m going to leave now. 
+…I’m going to leave now. 
 Getting out already? You should take it slow and enjoy yourself. 
 This is enough. The effect of the heat and increasing blood pressure has improved my muscle circulation.
 Oh boy… Same old Reni. 
@@ -827,45 +827,45 @@ Hmm hmm~ Hmm~ Hmm~
 Why don't you try singing too, Reni? It feels good to hear your voice echo in the bath. 
 I've never sung outside of my performances. 
 Huh? So you’ve never hummed or sung a song to yourself?
-...Correct. It’s not necessary.
+…Correct. It’s not necessary.
 …I’m going to leave now. 
 Oh boy… Same old Reni. 
 Phew, that was a great bath. 
 Oh no, 15 minutes have passed! 
-... 
+… 
 What? 
-I-I just... You look like a girl from behind. 
-And, is this just me, or does your chest... 
-... 
-R-Reni... D-Don't tell me you're actually, a... 
-...I am female. 
+I-I just… You look like a girl from behind. 
+And, is this just me, or does your chest… 
+… 
+R-Reni… D-Don't tell me you're actually, a… 
+…I am female. 
 Wh-Whaaaaaaaatttt!? 
 S-Sorry! I didn’t know you were a girl when I got into the bath! I’m really sorry for barging in! 
-...I'm not bothered. No need to apologize. 
+…I'm not bothered. No need to apologize. 
 There are only a few functional differences between male and females.
 A-Anyway, I'm getting out right away. Sorry again!! 
-Huff... Huff... I thought my heart was going to jump out of my chest. 
-But still... To think that Reni is a girl... Uh... 
+Huff… Huff… <br> I thought my heart was going to jump out of my chest. 
+But still… To think that Reni is a girl… Uh… 
 If that’s true, how did a girl like her learn so much about combat and warfare?
-Uhm, I don't think she would tell me, even if I asked her... 
-... 
-Reni... 
+Uhm, I don't think she would tell me, even if I asked her… 
+… 
+Reni… 
 Sorry about earlier. 
-So you're a girl... 
+So you're a girl… 
 Wanna get back in the bath?
 Sorry about earlier. 
 You’re kind of cute…
 Wanna get back in the bath?
-I'm sorry about earlier. I didn't realize that you were... a girl. 
-...I don't mind. 
-But... does everyone already know that you're a girl. 
+I'm sorry about earlier. I didn't realize that you were… a girl. 
+…I don't mind. 
+But… does everyone already know that you're a girl. 
 I don't know. You can tell them if that's important to you. 
 Is that all right with you, Reni? 
 It does not matter. Gender is unimportant to me.
-...I'm leaving. 
-Reni... 
-So you're a girl... Man, I was really surprised. 
-...Yes. But it doesn’t matter to me.
+…I'm leaving. 
+Reni… 
+So you're a girl… Man, I was really surprised. 
+…Yes. But it doesn’t matter to me.
 It’s been decided that I am a boy, that is all. 
 What did she mean by that? 
 So you’re a girl, huh? When you put it that way… You’re kind of cute.
@@ -873,10 +873,10 @@ Cute?
 Is that… a desirable quality? 
 Y-Yeah… I’m trying to give you a compliment.
 All right. I will accept it. 
-So Reni’s a girl, huh...
+So Reni’s a girl, huh…
 I don't know how I should put this, but… that makes me kind of happy.
 If gender is unimportant to you, wanna get back in the bath? 
-...One bath is enough. Any more would be a waste of time.
+…One bath is enough. Any more would be a waste of time.
 Ah… Did I go too far?
 If you have nothing to say, I'm leaving.
 Ah, R-Reni! 
@@ -887,13 +887,13 @@ The weather has been so hot and humid lately. A dip in the pool would be so refr
 But, considering the state of the team right now, I can’t be relaxing in the pool right now.
 Nobody's here. Guess I'll just check another room. 
 Hi, Reni. Are you training right now? 
-...I'm about to finish. 
+…I'm about to finish. 
 You don’t seem to be acting any different than usual… Aren’t you depressed, Reni? 
-...Why would I be? 
+…Why would I be? 
 "Why"? Because Manager Yoneda was shot, that's why. 
-...It can't be helped. It's his fault for putting his guard down. 
+…It can't be helped. It's his fault for putting his guard down. 
 How could you say that? 
-You may be right... 
+You may be right… 
 How could you say something like that?! We’re talking about someone whose life hangs in the balance?
 But that's what happens in warfare. 
 What's done is done. What matters is what we do next. 
@@ -903,7 +903,7 @@ You may be right… We need to learn from this and make sure the same mistake do
 We may have to become more vigilant so no one gets hurt like this again. 
 I agree. 
 W-Well, Reni… That’s one way to put it. 
-...I’m just speaking my mind. 
+…I’m just speaking my mind. 
 What's done is done. What matters is what we do next. 
 If you don’t get emotional and think about it rationally, you may have a point… 
 There's no place for emotion in warfare. 
@@ -916,59 +916,59 @@ My, Ogami. Fancy meeting you here.
 Oh, Saki. What're you doing here? 
 I came here to see the Koubu. 
 Now that I'm working at this theater, I just want to look at everything. 
-I see... 
+I see… 
 Looking at these fancy things really is satisfying. Well, I'll see you later, Ogami. 
 Well, I suppose the underground hangar is the only place to see this kind of thing. 
 There's nothing to do here. Saki has gone too. 
-...Ogami. 
+…Ogami. 
 What's wrong, Kasumi? 
 I just received word from a representative of the financial sector… 
 Our financial backers have pulled their support for the troupe… All at once.
-Wh-What!? That's just so sudden. W-Why... 
-I don't understand, but if it keeps going like this... 
+Wh-What!? That's just so sudden. W-Why… 
+I don't understand, but if it keeps going like this… 
 The Imperial Assault Troupe will soon run out of funds. 
-Damn it... Why now, of all times?! 
-Ogami... 
+Damn it… Why now, of all times?! 
+Ogami… 
 What should we do about this? 
-Hmm... 
+Hmm… 
 Make our next play a hit! 
 We have to endure it. 
 We're done for. 
 I know… Let’s do our best to make this month's play a hit! 
 If we can make our summer production a success and bring in plenty of patrons… 
 We’ll surely be able to keep the troupe in the black! 
-I see... That's a great idea! 
+I see… That's a great idea! 
 Besides, having a goal to work towards would help lift the Flower Division's spirits.
 If we focus on rehearsing for the play, everyone can take their minds off all this sadness!
 There's nothing else for it. Fate has dealt us a bad hand and all we can do is endure this. 
 We just have to hang in there until some good luck comes our way.
 But Ogami, if we do nothing, our funds won’t last long…
-Is that so? Uh... 
+Is that so? Uh… 
 Ogami, I have a suggestion. 
 If our summer play becomes a hit, many visitors will come to see it, and we can stay in the black. 
 Let's drive away this depressing atmosphere and make the summer performance a success!
-...Yes, that just might work. 
+…Yes, that just might work. 
 We’re done for… Bad news just keeps coming in one after the other. 
 Ogami, please don't say something so discouraging. 
-All of us, including me, are putting our hopes in you right now. 
-Sorry... You're right, I lost my nerve for a moment there. 
-But... How are we supposed to break ourselves out of this situation? 
+All of us, including myself, are putting our hopes in you right now. 
+Sorry… You're right, I lost my nerve for a moment there. 
+But… How are we supposed to break ourselves out of this situation? 
 Ogami, I have a suggestion. 
 If our summer play becomes a hit, many visitors will come to see it, and we can stay in the black. 
 Let's drive away this depressing atmosphere and make the summer performance a success! 
-...Yes, that just might work.
-Ugh... What should we do!? 
+…Yes, that just might work.
+Ugh… What should we do!? 
 Ogami, I have a suggestion. 
 If our summer play becomes a hit, many visitors will come to see it, and we can stay in the black. 
 Let's drive away this depressing atmosphere and make the summer performance a success!
-...Yes, that just might work.
-In that case, how about we have everyone in the Flower Division gather in the dressing room? 
-All right, Kasumi. OK, let's make the summer performance a success! 
+…Yes, that just might work.
+In that case, how about I have everyone in the Flower Division gather in the dressing room? 
+That would be great, Kasumi. OK, let's make the summer performance a success! 
 Sorry Ogami, but customers are only allowed to purchase one of each bromide. 
 I see. That's too bad. 
 So sorry, Mr. Ogami, but customers are only allowed to purchase one of each bromide.
 Oh, really? That's too bad.  
-... "" "" () - . , ! ? ?! !! 
+… "" "" () - . , ! ? ?! !! 
 Welcome to Pompadour Chikamatsu's Fortune Telling. Here is what fate has in store for you. 
 Your lucky color is peach. A fateful encounter will bring good luck. 
 Your lucky color is purple. If you're a wise shopper, you'll be in luck. 
@@ -1028,18 +1028,18 @@ If you spend money generously this week you may get twice as much back. But be w
 Your health will gradually improve over the weekend. But don't stay up too late.
 Popularity is focused on one's mellow stories. Your love life is on the rise but only with one person.
 It's a turning of the stars. Be careful of love triangles. 
-Secrets are revealed, trust is lost, and unexpected pitfalls appear... 
+Secrets are revealed, trust is lost, and unexpected pitfalls appear… 
 Entertainment expenses are likely to be high. Don't be stingy, think of it as an investment. 
 Be mindful of injuries and illness caused by carelessness. They'll add up and bring you trouble.
 You are a devoted partner. Your feelings are clear. All you have to do is wait for their response.
 Your lack of experience may cause you to stumble. Advice from an older person can turn your luck around. 
-Your luck is going down... A humble attitude and calm judgment are the key to survival. 
+Your luck is going down… A humble attitude and calm judgment are the key to survival. 
 You need to spread out your activities. Hang out with a lot of good people. Cherish the small encounters. 
 Ride your bike along the river. You may come across some interesting incidents. 
 This week, you will meet your ideal person. Your favorite restaurant will be the place to meet someone. 
 There may be opposition from those around you. Don't be hard on yourself. Try to listen to them.
 A balanced relationship and a serious approach to socializing will help you. 
-If you try to do things out in the open, you might get sidetracked and end up striking out... 
+If you try to do things out in the open, you might get sidetracked and end up striking out… 
 Your money luck is going down this week. When in doubt, don't buy anything. 
 Your relationship may progress. A date at a smart place like a museum or art gallery is recommended. 
 Energy floods your whole body. You can be active in any situation. In love, you will be compatible. 

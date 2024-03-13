@@ -1,4 +1,4 @@
-﻿A new teammate... I can't wait for her to get here. 
+﻿A new teammate… I can't wait for her to get here. 
 Looking forward to our new arrival, Iris? 
 Yep! I'm always happy to make new friends! 
 Hey, Mon Frère, what do you think the new girl will be like? 
@@ -15,7 +15,7 @@ A new girl, huh… I hope she’s cute.
 Mon Frère! Don't you cheat on me! 
 I-Iris, you're starting to sound just like Sakura when she gets upset. 
 I'm your girlfriend, of course I’d be upset! 
-I don't know what she'll be like... 
+I don't know what she'll be like… 
 But I hope we can share all kinds of happy moments together, as fellow members of the Flower Division. 
 Yeah! Mon Frère, you're so cool! 
 It's time to get back and continue preparing for the party. 
@@ -38,7 +38,7 @@ Oh, Iris, let me tell you something.
 After Ogami returned to the theater, the very first bromide he purchased was yours. 
 What? Mon Frère, is that true? 
 Oh, yes. That's right. 
-Thank you, Mon Frère. I'm... I'm so happy! 
+Thank you, Mon Frère. I'm… I'm so happy! 
 If there was a bromide of you, Mon Frère, I'd definitely buy one. 
 Hmmm. I don't think my bromides would sell very well. 
 That's not true. I'm sure that everyone in the Flower Division would buy one, at least. 
@@ -48,29 +48,29 @@ By the way, Ogami. What can I do for you?
 Buy a bromide. 
 Talk to Tsubaki. 
 Leave. 
-Could I buy a bromide? 
+Could I take a look at the portraits for sale? 
 Sorry, Ogami. I can only sell you one bromide per month. 
 Please understand, we need to keep some for the other patrons. 
-You'd like to buy a bromide? Thank you very much! 
+You want to buy a bromide? Please, take your pick! 
 That's a bromide of Sakura. 
-Let's see... Sakura's bromide, right? 
-That'll be 50 sen. Thank you very much! 
+Let's see… <br> Sakura's bromide, right? 
+That’ll be 50 sen. <br> Thanks for your patronage! 
 That's a bromide of Sumire. 
-Let's see... Sumire's bromide, right? 
-That'll be 50 sen. Thank you very much! 
+Let's see… <br> Sumire's bromide, right? 
+That’ll be 50 sen. <br> Thanks for your patronage! 
 That's a bromide of Maria. 
-Let's see... Maria's bromide, right? 
-That'll be 50 sen. Thank you very much! 
+Let's see… <br> Maria's bromide, right? 
+That’ll be 50 sen. <br> Thanks for your patronage! 
 That's a bromide of Kanna. 
-Let's see... Kanna's bromide, right? 
-That'll be 50 sen. Thank you very much! 
+Let's see… <br> Kanna's bromide, right? 
+That’ll be 50 sen. <br> Thanks for your patronage! 
 That's a bromide of Iris. 
 Mon Frère, are you going to buy my bromide? 
 All right, I'll take one of Iris. 
 Really? Yaaay, yaaay! 
 It's a cute bromide. I'll treasure it. 
 Thank you, Mon Frère. 
-I wish they had a bromide of you too, so I could buy it... 
+I wish they had a bromide of you too, so I could buy it… 
 Hmm, a bromide of me? I don't think they'd sell very well. 
 That's not true. I'm sure that everyone in the Flower Division would buy one, at least. 
 That's right! I'd use my pocket money to buy a whooole bunch of them! 
@@ -78,12 +78,12 @@ Thank you, Iris.
 OK, Tsubaki, here's the money for the bromide. It's 50 sen, right? 
 Yes! Thank you as always! 
 That's a bromide of Kohran. 
-Let's see... Kohran's bromide, right? 
-That'll be 50 sen. Thank you very much! 
+Let's see… <br> Kohran's bromide, right? 
+That’ll be 50 sen. <br> Thanks for your patronage! 
 That's a bromide of Orihime. 
 Orihime's bromide is finally available for purchase! Don't miss your chance to buy it! 
-Let's see... Orihime's bromide, right? 
-That'll be 50 sen. Thank you very much! 
+Let's see… <br> Orihime's bromide, right? 
+That’ll be 50 sen. <br> Thanks for your patronage! 
 Oh, so you're not going to buy anything?
 Oh, right. Tsubaki, at 12 we're having a welcome party in the dressing room for the new member.
 You should definitely come, too! 
@@ -108,10 +108,10 @@ OK, let's get going. We're still getting things ready.
 No one's here. Let's go somewhere else. 
 I wonder… Just who was that visitor earlier? 
 Ugh, Mon Frère! You always get so lovestruck when you see a pretty lady. 
-I-I wouldn't call it "lovestruck" or anything... 
+I-I wouldn't call it "lovestruck" or anything… 
 But if she's a patron, we can't be rude to her, right? 
-That's true, but... 
-... 
+That's true, but… 
+… 
 Mon Frère, do you like older women? 
 I prefer older women. 
 I prefer younger women. 
@@ -131,24 +131,24 @@ I don't care how old they are.
 That's right. As long as there's love, any difference in age doesn't matter, right? 
 Yeah, you're right. But where did you learn to talk like that? 
 Heheh, that's a secret. 
-... 
-...What's wrong? Did I say something weird? 
+… 
+…What's wrong? Did I say something weird? 
 It's nothing. I was just thinking about something. 
 Thank goodness. You had me worried for a moment. 
 Come on, Mon Frère. Let's find the plates and get to the dressing room. 
-Will do. Now let’s see, plates, plates... 
-... 
+Will do. Now let’s see, plates, plates… 
+… 
 OK, Iris, I found them. 
 Yaaay! All right, let's go back to the dressing room, Mon Frère! 
 Sure thing. Once we deliver these, we'll be all set. 
 Don't take any snacks, Mon Frère.
 There's going to be lots of food at the welcome party, so let's be patient. 
-...I guess so. I'll just have to tough it out. 
+…I guess so. I'll just have to tough it out. 
 Hey there, handsome. 
 Can I ask you something? 
 S-Sure. What is it? 
 Is this the Grand Imperial Theater? 
-Yes, it is... 
+Yes, it is… 
 Thank you very much. Here's a little token of my appreciation. 
 …Mwah! 
 Whoa! 
@@ -163,19 +163,19 @@ Let's get acquainted first.
 I'm working right now! I can't just get up and leave! 
 Besides, we've only just met. 
 You're so cool, Mon Frère. 
-Oh my, so uptight... <br> I like you even more now. 
+Oh my, so uptight… <br> I like you even more now. 
 Er, what? 
-I'd like to get more acquainted with you first... 
+I'd like to get more acquainted with you first… 
 Really? C'mon, Mon Frère, what are you saying? 
 Get more acquainted? <br> Mmhmhm… OK then, I'll tell you all about myself later. 
 But for now, why don’t the two of us go someplace a bit more comfortable? 
-Er, um, well... I... 
+Er, um, well… I… 
 No! Mon Frère is with me!! 
 Oh my, I'm so sorry. I forgot all about you. 
-... 
+… 
 C'mon, say something, Mon Frère! 
-S-Sorry. It was all so sudden... I don't know what to say. 
-My, my... You're so innocent. And cute, too. 
+S-Sorry. It was all so sudden… I don't know what to say. 
+My, my… You're so innocent. And cute, too. 
 Sure thing, let's get outta here. I'd follow a beautiful woman like you anywhere! 
 Mon Frère! We're getting ready for the welcome party! 
 Oh dear. I must have offended your pretty little girlfriend there. 
@@ -184,7 +184,7 @@ Who are you, lady? Stop bothering Mon Frère!
 I'm sorry, sweetheart, I was just kidding. 
 I'll see you around, "Mon Frère." 
 What was with that lady? Everyone knows you're MY boyfriend! 
-Huh... Just who was she, anyway? 
+Huh… Just who was she, anyway? 
 That woman from before, did she leave already? 
 Come on, Mon Frère. What's so great about her, anyway? 
 Y-You've got it all wrong, Iris. I was just wondering what she wanted. 
@@ -208,42 +208,42 @@ I think so too.
 She must have come to buy a bromide or something. 
 Could it be that she was a burglar? 
 What?! 
-M-Mon Frère... <br> What if she really was a burglar? What do we do? 
+M-Mon Frère… <br> What if she really was a burglar? What do we do? 
 On second thought, no thief would just walk in here during the middle of the day. 
 Y-Yeah, you're right! Whew, I was scared for a second. 
 She was pretty, wasn't she? 
 Mon Frère, you're my boyfriend, right? 
 Don't go cheating on me! 
 Oh, sorry. I shouldn't joke around so much. 
-... 
+… 
 What's wrong, Mon Frère? You got quiet all of a sudden. 
 Oh, sorry. I was just wondering who that woman was. 
 Well, there’s no point in thinking about it too much. Let's go somewhere else. 
 Yeah. Let's go, Mon Frère. 
 That lady from before isn't here. 
 What are you standing around for, Mon Frère? Come onnnn, let's go! 
-Ah... Sorry, I got sidetracked, didn't I? 
+Ah… Sorry, I got sidetracked, didn't I? 
 Hello, Yuri, Kasumi. 
 Oh, Ogami! Have you heard? 
 Yes, I have. 
-...About what? 
+…About what? 
 Ah, you mean the new division member, right? I just heard the news from the manager. 
 What?! You already know? 
-Aww, it was a juicy story, too... You're no fun.
+Aww, it was a juicy story, too… You're no fun.
 Heheh! Mon Frère beat you to it! 
-...About what? 
+…About what? 
 Eheheh, well, the thing is… 
 A new team member is joining the Flower Division! Exciting, isn’t it?! 
 Oh, that’s what you meant. Actually, we're getting ready for the welcome party right now. 
-My my, so you heard the news even before Yuri. 
-Oh gosh, you already knew? I thought I was the only one... 
+My, my, so you heard the news even before Yuri. 
+Oh gosh, you already knew? I thought I was the only one… 
 Heheh, Mon Frère beat you to it! 
-... 
+… 
 I know! You mean the new girl, right? 
 Oh gosh, even Iris knows? 
-Aww, it was a juicy story, too... You're no fun.
+Aww, it was a juicy story, too… You're no fun.
 Hahaha, that's too bad. We're preparing for the welcome party right now. 
-So, everyone knew about the new division member after all... Oooh, you got me this time. 
+So, everyone knew about the new division member after all… Oooh, you got me this time. 
 Hahaha, it's not the end of the world. 
 You know Yuri, she takes an awful lot of pride in her gossip. 
 All right then, Ogami, do you want to hear about any other interesting gossip? 
@@ -251,7 +251,7 @@ Listen to gossip.
 State your business.
 Tell me some gossip. 
 I'll come back later. 
-So, about the new girl arriving today... 
+So, about the new girl arriving today… 
 I hear she's a former member of the European Star Division, just like Orihime. 
 Oh, if she used to be in the Star Division, that must mean she's an experienced pilot. 
 I wonder what she's like. I'm getting excited just thinking about it! 
@@ -267,10 +267,10 @@ I didn't expect that from her!
 Oh, Yuri. It's not unexpected at all. 
 Orihime is a very nice, sensitive, and polite girl. 
 Wh-Whaaaat?! <br> Sensitive? Polite? 
-...Very nice? 
-That's right. Remember, Ogami, Orihime is still new to the theater... 
+…Very nice? 
+That's right. Remember, Ogami, Orihime is still new to the theater… 
 So please, try to look after her. 
-S-Sure... 
+S-Sure… 
 Oh, by the way, Ogami. I heard you got some communication device from Kohran. 
 Communication device? Oh, you mean the Kinematron. 
 It's an amazing invention. You can actually see the other person's face while you're talking to them. 
@@ -280,18 +280,18 @@ Oh, Ogami, I hear that Orihime's been giving you a hard time. She really dislike
 You must have done something awful to make her hate you so much. 
 O-Of course not! 
 Besides, Orihime says she hates Japanese men in general. 
-Huh... I suppose she must have her reasons.
+Huh… I suppose she must have her reasons.
 Maybe she got rejected by a Japanese guy once. Yeah, that must be it! 
 I wonder what kind of romance she's had with Japanese men before coming here. 
 Now, Yuri, you're assuming that she's been in a relationship before. 
 Remember, Orihime is a bit younger than the other girls in the Flower Division. 
 Oh, but age is just a number when it comes to love. 
-I'm sure she's been rejected, and that's why she doesn't like Japanese men. Oh, poor thing... 
-By the way, I read in this morning's issue of the Capital Daily Report... 
-...that another large part of Tokyo Bay is going to be reclaimed. 
+I'm sure she's been rejected, and that's why she doesn't like Japanese men. Oh, poor thing… 
+By the way, I read in this morning's issue of the Capital Daily Report… 
+…that another large part of Tokyo Bay is going to be reclaimed. 
 I see, now there will be more land for the capital to use. 
 Wow, Kasumi, you read the newspaper? There's so many complex words in there. 
-I only read fashion magazines... 
+I only read fashion magazines… 
 Well, nowadays, women are working in society just like men. 
 You need to be more aware of current events, Yuri. 
 Heheh, I already know what's going on in society from my magazines. I'll pass on the newspapers. 
@@ -302,7 +302,7 @@ Heehe, just don't peek on anyone in the bath. OK, Ogami?
 Iris, you seem quite happy hanging out with Ogami today, don't you? 
 Uh-huh! That's because I'm his girlfriend! 
 I see. You're a smooth one, aren't you, Ogami? 
-Ogami and Iris, getting closer... Ooh, this is the best gossip I've had in ages! 
+Ogami and Iris, getting closer… Ooh, this is the best gossip I've had in ages! 
 H-Hey, hey! Don't spread rumors like that all willy-nilly! 
 It's OK, Mon Frère! It's the truth! 
 Oh? 
@@ -313,7 +313,7 @@ I know! I'll give you her contact number!
 Huh? R-Really?! 
 Of course! You ready? Maria's number is "13900." 
 If you dial 13900 on the Kinematron, you can chat with her. 
-This is Maria we're talking about, so I don't think she's lonely or anything... 
+This is Maria we're talking about, so I don't think she's lonely or anything… 
 But since you two are so far apart, why don't you show your face to her for a bit? 
 I think I will. <br> Thanks, Yuri. 
 Oh? 
@@ -360,76 +360,76 @@ Yeah, we know. Come back soon.
 I'm sorry, I'm all out of things to gossip about. 
 I see. That's too bad. 
 I'll have some more interesting tidbits to share another time, so look forward to it! 
-Mr. Yoneda... I wonder if he's in. 
-...I think we should go somewhere else. 
+Mr. Yoneda… I wonder if he's in. 
+…I think we should go somewhere else. 
 Oh, you're not going to see him? 
 Uncle Yoneda isn't there, huh? 
 Maybe he's still in the command room. 
 It's Ogami. 
 Sorry, can you come back later? 
-...Yes, sir. Understood. 
+…Yes, sir. Understood. 
 Oh well. Come on, Mon Frère. 
 It's Ogami. Mr. Yoneda, are you there? 
 Ogami? Door's open. 
 Yes, sir. I'm coming in. 
 Uncle Yoneda, we're all getting ready for the welcome party. 
-O-Oh, I see... <br> That's great, Iris. 
-... 
+O-Oh, I see… <br> That's great, Iris. 
+… 
 Uncle Yoneda? 
 Mon Frère, I wonder what's wrong with Uncle Yoneda. 
 He's not his usual cheerful self. 
-Iris... 
+Iris… 
 Let's ask him why. 
 It’s about Yamazaki… 
 Leave him be. 
 He must not be doing well. Let's ask him what's wrong. 
-OK... 
+OK… 
 Mr. Yoneda. You're not looking so good, is something the matter? 
-...What did you say? 
+…What did you say? 
 Did you bring Iris all the way here just to ask me that? 
 I'm busy. If you don't need anything, then get out. 
 Y-Yes, sir. Excuse me, sir. 
-I think you made him mad, Mon Frère... 
-I guess I shouldn't have asked... 
+I think you made him mad, Mon Frère… 
+I guess I shouldn't have asked… 
 Oh well, can't do anything about that now. Let's go somewhere else. 
 Well, Mr. Yoneda has been thinking about Yamazaki--
 Oy, Ogami! Not another word! 
 I'm busy! If you don't need me, then get out! 
-Oh... E-Excuse me, sir! I'll be going! 
-I think you made him mad, Mon Frère... 
+Oh… E-Excuse me, sir! I'll be going! 
+I think you made him mad, Mon Frère… 
 Let's go. There's no point in staying here. 
-...Let's just leave him be, Iris. 
+…Let's just leave him be, Iris. 
 Sometimes people just need time to think to themselves, you know?
-...OK, I get it. 
-We're gonna go now, Uncle Yoneda... 
+…OK, I get it. 
+We're gonna go now, Uncle Yoneda… 
 We're holding a welcome party for the new recruit at 12 in the dressing room. You should come too. 
-...Ah, right, right. Got it. Thanks, Iris. 
+…Ah, right, right. Got it. Thanks, Iris. 
 Well, Mr. Yoneda, if you'll excuse us. 
 Come on, Iris. Let's go somewhere else. 
 OK, Mon Frère. 
-... 
+… 
 Iris, we're still in the middle of getting the party ready, so let's get going. 
 What? We just got here and now we're leaving? 
 Yeah. Let's go. 
 Well, Mr. Yoneda, if you'll excuse us. 
-...Mhmm. 
+…Mhmm. 
 You left without talking to him? That's weird. 
-...It's all right, Iris. 
+…It's all right, Iris. 
 Come on, let's go. We don't have much time left before noon. 
 Wow, there's always so many costumes in here. 
 Hey, Mon Frère, it'd be so nice if they made a stage costume for you to wear. 
-Hahaha, no way. I'm not an actor... 
+Hahaha, no way. I'm not an actor… 
 Oh, Mon Frère, did you forget something? We were just here earlier. 
-N-No... I just kinda wandered in here. 
+N-No… I just kinda wandered in here. 
 We don't need anything here, so let's go. 
-...There's no one here. 
+…There's no one here. 
 No point in hanging around. Let's go to another room. 
 Oh, it's Orihime! She's playing the piano. 
 Hi, Orihime. 
-...Oh, Iris and Mr. Ensign, is that you? 
+…Oh, Iris and Mr. Ensign, is that you? 
 How do the party preparations come along? 
 Good, we're almost done. 
-Hmm... I think it's going to take a little bit longer. 
+Hmm… I think it's going to take a little bit longer. 
 Orihime, were you practicing the piano? 
 I wasn't practicing. My technique is already perfetto. 
 I play the piano to enhance my imagination. 
@@ -460,7 +460,7 @@ There's no one here.
 Let's go somewhere else. 
 OK, let's go, Mon Frère! 
 Oh, Ogami, did you bring the plates from the kitchen? 
-Oh... Sorry, not yet. 
+Oh… Sorry, not yet. 
 C'mon, Mon Frère! Let's hurry up and get them. 
 A-All right. I'm off, Sakura. 
 Sakuraaa! <br> We brought the plates! 
@@ -468,7 +468,7 @@ Thank you, Iris. Can you leave them there?
 Here you go! 
 What do you plan on doing now, Ogami? 
 I'll wait here. 
-I have places to check...
+I have places to check…
 I'll wait here. There's nothing else to do. 
 Then I'll stay here, too! 
 OK, we'll wait for the others to arrive, then. 
@@ -484,7 +484,7 @@ Already taken care of, Sakura!
 Thank you very much! You saved me a lot of time. 
 What do you plan on doing now, Ogami? 
 I'll wait here. 
-I have places to check... 
+I have places to check… 
 I'll wait here. There's nothing else to do. 
 Then I'll stay here, too! 
 OK, we'll wait for the others to arrive, then. 
@@ -495,7 +495,7 @@ I'll come along, too!
 Hahaha, all right. Let's go, Iris. 
 OK! 
 Oh, Ogami, have you talked to Kasumi and Tsubaki yet? 
-Oh... Sorry, not yet. 
+Oh… Sorry, not yet. 
 We still have some time, so please let them know about the party. 
 Oh, Ogami, what's the matter? 
 Nothing, I just thought everyone would be here by now. 
@@ -515,19 +515,19 @@ Hurry up! Let's start the welcome party!
 Looks like everything's all ready. 
 I thought I'd be the first one here, but you're certainly fast. 
 It was all thanks to Ogami and Iris's help. 
-...Nobody's here. 
+…Nobody's here. 
 I suppose no one’s here because we're not in the middle of a performance. 
 Let's go, Iris. 
 No one's here. Let's go somewhere else. 
 Whoa, it's a mess back here, the set and props are all scattered around. 
-We'll have to clean up before our next performance... 
+We'll have to clean up before our next performance… 
 It's so messy, hide-and-seek would be really tough in this room. 
 Well, it certainly does look like a theater’s prop room in here. 
 I’m really looking forward to seeing all the Flower Division members back on this stage. 
 We're putting on our summer performance next month, so it won’t be much longer.  
 The summer performance, huh? Can't wait 
 It's sad seeing the stage so empty right now. 
-...Yeah, let’s go.
+…Yeah, let’s go.
 It's so creepy to be in an empty auditorium like this. 
 Aah! Mon Frère, behind you! 
 HUH?! What is it!? 
@@ -549,11 +549,11 @@ Oh, Mon Frère, let me see your watch!
 It's that late already? OK, we need to hurry back, then. 
 From up here, you can see the whole street in front of the theater. 
 I suppose the new girl will be coming down that street on her way here. 
-Hmm... We'd be able to see her from up here. 
+Hmm… We'd be able to see her from up here. 
 …That’s it! Hehehe, I've got a great idea! 
 What's this great idea you got? 
 It’s. A. Secret! I'll tell you in a bit. Come on, let's go somewhere else. 
-I hope the new girl gets here soon. And then I... 
+I hope the new girl gets here soon. And then I… 
 And then what? 
 Hehehe. Still a secret! 
 It's really quiet around here without a show going on. 
@@ -571,7 +571,7 @@ Well, I still have to prepare for the party, so I need to get going.
 Hey, Mon Frère. Let's go somewhere else. 
 OK, let's go. 
 Well, she wasn't in the music room. 
-I see. I'm sorry, I must have given you the wrong information... 
+I see. I'm sorry, I must have given you the wrong information… 
 Anyway, I still need to get things ready, so I’ll be on my way. 
 Hey, Mon Frère. Let's go somewhere else. 
 OK, let's go. 
@@ -583,8 +583,8 @@ Yes. When I asked, she said, “I understand.”
 Well, I still have to prepare for the party, so I need to get going. 
 Hey, Mon Frère. Let's go somewhere else. 
 OK, let's go. 
-Well, she wasn't in her room... 
-I see. I'm sorry, I must have given you the wrong information... 
+Well, she wasn't in her room… 
+I see. I'm sorry, I must have given you the wrong information… 
 Anyway, I still need to get things ready, so I’ll be on my way.
 Hey, Mon Frère. Let's go somewhere else. 
 OK, let's go. 
@@ -594,12 +594,12 @@ Really? That's great. Did Orihime say she would help out?
 Actually, she got really upset when I mentioned that you told me she was in the attic.
 Did something happen? 
 Orihime probably wanted you to keep that a secret.…
-Ah, yeah... Oops. 
+Ah, yeah… Oops. 
 Well, I still have to prepare for the party, so I need to get going. 
 Hey, Mon Frère. Let's go somewhere else. 
 OK, let's go. 
 Hmm, she wasn't in the attic. 
-I see. I'm sorry, I must have given you the wrong information... 
+I see. I'm sorry, I must have given you the wrong information… 
 Anyway, I still need to get things ready, so I’ll be on my way.
 Hey, Mon Frère. Let's go somewhere else. 
 OK, let's go. 
@@ -610,7 +610,7 @@ Well, I still have to prepare for the party, so I need to get going.
 Hey, Mon Frère. Let's go somewhere else. 
 OK, let's go. 
 Just once, I’d like to see my own performance from here.
-Hahaha... I see. That’d be a little difficult.
+Hahaha… I see. That’d be a little difficult.
 There's no one here. 
 Let's go to the other room, Iris. 
 Yeah. 
@@ -623,15 +623,15 @@ She was in her room.
 She was in the attic. 
 If you’re looking for Orihime, we just saw her in the music room. 
 I see. Thank you very much. I'll take a look. 
-I think she was in the music room. Well... Maybe. 
+I think she was in the music room. Well… Maybe. 
 I see. Thank you very much. I'll take a look. 
 We just saw Orihime in her room. 
 I see. Thank you very much. I'll go look. 
-I think she's in her room. Well... Maybe. 
+I think she's in her room. Well… Maybe. 
 I see. Thank you very much. I'll go look. 
 We just saw Orihime in the attic. 
 I see. Thank you very much. I'll go look. 
-I think she was in the attic. Well... Maybe. 
+I think she was in the attic. Well… Maybe. 
 I see. Thank you very much. I'll go look. 
 I'm sorry, I don't know where she is. 
 I see. Thanks anyway. I'll go look for her some more. 
@@ -652,20 +652,20 @@ Oh, this? It's a communication device called the Kinematron.
 I can use it to talk to people from far away. 
 Wow, that's so cool! Hey, hey, Mon Frère, let me see! 
 Hey, Mon Frère, are you going to call someone? 
-What should I do... 
+What should I do… 
 Make a call. 
 Maybe next time. 
 OK, then. Let's take it for a spin. 
 Yaaay! C'mon, hurry! 
 We don't have much time. Let's call someone another day. 
-Boo... That's boring. 
+Boo… That's boring. 
 Well, we shouldn't be playing around with this while Sakura and the others are getting ready, right? 
 Oh, OK. I'll wait, then. 
 Glad to hear it. Let's get going, Iris. 
-...This was Ayame's room, wasn't it? 
-We may never see Ayame again... 
+…This was Ayame's room, wasn't it? 
+We may never see Ayame again… 
 But she'll always be in our hearts. Isn't that right, Iris? 
-Yeah... That's right. 
+Yeah… That's right. 
 All right, let's go. Ayame will get mad at us for looking so sad. 
 Let's go, Iris. We've got other things to do now. 
 There's no one here. 
@@ -675,12 +675,12 @@ You're right. I wonder what's wrong.
 Hey, Orihime! What are you doing? 
 Eek!! 
 W-What do you want from me? 
-No, it's not like that... 
+No, it's not like that… 
 Hey, Orihime. What are you doing up here? 
 I-It's none of your business. Why do you care? 
 If you don't need me for anything, then I'll be leaving. 
 Ah, Orihime! W-Wait! 
-...She's gone. 
+…She's gone. 
 What was she doing up here, anyway? 
 …I'm curious but, even if we asked, it doesn’t look like she's going to tell us. 
 Anyway, let's go back downstairs. There's no point in staying up here. 
@@ -708,30 +708,30 @@ OK, we should get going, too.
 Kanna's gone to Okinawa for training. She's not here right now. 
 But if Kanna was at the theater, the preparations for the party would be over real quick. 
 Indeed, any heavy lifting would have been finished in no time. 
-Kanna... I hope she comes home soon. 
+Kanna… I hope she comes home soon. 
 She'll be back in the summer, right? That’s just right around the corner.
-...Yeah, I guess so. 
+…Yeah, I guess so. 
 I wonder if Orihime is in her room.
 This is Orihime's nameplate. 
 Hey, Mon Frère, did you need Orihime for something? 
-No... I figure we probably shouldn't disturb her. 
+No… I figure we probably shouldn't disturb her. 
 Come on, Iris. 
-...She's not here. 
+…She's not here. 
 Didn’t Orihime say she was going somewhere?
 Hmmm… Now that you mention it, I think you’re right. 
 Hey there, Orihime. I was just about to knock on your door. 
 Mr. Ensign? 
 There is nothing I wish to discuss with you.
 I have things to do so I’ll be off.
-Ah... Orihime! 
-Orihime... She's gone. 
-Oh, well... Let's go, Iris. 
-...Who's there? Orihime’s not at home.
+Ah… Orihime! 
+Orihime… She's gone. 
+Oh, well… Let's go, Iris. 
+…Who's there? Orihime’s not at home.
 Oh, she’s not home… 
 Then who's speaking? 
 Oh, I guess she’s not home…
 Mon Frère! You just heard her voice, of course she's home! 
-O-Oh, I see... You're right. 
+O-Oh, I see… You're right. 
 Hmph! You must really be hopeless if even Iris ridicules you. 
 I can't believe you fell for that. You are a stupid one, aren't you? 
 S-Stupid?! 
@@ -740,20 +740,20 @@ Well then, please continue your party preparations.
 Ah, Orihime… 
 Then whose voice am I hearing?
 You're in there, aren't you, Orihime? Open the door. 
-...Ugh! So obnoxious you are. 
+…Ugh! So obnoxious you are. 
 Mr. Ensign? Iris? <br> What on earth do you want? 
 Orihime, you're in there, aren't you? Come on, open the door. 
-Oh, is that you, Iris? Just a second... 
+Oh, is that you, Iris? Just a second… 
 Ah! Mr. Ensign?! I thought Iris was alone. 
 So you were in there after all, Orihime. You shouldn't trick people into thinking you're not around. 
 If there's anyone who'd fall for that trick, I would like to meet him. 
 That's right! Hey, Orihime. Show me the inside of your room. 
-...Inside my room? 
+…Inside my room? 
 I still haven't seen what your room looks like! Can I see it? Please?
 Well, if you want to see it so badly, then I guess I don't have a choice. 
 Fine, I’ll let you in, only this once.
 Yaaaay! Coming iiiin! 
-Wowww... <br> What a beautiful room! 
+Wowww… <br> What a beautiful room! 
 I understand why you would be starstruck…
 But please don’t dilly dally. You can’t stay in my room all day, OK? 
 What's this...? 
@@ -770,24 +770,24 @@ R-Really? That was careless of me.
 It's the Italian flag. That's where you're from, right, Orihime? 
 Well, you may be a Japanese man, but you seem to know a thing or two.
 That's Mon Frère for you! He's so smart. 
-I'm pretty sure it's... the British flag, right? 
+I'm pretty sure it's… the British flag, right? 
 That's not it at all. Japanese men really are stupid. 
 It's based on the flag of my home country, Italy. 
 R-Really? That was careless of me. 
-...Which flag is it? 
+…Which flag is it? 
 It's based on the flag of my home country, Italy. 
 To speak frankly, this sort of thing should be common knowledge. 
 (Displaying the curtains like this sure makes for an interesting layout.) 
 (What a fancy-looking bed. Is that what Orihime sleeps on?) 
 Don't stare at people's beds like that! 
-Oh... S-Sorry. 
+Oh… S-Sorry. 
 How many times must I tell you?! 
 You keep staring and staring and staring at my bed! You're so shameless! 
 Get out of here! 
-O-Orihime! Wait a minute... 
+O-Orihime! Wait a minute… 
 I'm not listening! Hurry up and get out! 
 I knew letting a Japanese man into my room was a mistake. Now arrivederci, goodbye! 
-Mon Frère... She kicked us out. 
+Mon Frère… She kicked us out. 
 Oh well. Let's go to another room. 
 (A dressing table, huh? There's some expensive cosmetics there.) 
 Hey, Orihime! Teach me how to put on makeup some time. 
@@ -801,16 +801,16 @@ No means no! Don't touch it!
 Pick it up.
 (There's a beautiful woman in the picture...) 
 Mr. Ensign! Do not touch other people’s things without permission!
-Oh... I'm sorry. I just couldn't help myself. 
+Oh… I'm sorry. I just couldn't help myself. 
 Seriously, the nerve of Japanese men! They have no sense of decency at all! 
 Get out of here! 
-O-Orihime! Wait a minute... 
+O-Orihime! Wait a minute… 
 I'm not listening! Hurry up and get out! 
 I knew letting a Japanese man into my room was a mistake. Now arrivederci, goodbye! 
-Mon Frère... She kicked us out. 
+Mon Frère… She kicked us out. 
 Oh well. Let's go to another room. 
 (No… I guess I better stop.) 
-Aw... I wanted to see it ... 
+Aw… I wanted to see it… 
 (Seems like she really doesn’t want me looking at that photo so I’ll leave it alone.)
 (A landscape? Where is it from?) 
 This is a landscape of my hometown. 
@@ -821,37 +821,37 @@ You have good taste if that picture caught your eye.
 This is a piece painted by Renoir. 
 Renoir? Is that someone famous? 
 He's a famous painter. 
-By the way, Mr. Ensign, speaking of Renoir... 
+By the way, Mr. Ensign, speaking of Renoir… 
 Do you know what movement he belonged to? 
 Impressionist, I think. 
 Romanticist, I think. 
 Direct style, of course! 
 Impressionist, I think. 
 Romanticist, I think. 
-Uhh... Playful style? 
-He was... An impressionist, right? 
+Uhh… Playful style? 
+He was… An impressionist, right? 
 Wow, you're pretty knowledgeable. 
 I have a tiiiny bit more respect for you now, Mr. Ensign. 
 You really know everything, Mon Frère! 
-He was... A romanticist, right? 
+He was… A romanticist, right? 
 Wow, I'm surprised you know what that is. 
 But you're wrong. Renoir was an impressionist. 
-Oh... Is that right? 
+Oh… Is that right? 
 Wow, there's stuff even you don't know, Mon Frère. 
 Direct style, of course! A real hardliner, as all men should be! 
-...Mr. Ensign? Do you even know what I'm talking about? 
+…Mr. Ensign? Do you even know what I'm talking about? 
 Renoir was an impressionist. You have no common sense at all, Mr. Ensign. Non ha senso! 
-Uhhh... Playful style? 
+Uhhh… Playful style? 
 Even if you were joking, Mr. Ensign, that wasn’t funny. 
-It's the only thing I could think of... 
+It's the only thing I could think of… 
 Renoir was an impressionist. You have no common sense at all, Mr. Ensign. Non ha senso! 
-...Hmm. I don't know much about painting. 
+…Hmm. I don't know much about painting. 
 I will tell you, then. Renoir was what is called an impressionist. 
 You should study art some more, Mr. Ensign. 
-(When I look at a good painting I just feel... so calm.) 
+(When I look at a good painting I just feel… so calm.) 
 This is a luxurious Italian-made chandelier I brought with me to Japan.
 You brought that all the way from Italy? That must have been a lot of work. 
-(Made in Italy... They sure make them different overseas.) 
+(Made in Italy… They sure make them different overseas.) 
 Iris, I think we should get going. 
 Yeah, OK. Let's go, Mon Frère. 
 Thank you for showing us your room. Maybe you can invite us over again sometime? 
@@ -859,7 +859,7 @@ Do not get carried away. Today was an exception because Iris was with you.
 Well then, I have things I need to do, so I'll be going. 
 We should go, too, Iris. 
 OK! 
-Mr. Ensign... Are you just going to loiter about here, or what? 
+Mr. Ensign… Are you just going to loiter about here, or what? 
 Right. We should get going, Iris. 
 Yeah. Thanks for showing us your room, Orihime. 
 You two should make note of my good taste for your future reference. 
@@ -868,11 +868,11 @@ Do not get carried away. Today was an exception because Iris was with you.
 Well then, I have things I need to do, so I'll be going. 
 We should go, too, Iris. 
 OK! 
-Maria's in America... That's so far away... 
+Maria's in America… That's so far away… 
 Hey, Mon Frère, which is farther from Japan, France or America? 
 I’m not sure. France might be farther, if you go by boat. 
-Hmm... I hope Maria comes back soon. 
-Same here... Come on, Iris, let's go somewhere else. 
+Hmm… I hope Maria comes back soon. 
+Same here… Come on, Iris, let's go somewhere else. 
 This is Maria's room. She's in America right now. 
 There's no point in staying here. Let's go, Mon Frère. 
 Hey, Mon Frère. Don't you wanna see my new room? 
@@ -885,11 +885,11 @@ You sure have a lot of stuffed animals.
 Heh-heh. They're all my dear friends! 
 Wow, so they must all have names, huh? 
 Of course they do! I'll introduce you. 
-This is Anjou, and this is Lune, Paul, François... 
-And this is, uh... <br> Oh, that's right! 
+This is Anjou, and this is Lune, Paul, François… 
+And this is, uh… <br> Oh, that's right! 
 I only just got this bunny, so he doesn't have a name yet. 
 Can you give this one a name, Mon Frère? 
-Hmmm... This is tough. 
+Hmmm… This is tough. 
 What about Marie? 
 How about Pierre? 
 How about Hogehoge? 
@@ -899,26 +899,26 @@ I played a girl named Marie on stage before!
 W-Well, it's cute, so that should still be fine, right? 
 Y-You think so? 
 Let's go with Marie, Iris. 
-Hmmm... OK, then! I'll name him Marie! 
-Well... How about "Pierre"? 
+Hmmm… OK, then! I'll name him Marie! 
+Well… How about "Pierre"? 
 Wow! That's so cool! I'll go with that, Mon Frère! 
 That's his name, then. Pierre! 
 Thanks for giving him such a cool name, Mon Frère! 
-Hmm... What about "Hogehoge"? 
+Hmm… What about "Hogehoge"? 
 Hogehoge? What does that mean? I have no idea! 
 There isn't really a meaning. I just thought of it on the spot. 
 I'll call him Hogehoge, then! It sounds funny. 
 Starting today, you are Hogehoge. Nice to meet you, Hogehoge. 
 Thanks for giving him such a funny name, Mon Frère! 
-Hmm, I can't think of a good name... 
+Hmm, I can't think of a good name… 
 I know! I'll give him your name, "Ichiro"! 
-Huh? I guess I don't mind, but... 
+Huh? I guess I don't mind, but… 
 Then it’s decided! OK, his name will be Ichiro! 
 You can properly introduce yourself the next time you come to my room. 
 (Iris sure loves stuffed animals, huh?) 
 That's a pretty large wardrobe. Is the whole thing full of clothes? 
 Yep, that's right. I love clothes. 
-Heheh... Mon Frère. Which of my outfits do you like best? 
+Heheh… Mon Frère. Which of my outfits do you like best? 
 I like what you're wearing. 
 I like your battle uniform. 
 It's not about the clothes.
@@ -927,7 +927,7 @@ I like your battle uniform.
 I like swimsuits. 
 I like what you're wearing.
 I like your battle uniform. 
-Rather you wear nothing...
+Rather you wear nothing…
 I like what you're wearing right now. It looks really good on you. 
 Yeah! This is my favorite outfit, too. 
 Thank you, Mon Frère! I'm so happy! 
@@ -935,15 +935,15 @@ I'd say your battle uniform. It's so cool and sleek.
 Thanks, Mon Frère. Eheheh, I'm so happy! 
 Your battle uniform is also really cool! 
 It's not about the clothes, Iris. A person’s charm isn’t determined by what they wear.
-Hmm... I guess. Boring... 
+Hmm… I guess. Boring… 
 I like swimsuits. I’d love to see you in one. 
 Huh?! That's bold of you, Mon Frère. 
 OK then, I'll show you my swimsuit in the summer! 
-I... I'd rather you wear nothing at all... 
+I… I'd rather you wear nothing at all… 
 Mon Frère, if you don't take this seriously, I'm gonna get mad! 
-Oh... S-Sorry. <br> Uhh... Which one's the best... 
+Oh… S-Sorry. <br> Uhh… Which one's the best… 
 Oh, never mind! You're such a perv, Mon Frère! 
-... 
+… 
 Oh, I get it! I look good in anything, so you don't know what to say, huh? 
 Uh… I-I guess so. 
 (So, all of Iris's various outfits are in here...) 
@@ -952,7 +952,7 @@ Iris, is Jean-Paul with you when you go to bed, too?
 Yep! Jean-Paul and I are always together. 
 Even in the bath? 
 Jean-Paul's a boy, so we can't take baths together. 
-I-I see... 
+I-I see… 
 (That's a huge pillow...) 
 (That's a huge cushion...) 
 That's a huge pillow. It looks so comfortable. 
@@ -964,7 +964,7 @@ That's my papa and mama.
 They told me to look at this picture whenever I feel alone. 
 That way I'm never lonely! 
 I'm always with my papa and mama whenever I'm in this room. 
-I see... 
+I see… 
 (That's a nice smelling flower. I wonder what it's called.) 
 This flower smells really nice. What's its name? 
 Hmmm… What was it again...? 
@@ -973,7 +973,7 @@ Huh, Orihime gave you this flower? That's surprising.
 (I wonder how this curtain opens up.) 
 How do you open this curtain? 
 Oh, this? It lifts up, like a stage curtain. 
-Wow... That's strange. 
+Wow… That's strange. 
 (It's an unusual but stylish curtain.) 
 We should get back to preparing for the welcome party. 
 Thanks for inviting me, Iris. 
@@ -983,7 +983,7 @@ Thanks for inviting me, Iris.
 Sure! I hope you'll come again! 
 We were just here, Mon Frère. 
 We're preparing for the welcome party. Let's go somewhere else. 
-...I guess so. Let's go, then. 
+…I guess so. Let's go, then. 
 Kohran would definitely liven up the welcome party if she were here. 
 She'd make some kind of new machine and make a big commotion. 
 As long as there wouldn’t be any explosions.
@@ -1004,7 +1004,7 @@ Huh? Boooriiing. <br> I'm staying right here!
 Sorry, Iris. We won't be long. 
 Boo. All right. 
 What is it you wanted to ask me, sir? 
-Yamazaki attacked us specifically... And not just him, but that masked man, too. 
+Yamazaki attacked us specifically… And not just him, but that masked man, too. 
 You know what that means? To them, we're a thorn in their side. 
 Yeah. In order to bring chaos to the capital, they have to take out the Assault Troupe first. 
 Exactly. So, if it were up to you, what would you do to defeat our new enemy? 
@@ -1013,41 +1013,41 @@ Fortify our defenses.
 Gather information.
 I would attack the enemy's base. A good offense is the best defense. 
 Oh? But we don't even know where they’re located. Where the hell do you plan on going? 
-Uh, well... 
+Uh, well… 
 Remember this. There's no point in recklessly attacking. 
 Wait for the opportune moment to act. Achieve the greatest results with the least amount of force. 
 Yes, sir. I understand. 
 I'd fortify the theater's defenses. We don't know when the enemy will strike. 
 Oh? Even if the capital is reduced to ashes? What will we be defending then? 
-Uh, well... 
+Uh, well… 
 Ogami, it's true that protecting the Imperial Theater is also important. 
 But our mission is to protect the capital. Never forget that. 
-...Yes, sir. I understand. 
+…Yes, sir. I understand. 
 I'd gather information. If you know your enemy, you can fight a hundred battles without fear. 
 Oh? Really now? So where are you going to get this intel, and how? 
-Uh, well... 
+Uh, well… 
 Gathering information is the foundation of strategy, but that's not the Flower Division's job. 
 The Imperial Assault Troupe has a secret intelligence unit called the Moon Division. 
 If we leave it up to them, we're bound to get some information sooner or later. 
 We don't know the enemy's identity, and I know that's frustrating, but you must remain calm, Ogami.
-...Yes, sir. I understand. 
-I don't know. So... I'd wait for now. 
+…Yes, sir. I understand. 
+I don't know. So… I'd wait for now. 
 Oh, and then? 
 If we don't know who the enemy is, we can't make any moves. 
 Heh, you're starting to understand what strategy is, aren't you? 
 For now, we have to patiently hold out for the right opportunity. 
-...Yes, sir. I understand. 
+…Yes, sir. I understand. 
 Wait for the right moment, look for an opportunity, fight with all you got. Do that and you'll never lose.
-Don't let the tragedy of losing your friends repeat itself... 
-...Yes, sir. 
+Don't let the tragedy of losing your friends repeat itself… 
+…Yes, sir. 
 Well, I'm off. Say hi to Iris for me. 
-Mr. Yoneda... 
+Mr. Yoneda… 
 Hey, Mon Frère. Are you finished talking? 
 Uncle Yoneda was looking kinda sad. Is he OK? 
 It's OK, Iris, don't worry about it. All right, let's go. 
-Mr. Yoneda... I guess he's not here anymore. 
+Mr. Yoneda… I guess he's not here anymore. 
 Let's go to another room, Mon Frère. 
-So this is the troupe's prized steam processor... 
+So this is the troupe's prized steam processor… 
 Uncle Yoneda said there are only two or three of them in Japan. 
 This, and the command center next door, are the heart of the Assault Troupe. 
 Even with this steam processor, we still don't know anything about our enemy, do we? 
@@ -1056,7 +1056,7 @@ This is the infirmary, eh?
 Whenever you get injured, you can come here to get treated. 
 If you get hurt really bad, you can go to the “intensive care unit” in the back. 
 But the ICU is usually off-limits. 
-I see... I'll keep that in mind. 
+I see… I'll keep that in mind. 
 I hate the disinfectant smell in here! 
 Hahaha. Let's go, then. 
 Look, Mon Frère. This is the new bathroom. 
@@ -1064,7 +1064,7 @@ It used to be a shower room, but they rebuilt it and turned it into a bath.
 I always feel so revitalized whenever I stretch out my limbs and soak in a nice tub. 
 Yep! The tub's so big, it makes me want to go swimming in it! 
 Doesn't it make you wanna swim too, Mon Frère? 
-Well... 
+Well… 
 It makes me want to swim. 
 It makes me want to sing. 
 It makes me want to swim. 
@@ -1074,15 +1074,15 @@ It's so big, it makes me want to swim as well.
 You too, Mon Frère? Eheheh, we're on the same page! 
 But when I took a bath with Sakura the other day, she got mad at me for swimming. 
 She said, "Go in the pool next door if you want to swim." 
-I see... That's certainly true. 
+I see… That's certainly true. 
 It makes me want to sing. It feels great to sing in the bath. 
 Uncle Yoneda sings a lot when he takes a bath, too. 
 Maybe I'll try singing next time? 
-It... makes me want to take a peek inside... 
+It… makes me want to take a peek inside… 
 You're so gross, Mon Frère! 
 I hate it when you say stuff like that!
-Oh... Kidding, just kidding. Don't be so mad, Iris. 
-I'm not really into swimming... 
+Oh… Kidding, just kidding. Don't be so mad, Iris. 
+I'm not really into swimming… 
 Nothing feels better than taking your time and washing yourself off in peace. 
 I always make sure to count to ten before I get out of the bath, too. 
 Hahaha, I see. If you don't warm up properly, you'll catch a cold. 
@@ -1091,7 +1091,7 @@ Yeah, you're right. Let's go.
 There's still nobody in the bath, Mon Frère. 
 You’re right. Let's go. 
 This is the changing room. This is where you change when you go to the pool or bath. 
-I see... 
+I see… 
 Don’t peek at anyone, Mon Frère!
 Why do you keep coming to the changing room? 
 You're not thinking of something nasty, are you? 
@@ -1099,33 +1099,33 @@ No, not at all. I just happened to come here, that's all.
 Look, Mon Frère! We got a new pool. 
 It's got warm water, too, so you can swim even in winter. 
 I heard it also has training mines! 
-I see... It's cutting edge, just as you'd expect from the troupe. 
+I see… It's cutting edge, just as you'd expect from the troupe. 
 Do you like the pool, Iris? 
-Yeah, I love it! My feet don't reach the bottom, though, so I have to use an inner tube... 
+Yeah, I love it! My feet don't reach the bottom, though, so I have to use an inner tube… 
 But I can swim halfway across the pool without one! 
 Wow, that's amazing. You're doing great, Iris. 
 Heheh, yep! 
-So this is the training room... Iris, you want to work out a bit? 
-Hmmm... Maybe later. We have the welcome party today. 
+So this is the training room… Iris, you want to work out a bit? 
+Hmmm… Maybe later. We have the welcome party today. 
 You're right. We'll do this some other time. 
 We were just here, Mon Frère. Did you need something? 
-No... No, not really. Let's go, then. 
+No… No, not really. Let's go, then. 
 Oh, it's Sakura. 
 Ah, Ogami, Iris. 
 What's up? Did you come here to get something? 
 I'm looking for some decorations for the welcome party. 
 I know, maybe you could help me? 
 Sure, no problem. 
-What a pain... 
-Searching through all this junk... What a pain... 
-...Fine, then. I'll look for it by myself. 
-You should've helped her, Mon Frère... 
-She looks so sad all by herself... 
+What a pain… 
+Searching through all this junk… What a pain… 
+…Fine, then. I'll look for it by myself. 
+You should've helped her, Mon Frère… 
+She looks so sad all by herself… 
 Sure, no problem. Right, Iris? 
 Yeah! Let's do our best, Mon Frère! 
 Thank you! I appreciate it. 
 Let's help her out, Mon Frère. 
-...You're right. If I’ve got time to stand around mulling it over, I’ve got time to help.
+…You're right. If I’ve got time to stand around mulling it over, I’ve got time to help.
 Thank you. I appreciate it. 
 We're looking for a kusudama, Ogami. I appreciate your help! 
 OK, got it! 
@@ -1139,34 +1139,34 @@ Did you see it there, Ogami?
 Pull yourself together, Ogami! 
 Ah, that's it! Thank goodness we found it. 
 What's this? Oh, a kusudama. 
-Oh, Ogami! I was looking for a kusudama, too. All that's left is... 
+Oh, Ogami! I was looking for a kusudama, too. All that's left is… 
 Ah, there you are! That's where you've been hiding. 
 A flower vase? That's not it. 
 I'm sorry, Ogami. I was actually looking for the vase, too. 
 Ah, that's it! Thank goodness we found it. 
-A hanging banner? Nope... 
+A hanging banner? Nope… 
 A banner? We'll need that, too. 
 I just looked in that box, Mon Frère. 
-...Props from "Dinosaur Island"? That takes me back. 
+…Props from "Dinosaur Island"? That takes me back. 
 What's this? Machine parts? Doesn't look like it's here. 
 I already checked here, Ogami. 
-What's this... A poster for "For Love"? That takes me back. 
-A Koubu part? Maybe it's inside... Nah, there's no way. 
-Maybe it's in the locker... Or not. 
-What's this room for? No good... It's locked. 
-Not here... Oh, what's this? 
-... 
+What's this… A poster for "For Love"? That takes me back. 
+A Koubu part? Maybe it's inside… Nah, there's no way. 
+Maybe it's in the locker… Or not. 
+What's this room for? No good… It's locked. 
+Not here… Oh, what's this? 
+… 
 Hey, Mon Frère! What are you doing? 
 No slacking off! 
-We don't have time, Ogami... Please take this seriously. 
-S-Sorry. I got caught up in reading this... 
-We've looked so hard, and yet we still can't find what we need... 
+We don't have time, Ogami… Please take this seriously. 
+S-Sorry. I got caught up in reading this… 
+We've looked so hard, and yet we still can't find what we need… 
 We've found a bunch of other stuff, too. Where haven't we looked yet? 
 I'll look around a bit more. I'll be fine on my own. 
 No, I'm sorry I couldn't be of more help. 
 Good luck, Sakura. 
-I can't believe we still couldn't find it... 
-Seriously... Where could it be? 
+I can't believe we still couldn't find it… 
+Seriously… Where could it be? 
 I'll look for it a bit more. 
 I'm so sorry to have taken up your time. 
 No, I'm sorry I couldn't be of more help. 
@@ -1174,19 +1174,19 @@ Good luck, Sakura.
 Iris, Ogami. Thank you very much. You were a great help. 
 Nah, it was nothing. 
 That was fun, kinda like playing hide-and-seek. 
-I'll take these back to the dressing room. If you'll excuse me... 
+I'll take these back to the dressing room. If you'll excuse me… 
 All right, Iris. We should go, too. 
 OK! 
 Iris, Ogami. Thank you very much. 
 Thanks to you, Ogami, we found everything I was looking for. 
 That was amazing, Mon Frère! You're a genius at finding things! 
-I'll take these back to the dressing room. If you'll excuse me... 
+I'll take these back to the dressing room. If you'll excuse me… 
 All right, Iris. We should go, too. 
 OK! 
 Oh, Ogami, Iris. I looked around a bit longer and I managed to find everything I was looking for.  
 Really? That’s good to hear.
 That's great, Sakura! 
-I'll take these back to the dressing room. If you'll excuse me... 
+I'll take these back to the dressing room. If you'll excuse me… 
 All right Iris. We should go, too. 
 OK! 
 Sakura isn't here anymore. I wonder if she went back to the dressing room. 
@@ -1195,7 +1195,7 @@ OK!
 This is the hangar. My Koubu is kept in here, too. 
 Nobody would ever guess there's a facility like this below the Imperial Theater. 
 Hey, do you know what Orihime's Spirit Armor is called? 
-Orihime's Spirit Armor? I believe it was... 
+Orihime's Spirit Armor? I believe it was… 
 Eisenkleid. 
 Eisenkride. 
 Eisencloud. 
@@ -1208,27 +1208,27 @@ Was that it? I have a hard time remembering foreign names.
 Eisencloud. 
 Close! <br> It's "kleid," not "cloud"! 
 Was that it? I have a hard time remembering foreign names. 
-...Huh? What was it called again? 
+…Huh? What was it called again? 
 Bzzt, time's up! <br> Did you forget, Mon Frère? 
 Orihime's Spirit Armor is called an "Eisenkleid"! 
 W-Was that it? I have a hard time remembering foreign names. 
 I heard that "Eisenkleid" means "Iron dress." 
 Orihime's been riding in it ever since she was in the Star Division. 
-Iron dress... <br> What an interesting name. 
+Iron dress… <br> What an interesting name. 
 My Koubu's yellow, just like my battle uniform. 
 Your white Koubu matches your uniform too, it's so cool. 
 Hahaha, thank you, Iris. 
 Oh, Mon Frère, let me see your watch! 
 5 minutes to go until it's 12. The welcome party is about to start! 
 It's that late already? OK, we need to hurry back, then. 
-Wow... Amazing! 
+Wow… Amazing! 
 It looks like we're all set for the welcome party. 
 Hey, you're here. 
 We've been waiting for you. 
 Ogami, Iris, thank you for your hard work. 
 You too, Sakura. Thank you for getting everything ready. 
-Heehee... I enjoy doing these kinds of preparations. 
-Besides, you all helped me... 
+Heehee… I enjoy doing these kinds of preparations. 
+Besides, you all helped me… 
 It's all thanks to you. Thank you so much. 
 Oh, it was nothing, right Iris? 
 Yep! It was a lot of fun being with Mon Frère! 
@@ -1239,11 +1239,11 @@ It's a little late, but you were a big help. Thank you very much.
 Oh, it was nothing, right Iris? 
 Yep! It was a lot of fun being with Mon Frère! 
 Speaking of which, I asked you to bring some plates. 
-Ah?! Oh, that's right... 
+Ah?! Oh, that's right… 
 Huh!? You didn't bring them!? 
-Sorry... It totally slipped my mind. 
+Sorry… It totally slipped my mind. 
 Me too. I'm sorry, Sakura. 
-...It is what it is. We all forget things sometimes. 
+…It is what it is. We all forget things sometimes. 
 I'll go get the plates. Now, everyone please come in. 
 Excuse us! 
 Oh, everyone, welcome. 
@@ -1253,58 +1253,58 @@ You invited them just like I asked. Thank you, Ogami.
 Oh, it was nothing. Right, Iris? 
 Yep! It was a lot of fun being with Mon Frère! 
 Excuse us! 
-Well, now... What beautiful decorations. 
-...Oh? Why isn’t Tsubaki here?
+Well, now… What beautiful decorations. 
+…Oh? Why isn’t Tsubaki here?
 Ah?! I forgot to invite Tsubaki! 
-Really? Oh, no... 
+Really? Oh, no… 
 I forgot, too. I'm sorry, Sakura. 
-...OK, I'll go get her later. 
+…OK, I'll go get her later. 
 We can all be forgetful sometimes. Don't worry about it. 
-...Thank you, Sakura. That's really kind of you. I appreciate it. 
+…Thank you, Sakura. That's really kind of you. I appreciate it. 
 Excuse me. Wow, what beautiful decorations! 
-...Oh? Where are Kasumi and Yuri? Is something the matter with them? 
+…Oh? Where are Kasumi and Yuri? Is something the matter with them? 
 Oh! I forgot to invite them! 
-Really? Oh, no... 
+Really? Oh, no… 
 I forgot, too. I'm sorry, Sakura. 
-...OK, I'll go get them later. 
+…OK, I'll go get them later. 
 We can all be forgetful sometimes. Don't worry about it. 
-...Thank you, Sakura. That's really kind of you. I appreciate it. 
-It's almost noon... Are Kasumi and the others not coming? 
-Ah... That's right, I totally forgot to invite them! 
+…Thank you, Sakura. That's really kind of you. I appreciate it. 
+It's almost noon… Are Kasumi and the others not coming? 
+Ah… That's right, I totally forgot to invite them! 
 Huh!? Really?! 
 I forgot, too. I'm sorry, Sakura. 
-...OK, I'll go get them later. 
-We can all be forgetful sometimes... 
+…OK, I'll go get them later. 
+We can all be forgetful sometimes… 
 But I can't believe you didn't tell any of them. You've got to get your act together, Ogami. 
 S-Sorry. I'll be more careful from now on. 
 Well then, all that's left now is to wait for the new recruit to show up. 
 I know! Why don't we greet her by the entrance? 
 That's a great idea. I'm sure she'll be thrilled.
 Yaaay! Let's go greet her, let's go! 
-Hmhm... So much noise for a simple newcomer. 
+Hmhm… So much noise for a simple newcomer. 
 I'll be waiting here. All of you can greet them in my stead. 
 Understood. OK, let's go. 
-Hey, Mon Frère... 
+Hey, Mon Frère… 
 What's up, Iris? 
 Let's greet our new teammate together on the terrace. 
 If we shout "welcome" from up there, she'll be so surprised! 
 All right, let's go. 
 Let’s go to the entrance.
-...All right, let's go. Looks like I’m spending the whole day with you.
+…All right, let's go. Looks like I’m spending the whole day with you.
 Yaaay! I get to be with Mon Frère again! 
-You sure like hanging around Japanese men... 
-...OK then, the manager and I will wait by the entrance. 
+You sure like hanging around Japanese men… 
+…OK then, the manager and I will wait by the entrance. 
 Thanks, I'll leave it to you. 
 OK, Mon Frère, let's hurry up and go! 
 Let’s greet her by the entrance with everyone else.
 No! I only want to be with you! 
 Sheesh, what's so great about Japanese men, anyway? 
-...Oh well. Iris won't budge once she sets her mind to something.
+…Oh well. Iris won't budge once she sets her mind to something.
 Ogami, please go with her. 
 The manager and I will greet the new team member by the entrance.
 Really? OK, I'll leave it to you. 
 Yaaay, it's decided! OK, let's go, Mon Frère! 
-Hmmm... What should I do? 
+Hmmm… What should I do? 
 C'mon, Mon Frère, let's go together! 
 Even if you say no, I'm taking you with me! 
 H-Hey, Iris! Don't pull so hard! 
@@ -1357,7 +1357,7 @@ A letter from Reni.
 A scarf given to me by Sakura. It's knitted with red yarn - my favorite color. 
 A scarf given to me by Sakura. It's knitted with blue yarn - my favorite color. 
 A scarf given to me by Sakura. It's knitted with yellow yarn - my favorite color. 
-... "" "" () - . , ! ? ?! !! 
+… "" "" () - . , ! ? ?! !! 
 Welcome to Pompadour Chikamatsu's Fortune Telling. Here is what fate has in store for you. 
 Your lucky color is peach. A fateful encounter will bring good luck. 
 Your lucky color is purple. If you're a wise shopper, you'll be in luck. 
@@ -1417,18 +1417,18 @@ If you spend money generously this week you may get twice as much back. But be w
 Your health will gradually improve over the weekend. But don't stay up too late.
 Popularity is focused on one's mellow stories. Your love life is on the rise but only with one person.
 It's a turning of the stars. Be careful of love triangles. 
-Secrets are revealed, trust is lost, and unexpected pitfalls appear... 
+Secrets are revealed, trust is lost, and unexpected pitfalls appear… 
 Entertainment expenses are likely to be high. Don't be stingy, think of it as an investment. 
 Be mindful of injuries and illness caused by carelessness. They'll add up and bring you trouble.
 You are a devoted partner. Your feelings are clear. All you have to do is wait for their response.
 Your lack of experience may cause you to stumble. Advice from an older person can turn your luck around. 
-Your luck is going down... A humble attitude and calm judgment are the key to survival. 
+Your luck is going down… A humble attitude and calm judgment are the key to survival. 
 You need to spread out your activities. Hang out with a lot of good people. Cherish the small encounters. 
 Ride your bike along the river. You may come across some interesting incidents. 
 This week, you will meet your ideal person. Your favorite restaurant will be the place to meet someone. 
 There may be opposition from those around you. Don't be hard on yourself. Try to listen to them.
 A balanced relationship and a serious approach to socializing will help you. 
-If you try to do things out in the open, you might get sidetracked and end up striking out... 
+If you try to do things out in the open, you might get sidetracked and end up striking out… 
 Your money luck is going down this week. When in doubt, don't buy anything. 
 Your relationship may progress. A date at a smart place like a museum or art gallery is recommended. 
 Energy floods your whole body. You can be active in any situation. In love, you will be compatible. 

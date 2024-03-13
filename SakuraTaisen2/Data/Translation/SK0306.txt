@@ -1,12 +1,12 @@
 ﻿Allow me to introduce myself. I am Kaede Fujieda, the newly appointed deputy commander of the troupe. 
-My older sister, Ayame, organized and assisted the Imperial Assault Troupe...
+My older sister, Ayame, organized and assisted the Imperial Assault Troupe…
 And now it’s my turn to care for it in her stead.
 I'm looking forward to working with everyone. 
-Y-Yes, ma'am! W-We'll be in your care! 
+Y-Yes, ma'am! <br> W-We'll be in your care! 
 Honestly… Ogami always gets red in the face anytime we meet a woman with good looks! 
 Ogami, Ogami! <br> We have big news!! 
 What is it, Yuri? And Kasumi's with you too. What happened this time?! 
-The manager... It seems that Mr. Yoneda has regained consciousness! 
+The manager… It seems that Mr. Yoneda has regained consciousness! 
 What?! Is that really true?! 
 Uncle Yoneda is doing OK? Yaaay, yaaay! 
 Thank goodness, Ogami. Now the Imperial Assault Troupe can return to normal. 
@@ -17,9 +17,9 @@ Mr. Yoneda was smiling and full of life when we visited him in the army hospital
 He was so cheerful it was hard to believe he was in a coma. It was a miracle, and quite the relief.
 The doctors said he can be discharged after another two months. 
 That said, those two months might be hard for him since no alcohol is allowed in the hospital. 
-And finally... The theater's summer performance of "King Lear" began. 
+And finally… The theater's summer performance of "King Lear" began. 
 I felt like I had worked my fingers to the bone after punching tickets for so long. 
-This job is unexpectedly exhausting... 
+This job is unexpectedly exhausting… 
 But hearing the storm of applause from where I stand in the entrance, washes away all my fatigue. 
 “King Lear” was met with unexpected acclaim from the audience.
 Kanna played the role of King Lear, Sakura was the kind-hearted Princess Cordelia… 
@@ -75,4 +75,4 @@ A letter from Reni.
 A scarf given to me by Sakura. It's knitted with red yarn - my favorite color. 
 A scarf given to me by Sakura. It's knitted with blue yarn - my favorite color. 
 A scarf given to me by Sakura. It's knitted with yellow yarn - my favorite color. 
-... "" "" () - . , ! ? ?! !!
+… "" "" () - . , ! ? ?! !!

@@ -1,15 +1,15 @@
 ﻿Good morning, Ogami. 
 Good morning. 
 Well? Ready to give your answer? 
-... 
-... 
-... 
-... 
-... 
-... 
-... 
-... 
-(The one I'll pick for the lead... is...) 
+… 
+… 
+… 
+… 
+… 
+… 
+… 
+… 
+(The one I'll pick for the lead… is...) 
 Ogami, the Flower Division's counting on you. 
 (Should I pick Sakura?) 
 It could only be Sakura! 
@@ -43,39 +43,39 @@ Let me think it over.
 It could only be Reni! 
 Let me think it over. 
 (This is a big decision. Let me think it over.) 
-The one I've picked for the lead role... is Sakura. 
+The one I've picked for the lead role… is Sakura. 
 ...! 
-Ogami... Are you... <br> Are you really sure? 
+Ogami… Are you… <br> Are you really sure? 
 Yes. I’m counting on you, Sakura. 
-...OK! 
-The one I've picked for the lead role... is Sumire. 
-Ensign... I knew you'd pick me! 
+…OK! 
+The one I've picked for the lead role… is Sumire. 
+Ensign… I knew you'd pick me! 
 Yes. I’m counting on you, Sumire. 
-...Of course! 
-The one I've picked for the lead role... is Maria. 
-Captain... <br> Are you really sure? 
+…Of course! 
+The one I've picked for the lead role… is Maria. 
+Captain… <br> Are you really sure? 
 Yes. I’m counting on you, Maria. 
-...Yes, sir! I'll do my best to live up to your expectations! 
-The one I've picked for the lead role... is Kanna. 
-Whaaa?! Boss... <br> Me? Are ya sure? 
+…Yes, sir! I'll do my best to live up to your expectations! 
+The one I've picked for the lead role… is Kanna. 
+Whaaa?! Boss… <br> Me? Are ya sure? 
 Yes. I’m counting on you, Kanna. 
 All right, you got it! For you Boss, I'll give it everythin’ I've got! 
-The one I've picked for the lead role... is Iris. 
+The one I've picked for the lead role… is Iris. 
 Really, Mon Frère? <br> Are you sure? 
 Yes. I’m counting on you, Iris. 
 OK! I'll do it! I'll do my best! 
-The one I've picked for the lead role... is Kohran. 
-Ch-Chief... For real? Me? <br> Are you sure? 
+The one I've picked for the lead role… is Kohran. 
+Ch-Chief… For real? Me? <br> Are you sure? 
 Yes. I’m counting on you, Kohran. 
-...OK! Thanks a bunch, Chief! I'm gonna give it my all! 
-The one I've picked for the lead role... is Orihime. 
-Mr. Ensign... <br> I knew you'd pick me! 
+…OK! Thanks a bunch, Chief! I'm gonna give it my all! 
+The one I've picked for the lead role… is Orihime. 
+Mr. Ensign… <br> I knew you'd pick me! 
 Yes. I’m counting on you, Orihime. 
 Just you leave it to me! I'll put on the very greatest performance!
-The one I've picked for the lead role... is Reni. 
-Captain... Are you... sure? 
+The one I've picked for the lead role… is Reni. 
+Captain… Are you… sure? 
 Yes. I’m counting on you, Reni. 
-...OK, understood. 
+…OK, understood. 
 Ogami’s judgment has never steered us wrong. I'm positive this will be a wonderful play. 
 Well, I suppose I can let someone else be the star this time. 
 We're all in this together. Let's make this a great Christmas play. 
@@ -85,12 +85,12 @@ This show’s gonna rock! I can't wait!
 Don't put down your guard, or I'll snatch away the lead role from you. 
 It's all right. The god of the stage is with us. 
 The lead isn't alone. The entire Flower Division together is the true star. 
-Everyone... Let's make this a Christmas play to remember! 
+Everyone… Let's make this a Christmas play to remember! 
 Sir, yes, sir! 
 And so, rehearsals for "The Miracle Bells" began. 
 After having picked the lead, I was put in charge of the entire production. 
 Ogami, what mood should we aim for with our set design? 
-Let's see... 
+Let's see… 
 Go for a cheery mood. 
 Go for a solemn mood. 
 Go for an ominous mood. 
@@ -98,10 +98,10 @@ Let's go for a cheery mood befitting of Christmas.
 OK, got it. We'll go for a cheery, flashy feel. 
 All right, leave it to me! I'll set up the lights so the stage is positively radiant! 
 It is a play about the miracle of Christmas, so let's go for a more solemn mood. 
-I see... An angelic feel fitting for a holy night. 
+I see… An angelic feel fitting for a holy night. 
 All right, leave it to me! I'll build us a nice, solemn set! 
 What if we went with an ominous mood? 
-Huh?! Did... Did you say "ominous"? 
+Huh?! Did… Did you say "ominous"? 
 Ahahaha! Why not, Sakura? That could be interesting! 
 Besides, this is the chief's play this time around. It's all up to him! 
 All right, I'll go fix up the lights to give the stage an ominous feel. 
@@ -118,18 +118,18 @@ That's a great idea! Nothin’ beats action when it comes to plays!
 All right, let's rewrite the script right away, then. 
 What if we made it an audacious comedy? 
 Sounds like fun! Let's close out the old year and ring in the new with some laughter! 
-Hmm... This will require a major rewrite to the script... 
+Hmm… This will require a major rewrite to the script… 
 So what, Maria? Let's make it fun and have ourselves a blast! 
-...Understood. Let's go with a comedic version of "The Miracle Bells." 
+…Understood. Let's go with a comedic version of "The Miracle Bells." 
 And with that, the course of the play is more or less set. 
 All right, let's start our rehearsals over, from the top! 
 Day in, day out, the Flower Division passionately continued their rehearsals. 
 The direction started to take shape, and the play finally started moving along. 
 And now, at last, it's time to direct all the performers. 
 In "The Miracle Bells,” the seven people aside from the heroine will portray angels. 
-Hey, Mon Frère. About the angel roles... 
+Hey, Mon Frère. About the angel roles… 
 What kind of performance should we be giving? 
-Captain, about the angel roles... 
+Captain, about the angel roles… 
 What kind of performance should we be giving? 
 Act in sync.
 Act restrained.
@@ -143,51 +143,51 @@ That's kinda boring, but if that's what you want, then OK.
 Roger. As restrained as possible. 
 I'll leave it up to you, everyone can act as they please. 
 OK, got it! Eheheh, I hope I do well! 
-...Roger. We'll leave it to everyone's own judgment. 
-And finally... The directions for  
+…Roger. We'll leave it to everyone's own judgment. 
+And finally… The directions for  
 's performance as the heroine. 
-Ogami... Opening day is finally approaching. 
+Ogami… Opening day is finally approaching. 
 Please, give me your final directions for my performance. 
 Act purely. 
 Act cheerily. 
 Act gracefully. 
 Let's go for a pure feel. I think it suits you perfectly. 
-Ogami... Thank you. 
+Ogami… Thank you. 
 I'll do my best to give a pure-hearted performance! 
-Sakura... 
+Sakura… 
 Let's go for a bright, cheery feel. I think it suits you perfectly. 
-Ogami... Thank you. 
+Ogami… Thank you. 
 I'll do my best to give a lively, cheerful performance! 
-Sakura... 
+Sakura… 
 Let's go for a graceful, refined feel. I know you can do it, Sakura. 
 Graceful, huh? Heehee, you're making me blush. 
 It's thanks to you we've made it this far. 
-Thank you, Ogami... <br> I mean it. 
-Sakura... 
+Thank you, Ogami… <br> I mean it. 
+Sakura… 
 For everyone's sake and yours… We'll make this an amazing play! 
-Ensign... Opening day is finally approaching. 
+Ensign… Opening day is finally approaching. 
 Please give me your final directions for my performance. 
 Act purely. 
 Act cheerily. 
 Act gracefully. 
 Let's go for a pure feel. I think it suits you perfectly. 
-Ensign... Thank you. 
+Ensign… Thank you. 
 I'll put on a marvelous performance, so as to not betray your expectations. 
 All right. I can't wait. 
 Let's go for a bright, cheery feel. I think it suits you perfectly. 
-...Oh dear. I don't think that would let my particular qualities shine through. 
+…Oh dear. I don't think that would let my particular qualities shine through. 
 But I think it'd be quite interesting to have a cheerful, lively Holy Mother. 
 Well if you insist, then it looks like I don't have a choice. Very well. 
 I'm looking forward to it, Sumire. 
 Let's go for a graceful, refined feel. I know you can do it, Sumire. 
 Of course, just leave it to me! 
 When it comes to grace, nobody comes close to Sumire Kanzaki! 
-Hahaha... <br> You're so reliable. 
+Hahaha… <br> You're so reliable. 
 It's all thanks to you that we've made it as far as we have. 
-Ensign... Truly, you have my thanks. 
-Sumire... 
-For the sake of everyone and yourself... We'll make this a wonderful play! 
-Captain... Opening day is finally approaching. 
+Ensign… Truly, you have my thanks. 
+Sumire… 
+For the sake of everyone and yourself… We'll make this a wonderful play! 
+Captain… Opening day is finally approaching. 
 Please give me your final directions for my performance. 
 Act purely. 
 Act cheerily. 
@@ -196,20 +196,20 @@ Let's go for a pure feel. I think it suits your dignified image perfectly.
 Dignified, huh...? Understood. 
 I'm looking forward to it, Maria. 
 How about we try a bright, cheerful performance, just this once. 
-Cheerful... you say? I don't know... 
+Cheerful… you say? I don't know… 
 It's all right. I know you can do it, Maria. 
-If you insist, sir... <br> Then I'll give it a try. 
+If you insist, sir… <br> Then I'll give it a try. 
 I can't wait, Maria. 
 Let's go for a graceful, refined feel. I know you can do it, Maria. 
-Graceful... you say? I don't know... 
+Graceful… you say? I don't know… 
 It's all right. I know you can do it, Maria. 
-If you insist, sir... Then I'll give it a try. 
+If you insist, sir… Then I'll give it a try. 
 I can't wait, Maria. 
 It's all thanks to you that we've made it this far. 
 Thank you, Captain. I mean it. 
-Maria... 
+Maria… 
 Let's make this an incredible play, for everyone's sake. 
-Hey Boss... The big day's almost here. 
+Hey Boss… The big day's almost here. 
 Would ya give me your final directions for my performance? 
 Act purely. 
 Act cheerily. 
@@ -217,22 +217,22 @@ Act gracefully.
 Let's go for a pure feel, put an emphasis on your innocent side. 
 Pure, huh? Heheh, you're makin' me kind of embarrassed. 
 It's OK, I know you can do it, Kanna. 
-...Got it. If you say so, then I'll give it a shot. 
+…Got it. If you say so, then I'll give it a shot. 
 Thank you, Kanna. 
 This is a Kanna performance, so how about a bright, cheerful feel? 
 Heheh, that's what I'm talkin' about! No one's got me beat when it comes to cheer! 
 I'm gonna put on the cheeriest performance you've ever seen, Boss, so look forward to it! 
-Hahaha... <br> I can't wait, Kanna. 
+Hahaha… <br> I can't wait, Kanna. 
 What if you act as gracefully and refined as you can? 
-Gracefully, huh? <br> Hmm... I dunno. 
+Gracefully, huh? <br> Hmm… I dunno. 
 Does that sound too tough, Kanna? 
-...Nah, I'll give it a shot. I'll think of it as a challenge. 
+…Nah, I'll give it a shot. I'll think of it as a challenge. 
 I'm lookin’ forward to how this is gonna turn out myself. 
-Hahaha... <br> I can't wait, Kanna. 
-Boss... It's thanks to you that we've made it this far. 
-So thanks... Really. Once again, you have my gratitude. 
-Kanna... 
-For you and for everyone... We'll make this an amazing show! 
+Hahaha… <br> I can't wait, Kanna. 
+Boss… It's thanks to you that we've made it this far. 
+So thanks… Really. Once again, you have my gratitude. 
+Kanna… 
+For you and for everyone… We'll make this an amazing show! 
 Hey. Mon. Frère!
 Heehee! It's almost time for the Christmas play! 
 How should I act up on stage, Mon Frère? 
@@ -247,21 +247,21 @@ OK! I'll do my best!
 Hahaha, that's the spirit, Iris. 
 How about you try to act as gracefully as you can? 
 Grays-fuh-ly? What does that mean? 
-Uhhh... How should I put this... 
-I guess... like a grown-up? 
+Uhhh… How should I put this… 
+I guess… like a grown-up? 
 Like a grown-up? OK! I'll give it a try! 
 Really? I'm looking forward to it, Iris. 
-Mon Frère... Thank you. Really, thank you. 
+Mon Frère… Thank you. Really, thank you. 
 It's because of you that we’ve made it this far. 
-Iris... 
-For your sake and everybody else... We'll do our very best! 
+Iris… 
+For your sake and everybody else… We'll do our very best! 
 The opening day's finally approaching, Chief. 
 Could I ask you for your final directions for my performance? 
 Act purely. 
 Act cheerily. 
 Act gracefully. 
 Let's go for a pure feel, put your innocent side to the forefront. 
-You... think I can do that? 
+You… think I can do that? 
 I'm sure you can, Kohran. Don't worry. 
 OK! I'll try my best! 
 Let's put your bright, cheerful side on full display! 
@@ -270,15 +270,15 @@ I'll do my best to put everyone watching in a happy mood!
 I can't wait, Kohran. 
 What if you act as gracefully and refined as you can? 
 Graceful? Are you for real, Chief? 
-I wanted to see you act gracefully, but... I dunno... 
-Hmm... 
+I wanted to see you act gracefully, but… I dunno… 
+Hmm… 
 All right! In that case, I'll brace myself and give it a shot! 
-A graceful, bespectacled heroine... This'll be a hoot! 
+A graceful, bespectacled heroine… This'll be a hoot! 
 Hahaha, I can't wait, Kohran! 
 It's thanks to you that we've made it this far. 
 So thanks, Chief. Seriously. I'm grateful. 
-Kohran... 
-For you and everyone else... We’re gonna make this an amazing show! 
+Kohran… 
+For you and everyone else… We’re gonna make this an amazing show! 
 Mr. Ensign, finally the Christmas play is approaching. 
 Only this once, I'll let you direct my performance. 
 Act purely. 
@@ -292,24 +292,24 @@ Leave it to me. Any performance you want me to do, I can handle it.
 I'm looking forward to it, Orihime. 
 Since this will be an Orihime performance, how about a graceful, refined feel? 
 Understood. I don't have any problem with my usual routine. 
-Hahaha... <br> What confidence. 
+Hahaha… <br> What confidence. 
 It is thanks to you that we've made it this far, Mr. Ensign. 
 For the sake of you and everyone else… We'll make this a wonderful play! 
-Captain... Opening day draws near. 
+Captain… Opening day draws near. 
 Please give me your directions. 
 Act purely. 
 Act cheerily. 
 Act gracefully. 
 Let's go for a pure feel, emphasize your innocent image. 
 Understood. I'll do that. 
-How about this... This might be tricky for you, but how about you act cheerfully? 
+How about this… This might be tricky for you, but how about you act cheerfully? 
 That won't be particularly difficult. Don't worry. 
 When I'm up on stage, I can turn in any kind of performance. 
 I-I see. Break a leg up there, Reni. 
-How about this... This might be tricky for you, but how about you act gracefully? 
-...Understood. I'll do that. 
+How about this… This might be tricky for you, but how about you act gracefully? 
+…Understood. I'll do that. 
 I know what the word means, so I'll do some research. 
-I see... I can't wait. 
+I see… I can't wait. 
 It's thanks to you that we've made it this far. 
 We'll put on a good play for you, Captain. 
 Sorry Ogami, but customers are only allowed to purchase one of each bromide. 
@@ -389,4 +389,4 @@ A letter from Reni.
 A scarf given to me by Sakura. It's knitted with red yarn - my favorite color. 
 A scarf given to me by Sakura. It's knitted with blue yarn - my favorite color. 
 A scarf given to me by Sakura. It's knitted with yellow yarn - my favorite color. 
-... "" "" () - . , ! ? ?! !!
+… "" "" () - . , ! ? ?! !!

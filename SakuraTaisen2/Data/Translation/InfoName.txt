@@ -107,9 +107,9 @@ Dark Kamui
 Satan
 None
 Dainichiken
-Kongo
+Kongou
 Roar of the Gods
-Hachou
+Hachiyou
 Tsuchigumo
 Nine-Seal Mandala
 Dark Kamui
@@ -179,16 +179,16 @@ Weapon
 Homura
 None
 Weapon
-Thunder Gun
+Thdr Cannon
 None
 Weapon
-B. Demon Gun
+BD Cannon
 None
 Weapon
-Assault Gun
+A Cannon
 None
 Weapon
-Dimension Gun
+D Cannon
 None
 Weapon
 Cord
@@ -218,7 +218,7 @@ Weapon
 Cord
 None
 Terrain
-D. Curtain
+Def Curtain
 None
 Terrain
 Beacon

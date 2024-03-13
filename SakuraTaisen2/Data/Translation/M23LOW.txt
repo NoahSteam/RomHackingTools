@@ -12,32 +12,32 @@ This order is currently in effect. We'll fight our opponents unflinchingly.
 Attention all units! Initiating the "Mountain" strategy!
 We're sticking with the current strategy!
 Roger!
-So those pillars are the heart of Musashi…
+So those pillars are the heart of Musashi, huh…
 If Musashi is able to fully restore its power, the capital will be completely annihilated.
-We have to throw everything we have into destroying all the pillars before that can happen! It's do-or-die, everyone!
+We have to destroy those pillars before it's too late! Everyone, it's do or die! Give it all you got!
 Exit the gate and destroy the machine!
-The enemy general, , is capable of multiple continuous attacks. Be careful!
+The enemy general, Tsuchigumo, is capable of multiple continuous attacks. Be careful!
 0 Message 2-3
 Ogami, Yamazaki's too strong. Let's make a temporary retreat!
 0 Message 3-2
 0 Message 3-3
 Ichiro Ogami, Flower Division captain. Highly proficient in combat and brave-hearted.
-Sakura Shinguji, practitioner of the Hokushin Itto style. She moves swiftly, cleaving enemies in two with her sword.
-Sumire Kanzaki, practitioner of the Kanzaki Fujin style. She inspires awe in all who witness her naginata technique.
-Maria Tachibana, sharpshooter. Once she's set her sights on her prey, they can't escape her icy bullets.
-Kanna Kirishima, practitioner of Kirishima-style karate. Pulverizes enemies with her overwhelming power.
+Sakura Shinguji, user of the Hokushin Itto style. She moves swiftly, cleaving foes in two with her sword.
+Sumire Kanzaki, user of the Kanzaki Fujin style. All who witness her naginata technique are left in awe.
+Maria Tachibana, sharpshooter. Once she targets her prey, no one can escape her icy bullets.
+Kanna Kirishima, user of Kirishima-style karate. She pulverizes enemies with her overwhelming power.
 Iris, the Flower Division's mascot. She fights enemies with her mysterious supernatural powers.
 Kohran Li, inventor. Startles friend and foe alike with the inventions she employs.
-Orihime Soletta, ex-member of the Star Division. Known as one of the "Red Nobles," riding a rose-colored armor.
+Orihime Soletta, prior Star Division member. Piloting a rose armor, she is known as one of the Red Nobles.
 Reni Milchstraße. A combat professional, attacking accurately without a single wasted movement.
 Close-range combat Kouma Weapon. Its combat prowess exceeds the "Banrai" Kouma Weapons.
-Kouma Weapon: Gufuu. With a focus on long-range attacks, its other attributes are comparatively weaker.
-Kouma Weapon: Kairai. Its full combat potential was maximized using data left behind by Mokujiki.
-Kouma Weapon: Ryukou. With well-balanced abilities across the board, this Kouma Weapon is a masterwork of design.
+Kouma Weapon: Gufuu. It has a long range, but is relatively weak in all other respects.
+Kouma Weapon: Kairai. Thanks to Mokujiki's leftover data, it's reached its full combat potential.
+Kouma Weapon: Ryukou. With well-balanced abilities across the board, this unit is a masterwork of design.
 Healing-type Kouma Weapon. Boasts restorative abilities to revitalize other Kouma.
-Kouma Weapon: Inazuma. This Kouma boasts not only restorative abilities, but high maneuverability as well.
-Heavy bombardment Kouma Weapon. Combining both long-range ability and high attack power, this is an impressive machine.
-Kouma Weapon: Ryukou. With well-balanced abilities across the board, this Kouma Weapon is a masterwork of design.
+Kouma Weapon: Inazuma. This Kouma boasts not only restorative abilities, but high mobility as well.
+Bomber-type Kouma Weapon. This impressive unit combines both powerful attacks and long range.
+Kouma Weapon: Ryukou. With well-balanced abilities across the board, this unit is a masterwork of design.
 Message 18
 Message 19
 Message 20
@@ -67,7 +67,7 @@ There's something different about you today, Ogami.
 I did it!
 It was all thanks to you, Ogami!
 Ogami… I believe in you.
-My time to shine has come, Ensign.
+Your time to shine has come, Ensign.
 Please, do your best for me…
 You mustn't overexert yourself…
 Now, here I come!
@@ -130,10 +130,10 @@ You're my knight in shining armor, Mon Frère!
 It's OK, Mon Frère, I'm here with you.
 Ah… It stopped…
 I'm sorry, Mon Frère…
-Yaaaay! You did it, Mon Frère!
+Yaaaay! <br> You did it, Mon Frère!
 Wow, Mon Frère! You're sooo cool!
 I'm amazing, huh?
-C'mon, praise me! Praise me!
+C'mon, praise me! <br> Praise me!
 With you around, Mon Frère, I'm not scared of anything!
 Countin' on ya, Chief!
 Lemme show ya what I'm made of!

@@ -114,6 +114,17 @@ bool InsertTextForSysFile(SysFileExtractor& inSysFile,
 		IncrementLine_Sys()\
 	}
 
+#if USE_SINGLE_BYTE_LOOKUPS	
+	#define AlignToWordBoundary(InTranslatedSakuraString)\
+	/*//Add 1 because the first byte is an identifier*/\
+	if ((InTranslatedSakuraString.mChars.size() + 1) % 2 != 0)\
+	{\
+		InTranslatedSakuraString.AddChar(' ');\
+	}
+#else
+	#define AlignToWordBoundary(x)
+#endif
+
 	if(inSysFile.mLines.size() == 0)
 	{
 		return true;
@@ -230,6 +241,9 @@ bool InsertTextForSysFile(SysFileExtractor& inSysFile,
 				translatedSakuraString.AddChar(inSysFile.mLineIds[translatedLineIndex].mId);
 				translatedSakuraString.AddChar(inSysFile.mLineIds[translatedLineIndex].mEnder);
 				translatedSakuraString.AddString(untranslatedString, 0, 0, false);
+				
+				AlignToWordBoundary(translatedSakuraString);
+
 				translatedSakuraString.AddChar(0xffff); //End of line
 
 				translatedLines.push_back(translatedSakuraString);
@@ -329,13 +343,7 @@ bool InsertTextForSysFile(SysFileExtractor& inSysFile,
 				}
 			}//for(wordIndex < numWords)
 
-#if USE_SINGLE_BYTE_LOOKUPS
-			//Add 1 because the first byte is an identifier
-			if ((translatedString.mChars.size() + 1) % 2 != 0)
-			{
-				translatedString.AddChar(' ');
-			}
-#endif
+			AlignToWordBoundary(translatedString);
 
 			//String ends with ffff
 			translatedString.AddChar(0xffff);
@@ -354,13 +362,16 @@ bool InsertTextForSysFile(SysFileExtractor& inSysFile,
 			translatedSakuraString.AddChar(inSysFile.mLineIds[i].mId);
 			translatedSakuraString.AddChar(inSysFile.mLineIds[i].mEnder);
 			translatedSakuraString.AddString(untranslatedString, 0, 0, false);
+			
+			AlignToWordBoundary(translatedSakuraString);
+			
 			translatedSakuraString.AddChar(0xffff); //End of line
 
 			translatedLines.push_back(translatedSakuraString);
 		}
 
 	}//if(pMatchingTranslatedFileName)
-	else
+	else //if(pMatchingTranslatedFileName)
 	{
 		//Fill out everything else with "Untranslated"
 		const string baseUntranslatedString = inSysFile.mFileNameInfo.mNoExtension + string(": ");
@@ -371,7 +382,11 @@ bool InsertTextForSysFile(SysFileExtractor& inSysFile,
 			translatedSakuraString.AddChar(inSysFile.mLineIds[i].mId);
 			translatedSakuraString.AddChar(inSysFile.mLineIds[i].mEnder);
 			translatedSakuraString.AddString(untranslatedString, 0, 0, false);
+
+			AlignToWordBoundary(translatedSakuraString);
+
 			translatedSakuraString.AddChar(0xffff); //End of line
+
 			translatedLines.push_back(translatedSakuraString);
 		}
 	}

@@ -12,32 +12,32 @@ This order is currently in effect. We'll fight our opponents unflinchingly.
 Attention all units! Initiating the "Mountain" strategy!
 We're sticking with the current strategy!
 Understood!
-Untranslated
-Untranslated
+Enemies will be coming one after the other, seeing as we're in the Black Demon Society base.
+Just try to hold out until you reach the deepest level!
 0 Message 1-3
 Pass through the gate and defeat Tsuchigumo!
-The enemy general, Tsuchigumo, is capable of multiple attacks. Be careful!
+The enemy general, Tsuchigumo, is capable of multiple continuous attacks. Be careful!
 0 Message 2-3
 Yamazaki is very powerful, Ogami. Let's pull back for now!
 0 Message 3-2
 0 Message 3-3
 Ichiro Ogami, Flower Division captain. Highly proficient in combat and brave-hearted.
-Sakura Shinguji, user of Hokushin Itto. She moves swiftly, cleaving enemies in two with her sword.
-Sumire Kanzaki, user of Kanzaki Fujin. She inspires awe in all who witness her naginata technique.
+Sakura Shinguji, user of the Hokushin Itto style. She moves swiftly, cleaving foes in two with her sword.
+Sumire Kanzaki, user of the Kanzaki Fujin style. All who witness her naginata technique are left in awe.
 Maria Tachibana, sharpshooter. Once she targets her prey, no one can escape her icy bullets.
 Kanna Kirishima, user of Kirishima-style karate. She pulverizes enemies with her overwhelming power.
 Iris, the Flower Division's mascot. She fights enemies with her mysterious supernatural powers.
 Kohran Li, inventor. Startles friend and foe alike with the inventions she employs.
-Orihime Soletta, former Star Division member. One of the Italian Red Nobles, she pilots a rose armor.
+Orihime Soletta, prior Star Division member. Piloting a rose armor, she is known as one of the Red Nobles.
 Reni Milchstraße. A combat professional, attacking accurately without a single wasted movement.
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
-Untranslated
+Hex Mech: Wakiji Kai. The ones equipped with longswords are referred to as I-type Otsu.
+Hex Mech: Wakiji Kai. This model has been successfully mass-produced with enhanced combat power.
+Assault Cannon. An older form of ranged artillery. Its firepower is high, but its range is narrow.
+Hex Mech: Wakiji Kai. The ones equipped with large cannons are referred to as HA-type.
+Hex Mech: Wakiji Kai. Equipped with more powerful cannons, they can now target enemies from afar.
+Hex Mech: Wakiji Kai. Attacks using buckshot, but a single blast is relatively weak.
+Hex Mech: Wakiji Kai. These types with healing abilities are referred to as L-Special.
+Hex Mech: Wakiji Kai. Has a unique attack radius, mowing down everything in its direct vicinity.
 Message 18
 Message 19
 Message 20
@@ -130,10 +130,10 @@ You're my knight in shining armor, Mon Frère!
 It's OK, Mon Frère, I'm here with you.
 Ah… It stopped…
 I'm sorry, Mon Frère…
-Yaaaay! You did it, Mon Frère!
+Yaaaay! <br> You did it, Mon Frère!
 Wow, Mon Frère! You're sooo cool!
 I'm amazing, huh?
-C'mon, praise me! Praise me!
+C'mon, praise me! <br> Praise me!
 With you around, Mon Frère, I'm not scared of anything!
 Countin' on ya, Chief!
 Lemme show ya what I'm made of!
@@ -157,7 +157,7 @@ Let's end this quickly so we can go home.
 I think we might be in trouble!
 This is fun!
 Eyes on me, please!
-Do as you please!
+I will do as I please!
 I'd kill for a shower!
 Aha! Grazie, Mr. Ensign!
 Don't overdo it, Mr. Ensign…
@@ -226,3 +226,4 @@ Don't touch me!
 You haven't even begun to feel this city's grudge…
 In the end… I'll be the last one standing!
 At this rate, I'll… Ngh!!
+Don't get cocky, you hypocrites!

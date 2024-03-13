@@ -482,11 +482,11 @@ nop          //0009
 	PatchLipsSingleByteForFile2("TUTORI0.BIN", 0x00005c98)
 
 //Single Byte Fast Forward
-//060890e6 add r0, r0           //0009
-//060890e8 mov.w @(r0, r1), r1  //011c
+//060890e6 add r0, r0           //0x011c move.w @(r0, r1), r1
+//060890e8 mov.w @(r0, r1), r1  //0x611c extu.b r1,r1
 #define SingleByteFastForward(filename, address) \
-	filename, address+0, 0x0009,\
-	filename, address+2, 0x011c
+	filename, address+0, 0x011c,\
+	filename, address+2, 0x611c
 
 #define SingleByteFastForwardInFiles() \
 	SingleByteFastForward("M00PRG.BIN", 0x0002fbe0), \
@@ -557,6 +557,28 @@ nop          //0009
 	PatchSingleByteHiCharacterHandling("M33PRG.BIN", 0x0002e1ee),\
 	PatchSingleByteHiCharacterHandling("M34PRG.BIN", 0x0002d2ca),\
 	PatchSingleByteHiCharacterHandling("SLGGOVER.BIN", 0x0001bc6e)
+
+/*
+//PatchSingleByteZeroExtend
+(battle1_b) 06088944 extu.w r1, r2 //should be extu.b r1, r2 621c
+*/
+#define PatchSingleByteZeroExtend(filename, address)\
+	filename, address, 0x621c
+
+#define PatchSingleByteZeroExtendInFiles() \
+	PatchSingleByteZeroExtend("M00PRG.BIN",   0x0002fbf8),\
+	PatchSingleByteZeroExtend("M01PRG.BIN",   0x00028c98),\
+	PatchSingleByteZeroExtend("M02PRG.BIN",   0x0002d438),\
+	PatchSingleByteZeroExtend("M03PRG.BIN",   0x0002e41c),\
+	PatchSingleByteZeroExtend("M04PRG.BIN",   0x0002ebcc),\
+	PatchSingleByteZeroExtend("M05PRG.BIN",   0x0002d740),\
+	PatchSingleByteZeroExtend("M26PRG.BIN",   0x0002f544),\
+	PatchSingleByteZeroExtend("M27PRG.BIN",   0x0002d2f4),\
+	PatchSingleByteZeroExtend("M29PRG.BIN",   0x00027130),\
+	PatchSingleByteZeroExtend("M31PRG.BIN",   0x0002d578),\
+	PatchSingleByteZeroExtend("M33PRG.BIN",   0x0002e0e8),\
+	PatchSingleByteZeroExtend("M34PRG.BIN",   0x0002d1c4),\
+	PatchSingleByteZeroExtend("SLGGOVER.BIN", 0x0001bb68)
 
 bool PatchBattleTextDrawingCode(const string& inPatchedDirectory, const string& inDataDirectory)
 {
@@ -1054,37 +1076,10 @@ bool PatchBattleTextDrawingCode(const string& inPatchedDirectory, const string& 
 		PatchCharacterDimensionsForLipsInFiles(),
 
 		#if USE_SINGLE_BYTE_LOOKUPS
-		/*
-		//name subbing (orihime, sakura, etc.)
-		06088fe0 add r0, r0           //0009
-		06088fe2 mov.w @(r0, r1), r1  //011c
-		*/
-			"M00PRG.BIN", 0x0002fbe0, 0x0009,
-			"M00PRG.BIN", 0x0002fbe2, 0x011c,
-			"M01PRG.BIN", 0x00028c80, 0x0009,
-			"M01PRG.BIN", 0x00028c82, 0x011c,
-			"M02PRG.BIN", 0x0002d420, 0x0009,
-			"M02PRG.BIN", 0x0002d422, 0x011c,
-			"M03PRG.BIN", 0x0002e404, 0x0009,
-			"M03PRG.BIN", 0x0002e406, 0x011c,
-			"M04PRG.BIN", 0x0002ebb4, 0x0009,
-			"M04PRG.BIN", 0x0002ebb6, 0x011c,
-			"M05PRG.BIN", 0x0002d728, 0x0009,
-			"M05PRG.BIN", 0x0002d72a, 0x011c,
-			"M26PRG.BIN", 0x0002f52c, 0x0009,
-			"M26PRG.BIN", 0x0002f52e, 0x011c,
-			"M27PRG.BIN", 0x0002d2dc, 0x0009,
-			"M27PRG.BIN", 0x0002d2de, 0x011c,
-			"M29PRG.BIN", 0x00027118, 0x0009,
-			"M29PRG.BIN", 0x0002711a, 0x011c,
-			"M31PRG.BIN", 0x0002d560, 0x0009,
-			"M31PRG.BIN", 0x0002d562, 0x011c,
-			"M33PRG.BIN", 0x0002e0d0, 0x0009,
-			"M33PRG.BIN", 0x0002e0d2, 0x011c,
-			"M34PRG.BIN", 0x0002d1ac, 0x0009,
-			"M34PRG.BIN", 0x0002d1ae, 0x011c,
-			"SLGGOVER.BIN", 0x0001bb50, 0x0009,
-			"SLGGOVER.BIN", 0x0001bb52, 0x011c,
+			/*
+			(battle1_b) 06088944 extu.w r1, r2 //should be extu.b r1, r2 621c
+			*/
+			PatchSingleByteZeroExtendInFiles(),
 
 			/*
 			//fast forward
@@ -1095,35 +1090,35 @@ bool PatchBattleTextDrawingCode(const string& inPatchedDirectory, const string& 
 
 			/*
 			Text read at 0608921e
-			0608921e add r0, r0           //0009
-			06089220 mov.w @(r0, r1), r1  //011c
+			0608921e mov.w @(r0, r1), r1  //011c
+			06089220 add r0, r0           //611c extu.b r1, r1
 			*/
 			"M00PRG.BIN", 0x0002fe1e, 0x011c,
-			"M00PRG.BIN", 0x0002fe1e+2, 0x009,
+			"M00PRG.BIN", 0x0002fe1e+2, 0x611c,
 			"M01PRG.BIN", 0x00028ebe, 0x011c,
-			"M01PRG.BIN", 0x00028ebe + 2, 0x009,
+			"M01PRG.BIN", 0x00028ebe + 2, 0x611c,
 			"M02PRG.BIN", 0x0002d65e, 0x011c,
-			"M02PRG.BIN", 0x0002d65e + 2, 0x009,
+			"M02PRG.BIN", 0x0002d65e + 2, 0x611c,
 			"M03PRG.BIN", 0x0002e642, 0x011c,
-			"M03PRG.BIN", 0x0002e642 + 2, 0x009,
+			"M03PRG.BIN", 0x0002e642 + 2, 0x611c,
 			"M04PRG.BIN", 0x0002edf2, 0x011c,
-			"M04PRG.BIN", 0x0002edf2 + 2, 0x009,
+			"M04PRG.BIN", 0x0002edf2 + 2, 0x611c,
 			"M05PRG.BIN", 0x0002d966, 0x011c,
-			"M05PRG.BIN", 0x0002d966 + 2, 0x009,
+			"M05PRG.BIN", 0x0002d966 + 2, 0x611c,
 			"M26PRG.BIN", 0x0002f76a, 0x011c,
-			"M26PRG.BIN", 0x0002f76a + 2, 0x009,
+			"M26PRG.BIN", 0x0002f76a + 2, 0x611c,
 			"M27PRG.BIN", 0x0002d51a, 0x011c,
-			"M27PRG.BIN", 0x0002d51a + 2, 0x009,
+			"M27PRG.BIN", 0x0002d51a + 2, 0x611c,
 			"M29PRG.BIN", 0x00027356, 0x011c,
-			"M29PRG.BIN", 0x00027356 + 2, 0x009,
+			"M29PRG.BIN", 0x00027356 + 2, 0x611c,
 			"M31PRG.BIN", 0x0002d79e, 0x011c,
-			"M31PRG.BIN", 0x0002d79e + 2, 0x009,
+			"M31PRG.BIN", 0x0002d79e + 2, 0x611c,
 			"M33PRG.BIN", 0x0002e30e, 0x011c,
-			"M33PRG.BIN", 0x0002e30e + 2, 0x009,
+			"M33PRG.BIN", 0x0002e30e + 2, 0x611c,
 			"M34PRG.BIN", 0x0002d3ea, 0x011c,
-			"M34PRG.BIN", 0x0002d3ea + 2, 0x009,
+			"M34PRG.BIN", 0x0002d3ea + 2, 0x611c,
 			"SLGGOVER.BIN", 0x0001bd8e, 0x011c,
-			"SLGGOVER.BIN", 0x0001bd8e + 2, 0x009,
+			"SLGGOVER.BIN", 0x0001bd8e + 2, 0x611c,
 		
 			PatchSingleByteHiCharacterHandlingInFiles(),
 			LipsSingleBytePatching(),

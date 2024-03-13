@@ -1,7 +1,7 @@
 image
-Jaws!
+Bang-up Job!
 Grab the targets swimming in the pool. Watch out for the ever increasing number of mines.
 Dive Right and Left
-Dive
+Dive Left
 Unused
 Dive Right

@@ -1,6 +1,6 @@
 This beginner drill is a battle at Uguisudani. Your objective is to defeat the enemy Hex Mech, Hachiyou.
 The intermediate drill is a battle at Ikebukuro. Your objective is to use the Tenbu to defeat Chiken.
-The expert drill is a hypothetical battle in Musashi. Your objective is to defeat Kongo's mech, Dainichiken.
+The expert drill is a virtual battle in Musashi. Your objective is to defeat Kongou's mech, Dainichiken.
 A mock battle against other Koubu Kai in front of the theater. Your objective is to defeat the mock Ogami.
 Commencing the special drill. Select a rank with your cursor to view the combat data for each rank.
 You can view the combat data for the 1st place score for the special drill.
@@ -67,7 +67,7 @@ There's something different about you today, Ogami.
 I did it!
 It was all thanks to you, Ogami!
 Ogami… I believe in you.
-My time to shine has come, Ensign.
+Your time to shine has come, Ensign.
 Please, do your best for me…
 You mustn't overexert yourself…
 Now, here I come!
@@ -130,10 +130,10 @@ You're my knight in shining armor, Mon Frère!
 It's OK, Mon Frère, I'm here with you.
 Ah… It stopped…
 I'm sorry, Mon Frère…
-Yaaaay! You did it, Mon Frère!
+Yaaaay! <br> You did it, Mon Frère!
 Wow, Mon Frère! You're sooo cool!
 I'm amazing, huh?
-C'mon, praise me! Praise me!
+C'mon, praise me! <br> Praise me!
 With you around, Mon Frère, I'm not scared of anything!
 Countin' on ya, Chief!
 Lemme show ya what I'm made of!

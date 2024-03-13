@@ -12,8 +12,8 @@ This order is currently in effect. We'll fight our opponents unflinchingly.
 Attention all units! Initiating the "Mountain" strategy!
 We're sticking with the current strategy!
 Roger!
-Kongo is the last of the Five Elements… Now is finally the time to bring them down, once and for all!
-Destroy Kongo's Hex Mech, Dainichiken!
+Kongou is the last of the Five Elements… Now is finally the time to bring them down, once and for all!
+Destroy Kongou's Hex Mech, Dainichiken!
 0 Message 1-3
 Exit the gate and destroy Tsuchigumo's machine!
 The enemy general, Tsuchigumo, is capable of multiple continuous attacks. Be careful!
@@ -22,23 +22,23 @@ Ogami, Yamazaki's too strong. Let's make a temporary retreat!
 0 Message 3-2
 0 Message 3-3
 Ichiro Ogami, Flower Division captain. Highly proficient in combat and brave-hearted.
-Sakura Shinguji, practitioner of the Hokushin Itto style. She moves swiftly, cleaving enemies in two with her sword.
-Sumire Kanzaki, practitioner of the Kanzaki Fujin style. She inspires awe in all who witness her naginata technique.
-Maria Tachibana, sharpshooter. Once she's set her sights on her prey, they can't escape her icy bullets.
-Kanna Kirishima, practitioner of Kirishima-style karate. Pulverizes enemies with her overwhelming power.
+Sakura Shinguji, user of the Hokushin Itto style. She moves swiftly, cleaving foes in two with her sword.
+Sumire Kanzaki, user of the Kanzaki Fujin style. All who witness her naginata technique are left in awe.
+Maria Tachibana, sharpshooter. Once she targets her prey, no one can escape her icy bullets.
+Kanna Kirishima, user of Kirishima-style karate. She pulverizes enemies with her overwhelming power.
 Iris, the Flower Division's mascot. She fights enemies with her mysterious supernatural powers.
 Kohran Li, inventor. Startles friend and foe alike with the inventions she employs.
-Orihime Soletta, ex-member of the Star Division. Known as one of the "Red Nobles," riding a rose-colored armor.
+Orihime Soletta, prior Star Division member. Piloting a rose armor, she is known as one of the Red Nobles.
 Reni Milchstraße. A combat professional, attacking accurately without a single wasted movement.
 Close-range combat Kouma Weapon. Its combat prowess exceeds the "Banrai" Kouma Weapons.
-Hex Mech: Dainichiken. Piloted by Kongo of the Five Black Demons, it excels in hand-to-hand combat.
+Hex Mech: Dainichiken. Piloted by Kongou of the Five Elements, it excels in close-range combat.
 Wakiji Kai: Oudouji. Part of Kongou's personal squad, painted the same color as his Dainichiken.
 Kouma Weapon: Reppuu. A long-ranged support-type Kouma modified by the Black Demon Society.
 Healing-type Kouma Weapon. Boasts restorative abilities to revitalize other Kouma.
 Kouma Weapon: Reppu. Designed with an emphasis on powerful, long-range attacks.
-Heavy bombardment Kouma Weapon. Buckshot is loaded from the interior and fired from its mouth.
-Kouma Weapon: Ryukou. Designed to inflict damage on multiple enemies at once.
-Dimension Cannon. Boasting a large attack range, it eliminates all intruders.
+Bomber-type Kouma Weapon. Equipped with an internal store of buckshot, it fires attacks from its mouth.
+Kouma Weapon: Senkou. Designed to inflict damage on multiple enemies at a time.
+Dimensional Cannon. Boasting a large attack range, it eliminates all intruders.
 Summoner. A demonic device that keeps spawning Kouma Weapons one after another.
 Message 20
 Doesn't look like I need to cover anyone right now.
@@ -67,7 +67,7 @@ There's something different about you today, Ogami.
 I did it!
 It was all thanks to you, Ogami!
 Ogami… I believe in you.
-My time to shine has come, Ensign.
+Your time to shine has come, Ensign.
 Please, do your best for me…
 You mustn't overexert yourself…
 Now, here I come!
@@ -130,10 +130,10 @@ You're my knight in shining armor, Mon Frère!
 It's OK, Mon Frère, I'm here with you.
 Ah… It stopped…
 I'm sorry, Mon Frère…
-Yaaaay! You did it, Mon Frère!
+Yaaaay! <br> You did it, Mon Frère!
 Wow, Mon Frère! You're sooo cool!
 I'm amazing, huh?
-C'mon, praise me! Praise me!
+C'mon, praise me! <br> Praise me!
 With you around, Mon Frère, I'm not scared of anything!
 Countin' on ya, Chief!
 Lemme show ya what I'm made of!

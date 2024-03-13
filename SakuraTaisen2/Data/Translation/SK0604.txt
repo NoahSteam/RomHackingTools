@@ -1,16 +1,16 @@
 ﻿The wind has gotten quite strong. 
 Indeed. It'll be a proper storm soon. 
-Now, about the incident... Do you have anything to report? 
+Now, about the incident… Do you have anything to report? 
 You’re referring to the assassination attempt on Commander Yoneda, am I right? 
 As a result of our covert investigation, we've managed to narrow down our suspects. 
 The culprit is most likely just as you theorized, Deputy Commander. 
 Saki Kageyama, correct? 
-But why? What's her goal? Why would she... 
+But why? What's her goal? Why would she… 
 We analyzed the timing of Saki's transmissions with the troupe's deployments and found a connection. 
 Whenever Saki would send out a transmission, the Black Demons always made a move a few days later. 
-What?! Then that means... <br> It can't be! 
+What?! Then that means… <br> It can't be! 
 Of course, this is ultimately pure conjecture. 
-Damn! If Saki knows our current status, then she probably... 
+Damn! If Saki knows our current status, then she probably… 
 Oh no! Reni's in danger!! 
 Stormy outside, eh? 
 It's gotten pretty late after talking with Kayama and Reni, but I should do my night watch. 
@@ -58,7 +58,7 @@ A letter from Reni.
 A scarf given to me by Sakura. It's knitted with red yarn - my favorite color. 
 A scarf given to me by Sakura. It's knitted with blue yarn - my favorite color. 
 A scarf given to me by Sakura. It's knitted with yellow yarn - my favorite color. 
-... "" "" () - . , ! ? ?! !! 
+… "" "" () - . , ! ? ?! !! 
 Macro complete. 
 Proceed to the next macro. 
 Repeat this macro. 
