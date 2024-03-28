@@ -139,6 +139,19 @@ struct SakuraString
 		//mOffsetToStringData = 2;
 	}
 
+	void AddSakuraString(const SakuraString& InOther)
+	{
+	#if USE_SINGLE_BYTE_LOOKUPS
+		for(const SakuraChar& otherChar : InOther.mChars)
+		{
+			mChars.push_back(SakuraChar(otherChar.mRow));
+			mChars.push_back(SakuraChar(otherChar.mColumn));
+		}
+	#else
+		mChars.insert(mChars.end(), InOther.mChars.begin(), InOther.mChars.end());
+	#endif
+	}
+
 	int GetNumberOfLines() const
 	{
 		int numLines = 1;
@@ -245,6 +258,7 @@ struct SakuraString
 		outData.clear();
 
 		int count = 0;
+		const int numChars = (int)mChars.size();
 		for (const SakuraChar& sakuraChar : mChars)
 		{
 			if (bIsSysFile && count < 2)
@@ -261,7 +275,7 @@ struct SakuraString
 				const char value2 = (char)(sakuraChar.mIndex & 0x00ff);
 
 				//If both bytes are 0, then these are the end bytes and they need to be output
-				if (value1 == 0 && value2 == 0)
+				if (count + 1 == numChars && (value1 == 0 && value2 == 0))
 				{
 					outData.push_back(value1);
 				}

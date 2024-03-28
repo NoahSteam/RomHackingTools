@@ -1,0 +1,25 @@
+20f728
+
+0607540a mov.w r@(r0, r1), r1  011c
+0607540c extu.w r1, r1         611c
+
+0608a4d8 mov.w @(r0, r8), r4   048c
+
+0608a49c once it finds string to print
+
+20f774
+20f776
+
+20f06a
+20f06c
+
+20f050 - first line prefix
+20f052
+
+0607e820
+
+-----
+First 2 bytes indicate the image of the character
+Second 2 bytes is the audio (7fff means no audio)
+
+Any character below 0x0b is a special character and should be left alone

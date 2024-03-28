@@ -14,13 +14,13 @@ We're sticking with the current strategy!
 Roger!
 Defend Yamaguchi's car from enemies until it can evacuate to a safe location.
 The car is not very sturdy, so do your best to keep the enemy units away from the vehicle.
-0 Message 1-3
+<LEAVE> 0 Message 1-3
 Distract the enemies long enough for Yamaguchi's car to evacuate to a safe location!
 However, the more enemies you lure at once, the more danger you'll put yourself in. Be especially careful.
-0 Message 2-3
+<LEAVE> 0 Message 2-3
 Ogami, Yamazaki's too strong. Let's make a temporary retreat!
-0 Message 3-2
-0 Message 3-3
+<LEAVE> 0 Message 3-2
+<LEAVE> 0 Message 3-3
 Ichiro Ogami, Flower Division captain. Highly proficient in combat and brave-hearted.
 Sakura Shinguji, user of the Hokushin Itto style. She moves swiftly, cleaving foes in two with her sword.
 Sumire Kanzaki, user of the Kanzaki Fujin style. All who witness her naginata technique are left in awe.
@@ -38,9 +38,9 @@ Luxury Car. The vehicle Yamaguchi is riding in. Sturdier than you might expect.
 Society Hex Mech: Wakiji Kai. The ones equipped with large cannons are referred to as HA-type.
 Society Hex Mech: Wakiji Kai. It's actually not very loyal, so it lacks motivation.
 Society Hex Mech: Wakiji Kai. The ones equipped with guns are referred to as RO-type.
-Message 18
-Message 19
-Message 20
+<LEAVE> Message 18
+<LEAVE> Message 19
+<LEAVE> Message 20
 Doesn't look like I need to cover anyone right now.
 Sakura… <br> I will protect you!
 Sumire… <br> Let me be your shield.

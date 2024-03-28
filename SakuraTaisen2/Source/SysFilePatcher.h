@@ -162,7 +162,8 @@ bool InsertTextForSysFile(SysFileExtractor& inSysFile,
 	const FileNameContainer* pMatchingTranslatedFileName = nullptr;
 	for (const FileNameContainer& translatedFileName : inTranslatedTextFiles)
 	{
-		if (translatedFileName.mNoExtension.find(inSysFile.mFileNameInfo.mNoExtension) != string::npos)
+		//if (translatedFileName.mNoExtension.find(inSysFile.mFileNameInfo.mNoExtension) != string::npos)
+		if (translatedFileName.mNoExtension == inSysFile.mFileNameInfo.mNoExtension)
 		{
 			pMatchingTranslatedFileName = &translatedFileName;
 			break;
@@ -202,12 +203,19 @@ bool InsertTextForSysFile(SysFileExtractor& inSysFile,
 			SakuraString translatedString;
 
 			//Output line id
-			translatedString.AddChar(inSysFile.mLineIds[translatedLineIndex].mId);
-			translatedString.AddChar(inSysFile.mLineIds[translatedLineIndex].mEnder);
+			translatedString.AddChar(inSysFile.mLineIds[translatedLineIndex].mCharacterID);
+			translatedString.AddChar(inSysFile.mLineIds[translatedLineIndex].mSoundID);
 
 			//Figure out if this is a lips entry
 			const size_t currSakuraStringIndex = translatedLineIndex;
 			
+			if (numWords && textLine.mWords[0] == LeaveAsIs)
+			{
+				translatedString.AddSakuraString(inSysFile.mLines[translatedLineIndex]);
+				translatedLines.push_back(translatedString);
+				continue;
+			}
+
 			if (numWords &&
 				 (textLine.mWords[0] == UntranslatedEnglishString ||
 				 textLine.mWords[0] == UnusedEnglishString)
@@ -238,8 +246,8 @@ bool InsertTextForSysFile(SysFileExtractor& inSysFile,
 				const string baseUntranslatedString = inSysFile.mFileNameInfo.mNoExtension + string(":");
 				const string untranslatedString = bUseShorthand ? "U" : baseUntranslatedString + std::to_string(translatedLineIndex + 1); //Just print out a U for unused lines to save space
 
-				translatedSakuraString.AddChar(inSysFile.mLineIds[translatedLineIndex].mId);
-				translatedSakuraString.AddChar(inSysFile.mLineIds[translatedLineIndex].mEnder);
+				translatedSakuraString.AddChar(inSysFile.mLineIds[translatedLineIndex].mCharacterID);
+				translatedSakuraString.AddChar(inSysFile.mLineIds[translatedLineIndex].mSoundID);
 				translatedSakuraString.AddString(untranslatedString, 0, 0, false);
 				
 				AlignToWordBoundary(translatedSakuraString);
@@ -359,8 +367,8 @@ bool InsertTextForSysFile(SysFileExtractor& inSysFile,
 			SakuraString translatedSakuraString;
 
 			const size_t currSakuraStringIndex = i + translatedFile.mLines.size();
-			translatedSakuraString.AddChar(inSysFile.mLineIds[i].mId);
-			translatedSakuraString.AddChar(inSysFile.mLineIds[i].mEnder);
+			translatedSakuraString.AddChar(inSysFile.mLineIds[i].mCharacterID);
+			translatedSakuraString.AddChar(inSysFile.mLineIds[i].mSoundID);
 			translatedSakuraString.AddString(untranslatedString, 0, 0, false);
 			
 			AlignToWordBoundary(translatedSakuraString);
@@ -373,14 +381,16 @@ bool InsertTextForSysFile(SysFileExtractor& inSysFile,
 	}//if(pMatchingTranslatedFileName)
 	else //if(pMatchingTranslatedFileName)
 	{
+		printf("WARNING: No translation file found for %s.\n", inSysFile.mFileNameInfo.mFileName.c_str());
+	
 		//Fill out everything else with "Untranslated"
 		const string baseUntranslatedString = inSysFile.mFileNameInfo.mNoExtension + string(": ");
 		for (size_t i = 0; i < inSysFile.mLines.size(); ++i)
 		{
 			const string untranslatedString = baseUntranslatedString + std::to_string(i + 1);
 			SakuraString translatedSakuraString;
-			translatedSakuraString.AddChar(inSysFile.mLineIds[i].mId);
-			translatedSakuraString.AddChar(inSysFile.mLineIds[i].mEnder);
+			translatedSakuraString.AddChar(inSysFile.mLineIds[i].mCharacterID);
+			translatedSakuraString.AddChar(inSysFile.mLineIds[i].mSoundID);
 			translatedSakuraString.AddString(untranslatedString, 0, 0, false);
 
 			AlignToWordBoundary(translatedSakuraString);

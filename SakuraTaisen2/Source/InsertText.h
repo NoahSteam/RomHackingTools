@@ -228,7 +228,8 @@ bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTrans
 		const FileNameContainer* pMatchingTranslatedFileName = nullptr;
 		for (const FileNameContainer& translatedFileName : translatedTextFiles)
 		{
-			if (translatedFileName.mNoExtension.find(sakuraFile.mFileNameInfo.mNoExtension) != string::npos)
+			//if (translatedFileName.mNoExtension.find(sakuraFile.mFileNameInfo.mNoExtension) != string::npos)
+			if (translatedFileName.mNoExtension == sakuraFile.mFileNameInfo.mNoExtension)
 			{
 				pMatchingTranslatedFileName = &translatedFileName;
 				break;
@@ -571,6 +572,8 @@ bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTrans
 		}//if(pMatchingTranslatedFileName)
 		else
 		{
+			printf("Unable to find translation file for %s\n", sakuraFile.mFileNameInfo.mFileName.c_str());
+
 			//Fill out everything else with "Untranslated"
 			const string baseUntranslatedString = sakuraFile.mFileNameInfo.mNoExtension + string(": ");
 			for (size_t i = 0; i < sakuraFile.mLines.size(); ++i)

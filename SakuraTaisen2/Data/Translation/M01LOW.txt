@@ -14,13 +14,13 @@ We're sticking with the current strategy!
 Roger!
 Seems the enemy numbers have largely thinned out thanks to the aerial assault.
 Now take this opportunity to eliminate the rest of the enemy "Wakiji" Hex Mechs!
-0 Message 1-3
+<LEAVE> 0 Message 1-3
 Compressed Steam pod's been dropped off!
 There's a large number of enemies, so be sure to recover your health as you eliminate the Wakiji!
-0 Message 2-3
-0 Message 3-1
-0 Message 3-2
-0 Message 3-3
+<LEAVE> 0 Message 2-3
+<LEAVE> 0 Message 3-1
+<LEAVE> 0 Message 3-2
+<LEAVE> 0 Message 3-3
 Ichiro Ogami, Flower Division captain. Highly proficient in combat and brave-hearted.
 Sakura Shinguji, user of the Hokushin Itto style. She moves swiftly, cleaving foes in two with her sword.
 Sumire Kanzaki, user of the Kanzaki Fujin style. All who witness her naginata technique are left in awe.
@@ -38,9 +38,9 @@ Wakiji Kai: Oudouji. Part of Kongou's personal squad, painted the same color as 
 Society Hex Mech: Wakiji Kai. The ones equipped with large cannons are referred to as HA-type.
 Society Hex Mech: Wakiji Kai. It's actually not very loyal, so it lacks motivation.
 Society Hex Mech: Wakiji Kai. The ones equipped with guns are referred to as RO-type.
-Message 18
-Message 19
-Message 20
+<LEAVE> Message 18
+<LEAVE> Message 19
+<LEAVE> Message 20
 Doesn't look like I need to cover anyone right now.
 Sakura… <br> I will protect you!
 Sumire… <br> Let me be your shield.

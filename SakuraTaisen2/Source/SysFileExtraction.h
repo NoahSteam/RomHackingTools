@@ -31,8 +31,8 @@ class SysFileExtractor
 
 	struct SysLineId
 	{
-		uint16 mId;
-		uint16 mEnder;
+		uint16 mCharacterID;
+		uint16 mSoundID;
 	};
 
 public:
@@ -145,8 +145,8 @@ public:
 			if (bIsNewEntry)
 			{
 				SysLineId id;
-				id.mId = currValue;
-				id.mEnder = nextValue;
+				id.mCharacterID = currValue;
+				id.mSoundID = nextValue;
 				mLineIds.push_back(id);
 				bIsNewEntry = false;
 				currentIndex++;

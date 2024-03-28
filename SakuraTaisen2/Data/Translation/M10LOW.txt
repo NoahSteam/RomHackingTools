@@ -14,13 +14,13 @@ We're sticking with the current strategy!
 Roger!
 Destroy Mokujiki’s Hex Mech, the Chiken!
 With the Tenbu's power, even just the two of you should be enough to fight him!
-0 Message 1-3
+<LEAVE> 0 Message 1-3
 Destroy Mokujiki’s Hex Mech, the Chiken!
 With the Tenbu's power, even just the two of you should be enough to fight him!
-0 Message 1-3
+<LEAVE> 0 Message 1-3
 Ogami, Yamazaki's too strong. Let's make a temporary retreat!
-0 Message 3-2
-0 Message 3-3
+<LEAVE> 0 Message 3-2
+<LEAVE> 0 Message 3-3
 Ichiro Ogami, Flower Division captain. Highly proficient in combat and brave-hearted.
 Sakura Shinguji, user of the Hokushin Itto style. She moves swiftly, cleaving foes in two with her sword.
 Sumire Kanzaki, user of the Kanzaki Fujin style. All who witness her naginata technique are left in awe.
@@ -40,7 +40,7 @@ Hex Mech: Wakiji Kai. These models, called L-Special, have the ability to restor
 Wakiji Kai L-Special. Like the I-type, these were originally developed as experimental units.
 Black Demon Cannon. A cannon made with Black Demon Society technology. Mokujiki's latest creation.
 Enkuu. A support weapon for the Chiken developed by Mokujiki.
-Message 20
+<LEAVE> Message 20
 Doesn't look like I need to cover anyone right now.
 Sakura… <br> I will protect you!
 Sumire… <br> Let me be your shield.

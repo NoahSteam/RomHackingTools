@@ -40,7 +40,7 @@ You're getting there. You seem to have a good grasp of the basics.
 Seems you're still not putting in enough effort. Keep your eye on the enemy and you'll find an opening soon enough.
 What awful results. You need to learn the abilities of each of your units.
 With results like these, it's too risky to put you in live combat. You need to train more.
-Message 20
+<LEAVE> Message 20
 Doesn't look like I need to cover anyone right now.
 Sakura… <br> I will protect you!
 Sumire… <br> Let me be your shield.

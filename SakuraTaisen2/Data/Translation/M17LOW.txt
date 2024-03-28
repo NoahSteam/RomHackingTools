@@ -13,14 +13,14 @@ Attention all units! Initiating the "Mountain" strategy!
 We're sticking with the current strategy!
 Roger!
 Destroy the Demon King's Hex Mech, the Dark Kamui!
-0 Message 1-2
-0 Message 1-3
+<LEAVE> 0 Message 1-2
+<LEAVE> 0 Message 1-3
 Exit the gate and destroy Tsuchigumo's machine!
 The enemy general, Tsuchigumo, is capable of multiple continuous attacks. Be careful!
-0 Message 2-3
+<LEAVE> 0 Message 2-3
 Ogami, Yamazaki's too strong. Let's make a temporary retreat!
-0 Message 3-2
-0 Message 3-3
+<LEAVE> 0 Message 3-2
+<LEAVE> 0 Message 3-3
 Ichiro Ogami, Flower Division captain. Highly proficient in combat and brave-hearted.
 Sakura Shinguji, user of the Hokushin Itto style. She moves swiftly, cleaving foes in two with her sword.
 Sumire Kanzaki, user of the Kanzaki Fujin style. All who witness her naginata technique are left in awe.
@@ -39,8 +39,8 @@ Hex Mech: Wakiji Kai. Attacks using buckshot, but a single blast is relatively w
 Hex Mech: Dark Kamui. Its abilities are greatly enhanced by Demon King's power.
 Steam Rocket. A weapon developed by Mokujiki, boasting high attack power.
 Hex Mech: Wakiji Kai. Classified as the NI-type Special, this unit boasts a peculiar attack range.
-Message 19
-Message 20
+<LEAVE> Message 19
+<LEAVE> Message 20
 Doesn't look like I need to cover anyone right now.
 Sakura… <br> I will protect you!
 Sumire… <br> Let me be your shield.

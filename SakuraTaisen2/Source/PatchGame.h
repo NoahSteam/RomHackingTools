@@ -25,6 +25,8 @@ static bool BringOverOriginalFiles(const string& inRootSakuraDirectory, const st
 	GetAllFilesOfType(allFiles, "INFONAME.BIN", originalFiles);
 	GetAllFilesOfType(allFiles, ".MES", originalFiles);
 	GetAllFilesOfType(allFiles, "TUTORI0.BIN", originalFiles);
+	GetAllFilesOfType(allFiles, "0.SLG", originalFiles);
+	GetAllFilesOfType(allFiles, "EV0", originalFiles);
 
 	//Battle files
 	GetAllFilesOfType(allFiles, "COL.BIN", originalFiles);
@@ -323,7 +325,7 @@ bool PatchGame(const string& inSourceGameDirectory, const string& inTranslatedDi
 		return false;
 	}
 
-	if( !PatchBattleTextDrawingCode(inPatchedDirectory, inTranslatedDirectory) )
+	if( !PatchBattleTextDrawingCode(inSourceGameDirectory, inPatchedDirectory, inTranslatedDirectory) )
 	{
 		printf("Unable to patch battle text drawing code\n");
 		return false;

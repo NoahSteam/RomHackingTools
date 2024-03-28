@@ -13,14 +13,14 @@ Attention all units! Initiating the "Mountain" strategy!
 We're sticking with the current strategy!
 Roger!
 This is a mock battle against other Koubu Kai. Defeat the other Ogami to win.
-0 Message 1-2
-0 Message 1-3
+<LEAVE> 0 Message 1-2
+<LEAVE> 0 Message 1-3
 Exit the gate and destroy Tsuchigumo's machine!
 The enemy general, Tsuchigumo, is capable of multiple continuous attacks. Be careful!
-0 Message 2-3
+<LEAVE> 0 Message 2-3
 Ogami, Yamazaki's too strong. Let's make a temporary retreat!
-0 Message 3-2
-0 Message 3-3
+<LEAVE> 0 Message 3-2
+<LEAVE> 0 Message 3-3
 Ichiro Ogami, Flower Division captain. Highly proficient in combat and brave-hearted.
 Sakura Shinguji, user of the Hokushin Itto style. She moves swiftly, cleaving foes in two with her sword.
 Sumire Kanzaki, user of the Kanzaki Fujin style. All who witness her naginata technique are left in awe.
@@ -40,7 +40,7 @@ Koubu Kai, Kohran Model. Can attack multiple enemies from a distance, but its of
 Eisenkleid, Orihime Model. Boasts the widest attack range, but is incapable of close-range attacks.
 Eisenkleid, Reni Model. Its offense is top of its class, but its defense is low in comparison.
 Thunder Cannon. Long-range artillery that boast high firepower and greater reach than the RO-type Wakiji.
-Message 20
+<LEAVE> Message 20
 Doesn't look like I need to cover anyone right now.
 Sakura… <br> I will protect you!
 Sumire… <br> Let me be your shield.

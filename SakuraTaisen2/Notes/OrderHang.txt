@@ -1,0 +1,11 @@
+New text loaded at 20f000
+
+Code at 06019a94 writes into 20f000
+
+20ff14 end of description text
+2108b6
+
+20f8bc
+
+-Writing text related data into buffer at 06033F50 and overrunning it
+-0600735a need to change 0x3f to 6f(edited)[0.SLG @0x0000235a]*/  

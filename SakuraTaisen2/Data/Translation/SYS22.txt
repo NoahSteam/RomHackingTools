@@ -13,14 +13,14 @@ Attention all units! Initiating the "Mountain" strategy!
 We're sticking with the current strategy!
 Understood!
 Attention all Flower Division members! Destroy the Dark Kamui in order to reach Musashi's core!
-0 Message 2-1
-0 Message 2-3
+<LEAVE> 0 Message 2-1
+<LEAVE> 0 Message 2-3
 Pass through the gate and defeat Tsuchigumo!
 The enemy general, Tsuchigumo, is capable of multiple continuous attacks. Be careful!
-0 Message 2-3
+<LEAVE> 0 Message 2-3
 Yamazaki is very powerful, Ogami. Let's pull back for now!
-0 Message 3-2
-0 Message 3-3
+<LEAVE> 0 Message 3-2
+<LEAVE> 0 Message 3-3
 Ichiro Ogami, Flower Division captain. Highly proficient in combat and brave-hearted.
 Sakura Shinguji, user of the Hokushin Itto style. She moves swiftly, cleaving foes in two with her sword.
 Sumire Kanzaki, user of the Kanzaki Fujin style. All who witness her naginata technique are left in awe.

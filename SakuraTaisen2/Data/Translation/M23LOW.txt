@@ -17,10 +17,10 @@ If Musashi is able to fully restore its power, the capital will be completely an
 We have to destroy those pillars before it's too late! Everyone, it's do or die! Give it all you got!
 Exit the gate and destroy the machine!
 The enemy general, Tsuchigumo, is capable of multiple continuous attacks. Be careful!
-0 Message 2-3
+<LEAVE> 0 Message 2-3
 Ogami, Yamazaki's too strong. Let's make a temporary retreat!
-0 Message 3-2
-0 Message 3-3
+<LEAVE> 0 Message 3-2
+<LEAVE> 0 Message 3-3
 Ichiro Ogami, Flower Division captain. Highly proficient in combat and brave-hearted.
 Sakura Shinguji, user of the Hokushin Itto style. She moves swiftly, cleaving foes in two with her sword.
 Sumire Kanzaki, user of the Kanzaki Fujin style. All who witness her naginata technique are left in awe.
@@ -38,9 +38,9 @@ Healing-type Kouma Weapon. Boasts restorative abilities to revitalize other Koum
 Kouma Weapon: Inazuma. This Kouma boasts not only restorative abilities, but high mobility as well.
 Bomber-type Kouma Weapon. This impressive unit combines both powerful attacks and long range.
 Kouma Weapon: Ryukou. With well-balanced abilities across the board, this unit is a masterwork of design.
-Message 18
-Message 19
-Message 20
+<LEAVE> Message 18
+<LEAVE> Message 19
+<LEAVE> Message 20
 Doesn't look like I need to cover anyone right now.
 Sakura… <br> I will protect you!
 Sumire… <br> Let me be your shield.

@@ -13,14 +13,14 @@ Attention all units! Initiating the "Mountain" strategy!
 We're sticking with the current strategy!
 Understood!
 Make your way towards the Demon King, and take back the Pandemonium Regalia!
-0 Message 1-2
-0 Message 1-3
+<LEAVE> 0 Message 1-2
+<LEAVE> 0 Message 1-3
 Pass through the gate and defeat the enemy!
 The enemy general, Tsuchigumo, is capable of multiple continuous attacks. Be careful!
-0 Message 2-3
+<LEAVE> 0 Message 2-3
 Yamazaki is very powerful, Ogami. Let's pull back for now!
-0 Message 3-2
-0 Message 3-3
+<LEAVE> 0 Message 3-2
+<LEAVE> 0 Message 3-3
 Ichiro Ogami, Flower Division captain. Highly proficient in combat and brave-hearted.
 Sakura Shinguji, user of the Hokushin Itto style. She moves swiftly, cleaving foes in two with her sword.
 Sumire Kanzaki, user of the Kanzaki Fujin style. All who witness her naginata technique are left in awe.
@@ -38,9 +38,9 @@ Hex Mech: Wakiji Kai. The RO-type Wakiji were developed to support I-type Wakiji
 Hex Mech: Wakiji Kai. Attacks using buckshot, but a single blast is relatively weak.
 Hex Mech: Wakiji Kai. These types with healing abilities are referred to as L-Special.
 Steam Rocket. A weapon developed by Mokujiki, boasting high attack power.
-Message 18
-Message 19
-Message 20
+<LEAVE> Message 18
+<LEAVE> Message 19
+<LEAVE> Message 20
 Doesn't look like I need to cover anyone right now.
 Sakura… I will protect you!
 Sumire… <br> Let me be your shield.

@@ -17,10 +17,10 @@ All of you, make sure to prevent the Shoujin's approach!
 In the meantime, Ogami, you yourself will have to get to the shack and save Orihime!
 Pass through the gate and defeat the enemy!
 The enemy general, Tsuchigumo, is capable of multiple continuous attacks. Be careful!
-0 Message 2-3
+<LEAVE> 0 Message 2-3
 Yamazaki is very powerful, Ogami. Let's pull back for now!
-0 Message 3-2
-0 Message 3-3
+<LEAVE> 0 Message 3-2
+<LEAVE> 0 Message 3-3
 Ichiro Ogami, Flower Division captain. Highly proficient in combat and brave-hearted.
 Sakura Shinguji, user of the Hokushin Itto style. She moves swiftly, cleaving foes in two with her sword.
 Sumire Kanzaki, user of the Kanzaki Fujin style. All who witness her naginata technique are left in awe.
@@ -39,8 +39,8 @@ Hex Mech: Wakiji Kai. Attacks using buckshot, but a single blast is relatively w
 Hex Mech: Wakiji Kai. These types with healing abilities are referred to as L-Special.
 Wakiji Kai: Shoujin. Part of Kasha's personal platoon, boasting both high attack and defense.
 Cross Homura. A flame weapon developed by Mokujiki. An upgraded version of the Homura.
-Message 19
-Message 20
+<LEAVE> Message 19
+<LEAVE> Message 20
 Doesn't look like I need to cover anyone right now.
 Sakura… I will protect you!
 Sumire… <br> Let me be your shield.

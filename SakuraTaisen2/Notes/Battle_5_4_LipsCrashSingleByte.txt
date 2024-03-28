@@ -1,0 +1,50 @@
+20f0dc
+20f0f5 ff
+
+--
+060d127d 0x40
+
+060d12e8
+mov.b (r0, r4), r1
+extu.w r1, r1 //611d to 611c
+
+060d1300 is ffff // change to ff
+
+060d15f4
+add r0, r0
+mov.w @(r0, r4), r1
+060d15fa extu.w r1, r1 //611d to 611c
+
+060d1604 *
+mov.w @(r0, r5), r1
+extu.w r1, r2 //621d to 621c
+
+060d160c
+mov.w @(r0, r4), r1
+extu.w r1, r1 //611d to 611c
+
+060d161c
+add r0, r0
+mov.w @(r0, r4), r1
+extu.w r1, r1
+
+060d1632 is ffff // change to ff
+
+060d1760 *
+mov.w @r13, r1
+
+060d1778 add r0, r0 //300c to 0009
+
+060d17aa*
+mov.w @(r0, r13), r1
+
+060d1888
+add r0, r0
+mov.w @(r0, r13), r1
+extu.w r1, r1 //611d to 611c //060d188c 
+
+060d1960 is ffff // change to ff
+
+--
+05c43c30 being overwritten for third time 
+060d128a writes next letter index, and this is skipping letters

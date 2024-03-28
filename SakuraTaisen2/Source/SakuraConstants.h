@@ -27,4 +27,5 @@ const string LipsWord("<LIPS>");
 const string SpaceWord("<sp>");
 const string BMPExtension(".bmp");
 const string SlgFontFileSuffix("_SLG");
+const string LeaveAsIs("<LEAVE>");
 const unsigned short SpecialDialogIndicator = 0xC351;
