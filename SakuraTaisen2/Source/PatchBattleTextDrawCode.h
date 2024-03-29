@@ -650,136 +650,136 @@ nop          //0009
 		PatchWidthSpacing("SLGGOVER.BIN", 0x0001bf50)
 
 //Scaled Lips Formatting (example in Battle 5_4 LIPS 060d17e4)
-#define PatchScaledLipsFormatting(filename, address)\
+#define PatchScaledLipsFormatting(filename, address, offset4)\
 	filename, address + 0,  0x7194, 0x7198, /*7198 to 7194*/\
 	filename, address + 42, 0x1a00, 0x1a01, /*Normal sprite instead of scaled sprite*/\
 	filename, address + 48, 0x010c, 0x0210, /*Font size*/\
 /*	filename, address + 50, 0xffb8, 0xff68, /*Horizontal framing - not needed for single byte encoding*/\
-	filename, address + 156, 0x7108, 0x7110 /*Horizontal spacing*/
+	filename, address + 156 + offset4, 0x7108, 0x7110 /*Horizontal spacing*/
 
 #define PatchScaledLipsFormattingInFiles()\
-	PatchScaledLipsFormatting("EV00001.BIN", 0x000076e0),\
-	PatchScaledLipsFormatting("EV00002.BIN", 0x00005fe4),\
-	PatchScaledLipsFormatting("EV00050.BIN", 0x00005fe4),\
-	PatchScaledLipsFormatting("EV00051.BIN", 0x00005fe4),\
-	PatchScaledLipsFormatting("EV00052.BIN", 0x00005fe4),\
-	PatchScaledLipsFormatting("EV00054.BIN", 0x00005fe4),\
-	PatchScaledLipsFormatting("EV00055.BIN", 0x00005fe4),\
-	PatchScaledLipsFormatting("EV00060.BIN", 0x00005fe4),\
-	PatchScaledLipsFormatting("EV01001.BIN", 0x000060f0),\
-	PatchScaledLipsFormatting("EV01002.BIN", 0x00005fe4),\
-	PatchScaledLipsFormatting("EV01020.BIN", 0x00006608),\
-	PatchScaledLipsFormatting("EV01021.BIN", 0x0000641c),\
-	PatchScaledLipsFormatting("EV01022.BIN", 0x00005fe4),\
-	PatchScaledLipsFormatting("EV01023.BIN", 0x00005fe4),\
-	PatchScaledLipsFormatting("EV01030.BIN", 0x00005fe4),\
-	PatchScaledLipsFormatting("EV01050.BIN", 0x00005fe4),\
-	PatchScaledLipsFormatting("EV01054.BIN", 0x00005fe4),\
-	PatchScaledLipsFormatting("EV01055.BIN", 0x00005fe4),\
-	PatchScaledLipsFormatting("EV02001.BIN", 0x00005fe4),\
-	PatchScaledLipsFormatting("EV02002.BIN", 0x00005fe4),\
-	PatchScaledLipsFormatting("EV02010.BIN", 0x00005fe4),\
-	PatchScaledLipsFormatting("EV02021.BIN", 0x00005fe4),\
-	PatchScaledLipsFormatting("EV02025.BIN", 0x00005fe4),\
-	PatchScaledLipsFormatting("EV02050.BIN", 0x00005fe4),\
-	PatchScaledLipsFormatting("EV02051.BIN", 0x00005fe4),\
-	PatchScaledLipsFormatting("EV02052.BIN", 0x00005fe4),\
-	PatchScaledLipsFormatting("EV02053.BIN", 0x00005fe4),\
-	PatchScaledLipsFormatting("EV02054.BIN", 0x00005fe4),\
-	PatchScaledLipsFormatting("EV03000.BIN", 0x00005cb8),\
-	PatchScaledLipsFormatting("EV03001.BIN", 0x000061b0),\
-	PatchScaledLipsFormatting("EV03002.BIN", 0x00006058),\
-	PatchScaledLipsFormatting("EV03005.BIN", 0x00006010),\
-	PatchScaledLipsFormatting("EV03010.BIN", 0x00005ff4),\
-	PatchScaledLipsFormatting("EV03020.BIN", 0x00005ff4),\
-	PatchScaledLipsFormatting("EV03021.BIN", 0x00005ff4),\
-	PatchScaledLipsFormatting("EV03023.BIN", 0x0000600c),\
-	PatchScaledLipsFormatting("EV03024.BIN", 0x0000600c),\
-	PatchScaledLipsFormatting("EV03025.BIN", 0x00006020),\
-	PatchScaledLipsFormatting("EV03050.BIN", 0x00006424),\
-	PatchScaledLipsFormatting("EV03051.BIN", 0x00006048),\
-	PatchScaledLipsFormatting("EV03052.BIN", 0x000060b4),\
-	PatchScaledLipsFormatting("EV03053.BIN", 0x00006070),\
-	PatchScaledLipsFormatting("EV04001.BIN", 0x00006e9c),\
-	PatchScaledLipsFormatting("EV04002.BIN", 0x00006060),\
-	PatchScaledLipsFormatting("EV04003.BIN", 0x00006194),\
-	PatchScaledLipsFormatting("EV04005.BIN", 0x00005fe4),\
-	PatchScaledLipsFormatting("EV04010.BIN", 0x00006058),\
-	PatchScaledLipsFormatting("EV04020.BIN", 0x00005fe4),\
-	PatchScaledLipsFormatting("EV04022.BIN", 0x00005fec),\
-	PatchScaledLipsFormatting("EV04050.BIN", 0x0000608c),\
-	PatchScaledLipsFormatting("EV04053.BIN", 0x00005fe4),\
-	PatchScaledLipsFormatting("EV04055.BIN", 0x00006058),\
-	PatchScaledLipsFormatting("EV05001.BIN", 0x00005ffc),\
-	PatchScaledLipsFormatting("EV05002.BIN", 0x00005fe4),\
-	PatchScaledLipsFormatting("EV05003.BIN", 0x000061c0),\
-	PatchScaledLipsFormatting("EV05004.BIN", 0x00005fe4),\
-	PatchScaledLipsFormatting("EV05005.BIN", 0x00005fe4),\
-	PatchScaledLipsFormatting("EV05007.BIN", 0x00005fe4),\
-	PatchScaledLipsFormatting("EV05010.BIN", 0x00005fe4),\
-	PatchScaledLipsFormatting("EV05011.BIN", 0x00005fe4),\
-	PatchScaledLipsFormatting("EV05018.BIN", 0x00005fe4),\
-	PatchScaledLipsFormatting("EV05019.BIN", 0x0000600c),\
-	PatchScaledLipsFormatting("EV05020.BIN", 0x00005fe4),\
-	PatchScaledLipsFormatting("EV05021.BIN", 0x00005fe4),\
-	PatchScaledLipsFormatting("EV05022.BIN", 0x00005fe4),\
-	PatchScaledLipsFormatting("EV05023.BIN", 0x00005fe4),\
-	PatchScaledLipsFormatting("EV05025.BIN", 0x00005fe4),\
-	PatchScaledLipsFormatting("EV05026.BIN", 0x00005fe4),\
-	PatchScaledLipsFormatting("EV05027.BIN", 0x00005fe4),\
-	PatchScaledLipsFormatting("EV05051.BIN", 0x00005fe4),\
-	PatchScaledLipsFormatting("EV05052.BIN", 0x00005fe4),\
-	PatchScaledLipsFormatting("EV05053.BIN", 0x00005fe4),\
-	PatchScaledLipsFormatting("EV05054.BIN", 0x00005fe4),\
-	PatchScaledLipsFormatting("EV05060.BIN", 0x00005fe4),\
-	PatchScaledLipsFormatting("EV26001.BIN", 0x00006df0),\
-	PatchScaledLipsFormatting("EV26002.BIN", 0x0000638c),\
-	PatchScaledLipsFormatting("EV26020.BIN", 0x00005fe4),\
-	PatchScaledLipsFormatting("EV26021.BIN", 0x00005fe4),\
-	PatchScaledLipsFormatting("EV27001.BIN", 0x00005ff0),\
-	PatchScaledLipsFormatting("EV27002.BIN", 0x00006098),\
-	PatchScaledLipsFormatting("EV27054.BIN", 0x00005fe4),\
-	PatchScaledLipsFormatting("EV28001.BIN", 0x00005fe4),\
-	PatchScaledLipsFormatting("EV28025.BIN", 0x00005fe4),\
-	PatchScaledLipsFormatting("EV28050.BIN", 0x00005fe4),\
-	PatchScaledLipsFormatting("EV28051.BIN", 0x00005fe4),\
-	PatchScaledLipsFormatting("EV29001.BIN", 0x00006008),\
-	PatchScaledLipsFormatting("EV29002.BIN", 0x00006008),\
-	PatchScaledLipsFormatting("EV29021.BIN", 0x00005fe4),\
-	PatchScaledLipsFormatting("EV29050.BIN", 0x00005fe4),\
-	PatchScaledLipsFormatting("EV30003.BIN", 0x0000702c),\
-	PatchScaledLipsFormatting("EV30020.BIN", 0x00005ff4),\
-	PatchScaledLipsFormatting("EV30026.BIN", 0x00005ff4),\
-	PatchScaledLipsFormatting("EV30027.BIN", 0x00005ff4),\
-	PatchScaledLipsFormatting("EV31001.BIN", 0x0000628c),\
-	PatchScaledLipsFormatting("EV31002.BIN", 0x000061e4),\
-	PatchScaledLipsFormatting("EV31023.BIN", 0x0000600c),\
-	PatchScaledLipsFormatting("EV31024.BIN", 0x0000600c),\
-	PatchScaledLipsFormatting("EV32002.BIN", 0x00006018),\
-	PatchScaledLipsFormatting("EV32020.BIN", 0x00005fe4),\
-	PatchScaledLipsFormatting("EV32055.BIN", 0x00006058),\
-	PatchScaledLipsFormatting("EV33001.BIN", 0x00006538),\
-	PatchScaledLipsFormatting("EV33002.BIN", 0x000062a0),\
-	PatchScaledLipsFormatting("EV33022.BIN", 0x00005fec),\
-	PatchScaledLipsFormatting("EV33054.BIN", 0x00005fe4),\
-	PatchScaledLipsFormatting("EV34001.BIN", 0x00006008),\
-	PatchScaledLipsFormatting("EV34002.BIN", 0x00006020),\
-	PatchScaledLipsFormatting("EV34003.BIN", 0x00006008),\
-	PatchScaledLipsFormatting("EV34004.BIN", 0x00006060),\
-	PatchScaledLipsFormatting("EV34005.BIN", 0x00006060),\
-	PatchScaledLipsFormatting("EV34006.BIN", 0x00006098),\
-	PatchScaledLipsFormatting("EV34007.BIN", 0x00006008),\
-	PatchScaledLipsFormatting("EV34008.BIN", 0x00006098),\
-	PatchScaledLipsFormatting("EV34020.BIN", 0x00005fe4),\
-	PatchScaledLipsFormatting("EV34030.BIN", 0x00005fe4),\
-	PatchScaledLipsFormatting("EV34040.BIN", 0x00005fe4),\
-	PatchScaledLipsFormatting("EV34041.BIN", 0x00005fe4),\
-	PatchScaledLipsFormatting("EV34042.BIN", 0x00005fe4),\
-	PatchScaledLipsFormatting("EV34043.BIN", 0x00005fe4),\
-	PatchScaledLipsFormatting("EV34044.BIN", 0x00005fe4),\
-	PatchScaledLipsFormatting("M00PRG.BIN",  0x00079ae0),\
-	PatchScaledLipsFormatting("M26PRG.BIN",  0x000791f0),\
-	PatchScaledLipsFormatting("TUTORI0.BIN", 0x0000615c)
+	PatchScaledLipsFormatting("EV00001.BIN", 0x000076e0, 0),\
+	PatchScaledLipsFormatting("EV00002.BIN", 0x00005fe4, 0),\
+	PatchScaledLipsFormatting("EV00050.BIN", 0x00005fe4, 0),\
+	PatchScaledLipsFormatting("EV00051.BIN", 0x00005fe4, 0),\
+	PatchScaledLipsFormatting("EV00052.BIN", 0x00005fe4, 0),\
+	PatchScaledLipsFormatting("EV00054.BIN", 0x00005fe4, 0),\
+	PatchScaledLipsFormatting("EV00055.BIN", 0x00005fe4, 0),\
+	PatchScaledLipsFormatting("EV00060.BIN", 0x00005fe4, 0),\
+	PatchScaledLipsFormatting("EV01001.BIN", 0x000060f0, 0),\
+	PatchScaledLipsFormatting("EV01002.BIN", 0x00005fe4, 0),\
+	PatchScaledLipsFormatting("EV01020.BIN", 0x00006608, 0),\
+	PatchScaledLipsFormatting("EV01021.BIN", 0x0000641c, 0),\
+	PatchScaledLipsFormatting("EV01022.BIN", 0x00005fe4, 0),\
+	PatchScaledLipsFormatting("EV01023.BIN", 0x00005fe4, 0),\
+	PatchScaledLipsFormatting("EV01030.BIN", 0x00005fe4, 0),\
+	PatchScaledLipsFormatting("EV01050.BIN", 0x00005fe4, 0),\
+	PatchScaledLipsFormatting("EV01054.BIN", 0x00005fe4, 0),\
+	PatchScaledLipsFormatting("EV01055.BIN", 0x00005fe4, 0),\
+	PatchScaledLipsFormatting("EV02001.BIN", 0x00005fe4, 0),\
+	PatchScaledLipsFormatting("EV02002.BIN", 0x00005fe4, 0),\
+	PatchScaledLipsFormatting("EV02010.BIN", 0x00005fe4, 0),\
+	PatchScaledLipsFormatting("EV02021.BIN", 0x00005fe4, 0),\
+	PatchScaledLipsFormatting("EV02025.BIN", 0x00005fe4, 0),\
+	PatchScaledLipsFormatting("EV02050.BIN", 0x00005fe4, 0),\
+	PatchScaledLipsFormatting("EV02051.BIN", 0x00005fe4, 0),\
+	PatchScaledLipsFormatting("EV02052.BIN", 0x00005fe4, 0),\
+	PatchScaledLipsFormatting("EV02053.BIN", 0x00005fe4, 0),\
+	PatchScaledLipsFormatting("EV02054.BIN", 0x00005fe4, 0),\
+	PatchScaledLipsFormatting("EV03000.BIN", 0x00005cb8, -2),\
+	PatchScaledLipsFormatting("EV03001.BIN", 0x000061b0, 0),\
+	PatchScaledLipsFormatting("EV03002.BIN", 0x00006058, 0),\
+	PatchScaledLipsFormatting("EV03005.BIN", 0x00006010, 0),\
+	PatchScaledLipsFormatting("EV03010.BIN", 0x00005ff4, 0),\
+	PatchScaledLipsFormatting("EV03020.BIN", 0x00005ff4, 0),\
+	PatchScaledLipsFormatting("EV03021.BIN", 0x00005ff4, 0),\
+	PatchScaledLipsFormatting("EV03023.BIN", 0x0000600c, 0),\
+	PatchScaledLipsFormatting("EV03024.BIN", 0x0000600c, 0),\
+	PatchScaledLipsFormatting("EV03025.BIN", 0x00006020, 0),\
+	PatchScaledLipsFormatting("EV03050.BIN", 0x00006424, 0),\
+	PatchScaledLipsFormatting("EV03051.BIN", 0x00006048, 0),\
+	PatchScaledLipsFormatting("EV03052.BIN", 0x000060b4, 0),\
+	PatchScaledLipsFormatting("EV03053.BIN", 0x00006070, 0),\
+	PatchScaledLipsFormatting("EV04001.BIN", 0x00006e9c, 0),\
+	PatchScaledLipsFormatting("EV04002.BIN", 0x00006060, 0),\
+	PatchScaledLipsFormatting("EV04003.BIN", 0x00006194, 0),\
+	PatchScaledLipsFormatting("EV04005.BIN", 0x00005fe4, 0),\
+	PatchScaledLipsFormatting("EV04010.BIN", 0x00006058, 0),\
+	PatchScaledLipsFormatting("EV04020.BIN", 0x00005fe4, 0),\
+	PatchScaledLipsFormatting("EV04022.BIN", 0x00005fec, 0),\
+	PatchScaledLipsFormatting("EV04050.BIN", 0x0000608c, 0),\
+	PatchScaledLipsFormatting("EV04053.BIN", 0x00005fe4, 0),\
+	PatchScaledLipsFormatting("EV04055.BIN", 0x00006058, 0),\
+	PatchScaledLipsFormatting("EV05001.BIN", 0x00005ffc, 0),\
+	PatchScaledLipsFormatting("EV05002.BIN", 0x00005fe4, 0),\
+	PatchScaledLipsFormatting("EV05003.BIN", 0x000061c0, 0),\
+	PatchScaledLipsFormatting("EV05004.BIN", 0x00005fe4, 0),\
+	PatchScaledLipsFormatting("EV05005.BIN", 0x00005fe4, 0),\
+	PatchScaledLipsFormatting("EV05007.BIN", 0x00005fe4, 0),\
+	PatchScaledLipsFormatting("EV05010.BIN", 0x00005fe4, 0),\
+	PatchScaledLipsFormatting("EV05011.BIN", 0x00005fe4, 0),\
+	PatchScaledLipsFormatting("EV05018.BIN", 0x00005fe4, 0),\
+	PatchScaledLipsFormatting("EV05019.BIN", 0x0000600c, 0),\
+	PatchScaledLipsFormatting("EV05020.BIN", 0x00005fe4, 0),\
+	PatchScaledLipsFormatting("EV05021.BIN", 0x00005fe4, 0),\
+	PatchScaledLipsFormatting("EV05022.BIN", 0x00005fe4, 0),\
+	PatchScaledLipsFormatting("EV05023.BIN", 0x00005fe4, 0),\
+	PatchScaledLipsFormatting("EV05025.BIN", 0x00005fe4, 0),\
+	PatchScaledLipsFormatting("EV05026.BIN", 0x00005fe4, 0),\
+	PatchScaledLipsFormatting("EV05027.BIN", 0x00005fe4, 0),\
+	PatchScaledLipsFormatting("EV05051.BIN", 0x00005fe4, 0),\
+	PatchScaledLipsFormatting("EV05052.BIN", 0x00005fe4, 0),\
+	PatchScaledLipsFormatting("EV05053.BIN", 0x00005fe4, 0),\
+	PatchScaledLipsFormatting("EV05054.BIN", 0x00005fe4, 0),\
+	PatchScaledLipsFormatting("EV05060.BIN", 0x00005fe4, 0),\
+	PatchScaledLipsFormatting("EV26001.BIN", 0x00006df0, 0),\
+	PatchScaledLipsFormatting("EV26002.BIN", 0x0000638c, 0),\
+	PatchScaledLipsFormatting("EV26020.BIN", 0x00005fe4, 0),\
+	PatchScaledLipsFormatting("EV26021.BIN", 0x00005fe4, 0),\
+	PatchScaledLipsFormatting("EV27001.BIN", 0x00005ff0, 0),\
+	PatchScaledLipsFormatting("EV27002.BIN", 0x00006098, 0),\
+	PatchScaledLipsFormatting("EV27054.BIN", 0x00005fe4, 0),\
+	PatchScaledLipsFormatting("EV28001.BIN", 0x00005fe4, 0),\
+	PatchScaledLipsFormatting("EV28025.BIN", 0x00005fe4, 0),\
+	PatchScaledLipsFormatting("EV28050.BIN", 0x00005fe4, 0),\
+	PatchScaledLipsFormatting("EV28051.BIN", 0x00005fe4, 0),\
+	PatchScaledLipsFormatting("EV29001.BIN", 0x00006008, 0),\
+	PatchScaledLipsFormatting("EV29002.BIN", 0x00006008, 0),\
+	PatchScaledLipsFormatting("EV29021.BIN", 0x00005fe4, 0),\
+	PatchScaledLipsFormatting("EV29050.BIN", 0x00005fe4, 0),\
+	PatchScaledLipsFormatting("EV30003.BIN", 0x0000702c, 0),\
+	PatchScaledLipsFormatting("EV30020.BIN", 0x00005ff4, 0),\
+	PatchScaledLipsFormatting("EV30026.BIN", 0x00005ff4, 0),\
+	PatchScaledLipsFormatting("EV30027.BIN", 0x00005ff4, 0),\
+	PatchScaledLipsFormatting("EV31001.BIN", 0x0000628c, 0),\
+	PatchScaledLipsFormatting("EV31002.BIN", 0x000061e4, 0),\
+	PatchScaledLipsFormatting("EV31023.BIN", 0x0000600c, 0),\
+	PatchScaledLipsFormatting("EV31024.BIN", 0x0000600c, 0),\
+	PatchScaledLipsFormatting("EV32002.BIN", 0x00006018, 0),\
+	PatchScaledLipsFormatting("EV32020.BIN", 0x00005fe4, 0),\
+	PatchScaledLipsFormatting("EV32055.BIN", 0x00006058, 0),\
+	PatchScaledLipsFormatting("EV33001.BIN", 0x00006538, 0),\
+	PatchScaledLipsFormatting("EV33002.BIN", 0x000062a0, 0),\
+	PatchScaledLipsFormatting("EV33022.BIN", 0x00005fec, 0),\
+	PatchScaledLipsFormatting("EV33054.BIN", 0x00005fe4, 0),\
+	PatchScaledLipsFormatting("EV34001.BIN", 0x00006008, 0),\
+	PatchScaledLipsFormatting("EV34002.BIN", 0x00006020, 0),\
+	PatchScaledLipsFormatting("EV34003.BIN", 0x00006008, 0),\
+	PatchScaledLipsFormatting("EV34004.BIN", 0x00006060, 0),\
+	PatchScaledLipsFormatting("EV34005.BIN", 0x00006060, 0),\
+	PatchScaledLipsFormatting("EV34006.BIN", 0x00006098, 0),\
+	PatchScaledLipsFormatting("EV34007.BIN", 0x00006008, 0),\
+	PatchScaledLipsFormatting("EV34008.BIN", 0x00006098, 0),\
+	PatchScaledLipsFormatting("EV34020.BIN", 0x00005fe4, 0),\
+	PatchScaledLipsFormatting("EV34030.BIN", 0x00005fe4, 0),\
+	PatchScaledLipsFormatting("EV34040.BIN", 0x00005fe4, 0),\
+	PatchScaledLipsFormatting("EV34041.BIN", 0x00005fe4, 0),\
+	PatchScaledLipsFormatting("EV34042.BIN", 0x00005fe4, 0),\
+	PatchScaledLipsFormatting("EV34043.BIN", 0x00005fe4, 0),\
+	PatchScaledLipsFormatting("EV34044.BIN", 0x00005fe4, 0),\
+	PatchScaledLipsFormatting("M00PRG.BIN",  0x00079ae0, 0),\
+	PatchScaledLipsFormatting("M26PRG.BIN",  0x000791f0, 0),\
+	PatchScaledLipsFormatting("TUTORI0.BIN", 0x0000615c, 0)
 
 //Add extra space for scaled LIPS characters
 /*change 060d180a from 01d4 to 3cc to make more space for buffer*/
@@ -1101,7 +1101,7 @@ nop          //0009
 
 	060d1960 is ffff // change to ff
 */
-#define PatchScaledLipsSingleByteReading(filename, address)\
+#define PatchScaledLipsSingleByteReading(filename, address, offset1, offset2)\
 	filename, address + 0,    0xE630, 0xE640,/*num bytes to copy from tile to vdp1, technically not necessary*/\
 	filename, address + 108,  0x014c, 0x014d,/*mov.w (r0, r4), r1*/\
 	filename, address + 110,  0x611c, 0x611d,/*extu.w r1, r1*/\
@@ -1120,134 +1120,134 @@ nop          //0009
 	filename, address + 1252, 0x61d0, 0x61d1,/*060d1760 mov.w @r13, r1*/\
 	filename, address + 1276, 0x009, 0x300c,/*060d1778 add r0, r0*/\
 	filename, address + 1326, 0x04dc, 0x04dd,/*060d17aa mov.w @(r0, r13), r1*/\
-	filename, address + 1546, 0x0009, 0x300c,/*060d1886 add r0, r0*/\
-	filename, address + 1548, 0x01dc, 0x01dd,/*mov.w @(r0, r13), r1*/\
-	filename, address + 1552, 0x611c, 0x611d,/*060d188c extu.w r1, r1*/\
-	filename, address + 1766, 0xff, 0xffff/*060d1962 is ffff*/
+	filename, address + 1546 + offset1, 0x0009, 0x300c,/*060d1886 add r0, r0*/\
+	filename, address + 1548 + offset1, 0x01dc, 0x01dd,/*mov.w @(r0, r13), r1*/\
+	filename, address + 1552 + offset1, 0x611c, 0x611d,/*060d188c extu.w r1, r1*/\
+	filename, address + 1766 + offset2, 0xff, 0xffff/*060d1962 is ffff*/
 
 #define PatchScaledLipsSingleByteReadingInFiles()\
-	PatchScaledLipsSingleByteReading("EV00001.BIN", 0x00007178),\
-	PatchScaledLipsSingleByteReading("EV00002.BIN", 0x00005a7c),\
-	PatchScaledLipsSingleByteReading("EV00050.BIN", 0x00005a7c),\
-	PatchScaledLipsSingleByteReading("EV00051.BIN", 0x00005a7c),\
-	PatchScaledLipsSingleByteReading("EV00052.BIN", 0x00005a7c),\
-	PatchScaledLipsSingleByteReading("EV00054.BIN", 0x00005a7c),\
-	PatchScaledLipsSingleByteReading("EV00055.BIN", 0x00005a7c),\
-	PatchScaledLipsSingleByteReading("EV00060.BIN", 0x00005a7c),\
-	PatchScaledLipsSingleByteReading("EV01001.BIN", 0x00005b88),\
-	PatchScaledLipsSingleByteReading("EV01002.BIN", 0x00005a7c),\
-	PatchScaledLipsSingleByteReading("EV01020.BIN", 0x000060a0),\
-	PatchScaledLipsSingleByteReading("EV01021.BIN", 0x00005eb4),\
-	PatchScaledLipsSingleByteReading("EV01022.BIN", 0x00005a7c),\
-	PatchScaledLipsSingleByteReading("EV01023.BIN", 0x00005a7c),\
-	PatchScaledLipsSingleByteReading("EV01030.BIN", 0x00005a7c),\
-	PatchScaledLipsSingleByteReading("EV01050.BIN", 0x00005a7c),\
-	PatchScaledLipsSingleByteReading("EV01054.BIN", 0x00005a7c),\
-	PatchScaledLipsSingleByteReading("EV01055.BIN", 0x00005a7c),\
-	PatchScaledLipsSingleByteReading("EV02001.BIN", 0x00005a7c),\
-	PatchScaledLipsSingleByteReading("EV02002.BIN", 0x00005a7c),\
-	PatchScaledLipsSingleByteReading("EV02010.BIN", 0x00005a7c),\
-	PatchScaledLipsSingleByteReading("EV02021.BIN", 0x00005a7c),\
-	PatchScaledLipsSingleByteReading("EV02025.BIN", 0x00005a7c),\
-	PatchScaledLipsSingleByteReading("EV02050.BIN", 0x00005a7c),\
-	PatchScaledLipsSingleByteReading("EV02051.BIN", 0x00005a7c),\
-	PatchScaledLipsSingleByteReading("EV02052.BIN", 0x00005a7c),\
-	PatchScaledLipsSingleByteReading("EV02053.BIN", 0x00005a7c),\
-	PatchScaledLipsSingleByteReading("EV02054.BIN", 0x00005a7c),\
-	PatchScaledLipsSingleByteReading("EV03000.BIN", 0x00005750),\
-	PatchScaledLipsSingleByteReading("EV03001.BIN", 0x00005c48),\
-	PatchScaledLipsSingleByteReading("EV03002.BIN", 0x00005af0),\
-	PatchScaledLipsSingleByteReading("EV03005.BIN", 0x00005aa8),\
-	PatchScaledLipsSingleByteReading("EV03010.BIN", 0x00005a8c),\
-	PatchScaledLipsSingleByteReading("EV03020.BIN", 0x00005a8c),\
-	PatchScaledLipsSingleByteReading("EV03021.BIN", 0x00005a8c),\
-	PatchScaledLipsSingleByteReading("EV03023.BIN", 0x00005aa4),\
-	PatchScaledLipsSingleByteReading("EV03024.BIN", 0x00005aa4),\
-	PatchScaledLipsSingleByteReading("EV03025.BIN", 0x00005ab8),\
-	PatchScaledLipsSingleByteReading("EV03050.BIN", 0x00005ebc),\
-	PatchScaledLipsSingleByteReading("EV03051.BIN", 0x00005ae0),\
-	PatchScaledLipsSingleByteReading("EV03052.BIN", 0x00005b4c),\
-	PatchScaledLipsSingleByteReading("EV03053.BIN", 0x00005b08),\
-	PatchScaledLipsSingleByteReading("EV04001.BIN", 0x00006934),\
-	PatchScaledLipsSingleByteReading("EV04002.BIN", 0x00005af8),\
-	PatchScaledLipsSingleByteReading("EV04003.BIN", 0x00005c2c),\
-	PatchScaledLipsSingleByteReading("EV04005.BIN", 0x00005a7c),\
-	PatchScaledLipsSingleByteReading("EV04010.BIN", 0x00005af0),\
-	PatchScaledLipsSingleByteReading("EV04020.BIN", 0x00005a7c),\
-	PatchScaledLipsSingleByteReading("EV04022.BIN", 0x00005a84),\
-	PatchScaledLipsSingleByteReading("EV04050.BIN", 0x00005b24),\
-	PatchScaledLipsSingleByteReading("EV04053.BIN", 0x00005a7c),\
-	PatchScaledLipsSingleByteReading("EV04055.BIN", 0x00005af0),\
-	PatchScaledLipsSingleByteReading("EV05001.BIN", 0x00005a94),\
-	PatchScaledLipsSingleByteReading("EV05002.BIN", 0x00005a7c),\
-	PatchScaledLipsSingleByteReading("EV05003.BIN", 0x00005c58),\
-	PatchScaledLipsSingleByteReading("EV05004.BIN", 0x00005a7c),\
-	PatchScaledLipsSingleByteReading("EV05005.BIN", 0x00005a7c),\
-	PatchScaledLipsSingleByteReading("EV05007.BIN", 0x00005a7c),\
-	PatchScaledLipsSingleByteReading("EV05010.BIN", 0x00005a7c),\
-	PatchScaledLipsSingleByteReading("EV05011.BIN", 0x00005a7c),\
-	PatchScaledLipsSingleByteReading("EV05018.BIN", 0x00005a7c),\
-	PatchScaledLipsSingleByteReading("EV05019.BIN", 0x00005aa4),\
-	PatchScaledLipsSingleByteReading("EV05020.BIN", 0x00005a7c),\
-	PatchScaledLipsSingleByteReading("EV05021.BIN", 0x00005a7c),\
-	PatchScaledLipsSingleByteReading("EV05022.BIN", 0x00005a7c),\
-	PatchScaledLipsSingleByteReading("EV05023.BIN", 0x00005a7c),\
-	PatchScaledLipsSingleByteReading("EV05025.BIN", 0x00005a7c),\
-	PatchScaledLipsSingleByteReading("EV05026.BIN", 0x00005a7c),\
-	PatchScaledLipsSingleByteReading("EV05027.BIN", 0x00005a7c),\
-	PatchScaledLipsSingleByteReading("EV05051.BIN", 0x00005a7c),\
-	PatchScaledLipsSingleByteReading("EV05052.BIN", 0x00005a7c),\
-	PatchScaledLipsSingleByteReading("EV05053.BIN", 0x00005a7c),\
-	PatchScaledLipsSingleByteReading("EV05054.BIN", 0x00005a7c),\
-	PatchScaledLipsSingleByteReading("EV05060.BIN", 0x00005a7c),\
-	PatchScaledLipsSingleByteReading("EV26001.BIN", 0x00006888),\
-	PatchScaledLipsSingleByteReading("EV26002.BIN", 0x00005e24),\
-	PatchScaledLipsSingleByteReading("EV26020.BIN", 0x00005a7c),\
-	PatchScaledLipsSingleByteReading("EV26021.BIN", 0x00005a7c),\
-	PatchScaledLipsSingleByteReading("EV27001.BIN", 0x00005a88),\
-	PatchScaledLipsSingleByteReading("EV27002.BIN", 0x00005b30),\
-	PatchScaledLipsSingleByteReading("EV27054.BIN", 0x00005a7c),\
-	PatchScaledLipsSingleByteReading("EV28001.BIN", 0x00005a7c),\
-	PatchScaledLipsSingleByteReading("EV28025.BIN", 0x00005a7c),\
-	PatchScaledLipsSingleByteReading("EV28050.BIN", 0x00005a7c),\
-	PatchScaledLipsSingleByteReading("EV28051.BIN", 0x00005a7c),\
-	PatchScaledLipsSingleByteReading("EV29001.BIN", 0x00005aa0),\
-	PatchScaledLipsSingleByteReading("EV29002.BIN", 0x00005aa0),\
-	PatchScaledLipsSingleByteReading("EV29021.BIN", 0x00005a7c),\
-	PatchScaledLipsSingleByteReading("EV29050.BIN", 0x00005a7c),\
-	PatchScaledLipsSingleByteReading("EV30003.BIN", 0x00006ac4),\
-	PatchScaledLipsSingleByteReading("EV30020.BIN", 0x00005a8c),\
-	PatchScaledLipsSingleByteReading("EV30026.BIN", 0x00005a8c),\
-	PatchScaledLipsSingleByteReading("EV30027.BIN", 0x00005a8c),\
-	PatchScaledLipsSingleByteReading("EV31001.BIN", 0x00005d24),\
-	PatchScaledLipsSingleByteReading("EV31002.BIN", 0x00005c7c),\
-	PatchScaledLipsSingleByteReading("EV31023.BIN", 0x00005aa4),\
-	PatchScaledLipsSingleByteReading("EV31024.BIN", 0x00005aa4),\
-	PatchScaledLipsSingleByteReading("EV32002.BIN", 0x00005ab0),\
-	PatchScaledLipsSingleByteReading("EV32020.BIN", 0x00005a7c),\
-	PatchScaledLipsSingleByteReading("EV32055.BIN", 0x00005af0),\
-	PatchScaledLipsSingleByteReading("EV33001.BIN", 0x00005fd0),\
-	PatchScaledLipsSingleByteReading("EV33002.BIN", 0x00005d38),\
-	PatchScaledLipsSingleByteReading("EV33022.BIN", 0x00005a84),\
-	PatchScaledLipsSingleByteReading("EV33054.BIN", 0x00005a7c),\
-	PatchScaledLipsSingleByteReading("EV34001.BIN", 0x00005aa0),\
-	PatchScaledLipsSingleByteReading("EV34002.BIN", 0x00005ab8),\
-	PatchScaledLipsSingleByteReading("EV34003.BIN", 0x00005aa0),\
-	PatchScaledLipsSingleByteReading("EV34004.BIN", 0x00005af8),\
-	PatchScaledLipsSingleByteReading("EV34005.BIN", 0x00005af8),\
-	PatchScaledLipsSingleByteReading("EV34006.BIN", 0x00005b30),\
-	PatchScaledLipsSingleByteReading("EV34007.BIN", 0x00005aa0),\
-	PatchScaledLipsSingleByteReading("EV34008.BIN", 0x00005b30),\
-	PatchScaledLipsSingleByteReading("EV34020.BIN", 0x00005a7c),\
-	PatchScaledLipsSingleByteReading("EV34030.BIN", 0x00005a7c),\
-	PatchScaledLipsSingleByteReading("EV34040.BIN", 0x00005a7c),\
-	PatchScaledLipsSingleByteReading("EV34041.BIN", 0x00005a7c),\
-	PatchScaledLipsSingleByteReading("EV34042.BIN", 0x00005a7c),\
-	PatchScaledLipsSingleByteReading("EV34043.BIN", 0x00005a7c),\
-	PatchScaledLipsSingleByteReading("EV34044.BIN", 0x00005a7c),\
-	PatchScaledLipsSingleByteReading("M00PRG.BIN", 0x00079578),\
-	PatchScaledLipsSingleByteReading("M26PRG.BIN", 0x00078c88),\
-	PatchScaledLipsSingleByteReading("TUTORI0.BIN", 0x00005bf4)
+	PatchScaledLipsSingleByteReading("EV00001.BIN", 0x00007178, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV00002.BIN", 0x00005a7c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV00050.BIN", 0x00005a7c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV00051.BIN", 0x00005a7c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV00052.BIN", 0x00005a7c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV00054.BIN", 0x00005a7c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV00055.BIN", 0x00005a7c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV00060.BIN", 0x00005a7c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV01001.BIN", 0x00005b88, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV01002.BIN", 0x00005a7c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV01020.BIN", 0x000060a0, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV01021.BIN", 0x00005eb4, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV01022.BIN", 0x00005a7c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV01023.BIN", 0x00005a7c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV01030.BIN", 0x00005a7c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV01050.BIN", 0x00005a7c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV01054.BIN", 0x00005a7c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV01055.BIN", 0x00005a7c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV02001.BIN", 0x00005a7c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV02002.BIN", 0x00005a7c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV02010.BIN", 0x00005a7c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV02021.BIN", 0x00005a7c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV02025.BIN", 0x00005a7c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV02050.BIN", 0x00005a7c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV02051.BIN", 0x00005a7c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV02052.BIN", 0x00005a7c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV02053.BIN", 0x00005a7c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV02054.BIN", 0x00005a7c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV03000.BIN", 0x00005750, -2, -4),\
+	PatchScaledLipsSingleByteReading("EV03001.BIN", 0x00005c48, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV03002.BIN", 0x00005af0, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV03005.BIN", 0x00005aa8, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV03010.BIN", 0x00005a8c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV03020.BIN", 0x00005a8c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV03021.BIN", 0x00005a8c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV03023.BIN", 0x00005aa4, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV03024.BIN", 0x00005aa4, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV03025.BIN", 0x00005ab8, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV03050.BIN", 0x00005ebc, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV03051.BIN", 0x00005ae0, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV03052.BIN", 0x00005b4c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV03053.BIN", 0x00005b08, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV04001.BIN", 0x00006934, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV04002.BIN", 0x00005af8, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV04003.BIN", 0x00005c2c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV04005.BIN", 0x00005a7c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV04010.BIN", 0x00005af0, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV04020.BIN", 0x00005a7c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV04022.BIN", 0x00005a84, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV04050.BIN", 0x00005b24, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV04053.BIN", 0x00005a7c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV04055.BIN", 0x00005af0, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV05001.BIN", 0x00005a94, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV05002.BIN", 0x00005a7c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV05003.BIN", 0x00005c58, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV05004.BIN", 0x00005a7c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV05005.BIN", 0x00005a7c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV05007.BIN", 0x00005a7c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV05010.BIN", 0x00005a7c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV05011.BIN", 0x00005a7c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV05018.BIN", 0x00005a7c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV05019.BIN", 0x00005aa4, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV05020.BIN", 0x00005a7c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV05021.BIN", 0x00005a7c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV05022.BIN", 0x00005a7c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV05023.BIN", 0x00005a7c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV05025.BIN", 0x00005a7c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV05026.BIN", 0x00005a7c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV05027.BIN", 0x00005a7c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV05051.BIN", 0x00005a7c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV05052.BIN", 0x00005a7c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV05053.BIN", 0x00005a7c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV05054.BIN", 0x00005a7c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV05060.BIN", 0x00005a7c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV26001.BIN", 0x00006888, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV26002.BIN", 0x00005e24, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV26020.BIN", 0x00005a7c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV26021.BIN", 0x00005a7c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV27001.BIN", 0x00005a88, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV27002.BIN", 0x00005b30, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV27054.BIN", 0x00005a7c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV28001.BIN", 0x00005a7c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV28025.BIN", 0x00005a7c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV28050.BIN", 0x00005a7c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV28051.BIN", 0x00005a7c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV29001.BIN", 0x00005aa0, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV29002.BIN", 0x00005aa0, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV29021.BIN", 0x00005a7c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV29050.BIN", 0x00005a7c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV30003.BIN", 0x00006ac4, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV30020.BIN", 0x00005a8c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV30026.BIN", 0x00005a8c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV30027.BIN", 0x00005a8c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV31001.BIN", 0x00005d24, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV31002.BIN", 0x00005c7c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV31023.BIN", 0x00005aa4, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV31024.BIN", 0x00005aa4, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV32002.BIN", 0x00005ab0, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV32020.BIN", 0x00005a7c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV32055.BIN", 0x00005af0, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV33001.BIN", 0x00005fd0, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV33002.BIN", 0x00005d38, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV33022.BIN", 0x00005a84, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV33054.BIN", 0x00005a7c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV34001.BIN", 0x00005aa0, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV34002.BIN", 0x00005ab8, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV34003.BIN", 0x00005aa0, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV34004.BIN", 0x00005af8, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV34005.BIN", 0x00005af8, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV34006.BIN", 0x00005b30, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV34007.BIN", 0x00005aa0, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV34008.BIN", 0x00005b30, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV34020.BIN", 0x00005a7c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV34030.BIN", 0x00005a7c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV34040.BIN", 0x00005a7c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV34041.BIN", 0x00005a7c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV34042.BIN", 0x00005a7c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV34043.BIN", 0x00005a7c, 0, 0),\
+	PatchScaledLipsSingleByteReading("EV34044.BIN", 0x00005a7c, 0, 0),\
+	PatchScaledLipsSingleByteReading("M00PRG.BIN", 0x00079578, 0, 0),\
+	PatchScaledLipsSingleByteReading("M26PRG.BIN", 0x00078c88, 0, 0),\
+	PatchScaledLipsSingleByteReading("TUTORI0.BIN", 0x00005bf4, 0, 0)
 
 bool PatchBattleTextDrawingCode(const string& inOriginalDirectory, const string& inPatchedDirectory, const string& inDataDirectory)
 {

@@ -1,0 +1,16 @@
+217cfb
+
+06012f4e
+extu.w r1, r1 //611d to 611c
+
+06012f66
+ffff to 00ff
+
+06012f9c
+extu.w r2, r2 //622d to 622c
+
+06013004
+extu.w r1, r1 //611d to 611c
+
+06013036
+ffff to 00ff

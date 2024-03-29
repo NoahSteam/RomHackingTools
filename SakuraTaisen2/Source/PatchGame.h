@@ -203,11 +203,16 @@ bool PatchTextDrawingCode(const string& inSourceGameDirectory, const string& inP
 			//Lips
 			WriteCommand(0xdf4a, 0x0009);
 			WriteCommand(0xdf4c, 0x014c); //Lips Text Read at 06012f4c: mov.w @(r0, r4), r1 (add r0, r0 right above)      change to 014c
+			WriteCommand(0xdf4e, 0x611c); //extu.w r1, r1 06012f4e (Reading High Bits)
+			WriteCommand(0xdf66, 0x00ff); //ffff to 00ff 06012f66 (Reading High Bits)
 			WriteCommand(0xdf96, 0x0009);
 			WriteCommand(0xdf98, 0x02bc); //Lips Text Read at 06012f98: mov.w @(r0, r11), r2 (add r0, r0 right above)     change to 02bc
+			WriteCommand(0xdf9c, 0x622c); //extu.w r2, r2 06012f9c (Reading Hight Bits)
 			WriteCommand(0xdf84, 0x61b0); //Lips Text Read at 06012f84: mov.w @r11, r1                                    change to 61b0
 			WriteCommand(0xdffe, 0x0009);
 			WriteCommand(0xe000, 0x01bc); //Lips Text Read at 06013000: mov.w @(r0, r11), r1 (add r0, r0 right above)     change to 01bc
+			WriteCommand(0xe004, 0x611c); //extu.w r1, r1 06013004 (Reading High Bits)
+			WriteCommand(0xe036, 0x00ff); //ffff to ff 06013036(Reading High Bits)
 			WriteCommand(0xe25c, 0x0009);
 			WriteCommand(0xe25e, 0x014c); //Lips Text Read at 0601325e: mov.w @(r0, r4), r1   (add r0, r0 right above)    change to 014c
 			WriteCommand(0xe274, 0x014c); //Lips Text Read at 06013274: mov.w @(r0, r4), r1                               change to 014c
