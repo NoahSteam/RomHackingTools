@@ -9,6 +9,20 @@ struct MainMenuImageInfo
 };
 #pragma pack(pop)
 
+//Found manually
+const int NumCustomMainMenuImages = 7;
+MainMenuImageInfo ManuallyFoundMainMenuImages[NumCustomMainMenuImages]
+{
+	0, 128, 16, (uint16)(0x3c460 / 8),
+	0, 32, 16,  (uint16)(0x3c460 / 8),
+	0, 16, 16,  (uint16)(0x3c460 / 8),
+	0, 48, 16,  (uint16)(0x3c460 / 8),
+
+	0, 64, 16, (uint16)(0x3d660 / 8),
+	0, 72, 16, (uint16)(0x3d660 / 8),
+	0, 48, 16, (uint16)(0x3d660 / 8)
+};
+
 bool PatchMainMenu(const string& inPatchedSakuraDirectory, const string& inTranslatedDataDirectory)
 {
 	const string titleFilePath = inPatchedSakuraDirectory + string("SAKURA1\\TITLE.BIN");
@@ -46,7 +60,7 @@ bool PatchMainMenu(const string& inPatchedSakuraDirectory, const string& inTrans
 		BmpToSaturnConverter convertedImage;
 		if(!convertedImage.ConvertBmpToSakuraFormat(translatedImagePath, false))
 		{
-			return false;
+			continue;
 		}
 
 		if(convertedImage.GetImageHeight() != height)
@@ -70,6 +84,53 @@ bool PatchMainMenu(const string& inPatchedSakuraDirectory, const string& inTrans
 		pbookFileData.WriteData(baseOffset + offset, convertedImage.GetImageData(), convertedImage.GetImageDataSize(), false);
 	}
 
+	int accumulatedOffset = 0;
+	int prevOffset = 0;
+	for (int i = 0; i < NumCustomMainMenuImages; ++i)
+	{
+		const int offset = ManuallyFoundMainMenuImages[i].offsetDiv8 * 8;
+		const int width = ManuallyFoundMainMenuImages[i].widthDiv8;
+		const int height = ManuallyFoundMainMenuImages[i].heightDiv8;
+
+		//For when the addresses jump
+		if (offset != prevOffset)
+		{
+			accumulatedOffset = 0;
+		}
+
+		const string translatedImagePath = translatedDirectory + std::to_string(i + numEntries) + bmpExt;
+
+		BmpToSaturnConverter convertedImage;
+		if (!convertedImage.ConvertBmpToSakuraFormat(translatedImagePath, false))
+		{
+			return false;
+		}
+
+		if (convertedImage.GetImageHeight() != height)
+		{
+			printf("Expected height of %i, got %i for %s\n", height, convertedImage.GetImageHeight(), translatedImagePath.c_str());
+			return false;
+		}
+
+		if (convertedImage.GetImageWidth() != width)
+		{
+			printf("Expected width of %i, got %i for %s\n", width, convertedImage.GetImageWidth(), translatedImagePath.c_str());
+			return false;
+		}
+
+		if (convertedImage.GetImageDataSize() != ((width * height) >> 1))
+		{
+			printf("Expected data size of %i, got %i for %s\n", (width * height) >> 1, convertedImage.GetImageWidth(), translatedImagePath.c_str());
+			return false;
+		}
+
+		pbookFileData.WriteData(offset + accumulatedOffset, convertedImage.GetImageData(), convertedImage.GetImageDataSize(), false);
+
+		accumulatedOffset += width * height / 2;
+		prevOffset = offset;
+
+	}
+
 	return true;
 }
 
@@ -87,7 +148,85 @@ void ExtractMainMenu(const string& rootSakuraDirectory, bool bBmp, const string&
 
 	const string bmpExt = bBmp ? string(".bmp") : (".png");
 
-	const char* filesToExtract[1] = { "PBOOK_FL"};
+	//PBOOK_FL
+	const string dataFilePath = rootSakuraDirectory + string("SAKURA1\\") + string("PBOOK_FL") + string(".CG");
+	FileNameContainer dataFileNameInfo(dataFilePath.c_str());
+
+	FileData fileData;
+	if (!fileData.InitializeFileData(dataFileNameInfo))
+	{
+		return;
+	}
+
+	const int paletteSize = 32;
+
+	PaletteData palette;
+	if (!palette.CreateFrom15BitData(sakuraFileData.GetData() + 0x00002250, paletteSize))
+	{
+		printf("Unable to create palette 1.\n");
+		return;
+	}
+
+	const string finalOutputDirectory = outDirectory + string("PBOOK_FL") + string("\\");
+	CreateDirectoryHelper(finalOutputDirectory);
+
+	const int numEntries = 167;
+	MainMenuImageInfo lookupTable[numEntries];
+	const unsigned int offsetToData = 0xE1B8;
+	memcpy_s(lookupTable, sizeof(lookupTable), sakuraFileData.GetData() + offsetToData, sizeof(lookupTable));
+
+	const int baseOffset = 0x3ef60;
+	for (int i = 0; i < numEntries; ++i)
+	{
+		const int offset = SwapByteOrder(lookupTable[i].offsetDiv8) * 8;
+		const int width  = SwapByteOrder(lookupTable[i].widthDiv8) * 8;
+		const int height = SwapByteOrder(lookupTable[i].heightDiv8) * 8;
+
+		const string outFileName = finalOutputDirectory + std::to_string(i) + bmpExt;
+
+		BitmapWriter outBmp;
+		outBmp.CreateBitmap(outFileName, width, -height, 4, fileData.GetData() + baseOffset + offset, (width * height) / 2, palette.GetData(), palette.GetSize(), bBmp);
+	}
+
+	int accumulatedOffset = 0;
+	int prevOffset = 0;
+	for (int i = 0; i < NumCustomMainMenuImages; ++i)
+	{
+		const int offset = ManuallyFoundMainMenuImages[i].offsetDiv8 * 8;
+		const int width = ManuallyFoundMainMenuImages[i].widthDiv8;
+		const int height = ManuallyFoundMainMenuImages[i].heightDiv8;
+
+		//For when the addresses jump
+		if(offset != prevOffset)
+		{
+			accumulatedOffset = 0;
+		}
+
+		const string outFileName = finalOutputDirectory + std::to_string(i + numEntries) + bmpExt;
+
+		BitmapWriter outBmp;
+		outBmp.CreateBitmap(outFileName, width, -height, 4, fileData.GetData() + offset + accumulatedOffset, (width * height) / 2, palette.GetData(), palette.GetSize(), bBmp);
+
+		accumulatedOffset += width * height / 2;
+		prevOffset = offset;
+	}
+}
+
+void ExtractBattlePauseMenu(const string& rootSakuraDirectory, bool bBmp, const string& outDirectory)
+{
+	CreateDirectoryHelper(outDirectory);
+
+	const string sakuraFilePath = rootSakuraDirectory + string("SAKURA2\\SLGNTBK.BIN");
+	FileNameContainer sakuraFileNameInfo(sakuraFilePath.c_str());
+	FileData tableFileData;
+	if (!tableFileData.InitializeFileData(sakuraFileNameInfo))
+	{
+		return;
+	}
+
+	const string bmpExt = bBmp ? string(".bmp") : (".png");
+
+	const char* filesToExtract[1] = { "PBOOK_BT" };
 
 	//PBOOK_FL
 	for (int fileIndex = 0; fileIndex < 1; ++fileIndex)
@@ -104,7 +243,7 @@ void ExtractMainMenu(const string& rootSakuraDirectory, bool bBmp, const string&
 		const int paletteSize = 32;
 
 		PaletteData palette;
-		if (!palette.CreateFrom15BitData(sakuraFileData.GetData() + 0x00002250, paletteSize))
+		if (!palette.CreateFrom15BitData(tableFileData.GetData() + 0x40c, paletteSize))
 		{
 			printf("Unable to create palette 1.\n");
 			return;
@@ -113,17 +252,17 @@ void ExtractMainMenu(const string& rootSakuraDirectory, bool bBmp, const string&
 		const string finalOutputDirectory = outDirectory + string(filesToExtract[fileIndex]) + string("\\");
 		CreateDirectoryHelper(finalOutputDirectory);
 
-		const int numEntries = 167;
+		const int numEntries = 62;
 		MainMenuImageInfo lookupTable[numEntries];
-		const unsigned int offsetToData = 0xE1B8;
-		memcpy_s(lookupTable, sizeof(lookupTable), sakuraFileData.GetData() + offsetToData, sizeof(lookupTable));
+		const unsigned int offsetToData = 0x5dc0;
+		memcpy_s(lookupTable, sizeof(lookupTable), tableFileData.GetData() + offsetToData, sizeof(lookupTable));
 
-		const int baseOffset = 0x3ef60;
+		const int baseOffset = 0xfb20;
 
 		for (int i = 0; i < numEntries; ++i)
 		{
 			const int offset = SwapByteOrder(lookupTable[i].offsetDiv8) * 8;
-			const int width  = SwapByteOrder(lookupTable[i].widthDiv8) * 8;
+			const int width = SwapByteOrder(lookupTable[i].widthDiv8) * 8;
 			const int height = SwapByteOrder(lookupTable[i].heightDiv8) * 8;
 
 			const string outFileName = finalOutputDirectory + std::to_string(i) + bmpExt;
@@ -133,6 +272,7 @@ void ExtractMainMenu(const string& rootSakuraDirectory, bool bBmp, const string&
 		}
 	}
 }
+
 
 bool CreateNamePBookFLSpreadsheet(const string& imageDirectory)
 {
@@ -301,6 +441,188 @@ bool CreateNamePBookFLSpreadsheet(const string& imageDirectory)
 
 		fprintf(htmlFile.GetFileHandle(), "				<tr id=\"tr_edit_%i\" bgcolor=\"#fefec8\">\n", i);
 		fprintf(htmlFile.GetFileHandle(), "					<td align=\"center\" width=\"20\">%s</td><td width=\"128\" height=\"16\" align=\"center\"><img src=\"..\\ExtractedData\\SakuraWars2\\Disc1\\PBOOK_FL\\%s.png\" class=\"rotate90\" ></td><td width=\"480\"><textarea id=\"edit_%i\" contenteditable=true onchange=\"SaveEdits('%i.bmp', 'edit_%i')\" style=\"border: none; width: 100%%; -webkit-box-sizing: border-box; -moz-box-sizing: border-box; box-sizing: border-box;\">Untranslated</textarea></td>\n", pImageNumber, pImageNumber, i, i, i);
+		fprintf(htmlFile.GetFileHandle(), "				</tr>\n");
+
+		++i;
+	}
+
+	htmlFile.WriteString("			</table><br>\n");
+	htmlFile.WriteString("			<?php\n");
+	htmlFile.WriteString("		}\n");
+	htmlFile.WriteString("	?></body>\n");
+	htmlFile.WriteString("	</html>\n");
+
+	return true;
+
+}
+
+bool CreateNamePBookBTSpreadsheet(const string& imageDirectory)
+{
+	TextFileWriter htmlFile;
+	const string htmlFileName = imageDirectory + string("..\\..\\..\\Translation\\PBOOK_BT.php");
+	if (!htmlFile.OpenFileForWrite(htmlFileName))
+	{
+		printf("Unable to create an html file: %s", htmlFileName.c_str());
+		return false;
+	}
+
+	htmlFile.WriteString("<html>\n");
+	htmlFile.WriteString("	<head><style>textarea {width: 100%;top: 0; left: 0; right: 0; bottom: 0; position: absolute; resize: none;-webkit-box-sizing: border-box; -moz-box-sizing: border-box; box-sizing: border-box;} table {border-collapse: collapse;} table, th, td { position: relative; border: 1px solid black;}#myProgress {width: 100%;	background-color: #ddd;} #myBar {width: 1%;height: 30px; background-color: #4CAF50;} .rotate90{ -webkit - transform: rotate(270deg); -moz - transform: rotate(270deg); -o - transform: rotate(270deg); -ms - transform: rotate(270deg); transform: rotate(270deg); }</style>\n");
+	htmlFile.WriteString("	<div id=\"FileName\" style=\"display: none;\">PBOOK_BT</div>\n");
+	htmlFile.WriteString("	<script src=\"https://ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js\">\n");
+	htmlFile.WriteString("		$( window ).on( \"load\", function()\n");
+	htmlFile.WriteString("		{\n");
+	htmlFile.WriteString("			OnStartup();\n");
+	htmlFile.WriteString("		});\n");
+	htmlFile.WriteString("	</script>\n\n");
+	htmlFile.WriteString("	<script type=\"text/javascript\">\n");
+	htmlFile.WriteString("		function SaveData(inDialogImageName, inDivID)\n");
+	htmlFile.WriteString("		{\n");
+	htmlFile.WriteString("			var translatedText = document.getElementById(inDivID).value;\n");
+	htmlFile.WriteString("			var fileName = document.getElementById(\"FileName\").innerHTML;\n");
+	htmlFile.WriteString("			$.ajax({\n");
+	htmlFile.WriteString("				type: \"POST\",\n");
+	htmlFile.WriteString("				url: \"UpdateTranslationTest.php\",\n");
+	htmlFile.WriteString("				data: { inTBLFileName: fileName, inImageName:inDialogImageName, inTranslation:translatedText, inDivId:inDivID, inCrc:0 },\n");
+	htmlFile.WriteString("				success: function(result)\n");
+	htmlFile.WriteString("				{\n");
+	htmlFile.WriteString("					var trId = \"tr_\" + inDivID;\n");
+	htmlFile.WriteString("					if( translatedText != \"Untranslated\" && translatedText != \"<div>Untranslated</div>\")\n");
+	htmlFile.WriteString("					{\n");
+	htmlFile.WriteString("						if( document.getElementById(trId).bgColor != \"#fec8c8\" )\n");
+	htmlFile.WriteString("						{\n");
+	htmlFile.WriteString("							document.getElementById(trId).bgColor = \"#e3fec8\";\n");
+	htmlFile.WriteString("						}\n");
+	htmlFile.WriteString("					}\n");
+	htmlFile.WriteString("				else\n");
+	htmlFile.WriteString("				{\n");
+	htmlFile.WriteString("					document.getElementById(trId).bgColor = \"#fefec8\";\n");
+	htmlFile.WriteString("				}\n");
+	htmlFile.WriteString("			}\n");
+	htmlFile.WriteString("		});\n");
+	htmlFile.WriteString("}\n");
+	htmlFile.WriteString("		function SaveEdits(inDialogImageName, inDivID)\n");
+	htmlFile.WriteString("		{\n");
+	htmlFile.WriteString("			SaveData(inDialogImageName, inDivID);\n");
+	htmlFile.WriteString("		}\n");
+	htmlFile.WriteString("		function ExportData()\n");
+	htmlFile.WriteString("		{\n");
+	htmlFile.WriteString("			$(\"textarea\").each ( function ()\n");
+	htmlFile.WriteString("			{\n");
+	htmlFile.WriteString("				var thisText = $(this).text();\n");
+	htmlFile.WriteString("				thisText = thisText.replace(/<br>/g, '&ltbr&gt');\n");
+	htmlFile.WriteString("				thisText = thisText.replace(/<sp>/g, '&ltsp&gt');\n");
+	htmlFile.WriteString("				document.write(thisText + \"<br>\");\n");
+	htmlFile.WriteString("			});\n");
+	htmlFile.WriteString("		}\n");
+	htmlFile.WriteString("	function LoadData()\n");
+	htmlFile.WriteString("	{\n");
+	htmlFile.WriteString("		var fileName = document.getElementById(\"FileName\").innerHTML;\n");
+	htmlFile.WriteString("		$.ajax({\n");
+	htmlFile.WriteString("		type: \"POST\",\n");
+	htmlFile.WriteString("			  url: \"GetTranslationData.php\",\n");
+	htmlFile.WriteString("				data: { inTBLFileName: fileName},\n");
+	htmlFile.WriteString("				success: function(result)\n");
+	htmlFile.WriteString("		{\n");
+	htmlFile.WriteString("			var json = $.parseJSON(result);\n");
+	htmlFile.WriteString("			var i;\n");
+	htmlFile.WriteString("			for (i = 0; i < json.length; i++)\n");
+	htmlFile.WriteString("			{\n");
+	htmlFile.WriteString("				var jsonEntry = json[i];\n");
+	htmlFile.WriteString("				var english   = jsonEntry.English.replace(/\\\\/g, \'\');\n");
+	htmlFile.WriteString("				var divId     = \"#\" + jsonEntry.DivId;\n");
+	htmlFile.WriteString("					var trId      = \"tr_\" + jsonEntry.DivId;\n");
+	htmlFile.WriteString("					if( english != \"Untranslated\" && english != \"<div>Untranslated</div>\")\n");
+	htmlFile.WriteString("					{\n");
+	htmlFile.WriteString("						if( document.getElementById(trId).bgColor != \"#fec8c8\" )\n");
+	htmlFile.WriteString("						{\n");
+	htmlFile.WriteString("						       document.getElementById(trId).bgColor = \"#e3fec8\";\n");
+	htmlFile.WriteString("						}\n");
+	htmlFile.WriteString("						$(divId).html(english);\n");
+	htmlFile.WriteString("					}\n");
+	htmlFile.WriteString("			}\n");
+	htmlFile.WriteString("		},\n");
+	htmlFile.WriteString("		error: function()\n");
+	htmlFile.WriteString("		{\n");
+	htmlFile.WriteString("			alert('Unable to load data');\n");
+	htmlFile.WriteString("		}\n");
+	htmlFile.WriteString("		});\n");
+	htmlFile.WriteString("	}\n");
+	htmlFile.WriteString("	function FixOnChangeEditableElements()\n");
+	htmlFile.WriteString("	{\n");
+	htmlFile.WriteString("		var tags = document.querySelectorAll('[contenteditable=true][onChange]');\n");
+	htmlFile.WriteString("		for (var i=tags.length-1; i>=0; i--) if (typeof(tags[i].onblur)!='function')\n");
+	htmlFile.WriteString("		{\n");
+	htmlFile.WriteString("			tags[i].onfocus = function()\n");
+	htmlFile.WriteString("			{\n");
+	htmlFile.WriteString("				this.data_orig=this.innerHTML;\n");
+	htmlFile.WriteString("			};\n");
+	htmlFile.WriteString("			tags[i].onblur = function()\n");
+	htmlFile.WriteString("			{\n");
+	htmlFile.WriteString("				if( this.innerHTML != this.data_orig)\n");
+	htmlFile.WriteString("					this.onchange();\n");
+	htmlFile.WriteString("				delete this.data_orig;\n");
+	htmlFile.WriteString("			};\n");
+	htmlFile.WriteString("		}\n");
+	htmlFile.WriteString("	}\n");
+	htmlFile.WriteString("	function OnStartup()\n");
+	htmlFile.WriteString("	{\n");
+	htmlFile.WriteString("		FixOnChangeEditableElements();\n");
+	htmlFile.WriteString("	}\n");
+	htmlFile.WriteString("	</script>\n");
+	htmlFile.WriteString("	</head>\n");
+	htmlFile.WriteString("	\n");
+	htmlFile.WriteString("	<body>\n");
+	htmlFile.WriteString("	<?php include 'GetUserPermissions.php';\n");
+	htmlFile.WriteString("	$bPermissionFound = false;\n");
+	htmlFile.WriteString("	foreach ($allowedFiles as $value)\n");
+	htmlFile.WriteString("	{\n");
+	htmlFile.WriteString("		if( $value == \"PBOOPBOOK_BTK_FL\" )\n");
+	htmlFile.WriteString("		{\n");
+	htmlFile.WriteString("			$bPermissionFound = true;\n");
+	htmlFile.WriteString("			break;\n");
+	htmlFile.WriteString("		}\n");
+	htmlFile.WriteString("	}\n");
+	htmlFile.WriteString("	if( $bPermissionFound || $masterUnlock )\n\t{\n?>");
+	htmlFile.WriteString("		<article><header align=\"center\"><h1>File: PBOOK_BT</h1></header></article>\n");
+	htmlFile.WriteString("			<br>\n");
+	htmlFile.WriteString("			<b>Instructions:</b><br>\n");
+	htmlFile.WriteString("			-This page is best displayed using Chrome.  Otherwise some of the table borders are missing for some reason.<br>\n");
+	htmlFile.WriteString("			-Your changes are automatically saved.<br>\n");
+	htmlFile.WriteString("			-Press the Load Data button when you come back to the page to load your changes.<br>\n");
+	htmlFile.WriteString("			<b>Naming Conventions:</n><br>\n");
+	htmlFile.WriteString("			<a href=\"https://docs.google.com/spreadsheets/d/1imZZn_SfbmMxBpEnyj8_oZ1BEnMN0q0Ck1XYQgKggm4/edit?usp=sharing\" target=\"_blank\">Click here to view the naming conventions for Characters, Locations, and Terms</a> <br>\n");
+	htmlFile.WriteString("			<?php\n");
+	htmlFile.WriteString("				$currUser = $_SERVER['PHP_AUTH_USER'];\n");
+	htmlFile.WriteString("				if( $currUser == \"rahmed\" )\n");
+	htmlFile.WriteString("				{\n");
+	htmlFile.WriteString("					echo \"<input align=\\\"center\\\" type=\\\"button\\\" value=\\\"Export Data\\\" onclick=\\\"ExportData()\\\"/>\";\n");
+	htmlFile.WriteString("				}\n");
+	htmlFile.WriteString("			?>\n\n");
+	htmlFile.WriteString("			<table align=\"center\">\n");
+	htmlFile.WriteString("				<tr>\n");
+	htmlFile.WriteString("					<td>\n");
+	htmlFile.WriteString("						<input align=\"center\" type=\"button\" value=\"Load Data\" onclick=\"LoadData()\"/>\n");
+	htmlFile.WriteString("					</td>\n");
+	htmlFile.WriteString("				</tr>\n");
+	htmlFile.WriteString("			</table><br>\n\n");
+	htmlFile.WriteString("			<table>\n");
+	htmlFile.WriteString("				<tr bgcolor=\"#c8c8fe\">\n");
+	htmlFile.WriteString("					<th>#</th>\n");
+	htmlFile.WriteString("					<th>Japanese</th>\n");
+	htmlFile.WriteString("					<th>English</th>\n");
+	htmlFile.WriteString("				</tr>\n");
+
+	vector<FileNameContainer> fileNames;
+	FindAllFilesWithinDirectory(imageDirectory, fileNames);
+
+	int i = 0;
+	for (const FileNameContainer& fileName : fileNames)
+	{
+		const char* pImageNumber = fileName.mNoExtension.c_str();
+
+		fprintf(htmlFile.GetFileHandle(), "				<tr id=\"tr_edit_%i\" bgcolor=\"#fefec8\">\n", i);
+		fprintf(htmlFile.GetFileHandle(), "					<td align=\"center\" width=\"20\">%s</td><td width=\"128\" height=\"16\" align=\"center\"><img src=\"..\\ExtractedData\\SakuraWars2\\Disc1\\PBOOK_BT\\%s.png\" class=\"rotate90\" ></td><td width=\"480\"><textarea id=\"edit_%i\" contenteditable=true onchange=\"SaveEdits('%i.bmp', 'edit_%i')\" style=\"border: none; width: 100%%; -webkit-box-sizing: border-box; -moz-box-sizing: border-box; box-sizing: border-box;\">Untranslated</textarea></td>\n", pImageNumber, pImageNumber, i, i, i);
 		fprintf(htmlFile.GetFileHandle(), "				</tr>\n");
 
 		++i;

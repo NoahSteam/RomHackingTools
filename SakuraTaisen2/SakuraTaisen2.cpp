@@ -74,6 +74,7 @@ using std::unordered_map;
 #include "Source/TextInImage.h"
 #include "Source/TextInImageUsingFontSheet.h"
 #include "Source/ExportTranslationToFiles.h"
+#include "Source/ImageColoringFunctions.h"
 
 void PrintHelp()
 {
@@ -641,6 +642,12 @@ int main(int argc, char *argv[])
 
 		CreateNamePBookFLSpreadsheet(imageDirectory);
 	}
+	else if (command == "CreateNamePBookBTSpreadsheet" && argc == 3)
+	{
+		const string imageDirectory = string(argv[2]) + Seperators;
+
+		CreateNamePBookBTSpreadsheet(imageDirectory);
+	}
 	else if (command == "CreateNameInfoNameSpreadsheet" && argc == 3)
 	{
 		const string imageDirectory = string(argv[2]) + Seperators;
@@ -676,6 +683,7 @@ int main(int argc, char *argv[])
 		const string outDirectory = string(argv[4]) + Seperators;
 
 		ExtractMainMenu(rootSakuraTaisenDirectory, bmpFormat, outDirectory);
+		ExtractBattlePauseMenu(rootSakuraTaisenDirectory, bmpFormat, outDirectory);
 	}
 	else if (command == "ExtractInfoName" && argc == 6)
 	{
@@ -783,6 +791,14 @@ int main(int argc, char *argv[])
 		
 		WriteTextIntoImageUsingFontSheet(inTextFilePath, inFontSheetPath, inBgndImageDirectory, 
 										 inOriginalImagesDirectory, inOutputPath);
+	}
+	else if(command == "SwapColorsInImage" && argc == 5)
+	{
+		const string inDirectory = string(argv[2]);
+		const int inSearchColor = atoi(argv[3]);
+		const int newColor = atoi(argv[4]);
+
+		SwapColors(inDirectory, (char)inSearchColor, (char)newColor);
 	}
 	else if(command == "SwapBattleFiles" && argc == 4)
 	{

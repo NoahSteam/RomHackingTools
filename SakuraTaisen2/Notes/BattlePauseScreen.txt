@@ -1,4 +1,15 @@
 
-PBOOK_BT.CG @0x0000fb20
-PBOOK_FL.CG @0x000411a0
-PBOOK_BT.CG @0x0000fb20
+PBOOK_BT.CG @0x0000f7c0
+//PBOOK_FL.CG @0x000411a0
+
+Sprite table written at 060450a0
+060450aa has dimensions of first image
+
+060D376A has some kind of table that's being read to calc sprite sizes
+
+Found in SLGNTBK.BIN 0x5da0
+
+uint16 reserved;
+uint16 widthDiv8;
+uint16 heightDiv8;
+uint16 offsetDiv8;

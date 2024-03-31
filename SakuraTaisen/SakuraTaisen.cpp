@@ -11422,7 +11422,7 @@ void AddShadowsToWKLText(const string& wklDirectory)
 
 		const char grayColor = 15;
 		const char grayColor2 = 0xd;
-		const char shadowColor = 9;
+		const char shadowColor = 2;
 		//Add shadows
 		for(int y = 0; y < imageHeight ; ++y)
 		{	

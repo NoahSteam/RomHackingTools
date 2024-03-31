@@ -1,0 +1,22 @@
+PBOOK_FL.CG 0x3c460
+
+06096f2a has dims
+
+Table Title.Bin 0x5708
+0x0e10
+02b8
+0328
+1010
+0398
+
+---
+0x3c460
+128x16
+32x16
+16x16
+48x16
+
+@3d660
+64x16 (item)
+72x16
+48x16

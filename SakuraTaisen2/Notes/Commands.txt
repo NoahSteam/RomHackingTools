@@ -9,6 +9,7 @@ FindDialogOrder a:\SakuraWars2\Disc1_Original a:\sakurawars2\ExtractedData\Disc1
 ExtractBattleMenu a:\SakuraWars2\Disc1_Original 1 a:\sakurawars2\ExtractedData\Disc1\BattleMenu\
 ExtractMainMenu a:\SakuraWars2\Disc1_Original 1 a:\sakurawars2\ExtractedData\Disc1\MainMenu\
 CreateNamePBookFLSpreadsheet A:\SakuraWars2\ExtractedData\Disc1\MainMenu_PNG\PBOOK_FL
+CreateNamePBookBTSpreadsheet A:\SakuraWars2\ExtractedData\Disc1\MainMenu_PNG\PBOOK_BT
 ExtractInfoName a:\SakuraWars2\Disc1_Original a:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\InfoName_Palette.bin 1 a:\sakurawars2\ExtractedData\Disc1\InfoName
 CreateNameInfoNameSpreadsheet A:\SakuraWars2\ExtractedData\Disc1\InfoNamePNG
 ExtractSysFiles a:\SakuraWars2\Disc1_Original a:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\StoryTextPalette.bin a:\sakurawars2\ExtractedData\Disc1\Sys
@@ -27,6 +28,7 @@ WriteTextIntoImage A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\Translation\
 WriteTextIntoImageUsingFontSheet A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\Translation\InfoName.txt A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\HudFontSheetWide.bmp A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\InfoName\Canvas A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\InfoName\Original A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\InfoName\Translated
 AddShadowsToWKLText A:\NoahSteam\Test
 SwapBattleFiles 26 A:\SakuraWars2\Patched\Disc1\Sakura2
+SwapColorsInImage A:\SakuraWars2\ColorSwap 3 2
 PatchGame A:\SakuraWars2\Disc1_Original A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data A:\SakuraWars2\Patched\Disc1
 FindData.exe a:\SakuraWars2\Disc1_Original a:\SakuraWars2\find.bin
 

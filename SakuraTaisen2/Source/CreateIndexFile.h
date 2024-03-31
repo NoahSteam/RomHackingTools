@@ -145,6 +145,11 @@ void CreateIndexFile(const string& inMesFileDirectory, const string& inSKFileDir
 		AddRowForFile("PBOOK_FL", 98);
 	}
 
+	//PBOOK_FL
+	{
+		AddRowForFile("PBOOK_BT", 62);
+	}
+
 	//Minigames
 	{
 		vector<string> miniGameDirectories;

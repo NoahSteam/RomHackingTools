@@ -144,6 +144,7 @@
     <ClInclude Include="Source\ExportTranslationData.h" />
     <ClInclude Include="Source\ExportTranslationToFiles.h" />
     <ClInclude Include="Source\FaceWinAll.h" />
+    <ClInclude Include="Source\ImageColoringFunctions.h" />
     <ClInclude Include="Source\ImageExtraction.h" />
     <ClInclude Include="Source\InfoNameExtraction.h" />
     <ClInclude Include="Source\InsertText.h" />
