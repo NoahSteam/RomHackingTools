@@ -10,7 +10,8 @@ struct MainMenuImageInfo
 #pragma pack(pop)
 
 //Found manually
-const int NumCustomMainMenuImages = 7;
+const uint16 CharBioImageOffset = (0x320a0 / 8);
+const int NumCustomMainMenuImages = 16;
 MainMenuImageInfo ManuallyFoundMainMenuImages[NumCustomMainMenuImages]
 {
 	0, 128, 16, (uint16)(0x3c460 / 8),
@@ -20,7 +21,20 @@ MainMenuImageInfo ManuallyFoundMainMenuImages[NumCustomMainMenuImages]
 
 	0, 64, 16, (uint16)(0x3d660 / 8),
 	0, 72, 16, (uint16)(0x3d660 / 8),
-	0, 48, 16, (uint16)(0x3d660 / 8)
+	0, 48, 16, (uint16)(0x3d660 / 8),
+
+	//Return image
+	0, 16, 48, (uint16)(0x54620 / 8),
+
+	//Character bios
+	0, 72, 120, CharBioImageOffset,
+	0, 72, 120, CharBioImageOffset,
+	0, 72, 120, CharBioImageOffset,
+	0, 72, 120, CharBioImageOffset,
+	0, 72, 120, CharBioImageOffset,
+	0, 72, 120, CharBioImageOffset,
+	0, 72, 120, CharBioImageOffset,
+	0, 72, 120, CharBioImageOffset,
 };
 
 bool PatchMainMenu(const string& inPatchedSakuraDirectory, const string& inTranslatedDataDirectory)
@@ -167,6 +181,13 @@ void ExtractMainMenu(const string& rootSakuraDirectory, bool bBmp, const string&
 		return;
 	}
 
+	PaletteData charBioPalette;
+	if (!charBioPalette.CreateFrom15BitData(sakuraFileData.GetData() + 0x00002350, paletteSize))
+	{
+		printf("Unable to create charBioPalette 1.\n");
+		return;
+	}
+
 	const string finalOutputDirectory = outDirectory + string("PBOOK_FL") + string("\\");
 	CreateDirectoryHelper(finalOutputDirectory);
 
@@ -175,6 +196,7 @@ void ExtractMainMenu(const string& rootSakuraDirectory, bool bBmp, const string&
 	const unsigned int offsetToData = 0xE1B8;
 	memcpy_s(lookupTable, sizeof(lookupTable), sakuraFileData.GetData() + offsetToData, sizeof(lookupTable));
 
+	std::vector<uint32> addresses;
 	const int baseOffset = 0x3ef60;
 	for (int i = 0; i < numEntries; ++i)
 	{
@@ -184,10 +206,13 @@ void ExtractMainMenu(const string& rootSakuraDirectory, bool bBmp, const string&
 
 		const string outFileName = finalOutputDirectory + std::to_string(i) + bmpExt;
 
+		addresses.push_back(baseOffset + offset);
+
 		BitmapWriter outBmp;
 		outBmp.CreateBitmap(outFileName, width, -height, 4, fileData.GetData() + baseOffset + offset, (width * height) / 2, palette.GetData(), palette.GetSize(), bBmp);
 	}
 
+	//Manually found images
 	int accumulatedOffset = 0;
 	int prevOffset = 0;
 	for (int i = 0; i < NumCustomMainMenuImages; ++i)
@@ -204,8 +229,9 @@ void ExtractMainMenu(const string& rootSakuraDirectory, bool bBmp, const string&
 
 		const string outFileName = finalOutputDirectory + std::to_string(i + numEntries) + bmpExt;
 
+		PaletteData* pPalette = ManuallyFoundMainMenuImages[i].offsetDiv8 == CharBioImageOffset ? &charBioPalette : &palette;
 		BitmapWriter outBmp;
-		outBmp.CreateBitmap(outFileName, width, -height, 4, fileData.GetData() + offset + accumulatedOffset, (width * height) / 2, palette.GetData(), palette.GetSize(), bBmp);
+		outBmp.CreateBitmap(outFileName, width, -height, 4, fileData.GetData() + offset + accumulatedOffset, (width * height) / 2, pPalette->GetData(), pPalette->GetSize(), bBmp);
 
 		accumulatedOffset += width * height / 2;
 		prevOffset = offset;
