@@ -1,0 +1,8 @@
+Example: BG6015.DAT
+
+Tile entries
+-2 byte tile indices
+
+512byte palette
+
+Color data

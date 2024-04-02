@@ -16,6 +16,9 @@ static bool BringOverOriginalFiles(const string& inRootSakuraDirectory, const st
 	GetAllFilesOfType(allFiles, "SKC", originalFiles);
 	GetAllFilesOfType(allFiles, "WPALL", originalFiles);
 	GetAllFilesOfType(allFiles, "PBOOK_FL", originalFiles);
+	GetAllFilesOfType(allFiles, "PBOOK_BT", originalFiles);
+	GetAllFilesOfType(allFiles, "PBOOK_EC", originalFiles);
+	GetAllFilesOfType(allFiles, "HANKO", originalFiles);
 	GetAllFilesOfType(allFiles, "VDP1.BIN", originalFiles);
 	GetAllFilesOfType(allFiles, "GOVER", originalFiles);
 	GetAllFilesOfType(allFiles, "CESALOGO.ALL", originalFiles);
@@ -303,6 +306,12 @@ bool PatchGame(const string& inSourceGameDirectory, const string& inTranslatedDi
 	if( !BringOverOriginalFiles(inSourceGameDirectory, inPatchedDirectory) )
 	{
 		printf("Unable to copy original files\n");
+		return false;
+	}
+	
+	if (!PatchBGDatFiles(inPatchedDirectory, inTranslatedDirectory))
+	{
+		printf("Unable to patch BGDat files\n");
 		return false;
 	}
 

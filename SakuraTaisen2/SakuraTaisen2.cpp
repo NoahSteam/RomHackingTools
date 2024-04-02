@@ -69,6 +69,7 @@ using std::unordered_map;
 #include "Source/ExportTranslationData.h"
 #include "Source/IntroScreenExtractor.h"
 #include "Source/SakuraWars2Utils.h"
+#include "Source/BGDatFiles.h"
 #include "Source/PatchGame.h"
 #include "Source/Demo.h"
 #include "Source/TextInImage.h"
@@ -806,6 +807,13 @@ int main(int argc, char *argv[])
 		const string inPatchedDir = string(argv[3]) + Seperators;
 
 		SwapBattleFiles(inBattleNum, inPatchedDir);
+	}
+	else if (command == "ExtractBGDatFiles" && argc == 4)
+	{
+		const string inSourceGameDirectory = string(argv[2]) + Seperators;
+		const string inOutputDirectory = string(argv[3]) + Seperators;
+
+		ExtractBGDatFiles(inSourceGameDirectory, inOutputDirectory);
 	}
 	else
 	{

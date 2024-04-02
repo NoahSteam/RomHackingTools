@@ -59,7 +59,7 @@ public:
 		}
 
 		mhFont = CreateFont(13, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, ANSI_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-			ANTIALIASED_QUALITY, DEFAULT_PITCH | FF_DONTCARE, "Calibri");
+			ANTIALIASED_QUALITY, DEFAULT_PITCH | FF_DONTCARE, "Rockwell Condensed");
 
 		return true;
 	}
@@ -119,7 +119,7 @@ public:
 		SelectObject(hdcImage, hBitmap);
 
 		// Set the text color
-		SetTextColor(hdcImage, RGB(255, 255, 255));
+		SetTextColor(hdcImage, RGB(0, 0, 0));
 
 		// Set the text background color
 		SetBkColor(hdcImage, TRANSPARENT);
@@ -338,6 +338,12 @@ bool WriteTextIntoImage(const std::string& pTextFilePath,
 
 	vector<FileNameContainer> allFiles;
 	FindAllFilesWithinDirectory(inOriginalImagesDirectory, allFiles);
+
+	// Sort the file names alphabetically
+	std::sort(allFiles.begin(), allFiles.end(), [](const FileNameContainer& a, const FileNameContainer& b)
+	{
+		return std::atoi(a.mNoExtension.c_str()) <  std::atoi(b.mNoExtension.c_str());
+	});
 
 	vector<FileNameContainer> bmpFiles;
 	GetAllFilesOfType(allFiles, ".bmp", bmpFiles);

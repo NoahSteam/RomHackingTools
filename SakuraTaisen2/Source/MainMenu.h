@@ -7,6 +7,17 @@ struct MainMenuImageInfo
 	uint16 heightDiv8;
 	uint16 offsetDiv8;
 };
+
+struct CustomMenuImageInfo
+{
+	CustomMenuImageInfo(){}
+	CustomMenuImageInfo(uint16 InWidth, uint16 InHeight, uint16 InOffset, const string& InImageName) : width(InWidth), height(InHeight), offset(InOffset), imageName(InImageName){}
+
+	uint16 width{ 0 };
+	uint16 height{ 0 };
+	uint16 offset{ 0 };
+	string imageName;
+};
 #pragma pack(pop)
 
 //Found manually
@@ -37,6 +48,196 @@ MainMenuImageInfo ManuallyFoundMainMenuImages[NumCustomMainMenuImages]
 	0, 72, 120, CharBioImageOffset,
 };
 
+bool PatchCustomImages( vector<CustomMenuImageInfo> InImageInfo,
+						const string& InPatchedFilePath)
+{
+	FileReadWriter pbookFileData;
+	if (!pbookFileData.OpenFile(InPatchedFilePath))
+	{
+		return false;
+	}
+
+	const string bmpExt(".bmp");
+	int accumulatedOffset = 0;
+	int prevOffset = 0;
+	const int numImages = (int)InImageInfo.size();
+	for (int i = 0; i < numImages; ++i)
+	{
+		const int offset = InImageInfo[i].offset;
+		const int width = InImageInfo[i].width;
+		const int height = InImageInfo[i].height;
+
+		//For when the addresses jump
+		if (offset != prevOffset)
+		{
+			accumulatedOffset = 0;
+		}
+
+		const string translatedImagePath = InImageInfo[i].imageName + bmpExt;
+		
+		//dummy entries
+		if (InImageInfo[i].imageName.size() == 0)
+		{
+			accumulatedOffset += width * height / 2;
+			prevOffset = offset;
+			continue;
+		}
+
+		BmpToSaturnConverter convertedImage;
+		if (!convertedImage.ConvertBmpToSakuraFormat(translatedImagePath, false))
+		{
+			return false;
+		}
+
+		if (convertedImage.GetImageHeight() != height)
+		{
+			printf("Expected height of %i, got %i for %s\n", height, convertedImage.GetImageHeight(), translatedImagePath.c_str());
+			return false;
+		}
+
+		if (convertedImage.GetImageWidth() != width)
+		{
+			printf("Expected width of %i, got %i for %s\n", width, convertedImage.GetImageWidth(), translatedImagePath.c_str());
+			return false;
+		}
+
+		if (convertedImage.GetImageDataSize() != ((width * height) >> 1))
+		{
+			printf("Expected data size of %i, got %i for %s\n", (width * height) >> 1, convertedImage.GetImageDataSize(), translatedImagePath.c_str());
+			return false;
+		}
+
+		pbookFileData.WriteData(offset + accumulatedOffset, convertedImage.GetImageData(), convertedImage.GetImageDataSize(), false);
+
+		accumulatedOffset += width * height / 2;
+		prevOffset = offset;
+	}
+
+	return true;
+}
+
+bool Patch_Hanko(const string& inPatchedSakuraDirectory, const string& inTranslatedDataDirectory)
+{
+	vector<CustomMenuImageInfo> hankoImages;
+	
+	const string translatedDirectory = inTranslatedDataDirectory + string("PBOOK_FL\\");
+
+	//Character bios
+	hankoImages.emplace_back(72, 120, 0, translatedDirectory + "175");
+	hankoImages.emplace_back(72, 120, 0, translatedDirectory + "176");
+	hankoImages.emplace_back(72, 120, 0, translatedDirectory + "177");
+	hankoImages.emplace_back(72, 120, 0, translatedDirectory + "178");
+	hankoImages.emplace_back(72, 120, 0, translatedDirectory + "179");
+	hankoImages.emplace_back(72, 120, 0, translatedDirectory + "180");
+	hankoImages.emplace_back(72, 120, 0, translatedDirectory + "181");
+	hankoImages.emplace_back(72, 120, 0, translatedDirectory + "182");
+
+	return PatchCustomImages(hankoImages, inPatchedSakuraDirectory + string("SAKURA1\\HANKO.CG") );
+}
+
+bool Patch_PBook_EC(const string& inPatchedSakuraDirectory, const string& inTranslatedDataDirectory)
+{
+	vector<CustomMenuImageInfo> hankoImages;
+
+	const string translatedDirectory = inTranslatedDataDirectory + string("PBOOK_FL\\");
+
+	//Character bios
+	hankoImages.emplace_back(72, 120, 0xcea0, translatedDirectory + "175");
+	hankoImages.emplace_back(72, 120, 0xcea0, translatedDirectory + "176");
+	hankoImages.emplace_back(72, 120, 0xcea0, translatedDirectory + "177");
+	hankoImages.emplace_back(72, 120, 0xcea0, translatedDirectory + "178");
+	hankoImages.emplace_back(72, 120, 0xcea0, translatedDirectory + "179");
+	hankoImages.emplace_back(72, 120, 0xcea0, translatedDirectory + "180");
+	hankoImages.emplace_back(72, 120, 0xcea0, translatedDirectory + "181");
+	hankoImages.emplace_back(72, 120, 0xcea0, translatedDirectory + "182");
+
+	return PatchCustomImages(hankoImages, inPatchedSakuraDirectory + string("SAKURA1\\HANKO.CG"));
+}
+
+//Battle pause menu
+bool Patch_PBook_BT(const string& inPatchedSakuraDirectory, const string& inTranslatedDataDirectory)
+{
+	const string sakuraFilePath = inPatchedSakuraDirectory + string("SAKURA2\\SLGNTBK.BIN");
+	FileNameContainer sakuraFileNameInfo(sakuraFilePath.c_str());
+	FileData tableFileData;
+	if (!tableFileData.InitializeFileData(sakuraFileNameInfo))
+	{
+		return false;
+	}
+
+	const int numEntries = 62;
+	MainMenuImageInfo lookupTable[numEntries];
+	const unsigned int offsetToData = 0x5dc0;
+	memcpy_s(lookupTable, sizeof(lookupTable), tableFileData.GetData() + offsetToData, sizeof(lookupTable));
+
+	vector<CustomMenuImageInfo> imageList;
+
+	const string translatedDirectory = inTranslatedDataDirectory + string("PBOOK_FL\\");
+
+	int lutIndex = 0;
+	#define ImageEntry(imagePath) imageList.emplace_back(SwapByteOrder(lookupTable[lutIndex].widthDiv8)*8, SwapByteOrder(lookupTable[lutIndex].heightDiv8)*8, 0xfb20, imagePath);\
+	                              ++lutIndex
+
+	//Mostly duplicate images from PBOOK_FL, so just reuse them
+	const uint16 pbookBTOffset = 0xfb20;
+	ImageEntry(translatedDirectory + "13");//0
+	ImageEntry(translatedDirectory + "14");//1
+	ImageEntry("");//2
+	ImageEntry(translatedDirectory + "16");//3
+	ImageEntry("");//4
+	ImageEntry(translatedDirectory + "18");//5
+	ImageEntry(translatedDirectory + "19");//6
+	ImageEntry("");//7
+	ImageEntry(translatedDirectory + "21");//8
+	ImageEntry("");//9
+	ImageEntry(translatedDirectory + "23");//10
+	ImageEntry(translatedDirectory + "24");//11
+	ImageEntry(translatedDirectory + "25");//12
+	ImageEntry(translatedDirectory + "26");//13 off
+	ImageEntry("");//14
+	ImageEntry(translatedDirectory + "28");//15
+	ImageEntry(translatedDirectory + "29");//16
+	ImageEntry(translatedDirectory + "30");//17
+	ImageEntry(translatedDirectory + "32");//18
+	ImageEntry("");//19
+	ImageEntry("");//20
+	ImageEntry("");//21
+	ImageEntry(translatedDirectory + "36");//22
+	ImageEntry(translatedDirectory + "37");//23
+	ImageEntry(translatedDirectory + "38");//24
+	ImageEntry(translatedDirectory + "39");//25
+	ImageEntry(translatedDirectory + "40");//26
+	ImageEntry(translatedDirectory + "41");//27
+	ImageEntry(translatedDirectory + "42");//28
+	ImageEntry(translatedDirectory + "43");//29
+	ImageEntry(translatedDirectory + "44");//30
+	ImageEntry(translatedDirectory + "45");//31
+	ImageEntry(translatedDirectory + "46");//32
+	ImageEntry(translatedDirectory + "47");//33
+	ImageEntry(translatedDirectory + "48");//34
+	ImageEntry(translatedDirectory + "49");//35
+	ImageEntry("");//36
+	ImageEntry(translatedDirectory + "51");//37
+	ImageEntry(translatedDirectory + "52");//38
+	ImageEntry("");//39
+	ImageEntry(translatedDirectory + "54");//40
+	ImageEntry("");//41
+	ImageEntry("");//42
+	ImageEntry("");//43
+	ImageEntry("");//44
+	ImageEntry("");//45
+	ImageEntry(translatedDirectory + "60");//46
+	ImageEntry(translatedDirectory + "42");//47
+	ImageEntry(translatedDirectory + "62");//48
+	ImageEntry("");//49
+	ImageEntry(translatedDirectory + "64");//50
+
+	bool bResult = PatchCustomImages(imageList, inPatchedSakuraDirectory + string("SAKURA1\\PBOOK_BT.CG"));
+	bResult = bResult && PatchCustomImages(imageList, inPatchedSakuraDirectory + string("SAKURA2\\PBOOK_BT.CG"));
+
+	return bResult;
+}
+
 bool PatchMainMenu(const string& inPatchedSakuraDirectory, const string& inTranslatedDataDirectory)
 {
 	const string titleFilePath = inPatchedSakuraDirectory + string("SAKURA1\\TITLE.BIN");
@@ -62,6 +263,7 @@ bool PatchMainMenu(const string& inPatchedSakuraDirectory, const string& inTrans
 
 	const string bmpExt(".bmp");
 	const int baseOffset = 0x3ef60;
+	vector<int> addressesPatched;
 
 	for (int i = 0; i < numEntries; ++i)
 	{
@@ -96,6 +298,8 @@ bool PatchMainMenu(const string& inPatchedSakuraDirectory, const string& inTrans
 		}
 
 		pbookFileData.WriteData(baseOffset + offset, convertedImage.GetImageData(), convertedImage.GetImageDataSize(), false);
+
+		addressesPatched.push_back(baseOffset + offset);
 	}
 
 	int accumulatedOffset = 0;
@@ -134,7 +338,7 @@ bool PatchMainMenu(const string& inPatchedSakuraDirectory, const string& inTrans
 
 		if (convertedImage.GetImageDataSize() != ((width * height) >> 1))
 		{
-			printf("Expected data size of %i, got %i for %s\n", (width * height) >> 1, convertedImage.GetImageWidth(), translatedImagePath.c_str());
+			printf("Expected data size of %i, got %i for %s\n", (width * height) >> 1, convertedImage.GetImageDataSize(), translatedImagePath.c_str());
 			return false;
 		}
 
@@ -143,6 +347,21 @@ bool PatchMainMenu(const string& inPatchedSakuraDirectory, const string& inTrans
 		accumulatedOffset += width * height / 2;
 		prevOffset = offset;
 
+	}
+
+	if(!Patch_Hanko(inPatchedSakuraDirectory, inTranslatedDataDirectory))
+	{
+		return false;
+	}
+
+	if(!Patch_PBook_EC(inPatchedSakuraDirectory, inTranslatedDataDirectory))
+	{
+		return false;
+	}
+
+	if (!Patch_PBook_BT(inPatchedSakuraDirectory, inTranslatedDataDirectory))
+	{
+		return false;
 	}
 
 	return true;
@@ -298,7 +517,6 @@ void ExtractBattlePauseMenu(const string& rootSakuraDirectory, bool bBmp, const 
 		}
 	}
 }
-
 
 bool CreateNamePBookFLSpreadsheet(const string& imageDirectory)
 {

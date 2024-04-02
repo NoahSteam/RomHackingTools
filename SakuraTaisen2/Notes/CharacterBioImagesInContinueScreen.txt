@@ -1,0 +1,7 @@
+HANKO.CG @0
+PBOOK_EC.CG @0x0000cea0
+PBOOK_FL.CG @0x000320a0
+
+Palette in Title.bin @0x00002350
+
+72*120, 8 images
