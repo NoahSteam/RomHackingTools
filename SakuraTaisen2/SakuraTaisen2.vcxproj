@@ -135,6 +135,7 @@
     <ClInclude Include="Source\BatchedImageExtractor.h" />
     <ClInclude Include="Source\BattleMenu.h" />
     <ClInclude Include="Source\BGDatFiles.h" />
+    <ClInclude Include="Source\CreateInfoNameImages.h" />
     <ClInclude Include="Source\CreateIndexFile.h" />
     <ClInclude Include="Source\CreateMiniGameSpreadsheets.h" />
     <ClInclude Include="Source\CreateMinigameSpreadsheets.h\Header.h" />

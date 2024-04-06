@@ -649,12 +649,18 @@ nop          //0009
 		PatchWidthSpacing("M34PRG.BIN", 0x0002d5ac), \
 		PatchWidthSpacing("SLGGOVER.BIN", 0x0001bf50)
 
+#if USE_SINGLE_BYTE_LOOKUPS
+const uint16 BattleTextHorizontalFraming = 0xffb8;
+#else
+const uint16 BattleTextHorizontalFraming = 0xff68;
+#endif
+
 //Scaled Lips Formatting (example in Battle 5_4 LIPS 060d17e4)
 #define PatchScaledLipsFormatting(filename, address, offset4)\
 	filename, address + 0,  0x7194, 0x7198, /*7198 to 7194*/\
 	filename, address + 42, 0x1a00, 0x1a01, /*Normal sprite instead of scaled sprite*/\
 	filename, address + 48, 0x010c, 0x0210, /*Font size*/\
-/*	filename, address + 50, 0xffb8, 0xff68, /*Horizontal framing - not needed for single byte encoding*/\
+	filename, address + 50, BattleTextHorizontalFraming, 0xff68, /*Horizontal framing - not needed for single byte encoding*/\
 	filename, address + 156 + offset4, 0x7108, 0x7110 /*Horizontal spacing*/
 
 #define PatchScaledLipsFormattingInFiles()\
@@ -1360,20 +1366,20 @@ bool PatchBattleTextDrawingCode(const string& inOriginalDirectory, const string&
 		"SLGGOVER.BIN", 0x0001bfc0, 0x1c, 0x0e,
 
 		//060894b0 is 0xa7f.  This is the amount of bytes to clear in vdp1 when clearing the text box.
-		//Change this to 27*4 * (48+2)(bytes) cause 48 is 8x12/2
-		"M00PRG.BIN", 0x000300b0, (27*4*50), 0x0a7f,
-		"M01PRG.BIN", 0x00029150, (27*4*50), 0x0a7f,
-		"M02PRG.BIN", 0x0002d8f0, (27*4*50), 0x0a7f,
-		"M03PRG.BIN", 0x0002e8d4, (27*4*50), 0x0a7f,
-		"M04PRG.BIN", 0x0002f084, (27*4*50), 0x0a7f,
-		"M05PRG.BIN", 0x0002dbf8, (27*4*50), 0x0a7f,
-		"M26PRG.BIN", 0x0002f9fc, (27*4*50), 0x0a7f,
-		"M27PRG.BIN", 0x0002d7ac, (27*4*50), 0x0a7f,
-		"M29PRG.BIN", 0x000275e8, (27*4*50), 0x0a7f,
-		"M31PRG.BIN", 0x0002da30, (27*4*50), 0x0a7f,
-		"M33PRG.BIN", 0x0002e5a0, (27*4*50), 0x0a7f,
-		"M34PRG.BIN", 0x0002d67c, (27*4*50), 0x0a7f,
-		"SLGGOVER.BIN", 0x0001c020, (27*4*50),0x0a7f,
+		//Change this to 27*4 * (48+2)(bytes) cause 48 is 8x12/2.  Divide by two because the vdp1 buffer is cleared two bytes at a time.
+		"M00PRG.BIN", 0x000300b0,   (27 * 4 * 50) >> 1, 0x0a7f,
+		"M01PRG.BIN", 0x00029150,   (27 * 4 * 50) >> 1, 0x0a7f,
+		"M02PRG.BIN", 0x0002d8f0,   (27 * 4 * 50) >> 1, 0x0a7f,
+		"M03PRG.BIN", 0x0002e8d4,   (27 * 4 * 50) >> 1, 0x0a7f,
+		"M04PRG.BIN", 0x0002f084,   (27 * 4 * 50) >> 1, 0x0a7f,
+		"M05PRG.BIN", 0x0002dbf8,   (27 * 4 * 50) >> 1, 0x0a7f,
+		"M26PRG.BIN", 0x0002f9fc,   (27 * 4 * 50) >> 1, 0x0a7f,
+		"M27PRG.BIN", 0x0002d7ac,   (27 * 4 * 50) >> 1, 0x0a7f,
+		"M29PRG.BIN", 0x000275e8,   (27 * 4 * 50) >> 1, 0x0a7f,
+		"M31PRG.BIN", 0x0002da30,   (27 * 4 * 50) >> 1, 0x0a7f,
+		"M33PRG.BIN", 0x0002e5a0,   (27 * 4 * 50) >> 1, 0x0a7f,
+		"M34PRG.BIN", 0x0002d67c,   (27 * 4 * 50) >> 1, 0x0a7f,
+		"SLGGOVER.BIN", 0x0001c020, (27 * 4 * 50) >> 1, 0x0a7f,
 
 		//060892a2 change to 0x1a
 		"M00PRG.BIN", 0x0002fc5c, 0x1a, 0x0d,
@@ -1545,12 +1551,12 @@ bool PatchBattleTextDrawingCode(const string& inOriginalDirectory, const string&
 		"SLGGOVER.BIN", 0x0001bcbc, 0x03, 0x02,
 		
 		/*Making space for a bigger text buffer
-		06034760 (3 instances need to be changed to 6046000 in 0.slg) 
+		06034760 (3 instances need to be changed to 6047000 in 0.slg) 
 		- at 0600739c, 06007400, 060074e0[@0x0000239c, 0x2400, 0x24e0]
 		0600735a need to change 0x3f to 6f*/
-		"0.SLG", 0x0000239c, 0x06046000, 0x06034760,
-		"0.SLG", 0x00002400, 0x06046000, 0x06034760,
-		"0.SLG", 0x000024e0, 0x06046000, 0x06034760,
+		"0.SLG", 0x0000239c, 0x06047000, 0x06034760,
+		"0.SLG", 0x00002400, 0x06047000, 0x06034760,
+		"0.SLG", 0x000024e0, 0x06047000, 0x06034760,
 		"0.SLG", 0x0000235a, 0x6f, 0x3f,
 
 
@@ -1681,11 +1687,14 @@ bool PatchBattleTextDrawingCode(const string& inOriginalDirectory, const string&
 		"M00PRG.BIN", 0x000795f0, 0xffff, 0,
 		"M26PRG.BIN", 0x00078d00, 0xffff, 0,
 		"TUTORI0.BIN", 0x00005c6c, 0xffff, 0,
+
+		#if FIX_SLG_FONT_DRAWING_SIZE
 		PatchCharacterDimensionsForFiles(),
 		PatchCharacterDimensionsForLipsInFiles(),
 		PatchScaledLipsFormattingInFiles(),
 		PatchScaledLipsSpriteBufferInFiles(),
 		PatchScaledLipsTileStrideInFiles(),
+		#endif
 
 		#if USE_SINGLE_BYTE_LOOKUPS
 			/*

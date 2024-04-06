@@ -40,21 +40,9 @@ static bool BringOverOriginalFiles(const string& inRootSakuraDirectory, const st
 	
 	//Bring over scenario files
 	const string outputDirectory = inPatchedDirectory + Seperators;
-	for(const FileNameContainer& scenarioFile : originalFiles)
+	if(!CopyFiles(originalFiles, outputDirectory))
 	{
-		string subDirectory = "";
-		const size_t lastIndex = scenarioFile.mPathOnly.find_last_of("\\");
-		if(lastIndex != std::string::npos)
-		{
-			subDirectory = scenarioFile.mPathOnly.substr(lastIndex, scenarioFile.mPathOnly.size()) + Seperators;
-		}
-
-		const string outputFile = outputDirectory + subDirectory + scenarioFile.mFileName;
-		if (!CopyFile(scenarioFile.mFullPath.c_str(), outputFile.c_str(), FALSE))\
-		{
-			printf("Unable to copy over %s\n", scenarioFile.mFullPath.c_str());
-			return false;
-		}
+		return false;
 	}
 
 #define CopySingleFile(InFileName)\
@@ -368,10 +356,19 @@ bool PatchGame(const string& inSourceGameDirectory, const string& inTranslatedDi
 	}
 
 	//Create translated font sheet for battles
+#if FIX_SLG_FONT_DRAWING_SIZE
 	const string translatedBattleFontSheetPath = inTranslatedDirectory + "8x12_SLG2.bmp";
+	uint32 battleFontWidth = 8;
+	uint32 battleFontHeight = 12;
+#else
+	const string translatedBattleFontSheetPath = translatedFontSheetPath;
+	uint32 battleFontWidth = 16;
+	uint32 battleFontHeight = 16;
+#endif
+
 	TileExtractor translatedBattleFontSheet;
 	PaletteData translatedBattleFontSheetPalette;
-	if (!CreateTranslatedFontSheet(translatedBattleFontSheetPath, translatedBattleFontSheet, translatedBattleFontSheetPalette, 8, 12))
+	if (!CreateTranslatedFontSheet(translatedBattleFontSheetPath, translatedBattleFontSheet, translatedBattleFontSheetPalette, battleFontWidth, battleFontHeight))
 	{
 		printf("Unable to create battle font sheet\n");
 		return false;

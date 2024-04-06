@@ -67,6 +67,20 @@ public:
 	
 	const TileExtractor::Tile* GetTileForCharacter(char InLetter)
 	{
+		//î
+		if(InLetter == 'î')
+		{
+			InLetter = 'z' + 1;
+		}
+		else if(InLetter == 'ü')
+		{
+			InLetter = 'z' + 2;
+		}
+		else if(InLetter == 'è')
+		{
+			InLetter = 'z' + 3;
+		}
+
 		const int index = (int)(InLetter) - (int)(mStartingLetter);
 		if( index < 0 || index >= (int)mFontSheet.mTiles.size() )
 		{
@@ -144,14 +158,14 @@ public:
 		mImageCanvas.CreateSurface(bgndImage.GetWidth(), bgndImage.GetHeight(), 
 								   BitmapSurface::EBitsPerPixel::kBPP_8, pPalette, paletteDataSize, true);
 
-		mImageCanvas.AddTile(pColorData, colorDataSize, 0, 0, bgndImage.GetWidth(), bgndImage.GetHeight());
-
+		mImageCanvas.AddTile(pColorData, colorDataSize, 0, 0, bgndImage.GetWidth(), abs(bgndImage.GetHeight()));
+		
 		return true;
 	}
 
 	bool AddTile(int inXLocation, const TileExtractor::Tile& inTile, int inWidthOfCharacter)
 	{
-		if( inXLocation + inWidthOfCharacter > mImageCanvas.GetWidth() )
+		if( inXLocation + inWidthOfCharacter > mImageCanvas.GetWidth() - mRightOffset)
 		{
 			return false;
 		}
@@ -183,11 +197,72 @@ public:
 		return true;
 	}
 
+	int GetWidth() const {return mImageCanvas.GetWidth();}
+
+	void SetRightOffset(int InOffset) {mRightOffset = InOffset;}
+
 private:
 	BitmapSurface mImageCanvas;
+	int mRightOffset{0};
 };
 
-bool WriteTextIntoImageUsingFontSheet(
+bool WriteTextIntoImageUsingFontSheet(	const std::string& InText, const FileNameContainer& InImagePath, Tiled8BitFontSheet& InFontSheet, 
+										bool bInFailIfImageDoesntFit, int inLeftOffset, int inRightOffset)
+{
+	static string bmpExt(".bmp");
+	if (InImagePath.mExtention != bmpExt)
+	{
+		printf("Image must be a bitmap. %s\n", InImagePath.mFullPath.c_str());
+		return false;
+	}
+
+	//Create canvas
+	TextInImageUsingFontSheet translatedImage;
+	if (!translatedImage.InitializeImage(InImagePath.mFullPath.c_str()))
+	{
+		return false;
+	}
+
+	translatedImage.SetRightOffset(inRightOffset);
+
+	//Draw text into image
+	const int textWidth = InFontSheet.GetWidthOfText(InText) - inRightOffset;
+	int xLocation = inLeftOffset + (translatedImage.GetWidth() / 2) - (textWidth / 2);
+	if (xLocation < 0)
+	{
+		xLocation = 0;
+	}
+
+	//Print out letters
+	const size_t numLetters = InText.size();
+	for (size_t letterIndex = 0; letterIndex < numLetters; ++letterIndex)
+	{
+		const TileExtractor::Tile* pTile = InFontSheet.GetTileForCharacter(InText[letterIndex]);
+		if (!pTile)
+		{
+			continue;
+		}
+
+		const int widthOfCharacter = InFontSheet.GetWidthOfCharacter(InText[letterIndex]);
+
+		if (!translatedImage.AddTile(xLocation, *pTile, widthOfCharacter))
+		{
+			if(bInFailIfImageDoesntFit)
+			{
+				return false;
+			}
+
+			printf("Unable to fit %s. %i/%i : %s\n", InImagePath.mFileName.c_str(), textWidth, translatedImage.GetWidth(), InText.c_str());
+		}
+		xLocation += widthOfCharacter;
+	}
+
+	translatedImage.OutputBitmap(InImagePath.mFullPath, true);
+
+	return true;
+}
+
+bool WriteTextIntoImagesUsingFontSheet(
 	const std::string& pInTextFilePath,
 	const std::string& inFontSheetPath,
 	const std::string& inBgndImageDirectory,

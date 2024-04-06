@@ -6,7 +6,7 @@
 #define FIX_TIMING_DATA 0
 #define FIX_EVT_FILES 0
 #define USE_LARGE_BATTLE_MENU 0
-#define FIX_SLG_FONT_DRAWING_SIZE 0
+#define FIX_SLG_FONT_DRAWING_SIZE 1
 
 const unsigned char MaxCharsPerLine = 27;
 const unsigned char OutTileSpacingX = 8;

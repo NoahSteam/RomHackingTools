@@ -43,6 +43,7 @@ using std::string;
 using std::list;
 using std::map;
 using std::unordered_map;
+using std::unordered_set;
 
 #include "Source/SakuraConstants.h"
 #include "Source/SakuraString.h"
@@ -76,6 +77,7 @@ using std::unordered_map;
 #include "Source/TextInImageUsingFontSheet.h"
 #include "Source/ExportTranslationToFiles.h"
 #include "Source/ImageColoringFunctions.h"
+#include "Source/CreateInfoNameImages.h"
 
 void PrintHelp()
 {
@@ -703,6 +705,13 @@ int main(int argc, char *argv[])
 
 		ExtractSysFiles(rootSakuraTaisenDirectory, paletteFileName, outDirectory);
 	}
+	else if(command == "ExtractSysTextCode" && argc == 4)
+	{
+		const string searchDirectory = string(argv[2]) + Seperators;
+		const string outDirectory = string(argv[3]) + Seperators;
+
+		ExtractSysTextCode(searchDirectory, outDirectory);
+	}
 	else if (command == "ExtractMiniGames" && argc == 5)
 	{
 		const string rootSakuraTaisenDirectory = string(argv[2]) + Seperators;
@@ -782,6 +791,14 @@ int main(int argc, char *argv[])
 
 		WriteTextIntoImage(inTranslatedTextFile, inImageSizesFile, inOriginalImagesDirectory, inOutputPath);
 	}
+	else if(command == "CreateTranslatedInfoNameImages" && argc == 5)
+	{
+		const string inTranslationDirectory = string(argv[2]) + Seperators;
+		const string inFontSheet            = string(argv[3]);
+		const string inFontSheetSmall       = string(argv[4]);
+
+		CreateTranslatedInfoNameImages(inTranslationDirectory, inFontSheet, inFontSheetSmall);
+	}
 	else if(command == "WriteTextIntoImageUsingFontSheet" && argc == 7 )
 	{
 		const string inTextFilePath = string(argv[2]);
@@ -790,7 +807,7 @@ int main(int argc, char *argv[])
 		const string inOriginalImagesDirectory = string(argv[5]) + Seperators;
 		const string inOutputPath = string(argv[6]) + Seperators;
 		
-		WriteTextIntoImageUsingFontSheet(inTextFilePath, inFontSheetPath, inBgndImageDirectory, 
+		WriteTextIntoImagesUsingFontSheet(inTextFilePath, inFontSheetPath, inBgndImageDirectory, 
 										 inOriginalImagesDirectory, inOutputPath);
 	}
 	else if(command == "SwapColorsInImage" && argc == 5)

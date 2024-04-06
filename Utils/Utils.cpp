@@ -1326,9 +1326,11 @@ BitmapSurface::~BitmapSurface()
 	}
 }
 
-bool BitmapSurface::CreateSurface(int width, int height, EBitsPerPixel bitsPerPixel, const char* pPalette,
+bool BitmapSurface::CreateSurface(int inWidth, int inHeight, EBitsPerPixel bitsPerPixel, const char* pPalette,
 								  int paletteSize, bool bDuplicatePalette)
 {
+	const int width = abs(inWidth);
+	const int height = abs(inHeight);
 	const int numPixels = width*height;
 	const int numBytes  = bitsPerPixel == kBPP_4 ? numPixels*4 : numPixels;
 	mBytesPerRow        = bitsPerPixel == kBPP_4 ? width/2 : width;
@@ -1379,10 +1381,7 @@ void BitmapSurface::AddTile(const char* pInData, int inDataSize, int inX, int in
 
 				assert(inDataOffset < inDataSize);
 
-				const int outIndex = y * mBytesPerRow + x;
-				pOutData[outIndex] = pInData[inDataOffset];
-				
-				inDataOffset = y*tileStride + x;
+				pOutData[y * mBytesPerRow + x] = pInData[inDataOffset++];			
 				++numBytesWritten;
 			}
 		}
@@ -2413,4 +2412,35 @@ bool CreateTemporaryDirectory(string& outDir)
 
 	outDir = tempDir;
 	return true;
+}
+
+bool CopyFiles(const std::vector<FileNameContainer>& InSourceFiles, const std::string& InOutputDirectory)
+{
+	//Bring over scenario files
+	for (const FileNameContainer& sourceFile : InSourceFiles)
+	{
+		string subDirectory = "";
+		const size_t lastIndex = sourceFile.mPathOnly.find_last_of("\\");
+		if (lastIndex != std::string::npos)
+		{
+			subDirectory = sourceFile.mPathOnly.substr(lastIndex, sourceFile.mPathOnly.size()) + Seperators;
+		}
+
+		const string outputFile = InOutputDirectory + subDirectory + sourceFile.mFileName;
+		if (!CopyFile(sourceFile.mFullPath.c_str(), outputFile.c_str(), FALSE))\
+		{
+			printf("Unable to copy over %s\n", sourceFile.mFullPath.c_str());
+			return false;
+		}
+	}
+
+	return true;
+}
+
+bool CopyFiles(const std::string& InSourceDirectory, const std::string& InOutputDirectory)
+{
+	std::vector<FileNameContainer> sourceFiles;
+	FindAllFilesWithinDirectory(InSourceDirectory, sourceFiles);
+
+	return CopyFiles(sourceFiles, InOutputDirectory);
 }

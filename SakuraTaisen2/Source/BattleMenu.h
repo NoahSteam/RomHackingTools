@@ -70,7 +70,7 @@ void ExtractBattleMenu(const string& rootSakuraDirectory, bool bBmp, const strin
 
 			const string outFileName = finalOutputDirectory + std::to_string(i) + bmpExt;
 
-			PaletteData& palette = i < 78 ? paletteData1 : paletteData2;
+			PaletteData& palette = i < 78 && !(i >= 33 && i <= 46) ? paletteData1 : paletteData2;
 			BitmapWriter outBmp;
 			outBmp.CreateBitmap(outFileName, lookupTable[i].widthDiv8, -lookupTable[i].height, 4, fileData.GetData() + lookupTable[i].offsetDiv8, (lookupTable[i].widthDiv8 * lookupTable[i].height) / 2, palette.GetData(), palette.GetSize(), bBmp);
 		}

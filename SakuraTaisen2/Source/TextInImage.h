@@ -1,5 +1,9 @@
 #pragma once
 
+#define TextFontName "Rockwell Condensed"
+#define TextFontSize 13
+#define TextYOffset 0
+
 class TextInImage
 {
 public:
@@ -58,8 +62,8 @@ public:
 			mOrigPaletteColorToIndex[colorValue] = i;
 		}
 
-		mhFont = CreateFont(13, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, ANSI_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-			ANTIALIASED_QUALITY, DEFAULT_PITCH | FF_DONTCARE, "Rockwell Condensed");
+		mhFont = CreateFont(TextFontSize, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, ANSI_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+			ANTIALIASED_QUALITY, DEFAULT_PITCH | FF_DONTCARE, TextFontName);
 
 		return true;
 	}
@@ -76,29 +80,81 @@ public:
 			for (unsigned int x = 1; x < inWidth - 1; x++)
 			{
 				// Get the color of the current pixel
-				unsigned int r = (uint8)pOriginal[y * inWidth * channels + x * channels + 0];
-				unsigned int g = (uint8)pOriginal[y * inWidth * channels + x * channels + 1];
-				unsigned int b = (uint8)pOriginal[y * inWidth * channels + x * channels + 2];
-				unsigned int a = (uint8)pOriginal[y * inWidth * channels + x * channels + 3];
+				const unsigned int r = (uint8)pOriginal[y * inWidth * channels + x * channels + 0];
+				const unsigned int g = (uint8)pOriginal[y * inWidth * channels + x * channels + 1];
+				const unsigned int b = (uint8)pOriginal[y * inWidth * channels + x * channels + 2];
+				const unsigned int a = (uint8)pOriginal[y * inWidth * channels + x * channels + 3];
+
+				const bool bAntiAlias = (r + g + b + a != 0) && x > 3 && y > 3 && x < inWidth - 3 && y < inHeight - 3;
+				bool bHasBeenOutput = false;
 
 				// Average the color values of the current pixel and its neighbours
-				unsigned int r_total = 0, g_total = 0, b_total = 0, a_total = 0;
-				for (int i = -1; i <= 1; i++)
+				if(bAntiAlias)
 				{
-					for (int j = -1; j <= 1; j++)
+					bool bHasTextNeighbor = false;
+
+					//Are any of the neighoring pixels black?
+					unsigned int r_total = 0, g_total = 0, b_total = 0, a_total = 0;
+					for (int i = -1; i <= 1; i++)
 					{
-						r_total += (uint8)pOriginal[(y + i) * inWidth * channels + (x + j) * channels + 0];
-						g_total += (uint8)pOriginal[(y + i) * inWidth * channels + (x + j) * channels + 1];
-						b_total += (uint8)pOriginal[(y + i) * inWidth * channels + (x + j) * channels + 2];
-						a_total += (uint8)pOriginal[(y + i) * inWidth * channels + (x + j) * channels + 3];
+						for (int j = -1; j <= 1; j++)
+						{
+							const bool bIsEdge = !(x + j > 3 && y + i > 3 && x + j < inWidth - 3 && y + i < inHeight - 3);
+							if(bIsEdge)
+							{
+								continue;
+							}
+
+							const uint8 rNeighbor = (uint8)pOriginal[(y + i) * inWidth * channels + (x + j) * channels + 0];
+							const uint8 gNeighbor = (uint8)pOriginal[(y + i) * inWidth * channels + (x + j) * channels + 1];
+							const uint8 bNeighbor = (uint8)pOriginal[(y + i) * inWidth * channels + (x + j) * channels + 2];
+							const uint8 aNeighbor = (uint8)pOriginal[(y + i) * inWidth * channels + (x + j) * channels + 3];
+
+							bHasTextNeighbor = (rNeighbor + gNeighbor + bNeighbor == 0);
+							if(bHasTextNeighbor)
+							{
+								pInImageData[y * inWidth * channels + x * channels + 0] = (uint8)(((float)r + rNeighbor) / 2.f);
+								pInImageData[y * inWidth * channels + x * channels + 1] = (uint8)(((float)g + gNeighbor) / 2.f);
+								pInImageData[y * inWidth * channels + x * channels + 2] = (uint8)(((float)b + bNeighbor) / 2.f);
+								pInImageData[y * inWidth * channels + x * channels + 3] = aNeighbor;//(uint8)(a_total / 12);
+								bHasBeenOutput =  true;
+								break;
+							}
+						}
+					}
+
+					if(bHasTextNeighbor && 0)
+					{
+						// Average the color values of the current pixel and its neighbours
+						unsigned int r_total = 0, g_total = 0, b_total = 0, a_total = 0;
+						for (int i = -1; i <= 1; i++)
+						{
+							for (int j = -1; j <= 1; j++)
+							{
+								r_total += (uint8)pOriginal[(y + i) * inWidth * channels + (x + j) * channels + 0];
+								g_total += (uint8)pOriginal[(y + i) * inWidth * channels + (x + j) * channels + 1];
+								b_total += (uint8)pOriginal[(y + i) * inWidth * channels + (x + j) * channels + 2];
+								a_total += (uint8)pOriginal[(y + i) * inWidth * channels + (x + j) * channels + 3];
+							}
+						}
+
+						// Set the new color values of the current pixel
+						pInImageData[y * inWidth * channels + x * channels + 0] = (uint8)255;//(uint8)(r_total / 12);
+						pInImageData[y * inWidth * channels + x * channels + 1] = (uint8)255;//(uint8)(g_total / 12);
+						pInImageData[y * inWidth * channels + x * channels + 2] = (uint8)255;//(uint8)(b_total / 12);
+						pInImageData[y * inWidth * channels + x * channels + 3] = 0;//(uint8)(a_total / 12);
+
+						bHasBeenOutput = true;
 					}
 				}
 
-				// Set the new color values of the current pixel
-				pInImageData[y * inWidth * channels + x * channels + 0] = (uint8)(r_total / 9);
-				pInImageData[y * inWidth * channels + x * channels + 1] = (uint8)(g_total / 9);
-				pInImageData[y * inWidth * channels + x * channels + 2] = (uint8)(b_total / 9);
-				pInImageData[y * inWidth * channels + x * channels + 3] = (uint8)(a_total / 9);
+				if (!bHasBeenOutput)
+				{
+					pInImageData[y * inWidth * channels + x * channels + 0] = r;
+					pInImageData[y * inWidth * channels + x * channels + 1] = g;
+					pInImageData[y * inWidth * channels + x * channels + 2] = b;
+					pInImageData[y * inWidth * channels + x * channels + 3] = a;
+				}
 			}
 		}
 
@@ -157,7 +213,7 @@ public:
 		GetTextExtentPoint32(hdcImage, pInText, textLen, &textSize);
 
 		// Draw the text on the image
-		const int yPosition = 0;//bitmap.bmHeight/2 - (textSize.cy/2)
+		const int yPosition = TextYOffset;//bitmap.bmHeight/2 - (textSize.cy/2)
 		TextOut(hdcImage, bitmap.bmWidth/2 - (textSize.cx/2), yPosition, pInText, textLen);
 
 		//Get image data again now that it has been rendered
@@ -175,8 +231,8 @@ public:
 			}
 		}
 
-		//AntiAlias
-	//	AntiAliasImage(pFlippedImage, bitmap.bmWidth, bitmap.bmHeight);
+		//AntiAlias - doesn't work
+		//AntiAliasImage(pFlippedImage, bitmap.bmWidth, bitmap.bmHeight);
 
 		const unsigned int palettedImageSize = (bitmap.bmWidth * bitmap.bmHeight) / 2;
 		char* pPalettedImage = new char[palettedImageSize];
