@@ -10,3 +10,5 @@ f988 read back at 06066ac8
 ff98 read at 06020642 then written to 06041D28
 
 06086ff8 has 1518 which used to be a7f, number of bytes to clear in vdp1 for text
+
+05c7cc20 is written to during load at 06019a94

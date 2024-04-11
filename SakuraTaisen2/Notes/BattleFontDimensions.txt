@@ -67,3 +67,17 @@ nop          //0009
 sprite dims stored at 060d153a //010c
 
 sprite size written at 05c015aa and 0604064a
+
+//Lips scaling
+060d1772 mov 0xf, r7 //e70f  =? mov 0x7, r7 e707
+060d1778 add r0, r0  //0a17  => mov 0xb, r6 ec0b
+
+060d17fe mov.w r7, @r2 2271 //leave it 
+060d183e mov.w r7, @r2 2271 //leave it
+060d1846 mov.w r7, @r2 2271 //mov.w r12, @r2 22c1
+
+060d1840
+mov 0xb, r7   //e70b
+add 0x2, r2   //7202
+mov.w r7, @r2 //2271 
+mov 0x7, r7   //e707

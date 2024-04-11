@@ -86,7 +86,7 @@ written by 060d17c0 (8780)
 
 --FIX--
 //Vertical height
-060d17e4 7198 to 7194 //ff94
+060d17e4 7198 to 7199
 
 EV05020.bin
 @6014 size of sprite needs to be 0210  (060d1814)
