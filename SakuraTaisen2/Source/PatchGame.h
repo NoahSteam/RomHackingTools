@@ -18,6 +18,8 @@ static bool BringOverOriginalFiles(const string& inRootSakuraDirectory, const st
 	GetAllFilesOfType(allFiles, "PBOOK_FL", originalFiles);
 	GetAllFilesOfType(allFiles, "PBOOK_BT", originalFiles);
 	GetAllFilesOfType(allFiles, "PBOOK_EC", originalFiles);
+	GetAllFilesOfType(allFiles, "CMD_WIN", originalFiles);
+	GetAllFilesOfType(allFiles, "PB_EYE", originalFiles);
 	GetAllFilesOfType(allFiles, "HANKO", originalFiles);
 	GetAllFilesOfType(allFiles, "VDP1.BIN", originalFiles);
 	GetAllFilesOfType(allFiles, "GOVER", originalFiles);

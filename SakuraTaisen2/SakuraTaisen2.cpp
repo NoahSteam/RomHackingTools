@@ -687,6 +687,7 @@ int main(int argc, char *argv[])
 
 		ExtractMainMenu(rootSakuraTaisenDirectory, bmpFormat, outDirectory);
 		ExtractBattlePauseMenu(rootSakuraTaisenDirectory, bmpFormat, outDirectory);
+		ExtractPBEye(rootSakuraTaisenDirectory, bmpFormat, outDirectory);
 	}
 	else if (command == "ExtractInfoName" && argc == 6)
 	{

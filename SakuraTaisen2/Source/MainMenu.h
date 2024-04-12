@@ -1,4 +1,8 @@
 #pragma once
+
+#define GenericImageEntry(imagePath) imageList.emplace_back(lookupTable[lutIndex].widthDiv8, lookupTable[lutIndex].heightDiv8, lookupTable[lutIndex].offsetDiv8, imagePath);\
+	                              ++lutIndex
+
 #pragma pack(push, 1)
 struct MainMenuImageInfo
 {
@@ -46,6 +50,74 @@ MainMenuImageInfo ManuallyFoundMainMenuImages[NumCustomMainMenuImages]
 	0, 72, 120, CharBioImageOffset,
 	0, 72, 120, CharBioImageOffset,
 	0, 72, 120, CharBioImageOffset,
+};
+
+const int NumPBEyeImages = 12;
+MainMenuImageInfo PBEyeImages[NumPBEyeImages]
+{
+	0, 128, 16, (uint16)(0xc940),
+	0, 112, 16, (uint16)(0xc940),
+	0, 112, 16, (uint16)(0xc940),
+	0, 112, 16, (uint16)(0xc940),
+	0, 128, 16, (uint16)(0xc940),
+	0, 32,  16, (uint16)(0xc940),
+	0, 16,  16, (uint16)(0xc940),
+	0, 48,  16, (uint16)(0xc940),
+	0, 88,  64, (uint16)(0xc940),
+	0, 64,  16, (uint16)(0xc940),
+	0, 72,  16, (uint16)(0xc940),
+	0, 48,  16, (uint16)(0xc940),
+};
+
+const int NumPBookRCImages = 12;
+MainMenuImageInfo PBookRCImages[NumPBookRCImages]
+{
+	0, 32, 112, (uint16)0x1880,
+	0, 32, 112, (uint16)0x1880,
+	0, 32, 112, (uint16)0x1880,
+	0, 32, 112, (uint16)0x1880,
+	0, 32, 112, (uint16)0x1880,
+	0, 32, 112, (uint16)0x1880,
+	0, 32, 112, (uint16)0x1880,
+	0, 32, 112, (uint16)0x1880,
+	0, 32, 112, (uint16)0x1880,
+	0, 32, 112, (uint16)0x1880,
+	0, 16, 112, (uint16)0x1880,
+	0, 40, 120, (uint16)0x1880,
+};
+
+const int NumTetyoADImages = 21;
+MainMenuImageInfo TetyoADImages[NumTetyoADImages]
+{
+	0, 88,  24, (uint16)0x9080,
+	0, 96,  16, (uint16)0x9080,
+	0, 16,  16, (uint16)0x9080,
+	0, 16,  16, (uint16)0x9080,
+	0, 16,  16, (uint16)0x9080,
+	0, 16,  16, (uint16)0x9080,
+	0, 64,  16, (uint16)0x9080,
+	0, 56,  16, (uint16)0x9080,
+	0, 8,   16, (uint16)0x9080,
+	0, 56,  16, (uint16)0x9080,
+	0, 32,  16, (uint16)0x9080,
+	0, 32,  16, (uint16)0x9080,
+	0, 32,  16, (uint16)0x9080,
+	0, 112, 24, (uint16)0x9080,
+	0, 80,  16, (uint16)0x9080,
+	0, 104, 16, (uint16)0x9080,
+	0, 32,  16, (uint16)0x9080,
+	0, 32,  16, (uint16)0x9080,
+	0, 112, 16, (uint16)0x9080,
+	0, 112, 16, (uint16)0x9080,
+	0, 16,  32, (uint16)0x9080,
+};
+
+const int NumCmdWinImages = 3;
+MainMenuImageInfo CmdWinImages[NumCmdWinImages]
+{
+	0, 64,  16, (uint16)(0xb00),
+	0, 72,  16, (uint16)(0xb00),
+	0, 48,  16, (uint16)(0xb00),
 };
 
 bool PatchCustomImages( vector<CustomMenuImageInfo> InImageInfo,
@@ -175,65 +247,114 @@ bool Patch_PBook_BT(const string& inPatchedSakuraDirectory, const string& inTran
 	const string translatedDirectory = inTranslatedDataDirectory + string("PBOOK_FL\\");
 
 	int lutIndex = 0;
-	#define ImageEntry(imagePath) imageList.emplace_back(SwapByteOrder(lookupTable[lutIndex].widthDiv8)*8, SwapByteOrder(lookupTable[lutIndex].heightDiv8)*8, 0xfb20, imagePath);\
+	const int offsetToImageData = 0xfb20;
+#define MenuImageEntry(imagePath) imageList.emplace_back(SwapByteOrder(lookupTable[lutIndex].widthDiv8)*8, SwapByteOrder(lookupTable[lutIndex].heightDiv8)*8, offsetToImageData, imagePath);\
 	                              ++lutIndex
 
 	//Mostly duplicate images from PBOOK_FL, so just reuse them
-	const uint16 pbookBTOffset = 0xfb20;
-	ImageEntry(translatedDirectory + "13");//0
-	ImageEntry(translatedDirectory + "14");//1
-	ImageEntry("");//2
-	ImageEntry(translatedDirectory + "16");//3
-	ImageEntry("");//4
-	ImageEntry(translatedDirectory + "18");//5
-	ImageEntry(translatedDirectory + "19");//6
-	ImageEntry("");//7
-	ImageEntry(translatedDirectory + "21");//8
-	ImageEntry("");//9
-	ImageEntry(translatedDirectory + "23");//10
-	ImageEntry(translatedDirectory + "24");//11
-	ImageEntry(translatedDirectory + "25");//12
-	ImageEntry(translatedDirectory + "26");//13 off
-	ImageEntry("");//14
-	ImageEntry(translatedDirectory + "28");//15
-	ImageEntry(translatedDirectory + "29");//16
-	ImageEntry(translatedDirectory + "30");//17
-	ImageEntry(translatedDirectory + "32");//18
-	ImageEntry("");//19
-	ImageEntry("");//20
-	ImageEntry("");//21
-	ImageEntry(translatedDirectory + "36");//22
-	ImageEntry(translatedDirectory + "37");//23
-	ImageEntry(translatedDirectory + "38");//24
-	ImageEntry(translatedDirectory + "39");//25
-	ImageEntry(translatedDirectory + "40");//26
-	ImageEntry(translatedDirectory + "41");//27
-	ImageEntry(translatedDirectory + "42");//28
-	ImageEntry(translatedDirectory + "43");//29
-	ImageEntry(translatedDirectory + "44");//30
-	ImageEntry(translatedDirectory + "45");//31
-	ImageEntry(translatedDirectory + "46");//32
-	ImageEntry(translatedDirectory + "47");//33
-	ImageEntry(translatedDirectory + "48");//34
-	ImageEntry(translatedDirectory + "49");//35
-	ImageEntry("");//36
-	ImageEntry(translatedDirectory + "51");//37
-	ImageEntry(translatedDirectory + "52");//38
-	ImageEntry("");//39
-	ImageEntry(translatedDirectory + "54");//40
-	ImageEntry("");//41
-	ImageEntry("");//42
-	ImageEntry("");//43
-	ImageEntry("");//44
-	ImageEntry("");//45
-	ImageEntry(translatedDirectory + "60");//46
-	ImageEntry(translatedDirectory + "42");//47
-	ImageEntry(translatedDirectory + "62");//48
-	ImageEntry("");//49
-	ImageEntry(translatedDirectory + "64");//50
+	MenuImageEntry(translatedDirectory + "13");//0
+	MenuImageEntry(translatedDirectory + "14");//1
+	MenuImageEntry("");//2
+	MenuImageEntry(translatedDirectory + "16");//3
+	MenuImageEntry("");//4
+	MenuImageEntry(translatedDirectory + "18");//5
+	MenuImageEntry(translatedDirectory + "19");//6
+	MenuImageEntry("");//7
+	MenuImageEntry(translatedDirectory + "21");//8
+	MenuImageEntry("");//9
+	MenuImageEntry(translatedDirectory + "23");//10
+	MenuImageEntry(translatedDirectory + "24");//11
+	MenuImageEntry(translatedDirectory + "25");//12
+	MenuImageEntry(translatedDirectory + "26");//13 off
+	MenuImageEntry("");//14
+	MenuImageEntry(translatedDirectory + "28");//15
+	MenuImageEntry(translatedDirectory + "29");//16
+	MenuImageEntry(translatedDirectory + "30");//17
+	MenuImageEntry(translatedDirectory + "32");//18
+	MenuImageEntry("");//19
+	MenuImageEntry("");//20
+	MenuImageEntry("");//21
+	MenuImageEntry(translatedDirectory + "36");//22
+	MenuImageEntry(translatedDirectory + "37");//23
+	MenuImageEntry(translatedDirectory + "38");//24
+	MenuImageEntry(translatedDirectory + "39");//25
+	MenuImageEntry(translatedDirectory + "40");//26
+	MenuImageEntry(translatedDirectory + "41");//27
+	MenuImageEntry(translatedDirectory + "42");//28
+	MenuImageEntry(translatedDirectory + "43");//29
+	MenuImageEntry(translatedDirectory + "44");//30
+	MenuImageEntry(translatedDirectory + "45");//31
+	MenuImageEntry(translatedDirectory + "46");//32
+	MenuImageEntry(translatedDirectory + "47");//33
+	MenuImageEntry(translatedDirectory + "48");//34
+	MenuImageEntry(translatedDirectory + "49");//35
+	MenuImageEntry("");//36
+	MenuImageEntry(translatedDirectory + "51");//37
+	MenuImageEntry(translatedDirectory + "52");//38
+	MenuImageEntry("");//39
+	MenuImageEntry(translatedDirectory + "54");//40
+	MenuImageEntry("");//41
+	MenuImageEntry("");//42
+	MenuImageEntry("");//43
+	MenuImageEntry("");//44
+	MenuImageEntry("");//45
+	MenuImageEntry(translatedDirectory + "60");//46
+	MenuImageEntry(translatedDirectory + "42");//47
+	MenuImageEntry(translatedDirectory + "62");//48
+	MenuImageEntry("");//49
+	MenuImageEntry(translatedDirectory + "64");//50
 
 	bool bResult = PatchCustomImages(imageList, inPatchedSakuraDirectory + string("SAKURA1\\PBOOK_BT.CG"));
 	bResult = bResult && PatchCustomImages(imageList, inPatchedSakuraDirectory + string("SAKURA2\\PBOOK_BT.CG"));
+
+	return bResult;
+}
+
+//Battle pause menu
+bool Patch_PB_Eye(const string& inPatchedSakuraDirectory, const string& inTranslatedDataDirectory)
+{
+	const string sakuraFilePath = inPatchedSakuraDirectory + string("SAKURA2\\SLGNTBK.BIN");
+	FileNameContainer sakuraFileNameInfo(sakuraFilePath.c_str());
+	FileData tableFileData;
+	if (!tableFileData.InitializeFileData(sakuraFileNameInfo))
+	{
+		return false;
+	}
+	
+	vector<CustomMenuImageInfo> imageList;
+
+	const string pbookFL_Dir = inTranslatedDataDirectory + string("PBOOK_FL\\");
+	const string pbEye_Dir = inTranslatedDataDirectory + string("PB_Eye\\");
+
+	int lutIndex = 0;
+	int offsetToImageData = 0xc940;
+
+	//Mostly duplicate images from PBOOK_FL, so just reuse them
+	MainMenuImageInfo* lookupTable = &PBEyeImages[0];
+	GenericImageEntry(pbEye_Dir + "0");//0
+	GenericImageEntry(pbEye_Dir + "1");//1
+	GenericImageEntry(pbEye_Dir + "2");//2
+	GenericImageEntry(pbEye_Dir + "3");//3
+	GenericImageEntry(pbEye_Dir + "4");//4
+	GenericImageEntry(pbookFL_Dir + "168");//5 Yes
+	GenericImageEntry("");//6
+	GenericImageEntry(pbookFL_Dir + "170");//7  No
+	GenericImageEntry("");//8 
+	GenericImageEntry(pbookFL_Dir + "171");//9 Item
+	GenericImageEntry(pbookFL_Dir + "172");//10 Option
+	GenericImageEntry(pbookFL_Dir + "173");//11 Return
+	bool bResult = PatchCustomImages(imageList, inPatchedSakuraDirectory + string("SAKURA1\\PB_EYE.CG"));
+
+	//WIN_CMD
+	offsetToImageData = 0xb00;
+	lutIndex = 0;
+	imageList.clear();
+	lookupTable = &CmdWinImages[0];
+	GenericImageEntry(pbookFL_Dir + "171");//0 Item
+	GenericImageEntry(pbookFL_Dir + "172");//0 Option
+	GenericImageEntry(pbookFL_Dir + "173");//2 Return
+
+	bResult &= PatchCustomImages(imageList, inPatchedSakuraDirectory + string("SAKURA1\\CMD_WIN.CG"));
 
 	return bResult;
 }
@@ -360,6 +481,11 @@ bool PatchMainMenu(const string& inPatchedSakuraDirectory, const string& inTrans
 	}
 
 	if (!Patch_PBook_BT(inPatchedSakuraDirectory, inTranslatedDataDirectory))
+	{
+		return false;
+	}
+
+	if (!Patch_PB_Eye(inPatchedSakuraDirectory, inTranslatedDataDirectory))
 	{
 		return false;
 	}
@@ -516,6 +642,85 @@ void ExtractBattlePauseMenu(const string& rootSakuraDirectory, bool bBmp, const 
 			outBmp.CreateBitmap(outFileName, width, -height, 4, fileData.GetData() + baseOffset + offset, (width * height) / 2, palette.GetData(), palette.GetSize(), bBmp);
 		}
 	}
+}
+
+bool ExtractPBEye(const string& rootSakuraDirectory, bool bBmp, const string& outDirectory)
+{
+	CreateDirectoryHelper(outDirectory);
+
+	const string sakuraFilePath = rootSakuraDirectory + string("SAKURA1\\TITLE.BIN");
+	FileNameContainer sakuraFileNameInfo(sakuraFilePath.c_str());
+	FileData sakuraFileData;
+	if (!sakuraFileData.InitializeFileData(sakuraFileNameInfo))
+	{
+		return false;
+	}
+
+	PaletteData palette;
+	if (!palette.CreateFrom15BitData(sakuraFileData.GetData() + 0x00002250, 32))
+	{
+		printf("Unable to create palette 1.\n");
+		return false;
+	}
+
+	const string bmpExt = bBmp ? string(".bmp") : (".png");
+
+	struct FileExtractInfo
+	{
+		const char* pOutDirName;
+		const char* pFileName;
+		MainMenuImageInfo* pImages;
+		int numImages;
+	};
+
+	FileExtractInfo filesToExtract[4] = 
+	{	{"PB_EYE", "SAKURA1\\PB_EYE.CG", &PBEyeImages[0], sizeof(PBEyeImages)/sizeof(PBEyeImages[0])},
+		{"CMD_WIN", "SAKURA1\\CMD_WIN.CG", &CmdWinImages[0], sizeof(CmdWinImages) / sizeof(CmdWinImages[0])},
+		{"PBookRCImages", "SAKURA1\\PBOOK_RC.CG", &PBookRCImages[0], sizeof(PBookRCImages)/sizeof(PBookRCImages[0])},
+		{"TetyoADImages", "SAKURA1\\TETYO_AD.CG", &TetyoADImages[0], sizeof(TetyoADImages) / sizeof(TetyoADImages[0])},
+	};
+
+	//PBOOK_FL
+	const int numFiles = sizeof(filesToExtract)/sizeof(FileExtractInfo);
+	for (int fileIndex = 0; fileIndex < numFiles; ++fileIndex)
+	{
+		const string dataFilePath = rootSakuraDirectory + string(filesToExtract[fileIndex].pFileName);
+		FileData fileData;
+		if (!fileData.InitializeFileData(dataFilePath))
+		{
+			return false;
+		}
+
+		const string finalOutputDirectory = outDirectory + string(filesToExtract[fileIndex].pOutDirName) + string("\\");
+		CreateDirectoryHelper(finalOutputDirectory);
+
+		//Manually found images
+		int accumulatedOffset = 0;
+		int prevOffset = 0;
+		const int numImages = filesToExtract[fileIndex].numImages;
+		for (int i = 0; i < numImages; ++i)
+		{
+			const int offset = filesToExtract[fileIndex].pImages[i].offsetDiv8;
+			const int width  = filesToExtract[fileIndex].pImages[i].widthDiv8;
+			const int height = filesToExtract[fileIndex].pImages[i].heightDiv8;
+
+			//For when the addresses jump
+			if (offset != prevOffset)
+			{
+				accumulatedOffset = 0;
+			}
+
+			const string outFileName = finalOutputDirectory + std::to_string(i) + bmpExt;
+
+			BitmapWriter outBmp;
+			outBmp.CreateBitmap(outFileName, width, -height, 4, fileData.GetData() + offset + accumulatedOffset, (width * height) / 2, palette.GetData(), palette.GetSize(), bBmp);
+
+			accumulatedOffset += width * height / 2;
+			prevOffset = offset;
+		}
+	}
+
+	return true;
 }
 
 bool CreateNamePBookFLSpreadsheet(const string& imageDirectory)
