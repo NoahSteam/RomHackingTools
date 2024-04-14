@@ -153,7 +153,7 @@
     <ClInclude Include="Source\IntroScreenExtractor.h" />
     <ClInclude Include="Source\MainMenu.h" />
     <ClInclude Include="Source\MiniGameExtraction.h" />
-    <ClInclude Include="Source\MiscImages.h" />
+    <ClInclude Include="Source\VDP2Images.h" />
     <ClInclude Include="Source\MNameCG.h" />
     <ClInclude Include="Source\PatchBattleTextDrawCode.h" />
     <ClInclude Include="Source\PatchGame.h" />

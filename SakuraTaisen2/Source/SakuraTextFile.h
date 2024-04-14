@@ -979,7 +979,7 @@ void ExtractText(const string& inSearchDirectory, const string& inPaletteFileNam
 
 		//Create font sheet
 		SakuraFontSheet sakuraFontSheet;
-		if (!sakuraFontSheet.CreateFontSheetFromData(sakuraText.mFontSheetData.mpData, sakuraText.mFontSheetData.mDataSize))
+		if (!sakuraFontSheet.CreateFontSheetFromData(sakuraText.mFontSheetData.mpData, sakuraText.mFontSheetData.mDataSize, 16, 16, true))
 		{
 			continue;
 		}

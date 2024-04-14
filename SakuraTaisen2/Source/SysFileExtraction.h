@@ -190,7 +190,7 @@ public:
 		const string outFileName = inOutputDirectory + mFileNameInfo.mNoExtension + extension;
 
 		SakuraFontSheet sakuraFontSheet;
-		if (sakuraFontSheet.CreateFontSheetFromData(mFontSheetData.mpData, mFontSheetData.mDataSize))
+		if (sakuraFontSheet.CreateFontSheetFromData(mFontSheetData.mpData, mFontSheetData.mDataSize, 16, 16, true))
 		{
 			ExtractImageFromData(mFontSheetData.mpData, mFontSheetData.mDataSize, outFileName, paletteFileData.GetData(), paletteFileData.GetDataSize(),
 								 paletteFileData.GetDataSize() == 32, 16, 16, 255, 256, 0, true, true);
@@ -209,7 +209,7 @@ public:
 
 		//Create font sheet
 		SakuraFontSheet sakuraFontSheet;
-		if (!sakuraFontSheet.CreateFontSheetFromData(mFontSheetData.mpData, mFontSheetData.mDataSize))
+		if (!sakuraFontSheet.CreateFontSheetFromData(mFontSheetData.mpData, mFontSheetData.mDataSize, 16, 16, true))
 		{
 			return;
 		}

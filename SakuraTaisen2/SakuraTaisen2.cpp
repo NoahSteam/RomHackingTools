@@ -71,13 +71,14 @@ using std::unordered_set;
 #include "Source/IntroScreenExtractor.h"
 #include "Source/SakuraWars2Utils.h"
 #include "Source/BGDatFiles.h"
-#include "Source/PatchGame.h"
 #include "Source/Demo.h"
+#include "Source/PatchGame.h"
 #include "Source/TextInImage.h"
 #include "Source/TextInImageUsingFontSheet.h"
 #include "Source/ExportTranslationToFiles.h"
 #include "Source/ImageColoringFunctions.h"
 #include "Source/CreateInfoNameImages.h"
+#include "Source/VDP2Images.h"
 
 void PrintHelp()
 {
@@ -832,6 +833,13 @@ int main(int argc, char *argv[])
 		const string inOutputDirectory = string(argv[3]) + Seperators;
 
 		ExtractBGDatFiles(inSourceGameDirectory, inOutputDirectory);
+	}
+	else if(command == "ExtractVDP2Files" && argc == 4)
+	{
+		const string inDirectory = string(argv[2]) + Seperators;
+		const string inOutputDirectory = string(argv[3]) + Seperators;
+
+		ExtractVDP2Files(inDirectory, inOutputDirectory);
 	}
 	else
 	{

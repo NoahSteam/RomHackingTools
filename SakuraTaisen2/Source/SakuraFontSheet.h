@@ -2,13 +2,16 @@
 
 class SakuraFontTile
 {
-	char* mpData;
+	char* mpData{nullptr};
+	int mDataSize{0};
 
 public:
 	SakuraFontTile(const char* pInData, int dataSize)
 	{
 		mpData = new char[dataSize];
 		memcpy(mpData, pInData, dataSize);
+
+		mDataSize = dataSize;
 	}
 
 	SakuraFontTile(SakuraFontTile&& other) : mpData(other.mpData)
@@ -32,6 +35,7 @@ public:
 	{
 		delete[] mpData;
 		mpData = nullptr;
+		mDataSize = 0;
 	}
 
 	const char* GetFontTileData() const
@@ -41,23 +45,25 @@ public:
 };
 
 class SakuraFontSheet
-{
-	vector<SakuraFontTile> mCharacterTiles;
-
+{	
 public:
-	bool CreateFontSheetFromData(const char* pInData, unsigned int inDataSize)
+	bool CreateFontSheetFromData(const char* pInData, unsigned int inDataSize, int inTileWidth, int inTileHeight, bool bInIs4Bit)
 	{
-		const int numBytesPerTile = 128;
-		if (inDataSize % 128 != 0) //128
+		mBytesInTile = bInIs4Bit ? (inTileWidth*inTileHeight) / 2 : inTileWidth*inTileHeight;
+		mTileWidth   = inTileWidth;
+		mTileHeight  = inTileHeight;
+		mPixelFormat = bInIs4Bit ? BitmapSurface::EBitsPerPixel::kBPP_4 : BitmapSurface::EBitsPerPixel::kBPP_8;
+
+		if (inDataSize % mBytesInTile != 0) //128
 		{
 			printf("CreateFontSheet: Invalid size for data.  Should be multiple of 128, is %u", inDataSize);
 			return false;
 		}
 
-		const int numTilesInFile = inDataSize / numBytesPerTile;
+		const int numTilesInFile = inDataSize / mBytesInTile;
 		for (int currTile = 0; currTile < numTilesInFile; ++currTile)
 		{
-			mCharacterTiles.push_back(std::move(SakuraFontTile(&pInData[currTile * numBytesPerTile], numBytesPerTile)));
+			mCharacterTiles.push_back(std::move(SakuraFontTile(&pInData[currTile * mBytesInTile], mBytesInTile)));
 		}
 
 		return true;
@@ -88,21 +94,38 @@ public:
 		return true;
 	}
 
-	const char* GetCharacterTile(const SakuraString::SakuraChar& sakuraChar) const
+	const char* GetCharacterTile(int inTileIndex) const
 	{
-		int tileIndex = sakuraChar.mIndex;// - 1;
-		assert(tileIndex >= 0);
+		assert(inTileIndex >= 0);
 		//assert(tileIndex < (int)mCharacterTiles.size());
-		if (tileIndex >= (int)mCharacterTiles.size())
+		if (inTileIndex >= (int)mCharacterTiles.size())
 		{
-			tileIndex = 0;
+			inTileIndex = 0;
 		}
 
-		return tileIndex < (int)mCharacterTiles.size() ? mCharacterTiles[tileIndex].GetFontTileData() : nullptr;
+		return inTileIndex < (int)mCharacterTiles.size() ? mCharacterTiles[inTileIndex].GetFontTileData() : nullptr;
+	}
+
+	const char* GetCharacterTile(const SakuraString::SakuraChar& sakuraChar) const
+	{
+		return GetCharacterTile(sakuraChar.mIndex);
 	}
 
 	unsigned long GetTileSizeInBytes() const
 	{
-		return 128;
+		return mBytesInTile;
 	}
+
+	int GetNumTiles() const {return mCharacterTiles.size();}
+
+	int GetTileWidth() const {mTileWidth;}
+	int GetTileHeight() const {mTileHeight;}
+	BitmapSurface::EBitsPerPixel GetPixelFormat() const {return mPixelFormat;}
+
+private:
+	vector<SakuraFontTile> mCharacterTiles;
+	unsigned long mBytesInTile{128};
+	int mTileWidth{0};
+	int mTileHeight{0};
+	BitmapSurface::EBitsPerPixel mPixelFormat{BitmapSurface::EBitsPerPixel::kBPP_8};
 };

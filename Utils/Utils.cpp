@@ -25,6 +25,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include <string>
 #include <assert.h>
 #include <algorithm> // for std::sort
+#include <unordered_map>
+#include <unordered_set>
 
 #include "Utils.h"
 #include "..\ExternalTools\lodepng.h"
@@ -1362,6 +1364,8 @@ bool BitmapSurface::CreateSurface(int inWidth, int inHeight, EBitsPerPixel bitsP
 
 void BitmapSurface::AddTile(const char* pInData, int inDataSize, int inX, int inY, int width, int height, EFlipFlag flipFlag)
 {
+	++mNumTiles;
+
 	const int startX = mBitsPerPixel == kBPP_4 ? inX/2 : inX;
 	const int tileStride = mBitsPerPixel == kBPP_4 ? width/2 : width;
 	const int offset = (inY*mBytesPerRow + startX);
@@ -1430,6 +1434,8 @@ void BitmapSurface::AddTile(const char* pInData, int inDataSize, int inX, int in
 void BitmapSurface::AddPartialTile(const char* pInData, int inDataSize, int inX, int inY, 
 								   int numBytesInWidthToCopy, int inWidth, int inHeight)
 {
+	++mNumTiles;
+
 	if( mBitsPerPixel != kBPP_8 )
 	{
 		printf("BitmapSurface::AddPartialTile: Only 8bit surfaces supported\n");
@@ -1449,7 +1455,7 @@ void BitmapSurface::AddPartialTile(const char* pInData, int inDataSize, int inX,
 	}
 }
 
-bool BitmapSurface::WriteToFile(const std::string& fileName, bool bForceBitmap)
+bool BitmapSurface::WriteToFile(const std::string& fileName, bool bForceBitmap) const
 {
 	BitmapWriter bitmap;
 
@@ -1789,6 +1795,13 @@ bool TileExtractor::ExtractTiles(unsigned int inTileWidth, int inTileHeight, uns
 	return true;
 }
 
+void TileExtractor::AddTile(const Tile& InTile)
+{
+	mDataSize += InTile.mTileSize;
+	
+	mTiles.push_back(std::move(InTile));
+}
+
 void TileExtractor::OutputTiles(FileReadWriter& outFile, int inStartingTile, int inOffset) const
 {
 	fseek(outFile.GetFileHandle(), inOffset, SEEK_SET);
@@ -1808,6 +1821,13 @@ void TileExtractor::OutputTiles(FileReadWriter& outFile, int inStartingTile, int
 		const Tile& tile = mTiles[i];
 		outFile.WriteData(tile.mpTile, tile.mTileSize);
 	}
+}
+
+uint32 TileExtractor::GetTileCRC(int inTileIndex) const
+{
+	assert(inTileIndex >= 0 && inTileIndex < (int)mTiles.size());
+
+	return mTiles[inTileIndex].GetFontTileCRC();
 }
 
 void TileExtractor::OutputTiles(FileWriter& outFile, int inStartingTile) const
@@ -1927,6 +1947,90 @@ const char* BmpToSaturnConverter::GetImageData() const
 unsigned int BmpToSaturnConverter::GetImageDataSize() const
 {
 	return mTileExtractor.mTiles[0].mTileSize;
+}
+
+
+////////////////////////////////////
+//        TileSetOptimizer        //
+////////////////////////////////////
+void TileSetOptimizer::OptimizeTileSet(const BmpToSaturnConverter& InSourceImage)
+{
+	std::unordered_map<uint32, std::vector<int>> crcToTileIndex;
+	std::unordered_map<int, uint32> tileIndexToCrc;
+
+	//Create mappings of tiles to their crcs
+	int numUniqueTiles = 0;
+	const int numTiles = InSourceImage.mTileExtractor.GetNumTiles();
+	for (int tileIndex = 0; tileIndex < numTiles; ++tileIndex)
+	{
+		const uint32 tileCrc = InSourceImage.mTileExtractor.GetTileCRC(tileIndex);
+		tileIndexToCrc[tileIndex] = tileCrc;
+
+		//If a tile of this crc doesn't exist, then it's a unique tile
+		if (crcToTileIndex[tileCrc].size() == 0)
+		{
+			++numUniqueTiles;
+		}
+
+		crcToTileIndex[tileCrc].push_back(tileIndex);
+	}
+
+	//Create optimized tile set
+	int optimizedTileIndex = 0;
+	std::unordered_set<int> processedCrcs;
+	std::unordered_map<uint32, int> crcToOptimizedIndex;
+	for (int tileIndex = 0; tileIndex < numTiles; ++tileIndex)
+	{
+		const uint32 tileCrc = tileIndexToCrc[tileIndex];
+		assert(crcToTileIndex.find(tileCrc) != crcToTileIndex.end());
+
+		//If a tile of this crc hasn't been processed, add it to the optimized tile set
+		if (processedCrcs.find(tileCrc) == processedCrcs.end())
+		{
+			processedCrcs.insert(tileCrc);
+
+			mOptimizedTileSet.AddTile(InSourceImage.mTileExtractor.mTiles[tileIndex]);
+
+			const int optimizedTileIndex = mOptimizedTileSet.GetNumTiles() - 1;
+			mTiledIndicesForOriginalImage.push_back(optimizedTileIndex);
+			crcToOptimizedIndex[tileCrc] = optimizedTileIndex;
+		}
+		else
+		{
+			assert(crcToOptimizedIndex.find(tileCrc) != crcToOptimizedIndex.end());
+
+			const int duplicateTileIndex = crcToOptimizedIndex[tileCrc];
+			mTiledIndicesForOriginalImage.push_back(duplicateTileIndex);
+		}
+	}
+}
+
+void TileSetOptimizer::OutputImage(const std::string& InOutputPath, bool bInForceBmp) const
+{
+	FileWriter outFile;
+	if(!outFile.OpenFileForWrite(InOutputPath))
+	{
+		return;
+	}
+
+	mOptimizedTileSet.OutputTiles(outFile, 0);
+}
+
+void TileSetOptimizer::PackTiles()
+{
+	if (mOptimizedTileSet.mTiles.size())
+	{
+		mPackedTileSize = (unsigned int)mOptimizedTileSet.mTiles.size() * mOptimizedTileSet.mTiles[0].mTileSize;
+		mpPackedTiles = new char[mPackedTileSize];
+
+		int packedTileOffset = 0;
+		for (const TileExtractor::Tile& tile : mOptimizedTileSet.mTiles)
+		{
+			memcpy_s(mpPackedTiles + packedTileOffset, mPackedTileSize - packedTileOffset, tile.mpTile, tile.mTileSize);
+
+			packedTileOffset += tile.mTileSize;
+		}
+	}
 }
 
 ///////////////////////////

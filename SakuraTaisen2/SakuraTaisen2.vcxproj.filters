@@ -131,7 +131,7 @@
     <ClInclude Include="Source\CreateInfoNameImages.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Source\MiscImages.h">
+    <ClInclude Include="Source\VDP2Images.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

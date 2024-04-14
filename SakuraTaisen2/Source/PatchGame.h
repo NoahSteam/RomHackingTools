@@ -32,6 +32,7 @@ static bool BringOverOriginalFiles(const string& inRootSakuraDirectory, const st
 	GetAllFilesOfType(allFiles, "TUTORI0.BIN", originalFiles);
 	GetAllFilesOfType(allFiles, "0.SLG", originalFiles);
 	GetAllFilesOfType(allFiles, "EV0", originalFiles);
+	GetAllFilesOfType(allFiles, "N_LOAD.ALL", originalFiles);
 
 	//Battle files
 	GetAllFilesOfType(allFiles, "COL.BIN", originalFiles);
@@ -299,6 +300,12 @@ bool PatchGame(const string& inSourceGameDirectory, const string& inTranslatedDi
 		return false;
 	}
 	
+	if(!PatchLoadScreens(inPatchedDirectory, inTranslatedDirectory))
+	{
+		printf("Unable to patch LoadScreens\n");
+		return false;
+	}
+
 	if (!PatchBGDatFiles(inPatchedDirectory, inTranslatedDirectory))
 	{
 		printf("Unable to patch BGDat files\n");

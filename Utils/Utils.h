@@ -377,6 +377,7 @@ private:
 	char*         mpBuffer      = nullptr;
 	const char*   mpPalette     = nullptr;
 	int           mPaletteSize  = 0;
+	int           mNumTiles     = 0;
 	bool          mbOwnsPalette = false;
 
 public:
@@ -385,7 +386,7 @@ public:
 	bool CreateSurface(int width, int height, EBitsPerPixel bitsPerPixel, const char* pPalette, int paletteSize, bool bDuplicatePalette = false);
 	void AddTile(const char* pData, int dataSize, int x, int y, int width, int height, EFlipFlag flipFlag = kFlipNone);
 	void AddPartialTile(const char* pData, int dataSize, int x, int y, int numBytesInWidthToCopy, int width, int height);
-	bool WriteToFile(const std::string& fileName, bool bForceBitmap = false);
+	bool WriteToFile(const std::string& fileName, bool bForceBitmap = false) const;
 	
 	const char* GetPaletteData() const {return mpPalette;}
 	char* GetColorData() const {return mpBuffer;}
@@ -393,6 +394,7 @@ public:
 	EBitsPerPixel GetBitsPerPixel() const {return mBitsPerPixel;}
 	int GetWidth() const {return mWidth;}
 	int GetHeight() const {return mHeight;}
+	int GetNumTiles() const {return mNumTiles;}
 };
 
 class BitmapFormatConverter
@@ -444,10 +446,54 @@ public:
 		unsigned int mWidthOfContent = 0;
 		unsigned int mBytesInWidthOfContent = 0;
 
+		Tile()
+		{
+
+		}
+
+		Tile(const Tile& other) : mTileSize(other.mTileSize), mX(other.mX), mY(other.mY), mTileWidth(other.mTileWidth),
+			mTileHeight(other.mTileHeight), mWidthOfContent(other.mWidthOfContent), mBytesInWidthOfContent(other.mBytesInWidthOfContent)
+		{
+			mTileSize = other.mTileSize;
+			mpTile = new char[mTileSize];
+			
+			memcpy_s(mpTile, mTileSize, other.mpTile, mTileSize);
+		}
+
+		Tile(Tile&& other) : mpTile(other.mpTile), mTileSize(other.mTileSize), mX(other.mX), mY(other.mY), mTileWidth(other.mTileWidth),
+							 mTileHeight(other.mTileHeight), mWidthOfContent(other.mWidthOfContent), mBytesInWidthOfContent(other.mBytesInWidthOfContent)
+		{
+			other.mpTile = nullptr;
+		}
+
+		Tile& operator=(Tile&& other)
+		{
+			if (this != &other)
+			{
+				delete[] mpTile;
+				mpTile = other.mpTile;
+				other.mpTile = nullptr;
+
+				mTileSize              = other.mTileSize;
+				mX                     = other.mX;
+				mY                     = other.mY;
+				mTileWidth             = other.mTileWidth;
+				mTileHeight            = other.mTileHeight;
+				mWidthOfContent        = other.mWidthOfContent;
+				mBytesInWidthOfContent = other.mBytesInWidthOfContent;
+			}
+
+		}
+
 		~Tile()
 		{
 			delete[] mpTile;
 			mpTile = nullptr;
+		}
+
+		uint32 GetFontTileCRC() const
+		{
+			return CalculateDataCRC(mpTile, mTileSize);
 		}
 	};
 
@@ -461,11 +507,14 @@ private:
 	
 public:
 	bool ExtractTiles(unsigned int inTileDimX, int inTileDimY, unsigned int outTileDimX, unsigned int outTileDimY, const BitmapReader& inBitmap, int inAlphaIndex = 0);
+	void AddTile(const Tile& InTile);
 	void FixupIndexOfAlphaColor(const unsigned short inIndexOfAlphaColor, bool bInIs4bit);
 	int GetDataSize() const {return mDataSize;}
 	void OutputTiles(FileWriter& outFile, int inStartingTile) const;
 	void OutputTiles(FileReadWriter& outFile, int inStartingTile, int inOffset) const;
 	unsigned int GetSizeOfSingleTile() const {return mTileByteSize;}
+	uint32 GetTileCRC(int inTileIndex) const;
+	int GetNumTiles() const {return (int)mTiles.size();}
 };
 
 struct BmpToSaturnConverter
@@ -474,7 +523,7 @@ struct BmpToSaturnConverter
 	PaletteData   mPalette;
 	char*         mpPackedTiles = nullptr;
 	unsigned int  mPackedTileSize = 0;
-
+	
 	static const unsigned short CYAN = 0xe07f; //In little endian order
 	static const unsigned short WHITE = 0xff7f;
 	static const unsigned short BLACK = 0;
@@ -487,6 +536,27 @@ struct BmpToSaturnConverter
 	int GetImageHeight() const {return (int)mTileExtractor.mImageHeight < 0 ? -1 * mTileExtractor.mImageHeight : mTileExtractor.mImageHeight;}
 	const char* GetImageData() const;
 	unsigned int GetImageDataSize() const;
+};
+
+/////////////////////////////////
+//        TileOptimizer        //
+/////////////////////////////////
+class TileSetOptimizer
+{
+public:
+	void OptimizeTileSet(const BmpToSaturnConverter& InSourceImage);
+	int GetNumOptimizedTiles() const { return mOptimizedTileSet.GetNumTiles(); }
+	void OutputImage(const std::string& InOutputDir, bool bInForceBmp) const;
+	void PackTiles();
+	const char* GetPackedTiles() const {return mpPackedTiles;}
+	uint32 GetPackedTileSize() const {return mPackedTileSize;}
+	const std::vector<int>& GetTileIndices() const {return mTiledIndicesForOriginalImage;}
+
+private:
+	TileExtractor    mOptimizedTileSet;
+	std::vector<int> mTiledIndicesForOriginalImage;
+	char*            mpPackedTiles = nullptr;
+	uint32           mPackedTileSize = 0;
 };
 
 class TileMap
