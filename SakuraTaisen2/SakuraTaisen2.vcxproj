@@ -142,7 +142,7 @@
     <ClInclude Include="Source\CreateStorySpreadhseets.h" />
     <ClInclude Include="Source\CreateSysSpreadsheets.h" />
     <ClInclude Include="Source\CreateTranslatedFontSheet.h" />
-    <ClInclude Include="Source\Demo.h" />
+    <ClInclude Include="Source\LoadScreens.h" />
     <ClInclude Include="Source\ExportTranslationData.h" />
     <ClInclude Include="Source\ExportTranslationToFiles.h" />
     <ClInclude Include="Source\FaceWinAll.h" />

@@ -1,5 +1,8 @@
 2182f0 has uncompressed data
 
+LOADDK1.DAT
 Found at: 0
 Results:
 Found: 00000000 00000300 Size: 176 CompressedSize: 21001
+
+Palette in LOADDK1.DAT @ 0x8000

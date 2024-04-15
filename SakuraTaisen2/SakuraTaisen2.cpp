@@ -71,7 +71,7 @@ using std::unordered_set;
 #include "Source/IntroScreenExtractor.h"
 #include "Source/SakuraWars2Utils.h"
 #include "Source/BGDatFiles.h"
-#include "Source/Demo.h"
+#include "Source/LoadScreens.h"
 #include "Source/PatchGame.h"
 #include "Source/TextInImage.h"
 #include "Source/TextInImageUsingFontSheet.h"
@@ -584,7 +584,7 @@ int main(int argc, char *argv[])
 		const string inTranslatedDirectory = string(argv[3]) + Seperators;
 		const string inPatchedDirectory    = string(argv[4]) + Seperators;
 
-		PatchGame(inSourceGameDirectory, inTranslatedDirectory, inPatchedDirectory);
+		PatchGame(inSourceGameDirectory, inTranslatedDirectory, inPatchedDirectory, 1);
 	}
 	else if (command == string("ExtractText") && argc == 5)
 	{
@@ -783,6 +783,20 @@ int main(int argc, char *argv[])
 		const string inOutputDir = string(argv[3]) + Seperators;
 
 		ExtractDemoWPALL(inSrcDir, inOutputDir);
+	}
+	else if (command == "ExtractLoadScreens" && argc == 4)
+	{
+		const string inSrcDir = string(argv[2]) + Seperators;
+		const string inOutputDir = string(argv[3]) + Seperators;
+
+		ExtractLoadScreens(inSrcDir, inOutputDir);
+	}
+	else if(command == "ExtractBattleLoadScreens" && argc == 4)
+	{
+		const string inSrcDir = string(argv[2]) + Seperators;
+		const string inOutputDir = string(argv[3]) + Seperators;
+
+		ExtractBattleLoadScreens(inSrcDir, inOutputDir);
 	}
 	else if(command == "WriteTextIntoImage" && argc == 6)
 	{

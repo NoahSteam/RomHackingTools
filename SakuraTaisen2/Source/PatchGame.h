@@ -33,6 +33,7 @@ static bool BringOverOriginalFiles(const string& inRootSakuraDirectory, const st
 	GetAllFilesOfType(allFiles, "0.SLG", originalFiles);
 	GetAllFilesOfType(allFiles, "EV0", originalFiles);
 	GetAllFilesOfType(allFiles, "N_LOAD.ALL", originalFiles);
+	GetAllFilesOfType(allFiles, "LOAD", originalFiles);
 
 	//Battle files
 	GetAllFilesOfType(allFiles, "COL.BIN", originalFiles);
@@ -292,7 +293,7 @@ bool PatchTextDrawingCode(const string& inSourceGameDirectory, const string& inP
 
 
 
-bool PatchGame(const string& inSourceGameDirectory, const string& inTranslatedDirectory, const string& inPatchedDirectory)
+bool PatchGame(const string& inSourceGameDirectory, const string& inTranslatedDirectory, const string& inPatchedDirectory, int inDiscNumber)
 {
 	if( !BringOverOriginalFiles(inSourceGameDirectory, inPatchedDirectory) )
 	{
@@ -303,6 +304,12 @@ bool PatchGame(const string& inSourceGameDirectory, const string& inTranslatedDi
 	if(!PatchLoadScreens(inPatchedDirectory, inTranslatedDirectory))
 	{
 		printf("Unable to patch LoadScreens\n");
+		return false;
+	}
+
+	if(!PatchBattleLoadScreens(inPatchedDirectory, inTranslatedDirectory, inDiscNumber))
+	{
+		printf("Unable to patch BattleLoadScreens\n");
 		return false;
 	}
 

@@ -104,7 +104,7 @@
     <ClInclude Include="Source\SplashScreen.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Source\Demo.h">
+    <ClInclude Include="Source\LoadScreens.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Source\TextInImage.h">
