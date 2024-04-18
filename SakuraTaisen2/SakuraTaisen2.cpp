@@ -72,6 +72,9 @@ using std::unordered_set;
 #include "Source/SakuraWars2Utils.h"
 #include "Source/BGDatFiles.h"
 #include "Source/LoadScreens.h"
+#include "Source/NBGFile.h"
+#include "Source/NCDatFile.h"
+#include "Source/EyeCatch.h"
 #include "Source/PatchGame.h"
 #include "Source/TextInImage.h"
 #include "Source/TextInImageUsingFontSheet.h"
@@ -854,6 +857,30 @@ int main(int argc, char *argv[])
 		const string inOutputDirectory = string(argv[3]) + Seperators;
 
 		ExtractVDP2Files(inDirectory, inOutputDirectory);
+	}
+	else if(command == "ExtractNBGFile" && argc == 5)
+	{
+		const string inFilePath = string(argv[2]);
+		const string inOutputDirectory = string(argv[3]) + Seperators;
+		const bool   bmpFormat = atoi(argv[4]);
+
+		ExtractNBGFile(inFilePath, inOutputDirectory, bmpFormat);
+	}
+	else if (command == "ExtractNCDatFile" && argc == 5)
+	{
+		const string inFilePath = string(argv[2]);
+		const string inOutputDirectory = string(argv[3]) + Seperators;
+		const bool   bmpFormat = atoi(argv[4]);
+
+		ExtractNCDatFile(inFilePath, inOutputDirectory, bmpFormat);
+	}
+	else if (command == "ExtractEyeCatch" && argc == 5)
+	{
+		const string inDirectory = string(argv[2]) + Seperators;
+		const string inOutputDirectory = string(argv[3]) + Seperators;
+		const bool   bmpFormat = atoi(argv[4]);
+
+		ExtractEyeCatch(inDirectory, inOutputDirectory, bmpFormat);
 	}
 	else
 	{

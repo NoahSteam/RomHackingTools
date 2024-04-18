@@ -37,8 +37,12 @@ ExtractVDP2Files a:\sakurawars2\Disc1_Original\SAKURA2 a:\SakuraWars2\ExtractedD
 ExtractDemoWPALL a:\sakurawars2\Disc1_Original\SAKURA1 a:\SakuraWars2\ExtractedData\DemoDisc\WPALL\
 ExtractLoadScreens a:\sakurawars2\Disc1_Original\SAKURA1 a:\SakuraWars2\ExtractedData\Disc1\N_Load
 ExtractBattleLoadScreens a:\sakurawars2\Disc1_Original a:\SakuraWars2\ExtractedData\Disc1\BattleLoadScreens
+ExtractNBGFile a:\sakurawars2\Disc1_Original\SAKURA1\NBGFile1.ALL a:\SakuraWars2\ExtractedData\Disc1\NBGFile 1
+ExtractNCDatFile a:\sakurawars2\Disc1_Original\SAKURA1\NCDAT.ALL a:\SakuraWars2\ExtractedData\Disc1\NCDat 1
+ExtractEyeCatch a:\sakurawars2\Disc1_Original\SAKURA1 a:\SakuraWars2\ExtractedData\Disc1\EyeCatch 1
 PatchGame A:\SakuraWars2\Disc1_Original A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data A:\SakuraWars2\Patched\Disc1
 FindData.exe a:\SakuraWars2\Disc1_Original a:\SakuraWars2\find.bin
+SakuraTaisen.exe FindCompressedDataInDir a:\SakuraWars2\Disc1_Original\SAKURA1 a:\SakuraWars2\Find.bin a:\SakuraWars2\UncompressedResults\EyeCatch
 
 ExtractText C:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1\SAKURA1 C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data\StoryTextPalette.bin C:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\Disc1\Text
 FindDuplicateText C:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\AllText C:\Users\16306\Desktop\Rizwan\SakuraWars2\AllDuplicates.txt

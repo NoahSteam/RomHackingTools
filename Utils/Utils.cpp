@@ -850,6 +850,11 @@ bool FileReadWriter::OpenFile(const std::string& inFileName)
 		return false;
 	}
 
+	//Figure out the file size by seeking to the end of the file and requesting the position of the file
+	fseek(mpFileHandle, 0, SEEK_END);
+	mFileSize = ftell(mpFileHandle);
+	fseek(mpFileHandle, 0, SEEK_SET); //reset to the start of the file
+
 	return true;
 }
 
@@ -1870,7 +1875,14 @@ bool BmpToSaturnConverter::ConvertBmpToSakuraFormat(const string& inBmpPath, boo
 	}
 
 	const unsigned int imageWidth = pTileWidth ? *pTileWidth : origBmp.mBitmapData.mInfoHeader.mImageWidth;
-	const int imageHeight = pTileHeight ? *pTileHeight : origBmp.mBitmapData.mInfoHeader.mImageHeight;
+	int imageHeight = pTileHeight ? *pTileHeight : origBmp.mBitmapData.mInfoHeader.mImageHeight;
+
+	//Store tiles upside down if image is flipped
+	if (pTileHeight && origBmp.mBitmapData.mInfoHeader.mImageHeight < 0 && imageHeight > 0)
+	{
+		imageHeight *= -1;
+	}
+
 
 	if (!mTileExtractor.ExtractTiles(imageWidth, imageHeight, imageWidth, abs(imageHeight), origBmp))
 	{

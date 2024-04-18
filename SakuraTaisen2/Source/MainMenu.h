@@ -69,21 +69,24 @@ MainMenuImageInfo PBEyeImages[NumPBEyeImages]
 	0, 48,  16, (uint16)(0xc940),
 };
 
-const int NumPBookRCImages = 12;
+const int NumPBookRCImages = 15;
 MainMenuImageInfo PBookRCImages[NumPBookRCImages]
 {
-	0, 32, 112, (uint16)0x1880,
-	0, 32, 112, (uint16)0x1880,
-	0, 32, 112, (uint16)0x1880,
-	0, 32, 112, (uint16)0x1880,
-	0, 32, 112, (uint16)0x1880,
-	0, 32, 112, (uint16)0x1880,
-	0, 32, 112, (uint16)0x1880,
-	0, 32, 112, (uint16)0x1880,
-	0, 32, 112, (uint16)0x1880,
-	0, 32, 112, (uint16)0x1880,
-	0, 16, 112, (uint16)0x1880,
-	0, 40, 120, (uint16)0x1880,
+	0, 112, 112,0,
+	0, 32, 112, 0,
+	0, 32, 112, 0,
+	0, 32, 112, 0,
+	0, 32, 112, 0,
+	0, 32, 112, 0,
+	0, 32, 112, 0,
+	0, 32, 112, 0,
+	0, 32, 112, 0,
+	0, 32, 112, 0,
+	0, 32, 112, 0,
+	0, 16, 112, 0,
+	0, 40, 40,  0,
+	0, 40, 40,  0,
+	0, 40, 40,  0,
 };
 
 const int NumTetyoADImages = 21;

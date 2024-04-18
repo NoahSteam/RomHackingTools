@@ -1,0 +1,14 @@
+NCDAT.ALL
+
+uint32 id1 //should be 0x100
+uint32 id2 //should be 0x200
+uint32 0x08 numImages
+uint32 0x30 offsetToPalette
+uint32 offsetToImageTable
+uint32 offsetToUnknownTable
+uint32 offsetToUnknownTable2
+uint32 offsetToUnknownTable3
+uint32 offsetToUnknownTable4
+uint32 offsetToImage
+
+search for 00000100 00000200 to start new header

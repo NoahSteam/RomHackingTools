@@ -201,6 +201,7 @@ class FileReadWriter
 {
 	FILE*       mpFileHandle = nullptr;
 	std::string mFileName;
+	unsigned long mFileSize{0};
 
 public:
 	~FileReadWriter();
@@ -212,6 +213,7 @@ public:
 	bool  WriteData(unsigned long fileOffset, const char* pData, unsigned long dataSize, bool bSwapEndianness);
 	bool  ReadData(unsigned long inFileOffset, char* pData, unsigned long dataSize, bool bSwapEndianness = false);
 	FILE* GetFileHandle() {return mpFileHandle;}
+	unsigned long GetFileSize() const {return mFileSize;}
 };
 
 class PaletteData

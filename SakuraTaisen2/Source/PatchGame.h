@@ -34,6 +34,8 @@ static bool BringOverOriginalFiles(const string& inRootSakuraDirectory, const st
 	GetAllFilesOfType(allFiles, "EV0", originalFiles);
 	GetAllFilesOfType(allFiles, "N_LOAD.ALL", originalFiles);
 	GetAllFilesOfType(allFiles, "LOAD", originalFiles);
+	GetAllFilesOfType(allFiles, "NBGFILE", originalFiles);
+	GetAllFilesOfType(allFiles, "EYECATCH.ALL", originalFiles);
 
 	//Battle files
 	GetAllFilesOfType(allFiles, "COL.BIN", originalFiles);
@@ -301,6 +303,18 @@ bool PatchGame(const string& inSourceGameDirectory, const string& inTranslatedDi
 		return false;
 	}
 	
+	if(!PatchEyeCatch(inPatchedDirectory, inTranslatedDirectory))
+	{
+		printf("Unable to patch EyeCatch\n");
+		return false;
+	}
+
+	if(!PatchNBGFile(inPatchedDirectory, inTranslatedDirectory, inDiscNumber))
+	{
+		printf("Unable to patch NBGFile\n");
+		return false;
+	}
+
 	if(!PatchLoadScreens(inPatchedDirectory, inTranslatedDirectory))
 	{
 		printf("Unable to patch LoadScreens\n");

@@ -142,6 +142,7 @@
     <ClInclude Include="Source\CreateStorySpreadhseets.h" />
     <ClInclude Include="Source\CreateSysSpreadsheets.h" />
     <ClInclude Include="Source\CreateTranslatedFontSheet.h" />
+    <ClInclude Include="Source\EyeCatch.h" />
     <ClInclude Include="Source\LoadScreens.h" />
     <ClInclude Include="Source\ExportTranslationData.h" />
     <ClInclude Include="Source\ExportTranslationToFiles.h" />
@@ -153,6 +154,8 @@
     <ClInclude Include="Source\IntroScreenExtractor.h" />
     <ClInclude Include="Source\MainMenu.h" />
     <ClInclude Include="Source\MiniGameExtraction.h" />
+    <ClInclude Include="Source\NBGFile.h" />
+    <ClInclude Include="Source\NCDatFile.h" />
     <ClInclude Include="Source\VDP2Images.h" />
     <ClInclude Include="Source\MNameCG.h" />
     <ClInclude Include="Source\PatchBattleTextDrawCode.h" />

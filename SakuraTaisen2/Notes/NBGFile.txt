@@ -1,0 +1,6 @@
+50byte header
+
+short 0x0a image width 
+short 0x0e image height
+int   0x10 palette offset
+short 0x16 palette size
