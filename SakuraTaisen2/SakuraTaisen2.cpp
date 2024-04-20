@@ -75,6 +75,7 @@ using std::unordered_set;
 #include "Source/NBGFile.h"
 #include "Source/NCDatFile.h"
 #include "Source/EyeCatch.h"
+#include "Source/StatusScreen.h"
 #include "Source/PatchGame.h"
 #include "Source/TextInImage.h"
 #include "Source/TextInImageUsingFontSheet.h"
@@ -881,6 +882,23 @@ int main(int argc, char *argv[])
 		const bool   bmpFormat = atoi(argv[4]);
 
 		ExtractEyeCatch(inDirectory, inOutputDirectory, bmpFormat);
+	}
+	else if (command == "ExtractStatusScreen" && argc == 5)
+	{
+		const string inDirectory = string(argv[2]) + Seperators;
+		const string inOutputDirectory = string(argv[3]) + Seperators;
+		const bool   bmpFormat = atoi(argv[4]);
+
+		ExtractStatusScreen(inDirectory, inOutputDirectory, bmpFormat);
+	}
+	else if(command == "SetColorInPalette" && argc == 6)
+	{
+		const string inDirectory = string(argv[2]) + Seperators;
+		const string inOutputDirectory = string(argv[3]) + Seperators;
+		const int    inPaletteIndex = atoi(argv[4]);
+		const uint32 inPaletteColor = ConvertFromHexString<uint16>(argv[5]);
+
+		SetColorInPalette(inDirectory, inOutputDirectory, inPaletteIndex, inPaletteColor);
 	}
 	else
 	{

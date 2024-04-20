@@ -987,7 +987,7 @@ bool PaletteData::CreateFrom15BitData(const char* pInPaletteData, int inPaletteS
 	for(int i = 0, origIdx = 0; i < mNumBytesInPalette; i += 4, origIdx += 2)
 	{
 		unsigned short color = ((pInPaletteData[origIdx] << 8) + (unsigned char)pInPaletteData[origIdx+1]);
-		
+
 		//Ugly conversion of 5bit values to 8bit.  Probably a better way to do this.
 		//Masking the r,g,b components and then bringing the result into a [0,255] range.
 		mpPaletteData[i+2] = (char)floorf( ( ((color & 0x001f)/full5BitValue) * 255.f) + 0.5f);
@@ -1315,6 +1315,13 @@ bool BitmapReader::Save()
 	outFile.WriteData(mBitmapData.mColorData.mpRGBA, mBitmapData.mColorData.mSizeInBytes);
 
 	return true;
+}
+
+void BitmapReader::SetPaletteValueAtIndex(int inIndex, uint32 inColor)
+{
+	const int paletteIndex = inIndex*4;
+	assert(paletteIndex < mBitmapData.mPaletteData.mSizeInBytes);
+	memcpy(&mBitmapData.mPaletteData.mpRGBA[paletteIndex], &inColor, sizeof(inColor));
 }
 
 /////////////////////////////////

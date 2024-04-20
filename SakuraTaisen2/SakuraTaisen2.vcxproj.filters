@@ -143,5 +143,8 @@
     <ClInclude Include="Source\EyeCatch.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Source\StatusScreen.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

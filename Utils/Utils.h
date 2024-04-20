@@ -1,5 +1,7 @@
 #pragma once
 
+#include <sstream>
+
 typedef unsigned int   uint32;
 typedef unsigned short uint16;
 typedef unsigned char  uint8;
@@ -353,6 +355,7 @@ public:
 	int GetWidth() const {return mBitmapData.mInfoHeader.mImageWidth;}
 	int GetHeight() const {return mBitmapData.mInfoHeader.mImageHeight;}
 	int GetBitCount() const {return mBitmapData.mInfoHeader.mBitCount;}
+	void SetPaletteValueAtIndex(int inIndex, uint32 inColor);
 };
 
 class BitmapSurface
@@ -715,3 +718,23 @@ bool CopyFiles(const std::string& InSourceDirectory, const std::string& InOutput
 //unsigned long prs_compress(void* source, void* dest, unsigned long size);
 int prs_decompress_buf(const uint8_t *src, uint8_t **dst, size_t src_len, size_t &outCompressedSize);
 int prs_compress(const uint8_t *src, uint8_t **dst, size_t src_len);
+
+template<typename T>
+T ConvertFromHexString(const std::string& hexString) 
+{
+	T result;
+
+	// Remove "0x" prefix if present
+	std::string str = hexString;
+	if (str.substr(0, 2) == "0x") 
+	{
+		str = str.substr(2);
+	}
+
+	// Use stringstream to convert hex string to the desired type
+	std::stringstream ss;
+	ss << std::hex << str;
+	ss >> result;
+
+	return result;
+}

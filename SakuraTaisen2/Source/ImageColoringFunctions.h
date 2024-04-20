@@ -119,3 +119,31 @@ void ReplaceColors(const string& inDirectory, const char inNewColor, unordered_s
 
 	printf("Successfully Replaced Colors\n");
 }
+
+void SetColorInPalette(const string& inDirectory, const string& inOutDirectory, int inPaletteIndex, const uint16 inNewColor)
+{
+	CreateDirectoryHelper(inOutDirectory);
+
+	vector<FileNameContainer> allFiles;
+	FindAllFilesWithinDirectory(inDirectory, allFiles);
+
+	vector<FileNameContainer> bmpFiles;
+	GetAllFilesOfType(allFiles, ".bmp", bmpFiles);
+
+	for (const FileNameContainer& fileName : bmpFiles)
+	{
+		BitmapReader bmpData;
+		if (!bmpData.ReadBitmap(fileName.mFullPath))
+		{
+			printf("Failed to read %s\n", fileName.mFullPath.c_str());
+			return;
+		}
+
+		bmpData.SetPaletteValueAtIndex(inPaletteIndex, inNewColor);
+
+		int imageHeight = bmpData.mBitmapData.mInfoHeader.mImageHeight * -1;
+		BitmapWriter outBitmap;
+		outBitmap.CreateBitmap(inOutDirectory + fileName.mFileName, bmpData.mBitmapData.mInfoHeader.mImageWidth, imageHeight, 4, bmpData.GetColorData(), bmpData.GetColorDataSize(),
+			bmpData.mBitmapData.mPaletteData.mpRGBA, bmpData.mBitmapData.mPaletteData.mSizeInBytes, true);
+	}	
+}

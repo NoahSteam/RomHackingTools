@@ -1,0 +1,59 @@
+StatuScreen images
+
+Palette at 0x200 SINRAICL.BIN  (also, 0xa00, 0x1200)
+
+---Image Data---
+SINRAISP.BIN
+a:\SakuraWars2\UncompressedResults\StatusScreen
+Found at: 0
+Results:
+Found: 00000000 00005600 Size: 129 CompressedSize: 13431
+
+152x64
+24x48
+48x8
+48x8
+72x48
+24x48
+24x48
+24x48
+24x48
+24x48
+24x48
+24x48
+24x16
+16x16
+24x16
+16x16
+16x16
+32x16
+24x16
+24x16
+32x16
+32x16
+32x16
+32x16
+32x16
+32x16
+8x16
+8x16
+8x16
+8x16
+8x16
+4x16
+4x16
+4x16
+4x16
+4x16
+4x16
+4x16
+4x16
+4x16
+4x16
+72x48
+32x16
+32x16
+32x16
+32x16
+32x16
+32x16
