@@ -70,6 +70,8 @@ static bool BringOverOriginalFiles(const string& inRootSakuraDirectory, const st
 
 bool PatchTextDrawingCode(const string& inSourceGameDirectory, const string& inPatchedDirectory)
 {
+	printf("Patching Text Drawing Code\n");
+
 	uint32 writeAddress = 0;
 	uint32 newLong = 0;
 	uint16 newCommand = 0;
@@ -303,6 +305,12 @@ bool PatchGame(const string& inSourceGameDirectory, const string& inTranslatedDi
 		return false;
 	}
 	
+	if(!PatchStatusScreen(inPatchedDirectory, inTranslatedDirectory))
+	{
+		printf("Unable to patch StatuScreen\n");
+		return false;
+	}
+
 	if(!PatchEyeCatch(inPatchedDirectory, inTranslatedDirectory))
 	{
 		printf("Unable to patch EyeCatch\n");

@@ -79,6 +79,8 @@ void ExtractBattleMenu(const string& rootSakuraDirectory, bool bBmp, const strin
 
 bool PatchBattleMenu(const string& inPatchedSakuraDirectory, const string& inTranslatedDataDirectory)
 {
+	printf("Patching Battle Menu\n");
+
 	const string sakuraFilePath = inPatchedSakuraDirectory + string("SAKURA2\\ETCDATA.BIN");
 	FileNameContainer sakuraFileNameInfo(sakuraFilePath.c_str());
 	FileData sakuraFileData;

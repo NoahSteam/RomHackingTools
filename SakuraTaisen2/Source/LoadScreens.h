@@ -197,6 +197,8 @@ void ExtractLoadScreens(const std::string& inDemoDirectory, const std::string& i
 
 bool PatchLoadScreens(const std::string& inPatchedSakuraDirectory, const std::string& inTranslatedDataDirectory)
 {
+	printf("Patching Load Screens\n");
+
 	const std::string nLoadPath = inPatchedSakuraDirectory + "SAKURA1\\N_LOAD.ALL";
 	FileReadWriter nLoadData;
 	if (!nLoadData.OpenFile(nLoadPath))
@@ -280,6 +282,8 @@ void ExtractBattleLoadScreens(const std::string& inRootSakuraDirectory, const st
 
 bool PatchBattleLoadScreens(const std::string& inPatchedSakuraDirectory, const std::string& inTranslatedDataDirectory, int inDiscNumber)
 {
+	printf("Patching Battle Load Screens\n");
+
 	const std::string searchDir = inPatchedSakuraDirectory + "SAKURA2\\";
 	vector<FileNameContainer> allFiles;
 	FindAllFilesWithinDirectory(searchDir, allFiles);

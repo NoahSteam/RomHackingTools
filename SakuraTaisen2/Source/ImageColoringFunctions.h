@@ -120,7 +120,7 @@ void ReplaceColors(const string& inDirectory, const char inNewColor, unordered_s
 	printf("Successfully Replaced Colors\n");
 }
 
-void SetColorInPalette(const string& inDirectory, const string& inOutDirectory, int inPaletteIndex, const uint16 inNewColor)
+void SetColorInPalette(const string& inDirectory, const string& inOutDirectory, int inPaletteIndex, const uint32 inNewColor)
 {
 	CreateDirectoryHelper(inOutDirectory);
 

@@ -1264,6 +1264,8 @@ nop          //0009
 
 bool PatchBattleTextDrawingCode(const string& inOriginalDirectory, const string& inPatchedDirectory, const string& inDataDirectory)
 {
+	printf("Patching Battle Status Screen\n");
+
 	struct PatchingData
 	{
 		union Command

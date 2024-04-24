@@ -38,6 +38,8 @@ void ExtractBGDatFiles(const string& InRootSakuraDirectory, const string& InOutD
 
 bool PatchBGDatFiles(const string& InPatchedSakuraDirectory, const string& InTranslatedDataDirectory)
 {
+	printf("Patching BGDatFiles\n");
+
 	vector<FileNameContainer> bossImages;
 	FindAllFilesWithinDirectory(InTranslatedDataDirectory + "BossImages", bossImages);
 

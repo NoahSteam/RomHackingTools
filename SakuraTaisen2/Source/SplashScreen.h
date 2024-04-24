@@ -2,6 +2,8 @@
 
 bool PatchSplashScreen(const string& inPatchedSakuraDirectory, const string& inTranslatedDataDirectory)
 {
+	printf("Patching Splash Screens\n");
+
 	//Tiled version
 	if(0) //Leave disabled until we actually run into this screen
 	{

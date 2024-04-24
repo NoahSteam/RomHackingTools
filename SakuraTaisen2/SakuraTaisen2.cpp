@@ -656,6 +656,12 @@ int main(int argc, char *argv[])
 
 		CreateNamePBookBTSpreadsheet(imageDirectory);
 	}
+	else if (command == "CreateNamePBookECSpreadsheet" && argc == 3)
+	{
+		const string imageDirectory = string(argv[2]) + Seperators;
+
+		CreateNamePBookECSpreadsheet(imageDirectory);
+	}
 	else if (command == "CreateNameInfoNameSpreadsheet" && argc == 3)
 	{
 		const string imageDirectory = string(argv[2]) + Seperators;
@@ -690,7 +696,8 @@ int main(int argc, char *argv[])
 		const bool   bmpFormat = atoi(argv[3]);
 		const string outDirectory = string(argv[4]) + Seperators;
 
-		ExtractMainMenu(rootSakuraTaisenDirectory, bmpFormat, outDirectory);
+		ExtractPBookFL(rootSakuraTaisenDirectory, bmpFormat, outDirectory);
+		ExtractPBookEC(rootSakuraTaisenDirectory, bmpFormat, outDirectory);
 		ExtractBattlePauseMenu(rootSakuraTaisenDirectory, bmpFormat, outDirectory);
 		ExtractPBEye(rootSakuraTaisenDirectory, bmpFormat, outDirectory);
 	}
@@ -896,7 +903,7 @@ int main(int argc, char *argv[])
 		const string inDirectory = string(argv[2]) + Seperators;
 		const string inOutputDirectory = string(argv[3]) + Seperators;
 		const int    inPaletteIndex = atoi(argv[4]);
-		const uint32 inPaletteColor = ConvertFromHexString<uint16>(argv[5]);
+		const uint32 inPaletteColor = ConvertFromHexString<uint32>(argv[5]);
 
 		SetColorInPalette(inDirectory, inOutputDirectory, inPaletteIndex, inPaletteColor);
 	}

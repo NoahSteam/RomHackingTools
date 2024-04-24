@@ -10,6 +10,8 @@ Palette (512 byes)
 
 bool PatchTitleScreens(const string& InRootOutputDirectory, const string& InDataDirectory)
 {
+	printf("Patching Title Screens\n");
+
 	string wpallFileName = InRootOutputDirectory + "\\SAKURA1\\WPALL1.ALL";
 	FileReadWriter wpallFile;
 	if(!wpallFile.OpenFile(wpallFileName))

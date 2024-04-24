@@ -98,6 +98,8 @@ void ExtractInfoName(const string& rootSakuraDirectory, const string& paletteFil
 
 bool PatchInfoName(const string& inPatchedSakuraDirectory, const string& inTranslatedDataDirectory)
 {
+	printf("Patching InfoName\n");
+
 	const string sakuraFilePath = inPatchedSakuraDirectory + string("SAKURA2\\INFONAME.BIN");
 	FileReadWriter infoNameFile;
 	if (!infoNameFile.OpenFile(sakuraFilePath))

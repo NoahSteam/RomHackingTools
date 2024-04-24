@@ -99,3 +99,55 @@ void ExtractStatusScreen(const std::string& inSakuraDir, const std::string& inOu
 		currOffset += imgSize;
 	}
 }
+
+bool PatchStatusScreen(const string& inPatchedSakuraDirectory, const string& inTranslatedDataDirectory)
+{
+	printf("Patching Status Screen\n");
+
+	//Output file
+	const std::string statusFilePath = inPatchedSakuraDirectory + "SAKURA1\\SINRAISP.BIN";
+	FileReadWriter outFileWriter;
+	if (!outFileWriter.OpenFile(statusFilePath))
+	{
+		return false;
+	}
+	
+	MemoryBlocks patchedDataBlock;
+	const std::string translatedImageDir = inTranslatedDataDirectory + std::string("StatusScreen\\");
+	const int numImages = sizeof(StatusScreenImages) / sizeof(StatusScreenImages[0]);
+	for (int i = 0; i < numImages; ++i)
+	{
+		std::string translatedImage = translatedImageDir + std::to_string(i) + ".bmp";
+
+		//Convert image to sw2 format
+		BmpToSaturnConverter patchedImageData;
+		if (!patchedImageData.ConvertBmpToSakuraFormat(translatedImage, false, BmpToSaturnConverter::CYAN))
+		{
+			return false;
+		}
+		
+		if(patchedImageData.GetImageWidth() != StatusScreenImages[i].width || patchedImageData.GetImageHeight() != StatusScreenImages[i].height)
+		{
+			printf("%s has invalid dimensions.  Expected %ix%i, got %ix%i.\n", translatedImage.c_str(), StatusScreenImages[i].width, StatusScreenImages[i].height, patchedImageData.GetImageWidth(), patchedImageData.GetImageHeight());
+			return false;
+		}
+
+		patchedDataBlock.AddBlock(patchedImageData.GetImageData(), 0, patchedImageData.GetImageDataSize());
+	}
+
+	patchedDataBlock.CombineBlocks();
+
+	//Compress data
+	PRSCompressor compressor;
+	compressor.CompressData((void*)patchedDataBlock.GetCombinedData(), patchedDataBlock.GetTotalSize(), PRSCompressor::kCompressOption_None);
+
+	if (compressor.mCompressedSize >= 13431)
+	{
+		printf("%s is too large when compressed.  Should be less that %i, is %i.\n", statusFilePath.c_str(), 13431, compressor.mCompressedSize);
+		return false;
+	}
+
+	outFileWriter.WriteData(0, compressor.mpCompressedData, compressor.mCompressedSize, false);
+	
+	return true;
+}

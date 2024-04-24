@@ -83,6 +83,8 @@ void ExtractEyeCatch(const std::string& inSakuraDir, const std::string& inOutput
 
 bool PatchEyeCatch(const std::string& inPatchedSakuraDirectory, const std::string& inTranslatedDataDirectory)
 {
+	printf("Patching Eye Catch\n");
+
 	//T_MARK
 	{
 		const string sakuraFilePath = inPatchedSakuraDirectory + string("SAKURA1\\T_MARK.CG");
