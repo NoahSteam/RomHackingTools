@@ -143,6 +143,7 @@
     <ClInclude Include="Source\CreateSysSpreadsheets.h" />
     <ClInclude Include="Source\CreateTranslatedFontSheet.h" />
     <ClInclude Include="Source\EyeCatch.h" />
+    <ClInclude Include="Source\Kinematron.h" />
     <ClInclude Include="Source\LoadScreens.h" />
     <ClInclude Include="Source\ExportTranslationData.h" />
     <ClInclude Include="Source\ExportTranslationToFiles.h" />

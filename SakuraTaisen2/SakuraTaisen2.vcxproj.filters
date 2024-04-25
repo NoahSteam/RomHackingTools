@@ -146,5 +146,8 @@
     <ClInclude Include="Source\StatusScreen.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Source\Kinematron.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

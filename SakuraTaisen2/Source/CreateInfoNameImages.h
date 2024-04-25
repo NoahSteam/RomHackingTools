@@ -143,10 +143,10 @@ bool CreateTranslatedInfoNameImages(const string& InTranslationDirectory, const 
 		GetSideOffsetsForInfoNameImage(translatedImages[i], leftOffset, rightOffset);
 
 		//See if wide font sheet will fit
-		if(!WriteTextIntoImageUsingFontSheet(textFile.mLines[i].mFullLine, translatedImages[i], fontSheetWide, true, leftOffset, rightOffset))
+		if(!WriteTextIntoImageUsingFontSheet(textFile.mLines[i].mFullLine, translatedImages[i], fontSheetWide, true, leftOffset, rightOffset, 0))
 		{
 			//Otherwise try the narrow one
-			WriteTextIntoImageUsingFontSheet(textFile.mLines[i].mFullLine, translatedImages[i], fontSheetNarrow, false, leftOffset, rightOffset);
+			WriteTextIntoImageUsingFontSheet(textFile.mLines[i].mFullLine, translatedImages[i], fontSheetNarrow, false, leftOffset, rightOffset, 0);
 		}
 	}
 

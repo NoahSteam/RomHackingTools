@@ -207,6 +207,136 @@ bool PatchMNameCG(const std::string& inPatchedSakuraDirectory, const std::string
 	return true;
 }
 
+bool CreateTranslatedMNameImages(const string& InTranslationDirectory, const string& InFontSheetWidePath, const string& InFontSheetNarrowPath)
+{
+	const string originalImageDirectoryRoot = InTranslationDirectory + "MNameCG\\Original\\";
+	const string translatedImageDirectoryRoot = InTranslationDirectory + "MNameCG\\Translated\\";
+	const string canvasDirectory = InTranslationDirectory + "MNameCG\\Canvas\\";
+
+	CreateDirectoryHelper(translatedImageDirectoryRoot);
+
+	//Create a map of canvas map files to their widths
+	typedef std::map<int, FileNameContainer> CanvasSizeToPathName;
+	CanvasSizeToPathName canvasSizeToPathName;
+	std::vector<FileNameContainer> allCanvasImages;
+	FindAllFilesWithinDirectory(canvasDirectory, allCanvasImages);
+
+	//Find all canvas images and make a map of them
+	const std::string bmpExt(".bmp");
+	for (const FileNameContainer& canvasFile : allCanvasImages)
+	{
+		if (canvasFile.mExtention != bmpExt)
+		{
+			continue;
+		}
+
+		BitmapReader canvasImage;
+		if (canvasImage.ReadBitmap(canvasFile.mFullPath.c_str()))
+		{
+			canvasSizeToPathName[canvasImage.GetWidth()] = canvasFile;
+		}
+	}
+
+
+	//Create font sheets
+	Tiled8BitFontSheet fontSheetWide;
+	if (!fontSheetWide.CreateFontSheet(InFontSheetWidePath, translatedImageDirectoryRoot, ' '))
+	{
+		return false;
+	}
+
+	Tiled8BitFontSheet fontSheetNarrow;
+	if (!fontSheetNarrow.CreateFontSheet(InFontSheetNarrowPath, translatedImageDirectoryRoot, ' '))
+	{
+		return false;
+	}
+
+	fontSheetWide.SwapColors(1, 0);
+	fontSheetWide.SwapColors(7, 14);
+	fontSheetWide.SwapColors(8, 8);
+	fontSheetWide.SwapColors(12, 15);
+	fontSheetNarrow.SwapColors(1, 0);
+	fontSheetNarrow.SwapColors(7, 15);
+	fontSheetNarrow.SwapColors(8, 8);
+	fontSheetNarrow.SwapColors(12, 15);
+
+	for(int mnameFileIndex = 1; mnameFileIndex <= 3; ++mnameFileIndex)
+	{
+		const string originalImageDirectory = originalImageDirectoryRoot + std::to_string(mnameFileIndex) + Seperators;
+		const string translatedImageDirectory = translatedImageDirectoryRoot + std::to_string(mnameFileIndex) + Seperators;
+
+		//Create translation directory
+		CreateDirectoryHelper(translatedImageDirectory);
+
+		//Find all created translated images
+		vector<FileNameContainer> originalImages;
+		FindAllFilesWithinDirectory(originalImageDirectory, originalImages);
+
+		// Sort the file names alphabetically
+		std::sort(originalImages.begin(), originalImages.end(), [](const FileNameContainer& a, const FileNameContainer& b)
+			{
+				return std::atoi(a.mNoExtension.c_str()) < std::atoi(b.mNoExtension.c_str());
+			});
+
+		//Text data
+		const string translationFile = InTranslationDirectory + "Translation\\MNameCG" + std::to_string(mnameFileIndex) + ".txt";
+		FileNameContainer textFileName(translationFile);
+		TextFileData textFile(textFileName);
+		if (!textFile.InitializeTextFile(true, true))
+		{
+			return false;
+		}
+
+		if (textFile.mLines.size() != originalImages.size())
+		{
+			printf("Not enough translated lines of text in %s.\n", translationFile.c_str());
+			return false;
+		}
+
+		//Insert text into images
+		const int numImages = (int)originalImages.size();
+		int textIndex = 0;
+		int leftOffset = 0;//2;
+		int rightOffset = 0;//3;
+		int yOffset = 0;
+		for (int i = 0; i < numImages; ++i)
+		{
+			BitmapReader sourceImage;
+			if(!sourceImage.ReadBitmap(originalImages[i].mFullPath))
+			{
+				return false;
+			}
+
+			CanvasSizeToPathName::iterator canvasToUse = canvasSizeToPathName.find(sourceImage.GetWidth());
+			if (canvasToUse == canvasSizeToPathName.end())
+			{
+				printf("No canvas found for: %s. Has width of %i\n", originalImages[i].mFullPath.c_str(), sourceImage.GetWidth());
+				continue;
+			}
+
+			const string translatedImagePath = translatedImageDirectory + originalImages[i].mFileName;
+			if(!CopyFile(canvasToUse->second.mFullPath.c_str(), translatedImagePath.c_str(), false))
+			{
+				printf("Unable to copy %s to %s\n", canvasToUse->second.mFullPath.c_str(), translatedImagePath.c_str());
+				return false;
+			}
+
+			//See if wide font sheet will fit
+			if (!WriteTextIntoImageUsingFontSheet(textFile.mLines[textIndex].mFullLine, translatedImagePath, fontSheetWide, true, leftOffset, rightOffset, yOffset))
+			{
+				//Otherwise try the narrow one
+				WriteTextIntoImageUsingFontSheet(textFile.mLines[textIndex].mFullLine, translatedImagePath, fontSheetNarrow, false, leftOffset, rightOffset, yOffset);
+			}
+
+			++textIndex;
+		}
+	}
+
+	printf("Finished Successfully");
+
+	return true;
+}
+
 bool CreateNameCG1Spreadsheet(const string& imageDirectory)
 {
 	TextFileWriter htmlFile;

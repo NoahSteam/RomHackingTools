@@ -10,7 +10,8 @@ ExtractBattleMenu a:\SakuraWars2\Disc1_Original 1 a:\sakurawars2\ExtractedData\D
 ExtractMainMenu a:\SakuraWars2\Disc1_Original 1 a:\sakurawars2\ExtractedData\Disc1\MainMenu\
 CreateNamePBookFLSpreadsheet A:\SakuraWars2\ExtractedData\Disc1\MainMenu_PNG\PBOOK_FL
 CreateNamePBookBTSpreadsheet A:\SakuraWars2\ExtractedData\Disc1\MainMenu_PNG\PBOOK_BT
-CreateNamePBookBTSpreadsheet A:\SakuraWars2\ExtractedData\Disc1\MainMenu\PNG\PBOOK_EC
+CreateNamePBookECSpreadsheet A:\SakuraWars2\ExtractedData\Disc1\MainMenu\PNG\PBOOK_EC
+CreateNameKinematronSpreadsheet A:\SakuraWars2\ExtractedData\Disc1\Kinematron\PNG
 ExtractInfoName a:\SakuraWars2\Disc1_Original a:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\InfoName_Palette.bin 1 a:\sakurawars2\ExtractedData\Disc1\InfoName
 CreateNameInfoNameSpreadsheet A:\SakuraWars2\ExtractedData\Disc1\InfoNamePNG
 ExtractSysFiles a:\SakuraWars2\Disc1_Original a:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\StoryTextPalette.bin a:\sakurawars2\ExtractedData\Disc1\Sys
@@ -26,9 +27,11 @@ FixupWKLImageColors A:\NoahSteam\RomPatchingTools\SakuraTaisen\Data\WKL\WKL01 a:
 ExtractMNameCGFiles a:\SakuraWars2\Disc1_Original a:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\MNameCG1_Palette.bin A:\SakuraWars2\ExtractedData\Disc1\MNameCG\
 WriteTextIntoImage A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\Translation\MNameCG1.txt A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\MNameCG\ImageSizes.txt A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\MNameCG\Original\1\ A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\MNameCG\Translated\1\
 WriteTextIntoImage A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\Translation\InfoName.txt A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\InfoName\ImageSizes.txt A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\InfoName\Original\ A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\InfoName\Translated\
-WriteTextIntoImageUsingFontSheet A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\Translation\InfoName.txt A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\HudFontSheetWide.bmp A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\InfoName\Canvas A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\InfoName\Original A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\InfoName\Translated
+WriteTextIntoImageUsingFontSheet A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\Translation\InfoName.txt A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\HudFontSheetWide.bmp A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\InfoName\Canvas A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\InfoName\Original A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\InfoName\Translated
 WriteTextIntoImageUsingFontSheet A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\Translation\GoverKV.txt A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\HudFontSheetWide.bmp A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\InfoName\Canvas A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\GOVEREditOriginal\ A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\GOVEREdit\
 CreateTranslatedInfoNameImages A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\HudFontSheetWide.bmp A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\HudFontSheetNarrow.bmp
+CreateTranslatedStatusScreenImages A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\HudFontSheetWide.bmp A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\HudFontSheetNarrow.bmp
+CreateTranslatedMNameImages A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\HudFontSheetWide.bmp A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\HudFontSheetNarrow.bmp
 AddShadowsToWKLText A:\NoahSteam\Test
 SwapBattleFiles 26 A:\SakuraWars2\Patched\Disc1\Sakura2
 SwapColorsInImage A:\SakuraWars2\ColorSwap 3 2
@@ -42,6 +45,7 @@ ExtractNBGFile a:\sakurawars2\Disc1_Original\SAKURA1\NBGFile1.ALL a:\SakuraWars2
 ExtractNCDatFile a:\sakurawars2\Disc1_Original\SAKURA1\NCDAT.ALL a:\SakuraWars2\ExtractedData\Disc1\NCDat 1
 ExtractEyeCatch a:\sakurawars2\Disc1_Original\SAKURA1 a:\SakuraWars2\ExtractedData\Disc1\EyeCatch 1
 ExtractStatusScreen a:\sakurawars2\Disc1_Original\SAKURA1 a:\SakuraWars2\ExtractedData\Disc1\StatusScreen 1
+ExtractKinematronImages a:\sakurawars2\Disc1_Original\SAKURA1 a:\SakuraWars2\ExtractedData\Disc1\Kinematron 1
 SetColorInPalette A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\StatusScreen A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\StatusScreen\Modified 0 0xff00
 PatchGame A:\SakuraWars2\Disc1_Original A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data A:\SakuraWars2\Patched\Disc1
 FindData.exe a:\SakuraWars2\Disc1_Original a:\SakuraWars2\find.bin

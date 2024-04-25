@@ -8,3 +8,27 @@
 060c0490
 
 0608F815 has 0101, if this is 01, then data is decoded,  This is checked at 0603bb86
+
+
+-----
+In radioOut.bin starting at 0xa360:
+40x16
+40x16
+40x16
+40x16
+
+64x56 at 8bpp
+
+16x16
+16x16
+32x16
+72x16
+56x24
+48x16
+
+-----At 0x1120 image table-- 43 entries
+uint16 width
+uint16 height
+uint32 unknown1;
+uint32 offset;
+uint32 unknown2;

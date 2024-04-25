@@ -356,6 +356,8 @@ public:
 	int GetHeight() const {return mBitmapData.mInfoHeader.mImageHeight;}
 	int GetBitCount() const {return mBitmapData.mInfoHeader.mBitCount;}
 	void SetPaletteValueAtIndex(int inIndex, uint32 inColor);
+	void ReplaceColors(const char inNewColor, std::unordered_set<char>& inIgnoreColors);
+	void SwapColors(const char inSearchColor, const char inNewColor);
 };
 
 class BitmapSurface
@@ -520,6 +522,7 @@ public:
 	unsigned int GetSizeOfSingleTile() const {return mTileByteSize;}
 	uint32 GetTileCRC(int inTileIndex) const;
 	int GetNumTiles() const {return (int)mTiles.size();}
+	void SwapColorsOnTiles(const char inSearchColor, const char inReplaceColor);
 };
 
 struct BmpToSaturnConverter

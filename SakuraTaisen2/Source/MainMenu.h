@@ -123,75 +123,6 @@ MainMenuImageInfo CmdWinImages[NumCmdWinImages]
 	0, 48,  16, (uint16)(0xb00),
 };
 
-MainMenuImageInfo PBookECImages[]
-{
-	0, 24,  80,  0,
-	0, 24,  80,  0,
-	0, 24,  104, 0,
-	0, 8,   56,  0,
-	0, 16,  16,  0,
-	0, 16,  16,  0,
-	0, 16,  16,  0,
-	0, 16,  16,  0,
-	0, 16,  16,  0,
-	0, 16,  16,  0,
-	0, 16,  16,  0,
-	0, 16,  16,  0,
-	0, 16,  16,  0,
-	0, 16,  24,  0,
-	0, 16,  24,  0,
-	0, 16,  24,  0,
-	0, 16,  24,  0,
-	0, 16,  24,  0,
-	0, 16,  24,  0,
-	0, 16,  24,  0,
-	0, 16,  112, 0,
-	0, 16,  112, 0,
-	0, 16,  112, 0,
-	0, 16,  88,  0,
-	0, 16,  56,  0,
-	0, 16,  56,  0,
-	0, 16,  56,  0,
-	0, 16,  56,  0,
-	0, 16,  56,  0,
-	0, 16,  56,  0,
-	0, 16,  56,  0,
-	0, 16,  56,  0,
-	0, 16,  56,  0,
-	0, 16,  56,  0,
-	0, 16,  56,  0,
-	0, 16,  56,  0,
-	0, 16,  56,  0,
-	0, 16,  72,  0,
-	0, 16,  104, 0,
-	0, 16,  72,  0,
-	0, 16,  128, 0,
-	0, 16,  160, 0,
-	0, 16,  96,  0,
-	0, 16,  112, 0,
-	0, 16,  112, 0,
-	0, 16,  112, 0,
-	0, 16,  112, 0,
-	0, 16,  76,  0,
-	0, 16,  16,  0,
-	0, 16,  16,  0,
-	0, 16,  16,  0,
-	0, 16,  80,  0,
-	0, 32,  320, 0,
-	0, 48,  320, 0,
-	0, 48,  224, 0,
-	0, 48,  240, 0,
-	0, 32,  224, 0,
-	0, 72,  120, 0,
-	0, 72,  120, 0,
-	0, 72,  120, 0,
-	0, 72,  120, 0,
-	0, 72,  120, 0,
-	0, 72,  120, 0,
-	0, 72,  120, 0,
-	0, 72,  120, 0,
-};
-
 std::unordered_set<int> PBookFLFilesToSkip;
 
 bool PatchCustomImages( vector<CustomMenuImageInfo> InImageInfo,
@@ -291,7 +222,8 @@ bool Patch_PBook_EC(const string& inPatchedSakuraDirectory, const string& inTran
 		return false;
 	}
 
-	const string translatedDirectory = inTranslatedDataDirectory + string("PBOOK_FL\\");
+	const string pbookFLDirectory = inTranslatedDataDirectory + string("PBOOK_FL\\");
+	const string pbookECDirectory = inTranslatedDataDirectory + string("PBOOK_EC\\");
 
 	const int numEntries = 111;
 	MainMenuImageInfo lookupTable[numEntries];
@@ -312,19 +244,19 @@ bool Patch_PBook_EC(const string& inPatchedSakuraDirectory, const string& inTran
 		string translatedImagePath;
 		if(i == 62)
 		{
-			//todo
+			translatedImagePath = pbookECDirectory + std::to_string(62);
 		}
 		else if(i >= 103)
 		{
-			translatedImagePath = translatedDirectory + std::to_string(i + 72);
+			translatedImagePath = pbookFLDirectory + std::to_string(i + 72);
 		}
 		else if(i < 63 && PBookFLFilesToSkip.find(i + 76) == PBookFLFilesToSkip.end())
 		{
-			translatedImagePath = translatedDirectory + std::to_string(i + 76);
+			translatedImagePath = pbookFLDirectory + std::to_string(i + 76);
 		}
 		else if (i >= 63 && PBookFLFilesToSkip.find(i + 75) == PBookFLFilesToSkip.end())
 		{
-			translatedImagePath = translatedDirectory + std::to_string(i + 75);
+			translatedImagePath = pbookFLDirectory + std::to_string(i + 75);
 		}
 
 		images.emplace_back(width, height, 0, translatedImagePath);
@@ -960,7 +892,6 @@ bool ExtractPBEye(const string& rootSakuraDirectory, bool bBmp, const string& ou
 		{"CMD_WIN", "SAKURA1\\CMD_WIN.CG", &CmdWinImages[0], sizeof(CmdWinImages) / sizeof(CmdWinImages[0])},
 		{"PBookRCImages", "SAKURA1\\PBOOK_RC.CG", &PBookRCImages[0], sizeof(PBookRCImages)/sizeof(PBookRCImages[0])},
 		{"TetyoADImages", "SAKURA1\\TETYO_AD.CG", &TetyoADImages[0], sizeof(TetyoADImages) / sizeof(TetyoADImages[0])},
-	//	{"PBOOK_EC", "SAKURA1\\PBOOK_EC.CG", &PBookECImages[0], sizeof(PBookECImages) / sizeof(PBookECImages[0])},
 	};
 
 	//PBOOK_FL

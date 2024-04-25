@@ -3,18 +3,19 @@
 class Tiled8BitFontSheet
 {
 public:
-	bool CreateFontSheet(const std::string& inFontSheetPath, const std::string& inTempOutputPath, char inStartingLetter)
+	bool CreateFontSheet(const std::string& inFontSheetPath, const std::string& inTempOutputPath, char inStartingLetter, BitmapReader* pInFontSheet = nullptr)
 	{
 		CreateDirectoryHelper(inTempOutputPath);
 
 		mStartingLetter = inStartingLetter;
 
-		BitmapReader fontSheet;
-		if( !fontSheet.ReadBitmap(inFontSheetPath) )
+		BitmapReader newFontSheet;
+		BitmapReader& fontSheet = pInFontSheet ? *pInFontSheet : newFontSheet;
+		if( !pInFontSheet && !fontSheet.ReadBitmap(inFontSheetPath) )
 		{
 			return false;
 		}
-	
+
 		//Convert font sheet to 8 bit if needed
 		BitmapFormatConverter fontSheet8Bit;
 		if( fontSheet.GetBitCount() == 4 )
@@ -116,6 +117,11 @@ public:
 		return width;
 	}
 
+	void SwapColors(const char inSearchColor, const char inReplaceColor)
+	{
+		mFontSheet.SwapColorsOnTiles(inSearchColor, inReplaceColor);
+	}
+
 	TileExtractor mFontSheet;
 
 private:
@@ -163,14 +169,14 @@ public:
 		return true;
 	}
 
-	bool AddTile(int inXLocation, const TileExtractor::Tile& inTile, int inWidthOfCharacter)
+	bool AddTile(int inXLocation, int inYLocation, const TileExtractor::Tile& inTile, int inWidthOfCharacter)
 	{
 		if( inXLocation + inWidthOfCharacter > mImageCanvas.GetWidth() - mRightOffset)
 		{
 			return false;
 		}
 
-		mImageCanvas.AddPartialTile(inTile.mpTile, inTile.mTileSize, inXLocation, 0, inWidthOfCharacter, inTile.mTileWidth, inTile.mTileHeight);
+		mImageCanvas.AddPartialTile(inTile.mpTile, inTile.mTileSize, inXLocation, inYLocation, inWidthOfCharacter, inTile.mTileWidth, inTile.mTileHeight);
 		return true;
 	}
 
@@ -207,7 +213,7 @@ private:
 };
 
 bool WriteTextIntoImageUsingFontSheet(	const std::string& InText, const FileNameContainer& InImagePath, Tiled8BitFontSheet& InFontSheet, 
-										bool bInFailIfImageDoesntFit, int inLeftOffset, int inRightOffset)
+										bool bInFailIfImageDoesntFit, int inLeftOffset, int inRightOffset, int yOffset, bool bInCenter = true)
 {
 	static string bmpExt(".bmp");
 	if (InImagePath.mExtention != bmpExt)
@@ -226,8 +232,8 @@ bool WriteTextIntoImageUsingFontSheet(	const std::string& InText, const FileName
 	translatedImage.SetRightOffset(inRightOffset);
 
 	//Draw text into image
-	const int textWidth = InFontSheet.GetWidthOfText(InText) - inRightOffset;
-	int xLocation = inLeftOffset + (translatedImage.GetWidth() / 2) - (textWidth / 2);
+	const int textWidth = InFontSheet.GetWidthOfText(InText) - (inRightOffset);// + inLeftOffset);
+	int xLocation = bInCenter ? inLeftOffset + (translatedImage.GetWidth() / 2) - (textWidth / 2) : inLeftOffset;
 	if (xLocation < 0)
 	{
 		xLocation = 0;
@@ -245,7 +251,7 @@ bool WriteTextIntoImageUsingFontSheet(	const std::string& InText, const FileName
 
 		const int widthOfCharacter = InFontSheet.GetWidthOfCharacter(InText[letterIndex]);
 
-		if (!translatedImage.AddTile(xLocation, *pTile, widthOfCharacter))
+		if (!translatedImage.AddTile(xLocation, yOffset, *pTile, widthOfCharacter))
 		{
 			if(bInFailIfImageDoesntFit)
 			{
@@ -368,7 +374,7 @@ bool WriteTextIntoImagesUsingFontSheet(
 
 			const int widthOfCharacter = fontSheet.GetWidthOfCharacter(textLine.mFullLine[letterIndex]);
 
-			if( !translatedImage.AddTile(xLocation, *pTile, widthOfCharacter) )
+			if( !translatedImage.AddTile(xLocation, 0, *pTile, widthOfCharacter) )
 			{
 				printf("Unable to fit %s. %i/%i : %s\n", originalFileName.mFileName.c_str(), textWidth, originalImage.GetWidth(), textLine.mFullLine.c_str());
 				break;

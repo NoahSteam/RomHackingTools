@@ -1324,6 +1324,90 @@ void BitmapReader::SetPaletteValueAtIndex(int inIndex, uint32 inColor)
 	memcpy(&mBitmapData.mPaletteData.mpRGBA[paletteIndex], &inColor, sizeof(inColor));
 }
 
+void BitmapReader::ReplaceColors(const char inNewColor, std::unordered_set<char>& inIgnoreColors)
+{
+	const int numBytes = mBitmapData.mColorData.mSizeInBytes;
+	char* pModifiedData = new char[numBytes];
+	char* pOriginalData = mBitmapData.mColorData.mpRGBA;
+	memcpy_s(pModifiedData, numBytes, pOriginalData, numBytes);
+
+	//Swap colors
+	const int imageHeight = abs(mBitmapData.mInfoHeader.mImageHeight);
+	for (int y = 0; y < imageHeight; ++y)
+	{
+		for (int x = 0; x < mBitmapData.mInfoHeader.mImageWidth / 2; ++x)
+		{
+			const int currentPixel = y * mBitmapData.mInfoHeader.mImageWidth / 2 + x;
+
+			const char colorValue1 = (pModifiedData[currentPixel] & 0xf0) >> 4;
+			if (inIgnoreColors.find(colorValue1) == inIgnoreColors.end())
+			{
+				pModifiedData[currentPixel] = (pModifiedData[currentPixel] & 0x0f) + (inNewColor << 4);
+
+			}//if( colorValue1 == 1)
+
+			char colorValue2 = pModifiedData[currentPixel] & 0x0f;
+			if (inIgnoreColors.find(colorValue2) == inIgnoreColors.end())
+			{
+				pModifiedData[currentPixel] = (pModifiedData[currentPixel] & 0xf0) + inNewColor;
+			}
+
+		} //for x
+	}
+
+	memcpy_s(pOriginalData, numBytes, pModifiedData, numBytes);
+
+	delete[] pModifiedData;
+}
+
+void BitmapReader::SwapColors(const char inSearchColor, const char inNewColor)
+{
+	const int numBytes = mBitmapData.mColorData.mSizeInBytes;
+	char* pModifiedData = new char[numBytes];
+	char* pOriginalData = mBitmapData.mColorData.mpRGBA;
+	memcpy_s(pModifiedData, numBytes, pOriginalData, numBytes);
+
+	//Flip image
+	const int imageHeight = abs(mBitmapData.mInfoHeader.mImageHeight);
+	/*
+	for (int y = 0; y < imageHeight; ++y)
+	{
+		for (int x = 0; x < mBitmapData.mInfoHeader.mImageWidth / 2; ++x)
+		{
+			const int currentPixel = y * mBitmapData.mInfoHeader.mImageWidth / 2 + x;
+			const int outPixel = ((imageHeight - 1) - y) * mBitmapData.mInfoHeader.mImageWidth / 2 + x;
+			pModifiedData[outPixel] = pOriginalData[currentPixel];
+		}
+	}*/
+
+	//Swap colors
+	for (int y = 0; y < imageHeight; ++y)
+	{
+		for (int x = 0; x < mBitmapData.mInfoHeader.mImageWidth / 2; ++x)
+		{
+			const int currentPixel = y * mBitmapData.mInfoHeader.mImageWidth / 2 + x;
+
+			const char colorValue1 = (pModifiedData[currentPixel] & 0xf0) >> 4;
+			if (colorValue1 == inSearchColor)
+			{
+				pModifiedData[currentPixel] = (pModifiedData[currentPixel] & 0x0f) + (inNewColor << 4);
+
+			}//if( colorValue1 == 1)
+
+			char colorValue2 = pModifiedData[currentPixel] & 0x0f;
+			if (colorValue2 == inSearchColor)
+			{
+				pModifiedData[currentPixel] = (pModifiedData[currentPixel] & 0xf0) + inNewColor;
+			}
+
+		} //for x
+	}
+
+	memcpy_s(pOriginalData, numBytes, pModifiedData, numBytes);
+
+	delete[] pModifiedData;
+}
+
 /////////////////////////////////
 //        BitmapSurface        //
 /////////////////////////////////
@@ -1453,16 +1537,19 @@ void BitmapSurface::AddPartialTile(const char* pInData, int inDataSize, int inX,
 		printf("BitmapSurface::AddPartialTile: Only 8bit surfaces supported\n");
 	}
 	
-	for (int y = 0; y < inHeight && y < mHeight; ++y)
+	for (int y = 0; y + inY < inHeight && y + inY < mHeight; ++y)
 	{
-		for (int x = 0; x < numBytesInWidthToCopy; ++x) //used to be 8 insntead of maxX
+		for (int x = 0; x < numBytesInWidthToCopy; ++x) //used to be 8 instead of maxX
 		{
-			const int writeOffset = ((inY + y)*mBytesPerRow + inX + x);
+			const int writeOffset = ((y + inY)*mBytesPerRow + inX + x);
 			const int readOffset = (y*inWidth + x);
 			assert(writeOffset < mBufferSize);
 			assert(readOffset < inDataSize);
 ;
-			mpBuffer[writeOffset] = pInData[readOffset];
+			if(pInData[readOffset] != 0)
+			{
+				mpBuffer[writeOffset] = pInData[readOffset];
+			}
 		}
 	}
 }
@@ -1859,6 +1946,38 @@ void TileExtractor::OutputTiles(FileWriter& outFile, int inStartingTile) const
 		const Tile& tile = mTiles[i];
 		outFile.WriteData(tile.mpTile, tile.mTileSize);
 	}
+}
+
+void TileExtractor::SwapColorsOnTiles(const char inSearchColor, const char inReplaceColor)
+{
+	const int numTiles = GetNumTiles();
+	for (int i = 0; i < numTiles; ++i)
+	{
+		const Tile& tile = mTiles[i];
+		for (uint32 y = 0; y < tile.mTileHeight; ++y)
+		{
+			for (uint32 x = 0; x < tile.mTileWidth; ++x)
+			{
+				const uint32 currentPixel = y * tile.mTileWidth + x;
+
+				const unsigned char pixelValue = tile.mpTile[currentPixel];
+				const unsigned char colorValue1 = (pixelValue & 0xf0) >> 4;
+				if (colorValue1 == inSearchColor)
+				{
+					tile.mpTile[currentPixel] = (pixelValue & 0x0f) + (inReplaceColor << 4);
+
+				}//if( colorValue1 == 1)
+
+				unsigned char colorValue2 = pixelValue & 0x0f;
+				if (colorValue2 == inSearchColor)
+				{
+					tile.mpTile[currentPixel] = (pixelValue & 0xf0) + inReplaceColor;
+				}
+
+			} //for x
+		}
+	}
+
 }
 
 ////////////////////////////////////////
