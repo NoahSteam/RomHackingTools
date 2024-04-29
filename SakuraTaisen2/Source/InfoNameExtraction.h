@@ -17,8 +17,8 @@ struct InfoNameImageInfo
 	int paletteOffset;
 };
 
-const int NumImagesInSet = 7;
-InfoNameImageInfo InfoNameImageSet[7] =
+const int NumImagesInSet = 8;
+InfoNameImageInfo InfoNameImageSet[NumImagesInSet] =
 {
 	{64, 16, 0, 0},
 	{48, 15, 0x1E0, 0},
@@ -26,7 +26,8 @@ InfoNameImageInfo InfoNameImageSet[7] =
 	{40, 46, 0x1840, 0x1700},// (character portrait)
 	{40, 32, 0x1f80, 0x1700},//(character eyes)
 	{40, 46, 0x2740, 0x2600},// (portrait 2
-	{40, 32, 0x2e80, 0x2600}// (eyes 2)
+	{40, 32, 0x2e80, 0x2600},// (eyes 2)
+	{40, 46, 0x940, 0x800} //(portrait 1)
 };
 
 void ExtractInfoName(const string& rootSakuraDirectory, const string& paletteFileName, bool bBmp, const string& outDirectory)
@@ -64,7 +65,7 @@ void ExtractInfoName(const string& rootSakuraDirectory, const string& paletteFil
 		{
 			const string setName = string("Char") + std::to_string(i) + string("_");
 
-			for(int setIndex = 0; setIndex < 3; ++setIndex)
+			for(int setIndex = 0; setIndex < NumImagesInSet; ++setIndex)
 			{
 				const int offset         = InfoNameImageSet[setIndex].offset + baseOffset;
 				const int width          = InfoNameImageSet[setIndex].width;
@@ -84,6 +85,7 @@ void ExtractInfoName(const string& rootSakuraDirectory, const string& paletteFil
 				PaletteData& paletteToUse = paletteSize == 512 ? palette2 : palette;
 
 				const string outFileName = outDirectory + setName + std::to_string(setIndex) + bmpExt;
+			//	const string outFileName = outDirectory + setName + IntToHexString(offset) + bmpExt;
 
 				BitmapWriter outBmp;
 				outBmp.CreateBitmap(outFileName, width, -height, bpp, sakuraFileData.GetData() + offset, (width * height) / divisor, paletteToUse.GetData(), paletteToUse.GetSize() , bBmp);

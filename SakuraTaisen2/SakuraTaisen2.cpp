@@ -83,6 +83,7 @@ using std::unordered_set;
 #include "Source/VDP2Images.h"
 #include "Source/StatusScreen.h"
 #include "Source/Kinematron.h"
+#include "Source/WarningScreens.h"
 #include "Source/PatchGame.h"
 
 void PrintHelp()
@@ -758,6 +759,14 @@ int main(int argc, char *argv[])
 		const bool   bmpFormat = atoi(argv[4]);
 
 		ExtractKinematronImages(inDirectory, inOutputDirectory, bmpFormat);
+	}
+	else if(command == "ExtractWarningScreens" && argc == 5)
+	{
+		const string inDirectory = string(argv[2]) + Seperators;
+		const string inOutputDirectory = string(argv[3]) + Seperators;
+		const bool   bmpFormat = atoi(argv[4]);
+
+		ExtractWarningScreens(inDirectory, inOutputDirectory, bmpFormat);
 	}
 	else if(command == "SetColorInPalette" && argc == 6)
 	{
