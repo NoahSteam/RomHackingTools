@@ -36,6 +36,9 @@ static bool BringOverOriginalFiles(const string& inRootSakuraDirectory, const st
 	GetAllFilesOfType(allFiles, "LOAD", originalFiles);
 	GetAllFilesOfType(allFiles, "NBGFILE", originalFiles);
 	GetAllFilesOfType(allFiles, "EYECATCH.ALL", originalFiles);
+	GetAllFilesOfType(allFiles, "CACG.ALL", originalFiles);
+	GetAllFilesOfType(allFiles, "ETCDATA.BIN", originalFiles);
+	GetAllFilesOfType(allFiles, "COMMFILE.ALL", originalFiles);
 
 	//Battle files
 	GetAllFilesOfType(allFiles, "COL.BIN", originalFiles);
@@ -295,8 +298,6 @@ bool PatchTextDrawingCode(const string& inSourceGameDirectory, const string& inP
 	return true;
 }
 
-
-
 bool PatchGame(const string& inSourceGameDirectory, const string& inTranslatedDirectory, const string& inPatchedDirectory, int inDiscNumber)
 {
 	if( !BringOverOriginalFiles(inSourceGameDirectory, inPatchedDirectory) )
@@ -305,9 +306,21 @@ bool PatchGame(const string& inSourceGameDirectory, const string& inTranslatedDi
 		return false;
 	}
 	
+	if (!PatchKinematron(inPatchedDirectory, inTranslatedDirectory))
+	{
+		printf("Unable to patch Kinematron\n");
+		return false;
+	}
+
+	if (!PatchWarningScreens(inPatchedDirectory, inTranslatedDirectory))
+	{
+		printf("Unable to patch Warning Screens\n");
+		return false;
+	}
+	
 	if(!PatchStatusScreen(inPatchedDirectory, inTranslatedDirectory))
 	{
-		printf("Unable to patch StatuScreen\n");
+		printf("Unable to patch Status Screen\n");
 		return false;
 	}
 

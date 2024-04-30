@@ -1,0 +1,11 @@
+CARD_DAT.ALL
+
+Starting at 0x580
+16x16
+16x16
+32x32
+16x16
+
+0x155040 has tiles at 8x8 8bpp.  Tiling data preceeds it probably
+
+0x30e800 has font sheet at 16x16

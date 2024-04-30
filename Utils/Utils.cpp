@@ -2009,7 +2009,6 @@ bool BmpToSaturnConverter::ConvertBmpToSakuraFormat(const string& inBmpPath, boo
 		imageHeight *= -1;
 	}
 
-
 	if (!mTileExtractor.ExtractTiles(imageWidth, imageHeight, imageWidth, abs(imageHeight), origBmp))
 	{
 		return false;

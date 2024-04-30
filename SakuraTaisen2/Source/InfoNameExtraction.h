@@ -102,6 +102,86 @@ bool PatchInfoName(const string& inPatchedSakuraDirectory, const string& inTrans
 {
 	printf("Patching InfoName\n");
 
+	//Obstacle and Weapons image are repeated and are handled as special case entries
+	enum class EGearType : uint8
+	{
+		Weapon,
+		WeaponName,
+		Obstacle
+	};
+	struct GearImageInfo
+	{
+		int charIndex;
+		int setIndex;
+		EGearType gearType;
+	};
+	GearImageInfo gearImages[] = 
+	{
+		58, 7, EGearType::Weapon,
+		59, 3, EGearType::Weapon,
+		59, 4, EGearType::WeaponName,
+		59, 5, EGearType::Weapon,
+		59, 6, EGearType::WeaponName,
+		59, 7, EGearType::Weapon,
+		60, 3, EGearType::Weapon,
+		60, 4, EGearType::WeaponName,
+		60, 5, EGearType::Weapon,
+		60, 6, EGearType::WeaponName,
+		60, 7, EGearType::Weapon,
+		62, 7, EGearType::Weapon,
+		63, 7, EGearType::Weapon,
+		64, 7, EGearType::Weapon,
+		65, 7, EGearType::Weapon,
+		66, 7, EGearType::Weapon,
+		67, 7, EGearType::Weapon,
+		68, 7, EGearType::Weapon,
+		69, 7, EGearType::Weapon,
+		70, 7, EGearType::Weapon,
+		72, 7, EGearType::Obstacle,
+		73, 7, EGearType::Obstacle,
+		74, 7, EGearType::Obstacle,
+		75, 7, EGearType::Obstacle,
+		76, 7, EGearType::Obstacle,
+		77, 7, EGearType::Obstacle,
+		78, 7, EGearType::Obstacle,
+		79, 7, EGearType::Obstacle,
+		80, 7, EGearType::Obstacle,
+		81, 7, EGearType::Obstacle,
+		82, 7, EGearType::Obstacle,
+		83, 7, EGearType::Obstacle,
+		84, 7, EGearType::Obstacle,
+		85, 7, EGearType::Obstacle,
+		86, 7, EGearType::Obstacle,
+		87, 7, EGearType::Obstacle,
+	};
+
+	//Load obstacle image
+	const string obstacleImagePath = inTranslatedDataDirectory + "InfoName\\Translated\\Obstacle.bmp";
+	BmpToSaturnConverter obstacleImage;
+	if (!obstacleImage.ConvertBmpToSakuraFormat(obstacleImagePath, false, BmpToSaturnConverter::CYAN))
+	{
+		return false;
+	}
+
+	//Load weapon image
+	const string weaponImagePath = inTranslatedDataDirectory + "InfoName\\Translated\\Weapon.bmp";
+	BmpToSaturnConverter weaponImage;
+	if (!weaponImage.ConvertBmpToSakuraFormat(weaponImagePath, false, BmpToSaturnConverter::CYAN))
+	{
+		return false;
+	}
+
+	//Load weapon name image
+	const string weaponNameImagePath = inTranslatedDataDirectory + "InfoName\\Translated\\WeaponName.bmp";
+	BmpToSaturnConverter weaponNameImage;
+	if (!weaponNameImage.ConvertBmpToSakuraFormat(weaponNameImagePath, false, BmpToSaturnConverter::CYAN))
+	{
+		return false;
+	}
+
+	const int numGearImages = sizeof(gearImages)/sizeof(gearImages[0]);
+
+	//Infoname file
 	const string sakuraFilePath = inPatchedSakuraDirectory + string("SAKURA2\\INFONAME.BIN");
 	FileReadWriter infoNameFile;
 	if (!infoNameFile.OpenFile(sakuraFilePath))
@@ -111,12 +191,13 @@ bool PatchInfoName(const string& inPatchedSakuraDirectory, const string& inTrans
 
 	const string translatedDirectory = inTranslatedDataDirectory + "\\InfoName\\Translated\\";
 
+	//Patch all images in infoname
 	const string bmpExt(".bmp");
 	const int numEntries = 129;
 	int baseOffset = 0;
-	for (int i = 0; i < numEntries; ++i)
+	for (int charIndex = 0; charIndex < numEntries; ++charIndex)
 	{
-		const string setName = string("Char") + std::to_string(i) + string("_");
+		const string setName = string("Char") + std::to_string(charIndex) + string("_");
 
 		for (int setIndex = 0; setIndex < 3; ++setIndex)
 		{
@@ -145,6 +226,35 @@ bool PatchInfoName(const string& inPatchedSakuraDirectory, const string& inTrans
 			}
 
 			infoNameFile.WriteData(offset, translatedFile.mBitmapData.mColorData.mpRGBA, translatedFile.mBitmapData.mColorData.mSizeInBytes);
+		}
+
+		//Check if gear image exists for this set
+		for(int g = 0; g < numGearImages; ++g)
+		{
+			if(gearImages[g].charIndex != charIndex)
+			{
+				continue;
+			}
+
+			const int offset = InfoNameImageSet[gearImages[g].setIndex].offset + baseOffset;
+			switch(gearImages[g].gearType)
+			{
+				case EGearType::Obstacle:
+				{
+					infoNameFile.WriteData(offset, obstacleImage.GetImageData(), obstacleImage.GetImageDataSize());
+				}break;
+				
+				case EGearType::Weapon:
+				{
+					infoNameFile.WriteData(offset, weaponImage.GetImageData(), weaponImage.GetImageDataSize());
+				}break;
+
+				case EGearType::WeaponName:
+				{
+					infoNameFile.WriteData(offset, weaponNameImage.GetImageData(), weaponNameImage.GetImageDataSize());
+				}
+			}
+			
 		}
 
 		baseOffset += 0x4000;

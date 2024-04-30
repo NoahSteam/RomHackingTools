@@ -152,5 +152,8 @@
     <ClInclude Include="Source\WarningScreens.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Source\TycoonGame.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

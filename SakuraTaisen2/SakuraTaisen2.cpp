@@ -84,6 +84,7 @@ using std::unordered_set;
 #include "Source/StatusScreen.h"
 #include "Source/Kinematron.h"
 #include "Source/WarningScreens.h"
+#include "Source/TycoonGame.h"
 #include "Source/PatchGame.h"
 
 void PrintHelp()
@@ -776,6 +777,13 @@ int main(int argc, char *argv[])
 		const uint32 inPaletteColor = ConvertFromHexString<uint32>(argv[5]);
 
 		SetColorInPalette(inDirectory, inOutputDirectory, inPaletteIndex, inPaletteColor);
+	}
+	else if(command == "ExtractTycoonRulesScreen" && argc == 5)
+	{
+		const string inDirectory = string(argv[2]) + Seperators;
+		const string inOutputDirectory = string(argv[3]) + Seperators;
+		const bool   bmpFormat = atoi(argv[4]);
+		ExtractTycoonRulesScreen(inDirectory, inOutputDirectory, bmpFormat);
 	}
 	else
 	{

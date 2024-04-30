@@ -158,6 +158,7 @@
     <ClInclude Include="Source\NBGFile.h" />
     <ClInclude Include="Source\NCDatFile.h" />
     <ClInclude Include="Source\StatusScreen.h" />
+    <ClInclude Include="Source\TycoonGame.h" />
     <ClInclude Include="Source\VDP2Images.h" />
     <ClInclude Include="Source\MNameCG.h" />
     <ClInclude Include="Source\PatchBattleTextDrawCode.h" />

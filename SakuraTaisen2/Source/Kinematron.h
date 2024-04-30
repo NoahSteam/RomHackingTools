@@ -2,103 +2,7 @@
 
 //Kinemtron images are encoded using some strange algorithm
 
-struct KinematronImageTableEntry
-{
-	uint16 width;
-	uint16 height;
-	uint32 unknown1;
-	uint32 offset;
-	uint32 unknown2;
-
-	void SwapEndianness()
-	{
-		width = SwapByteOrder(width);
-		height = SwapByteOrder(height);
-		offset = SwapByteOrder(offset);
-	}
-};
-
-void DecompressKinemtronData(uint32* pEncodedData, int param_2)
-{
-	uint32 uVar1;
-	int iVar2;
-	int iVar3 = 0;
-	uint32 key;
-	int iVar5;
-	uint32 secondValue;
-	uint32 firstValue;
-
-	iVar2 = 0xAC53AC53;//DAT_060333c0; r8
-	uVar1 = 0xAAAA5555;//DAT_060333bc; r9
-
-	char* pStart = (char*)pEncodedData;
-
-	/* Top of COMMFILE 060c0000 in memory */
-	firstValue = SwapByteOrder(*pEncodedData); //uVar7 = r6
-	secondValue = SwapByteOrder(pEncodedData[1]); //param_1 = r7
-	key = firstValue;
-	while (true)
-	{
-		iVar5 = param_2; //r4 = r10
-		if (iVar5 < 0)
-		{
-			iVar5 += 0x00ff0009;//PTR_DAT_060333b8._0_2_; r1 = 0x00ff0009
-		}
-
-		//iVar3 = r0
-		//iVar3 = iVar5 >> 8;//(*(code*)PTR_FUN_060333c4)(); shar r4, 8 times
-		iVar5 = iVar5 >> 8;
-
-		if (iVar5 + 1 <= iVar3)
-		{
-			break;
-		}
-
-		iVar5 = 0;
-		do
-		{
-			const uint32 encodedValue = SwapByteOrder(*pEncodedData);
-			*pEncodedData = SwapByteOrder(encodedValue ^ key);
-			key = (key ^ 0xAAAA5555) + 0xAC53AC53;
-			++pEncodedData;
-		} while (++iVar5 < 0x40);
-
-		key = (firstValue ^ 0x13579BDF) + secondValue; //uVar7 = r6
-		secondValue = firstValue;
-		firstValue = key;
-		iVar3 += 1;
-		//	param_2 = uVar4;
-	}
-	return;
-}
-
-void TestRadio()
-{
-	FileNameContainer name("a:\\SakuraWars2\\Disc1_Original\\SAKURA1\\COMMFILE.ALL");
-	//	FileNameContainer name("a:\\SakuraWars2\\COMMFILE2.ALL");
-	FileData commFile;
-	if (!commFile.InitializeFileData(name))
-	{
-		return;
-	}
-
-	const int dataSize = commFile.GetDataSize() - 0x7800;
-	char* pData = new char[dataSize];
-	char* pDataStart = pData;
-	memcpy_s(pData, dataSize, commFile.GetData() + 0x7800, commFile.GetDataSize() - 0x7800);
-	//	memcpy_s(pData, dataSize, commFile.GetData(), commFile.GetDataSize());
-	DecompressKinemtronData((uint32*)pData, 0xd74c);//0x7594);
-
-	FileWriter outData;
-	if (outData.OpenFileForWrite("a:\\SakuraWars2\\radioOut.bin"))
-	{
-		outData.WriteData(pDataStart, dataSize);
-	}
-
-	delete[] pData;
-}
-
-void EncodeRadio()
+void EncodeRadioTest()
 {
 	uint32 c1 = 0xAAAA5555;
 	uint32 c2 = 0xAC53AC53;
@@ -184,6 +88,146 @@ void EncodeRadio()
 	}
 }
 
+struct KinematronImageTableEntry
+{
+	uint16 width;
+	uint16 height;
+	uint32 unknown1;
+	uint32 offset;
+	uint32 unknown2;
+
+	void SwapEndianness()
+	{
+		width = SwapByteOrder(width);
+		height = SwapByteOrder(height);
+		offset = SwapByteOrder(offset);
+	}
+};
+
+void EncodeKinematronData(const uint32* pInDecodedData, const uint32 inDecodedDataSize, std::vector<uint32>& outEncodedData)
+{
+	uint32 prevKey = 0xb17;
+	uint32 firstEncodedValueInBlock = SwapByteOrder(pInDecodedData[0]) ^ prevKey;
+	outEncodedData.push_back(SwapByteOrder(prevKey));
+
+	bool bCalcSecond = true;
+	uint32 decodedIndex = 1;
+	uint32 secondValue = 0;
+	const uint32 numEntriesInData = inDecodedDataSize >> 2;
+	while (decodedIndex < numEntriesInData)
+	{
+		const uint32 numEntriesInBlock = 0x40;
+		uint32 entryIndex = 1;
+		while (entryIndex < numEntriesInBlock)
+		{
+			const uint32 given = SwapByteOrder(pInDecodedData[decodedIndex]);
+			const uint32 key = (prevKey ^ 0xaaaa5555) + 0xac53ac53;
+			const uint32 encoded = given ^ key;
+			prevKey = key;
+
+			if (bCalcSecond)
+			{
+				secondValue = encoded;
+				bCalcSecond = false;
+			}
+
+			outEncodedData.push_back(SwapByteOrder(encoded));
+			++decodedIndex;
+			++entryIndex;
+		}
+
+		prevKey = (firstEncodedValueInBlock ^ 0x13579bdf) + secondValue;
+		secondValue = firstEncodedValueInBlock;
+		firstEncodedValueInBlock = prevKey;
+
+		uint32 nextVal = SwapByteOrder(pInDecodedData[decodedIndex++]);
+		uint32 nextEncoded = nextVal ^ prevKey;
+		outEncodedData.push_back(SwapByteOrder(nextEncoded));
+	}
+}
+
+
+uint32 DecodeKinematronData(uint32* pEncodedData, int param_2)
+{
+	uint32 uVar1;
+	int iVar2;
+	int iVar3 = 0;
+	uint32 key;
+	int iVar5;
+	uint32 secondValue;
+	uint32 firstValue;
+
+	iVar2 = 0xAC53AC53;//DAT_060333c0; r8
+	uVar1 = 0xAAAA5555;//DAT_060333bc; r9
+
+	char* pStart = (char*)pEncodedData;
+
+	/* Top of COMMFILE 060c0000 in memory */
+	firstValue = SwapByteOrder(*pEncodedData); //uVar7 = r6
+	secondValue = SwapByteOrder(pEncodedData[1]); //param_1 = r7
+	key = firstValue;
+	while (true)
+	{
+		iVar5 = param_2; //r4 = r10
+		if (iVar5 < 0)
+		{
+			iVar5 += 0x00ff0009;//PTR_DAT_060333b8._0_2_; r1 = 0x00ff0009
+		}
+
+		//iVar3 = r0
+		//iVar3 = iVar5 >> 8;//(*(code*)PTR_FUN_060333c4)(); shar r4, 8 times
+		iVar5 = iVar5 >> 8;
+
+		if (iVar5 + 1 <= iVar3)
+		{
+			break;
+		}
+
+		iVar5 = 0;
+		do
+		{
+			const uint32 encodedValue = SwapByteOrder(*pEncodedData);
+			*pEncodedData = SwapByteOrder(encodedValue ^ key);
+			key = (key ^ 0xAAAA5555) + 0xAC53AC53;
+			++pEncodedData;
+		} while (++iVar5 < 0x40);
+
+		key = (firstValue ^ 0x13579BDF) + secondValue; //uVar7 = r6
+		secondValue = firstValue;
+		firstValue = key;
+		iVar3 += 1;
+		//	param_2 = uVar4;
+	}
+
+	return ((char*)pEncodedData - pStart);
+}
+
+void TestRadio()
+{
+	FileNameContainer name("a:\\SakuraWars2\\Disc1_Original\\SAKURA1\\COMMFILE.ALL");
+	//	FileNameContainer name("a:\\SakuraWars2\\COMMFILE2.ALL");
+	FileData commFile;
+	if (!commFile.InitializeFileData(name))
+	{
+		return;
+	}
+
+	const int dataSize = commFile.GetDataSize() - 0x7800;
+	char* pData = new char[dataSize];
+	char* pDataStart = pData;
+	memcpy_s(pData, dataSize, commFile.GetData() + 0x7800, commFile.GetDataSize() - 0x7800);
+	//	memcpy_s(pData, dataSize, commFile.GetData(), commFile.GetDataSize());
+	DecodeKinematronData((uint32*)pData, 0xd74c);//0x7594);
+
+	FileWriter outData;
+	if (outData.OpenFileForWrite("a:\\SakuraWars2\\radioOut.bin"))
+	{
+		outData.WriteData(pDataStart, dataSize);
+	}
+
+	delete[] pData;
+}
+
 void ExtractKinematronImages(const std::string& inSakuraDir, const std::string& inOutputDirectory, bool bInBmp)
 {
 	CreateDirectoryHelper(inOutputDirectory);
@@ -201,7 +245,7 @@ void ExtractKinematronImages(const std::string& inSakuraDir, const std::string& 
 	const int dataSize = commFile.GetDataSize() - 0x7800;
 	char* pDecodedData = new char[dataSize];
 	memcpy_s(pDecodedData, dataSize, commFile.GetData() + 0x7800, commFile.GetDataSize() - 0x7800);
-	DecompressKinemtronData((uint32*)pDecodedData, 0xd74c);//0x7594);
+	DecodeKinematronData((uint32*)pDecodedData, 0xd74c);//0x7594);
 
 	const char* pPalette = pDecodedData + 0x290;
 
@@ -227,6 +271,92 @@ void ExtractKinematronImages(const std::string& inSakuraDir, const std::string& 
 	}
 
 	delete[] pDecodedData;
+}
+
+bool PatchKinematron(const string& inPatchedSakuraDirectory, const string& inTranslatedDataDirectory)
+{
+	printf("Patching Kinematron\n");
+
+	string commFilePath(inPatchedSakuraDirectory + string("SAKURA1\\COMMFILE.ALL"));
+	FileReadWriter commFileData;
+	if (!commFileData.OpenFile(commFilePath))
+	{
+		return false;
+	}
+
+	const string patchedKinematronImageDir = inTranslatedDataDirectory + "Kinematron\\";
+
+	//Get original decoded data
+	const int dataSize = commFileData.GetFileSize() - 0x7800;
+	char* pDecodedData = new char[dataSize];
+	commFileData.ReadData(0x7800, pDecodedData, dataSize, false);
+	const uint32 decodedSize = DecodeKinematronData((uint32*)pDecodedData, 0xd74c);//0x7594);
+
+	//Grab image table
+	const int offsetToImageTable = 0x1120;
+	const int numImages = 0x2c;
+	const int offsetToImages = offsetToImageTable + sizeof(KinematronImageTableEntry) * numImages;
+	KinematronImageTableEntry images[numImages];
+	memcpy_s(images, sizeof(images), pDecodedData + offsetToImageTable, sizeof(images));
+	for (int i = 0; i < numImages; ++i)
+	{
+		images[i].SwapEndianness();
+	}
+
+	std::unordered_set<int> imagesToPatch;
+	imagesToPatch.insert(12);
+	imagesToPatch.insert(13);
+	imagesToPatch.insert(14);
+	imagesToPatch.insert(15);
+	imagesToPatch.insert(16);
+	imagesToPatch.insert(17);
+	imagesToPatch.insert(18);
+	imagesToPatch.insert(19);
+	imagesToPatch.insert(28);
+	imagesToPatch.insert(29);
+	imagesToPatch.insert(30);
+	imagesToPatch.insert(31);
+	imagesToPatch.insert(32);
+	imagesToPatch.insert(33);
+	imagesToPatch.insert(34);
+	imagesToPatch.insert(35);
+	imagesToPatch.insert(36);
+	imagesToPatch.insert(40);
+	imagesToPatch.insert(43);
+
+	//Copy over patched image data to decoded data buffer
+	const string imgExt(".bmp");
+	for (int i = 0; i < numImages; ++i)
+	{
+		if(imagesToPatch.find(i) == imagesToPatch.end())
+		{
+			continue;
+		}
+
+		const string bitmapFileName = patchedKinematronImageDir + std::to_string(i) + imgExt;
+		const uint16 width = images[i].width;
+		const uint16 height = images[i].height;
+		const int imgSize = (width * height) >> 1;
+
+		BmpToSaturnConverter patchedImage;
+		if (!patchedImage.ConvertBmpToSakuraFormat(bitmapFileName, false))
+		{
+			return false;
+		}
+
+		const uint32 offset = offsetToImages + images[i].offset;
+		memcpy_s(pDecodedData + offset, dataSize - offset, patchedImage.GetImageData(), patchedImage.GetImageDataSize());
+	}
+
+	//Encode the data
+	vector<uint32> encodedData;
+	EncodeKinematronData((const uint32*)pDecodedData, dataSize, encodedData);
+
+	//encodedSize = numEntries * size of each entry
+	const uint32 encodedSize = encodedData.size() * sizeof(uint32);
+	commFileData.WriteData(0x7800, (char*)encodedData.data(), encodedSize, false);
+
+	return true;
 }
 
 bool CreateNameKinematronSpreadsheet(const string& imageDirectory)
