@@ -39,6 +39,7 @@ static bool BringOverOriginalFiles(const string& inRootSakuraDirectory, const st
 	GetAllFilesOfType(allFiles, "CACG.ALL", originalFiles);
 	GetAllFilesOfType(allFiles, "ETCDATA.BIN", originalFiles);
 	GetAllFilesOfType(allFiles, "COMMFILE.ALL", originalFiles);
+	GetAllFilesOfType(allFiles, "OMK", originalFiles);
 
 	//Battle files
 	GetAllFilesOfType(allFiles, "COL.BIN", originalFiles);
@@ -146,7 +147,7 @@ bool PatchTextDrawingCode(const string& inSourceGameDirectory, const string& inP
 		//Fix regular lips spacing
 		{
 			WriteByte(0xdff3, 0x08); //horizontal spacing increment by 10, from 7110 to 7108 in memory at 06012ff2
-			WriteByte(0xdfdf, 0x91); //vertical spacing offset by 0x92, from 7190 to 7192 in memory at 06012fde
+			WriteByte(0xdfdf, 0x93); //vertical spacing offset by 0x92, from 7190 to 7192 in memory at 06012fde
 		}
 
 		//Fix special lips (where text changes midway) code to allow for more characters
@@ -306,6 +307,12 @@ bool PatchGame(const string& inSourceGameDirectory, const string& inTranslatedDi
 		return false;
 	}
 	
+	if (!PatchLongDay(inPatchedDirectory, inTranslatedDirectory))
+	{
+		printf("Unable to patch Long Day\n");
+		return false;
+	}
+
 	if (!PatchKinematron(inPatchedDirectory, inTranslatedDirectory))
 	{
 		printf("Unable to patch Kinematron\n");

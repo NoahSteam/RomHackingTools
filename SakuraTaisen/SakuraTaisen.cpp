@@ -8285,7 +8285,7 @@ void FindCompressedData(const string& inCompressedFilePath, const string& inUnco
 		
 		for(const FoundData& foundResult : foundIndices)
 		{
-			printf("Found: %08x %08x Size: %lu CompressedSize: %lu\n", foundResult.uncompressionStart, foundResult.offestInUncompressedData, foundResult.dataSize, foundResult.compressedSize);
+			printf("Found: At %08x OffsetWithinUncompressedData: %08x Size: %lu CompressedSize: %lu\n", foundResult.uncompressionStart, foundResult.offestInUncompressedData, foundResult.dataSize, foundResult.compressedSize);
 		}
 	}
 	else

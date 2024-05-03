@@ -716,6 +716,7 @@ bool CreateTemporaryDirectory(std::string& outDir);
 void GetAllFilesOfType(const std::vector<FileNameContainer>& allFiles, const char* pInFileType, std::vector<FileNameContainer>& outFiles);
 bool CopyFiles(const std::vector<FileNameContainer>& InSourceFiles, const std::string& InOutputDirectory);
 bool CopyFiles(const std::string& InSourceDirectory, const std::string& InOutputDirectory);
+bool CreateSpreadSheetForImages(const std::string& InSpreadsheetName, const std::string InExtractedImageDirName, const std::string& InImageDirectory, const std::string& InOutputPhpFilePath);
 
 //unsigned long prs_decompress_size(void* source);
 //unsigned long prs_decompress(void* source, void* dest, unsigned long destSize);

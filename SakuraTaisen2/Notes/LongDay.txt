@@ -1,0 +1,30 @@
+table at 2a540a, 0x53f0 OMKTEST.BIN
+
+String header at 0x5790.  4bytes 0x2a53f0 + offset
+
+Fonts compressed within OMKFNT.BIN
+Found: 00000000 CompressedSize: 8307
+Found: 00002800 CompressedSize: 7908 <-----this is the one for the main options screen within memories
+Found: 00004800 CompressedSize: 1657
+
+2a53f0 "Opening"
+
+2a01ac mov.w @r11, r1 //61b1 => 61b0
+
+2a01ea extu.w r1,r1 //611d => 611c
+
+2a01f0 mov 0xb, r1 //e10b => e117
+
+2a01b8 add r0, r0 //300c => 0009
+2a01ba mov.w @(r0, r11), r1 //01bd => 01bc
+2a01bc extu.w r1, r6 //661d => 661c
+
+2a01e6 addd r0, r0  //300c => 0009
+2a01e8 mov.w @(r0, r11), r1  //01bd => 01bc
+
+2a01c8 add 10, r1 //7110 => 7108 no
+2a01da add 10, r1 //7110 => 7108 horizontal spacing
+
+
+------
+Code in OMKTEST.BIN

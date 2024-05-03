@@ -199,7 +199,7 @@ uint32 DecodeKinematronData(uint32* pEncodedData, int param_2)
 		//	param_2 = uVar4;
 	}
 
-	return ((char*)pEncodedData - pStart);
+	return ((char*)pEncodedData - pStart) + sizeof(*pEncodedData); //+sizeof(*pEncodedData) because the size includes the full 4 final bytes
 }
 
 void TestRadio()
@@ -350,10 +350,16 @@ bool PatchKinematron(const string& inPatchedSakuraDirectory, const string& inTra
 
 	//Encode the data
 	vector<uint32> encodedData;
-	EncodeKinematronData((const uint32*)pDecodedData, dataSize, encodedData);
+	EncodeKinematronData((const uint32*)pDecodedData, decodedSize, encodedData);
 
 	//encodedSize = numEntries * size of each entry
 	const uint32 encodedSize = encodedData.size() * sizeof(uint32);
+	if(encodedSize != decodedSize)
+	{
+		printf("PatchKinematron: Re-encoded data size is not the same as the original encoded data size. Expected %i, got %i \n", decodedSize, encodedSize);
+		return false;
+	}
+
 	commFileData.WriteData(0x7800, (char*)encodedData.data(), encodedSize, false);
 
 	return true;

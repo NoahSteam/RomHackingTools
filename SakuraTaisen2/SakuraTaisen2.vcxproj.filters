@@ -155,5 +155,8 @@
     <ClInclude Include="Source\TycoonGame.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Source\LongDay.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

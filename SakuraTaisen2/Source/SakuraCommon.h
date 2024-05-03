@@ -1,1 +1,76 @@
 #pragma once
+
+struct PatchingData
+{
+	union Command
+	{
+		uint32 longWord;
+		uint16 word;
+		uint8 byte;
+	};
+
+	uint32 address;
+	Command command;
+	Command originalCommand;
+};
+
+struct PatchingEntry
+{
+	const char* pFileName;
+	PatchingData data;
+};
+
+bool PatchCodeInFile(std::string& InFileName, PatchingData* pInPatchingData, int InNumEntries)
+{
+	FileReadWriter sakuraBin;
+	if (!sakuraBin.OpenFile(InFileName))
+	{
+		return false;
+	}
+
+	for (int i = 0; i < InNumEntries; ++i)
+	{
+		const bool bIsLongWord = (pInPatchingData[i].command.longWord) > 0xffff;
+		if (bIsLongWord)
+		{
+			unsigned int originalValue = 0;
+			sakuraBin.ReadData(pInPatchingData[i].address, (char*)&originalValue, sizeof(originalValue), true);
+			if (originalValue != pInPatchingData[i].originalCommand.longWord)
+			{
+				printf("In %s at 0x%08x, expecting 0x%08x but found 0x%08x\n", InFileName.c_str(), pInPatchingData[i].address, pInPatchingData[i].originalCommand.longWord, originalValue);
+				return false;
+			}
+
+			sakuraBin.WriteData(pInPatchingData[i].address, (char*)&pInPatchingData[i].command.longWord, 4, true);
+			continue;
+		}
+
+		const bool bIsWord = (pInPatchingData[i].command.word & 0xff00) != 0 || pInPatchingData[i].command.byte == 0x09 || pInPatchingData[i].originalCommand.word == 0xffff;
+		if (bIsWord)
+		{
+			unsigned short originalValue = 0;
+			sakuraBin.ReadData(pInPatchingData[i].address, (char*)&originalValue, sizeof(originalValue), true);
+			if (originalValue != pInPatchingData[i].originalCommand.word)
+			{
+				printf("In %s at 0x%08x, expecting 0x%04x but found 0x%04x\n", InFileName.c_str(), pInPatchingData[i].address, pInPatchingData[i].originalCommand.word, originalValue);
+				return false;
+			}
+
+			sakuraBin.WriteData(pInPatchingData[i].address, (char*)&pInPatchingData[i].command.word, 2, true);
+		}
+		else
+		{
+			unsigned char originalValue = 0;
+			sakuraBin.ReadData(pInPatchingData[i].address + 1, (char*)&originalValue, sizeof(originalValue), true);
+			if (originalValue != pInPatchingData[i].originalCommand.byte)
+			{
+				printf("In %s at 0x%08x, expecting 0x%01x but found 0x%01x\n", InFileName.c_str(), pInPatchingData[i].address, pInPatchingData[i].originalCommand.byte, originalValue);
+				return false;
+			}
+
+			sakuraBin.WriteData(pInPatchingData[i].address + 1, (char*)&pInPatchingData[i].command.byte, 1, false);
+		}
+	}
+
+	return true;
+}

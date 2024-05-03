@@ -153,6 +153,7 @@
     <ClInclude Include="Source\InfoNameExtraction.h" />
     <ClInclude Include="Source\InsertText.h" />
     <ClInclude Include="Source\IntroScreenExtractor.h" />
+    <ClInclude Include="Source\LongDay.h" />
     <ClInclude Include="Source\MainMenu.h" />
     <ClInclude Include="Source\MiniGameExtraction.h" />
     <ClInclude Include="Source\NBGFile.h" />

@@ -1266,26 +1266,6 @@ bool PatchBattleTextDrawingCode(const string& inOriginalDirectory, const string&
 {
 	printf("Patching Battle Status Screen\n");
 
-	struct PatchingData
-	{
-		union Command
-		{
-			uint32 longWord;
-			uint16 word;
-			uint8 byte;
-		};
-
-		uint32 address;
-		Command command;
-		Command originalCommand;
-	};
-
-	struct PatchingEntry
-	{
-		const char* pFileName;
-		PatchingData data;	
-	};
-
 	const string lipPatchPath = inDataDirectory + Seperators + "BattleLipsPatching.bin";
 	FileData lipsPatchData;
 	if(!lipsPatchData.InitializeFileData(lipPatchPath))

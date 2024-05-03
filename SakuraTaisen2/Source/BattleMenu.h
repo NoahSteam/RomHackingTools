@@ -77,6 +77,28 @@ void ExtractBattleMenu(const string& rootSakuraDirectory, bool bBmp, const strin
 	}
 }
 
+bool PatchBattleNumberLocation(const string& inPatchedSakuraDirectory, const string& inTranslatedDataDirectory)
+{
+	const string sakuraFilePath = inPatchedSakuraDirectory + string("SAKURA2\\ETCDATA.BIN");
+	FileReadWriter etcFile;
+	if(!etcFile.OpenFile(sakuraFilePath))
+	{
+		return false;
+	}
+
+	const int numEntries = 13;
+	int fileOffset = 0x715; //0x21cf15 in memory
+	const char xOffset = 0x9;
+
+	for(int i = 0; i < numEntries; ++i)
+	{
+		etcFile.WriteData(fileOffset, &xOffset, sizeof(xOffset), false);
+		fileOffset += 8;
+	}
+
+	return true;
+}
+
 bool PatchBattleMenu(const string& inPatchedSakuraDirectory, const string& inTranslatedDataDirectory)
 {
 	printf("Patching Battle Menu\n");
@@ -168,7 +190,7 @@ bool PatchBattleMenu(const string& inPatchedSakuraDirectory, const string& inTra
 		}
 	}
 
-	return true;
+	return PatchBattleNumberLocation(inPatchedSakuraDirectory, inTranslatedDataDirectory);
 }
 
 bool CreateNameGOVERSpreadsheet(const string& imageDirectory)

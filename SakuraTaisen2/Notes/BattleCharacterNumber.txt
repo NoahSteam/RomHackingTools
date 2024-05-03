@@ -1,0 +1,8 @@
+0021cf08 has a table for positioning
+0021cf1c has number x offset (in ETCDATA.BIN around 0x6a0)
+
+060667e8
+
+
+060667ee 
+mov.w r1, @r1 //r1 = 0x0a

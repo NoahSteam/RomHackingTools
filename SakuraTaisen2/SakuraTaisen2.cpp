@@ -48,6 +48,7 @@ using std::unordered_set;
 #include "Source/SakuraConstants.h"
 #include "Source/SakuraString.h"
 #include "Source/SakuraFontSheet.h"
+#include "Source/SakuraCommon.h"
 #include "Source/TextInImage.h"
 #include "Source/TextInImageUsingFontSheet.h"
 #include "Source/ExportTranslationToFiles.h"
@@ -85,6 +86,7 @@ using std::unordered_set;
 #include "Source/Kinematron.h"
 #include "Source/WarningScreens.h"
 #include "Source/TycoonGame.h"
+#include "Source/LongDay.h"
 #include "Source/PatchGame.h"
 
 void PrintHelp()
@@ -783,7 +785,16 @@ int main(int argc, char *argv[])
 		const string inDirectory = string(argv[2]) + Seperators;
 		const string inOutputDirectory = string(argv[3]) + Seperators;
 		const bool   bmpFormat = atoi(argv[4]);
+
 		ExtractTycoonRulesScreen(inDirectory, inOutputDirectory, bmpFormat);
+	}
+	else if(command == "ExtractLongDayData" && argc == 5)
+	{
+		const string inDirectory = string(argv[2]) + Seperators;
+		const string inOutputDirectory = string(argv[3]) + Seperators;
+		const bool   bmpFormat = atoi(argv[4]);
+
+		ExtractLongDayData(inDirectory, inOutputDirectory, bmpFormat);
 	}
 	else
 	{

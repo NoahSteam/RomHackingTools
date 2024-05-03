@@ -4,7 +4,7 @@ void ExtractTycoonRulesScreen(const std::string& inRootDirectory, const std::str
 {
 	CreateDirectoryHelper(inOutputDirectory);
 
-	//N_Load
+	//CARD_DAT
 	const std::string cardFilePath = inRootDirectory + "SAKURA3\\CARD_DAT.ALL";
 	FileData cardFile;
 	if (!cardFile.InitializeFileData(cardFilePath))
