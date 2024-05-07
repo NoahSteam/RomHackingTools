@@ -60,4 +60,38 @@ void ExtractTycoonRulesScreen(const std::string& inRootDirectory, const std::str
 	const std::string imageExt = bInBmp ? ".bmp" : ".png";
 	const std::string outFile = inOutputDirectory + "TiledImage" + imageExt;
 	sakuraStringBmp.WriteToFile(outFile, true);	
+
+	printf("Created %s\n", outFile.c_str());
+}
+
+bool PatchTycoon(const std::string& inPatchedSakuraDirectory, const std::string& inTranslatedDataDirectory)
+{
+	printf("Patching Tycoon\n");
+
+	const std::string cardFilePath = inPatchedSakuraDirectory + "SAKURA3\\CARD_DAT.ALL";
+	FileReadWriter cardFileData;
+	if (!cardFileData.OpenFile(cardFilePath))
+	{
+		return false;
+	}
+
+	const std::string patchedImagePath = inTranslatedDataDirectory + std::string("Tycoon\\Rules.bmp");
+	const uint32 tileDim = 8;
+	BmpToSaturnConverter patchedImage;
+	if (!patchedImage.ConvertBmpToSakuraFormat(patchedImagePath, false, BmpToSaturnConverter::CYAN, &tileDim, &tileDim))
+	{
+		return false;
+	}
+
+	TileSetOptimizer optimizedTileSet;
+	optimizedTileSet.OptimizeTileSet(patchedImage);
+	optimizedTileSet.PackTiles();
+
+	std::vector<int> packedIndices;
+	optimizedTileSet.GetTiledIndicesInSaturnFormat(packedIndices);
+
+	cardFileData.WriteData(0x155040, optimizedTileSet.GetPackedTiles(), optimizedTileSet.GetPackedTileSize(), false);
+	cardFileData.WriteData(0x166800, (char*)packedIndices.data(), packedIndices.size()*sizeof(int), false);
+
+	return true;
 }

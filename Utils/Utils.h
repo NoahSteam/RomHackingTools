@@ -560,6 +560,7 @@ public:
 	const char* GetPackedTiles() const {return mpPackedTiles;}
 	uint32 GetPackedTileSize() const {return mPackedTileSize;}
 	const std::vector<int>& GetTileIndices() const {return mTiledIndicesForOriginalImage;}
+	void GetTiledIndicesInSaturnFormat(std::vector<int>& OutIndices) const;
 
 private:
 	TileExtractor    mOptimizedTileSet;

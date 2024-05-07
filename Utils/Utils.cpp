@@ -2170,6 +2170,21 @@ void TileSetOptimizer::PackTiles()
 	}
 }
 
+void TileSetOptimizer::GetTiledIndicesInSaturnFormat(std::vector<int>& OutIndices) const
+{	
+	const size_t numIndices = mTiledIndicesForOriginalImage.size();
+	const size_t expectedIndices = 1120;
+	assert(numIndices == expectedIndices);
+
+	OutIndices.reserve(numIndices);
+
+	for (size_t i = 0; i < numIndices; ++i)
+	{
+		const int indice = (mTiledIndicesForOriginalImage[i] + 1) * 2;
+		OutIndices.push_back( SwapByteOrder(indice) );
+	}
+}
+
 ///////////////////////////
 //        TileMap        //
 ///////////////////////////
