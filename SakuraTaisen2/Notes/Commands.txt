@@ -50,10 +50,12 @@ ExtractKinematronImages a:\sakurawars2\Disc1_Original\SAKURA1 a:\SakuraWars2\Ext
 ExtractWarningScreens a:\sakurawars2\Disc1_Original a:\SakuraWars2\ExtractedData\Disc1\WarningScreens 1
 ExtractTycoonRulesScreen a:\sakurawars2\Disc1_Original a:\SakuraWars2\ExtractedData\Disc1\TycoonRules 1
 ExtractLongDayData a:\sakurawars2\Disc1_Original a:\SakuraWars2\ExtractedData\Disc1\LongDay 1
+ExtractBattleSimulator a:\sakurawars2\Disc2_Original a:\SakuraWars2\ExtractedData\Disc2\BattleSimulator 1
+ExtractCreditsData a:\sakurawars2\Disc3_Original a:\SakuraWars2\ExtractedData\Disc3\Credits 1
 SetColorInPalette A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\StatusScreen A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\StatusScreen\Modified 0 0xff00
 PatchGame A:\SakuraWars2\Disc1_Original A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data A:\SakuraWars2\Patched\Disc1
 FindData.exe a:\SakuraWars2\Disc1_Original a:\SakuraWars2\find.bin
-SakuraTaisen.exe FindCompressedDataInDir a:\SakuraWars2\Disc1_Original\SAKURA1 a:\SakuraWars2\Find.bin a:\SakuraWars2\UncompressedResults\EyeCatch
+SakuraTaisen.exe FindCompressedData a:\SakuraWars2\Disc1_Original\SAKURA1 a:\SakuraWars2\Find.bin a:\SakuraWars2\UncompressedResults\EyeCatch
 
 ExtractText C:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1\SAKURA1 C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data\StoryTextPalette.bin C:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\Disc1\Text
 FindDuplicateText C:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\AllText C:\Users\16306\Desktop\Rizwan\SakuraWars2\AllDuplicates.txt

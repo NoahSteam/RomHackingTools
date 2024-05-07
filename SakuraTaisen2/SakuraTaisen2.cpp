@@ -87,6 +87,8 @@ using std::unordered_set;
 #include "Source/WarningScreens.h"
 #include "Source/TycoonGame.h"
 #include "Source/LongDay.h"
+#include "Source/BattleSimulator.h"
+#include "Source/Credits.h"
 #include "Source/PatchGame.h"
 
 void PrintHelp()
@@ -795,6 +797,22 @@ int main(int argc, char *argv[])
 		const bool   bmpFormat = atoi(argv[4]);
 
 		ExtractLongDayData(inDirectory, inOutputDirectory, bmpFormat);
+	}
+	else if (command == "ExtractBattleSimulator" && argc == 5)
+	{
+		const string inDirectory = string(argv[2]) + Seperators;
+		const string inOutputDirectory = string(argv[3]) + Seperators;
+		const bool   bmpFormat = atoi(argv[4]);
+
+		ExtractBattleSimulator(inDirectory, inOutputDirectory, bmpFormat);
+	}
+	else if(command == "ExtractCreditsData" && argc == 5)
+	{
+		const string inDirectory = string(argv[2]) + Seperators;
+		const string inOutputDirectory = string(argv[3]) + Seperators;
+		const bool   bmpFormat = atoi(argv[4]);
+
+		ExtractCreditsData(inDirectory, inOutputDirectory, bmpFormat);
 	}
 	else
 	{

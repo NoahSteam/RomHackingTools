@@ -1,0 +1,9 @@
+280320 changes
+
+param_2 = 060e0000
+
+"header" data is actually part of the encoded data
+
+decoding function at 06010a38
+
+Decode param_2 at 0000ENDI.BIN @0x0002fe80

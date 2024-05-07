@@ -134,6 +134,7 @@
     <ClInclude Include="CreateMinigameSpreadsheets.h\Header.h" />
     <ClInclude Include="Source\BatchedImageExtractor.h" />
     <ClInclude Include="Source\BattleMenu.h" />
+    <ClInclude Include="Source\BattleSimulator.h" />
     <ClInclude Include="Source\BGDatFiles.h" />
     <ClInclude Include="Source\CreateInfoNameImages.h" />
     <ClInclude Include="Source\CreateIndexFile.h" />
@@ -142,6 +143,7 @@
     <ClInclude Include="Source\CreateStorySpreadhseets.h" />
     <ClInclude Include="Source\CreateSysSpreadsheets.h" />
     <ClInclude Include="Source\CreateTranslatedFontSheet.h" />
+    <ClInclude Include="Source\Credits.h" />
     <ClInclude Include="Source\EyeCatch.h" />
     <ClInclude Include="Source\Kinematron.h" />
     <ClInclude Include="Source\LoadScreens.h" />

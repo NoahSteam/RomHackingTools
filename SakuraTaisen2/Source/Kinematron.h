@@ -147,7 +147,7 @@ void EncodeKinematronData(const uint32* pInDecodedData, const uint32 inDecodedDa
 }
 
 
-uint32 DecodeKinematronData(uint32* pEncodedData, int param_2)
+uint32 DecodeKinematronData(uint32* pEncodedData, const int param_2)
 {
 	uint32 uVar1;
 	int iVar2;

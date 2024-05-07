@@ -2844,16 +2844,19 @@ const std::string &InImageDirectory, const std::string& InOutputPhpFilePath)
 	htmlFile.WriteString("					<th>English</th>\n");
 	htmlFile.WriteString("				</tr>\n");
 
-	vector<FileNameContainer> fileNames;
-	FindAllFilesWithinDirectory(InImageDirectory, fileNames);
+	vector<FileNameContainer> allFiles;
+	FindAllFilesWithinDirectory(InImageDirectory, allFiles);
 
-	std::sort(fileNames.begin(), fileNames.end(), [](const FileNameContainer& a, const FileNameContainer& b)
+	vector<FileNameContainer> imageFiles;
+	GetAllFilesOfType(allFiles, ".png", imageFiles);
+
+	std::sort(imageFiles.begin(), imageFiles.end(), [](const FileNameContainer& a, const FileNameContainer& b)
 		{
 			return std::atoi(a.mNoExtension.c_str()) < std::atoi(b.mNoExtension.c_str());
 		});
 
 	int i = 0;
-	for (const FileNameContainer& fileName : fileNames)
+	for (const FileNameContainer& fileName : imageFiles)
 	{
 		const char* pImageNumber = fileName.mNoExtension.c_str();
 
