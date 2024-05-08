@@ -11,9 +11,67 @@ struct BattleMenuImageInfo
 };
 #pragma pack(pop)
 
+void ExtractGameOverMenu(const string& rootSakuraDirectory, bool bBmp, const string& outDirectory)
+{
+	const string gameOverDir = outDirectory + "GameOver\\";
+	CreateDirectoryHelper(gameOverDir);
+
+	const string dataFilePath = rootSakuraDirectory + string("SAKURA2\\GOVERKV1.BIN");
+	FileNameContainer dataFileNameInfo(dataFilePath.c_str());
+
+	FileData fileData;
+	if (!fileData.InitializeFileData(dataFileNameInfo))
+	{
+		return;
+	}
+
+	struct ImageInfo
+	{
+		int width;
+		int height;
+	};
+
+	const int numImages = 3;
+	ImageInfo images[numImages] =
+	{
+		320, 240,
+		176, 80,
+		176, 64
+	};
+
+	const string bmpExt = bBmp ? string(".bmp") : (".png");
+	uint32 offset = 0x10000;
+	for(int imageIndex = 0; imageIndex < numImages; ++imageIndex)
+	{
+		const int bufferSize = images[imageIndex].width * images[imageIndex].height;
+		uint16* pColorBuffer = new uint16[bufferSize];
+		uint16* pSaturnColor = (uint16*)(fileData.GetData() + offset); //0x3c600 176x32
+
+		for (int i = 0; i < bufferSize; i += 1)
+		{
+			unsigned short color = SwapByteOrder(pSaturnColor[i]);//((pSaturnColor[i] << 8) + (unsigned char)pSaturnColor[i + 1]);
+			const uint8 r = (color & 0x7C00) >> 10;
+			const uint8 g = (color & 0x3e0) >> 5;
+			const uint8 b = (color & 0x1f);
+
+			pColorBuffer[i] = (b << 10) + (g << 5) + r;
+		}
+
+		const string imageName = gameOverDir + std::to_string(imageIndex) + bmpExt;
+		BitmapWriter bitmap;
+		bitmap.CreateBitmap(imageName, images[imageIndex].width, -images[imageIndex].height, 16, (char*)pColorBuffer, bufferSize * 2, nullptr, 0, bBmp);
+
+		delete pColorBuffer;
+
+		offset += bufferSize*2;
+	}
+}
+
 void ExtractBattleMenu(const string& rootSakuraDirectory, bool bBmp, const string& outDirectory)
 {
 	CreateDirectoryHelper(outDirectory);
+
+	ExtractGameOverMenu(rootSakuraDirectory, bBmp, outDirectory);
 
 	const string sakuraFilePath = rootSakuraDirectory + string("SAKURA2\\ETCDATA.BIN");
 	FileNameContainer sakuraFileNameInfo(sakuraFilePath.c_str());
