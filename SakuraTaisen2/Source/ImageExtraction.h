@@ -98,3 +98,27 @@ bool ExtractFontSheetAsBitmap(const FileNameContainer& inFileNameContainer, cons
 	//	return ExtractImage(inFileNameContainer, outFileName, inPaletteFile, 8, 12, 255, 16, 0, false, true);
 	return ExtractImage(inFileNameContainer, outFileName, inPaletteFile, 16, 16, 255, bOutput4BitImage);
 }
+
+bool Extract16BitImageFromData(const string& inFileName, const char* pInColorData, const int inWidth, const int inHeight)
+{
+	const int bufferSize = inWidth * inHeight;
+	uint16* pColorBuffer = new uint16[bufferSize];
+	uint16* pSaturnColor = (uint16*)(pInColorData);
+
+	for (int i = 0; i < bufferSize; i += 1)
+	{
+		unsigned short color = SwapByteOrder(pSaturnColor[i]);
+		const uint8 r = (color & 0x7C00) >> 10;
+		const uint8 g = (color & 0x3e0) >> 5;
+		const uint8 b = (color & 0x1f);
+
+		pColorBuffer[i] = (b << 10) + (g << 5) + r;
+	}
+
+	BitmapWriter bitmap;
+	const bool bResult = bitmap.CreateBitmap(inFileName, inWidth, -inHeight, 16, (char*)pColorBuffer, bufferSize * 2, nullptr, 0, true);
+
+	delete pColorBuffer;
+
+	return bResult;
+}

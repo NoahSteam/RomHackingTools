@@ -1250,7 +1250,7 @@ bool BitmapReader::ReadBitmap(const string& inBitmapName, bool bInErrorOnFail)
 
 	memcpy(&mBitmapData.mInfoHeader, pFileData + sizeof(mBitmapData.mFileHeader), sizeof(mBitmapData.mInfoHeader));
 
-	if( !(mBitmapData.mInfoHeader.mBitCount == 4 || mBitmapData.mInfoHeader.mBitCount == 8) )
+	if( !(mBitmapData.mInfoHeader.mBitCount == 4 || mBitmapData.mInfoHeader.mBitCount == 8 || mBitmapData.mInfoHeader.mBitCount == 32) )
 	{
 		printf("%s has unsupported bit count [%i]", inBitmapName.c_str(), mBitmapData.mInfoHeader.mBitCount);
 		return false;	
@@ -1817,7 +1817,7 @@ bool TileExtractor::ExtractTiles(unsigned int inTileWidth, int inTileHeight, uns
 
 	if( !(inBitmap.GetBitCount() == 4 || inBitmap.GetBitCount() == 8) )
 	{
-		printf("Can't extract tiles.  Only 4 and 8 bit paletted bitmaps supported\n");
+		printf("Can't extract tiles.  Only 4, 8, and 16 bit paletted bitmaps supported\n");
 		return false;
 	}
 
@@ -1980,10 +1980,94 @@ void TileExtractor::SwapColorsOnTiles(const char inSearchColor, const char inRep
 
 }
 
+///////////////////////////////////////////
+//        RGBBmpToSaturnConverter        //
+///////////////////////////////////////////
+RGBBmpToSaturnConverter::~RGBBmpToSaturnConverter()
+{
+	delete[] mpBGR;
+	mpBGR = nullptr;
+
+	mColorDataSize = 0;
+}
+
+bool RGBBmpToSaturnConverter::ConvertBmpToSakuraFormat(const std::string& inBmpPath)
+{
+	BitmapReader origBmp;
+	if (!origBmp.ReadBitmap(inBmpPath))
+	{
+		return false;
+	}
+
+	if(origBmp.GetBitCount() != 32)
+	{
+		printf("RGBBmpToSaturnConverter::ConvertBmpToSakuraFormat: Only 32bit images supported. %s \n", inBmpPath.c_str());
+		return false;
+	}
+	
+	//Init image info
+	mWidth = origBmp.mBitmapData.mInfoHeader.mImageWidth;
+	mHeight = abs(origBmp.mBitmapData.mInfoHeader.mImageHeight);
+	const int numPixels = mWidth * mHeight;
+	mColorDataSize = numPixels * 2;
+
+	const int bmpColorDataSize = origBmp.GetColorDataSize();
+	if(numPixels*4 != bmpColorDataSize)
+	{
+		printf("RGBBmpToSaturnConverter::ConvertBmpToSakuraFormat: Color count is invalid. %s \n", inBmpPath.c_str());
+		return false;
+	}
+
+	mpBGR = new char[mColorDataSize];
+
+	const bool bFlipImage = origBmp.mBitmapData.mInfoHeader.mImageHeight > 0;
+
+	if(bFlipImage)
+	{
+		//Convert from rbg to bgr
+		const uint8* pBmpColor = (uint8*)origBmp.GetColorData();
+		uint16* pOutColor = (uint16*)mpBGR;
+		for (int y = 0; y < mHeight; ++y)
+		{
+			for (int x = 0; x < mWidth; ++x)
+			{
+				const int origPixelIndex = (y * mWidth + x)*4;
+				const int outPixelIndex  = ((mHeight - 1) - y) * mWidth + x;
+
+				const uint8 r = (uint8)floorf(((uint8)(pBmpColor[origPixelIndex + 0]) / 255.f) * 31.f + 0.5f);
+				const uint8 g = (uint8)floorf(((uint8)(pBmpColor[origPixelIndex + 1]) / 255.f) * 31.f + 0.5f);
+				const uint8 b = (uint8)floorf(((uint8)(pBmpColor[origPixelIndex + 2]) / 255.f) * 31.f + 0.5f);
+
+				const uint16 outColor = ((r << 10) + (g << 5) + b) & 0x7fff;
+				pOutColor[outPixelIndex] = SwapByteOrder(outColor);
+			}
+		}
+	}
+	else
+	{
+		//Convert from rbg to bgr
+		const uint8* pBmpColor = (uint8*)origBmp.GetColorData();
+		uint16* pOutColor = (uint16*)mpBGR;
+		for (int i = 0; i < numPixels; ++i)
+		{
+			const int bmpIndex = i * 4;
+			assert(bmpIndex + 2 < bmpColorDataSize);
+
+			const uint8 r = (uint8)floorf(((uint8)(pBmpColor[bmpIndex + 0]) / 255.f) * 31.f + 0.5f);
+			const uint8 g = (uint8)floorf(((uint8)(pBmpColor[bmpIndex + 1]) / 255.f) * 31.f + 0.5f);
+			const uint8 b = (uint8)floorf(((uint8)(pBmpColor[bmpIndex + 2]) / 255.f) * 31.f + 0.5f);
+
+			uint16 outColor = ((r << 10) + (g << 5) + b) & 0x7fff;
+			pOutColor[i] = SwapByteOrder(outColor);
+		}
+	}
+
+	return true;
+}
+
 ////////////////////////////////////////
 //        BmpToSaturnConverter        //
 ////////////////////////////////////////
-
 BmpToSaturnConverter::~BmpToSaturnConverter()
 {
 	delete mpPackedTiles;
@@ -2017,42 +2101,45 @@ bool BmpToSaturnConverter::ConvertBmpToSakuraFormat(const string& inBmpPath, boo
 	mTileExtractor.mImageWidth = abs(origBmp.mBitmapData.mInfoHeader.mImageWidth);
 	mTileExtractor.mImageHeight = abs(origBmp.mBitmapData.mInfoHeader.mImageHeight);
 
-	//Convert it to the SakuraTaisen format
-	if (!mPalette.CreateFrom32BitData(origBmp.mBitmapData.mPaletteData.mpRGBA, origBmp.mBitmapData.mPaletteData.mSizeInBytes, false))
+	//Fixup palette if needed
+	if(origBmp.GetBitCount() < 16)
 	{
-		return false;
-	}
-
-	//Fix up palette
-	if (bFixupAlphaColor)
-	{
-		//First index needs to have the transparent color
-		int indexOfAlphaColor = -1;
-		for (int i = 0; i < mPalette.GetNumColors(); ++i)
+		if (!mPalette.CreateFrom32BitData(origBmp.mBitmapData.mPaletteData.mpRGBA, origBmp.mBitmapData.mPaletteData.mSizeInBytes, false))
 		{
-			assert(i * 2 < mPalette.GetSize());
+			return false;
+		}
 
-			const unsigned short color = *((short*)(mPalette.GetData() + i * 2));
-			if (color == inAlphaColor)
+		//Fix up palette
+		if (bFixupAlphaColor)
+		{
+			//First index needs to have the transparent color
+			int indexOfAlphaColor = -1;
+			for (int i = 0; i < mPalette.GetNumColors(); ++i)
 			{
-				const unsigned short oldColor0 = *((unsigned short*)mPalette.GetData());
-				mPalette.SetValue(0, inAlphaColor);
-				mPalette.SetValue(i, oldColor0);
-				indexOfAlphaColor = i;
-				break;
+				assert(i * 2 < mPalette.GetSize());
+
+				const unsigned short color = *((short*)(mPalette.GetData() + i * 2));
+				if (color == inAlphaColor)
+				{
+					const unsigned short oldColor0 = *((unsigned short*)mPalette.GetData());
+					mPalette.SetValue(0, inAlphaColor);
+					mPalette.SetValue(i, oldColor0);
+					indexOfAlphaColor = i;
+					break;
+				}
 			}
-		}
 
-		if (indexOfAlphaColor == -1)
-		{
-			printf("Alpha Color not found.  Palette will not be correct. \n");
-			indexOfAlphaColor = 0;
-		}
+			if (indexOfAlphaColor == -1)
+			{
+				printf("Alpha Color not found.  Palette will not be correct. \n");
+				indexOfAlphaColor = 0;
+			}
 
-		//Fix up color data now that the palette has been modified
-		if (indexOfAlphaColor != -1)
-		{
-			mTileExtractor.FixupIndexOfAlphaColor((unsigned short)indexOfAlphaColor, origBmp.mBitmapData.mInfoHeader.mBitCount == 4);
+			//Fix up color data now that the palette has been modified
+			if (indexOfAlphaColor != -1)
+			{
+				mTileExtractor.FixupIndexOfAlphaColor((unsigned short)indexOfAlphaColor, origBmp.mBitmapData.mInfoHeader.mBitCount == 4);
+			}
 		}
 	}
 

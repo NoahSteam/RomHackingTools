@@ -32,7 +32,7 @@ void ExtractGameOverMenu(const string& rootSakuraDirectory, bool bBmp, const str
 	};
 
 	const int numImages = 3;
-	ImageInfo images[numImages] =
+	const ImageInfo images[numImages] =
 	{
 		320, 240,
 		176, 80,
@@ -43,27 +43,10 @@ void ExtractGameOverMenu(const string& rootSakuraDirectory, bool bBmp, const str
 	uint32 offset = 0x10000;
 	for(int imageIndex = 0; imageIndex < numImages; ++imageIndex)
 	{
-		const int bufferSize = images[imageIndex].width * images[imageIndex].height;
-		uint16* pColorBuffer = new uint16[bufferSize];
-		uint16* pSaturnColor = (uint16*)(fileData.GetData() + offset); //0x3c600 176x32
-
-		for (int i = 0; i < bufferSize; i += 1)
-		{
-			unsigned short color = SwapByteOrder(pSaturnColor[i]);//((pSaturnColor[i] << 8) + (unsigned char)pSaturnColor[i + 1]);
-			const uint8 r = (color & 0x7C00) >> 10;
-			const uint8 g = (color & 0x3e0) >> 5;
-			const uint8 b = (color & 0x1f);
-
-			pColorBuffer[i] = (b << 10) + (g << 5) + r;
-		}
-
 		const string imageName = gameOverDir + std::to_string(imageIndex) + bmpExt;
-		BitmapWriter bitmap;
-		bitmap.CreateBitmap(imageName, images[imageIndex].width, -images[imageIndex].height, 16, (char*)pColorBuffer, bufferSize * 2, nullptr, 0, bBmp);
+		Extract16BitImageFromData(imageName, fileData.GetData() + offset, images[imageIndex].width, images[imageIndex].height);
 
-		delete pColorBuffer;
-
-		offset += bufferSize*2;
+		offset += images[imageIndex].width * images[imageIndex].height * 2;
 	}
 }
 
@@ -133,6 +116,63 @@ void ExtractBattleMenu(const string& rootSakuraDirectory, bool bBmp, const strin
 			outBmp.CreateBitmap(outFileName, lookupTable[i].widthDiv8, -lookupTable[i].height, 4, fileData.GetData() + lookupTable[i].offsetDiv8, (lookupTable[i].widthDiv8 * lookupTable[i].height) / 2, palette.GetData(), palette.GetSize(), bBmp);
 		}
 	}
+}
+
+bool PatchBattleGameOverScreens(const string& inPatchedSakuraDirectory, const string& inTranslatedDataDirectory)
+{
+	struct FilesToPatch
+	{
+		const char* pName;
+	};
+	const FilesToPatch filesToPatch[] =
+	{
+		"SAKURA2\\GOVERKV1.BIN",
+		"SAKURA2\\GOVERTV1.BIN",
+	};
+
+	const string translatedImagePath1 = inTranslatedDataDirectory + "GOVER\\GameOver1.bmp";
+	const string translatedImagePath2 = inTranslatedDataDirectory + "GOVER\\GameOver2.bmp";
+
+	RGBBmpToSaturnConverter patchedImageData1;
+	if (!patchedImageData1.ConvertBmpToSakuraFormat(translatedImagePath1))
+	{
+		printf("PatchBattleMenu: Couldn't convert image: %s.\n", translatedImagePath1.c_str());
+		return false;
+	}
+
+	if(patchedImageData1.GetImageWidth() != 176 && patchedImageData1.GetImageHeight() != 80)
+	{
+		printf("PatchBattleMenu: Image needs to be 176x80: %s.\n", translatedImagePath1.c_str());
+		return false;
+	}
+
+	RGBBmpToSaturnConverter patchedImageData2;
+	if (!patchedImageData2.ConvertBmpToSakuraFormat(translatedImagePath2))
+	{
+		printf("PatchBattleMenu: Couldn't convert image: %s.\n", translatedImagePath2.c_str());
+		return false;
+	}
+
+	if (patchedImageData2.GetImageWidth() != 176 && patchedImageData2.GetImageHeight() != 64)
+	{
+		printf("PatchBattleMenu: Image needs to be 176x64: %s.\n", translatedImagePath2.c_str());
+		return false;
+	}
+
+	for(int i = 0; i < 2; ++i)
+	{
+		const string sakuraFilePath = inPatchedSakuraDirectory + filesToPatch[i].pName;
+		FileReadWriter sakuraFile;
+		if (!sakuraFile.OpenFile(sakuraFilePath))
+		{
+			return false;
+		}
+
+		sakuraFile.WriteData(0x35800, patchedImageData1.GetImageData(), patchedImageData1.GetImageDataSize(), false);
+		sakuraFile.WriteData(0x3c600, patchedImageData2.GetImageData(), patchedImageData2.GetImageDataSize(), false);		
+	}
+
+	return true;
 }
 
 bool PatchBattleNumberLocation(const string& inPatchedSakuraDirectory, const string& inTranslatedDataDirectory)
@@ -246,6 +286,11 @@ bool PatchBattleMenu(const string& inPatchedSakuraDirectory, const string& inTra
 				return false;
 			}
 		}
+	}
+
+	if(!PatchBattleGameOverScreens(inPatchedSakuraDirectory, inTranslatedDataDirectory))
+	{
+		return false;
 	}
 
 	return PatchBattleNumberLocation(inPatchedSakuraDirectory, inTranslatedDataDirectory);

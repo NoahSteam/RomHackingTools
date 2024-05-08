@@ -526,6 +526,24 @@ public:
 	void SwapColorsOnTiles(const char inSearchColor, const char inReplaceColor);
 };
 
+struct RGBBmpToSaturnConverter
+{
+	~RGBBmpToSaturnConverter();
+
+	bool ConvertBmpToSakuraFormat(const std::string& inBmpPath);
+	int GetImageWidth() const { return mWidth; }
+	int GetImageHeight() const { return mHeight; }
+	const char* GetImageData() const {return mpBGR;}
+	unsigned int GetImageDataSize() const {return mColorDataSize;}
+
+private:
+	const char* mpBGR = nullptr;
+	int mColorDataSize{0};
+	int mWidth{ 0 };
+	int mHeight{ 0 };
+	int mBitCount{ 0 };
+};
+
 struct BmpToSaturnConverter
 {
 	TileExtractor mTileExtractor;
