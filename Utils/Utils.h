@@ -557,7 +557,7 @@ struct BmpToSaturnConverter
 
 	~BmpToSaturnConverter();
 
-	bool ConvertBmpToSakuraFormat(const std::string& inBmpPath, bool bFixupAlphaColor, const unsigned short inAlphaColor = CYAN, const unsigned int* pTileWidth = 0, const unsigned int* pTileHeight = 0);
+	bool ConvertBmpToSakuraFormat(const std::string& inBmpPath, bool bFixupAlphaColor, const unsigned short inAlphaColor = CYAN, const unsigned int* pTileWidth = 0, const unsigned int* pTileHeight = 0, bool bInMustExist = true);
 	void PackTiles();
 	int GetImageWidth() const {return mTileExtractor.mImageWidth;}
 	int GetImageHeight() const {return (int)mTileExtractor.mImageHeight < 0 ? -1 * mTileExtractor.mImageHeight : mTileExtractor.mImageHeight;}

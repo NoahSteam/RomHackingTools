@@ -1369,16 +1369,19 @@ void BitmapReader::SwapColors(const char inSearchColor, const char inNewColor)
 
 	//Flip image
 	const int imageHeight = abs(mBitmapData.mInfoHeader.mImageHeight);
-	/*
-	for (int y = 0; y < imageHeight; ++y)
+	
+	if(mBitmapData.mInfoHeader.mImageHeight > 0)
 	{
-		for (int x = 0; x < mBitmapData.mInfoHeader.mImageWidth / 2; ++x)
+		for (int y = 0; y < imageHeight; ++y)
 		{
-			const int currentPixel = y * mBitmapData.mInfoHeader.mImageWidth / 2 + x;
-			const int outPixel = ((imageHeight - 1) - y) * mBitmapData.mInfoHeader.mImageWidth / 2 + x;
-			pModifiedData[outPixel] = pOriginalData[currentPixel];
+			for (int x = 0; x < mBitmapData.mInfoHeader.mImageWidth / 2; ++x)
+			{
+				const int currentPixel = y * mBitmapData.mInfoHeader.mImageWidth / 2 + x;
+				const int outPixel = ((imageHeight - 1) - y) * mBitmapData.mInfoHeader.mImageWidth / 2 + x;
+				pModifiedData[outPixel] = pOriginalData[currentPixel];
+			}
 		}
-	}*/
+	}
 
 	//Swap colors
 	for (int y = 0; y < imageHeight; ++y)
@@ -2075,11 +2078,11 @@ BmpToSaturnConverter::~BmpToSaturnConverter()
 	mPackedTileSize = 0;
 }
 
-bool BmpToSaturnConverter::ConvertBmpToSakuraFormat(const string& inBmpPath, bool bFixupAlphaColor, const unsigned short inAlphaColor, const unsigned int* pTileWidth, const unsigned int* pTileHeight)
+bool BmpToSaturnConverter::ConvertBmpToSakuraFormat(const string& inBmpPath, bool bFixupAlphaColor, const unsigned short inAlphaColor, const unsigned int* pTileWidth, const unsigned int* pTileHeight, bool bInMustExist)
 {
 	//Read in translated font sheet
 	BitmapReader origBmp;
-	if (!origBmp.ReadBitmap(inBmpPath))
+	if (!origBmp.ReadBitmap(inBmpPath, bInMustExist))
 	{
 		return false;
 	}

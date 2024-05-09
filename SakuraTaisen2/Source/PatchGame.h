@@ -41,6 +41,11 @@ static bool BringOverOriginalFiles(const string& inRootSakuraDirectory, const st
 	GetAllFilesOfType(allFiles, "COMMFILE.ALL", originalFiles);
 	GetAllFilesOfType(allFiles, "OMK", originalFiles);
 	GetAllFilesOfType(allFiles, "CARD_DAT.ALL", originalFiles);
+	GetAllFilesOfType(allFiles, "INST_", originalFiles);
+	GetAllFilesOfType(allFiles, "MGMRDATA.BIN", originalFiles);
+	GetAllFilesOfType(allFiles, "MGRNDATA.BIN", originalFiles);
+	GetAllFilesOfType(allFiles, "MGSKDATA.BIN", originalFiles);
+	GetAllFilesOfType(allFiles, "MINIGAME.CG", originalFiles);
 
 	//Battle files
 	GetAllFilesOfType(allFiles, "COL.BIN", originalFiles);
@@ -308,6 +313,12 @@ bool PatchGame(const string& inSourceGameDirectory, const string& inTranslatedDi
 		return false;
 	}
 	
+	if(!PatchMiniGames(inPatchedDirectory, inTranslatedDirectory))
+	{
+		printf("Unable to patch MiniGames\n");
+		return false;
+	}
+
 	if (!PatchTycoon(inPatchedDirectory, inTranslatedDirectory))
 	{
 		printf("Unable to patch Tycoon\n");
