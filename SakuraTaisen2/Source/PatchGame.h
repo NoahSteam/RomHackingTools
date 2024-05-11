@@ -169,6 +169,7 @@ bool PatchTextDrawingCode(const string& inSourceGameDirectory, const string& inP
 			//Fix special lips horizontal spacing
 			WriteCommand(0xdf56, 0x4200); //from SHLL2 to SHLL in memory at 06012F56
 			WriteByte(0xe4f5, 0x08); //from add 0x10,r1 to add 0x08,r1
+			WriteCommand(0xe45e, 0x719a) //from add 0x98, r1, to add 0x9a, r1 at 0601345e 
 		}
 
 		//Fix item drawing code
