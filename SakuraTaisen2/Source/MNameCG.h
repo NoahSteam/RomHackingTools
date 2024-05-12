@@ -143,8 +143,8 @@ bool PatchMNameCG(const std::string& inPatchedSakuraDirectory, const std::string
 	const string sakuraFilePath = inPatchedSakuraDirectory + string("SAKURA.BIN");
 	FileNameContainer sakuraFileNameInfo(sakuraFilePath.c_str());
 
-	FileData sakuraFileData;
-	if (!sakuraFileData.InitializeFileData(sakuraFileNameInfo))
+	FileReadWriter sakuraFileData;
+	if (!sakuraFileData.OpenFile(sakuraFileNameInfo.mFullPath))
 	{
 		return false;
 	}
@@ -159,7 +159,7 @@ bool PatchMNameCG(const std::string& inPatchedSakuraDirectory, const std::string
 
 	const int MaxEntries = 49;
 	const int numCGFiles = 3;
-	CGFilesToPatch cgFilesToPatch[numCGFiles] = 
+	const CGFilesToPatch cgFilesToPatch[numCGFiles] = 
 	{
 		{"1\\", "SAKURA1\\M_NAME1.CG", 49, 0x00021C08},
 		{"2\\", "SAKURA1\\M_NAME2.CG", 7, 0x000222EC},
@@ -180,14 +180,13 @@ bool PatchMNameCG(const std::string& inPatchedSakuraDirectory, const std::string
 
 		const std::string bmpExt(".bmp");
 		MNameCGHeader lookupTable[MaxEntries];
-		const unsigned int offsetToData = cgFilesToPatch[cgIndex].offsetToData;
-		memcpy_s(lookupTable, sizeof(lookupTable), sakuraFileData.GetData() + offsetToData, sizeof(MNameCGHeader)*cgFilesToPatch[cgIndex].numEntries);
+		const unsigned int offsetToTable = cgFilesToPatch[cgIndex].offsetToData;
+		sakuraFileData.ReadData(offsetToTable, (char*)lookupTable, sizeof(MNameCGHeader)* cgFilesToPatch[cgIndex].numEntries, false);
+	//	memcpy_s(lookupTable, sizeof(lookupTable), sakuraFileData.GetData() + offsetToData, sizeof(MNameCGHeader)*cgFilesToPatch[cgIndex].numEntries);
 
+		uint16 offset = SwapByteOrder(lookupTable[0].offsetToImage) * 8;
 		for (int i = 0; i < cgFilesToPatch[cgIndex].numEntries; ++i)
 		{
-			lookupTable[i].offsetToImage = SwapByteOrder(lookupTable[i].offsetToImage) * 8;
-			lookupTable[i].width *= 8;
-
 			const string imageName = translatedDirectory + std::to_string(i) + bmpExt;
 			BmpToSaturnConverter patchedImage;
 			if( !patchedImage.ConvertBmpToSakuraFormat(imageName, false) )
@@ -199,8 +198,15 @@ bool PatchMNameCG(const std::string& inPatchedSakuraDirectory, const std::string
 				return false;
 			}
 			
-			cgFileData.WriteData(lookupTable[i].offsetToImage, patchedImage.GetImageData(), patchedImage.GetImageDataSize());
+			const uint32 offsetToImage = offset;//SwapByteOrder(lookupTable[i].offsetToImage) * 8;
+			cgFileData.WriteData(offsetToImage, patchedImage.GetImageData(), patchedImage.GetImageDataSize());
+
+			lookupTable[i].offsetToImage = SwapByteOrder<uint16>(offset / 8);
+			lookupTable[i].width = patchedImage.GetImageWidth() / 8;
+			offset += (lookupTable[i].width*8 * lookupTable[i].height) >> 1;
 		}
+
+		sakuraFileData.WriteData(offsetToTable, (char*)lookupTable, sizeof(MNameCGHeader)* cgFilesToPatch[cgIndex].numEntries, false);
 	}
 
 	printf("Succeeded patching CG files\n");
