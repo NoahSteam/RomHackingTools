@@ -392,10 +392,10 @@ bool PatchGame(const string& inSourceGameDirectory, const string& inTranslatedDi
 		return false;
 	}
 
-	//if(!PatchIntroScreens(inPatchedDirectory, inTranslatedDirectory))
+	if(!PatchIntroScreens(inPatchedDirectory, inTranslatedDirectory))
 	{
-	//	printf("Unable to patch Title Screens\n");
-	//	return false;
+		printf("Unable to patch Title Screens\n");
+		return false;
 	}
 
 	if(!PatchTextDrawingCode(inSourceGameDirectory, inPatchedDirectory))

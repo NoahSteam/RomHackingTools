@@ -38,3 +38,5 @@ skip
 64x32 @8140
 56x16 @8940
 48x32 @8cc0
+
+Intro Table at 0xc538 (210548 in mem)

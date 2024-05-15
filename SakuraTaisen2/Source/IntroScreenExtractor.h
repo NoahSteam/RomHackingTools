@@ -1,10 +1,35 @@
+//Static logo
 struct TTL2ImageData
 {
-	int width;
-	int height;
+	uint8 widthDiv8;
+	uint8 height;
+	uint16 unknown1;
+	uint16 offsetToNextDiv8;
+	uint16 unknown2;
+
+	void SwapEndianess()
+	{
+		offsetToNextDiv8 = SwapByteOrder(offsetToNextDiv8);
+	}
 };
 
-static const TTL2ImageData TTL2ImageTable[] =
+//For animated logo
+#pragma pack(push, 1)
+struct TitleImageData
+{
+	uint16 offsetToNextDiv8;
+	uint16 unknown1;
+	uint8 widthDiv8;
+	uint8 height;
+	uint16 unknown2;
+
+	void SwapEndianess()
+	{
+		offsetToNextDiv8 = SwapByteOrder(offsetToNextDiv8);
+	}
+};
+#pragma pack(pop)
+/*static const TTL2ImageData TTL2ImageTable[] =
 {
 	{192,64},
 	{256,24},
@@ -15,7 +40,7 @@ static const TTL2ImageData TTL2ImageTable[] =
 	{208, 16},
 	{96, 8},
 	{160, 16}
-};
+};*/
 
 void ExtractTTL2(const string& InSakuraRootDir, const string& OutDirectory)
 {
@@ -35,24 +60,53 @@ void ExtractTTL2(const string& InSakuraRootDir, const string& OutDirectory)
 		return;
 	}
 
+	const FileNameContainer titleFileName((InSakuraRootDir + string("SAKURA1\\TITLE.BIN")));
+	FileData titleFileData;
+	if (!titleFileData.InitializeFileData(titleFileName))
+	{
+		return;
+	}
+
+	const int numImages = 10;
+	TTL2ImageData ttl2ImageTable[numImages];
+	titleFileData.ReadData(0xdee0, (char*)ttl2ImageTable, sizeof(ttl2ImageTable), false);
+	for(int i = 0; i < numImages; ++i)
+	{
+		ttl2ImageTable[i].SwapEndianess();
+	}
+
 	int imageOffset = 0;
-	const int numImages = sizeof(TTL2ImageTable) / sizeof(TTL2ImageData);
 	for (int i = 0; i < numImages; ++i)
 	{
 		const string outputFile = tt2lOutDirectory + string("image_") + std::to_string(i) + string(".bmp");
 		const char* pImageData = decompressor.mpUncompressedData;
+		const int width = ttl2ImageTable[i].widthDiv8*8;
 
-		ExtractImageFromData(pImageData + imageOffset, TTL2ImageTable[i].width * TTL2ImageTable[i].height, outputFile,
+		ExtractImageFromData(pImageData + imageOffset, width * ttl2ImageTable[i].height, outputFile,
 			ttl2cgbData.GetData() + 0x200,
-			512, false, TTL2ImageTable[i].width, TTL2ImageTable[i].height,
+			512, false, width, ttl2ImageTable[i].height,
 			1, 256, 0, true, true);
 
-		imageOffset += TTL2ImageTable[i].width * TTL2ImageTable[i].height;
+		imageOffset = ttl2ImageTable[i].offsetToNextDiv8 * 8;//width * TTL2ImageTable[i].height;
 	}
 }
 
 void ExtractTitle(const string& InSakuraRootDir, const string& OutDirectory)
 {
+#define USE_DEMO_VERSION 0
+
+#if USE_DEMO_VERSION
+	const int offsetToImageTable = 0xac54;
+	const int offsetToCompressedImages = 0x15c54;
+	const int offsetToPalette1 = 0x10f98;
+	const int offsetToPalette2 = 0x11198;
+#else
+	const int offsetToImageTable = 0xc538;
+	const int offsetToCompressedImages = 0x18158;
+	const int offsetToPalette1 = 0x1349c;
+	const int offsetToPalette2 = 0x1369c;
+#endif
+
 	const string tt2lOutDirectory = OutDirectory + "TITLE\\";
 	CreateDirectoryHelper(tt2lOutDirectory);
 
@@ -63,12 +117,42 @@ void ExtractTitle(const string& InSakuraRootDir, const string& OutDirectory)
 		return;
 	}
 
+	//Read image table
+	const int numImages = 62;
+	TitleImageData imageTable[numImages];
+	titleFileData.ReadData(offsetToImageTable, (char*)imageTable, sizeof(imageTable), false);
+	for(int i = 0; i < numImages; ++i)
+	{
+		imageTable[i].SwapEndianess();
+	}
+
+	//Uncompress image data
 	PRSDecompressor decompressor;
-	if (!decompressor.UncompressData((void*)(titleFileData.GetData() + 0x18158), titleFileData.GetDataSize() - 0x18158))
+	if (!decompressor.UncompressData((void*)(titleFileData.GetData() + offsetToCompressedImages), titleFileData.GetDataSize() - offsetToCompressedImages))
 	{
 		return;
 	}
 
+	const char* pImageData = decompressor.mpUncompressedData;
+	for (int i = 0; i < numImages; ++i)
+	{
+		const string outputFile = tt2lOutDirectory + string("image_") + std::to_string(i) + string(".bmp");
+	//	const string outputFile = tt2lOutDirectory + string("image_") + IntToHexString(imageTable[i].offsetToNextDiv8 * 8) + string(".bmp");
+		const int width = imageTable[i].widthDiv8 * 8;
+		const int height = imageTable[i].height;
+		const int paletteOffset = i < 30 ? offsetToPalette1 : offsetToPalette2;
+		const bool bIs4Bit = (i >= 0 && i <= 12) || i >= 60;
+		const int dataSize = bIs4Bit ? (width * height) >> 1 : width * height;
+
+		ExtractImageFromData(pImageData + imageTable[i].offsetToNextDiv8*8, dataSize, outputFile,
+			titleFileData.GetData() + paletteOffset,
+			bIs4Bit ? 32 : 512, bIs4Bit, width, height,
+			1, 256, 0, true, true);
+
+		//imageOffset += images[i].width * images[i].height;
+	}
+
+	#if 0
 	struct ImageData
 	{
 		int width;
@@ -142,6 +226,7 @@ void ExtractTitle(const string& InSakuraRootDir, const string& OutDirectory)
 
 		imageOffset += images[i].width * images[i].height;
 	}
+	#endif
 }
 
 void ExtractIntrosScreens(const string& InSakuraRootDir, const string& OutDirectory)
@@ -150,6 +235,101 @@ void ExtractIntrosScreens(const string& InSakuraRootDir, const string& OutDirect
 
 	ExtractTTL2(InSakuraRootDir, OutDirectory);
 	ExtractTitle(InSakuraRootDir, OutDirectory);
+}
+
+bool PatchTitleFile(const string& inPatchedSakuraDirectory, const string& inTranslatedDataDirectory)
+{
+	const string titlePath = inPatchedSakuraDirectory + string("SAKURA1\\TITLE.BIN");
+
+	FileData titleFileData;
+	if (!titleFileData.InitializeFileData(titlePath))
+	{
+		return false;
+	}
+
+	FileReadWriter titleFile;
+	if (!titleFile.OpenFile(titlePath))
+	{
+		return false;
+	}
+
+	const int offsetToImageTable = 0xc538;
+	const int offsetToCompressedImages = 0x18158;
+
+	//Read image table
+	const int numImages = 62;
+	TitleImageData imageTable[numImages];
+	titleFile.ReadData(offsetToImageTable, (char*)imageTable, sizeof(imageTable), false);
+	for (int i = 0; i < numImages; ++i)
+	{
+		imageTable[i].SwapEndianess();
+	}
+
+	//Uncompress image data
+	PRSDecompressor decompressor;
+	if (!decompressor.UncompressData((void*)(titleFileData.GetData() + offsetToCompressedImages), titleFileData.GetDataSize() - offsetToCompressedImages))
+	{
+		return false;
+	}
+
+	//Create blocks of patched image data
+	MemoryBlocks patchedImageBuffer;
+	const string ttl2ImageDir = inTranslatedDataDirectory + "IntroImages\\TITLE\\";
+	uint32 offset = 0;
+	for (int i = 0; i < numImages; ++i)
+	{
+		const string inputImagePath = ttl2ImageDir + string("image_") + std::to_string(i) + string(".bmp");
+		BmpToSaturnConverter patchedImageData;
+		if (!patchedImageData.ConvertBmpToSakuraFormat(inputImagePath, false))
+		{
+			return false;
+		}
+		patchedImageBuffer.AddBlock(patchedImageData.GetImageData(), 0, patchedImageData.GetImageDataSize());
+
+		imageTable[i].widthDiv8        = patchedImageData.GetImageWidth() / 8;
+		imageTable[i].height           = patchedImageData.GetImageHeight();
+		imageTable[i].offsetToNextDiv8 = SwapByteOrder<uint16>(offset / 8);
+		offset += patchedImageData.GetImageDataSize();
+	}		
+
+	//Update image table
+	titleFile.WriteData(offsetToImageTable, (char*)imageTable, sizeof(imageTable), false);
+	
+	//Combine patched data into contiguous block
+	patchedImageBuffer.CombineBlocks();
+
+	//Copy over original compressed data and then paste our new images over that to retain any other data that might exist after the images
+	char* pNewData = new char[decompressor.mUncompressedDataSize];
+	memcpy_s(pNewData, decompressor.mUncompressedDataSize, decompressor.mpUncompressedData, decompressor.mUncompressedDataSize);
+	memcpy_s(pNewData, patchedImageBuffer.GetTotalSize(), patchedImageBuffer.GetCombinedData(), patchedImageBuffer.GetTotalSize());
+
+	//Compress it all
+	PRSCompressor compressor;
+	compressor.CompressData(pNewData, decompressor.mUncompressedDataSize);
+
+	//Clear the buffer now that it's compressed
+	delete[] pNewData;
+
+	//Make sure we don't go over our size limit
+	if (compressor.mCompressedSize > decompressor.mUncompressedDataSize)
+	{
+		printf("PatchTitle: Compressed data is too large. Expected: %i, Got: %li\n", decompressor.mUncompressedDataSize, compressor.mCompressedSize);
+		return false;
+	}
+
+	//Write out compressed image data
+	titleFile.WriteData(offsetToCompressedImages, compressor.mpCompressedData, compressor.mCompressedSize, false);
+
+	//Copy formatting data since image sizes changed
+	FileData patchedFormattingData;
+	if(!patchedFormattingData.InitializeFileData((ttl2ImageDir + "IntroAnimationFormatting.bin")))
+	{
+		return false;
+	}
+
+	titleFile.WriteData(0xc728, patchedFormattingData.GetData(), patchedFormattingData.GetDataSize(), false);
+
+	return true;
 }
 
 bool PatchTTL2(const string& inPatchedSakuraDirectory, const string& inTranslatedDataDirectory)
@@ -174,14 +354,13 @@ bool PatchTTL2(const string& inPatchedSakuraDirectory, const string& inTranslate
 		return false;
 	}
 
-	const string titleFormattingPath = inTranslatedDataDirectory + string("IntroImages\\TTL2\\DisplayFormatting.bin");
-	FileData titleFormattingData;
-	if(!titleFormattingData.InitializeFileData(titleFormattingPath))
+	const int numImages = 10;
+	TTL2ImageData ttl2ImageTable[numImages];
+	titleFile.ReadData(0xdee0, (char*)ttl2ImageTable, sizeof(ttl2ImageTable), false);
+	for (int i = 0; i < numImages; ++i)
 	{
-		return false;
+		ttl2ImageTable[i].SwapEndianess();
 	}
-
-	titleFile.WriteData(0xdee0, titleFormattingData.GetData(), titleFormattingData.GetDataSize(), false);
 
 	PRSDecompressor decompressor;
 	if (!decompressor.UncompressData((void*)(ttl2Data.GetData() + 0x400), ttl2Data.GetDataSize() - 0x400))
@@ -191,7 +370,7 @@ bool PatchTTL2(const string& inPatchedSakuraDirectory, const string& inTranslate
 	
 	MemoryBlocks patchedImageBuffer;
 	const string ttl2ImageDir = inTranslatedDataDirectory + "IntroImages\\TTL2\\";
-	const int numImages = sizeof(TTL2ImageTable) / sizeof(TTL2ImageData);
+	uint16 offset = 0;
 	for (int i = 0; i < numImages; ++i)
 	{
 		const string inputImagePath = ttl2ImageDir + string("image_") + std::to_string(i) + string(".bmp");
@@ -200,17 +379,22 @@ bool PatchTTL2(const string& inPatchedSakuraDirectory, const string& inTranslate
 		{
 			return false;
 		}
-		patchedImageData.PackTiles();
+		patchedImageBuffer.AddBlock(patchedImageData.GetImageData(), 0, patchedImageData.GetImageDataSize());
 
-		patchedImageBuffer.AddBlock(patchedImageData.mpPackedTiles, 0, patchedImageData.mPackedTileSize);
+		offset += patchedImageData.GetImageDataSize();
+		ttl2ImageTable[i].widthDiv8 = patchedImageData.GetImageWidth()/8;
+		ttl2ImageTable[i].height = patchedImageData.GetImageHeight();
+		ttl2ImageTable[i].offsetToNextDiv8 = SwapByteOrder<uint16>(offset/8);
 	}
+	ttl2ImageTable[numImages-1].offsetToNextDiv8 = 0;
+	titleFile.WriteData(0xdee0, (char*)ttl2ImageTable, sizeof(ttl2ImageTable), false);
 
 	//Combine patched data into contiguous block
 	patchedImageBuffer.CombineBlocks();
 
 	//Technically our images are bigger than the original, but there is a bunch of extra space in the file so 33792 is our actual limit
 	PRSCompressor compressor;
-	compressor.CompressData(decompressor.mpUncompressedData, decompressor.mUncompressedDataSize);
+	compressor.CompressData(patchedImageBuffer.GetCombinedData(), patchedImageBuffer.GetTotalSize());
 	if(compressor.mCompressedSize > 33792)
 	{
 		printf("PatchTTL2: Compressed data is too large. Expected: %i, Got: %li\n", 33792, compressor.mCompressedSize);
@@ -219,10 +403,19 @@ bool PatchTTL2(const string& inPatchedSakuraDirectory, const string& inTranslate
 
 	ttl2File.WriteData(0x400, compressor.mpCompressedData, compressor.mCompressedSize, false);
 
+	//The "Sakura Wa" image is a different size than the original, so we need to move it back from 0x18 to 0x10
+	const char sakuraImagePosition = 0x10;
+	titleFile.WriteData(0xdf31, &sakuraImagePosition, sizeof(sakuraImagePosition), false);
+
 	return true;
 }
 
 bool PatchIntroScreens(const string& inPatchedSakuraDirectory, const string& inTranslatedDataDirectory)
 {
-	return PatchTTL2(inPatchedSakuraDirectory, inTranslatedDataDirectory);
+	if(!PatchTTL2(inPatchedSakuraDirectory, inTranslatedDataDirectory))
+	{
+		return false;
+	}
+
+	return PatchTitleFile(inPatchedSakuraDirectory, inTranslatedDataDirectory);
 }
