@@ -74,3 +74,64 @@ bool PatchCodeInFile(std::string& InFileName, PatchingData* pInPatchingData, int
 
 	return true;
 }
+
+template<typename TileByteType>
+void ExtractTiledScreen(const std::string& inTileFilePath, const std::string& inColFilePath, uint32 inTileOffset, uint32 inColorOffset, 
+						uint32 inPaletteOffset, const std::string& inOutFileName, const bool bInBmp)
+{
+	FileData tileFile;
+	if (!tileFile.InitializeFileData(inTileFilePath))
+	{
+		return;
+	}
+
+	FileData colorFile;
+	if (!colorFile.InitializeFileData(inColFilePath))
+	{
+		return;
+	}
+
+	SakuraFontSheet tileSheet;
+	if (!tileSheet.CreateFontSheetFromData(tileFile.GetData() + inColorOffset, 40 * 28 * 64, 8, 8, false))
+	{
+		return;
+	}
+
+	//Create 32bit palette data
+	PaletteData paletteData;
+	paletteData.CreateFrom15BitData(colorFile.GetData() + inPaletteOffset, 512);
+
+	BitmapSurface sakuraStringBmp;
+	sakuraStringBmp.CreateSurface(320, 224, BitmapSurface::EBitsPerPixel::kBPP_8, paletteData.GetData(), paletteData.GetSize());
+
+	TileByteType tiles[1120];
+	memcpy_s(tiles, sizeof(tiles), tileFile.GetData() + inTileOffset, sizeof(tiles));
+
+	//Convert tile index into game format
+	for (int t = 0; t < 1120; ++t)
+	{
+		const int tileValue = (SwapByteOrder<TileByteType>(tiles[t]) / 2) - 1;
+		tiles[t] = tileValue;
+	}
+
+	//Output tiles
+	int x = 0;
+	int y = 0;
+	for (int t = 0; t < 1120; ++t)
+	{
+		SakuraString::SakuraChar sakuraChar;
+		sakuraChar.mIndex = tiles[t];
+
+		const char* pTileData = tileSheet.GetCharacterTile(sakuraChar);
+		sakuraStringBmp.AddTile(pTileData, 64, x, y, 8, 8, BitmapSurface::kFlipNone);
+
+		x += 8;
+		if (x == 320)
+		{
+			x = 0;
+			y += 8;
+		}
+	}
+
+	sakuraStringBmp.WriteToFile(inOutFileName, true);
+}

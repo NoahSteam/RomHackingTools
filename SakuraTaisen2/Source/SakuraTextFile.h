@@ -791,11 +791,6 @@ private:
 						if(mTextIdToSequenceEntryMap.find(newEntry.mTextIndex) != mTextIdToSequenceEntryMap.end())
 						{
 							bIsUnique = false;
-							if(!(mTextIdToSequenceEntryMap[newEntry.mTextIndex] == newEntry))
-							{
-								int dfk = 0;
-								++dfk;
-							}
 						}
 
 						if(bIsUnique)

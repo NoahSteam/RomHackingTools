@@ -6,3 +6,5 @@ Tile entries
 512byte palette
 
 Color data
+
+0607e100 has 08008000 which is used for the base address for tiles

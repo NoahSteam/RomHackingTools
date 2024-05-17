@@ -39,4 +39,6 @@ skip
 56x16 @8940
 48x32 @8cc0
 
-Intro Table at 0xc538 (210548 in mem)
+Animated Logo Intro Table at 0xc538 (210548 in mem), vdp1 entries written at 0609750a
+
+

@@ -30,9 +30,7 @@ void ExtractTycoonRulesScreen(const std::string& inRootDirectory, const std::str
 
 	unsigned int tiles[1120];
 	memcpy_s(tiles, sizeof(tiles), cardFile.GetData() + tileOffset, sizeof(tiles));
-	int x = 0;
-	int y = 0;
-
+	
 	//Convert tile index into game format
 	for (int t = 0; t < 1120; ++t)
 	{
@@ -41,6 +39,8 @@ void ExtractTycoonRulesScreen(const std::string& inRootDirectory, const std::str
 	}
 
 	//Output tiles
+	int x = 0;
+	int y = 0;
 	for (int t = 0; t < 1120; ++t)
 	{
 		SakuraString::SakuraChar sakuraChar;

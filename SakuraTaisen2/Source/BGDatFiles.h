@@ -27,12 +27,60 @@ void ExtractBGDatFiles(const string& InRootSakuraDirectory, const string& InOutD
 			continue;
 		}
 
-		const char* pImageData = fileData.GetData() + 0x710;
+		const char* pColorData = fileData.GetData() + 0x710;
 		const char* pPaletteData = fileData.GetData() + 0x510;
 		const string outFileName = InOutDirectory + datFiles[i].mNoExtension + bmpExt;
 
-		ExtractImageFromData(pImageData, fileData.GetDataSize() - 0x710, outFileName, pPaletteData, 512, false, 8, 8,
-							36, 256, 0, true, false);
+		const int imageWidth = 288;
+		const int imageHeight = 144;
+		const int numBytesPerTile = 8*8;
+		const int numTiles = (imageWidth / 8) * (imageHeight / 8);
+		SakuraFontSheet tileSheet;
+		if (!tileSheet.CreateFontSheetFromData(pColorData, numTiles * numBytesPerTile, 8, 8, false))
+		{
+			return;
+		}
+
+		//Create 32bit palette data
+		PaletteData paletteData;
+		paletteData.CreateFrom15BitData(pPaletteData, 512);
+
+		BitmapSurface sakuraStringBmp;
+		sakuraStringBmp.CreateSurface(imageWidth, imageHeight, BitmapSurface::EBitsPerPixel::kBPP_8, paletteData.GetData(), paletteData.GetSize());
+
+		uint16* pTiles = new uint16[numTiles];
+		const unsigned int tileDataSize = sizeof(pTiles[0]) * numTiles;
+		memcpy_s(pTiles, tileDataSize, fileData.GetData(), tileDataSize);
+
+		//Convert tile index into game format
+		for (int t = 0; t < numTiles; ++t)
+		{
+			const int tileValue = (SwapByteOrder<uint16>(pTiles[t]) / 2);
+			pTiles[t] = tileValue;
+		}
+
+		//Create imate from tiles
+		int x = 0;
+		int y = 0;
+		for (int t = 0; t < numTiles; ++t)
+		{
+			SakuraString::SakuraChar sakuraChar;
+			sakuraChar.mIndex = pTiles[t];
+
+			const char* pTileData = tileSheet.GetCharacterTile(sakuraChar);
+			sakuraStringBmp.AddTile(pTileData, numBytesPerTile, x, y, 8, 8, BitmapSurface::kFlipNone);
+
+			x += 8;
+			if (x == imageWidth)
+			{
+				x = 0;
+				y += 8;
+			}
+		}
+
+		sakuraStringBmp.WriteToFile(outFileName, true);
+
+		delete[] pTiles;
 	}
 }
 
