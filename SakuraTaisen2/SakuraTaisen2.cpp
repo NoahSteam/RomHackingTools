@@ -823,6 +823,14 @@ int main(int argc, char *argv[])
 
 		ExtractCreditsData(inDirectory, inOutputDirectory, bmpFormat);
 	}
+	else if (command == "CreateTranslatedBattleAnimViewerImages" && argc == 5)
+	{
+		const string inTranslationDirectory = string(argv[2]) + Seperators;
+		const string inFontSheet = string(argv[3]);
+		const string inFontSheetSmall = string(argv[4]);
+
+		CreateTranslatedBattleAnimViewerImages(inTranslationDirectory, inFontSheet, inFontSheetSmall);
+	}
 	else
 	{
 		PrintHelp();

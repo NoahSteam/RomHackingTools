@@ -69,15 +69,15 @@ public:
 	const TileExtractor::Tile* GetTileForCharacter(char InLetter)
 	{
 		//î
-		if(InLetter == 'î')
+		if((uint8)InLetter == (uint8)'î')
 		{
 			InLetter = 'z' + 1;
 		}
-		else if(InLetter == 'ü')
+		else if((uint8)InLetter == (uint8)'ü')
 		{
 			InLetter = 'z' + 2;
 		}
-		else if(InLetter == 'è')
+		else if((uint8)InLetter == (uint8)'è')
 		{
 			InLetter = 'z' + 3;
 		}
@@ -94,6 +94,20 @@ public:
 
 	int GetWidthOfCharacter(char InLetter) const
 	{
+		//î
+		if ((uint8)InLetter == (uint8)'î')
+		{
+			InLetter = 'z' + 1;
+		}
+		else if ((uint8)InLetter == (uint8)'ü')
+		{
+			InLetter = 'z' + 2;
+		}
+		else if ((uint8)InLetter == (uint8)'è')
+		{
+			InLetter = 'z' + 3;
+		}
+
 		std::map<int, int>::const_iterator iter = mLetterToWidth.find(InLetter);
 		if( iter != mLetterToWidth.end() )
 		{

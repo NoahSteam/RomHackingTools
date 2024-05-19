@@ -1,0 +1,51 @@
+Battle Sim (Kaede's Room)
+
+M92VDP1.BIN
+
+@10780
+24x24
+24x24
+24x24
+24x24
+128x24
+40x32
+24x24
+16x32
+40x24
+96x48
+
+@1f0a0 //Header for first four at M92PRG.BIN 0x39454 (uint32 offset, uint8 widthDiv8, uint8 height)
+40x16
+40x16
+40x16
+40x16
+40x20
+40x21
+
+@1f960
+64x22 (20 times)
+
+@23760
+168x22
+
+@23ea0
+48x72
+168x22
+
+@24ca0
+48x72
+168x22
+
+@25aa0
+48x72
+
+Palettes in M92COL.BIN
+4bit 0xE80
+8bit 0x0
+
+VDP2 images
+0x40
+0x20040
+
+Tiles
+0x2e040
