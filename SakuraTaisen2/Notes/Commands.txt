@@ -34,6 +34,7 @@ CreateTranslatedInfoNameImages A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data 
 CreateTranslatedStatusScreenImages A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\HudFontSheetWide.bmp A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\HudFontSheetNarrow.bmp
 CreateTranslatedMNameImages A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\HudFontSheetWide.bmp A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\HudFontSheetNarrow.bmp
 CreateTranslatedBattleAnimViewerImages A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\HudFontSheetWide.bmp A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\HudFontSheetNarrow.bmp
+CreateTranslatedBattleSimulatorImages A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\HudFontSheetWide.bmp A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\HudFontSheetNarrow.bmp
 AddShadowsToWKLText A:\NoahSteam\Test
 SwapBattleFiles 26 A:\SakuraWars2\Patched\Disc1\Sakura2
 SwapColorsInImage A:\SakuraWars2\ColorSwap 3 2

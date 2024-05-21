@@ -401,3 +401,104 @@ bool WriteTextIntoImagesUsingFontSheet(
 
 	return true;
 }
+
+
+struct TranslatedImageCreator
+{
+	Tiled8BitFontSheet mFontSheetWide;
+	Tiled8BitFontSheet mFontSheetNarrow;	
+	std::string mTranslatedImageDirectory;
+
+	bool InitializeCreator(const string& InTranslationDirectory, const string& InFontSheetWidePath, const string& InFontSheetNarrowPath)
+	{
+		const std::string originalImageDirectory = InTranslationDirectory;
+		mTranslatedImageDirectory = InTranslationDirectory + "\\Translated\\";
+		CreateDirectoryHelper(mTranslatedImageDirectory);
+
+		//Create font sheets
+		if (!mFontSheetWide.CreateFontSheet(InFontSheetWidePath, originalImageDirectory, ' '))
+		{
+			return false;
+		}
+
+		if (!mFontSheetNarrow.CreateFontSheet(InFontSheetNarrowPath, originalImageDirectory, ' '))
+		{
+			return false;
+		}
+
+		//Create translation directory
+		CreateDirectoryHelper(mTranslatedImageDirectory);
+
+		//Duplicate original images
+		CopyFiles(originalImageDirectory, mTranslatedImageDirectory);
+
+		return true;
+	}
+
+	bool CreateImages(const std::string& inTranslationFilePath, int inNumImages)
+	{
+		//Remove text from original images
+		unordered_set<char> colorsToIgnore;
+		colorsToIgnore.insert(0);
+		ReplaceColors(mTranslatedImageDirectory, 15, colorsToIgnore);
+
+		//Find all created translated images
+		vector<FileNameContainer> translatedImages;
+		FindAllFilesWithinDirectory(mTranslatedImageDirectory, translatedImages);
+
+		// Sort the file names alphabetically
+		std::sort(translatedImages.begin(), translatedImages.end(), [](const FileNameContainer& a, const FileNameContainer& b)
+			{
+				return std::atoi(a.mNoExtension.c_str()) < std::atoi(b.mNoExtension.c_str());
+			});
+
+		//Text data
+		FileNameContainer textFileName(inTranslationFilePath);
+		TextFileData textFile(textFileName);
+		if (!textFile.InitializeTextFile(true, true))
+		{
+			return false;
+		}
+
+		if (textFile.mLines.size() != inNumImages)
+		{
+			printf("Not enough translated lines of text in %s.  Need %i, one for each image.\n", inTranslationFilePath.c_str(), inNumImages);
+			return false;
+		}
+
+		const bool bCenter = true;
+
+		//Insert text into images
+		int textIndex = 0;
+		for (int i = 0; i < inNumImages; ++i)
+		{
+			int leftOffset = 0;
+			int rightOffset = 0;
+			bool bForceNarrow = false;
+
+			std::string text = textFile.mLines[textIndex].mFullLine;
+			if (text.c_str()[0] == '*')
+			{
+				text = text.c_str() + 1;
+				bForceNarrow = true;
+			}
+
+			//See if wide font sheet will fit
+			if (bForceNarrow || !WriteTextIntoImageUsingFontSheet(text, translatedImages[i], mFontSheetWide, true, leftOffset, rightOffset, 0, bCenter))
+			{
+				//Otherwise try the narrow one
+				WriteTextIntoImageUsingFontSheet(text, translatedImages[i], mFontSheetNarrow, false, leftOffset, rightOffset, 0, bCenter);
+			}
+
+			++textIndex;
+		}
+
+		return true;
+	}
+
+	void SwapFontSheetColors(const char inSearchColor, const char inReplaceColor)
+	{
+		mFontSheetWide.SwapColors(inSearchColor, inReplaceColor);
+		mFontSheetNarrow.SwapColors(inSearchColor, inReplaceColor);
+	}
+};

@@ -14,7 +14,7 @@ const BattleSimImageInfo images[] =
 	0x1f0a0, 40, 16,
 	0x1f0a0, 40, 16,
 	0x1f0a0, 40, 20,
-	0x1f0a0, 40, 21,
+	0x1f740, 40, 20,
 
 	0x1f960, 64, 22,
 	0x1f960, 64, 22,
@@ -121,4 +121,45 @@ void ExtractBattleSimulator(const std::string& inRootDirectory, const std::strin
 	}
 
 	ExtractBattleSimVDP2(inRootDirectory, outputDirectory, bInBmp);
+}
+
+bool CreateTranslatedBattleResultImages(const string& InTranslationDirectory, const string& InFontSheetWidePath, const string& InFontSheetNarrowPath)
+{
+	const string originalImageDirectory = InTranslationDirectory + "BattleSimulator\\VDP2\\ButtonImages\\";
+
+	TranslatedImageCreator imageCreator;
+	if (!imageCreator.InitializeCreator(originalImageDirectory, InFontSheetWidePath, InFontSheetNarrowPath))
+	{
+		return false;
+	}
+
+	imageCreator.SwapFontSheetColors(1, 15);
+	imageCreator.SwapFontSheetColors(7, 1);
+	imageCreator.SwapFontSheetColors(12, 5);
+	imageCreator.SwapFontSheetColors(8, 13);
+
+	return imageCreator.CreateImages(InTranslationDirectory + "Translation\\BattleSimulatorResultsButtons.txt", 6);
+}
+
+bool CreateTranslatedBattleSimulatorImages(const string& InTranslationDirectory, const string& InFontSheetWidePath, const string& InFontSheetNarrowPath)
+{
+	const string originalImageDirectory = InTranslationDirectory + "BattleSimulator\\";
+	
+	TranslatedImageCreator imageCreator;
+	if(!imageCreator.InitializeCreator(originalImageDirectory, InFontSheetWidePath, InFontSheetNarrowPath))
+	{
+		return false;
+	}
+
+	imageCreator.SwapFontSheetColors(1, 15);
+	imageCreator.SwapFontSheetColors(7, 1);
+	imageCreator.SwapFontSheetColors(12, 5);
+	imageCreator.SwapFontSheetColors(8, 13);
+
+	if(!imageCreator.CreateImages(InTranslationDirectory + "Translation\\BattleSimulator.txt", 6))
+	{
+		return false;
+	}
+
+	return CreateTranslatedBattleResultImages(InTranslationDirectory, InFontSheetWidePath, InFontSheetNarrowPath);
 }
