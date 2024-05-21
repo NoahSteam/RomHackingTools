@@ -1331,28 +1331,53 @@ void BitmapReader::ReplaceColors(const char inNewColor, std::unordered_set<char>
 	char* pOriginalData = mBitmapData.mColorData.mpRGBA;
 	memcpy_s(pModifiedData, numBytes, pOriginalData, numBytes);
 
-	//Swap colors
-	const int imageHeight = abs(mBitmapData.mInfoHeader.mImageHeight);
-	for (int y = 0; y < imageHeight; ++y)
+	if(mBitmapData.mInfoHeader.mBitCount == 4)
 	{
-		for (int x = 0; x < mBitmapData.mInfoHeader.mImageWidth / 2; ++x)
+		const int numBytesInWidth = mBitmapData.mInfoHeader.mImageWidth / 2;
+
+		//Swap colors
+		const int imageHeight = abs(mBitmapData.mInfoHeader.mImageHeight);
+		for (int y = 0; y < imageHeight; ++y)
 		{
-			const int currentPixel = y * mBitmapData.mInfoHeader.mImageWidth / 2 + x;
-
-			const char colorValue1 = (pModifiedData[currentPixel] & 0xf0) >> 4;
-			if (inIgnoreColors.find(colorValue1) == inIgnoreColors.end())
+			for (int x = 0; x < numBytesInWidth; ++x)
 			{
-				pModifiedData[currentPixel] = (pModifiedData[currentPixel] & 0x0f) + (inNewColor << 4);
+				const int currentPixel = y * numBytesInWidth + x;
 
-			}//if( colorValue1 == 1)
+				const char colorValue1 = (pModifiedData[currentPixel] & 0xf0) >> 4;
+				if (inIgnoreColors.find(colorValue1) == inIgnoreColors.end())
+				{
+					pModifiedData[currentPixel] = (pModifiedData[currentPixel] & 0x0f) + (inNewColor << 4);
 
-			char colorValue2 = pModifiedData[currentPixel] & 0x0f;
-			if (inIgnoreColors.find(colorValue2) == inIgnoreColors.end())
+				}//if( colorValue1 == 1)
+
+				char colorValue2 = pModifiedData[currentPixel] & 0x0f;
+				if (inIgnoreColors.find(colorValue2) == inIgnoreColors.end())
+				{
+					pModifiedData[currentPixel] = (pModifiedData[currentPixel] & 0xf0) + inNewColor;
+				}
+
+			} //for x
+		}
+	}
+	else
+	{
+		const int numBytesInWidth = mBitmapData.mInfoHeader.mImageWidth;
+
+		//Swap colors
+		const int imageHeight = abs(mBitmapData.mInfoHeader.mImageHeight);
+		for (int y = 0; y < imageHeight; ++y)
+		{
+			for (int x = 0; x < numBytesInWidth; ++x)
 			{
-				pModifiedData[currentPixel] = (pModifiedData[currentPixel] & 0xf0) + inNewColor;
-			}
+				const int currentPixel = y * numBytesInWidth + x;
 
-		} //for x
+				const char colorValue1 = pModifiedData[currentPixel];
+				if (inIgnoreColors.find(colorValue1) == inIgnoreColors.end())
+				{
+					pModifiedData[currentPixel] = inNewColor;
+				}
+			} //for x
+		}
 	}
 
 	memcpy_s(pOriginalData, numBytes, pModifiedData, numBytes);

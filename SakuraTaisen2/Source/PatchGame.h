@@ -72,7 +72,7 @@ static bool BringOverOriginalFiles(const string& inRootSakuraDirectory, const st
 		}\
 	}
 	
-	CopySingleFile("SAKURADA");
+//	CopySingleFile("SAKURADA");
 	CopySingleFile("SAKURA.BIN");
 
 	return true;
@@ -314,6 +314,21 @@ bool PatchGame(const string& inSourceGameDirectory, const string& inTranslatedDi
 		return false;
 	}
 	
+	if(inDiscNumber == 2)
+	{
+		if(!PatchBattleAnimViewer(inPatchedDirectory, inTranslatedDirectory))
+		{
+			printf("Unable to patch BattleAnimViewer\n");
+			return false;
+		}
+
+		if (!PatchBattleSimulator(inPatchedDirectory, inTranslatedDirectory))
+		{
+			printf("Unable to patch BattleSimulator\n");
+			return false;
+		}
+	}
+
 	if(!PatchMiniGames(inPatchedDirectory, inTranslatedDirectory))
 	{
 		printf("Unable to patch MiniGames\n");

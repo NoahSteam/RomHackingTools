@@ -1,8 +1,32 @@
 #pragma once
 
+void ExtractBattleAnimViewerVDP2(const std::string& inRootDirectory, const std::string& inOutputDirectory, const bool bInBmp)
+{
+	std::string outputDirectory = inOutputDirectory + "VDP2\\";
+	CreateDirectoryHelper(outputDirectory);
+	if (!bInBmp)
+	{
+		outputDirectory += "PNG\\";
+
+		CreateDirectoryHelper(outputDirectory);
+	}
+
+	const string vdp2Path = inRootDirectory + string("SAKURA2\\M91VDP2.BIN");
+	const string colPath = inRootDirectory + string("SAKURA2\\M91COL.BIN");
+
+	const string ext = bInBmp ? ".bmp" : ".png";
+	ExtractTiledScreen<uint32>(vdp2Path, colPath, 0x11840, 0x40, 0, outputDirectory + std::string("1") + ext, bInBmp);
+}
+
 void ExtractBattleAnimViewer(const std::string& inRootDirectory, const std::string& inOutputDirectory, const bool bInBmp)
 {
-	CreateDirectoryHelper(inOutputDirectory);
+	std::string outputDirectory(inOutputDirectory);
+	CreateDirectoryHelper(outputDirectory);
+	if (!bInBmp)
+	{
+		outputDirectory += "PNG\\";
+		CreateDirectoryHelper(outputDirectory);
+	}
 
 	const string sakuraFilePath = inRootDirectory + string("SAKURA2\\M91VDP1.BIN");
 	FileNameContainer sakuraFileNameInfo(sakuraFilePath.c_str());
@@ -31,11 +55,16 @@ void ExtractBattleAnimViewer(const std::string& inRootDirectory, const std::stri
 
 		offset += 0x50*8;
 	}
+	
+	const string bitmapFileName = inOutputDirectory + "Backdrop" + ext;
+	ExtractImageFromData(sakuraFileData.GetData() + 0x16520, 40*46, bitmapFileName, paletteFileData.GetData(), 512, false, 40, 46, 1, 256, 0, true, bInBmp);
 
 	if(!bInBmp)
 	{
 		CreateSpreadSheetForImages("BattleAnimViewer", "BattleAnimViewer\\PNG\\", inOutputDirectory, "BattleAnimViewer.php");
 	}
+
+	ExtractBattleAnimViewerVDP2(inRootDirectory, outputDirectory, bInBmp);
 }
 
 bool CreateTranslatedBattleAnimViewerImages(const string& InTranslationDirectory, const string& InFontSheetWidePath, const string& InFontSheetNarrowPath)
@@ -132,4 +161,49 @@ bool CreateTranslatedBattleAnimViewerImages(const string& InTranslationDirectory
 	printf("Finished Successfully");
 
 	return true;
+}
+
+bool PatchBattleAnimViewer(const string& inPatchedSakuraDirectory, const string& inTranslatedDataDirectory)
+{
+	printf("Patching Battle Anim Viewer\n");
+
+	const string translatedDir = inTranslatedDataDirectory + "BattleAnimViewer\\";
+	
+	//Output file
+	const std::string vdp1FilePath = inPatchedSakuraDirectory + string("SAKURA2\\M91VDP1.BIN");
+	FileReadWriter outFileWriter;
+	if (!outFileWriter.OpenFile(vdp1FilePath))
+	{
+		return false;
+	}
+
+	const string ext(".bmp");
+	const int imageWidth = 88;
+	const int imageHeight = 14;
+	const int imageSize = imageWidth * imageHeight / 2;
+	int offset = 0xa0e0;
+	const int numImages = 65;
+	for (int i = 0; i < numImages; ++i)
+	{
+		const string translatedImage = translatedDir + std::to_string(i) + ext;
+		
+		//Convert image to sw2 format
+		BmpToSaturnConverter patchedImageData;
+		if (!patchedImageData.ConvertBmpToSakuraFormat(translatedImage, false, BmpToSaturnConverter::CYAN))
+		{
+			return false;
+		}
+
+		if (patchedImageData.GetImageWidth() != imageWidth || patchedImageData.GetImageHeight() != imageHeight)
+		{
+			printf("%s has invalid dimensions.  Expected %ix%i, got %ix%i.\n", translatedImage.c_str(), imageWidth, imageHeight, patchedImageData.GetImageWidth(), patchedImageData.GetImageHeight());
+			return false;
+		}
+
+		outFileWriter.WriteData(offset, patchedImageData.GetImageData(), patchedImageData.GetImageDataSize(), false);
+
+		offset += 0x50 * 8;
+	}
+
+	return PatchTiledImage<uint32>(translatedDir + "VDP2\\1.bmp", inPatchedSakuraDirectory + string("SAKURA2\\M91VDP2.BIN"), 0x11800, 0x40, 0x11840);
 }

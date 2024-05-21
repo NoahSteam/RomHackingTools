@@ -135,3 +135,47 @@ void ExtractTiledScreen(const std::string& inTileFilePath, const std::string& in
 
 	sakuraStringBmp.WriteToFile(inOutFileName, true);
 }
+
+template<typename TileByteType>
+bool PatchTiledImage(const std::string& InPatchedImagePath, const std::string InSakuraFilePath, const uint32 InColorDataSize, const int InColorDataOffset,
+                     const int InTileDataOffset)
+{
+	const uint32 tileDim = 8;
+	BmpToSaturnConverter patchedImage;
+	if (!patchedImage.ConvertBmpToSakuraFormat(InPatchedImagePath, false, BmpToSaturnConverter::CYAN, &tileDim, &tileDim))
+	{
+		return false;
+	}
+
+	FileReadWriter outputFile;
+	if(!outputFile.OpenFile(InSakuraFilePath))
+	{
+		return false;
+	}
+
+	TileSetOptimizer optimizedTileSet;
+	optimizedTileSet.OptimizeTileSet(patchedImage);
+	optimizedTileSet.PackTiles();
+
+	if (optimizedTileSet.GetPackedTileSize() > InColorDataSize)
+	{
+		printf("TileSet is too big for %s", InPatchedImagePath.c_str());
+		return false;
+	}
+	outputFile.WriteData(InColorDataOffset, optimizedTileSet.GetPackedTiles(), optimizedTileSet.GetPackedTileSize());
+
+	const std::vector<int>& tileIndices = optimizedTileSet.GetTileIndices();
+	const size_t numIndices = tileIndices.size();
+	const size_t expectedIndices = 1120;
+	assert(numIndices == expectedIndices);
+
+	TileByteType vdp2Indices[expectedIndices];
+	for (size_t i = 0; i < numIndices; ++i)
+	{
+		const TileByteType indice = TileByteType((tileIndices[i] + 1) * 2);
+		vdp2Indices[i] = SwapByteOrder(indice);
+	}
+	outputFile.WriteData(InTileDataOffset, (char*)vdp2Indices, sizeof(vdp2Indices[0]) * expectedIndices, false);
+
+	return true;
+}

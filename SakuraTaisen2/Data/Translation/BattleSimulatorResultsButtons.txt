@@ -1,0 +1,6 @@
+*Allies Survived
+*Enemies Beat
+*Damage Dealt
+*Damage Taken
+*Turns Taken
+*Total Score

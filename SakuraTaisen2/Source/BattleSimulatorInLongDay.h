@@ -133,11 +133,6 @@ bool CreateTranslatedBattleResultImages(const string& InTranslationDirectory, co
 		return false;
 	}
 
-	imageCreator.SwapFontSheetColors(1, 15);
-	imageCreator.SwapFontSheetColors(7, 1);
-	imageCreator.SwapFontSheetColors(12, 5);
-	imageCreator.SwapFontSheetColors(8, 13);
-
 	return imageCreator.CreateImages(InTranslationDirectory + "Translation\\BattleSimulatorResultsButtons.txt", 6);
 }
 
@@ -162,4 +157,63 @@ bool CreateTranslatedBattleSimulatorImages(const string& InTranslationDirectory,
 	}
 
 	return CreateTranslatedBattleResultImages(InTranslationDirectory, InFontSheetWidePath, InFontSheetNarrowPath);
+}
+
+bool PatchBattleSimulator(const string& inPatchedSakuraDirectory, const string& inTranslatedDataDirectory)
+{
+	printf("Patching Battle Simulator\n");
+
+	const string translatedDir = inTranslatedDataDirectory + "BattleSimulator\\";
+
+	//Output file
+	const std::string vdp1FilePath = inPatchedSakuraDirectory + string("SAKURA2\\M92VDP1.BIN");
+	FileReadWriter outFileWriter;
+	if (!outFileWriter.OpenFile(vdp1FilePath))
+	{
+		return false;
+	}
+
+	const string ext(".bmp");
+	int offset = images[0].offset;
+	int prevOffset = offset;
+	const int numImages = sizeof(images) / sizeof(images[0]);
+
+	for (int i = 0; i < numImages; ++i)
+	{
+		if (images[i].offset != prevOffset)
+		{
+			offset = images[i].offset;
+			prevOffset = offset;
+		}
+
+		const int imageWidth = images[i].width;
+		const int imageHeight = images[i].height;
+		const int imageSize = imageWidth * imageHeight / 2;
+		
+		const string translatedImage = translatedDir + std::to_string(i) + ext;
+
+		//Convert image to sw2 format
+		BmpToSaturnConverter patchedImageData;
+		if (!patchedImageData.ConvertBmpToSakuraFormat(translatedImage, false, BmpToSaturnConverter::CYAN))
+		{
+			return false;
+		}
+
+		if (patchedImageData.GetImageWidth() != imageWidth || patchedImageData.GetImageHeight() != imageHeight)
+		{
+			printf("%s has invalid dimensions.  Expected %ix%i, got %ix%i.\n", translatedImage.c_str(), imageWidth, imageHeight, patchedImageData.GetImageWidth(), patchedImageData.GetImageHeight());
+			return false;
+		}
+
+		outFileWriter.WriteData(offset, patchedImageData.GetImageData(), patchedImageData.GetImageDataSize(), false);
+
+		offset += imageSize;
+	}
+
+	if(!PatchTiledImage<uint32>(translatedDir + "VDP2\\1.bmp", inPatchedSakuraDirectory + string("SAKURA2\\M92VDP2.BIN"), 0x2e000, 0x40, 0x2e040))
+	{
+		return false;
+	}
+
+	return PatchTiledImage<uint16>(translatedDir + "VDP2\\2.bmp", inPatchedSakuraDirectory + string("SAKURA2\\M92VDP2.BIN"), (uint32)0x2f1c0 - (uint32)0x20040, 0x20040, 0x2f1c0);
 }

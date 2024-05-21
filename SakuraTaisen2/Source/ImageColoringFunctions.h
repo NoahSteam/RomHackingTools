@@ -44,12 +44,12 @@ void ReplaceColors(const string& inDirectory, const char inNewColor, unordered_s
 			printf("Failed to read %s\n", fileName.mFullPath.c_str());
 			return;
 		}
-
+		
 		bmpData.ReplaceColors(inNewColor, inIgnoreColors);
 
 		const int imageHeight = bmpData.mBitmapData.mInfoHeader.mImageHeight * -1;
 		BitmapWriter outBitmap;
-		outBitmap.CreateBitmap(fileName.mFullPath, bmpData.mBitmapData.mInfoHeader.mImageWidth, imageHeight, 4, bmpData.GetColorData(), bmpData.GetColorDataSize(),
+		outBitmap.CreateBitmap(fileName.mFullPath, bmpData.mBitmapData.mInfoHeader.mImageWidth, imageHeight, bmpData.mBitmapData.mInfoHeader.mBitCount, bmpData.GetColorData(), bmpData.GetColorDataSize(),
 			bmpData.mBitmapData.mPaletteData.mpRGBA, bmpData.mBitmapData.mPaletteData.mSizeInBytes, true);
 	}
 
