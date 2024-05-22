@@ -1,8 +1,229 @@
 #pragma once
 
+//r10 = 0xb17;
+uint32 DecodeTycoonImages(uint8* r7, uint32 r10)
+{
+	uint32 r0 = 0;
+	uint32 r9 = 0xAAAA5555;
+	uint32 r8 = 0xAC53AC53;
+	uint32 r6 = SwapByteOrder(*(uint32*)r7);
+	uint32 r5 = SwapByteOrder(((uint32*)r7)[1]);
+	const uint8* startAddress = r7;
+
+	while(1) //LAB_0600ff06
+	{
+		uint32 r4 = r10;
+		if(r4 < 0)
+		{
+			r4 += 0x09;
+		}
+
+		//LAB_0600ff10
+		r4 = r4 >> 8;
+		uint32 r2 = r6;
+		if(++r4 <= r0)
+		{
+			break;
+		}
+
+		uint32 r3 = 0;
+		r4 = 0x3f;
+
+		do //LAB_0600ff22
+		{
+			uint32 r1 = SwapByteOrder(*(uint32*)r7);
+			++r3;
+			r1 = r2 ^ r1;
+			(*(uint32*)r7) = SwapByteOrder(r1);
+			r7 += 4;
+			r2 = r2 ^ r9;
+			r2 += r8;
+		} while (r3 <= r4);
+
+		r2 = r6;
+		r6 = r6 ^ 0x13579BDF;
+		r6 += r5;
+		r5 = r2;
+		++r0;
+	}
+
+	return r7 - startAddress;
+}
+
+void ExtractTycoonIntroImages(const std::string& inRootDirectory, const std::string& inOutputDirectory, const bool bInBmp)
+{
+	std::string outputDirectory = inOutputDirectory + "IntroImages\\";
+	const std::string binOutputDirectory = inOutputDirectory + "IntroImages\\BIN\\";
+	CreateDirectoryHelper(outputDirectory);
+	CreateDirectoryHelper(binOutputDirectory);
+
+	if(!bInBmp)
+	{
+		outputDirectory = outputDirectory + "PNG\\";
+		CreateDirectoryHelper(outputDirectory);
+
+		CreateSpreadSheetForImages("TrumpWars", "TrumpWars\\PNG\\", outputDirectory, "TrumpWars.php");
+	}
+
+	//CARD_DAT
+	const std::string cardFilePath = inRootDirectory + "SAKURA3\\CARD_DAT.ALL";
+	FileData cardFile;
+	if (!cardFile.InitializeFileData(cardFilePath))
+	{
+		return;
+	}
+
+	//0000DAIF
+	const std::string daifFilePath = inRootDirectory + "SAKURA3\\0000DAIF.BIN";
+	FileData daifFile;
+	if (!daifFile.InitializeFileData(daifFilePath))
+	{
+		return;
+	}
+
+	struct KeyData
+	{
+		uint32 unknown;
+		uint32 key;
+
+		void SwapEndianess()
+		{
+			unknown = SwapByteOrder(unknown);
+			key = SwapByteOrder(key);
+		}
+	};
+
+	const int numKeys = 183;
+	KeyData keys[numKeys];
+	daifFile.ReadData(0x46df8, (char*)keys, sizeof(keys), false);
+	for(int i = 0; i < numKeys; ++i)
+	{
+		keys[i].SwapEndianess();
+	}
+
+	const std::string imageExt = bInBmp ? ".bmp" : ".png";
+	const uint32 fileSize = (uint32)cardFile.GetDataSize();
+	const uint32 bufferSize = 0x2c000;
+	char buffer[bufferSize];
+	//uint32 dataSetOffset = 0x002d9800;//0x1000;
+	
+	struct OffsetKeyInfo
+	{
+		uint32 offset;
+		uint32 key;
+	};
+
+	OffsetKeyInfo entries[] = 
+	{
+		0x1000,     0x2b4d0,
+		0x2c800,    0x996c,
+		0x36800,    0xb6c4,
+		0xb5800,    0x335c,
+		0xbc800,    0x870c,
+		0xb9000,    0x335c,
+		0xf0800,    0x89dc,
+		0xf9800,    0x89dc,
+		0x102800,   0x89dc,
+		0x10b800,   0x89dc,
+		0x11d800,   0x1000c, //335c also
+		0x1db000,   0x335c,
+		0x1de800,   0x335c,
+		0x1f3800,   0x31dc,
+		0x1f7000,   0x31dc,
+		0x1fa800,   0x31dc,
+		0x1fe000,   0x31dc,
+		0x201800,   0x31dc,
+		0x239800,   0x335c,
+		0x23d000,   0x335c,
+		0x240800,   0x335c,
+		0x244000,   0x335c,
+		0x247800,   0x335c,
+		0x27f800,   0x2df4,
+		0x28b800,   0x2df4,
+		0x28e800,   0x2df4,
+		0x294800,   0x2df4,
+		0x2d9800,   0x12904,		
+		0x2fa800,   0x12904,
+		0x304800,   0x12904,
+		
+	};
+	const int numEntries = sizeof(entries)/sizeof(entries[0]);
+
+	FileWriter decodedDataFile;
+	for (int k = 0; k < numEntries; ++k)
+	{
+		if(bInBmp)
+		{
+			const std::string decodedFilePath = binOutputDirectory + std::to_string(k) + ".bin";
+			if (!decodedDataFile.OpenFileForWrite(decodedFilePath))
+			{
+				break;
+			}
+
+		}
+		
+		const uint32 dataSetOffset = entries[k].offset;
+		const uint32 copySize = dataSetOffset + bufferSize > cardFile.GetDataSize() ? cardFile.GetDataSize() - dataSetOffset : bufferSize;
+		memcpy_s(buffer, copySize, cardFile.GetData() + dataSetOffset, copySize);
+
+		//const uint32 decodedSize = DecodeTycoonImages((uint8*)buffer, 0x12904);//keys[k].key);
+		const uint32 decodedSize = DecodeTycoonImages((uint8*)buffer, entries[k].key);
+		if(decodedSize > bufferSize)
+		{
+			assert(decodedSize < bufferSize);
+		}
+
+		const uint32 offsetToImageTable = SwapByteOrder(*((uint32*)(buffer + 0x20))); //always 0x1110?
+		const uint32 offsetToPaletteData = 0x110;
+		const int paletteOffset = 0x110;
+
+		if(bInBmp)
+		{
+			decodedDataFile.WriteData(buffer, decodedSize, false);
+			decodedDataFile.Close();
+		}
+
+		if(offsetToImageTable < decodedSize)
+		{
+			const uint16 numImagesInSet = SwapByteOrder(*(uint16*)(buffer + offsetToImageTable));
+			uint32 imageOffset = offsetToImageTable + numImagesInSet * 16 + 16;
+			for (uint32 i = 0; i < numImagesInSet; ++i)
+			{
+				const uint32 offsetToNextImageInfo = offsetToImageTable + 16 + i * 16;
+				const uint16 imageWidth = SwapByteOrder(*(uint16*)(buffer + offsetToNextImageInfo));
+				const uint16 imageHeight = SwapByteOrder(*(uint16*)(buffer + offsetToNextImageInfo + 2));
+				const uint16 bitSize = SwapByteOrder(*(uint16*)(buffer + offsetToNextImageInfo + 4));
+				const uint16 paletteOffset = SwapByteOrder(*(uint16*)(buffer + offsetToNextImageInfo + 6))*2 + offsetToPaletteData;
+				const bool bIs4Bit = bitSize == 0;
+				const uint32 imageSize = bIs4Bit ? (imageWidth * imageHeight) >> 1 : imageWidth * imageHeight;
+
+				const std::string imageFileName = outputDirectory + std::to_string(k) + std::string("_") + IntToHexString(dataSetOffset) + std::string("_") + std::to_string(i) + imageExt;
+				ExtractImageFromData(buffer + imageOffset, imageSize, imageFileName, buffer + paletteOffset, 512, bIs4Bit, imageWidth, imageHeight, 1, 256, 0, true, bInBmp);
+
+				imageOffset += imageSize;
+			}
+		}
+	}
+
+	/*
+	//DecodeTycoonImages
+	char buffer[0x2c000];
+	//memcpy_s(buffer, sizeof(buffer), cardFile.GetData() + 0x2c800, sizeof(buffer));
+	memcpy_s(buffer, sizeof(buffer), cardFile.GetData() + 0x1000, sizeof(buffer));
+	const uint32 decodedSize = DecodeTycoonImages((uint8*)buffer, 0x2b4d0);
+
+	FileWriter outFile;
+	outFile.OpenFileForWrite("a:\\sakurawars2\\extracteddata\\disc2\\decoded.bin");
+	outFile.WriteData(buffer, decodedSize, false);
+//	ExtractImageFromData(buffer + headerSize, imageSize, bitmapFileName, buffer + imageSize + headerSize, 512, false, 8, 8, header.width / 8, 256, 0, true, bInBmp);
+*/
+}
+
 void ExtractTycoonRulesScreen(const std::string& inRootDirectory, const std::string& inOutputDirectory, const bool bInBmp)
 {
 	CreateDirectoryHelper(inOutputDirectory);
+
+	ExtractTycoonIntroImages(inRootDirectory, inOutputDirectory, bInBmp);
 
 	//CARD_DAT
 	const std::string cardFilePath = inRootDirectory + "SAKURA3\\CARD_DAT.ALL";

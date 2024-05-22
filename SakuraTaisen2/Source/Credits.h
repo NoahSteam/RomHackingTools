@@ -94,67 +94,6 @@ uint32 DecodeCreditsData(uint8* r7, uint32 r11)
 	return r7 - startAddress;
 }
 
-uint32 DecodeCreditsDataOld(uint32* param_1, int param_2)
-{
-	uint32 uVar1;
-	int iVar2;
-	uint32 uVar3 = 0;
-	int iVar4;
-	int iVar5;
-	uint32 uVar6;
-	uint32 uVar7;
-	uint8* pStartAddresss = (uint8*)param_1;
-
-	iVar2 = 0xAC53AC53;//DAT_06010aa4; r8
-	uVar1 = 0xAAAA5555;//DAT_06010aa0; r9
-	iVar5 = 0;
-	uVar7 = SwapByteOrder(param_1[1]);
-	uVar6 = SwapByteOrder (*param_1);
-	while (true) 
-	{
-		iVar4 = param_2;
-		if (param_2 < 0) 
-		{
-			iVar4 = param_2 + 0x3f;
-		}
-
-		//r4 = iVar4
-		iVar4 = iVar4 >> 6;
-		uVar3 = iVar4;
-		//uVar3 = (*(code*)PTR_FUN_06010aa8)(); //shar r4 6 times
-		if (iVar4 + 1 <= iVar5) 
-		{
-			break;
-		}
-
-		if ((uint32)0x7fff < uVar3) 
-		{
-			iVar4 = 0;
-			uVar3 = uVar6;
-			do 
-			{
-				iVar4 = iVar4 + 1;
-
-				const uint32 encodedValue = SwapByteOrder(*param_1);
-				*param_1 = SwapByteOrder(encodedValue ^ uVar3);
-				param_1 = param_1 + 1;
-				uVar3 = (uVar3 ^ uVar1) + iVar2;
-			} while (iVar4 < 0x10);
-			uVar3 = (uVar6 ^ 0x13579BDF) + uVar7;
-			uVar7 = uVar6;
-		}
-		else 
-		{
-			param_1 = param_1 + 0x10;
-			uVar3 = uVar6;
-		}
-		iVar5 = iVar5 + 1;
-		uVar6 = uVar3;
-	}
-
-	return ((uint8*)param_1 - pStartAddresss) + 4;
-}
-
 void ExtractRollingCredits(const std::string& inRootDirectory, const std::string& inOutputDirectory, const bool bInBmp)
 {
 	const string ext = bInBmp ? ".bmp" : ".png";
