@@ -61,8 +61,7 @@ void ExtractTycoonIntroImages(const std::string& inRootDirectory, const std::str
 	{
 		outputDirectory = outputDirectory + "PNG\\";
 		CreateDirectoryHelper(outputDirectory);
-
-		CreateSpreadSheetForImages("TrumpWars", "TrumpWars\\PNG\\", outputDirectory, "TrumpWars.php");
+	//	CreateSpreadSheetForImages("TrumpWars", "TrumpWars\\PNG\\", outputDirectory, "TrumpWars.php");
 	}
 
 	//CARD_DAT

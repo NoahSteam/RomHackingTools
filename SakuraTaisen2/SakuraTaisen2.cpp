@@ -49,6 +49,7 @@ using std::unordered_set;
 #include "Source/SakuraString.h"
 #include "Source/SakuraFontSheet.h"
 #include "Source/SakuraCommon.h"
+#include "Source/SyncFiles.h"
 #include "Source/ImageColoringFunctions.h"
 #include "Source/TextInImage.h"
 #include "Source/TextInImageUsingFontSheet.h"
@@ -838,6 +839,12 @@ int main(int argc, char *argv[])
 		const string inFontSheetSmall = string(argv[4]);
 
 		CreateTranslatedBattleSimulatorImages(inTranslationDirectory, inFontSheet, inFontSheetSmall);
+	}
+	else if(command == "ValidateSyncData" && argc == 3)
+	{
+		const string inSakura1Directory = string(argv[2]) + Seperators;
+
+		ValidateSyncData(inSakura1Directory);
 	}
 	else
 	{

@@ -1,0 +1,12 @@
+0600feec - decoding code (look at r5 for the key and find contents of 060c0000 in card_dat.all file)
+
+Image in CARD_DAT.ALL 0x32070
+
+
+Image table at 060c1110
+
+0000DAIF.BIN @0x00046df0 has key table
+
+Decoded data has a header, palette, image table, and image color.
+
+Some table used to get into the DAIF table at 0604dd80

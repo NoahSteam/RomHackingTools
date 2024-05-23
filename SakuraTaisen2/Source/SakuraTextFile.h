@@ -294,6 +294,7 @@ struct SakuraTextFile
 	struct SequenceEntry
 	{
 		uint16 mTextIndex{ 0xffff };
+		uint16 mLipSyncId{0};
 		uint16 mImageId_CharIndex{ 0 };
 		uint16 mImageId_SetIndex{ 0 };
 		uint16 mImageId_ExpressionIndex{ 0 };
@@ -320,6 +321,7 @@ struct SakuraTextFile
 	vector<SakuraTimingData>  mLineTimingData;
 	vector<SequenceEntry>     mSequenceEntries;
 	unordered_map<uint16, SequenceEntry> mTextIdToSequenceEntryMap;
+	map<uint16, SequenceEntry> mLipSyncIdToSequenceEntryMap;
 	char*                     mpHeaderToText{0};
 	int                       mHeaderToTextSize{0};
 
@@ -335,7 +337,7 @@ public:
 		mDataSegments(std::move(rhs.mDataSegments)), mStringInfoArray(std::move(rhs.mStringInfoArray)), mpHeaderToText(std::move(rhs.mpHeaderToText)),
 		mHeaderToTextSize(rhs.mHeaderToTextSize), mFileSize(rhs.mFileSize),	mpFile(rhs.mpFile), mpBuffer(std::move(rhs.mpBuffer)), 
 		mLineTimingData(std::move(rhs.mLineTimingData)), mFontSheetData(std::move(rhs.mFontSheetData)), mSequenceEntries(rhs.mSequenceEntries), 
-		mTextIdToSequenceEntryMap(rhs.mTextIdToSequenceEntryMap)
+		mTextIdToSequenceEntryMap(rhs.mTextIdToSequenceEntryMap), mLipSyncIdToSequenceEntryMap(rhs.mLipSyncIdToSequenceEntryMap)
 	{
 		rhs.mpBuffer              = nullptr;
 		rhs.mpFile                = nullptr;
@@ -358,6 +360,7 @@ public:
 		mFontSheetData        = std::move(rhs.mFontSheetData);
 		mSequenceEntries      = std::move(rhs.mSequenceEntries);
 		mTextIdToSequenceEntryMap = std::move(rhs.mTextIdToSequenceEntryMap);
+		mLipSyncIdToSequenceEntryMap = std::move(rhs.mLipSyncIdToSequenceEntryMap);
 		mpHeaderToText        = std::move(rhs.mpHeaderToText);
 		mHeaderToTextSize     = rhs.mHeaderToTextSize;
 
@@ -764,8 +767,10 @@ private:
 		//Go to the second to last entry as we require index + 1 to be valid in this loop
 		while (index < (SequenceDataNumEntries - 1))
 		{
-			const unsigned short sequenceValue = SwapByteOrder(pSequenceData[index]);
-			const unsigned short prevValue     = SwapByteOrder(pSequenceData[index - 1]);
+			const unsigned short sequenceValue     = SwapByteOrder(pSequenceData[index]);
+			const unsigned short prevValue         = SwapByteOrder(pSequenceData[index - 1]);
+			const unsigned short nextNextValue     = SwapByteOrder(pSequenceData[index + 2]);
+			const unsigned short nextNextNextValue = SwapByteOrder(pSequenceData[index + 3]);
 
 			//if 7FFE detected
 			if (sequenceValue == DataEntryId /*0x7FFE*/ ||
@@ -776,9 +781,20 @@ private:
 				{
 					SequenceEntry newEntry;
 					newEntry.mTextIndex               = SwapByteOrder(pSequenceData[index + 1]) & 0x0fff;
+					newEntry.mLipSyncId               = SwapByteOrder(pSequenceData[index + 2]) & 0x0fff;
 					newEntry.mImageId_CharIndex       = SwapByteOrder(pSequenceData[index - 4]) & 0x0fff;
 					newEntry.mImageId_SetIndex        = SwapByteOrder(pSequenceData[index - 3]) & 0x0fff;
 					newEntry.mImageId_ExpressionIndex = SwapByteOrder(pSequenceData[index - 2]) & 0x0fff;
+
+					if (newEntry.mLipSyncId < 0x3e8)
+					{
+						newEntry.mLipSyncId = 0;
+					}
+					else
+					{
+						mLipSyncIdToSequenceEntryMap[newEntry.mLipSyncId] = newEntry;
+					}
+
 
 					if (mProcessedIdsToSequenceIndex_ExtraEntries.find(newEntry.mTextIndex) != mProcessedIdsToSequenceIndex_ExtraEntries.end())
 					{
@@ -836,7 +852,7 @@ private:
 				{
 					uint16 lipsTestIndex = index + 1;
 					uint16 nextValue = SwapByteOrder(pSequenceData[lipsTestIndex]);
-					uint16 nextNextValue = SwapByteOrder(pSequenceData[index + 2]);
+				//	uint16 nextNextValue = SwapByteOrder(pSequenceData[index + 2]);
 					if ((nextValue == LipsId || nextValue == LipsId2) && 
 						((nextNextValue&0xF000) == 0xC000) &&
 						!(nextNextValue == 0xC000 || nextNextValue == 0xC001 || nextNextValue == 0xC002 || nextNextValue == 0xC003 || nextNextValue == 0xC004)
@@ -861,20 +877,13 @@ private:
 									newEntry.mTextIndex += 0xf000;
 								}
 								newEntry.mImageId_CharIndex = prevEntry.mImageId_CharIndex;
+								newEntry.mLipSyncId = 0;//?
 								newEntry.mImageId_SetIndex = prevEntry.mImageId_SetIndex;
 								newEntry.mImageId_ExpressionIndex = prevEntry.mImageId_ExpressionIndex;
 								newEntry.mbIsLips = true;
 
 								mSequenceEntries.push_back(newEntry);
 
-								if (mTextIdToSequenceEntryMap.find(newEntry.mTextIndex) != mTextIdToSequenceEntryMap.end())
-								{
-									if (!(mTextIdToSequenceEntryMap[newEntry.mTextIndex] == newEntry))
-									{
-										int dfk = 0;
-										++dfk;
-									}
-								}
 								mTextIdToSequenceEntryMap[newEntry.mTextIndex] = newEntry;
 							}
 
@@ -882,8 +891,27 @@ private:
 							nextValue = SwapByteOrder(pSequenceData[index]);
 						} while ((nextValue & 0x8000) != 0);//!(nextValue == 0xC000 || nextValue == 0xC001 || nextValue == 0xC002 || nextValue == 0xC003 || nextValue == 0xC004 || ((nextValue & 0xF000) != 0xC000)));
 					}
-				}
+					else if (prevValue == SpecialEntryId && (nextNextNextValue == TextEntryId || nextNextNextValue == SpecialEntryId))
+					{
+						SequenceEntry newEntry;
+						newEntry.mTextIndex = SwapByteOrder(pSequenceData[index + 1]) & 0x0fff;
+						newEntry.mLipSyncId = SwapByteOrder(pSequenceData[index + 2]) & 0x0fff;
 
+						if (newEntry.mLipSyncId > 0x3e7)
+						{
+							mSequenceEntries.push_back(newEntry);
+
+							if (mTextIdToSequenceEntryMap.find(newEntry.mTextIndex) != mTextIdToSequenceEntryMap.end())
+							{
+								SequenceEntry oldEntry = mTextIdToSequenceEntryMap.find(newEntry.mTextIndex)->second;
+								assert(oldEntry.mLipSyncId == 0 || oldEntry.mLipSyncId == newEntry.mLipSyncId);
+							}
+
+							mTextIdToSequenceEntryMap[newEntry.mTextIndex] = newEntry;
+						}
+					}
+				}
+				
 				index += 1;
 			}
 			else
@@ -1108,4 +1136,29 @@ bool ExtractFontSheets(const string& inSearchDirectory, const string& inPaletteF
 	ExtractText(inSearchDirectory, inPaletteFileName, inOutputDirectory, true);
 
 	return true;
+}
+
+void ValidateSyncData(const string& inSakura1Directory)
+{
+	//Find all files within the requested directory
+	vector<FileNameContainer> allFiles;
+	FindAllFilesWithinDirectory(inSakura1Directory, allFiles);
+
+	//Find all the scenario text files
+	vector<FileNameContainer> scenarioFiles;
+	GetAllFilesOfType(allFiles, "SK0", scenarioFiles);
+	GetAllFilesOfType(allFiles, "SK1", scenarioFiles);
+	GetAllFilesOfType(allFiles, "SKC", scenarioFiles);
+
+	//Extract the text
+	vector<SakuraTextFile> sakuraTextFiles;
+	FindAllSakuraText(scenarioFiles, sakuraTextFiles);
+
+	//Extract sync data
+	vector<FileNameContainer> syncFileNames;
+	vector<SW2SyncFile> syncFiles;
+	GetAllFilesOfType(allFiles, "SYNC", syncFileNames);
+	FindAllSyncData(syncFileNames, syncFiles);
+
+	//Make sure all sync ids from the sakuraTextFiles exist within the syncFiles and vice-versa
 }

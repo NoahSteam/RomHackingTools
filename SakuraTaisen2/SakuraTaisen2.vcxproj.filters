@@ -167,5 +167,8 @@
     <ClInclude Include="Source\BattleSimulatorInLongDay.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Source\SyncFiles.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
