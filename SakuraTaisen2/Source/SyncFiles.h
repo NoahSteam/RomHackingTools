@@ -15,8 +15,42 @@ struct SyncEntry
 //Each entry ends with 5a00
 struct SyncData
 {
-	SyncEntry syncData;
+	SyncEntry syncEntry;
 	std::vector<uint8> timingData;
+
+	int GetNumTimingValues() const
+	{
+		int count = 0;
+
+		for(uint8 t : timingData)
+		{
+			if(t == (uint8)0x2e)
+			{
+				++count;
+			}
+		}
+
+		return count;
+	}
+
+	bool AreTimingDatasTheSame(const std::vector<uint8>& InOtherTiming) const
+	{
+		if(InOtherTiming.size() != timingData.size())
+		{
+			return false;
+		}
+
+		const size_t numValues = timingData.size();
+		for(size_t i = 0; i < numValues; ++i)
+		{
+			if(timingData[i] != InOtherTiming[i])
+			{
+				return false;
+			}
+		}
+
+		return true;
+	}
 };
 
 struct SW2SyncFile
@@ -24,6 +58,7 @@ struct SW2SyncFile
 	FileNameContainer mFileName;
 	std::vector<SyncData> mSyncEntries;
 	std::unordered_map<uint32, SyncData> mSyncIdToEntry;
+	std::unordered_map<uint32, int> mSyncIdToEntryIndex;
 
 	bool InitializeSyncFile(const std::string& InFilePath)
 	{
@@ -59,9 +94,9 @@ struct SW2SyncFile
 
 			//Create new entry
 			SyncData newData;
-			newData.syncData = pSyncTable[i];
+			newData.syncEntry = pSyncTable[i];
 
-			const uint32 offsetToTiming = newData.syncData.offsetToTimingData & 0xffff;
+			const uint32 offsetToTiming = newData.syncEntry.offsetToTimingData & 0xffff;
 
 			//Read in timing data
 			uint8* pTimingData = (uint8*)(fileData.GetData() + offsetToTiming);
@@ -73,7 +108,8 @@ struct SW2SyncFile
 		
 			//Add entry
 			mSyncEntries.push_back(newData);
-			mSyncIdToEntry[newData.syncData.syncID] = newData;
+			mSyncIdToEntry[newData.syncEntry.syncID] = newData;
+			mSyncIdToEntryIndex[newData.syncEntry.syncID] = (int)mSyncEntries.size() - 1;
 		}
 
 		return true;

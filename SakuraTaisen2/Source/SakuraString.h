@@ -170,7 +170,7 @@ struct SakuraString
 	{
 		const size_t charCount = mChars.size();
 		int returnValue = 0;
-		for (size_t i = 2; i < charCount; ++i)
+		for (size_t i = 0; i < charCount; ++i)
 		{
 			if (mChars[i].mIndex && mChars[i].mIndex != SakuraChar::NewLine)
 			{

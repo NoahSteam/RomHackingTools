@@ -1,0 +1,15 @@
+Each character has a 2E.
+1 extra 2E 5A 00 at the end 
+
+Entries end with 0x5A
+MES files don't have any byte alignment.
+SK files have corresponding SYNC files.  
+
+Callstack for reading LipSyncID:
+0601b69a
+0601b12c
+
+060A5066 has 1388 which is the first lipsync id for chapter 5
+Written at 0602c3fa which originally is written to 060a8560
+
+In SK0501, the pattern is: 7ffe textIndex c004 c400 0004 lipSyncID

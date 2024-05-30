@@ -840,11 +840,12 @@ int main(int argc, char *argv[])
 
 		CreateTranslatedBattleSimulatorImages(inTranslationDirectory, inFontSheet, inFontSheetSmall);
 	}
-	else if(command == "ValidateSyncData" && argc == 3)
+	else if(command == "ValidateSyncData" && argc == 4)
 	{
 		const string inSakura1Directory = string(argv[2]) + Seperators;
+		const string outputDirectory = string(argv[3]) + Seperators;
 
-		ValidateSyncData(inSakura1Directory);
+		ValidateSyncData(inSakura1Directory, outputDirectory);
 	}
 	else
 	{

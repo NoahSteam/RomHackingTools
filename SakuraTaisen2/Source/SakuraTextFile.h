@@ -298,6 +298,7 @@ struct SakuraTextFile
 		uint16 mImageId_CharIndex{ 0 };
 		uint16 mImageId_SetIndex{ 0 };
 		uint16 mImageId_ExpressionIndex{ 0 };
+		uint32 mAddress{0};
 		bool   mbIsLips{ false };
 
 		bool operator==(const SequenceEntry& rhs) const 
@@ -322,6 +323,7 @@ struct SakuraTextFile
 	vector<SequenceEntry>     mSequenceEntries;
 	unordered_map<uint16, SequenceEntry> mTextIdToSequenceEntryMap;
 	map<uint16, SequenceEntry> mLipSyncIdToSequenceEntryMap;
+	SW2SyncFile               mSyncFileData;
 	char*                     mpHeaderToText{0};
 	int                       mHeaderToTextSize{0};
 
@@ -337,7 +339,7 @@ public:
 		mDataSegments(std::move(rhs.mDataSegments)), mStringInfoArray(std::move(rhs.mStringInfoArray)), mpHeaderToText(std::move(rhs.mpHeaderToText)),
 		mHeaderToTextSize(rhs.mHeaderToTextSize), mFileSize(rhs.mFileSize),	mpFile(rhs.mpFile), mpBuffer(std::move(rhs.mpBuffer)), 
 		mLineTimingData(std::move(rhs.mLineTimingData)), mFontSheetData(std::move(rhs.mFontSheetData)), mSequenceEntries(rhs.mSequenceEntries), 
-		mTextIdToSequenceEntryMap(rhs.mTextIdToSequenceEntryMap), mLipSyncIdToSequenceEntryMap(rhs.mLipSyncIdToSequenceEntryMap)
+		mTextIdToSequenceEntryMap(rhs.mTextIdToSequenceEntryMap), mLipSyncIdToSequenceEntryMap(rhs.mLipSyncIdToSequenceEntryMap), mSyncFileData(rhs.mSyncFileData)
 	{
 		rhs.mpBuffer              = nullptr;
 		rhs.mpFile                = nullptr;
@@ -363,6 +365,7 @@ public:
 		mLipSyncIdToSequenceEntryMap = std::move(rhs.mLipSyncIdToSequenceEntryMap);
 		mpHeaderToText        = std::move(rhs.mpHeaderToText);
 		mHeaderToTextSize     = rhs.mHeaderToTextSize;
+		mSyncFileData         = rhs.mSyncFileData;
 
 		rhs.mpFile = nullptr;
 		rhs.mpBuffer = nullptr;
@@ -417,8 +420,22 @@ public:
 		return true;
 	}
 
+	void ParseSyncData()
+	{
+		std::string syncFileName("SYNC");
+		if (isdigit(*(char*)(mFileNameInfo.mNoExtension.c_str() + 3)))
+		{
+			syncFileName += mFileNameInfo.mNoExtension.at(4);
+			syncFileName += mFileNameInfo.mNoExtension.at(3);
+
+			syncFileName = mFileNameInfo.mPathOnly + syncFileName + ".BIN";
+
+			mSyncFileData.InitializeSyncFile(syncFileName);
+		}
+	}
 	void ReadInText()
 	{
+		ParseSyncData();
 		ParseHeader();
 		ParseStrings();
 		//	ParseFooter();
@@ -752,6 +769,8 @@ private:
 		const unsigned int SequenceDataNumEntries = (mFileHeader.OffsetToTextHeader - mFileHeader.OffsetToSequenceData) / sizeof(short);
 		assert((int)SequenceDataNumEntries > 0);
 
+		const uint16 breakTextId = 0xfffc;//0x48;
+
 		const uint16 TextEntryId     = 0x0102;
 		const uint16 SpecialEntryId  = 0x0103;
 		const uint16 SpecialEntryId2 = 0xF04A;
@@ -759,159 +778,222 @@ private:
 		const uint16 LipsId          = 0xC13F;
 		const uint16 LipsId2         = 0xC180;
 
+		size_t syncEntryIndex = 0;
+		const size_t numSyncEntries = mSyncFileData.mSyncEntries.size();
+		bool bFirstSyncEntryFound = false;
+
 		unsigned int index = 1;
 
 		std::map<uint16, int> mProcessedIdsToSequenceIndex;
 		std::map<uint16, int> mProcessedIdsToSequenceIndex_ExtraEntries;
+		
+		auto AddLipSyncEntry = [this, &mProcessedIdsToSequenceIndex, &mProcessedIdsToSequenceIndex_ExtraEntries](const SequenceEntry& newEntry)
+		{
+			mLipSyncIdToSequenceEntryMap[newEntry.mLipSyncId] = newEntry;
+			if (mProcessedIdsToSequenceIndex_ExtraEntries.find(newEntry.mTextIndex) != mProcessedIdsToSequenceIndex_ExtraEntries.end())
+			{
+				mSequenceEntries[mProcessedIdsToSequenceIndex_ExtraEntries[newEntry.mTextIndex]] = newEntry;
+				mProcessedIdsToSequenceIndex_ExtraEntries.erase(mProcessedIdsToSequenceIndex_ExtraEntries.find(newEntry.mTextIndex));
+			}
+			else
+			{
+				bool bIsUnique = true;
+				if (mTextIdToSequenceEntryMap.find(newEntry.mTextIndex) != mTextIdToSequenceEntryMap.end())
+				{
+					bIsUnique = false;
+				}
+
+				if (bIsUnique)
+				{
+					mSequenceEntries.push_back(newEntry);
+					mTextIdToSequenceEntryMap[newEntry.mTextIndex] = newEntry;
+				}
+			}
+			mProcessedIdsToSequenceIndex[newEntry.mTextIndex] = (int)(mSequenceEntries.size() - 1);
+		};
+
+		uint16 prevTextIndex = 1;
 
 		//Go to the second to last entry as we require index + 1 to be valid in this loop
 		while (index < (SequenceDataNumEntries - 1))
 		{
 			const unsigned short sequenceValue     = SwapByteOrder(pSequenceData[index]);
 			const unsigned short prevValue         = SwapByteOrder(pSequenceData[index - 1]);
+			const unsigned short nextValue         = SwapByteOrder(pSequenceData[index + 1]);
 			const unsigned short nextNextValue     = SwapByteOrder(pSequenceData[index + 2]);
 			const unsigned short nextNextNextValue = SwapByteOrder(pSequenceData[index + 3]);
 
 			//if 7FFE detected
-			if (sequenceValue == DataEntryId /*0x7FFE*/ ||
-			    sequenceValue == SpecialEntryId2 /*0xF04A*/)
+			if (sequenceValue == DataEntryId /*0x7FFE*/)
 			{
 				//if prev value was 0x0102, then the next value is the text id
-				if (prevValue == TextEntryId)
+				if (prevValue == 0x0102)
 				{
 					SequenceEntry newEntry;
-					newEntry.mTextIndex               = SwapByteOrder(pSequenceData[index + 1]) & 0x0fff;
-					newEntry.mLipSyncId               = SwapByteOrder(pSequenceData[index + 2]) & 0x0fff;
+					newEntry.mTextIndex               = 0xffff;//SwapByteOrder(pSequenceData[index + 1]) & 0x0fff;
+					newEntry.mLipSyncId               = 0;
 					newEntry.mImageId_CharIndex       = SwapByteOrder(pSequenceData[index - 4]) & 0x0fff;
 					newEntry.mImageId_SetIndex        = SwapByteOrder(pSequenceData[index - 3]) & 0x0fff;
 					newEntry.mImageId_ExpressionIndex = SwapByteOrder(pSequenceData[index - 2]) & 0x0fff;
+					newEntry.mbIsLips                 = false;
+					newEntry.mAddress                 = (index + 1) * 2 + mFileHeader.OffsetToSequenceData;
+					
+				//	prevTextIndex = newEntry.mTextIndex;
 
-					if (newEntry.mLipSyncId < 0x3e8)
+					//Rare case
+					if(nextNextValue == 0x0112 && nextNextNextValue == 0x7ffe)
 					{
-						newEntry.mLipSyncId = 0;
-					}
-					else
-					{
-						mLipSyncIdToSequenceEntryMap[newEntry.mLipSyncId] = newEntry;
+						newEntry.mTextIndex = SwapByteOrder(pSequenceData[index + 4]) & 0x0fff;
+						newEntry.mAddress = (index + 4) * 2 + mFileHeader.OffsetToSequenceData;
+
+						index = index + 5;
+
+						prevTextIndex = newEntry.mTextIndex;
+
+						AddLipSyncEntry(newEntry);
+						continue;
 					}
 
-
-					if (mProcessedIdsToSequenceIndex_ExtraEntries.find(newEntry.mTextIndex) != mProcessedIdsToSequenceIndex_ExtraEntries.end())
+					if (newEntry.mTextIndex == breakTextId)
 					{
-						mSequenceEntries[ mProcessedIdsToSequenceIndex_ExtraEntries[newEntry.mTextIndex] ] = newEntry;
-						mProcessedIdsToSequenceIndex_ExtraEntries.erase( mProcessedIdsToSequenceIndex_ExtraEntries.find(newEntry.mTextIndex) );
+						newEntry.mTextIndex = breakTextId;
 					}
-					else
+
+					bool b103Found = false;
+
+					//**Find lipsync id**
+					unsigned int searchIndex = index + 1;
+					while(searchIndex < mFileHeader.OffsetToTextHeader)
 					{
-						bool bIsUnique = true;
-						if(mTextIdToSequenceEntryMap.find(newEntry.mTextIndex) != mTextIdToSequenceEntryMap.end())
+						//Find next sequence
+						uint16 searchValue     = SwapByteOrder(pSequenceData[searchIndex]);
+						uint16 nextSearchValue = SwapByteOrder(pSequenceData[searchIndex+1]);
+
+						if( !(searchValue == 0x0102 && (nextSearchValue == 0x7FFE || nextSearchValue == 0xF04A)))
 						{
-							bIsUnique = false;
-						}
-
-						if(bIsUnique)
-						{
-							mSequenceEntries.push_back(newEntry);
-							mTextIdToSequenceEntryMap[newEntry.mTextIndex] = newEntry;
-						}
-					}
-				
-					mProcessedIdsToSequenceIndex[newEntry.mTextIndex] = (int)(mSequenceEntries.size() - 1);
-
-					/*
-					//We might have an extra entry after the 0102 entry in this form:
-					//0102 7FFE C### C### 0103 7FFE C### < --Last one there is the line number
-					if( (SwapByteOrder(pSequenceData[index + 2]) & 0xF000) == 0xC000 && 
-						(SwapByteOrder(pSequenceData[index + 2]) & 0x0FF0) != 0 &&
-					    SwapByteOrder(pSequenceData[index + 3]) == 0x0103 && 
-						SwapByteOrder(pSequenceData[index + 4]) == 0x7FFE )
-					{
-						
-						const uint16 anotherTextEntry = SwapByteOrder(pSequenceData[index + 5]) & 0x0fff;
-						
-						//Make sure we haven't already found an entry for this text id
-						if( mProcessedIdsToSequenceIndex.find(anotherTextEntry) == mProcessedIdsToSequenceIndex.end() &&
-							mProcessedIdsToSequenceIndex_ExtraEntries.find(anotherTextEntry) == mProcessedIdsToSequenceIndex_ExtraEntries.end()
-						  )
-						{
-							if( mProcessedIdsToSequenceIndex.find(anotherTextEntry - 1) != mProcessedIdsToSequenceIndex.end() )
+							//Should be 0103 and then behind that we can find the lip sync id
+							if (searchValue == 0x0103 && nextSearchValue == 0x7FFE)
 							{
-								SequenceEntry newEntry2 = mSequenceEntries[mProcessedIdsToSequenceIndex[anotherTextEntry - 1]];
-								newEntry2.mTextIndex = anotherTextEntry;
-								mSequenceEntries.push_back(newEntry2);
+								unsigned int index103 = searchIndex;
+								const unsigned int endSearch = index;
+								bool bSyncIdFound = false;
 
-								mProcessedIdsToSequenceIndex_ExtraEntries[newEntry2.mTextIndex] = (int)(mSequenceEntries.size() - 1);
-							}
-						}
-					}*/
-				}
-				//Lips entries
-				else if (prevValue == SpecialEntryId || 
-						(sequenceValue == SpecialEntryId2 && SwapByteOrder(pSequenceData[index+1]) == LipsId) 
-						)
-				{
-					uint16 lipsTestIndex = index + 1;
-					uint16 nextValue = SwapByteOrder(pSequenceData[lipsTestIndex]);
-				//	uint16 nextNextValue = SwapByteOrder(pSequenceData[index + 2]);
-					if ((nextValue == LipsId || nextValue == LipsId2) && 
-						((nextNextValue&0xF000) == 0xC000) &&
-						!(nextNextValue == 0xC000 || nextNextValue == 0xC001 || nextNextValue == 0xC002 || nextNextValue == 0xC003 || nextNextValue == 0xC004)
-						)
-					{
-						//Grab previous text entry because lips will use the same image ids as that one
-						const SequenceEntry prevEntry = mSequenceEntries.back();
-
-						index += 2; //Go to first entry within lips
-						nextValue = SwapByteOrder(pSequenceData[index]);
-
-						do
-						{
-							if(((nextValue&0xF000) == 0xC000) &&
-							   !(nextValue == 0xC000 || nextValue == 0xC001 || nextValue == 0xC002 || nextValue == 0xC003 || nextValue == 0xC004))
-							{
-
-								SequenceEntry newEntry;
-								newEntry.mTextIndex = nextValue & 0x0fff;
-								if ((newEntry.mTextIndex >> 0xb) != 0)
+								while (--index103 != endSearch)
 								{
-									newEntry.mTextIndex += 0xf000;
+									searchValue = SwapByteOrder(pSequenceData[index103]);
+									const uint16 searchValueClean = (searchValue & 0xf000) == 0xc000 ? searchValue & 0x0fff : 0;
+
+									//Sync entry
+									if (!bSyncIdFound && (searchValue & 0xf000) == 0xc000)
+									{
+										newEntry.mLipSyncId = searchValue & 0x0fff;
+										newEntry.mbIsLips   = false;
+										bSyncIdFound        = true;
+
+										//Find first sync entry from sync file
+										if(!bFirstSyncEntryFound && mSyncFileData.mSyncIdToEntry.find(newEntry.mLipSyncId) != mSyncFileData.mSyncIdToEntry.end())
+										{
+											syncEntryIndex = mSyncFileData.mSyncIdToEntryIndex[newEntry.mLipSyncId];
+											bFirstSyncEntryFound = true;
+										}
+
+										if(bFirstSyncEntryFound)
+										{
+											//Sanity check to see if this is a valid entry
+											const bool bSyncEntriesExist = syncEntryIndex < numSyncEntries;
+											const uint16 expectedSyncId = bSyncEntriesExist ? mSyncFileData.mSyncEntries[syncEntryIndex].syncEntry.syncID : 0;
+											if (!bSyncEntriesExist || newEntry.mLipSyncId != expectedSyncId)
+											{
+												newEntry.mLipSyncId = 0;
+											}
+											else
+											{
+												++syncEntryIndex;
+
+												if(syncEntryIndex < numSyncEntries && (mSyncFileData.mSyncEntries[syncEntryIndex].syncEntry.syncID & 0xf000) > 0x1000)
+												{
+													++syncEntryIndex;
+												}
+											}
+										}
+										else
+										{
+											newEntry.mLipSyncId = 0;
+										}
+									}
+									else if(bSyncIdFound && (searchValueClean == prevTextIndex + 1 || (!b103Found && searchValueClean == prevTextIndex)))
+									{
+										newEntry.mTextIndex = searchValueClean;
+										newEntry.mAddress   = index103 * 2 + mFileHeader.OffsetToSequenceData;
+										
+										const bool bShouldBreak = searchValueClean != prevTextIndex;
+										prevTextIndex = newEntry.mTextIndex;
+
+										b103Found = true;
+
+										AddLipSyncEntry(newEntry);
+
+										if (newEntry.mTextIndex == breakTextId)
+										{
+											newEntry.mTextIndex = breakTextId;
+										}
+
+										if(bShouldBreak)
+										{
+											break;
+										}
+									}
 								}
-								newEntry.mImageId_CharIndex = prevEntry.mImageId_CharIndex;
-								newEntry.mLipSyncId = 0;//?
-								newEntry.mImageId_SetIndex = prevEntry.mImageId_SetIndex;
-								newEntry.mImageId_ExpressionIndex = prevEntry.mImageId_ExpressionIndex;
-								newEntry.mbIsLips = true;
 
-								mSequenceEntries.push_back(newEntry);
-
-								mTextIdToSequenceEntryMap[newEntry.mTextIndex] = newEntry;
+								searchIndex += 2;
+								continue;
 							}
 
-							++index;
-							nextValue = SwapByteOrder(pSequenceData[index]);
-						} while ((nextValue & 0x8000) != 0);//!(nextValue == 0xC000 || nextValue == 0xC001 || nextValue == 0xC002 || nextValue == 0xC003 || nextValue == 0xC004 || ((nextValue & 0xF000) != 0xC000)));
-					}
-					else if (prevValue == SpecialEntryId && (nextNextNextValue == TextEntryId || nextNextNextValue == SpecialEntryId))
-					{
-						SequenceEntry newEntry;
-						newEntry.mTextIndex = SwapByteOrder(pSequenceData[index + 1]) & 0x0fff;
-						newEntry.mLipSyncId = SwapByteOrder(pSequenceData[index + 2]) & 0x0fff;
-
-						if (newEntry.mLipSyncId > 0x3e7)
-						{
-							mSequenceEntries.push_back(newEntry);
-
-							if (mTextIdToSequenceEntryMap.find(newEntry.mTextIndex) != mTextIdToSequenceEntryMap.end())
+							//Lips
+							else if(searchValue == 0x0001 && nextSearchValue == 0x7ffe)
 							{
-								SequenceEntry oldEntry = mTextIdToSequenceEntryMap.find(newEntry.mTextIndex)->second;
-								assert(oldEntry.mLipSyncId == 0 || oldEntry.mLipSyncId == newEntry.mLipSyncId);
+								//Find start of lips sequence
+								const uint32 endIndex = searchIndex;
+								uint32 lipsStartIndex = searchIndex;
+								uint16 lipsValue = 0;
+								do 
+								{
+									--lipsStartIndex;
+									lipsValue = SwapByteOrder(pSequenceData[lipsStartIndex]);
+									
+								} while (lipsValue != 0x7ffe);
+
+								
+								//Find all lips ids
+								uint32 lipsIndex = lipsStartIndex + 2; //Skip past junk value
+								while(lipsIndex != endIndex)
+								{
+									lipsValue = SwapByteOrder(pSequenceData[lipsIndex]);
+									if(((lipsValue & 0xf000) == 0xc000) && (lipsValue&0x0fff) == prevTextIndex + 1)
+									{
+										newEntry.mTextIndex = lipsValue & 0x0fff;
+										newEntry.mbIsLips = true;
+										newEntry.mLipSyncId = 0;
+										newEntry.mAddress = lipsIndex * 2 + mFileHeader.OffsetToSequenceData;
+
+										prevTextIndex = newEntry.mTextIndex;
+
+										AddLipSyncEntry(newEntry);
+									}
+									++lipsIndex;
+								}
+
+								searchIndex += 2;
+								continue;
 							}
 
-							mTextIdToSequenceEntryMap[newEntry.mTextIndex] = newEntry;
+							++searchIndex;
+							continue;
 						}
+						index = searchIndex - 1;
+						break;
 					}
-				}
-				
+				}//if (prevValue == 0x0102)
 				index += 1;
 			}
 			else
@@ -1098,18 +1180,27 @@ void ExtractTextCode(const string& inSearchDirectory, const string& inOutputDire
 	for (size_t i = 0; i < numFiles; ++i)
 	{
 		const SakuraTextFile& sakuraText = sakuraTextFiles[i];
-		const string outFileName = inOutputDirectory + sakuraText.mFileNameInfo.mNoExtension + txt;
+		const string outTextCodeFileName = inOutputDirectory + sakuraText.mFileNameInfo.mNoExtension + txt;
+		const string outTextSequenceFileName = inOutputDirectory + sakuraText.mFileNameInfo.mNoExtension + "_Seq" + txt;
 
-		FILE* pOutFile = nullptr;
-		errno_t errorValue = fopen_s(&pOutFile, outFileName.c_str(), "w");
+		FILE* pOutTextCodeFile = nullptr;
+		errno_t errorValue = fopen_s(&pOutTextCodeFile, outTextCodeFileName.c_str(), "w");
 		if (errorValue)
 		{
-			printf("Unable to open out file: %s.  Error code: %i \n", outFileName.c_str(), errorValue);
+			printf("Unable to open out file: %s.  Error code: %i \n", outTextCodeFileName.c_str(), errorValue);
+			continue;
+		}
+
+		FILE* pOutTextSequenceFile = nullptr;
+		errorValue = fopen_s(&pOutTextSequenceFile, outTextSequenceFileName.c_str(), "w");
+		if (errorValue)
+		{
+			printf("Unable to open out file: %s.  Error code: %i \n", outTextSequenceFileName.c_str(), errorValue);
 			continue;
 		}
 
 		printf("Dumping dialog for: %s\n", sakuraText.mFileNameInfo.mNoExtension.c_str());
-
+		
 		//Dump out the dialog for each line
 		int stringIndex = 0;
 		const int tileDim = 16;
@@ -1123,11 +1214,19 @@ void ExtractTextCode(const string& inSearchDirectory, const string& inOutputDire
 			
 			for (const SakuraString::SakuraChar& sakuraChar : sakuraString.mChars)
 			{
-				fprintf(pOutFile, "%02x%02x ", sakuraChar.mRow, sakuraChar.mColumn);
+				fprintf(pOutTextCodeFile, "%02x%02x ", sakuraChar.mRow, sakuraChar.mColumn);
 			}
 
-			fprintf(pOutFile, "\n");
+			fprintf(pOutTextCodeFile, "\n");
 		}
+
+		for(const SakuraTextFile::SequenceEntry& seqEntry : sakuraText.mSequenceEntries)
+		{
+			fprintf(pOutTextSequenceFile, "%02x [%04x]\n", seqEntry.mTextIndex, seqEntry.mLipSyncId);
+		}
+
+		fclose(pOutTextCodeFile);
+		fclose(pOutTextSequenceFile);
 	}
 }
 
@@ -1138,8 +1237,10 @@ bool ExtractFontSheets(const string& inSearchDirectory, const string& inPaletteF
 	return true;
 }
 
-void ValidateSyncData(const string& inSakura1Directory)
+void ValidateSyncData(const string& inSakura1Directory, const string& inOutputDirectory)
 {
+	CreateDirectoryHelper(inOutputDirectory);
+
 	//Find all files within the requested directory
 	vector<FileNameContainer> allFiles;
 	FindAllFilesWithinDirectory(inSakura1Directory, allFiles);
@@ -1160,5 +1261,128 @@ void ValidateSyncData(const string& inSakura1Directory)
 	GetAllFilesOfType(allFiles, "SYNC", syncFileNames);
 	FindAllSyncData(syncFileNames, syncFiles);
 
+	struct SyncDataInfo
+	{
+		const char* pFileName;
+		uint16 syncId;
+	};
+
 	//Make sure all sync ids from the sakuraTextFiles exist within the syncFiles and vice-versa
+
+	//Gather all sync data
+	std::unordered_map<std::string, std::unordered_set<uint16>> syncIds;
+	for(const SW2SyncFile& syncFile : syncFiles)
+	{
+		for(const SyncData& syncData : syncFile.mSyncEntries)
+		{
+			syncIds[syncFile.mFileName.mNoExtension].insert(syncData.syncEntry.syncID);
+		}
+	}
+
+	typedef std::unordered_map<uint16, SyncDataInfo> SyncIDToSyncData;
+	typedef std::unordered_map<std::string, SyncIDToSyncData> SyncFileToSyncData;
+	
+	SyncFileToSyncData syncDataForSyncFiles;
+
+	//TODO: Once you find 0102, keep going till you find another 0102. In between if a 01013 is found, then textId and lipId preceeds it 
+	
+	//Find sync files for each SK file
+	for(const SakuraTextFile& sakuraFile : sakuraTextFiles)
+	{
+		std::string syncFileName("SYNC");
+		if(isdigit( *(char*)(sakuraFile.mFileNameInfo.mNoExtension.c_str() + 3)))
+		{
+			syncFileName += sakuraFile.mFileNameInfo.mNoExtension.at(4);
+			syncFileName += sakuraFile.mFileNameInfo.mNoExtension.at(3);
+		}
+		else
+		{
+			continue;
+		}
+
+		int expectedTextId = 1;
+		if(sakuraFile.mSequenceEntries.size())
+		{
+			for(const SakuraTextFile::SequenceEntry& seqEntry : sakuraFile.mSequenceEntries)
+			{
+				if(seqEntry.mTextIndex != expectedTextId)
+				{
+					expectedTextId = seqEntry.mTextIndex;
+				}
+				++expectedTextId;
+
+				if(seqEntry.mLipSyncId)
+				{	
+					if(syncIds.find(syncFileName) != syncIds.end())
+					{
+						const auto& syncIdSet = syncIds[syncFileName];
+						if(syncIdSet.find(seqEntry.mLipSyncId) == syncIdSet.end())
+						{
+							printf("%s: 0x%02x\n", syncFileName.c_str(), seqEntry.mLipSyncId);
+						}
+					}
+
+					SyncDataInfo info;
+					info.pFileName = sakuraFile.mFileNameInfo.mNoExtension.c_str();
+					info.syncId = seqEntry.mLipSyncId;
+					syncDataForSyncFiles[syncFileName][seqEntry.mLipSyncId] = info;
+				}
+			}
+		}
+		else
+		{
+			printf("No sync file for %s\n", sakuraFile.mFileNameInfo.mFileName.c_str());
+		}
+	}
+
+
+	for (const SakuraTextFile& sakuraFile : sakuraTextFiles)
+	{
+		printf("%s: %i, TextLines: %i\n", sakuraFile.mFileNameInfo.mNoExtension.c_str(), (int)sakuraFile.mSequenceEntries.size(), (int)sakuraFile.mLines.size());
+
+		const string outFileName = inOutputDirectory + sakuraFile.mFileNameInfo.mNoExtension + ".txt";
+		TextFileWriter outFile;
+		outFile.OpenFileForWrite(outFileName);
+
+		for(const SakuraTextFile::SequenceEntry& seqEntry : sakuraFile.mSequenceEntries)
+		{
+			outFile.Printf("Entry: %02x Sync: %02x 0x%05x ", seqEntry.mTextIndex, seqEntry.mLipSyncId, seqEntry.mAddress);
+
+			if(seqEntry.mTextIndex >= sakuraFile.mLines.size())
+			{
+				outFile.Printf("INVALID NUMBER OF LINES IN %s\n", sakuraFile.mFileNameInfo.mFileName.c_str());
+			}
+			else
+			{
+				const int numPrintedCharacters = sakuraFile.mLines[seqEntry.mTextIndex - 1].GetNumberOfActualCharacters();
+
+				const uint32 lipSyncId = seqEntry.mLipSyncId;
+				if(sakuraFile.mSyncFileData.mSyncIdToEntry.find(lipSyncId) != sakuraFile.mSyncFileData.mSyncIdToEntry.end())
+				{
+					const SyncData& syncData = sakuraFile.mSyncFileData.mSyncIdToEntry.at(lipSyncId);
+
+					const int numTimingValues = syncData.GetNumTimingValues();
+					if(abs(numTimingValues - numPrintedCharacters) > 1)
+					{
+						outFile.Printf("MISMATCH: ExpectedCharacters: %i, SK_Characters: %i Timing: ", numTimingValues, numPrintedCharacters);
+
+						for(uint8 t : syncData.timingData)
+						{
+							outFile.Printf("%02x ", t);
+						}
+
+						outFile.Printf("\n");
+					}
+					else
+					{
+						outFile.Printf("ExpectedCharacters: %i, SK_Characters: %i\n", numTimingValues, numPrintedCharacters);
+					}
+				}
+				else
+				{
+					outFile.Printf("\n");
+				}
+			}
+		}
+	}
 }

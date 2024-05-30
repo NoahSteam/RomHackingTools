@@ -8,6 +8,14 @@ M92VDP1.BIN
 24x24
 24x24
 128x24
+(etc., same as gover files
+
+@10780
+24x24
+24x24
+24x24
+24x24
+128x24
 40x32
 24x24
 16x32
