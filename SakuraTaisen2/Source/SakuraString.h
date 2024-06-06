@@ -52,6 +52,7 @@ struct SakuraString
 		unsigned char    mColumn;
 		unsigned short   mIndex;
 		static const int NewLine = 0xFFFE;
+		static const int EndOfText = 0xFFFF;
 	};
 
 	vector<SakuraChar> mChars;
@@ -170,12 +171,23 @@ struct SakuraString
 	{
 		const size_t charCount = mChars.size();
 		int returnValue = 0;
+
+	//	vector<SakuraChar> skippedChars;
 		for (size_t i = 0; i < charCount; ++i)
 		{
-			if (mChars[i].mIndex && mChars[i].mIndex != SakuraChar::NewLine)
+			const uint16 indexValue = mChars[i].mIndex;
+			
+			if (indexValue && 
+				(uint16)(indexValue | 0xff00) != SakuraChar::NewLine &&
+				(uint16)(indexValue | 0xff00) != SakuraChar::EndOfText)
 			{
 				++returnValue;
 			}
+			/*
+			else
+			{
+				skippedChars.push_back(mChars[i]);
+			}*/
 		}
 
 		return returnValue;

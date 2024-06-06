@@ -138,7 +138,7 @@ void ExtractTiledScreen(const std::string& inTileFilePath, const std::string& in
 
 template<typename TileByteType>
 bool PatchTiledImage(const std::string& InPatchedImagePath, const std::string InSakuraFilePath, const uint32 InColorDataSize, const int InColorDataOffset,
-                     const int InTileDataOffset)
+                     const int InTileDataOffset, const int InNumIndices = 1120, bool bInOffsetTileByOne = true)
 {
 	const uint32 tileDim = 8;
 	BmpToSaturnConverter patchedImage;
@@ -166,16 +166,19 @@ bool PatchTiledImage(const std::string& InPatchedImagePath, const std::string In
 
 	const std::vector<int>& tileIndices = optimizedTileSet.GetTileIndices();
 	const size_t numIndices = tileIndices.size();
-	const size_t expectedIndices = 1120;
-	assert(numIndices == expectedIndices);
+	assert(numIndices == InNumIndices);
 
-	TileByteType vdp2Indices[expectedIndices];
+	TileByteType* pVdp2Indices = new TileByteType[numIndices];
+	const int offset = bInOffsetTileByOne ? 1 : 0;
 	for (size_t i = 0; i < numIndices; ++i)
 	{
-		const TileByteType indice = TileByteType((tileIndices[i] + 1) * 2);
-		vdp2Indices[i] = SwapByteOrder(indice);
+		const TileByteType indice = TileByteType((tileIndices[i] + offset) * 2);
+		pVdp2Indices[i] = SwapByteOrder(indice);
 	}
-	outputFile.WriteData(InTileDataOffset, (char*)vdp2Indices, sizeof(vdp2Indices[0]) * expectedIndices, false);
+	
+	outputFile.WriteData(InTileDataOffset, (char*)pVdp2Indices, sizeof(pVdp2Indices[0]) * numIndices, false);
+
+	delete[] pVdp2Indices;
 
 	return true;
 }

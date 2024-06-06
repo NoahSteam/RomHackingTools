@@ -91,9 +91,18 @@ bool PatchBGDatFiles(const string& InPatchedSakuraDirectory, const string& InTra
 	vector<FileNameContainer> bossImages;
 	FindAllFilesWithinDirectory(InTranslatedDataDirectory + "BossImages", bossImages);
 
+	const int imageWidth = 288;
+	const int imageHeight = 144;
+	const int numBytesPerTile = 8 * 8;
+	const int numTiles = (imageWidth / 8) * (imageHeight / 8);
+
 	const int numFiles = (int)bossImages.size();
 	for (int i = 0; i < numFiles; ++i)
 	{
+		const string bgFilePath = InPatchedSakuraDirectory + string("SAKURA2\\") + bossImages[i].mNoExtension + string(".DAT");
+
+		PatchTiledImage<uint16>(bossImages[i].mFullPath, bgFilePath, imageWidth*imageHeight, 0x710,	0, numTiles, false);
+	/*
 		FileReadWriter targetFile;
 		if (!targetFile.OpenFile(InPatchedSakuraDirectory + string("SAKURA2\\") + bossImages[i].mNoExtension + string(".DAT")))
 		{
@@ -110,6 +119,7 @@ bool PatchBGDatFiles(const string& InPatchedSakuraDirectory, const string& InTra
 		patchedImage.PackTiles();
 
 		targetFile.WriteData(0x710, patchedImage.mpPackedTiles, patchedImage.mPackedTileSize);
+		*/
 	}
 
 	return true;

@@ -13,24 +13,31 @@ struct SyncEntry
 };
 
 //Each entry ends with 5a00
+typedef std::vector<uint8> TimingDataVector;
+
 struct SyncData
 {
 	SyncEntry syncEntry;
-	std::vector<uint8> timingData;
+	TimingDataVector timingData;
 
-	int GetNumTimingValues() const
+	static int GetNumTimingValues(const TimingDataVector& inTimingData)
 	{
 		int count = 0;
 
-		for(uint8 t : timingData)
+		for (uint8 t : inTimingData)
 		{
-			if(t == (uint8)0x2e)
+			if (t == (uint8)0x2e)
 			{
 				++count;
 			}
 		}
 
 		return count;
+	}
+
+	int GetNumTimingValues() const
+	{
+		return GetNumTimingValues(timingData);
 	}
 
 	bool AreTimingDatasTheSame(const std::vector<uint8>& InOtherTiming) const
@@ -53,11 +60,14 @@ struct SyncData
 	}
 };
 
+typedef std::unordered_map<uint32, SyncData> SyncIdToSyncData;
 struct SW2SyncFile
 {
 	FileNameContainer mFileName;
 	std::vector<SyncData> mSyncEntries;
-	std::unordered_map<uint32, SyncData> mSyncIdToEntry;
+	std::vector<SyncData> mPatchedSyncEntries;
+	SyncIdToSyncData mSyncIdToEntry;
+	SyncIdToSyncData mPatchedSyncIdToEntry;
 	std::unordered_map<uint32, int> mSyncIdToEntryIndex;
 
 	bool InitializeSyncFile(const std::string& InFilePath)
@@ -87,7 +97,7 @@ struct SW2SyncFile
 		memcpy_s(pSyncTable, sizeof(SyncEntry) * numEntries, fileData.GetData(), sizeof(SyncEntry) * numEntries);
 
 		//Read in timing data
-		for (uint32 i = 0; i < numEntries; ++i)
+ 		for (uint32 i = 0; i < numEntries; ++i)
 		{
 			//Fix endianness
 			pSyncTable[i].SwapEndianess();
@@ -106,11 +116,20 @@ struct SW2SyncFile
 				++pTimingData;
 			}
 		
+			//Also grab the padding bytes
+			while (*pTimingData == 0x0)
+			{
+				newData.timingData.push_back(0);
+				++pTimingData;
+			}
+
 			//Add entry
 			mSyncEntries.push_back(newData);
 			mSyncIdToEntry[newData.syncEntry.syncID] = newData;
 			mSyncIdToEntryIndex[newData.syncEntry.syncID] = (int)mSyncEntries.size() - 1;
 		}
+
+		mPatchedSyncIdToEntry = mSyncIdToEntry;
 
 		return true;
 	}

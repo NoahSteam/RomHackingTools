@@ -1,5 +1,7 @@
 #pragma once
 
+bool PatchLipSyncDataForAdventure(const string& inTranslatedDataDirectory);
+
 struct SakuraTextFileFixedHeader
 {
 	struct StringInfo
@@ -125,7 +127,7 @@ struct SakuraTextFileFixedHeader
 
 	void OutputToFile(FileWriter& outFile)
 	{
-		const int totalSize = SwapByteOrder(mStringInfo.size() * sizeof(SakuraTextFileFixedHeader::StringInfo));
+		const int totalSize = SwapByteOrder(mStringInfo.size() + 1);//* sizeof(SakuraTextFileFixedHeader::StringInfo));
 		outFile.WriteData(&totalSize, sizeof(totalSize));
 
 		for(StringInfo& stringInfo : mStringInfo)
@@ -147,7 +149,7 @@ static int GetNumBytesInLines(const vector<SakuraString>& inTranslatedLines)
 	return numBytes;
 }
 
-bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTranslatedTextDirectory, const string& outDirectory, 
+bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTranslatedDataDirectory, const string& inPatchedDirectory, 
                 TileExtractor& inTranslatedFontSheet, bool bInOutputToCorrespondingDirectory = false, bool bInCreateOutput = true)
 {
 #define IncrementLine()\
@@ -189,18 +191,18 @@ bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTrans
 
 	//Extract the text
 	vector<SakuraTextFile> sakuraTextFiles;
-	FindAllSakuraText(scenarioFiles, sakuraTextFiles);
+	FindAllSakuraText(scenarioFiles, sakuraTextFiles, false);
 	///////////////
 	
 	//Find all translated text files
 	vector<FileNameContainer> translatedTextFiles;
-	const string translatedFileDirectory = inTranslatedTextDirectory + Seperators + "Translation";
+	const string translatedFileDirectory = inTranslatedDataDirectory + Seperators + "Translation";
 	FindAllFilesWithinDirectory(translatedFileDirectory, translatedTextFiles);
 
 	const string UntranslatedEnglishString("Untranslated");
 	const string UnusedEnglishString("Unused");
 	const bool bIsMESFile = false;
-	const string outputDirectory = outDirectory + Seperators + "SAKURA1\\";
+	const string outputDirectory = inPatchedDirectory + Seperators + "SAKURA1\\";
 	CreateDirectoryHelper(outputDirectory);
 
 	//Insert text

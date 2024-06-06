@@ -46,7 +46,7 @@ bool CreateStoryTextSpreadsheets(const string& dialogImageDirectory, const strin
 
 	//Parse the TBL files
 	vector<SakuraTextFile> sakuraTextFiles;
-	FindAllSakuraText(scenarioFiles, sakuraTextFiles);
+	FindAllSakuraText(scenarioFiles, sakuraTextFiles, false);
 
 	vector<FileNameContainer> translatedTextFiles;
 	FindAllFilesWithinDirectory(translatedTextDirectory, translatedTextFiles);

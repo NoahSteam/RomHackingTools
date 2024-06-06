@@ -422,7 +422,7 @@ public:
 
 	void ParseSyncData()
 	{
-		std::string syncFileName("SYNC");
+		std::string syncFileName("\\SYNC");
 		if (isdigit(*(char*)(mFileNameInfo.mNoExtension.c_str() + 3)))
 		{
 			syncFileName += mFileNameInfo.mNoExtension.at(4);
@@ -433,11 +433,25 @@ public:
 			mSyncFileData.InitializeSyncFile(syncFileName);
 		}
 	}
-	void ReadInText()
+
+	void ReadInText(bool bInIsSingleByteEncoded)
 	{
+		if(bInIsSingleByteEncoded)
+		{
+			bInIsSingleByteEncoded = true;
+		}
 		ParseSyncData();
 		ParseHeader();
-		ParseStrings();
+
+		if(bInIsSingleByteEncoded)
+		{
+			ParseStrings<uint8>();
+		}
+		else
+		{
+			ParseStrings<uint16>();
+		}
+		
 		//	ParseFooter();
 		ReadInFontSheetData();
 		ReadInSequenceData();
@@ -530,7 +544,124 @@ public:
 		return "";
 	}
 
+	void GenerateTimingDataForLine(const SakuraString& inTextLine, TimingDataVector& outTimingData)
+	{
+		const size_t numTimingValues = SyncData::GetNumTimingValues(outTimingData);
+		const size_t numCharsInTranslation = inTextLine.GetNumberOfActualCharacters();
+
+		//If the number of characters didn't change, leave the data as is
+		if(numTimingValues - 1 == numCharsInTranslation)
+		{
+			return;
+		}
+
+		//Gather keys to split and retain
+		bool bFirstEntryFound = false;
+		TimingDataVector timingKeysBeforeFirstLetter;
+		TimingDataVector timingKeysToSplit;
+		size_t numCharactersOriginally = 0;
+		for(uint8 t : outTimingData)
+		{
+			if(t == (uint8)0x2e)
+			{
+				bFirstEntryFound = true;
+				++numCharactersOriginally;
+			}
+			else if(t == (uint8)0x5a || t == 0)
+			{
+				break;
+			}
+			else
+			{
+				//Keys prior to the first 0x2e are not split
+				if(bFirstEntryFound)
+				{
+					timingKeysToSplit.push_back(t);
+				}
+				else
+				{
+					timingKeysBeforeFirstLetter.push_back(t);
+				}
+			}
+		}
+
+		assert(numCharactersOriginally > 0);
+		--numCharactersOriginally;
+
+		//Add extra 0x6e values if number of keys to split is less than the number of characters we have in our translated string		
+		for(size_t i = timingKeysToSplit.size(); i < numCharsInTranslation; ++i)
+		{
+			timingKeysToSplit.push_back(0x6e);
+		}
+		
+		//Figure out how to divide up the keys
+		const size_t numTimingBytesToSplit = timingKeysToSplit.size();
+
+		TimingDataVector newTimingData(timingKeysBeforeFirstLetter);
+		const size_t numTimingValuesPerCharacter = numTimingBytesToSplit / numCharsInTranslation;
+		const size_t numCharactersWithOneTimingValue = numTimingBytesToSplit % numCharsInTranslation;//numTimingBytesToSplit - (numTimingValuesPerCharacter * numCharsInTranslation);
+
+		//Create new timing data
+		size_t timingIndex = 0;
+		size_t numSingleEntriesWritten = 0;
+		for (size_t characterIndex = 0; characterIndex < numCharsInTranslation; ++characterIndex)
+		{
+			newTimingData.push_back((uint8)0x2e);
+
+			for (size_t innerIndex = 0; innerIndex < numTimingValuesPerCharacter; ++innerIndex)
+			{
+				newTimingData.push_back(timingKeysToSplit[timingIndex]);
+				++timingIndex;
+			}
+
+			if (numSingleEntriesWritten < numCharactersWithOneTimingValue)
+			{
+				newTimingData.push_back(timingKeysToSplit[timingIndex]);
+				++numSingleEntriesWritten;
+				++timingIndex;
+			}
+		}
+
+		//End bytes
+		newTimingData.push_back(0x2e);
+		newTimingData.push_back(0x5a);
+		newTimingData.push_back(0);
+
+		//Make it all 4byte aligned
+		const int numPadBytes = newTimingData.size() % 4 > 0 ? 4 - (int)(newTimingData.size() % 4) : 0;
+		for(int i = 0; i < numPadBytes; ++i)
+		{
+			newTimingData.push_back(0);
+		}
+
+		outTimingData = newTimingData;
+	}
+
+	void GenerateSyncData()
+	{
+		SyncIdToSyncData& newSyncEntries = mSyncFileData.mPatchedSyncIdToEntry;
+
+		const size_t numEntries = mSequenceEntries.size();
+		for(size_t i = 0; i < numEntries; ++i)
+		{
+			SequenceEntry& seqEntry = mSequenceEntries[i];
+			if(!seqEntry.mLipSyncId)
+			{
+				continue;
+			}
+
+			assert(mLines.size() + 1> seqEntry.mTextIndex);
+			assert(seqEntry.mTextIndex > 0);
+
+			const SakuraString& textLine = mLines[seqEntry.mTextIndex - 1];
+			assert(newSyncEntries.find(seqEntry.mLipSyncId) != newSyncEntries.end());
+
+			GenerateTimingDataForLine(textLine, newSyncEntries[seqEntry.mLipSyncId].timingData);
+		}
+	}
+
 private:
+//	template<typename EncodingSize>
 	void ParseHeader()
 	{
 		//Read in file header
@@ -696,9 +827,10 @@ private:
 		}
 	}
 
+	template <typename EncodingSize>
 	void ParseStrings()
 	{
-		static const unsigned short EndOfLineCharacter = 0xffff;
+		static const EncodingSize EndOfLineCharacter = sizeof(EncodingSize) == 1 ? 0xff : 0xffff;
 
 		const unsigned int NumBytesPerCharacter = 2;
 
@@ -715,12 +847,12 @@ private:
 			assert(offsetToString < mFileSize);
 
 			SakuraString newLineOfText;
-			unsigned short* pWordBuffer = (unsigned short*)&mpBuffer[offsetToString];
+			EncodingSize* pWordBuffer = (EncodingSize*)&mpBuffer[offsetToString];
 			int currentIndex = 0;
 
 			while (1)
 			{
-				const unsigned short currValue = SwapByteOrder(pWordBuffer[currentIndex++]);
+				const EncodingSize currValue = SwapByteOrder(pWordBuffer[currentIndex++]);
 
 				if (bIsMESFile)
 				{
@@ -1015,7 +1147,7 @@ private:
 	}
 };
 
-void FindAllSakuraText(const vector<FileNameContainer>& inFiles, vector<SakuraTextFile>& outText)
+void FindAllSakuraText(const vector<FileNameContainer>& inFiles, vector<SakuraTextFile>& outText, bool bIsSingleByteEncoded)
 {
 	const std::string SkipFileName("SK0000");
 
@@ -1039,7 +1171,7 @@ void FindAllSakuraText(const vector<FileNameContainer>& inFiles, vector<SakuraTe
 			continue;
 		}
 
-		sakuraFile.ReadInText();
+		sakuraFile.ReadInText(bIsSingleByteEncoded);
 
 		outText.push_back(std::move(sakuraFile));
 	}
@@ -1072,7 +1204,7 @@ void ExtractText(const string& inSearchDirectory, const string& inPaletteFileNam
 
 	//Extract the text
 	vector<SakuraTextFile> sakuraTextFiles;
-	FindAllSakuraText(scenarioFiles, sakuraTextFiles);
+	FindAllSakuraText(scenarioFiles, sakuraTextFiles, false);
 
 	const string extension(".bmp");
 	
@@ -1170,7 +1302,7 @@ void ExtractTextCode(const string& inSearchDirectory, const string& inOutputDire
 
 	//Extract the text
 	vector<SakuraTextFile> sakuraTextFiles;
-	FindAllSakuraText(scenarioFiles, sakuraTextFiles);
+	FindAllSakuraText(scenarioFiles, sakuraTextFiles, false);
 
 	CreateDirectoryHelper(inOutputDirectory);
 
@@ -1235,154 +1367,4 @@ bool ExtractFontSheets(const string& inSearchDirectory, const string& inPaletteF
 	ExtractText(inSearchDirectory, inPaletteFileName, inOutputDirectory, true);
 
 	return true;
-}
-
-void ValidateSyncData(const string& inSakura1Directory, const string& inOutputDirectory)
-{
-	CreateDirectoryHelper(inOutputDirectory);
-
-	//Find all files within the requested directory
-	vector<FileNameContainer> allFiles;
-	FindAllFilesWithinDirectory(inSakura1Directory, allFiles);
-
-	//Find all the scenario text files
-	vector<FileNameContainer> scenarioFiles;
-	GetAllFilesOfType(allFiles, "SK0", scenarioFiles);
-	GetAllFilesOfType(allFiles, "SK1", scenarioFiles);
-	GetAllFilesOfType(allFiles, "SKC", scenarioFiles);
-
-	//Extract the text
-	vector<SakuraTextFile> sakuraTextFiles;
-	FindAllSakuraText(scenarioFiles, sakuraTextFiles);
-
-	//Extract sync data
-	vector<FileNameContainer> syncFileNames;
-	vector<SW2SyncFile> syncFiles;
-	GetAllFilesOfType(allFiles, "SYNC", syncFileNames);
-	FindAllSyncData(syncFileNames, syncFiles);
-
-	struct SyncDataInfo
-	{
-		const char* pFileName;
-		uint16 syncId;
-	};
-
-	//Make sure all sync ids from the sakuraTextFiles exist within the syncFiles and vice-versa
-
-	//Gather all sync data
-	std::unordered_map<std::string, std::unordered_set<uint16>> syncIds;
-	for(const SW2SyncFile& syncFile : syncFiles)
-	{
-		for(const SyncData& syncData : syncFile.mSyncEntries)
-		{
-			syncIds[syncFile.mFileName.mNoExtension].insert(syncData.syncEntry.syncID);
-		}
-	}
-
-	typedef std::unordered_map<uint16, SyncDataInfo> SyncIDToSyncData;
-	typedef std::unordered_map<std::string, SyncIDToSyncData> SyncFileToSyncData;
-	
-	SyncFileToSyncData syncDataForSyncFiles;
-
-	//TODO: Once you find 0102, keep going till you find another 0102. In between if a 01013 is found, then textId and lipId preceeds it 
-	
-	//Find sync files for each SK file
-	for(const SakuraTextFile& sakuraFile : sakuraTextFiles)
-	{
-		std::string syncFileName("SYNC");
-		if(isdigit( *(char*)(sakuraFile.mFileNameInfo.mNoExtension.c_str() + 3)))
-		{
-			syncFileName += sakuraFile.mFileNameInfo.mNoExtension.at(4);
-			syncFileName += sakuraFile.mFileNameInfo.mNoExtension.at(3);
-		}
-		else
-		{
-			continue;
-		}
-
-		int expectedTextId = 1;
-		if(sakuraFile.mSequenceEntries.size())
-		{
-			for(const SakuraTextFile::SequenceEntry& seqEntry : sakuraFile.mSequenceEntries)
-			{
-				if(seqEntry.mTextIndex != expectedTextId)
-				{
-					expectedTextId = seqEntry.mTextIndex;
-				}
-				++expectedTextId;
-
-				if(seqEntry.mLipSyncId)
-				{	
-					if(syncIds.find(syncFileName) != syncIds.end())
-					{
-						const auto& syncIdSet = syncIds[syncFileName];
-						if(syncIdSet.find(seqEntry.mLipSyncId) == syncIdSet.end())
-						{
-							printf("%s: 0x%02x\n", syncFileName.c_str(), seqEntry.mLipSyncId);
-						}
-					}
-
-					SyncDataInfo info;
-					info.pFileName = sakuraFile.mFileNameInfo.mNoExtension.c_str();
-					info.syncId = seqEntry.mLipSyncId;
-					syncDataForSyncFiles[syncFileName][seqEntry.mLipSyncId] = info;
-				}
-			}
-		}
-		else
-		{
-			printf("No sync file for %s\n", sakuraFile.mFileNameInfo.mFileName.c_str());
-		}
-	}
-
-
-	for (const SakuraTextFile& sakuraFile : sakuraTextFiles)
-	{
-		printf("%s: %i, TextLines: %i\n", sakuraFile.mFileNameInfo.mNoExtension.c_str(), (int)sakuraFile.mSequenceEntries.size(), (int)sakuraFile.mLines.size());
-
-		const string outFileName = inOutputDirectory + sakuraFile.mFileNameInfo.mNoExtension + ".txt";
-		TextFileWriter outFile;
-		outFile.OpenFileForWrite(outFileName);
-
-		for(const SakuraTextFile::SequenceEntry& seqEntry : sakuraFile.mSequenceEntries)
-		{
-			outFile.Printf("Entry: %02x Sync: %02x 0x%05x ", seqEntry.mTextIndex, seqEntry.mLipSyncId, seqEntry.mAddress);
-
-			if(seqEntry.mTextIndex >= sakuraFile.mLines.size())
-			{
-				outFile.Printf("INVALID NUMBER OF LINES IN %s\n", sakuraFile.mFileNameInfo.mFileName.c_str());
-			}
-			else
-			{
-				const int numPrintedCharacters = sakuraFile.mLines[seqEntry.mTextIndex - 1].GetNumberOfActualCharacters();
-
-				const uint32 lipSyncId = seqEntry.mLipSyncId;
-				if(sakuraFile.mSyncFileData.mSyncIdToEntry.find(lipSyncId) != sakuraFile.mSyncFileData.mSyncIdToEntry.end())
-				{
-					const SyncData& syncData = sakuraFile.mSyncFileData.mSyncIdToEntry.at(lipSyncId);
-
-					const int numTimingValues = syncData.GetNumTimingValues();
-					if(abs(numTimingValues - numPrintedCharacters) > 1)
-					{
-						outFile.Printf("MISMATCH: ExpectedCharacters: %i, SK_Characters: %i Timing: ", numTimingValues, numPrintedCharacters);
-
-						for(uint8 t : syncData.timingData)
-						{
-							outFile.Printf("%02x ", t);
-						}
-
-						outFile.Printf("\n");
-					}
-					else
-					{
-						outFile.Printf("ExpectedCharacters: %i, SK_Characters: %i\n", numTimingValues, numPrintedCharacters);
-					}
-				}
-				else
-				{
-					outFile.Printf("\n");
-				}
-			}
-		}
-	}
 }

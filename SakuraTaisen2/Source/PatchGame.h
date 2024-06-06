@@ -46,6 +46,8 @@ static bool BringOverOriginalFiles(const string& inRootSakuraDirectory, const st
 	GetAllFilesOfType(allFiles, "MGRNDATA.BIN", originalFiles);
 	GetAllFilesOfType(allFiles, "MGSKDATA.BIN", originalFiles);
 	GetAllFilesOfType(allFiles, "MINIGAME.CG", originalFiles);
+	GetAllFilesOfType(allFiles, "SYNC", originalFiles);
+	GetAllFilesOfType(allFiles, "BG6", originalFiles);
 
 	//Battle files
 	GetAllFilesOfType(allFiles, "COL.BIN", originalFiles);
@@ -306,7 +308,7 @@ bool PatchTextDrawingCode(const string& inSourceGameDirectory, const string& inP
 	return true;
 }
 
-bool PatchGame(const string& inSourceGameDirectory, const string& inTranslatedDirectory, const string& inPatchedDirectory, int inDiscNumber)
+bool PatchGame(const string& inSourceGameDirectory, const string& inTranslatedDataDirectory, const string& inPatchedDirectory, int inDiscNumber)
 {
 	if( !BringOverOriginalFiles(inSourceGameDirectory, inPatchedDirectory) )
 	{
@@ -314,100 +316,101 @@ bool PatchGame(const string& inSourceGameDirectory, const string& inTranslatedDi
 		return false;
 	}
 	
+	#if 1
 	if(inDiscNumber == 2)
 	{
-		if(!PatchBattleAnimViewer(inPatchedDirectory, inTranslatedDirectory))
+		if(!PatchBattleAnimViewer(inPatchedDirectory, inTranslatedDataDirectory))
 		{
 			printf("Unable to patch BattleAnimViewer\n");
 			return false;
 		}
 
-		if (!PatchBattleSimulator(inPatchedDirectory, inTranslatedDirectory))
+		if (!PatchBattleSimulator(inPatchedDirectory, inTranslatedDataDirectory))
 		{
 			printf("Unable to patch BattleSimulator\n");
 			return false;
 		}
 	}
 
-	if(!PatchMiniGames(inPatchedDirectory, inTranslatedDirectory))
+	if(!PatchMiniGames(inPatchedDirectory, inTranslatedDataDirectory))
 	{
 		printf("Unable to patch MiniGames\n");
 		return false;
 	}
 
-	if (!PatchTycoon(inPatchedDirectory, inTranslatedDirectory))
+	if (!PatchTycoon(inPatchedDirectory, inTranslatedDataDirectory))
 	{
 		printf("Unable to patch Tycoon\n");
 		return false;
 	}
 
-	if (!PatchLongDay(inPatchedDirectory, inTranslatedDirectory))
+	if (!PatchLongDay(inPatchedDirectory, inTranslatedDataDirectory))
 	{
 		printf("Unable to patch Long Day\n");
 		return false;
 	}
 
-	if (!PatchKinematron(inPatchedDirectory, inTranslatedDirectory))
+	if (!PatchKinematron(inPatchedDirectory, inTranslatedDataDirectory))
 	{
 		printf("Unable to patch Kinematron\n");
 		return false;
 	}
 
-	if (!PatchWarningScreens(inPatchedDirectory, inTranslatedDirectory))
+	if (!PatchWarningScreens(inPatchedDirectory, inTranslatedDataDirectory))
 	{
 		printf("Unable to patch Warning Screens\n");
 		return false;
 	}
 	
-	if(!PatchStatusScreen(inPatchedDirectory, inTranslatedDirectory))
+	if(!PatchStatusScreen(inPatchedDirectory, inTranslatedDataDirectory))
 	{
 		printf("Unable to patch Status Screen\n");
 		return false;
 	}
 
-	if(!PatchEyeCatch(inPatchedDirectory, inTranslatedDirectory))
+	if(!PatchEyeCatch(inPatchedDirectory, inTranslatedDataDirectory))
 	{
 		printf("Unable to patch EyeCatch\n");
 		return false;
 	}
 
-	if(!PatchNBGFile(inPatchedDirectory, inTranslatedDirectory, inDiscNumber))
+	if(!PatchNBGFile(inPatchedDirectory, inTranslatedDataDirectory, inDiscNumber))
 	{
 		printf("Unable to patch NBGFile\n");
 		return false;
 	}
 
-	if(!PatchLoadScreens(inPatchedDirectory, inTranslatedDirectory))
+	if(!PatchLoadScreens(inPatchedDirectory, inTranslatedDataDirectory))
 	{
 		printf("Unable to patch LoadScreens\n");
 		return false;
 	}
 
-	if(!PatchBattleLoadScreens(inPatchedDirectory, inTranslatedDirectory, inDiscNumber))
+	if(!PatchBattleLoadScreens(inPatchedDirectory, inTranslatedDataDirectory, inDiscNumber))
 	{
 		printf("Unable to patch BattleLoadScreens\n");
 		return false;
 	}
 
-	if (!PatchBGDatFiles(inPatchedDirectory, inTranslatedDirectory))
+	if (!PatchBGDatFiles(inPatchedDirectory, inTranslatedDataDirectory))
 	{
 		printf("Unable to patch BGDat files\n");
 		return false;
 	}
 
-	if( !PatchInfoName(inPatchedDirectory, inTranslatedDirectory) )
+	if( !PatchInfoName(inPatchedDirectory, inTranslatedDataDirectory) )
 	{
 		printf("Unable to patch PatchInfoName\n");
 		return false;
 	}
 
-	if( !PatchMNameCG(inPatchedDirectory, inTranslatedDirectory) )
+	if( !PatchMNameCG(inPatchedDirectory, inTranslatedDataDirectory) )
 	{
 		printf("Unable to patch MNameCG\n");
 		return false;
 	}
 
-	if(!PatchIntroScreens(inPatchedDirectory, inTranslatedDirectory))
+	if(!PatchIntroScreens(inPatchedDirectory, inTranslatedDataDirectory))
 	{
 		printf("Unable to patch Title Screens\n");
 		return false;
@@ -419,26 +422,27 @@ bool PatchGame(const string& inSourceGameDirectory, const string& inTranslatedDi
 		return false;
 	}
 
-	if( !PatchBattleTextDrawingCode(inSourceGameDirectory, inPatchedDirectory, inTranslatedDirectory) )
+	if( !PatchBattleTextDrawingCode(inSourceGameDirectory, inPatchedDirectory, inTranslatedDataDirectory) )
 	{
 		printf("Unable to patch battle text drawing code\n");
 		return false;
 	}
 
-	if(!PatchMainMenu(inPatchedDirectory, inTranslatedDirectory))
+	if(!PatchMainMenu(inPatchedDirectory, inTranslatedDataDirectory))
 	{
 		printf("Unable to patch main menu\n");
 		return false;
 	}
 
-	if(!PatchBattleMenu(inPatchedDirectory, inTranslatedDirectory))
+	if(!PatchBattleMenu(inPatchedDirectory, inTranslatedDataDirectory))
 	{
 		printf("Unable to patch battle menu\n");
 		return false;
 	}
+	#endif
 
 	//Create translated font sheet
-	const string translatedFontSheetPath = inTranslatedDirectory + "8x12.bmp";
+	const string translatedFontSheetPath = inTranslatedDataDirectory + "8x12.bmp";
 	TileExtractor translatedFontSheet;
 	PaletteData translatedFontSheetPalette;
 	if( !CreateTranslatedFontSheet(translatedFontSheetPath, translatedFontSheet, translatedFontSheetPalette, 16, 16) )
@@ -449,7 +453,7 @@ bool PatchGame(const string& inSourceGameDirectory, const string& inTranslatedDi
 
 	//Create translated font sheet for battles
 #if FIX_SLG_FONT_DRAWING_SIZE
-	const string translatedBattleFontSheetPath = inTranslatedDirectory + "8x12_SLG2.bmp";
+	const string translatedBattleFontSheetPath = inTranslatedDataDirectory + "8x12_SLG2.bmp";
 	uint32 battleFontWidth = 8;
 	uint32 battleFontHeight = 12;
 #else
@@ -467,21 +471,30 @@ bool PatchGame(const string& inSourceGameDirectory, const string& inTranslatedDi
 	}
 
 	//Insert scenario text
-	if (!InsertSysFileText(inSourceGameDirectory, inTranslatedDirectory, inPatchedDirectory, translatedBattleFontSheet, false))
+	if (!InsertSysFileText(inSourceGameDirectory, inTranslatedDataDirectory, inPatchedDirectory, translatedBattleFontSheet, false))
 	{
 		printf("Text insertion failed\n");
 		return false;
 	}
 
 	//Insert scenario text
-	if( !InsertText(inSourceGameDirectory, inTranslatedDirectory, inPatchedDirectory, translatedFontSheet, false) )
+	if( !InsertText(inSourceGameDirectory, inTranslatedDataDirectory, inPatchedDirectory, translatedFontSheet, false) )
 	{
 		printf("Text insertion failed\n");
 		return false;
 	}
 
+	/*
+	if(!PatchLipSyncDataForAdventure(inPatchedDirectory))
+	{
+		printf("Patching sync data failed\n");
+
+		return false;
+	}
+	*/
+
 	//Patch title screens
-	const string wpallDirectory = inTranslatedDirectory + "Disc\\1\\WPALL1\\";
+	const string wpallDirectory = inTranslatedDataDirectory + "Disc\\1\\WPALL1\\";
 	if(!PatchTitleScreens(inPatchedDirectory, wpallDirectory))
 	{
 		printf("PatchTitleScreens failed\n");
@@ -489,7 +502,7 @@ bool PatchGame(const string& inSourceGameDirectory, const string& inTranslatedDi
 	}
 
 	//Patch splash screen
-	if(!PatchSplashScreen(inPatchedDirectory, inTranslatedDirectory))
+	if(!PatchSplashScreen(inPatchedDirectory, inTranslatedDataDirectory))
 	{
 		printf("PatchSplashScreen failed\n");
 		return false;

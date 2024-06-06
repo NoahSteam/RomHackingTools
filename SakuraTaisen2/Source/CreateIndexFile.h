@@ -89,7 +89,7 @@ void CreateIndexFile(const string& inMesFileDirectory, const string& inSKFileDir
 		ParseAllSysFiles(sysFileNames, sysFiles);
 
 		vector<SakuraTextFile> sakuraTextFiles;
-		FindAllSakuraText(skFiles, sakuraTextFiles);
+		FindAllSakuraText(skFiles, sakuraTextFiles, false);
 
 		for (const SakuraTextFile& skFile : sakuraTextFiles)
 		{

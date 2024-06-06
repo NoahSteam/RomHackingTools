@@ -91,6 +91,7 @@ using std::unordered_set;
 #include "Source/BattleAnimViewer.h"
 #include "Source/BattleSimulatorInLongDay.h"
 #include "Source/Credits.h"
+#include "Source/SyncFilePatching.h"
 #include "Source/PatchGame.h"
 
 void PrintHelp()

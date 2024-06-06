@@ -1,0 +1,11 @@
+BG6015: Hex Mech: Dark Kamui
+BG6016: Hex Mech: Dainichiken
+BG6017: Hex Mech: Chiken
+BG6018: Hex Mech: Hachiyou
+BG6019: Hex Mech: Hougyou
+BG6020: Hex Mech: Goko
+BG6021: Hex Mech: Dark Kamui
+
+They're all prefaced with 魔操機兵.  That's the "Hex Mech" part of it.
+
+And yea, both 15 and 21 are "Dark Kamui"
