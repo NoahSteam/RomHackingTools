@@ -139,9 +139,9 @@ bool PatchTextDrawingCode(const string& inSourceGameDirectory, const string& inP
 			
 			//Printing number of empty lines
 			{
-				//Need a bigger buffer for empty lines, so start writing from 060a5100 instead of 060a5180 
-				WriteCommand(0xde7a, 0x5100);
-				WriteCommand(0xdeb6, 0x5100);
+				//Need a bigger buffer for empty lines, so start writing from 060a50f0 instead of 060a5180 
+				WriteCommand(0xde7a, 0x50f0);
+				WriteCommand(0xdeb6, 0x50f0);
 
 				//06012ece
 				WriteByte(0xdecf, 0x1b); //num chars per line
@@ -170,8 +170,9 @@ bool PatchTextDrawingCode(const string& inSourceGameDirectory, const string& inP
 
 			//Fix special lips horizontal spacing
 			WriteCommand(0xdf56, 0x4200); //from SHLL2 to SHLL in memory at 06012F56
+			WriteCommand(0xe380, 0x72ff);//06013380 add 0xf0, r2 72f0  centering horizontally
 			WriteByte(0xe4f5, 0x08); //from add 0x10,r1 to add 0x08,r1
-			WriteCommand(0xe45e, 0x719a) //from add 0x98, r1, to add 0x9a, r1 at 0601345e 
+			WriteCommand(0xe45e, 0x719a); //from add 0x98, r1, to add 0x9a, r1 at 0601345e 
 		}
 
 		//Fix item drawing code
@@ -203,8 +204,8 @@ bool PatchTextDrawingCode(const string& inSourceGameDirectory, const string& inP
 			WriteCommand(0xd8de,  0x011c); //060128de Text Read at 060128de: mov.w @(r0, r1), r1  change to 011c //when dumping out all text
 			WriteCommand(0x1631a, 0x0009); //No-op for add r0, r0
 			WriteCommand(0x1631c, 0x011c); //Text Read at 0601B31c: mov.w @(r0, r1), r1  change to 011c //ogami's lines
-			WriteCommand(0xd6fe,  0x0009); //No-op for add r0, r0
-			WriteCommand(0xd700,  0x011c); //06012700: same change to 011c
+		//	WriteCommand(0xd6fe,  0x0009); //No-op for add r0, r0
+		//	WriteCommand(0xd700,  0x011c); //06012700: same change to 011c
 			
 			//Compare FFFF and FFFE changed to to FF and FE
 			WriteCommand(0xd71a, 0x631c); // Compare value to fffa extu.w r1, r3 0601271a change to 631c
@@ -234,6 +235,33 @@ bool PatchTextDrawingCode(const string& inSourceGameDirectory, const string& inP
 			WriteCommand(0xe4fa, 0x0009);
 			WriteCommand(0xe4fc, 0x01ac); //Lips Text Read at 060134fc: mov.w @(r0, r10), r1 (add r0, r0 right above)     change to 01ac
 
+			//Auto-Resume Commands (Used in sparring sequence and some kinematron events like in SK0206.BIN where we have fffa <code> at the end of the line
+			WriteCommand(0xd6fe, 0x011c);	//060126fe nop                  /011d to 011c extu.b r1, r1
+			WriteCommand(0xd700, 0x611c);	//6012700 mov.b @(r0, r1), r1  //300c to 611c
+
+			WriteCommand(0xd7f6, 0x011c);	//060127f6 add r0, r0          //300c to 011c
+			WriteCommand(0xd7f8, 0x611c);	//060127f8 mov.w @(r0, r1), r1 //011d to 611c extu.b r1, r1
+			WriteCommand(0xd810,0x011c);	//06012810 add r0, r0          //300c to 0009
+			WriteCommand(0xd812,0x611c);	//06012812 mov.w @(r0, r1), r1 //011d to 011c  Swap with above and change this to extu.b r1, r1 (611c)
+			WriteCommand(0xdd2a,0x611c);	//06012d2a extu.w r1, r1       //611d to 611c
+			WriteCommand(0x16310,0x601c);	//0601b316 extu.w r1, r0       //601d to 601c
+			WriteCommand(0x1631e,0x611c);	//0601b31e extu.w r1, r1       //611d to 611c
+
+			//More Lips commands along with fix for all lines flipping instead of just the newly appeared one
+			WriteCommand(0xe262, 0x611c); //06013262  extu.w r1, r1      //611d to 611c
+			WriteCommand(0xe26c, 0x015c); //0601326c mov.w @(r0, r5), r1 //015d
+			WriteCommand(0xe26e, 0x621c); //0601326e extu.w r1, r2       //621d to 621c
+			WriteCommand(0xe276, 0x611c); //06013276 extu.w r1, r1       //611d to 611c
+			WriteCommand(0xe284, 0x0009); //06013284 add r0, r0          //300c to 0009 
+			WriteCommand(0xe286, 0x014c); //06013286 mov.w @(r0, r4), r1 //014d  to 014c
+			WriteCommand(0xe288, 0x611c); //06013288 extu.w r1, r1       //611d to 611c
+			WriteCommand(0xe29a, 0x00ff); //0601329a ffff to ff
+			WriteCommand(0xe3e0, 0x611c); //060133e0 extu.w r1, r1       //611d to 611c
+			WriteCommand(0xe4ae, 0x00ff); //060134ae ffff to ff
+			WriteCommand(0xe42e, 0x622c); //0601342e extu.w r2, r2       //622d to 622c			
+			WriteCommand(0xe4fe, 0x611c); //060134fe extu.w r1, r1       //611d to 611c			
+
+			
 			//Dog Lines
 			// 0602c580	=> 27580
 			// 0602c582	=> 27582
@@ -266,8 +294,16 @@ bool PatchTextDrawingCode(const string& inSourceGameDirectory, const string& inP
 			WriteCommand(0x275B0, 0x77ff); // 0602c5b0 add 0xfe, r1 change to 77ff
 
 			//Item Menu
-			WriteCommand(0x4B5B0, 0x0009); // 0602c5a4 060505b0 add r0, r0
-			WriteCommand(0x4B5B2, 0x011c); // 060505b2 mov.w@(r0, r1, r1)
+			WriteCommand(0x4B5B0, 0x011c); // 060505b0 add r0, r0 TO mov.b @(r0, r1), r1
+			WriteCommand(0x4B5B2, 0x611c); // 060505b2 mov.w@(r0, r1, r1) TO extu.w r1, r1 //011d to 611c
+			WriteCommand(0x4B5C8, 0x621c); // 060505c8 extu.w r1, r2  621d TO 621c
+			WriteCommand(0x4B5f8, 0xe21c); // 060505f8 e20e to e21c  max chars per line
+			WriteCommand(0x4B612, 0xe203); // 06050612 e202 to e203  max lines
+			WriteCommand(0x4B7EA, 0x00fe); // 060507ea fffe = > 00fe
+			WriteCommand(0x4B7EE, 0x00ff); // 060507ee ffff = > 00ff
+
+
+			WriteCommand(0x4B660, 0x666c); // 06050660 exut.w r6, r6       //666d to 666c
 		}
 		#endif
 	}

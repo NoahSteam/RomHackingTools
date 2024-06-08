@@ -1,0 +1,6 @@
+0601b316 extu.w r1, r0 //601d to 601c
+0601b31e extu.w r1, r1 //611d to 611c
+
+0601b322 read from 0601b3a0 is 0xff00?
+
+216077 has the end of line character

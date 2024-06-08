@@ -8,3 +8,23 @@
 
 060505c4 add 4, r1
 060505c6 mov.w @r1, r1
+
+/////////
+0605065c add 4, r1           //7104 to 7102 *
+0605065e mov.w @r1, r6       //6611 to 6610 *
+06050660 exut.w r6, r6       //666d to 666c
+
+060505b0 nop                 //mov.b @(r0, r1), r1 0009 to 011c
+060505b2 extu.w r1, r1       //011d to 611c
+060505b6 mov.w r1, @r2       //2211 to 2210 * 
+060505c4 add 4, r1           //7104 to 7402 *
+060505c6 mov.w @r1, r1       //6111 to 6110 *
+060505c8 extu.w r1, r2       //621d to 621c
+
+060505f8 mov 0xe, r2         //e20e to e21c  max chars per line
+06050612 mov 2, r2           //e202 to e203  max lines
+
+060507ea fffe => 00fe
+060507ee ffff => 00ff
+
+230108 - single byte fe

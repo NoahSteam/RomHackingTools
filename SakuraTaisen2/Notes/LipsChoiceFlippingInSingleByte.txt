@@ -1,0 +1,43 @@
+060a5100
+
+060a51d6 ends up being written to from 0601d1c8
+
+06013380 add 0xf0, r2 //72f0
+
+---
+06097e52 has y scale for first letter
+0608FCAE written here first //only when flipping FROM 0601369E?, otherwise from 060134bc
+
+060657b6 writes Y scale
+
+060657b2 mov 0xf, r3 e30f
+
+//Switch happens at 060132fa out of @r1
+
+06013264 determines newline
+
+0601326c mov.w @(r0, r5), r1 //015d
+06013286 mov.w @(r0, r4), r1 //014d followed by extu.w r1, r1 611d
+
+2153d9 has ff
+2153c2 has Yes, it sure is lovely
+
+--
+0601326c mov.w @(r0, r5), r1 //015d
+0601326e extu.w r1, r2 //621d to 621c
+0601329a ffff to ff
+
+060133e0 extu.w r1, r1  //611d to 611c
+060134ac ffff to ff
+0601342e extu.w r2, r2 //622d to 622c
+
+06013276 extu.w r1, r1 //611d to 611c
+
+060134fe extu.w r1, r1 //611d to 611c
+
+06013286 mov.w @(r0, r4), r1 //014d  to 611c
+06013288 extu.w r1, r1 //611d to 611c
+
+06013262  extu.w r1, r1 //611d to 611c
+
+06013284 add r0, r0 //300c to 0009 

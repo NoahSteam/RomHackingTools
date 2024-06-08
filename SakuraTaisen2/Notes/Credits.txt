@@ -1,6 +1,6 @@
 280320 changes
 
-param_2 = 060e0000
+060c0000 is where image data is (or 060e0000)
 
 "header" data is actually part of the encoded data
 
