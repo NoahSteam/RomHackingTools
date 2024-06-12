@@ -17,8 +17,11 @@ In SK0501, the pattern is: 7ffe textIndex c004 c400 0004 lipSyncID
 0601b4ba has switch statement for all the timing ids (FUN_0601b4b0)
 0601b1ac
 
+0608F45C
 
-
+///
+0601b1d2 e300
+0601b1d8 2130
 
 //LipSync ID Switch 
 int FUN_0601b4b0(int param_1,uint param_2)
@@ -57,22 +60,23 @@ int FUN_0601b4b0(int param_1,uint param_2)
     iVar1 = (int)PTR_DAT_0601b5ac._0_2_;
     break;
   case 0x61:
-    iVar1 = 0x11;
+    iVar1 = 0x11;  //holds for 7 frames
     break;
   case 0x65:
-    iVar1 = 0x14;
+    iVar1 = 0x14;  //holds for 7 frames
     break;
   case 0x69:
-    iVar1 = 0x12;
+    iVar1 = 0x12; //holds for 7 frames
     break;
   case 0x6e:
-    iVar1 = 0x10;
+    iVar1 = 0x10;  //holds for 7 frames
     break;
   case 0x6f:
-    iVar1 = 0x15;
+    iVar1 = 0x15; //holds for 2 frames
     break;
   case 0x75:
     iVar1 = 0x13;
   }
   return iVar1;
 }
+
