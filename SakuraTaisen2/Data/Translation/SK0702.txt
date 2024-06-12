@@ -154,7 +154,7 @@ Oh yeah, that's right! I have a special scoop for you, Ogami.
 Mysterious torii gates have been spotted all over the capital! Isn't that crazy? 
 Mysterious torii gates? What do you mean? 
 There've been several cases of torii gates suddenly appearing at certain spots throughout the capital. 
-The locals seem happy about them, going so far as to call them "good omens"... 
+The locals seem happy about them, going so far as to call them "good omens"… 
 But who exactly built them? That's a lot of effort if it's all just a prank. 
 Hmm… That is kind of concerning. 
 That reminds me, how was the autumn festival, Ogami? 
@@ -236,7 +236,7 @@ I think you might be right, Ensign.
 Considering all she's been through, there's no way her heart could heal in just a single day. 
 Right. We'll have to keep doing our best, then, for Reni’s sake. 
 I was just thinking… Reni's pretty cute when she smiles. 
-Ensign, while I certainly don't object to Reni being called "cute"... 
+Ensign, while I certainly don't object to Reni being called "cute"… 
 We were having a more serious discussion. Please refrain from making jokes. 
 She's right, Ogami. 
 You've been saying that sort of thing a lot lately, haven't you? 
@@ -355,7 +355,7 @@ We were just talkin’ about your smoke signal thing from earlier.
 Trying to make smoke signals from a bonfire like this? You're hilarious, Chief! 
 Good grief, didn't think that'd spark a whole conversation. 
 So, we're right in the middle of autumn now. 
-In Japan, they say, "Fall is for something-or-other"... What is fall to you, Chief? 
+In Japan, they say, "Fall is for something-or-other"… What is fall to you, Chief? 
 "Fall is for reading." 
 "Fall is for the arts." 
 "Fall is for sports." 
@@ -625,7 +625,7 @@ Well then, let's begin. Go easy on me, Captain.
 It's your turn, Captain. You're in a tough spot. 
 Shoot… The next ball's totally blocked off. 
 If I get a foul now, I'll lose. Hmm… 
-(Maybe if I tried that jump shot Maria showed me back then...) 
+(Maybe if I tried that jump shot Maria showed me back then…) 
 Attempt a jump shot. 
 Give up. 
 Nope, can't do it. This is way beyond me. 
@@ -670,7 +670,7 @@ Thanks, Maria.
 I wasn't able to beat you in the end, but it still made for some good memories. 
 Yes. I always looked forward to our trips to the game room these past three months. 
 If you ever have the chance, you should challenge me again. All right, I have to go now.
-Never giving up till the very end, huh...? 
+Never giving up till the very end, huh…? 
 Well, my forehead's mostly stopped hurting, so I think I'll get going too. 
 Maria taught me billiards in here these past three months. 
 I wasn't able to beat her in the end, but we made some good memories. 
@@ -719,7 +719,7 @@ O-Ogami…
 … 
 I… Um… I should go. Got work to do, bye! 
 Ah! Tsubaki! 
-*sigh*... <br> She hung up. 
+*sigh*… <br> She hung up. 
 At any rate, I wonder where she is and what she's doing. 
 All right, Ogami, I'm in the middle of work, so I have to go. 
 Tell everyone at the theater I said hi! 
@@ -746,7 +746,7 @@ If she tries her hardest, then I'm sure the customers will recognize that.
 She's cheerful, but kind of a klutz, too. 
 That's fine! Nothing's more important than cheer when it comes to running the shop. 
 I mean, I'm pretty clumsy myself, anyway. 
-(I don't think you two are quite on the same level of clumsiness, though...) 
+(I don't think you two are quite on the same level of clumsiness, though…) 
 She dresses kind of strangely, but she's pretty cute. 
 Really? Heh, I can't wait to meet her. 
 Hmm… I don't know how to put it… 
@@ -758,7 +758,7 @@ Thank you! All right then, talk to you later!
 All right, what next? 
 … 
 Tsubaki's not picking up. She must be back at work. 
-Good afternoon. It's time for Capital News. 
+Good afternoon. <br> It's time for Capital News. 
 Today we begin with a report on infighting within the Imperial Assault Troop. 
 This shocking development was first brought to light in last month's battle in Ikebukuro. 
 Unique Spirit Armor models appeared within the troop's ranks earlier this year in May… 
@@ -876,7 +876,7 @@ Oh, Captain.
 Ah! Maria!! 
 Looking for some fall reading? What book do you have there? 
 Eeep?! 
-..."Dating Coach"? 
+…"Dating Coach"? 
 “The ultimate dating guide. With this, her heart will be yours!" 
 … 
 I'm sorry for interrupting your precious reading time. 
@@ -918,7 +918,7 @@ Um, what happened back at the festival?
 That's not your business, Mr. Ensign! 
 B-But… 
 Quit butting in and leave me alone!! 
-(Sheesh, couldn't get a word in edgewise...) 
+(Sheesh, couldn't get a word in edgewise…) 
 Ah, Mr. Ogami! There you are! 
 Tsubomi? What's the matter? 
 It's just… There's a strange man loitering out front. 
@@ -1088,7 +1088,7 @@ Then that means Iris is the one taking a bath…
 I am drawn to the bath…
 Go back outside. 
 O-Oh no… My body is moving towards the bathroom on its own… 
-(Ah… Iris...) 
+(Ah… Iris…) 
 Dum de dum… 
 Ah, that festival was so much fun! 
 I got to see so many stalls with Mon Frère. 
@@ -1303,7 +1303,7 @@ A scarf given to me by Sakura. It's knitted with red yarn - my favorite color.
 A scarf given to me by Sakura. It's knitted with blue yarn - my favorite color. 
 A scarf given to me by Sakura. It's knitted with yellow yarn - my favorite color. 
 Ayame and I almost never lived in the same household, even though we were sisters. 
-Eh...? 
+Eh…? 
 It's not so unusual, given our lineage. We have less a "family tree" and more a "family wisteria." 
 Yet, I still knew that she was the type of person that would sacrifice her own well-being for others… 
 Carrying everyone's burdens by herself… 

@@ -1,5 +1,5 @@
 ﻿All right… Which number should I dial?
-Good afternoon. It's time for Capital News.
+Good afternoon. <br> It's time for Capital News.
 Today, the Fukagawa Police held a conference regarding the fire that broke out at the Murasame restaurant.
 They determined that last month’s fire was a case of arson carried out by an unknown party.
 The Navy Minister Yamaguchi was found to have been visiting the restaurant at the time of the incident.
@@ -33,7 +33,7 @@ Eventually, he finds an underground prison deep in the canal with the missing gi
 Masked Red climbs the ladder which leads to a fireplace inside the professor’s laboratory.
 Masked Red prepares his Colt, then barges into the laboratory. "Hold it right there, Professor Kurogane!" 
 At last, the final clash between Masked Red and Professor Kurogane. Can Red defeat the mummy? 
-Fight on, Masked Red! You're our hero, Red! <br> -The End 
+Fight on, Masked Red! You're our hero, Red! <br> To Be Continued
 Go, Masked Red! <br> Fight on, Masked Red! <br> Tune in next time! 
 I don't want to be late for our trip, so I better cut the transmission. 
 OK, let's hurry to the entrance hall! 

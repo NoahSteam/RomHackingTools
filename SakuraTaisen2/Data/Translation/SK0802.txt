@@ -1,6 +1,6 @@
 ﻿Uh… 
 What’s with that racket? It’s too early for this…
-...! 
+…! 
 Gunshots?! 
 Jump out of bed. 
 This is no time to be sleeping!
@@ -13,7 +13,7 @@ Ogami! Are you all right?!
 Sakura! What the hell is going on?!
 … 
 Acting in haste could be dangerous… Let's wait and see what happens…
-...! 
+…! 
 Ogami! Ogami, wake up! 
 S-Sakura?! 
 Ogami, please open up! Quick!! 
@@ -24,7 +24,7 @@ What about the others?!
 They went down to the first floor with Kaede. 
 I see… 
 There should be people on the second floor! Sweep the area!! 
-...! 
+…! 
 Ogami! Someone's coming! 
 Let’s get out of here.
 Assess the situation.
@@ -38,7 +38,7 @@ Ogami! What are you saying?!
 If you don’t get your act together, we’re all gonna be in trouble!!
 B-But… 
 Let's run, Ogami. I think the first thing we should do is meet up with everyone else.
-...! 
+…! 
 Over there! I see her!
 Ah! 
 It’s her, Sakura Shinguji! Open fire!!
@@ -59,7 +59,7 @@ We managed to escape from the second floor.
 Ogami, those people just now… They were wearing Army uniforms.
 Why… Why is the Army attacking the theater?!
 Hmm… 
-...! <br> Ogami, Sakura!! <br> There you are! 
+…! <br> Ogami, Sakura!! <br> There you are! 
 Mr. Yoneda! 
 I’m glad to see you both are safe.
 You too, Manager… Thank goodness you're all right! 
@@ -127,7 +127,7 @@ That is to say… They hold the “Power of Purification.”
 Power of… Purification? 
 With that power, we could seal away even the strongest of demons.
 However, it would cost the life of the one who wields it… 
-...! 
+…! 
 Seven years ago, during the Great Kouma War, there was a person who used that power. 
 A man who sacrificed his life to seal away a mighty evil…
 That man was your father… Kazuma Shinguji.
@@ -163,7 +163,7 @@ What should we do, Maria? Things are only gonna get worse if we stick around muc
 (The intruders have us outmanned and outgunned.) 
 (If this keeps up, it'll only be a matter of time before they occupy the entire theater.) 
 Seems like the Army hasn't breached the basement yet. 
-...! <br> That explosion just now… <br> It came from the storeroom! 
+…! <br> That explosion just now… <br> It came from the storeroom! 
 Let's hurry, Sakura! 
 R-Right! 
 W-What? 

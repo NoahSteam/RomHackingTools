@@ -35,10 +35,10 @@ Shu'u. Attacks multiple times, like a torrential rain. Highly mobile as well.
 Inazuma. This Kouma boasts not only restorative abilities, but high mobility as well.
 Ryukou. With well-balanced abilities across the board, this unit is a masterwork of design.
 Dainichiken <br> Once defeated, the drill will come to an end.
-Enkuu. An unmanned support drone designed by Mokujiki.
+Enkuu. <br> An unmanned support drone designed by Mokujiki.
 Steam Rocket. A weapon developed by Mokujiki boasting high attack power.
 Dimensional Cannon. Boasting a large attack range, it eliminates all intruders.
-Summoner. A demonic device that keeps spawning Kouma Weapons one after another.
+Summoner. <br> A demonic device that keeps spawning Kouma Weapons one after another.
 Dimensional Cannon. A long-range cannon with high firepower.
 <LEAVE> Message 20
 Doesn't look like I need to cover anyone right now.

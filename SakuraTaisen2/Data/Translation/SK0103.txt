@@ -7,8 +7,8 @@ Whoa! Something appeared on the screen!
 A-hoy, Chief! <br> Can you hear me? <br> Kohran here! 
 Man, it's really you, Chief. 
 Haven't seen you for so long. 
-Kohran… It’s been a while. Glad to see you're doing all right. 
-Is that you, Kohran? Thanks for coming to greet me earlier today. 
+Kohran… It really has been a while. Glad to see you're doing all right. 
+Oh, Kohran, it’s you. Thanks for coming to greet me earlier today. 
 Hehe, it's no big deal, Chief. 
 By the way, what's this machine? 
 Heh-heh. <br> Surprised you, didn’t I? <br> Behold my latest invention, the “Kinematron.” 
@@ -66,7 +66,7 @@ Fact is, I really wanted to welcome ya back in person, but I had already hit the
 Don't worry about it. Just seeing you happy and healthy is good enough for me.  
 But never mind that… You also have a Kinematron, Kanna? 
 Yeah, Kohran gave me one before I left for Okinawa. 
-Hehe! Sorry to interrupt, but this is the power of my Kinematron for ya! 
+Heheh! Sorry to interrupt! The Kinematron’s pretty impressive, huh?
 This machine’s so advanced, you can communicate with a bunch of people at the same time! 
 Besides Kanna, I also made sure to give everyone who was leaving the theater their own device. 
 Huh? So, that means… 
@@ -83,11 +83,11 @@ My, I see your vulgar manner of speaking hasn't changed at all, Kanna.
 What was that, ya damn cactus woman?! Someone needs to knock ya off your high horse!
 That's enough, both of you! 
 Can you hear my voice, Captain? It's me, Maria Tachibana. 
-Maria! Of course, I can hear you. 
+Maria! Of course I can hear you. 
 Captain, thank you for seeing me off earlier. 
 It's been a long time, Captain. I'm relieved to see that you are in good health. 
 Glad to see you’re doing well too, Maria. 
-Presently, I'm contacting you from a ship heading to New York. 
+At present, I'm contacting you from a ship heading to New York. 
 Amazing, isn't it? 
 Even when I'm atop the waves, I can still talk with you like this. 
 It really is amazing. All thanks to Kohran's Kinematron. 
@@ -117,9 +117,9 @@ Despite being one of Kohran’s machines, it doesn’t look like I’m in danger
 Wah! You surprised me, Sumire! Is there something else you needed? 
 I forgot to tell you something important. 
 I never gave you my call number. 
-My number is "13800." May I ask you to give me a call? 
+My number is "13800." Would you mind calling me every so often? 
 13800, right? OK, I'll set it to my speed dial. 
-Please reach me out when you have a moment, Ensign. I'll wait for your call. 
+Please reach out to me whenever you have a moment, Ensign. I'll wait for your call. 
 …Captain. 
 Wah! You surprised me, Maria! Is there something else you needed? 
 Sorry to bother you again, but I forgot to tell you something important. 
@@ -141,9 +141,9 @@ Yes? I'm coming!
 Good evening, Ogami. 
 Good evening. What’s the matter, Sakura? 
 I was sent by the manager to ask if you would perform the night watch.
-The patrol will only last till 10 o'clock. So you have 30 minutes to inspect the theater. 
+The patrol will only last till 10 o'clock. We have 30 minutes to inspect the theater. 
 Night watch, huh… 
-I'll also be patrolling with you tonight, Ogami, so let’s go together. 
+I'll be patrolling along with you tonight, Ogami, so let’s get going. 
 I know! We should invite Orihime to join us. It would be a good opportunity to talk with her.
 OK, let's go. 
 …Invite Orihime? 
@@ -160,13 +160,13 @@ Actually, I just want to head to bed. A lot’s happened today, and I'm exhauste
 Is that so… And here I thought you would have accepted…
 Sorry for disturbing you. Well, good night. 
 … 
-Guess I might have overdone it. 
+I might’ve pushed it a little too far. 
 Well, what’s done is done. Guess I’ll hit the hay, then. 
 Ogami, it'll be midnight soon if you keep hesitating. 
 Let's just talk to Orihime before she goes to sleep. 
 Hmmm… What should we do? 
 All right, then. I’m just going to have to drag you over there by force. 
-H-Hey, Sakura! Don't pull my sleeve! W-Wait! 
+H-Hey, Sakura! Quit pulling on my sleeve! W-Wait! 
 So, this is Orihime's room. I wonder if she's still awake. 
 Ogami! Where do you think you're going? You need to invite Orihime! 
 The nameplate has a simple design, but it sure looks classy. 
@@ -209,12 +209,12 @@ That'd be too much for her.
 If Sakura wore a negligee… I’m sure she’d look quite attractive! 
 Ogami, come on… <br> Don't tease me like that. 
 I bet a negligee would suit you well, Sakura.
-Do you think so? Wouldn't this look a little too mature for me? 
+Do you think so? Wouldn't that look a little too mature for me? 
 No, of course not. 
 Ogami… Thank you. 
 If you two want to flirt, do it somewhere else, would you? 
 A negligee, huh? I think that'd be too much for Sakura. 
-…Are you trying to say I’m too childish to wear one? 
+…Are you trying to say I’m too immature to wear one? 
 If you two want to squabble, do it somewhere else, would you? 
 …I-I think that's a bit too mature for me. 
 Oho… Well, perhaps you're right. 
@@ -225,7 +225,7 @@ So you came here just to ogle other people’s bodies? Mamma mia!
 (I'll be in serious trouble if I stare again.) 
 These are my favorite earrings. 
 I only take them off before I go to sleep. 
-(Those pretty earrings suit her well.) 
+(Those pretty earrings sure do look good on her.) 
 Come on now, what did you want to talk to me about? 
 (How should I start?) 
 Invite her directly.
@@ -233,13 +233,13 @@ Beat around the bush.
 I'll get straight to the point. Would you like to join us for our night watch? 
 Night watch? What's that?
 How do evenings in Japan feel compared to Italy? Is it warmer here, or colder? 
-…Did you call me out here just to chat about weather? 
+…Did you call me out here just to chat about the weather? 
 W-Wait, Orihime! Actually, we wanted to invite you to join us on our night watch. 
-Night watch...? 
+Night watch…? 
 If you don't have business with me, I will be taking my leave. 
 W-Wait, Orihime! Actually, we wanted to invite you to join us on our night watch. 
-Night watch...? 
-We go around the theater to check if there is anything out of the ordinary. 
+Night watch…? 
+We go around the theater to check if there’s anything out of the ordinary. 
 Would you like to come with us? After all… 
 You have spare time, right?
 It'd be a change of pace.
@@ -257,10 +257,10 @@ Until 12 o'clock.
 Until 10 o'clock. 
 10 o'clock, huh… I suppose I could spare my time. 
 Until 11 o'clock. 
-You got it wrong, Ogami! I told you already, it's until 10 o'clock. 10 o'clock. 
+You got it wrong, Ogami! I told you already, 10 o'clock, it's until 10 o'clock. 
 Well, which is it? Just tell me already! 
 Until 12 o'clock. 
-You got it wrong, Ogami! I told you already, it's until 10 o'clock. 10 o'clock. 
+You got it wrong, Ogami! I told you already, 10 o'clock, it's until 10 o'clock. 
 Well, which is it? Just tell me already! 
 Ogami, did you forget? We’re going to patrol the theater until 10 o’clock.
 10 o'clock, huh… I suppose I could spare my time. 
@@ -298,7 +298,7 @@ That's none of your business! I don’t need to explain myself to you.
 I will be taking my leave now. Good luck with your night watch, you two. 
 Ugh… That could have gone better. 
 Did I just… say something that I shouldn't have? 
-No, I don't think so. I guess it's just that she can be hard to approach. 
+No, I don't think so. She’s just too hard to approach with that mood she’s in.
 Well, we can always chat with Orihime another time. Let's just continue with the two of us. 
 …I suppose you’re right. Let’s get going, then.
 All right, fine. Just for tonight, I’ll join your night patrol.
@@ -369,11 +369,11 @@ You promised, Ogami, so let’s keep looking for Iris.
 Time's up, Mon Frère! 
 Ah, Ogami! There was a shadow on the floor by the costumes!
 I see… So she was hiding behind the costumes. 
-Ehehe! Too late now! 
+Eheheh! Too late now! 
 You didn't find me in time, so I win! 
 Oh… You got me. 
 Yay, that was fun! Playing hide-and-seek at night like this is so exciting.
-Hehe… Good for you, Iris. 
+Heheh… Good for you, Iris. 
 It's getting late, so please go back to your room now. 
 Okey-dokey! <br> Well, good niiight! 
 So you must also play with children, Mr. Ensign? Such a difficult job you have.
@@ -395,7 +395,7 @@ May I take a moment to play it?
 Yes, go ahead. 
 Heh-heh. Then I shall play my heart out! 
 … 
-(Orihime looks serious...) 
+(Orihime looks serious…) 
 OK… Here I go! 
 Wow, amazing! That was really great, Orihime! 
 Oho, grazie mille! 

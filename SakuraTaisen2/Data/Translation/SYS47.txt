@@ -39,7 +39,7 @@ Kouma Weapon: Reppu. Designed with an emphasis on powerful, long-range attacks.
 Bomber-type Kouma Weapon. Equipped with an internal store of buckshot, it fires attacks from its mouth.
 Kouma Weapon: Senkou. Designed to inflict damage on multiple enemies at a time.
 Dimensional Cannon. Boasting a large attack range, it eliminates all intruders.
-Summoner. A demonic device that keeps spawning Kouma Weapons one after another.
+Summoner. <br> A demonic device that keeps spawning Kouma Weapons one after another.
 <LEAVE> Message 20
 Doesn't look like I need to cover anyone right now.
 Sakura… I will protect you!

@@ -35,11 +35,11 @@ Hex Mech: Wakiji Kai. Recently had its screws replaced, so it's in a pretty good
 Hex Mech: Dark Kamui. Piloted by Cerulean Satan, its power far and away outclasses the Koubu.
 Society Hex Mech: Sesshou. Its defensive power is on a whole other level compared to the Wakiji.
 Kongou's underling Wakiji. Fiercely loyal to Kongou.
-Society Hex Mech: Wakiji Kai. The ones equipped with large cannons are referred to as HA-type.
+Society Hex Mech: Wakiji Kai. The units equipped with large cannons are referred to as HA-type.
 Society Hex Mech: Wakiji Kai. It's actually not very loyal, so it lacks motivation.
 Hex Mech: Wakiji Kai. Equipped with a cannon for long-range combat.
-<LEAVE> Messages 18
-<LEAVE> Messages 19
+<LEAVE> Message 18
+<LEAVE> Message 19
 <LEAVE> Message 20
 Doesn't look like I need to cover anyone right now.
 Sakura… I will protect you!

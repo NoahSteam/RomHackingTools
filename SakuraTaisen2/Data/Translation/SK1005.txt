@@ -122,12 +122,12 @@ Jeez, way to spoil the mood, Mon Frère!
 B-But Iris… We can't just hold hands on the train…
 Whatever! You're such a wimp, Mon Frère!
 BLEHHH!
-(Oh boy, this date is quite the handful already...)
+(Oh boy, this date is quite the handful already…)
 Well, since you're being so quiet, Mon Frère…
 I'll just go ahead and hold your hand!
 H-Hey, Iris! Wait a second!
 It's all right, Mon Frère! After all, we're a couple!
-…Say, do you think those two are...?
+…Say, do you think those two are…?
 Good heavens, what a dazzling pair those youngsters make.
 Heheheh! <br> We're the center of attention, Mon Frère!
 Hahaha… L-Looks like it…
@@ -244,7 +244,7 @@ Eh? Then this tree is…
 What’s this? Is… Is that you, Sakura?
 Huh?
 I knew it, it IS you! Long time no see!
-...?
+…?
 What, have you forgotten about me? It's me, Takeshi! Takeshi Matsumoto!
 Huh?! Takeshi?! Takeshi, is that really you?! Wow, it's been ages!
 Are you here for the holiday?
@@ -337,7 +337,7 @@ M-Mother! You don't have to mention that…
 Now then, you must be tired from your long trip. Please come inside.
 Yes, ma'am. <br> Pardon the intrusion.
 You can use this room while you're staying here, Ogami.
-Would this happen to be...?
+Would this happen to be…?
 …Yes. It was my father's room when he was still with us.
 His photo is above the desk…
 It's a picture from when he was transferred to the Anti-Kouma Corps.
@@ -552,7 +552,7 @@ Th-This is… a letter to me.
 "I await your return, alone, as the isolation tears me apart."
 Wait… Are all of these letters to me?!
 Sorry to keep you waiting, Ensign. The tea's-
-…Ah! A-Are those...?
+…Ah! A-Are those…?
 Ah… W-Well, uh…
 E-Ensign! Don't read other people's letters without permission!
 S-Sorry! I just found them here and got the urge to…
@@ -618,7 +618,7 @@ You're always exhausted from work, so I poured my heart into making a meal that 
 I… I see. Thank you, Sumire.
 Now then, please, help yourself.
 D-Down the hatch!
-(Th-This flavor… Words can't even begin to describe it...)
+(Th-This flavor… Words can't even begin to describe it…)
 Well, Ensign? How does it taste?
 I'm not a fan…
 I-It has a unique flavor.
@@ -647,7 +647,7 @@ Sumire…
 Oh, don't mind me, please keep eating. There's plenty left for you to enjoy.
 I… I see! Glad to hear it! Hahaha…
 Oh, Sumire… <br> Welcome home.
-(Hm? Was that...?)
+(Hm? Was that…?)
 Welcome home, Sumire. Sorry we were so preoccupied with our guests.
 It's been like this ever since I was a child. I'm used to it.
 I truly am sorry, Sumire… After you came all this way…
@@ -898,7 +898,7 @@ Kanna…
 All right, Boss, how's ‘bout you and I have a drinkin’ contest while we're here?
 Huh?! Here?!
 We drink and we sing. It's the Okinawan way. It'll make Dad happy, too.
-Really...? <br> All right! Got it.
+Really…? <br> All right! Got it.
 OK, here's some awamori! Let's get our drink on!
 All right, let's party!
 I can't hold my liquor…
@@ -957,7 +957,7 @@ Huh? Really?
 Yaaay, yaaay! <br> Mon Frère said I'm beautiful!
 Oh, Iris…
 Hahaha…
-(She… She sure is beautiful...)
+(She… She sure is beautiful…)
 Ah! Mon Frère, you're bluuushiiing!
 I'm gonna be just as pretty when I grow up, so just wait, OK?
 Oh, Iris…
@@ -1072,7 +1072,7 @@ By the way, this is a surprisingly normal house.
 I was expecting an extravagant laboratory or something when Kohran said you were her teacher…
 Heheheh…
 Heheh…
-...?
+…?
 Ogami, could you shut your peepers till I give ya the all-clear? Just close your eyes, please.
 Um, sure.
 Wh-Why?
@@ -1108,7 +1108,7 @@ For real? That's amazing. You have to tell me all about it!
 I'm gonna stay here and talk with Howard for a minute. Make yourself at home over there, Chief.
 Sheesh, those two really are obsessed with machines.
 …
-How long are they going to make me wait here, anyway...?
+How long are they going to make me wait here, anyway…?
 Here we are! This is the Grand Imperial Hotel.
 Your parents are meeting up here, right?
 That's correct. Now then, Mr. Ensign, let's hurry ourselves up and get inside!
@@ -1117,7 +1117,7 @@ Ciao, Papa!
 It's been a while. How are you feeling?
 When I heard Carino was coming, my wounds healed in an instant. Hahaha…
 …Seiya!
-...?!
+…?!
 C-Carino?!
 Ah, Seiya…
 Carino!
@@ -1272,8 +1272,8 @@ Things like "good luck" or "bad luck" will be written on the paper, which tells 
 Let's give it a shot, Reni. It'll make more sense if you try it yourself.
 Sure. In that case…
 …
-Urgh! I got… "bad luck"...
-Even worse, it says: "Beware of drowning"...
+Urgh! I got… "bad luck"…
+Even worse, it says: "Beware of drowning"…
 So that symbol means unlucky? Then… what does this mean?
 Let's see here…
 Whoa! You got: "Great luck"! That's the best one!

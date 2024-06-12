@@ -33,12 +33,12 @@ Reni Milchstraﬂe. A combat professional, attacking accurately without a single w
 RO-type Otsu. A long-range attack Hex Mech. Only capable of attacking single targets.
 RO-type Otsu. A long-range attack Hex Mech. Only capable of attacking single targets.
 HA-type Kou. A long-range attack Hex Mech. Capable of attacking multiple targets.
-L Special. A close-range attack Wakiji with restorative powers.
+L-Special. <br> A close-range Wakiji unit with healing capabilities.
 Chiken. Destroy it to end this exercise.
 Enkuu. An unmanned support drone developed by Mokujiki.
-Steam Rocket. A weapon developed by Mokujiki, boasting high attack power.
-Cross Homura. A flame weapon developed by Mokujiki. An upgraded version of the Homura.
-Summoner. A demonic device that keeps spawning Kouma Weapons one after another.
+Steam Rocket. <br> A weapon developed by Mokujiki, boasting high attack power.
+Cross Homura. <br> A flame weapon developed by Mokujiki. An upgraded version of the Homura.
+Summoner. <br> A demonic device that keeps spawning Kouma Weapons one after another.
 Thunder Cannon. Long-range artillery that boast high firepower and greater reach than the RO-type Wakiji.
 <LEAVE> Message 20
 Doesn't look like I need to cover anyone right now.

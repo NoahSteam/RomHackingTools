@@ -12,7 +12,7 @@ This order is currently in effect. We'll fight our opponents unflinchingly.
 Attention all units! Initiating the "Mountain" strategy!
 We're sticking with the current strategy!
 Understood!
-Destroy Tsuchigumo's Hex Mech, Hachiyou STNSYS!
+Destroy Tsuchigumo's Hex Mech, Hachiyou!
 <LEAVE> 0 Message 1-2
 <LEAVE> 0 Message 1-3
 Pass through the gate and defeat Tsuchigumo!
@@ -30,16 +30,16 @@ Iris, the Flower Division's mascot. She fights enemies with her mysterious super
 Kohran Li, inventor. Startles friend and foe alike with the inventions she employs.
 Orihime Soletta, prior Star Division member. Piloting a rose armor, she is known as one of the Red Nobles.
 Reni Milchstraße. A combat professional, attacking accurately without a single wasted movement.
-I-type Otsu. A Hex Mech designed for close-range attacks.
-RO-type Kou. A long-range attack Hex Mech. Only capable of attacking single targets.
+I-type Otsu. <br> A Hex Mech designed for close-range attacks.
+RO-type Kou. <br> A long-range attack Hex Mech. Only capable of attacking single targets.
 HA-type Kou. A long-range attack Hex Mech. Capable of attacking multiple targets.
-L Special. A close-range attack Wakiji with restorative powers.
-Hachiyou. Destroy it to end this exercise.
-Enkuu. Destroy it for an additional 100 points.
-Steam Rocket. Destroy it for an additional 100 points.
-Cross Homura. Destroy it for an additional 100 points.
-Summoner. A demonic device that keeps spawning Kouma Weapons one after another.
-<LEAVE> Message 18
+L-Special. <br> A close-range Wakiji unit with healing capabilities.
+Hachiyou. <br> Destroy it to end this exercise.
+Enkuu. <br> Destroy it for an additional 100 points.
+Steam Rocket. <br> Destroy it for an additional 100 points.
+Cross Homura. <br> Destroy it for an additional 100 points.
+Summoner. <br> A demonic device that keeps spawning Kouma Weapons one after another.
+<LEAVE> Message 19
 <LEAVE> Message 20
 Doesn't look like I need to cover anyone right now.
 Sakura… <br> I'll protect you!

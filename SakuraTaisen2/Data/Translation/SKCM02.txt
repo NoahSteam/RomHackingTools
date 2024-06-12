@@ -1,8 +1,8 @@
-﻿Wow, this is so cool! Come on, Mon Frère! Hurry, Hurry!
+﻿Wow, this is so cool! <br> Come on, Mon Frère! <br> Hurry, Hurry!
 Hahaha… OK, here we go. 
 Hello, this is the Hanayashiki Branch. 
-Hi, Kohran. It's been a while. 
-Ah, is that you, Chief? You didn’t waste any time getting back in touch, did you?
+Hi, Kohran. <br> It's been a while. 
+Ah, is that you, Chief? <br> You didn’t waste any time getting back in touch, did you?
 Well, you went to the trouble of teaching me how to use the Kinemaron, so I figured I’d call. 
 Yaaay, it's Kohran! Ehehehe, I’m here too!
 Aha, even Iris is there! Let's move to the big screen, OK? 
@@ -97,20 +97,20 @@ My, you called my number right away, Ensign!
 …Yes, hello? 
 Ah, Sumire! This is Ogami. 
 My, Ensign! You already seem to know my number.
-Yaaay, it's Sumire! Long time no see! 
-Oh, my… Is that Iris with you?
+Yaaay, it's Sumire! <br> Long time no see! 
+Oh, my… <br> Is that Iris with you?
 Why don't we talk on the big screen, then? 
-By the way, Sumire… Are you still stuck at your parents’ home?
+By the way, Sumire… <br> Are you still stuck at your parents’ home?
 That’s right! My family still won't allow me to leave the estate.
 Honestly… What on earth could they be planning…?
 Hello. Is that you, Boss? 
 Oh… That voice, isn't that Kanna? 
-Yo, Boss. Oh… And Iris, too. 
+Yo, Boss. <br> Oh… And Iris, too. 
 Kanna, please! The ensign and I were right in the middle of a conversation!
 Oh my, Ensign… 
 Ah, Sumire, so this was your number? 
 Yes, that is correct. What can I do for you, Ensign?
-Oh, Ensign… Is something the matter?
+Oh, Ensign… <br> Is something the matter?
 What business do you have with me, Ensign? 
 Uh… I'm sorry about earlier. I went a bit too far. 
 …Oh, my! You went to the trouble of calling just to tell me that?
@@ -180,7 +180,7 @@ Huh? <br> Really, Mon Frère? <br> Yaaay, yaaay!
 …If you wanted to talk to Iris, why bother using the Kinematron? 
 Whatever! This is stupid, we’re done here.
 Kanna. Let’s end this call.
-Yeah, I'm leavin’. Later, Boss! 
+Yeah, I'm leavin’. <br> Later, Boss! 
 Ah, those two… 
 I’ll always be here if you want to talk, Mon Frère!
 …I know. Thanks, Iris.
@@ -238,7 +238,7 @@ It was nice to talk with Maria. Right, Mon Frère?
 Yeah, it was.
 …Maria's not answering. 
 I wonder if she went to another room. 
-Good afternoon. It's time for Capital News. 
+Good afternoon. <br> It's time for Capital News. 
 First, we have follow-up information on the explosions that rocked Ginza last month.
 During the incident, the trams and buildings in front of the Imperial Theater were destroyed…
 Army officials have denied eyewitness reports that humanoid steam-powered machines were responsible.
@@ -263,7 +263,7 @@ A red shadow opposes the evildoers lurking in the darkness of the capital. His n
 Masked Red, the boy wonder of justice! Today he continues his fight for peace in the capital! 
 Serial Radio Drama Masked Red, The Terrifying Mummy, Part 1 
 On a hot summer's eve, a girl walks briskly down a gloomy, barren street. 
-“Oh no. I'm going to be late for my koto music lesson..." 
+“Oh no. I'm going to be late for my koto music lesson…" 
 She turns down a narrow alleyway, only to find a figure standing there. 
 Suddenly a huge man looms over her, standing at least 2 meters tall. 
 What's more, for reasons unknown, he's wrapped head to toe in pale brown bandages. 
@@ -273,7 +273,7 @@ The mysterious figure's eye seems to glint red, and a massive hand reaches down 
 “Oh my, it's Masked Red!" <br> "No need to worry, Miss, I'm here to help!" 
 Masked Red leaps from his bike, looking dashing as his cape billows in the wind. 
 Will our hero be able to rescue this damsel in distress? 
-Fight on, Masked Red! You're our hero, Red! <br> -The End 
+Fight on, Masked Red! You're our hero, Red! <br> To Be Continued
 Go, Masked Red! <br> Fight on, Masked Red! <br> Tune in next time! 
 Ah! It's gonna be 12 o'clock in five minutes, Mon Frère! 
 Huh?! It's already that late?

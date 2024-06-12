@@ -31,13 +31,13 @@ Kohran Li, inventor. Startles friend and foe alike with the inventions she emplo
 Orihime Soletta, prior Star Division member. Piloting a rose armor, she is known as one of the Red Nobles.
 Reni Milchstraﬂe. A combat professional, attacking accurately without a single wasted movement.
 Wakiji Kai: Yakigomi. Kasha's personal troops. They possess both high offense and defense.
-Hex Mech: Wakiji Kai. The ones equipped with guns are referred to as RO-type.
+Hex Mech: Wakiji Kai. <br> The units equipped with guns are referred to as RO-type.
 Flamethrower: Honoh. A flaming weapon invented by Mokujiki.
 Hex Mech: Wakiji Kai. Equipped with artillery, they are able to attack multiple enemies at once.
 Hex Mech: Goko. Piloted by Kasha of the Five Elements, it specializes in flame-based attacks.
-Society Hex Mech: Wakiji Kai. The ones equipped with large cannons are referred to as HA-type.
+Society Hex Mech: Wakiji Kai. The units equipped with large cannons are referred to as HA-type.
 Society Hex Mech: Wakiji Kai. It's actually not very loyal, so it lacks motivation.
-Society Hex Mech: Wakiji Kai. The ones equipped with guns are referred to as RO-type.
+Society Hex Mech: Wakiji Kai. The units equipped with guns are referred to as RO-type.
 <LEAVE> Message 18
 <LEAVE> Message 19
 <LEAVE> Message 20

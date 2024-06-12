@@ -31,13 +31,13 @@ Kohran Li, inventor. Startles friend and foe alike with the inventions she emplo
 Orihime Soletta, prior Star Division member. Piloting a rose armor, she is known as one of the Red Nobles.
 Reni Milchstraﬂe. A combat professional, attacking accurately without a single wasted movement.
 Hex Mech: Wakiji Kai. Wielding a longsword, it has strengthened its close-range combat ability.
-Hex Mech: Wakiji Kai. The ones equipped with guns are referred to as RO-type.
-Steam Rocket. A weapon developed by Mokujiki, boasting high attack power.
+Hex Mech: Wakiji Kai. <br> The units equipped with guns are referred to as RO-type.
+Steam Rocket. <br> A weapon developed by Mokujiki, boasting high attack power.
 Wakiji Kai: I-Type Light. Part of Tsuchigumo's platoon, they have excellent mobility.
 Hex Mech: Hachiyou. Piloted by Tsuchigumo of the Five Elements, it attacks with its six arms in succession.
-Society Hex Mech: Wakiji Kai. The ones equipped with large cannons are referred to as HA-type.
+Society Hex Mech: Wakiji Kai. The units equipped with large cannons are referred to as HA-type.
 Society Hex Mech: Wakiji Kai. It's actually not very loyal, so it lacks motivation.
-Society Hex Mech: Wakiji Kai. The ones equipped with guns are referred to as RO-type.
+Society Hex Mech: Wakiji Kai. The units equipped with guns are referred to as RO-type.
 <LEAVE> Message 18
 <LEAVE> Message 19
 <LEAVE> Message 20

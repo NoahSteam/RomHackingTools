@@ -137,7 +137,7 @@ Mamma mia, Japanese men are so indecisive.
 I thought something seemed different, but it looks as though you've just changed into a summer dress.
 Wh-Why do you say this, all of the sudden?!
 I don't know much of anything about clothes, but I like it a lot.
-I-Is that right...?
+I-Is that right…?
 Your face is sooo red, Orihime! If you're happy, you should just say so!
 How very rare to see her looking so flustered.
 I-I am not flustered even in the least!
@@ -247,8 +247,8 @@ Not particularly…
 Arf, arf!
 …
 Arf, arf!
-Reni, just look how much
-wants to play with you.
+
+Reni, just look how much <br> wants to play with you.
 You could at least give him a pat on the head.
 …
 Well, there is somewhere I must be…
@@ -259,12 +259,12 @@ There there,
 . I'm sure Reni will come around eventually.
 Oh my, Ensign…
 Arf, arf!
-Hi, Sumire. Were you playing with
-?
+
+Hi, Sumire. Were you playing with <br> ?
 Yes. My family kept a dog once, when I was younger.
 Although he was quite a bit larger than this fellow, he made an excellent playmate.
 Well then,
-, let us play again another time.
+<br> let us play again another time.
 Arf, arf!
 I wish Reni would play with you, too.
 I should get going, too. See you later,
@@ -272,7 +272,7 @@ I should get going, too. See you later,
 Woof!
 Arf!
 Hey there,
-. How do you like the theater so far?
+<br> How do you like the theater so far?
 Arf, arf!
 Hahaha. I wonder what you're saying? It's almost like you can understand me.
 Anyway, I should be off. See you later,
@@ -430,7 +430,7 @@ Scold her.
 O-OK then, if you want me to, then…
 Ogami…
 …
-(...Huh? I don't feel anything.)
+(…Huh? I don't feel anything.)
 …Saki?
 Hmmhmm, you were being serious, then? Oh, Ogami, you're so adorable.
 Huh? Saki, where'd you go?
@@ -553,7 +553,7 @@ Come back to the cafeteria in 30 minutes or so, and I'll feed you as much as you
 A-All right. I may swing back around if I feel so inclined.
 You may as well give it a taste! I'll be here!
 Hmm, I can't decide if that would taste good or not…
-Oh yeah...? All right, I'm gonna serve ya some, Boss.
+Oh yeah…? All right, I'm gonna serve ya some, Boss.
 I'm still in the middle of makin' it, but I should be finished up by around 3:30.
 Come back to the cafeteria in 30 minutes or so, and I'll feed you as much as you can eat!
 OK, thanks Kanna. I'll come back in a bit, then.
@@ -590,7 +590,7 @@ All right, here we go! Ready… Start!
 OK… What should I grab first?
 Mm, bitter melon stir-fried with eggs… So tasty.
 Pretty great, huh? This recipe is my specialty!
-*munch* *munch*... <br> The seasoning is fantastic!
+*munch* *munch*… <br> The seasoning is fantastic!
 And the rice is steamed to perfection, too. *munch* *munch*
 *munch* *gulp* <br> Phew… Need to catch my breath… OK, onto the next one!
 Which one should I grab first? Uh, I can’t decide…
@@ -617,9 +617,9 @@ B… Bitter…
 Ri… ce…
 Tea… Tea…
 Urgh… C'mon, Ogami… Just a little more…
-*munch*...
-*munch*...
-*chew*...
+*munch*…
+*munch*…
+*chew*…
 Th-There! I finished off all the chanpuru!
 Just one more bite… Gotta eat all… the rice…
 Hey, wait, you OK? You're lookin' a bit green around the gills!
@@ -698,11 +698,11 @@ But I am starting to feel that, just maybe… it is not so bad after all.
 My captain may be a busybody, but the theater is a fairly comfortable place to stay.
 In the beginning, I wanted to run back home as soon as I could… but I have decided to stay a little longer.
 I hope you are well, Mamma. I'm just fine, so you take care of yourself…
-(Orihime...)
+(Orihime…)
 Say something.
 …I should leave her be.
 Orihime…
-...!
+…!
 M-Mr. Ensign! Just how long have you been there?!
 S-Sorry… I didn't mean to listen in.
 You certainly do love to eavesdrop, don't you?! Just like usual!
@@ -710,8 +710,8 @@ Japanese men are all sneaky little cowards, after all!
 I do not wish to see your face any longer! Now, get out of my way!
 Wait, Orihime…
 Well, eavesdropping isn't exactly commendable. Guess there's nothing else I can say.
-(...I should leave her be. It wouldn't be right to bother her.)
-(Still, I never expected to see this side of Orihime...)
+(…I should leave her be. It wouldn't be right to bother her.)
+(Still, I never expected to see this side of Orihime…)
 Well now, I should be on my way.
 (Oh, shoot! I gotta get out of here!)
 Oh, Mr. Ensign. Whatever could you be doing here?
@@ -783,14 +783,14 @@ There's a huge carrot growing in their field out back, but neither one of them c
 So if the two of them cooperate and give it a good, hard yank, they can harvest it together.
 Oh, I see! So a three-legged race means that you should pick carrots with two people!
 Umm, that's not quite what it means, but I guess that is the general idea…
-Hmm, could a three-legged race be like when two people work together on something...?
+Hmm, could a three-legged race be like when two people work together on something…?
 Yes! That's exactly right, Iris! Nicely done.
 Hee hee. I got it right! Hooray!
 Hey Mon Frère, let's keep doing more!
 All right then. On to the next problem!
 Mon Frère… I can't keep going. I'm too sleepy…
 Just one more, Iris. Come on, keep your head up!
-Let's do it later, OK...?
+Let's do it later, OK…?
 Just push through it!
 Guess we should stop.
 Just push through it! One more problem. Come on, Iris!
@@ -1050,9 +1050,9 @@ Go back outside.
 O-Oh no… My body is moving towards the bathroom on its own…
 Ahh, this feels great… So refreshing after getting soaked by the rain.
 And I'm so happy Ogami said I looked good in that dress…
-(Sakura...)
+(Sakura…)
 (C-Crap!)
-...! <br> I-Is someone there?!
+…! <br> I-Is someone there?!
 Make an excuse.
 Run away.
 Make an excuse.
@@ -1151,7 +1151,7 @@ All right, but you never gave me an answer. What in the world are you working on
 It won't be long before I'm able to tell you everything you wanted to know and more. So hang in there!
 Hrm… Hearing that wishy-washy answer is just making me even more concerned.
 …
-...? <br> Got some deep thoughts rattling around in there, Chief?
+…? <br> Got some deep thoughts rattling around in there, Chief?
 No… I just feel bad for coming here and disturbing your work.
 No need to tiptoe around me, you know. It's nothing world-shattering, after all.
 OK, analysis complete! I'd better make like a tree and leave.
@@ -1428,7 +1428,7 @@ Well, it's the one thing I'm good at. Since I was a kid, I've done nothing but t
 That long, huh? So, what kind of machines have you messed with?
 I started out by fiddling around with my father's pocket watch…
 But that watch ended up becoming the only memento I had of him…
-A memento...?
+A memento…?
 …See, I lost both my folks when I was young.
 I was just a little kid when it all happened. It was in 1911… A revolution broke out in China.
 In 1911… That was the year of the Xinhai Revolution.
@@ -1443,7 +1443,7 @@ The way I see it, Chief… I have three dads.
 My real father, back in China… My dad back in Kobe, who took me in when I came to Japan…
 And here at the theater, it's Yoneda.
 Mr. Yoneda?
-How dare those bastards shoot him...!
+How dare those bastards shoot him…!
 I don't know who the hell these guys are, but I swear I'll make them pay!
 The second we find them, I'll bash their worthless heads in!
 K-Kohran…
@@ -1482,8 +1482,7 @@ Oh, it's no problem! So, that dog's name is
 , isn't it? 
 You got that information pretty quick. Just like always, Yuri. 
 Heheh. Actually, Kohran just dropped by to tell us the news. She was really excited to talk about it. 
-I see, glad to hear it. I hope that you two will play with 
-every now and then.
+I see, glad to hear it. I hope that you two will play with <br> every now and then.
 Has Mr. Yoneda been doing OK? 
 Yeah, we just visited him in the hospital and he was as lively as ever. 
 He's not allowed to drink there, so it’s a good opportunity for his body to recover a bit.
@@ -1599,7 +1598,7 @@ A scarf given to me by Sakura. It's knitted with red yarn - my favorite color.
 A scarf given to me by Sakura. It's knitted with blue yarn - my favorite color. 
 A scarf given to me by Sakura. It's knitted with yellow yarn - my favorite color.
 Ayame and I almost never lived in the same household, even though we were sisters. 
-Eh...? 
+Eh…? 
 It's not so unusual, given our lineage. We have less a "family tree" and more a "family wisteria." 
 Yet, I still knew that she was the type of person that would sacrifice her own well-being for others… 
 Carrying everyone's burdens by herself… 

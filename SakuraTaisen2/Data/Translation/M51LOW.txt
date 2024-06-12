@@ -12,7 +12,7 @@ This order is currently in effect. We'll fight our opponents unflinchingly.
 Attention all units! Initiating the "Mountain" strategy!
 We're sticking with the current strategy!
 Roger!
-Destroy Tsuchigumo's Hex Mech, Hachiyou M51LOW!
+Destroy Tsuchigumo's Hex Mech, Hachiyou!
 <LEAVE> 0 Message 1-2
 <LEAVE> 0 Message 1-3
 Exit the gate and destroy Tsuchigumo's machine!
@@ -30,16 +30,16 @@ Iris, the Flower Division's mascot. She fights enemies with her mysterious super
 Kohran Li, inventor. Startles friend and foe alike with the inventions she employs.
 Orihime Soletta, prior Star Division member. Piloting a rose armor, she is known as one of the Red Nobles.
 Reni Milchstraße. A combat professional, attacking accurately without a single wasted movement.
-I-type Otsu. A Hex Mech designed for close-range attacks.
-RO-type Kou. A long-range attack Hex Mech. Only capable of attacking single targets.
-HA-type Otsu. A Hex Mech designed for ranged attacks. Can attack multiple targets at once.
-L-Special. A close-range Wakiji unit with healing capabilities.
-Hachiyou. Once defeated, this training exercise will come to an end.
-Enkuu. Destroy it to earn 100 additional points.
-Steam Rocket. Destroy it to earn 100 additional points.
-Cross Homura. Destroy it to earn 100 additional points.
-Summoner. A demonic device that keeps spawning Kouma Weapons one after another.
-<LEAVE> Message 18
+I-type Otsu. <br> A Hex Mech designed for close-range attacks.
+RO-type Kou. <br> A long-range attack Hex Mech. Only capable of attacking single targets.
+HA-type Otsu. <br> A Hex Mech designed for ranged attacks. Can attack multiple targets at once.
+L-Special. <br> A close-range Wakiji unit with healing capabilities.
+Hachiyou. <br> Once defeated, this training exercise will come to an end.
+Enkuu. <br> Destroy it to earn 100 additional points.
+Steam Rocket. <br> Destroy it to earn 100 additional points.
+Cross Homura. <br> Destroy it to earn 100 additional points.
+Summoner. <br> A demonic device that keeps spawning Kouma Weapons one after another.
+<LEAVE> Message 19
 <LEAVE> Message 20
 Doesn't look like I need to cover anyone right now.
 Sakura… <br> I will protect you!

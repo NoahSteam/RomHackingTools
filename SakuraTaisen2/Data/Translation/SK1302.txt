@@ -309,8 +309,8 @@ To fight for myself… To fight for the ones I love.
 Captain… Thank you. 
 Huh? 
 Well… I'll be going now. 
-...? 
-Did I do anything worth being thanked for just now...? 
+…? 
+Did I do anything worth being thanked for just now…? 
 Doesn't look like Reni's here anymore. 
 No use staying here. I'll go somewhere else. 
 It's our day off, so there's not a single customer in sight. 
@@ -376,7 +376,7 @@ I was simply lost in thought… I do apologize.
 What were you thinking about? 
 N-Nothing at all! 
 Now I must be going. <br> Good day! 
-...? <br> What's up with Sumire? 
+…? <br> What's up with Sumire? 
 Doesn't look like Sumire's here anymore. 
 Oh well. I'll go somewhere else. 
 Oh, Ogami. 
@@ -411,14 +411,14 @@ Go somewhere else.
 If you don't mind, then I can stick around for some more practice. 
 Really? Thank you! 
 OK then, please stick around! 
-(Training with Sakura was rough, but a lot of fun...) 
+(Training with Sakura was rough, but a lot of fun…) 
 Ogami? Is there something wrong? 
 No, I was just thinking about that time we trained before. 
 You really went for it, didn't you, Sakura? 
 Oh, not at all. It's just that you and I were in perfect sync. 
 All right, I have to get going. Nice job, Sakura. 
 Thank you so much! <br> Stop by again sometime! 
-(Training with Sakura was rough, but a lot of fun...) 
+(Training with Sakura was rough, but a lot of fun…) 
 Ogami? Is there something wrong? 
 No, I was just thinking about that time we trained before. 
 You really went for it, didn't you, Sakura? 
@@ -428,7 +428,7 @@ I see… Well, stop by again sometime.
 Oh my, Ensign… 
 Hey, Sumire, thought I'd come hang out. 
 My apologies, but I have matters to attend to. 
-..."Matters"? What would those happen to be? 
+…"Matters"? What would those happen to be? 
 Hmhm, I'm afraid I can't say. 
 Now then, Ensign, if you'll please excuse me. 
 Hmm… Well, if she's busy, then so be it. 
@@ -439,11 +439,11 @@ Oh, Ensign, welcome.
 Hey, Sumire, thought I'd come hang out. 
 My apologies, I was just about to head to the stage… 
 The stage? For dance practice, I take it? 
-...! <br> Th-That's not… 
+…! <br> Th-That's not… 
 Hey, Sumire, thought I'd come hang out. 
 Oh, my apologies, I was just about to head to the stage… 
 The stage? For dance practice, I take it? 
-...! <br> Th-That's not… 
+…! <br> Th-That's not… 
 Hey, Sumire, need help with your dance practice? 
 …Well, no use hiding it now that you've found out. 
 Help Sumire practice. 
@@ -460,7 +460,7 @@ If you want, I could practice with you some more.
 Are you sure? It's your day off, after all. 
 Yeah, don't worry about it. Besides, I've gotten pretty good at controlling the lights. 
 Ohohohoho… <br> Well then, if you insist. 
-(Sumire sure looked beautiful dancing in the spotlight...) 
+(Sumire sure looked beautiful dancing in the spotlight…) 
 What's the matter, Ensign? You seem to be in a trance.
 …N-No, it's nothing. 
 Could it be you were daydreaming of my beautiful dancing figure? 
@@ -468,7 +468,7 @@ You… <br> Yeah, you nailed it.
 Ohohoho… <br> I've learned a lot about you these past two years, Ensign. 
 All right, I'm gonna get going. Nice job, Sumire. 
 Remember, these practice sessions are our secret.
-(Sumire sure was pretty dancing in the spotlight...) 
+(Sumire sure was pretty dancing in the spotlight…) 
 What's the matter, Ensign? You look to be in a trance.
 …N-No, it's nothing. 
 … You look like you're busy, so I'm gonna head out. 
@@ -568,7 +568,7 @@ We'll have plenty of time to play when I'm all done!
 R-Right… Sorry for interrupting your studies. 
 Well then, keep studying hard, Iris. 
 OK! Sorry, Mon Frère! 
-(Iris said she was studying...) 
+(Iris said she was studying…) 
 (I shouldn't bother her. Guess I'll go somewhere else.) 
 Ah, Mon Frère! <br> You're gonna play with me?! 
 Yeah. What are you up to? 
@@ -654,7 +654,7 @@ Come back to hang out whenever you like!
 Oh, Mr. Ensign. Did you need something? 
 I have the day off, so I thought I'd stop by and chat with you. 
 Actually…I was just about to take my siesta. 
-“Siesta"...? Oh, you're going to take a nap, huh? 
+“Siesta"…? Oh, you're going to take a nap, huh? 
 I'm sorry. Stop by some other time, OK? 
 Orihime? It's Ogami. 
 Zzzz… Zzzz… 
@@ -675,28 +675,28 @@ OK, let's go to the music room right away!
 (Oh yeah, there was that time Orihime tried to test my musical aptitude.) 
 (That was… Last summer, right?) 
 … 
-(I can't believe it's already been half a year since then...) 
+(I can't believe it's already been half a year since then…) 
 Mr. Ensiiiign? Are you listening to my piano playing? 
 Y-Yeah, I'm listening. 
 Remember the music test. 
 Look at Orihime. 
 Go somewhere else. 
-(I can still remember it clearly...) 
+(I can still remember it clearly…) 
 … 
 Mr. Ensign, you have seemed distracted for quite a while now. Are you even listening to me?! 
 I-I was just caught up in your piano playing, Orihime… 
 …Really, now? Well, I guess that's fine. 
 … 
 … 
-(I can still picture how Orihime looked back then...) 
+(I can still picture how Orihime looked back then…) 
 Lala… Lala… <br> Lalala… 
-(Orihime didn't listen to me very much back then...) 
-(But she looked just as serious playing the piano as she does now...) 
+(Orihime didn't listen to me very much back then…) 
+(But she looked just as serious playing the piano as she does now…) 
 I hate to leave in the middle of your performance, but I have to get going. 
 If you're leaving, then I'll be leaving as well. 
 Let's come back here again sometime! 
 Yeah, I'm looking forward to it. 
-(Even looking at her like this, I can picture her playing the piano...) 
+(Even looking at her like this, I can picture her playing the piano…) 
 …Mr. Ensign? You've been dead silent ever since you got here. Is there something wrong?
 …Oh, sorry, my bad. Just spaced out a bit. 
 Feeling listless now that the battle's over, is that it? 
@@ -736,12 +736,12 @@ Look at Reni.
 Go somewhere else. 
 I'm still going! I'm ready to swim all day! 
 Good luck, Captain. 
-(Reni in her bathing suit...) 
+(Reni in her bathing suit…) 
 Captain… What are you staring at? 
 Uh… N-Nothing, nothing at all, Reni. 
 All right, I'm gonna go now. Nice job, Reni. 
 OK. See you later, Captain. 
-(Reni sure was cute in that swimsuit...) 
+(Reni sure was cute in that swimsuit…) 
 …What's the matter, Captain? 
 Uh… S-Sorry, I just remembered how you looked in that bathing suit. 
 Ah… I-I see. 
@@ -1052,7 +1052,7 @@ All right, then… Kikunojo, if you'd be so kind.
 O-OK! Understood. 
 Oh, oh my… I don't think any of my information will be of any use to you just yet… 
 I'm sorry I can't be of any help… 
-U-Um, right… How about when you're listening to Orihime playing the piano...? 
+U-Um, right… How about when you're listening to Orihime playing the piano…? 
 If you have improper notes in front of you, you need to think carefully about moving them up or down.
 Even when they're lined up vertically, arrange them to be horizontal. That'll make things easier. 
 Also, the "#" and “♭” won't reach all the way to the end, so do be careful about that. 

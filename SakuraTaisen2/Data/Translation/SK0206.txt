@@ -28,7 +28,7 @@ I'm impressed you noticed a tiny detail like that, Ogami. I wouldn't expect any 
 No, it's nothing more than a guess right now. 
 Well, we can theorize all we want but we won't know for sure until we talk with Iris. 
 Right! In that case, I'll try searching a bit more. 
-What could've gotten Iris so upset...? I'm not sure, myself. 
+What could've gotten Iris so upset…? I'm not sure, myself. 
 Still, we can theorize all we want but we won't know for sure until we talk with Iris. 
 …Yes, that's true. 
 In that case, I'll try searching a bit more. I'll see you later. 
@@ -178,7 +178,7 @@ Say something.
 Leave. 
 Playfully cover his eyes.
 Hey, Reni. What're you doing - 
-...! 
+…! 
 Uwaaahhhh!! 
 Yeowch… 
 …Captain? 
@@ -196,7 +196,7 @@ Where the heck did he learn a move like that?
 (I should leave him alone. Besides, I need to look for Iris right now.) 
 (I know. I'll try teasing him a little.) 
 Guess… 
-...! 
+…! 
 …Whooooo?!! 
 Yeowch… 
 …Captain? 
@@ -417,7 +417,7 @@ I guess I ought to do as she says and keep looking…
 Guess I'll have to give up on calling her for now. 
 Maria's not picking up. 
 It's morning where she is now. She probably went to eat breakfast or something. 
-Good evening. It's time for Capital News. 
+Good evening. <br> It's time for Capital News. 
 Hex Mechs appeared shortly after noon today among a crowd of vacationers in Uguisudani. 
 They engaged in combat with the Imperial Assault Troop, who were dispatched to the scene. 
 At the time, a number of sightseers were present at the scene who had come to view the wisterias.
@@ -443,7 +443,7 @@ A red shadow opposes the evildoers lurking in the darkness of the capital. His n
 Masked Red, the boy wonder of justice! Today he continues his fight for peace in the capital! 
 Serial Radio Drama Masked Red, The Terrifying Mummy, Part 1 
 On a hot summer's eve, a girl walks briskly down a gloomy, barren street. 
-“Oh no. I'm going to be late for my koto music lesson..." 
+“Oh no. I'm going to be late for my koto music lesson…" 
 She turns down a narrow alleyway, only to find a figure standing there. 
 Suddenly a huge man looms over her, standing at least 2 meters tall. 
 What's more, for reasons unknown, he's wrapped head to toe in pale brown bandages. 
@@ -453,7 +453,7 @@ The mysterious figure's eye seems to glint red, and a massive hand reaches down 
 “Oh my, it's Masked Red!" <br> "No need to worry, Miss, I'm here to help!" 
 Masked Red leaps from his bike, looking dashing as his cape billows in the wind. 
 Will our hero be able to rescue this damsel in distress? 
-Fight on, Masked Red! You're our hero, Red! <br> -The End 
+Fight on, Masked Red! You're our hero, Red! <br> -To Be Continued
 Go, Masked Red! <br> Fight on, Masked Red! <br> Tune in next time! 
 This isn't the time to be making calls. 
 I need to look for Iris. 
@@ -531,7 +531,7 @@ If you have no need of me, there's somewhere I must go.
 H-Hey Reni, wait a second! 
 …Gone already. He's a quick one, that's for sure. 
 Reni and Iris both… <br> I wonder where they went. 
-...! 
+…! 
 Oh, Sakura! 
 Are you… still angry about what happened earlier? 
 No, not really. 
@@ -573,7 +573,7 @@ By tomorrow, I'm sure I'll be able to show you a smile again.
 …Fair enough.
 Then, I'll be going. <br> See you… in the morning. 
 …Yes. 
-(I should probably leave her be for now...) 
+(I should probably leave her be for now…) 
 Sakura, I'll be going. 
 But let's talk again in the morning. 
 … 
@@ -718,7 +718,7 @@ Go back outside.
 O-Oh no… My body is moving towards the bathroom on its own… 
 Ahhh. I'm surprised. Japanese bathrooms aren't all that bad. 
 (Orihime is… in the b-bath.) 
-...! <br> Is someone there?! 
+…! <br> Is someone there?! 
 (Crap, did she see me?!) 
 Make an excuse. 
 Run away. 
@@ -921,8 +921,8 @@ Ohh, how nice…
 A little… harder… <br> Please… 
 No… Don't press it that hard… 
 Gently, Ogami… 
-(Wow, her chest is quite large...) 
-(...Come on, Ogami! Now's not the time to be thinking about that!) 
+(Wow, her chest is quite large…) 
+(…Come on, Ogami! Now's not the time to be thinking about that!) 
 Chest (press) 
 Saki, is this where it hurts? 
 Ah, that's my chest. 
@@ -930,7 +930,7 @@ Ogami, you're unexpectedly bold.
 You mustn't take advantage of this situation to do anything indecent.
 (Damn… She saw right through me.) 
 Chest (peek) 
-(Phew, it really is big...) 
+(Phew, it really is big…) 
 Saki, is your hip OK? 
 Yes, my ankle is what got injured. 
 But since you're checking me over, would you mind massaging my hip as well? 
@@ -940,7 +940,7 @@ Ahh, yes… <br> Softly… Like that…
 Mhmhm… Ogami, you give such lovely massages. 
 Y-You think so? Hahaha… 
 Ahh, yes… <br> Softly… Like that… 
-(Ohh man, this is getting pretty sensual...) 
+(Ohh man, this is getting pretty sensual…) 
 Oh, Ogami, please don't look at me that way. It's embarrassing. 
 Leg (press) 
 Saki, is this where it hurts? 

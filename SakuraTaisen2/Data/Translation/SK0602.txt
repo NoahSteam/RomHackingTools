@@ -252,7 +252,7 @@ Eh, this is Maria we're talking about, she'll be fine.
 Now that she's gone, I should head to another room. 
 I don't have much time, so I'll be going. Excuse me. 
 Ah, Maria! She's gone… 
-I could've at least said, "Come back safely"... 
+I could've at least said, "Come back safely"… 
 Well, no use regretting that now. I'll go somewhere else. 
 If you don't mind, we could go together. 
 Really? I'm just going out shopping. 
@@ -331,7 +331,7 @@ Rafute…
 Rice… 
 Tea… 
 Rafute plate number two… This is getting pretty tough. 
-*munch* *munch*... <br> There, done! 
+*munch* *munch*… <br> There, done! 
 This rice is starting to fill me up… 
 …All right, that's bowl number two finished! 
 Gulp… Gulp… 
@@ -345,16 +345,16 @@ Ra… Rafute!
 Rice! 
 Tea! 
 I've made it this far, I just have to power through the rest! 
-*munch*... 
-*munch*... 
-*chew*... 
+*munch*… 
+*munch*… 
+*chew*… 
 D-Done! That's all the rafute dealt with! 
 Just five mouthfuls of rice left… 
 Four… Three… 
 Two… mouthfuls… <br> Last… mouth… ful… 
 DONE!! That's all the rice! 
 Urgh… You got this, Ogami! This is the last one!! 
-*glug*... *glug*... *glug*! 
+*glug*… *glug*… *glug*! 
 PWAHHH!! <br> D-Drank all the tea! 
 Close… So close… 
 Come on, Ogami… Just one last meal! 
@@ -635,7 +635,7 @@ Oh… Sorry about that.
 Whatever! You must think I'm being silly, don't you?!
 I have to read my lines now, so please leave me alone. 
 R-Right. I'll be going, then. 
-*sigh*... <br> Boy, I sure made her upset. 
+*sigh*… <br> Boy, I sure made her upset. 
 …Well, better shake it off and go somewhere else.
 It's all right, Sakura. I'm here for you. 
 Worst comes to worst, I could hide your belly button again so the Thunder God can't find it.
@@ -729,7 +729,7 @@ True… All right, sure. I'll help.
 That's what I'm talkin' about! All right, let's make our way up to the roof through the attic. 
 Remember to watch your step. Let's go, Boss! 
 Yahoo! We're here, Boss! 
-The view's awesome, the breeze is refreshin’... This is great! 
+The view's awesome, the breeze is refreshin’… This is great! 
 I thought gettin’ up here would be way harder, but that took no time at all! 
 Those Navy skills were somethin' else, Boss. You cleared those obstacles like they were nothin'.
 We made it! Nice job, Boss. 
@@ -819,7 +819,7 @@ Maria…
 Forgive me, I'm just rambling. 
 Now then, there's something I need to take care of. Excuse me, sir. 
 I'll be around to play billiards until 5:30. 
-The blue bird, huh...? 
+The blue bird, huh…? 
 Well, I'd better get going. 
 It's fall already. The perfect season for reading. 
 I can wait till nighttime to read, though. I should go somewhere else. 
@@ -1099,11 +1099,11 @@ Go back outside.
 O-Oh no… My body is moving towards the bathroom on its own… 
 (Maria… She was soaking wet after that shopping trip.) 
 (She must've felt pretty chilly, what with it being September and all.) 
-(...! <br> Uh-oh, I feel a sneeze coming on!) 
+(…! <br> Uh-oh, I feel a sneeze coming on!) 
 Sneeze. 
 (C-Crap, I can't hold it in any longer!) 
 ACHOO!! 
-...!! <br> C-Captain?! 
+…!! <br> C-Captain?! 
 S-Sorry Maria! It's just, I, uh… 
 Captain! Get out… <br> Get out this instant!! 
 Y-Yes, ma'am! Right away, ma'am! 
@@ -1173,7 +1173,7 @@ Take care of Reni, huh…
 Kanna's worried about Reni, in her own way. 
 I don't have time to work out right now. 
 I should go somewhere else. Where is everyone, anyway? 
-Wh-What is this...? <br> And that smell… <br> It reeks of roses… 
+Wh-What is this…? <br> And that smell… <br> It reeks of roses… 
 Oh my, Ogami! Welcome! 
 You actually came… I'm so happy… 
 Come on, Ichiro, don't be shy! Come in! 
@@ -1200,7 +1200,7 @@ Oh, what a shame. Come back whenever you'd like.
 Um… We'll be… waiting for you… 
 R-Right… I'll be going, now. 
 Phew… It feels like the smell of roses is clinging to my body. 
-Still, how did they set up that room so quickly...? 
+Still, how did they set up that room so quickly…? 
 Oh, Ogami. What's the status up on the surface? 
 The typhoon's getting closer, so the wind's picking up. 
 It's safe and warm down here underground. Why don't you come down to play for a while? 
@@ -1278,7 +1278,7 @@ Tsubaki seems to be really giving it her all.
 But still, I wonder what she's doing. 
 … 
 Tsubaki's not picking up. She must've gone back to work after all. 
-Good afternoon. It's time for Capital News. 
+Good afternoon. <br> It's time for Capital News. 
 Days earlier, a battle broke out at Atami between the Imperial Assault Troop and the Black Demons. 
 However, the site of this battle is currently enjoying somewhat of a boom in tourism. 
 It's believed that the locals, who usually never get to see the troop in action… 
@@ -1449,7 +1449,7 @@ Kohran
 Orihime 
 Reni 
 Ayame and I almost never lived in the same household, even though we were sisters. 
-Eh...? 
+Eh…? 
 It's not so unusual, given our lineage. We have less a "family tree" and more a "family wisteria." 
 Yet, I still knew that she was the type of person that would sacrifice her own well-being for others… 
 Carrying everyone's burdens by herself… 

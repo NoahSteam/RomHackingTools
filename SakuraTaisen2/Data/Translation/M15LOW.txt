@@ -33,7 +33,7 @@ Reni Milchstraﬂe. A combat professional, attacking accurately without a single w
 Hex Mech: Hachiyou. Piloted by Tsuchigumo of the Five Elements, it attacks with its six arms in succession.
 Hex Mech: Wakiji Kai. These machines were successfully mass-produced with enhanced combat capability.
 Hex Mech: Wakiji Kai. These models with stronger firearms are referred to as RO-type Otsu.
-Hex Mech: Wakiji Kai. The ones equipped with large cannons are referred to as HA-type.
+Hex Mech: Wakiji Kai. <br> The units equipped with large cannons are referred to as HA-type.
 Hex Mech: Wakiji Kai. Classified as the NI-type Special, this unit boasts a peculiar attack range.
 Hex Mech: Wakiji Kai. Attacks using buckshot, but a single blast is relatively weak.
 Hex Mech: Dainichiken. Piloted by Kongou of the Five Elements, it excels in close-range combat.

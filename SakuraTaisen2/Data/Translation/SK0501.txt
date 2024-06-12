@@ -692,7 +692,7 @@ C-Captain!! What do you think you're doing?!
 Well… I just wanted to take a look inside… 
 Captain, please! Don't just flip through a person's diary without permission! 
 Oh… Sorry. 
-*sigh*... <br> You surprise me at times. 
+*sigh*… <br> You surprise me at times. 
 (Aw, I wanted to see what was in Maria's diary.) 
 It’s a pleasant morning, isn’t it?
 Yeah. Seems like we’ll have fine weather today.
@@ -985,7 +985,7 @@ Mr. Ensign, you saved me. Just this once, I thank you.
 Never mind that, just change your clothes, quick! 
 (Oh boy. That would have been terrible if I hadn't woken her up.) 
 (I have to force my way into her room!) 
-Uh...? 
+Uh…? 
 …Wha! <br> W-Who's there!? 
 Oh, you're finally awake. It's me, Ogami. 
 M-Mr. Ensign?! <br> Do you intend to become a criminal at last?! 
@@ -1212,9 +1212,9 @@ T-That means… Kohran's in the bath…
 I am drawn to the bath…
 Go back outside. 
 O-Oh no… My body is moving towards the bathroom on its own… 
-(Kohran...) 
-(She must have taken off her glasses, so maybe she won't notice me...) 
-...! 
+(Kohran…) 
+(She must have taken off her glasses, so maybe she won't notice me…) 
+…! 
 U-Uh-oh! 
 Don’t panic, remain calm. 
 Get out of there.
@@ -1293,7 +1293,7 @@ However, it is important to stay alert and not let our guard down, even while on
 I hope we won't have to use this room during our break. 
 There's no use in worrying about it. Let's just enjoy the trip as much as we can. 
 Wha… What's that sound?! 
-...!? <br> The noise sounded like it was coming from behind this wall. 
+…!? <br> The noise sounded like it was coming from behind this wall. 
 And then… it seemed to just stop the moment I got here. 
 Check the wall. 
 Pretend to leave. 
@@ -1306,7 +1306,7 @@ Uh… Doesn't seem to be anything out of place.
 That's weird, I thought I heard something. Was it my imagination? 
 Can't do anything about that, better check out another room. 
 … 
-(Just as I thought...) 
+(Just as I thought…) 
 Who's there!? 
 Ugh… What's happening here? 
 Hmm… Maybe there's construction going on, I don't know… 
@@ -1368,7 +1368,7 @@ Huh, extra muscle?
 Hey boys, come on out and show yourselves! 
 Imperial Assault Troupe, Rose Division, reporting for duty! 
 R-Rose Division!? 
-Wh-Who on earth are these people...? 
+Wh-Who on earth are these people…? 
 These men are the Rose Division. They'll be watching over the theater while you're all away. 
 Pleased to meet you, Ensign Ogami. I'm Seiryuin Kotone… 
 I am the captain of the secret unit of love and beauty, the Rose Division.
@@ -1494,7 +1494,7 @@ A scarf given to me by Sakura. It's knitted with red yarn - my favorite color.
 A scarf given to me by Sakura. It's knitted with blue yarn - my favorite color. 
 A scarf given to me by Sakura. It's knitted with yellow yarn - my favorite color. 
 Ayame and I almost never lived in the same household, even though we were sisters. 
-Eh...? 
+Eh…? 
 It's not so unusual, given our lineage. We have less a "family tree" and more a "family wisteria." 
 Yet, I still knew that she was the type of person that would sacrifice her own well-being for others… 
 Carrying everyone's burdens by herself… 

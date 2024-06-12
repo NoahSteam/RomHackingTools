@@ -124,7 +124,7 @@ Nice weather we're having.
 Hey, you two haven't seen the Kinematron anywhere, have you? 
 S-Sir, what part of "indirectly" didn't you understand?! 
 Oh… Right… 
-...? 
+…? 
 Kinematron? You mean that communicator of yours? 
 I haven't seen it. What about you, Sakura? 
 Sorry, I haven't seen it either. 
@@ -322,7 +322,7 @@ Zzz… Zzz…
 Seems like Saki's asleep. 
 She did say something about wanting to take a nap, didn't she? 
 … 
-(Saki looks pretty sexy, sleeping in a yukata like that...) 
+(Saki looks pretty sexy, sleeping in a yukata like that…) 
 What exactly are you looking at, Captain? 
 N-No, I was just, uh, looking for the Kinematron. 
 Really? Because it looked to me like you were just staring at Saki. 
@@ -352,7 +352,7 @@ Hm? What about it? <br> Did it break or something?
 N-No, it's nothing. Don't worry about it, Kohran. 
 (Captain! I thought we agreed to keep it a secret from everyone!) 
 (Oh… Sorry.) 
-(Sorry, Kohran. You worked so hard to make the Kinematron...) 
+(Sorry, Kohran. You worked so hard to make the Kinematron…) 
 …What's up? You two went quite real quick. 
 It's nothing, Kohran. 
 Well, I'm gonna stay out here for a bit longer and clean up after the fireworks some more. 
@@ -449,7 +449,7 @@ But why would there be pieces of it on the beach?
 Someone must've taken the Kinematron here and broken it. 
 That's a reasonable assumption. But… 
 Who would do that, and why? 
-...! <br> Captain, over there! <br> I see something shining! 
+…! <br> Captain, over there! <br> I see something shining! 
 What?! Where?! 
 In the shade over there. Let's take a look. 
 There's no mistaking it… This is my Kinematron! 
@@ -511,7 +511,7 @@ Seems like this is where the cave ends.
 Captain, come look at this! 
 Is this… a wireless transceiver?! 
 Who's making calls in a place like this? 
-...! 
+…! 
 The transceiver! 
 Seems like a transmission's coming in, but from who?! 
 What should we do, Captain? 
@@ -545,7 +545,7 @@ Gotcha. Heheh, so even YOU catch colds, huh?
 Gahahaha! Right, I'll start heading over there with reinforcements, like we planned. 
 Speaking of which, should I approach from the sea or the mountains? 
 (What should I tell him, Captain?) 
-(Hmm… Let's see...) 
+(Hmm… Let's see…) 
 From the sea. 
 From the mountains. 
 (Tell him to come from the sea. We'll cut him off at the beach.) 
@@ -576,7 +576,7 @@ Ah?! Captain! <br> Look, behind you!
 D-Damn! The tide must've come in at some point! The exit's completely flooded! 
 The Black Demons will be here at any minute, but now we can't get out. 
 … 
-(That's right, Maria said she doesn't know how to swim...) 
+(That's right, Maria said she doesn't know how to swim…) 
 Captain, you go on ahead and escape. 
 Huh?! What are you saying, Maria?! 
 You don't want me to leave you here, do you? 
@@ -613,13 +613,13 @@ All right then, here we go!
 … 
 (C'mon, Maria… You've got this!) 
 … 
-(Just 10 meters left...) 
+(Just 10 meters left…) 
 … 
-(5 meters left...) 
+(5 meters left…) 
 … 
 (We're almost there, Maria!) 
 … 
-(...!! <br> She's gone limp!!) 
+(…!! <br> She's gone limp!!) 
 … 
 Thank God, she's still breathing! 
 Maria… Maria!! 
@@ -645,7 +645,7 @@ M-Maria…
 Mmm… 
 …Ah! 
 Maria, a-are you awake? 
-C-Captain...? 
+C-Captain…? 
 You look… disappointed, somehow. 
 O-Of course not! <br> I'm so glad you're OK. 
 She seems to be breathing normally. There's nothing left to do but pray. 
@@ -670,7 +670,7 @@ I can still feel the warmth and strength of your hand, Captain.
 You held onto me till the very end.
 Of course. I promised I wouldn't let go, didn't I? 
 Captain… 
-...! 
+…! 
 That noise! <br> It's the Soaring Whale! 
 Sorry to keep you waiting, Ogami! The Koubu are prepped for airdrop! 
 Understood! 

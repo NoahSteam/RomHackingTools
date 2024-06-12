@@ -1088,10 +1088,22 @@ private:
 								const uint32 endIndex = searchIndex;
 								uint32 lipsStartIndex = searchIndex;
 								uint16 lipsValue = 0;
+								bool bFoundLipsDataId1 = false;
+								bool bFoundLipsDataId2 = false;
 								do 
 								{
 									--lipsStartIndex;
 									lipsValue = SwapByteOrder(pSequenceData[lipsStartIndex]);
+
+									if(lipsValue == 0x0200 || lipsValue == 0x0201 || lipsValue == 0x0202 || lipsValue == 0x208 || (lipsValue >= 0xc100 && lipsValue <= 0xc106))
+									{
+										bFoundLipsDataId1 = true;
+										bFoundLipsDataId2 = true;
+									}
+									else if(lipsValue == 0xc1f0)// || (bFoundLipsDataId1 && (lipsValue == 0xc003 || lipsValue == 0xc002 || lipsValue == 0xc000)))
+									{
+										bFoundLipsDataId2 = true;
+									}
 									
 								} while (lipsValue != 0x7ffe);
 
@@ -1104,10 +1116,14 @@ private:
 									if(((lipsValue & 0xf000) == 0xc000) && (lipsValue&0x0fff) == prevTextIndex + 1)
 									{
 										newEntry.mTextIndex = lipsValue & 0x0fff;
-										newEntry.mbIsLips = true;
+										newEntry.mbIsLips = bFoundLipsDataId2;//true;
 										newEntry.mLipSyncId = 0;
 										newEntry.mAddress = lipsIndex * 2 + mFileHeader.OffsetToSequenceData;
 
+										if(!bFoundLipsDataId2 || mLines[newEntry.mTextIndex - 1].GetNumberOfLines() > 1)
+										{
+											bFoundLipsDataId2 = false;
+										}
 										prevTextIndex = newEntry.mTextIndex;
 
 										AddLipSyncEntry(newEntry);
@@ -1118,7 +1134,7 @@ private:
 								searchIndex += 2;
 								continue;
 							}
-
+							
 							++searchIndex;
 							continue;
 						}

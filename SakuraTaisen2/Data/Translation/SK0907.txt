@@ -175,9 +175,9 @@ It's not how you pray that matters, but rather what you feel.
 (What should I pray for?) 
 Give thanks for everything. 
 Pray for future happiness. 
-(I wish to express my gratitude… For having met everyone in the Imperial Assault Troupe...) 
+(I wish to express my gratitude… For having met everyone in the Imperial Assault Troupe…) 
 (And for having met Maria… Thank you.) 
-(May everyone in the Imperial Assault Troupe… And Maria...) 
+(May everyone in the Imperial Assault Troupe… And Maria…) 
 (Live happy, enjoyable lives.) 
 … 
 All right, Captain, let's go. 
@@ -274,7 +274,7 @@ I'll pray to be a good girl.
 But you’re already a good girl, Iris. 
 Heheh, thank you, Mon Frère. I'll pray for you, then. 
 … 
-...? <br> What's wrong, Iris? 
+…? <br> What's wrong, Iris? 
 I'm still just a kid. I'm not a grown-up like the others. 
 I can't be your girlfriend… 
 And I was too small to play the lead role after all. 

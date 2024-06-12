@@ -102,7 +102,6 @@ public:
 		ParseTextHeader();
 
 		static const unsigned short EndOfLineCharacter = 0xffff;
-		const uint16 idTag = 0x7fff;
 		const unsigned int NumBytesPerCharacter = 2;
 
 		if(mFileData.GetDataSize() <= TextTableStart)

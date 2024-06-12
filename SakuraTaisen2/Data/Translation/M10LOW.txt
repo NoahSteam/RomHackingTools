@@ -30,10 +30,10 @@ Iris, the Flower Division's mascot. She fights enemies with her mysterious super
 Kohran Li, inventor. Startles friend and foe alike with the inventions she employs.
 Orihime Soletta, prior Star Division member. Piloting a rose armor, she is known as one of the Red Nobles.
 Reni Milchstraﬂe. A combat professional, attacking accurately without a single wasted movement.
-Hex Mech: Wakiji Kai. The ones equipped with longswords are referred to as I-type Otsu.
+Hex Mech: Wakiji Kai. <br> The units equipped with longswords are referred to as I-type Otsu.
 Hex Mech: Wakiji Kai. These machines were successfully mass-produced with enhanced combat capability.
 Hex Mech: Chiken. Piloted by Mokujiki of the Five Elements, it wields the Enkuu as its weapons.
-Hex Mech: Wakiji Kai. The ones equipped with large cannons are referred to as HA-type.
+Hex Mech: Wakiji Kai. <br> The units equipped with large cannons are referred to as HA-type.
 Hex Mech: Wakiji Kai. The RO-type Wakiji were designed to support the I-type Wakiji in battle.
 Black Demon Cannon. A cannon made with Black Demon Society technology. Mokujiki's latest creation.
 Hex Mech: Wakiji Kai. These models, called L-Special, have the ability to restore health.

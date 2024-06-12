@@ -12,7 +12,7 @@ This order is currently in effect. We'll fight our opponents unflinchingly.
 Attention all units! Initiating the "Mountain" strategy!
 We're sticking with the current strategy!
 Understood!
-Destroy all the enemy Wakiji Hex Mechs! We're counting on you, Ogami!SYSTEM
+Destroy all the enemy Wakiji Hex Mechs! We're counting on you, Ogami!
 <LEAVE> 0 Message 1-2
 <LEAVE> 0 Message 1-3
 Go through the gate and defeat Tsuchigumo's mech!
@@ -30,16 +30,16 @@ Iris, the Flower Division's mascot. She fights enemies with her mysterious super
 Kohran Li, inventor. Startles friend and foe alike with the inventions she employs.
 Orihime Soletta, prior Star Division member. Clad in pink, she's called the Red Wind of the Mediterranean. 
 Reni Milchstraße. A combat professional, attacking accurately without a single wasted movement.
-Hex Mech: Wakiji Kai. The close range attack types are referred to as I-type.
+Hex Mech: Wakiji Kai. <br> The close range attack units are referred to as I-type.
 Hex Mech: Wakiji Kai. Recently had its screws replaced, so it's in a pretty good mood.
 Hex Mech: Dark Kamui. The machine piloted by Satan in our prior battle. Its power rivals that of the Koubu.
 Society Hex Mech: Sesshou. Its defensive power is on a whole other level compared to the Wakiji.
 Kongou's underling Wakiji. Fiercely loyal to Kongou.
-Society Hex Mech: Wakiji Kai. The ones equipped with large cannons are referred to as HA-type.
+Society Hex Mech: Wakiji Kai. The units equipped with large cannons are referred to as HA-type.
 Society Hex Mech: Wakiji Kai. It's actually not very loyal, so it lacks motivation.
-Society Hex Mech: Wakiji Kai. The ones equipped with guns are referred to as RO-type.
-<LEAVE> Messages 18
-<LEAVE> Messages 19
+Society Hex Mech: Wakiji Kai. The units equipped with guns are referred to as RO-type.
+<LEAVE> Message 18
+<LEAVE> Message 19
 <LEAVE> Message 20
 Doesn't look like I need to cover anyone right now.
 Sakura… I will protect you!

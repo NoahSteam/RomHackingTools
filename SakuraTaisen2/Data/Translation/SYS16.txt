@@ -30,10 +30,10 @@ Iris, the Flower Division's mascot. She fights enemies with her mysterious super
 Kohran Li, inventor. Startles friend and foe alike with the inventions she employs.
 Orihime Soletta, prior Star Division member. Piloting a rose armor, she is known as one of the Red Nobles.
 Reni Milchstraﬂe. A combat professional, attacking accurately without a single wasted movement.
-Hex Mech: Wakiji Kai. The ones equipped with longswords are referred to as I-type Otsu.
+Hex Mech: Wakiji Kai. <br> The units equipped with longswords are referred to as I-type Otsu.
 Hex Mech: Wakiji Kai. This model has been successfully mass-produced with enhanced combat power.
 Assault Cannon. An older form of ranged artillery. Its firepower is high, but its range is narrow.
-Hex Mech: Wakiji Kai. The ones equipped with large cannons are referred to as HA-type.
+Hex Mech: Wakiji Kai. <br> The units equipped with large cannons are referred to as HA-type.
 Hex Mech: Wakiji Kai. Equipped with more powerful cannons, they can now target enemies from afar.
 Hex Mech: Wakiji Kai. Attacks using buckshot, but a single blast is relatively weak.
 Hex Mech: Wakiji Kai. These types with healing abilities are referred to as L-Special.

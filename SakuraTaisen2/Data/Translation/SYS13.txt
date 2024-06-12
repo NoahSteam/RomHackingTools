@@ -33,12 +33,12 @@ Reni Milchstraﬂe. A combat professional, attacking accurately without a single w
 Hex Mech: Wakiji Kai. Originally an experimental model, much like the I-type.
 Hex Mech: Wakiji Kai. This model has been successfully mass-produced with enhanced combat power.
 Hex Mech: Wakiji Kai. These models with stronger firearms are referred to as RO-type Otsu.
-Hex Mech: Wakiji Kai. The ones equipped with large cannons are referred to as HA-type.
+Hex Mech: Wakiji Kai. <br> The units equipped with large cannons are referred to as HA-type.
 Hex Mech: Wakiji Kai. Equipped with more powerful cannons, they can now target enemies from afar.
 Hex Mech: Wakiji Kai. Attacks using buckshot, but a single blast is relatively weak.
 Hex Mech: Dainichiken. Piloted by Kongou of the Five Elements, it excels in close-range combat.
 Hex Mech: Wakiji Kai. The models equipped with healing abilities are referred to as L-Special.
-Steam Rocket. A weapon developed by Mokujiki, boasting high attack power.
+Steam Rocket. <br> A weapon developed by Mokujiki, boasting high attack power.
 <LEAVE> Message 19
 <LEAVE> Message 20
 Doesn't look like I need to cover anyone right now.

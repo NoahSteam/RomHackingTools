@@ -266,7 +266,7 @@ At last, our summer performance is starting this month…
 It’s bound to take the edge off this depressing mood the theater has had lately. 
 I came here again just to be sure. No one's here. 
 Sniff… Sniff… 
-(...Iris?) 
+(…Iris?) 
 Hic… <br> Uncle… Sniff…
 … 
 Say something. 
@@ -282,7 +282,7 @@ Uh-huh… <br> Thanks, Mon Frère.
 I don't know if I can smile right away… but I'll try. 
 I hope there's something I can do to bring back her smile… 
 (Let's leave her be for now.) 
-(This must be especially hard for her...) 
+(This must be especially hard for her…) 
 (Hang in there, Iris.) 
 Let's not go to the courtyard for now. 
 No one's here, huh. Let's just get going. 
@@ -302,7 +302,7 @@ After I saw Iris just now, I just couldn’t hold back my tears either…
 … 
 Ogami, please don't stare at me. 
 Oh, sorry… 
-(Her tears, she's trying to stop them from rolling down her face...) 
+(Her tears, she's trying to stop them from rolling down her face…) 
 I said don't stare at me! 
 S-Sakura… 
 I-I don't want you to see me like this… 
@@ -310,7 +310,7 @@ I-I don't want you to see me like this…
 (She's on the verge of sobbing… I don't know where I should look when talking to her.) 
 (J-Just where do I look in this situation?!) 
 … 
-(Oh no, Sakura looks really down...) 
+(Oh no, Sakura looks really down…) 
 (I better stop staring right now.) 
 I-It's surprisingly sunny today, even though it's the rainy season. Wouldn't you say, Sakura? 
 … 
@@ -532,7 +532,7 @@ Good night… Captain.
 I didn’t put much thought into it since the Kinematron makes communication so easy, but…
 It’s nighttime in America… We really are far apart, huh?
 Maria's not picking up. 
-Good afternoon. It's time for Capital News. 
+Good afternoon. <br> It's time for Capital News. 
 New information has come to light regarding the recent attacks on Shibuya and Uguisudani. 
 Both incidents saw Hex Mechs committing acts of destruction in the area… 
 The group of villains behind these atrocities have been identified as the "Black Demon Society."
@@ -555,8 +555,8 @@ Masked Red, the boy wonder of justice! Today he continues his fight for peace in
 Serial Radio Drama Masked Red, The Terrifying Mummy, Part 2 
 Creak… Creak… <br> The mummy begins to move as its body rattles.
 Releasing his grip on the girl, the mummy turns around and begins to flee the scene. 
-“Hold it! Stop!!" <br> Masked Red pulls the trigger of his two Colts. 
-Bang! Bang! Shockingly, with bullets piercing the mummy, it still continues to run away.
+“Hold it! Stop!!" <br> Masked Red pulls the triggers of his twin Colts. 
+Bang! Bang! Shockingly, though the bullets pierce the mummy, it continues to run away.
 As the monster begins to vanish into the night, Masked Red straddles his steam bike. 
 “Don’t worry, miss, I’ll catch that bizarre mummy man!” 
 “Do be careful, Mr. Red. Please, stay safe!” 
@@ -564,7 +564,7 @@ As the monster begins to vanish into the night, Masked Red straddles his steam b
 The mummy runs amid the darkness as the Mach Red’s spotlight illuminates its back. 
 Before long, they enter a dense forest and the mummy disappears into a western house in the woods. 
 Could this be the mummy’s lair? What awaits Masked Red in the mysterious old house? 
-Fight on, Masked Red! You're our hero, Red! <br> -The End 
+Fight on, Masked Red! You're our hero, Red! <br> To Be Continued
 Go, Masked Red! <br> Fight on, Masked Red! <br> Tune in next time! 
 I'm worried about everyone else, so let's end this transmission. 
 Now… Where should I head next? 
@@ -612,8 +612,8 @@ This room is vacant now. Let’s check another one.
 … 
 (Orihime? What’s she doing in a place like this?) 
 I'm… <br> Please… <br> May you… 
-(She seems to be saying something...) 
-...?! <br> Who’s there?! 
+(She seems to be saying something…) 
+…?! <br> Who’s there?! 
 M-Mr. Ensign?! How long have you been standing there?! 
 Well… I just got here. 
 What are you up to in the attic of all places?

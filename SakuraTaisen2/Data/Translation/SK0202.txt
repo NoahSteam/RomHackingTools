@@ -91,7 +91,7 @@ OK, got it! 12 o'clock in the dressing room, right?
 The gift shop closes at noon for lunch, so I'll definitely be there. 
 Things always get busy for me when we get a new division member. 
 I have to prepare new pamphlets and bromides to sell. 
-I see. A new bromide, huh...? 
+I see. A new bromide, huh…? 
 I'm sure it'll be ready by next month, so please look forward to it. 
 I wonder what time the newcomer will arrive. 
 Well, I should get going. Keep up the good work. 
@@ -645,17 +645,17 @@ Come on, Mon Frère, let's go to another room!
 O-OK, got it. Let's go, Iris. 
 I thought Orihime might be here, but it doesn't look like it. 
 Let's go somewhere else. We don't have much time before noon. 
-Yaaay! It's Mon Frère's room! Pardon me. 
+Yaaay! <br> It's Mon Frère's room! Pardon me. 
 Hahaha, come on in. 
 Huh? What's that machine, Mon Frère? 
-Oh, this? It's a communication device called the Kinematron. 
+Oh, this? <br> It's a communication device called the Kinematron. 
 I can use it to talk to people from far away. 
 Wow, that's so cool! Hey, hey, Mon Frère, let me see! 
 Hey, Mon Frère, are you going to call someone? 
 What should I do… 
 Make a call. 
 Maybe next time. 
-OK, then. Let's take it for a spin. 
+OK, then. <br> Let's take it for a spin. 
 Yaaay! C'mon, hurry! 
 We don't have much time. Let's call someone another day. 
 Boo… That's boring. 
@@ -756,7 +756,7 @@ Yaaaay! Coming iiiin!
 Wowww… <br> What a beautiful room! 
 I understand why you would be starstruck…
 But please don’t dilly dally. You can’t stay in my room all day, OK? 
-What's this...? 
+What's this…? 
 It's an interior design that also serves as curtains. 
 It uses the flag of a certain country as a motif. Do you know what flag, Mr. Ensign? 
 It's the flag of France. 
@@ -793,13 +793,13 @@ Oh well. Let's go to another room.
 Hey, Orihime! Teach me how to put on makeup some time. 
 I don't think there's any point for a child like yourself to wear makeup. 
 Heyyy. I'm not a little kid! 
-(There's a framed photograph...) 
+(There's a framed photograph…) 
 What's this picture? 
 I can’t show anyone that photograph, Mr. Ensign.
 What? Why not? Let me see it, Orihime. 
 No means no! Don't touch it! 
 Pick it up.
-(There's a beautiful woman in the picture...) 
+(There's a beautiful woman in the picture…) 
 Mr. Ensign! Do not touch other people’s things without permission!
 Oh… I'm sorry. I just couldn't help myself. 
 Seriously, the nerve of Japanese men! They have no sense of decency at all! 
@@ -946,15 +946,15 @@ Oh, never mind! You're such a perv, Mon Frère!
 … 
 Oh, I get it! I look good in anything, so you don't know what to say, huh? 
 Uh… I-I guess so. 
-(So, all of Iris's various outfits are in here...) 
+(So, all of Iris's various outfits are in here…) 
 (Does Iris sleep together with Jean-Paul?) 
 Iris, is Jean-Paul with you when you go to bed, too? 
 Yep! Jean-Paul and I are always together. 
 Even in the bath? 
 Jean-Paul's a boy, so we can't take baths together. 
 I-I see… 
-(That's a huge pillow...) 
-(That's a huge cushion...) 
+(That's a huge pillow…) 
+(That's a huge cushion…) 
 That's a huge pillow. It looks so comfortable. 
 That's called a "cushion," Mon Frère. 
 Huh, really? 
@@ -967,7 +967,7 @@ I'm always with my papa and mama whenever I'm in this room.
 I see… 
 (That's a nice smelling flower. I wonder what it's called.) 
 This flower smells really nice. What's its name? 
-Hmmm… What was it again...? 
+Hmmm… What was it again…? 
 I'm sorry, I forgot. That flower was given to me by Orihime. What was it called, anyway? 
 Huh, Orihime gave you this flower? That's surprising. 
 (I wonder how this curtain opens up.) 
@@ -1051,7 +1051,7 @@ So this is the troupe's prized steam processor…
 Uncle Yoneda said there are only two or three of them in Japan. 
 This, and the command center next door, are the heart of the Assault Troupe. 
 Even with this steam processor, we still don't know anything about our enemy, do we? 
-The “Demon King"... <br> Just who the hell is he? 
+The “Demon King"… <br> Just who the hell is he? 
 This is the infirmary, eh? 
 Whenever you get injured, you can come here to get treated. 
 If you get hurt really bad, you can go to the “intensive care unit” in the back. 

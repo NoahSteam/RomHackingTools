@@ -431,7 +431,7 @@ Torte is working hard to dig a hole. Is he burying bones or something?
 Long is working hard to dig a hole. Is he burying bones or something? 
 Altair is working hard to dig a hole. Is he burying bones or something? 
 Hund is working hard to dig a hole. Is he burying bones or something? 
-...! <br> Arf, arf, arf! 
+…! <br> Arf, arf, arf! 
 Oh, you found me. I won't steal them. Don't worry. 
 Arf, arf, arf! 
 OK, OK. I'll stay away. Bye, Shiro. 
@@ -475,7 +475,7 @@ Make a call.
 Maybe next time. 
 I know, why don't I make a call? 
 OK, who should I contact?
-Good afternoon. It's time for Capital News. 
+Good afternoon. <br> It's time for Capital News. 
 During the attempted coup d'etat, Tokyo was under the rebel force’s control.
 The Imperial Assault Troop was found battling with the Black Demon Society at Ginza and Shinjuku. 
 Additionally, the troop was seen piloting what appeared to be new Spirit Armor.

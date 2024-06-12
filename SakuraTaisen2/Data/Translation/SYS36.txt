@@ -30,15 +30,15 @@ Iris, the Flower Division's mascot. She fights enemies with her mysterious super
 Kohran Li, inventor. Startles friend and foe alike with the inventions she employs.
 Orihime Soletta, prior Star Division member. Piloting a rose armor, she is known as one of the Red Nobles.
 Reni Milchstraﬂe. A combat professional, attacking accurately without a single wasted movement.
-Hex Mech: Wakiji Kai. The ones equipped with longswords are referred to as I-type Otsu.
-Hex Mech: Wakiji Kai. The ones equipped with guns are referred to as RO-type.
+Hex Mech: Wakiji Kai. <br> The units equipped with longswords are referred to as I-type Otsu.
+Hex Mech: Wakiji Kai. <br> The units equipped with guns are referred to as RO-type.
 Hex Mech: Wakiji Kai. A flame weapon developed by Mokujiki.
-Hex Mech: Wakiji Kai. The ones equipped with large cannons are referred to as HA-type.
+Hex Mech: Wakiji Kai. <br> The units equipped with large cannons are referred to as HA-type.
 Hex Mech: Wakiji Kai. The RO-type Wakiji were developed to support I-type Wakiji in the field.
 Hex Mech: Wakiji Kai. Attacks using buckshot, but a single blast is relatively weak.
 Hex Mech: Wakiji Kai. These types with healing abilities are referred to as L-Special.
-Wakiji Kai: Shoujin. Part of Kasha's personal platoon, boasting both high attack and defense.
-Cross Homura. A flame weapon developed by Mokujiki. An upgraded version of the Homura.
+Wakiji Kai: Shoujin. <br> Part of Kasha's personal platoon, boasting both high attack and defense.
+Cross Homura. <br> A flame weapon developed by Mokujiki. An upgraded version of the Homura.
 Karan. A suicide bomber designed to support the Goko.
 Hex Mech: Goko. Piloted by Kasha of the Five Elements, it specializes in flame-based attacks.
 Doesn't look like I need to cover anyone right now.

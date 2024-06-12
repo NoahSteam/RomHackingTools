@@ -38,7 +38,7 @@ Healing-type Kouma Weapon. Boasts restorative abilities to revitalize other Koum
 Support-type Kouma Weapon. A reinforced Reppuu model with a focus on offensive power.
 Kouma Weapon: Inazuma. A healing-type Kouma that can help other Kouma Weapons recover their strength.
 Dimensional Cannon. Boasting a large attack range, it eliminates all intruders.
-Summoner. A demonic device that keeps spawning Kouma Weapons one after another.
+Summoner. <br> A demonic device that keeps spawning Kouma Weapons one after another.
 <LEAVE> Message 19
 <LEAVE> Message 20
 Doesn't look like I need to cover anyone right now.

@@ -9,7 +9,7 @@ Well? Ready to give your answer?
 … 
 … 
 … 
-(The one I'll pick for the lead… is...) 
+(The one I'll pick for the lead… is…) 
 Ogami, the Flower Division's counting on you. 
 (Should I pick Sakura?) 
 It could only be Sakura! 
@@ -44,7 +44,7 @@ It could only be Reni!
 Let me think it over. 
 (This is a big decision. Let me think it over.) 
 The one I've picked for the lead role… is Sakura. 
-...! 
+…! 
 Ogami… Are you… <br> Are you really sure? 
 Yes. I’m counting on you, Sakura. 
 …OK! 
@@ -193,7 +193,7 @@ Act purely.
 Act cheerily. 
 Act gracefully. 
 Let's go for a pure feel. I think it suits your dignified image perfectly. 
-Dignified, huh...? Understood. 
+Dignified, huh…? Understood. 
 I'm looking forward to it, Maria. 
 How about we try a bright, cheerful performance, just this once. 
 Cheerful… you say? I don't know… 

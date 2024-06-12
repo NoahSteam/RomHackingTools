@@ -220,9 +220,9 @@ Shinnosuke Yamazaki
 Ayame Fujieda
 Kazuma Shinguji
 What did Reni say right after she arrived at the theater for the first time?
-"...Yes."
-"...Later, then."
-"...It's fine."
+"…Yes."
+"…Later, then."
+"…It's fine."
 What kind of French sweets did Iris bring for Reni's do-over party? 
 Biscuits
 Cookies
@@ -379,7 +379,7 @@ Do you know what Kasha's Hex Mech is called?
 Goko
 Hachiyou
 Hougyou
-Suiko's Hex Mech, Hougyou, has a special attack called...?
+Suiko's Hex Mech, Hougyou, has a special attack called…?
 Blizzard Wave
 Petrification Wave
 Snegurochka
@@ -684,9 +684,9 @@ OK, let's eat!
 There's plenty to go around, so eat as much as you'd like!
 Sakura made this breakfast almost entirely by herself.
 Hmhm, I tried to make it just like Mother's!
-*chew* *chew*...
+*chew* *chew*…
 …
-Well, Ogami...? <br> How does it taste?
+Well, Ogami…? <br> How does it taste?
 It's great! This is delicious, Sakura!
 Really? Thank you so much!
 You've gotten quite good at seasoning, haven't you, Sakura?
@@ -694,7 +694,7 @@ Thanks! I practiced while at the theater so that I could recreate your recipes, 
 Though I do think the miso soup could stand to be a bit lighter.
 Huh, you think so? <br> …In that case, you'll have to teach me how sometime! 
 Um… It's OK.
-I-Is that right...?
+I-Is that right…?
 …
 I think the miso soup should've been a bit lighter.
 I'll teach you the trick to making it later.
@@ -741,7 +741,7 @@ Then, on the day of the marriage interview…
 Now that young master Makibishi's wishes have been made known… What say you, Sumire?
 I… I…
 Wait just a damn minute!
-...!! <br> That voice, it couldn't be?!
+…!! <br> That voice, it couldn't be?!
 Who are you people?
 I am Captain Ichiro Ogami of the Imperial Assault Troupe, Flower Division!
 And I'm Kanna Kirishima, also from the Flower Division!
@@ -809,15 +809,15 @@ Urk…
 …
 Cap… tain…
 …
-...!!
+…!!
 I have no idea how much time passed after that…
 But when I came to… He was there at my side.
 Maria, are you all right?
-...!
+…!
 I never let your hand go, just as I promised.
 Captain…
 Maria, a-are you awake?
-C-Captain...?
+C-Captain…?
 You look… disappointed, somehow.
 O-Of course not! I'm so glad you're OK.
 Captain…
@@ -855,7 +855,7 @@ This is way too big of a role for me…
 Sorry, Kanna. As the person picking the lead, there's nothing I can tell you.
 Ah… You're right.
 (The night went by in a flash.)
-(And then finally, the big announcement of the lead role...)
+(And then finally, the big announcement of the lead role…)
 Good morning, Ogami.
 Good morning.
 Well? Ready to give your answer?
@@ -891,7 +891,7 @@ I'm gonna be just as pretty when I grow up, so just wait, OK?
 Then I fell asleep on Mama's lap…
 I had a wonderful dream with Mon Frère, Papa, and Mama. Everyone was in it…
 …
-We were… <br>... we thought…
+We were… <br>… we thought…
 Iris… <br>Look after her.
 Yes, sir. No matter what happens, I will protect Iris.
 Come visit again whenever you like.
@@ -1045,7 +1045,7 @@ Heeehee, oh, Mr. Ensign, that's perfectly all right.
 Huh? Why's that?
 Heehee… Because, that means we can be alone together for even longer.
 …
-(Why… What am I...)
+(Why… What am I…)
 …
 Reni, it's me. I just want to talk for a minute. Will you open up?
 …

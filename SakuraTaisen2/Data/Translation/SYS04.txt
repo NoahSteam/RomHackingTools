@@ -30,14 +30,14 @@ Iris, the Flower Division's mascot. She fights enemies with her mysterious super
 Kohran Li, inventor. Startles friend and foe alike with the inventions she employs.
 Orihime Soletta, prior Star Division member. Piloting a rose armor, she is known as one of the Red Nobles.
 Reni Milchstraﬂe. A combat professional, attacking accurately without a single wasted movement.
-Wakiji Kai: Shoujin. Part of Kasha's personal platoon, boasting both high attack and defense.
-Hex Mech: Wakiji Kai. The ones equipped with guns are referred to as RO-type.
-Flamethrower: Homura. A flame weapon developed by Mokujiki.
+Wakiji Kai: Shoujin. <br> Part of Kasha's personal platoon, boasting both high attack and defense.
+Hex Mech: Wakiji Kai. <br> The units equipped with guns are referred to as RO-type.
+Flamethrower: Homura. <br> A flame weapon developed by Mokujiki.
 Hex Mech: Wakiji Kai. Equipped with a large cannon, it can attack multiple enemies at once.
-Fancy Car. The car Yamaguchi is riding in. Sturdier than you'd think.
-Society Hex Mech: Wakiji Kai. The ones equipped with large cannons are referred to as HA-type.
+Luxury Car. <br> The automobile Yamaguchi is riding in. Sturdier than you might expect.
+Society Hex Mech: Wakiji Kai. The units equipped with large cannons are referred to as HA-type.
 Society Hex Mech: Wakiji Kai. It's actually not very loyal, so it lacks motivation.
-Society Hex Mech: Wakiji Kai. The ones equipped with guns are referred to as RO-type.
+Society Hex Mech: Wakiji Kai. The units equipped with guns are referred to as RO-type.
 <LEAVE> Message 18
 <LEAVE> Message 19
 <LEAVE> Message 20
