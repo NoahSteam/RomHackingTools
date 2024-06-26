@@ -2066,7 +2066,7 @@ bool RGBBmpToSaturnConverter::ConvertBmpToSakuraFormat(const std::string& inBmpP
 				const uint8 g = (uint8)floorf(((uint8)(pBmpColor[origPixelIndex + 1]) / 255.f) * 31.f + 0.5f);
 				const uint8 b = (uint8)floorf(((uint8)(pBmpColor[origPixelIndex + 2]) / 255.f) * 31.f + 0.5f);
 
-				const uint16 outColor = ((r << 10) + (g << 5) + b) & 0x7fff;
+				const uint16 outColor = (((r << 10) + (g << 5) + b) & 0x7fff) | 0x8000;
 				pOutColor[outPixelIndex] = SwapByteOrder(outColor);
 			}
 		}
@@ -2085,7 +2085,7 @@ bool RGBBmpToSaturnConverter::ConvertBmpToSakuraFormat(const std::string& inBmpP
 			const uint8 g = (uint8)floorf(((uint8)(pBmpColor[bmpIndex + 1]) / 255.f) * 31.f + 0.5f);
 			const uint8 b = (uint8)floorf(((uint8)(pBmpColor[bmpIndex + 2]) / 255.f) * 31.f + 0.5f);
 
-			uint16 outColor = ((r << 10) + (g << 5) + b) & 0x7fff;
+			uint16 outColor = (((r << 10) + (g << 5) + b) & 0x7fff) | 0x8000;
 			pOutColor[i] = SwapByteOrder(outColor);
 		}
 	}

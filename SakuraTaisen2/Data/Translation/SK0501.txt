@@ -121,7 +121,7 @@ Oh, it's Reni. Hey!
 Good morning, Reni. 
 …Morning. 
 Arf, arf! 
-looks like he wants to play with you again today.
+looks like he <br> wants to play with you again today.
 In fact, he seems to have grown even more attached to you, Reni.
 Arf! 
 … 
@@ -131,7 +131,7 @@ Let me join in.
 Try petting his head.
 Have you gotten used to him yet? 
 …Used to what? 
-, of course. You’re not good with dogs, right? 
+, of course. <br> You’re not good with dogs, right? 
 …That’s inaccurate. I'm just not interested.
 Can I play with him, too? Let me join in.
 … 
@@ -211,7 +211,7 @@ Well then, see ya later, Chief.
 Seems that she managed to save some of the tomatoes. That’s a relief. 
 Now then, maybe I should go somewhere else. 
 Arf, arf! 
-, we're gonna go on a trip for a while. 
+, we're gonna go <br> on a trip for a while. 
 Take care of the theater while we're gone, OK? 
 Arf! 
 Yo, Boss! C'mere, c'mere! 

@@ -28,9 +28,9 @@ struct NLoadInfo
 };
 const NLoadInfo TiledLoadScreenImages[3] =
 {
-	{0x40,    44992,  0xa800, 0xc000},
-	{0xc840,  44992,  0x17800, 0x19000},
-	{0x19840, 44992,  0x24800, 0x26000}
+	{0x40,    42944,  0xa800, 0xc000},
+	{0xc840,  42944,  0x17800, 0x19000},
+	{0x19840, 42944,  0x24800, 0x26000}
 };
 
 void ExtractDemoWPALL(const std::string& inDemoDirectory, const std::string& inOutputDirectory)
@@ -161,23 +161,24 @@ void ExtractLoadScreens(const std::string& inDemoDirectory, const std::string& i
 		const string bitmapFileName = inOutputDirectory + std::string("TileSheet") + std::to_string(i) + ".bmp";
 		ExtractImageFromData(nLoadData.GetData() + TiledLoadScreenImages[i].colorOffset, 8 * 8 * (320 / 8) * (224 / 8), bitmapFileName, nLoadData.GetData() + TiledLoadScreenImages[i].paletteOffset, 512, false, 8, 8, 320 / 8, 256, 0, true, true);
 
-		unsigned int tiles[1120];
-		memcpy_s(tiles, sizeof(tiles), nLoadData.GetData() + TiledLoadScreenImages[i].tileOffset, sizeof(tiles));
+		const int numTiles = 1120;
+		unsigned int* pTiles = new unsigned int [numTiles];
+		memcpy_s(pTiles, numTiles * sizeof(pTiles[0]), nLoadData.GetData() + TiledLoadScreenImages[i].tileOffset, numTiles * sizeof(pTiles[0]));
 		int x = 0;
 		int y = 0;
 
 		//Convert tile index into game format
-		for (int t = 0; t < 1120; ++t)
+		for (int t = 0; t < numTiles; ++t)
 		{
-			const int tileValue = (SwapByteOrder(tiles[t]) / 2) - 1;
-			tiles[t] = tileValue;
+			const int tileValue = (SwapByteOrder(pTiles[t]) / 2) - 1;
+			pTiles[t] = tileValue;
 		}
 
 		//Output tiles
-		for (int t = 0; t < 1120; ++t)
+		for (int t = 0; t < numTiles; ++t)
 		{
 			SakuraString::SakuraChar sakuraChar;
-			sakuraChar.mIndex = tiles[t];
+			sakuraChar.mIndex = pTiles[t];
 
 			const char* pTileData = tileSheet.GetCharacterTile(sakuraChar);
 			sakuraStringBmp.AddTile(pTileData, 64, x, y, 8, 8, BitmapSurface::kFlipNone);
@@ -189,6 +190,8 @@ void ExtractLoadScreens(const std::string& inDemoDirectory, const std::string& i
 				y += 8;
 			}
 		}
+
+		delete[] pTiles;
 
 		const std::string outFile = inOutputDirectory + "nload_" + std::to_string(i) + ".bmp";
 		sakuraStringBmp.WriteToFile(outFile, true);			
@@ -221,12 +224,13 @@ bool PatchLoadScreens(const std::string& inPatchedSakuraDirectory, const std::st
 		optimizedTileSet.OptimizeTileSet(patchedImage);
 		optimizedTileSet.PackTiles();
 
-		if (optimizedTileSet.GetPackedTileSize() > TiledLoadScreenImages[i].colorSize)
+		const unsigned int packedTileSize = optimizedTileSet.GetPackedTileSize();
+		if (packedTileSize > TiledLoadScreenImages[i].colorSize)
 		{
-			printf("TileSet is too big for %s", patchedImagePath.c_str());
+			printf("TileSet is too big for %s. Expected %u, got %u\n", patchedImagePath.c_str(), TiledLoadScreenImages[i].colorSize, packedTileSize);
 			return false;
 		}
-		nLoadData.WriteData(TiledLoadScreenImages[i].colorOffset, optimizedTileSet.GetPackedTiles(), optimizedTileSet.GetPackedTileSize());
+		nLoadData.WriteData(TiledLoadScreenImages[i].colorOffset, optimizedTileSet.GetPackedTiles(), packedTileSize);
 
 		const std::vector<int>& tileIndices = optimizedTileSet.GetTileIndices();
 		const size_t numIndices = tileIndices.size();

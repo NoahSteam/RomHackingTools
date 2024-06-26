@@ -401,6 +401,35 @@ void FixupStellarAssultLoadScreens()
 	}*/
 }
 
+void TileCounter(const string& inImagePath)
+{
+	char exePath[MAX_PATH] = { 0 };
+	GetModuleFileName(NULL, exePath, MAX_PATH);
+	std::string::size_type pos = std::string(exePath).find_last_of("\\/");
+	const string currentDirectory = std::string(exePath).substr(0, pos) + Seperators;
+
+	TextFileWriter outFile;
+	if(!outFile.OpenFileForWrite((currentDirectory + "Result.txt")))
+	{
+		printf("Couldn't open outfile\n");
+		return;
+	}
+
+	const uint32 tileDim = 8;
+	BmpToSaturnConverter patchedImage;
+	if (!patchedImage.ConvertBmpToSakuraFormat(inImagePath, false, BmpToSaturnConverter::CYAN, &tileDim, &tileDim))
+	{
+		outFile.Printf("Failed to convert file\n");
+		return;
+	}
+
+	TileSetOptimizer optimizedTileSet;
+	optimizedTileSet.OptimizeTileSet(patchedImage);
+	optimizedTileSet.PackTiles();
+	
+	outFile.Printf("TileCount: %i  (Must be less than 704 tiles)\n", optimizedTileSet.GetPackedTileSize()/64);
+}
+
 int main(int argc, char *argv[])
 {
 #if 0
@@ -411,7 +440,13 @@ int main(int argc, char *argv[])
 	
 	//	VerifyText();
 
-		FixupStellarAssultLoadScreens();
+		//FixupStellarAssultLoadScreens();
+
+		if (argc == 2)
+		{
+			const string imagePath = string(argv[1]);
+			TileCounter(imagePath);
+		}
 	}
 #else
 	if(argc == 1)

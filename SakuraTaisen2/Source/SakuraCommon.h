@@ -159,7 +159,7 @@ bool PatchTiledImage(const std::string& InPatchedImagePath, const std::string In
 
 	if (optimizedTileSet.GetPackedTileSize() > InColorDataSize)
 	{
-		printf("TileSet is too big for %s", InPatchedImagePath.c_str());
+		printf("TileSet is too big for %s\n", InPatchedImagePath.c_str());
 		return false;
 	}
 	outputFile.WriteData(InColorDataOffset, optimizedTileSet.GetPackedTiles(), optimizedTileSet.GetPackedTileSize());

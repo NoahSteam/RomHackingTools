@@ -16,37 +16,41 @@ void ExtractGameOverMenu(const string& rootSakuraDirectory, bool bBmp, const str
 	const string gameOverDir = outDirectory + "GameOver\\";
 	CreateDirectoryHelper(gameOverDir);
 
-	const string dataFilePath = rootSakuraDirectory + string("SAKURA2\\GOVERKV1.BIN");
-	FileNameContainer dataFileNameInfo(dataFilePath.c_str());
-
-	FileData fileData;
-	if (!fileData.InitializeFileData(dataFileNameInfo))
+	const char* filesToExtract[2] = { "GOVERKV1", "GOVERTV1" };
+	for (int fileIndex = 0; fileIndex < 2; ++fileIndex)
 	{
-		return;
-	}
+		const string dataFilePath = rootSakuraDirectory + string("SAKURA2\\") + string(filesToExtract[fileIndex]) + string(".BIN");
+		FileNameContainer dataFileNameInfo(dataFilePath.c_str());
 
-	struct ImageInfo
-	{
-		int width;
-		int height;
-	};
+		FileData fileData;
+		if (!fileData.InitializeFileData(dataFileNameInfo))
+		{
+			return;
+		}
 
-	const int numImages = 3;
-	const ImageInfo images[numImages] =
-	{
-		320, 240,
-		176, 80,
-		176, 64
-	};
+		struct ImageInfo
+		{
+			int width;
+			int height;
+		};
 
-	const string bmpExt = bBmp ? string(".bmp") : (".png");
-	uint32 offset = 0x10000;
-	for(int imageIndex = 0; imageIndex < numImages; ++imageIndex)
-	{
-		const string imageName = gameOverDir + std::to_string(imageIndex) + bmpExt;
-		Extract16BitImageFromData(imageName, fileData.GetData() + offset, images[imageIndex].width, images[imageIndex].height);
+		const int numImages = 3;
+		const ImageInfo images[numImages] =
+		{
+			320, 240,
+			176, 80,
+			176, 64
+		};
 
-		offset += images[imageIndex].width * images[imageIndex].height * 2;
+		const string bmpExt = bBmp ? string(".bmp") : (".png");
+		uint32 offset = 0x10000;
+		for (int imageIndex = 0; imageIndex < numImages; ++imageIndex)
+		{
+			const string imageName = gameOverDir + std::string(filesToExtract[fileIndex]) + std::to_string(imageIndex) + bmpExt;
+			Extract16BitImageFromData(imageName, fileData.GetData() + offset, images[imageIndex].width, images[imageIndex].height);
+
+			offset += images[imageIndex].width * images[imageIndex].height * 2;
+		}
 	}
 }
 
@@ -126,50 +130,53 @@ bool PatchBattleGameOverScreens(const string& inPatchedSakuraDirectory, const st
 	};
 	const FilesToPatch filesToPatch[] =
 	{
-		"SAKURA2\\GOVERKV1.BIN",
-		"SAKURA2\\GOVERTV1.BIN",
+		"GOVERKV1",
+		"GOVERTV1",
 	};
 
-	const string translatedImagePath1 = inTranslatedDataDirectory + "GOVER\\GameOver1.bmp";
-	const string translatedImagePath2 = inTranslatedDataDirectory + "GOVER\\GameOver2.bmp";
-
-	RGBBmpToSaturnConverter patchedImageData1;
-	if (!patchedImageData1.ConvertBmpToSakuraFormat(translatedImagePath1))
+	for(int fileIndex = 0; fileIndex < 2; ++fileIndex)
 	{
-		printf("PatchBattleMenu: Couldn't convert image: %s.\n", translatedImagePath1.c_str());
-		return false;
-	}
+		const string translatedImagePath1 = inTranslatedDataDirectory + string("GOVER\\") + string(filesToPatch[fileIndex].pName) + "1.bmp";
+		const string translatedImagePath2 = inTranslatedDataDirectory + string("GOVER\\") + string(filesToPatch[fileIndex].pName) + "2.bmp";
 
-	if(patchedImageData1.GetImageWidth() != 176 && patchedImageData1.GetImageHeight() != 80)
-	{
-		printf("PatchBattleMenu: Image needs to be 176x80: %s.\n", translatedImagePath1.c_str());
-		return false;
-	}
-
-	RGBBmpToSaturnConverter patchedImageData2;
-	if (!patchedImageData2.ConvertBmpToSakuraFormat(translatedImagePath2))
-	{
-		printf("PatchBattleMenu: Couldn't convert image: %s.\n", translatedImagePath2.c_str());
-		return false;
-	}
-
-	if (patchedImageData2.GetImageWidth() != 176 && patchedImageData2.GetImageHeight() != 64)
-	{
-		printf("PatchBattleMenu: Image needs to be 176x64: %s.\n", translatedImagePath2.c_str());
-		return false;
-	}
-
-	for(int i = 0; i < 2; ++i)
-	{
-		const string sakuraFilePath = inPatchedSakuraDirectory + filesToPatch[i].pName;
-		FileReadWriter sakuraFile;
-		if (!sakuraFile.OpenFile(sakuraFilePath))
+		RGBBmpToSaturnConverter patchedImageData1;
+		if (!patchedImageData1.ConvertBmpToSakuraFormat(translatedImagePath1))
 		{
+			printf("PatchBattleMenu: Couldn't convert image: %s.\n", translatedImagePath1.c_str());
 			return false;
 		}
 
-		sakuraFile.WriteData(0x35800, patchedImageData1.GetImageData(), patchedImageData1.GetImageDataSize(), false);
-		sakuraFile.WriteData(0x3c600, patchedImageData2.GetImageData(), patchedImageData2.GetImageDataSize(), false);		
+		if (patchedImageData1.GetImageWidth() != 176 && patchedImageData1.GetImageHeight() != 80)
+		{
+			printf("PatchBattleMenu: Image needs to be 176x80: %s.\n", translatedImagePath1.c_str());
+			return false;
+		}
+
+		RGBBmpToSaturnConverter patchedImageData2;
+		if (!patchedImageData2.ConvertBmpToSakuraFormat(translatedImagePath2))
+		{
+			printf("PatchBattleMenu: Couldn't convert image: %s.\n", translatedImagePath2.c_str());
+			return false;
+		}
+
+		if (patchedImageData2.GetImageWidth() != 176 && patchedImageData2.GetImageHeight() != 64)
+		{
+			printf("PatchBattleMenu: Image needs to be 176x64: %s.\n", translatedImagePath2.c_str());
+			return false;
+		}
+
+		for (int i = 0; i < 2; ++i)
+		{
+			const string sakuraFilePath = inPatchedSakuraDirectory + string("SAKURA2\\") + filesToPatch[i].pName + string(".bin");
+			FileReadWriter sakuraFile;
+			if (!sakuraFile.OpenFile(sakuraFilePath))
+			{
+				return false;
+			}
+
+			sakuraFile.WriteData(0x35800, patchedImageData1.GetImageData(), patchedImageData1.GetImageDataSize(), false);
+			sakuraFile.WriteData(0x3c600, patchedImageData2.GetImageData(), patchedImageData2.GetImageDataSize(), false);
+		}
 	}
 
 	return true;

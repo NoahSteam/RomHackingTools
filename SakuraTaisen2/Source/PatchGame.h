@@ -192,6 +192,8 @@ bool PatchTextDrawingCode(const string& inSourceGameDirectory, const string& inP
 			//Buffer address :
 			WriteLong(0x4cab0, 0x060a6700);//Read:  06051ab0 needs to be 060a6700
 			WriteLong(0x4caec, 0x060a6700);//Write : 06051aec needs to be 060a6700
+
+			WriteCommand(0x3010, 0xe56c); //e538 to e56c Number of bytes within text buffer to clear when opening the item menu
 		}
 
 		//Fixes for Single Byte Encoding

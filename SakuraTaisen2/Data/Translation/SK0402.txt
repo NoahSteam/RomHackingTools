@@ -181,8 +181,8 @@ Ogami, please pick a good name for this pup.
 Hey, Chief, are you gonna run off without giving this poor doggy a name?
 Mon Frère, what should we name the puppy?!
 Ogami, please pick a good name for this pup.
-Oh, it looks like
-likes his name, too.
+Oh, it looks like<br>
+ likes his name, too.
 Since we've decided on a name for the dog, why don't we disperse for the time being?
 In that case, I will be found in the music room, playing on the piano.
 I think I might take a bath and then do some sword training in the courtyard.
@@ -225,7 +225,7 @@ Arf, arf!
 Hey,
 !
 Arf, arf!
-looks like he wants to play with you, Reni.
+<br> looks like he wants to play with you, Reni.
 Arf!
 …
 Reni…
@@ -237,9 +237,9 @@ Go play with Long.
 Go play with Altair.
 Go play with Hund.
 Do you dislike dogs?
-Reni, why not play with
+Reni, why not play with <br>
 since he's here?
-It looks like he wants to play with you, too.
+wants to play<br>with you, too.
 Arf, arf!
 …I would prefer to avoid any excessive movement.
 Do you dislike dogs, Reni?
@@ -256,7 +256,7 @@ Ah, Reni!
 Shoot, too late.
 Whiiine…
 There there,
-. I'm sure Reni will come around eventually.
+<br> I'm sure Reni will come around eventually.
 Oh my, Ensign…
 Arf, arf!
 
@@ -268,7 +268,7 @@ Well then,
 Arf, arf!
 I wish Reni would play with you, too.
 I should get going, too. See you later,
-.
+<br>.
 Woof!
 Arf!
 Hey there,
@@ -276,7 +276,7 @@ Hey there,
 Arf, arf!
 Hahaha. I wonder what you're saying? It's almost like you can understand me.
 Anyway, I should be off. See you later,
-.
+<br>.
 Woof!
 Hey, Sakura.
 Ah, Ogami.
@@ -404,12 +404,12 @@ That’ll be 50 sen. <br> Thanks for your patronage!
 Oh, so you're not going to buy anything?
 Oh yeah, you brought back that super cute little doggy earlier, didn't you?
 I guess he lives here at the theater with us now, huh?
-Yes, that’s right. His name is
-.
-, the cute little dog! What a great name!
+Yes, that’s right. His name is <br>
+if I remember.
+<br>, the cute little dog! What a great name!
 Would it be OK if I played with him after I'm done working?
 Yeah, of course. I bet he'll really take a liking to you, Tsubaki.
-… I can’t wait to play with him!
+Ooh, I can’t wait to play with <br>!
 Well, I should be going. Keep up the good work.
 Thank you very much! Come back again soon!
 Thank you very much! Come back and buy another bromide next month!
@@ -1478,11 +1478,12 @@ Tell me some gossip.
 I'll come back later. 
 Seems like you’ve started keeping a dog in the courtyard, Ogami. 
 That’s right. Sorry I made the decision without consulting you two first. 
-Oh, it's no problem! So, that dog's name is 
+Oh, it's no problem! So, that dog's name is <br>
 , isn't it? 
 You got that information pretty quick. Just like always, Yuri. 
 Heheh. Actually, Kohran just dropped by to tell us the news. She was really excited to talk about it. 
-I see, glad to hear it. I hope that you two will play with <br> every now and then.
+I see, glad to hear it. 
+I hope that you two will play with <br> every now and then.
 Has Mr. Yoneda been doing OK? 
 Yeah, we just visited him in the hospital and he was as lively as ever. 
 He's not allowed to drink there, so it’s a good opportunity for his body to recover a bit.
