@@ -17,7 +17,7 @@ struct InfoNameImageInfo
 	int paletteOffset;
 };
 
-const int NumImagesInSet = 8;
+const int NumImagesInSet = 9;
 InfoNameImageInfo InfoNameImageSet[NumImagesInSet] =
 {
 	{64, 16, 0, 0},
@@ -27,7 +27,8 @@ InfoNameImageInfo InfoNameImageSet[NumImagesInSet] =
 	{40, 32, 0x1f80, 0x1700},//(character eyes)
 	{40, 46, 0x2740, 0x2600},// (portrait 2
 	{40, 32, 0x2e80, 0x2600},// (eyes 2)
-	{40, 46, 0x940, 0x800} //(portrait 1)
+	{40, 46, 0x940, 0x800}, //(portrait 1)
+	{40, 14, 0x1080, 0x800} //(portrait 2)
 };
 
 void ExtractInfoName(const string& rootSakuraDirectory, const string& paletteFileName, bool bBmp, const string& outDirectory)
@@ -107,7 +108,10 @@ bool PatchInfoName(const string& inPatchedSakuraDirectory, const string& inTrans
 	{
 		Weapon,
 		WeaponName,
-		Obstacle
+		WeaponNameSmall,
+		WeaponNameSmallGlow,
+		Obstacle,
+		ObstacleNameSmall,
 	};
 	struct GearImageInfo
 	{
@@ -118,47 +122,83 @@ bool PatchInfoName(const string& inPatchedSakuraDirectory, const string& inTrans
 	GearImageInfo gearImages[] = 
 	{
 		58, 7, EGearType::Weapon,
+		58, 8, EGearType::WeaponNameSmallGlow,
 		59, 3, EGearType::Weapon,
 		59, 4, EGearType::WeaponName,
+		59, 8, EGearType::WeaponNameSmallGlow,
 		59, 5, EGearType::Weapon,
 		59, 6, EGearType::WeaponName,
 		59, 7, EGearType::Weapon,
 		60, 3, EGearType::Weapon,
 		60, 4, EGearType::WeaponName,
+		60, 8, EGearType::WeaponNameSmallGlow,
 		60, 5, EGearType::Weapon,
 		60, 6, EGearType::WeaponName,
 		60, 7, EGearType::Weapon,
 		62, 7, EGearType::Weapon,
+		62, 8, EGearType::WeaponNameSmallGlow,
 		63, 7, EGearType::Weapon,
+		63, 8, EGearType::WeaponNameSmallGlow,
 		64, 7, EGearType::Weapon,
+		64, 8, EGearType::WeaponNameSmallGlow,
 		65, 7, EGearType::Weapon,
+		65, 8, EGearType::WeaponNameSmallGlow,
 		66, 7, EGearType::Weapon,
+		66, 8, EGearType::WeaponNameSmallGlow,
 		67, 7, EGearType::Weapon,
+		67, 8, EGearType::WeaponNameSmallGlow,
 		68, 7, EGearType::Weapon,
+		68, 8, EGearType::WeaponNameSmall,
 		69, 7, EGearType::Weapon,
+		69, 8, EGearType::WeaponNameSmallGlow,
 		70, 7, EGearType::Weapon,
+		70, 8, EGearType::WeaponNameSmallGlow,
 		72, 7, EGearType::Obstacle,
+		72, 8, EGearType::ObstacleNameSmall,
 		73, 7, EGearType::Obstacle,
+		73, 8, EGearType::ObstacleNameSmall,
 		74, 7, EGearType::Obstacle,
+		74, 8, EGearType::ObstacleNameSmall,
 		75, 7, EGearType::Obstacle,
+		75, 8, EGearType::ObstacleNameSmall,
 		76, 7, EGearType::Obstacle,
+		76, 8, EGearType::ObstacleNameSmall,
 		77, 7, EGearType::Obstacle,
+		77, 8, EGearType::ObstacleNameSmall,
 		78, 7, EGearType::Obstacle,
+		78, 8, EGearType::ObstacleNameSmall,
 		79, 7, EGearType::Obstacle,
+		79, 8, EGearType::ObstacleNameSmall,
 		80, 7, EGearType::Obstacle,
+		80, 8, EGearType::ObstacleNameSmall,
 		81, 7, EGearType::Obstacle,
+		81, 8, EGearType::ObstacleNameSmall,
 		82, 7, EGearType::Obstacle,
+		82, 8, EGearType::ObstacleNameSmall,
 		83, 7, EGearType::Obstacle,
+		83, 8, EGearType::ObstacleNameSmall,
 		84, 7, EGearType::Obstacle,
+		84, 8, EGearType::ObstacleNameSmall,
 		85, 7, EGearType::Obstacle,
+		85, 8, EGearType::ObstacleNameSmall,
 		86, 7, EGearType::Obstacle,
+		86, 8, EGearType::ObstacleNameSmall,
 		87, 7, EGearType::Obstacle,
+		87, 8, EGearType::ObstacleNameSmall,
 	};
 
 	//Load obstacle image
 	const string obstacleImagePath = inTranslatedDataDirectory + "InfoName\\Translated\\Obstacle.bmp";
 	BmpToSaturnConverter obstacleImage;
 	if (!obstacleImage.ConvertBmpToSakuraFormat(obstacleImagePath, false, BmpToSaturnConverter::CYAN))
+	{
+		return false;
+	}
+
+	//Load obstacle name image
+	const string obstacleNameSmallImagePath = inTranslatedDataDirectory + "InfoName\\Translated\\ObstacleNameSmall.bmp";
+	BmpToSaturnConverter obstacleNameSmallImage;
+	if (!obstacleNameSmallImage.ConvertBmpToSakuraFormat(obstacleNameSmallImagePath, false, BmpToSaturnConverter::CYAN))
 	{
 		return false;
 	}
@@ -175,6 +215,22 @@ bool PatchInfoName(const string& inPatchedSakuraDirectory, const string& inTrans
 	const string weaponNameImagePath = inTranslatedDataDirectory + "InfoName\\Translated\\WeaponName.bmp";
 	BmpToSaturnConverter weaponNameImage;
 	if (!weaponNameImage.ConvertBmpToSakuraFormat(weaponNameImagePath, false, BmpToSaturnConverter::CYAN))
+	{
+		return false;
+	}
+
+	//Load weapon name small image
+	const string weaponNameSmallImagePath = inTranslatedDataDirectory + "InfoName\\Translated\\WeaponNameSmall.bmp";
+	BmpToSaturnConverter weaponNameSmallImage;
+	if (!weaponNameSmallImage.ConvertBmpToSakuraFormat(weaponNameSmallImagePath, false, BmpToSaturnConverter::CYAN))
+	{
+		return false;
+	}
+
+	//Load weapon name small glowing image
+	const string weaponNameSmallGlowImagePath = inTranslatedDataDirectory + "InfoName\\Translated\\WeaponNameSmallGlow.bmp";
+	BmpToSaturnConverter weaponNameSmallGlowImage;
+	if (!weaponNameSmallGlowImage.ConvertBmpToSakuraFormat(weaponNameSmallGlowImagePath, false, BmpToSaturnConverter::CYAN))
 	{
 		return false;
 	}
@@ -244,6 +300,11 @@ bool PatchInfoName(const string& inPatchedSakuraDirectory, const string& inTrans
 					infoNameFile.WriteData(offset, obstacleImage.GetImageData(), obstacleImage.GetImageDataSize());
 				}break;
 				
+				case EGearType::ObstacleNameSmall:
+				{
+					infoNameFile.WriteData(offset, obstacleNameSmallImage.GetImageData(), obstacleNameSmallImage.GetImageDataSize());
+				}break;
+
 				case EGearType::Weapon:
 				{
 					infoNameFile.WriteData(offset, weaponImage.GetImageData(), weaponImage.GetImageDataSize());
@@ -252,7 +313,17 @@ bool PatchInfoName(const string& inPatchedSakuraDirectory, const string& inTrans
 				case EGearType::WeaponName:
 				{
 					infoNameFile.WriteData(offset, weaponNameImage.GetImageData(), weaponNameImage.GetImageDataSize());
-				}
+				}break;
+
+				case EGearType::WeaponNameSmall:
+				{
+					infoNameFile.WriteData(offset, weaponNameSmallImage.GetImageData(), weaponNameSmallImage.GetImageDataSize());
+				}break;
+
+				case EGearType::WeaponNameSmallGlow:
+				{
+					infoNameFile.WriteData(offset, weaponNameSmallGlowImage.GetImageData(), weaponNameSmallGlowImage.GetImageDataSize());
+				}break;
 			}
 			
 		}
