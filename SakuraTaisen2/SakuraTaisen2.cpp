@@ -92,6 +92,7 @@ using std::unordered_set;
 #include "Source/BattleSimulatorInLongDay.h"
 #include "Source/Credits.h"
 #include "Source/SyncFilePatching.h"
+#include "Source/IntroSubtitles.h"
 #include "Source/PatchGame.h"
 
 void PrintHelp()
@@ -859,6 +860,13 @@ int main(int argc, char *argv[])
 		const bool   bmpFormat = atoi(argv[4]);
 
 		ExtractCreditsData(inDirectory, inOutputDirectory, bmpFormat);
+	}
+	else if(command == "ExtractIntroSubtitles" && argc == 4)
+	{
+		const string inDirectory = string(argv[2]) + Seperators;
+		const string inOutputDirectory = string(argv[3]) + Seperators;
+
+		ExtractIntroSubtitles(inDirectory, inOutputDirectory);
 	}
 	else if (command == "CreateTranslatedBattleAnimViewerImages" && argc == 5)
 	{

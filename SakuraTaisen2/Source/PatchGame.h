@@ -50,6 +50,8 @@ static bool BringOverOriginalFiles(const string& inRootSakuraDirectory, const st
 	GetAllFilesOfType(allFiles, "BG6", originalFiles);
 	GetAllFilesOfType(allFiles, "SINRAISP.BIN", originalFiles);
 	GetAllFilesOfType(allFiles, "SINRAIP.BIN", originalFiles);
+	GetAllFilesOfType(allFiles, "OPBG_1.BIN", originalFiles);
+	GetAllFilesOfType(allFiles, "OPCPK.BG", originalFiles);
 
 	//Battle files
 	GetAllFilesOfType(allFiles, "COL.BIN", originalFiles);
@@ -370,6 +372,12 @@ bool PatchGame(const string& inSourceGameDirectory, const string& inTranslatedDa
 			printf("Unable to patch BattleSimulator\n");
 			return false;
 		}
+	}
+
+	if(!PatchIntroSubtitles(inPatchedDirectory, inTranslatedDataDirectory))
+	{
+		printf("Unable to patch IntroSubtitles\n");
+		return false;
 	}
 
 	if(!PatchMiniGames(inPatchedDirectory, inTranslatedDataDirectory))

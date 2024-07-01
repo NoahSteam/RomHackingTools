@@ -1,0 +1,8 @@
+OPCPK.BG Found: At 0000c400 OffsetWithinUncompressedData: 00000000 Size: 240 CompressedSize: 9098
+OPBG_1.BIN Found: At 0000c400 OffsetWithinUncompressedData: 00000000 Size: 240 CompressedSize: 9098
+
+Palettes:
+Found a match in OPBG_1.BIN @0x00000000
+Found a match in OPBG_1.BIN @0x00000200
+Found a match in OPCPK.BG @0x00000000
+Found a match in OPCPK.BG @0x00000200

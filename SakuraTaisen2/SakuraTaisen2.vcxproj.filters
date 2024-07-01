@@ -173,5 +173,8 @@
     <ClInclude Include="Source\SyncFilePatching.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Source\IntroSubtitles.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

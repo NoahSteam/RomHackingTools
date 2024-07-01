@@ -55,6 +55,7 @@ ExtractLongDayData a:\sakurawars2\Disc1_Original a:\SakuraWars2\ExtractedData\Di
 ExtractBattleAnimViewer a:\sakurawars2\Disc2_Original a:\SakuraWars2\ExtractedData\Disc2\BattleAnimViewer 1
 ExtractBattleSimulator a:\sakurawars2\Disc2_Original a:\SakuraWars2\ExtractedData\Disc2\BattleSim 1
 ExtractCreditsData a:\sakurawars2\Disc3_Original a:\SakuraWars2\ExtractedData\Disc3\Credits 1
+ExtractIntroSubtitles a:\sakurawars2\Disc1_Original a:\SakuraWars2\ExtractedData\Disc1\IntroSubtitles
 ValidateSyncData  a:\sakurawars2\Disc1_Original\SAKURA1 a:\SakuraWars2\ExtractedData\Disc1\SyncValidation
 SetColorInPalette A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\StatusScreen A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\StatusScreen\Modified 0 0xff00
 PatchGame A:\SakuraWars2\Disc1_Original A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data A:\SakuraWars2\Patched\Disc1
