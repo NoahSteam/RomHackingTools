@@ -76,7 +76,7 @@ bool PatchCodeInFile(std::string& InFileName, PatchingData* pInPatchingData, int
 }
 
 template<typename TileByteType>
-void ExtractTiledScreen(const std::string& inTileFilePath, const std::string& inColFilePath, uint32 inTileOffset, uint32 inColorOffset, 
+void ExtractTiledFullScreenImage(const std::string& inTileFilePath, const std::string& inColFilePath, uint32 inTileOffset, uint32 inColorOffset, 
 						uint32 inPaletteOffset, const std::string& inOutFileName, const bool bInBmp)
 {
 	FileData tileFile;

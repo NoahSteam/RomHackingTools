@@ -1,11 +1,11 @@
-Sakura
-Kohran
-Sumire
-Ohrihime
-Reni
-Iris
-Maria
-Kanna
+^Sakura
+^Kohran
+^Sumire
+^Ohrihime
+^Reni
+^Iris
+^Maria
+^Kanna
 Amped
 Up!
 Feeling
@@ -27,9 +27,9 @@ MOV
 7
 8
 9
-Amped
-Up!
-Feeling
-Normal
-In a bad
-Mood
+ Amped
+ Up!
+ Feeling
+ Normal
+ In a bad
+ Mood

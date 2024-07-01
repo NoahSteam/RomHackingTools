@@ -1,0 +1,34 @@
+0609764c
+2a3090
+
+2a1ff0 mov 0x24, r6
+
+2a3326
+
+2a0d12 sll2 r1
+
+2a18b0 add 0x18, r4
+
+02a1d72 reads position from r1 to r1
+
+002A49B2 has 0x4c //spacing for ATK text
+
+060905E4 add 0x18, r4
+
+d ff70 //location of grid entry
+
+06090830 x offset?
+
+2a2fd8
+
+2a3698 has start of table that has info for image sizes
+
+2a3910 has positioning table.  x, y, imageID
+
+06001F64 
+
+2a1a74
+
+0609065c has x offset?
+
+2a1eba has 0x4a, change this to 4c

@@ -15,7 +15,7 @@ void ExtractBattleAnimViewerVDP2(const std::string& inRootDirectory, const std::
 	const string colPath = inRootDirectory + string("SAKURA2\\M91COL.BIN");
 
 	const string ext = bInBmp ? ".bmp" : ".png";
-	ExtractTiledScreen<uint32>(vdp2Path, colPath, 0x11840, 0x40, 0, outputDirectory + std::string("1") + ext, bInBmp);
+	ExtractTiledFullScreenImage<uint32>(vdp2Path, colPath, 0x11840, 0x40, 0, outputDirectory + std::string("1") + ext, bInBmp);
 }
 
 void ExtractBattleAnimViewer(const std::string& inRootDirectory, const std::string& inOutputDirectory, const bool bInBmp)

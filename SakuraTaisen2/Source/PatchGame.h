@@ -48,6 +48,8 @@ static bool BringOverOriginalFiles(const string& inRootSakuraDirectory, const st
 	GetAllFilesOfType(allFiles, "MINIGAME.CG", originalFiles);
 	GetAllFilesOfType(allFiles, "SYNC", originalFiles);
 	GetAllFilesOfType(allFiles, "BG6", originalFiles);
+	GetAllFilesOfType(allFiles, "SINRAISP.BIN", originalFiles);
+	GetAllFilesOfType(allFiles, "SINRAIP.BIN", originalFiles);
 
 	//Battle files
 	GetAllFilesOfType(allFiles, "COL.BIN", originalFiles);

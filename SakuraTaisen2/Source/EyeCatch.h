@@ -24,16 +24,23 @@ void ExtractEyeCatch(const std::string& inSakuraDir, const std::string& inOutput
 
 	//T_MARK.CG
 	{
-		const std::string tmarkFilePath = inSakuraDir + "T_MARK.CG";
+		const std::string tmarkFilePath = inSakuraDir + "SAKURA1\\T_MARK.CG";
 		FileData tmarkFile;
 		if (!tmarkFile.InitializeFileData(tmarkFilePath))
 		{
 			return;
 		}
 
-		const std::string pbEyeFilePath = inSakuraDir + "PB_EYE.CL";
+		const std::string pbEyeFilePath = inSakuraDir + "SAKURA1\\PB_EYE.CL";
 		FileData pbEyeFile;
 		if (!pbEyeFile.InitializeFileData(pbEyeFilePath))
+		{
+			return;
+		}
+
+		const std::string sakuraFilePath = inSakuraDir + "SAKURA.BIN";
+		FileData sakuraFile;
+		if (!sakuraFile.InitializeFileData(sakuraFilePath))
 		{
 			return;
 		}
@@ -44,18 +51,23 @@ void ExtractEyeCatch(const std::string& inSakuraDir, const std::string& inOutput
 		unsigned int currOffset = 0xa800;
 		for(int i = 0; i < NumTMarkFiles; ++i)
 		{
-			const string bitmapFileName = tmarkOutputDir + std::to_string(i) + ".bmp";
+			const string bitmapFileName = tmarkOutputDir + std::to_string(i) + imgExt;
 
 			const int imgSize = (TMarkImages[i].width * TMarkImages[i].height) / 2;
 			ExtractImageFromData(tmarkFile.GetData() + currOffset, imgSize, bitmapFileName, pbEyeFile.GetData() + 0x2a0, 32, true, TMarkImages[i].width, TMarkImages[i].height, 1, 256, 0, true, bInBmp);
 
 			currOffset += imgSize;
 		}
+
+		//Menu.bmp image
+		const string bitmapFileName = tmarkOutputDir + "Menu" + imgExt;
+		const uint32 imageSize = 16*16*7*8;
+		ExtractImageFromData(tmarkFile.GetData() + 0x3800, imageSize, bitmapFileName, sakuraFile.GetData() + 0x75d50, 512, false, 16, 16, 7, 256, 0, true, bInBmp);
 	}
 
 	//EYECATCH.ALL
 	{
-		const std::string eyeCatchAllFilePath = inSakuraDir + "EYECATCH.ALL";
+		const std::string eyeCatchAllFilePath = inSakuraDir + "SAKURA1\\EYECATCH.ALL";
 		FileData eyeCatchAllFile;
 		if (!eyeCatchAllFile.InitializeFileData(eyeCatchAllFilePath))
 		{
@@ -129,6 +141,17 @@ bool PatchEyeCatch(const std::string& inPatchedSakuraDirectory, const std::strin
 
 			currOffset += imgSize;
 		}
+
+		//Convert image to sw2 format
+		const uint32 menuTileDim = 16;
+		std::string translatedMenuImage = translatedDirectory + "Menu.bmp";
+		BmpToSaturnConverter patchedMenuImageData;
+		if (!patchedMenuImageData.ConvertBmpToSakuraFormat(translatedMenuImage, false, BmpToSaturnConverter::CYAN, &menuTileDim, &menuTileDim))
+		{
+			return false;
+		}
+		patchedMenuImageData.PackTiles();
+		tmarkFile.WriteData(0x3800, patchedMenuImageData.mpPackedTiles, patchedMenuImageData.mPackedTileSize);
 	}
 
 	//EyeCatchAll
@@ -144,7 +167,7 @@ bool PatchEyeCatch(const std::string& inPatchedSakuraDirectory, const std::strin
 
 		const unsigned long fileSize = eyeCatchFile.GetFileSize();
 		int imageIndex = 3;
-		unsigned long currOffset = 0x12800 * imageIndex;
+		unsigned long currOffset = 0x12800 * imageIndex + 0x40;
 		const uint32 imgSize = 320 * 224;
 		unsigned int tileDim = 8;
 		while (currOffset < fileSize)

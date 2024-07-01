@@ -63,8 +63,8 @@ void ExtractBattleSimVDP2(const std::string& inRootDirectory, const std::string&
 	const string colPath = inRootDirectory + string("SAKURA2\\M92COL.BIN");
 
 	const string ext = bInBmp ? ".bmp" : ".png";
-	ExtractTiledScreen<uint32>(vdp2Path, colPath, 0x2e040, 0x40,    0, outputDirectory + std::string("1") + ext, bInBmp);
-	ExtractTiledScreen<uint16>(vdp2Path, colPath, 0x2f1c0, 0x20040, 0, outputDirectory + std::string("2") + ext, bInBmp);
+	ExtractTiledFullScreenImage<uint32>(vdp2Path, colPath, 0x2e040, 0x40,    0, outputDirectory + std::string("1") + ext, bInBmp);
+	ExtractTiledFullScreenImage<uint16>(vdp2Path, colPath, 0x2f1c0, 0x20040, 0, outputDirectory + std::string("2") + ext, bInBmp);
 }
 
 void ExtractBattleSimulator(const std::string& inRootDirectory, const std::string& inOutputDirectory, const bool bInBmp)

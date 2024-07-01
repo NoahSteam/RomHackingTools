@@ -46,7 +46,7 @@ ExtractLoadScreens a:\sakurawars2\Disc1_Original\SAKURA1 a:\SakuraWars2\Extracte
 ExtractBattleLoadScreens a:\sakurawars2\Disc1_Original a:\SakuraWars2\ExtractedData\Disc1\BattleLoadScreens
 ExtractNBGFile a:\sakurawars2\Disc1_Original\SAKURA1\NBGFile1.ALL a:\SakuraWars2\ExtractedData\Disc1\NBGFile 1
 ExtractNCDatFile a:\sakurawars2\Disc1_Original\SAKURA1\NCDAT.ALL a:\SakuraWars2\ExtractedData\Disc1\NCDat 1
-ExtractEyeCatch a:\sakurawars2\Disc1_Original\SAKURA1 a:\SakuraWars2\ExtractedData\Disc1\EyeCatch 1
+ExtractEyeCatch a:\sakurawars2\Disc1_Original a:\SakuraWars2\ExtractedData\Disc1\EyeCatch 1
 ExtractStatusScreen a:\sakurawars2\Disc1_Original\SAKURA1 a:\SakuraWars2\ExtractedData\Disc1\StatusScreen 1
 ExtractKinematronImages a:\sakurawars2\Disc1_Original\SAKURA1 a:\SakuraWars2\ExtractedData\Disc1\Kinematron 1
 ExtractWarningScreens a:\sakurawars2\Disc1_Original a:\SakuraWars2\ExtractedData\Disc1\WarningScreens 1

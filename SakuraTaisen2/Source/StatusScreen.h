@@ -106,8 +106,15 @@ bool PatchStatusScreen(const string& inPatchedSakuraDirectory, const string& inT
 
 	//Output file
 	const std::string statusFilePath = inPatchedSakuraDirectory + "SAKURA1\\SINRAISP.BIN";
-	FileReadWriter outFileWriter;
-	if (!outFileWriter.OpenFile(statusFilePath))
+	FileReadWriter sinraispWriter;
+	if (!sinraispWriter.OpenFile(statusFilePath))
+	{
+		return false;
+	}
+		
+	const std::string statusCodeFilePath = inPatchedSakuraDirectory + "SAKURA1\\SINRAIP.BIN";
+	FileReadWriter sinraipWriter;
+	if (!sinraipWriter.OpenFile(statusCodeFilePath))
 	{
 		return false;
 	}
@@ -147,8 +154,12 @@ bool PatchStatusScreen(const string& inPatchedSakuraDirectory, const string& inT
 		return false;
 	}
 
-	outFileWriter.WriteData(0, compressor.mpCompressedData, compressor.mCompressedSize, false);
+	sinraispWriter.WriteData(0, compressor.mpCompressedData, compressor.mCompressedSize, false);
 	
+	//Give two extra pixels of spacing along the X axis for drawing the names so they aren't clipped by the character portrait
+	const uint8 nameSpacing = 0x4c;
+	sinraipWriter.WriteData(0x1ebb, (char*)&nameSpacing, sizeof(nameSpacing), false);
+
 	return true;
 }
 
@@ -172,11 +183,11 @@ bool CreateTranslatedStatusScreenImages(const string& InTranslationDirectory, co
 
 	fontSheetWide.SwapColors(1, 0);
 	fontSheetWide.SwapColors(7, 15);
-	fontSheetWide.SwapColors(8, 1);
+	fontSheetWide.SwapColors(8, 4);
 	fontSheetWide.SwapColors(12, 2);
 	fontSheetNarrow.SwapColors(1, 0);
 	fontSheetNarrow.SwapColors(7, 15);
-	fontSheetNarrow.SwapColors(8, 1);
+	fontSheetNarrow.SwapColors(8, 4);
 	fontSheetNarrow.SwapColors(12, 2);
 
 	//Create translation directory
@@ -224,6 +235,9 @@ bool CreateTranslatedStatusScreenImages(const string& InTranslationDirectory, co
 			continue;
 		}
 
+		std::string text = textFile.mLines[textIndex].mFullLine;
+		std::replace(text.begin(), text.end(), '^', ' ');
+
 		//center the + and - signs
 		const bool bCenter = i >= 29 && i <= 30;
 
@@ -231,10 +245,10 @@ bool CreateTranslatedStatusScreenImages(const string& InTranslationDirectory, co
 		int rightOffset = 0;
 
 		//See if wide font sheet will fit
-		if (!WriteTextIntoImageUsingFontSheet(textFile.mLines[textIndex].mFullLine, translatedImages[i], fontSheetWide, true, leftOffset, rightOffset, bCenter, 0))
+		if (!WriteTextIntoImageUsingFontSheet(text, translatedImages[i], fontSheetWide, true, leftOffset, rightOffset, bCenter, 0))
 		{
 			//Otherwise try the narrow one
-			WriteTextIntoImageUsingFontSheet(textFile.mLines[textIndex].mFullLine, translatedImages[i], fontSheetNarrow, false, leftOffset, rightOffset, bCenter, 0);
+			WriteTextIntoImageUsingFontSheet(text, translatedImages[i], fontSheetNarrow, false, leftOffset, rightOffset, bCenter, 0);
 		}
 
 		++textIndex;
