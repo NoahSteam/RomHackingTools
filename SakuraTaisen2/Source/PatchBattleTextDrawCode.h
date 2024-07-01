@@ -559,6 +559,141 @@ nop          //0009
 	PatchSingleByteHiCharacterHandling("SLGGOVER.BIN", 0x0001bc6e)
 
 /*
+	060d1324 extu.w r1, r1 //611d to 611c	
+	060d133a extu.w r4, r4 //644d to 644c
+	060d139c extu.w r1, r1
+	060d13c8 0000ffff
+*/
+#define PatchSingleByteLipsHiCharacterHandling(filename, address) \
+	filename, address + 0,   0x611c, 0x611d,\
+	filename, address + 22,  0x644c, 0x644d,\
+	filename, address + 120, 0x611c, 0x611d,\
+	filename, address + 165, 0x00,   0xff
+
+#define PatchSingleByteLipsHiCharacterHandlingInFiles() \
+	PatchSingleByteLipsHiCharacterHandling("EV00001.BIN", 0x00007220),\
+	PatchSingleByteLipsHiCharacterHandling("EV00002.BIN", 0x00005b24),\
+	PatchSingleByteLipsHiCharacterHandling("EV00050.BIN", 0x00005b24),\
+	PatchSingleByteLipsHiCharacterHandling("EV00051.BIN", 0x00005b24),\
+	PatchSingleByteLipsHiCharacterHandling("EV00052.BIN", 0x00005b24),\
+	PatchSingleByteLipsHiCharacterHandling("EV00054.BIN", 0x00005b24),\
+	PatchSingleByteLipsHiCharacterHandling("EV00055.BIN", 0x00005b24),\
+	PatchSingleByteLipsHiCharacterHandling("EV00060.BIN", 0x00005b24),\
+	PatchSingleByteLipsHiCharacterHandling("EV01001.BIN", 0x00005c30),\
+	PatchSingleByteLipsHiCharacterHandling("EV01002.BIN", 0x00005b24),\
+	PatchSingleByteLipsHiCharacterHandling("EV01020.BIN", 0x00006148),\
+	PatchSingleByteLipsHiCharacterHandling("EV01021.BIN", 0x00005f5c),\
+	PatchSingleByteLipsHiCharacterHandling("EV01022.BIN", 0x00005b24),\
+	PatchSingleByteLipsHiCharacterHandling("EV01023.BIN", 0x00005b24),\
+	PatchSingleByteLipsHiCharacterHandling("EV01030.BIN", 0x00005b24),\
+	PatchSingleByteLipsHiCharacterHandling("EV01050.BIN", 0x00005b24),\
+	PatchSingleByteLipsHiCharacterHandling("EV01054.BIN", 0x00005b24),\
+	PatchSingleByteLipsHiCharacterHandling("EV01055.BIN", 0x00005b24),\
+	PatchSingleByteLipsHiCharacterHandling("EV02001.BIN", 0x00005b24),\
+	PatchSingleByteLipsHiCharacterHandling("EV02002.BIN", 0x00005b24),\
+	PatchSingleByteLipsHiCharacterHandling("EV02010.BIN", 0x00005b24),\
+	PatchSingleByteLipsHiCharacterHandling("EV02021.BIN", 0x00005b24),\
+	PatchSingleByteLipsHiCharacterHandling("EV02025.BIN", 0x00005b24),\
+	PatchSingleByteLipsHiCharacterHandling("EV02050.BIN", 0x00005b24),\
+	PatchSingleByteLipsHiCharacterHandling("EV02051.BIN", 0x00005b24),\
+	PatchSingleByteLipsHiCharacterHandling("EV02052.BIN", 0x00005b24),\
+	PatchSingleByteLipsHiCharacterHandling("EV02053.BIN", 0x00005b24),\
+	PatchSingleByteLipsHiCharacterHandling("EV02054.BIN", 0x00005b24),\
+	PatchSingleByteLipsHiCharacterHandling("EV03000.BIN", 0x000057f8),\
+	PatchSingleByteLipsHiCharacterHandling("EV03001.BIN", 0x00005cf0),\
+	PatchSingleByteLipsHiCharacterHandling("EV03002.BIN", 0x00005b98),\
+	PatchSingleByteLipsHiCharacterHandling("EV03005.BIN", 0x00005b50),\
+	PatchSingleByteLipsHiCharacterHandling("EV03010.BIN", 0x00005b34),\
+	PatchSingleByteLipsHiCharacterHandling("EV03020.BIN", 0x00005b34),\
+	PatchSingleByteLipsHiCharacterHandling("EV03021.BIN", 0x00005b34),\
+	PatchSingleByteLipsHiCharacterHandling("EV03023.BIN", 0x00005b4c),\
+	PatchSingleByteLipsHiCharacterHandling("EV03024.BIN", 0x00005b4c),\
+	PatchSingleByteLipsHiCharacterHandling("EV03025.BIN", 0x00005b60),\
+	PatchSingleByteLipsHiCharacterHandling("EV03050.BIN", 0x00005f64),\
+	PatchSingleByteLipsHiCharacterHandling("EV03051.BIN", 0x00005b88),\
+	PatchSingleByteLipsHiCharacterHandling("EV03052.BIN", 0x00005bf4),\
+	PatchSingleByteLipsHiCharacterHandling("EV03053.BIN", 0x00005bb0),\
+	PatchSingleByteLipsHiCharacterHandling("EV04001.BIN", 0x000069dc),\
+	PatchSingleByteLipsHiCharacterHandling("EV04002.BIN", 0x00005ba0),\
+	PatchSingleByteLipsHiCharacterHandling("EV04003.BIN", 0x00005cd4),\
+	PatchSingleByteLipsHiCharacterHandling("EV04005.BIN", 0x00005b24),\
+	PatchSingleByteLipsHiCharacterHandling("EV04010.BIN", 0x00005b98),\
+	PatchSingleByteLipsHiCharacterHandling("EV04020.BIN", 0x00005b24),\
+	PatchSingleByteLipsHiCharacterHandling("EV04022.BIN", 0x00005b2c),\
+	PatchSingleByteLipsHiCharacterHandling("EV04050.BIN", 0x00005bcc),\
+	PatchSingleByteLipsHiCharacterHandling("EV04053.BIN", 0x00005b24),\
+	PatchSingleByteLipsHiCharacterHandling("EV04055.BIN", 0x00005b98),\
+	PatchSingleByteLipsHiCharacterHandling("EV05001.BIN", 0x00005b3c),\
+	PatchSingleByteLipsHiCharacterHandling("EV05002.BIN", 0x00005b24),\
+	PatchSingleByteLipsHiCharacterHandling("EV05003.BIN", 0x00005d00),\
+	PatchSingleByteLipsHiCharacterHandling("EV05004.BIN", 0x00005b24),\
+	PatchSingleByteLipsHiCharacterHandling("EV05005.BIN", 0x00005b24),\
+	PatchSingleByteLipsHiCharacterHandling("EV05007.BIN", 0x00005b24),\
+	PatchSingleByteLipsHiCharacterHandling("EV05010.BIN", 0x00005b24),\
+	PatchSingleByteLipsHiCharacterHandling("EV05011.BIN", 0x00005b24),\
+	PatchSingleByteLipsHiCharacterHandling("EV05018.BIN", 0x00005b24),\
+	PatchSingleByteLipsHiCharacterHandling("EV05019.BIN", 0x00005b4c),\
+	PatchSingleByteLipsHiCharacterHandling("EV05020.BIN", 0x00005b24),\
+	PatchSingleByteLipsHiCharacterHandling("EV05021.BIN", 0x00005b24),\
+	PatchSingleByteLipsHiCharacterHandling("EV05022.BIN", 0x00005b24),\
+	PatchSingleByteLipsHiCharacterHandling("EV05023.BIN", 0x00005b24),\
+	PatchSingleByteLipsHiCharacterHandling("EV05025.BIN", 0x00005b24),\
+	PatchSingleByteLipsHiCharacterHandling("EV05026.BIN", 0x00005b24),\
+	PatchSingleByteLipsHiCharacterHandling("EV05027.BIN", 0x00005b24),\
+	PatchSingleByteLipsHiCharacterHandling("EV05051.BIN", 0x00005b24),\
+	PatchSingleByteLipsHiCharacterHandling("EV05052.BIN", 0x00005b24),\
+	PatchSingleByteLipsHiCharacterHandling("EV05053.BIN", 0x00005b24),\
+	PatchSingleByteLipsHiCharacterHandling("EV05054.BIN", 0x00005b24),\
+	PatchSingleByteLipsHiCharacterHandling("EV05060.BIN", 0x00005b24),\
+	PatchSingleByteLipsHiCharacterHandling("EV26001.BIN", 0x00006930),\
+	PatchSingleByteLipsHiCharacterHandling("EV26002.BIN", 0x00005ecc),\
+	PatchSingleByteLipsHiCharacterHandling("EV26020.BIN", 0x00005b24),\
+	PatchSingleByteLipsHiCharacterHandling("EV26021.BIN", 0x00005b24),\
+	PatchSingleByteLipsHiCharacterHandling("EV27001.BIN", 0x00005b30),\
+	PatchSingleByteLipsHiCharacterHandling("EV27002.BIN", 0x00005bd8),\
+	PatchSingleByteLipsHiCharacterHandling("EV27054.BIN", 0x00005b24),\
+	PatchSingleByteLipsHiCharacterHandling("EV28001.BIN", 0x00005b24),\
+	PatchSingleByteLipsHiCharacterHandling("EV28025.BIN", 0x00005b24),\
+	PatchSingleByteLipsHiCharacterHandling("EV28050.BIN", 0x00005b24),\
+	PatchSingleByteLipsHiCharacterHandling("EV28051.BIN", 0x00005b24),\
+	PatchSingleByteLipsHiCharacterHandling("EV29001.BIN", 0x00005b48),\
+	PatchSingleByteLipsHiCharacterHandling("EV29002.BIN", 0x00005b48),\
+	PatchSingleByteLipsHiCharacterHandling("EV29021.BIN", 0x00005b24),\
+	PatchSingleByteLipsHiCharacterHandling("EV29050.BIN", 0x00005b24),\
+	PatchSingleByteLipsHiCharacterHandling("EV30003.BIN", 0x00006b6c),\
+	PatchSingleByteLipsHiCharacterHandling("EV30020.BIN", 0x00005b34),\
+	PatchSingleByteLipsHiCharacterHandling("EV30026.BIN", 0x00005b34),\
+	PatchSingleByteLipsHiCharacterHandling("EV30027.BIN", 0x00005b34),\
+	PatchSingleByteLipsHiCharacterHandling("EV31001.BIN", 0x00005dcc),\
+	PatchSingleByteLipsHiCharacterHandling("EV31002.BIN", 0x00005d24),\
+	PatchSingleByteLipsHiCharacterHandling("EV31023.BIN", 0x00005b4c),\
+	PatchSingleByteLipsHiCharacterHandling("EV31024.BIN", 0x00005b4c),\
+	PatchSingleByteLipsHiCharacterHandling("EV32002.BIN", 0x00005b58),\
+	PatchSingleByteLipsHiCharacterHandling("EV32020.BIN", 0x00005b24),\
+	PatchSingleByteLipsHiCharacterHandling("EV32055.BIN", 0x00005b98),\
+	PatchSingleByteLipsHiCharacterHandling("EV33001.BIN", 0x00006078),\
+	PatchSingleByteLipsHiCharacterHandling("EV33002.BIN", 0x00005de0),\
+	PatchSingleByteLipsHiCharacterHandling("EV33022.BIN", 0x00005b2c),\
+	PatchSingleByteLipsHiCharacterHandling("EV33054.BIN", 0x00005b24),\
+	PatchSingleByteLipsHiCharacterHandling("EV34001.BIN", 0x00005b48),\
+	PatchSingleByteLipsHiCharacterHandling("EV34002.BIN", 0x00005b60),\
+	PatchSingleByteLipsHiCharacterHandling("EV34003.BIN", 0x00005b48),\
+	PatchSingleByteLipsHiCharacterHandling("EV34004.BIN", 0x00005ba0),\
+	PatchSingleByteLipsHiCharacterHandling("EV34005.BIN", 0x00005ba0),\
+	PatchSingleByteLipsHiCharacterHandling("EV34006.BIN", 0x00005bd8),\
+	PatchSingleByteLipsHiCharacterHandling("EV34007.BIN", 0x00005b48),\
+	PatchSingleByteLipsHiCharacterHandling("EV34008.BIN", 0x00005bd8),\
+	PatchSingleByteLipsHiCharacterHandling("EV34020.BIN", 0x00005b24),\
+	PatchSingleByteLipsHiCharacterHandling("EV34030.BIN", 0x00005b24),\
+	PatchSingleByteLipsHiCharacterHandling("EV34040.BIN", 0x00005b24),\
+	PatchSingleByteLipsHiCharacterHandling("EV34041.BIN", 0x00005b24),\
+	PatchSingleByteLipsHiCharacterHandling("EV34042.BIN", 0x00005b24),\
+	PatchSingleByteLipsHiCharacterHandling("EV34043.BIN", 0x00005b24),\
+	PatchSingleByteLipsHiCharacterHandling("EV34044.BIN", 0x00005b24),\
+	PatchSingleByteLipsHiCharacterHandling("M00PRG.BIN",  0x00079620),\
+	PatchSingleByteLipsHiCharacterHandling("M26PRG.BIN",  0x00078d30),\
+	PatchSingleByteLipsHiCharacterHandling("TUTORI0.BIN", 0x00005c9c)
+/*
 //PatchSingleByteZeroExtend
 (battle1_b) 06088944 extu.w r1, r2 //should be extu.b r1, r2 621c
 */
@@ -1706,6 +1841,7 @@ bool PatchBattleTextDrawingCode(const string& inOriginalDirectory, const string&
 		//	PatchSingleByteReadingInFiles(),
 		
 			PatchSingleByteHiCharacterHandlingInFiles(),
+			PatchSingleByteLipsHiCharacterHandlingInFiles(),
 			LipsSingleBytePatching(),
 			LipsSingleBytePatching2(),
 			PatchScaledLipsSingleByteReadingInFiles()
