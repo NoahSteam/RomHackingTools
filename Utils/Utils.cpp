@@ -541,7 +541,13 @@ bool TextFileData::InitializeTextFile(bool bFixupSpecialCharacters, bool bCollap
 						(unsigned char)(pToken[t+1]) <= 0xbf )
 				{
 					const unsigned char uTokenNext = (unsigned char)pToken[t+1];
-					const unsigned char fontSheetIndex = 192 + (uTokenNext - 0x80);
+					unsigned char fontSheetIndex = 192 + (uTokenNext - 0x80);
+
+					//For SW2.  Characters >= 0xfa are special byte codes for the text system, so move these characters lower in the font sheet
+					if(fontSheetIndex >= 0xfa)
+					{
+						fontSheetIndex -= 65;
+					}
 
 					t += 2;
 					fixedString[f++] = fontSheetIndex;
