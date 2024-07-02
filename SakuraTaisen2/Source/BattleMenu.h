@@ -191,7 +191,7 @@ bool PatchBattleNumberLocation(const string& inPatchedSakuraDirectory, const str
 		return false;
 	}
 
-	const int numEntries = 13;
+	const int numEntries = 10;
 	int fileOffset = 0x715; //0x21cf15 in memory
 	const char xOffset = 0x9;
 

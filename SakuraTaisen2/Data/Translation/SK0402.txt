@@ -181,8 +181,8 @@ Ogami, please pick a good name for this pup.
 Hey, Chief, are you gonna run off without giving this poor doggy a name?
 Mon Frère, what should we name the puppy?!
 Ogami, please pick a good name for this pup.
-Oh, it looks like<br>
- likes his name, too.
+Oh, it looks like
+<br> likes his name, too.
 Since we've decided on a name for the dog, why don't we disperse for the time being?
 In that case, I will be found in the music room, playing on the piano.
 I think I might take a bath and then do some sword training in the courtyard.
@@ -216,7 +216,7 @@ I'll be waiting in my room then. Later gator!
 She asked that I come to her room… I wonder what Kohran wants to talk about.
 If I'm meeting her at 4, then I've got an hour to kill. Guess I'll find something to do until then.
 Oh, it's Reni.
-Hey, Reni. Nice weather, huh?
+Hey, Reni. <br> Nice weather, huh?
 …
 So, uh… Are you getting some sunbathing in?
 …
@@ -225,7 +225,7 @@ Arf, arf!
 Hey,
 !
 Arf, arf!
-<br> looks like he wants to play with you, Reni.
+looks like he <br> wants to play with you, Reni.
 Arf!
 …
 Reni…
@@ -237,9 +237,9 @@ Go play with Long.
 Go play with Altair.
 Go play with Hund.
 Do you dislike dogs?
-Reni, why not play with <br>
-since he's here?
-wants to play<br>with you, too.
+Why not play with
+<br> since he's here, Reni?
+seems eager to<br>play with you, too.
 Arf, arf!
 …I would prefer to avoid any excessive movement.
 Do you dislike dogs, Reni?
@@ -247,8 +247,8 @@ Not particularly…
 Arf, arf!
 …
 Arf, arf!
-
-Reni, just look how much <br> wants to play with you.
+Just look how much
+<br> wants to play with you, Reni.
 You could at least give him a pat on the head.
 …
 Well, there is somewhere I must be…
@@ -256,27 +256,27 @@ Ah, Reni!
 Shoot, too late.
 Whiiine…
 There there,
-<br> I'm sure Reni will come around eventually.
+. <br> I'm sure Reni will come around eventually.
 Oh my, Ensign…
 Arf, arf!
-
-Hi, Sumire. Were you playing with <br> ?
+Hi, Sumire. Were you <br> playing with 
+?
 Yes. My family kept a dog once, when I was younger.
 Although he was quite a bit larger than this fellow, he made an excellent playmate.
-Well then,
-<br> let us play again another time.
+Well then
+, <br> let us play again another time.
 Arf, arf!
 I wish Reni would play with you, too.
-I should get going, too. See you later,
-<br>.
+I should also get going. <br> See you later,
+.
 Woof!
 Arf!
 Hey there,
-<br> How do you like the theater so far?
+. <br> How do you like the theater so far?
 Arf, arf!
 Hahaha. I wonder what you're saying? It's almost like you can understand me.
-Anyway, I should be off. See you later,
-<br>.
+Anyway, I should be off. <br> See you later,
+.
 Woof!
 Hey, Sakura.
 Ah, Ogami.
@@ -404,12 +404,12 @@ That’ll be 50 sen. <br> Thanks for your patronage!
 Oh, so you're not going to buy anything?
 Oh yeah, you brought back that super cute little doggy earlier, didn't you?
 I guess he lives here at the theater with us now, huh?
-Yes, that’s right. His name is <br>
-if I remember.
-<br>, the cute little dog! What a great name!
+Yes, that’s right. <br> His name is
+<br> if I remember right.
+, the cute little <br> dog! What an adorable name!
 Would it be OK if I played with him after I'm done working?
-Yeah, of course. I bet he'll really take a liking to you, Tsubaki.
-Ooh, I can’t wait to play with <br>!
+Yeah, of course. <br> I bet he'll really take a liking to you, Tsubaki.
+… <br> Ooh, I can’t wait to play with him!
 Well, I should be going. Keep up the good work.
 Thank you very much! Come back again soon!
 Thank you very much! Come back and buy another bromide next month!
@@ -682,7 +682,7 @@ Nobody's around. I'll go somewhere else.
 It's empty. No one usually comes here during their free time.
 Oh well. Guess I'll check someplace else.
 There doesn't seem to be anyone on the terrace.
-Since the rain's finally stopped, maybe I'll go to the courtyard and visit
+Since the rain's finally stopped, maybe I'll go to the courtyard and visit <br>
 .
 I figured I'd check again, but there's still no one here…
 Oh yeah, Kohran was asking for me, wasn't she? I'd best not be late.
@@ -1004,7 +1004,7 @@ Maybe next time.
 OK, I'll make a call.
 I'll call someone another time. Maybe I'll head somewhere else for now.
 There's no one here… Where did everyone go?
-is pretty popular. Maybe they’re spending time with him. Hmm… I'll try somewhere else.
+is pretty popular. <br> Maybe they’re spending time with him. Hmm… I'll try somewhere else.
 The sunlight here is so bright. It's nice and warm.
 Well, I guess I'll keep going since there's nobody here.
 The other day, Yuri told me that these VIP seats are 15 yen per ticket…
@@ -1099,8 +1099,8 @@ Get in the bath.
 Go somewhere else.
 OK, I think I will take a bath.
 I don't have time to lounge in here all day… But a short, relaxing bath would be nice.
-Phew… Ohh, this feels great.
-was almost hit by a car but even the injury I got from rescuing him is starting to hurt less.
+Phew… <br> Ohh, this feels great.
+was almost hit by <br> a car but even the injury I got from rescuing him is starting to hurt less.
 Having this huge bath to soak in all to myself is seriously heaven on earth…
 Now that I'm nice and warmed up, I guess it's time to get out.
 Ahh… That was a nice bath.
@@ -1114,7 +1114,7 @@ Go somewhere else.
 All right, I'll hop in the bath.
 I don't have time to lounge in here all day… But a short, relaxing bath would be nice.
 Phew… Ohh, this feels great.
-was almost hit by a car but even the injury I got from rescuing him is starting to hurt less.
+was almost hit by <br> a car but even the injury I got from rescuing him is starting to hurt less.
 Having this huge bath to soak in all to myself is seriously heaven on earth…
 Now that I'm nice and warmed up, I guess it's time to get out.
 Ahh… That was a nice bath.
@@ -1348,8 +1348,8 @@ No one here. I'll go somewhere else.
 No one here. I'll go somewhere else.
 Hey. Mon. Frère!
 Hey, Iris, what's up?
-You know, on July 5th… It's gonna be my birthday!
-Is that right? Happy birthday, Iris.
+You know, on July 5th… <br> It's gonna be my birthday!
+Is that right? <br> Happy birthday, Iris.
 Hee hee, thank youuu!
 Do you know how old I'm gonna be?
 11 years old.
@@ -1359,7 +1359,7 @@ You'll be 11 years old, right?
 No, you're wrong! I'm gonna be 12!
 Oh, th-that's right… <br> Sorry, it slipped my mind.
 Jeez! Remember it next time!
-You'll be 12. I remember that much.
+You'll be 12. <br> I remember that much.
 Thank you, Mon Frère! I knew you'd remember!
 Hahaha, of course I did.
 I think… you'll be 13?
@@ -1478,12 +1478,12 @@ Tell me some gossip.
 I'll come back later. 
 Seems like you’ve started keeping a dog in the courtyard, Ogami. 
 That’s right. Sorry I made the decision without consulting you two first. 
-Oh, it's no problem! So, that dog's name is <br>
-, isn't it? 
+Oh, it's no problem! <br> The dog's name is
+, <br> isn't it? 
 You got that information pretty quick. Just like always, Yuri. 
 Heheh. Actually, Kohran just dropped by to tell us the news. She was really excited to talk about it. 
-I see, glad to hear it. 
-I hope that you two will play with <br> every now and then.
+I see, glad to hear it. <br> I hope that you two will play with 
+every <br> now and then.
 Has Mr. Yoneda been doing OK? 
 Yeah, we just visited him in the hospital and he was as lively as ever. 
 He's not allowed to drink there, so it’s a good opportunity for his body to recover a bit.
