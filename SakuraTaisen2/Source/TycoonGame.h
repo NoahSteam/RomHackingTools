@@ -1,7 +1,7 @@
 #pragma once
 
 //r10 = 0xb17;
-uint32 DecodeTycoonImages(uint8* r7, uint32 r10)
+uint64 DecodeTycoonImages(uint8* r7, uint32 r10)
 {
 	uint32 r0 = 0;
 	uint32 r9 = 0xAAAA5555;

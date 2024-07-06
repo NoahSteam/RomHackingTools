@@ -358,7 +358,6 @@ bool PatchGame(const string& inSourceGameDirectory, const string& inTranslatedDa
 		return false;
 	}
 	
-	#if 1
 	if(inDiscNumber == 2)
 	{
 		if(!PatchBattleAnimViewer(inPatchedDirectory, inTranslatedDataDirectory))
@@ -374,12 +373,13 @@ bool PatchGame(const string& inSourceGameDirectory, const string& inTranslatedDa
 		}
 	}
 
-	if(!PatchIntroSubtitles(inPatchedDirectory, inTranslatedDataDirectory))
+	if(!PatchIntroSubtitles(inPatchedDirectory, inTranslatedDataDirectory, inDiscNumber))
 	{
 		printf("Unable to patch IntroSubtitles\n");
 		return false;
 	}
 
+		#if 0
 	if(!PatchMiniGames(inPatchedDirectory, inTranslatedDataDirectory))
 	{
 		printf("Unable to patch MiniGames\n");
@@ -487,7 +487,6 @@ bool PatchGame(const string& inSourceGameDirectory, const string& inTranslatedDa
 		printf("Unable to patch battle menu\n");
 		return false;
 	}
-	#endif
 
 	//Create translated font sheet
 	const string translatedFontSheetPath = inTranslatedDataDirectory + "8x12.bmp";
@@ -555,6 +554,7 @@ bool PatchGame(const string& inSourceGameDirectory, const string& inTranslatedDa
 		printf("PatchSplashScreen failed\n");
 		return false;
 	}
+#endif
 
 	printf("Patching Successfull!\n");
 	return true;

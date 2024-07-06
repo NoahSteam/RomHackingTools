@@ -58,7 +58,8 @@ ExtractCreditsData a:\sakurawars2\Disc3_Original a:\SakuraWars2\ExtractedData\Di
 ExtractIntroSubtitles a:\sakurawars2\Disc1_Original a:\SakuraWars2\ExtractedData\Disc1\IntroSubtitles
 ValidateSyncData  a:\sakurawars2\Disc1_Original\SAKURA1 a:\SakuraWars2\ExtractedData\Disc1\SyncValidation
 SetColorInPalette A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\StatusScreen A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\StatusScreen\Modified 0 0xff00
-PatchGame A:\SakuraWars2\Disc1_Original A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data A:\SakuraWars2\Patched\Disc1
+PatchGame A:\SakuraWars2\Disc1_Original A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data A:\SakuraWars2\Patched\Disc1 1
+PatchGame A:\SakuraWars2\Disc2_Original A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data A:\SakuraWars2\Patched\Disc2 2
 FindData.exe a:\SakuraWars2\Disc1_Original a:\SakuraWars2\find.bin
 SakuraTaisen.exe FindCompressedData a:\SakuraWars2\Disc1_Original\SAKURA1 a:\SakuraWars2\Find.bin a:\SakuraWars2\UncompressedResults\EyeCatch
 
@@ -80,7 +81,8 @@ CreateIndexFile C:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc_All\MesFiles C:\U
 ExtractMiniGames c:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1 0 c:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\Disc1\MiniGames\
 ExtractIntroImages C:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1_Original\ c:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\Disc1\IntroImages\
 ExtractDemoWPALL C:\Users\16306\Desktop\Rizwan\SakuraWars2\DemoDisc_Original C:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\DemoDisc\WPALL\
-PatchGame c:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1 C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data c:\Users\16306\Desktop\Rizwan\SakuraWars2\Patched\Disc1
+PatchGame c:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1 C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data c:\Users\16306\Desktop\Rizwan\SakuraWars2\Patched\Disc1 1
+PatchGame c:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc2_OriginalC:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data c:\Users\16306\Desktop\Rizwan\SakuraWars2\Patched\Disc2 2
 WriteTextIntoImage C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data\Translation\MNameCG1.txt C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data\MNameCG\ImageSizes.txt C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data\MNameCG\Original\1\ C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data\MNameCG\Translated\1\
 WriteTextIntoImageUsingFontSheet C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data\Translation\InfoName.txt C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data\HudFontSheetWide.bmp C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data\InfoName\Canvas C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data\InfoName\Original C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data\InfoName\Translated
 ExportTranslationData C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data\TBLFiles.csv C:\Users\16306\Desktop\Rizwan\SakuraWars2\ExportedText

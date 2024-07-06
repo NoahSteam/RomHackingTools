@@ -8215,6 +8215,8 @@ void FindCMPData(const string& /*inCompressedFilePath*/, const string& /*inUncom
 
 void FindCompressedData(const string& inCompressedFilePath, const string& inUncompressedFilePath, const string& outDirectory)
 {
+	CreateDirectoryHelper(outDirectory);
+
 	FileNameContainer compressedFileName(inCompressedFilePath.c_str());
 	FileData compresedFile;
 	if( !compresedFile.InitializeFileData(compressedFileName) )

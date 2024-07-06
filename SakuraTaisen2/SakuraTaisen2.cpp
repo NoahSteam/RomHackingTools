@@ -458,13 +458,14 @@ int main(int argc, char *argv[])
 
 	const string command(argv[1]);
 
-	if (command == string("PatchGame") && argc == 5)
+	if (command == string("PatchGame") && argc == 6)
 	{
 		const string inSourceGameDirectory = string(argv[2]) + Seperators;
 		const string inTranslatedDirectory = string(argv[3]) + Seperators;
 		const string inPatchedDirectory    = string(argv[4]) + Seperators;
+		const int inDiscNumber             = atoi(argv[5]);
 
-		PatchGame(inSourceGameDirectory, inTranslatedDirectory, inPatchedDirectory, 1);
+		PatchGame(inSourceGameDirectory, inTranslatedDirectory, inPatchedDirectory, inDiscNumber);
 	}
 	else if (command == string("ExtractText") && argc == 5)
 	{

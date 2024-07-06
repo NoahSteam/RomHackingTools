@@ -25,15 +25,22 @@ void ExtractIntroSubtitles(const std::string& inRootSakuraDirectory, const std::
 	}
 }
 
-bool PatchIntroSubtitles(const string& inPatchedSakuraDirectory, const string& inTranslatedDataDirectory)
+bool PatchIntroSubtitles(const string& inPatchedSakuraDirectory, const string& inTranslatedDataDirectory, int InDisc)
 {
 	printf("Patching Intro Subtitles\n");
 
 	const string translatedDir = inTranslatedDataDirectory + "IntroSubtitles\\";
 
-	const char* pFiles[2] {"SAKURA1\\OPCPK.BG", "SAKURA1\\OPBG_1.BIN"};
+	const char* pFiles[] =
+	{
+		"SAKURA1\\OPCPK.BG", "SAKURA1\\OPBG_1.BIN",
+		"SAKURA1\\OPCPK.BG", "SAKURA1\\OPBG_2.BIN",
+		"SAKURA1\\OPCPK.BG", "SAKURA1\\OPBG_3.BIN"
+	};
 
-	for(int i = 0; i < 2; ++i)
+	const int startingIndex = InDisc == 1 ? 0 : InDisc == 2 ? 2 : 4;
+	const int endingIndex   = startingIndex + 2;
+	for(int i = startingIndex; i < endingIndex; ++i)
 	{
 		FileReadWriter subFile;
 		if (!subFile.OpenFile(inPatchedSakuraDirectory + pFiles[i]))

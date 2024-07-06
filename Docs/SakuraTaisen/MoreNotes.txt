@@ -130,7 +130,7 @@ PatchGame 1 a:\SakuraWars\Disc2 a:\SakuraWars\Disc2_Translated A:\NoahSteam\RomP
 FindData.exe a:\SakuraWars\Disc1 a:\SakuraWars\Search.bin
 
 ExtractPalettedImage C:\Users\16306\Desktop\Rizwan\DragonForce\Game\Saturn\Disc\GAME\MAP.BMP C:\Users\16306\Desktop\Rizwan\RomHackingTools\DragonForce\Data\Saturn\SaturnMap_Palette.bin 0 8 8 1 256 1 C:\Users\16306\Desktop\Rizwan\DragonForce
-
+ExtractPalettedImage C:\Users\16306\Desktop\Rizwan\Emulators\Games\StellarAssault\Raw\Loading.bin C:\Users\16306\Desktop\Rizwan\Emulators\Games\StellarAssault\Raw\Loading.bin 8 208 15 1 256 1 c:\Users\16306\Desktop\ 
 UPDATE TBLFiles SET English = REPLACE(English, '\\n', ' ')
 
 SELECT *
