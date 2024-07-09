@@ -82,11 +82,13 @@ ExtractMiniGames c:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1 0 c:\Users\1630
 ExtractIntroImages C:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1_Original\ c:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\Disc1\IntroImages\
 ExtractDemoWPALL C:\Users\16306\Desktop\Rizwan\SakuraWars2\DemoDisc_Original C:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\DemoDisc\WPALL\
 PatchGame c:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1 C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data c:\Users\16306\Desktop\Rizwan\SakuraWars2\Patched\Disc1 1
-PatchGame c:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc2_OriginalC:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data c:\Users\16306\Desktop\Rizwan\SakuraWars2\Patched\Disc2 2
+PatchGame c:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc2_Original C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data c:\Users\16306\Desktop\Rizwan\SakuraWars2\Patched\Disc2 2
 WriteTextIntoImage C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data\Translation\MNameCG1.txt C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data\MNameCG\ImageSizes.txt C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data\MNameCG\Original\1\ C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data\MNameCG\Translated\1\
 WriteTextIntoImageUsingFontSheet C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data\Translation\InfoName.txt C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data\HudFontSheetWide.bmp C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data\InfoName\Canvas C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data\InfoName\Original C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data\InfoName\Translated
+ExtractBattleLoadScreens c:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc2_Original c:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\Disc2\BattleLoadScreens
 ExportTranslationData C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data\TBLFiles.csv C:\Users\16306\Desktop\Rizwan\SakuraWars2\ExportedText
 FindData.exe C:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1 C:\Users\16306\Desktop\Rizwan\SakuraWars2\find.bin
+SakuraTaisen.exe FindCompressedData C:\Users\16306\Desktop\Rizwan\SakuraWars2\OPBG_1.bin C:\Users\16306\Desktop\Rizwan\SakuraWars2\find.bin C:\Users\16306\Desktop\Rizwan\SakuraWars2\UncompressedResults\Subtitles
 
 FL_BOOK:
 Rockwell 14

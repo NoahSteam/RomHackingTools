@@ -379,7 +379,6 @@ bool PatchGame(const string& inSourceGameDirectory, const string& inTranslatedDa
 		return false;
 	}
 
-		#if 0
 	if(!PatchMiniGames(inPatchedDirectory, inTranslatedDataDirectory))
 	{
 		printf("Unable to patch MiniGames\n");
@@ -434,7 +433,8 @@ bool PatchGame(const string& inSourceGameDirectory, const string& inTranslatedDa
 		return false;
 	}
 
-	if(!PatchBattleLoadScreens(inPatchedDirectory, inTranslatedDataDirectory, inDiscNumber))
+	//Todo Disc 2
+	if(inDiscNumber == 1 && !PatchBattleLoadScreens(inPatchedDirectory, inTranslatedDataDirectory, inDiscNumber))
 	{
 		printf("Unable to patch BattleLoadScreens\n");
 		return false;
@@ -458,7 +458,7 @@ bool PatchGame(const string& inSourceGameDirectory, const string& inTranslatedDa
 		return false;
 	}
 
-	if(!PatchIntroScreens(inPatchedDirectory, inTranslatedDataDirectory))
+	if(inDiscNumber == 1 && !PatchIntroScreens(inPatchedDirectory, inTranslatedDataDirectory))
 	{
 		printf("Unable to patch Title Screens\n");
 		return false;
@@ -470,7 +470,7 @@ bool PatchGame(const string& inSourceGameDirectory, const string& inTranslatedDa
 		return false;
 	}
 
-	if( !PatchBattleTextDrawingCode(inSourceGameDirectory, inPatchedDirectory, inTranslatedDataDirectory) )
+	if( inDiscNumber == 1 && !PatchBattleTextDrawingCode(inSourceGameDirectory, inPatchedDirectory, inTranslatedDataDirectory) )
 	{
 		printf("Unable to patch battle text drawing code\n");
 		return false;
@@ -482,7 +482,7 @@ bool PatchGame(const string& inSourceGameDirectory, const string& inTranslatedDa
 		return false;
 	}
 
-	if(!PatchBattleMenu(inPatchedDirectory, inTranslatedDataDirectory))
+	if(inDiscNumber == 1 && !PatchBattleMenu(inPatchedDirectory, inTranslatedDataDirectory))
 	{
 		printf("Unable to patch battle menu\n");
 		return false;
@@ -542,7 +542,7 @@ bool PatchGame(const string& inSourceGameDirectory, const string& inTranslatedDa
 
 	//Patch title screens
 	const string wpallDirectory = inTranslatedDataDirectory + "Disc\\1\\WPALL1\\";
-	if(!PatchTitleScreens(inPatchedDirectory, wpallDirectory))
+	if(inDiscNumber == 1 && !PatchTitleScreens(inPatchedDirectory, wpallDirectory))
 	{
 		printf("PatchTitleScreens failed\n");
 		return false;
@@ -554,7 +554,6 @@ bool PatchGame(const string& inSourceGameDirectory, const string& inTranslatedDa
 		printf("PatchSplashScreen failed\n");
 		return false;
 	}
-#endif
 
 	printf("Patching Successfull!\n");
 	return true;

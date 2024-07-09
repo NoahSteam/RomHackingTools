@@ -102,24 +102,6 @@ bool PatchBGDatFiles(const string& InPatchedSakuraDirectory, const string& InTra
 		const string bgFilePath = InPatchedSakuraDirectory + string("SAKURA2\\") + bossImages[i].mNoExtension + string(".DAT");
 
 		PatchTiledImage<uint16>(bossImages[i].mFullPath, bgFilePath, imageWidth*imageHeight, 0x710,	0, numTiles, false);
-	/*
-		FileReadWriter targetFile;
-		if (!targetFile.OpenFile(InPatchedSakuraDirectory + string("SAKURA2\\") + bossImages[i].mNoExtension + string(".DAT")))
-		{
-			return false;
-		}
-
-		const uint32 tileDim = 8;
-		BmpToSaturnConverter patchedImage;
-		if (!patchedImage.ConvertBmpToSakuraFormat(bossImages[i].mFullPath, false, BmpToSaturnConverter::CYAN, &tileDim, &tileDim))
-		{
-			return false;
-		}
-
-		patchedImage.PackTiles();
-
-		targetFile.WriteData(0x710, patchedImage.mpPackedTiles, patchedImage.mPackedTileSize);
-		*/
 	}
 
 	return true;
