@@ -458,7 +458,7 @@ bool PatchGame(const string& inSourceGameDirectory, const string& inTranslatedDa
 		return false;
 	}
 
-	if(inDiscNumber == 1 && !PatchIntroScreens(inPatchedDirectory, inTranslatedDataDirectory))
+	if(!PatchIntroScreens(inPatchedDirectory, inTranslatedDataDirectory, inDiscNumber))
 	{
 		printf("Unable to patch Title Screens\n");
 		return false;

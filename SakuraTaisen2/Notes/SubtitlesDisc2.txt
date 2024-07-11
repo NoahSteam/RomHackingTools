@@ -1,0 +1,2 @@
+OPCPK.bg Found: At 0000c400 OffsetWithinUncompressedData: 00000000 Size: 64 CompressedSize: 9737
+OPBG_2.bin Found: At 0000c400 OffsetWithinUncompressedData: 00000000 Size: 64 CompressedSize: 9737

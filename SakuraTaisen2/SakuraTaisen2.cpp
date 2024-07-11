@@ -648,12 +648,13 @@ int main(int argc, char *argv[])
 
 		VerifyText(inSourceGameDirectory, inTranslatedDirectory, inPatchedDirectory);
 	}
-	else if(command == "ExtractIntroImages" && argc == 4)
+	else if(command == "ExtractIntroImages" && argc == 5)
 	{
 		const string inSourceGameDirectory = string(argv[2]) + Seperators;
 		const string inOutputDirectory = string(argv[3]) + Seperators;
+		const int inDiscNumber = atoi(argv[4]);
 
-		ExtractIntrosScreens(inSourceGameDirectory, inOutputDirectory);
+		ExtractIntrosScreens(inSourceGameDirectory, inOutputDirectory, inDiscNumber);
 	}
 	else if(command == "OutputUncompressedData" && argc == 5)
 	{

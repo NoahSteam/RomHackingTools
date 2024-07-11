@@ -42,7 +42,7 @@ struct TitleImageData
 	{160, 16}
 };*/
 
-void ExtractTTL2(const string& InSakuraRootDir, const string& OutDirectory)
+void ExtractTTL2(const string& InSakuraRootDir, const string& OutDirectory, int InDiscNumber)
 {
 	const string tt2lOutDirectory = OutDirectory + "TTL2\\";
 	CreateDirectoryHelper(tt2lOutDirectory);
@@ -69,7 +69,8 @@ void ExtractTTL2(const string& InSakuraRootDir, const string& OutDirectory)
 
 	const int numImages = 10;
 	TTL2ImageData ttl2ImageTable[numImages];
-	titleFileData.ReadData(0xdee0, (char*)ttl2ImageTable, sizeof(ttl2ImageTable), false);
+	const uint32 imageTableOffset = InDiscNumber == 1 ? 0xdee0 : InDiscNumber == 2 ? 0xdfb0 : 0xe078;
+	titleFileData.ReadData(imageTableOffset, (char*)ttl2ImageTable, sizeof(ttl2ImageTable), false);
 	for(int i = 0; i < numImages; ++i)
 	{
 		ttl2ImageTable[i].SwapEndianess();
@@ -229,11 +230,11 @@ void ExtractTitle(const string& InSakuraRootDir, const string& OutDirectory)
 	#endif
 }
 
-void ExtractIntrosScreens(const string& InSakuraRootDir, const string& OutDirectory)
+void ExtractIntrosScreens(const string& InSakuraRootDir, const string& OutDirectory, int inDiscNumber)
 {
 	CreateDirectoryHelper(OutDirectory);
 
-	ExtractTTL2(InSakuraRootDir, OutDirectory);
+	ExtractTTL2(InSakuraRootDir, OutDirectory, inDiscNumber);
 	ExtractTitle(InSakuraRootDir, OutDirectory);
 }
 
@@ -332,7 +333,7 @@ bool PatchTitleFile(const string& inPatchedSakuraDirectory, const string& inTran
 	return true;
 }
 
-bool PatchTTL2(const string& inPatchedSakuraDirectory, const string& inTranslatedDataDirectory)
+bool PatchTTL2(const string& inPatchedSakuraDirectory, const string& inTranslatedDataDirectory, int inDiscNumber)
 {
 	const string ttl2Path = inPatchedSakuraDirectory + string("SAKURA1\\TTL2CGB.BIN");
 	FileData ttl2Data;
@@ -356,7 +357,8 @@ bool PatchTTL2(const string& inPatchedSakuraDirectory, const string& inTranslate
 
 	const int numImages = 10;
 	TTL2ImageData ttl2ImageTable[numImages];
-	titleFile.ReadData(0xdee0, (char*)ttl2ImageTable, sizeof(ttl2ImageTable), false);
+	const uint32 imageTableOffset = inDiscNumber == 1 ? 0xdee0 : inDiscNumber == 2 ? 0xdfb0 : 0xe078;
+	titleFile.ReadData(imageTableOffset, (char*)ttl2ImageTable, sizeof(ttl2ImageTable), false);
 	for (int i = 0; i < numImages; ++i)
 	{
 		ttl2ImageTable[i].SwapEndianess();
@@ -369,7 +371,7 @@ bool PatchTTL2(const string& inPatchedSakuraDirectory, const string& inTranslate
 	}
 	
 	MemoryBlocks patchedImageBuffer;
-	const string ttl2ImageDir = inTranslatedDataDirectory + "IntroImages\\TTL2\\";
+	const string ttl2ImageDir = inTranslatedDataDirectory + string("IntroImages\\Disc") + std::to_string(inDiscNumber) + string("\\TTL2\\");
 	uint16 offset = 0;
 	for (int i = 0; i < numImages; ++i)
 	{
@@ -386,8 +388,10 @@ bool PatchTTL2(const string& inPatchedSakuraDirectory, const string& inTranslate
 		ttl2ImageTable[i].height = patchedImageData.GetImageHeight();
 		ttl2ImageTable[i].offsetToNextDiv8 = SwapByteOrder<uint16>(offset/8);
 	}
+
 	ttl2ImageTable[numImages-1].offsetToNextDiv8 = 0;
-	titleFile.WriteData(0xdee0, (char*)ttl2ImageTable, sizeof(ttl2ImageTable), false);
+	
+	titleFile.WriteData(imageTableOffset, (char*)ttl2ImageTable, sizeof(ttl2ImageTable), false);
 
 	//Combine patched data into contiguous block
 	patchedImageBuffer.CombineBlocks();
@@ -403,16 +407,16 @@ bool PatchTTL2(const string& inPatchedSakuraDirectory, const string& inTranslate
 
 	ttl2File.WriteData(0x400, compressor.mpCompressedData, compressor.mCompressedSize, false);
 
-	//The "Sakura Wa" image is a different size than the original, so we need to move it back from 0x18 to 0x10
+	//The "Sakura Wa" image is a different size than the original, so we need to move it back from 0x18 to 0x10 for Disc 1
 	const char sakuraImagePosition = 0x10;
 	titleFile.WriteData(0xdf31, &sakuraImagePosition, sizeof(sakuraImagePosition), false);
 
 	return true;
 }
 
-bool PatchIntroScreens(const string& inPatchedSakuraDirectory, const string& inTranslatedDataDirectory)
+bool PatchIntroScreens(const string& inPatchedSakuraDirectory, const string& inTranslatedDataDirectory, int inDiscNumber)
 {
-	if(!PatchTTL2(inPatchedSakuraDirectory, inTranslatedDataDirectory))
+	if(!PatchTTL2(inPatchedSakuraDirectory, inTranslatedDataDirectory, inDiscNumber))
 	{
 		return false;
 	}
