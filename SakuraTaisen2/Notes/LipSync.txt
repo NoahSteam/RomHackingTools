@@ -19,6 +19,11 @@ In SK0501, the pattern is: 7ffe textIndex c004 c400 0004 lipSyncID
 
 0608F45C
 
+06012b22 extu.w r1, r3 //631d to 631c?
+06012bf6 fffa to 00fa
+
+217418 has start of first line
+
 ///
 0601b1d2 e300
 0601b1d8 2130

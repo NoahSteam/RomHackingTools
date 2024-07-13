@@ -1,0 +1,1 @@
+143.bmp needs to be edited by hand after it has been generated in order to account for the border on the right side.

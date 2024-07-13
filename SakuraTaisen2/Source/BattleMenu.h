@@ -204,7 +204,74 @@ bool PatchBattleNumberLocation(const string& inPatchedSakuraDirectory, const str
 	return true;
 }
 
-bool PatchBattleMenu(const string& inPatchedSakuraDirectory, const string& inTranslatedDataDirectory)
+struct FilesToPatch
+{
+	const char* pName;
+	int offset;
+};
+
+const FilesToPatch GBattleMenuFilesDisc1[] =
+{
+	"GOVERKV1", 0,
+	"GOVERTV1", 0,
+	"M00VDP1", 0x17e40,
+	"M01VDP1", 0x17e40,
+	"M02VDP1", 0x17e40,
+	"M03VDP1", 0x17e40,
+	"M04VDP1", 0x17e40,
+	"M05VDP1", 0x17e40,
+	"M26VDP1", 0x17e40,
+	"M27VDP1", 0x17e40,
+	"M29VDP1", 0x17e40,
+	"M31VDP1", 0x17e40,
+	"M33VDP1", 0x17e40,
+	"M34VDP1", 0x17e40
+};
+
+const FilesToPatch GBattleMenuFilesDisc2[] =
+{
+	"GOVERKV1", 0x00000000,
+	"GOVERTV1", 0x00000000,
+	"M07VDP1", 0x00017e40,
+	"M08VDP1", 0x00017e40,
+	"M09VDP1", 0x00017e40,
+	"M10VDP1", 0x00017e40,
+	"M11VDP1", 0x00017e40,
+	"M12VDP1", 0x00017e40,
+	"M13VDP1", 0x00017e40,
+	"M15VDP1", 0x00017e40,
+	"M16VDP1", 0x00017e40,
+	"M17VDP1", 0x00017e40,
+	"M18VDP1", 0x00017e40,
+	"M36VDP1", 0x00017e40,
+	"M37VDP1", 0x00017e40,
+	"M49VDP1", 0x00017e40,
+	"M50VDP1", 0x00017e40,
+	"M51VDP1", 0x00017e40,
+	"M52VDP1", 0x00017e40,
+	"M53VDP1", 0x00017e40,
+	"M54VDP1", 0x00017e40,
+	"M91VDP1", 0x00017e40,
+	"M92VDP1", 0x0000fa40,
+};
+
+const FilesToPatch GBattleMenuFilesDisc3[] =
+{
+	"GOVERKV1.BIN", 0x00000000,
+	"GOVERTV1.BIN", 0x00000000,
+	"M19VDP1.BIN",  0x00017e40,
+	"M20VDP1.BIN",  0x00017e40,
+	"M21VDP1.BIN",  0x00017e40,
+	"M22VDP1.BIN",  0x00017e40,
+	"M23VDP1.BIN",  0x00017e40,
+	"M24VDP1.BIN",  0x00017e40,
+	"M25VDP1.BIN",  0x00017e40,
+	"M45VDP1.BIN",  0x00017e40,
+	"M46VDP1.BIN",  0x00017e40,
+	"M47VDP1.BIN",  0x00017e40,
+};
+
+bool PatchBattleMenu(const string& inPatchedSakuraDirectory, const string& inTranslatedDataDirectory, int inDiscNumber)
 {
 	printf("Patching Battle Menu\n");
 
@@ -216,31 +283,36 @@ bool PatchBattleMenu(const string& inPatchedSakuraDirectory, const string& inTra
 		return false;
 	}
 
-	struct FilesToPatch
+	int numFiles = 0;
+	const FilesToPatch* filesToPatch = nullptr;	
+	switch(inDiscNumber)
 	{
-		const char* pName;
-		int offset;
-	};
-	const FilesToPatch filesToPatch[] =
-	{ 
-		"GOVERKV1", 0,
-		"GOVERTV1", 0,
-		"M00VDP1", 0x17e40,
-		"M01VDP1", 0x17e40,
-		"M02VDP1", 0x17e40,
-		"M03VDP1", 0x17e40,
-		"M04VDP1", 0x17e40,
-		"M05VDP1", 0x17e40,
-		"M26VDP1", 0x17e40,
-		"M27VDP1", 0x17e40,
-		"M29VDP1", 0x17e40,
-		"M31VDP1", 0x17e40,
-		"M33VDP1", 0x17e40,
-		"M34VDP1", 0x17e40
+		case 1:
+		{
+			filesToPatch = GBattleMenuFilesDisc1;
+			numFiles = sizeof(GBattleMenuFilesDisc1) / sizeof(FilesToPatch);
+		}break;
+
+		case 2:
+		{
+			filesToPatch = GBattleMenuFilesDisc2;
+			numFiles = sizeof(GBattleMenuFilesDisc2) / sizeof(FilesToPatch);
+		}break;
+
+		case 3:
+		{
+			filesToPatch = GBattleMenuFilesDisc3;
+			numFiles = sizeof(GBattleMenuFilesDisc3) / sizeof(FilesToPatch);
+		}break;
+
+		default:
+		{
+			printf("Invalid disc number %i\n", inDiscNumber);
+			return false;	
+		}
 	};
 
 	const string patchedImageDirectory = inTranslatedDataDirectory + Seperators + "GOVER\\";
-	const int numFiles = sizeof(filesToPatch) / sizeof(FilesToPatch);
 	for (int fileIndex = 0; fileIndex < numFiles; ++fileIndex)
 	{
 		const string dataFilePath = inPatchedSakuraDirectory + string("SAKURA2\\") + string(filesToPatch[fileIndex].pName) + string(".BIN");

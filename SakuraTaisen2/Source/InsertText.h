@@ -279,14 +279,14 @@ bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTrans
 				const size_t currSakuraStringIndex = translatedLineIndex;
 				const size_t sequenceIndex = translatedLineIndex + 1; //sequence ids are 1 based, not 0 based
 				const unordered_map<uint16, SakuraTextFile::SequenceEntry>::const_iterator sequenceEntry = sakuraFile.mTextIdToSequenceEntryMap.find(sequenceIndex);
-				const bool bIsLipsEntry = sequenceEntry != sakuraFile.mTextIdToSequenceEntryMap.end() ? sequenceEntry->second.mbIsLips : false;
+				const bool bIsLipsEntry = false;//TODO: Lips are not identified correctly always sequenceEntry != sakuraFile.mTextIdToSequenceEntryMap.end() ? sequenceEntry->second.mbIsLips : false;
 				const bool bIsUnused = false;
 
 				if (bIsLipsEntry)
 				{
 					if (textLine.GetNumberOfLines() != sakuraFile.mLines[currSakuraStringIndex].GetNumberOfLines())
 					{
-						printf("LIPS ERROR - Translated LIPS line does not have expected number of options. Expected: %i, Has: %i (File: %s Line: %zu)\n", sakuraFile.mLines[currSakuraStringIndex].GetNumberOfLines(), textLine.GetNumberOfLines(), sakuraFile.mFileNameInfo.mFileName.c_str(), currSakuraStringIndex + 1);
+					//	printf("LIPS ERROR - Translated LIPS line does not have expected number of options. Expected: %i, Has: %i (File: %s Line: %zu)\n", sakuraFile.mLines[currSakuraStringIndex].GetNumberOfLines(), textLine.GetNumberOfLines(), sakuraFile.mFileNameInfo.mFileName.c_str(), currSakuraStringIndex + 1);
 					}
 				}
 
@@ -396,7 +396,7 @@ bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTrans
 						{
 							if (bIsLipsEntry)
 							{
-								printf("LIPS too long[A Line: %zi]:  %s\n", translatedLineIndex, textLine.mFullLine.c_str());
+						//		printf("LIPS too long[A Line: %zi]:  %s\n", translatedLineIndex, textLine.mFullLine.c_str());
 								//break;
 							}
 							else

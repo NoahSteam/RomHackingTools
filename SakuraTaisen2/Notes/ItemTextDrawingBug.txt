@@ -1,0 +1,9 @@
+06050602 add 0x03, r1
+
+0608fa8c written at address 0608f7d4
+
+0608fada written at address 0608f818
+
+06007ed0 shlr2 r8 //seems to calculate number of characters worth of data to clear 
+
+06008010 mov 0x38, r5 //e538 to e56c Number of bytes to clear

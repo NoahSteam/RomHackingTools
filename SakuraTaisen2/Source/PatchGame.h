@@ -433,8 +433,7 @@ bool PatchGame(const string& inSourceGameDirectory, const string& inTranslatedDa
 		return false;
 	}
 
-	//Todo Disc 2
-	if(inDiscNumber == 1 && !PatchBattleLoadScreens(inPatchedDirectory, inTranslatedDataDirectory, inDiscNumber))
+	if(!PatchBattleLoadScreens(inPatchedDirectory, inTranslatedDataDirectory, inDiscNumber))
 	{
 		printf("Unable to patch BattleLoadScreens\n");
 		return false;
@@ -470,7 +469,7 @@ bool PatchGame(const string& inSourceGameDirectory, const string& inTranslatedDa
 		return false;
 	}
 
-	if( inDiscNumber == 1 && !PatchBattleTextDrawingCode(inSourceGameDirectory, inPatchedDirectory, inTranslatedDataDirectory) )
+	if( !PatchBattleTextDrawingCode(inSourceGameDirectory, inPatchedDirectory, inTranslatedDataDirectory) )
 	{
 		printf("Unable to patch battle text drawing code\n");
 		return false;
@@ -482,7 +481,7 @@ bool PatchGame(const string& inSourceGameDirectory, const string& inTranslatedDa
 		return false;
 	}
 
-	if(inDiscNumber == 1 && !PatchBattleMenu(inPatchedDirectory, inTranslatedDataDirectory))
+	if(!PatchBattleMenu(inPatchedDirectory, inTranslatedDataDirectory, inDiscNumber))
 	{
 		printf("Unable to patch battle menu\n");
 		return false;
@@ -541,8 +540,7 @@ bool PatchGame(const string& inSourceGameDirectory, const string& inTranslatedDa
 	*/
 
 	//Patch title screens
-	const string wpallDirectory = inTranslatedDataDirectory + "Disc\\1\\WPALL1\\";
-	if(inDiscNumber == 1 && !PatchTitleScreens(inPatchedDirectory, wpallDirectory))
+	if(!PatchTitleScreens(inPatchedDirectory, inTranslatedDataDirectory, inDiscNumber))
 	{
 		printf("PatchTitleScreens failed\n");
 		return false;

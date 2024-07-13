@@ -61,8 +61,10 @@ void PrintMatches(const vector<MatchInfo>& inInfo)
 	{
 		for(const MatchInfo& info : inInfo)
 		{
-			printf("Found a match in %s @0x%08x\n", info.mFileName.c_str(), info.mOffset);
+			printf("\"%s\", 0x%08x,\n", info.mFileName.c_str(), info.mOffset);
 		}
+
+		printf("Matches: %i\n", inInfo.size());
 	}
 	else
 	{

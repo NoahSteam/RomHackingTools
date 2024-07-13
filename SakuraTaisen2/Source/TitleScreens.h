@@ -8,39 +8,29 @@ Image data (320 * 224 @8bpp)
 Palette (512 byes)
 */
 
-bool PatchTitleScreens(const string& InRootOutputDirectory, const string& InDataDirectory)
+bool PatchTitleScreens(const string& InRootOutputDirectory, const string& InDataDirectory, int InDiscNumber)
 {
 	printf("Patching Title Screens\n");
 
-	string wpallFileName = InRootOutputDirectory + "\\SAKURA1\\WPALL1.ALL";
+	const string wpallDirectory = InDataDirectory + string("ChapterScreens\\WPALL") + std::to_string(InDiscNumber) + Seperators;
+
+	string wpallFileName = InRootOutputDirectory + string("\\SAKURA1\\WPALL") + std::to_string(InDiscNumber) + string(".ALL");
 	FileReadWriter wpallFile;
 	if(!wpallFile.OpenFile(wpallFileName))
 	{
 		return false;
 	}
 
-	struct ImageData
-	{
-		const char* pName;
-		int imageNumber;
-	};
+	vector<FileNameContainer> wpallImages;
+	FindAllFilesWithinDirectory(wpallDirectory, wpallImages);
 
-	const ImageData patchedImages[] =
-	{
-		{"WPALL20.bmp", 19},
-		{"WPALL21.bmp", 20},
-		{"WPALL22.bmp", 21},
-		{"WPALL23.bmp", 22},
-		{"WPALL24.bmp", 23}
-	};
-
-	int offset = 0x190040;
+	int offset = InDiscNumber == 1 ? 0x190040 : InDiscNumber == 2 ? 0x221040 : 0x10e040;
 	const int imageStride = 320*224;
-	const int numImages = sizeof(patchedImages) / sizeof(ImageData);
+	const int numImages = (int)wpallImages.size();
 	unsigned int tileDim = 8;
 	for(int i = 0; i < numImages; ++i)
 	{
-		const string patchedImagePath = InDataDirectory + patchedImages[i].pName;
+		const string patchedImagePath = wpallImages[i].mFullPath;
 
 		BmpToSaturnConverter patchedImageData;
 		if (!patchedImageData.ConvertBmpToSakuraFormat(patchedImagePath, false, BmpToSaturnConverter::CYAN, &tileDim, &tileDim))

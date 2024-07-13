@@ -2,6 +2,7 @@
 
 #include <sstream>
 #include <iomanip>
+#include <unordered_set>
 
 typedef unsigned long uint64;
 typedef unsigned int   uint32;
@@ -210,7 +211,7 @@ class FileReadWriter
 public:
 	~FileReadWriter();
 
-	bool  OpenFile(const std::string& inFileName);
+	bool  OpenFile(const std::string& inFileName, bool bInOutputError = true);
 	void  Close();
 	bool  WriteData(const char* pInData, unsigned long inDataSize);
 	bool  WriteData(unsigned long fileOffset, const char* pData, unsigned long dataSize);
