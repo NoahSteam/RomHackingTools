@@ -62,12 +62,12 @@ struct FixedSysFileHeader
 bool ExtractAllSysFiles(const vector<FileNameContainer>& InSysFiles, vector<SysFileExtractor>& InExtractedSysFiles)
 {	
 	//Empty file
-	const string fileToSkip = "SYS49";
+	const std::unordered_set<string> filesToSkip{"SYS49", "ATK40L0W", "ATK41L0W", "CTK40LOW", "DTK40LOW", "DTK44LOW", "ETKLOW"};
 
 	InExtractedSysFiles.reserve(InSysFiles.size());
 	for (const FileNameContainer& sysFile : InSysFiles)
 	{
-		if(sysFile.mNoExtension == fileToSkip)
+		if(filesToSkip.find(sysFile.mNoExtension) != filesToSkip.end())
 		{
 			continue;
 		}

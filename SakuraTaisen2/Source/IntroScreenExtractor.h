@@ -67,10 +67,10 @@ void ExtractTTL2(const string& InSakuraRootDir, const string& OutDirectory, int 
 		return;
 	}
 
-	const int numImages = 10;
-	TTL2ImageData ttl2ImageTable[numImages];
+	const int numImages = InDiscNumber == 3 ? 12 : 10;
+	TTL2ImageData* ttl2ImageTable = new TTL2ImageData[numImages];
 	const uint32 imageTableOffset = InDiscNumber == 1 ? 0xdee0 : InDiscNumber == 2 ? 0xdfb0 : 0xe078;
-	titleFileData.ReadData(imageTableOffset, (char*)ttl2ImageTable, sizeof(ttl2ImageTable), false);
+	titleFileData.ReadData(imageTableOffset, (char*)ttl2ImageTable, sizeof(ttl2ImageTable[0])*numImages, false);
 	for(int i = 0; i < numImages; ++i)
 	{
 		ttl2ImageTable[i].SwapEndianess();
@@ -90,6 +90,8 @@ void ExtractTTL2(const string& InSakuraRootDir, const string& OutDirectory, int 
 
 		imageOffset = ttl2ImageTable[i].offsetToNextDiv8 * 8;//width * TTL2ImageTable[i].height;
 	}
+
+	delete[] ttl2ImageTable;
 }
 
 void ExtractTitle(const string& InSakuraRootDir, const string& OutDirectory)
@@ -355,10 +357,10 @@ bool PatchTTL2(const string& inPatchedSakuraDirectory, const string& inTranslate
 		return false;
 	}
 
-	const int numImages = 10;
-	TTL2ImageData ttl2ImageTable[numImages];
+	const int numImages = inDiscNumber == 3 ? 12 : 10;
+	TTL2ImageData* ttl2ImageTable = new TTL2ImageData[numImages];
 	const uint32 imageTableOffset = inDiscNumber == 1 ? 0xdee0 : inDiscNumber == 2 ? 0xdfb0 : 0xe078;
-	titleFile.ReadData(imageTableOffset, (char*)ttl2ImageTable, sizeof(ttl2ImageTable), false);
+	titleFile.ReadData(imageTableOffset, (char*)ttl2ImageTable, sizeof(ttl2ImageTable[0])*numImages, false);
 	for (int i = 0; i < numImages; ++i)
 	{
 		ttl2ImageTable[i].SwapEndianess();
@@ -369,7 +371,7 @@ bool PatchTTL2(const string& inPatchedSakuraDirectory, const string& inTranslate
 	{
 		return false;
 	}
-	
+
 	MemoryBlocks patchedImageBuffer;
 	const string ttl2ImageDir = inTranslatedDataDirectory + string("IntroImages\\Disc") + std::to_string(inDiscNumber) + string("\\TTL2\\");
 	uint16 offset = 0;
@@ -386,12 +388,17 @@ bool PatchTTL2(const string& inPatchedSakuraDirectory, const string& inTranslate
 		offset += patchedImageData.GetImageDataSize();
 		ttl2ImageTable[i].widthDiv8 = patchedImageData.GetImageWidth()/8;
 		ttl2ImageTable[i].height = patchedImageData.GetImageHeight();
-		ttl2ImageTable[i].offsetToNextDiv8 = SwapByteOrder<uint16>(offset/8);
+		ttl2ImageTable[i].offsetToNextDiv8 = offset / 8;//SwapByteOrder<uint16>(offset/8);
+	}
+
+	for (int i = 0; i < numImages; ++i)
+	{
+		ttl2ImageTable[i].SwapEndianess();
 	}
 
 	ttl2ImageTable[numImages-1].offsetToNextDiv8 = 0;
 	
-	titleFile.WriteData(imageTableOffset, (char*)ttl2ImageTable, sizeof(ttl2ImageTable), false);
+	titleFile.WriteData(imageTableOffset, (char*)ttl2ImageTable, sizeof(ttl2ImageTable[0]) * numImages, false);
 
 	//Combine patched data into contiguous block
 	patchedImageBuffer.CombineBlocks();
@@ -410,6 +417,8 @@ bool PatchTTL2(const string& inPatchedSakuraDirectory, const string& inTranslate
 	//The "Sakura Wa" image is a different size than the original, so we need to move it back from 0x18 to 0x10 for Disc 1
 	const char sakuraImagePosition = 0x10;
 	titleFile.WriteData(0xdf31, &sakuraImagePosition, sizeof(sakuraImagePosition), false);
+
+	delete[] ttl2ImageTable;
 
 	return true;
 }

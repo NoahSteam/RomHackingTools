@@ -379,13 +379,13 @@ bool PatchGame(const string& inSourceGameDirectory, const string& inTranslatedDa
 		return false;
 	}
 
-	if(!PatchMiniGames(inPatchedDirectory, inTranslatedDataDirectory))
+	if(inDiscNumber != 3 && !PatchMiniGames(inPatchedDirectory, inTranslatedDataDirectory))
 	{
 		printf("Unable to patch MiniGames\n");
 		return false;
 	}
 
-	if (!PatchTycoon(inPatchedDirectory, inTranslatedDataDirectory))
+	if (inDiscNumber != 3 && !PatchTycoon(inPatchedDirectory, inTranslatedDataDirectory))
 	{
 		printf("Unable to patch Tycoon\n");
 		return false;

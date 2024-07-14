@@ -257,18 +257,18 @@ const FilesToPatch GBattleMenuFilesDisc2[] =
 
 const FilesToPatch GBattleMenuFilesDisc3[] =
 {
-	"GOVERKV1.BIN", 0x00000000,
-	"GOVERTV1.BIN", 0x00000000,
-	"M19VDP1.BIN",  0x00017e40,
-	"M20VDP1.BIN",  0x00017e40,
-	"M21VDP1.BIN",  0x00017e40,
-	"M22VDP1.BIN",  0x00017e40,
-	"M23VDP1.BIN",  0x00017e40,
-	"M24VDP1.BIN",  0x00017e40,
-	"M25VDP1.BIN",  0x00017e40,
-	"M45VDP1.BIN",  0x00017e40,
-	"M46VDP1.BIN",  0x00017e40,
-	"M47VDP1.BIN",  0x00017e40,
+	"GOVERKV1", 0x00000000,
+	"GOVERTV1", 0x00000000,
+	"M19VDP1",  0x00017e40,
+	"M20VDP1",  0x00017e40,
+	"M21VDP1",  0x00017e40,
+	"M22VDP1",  0x00017e40,
+	"M23VDP1",  0x00017e40,
+	"M24VDP1",  0x00017e40,
+	"M25VDP1",  0x00017e40,
+	"M45VDP1",  0x00017e40,
+	"M46VDP1",  0x00017e40,
+	"M47VDP1",  0x00017e40,
 };
 
 bool PatchBattleMenu(const string& inPatchedSakuraDirectory, const string& inTranslatedDataDirectory, int inDiscNumber)
