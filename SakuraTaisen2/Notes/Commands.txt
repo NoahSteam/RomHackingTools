@@ -82,6 +82,7 @@ CreateIndexFile C:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc_All\MesFiles C:\U
 ExtractMiniGames c:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1 0 c:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\Disc1\MiniGames\
 ExtractIntroImages C:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1_Original\ c:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\Disc1\IntroImages\
 ExtractDemoWPALL C:\Users\16306\Desktop\Rizwan\SakuraWars2\DemoDisc_Original C:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\DemoDisc\WPALL\
+ExtractLongDayData C:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1_Original C:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\Disc1\LongDay 1
 PatchGame c:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1 C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data c:\Users\16306\Desktop\Rizwan\SakuraWars2\Patched\Disc1 1
 PatchGame c:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc2_Original C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data c:\Users\16306\Desktop\Rizwan\SakuraWars2\Patched\Disc2 2
 WriteTextIntoImage C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data\Translation\MNameCG1.txt C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data\MNameCG\ImageSizes.txt C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data\MNameCG\Original\1\ C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data\MNameCG\Translated\1\
