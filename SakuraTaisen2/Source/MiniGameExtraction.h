@@ -220,6 +220,19 @@ void ExtractMiniGames(const string& inSakuraDirectory, bool bInIsBmp, const stri
 		return;
 	}
 
+	FileData sakuraFile;
+	if (!sakuraFile.InitializeFileData("0000SAKU.BIN", (inSakuraDirectory + string("SAKURA3\\0000SAKU.BIN")).c_str()))
+	{
+		return;
+	}
+
+	PaletteData logoPaletteSaku;
+	if (!logoPaletteSaku.CreateFrom15BitData(sakuraFile.GetData() + 0x00038ee0, 32))
+	{
+		printf("Unable to create palette.\n");
+		return;
+	}
+
 	/*
 	PaletteData firstImagePalette;
 	if (!firstImagePalette.CreateFrom15BitData(nbgFile.GetData() + 0x000331f8, 512))
@@ -308,6 +321,7 @@ void ExtractMiniGames(const string& inSakuraDirectory, bool bInIsBmp, const stri
 	}
 
 	ExtractMiscMiniGameImages(inSakuraDirectory, bInIsBmp, standardPalette, inOutputDirectory);
+//	ExtractMiscMiniGameImages(inSakuraDirectory, bInIsBmp, logoPaletteSaku, inOutputDirectory);
 }
 
 bool PatchMiscMiniGameFiles(const string& inPatchedSakuraDirectory, const string& inTranslatedDataDirectory)
