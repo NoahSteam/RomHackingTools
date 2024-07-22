@@ -226,8 +226,21 @@ void ExtractMiniGames(const string& inSakuraDirectory, bool bInIsBmp, const stri
 		return;
 	}
 
+	FileData reniFile;
+	if (!reniFile.InitializeFileData("0000RENI.BIN", (inSakuraDirectory + string("SAKURA3\\0000RENI.BIN")).c_str()))
+	{
+		return;
+	}
+
 	PaletteData logoPaletteSaku;
 	if (!logoPaletteSaku.CreateFrom15BitData(sakuraFile.GetData() + 0x00038ee0, 32))
+	{
+		printf("Unable to create palette.\n");
+		return;
+	}
+
+	PaletteData logoPaletteReni;
+	if (!logoPaletteReni.CreateFrom15BitData(reniFile.GetData() + 0x00030e14, 32))
 	{
 		printf("Unable to create palette.\n");
 		return;
@@ -320,8 +333,8 @@ void ExtractMiniGames(const string& inSakuraDirectory, bool bInIsBmp, const stri
 		}
 	}
 
-	ExtractMiscMiniGameImages(inSakuraDirectory, bInIsBmp, standardPalette, inOutputDirectory);
-//	ExtractMiscMiniGameImages(inSakuraDirectory, bInIsBmp, logoPaletteSaku, inOutputDirectory);
+//	ExtractMiscMiniGameImages(inSakuraDirectory, bInIsBmp, standardPalette, inOutputDirectory);
+	ExtractMiscMiniGameImages(inSakuraDirectory, bInIsBmp, logoPaletteReni, inOutputDirectory);
 }
 
 bool PatchMiscMiniGameFiles(const string& inPatchedSakuraDirectory, const string& inTranslatedDataDirectory)
