@@ -168,14 +168,12 @@ uint32 DecodeKinematronData(uint32* pEncodedData, const int param_2)
 	key = firstValue;
 	while (true)
 	{
-		iVar5 = param_2; //r4 = r10
+		iVar5 = param_2;
 		if (iVar5 < 0)
 		{
-			iVar5 += 0x00ff0009;//PTR_DAT_060333b8._0_2_; r1 = 0x00ff0009
+			iVar5 += 0x00ff0009;
 		}
 
-		//iVar3 = r0
-		//iVar3 = iVar5 >> 8;//(*(code*)PTR_FUN_060333c4)(); shar r4, 8 times
 		iVar5 = iVar5 >> 8;
 
 		if (iVar5 + 1 <= iVar3)

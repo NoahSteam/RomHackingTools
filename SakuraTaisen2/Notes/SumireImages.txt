@@ -1,0 +1,27 @@
+05c6e5a0
+060C1760
+
+Decoded at 0600ff52 from SUMI_DAT.ALL, 0x1730
+
+Decoding Keys at 0000SUMI.BIN at 0x00032430
+
+//Reverse decoding
+r6 = 0x0b17
+r2 = r6;
+
+while(bytesProcessed < 0x40)
+{
+	r1 = 0xb17;
+	r1 = 0xb17^0xb17;
+	r2 = 0xb17 ^ 0xaaaa5555;
+	r2 += 0xac53ac53
+}
+
+r2 =  r6;
+r6 = 0xb17 ^ 0x13579BDF;
+r6 += 0x026 (r5); //stream[1];
+r5 = r2;
+++r0;
+
+//first bytes from decoded file
+00 00 00 00 56 fe 0a b6 0a b3 00 e9 e8 48 8b 14 96 1b

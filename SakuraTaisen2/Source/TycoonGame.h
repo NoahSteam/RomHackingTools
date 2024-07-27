@@ -1,18 +1,18 @@
 #pragma once
 
 //r10 = 0xb17;
-uint64 DecodeTycoonImages(uint8* r7, uint32 r10)
+uint64 DecodeTycoonImages(uint8* inDataStream, uint32 inKey)
 {
 	uint32 r0 = 0;
 	uint32 r9 = 0xAAAA5555;
 	uint32 r8 = 0xAC53AC53;
-	uint32 r6 = SwapByteOrder(*(uint32*)r7);
-	uint32 r5 = SwapByteOrder(((uint32*)r7)[1]);
-	const uint8* startAddress = r7;
+	uint32 r6 = SwapByteOrder(*(uint32*)inDataStream);
+	uint32 r5 = SwapByteOrder(((uint32*)inDataStream)[1]);
+	const uint8* startAddress = inDataStream;
 
 	while(1) //LAB_0600ff06
 	{
-		uint32 r4 = r10;
+		uint32 r4 = inKey;
 		if(r4 < 0)
 		{
 			r4 += 0x09;
@@ -26,19 +26,19 @@ uint64 DecodeTycoonImages(uint8* r7, uint32 r10)
 			break;
 		}
 
-		uint32 r3 = 0;
-		r4 = 0x3f;
+		uint32 numBytesProcessed = 0;
+		const uint32 dataBlockSize = 0x3f;
 
 		do //LAB_0600ff22
 		{
-			uint32 r1 = SwapByteOrder(*(uint32*)r7);
-			++r3;
+			uint32 r1 = SwapByteOrder(*(uint32*)inDataStream);
+			++numBytesProcessed;
 			r1 = r2 ^ r1;
-			(*(uint32*)r7) = SwapByteOrder(r1);
-			r7 += 4;
+			(*(uint32*)inDataStream) = SwapByteOrder(r1);
+			inDataStream += 4;
 			r2 = r2 ^ r9;
 			r2 += r8;
-		} while (r3 <= r4);
+		} while (numBytesProcessed <= dataBlockSize);
 
 		r2 = r6;
 		r6 = r6 ^ 0x13579BDF;
@@ -47,7 +47,7 @@ uint64 DecodeTycoonImages(uint8* r7, uint32 r10)
 		++r0;
 	}
 
-	return r7 - startAddress;
+	return inDataStream - startAddress;
 }
 
 void ExtractTycoonIntroImages(const std::string& inRootDirectory, const std::string& inOutputDirectory, const bool bInBmp)
@@ -165,7 +165,6 @@ void ExtractTycoonIntroImages(const std::string& inRootDirectory, const std::str
 		const uint32 copySize = dataSetOffset + bufferSize > cardFile.GetDataSize() ? cardFile.GetDataSize() - dataSetOffset : bufferSize;
 		memcpy_s(buffer, copySize, cardFile.GetData() + dataSetOffset, copySize);
 
-		//const uint32 decodedSize = DecodeTycoonImages((uint8*)buffer, 0x12904);//keys[k].key);
 		const uint32 decodedSize = DecodeTycoonImages((uint8*)buffer, entries[k].key);
 		if(decodedSize > bufferSize)
 		{
@@ -203,19 +202,6 @@ void ExtractTycoonIntroImages(const std::string& inRootDirectory, const std::str
 			}
 		}
 	}
-
-	/*
-	//DecodeTycoonImages
-	char buffer[0x2c000];
-	//memcpy_s(buffer, sizeof(buffer), cardFile.GetData() + 0x2c800, sizeof(buffer));
-	memcpy_s(buffer, sizeof(buffer), cardFile.GetData() + 0x1000, sizeof(buffer));
-	const uint32 decodedSize = DecodeTycoonImages((uint8*)buffer, 0x2b4d0);
-
-	FileWriter outFile;
-	outFile.OpenFileForWrite("a:\\sakurawars2\\extracteddata\\disc2\\decoded.bin");
-	outFile.WriteData(buffer, decodedSize, false);
-//	ExtractImageFromData(buffer + headerSize, imageSize, bitmapFileName, buffer + imageSize + headerSize, 512, false, 8, 8, header.width / 8, 256, 0, true, bInBmp);
-*/
 }
 
 void ExtractTycoonRulesScreen(const std::string& inRootDirectory, const std::string& inOutputDirectory, const bool bInBmp)

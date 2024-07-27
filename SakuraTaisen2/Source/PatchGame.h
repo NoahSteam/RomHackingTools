@@ -53,6 +53,12 @@ static bool BringOverOriginalFiles(const string& inRootSakuraDirectory, const st
 	GetAllFilesOfType(allFiles, "OPBG_1.BIN", originalFiles);
 	GetAllFilesOfType(allFiles, "OPCPK.BG", originalFiles);
 
+	GetAllFilesOfType(allFiles, "IRIS_DAT.ALL", originalFiles);
+	GetAllFilesOfType(allFiles, "MGKR_DAT.ALL", originalFiles);
+	GetAllFilesOfType(allFiles, "MGOH_DAT.ALL", originalFiles);
+	GetAllFilesOfType(allFiles, "SUMI_DAT.ALL", originalFiles);
+	GetAllFilesOfType(allFiles, "MG_FONT.CG", originalFiles);
+
 	//Battle files
 	GetAllFilesOfType(allFiles, "COL.BIN", originalFiles);
 	GetAllFilesOfType(allFiles, "LOW.BIN", originalFiles);
