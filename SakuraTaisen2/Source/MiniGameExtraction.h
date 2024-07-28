@@ -166,6 +166,7 @@ const char* pMiniGameMGFiles[NumMiniGameMGFiles] =
 };
 
 extern uint64 DecodeTycoonImages(uint8* r7, uint32 r10);
+extern uint32 DecodeKinematronData(uint32* pEncodedData, const int param_2);
 void ExtractEncodedSumireImages(const std::string& inRootDirectory, const std::string& inOutputDirectory, const bool bInBmp)
 {
 	CreateDirectoryHelper(inOutputDirectory + "Encoded\\");
@@ -243,7 +244,7 @@ void ExtractEncodedSumireImages(const std::string& inRootDirectory, const std::s
 		const uint32 copySize = dataSetOffset + bufferSize > cardFile.GetDataSize() ? cardFile.GetDataSize() - dataSetOffset : bufferSize;
 		memcpy_s(buffer, copySize, cardFile.GetData() + dataSetOffset, copySize);
 
-		const uint32 decodedSize = DecodeTycoonImages((uint8*)buffer, keys[k].key);//entries[k].key);
+		const uint32 decodedSize = DecodeKinematronData((uint32*)buffer, keys[k].key);//entries[k].key);
 		if (decodedSize > bufferSize)
 		{
 			assert(decodedSize < bufferSize);
