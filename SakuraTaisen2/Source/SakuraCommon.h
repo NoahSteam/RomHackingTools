@@ -75,9 +75,15 @@ bool PatchCodeInFile(std::string& InFileName, PatchingData* pInPatchingData, int
 	return true;
 }
 
+enum class ETileIndiceType : uint8
+{
+	DoubleMinusOne,
+	MinusOne
+};
 template<typename TileByteType>
-void ExtractTiledFullScreenImage(const std::string& inTileFilePath, const std::string& inColFilePath, uint32 inTileOffset, uint32 inColorOffset, 
-						uint32 inPaletteOffset, const std::string& inOutFileName, const bool bInBmp)
+void ExtractImageWithTileSet(const std::string& inTileFilePath, uint32 inWidth, uint32 inHeight, const std::string& inColFilePath,
+							 uint32 inTileOffset, uint32 inColorOffset, uint32 inPaletteOffset, const std::string& inOutFileName, 
+							 const bool bInBmp, int inBitCount = 8, ETileIndiceType inIndiceType = ETileIndiceType::DoubleMinusOne)
 {
 	FileData tileFile;
 	if (!tileFile.InitializeFileData(inTileFilePath))
@@ -91,33 +97,51 @@ void ExtractTiledFullScreenImage(const std::string& inTileFilePath, const std::s
 		return;
 	}
 
+	const int tileDim = 8;
+	const int bytesInTile = tileDim * tileDim;
+	const uint32 numColumns = inWidth / 8;
+	const uint32 numRows = inHeight / 8;
+	const int fontSheetDataSize = inBitCount == 4 ? (numColumns * numRows * bytesInTile)/2 : (numColumns*numRows * bytesInTile);
 	SakuraFontSheet tileSheet;
-	if (!tileSheet.CreateFontSheetFromData(tileFile.GetData() + inColorOffset, 40 * 28 * 64, 8, 8, false))
+	if (!tileSheet.CreateFontSheetFromData(tileFile.GetData() + inColorOffset, fontSheetDataSize, tileDim, tileDim, inBitCount == 4))
 	{
 		return;
 	}
 
 	//Create 32bit palette data
 	PaletteData paletteData;
-	paletteData.CreateFrom15BitData(colorFile.GetData() + inPaletteOffset, 512);
+	paletteData.CreateFrom15BitData(colorFile.GetData() + inPaletteOffset, inBitCount == 4 ? 32 : 512);
 
+	const BitmapSurface::EBitsPerPixel bitCount = inBitCount == 4 ? BitmapSurface::EBitsPerPixel::kBPP_4 : BitmapSurface::EBitsPerPixel::kBPP_8;
 	BitmapSurface sakuraStringBmp;
-	sakuraStringBmp.CreateSurface(320, 224, BitmapSurface::EBitsPerPixel::kBPP_8, paletteData.GetData(), paletteData.GetSize());
+	sakuraStringBmp.CreateSurface(inWidth, inHeight, bitCount, paletteData.GetData(), paletteData.GetSize());
 
-	TileByteType tiles[1120];
-	memcpy_s(tiles, sizeof(tiles), tileFile.GetData() + inTileOffset, sizeof(tiles));
+	const uint32 numTiles = numColumns * numRows;
+	TileByteType* tiles = new TileByteType[numTiles];
+	memcpy_s(tiles, sizeof(tiles[0])*numTiles, tileFile.GetData() + inTileOffset, sizeof(tiles[0])*numTiles);
 
 	//Convert tile index into game format
-	for (int t = 0; t < 1120; ++t)
+	if( inIndiceType == ETileIndiceType::DoubleMinusOne )
+	{		
+		for (int t = 0; t < numTiles; ++t)
+		{
+			const int tileValue = (SwapByteOrder<TileByteType>(tiles[t]) / 2) - 1;
+			tiles[t] = tileValue;
+		}
+	}
+	else
 	{
-		const int tileValue = (SwapByteOrder<TileByteType>(tiles[t]) / 2) - 1;
-		tiles[t] = tileValue;
+		for (int t = 0; t < numTiles; ++t)
+		{
+			const int tileValue = SwapByteOrder<TileByteType>(tiles[t]) - 1;
+			tiles[t] = tileValue;
+		}
 	}
 
 	//Output tiles
 	int x = 0;
 	int y = 0;
-	for (int t = 0; t < 1120; ++t)
+	for (int t = 0; t < numTiles; ++t)
 	{
 		SakuraString::SakuraChar sakuraChar;
 		sakuraChar.mIndex = tiles[t];
@@ -126,7 +150,7 @@ void ExtractTiledFullScreenImage(const std::string& inTileFilePath, const std::s
 		sakuraStringBmp.AddTile(pTileData, 64, x, y, 8, 8, BitmapSurface::kFlipNone);
 
 		x += 8;
-		if (x == 320)
+		if (x == inWidth)
 		{
 			x = 0;
 			y += 8;
@@ -134,6 +158,16 @@ void ExtractTiledFullScreenImage(const std::string& inTileFilePath, const std::s
 	}
 
 	sakuraStringBmp.WriteToFile(inOutFileName, true);
+
+	delete[] tiles;
+}
+
+template<typename TileByteType>
+void ExtractTiledFullScreenImage(const std::string& inTileFilePath, const std::string& inColFilePath, uint32 inTileOffset, uint32 inColorOffset, 
+						uint32 inPaletteOffset, const std::string& inOutFileName, const bool bInBmp, int inBitCount = 8)
+{
+	ExtractImageWithTileSet<TileByteType>(inTileFilePath, 320, 224, inColFilePath, inTileOffset, inColorOffset, inPaletteOffset, 
+										  inOutFileName, bInBmp, inBitCount);
 }
 
 template<typename TileByteType>

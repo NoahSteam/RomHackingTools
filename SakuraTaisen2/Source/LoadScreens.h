@@ -11,12 +11,12 @@ struct WPAllInfo
 
 const WPAllInfo DemoTiledLoadScreenImages[6] =
 {
-		{true,  0x40,    0xfc00,  0x10000, 0x11800},
-		{true,  0x12040, 0x11480, 0x23800, 0x25000},
-		{true,  0x25840, 0xf500,  0x35000, 0x36800},
-		{false, 0x40,    44992,  0xa800, 0xc000},
-		{false, 0xc840,  44992,  0x17800, 0x19000},
-		{false, 0x19840, 44992,  0x24800, 0x26000}
+		{true,  0x40,    0xfc00,  0x10000, 0x12000},
+		{true,  0x12840, 0x11480, 0x23800, 0x24800},
+		{true,  0x37840, 0xf500,  0x35000, 0x37000},
+		{false, 0x40,    44992,   0xa800, 0xc000},
+		{false, 0xc840,  44992,   0x17800, 0x19000},
+		{false, 0x19840, 44992,   0x24800, 0x26000}
 };
 
 struct NLoadInfo
@@ -61,16 +61,9 @@ void ExtractDemoWPALL(const std::string& inDemoDirectory, const std::string& inO
 			return;
 		}
 
-		const std::string wpallPath = inDemoDirectory + "WPALL1.ALL";
-		FileData wpallData;
-		if( !wpallData.InitializeFileData(wpallPath) )
+		for( int i = 3; i < 6; ++i )
 		{
-			return;
-		}
-
-		for( int i = 0; i < 6; ++i )
-		{
-			FileData* pFileData = DemoTiledLoadScreenImages[i].bIsWpall ? &wpallData : &nLoadData;
+			FileData* pFileData = &nLoadData;
 
 			SakuraFontSheet tileSheet;
 			if( !tileSheet.CreateFontSheetFromData(pFileData->GetData() + DemoTiledLoadScreenImages[i].colorOffset, DemoTiledLoadScreenImages[i].colorSize, 8, 8, false) )
@@ -86,7 +79,8 @@ void ExtractDemoWPALL(const std::string& inDemoDirectory, const std::string& inO
 			sakuraStringBmp.CreateSurface(320, 224, BitmapSurface::EBitsPerPixel::kBPP_8, paletteData.GetData(), paletteData.GetSize());
 
 			const string bitmapFileName = inOutputDirectory + std::string("TileSheet") + std::to_string(i) + ".bmp";
-			ExtractImageFromData(pFileData->GetData() + DemoTiledLoadScreenImages[i].colorOffset, 8 * 8 * (320 / 8) * (224 / 8), bitmapFileName, pFileData->GetData() + TiledLoadScreenImages[i].paletteOffset, 512, false, 8, 8, 320 / 8, 256, 0, true, true);
+			ExtractImageFromData(pFileData->GetData() + DemoTiledLoadScreenImages[i].colorOffset, 8 * 8 * (320 / 8) * (224 / 8),
+								 bitmapFileName, pFileData->GetData() + TiledLoadScreenImages[i].paletteOffset, 512, false, 8, 8, 320 / 8, 256, 0, true, true);
 
 			unsigned int tiles[1120];
 			memcpy_s(tiles, sizeof(tiles), pFileData->GetData() + DemoTiledLoadScreenImages[i].tileOffset, sizeof(tiles));
@@ -115,17 +109,31 @@ void ExtractDemoWPALL(const std::string& inDemoDirectory, const std::string& inO
 				}
 			}
 
-			std::string outFile;
-			if(DemoTiledLoadScreenImages[i].bIsWpall)
-			{
-				outFile = inOutputDirectory + "wpall_" + std::to_string(i) + ".bmp";
-			}
-			else
-			{
-				outFile = inOutputDirectory + "nload_" + std::to_string(i) + ".bmp";
-			}
-			
+			std::string outFile = inOutputDirectory + "nload_" + std::to_string(i) + ".bmp";
 			sakuraStringBmp.WriteToFile(outFile, true);
+		}
+	}
+
+	//WPALL
+	{
+		const std::string wpallPath = inDemoDirectory + "WPALL1.ALL";
+		FileData wpallData;
+		if( !wpallData.InitializeFileData(wpallPath) )
+		{
+			return;
+		}
+
+		for( int i = 0; i < 3; ++i )
+		{
+			FileData* pFileData = &wpallData;
+
+			//Create 32bit palette data
+			PaletteData paletteData;
+			paletteData.CreateFrom15BitData(pFileData->GetData() + DemoTiledLoadScreenImages[i].paletteOffset, 512);
+
+			const string bitmapFileName = inOutputDirectory + std::string("WPALL") + std::to_string(i) + ".bmp";
+			ExtractImageFromData(pFileData->GetData() + DemoTiledLoadScreenImages[i].colorOffset, 8 * 8 * (320 / 8) * (224 / 8),
+								 bitmapFileName, pFileData->GetData() + DemoTiledLoadScreenImages[i].paletteOffset, 512, false, 8, 8, 320 / 8, 256, 0, true, true);
 		}
 	}
 }

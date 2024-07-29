@@ -63,7 +63,7 @@ void ExtractNBGFile(const std::string& inFilePath, const std::string& inOutputDi
 			}
 		}
 
-		printf("Outputting %i from 0x%08x\n", imageIndex, currFileOffset + sizeof(header));
+		printf("Outputting %i from 0x%08zx\n", imageIndex, currFileOffset + sizeof(header));
 
 		headers.push_back(header);
 		const string bitmapFileName = inOutputDirectory + std::to_string(imageIndex++) + ".bmp";
