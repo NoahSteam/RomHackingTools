@@ -50,7 +50,7 @@ ExtractEyeCatch a:\sakurawars2\Disc1_Original a:\SakuraWars2\ExtractedData\Disc1
 ExtractStatusScreen a:\sakurawars2\Disc1_Original\SAKURA1 a:\SakuraWars2\ExtractedData\Disc1\StatusScreen 1
 ExtractKinematronImages a:\sakurawars2\Disc1_Original\SAKURA1 a:\SakuraWars2\ExtractedData\Disc1\Kinematron 1
 ExtractWarningScreens a:\sakurawars2\Disc1_Original a:\SakuraWars2\ExtractedData\Disc1\WarningScreens 1
-ExtractTycoonRulesScreen a:\sakurawars2\Disc1_Original a:\SakuraWars2\ExtractedData\Disc1\TycoonRules 1
+ExtractTycoonRulesScreen a:\sakurawars2\Disc1_Original a:\SakuraWars2\ExtractedData\Disc1\TycoonRules 1 0
 ExtractLongDayData a:\sakurawars2\Disc1_Original a:\SakuraWars2\ExtractedData\Disc1\LongDay 1
 ExtractBattleAnimViewer a:\sakurawars2\Disc2_Original a:\SakuraWars2\ExtractedData\Disc2\BattleAnimViewer 1
 ExtractBattleSimulator a:\sakurawars2\Disc2_Original a:\SakuraWars2\ExtractedData\Disc2\BattleSim 1
@@ -83,7 +83,7 @@ ExtractMiniGames c:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1 0 c:\Users\1630
 ExtractIntroImages C:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1_Original\ c:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\Disc1\IntroImages\
 ExtractDemoWPALL C:\Users\16306\Desktop\Rizwan\SakuraWars2\DemoDisc_Original C:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\DemoDisc\WPALL\
 ExtractLongDayData C:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1_Original C:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\Disc1\LongDay 1
-ExtractTycoonRulesScreen C:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1_Original C:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\Disc1\TycoonRules 1
+ExtractTycoonRulesScreen C:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1_Original C:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\Disc1\TycoonRules 1 0
 
 PatchGame c:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1 C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data c:\Users\16306\Desktop\Rizwan\SakuraWars2\Patched\Disc1 1
 PatchGame c:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc2_Original C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data c:\Users\16306\Desktop\Rizwan\SakuraWars2\Patched\Disc2 2

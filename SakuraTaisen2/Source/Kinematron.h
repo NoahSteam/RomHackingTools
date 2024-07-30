@@ -200,6 +200,95 @@ uint32 DecodeKinematronData(uint32* pEncodedData, const int param_2)
 	return ((char*)pEncodedData - pStart) + sizeof(*pEncodedData); //+sizeof(*pEncodedData) because the size includes the full 4 final bytes
 }
 
+struct KinematronEncodingKeyInfo
+{
+	uint32 offset;
+	uint32 key;
+
+	void FixupAfterLoading()
+	{
+		offset = SwapByteOrder(offset) * 0x800;
+		key = SwapByteOrder(key);
+	}
+};
+
+bool PatchKinematronEncodedImages(const std::string& inDataFilePath, const std::string& inImageDirectory, 
+								  const KinematronEncodingKeyInfo* pInKeys, uint32 inNumKeys)
+{
+	//CARD_DAT
+	FileReadWriter cardFile;
+	if (!cardFile.OpenFile(inDataFilePath))
+	{
+		return false;
+	}
+
+	const std::string imageExt(".bmp");
+	const uint32 bufferSize = 0x2c000;
+	char* buffer = new char[bufferSize];
+
+	for (uint32 k = 0; k < inNumKeys; ++k)
+	{
+		const uint32 dataSetOffset = pInKeys[k].offset;
+		const uint32 copySize = dataSetOffset + bufferSize > cardFile.GetFileSize() ? cardFile.GetFileSize() - dataSetOffset : bufferSize;
+		cardFile.ReadData(dataSetOffset, buffer, copySize, false);
+
+		const uint32 decodedSize = DecodeKinematronData((uint32*)buffer, pInKeys[k].key);
+		if (decodedSize > bufferSize)
+		{
+			assert(decodedSize < bufferSize);
+		}
+
+		//Create patched data buffer
+		const uint32 offsetToImageTable = SwapByteOrder(*((uint32*)(buffer + 0x20)));
+		if (offsetToImageTable < decodedSize)
+		{
+			const uint16 numImagesInSet = SwapByteOrder(*(uint16*)(buffer + offsetToImageTable));
+			uint32 imageOffset = offsetToImageTable + numImagesInSet * 16 + 16;
+			for (uint32 i = 0; i < numImagesInSet; ++i)
+			{
+				const uint32 offsetToNextImageInfo = offsetToImageTable + 16 + i * 16;
+				const uint16 imageWidth            = SwapByteOrder(*(uint16*)(buffer + offsetToNextImageInfo));
+				const uint16 imageHeight           = SwapByteOrder(*(uint16*)(buffer + offsetToNextImageInfo + 2));
+				const uint16 bitSize               = SwapByteOrder(*(uint16*)(buffer + offsetToNextImageInfo + 4));
+				const bool bIs4Bit                 = bitSize == 0;
+				const uint32 imageSize             = bIs4Bit ? (imageWidth * imageHeight) >> 1 : imageWidth * imageHeight;
+
+				const std::string imageFileName = inImageDirectory + std::to_string(k) + std::string("_") + IntToHexString(dataSetOffset) + std::string("_") + std::to_string(i) + imageExt;
+				BmpToSaturnConverter patchedImage;
+				if (patchedImage.ConvertBmpToSakuraFormat(imageFileName, false, BmpToSaturnConverter::CYAN, nullptr, nullptr, false))
+				{
+					if (imageSize != patchedImage.GetImageDataSize())
+					{
+						printf("Image size mismatch for %s. Expected %i, got %i\n", imageFileName.c_str(), imageSize, patchedImage.GetImageDataSize());
+						return false;
+					}
+
+					memcpy_s(buffer + imageOffset, imageSize, patchedImage.GetImageData(), imageSize);
+				}
+
+				imageOffset += imageSize;
+			}
+		}
+
+		//Encode data buffer
+		vector<uint32> encodedData;
+		EncodeKinematronData((uint32*)buffer, decodedSize, encodedData);
+
+		const uint32 encodedSize = encodedData.size() * sizeof(uint32);
+		if (encodedSize != decodedSize)
+		{
+			printf("PatchKinematronEncodedImages: Re-encoded data size is not the same as the original encoded data size. Expected %i, got %i \n", decodedSize, encodedSize);
+			return false;
+		}
+
+		cardFile.WriteData(dataSetOffset, (char*)encodedData.data(), encodedSize);
+	}
+
+	delete[] buffer;
+
+	return true;
+}
+
 void TestRadio()
 {
 	FileNameContainer name("a:\\SakuraWars2\\Disc1_Original\\SAKURA1\\COMMFILE.ALL");

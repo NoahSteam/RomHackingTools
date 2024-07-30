@@ -56,6 +56,7 @@ using std::unordered_set;
 #include "Source/ExportTranslationToFiles.h"
 #include "Source/CreateTranslatedFontSheet.h"
 #include "Source/ImageExtraction.h"
+#include "Source/Kinematron.h"
 #include "Source/SakuraTextFile.h"
 #include "Source/FaceWinAll.h"
 #include "Source/CreateStorySpreadhseets.h"
@@ -84,7 +85,6 @@ using std::unordered_set;
 #include "Source/CreateInfoNameImages.h"
 #include "Source/VDP2Images.h"
 #include "Source/StatusScreen.h"
-#include "Source/Kinematron.h"
 #include "Source/WarningScreens.h"
 #include "Source/TycoonGame.h"
 #include "Source/LongDay.h"
@@ -823,13 +823,14 @@ int main(int argc, char *argv[])
 
 		SetColorInPalette(inDirectory, inOutputDirectory, inPaletteIndex, inPaletteColor);
 	}
-	else if(command == "ExtractTycoonRulesScreen" && argc == 5)
+	else if(command == "ExtractTycoonRulesScreen" && argc == 6)
 	{
 		const string inDirectory = string(argv[2]) + Seperators;
 		const string inOutputDirectory = string(argv[3]) + Seperators;
 		const bool   bmpFormat = atoi(argv[4]);
+		const bool   bFullExtraction = atoi(argv[5]);
 
-		ExtractTycoonRulesScreen(inDirectory, inOutputDirectory, bmpFormat);
+		ExtractTycoonRulesScreen(inDirectory, inOutputDirectory, bmpFormat, bFullExtraction);
 	}
 	else if(command == "ExtractLongDayData" && argc == 5)
 	{

@@ -1,18 +1,6 @@
 #pragma once
 
-struct TycoonOffsetKeyInfo
-{
-	uint32 offset;
-	uint32 key;
-
-	void FixupAfterLoading()
-	{
-		offset = SwapByteOrder(offset) * 0x800;
-		key = SwapByteOrder(key);
-	}
-};
-
-TycoonOffsetKeyInfo GTycoonKeyEntries[] = 
+KinematronEncodingKeyInfo GTycoonKeyEntries[] =
 {
 	0x1000,     0x2b4d0,
 	0x2c800,    0x996c,
@@ -46,18 +34,8 @@ TycoonOffsetKeyInfo GTycoonKeyEntries[] =
 	0x304800,   0x12904,
 	0x2ec800,   0x12904,
 	
-	
+	//Found later
 	0x114800,   0x1000c,
-	
-	/*
-	0x282800,   0x2df4,
-	0x285800,   0x2df4,
-	0x288800,   0x2df4,
-	0x291800,   0x2df4,
-	0x297800,   0x2df4,
-	0x29A800,   0x2df4,
-	0x29D800,   0x2df4,
-	0x2a0800,   0x2df4,*/
 };
 
 //r10 = 0xb17;
@@ -110,7 +88,7 @@ uint64 DecodeTycoonImages(uint8* inDataStream, uint32 inKey)
 	return (inDataStream - startAddress)  + sizeof(uint32); //+sizeof(uint32) because the size includes the full 4 final bytes
 }
 
-void ExtractTycoonIntroImages(const std::string& inRootDirectory, const std::string& inOutputDirectory, const bool bInBmp)
+void ExtractTycoonIntroImages(const std::string& inRootDirectory, const std::string& inOutputDirectory, const bool bInBmp, bool bInFullExtraction)
 {
 	std::string outputDirectory = inOutputDirectory + "IntroImages\\";
 	const std::string binOutputDirectory = inOutputDirectory + "IntroImages\\BIN\\";
@@ -137,17 +115,17 @@ void ExtractTycoonIntroImages(const std::string& inRootDirectory, const std::str
 	const std::string vdp2Image1 = inOutputDirectory + "VDP2Image1" + imageExt;
 	ExtractImageWithTileSet<uint32>(cardFilePath, 192, 64, cardFilePath, 0xd4800, 0xd3020, 0xd5000, vdp2Image1, bInBmp, 4, ETileIndiceType::MinusOne);
 
-	//0000DAIF - Has key data there, but its convoluted, so just manually define the key table (GTycoonKeyEntries)
+	//0000DAIF - Has key data there
 	const std::string daifFilePath = inRootDirectory + "SAKURA3\\0000DAIF.BIN";
 	FileData daifFile;
 	if (!daifFile.InitializeFileData(daifFilePath))
 	{
 		return;
 	}
-	const int numKeys = 183;
-	TycoonOffsetKeyInfo keys[numKeys];
+	const int totalKeys = 183;
+	KinematronEncodingKeyInfo keys[totalKeys];
 	daifFile.ReadData(0x46df8, (char*)keys, sizeof(keys), false);
-	for( int i = 0; i < numKeys; ++i )
+	for( int i = 0; i < totalKeys; ++i )
 	{
 		keys[i].FixupAfterLoading();
 	}
@@ -157,7 +135,7 @@ void ExtractTycoonIntroImages(const std::string& inRootDirectory, const std::str
 	char* buffer = new char[bufferSize];
 	//uint32 dataSetOffset = 0x002d9800;//0x1000;
 	
-	const int numEntries = numKeys;//sizeof(GTycoonKeyEntries)/sizeof(GTycoonKeyEntries[0]);
+	const int numEntries = bInFullExtraction ? totalKeys : sizeof(GTycoonKeyEntries)/sizeof(GTycoonKeyEntries[0]);
 
 	FileWriter decodedDataFile;
 	for (int k = 0; k < numEntries; ++k)
@@ -171,11 +149,11 @@ void ExtractTycoonIntroImages(const std::string& inRootDirectory, const std::str
 			}
 		}
 		
-		const uint32 dataSetOffset = keys[k].offset;//GTycoonKeyEntries[k].offset;
+		const uint32 dataSetOffset = bInFullExtraction ? keys[k].offset : GTycoonKeyEntries[k].offset;
 		const uint32 copySize = dataSetOffset + bufferSize > cardFile.GetDataSize() ? cardFile.GetDataSize() - dataSetOffset : bufferSize;
 		memcpy_s(buffer, copySize, cardFile.GetData() + dataSetOffset, copySize);
 
-		const uint32 decodedSize = DecodeTycoonImages((uint8*)buffer, keys[k].key);//GTycoonKeyEntries[k].key);
+		const uint32 decodedSize = bInFullExtraction ? DecodeTycoonImages((uint8*)buffer, keys[k].key) : DecodeTycoonImages((uint8*)buffer, GTycoonKeyEntries[k].key);
 		if(decodedSize > bufferSize)
 		{
 			assert(decodedSize < bufferSize);
@@ -216,11 +194,11 @@ void ExtractTycoonIntroImages(const std::string& inRootDirectory, const std::str
 	delete[] buffer;
 }
 
-void ExtractTycoonRulesScreen(const std::string& inRootDirectory, const std::string& inOutputDirectory, const bool bInBmp)
+void ExtractTycoonRulesScreen(const std::string& inRootDirectory, const std::string& inOutputDirectory, const bool bInBmp, const bool bInFullExtraction)
 {
 	CreateDirectoryHelper(inOutputDirectory);
 
-	ExtractTycoonIntroImages(inRootDirectory, inOutputDirectory, bInBmp);
+	ExtractTycoonIntroImages(inRootDirectory, inOutputDirectory, bInBmp, bInFullExtraction);
 
 	//CARD_DAT
 	const std::string cardFilePath = inRootDirectory + "SAKURA3\\CARD_DAT.ALL";
@@ -312,85 +290,13 @@ bool PatchTycoonRulesScreen(const std::string& inPatchedSakuraDirectory, const s
 	return true;
 }
 
-bool PatchTycoonImages(const std::string& inPatchedSakuraDirectory, const std::string& inTranslatedDataDirectory)
+bool PatchTycoonEncodedImages(const std::string& inPatchedSakuraDirectory, const std::string& inTranslatedDataDirectory)
 {
 	//CARD_DAT
 	const std::string cardFilePath = inPatchedSakuraDirectory + "SAKURA3\\CARD_DAT.ALL";
-	FileReadWriter cardFile;
-	if (!cardFile.OpenFile(cardFilePath))
-	{
-		return false;
-	}
-
 	const std::string tycoonImageDir = inTranslatedDataDirectory + "Tycoon\\";
 
-	const std::string imageExt(".bmp");
-	const uint32 bufferSize = 0x2c000;
-	char* buffer = new char[bufferSize];
-	
-	const int numEntries = sizeof(GTycoonKeyEntries)/sizeof(GTycoonKeyEntries[0]);
-
-	for (int k = 0; k < numEntries; ++k)
-	{
-		const uint32 dataSetOffset = GTycoonKeyEntries[k].offset;
-		const uint32 copySize = dataSetOffset + bufferSize > cardFile.GetFileSize() ? cardFile.GetFileSize() - dataSetOffset : bufferSize;
-		cardFile.ReadData(dataSetOffset, buffer, copySize, false);
-		
-		const uint32 decodedSize = DecodeTycoonImages((uint8*)buffer, GTycoonKeyEntries[k].key);
-		if(decodedSize > bufferSize)
-		{
-			assert(decodedSize < bufferSize);
-		}
-
-		//Create patched data buffer
-		const uint32 offsetToImageTable = SwapByteOrder(*((uint32*)(buffer + 0x20)));
-		if(offsetToImageTable < decodedSize)
-		{
-			const uint16 numImagesInSet = SwapByteOrder(*(uint16*)(buffer + offsetToImageTable));
-			uint32 imageOffset = offsetToImageTable + numImagesInSet * 16 + 16;
-			for (uint32 i = 0; i < numImagesInSet; ++i)
-			{
-				const uint32 offsetToNextImageInfo = offsetToImageTable + 16 + i * 16;
-				const uint16 imageWidth            = SwapByteOrder(*(uint16*)(buffer + offsetToNextImageInfo));
-				const uint16 imageHeight           = SwapByteOrder(*(uint16*)(buffer + offsetToNextImageInfo + 2));
-				const uint16 bitSize               = SwapByteOrder(*(uint16*)(buffer + offsetToNextImageInfo + 4));
-				const bool bIs4Bit                 = bitSize == 0;
-				const uint32 imageSize             = bIs4Bit ? (imageWidth * imageHeight) >> 1 : imageWidth * imageHeight;
-
-				const std::string imageFileName = tycoonImageDir + std::to_string(k) + std::string("_") + IntToHexString(dataSetOffset) + std::string("_") + std::to_string(i) + imageExt;
-				BmpToSaturnConverter patchedImage;
-				if (patchedImage.ConvertBmpToSakuraFormat(imageFileName, false, BmpToSaturnConverter::CYAN, nullptr, nullptr, false))
-				{
-					if( imageSize != patchedImage.GetImageDataSize() )
-					{
-						printf("Image size mismatch for %s. Expected %i, got %i\n", imageFileName.c_str(), imageSize, patchedImage.GetImageDataSize());
-						return false;
-					}
-
-					memcpy_s(buffer + imageOffset, imageSize, patchedImage.GetImageData(), imageSize);
-				}
-				
-				imageOffset += imageSize;
-			}
-		}
-
-		//Encode data buffer
-		vector<uint32> encodedData;
-		EncodeKinematronData((uint32*)buffer, decodedSize, encodedData);
-	
-		const uint32 encodedSize = encodedData.size() * sizeof(uint32);
-		if(encodedSize != decodedSize)
-		{
-			printf("PatchTycoonImages: Re-encoded data size is not the same as the original encoded data size. Expected %i, got %i \n", decodedSize, encodedSize);
-			return false;
-		}
-
-		cardFile.WriteData(dataSetOffset, (char*)encodedData.data(), encodedSize);
-	}
-
-	delete[] buffer;
-
-	return true;
+	return PatchKinematronEncodedImages(cardFilePath, tycoonImageDir, GTycoonKeyEntries, sizeof(GTycoonKeyEntries) / sizeof(GTycoonKeyEntries[0]));
 }
 
 bool PatchTycoon(const std::string& inPatchedSakuraDirectory, const std::string& inTranslatedDataDirectory)
@@ -402,5 +308,5 @@ bool PatchTycoon(const std::string& inPatchedSakuraDirectory, const std::string&
 		return false;
 	}
 
-	return PatchTycoonImages(inPatchedSakuraDirectory, inTranslatedDataDirectory);
+	return PatchTycoonEncodedImages(inPatchedSakuraDirectory, inTranslatedDataDirectory);
 }

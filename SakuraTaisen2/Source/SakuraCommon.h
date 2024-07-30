@@ -123,7 +123,7 @@ void ExtractImageWithTileSet(const std::string& inTileFilePath, uint32 inWidth, 
 	//Convert tile index into game format
 	if( inIndiceType == ETileIndiceType::DoubleMinusOne )
 	{		
-		for (int t = 0; t < numTiles; ++t)
+		for (uint32 t = 0; t < numTiles; ++t)
 		{
 			const int tileValue = (SwapByteOrder<TileByteType>(tiles[t]) / 2) - 1;
 			tiles[t] = tileValue;
@@ -131,7 +131,7 @@ void ExtractImageWithTileSet(const std::string& inTileFilePath, uint32 inWidth, 
 	}
 	else
 	{
-		for (int t = 0; t < numTiles; ++t)
+		for (uint32 t = 0; t < numTiles; ++t)
 		{
 			const int tileValue = SwapByteOrder<TileByteType>(tiles[t]) - 1;
 			tiles[t] = tileValue;
@@ -141,7 +141,7 @@ void ExtractImageWithTileSet(const std::string& inTileFilePath, uint32 inWidth, 
 	//Output tiles
 	int x = 0;
 	int y = 0;
-	for (int t = 0; t < numTiles; ++t)
+	for (uint32 t = 0; t < numTiles; ++t)
 	{
 		SakuraString::SakuraChar sakuraChar;
 		sakuraChar.mIndex = tiles[t];

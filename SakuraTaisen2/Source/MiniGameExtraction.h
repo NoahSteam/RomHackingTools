@@ -165,7 +165,19 @@ const char* pMiniGameMGFiles[NumMiniGameMGFiles] =
 	"MINIGAME" //.CG
 };
 
-extern uint64 DecodeTycoonImages(uint8* r7, uint32 r10);
+const int GNumSumireEnodingKeys = 8;
+const KinematronEncodingKeyInfo GSumireEncodedImageTable[GNumSumireEnodingKeys] =
+{
+	0,       0x18a10,
+	0x19000, 0xb5b8,
+	0x24800, 0x015a6c,
+	0x3a800, 0x2528,
+	0x3d000, 0x27c8,
+	0x3f800, 0x1894,
+	0x41800, 0x848c,
+	0x4a000, 0x1e08
+};
+
 extern uint32 DecodeKinematronData(uint32* pEncodedData, const int param_2);
 void ExtractEncodedSumireImages(const std::string& inRootDirectory, const std::string& inOutputDirectory, const bool bInBmp)
 {
@@ -199,25 +211,6 @@ void ExtractEncodedSumireImages(const std::string& inRootDirectory, const std::s
 		return;
 	}
 
-	struct KeyData
-	{
-		uint32 offset;
-		uint32 key;
-	};
-
-	const int numKeys = 8;
-	const KeyData keys[numKeys] = 
-	{
-		0,       0x18a10,
-		0x19000, 0xb5b8,
-		0x24800, 0x015a6c,
-		0x3a800, 0x2528,
-		0x3d000, 0x27c8,
-		0x3f800, 0x1894,
-		0x41800, 0x848c,
-		0x4a000, 0x1e08
-	};
-
 	//keyFile.ReadData(0x32430, (char*)keys, sizeof(keys), false);
 
 	const std::string imageExt = bInBmp ? ".bmp" : ".png";
@@ -237,20 +230,19 @@ void ExtractEncodedSumireImages(const std::string& inRootDirectory, const std::s
 			{
 				break;
 			}
-
 		}
 
-		const uint32 dataSetOffset = keys[k].offset;//entries[k].offset;
+		const uint32 dataSetOffset = GSumireEncodedImageTable[k].offset;//entries[k].offset;
 		const uint32 copySize = dataSetOffset + bufferSize > cardFile.GetDataSize() ? cardFile.GetDataSize() - dataSetOffset : bufferSize;
 		memcpy_s(buffer, copySize, cardFile.GetData() + dataSetOffset, copySize);
 
-		const uint32 decodedSize = DecodeKinematronData((uint32*)buffer, keys[k].key);//entries[k].key);
+		const uint32 decodedSize = DecodeKinematronData((uint32*)buffer, GSumireEncodedImageTable[k].key);
 		if (decodedSize > bufferSize)
 		{
 			assert(decodedSize < bufferSize);
 		}
 
-		const uint32 offsetToImageTable = SwapByteOrder(*((uint32*)(buffer + 0x20))); //always 0x1110?
+		const uint32 offsetToImageTable = SwapByteOrder(*((uint32*)(buffer + 0x20)));
 		const uint32 offsetToPaletteData = 0x110;
 		const int paletteOffset = 0x110;
 
@@ -617,6 +609,12 @@ bool PatchCommonUIImages(const string& inPatchedSakuraDirectory, const string& i
 	return true;
 }
 
+bool PatchEncodedMinigameImages(const string& inPatchedSakuraDirectory, const string& inTranslatedDataDirectory)
+{
+	const std::string cardFilePath = inPatchedSakuraDirectory + "SAKURA3\\SUMI_DAT.ALL";
+	return PatchKinematronEncodedImages(cardFilePath, inTranslatedDataDirectory + "Minigames\\Encoded\\Sumire\\", GSumireEncodedImageTable, GNumSumireEnodingKeys);
+}
+
 bool PatchMiscMiniGameFiles(const string& inPatchedSakuraDirectory, const string& inTranslatedDataDirectory)
 {
 	const string translatedDir = inTranslatedDataDirectory + "MiniGames\\";
@@ -733,9 +731,6 @@ bool PatchMiscMiniGameFiles(const string& inPatchedSakuraDirectory, const string
 		}
 	}
 
-	//Patch shared ui images
-
-
 	return true;
 }
 
@@ -812,5 +807,10 @@ bool PatchMiniGames(const string& inPatchedSakuraDirectory, const string& inTran
 		return false;
 	}
 
-	return PatchCommonUIImages(inPatchedSakuraDirectory, inTranslatedDataDirectory);
+	if(!PatchCommonUIImages(inPatchedSakuraDirectory, inTranslatedDataDirectory))
+	{
+		return false;
+	}
+
+	return PatchEncodedMinigameImages(inPatchedSakuraDirectory, inTranslatedDataDirectory);
 }
