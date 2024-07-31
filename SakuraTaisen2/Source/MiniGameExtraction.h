@@ -166,7 +166,7 @@ const char* pMiniGameMGFiles[NumMiniGameMGFiles] =
 };
 
 const int GNumSumireEnodingKeys = 8;
-const KinematronEncodingKeyInfo GSumireEncodedImageTable[GNumSumireEnodingKeys] =
+KinematronEncodingKeyInfo GSumireEncodedImageTable[GNumSumireEnodingKeys] =
 {
 	0,       0x18a10,
 	0x19000, 0xb5b8,
@@ -211,7 +211,11 @@ void ExtractEncodedSumireImages(const std::string& inRootDirectory, const std::s
 		return;
 	}
 
-	//keyFile.ReadData(0x32430, (char*)keys, sizeof(keys), false);
+	keyFile.ReadData(0x3242c, (char*)GSumireEncodedImageTable, sizeof(GSumireEncodedImageTable), false);
+	for(int i = 0; i < GNumSumireEnodingKeys; ++i)
+	{
+		GSumireEncodedImageTable[i].FixupAfterLoading();
+	}
 
 	const std::string imageExt = bInBmp ? ".bmp" : ".png";
 	const uint32 fileSize = (uint32)cardFile.GetDataSize();

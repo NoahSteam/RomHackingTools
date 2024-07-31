@@ -114,9 +114,9 @@ void EncodeKinematronData(const uint32* pInDecodedData, const uint32 inDecodedDa
 	uint32 decodedIndex = 1;
 	uint32 secondValue = 0;
 	const uint32 numEntriesInData = inDecodedDataSize >> 2;
+	const uint32 numEntriesInBlock = 0x40;
 	while (decodedIndex < numEntriesInData)
-	{
-		const uint32 numEntriesInBlock = 0x40;
+	{	
 		uint32 entryIndex = 1;
 		while (entryIndex < numEntriesInBlock)
 		{
@@ -142,7 +142,15 @@ void EncodeKinematronData(const uint32* pInDecodedData, const uint32 inDecodedDa
 
 		uint32 nextVal = SwapByteOrder(pInDecodedData[decodedIndex++]);
 		uint32 nextEncoded = nextVal ^ prevKey;
-		outEncodedData.push_back(SwapByteOrder(nextEncoded));
+
+		if(decodedIndex < numEntriesInData)
+		{
+			outEncodedData.push_back(SwapByteOrder(nextEncoded));
+		}
+		else
+		{
+	//		outEncodedData.push_back(0);
+		}
 	}
 }
 
@@ -197,7 +205,7 @@ uint32 DecodeKinematronData(uint32* pEncodedData, const int param_2)
 		//	param_2 = uVar4;
 	}
 
-	return ((char*)pEncodedData - pStart) + sizeof(*pEncodedData); //+sizeof(*pEncodedData) because the size includes the full 4 final bytes
+	return ((char*)pEncodedData - pStart);// + sizeof(*pEncodedData); //+sizeof(*pEncodedData) because the size includes the full 4 final bytes
 }
 
 struct KinematronEncodingKeyInfo
@@ -230,6 +238,7 @@ bool PatchKinematronEncodedImages(const std::string& inDataFilePath, const std::
 	{
 		const uint32 dataSetOffset = pInKeys[k].offset;
 		const uint32 copySize = dataSetOffset + bufferSize > cardFile.GetFileSize() ? cardFile.GetFileSize() - dataSetOffset : bufferSize;
+		memset(buffer, 0, bufferSize);
 		cardFile.ReadData(dataSetOffset, buffer, copySize, false);
 
 		const uint32 decodedSize = DecodeKinematronData((uint32*)buffer, pInKeys[k].key);
