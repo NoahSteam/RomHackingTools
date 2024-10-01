@@ -1,0 +1,20 @@
+z x right left up q s e
+
+21246d //fa
+212438 //l
+
+read around 06012b18
+
+06012bf4 has fffa
+06012bf4
+
+06012b22 extu.w r1, r3 //631d to 631c
+06012c38 extu.w r6, r6 //666d to 666c
+06012b0e mov.w r1, @r2 //2211 to 2210 no
+06012b1e mov.w @r1, r1 //6111 to 6110
+
+06012b1c add 4, r1 //7104 to 7105
+
+060A51E2 has 0001 written to it which makes the game read the next character
+
+LipSync data read at 060b4b6 (26c8e4 is the data in memory)
