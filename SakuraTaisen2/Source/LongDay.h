@@ -237,7 +237,7 @@ bool PatchLongDayText(const string& inPatchedSakuraDirectory, const string& inTr
 		const uint32 numLines = translatedFile.mLines.size();
 		if (numLines < omkEntry.NumLines)
 		{
-			printf("Unable to translate file: %s because the translation has too many lines. Expected: %zi Got: %zi\n", translatedFileName.mNoExtension.c_str(), omkEntry.NumLines, translatedFile.mLines.size());
+			printf("Unable to translate file: %s because the translation has too many lines. Expected: %i Got: %zi\n", translatedFileName.mNoExtension.c_str(), omkEntry.NumLines, translatedFile.mLines.size());
 			return false;
 		}
 

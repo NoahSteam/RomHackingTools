@@ -127,7 +127,7 @@ struct SakuraTextFileFixedHeader
 
 	void OutputToFile(FileWriter& outFile)
 	{
-		const int totalSize = SwapByteOrder(mStringInfo.size() + 1);//* sizeof(SakuraTextFileFixedHeader::StringInfo));
+		const int totalSize = SwapByteOrder((int)mStringInfo.size() + 1);//* sizeof(SakuraTextFileFixedHeader::StringInfo));
 		outFile.WriteData(&totalSize, sizeof(totalSize));
 
 		for(StringInfo& stringInfo : mStringInfo)

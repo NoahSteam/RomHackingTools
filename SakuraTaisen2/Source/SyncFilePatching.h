@@ -25,9 +25,9 @@ bool UpdateSyncDataFromSKFiles(SW2SyncFile& inSyncFile, vector<SakuraTextFile>& 
 	for (SakuraTextFile& skFile : inSakuraFiles)
 	{
 		string skFileNumber;
-		if (isdigit(*(char*)(skFile.mFileNameInfo.mNoExtension.c_str() + 3)))
+		if (isdigit(*(char*)(skFile.mFileNameInfo.mNoExtension.c_str() + 2)))
 		{
-			skFileNumber += skFile.mFileNameInfo.mNoExtension.at(4);
+			skFileNumber += skFile.mFileNameInfo.mNoExtension.at(2);
 			skFileNumber += skFile.mFileNameInfo.mNoExtension.at(3);
 		}
 
@@ -214,9 +214,9 @@ void ValidateSyncData(const string& inSakura1Directory, const string& inOutputDi
 	for (const SakuraTextFile& sakuraFile : sakuraTextFiles)
 	{
 		std::string syncFileName("SYNC");
-		if (isdigit(*(char*)(sakuraFile.mFileNameInfo.mNoExtension.c_str() + 3)))
+		if (isdigit(*(char*)(sakuraFile.mFileNameInfo.mNoExtension.c_str() + 2)))
 		{
-			syncFileName += sakuraFile.mFileNameInfo.mNoExtension.at(4);
+			syncFileName += sakuraFile.mFileNameInfo.mNoExtension.at(2);
 			syncFileName += sakuraFile.mFileNameInfo.mNoExtension.at(3);
 		}
 		else

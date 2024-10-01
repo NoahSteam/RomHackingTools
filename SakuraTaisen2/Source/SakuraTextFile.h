@@ -423,9 +423,9 @@ public:
 	void ParseSyncData()
 	{
 		std::string syncFileName("\\SYNC");
-		if (isdigit(*(char*)(mFileNameInfo.mNoExtension.c_str() + 3)))
+		if (isdigit(*(char*)(mFileNameInfo.mNoExtension.c_str() + 2)))
 		{
-			syncFileName += mFileNameInfo.mNoExtension.at(4);
+			syncFileName += mFileNameInfo.mNoExtension.at(2);
 			syncFileName += mFileNameInfo.mNoExtension.at(3);
 
 			syncFileName = mFileNameInfo.mPathOnly + syncFileName + ".BIN";

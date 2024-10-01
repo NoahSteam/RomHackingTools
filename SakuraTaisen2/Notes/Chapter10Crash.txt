@@ -6,7 +6,6 @@ z x right left up q s e
 read around 06012b18
 
 06012bf4 has fffa
-06012bf4
 
 06012b22 extu.w r1, r3 //631d to 631c
 06012c38 extu.w r6, r6 //666d to 666c
@@ -17,4 +16,4 @@ read around 06012b18
 
 060A51E2 has 0001 written to it which makes the game read the next character
 
-LipSync data read at 060b4b6 (26c8e4 is the data in memory)
+LipSync data read at 060b4b6 (26c8e4 is the data in memory) (0026C944 in patched sync data version)
