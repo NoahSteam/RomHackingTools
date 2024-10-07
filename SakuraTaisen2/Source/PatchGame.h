@@ -272,8 +272,7 @@ bool PatchTextDrawingCode(const string& inSourceGameDirectory, const string& inP
 			WriteCommand(0xe4ae, 0x00ff); //060134ae ffff to ff
 			WriteCommand(0xe42e, 0x622c); //0601342e extu.w r2, r2       //622d to 622c			
 			WriteCommand(0xe4fe, 0x611c); //060134fe extu.w r1, r1       //611d to 611c			
-
-			
+						
 			//Dog Lines
 			// 0602c580	=> 27580
 			// 0602c582	=> 27582
@@ -314,8 +313,18 @@ bool PatchTextDrawingCode(const string& inSourceGameDirectory, const string& inP
 			WriteCommand(0x4B7EA, 0x00fe); // 060507ea fffe = > 00fe
 			WriteCommand(0x4B7EE, 0x00ff); // 060507ee ffff = > 00ff
 
-
 			WriteCommand(0x4B660, 0x666c); // 06050660 exut.w r6, r6       //666d to 666c
+
+			//Auto-resume commands during Chapter 10 and 9
+			WriteCommand(0xdbf6, 0x00fa); // 06012bf4 fffa => 00ff
+			WriteCommand(0xdb1c, 0x7105); // 06012b1c add 4, r1 //7104 to 7105
+			WriteCommand(0xdb1e, 0x6110); // 06012b1e mov.w @r1, r1 //6111 to 6110
+			WriteCommand(0xdb22, 0x631c); // 06012b22 extu.w r1, r3 //631d to 631c
+			WriteCommand(0xdc38, 0x666c); // 06012c38 extu.w r6, r6 //666d to 666c
+
+			//Auto-resume at the end of SK0808  (macro 66 in debug mode)
+			WriteCommand(0x24f5a, 0x6200);// 06029f5a mov.w @r0, r2  //6201 to 6200
+			WriteCommand(0x24f5c, 0x612c);// 06029f5c extu.w r2, r1  //612d to 612c
 		}
 		#endif
 	}
@@ -536,14 +545,19 @@ bool PatchGame(const string& inSourceGameDirectory, const string& inTranslatedDa
 		return false;
 	}
 
-
+/*
 	if(!PatchLipSyncDataForAdventure(inPatchedDirectory))
 	{
 		printf("Patching sync data failed\n");
 
 		return false;
 	}
-	
+*/
+
+	if(!HackFixAutoResumeLines(inPatchedDirectory))
+	{
+
+	}
 
 	//Patch title screens
 	if(!PatchTitleScreens(inPatchedDirectory, inTranslatedDataDirectory, inDiscNumber))

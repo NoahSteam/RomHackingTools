@@ -658,7 +658,7 @@ public:
 
 			GenerateTimingDataForLine(textLine, newSyncEntries[seqEntry.mLipSyncId].timingData);
 		}
-	}
+	}	
 
 private:
 //	template<typename EncodingSize>
@@ -907,8 +907,6 @@ private:
 		const uint16 SpecialEntryId  = 0x0103;
 		const uint16 SpecialEntryId2 = 0xF04A;
 		const uint16 DataEntryId     = 0x7FFE;
-		const uint16 LipsId          = 0xC13F;
-		const uint16 LipsId2         = 0xC180;
 
 		size_t syncEntryIndex = 0;
 		const size_t numSyncEntries = mSyncFileData.mSyncEntries.size();

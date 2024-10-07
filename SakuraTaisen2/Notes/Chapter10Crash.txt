@@ -17,3 +17,6 @@ read around 06012b18
 060A51E2 has 0001 written to it which makes the game read the next character
 
 LipSync data read at 060b4b6 (26c8e4 is the data in memory) (0026C944 in patched sync data version)
+-c8e4, c964, c9c8 have lip sync ids
+
+2a57 written to 060a5066

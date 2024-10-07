@@ -211,11 +211,13 @@ void ExtractEncodedSumireImages(const std::string& inRootDirectory, const std::s
 		return;
 	}
 
+	//Real keys here. Found the data scheme after I hard coded them.
+	/*
 	keyFile.ReadData(0x3242c, (char*)GSumireEncodedImageTable, sizeof(GSumireEncodedImageTable), false);
 	for(int i = 0; i < GNumSumireEnodingKeys; ++i)
 	{
 		GSumireEncodedImageTable[i].FixupAfterLoading();
-	}
+	}*/
 
 	const std::string imageExt = bInBmp ? ".bmp" : ".png";
 	const uint32 fileSize = (uint32)cardFile.GetDataSize();

@@ -310,3 +310,117 @@ void ValidateSyncData(const string& inSakura1Directory, const string& inOutputDi
 		}
 	}
 }
+
+void CreateExtraCharacterEntriesInTimingData(TimingDataVector& inTimingVector, int inNumCharacters)
+{
+	int numExistingChars = 0;
+	for(uint8 value : inTimingVector)
+	{
+		if(value == (uint8)0x4e || value == (uint8)0x2e)
+		{
+			++numExistingChars;
+		}
+	}
+
+	if(numExistingChars < inNumCharacters)
+	{
+		int numCharsToAdd = inNumCharacters - numExistingChars;
+		for (uint8& value : inTimingVector)
+		{
+			if (!(value == (uint8)0x4e || value == (uint8)0x2e))
+			{
+				value = (uint8)0x2e;
+				--numCharsToAdd;
+				if(numCharsToAdd == 0)
+				{
+					break;
+				}
+			}
+		}
+
+		if (numCharsToAdd > 0)
+		{
+			printf("CreateExtraCharacterEntriesInTimingData: Not enough timing data available. \n");
+		}
+	}
+}
+
+bool HackUpdateSyncDataForAutoResumeLines(SW2SyncFile& inSyncFile, vector<SakuraTextFile>& inSakuraFiles)
+{
+	SakuraTextFile* pSK1007 = nullptr;
+	for(SakuraTextFile& sakuraFile : inSakuraFiles)
+	{
+		if(sakuraFile.mFileNameInfo.mNoExtension == "SK1007")
+		{
+			pSK1007 = &sakuraFile;
+		}
+	}
+
+	if(!pSK1007)
+	{
+		return false;
+	}
+
+	FileReadWriter syncFileWriter;
+	if (!syncFileWriter.OpenFile(inSyncFile.mFileName.mFullPath))
+	{
+		return false;
+	}
+
+	//Generate patched data
+	{
+		SyncData& patchedSyncData = inSyncFile.mSyncEntries[691];
+		CreateExtraCharacterEntriesInTimingData(patchedSyncData.timingData, pSK1007->mLines[40].GetNumberOfPrintedCharacters());
+		syncFileWriter.WriteData(0xc8e4, (const char*)patchedSyncData.timingData.data(), patchedSyncData.timingData.size(), false);
+	}
+	{
+		SyncData& patchedSyncData = inSyncFile.mSyncEntries[692];
+		CreateExtraCharacterEntriesInTimingData(patchedSyncData.timingData, pSK1007->mLines[41].GetNumberOfPrintedCharacters());
+		syncFileWriter.WriteData(0xc964, (const char*)patchedSyncData.timingData.data(), patchedSyncData.timingData.size(), false);
+	}
+	{
+		SyncData& patchedSyncData = inSyncFile.mSyncEntries[693];
+		CreateExtraCharacterEntriesInTimingData(patchedSyncData.timingData, pSK1007->mLines[42].GetNumberOfPrintedCharacters());
+		syncFileWriter.WriteData(0xc9c8, (const char*)patchedSyncData.timingData.data(), patchedSyncData.timingData.size(), false);
+	}
+
+	return true;
+}
+
+bool HackFixAutoResumeLines(const string& inPatchedDirectory)
+{
+	printf("HackFixAutoResumeLines\n");
+
+	//Find all files within the requested directory
+	vector<FileNameContainer> allFiles;
+	FindAllFilesWithinDirectory(inPatchedDirectory + string("SAKURA1\\"), allFiles);
+
+	//Find all the scenario text files
+	vector<FileNameContainer> scenarioFiles;
+	GetAllFilesOfType(allFiles, "SK0", scenarioFiles);
+	GetAllFilesOfType(allFiles, "SK1", scenarioFiles);
+
+	vector<SakuraTextFile> skFiles;
+	FindAllSakuraText(scenarioFiles, skFiles, true);
+
+	//Extract sync data
+	vector<FileNameContainer> syncFileNames;
+	vector<SW2SyncFile> syncFiles;
+	GetAllFilesOfType(allFiles, "SYNC", syncFileNames);
+	FindAllSyncData(syncFileNames, syncFiles);
+
+	for (SW2SyncFile& syncFile : syncFiles)
+	{
+		if(syncFile.mFileName.mNoExtension != "SYNC10")
+		{
+			continue;
+		}
+
+		if (!HackUpdateSyncDataForAutoResumeLines(syncFile, skFiles))
+		{
+			return false;
+		}
+	}
+
+	return true;
+}

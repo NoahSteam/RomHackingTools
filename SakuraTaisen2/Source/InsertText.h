@@ -518,6 +518,20 @@ bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTrans
 						translatedString.AddChar(sakuraFile.mLines[currSakuraStringIndex].mChars[numBytesInOriginalText-2].mIndex);
 					}
 
+					//Leaving this because it causes formatting issues that need to be dealt with manually
+					//For examples, search for fffd in the TextCode files.  SK0808 has an example on lines 59&60
+					/*
+					if (sakuraFile.mLines[currSakuraStringIndex].mChars[0].mIndex == 0xfffc && 
+						sakuraFile.mLines[currSakuraStringIndex].mChars[numBytesInOriginalText - 2].mIndex == 0xfffd)
+					{
+						translatedString.AddChar(0xfd);
+
+						if(sakuraFile.mLines[currSakuraStringIndex].mChars[numBytesInOriginalText - 2].mIndex == 0xfffe)
+						{
+							translatedString.AddChar(0xfe);
+						}
+					}*/
+
 					if (sakuraFile.mLines[currSakuraStringIndex].mChars[0].mIndex == 0xfffc)
 					{
 						translatedString.AddChar(sakuraFile.mLines[currSakuraStringIndex].mChars[1].mIndex, true);

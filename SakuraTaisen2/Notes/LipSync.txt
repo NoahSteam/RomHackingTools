@@ -21,8 +21,12 @@ In SK0501, the pattern is: 7ffe textIndex c004 c400 0004 lipSyncID
 
 06012b22 extu.w r1, r3 //631d to 631c?
 06012bf6 fffa to 00fa
+06012c38 extu.w r6, r6  //666d to 666c
 
-217418 has start of first line
+0605acd4 to 0009?
+
+217418 has start of first line //read at 06012b0a
+21744e The cherry
 
 ///
 0601b1d2 e300
