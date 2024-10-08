@@ -660,6 +660,19 @@ public:
 		}
 	}	
 
+	const SequenceEntry* GetSequenceEntryForLineNumber(int inLineNumber) const
+	{
+		for(const SequenceEntry& seqEntry : mSequenceEntries)
+		{
+			if(seqEntry.mTextIndex == inLineNumber)
+			{
+				return &seqEntry;
+			}
+		}
+
+		return nullptr;
+	}
+
 private:
 //	template<typename EncodingSize>
 	void ParseHeader()
@@ -1368,7 +1381,7 @@ void ExtractTextCode(const string& inSearchDirectory, const string& inOutputDire
 
 		for(const SakuraTextFile::SequenceEntry& seqEntry : sakuraText.mSequenceEntries)
 		{
-			fprintf(pOutTextSequenceFile, "%02x [%04x]\n", seqEntry.mTextIndex, seqEntry.mLipSyncId);
+			fprintf(pOutTextSequenceFile, "TextIndex: %i [0x%02x] LipSyncID: %04x\n", seqEntry.mTextIndex, seqEntry.mTextIndex, seqEntry.mLipSyncId);
 		}
 
 		fclose(pOutTextCodeFile);

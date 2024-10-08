@@ -105,6 +105,7 @@ struct SW2SyncFile
 			//Create new entry
 			SyncData newData;
 			newData.syncEntry = pSyncTable[i];
+			newData.syncEntry.syncID &= 0x0fff;
 
 			const uint32 offsetToTiming = newData.syncEntry.offsetToTimingData & 0xffff;
 

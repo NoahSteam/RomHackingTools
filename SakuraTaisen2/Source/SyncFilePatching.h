@@ -311,7 +311,7 @@ void ValidateSyncData(const string& inSakura1Directory, const string& inOutputDi
 	}
 }
 
-void CreateExtraCharacterEntriesInTimingData(TimingDataVector& inTimingVector, int inNumCharacters)
+void CreateExtraCharacterEntriesInTimingData(TimingDataVector& inTimingVector, int inNumCharacters, int inLineNumber, const std::string& inFileName)
 {
 	int numExistingChars = 0;
 	for(uint8 value : inTimingVector)
@@ -340,27 +340,93 @@ void CreateExtraCharacterEntriesInTimingData(TimingDataVector& inTimingVector, i
 
 		if (numCharsToAdd > 0)
 		{
-			printf("CreateExtraCharacterEntriesInTimingData: Not enough timing data available. \n");
+			printf("CreateExtraCharacterEntriesInTimingData: Remove %i characters from line: %i (%s)\n", numCharsToAdd, inLineNumber, inFileName.c_str());
 		}
 	}
 }
 
-bool HackUpdateSyncDataForAutoResumeLines(SW2SyncFile& inSyncFile, vector<SakuraTextFile>& inSakuraFiles)
+bool HackUpdateSyncDataForAutoResumeLines(const string& inPatchedDirectory, vector<SakuraTextFile>& inSakuraFiles)
 {
-	SakuraTextFile* pSK1007 = nullptr;
-	for(SakuraTextFile& sakuraFile : inSakuraFiles)
+	//Find all files within the requested directory
+	vector<FileNameContainer> allFiles;
+	FindAllFilesWithinDirectory(inPatchedDirectory + string("SAKURA1\\"), allFiles);
+
+	vector<FileNameContainer> syncFileNames;
+	vector<SW2SyncFile> syncFiles;
+	GetAllFilesOfType(allFiles, "SYNC", syncFileNames);
+	FindAllSyncData(syncFileNames, syncFiles);
+
+	for(const SakuraTextFile& sakuraFile : inSakuraFiles)
 	{
-		if(sakuraFile.mFileNameInfo.mNoExtension == "SK1007")
+		std::string syncFileName("SYNC");
+		if (isdigit(*(char*)(sakuraFile.mFileNameInfo.mNoExtension.c_str() + 2)))
 		{
-			pSK1007 = &sakuraFile;
+			syncFileName += sakuraFile.mFileNameInfo.mNoExtension.at(2);
+			syncFileName += sakuraFile.mFileNameInfo.mNoExtension.at(3);
+		}
+		else
+		{
+			continue;
+		}
+
+		//Find sync file for this SK file
+		SW2SyncFile* pSyncFile = nullptr;
+		for(SW2SyncFile& syncFile : syncFiles)
+		{
+			if(syncFile.mFileName.mNoExtension == syncFileName)
+			{
+				pSyncFile = &syncFile;
+			}
+		}
+
+		if(!pSyncFile)
+		{
+			continue;
+		}
+
+		FileReadWriter syncFileWriter;
+		if (!syncFileWriter.OpenFile(pSyncFile->mFileName.mFullPath))
+		{
+			return false;
+		}
+
+		const int numLines = (int)sakuraFile.mLines.size();
+		for(int lineNumber = 0; lineNumber < numLines; ++lineNumber)
+		{
+			const SakuraString& sakuraLine = sakuraFile.mLines[lineNumber];
+			const int numChars = (int)sakuraLine.mChars.size();
+			if(numChars < 3)
+			{
+				continue;
+			}
+
+			//This line requires its sync data to be fixed up
+			if(sakuraLine.mChars[0].mIndex != (uint16)0xfc && sakuraLine.mChars[numChars-3].mIndex == (uint16)0xfa)
+			{
+				const SakuraTextFile::SequenceEntry* pSequenceEntry = sakuraFile.GetSequenceEntryForLineNumber(lineNumber + 1);
+				if(!pSequenceEntry)
+				{
+					printf("No sync data found for line: %i in %s within %s\n", lineNumber+1, sakuraFile.mFileNameInfo.mFileName.c_str(), pSyncFile->mFileName.mFileName.c_str());
+					continue;
+				}
+
+				const uint16 lipSyncId = pSequenceEntry->mLipSyncId;
+				if(pSyncFile->mSyncIdToEntry.find(lipSyncId) == pSyncFile->mSyncIdToEntry.end())
+				{
+					printf("No sync data found for line: %i in %s within %s\n", lineNumber+1, sakuraFile.mFileNameInfo.mFileName.c_str(), pSyncFile->mFileName.mFileName.c_str());
+					continue;//return false;
+				}
+
+				SyncData* pSyncData = &pSyncFile->mSyncIdToEntry[lipSyncId];
+				CreateExtraCharacterEntriesInTimingData(pSyncData->timingData, sakuraLine.GetNumberOfPrintedCharacters(), lineNumber+1, sakuraFile.mFileNameInfo.mNoExtension);
+				syncFileWriter.WriteData(pSyncData->syncEntry.offsetToTimingData & 0xffff, (const char*)pSyncData->timingData.data(), pSyncData->timingData.size(), false);
+
+			//	printf("Fixed SyncData for line: %i in %s within %s\n", lineNumber, sakuraFile.mFileNameInfo.mFileName.c_str(), pSyncFile->mFileName.mFileName.c_str());
+			}
 		}
 	}
 
-	if(!pSK1007)
-	{
-		return false;
-	}
-
+	/*
 	FileReadWriter syncFileWriter;
 	if (!syncFileWriter.OpenFile(inSyncFile.mFileName.mFullPath))
 	{
@@ -383,7 +449,7 @@ bool HackUpdateSyncDataForAutoResumeLines(SW2SyncFile& inSyncFile, vector<Sakura
 		CreateExtraCharacterEntriesInTimingData(patchedSyncData.timingData, pSK1007->mLines[42].GetNumberOfPrintedCharacters());
 		syncFileWriter.WriteData(0xc9c8, (const char*)patchedSyncData.timingData.data(), patchedSyncData.timingData.size(), false);
 	}
-
+	*/
 	return true;
 }
 
@@ -402,25 +468,11 @@ bool HackFixAutoResumeLines(const string& inPatchedDirectory)
 
 	vector<SakuraTextFile> skFiles;
 	FindAllSakuraText(scenarioFiles, skFiles, true);
-
-	//Extract sync data
-	vector<FileNameContainer> syncFileNames;
-	vector<SW2SyncFile> syncFiles;
-	GetAllFilesOfType(allFiles, "SYNC", syncFileNames);
-	FindAllSyncData(syncFileNames, syncFiles);
-
-	for (SW2SyncFile& syncFile : syncFiles)
+		
+	if (!HackUpdateSyncDataForAutoResumeLines(inPatchedDirectory, skFiles))
 	{
-		if(syncFile.mFileName.mNoExtension != "SYNC10")
-		{
-			continue;
-		}
-
-		if (!HackUpdateSyncDataForAutoResumeLines(syncFile, skFiles))
-		{
-			return false;
-		}
+		return false;
 	}
-
+	
 	return true;
 }
