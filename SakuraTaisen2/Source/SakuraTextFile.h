@@ -1033,6 +1033,19 @@ private:
 										newEntry.mbIsLips   = false;
 										bSyncIdFound        = true;
 
+										if( index - 3 > endSearch)
+										{
+											if( SwapByteOrder(pSequenceData[index103 - 1]) == 0x0004 )
+											{
+												const uint16 multiplier1 = SwapByteOrder(pSequenceData[index103 - 2]);
+												const uint16 multiplier2 = SwapByteOrder(pSequenceData[index103 - 3]);
+												if( (multiplier1 & 0xf000) == 0xc && (multiplier2 & 0xf000) == 0xc )
+												{
+													newEntry.mLipSyncId += (multiplier1 & 0x0fff) * (multiplier2 & 0x0fff);
+												}
+											}
+										}
+
 										//Find first sync entry from sync file
 										if(!bFirstSyncEntryFound && mSyncFileData.mSyncIdToEntry.find(newEntry.mLipSyncId) != mSyncFileData.mSyncIdToEntry.end())
 										{
