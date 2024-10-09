@@ -545,20 +545,19 @@ bool PatchGame(const string& inSourceGameDirectory, const string& inTranslatedDa
 		return false;
 	}
 
-/*
 	if(!PatchLipSyncDataForAdventure(inPatchedDirectory))
 	{
 		printf("Patching sync data failed\n");
 
 		return false;
 	}
-*/
 
+	/*
 	if(!HackFixAutoResumeLines(inPatchedDirectory))
 	{
 
 	}
-
+	*/
 	//Patch title screens
 	if(!PatchTitleScreens(inPatchedDirectory, inTranslatedDataDirectory, inDiscNumber))
 	{

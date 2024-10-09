@@ -44,7 +44,29 @@ bool UpdateSyncDataFromSKFiles(SW2SyncFile& inSyncFile, vector<SakuraTextFile>& 
 				continue;
 			}
 
-			syncIdsFromSkFiles[iter->first] = iter->second;
+			//Only patch auto-resume lines.  These are lines that have 0xfa in the 3rd last byte and something besides 0xfc in the first byte
+			bool bNeedsSyncingFixup = false;
+			if(skFile.mLipSyncIdToSequenceEntryMap.find(iter->first) != skFile.mLipSyncIdToSequenceEntryMap.end())
+			{
+				const SakuraTextFile::SequenceEntry& sequenceEntry = skFile.mLipSyncIdToSequenceEntryMap[iter->first];
+				const int textIndex = sequenceEntry.mTextIndex - 1;
+				const SakuraString& sakuraLine = skFile.mLines[textIndex];
+
+				const int numChars = (int)sakuraLine.mChars.size();
+				if(numChars > 3)
+				{
+					//This line requires its sync data to be fixed up
+					if( sakuraLine.mChars[0].mIndex != (uint16)0xfc && sakuraLine.mChars[numChars - 3].mIndex == (uint16)0xfa )
+					{
+						bNeedsSyncingFixup = true;
+					}
+				}
+			}
+
+			if(bNeedsSyncingFixup)
+			{
+				syncIdsFromSkFiles[iter->first] = iter->second;
+			}
 		}
 	}
 
