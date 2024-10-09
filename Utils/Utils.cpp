@@ -593,7 +593,7 @@ bool TextFileData::InitializeTextFile(bool bFixupSpecialCharacters, bool bCollap
 				}
 				else if( bFixupSpecialCharacters && uToken == (unsigned char)0xe2 )
 				{
-					printf("Unhandled multi-byte character in string %s in %s\n", pToken, mFileNameInfo.mFileName.c_str());
+					printf("Unhandled multi-byte character in string %s in %s around line %i\n", pToken, mFileNameInfo.mFileName.c_str(), lineCount);
 
 					t += 3;
 				}

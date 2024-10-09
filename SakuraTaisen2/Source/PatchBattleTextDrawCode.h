@@ -4340,7 +4340,7 @@ nop          //0009
 
 bool PatchBattleTextDrawingCode(const string& inOriginalDirectory, const string& inPatchedDirectory, const string& inDataDirectory)
 {
-	printf("Patching Battle Status Screen\n");
+	printf("Patching Battle Status Screen (Slow, please wait)\n");
 
 	const string lipPatchPath = inDataDirectory + Seperators + "BattleLipsPatching.bin";
 	FileData lipsPatchData;

@@ -59,6 +59,8 @@ bool UpdateSyncDataFromSKFiles(SW2SyncFile& inSyncFile, vector<SakuraTextFile>& 
 					if( sakuraLine.mChars[0].mIndex != (uint16)0xfc && sakuraLine.mChars[numChars - 3].mIndex == (uint16)0xfa )
 					{
 						bNeedsSyncingFixup = true;
+
+						printf("LipSyncFix: Line: %i in %s\n", textIndex, skFile.mFileNameInfo.mFileName.c_str());
 					}
 				}
 			}
@@ -333,7 +335,7 @@ void ValidateSyncData(const string& inSakura1Directory, const string& inOutputDi
 	}
 }
 
-void CreateExtraCharacterEntriesInTimingData(TimingDataVector& inTimingVector, int inNumCharacters, int inLineNumber, const std::string& inFileName)
+bool CreateExtraCharacterEntriesInTimingData(TimingDataVector& inTimingVector, int inNumCharacters, int inLineNumber, const std::string& inFileName)
 {
 	int numExistingChars = 0;
 	for(uint8 value : inTimingVector)
@@ -364,7 +366,11 @@ void CreateExtraCharacterEntriesInTimingData(TimingDataVector& inTimingVector, i
 		{
 			printf("CreateExtraCharacterEntriesInTimingData: Remove %i characters from line: %i (%s)\n", numCharsToAdd, inLineNumber, inFileName.c_str());
 		}
+
+		return true;
 	}
+
+	return false;
 }
 
 bool HackUpdateSyncDataForAutoResumeLines(const string& inPatchedDirectory, vector<SakuraTextFile>& inSakuraFiles)
@@ -440,10 +446,12 @@ bool HackUpdateSyncDataForAutoResumeLines(const string& inPatchedDirectory, vect
 				}
 
 				SyncData* pSyncData = &pSyncFile->mSyncIdToEntry[lipSyncId];
-				CreateExtraCharacterEntriesInTimingData(pSyncData->timingData, sakuraLine.GetNumberOfPrintedCharacters(), lineNumber+1, sakuraFile.mFileNameInfo.mNoExtension);
-				syncFileWriter.WriteData(pSyncData->syncEntry.offsetToTimingData & 0xffff, (const char*)pSyncData->timingData.data(), pSyncData->timingData.size(), false);
+				if(CreateExtraCharacterEntriesInTimingData(pSyncData->timingData, sakuraLine.GetNumberOfPrintedCharacters(), lineNumber+1, sakuraFile.mFileNameInfo.mNoExtension))
+				{
+					syncFileWriter.WriteData(pSyncData->syncEntry.offsetToTimingData & 0xffff, (const char*)pSyncData->timingData.data(), pSyncData->timingData.size(), false);
 
-			//	printf("Fixed SyncData for line: %i in %s within %s\n", lineNumber, sakuraFile.mFileNameInfo.mFileName.c_str(), pSyncFile->mFileName.mFileName.c_str());
+					printf("Hack Fixed SyncData for line: %i in %s within %s\n", lineNumber, sakuraFile.mFileNameInfo.mFileName.c_str(), pSyncFile->mFileName.mFileName.c_str());
+				}
 			}
 		}
 	}

@@ -1026,6 +1026,7 @@ private:
 								{
 									searchValue = SwapByteOrder(pSequenceData[index103]);
 									const uint16 searchValueClean = (searchValue & 0xf000) == 0xc000 ? searchValue & 0x0fff : 0;
+									const int searchValueDifference = (searchValueClean - prevTextIndex);
 
 									//Sync entry
 									if (!bSyncIdFound && (searchValue & 0xf000) == 0xc000)
@@ -1033,12 +1034,6 @@ private:
 										newEntry.mLipSyncId = searchValue & 0x0fff;
 										newEntry.mbIsLips   = false;
 										bSyncIdFound        = true;
-
-										if( newEntry.mLipSyncId == 0x318 )
-										{
-											int k = 9;
-											++k;
-										}
 
 										//IDs can have multipliers that are added to them
 										if( index103 - 3 > endSearch)
@@ -1050,6 +1045,12 @@ private:
 												if( (multiplier1 & 0xf000) == 0xc000 && (multiplier2 & 0xf000) == 0xc000 )
 												{
 													newEntry.mLipSyncId += (multiplier1 & 0x0fff) * (multiplier2 & 0x0fff);
+
+													/*
+													if(newEntry.mLipSyncId == 0x2528)
+													{
+														newEntry.mLipSyncId = 0x2528;
+													}*/
 												}
 											}
 										}
@@ -1089,7 +1090,8 @@ private:
 
 									//If Sync ID has been found, we now need to find the text index
 									else if(bSyncIdFound && 
-											(searchValueClean == prevTextIndex + 1 || (!b103Found && searchValueClean == prevTextIndex)))
+											(searchValueClean == prevTextIndex + 1 || 
+											(!b103Found && (searchValueDifference >= 0 && searchValueDifference < 10))))
 									{
 										newEntry.mTextIndex = searchValueClean;
 										newEntry.mAddress   = index103 * 2 + mFileHeader.OffsetToSequenceData;
@@ -1097,6 +1099,8 @@ private:
 										const bool bShouldBreak = searchValueClean != prevTextIndex;
 										prevTextIndex = newEntry.mTextIndex;
 
+										assert( newEntry.mTextIndex >= prevTextIndex );
+										
 										b103Found = true;
 
 										AddLipSyncEntry(newEntry);
