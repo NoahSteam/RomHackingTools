@@ -389,7 +389,7 @@ bool HackUpdateSyncDataForAutoResumeLines(const string& inPatchedDirectory, vect
 		{
 			return false;
 		}
-
+		
 		const int numLines = (int)sakuraFile.mLines.size();
 		for(int lineNumber = 0; lineNumber < numLines; ++lineNumber)
 		{
@@ -426,30 +426,6 @@ bool HackUpdateSyncDataForAutoResumeLines(const string& inPatchedDirectory, vect
 		}
 	}
 
-	/*
-	FileReadWriter syncFileWriter;
-	if (!syncFileWriter.OpenFile(inSyncFile.mFileName.mFullPath))
-	{
-		return false;
-	}
-
-	//Generate patched data
-	{
-		SyncData& patchedSyncData = inSyncFile.mSyncEntries[691];
-		CreateExtraCharacterEntriesInTimingData(patchedSyncData.timingData, pSK1007->mLines[40].GetNumberOfPrintedCharacters());
-		syncFileWriter.WriteData(0xc8e4, (const char*)patchedSyncData.timingData.data(), patchedSyncData.timingData.size(), false);
-	}
-	{
-		SyncData& patchedSyncData = inSyncFile.mSyncEntries[692];
-		CreateExtraCharacterEntriesInTimingData(patchedSyncData.timingData, pSK1007->mLines[41].GetNumberOfPrintedCharacters());
-		syncFileWriter.WriteData(0xc964, (const char*)patchedSyncData.timingData.data(), patchedSyncData.timingData.size(), false);
-	}
-	{
-		SyncData& patchedSyncData = inSyncFile.mSyncEntries[693];
-		CreateExtraCharacterEntriesInTimingData(patchedSyncData.timingData, pSK1007->mLines[42].GetNumberOfPrintedCharacters());
-		syncFileWriter.WriteData(0xc9c8, (const char*)patchedSyncData.timingData.data(), patchedSyncData.timingData.size(), false);
-	}
-	*/
 	return true;
 }
 

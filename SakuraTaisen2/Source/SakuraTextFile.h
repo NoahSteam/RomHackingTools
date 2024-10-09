@@ -1004,7 +1004,7 @@ private:
 
 					bool b103Found = false;
 
-					//**Find lipsync id**
+					//**Find Sync IDs**
 					unsigned int searchIndex = index + 1;
 					while(searchIndex < mFileHeader.OffsetToTextHeader)
 					{
@@ -1012,7 +1012,8 @@ private:
 						uint16 searchValue     = SwapByteOrder(pSequenceData[searchIndex]);
 						uint16 nextSearchValue = SwapByteOrder(pSequenceData[searchIndex+1]);
 
-						if( !(searchValue == 0x0102 && (nextSearchValue == 0x7FFE || nextSearchValue == 0xF04A)))
+						const bool bReachedEndOfEntry = searchValue == 0x0102 && (nextSearchValue == 0x7FFE || nextSearchValue == 0xF04A);
+						if(!bReachedEndOfEntry)
 						{
 							//Should be 0103 and then behind that we can find the lip sync id
 							if (searchValue == 0x0103 && nextSearchValue == 0x7FFE)
@@ -1033,13 +1034,20 @@ private:
 										newEntry.mbIsLips   = false;
 										bSyncIdFound        = true;
 
-										if( index - 3 > endSearch)
+										if( newEntry.mLipSyncId == 0x318 )
+										{
+											int k = 9;
+											++k;
+										}
+
+										//IDs can have multipliers that are added to them
+										if( index103 - 3 > endSearch)
 										{
 											if( SwapByteOrder(pSequenceData[index103 - 1]) == 0x0004 )
 											{
 												const uint16 multiplier1 = SwapByteOrder(pSequenceData[index103 - 2]);
 												const uint16 multiplier2 = SwapByteOrder(pSequenceData[index103 - 3]);
-												if( (multiplier1 & 0xf000) == 0xc && (multiplier2 & 0xf000) == 0xc )
+												if( (multiplier1 & 0xf000) == 0xc000 && (multiplier2 & 0xf000) == 0xc000 )
 												{
 													newEntry.mLipSyncId += (multiplier1 & 0x0fff) * (multiplier2 & 0x0fff);
 												}
@@ -1066,10 +1074,11 @@ private:
 											{
 												++syncEntryIndex;
 
+												/*
 												if(syncEntryIndex < numSyncEntries && (mSyncFileData.mSyncEntries[syncEntryIndex].syncEntry.syncID & 0xf000) > 0x1000)
 												{
 													++syncEntryIndex;
-												}
+												}*/
 											}
 										}
 										else
@@ -1077,7 +1086,10 @@ private:
 											newEntry.mLipSyncId = 0;
 										}
 									}
-									else if(bSyncIdFound && (searchValueClean == prevTextIndex + 1 || (!b103Found && searchValueClean == prevTextIndex)))
+
+									//If Sync ID has been found, we now need to find the text index
+									else if(bSyncIdFound && 
+											(searchValueClean == prevTextIndex + 1 || (!b103Found && searchValueClean == prevTextIndex)))
 									{
 										newEntry.mTextIndex = searchValueClean;
 										newEntry.mAddress   = index103 * 2 + mFileHeader.OffsetToSequenceData;
