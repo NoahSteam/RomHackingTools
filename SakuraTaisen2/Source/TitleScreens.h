@@ -47,6 +47,12 @@ bool PatchTitleScreens(const string& InRootOutputDirectory, const string& InData
 			return false;
 		}
 
+		//Special case for disc 3 where the last screen is after a bunch of other epilogue images
+		if( InDiscNumber == 3 && i == 2 )
+		{
+			offset = 0x25B040;
+		}
+
 		wpallFile.WriteData(offset, patchedImageData.mpPackedTiles, patchedImageData.mPackedTileSize);
 		offset += imageStride + 4096;
 	}
