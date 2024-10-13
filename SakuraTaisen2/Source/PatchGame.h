@@ -553,7 +553,7 @@ bool PatchGame(const string& inSourceGameDirectory, const string& inTranslatedDa
 	}
 
 	
-	if(!HackFixAutoResumeLines(inPatchedDirectory))
+	if(!VerifyAutoResumeLines(inPatchedDirectory))
 	{
 
 	}

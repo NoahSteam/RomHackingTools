@@ -36,6 +36,8 @@ bool UpdateSyncDataFromSKFiles(SW2SyncFile& inSyncFile, vector<SakuraTextFile>& 
 			continue;
 		}
 
+		const int numLinesInSkFile = (int)skFile.mLines.size();
+
 		//Create map of all syncIds and their data
 		for (SyncIdToSyncData::iterator iter = skFile.mSyncFileData.mPatchedSyncIdToEntry.begin(); iter != skFile.mSyncFileData.mPatchedSyncIdToEntry.end(); ++iter)
 		{
@@ -50,6 +52,12 @@ bool UpdateSyncDataFromSKFiles(SW2SyncFile& inSyncFile, vector<SakuraTextFile>& 
 			{
 				const SakuraTextFile::SequenceEntry& sequenceEntry = skFile.mLipSyncIdToSequenceEntryMap[iter->first];
 				const int textIndex = sequenceEntry.mTextIndex - 1;
+				if(textIndex > numLinesInSkFile)
+				{
+					printf("Invalid line index %i in %s\n", textIndex, skFile.mFileNameInfo.mFileName.c_str());
+					continue;
+				}
+
 				const SakuraString& sakuraLine = skFile.mLines[textIndex];
 
 				const int numChars = (int)sakuraLine.mChars.size();
@@ -480,5 +488,107 @@ bool HackFixAutoResumeLines(const string& inPatchedDirectory)
 		return false;
 	}
 	
+	return true;
+}
+
+bool VerifySyncDataForAutoResumeLines(const string& inPatchedDirectory, vector<SakuraTextFile>& inSakuraFiles)
+{
+	//Find all files within the requested directory
+	vector<FileNameContainer> allFiles;
+	FindAllFilesWithinDirectory(inPatchedDirectory + string("SAKURA1\\"), allFiles);
+
+	vector<FileNameContainer> syncFileNames;
+	vector<SW2SyncFile> syncFiles;
+	GetAllFilesOfType(allFiles, "SYNC", syncFileNames);
+	FindAllSyncData(syncFileNames, syncFiles);
+
+	for (const SakuraTextFile& sakuraFile : inSakuraFiles)
+	{
+		std::string syncFileName("SYNC");
+		if (isdigit(*(char*)(sakuraFile.mFileNameInfo.mNoExtension.c_str() + 2)))
+		{
+			syncFileName += sakuraFile.mFileNameInfo.mNoExtension.at(2);
+			syncFileName += sakuraFile.mFileNameInfo.mNoExtension.at(3);
+		}
+		else
+		{
+			continue;
+		}
+
+		//Find sync file for this SK file
+		SW2SyncFile* pSyncFile = nullptr;
+		for (SW2SyncFile& syncFile : syncFiles)
+		{
+			if (syncFile.mFileName.mNoExtension == syncFileName)
+			{
+				pSyncFile = &syncFile;
+			}
+		}
+
+		if (!pSyncFile)
+		{
+			continue;
+		}
+
+		FileReadWriter syncFileWriter;
+		if (!syncFileWriter.OpenFile(pSyncFile->mFileName.mFullPath))
+		{
+			return false;
+		}
+
+		const int numLines = (int)sakuraFile.mLines.size();
+		for (int lineNumber = 0; lineNumber < numLines; ++lineNumber)
+		{
+			const SakuraString& sakuraLine = sakuraFile.mLines[lineNumber];
+			const int numChars = (int)sakuraLine.mChars.size();
+			if (numChars < 3)
+			{
+				continue;
+			}
+
+			//This line requires its sync data to be fixed up
+			if (sakuraLine.mChars[0].mIndex != (uint16)0xfc && sakuraLine.mChars[numChars - 3].mIndex == (uint16)0xfa)
+			{
+				const SakuraTextFile::SequenceEntry* pSequenceEntry = sakuraFile.GetSequenceEntryForLineNumber(lineNumber + 1);
+				if (!pSequenceEntry)
+				{
+					printf("No sync data found for line: %i in %s within %s\n", lineNumber + 1, sakuraFile.mFileNameInfo.mFileName.c_str(), pSyncFile->mFileName.mFileName.c_str());
+					continue;
+				}
+
+				const uint16 lipSyncId = pSequenceEntry->mLipSyncId;
+				if (pSyncFile->mSyncIdToEntry.find(lipSyncId) == pSyncFile->mSyncIdToEntry.end())
+				{
+					printf("No sync data found for line: %i in %s within %s\n", lineNumber + 1, sakuraFile.mFileNameInfo.mFileName.c_str(), pSyncFile->mFileName.mFileName.c_str());
+					continue;//return false;
+				}
+			}
+		}
+	}
+
+	return true;
+}
+
+bool VerifyAutoResumeLines(const string& inPatchedDirectory)
+{
+	printf("HackFixAutoResumeLines\n");
+
+	//Find all files within the requested directory
+	vector<FileNameContainer> allFiles;
+	FindAllFilesWithinDirectory(inPatchedDirectory + string("SAKURA1\\"), allFiles);
+
+	//Find all the scenario text files
+	vector<FileNameContainer> scenarioFiles;
+	GetAllFilesOfType(allFiles, "SK0", scenarioFiles);
+	GetAllFilesOfType(allFiles, "SK1", scenarioFiles);
+
+	vector<SakuraTextFile> skFiles;
+	FindAllSakuraText(scenarioFiles, skFiles, true);
+
+	if (!VerifySyncDataForAutoResumeLines(inPatchedDirectory, skFiles))
+	{
+		return false;
+	}
+
 	return true;
 }

@@ -650,6 +650,10 @@ public:
 				continue;
 			}
 
+			if(!(mLines.size() + 1 > seqEntry.mTextIndex))
+			{
+				continue;
+			}
 			assert(mLines.size() + 1> seqEntry.mTextIndex);
 			assert(seqEntry.mTextIndex > 0);
 
