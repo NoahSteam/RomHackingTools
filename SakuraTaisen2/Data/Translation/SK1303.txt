@@ -613,17 +613,17 @@ Beacon
 Summoner
 OK, it's time for a video quiz! Please watch really closely!
 OK, it's time for a video quiz!
-2
-2
+<ignore>
+<ignore>
 OK, now it's time for a video quiz. You better watch closely.
 OK, now it's time for a video quiz.
-2
-2
+<ignore>
+<ignore>
 OK, it's time for a video quiz!
-2
+<ignore>
 OK, now it's time for a video quiz.
-2
-2
+<ignore>
+<ignore>
 Are you ready? Get set…
 Let's get started! Ready…
 Ready? Get set…

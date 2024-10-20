@@ -256,7 +256,7 @@ bool PatchTextDrawingCode(const string& inSourceGameDirectory, const string& inP
 			WriteCommand(0xd810,0x011c);	//06012810 add r0, r0          //300c to 0009
 			WriteCommand(0xd812,0x611c);	//06012812 mov.w @(r0, r1), r1 //011d to 011c  Swap with above and change this to extu.b r1, r1 (611c)
 			WriteCommand(0xdd2a,0x611c);	//06012d2a extu.w r1, r1       //611d to 611c
-			WriteCommand(0x16310,0x601c);	//0601b316 extu.w r1, r0       //601d to 601c
+			WriteCommand(0x16316,0x601c);	//0601b316 extu.w r1, r0       //601d to 601c
 			WriteCommand(0x1631e,0x611c);	//0601b31e extu.w r1, r1       //611d to 611c
 
 			//More Lips commands along with fix for all lines flipping instead of just the newly appeared one
@@ -325,6 +325,7 @@ bool PatchTextDrawingCode(const string& inSourceGameDirectory, const string& inP
 			//Auto-resume at the end of SK0808  (macro 66 in debug mode)
 			WriteCommand(0x24f5a, 0x6200);// 06029f5a mov.w @r0, r2  //6201 to 6200
 			WriteCommand(0x24f5c, 0x612c);// 06029f5c extu.w r2, r1  //612d to 612c
+			WriteCommand(0x24F76, 0x00ff);// 06029f74 ffff => 00ff
 		}
 		#endif
 	}

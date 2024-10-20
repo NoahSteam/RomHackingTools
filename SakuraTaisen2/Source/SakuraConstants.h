@@ -25,6 +25,7 @@ const string Disc2("\\Disc2");
 const string NewLineWord("<br>");
 const string LipsWord("<LIPS>");
 const string SpaceWord("<sp>");
+const string IgnoreCharacter("<ignore>");
 const string BMPExtension(".bmp");
 const string SlgFontFileSuffix("_SLG");
 const string LeaveAsIs("<LEAVE>");

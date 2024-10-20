@@ -418,6 +418,10 @@ bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTrans
 
 						continue;
 					}
+					else if(word == IgnoreCharacter)
+					{
+						continue;
+					}
 
 					//Insert new line if needed
 					ConditionallyAddNewLine();
