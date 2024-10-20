@@ -1,0 +1,18 @@
+0602C59E has code to read first character
+
+todo: 
+two byte read fix needed around 06029f4e 
+mov.w @r0, r2 //6201 to 6200
+
+0601b36a
+655d
+630d
+
+0601b31e to 611c (exts.w r1, r1)
+
+06029F3C is returning 0 when it shouldn't (returns at 06029f6c)
+
+21BF40 has ogami's line
+0022B600 has end line characters
+
+06029f5a mov.b @r0, r2 //7002 to 7001
