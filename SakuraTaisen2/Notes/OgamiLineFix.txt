@@ -15,4 +15,5 @@ mov.w @r0, r2 //6201 to 6200
 21BF40 has ogami's line
 0022B600 has end line characters
 
-06029f5a mov.b @r0, r2 //7002 to 7001
+06029f4e mov.w @r0, r2 //mov.w @r0, r2 6201 to 6200
+06029f58 add 0x2, r0  // add 0x1, r0 7002 to 7001

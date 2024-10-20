@@ -571,7 +571,7 @@ bool VerifySyncDataForAutoResumeLines(const string& inPatchedDirectory, vector<S
 
 bool VerifyAutoResumeLines(const string& inPatchedDirectory)
 {
-	printf("HackFixAutoResumeLines\n");
+	printf("VerifyAutoResumeLines\n");
 
 	//Find all files within the requested directory
 	vector<FileNameContainer> allFiles;

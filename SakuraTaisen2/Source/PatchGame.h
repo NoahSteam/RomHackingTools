@@ -257,7 +257,7 @@ bool PatchTextDrawingCode(const string& inSourceGameDirectory, const string& inP
 			WriteCommand(0xd812,0x611c);	//06012812 mov.w @(r0, r1), r1 //011d to 011c  Swap with above and change this to extu.b r1, r1 (611c)
 			WriteCommand(0xdd2a,0x611c);	//06012d2a extu.w r1, r1       //611d to 611c
 			WriteCommand(0x16316,0x601c);	//0601b316 extu.w r1, r0       //601d to 601c
-			WriteCommand(0x1631e,0x611c);	//0601b31e extu.w r1, r1       //611d to 611c
+			WriteCommand(0x1631e,0x611c);	//0601b31e exts.w r1, r1       //611d to 611c
 
 			//More Lips commands along with fix for all lines flipping instead of just the newly appeared one
 			WriteCommand(0xe262, 0x611c); //06013262  extu.w r1, r1      //611d to 611c
@@ -322,10 +322,12 @@ bool PatchTextDrawingCode(const string& inSourceGameDirectory, const string& inP
 			WriteCommand(0xdb22, 0x631c); // 06012b22 extu.w r1, r3 //631d to 631c
 			WriteCommand(0xdc38, 0x666c); // 06012c38 extu.w r6, r6 //666d to 666c
 
-			//Auto-resume at the end of SK0808  (macro 66 in debug mode)
+			//Auto-resume at the end of SK0808  (macro 66 in debug mode) (also used by Ogami lines)
+			WriteCommand(0x24f4e, 0x6200);// 06029f4e mov.w @r0, r2 //mov.w @r0, r2 6201 to 6200
+			WriteCommand(0x24f58, 0x7001);// 06029f58 add 0x2, r0  // add 0x1, r0 7002 to 7001
 			WriteCommand(0x24f5a, 0x6200);// 06029f5a mov.w @r0, r2  //6201 to 6200
 			WriteCommand(0x24f5c, 0x612c);// 06029f5c extu.w r2, r1  //612d to 612c
-			WriteCommand(0x24F76, 0x00ff);// 06029f74 ffff => 00ff
+			WriteCommand(0x24f76, 0x00ff);// 06029f74 ffff => 00ff
 		}
 		#endif
 	}
@@ -546,7 +548,7 @@ bool PatchGame(const string& inSourceGameDirectory, const string& inTranslatedDa
 		return false;
 	}
 
-	if(!PatchLipSyncDataForAdventure(inPatchedDirectory))
+	if(!HackFixAutoResumeLines(inPatchedDirectory))
 	{
 		printf("Patching sync data failed\n");
 
