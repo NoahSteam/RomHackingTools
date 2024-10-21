@@ -591,6 +591,12 @@ bool TextFileData::InitializeTextFile(bool bFixupSpecialCharacters, bool bCollap
 					t += 3;
 					fixedString[f++] = '\'';
 				}
+				// musical 'b' note
+				else if (bFixupSpecialCharacters && uToken == (unsigned char)0xe2 && (unsigned char)pToken[t+1] == (unsigned char)0x99 && (unsigned char)pToken[t + 2] == (unsigned char)0xad)
+				{
+					t += 3;
+					fixedString[f++] = (unsigned char)134;
+				}
 				else if( bFixupSpecialCharacters && uToken == (unsigned char)0xe2 )
 				{
 					printf("Unhandled multi-byte character in string %s in %s around line %i\n", pToken, mFileNameInfo.mFileName.c_str(), lineCount);
