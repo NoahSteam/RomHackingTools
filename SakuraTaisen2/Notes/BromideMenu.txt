@@ -1,0 +1,6 @@
+Bromide image uncompressed to 60E6400
+
+"OMKTEST.BIN", 0x00007070,
+
+Found: At 00006bf7 OffsetWithinUncompressedData: 0000659b Size: 429 CompressedSize: 2283
+Found: At 00006c00 OffsetWithinUncompressedData: 00006593 Size: 429 CompressedSize: 2274
