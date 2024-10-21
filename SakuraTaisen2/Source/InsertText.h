@@ -525,15 +525,25 @@ bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTrans
 
 					//Can Leave this because it causes formatting issues that need to be dealt with manually
 					//For examples, search for fffd in the TextCode files.  SK0808 has an example on lines 59&60					
-					if (sakuraFile.mLines[currSakuraStringIndex].mChars[0].mIndex == 0xfffc && 
-						sakuraFile.mLines[currSakuraStringIndex].mChars[numBytesInOriginalText - 2].mIndex == 0xfffd)
+					if (sakuraFile.mLines[currSakuraStringIndex].mChars[0].mIndex == 0xfffc)
 					{
-						translatedString.AddChar(0xfd);
+						translatedString.AddChar(sakuraFile.mLines[currSakuraStringIndex].mChars[1].mIndex, true);
+						translatedString.AddChar(0xfc, true);
 
+						if(sakuraFile.mLines[currSakuraStringIndex].mChars[numBytesInOriginalText - 2].mIndex == 0xfffd)
+						{
+							translatedString.AddChar(0xfd);
+							printf("Verify Formatting (fc fd): %i\n", currSakuraStringIndex);
+						}
+
+						//No such case
+						/*
 						if(sakuraFile.mLines[currSakuraStringIndex].mChars[numBytesInOriginalText - 2].mIndex == 0xfffe)
 						{
 							translatedString.AddChar(0xfe);
+							printf("Verify Formatting (fc fe): %i\n", currSakuraStringIndex);
 						}
+						*/
 					}
 					//The FFFD character will have the game combine another line after this line.  But there isn't a way to know
 					//which line it will combine.  Meaning the game can end up having the line cut off if we don't manually format it.
@@ -542,14 +552,10 @@ bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTrans
 					else if (sakuraFile.mLines[currSakuraStringIndex].mChars[numBytesInOriginalText - 2].mIndex == 0xfffd)
 					{
 						translatedString.AddChar(0xfd);
+
+						printf("Verify Formatting (fd): %i\n", currSakuraStringIndex);
 					}
 					/**/
-
-					if (sakuraFile.mLines[currSakuraStringIndex].mChars[0].mIndex == 0xfffc)
-					{
-						translatedString.AddChar(sakuraFile.mLines[currSakuraStringIndex].mChars[1].mIndex, true);
-						translatedString.AddChar(0xfc, true);
-					}
 				}				
 
 				//String ends with ffff

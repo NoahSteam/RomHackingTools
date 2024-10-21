@@ -143,6 +143,34 @@ bool ExtractLongDayOptionsText(const std::string& inRootDirectory, const std::st
 	return true;
 }
 
+bool ExtractLongDayBattleViewerBgnd(const std::string& inRootDirectory, const std::string& inOutputDirectory, const bool bInBmp)
+{
+	const string outputDirectory = inOutputDirectory + "OptionsText\\BromideViewer\\";
+	CreateDirectoryHelper(outputDirectory);
+
+	//OMKTEST
+	const std::string omkTestFilePath = inRootDirectory + "SAKURA1\\OMKTEST.BIN";
+	FileData omkTestFile;
+	if (!omkTestFile.InitializeFileData(omkTestFilePath))
+	{
+		return false;
+	}
+
+	PRSDecompressor decompressedData;
+	decompressedData.UncompressData((void*)(omkTestFile.GetData() + 0x6bf7), omkTestFile.GetDataSize());
+
+	const string extension = bInBmp ? ".bmp" : ".png";
+
+	int offset = 8;
+	ExtractImageFromData(decompressedData.mpUncompressedData + offset, 128*200, outputDirectory + "img1" + extension,
+		omkTestFile.GetData() + 0x4d94, 512, false, 128, 200, 1, 256, 0, true, bInBmp);
+
+	ExtractImageFromData(decompressedData.mpUncompressedData + offset + 128*200, 128 * 200, outputDirectory + "img2" + extension,
+		omkTestFile.GetData() + 0x4d94, 512, false, 128, 200, 1, 256, 0, true, bInBmp);
+
+	return true;
+}
+
 void ExtractLongDayData(const std::string& inRootDirectory, const std::string& inOutputDirectory, const bool bInBmp)
 {
 	CreateDirectoryHelper(inOutputDirectory);
@@ -152,9 +180,16 @@ void ExtractLongDayData(const std::string& inRootDirectory, const std::string& i
 		return;
 	}
 
+	if(!ExtractLongDayBattleViewerBgnd(inRootDirectory, inOutputDirectory, bInBmp))
+	{
+		return;
+	}
+
+	/*
 	CreateSpreadSheetForImages("LongDayOptions0", "LongDay\\PNG\\OptionsText\\0\\", inOutputDirectory + "OptionsText\\0\\", "..\\..\\..\\..\\Translation\\LongDayOptions0.php");
 	CreateSpreadSheetForImages("LongDayOptions1", "LongDay\\PNG\\OptionsText\\1\\", inOutputDirectory + "OptionsText\\1\\", "..\\..\\..\\..\\Translation\\LongDayOptions1.php");
 	CreateSpreadSheetForImages("LongDayOptions2", "LongDay\\PNG\\OptionsText\\2\\", inOutputDirectory + "OptionsText\\2\\", "..\\..\\..\\..\\Translation\\LongDayOptions2.php");
+	*/
 
 	printf("Success\n");
 }
@@ -351,11 +386,81 @@ bool PatchLongDayTextRenderingCode(const string& inPatchedSakuraDirectory, const
 	return PatchCodeInFile(inPatchedSakuraDirectory + "SAKURA1\\OMKTEST.BIN", patchingInfo, sizeof(patchingInfo)/sizeof(patchingInfo[0]));
 }
 
+bool PatchLongDayBgndImages(const string& inPatchedSakuraDirectory, const string& inTranslatedDataDirectory)
+{
+	const string translatedDataDirectory = inTranslatedDataDirectory + "BromideViewer\\";
+	
+	//OMKTEST
+	const std::string omkTestFilePath = inPatchedSakuraDirectory + "SAKURA1\\OMKTEST.BIN";
+	FileData omkTestFile;
+	if (!omkTestFile.InitializeFileData(omkTestFilePath))
+	{
+		return false;
+	}
+
+	//OMKTEST writer
+	FileReadWriter omkTestFileWriter;
+	if (!omkTestFileWriter.OpenFile(omkTestFilePath))
+	{
+		return false;
+	}
+
+	//Import images
+	BmpToSaturnConverter translatedImg1;
+	if (!translatedImg1.ConvertBmpToSakuraFormat(translatedDataDirectory + "img1.bmp", false))
+	{
+		return false;
+	}
+
+	BmpToSaturnConverter translatedImg2;
+	if (!translatedImg2.ConvertBmpToSakuraFormat(translatedDataDirectory + "img2.bmp", false))
+	{
+		return false;
+	}
+
+	//These images appear twice for some reason, so patch them both
+	for(int i = 0; i < 2; ++i)
+	{
+		const int offsetToData = i == 0 ? 0x6bf7 : 0x6c00;
+		const int offsetInsideCompressedData = i == 0 ? 8 : 0;
+
+		//Grab original compressed data and uncompress it
+		PRSDecompressor decompressedData;
+		decompressedData.UncompressData((void*)(omkTestFile.GetData() + offsetToData), omkTestFile.GetDataSize());
+
+		//Overwrite into original data
+		memcpy_s(decompressedData.mpUncompressedData + offsetInsideCompressedData, translatedImg1.GetImageDataSize(), translatedImg1.GetImageData(), translatedImg1.GetImageDataSize());
+		memcpy_s(decompressedData.mpUncompressedData + offsetInsideCompressedData + 128 * 200, translatedImg2.GetImageDataSize(), translatedImg2.GetImageData(), translatedImg2.GetImageDataSize());
+
+		//Compress it
+		PRSCompressor compressedFont;
+		compressedFont.CompressData((void*)decompressedData.mpUncompressedData, decompressedData.mUncompressedDataSize);
+
+		//Verify size
+		if (compressedFont.mCompressedSize > decompressedData.mUncompressedDataSize)
+		{
+			printf("Compressed size for Img1&Img2 is larger than original.  Should be less than %i, is %i\n", compressedFont.mCompressedSize, decompressedData.mUncompressedDataSize);
+			return false;
+		}
+
+		//Write out compressed data
+		omkTestFileWriter.WriteData(offsetToData, compressedFont.mpCompressedData, compressedFont.mCompressedSize, false);
+
+	}
+
+	return true;
+}
+
 bool PatchLongDay(const string& inPatchedSakuraDirectory, const string& inTranslatedDataDirectory)
 {
 	printf("Patching Long Day\n");
 
 	if(!PatchLongDayText(inPatchedSakuraDirectory, inTranslatedDataDirectory))
+	{
+		return false;
+	}
+
+	if(!PatchLongDayBgndImages(inPatchedSakuraDirectory, inTranslatedDataDirectory))
 	{
 		return false;
 	}

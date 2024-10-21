@@ -205,5 +205,13 @@ bool PatchBattleAnimViewer(const string& inPatchedSakuraDirectory, const string&
 		offset += 0x50 * 8;
 	}
 
+	//Unavailable image
+	BmpToSaturnConverter unavailableImage;
+	if (!unavailableImage.ConvertBmpToSakuraFormat(translatedDir + "unavailable.bmp", false, BmpToSaturnConverter::CYAN))
+	{
+		return false;
+	}
+	outFileWriter.WriteData(0x16520, unavailableImage.GetImageData(), unavailableImage.GetImageDataSize(), false);
+	
 	return PatchTiledImage<uint32>(translatedDir + "VDP2\\1.bmp", inPatchedSakuraDirectory + string("SAKURA2\\M91VDP2.BIN"), 0x11800, 0x40, 0x11840);
 }
