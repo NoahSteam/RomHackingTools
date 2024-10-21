@@ -167,6 +167,28 @@ struct SakuraString
 		return numLines;
 	}
 
+	int GetNumberOfPrintedCharactersOnFinalLine() const
+	{
+		int retValue = 0;
+		for (int index = (int)mChars.size() - 2; index >= 0; --index)
+		{
+			const uint16 charValue = mChars[index].mIndex;
+
+			if((uint16)(charValue | 0xff00) == SakuraChar::NewLine)
+			{
+				break;
+			}
+
+			if (charValue &&				
+				(uint16)(charValue | 0xff00) != SakuraChar::EndOfText)
+			{
+				++retValue;
+			}
+		}
+
+		return retValue;
+	}
+
 	int GetNumberOfActualCharacters() const
 	{
 		const size_t charCount = mChars.size();

@@ -265,7 +265,7 @@ bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTrans
 			const size_t numTranslatedLines       = translatedFile.mLines.size();
 			unsigned short numCharsPrintedForMES  = 0;
 			unsigned short numCharsPrintedFortTBL = 0;
-
+			
 			for (size_t translatedLineIndex = 0; translatedLineIndex < numTranslatedLines; ++translatedLineIndex)
 			{
 				const TextFileData::TextLine& textLine = translatedFile.mLines[translatedLineIndex];
@@ -511,6 +511,7 @@ bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTrans
 				}
 #endif
 
+				//Special line ender codes (FFFD, FFFA)
 				const int numBytesInOriginalText = sakuraFile.mLines[currSakuraStringIndex].mChars.size();
 				if(numBytesInOriginalText >= 3)
 				{
@@ -522,9 +523,8 @@ bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTrans
 						translatedString.AddChar(sakuraFile.mLines[currSakuraStringIndex].mChars[numBytesInOriginalText-2].mIndex);
 					}
 
-					//Leaving this because it causes formatting issues that need to be dealt with manually
-					//For examples, search for fffd in the TextCode files.  SK0808 has an example on lines 59&60
-					/*
+					//Can Leave this because it causes formatting issues that need to be dealt with manually
+					//For examples, search for fffd in the TextCode files.  SK0808 has an example on lines 59&60					
 					if (sakuraFile.mLines[currSakuraStringIndex].mChars[0].mIndex == 0xfffc && 
 						sakuraFile.mLines[currSakuraStringIndex].mChars[numBytesInOriginalText - 2].mIndex == 0xfffd)
 					{
@@ -534,7 +534,16 @@ bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTrans
 						{
 							translatedString.AddChar(0xfe);
 						}
-					}*/
+					}
+					//The FFFD character will have the game combine another line after this line.  But there isn't a way to know
+					//which line it will combine.  Meaning the game can end up having the line cut off if we don't manually format it.
+					//Example: Quiz minigame in LongDay in 1303 has "Are you ready? Get set…" + "Start!"
+					/**/
+					else if (sakuraFile.mLines[currSakuraStringIndex].mChars[numBytesInOriginalText - 2].mIndex == 0xfffd)
+					{
+						translatedString.AddChar(0xfd);
+					}
+					/**/
 
 					if (sakuraFile.mLines[currSakuraStringIndex].mChars[0].mIndex == 0xfffc)
 					{

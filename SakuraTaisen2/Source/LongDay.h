@@ -10,7 +10,7 @@ bool ExtractLongDayOptionsText(const std::string& inRootDirectory, const std::st
 	};
 	const LongDayTextBlock textBlocks[] =
 	{
-		{936/2, 0x4e54, 0},
+		{469, 0x4e54, 0},
 		{467, 0x53f0, 0x2800},
 		{196/2, 0x58ba, 0x4800},
 	};
@@ -205,7 +205,7 @@ bool PatchLongDayText(const string& inPatchedSakuraDirectory, const string& inTr
 
 	OMKFileEntry omkFileEntries[] = 
 	{
-		{inTranslatedDataDirectory + "\\Translation\\LongDayOptions0.txt", 7908,      0, 60, 0x2a4e54, 0x4e54, 0x5200},
+		{inTranslatedDataDirectory + "\\Translation\\LongDayOptions0.txt", 7908,      0, 61, 0x2a4e54, 0x4e54, 0x5200},
 		{inTranslatedDataDirectory + "\\Translation\\LongDayMovies.txt",   7908, 0x2800, 55, 0x2a53f0, 0x53f0, 0x5798},
 		{inTranslatedDataDirectory + "\\Translation\\LongDayOptions2.txt", 7908, 0x4800, 20, 0x2a58ba, 0x58ba, 0x5980},
 	};

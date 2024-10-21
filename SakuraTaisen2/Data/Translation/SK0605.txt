@@ -525,4 +525,4 @@ Execute random macro.
 2. Night movement ~ deployment 
 3. Light 
 4. Blue bird 
-… "" "" () - . , ! ? ?! !!
+…()-.,!??

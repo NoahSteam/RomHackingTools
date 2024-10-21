@@ -206,4 +206,4 @@ Execute random macro.
 4. Father and Daughter 
 5. Consideration 
 6. Epilogue 
-… "" "" () - . , ! ? ?! !!
+…()-.,!??

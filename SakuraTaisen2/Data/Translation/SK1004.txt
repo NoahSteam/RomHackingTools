@@ -838,7 +838,7 @@ Execute random macro.
 4. Free Walk 
 5. Returning Home 
 6. Kyogoku Alive 
-… "" "" () - . , ! ? ?! !! 
+…()-.,!?? 
 Listen to some gossip. 
 I'll come back later. 
 The Christmas play was so emotional! 

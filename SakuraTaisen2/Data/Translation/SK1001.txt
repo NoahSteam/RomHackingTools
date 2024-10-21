@@ -72,4 +72,4 @@ Execute random macro.
 4. Free Walk 
 5. Returning Home 
 6. Kyogoku Alive 
-… "" "" () - . , ! ? ?! !!
+…()-.,!??
