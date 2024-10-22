@@ -344,8 +344,13 @@ bool PatchLongDayText(const string& inPatchedSakuraDirectory, const string& inTr
 				writeOffset += sizeof(uint32);
 			}
 		}
-		omkTestFile.WriteData(writeOffset, (char*)&footerData[0], sizeof(uint32), true);
-		omkTestFile.WriteData(writeOffset + sizeof(uint32), (char*)&footerData[0], sizeof(uint32), true);
+		
+		//First value repeats twice for first two segments
+		if( omkIndex < 2 )
+		{
+			omkTestFile.WriteData(writeOffset, (char*)&footerData[0], sizeof(uint32), true);
+			omkTestFile.WriteData(writeOffset + sizeof(uint32), (char*)&footerData[0], sizeof(uint32), true);
+		}
 	}
 	
 	return true;

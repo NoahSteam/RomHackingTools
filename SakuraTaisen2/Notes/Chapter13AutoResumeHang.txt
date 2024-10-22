@@ -1,0 +1,36 @@
+21a8be
+
+Read at 06012b0a
+
+060A51E2 contains flag in memory
+0601b1ce writes 1 to indicate that next character can be read
+06012ad4 checks that flag
+
+06012d60 comp/eq 0x0e, r0
+
+060a5060 written to at 0602c3f2 and read at 0601b070
+2 is written here by 0602c3f2
+
+0608EF15 has switch value written to it, read at 0601b006. 
+Written by 0601b2e2 in bad case
+
+Case 1: is bad case.  Code around 0601b092
+nop 0601b09a will continue the text, but get stuck in an infinte loop
+
+//Maybe try to add this?
+add 0x11, r8 //7811
+mov 1, r1    //1e01
+mov.b r1, @r8//2810
+
+LipSync data read at 0601b4b6 from memory at 2613a0, written to 0608fd64 from code at 0601b132
+
+LipSync offset calculated within function 0601b670
+
+LipSync ID is 3318, written to 060A5066(originally at 060A8560) and passed into function 0601b670
+
+Unfortunately the debugger isn't stopping when 060A8560 has the LipsSync ID written to it =(
+
+c318 at 2136a6 read at 060321c0
+3000 calculated at 060a251a, multiplies 0x400(at060a8560) by 0x0c
+2020c0 has 000c 0400, written by 06029a50
+000c resides in 060a855a
