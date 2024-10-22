@@ -12,8 +12,8 @@ This order is currently in effect. We'll fight our opponents unflinchingly.
 Attention all units! Initiating the "Mountain" strategy!
 We're sticking with the current strategy!
 Understood!
-The platoon that just entered, your top priority is to defend the engines!
-Ogami, your unit will have to hold out until you can destroy the Hachiyou!
+To the platoon that just arrived, your top priority is to defend the engine room!
+Try to hold out until Ogami's team is able to defeat the Hachiyou!
 <LEAVE> 0 Message 1-3
 Pass through the gate and defeat Tsuchigumo!
 The enemy general, Tsuchigumo, is capable of multiple continuous attacks. Be careful!
@@ -35,9 +35,9 @@ Support-type Kouma Weapon. Its wings have been altered into weapons capable of m
 Kouma Weapon: Banrai. A close-combat Kouma Weapon completed using some of Mokujiki's leftover data.
 Kouma Weapon: Reppuu. A long-ranged support-type Kouma modified by the Black Demon Society.
 Healing-type Kouma Weapon. A Kouma Weapon with the ability to help other Kouma recover their strength.
-Hex Mech: Wakiji Kai. Attacks using buckshot, but a single blast is relatively weak.
-Hex Mech: Wakiji Kai. These types with healing abilities are referred to as L-Special.
-Hex Mech: Wakiji Kai. Classified as the NI-type Special, this unit boasts a peculiar attack range.
+Hex Mech: Wakiji Kai. <br> Attacks using buckshot, but a single blast is relatively weak.
+Hex Mech: Wakiji Kai. <br> The units with healing abilities are referred to as L-Special.
+Hex Mech: Wakiji Kai. <br> Classified as the NI-type Special, this unit boasts a peculiar attack range.
 Hex Mech: Hachiyou. Piloted by Tsuchigumo of the Five Elements, attacks with its six arms in succession.
 <LEAVE> Message 19
 <LEAVE> Message 20
@@ -98,7 +98,7 @@ Captain… My apologies…
 I wish I could stay with you… a little longer…
 Well done, sir.
 Thank goodness you're here, sir…
-Hmph! Is that all you've got?
+Hmph! <br> Is that all you've got?
 An excellent order, Captain!
 You give me strength, Captain!
 Go get 'em, Boss!
@@ -131,7 +131,7 @@ It's OK, Mon Frère, I'm here with you.
 Ah… It stopped…
 I'm sorry, Mon Frère…
 Yaaaay! <br> You did it, Mon Frère!
-Wow, Mon Frère! You're sooo cool!
+Wow, Mon Frère! <br> You're sooo cool!
 I'm amazing, huh?
 C'mon, praise me! <br> Praise me!
 With you around, Mon Frère, I'm not scared of anything!

@@ -10,7 +10,7 @@ Divide Blade Mekkyaku. A special sword entrusted to me by Yoneda.
 The uniform I wear at the theater. Good for both summer and winter. 
 A lighter borrowed from the inn. 
 The flower crown that Iris made for Reni. 
-A plate used at the welcome party. I was asked to bring it to Sakura. 
+Plates for the welcome party. Sakura asked us to get them for her. 
 A bromide of Sakura. 
 A bromide of Sakura. This one is a limited edition only available at New Year's. 
 A bromide of Sumire. 
@@ -45,7 +45,7 @@ A letter from Reni.
 A scarf given to me by Sakura. It's knitted with red yarn - my favorite color. 
 A scarf given to me by Sakura. It's knitted with blue yarn - my favorite color. 
 A scarf given to me by Sakura. It's knitted with yellow yarn - my favorite color.
-…()-.,!??
+… "" "" () - . , ! ? ?! !!
 Start!
 Ogami, who was the first person you spoke to on the Kinematron?
 Kohran
@@ -168,8 +168,8 @@ Masked Red
 A Rare Beast Emerges!
 Dinosaur Island
 What are the Flower Division members looking at?
-Rehearsal for The Blue Bird
-Maria and Kohran building sets
+Blue Bird rehearsals
+Maria & Kohran making sets
 The audience
 Who's this welcoming party for?
 Reni
@@ -377,11 +377,11 @@ Dance of the Dragon
 Dance of the Phoenix
 Do you know what Kasha's Hex Mech is called?
 Goko
-Hachiyou
+Hachou
 Hougyou
 Suiko's Hex Mech, Hougyou, has a special attack called…?
-Blizzard Wave
-Petrification Wave
+Rippling Flurry
+Petrification Flurry
 Snegurochka
 What is Sakura's Tenbu special attack called?
 Floral Enlightenment
@@ -403,7 +403,7 @@ What color is the Japanese character written on the shoulder of Kongou's Hex Mec
 Black
 Gold
 White
-How many limbs does Tsuchigumo's Hex Mech, Hachiyou have?
+How many limbs does Tsuchigumo's Hex Mech, Hachou have?
 Four
 Six
 Eight
@@ -484,7 +484,7 @@ Recovers allies' health
 Attacks enemies
 Teleportation
 If an enemy stands on a steam stand, what will happen?
-Resistance is restored
+Health is restored
 It'll explode
 Nothing happens
 Do you know what Kyogoku's Hex Mech is called?
@@ -496,8 +496,8 @@ Hawk
 Monkey
 Tiger
 What insulting nickname did Kanna call Sumire during their first conversation on the Kinematron?
-Snake woman
 Cactus woman
+Snake woman
 Bagworm woman
 What are the Tenbu's base attack, defense, and movement stats?
 15, 10, 3
@@ -510,7 +510,7 @@ Yellow
 What color is Shinnosuke Yamazaki's "Dark Kamui" mech?
 Black
 Red
-Black
+Gold
 During the Episode 2 battle in Uguisudani, who tells you the victory conditions in the comms menu?
 Tsubaki
 Yuri
@@ -533,7 +533,7 @@ Attack due to his arm
 Defense due to his back
 What does Kongou say to Suiko while covering her?
 "You OK, Suiko?"
-"Sorry to keep you waiting, Suiko."
+"Sorry for the wait."
 "I love you, Suiko."
 When Sakura’s piece of the Regalia resonated with the Demon King's, what color did it glow?
 Red
@@ -556,7 +556,7 @@ How many times did the Kouma fly onto the Mikasa's deck?
 3 times
 4 times
 Which of these weapons is NOT one of Mokujiki's inventions?
-Dimensional Cannon
+Dimension Cannon
 Black Demon Cannon
 Enkuu
 Maria's special attack with the Koubu Kai is called "Pikovaya Dama." What does it mean?
@@ -624,14 +624,14 @@ OK, it's time for a video quiz!
 OK, now it's time for a video quiz.
 <ignore>
 <ignore>
-Are you ready? Get set…
-Let's get started! Ready…
-Ready? Get set…
-Let's get ready. Set…
-Here's the quiz!
+Are you ready? <br> Get set…
+Let's get started! <br> Ready…
+Ready? <br> Get set…
+Let's get ready. <br> Set…
+Here's the question!
 Start!
-Here's the quiz!
-Here's the quiz.
+Here's the question!
+Here's the question.
 Ah, that's the wrong answer! Too bad.
 Wrong answer. You still have a long way to go, Ogami.
 Wrong answer, Ogami.
@@ -1084,6 +1084,6 @@ The time we first met… The days we spent together… Have you completely forgo
 Remember how Iris poured her heart into making this flower crown for you!
 Urgh…
 I didn't know how lost you felt, how anxious you felt, how lonely you felt…
-"What am I fighting for?" <br> When you asked me that question, I didn't know how to answer you.
+“What am I fighting for?" <br> When you asked me that question, I didn't know how to answer you.
 But now… Now I can tell you exactly how I feel!
 We fight for those dear to us! We fight to protect the ones we love!

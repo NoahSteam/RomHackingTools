@@ -12,7 +12,7 @@ And one more thing. On this holy night, to celebrate Christmas…
 Merry Christmas! 
 Man, that was a great show! A smash hit! Now for the wrap party! 
 I hope you don't mind if we join in. 
-Mr. Yoneda, Kaede! Come on in! 
+Mr. Yoneda, Kaede! <br> Come on in! 
 Protecting everyone in the capital may be the Imperial Assault Troupe's job… 
 But giving dreams to the people of the capital is the other half of the Flower Division's duties. 
 You all did great today. 
@@ -21,7 +21,7 @@ At any rate, it's always exciting to be done with a play.
 No matter how exhausted you are, you just can't fall asleep. So party as hard as ya can! 
 All right! We'll party straight till mornin’! 
 Yeah! 
-Phew… I need to sober up a bit. 
+Phew… <br> I need to sober up a bit. 
 Still, I feel all warm inside. 
 We totally connected with the audience… What a great play that was. 
 Ogami… 
@@ -44,9 +44,9 @@ Is that you, Kanna? Great job today. That was a wonderful show.
 I still can't believe I actually played a female lead. 
 This… This ain't a dream, right? I can believe this, right? 
 Kanna… 
-Ah, Mon Frère! There you are! 
+Ah, Mon Frère! <br> There you are! 
 Iris. You did great today. 
-I worked hard! Super duper hard! 
+I worked hard! <br> Super duper hard! 
 All because you cheered me on, Mon Frère! 
 Iris… 
 Chief… 
@@ -57,7 +57,7 @@ Kohran…
 Mr. Ensign… 
 Orihime. Great job today. That was a wonderful show. 
 Your efforts were fantastic as well, Mr. Ensign. 
-All things considered, that was an excellent play. Even in Italy, I think it would be a success… 
+All things considered, that was an excellent play. Even in Italy, I think it would be a success.. 
 Hahaha… Glad to hear it. 
 Captain… 
 Hey, Reni. Great job today. That was a wonderful show. 
@@ -67,7 +67,7 @@ I want to keep performing plays like that forever.
 Reni… 
 Oh, so that's where you two ran off to. 
 Ah… Mr. Yoneda? 
-What have we here, a Christmas date? Hahaha… Ah, youth is a wonderful thing. 
+What have we here, a Christmas date? Hahaha… <br> Ah, youth is a wonderful thing. 
 Well, today's a special day. Just make sure you two get back by midnight. 
 Mr. Yoneda… 
 If it's all right with you Ogami, maybe we could… step outside for a moment? 
@@ -251,20 +251,20 @@ Uh-oh, it's gonna be past midnight soon!
 OK, race you to the theater, then! 
 All right, you're on! Think ya can beat me, Boss? Hahahaha! 
 What do you think we should do, Iris? 
-Ah! Look, Mon Frère! It's snowing! 
+Ah! Look, Mon Frère! <br> It's snowing! 
 C'mon, let's go outside! Can we, Mon Frère? 
-Hahaha, you're right. Sure, let's go. 
+Hahaha, you're right. <br> Sure, let's go. 
 Yaaay, yaaay! <br> C'mon, let's go, Mon Frère! 
 Look, Mon Frère! It's snowing so much! 
 You're right. When did all this snow pile up, anyway? 
-Heheh! I'll make you a snowman! 
+Heheh! <br> I'll make you a snowman! 
 Thanks, Iris. Aren't your hands a little cold, though? 
 I'll be OK! Just wait a little bit longer. 
-…All done! Here you go, Mon Frère. 
-Thanks, Iris. What a cute snowman. 
+…All done! <br> Here you go, Mon Frère. 
+Thanks, Iris. <br> What a cute snowman. 
 Heheh! I'll make you an even bigger one tomorrow! 
 I know! There's a church a little further down the road. 
-C'mon, let's go! We can make it back before midnight. 
+C'mon, let's go! <br> We can make it back before midnight. 
 Yeah, sure, let's take a look. 
 You weren’t lying. I never knew there was a church here. 
 Let's go inside, Mon Frère! C'mon, hurry! 
@@ -293,18 +293,18 @@ That's why I thought you'd be perfect for the lead role.
 Mon Frère… 
 You understand now, Iris? 
 Uh-huh! Thanks, Mon Frère! 
-I love you! 
-I hope I can be with you forever! 
+I really love you so much! 
+I hope we can be together all the time next year!
 Hahaha, yeah. 
-I know! I've got a great idea! 
+I know! <br> I've got a great idea! 
 Since we're in a church, let's get married, right now! 
 Huh?! M-Married?! 
 I'm… I'm glad you feel that way, Iris, but you're still a little young… 
-Huh?! But you just said my age doesn't matter! 
+Huuuh?! <br> But you just said my age doesn't matter! 
 Th-That was for something completely different! 
-Marry me, Mon Frère! 
+Come on, Mon Frère! <br> Let’s have a wedding! 
 Ah… It's almost midnight, Iris. I'm going back to the theater. 
-Ah, he's getting away! Wait, Mon Frèreee!
+Aaah, he's getting away! Wait, Mon Frèreee! 
 Chief… Um… Wanna head outside for a bit? 
 There's some stuff I wanted to talk to you about, now that the play's over. 
 All right, sure. It's a Christmas Eve date, then… Until midnight, anyway. 
@@ -313,7 +313,7 @@ For real? Thanks a bunch, Chief. All right, let's go.
 Wow… Look, Chief, snow. 
 You're right. When did all this snow pile up, anyway? 
 It's so pretty… 
-Yeah. It's a White Christmas. 
+Yeah. <br> It's a White Christmas. 
 … 
 …Kohran? What's up? 
 Spending Christmas alone with you, Chief… 
@@ -324,7 +324,7 @@ I know I'm not drop-dead gorgeous like the other girls in the Flower Division…
 That's not true. 
 So what if you aren't? 
 Kohran… That's not true. 
-I'm happy to be with you. I mean it. 
+I'm happy to be with you. <br> I mean it. 
 Chief… 
 So what if you aren't? 
 I like you just the way you are, Kohran. 
@@ -334,7 +334,7 @@ You're you. You don't have to compensate for anything.
 The crowd loved having a lead with glasses, didn't they? 
 Your natural genuineness is what I like about you. 
 Chief… 
-You're right. I'm me. No use pretending I’m something I’m not. 
+You're right. I'm me. <br> No use pretending I’m something I’m not. 
 Being together with you like this… 
 I'm allowed to be happy about it in my own way. 
 That's right. It's that unique Kohran-ness that makes you special. 
@@ -359,9 +359,9 @@ I… knew… this would… happen…
 S-Sorry about that, Chief… Don't have a clue why it blew up like that. 
 Hahaha… I'm used to your explosions at this point. 
 Like I said before, it's that unique Kohran-ness of yours that makes you special. 
-Ahahaha! Was that supposed to be a compliment? Eh, I'll take it! 
-Once again, Chief… Merry Christmas. 
-Yeah. Merry Christmas, Kohran. 
+Ahahaha! <br> Was that supposed to be a compliment? Eh, I'll take it! 
+Once again, Chief… <br> Merry Christmas. 
+Yeah. <br> Merry Christmas, Kohran. 
 Why don't we take this opportunity to go outside, Mr. Ensign? 
 I have been hoping to spend Christmas Eve with you for a long time. 
 All right, sure. It's a Christmas Eve date, then… Until midnight, anyway. 
@@ -405,7 +405,7 @@ We should go, Mr. Ensign. Let us go back to the others.
 You're right, it's almost midnight. 
 Mr. Ensign… 
 What is it? 
-One last time… Merry Christmas. 
+One last time… <br> Merry Christmas. 
 Yeah. Merry Christmas. 
 What should we do, Reni? 
 I'd… like to go outside for a while. 
@@ -424,7 +424,7 @@ Birthdays let me know that I'm not alone.
 Reni… 
 Oh, I had no idea there was a chapel around here. 
 Why don't we offer a prayer while we're here? 
-But… I've never prayed before. 
+But… <br> I've never prayed before. 
 Don't worry, it's nothing to stress over. Come on, let's go inside. 
 What should I do, Captain? 
 Just think really hard about what you feel in your heart. 
@@ -489,7 +489,7 @@ Divide Blade Mekkyaku. A special sword entrusted to me by Yoneda.
 The uniform I wear at the theater. Good for both summer and winter. 
 A lighter borrowed from the inn. 
 The flower crown that Iris made for Reni. 
-A plate used at the welcome party. I was asked to bring it to Sakura. 
+Plates for the welcome party. Sakura asked us to get them for her. 
 A bromide of Sakura. 
 A bromide of Sakura. This one is a limited edition only available at New Year's. 
 A bromide of Sumire. 
@@ -524,4 +524,4 @@ A letter from Reni.
 A scarf given to me by Sakura. It's knitted with red yarn - my favorite color. 
 A scarf given to me by Sakura. It's knitted with blue yarn - my favorite color. 
 A scarf given to me by Sakura. It's knitted with yellow yarn - my favorite color. 
-…()-.,!??
+… "" "" () - . , ! ? ?! !!

@@ -37,7 +37,7 @@ Those were some good moves. You seem to have gotten a handle on your own fightin
 That was some decent fighting. Keep on striving for even better results.
 Well, these results are about average. Some more efficient fighting should get you better results.
 You're getting there. You seem to have a good grasp of the basics.
-Seems you're still not putting in enough effort. Keep your eye on the enemy and you'll find an opening soon enough.
+Seems you're still not putting in enough effort. Keep your eye on the enemy and you'll find an opening.
 What awful results. You need to learn the abilities of each of your units.
 With results like these, it's too risky to put you in live combat. You need to train more.
 <LEAVE> Message 20
@@ -98,7 +98,7 @@ Captain… My apologies…
 I wish I could stay with you… a little longer…
 Well done, sir.
 Thank goodness you're here, sir…
-Hmph! Is that all you've got?
+Hmph! <br> Is that all you've got?
 An excellent order, Captain!
 You give me strength, Captain!
 Go get 'em, Boss!
@@ -131,7 +131,7 @@ It's OK, Mon Frère, I'm here with you.
 Ah… It stopped…
 I'm sorry, Mon Frère…
 Yaaaay! <br> You did it, Mon Frère!
-Wow, Mon Frère! You're sooo cool!
+Wow, Mon Frère! <br> You're sooo cool!
 I'm amazing, huh?
 C'mon, praise me! <br> Praise me!
 With you around, Mon Frère, I'm not scared of anything!

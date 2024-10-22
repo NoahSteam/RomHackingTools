@@ -1,6 +1,6 @@
 ﻿A month has passed since then… 
 It was a bright spring day like any other. 
-<sp>
+1 
 Strange for Mr. Yoneda to summon me out of the blue like this… 
 What could he want with me? 
 Ah, Ogami? 
@@ -366,7 +366,7 @@ Uhh… <br> Sniff… Mon Frère…
 Come, now, Iris, don't cry. 
 Mon Frère… <br> Don't forget about me… OK? 
 I'll always… Always…  
-Sniff… Uhh… 
+Sniff.. Uhh… 
 …It's OK, Iris. There's no way the boss would forget about us. 
 Heheh, you better not half-ass your trainin’ while you're in France, Boss. 
 I want you to come back even stronger and more reliable than you are now. 
@@ -482,10 +482,10 @@ Till we meet again… Ogami.
 I guess this means goodbye for now… Grand Imperial Theater. 
 … 
 Goodbye… <br> Everyone. 
-I'm writing to you today as the cherry blossoms in the capital are in full bloom. It truly is peaceful. 
+Today I pen this letter as the capital's cherry blossoms are in full bloom. It truly is peaceful.
 Congratulations again on your promotion to Lieutenant Junior Grade, Ogami. 
-As I write this letter, I can't help but remember when we first met in Ueno during the spring. 
-It's hard to say goodbye, but I'll always carry in my heart the joy I felt at that moment. 
+As I write, I can't help but remember when we first met in Ueno during the spring. 
+Saying goodbye is hard, but I'll always carry the joy I felt back then in my heart. 
 I wish I could join you on your trip to Paris… 
 But I don't think you'd be very happy if I did. 
 You always keep moving forward, so I'll follow your example and keep working hard in the troupe. 
@@ -495,11 +495,11 @@ I'll write you plenty of letters, and I'll keep your room clean.
 Have a safe trip. I eagerly await your return. 
 Sincerely, <br> Imperial Assault Troupe, Flower Division <br> Sakura Shinguji 
 Dear Lieutenant, <br> Congratulations on your promotion. 
-I have found myself unable to sleep at night ever since I heard you were leaving for Paris. 
+I find myself unable to sleep since I heard you were leaving for Paris.
 However, I realize I'm the top star of the Flower Division. 
 I'm sure you'd laugh at me if I just kept moping around forever. 
 That's why I've decided-- and don't act surprised-- 
-That through my acting, I'm going to secure the Flower Division a performance in Europe. 
+That through my acting, I shall secure the troupe a performance in Europe. 
 Then all of Europe will see what I am truly capable of. 
 Ahh, I can hear their cheers already… 
 Then you'll finally get to reunite with Europe's top star in Paris, the city of flowers. 
@@ -513,22 +513,22 @@ No matter how far apart we may be, our hearts are connected.
 I know one can only taste the joys of spring after braving the harsh winter. 
 You can leave the Flower Division to me. I will not falter anymore. 
 The Flower Division is my motherland now. 
-The future of Japan rests on your shoulders, Captain. Study hard and come back to us. 
+The future of Japan rests on your shoulders, Captain. Study hard and return to us.
 The water in Europe isn't very clean, so do be careful. 
 I'll be praying for your safety and success, from the bottom of my heart. 
 P.S. I've started learning how to swim. Perhaps we can swim together someday. 
 Yours truly from Tokyo, <br> Imperial Assault Troupe, Flower Division <br> Maria Tachibana 
-Yo! Congrats on the promotion to lieutenant. I'm just as happy for you as I'd be for myself. 
-I was shocked to hear you were leaving for Paris so soon. I'm gonna miss ya. 
+Yo! Congrats on becoming a lieutenant. I'm just as happy for you as I'd be for myself.
+I was shocked to hear you were leaving for Paris so soon. I'll miss ya.
 The theater without you is like a hinomaru bento without the plum. 
 But it's thanks to you that we all learned to trust in each other… 
 So even while you're gone, we'll stick together and protect the capital. 
-You don't have to worry about a thing, Boss. Just study up in Paris and come back to us. 
+Don't worry about a thing, Boss. Just study up in Paris and come back to us.
 That way you can teach us even more stuff. 
 In Okinawa, we've got the legend of Nirai Kanai. It's about a paradise off in the west. 
 I hope Paris winds up being your Nirai Kanai. 
 No matter when, no matter where, you'll always be our captain. 
-I'm rooting for you, from the bottom of my heart. Never give up! I'll always be in your corner! 
+I’m supporting you all the way. Keep fighting! I'll always be in your corner! 
 See ya later. <br> Imperial Assault Troupe, Flower Division <br> Kanna Kirishima 
 I'm in my room right now, writing you this letter. 
 I'm really gonna miss you while you're away in Paris, Mon Frère. 
@@ -548,7 +548,7 @@ Hey, what kind of place do you think Paris is? Think they got some neat inventio
 Paris, the city of flowers! Paris, capital of the world! Ahh, I wanna go so bad. 
 If we ever get the chance, I wanna go exploring the city with you, Chief. 
 Oh yeah, I've got a new dream! I'm building an airplane! 
-A plane capable of continuous flight around the world. If I ever finish it, I'm coming for ya! 
+A plane that can fly around the world in one go. If I finish it, I'm coming for ya! 
 Then I'll snatch you up, and we'll travel around the world together! 
 Ah, jeez. <br> There I go, talking nonsense again. 
 But y'know, none of your dreams will come true if you don't work hard for them. 
@@ -559,20 +559,20 @@ Congratulations, and grazie! You're probably reading this on the boat, huh?
 How's the boat ride been so far? Feeling lonely? Want me to come join you? 
 Just kidding. <br> I'm busy right now with requests from all over the world to come perform. 
 Even though we're so far apart, we're together in our hearts. 
-Let's keep working hard, never letting go of our desire to meet with one another. 
+Let's work hard, never letting go of our desire to meet with one another.
 Papa and Mamma never stopped loving each other, no matter how far apart they were. 
 I know our love, too, can overcome any distance. 
 We might even be able to see each other once a year, just like in the Tanabata legend… 
-Nevertheless, I can say with confidence that you're one of a kind, Mr. Lieutenant. 
+Nevertheless, I say with confidence that you are one of a kind, Mr. Lieutenant.
 And on that note, try not to ogle the Parisian girls too much. 
 With love, <br> Imperial Assault Troupe, Flower Division <br> Orihime Soletta 
 May 1925. <br> I was transferred to the Imperial Assault Troupe. I met you for the first time. 
-August 1925. <br> Together with the Flower Division, I went to a hot spring for the first time. 
-So much happened then. I still get a little embarrassed just thinking about it. 
+August 1925. <br> Together with the troupe, I went to a hot spring for the first time. 
+So much happened then. I still get a little embarrassed thinking about it.
 September 1925. <br> You saved me from Suiko's control. 
 From the moment I met you, something inside me slowly began to change. 
 December 1925. <br> The Christmas play. <br> You picked me to play the lead. 
-I celebrated my birthday for the first time ever. I visited a chapel with you. I'll never forget that day. 
+I celebrated my birthday for the first time. You and I visited a chapel. I'll never forget that day. 
 January 1926. <br> We spent New Year's alone together, and took part in that final battle. 
 A lot has happened in the year I've spent with you. You've changed me, Captain. 
 You're a big part of my life now. Perhaps you always will be. 
@@ -590,7 +590,7 @@ Divide Blade Mekkyaku. A special sword entrusted to me by Yoneda.
 The uniform I wear at the theater. Good for both summer and winter. 
 A lighter borrowed from the inn. 
 The flower crown that Iris made for Reni. 
-A plate used at the welcome party. I was asked to bring it to Sakura. 
+Plates for the welcome party. Sakura asked us to get them for her. 
 A bromide of Sakura. 
 A bromide of Sakura. This one is a limited edition only available at New Year's. 
 A bromide of Sumire. 
@@ -625,4 +625,4 @@ A letter from Reni.
 A scarf given to me by Sakura. It's knitted with red yarn - my favorite color. 
 A scarf given to me by Sakura. It's knitted with blue yarn - my favorite color. 
 A scarf given to me by Sakura. It's knitted with yellow yarn - my favorite color. 
-…()-.,!??
+… "" "" () - . , ! ? ?! !!

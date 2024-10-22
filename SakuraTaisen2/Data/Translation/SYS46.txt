@@ -37,7 +37,7 @@ Kouma Weapon: Reppuu. A long-ranged support-type Kouma modified by the Black Dem
 Hex Mech: Hachiyou. Piloted by Tsuchigumo of the Five Elements, attacks with its six arms in succession.
 Kouma Weapon: Reppu. Designed with an emphasis on powerful, long-range attacks.
 Bomber-type Kouma Weapon. Equipped with an internal store of buckshot, it fires attacks from its mouth.
-Hex Mech: Wakiji Kai. Classified as the NI-type Special, this unit boasts a peculiar attack range.
+Hex Mech: Wakiji Kai. <br> Classified as the NI-type Special, this unit boasts a peculiar attack range.
 Hex Mech: Hachiyou. Piloted by Tsuchigumo of the Five Elements, attacks with its six arms in succession.
 <LEAVE> Message 19
 <LEAVE> Message 20
@@ -98,7 +98,7 @@ Captain… My apologies…
 I wish I could stay with you… a little longer…
 Well done, sir.
 Thank goodness you're here, sir…
-Hmph! Is that all you've got?
+Hmph! <br> Is that all you've got?
 An excellent order, Captain!
 You give me strength, Captain!
 Go get 'em, Boss!
@@ -131,7 +131,7 @@ It's OK, Mon Frère, I'm here with you.
 Ah… It stopped…
 I'm sorry, Mon Frère…
 Yaaaay! <br> You did it, Mon Frère!
-Wow, Mon Frère! You're sooo cool!
+Wow, Mon Frère! <br> You're sooo cool!
 I'm amazing, huh?
 C'mon, praise me! <br> Praise me!
 With you around, Mon Frère, I'm not scared of anything!

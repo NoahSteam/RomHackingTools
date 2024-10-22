@@ -24,7 +24,7 @@ Listen, we'll take over from here, so you just sit back and rest.
 What're you even saying? There's no way I'm sitting out a battle this important.
 I'm gonna fight, right here alongside you, Kanna!
 Hey, Kohran! You OK?
-Thanks much, Iris. I'm just fine!
+Thanks much, Iris. <br> I'm just fine!
 …Are you really? We're gonna fight, so you can rest if you want.
 What're you even saying? There's no way I'm sitting out a battle this important.
 I'm gonna fight, right here alongside you, Iris!
@@ -35,7 +35,7 @@ Just leave the rest to us. Retreat to a safe place and take a rest!
 What're you even saying? There's no way I'm sitting out a battle this important.
 I'm gonna fight, right here alongside you, Orihime!
 Can you move?
-I'm just fine. Thanks a bundle, Reni.
+I'm just fine. <br> Thanks a bundle, Reni.
 You are not at your normal fighting capacity right now. You should rest.
 What're you even saying? There's no way I'm sitting out a battle this important.
 I'm gonna fight, right here alongside you, Reni!

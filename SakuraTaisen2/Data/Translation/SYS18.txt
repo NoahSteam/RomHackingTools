@@ -12,7 +12,7 @@ This order is currently in effect. We'll fight our opponents unflinchingly.
 Attention all units! Initiating the "Mountain" strategy!
 We're sticking with the current strategy!
 Understood!
-Everyone who deployed beforehand's been trapped in a barrier.
+Everyone who deployed beforehand has been trapped in a barrier.
 The barriers don't seem to be very powerful, so you should be able to save them with the Tenbu.
 Rescue the other Flower Division members, and destroy the enemy Hex Mechs!
 Pass through the gate and defeat Tsuchigumo!
@@ -32,12 +32,12 @@ Orihime Soletta, prior Star Division member. Piloting a rose armor, she is known
 Reni Milchstraße. A combat professional, attacking accurately without a single wasted movement.
 Close combat Kouma Weapon. It's not equipped with any special weaponry, instead attacking with bites.
 Support-type Kouma Weapon. Its wings have been altered into weapons capable of mid-ranged attacks.
-Hex Mech: Wakiji Kai. A powerful support unit that is in short supply due to manufacturing issues.
+Hex Mech: Wakiji Kai. <br> A powerful support unit that is in short supply due to manufacturing issues.
 Hex Mech: Wakiji Kai. <br> The units equipped with large cannons are referred to as HA-type.
-Hex Mech: Wakiji Kai. These models with stronger firearms are referred to as RO-type Otsu.
-Hex Mech: Wakiji Kai. Attacks using buckshot, but a single blast is relatively weak.
-Hex Mech: Wakiji Kai. These types with healing abilities are referred to as L-Special.
-Hex Mech: Wakiji Kai. Classified as the NI-type Special, this unit boasts a peculiar attack range.
+Hex Mech: Wakiji Kai. <br> These models with stronger firearms are referred to as RO-type Otsu.
+Hex Mech: Wakiji Kai. <br> Attacks using buckshot, but a single blast is relatively weak.
+Hex Mech: Wakiji Kai. <br> The units with healing abilities are referred to as L-Special.
+Hex Mech: Wakiji Kai. <br> Classified as the NI-type Special, this unit boasts a peculiar attack range.
 <LEAVE> Message 18
 <LEAVE> Message 19
 <LEAVE> Message 20
@@ -98,7 +98,7 @@ Captain… My apologies…
 I wish I could stay with you… a little longer…
 Well done, sir.
 Thank goodness you're here, sir…
-Hmph! Is that all you've got?
+Hmph! <br> Is that all you've got?
 An excellent order, Captain!
 You give me strength, Captain!
 Go get 'em, Boss!
@@ -131,7 +131,7 @@ It's OK, Mon Frère, I'm here with you.
 Ah… It stopped…
 I'm sorry, Mon Frère…
 Yaaaay! <br> You did it, Mon Frère!
-Wow, Mon Frère! You're sooo cool!
+Wow, Mon Frère! <br> You're sooo cool!
 I'm amazing, huh?
 C'mon, praise me! <br> Praise me!
 With you around, Mon Frère, I'm not scared of anything!

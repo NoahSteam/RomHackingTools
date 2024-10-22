@@ -2,7 +2,7 @@
 I see. That's too bad. 
 So sorry, Mr. Ogami, but customers are only allowed to purchase one of each bromide.
 Oh, really? That's too bad. 
-…()-.,!?? 
+… "" "" () - . , ! ? ?! !! 
 *yawn* <br> Ahh, I slept great. 
 Today's my first day off in ages. I should take it easy. 
 Well, Ogami? <br> Pretty neat, huh? 
@@ -653,8 +653,8 @@ I should get going. Thanks for having me over, Kohran.
 Come back to hang out whenever you like! 
 Oh, Mr. Ensign. Did you need something? 
 I have the day off, so I thought I'd stop by and chat with you. 
-Actually…I was just about to take my siesta. 
-“Siesta"…? Oh, you're going to take a nap, huh? 
+Actually… I was just about to take my siesta. 
+“Siesta"…? <br> Oh, you're going to take a nap, huh? 
 I'm sorry. Stop by some other time, OK? 
 Orihime? It's Ogami. 
 Zzzz… Zzzz… 
@@ -889,7 +889,7 @@ Come, now, no need to thank me. A diversion like this on a day off isn't so bad.
 Well then, Ogami, till we meet again! 
 Nobody here in the salon. 
 Thought everyone would be here, since we have the day off, but I guess not. 
-Wha- What are you all doing here? 
+Wha-What are you all doing here? 
 Ah, Ogami. Will you be joining us for cards? 
 Cards? 
 You came 'round to all our rooms earlier and called for us, right? 
@@ -934,7 +934,7 @@ Looks like she's not in.
 Oh, Ogami, is that you? 
 You must've beaten Kasumi's quiz if you've come here. 
 Y-Yes. 
-Very well. Well then, follow me, Ogami. 
+Very well. <br> OK then, follow me, Ogami. 
 Why on earth did she bring me all the way to the command room? 
 Sorry to keep you waiting, Ogami. 
 Kaede?! What in the world… 
@@ -1055,7 +1055,7 @@ I'm sorry I can't be of any help…
 U-Um, right… How about when you're listening to Orihime playing the piano…? 
 If you have improper notes in front of you, you need to think carefully about moving them up or down.
 Even when they're lined up vertically, arrange them to be horizontal. That'll make things easier. 
-Also, the "#" and "♭" won't reach all the way to the end, so do be careful about that. 
+Also, the "#" and “♭” won't reach all the way to the end, so do be careful about that. 
 Count how many notes of the same color are coming, then move them only as much as is necessary.
 That's all I know about Orihime's piano playing. 
 Here's some advice for when you're joining Reni for her aquatic training… 
@@ -1105,7 +1105,7 @@ Spirit Sword Arataka. The special sword of the Shinguji family.
 Divine Sword Shirahatori. Entrusted to me by Kaede. A special sword passed down by the Fujieda family. 
 Luminous Blade Mukei. A special sword entrusted to us by Kazuma that once belonged to Major Yamazaki. 
 Divide Blade Mekkyaku. A special sword entrusted to me by Yoneda. 
-A plate used at the welcome party. I was asked to bring it to Sakura. 
+Plates for the welcome party. Sakura asked us to get them for her. 
 A decorative paper ball for the welcome party called a kusudama. 
 A flower vase for the welcome party.
 The banner for the welcome party.

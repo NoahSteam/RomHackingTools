@@ -55,10 +55,10 @@ When you have the time, be sure to say hi to her.
 At first, when I received orders to go to Hokkaido, I felt really nervous… 
 But, in the end, I had a great experience there. I'm glad that I went.
 Well, I should be going. Keep up the good work. 
-Thank you very much! Come back soon! 
+Thank you very much! <br> Come back again soon! 
 Tsubaki is really getting back into the swing of things.
 All right, I gotta follow her example and put some extra oomph behind my ticket punching! 
-Thank you very much! Come back and buy another bromide next month! 
+Thank you very much! <br> Come back and buy another bromide next month! 
 Tsubaki is really getting back into the swing of things.
 All right, I gotta follow her example and put some extra oomph behind my ticket punching!
 Ah, Mr. Ogami! Good afternoon! 
@@ -398,7 +398,7 @@ If you don't mind, could you please check on the others?
 Yeah, you're right. OK then, keep at it, you two. 
 Thanks, Chief! 
 Thank you for visiting us, Captain.
-Everyone is really giving it their all for this Christmas performance… 
+Everyone is really giving it their all for this Christmas performance.. 
 OK. I should do the same and sharpen up my ticket collecting skills.
 Maria… If we put that there, won't it make it harder for the audience to see? 
 Hmm… It's a bit hard to say. 
@@ -740,7 +740,7 @@ Divide Blade Mekkyaku. A special sword entrusted to me by Yoneda.
 The uniform I wear at the theater. Good for both summer and winter. 
 A lighter borrowed from the inn. 
 The flower crown that Iris made for Reni. 
-A plate used at the welcome party. I was asked to bring it to Sakura. 
+Plates for the welcome party. Sakura asked us to get them for her. 
 A bromide of Sakura. 
 A bromide of Sakura. This one is a limited edition only available at New Year's. 
 A bromide of Sumire. 
@@ -775,7 +775,7 @@ A letter from Reni.
 A scarf given to me by Sakura. It's knitted with red yarn - my favorite color. 
 A scarf given to me by Sakura. It's knitted with blue yarn - my favorite color. 
 A scarf given to me by Sakura. It's knitted with yellow yarn - my favorite color.
-…()-.,!?? 
+…(){}[]-.,!? 
 Welcome to Pompadour Chikamatsu's Fortune Telling. Here is what fate has in store for you. 
 Your lucky color is peach. A fateful encounter will bring good luck. 
 Your lucky color is purple. If you're a wise shopper, you'll be in luck. 

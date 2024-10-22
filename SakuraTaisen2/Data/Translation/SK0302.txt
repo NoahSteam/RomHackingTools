@@ -20,31 +20,31 @@ Please understand, we need to keep some for the customers.
 You want to buy a bromide? Please, take your pick! 
 That's a bromide of Sakura. 
 Let's see… <br> Sakura's bromide, right? 
-That'll be 50 sen. Thank you very much! 
+That’ll be 50 sen. <br> Thanks for your patronage! 
 That's a bromide of Sumire. 
 Let's see… <br> Sumire's bromide, right? 
-That'll be 50 sen. Thank you very much! 
+That’ll be 50 sen. <br> Thanks for your patronage! 
 That's a bromide of Maria. 
 Let's see… <br> Maria's bromide, right? 
-That'll be 50 sen. Thank you very much! 
+That’ll be 50 sen. <br> Thanks for your patronage! 
 That's a bromide of Kanna. 
 Let's see… <br> Kanna's bromide, right? 
-That'll be 50 sen. Thank you very much! 
+That’ll be 50 sen. <br> Thanks for your patronage! 
 That's a bromide of Iris. 
 Let's see… <br> Iris's bromide, right? 
-That'll be 50 sen. Thank you very much! 
+That’ll be 50 sen. <br> Thanks for your patronage! 
 That's a bromide of Kohran. 
 Let's see… <br> Kohran's bromide, right? 
-That'll be 50 sen. Thank you very much! 
+That’ll be 50 sen. <br> Thanks for your patronage! 
 That's a bromide of Orihime. 
 Her bromide is very popular right now. 
 So make sure to grab one before they're all gone!
 Let's see… <br> Orihime's bromide, right? 
-That'll be 50 sen. Thank you very much! 
+That’ll be 50 sen. <br> Thanks for your patronage! 
 That's a bromide of Reni. 
 We just put that bromide up for sale recently. Get one while you can!
 Let's see… <br> Reni's bromide, right? 
-That'll be 50 sen. Thank you very much! 
+That’ll be 50 sen. <br> Thanks for your patronage! 
 Oh, so you're not going to buy anything?
 Tsubaki, you look… very cheerful. 
 Absolutely. This is the theater’s entrance after all. 
@@ -59,10 +59,10 @@ And when he does, please make sure to greet him with a bright smile!
 I’ll make sure to greet him with the biggest, brightest smile ever! 
 Just leave it to me! I’ll give the manager a warm welcome!
 Well, I should be going. Keep up the good work. 
-Thank you very much! Come back soon! 
+Thank you very much! <br> Come back again soon! 
 It must be hard for her, but Tsubaki’s doing her best to stay cheerful. 
 I have to stay strong, just like her. 
-Thank you very much! Come back and buy another bromide next month! 
+Thank you very much! <br> Come back and buy another bromide next month! 
 …Tsubaki’s doing her best to stay cheerful.
 Unsurprisingly, no one is eating at this hour. 
 There's no sign of anyone in the kitchen. Guess I'll check another room. 
@@ -968,7 +968,7 @@ Sorry Ogami, but customers are only allowed to purchase one of each bromide.
 I see. That's too bad. 
 So sorry, Mr. Ogami, but customers are only allowed to purchase one of each bromide.
 Oh, really? That's too bad.  
-…()-.,!?? 
+…(){}[]-.,!? 
 Welcome to Pompadour Chikamatsu's Fortune Telling. Here is what fate has in store for you. 
 Your lucky color is peach. A fateful encounter will bring good luck. 
 Your lucky color is purple. If you're a wise shopper, you'll be in luck. 
@@ -1054,7 +1054,7 @@ Divide Blade Mekkyaku. A special sword entrusted to me by Yoneda.
 The uniform I wear at the theater. Good for both summer and winter. 
 A lighter borrowed from the inn. 
 The flower crown that Iris made for Reni. 
-A plate used at the welcome party. I was asked to bring it to Sakura. 
+Plates for the welcome party. Sakura asked us to get them for her. 
 A bromide of Sakura. 
 A bromide of Sakura. This one is a limited edition only available at New Year's. 
 A bromide of Sumire. 

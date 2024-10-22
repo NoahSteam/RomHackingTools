@@ -31,12 +31,12 @@ Kohran Li, inventor. Startles friend and foe alike with the inventions she emplo
 Orihime Soletta, prior Star Division member. Piloting a rose armor, she is known as one of the Red Nobles.
 Reni Milchstraße. A combat professional, attacking accurately without a single wasted movement.
 Hex Mech: Wakiji Kai. <br> The units equipped with longswords are referred to as I-type Otsu.
-Hex Mech: Wakiji Kai. These machines were successfully mass-produced with enhanced combat capability.
-Hex Mech: Chiken. Piloted by Mokujiki of the Five Elements, it wields the Enkuu as its weapons.
+Hex Mech: Wakiji Kai. <br> These were successfully mass-produced with enhanced combat capability.
+Hex Mech: Chiken. <br> Piloted by Mokujiki of the Five Elements, it wields the Enkuu as its weapons.
 Hex Mech: Wakiji Kai. <br> The units equipped with large cannons are referred to as HA-type.
-Hex Mech: Wakiji Kai. The RO-type Wakiji were designed to support the I-type Wakiji in battle.
+Hex Mech: Wakiji Kai. <br> The RO-type Wakiji were designed to support the I-type Wakiji in battle.
 Black Demon Cannon. A cannon made with Black Demon Society technology. Mokujiki's latest creation.
-Hex Mech: Wakiji Kai. These models, called L-Special, have the ability to restore health.
+Hex Mech: Wakiji Kai. <br> These models, called L-Special, have the ability to restore health.
 Wakiji Kai L-Special. Like the I-type, these were originally developed as experimental units.
 Black Demon Cannon. A cannon made with Black Demon Society technology. Mokujiki's latest creation.
 Enkuu. A support weapon for the Chiken developed by Mokujiki.
@@ -98,7 +98,7 @@ Captain… My apologies…
 I wish I could stay with you… a little longer…
 Well done, sir.
 Thank goodness you're here, sir…
-Hmph! Is that all you've got?
+Hmph! <br> Is that all you've got?
 An excellent order, Captain!
 You give me strength, Captain!
 Go get 'em, Boss!
@@ -131,7 +131,7 @@ It's OK, Mon Frère, I'm here with you.
 Ah… It stopped…
 I'm sorry, Mon Frère…
 Yaaaay! <br> You did it, Mon Frère!
-Wow, Mon Frère! You're sooo cool!
+Wow, Mon Frère! <br> You're sooo cool!
 I'm amazing, huh?
 C'mon, praise me! <br> Praise me!
 With you around, Mon Frère, I'm not scared of anything!

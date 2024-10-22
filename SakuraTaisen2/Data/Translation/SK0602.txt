@@ -79,24 +79,24 @@ Oh, is it that late already?
 I should go to Reni's room. I have to try talking to her. 
 Reni, it's me. I just want to talk for a minute. Will you open up? 
 … 
-Oh, hello! Pleased to meet you! 
-By any chance, are you… Mr. Ichiro Ogami? I knew it! It really IS you! 
+Oh, hello! <br> Pleased to meet you! 
+By any chance, are you… <br> Mr. Ichiro Ogami? I knew it! It really IS you! 
 Huh?! Wh-Who are you? 
 Starting today, I'll be running the theater's gift shop. 
 I’m Tsubomi Nonomura, age 15. 
 Ahh, I can't believe I get to work at THE Imperial Theater! It's like a dream come true! 
 Huh?! You're running the gift shop? 
 I see, so you must be the replacement Tsubaki was talking about. 
-Yep, that's me! A hard worker who always wears a smile, smile! 
+Yep, that's me! <br> A hard worker who always wears a smile, smile! 
 Looking forward to working with you! 
 Let's do our best. 
-Smile-smile back atcha!
+Smile, smile back atcha!
 I look forward to working with you. As fellow theater employees, let's both do our best.
 Yes, sir! 
 I'm a bit of a scatterbrain, so I tend to mess up a lot… 
 But I always put my best foot forward with a smile, smile! I hope you'll support me! 
 Hahaha, you're a funny one. 
-Smile-smile right back atcha! 
+Smile, smile right back atcha! 
 Huh… You sure talk funny, Mr. Ogami! 
 R-Really? I was just trying to copy you… 
 … 
@@ -110,18 +110,18 @@ Don't ever forget what it takes to keep the capital safe.
 Yes, sir! I know! 
 I might not look it, but I'm here with the full endorsement of the Maidens' Academy! 
 Maidens' Academy? 
-Yes, that's right. It's, well… A training school for the troupe, established by Mr. Yoneda. 
+Yes, that's right. <br> It's, well… A training school for the troupe, established by Mr. Yoneda. 
 I see… The manager’s involved in a lot of stuff we’re unaware of, huh. 
-Ahh, that's right! I have to report to the office! 
-I'm already super late! I have to hurry or I'm not gonna make it! Please excuse me! 
-Hey! You're going the wrong way! The office is over here! This way! 
-Ahhh, I messed up! Thank you so much! OK, goodbye! 
-Phew. Another colorful character has joined our ranks…  
+Ahh, that's right! <br> I have to report to the office! 
+I'm already super late! <br> I have to hurry or I'm not gonna make it! Please excuse me! 
+Hey! <br> You're going the wrong way! <br> The office is over here! <br> This way! 
+Ahhh, I messed up! <br> Thank you so much! <br> OK, goodbye! 
+…Phew. <br> Another colorful character has joined our ranks…  
 Ensign Ogami, if I could have a moment. 
 Eep! I-It's you! 
 Yes. The secret unit of love and beauty, the Rose Division! I am its captain, Kotone. 
-I'm Yokihiko! Remember lil' ol' me, Ichiro? 
-U-Um… I'm… Kikunojo. You haven't… forgotten me, have you? 
+I'm Yokihiko! <br> Remember lil' ol' me, Ichiro? 
+U-Um… I'm… Kikunojo. <br> You haven't… forgotten me, have you? 
 Did you… need something? 
 We've just finished setting up our room in the basement. Please, stop by sometime. 
 Apparently there's a typhoon headed towards the capital. It's gonna be pretty stormy tonight. 
@@ -132,7 +132,7 @@ But no typhoon's gonna bother us down in the basement!
 It's so cozy down there, you should come and play sometime, Ichiro. 
 U-Um… We'll be waiting for you. 
 Now then, Ensign Ogami, we must take our leave. 
-A storm tonight, huh? Well, I guess that’s to be expected when a typhoon comes around.
+A storm tonight, huh? <br> Well, I guess that’s to be expected when a typhoon comes around.
 But boy, those three are practically a typhoon themselves. 
 Oh, Ogami… 
 You look to have a lot of free time on your hands, Mr. Ensign, as usual. 
@@ -157,7 +157,7 @@ I suppose Reni might feel better by tomorrow…
 Hmmm, it's hard to say who's right. 
 For now, I think I'll go talk to her. 
 We can’t even begin to help if we don’t know what’s troubling her.
-You're right. Thank you, Ogami. 
+You're right. <br> Thank you, Ogami. 
 That is what I was thinking you would say. You really are nosy, Mr. Ensign. 
 Well, I have to go now. Good luck with Reni! 
 For now, I'll go back to my room as well. Please help Reni, Ogami. 
@@ -257,8 +257,8 @@ Well, no use regretting that now. I'll go somewhere else.
 If you don't mind, we could go together. 
 Really? I'm just going out shopping. 
 It might be nice to take a stroll through the capital before the storm hits. 
-Hm hm, you're right. Shall we, then? 
-Matches… Candles… That should be everything we need. 
+Hm hm, you're right. <br> Shall we, then? 
+Matches… Candles… <br> That should be everything we need. 
 Good. Now let's make our way back to the thea-- 
 …It seems like it's started to rain. 
 You're right. It's coming down strong, too. 
@@ -272,9 +272,9 @@ I do have an umbrella, albeit only one.
 Well, it’s not like we can just stay here twiddling our thumbs.
 It's nice we get to share an umbrella, but too bad it's in such awful weather. Let's do this, Maria. 
 Y-Yes, sir! 
-ACHOO! We managed to make it back somehow. 
+ACHOO! <br> We managed to make it back somehow. 
 Are you all right, Maria? 
-Yes. Thanks to you, Captain, I managed to stay pretty dry. 
+Yes. <br> Thanks to you, Captain, I managed to stay pretty dry. 
 Although, it seems like you got pretty soaked shielding me from the rain. 
 Hahaha, it's nothing. Don't worry about it, Maria. 
 Sir… Thank you so much. 
@@ -291,7 +291,7 @@ I know you tried your best to shield me from the rain.
 Thank you for saying that, Maria. I feel a little better now. 
 I appreciate the effort, Captain. Take it easy. 
 You too. Try not to catch a cold, OK? 
-Thank you. Now then, I have to go. 
+Thank you. <br> Now then, I have to go. 
 My clothes are mostly dry now, so I guess I'll get going. 
 Maria should have returned by now, right? 
 Oh, Captain! I'm back! 
@@ -417,34 +417,34 @@ We have to leave some for the customers, I hope you understand.
 Buying a bromide? <br> Thank you very much! 
 That’s a bromide of <br> Miss Sakura.
 She looked so pretty playing Cordelia in "King Lear" this past summer… 
-Miss Sakura's bromide? That'll be 50 sen! <br> Thank you, come again! 
+Miss Sakura's bromide? <br> That'll be 50 sen! <br> Thank you, come again! 
 That’s a bromide of <br> Miss Sumire. 
 Her banter with Miss Kanna in "King Lear" was fantastic! 
 I couldn't stop laughing from all the way back in the stands! 
-Miss Sumire's bromide? That'll be 50 sen! <br> Thank you, come again! 
+Miss Sumire's bromide? <br> That'll be 50 sen! <br> Thank you, come again! 
 That’s a bromide of <br> Miss Maria. 
 Miss Maria's going to be in this month's play, right? I can't wait! 
-Miss Maria's bromide? That'll be 50 sen! <br> Thank you, come again! 
+Miss Maria's bromide? <br> That'll be 50 sen! <br> Thank you, come again! 
 That’s a bromide of <br> Miss Kanna. 
 She was so cool as King Lear! 
 Miss Kanna's got a lot of female fans, you know. 
-Miss Kanna's bromide? That'll be 50 sen! <br> Thank you, come again! 
+Miss Kanna's bromide? <br> That'll be 50 sen! <br> Thank you, come again! 
 That’s a bromide of <br> Miss Iris. 
 We'll finally get to see her as Mytyl this month! 
 She's gonna be so cute! I can hardly wait! 
-Miss Iris's bromide? That'll be 50 sen! <br> Thank you, come again! 
+Miss Iris's bromide? <br> That'll be 50 sen! <br> Thank you, come again! 
 That’s a bromide of <br> Miss Kohran. 
 She's the best when it comes to comedies! 
 Remember that play she was in a while back, "Dinosaur Island"? I went and saw it five times! 
-Miss Kohran's bromide? That'll be 50 sen! <br> Thank you, come again! 
+Miss Kohran's bromide? <br> That'll be 50 sen! <br> Thank you, come again! 
 That’s a bromide of <br> Miss Orihime. 
 Miss Orihime's Imperial Theater debut as Regan in "King Lear" was great! 
 A perfect performance, just like you'd expect from someone who came from the birthplace of theatre! 
-Miss Orihime's bromide? That'll be 50 sen! <br> Thank you, come again! 
+Miss Orihime's bromide? <br> That'll be 50 sen! <br> Thank you, come again! 
 That’s a bromide of <br> Miss Reni. 
 With "The Blue Bird" this month, Miss Reni finally gets to be the star! 
 I'm SO looking forward to opening day, I just can't wait! 
-Miss Reni's bromide? That'll be 50 sen! <br> Thank you, come again! 
+Miss Reni's bromide? <br> That'll be 50 sen! <br> Thank you, come again! 
 Oh, not buying a bromide after all?
 How do you like running the shop, Tsubomi? 
 Eheheh, I messed up immediately. 
@@ -1132,7 +1132,7 @@ Oh, Captain… Were you looking to take a bath, too?
 N-No… That's not it. 
 I see. I just got out, myself. 
 There's nothing quite as refreshing as taking a hot bath after a hard day's work. 
-Anyway, I have to go. Take care, Captain. 
+Anyway, I have to go. <br> Take care, Captain. 
 It's true, nothing beats taking a bath after a long day. 
 I should get going. I've still got things I need to do. 
 Looks like no one's taking a bath right now. 
@@ -1231,9 +1231,9 @@ We barely ever use it, so I'm sure it doesn't feel very appreciated.
 Hmm… Guess no one's here. 
 I probably shouldn't stick around. 
 OK, who to call? 
-Hello? This is Tsubaki Takamura. 
-Hey, Tsubaki? It's me, Ogami. 
-Huh? Ogami! How'd you get my number? 
+Hello? <br> This is Tsubaki Takamura. 
+Hey, Tsubaki? <br> It's me, Ogami. 
+Huh? Ogami! <br> How'd you get my number? 
 Yuri told me, actually. 
 Oh, I see! I'm just a little surprised, getting called out of the blue like this. 
 I just kept trying numbers till I found it. 
@@ -1389,7 +1389,7 @@ Divide Blade Mekkyaku. A special sword entrusted to me by Yoneda.
 The uniform I wear at the theater. Good for both summer and winter. 
 A lighter borrowed from the inn. 
 The flower crown that Iris made for Reni. 
-A plate used at the welcome party. I was asked to bring it to Sakura. 
+Plates for the welcome party. Sakura asked us to get them for her. 
 A bromide of Sakura. 
 A bromide of Sakura. This one is a limited edition only available at New Year's. 
 A bromide of Sumire. 
@@ -1428,7 +1428,7 @@ Sorry Ogami, but customers are only allowed to purchase one of each bromide.
 I see. That's too bad. 
 So sorry, Mr. Ogami, but customers are only allowed to purchase one of each bromide.
 Oh, really? That's too bad. 
-…()-.,!?? 
+… "" "" () - . , ! ? ?! !! 
 Minigame part <br> Select results 
 Low score 
 Middle score 

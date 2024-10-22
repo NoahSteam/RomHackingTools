@@ -256,18 +256,18 @@ Ah, Reni!
 Shoot, too late.
 Whiiine…
 There there,
-. <br> I'm sure Reni will come around eventually.
+. <br> I'm sure Reni will come <br> around eventually.
 Oh my, Ensign…
 Arf, arf!
-Hi, Sumire. Were you <br>
-playing with?
+Hi, Sumire. Were you <br> playing with<sp>
+just now?
 Yes. My family kept a dog once, when I was younger.
 Although he was quite a bit larger than this fellow, he made an excellent playmate.
-Well then
+Well then<sp>
 , <br> let us play again another time.
 Arf, arf!
 I wish Reni would play with you, too.
-I should also get going. <br> See you later,
+I should also get going. <br> See you later,<sp>
 .
 Woof!
 Arf!
@@ -275,7 +275,7 @@ Hey there,
 . <br> How do you like the theater so far?
 Arf, arf!
 Hahaha. I wonder what you're saying? It's almost like you can understand me.
-Anyway, I should be off. <br> See you later,
+Anyway, I should be off. <br> See you later,<sp>
 .
 Woof!
 Hey, Sakura.
@@ -405,14 +405,14 @@ Oh, so you're not going to buy anything?
 Oh yeah, you brought back that super cute little doggy earlier, didn't you?
 I guess he lives here at the theater with us now, huh?
 Yes, that’s right. <br> His name is
-<br> if I remember right.
-, the cute little <br> dog! What an adorable name!
+if I <br> remember right.
+of the Flower <br> Division! What an adorable name!
 Would it be OK if I played with him after I'm done working?
 Yeah, of course. <br> I bet he'll really take a liking to you, Tsubaki.
 … <br> Ooh, I can’t wait to play with him!
 Well, I should be going. Keep up the good work.
-Thank you very much! Come back again soon!
-Thank you very much! Come back and buy another bromide next month!
+Thank you very much! <br> Come back again soon!
+Thank you very much! <br> Come back and buy another bromide next month!
 Hmm, it looks like the door to the manager's office was left open.
 Is someone inside?
 Oh, Saki, it's you. What're you doing in here?
@@ -682,8 +682,8 @@ Nobody's around. I'll go somewhere else.
 It's empty. No one usually comes here during their free time.
 Oh well. Guess I'll check someplace else.
 There doesn't seem to be anyone on the terrace.
-Since the rain's finally stopped, maybe I'll go to the courtyard and visit <br>
-.
+Maybe I’ll visit
+<br> in the courtyard now that the rain has finally stopped.
 I figured I'd check again, but there's still no one here…
 Oh yeah, Kohran was asking for me, wasn't she? I'd best not be late.
 …
@@ -1003,7 +1003,7 @@ Make a call.
 Maybe next time.
 OK, I'll make a call.
 I'll call someone another time. Maybe I'll head somewhere else for now.
-There's no one here… Where did everyone go?
+There's no one here… <br> Where did everyone go?
 is pretty popular. <br> Maybe they’re spending time with him. Hmm… I'll try somewhere else.
 The sunlight here is so bright. It's nice and warm.
 Well, I guess I'll keep going since there's nobody here.
@@ -1100,8 +1100,8 @@ Go somewhere else.
 OK, I think I will take a bath.
 I don't have time to lounge in here all day… But a short, relaxing bath would be nice.
 Phew… <br> Ohh, this feels great.
-was almost hit by <br> a car but even the injury I got from rescuing him is starting to hurt less.
-Having this huge bath to soak in all to myself is seriously heaven on earth…
+was almost hit by <br> a car and I got hurt saving him. But now even my injured leg feels healed.
+Soaking in this huge bath all by myself is seriously heaven on earth…
 Now that I'm nice and warmed up, I guess it's time to get out.
 Ahh… That was a nice bath.
 15 minutes went by before I even realized.
@@ -1114,8 +1114,8 @@ Go somewhere else.
 All right, I'll hop in the bath.
 I don't have time to lounge in here all day… But a short, relaxing bath would be nice.
 Phew… Ohh, this feels great.
-was almost hit by <br> a car but even the injury I got from rescuing him is starting to hurt less.
-Having this huge bath to soak in all to myself is seriously heaven on earth…
+was almost hit by <br> a car and I got hurt saving him. But now even my injured leg feels healed.
+Soaking in this huge bath all by myself is seriously heaven on earth…
 Now that I'm nice and warmed up, I guess it's time to get out.
 Ahh… That was a nice bath.
 15 minutes went by before I even realized.
@@ -1256,7 +1256,7 @@ Sorry about earlier.
 So you're a girl.
 Sorry about earlier.
 You’re kind of cute…
-I'm sorry about earlier. I didn't realize that you were… a girl. 
+I'm sorry about earlier. I didn't realize that you were… a girl.
 …It's fine.
 Um… I suppose you'd prefer I kept this a secret from the others?
 I don't mind if you tell them. It's all the same to me.
@@ -1457,7 +1457,7 @@ Anyways, here. Try hurling it to the floor, as hard as you can.
 Throw it to the floor.
 As hard as I can, huh? <br> Here goes!
 …Hang on, is this thing smoking?!
-Oh, shoot… 
+Oh, shoot…
 Th-This is…
 Wait a tic, that's strange. How come it exploded before you even threw it?
 The explosive force is really missing something. Hm, maybe I'll try doubling the amount of gunpowder.
@@ -1474,37 +1474,37 @@ Well, I'll be happy to help in the future too, Kohran.
 And I'm glad to hear it! I'll be looking forward to your assistance next time I make something new!
 Eeep?!
 Oh man… Looks like I'm picking up a side job as a human guinea pig…
-Tell me some gossip. 
-I'll come back later. 
-Seems like you’ve started keeping a dog in the courtyard, Ogami. 
-That’s right. Sorry I made the decision without consulting you two first. 
-Oh, it's no problem!<br>The dog's name is<br>
-, isn't it? 
-You got that information pretty quick. Just like always, Yuri. 
-Heheh. Actually, Kohran just dropped by to tell us the news. She was really excited to talk about it. 
-I see, glad to hear it. <br> I hope that you two will play with 
+Tell me some gossip.
+I'll come back later.
+Seems like you’ve started keeping a dog in the courtyard, Ogami.
+That’s right. Sorry I made the decision without consulting you two first.
+Oh, it's no problem! <br> The dog's name is
+, <br> isn't it?
+You got that information pretty quick. Just like always, Yuri.
+Heheh. Actually, Kohran just dropped by to tell us the news. She was really excited to talk about it.
+I see, glad to hear it. <br> I hope that you two will <br> play with
 every <br> now and then.
-Has Mr. Yoneda been doing OK? 
-Yeah, we just visited him in the hospital and he was as lively as ever. 
+Has Mr. Yoneda been doing OK?
+Yeah, we just visited him in the hospital and he was as lively as ever.
 He's not allowed to drink there, so it’s a good opportunity for his body to recover a bit.
 Well, this is the manager we're talking about. He's probably been sneaking some alcohol on the sly.
-I heard from Kanna recently that some food in the kitchen's gone missing. 
-Huh?! D-Don't tell me there are rats? 
-I don't think so. The food disappears along with the packaging. 
-Perhaps, unbeknownst to us, there is a person secretly living in the theater… 
-…Just kidding. Did I make your heart skip a beat? 
-Ogami, have you ever been to Café Paulista? 
-Um, Cafe… what now? No, I haven't. 
+I heard from Kanna recently that some food in the kitchen's gone missing.
+Huh?! D-Don't tell me there are rats?
+I don't think so. The food disappears along with the packaging.
+Perhaps, unbeknownst to us, there is a person secretly living in the theater…
+…Just kidding. Did I make your heart skip a beat?
+Ogami, have you ever been to Café Paulista?
+Um, Cafe… what now? No, I haven't.
 It’s a place that serves delicious coffee and donuts.
 The cafe is wonderful, but all of the customers seem to be a bunch of writer types.
-Whenever I go, I always end up having some kind of high-minded conversation… It gets tiring sometimes. 
+Whenever I go, I always end up having some kind of high-minded conversation… It gets tiring sometimes.
 By the way, I've heard that there are quite a few female bus conductors these days!
 Women that work alongside men are pretty cool, don't you think?
 I kind of admire them.
 Ah, now that I think about it, Ogami, you’re a man working among mostly women, aren’t you?  
-By the way, Maria is scheduled to return from America soon. 
+By the way, Maria is scheduled to return from America soon.
 Huh, is that so? It will be a huge relief to have her back.
-You look happy to hear that, Ogami. Were you lonely without Maria? 
+You look happy to hear that, Ogami. Were you lonely without Maria?
 I-It's not like that. I’m just happy to have another member return to the Flower Division.
 It’s hard keeping an eye on everyone all by myself.
 I see. I’m sure it must be difficult to keep the team together on your own.
@@ -1512,27 +1512,27 @@ That reminds me. People have apparently seen a mysterious figure in the theater 
 Sometimes, they even hear the sounds of a guitar playing alongside someone singing.
 From what I understand, they don’t appear to be from the theater's orchestra.
 If I ever find out who it is, you’ll be the first to know.
-O-OK… Thanks. 
-Speaking of which, summer break is coming up next month. 
-I'm thinking of buying the latest swimsuit and going to the beach! How about we go together, Kasumi? 
-Um… I think I'll pass… By the way, do you have any plans for summer break, Ogami? 
+O-OK… Thanks.
+Speaking of which, summer break is coming up next month.
+I'm thinking of buying the latest swimsuit and going to the beach! How about we go together, Kasumi?
+Um… I think I'll pass… By the way, do you have any plans for summer break, Ogami?
 Hmm… In this line of work, we don’t really get days off. Who knows if we’ll get a vacation this summer…
-Sorry, Ogami, but I'm all out of gossip for now. 
+Sorry, Ogami, but I'm all out of gossip for now.
 I'll have some more interesting tidbits to share another time, so look forward to it!
 Oh… Ogami, I see you bought Maria's bromide.
-I thought I should at least get her bromide since she’s off in America right now. 
-Would you like me to give you her call number, Ogami? 
-…Really? 
+I thought I should at least get her bromide since she’s off in America right now.
+Would you like me to give you her call number, Ogami?
+…Really?
 She actually gave me her number in case of emergencies.   
-You can talk to her if you dial "13900." 
-13900, OK. Thanks, Yuri! 
-I'll come back another time. Good luck with your work. 
-OK. Thanks for coming, Ogami. 
-Tell us if you hear any juicy stories! 
-Sorry Ogami, but customers are only allowed to purchase one of each bromide. 
-I see. That's too bad. 
+You can talk to her if you dial "13900."
+13900, OK. Thanks, Yuri!
+I'll come back another time. Good luck with your work.
+OK. Thanks for coming, Ogami.
+Tell us if you hear any juicy stories!
+Sorry Ogami, but customers are only allowed to purchase one of each bromide.
+I see. That's too bad.
 So sorry, Mr. Ogami, but customers are only allowed to purchase one of each bromide.
-Oh, really? That's too bad. 
+Oh, really? That's too bad.
 Shiro
 Hanamaru
 Dai
@@ -1555,110 +1555,110 @@ Iris
 Kohran
 Orihime
 Reni
-The jewel of the Pandemonium Regalia, entrusted to us by the Rose Division. 
-Spirit Sword Arataka. The special sword of the Shinguji family. 
-Divine Sword Shirahatori. Entrusted to me by Kaede. A special sword passed down by the Fujieda family. 
-Luminous Blade Mukei. A special sword entrusted to us by Kazuma that once belonged to Major Yamazaki. 
-Divide Blade Mekkyaku. A special sword entrusted to me by Yoneda. 
-The uniform I wear at the theater. Good for both summer and winter. 
-A lighter borrowed from the inn. 
-The flower crown that Iris made for Reni. 
-A plate used at the welcome party. I was asked to bring it to Sakura. 
-A bromide of Sakura. 
-A bromide of Sakura. This one is a limited edition only available at New Year's. 
-A bromide of Sumire. 
-A bromide of Sumire. This one is a limited edition only available at New Year's. 
-A bromide of Maria. 
-A bromide of Maria. This one is a limited edition only available at New Year's. 
-A bromide of Kanna. 
-A bromide of Kanna. This one is a limited edition only available at New Year's. 
-A bromide of Iris. 
-A bromide of Iris. This one is a limited edition only available at New Year's. 
-A bromide of Kohran. 
-A bromide of Kohran. This one is a limited edition only available at New Year's. 
-A bromide of Orihime. 
-A bromide of Orihime. This one is a limited edition only available at New Year's. 
-A bromide of Reni. 
-A bromide of Reni. This one is a limited edition only available at New Year's. 
-A decorative paper ball for the welcome party called a kusudama. 
+The jewel of the Pandemonium Regalia, entrusted to us by the Rose Division.
+Spirit Sword Arataka. The special sword of the Shinguji family.
+Divine Sword Shirahatori. Entrusted to me by Kaede. A special sword passed down by the Fujieda family.
+Luminous Blade Mukei. A special sword entrusted to us by Kazuma that once belonged to Major Yamazaki.
+Divide Blade Mekkyaku. A special sword entrusted to me by Yoneda.
+The uniform I wear at the theater. Good for both summer and winter.
+A lighter borrowed from the inn.
+The flower crown that Iris made for Reni.
+Plates for the welcome party. Sakura asked us to get them for her.
+A bromide of Sakura.
+A bromide of Sakura. This one is a limited edition only available at New Year's.
+A bromide of Sumire.
+A bromide of Sumire. This one is a limited edition only available at New Year's.
+A bromide of Maria.
+A bromide of Maria. This one is a limited edition only available at New Year's.
+A bromide of Kanna.
+A bromide of Kanna. This one is a limited edition only available at New Year's.
+A bromide of Iris.
+A bromide of Iris. This one is a limited edition only available at New Year's.
+A bromide of Kohran.
+A bromide of Kohran. This one is a limited edition only available at New Year's.
+A bromide of Orihime.
+A bromide of Orihime. This one is a limited edition only available at New Year's.
+A bromide of Reni.
+A bromide of Reni. This one is a limited edition only available at New Year's.
+A decorative paper ball for the welcome party called a kusudama.
 A flower vase for the welcome party.
 The banner for the welcome party.
-The Kinematron. One of Kohran's inventions that lets you see and talk to someone from far away. 
-The sword of the Pandemonium Regalia, recovered from the Demon King. 
-The mirror of the Pandemonium Regalia, recovered from the Demon King. 
-Fragments of the broken Kinematron. Seems like the kids at the inn picked them up along the shore. 
-A letter from Sakura. 
-A letter from Sumire. 
-A letter from Maria. 
-A letter from Kanna. 
-A letter from Iris. 
-A letter from Kohran. 
-A letter from Orihime. 
-A letter from Reni. 
-A scarf given to me by Sakura. It's knitted with red yarn - my favorite color. 
-A scarf given to me by Sakura. It's knitted with blue yarn - my favorite color. 
+The Kinematron. One of Kohran's inventions that lets you see and talk to someone from far away.
+The sword of the Pandemonium Regalia, recovered from the Demon King.
+The mirror of the Pandemonium Regalia, recovered from the Demon King.
+Fragments of the broken Kinematron. Seems like the kids at the inn picked them up along the shore.
+A letter from Sakura.
+A letter from Sumire.
+A letter from Maria.
+A letter from Kanna.
+A letter from Iris.
+A letter from Kohran.
+A letter from Orihime.
+A letter from Reni.
+A scarf given to me by Sakura. It's knitted with red yarn - my favorite color.
+A scarf given to me by Sakura. It's knitted with blue yarn - my favorite color.
 A scarf given to me by Sakura. It's knitted with yellow yarn - my favorite color.
-Ayame and I almost never lived in the same household, even though we were sisters. 
-Eh…? 
-It's not so unusual, given our lineage. We have less a "family tree" and more a "family wisteria." 
-Yet, I still knew that she was the type of person that would sacrifice her own well-being for others… 
-Carrying everyone's burdens by herself… 
-That's why, when I received the news that she had passed away, I made up my mind. 
-I want to carry on her will. I want to protect the capital, just like she did. 
-And for my own sake, too. 
-…I suppose that's all I have to say. 
-You know, Ogami, I came here to work of my own volition. 
-To protect the peace of this city, and to cherish our audience's smiles. 
-I'm sure you feel the same, Ogami. 
-Yes, of course. 
-So let's both do our best. 
-For my sister… <br> For everyone… 
-Yes, ma'am! 
-Well, today I will tell you about the Anti-Kouma Corps. 
-The Anti-Kouma Corps was the Army's predecessor to the Imperial Assault Troupe. 
-Ikki Yoneda, Kazuma Shinguji, Shinnosuke Yamazaki, and… Ayame Fujieda. 
-A special unit, comprising only those four, formed to defend the capital from evil. 
-Seven years ago… A Kouma appeared in Nihonbashi. 
-Even though it was just a single Kouma, the military and police were powerless against it. 
-However, the Anti-Kouma Corps managed to seal the Kouma away, albeit at great cost. 
-That incident made the government painfully aware of the need to defend against such evil. 
-As a result, the Imperial Assault Troupe as you know it was born. 
-The troupe is the fruit of the Anti-Kouma Corps' will. 
-And, of the four members, only General Yoneda is still alive today. 
-For the sake of those four, who protected the people from evil… We have to keep fighting. 
-… 
-Now then, today I'll tell you about Ayame's travels. 
-In order to recruit members for the Flower Division, Ayame traveled around the world. 
+Ayame and I almost never lived in the same household, even though we were sisters.
+Eh…?
+It's not so unusual, given our lineage. We have less a "family tree" and more a "family wisteria."
+Yet, I still knew that she was the type of person that would sacrifice her own well-being for others…
+Carrying everyone's burdens by herself…
+That's why, when I received the news that she had passed away, I made up my mind.
+I want to carry on her will. I want to protect the capital, just like she did.
+And for my own sake, too.
+…I suppose that's all I have to say.
+You know, Ogami, I came here to work of my own volition.
+To protect the peace of this city, and to cherish our audience's smiles.
+I'm sure you feel the same, Ogami.
+Yes, of course.
+So let's both do our best.
+For my sister… <br> For everyone…
+Yes, ma'am!
+Well, today I will tell you about the Anti-Kouma Corps.
+The Anti-Kouma Corps was the Army's predecessor to the Imperial Assault Troupe.
+Ikki Yoneda, Kazuma Shinguji, Shinnosuke Yamazaki, and… Ayame Fujieda.
+A special unit, comprising only those four, formed to defend the capital from evil.
+Seven years ago… A Kouma appeared in Nihonbashi.
+Even though it was just a single Kouma, the military and police were powerless against it.
+However, the Anti-Kouma Corps managed to seal the Kouma away, albeit at great cost.
+That incident made the government painfully aware of the need to defend against such evil.
+As a result, the Imperial Assault Troupe as you know it was born.
+The troupe is the fruit of the Anti-Kouma Corps' will.
+And, of the four members, only General Yoneda is still alive today.
+For the sake of those four, who protected the people from evil… We have to keep fighting.
+…
+Now then, today I'll tell you about Ayame's travels.
+In order to recruit members for the Flower Division, Ayame traveled around the world.
 She searched for suitable Flower Division candidates, girls with powerful spiritual abilities.
-She sent me letters from various countries. America, France, China… 
-Whenever she did, I must be honest, I envied her. 
-I see, so she did all that… 
-Those same candidates make up the Flower Division we have now. 
-And you know what, Ogami? Recently, I've been thinking… 
-The people Ayame chose truly were the best people for the job. That includes you. 
-Kaede… 
-Ayame entrusted the Flower Division to me, so I'll continue to give it my all. 
-Don't give up. Even in the hardest of times, remember to never give up, Ogami. 
-Yes, ma'am! I will do all I can to meet your expectations! 
-Now then, today I'll tell you about Ayame and Major Yamazaki. 
+She sent me letters from various countries. America, France, China…
+Whenever she did, I must be honest, I envied her.
+I see, so she did all that…
+Those same candidates make up the Flower Division we have now.
+And you know what, Ogami? Recently, I've been thinking…
+The people Ayame chose truly were the best people for the job. That includes you.
+Kaede…
+Ayame entrusted the Flower Division to me, so I'll continue to give it my all.
+Don't give up. Even in the hardest of times, remember to never give up, Ogami.
+Yes, ma'am! I will do all I can to meet your expectations!
+Now then, today I'll tell you about Ayame and Major Yamazaki.
 Both Ayame and Major Yamazaki were members of the troupe's predecessor, the Anti-Kouma Corps.
-Major Yamazaki was a brilliant scientist who created the foundational designs for Spirit Armor… 
-And they say he had a stronger sense of justice than most. 
-Anyone could see that Ayame and Major Yamazaki were deeply in love with each other… 
-But their relationship crumbled when the Kouma War started. 
-What could have possibly caused that? 
-Now, this is pure conjecture… 
+Major Yamazaki was a brilliant scientist who created the foundational designs for Spirit Armor…
+And they say he had a stronger sense of justice than most.
+Anyone could see that Ayame and Major Yamazaki were deeply in love with each other…
+But their relationship crumbled when the Kouma War started.
+What could have possibly caused that?
+Now, this is pure conjecture…
 But it seems that during their battles, Major Yamazaki became obsessed with certain questions.
-“What are these demons?" "Why do they exist?" 
-And "how are they so powerful?" 
-General Yoneda noticed that Major Yamazaki had changed, and he warned him many times. 
-But, in the end, no one could change his mind. 
-Not even Ayame… 
-When the Kouma War ended seven years ago, Major Yamazaki went missing. 
-And then in our recent battles, he appeared again as Cerulean Satan. 
-Justice by power… <br> Rule through evil… 
-Perhaps that was his conclusion… 
-Back when he appeared in front of the theater six months ago… 
-I wonder what Cerulean Satan… No, what Major Yamazaki was trying to tell us… 
-… 
+“What are these demons?" "Why do they exist?"
+And "how are they so powerful?"
+General Yoneda noticed that Major Yamazaki had changed, and he warned him many times.
+But, in the end, no one could change his mind.
+Not even Ayame…
+When the Kouma War ended seven years ago, Major Yamazaki went missing.
+And then in our recent battles, he appeared again as Cerulean Satan.
+Justice by power… <br> Rule through evil…
+Perhaps that was his conclusion…
+Back when he appeared in front of the theater six months ago…
+I wonder what Cerulean Satan… No, what Major Yamazaki was trying to tell us…
+…
 …[]()'.,!?!

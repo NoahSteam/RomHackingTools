@@ -24,17 +24,17 @@ Come now, Ogami, have you forgotten that old saying? "After rain comes fair weat
 The more two people quarrel, the stronger their relationship will become in the end. 
 Ahh, humans are truly complicated creatures. 
 That's true, no matter how much they fight, Orihime and Ogata are still family. 
-Thanks, Kayama. I appreciate the advice. 
-Attaboy, Ogami. Well then, farewell! Alley-OOP! 
+Thanks, Kayama. <br> I appreciate the advice. 
+Attaboy, Ogami. <br> Well then, farewell! <br> Alley-OOP! 
 All right, I'll stop by Orihime's room while I'm doing my rounds. 
-It's 9:30 right now… That gives me a half hour till 10. 
+It's 9:30 right now… <br> That gives me a half hour till 10. 
 The door's shut tight. It's properly locked. 
 OK, onto the next room. 
 Nothing unusual out in the lobby. 
 OK, continuing the night watch, then. 
 The merchandise is neatly organized. Tsubomi's pretty tidy. 
 All right, nothing out of the ordinary here. Continuing my night watch. 
-Yo, Boss. Out on your rounds? 
+Yo, Boss. <br> Out on your rounds? 
 What are you up to, Kanna? 
 Heheh, I got a little hungry, so I'm having a quick meal. 
 Oh yeah, I didn't see Orihime come down here at all this evenin’. 
@@ -120,7 +120,7 @@ Phew… How was that, Sumire?
 Splendid, Ensign. Bathed in that glimmering light, I could dance with ease. 
 How would you feel about becoming my personal lighting technician, Ensign? 
 Uhh… Well… I… 
-Ohohohoho! Relax, Ensign, I'm only kidding. 
+Ohohohoho! <br> Relax, Ensign, I'm only kidding. 
 Now then, I must be going. Take care, Ensign. 
 Lighting technician, huh? I wonder if that'd suit me better than being a ticket collector. 
 …Now's not the time to be thinking about that. I have to get back to my rounds. 
@@ -163,7 +163,7 @@ I'm pretty sure it was the South Star, right?
 …Wrong. There is no such thing as the "South Star." The correct answer is the "North Star." 
 Mon Frère, if you don't know something, don't pretend that you do! 
 Hmmm, maybe it's the Star of Happiness? Hahahaha! 
-Hahahaha! You're so funny, Mon Frère! 
+Hahahaha! <br> You're so funny, Mon Frère! 
 Wasn't that funny, Reni? 
 Y… Yes. 
 Bzzzt! Time's up! 
@@ -544,7 +544,7 @@ All right, I'll be going now. Good night, Orihime.
 … 
 Mamma mia… You really are stubborn, you know that? 
 …Come on in. 
-Thanks, Orhine. 
+Thanks, Orihime. 
 All right, what did you want to talk with me about, anyway? 
 Ask about Carino. 
 Ask about Ogata. 
@@ -620,7 +620,7 @@ Divide Blade Mekkyaku. A special sword entrusted to me by Yoneda.
 The uniform I wear at the theater. Good for both summer and winter. 
 A lighter borrowed from the inn. 
 The flower crown that Iris made for Reni. 
-A plate used at the welcome party. I was asked to bring it to Sakura. 
+Plates for the welcome party. Sakura asked us to get them for her. 
 A bromide of Sakura. 
 A bromide of Sakura. This one is a limited edition only available at New Year's. 
 A bromide of Sumire. 
@@ -655,5 +655,5 @@ A letter from Reni.
 A scarf given to me by Sakura. It's knitted with red yarn - my favorite color. 
 A scarf given to me by Sakura. It's knitted with blue yarn - my favorite color. 
 A scarf given to me by Sakura. It's knitted with yellow yarn - my favorite color. 
-…()-.,!?? 
+… "" "" () - . , ! ? ?! !! 
 Whaaaaa?!

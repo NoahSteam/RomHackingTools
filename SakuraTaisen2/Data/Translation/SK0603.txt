@@ -24,7 +24,7 @@ For justice, of course.
 That's right. We defeat evil and represent our justice. That's our job. 
 Justice through destroying evil. An ideal stained in blood… Is that why you fight? 
 Reni… 
-Heh, isn't it obvious? It's to find the blue bird. 
+Heh, isn't it obvious? <br> It's to find the blue bird. 
 Now, let's look for the blue bird of happiness, together! 
 J-Just kidding! Ha, hahaha… Are you feeling better yet? 
 …I guess not. 
@@ -39,7 +39,7 @@ B-But…
 Just go already! 
 Reni… 
 … 
-Why… Why is it that I fight?
+Why… <br> Why is it that I fight?
 What am I fighting for, huh? Hmm… 
 Ah, what a joy this is. <br> …Yo, Ogami! 
 That voice, is that…? 
@@ -59,7 +59,7 @@ You understand, Ogami?
 I see. It's true, I was having trouble putting my answer to Reni into words… 
 What Reni needs isn't words or logic. It's my honest feelings. 
 Do not falter, Ogami. To do so would be playing into the enemy's hands. Stay true to your beliefs.
-Yeah, got it. I appreciate the advice. 
+Yeah, got it. <br> I appreciate the advice. 
 I'd expect nothing less from my rival. I'll see you later, Ogami. Alley-OOP! 
 There we go… <br> Well then, Ogami, farewell! Adiòs! Till we meet again! 
 …Seriously, what's with that guy? 
@@ -67,7 +67,7 @@ Hey. Mon. Frère! <br> Are you in there?
 Oh, it's Iris this time. Come in, door's open. 
 OK, I'm coming in! 
 Hey, Iris, what's up? 
-Guess what, Mon Frère? I made this for Reni! 
+Guess what, Mon Frère? <br> I made this for Reni! 
 A flower crown? 
 I see, so this is what you were up to in the yard this afternoon. 
 Uh-huh! I thought Reni looked kinda sad. 
@@ -100,16 +100,16 @@ Iris, w-wait! You don't have to pull on me, I'm coming!
 … 
 Hm? What's wrong, Iris? 
 Mon Frère… Do you think Reni will like it? 
-It's all right. I'm sure she will. 
+It's all right. <br> I'm sure she will. 
 …OK! 
 Reni? Are you there? 
 …Did you need something? 
-Uh-huh. But, until you open this door… I'm. Not. Telling 
+Uh-huh. <br> But, until you open this door… I'm. Not. Telling 
 …What is it? 
-Teehee! Here you go! It's a present from me to you! 
+Teehee! Here you go! <br> It's a present from me to you! 
 What is this? 
 A flower crown I made just for you! It's pretty, right? 
-Iris… Why did you do this for me? 
+Iris… <br> Why did you do this for me? 
 Because you're my friend, Reni! 
 And when my friends are feeling sad, I'm always there to cheer them up! 
 I'm… your friend? 
@@ -118,10 +118,10 @@ Reni, Iris poured her heart into making that flower crown.
 We might not know exactly what’s bothering you… 
 But we'll always be by your side, watching over you. This flower crown is proof of that. 
 … 
-So… You'll take it, right, Reni? 
+So, Reni… <br> You'll take it, right? 
 Yeah… Thank… <br> Thank you, Iris. 
-Ah! Mon Frère, look! Reni smiled! 
-Yeah. Isn't that great, Iris? 
+Ah! Mon Frère, look! <br> Reni smiled! 
+Yeah. <br> Isn't that great, Iris? 
 Uh-huh!
 All right, Reni, it's getting late. Get a good night's sleep, OK? 
 …Yes. Good night. 
@@ -131,7 +131,7 @@ Yeah. Good night, Iris.
 Hm hm hm… 
 Looks like the rats are finally starting to catch on… Now's my chance. 
 Flowers… <br> Iris is… my friend? 
-Hm hm hm… A false friend, that is. 
+Hm hm hm… <br> A false friend, that is. 
 Who's there?! 
 Saki? 
 Reni, you're just like me, you know. 
@@ -159,7 +159,7 @@ Divide Blade Mekkyaku. A special sword entrusted to me by Yoneda.
 The uniform I wear at the theater. Good for both summer and winter. 
 A lighter borrowed from the inn. 
 The flower crown that Iris made for Reni. 
-A plate used at the welcome party. I was asked to bring it to Sakura. 
+Plates for the welcome party. Sakura asked us to get them for her. 
 A bromide of Sakura. 
 A bromide of Sakura. This one is a limited edition only available at New Year's. 
 A bromide of Sumire. 
@@ -196,8 +196,8 @@ A scarf given to me by Sakura. It's knitted with blue yarn - my favorite color.
 A scarf given to me by Sakura. It's knitted with yellow yarn - my favorite color.
 Sorry Ogami, but customers are only allowed to purchase one of each bromide. 
 I see. That's too bad. 
-So sorry, Mr. Ogami, but customers are only allowed to purchase one of each bromide. 
-Oh, really? That's too bad.  
+So sorry, Mr. Ogami, but customers are only allowed to purchase one of each bromide.
+Oh, really? That's too bad. 
 Macro complete. 
 Proceed to the next macro. 
 Repeat this macro. 
@@ -206,7 +206,7 @@ Execute random macro.
 2. Night movement ~ deployment 
 3. Light 
 4. Blue Bird 
-…()-.,!?? 
+…(){}[]-.,!? 
 Minigame part <br> Select results 
 Low score 
 Middle score 

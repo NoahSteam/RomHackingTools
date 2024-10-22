@@ -115,7 +115,7 @@ Sure, why not?
 I'm kind of embarrassed…
 Sure, why not?
 Heheheh, thanks! I feel so happy…
-Don't let go of my hand until Papa and Mama's boat gets here, OK?
+Don't let go of my hand until we reach Papa and Mama's boat, OK?
 OK, got it.
 There's so many people here… I feel kind of embarrassed.
 Jeez, way to spoil the mood, Mon Frère!
@@ -199,11 +199,11 @@ Hahaha, this is kind of embarrassing. But, eh, oh well.
 …Are all these people also going to visit the shrine?
 This train is headed towards Meiji Shrine, so maybe.
 …
-Captain… Why did you invite me out?
+Captain… <br> Why did you invite me out?
 Because I wanted to.
 Because you were alone.
 I just wanted to go with you. Is that not enough of a reason?
-No, it is… Lately I feel like I've come to understand that sort of sentiment.
+No, it is… <br> Lately I feel like I've come to understand that sort of sentiment.
 I see…
 I just thought you might be lonely all by yourself.
 I wasn't particularly lonely. It's always been like that for me.
@@ -917,20 +917,20 @@ Don't mind us, Dad, we're just gonna do our own thing!
 Kanna…
 It's fine! He's the one who just had to go and die…
 All right, we still got plenty of time! Time to party!
-It's here! Papa and Mama are in that boat, Mon Frère!
+We’re here! Papa and Mama are in that boat, Mon Frère!
 Wow… That ship is huge.
 C'mon, Mon Frère, let's go! Hurry!
 Hahaha, OK, OK.
-Yaaay! <br> Papaaaa! Mamaaaa!
+Yaaay! <br> Papaaa! Mamaaa!
 Iris?!
 Ohh, Iris!
-Papa, Mama! I'm so happy you're here!
+Papa, Mama! <br> I'm so happy you're here!
 We can have lunch together and talk about all sorts of stuff!!
 Y-Yes…
 …Of course, let's do that, Iris.
-Teehee! Heheh, I can't wait!
+Teehee! <br> Heheh, I can't wait!
 Papa, Mama, this is Mon Frère.
-I'm Ichiro Ogami. Pleased to meet you.
+I'm Ichiro Ogami. <br> Pleased to meet you.
 It's been a long time. Thank you for your hospitality back when I visited France.
 You haven’t seen them in a while, so let me introduce you again!
 This is my papa and mama!
@@ -948,7 +948,7 @@ Oh, Iris…
 Hahaha, I can't wait.
 She looks a lot like you, I was surprised.
 You're her spitting image, Iris.
-Uh-huh! I'm her child, after all!
+Uh-huh! <br> I'm her child, after all!
 When I grow up, I'm gonna be pretty just like her!
 Oh, Iris…
 Hahaha, I can't wait.
@@ -963,9 +963,9 @@ I'm gonna be just as pretty when I grow up, so just wait, OK?
 Oh, Iris…
 Hahaha, thank you Iris.
 Mon Frère, Papa, Mama, come on. Let's go inside.
-You're right. After you, Ogami.
+You're right. <br> After you, Ogami.
 Very well. Pardon me.
-And then, and then! Guess what Mon Frère did?
+And then, and then! <br> Guess what Mon Frère did?
 I-Iris!
 Hmhmhm, oh, Iris, you've done nothing but talk about Ogami this whole time.
 R… Really? Heheh…
@@ -1015,7 +1015,7 @@ When we read Iris's letters, we thought she might be doing well…
 Yes, but we never would've imagined she would be this cheerful.
 It's because my papa and mama are here! And Mon Frère too!
 I know! If you marry me, Mon Frère, we can all be together forever!
-Eep! H-Hang on a second, Iris…
+Eep! <br> H-Hang on a second, Iris…
 Oh, Iris… Hmhmhm.
 Well, if it'll make Iris happy, then we'll welcome you with open arms. Hahaha…
 We're here, Chief. We finally made it to Kobe.
@@ -1272,19 +1272,19 @@ Things like "good luck" or "bad luck" will be written on the paper, which tells 
 Let's give it a shot, Reni. It'll make more sense if you try it yourself.
 Sure. In that case…
 …
-Urgh! I got… "bad luck"…
+Urgh! <br> I got… "bad luck"…
 Even worse, it says: "Beware of drowning"…
 So that symbol means unlucky? Then… what does this mean?
 Let's see here…
-Whoa! You got: "Great luck"! That's the best one!
+Whoa! <br> You got: "Great luck"! That's the best one!
 …Is it, now.
 Good for you, Reni!
 …Wanna trade?
 I can't believe you got "great luck" right away. Good for you, Reni!
 And "great luck" is the best one, right?
-Yeah. This year's definitely gonna be a good one for you.
+Yeah. <br> This year's definitely gonna be a good one for you.
 There's no harm in believing in it if you got great luck.
-Got it. I will, then.
+Got it. <br> I will, then.
 I got bad luck, so I don't really want to believe mine, though. Hahaha…
 …
 If it's all right with you… How's about a trade?
@@ -1293,12 +1293,12 @@ K-Kidding, I was just kidding! There's no way I could take that from you!
 I don't really mind.
 Still, I can't believe I pulled "bad luck" first thing this year…
 Captain, it's odd you'd give so much weight to a scrap of paper like this.
-Hmmm… It DOES bug me, though.
+Hmmm… <br> It DOES bug me, though.
 A person's future is determined by their actions and environment.
 A piece of paper like this won't change that.
 Reni…
 Though reading one's fortune at the start of a new year does have a psychological effect.
-What the heck, Reni… You just had to go and say that as I was starting to feel better.
+What the heck, Reni… <br> You just had to go and say that as I was starting to feel better.
 *sigh* Can't believe I got bad luck… Well, after bad luck comes good fortune, though, right? Hahaha.
 Sorry Ogami, but customers are only allowed to purchase one of each bromide. 
 I see. That's too bad. 
@@ -1312,7 +1312,7 @@ Divide Blade Mekkyaku. A special sword entrusted to me by Yoneda.
 The uniform I wear at the theater. Good for both summer and winter. 
 A lighter borrowed from the inn. 
 The flower crown that Iris made for Reni. 
-A plate used at the welcome party. I was asked to bring it to Sakura. 
+Plates for the welcome party. Sakura asked us to get them for her. 
 A bromide of Sakura. 
 A bromide of Sakura. This one is a limited edition only available at New Year's. 
 A bromide of Sumire. 
@@ -1372,4 +1372,4 @@ Execute random macro.
 4. Free Walk
 5. Returning Home
 6. Kyogoku Alive
-…()-.,!??
+… "" "" () - . , ! ? ?! !!

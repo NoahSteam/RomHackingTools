@@ -14,7 +14,7 @@ We're sticking with the current strategy!
 Roger!
 The enemy appears to be targeting the Mikasa's engines.
 If every engine gets destroyed, the Mikasa will come crashing down.
-Destroy all the Kouma Weapons that have infiltrated the Mikasa while defending the engines!
+Destroy all the Kouma Weapons that have invaded the Mikasa while defending the engines!
 Exit the gate and destroy Tsuchigumo's machine!
 The enemy general, Tsuchigumo, is capable of multiple continuous attacks. Be careful!
 <LEAVE> 0 Message 2-3
@@ -35,9 +35,9 @@ Support-type Kouma Weapon. Its wings have been altered into weapons capable of m
 Kouma Weapon: Banrai. A mid-ranged Kouma developed using Mokujiki's leftover data.
 Kouma Weapon: Reppuu. A long-ranged support-type Kouma modified by the Black Demon Society.
 Healing-type Kouma Weapon. Boasts restorative abilities to revitalize other Kouma.
-Hex Mech: Wakiji Kai. Attacks using buckshot, but a single blast is relatively weak.
-Hex Mech: Wakiji Kai. These models, called L-Special, have the ability to restore health.
-Hex Mech: Wakiji Kai. Classified as the NI-type Special, this unit boasts a peculiar attack range.
+Hex Mech: Wakiji Kai. <br> Attacks using buckshot, but a single blast is relatively weak.
+Hex Mech: Wakiji Kai. <br> These models, called L-Special, have the ability to restore health.
+Hex Mech: Wakiji Kai. <br> Classified as the NI-type Special, this unit boasts a peculiar attack range.
 <LEAVE> Message 18
 <LEAVE> Message 19
 <LEAVE> Message 20
@@ -98,7 +98,7 @@ Captain… My apologies…
 I wish I could stay with you… a little longer…
 Well done, sir.
 Thank goodness you're here, sir…
-Hmph! Is that all you've got?
+Hmph! <br> Is that all you've got?
 An excellent order, Captain!
 You give me strength, Captain!
 Go get 'em, Boss!
@@ -131,7 +131,7 @@ It's OK, Mon Frère, I'm here with you.
 Ah… It stopped…
 I'm sorry, Mon Frère…
 Yaaaay! <br> You did it, Mon Frère!
-Wow, Mon Frère! You're sooo cool!
+Wow, Mon Frère! <br> You're sooo cool!
 I'm amazing, huh?
 C'mon, praise me! <br> Praise me!
 With you around, Mon Frère, I'm not scared of anything!

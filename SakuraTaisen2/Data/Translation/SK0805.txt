@@ -1,29 +1,29 @@
 ﻿According to Kayama, the others should be barricaded in the command room. 
 Ogami… Don’t you think it’s a little too quiet?
-Yeah, you’re right… What happened to all those soldiers?
+Yeah, you’re right… <br> What happened to all those soldiers?
 Don't let your guard down, Sakura. This might be a trap. 
 As long as I have my blade, Arataka, I'll be fine.
 OK… Let’s go.
 Is everyone all right?! We're here to help! 
 Aaah! Mon Frère! Sakura!! 
-You're late! Finally, you show up! 
+You're late! <br> Finally, you show up! 
 Hey, what happened to that bunch on the upper floor? Don't tell me you finished them all by yourselves. 
 About that… Nobody was around when we got here.
 What did you say?!
-For so many soldiers to suddenly disappear… What could it mean?
+For so many soldiers to suddenly disappear… <br> What could it mean?
 No idea. However, the person fighting us earlier was one of the Society's Five Elements, Mokujiki.
 I suppose we can assume… that the Black Demon Society is involved in this incident somehow.
-I knew it… Sorry we were unable to lend you our support, Captain.
+I knew it… <br> Sorry we were unable to lend you our support, Captain.
 No, it’s all right. We had the new Spirit Armor with us, the Tendu.
 I see, so the Tenbu have finally been completed!
 A single Tenbu has the strength of hundreds! With these, we have nothing to fear even from the Society!
-…Wait! Someone else is here!
-Hehehe… Excellent as always, Imperial Assault Troupe. A splendid display indeed.
+…Wait! <br> Someone else is here!
+Hehehe… <br> Excellent as always, Imperial Assault Troupe. A splendid display indeed.
 …That voice! 
 It’s been a long time, hasn't it… Ensign Ichiro Ogami. 
 You… <br> Army Minister Kyogoku! 
 I can’t believe it… <br> Are you the one leading this coup d’etat?!
-Hehehe… “Coup d’etat” is such an ugly phrase.
+Hehehe… <br> “Coup d’etat” is such an ugly phrase.
 I'd prefer you call our operation a restoration. The Taisho Restoration.
 What on earth are you doing here?
 I only came to give my regards. A defensive line, such as this, is of no use to me. 
@@ -32,8 +32,8 @@ Stop joking around!
 This is no joke, Sakura Shinguji.
 Open your eyes. Don’t waste your power on such trifles as “justice.”
 You’ll end up dying a dog’s death, just like your father.
-Wha… What did you just say?! 
-Not once, but twice you’ve ridiculed my father… I won’t allow it!!
+Wha… <br> What did you just say?! 
+Not once, but twice you’ve ridiculed my father… <br> I won’t allow it!!
 Sakura! 
 Draw your sword!!
 I said draw your sword, Keigo Kyogoku!!
@@ -44,7 +44,7 @@ Wha… What?!
 I won’t let you lay a finger on Lord Kyogoku…
 De… Demon King!! 
 …Step aside!
-It's futile… Your skills are nothing compared to mine. 
+It's futile… <br> Your skills are nothing compared to mine. 
 This fight will only make my sword, Mukei, rust.
 Heh heh heh… <br> This is an amusing battle.
 However, Demon King, it is time to initiate the next phase of our plan. Withdraw for now.
@@ -55,16 +55,16 @@ Child… Push yourself to hone your swordsmanship.
 At your current level, you have no hope in taking the life of another…
 … 
 Sakura… 
-Lord Kyogoku… The Taisho Restoration Army has nearly been quelled.
-Of course they have. They never stood a chance.
+Lord Kyogoku… <br> The Taisho Restoration Army has nearly been quelled.
+Of course they have. <br> They never stood a chance.
 By throwing Tokyo into disarray, they have done enough. They’ve served their purpose.
 Our preparations are already complete…
 I see… 
 Then I shall proceed to release the seal that has been placed on Shinjuku. 
 Heh heh heh… <br> The time is near. Soon, the TRUE Tokyo will awaken.
-At any rate… I’m just glad you’re all OK.
+At any rate, I’m just glad you’re all OK.
 But, Commander Yoneda… 
-Yeah, I know. First, let’s take stock of the situation.
+…Yeah, I know. <br> First, let’s take stock of the situation.
 Ogami. Is there anything you would like to ask?
 Ask about Kyogoku. 
 Ask about the coup. 
@@ -84,12 +84,12 @@ Not until we capture the one responsible for all this chaos.
 Keigo Kyogoku… 
 Commander Yoneda, what about the remaining pieces of the Regalia?
 They’ve… fallen into enemy hands.
-My apologies, Commander… My team allowed this to happen…
+My apologies, Commander… <br> My team allowed this to happen…
 Come on, we managed to secure the jewel thanks to your quick wit. 
 We just need to take back what was stolen. That's all there is to it.
 … 
-Commander Yoneda, 
-If you don't mind… Please tell me more about the Pandemonium Regalia. 
+…Commander Yoneda. 
+If you don't mind… <br> Please tell me more about the Pandemonium Regalia. 
 And also… about the Power of Purification. 
 Sakura… 
 … 
@@ -98,10 +98,10 @@ The Pandemonium Regalia… The ultimate sacred instruments that amplify the powe
 Throughout the Taisho Era, there are only two people that have ever used them…
 One of them was Cerulean Satan… Who used to be known as Shinnosuke Yamazaki. 
 Two years ago, he amplified his own power through the use of the Regalia…
-And was able to resurrect the Sacred Demon Castle from the sea. It's still fresh in all our memories.
+…and was able to resurrect the Sacred Demon Castle from the sea. It's still fresh in all our memories.
 The other person was Kazuma Shinguji. Your father, Sakura…
 … 
-Seven years ago… When a Kouma appeared in Nihonbashi during the Great Kouma War… 
+Seven years ago… <br> When a Kouma appeared in Nihonbashi during the Great Kouma War… 
 Kazuma, with the help of the Regalia… used the Power of Purification.
 The power is said to put an unimaginable burden on the mind and body of its user.
 Kazuma departed from this world only three months after the war…
@@ -115,7 +115,7 @@ But where are they?
 Roger that! I promise that we'll retrieve the rest of the Regalia!
 Ensign Ogami… <br> Thank you so much!
 When you get the Regalia back, I’ll give you a kiss!
-Please… Do your best everyone! 
+Please… <br> Do your best everyone! 
 But, we don’t know the whereabouts of the other pieces…
 No need to worry about that. The Regalia emits a strong spiritual energy.
 If we can locate that energy’s transmission point…
@@ -128,10 +128,10 @@ Ichiro… Make sure to retrieve them, OK?
 …O-Of course. 
 Commander Yoneda! The steam processor’s spirit radar has detected something…
 We’re picking up a spirit power reading that we believe to be the Regalia!
-Is that so?! Where’s it coming from?
+Is that so?! <br> Where’s it coming from?
 Location: Shinjuku. It appears that both of the remaining pieces are there!
 Hm, so it’s finally our turn to make a move.
-Now, Ogami! Give the order to sortie!
+Now, Ogami! <br> Give the order to sortie!
 Assault Troupe, move out!
 Take back the Regalia!
 Imperial Assault Troupe, move out! Our destination is Shinjuku! 
@@ -161,7 +161,7 @@ Divide Blade Mekkyaku. A special sword entrusted to me by Yoneda.
 The uniform I wear at the theater. Good for both summer and winter. 
 A lighter borrowed from the inn. 
 The flower crown that Iris made for Reni. 
-A plate used at the welcome party. I was asked to bring it to Sakura. 
+Plates for the welcome party. Sakura asked us to get them for her. 
 A bromide of Sakura. 
 A bromide of Sakura. This one is a limited edition only available at New Year's. 
 A bromide of Sumire. 
@@ -206,4 +206,4 @@ Execute random macro.
 4. Father and Daughter 
 5. Consideration 
 6. Epilogue 
-…()-.,!??
+… "" "" () - . , ! ? ?! !!

@@ -31,13 +31,13 @@ Kohran Li, inventor. Startles friend and foe alike with the inventions she emplo
 Orihime Soletta, prior Star Division member. Piloting a rose armor, she is known as one of the Red Nobles.
 Reni Milchstraße. A combat professional, attacking accurately without a single wasted movement.
 Hex Mech: Wakiji Kai. <br> The units equipped with longswords are referred to as I-type Otsu.
-Hex Mech: Wakiji Kai. This model has been successfully mass-produced with enhanced combat power.
-Assault Cannon. An older form of ranged artillery. Its firepower is high, but its range is narrow.
+Hex Mech: Wakiji Kai. <br> This model has been successfully mass-produced with enhanced combat power.
+Assault Cannon. <br> An older form of ranged artillery with high firepower but narrow range.
 Hex Mech: Wakiji Kai. <br> The units equipped with large cannons are referred to as HA-type.
-Hex Mech: Wakiji Kai. Equipped with more powerful cannons, they can now target enemies from afar.
-Hex Mech: Wakiji Kai. Attacks using buckshot, but a single blast is relatively weak.
-Hex Mech: Wakiji Kai. These types with healing abilities are referred to as L-Special.
-Hex Mech: Wakiji Kai. Has a unique attack radius, mowing down everything in its direct vicinity.
+Hex Mech: Wakiji Kai. <br> Equipped with more powerful cannons, they can now target enemies from afar.
+Hex Mech: Wakiji Kai. <br> Attacks using buckshot, but a single blast is relatively weak.
+Hex Mech: Wakiji Kai. <br> The units with healing abilities are referred to as L-Special.
+Hex Mech: Wakiji Kai. <br> Has a unique attack radius, mowing down everything in its direct vicinity.
 <LEAVE> Message 18
 <LEAVE> Message 19
 <LEAVE> Message 20
@@ -98,7 +98,7 @@ Captain… My apologies…
 I wish I could stay with you… a little longer…
 Well done, sir.
 Thank goodness you're here, sir…
-Hmph! Is that all you've got?
+Hmph! <br> Is that all you've got?
 An excellent order, Captain!
 You give me strength, Captain!
 Go get 'em, Boss!
@@ -131,7 +131,7 @@ It's OK, Mon Frère, I'm here with you.
 Ah… It stopped…
 I'm sorry, Mon Frère…
 Yaaaay! <br> You did it, Mon Frère!
-Wow, Mon Frère! You're sooo cool!
+Wow, Mon Frère! <br> You're sooo cool!
 I'm amazing, huh?
 C'mon, praise me! <br> Praise me!
 With you around, Mon Frère, I'm not scared of anything!

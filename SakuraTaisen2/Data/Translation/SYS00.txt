@@ -30,14 +30,14 @@ Iris, the Flower Division's mascot. She fights enemies with her mysterious super
 Kohran Li, inventor. Startles friend and foe alike with the inventions she employs.
 Orihime Soletta, prior Star Division member. Piloting a rose armor, she is known as one of the Red Nobles.
 Reni Milchstraße. A combat professional, attacking accurately without a single wasted movement.
-Hex Mech: Wakiji Kai. Equipped with a shortsword for close-range combat.
-Hex Mech: Wakiji Kai. Recently had its screws replaced, so it's in a pretty good mood.
+Hex Mech: Wakiji Kai. <br> Equipped with a shortsword for close-range combat.
+Hex Mech: Wakiji Kai. <br> Recently had its screws replaced, so it's in a pretty good mood.
 Hex Mech: Dark Kamui. The machine piloted by Satan in our prior battle. Its power rivals that of the Koubu.
 Society Hex Mech: Sesshou. Its defensive power is on a whole other level compared to the Wakiji.
 Kongou's underling Wakiji. Fiercely loyal to Kongou.
 Society Hex Mech: Wakiji Kai. The units equipped with large cannons are referred to as HA-type.
 Society Hex Mech: Wakiji Kai. It's actually not very loyal, so it lacks motivation.
-Hex Mech: Wakiji Kai. Equipped with a cannon for long-range combat.
+Hex Mech: Wakiji Kai. <br> Equipped with a cannon for long-range combat.
 <LEAVE> Message 18
 <LEAVE> Message 19
 <LEAVE> Message 20
@@ -98,7 +98,7 @@ Captain… My apologies…
 I wish I could stay with you… a little longer…
 Well done, sir.
 Thank goodness you're here, sir…
-Hmph! Is that all you've got?
+Hmph! <br> Is that all you've got?
 An excellent order, Captain!
 You give me strength, Captain!
 Go get 'em, Boss!
@@ -131,7 +131,7 @@ It's OK, Mon Frère, I'm here with you.
 Ah… It stopped…
 I'm sorry, Mon Frère…
 Yaaaay! <br> You did it, Mon Frère!
-Wow, Mon Frère! You're sooo cool!
+Wow, Mon Frère! <br> You're sooo cool!
 I'm amazing, huh?
 C'mon, praise me! <br> Praise me!
 With you around, Mon Frère, I'm not scared of anything!

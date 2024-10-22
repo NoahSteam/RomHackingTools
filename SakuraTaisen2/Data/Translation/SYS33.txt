@@ -33,7 +33,7 @@ Reni Milchstraße. A combat professional, attacking accurately without a single w
 Wakiji Kai: Shoujin. <br> Part of Kasha's personal platoon, boasting both high attack and defense.
 Hex Mech: Wakiji Kai. <br> The units equipped with guns are referred to as RO-type.
 Flamethrower: Homura. <br> A flame weapon developed by Mokujiki.
-Hex Mech: Wakiji Kai. Equipped with a large cannon, it can attack multiple enemies at once.
+Hex Mech: Wakiji Kai. <br> Equipped with a large cannon, it can attack multiple enemies at once.
 Hex Mech: Goko. Piloted by Kasha of the Five Elements, it specializes in flame-based attacks.
 Society Hex Mech: Wakiji Kai. The units equipped with large cannons are referred to as HA-type.
 Society Hex Mech: Wakiji Kai. It's actually not very loyal, so it lacks motivation.
@@ -98,7 +98,7 @@ Captain… My apologies…
 I wish I could stay with you… a little longer…
 Well done, sir.
 Thank goodness you're here, sir…
-Hmph! Is that all you've got?
+Hmph! <br> Is that all you've got?
 An excellent order, Captain!
 You give me strength, Captain!
 Go get 'em, Boss!
@@ -131,7 +131,7 @@ It's OK, Mon Frère, I'm here with you.
 Ah… It stopped…
 I'm sorry, Mon Frère…
 Yaaaay! <br> You did it, Mon Frère!
-Wow, Mon Frère! You're sooo cool!
+Wow, Mon Frère! <br> You're sooo cool!
 I'm amazing, huh?
 C'mon, praise me! <br> Praise me!
 With you around, Mon Frère, I'm not scared of anything!

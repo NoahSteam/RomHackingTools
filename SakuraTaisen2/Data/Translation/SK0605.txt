@@ -25,7 +25,7 @@ No, she looked so happy when you gave it to her.
 That's strange… I have a bad feeling about this. 
 Ah, Chief! There you are! 
 Kohran?! 
-What's wrong, Kohran?! Did something happen?! 
+What's wrong, Kohran?! <br> Did something happen?! 
 Just now… Reni took her Eisenkleid and ran off! 
 Wha-What did you say?! 
 She just showed up in the hangar, then booked it before I had the chance to stop her. 
@@ -38,7 +38,7 @@ Reni… What the hell's going on?!
 Ah, there you are, Ogami. 
 Kaede? What are you doing here this late? 
 You haven't seen Saki Kageyama around, have you, Ogami? 
-Huh? Saki? No, can't say that I have. 
+Huh? Saki? <br> No, can't say that I have. 
 What's wrong, Kaede? You usually never address Saki by her full name like that…
 I'll explain later. Sorry, I have to go, I'm in a hurry. 
 Kaede looked really on edge. I wonder what's wrong. 
@@ -133,7 +133,7 @@ It's just like Sakura to have a cute nameplate like this.
 OK, let's check another room. 
 I wonder if Iris is in her room.
 …Who is it? 
-It's me, Ogami. You still awake? 
+It's me, Ogami. <br> You still awake? 
 Mon Frère… 
 You haven't even changed into your pajamas. What's wrong? 
 I feel nervous for some reason. My heart won't stop pounding. 
@@ -145,7 +145,7 @@ H-Hey, Iris!
 Reniiii… Are you in there? 
 Reni! Answer me, Reni! 
 Iris… 
-Hm? Hold on a second. The door's open… 
+Hm? Hold on a second. <br> The door's open… 
 …OK, Iris, let’s go inside.
 …Right.
 So Iris's nameplate is shaped like Jean-Paul. 
@@ -433,7 +433,7 @@ Everyone, we WILL save Reni!
 Sir, yes, sir! 
 Keep it together, Ogami! You're the captain, remember?! 
 Now give the order! 
-Reni! Where are you? Answer me! 
+Reni! Where are you? <br> Answer me! 
 Reniiii! Reeeeeniiii! <br> Where are you?! 
 Iris, can you use your powers to find out where Reni is? 
 OK, I'll try. 
@@ -445,19 +445,19 @@ Mon Frère, I can feel a super strong power coming from over there!
 Got it! Let's check it out! 
 It'll be daybreak soon. Where are you, Reni?! 
 Ah!! Mon Frère! Over there! 
-Reni! Reni, are you all right?! 
+…Reni! <br> Reni, are you all right?! 
 … 
 Reni… 
 Heheheheheh. <br> Her heart is already mine. 
 Reni's my cute little puppet now. She'll make a great gift for our master. 
 A souvenir of the return of Saki Kageyama; of Suiko, one of the Black Demon Society's Five Elements. 
-Saki. I didn't want to believe you were truly Suiko. 
+Saki… <br> I didn't want to believe you were truly Suiko. 
 But if you really are the same Saki who was our friend, you'll stop this right now! 
 It's not too late! Give Reni back, and return to the Saki you used to be! 
 Heheheh. Naive as ever. 
-Reni. Those two are your enemies. Now kill them. 
+Reni… <br> Those two are your enemies. Now kill them. 
 …RO-GER. 
-Heheheh. Well, Ogami? What will you do? 
+Heheheh. Well, Ogami? <br> What will you do? 
 Rrgh… How could you?! 
 Mon Frère… What… <br> What should I do? 
 Go get the others. 
@@ -467,8 +467,8 @@ OK, got it!
 Mon Frère, please save Reni! 
 I will. I'll talk to her. 
 Reni asked me what it is I'm fighting for. 
-I know my answer now. Just hold on, Reni! 
-Come with me, Iris. I'll need your help, too 
+I know my answer now. <br> Just hold on, Reni! 
+Come with me, Iris. <br> I'll need your help, too. 
 OK, got it! 
 Let's save Reni, Mon Frère! 
 If you talk to her, I'm sure she'll come around! 
@@ -482,7 +482,7 @@ Divide Blade Mekkyaku. A special sword entrusted to me by Yoneda.
 The uniform I wear at the theater. Good for both summer and winter. 
 A lighter borrowed from the inn. 
 The flower crown that Iris made for Reni. 
-A plate used at the welcome party. I was asked to bring it to Sakura. 
+Plates for the welcome party. Sakura asked us to get them for her. 
 A bromide of Sakura. 
 A bromide of Sakura. This one is a limited edition only available at New Year's. 
 A bromide of Sumire. 
@@ -525,4 +525,4 @@ Execute random macro.
 2. Night movement ~ deployment 
 3. Light 
 4. Blue bird 
-…()-.,!??
+…(){}[]-.,!?

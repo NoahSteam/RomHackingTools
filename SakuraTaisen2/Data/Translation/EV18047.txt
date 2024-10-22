@@ -4,12 +4,12 @@ Listen, we'll take things from here, so you should evacuate to safety.
 What are you saying? Do you really expect that you can win without me?
 Perhaps I let down my guard before, but that will not be happening again! Let's be off, Mr. Ensign!
 Orihime, are you OK?
-I am perfectly fine. Thank you, Sakura.
+I am perfectly fine. <br> Thank you, Sakura.
 We'll handle things from here, so please get yourself someplace safe for now.
 What are you saying? Do you really expect that you can win without me?
 Perhaps I let down my guard before, but that will not be happening again! Let's be off, Sakura!
 Are you all right, Orihime?
-I am perfectly fine. Thanks very much, Sumire.
+I am perfectly fine. <br> Thanks very much, Sumire.
 You may leave the rest to us, so just stand back!
 What are you saying? Do you really expect that you can win without me?
 Perhaps I let down my guard before, but that will not be happening again! Let's be off, Sumire!
@@ -24,12 +24,12 @@ Listen, we'll take over from here, so you just sit back and rest.
 What are you saying? Do you really expect that you can win without me?
 Perhaps I let down my guard before, but that will not be happening again! Let's be off, Kanna!
 Hey Orihime, you OK?
-I am perfectly fine. Thank you, Iris.
+I am perfectly fine. <br> Thank you, Iris.
 …Are you really? We're gonna fight, so you can rest if you want.
 What are you saying? Do you really expect that you can win without me?
 Perhaps I let down my guard before, but that will not be happening again! Let's be off, Iris!
 Hey, Orihime, you doing OK?
-I am perfectly fine. My deepest thanks.
+I am perfectly fine. <br> My deepest thanks.
 You sure you're OK? We'll take care of these guys, so you can rest up if you want.
 What are you saying? Do you really expect that you can win without me?
 Perhaps I let down my guard before, but that will not be happening again! Let's be off, Kohran!

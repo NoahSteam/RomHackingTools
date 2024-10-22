@@ -489,7 +489,7 @@ My resolution this year is to be less scatterbrained!
 What's your New Year's resolution, Mr. Ogami? 
 Strive to safeguard peace. 
 Perfect my ticket punching. 
-Smile-smile! 
+Smile, smile! 
 As captain, my resolution is to continue striving to safeguard peace in the capital.
 You're always so cool, Mr. Ogami! 
 I'll also try my hardest to be more like everyone in the Flower Division! 
@@ -497,8 +497,8 @@ Hmm, I'd like to perfect my ticket punching skills this year.
 The path of the ticket puncher is a long and treacherous one… 
 Whaaa? There's a path for ticket punchers? That's so deep… 
 OK, then I'll try to perfect my waitressing, too! 
-My resolution is to do my best with a "smile-smile," just like you, Tsubomi. 
-OK! I'll be working hard with a smile-smile, as well! 
+My resolution is to do my best with a "smile, smile," just like you, Tsubomi. 
+OK! I'll be working hard with a smile, smile, as well! 
 Hmm… I haven't really decided yet. 
 That's no good, Mr. Ogami. It's important to set goals, you know. 
 You're right. I'll have to take some time to think about it. 
@@ -762,7 +762,7 @@ Divide Blade Mekkyaku. A special sword entrusted to me by Yoneda.
 The uniform I wear at the theater. Good for both summer and winter. 
 A lighter borrowed from the inn. 
 The flower crown that Iris made for Reni. 
-A plate used at the welcome party. I was asked to bring it to Sakura. 
+Plates for the welcome party. Sakura asked us to get them for her. 
 A bromide of Sakura. 
 A bromide of Sakura. This one is a limited edition only available at New Year's. 
 A bromide of Sumire. 
@@ -838,7 +838,7 @@ Execute random macro.
 4. Free Walk 
 5. Returning Home 
 6. Kyogoku Alive 
-…()-.,!?? 
+…(){}[]-.,!? 
 Listen to some gossip. 
 I'll come back later. 
 The Christmas play was so emotional! 

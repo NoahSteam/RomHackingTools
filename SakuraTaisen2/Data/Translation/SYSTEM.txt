@@ -31,7 +31,7 @@ Kohran Li, inventor. Startles friend and foe alike with the inventions she emplo
 Orihime Soletta, prior Star Division member. Clad in pink, she's called the Red Wind of the Mediterranean. 
 Reni Milchstraße. A combat professional, attacking accurately without a single wasted movement.
 Hex Mech: Wakiji Kai. <br> The close range attack units are referred to as I-type.
-Hex Mech: Wakiji Kai. Recently had its screws replaced, so it's in a pretty good mood.
+Hex Mech: Wakiji Kai. <br> Recently had its screws replaced, so it's in a pretty good mood.
 Hex Mech: Dark Kamui. The machine piloted by Satan in our prior battle. Its power rivals that of the Koubu.
 Society Hex Mech: Sesshou. Its defensive power is on a whole other level compared to the Wakiji.
 Kongou's underling Wakiji. Fiercely loyal to Kongou.
@@ -131,7 +131,7 @@ Stop bullying Mon Frère!
 Ah… It stopped…
 I'm sorry, Mon Frère…
 Yaaaay! <br> You did it, Mon Frère!
-Wow, Mon Frère! You're sooo cool!
+Wow, Mon Frère! <br> You're sooo cool!
 I'm amazing, huh?
 C'mon, praise me! <br> Praise me!
 With you around, Mon Frère, I'm not scared of anything!

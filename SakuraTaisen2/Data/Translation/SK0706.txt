@@ -11,8 +11,8 @@ Mr. Ensign…
 Orihime!! Ogata!! <br> Are you all right?! 
 That voice… 
 Orihime! <br> Thank God you're OK! 
-Mr. Ensign… <br> Mr. Ensign!! 
-It's all right now. I’m on my way. 
+Mr. Ensign… Mr. Ensign!! 
+It's all right now. <br> I’m on my way. 
 I've come back for you, Orihime. 
 …Y-Yes! 
 Sorry I'm late, Ogata. 
@@ -25,16 +25,16 @@ The others and I will always be there for you.
 Mr. Ensign… 
 See? Even a Japanese man can rise to the occasion sometimes. 
 Hm hm… You are ever so slightly late, though. 
-Still… I have maybe misjudged you. 
+Still… <br> I have maybe misjudged you. 
 S-Sorry… I never know what to say at times like this. 
 You don't have to say a word… 
 Huh? 
 You came back for me. That's more than enough. 
 All right, now is not the time to be loafing around, Mr. Ensign! 
 Yeah. We've got a job to do. 
-Ogami… Please… Look after Orihime. 
+Ogami… Please… <br> Look after Orihime. 
 I will, sir. 
-Papa… I have to go. For the sake of the ones I hold dear.
+Papa… I have to go. <br> For the sake of the ones I hold dear.
 For the sake of everyone! I'll protect them all, no matter what!
 Sorry Ogami, but customers are only allowed to purchase one of each bromide. 
 I see. That's too bad. 
@@ -78,7 +78,7 @@ Divide Blade Mekkyaku. A special sword entrusted to me by Yoneda.
 The uniform I wear at the theater. Good for both summer and winter. 
 A lighter borrowed from the inn. 
 The flower crown that Iris made for Reni. 
-A plate used at the welcome party. I was asked to bring it to Sakura. 
+Plates for the welcome party. Sakura asked us to get them for her. 
 A bromide of Sakura. 
 A bromide of Sakura. This one is a limited edition only available at New Year's. 
 A bromide of Sumire. 
@@ -113,5 +113,5 @@ A letter from Reni.
 A scarf given to me by Sakura. It's knitted with red yarn - my favorite color. 
 A scarf given to me by Sakura. It's knitted with blue yarn - my favorite color. 
 A scarf given to me by Sakura. It's knitted with yellow yarn - my favorite color.
-…()-.,!?? 
+… "" "" () - . , ! ? ?! !! 
 Whaaaaa?!

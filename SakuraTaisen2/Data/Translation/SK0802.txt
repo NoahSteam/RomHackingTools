@@ -4,7 +4,7 @@ What’s with that racket? It’s too early for this…
 Gunshots?! 
 Jump out of bed. 
 This is no time to be sleeping!
-I need to hurry! Where is everyone?! 
+I need to hurry! <br> Where is everyone?! 
 Nothing seems to be out of the ordinary, but… 
 I knew it, that's gunfire! It's coming from the first floor! 
 Ogami! 
@@ -42,19 +42,19 @@ Let's run, Ogami. I think the first thing we should do is meet up with everyone 
 Over there! I see her!
 Ah! 
 It’s her, Sakura Shinguji! Open fire!!
-You missed! Continue firing! 
+You missed! <br> Continue firing! 
 This is bad! Run, Sakura! 
-Y-Yes! 
+R-Right! 
 Major Amakasa, we've managed to occupy the lobby, dining hall, and seating area! 
 We're currently taking over the second floor as well. The operation has been going smoothly! 
 Don't get careless. Our efforts will be meaningless if we don't occupy the entire theater. 
 Yes, sir! 
 Our first objective is to capture the backbone of the Assault Troupe, their underground command room!
-Yes, sir! The basement squad's operation is going smoothly as well. 
+Yes, sir! <br> The basement squad's operation is going smoothly as well. 
 Second, we must fulfill our special mission from His Excellency. Capture Sakura Shinguji, dead or alive!
 Yes, sir! 
 The time for the Army has finally come, to rule this rotten Japan. 
-Your Excellency… Before long… Our restoration will be realized!
+Your Excellency… <br> Before long… <br> Our restoration will be realized!
 We managed to escape from the second floor. 
 Ogami, those people just now… They were wearing Army uniforms.
 Why… Why is the Army attacking the theater?!
@@ -82,7 +82,7 @@ A coup d'etat?!
 Occupying primary government institutions in order to seize their power…
 In a nutshell, these people are trying to take over the country. 
 There's no doubt that they've already attacked various places in the city, just like the theater. 
-N-No way! 
+I-It can’t be! 
 …Ogami, Sakura. I’m giving you both an order.
 The two of you need to escape… Get out of the theater.
 Huh?! 
@@ -99,7 +99,7 @@ Commander…
 I know how you feel, Ogami, but this is something only you can do. 
 Now listen carefully. These orders are of the utmost importance. The survival of Tokyo is at stake.
 Y-Yes, sir!
-First, secure the Pandemonium Regalia. You can find it in the underground storeroom. 
+First, secure the Pandemonium Regalia. <br> You can find it in the underground storeroom. 
 Then, board the Thunderstrike and escape to the Hanayashiki Branch. 
 Finally, and this is the most crucial…
 The enemy is after Sakura. Protect her with your life.
@@ -123,7 +123,7 @@ That’s all I can say. For the time being, just get aboard the Thunderstrike an
 Why are they targeting Sakura? 
 …Sakura, listen well to what I’m about to say.
 Members of the Shinguji family have the “Lineage of Purification” running through their veins.
-That is to say… They hold the “Power of Purification.”
+That is to say… <br> They hold the “Power of Purification.”
 Power of… Purification? 
 With that power, we could seal away even the strongest of demons.
 However, it would cost the life of the one who wields it… 
@@ -131,7 +131,7 @@ However, it would cost the life of the one who wields it…
 Seven years ago, during the Great Kouma War, there was a person who used that power. 
 A man who sacrificed his life to seal away a mighty evil…
 That man was your father… Kazuma Shinguji.
-What?! It can’t be… My father?! 
+What?! It can’t be… <br> My father?! 
 I’ve kept silent until now… But your very existence is a threat to those who wish to commit evil.
 Get it, Ogami? Protect Sakura… No matter what! 
 We can't allow Sakura to die because of that power!
@@ -141,7 +141,7 @@ Hah!
 It's only a matter of time until those guys find us.
 Go, Ogami! Head to the basement and escape to the Hanayashiki Branch, now! 
 Run to the basement. 
-Understood! Watch yourself, Mr. Yoneda! 
+Understood! <br> Watch yourself, Mr. Yoneda! 
 Yeah, you can count on it! I won't die so easily! 
 What are you waiting for, Ogami?! There's no time! 
 But I… 
@@ -151,7 +151,7 @@ Just go, Ogami! Every second counts!
 Let's go, Sakura! 
 R-Right! 
 I'm counting on you, Ogami! 
-Please stay safe, Manager Yoneda! 
+Please stay safe, Mr. Yoneda! 
 Damn it! Why's the Army attackin' us?! 
 We can’t even fight back in our Koubu ‘cause we’re stuck indoors…
 What's more, it's awful that we've been separated from Ensign and the others.
@@ -186,23 +186,23 @@ W-What did you say?!
 Protecting Japan's ultimate sacred weapon stored beneath the Imperial Theater… 
 The Pandemonium Regalia… 
 That is our true mission… Our mission as the secret unit of love and beauty, the Rose Division!
-Here, Ensign Ogami! Take this!
+Here, Ensign Ogami! <br> Take this!
 Th-This is…
 It’s a piece of the Regalia, the jewel! Take it and escape the theater!
 The enemy won’t be able to use the Regalia’s power if even one of its pieces is missing.
 Everyone… 
-Now go! There isn't any time! 
+Now go! <br> There isn't any time! 
 No need to worry about us, Ichiro! 
-Ogami, Sakura… Please, hurry to the Hanayashiki Branch! 
-Understood! Let's go, Sakura!! 
+Ogami, Sakura… <br> Please, hurry to the Hanayashiki Branch! 
+Understood! <br> Let's go, Sakura!! 
 Y-Yes! 
-Ogami…What’s going to happen to us?!
+Ogami… <br> What’s going to happen to us?!
 I don't know… 
 But right now, all we can do is take this piece of the Regalia to Hanayashiki as fast as we can!
 For the sake of the Flower Division… For the sake of everyone…
 … 
 OK! The Thunderstrike is working! 
-Let's go, Sakura! We're getting out of the Imperial Theater! 
+Let's go, Sakura! <br> We're getting out of the Imperial Theater! 
 Major Amakasa, I have a report! 
 Our men have completely occupied the first and second floor of the Imperial Theater! 
 The basement team has succeeded in breaking through their walls. 
@@ -212,10 +212,10 @@ They seem to have retreated deeper into the basement, barricading themselves in 
 Heh… We’ve finally got them cornered.
 Send a message to His Excellency. Let him know that we’re just about done here.
 Yes, sir! 
-Sorry Ogami, but customers are only allowed to purchase one of each bromide.  
+Sorry Ogami, but customers are only allowed to purchase one of each bromide. 
 I see. That's too bad. 
 So sorry, Mr. Ogami, but customers are only allowed to purchase one of each bromide.
-Oh, really? That's too bad.  
+Oh, really? That's too bad. 
 The jewel of the Pandemonium Regalia, entrusted to us by the Rose Division. 
 Spirit Sword Arataka. The special sword of the Shinguji family. 
 Divine Sword Shirahatori. Entrusted to me by Kaede. A special sword passed down by the Fujieda family. 
@@ -224,7 +224,7 @@ Divide Blade Mekkyaku. A special sword entrusted to me by Yoneda.
 The uniform I wear at the theater. Good for both summer and winter. 
 A lighter borrowed from the inn. 
 The flower crown that Iris made for Reni. 
-A plate used at the welcome party. I was asked to bring it to Sakura. 
+Plates for the welcome party. Sakura asked us to get them for her. 
 A bromide of Sakura. 
 A bromide of Sakura. This one is a limited edition only available at New Year's. 
 A bromide of Sumire. 
@@ -269,4 +269,4 @@ Execute random macro.
 4. Father and Daughter 
 5. Consideration 
 6. Epilogue 
-…()-.,!??
+… "" "" () - . , ! ? ?! !!
