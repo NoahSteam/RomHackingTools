@@ -181,8 +181,8 @@ Ogami, please pick a good name for this pup.
 Hey, Chief, are you gonna run off without giving this poor doggy a name?
 Mon Frère, what should we name the puppy?!
 Ogami, please pick a good name for this pup.
-Oh, it looks like
-<br> likes his name, too.
+Oh, it looks like<br>
+likes his name, too.
 Since we've decided on a name for the dog, why don't we disperse for the time being?
 In that case, I will be found in the music room, playing on the piano.
 I think I might take a bath and then do some sword training in the courtyard.
@@ -237,8 +237,8 @@ Go play with Long.
 Go play with Altair.
 Go play with Hund.
 Do you dislike dogs?
-Why not play with
-<br> since he's here, Reni?
+Why not play with<br>
+since he's here, Reni?
 seems eager to<br>play with you, too.
 Arf, arf!
 …I would prefer to avoid any excessive movement.
@@ -259,8 +259,8 @@ There there,
 . <br> I'm sure Reni will come around eventually.
 Oh my, Ensign…
 Arf, arf!
-Hi, Sumire. Were you <br> playing with 
-?
+Hi, Sumire. Were you <br>
+playing with?
 Yes. My family kept a dog once, when I was younger.
 Although he was quite a bit larger than this fellow, he made an excellent playmate.
 Well then
@@ -1478,8 +1478,8 @@ Tell me some gossip.
 I'll come back later. 
 Seems like you’ve started keeping a dog in the courtyard, Ogami. 
 That’s right. Sorry I made the decision without consulting you two first. 
-Oh, it's no problem! <br> The dog's name is
-, <br> isn't it? 
+Oh, it's no problem!<br>The dog's name is<br>
+, isn't it? 
 You got that information pretty quick. Just like always, Yuri. 
 Heheh. Actually, Kohran just dropped by to tell us the news. She was really excited to talk about it. 
 I see, glad to hear it. <br> I hope that you two will play with 
@@ -1661,4 +1661,4 @@ Perhaps that was his conclusion…
 Back when he appeared in front of the theater six months ago… 
 I wonder what Cerulean Satan… No, what Major Yamazaki was trying to tell us… 
 … 
-… [] [] () ' . , ! ? ?! !!
+…[]()'.,!?!

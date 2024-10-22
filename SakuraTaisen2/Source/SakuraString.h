@@ -321,6 +321,25 @@ struct SakuraString
 		}
 	}
 
+	bool EndsWithLineBreak() const
+	{
+		const auto numChars = mChars.size();
+		if(numChars > 0)
+		{
+			if((mChars[numChars - 1].mIndex == (uint16)SakuraChar::NewLine))
+			{
+				return true;
+			}
+
+			if(numChars > 1 && mChars[numChars - 1].mIndex == ' ' && mChars[numChars - 2].mIndex == (uint16)SakuraChar::NewLine)
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
 	bool IsVoicedLine() const
 	{
 		//Voiced line don't start with 0000

@@ -51,6 +51,11 @@ struct SakuraTextFileFixedHeader
 			
 			totalCharCount += inStrings[i].mChars.size();
 			prevValue = newOffset;
+			if(newOffset % 2 != 0)
+			{
+				printf("\nERROR:Translated file %s. Line %i is not 2byte alignedu.\n", inSakuraFile.mFileNameInfo.mFileName.c_str(), i);
+			}
+
 			newOffset /= 2;
 #else
 			const unsigned int newOffset = (unsigned int)inStrings[i].mChars.size() + prevValue; //+ trailingZeros;
@@ -504,13 +509,6 @@ bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTrans
 					}
 				}//for(wordIndex < numWords)
 
-#if USE_SINGLE_BYTE_LOOKUPS
-				if ((translatedString.mChars.size()) % 2 == 0)
-				{
-					translatedString.AddChar(' ');
-				}
-#endif
-
 				//Special line ender codes (FFFD, FFFA)
 				const int numBytesInOriginalText = sakuraFile.mLines[currSakuraStringIndex].mChars.size();
 				if(numBytesInOriginalText >= 3)
@@ -533,17 +531,8 @@ bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTrans
 						if(sakuraFile.mLines[currSakuraStringIndex].mChars[numBytesInOriginalText - 2].mIndex == 0xfffd)
 						{
 							translatedString.AddChar(0xfd);
-							printf("Verify Formatting (fc fd): %i\n", currSakuraStringIndex);
+							printf("Verify Formatting (fc fd): %i\n", currSakuraStringIndex + 1);
 						}
-
-						//No such case
-						/*
-						if(sakuraFile.mLines[currSakuraStringIndex].mChars[numBytesInOriginalText - 2].mIndex == 0xfffe)
-						{
-							translatedString.AddChar(0xfe);
-							printf("Verify Formatting (fc fe): %i\n", currSakuraStringIndex);
-						}
-						*/
 					}
 					//The FFFD character will have the game combine another line after this line.  But there isn't a way to know
 					//which line it will combine.  Meaning the game can end up having the line cut off if we don't manually format it.
@@ -556,7 +545,25 @@ bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTrans
 						printf("Verify Formatting (fd): %i\n", currSakuraStringIndex);
 					}
 					/**/
+
+					//If original line ende with a newline.  This usually happens if the line will be appended with some other line with a fffd byte code
+					if(sakuraFile.mLines[currSakuraStringIndex].mChars[numBytesInOriginalText - 2].mIndex == 0xfffe)
+					{
+						if(!translatedString.EndsWithLineBreak())
+						{
+							translatedString.AddChar(0xfe);
+							printf("Original line ended with a line break: %i\n", currSakuraStringIndex + 1);
+						}
+					}
 				}				
+
+#if USE_SINGLE_BYTE_LOOKUPS
+				//Strings need to start at 2byte boundaries, so pad this one if needed so next string is at boundary
+				if ((translatedString.mChars.size()) % 2 == 0)
+				{
+					translatedString.AddChar(' ');
+				}
+#endif
 
 				//String ends with ffff
 				translatedString.AddChar(0xffff);
