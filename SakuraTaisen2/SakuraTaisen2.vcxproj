@@ -166,6 +166,7 @@
     <ClInclude Include="Source\SyncFilePatching.h" />
     <ClInclude Include="Source\SyncFiles.h" />
     <ClInclude Include="Source\TycoonGame.h" />
+    <ClInclude Include="Source\TycoonTutorial.h" />
     <ClInclude Include="Source\VDP2Images.h" />
     <ClInclude Include="Source\MNameCG.h" />
     <ClInclude Include="Source\PatchBattleTextDrawCode.h" />

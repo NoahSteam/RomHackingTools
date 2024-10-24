@@ -93,6 +93,7 @@ using std::unordered_set;
 #include "Source/Credits.h"
 #include "Source/SyncFilePatching.h"
 #include "Source/IntroSubtitles.h"
+#include "Source/TycoonTutorial.h"
 #include "Source/PatchGame.h"
 
 void PrintHelp()
@@ -863,6 +864,15 @@ int main(int argc, char *argv[])
 		const bool   bmpFormat = atoi(argv[4]);
 
 		ExtractCreditsData(inDirectory, inOutputDirectory, bmpFormat);
+	}
+	else if (command == "ExtractTycoonTutorial" && argc == 6)
+	{
+		const string inDirectory = string(argv[2]) + Seperators;
+		const string inOutputDirectory = string(argv[3]) + Seperators;
+		const string paletteFileName = string(argv[4]);
+		const bool   bmpFormat = atoi(argv[5]);
+
+		ExtractTycoonTutorial(inDirectory, inOutputDirectory, paletteFileName, bmpFormat);
 	}
 	else if(command == "ExtractIntroSubtitles" && argc == 4)
 	{

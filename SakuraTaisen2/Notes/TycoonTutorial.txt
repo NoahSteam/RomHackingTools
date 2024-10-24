@@ -1,0 +1,7 @@
+CARD_DAT.ALL
+
+30e700 contains font sheet
+
+318000 contains text table
+-first 4 bytes is number of entiries
+-4byte entries containing offsets to the string
