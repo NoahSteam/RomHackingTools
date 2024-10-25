@@ -149,6 +149,11 @@ bool PatchTycoonTutorialRenderingCode(const string& inOriginalDirectory, const s
 		//X, Y spacing
 		{0x180ba, 0x710c, 0x7110}, //0601d0ba add 0x10, r1 (Y spacing)
 		{0x180c8, 0x7108, 0x7110}, //0601d0c6 add 0x10, r1 (X spacing)
+
+		//Single byte encoding
+		{0x18096, 0x6390, 0x6391}, //0601d096 mov.w @r9, r3 //6391 to 6390
+		{0x180cc, 0x6390, 0x6391}, //0601d0cc mov.w @r9, r3 //6391 to 6390
+		{0x180ae, 0x7901, 0x7902}, //0601d0ae add 2,r9      //7902 to 7901
 	};
 
 	const int numEntries = sizeof(patchingData) / sizeof(PatchingData);
@@ -199,11 +204,13 @@ void CreatePatchedTycoonTutorialLine(const TextFileData::TextLine& InTextLine, c
 	int currLine = 0;
 	const int maxLines = 4;
 	bool bAlreadyShowedError = false;
+	const string untranslated("Untranslated");
 
 	const size_t numWords = InTextLine.mWords.size();
 	for (size_t wordIndex = 0; wordIndex < numWords; ++wordIndex)
 	{
 		const string& word = InTextLine.mWords[wordIndex];
+
 		bool bFailedToAddLine = false;
 		if (word.size() > MaxCharsPerLine)
 		{
@@ -304,17 +311,19 @@ void CreatePatchedTycoonTutorialLine(const TextFileData::TextLine& InTextLine, c
 		}
 	}//for(wordIndex < numWords)
 
+	//Strings need to start at 2byte boundaries, so pad this one if needed so next string is at boundary
+	if ((translatedString.mChars.size()) % 2 == 0)
+	{
+		translatedString.AddChar(' ');
+	}
+
+	translatedString.AddChar(0xffff);
+
 	OutLines.push_back(translatedString);
 }
 
-bool OutputPatchedTycoonTutorialText(const string& inPatchedDirectory, vector<SakuraString>& inTranslatedLines)
+bool OutputPatchedTycoonTutorialText(FileReadWriter& inCardFile, vector<SakuraString>& inTranslatedLines)
 {
-	FileWriter cardFile;
-	if (!cardFile.OpenFileForWrite(inPatchedDirectory + "\\SAKURA3\\CARD_DAT.ALL"))
-	{
-		return false;
-	}
-
 	vector<uint32> newEntryOffsets;
 	newEntryOffsets.push_back( SwapByteOrder((uint32)166)); //First value is the number of entries
 
@@ -331,7 +340,7 @@ bool OutputPatchedTycoonTutorialText(const string& inPatchedDirectory, vector<Sa
 		{
 			vector<unsigned char> translationData;
 			inTranslatedLines[dataIndex].GetSingleByteDataArray(translationData);
-			cardFile.WriteDataAtOffset(translationData.data(), translationData.size() * sizeof(char), offset);
+			inCardFile.WriteData(offset, (char*)translationData.data(), translationData.size() * sizeof(char));
 
 			const int numBytesWritten = (int)translationData.size() * sizeof(char);
 			numSingleBytesWritten += numBytesWritten;
@@ -352,12 +361,12 @@ bool OutputPatchedTycoonTutorialText(const string& inPatchedDirectory, vector<Sa
 	}
 
 	//Output new entry table
-	cardFile.WriteDataAtOffset((char*)newEntryOffsets.data(), newEntryOffsets.size()*sizeof(uint32), 0x318000);
+	inCardFile.WriteData(0x318000, (char*)newEntryOffsets.data(), newEntryOffsets.size()*sizeof(uint32));
 
 	return true;
 }
 
-bool PatchTycoonTutorialText(const string& inDataDirectory, const string& inPatchedDirectory)
+bool PatchTycoonTutorialText(const string& inDataDirectory, const string& inPatchedDirectory, FileReadWriter& inCardFile)
 {
 	const FileNameContainer fileName(inDataDirectory + "Translation\\TycoonTutorial.txt");
 	TextFileData textFile(fileName);
@@ -373,15 +382,21 @@ bool PatchTycoonTutorialText(const string& inDataDirectory, const string& inPatc
 		return false;
 	}
 
+	const string untranslated("Untranslated");
 	vector<SakuraString> translatedLines;
 	for (size_t translatedLineIndex = 0; translatedLineIndex < numLines; ++translatedLineIndex)
 	{
-		const TextFileData::TextLine& textLine = textFile.mLines[translatedLineIndex];
+		TextFileData::TextLine& textLine = textFile.mLines[translatedLineIndex];
+
+		if( textLine.mWords.size() == 1 && textLine.mWords[0] == untranslated)
+		{
+			textLine.mWords[0] = std::to_string(translatedLineIndex + 1);
+		}
 
 		CreatePatchedTycoonTutorialLine(textLine, translatedLineIndex, translatedLines);
 	}
 
-	OutputPatchedTycoonTutorialText(inPatchedDirectory, translatedLines);
+	OutputPatchedTycoonTutorialText(inCardFile, translatedLines);
 
 	return true;
 }
@@ -390,22 +405,23 @@ bool PatchTycoonTutorial(const string& inOriginalDirectory, const string& inPatc
 {
 	printf("Patching Tycoon Tutorial\n");
 
-	if(!PatchTycoonTutorialRenderingCode(inOriginalDirectory, inPatchedDirectory))
-	{
-		return false;
-	}
-
-	if(!PatchTycoonTutorialText(inDataDirectory, inPatchedDirectory))
-	{
-		return false;
-	}
-
-	//Write out new font sheet
 	FileReadWriter cardFile;
 	if (!cardFile.OpenFile(inPatchedDirectory + "\\SAKURA3\\CARD_DAT.ALL"))
 	{
 		return false;
 	}
+
+	if(!PatchTycoonTutorialRenderingCode(inOriginalDirectory, inPatchedDirectory))
+	{
+		return false;
+	}
+
+	if(!PatchTycoonTutorialText(inDataDirectory, inPatchedDirectory, cardFile))
+	{
+		return false;
+	}
+
+	//Write out new font sheet
 	inFontSheet.OutputTiles(cardFile, -1, 0x30e780 + 0x80);
 
 	return true;
