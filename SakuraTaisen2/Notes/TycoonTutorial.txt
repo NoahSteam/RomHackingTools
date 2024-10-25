@@ -5,3 +5,30 @@ CARD_DAT.ALL
 318000 contains text table
 -first 4 bytes is number of entiries
 -4byte entries containing offsets to the string
+
+--Rendering Code--
+00228D60 has string for first line
+0605e298 has sprite address in vdp1
+0601cf2a contains 0210 ("0000DAIF.BIN", 0x00017f2a) //Should be 080c
+0601cef0 shll2 r4 //calculates sprite writing address
+
+"0000DAIF.BIN", 0x00017eea
+/////Multiply by 12 instead of 16
+0601ceea mov r14, @r2 //62e3
+0601ceec add 0x8, r2  //7208
+0601ceee shll2 r4     //4408
+0601cef0 shll2 r4     //4408
+
+to
+
+0601ceea mov 0x6, r1  //e106
+0601ceec add 0x2, r2  //7202
+0601ceee mulu.w r4,r1 //0147
+0601cef0 macl r4      //041a
+
+--X Spacing--
+0601cf04 mov.w r5, @r1 //r5 contains x position
+0601d148 writes r5
+
+0601d0c8 adds 0x10 to r1  //7210 to 7208 X-spacing
+0601d0ba adds 0x10 to r1  //7210 to 720c Y-spacing

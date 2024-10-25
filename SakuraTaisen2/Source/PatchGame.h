@@ -58,6 +58,7 @@ static bool BringOverOriginalFiles(const string& inRootSakuraDirectory, const st
 	GetAllFilesOfType(allFiles, "MGOH_DAT.ALL", originalFiles);
 	GetAllFilesOfType(allFiles, "SUMI_DAT.ALL", originalFiles);
 	GetAllFilesOfType(allFiles, "MG_FONT.CG", originalFiles);
+	GetAllFilesOfType(allFiles, "0000", originalFiles);
 
 	//Battle files
 	GetAllFilesOfType(allFiles, "COL.BIN", originalFiles);
@@ -531,6 +532,12 @@ bool PatchGame(const string& inSourceGameDirectory, const string& inTranslatedDa
 	if (!CreateTranslatedFontSheet(translatedBattleFontSheetPath, translatedBattleFontSheet, translatedBattleFontSheetPalette, battleFontWidth, battleFontHeight))
 	{
 		printf("Unable to create battle font sheet\n");
+		return false;
+	}
+
+	if (inDiscNumber != 3 && !PatchTycoonTutorial(inSourceGameDirectory, inPatchedDirectory, inTranslatedDataDirectory, translatedBattleFontSheet))
+	{
+		printf("PatchTycoonTutorial failed\n");
 		return false;
 	}
 

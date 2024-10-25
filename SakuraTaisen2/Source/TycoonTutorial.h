@@ -114,3 +114,78 @@ void ExtractTycoonTutorial(const std::string& inRootDirectory, const std::string
 
 	printf("Success\n");
 }
+
+bool PatchTycoonTutorialRenderingCode(const string& inOriginalDirectory, const string& inPatchedDirectory)
+{
+	FileData originalData;
+	if(!originalData.InitializeFileData(inOriginalDirectory + "SAKURA3\\0000DAIF.BIN"))
+	{
+		return false;
+	}
+
+	FileReadWriter patchedFile;
+	if(!patchedFile.OpenFile(inPatchedDirectory + "SAKURA3\\0000DAIF.BIN"))
+	{
+		return false;
+	}
+
+	struct PatchingData
+	{
+		uint32 offset;
+		uint16 newCode;
+		uint16 originalCode;
+	};
+
+	PatchingData patchingData[] = 
+	{
+		{0x17f2a, 0x010c, 0x0210}, //Dimensions: 0601cf2a contains 0210
+
+		//Multiply by 6 (12/2) instead of 16 to get to correct character within sprite sheet in VDP1 ram
+		{0x17eea, 0xe106, 0x62e3}, //0601ceea mov 0x6, r1
+		{0x17eec, 0x7202, 0x7208}, //0601ceec add 0x2, r2
+		{0x17eee, 0x0147, 0x4408}, //0601ceee mulu.w r4,r1
+		{0x17ef0, 0x041a, 0x4408}, //0601cef0 macl r4
+
+		//X, Y spacing
+		{0x180ba, 0x710c, 0x7110}, //0601d0ba add 0x10, r1 (Y spacing)
+		{0x180c8, 0x7108, 0x7110}, //0601d0c6 add 0x10, r1 (X spacing)
+	};
+
+	const int numEntries = sizeof(patchingData) / sizeof(PatchingData);
+	for(int i = 0; i < numEntries; ++i)
+	{
+		const PatchingData currEntry = patchingData[i];
+
+		const uint16 originalByte = SwapByteOrder(*(uint16*)(originalData.GetData() + currEntry.offset));
+		if(originalByte != currEntry.originalCode)
+		{
+			printf("In 0000DAIF.BIN at 0x%08x, expecting 0x%04x but found 0x%04x\n", currEntry.offset, currEntry.originalCode, originalByte);
+			return false;
+		}
+
+		patchedFile.WriteData(currEntry.offset, (char*)&currEntry.newCode, sizeof(currEntry.newCode), true);
+	}
+
+	return true;
+}
+
+bool PatchTycoonTutorial(const string& inOriginalDirectory, const string& inPatchedDirectory, const string& inDataDirectory, const TileExtractor& inFontSheet)
+{
+	printf("Patching Tycoon Tutorial\n");
+
+	if(!PatchTycoonTutorialRenderingCode(inOriginalDirectory, inPatchedDirectory))
+	{
+		return false;
+	}
+
+	//Write out new font sheet
+	FileReadWriter cardFile;
+	if (!cardFile.OpenFile(inPatchedDirectory + "\\SAKURA3\\CARD_DAT.ALL"))
+	{
+		return false;
+	}
+
+	inFontSheet.OutputTiles(cardFile, -1, 0x30e780 + 0x80);
+
+	return true;
+}
