@@ -28,7 +28,7 @@ Well then, let's say goodbye to the manager and be on our way.
 OK, got it. We'll ask him to hold down the fort while we’re away. 
 Right! Let's head to his office. 
 I wonder if Sakura is in her room. 
-Oh, Ogami? Did you need something? 
+Oh, Ogami? <br> Did you need something? 
 No, not particularly… 
 I see. That's good. I was just about to leave for Sendai. 
 I'll be going now. I'll miss the train if I don't hurry. 
@@ -40,7 +40,7 @@ Get me a souvenir while you're there, OK, Sakura?
 Heehee, understood. Look forward to it. 
 I'm going to be late for the train, Ogami, so if you don't mind… 
 Y-Yeah, right. Sorry. 
-I'll be going, then. Have a pleasant New Year's vacation, Ogami. 
+I'll be going, then. <br> Have a pleasant New Year's vacation, Ogami. 
 Yeah, see you. 
 She left… 
 I should get dressed and get ready to leave, myself. 
@@ -74,7 +74,7 @@ Why don't we bid farewell to the manager before we leave?
 Yeah, you're right. We'll let him know, just to be safe. 
 Right then, let's make our way to the manager's office. 
 There, the door's locked tight… 
-Hey, Sumire. Heading out already? 
+Hey, Sumire. <br> Heading out already? 
 Oh my, Ensign… 
 Yes, I was just about to go on my trip. 
 Well, I say "trip," but my home is in Yokohama, so I'll be there in no time at all.
@@ -302,8 +302,8 @@ I-I see…
 That reminds me, since we are to leave the theater… 
 We should talk to Yoneda first, just to be safe. 
 Yeah, you're right. OK then, let's stop by his office. 
-There, door's shut tight. 
-Hey, Orihime. Heading out already?
+There, the door is shut tight. 
+Hey, Orihime. <br> Heading out already?
 Ah, Mr. Ensign. 
 You're going to see your mother, right? 
 Yes, that's right. Mamma came to Japan all the way from Italy. 
@@ -322,7 +322,7 @@ I'm sorry, Orihime. I probably should go and meet them, but…
 It's OK! 
 I'll tell Papa and Mamma all about you! 
 Well then, Mr. Ensign, I should get going now. 
-All right, be careful. See you soon. 
+All right, be careful. <br> See you soon. 
 Orihime must be so happy. Her parents are finally being reunited after over a dozen years.
 Well, I should get dressed and ready to go, myself. 
 Orihime just left, right? 
@@ -332,10 +332,10 @@ I ought to put on something nice for my first shrine visit of the year.
 I wonder if Reni is in her room. 
 Since it's New Year's, I'll try inviting her out for a shrine visit. 
 Reni… Still using notebook paper as a nameplate, I see. 
-Reni, are you there? It's Ogami. 
+Reni, are you there? <br> It's Ogami. 
 Captain? Just a second. 
 Sorry to keep you waiting. 
-Captain… Your clothes are different. 
+Captain… <br> Your clothes are different. 
 Yeah. I was going to invite you out to a New Year's shrine visit, so I thought I'd change my outfit. 
 A shrine visit… With me? 
 Yeah. It's New Year's, so why not? 
@@ -384,8 +384,8 @@ Well, I'd better get ready to head out, then.
 Reni said she's going on a shrine visit with Kaede, right? 
 I should get ready to head out, too. 
 Right, I should get ready to head out. 
-Yo, Ogami. Long time no see. 
-That voice… Is that you, Kayama? 
+Yo, Ogami. <br> Long time no see. 
+That voice… <br> Is that you, Kayama? 
 The first of January is lovely, isn’t it, Ogami?
 What a joy it is to greet the new year with you! 
 You never change, do you? Is the Moon Division on break for New Year's, too? 
@@ -393,8 +393,8 @@ Indeed. However, should anything happen, we'll still deploy immediately.
 They say, "New Year's Day is the key to the year." You must steel yourself for the coming year.
 I see… 
 Now then, farewell, Ogami. Here's hoping we both enjoy a pleasant New Year. 
-What an extravagant guy. He wore a tuxedo and everything, just for a New Year's greeting. 
-It's been a long time since I've had to dress nicely like this. 
+What an extravagant guy. <br> He wore a tuxedo and everything, just for a New Year's greeting. 
+It's been a long time since I've worn a suit and tie like this. 
 There, I should be all ready now. 
 Go to Sakura's room. 
 Go to Sumire's room. 
@@ -419,7 +419,7 @@ Are you there, sir? It's Ogami.
 … 
 Huh? Doesn't seem like the manager's in. 
 Ah, Ogami! Happy New Year! 
-Hey, Tsubaki. Happy New Year. 
+Hey, Tsubaki. <br> Happy New Year. 
 Heehee, you came at just the right time, Ogami. 
 Huh? 
 You see, we have a special gift for our most loyal customers: 
@@ -459,7 +459,7 @@ It's a photo of Reni in her role as Tyltyl in "The Blue Bird."
 All right, I'll take Reni's. 
 Here you go, Reni's special bromide! Thank you, come again! 
 Don't be shy, Ogami. Pick whichever bromide you'd like. 
-Thanks, Tsubaki. I'll cherish this bromide. 
+Thanks, Tsubaki. <br> I'll cherish this bromide. 
 No, I should be the one thanking you for your continued patronage. 
 I'll be getting a lot of new bromides this year, so I hope you look forward to them! 
 OK, I have to get back to work, so I'll be going now. 
@@ -582,7 +582,7 @@ These clothes… They look like Kaede's.
 Huh? Did you say… Kaede?! 
 I am drawn to the bath…
 Go back outside. 
-O-Oh no… My body's moving on its own… I-I can't control it… 
+O-Oh, no… My body's moving on its own… I-I can't control it… 
 H-Hey! Where do you think you're going, Ogami! 
 It's no good! I… can't… stop! 
 Phew, it's nice to take a bath first thing in the morning. 
@@ -860,7 +860,7 @@ Yeah, people have already stopped talking about the Taisho Restoration Army.
 It's the New Year, so maybe everyone wants to just forget about the depressing news from last year? 
 Yeah, that must be it. 
 Have you already had the chance to visit a shrine for the New Year's, Ogami? 
-Um, sure… Are you two going?
+Um, sure… <br> Are you two going?
 Yes, we thought we'd go with Kaede later… 
 But Kaede seems so busy already, we don't know if she'll have the time. 
 I see. I hope you all get to go together. 

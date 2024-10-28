@@ -32,3 +32,10 @@ to
 
 0601d0c8 adds 0x10 to r1  //7210 to 7208 X-spacing
 0601d0ba adds 0x10 to r1  //7210 to 720c Y-spacing
+
+--Single Byte Fixup--
+Read at 00229020
+
+0601d096 mov.w @r9, r3 //6391 to 6390
+0601d0cc mov.w @r9, r3 //6391 to 6390
+0601d0ae add 2,r9 //7902 to 7901

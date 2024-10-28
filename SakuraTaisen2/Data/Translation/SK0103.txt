@@ -18,7 +18,7 @@ This piece of kit is a steam-powered communication device.
 Here, I'll teach you how to use it. 
 First, tune the central dial to the "Call Number" of the person you want to contact. 
 Then, all you gotta do is press the "Call" button in the upper right here. 
-If you want to end your call, just press the "Power" button. 
+If you want to end your call, just press the power button. 
 On the right are speed dials. These buttons let you quickly call a person you've talked to before.
 But keep in mind that if the person isn’t around, you may not get a response to your call. Easy, right? 
 Uhm… I think I kinda get it. 

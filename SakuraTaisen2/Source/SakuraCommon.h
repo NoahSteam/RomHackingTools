@@ -77,6 +77,7 @@ bool PatchCodeInFile(std::string& InFileName, PatchingData* pInPatchingData, int
 
 enum class ETileIndiceType : uint8
 {
+	Double,
 	DoubleMinusOne,
 	MinusOne
 };
@@ -129,6 +130,14 @@ void ExtractImageWithTileSet(const std::string& inTileFilePath, uint32 inWidth, 
 			tiles[t] = tileValue;
 		}
 	}
+	else if( inIndiceType == ETileIndiceType::Double )
+	{		
+		for (uint32 t = 0; t < numTiles; ++t)
+		{
+			const int tileValue = (SwapByteOrder<TileByteType>(tiles[t]) / 2);
+			tiles[t] = tileValue;
+		}
+	}
 	else
 	{
 		for (uint32 t = 0; t < numTiles; ++t)
@@ -172,7 +181,7 @@ void ExtractTiledFullScreenImage(const std::string& inTileFilePath, const std::s
 
 template<typename TileByteType>
 bool PatchTiledImage(const std::string& InPatchedImagePath, const std::string InSakuraFilePath, const uint32 InColorDataSize, const int InColorDataOffset,
-                     const int InTileDataOffset, const int InNumIndices = 1120, bool bInOffsetTileByOne = true)
+                     const int InTileDataOffset, const int InNumIndices = 1120, ETileIndiceType inIndiceType = ETileIndiceType::DoubleMinusOne)//bool bInOffsetTileByOne = true)
 {
 	const uint32 tileDim = 8;
 	BmpToSaturnConverter patchedImage;
@@ -203,13 +212,25 @@ bool PatchTiledImage(const std::string& InPatchedImagePath, const std::string In
 	assert(numIndices == InNumIndices);
 
 	TileByteType* pVdp2Indices = new TileByteType[numIndices];
-	const int offset = bInOffsetTileByOne ? 1 : 0;
-	for (size_t i = 0; i < numIndices; ++i)
+
+	if( inIndiceType == ETileIndiceType::MinusOne )
 	{
-		const TileByteType indice = TileByteType((tileIndices[i] + offset) * 2);
-		pVdp2Indices[i] = SwapByteOrder(indice);
+		for (size_t i = 0; i < numIndices; ++i)
+		{
+			const TileByteType indice = TileByteType(tileIndices[i] + 1);
+			pVdp2Indices[i] = SwapByteOrder(indice);
+		}
 	}
-	
+	else
+	{
+		const int offset = inIndiceType == ETileIndiceType::DoubleMinusOne ? 1 : 0;
+		for (size_t i = 0; i < numIndices; ++i)
+		{
+			const TileByteType indice = TileByteType((tileIndices[i] + offset) * 2);
+			pVdp2Indices[i] = SwapByteOrder(indice);
+		}
+	}
+		
 	outputFile.WriteData(InTileDataOffset, (char*)pVdp2Indices, sizeof(pVdp2Indices[0]) * numIndices, false);
 
 	delete[] pVdp2Indices;

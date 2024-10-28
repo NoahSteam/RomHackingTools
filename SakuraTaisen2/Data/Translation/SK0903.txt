@@ -5,7 +5,7 @@ You know about the Flower Division's Christmas performance, right? "The Miracle 
 Yes. At least, I know it’s a special one-night event being held on Christmas Eve.
 The thing is… I received a request from everyone in the division.
 They want you to pick which member will play the starring role for the performance.
-What?! They want ME to choose?!
+What?! <br> They want ME to choose?!
 Right now, we have four candidates for the main lead.
 Sakura… 
 Sumire… 
@@ -168,7 +168,7 @@ I've always wanted to bring you here, even if it was just once. Now my dream has
 Sorry Ogami, but customers are only allowed to purchase one of each bromide. 
 I see. That's too bad. 
 So sorry, Mr. Ogami, but customers are only allowed to purchase one of each bromide.
-Oh, really? That's too bad.  
+Oh, really? That's too bad. 
 The jewel of the Pandemonium Regalia, entrusted to us by the Rose Division. 
 Spirit Sword Arataka. The special sword of the Shinguji family. 
 Divine Sword Shirahatori. Entrusted to me by Kaede. A special sword passed down by the Fujieda family. 

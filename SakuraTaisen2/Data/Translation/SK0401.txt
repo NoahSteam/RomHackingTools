@@ -23,7 +23,7 @@ Arf!
 Ah, he ran away. 
 He really was a cute pup. I wish we could bring him back to the theater with us… 
 Ah!! 
-(Oh no! That car's not slowing down!) 
+(Oh, no! That car's not slowing down!) 
 Kyaah, the puppy!! 
 Ugh! 
 I gotta jump and save him! 
@@ -275,8 +275,8 @@ Tell me some gossip.
 I'll come back later. 
 Seems like you’ve started keeping a dog in the courtyard, Ogami. 
 That’s right. Sorry I made the decision without consulting you two first. 
-Oh, it's no problem! So, that dog's name is 
-, isn't it? 
+Oh, it's no problem!<br>The dog's name is
+<br>from what I heard, right?
 You got that information pretty quick. Just like always, Yuri. 
 Heheh. Actually, Kohran just dropped by to tell us the news. She was really excited to talk about it. 
 I see, glad to hear it. I hope that you two will play with 

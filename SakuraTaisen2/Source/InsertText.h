@@ -542,7 +542,7 @@ bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTrans
 					{
 						translatedString.AddChar(0xfd);
 
-						printf("Verify Formatting (fd): %i\n", currSakuraStringIndex);
+						printf("Verify Formatting (fd): %i\n", currSakuraStringIndex + 1);
 					}
 					/**/
 

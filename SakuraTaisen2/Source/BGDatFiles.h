@@ -101,7 +101,7 @@ bool PatchBGDatFiles(const string& InPatchedSakuraDirectory, const string& InTra
 	{
 		const string bgFilePath = InPatchedSakuraDirectory + string("SAKURA2\\") + bossImages[i].mNoExtension + string(".DAT");
 
-		PatchTiledImage<uint16>(bossImages[i].mFullPath, bgFilePath, imageWidth*imageHeight, 0x710,	0, numTiles, false);
+		PatchTiledImage<uint16>(bossImages[i].mFullPath, bgFilePath, imageWidth*imageHeight, 0x710,	0, numTiles, ETileIndiceType::Double);
 	}
 
 	return true;

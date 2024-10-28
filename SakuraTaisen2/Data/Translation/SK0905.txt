@@ -1,6 +1,6 @@
 ﻿Good morning, Ogami. 
 Good morning. 
-Well? Ready to give your answer? 
+Well? <br> Ready to give your answer? 
 … 
 … 
 … 
@@ -49,7 +49,7 @@ Ogami… Are you… <br> Are you really sure?
 Yes. I’m counting on you, Sakura. 
 …OK! 
 The one I've picked for the lead role… is Sumire. 
-Ensign… I knew you'd pick me! 
+Ensign… <br> I knew you'd pick me! 
 Yes. I’m counting on you, Sumire. 
 …Of course! 
 The one I've picked for the lead role… is Maria. 
@@ -63,7 +63,7 @@ All right, you got it! For you Boss, I'll give it everythin’ I've got!
 The one I've picked for the lead role… is Iris. 
 Really, Mon Frère? <br> Are you sure? 
 Yes. I’m counting on you, Iris. 
-OK! I'll do it! I'll do my best! 
+OK! I'll do it! <br> I'll do my best!! 
 The one I've picked for the lead role… is Kohran. 
 Ch-Chief… For real? Me? <br> Are you sure? 
 Yes. I’m counting on you, Kohran. 
@@ -73,15 +73,15 @@ Mr. Ensign… <br> I knew you'd pick me!
 Yes. I’m counting on you, Orihime. 
 Just you leave it to me! I'll put on the very greatest performance!
 The one I've picked for the lead role… is Reni. 
-Captain… Are you… sure? 
+Captain… <br> Are you… sure? 
 Yes. I’m counting on you, Reni. 
 …OK, understood. 
 Ogami’s judgment has never steered us wrong. I'm positive this will be a wonderful play. 
 Well, I suppose I can let someone else be the star this time. 
 We're all in this together. Let's make this a great Christmas play. 
-You got this! We'll light up the stage! 
+You got this! <br> We'll light up the stage! 
 I'll do my best too as one of the angels! 
-This show’s gonna rock! I can't wait! 
+This show’s gonna rock! <br> I can't wait! 
 Don't put down your guard, or I'll snatch away the lead role from you. 
 It's all right. The god of the stage is with us. 
 The lead isn't alone. The entire Flower Division together is the true star. 
@@ -124,7 +124,7 @@ So what, Maria? Let's make it fun and have ourselves a blast!
 And with that, the course of the play is more or less set. 
 All right, let's start our rehearsals over, from the top! 
 Day in, day out, the Flower Division passionately continued their rehearsals. 
-The direction started to take shape, and the play finally started moving along. 
+The direction started to take shape, and the play finally began moving along. 
 And now, at last, it's time to direct all the performers. 
 In "The Miracle Bells,” the seven people aside from the heroine will portray angels. 
 Hey, Mon Frère. About the angel roles… 
@@ -144,8 +144,8 @@ Roger. As restrained as possible.
 I'll leave it up to you, everyone can act as they please. 
 OK, got it! Eheheh, I hope I do well! 
 …Roger. We'll leave it to everyone's own judgment. 
-And finally… The directions for  
-'s performance as the heroine. 
+Finally… Time for 
+<br>and her direction as the<br>heroine.  
 Ogami… Opening day is finally approaching. 
 Please, give me your final directions for my performance. 
 Act purely. 
@@ -295,18 +295,18 @@ Understood. I don't have any problem with my usual routine.
 Hahaha… <br> What confidence. 
 It is thanks to you that we've made it this far, Mr. Ensign. 
 For the sake of you and everyone else… We'll make this a wonderful play! 
-Captain… Opening day draws near. 
+Captain… <br> Opening day draws near. 
 Please give me your directions. 
 Act purely. 
 Act cheerily. 
 Act gracefully. 
 Let's go for a pure feel, emphasize your innocent image. 
 Understood. I'll do that. 
-How about this… This might be tricky for you, but how about you act cheerfully? 
+How about this… <br> This might be tricky for you, but how about you act cheerfully? 
 That won't be particularly difficult. Don't worry. 
 When I'm up on stage, I can turn in any kind of performance. 
 I-I see. Break a leg up there, Reni. 
-How about this… This might be tricky for you, but how about you act gracefully? 
+How about this… <br> This might be tricky for you, but how about you act gracefully? 
 …Understood. I'll do that. 
 I know what the word means, so I'll do some research. 
 I see… I can't wait. 

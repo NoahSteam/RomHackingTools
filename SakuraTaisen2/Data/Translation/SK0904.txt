@@ -68,7 +68,7 @@ I was imagining how I'd portray the Holy Mother while the music played. Ohohohoh
 I see… That sounds about right for you, Sumire. 
 … 
 … 
-Sumire… Aren't you going to listen to it? 
+Sumire… Aren't you going to listen to the record? 
 Ah… Y-Yes, that's right. 
 … 
 Sumire? 
@@ -170,13 +170,13 @@ Hm? Seems like someone's out in the yard.
 … 
 Is that you, Reni? What are you doing standing around in a place like this? 
 Captain? 
-I just felt like moving around all of a sudden… So I came here. 
+I just felt like moving around all of a sudden… <br> So I came here. 
 Captain… If you don't mind, could you watch me dance? 
 Sure, no problem. 
 Watch you… dance? 
 I'm patrolling right now…
 Sure, no problem. 
-Thank you. All right… Here I go. 
+Thank you. <br> All right… Here I go. 
 Hah! 
 (Whoa…) 
 (Reni's always so quiet, I never imagined she could dance with such passion.) 
@@ -212,7 +212,7 @@ No, it's fine. Don't worry about it.
 …Thank you. All right, I'm going back to my room. 
 I see. Good night, Reni. 
 Good night, Captain. 
-Well… I ought to get going, too. 
+Well… <br> I ought to get going, too. 
 I appreciate the offer, but I'm in the middle of my patrol. 
 I see… Sorry. 
 All right, I gotta go. Try not to stay up too late, OK, Reni? 
@@ -281,6 +281,7 @@ Huh?
 To play the piano, you need not only your fingers, but your heart, as well. 
 Usually, my fingers will move without even my thinking…
 Perhaps "The Miracle Bells" is the cause. I can't picture the lead role clear enough in my mind… 
+Orihime… 
 Believe in yourself.
 It happens. 
 You should get to bed. 

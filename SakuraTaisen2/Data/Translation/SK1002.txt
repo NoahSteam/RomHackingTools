@@ -8,7 +8,7 @@ Strive for peace.
 Get along with everyone.
 Have a fun life.
 My resolution this year is to strive for peace in the capital.
-Hmhm, so diligent, just as you’d expect from the captain of the Flower Division.
+Hmhm, so diligent. Just as you’d expect from the captain of the Flower Division.
 My resolution this year is to get along with everyone.
 Hehe, that’s just the kind of answer I’d expect from you, Ogami.
 My resolution this year is to live a fun life full of laughter.
@@ -24,9 +24,9 @@ Sakura, you seem to have made a resolution. Mind sharing it with us?
 My resolution this year is to polish my swordsmanship. 
 I intend to diligently practice my kenjutsu this year, starting with the basics, my form…
 Hopefully I can get even one step closer to achieving the impenetrable stance of my father.
-I getcha… That's a nice resolution.
+I getcha… <br> That's a heck of a resolution.
 As such, I’m planning to return to my hometown of Sendai during the holiday.
-I see… What about everyone else? Do you have plans for the New Year holiday?
+I see… <br> What about everyone else? Do you have plans for the New Year holiday?
 I was thinking of going back to the Kanzaki estate, myself.
 Heh, I’m gonna visit my old man’s grave back in Okinawa.
 Is that so… <br> How about you, Maria? 
@@ -35,10 +35,10 @@ I was gonna head down to Kobe to visit the man that took care of me way back in 
 I see… 
 Mon Frère, Mon Frère! <br> You gotta hear this! 
 My papa and mama are coming all the way from France to see me! 
-You don’t say. Good for you, Iris.
-Yeah! I'll get to spend lots of time with Papa and Mama! 
+You don’t say. <br> Good for you, Iris.
+Yeah! <br> I'll get to spend lots of time with Papa and Mama! 
 I am doing the same. Mamma is traveling all the way from Italy to see Papa!
-Really? Reuniting after all this time… Isn't that great? 
+Really? So they’re finally reuniting after all this time. That’s great to hear. 
 Yes! Fantastico! 
 By the way, what will you be doing, Ogami?
 I'll be staying here. 
@@ -60,7 +60,7 @@ Right, understood.
 Sorry Ogami, but customers are only allowed to purchase one of each bromide. 
 I see. That's too bad. 
 So sorry, Mr. Ogami, but customers are only allowed to purchase one of each bromide.
-Oh, really? That's too bad.  
+Oh, really? That's too bad. 
 The jewel of the Pandemonium Regalia, entrusted to us by the Rose Division. 
 Spirit Sword Arataka. The special sword of the Shinguji family. 
 Divine Sword Shirahatori. Entrusted to me by Kaede. A special sword passed down by the Fujieda family. 

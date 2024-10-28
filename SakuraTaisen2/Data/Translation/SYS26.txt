@@ -12,7 +12,7 @@ This order is currently in effect. We'll fight our opponents unflinchingly.
 Attention all units! Initiating the "Mountain" strategy!
 We're sticking with the current strategy!
 Understood!
-Defeat Cerulean Satan's Hex Mech, Dark Kamui!
+Defeat Aoi Satan's Hex Mech, Dark Kamui!
 <LEAVE> 0 Message 1-2
 <LEAVE> 0 Message 1-3
 Pass through the gate and defeat Tsuchigumo!
@@ -32,7 +32,7 @@ Orihime Soletta, prior Star Division member. Piloting a rose armor, she is known
 Reni Milchstraﬂe. A combat professional, attacking accurately without a single wasted movement.
 Hex Mech: Wakiji Kai. <br> Equipped with a shortsword for close-range combat.
 Hex Mech: Wakiji Kai. <br> Recently had its screws replaced, so it's in a pretty good mood.
-Hex Mech: Dark Kamui. Piloted by Cerulean Satan, its power far and away outclasses the Koubu.
+Hex Mech: Dark Kamui. Piloted by Aoi Satan, its power far and away outclasses the Koubu.
 Society Hex Mech: Sesshou. Its defensive power is on a whole other level compared to the Wakiji.
 Kongou's underling Wakiji. Fiercely loyal to Kongou.
 Society Hex Mech: Wakiji Kai. The units equipped with large cannons are referred to as HA-type.

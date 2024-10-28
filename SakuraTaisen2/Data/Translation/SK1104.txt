@@ -528,7 +528,7 @@ Wh-What is this place?!
 Ah, Mr. Ogami! 
 Arf, arf! Woof! 
 Ah! Tsubomi and 
-! 
+<br>too! 
 What the heck is this room? 
 Heheh, the Grand Imperial Theater transformed so it could fit inside the Mikasa…
 That’s why the seating area is now flipped upside-down.
@@ -539,7 +539,7 @@ Looks like I'm in the audience seating area.
 Ah, Mr. Ogami! 
 Arf, arf! Woof! 
 Ah! Tsubomi and 
-! 
+<br>too! 
 You two also came aboard?
 Heheh, yup! I can't work on the bridge just yet… 
 But everyone's letting me help with making tea and meals. 

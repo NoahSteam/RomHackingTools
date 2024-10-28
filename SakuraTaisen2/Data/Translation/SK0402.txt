@@ -182,7 +182,7 @@ Hey, Chief, are you gonna run off without giving this poor doggy a name?
 Mon Frère, what should we name the puppy?!
 Ogami, please pick a good name for this pup.
 Oh, it looks like<br>
-likes his name, too.
+likes his name,<br>too.
 Since we've decided on a name for the dog, why don't we disperse for the time being?
 In that case, I will be found in the music room, playing on the piano.
 I think I might take a bath and then do some sword training in the courtyard.
@@ -259,8 +259,8 @@ There there,
 . <br> I'm sure Reni will come <br> around eventually.
 Oh my, Ensign…
 Arf, arf!
-Hi, Sumire. Were you <br> playing with<sp>
-just now?
+Hi, Sumire. Were you<br>playing with
+<br>just now?
 Yes. My family kept a dog once, when I was younger.
 Although he was quite a bit larger than this fellow, he made an excellent playmate.
 Well then<sp>
@@ -683,7 +683,7 @@ It's empty. No one usually comes here during their free time.
 Oh well. Guess I'll check someplace else.
 There doesn't seem to be anyone on the terrace.
 Maybe I’ll visit
-<br> in the courtyard now that the rain has finally stopped.
+<br>in the courtyard now that<br>the rain has finally<br>stopped.
 I figured I'd check again, but there's still no one here…
 Oh yeah, Kohran was asking for me, wasn't she? I'd best not be late.
 …
@@ -1047,7 +1047,7 @@ That looks like… the summer dress that Sakura was wearing…
 Wh-Which means right now… Sakura’s in there.
 I am drawn to the bath…
 Go back outside.
-O-Oh no… My body is moving towards the bathroom on its own…
+O-Oh, no… My body is moving towards the bathroom on its own…
 Ahh, this feels great… So refreshing after getting soaked by the rain.
 And I'm so happy Ogami said I looked good in that dress…
 (Sakura…)
@@ -1478,8 +1478,8 @@ Tell me some gossip.
 I'll come back later.
 Seems like you’ve started keeping a dog in the courtyard, Ogami.
 That’s right. Sorry I made the decision without consulting you two first.
-Oh, it's no problem! <br> The dog's name is
-, <br> isn't it?
+Oh, it's no problem!<br>The dog's name is
+<br>from what I heard, right?
 You got that information pretty quick. Just like always, Yuri.
 Heheh. Actually, Kohran just dropped by to tell us the news. She was really excited to talk about it.
 I see, glad to hear it. <br> I hope that you two will <br> play with
@@ -1655,10 +1655,10 @@ General Yoneda noticed that Major Yamazaki had changed, and he warned him many t
 But, in the end, no one could change his mind.
 Not even Ayame…
 When the Kouma War ended seven years ago, Major Yamazaki went missing.
-And then in our recent battles, he appeared again as Cerulean Satan.
+And then in our recent battles, he appeared again as Aoi Satan.
 Justice by power… <br> Rule through evil…
 Perhaps that was his conclusion…
 Back when he appeared in front of the theater six months ago…
-I wonder what Cerulean Satan… No, what Major Yamazaki was trying to tell us…
+I wonder what Aoi Satan… No, what Major Yamazaki was trying to tell us…
 …
 …[]()'.,!?!

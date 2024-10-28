@@ -61,7 +61,7 @@ All right, I gotta follow her example and put some extra oomph behind my ticket 
 Thank you very much! <br> Come back and buy another bromide next month! 
 Tsubaki is really getting back into the swing of things.
 All right, I gotta follow her example and put some extra oomph behind my ticket punching!
-Ah, Mr. Ogami! Good afternoon! 
+Ah, Mr. Ogami! <br> Good afternoon! 
 Tsu-Tsubomi?! <br> What's with that outfit? 
 Tsubaki’s back to running the gift shop again!
 So starting today, I'm gonna be working in the dining hall!
@@ -73,7 +73,7 @@ Aaah! <br> I left a pot on the stove!
 Hey Tsubomi! You’re going the wrong way! The kitchen is over here!
 Aaah, I got all mixed up! Thank you very much! Please, excuse me!
 Oh boy… She’s still her usual clumsy self.
-Ah, Mr. Ogami! Good afternoon! 
+Ah, Mr. Ogami! <br> Good afternoon! 
 Tsubomi… The theater is closed, do we still have guests? 
 No, but that’s OK. This is a good chance for me to practice.
 I’m planning to become the perfect waitress in time for our Christmas performance!
@@ -513,13 +513,13 @@ Huh? Sounds like someone's at the door.
 Yes? Who is it? 
 Uhm… Ogami, is this a good time? 
 Oh, Kasumi. Just a minute. 
-Hi, Kasumi. Do you need something? 
+Hi, Kasumi. <br> Do you need something? 
 Well… If you’re available, do you think you could help me sort receipts later today?
 You can come to the secretarial office at 5 o'clock.
 Sorting receipts, huh…
 I'm sure you're busy. If it turns out you don't have time, that's quite all right. 
 Well, excuse me for now. 
-5 o'clock at the secretarial office. What to do? 
+5 o'clock at the secretarial office. <br> What to do? 
 Huh? Sounds like someone's at the door. 
 Who is it? 
 It's Yuri. Ogami, can I ask for your help? 
