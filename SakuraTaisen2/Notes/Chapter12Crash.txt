@@ -1,0 +1,8 @@
+06012b32
+
+06012b40 has 001e code that is probably read and compared with text
+
+06012bc4 add r0, r0 //300c to 009
+06012bc6 mov.w @(r0, r1), r11 //011d to 011c
+
+06012d60 cmp/eq 0xE, r0 //880e to 881c ?
