@@ -31,13 +31,13 @@ Kohran Li, inventor. Startles friend and foe alike with the inventions she emplo
 Orihime Soletta, prior Star Division member. Piloting a rose armor, she is known as one of the Red Nobles.
 Reni Milchstraﬂe. A combat professional, attacking accurately without a single wasted movement.
 Close-range combat Kouma Weapon. Its combat prowess exceeds the "Banrai" Kouma Weapons.
-Kouma Weapon: Gufuu. It has a long range, but is relatively weak in all other respects.
-Kouma Weapon: Kairai. Thanks to Mokujiki's leftover data, it's reached its full combat potential.
-Kouma Weapon: Ryukou. With well-balanced abilities across the board, this unit is a masterwork of design.
+Kouma Weapon: Gufuu. <br> It has a long range, but is relatively weak in all other respects.
+Kouma Weapon: Kairai. <br> Thanks to Mokujiki's leftover data, it's reached its full combat potential.
+Kouma Weapon: Ryukou. <br> Its well-balanced abilities across the board make it a masterwork of design.
 Healing-type Kouma Weapon. Boasts restorative abilities to revitalize other Kouma.
-Kouma Weapon: Inazuma. This Kouma boasts not only restorative abilities, but high mobility as well.
-Bomber-type Kouma Weapon. This impressive unit combines both powerful attacks and long range.
-Kouma Weapon: Ryukou. With well-balanced abilities across the board, this unit is a masterwork of design.
+Kouma Weapon: Inazuma. <br> This Kouma boasts not only restorative abilities, but high mobility as well.
+Bomber-type Kouma Weapon. <br> This impressive unit combines both powerful attacks and long range.
+Kouma Weapon: Ryukou. <br> Its well-balanced abilities across the board make it a masterwork of design.
 <LEAVE> Message 18
 <LEAVE> Message 19
 <LEAVE> Message 20

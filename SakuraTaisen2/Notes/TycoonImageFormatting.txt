@@ -1,0 +1,11 @@
+0605d87c
+
+00211636 contains table
+
+0600fc8c calculates x location for "Rich!!"
+
+0211a70 has table
+
+211a68 should be 0031 in order for "Ric" to touch "h"
+
+060CEABC is where table is originally located, written from code at 060449c0

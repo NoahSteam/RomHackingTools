@@ -12,7 +12,7 @@ This order is currently in effect. We'll fight our opponents unflinchingly.
 Attention all units! Initiating the "Mountain" strategy!
 We're sticking with the current strategy!
 Understood!
-The last of the Five Elements, Kongo… Now is the time to end our battle against these villains!
+The last of the Five Elements, Kongou… Now is the time to end our battle against these villains!
 Destroy Kongou's Hex Mech, Dainichiken!
 <LEAVE> 0 Message 1-3
 Pass through the gate and defeat Tsuchigumo!
@@ -32,13 +32,13 @@ Orihime Soletta, prior Star Division member. Piloting a rose armor, she is known
 Reni Milchstraße. A combat professional, attacking accurately without a single wasted movement.
 Close combat Kouma Weapon. Using the Banrai as a base, its combat abilities have been augmented.
 Hex Mech: Dainichiken. Piloted by Kongou of the Five Elements, it excels in close-range combat.
-Wakiji Kai: Oudouji. Part of Kongou's personal squad, painted the same color as his Dainichiken.
+Wakiji Kai: Oudouji. <br> Part of Kongou's personal squad, painted the same color as his Dainichiken.
 Kouma Weapon: Reppuu. A long-ranged support-type Kouma modified by the Black Demon Society.
 Healing-type Kouma Weapon. A Kouma Weapon with the ability to help other Kouma recover their strength.
 Kouma Weapon: Reppu. Designed with an emphasis on powerful, long-range attacks.
 Bomber-type Kouma Weapon. Equipped with an internal store of buckshot, it fires attacks from its mouth.
 Kouma Weapon: Senkou. Designed to inflict damage on multiple enemies at a time.
-Dimensional Cannon. Boasting a large attack range, it eliminates all intruders.
+Dimensional Cannon. <br> Boasting a large attack range, it eliminates all intruders.
 Summoner. <br> A demonic device that keeps spawning Kouma Weapons one after another.
 <LEAVE> Message 20
 Doesn't look like I need to cover anyone right now.

@@ -24,6 +24,11 @@ bool PatchTitleScreens(const string& InRootOutputDirectory, const string& InData
 	vector<FileNameContainer> wpallImages;
 	FindAllFilesWithinDirectory(wpallDirectory, wpallImages);
 
+	std::sort(wpallImages.begin(), wpallImages.end(), [](const FileNameContainer& a, const FileNameContainer& b)
+		{
+			return std::atoi(a.mNoExtension.c_str()) < std::atoi(b.mNoExtension.c_str());
+		});
+
 	int offset = InDiscNumber == 1 ? 0x190040 : InDiscNumber == 2 ? 0x221040 : 0x10e040;
 	const int imageStride = 320*224;
 	const int numImages = (int)wpallImages.size();

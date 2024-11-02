@@ -274,8 +274,8 @@ We finally manage to get the Mikasa in the air and you don’t have a strategy?
 You're from the Navy, you should already have some ideas on how to deploy this battleship. 
 Y-Yes, sir. 
 Now then, let me explain the details of our operation. Direct your attention to the monitor.
-From here on, the Mikasa will gradually ascend…
-Until it eventually reaches the same altitude as Musashi, lining up with it perfectly.
+From here on, the Mikasa will gradually ascend…<br>
+until its altitude matches<br>the Musashi.
 After that, we’ll accelerate towards our enemy at maximum output…
 Once we reach top speed, we’ll create an opening in the mouth with our canon and force our way inside.
 Hold up, we’re gonna ram the whole ship into that thing?! 

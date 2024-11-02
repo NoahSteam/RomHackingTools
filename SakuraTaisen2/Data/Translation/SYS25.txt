@@ -35,9 +35,9 @@ Ultimate Weapon Shinnou. An all-powerful weapon of mass destruction, powered by 
 Ultimate Weapon Shinnou. It has opened up all of its engines and reached full power.
 Ultimate Weapon Shinnou. The shockwave attack from its arms is highly destructive.
 Obeyer. A weapon made of vengeful spirits that follows Shinnou's orders.
-Kouma Weapon: Inazuma. This Kouma boasts not only restorative abilities, but high mobility as well.
-Bomber-type Kouma Weapon. This impressive unit combines both powerful attacks and long range.
-Kouma Weapon: Ryukou. With well-balanced abilities across the board, this unit is a masterwork of design.
+Kouma Weapon: Inazuma. <br> This Kouma boasts not only restorative abilities, but high mobility as well.
+Bomber-type Kouma Weapon. <br> This impressive unit combines both powerful attacks and long range.
+Kouma Weapon: Ryukou. <br> Its well-balanced abilities across the board make it a masterwork of design.
 <LEAVE> Message 18
 <LEAVE> Message 19
 <LEAVE> Message 20

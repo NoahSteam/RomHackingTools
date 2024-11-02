@@ -32,13 +32,13 @@ Orihime Soletta, prior Star Division member. Piloting a rose armor, she is known
 Reni Milchstraﬂe. A combat professional, attacking accurately without a single wasted movement.
 Close combat Kouma Weapon. Using the Banrai as a base, its combat abilities have been augmented.
 Support-type Kouma Weapon. A reinforced Reppuu model with a focus on offensive power.
-Kouma Weapon: Kairai. Thanks to Mokujiki's leftover data, it's reached its full combat potential.
+Kouma Weapon: Kairai. <br> Thanks to Mokujiki's leftover data, it's reached its full combat potential.
 Kouma Weapon. A long-distance support Kouma, augmented by the Black Demon Society.
 Healing-type Kouma Weapon. A Kouma Weapon with the ability to help other Kouma recover their strength.
-Kouma Weapon: Shu'u. Its attacks pummel its enemies like rain. Also highly mobile.
-Bomber-type Kouma Weapon. This impressive unit combines both powerful attacks and long range.
+Kouma Weapon: Shu'u. <br> Its attacks pummel its enemies like rain. Also highly mobile.
+Bomber-type Kouma Weapon. <br> This impressive unit combines both powerful attacks and long range.
 Kouma Weapon: Senkou. Designed to inflict damage on multiple enemies at a time.
-Hex Mech: Dark Kamui. The Black Demon Society's trump card, wielding the "Blossom Smite" technique.
+Hex Mech: Dark Kamui. <br> The Black Demon Society's trump card, wielding the "Blossom Smite" technique.
 Enkuu. <br> A support weapon developed by Mokujiki, modified for use with the Dark Kamui.
 Karan. <br> A support weapon devised by Kasha, modified for use with the Dark Kamui.
 Doesn't look like I need to cover anyone right now.

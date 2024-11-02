@@ -33,7 +33,7 @@ You're right. We'll find a way through this, so long as we don't give up.
 Not to worry, everyone. We may not be able to ride the Tenbu anymore… 
 But thankfully I also loaded the Koubu Kai into the hangar, just for such an occasion! 
 Plus, I prepared Koubu units for Orihime and Reni as well!
-Huh?! Kohran, do you mean it?! 
+Huh?! <br> Kohran, do you mean it?! 
 Yep, I never lie. You'll see once we get to the hangar. 
 Yaaay, yaaay! <br> C'mon, everybody, let's go see the Koubu! 
 It's true! The Koubu… They're all there, ready to go! 
@@ -69,7 +69,7 @@ Heehee, well said, Mr. Ensign!
 Heehee, I see you are left speechless by how perfettamente my uniform fits, Mr. Ensign.
 We share one Spirit Armor, one uniform, and one heart. 
 Now the Flower Division is fully united, wouldn't you say, Captain?
-…Yeah. Now the real battle begins. 
+…Yeah. <br> Now the real battle begins. 
 Right then, let's get back to the bridge. 
 Commander Yoneda's likely waiting for us. 
 Good, you're all here. 
@@ -87,7 +87,7 @@ We'll show 'em what we're made of!
 Good. Now then, you're dismissed. 
 Everyone get some rest and prepare yourselves for the infiltration mission! 
 Yes, sir! 
-(One hour until the infiltration mission… This battle is about to reach its climax.)
+(One hour until the infiltration mission… <br> This battle is about to reach its climax.)
 Ogami. 
 Kaede? What is it? 
 The final battle is almost at hand.
@@ -182,7 +182,7 @@ Sumire…
 Even someone such as I… can feel nervous at times.
 As a member of the Flower Division… As a woman… Even I can have a loss of heart. 
 … 
-…I'm sorry, Ensign. I didn't want you to see me like this. 
+…I'm sorry, Ensign. <br> I didn't want you to see me like this. 
 Sumire… 
 I'll be all right now. I feel better having talked to you. 
 Right then, I'll be taking my leave, Ensign. 
@@ -280,7 +280,7 @@ We don't know what the enemy's capable of, so I can't really say.
 Discreet, just as I expected from you, sir. 
 But with the way we are now… I have no doubt that we can win. 
 The Flower Division's always overcome any hardship we've faced. 
-We never gave up… Even when all seemed lost, we overcame every obstacle. 
+We never gave up… <br> Even when all seemed lost, we overcame every obstacle. 
 And it's all because we had our captain. 
 It's thanks to you, sir, that we're able to fight beyond our full strength.
 … 
@@ -291,7 +291,7 @@ Maria. For the Flower Division, victory doesn't come with just winning the battl
 Only when every single one of us comes home alive can we truly call it a victory. 
 Yes, I know that. We will come back alive, every one of us. 
 Yeah, we will. 
-I'll be going now. Excuse me, Captain. 
+I'll be going now. <br> Excuse me, Captain. 
 We'll meet here again before the mission starts. 
 Right, I should get going too. 
 Yes… 
@@ -374,7 +374,7 @@ Iris? What's wrong? What are you doing here?
 I was just… looking outside. 
 It's not every day you get to see the top of the clouds like this, huh. 
 I always thought that Heaven was on top of the clouds. 
-But where we're going… It's not Heaven, is it? 
+But where we're going… <br> It's not Heaven, is it? 
 … 
 If we die… Where do you think we'll go? 
 Mon Frère… Do you know where Heaven is? 
@@ -411,12 +411,12 @@ We'll be together forever and ever and ever!
 Mon Frère. Let’s make sure we both get back from this fight.
 We're absolutely going home together no matter what! 
 Yeah. No matter what. 
-Uh-huh! That's a promise, Mon Frère. 
-Thanks, Mon Frère. I'm gonna go now. 
+Uh-huh! <br> That's a promise, Mon Frère. 
+Thanks, Mon Frère. <br> I'm gonna go now. 
 All right, get some rest before the mission, OK? 
 Okey-dokey! <br> See you later, Mon Frère! Bye-byyye! 
 Let's go on a date when we get back! 
-Hahaha. So it's a date, huh? 
+Hahaha. <br> So it's a date, huh? 
 Right, I'd better get going. 
 I can see the capital down below. 
 We can't afford to lose. We have to defend the city. 
@@ -468,7 +468,7 @@ OK, I'll be going, then. Good luck with your maintenance, Kohran.
 All right, see ya later in the command room. 
 Kohran must be working on the Koubu somewhere where I can't see her. 
 I don't want to get in the way of her work, so I'll just get going. 
-Hey, Reni. Were you resting in here? 
+Hey, Reni. <br> Were you resting in here? 
 …Yeah. 
 How do you like your new Flower Division uniform? 
 …Yeah. 
@@ -527,8 +527,8 @@ I'll leave her alone till it's time for the mission.
 Wh-What is this place?! 
 Ah, Mr. Ogami! 
 Arf, arf! Woof! 
-Ah! Tsubomi and 
-<br>too! 
+Ah! Tsubomi and<br> 
+too! 
 What the heck is this room? 
 Heheh, the Grand Imperial Theater transformed so it could fit inside the Mikasa…
 That’s why the seating area is now flipped upside-down.
@@ -538,8 +538,8 @@ Whoa, this room's upside-down, too.
 Looks like I'm in the audience seating area. 
 Ah, Mr. Ogami! 
 Arf, arf! Woof! 
-Ah! Tsubomi and 
-<br>too! 
+Ah! Tsubomi and<br> 
+too!  
 You two also came aboard?
 Heheh, yup! I can't work on the bridge just yet… 
 But everyone's letting me help with making tea and meals. 
@@ -548,7 +548,7 @@ I see…
 We can’t do much besides support you all from the sidelines…
 But we’ll do our best to help in any way we can! Good luck guys!
 Arf, arf, arf! 
-Haha, thanks Tsubomi, 
+Haha, thanks Tsubomi.<br> You too, 
 . 
 Mr. Ogami! <br>
 and I are rooting <br> for you! 
@@ -565,7 +565,7 @@ I-I see. So that's what this is.
 Oh, this area’s upside down as well. Looks like it's the Rose Division's room. 
 But then… That means… 
 EEEEEK! Ichirooo! 
-Ensign Ogami! Good work out there! 
+Ensign Ogami! <br> Good work out there! 
 Ogami… 
 So you're all aboard the Mikasa, too. 
 But of course. We wouldn't dream of missing such a historic battle. 
@@ -665,7 +665,7 @@ Deep within Musashi must lie the source of the demonic energy powering it.
 If you can destroy that power source with the Rite of Four Swords, you can seal away all this evil. 
 … 
 …Understood. 
-…Understood. I'll give it a shot. 
+…Understood. <br> I'll give it a shot. 
 And you, Sakura? 
 Yes! Ogami and I will do it together! 
 Thank you, both of you. 
@@ -716,7 +716,7 @@ Before you go off to fight… There's something I want to ask you.
 What's your attitude going into this battle? 
 We're coming back alive! 
 We must win at any cost!
-We're going to defeat Kyogoku… And we're coming back alive! 
+We're going to defeat Kyogoku… and we're coming back alive! 
 Very good… <br> You pass, Ogami. 
 We must defeat Kyogoku, no matter the cost! 
 In that case, if you're serious… Then I can't let you go. 

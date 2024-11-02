@@ -30,16 +30,16 @@ Iris, the Flower Division's mascot. She fights enemies with her mysterious super
 Kohran Li, inventor. Startles friend and foe alike with the inventions she employs.
 Orihime Soletta, prior Star Division member. Piloting a rose armor, she is known as one of the Red Nobles.
 Reni Milchstraße. A combat professional, attacking accurately without a single wasted movement.
-Gufuu. Focusing mainly on range, its other abilities are weak in comparison.
-Shu'u. Attacks multiple times, like a torrential rain. Highly mobile as well.
-Inazuma. This Kouma boasts not only restorative abilities, but high mobility as well.
-Ryukou. With well-balanced abilities across the board, this unit is a masterwork of design.
+Gufuu. <br> Focusing mainly on range, its other abilities are weak in comparison.
+Shu'u. <br> Attacks multiple times, like a torrential rain. Highly mobile as well.
+Inazuma. <br> This Kouma boasts not only restorative abilities, but high mobility as well.
+Ryukou. <br> Its well-balanced abilities across the board make it a masterwork of design.
 Dainichiken <br> Once defeated, the drill will come to an end.
 Enkuu. <br> An unmanned support drone designed by Mokujiki.
 Steam Rocket. A weapon developed by Mokujiki boasting high attack power.
-Dimensional Cannon. Boasting a large attack range, it eliminates all intruders.
+Dimensional Cannon. <br> Boasting a large attack range, it eliminates all intruders.
 Summoner. <br> A demonic device that keeps spawning Kouma Weapons one after another.
-Dimensional Cannon. A long-range cannon with high firepower.
+Dimensional Cannon. <br> A long-range cannon with high firepower.
 <LEAVE> Message 20
 Doesn't look like I need to cover anyone right now.
 Sakura… <br> I will protect you!

@@ -35,7 +35,7 @@ RO-type Otsu. A long-range attack Hex Mech. Only capable of attacking single tar
 HA-type Kou. A long-range attack Hex Mech. Capable of attacking multiple targets.
 L-Special. <br> A close-range Wakiji unit with healing capabilities.
 Chiken. Destroy it to end this exercise.
-Enkuu. An unmanned support drone developed by Mokujiki.
+Enkuu. <br> An unmanned support drone developed by Mokujiki.
 Steam Rocket. <br> A weapon developed by Mokujiki, boasting high attack power.
 Cross Homura. <br> A flame weapon developed by Mokujiki. An upgraded version of the Homura.
 Summoner. <br> A demonic device that keeps spawning Kouma Weapons one after another.

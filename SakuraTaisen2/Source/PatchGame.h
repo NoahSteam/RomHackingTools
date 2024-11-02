@@ -240,8 +240,8 @@ bool PatchTextDrawingCode(const string& inSourceGameDirectory, const string& inP
 		//	WriteCommand(0xd700,  0x011c); //06012700: same change to 011c
 			
 			//Compare FFFF and FFFE changed to to FF and FE
-			WriteCommand(0xd71a, 0x631c, 0x63d); // Compare value to fffa extu.w r1, r3 0601271a change to 631c
-			WriteCommand(0xd78a, 0x00fa, 0x00ff); // 06012788 fffa change to 00fa
+			WriteCommand(0xd71a, 0x631c, 0x631d); // Compare value to fffa extu.w r1, r3 0601271a change to 631c
+			WriteCommand(0xd78a, 0x00fa, 0xfffa); // 06012788 fffa change to 00fa
 			WriteCommand(0xde86, 0x666c, 0x666d); // Compare value to fffe extu.w r6, r6 06012e86 change to 666c
 			WriteCommand(0xdeb2, 0x00fe, 0xfeff); // 06012eb0 fffe change to 00fe
 			
@@ -253,7 +253,7 @@ bool PatchTextDrawingCode(const string& inSourceGameDirectory, const string& inP
 			WriteCommand(0xdf96, 0x0009, 0x300c);
 			WriteCommand(0xdf98, 0x02bc, 0x02bd); //Lips Text Read at 06012f98: mov.w @(r0, r11), r2 (add r0, r0 right above)     change to 02bc
 			WriteCommand(0xdf9c, 0x622c, 0x622d); //extu.w r2, r2 06012f9c (Reading Hight Bits)
-			WriteCommand(0xdf84, 0x61b0, 0x61ba); //Lips Text Read at 06012f84: mov.w @r11, r1                                    change to 61b0
+			WriteCommand(0xdf84, 0x61b0, 0x61b1); //Lips Text Read at 06012f84: mov.w @r11, r1                                    change to 61b0
 			WriteCommand(0xdffe, 0x0009, 0x300c);
 			WriteCommand(0xe000, 0x01bc, 0x01bd); //Lips Text Read at 06013000: mov.w @(r0, r11), r1 (add r0, r0 right above)     change to 01bc
 			WriteCommand(0xe004, 0x611c, 0x611d); //extu.w r1, r1 06013004 (Reading High Bits)
@@ -326,10 +326,10 @@ bool PatchTextDrawingCode(const string& inSourceGameDirectory, const string& inP
 
 			//Item Menu
 			WriteCommand(0x4B5B0, 0x011c, 0x300c); // 060505b0 add r0, r0 TO mov.b @(r0, r1), r1
-			WriteCommand(0x4B5B2, 0x611c, 0x611d); // 060505b2 mov.w@(r0, r1, r1) TO extu.w r1, r1 //011d to 611c
+			WriteCommand(0x4B5B2, 0x611c, 0x011d); // 060505b2 mov.w@(r0, r1, r1) TO extu.w r1, r1 //011d to 611c
 			WriteCommand(0x4B5C8, 0x621c, 0x621d); // 060505c8 extu.w r1, r2  621d TO 621c
 			WriteCommand(0x4B5f8, 0xe21c, 0xe20e); // 060505f8 e20e to e21c  max chars per line
-			WriteCommand(0x4B612, 0xe203, 0xe202); // 06050612 e202 to e203  max lines
+			WriteCommand(0x4B616,    0xe203, 0xe202); // 06050616 e202 to e203  max lines
 			WriteCommand(0x4B7EA, 0x00fe, 0xfffe); // 060507ea fffe = > 00fe
 			WriteCommand(0x4B7EE, 0x00ff, 0xffff); // 060507ee ffff = > 00ff
 
@@ -341,6 +341,10 @@ bool PatchTextDrawingCode(const string& inSourceGameDirectory, const string& inP
 			WriteCommand(0xdb1e, 0x6110, 0x6111); // 06012b1e mov.w @r1, r1 //6111 to 6110
 			WriteCommand(0xdb22, 0x631c, 0x631d); // 06012b22 extu.w r1, r3 //631d to 631c
 			WriteCommand(0xdc38, 0x666c, 0x666d); // 06012c38 extu.w r6, r6 //666d to 666c
+
+			//Fix for chapter 12 crash
+			WriteCommand(0xdbc4, 0x0009, 0x300c); // 06012bc4 add r0, r0 //300c to 009 
+			WriteCommand(0xdbc6, 0x011c, 0x011d); // 06012bc6 mov.w @(r0, r1), r11 //011d to 011c
 
 			//Auto-resume at the end of SK0808  (macro 66 in debug mode) (also used by Ogami lines)
 			WriteCommand(0x24f4e, 0x6200, 0x6201);// 06029f4e mov.w @r0, r2 //mov.w @r0, r2 6201 to 6200
@@ -509,10 +513,10 @@ bool PatchGame(const string& inSourceGameDirectory, const string& inTranslatedDa
 		return false;
 	}
 
-	//if( !PatchBattleTextDrawingCode(inSourceGameDirectory, inPatchedDirectory, inTranslatedDataDirectory) )
+	if( !PatchBattleTextDrawingCode(inSourceGameDirectory, inPatchedDirectory, inTranslatedDataDirectory) )
 	{
-	//	printf("Unable to patch battle text drawing code\n");
-	//	return false;
+		printf("Unable to patch battle text drawing code\n");
+		return false;
 	}
 
 	if(!PatchMainMenu(inPatchedDirectory, inTranslatedDataDirectory))
