@@ -329,7 +329,7 @@ bool PatchTextDrawingCode(const string& inSourceGameDirectory, const string& inP
 			WriteCommand(0x4B5B2, 0x611c, 0x011d); // 060505b2 mov.w@(r0, r1, r1) TO extu.w r1, r1 //011d to 611c
 			WriteCommand(0x4B5C8, 0x621c, 0x621d); // 060505c8 extu.w r1, r2  621d TO 621c
 			WriteCommand(0x4B5f8, 0xe21c, 0xe20e); // 060505f8 e20e to e21c  max chars per line
-			WriteCommand(0x4B616,    0xe203, 0xe202); // 06050616 e202 to e203  max lines
+			WriteCommand(0x4B616, 0xe203, 0xe202); // 06050616 e202 to e203  max lines
 			WriteCommand(0x4B7EA, 0x00fe, 0xfffe); // 060507ea fffe = > 00fe
 			WriteCommand(0x4B7EE, 0x00ff, 0xffff); // 060507ee ffff = > 00ff
 
@@ -574,13 +574,20 @@ bool PatchGame(const string& inSourceGameDirectory, const string& inTranslatedDa
 		return false;
 	}
 
-	if(!HackFixAutoResumeLines(inPatchedDirectory))
+	if(!PatchLipSyncDataForAdventure(inPatchedDirectory))
 	{
 		printf("Patching sync data failed\n");
 
 		return false;
 	}
 
+	/*
+	if(!HackFixAutoResumeLines(inPatchedDirectory))
+	{
+		printf("Patching sync data failed\n");
+
+		return false;
+	}*/
 	
 	if(!VerifyAutoResumeLines(inPatchedDirectory))
 	{
