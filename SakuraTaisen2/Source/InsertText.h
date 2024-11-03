@@ -181,6 +181,16 @@ bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTrans
 		}\
 	}
 
+#if USE_SINGLE_BYTE_LOOKUPS
+#define ConditinallyPadString(AdditionalLetters)\
+	if ((translatedString.mChars.size() + AdditionalLetters) % 2 == 0)\
+	{\
+		translatedString.AddChar(' ');\
+	}
+#else
+#define ConditinallyPadString(AdditionalLetters) {}
+#endif
+
 	printf("Inserting Text\n");
 
 	///////////
@@ -516,7 +526,7 @@ bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTrans
 					assert(numBytesInOriginalText - 3 >= 0);
 
 					if(sakuraFile.mLines[currSakuraStringIndex].mChars[numBytesInOriginalText - 3].mIndex == 0xfffa)
-					{
+					{						
 						translatedString.AddChar(0xfa);
 						translatedString.AddChar(sakuraFile.mLines[currSakuraStringIndex].mChars[numBytesInOriginalText-2].mIndex);
 					}
@@ -555,18 +565,26 @@ bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTrans
 							printf("Original line ended with a line break: %i\n", currSakuraStringIndex + 1);
 						}
 					}
-				}				
-
-#if USE_SINGLE_BYTE_LOOKUPS
-				//Strings need to start at 2byte boundaries, so pad this one if needed so next string is at boundary
-				if ((translatedString.mChars.size()) % 2 == 0)
+				}	
+				else //No special line ending codes
 				{
-					translatedString.AddChar(' ');
-				}
+#if USE_SINGLE_BYTE_LOOKUPS
+					//Strings need to start at 2byte boundaries, so pad this one if needed so next string is at boundary
+					//Going to add 0xff, so at this point, character count needs to be odd
+					if ((translatedString.mChars.size()) % 2 == 0)
+					{
+//						translatedString.AddChar(' ');
+					}
 #endif
+				}
 
 				//String ends with ffff
 				translatedString.AddChar(0xffff);
+
+				if ((translatedString.mChars.size()) % 2 != 0)
+				{
+					translatedString.AddChar(0xffff);
+				}
 
 				translatedLines.push_back(std::move(translatedString));
 			}
