@@ -147,10 +147,6 @@ void EncodeKinematronData(const uint32* pInDecodedData, const uint32 inDecodedDa
 		{
 			outEncodedData.push_back(SwapByteOrder(nextEncoded));
 		}
-		else
-		{
-	//		outEncodedData.push_back(0);
-		}
 	}
 }
 

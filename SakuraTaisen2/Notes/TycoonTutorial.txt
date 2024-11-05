@@ -39,3 +39,28 @@ Read at 00229020
 0601d096 mov.w @r9, r3 //6391 to 6390
 0601d0cc mov.w @r9, r3 //6391 to 6390
 0601d0ae add 2,r9 //7902 to 7901
+
+0601d09a extu.w r3, r2 //623d to 623c
+0601d0a4 extu.w r3, r1 //613d to 613c
+0601d0d6 extu.w r3, r1 //613d to 613c
+0601d0d0 extu.w r3, r2 //623d to 623c
+
+0601d116 ffff to 00ff
+0601d11e fffe to 00fe
+
+22973c
+229761
+
+--Positioning--
+Written to 0605d87c from 0603926e <- 0601cf04 <- 0601d14e <- 0602021c
+0601d1a8 has ff60 change to ff08
+
+0605529a has 009b which is added to ff60 for final x position written from 0601d1ec
+
+06007d64
+
+06020274 has some values around it which control X location.  Change from 009b to 0043
+"0000DAIF.BIN", 0x0001b274,
+
+0601efe2 has 009b for Sakura's final line
+06020d02 has 009b for Revolution tutorial final line
