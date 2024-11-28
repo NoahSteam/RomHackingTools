@@ -219,6 +219,9 @@ bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTrans
 	const bool bIsMESFile = false;
 	const string outputDirectory = inPatchedDirectory + Seperators + "SAKURA1\\";
 	CreateDirectoryHelper(outputDirectory);
+	
+	//For fixing print speed for the musical scene
+	const std::string sk0906FileName("SK0906");
 
 	//Insert text
 	for (const SakuraTextFile& sakuraFile : sakuraTextFiles)
@@ -274,13 +277,15 @@ bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTrans
 				return false;
 			}
 
+
 			//Get converted lines of text
 			const int maxCharsPerLine             = MaxCharsPerLine;//(240 / OutTileSpacingX);
 			const int maxLines                    = MaxLines;
 			const size_t numTranslatedLines       = translatedFile.mLines.size();
 			unsigned short numCharsPrintedForMES  = 0;
 			unsigned short numCharsPrintedFortTBL = 0;
-			
+			const bool bIsSK0906 = translatedFile.mFileNameInfo.mNoExtension == sk0906FileName;
+
 			for (size_t translatedLineIndex = 0; translatedLineIndex < numTranslatedLines; ++translatedLineIndex)
 			{
 				const TextFileData::TextLine& textLine = translatedFile.mLines[translatedLineIndex];
@@ -531,12 +536,17 @@ bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTrans
 						translatedString.AddChar(sakuraFile.mLines[currSakuraStringIndex].mChars[numBytesInOriginalText-2].mIndex);
 					}
 
-					//Can Leave this because it causes formatting issues that need to be dealt with manually
-					//For examples, search for fffd in the TextCode files.  SK0808 has an example on lines 59&60					
+					//The byte after FFFC indicates the print speed of the line
 					if (sakuraFile.mLines[currSakuraStringIndex].mChars[0].mIndex == 0xfffc)
 					{
-						translatedString.AddChar(sakuraFile.mLines[currSakuraStringIndex].mChars[1].mIndex, true);
+						const unsigned short speedDivisor = bIsSK0906 ? currSakuraStringIndex + 1 >= 9 && currSakuraStringIndex + 1 <= 42 : 0;
+						translatedString.AddChar(sakuraFile.mLines[currSakuraStringIndex].mChars[1].mIndex >> speedDivisor, true);
 						translatedString.AddChar(0xfc, true);
+
+						if(bIsSK0906)
+						{
+							printf("SK0906 SPEED FIX %i\n", currSakuraStringIndex + 1);
+						}
 
 						if(sakuraFile.mLines[currSakuraStringIndex].mChars[numBytesInOriginalText - 2].mIndex == 0xfffd)
 						{

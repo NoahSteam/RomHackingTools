@@ -1,166 +1,166 @@
 All right, Ogami,<br>let's go over the rules.<br>I'll keep it simple.
 In front of you is your hand.
-They are lined up from left to right in order of weakest to strongest.
-3 is the weakest, while 2 is the strongest. Remember that.
-Next, I'll go over how to play cards.
-First, pick whichever card you like and place it in the center.
-When you place your first card, you can pick any one you like.
-Oh, right! If you have a pair of the same number, you can play both at the same time!
-Just line up your cursor over the card you want to play…
-Then if you press the A or C Button… Look! The border changed color, see?
-And the same goes for playing more than two matching cards, just select them.
-See? You selected the second card just now.
-If you want to cancel, just press the B Button.
-Once you've decided, place your cursor over them again…
-Then press either A or C once more to play those cards.
-Then your opponent has to play the same amount but with a higher number.
-If you have no cards left, you'll have to pass. If everyone passes…
-Now you get to play the first card again.
+They are lined up from left to right in order of strength.
+3 is the weakest, 2 is the strongest. Keep that in mind.
+Next, I'll go over how to play.
+First, pick any card and place it in the center.
+When you place your first card, pick any one you like.
+Oh, right! If you have a pair of the same number, you can play them both!
+Just line up your cursor over the card...
+Then press A or C... Look! The color around the cards changed.
+The same applies for playing more than two matching cards.
+See? You were able to select the second card just now.
+If you ever want to cancel your selection, just press B.
+Once you've decided what cards to play, place your cursor over them again...
+Then you'll play your selection after pressing A or C once more.
+Now your opponent must play the same amount of cards but with a higher number.
+If you can’t play anything, you'll have to pass. If everyone else passes...
+Then you get to play the first card again.
 Ah! That's four cards of the same number! That makes a Revolution!
-When a Revolution happens, the strength order of all the cards is reversed.
-So 2 becomes the weakest and 3 becomes the strongest… It's chaotic!
-But if another Revolution happens, the order goes back to normal.
-Even if a Revolution occurs, the Joker will always beat any other card.
-The Joker is very powerful and can be paired with any other card. Use it wisely.
-…Oh, that's right, if you don't want to play, you can pass.
-Move your cursor over to PASS and press A or C.
-Finally, the game ends once you've gotten rid of all of your cards.
-Oh, I almost forgot! In our custom Flower Division rule set…
-Playing a 2 or a Joker as your final card is forbidden.
-Be careful not to be left with either a Joker or a 2 as your final card.
+When a Revolution happens, the cards’ strength order is reversed.
+So 2 becomes the weakest and 3 becomes the strongest... It's quite chaotic!
+But if another Revolution happens, the strength order reverts to normal.
+However, even after a Revolution, the Joker can still beat any other card.
+The Joker is very powerful and it can be paired with any card, too. Use it wisely.
+...Oh, that's right, if you simply don't want to play a card, you can willingly pass.
+Just move your cursor over to the Pass icon and press A or C.
+Finally, the game ends for you once your hand is empty.
+Oh, I almost forgot! In our custom Flower Division rule set...
+Playing a 2 or a Joker as your final card is strictly forbidden.
+So be very careful that neither of those are the last card in your hand.
 You're out of cards, Ogami! That means you're the Tycoon! Congrats!
-Starting with the first to play all their cards, it goes: Tycoon, Rich, Poor, and Beggar.
-In the next round, Poor or Beggar…
-…has to give up their strongest non-Joker cards to the Tycoon or the Rich.
-In exchange, the Tycoon and Rich can give whatever cards they like to the Poor and Beggar.
-The Tycoon and Beggar exchange two cards, while Rich and Poor exchange one.
-However, if the Tycoon doesn't get rid of all their cards first in the next round…
-They'll fall all the way down to Beggar, so be careful!
-Becoming Tycoon gets you 4 points, Rich 2 points, Poor 1 point, and Beggar 0 points.
-When a round is over, your points get added up.
-Whoever reaches a total of 16 points first is the overall winner!
-Well? Do you have a handle on the rules of Tycoon now?
+Starting with the first to finish the game, it goes: Tycoon, Rich, Poor, and Beggar.
+In the next round, whoever wound up as Poor or the Beggar...
+…has to give up their strongest non-Joker cards to the Tycoon or Rich.
+In exchange, the Tycoon and Rich can give whichever cards they like to the other two.
+The Tycoon and Beggar exchange two cards, while Rich and Poor only exchange one.
+However, if the Tycoon isn’t the first to empty their hand in the next round...
+They'll immediately fall all the way down to Beggar, so you better be careful!
+Tycoon gets you 4 points, Rich 2 points, Poor 1 point, and Beggar 0 points.
+When a round is over, all your points get added up.
+Whoever is the first to reach 16 points in total is the winner!
+Well? Do you think you have a handle on the rules now?
 All right then, let's play! Good luck!
 Yeah! I'll do my best!
 Alright, Ogami,<br>let's go over the rules.<br>I'll keep it simple.
 In front of you is your hand.
-They are lined up from left to right in order of weakest to strongest.
-3 is the weakest, while 2 is the strongest. Remember that.
-Next, I'll go over how to play cards.
-First, pick whichever card you like and place it in the center.
-When you place your first card, you can pick any one you like.
-Oh, right! If you have a pair of the same number, you can play both at the same time!
-Then your opponent has to play the same amount but with a higher number.
-If no cards left or you'd rather not play, you can pass.
+They are lined up from left to right in order of strength.
+3 is the weakest, 2 is the strongest. Keep that in mind.
+Next, I'll go over how to play.
+First, pick any card and place it in the center.
+When you place your first card, pick any one you like.
+Oh, right! If you have a pair of the same number, you can play them both!
+Then your opponent must play the same amount of cards but with a higher number.
+If you have nothing to play or you'd rather not use a card, you can pass.
 Sumire will tell you more about how to pass.
-Finally, the game ends once you've gotten rid of all of your cards.
-Players are then ranked and awarded points based on the order they finished.
+Finally, the game ends for you once you've emptied your hand.
+The players are then ranked and awarded points based on the order they finished.
 I'll let Kohran tell you more about how that works.
 Well, that does it for my explanations. Thanks for listening!
-Oh, did you need me for something?
-Very well, I'll tell you about how to pass.
-Suppose your opponent plays a card, and you have a stronger card…
-If you'd like to hold onto it, you can pass.
-Whenever you wish to pass, move the cursor away from the cards…
-And over the PASS icon, then press A or C.
-And look… Now you've passed on your turn, have you not?
-If your opponent plays a card stronger than anything in your hand…
-You'll pass automatically.
-If every other player has passed after you played your card…
-You'll get to play whichever card you like, setting the course of the game.
-Will you play a strong card and force your opponents to pass?
-Or would you rather pass and save those cards for later? Use your judgment, Ensign.
-…That concludes my explanation.
+Oh my, did you have need of me?
+Very well, I shall teach you about passing.
+Suppose your opponent plays a card, and you have a stronger one...
+If you'd like to hold onto that card for whatever reason, you can opt to pass.
+Whenever you wish to pass, move the cursor away from the cards...
+…and press A or C over the Pass icon.
+See that? Now you have passed on your turn.
+If your opponent plays a card stronger than anything in your hand...
+You will pass automatically.
+If every other player passes after you’ve played your card...
+You'll get to play any card you like, letting you set the course of the game.
+Will you play a powerful card and force your opponents to pass?
+Or would you rather pass and save those cards for later? It’s up to you, Ensign.
+...That concludes my explanation.
 I look forward to our duels, Ensign. Good day.
 Got it. I'd be more than happy to.
 I'll explain the controls for this game.
-First, playing the cards. When it's your turn, Captain…
+First, playing the cards. When it's your turn, Captain...
 Move the cursor over the card you wish to play.
-When you press either the A or C Button, the color of the card will change.
-If you wish to play multiple cards of the same number, move the cursor over to each card…
-And press A or C on them, one at a time.
-If you've changed your mind, you can press the B Button to cancel your selection.
-Otherwise, if you wish to play the cards, press A or C again.
-The game is won by emptying your hand.
-That said, Captain, we do have a house rule around here…
+Press A or C and the color of the card will change.
+If you wish to play multiple pairing cards, move the cursor over to each one...
+…and press A or C once more.
+If you change your mind, you can press B to cancel your selection.
+Otherwise, press A or C to play your selection.
+The game is won by playing all your cards and emptying your hand.
+That said, Captain, we do have a house rule...
 Playing either a 2 or a Joker as your final card is forbidden.
-How you choose to play and when…
-Therein lies the difference between victory and defeat. Think carefully before making your move.
+How you choose to play your cards and when...
+Therein lies the difference between victory and defeat. Think carefully before each move.
 Exchanging cards works much the same way.
-If you wish to learn more about exchanging cards, you can always ask Orihime.
+If you wish to learn more about exchanging, you can always ask Orihime.
 Now you should know everything there is to controlling the game.
 Take care, Captain. I'll see you later.
-Yo, Boss! Lemme teach ya about how Revolutions work.
-Y'see, a Revolution is…<br>Whoa whoa whoa!<br>A Revolution JUST happened!
-See how four cards of the same kind were played just now? That's what we call a  Revolution.
-When a Revolution happens, the order of how strong the cards are gets instantly reversed!
-Though the Joker's always gonna be the strongest card.
-Iris knows more about the Joker, so try asking her about it.
-Anyway, back to Revolutions. When the strength order of the cards gets reversed…
-That means that 2, which used to be the strongest, now becomes the weakest.
-And then 3, which used to be the weakest, becomes the strongest!
-Just like that, the tables are turned! Pretty cool, right?
-Even if you're stuck with low cards, a Revolution isn't off the table!
-With Revolutions, you could win in an instant, or lose everything…
-But there's still some luck, so don't think about it too hard, OK?
-Welp, that's it for my explanation. Got all that?
+Yo, Boss! Lemme teach ya ‘bout how Revolutions work.
+Y'see, a Revolution is...<br>Whoa whoa whoa!<br>A Revolution JUST happened!
+See that? Four cards of the same kind were played. That's called a Revolution.
+When a Revolution happens, the cards’ strength order gets reversed!
+Although the Joker's always gonna be the strongest.
+Iris knows more about the Joker, so try askin’ her ‘bout it.
+Anyway, back to Revolutions. When everythin’ gets reversed...
+That means 2, the strongest card, now becomes the weakest.
+And 3, which was the weakest, now becomes the strongest!
+Just like that, the tables are turned! Well? Pretty cool, right?
+Even if you're stuck with 3's or 4's, startin’ a Revolution isn't off the table!
+With Revolutions, you can either seize victory in an instant, or lose it all...
+Well, there's still some luck involved, so don't think ‘bout it too hard, OK?
+Welp, that does it for me. Did ya get all that?
 Alright, see ya later. Lookin' forward to our duel, Boss!
-Yoohoo!<br>It's me, Iris! And Jean-Paul's here too!
-Eheheh!<br>I'm gonna teach you about something good!
-And it's… this!<br>It's the Joker card!
-The Joker card is super strong; it beats every card!
-Even if a Revolution happens, it'll stay strong, always!
-…Oh yeah, ask Kanna for more on Revolutions.
-Oh, and I forgot! There's another important Joker trick!
-If you've no pair, combine one with the Joker and…
-Heehee!<br>Look, that makes a pair!
-Got it, Mon Frère? The Joker can turn into any card!
-That way it’s easy to play three cards at once!
-The Joker is good, but there's only one in the deck.
-Think hard about when you'll use it!
-See ya, Mon Frère! Let's play soon!
-And remember what I taught you!
-OK, let's start the show!
-I'm gonna teach ya about end-game scores… Oh!
-Look at you, Chief!<br>You emptied your hand!
-The first player to finish becomes the Tycoon.
-Then there's Tycoon, Rich, Poor, Beggar.
-Scores are as follows:
-Tycoon: 4, Rich: 2, Poor: 1, Beggar: 0.
-Scores tally one game at a time…
-And whoever reaches 16 points wins overall!
-Get 16 points, hit the top, win…
-Then it all starts over.
-Best way to reach 16? Become a Tycoon, but…
-There's a special house rule for Downfalls.
-Reni will explain that one.
-Alrighty, let's have fun!
-Ciao, Mr. Ensign!<br>What do you want to know?
-Shall I explain the card exchange?
-At the start, the Rich player…
-…gets the best card from Poor!
-They can't take the Joker from you, relax.
-In return, Rich gives any card they don't want to Poor.
-Also, the Tycoon takes the top two cards from Beggar!
-It’s tough for the poor players, but…
-With skill, even a Beggar can win the game!
-Well, I’ll never be Beggar…
-So I'm not worried about losing my cards! Non ne ho bisogno!
-I’d rather take my time…
-Pondering if I should take a 3 for a Revolution.
-Mr. Ensign, instead of talking…
-I want to start playing!<br>Let’s go!
-Okay. Here's the Downfall rule.
-The tides of war change fast.
-Even as Tycoon, Captain…
-Never let your guard down in battle.
-An advantaged Tycoon has a weakness.
-They must empty their hand first in the next game.
-If anyone else does it first…
-The Tycoon drops to Beggar instantly. This is Downfall.
-If Tycoon falls, they’re out immediately.
-A Tycoon never knows if they'll drop to Beggar.
-And you can use this rule on other Tycoons, too.
-The Tycoon position is dangerous.
-Remember this rule.
-That's all from me. Now, try a real match for experience.
+Yoohoo!<br>It's me, Iris!<br>And Jean-Paul's here too!
+Eheheh!<br>I'm gonna teach you about something really cool!
+And it's... this!<br>It's the Joker card!
+The Joker card is super duper strong, it can beat every other card!
+Even if a Revolution happens, it'll stay strong, no matter what!
+...Oh yeah, if you wanna know more about Revolutions, you should ask Kanna.
+Oh, and I totally forgot! There's another really important thing Jokers can do!
+If you don’t have any pairs, just combine any card with the Joker and...
+Heehee!<br>Look, they make a pair!
+Get it , Mon Frère? The Joker can turn into any card you want!
+That way it's super easy to play even three cards at a time!
+The Joker is really good, but there's only one in the whole deck.
+You gotta think real hard about when you're gonna use it!
+All right, bye-bye, Mon Frère! Let's play together real soon!
+And don't forget what I taught you!
+OK, let's get this show on the road!
+I'm gonna teach ya about scores at the end of a game... Oh!
+Look at you, Chief!<br>You emptied out your hand!
+The first player to get rid of all their cards becomes the Tycoon.
+In the order they finish, players are ranked as Tycoon, Rich, Poor, and Beggar.
+Here's how the scores shake out:
+Tycoon: 4 points, Rich: 2 points, Poor: 1 point, Beggar: 0.
+The scores get tallied one game at a time...
+And whoever reaches a total of 16 points first is the winner!
+Get 16 points, reach the top and win...
+Then the game starts over.
+There's no better way to hit 16 points than to become a Tycoon, but...
+You should know that we got a special house rule for Downfalls.
+I'll let Reni explain that one.
+Alrighty, now let's have some fun!
+Ciao, Mr. Ensign!<br>What would you like to know?
+How about I explain the card exchange?
+At the start of a game, the player that became Rich...
+…gets to take the strongest card from the Poor player!
+However, they aren't allowed to take the Joker, so you can relax.
+In exchange, Rich can give any card they don't want to the Poor player.
+Oh yes, and the Tycoon gets to take the two best cards from the Beggar!
+It's a shame that the two poor players are so weak...
+But if they use their head, even a Beggar can win the whole game!
+Well, I know I'll never become Beggar...
+So I have no need to worry about my cards being taken! Non ne ho bisogno!
+I'd much rather take my sweet time...
+Pondering if I should take a 3 in preparation for a Revolution.
+Now, Mr. Ensign, rather than explaining things to you all day...
+I want to start playing!<br>Let's go already!
+OK. I'll teach you about the Downfall rule.
+The tides of war can change in an instant.
+Even if you become Tycoon, Captain...
+You must never let your guard down in battle.
+Even an advantageous position like the Tycoon has a weakness.
+Whoever becomes the Tycoon must be the first to empty their hand in the next game.
+If someone else were to empty their hand before them...
+The Tycoon immediately drops to Beggar status. This is the Downfall rule.
+If the Tycoon suffers a Downfall, their game ends immediately.
+The Tycoon never knows when they might fall.
+Of course, you can use this rule against any other Tycoons as well.
+The position of Tycoon is always fraught with danger.
+Make sure never to forget this rule.
+That is all. Now, I'd recommend gaining some practical experience in a real match.
