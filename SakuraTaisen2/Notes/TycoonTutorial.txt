@@ -64,3 +64,5 @@ Written to 0605d87c from 0603926e <- 0601cf04 <- 0601d14e <- 0602021c
 
 0601efe2 has 009b for Sakura's final line
 06020d02 has 009b for Revolution tutorial final line
+060216aa has mov 0x7b, r6 for Joker's second to final line (e67b)
+0602177c has 008b for Joker's final line
