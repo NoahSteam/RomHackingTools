@@ -184,7 +184,9 @@ void ExtractTycoonIntroImages(const std::string& inRootDirectory, const std::str
 				const uint32 imageSize             = bIs4Bit ? (imageWidth * imageHeight) >> 1 : imageWidth * imageHeight;
 
 				const std::string imageFileName = outputDirectory + std::to_string(k) + std::string("_") + IntToHexString(dataSetOffset) + std::string("_") + std::to_string(i) + imageExt;
-				ExtractImageFromData(buffer + imageOffset, imageSize, imageFileName, buffer + paletteOffset, 512, bIs4Bit, imageWidth, imageHeight, 1, 256, 0, true, bInBmp);
+				
+				const char* pPalette = k == 10 && i == 19 ? daifFile.GetData() + 0x00048324 : buffer + paletteOffset;
+				ExtractImageFromData(buffer + imageOffset, imageSize, imageFileName, pPalette, 512, bIs4Bit, imageWidth, imageHeight, 1, 256, 0, true, bInBmp);
 
 				imageOffset += imageSize;
 			}

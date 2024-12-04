@@ -75,6 +75,8 @@ ExtractFaceWinFiles c:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1 c:\Users\163
 ExtractMNameCGFiles c:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1 C:\Users\16306\Desktop\Rizwan\RomHackingTools\SakuraTaisen2\Data\MNameCG1_Palette.bin C:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\Disc1\MNameCG\
 CreateNameCG1Spreadsheet C:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\Disc1\MNameCGPNG\3
 CreateNameGOVERSpreadsheet C:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\Disc1\BattleMenu\GOVERTV1_TranslationFiles
+ExtractBGDatFiles  c:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1 C:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\Disc1\BGData\
+ExtractNBGFile c:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1\SAKURA1\NBGFile1.ALL C:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\Disc1\NBGFile 1
 ExtractBattleMenu c:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1 1 C:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\Disc1\BattleMenu\
 ExtractMainMenu c:\Users\16306\Desktop\Rizwan\SakuraWars2\Disc1 1 C:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\Disc1\MainMenu\
 CreateNamePBookFLSpreadsheet C:\Users\16306\Desktop\Rizwan\SakuraWars2\ExtractedData\Disc1\MainMenu_PNG\PBOOK_FL

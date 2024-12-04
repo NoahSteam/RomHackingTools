@@ -154,6 +154,24 @@ bool PatchTycoonTutorialRenderingCode(const string& inOriginalDirectory, const s
 		{0x18096, 0x6390, 0x6391}, //0601d096 mov.w @r9, r3 //6391 to 6390
 		{0x180cc, 0x6390, 0x6391}, //0601d0cc mov.w @r9, r3 //6391 to 6390
 		{0x180ae, 0x7901, 0x7902}, //0601d0ae add 2,r9      //7902 to 7901
+
+		//High byte letters fix for single byte encoding
+		{0x1809a, 0x623c, 0x623d}, //0601d09a extu.w r3, r2 //623d to 623c
+		{0x180a4, 0x613c, 0x613d}, //0601d0a4 extu.w r3, r1 //613d to 613c
+		{0x180d0, 0x623c, 0x623d}, //0601d0d0 extu.w r3, r2 //623d to 623c
+		{0x180d6, 0x613c, 0x613d}, //0601d0d6 extu.w r3, r1 //613d to 613c
+		
+		{0x18116, 0x00ff, 0xffff}, //0601d116 ffff to 00ff
+		{0x1811e, 0x00fe, 0xfffe}, //0601d11e fffe to 00fe
+
+		//Shift final text box position
+		{0x19fe2, 0x0043, 0x009b}, //0601efe2 has 009b someone's final line
+		{0x1b274, 0x0043, 0x009b}, //06020274 has 009b for Sakura's final line
+		{0x1bd02, 0x0043, 0x009b}, //06020d02 has 009b for Revolution tutorial final line
+		{0x1c6aa, 0xe643, 0xe67b}, //060216aa has mov 0x7b, r6 for Joker's second to final line (e67b)
+		{0x1c77c, 0x0043, 0x008b}, //0602177c has 008b for Joker's final line
+		{0x1e564, 0x0043, 0x008b}, //06023564 has 008b for Reni's final line
+
 	};
 
 	const int numEntries = sizeof(patchingData) / sizeof(PatchingData);
