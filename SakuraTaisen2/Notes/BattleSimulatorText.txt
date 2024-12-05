@@ -1,0 +1,15 @@
+20f728 has "Destroy Tsuchigumo's Hex Mex"
+
+06075042 mov.w @(r0, r1), r1  //011d to 011c ? 
+06075044 extu.w r1, r1  //611d ?
+
+06086c98 add r0, r0 //3000c to 0009
+06086c9a mov.w @(r0, r1), r1 //011d to 011c
+
+//Taking value of font sheet and multiplying it by 64
+06087122 shll2 r4
+  //Replace with 
+mov    0x30, r1 //e130
+mul.u  r4, r1   //214e
+sts    macl, r4 //041a
+nop             //0009

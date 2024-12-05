@@ -116,6 +116,9 @@
 	"M50PRG.BIN", 0x00025592, 0x1c, 0x0e,\
 	"M50PRG.BIN", 0x000256a2, 0x1c, 0x0e,\
 	"M50PRG.BIN", 0x000257d8, 0x1c, 0x0e,\
+	"M51PRG.BIN", 0x0002d8d6, 0x1c, 0x0e,\
+	"M51PRG.BIN", 0x0002d9e6, 0x1c, 0x0e,\
+	"M51PRG.BIN", 0x0002db1c, 0x1c, 0x0e,\
 	"M52PRG.BIN", 0x000210ca, 0x1c, 0x0e,\
 	"M52PRG.BIN", 0x000211da, 0x1c, 0x0e,\
 	"M52PRG.BIN", 0x00021310, 0x1c, 0x0e,\
@@ -172,6 +175,7 @@
 	"M47PRG.BIN", 0x0002da1c, 0x1b, 0x0d,\
 	"M49PRG.BIN", 0x00021038, 0x1b, 0x0d,\
 	"M50PRG.BIN", 0x00025970, 0x1b, 0x0d,\
+	"M51PRG.BIN", 0x0002dcb4, 0x1b, 0x0d,\
 	"M52PRG.BIN", 0x000214a8, 0x1b, 0x0d,\
 	"M53PRG.BIN", 0x0002e9a4, 0x1b, 0x0d,\
 	"M54PRG.BIN", 0x0002e324, 0x1b, 0x0d,\
@@ -218,6 +222,7 @@
 	"M47PRG.BIN", 0x0002da28, 0x03, 0x02,\
 	"M49PRG.BIN", 0x00021044, 0x03, 0x02,\
 	"M50PRG.BIN", 0x0002597c, 0x03, 0x02,\
+	"M51PRG.BIN", 0x0002dcc0, 0x03, 0x02,\
 	"M52PRG.BIN", 0x000214b4, 0x03, 0x02,\
 	"M53PRG.BIN", 0x0002e9b0, 0x03, 0x02,\
 	"M54PRG.BIN", 0x0002e330, 0x03, 0x02,\
@@ -264,6 +269,7 @@
 	"M47PRG.BIN", 0x0002da70, 0x1c, 0x0e,\
 	"M49PRG.BIN", 0x0002108c, 0x1c, 0x0e,\
 	"M50PRG.BIN", 0x000259c4, 0x1c, 0x0e,\
+	"M51PRG.BIN", 0x0002dd08, 0x1c, 0x0e,\
 	"M52PRG.BIN", 0x000214fc, 0x1c, 0x0e,\
 	"M53PRG.BIN", 0x0002e9f8, 0x1c, 0x0e,\
 	"M54PRG.BIN", 0x0002e378, 0x1c, 0x0e,\
@@ -311,6 +317,7 @@
 	"M47PRG.BIN", 0x0002dad0, (27 * 4 * 50) >> 1, 0x0a7f,\
 	"M49PRG.BIN", 0x000210ec, (27 * 4 * 50) >> 1, 0x0a7f,\
 	"M50PRG.BIN", 0x00025a24, (27 * 4 * 50) >> 1, 0x0a7f,\
+	"M51PRG.BIN", 0x0002dd68, (27 * 4 * 50) >> 1, 0x0a7f,\
 	"M52PRG.BIN", 0x0002155c, (27 * 4 * 50) >> 1, 0x0a7f,\
 	"M53PRG.BIN", 0x0002ea58, (27 * 4 * 50) >> 1, 0x0a7f,\
 	"M54PRG.BIN", 0x0002e3d8, (27 * 4 * 50) >> 1, 0x0a7f,\
@@ -433,6 +440,9 @@
 	"M50PRG.BIN", 0x000255d0, 0x1b, 0x0d,\
 	"M50PRG.BIN", 0x000256ea, 0x1b, 0x0d,\
 	"M50PRG.BIN", 0x00025816, 0x1b, 0x0d,\
+	"M51PRG.BIN", 0x0002d914, 0x1b, 0x0d,\
+	"M51PRG.BIN", 0x0002da2e, 0x1b, 0x0d,\
+	"M51PRG.BIN", 0x0002db5a, 0x1b, 0x0d,\
 	"M52PRG.BIN", 0x00021108, 0x1b, 0x0d,\
 	"M52PRG.BIN", 0x00021222, 0x1b, 0x0d,\
 	"M52PRG.BIN", 0x0002134e, 0x1b, 0x0d,\
@@ -527,6 +537,8 @@
 	"M49PRG.BIN", 0x00020ebe, 0x03, 0x02, \
 	"M50PRG.BIN", 0x000255b0, 0x03, 0x02, \
 	"M50PRG.BIN", 0x000257f6, 0x03, 0x02, \
+	"M51PRG.BIN", 0x0002d8f4, 0x03, 0x02, \
+	"M51PRG.BIN", 0x0002db3a, 0x03, 0x02, \
 	"M52PRG.BIN", 0x000210e8, 0x03, 0x02, \
 	"M52PRG.BIN", 0x0002132e, 0x03, 0x02, \
 	"M53PRG.BIN", 0x0002e5e4, 0x03, 0x02, \
@@ -578,6 +590,7 @@
 	"M47PRG.BIN", 0x0002d76c, 0x03, 0x02, \
 	"M49PRG.BIN", 0x00020d88, 0x03, 0x02, \
 	"M50PRG.BIN", 0x000256c0, 0x03, 0x02, \
+	"M51PRG.BIN", 0x0002da04, 0x03, 0x02, \
 	"M52PRG.BIN", 0x000211f8, 0x03, 0x02, \
 	"M53PRG.BIN", 0x0002e6f4, 0x03, 0x02, \
 	"M54PRG.BIN", 0x0002e074, 0x03, 0x02, \
@@ -1387,6 +1400,7 @@ nop          //0009
 	PatchCharacterDimensions("M47PRG.BIN",   0x0002d9f0),\
 	PatchCharacterDimensions("M49PRG.BIN",   0x0002100c),\
 	PatchCharacterDimensions("M50PRG.BIN",   0x00025944),\
+	PatchCharacterDimensions("M51PRG.BIN",   0x0002dc88),\
 	PatchCharacterDimensions("M52PRG.BIN",   0x0002147c),\
 	PatchCharacterDimensions("M53PRG.BIN",   0x0002e978),\
 	PatchCharacterDimensions("M54PRG.BIN",   0x0002e2f8),\
@@ -2229,6 +2243,9 @@ nop          //0009
     SingleByteFastForward("M50PRG.BIN", 0x00025554),\
     SingleByteFastForward("M50PRG.BIN", 0x0002565a),\
     SingleByteFastForward("M50PRG.BIN", 0x00025792),\
+	SingleByteFastForward("M51PRG.BIN", 0x0002d898),\
+	SingleByteFastForward("M51PRG.BIN", 0x0002d99e),\
+	SingleByteFastForward("M51PRG.BIN", 0x0002dad6),\
     SingleByteFastForward("M52PRG.BIN", 0x0002108c),\
     SingleByteFastForward("M52PRG.BIN", 0x00021192),\
     SingleByteFastForward("M52PRG.BIN", 0x000212ca),\
@@ -2298,6 +2315,7 @@ nop          //0009
     PatchSingleByteHiCharacterHandling("M47PRG.BIN", 0x0002d71e),\
     PatchSingleByteHiCharacterHandling("M49PRG.BIN", 0x00020d3a),\
     PatchSingleByteHiCharacterHandling("M50PRG.BIN", 0x00025672),\
+	PatchSingleByteHiCharacterHandling("M51PRG.BIN", 0x0002d9b6),\
     PatchSingleByteHiCharacterHandling("M52PRG.BIN", 0x000211aa),\
     PatchSingleByteHiCharacterHandling("M53PRG.BIN", 0x0002e6a6),\
     PatchSingleByteHiCharacterHandling("M54PRG.BIN", 0x0002e026),\
@@ -2706,6 +2724,7 @@ nop          //0009
     PatchSingleByteZeroExtend("M47PRG.BIN", 0x0002d618),\
     PatchSingleByteZeroExtend("M49PRG.BIN", 0x00020c34),\
     PatchSingleByteZeroExtend("M50PRG.BIN", 0x0002556c),\
+	PatchSingleByteZeroExtend("M51PRG.BIN", 0x0002d8b0),\
     PatchSingleByteZeroExtend("M52PRG.BIN", 0x000210a4),\
     PatchSingleByteZeroExtend("M53PRG.BIN", 0x0002e5a0),\
     PatchSingleByteZeroExtend("M54PRG.BIN", 0x0002df20),\
@@ -2786,6 +2805,7 @@ nop          //0009
 		PatchHeightSpacing("M47PRG.BIN", 0x0002d9d0),\
 		PatchHeightSpacing("M49PRG.BIN", 0x00020fec),\
 		PatchHeightSpacing("M50PRG.BIN", 0x00025924),\
+		PatchHeightSpacing("M51PRG.BIN", 0x0002dc68),\
 		PatchHeightSpacing("M52PRG.BIN", 0x0002145c),\
 		PatchHeightSpacing("M53PRG.BIN", 0x0002e958),\
 		PatchHeightSpacing("M54PRG.BIN", 0x0002e2d8),\
@@ -2835,6 +2855,7 @@ nop          //0009
 		PatchWidthSpacing("M47PRG.BIN", 0x0002da00),\
 		PatchWidthSpacing("M49PRG.BIN", 0x0002101c),\
 		PatchWidthSpacing("M50PRG.BIN", 0x00025954),\
+		PatchWidthSpacing("M51PRG.BIN", 0x0002dc98),\
 		PatchWidthSpacing("M52PRG.BIN", 0x0002148c),\
 		PatchWidthSpacing("M53PRG.BIN", 0x0002e988),\
 		PatchWidthSpacing("M54PRG.BIN", 0x0002e308),\
