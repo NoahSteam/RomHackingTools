@@ -321,7 +321,7 @@ bool PatchLongDayText(const string& inPatchedSakuraDirectory, const string& inTr
 			const uint32 dataSize = dataArray.size() * sizeof(uint8);
 			if (writeOffset + dataSize >= omkEntry.FooterOffset)
 			{
-				printf("Translation for Long Data does not fit in string table. Got up to: %s\n", translatedFile.mLines[lineIndex].mFullLine.c_str());
+				printf("Translation for Long Day does not fit in string table. Got up to: %s in %s\n", translatedFile.mLines[lineIndex].mFullLine.c_str(), translatedFile.mFileNameInfo.mFileName.c_str());
 				break;
 			}
 

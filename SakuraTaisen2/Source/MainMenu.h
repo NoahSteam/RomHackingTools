@@ -26,7 +26,7 @@ struct CustomMenuImageInfo
 
 //Found manually
 const uint16 CharBioImageOffset = (0x320a0 / 8);
-const int NumCustomMainMenuImages = 17;
+const int NumCustomMainMenuImages = 21;
 MainMenuImageInfo ManuallyFoundMainMenuImages[NumCustomMainMenuImages]
 {
 	0, 128, 16, (uint16)(0x3c460 / 8),
@@ -52,7 +52,13 @@ MainMenuImageInfo ManuallyFoundMainMenuImages[NumCustomMainMenuImages]
 	0, 72, 120, CharBioImageOffset,
 
 	//Missing game setting
-	0, 16, 112, (uint16)(0x542a0 / 8)
+	0, 16, 112, (uint16)(0x542a0 / 8),
+
+	//Delete file
+	0, 128, 16, (uint16)(0x3b5e0 / 8),
+	0, 112, 16, (uint16)(0x3b5e0 / 8),
+	0, 112, 16, (uint16)(0x3b5e0 / 8),
+	0, 112, 16, (uint16)(0x3b5e0 / 8),
 };
 
 const int NumPBEyeImages = 12;
