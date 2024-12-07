@@ -22,20 +22,21 @@ struct MiniGameFiles
 	const char* pDataFileName;
 	uint16      imageInfoTableOffset;
 	uint32      standardPaletteOffset;
+	uint32      logoPaletteOffset;
 };
 
 const int NumMiniGames = 9;
 const MiniGameFiles miniGameFiles[NumMiniGames] =
 {
-	"INST_AL", "0000DAIF.BIN", 0xcf64, 0x46770,
-	"INST_IR", "0000IRIS.BIN", 0xcd10, 0x339e0,
-	"INST_KN", "0000KANN.BIN", 0xc628, 0x3afc4,
-	"INST_KR", "0000KORA.BIN", 0xcbc8, 0x3c478,
-	"INST_MR", "0000MARI.BIN", 0x8fc8, 0x35178,
-	"INST_OH", "0000ORIH.BIN", 0xcbcc, 0x33058,
-	"INST_RN", "0000RENI.BIN", 0xa3f4, 0x30e34,
-	"INST_SK", "0000SAKU.BIN", 0x8c00, 0x38f00,
-	"INST_SM", "0000SUMI.BIN", 0xcd20, 0x31dac,
+	"INST_AL", "0000DAIF.BIN", 0xcf64, 0x46770, 0x46770-32,
+	"INST_IR", "0000IRIS.BIN", 0xcd10, 0x339e0, 0x339e0-32,
+	"INST_KN", "0000KANN.BIN", 0xc628, 0x3afc4, 0x3afc4-32,
+	"INST_KR", "0000KORA.BIN", 0xcbc8, 0x3c478, 0x3c478-32,
+	"INST_MR", "0000MARI.BIN", 0x8fc8, 0x35178, 0x35178-32,
+	"INST_OH", "0000ORIH.BIN", 0xcbcc, 0x33058, 0x33038,
+	"INST_RN", "0000RENI.BIN", 0xa3f4, 0x30e34, 0x30e34-32,
+	"INST_SK", "0000SAKU.BIN", 0x8c00, 0x38f00, 0x38f00-32,
+	"INST_SM", "0000SUMI.BIN", 0xcd20, 0x31dac, 0x31dac-32,
 };
 
 struct MiniGameMiscImageData
@@ -306,6 +307,30 @@ void ExtractMiscMiniGameImages(const string& inSakuraDirectory, bool bInIsBmp, c
 		return;
 	}
 
+	FileData kannaFile;
+	if (!kannaFile.InitializeFileData("0000KANN.BIN", (inSakuraDirectory + string("SAKURA3\\0000KANN.BIN")).c_str()))
+	{
+		return;
+	}
+
+	FileData orihimeFile;
+	if (!orihimeFile.InitializeFileData("0000ORIH.BIN", (inSakuraDirectory + string("SAKURA3\\0000ORIH.BIN")).c_str()))
+	{
+		return;
+	}
+
+	FileData oneTwoThreeSFile;
+	if (!oneTwoThreeSFile.InitializeFileData("123S.CG", (inSakuraDirectory + string("SAKURA3\\123S.CG")).c_str()))
+	{
+		return;
+	}
+
+	FileData mgOhFile;
+	if (!mgOhFile.InitializeFileData("MGOH_DAT.ALL", (inSakuraDirectory + string("SAKURA3\\MGOH_DAT.ALL")).c_str()))
+	{
+		return;
+	}
+
 	//Should be used by 42_0000bd20 images
 	PaletteData logoPaletteSakura;
 	if (!logoPaletteSakura.CreateFrom15BitData(sakuraFile.GetData() + 0x00038ee0, 32))
@@ -458,6 +483,14 @@ void ExtractMiscMiniGameImages(const string& inSakuraDirectory, bool bInIsBmp, c
 	}
 
 	ExtractEncodedSumireImages(inSakuraDirectory, inOutputDirectory, bInIsBmp);
+
+	//123S file
+	const std::string out123sImageName = inOutputDirectory + std::string("123s") + imageExt;
+	ExtractImageFromData(oneTwoThreeSFile.GetData() + 0x3fc0, (304*96)/2, out123sImageName, kannaFile.GetData() + 0x3b7a8, 512, true, 304, 96, 1, 256, 0, true, bInIsBmp);
+
+	//MG_OH file
+	const std::string orihimeImageName = inOutputDirectory + std::string("MG_OH") + imageExt;
+	ExtractImageFromData(mgOhFile.GetData() + 0x23000, (32*16)/2, orihimeImageName, orihimeFile.GetData() + 0x33a38, 512, true, 32, 16, 1, 256, 0, true, bInIsBmp);
 }
 
 void ExtractMiniGames(const string& inSakuraDirectory, bool bInIsBmp, const string& inOutputDirectory)
@@ -523,7 +556,7 @@ void ExtractMiniGames(const string& inSakuraDirectory, bool bInIsBmp, const stri
 		}
 
 		PaletteData logoPalette;
-		if (!logoPalette.CreateFrom15BitData(binFileData.GetData() + miniGameFiles[i].standardPaletteOffset - 32, 32))
+		if (!logoPalette.CreateFrom15BitData(binFileData.GetData() + miniGameFiles[i].logoPaletteOffset, 32))
 		{
 			printf("Unable to create palette.\n");
 			return;
@@ -619,6 +652,47 @@ bool PatchEncodedMinigameImages(const string& inPatchedSakuraDirectory, const st
 {
 	const std::string cardFilePath = inPatchedSakuraDirectory + "SAKURA3\\SUMI_DAT.ALL";
 	return PatchKinematronEncodedImages(cardFilePath, inTranslatedDataDirectory + "Minigames\\Encoded\\Sumire\\", GSumireEncodedImageTable, GNumSumireEnodingKeys);
+}
+
+bool PatchSingleMinigameImage(const string& inImagePath, const string& inSakuraFileName, const int inWidth, const int inHeight, const uint32 inPatchingOffset)
+{
+	BmpToSaturnConverter convertedImage;
+	if (!convertedImage.ConvertBmpToSakuraFormat(inImagePath, false))
+	{
+		return false;
+	}
+
+	if (convertedImage.GetImageWidth() != inWidth || convertedImage.GetImageHeight() != inHeight)
+	{
+		printf("Image dimensions mismatch in %s.  Expected: %ix%i Got: %ix%i", inImagePath.c_str(), inWidth, inHeight, convertedImage.GetImageWidth(), convertedImage.GetImageHeight());
+		return false;
+	}
+
+	FileNameContainer fileName(inSakuraFileName);
+	FileReadWriter cgFileData;
+	if (!cgFileData.OpenFile(fileName.mFullPath))
+	{
+		return false;
+	}
+
+	cgFileData.WriteData(inPatchingOffset, convertedImage.GetImageData(), convertedImage.GetImageDataSize(), false);
+
+	return true;
+}
+
+bool PatchMiscSingleImages(const string& inPatchedSakuraDirectory, const string& inTranslatedDataDirectory)
+{
+	if( !PatchSingleMinigameImage(inTranslatedDataDirectory + "MiniGames\\123s.bmp", inPatchedSakuraDirectory + "SAKURA3\\123S.CG", 304, 96, 0x3fc0) )
+	{
+		return false;
+	}
+
+	if(!PatchSingleMinigameImage(inTranslatedDataDirectory + "MiniGames\\MG_OH.bmp", inPatchedSakuraDirectory + "SAKURA3\\MGOH_DAT.ALL", 32, 16, 0x23000))
+	{
+		return false;
+	}
+
+	return true;
 }
 
 bool PatchMiscMiniGameFiles(const string& inPatchedSakuraDirectory, const string& inTranslatedDataDirectory)
@@ -737,7 +811,8 @@ bool PatchMiscMiniGameFiles(const string& inPatchedSakuraDirectory, const string
 		}
 	}
 
-	return true;
+	//Patch 123s
+	return PatchMiscSingleImages(inPatchedSakuraDirectory, inTranslatedDataDirectory);
 }
 
 bool PatchMiniGames(const string& inPatchedSakuraDirectory, const string& inTranslatedDataDirectory)
