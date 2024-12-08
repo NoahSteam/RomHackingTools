@@ -123,7 +123,7 @@ const MiniGameMiscImageData MGSKImages[NumMgskEntries] =
 	1, 112, 48,  4, 0x1507f, 0x38aa0 - 32,
 	3, 112, 48,  4, 0x1cd01, 0x38aa0,
 	3, 112, 48,  4, 0x1ec81, 0x38aa0 + 32,
-	3, 112, 48,  4, 0x20c01, 0x38aa0 - 32,
+	6, 112, 48,  4, 0x20c01, 0x38aa0 - 32,
 };
 
 struct CommonMinigameUIData
