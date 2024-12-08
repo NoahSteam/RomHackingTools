@@ -299,7 +299,6 @@ bool PatchTycoonEncodedImages(const std::string& inPatchedSakuraDirectory, const
 	const std::string tycoonImageDir = inTranslatedDataDirectory + "Tycoon\\";
 
 	const std::string vdp2Image1 = tycoonImageDir + "VDP2Image1.bmp";
-//	ExtractImageWithTileSet<uint32>(cardFilePath, 192, 64, cardFilePath, 0xd4800, 0xd3020, 0xd5000, vdp2Image1, bInBmp, 4, ETileIndiceType::MinusOne);
 	if( !PatchTiledImage<uint32>(vdp2Image1, cardFilePath, 192 * 64 / 2, 0xd3020, 0xd4800, (192 / 8) * (64 / 8), ETileIndiceType::MinusOne) )
 	{
 		return false;

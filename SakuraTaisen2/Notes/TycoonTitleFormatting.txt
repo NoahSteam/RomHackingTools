@@ -1,0 +1,15 @@
+002100E8 contains x for "Tycoon".  Read at 0600fc82
+
+2100e0 00084 to 003a
+2100e8 003a to 0064
+2100f0 003a to 0064
+
+060c975c has 003a written to it
+
+060c975c has 6499e672 which when XOR'd with 0x64a3e63a becomes 0x003a0048 (read at 0x600ff2a)
+
+"CARD_DAT.ALL", 0x00035f5c (starts at 0x2c800), has encrypted data within it
+
+Within 1.bin of extracted Tycoon data lives our formatting data at 0x975c
+
+When patching tycoon images, pass in a callback into PatchTycoonEncodedImages that is called after each block is decoded. Within here, modify the formatting.
