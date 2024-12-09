@@ -217,7 +217,8 @@ struct KinematronEncodingKeyInfo
 };
 
 bool PatchKinematronEncodedImages(const std::string& inDataFilePath, const std::string& inImageDirectory, 
-								  const KinematronEncodingKeyInfo* pInKeys, uint32 inNumKeys)
+								  const KinematronEncodingKeyInfo* pInKeys, uint32 inNumKeys,
+								  const std::function<void(int BlockNumber, char* pBlockData, uint32 BlockSize)>& OnBlockDecoded = nullptr)
 {
 	//CARD_DAT
 	FileReadWriter cardFile;
@@ -241,6 +242,11 @@ bool PatchKinematronEncodedImages(const std::string& inDataFilePath, const std::
 		if (decodedSize > bufferSize)
 		{
 			assert(decodedSize < bufferSize);
+		}
+
+		if( OnBlockDecoded )
+		{
+			OnBlockDecoded(k, buffer, decodedSize);
 		}
 
 		//Create patched data buffer

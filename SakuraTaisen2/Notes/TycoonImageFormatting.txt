@@ -9,3 +9,30 @@
 211a68 should be 0031 in order for "Ric" to touch "h"
 
 060CEABC is where table is originally located, written from code at 060449c0
+
+Formating is located within 10.bin of Tycoon deocded data at ex9f0
+
+(Decoded data at 0x060ce9fc)
+00211A40 has X location for Very in "Very Rich" //00 to 20
+00211A48 has X location for Rich in "Very Rich" //40 to 60
+00211A58 hax X location for ! //a0
+00211A60 hax X location for ! //b0
+
+//Down Fall
+00211b38 X location for Down //12 to 1c
+
+Decoded to 060ceddc
+
+//...
+05c0198c has X location for ...
+00211694
+00211B20 //has 00b4 to a8
+
+//Very Poor...
+0605d87b
+00211634
+00211a90 has 0000 and is X position for Very //change to 10
+00211a98 has 0040 and is X position for Poor //change to 0050
+00211aa0 has 00c4 and is X position for . //change to 90 0020
+             d8
+			 ec

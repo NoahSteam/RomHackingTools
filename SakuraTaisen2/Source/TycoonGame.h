@@ -292,6 +292,154 @@ bool PatchTycoonRulesScreen(const std::string& inPatchedSakuraDirectory, const s
 	return true;
 }
 
+void PatchTycoonWarsLogoLocation(char* InData)
+{
+	//Patch location of "Tycoon Wars" so that Tycoon is on the left
+	uint8& tycoonX = *(uint8*)(InData + 0x973d);
+	uint8& warsX1  = *(uint8*)(InData + 0x975d);
+	uint8& warsX2  = *(uint8*)(InData + 0x977d);
+
+	if(tycoonX != 0x84 )
+	{
+		printf("Patching Tycoon Error: Expected 0x84 for position of Tycoon, but got 0x%02x", tycoonX);
+	}
+
+	if(warsX1 != 0x3a )
+	{
+		printf("Patching Tycoon Error: Expected 0x3a for position of W, but got 0x%02x", warsX1);
+	}
+
+	if(warsX2 != 0x3a )
+	{
+		printf("Patching Tycoon Error: Expected 0x3a for position of ars, but got 0x%02x", warsX2);
+	}
+
+	tycoonX = 0x3a;
+	warsX1 = 0x64;
+	warsX2 = 0x64;
+}
+
+void PatchVeryRichLocation(char* InData)
+{
+	//Patch location of "Tycoon Wars" so that Tycoon is on the left
+	uint8& veryX    = *(uint8*)(InData + 0xe9fd);
+	uint8& richX    = *(uint8*)(InData + 0xea1d);
+	uint8& exclaim1 = *(uint8*)(InData + 0xea5d);
+	uint8& exclaim2 = *(uint8*)(InData + 0xea7d);
+
+	if(veryX != 0x00 )
+	{
+		printf("Patching VeryRich Error: Expected 0x84 for position of Very, but got 0x%02x\n", veryX);
+	}
+
+	if(richX != 0x40 )
+	{
+		printf("Patching VeryRich Error: Expected 0x40 for position of Rich, but got 0x%02x\n", richX);
+	}
+
+	if(exclaim1 != 0xc4 )
+	{
+		printf("Patching VeryRich Error: Expected 0xc4 for position of !1, but got 0x%02x\n", exclaim1);
+	}
+
+	if(exclaim2 != 0xd7 )
+	{
+		printf("Patching VeryRich Error: Expected 0xd7 for position of !2, but got 0x%02x\n", exclaim2);
+	}
+
+	veryX = 0x20;
+	richX = 0x60;
+	exclaim1 = 0xa0;
+	exclaim2 = 0xb0;
+}
+
+void PatchDownFallLocation(char* InData)
+{
+	//Patch location of "DownFall" so that DownFall are together
+	uint8& downX = *(uint8*)(InData + 0xeddd);
+	uint8& dot1X = *(uint8*)(InData + 0xed7d);
+	uint8& dot1Y = *(uint8*)(InData + 0xed7f);
+	uint8& dot2X = *(uint8*)(InData + 0xed9d);
+	uint8& dot2Y = *(uint8*)(InData + 0xed9f);
+	uint8& dot3X = *(uint8*)(InData + 0xedbd);
+	uint8& dot3Y = *(uint8*)(InData + 0xedbf);
+
+	if(downX != 0x12 )
+	{
+		printf("Patching DownFall Error: Expected 0x12 for position of Tycoon, but got 0x%02x\n", downX);
+	}
+
+	if(dot1X != 0xb4)
+	{
+		printf("Patching DownFall. Error: Expected 0xb4 for position of .1, but got 0x%02x\n", dot1X);
+	}
+
+	if(dot2X != 0xc8)
+	{
+		printf("Patching DownFall.. Error: Expected 0xc8 for position of .2, but got 0x%02x\n", dot2X);
+	}
+
+	if(dot3X != 0xdc)
+	{
+		printf("Patching DownFall... Error: Expected 0xdc for position of .3, but got 0x%02x\n", dot3X);
+	}
+
+	downX = 0x1c;
+	dot1X = 0xaa;
+	dot1Y = 0x2a;
+	dot2X = 0xba;
+	dot2Y = 0x2a;
+	dot3X = 0xca;
+	dot3Y = 0x2a;
+}
+
+void PatchVeryPoorLocation(char* InData)
+{
+	//Patch location of "DownFall" so that DownFall are together
+	uint8& veryX = *(uint8*)(InData + 0xeb3d);
+	uint8& poorX = *(uint8*)(InData + 0xeb5d);
+	uint8& dot1X = *(uint8*)(InData + 0xeb9d);
+	uint8& dot1Y = *(uint8*)(InData + 0xeb9f);
+	uint8& dot2X = *(uint8*)(InData + 0xebbd);
+	uint8& dot2Y = *(uint8*)(InData + 0xebbf);
+	uint8& dot3X = *(uint8*)(InData + 0xebdd);
+	uint8& dot3Y = *(uint8*)(InData + 0xebdf);
+
+	if(veryX != 0 )
+	{
+		printf("Patching Very Error: Expected 0 for position of Very, but got 0x%02x\n", veryX);
+	}
+
+	if(poorX != 0x40 )
+	{
+		printf("Patching Poor Error: Expected 0x40 for position of Poor, but got 0x%02x\n", poorX);
+	}
+
+	if(dot1X != 0xc4)
+	{
+		printf("Patching Very Poor. Error: Expected 0xc4 for position of .1, but got 0x%02x\n", dot1X);
+	}
+
+	if(dot2X != 0xd8)
+	{
+		printf("Patching Very Poor.. Error: Expected 0xd8 for position of .2, but got 0x%02x\n", dot2X);
+	}
+
+	if(dot3X != 0xec)
+	{
+		printf("Patching Very Poor... Error: Expected 0xec for position of .3, but got 0x%02x\n", dot3X);
+	}
+
+	veryX = 0x10;
+	poorX = 0x50;
+	dot1X = 0x90;
+	dot1Y = 0x20;
+	dot2X = 0xa0;
+	dot2Y = 0x20;
+	dot3X = 0xb0;
+	dot3Y = 0x20;
+}
+
 bool PatchTycoonEncodedImages(const std::string& inPatchedSakuraDirectory, const std::string& inTranslatedDataDirectory)
 {
 	//CARD_DAT
@@ -304,7 +452,21 @@ bool PatchTycoonEncodedImages(const std::string& inPatchedSakuraDirectory, const
 		return false;
 	}
 
-	return PatchKinematronEncodedImages(cardFilePath, tycoonImageDir, GTycoonKeyEntries, sizeof(GTycoonKeyEntries) / sizeof(GTycoonKeyEntries[0]));
+	auto OnBlockDecoded = [](int InBlockNumber, char* InDecodedData, uint32 InDataSize) 
+	{
+		if(InBlockNumber == 1)
+		{
+			PatchTycoonWarsLogoLocation(InDecodedData);
+		}
+		else if( InBlockNumber == 10 )
+		{
+			PatchVeryRichLocation(InDecodedData);
+			PatchDownFallLocation(InDecodedData);
+			PatchVeryPoorLocation(InDecodedData);
+		}		
+    };
+
+	return PatchKinematronEncodedImages(cardFilePath, tycoonImageDir, GTycoonKeyEntries, sizeof(GTycoonKeyEntries) / sizeof(GTycoonKeyEntries[0]), OnBlockDecoded);
 }
 
 bool PatchTycoon(const std::string& inPatchedSakuraDirectory, const std::string& inTranslatedDataDirectory)
