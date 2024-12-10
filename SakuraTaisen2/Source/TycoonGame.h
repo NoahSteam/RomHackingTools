@@ -350,7 +350,7 @@ void PatchVeryRichLocation(char* InData)
 	veryX = 0x20;
 	richX = 0x60;
 	exclaim1 = 0xa0;
-	exclaim2 = 0xb0;
+	exclaim2 = 0xbb;
 }
 
 void PatchDownFallLocation(char* InData)
