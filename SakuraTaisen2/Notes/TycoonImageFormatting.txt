@@ -16,10 +16,11 @@ Formating is located within 10.bin of Tycoon deocded data at ex9f0
 00211A40 has X location for Very in "Very Rich" //00 to 20
 00211A48 has X location for Rich in "Very Rich" //40 to 60
 00211A58 hax X location for ! //a0
-00211A60 hax X location for ! //b0
+00211A60 hax X location for ! //aa
 
 //Down Fall
 00211b38 X location for Down //12 to 1c
+(becomes 0064) during gameplay for some reason
 
 Decoded to 060ceddc
 
@@ -36,3 +37,18 @@ Decoded to 060ceddc
 00211aa0 has 00c4 and is X position for . //change to 90 0020
              d8
 			 ec
+			 
+//Poor
+0605d87c
+00211654
+00211A80 //0018 to 50
+060CEAFC //decoded from
+
+//Rich
+0605d87c
+002115D4
+00211A68 //18 to 40
+decoded from 060cea9c
+
+!00211a78 //b8 to 7c
+decoded from 060ceafc

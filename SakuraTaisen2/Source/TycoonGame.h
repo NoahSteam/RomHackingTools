@@ -350,7 +350,27 @@ void PatchVeryRichLocation(char* InData)
 	veryX = 0x20;
 	richX = 0x60;
 	exclaim1 = 0xa0;
-	exclaim2 = 0xbb;
+	exclaim2 = 0xaa;
+}
+
+void PatchTycoonRichLocation(char* InData)
+{
+	//Patch location of "Poor" so that it is centered
+	uint8& richX = *(uint8*)(InData + 0xea9d);
+	uint8& exclaimX = *(uint8*)(InData + 0xeadd);
+
+	if (richX != 0x18)
+	{
+		printf("Patching Tycoon Error: Expected 0x18 for position of Rich, but got 0x%02x", richX);
+	}
+
+	if (exclaimX != 0xb8)
+	{
+		printf("Patching Tycoon Error: Expected 0xb8 for position of (Rich)!, but got 0x%02x", exclaimX);
+	}
+
+	richX = 0x40;
+	exclaimX = 0x7c;
 }
 
 void PatchDownFallLocation(char* InData)
@@ -391,6 +411,19 @@ void PatchDownFallLocation(char* InData)
 	dot2Y = 0x2a;
 	dot3X = 0xca;
 	dot3Y = 0x2a;
+}
+
+void PatchTycoonPoorLocation(char* InData)
+{
+	//Patch location of "Poor" so that it is centered
+	uint8& poorX = *(uint8*)(InData + 0xeafd);
+
+	if (poorX != 0x18)
+	{
+		printf("Patching Tycoon Error: Expected 0x18 for position of Poor, but got 0x%02x", poorX);
+	}
+
+	poorX = 0x50;
 }
 
 void PatchVeryPoorLocation(char* InData)
@@ -461,9 +494,11 @@ bool PatchTycoonEncodedImages(const std::string& inPatchedSakuraDirectory, const
 		else if( InBlockNumber == 10 )
 		{
 			PatchVeryRichLocation(InDecodedData);
+			PatchTycoonRichLocation(InDecodedData);
 			PatchDownFallLocation(InDecodedData);
+			PatchTycoonPoorLocation(InDecodedData);
 			PatchVeryPoorLocation(InDecodedData);
-		}		
+		}
     };
 
 	return PatchKinematronEncodedImages(cardFilePath, tycoonImageDir, GTycoonKeyEntries, sizeof(GTycoonKeyEntries) / sizeof(GTycoonKeyEntries[0]), OnBlockDecoded);
