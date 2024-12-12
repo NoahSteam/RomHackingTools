@@ -735,8 +735,8 @@ bool AreFilesTheSame(const FileData& file1, const FileNameContainer& file2Name);
 bool FindDataWithinBuffer(const char* pBuffer, unsigned long bufferSize, const char* pSearchData, const unsigned int searchDataSize, unsigned long& outIndex);
 bool CreateTemporaryDirectory(std::string& outDir);
 void GetAllFilesOfType(const std::vector<FileNameContainer>& allFiles, const char* pInFileType, std::vector<FileNameContainer>& outFiles);
-bool CopyFiles(const std::vector<FileNameContainer>& InSourceFiles, const std::string& InOutputDirectory);
-bool CopyFiles(const std::string& InSourceDirectory, const std::string& InOutputDirectory);
+bool CopyFiles(const std::vector<FileNameContainer>& InSourceFiles, const std::string& InOutputDirectory, std::unordered_set<std::string>* pInIgnoreFiles = nullptr);
+bool CopyFiles(const std::string& InSourceDirectory, const std::string& InOutputDirectory, std::unordered_set<std::string>* pInIgnoreFiles = nullptr);
 bool CreateSpreadSheetForImages(const std::string& InSpreadsheetName, const std::string InExtractedImageDirName, const std::string& InImageDirectory, const std::string& InOutputPhpFilePath);
 
 //unsigned long prs_decompress_size(void* source);

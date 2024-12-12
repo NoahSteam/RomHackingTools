@@ -28,7 +28,7 @@ void SwapColors(const string& inDirectory, const char inSearchColor, const char 
 	printf("Success\n");
 }
 
-void ReplaceColors(const string& inDirectory, const char inNewColor, unordered_set<char>& inIgnoreColors)
+void ReplaceColors(const string& inDirectory, const char inNewColor, unordered_set<char>& inIgnoreColors, std::unordered_set<std::string>* pInIgnoreFiles = nullptr)
 {
 	vector<FileNameContainer> allFiles;
 	FindAllFilesWithinDirectory(inDirectory, allFiles);
@@ -38,6 +38,11 @@ void ReplaceColors(const string& inDirectory, const char inNewColor, unordered_s
 
 	for (const FileNameContainer& fileName : bmpFiles)
 	{
+		if(pInIgnoreFiles && pInIgnoreFiles->find(fileName.mNoExtension) != pInIgnoreFiles->end())
+		{
+			continue;
+		}
+
 		BitmapReader bmpData;
 		if (!bmpData.ReadBitmap(fileName.mFullPath))
 		{

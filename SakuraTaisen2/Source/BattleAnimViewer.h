@@ -99,11 +99,13 @@ bool CreateTranslatedBattleAnimViewerImages(const string& InTranslationDirectory
 	CreateDirectoryHelper(translatedImageDirectory);
 
 	//Duplicate original images
-	CopyFiles(originalImageDirectory, translatedImageDirectory);
+	unordered_set<string> ignoreFiles;
+	ignoreFiles.insert("unavailable");
+	CopyFiles(originalImageDirectory, translatedImageDirectory, &ignoreFiles);
 
 	//Remove text from original images
 	unordered_set<char> colorsToIgnore;
-	colorsToIgnore.insert(0);
+	colorsToIgnore.insert(0);	
 	ReplaceColors(translatedImageDirectory, 15, colorsToIgnore);
 
 	//Find all created translated images

@@ -66,33 +66,7 @@ public:
 		return true;
 	}
 	
-	const TileExtractor::Tile* GetTileForCharacter(char InLetter)
-	{
-		//î
-		if((uint8)InLetter == (uint8)'î')
-		{
-			InLetter = 'z' + 1;
-		}
-		else if((uint8)InLetter == (uint8)'ü')
-		{
-			InLetter = 'z' + 2;
-		}
-		else if((uint8)InLetter == (uint8)'è')
-		{
-			InLetter = 'z' + 3;
-		}
-
-		const int index = (int)(InLetter) - (int)(mStartingLetter);
-		if( index < 0 || index >= (int)mFontSheet.mTiles.size() )
-		{
-			printf("GetTileForCharacter: Invalid letter %c\n", InLetter);
-			return nullptr;
-		}
-
-		return &mFontSheet.mTiles[index];
-	}
-
-	int GetWidthOfCharacter(char InLetter) const
+	char GetFixedUpLetter(char InLetter) const
 	{
 		//î
 		if ((uint8)InLetter == (uint8)'î')
@@ -107,6 +81,36 @@ public:
 		{
 			InLetter = 'z' + 3;
 		}
+		else if ((uint8)InLetter == (uint8)'ç')
+		{
+			InLetter = 'c'; //Todo
+		}
+		else if ((uint8)InLetter == (uint8)'ã')
+		{
+			InLetter = 'a'; //Todo
+		}
+		return InLetter;
+	}
+
+	const TileExtractor::Tile* GetTileForCharacter(char InLetter)
+	{
+		InLetter = GetFixedUpLetter(InLetter);
+
+		int index = (int)(InLetter) - (int)(mStartingLetter);
+		if( index < 0 || index >= (int)mFontSheet.mTiles.size() )
+		{
+			printf("GetTileForCharacter: Invalid letter %c\n", (uint8)InLetter);
+			InLetter = '!';
+			index = (int)(InLetter)-(int)(mStartingLetter);
+			//return nullptr;
+		}
+
+		return &mFontSheet.mTiles[index];
+	}
+
+	int GetWidthOfCharacter(char InLetter) const
+	{
+		InLetter = GetFixedUpLetter(InLetter);
 
 		std::map<int, int>::const_iterator iter = mLetterToWidth.find(InLetter);
 		if( iter != mLetterToWidth.end() )

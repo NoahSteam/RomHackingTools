@@ -2801,11 +2801,16 @@ bool CreateTemporaryDirectory(string& outDir)
 	return true;
 }
 
-bool CopyFiles(const std::vector<FileNameContainer>& InSourceFiles, const std::string& InOutputDirectory)
+bool CopyFiles(const std::vector<FileNameContainer>& InSourceFiles, const std::string& InOutputDirectory, std::unordered_set<std::string>* pInIgnoreFiles)
 {
 	//Bring over scenario files
 	for (const FileNameContainer& sourceFile : InSourceFiles)
 	{
+		if (pInIgnoreFiles && pInIgnoreFiles->find(sourceFile.mNoExtension) != pInIgnoreFiles->end())
+		{
+			continue;
+		}
+
 		string subDirectory = "";
 		const size_t lastIndex = sourceFile.mPathOnly.find_last_of("\\");
 		if (lastIndex != std::string::npos)
@@ -2824,12 +2829,12 @@ bool CopyFiles(const std::vector<FileNameContainer>& InSourceFiles, const std::s
 	return true;
 }
 
-bool CopyFiles(const std::string& InSourceDirectory, const std::string& InOutputDirectory)
+bool CopyFiles(const std::string& InSourceDirectory, const std::string& InOutputDirectory, std::unordered_set<std::string>* pInIgnoreFiles)
 {
 	std::vector<FileNameContainer> sourceFiles;
 	FindAllFilesWithinDirectory(InSourceDirectory, sourceFiles);
 
-	return CopyFiles(sourceFiles, InOutputDirectory);
+	return CopyFiles(sourceFiles, InOutputDirectory, pInIgnoreFiles);
 }
 
 bool CreateSpreadSheetForImages(const std::string& InSpreadsheetName, const std::string InImagePathOnServer, 

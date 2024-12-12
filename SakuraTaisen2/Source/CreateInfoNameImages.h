@@ -106,13 +106,23 @@ bool CreateTranslatedInfoNameImages(const string& InTranslationDirectory, const 
 	CopyFiles(originalImageDirectory, translatedImageDirectory);
 
 	//Remove text from original images
-	unordered_set<char> colorsToIgnore;
+	unordered_set<char> colorsToIgnore;	
+	unordered_set<string> ignoreFiles;
+	ignoreFiles.insert("Obstacle");
+	ignoreFiles.insert("ObstacleNameSmall");
+	ignoreFiles.insert("Weapon");
+	ignoreFiles.insert("WeaponName");
+	ignoreFiles.insert("WeaponNameSmall");
+	ignoreFiles.insert("WeaponNameSmallGlow");
 	colorsToIgnore.insert(0);
-	ReplaceColors(translatedImageDirectory, 1, colorsToIgnore);
+	ReplaceColors(translatedImageDirectory, 1, colorsToIgnore, &ignoreFiles);
 
 	//Find all created translated images
+	vector<FileNameContainer> allFiles;
+	FindAllFilesWithinDirectory(translatedImageDirectory, allFiles);
+
 	vector<FileNameContainer> translatedImages;
-	FindAllFilesWithinDirectory(translatedImageDirectory, translatedImages);
+	GetAllFilesOfType(allFiles, "Char", translatedImages);
 
 	// Sort the file names alphabetically
 	std::sort(translatedImages.begin(), translatedImages.end(), [](const FileNameContainer& a, const FileNameContainer& b) 
