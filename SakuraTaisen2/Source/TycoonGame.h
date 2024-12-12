@@ -39,6 +39,7 @@ KinematronEncodingKeyInfo GTycoonKeyEntries[] =
 };
 
 //r10 = 0xb17;
+//Same as DecodeKinematronData
 uint64 DecodeTycoonImages(uint8* inDataStream, uint32 inKey)
 {
 	uint32 r0 = 0;
@@ -153,7 +154,7 @@ void ExtractTycoonIntroImages(const std::string& inRootDirectory, const std::str
 		const uint32 copySize = dataSetOffset + bufferSize > cardFile.GetDataSize() ? cardFile.GetDataSize() - dataSetOffset : bufferSize;
 		memcpy_s(buffer, copySize, cardFile.GetData() + dataSetOffset, copySize);
 
-		const uint32 decodedSize = bInFullExtraction ? DecodeTycoonImages((uint8*)buffer, keys[k].key) : DecodeTycoonImages((uint8*)buffer, GTycoonKeyEntries[k].key);
+		const uint32 decodedSize = bInFullExtraction ? DecodeKinematronData((uint32*)buffer, keys[k].key) : DecodeKinematronData((uint32*)buffer, GTycoonKeyEntries[k].key);
 		if(decodedSize > bufferSize)
 		{
 			assert(decodedSize < bufferSize);
@@ -185,7 +186,17 @@ void ExtractTycoonIntroImages(const std::string& inRootDirectory, const std::str
 
 				const std::string imageFileName = outputDirectory + std::to_string(k) + std::string("_") + IntToHexString(dataSetOffset) + std::string("_") + std::to_string(i) + imageExt;
 				
-				const char* pPalette = k == 10 && i == 19 ? daifFile.GetData() + 0x00048324 : buffer + paletteOffset;
+				const char* pPalette = buffer + paletteOffset;
+				
+				if(k == 10)
+				{
+					if(i == 19)
+						pPalette = daifFile.GetData() + 0x00048324;
+					else if(i == 39)				
+						pPalette = daifFile.GetData() + 0x00048c44;
+					else if(i == 43)
+						pPalette = daifFile.GetData() + 0x000489c4;
+				}
 				ExtractImageFromData(buffer + imageOffset, imageSize, imageFileName, pPalette, 512, bIs4Bit, imageWidth, imageHeight, 1, 256, 0, true, bInBmp);
 
 				imageOffset += imageSize;

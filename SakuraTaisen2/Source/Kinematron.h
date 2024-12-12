@@ -152,53 +152,36 @@ void EncodeKinematronData(const uint32* pInDecodedData, const uint32 inDecodedDa
 
 
 uint32 DecodeKinematronData(uint32* pEncodedData, const int param_2)
-{
-	uint32 uVar1;
-	int iVar2;
-	int iVar3 = 0;
-	uint32 key;
-	int iVar5;
-	uint32 secondValue;
-	uint32 firstValue;
-
-	iVar2 = 0xAC53AC53;//DAT_060333c0; r8
-	uVar1 = 0xAAAA5555;//DAT_060333bc; r9
+{	
+	//Figure out number of blocks to decode
+	int numBlocksToDecode = param_2;
+	if (numBlocksToDecode < 0)
+	{
+		numBlocksToDecode += 0x00ff0009;
+	}
+	numBlocksToDecode = numBlocksToDecode >> 8;
 
 	char* pStart = (char*)pEncodedData;
 
 	/* Top of COMMFILE 060c0000 in memory */
-	firstValue = SwapByteOrder(*pEncodedData); //uVar7 = r6
-	secondValue = SwapByteOrder(pEncodedData[1]); //param_1 = r7
-	key = firstValue;
-	while (true)
+	uint32 firstValue = SwapByteOrder(*pEncodedData);
+	uint32 secondValue = SwapByteOrder(pEncodedData[1]);
+	uint32 key = firstValue;
+	uint32 oldKey = firstValue;
+	for (int numBlocksDecoded = 0; numBlocksDecoded <= numBlocksToDecode; ++numBlocksDecoded)
 	{
-		iVar5 = param_2;
-		if (iVar5 < 0)
-		{
-			iVar5 += 0x00ff0009;
-		}
-
-		iVar5 = iVar5 >> 8;
-
-		if (iVar5 + 1 <= iVar3)
-		{
-			break;
-		}
-
-		iVar5 = 0;
-		do
+		for(int i = 0; i < 0x40; ++i)
 		{
 			const uint32 encodedValue = SwapByteOrder(*pEncodedData);
 			*pEncodedData = SwapByteOrder(encodedValue ^ key);
 			key = (key ^ 0xAAAA5555) + 0xAC53AC53;
 			++pEncodedData;
-		} while (++iVar5 < 0x40);
+		}
 
-		key = (firstValue ^ 0x13579BDF) + secondValue; //uVar7 = r6
-		secondValue = firstValue;
-		firstValue = key;
-		iVar3 += 1;
-		//	param_2 = uVar4;
+		key         = (firstValue ^ 0x13579BDF) + secondValue;
+		secondValue = oldKey;
+		firstValue  = key;
+		oldKey      = firstValue;
 	}
 
 	return ((char*)pEncodedData - pStart);// + sizeof(*pEncodedData); //+sizeof(*pEncodedData) because the size includes the full 4 final bytes

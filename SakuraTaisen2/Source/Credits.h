@@ -28,101 +28,85 @@ struct EDSTFHeader
 	}
 };
 
-uint32 DecodeCreditsData(uint8* r7, uint32 r11)
+struct EndingFileInfo
 {
-	uint32 r0 = 0;
-	uint32 r5 = 0;
-	uint32 r10 = 0xAAAA5555;
-	uint32 r9 = 0xAC53AC53;
-	uint32 r6 = SwapByteOrder( *(uint32*)r7 );
-	uint32 r8 = SwapByteOrder( ((uint32*)r7)[1] );
-	const uint8* startAddress = r7;
-//	LAB_06010a3a
-	while(1)
+	const char* pFileName;
+	const char* pOutputDir;
+	const int offsetToKeys;
+	const int numKeys;
+};
+
+EndingFileInfo GEndingFiles[2] =
+{
+	{"SAKURA1\\EDSTF.ALL", "RollingCredits\\", 0x30da0, 20},
+	{"SAKURA1\\EDDATA.ALL", "Credits\\", 0x2fe80, 386}, //11a28, 3fe8
+};
+
+struct EndingFileKeyData
+{
+	uint32 key;
+	uint32 unknown;
+
+	void ChangeByeOrder()
 	{
-		uint32 r4 = r11;
-		if (r4 < 0)
-		{
-			r4 += 0x3f;
-		}
+		key = SwapByteOrder(key);
+		unknown = SwapByteOrder(unknown);
+	}
+};
 
-		r4 = r4 >> 6;
-		if(++r4 <= r5)
-		{
-			break;
-		}
+uint32 DecodeCreditsData(uint32* pInEncodedData, const uint32 inParam2)
+{
+	const uint8* startAddress = (uint8*)pInEncodedData;
 
-		uint32 r1 = 0x7fff;
-		uint32 r3 = r6;
-		if(r0 > r1)
+	uint32 firstValue = SwapByteOrder(*pInEncodedData);
+	uint32 secondValue = SwapByteOrder(pInEncodedData[1]);
+
+	//Figure out the number of blocks to decode
+	uint32 numBlocksToDecode = inParam2;
+	if (numBlocksToDecode < 0)
+	{
+		numBlocksToDecode += 0x3f; //This is never hit
+	}
+	numBlocksToDecode = (numBlocksToDecode >> 6) + 1;
+
+	//	LAB_06010a3a
+	uint32 r0 = 0;
+	for (uint32 numBlocksDecoded = 0; numBlocksDecoded <= numBlocksToDecode; ++numBlocksDecoded)
+	{
+		uint32 key = firstValue;
+
+		//Skip past un-encoded data
+		if (r0 > 0x7fff)
 		{
 			r0 = 0;
-			uint32 r2 = 0;
-			r4 = 0xf;
-
+			
 			//LAB_06010a5e
-			do 
+			for(uint32 r2 = 0; r2 < 0x10; ++r2)
 			{
-				r1 = SwapByteOrder(*(uint32*)r7);
-				++r2;
-				r1 = r3^r1;
-				(*(uint32*)r7) = SwapByteOrder(r1);
-				r7 += 4;
-				r3 = r3 ^ r10;
-				r3 += r9;
-			} while (r2 <= r4);
+				const uint32 encodedValue = SwapByteOrder(*(uint32*)pInEncodedData);
+				*pInEncodedData = SwapByteOrder(key ^ encodedValue);
+				++pInEncodedData;
+				key = (key ^ 0xAAAA5555) + 0xAC53AC53;
+			}
 
-			r2 = r6;
-			r1 = 0x13579BDF;
-			r6 = r6^r1;
-			r6 += r8;
-			r8 = r2;
+			const uint32 oldFirstValue = firstValue;
+			firstValue = (firstValue ^ 0x13579BDF) + secondValue;			
+			secondValue = oldFirstValue;
 		}
 		else
 		{
-			r7 += 0x40;
+			pInEncodedData += 0x10;
 		}
 
-		r1 = 0x800;
-		r0 += r1;
-		r1 = 0x7ff;
-		r1 &= r6;
-		r0 += r1;
-		++r5;
+		r0 += (firstValue & 0x7ff) + 0x800;
 	}
 
-	return r7 - startAddress;
+	return (uint8*)pInEncodedData - startAddress;
 }
 
 void ExtractRollingCredits(const std::string& inRootDirectory, const std::string& inOutputDirectory, const bool bInBmp)
 {
 	const string ext = bInBmp ? ".bmp" : ".png";
-
-	struct EndingFileInfo
-	{
-		const char* pFileName;
-		const char* pOutputDir;
-		const int offsetToKeys;
-		const int numKeys;
-	};
-
-	EndingFileInfo endingFiles[2] =
-	{
-		{"SAKURA1\\EDSTF.ALL", "RollingCredits\\", 0x30da0, 20},
-		{"SAKURA1\\EDDATA.ALL", "Credits\\", 0x2fe80, 386}, //11a28, 3fe8
-	};
-	
-	struct EndingFileKeyData
-	{
-		uint32 key;
-		uint32 unknown;
-
-		void ChangeByeOrder()
-		{
-			key = SwapByteOrder(key);
-			unknown = SwapByteOrder(unknown);
-		}
-	};
 
 	const std::string endiFilePath = inRootDirectory + "SAKURA3\\0000ENDI.BIN";
 	FileData ediFile;
@@ -133,21 +117,21 @@ void ExtractRollingCredits(const std::string& inRootDirectory, const std::string
 
 	for(int fileIndex = 0; fileIndex < 2; ++fileIndex)
 	{
-		const string rollingCreditsDir = inOutputDirectory + endingFiles[fileIndex].pOutputDir;
+		const string rollingCreditsDir = inOutputDirectory + GEndingFiles[fileIndex].pOutputDir;
 		CreateDirectoryHelper(rollingCreditsDir);
 
-		const std::string edsFilePath = inRootDirectory + endingFiles[fileIndex].pFileName;
+		const std::string edsFilePath = inRootDirectory + GEndingFiles[fileIndex].pFileName;
 		FileData edsFile;
 		if (!edsFile.InitializeFileData(edsFilePath))
 		{
 			return;
 		}
 
-		EndingFileKeyData* pKeyData = new EndingFileKeyData[endingFiles[fileIndex].numKeys];
-		const size_t keyDataSize = sizeof(pKeyData[0]) * endingFiles[fileIndex].numKeys;
-		memcpy_s(pKeyData, keyDataSize, ediFile.GetData() + endingFiles[fileIndex].offsetToKeys, keyDataSize);
+		EndingFileKeyData* pKeyData = new EndingFileKeyData[GEndingFiles[fileIndex].numKeys];
+		const size_t keyDataSize = sizeof(pKeyData[0]) * GEndingFiles[fileIndex].numKeys;
+		memcpy_s(pKeyData, keyDataSize, ediFile.GetData() + GEndingFiles[fileIndex].offsetToKeys, keyDataSize);
 
-		for(int i = 0; i < endingFiles[fileIndex].numKeys; ++i)
+		for(int i = 0; i < GEndingFiles[fileIndex].numKeys; ++i)
 		{
 			pKeyData[i].ChangeByeOrder();
 		}
@@ -172,7 +156,7 @@ void ExtractRollingCredits(const std::string& inRootDirectory, const std::string
 			memcpy_s(buffer, sizeof(buffer), edsFile.GetData() + offset, header.colorDataSize + 40 + 512);
 
 			const uint32 headerSize = sizeof(header);
-			const uint32 decodedSize = DecodeCreditsData((uint8*)buffer, pKeyData[i].key);
+			const uint32 decodedSize = DecodeCreditsData((uint32*)buffer, pKeyData[i].key);
 			const uint32 imageSize = header.width * header.height;
 			const int paletteOffset = fileIndex == 0 ? 0x14028 : offset + imageSize + headerSize;
 
@@ -205,4 +189,32 @@ void ExtractCreditsData(const std::string& inRootDirectory, const std::string& i
 	CreateDirectoryHelper(inOutputDirectory);
 
 	ExtractRollingCredits(inRootDirectory, inOutputDirectory, bInBmp);
+}
+
+bool PatchCredits(const std::string& inPatchedSakuraDirectory, const std::string& inTranslatedDataDirectory)
+{
+	//CARD_DAT
+	const std::string creditsFilePath = inPatchedSakuraDirectory + "SAKURA3\\0000ENDI.BIN";
+	const std::string patchedImageDir1 = inTranslatedDataDirectory + "Credits\\Credits\\";
+	const std::string patchedImageDir2 = inTranslatedDataDirectory + "Credits\\RollingCredits\\";
+
+	FileData ediFile;
+	if (!ediFile.InitializeFileData(creditsFilePath))
+	{
+		return false;
+	}
+
+	KinematronEncodingKeyInfo* pKeyData = new KinematronEncodingKeyInfo[GEndingFiles[0].numKeys];
+	const size_t keyDataSize = sizeof(pKeyData[0]) * GEndingFiles[0].numKeys;
+	memcpy_s(pKeyData, keyDataSize, ediFile.GetData() + GEndingFiles[0].offsetToKeys, keyDataSize);
+
+	for (int i = 0; i < GEndingFiles[0].numKeys; ++i)
+	{
+	//	pKeyData[i].ChangeByeOrder();
+	}
+
+	bool bResult = PatchKinematronEncodedImages(creditsFilePath, patchedImageDir1, pKeyData, GEndingFiles[0].numKeys);
+//	bResult &= PatchKinematronEncodedImages(creditsFilePath, patchedImageDir2, GTycoonKeyEntries, sizeof(GTycoonKeyEntries) / sizeof(GTycoonKeyEntries[0]));
+
+	return bResult;
 }

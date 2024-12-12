@@ -59,6 +59,7 @@ ExtractIntroSubtitles a:\sakurawars2\Disc1_Original a:\SakuraWars2\ExtractedData
 ExtractIntroImages a:\sakurawars2\Disc3_Original a:\SakuraWars2\ExtractedData\Disc3\IntroImages 3
 ExtractTycoonTutorial a:\sakurawars2\Disc2_Original\ a:\SakuraWars2\ExtractedData\Disc2\TycoonTutorial a:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\StoryTextPalette.bin 1
 ValidateSyncData  a:\sakurawars2\Disc1_Original\SAKURA1 a:\SakuraWars2\ExtractedData\Disc1\SyncValidation
+PatchCredits A:\SakuraWars2\Patched\Disc3 A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data
 SetColorInPalette A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\StatusScreen A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data\StatusScreen\Modified 0 0xff00
 PatchGame A:\SakuraWars2\Disc1_Original A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data A:\SakuraWars2\Patched\Disc1 1
 PatchGame A:\SakuraWars2\Disc2_Original A:\NoahSteam\RomPatchingTools\SakuraTaisen2\Data A:\SakuraWars2\Patched\Disc2 2

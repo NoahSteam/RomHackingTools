@@ -905,6 +905,13 @@ int main(int argc, char *argv[])
 
 		ValidateSyncData(inSakura1Directory, outputDirectory);
 	}
+	else if (command == "PatchCredits" && argc == 4)
+	{
+		const string inSakura1Directory = string(argv[2]) + Seperators;
+		const string inDataDirectory = string(argv[3]) + Seperators;
+
+		PatchCredits(inSakura1Directory, inDataDirectory);
+	}
 	else
 	{
 		PrintHelp();
