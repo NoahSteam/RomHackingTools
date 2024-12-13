@@ -44,12 +44,12 @@ EndingFileInfo GEndingFiles[2] =
 
 struct EndingFileKeyData
 {
-	uint32 key;
+	uint32 blocksToDecode;
 	uint32 unknown;
 
 	void ChangeByeOrder()
 	{
-		key = SwapByteOrder(key);
+		blocksToDecode = SwapByteOrder(blocksToDecode);
 		unknown = SwapByteOrder(unknown);
 	}
 };
@@ -68,6 +68,8 @@ uint32 DecodeCreditsData(uint32* pInEncodedData, const uint32 inParam2)
 		numBlocksToDecode += 0x3f; //This is never hit
 	}
 	numBlocksToDecode = (numBlocksToDecode >> 6) + 1;
+
+	int bytesSkipped = 0;
 
 	//	LAB_06010a3a
 	uint32 r0 = 0;
@@ -96,6 +98,7 @@ uint32 DecodeCreditsData(uint32* pInEncodedData, const uint32 inParam2)
 		else
 		{
 			pInEncodedData += 0x10;
+			bytesSkipped += 0x10*4;
 		}
 
 		r0 += (firstValue & 0x7ff) + 0x800;
@@ -156,7 +159,7 @@ void ExtractRollingCredits(const std::string& inRootDirectory, const std::string
 			memcpy_s(buffer, sizeof(buffer), edsFile.GetData() + offset, header.colorDataSize + 40 + 512);
 
 			const uint32 headerSize = sizeof(header);
-			const uint32 decodedSize = DecodeCreditsData((uint32*)buffer, pKeyData[i].key);
+			const uint32 decodedSize = DecodeCreditsData((uint32*)buffer, pKeyData[i].blocksToDecode);
 			const uint32 imageSize = header.width * header.height;
 			const int paletteOffset = fileIndex == 0 ? 0x14028 : offset + imageSize + headerSize;
 

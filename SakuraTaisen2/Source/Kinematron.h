@@ -187,6 +187,68 @@ uint32 DecodeKinematronData(uint32* pEncodedData, const int param_2)
 	return ((char*)pEncodedData - pStart);// + sizeof(*pEncodedData); //+sizeof(*pEncodedData) because the size includes the full 4 final bytes
 }
 
+void EncodeCreditsData(uint32 inFirstValue, const uint32* pInDecodedData, const uint32 inDecodedDataSize, std::vector<uint32>& outEncodedData)
+{
+	uint32 prevKey = inFirstValue;
+	uint32 firstEncodedValueInBlock = SwapByteOrder(pInDecodedData[0]) ^ prevKey;
+	outEncodedData.push_back(SwapByteOrder(prevKey));
+
+	bool bCalcSecond = true;
+	uint32 decodedIndex = 1;
+	uint32 secondValue = 0;
+	const uint32 numEntriesInData = inDecodedDataSize >> 2;
+	const uint32 numEntriesInBlock = 0x10;
+	while (decodedIndex < numEntriesInData)
+	{
+		uint32 r0 = 0;
+		if (r0 > 0x7fff)
+		{
+			uint32 entryIndex = 1;
+			while (entryIndex < numEntriesInBlock)
+			{
+				const uint32 given = SwapByteOrder(pInDecodedData[decodedIndex]);
+				const uint32 key = (prevKey ^ 0xaaaa5555) + 0xac53ac53;
+				const uint32 encoded = given ^ key;
+				prevKey = key;
+
+				if (bCalcSecond)
+				{
+					secondValue = encoded;
+					bCalcSecond = false;
+				}
+
+				outEncodedData.push_back(SwapByteOrder(encoded));
+				++decodedIndex;
+				++entryIndex;
+			}
+
+			prevKey = (firstEncodedValueInBlock ^ 0x13579bdf) + secondValue;
+			secondValue = firstEncodedValueInBlock;
+			firstEncodedValueInBlock = prevKey;
+
+			uint32 nextVal = SwapByteOrder(pInDecodedData[decodedIndex++]);
+			uint32 nextEncoded = nextVal ^ prevKey;
+
+			if (decodedIndex < numEntriesInData)
+			{
+				outEncodedData.push_back(SwapByteOrder(nextEncoded));
+			}
+		}
+		else
+		{
+			for(int i = 0; i < 0x10; ++i)
+			{
+				const uint32 given = SwapByteOrder(pInDecodedData[decodedIndex]);
+				outEncodedData.push_back(given);
+				++decodedIndex;
+			}
+		}
+
+	//	r0 += (firstValue & 0x7ff) + 0x800;
+	}
+}
+
+
 struct KinematronEncodingKeyInfo
 {
 	uint32 offset;

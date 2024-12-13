@@ -66,7 +66,7 @@ public:
 		return true;
 	}
 	
-	char GetFixedUpLetter(char InLetter) const
+	char GetFixedUpLetter(uint8 InLetter) const
 	{
 		//î
 		if ((uint8)InLetter == (uint8)'î')
@@ -81,23 +81,56 @@ public:
 		{
 			InLetter = 'z' + 3;
 		}
+		else if ((uint8)InLetter == (uint8)'ß')
+		{
+			InLetter = 'z' + 4;
+		}
+		else if ((uint8)InLetter == (uint8)'ô')
+		{
+			InLetter = 'z' + 5;
+		}
 		else if ((uint8)InLetter == (uint8)'ç')
 		{
-			InLetter = 'c'; //Todo
+			InLetter = 'z' + 6;
+		}
+		else if ((uint8)InLetter == (uint8)'é')
+		{
+			InLetter = 'z' + 7;
 		}
 		else if ((uint8)InLetter == (uint8)'ã')
 		{
-			InLetter = 'a'; //Todo
+			InLetter = 'z' + 8;
 		}
+		else if ((uint8)InLetter == (uint8)'ê')
+		{
+			InLetter = 'z' + 9;
+		}
+		else if ((uint8)InLetter == (uint8)'õ')
+		{
+			InLetter = 'z' + 10;
+		}
+		else if ((uint8)InLetter == (uint8)'í')
+		{
+			InLetter = 'z' + 11;
+		}
+		else if ((uint8)InLetter == (uint8)'ó')
+		{
+			InLetter = 'z' + 12;
+		}
+		else if ((uint8)InLetter == (uint8)'á')
+		{
+			InLetter = 'z' + 13;
+		}
+
 		return InLetter;
 	}
 
-	const TileExtractor::Tile* GetTileForCharacter(char InLetter)
+	const TileExtractor::Tile* GetTileForCharacter(uint8 InLetter)
 	{
 		InLetter = GetFixedUpLetter(InLetter);
 
-		int index = (int)(InLetter) - (int)(mStartingLetter);
-		if( index < 0 || index >= (int)mFontSheet.mTiles.size() )
+		uint8 index = InLetter - (uint8)(mStartingLetter);
+		if( index >= (int)mFontSheet.mTiles.size() )
 		{
 			printf("GetTileForCharacter: Invalid letter %c\n", (uint8)InLetter);
 			InLetter = '!';
@@ -108,7 +141,7 @@ public:
 		return &mFontSheet.mTiles[index];
 	}
 
-	int GetWidthOfCharacter(char InLetter) const
+	int GetWidthOfCharacter(uint8 InLetter) const
 	{
 		InLetter = GetFixedUpLetter(InLetter);
 
@@ -129,7 +162,7 @@ public:
 		const size_t numLetters = InString.length();
 		for(size_t i = 0; i < numLetters; ++i )
 		{
-			width += GetWidthOfCharacter(InString[i]);
+			width += GetWidthOfCharacter((uint8)InString[i]);
 		}
 
 		return width;
@@ -261,13 +294,13 @@ bool WriteTextIntoImageUsingFontSheet(	const std::string& InText, const FileName
 	const size_t numLetters = InText.size();
 	for (size_t letterIndex = 0; letterIndex < numLetters; ++letterIndex)
 	{
-		const TileExtractor::Tile* pTile = InFontSheet.GetTileForCharacter(InText[letterIndex]);
+		const TileExtractor::Tile* pTile = InFontSheet.GetTileForCharacter((uint8)InText[letterIndex]);
 		if (!pTile)
 		{
 			continue;
 		}
 
-		const int widthOfCharacter = InFontSheet.GetWidthOfCharacter(InText[letterIndex]);
+		const int widthOfCharacter = InFontSheet.GetWidthOfCharacter((uint8)InText[letterIndex]);
 
 		if (!translatedImage.AddTile(xLocation, yOffset, *pTile, widthOfCharacter))
 		{
@@ -384,13 +417,13 @@ bool WriteTextIntoImagesUsingFontSheet(
 		const size_t numLetters = textLine.mFullLine.size();
 		for( size_t letterIndex = 0; letterIndex < numLetters; ++letterIndex )
 		{
-			const TileExtractor::Tile* pTile = fontSheet.GetTileForCharacter(textLine.mFullLine[letterIndex]);
+			const TileExtractor::Tile* pTile = fontSheet.GetTileForCharacter((uint8)textLine.mFullLine[letterIndex]);
 			if( !pTile )
 			{
 				continue;
 			}
 
-			const int widthOfCharacter = fontSheet.GetWidthOfCharacter(textLine.mFullLine[letterIndex]);
+			const int widthOfCharacter = fontSheet.GetWidthOfCharacter((uint8)textLine.mFullLine[letterIndex]);
 
 			if( !translatedImage.AddTile(xLocation, 0, *pTile, widthOfCharacter) )
 			{
