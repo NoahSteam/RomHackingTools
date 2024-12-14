@@ -728,6 +728,12 @@ int main(int argc, char *argv[])
 
 		CreateTranslatedMNameImages(inTranslationDirectory, inFontSheet, inFontSheetSmall);
 	}
+	else if (command == "CreateTranslatedGOverImages" && argc == 3)
+	{
+		const string inTranslationDirectory = string(argv[2]) + Seperators;
+
+		CreateTranslatedGOverImages(inTranslationDirectory);
+	}
 	else if(command == "WriteTextIntoImageUsingFontSheet" && argc == 7 )
 	{
 		const string inTextFilePath = string(argv[2]);

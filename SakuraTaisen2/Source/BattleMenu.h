@@ -554,5 +554,151 @@ bool CreateNameGOVERSpreadsheet(const string& imageDirectory)
 	htmlFile.WriteString("	</html>\n");
 
 	return true;
+}
 
+bool CreateTranslatedGOverImages(const string& inDataDirectory)
+{	
+	//Create translation directory
+	const string translatedImageDirectory = inDataDirectory + "GOVER\\Translated\\";
+	CreateDirectoryHelper(translatedImageDirectory);
+
+	//Duplicate original images
+	std::unordered_set<string> ignoreFiles;
+	ignoreFiles.insert("4");
+	ignoreFiles.insert("5");
+	ignoreFiles.insert("6");
+	ignoreFiles.insert("7");
+	ignoreFiles.insert("8");
+	ignoreFiles.insert("16");
+	ignoreFiles.insert("33");
+	ignoreFiles.insert("34");
+	ignoreFiles.insert("35");
+	ignoreFiles.insert("36");
+	ignoreFiles.insert("37");
+	ignoreFiles.insert("38");
+	ignoreFiles.insert("39");
+	ignoreFiles.insert("40");
+	ignoreFiles.insert("41");
+	ignoreFiles.insert("42");
+	ignoreFiles.insert("47");
+	ignoreFiles.insert("48");
+	ignoreFiles.insert("49");
+	ignoreFiles.insert("54");
+	ignoreFiles.insert("57");
+	ignoreFiles.insert("58");
+	ignoreFiles.insert("59");
+	ignoreFiles.insert("60");
+	ignoreFiles.insert("61");
+	ignoreFiles.insert("62");
+	ignoreFiles.insert("63");
+	ignoreFiles.insert("64");
+	ignoreFiles.insert("65");
+	ignoreFiles.insert("66");
+	ignoreFiles.insert("67");
+	ignoreFiles.insert("96");
+	ignoreFiles.insert("125");
+	ignoreFiles.insert("126");
+	ignoreFiles.insert("127");
+	ignoreFiles.insert("128");
+	ignoreFiles.insert("129");
+	ignoreFiles.insert("130");
+	ignoreFiles.insert("131");
+	ignoreFiles.insert("132");
+	ignoreFiles.insert("133");
+	ignoreFiles.insert("GOVERKV11");
+	ignoreFiles.insert("GOVERKV12");
+	ignoreFiles.insert("GOVERTV11");
+	ignoreFiles.insert("GOVERTV12");
+	ignoreFiles.insert("Note");
+
+	//Copy files to Translated directory
+	const string goverDir = inDataDirectory + "GOVER\\";
+	CopyFiles(goverDir, translatedImageDirectory, &ignoreFiles);
+
+	//Clear out images
+	unordered_set<char> colorsToIgnore;
+	colorsToIgnore.insert(0);
+	ReplaceColors(translatedImageDirectory, 10, colorsToIgnore, &ignoreFiles);
+
+	//Find all created translated images
+	vector<FileNameContainer> translatedImages;
+	FindAllFilesWithinDirectory(translatedImageDirectory, translatedImages);
+
+	// Sort the file names alphabetically
+	std::sort(translatedImages.begin(), translatedImages.end(), [](const FileNameContainer& a, const FileNameContainer& b)
+		{
+			return std::stoi(a.mNoExtension.c_str()) < std::stoi(b.mNoExtension.c_str());
+		});
+
+	//Text data
+	FileNameContainer textFileName(inDataDirectory + "Translation\\GOverHud.txt");
+	TextFileData textFile(textFileName);
+	if (!textFile.InitializeTextFile(true, true))
+	{
+		return false;
+	}
+
+	if (textFile.mLines.size() != translatedImages.size())
+	{
+		printf("Image and translation mismatch.  Images:%i TranslationLine:%i\n", (int)translatedImages.size(), (int)textFile.mLines.size());
+		return false;
+	}
+		
+	// Create font sheets
+	const string hudWide = inDataDirectory + "HudFontSheetWide.bmp";
+	Tiled8BitFontSheet fontSheetWide, fontSheetWide2;
+	if (!fontSheetWide.CreateFontSheet(hudWide, translatedImageDirectory, ' '))
+	{
+		return false;
+	}
+	if (!fontSheetWide2.CreateFontSheet(hudWide, translatedImageDirectory, ' '))
+	{
+		return false;
+	}
+
+	const string hudNarrow = inDataDirectory + "HudFontSheetNarrow.bmp";
+	Tiled8BitFontSheet fontSheetNarrow, fontSheetNarrow2;
+	if (!fontSheetNarrow.CreateFontSheet(hudNarrow, translatedImageDirectory, ' '))
+	{
+		return false;
+	}
+	if (!fontSheetNarrow2.CreateFontSheet(hudNarrow, translatedImageDirectory, ' '))
+	{
+		return false;
+	}
+
+	fontSheetWide2.SwapColors(1, 10);
+	fontSheetWide2.SwapColors(7, 13);
+	fontSheetNarrow2.SwapColors(1, 10);
+	fontSheetNarrow2.SwapColors(7, 13);
+
+	//Insert text into images
+	const int numImages = (int)translatedImages.size();
+	for (int i = 0; i < numImages; ++i)
+	{
+		int leftOffset = 0;
+		int rightOffset = 0;
+		if(i >= 19 && i <= 27)
+		{
+			leftOffset = rightOffset = 1;
+		}
+
+		Tiled8BitFontSheet* pWideFont   = &fontSheetWide;
+		Tiled8BitFontSheet* pNarrowFont = &fontSheetNarrow;
+		const int imageNum = std::stoi(translatedImages[i].mNoExtension);
+		if( (imageNum >= 78 && imageNum <= 91) || imageNum >= 143)
+		{
+			pWideFont = &fontSheetWide2;
+			pNarrowFont = &fontSheetNarrow2;
+		}
+
+		//See if wide font sheet will fit
+		if (!WriteTextIntoImageUsingFontSheet(textFile.mLines[i].mFullLine, translatedImages[i], *pWideFont, true, leftOffset, rightOffset, 0))
+		{
+			//Otherwise try the narrow one
+			WriteTextIntoImageUsingFontSheet(textFile.mLines[i].mFullLine, translatedImages[i], *pNarrowFont, false, leftOffset, rightOffset, 0);
+		}
+	}
+
+	return true;
 }
