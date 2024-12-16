@@ -52,6 +52,8 @@ static bool BringOverOriginalFiles(const string& inRootSakuraDirectory, const st
 	GetAllFilesOfType(allFiles, "SINRAIP.BIN", originalFiles);
 	GetAllFilesOfType(allFiles, "OPBG_1.BIN", originalFiles);
 	GetAllFilesOfType(allFiles, "OPCPK.BG", originalFiles);
+	GetAllFilesOfType(allFiles, "EDSTF.ALL", originalFiles);
+	GetAllFilesOfType(allFiles, "EDDATA.ALL", originalFiles);
 
 	GetAllFilesOfType(allFiles, "IRIS_DAT.ALL", originalFiles);
 	GetAllFilesOfType(allFiles, "MGKR_DAT.ALL", originalFiles);
@@ -402,6 +404,11 @@ bool PatchGame(const string& inSourceGameDirectory, const string& inTranslatedDa
 		return false;
 	}
 	
+	if(inDiscNumber == 3)
+	{
+		PatchCredits(inPatchedDirectory, inTranslatedDataDirectory);
+	}
+
 	if(inDiscNumber == 2)
 	{
 		if(!PatchBattleAnimViewer(inPatchedDirectory, inTranslatedDataDirectory))

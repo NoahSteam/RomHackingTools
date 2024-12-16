@@ -866,6 +866,8 @@ bool FileReadWriter::OpenFile(const std::string& inFileName, bool bInOutputError
 		return false;
 	}
 
+	mFileName = inFileName;
+
 	//Figure out the file size by seeking to the end of the file and requesting the position of the file
 	fseek(mpFileHandle, 0, SEEK_END);
 	mFileSize = ftell(mpFileHandle);
