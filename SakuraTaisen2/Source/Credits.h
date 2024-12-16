@@ -86,9 +86,9 @@ uint32 DecodeCreditsData(uint32* pInEncodedData, const uint32 inParam2)
 			for(uint32 r2 = 0; r2 < 0x10; ++r2)
 			{
 				const uint32 encodedValue = SwapByteOrder(*(uint32*)pInEncodedData);
-				*pInEncodedData = SwapByteOrder(key ^ encodedValue);
-				++pInEncodedData;
+				*pInEncodedData = SwapByteOrder(key ^ encodedValue);				
 				key = (key ^ 0xAAAA5555) + 0xAC53AC53;
+				++pInEncodedData;
 			}
 
 			const uint32 oldFirstValue = firstValue;
@@ -187,6 +187,87 @@ void ExtractRollingCredits(const std::string& inRootDirectory, const std::string
 	}
 }
 
+void TestEncodeCredits(const std::string& inRootDirectory, const std::string& inOutputDirectory)
+{
+
+	const std::string endiFilePath = inRootDirectory + "SAKURA3\\0000ENDI.BIN";
+	FileData ediFile;
+	if (!ediFile.InitializeFileData(endiFilePath))
+	{
+		return;
+	}
+
+	for (int fileIndex = 0; fileIndex < 2; ++fileIndex)
+	{
+		CreateDirectoryHelper(inOutputDirectory);
+
+		const std::string edsFilePath = inRootDirectory + GEndingFiles[fileIndex].pFileName;
+		FileData edsFile;
+		if (!edsFile.InitializeFileData(edsFilePath))
+		{
+			return;
+		}
+
+		EndingFileKeyData* pKeyData = new EndingFileKeyData[GEndingFiles[fileIndex].numKeys];
+		const size_t keyDataSize = sizeof(pKeyData[0]) * GEndingFiles[fileIndex].numKeys;
+		memcpy_s(pKeyData, keyDataSize, ediFile.GetData() + GEndingFiles[fileIndex].offsetToKeys, keyDataSize);
+
+		for (int i = 0; i < GEndingFiles[fileIndex].numKeys; ++i)
+		{
+			pKeyData[i].ChangeByeOrder();
+		}
+
+		uint32 offset = 0;
+		const int bufferSize = 0x15000;
+		char buffer[bufferSize];
+		char encodedBuffer[bufferSize];
+		int i = 0;
+		const uint32 fileSize = (uint32)edsFile.GetDataSize();
+		while (offset < fileSize)
+		{
+			EDSTFHeader header;
+			memcpy_s(&header, sizeof(header), edsFile.GetData() + offset, sizeof(header));
+			header.ChangeByteOrder();
+
+			if (header.width > 320)
+			{
+				break;
+			}
+			memset(buffer, 0, sizeof(buffer));
+			memcpy_s(buffer, sizeof(buffer), edsFile.GetData() + offset, header.colorDataSize + 40 + 512);
+
+			if(pKeyData[i].blocksToDecode > bufferSize)
+			{
+				printf("Buffer is too small.  Should be at least %i bytes\b", pKeyData[i].blocksToDecode);
+			}
+
+			const uint32 headerSize = sizeof(header);
+			const uint32 decodedSize = DecodeCreditsData((uint32*)buffer, pKeyData[i].blocksToDecode);
+
+			/*
+			FileWriter decodedDataFile;
+			if (decodedDataFile.OpenFileForWrite(inOutputDirectory + string("decoded_") + std::to_string(offset)))
+			{
+				decodedDataFile.WriteData(buffer, bufferSize * 4);
+				decodedDataFile.Close();
+			}*/
+
+			memset(encodedBuffer, 0, sizeof(encodedBuffer));
+			memcpy_s(encodedBuffer, sizeof(encodedBuffer), buffer, decodedSize);
+
+			std::vector<uint32> outEncodedData;
+			const uint32 firstValue = SwapByteOrder(*(uint32*)buffer);
+			EncodeCreditsData(firstValue, (uint32*)encodedBuffer, decodedSize, outEncodedData);
+			
+			FileWriter outFile;
+			if(outFile.OpenFileForWrite(inOutputDirectory + std::to_string(offset)))
+			{
+				outFile.WriteData(outEncodedData.data(), outEncodedData.size()*4);
+			}
+		}
+	}
+}
+
 void ExtractCreditsData(const std::string& inRootDirectory, const std::string& inOutputDirectory, const bool bInBmp)
 {
 	CreateDirectoryHelper(inOutputDirectory);
@@ -196,28 +277,7 @@ void ExtractCreditsData(const std::string& inRootDirectory, const std::string& i
 
 bool PatchCredits(const std::string& inPatchedSakuraDirectory, const std::string& inTranslatedDataDirectory)
 {
-	//CARD_DAT
-	const std::string creditsFilePath = inPatchedSakuraDirectory + "SAKURA3\\0000ENDI.BIN";
-	const std::string patchedImageDir1 = inTranslatedDataDirectory + "Credits\\Credits\\";
-	const std::string patchedImageDir2 = inTranslatedDataDirectory + "Credits\\RollingCredits\\";
+	TestEncodeCredits(inPatchedSakuraDirectory, "a:\\SakuraWars2\\EncodingTest\\");
 
-	FileData ediFile;
-	if (!ediFile.InitializeFileData(creditsFilePath))
-	{
-		return false;
-	}
-
-	KinematronEncodingKeyInfo* pKeyData = new KinematronEncodingKeyInfo[GEndingFiles[0].numKeys];
-	const size_t keyDataSize = sizeof(pKeyData[0]) * GEndingFiles[0].numKeys;
-	memcpy_s(pKeyData, keyDataSize, ediFile.GetData() + GEndingFiles[0].offsetToKeys, keyDataSize);
-
-	for (int i = 0; i < GEndingFiles[0].numKeys; ++i)
-	{
-	//	pKeyData[i].ChangeByeOrder();
-	}
-
-	bool bResult = PatchKinematronEncodedImages(creditsFilePath, patchedImageDir1, pKeyData, GEndingFiles[0].numKeys);
-//	bResult &= PatchKinematronEncodedImages(creditsFilePath, patchedImageDir2, GTycoonKeyEntries, sizeof(GTycoonKeyEntries) / sizeof(GTycoonKeyEntries[0]));
-
-	return bResult;
+	return true;
 }

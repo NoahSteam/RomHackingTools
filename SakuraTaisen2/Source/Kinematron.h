@@ -150,7 +150,6 @@ void EncodeKinematronData(const uint32* pInDecodedData, const uint32 inDecodedDa
 	}
 }
 
-
 uint32 DecodeKinematronData(uint32* pEncodedData, const int param_2)
 {	
 	//Figure out number of blocks to decode
@@ -187,64 +186,52 @@ uint32 DecodeKinematronData(uint32* pEncodedData, const int param_2)
 	return ((char*)pEncodedData - pStart);// + sizeof(*pEncodedData); //+sizeof(*pEncodedData) because the size includes the full 4 final bytes
 }
 
-void EncodeCreditsData(uint32 inFirstValue, const uint32* pInDecodedData, const uint32 inDecodedDataSize, std::vector<uint32>& outEncodedData)
+void EncodeCreditsData(uint32 inFirstValue, const uint32* const pInDecodedData, const uint32 inDecodedDataSize, std::vector<uint32>& outEncodedData)
 {
 	uint32 prevKey = inFirstValue;
-	uint32 firstEncodedValueInBlock = SwapByteOrder(pInDecodedData[0]) ^ prevKey;
-	outEncodedData.push_back(SwapByteOrder(prevKey));
-
-	bool bCalcSecond = true;
-	uint32 decodedIndex = 1;
-	uint32 secondValue = 0;
+	uint32 decodedIndex = 0;
+	uint32 secondValue = SwapByteOrder(pInDecodedData[1]);
+	uint32 bytesWritten = 0;
+	uint32 r0 = 0;
 	const uint32 numEntriesInData = inDecodedDataSize >> 2;
 	const uint32 numEntriesInBlock = 0x10;
 	while (decodedIndex < numEntriesInData)
-	{
-		uint32 r0 = 0;
+	{	
 		if (r0 > 0x7fff)
 		{
-			uint32 entryIndex = 1;
+			r0 = 0;
+
+			uint32 key = prevKey;
+			uint32 entryIndex = 0;
 			while (entryIndex < numEntriesInBlock)
 			{
 				const uint32 given = SwapByteOrder(pInDecodedData[decodedIndex]);
-				const uint32 key = (prevKey ^ 0xaaaa5555) + 0xac53ac53;
 				const uint32 encoded = given ^ key;
-				prevKey = key;
-
-				if (bCalcSecond)
-				{
-					secondValue = encoded;
-					bCalcSecond = false;
-				}
-
+				key = (key ^ 0xaaaa5555) + 0xac53ac53;
+		
 				outEncodedData.push_back(SwapByteOrder(encoded));
 				++decodedIndex;
 				++entryIndex;
+				bytesWritten += 4;
 			}
 
-			prevKey = (firstEncodedValueInBlock ^ 0x13579bdf) + secondValue;
-			secondValue = firstEncodedValueInBlock;
-			firstEncodedValueInBlock = prevKey;
-
-			uint32 nextVal = SwapByteOrder(pInDecodedData[decodedIndex++]);
-			uint32 nextEncoded = nextVal ^ prevKey;
-
-			if (decodedIndex < numEntriesInData)
-			{
-				outEncodedData.push_back(SwapByteOrder(nextEncoded));
-			}
+			const uint32 oldPrevKey = prevKey;
+			prevKey = (prevKey ^ 0x13579bdf) + secondValue;
+			secondValue = oldPrevKey;
 		}
 		else
 		{
 			for(int i = 0; i < 0x10; ++i)
 			{
-				const uint32 given = SwapByteOrder(pInDecodedData[decodedIndex]);
+				const uint32 given = pInDecodedData[decodedIndex];
 				outEncodedData.push_back(given);
+
 				++decodedIndex;
+				bytesWritten += 4;
 			}
 		}
 
-	//	r0 += (firstValue & 0x7ff) + 0x800;
+		r0 += (prevKey & 0x7ff) + 0x800;
 	}
 }
 
