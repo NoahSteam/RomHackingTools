@@ -486,7 +486,7 @@ bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTrans
 					{
 						//Insert new line if needed
 						const string& nextWord = textLine.mWords[wordIndex + 1];
-						if (nextWord != NewLineWord)
+						if (nextWord != NewLineWord && nextWord != SpaceWord)
 						{
 							if (bIsLipsEntry && charCount + nextWord.size() > maxCharsPerLine)
 							{

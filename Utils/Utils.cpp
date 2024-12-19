@@ -507,6 +507,7 @@ bool TextFileData::InitializeTextFile(bool bFixupSpecialCharacters, bool bCollap
 
 	const string space(" ");
 	const string newLine("<br>");
+	const string spaceKeyword("<sp>");
 	char* pToken   = nullptr;
 
 	int lineCount = 1;
@@ -612,14 +613,15 @@ bool TextFileData::InitializeTextFile(bool bFixupSpecialCharacters, bool bCollap
 			//Split out newLine characters
 			bool bConditionallyAddSpaceAtEnd = false;
 			string testString(fixedString);
-			size_t pos = testString == newLine ? std::string::npos : testString.find(newLine);
-			if( pos != std::string::npos )
+			size_t newLinePosition = testString == newLine ? std::string::npos : testString.find(newLine);
+			size_t spacePosition = testString == spaceKeyword ? std::string::npos : testString.find(spaceKeyword);
+			if( newLinePosition != std::string::npos )
 			{
 				std::string token;
-				while( pos != std::string::npos ) 
+				while( newLinePosition != std::string::npos ) 
 				{
-					token = testString.substr(0, pos);
-					if( pos > 0 )
+					token = testString.substr(0, newLinePosition);
+					if( newLinePosition > 0 )
 					{
 						newLineOfText.mWords.push_back(token);
 						newLineOfText.mFullLine += token + space;
@@ -627,23 +629,56 @@ bool TextFileData::InitializeTextFile(bool bFixupSpecialCharacters, bool bCollap
 						newLineOfText.mWords.push_back(newLine);
 						newLineOfText.mFullLine += newLine + space;
 
-						testString.erase(0, pos + newLine.length());
+						testString.erase(0, newLinePosition + newLine.length());
 					}
 					else
 					{
 						newLineOfText.mWords.push_back(newLine);
 						newLineOfText.mFullLine += newLine + space;
 
-						testString.erase(0, pos + newLine.length());
+						testString.erase(0, newLinePosition + newLine.length());
 					}
 
-					pos = testString.find(newLine);
+					newLinePosition = testString.find(newLine);
 				}
 
 				if( testString.size() )
 				{
 					newLineOfText.mWords.push_back(testString);
 					newLineOfText.mFullLine += testString + space;
+				}
+			}
+			else if(spacePosition != std::string::npos )
+			{
+				std::string token;
+				while(spacePosition != std::string::npos )
+				{
+					token = testString.substr(0, spacePosition);
+					if(spacePosition > 0 )
+					{
+						newLineOfText.mWords.push_back(token);
+						newLineOfText.mFullLine += token;
+
+						newLineOfText.mWords.push_back(spaceKeyword);
+						newLineOfText.mFullLine += spaceKeyword;
+
+						testString.erase(0, spacePosition + spaceKeyword.length());
+					}
+					else
+					{
+						newLineOfText.mWords.push_back(spaceKeyword);
+						newLineOfText.mFullLine += spaceKeyword;
+
+						testString.erase(0, spacePosition + spaceKeyword.length());
+					}
+
+					spacePosition = testString.find(spaceKeyword);
+				}
+
+				if( testString.size() )
+				{
+					newLineOfText.mWords.push_back(testString);
+					newLineOfText.mFullLine += testString;
 				}
 			}
 			else

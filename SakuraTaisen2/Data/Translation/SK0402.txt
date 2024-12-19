@@ -182,7 +182,7 @@ Hey, Chief, are you gonna run off without giving this poor doggy a name?
 Mon Frère, what should we name the puppy?!
 Ogami, please pick a good name for this pup.
 Oh, it looks like<br>
-likes his name,<br>too.
+<sp>likes his name,<br>too.
 Since we've decided on a name for the dog, why don't we disperse for the time being?
 In that case, I will be found in the music room, playing on the piano.
 I think I might take a bath and then do some sword training in the courtyard.
@@ -222,7 +222,7 @@ So, uh… Are you getting some sunbathing in?
 …
 (Shoot. I don't know how to keep the conversation going.)
 Arf, arf!
-Hey,
+Hey,<sp>
 !
 Arf, arf!
 looks like he<br>wants to play with you, Reni.
