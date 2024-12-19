@@ -207,11 +207,19 @@ void ExtractTycoonIntroImages(const std::string& inRootDirectory, const std::str
 	delete[] buffer;
 }
 
+void ExtractTycoonSplashScreen(const std::string& inRootDirectory, const std::string& inOutputDirectory, const bool bInBmp)
+{
+	const std::string cardFilePath = inRootDirectory + "SAKURA3\\CARD_DAT.ALL";
+	ExtractTiledFullScreenImage<uint32>(cardFilePath, cardFilePath, 0x6b000, 0x6a020, 0x6c800, inOutputDirectory + "SplashScreen.bmp", bInBmp, 4, ETileIndiceType::MinusOne);
+}
+
 void ExtractTycoonRulesScreen(const std::string& inRootDirectory, const std::string& inOutputDirectory, const bool bInBmp, const bool bInFullExtraction)
 {
 	CreateDirectoryHelper(inOutputDirectory);
 
 	ExtractTycoonIntroImages(inRootDirectory, inOutputDirectory, bInBmp, bInFullExtraction);
+
+	ExtractTycoonSplashScreen(inRootDirectory, inOutputDirectory, bInBmp);
 
 	//CARD_DAT
 	const std::string cardFilePath = inRootDirectory + "SAKURA3\\CARD_DAT.ALL";
@@ -515,11 +523,80 @@ bool PatchTycoonEncodedImages(const std::string& inPatchedSakuraDirectory, const
 	return PatchKinematronEncodedImages(cardFilePath, tycoonImageDir, GTycoonKeyEntries, sizeof(GTycoonKeyEntries) / sizeof(GTycoonKeyEntries[0]), OnBlockDecoded);
 }
 
+bool PatchTycoonSplashScreen(const std::string& inPatchedSakuraDirectory, const std::string& inTranslatedDataDirectory)
+{
+	const int maxTiles = 75;
+
+	//Patch Tycoon splash screen
+	if (!PatchTiledImage<uint32>(inTranslatedDataDirectory + "Tycoon\\TycoonSplash.bmp", inPatchedSakuraDirectory + "SAKURA3\\CARD_DAT.ALL", (320 * 244) / 2, 0x6a020, 0x6b000, 1120, ETileIndiceType::MinusOne, maxTiles))
+	{
+		return false;
+	}
+
+	//Original game only expects 67 tiles.  We need to increase this to 76
+	{
+		const string daifFilePath = inPatchedSakuraDirectory + "SAKURA3\\0000DAIF.BIN";
+		FileData daifFileData;
+		if(!daifFileData.InitializeFileData(daifFilePath))
+		{
+			return false;
+		}
+
+		FileReadWriter daifFile;
+		if (!daifFile.OpenFile(daifFilePath))
+		{
+			return false;
+		}
+
+		//Update where in VDP2 ram our images reside.  We need more space, so move the address a little.
+		{
+			const int vdp2TileSetAddressOriginal = 0x25e40000;
+			const int vdp2TileSetAddress = 0x25e3fe00;
+		
+			// Verify we are writing to the correct place in the file
+			int originalVdp2Address = 0;
+			daifFileData.ReadData(0x139a4, (char*)&originalVdp2Address, sizeof(originalVdp2Address), true);
+			if(originalVdp2Address != vdp2TileSetAddressOriginal)
+			{
+				printf("PatchTycoonSplashScreen: At 0x139a4 in 0000DAIF.BIN, expected vdp2 address to be 0x%08x, got 0x%08x\n", vdp2TileSetAddressOriginal, originalVdp2Address);
+				return false;
+			}
+
+			//Update the address now
+			daifFile.WriteData(0x139a4, (char*)&vdp2TileSetAddress, sizeof(vdp2TileSetAddress), true);
+		}
+
+		//Update number of bytes in the tile set
+		{
+			const uint16 numBytesInTileSetOriginal = 0x880;
+			const uint16 numBytesInTileSet = (maxTiles + 1) * 8 * 4; //Game divides this value by 4, so multiply it in here
+			
+			// Verify we are writing to the correct place in the file
+			uint16 originalSize = 0;
+			daifFileData.ReadData(0x46e46, (char*)&originalSize, sizeof(originalSize), true);
+			if (originalSize != numBytesInTileSetOriginal)
+			{
+				printf("PatchTycoonSplashScreen: At 0x139a4 in 0000DAIF.BIN, expected tile size to be to be 0x%04x, got 0x%04x\n", numBytesInTileSetOriginal, originalSize);
+				return false;
+			}
+
+			daifFile.WriteData(0x46e46, (char*)&numBytesInTileSet, sizeof(numBytesInTileSet), true);
+		}
+	}
+
+	return true;
+}
+
 bool PatchTycoon(const std::string& inPatchedSakuraDirectory, const std::string& inTranslatedDataDirectory)
 {
 	printf("Patching Tycoon\n");
 
 	if( !PatchTycoonRulesScreen(inPatchedSakuraDirectory, inTranslatedDataDirectory) )
+	{
+		return false;
+	}
+
+	if(!PatchTycoonSplashScreen(inPatchedSakuraDirectory, inTranslatedDataDirectory))
 	{
 		return false;
 	}

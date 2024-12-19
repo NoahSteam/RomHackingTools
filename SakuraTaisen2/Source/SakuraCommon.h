@@ -173,15 +173,15 @@ void ExtractImageWithTileSet(const std::string& inTileFilePath, uint32 inWidth, 
 
 template<typename TileByteType>
 void ExtractTiledFullScreenImage(const std::string& inTileFilePath, const std::string& inColFilePath, uint32 inTileOffset, uint32 inColorOffset, 
-						uint32 inPaletteOffset, const std::string& inOutFileName, const bool bInBmp, int inBitCount = 8)
+						uint32 inPaletteOffset, const std::string& inOutFileName, const bool bInBmp, int inBitCount = 8, ETileIndiceType inIndiceType  = ETileIndiceType::DoubleMinusOne)
 {
 	ExtractImageWithTileSet<TileByteType>(inTileFilePath, 320, 224, inColFilePath, inTileOffset, inColorOffset, inPaletteOffset, 
-										  inOutFileName, bInBmp, inBitCount);
+										  inOutFileName, bInBmp, inBitCount, inIndiceType);
 }
 
 template<typename TileByteType>
 bool PatchTiledImage(const std::string& InPatchedImagePath, const std::string InSakuraFilePath, const uint32 InColorDataSize, const int InColorDataOffset,
-                     const int InTileDataOffset, const int InNumIndices = 1120, ETileIndiceType inIndiceType = ETileIndiceType::DoubleMinusOne)//bool bInOffsetTileByOne = true)
+                     const int InTileDataOffset, const int InNumIndices = 1120, ETileIndiceType inIndiceType = ETileIndiceType::DoubleMinusOne, int inMaxTiles = -1)//bool bInOffsetTileByOne = true)
 {
 	const uint32 tileDim = 8;
 	BmpToSaturnConverter patchedImage;
@@ -199,6 +199,12 @@ bool PatchTiledImage(const std::string& InPatchedImagePath, const std::string In
 	TileSetOptimizer optimizedTileSet;
 	optimizedTileSet.OptimizeTileSet(patchedImage);
 	optimizedTileSet.PackTiles();
+
+	if(inMaxTiles > -1 && optimizedTileSet.GetNumOptimizedTiles() > inMaxTiles)
+	{
+		printf("TileSet is too big for %s.  Got %i tiles, max is %i\n", InPatchedImagePath.c_str(), optimizedTileSet.GetNumOptimizedTiles(), inMaxTiles);
+		return false;
+	}
 
 	if (optimizedTileSet.GetPackedTileSize() > InColorDataSize)
 	{
