@@ -121,7 +121,7 @@ Oh, it's Reni. Hey!
 Good morning, Reni. 
 …Morning. 
 Arf, arf! 
-looks like he <br> wants to play with you again today.
+looks like he<br>wants to play with you again today.
 In fact, he seems to have grown even more attached to you, Reni.
 Arf! 
 … 
@@ -131,7 +131,7 @@ Let me join in.
 Try petting his head.
 Have you gotten used to him yet? 
 …Used to what? 
-, of course. <br> You’re not good with dogs, right? 
+, of course.<br>You’re not good with dogs, right? 
 …That’s inaccurate. I'm just not interested.
 Can I play with him, too? Let me join in.
 … 
@@ -151,7 +151,7 @@ Give it a try, Reni.
 Ah, wait!
 Aw… Reni just got up and left.
 Arf, arf, arf! 
-Ah,<sp> 
+Ah, 
 … 
 Hahaha, he's chasing after Reni. 
 …He sure has taken a liking to Reni. 
@@ -515,7 +515,7 @@ I haven't put much thought into it, guess I'll just take a bath like I normally 
 Hehe, not a bad idea. 
 In that case, perhaps I could help scrub your back. 
 …What?! R-Really? 
-Hmhm, you’ll just have to… Wait. And. See! 
+Hmhm, you’ll just have to… wait… and… see! 
 I'll see you later. I can't wait for the trip. 
 S-Saki… Was she being serious about that? 
 I feel like this is going to be a memorable trip…

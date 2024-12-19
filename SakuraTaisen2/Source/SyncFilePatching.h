@@ -442,14 +442,14 @@ bool HackUpdateSyncDataForAutoResumeLines(const string& inPatchedDirectory, vect
 				const SakuraTextFile::SequenceEntry* pSequenceEntry = sakuraFile.GetSequenceEntryForLineNumber(lineNumber + 1);
 				if(!pSequenceEntry)
 				{
-					printf("No sync data found for line: %i in %s within %s\n", lineNumber+1, sakuraFile.mFileNameInfo.mFileName.c_str(), pSyncFile->mFileName.mFileName.c_str());
+		//			printf("No sync data found for line: %i in %s within %s\n", lineNumber+1, sakuraFile.mFileNameInfo.mFileName.c_str(), pSyncFile->mFileName.mFileName.c_str());
 					continue;
 				}
 
 				const uint16 lipSyncId = pSequenceEntry->mLipSyncId;
 				if(pSyncFile->mSyncIdToEntry.find(lipSyncId) == pSyncFile->mSyncIdToEntry.end())
 				{
-					printf("No sync data found for line: %i in %s within %s\n", lineNumber+1, sakuraFile.mFileNameInfo.mFileName.c_str(), pSyncFile->mFileName.mFileName.c_str());
+		//			printf("No sync data found for line: %i in %s within %s\n", lineNumber+1, sakuraFile.mFileNameInfo.mFileName.c_str(), pSyncFile->mFileName.mFileName.c_str());
 					continue;//return false;
 				}
 
@@ -458,7 +458,7 @@ bool HackUpdateSyncDataForAutoResumeLines(const string& inPatchedDirectory, vect
 				{
 					syncFileWriter.WriteData(pSyncData->syncEntry.offsetToTimingData & 0xffff, (const char*)pSyncData->timingData.data(), pSyncData->timingData.size(), false);
 
-					printf("Hack Fixed SyncData for line: %i in %s within %s\n", lineNumber+1, sakuraFile.mFileNameInfo.mFileName.c_str(), pSyncFile->mFileName.mFileName.c_str());
+		//			printf("Hack Fixed SyncData for line: %i in %s within %s\n", lineNumber+1, sakuraFile.mFileNameInfo.mFileName.c_str(), pSyncFile->mFileName.mFileName.c_str());
 				}
 			}
 		}

@@ -25,7 +25,7 @@ Sure. Go find out what the others think and decide on a nice name for him.
 You're also dressed in your summer outfit, aren't you, Sakura.
 Yes, and I was really pleased to hear you liked it, Ogami.
 Ooh, what's up? Did something happen with you and the chief?
-Heheh. That’s. A. Secret. <br> Right, Ogami?
+Heheh. <br> That’s… a… secret. <br> Right, Ogami?
 Uh, y-yeah.
 That summer dress looks great on you.
 I thought you said you preferred my usual outfit.
@@ -225,7 +225,7 @@ Arf, arf!
 Hey,
 !
 Arf, arf!
-looks like he <br> wants to play with you, Reni.
+looks like he<br>wants to play with you, Reni.
 Arf!
 …
 Reni…
@@ -238,7 +238,7 @@ Go play with Altair.
 Go play with Hund.
 Do you dislike dogs?
 Why not play with<br>
-since he's here, Reni?
+since he's here,<br>Reni?
 seems eager to<br>play with you, too.
 Arf, arf!
 …I would prefer to avoid any excessive movement.
@@ -263,19 +263,19 @@ Hi, Sumire. Were you and<br>
 playing just now?
 Yes. My family kept a dog once, when I was younger.
 Although he was quite a bit larger than this fellow, he made an excellent playmate.
-Well then<sp>
-, <br> let us play again another time.
+Well then
+,<br>let us play again another<br>time.
 Arf, arf!
 I wish Reni would play with you, too.
-I should also get going. <br> See you later,<sp>
+I should also get going.<br>See you later,
 .
 Woof!
 Arf!
 Hey there,
-. <br> How do you like the theater so far?
+.<br>How do you like the theater so far?
 Arf, arf!
 Hahaha. I wonder what you're saying? It's almost like you can understand me.
-Anyway, I should be off. <br> See you later,<sp>
+Anyway, I should be off.<br>See you later,
 .
 Woof!
 Hey, Sakura.
@@ -404,12 +404,12 @@ That’ll be 50 sen. <br> Thanks for your patronage!
 Oh, so you're not going to buy anything?
 Oh yeah, you brought back that super cute little doggy earlier, didn't you?
 I guess he lives here at the theater with us now, huh?
-Yes, that’s right. <br> His name is
-if I <br> remember right.
+Yes, that’s right.<br>His name is
+if I<br>remember right.
 of the Flower <br> Division! What an adorable name!
 Would it be OK if I played with him after I'm done working?
 Yeah, of course. <br> I bet he'll really take a liking to you, Tsubaki.
-… <br> Ooh, I can’t wait to play with him!
+…<br>Ooh, I can’t wait to play with him!
 Well, I should be going. Keep up the good work.
 Thank you very much! <br> Come back again soon!
 Thank you very much! <br> Come back and buy another bromide next month!
@@ -591,7 +591,7 @@ OK… What should I grab first?
 Mm, bitter melon stir-fried with eggs… So tasty.
 Pretty great, huh? This recipe is my specialty!
 *munch* *munch*… <br> The seasoning is fantastic!
-And the rice is steamed to perfection, too. *munch* *munch*
+And the rice is steamed to perfection, too. <br> *munch* *munch*
 *munch* *gulp* <br> Phew… Need to catch my breath… OK, onto the next one!
 Which one should I grab first? Uh, I can’t decide…
 What're ya doin’, Boss? Better get to eatin’ unless you want me to come out on top.
@@ -1100,7 +1100,7 @@ Go somewhere else.
 OK, I think I will take a bath.
 I don't have time to lounge in here all day… But a short, relaxing bath would be nice.
 Phew… <br> Ohh, this feels great.
-was almost hit by <br> a car and I got hurt saving him. But now even my injured leg feels healed.
+was almost hit by<br>a car and I got hurt saving him. But now even my injured leg feels healed.
 Soaking in this huge bath all by myself is seriously heaven on earth…
 Now that I'm nice and warmed up, I guess it's time to get out.
 Ahh… That was a nice bath.
@@ -1114,7 +1114,7 @@ Go somewhere else.
 All right, I'll hop in the bath.
 I don't have time to lounge in here all day… But a short, relaxing bath would be nice.
 Phew… Ohh, this feels great.
-was almost hit by <br> a car and I got hurt saving him. But now even my injured leg feels healed.
+was almost hit by<br>a car and I got hurt saving him. But now even my injured leg feels healed.
 Soaking in this huge bath all by myself is seriously heaven on earth…
 Now that I'm nice and warmed up, I guess it's time to get out.
 Ahh… That was a nice bath.
@@ -1346,7 +1346,7 @@ That soap smells really nice. It must be from Sakura's bath a little while ago.
 There's no point in standing around in here. Let's move to another room.
 No one here. I'll go somewhere else.
 No one here. I'll go somewhere else.
-Hey. Mon. Frère!
+Hey… Mon… Frère!
 Hey, Iris, what's up?
 You know, on July 5th… <br> It's gonna be my birthday!
 Is that right? <br> Happy birthday, Iris.
@@ -1479,7 +1479,7 @@ I'll come back later.
 Seems like you’ve started keeping a dog in the courtyard, Ogami.
 That’s right. Sorry I made the decision without consulting you two first.
 Oh, it's no problem!<br>The dog's name is<br>
-from what I heard,<br>right?
+, isn't it?
 You got that information pretty quick. Just like always, Yuri.
 Heheh. Actually, Kohran just dropped by to tell us the news. She was really excited to talk about it.
 I see, glad to hear it. <br> I hope that you two will <br> play with

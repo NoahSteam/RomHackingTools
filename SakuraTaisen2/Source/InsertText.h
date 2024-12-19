@@ -545,13 +545,13 @@ bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTrans
 
 						if(bIsSK0906)
 						{
-							printf("SK0906 SPEED FIX %i\n", currSakuraStringIndex + 1);
+					//		printf("SK0906 SPEED FIX %i\n", currSakuraStringIndex + 1);
 						}
 
 						if(sakuraFile.mLines[currSakuraStringIndex].mChars[numBytesInOriginalText - 2].mIndex == 0xfffd)
 						{
 							translatedString.AddChar(0xfd);
-							printf("Verify Formatting (fc fd): %i\n", currSakuraStringIndex + 1);
+					//		printf("Verify Formatting (fc fd): %i\n", currSakuraStringIndex + 1);
 						}
 					}
 					//The FFFD character will have the game combine another line after this line.  But there isn't a way to know
@@ -562,7 +562,7 @@ bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTrans
 					{
 						translatedString.AddChar(0xfd);
 
-						printf("Verify Formatting (fd): %i\n", currSakuraStringIndex + 1);
+					//	printf("Verify Formatting (fd): %i\n", currSakuraStringIndex + 1);
 					}
 					/**/
 
@@ -572,7 +572,7 @@ bool InsertText(const string& inRootSakuraTaisenDirectory, const string& inTrans
 						if(!translatedString.EndsWithLineBreak())
 						{
 							translatedString.AddChar(0xfe);
-							printf("Original line ended with a line break: %i\n", currSakuraStringIndex + 1);
+				//			printf("Original line ended with a line break: %i\n", currSakuraStringIndex + 1);
 						}
 					}
 				}	

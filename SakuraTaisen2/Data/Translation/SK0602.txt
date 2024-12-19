@@ -166,7 +166,7 @@ All right, I should go too. First things first, I need to talk to Reni.
 Rehearsals are done for today. Nobody's here. 
 Reni's not here either. I'll go somewhere else. 
 Oh… Mon Frère. 
-Hey Iris. Why the long face? 
+Hey Iris. <br> Why the long face? 
 I'm worried about Reni… 
 She's looked so unhappy ever since the meeting earlier today. What happened to her? 
 Iris… 
@@ -215,7 +215,7 @@ No! I'm not a little kid, you know!
 R-Right. Then what are you doing? 
 Hmmm, I have no idea. 
 I give up, Iris. Tell me what you’re doing. 
-That’s. Our. Little. Secret! Isn't that right, 
+That’s… our… little… secret! Isn't that right,<br> 
 ? 
 Woof. 
 OK, Mon Frère, I have to get back to it, so I'll see you later. 
@@ -235,7 +235,7 @@ Hey,
 . How've you been? 
 There's a typhoon coming tonight, so you'll have to stay inside once it gets dark out. 
 Arf! 
-Good answer. See you, 
+Good answer.<br>See you, 
 . 
 Arf, arf! 
 Oh, Captain. 
@@ -1193,7 +1193,7 @@ Hmmm… No idea.
 Then I'll tell you. A rose's thorns are its weapons, made to protect what's important. 
 Of course, what WE'RE protecting isn't ourselves. 
 Well then… What is it? 
-That's. Our. Little. Secret! 
+That's… our… little… secret! 
 But never mind that, Ichiro! Stay here and play with us for a while! 
 N-No, I'm good, thanks! I really ought to get going now! Excuse me! 
 Oh, what a shame. Come back whenever you'd like. 

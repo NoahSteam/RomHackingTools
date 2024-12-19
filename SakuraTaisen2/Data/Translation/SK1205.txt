@@ -20,7 +20,7 @@ What could it be? <br> Hmm, now I'm curious.
 OK, guess I'll head over to the salon. 
 Hey, Maria. What's up? 
 Captain, um… <br> Are you free right now? 
-Yeah, sure, but… What's up? 
+Yeah, sure, but… what's up? 
 You remember how we went to Yokohama, right? 
 Yeah, I remember. We went together for New Year's. 
 Back then our trip was interrupted by the Black Demons and we were forced to come back early. 
@@ -44,9 +44,9 @@ Really? <br> Thanks, Boss!
 All right, I'll be waitin’ over by the entrance. See ya later! 
 A beach trip with Kanna, huh? Can't wait. 
 OK, guess I'll head over to the entrance, then. 
-Hehehe. Hey. Mon. Frère!
-Hey, Iris. Did you need something? 
-Uh-huh! Let's go on a date, Mon Frère, right now! 
+Hehehe. <br> Hey… Mon… Frère!
+Hey, Iris. <br> Did you need something? 
+Uh-huh! <br> Let's go on a date, <br> Mon Frère, right now! 
 You promised we'd go on one after we got back, remember? 
 Hahaha, now that you mention it, I guess I did. 
 Sure, let's go. I'd be more than happy to. 
@@ -58,7 +58,7 @@ All right, see you later! Bye-byyye!
 A date with Iris, huh? Hmmm, where does she plan on taking me? 
 OK, guess I'll head over to her room. 
 Hey Chief, are you free right now? 
-Hey Kohran. Did you need something? 
+Hey Kohran. <br> Did you need something? 
 Well, you know how I used to work at the Hanayashiki Branch, right? 
 Yeah, I remember. 
 There's a munitions factory underground below Hanayashiki… 
@@ -71,7 +71,7 @@ All right, just swing by my room when you're ready to go! I'll be waiting!
 An amusement park date with Kohran, huh? Can't wait. 
 OK, guess I'll head over to Kohran's room, then. 
 Ciao, Mr. Ensign. 
-Hey, Orihime. Did you need something? 
+Hey, Orihime. <br> Did you need something? 
 Actually, there's something I wanted to show you. 
 Come by my room later, please! 
 Something to show me? 
@@ -79,7 +79,7 @@ Heehee, whatever could it be?
 OK then, I'll be waiting! 
 Orihime has something to show me, huh? I wonder what it is. 
 All right, guess I'll head over to her room, then. 
-Hey, Reni. Did you need something? 
+Hey, Reni. <br> Did you need something? 
 Captain… <br> Are you free right now? 
 Yeah, I’m available.
 There's… a festival nearby today. 
@@ -108,7 +108,7 @@ I want to treasure every moment I get to spend with you.
 Sakura… 
 …OK, Ogami, let's get going. 
 Now, could you please hold the back of the bike for me? 
-Huh?! W-Wait, then… That favor of yours… 
+Huh?! W-Wait, then… <br> That favor of yours… 
 That's right! I want you to help me practice. 
 Heheh, I only just bought this bike, I don't actually know how to ride it yet. 
 S-Say what?! 
@@ -117,7 +117,7 @@ Whoa! S-Sakura, waaaaait!
 Oops, I don't think this outfit's gonna cut it for a date. 
 Better get changed while I'm at it. 
 There, that should do it. Let's get going. 
-Hey, Maria. Did I keep you waiting? 
+Hey, Maria. <br> Did I keep you waiting? 
 No, you're all right. <br> We have plenty of time. 
 Now, how about we take a steam taxi over to Yokohama? 
 Sure, let's do that. 
@@ -178,8 +178,8 @@ All right, Orihime, I'm gonna go now.
 Stay for a while and listen to me play next time, OK? 
 (Orihime's playing piano.) 
 (I'll leave her be. Wouldn't want to disturb her.) 
-Mr. Yoneda. Drinking as usual, eh? 
-That you, Ogami? Wanna drink? 
+Mr. Yoneda. <br> Drinking as usual, eh? 
+That you, Ogami? <br> Wanna drink? 
 N-No, I'm good. 
 Aw, you're no fun. 
 Still, you did great in that last battle. 
@@ -193,7 +193,7 @@ Zzzzzzzz… Zzzzzzzz…
 Sounds like the manager's fallen asleep. 
 That makes sense, what with all his drinking and this warm weather. 
 Ah, hello, Ogami! 
-Hello, you two. Hard at work, I see. 
+Hello, you two. <br> Hard at work, I see. 
 Yes, thanks to that battle, our clerical work has really piled up… 
 We've been working overtime constantly since then, it's been tough! 
 I see. Keep up the good work, you two. 
@@ -236,7 +236,7 @@ OK, I'll be going, then. See you later, Reni.
 (She must be savoring the joy she feels from being back at the theater.) 
 I guess not even Kanna would eat before going out. 
 A beach trip with Kanna, huh? Can't wait. 
-Yo, Boss. Here to chow down? 
+Yo, Boss. <br> Here to chow down? 
 Hahaha, nope. Although, I see you're having a feast like you always do. 
 Yeah, the food here really is great! 
 OK, onto bowl number eleven! 
@@ -307,7 +307,7 @@ Well, I do need to train a lot more if I ever hope to catch up to my father.
 All right, Ogami, I'll be going now. See you later. 
 Sakura's really trying her best. 
 I know she'll be able to surpass her father someday. 
-Oh, Ogami. Did you need something? 
+Oh, Ogami. <br> Did you need something? 
 No, nothing in particular. 
 Oh, I see. I was writing my reports just now. 
 You did a fantastic job, Ogami. What's more… 
@@ -317,7 +317,7 @@ Every single member of the Flower Division made it back, together…
 And it's all because of you, Ogami. Thank you so much. 
 Kaede… 
 Now then, you'd better get going. After all, you've got someone waiting for you, don't you? 
-Huh?! <br> But… How did you know? 
+Huh?! <br> But… how did you know? 
 Hm hm hm, I'm the deputy commander, remember? All right, run along now. 
 Um… It's Ogami. 
 Oh, Ogami? Did you still need something? 
@@ -336,7 +336,7 @@ Kayama… You didn't get hurt fighting the Kouma, did you?
 I told you I'd be fine. Don't underestimate the Moon Division! 
 But hold on, Ogami… Does that mean you were worried about me? 
 Well of course I was. We're both part of the Imperial Assault Troupe. We're partners, aren't we? 
-Ogami… Thank you. What a joy it is to be able to fight at your side! 
+Ogami… Thank you. <br> What a joy it is to be able to fight at your side! 
 However, there is an old saying, "Tighten your helmet strings in the hour of victory." 
 As captains of the Flower and Moon Divisions, let's both strive to do our best! 
 Yeah! 
@@ -384,7 +384,7 @@ Tee-hee! <br> Okey-dokey, I'm gonna put this on and then we can go!
 This date's gonna go great, don'tcha think, Mon Frère? 
 Yeah, it definitely will. 
 By the way, aren't you going to tell me where we're going? 
-Well… That's. A. Secret! Heeheehee!
+Well… <br> That's… a… secret! <br> Heeheehee!
 Hey, Iris. Sorry to barge in. 
 Ah, Mon Frère! Welcome! 
 I was just writing a letter to my papa and mama. 
@@ -392,7 +392,7 @@ About our spring play, about our last battle…
 Heheh, I have so much to write about, I don't even know where to begin! 
 Hahaha, I see. 
 All right, then, Iris, I'll get out of your hair. Good luck with your letter. 
-Thanks, Mon Frère! See you later! Bye-byyyye! 
+Thanks, Mon Frère! <br> See you later! Bye-byyyye! 
 Iris said she was writing a letter. 
 I don't want to bother her, plus I've got someone waiting on me, so I'll just go. 
 Kohran? It's Ogami. 
@@ -464,13 +464,13 @@ I'm perfectly happy just being able to spend time with you.
 Hm? Did you say something, Sumire? 
 N-No, nothing at all! Ohohohoho! 
 Now then, Ensign, shall we get going? 
-My, Ensign. You seem busy as ever. 
+My, Ensign. <br> You seem busy as ever. 
 And I see you're gracefully enjoying your tea, as usual. 
 Indeed. There's nothing quite like a cup of tea after a hard day's work. 
 Besides, I always feel the most at ease when I'm sitting right here drinking my tea. 
 Hahaha, I see. 
 All right, I'll be going, then. 
-Very well. Good day, Ensign. 
+Very well. <br> Good day, Ensign. 
 My, Ensign. Aimlessly wandering around as usual, I see. 
 You should relax and enjoy a nice cup of tea every once in a while. 
 Haha… Well, I suppose you're right. 
@@ -513,7 +513,7 @@ Doesn't look like she's in her room.
 Even though the fighting's over, the Imperial Assault Troupe's work never ends. 
 We've got to keep working together to keep putting on great plays. 
 Arf, arf! 
-Oh, that sounds like 
+Oh, that sounds like<br> 
 ! 
 You came to the theater in July of last year, right? 
 Arf! 
@@ -522,7 +522,7 @@ Bet you never thought you'd ever be flying in the Mikasa, did you?
 Now you're a full-fledged part of the team, too. Keep up the good work. 
 Arf, arf, arf! 
 Huh? Did<br> 
-run off somewhere? 
+run off<br>somewhere? 
 Eh, I'm sure he's fine. He's probably running around in the theater somewhere. 
 To think this theater can transform and become a part of the Mikasa… 
 Hard to believe when you see an attic made of wood like this. 
@@ -535,7 +535,7 @@ The Koubu and the Tenbu… <br> They all did great.
 Now they get to take a little break while they heal their wounds. 
 I see, so they're on vacation for a little while. 
 All right, Kohran, I'm gonna go. Keep up the good work. 
-Thanks a bunch, Chief! See ya! 
+Thanks a bunch, Chief! <br> See ya! 
 I don't see Kohran anywhere. She must be under a Koubu, fixing it up. 
 I wouldn't want to get in the way of her work, so I'll go somewhere else. 
 Hello, everyone. 

@@ -93,7 +93,7 @@ So you're Ensign Ichiro Ogami.
 You got yourself a pair of nice piercing eyes. 
 … 
 And you… You resemble your father quite a bit, Sakura Shinguji. 
-Huh!? So you… You knew my father? 
+Huh!? So you… <br> You knew my father? 
 Indeed… <br> What a pathetic man he was. 
 I’m sure even now he is lamenting his foolish, pointless sacrifice in the afterlife… 
 What!? 
@@ -162,7 +162,7 @@ Then… Has there been any news about when you'll be discharged?
 Ah… I may be able to leave next month. 
 I see. In any case, please take care of yourself. 
 By the way, Ogami… What's with the bruises? You get into a fight? 
-Ah, t-this is… I just tripped and fell over while we were walking here. 
+Ah, t-this is… <br> I just tripped and fell over while we were walking here. 
 Uh-huh… <br> Now that's suspicious. <br> Did you get caught two-timing, Chief? 
 Huh!? 
 Yoohoo!! <br> Long time no see. <br> How’ve you all been?  
@@ -276,7 +276,7 @@ I'll come back later.
 Seems like you’ve started keeping a dog in the courtyard, Ogami. 
 That’s right. Sorry I made the decision without consulting you two first. 
 Oh, it's no problem!<br>The dog's name is<br>
-from what I heard,<br>right?
+, isn't it?
 You got that information pretty quick. Just like always, Yuri. 
 Heheh. Actually, Kohran just dropped by to tell us the news. She was really excited to talk about it. 
 I see, glad to hear it. I hope that you two will play with 

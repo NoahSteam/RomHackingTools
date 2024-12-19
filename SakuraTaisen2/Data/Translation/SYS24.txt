@@ -14,7 +14,7 @@ We're sticking with the current strategy!
 Understood!
 Destroy Kyogoku's mech!
 This may be our final battle…
-All of you, please… Please, come back alive!
+All of you, please… <br> Please, come back alive!
 Pass through the gate and defeat Tsuchigumo!
 The enemy general, Tsuchigumo, is capable of multiple continuous attacks. Be careful!
 <LEAVE> 0 Message 2-3
@@ -32,11 +32,11 @@ Orihime Soletta, prior Star Division member. Piloting a rose armor, she is known
 Reni Milchstraße. A combat professional, attacking accurately without a single wasted movement.
 Close combat Kouma Weapon. Using the Banrai as a base, its combat abilities have been augmented.
 Kouma Weapon: Gufuu. <br> It has a long range, but is relatively weak in all other respects.
-Kouma Weapon: Shu'u. <br> Its attacks pummel its enemies like rain. Also highly mobile.
+Kouma Weapon: Shu'u. <br> A highly mobile unit that pummels its enemies like a torrential rain.
 The ultimate weapon piloted by Kyogoku. Fueled by the souls of the vengeful dead, its power is unimaginable.
 Grudge Cord. <br> Uses the power of vengeful spirits within Musashi to attack any intruders.
 Kouma Weapon: Inazuma. <br> This Kouma boasts not only restorative abilities, but high mobility as well.
-Bomber-type Kouma Weapon. <br> This impressive unit combines both powerful attacks and long range.
+Kouma Weapon: Ryukou. <br> This impressive unit combines both powerful attacks and long range.
 Kouma Weapon: Ryukou. <br> Its well-balanced abilities across the board make it a masterwork of design.
 <LEAVE> Message 18
 <LEAVE> Message 19

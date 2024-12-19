@@ -31,10 +31,10 @@ Kohran Li, inventor. Startles friend and foe alike with the inventions she emplo
 Orihime Soletta, prior Star Division member. Piloting a rose armor, she is known as one of the Red Nobles.
 Reni Milchstraﬂe. A combat professional, attacking accurately without a single wasted movement.
 Close combat Kouma Weapon. Using the Banrai as a base, its combat abilities have been augmented.
-Ultimate Weapon Shinnou. An all-powerful weapon of mass destruction, powered by vengeful spirits.
-Ultimate Weapon Shinnou. It has opened up all of its engines and reached full power.
-Ultimate Weapon Shinnou. The shockwave attack from its arms is highly destructive.
-Obeyer. A weapon made of vengeful spirits that follows Shinnou's orders.
+Ultimate Weapon Shinnou. <br> An all-powerful weapon of mass destruction, powered by vengeful spirits.
+Ultimate Weapon Shinnou. <br> It has opened up all of its engines and reached full power.
+Ultimate Weapon Shinnou. <br> The shockwave attack from its arms is highly destructive.
+Obeyer. <br> A weapon made of vengeful spirits that follows Shinnou's orders.
 Kouma Weapon: Inazuma. <br> This Kouma boasts not only restorative abilities, but high mobility as well.
 Bomber-type Kouma Weapon. <br> This impressive unit combines both powerful attacks and long range.
 Kouma Weapon: Ryukou. <br> Its well-balanced abilities across the board make it a masterwork of design.

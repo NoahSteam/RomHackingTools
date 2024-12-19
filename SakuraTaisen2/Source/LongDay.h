@@ -69,7 +69,7 @@ bool ExtractLongDayOptionsText(const std::string& inRootDirectory, const std::st
 		ExtractImageFromData(decompressedFontSheet.mpUncompressedData, decompressedFontSheet.mUncompressedDataSize,
 			blockOutputDir + "FontSheet.png", paletteFileData.GetData() + 0x77c9c, 32, true, 16, 16, 16, 256, 0, true, false);
 
-		//Read int character entries
+		//Read in character entries
 		const uint16 numCharEntries = textBlock.NumCharEntries;
 		uint16* pCharEntries = new uint16[numCharEntries];
 		memcpy_s(pCharEntries, numCharEntries * sizeof(uint16), omkTestFile.GetData() + textBlock.Offset, numCharEntries * sizeof(uint16));
@@ -345,12 +345,15 @@ bool PatchLongDayText(const string& inPatchedSakuraDirectory, const string& inTr
 			}
 		}
 		
+		// Actually, these shouldn't be modified.  
+		// They point to the start of the table with the file names for the music files.
+		/*
 		//First value repeats twice for first two segments
 		if( omkIndex < 2 )
 		{
 			omkTestFile.WriteData(writeOffset, (char*)&footerData[0], sizeof(uint32), true);
 			omkTestFile.WriteData(writeOffset + sizeof(uint32), (char*)&footerData[0], sizeof(uint32), true);
-		}
+		}*/
 	}
 	
 	return true;
