@@ -774,3 +774,26 @@ std::string IntToHexString(T i)
 		<< std::hex << i;
 	return stream.str();
 }
+
+struct CharToWChar
+{
+	~CharToWChar()
+	{
+		delete[] pWCharBuffer;
+
+		pWCharBuffer = nullptr;
+	}
+
+	CharToWChar(const char* pInData)
+	{
+		const size_t srcLen = strlen(pInData);
+		size_t destSize = 0;
+		mbstowcs_s(&destSize, nullptr, 0, pInData, srcLen);
+
+		size_t convertedChars = 0;;
+		pWCharBuffer = new wchar_t[destSize];
+		mbstowcs_s(&convertedChars, pWCharBuffer, destSize, pInData, srcLen);
+	}
+
+	wchar_t* pWCharBuffer = nullptr;
+};

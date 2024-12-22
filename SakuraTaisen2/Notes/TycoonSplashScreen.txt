@@ -1,0 +1,9 @@
+25e40000 stored at 060189a4 read at 0x139a0 (0601895a) (change to 25e3fe00?)
+
+In 0000DAF.BIN at 0x139a0
+
+05e40000 written from 06006a8e
+
+0000DAIF.BIN 0x46e46 has number of bytes in our tile sheet
+
+06010CDE reads that value in from 0604be44
