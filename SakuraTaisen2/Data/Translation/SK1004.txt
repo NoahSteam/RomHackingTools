@@ -682,14 +682,14 @@ Everyone should be in their rooms getting ready to leave right about now.
 With the Christmas play over and done with, the theater's on break for the New Year holiday. 
 The entrance here will remain locked tight until the holiday's over. 
 Arf, arf! 
-Hey, 
+Hey,<sp> 
 !<br>Happy New Year. 
 Arf, arf, arf! 
 Haha, I see you got yourself a New Year's bone, too. 
 Well, there's not many of us guys here at the theater. Let's both do our best this year, all right? 
 Arf! 
 Arf, arf! 
-, I'll be heading out for a while. 
+, I'll be heading<br>out for a while. 
 Look after the theater while I'm gone, OK? 
 Guess Orihime's taking a vacation from the piano for New Year's Day. 
 Well, she did say her mother was coming to visit, so I guess now's not the time for piano. 
@@ -844,7 +844,7 @@ I'll come back later.
 The Christmas play was so emotional! 
 Your direction was exceptional, Ogami. 
 Thank you. Somehow we managed to pull it off. 
-And 
+And<sp> 
 Sakura 
 Sumire 
 Maria 
@@ -853,7 +853,7 @@ Iris
 Kohran 
 Orihime 
 Reni 
-was so<br>beautiful in the lead… 
+<sp>was so<br>beautiful in the lead… 
 I'd love to get up on that stage too, even if only just once… 
 The commotion caused by the attempted coup d’etat last year has finally faded away. 
 Yeah, people have already stopped talking about the Taisho Restoration Army. 

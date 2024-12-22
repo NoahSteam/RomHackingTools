@@ -225,7 +225,7 @@ Arf, arf!
 Hey,<sp>
 !
 Arf, arf!
-looks like he<br>wants to play with you, Reni.
+<sp>looks like he<br>wants to play with you, Reni.
 Arf!
 …
 Reni…
@@ -238,8 +238,8 @@ Go play with Altair.
 Go play with Hund.
 Do you dislike dogs?
 Why not play with<br>
-since he's here,<br>Reni?
-seems eager to<br>play with you, too.
+<sp>since he's here,<br>Reni?
+<sp>seems eager to<br>play with you, too.
 Arf, arf!
 …I would prefer to avoid any excessive movement.
 Do you dislike dogs, Reni?
@@ -247,35 +247,35 @@ Not particularly…
 Arf, arf!
 …
 Arf, arf!
-Just look how much
-<br> wants to play with you, Reni.
+Just look how much<sp>
+<br>wants to play with you, Reni.
 You could at least give him a pat on the head.
 …
 Well, there is somewhere I must be…
 Ah, Reni!
 Shoot, too late.
 Whiiine…
-There there,
-. <br> I'm sure Reni will come <br> around eventually.
+There there,<sp>
+.<br>I'm sure Reni will come<br>around eventually.
 Oh my, Ensign…
 Arf, arf!
 Hi, Sumire. Were you and<br>
-playing just now?
+<sp>playing just now?
 Yes. My family kept a dog once, when I was younger.
 Although he was quite a bit larger than this fellow, he made an excellent playmate.
-Well then
-,<br>let us play again another<br>time.
+Well then<sp>
+, let us<br>play again another time.
 Arf, arf!
 I wish Reni would play with you, too.
-I should also get going.<br>See you later,
+I should also get going.<br>See you later,<sp>
 .
 Woof!
 Arf!
-Hey there,
+Hey there,<sp>
 .<br>How do you like the theater so far?
 Arf, arf!
 Hahaha. I wonder what you're saying? It's almost like you can understand me.
-Anyway, I should be off.<br>See you later,
+Anyway, I should be off.<br>See you later,<sp>
 .
 Woof!
 Hey, Sakura.
@@ -404,9 +404,9 @@ That’ll be 50 sen. <br> Thanks for your patronage!
 Oh, so you're not going to buy anything?
 Oh yeah, you brought back that super cute little doggy earlier, didn't you?
 I guess he lives here at the theater with us now, huh?
-Yes, that’s right.<br>His name is
-if I<br>remember right.
-of the Flower <br> Division! What an adorable name!
+Yes, that’s right.<br>His name is<sp>
+<br>if I remember right.
+<sp>of the Flower<br>Division! What an adorable name!
 Would it be OK if I played with him after I'm done working?
 Yeah, of course. <br> I bet he'll really take a liking to you, Tsubaki.
 …<br>Ooh, I can’t wait to play with him!
@@ -683,7 +683,7 @@ It's empty. No one usually comes here during their free time.
 Oh well. Guess I'll check someplace else.
 There doesn't seem to be anyone on the terrace.
 Maybe I’ll visit<br>
-in the courtyard<br>now that the rain has<br>finally stopped.
+<sp>in the courtyard<br>now that the rain has<br>finally stopped.
 I figured I'd check again, but there's still no one here…
 Oh yeah, Kohran was asking for me, wasn't she? I'd best not be late.
 …
@@ -1004,7 +1004,7 @@ Maybe next time.
 OK, I'll make a call.
 I'll call someone another time. Maybe I'll head somewhere else for now.
 There's no one here… <br> Where did everyone go?
-is pretty popular. <br> Maybe they’re spending time with him. Hmm… I'll try somewhere else.
+<sp>is pretty popular.<br>Maybe they’re all spending time with him. Hmm… I'll try somewhere else.
 The sunlight here is so bright. It's nice and warm.
 Well, I guess I'll keep going since there's nobody here.
 The other day, Yuri told me that these VIP seats are 15 yen per ticket…
@@ -1092,15 +1092,15 @@ Oh, Ogami. Are you here to bathe?
 N-No… That's not it.
 You know, you did get pretty wet in the rain earlier.
 Why not take a bath to warm up so you don't catch a cold?
-G-Good idea. Thanks, Sakura.
-I'd better be going. See you later.
+G-Good idea. <br> Thanks, Sakura.
+I'd better be going. <br> See you later.
 Yeah… A bath doesn't sound too bad.
 Get in the bath.
 Go somewhere else.
 OK, I think I will take a bath.
 I don't have time to lounge in here all day… But a short, relaxing bath would be nice.
 Phew… <br> Ohh, this feels great.
-was almost hit by<br>a car and I got hurt saving him. But now even my injured leg feels healed.
+<sp>was almost hit by<br>a car and I got hurt saving him. But now even my injured leg feels healed.
 Soaking in this huge bath all by myself is seriously heaven on earth…
 Now that I'm nice and warmed up, I guess it's time to get out.
 Ahh… That was a nice bath.
@@ -1114,7 +1114,7 @@ Go somewhere else.
 All right, I'll hop in the bath.
 I don't have time to lounge in here all day… But a short, relaxing bath would be nice.
 Phew… Ohh, this feels great.
-was almost hit by<br>a car and I got hurt saving him. But now even my injured leg feels healed.
+<sp>was almost hit by<br>a car and I got hurt saving him. But now even my injured leg feels healed.
 Soaking in this huge bath all by myself is seriously heaven on earth…
 Now that I'm nice and warmed up, I guess it's time to get out.
 Ahh… That was a nice bath.
@@ -1360,7 +1360,7 @@ No, you're wrong! I'm gonna be 12!
 Oh, th-that's right… <br> Sorry, it slipped my mind.
 Jeez! Remember it next time!
 You'll be 12. <br> I remember that much.
-Thank you, Mon Frère! I knew you'd remember!
+Thank you, Mon Frère! <br> I knew you'd remember!
 Hahaha, of course I did.
 I think… you'll be 13?
 No… I'm turning 12 years old.

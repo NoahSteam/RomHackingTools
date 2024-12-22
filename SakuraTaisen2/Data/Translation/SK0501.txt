@@ -121,7 +121,7 @@ Oh, it's Reni. Hey!
 Good morning, Reni. 
 …Morning. 
 Arf, arf! 
-looks like he<br>wants to play with you again today.
+<sp>looks like he<br>wants to play with you again today.
 In fact, he seems to have grown even more attached to you, Reni.
 Arf! 
 … 
@@ -151,7 +151,7 @@ Give it a try, Reni.
 Ah, wait!
 Aw… Reni just got up and left.
 Arf, arf, arf! 
-Ah, 
+Ah,<sp> 
 … 
 Hahaha, he's chasing after Reni. 
 …He sure has taken a liking to Reni. 
