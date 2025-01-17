@@ -10,6 +10,7 @@ void ExtractBGDatFiles(const string& InRootSakuraDirectory, const string& InOutD
 	//Find all the scenario text files
 	vector<FileNameContainer> datFiles;
 	GetAllFilesOfType(allFiles, ".DAT", datFiles);
+	GetAllFilesOfType(allFiles, "BG6018", datFiles);
 
 	const string bmpExt(".bmp");
 
@@ -29,7 +30,7 @@ void ExtractBGDatFiles(const string& InRootSakuraDirectory, const string& InOutD
 
 		const char* pColorData = fileData.GetData() + 0x710;
 		const char* pPaletteData = fileData.GetData() + 0x510;
-		const string outFileName = InOutDirectory + datFiles[i].mNoExtension + bmpExt;
+		const string outFileName = InOutDirectory + datFiles[i].mNoExtension + datFiles[i].mExtention + bmpExt;
 
 		const int imageWidth = 288;
 		const int imageHeight = 144;
@@ -100,8 +101,20 @@ bool PatchBGDatFiles(const string& InPatchedSakuraDirectory, const string& InTra
 	for (int i = 0; i < numFiles; ++i)
 	{
 		const string bgFilePath = InPatchedSakuraDirectory + string("SAKURA2\\") + bossImages[i].mNoExtension + string(".DAT");
+		const string bgFilePathBin = InPatchedSakuraDirectory + string("SAKURA2\\") + bossImages[i].mNoExtension + string(".BIN");
 
-		PatchTiledImage<uint16>(bossImages[i].mFullPath, bgFilePath, imageWidth*imageHeight, 0x710,	0, numTiles, ETileIndiceType::Double);
+		if(DoesFileExist(bgFilePathBin))
+		{
+			if (!PatchTiledImage<uint16>(bossImages[i].mFullPath, bgFilePathBin, imageWidth * imageHeight, 0x710, 0, numTiles, ETileIndiceType::Double))
+			{
+				return false;
+			}
+		}
+
+		if(!PatchTiledImage<uint16>(bossImages[i].mFullPath, bgFilePath, imageWidth*imageHeight, 0x710,	0, numTiles, ETileIndiceType::Double))
+		{
+			return false;
+		}
 	}
 
 	return true;

@@ -5,47 +5,52 @@ struct BattleSimImageInfo
 	int offset;
 	uint8 width;
 	uint8 height;
+	bool b4Bit;
 };
 
 const BattleSimImageInfo images[] =
 {
-	0x1f0a0, 40, 16,
-	0x1f0a0, 40, 16,
-	0x1f0a0, 40, 16,
-	0x1f0a0, 40, 16,
-	0x1f0a0, 40, 20,
-	0x1f740, 40, 20,
+	0x1f0a0, 40, 16, true,
+	0x1f0a0, 40, 16, true,
+	0x1f0a0, 40, 16, true,
+	0x1f0a0, 40, 16, true,
+	0x1f0a0, 40, 20, true,
+	0x1f740, 40, 20, true,
 
-	0x1f960, 64, 22,
-	0x1f960, 64, 22,
-	0x1f960, 64, 22,
-	0x1f960, 64, 22,
-	0x1f960, 64, 22,
-	0x1f960, 64, 22,
-	0x1f960, 64, 22,
-	0x1f960, 64, 22,
-	0x1f960, 64, 22,
-	0x1f960, 64, 22,
-	0x1f960, 64, 22,
-	0x1f960, 64, 22,
-	0x1f960, 64, 22,
-	0x1f960, 64, 22,
-	0x1f960, 64, 22,
-	0x1f960, 64, 22,
-	0x1f960, 64, 22,
-	0x1f960, 64, 22,
-	0x1f960, 64, 22,
-	0x1f960, 64, 22,
+	0x1f960, 64, 22, true,
+	0x1f960, 64, 22, true,
+	0x1f960, 64, 22, true,
+	0x1f960, 64, 22, true,
+	0x1f960, 64, 22, true,
+	0x1f960, 64, 22, true,
+	0x1f960, 64, 22, true,
+	0x1f960, 64, 22, true,
+	0x1f960, 64, 22, true,
+	0x1f960, 64, 22, true,
+	0x1f960, 64, 22, true,
+	0x1f960, 64, 22, true,
+	0x1f960, 64, 22, true,
+	0x1f960, 64, 22, true,
+	0x1f960, 64, 22, true,
+	0x1f960, 64, 22, true,
+	0x1f960, 64, 22, true,
+	0x1f960, 64, 22, true,
+	0x1f960, 64, 22, true,
+	0x1f960, 64, 22, true,
 
-	0x23760, 168, 22,
+	0x23760, 168, 22, true,
 
-	0x23ea0, 48, 72,
-	0x23ea0, 168, 22,
+	0x23ea0, 48, 72, true,
+	0x23ea0, 168, 22, true,
 
-	0x24ca0, 48, 72,
-	0x24ca0, 168, 22,
+	0x24ca0, 48, 72, true,
+	0x24ca0, 168, 22, true,
 
-	0x25aa0, 48, 72
+	0x25aa0, 48, 72, true,
+
+	0x1ec20, 24, 16, false,
+	0x1ec20, 24, 16, false,
+	0x1ec20, 24, 16, false,
 };
 
 void ExtractBattleSimVDP2(const std::string& inRootDirectory, const std::string& inOutputDirectory, const bool bInBmp)
@@ -104,13 +109,15 @@ void ExtractBattleSimulator(const std::string& inRootDirectory, const std::strin
 			prevOffset = offset;
 		}
 
+		const bool b4bit = images[i].b4Bit;
+		const int paletteSize = b4bit ? 32 : 512;
 		const int imageWidth = images[i].width;
 		const int imageHeight = images[i].height;
-		const int imageSize = imageWidth * imageHeight / 2;
-		const int paletteOffset = i < 6 ? 0xe00 : 0xe80;
+		const int imageSize = b4bit ? imageWidth * imageHeight / 2 : imageWidth * imageHeight;
+		const int paletteOffset = i < 6 ? 0xe00 : b4bit ? 0xe80 : 0;
 
 		const string bitmapFileName = outputDirectory + std::to_string(i) + ext;
-		ExtractImageFromData(sakuraFileData.GetData() + offset, imageSize, bitmapFileName, paletteFileData.GetData() + paletteOffset, 32, true, imageWidth, imageHeight, 1, 256, 0, true, bInBmp);
+		ExtractImageFromData(sakuraFileData.GetData() + offset, imageSize, bitmapFileName, paletteFileData.GetData() + paletteOffset, paletteSize, b4bit, imageWidth, imageHeight, 1, 256, 0, true, bInBmp);
 
 		offset += imageSize;
 	}
