@@ -15,11 +15,11 @@ struct MainMenuImageInfo
 struct CustomMenuImageInfo
 {
 	CustomMenuImageInfo(){}
-	CustomMenuImageInfo(uint16 InWidth, uint16 InHeight, uint16 InOffset, const string& InImageName) : width(InWidth), height(InHeight), offset(InOffset), imageName(InImageName){}
+	CustomMenuImageInfo(uint16 InWidth, uint16 InHeight, uint32 InOffset, const string& InImageName) : width(InWidth), height(InHeight), offset(InOffset), imageName(InImageName){}
 
 	uint16 width{ 0 };
 	uint16 height{ 0 };
-	uint16 offset{ 0 };
+	uint32 offset{ 0 };
 	string imageName;
 };
 #pragma pack(pop)
@@ -135,7 +135,7 @@ MainMenuImageInfo CmdWinImages[NumCmdWinImages]
 std::unordered_set<int> PBookFLFilesToSkip;
 
 bool PatchCustomImages( vector<CustomMenuImageInfo> InImageInfo,
-						const string& InPatchedFilePath)
+						const string& InPatchedFilePath, bool bInAccumulateOffsets = true)
 {
 	FileReadWriter pbookFileData;
 	if (!pbookFileData.OpenFile(InPatchedFilePath))
@@ -191,6 +191,11 @@ bool PatchCustomImages( vector<CustomMenuImageInfo> InImageInfo,
 		{
 			printf("Expected data size of %i, got %i for %s\n", (width * height) >> 1, convertedImage.GetImageDataSize(), translatedImagePath.c_str());
 			return false;
+		}
+
+		if(!bInAccumulateOffsets)
+		{
+			accumulatedOffset = 0;
 		}
 
 		pbookFileData.WriteData(offset + accumulatedOffset, convertedImage.GetImageData(), convertedImage.GetImageDataSize(), false);
@@ -293,10 +298,11 @@ bool Patch_PBook_BT(const string& inPatchedSakuraDirectory, const string& inTran
 	vector<CustomMenuImageInfo> imageList;
 
 	const string translatedDirectory = inTranslatedDataDirectory + string("PBOOK_FL\\");
+	const string pbookBtDirectory = inTranslatedDataDirectory + string("PBOOK_BT\\");
 
 	int lutIndex = 0;
 	const int offsetToImageData = 0xfb20;
-#define MenuImageEntry(imagePath) imageList.emplace_back(SwapByteOrder(lookupTable[lutIndex].widthDiv8)*8, SwapByteOrder(lookupTable[lutIndex].heightDiv8)*8, offsetToImageData, imagePath);\
+#define MenuImageEntry(imagePath) imageList.emplace_back(SwapByteOrder(lookupTable[lutIndex].widthDiv8)*8, SwapByteOrder(lookupTable[lutIndex].heightDiv8)*8, offsetToImageData + (SwapByteOrder<uint16>(lookupTable[lutIndex].offsetDiv8))*8, imagePath);\
 	                              ++lutIndex
 
 	//Mostly duplicate images from PBOOK_FL, so just reuse them
@@ -351,9 +357,20 @@ bool Patch_PBook_BT(const string& inPatchedSakuraDirectory, const string& inTran
 	MenuImageEntry(translatedDirectory + "62");//48
 	MenuImageEntry("");//49
 	MenuImageEntry(translatedDirectory + "64");//50
+	MenuImageEntry("");//51
+	MenuImageEntry(pbookBtDirectory + "52");//52
+	MenuImageEntry("");//53
+	MenuImageEntry(pbookBtDirectory + "54");//54
+	MenuImageEntry("");//55
+	MenuImageEntry(pbookBtDirectory + "56");//56
+	MenuImageEntry("");//57
+	MenuImageEntry("");//58
+	MenuImageEntry("");//59
+	MenuImageEntry(pbookBtDirectory + "60");//60
+	MenuImageEntry(pbookBtDirectory + "61");//61
 
-	bool bResult = PatchCustomImages(imageList, inPatchedSakuraDirectory + string("SAKURA1\\PBOOK_BT.CG"));
-	bResult = bResult && PatchCustomImages(imageList, inPatchedSakuraDirectory + string("SAKURA2\\PBOOK_BT.CG"));
+	bool bResult = PatchCustomImages(imageList, inPatchedSakuraDirectory + string("SAKURA1\\PBOOK_BT.CG"), false);
+	bResult = bResult && PatchCustomImages(imageList, inPatchedSakuraDirectory + string("SAKURA2\\PBOOK_BT.CG"), false);
 
 	return bResult;
 }
@@ -859,7 +876,8 @@ void ExtractBattlePauseMenu(const string& rootSakuraDirectory, bool bBmp, const 
 			const int width = SwapByteOrder(lookupTable[i].widthDiv8) * 8;
 			const int height = SwapByteOrder(lookupTable[i].heightDiv8) * 8;
 
-			const string outFileName = finalOutputDirectory + std::to_string(i) + bmpExt;
+			//const string outFileName = finalOutputDirectory + std::to_string(i) + bmpExt;
+			const string outFileName = finalOutputDirectory + std::to_string(i) + "_" + IntToHexString(offset + baseOffset) + bmpExt;
 
 			BitmapWriter outBmp;
 			outBmp.CreateBitmap(outFileName, width, -height, 4, fileData.GetData() + baseOffset + offset, (width * height) / 2, palette.GetData(), palette.GetSize(), bBmp);

@@ -25,7 +25,7 @@ static bool BringOverOriginalFiles(const string& inRootSakuraDirectory, const st
 	GetAllFilesOfType(allFiles, "GOVER", originalFiles);
 	GetAllFilesOfType(allFiles, "CESALOGO.ALL", originalFiles);
 	GetAllFilesOfType(allFiles, "TITLE.BIN", originalFiles);
-	GetAllFilesOfType(allFiles, "TTL2CGB.BIN", originalFiles);	
+	GetAllFilesOfType(allFiles, "TTL2CGB.BIN", originalFiles);
 	GetAllFilesOfType(allFiles, "M_NAME", originalFiles);
 	GetAllFilesOfType(allFiles, "INFONAME.BIN", originalFiles);
 	GetAllFilesOfType(allFiles, ".MES", originalFiles);
@@ -68,7 +68,8 @@ static bool BringOverOriginalFiles(const string& inRootSakuraDirectory, const st
 	GetAllFilesOfType(allFiles, "PRG.BIN", originalFiles);
 	GetAllFilesOfType(allFiles, "VDP1.BIN", originalFiles);
 	GetAllFilesOfType(allFiles, "VDP2.BIN", originalFiles);
-	
+	GetAllFilesOfType(allFiles, "EV", originalFiles);
+
 	//Bring over scenario files
 	const string outputDirectory = inPatchedDirectory + Seperators;
 	if(!CopyFiles(originalFiles, outputDirectory))
@@ -199,6 +200,10 @@ bool PatchTextDrawingCode(const string& inSourceGameDirectory, const string& inP
 
 			WriteCommand(0xe5ce, offsetToLipsCharSpriteData + 0, 0x01d0); //from 0x01d0 in memory at 060135ce
 			WriteCommand(0xe5d0, offsetToLipsCharSpriteData + 2, 0x01d2); //from 0x01d2 in memory at 060135d0
+
+			//Special lips vertical dimension (from TrekkiesUnite118)
+			WriteByte(0xe5e5, 0x08, 0x10); // 0x060135E5
+			WriteByte(0xe5f9, 0x08, 0x10); // 0x060135F9
 
 			//Fix special lips horizontal spacing
 			WriteCommand(0xdf56, 0x4200, 0x4208); //from SHLL2 to SHLL in memory at 06012F56
@@ -392,6 +397,22 @@ bool PatchTextDrawingCode(const string& inSourceGameDirectory, const string& inP
 
 	}
 #endif
+
+	return true;
+}
+
+bool HackFixHorn(const string& inPatchedDirectory)
+{
+	const string sakuraBinFilePath = inPatchedDirectory + Seperators + string("SAKURA1\\SK1301.BIN");
+	FileReadWriter skFile;
+	if (!skFile.OpenFile(sakuraBinFilePath))
+	{
+		return false;
+	}
+
+	uint16 newCommand = 0;
+	skFile.ReadData(0xaa, (char*)&newCommand, sizeof(newCommand));
+	skFile.WriteData(0xa6, (char*)&newCommand, sizeof(newCommand));
 
 	return true;
 }
@@ -618,6 +639,12 @@ bool PatchGame(const string& inSourceGameDirectory, const string& inTranslatedDa
 	if(!PatchSplashScreen(inPatchedDirectory, inTranslatedDataDirectory))
 	{
 		printf("PatchSplashScreen failed\n");
+		return false;
+	}
+
+	if(inDiscNumber == 3 && !HackFixHorn(inPatchedDirectory))
+	{
+		printf("HackFixHorn failed\n");
 		return false;
 	}
 

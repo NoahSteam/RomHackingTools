@@ -311,7 +311,7 @@ bool PatchTycoonRulesScreen(const std::string& inPatchedSakuraDirectory, const s
 	return true;
 }
 
-void PatchTycoonWarsLogoLocation(char* InData)
+bool PatchTycoonWarsLogoLocation(char* InData)
 {
 	//Patch location of "Tycoon Wars" so that Tycoon is on the left
 	uint8& tycoonX = *(uint8*)(InData + 0x973d);
@@ -321,24 +321,29 @@ void PatchTycoonWarsLogoLocation(char* InData)
 	if(tycoonX != 0x84 )
 	{
 		printf("Patching Tycoon Error: Expected 0x84 for position of Tycoon, but got 0x%02x", tycoonX);
+		return false;
 	}
 
 	if(warsX1 != 0x3a )
 	{
 		printf("Patching Tycoon Error: Expected 0x3a for position of W, but got 0x%02x", warsX1);
+		return false;
 	}
 
 	if(warsX2 != 0x3a )
 	{
 		printf("Patching Tycoon Error: Expected 0x3a for position of ars, but got 0x%02x", warsX2);
+		return false;
 	}
 
 	tycoonX = 0x3a;
 	warsX1 = 0x64;
 	warsX2 = 0x64;
+
+	return true;
 }
 
-void PatchVeryRichLocation(char* InData)
+bool PatchVeryRichLocation(char* InData)
 {
 	//Patch location of "Tycoon Wars" so that Tycoon is on the left
 	uint8& veryX    = *(uint8*)(InData + 0xe9fd);
@@ -349,30 +354,36 @@ void PatchVeryRichLocation(char* InData)
 	if(veryX != 0x00 )
 	{
 		printf("Patching VeryRich Error: Expected 0x84 for position of Very, but got 0x%02x\n", veryX);
+		return false;
 	}
 
 	if(richX != 0x40 )
 	{
 		printf("Patching VeryRich Error: Expected 0x40 for position of Rich, but got 0x%02x\n", richX);
+		return false;
 	}
 
 	if(exclaim1 != 0xc4 )
 	{
 		printf("Patching VeryRich Error: Expected 0xc4 for position of !1, but got 0x%02x\n", exclaim1);
+		return false;
 	}
 
 	if(exclaim2 != 0xd7 )
 	{
 		printf("Patching VeryRich Error: Expected 0xd7 for position of !2, but got 0x%02x\n", exclaim2);
+		return false;
 	}
 
 	veryX = 0x20;
 	richX = 0x60;
 	exclaim1 = 0xa0;
 	exclaim2 = 0xaa;
+
+	return true;
 }
 
-void PatchTycoonRichLocation(char* InData)
+bool PatchTycoonRichLocation(char* InData)
 {
 	//Patch location of "Poor" so that it is centered
 	uint8& richX = *(uint8*)(InData + 0xea9d);
@@ -381,18 +392,22 @@ void PatchTycoonRichLocation(char* InData)
 	if (richX != 0x18)
 	{
 		printf("Patching Tycoon Error: Expected 0x18 for position of Rich, but got 0x%02x", richX);
+		return false;
 	}
 
 	if (exclaimX != 0xb8)
 	{
 		printf("Patching Tycoon Error: Expected 0xb8 for position of (Rich)!, but got 0x%02x", exclaimX);
+		return false;
 	}
 
 	richX = 0x40;
 	exclaimX = 0x7c;
+
+	return true;
 }
 
-void PatchDownFallLocation(char* InData)
+bool PatchDownFallLocation(char* InData)
 {
 	//Patch location of "DownFall" so that DownFall are together
 	uint8& downX = *(uint8*)(InData + 0xeddd);
@@ -406,21 +421,25 @@ void PatchDownFallLocation(char* InData)
 	if(downX != 0x12 )
 	{
 		printf("Patching DownFall Error: Expected 0x12 for position of Tycoon, but got 0x%02x\n", downX);
+		return false;
 	}
 
 	if(dot1X != 0xb4)
 	{
 		printf("Patching DownFall. Error: Expected 0xb4 for position of .1, but got 0x%02x\n", dot1X);
+		return false;
 	}
 
 	if(dot2X != 0xc8)
 	{
 		printf("Patching DownFall.. Error: Expected 0xc8 for position of .2, but got 0x%02x\n", dot2X);
+		return false;
 	}
 
 	if(dot3X != 0xdc)
 	{
 		printf("Patching DownFall... Error: Expected 0xdc for position of .3, but got 0x%02x\n", dot3X);
+		return false;
 	}
 
 	downX = 0x1c;
@@ -430,9 +449,11 @@ void PatchDownFallLocation(char* InData)
 	dot2Y = 0x2a;
 	dot3X = 0xca;
 	dot3Y = 0x2a;
+
+	return true;
 }
 
-void PatchTycoonPoorLocation(char* InData)
+bool PatchTycoonPoorLocation(char* InData)
 {
 	//Patch location of "Poor" so that it is centered
 	uint8& poorX = *(uint8*)(InData + 0xeafd);
@@ -440,12 +461,15 @@ void PatchTycoonPoorLocation(char* InData)
 	if (poorX != 0x18)
 	{
 		printf("Patching Tycoon Error: Expected 0x18 for position of Poor, but got 0x%02x", poorX);
+		return false;
 	}
 
 	poorX = 0x50;
+
+	return true;
 }
 
-void PatchVeryPoorLocation(char* InData)
+bool PatchVeryPoorLocation(char* InData)
 {
 	//Patch location of "DownFall" so that DownFall are together
 	uint8& veryX = *(uint8*)(InData + 0xeb3d);
@@ -460,26 +484,31 @@ void PatchVeryPoorLocation(char* InData)
 	if(veryX != 0 )
 	{
 		printf("Patching Very Error: Expected 0 for position of Very, but got 0x%02x\n", veryX);
+		return false;
 	}
 
 	if(poorX != 0x40 )
 	{
 		printf("Patching Poor Error: Expected 0x40 for position of Poor, but got 0x%02x\n", poorX);
+		return false;
 	}
 
 	if(dot1X != 0xc4)
 	{
 		printf("Patching Very Poor. Error: Expected 0xc4 for position of .1, but got 0x%02x\n", dot1X);
+		return false;
 	}
 
 	if(dot2X != 0xd8)
 	{
 		printf("Patching Very Poor.. Error: Expected 0xd8 for position of .2, but got 0x%02x\n", dot2X);
+		return false;
 	}
 
 	if(dot3X != 0xec)
 	{
 		printf("Patching Very Poor... Error: Expected 0xec for position of .3, but got 0x%02x\n", dot3X);
+		return false;
 	}
 
 	veryX = 0x10;
@@ -490,6 +519,56 @@ void PatchVeryPoorLocation(char* InData)
 	dot2Y = 0x20;
 	dot3X = 0xb0;
 	dot3Y = 0x20;
+
+	return true;
+}
+
+static const bool UpdateTycoonValue(char* InData, uint32 InOffset, uint8 InNew, uint8 InOld)
+{
+	if((uint8)InData[InOffset] != InOld)
+	{
+		printf("UpdateTycoonValue: At %0x08x, Expected: 0x%01x, Found: 0x%01x\n", InOffset, InOld, InData[InOffset]);
+		return false;
+	}
+
+	uint8& value = *(uint8*)(InData + InOffset);
+	value = InNew;
+
+	return true;
+}
+
+//From TrekkiesUnite118
+bool PatchTycoonIntroLogoOrientation(char* InData)
+{
+	bool bResult = true;
+
+	bResult = UpdateTycoonValue(InData, 0x1161, 0x38, 0x40);
+	bResult = UpdateTycoonValue(InData, 0x1163, 0x30, 0x38);
+	bResult = UpdateTycoonValue(InData, 0x116a, 0x2a, 0x1c);
+	bResult = UpdateTycoonValue(InData, 0x116e, 0x0a, 0x0e);
+	bResult = UpdateTycoonValue(InData, 0x116f, 0x80, 0x00);
+
+	bResult = UpdateTycoonValue(InData, 0x1171, 0x40, 0x38);
+	bResult = UpdateTycoonValue(InData, 0x1173, 0x38, 0x30);
+	bResult = UpdateTycoonValue(InData, 0x117a, 0x1c, 0x2a);
+	bResult = UpdateTycoonValue(InData, 0x117e, 0x0e, 0x0a);
+	bResult = UpdateTycoonValue(InData, 0x117f, 0x00, 0x80);
+
+	bResult = UpdateTycoonValue(InData, 0xafcf, 0x35, 0x45);
+	bResult = UpdateTycoonValue(InData, 0xafed, 0x3b, 0x38);
+	bResult = UpdateTycoonValue(InData, 0xafef, 0x55, 0x56);
+
+	bResult = UpdateTycoonValue(InData, 0xb00d, 0x58, 0x48);
+	bResult = UpdateTycoonValue(InData, 0xb00f, 0x74, 0x56);
+	bResult = UpdateTycoonValue(InData, 0xb02d, 0x75, 0x60);
+	bResult = UpdateTycoonValue(InData, 0xb02f, 0x55, 0x52);
+	bResult = UpdateTycoonValue(InData, 0xb04d, 0x91, 0x80);
+	bResult = UpdateTycoonValue(InData, 0xb04f, 0x4c, 0x44);
+	bResult = UpdateTycoonValue(InData, 0xb06d, 0xb8, 0xb0);
+	bResult = UpdateTycoonValue(InData, 0xb06f, 0x44, 0x4c);
+
+	return bResult;
+
 }
 
 bool PatchTycoonEncodedImages(const std::string& inPatchedSakuraDirectory, const std::string& inTranslatedDataDirectory)
@@ -504,20 +583,38 @@ bool PatchTycoonEncodedImages(const std::string& inPatchedSakuraDirectory, const
 		return false;
 	}
 
-	auto OnBlockDecoded = [](int InBlockNumber, char* InDecodedData, uint32 InDataSize) 
+	auto OnBlockDecoded = [](int InBlockNumber, char* InDecodedData, uint32 InDataSize)->bool
 	{
 		if(InBlockNumber == 1)
 		{
-			PatchTycoonWarsLogoLocation(InDecodedData);
+			if(!PatchTycoonWarsLogoLocation(InDecodedData))
+			{
+				return false;
+			}
 		}
-		else if( InBlockNumber == 10 )
+		else if(InBlockNumber == 2)
 		{
-			PatchVeryRichLocation(InDecodedData);
-			PatchTycoonRichLocation(InDecodedData);
-			PatchDownFallLocation(InDecodedData);
-			PatchTycoonPoorLocation(InDecodedData);
-			PatchVeryPoorLocation(InDecodedData);
+			if(!PatchTycoonIntroLogoOrientation(InDecodedData))
+			{
+				return false;
+			}
 		}
+		else if(InBlockNumber == 10)
+		{
+			bool bResult = true;
+			bResult &= PatchVeryRichLocation(InDecodedData);
+			bResult &= PatchTycoonRichLocation(InDecodedData);
+			bResult &= PatchDownFallLocation(InDecodedData);
+			bResult &= PatchTycoonPoorLocation(InDecodedData);
+			bResult &= PatchVeryPoorLocation(InDecodedData);
+
+			if(!bResult)
+			{
+				return false;
+			}
+		}
+
+		return true;
     };
 
 	return PatchKinematronEncodedImages(cardFilePath, tycoonImageDir, GTycoonKeyEntries, sizeof(GTycoonKeyEntries) / sizeof(GTycoonKeyEntries[0]), OnBlockDecoded);
