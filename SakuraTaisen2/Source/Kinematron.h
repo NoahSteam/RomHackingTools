@@ -225,14 +225,6 @@ bool PatchKinematronEncodedImages(const std::string& inDataFilePath, const std::
 			assert(decodedSize < bufferSize);
 		}
 
-		if( OnBlockDecoded )
-		{
-			if(!OnBlockDecoded(k, buffer, decodedSize))
-			{
-				return false;
-			}
-		}
-
 		//Create patched data buffer
 		const uint32 offsetToImageTable = SwapByteOrder(*((uint32*)(buffer + 0x20)));
 		if (offsetToImageTable < decodedSize)
@@ -254,14 +246,22 @@ bool PatchKinematronEncodedImages(const std::string& inDataFilePath, const std::
 				{
 					if (imageSize != patchedImage.GetImageDataSize())
 					{
-				//		printf("Image size mismatch for %s. Expected %i, got %i\n", imageFileName.c_str(), imageSize, patchedImage.GetImageDataSize());
-				//		return false;
+						printf("Image size mismatch for %s. Expected %i, got %i\n", imageFileName.c_str(), imageSize, patchedImage.GetImageDataSize());
+						return false;
 					}
 
 					memcpy_s(buffer + imageOffset, imageSize, patchedImage.GetImageData(), imageSize);
 				}
 
 				imageOffset += imageSize;
+			}
+		}
+
+		if (OnBlockDecoded)
+		{
+			if (!OnBlockDecoded(k, buffer, decodedSize))
+			{
+				return false;
 			}
 		}
 

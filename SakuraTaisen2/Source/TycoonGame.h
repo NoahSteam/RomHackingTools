@@ -559,8 +559,8 @@ bool PatchTycoonIntroLogoOrientation(char* InData)
 	bResult = UpdateTycoonValue(InData, 0xafef, 0x55, 0x56);
 
 	bResult = UpdateTycoonValue(InData, 0xb00d, 0x58, 0x48);
-	bResult = UpdateTycoonValue(InData, 0xb00f, 0x74, 0x56);
-	bResult = UpdateTycoonValue(InData, 0xb02d, 0x75, 0x60);
+	bResult = UpdateTycoonValue(InData, 0xb00f, 0x58, 0x56);
+	bResult = UpdateTycoonValue(InData, 0xb02d, 0x74, 0x60);
 	bResult = UpdateTycoonValue(InData, 0xb02f, 0x55, 0x52);
 	bResult = UpdateTycoonValue(InData, 0xb04d, 0x91, 0x80);
 	bResult = UpdateTycoonValue(InData, 0xb04f, 0x4c, 0x44);
