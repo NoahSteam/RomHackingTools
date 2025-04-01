@@ -202,8 +202,8 @@ bool PatchTextDrawingCode(const string& inSourceGameDirectory, const string& inP
 			WriteCommand(0xe5d0, offsetToLipsCharSpriteData + 2, 0x01d2); //from 0x01d2 in memory at 060135d0
 
 			//Special lips vertical dimension (from TrekkiesUnite118)
-			WriteByte(0xe5e5, 0x08, 0x10); // 0x060135E5
-			WriteByte(0xe5f9, 0x08, 0x10); // 0x060135F9
+			WriteByte(0xe5e5, 0x0f, 0x10); // 0x060135E5
+			WriteByte(0xe5f9, 0x0f, 0x10); // 0x060135F9
 
 			//Fix special lips horizontal spacing
 			WriteCommand(0xdf56, 0x4200, 0x4208); //from SHLL2 to SHLL in memory at 06012F56
