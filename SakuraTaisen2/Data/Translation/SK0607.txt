@@ -3,7 +3,7 @@ The Imperial Assault Troupe's autumn production, "The Blue Bird," was a smash hi
 Reni and Iris's perfectly-synchronized performances received rave reviews. 
 Critics summed up "The Blue Bird" thusly: 
 “In the final scene, you can genuinely feel the love between the two siblings as they find the blue bird." 
-Tyltyl! The blue bird was in our room this whole time! 
+Tyltyl! <br> The blue bird was in our room this whole time! 
 That's right, Mytyl. <br> The blue bird of happiness was here all along. 
 The jewel of the Pandemonium Regalia, entrusted to us by the Rose Division. 
 Spirit Sword Arataka. The special sword of the Shinguji family. 

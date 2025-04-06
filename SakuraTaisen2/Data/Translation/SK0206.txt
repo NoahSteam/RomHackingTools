@@ -117,7 +117,7 @@ In any case, just what in the world was she doing over here?
 (I'll try watching her quietly.) 
 (Anyway, searching for Iris should come first.) 
 Were you looking for Iris? 
-Helping with night watch? 
+Helping patrol the theater?
 Were you, by any chance, looking for Iris? 
 …N-Not at all. 
 OK then, what were you doing? 
@@ -239,7 +239,7 @@ Iris… Where in the world did she go?
 She went rushing out of the salon, so it seems pretty unlikely that she'd be in here. 
 It'd be nice if I had some idea of whether she was on the first or second floor, though… 
 Yeah, she isn't here. I'll try looking in another room. 
-Phew… Maybe I'll take a breather in my room for a minute.
+Phew… <br> Maybe I'll take a breather in my room for a minute.
 All right… What should I do from here? 
 Make a call. 
 Go search for Iris. 
@@ -463,7 +463,7 @@ Hm? Am I getting a call?
 No, Ogami. I'm right here, behind you. 
 S-Saki? What is it? 
 Well you see, I wanted to speak to you alone. 
-But perhaps not here… Could you please follow me? 
+But perhaps not here… <br> Could you please follow me? 
 Shoot, it's already this late?! 
 I don't have time to be doing this. I have to look for Iris! 
 If I recall, Kayama said to try checking the attic. 
@@ -486,7 +486,7 @@ Such a bland, spartan nameplate. It's very much Reni's style, I guess.
 …No time to be loitering around. I need to find Iris. 
 Looks like Reni isn't here. 
 Who's there? 
-It's Ogami. Mind if I come in? 
+It's Ogami. <br> Mind if I come in? 
 …Go ahead. 
 Thanks. Sorry to intrude. 
 Wow, this is one bleak-looking room. 
@@ -654,16 +654,16 @@ Oh well. I'll go somewhere else for now.
 … 
 Iris, if you stay here too long, you're going to catch a cold. 
 Oh, Mon Frère… 
-You… You came looking for me? 
+You… <br> You came looking for me? 
 Of course. I just had a feeling I might find you here. 
 Mon Frère, thank you… 
 (Ah, there's Iris!) 
 … 
 Iris, if you stay here too long, you're going to catch a cold. 
 Oh, Mon Frère… 
-You… You came looking for me? 
+You… <br> You came looking for me? 
 Yeah. Sorry it took me some time to find you. 
-It's OK… I'm happy you came to get me. 
+It's OK… <br> I'm happy you came to get me. 
 …I'm sorry, Mon Frère. 
 We went to all that trouble for Reni's party, and then I messed it up. 
 It's OK, Iris. I'm sure Reni wasn't bothered by it. 
@@ -687,7 +687,7 @@ Oh boy. She rushed off looking completely thrilled.
 I guess there's no helping it. I may as well spend the rest of the evening with Iris. 
 All right, I'd better start cleaning off my desk. 
 It's Iris. Can I come in? 
-Yeah, go ahead. It's not locked. 
+Yeah, go ahead. <br> It's not locked. 
 Okey-dokey! Coming in now! 
 Hee hee. Thanks for waiting, Mon Frère. 
 It's already 11 o'clock. I wonder where Iris could've gone. 
@@ -715,7 +715,7 @@ Huh? Those flashy clothes, aren't these Orihime's?!
 S-So then… Orihime is in there r-right now. 
 I'm drawn to the bath…
 Go back outside. 
-O-Oh, no… My body is moving towards the bathroom on its own… 
+O-Oh, no… <br> My body is moving towards the bathroom on its own… 
 Ahhh. I'm surprised. Japanese bathrooms aren't all that bad. 
 (Orihime is… in the b-bath.) 
 …! <br> Is someone there?! 
@@ -736,9 +736,9 @@ From now on, I will make sure to lock you in your room before I enter the bath.
 Oh yes. Maybe even to be safe, I will tie some rope around you as well! 
 H-Hey, wait… 
 Anyway, the next time you peek, you will WISH I was using a bath bucket. 
-Sheesh… I know I brought it on myself, but that was awful. 
+Sheesh… <br> I know I brought it on myself, but that was awful. 
 (I gotta get out of here before she sees me!) 
-Phew… I think I got away before she realized I was there. 
+Phew… <br> I think I got away before she realized I was there. 
 If I'd been just a moment slower, I might not have made it. That was too close… 
 Wh-Who's there? Mr. Ensign, it couldn't be you, could it?! 
 O-Orihime… Um, I… 
@@ -753,7 +753,7 @@ From now on, I will make sure to lock you in your room before I enter the bath.
 Oh yes. Maybe even to be safe, I will tie some rope around you as well! 
 H-Hey, wait… 
 Anyway, do not expect to be let off so easily the next time you peek. 
-Sheesh… I know I brought it on myself, but that was awful. 
+Sheesh… <br> I know I brought it on myself, but that was awful. 
 (I'd better get out of here before Orihime sees me.) 
 …Looks like I got out without her realizing. 
 If Orihime ever found me here like this, she'd never forgive me for it. 
@@ -761,7 +761,7 @@ I should get going. It doesn't look like Iris is in here, anyway.
 Ahh… I think it's about time I got out. 
 (Oh crap!! It looks like she's getting out of the water!) 
 (I gotta get out of here before she sees me!) 
-Phew… I think I got away before she realized I was there. 
+Phew… <br> I think I got away before she realized I was there. 
 If I'd been just a moment slower, I might not have made it. That was too close… 
 Ah, Mr. Ensign. 
 H-Hey, Orihime. Were you taking a bath? 
@@ -795,7 +795,7 @@ I guess I'll go check another room.
 It doesn't seem like anyone's been in here at all, so I doubt Iris has, either. 
 I guess no one's here. Oh well, I'll go try another room. 
 Oh, looks like Reni is over there. 
-Hey, Reni! What are you up to? 
+Hey, Reni! <br> What are you up to? 
 …Captain. 
 I am inspecting my Eisenkleid. 
 I see, so you came here to check up on it after today's battle. 
@@ -819,7 +819,7 @@ Well, take it easy, then. I'll bet you feel more at ease when you're alone, huh?
 I need to continue my inspection, so I'll be going. 
 Well, I guess I should go look for Iris, myself. 
 If you have no need of me, I'll be going. 
-H-Hey, Reni! Hold on a minute! 
+H-Hey, Reni! <br> Hold on a minute! 
 …There he goes. Man, I couldn't really strike up a conversation with him at all. 
 It looks like Reni is still performing his inspection. 
 I should get back to searching for Iris, myself. 
@@ -844,7 +844,7 @@ H-Hey, that's not what I said.
 Then, you'll listen to what I have to say? Thank you, Ogami! 
 Let's go, then. There are so many things I'd like to discuss, just you and me. 
 H-Hey, Saki! Don't just drag me around like this! 
-Hmhmhm… Follow me, if you would. 
+Hmhmhm… <br> Follow me, if you would. 
 Hmmm, what should I do? 
 If you have the time to think about it, I'd like for you to hear me out. 
 Let's go, then. There are so many things I'd like to discuss, just you and me. 
@@ -865,7 +865,7 @@ I'm so clueless about everything when it comes to working at this theater. The a
 Please, Ogami, don't say anything more. Just hold me… 
 Hold her. 
 Refuse. 
-All right. If I can really help… 
+All right. <br> If I can really help… 
 Ogami… 
 Ah… N-Not so hard… 
 Eeek! 
@@ -885,7 +885,7 @@ Ah, Ogami, please wait…
 Eeek! 
 S-Saki?! 
 Saki, are you all right? 
-My foot slipped, and… I fell down. 
+My foot slipped, and… <br> I fell down. 
 Ogami, could you please do something to help? 
 (Do something to help, she says, but what?) 
 Arm (look) 
@@ -916,10 +916,10 @@ My ankle hurts. I don't think I can do it alone.
 Ankle (press) 
 Saki, is this where it hurts? 
 Ah… Yes, there… <br> Ohh, that feels good… 
-Just keep going… Massage it softly… Like that… 
+Just keep going… <br> Massage it softly… <br> Like that… 
 Ohh, how nice… 
 A little… harder… <br> Please… 
-No… Don't press it that hard… 
+No… <br> Don't press it that hard… 
 Gently, Ogami… 
 (Wow, her chest is quite large…) 
 (…Come on, Ogami! Now's not the time to be thinking about that!) 
@@ -972,7 +972,7 @@ Eep?! That voice…
 S… Sakura!! 
 Iris has gone missing, and here you are, fooling around! 
 It seems I've interrupted something important, so pardon me. I'll be in my room! 
-Sakura, wait! Please, listen to me! 
+Sakura, wait! <br> Please, listen to me! 
 My ankle appears to have made a complete recovery thanks to your efforts, Ogami. 
 How dreadful that Sakura became angry with you, though. Well, I bid you goodnight. 
 S-Saki… 
@@ -981,11 +981,11 @@ But I guess I did get a little too carried away…
 Even so, I wish Sakura hadn't lost her temper at me like that. 
 Oh man, I give up. 
 Why Ogami, it's been an age! How good it is to see you well. Yes, what a joy this is!
-Wh-Who's there? Who're you?! 
+Wh-Who's there? <br> Who're you?! 
 What?! Oh come now, come now! Did you forget all about me? What sort of friend are you? 
 How could you forget me, Yuichi Kayama? I sat right next to you during our time in the naval academy! 
 …Kayama?! 
-So it's you, Kayama! Wow, you're looking a lot cooler these days. 
+So it's you, Kayama! <br> Wow, you're looking a lot cooler these days. 
 Anyway, what are you doing in a place like this? 
 Ahh, what a joy it is to see an old classmate once again… 
 Answer the question, Kayama! Why are you even here? 

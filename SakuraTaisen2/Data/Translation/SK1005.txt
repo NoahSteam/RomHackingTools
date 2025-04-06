@@ -170,10 +170,10 @@ Beautiful, like you.
 Quiet, like you.
 Scary, like you.
 I imagine your mother is beautiful, just like you.
-You imagine correctly! My Mamma is really pretty!
-I hope you're looking forward to meeting her!
+You imagine correctly! <br> My Mamma is really pretty!
+I hope you are looking forward to meeting her!
 I imagine your mother is a quiet person, just like you.
-You shouldn't say something unless you actually mean it, Mr. Ensign!
+You should not say something unless you actually mean it, Mr. Ensign!
 I am not a "quiet person," if I do say so myself!
 R-Right. Sorry.
 I imagine your mother's scary, just like you.
@@ -186,14 +186,14 @@ Even if you make a mistake, she won’t get mad at you. So just relax.
 Hmm… I have no idea what kind of person she could be.
 My mamma is just like me: elegant, kind…
 And most of all, beautiful!
-I hope you're looking forward to meeting her!
+I hope you are looking forward to meeting her!
 Eeek!
-Whoa… Are you all right, Orihime?
+Whoa… <br> Are you all right, Orihime?
 This is my first time riding a Japanese train… How unstable it is!
 Hahaha, this is your first time, huh?
 …Mr. Ensign, can I hold onto your arm so I don't fall over?
 Huh? You're not gonna use the handles?
-I'd prefer to hold onto you, Ensign.
+I would prefer to hold onto you, Mr. Ensign.
 Look, I will just lock your arm with mine!
 Hahaha, this is kind of embarrassing. But, eh, oh well.
 …Are all these people also going to visit the shrine?
@@ -559,7 +559,7 @@ S-Sorry! I just found them here and got the urge to…
 For goodness' sake! After I made you some tea, no less!
 As punishment, you're going to drink this freshly-boiled, piping-hot water!
 Eep! Th-That's going a little too far, Sumire!
-(Sheesh… Don't do anything you wouldn't want to get caught doing, I guess.)
+(Sheesh… <br> Don't do anything you wouldn't want to get caught doing, I guess.)
 No, I shouldn't. I can't just snoop around people's rooms on a whim.
 Sorry to keep you waiting, Ensign. The tea's ready.
 Ah… O-OK!
@@ -836,7 +836,7 @@ There it is, Boss. This here's my house.
 Wow, the walls are made of stone.
 Yep, most Okinawan houses are like that.
 Anyway, let's head inside for now.
-Phew… There really is no place like home!
+Phew… <br> There really is no place like home!
 You lived here when you were little, right?
 You could say that, but all I ever did was train in karate.
 The building over there's a dojo now.
@@ -1112,9 +1112,9 @@ How long are they going to make me wait here, anyway…?
 Here we are! This is the Grand Imperial Hotel.
 Your parents are meeting up here, right?
 That's correct. Now then, Mr. Ensign, let's hurry ourselves up and get inside!
-Oh, Orhime! And Ogami! Welcome.
+Oh, Orihime! And Ogami! Welcome.
 Ciao, Papa!
-It's been a while. How are you feeling?
+It's been a while. <br> How are you feeling?
 When I heard Carino was coming, my wounds healed in an instant. Hahaha…
 …Seiya!
 …?!
@@ -1133,7 +1133,7 @@ Carino!
 Papa… <br> Mamma…
 Orihime…
 Say something to them.
-Orihime… Let's go congratulate them.
+Let's go congratulate them, Orihime.
 Mr. Ensign… Let's leave them alone for now.
 Orihime… Let's not say anything and leave them alone for now.
 Yes… I was thinking the same thing.
@@ -1142,7 +1142,7 @@ But that whole time, they still loved each other.
 And now finally, they are together again.
 So you must be Ichiro Ogami. I have read much about you in Orihime’s correspondence.
 I am her mother, Carino. Allow me to extend my gratitude for all you’ve done for my daughter.
-No need to thank me. I only did what I could.
+No need to thank me. <br> I only did what I could.
 But Orihime’s hatred towards Japanese men was truly unyielding.
 How did you succeed in opening her heart to you?
 I think it was trust.
@@ -1152,8 +1152,8 @@ I think it was all trust.
 Trusting each other, and earning each other's trust in turn…
 I think that's how we came to understand one another.
 Hmhm, so corny as ever, Mr. Ensign.
-I understand completely. My trust in Seiya was what allowed me to endure the wait for this day.
-Please, Ogami… Continue believing in Orihime.
+I understand completely. <br> My trust in Seiya was what allowed me to endure the wait for this day.
+Please, Ogami… <br> Continue believing in Orihime.
 I will.
 I think it was all patience.
 At first, even I didn't think we'd be able to get along.
@@ -1171,7 +1171,7 @@ Mamma…
 I… don't really know, either.
 Hmhm, you're an honest man, Ogami.
 I am sure Orihime sensed that honesty as well.
-You are the man my daughter chose, after all. There's not a doubt in my mind that you're a wonderful person.
+You are the man my daughter chose, after all. There's not a doubt in my mind that you are a wonderful person.
 Orihime. You must always treasure Ogami's feelings for you.
 Yes, Mamma. I understand.
 Now then… <br> Mr. Ensign, could you come with me for a second?
@@ -1205,7 +1205,7 @@ And it's all because you helped patch things up with Papa and me.
 Thank you so much, Mr. Ensign!
 I'm actually jealous of them. I've never seen such a loving couple before.
 Truly, they are. But it's OK, I've already found a partner for myself.
-You have? Who is it? Tell me, Orihime.
+You have? Who is it? <br> Tell me, Orihime.
 Heehee, whoever could it be?
 I hope… we end up like them.
 …Yes. Surely, we will.
@@ -1257,7 +1257,7 @@ Isn't that "tamaya"?
 Wow, Reni, you sure know a lot.
 I remembered from when we set off fireworks during our summer vacation.
 Oh, I-I see…
-Hmmm… Sorry, I don't really know, either.
+Hmmm… <br> Sorry, I don't really know, either.
 All right, I'll look it up when we get back.
 By the way, how are you enjoying your first New Year's shrine visit?
 There's so many things I've never seen before, I'm overcome with curiosity.

@@ -11,7 +11,7 @@ Oh well. I guess we'll have to go meet her in the entryway.
 Oh, Sakura. Do you know where that Ogami got off to? I told him we had a new recruit coming in today. 
 I think he's probably up on the second floor with Iris. 
 I'll go and get him for you. 
-Yaaay, she’s here! Wonder what kind of person she is? I'm so excited! 
+Yaaay, they're here! <br> I wonder what she’s like? I'm so excited!
 Mon Frère, I'm gonna go ahead! 
 W-Wait, Iris! 
 Iris, are you OK?! 
@@ -39,13 +39,13 @@ Not particularly…
 … 
 … 
 …Goodbye, then. 
-H-Hang on! Where are you going, Reni? 
+H-Hang on! <br> Where are you going, Reni? 
 …I will be on standby in my room until receiving orders. 
 Additionally, there is no need for you to associate so closely with me. 
 Oh… Sure. 
 Um, Reni? Actually, we've prepared a welcome party for you in the dressing room. 
 Would you like to come? We want to introduce you to everyone in the troupe. 
-Let's go, Reni! Everyone's waiting! 
+Let's go, Reni! <br> Everyone's waiting! 
 … 
 What're you so quiet for? C'mon, let's gooo! 
 Iris, Reni only just arrived, so I'm sure he doesn't know quite where to go yet. 
@@ -53,8 +53,8 @@ Come on, we'll show you the way there. Follow us.
 …Right. 
 Now then, these are your fellow Flower Division members. 
 This is Orihime Soletta. 
-Reni! Ciao! It's been a while! 
-…Hello. 
+Reni! <br> Ciao! It's been a while! 
+…Hi. 
 Oh, that's right, you two were originally in the Star Division together. 
 These two are Kasumi Fujii and Yuri Sakakibara. They take care of the office work. 
 And this is Tsubaki Takamura, who runs the gift shop. 
@@ -75,24 +75,24 @@ Er, wait… What was it?
 Ogami, it's Milchstraße. 
 So crass, forgetting someone's name like that! There’s not a tactful bone in your body! 
 I'm sorry, Reni. How rude of me to forget your name… 
-It's fine… A name is nothing more than a signifier. 
+It's fine… <br> A name is nothing more than a signifier. 
 R-Right… 
 If I recall, Reni was born in Germany. 
-In German, "milch" means "milk," and "straße" is "road"… 
+In German, milch means "milk," and straße is "road"… 
 So it means "Milky Way" like the galaxy, or "Amanogawa" in your Japanese.
 I see. What a lovely name. 
 Well, it's quite a tongue-twister of a name, so why don't we just stick with Reni for now? 
 …OK. 
 We've also got one more new person coming to work in the office with us. 
-She was referred to us by the Army… Here, come on in. 
+She was referred to us by the Army. Here, come on in. 
 Saki Kageyama, reporting for duty at the Grand Imperial Theater starting today. 
 It's very nice to meet you all. 
-Ah! It’s that lady from before! 
+Ahhh! <br> It’s that lady from before! 
 Oh, you're…! 
-My, it's you… Hmhm, we met earlier today, didn't we? 
+My, it's you… <br> Hmhm, we met earlier today, didn't we? 
 I wanted to thank you for your kindness before. It left me with such a warm feeling in my heart. 
 …You don’t waste any time, do you, Ogami. 
-Eep?! H-Hang on Sakura, this is just a misunderstanding! 
+Eep?! <br> H-Hang on Sakura, this is just a misunderstanding! 
 …I don't even want to know! 
 (Oh man, what kind of weird ideas does she have about me now?) 
 Ah, could it be that you're the Flower Division's captain, then? 
@@ -120,9 +120,9 @@ That is all I need to know. Going on ahead.
 Reni, hold on a minute! 
 Ah… There he goes. 
 Reni seems like a different person now, doesn't he?
-Hahaha. That's Reni for you. 
+Hahaha… <br> That's Reni for you. 
 The rest of us should get going too, Ogami. 
-You're right. OK everyone, let's go! 
+You're right. <br> OK everyone, let's go! 
 The Imperial Assault Troupe, Flower Division has assembled! 
 Good. I see Reni arrived here particularly fast. 
 More importantly Commander, do we know the enemy's location or number? 
@@ -144,7 +144,7 @@ So even if you give the order to protect the citizens, I don't believe it will h
 I-I see. 
 All right, Ogami, time to mobilize! 
 The Soaring Whale is ready for departure. 
-The "Soaring Whale"? What’s that? 
+The "Soaring Whale"? <br> What’s that? 
 It's a huuuge flying ship! It can hold a whole bunch of Koubu! 
 Now, Ogami. I need you to decide on the strategy for this mission. 
 If we focus on offense, the Soaring Whale will provide backup via air bombardment. 

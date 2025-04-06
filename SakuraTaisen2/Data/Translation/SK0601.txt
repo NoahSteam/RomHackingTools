@@ -7,7 +7,7 @@ They're not so tough, so long as we all stick together! Right, Reni?
 … 
 All right, everyone, that's it for today. Dismissed. 
 Welp, suppose we better start rehearsin’ for our autumn production of "The Blue Bird." 
-Let's go, Reni! We're the stars this time! 
+Let's go, Reni! <br> We're the stars this time! 
 … 
 OK, we'll all meet up on stage after we've gotten changed. Excuse us, Ogami. 
 Right, I should head back to my room, too. 
@@ -20,7 +20,7 @@ Reni? Seriously?
 Well, I may be overthinking things. Don’t give it too much thought.
 Anyway, good work today. Please excuse me. 
 Reni… 
-All right… Now that I’ve finished changing, what should I do next? 
+All right… <br> Now that I’ve finished changing, what should I do next? 
 Oh yeah, everyone's rehearsing for our autumn production, right? 
 I'm a bit worried about Reni. I should go check and see how she's doing. 
 Oh, looks like they’ve already started.
@@ -40,9 +40,9 @@ Tell me, boy… <br> Why are you doing this? For what purpose do you fight?
 I'm protecting Mytyl…! <br> I'm… I'm… 
 I'm… 
 Sorry… Once more…
-What's wrong, Reni? Did you forget your lines? It's this one, right here! 
+What's wrong, Reni? <br> Did you forget your lines? <br> It's this one, right here! 
 … 
-All right, then. Let’s take it from the top.
+All right, then. <br> Let’s take it from the top.
 Oh my, I guess Reni really is human after all. Ohohoho. 
 I can't believe Reni would flub her line like that. 
 Reni… 
@@ -84,21 +84,21 @@ Ah! Reni!!
 R-Reni? Are you all right? 
 Reni's acting strangely. I think she might be broken! 
 … 
-Aw, jeez… She just up and left. Nothing we can do…
+Aw, jeez… <br> She just up and left. Nothing we can do…
 In her current state, Reni's in no shape to be rehearsing.
 Reni… 
 It's just like Kaede said. Something's up with Reni. 
 I'll try talking to her a bit. She might be back in her room by now. 
-Tell me some gossip. 
+Listen to some gossip. 
 I'll come back later. 
-Oh yeah, Ogami, have you met Tsubomi, our new shopkeep, yet? 
+Oh yeah, Ogami. Have you met Tsubomi, our new shopkeep, yet? 
 Yeah, I just ran into her. She’s, uh, quite lively. 
 Yes, she seems overjoyed to be working here. 
 We have to be on our best behavior with a new girl on the team! 
 By the way, Ogami, I have a huge scoop. 
 A huge scoop, you say? 
 Uh-huh! Tsubaki's out on a secret assignment but I have her call number! 
-H-Huh?! You know her number? 
+H-Huh?! <br> You know her number? 
 Yes, she has a transceiver on hand in case of emergency. 
 Ready, Ogami? Her number is “13600.” 
 13600… Got it. There, I got it written down. 
@@ -125,7 +125,7 @@ They're even telling everyone on the radio not to go out tonight.
 It's true, the scariest part of a storm like this isn't the rain, it's being hit by flying debris. 
 Transit around the capital will come to a standstill, too. 
 It's finally time for the autumn production to start, isn't it, Ogami. 
-“The Blue Bird," right? I'm looking forward to it as well. 
+“The Blue Bird," right? <br> I'm looking forward to it as well. 
 It's Reni's big debut, all the patrons are talking about it. 
 Ticket preorders are selling like hotcakes. 
 Really? Guess everyone's looking forward to this performance. 
@@ -144,8 +144,8 @@ Oh? Didn't you swim in the underground pool while everyone was on vacation?
 Yeah, but that's just our pool. I'm not gonna find any cute boys to swim with there. 
 Sorry, Ogami, but I'm all out of gossip for now. 
 I'll have some more interesting tidbits to share another time, so look forward to it! 
-I'll be back. Good luck with the rest of your work. 
-OK. Thanks for coming, Ogami. 
+I'll come back another time. Good luck with your work. 
+OK. <br> Thanks for coming, Ogami. 
 Let me know if you hear any juicy stories!
 The jewel of the Pandemonium Regalia, entrusted to us by the Rose Division. 
 Spirit Sword Arataka. The special sword of the Shinguji family. 

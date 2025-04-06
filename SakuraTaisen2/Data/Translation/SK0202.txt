@@ -36,15 +36,15 @@ Good luck with your preparations, you two!
 Yeah. I'll do my best! 
 Oh, Iris, let me tell you something. 
 After Ogami returned to the theater, the very first bromide he purchased was yours. 
-What? Mon Frère, is that true? 
+What? <br> Mon Frère, is that true? 
 Oh, yes. That's right. 
-Thank you, Mon Frère. I'm… I'm so happy! 
+Thank you, Mon Frère. <br> I'm… I'm so happy! 
 If there was a bromide of you, Mon Frère, I'd definitely buy one. 
 Hmmm. I don't think my bromides would sell very well. 
 That's not true. I'm sure that everyone in the Flower Division would buy one, at least. 
 That's right! I'd use my pocket money to buy a whooole bunch of them! 
 Hahaha, thank you, Iris. 
-By the way, Ogami. What can I do for you? 
+By the way, Ogami. <br> What can I do for you? 
 Buy a bromide. 
 Talk to Tsubaki. 
 Leave. 
@@ -149,7 +149,7 @@ Can I ask you something?
 S-Sure. What is it? 
 Is this the Grand Imperial Theater? 
 Yes, it is… 
-Thank you very much. Here's a little token of my appreciation. 
+Thank you very much. <br> Here's a little token of my appreciation. 
 …Mwah! 
 Whoa! 
 Aaah?!
@@ -174,17 +174,17 @@ No! Mon Frère is with me!!
 Oh my, I'm so sorry. I forgot all about you. 
 … 
 C'mon, say something, Mon Frère! 
-S-Sorry. It was all so sudden… I don't know what to say. 
+S-Sorry. <br> It was all so sudden… <br> I don't know what to say. 
 My, my… You're so innocent. And cute, too. 
 Sure thing, let's get outta here. I'd follow a beautiful woman like you anywhere! 
 Mon Frère! We're getting ready for the welcome party! 
 Oh dear. I must have offended your pretty little girlfriend there. 
 That's too bad. Let's do this another time. 
-Who are you, lady? Stop bothering Mon Frère! 
+Who are you, lady? <br> Stop bothering Mon Frère! 
 I'm sorry, sweetheart, I was just kidding. 
 I'll see you around, "Mon Frère." 
 What was with that lady? Everyone knows you're MY boyfriend! 
-Huh… Just who was she, anyway? 
+Huh… <br> Just who was she, anyway? 
 That woman from before, did she leave already? 
 Come on, Mon Frère. What's so great about her, anyway? 
 Y-You've got it all wrong, Iris. I was just wondering what she wanted. 
@@ -249,7 +249,7 @@ You know Yuri, she takes an awful lot of pride in her gossip.
 All right then, Ogami, do you want to hear about any other interesting gossip? 
 Listen to gossip. 
 State your business.
-Tell me some gossip. 
+Listen to some gossip. 
 I'll come back later. 
 So, about the new girl arriving today… 
 I hear she's a former member of the European Star Division, just like Orihime. 
@@ -303,8 +303,8 @@ Iris, you seem quite happy hanging out with Ogami today, don't you?
 Uh-huh! That's because I'm his girlfriend! 
 I see. You're a smooth one, aren't you, Ogami? 
 Ogami and Iris, getting closer… Ooh, this is the best gossip I've had in ages! 
-H-Hey, hey! Don't spread rumors like that all willy-nilly! 
-It's OK, Mon Frère! It's the truth! 
+H-Hey, hey! <br> Don't spread rumors like that all willy-nilly! 
+It's OK, Mon Frère! <br> It's the truth! 
 Oh? 
 Did you buy Maria's bromide, Ogami? 
 Yeah, I figured I'd get a photo of her since we're so far apart right now. 
@@ -369,7 +369,7 @@ It's Ogami.
 Sorry, can you come back later? 
 …Yes, sir. Understood. 
 Oh well. Come on, Mon Frère. 
-It's Ogami. Mr. Yoneda, are you there? 
+It's Ogami. <br> Mr. Yoneda, are you there? 
 Ogami? Door's open. 
 Yes, sir. I'm coming in. 
 Uncle Yoneda, we're all getting ready for the welcome party. 
@@ -671,12 +671,12 @@ Let's go, Iris. We've got other things to do now.
 There's no one here. 
 No point in staying here. Let's go to another room. 
 Huh? Why is Orihime in a place like this? 
-You're right. I wonder what's wrong. 
-Hey, Orihime! What are you doing? 
+You're right. <br> I wonder what's wrong. 
+Hey, Orihime! <br> What are you doing? 
 Eek!! 
 W-What do you want from me? 
 No, it's not like that… 
-Hey, Orihime. What are you doing up here? 
+Hey, Orihime. <br> What are you doing up here? 
 I-It's none of your business. Why do you care? 
 If you don't need me for anything, then I'll be leaving. 
 Ah, Orihime! W-Wait! 
@@ -718,7 +718,7 @@ No… I figure we probably shouldn't disturb her.
 Come on, Iris. 
 …She's not here. 
 Didn’t Orihime say she was going somewhere?
-Hmmm… Now that you mention it, I think you’re right. 
+Hmmm… <br> Now that you mention it, <br> I think you’re right. 
 Hey there, Orihime. I was just about to knock on your door. 
 Mr. Ensign? 
 There is nothing I wish to discuss with you.
@@ -884,7 +884,7 @@ Hahaha, all right then, show me around a little.
 You sure have a lot of stuffed animals. 
 Heh-heh. They're all my dear friends! 
 Wow, so they must all have names, huh? 
-Of course they do! I'll introduce you. 
+Of course they do! <br> I'll introduce you. 
 This is Anjou, and this is Lune, Paul, François… 
 And this is, uh… <br> Oh, that's right! 
 I only just got this bunny, so he doesn't have a name yet. 
@@ -894,18 +894,18 @@ What about Marie?
 How about Pierre? 
 How about Hogehoge? 
 How about "Marie"? 
-What? That's a girl's name! This one's a boy! 
+What? <br> That's a girl's name! <br> This one's a boy! 
 I played a girl named Marie on stage before! 
 W-Well, it's cute, so that should still be fine, right? 
 Y-You think so? 
 Let's go with Marie, Iris. 
-Hmmm… OK, then! I'll name him Marie! 
+Hmmm… OK, then! <br> I'll name him Marie! 
 Well… How about "Pierre"? 
 Wow! That's so cool! I'll go with that, Mon Frère! 
 That's his name, then. Pierre! 
 Thanks for giving him such a cool name, Mon Frère! 
 Hmm… What about "Hogehoge"? 
-Hogehoge? What does that mean? I have no idea! 
+Hogehoge? <br> What does that mean? <br> I have no idea! 
 There isn't really a meaning. I just thought of it on the spot. 
 I'll call him Hogehoge, then! It sounds funny. 
 Starting today, you are Hogehoge. Nice to meet you, Hogehoge. 
@@ -917,8 +917,8 @@ Then it’s decided! OK, his name will be Ichiro!
 You can properly introduce yourself the next time you come to my room. 
 (Iris sure loves stuffed animals, huh?) 
 That's a pretty large wardrobe. Is the whole thing full of clothes? 
-Yep, that's right. I love clothes. 
-Heheh… Mon Frère. Which of my outfits do you like best? 
+Yep, that's right. <br> I love clothes. 
+Heheh… Mon Frère. <br> Which of my outfits do you like best? 
 I like what you're wearing. 
 I like your battle uniform. 
 It's not about the clothes.
@@ -930,13 +930,13 @@ I like your battle uniform.
 Rather you wear nothing…
 I like what you're wearing right now. It looks really good on you. 
 Yeah! This is my favorite outfit, too. 
-Thank you, Mon Frère! I'm so happy! 
+Thank you, Mon Frère! <br> I'm so happy! 
 I'd say your battle uniform. It's so cool and sleek. 
-Thanks, Mon Frère. Eheheh, I'm so happy! 
+Thanks, Mon Frère. <br> Eheheh, I'm so happy! 
 Your battle uniform is also really cool! 
 It's not about the clothes, Iris. A person’s charm isn’t determined by what they wear.
-Hmm… I guess. Boring… 
-I like swimsuits. I’d love to see you in one. 
+Hmm… I guess. <br> Boring… 
+I like swimsuits. <br> I’d love to see you in one. 
 Huh?! That's bold of you, Mon Frère. 
 OK then, I'll show you my swimsuit in the summer! 
 I… I'd rather you wear nothing at all… 
@@ -955,7 +955,7 @@ Jean-Paul's a boy, so we can't take baths together.
 I-I see… 
 (That's a huge pillow…) 
 (That's a huge cushion…) 
-That's a huge pillow. It looks so comfortable. 
+That's a huge pillow. <br> It looks so comfortable. 
 That's called a "cushion," Mon Frère. 
 Huh, really? 
 (This looks like a picture of Iris's parents.) 
@@ -977,7 +977,7 @@ Wow… That's strange.
 (It's an unusual but stylish curtain.) 
 We should get back to preparing for the welcome party. 
 Thanks for inviting me, Iris. 
-Sure! I hope you'll come again! 
+Sure! <br> I hope you'll come again! 
 Oh, is it that late already? 
 Thanks for inviting me, Iris. 
 Sure! I hope you'll come again! 
@@ -1106,7 +1106,7 @@ But I can swim halfway across the pool without one!
 Wow, that's amazing. You're doing great, Iris. 
 Heheh, yep! 
 So this is the training room… Iris, you want to work out a bit? 
-Hmmm… Maybe later. We have the welcome party today. 
+Hmmm… <br> Maybe later. We have the welcome party today. 
 You're right. We'll do this some other time. 
 We were just here, Mon Frère. Did you need something? 
 No… No, not really. Let's go, then. 
@@ -1121,7 +1121,7 @@ Searching through all this junk… What a pain…
 …Fine, then. I'll look for it by myself. 
 You should've helped her, Mon Frère… 
 She looks so sad all by herself… 
-Sure, no problem. Right, Iris? 
+Sure, no problem. <br> Right, Iris? 
 Yeah! Let's do our best, Mon Frère! 
 Thank you! I appreciate it. 
 Let's help her out, Mon Frère. 
@@ -1250,7 +1250,7 @@ Oh, everyone, welcome.
 Ogami and Iris asked us to stop by. 
 Thank you, Iris and Ogami! 
 You invited them just like I asked. Thank you, Ogami. 
-Oh, it was nothing. Right, Iris? 
+Oh, it was nothing. <br> Right, Iris? 
 Yep! It was a lot of fun being with Mon Frère! 
 Excuse us! 
 Well, now… What beautiful decorations. 

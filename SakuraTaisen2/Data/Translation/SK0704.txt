@@ -84,7 +84,7 @@ O-Of course not! A natural talent like me doesn't need practice!
 I was just chasing around a bug, that's all. 
 A bug? Where? 
 …Right. 
-A bug? Where? Where did it go? 
+A bug? Where? <br> Where did it go? 
 Well, that's… 
 Oh for heaven's sake, Ensign! Try to read the room! 
 Yes, it's true. I was practicing my dancing. 
@@ -107,7 +107,7 @@ Hmm… I hope I can manage.
 I know you'll do just fine. Now then, let us dance. 
 … 
 U-Um… 
-I'm sorry, Ensign. The truth is, I WAS practicing my dancing. 
+I'm sorry, Ensign. <br> The truth is, I WAS practicing my dancing. 
 I didn't want anyone to see me, so that's why I said what I did earlier. 
 As it turns out, it doesn't sit well with me to lie… 
 Sumire… 
@@ -122,14 +122,14 @@ How would you feel about becoming my personal lighting technician, Ensign?
 Uhh… Well… I… 
 Ohohohoho! <br> Relax, Ensign, I'm only kidding. 
 Now then, I must be going. Take care, Ensign. 
-Lighting technician, huh? I wonder if that'd suit me better than being a ticket collector. 
+Lighting technician, huh? <br> I wonder if that'd suit me better than being a ticket collector. 
 …Now's not the time to be thinking about that. I have to get back to my rounds. 
 Phew… How was that, Sumire? 
 I think you have a knack for this. 
 Perhaps it wouldn't be such a bad idea to become a lighting technician as well as a ticket puncher? 
 A lighting technician, huh? Hmmm… 
 Now then, I must be going. Take care, Ensign. 
-Lighting technician, huh? I wonder if that'd suit me better than being a ticket collector. 
+Lighting technician, huh? <br> I wonder if that'd suit me better than being a ticket collector. 
 …Now's not the time to be thinking about that. I have to get back to my rounds. 
 Sorry, Sumire… I wasn't very good at controlling the spotlight. 
 Well, it was your first time. Don't worry about it too much. 
@@ -144,7 +144,7 @@ Sumire had me help her with her dance practice here just a moment ago.
 So typical of her, not letting anyone see her exerting any effort. 
 This place is always deserted, both day and night. 
 Nothing out of the ordinary here. Back to my night watch. 
-Oh, Mon Frère! Reni was just teaching me about the stars! 
+Oh, Mon Frère! <br> Reni was just teaching me about the stars! 
 She knows all sorts of stuff about them!
 …The position of the stars can help you keep your bearings in battle. 
 Guess what, Mon Frère? She taught me about the large dipper in the stars.
@@ -156,7 +156,7 @@ The South Star?
 The North Star? 
 The South Star? 
 The Star of Happiness? 
-The North Star, right? I learned that in the Navy. 
+The North Star, right? <br> I learned that in the Navy. 
 Wow, Mon Frère, you're so smart! 
 Not bad, Captain. 
 I'm pretty sure it was the South Star, right? 
@@ -209,9 +209,9 @@ Well, see you two later. I gotta go work on the Koubu.
 Good luck with Orihime, Chief! 
 I'll be going to my room, then. 
 Good night, Ogami. Good luck with your night watch. 
-Hmmm… Will Orihime really talk to me? 
+Hmmm… <br> Will Orihime really talk to me? 
 At any rate, I guess I'll continue my night watch for now. 
-Brr, it's cold… Winter's almost here. 
+Brr, it's cold… <br> Winter's almost here. 
 Gotta make sure the door's properly closed… OK, let's check another room. 
 The chandelier's shining so brilliantly. 
 It doesn't look like this light will go out till morning. That's the Imperial Theater for you. 
@@ -340,7 +340,7 @@ These are… Sumire's clothes.
 So that means… Sumire's in the bath right now… 
 I am drawn to the bath…
 Go back outside. 
-O-Oh, no… My body is moving towards the bathroom on its own… 
+O-Oh, no… <br> My body is moving towards the bathroom on its own… 
 Ahh, this feels so good. There's nothing better than a bath after a rehearsal. 
 (Sumire…) 
 (Hmm, I can't see very well through all this steam. Maybe if I get a little closer…) 
@@ -368,9 +368,9 @@ Phew, I think I got away before she realized I was there.
 If I'd been just a moment slower, I might not have made it. That was too close… 
 Ah… Uhm… I… 
 E-Ensign?! 
-H-Hey, Sumire… Fancy meeting you here. 
+H-Hey, Sumire… <br> Fancy meeting you here. 
 Wh-What are you saying?! 
-Get out! Get out this instant! 
+Get out! <br> Get out this instant! 
 Y-Yes, ma'am! 
 … 
 I'm sorry, Sumire. I walked in without thinking… 
@@ -378,7 +378,7 @@ I'm sorry, Sumire. I walked in without thinking…
 I can't believe you'd walk in on a lady in the middle of her bath! 
 I know… I really am sorry. 
 …And here I thought you were different from other men, that you were a true gentleman. 
-What a shame. Now then, I have to go. 
+What a shame. <br> Now then, I have to go. 
 Serves me right, I guess… Man, I screwed up. 
 I don't feel great, but I guess I'll just go back to my patrol for now. 
 She must be relaxing in the bath after practicing so hard. 
@@ -387,7 +387,7 @@ OK, doesn't seem like Sumire noticed I'm here.
 I'm still on patrol, so I should go somewhere else. 
 Phew, that was refreshing. 
 I suppose I should be getting out. 
-(Oh crap!! It looks like she's leaving the bathroom!) 
+(Oh crap!! It sounds like she's leaving the bathroom!) 
 (I gotta get out of here before she sees me!) 
 Phew, I think I got away before she realized I was there. 
 If I'd been just a moment slower, I might not have made it. That was too close… 
@@ -410,17 +410,17 @@ Nothing out of the ordinary here, apart from the smell of roses. Right, onto the
 G-Good evening. 
 Oh my, Ensign Ogami. What did you need at this hour? 
 Uh, I'm here on my night watch. 
-Oh, good work. We were just about to start our debriefing. 
+Oh, good work. <br> We were just about to start our debriefing. 
 You should join us, Ichiro! 
 We can talk all about beauty while we sip on this rose tea Kiku prepared for us. 
 O-Ogami… If you don't mind… I'd like you to have some. 
 It's so cold and lonely this time of year… You can stay here if you'd like, Ichiro. 
 I'll be sure to steal a kiss from you by sunrise! 
-Y-Yokihiko! You… You can't do that! 
+Y-Yokihiko! <br> You… You can't do that! 
 That's right, Yokihiko! Ensign Ogami belongs to everyone! 
 I… I'm in the middle of my rounds, so… I have to go. 
 Ah, Ichiro! 
-Sheesh… I was in trouble for a second, there. 
+Sheesh… <br> I was in trouble for a second, there. 
 At any rate, better pull myself together and continue my night watch. 
 Now then, let's begin the debriefing. 
 It's fall already, don't you think we should come up with a new theme to match the season? 
@@ -449,24 +449,24 @@ Heheh, well they ARE called Koubu, it's only natural they'd be Kou-verjoyed!
 Ahahahaha! 
 Oh, a wise guy, eh? 
 Ahahahaha! 
-Ahahaha! You're hilarious, Kohran! 
-Really? You thought that was funny? Heheh, I'm glad it hit! 
+Ahahaha! <br> You're hilarious, Kohran! 
+Really? <br> You thought that was funny? Heheh, I'm glad it hit! 
 …Ahahaha! Th-That was really funny! 
 Hmm, it took you a while to laugh at that one. 
 Y-You're just imagining things. 
 If you say so… I was hoping you'd laugh a bit more, though. 
 Oh, a wise guy, eh? 
 Aww, I've done it again! 
-Ahahaha! That was a perfect straight-man response, Chief! 
+Ahahaha! <br> That was a perfect straight-man response, Chief! 
 Looks like you finally found your comedic footing! 
 …N-No good, huh? I just came up with it on the spot, but I still thought it was kinda amusing… 
-Hmm… That wasn't very funny. 
+Hmm… <br> That wasn't very funny. 
 Hmm… Guess it wasn't inspired enough. 
 Alrighty then, we had ourselves a nice break, time to get back to work. 
-Thanks for the manju. I'll be getting back to my night watch now. 
+Thanks for the manju. <br> I'll be getting back to my night watch now. 
 Let's both give it all we've got, Chief! 
-Sure thing. See you later, Kohran. 
-Well… I ought to get going, too. 
+Sure thing. <br> See you later, Kohran. 
+Well… <br> I ought to get going, too. 
 Oh, hey Chief. Thanks for going on patrol for us. 
 Don't overdo it, Kohran. You stay up too late and you'll catch a cold. 
 Thanks, Chief. 
@@ -485,7 +485,7 @@ Orihime…
 (I have to open this door and talk to her!) 
 (Now's not the time to be looking at that.) 
 (I can't leave Orihime alone like this.) 
-Orihime… Please open the door. 
+Orihime… <br> Please open the door. 
 No. 
 Orihime, please, listen to me! 
 No means no! 
@@ -501,24 +501,24 @@ You're right. I have nothing to do with your family, not directly.
 But I'm worried about you! Isn't that reason enough?! 
 Mr. Ensign… 
 …No matter what you say, I will not be opening this door. 
-…Mr. Ensign? Are you still there?! 
+…Mr. Ensign? <br> Are you still there?! 
 I already told you, I'm not opening this door! 
 Orihime, please! 
-That's cowardly, Orhime!
-Orihime, please! Open the door! 
-Aghh, shut your mouth! I don't want to hear another word! 
+That's cowardly, Orihime!
+Orihime, please! <br> Open the door! 
+Aghh, shut your mouth! <br> I don't want to hear another word! 
 Orihime! 
 … 
 That's cowardly, Orihime! If you truly believe what you think is right, then say it to my face! 
 …I don't care what you say, I don't feel like talking to any Japanese men! 
 Orihime! 
-Aghh, shut your mouth! I don't want to hear another word! 
+Aghh, shut your mouth! <br> I don't want to hear another word! 
 Orihime! 
 … 
 Hmph! You are giving me a silent treatment now? 
 Ah, thank goodness! Finally some peace and quiet. 
 Give up and leave. 
-Oh well. It's late. I'll go back to my room for tonight. 
+Oh well. It's late. <br> I'll go back to my room for tonight. 
 But Orihime, I want you to know one thing. 
 I don't think it's right to hate your father like this forever. 
 I just want to help you two patch things up, that's all. 
@@ -560,7 +560,7 @@ Orihime, you called him "unfaithful" just now…
 But it seemed to me like Mr. Ogata truly loved Carino. 
 That man is tricking you, Mr. Ensign! 
 He may claim that he loved my mamma… but, it's an obvious lie!!
-You were separated from your father when you were just a child, right, Orhime? 
+You were separated from your father when you were just a child, right, Orihime? 
 So how did you recognize that Mr. Ogata was your father? 
 …Before I came to Japan, I asked my mamma to give me a photograph of the man. 
 I was thinking that if I ever saw him, I'd make him apologize.

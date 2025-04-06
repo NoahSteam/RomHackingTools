@@ -53,8 +53,8 @@ I had to… You would have run over this dog at the speed you were driving.
 What was that? You mean to tell me that the life of that mutt is more important than our own?! 
 Would you stop this! Your attitude is uncalled for! 
 You bastards… How dare you talk like that in front of Imperial soldiers. 
-That rank insignia… Are you a commissioned officer in the Army? 
-Oh… So you’re military, too, are you? State your name and rank. 
+That rank insignia… <br> Are you a commissioned officer in the Army? 
+Oh… <br> So you’re military, too, are you? State your name and rank. 
 Ensign Ichiro Ogami! 
 Like hell I'm telling you! 
 I am Imperial Navy Ensign, Ichiro Ogami! 
@@ -63,12 +63,12 @@ You're the captain of that rotten unit overrun by women. The Imperial Assault Tr
 What did you just say!? 
 Like hell I'm telling you!
 What was that, you bastard?! 
-Wait… I recognize your face. 
+…Wait. <br> I recognize your face. 
 You're Ichiro Ogami, the captain of that rotten unit overrun by women. The Imperial Assault Troupe. 
 … 
 … 
 Answer his question, bastard!! 
-Wait… I recognize your face. 
+…Wait. <br> I recognize your face. 
 You're Ichiro Ogami, the captain of that rotten unit overrun by women. The Imperial Assault Troupe. 
 … 
 Look at you, cavorting with young girls in broad daylight.
@@ -87,8 +87,8 @@ Commander Yoneda is still absent, too. It'll just make things even worse for us.
 Ogami… 
 Heh, what a complete idiot! Now, take this!! 
 … 
-Insolent cur! Salute His Excellency! This is Keigo Kyogoku, Minister of the Army! 
-Keigo… Kyougoku? 
+Insolent cur! <br> Salute His Excellency! <br> This is Keigo Kyogoku, Minister of the Army! 
+Keigo… Kyogoku? 
 So you're Ensign Ichiro Ogami. 
 You got yourself a pair of nice piercing eyes. 
 … 
@@ -124,7 +124,7 @@ Don’t give it a second thought. I never would’ve dreamed of getting shot in 
 Guess I was just too stubborn to die. Wahahahaha! 
 Now, get back to your job. No need to dwell on the matter. 
 Understood. I shall return to my duties. Please, excuse me for now. 
-Damn it… How could I have let this happen under my watch…
+Damn it… <br> How could I have let this happen under my watch…
 Kayama, is that you? 
 Nwhahhh?! O-Ogami!? 
 H-Hey Ogami! Ah, how lovely the sea is. When it comes to summer, the beach is the place to be! 
@@ -161,7 +161,7 @@ But that blasted doctor keeps saying I need to stay in bed and rest.
 Then… Has there been any news about when you'll be discharged? 
 Ah… I may be able to leave next month. 
 I see. In any case, please take care of yourself. 
-By the way, Ogami… What's with the bruises? You get into a fight? 
+By the way, Ogami… <br> What's with the bruises? You get into a fight? 
 Ah, t-this is… <br> I just tripped and fell over while we were walking here. 
 Uh-huh… <br> Now that's suspicious. <br> Did you get caught two-timing, Chief? 
 Huh!? 
@@ -177,8 +177,8 @@ But, Chief, are you sure nothing happened to you? Your handsome face is all mess
 …Sorry, Ogami, but I can't stay silent any more. 
 Sakura! 
 Excuse me… Mr. Yoneda. <br> Do you know the Minister of the Army, a man named Keigo Kyogoku? 
-…Yeah, I know 'em all right. Did something happen? 
-Yes… We actually had a quarrel with his subordinates earlier. 
+…Yeah, I know 'im all right. Did something happen? 
+…Yes. We actually had a quarrel with his subordinates earlier. 
 Ogami didn't want the scuffle to get worse, so he stayed silent and let them punch him. 
 … 
 I see, so that's what happened. 
@@ -201,7 +201,7 @@ Sure… Oh, wait a minute. Ogami, you stick around for a bit. We need to talk.
 Y-Yes, sir. 
 … 
 What did you want to discuss with me, Mr. Yoneda?
-The thing is… I want you to hold onto something for me.
+The thing is… <br> I want you to hold onto something for me.
 T-This is… 
 It's my sword that's been with me through thick and thin since the Kouma War… The Divine Blade Mekkyaku.
 Something so important…
@@ -219,7 +219,7 @@ Y-Yes, sir. Understood. <br> I will take care of it.
 You're right, it is important. That's precisely why I'm entrusting it to someone I can count on.
 Y-Yes. I understand. Then I will accept the Mekkyaku. 
 … 
-What? You don't want it, Ogami? 
+What? <br> You don't want it, Ogami? 
 General Yoneda, is there any reason why you're entrusting this priceless item to me? 
 Eh, I just feel like it. I’ll be more at ease knowing it’s with you instead of at the hospital.
 Y-Yes, sir… Understood. <br> I will take care of it. 
@@ -232,13 +232,13 @@ Huh, you’re holding a sword. Where did that come from?
 Well, it’s… a long story. Ah, anyway, thank you for waiting. 
 Arf! 
 Oh, it's you! 
-Aaah… What a cute pup! Is it yours, Chief?
-Actually… He appears to be a stray.
+Aaah… What a cute pup! <br> Is it yours, Chief?
+Actually, he appears to be a stray.
 I rescued him earlier today from almost getting hit by a car.
 He must have been waiting here this whole time just to see you.
 Arf! 
 Aw, looks like the little guy isn’t going to leave your side anytime soon, Chief.
-I know, Ogami! What if we kept the puppy at the theater with us?
+I know, Ogami! <br> What if we kept the puppy at the theater with us?
 Good idea, let's keep him! 
 That’s out of the question.
 I'm more of a cat person. 
@@ -260,7 +260,7 @@ I’d rather have a kitten. I’m more of a cat person, myself.
 Don’t say that, Ogami! <br> Come on, please? 
 She’s got a point, Chief. You can’t just leave him here like this.
 I'll make sure to take care of him along with Sakura. So can we keep him, please? 
-Well… OK. If you insist. 
+Well… <br> OK. If you insist. 
 Hurraaaay! <br> It's a deal, then! 
 Isn't that great, boy? Let's go home together! 
 Arf, arf! 
@@ -271,7 +271,7 @@ Uhm… Well… <br> OK, if you insist.
 Hurraaaay! <br> It's a deal, then! 
 Isn't that great, boy? Let's go home together! 
 Arf, arf! 
-Tell me some gossip. 
+Listen to some gossip.
 I'll come back later. 
 Seems like you’ve started keeping a dog in the courtyard, Ogami. 
 That’s right. Sorry I made the decision without consulting you two first. 
@@ -279,8 +279,8 @@ Oh, it's no problem!<br>The dog's name is<br>
 , isn't it?
 You got that information pretty quick. Just like always, Yuri. 
 Heheh. Actually, Kohran just dropped by to tell us the news. She was really excited to talk about it. 
-I see, glad to hear it. I hope that you two will play with 
-every now and then.
+I see, glad to hear it.<br>I hope that you two<br>will play with<sp>
+<br>every now and then.
 Has Mr. Yoneda been doing OK? 
 Yeah, we just visited him in the hospital and he was as lively as ever. 
 He's not allowed to drink there, so it’s a good opportunity for his body to recover a bit.
@@ -291,7 +291,7 @@ I don't think so. The food disappears along with the packaging.
 Perhaps, unbeknownst to us, there is a person secretly living in the theater… 
 …Just kidding. Did I make your heart skip a beat? 
 Ogami, have you ever been to Café Paulista? 
-Um, Cafe… what now? No, I haven't. 
+Um, Cafe… what now? <br> No, I haven't. 
 It’s a place that serves delicious coffee and donuts.
 The cafe is wonderful, but all of the customers seem to be a bunch of writer types.
 Whenever I go, I always end up having some kind of high-minded conversation… It gets tiring sometimes. 
@@ -312,7 +312,7 @@ If I ever find out who it is, you’ll be the first to know.
 O-OK… Thanks. 
 Speaking of which, summer break is coming up next month. 
 I'm thinking of buying the latest swimsuit and going to the beach! How about we go together, Kasumi? 
-Um… I think I'll pass… By the way, do you have any plans for summer break, Ogami? 
+Um… I think I'll pass… <br> By the way, do you have any plans for summer break, Ogami? 
 Hmm… In this line of work, we don’t really get days off. Who knows if we’ll get a vacation this summer…
 Sorry, Ogami, but I'm all out of gossip for now. 
 I'll have some more interesting tidbits to share another time, so look forward to it!
@@ -324,8 +324,8 @@ She actually gave me her number in case of emergencies.
 You can talk to her if you dial "13900." 
 13900, OK. Thanks, Yuri! 
 I'll come back another time. Good luck with your work. 
-OK. Thanks for coming, Ogami. 
-Tell us if you hear any juicy stories! 
+OK. <br> Thanks for coming, Ogami. 
+Let us know if you hear any juicy stories! 
 Sorry Ogami, but customers are only allowed to purchase one of each bromide. 
 I see. That's too bad. 
 So sorry, Mr. Ogami, but customers are only allowed to purchase one of each bromide.

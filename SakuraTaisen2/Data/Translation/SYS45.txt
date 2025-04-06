@@ -12,7 +12,7 @@ This order is currently in effect. We'll fight our opponents unflinchingly.
 Attention all units! Initiating the "Mountain" strategy!
 We're sticking with the current strategy!
 Understood!
-To the platoon that just arrived, your top priority is to defend the engine room!
+To the platoon that just arrived: your top priority is to defend the engine room!
 Try to hold out until Ogami's team is able to defeat the Hachiyou!
 <LEAVE> 0 Message 1-3
 Pass through the gate and defeat Tsuchigumo!
@@ -38,7 +38,7 @@ Healing-type Kouma Weapon. A Kouma Weapon with the ability to help other Kouma r
 Hex Mech: Wakiji Kai. <br> Attacks using buckshot, but a single blast is relatively weak.
 Hex Mech: Wakiji Kai. <br> The units with healing abilities are referred to as L-Special.
 Hex Mech: Wakiji Kai. <br> Classified as the NI-type Special, this unit boasts a peculiar attack range.
-Hex Mech: Hachiyou. Piloted by Tsuchigumo of the Five Elements, attacks with its six arms in succession.
+Hex Mech: Hachiyou. Piloted by Tsuchigumo of the Five Elements, it attacks with its six arms in succession.
 <LEAVE> Message 19
 <LEAVE> Message 20
 Doesn't look like I need to cover anyone right now.
@@ -165,7 +165,7 @@ Sheesh, you're hopeless!
 I can't take it anymore!
 I have to retreat. I can't keep going… Captain…
 Not bad!
-That was super cool, Mr. Ensign!
+That was super cool, <br> Mr. Ensign!
 That was easy!
 Heehee! Give me a big round of applause!
 We're an unstoppable duo!
@@ -196,7 +196,7 @@ You'll burn brilliantly…
 Prepare yourselves.
 Ahahahahaha!
 I'll burn you to a crisp!
-You… Pieces of trash…
+You… pieces of trash…
 I'll show you what I've got.
 I'll be gentle.
 Hm hm hm… I won't lose.

@@ -6,7 +6,7 @@ Um… Excuse me, sir.
 Huh? Oh, it's you, the young man from before. 
 My name is Ichiro Ogami, I work here at this theater. 
 I apologize for all the commotion earlier. 
-No, that's all right. I wasn't getting any customers anyway. I had time to kill. 
+No, that's all right. <br> I wasn't getting any customers anyway. <br> I had time to kill. 
 Um, I'm sorry, but what was your name, sir? 
 Right, you may call me Ogata. I am but a humble wandering artist. 
 Mr. Ogata, do you have business with us here at the theater? 
@@ -32,7 +32,7 @@ When I heard a man was standing outside the theater, I thought it might be…
 Oh well, I'll go back to my room. 
 … 
 I understand. If that's what you want, then I'll tell you. 
-…?! <br> That voice… It can't be! 
+…?! <br> That voice… <br> It can't be! 
 Today, I may be a lowly caricaturist, but in the past, I dreamed of becoming a painter of fine art. 
 I traveled to Italy, wandering from place to place, spending every passing day painting. 
 That's when… I met her. 
@@ -64,9 +64,9 @@ I had no idea Orihime had that kind of upbringing.
 Is that why she hates Japanese men as much as she does? 
 If nothing else, Ogami, believe me when I say this… 
 Even if I was never able to see her, I've always prayed for Orihime's happiness. 
-That's a lie!! 
+That is a lie!! 
 That voice! 
-Everything you have said is total nonsense! You're nothing but a liar! 
+Everything you have said is total nonsense! You are nothing but a liar! 
 O-Orihime! 
 You think I don't know the truth? 
 You're… <br> You're the wretched man who abandoned Mamma and I! 

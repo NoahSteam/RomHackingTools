@@ -49,13 +49,13 @@ Oh, so you're not going to buy anything?
 Tsubaki, you look… very cheerful. 
 Absolutely. This is the theater’s entrance after all. 
 At times like this, it’s all the more important to greet visitors with a smile. 
-I see… You’re so strong, Tsubaki. 
-Ehe… Thank you for saying so.
+I see… <br> You’re so strong, Tsubaki. 
+Ehe… <br> Thank you for saying so.
 But, you know… <br> When there aren’t a lot of patrons and I’m by myself…
 I can't help but feel… a little lonely. 
 …The manager will be fine. I’m sure he’ll return as good as new. 
 And when he does, please make sure to greet him with a bright smile! 
-…Of course! You can count on me! 
+…Of course! <br> You can count on me! 
 I’ll make sure to greet him with the biggest, brightest smile ever! 
 Just leave it to me! I’ll give the manager a warm welcome!
 Well, I should be going. Keep up the good work. 
@@ -72,7 +72,7 @@ Looks like nobody's here, guess I'll check another room.
 No one's around. I suppose people aren't visiting the theater before the summer performance opens.
 Guess I'll check another room, then. 
 Oh, Ogami. Is there something you need? 
-Let me hear any new gossip. 
+Listen to some gossip.
 I'll come back later. 
 Sorry, Ogami… I’m afraid I don't have anything fun to share.
 Sad to say that all of the current gossip is pretty depressing… 
@@ -420,7 +420,7 @@ He might remain in a coma…
 Don’t worry, he’s OK. We can't visit him right now, but he'll be discharged in no time. 
 For real? You’re serious?
 …Yeah, I'm serious. 
-Phew… I’m so relieved that my tears just won’t stop. 
+Phew… <br> I’m so relieved that my tears just won’t stop. 
 … 
 … 
 Thanks a lot, Chief. At last… I can calm down now. 
@@ -488,7 +488,7 @@ The manager is doing fine. I was just told by the captain that his condition is 
 For real? You’re serious? 
 …Yes, I'm serious. When have I ever lied to you? 
 Yeah… You’re not one to tell tall tales.
-Phew… I’m so relieved that my tears just won’t stop.
+Phew… <br> I’m so relieved that my tears just won’t stop.
 … 
 … 
 Anyway, Captain… Should I return to Japan? 
@@ -589,7 +589,7 @@ Uh… I-I was…
 In times like this, shouldn’t you at least try to act like the leader?
 Let me be blunt, everyone here is acting like a bunch of cowards! It’s your job to set them straight! 
 Ah, Orihime… 
-Sheesh… I was supposed to be the one encouraging her, not the other way around. 
+Sheesh… <br> I was supposed to be the one encouraging her, not the other way around. 
 No, not at all. During tough times like this, I need to be strong and keep everyone together. 
 Hmm… For once, you act like a captain. 
 Careful you do not overexert yourself.
@@ -636,7 +636,7 @@ I wonder if Reni is here right now.
 It's just a piece of paper from a notebook. I suppose that's fitting for someone like Reni. 
 I better check another room, I guess. 
 …Who's there? 
-It's Ogami. Can we talk for a moment? 
+It's Ogami. <br> Can we talk for a moment? 
 … 
 Well, I’m letting myself in.
 Sorry, am I bothering you? 
@@ -659,7 +659,7 @@ Thanks for having me, Reni. I gotta go now.
 (It's framing a jewel with the same color as Reni's eyes) 
 … 
 (This room is pretty bleak…)
-Reni… Where do you usually sleep? 
+Reni… <br> Where do you usually sleep? 
 I sleep on the chair. 
 Don't you have any other furniture, like a bed or a dresser? 
 …I don't need such superfluous items. 
@@ -676,7 +676,7 @@ How'd you figure that out?
 T-That's not what I meant!
 So it must have been done… by a professional. 
 True. It's possible that the culprit has undergone training for sharpshooting. 
-Way to go, Reni… You’re an expert on these kinds of things. 
+Way to go, Reni. You’re an expert on these kinds of things. 
 Reni… How were you able to figure all that out?
 Because… I have first-hand experience.
 Huh?! 
@@ -793,7 +793,7 @@ OK, let's go check on the others.
 I'd feel bad if I interrupted him while he's relaxing. I’ll head to another room.
 OK, I'm gonna take a quick bath too. 
 I’ll try striking up a conversation with Reni while I help wash his back. We’re both guys after all. 
-Hi, Reni. Mind if I join you? 
+Hi, Reni. <br> Mind if I join you? 
 … 
 Wash his back. 
 Soak in the bathtub. 
@@ -827,7 +827,7 @@ Hmm hmm~ Hmm~ Hmm~
 Why don't you try singing too, Reni? It feels good to hear your voice echo in the bath. 
 I've never sung outside of my performances. 
 Huh? So you’ve never hummed or sung a song to yourself?
-…Correct. It’s not necessary.
+…Correct. <br> It’s not necessary.
 …I’m going to leave now. 
 Oh boy… Same old Reni. 
 Phew, that was a great bath. 
@@ -872,7 +872,7 @@ So you’re a girl, huh? When you put it that way… You’re kind of cute.
 Cute? 
 Is that… a desirable quality? 
 Y-Yeah… I’m trying to give you a compliment.
-All right. I will accept it. 
+All right. <br> I will accept it. 
 So Reni’s a girl, huh…
 I don't know how I should put this, but… that makes me kind of happy.
 If gender is unimportant to you, wanna get back in the bath? 
@@ -886,11 +886,11 @@ Guess I better get going too.
 The weather has been so hot and humid lately. A dip in the pool would be so refreshing right now… 
 But, considering the state of the team right now, I can’t be relaxing in the pool right now.
 Nobody's here. Guess I'll just check another room. 
-Hi, Reni. Are you training right now? 
+Hi, Reni. <br> Are you training right now? 
 …I'm about to finish. 
 You don’t seem to be acting any different than usual… Aren’t you depressed, Reni? 
 …Why would I be? 
-"Why"? Because Manager Yoneda was shot, that's why. 
+"Why"? Because Mr. Yoneda was shot, that's why. 
 …It can't be helped. It's his fault for putting his guard down. 
 How could you say that? 
 You may be right… 
@@ -902,7 +902,7 @@ There's no place for emotion in warfare.
 You may be right… We need to learn from this and make sure the same mistake doesn’t happen twice. 
 We may have to become more vigilant so no one gets hurt like this again. 
 I agree. 
-W-Well, Reni… That’s one way to put it. 
+W-Well, Reni… <br> That’s one way to put it. 
 …I’m just speaking my mind. 
 What's done is done. What matters is what we do next. 
 If you don’t get emotional and think about it rationally, you may have a point… 
@@ -927,7 +927,7 @@ Our financial backers have pulled their support for the troupe… All at once.
 Wh-What!? That's just so sudden. W-Why… 
 I don't understand, but if it keeps going like this… 
 The Imperial Assault Troupe will soon run out of funds. 
-Damn it… Why now, of all times?! 
+Damn it… <br> Why now, of all times?! 
 Ogami… 
 What should we do about this? 
 Hmm… 

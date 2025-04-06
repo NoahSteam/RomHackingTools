@@ -45,28 +45,28 @@ Lookie, Jean-Paul the bear is happy, too!
 Hahaha. Thanks, you two. 
 Hey, Mon Frère… 
 Hm? What is it? 
-I’ve changed since last time, right, Mon Frère? 
-…You have?
+Don't you think I've changed since you last saw me, Mon Frère? 
+…You have? 
 You're even prettier now. 
-…You have?
+…You have? 
 You're even prettier now. 
 You're more grown-up now.  
 …You have? 
-Sheesh, Mon Frère! It's been so long since we saw each other! 
+Sheesh, Mon Frère! <br> It's been so long since we saw each other! 
 So you're supposed to say that I'm prettier, or more grown-up, or something! 
 I-I see. I'm sorry. 
 You're just the same as always. You don't understand a lady's heart at all! 
-Er, sure. 
-You're right. You're even prettier now than you were before. 
-Hee hee hee, really? <br> Yaay! I'm so happy! 
+…Er, sure. 
+You're right. <br> You're even prettier now than you were before. 
+Hee hee, really? <br> Yaaay! I'm so happy! 
 Um, but did you notice anything else, Mon Frère? 
-Huh? Did something else happen? 
-Yep! I'm 11 years old now. 
+…Huh? <br> Did something else happen?
+Yep, I'm 11 years old now. 
 Don't you think I'm more grown-up now? 
 Y-Yeah. 
-You're right. You're more grown-up now. 
+You're right. <br> You're more grown-up now.
 Really? So you did notice! <br> I knew you would, Mon Frère! 
-I'm 11 years old now. I'm a real adult now, huh? 
+I'm 11 years old now. <br> I'm a real adult now, huh? 
 Hahaha, that you are.
 Hee hee… <br> Thank you, Mon Frère. 
 Mon Frère, why won't you say something?!  
@@ -75,8 +75,8 @@ Sheesh, you're so dense!
 Sorry, Iris. 
 By the way, how is everyone else in the Flower Division? 
 Um, so right now, it's just me and Sakura here. 
-Huh?! Where'd everyone else go? 
-Sumire went home to her family because her grandpa fell ill…
+Huh?! <br> Where'd everyone else go? 
+Sumire went home to her family because her grandpa fell ill… 
 Kanna went to Okinawa to train… 
 Maria has work to do in New York… 
 …and Kohran also has work at the Hanayashiki Branch. 
@@ -84,8 +84,8 @@ Oh, so then I won't get to see everyone.
 But it's OK, 'cause everyone will be back by summer! 
 Besides, now that you're here, I can put up with the loneliness. 
 Is that so? That’s very grown up of you, Iris. 
-Oh, that's right! I have to go get ready now. 
-Later, Mon Frère! I'll be going now! Bye-bye!! 
+Oh, that's right! <br> I have to go get ready now. 
+Later, Mon Frère. <br> I'll be going now! Bye-bye! 
 Hey, Iris! <br> …And she's gone.  
 But I wonder what she's getting ready for. Now I'm curious. 
 Hey there, Ogami. 
@@ -115,7 +115,7 @@ I need to get to the manager's office! I can't believe I'm going to be late on m
 Ogami. 
 That voice… 
 It's been quite some time, Ogami. Do you remember me? I'm Kasumi Fujii, from the secretarial office. 
-Ah, Kasumi. I'm going to be working here at the theater again. 
+Ah, Kasumi. <br> I'm going to be working here at the theater again. 
 Yes, I heard as much from Mr. Yoneda. We're grateful to have you back. 
 By the way, Ogami, have you filled out your arrival forms yet? 
 No, not yet. 
@@ -124,7 +124,7 @@ Eeek!
 Whoa?! 
 O-Ogami! I'm so sorry! 
 I'm perfectly fine, but are you all right, Sakura? 
-Yes, I'm fine. Thanks for your concern. 
+Yes, I'm fine. <br> Thanks for your concern. 
 I don't have much time, so I need to get moving… I'm really sorry. 
 Can I help?
 What are you doing? 
@@ -137,7 +137,7 @@ You're sure in a hurry. What are you doing?
 Um, I'm going to the kitchen… 
 The kitchen? What for? 
 Huh? Er, well… <br> N-Nothing at all! 
-O-Ogami? Are you sure you're OK? 
+O-Ogami? <br> Are you sure you're OK? 
 Sorry, sorry, I should've said something. I'm fine, really. 
 I really am such a klutz. <br> I'm sorry. 
 You don't need to worry about me. You can go on ahead if you’re that busy. 
@@ -148,7 +148,7 @@ Still, I wonder what she's in such a rush for.
 Ogami. 
 That voice… 
 It's been quite some time, Ogami. Do you remember me? I'm Kasumi Fujii, from the secretarial office. 
-Ah, Kasumi. I'm going to be working here at the theater again. 
+Ah, Kasumi. <br> I'm going to be working here at the theater again. 
 Yes, I heard as much from Mr. Yoneda. We're grateful to have you back. 
 By the way, Ogami, have you filled out your arrival forms yet? 
 No, not yet. 
@@ -163,10 +163,10 @@ In any case, I’ll have to ask you don’t go past here. I hope you understand.
 I apologize, Ogami, but the back rooms and the basement are currently off-limits. 
 Oh right, I remember you telling me that. Oh well, I suppose I'll head somewhere else. 
 Ah, Ogami! 
-You remember me, don't you? It's me, Yuri Sakakibara, the secretary. 
-Nice to see you again after so long, Ogami. It's Kasumi Fuji, one of the secretaries here. 
+You remember me, don't you? It's me, Yuri Sakakibara, one of the secretaries here. 
+Nice to see you again after so long, Ogami. It's Kasumi Fujii, this office's other secretary. 
 Ogami, welcome! 
-Ah, sorry about that! I just yelled out like I always do. 
+Ah, sorry about that! <br> I just yelled out like I always do. 
 Tsubaki Takamura here, from the gift shop. I hope you'll come by to purchase some bromides again! 
 It's been a while, everyone! Looking forward to working with you all from here on out.
 All right, Ogami, here's that arrival paperwork to fill out, if you please. 
@@ -180,7 +180,7 @@ We look forward to working with you!
 OK, where to next? 
 Ogami. 
 Hey, Tsubaki, you seem to be in a good mood. 
-Absolutely! I'm really excited to have you back with us! 
+Absolutely! <br> I'm really excited to have you back with us! 
 Ogami, what makes you happiest about returning to the theater? 
 Fighting for peace. 
 Seeing you again, maybe?
@@ -200,7 +200,7 @@ OK, I'd better get to the manager's office.
 Ack! It's past 12 o'clock already! 
 Gotta get over to the manager's office right away, or he'll be furious! 
 Oh, Ogami. Is there something you need? 
-Tell me some gossip. 
+Listen to some gossip. 
 I'll come back later. 
 By the way, during the year you weren't here… 
 …public transit in the capital has seen a lot of growth. 
@@ -241,7 +241,7 @@ I'll have some more interesting tidbits to share another time, so look forward t
 Thanks, Yuri. If anything happens, I'll come ask you about it. 
 And if any interesting gossip comes your way, be sure to let me know! 
 Ogami. 
-Hey, Sakura. Taking in some sunlight? 
+Hey, Sakura. <br> Taking in some sunlight? 
 Yes. The weather's so nice today, I decided to take a little walk. 
 (Her hair is gleaming in the springtime sun… It's quite lovely.) 
 Is there something stuck in my hair? 
@@ -256,9 +256,9 @@ The way you're looking at me, it's making me blush.
 (Sakura looks really good in that kimono.) 
 This kimono has so many memories attached to it. 
 So I want to continue wearing it and treasure it for a long time to come. 
-You know, that navy uniform suits you really well, Ogami. 
+You know, that Navy uniform suits you really well, Ogami. 
 (Has Sakura's chest… gotten bigger?) 
-Ogami. Where exactly were you looking just now? 
+…Ogami. <br> Where exactly were you looking just now? 
 Uhh, w-well… 
 Make an excuse. 
 I-I just… saw your outfit and was thinking how pretty it is… 
@@ -268,7 +268,7 @@ Well, that's fine then. It just seemed like you had a perverted look in your eye
 Err… Well, you see… 
 Ogami, you had better not be staring at me with that perverted look in your eye. 
 It's pretty embarrassing for me, you know? 
-I-I'm sorry. I'll be more considerate. 
+I-I'm sorry. <br> I'll be more considerate. 
 (I'd better stop leering like this. I don't want her to get angry again.) 
 Just where are you looking, Ogami? 
 I should get going. See you later, Sakura. 
@@ -296,7 +296,7 @@ Ogami, is that you? <br> Good to see you again! <br> It's me, Tsubaki Takamura!
 Tsubaki, good to see you too. I've been reassigned to the theater. Happy to work with you again. 
 Yes, I heard all about it from Mr. Yoneda! I could hardly wait to have you back. 
 When all's said and done, you're by far my most loyal customer! 
-Wh-What the… Is THAT what you’ve been waiting for me for?
+Wh-What the… <br> Is THAT what you’ve been waiting for me for?
 Oh, by the way! Have you filled out your arrival paperwork yet, Ogami? 
 No, not yet. 
 Well that's not good! You're just making more trouble for Kasumi and Yuri! 
@@ -460,7 +460,7 @@ Hey, hey, you should talk to me, then!
 (Her hair is a little unruly, but it's a lovely golden blonde.) 
 Mon Frère, is there something wrong with my hair? 
 No, not at all. I was only thinking about how pretty it looks. 
-Hee hee, thanks! Yaaay, Mon Frère complimented me!! 
+Hee hee, thanks! <br> Yaaay, Mon Frère complimented me!! 
 I think your hair is cool, too! 
 (Iris's huge ribbon is an iconic part of her look.) 
 Isn't my ribbon cute? 
@@ -491,7 +491,7 @@ I'm sure Jean-Paul is pleased, too!
 All right, Jean-Paul, how about a handshake? 
 Let's both do our best to help Iris from here on out. 
 Thanks, Mon Frère! 
-How nice, Jean-Paul! Mon Frère shook your paw! 
+How nice, Jean-Paul! <br> Mon Frère shook your paw! 
 What's wrong, Mon Frère? Here, come say hello to Jean-Paul, too! 
 Uh, r-right… <br> Hello, Jean-Paul. 
 If you don't get it together, then Jean-Paul will laugh at you, Mon Frère! 
@@ -510,7 +510,7 @@ I haven't been around to every room yet, but it seems like you’ve updated all 
 Yeah! I really wanna dance on the new stage! 
 We're gonna be getting a whooole lot of customers… 
 So I bet your ticket punching job will get pretty hard. 
-O-Oh, that's right. I do have to go back to punching tickets, don't I… 
+O-Oh, that's right. <br> I do have to go back to punching tickets, don't I… 
 I bet that might be kinda hard, since you haven't done it for a whole year. 
 We all have to do rehearsals for our plays, so maybe you can rehearse for your job too. 
 OK, I'm gonna go now. Bye-bye, Mon Frère! 
@@ -518,14 +518,14 @@ Rehearse for ticket punching, huh? Well, it has been a pretty long time.
 Though at the rate things are going, I'm gonna get roped into doing all sorts of odd jobs again… 
 A game room. This place looks pretty new. 
 There's even a pool table? Wow, this is the real thing. 
-Oh, Sakura! Are you done getting ready? 
+Oh, Sakura! <br> Are you done getting ready? 
 I still have a bit more to do. How about you, Iris? 
 Those voices, is that Sakura and Iris? 
 It kind of sounds like… someone's talking in the salon next door. 
 I'm almost finished. Do you want some help, Sakura? 
 Thanks, Iris. But I've only got a little bit left, so don't worry about it. 
 Hee hee! Mon Frère is really back, huh? 
-I'm so happy that… I'm gonna cry again. 
+I'm so happy that… <br> I'm gonna cry again. 
 Iris… 
 Say something. 
 Were you two talking about me just now? 
@@ -539,11 +539,11 @@ Hey, you two… <br> And they're gone.
 Oh well, I suppose I'll head somewhere else. 
 (Maybe I'll stay here.) 
 Mon Frère, he's really cool, and super-duper nice. 
-Yes, he is. I… feel the same way. 
+Yes, he is. <br> I… feel the same way. 
 Well, why don't we both do our best to get things ready for him? 
 Y-Yeah. 
 OK, I'm gonna go now. Keep up the good work, Sakura! 
-Thanks, Iris. See you later. 
+Thanks, Iris. <br> See you later. 
 … 
 I don't have time to hang around here. I need to head to the manager's office. 
 Huh? I wonder whose room this is. 
@@ -604,7 +604,7 @@ There's no one here. No one but mice, I'd bet.
 I should get going. I don't have time to dawdle. 
 All right, time to go meet the manager. 
 I should go meet with the manager first. 
-It's Ogami. Are you in, Mr. Yoneda? 
+It's Ogami. <br> Are you in, Mr. Yoneda? 
 Ah, Ogami? Come in. 
 Yes, sir. Pardon me! 
 Ichiro Ogami, newly reinstated to the Assault Troupe as of 1200, reporting for duty, sir! 
@@ -619,15 +619,15 @@ However, when trouble arises, they launch into battle as members of a special co
 Its captain carries a great weight. You must both work at the theater and serve as commander in battle.
 I'm sure you're overjoyed to be back with the Flower Division, but make sure to keep your wits about you. 
 Yes, sir. Understood! 
-Right, that's all. Oh, wait… You stand out like a sore thumb in that Navy uniform. 
+Right, that's all. <br> Oh, wait… You stand out like a sore thumb in that Navy uniform. 
 Here, change into this when you get to your room. 
 Whoa, these clothes bring back some memories. 
 I think it's finally starting to hit me that I'm captain of the Flower Division again. 
-Wahaha! Is that right? Then I'm glad I kept that outfit around. 
+Wahaha! Is that right? <br> Then I'm glad I kept that outfit around. 
 Well then, I'm going to go change. Please excuse me. 
 Understood. Having this means I’m finally back to work as captain of the Flower Division. 
 Well then, I'm going to go change. Please excuse me. 
-Oh, Sakura… And Iris, too. What are you both doing? 
+Oh, Sakura… and Iris, too. What are you both doing? 
 We were waiting for you two to finish talking.
 Come to think of it, something similar happened when I first arrived here two years ago. 
 Were you two eavesdropping again, like you did back then? 
@@ -646,7 +646,7 @@ Uh, no, I… That's not…
 Ogami, why don't you, me, and Iris all go together? 
 How does that sound, Iris? 
 …OK! 
-All right then. Let's go, Ogami. 
+All right then. <br> Let's go, Ogami. 
 OK then, why don't you take me there, Iris? 
 OK! Come on, let's go, Mon Frère! 
 Sorry Sakura, but I'm going to let Iris take me. 
@@ -673,7 +673,7 @@ Hee hee! I helped out a whoooole bunch!
 I see. Thank you for going to all that trouble for me. 
 Well, I'm going to get changed real quick, so hold on just a minute. 
 All right. Let's wait outside, Iris. 
-OK! We'll be waiting, so be quick! 
+OK! I'll be waiting, so be quick! 
 Well then, I guess I'd better hurry up and get changed. 
 First things first, I need to take off my naval uniform. 
 Get undressed in a hurry 
@@ -724,11 +724,11 @@ Uh, Mon Frère, you're still in your underpants…
 Ack! C-Crap! 
 Ahh! I-I'm so sorry! 
 Iris, l-let's go back outside! 
-Sheesh, Mon Frère! Hurry up! 
-Ahh jeez, I can't believe they saw me looking like that. 
-Whoa! J-Just hang on a second! 
-Eeeek! O-Ogami, you're still naked?! 
-I-I'm in the middle of changing! 
+Sheesh, Mon Frère! <br> Hurry up! 
+Ahh jeez, I can't believe I was seen looking like that. 
+Whoa! <br> J-Just hang on a second! 
+Eeeek!! <br> O-Ogami, you're still naked?! 
+I-I'm still in the middle of changing! 
 Sheesh! You change slower than I do, Mon Frère! 
 You better hurry or we’re going on without you! 
 Oh, good grief… I give up. 
@@ -752,7 +752,7 @@ Yaaay, let's go, let's go! We gotta go to the dressing room. Come on, hurryyyy!
 Heheheh. Iris certainly is in high spirits. 
 Hey now, Iris, don't tug my hand so hard. 
 Come on already, hurry, hurry! This is your welcome back party, after all! 
-Over here, Mon Frère! Go inside! 
+Over here, Mon Frère! <br> Go inside! 
 Tah-daaahh! <br> Mon Frère has arrived! 
 Wow, "Welcome to the Flower Division." Incredible! You've all done a great job of decorating this room. 
 C’mon, Mon Frère, this way! Here you go, this is your seat. 
@@ -801,7 +801,7 @@ That's right.
 Whoa, that's incredible. 
 These three are Kasumi, Yuri, and Tsubaki. They handle the theater's clerical work. 
 And this is Sakura and Iris, both members of the Flower Division. 
-I'm Sakura Shinguji. It's nice to meet you. 
+I'm Sakura Shinguji. <br> It's nice to meet you. 
 Hello!! I'm Iris! And this is my bear, Jean-Paul. Let's be friends! 
 Everyone, I am in your kind hands now! 
 Finally, this is Ichiro Ogami, the captain of the Imperial Assault Troupe, Flower Division. 
@@ -815,7 +815,7 @@ Mr. Ensign, I will be frank with you. I do not like Japanese men.
 Japanese men, they are all spineless, weak-willed, and shifty. 
 Maybe you are the captain or what have you, but I will ask you now not to get in my way. 
 O-Orihime… 
-Ciao, Orihime! I'm Ensign Ichiro Ogami of the Imperial Navy. 
+Ciao, Orihime! <br> I'm Ensign Ichiro Ogami of the Imperial Navy. 
 I just returned to the Imperial Assault Troupe today myself. I hope we'll get along. 
 … 
 Well then, how about a handshake for now? 
@@ -824,7 +824,7 @@ Or perhaps, like they taught us at the military academy, a kiss on the back of t
 So to begin, I have a word for you: idiot! 
 O-Orihime… 
 … 
-How sullen you are. If there is something you wish to say, then why not say it? 
+How sullen you are. <br> If there is something you wish to say, then why not say it? 
 Truly, the Japanese have lowly, ill-mannered, shallow men! 
 All right, All right, that’s enough introductions for today. Orihime, Ogami, both of you take a seat. 
 Wh-What is this? The floor is made out of grass?! 
@@ -839,10 +839,10 @@ And all of them, always filled to the brim with guests far and wide.
 Wow, that's incredible. 
 Well, I'm sure there must be a lot of things you don't know since you only just arrived in Japan. 
 I’m always here for you, so if you have any questions, just ask. 
-Hmmm. <br> “Always here for me,” you say? 
+Hmmm… <br> “Always here for me,” you say? 
 I will be returning now to my room! 
 I cannot be bothered with any more of this. 
-O-Orihime! What's the matter?! 
+O-Orihime! <br> What's the matter?! 
 Hmph, nothing much. Being here has simply bored me, is all, and so I'm going back. 
 O-Orihime, wait a second! 
 If I said something to offend you, I apologize. 
@@ -854,19 +854,19 @@ Chase after her.
 Call out to her. 
 Orihimeeee! 
 … 
-It's no good. She's already gone. 
+It's no good. <br> She's already gone. 
 Ogami, what in the world is going on with Orihime? 
 Hmm… 
 (Good grief. I only just returned to the theater, and things are already off to a bad start.) 
 Sorry, everyone, I'm going after her. 
 Of course. Don't mind us, Ogami, just see to Orihime for now! 
 Thanks. I'll be right back. 
-Orihime! Just wait a minute! 
+Orihime! <br> Just wait a minute! 
 Oh my, Mr. Ensign? <br> You chased me all this way? 
 O-Of course. Starting today, you're a part of the Flower Division, after all. 
 I-I'm not entirely sure what I did to offend you… 
 But everyone was pretty worried after you got angry and stormed off like that. 
-Mr. Ensign, I would not like for you to misunderstand. 
+…Mr. Ensign. <br> I would not like for you to misunderstand. 
 I do not have any intention of becoming a part of the Flower Division! 
 Huh?! 
 In fact, none of you are worthy of more than playing the foil to my stardom! 
@@ -878,7 +878,7 @@ Ah, Orihime!
 (Good grief. I only just returned to the theater, and things are already off to a bad start.) 
 Ogami, are you sure you shouldn't go after her? 
 Ah, I wouldn't be able to catch up with her now, anyway. 
-I suppose, but even so… 
+But still, even if I did… 
 Ogami, what in the world is going on with Orihime? 
 Hmm… 
 (Good grief, I only just returned to the theater, and things are already off to a bad start.) 

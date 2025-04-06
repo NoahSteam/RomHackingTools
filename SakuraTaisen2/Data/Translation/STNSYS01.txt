@@ -30,8 +30,8 @@ Iris, the Flower Division's mascot. She fights enemies with her mysterious super
 Kohran Li, inventor. Startles friend and foe alike with the inventions she employs.
 Orihime Soletta, prior Star Division member. Piloting a rose armor, she is known as one of the Red Nobles.
 Reni Milchstraße. A combat professional, attacking accurately without a single wasted movement.
-RO-type Otsu. A long-range attack Hex Mech. Only capable of attacking single targets.
-RO-type Otsu. A long-range attack Hex Mech. Only capable of attacking single targets.
+RO-type Otsu. <br> A long-range attack Hex Mech. Only capable of attacking single targets.
+RO-type Otsu. <br> A long-range attack Hex Mech. Only capable of attacking single targets.
 HA-type Kou. A long-range attack Hex Mech. Capable of attacking multiple targets.
 L-Special. <br> A close-range Wakiji unit with healing capabilities.
 Chiken. Destroy it to end this exercise.
@@ -165,7 +165,7 @@ Sheesh, you're hopeless!
 No more!
 I have to retreat. I can't keep going… Captain…
 Not bad!
-That was super cool, Mr. Ensign!
+That was super cool, <br> Mr. Ensign!
 That was easy!
 Heehee! Give me a big round of applause!
 We're an unstoppable duo!
@@ -196,7 +196,7 @@ You'll burn brilliantly…
 Prepare yourselves.
 Ahahahahaha!
 I'll burn you to a crisp!
-You… Pieces of trash…
+You… pieces of trash…
 I'll show you what I've got.
 I'll be gentle.
 Hm hm hm… I won't lose.

@@ -17,14 +17,14 @@ You're dressed for summer.
 OK, Let's go with Shiro.
 Let me think it over.
 OK, let's go with Shiro. His fur is the first thing you see when you look at him, so it suits him well.
-You think so? I'm glad to hear that.
+You think so? <br> I'm glad to hear that.
 All right, it's decided, then! Welcome to the team, Shiro!
 Arf, arf! Woof!
 Let me think on it a bit longer. If we’re giving him a name, I want to be sure it's a good one.
 Sure. Go find out what the others think and decide on a nice name for him.
 You're also dressed in your summer outfit, aren't you, Sakura.
 Yes, and I was really pleased to hear you liked it, Ogami.
-Ooh, what's up? Did something happen with you and the chief?
+Ooh, what's up? <br> Did something happen with you and the chief?
 Heheh. <br> That’s… a… secret. <br> Right, Ogami?
 Uh, y-yeah.
 That summer dress looks great on you.
@@ -47,7 +47,7 @@ Your outfit looks nice.
 OK, let's go with Hanamaru.
 Let me think it over.
 OK, let's go with Hanamaru. You're right Sumire, it's a really fitting name.
-Ohohoho! I knew that I could count upon you to have good sense in names, Ensign!
+Ohohoho! <br> I knew that I could count upon you to have good sense in names, Ensign!
 All right, then it's decided. This pup's name will be Hanamaru.
 Let's get along, Hanamaru.
 Arf, arf! Woof!
@@ -60,7 +60,7 @@ Heavens, what a tremendously rude way to treat a lady!
 Ensign… My deepest thanks.
 You certainly do have good taste. How delightful.
 Well, I think "Dai" would be a good name for 'im.
-He's just a lil' guy, but if we name him Dai like the word for "big," he'll surely grow big and strong.
+He's just a lil' guy, but if we name him Dai like the word for big, he'll surely grow big and strong.
 I think my name suits him best.
 OK, let's go with Dai.
 Let me think it over.
@@ -73,7 +73,7 @@ Looks like you've got a name, Dai. And it's a good one, too!
 Arf, arf, arf!!
 Let me think on it a bit longer. If we’re giving him a name, I want to be sure it's a good one.
 Take your time and don't rush it. He's gonna carry whatever name we give 'im his whole life, after all.
-By the way, Kanna… That's not your usual karate gi, is it? It looks good on you, though.
+By the way, Kanna… <br> That's not your usual karate gi, is it? It looks good on you, though.
 C-C'mon, Boss, what're you talkin' about? Let's come up with a name for this lil' guy first!
 Heavens, Kanna, your face has turned the brightest shade of red. Whatever could be the matter?
 Gimme a break, Sumire! The boss is over here sayin' all this weird stuff, that's all.
@@ -97,7 +97,7 @@ Hee hee, I knew you'd notice, Mon Frère! So you think it looks good on me, righ
 Yeah, it does. It's such a cute outfit, it suits you perfectly.
 Eheheh… Thanks, Mon Frère.
 I had a hunch things might end up like this, so I thought up a name on the way back from the hospital.
-And that name is "Long"! It's the Chinese word for "dragon."
+And that name is "Long"! It's the Chinese word for dragon.
 He's just a little squirt, but we want him to grow big enough to stretch toward the heavens, like a dragon…
 That's the feel I was going for, anyway. Sounds awesome, right?!
 So, whaddaya think of Long? I think it's pretty great, myself.
@@ -113,11 +113,11 @@ Arf, arf, arf!!
 Yaaay! He knows when we say his name!
 Arf, arf!!
 Let me think on it a bit longer. I might decide to go with a different name.
-Sure thing. Think it over real good.
+Sure thing. <br> Think it over real good.
 Is that your summer outfit? It looks really good on you.
 Huh? If you're talking about this old thing, it's what I always wear. Did you hit your head or something?
 Well, it's just that when I take a closer look at it, I feel like it really does suit you perfectly.
-Aww, Chief… Butter me up all you want, it won't get you anywhere.
+Aww, Chief… <br> Butter me up all you want, it won't get you anywhere.
 Let me see… What do you think of "Altair"?
 It is the name of one of the stars from the legend of Tanabata. In Japan you call the star "Hikoboshi."
 Now is the season for the Tanabata festival, so I'm thinking this name is very timely.
@@ -152,7 +152,7 @@ Reni, have you thought of any good names for him?
 Anything is fine. Just tell me the first name that comes to mind.
 …Hund.
 Hund?
-The German word for "dog."
+The German word for dog.
 Hmm…
 …Any moniker will do, Hund is just one option.
 OK, let's go with Hund.
@@ -189,10 +189,10 @@ I think I might take a bath and then do some sword training in the courtyard.
 Guess we're gonna get going, then. Later, Boss.
 Well then… I've got some time until dinner. I guess I'll wander around the theater.
 Hey, Chief, do you have a second?
-What is it, Kohran? You sound serious.
+What is it, Kohran? <br> You sound serious.
 There's something I wanna bend your ear about. Mind coming to my room at 4 o'clock?
 Sure, I'll be there.
-Sorry… I'm a bit busy.
+Sorry… <br> I'm a bit busy.
 Why not right now?
 Sure, I'll be there. Your room, 4 o'clock. Got it.
 Thank you kindly! I knew you'd come through for me.
@@ -283,7 +283,7 @@ Ah, Ogami.
 Hm? What happened to the summer dress you had on earlier?
 I'm just about to start my sword training, so I got changed.
 It turns out my traditional clothing is better at getting me in the right frame of mind for training.
-Hahaha… Yeah, I see what you mean.
+Hahaha… <br> Yeah, I see what you mean.
 I know! Would you like to train with me, Ogami?
 Sure, let's do it!
 No thanks, sounds tiring.
@@ -309,7 +309,7 @@ Well, I'm going to keep it up for a while longer.
 I see. In that case, I'll be on my way.
 You did great!
 No thanks, sounds tiring.
-Is that so… Well, I'm going to keep it up for a while longer.
+Is that so… <br> Well, I'm going to keep it up for a while longer.
 I see. In that case, I'll be on my way.
 All right, we'll do this together, Ogami.
 I'll teach you what to do as we go. Now, let's get started!
@@ -500,12 +500,12 @@ Uh…
 I suppose you can go and waste as much time as you'd like.
 Unlike you, I have places where I must be. So I will excuse myself now.
 With Orihime gone, I guess I've got the room to myself.
-What do you say, then? Will you do it or not?
-…All right. I'll give it a shot.
+What do you say, then? <br> Will you do it or not?
+…All right. <br> I'll give it a shot.
 Ooh… Don't blame me if this turns out to be too much for you.
 Well, do try your hardest not to embarrass yourself!
-My, my… A surprisingly good showing, Mr. Ensign.
-Hahaha… I wouldn't go that far.
+My, my… <br> A surprisingly good showing, Mr. Ensign.
+Hahaha… <br> I wouldn't go that far.
 I think this is what they call "beginner's luck" or "happy accident," isn't it?
 I suppose it was a perfect way to kill some time.
 Unlike you, I have places where I must be. So I will excuse myself now.
@@ -570,19 +570,19 @@ This must be the scent of Kanna's bitter melon chanpuru.
 Yo, Boss!
 Hey Kanna. I'm back and ready to eat, just like you told me.
 Heheh, thanks for waitin'. Take a seat.
-Hi Kanna. Are you eating right now?
+Hi Kanna. <br> Are you eating right now?
 Yep. This is Chef Kanna's Ultra-Special Menu.
 It's bitter melon chanpuru, a dish we make where I'm from back on Okinawa.
 You just stir-fry some bitter melon with eggs. Sounds pretty tasty, right?!
 You can have some too, if you want. Go on, take a seat!
 Well, since you're offering… OK then.
-Here ya go, Boss. Help yourself.
-Sure thing. Thanks for the meal.
+Here ya go, Boss. <br> Help yourself.
+Sure thing. <br> Thanks for the meal.
 …Wow, this is great! I could eat bowlfuls of this!
 Heheh, I knew you'd be into it! Man, I never get tired of watchin' you eat.
 Say, Boss. How's about you an' me have a little eatin’ contest?
 The rules are simple: whichever of us can eat three servings of food the fastest is the winner!
-Sounds fun. I'll take that challenge!
+Sounds fun. <br> I'll take that challenge!
 Bitter melon chanpuru
 Rice
 Tea
@@ -592,7 +592,7 @@ Mm, bitter melon stir-fried with eggs… So tasty.
 Pretty great, huh? This recipe is my specialty!
 *munch* *munch*… <br> The seasoning is fantastic!
 And the rice is steamed to perfection, too. <br> *munch* *munch*
-*munch* *gulp* <br> Phew… Need to catch my breath… OK, onto the next one!
+*munch* *gulp* Phew… <br> Need to catch my breath… OK, onto the next one!
 Which one should I grab first? Uh, I can’t decide…
 What're ya doin’, Boss? Better get to eatin’ unless you want me to come out on top.
 OK, I finished the first serving. What do you think, Kanna?
@@ -605,7 +605,7 @@ Bitter melon chanpuru… It was good at first, but I'm starting to get tired of 
 *munch* *gulp* <br> OK! Managed to get it down!
 The rice isn't as easy to wolf down as it was the first time, either…
 *chomp* <br> Ugh… There, that should be all of it.
-Phew… I feel a little better after washing it down with some tea.
+Phew… <br> I feel a little better after washing it down with some tea.
 But I've still got food left to eat. Sigh… This is wearing me down.
 Is it just me, or… I can't seem to move my chopsticks like before.
 What's wrong, Boss? Ready to give up?
@@ -691,7 +691,7 @@ Oh yeah, Kohran was asking for me, wasn't she? I'd best not be late.
 (I wonder what she's always doing in the attic.)
 Mamma…
 Hm?
-Mamma, it has been 3 months now since I came here to Japan.
+Mamma, it has been three months now since I came here to Japan.
 At first, I thought that it would be a terrible place…
 …because this is where HE was born, after all.
 But I am starting to feel that, just maybe… it is not so bad after all.
@@ -704,7 +704,7 @@ Say something.
 Orihime…
 …!
 M-Mr. Ensign! Just how long have you been there?!
-S-Sorry… I didn't mean to listen in.
+S-Sorry… <br> I didn't mean to listen in.
 You certainly do love to eavesdrop, don't you?! Just like usual!
 Japanese men are all sneaky little cowards, after all!
 I do not wish to see your face any longer! Now, get out of my way!
@@ -717,10 +717,10 @@ Well now, I should be on my way.
 Oh, Mr. Ensign. Whatever could you be doing here?
 I-I could ask you the same thing.
 Oh, me? I was just having a little chat.
-Though, I am thinking you have no idea what I’m talking about.
+Though, I am thinking you have no idea what I am talking about.
 Now if you will pardon me. Please, enjoy yourself!
 Orihime… So that's what you're always doing here.
-Huh? I thought Orihime was here, but…
+Huh? I thought Orihime would be here, but…
 Maybe I'll come back later…
 There's no one in the attic. Not like anyone would come up here, though.
 Oh well. I'll go try another room.
@@ -739,7 +739,7 @@ I'll try somewhere else. Maybe where everyone else seems to be going…
 I wonder if Iris is in her room.
 So Iris's nameplate is shaped like Jean-Paul…
 I better check another room, I guess.
-It's Ogami. Are you there, Iris?
+It's Ogami. <br> Are you there, Iris?
 Yes… I am.
 I'm studying right now. But it's so hard, it's making my head hurt…
 Mind if I help you?
@@ -807,24 +807,24 @@ Praise her.
 Give her homework.
 I'll head off, then. See you later.
 Let's study again another time!
-Phew… I'm actually kind of tired.
+Phew… <br> I'm actually kind of tired.
 I am doing this for Iris, though. I should keep checking in on her every now and then.
 You worked really hard today, Iris. You did fantastic.
 Really? Cause it was so much fun studying with you!
 Let's study again another time!
 Hahaha, I see. OK, I'll be off for now.
-Phew… I'm actually kind of tired.
+Phew… <br> I'm actually kind of tired.
 I am doing this for Iris, though. I should keep checking in on her every now and then.
 All right, here's your homework. Finish up to this page by next time.
 Huh?! Mon Frère, you're awful!
 It's important to do a little more each and every day. Understand?
 Aaaall riiiight. <br> Aww, I hate this…
-Phew… I'm actually kind of tired.
+Phew… <br> I'm actually kind of tired.
 I am doing this for Iris, though. I should keep checking in on her every now and then.
 I'm… starting to feel sleepy again.
 Well, I should be going. See you later, Iris.
 OK… Goodnight.
-Phew… I'm actually kind of tired.
+Phew… <br> I'm actually kind of tired.
 I am doing this for Iris, though. I should keep checking in on her every now and then.
 I wonder if Iris is in her room.
 So Iris's nameplate is shaped like Jean-Paul…
@@ -939,7 +939,7 @@ No one here. I thought for sure Sumire would be here…
 Maybe I'll try coming back a bit later.
 This is Kaede's room.
 I better check another room, I guess.
-It's Ogami. Are you there, Kaede?
+It's Ogami. <br> Are you there, Kaede?
 Oh, Ogami? Just a moment.
 Come on in.
 Sorry to drop by unannounced.
@@ -989,11 +989,11 @@ So Ayame… said that much about me？
 Yes. She spoke of the Assault Troupe often.
 I suppose a large part of the reason I joined was due to her influence.
 If you ever want to hear more about Ayame, come by again anytime.
-All right. Well, I should get going. Please excuse me.
+All right. <br> Well, I should get going. <br> Please excuse me.
 I'm glad I had a chance to speak with Kaede. Maybe I'll make an effort to drop by and see her sometimes.
 This is Kaede's room.
 I better check another room, I guess.
-It's Ogami. Are you there, Kaede?
+It's Ogami. <br> Are you there, Kaede?
 Oh, Ogami.
 I'm sorry, but I still have reports to write.
 I see. Then I'll come by another time.
@@ -1047,7 +1047,7 @@ That looks like… the summer dress that Sakura was wearing…
 Wh-Which means right now… Sakura’s in there.
 I am drawn to the bath…
 Go back outside.
-O-Oh, no… My body is moving towards the bathroom on its own…
+O-Oh, no… <br> My body is moving towards the bathroom on its own…
 Ahh, this feels great… So refreshing after getting soaked by the rain.
 And I'm so happy Ogami said I looked good in that dress…
 (Sakura…)
@@ -1068,7 +1068,7 @@ I guess it's fine since you really didn't mean to…
 …but please be more careful from now on.
 Yeah… I really shouldn't have done that.
 (I gotta get out of here before she sees me!)
-Phew… I think I got away before she realized I was there.
+Phew… <br> I think I got away before she realized I was there.
 If I'd been just a moment slower, I might not have made it. That was too close.
 Eeeek! O-Ogami?!
 (Crap! No use in running now!)
@@ -1081,12 +1081,12 @@ I guess it's fine since you really didn't mean to…
 Now if you'll excuse me, I need to do my sword training.
 Yeah… I really shouldn't have done that.
 (I've gotta get out of here before Sakura finds me.)
-Phew… Looks like she didn't see me.
+Phew… <br> Looks like she didn't see me.
 I can't be peeping in the baths like this. I'd better stop here.
 Ahh, I feel brand-new… I guess I'd better get out.
 (Oh, crap!! It looks like she's getting out of the water!)
 (I gotta get out of here before she sees me!)
-Phew… I think I got away before she realized I was there.
+Phew… <br> I think I got away before she realized I was there.
 If I'd been just a moment slower, I might not have made it. That was too close.
 Oh, Ogami. Are you here to bathe?
 N-No… That's not it.
@@ -1113,7 +1113,7 @@ Get in the bath.
 Go somewhere else.
 All right, I'll hop in the bath.
 I don't have time to lounge in here all day… But a short, relaxing bath would be nice.
-Phew… Ohh, this feels great.
+Phew… <br> Ohh, this feels great.
 <sp>was almost hit by<br>a car and I got hurt saving him. But now even my injured leg feels healed.
 Soaking in this huge bath all by myself is seriously heaven on earth…
 Now that I'm nice and warmed up, I guess it's time to get out.
@@ -1270,7 +1270,7 @@ When you put it that way… You’re kind of cute.
 Cute?
 Is that… a desirable quality?
 Y-Yeah… I’m trying to give you a compliment.
-All right. I will accept it.
+All right. <br> I will accept it.
 So Reni’s a girl, huh…
 I don't know how I should put this, but… that makes me kind of happy.
 If you have nothing to say, I'm leaving.
@@ -1356,19 +1356,19 @@ Do you know how old I'm gonna be?
 12 years old.
 13 years old.
 You'll be 11 years old, right?
-No, you're wrong! I'm gonna be 12!
+No, you're wrong! <br> I'm gonna be 12!
 Oh, th-that's right… <br> Sorry, it slipped my mind.
-Jeez! Remember it next time!
+Jeez! <br> Remember it next time!
 You'll be 12. <br> I remember that much.
 Thank you, Mon Frère! <br> I knew you'd remember!
 Hahaha, of course I did.
 I think… you'll be 13?
-No… I'm turning 12 years old.
+No… <br> I'm turning 12 years old.
 O-Oh… Is that so…
-But does that mean… I'm starting to look more grown-up?
+But does that mean… <br> I'm starting to look more grown-up?
 Hee hee, I'm so happy. Thanks, Mon Frère.
 …How old did you say you were going to be?
-Huh? Did you forget already?
+Huh? <br> Did you forget already?
 I'm about to turn 12 years old. You'd better remember!
 S-Sorry.
 Hey, hey, Mon Frère. <br> Umm… Well…
@@ -1382,9 +1382,9 @@ Let's go on a date.
 What would you like, Iris? I'll buy you anything you want.
 You will? Oh, thank you!
 Just, maybe nothing TOO expensive, OK? Hahaha.
-Oh, that's all right! I want a book.
+Oh, that's all right! <br> I want a book.
 It's called "The Blue Bird." I'm gonna be in the fall play we're doing based on that book, so…
-Is that so? You're amazing, Iris.
+Is that so? <br> You're amazing, Iris.
 Then let's go buy it together on your birthday.
 OK! Oooh, why can't it be 5 days from now already?!
 All right, how about I bake you a cake?
@@ -1393,8 +1393,8 @@ It's for your birthday, so I'll give it my all.
 Then, can you add lots and lots of strawberries to it?
 A strawberry cake, is it? Sure, I can do that.
 OK! Oooh, why can't it be 5 days from now already?!
-Let's see… Why don’t we take ourselves out on a date?
-Really? Mon Frère, do you mean it?!
+Let's see… <br> Why don’t we take ourselves out on a date?
+Really? <br> Mon Frère, do you mean it?!
 Yeah, of course.
 I'll take you anywhere you like. Ginza, Asakusa, Ueno, just name it.
 Yay, yay, yaaay! <br> Ooh, where should we go? What should I wear?
@@ -1410,15 +1410,15 @@ Hee hee! I hope the next 5 days pass quickly!
 Hahaha, it'll be here before you know it.
 Yeah!
 I'm gonna go back to my room now. Bye-bye, Mon Frère!
-Hahaha… Guess I'm wrapped around her little finger now.
+Hahaha… <br> Guess I'm wrapped around her little finger now.
 Well, I should be on my way, too.
 …Ack! Oh shoot, when did it get past 4 o’clock?!
-Kohran must have been waiting in her room! I gotta hurry!
+Kohran must have been waiting in her room! <br> I gotta hurry!
 Yeah? Who's there?
 It's Ogami…
 …Seems a little past 4, don't you think?
-I-I know, sorry. I ran late…
-…I guess it's fine. Come on in.
+I-I know, sorry. <br> I ran late…
+…I guess it's fine. <br> Come on in.
 S-Sure, thanks.
 Chief, that you? Come on in, door's unlocked.
 Sure, thanks.
@@ -1439,7 +1439,7 @@ At first… I had a lot of trouble adjusting to being in the troupe.
 But then, Yoneda asked me to put my skills at tinkering with machines to work.
 That's when I finally started to feel like I'd found a place I belonged.
 Though, I've never had anyone to talk shop with before…
-The way I see it, Chief… I have three dads.
+The way I see it, Chief… <br> I have three dads.
 My real father, back in China… My dad back in Kobe, who took me in when I came to Japan…
 And here at the theater, it's Yoneda.
 Mr. Yoneda?
@@ -1451,7 +1451,7 @@ Uh… S-Sorry about that, Chief. Guess I went and got a bit too fired up.
 It's OK. By the way, wasn't there something you wanted to speak to me about?
 Oh yeah, glad you asked! I just finished work on a brand new creation.
 This black ball? <br> What is it?
-Heh-heh… It's my newest invention. Feast your peepers on this!
+Heh-heh… <br> It's my newest invention. Feast your peepers on this!
 The well-prepared have nothing to fear! That’s the guiding principle of invention.
 Anyways, here. Try hurling it to the floor, as hard as you can.
 Throw it to the floor.
@@ -1473,8 +1473,8 @@ I think it's finally hitting me that I'm back at the theater.
 Well, I'll be happy to help in the future too, Kohran.
 And I'm glad to hear it! I'll be looking forward to your assistance next time I make something new!
 Eeep?!
-Oh man… Looks like I'm picking up a side job as a human guinea pig…
-Tell me some gossip.
+Oh man… <br> Looks like I'm picking up a side job as a human guinea pig…
+Listen to some gossip.
 I'll come back later.
 Seems like you’ve started keeping a dog in the courtyard, Ogami.
 That’s right. Sorry I made the decision without consulting you two first.
@@ -1482,8 +1482,8 @@ Oh, it's no problem!<br>The dog's name is<br>
 , isn't it?
 You got that information pretty quick. Just like always, Yuri.
 Heheh. Actually, Kohran just dropped by to tell us the news. She was really excited to talk about it.
-I see, glad to hear it. <br> I hope that you two will <br> play with
-every <br> now and then.
+I see, glad to hear it.<br>I hope that you two<br>will play with<sp>
+<br>every now and then.
 Has Mr. Yoneda been doing OK?
 Yeah, we just visited him in the hospital and he was as lively as ever.
 He's not allowed to drink there, so it’s a good opportunity for his body to recover a bit.
@@ -1494,7 +1494,7 @@ I don't think so. The food disappears along with the packaging.
 Perhaps, unbeknownst to us, there is a person secretly living in the theater…
 …Just kidding. Did I make your heart skip a beat?
 Ogami, have you ever been to Café Paulista?
-Um, Cafe… what now? No, I haven't.
+Um, Cafe… what now? <br> No, I haven't.
 It’s a place that serves delicious coffee and donuts.
 The cafe is wonderful, but all of the customers seem to be a bunch of writer types.
 Whenever I go, I always end up having some kind of high-minded conversation… It gets tiring sometimes.
@@ -1515,7 +1515,7 @@ If I ever find out who it is, you’ll be the first to know.
 O-OK… Thanks.
 Speaking of which, summer break is coming up next month.
 I'm thinking of buying the latest swimsuit and going to the beach! How about we go together, Kasumi?
-Um… I think I'll pass… By the way, do you have any plans for summer break, Ogami?
+Um… I think I'll pass… <br> By the way, do you have any plans for summer break, Ogami?
 Hmm… In this line of work, we don’t really get days off. Who knows if we’ll get a vacation this summer…
 Sorry, Ogami, but I'm all out of gossip for now.
 I'll have some more interesting tidbits to share another time, so look forward to it!
@@ -1527,8 +1527,8 @@ She actually gave me her number in case of emergencies.
 You can talk to her if you dial "13900."
 13900, OK. Thanks, Yuri!
 I'll come back another time. Good luck with your work.
-OK. Thanks for coming, Ogami.
-Tell us if you hear any juicy stories!
+OK. <br> Thanks for coming, Ogami.
+Let us know if you hear any juicy stories!
 Sorry Ogami, but customers are only allowed to purchase one of each bromide.
 I see. That's too bad.
 So sorry, Mr. Ogami, but customers are only allowed to purchase one of each bromide.
@@ -1600,7 +1600,7 @@ A scarf given to me by Sakura. It's knitted with blue yarn - my favorite color.
 A scarf given to me by Sakura. It's knitted with yellow yarn - my favorite color.
 Ayame and I almost never lived in the same household, even though we were sisters.
 Eh…?
-It's not so unusual, given our lineage. We have less a "family tree" and more a "family wisteria."
+It's not so unusual, given our lineage. We have less a family tree and more a family wisteria.
 Yet, I still knew that she was the type of person that would sacrifice her own well-being for others…
 Carrying everyone's burdens by herself…
 That's why, when I received the news that she had passed away, I made up my mind.
@@ -1639,7 +1639,7 @@ The people Ayame chose truly were the best people for the job. That includes you
 Kaede…
 Ayame entrusted the Flower Division to me, so I'll continue to give it my all.
 Don't give up. Even in the hardest of times, remember to never give up, Ogami.
-Yes, ma'am! I will do all I can to meet your expectations!
+Yes, ma'am! <br> I will do all I can to meet your expectations!
 Now then, today I'll tell you about Ayame and Major Yamazaki.
 Both Ayame and Major Yamazaki were members of the troupe's predecessor, the Anti-Kouma Corps.
 Major Yamazaki was a brilliant scientist who created the foundational designs for Spirit Armor…

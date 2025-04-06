@@ -16,11 +16,11 @@ Moment of truth, isn't it?
 Understood! 
 Moment of truth, isn't it? 
 …Man, I'm tired. 
-Understood! Moving out immediately! 
+Understood! <br> Moving out immediately! 
 Good. We're counting on you, Ogami! 
 This is the moment of truth, isn't it? 
 Yes, it is. We may be hurting, but so is the enemy. 
-…Man, I'm tired. I could use a break. 
+…Man, I'm tired. <br> I could use a break. 
 Now's not the time, dumbass! 
 If you don't deal with the enemy right now, you'll be taking a real long break in the grave! 
 R-Roger! 

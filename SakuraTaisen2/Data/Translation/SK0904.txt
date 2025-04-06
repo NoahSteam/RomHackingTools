@@ -3,12 +3,12 @@ It's cold out tonight, but I've got a job to do.
 (I should check everyone's rooms first.) 
 (I wonder if Iris is asleep already.) 
 Who is it? 
-It's Ogami. Were you still up, Iris? 
+It's Ogami. <br> Were you still up, Iris? 
 Mon Frère… I can't sleep. Can you come in? 
 I see… All right, I'll visit for a little while. 
 What's the matter, Iris? Why the long face? 
 Well… Jean-Paul and I have been talking. 
-We were wondering if it was even possible for me to play the lead role… Since I'm so little. 
+We were wondering if it was even possible for me to play the lead role… <br> Since I'm so little. 
 … 
 *sigh* <br> I wish I could grow up already… 
 Right now… I'm no good for the part. 
@@ -35,7 +35,7 @@ I'm no playwright, so I can't say for certain, but that's what I truly believe.
 Mon Frère… 
 Thank you, Mon Frère. Now I feel like I can do it! 
 No matter what role I wind up with, I'll do my very best! 
-Glad to hear it. Break a leg, Iris. 
+Glad to hear it. <br> Break a leg, Iris. 
 All right, I have to get back to my patrol. Good night, Iris. 
 Good niiiight! 
 True… This might be a bit too much for you. 
@@ -230,7 +230,7 @@ Do you really think I have what it takes to play a feminine role like this?
 Of course you do! 
 Well, who knows? 
 True, that might be tough. 
-Of course you do! You'd be great, Kanna. 
+Of course you do! <br> You'd be great, Kanna. 
 Huh? R-Really? 
 Yeah, really. Don't think about it so hard. 
 Just throw yourself into the part like you always do, Kanna. 
@@ -382,7 +382,7 @@ Night, Chief. Good luck with your night watch.
 Well… I ought to get going, too. 
 OK, last up, time to check the stage. 
 Hm? Sounds like someone's here. 
-Spin to the right… Put your foot out… 
+Spin to the right… <br> Put your foot out… 
 (It's Sakura. Is she practicing some kind of dance?) 
 …Who is it? 
 (…! <br> She spotted me!) 
@@ -404,8 +404,8 @@ I'll go back to basics, start fresh and do the best I can.
 That way… If I give it everything I got, I won’t have any regrets.
 Sakura… 
 All right, Ogami, I'll be going back to my room. Good work on your night watch. 
-Yeah, thanks. Good night, Sakura. 
-Of course. Good night, Ogami. 
+Yeah, thanks. <br> Good night, Sakura. 
+Of course. <br> Good night, Ogami. 
 OK, it's about time I wrapped up my patrol. I should head back to my room, too. 
 The fundamentals are important. Sometimes you just have to go back to basics. 
 Yes, that's true. 
@@ -414,8 +414,8 @@ And I remember how I felt going up on stage for the very first time…
 I feel like it all came back to me just now. 
 Sakura… 
 All right, Ogami, I'll be going back to my room. Good work on your night watch. 
-Yeah, thanks. Good night, Sakura. 
-Of course. Good night, Ogami. 
+Yeah, thanks. <br> Good night, Sakura. 
+Of course. <br> Good night, Ogami. 
 OK, it's about time I wrapped up my patrol. I should head back to my room, too. 
 Don't overdo it, it's bad for your health. You should get to bed. 
 …OK. Understood. 
@@ -426,8 +426,8 @@ Sorry, Sakura. As the person picking the lead, there's nothing I can tell you.
 Ah… S-Sorry, I started talking about some weird things, didn't I? 
 Don't worry about what I said just now. 
 All right, Ogami, I'll be going back to my room. Good work on your night watch. 
-Yeah, thanks. Good night, Sakura. 
-Of course. Good night, Ogami. 
+Yeah, thanks. <br> Good night, Sakura. 
+Of course. <br> Good night, Ogami. 
 OK, it's about time I wrapped up my patrol. I should head back to my room, too. 
 Phew, finally done with my night watch. 
 Still, everyone's doing their best for this Christmas play. 

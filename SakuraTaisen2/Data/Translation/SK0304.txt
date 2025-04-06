@@ -54,7 +54,7 @@ O-Oh yeah? Aww, c'mon, you're gonna make me blush!
 Sorry, it's nothing. 
 Sheesh, you were quiet for a long time before answerin' the question. 
 All right, now that we've had a bit of a break, let's get back into it. 
-Right. Why don't we continue on with the second half of… 
+Right. <br> Why don't we continue on with the second half of… 
 Ogamiii! <br> I've got some big news! <br> This is serious!! 
 Yuri? <br> What kind of big news? 
 Don't tell me some other horrible incident has happened… 
@@ -79,15 +79,15 @@ Isn't it obvious? We have to go rescue Sumire!
 If she's being married against her will, we've got to put a stop to it! 
 Now that's what I'm talkin' about! 
 I'll come as well! 
-Poor Sumire! I wanna go save her, too! 
+Poor Sumire! <br> I wanna go save her, too! 
 No doubt this will be interesting. You may count me in! 
 At the very least, it would be best not to let her be married off to some Japanese man. 
 You should come too, Reni! 
 I will go if ordered to. 
 If we retrieve her, it will strengthen the Flower Division's fighting capabilities. 
 OK, everyone! We're off to the Kanzaki estate! 
-All right! Heheh, I'm itchin' to get started. 
-This is great news! We should go congratulate Sumire, everyone! 
+All right! Heheh, I'm itchin' to get started! 
+This is great news! <br> We should go congratulate Sumire, everyone! 
 What the hell're you sayin' Boss?! 
 That isn't funny, Mon Frère! 
 Do you have any idea at all how Sumire must feel, Ogami?! 
@@ -101,7 +101,7 @@ Boss, with things bein' how they are, I get you wantin' to be careful.
 We don't know for sure whether gettin' married is really what Sumire wants. 
 But there's one thing I am sure of: there's no way her heart's in this! 
 If she was excited about gettin' hitched, you know she'd be over here braggin' about it to us! 
-I see… 
+You're right… 
 We gotta go rescue Sumire, Boss. And then there's somethin' we gotta tell her: 
 That we’re gonna protect the troupe with our own strength! 
 All right. Everyone, let's head for the Kanzaki estate! 
@@ -109,7 +109,7 @@ All right! Heheh, I'm itchin' to get started.
 … 
 …Yes. 
 My lady, Lord Makibishi has arrived. 
-He, as well as Lord Shigeki and Lady Hinako have been awaiting you in the banquet hall for some time. 
+He as well as Lord Shigeki and Lady Hinako have been waiting for you in the banquet hall for some time. 
 Very well. Please tell them… I will be along shortly. 
 As you wish. 
 …Miyata, what are your feelings on this marriage interview? 
@@ -162,7 +162,7 @@ K-Kayama! Why in the world are you here?!
 But of course, in the literal sense it means that good things come to those who wait. 
 I myself am as the sun, shining upon the ocean blue! Hahahaha! 
 K-Kayama… 
-Go on now, Ogami. Sumire is awaiting you. 
+Go on now, Ogami. <br> Sumire is awaiting you. 
 And now, I shall fly away with the early summer's breeze. Farewell to you, Ogami! 
 Kayama… What the heck is with that guy? 
 Boss, hurry up and let's go in! 
@@ -191,12 +191,12 @@ Guess there's nothing else to do but to dash in.
 OK, everyone. Time to infiltrate the Kanzaki estate! 
 Whoa, this is one big house, all right. 
 And Sumire is somewhere in there right now. 
-Yeah. Let's not waste any time. 
+Yeah. <br> Let's not waste any time. 
 Ah, there they are! That horde of ruffians are right over there! After them! 
 Damn, we're surrounded! 
 Run towards the entrance. 
 Fight. 
-Everyone, run! Make for the entrance! 
+Everyone, run! <br> Make for the entrance! 
 Y-Yes, sir! 
 We'll have to fight them off to have a chance at stopping Sumire's marriage. 
 Right, leave it to me! 
@@ -220,20 +220,20 @@ From above, I should guard my head!
 Yes, I stopped it! 
 Nice one, Boss! 
 Thanks! Our sparring match yesterday came in handy! 
-Do not falter now! Keep it up, for the sake of Lady Sumire! 
+Do not falter now! <br> Keep it up, for the sake of Lady Sumire! 
 I'll guard my abdomen! 
 Gwaahhh! 
-What the heck, Boss? Didja forget everything we did during sparring yesterday?! 
-Nicely done! Keep it up, for the sake of Lady Sumire! 
-An attack from above? I'd better duck! 
+What the heck, Boss? Didja forget everything we did durin' our spar yesterday?! 
+Nicely done! <br> Keep it up, for the sake of Lady Sumire! 
+An attack from above? <br> I'd better duck! 
 Yes, I dodged it! 
-Good one, Boss! I knew ya could do it! 
+Good one, Boss! <br> I knew ya could do it! 
 Thanks! Our sparring match yesterday came in handy! 
-Do not falter now! Keep it up, for the sake of Lady Sumire! 
+Do not falter now! <br> Keep it up, for the sake of Lady Sumire! 
 Uhh… If they're coming from above, then I'm supposed to… What was it… 
 Gwaahhh! 
-What the heck, Boss? Didja forget everything we did during sparring yesterday?! 
-Nicely done! Keep it up, for the sake of Lady Sumire! 
+What the heck, Boss? Didja forget everything we did durin' our spar yesterday?! 
+Nicely done! <br> Keep it up, for the sake of Lady Sumire! 
 Damn, these bastards got no sense of honor at all! 
 The way things are going… We don't have time for this! 
 Ogami! Kanna! 
@@ -243,8 +243,8 @@ I would ask you not to underestimate me!
 Defeating a mere Japanese man is as simple as eating a piece of cake. 
 I get stronger when I'm mad, you know! 
 We should have no trouble defeating enemies of this rank. 
-Nngh! There are only six of them! Is that the best you can do?! 
-Call for reinforcements! We must not allow them to pass through! 
+Nngh! <br> There are only six of them! Is that the best you can do?! 
+Call for reinforcements! <br> We must not allow them to pass through! 
 Ogami, hurry! Before their reinforcements arrive! 
 Everyone… 
 We'll leave this to you! 
@@ -264,8 +264,8 @@ Go a bit easy on them, everyone.
 Otherwise they might give us some nasty medical bills to pay back later. 
 Hahaha! Right, understood! 
 Mr. Ensign and Kanna, you two be careful as well! Make sure to not break any buildings along the way.
-Hahaha! If I'm bein' honest, that's the one thing I ain't too confident about. 
-Well, we’re already dirt poor after losing all our financial support, so I’ll be as careful as I can. 
+Hahaha! <br> If I'm bein' honest, that's the one thing I ain't too confident about. 
+Well, we’re already dirt poor after losin' all our financial support, so I’ll be as careful as I can. 
 OK, let's go, Kanna. 
 Right! 
 No, we'll stay here. We can't just leave you all behind. 
@@ -288,15 +288,15 @@ Right!
 This must be the entrance. We've finally reached the main house. 
 …Yep, it's locked all right. 
 Heheh. So what now, Boss? 
-We've got no choice. Go ahead, Kanna. 
+We've got no choice. <br> Go ahead, Kanna. 
 Yep, leave it to me! 
 Heheh. Man, this entryway alone musta cost a fortune. 
-Well, in we go. Hoo boy, the inside of this place is just as fancy. 
+Well, in we go. <br> Hoo boy, the inside of this place is just as fancy. 
 …Good, looks like there's no one inside. 
 Let's get a move on, Boss. We gotta find out which room the marriage interview is takin’ place in. 
 This really is an enormous house. Just where could Sumire be? 
 Ehn? Hang on a sec. 
-Hey, Boss… Looks like your finger's bleedin'. 
+Hey, Boss… <br> Looks like your finger's bleedin'. 
 Oh, you're right. Maybe I injured it during the fight back there. 
 Sheesh, guess I gotta do this. C'mon, gimme your hand… 
 Kanna… 
@@ -321,14 +321,14 @@ Man, it's kinda… tense in here, eh? Hahaha.
 Y-Yeah… It sure is. 
 All right, let's get movin'. We better hurry before Sumire gets married off for real. 
 Yeah. It's almost time for the decisive showdown. 
-Heheh, that's right! It'll be our final battle. 
+Heheh, that's right! <br> It'll be our final battle. 
 Right. Let's go, Kanna! 
 … 
 … 
 Don't just sit there silently, Sumire. Say something. 
 … 
 Sumire, your grandfather is right. 
-Now, dear. There's no need for that… 
+Now, dear. <br> There's no need for that… 
 Sumire, if you don't at least try speaking to the young man, you won't learn anything about him. 
 Lord Makibishi, are you truly all right with this? With things being decided without your input? 
 W-Well, I- 
@@ -372,7 +372,7 @@ We're taking Sumire back with us.
 Ensign! 
 Boss! 
 I… can't make this decision myself. There's too much riding on it. 
-B-Boss, what the hell're you saying?! 
+B-Boss, what the hell're you sayin'?! 
 … 
 You said it yourself, Boss! No matter how tough things get, we gotta do this with our own strength!
 Sumire's an important part of the Flower Division! 
@@ -383,8 +383,8 @@ Is that so? Are you truly all right with following along with the captain's deci
 Any decision he makes becomes the will of the Imperial Assault Troupe itself. 
 Very well. As deputy commander of the Imperial Assault Troupe, I approve of this decision. 
 Kaede… Fujieda?! 
-So you're Ogami. You're exactly how my sister described you. 
-Huh? Ayame… talked about me? 
+So you're Ogami. <br> You're exactly how my sister described you. 
+Huh? <br> Ayame… talked about me? 
 Fwahahaha! How amusing. 
 To think, the Imperial Assault Troupe would go so far for the sake of a single member. 
 …Grandfather. <br> I… I'm returning to the Imperial Assault Troupe. 
@@ -400,7 +400,7 @@ But there is no need to worry. We were aware that the enemy planned to attack th
 You knew?! 
 Your Koubu are all onboard the Soaring Whale, Sumire's included. 
 Now, let us depart! 
-All right, Boss! We gotta drive any enemies outta the mansion! 
+All right, Boss! <br> We gotta drive any enemies outta the mansion! 
 The estate's garden still has quite a few people in it. Evacuating them should be our first priority.
 Take out the enemy first!
 Civilians take priority! 

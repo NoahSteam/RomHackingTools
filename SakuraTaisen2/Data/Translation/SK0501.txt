@@ -1,4 +1,4 @@
-﻿Phew… We're pretty much done cleaning the gift shop. 
+﻿Phew… <br> We're pretty much done cleaning the gift shop. 
 Thanks a lot, Ogami! 
 Thank you for your hard work, Ogami. Having you here was a big help. 
 Now that both our office and the gift shop are clean… We can vacation without any worries!
@@ -12,15 +12,15 @@ U-Uh, that's…
 Sorry, Ogami. Her mission is top-secret, so neither of us have been told anything either.
 Yup. Even with my vast information network, I haven’t learned a single detail. What could it be? 
 Eheh! Truth be told, I haven't been given any specifics yet. 
-I-I see. Now I'm really curious. 
+I-I see. <br> Now I'm really curious. 
 Yoooo! <br> I’m hooooome!
-Huh? That voice, could it be… 
+Huh? <br> That voice, could it be… 
 Yo, Ogami! Kasumi! Yuri! Tsubaki! It's been a while. 
 M-Mr. Yoneda! 
 Welcome back, sir!!
 Have you made a full recovery?
 Yup, I'm fit as a fiddle now. Sorry to have made you guys worry. 
-Hooray! This is big news! I gotta tell everyone right away! 
+Hooray! This is big news! <br> I gotta tell everyone right away! 
 Hahaha, Yuri hasn’t changed a bit. You know what they say, there’s no place like home! 
 Now that I’m back, let’s party! Gather everyone up and let’s kick things off with a bang! 
 (Oh boy… Looks like he's gonna throw a huge bash.) 
@@ -31,33 +31,33 @@ She’s right, Mr. Yoneda. This was very sudden.
 Heheh, I didn’t want you to go out of your way for me. 
 By the way, you look great in that outfit, Maria. 
 Hey, Ogami. <br> Wouldn't you agree? 
-It suits you very well. 
+It really makes you shine.
 You look pretty cool. 
 You're beautiful, Maria. 
-The outfit suits you very well, Maria. 
-Is… Is that so? Thank you very much, Captain. 
-Wahahaha! You’re quite the smooth talker, Ogami.
+The outfit really makes you shine, Maria. 
+Is… Is that so? <br> Thank you very much, Captain. 
+Wahahaha! <br> You’re quite the smooth talker, Ogami.
 You look pretty cool, Maria. 
-Hmhm, is that so? Thank you very much. 
-Oh, come on, Ogami. You’re talking to a lady, you know? 
-I’m sure you could have thought of something more flattering to say… Jeez, you can be so dense. 
+Hmhm, is that so? <br> Thank you very much. 
+Oh, come on, Ogami. <br> You’re talking to a lady, you know? 
+I’m sure you could have thought of something more flattering to say… <br> Jeez, you can be so dense. 
 It's fine, Manager. The captain was just expressing his honest thoughts.
 Knowing he gave a genuine compliment is more than enough for me. 
 Maria… You're beautiful. The sight of you takes my breath away.
-Ca-Captain! Please, not in front of everyone else… 
-How smooth of you, Ogami.
+Ca-Captain! <br> Please, not in front of everyone else… 
+Quite the smooth talker, aren't you, Ogami?
 I can’t believe you would say something so tacky.
-Gahahahaha! Good, good. Now this is the Flower Division I know and love. 
+Gahahahaha! Good, good. <br> Now this is the Flower Division I know and love. 
 I uh… Well… <br> How do I put it into words? 
-Mr. Yoneda! Look, you’ve made the captain all flustered with your strange questions. 
-Wahaha! Sorry, Maria. I didn't mean to tease you two that much. 
+Mr. Yoneda! <br> Look, you’ve made the captain all flustered with your strange questions. 
+Wahaha! Sorry, Maria. <br> I didn't mean to tease you two that much. 
 But I kinda expected Ogami would get tongue tied. 
 R-Right… 
 But really, you guys were a huge help. You did a great job taking care of the place while I was away.
 Let me say it again, I truly thank each and every one of you. 
 It was no problem, Mr. Yoneda. After all, the Flower Division always helps out one of their own.
-Yeah, yeah. You're one of us, Commander. 
-Hehe… Aw, come on. You guys are too kind. 
+Yeah, yeah. <br> You're one of us, Commander. 
+Hehe… Aw, come on. <br> You guys are too kind. 
 Well, after all that’s happened, allow me to reward your hard work with a token of my appreciation.
 …Reward?
 That’s right. Starting tomorrow, the theater is on summer break. 
@@ -70,16 +70,16 @@ Ogami. I want you to relax and have a good time with everyone in the Flower Divi
 Thank you, sir! 
 You’re not going?
 Will the theater be OK? 
-Thank you very much! We'll make sure to enjoy ourselves to the fullest! 
+Thank you very much! <br> We'll make sure to enjoy ourselves to the fullest! 
 Mm. 
 …Oh right, I believe that Saki wanted to go as well. So make sure to take her with you. 
 The manager and I will be staying here, so take it easy. 
 But don't forget to bring your Kinematron, Ogami. 
 If anything happens, make sure to contact us right away. We'll send the Soaring Whale. 
 Roger. In that case, we'll gladly take your offer. 
-You’re not going, sir? Not even Kaede? 
+You’re not going, sir? <br> Not even Kaede? 
 Work has really piled up while I’ve been out of the office. You all go have fun without us. 
-Oh right, it seems that Saki wants to go, too. Take her with you. 
+Oh right, it seems that Saki wants to go, too. <br> Take her with you. 
 Every once in a while, you should kick back without us around. 
 But don't forget to bring your Kinematron, Ogami. 
 If anything happens, make sure to contact us right away. We'll send the Soaring Whale.
@@ -112,8 +112,8 @@ Ah, if it isn't the chief. Hello and good morning.
 Good morning, Kohran. Are you done preparing for the trip? 
 Yup, all set and ready to go. Right now, I’m heading over to the hangar for a bit.
 Looks like everyone else is still in their rooms. 
-I see… They may still be packing their things for the trip.
-Well, off I go. See ya later, Chief.
+I see. They may still be packing their things for the trip.
+Well, off I go. <br> See ya later, Chief.
 I guess I should get going, too.
 No one's here yet. Seems that I arrived too early. 
 Everyone will be gathering here at 10 o'clock. I should kill some more time and come back later. 
@@ -132,15 +132,15 @@ Try petting his head.
 Have you gotten used to him yet? 
 …Used to what? 
 , of course.<br>You’re not good with dogs, right? 
-…That’s inaccurate. I'm just not interested.
+…That’s inaccurate. <br> I'm just not interested.
 Can I play with him, too? Let me join in.
 … 
-You wanna play with both of us, don'tcha boy? 
+<sp>wants to play with<br>both of us. Don'tcha boy?
 Arf! 
-You hear that, Reni? He just said yes.
+You hear that, Reni? <br> He just said yes.
 …He was only reacting to the sound of a human’s voice, not to your question specifically.
 R-Reni… 
-Try petting his head. Here, like this…
+Try petting his head. <br> Here, like this…
 Wooofff… 
 See? He loves it. 
 … 
@@ -149,25 +149,25 @@ Give it a try, Reni.
 … 
 … 
 Ah, wait!
-Aw… Reni just got up and left.
+Aw… <br> Reni just got up and left.
 Arf, arf, arf! 
 Ah,<sp> 
 … 
 Hahaha, he's chasing after Reni. 
 …He sure has taken a liking to Reni. 
 Wooofff… 
-Couldn’t catch up to Reni, eh, boy?
+…<br>Couldn’t catch up to Reni,<br>eh, boy?
 Don’t worry. I don’t think Reni dislikes you.
 Woof. 
 Oh, isn't that Kohran over there? 
 Heeey, Kohran! 
-That voice… Is that you, Chief? 
+That voice… <br> Is that you, Chief? 
 Man, it’s still the morning but it’s already a scorcher. Summer days are here again, eh? 
 I’ve been harvesting my tomatoes here in the courtyard and I've already worked up a sweat. 
 I know, mind if I ask for your help picking these bad boys?
 Yeah, no problem! 
 I'm busy right now. 
-Yeah, no problem. I'd be glad to help. 
+Yeah, no problem. <br> I'd be glad to help. 
 Really? Thanks, Chief! 
 I'd like to, but I'm busy right now. 
 Aw… That's too bad. But if you’re busy, then it can’t be helped. 
@@ -175,7 +175,7 @@ I'll see you in the entrance hall, then.
 Hmmm, what should I do? 
 You got nothing else going on, right? What do ya say, Chief? 
 …OK then. I'll help out. 
-Thanks, Chief! I knew you’d say yes! 
+Thanks, Chief! <br> I knew you’d say yes! 
 To tell the truth, picking the tomatoes isn’t the hard part…
 Dealing with those guys is the real challenge…
 Are those… crows? 
@@ -183,7 +183,7 @@ You betcha. They’ve been flying around eyeing my tomatoes.
 Lately, the crows have been gobbling up the veggies in the courtyard.
 But I’m not gonna let them have even one bite of these tomatoes! 
 That's where you come in, Chief. I need you to drive them away with these smoke bombs I made. 
-B-But… Won’t that hurt the crows? 
+B-But… <br> Won’t that hurt the crows? 
 No worries. My smoke bombs will just make them dizzy for a bit, it won't harm them. 
 I’m counting on you, Chief! The fate of these tomatoes rests in your hands! 
 I managed to pick all the tomatoes safely. Thanks a lot, Chief! 
@@ -198,8 +198,8 @@ Kohran…
 By the way, I didn't even know that you were growing tomatoes out here. 
 Hehe. I'm always researching machines so I decided to give researching vegetables a try. 
 If you're gonna grow veggies, you might as well make sure they're tasty, am I right? 
-Haha… Well, I suppose you got a point. 
-Ah, look at the time! I better get going. 
+Haha… <br> Well, I suppose you got a point. 
+Ah, look at the time! <br> I better get going. 
 I'm really grateful for your help. Later, Chief! 
 It’s just like Kohran to use smoke bombs, of all things, to drive away crows. 
 Well, I better get going too.
@@ -412,19 +412,19 @@ Oh, so you're not going to buy anything?
 We won't be able to see each other for a while, Ogami… 
 But… You’ll be coming back, right? 
 …Yeah. And when I return, please stop by again to buy some bromides. 
-Of course. I’ll be the first in line.
+Of course. <br> I’ll be the first in line.
 Ogami… Thank you very much! 
 Hope you have a great time on your trip!
 I look forward to hearing all about it when you get back.
 Got it, I'll be going now. 
-Tsubaki… Come back safely, OK? 
+Tsubaki… <br> Come back safely, OK? 
 Absolutely, leave it to me! I’ll come back as my usual cheerful self!
 You too, Ogami. Please take care and good luck! 
 My, you came here like clockwork, Ogami. 
 If you're interested in hearing more gossip, I'm all out. Sorry.
 I see, that's too bad. 
 I'll have some more interesting tidbits to share another time, so look forward to it! 
-Hi, Yuri, Kasumi. Are you doing the last bits of cleanup? 
+Hi, Yuri, Kasumi. <br> Are you doing the last bits of cleanup? 
 Yes, we just finished sorting the last of the documents. 
 Before you leave on your trip, Ogami, let me share the latest gossip I’ve gathered.
 Oh, Ogami. What do you need this time? 
@@ -463,7 +463,7 @@ As I understand, Japan is currently using several different measurement systems 
 The most common are the Japanese shakkanhou system, the metric system, and the British imperial system.
 And now the steam office is all mixed up because every area uses different systems to measure their pipes!
 I see, that must be hard on them. 
-Ah, that’s right. Guess what, Ogami?
+Ah, that’s right. <br> Guess what, Ogami?
 I heard that the resort you’re visiting is actually owned by one of the manager’s friends. 
 …Huh, is that so?
 Looks like he organized all the accommodations so the Flower Division could rest without any worries. 
@@ -541,7 +541,7 @@ I wonder if Sakura is in her room.
 It's just like Sakura to have a cute nameplate like this. 
 OK, let's check another room. 
 Yeees? Who is it? 
-It's Ogami. May I come in, Sakura? 
+It's Ogami. <br> May I come in, Sakura? 
 Ah, it's you, Ogami. The door's unlocked, come in. 
 OK, sorry to intrude. 
 Good morning, Ogami. 
@@ -558,7 +558,7 @@ Hmmm… Blue, I guess.
 All right, blue it is. <br> Thank you very much. 
 Hmmm… Yellow, I guess. 
 All right, yellow it is. <br> Thank you very much. 
-Hmmm… I don't have any favorite color in particular. 
+Hmmm… <br> I don't have any favorite color in particular. 
 Is that so… <br> That's a problem. 
 I know, since you were in the Navy, how does blue sound? 
 Huh? Oh… It's fine, I guess. 
@@ -639,13 +639,13 @@ There's no answer. Looks like she's not here.
 I wonder if Maria is in her room.
 It's Maria's nameplate. 
 OK, I'll check another room. 
-It's Ogami. Are you there, Maria? 
+It's Ogami. <br> Are you there, Maria? 
 Oh, Captain, it's you. The door's unlocked, please come in. 
 OK. Excuse me. 
 Good morning, Captain. 
 Morning, Maria. Are you all ready for the trip? 
 Yes. I finished packing last night. 
-I see… Prepared as always, Maria. 
+I see… <br> Prepared as always, Maria. 
 Now that I think about it, I don't visit your room too often. 
 I suppose that’s true. But, as you can see, there isn’t much to show.
 (Maria must have just recently gotten out of bed…)
@@ -653,7 +653,7 @@ I suppose that’s true. But, as you can see, there isn’t much to show.
 (There are a lot of possibilities… <br> Pajamas, a yukata…)
 Ask her. 
 What kind of clothes do you wear to bed, Maria? 
-Huh?! Uh, about that, I don’t…
+Huh?! <br> Uh, about that, I don’t…
 You don’t what?
 It’s… Is it really that important to you? 
 Huh? What's wrong with the question? 
@@ -670,7 +670,7 @@ I really love that desk. I’ve been using it for a long time now.
 That chair looks just like your desk. I guess you prefer simpler designs, Maria. 
 Yes, I tend to gravitate towards things that are easy to determine at first glance. 
 What kind of book are you reading? 
-Ah, this isn't a book. It's my diary. 
+Ah, this isn't a book. <br> It's my diary. 
 Do you keep one, Captain? 
 Yeah, pretty much. 
 No, I don't. 
@@ -679,14 +679,14 @@ I don’t write in it often but I do have a diary.
 I see, so you keep one as well. 
 When I look at what I’ve written in my diary, I gain a new perspective on my past thoughts and actions.
 No, I don't. 
-Is that so? Keeping one is rather fun. 
+Is that so? <br> Keeping one is rather fun. 
 When I look at what I’ve written in my diary, I gain a new perspective on my past thoughts and actions. 
 I’ve tried to, but I can never keep up the routine and end up stopping after a few days. 
 Try to make a habit of writing in it at a certain time, like before bed or after dinner. 
 Even writing a few lines for the day is fine. What matters is you're doing it consistently. 
-I see… I'll keep that in mind. Thanks. 
+I see… <br> I'll keep that in mind. Thanks. 
 Oh… I’m sorry for prying into such a private matter, Captain. 
-Oh, it's fine. I don't mind at all. 
+Oh, it's fine. <br> I don't mind at all. 
 A diary, hmm? 
 C-Captain!! What do you think you're doing?! 
 Well… I just wanted to take a look inside… 
@@ -705,7 +705,7 @@ How about we get going, Captain?
 We should be finished with our business here. Let us depart. 
 If I remember correctly, we should be gathering at the entrance hall at 10 o'clock. 
 Yeah. What are you gonna do until then? 
-Hehe… Actually, I was reading my diary a moment ago…
+Hehe… <br> Actually, I was reading my diary a moment ago…
 And I was reminded of a game I once often played. So I may partake in a few rounds before we depart.
 Well then, Captain. <br> Please excuse me. 
 A game she used to play…? <br> I wonder what it is.
@@ -729,7 +729,7 @@ Oh, it’s you, Boss…
 The door's unlocked, you can come in. 
 OK, then. Excuse me… 
 Fwaaaah… Mornin', Boss. 
-…Huh? Is it already this late? 
+…Huh? <br> Is it already this late? 
 Kanna… Did you go to sleep dressed like that? 
 Uuuh… Last night, I was exercisin' in here. Must've gone straight to bed right after that. 
 Aw man, looks like ya caught me when I'm all messed up… 
@@ -750,7 +750,7 @@ Uh, Boss… Are you mad?
 …Oh, no. I didn’t mean it that way. I just couldn’t think of what to say.
 Can ya give me a pass this time? I'll be more careful. 
 …Well, I better change my clothes ASAP so I don’t get left behind.
-See you, Kanna. Make sure not to be late. 
+See you, Kanna. <br> Make sure not to be late. 
 Yeah, thanks! <br> See ya later, then. 
 Kanna, are you done yet? 
 Oh, Boss. I'm still changin'. 
@@ -817,22 +817,22 @@ Now then, why don’t we start a game.
 Hmm, what to do… 
 I think it'll be a nice way to spend some time before we have to leave. 
 Playing a round of nine-ball won't take us much time. 
-Well, all right then. Let’s give it a go.
-Sure. We’ll play a quick game.
+Well, all right then. <br> Let’s give it a go.
+Sure. <br> We’ll play a quick game.
 Now it's your turn, Captain. This is your chance to drop the 9-ball. 
 For this shot, try building up some strength and then strike the cue ball with conviction. 
 Strike. 
 Give it all you got. 
 OK… Here I go! 
-Aw… I guess that was too soft. 
+Aw… <br> I guess that was too soft. 
 You should have hit the ball a bit harder for that shot, Captain.
 If you had used more strength, you might have sunk the 9-ball. 
-Is that right… I was so close. 
+Is that right… <br> I was so close. 
 OK, now it's my turn. 
 W-What the?! <br> The ball hopped! 
 That was a jump shot. 
 It's a technique used to leap over an obstructing ball to hit the target behind it. 
-Wow… Impressive as always, Maria. 
+Wow… <br> Impressive as always, Maria. 
 Heheh, you can learn it too if you practice. 
 More power… and shoot! 
 Yeah! The 9-ball didn't go in, but I was able to sink number 8! 
@@ -842,7 +842,7 @@ OK, now it's my turn.
 W-What the?! <br> The ball hopped! 
 That was a jump shot. 
 It's a technique used to leap over an obstructing ball to hit the target behind it. 
-Wow… Impressive as always, Maria. 
+Wow… <br> Impressive as always, Maria. 
 Heheh, you can learn it too if you practice. 
 Oh… Oh, no. I was so nervous, I couldn't shoot. 
 No need to be so tense, Captain. Try not not to overthink your shot.
@@ -852,7 +852,7 @@ For example, you could try a shot like this.
 W-What the?! <br> The ball hopped! 
 That was a jump shot. 
 It's a technique used to leap over an obstructing ball to hit the target behind it. 
-Wow… Impressive as always, Maria. 
+Wow… <br> Impressive as always, Maria. 
 Hmhm. Normally, I don’t do trick shots like that. 
 You should try just playing for the fun of it, without any fear of failure.
 Yeah, got it. Thanks, Maria. 
@@ -974,13 +974,13 @@ Mmm… <br> Zzz… Zzz…
 Is she still sleeping? 
 Shout to wake her up. 
 Open the door by force. 
-Leave her. 
+Leave her be. 
 Heeey, Orihime! <br> It’s almost 10 o’clock!
-Mmmm… So… annoying… 
+Mmmm… <br> So… annoying… 
 You're going to be left behind if you oversleep! 
 Left… behind?
 Huh?! It's… <br> It's already this late?! 
-Hey, now… You're not gonna make it if you don't hurry. 
+Hey, now… <br> You're not gonna make it if you don't hurry. 
 Mr. Ensign, you saved me. Just this once, I thank you. 
 Never mind that, just change your clothes, quick! 
 (Oh boy. That would have been terrible if I hadn't woken her up.) 
@@ -990,22 +990,22 @@ Uh…?
 Oh, you're finally awake. It's me, Ogami. 
 M-Mr. Ensign?! <br> Do you intend to become a criminal at last?! 
 Don't break into people's rooms!! 
-N-No! The clock! Look at the time! 
+N-No! The clock! <br> Look at the time! 
 Huh?! It's… <br> It's already this late?! 
 If I hadn’t woken you up, you would have overslept for sure.
 But… But even so, there must have been a better way to wake me than barging into my room! 
 I need to change, so get out! 
-Oh dear… This'll be quite the ruckus just before the trip. 
+Oh boy… <br> This is quite the ruckus just before the trip. 
 She'll just get angry at me if I wake her up, so I’ll leave her be. 
-Let sleeping dogs lie… I'll just head to another room. 
+Let sleeping dogs lie… <br> I'll just head to another room. 
 Uh… Should I or should I not wake her up? 
 Well, she'll eventually get up on her own, so I’ll just leave for now. 
 I wonder if Orihime is in her room.
 The nameplate has a simple design, but it sure looks classy. 
 Let's go check another room. 
 Orihime, are you awake? 
-Y-Yes… I just finished changing into my clothes.
-My thanks… Sorry for taking up your time. 
+Y-Yes… <br> I just finished changing into my clothes.
+My thanks… <br> Sorry for taking up your time. 
 Don't slack off! 
 Be more careful next time. 
 …Everything all right? 
@@ -1040,14 +1040,14 @@ Looks like she's already gone on to the entrance to meet up with everyone.
 There's not much time. I should get going too. 
 This is Kaede's room. 
 I better check another room, I guess. 
-It's Ogami. Are you there, Kaede? 
+It's Ogami. <br> Are you there, Kaede? 
 Oh, Ogami. The door's unlocked, come in. 
 Right. Pardon me. 
-Welcome, Ogami. Did you need something? 
+Welcome, Ogami. <br> Did you need something? 
 Have a chat. 
 Ask about Ayame. 
 Nothing in particular. 
-It's very sunny outside. At this rate, we’ll have ourselves another hot afternoon. 
+It's very sunny outside. <br> At this rate, we’ll have ourselves another hot afternoon. 
 That's true, it is the height of summer after all. 
 That reminds me, Kohran said that at 9:30 she was going to pick tomatoes in the courtyard. 
 Everyone else seems to be busy preparing for the trip.
@@ -1056,22 +1056,22 @@ I see…
 Speaking of packing, make sure to bring your Kinematron along, Ogami.
 Y-Yes, ma'am! 
 If it’s OK with you, Kaede… I would like to hear about Ayame. 
-Why, of course. Hmm… What should I talk about? 
+Why, of course. Hmm… <br> What should I talk about? 
 No… Nothing in particular. 
 I just wanted to see you. 
 Oh, is that so? I'm happy to hear that, Ogami. 
 Well then, I have to excuse myself. 
 You're always welcome here. 
-All right. Well, I should get going. Please excuse me. 
+All right. <br> Well, I should get going. <br> Please excuse me. 
 I'm glad I could talk with Kaede. I'll visit her again next time. 
 This is Kaede's room. 
 I better check another room, I guess. 
-It's Ogami. Are you there, Kaede? 
+It's Ogami. <br> Are you there, Kaede? 
 Oh, Ogami. 
 I'm sorry, but I have to write these reports. 
 I see. Then I'll see you later. 
 Sorry, Ogami. Let's have a nice talk some other time. 
-Phew… Being in my own room is quite relaxing. 
+Phew… <br> Being in my own room is quite relaxing. 
 Now, what should I do… 
 Call someone. 
 Take the Kinematron.
@@ -1174,12 +1174,12 @@ It was that metal which held the power to defend against the supernatural… “
 Celesteel, huh… 
 It’s thanks to their Celesteel armor that the Koubu can even fight against demons.
 The entire underground level of the Imperial Theater is made of the stuff, too.
-I see… So that's how it happened. 
+I see… <br> So that's how it happened. 
 As for Celesteel, think my story was good enough to "sell" you on it? Ahahahaha! 
 That was hilarious! 
 Huh… What do you mean? 
 That was hilarious! 
-F-For real?! I kinda forced it, though. 
+F-For real?! <br> I kinda forced it, though. 
 No need to pretend it was funny. I don't like seeing someone lie. 
 If the joke is too cheesy, just play the straight man and give me a comedic retort.
 No… I really did think it was funny.
@@ -1189,13 +1189,13 @@ I was trying to make a pun about Celesteel. I guess it didn’t land, huh?
 Uh… 
 Chief, if the joke is lame, you gotta respond with something like, “Oh, a wise guy, eh?”
 It’s awkward for me if no one plays the straight man and retorts my bad pun.
-I see… I'll keep that in mind. 
+I see… <br> I'll keep that in mind. 
 Ah, it’s no biggie. But next time I’ll make you laugh for sure.
 Ah, dear me… <br> Not a fan of puns, huh?
 Ah, s-sorry. I was just dumbfounded after hearing that…
 Well, no need to force yourself to laugh. But at least come back at me with a comedic retort.
 It’s awkward for me if no one plays the straight man and retorts my bad pun.
-I see… I'll keep that in mind. 
+I see… <br> I'll keep that in mind. 
 OK now, I have to do one more thing before the trip. 
 What’s that?
 Today I'm gonna pick some tomatoes that I planted in the courtyard. 
@@ -1211,7 +1211,7 @@ These clothes… These are Kohran's.
 T-That means… Kohran's in the bath… 
 I am drawn to the bath…
 Go back outside. 
-O-Oh, no… My body is moving towards the bathroom on its own… 
+O-Oh, no… <br> My body is moving towards the bathroom on its own… 
 (Kohran…) 
 (She must have taken off her glasses, so maybe she won't notice me…) 
 …! 
@@ -1231,10 +1231,10 @@ Looks like keeping them on was a wise decision.
 Sorry… I regret my actions.
 Well, since you apologized so earnestly, I'll forgive you this one time. 
 Do that again and I'll never let you forget it. 
-Phew… Somehow I got away without getting yelled at. 
+Phew… <br> Somehow I got away without getting yelled at. 
 Huh. So she takes baths with her glasses on. 
 (I gotta get out of here before she sees me!) 
-Phew… I think I got away before she realized I was there. 
+Phew… <br> I think I got away before she realized I was there. 
 Had I'd been just a moment slower, I might not have made it. That was too close… 
 Ah… Uhm… I… 
 Ch-Chief!? 
@@ -1248,7 +1248,7 @@ Looks like keeping them on was a wise decision.
 Sorry… I regret my actions.
 Well, since you apologized so earnestly, I'll forgive you this one time. 
 Do that again and I'll never let you forget it. 
-Phew… Somehow I got away without getting yelled at. 
+Phew… <br> Somehow I got away without getting yelled at. 
 Huh. So she takes baths with her glasses on. 
 She must be cleaning herself up after working on the Koubu so much. 
 I better not bother her and walk away. 
@@ -1258,7 +1258,7 @@ Phew, washing up after a long maintenance session sure hits the spot.
 Well, I guess it’s almost time to go. 
 (Ack! Her glasses… She's still wearing them!) 
 (I gotta get out of here before she sees me!) 
-Phew… I think I got away before she realized I was there. 
+Phew… <br> I think I got away before she realized I was there. 
 Had I'd been just a moment slower, I might not have made it. That was too close… 
 Hiya, Chief. 
 H-Hey, Kohran. Uh… Are you finished with your bath? 
@@ -1349,7 +1349,7 @@ Take a look out front. I got a ride ready for you.
 Wooow! What a big car! 
 This is a steam bus. <br> I reserved it exclusively for your trip. 
 Hooo boy, a private bus. This sure is fancy. 
-Well done, Mr. Yoneda. What a grand idea. 
+Well done, Mr. Yoneda. <br> What a grand idea. 
 Gwahahahaha! I told you I'd take care of everything. 
 All right, I hope you all enjoy your trip. 
 And Ogami, please watch over everyone. 
@@ -1370,17 +1370,17 @@ Imperial Assault Troupe, Rose Division, reporting for duty!
 R-Rose Division!? 
 Wh-Who on earth are these people…? 
 These men are the Rose Division. They'll be watching over the theater while you're all away. 
-Pleased to meet you, Ensign Ogami. I'm Seiryuin Kotone… 
+Pleased to meet you, Ensign Ogami. I'm Kotone Seiryuin… 
 I am the captain of the secret unit of love and beauty, the Rose Division.
-Ichirooo! I've always wanted to meet you! How about a smooch?
+Ichirooo! <br> I've always wanted to meet you! How about a smooch?
 U-Uwaaahh! Please don't! 
 Now wait a minute, Yokihiko! You have to give a proper introduction first!
 Oh, dear me. I’m so sorry. Where are my manners?
 I'm Yokihiko Ota, also of the Rose Division. 
-Now you too, Kiku. You haven’t introduced yourself either, right?
+Now you too, Kiku. <br> You haven’t introduced yourself either, right?
 Yes! A-Ah, uhm… <br> Hello… Ogami… 
 My name is… Kikunojo Oka. It’s a pleasure to meet you.
-Hehe. Well, Kikunojo? How does it feel to finally meet your beloved Ensign Ogami? 
+Hehe. Well, Kikunojo? <br> How does it feel to finally meet your beloved Ensign Ogami? 
 Oh, S-Stop it, Kotone. That’s… Uhm… It feels… fantastic.
 Just who are these people?! This… lot of eccentrics?
 Now, now. Despite their appearances, these guys are some of the Imperial Army's finest. 
@@ -1394,7 +1394,7 @@ H-Hello… Nice to meet you…
 Oh my, why so nervous, Ichiro? Ooh-ho, how cuuute!
 Ah… What a bashful person, I can’t help but love him.
 Nice to… meet you too… 
-I'm Ichiro Ogami. Nice to meet you, everyone. 
+I'm Ichiro Ogami. <br> Nice to meet you, everyone. 
 Ah, lovely! How gallant! Take me, I’m yours!!
 As one would expect from a naval ensign. Even a man would fall for your refined manners and kindness.
 You're so cool, Ogami. 
@@ -1404,11 +1404,11 @@ N-No thanks!
 Oh, you called us "fabulous." I'm so happy to hear that. I could cry… 
 Ah, you certainly have a sense for beauty. Just what you would expect from the Flower Division's captain.
 … 
-Hmhmhm… It appears you are so mesmerized by my looks that you have become speechless. 
-Please, Kotone! Don't be so full of yourself. 
+Hmhmhm… <br> It appears you are so mesmerized by my looks that you have become speechless. 
+Please, Kotone! <br> Don't be so full of yourself. 
 He must be mesmerized by my physical beauty and stature! 
-Hey, now wait a minute! I…  
-Oho, you're blushing! So innocent, Ichiro. How cute! 
+Hey, now wait a minute! <br> I…  
+Oho, you're blushing! <br> So innocent, Ichiro. <br> How cute! 
 Apparently he's been captivated by each of our beauty. 
 Is… Is that so?! <br> I'm… so happy. 
 S-Sorry, Mr. Yoneda, I need to ask you something, just to make sure… 
@@ -1495,7 +1495,7 @@ A scarf given to me by Sakura. It's knitted with blue yarn - my favorite color.
 A scarf given to me by Sakura. It's knitted with yellow yarn - my favorite color. 
 Ayame and I almost never lived in the same household, even though we were sisters. 
 Eh…? 
-It's not so unusual, given our lineage. We have less a "family tree" and more a "family wisteria." 
+It's not so unusual, given our lineage. We have less a family tree and more a family wisteria. 
 Yet, I still knew that she was the type of person that would sacrifice her own well-being for others… 
 Carrying everyone's burdens by herself… 
 That's why, when I received the news that she had passed away, I made up my mind. 
@@ -1534,7 +1534,7 @@ The people Ayame chose truly were the best people for the job. That includes you
 Kaede… 
 Ayame entrusted the Flower Division to me, so I'll continue to give it my all. 
 Don't give up. Even in the hardest of times, remember to never give up, Ogami. 
-Yes, ma'am! I will do all I can to meet your expectations! 
+Yes, ma'am! <br> I will do all I can to meet your expectations! 
 Now then, today I'll tell you about Ayame and Major Yamazaki. 
 Both Ayame and Major Yamazaki were members of the troupe's predecessor, the Anti-Kouma Corps.
 Major Yamazaki was a brilliant scientist who created the foundational designs for Spirit Armor… 

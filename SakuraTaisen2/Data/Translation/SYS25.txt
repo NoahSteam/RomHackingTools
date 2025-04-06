@@ -165,7 +165,7 @@ Sheesh, you're hopeless!
 I can't take it anymore!
 I have to retreat. I can't keep going… Captain…
 Not bad!
-That was super cool, Mr. Ensign!
+That was super cool, <br> Mr. Ensign!
 That was easy!
 Heehee! Give me a big round of applause!
 We're an unstoppable duo!
@@ -196,7 +196,7 @@ You'll burn brilliantly…
 Prepare yourselves.
 Ahahahaha!
 I'll burn you to a crisp!
-You… Pieces of trash…
+You… pieces of trash…
 I'll show you what I've got.
 I'll be gentle.
 Hm hm hm… I won't lose.

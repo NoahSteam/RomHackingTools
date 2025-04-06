@@ -36,7 +36,7 @@ Hex Mech: Wakiji Kai. <br> A hardy support unit that is limited in number due to
 Hex Mech: Wakiji Kai. <br> The units equipped with large cannons are referred to as HA-type.
 Hex Mech: Wakiji Kai. <br> The units equipped with large cannons are referred to as HA-type.
 Hex Mech: Wakiji Kai. <br> Attacks using buckshot, but a single blast is relatively weak.
-Hex Mech: Dark Kamui. <br> Its capabilities have been greatly enhanced by Demon King's power.
+Hex Mech: Dark Kamui. <br> Its capabilities have been greatly enhanced by the Demon King's power.
 Steam Rocket. <br> A weapon developed by Mokujiki, boasting high attack power.
 Hex Mech: Wakiji Kai. <br> Classified as the NI-type Special, this unit boasts a peculiar attack range.
 <LEAVE> Message 19
@@ -54,7 +54,7 @@ Good luck, Ogami!
 I know I can count on you, Ogami!
 Don't be reckless, Ogami…
 I'll do my best!
-For you, Ogami… I'll do anything!
+For you, Ogami… <br> I'll do anything!
 I have to try my hardest!
 I won't… lose…
 …Thank you, Ogami.

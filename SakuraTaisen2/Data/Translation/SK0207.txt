@@ -7,7 +7,7 @@ Uhm… You can tell me what you want to say…
 …and I'll write it in French. 
 OK, got it. 
 All right, Mon Frère. First, we need you to say hello to Papa and Mama. 
-Say hello, huh… In that case, let's start with an introduction. 
+Say hello, huh… <br> In that case, let's start with an introduction. 
 “I hope this letter finds you well. I am Ichiro Ogami…” 
 Captain of the division. 
 Iris's boyfriend. 
@@ -34,11 +34,11 @@ Hey now, what are you writing?
 Ehehe. <br> It’s… a… secret!
 Now, what should we say next? 
 Oh, oh. Write something about me next! 
-OK, I’ll do that. Let’s see… 
+OK, I’ll do that. <br> Let’s see… 
 “It is my conviction that you must be worried about Iris." 
 “It is my conviction…" <br> Mon Frère, what does "con-vic-tion" mean? 
 Hmm. Let's replace it with "I'm sure," then. 
-Got it. So, what's next? 
+Got it. <br> So, what's next? 
 Let's see… <br> "Iris is…" 
 Doing quite well.
 A vital asset to the team. 
@@ -166,29 +166,29 @@ You're a precious friend to everyone in the Flower Division, not just me.
 We won't let you be alone anymore. 
 Mon Frère… 
 Phew, it's getting late. Let's get to bed. 
-Mon Frère, u-um… Can I ask for one more thing? 
+Mon Frère, u-um… <br> Can I ask for one more thing? 
 Oh? What is it? 
 Can I… sleep in your room tonight? 
 Sure, no problem. 
 That'll be a problem. 
-Sure, no problem. We can share my room. 
+Sure, no problem. <br> We can share my room. 
 Yay! Thank you, Mon Frère! 
 That… may be a problem. 
-It's fiiine! I won't tell Sakura, OK? 
+It's fiiine! <br> I won't tell Sakura, OK? 
 R-Right… 
 U-Uhm… What should I do? 
-Oh! Mon Frère, you're blushing! That's cute! 
+Ah! Mon Frère, you're blushing! That's cute! 
 I won't tell anyone, Mon Frère. I'll just go to sleep right away! Good niiight! 
 H-Hey, Iris! 
 OK, good night, Mon Frère! 
 OK… Good night, Iris. 
-Ehehe! This makes me so happy… 
+Ehehe! <br> This makes me so happy… 
 … 
 Hey, Mon Frère… 
 Yes, Iris? 
 Let's play together some time… 
 OK, I promise. 
-A promise is a promise… And Mon Frère, please stay… 
+A promise is a promise… <br> And Mon Frère, please stay… 
 …by my side… always… 
 … 
 Yes… I'll always be there for you. 
@@ -198,11 +198,11 @@ Zzz… Zzz…
 Iris? Oh yeah, last night she asked to stay in my room. 
 Hm… Mmmmmmm… 
 Hahaha, what a cute face. She looks so innocent. 
-Iris, wake up. It's morning. 
+Iris, wake up. <br> It's morning. 
 Hmmm… 
 …Huh? Mon Frère? 
 Yaaaawn… <br> So I was dreaming, huh. 
-Morning, Iris. Did you sleep well? 
+Morning, Iris. <br> Did you sleep well? 
 Yeah! I slept really well! 
 Mon Frère, I saw you in my dream! 
 Oh… 
@@ -220,9 +220,9 @@ I think… I had a dream, too.
 You had a dream as well, Mon Frère? What did you dream about? 
 Uhm… What was it… 
 Huh. I think I forgot. 
-You forgot? Aw… I wanted to hear about it. 
+You forgot? Aw… <br> I wanted to hear about it. 
 What was it like, huh? Should I ask for a performance fee? 
-Whaaat!? Mon Frère, you meanie!! 
+Whaaat!? <br> Mon Frère, you meanie!! 
 Hahaha, just kidding. As long as it's not a bad dream, that's good enough for me. 
 Yeah! Of course it was a good dream! 
 Me too. I saw you in my dream last night. 
@@ -241,20 +241,20 @@ I’m not… lonely anymore.
 …Glad to hear it. 
 All right, how about we go get some breakfast? 
 Yeah! 
-Ah, Sakura’s here! Good morning!
+Ah, Sakura’s here! <br> Good morning!
 I-Iris… 
 Good morning, Sakura. Looks like it'll be a pleasant morning. 
 Ogami… 
 Come on, you two! Let's hurry up and eat breakfast! 
 You're right. OK, let's have a big meal to start the day! 
 …Yeah! 
-Oh, hello, everyone. Good morning.
+Oh, hello, everyone. <br> Good morning.
 Hey, you’re up early, Ogami. You getting some grub too? 
 Good morning, sir. <br> Huh? What’s with the uniform? Are you going out somewhere?
 Yup, I’ve got some things to take care of at the Ministry of the Army. Saki’s tagging along too.
 Iris, how about you ask the manager to help send your letter? 
 What’s this, a letter? Sure, I can mail this out for you. 
-Really, Uncle? You’d do that for me?
+Really, Uncle? <br> You’d do that for me?
 Of course, not a problem. Anything for my adorable Iris. 
 Thank you so much, Uncle! 
 The alarm?! 
@@ -263,11 +263,11 @@ Ogami, I have to go to the ministry. The Flower Division is in your hands.
 Understood, sir! 
 Iris, I'll make sure to send this letter, so don't worry. 
 Yeah! I'm counting on you, Uncle! 
-Yup, you can count on me. I'm off…
+Yup, you can count on me. I'm off…<br>
 Uh-oh. 
 What's wrong, sir? 
 Aw, my shoelace just snapped is all. It's not a big deal. 
-Oh my… I'm afraid that's a sign of bad luck. 
+Oh my… <br> I'm afraid that's a sign of bad luck. 
 Well then, sir, we're heading out for our mission. 
 OK. Watch yourselves out there! 
 Yeah! I'm gonna do my best today! 

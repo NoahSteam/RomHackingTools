@@ -34,11 +34,11 @@ Close combat Kouma Weapon. It's not equipped with any special weaponry, instead 
 Support-type Kouma Weapon. Its wings have been altered into weapons capable of mid-ranged attacks.
 Kouma Weapon: Banrai. A close-combat Kouma Weapon completed using some of Mokujiki's leftover data.
 Kouma Weapon: Reppuu. A long-ranged support-type Kouma modified by the Black Demon Society.
-Hex Mech: Hachiyou. Piloted by Tsuchigumo of the Five Elements, attacks with its six arms in succession.
+Hex Mech: Hachiyou. Piloted by Tsuchigumo of the Five Elements, it attacks with its six arms in succession.
 Kouma Weapon: Reppu. Designed with an emphasis on powerful, long-range attacks.
 Bomber-type Kouma Weapon. Equipped with an internal store of buckshot, it fires attacks from its mouth.
 Hex Mech: Wakiji Kai. <br> Classified as the NI-type Special, this unit boasts a peculiar attack range.
-Hex Mech: Hachiyou. Piloted by Tsuchigumo of the Five Elements, attacks with its six arms in succession.
+Hex Mech: Hachiyou. Piloted by Tsuchigumo of the Five Elements, it attacks with its six arms in succession.
 <LEAVE> Message 19
 <LEAVE> Message 20
 Doesn't look like I need to cover anyone right now.
@@ -165,7 +165,7 @@ Sheesh, you're hopeless!
 I can't take it anymore!
 I have to retreat. I can't keep going… Captain…
 Not bad!
-That was super cool, Mr. Ensign!
+That was super cool, <br> Mr. Ensign!
 That was easy!
 Heehee! Give me a big round of applause!
 We're an unstoppable duo!
@@ -196,7 +196,7 @@ You'll burn brilliantly…
 Prepare yourselves.
 Ahahahahaha!
 I'll burn you to a crisp!
-You… Pieces of trash…
+You… pieces of trash…
 I'll show you what I've got.
 I'll be gentle.
 Hm hm hm… I won't lose.

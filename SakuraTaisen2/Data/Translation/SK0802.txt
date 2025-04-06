@@ -17,7 +17,7 @@ Acting in haste could be dangerous… Let's wait and see what happens…
 Ogami! Ogami, wake up! 
 S-Sakura?! 
 Ogami, please open up! Quick!! 
-Got it! I’ll be right there!! 
+Got it! <br> I’ll be right there!! 
 Sakura, what in the world is going on?!
 I don't know… I rushed over here as soon as I heard those gunshots. 
 What about the others?! 
@@ -34,7 +34,7 @@ Wait… If we're not careful, we could put ourselves in even more danger.
 We’ll still have time to escape once we’ve gotten a look at who we’re dealing with.
 Right, understood. 
 S-Sakura, what do we do?! 
-Ogami! What are you saying?! 
+Ogami! <br> What are you saying?! 
 If you don’t get your act together, we’re all gonna be in trouble!!
 B-But… 
 Let's run, Ogami. I think the first thing we should do is meet up with everyone else.
@@ -67,7 +67,7 @@ Mr. Yoneda…
 What on earth is happening?
 What about everyone else? 
 What on earth is happening?
-I’m just as much in the dark as you two, but… I have a hunch.
+I’m just as much in the dark as you two, but… <br> I have a hunch.
 What about the rest of the Flower Division? Where is everybody else?
 …I dunno. I just caught up with you two.
 But I'm sure they're all doing fine. 
@@ -146,12 +146,12 @@ Yeah, you can count on it! I won't die so easily!
 What are you waiting for, Ogami?! There's no time! 
 But I… 
 Don't worry about me and the others! 
-Just go, Ogami! Every second counts! 
+Just go, Ogami! <br> Every second counts! 
 …Yes, sir! 
 Let's go, Sakura! 
 R-Right! 
 I'm counting on you, Ogami! 
-Please stay safe, Mr. Yoneda! 
+Please stay safe, <br> Mr. Yoneda! 
 Damn it! Why's the Army attackin' us?! 
 We can’t even fight back in our Koubu ‘cause we’re stuck indoors…
 What's more, it's awful that we've been separated from Ensign and the others.
@@ -169,8 +169,8 @@ R-Right!
 W-What? 
 Ah! O-Ogami! 
 Ichirooo! Sakuraaa! <br> We've been waiting for you! 
-Seems that these guys managed to infiltrate the basement by blowing up the wall from the outside. 
-But their luck ran out the moment they encountered the secret unit of love and beauty, the Rose Division!
+These fellows appear to have infiltrated the basement by blowing up the wall from the outside. 
+But their luck ran out the moment they encountered the Rose Division, secret unit of love and beauty!
 Y-You guys! 
 We'll help you! 
 Why are you doing this?

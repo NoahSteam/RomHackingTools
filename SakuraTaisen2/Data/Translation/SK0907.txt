@@ -27,7 +27,7 @@ We totally connected with the audience… What a great play that was.
 Ogami… 
 Great job today, Sakura. That was a wonderful show. 
 I'll remember this play for as long as I live. 
-Ogami… Thank you for everything. I mean it. 
+Ogami… <br> Thank you for everything. <br> I mean it. 
 Sakura… 
 Ensign… 
 Hey Sumire. Great job today. That was a wonderful show. 
@@ -57,7 +57,7 @@ Kohran…
 Mr. Ensign… 
 Orihime. Great job today. That was a wonderful show. 
 Your efforts were fantastic as well, Mr. Ensign. 
-All things considered, that was an excellent play. Even in Italy, I think it would be a success.. 
+All things considered, that was an excellent play. Even in Italy, I think it would be a success. 
 Hahaha… Glad to hear it. 
 Captain… 
 Hey, Reni. Great job today. That was a wonderful show. 
@@ -109,7 +109,7 @@ Sakura…
 Ogami… 
 Please… <br> Stay with me forever…  
 … 
-All right. I'll stay by your side. Forever. 
+All right. <br> I'll stay by your side. Forever. 
 …OK. 
 If it's all right with you, Ensign, perhaps we could step outside for a moment? 
 I'd like to take a stroll with you in the capital while it's still Christmas. Just the two of us. 
@@ -192,20 +192,20 @@ It's because I'm alive that I get to meet so many people.
 I wanted to express my gratitude for that, and my hope that I may continue to live alongside everyone. 
 That's what I prayed for. 
 Maria… 
-Captain, I hope that… For as long as I live… 
+Captain, I hope that… <br> For as long as I live… 
 For as long as you live… What? 
 …No, it's nothing. 
 Now then, it's almost midnight. We should head back. 
 Wh-What's with you, Maria? Now I’m curious… 
 Come on now, quit loafing around, or I'm leaving you behind. 
-Hey, Boss? Um… If it's cool with you… Wanna head outside? 
+Hey, Boss? Um… <br> If it's cool with you… Wanna head outside? 
 There's some stuff I wanna talk to you about, alone. 
 All right, sure. It's a Christmas Eve date, then… Until midnight, anyway. 
-OK then. Let's go, Kanna. 
+OK then. <br> Let's go, Kanna. 
 Yeah! Thanks, Boss. 
-Ah! Boss, look, it's snowin’! 
+Ah! <br> Boss, look, it's snowin’! 
 You're right. When did all this snow pile up, anyway? 
-Ahahaha! Snow! Snow! It's snowin’, Boss! 
+Ahahaha! Snow! Snow! <br> It's snowin’, Boss! 
 Right, you're from Okinawa, so you don't get to see snow very often, huh? 
 That's right. I can count on one hand the amount of times I've seen snow. 
 You think maybe it's snowin’ cause I played the lead tonight? Ahahahaha! 
@@ -221,7 +221,7 @@ We can't make too much noise in a church…
 But still, it's Christmas, we should be celebrating! I almost feel like dancin’! 
 Typical Kanna… 
 … 
-Boss… Can I… ask you a question? 
+Boss… <br> Can I… ask you a question? 
 Sure, what is it? 
 Why did you pick me for the lead? 
 Well, you see… 
@@ -240,12 +240,12 @@ And since you picked me, I decided to believe in myself.
 Kanna… 
 All right, Boss, let's get outta here. 
 Yahoo! 
-Hahaha… You're full of energy tonight. 
+Hahaha, you're full of energy tonight. 
 Yeah! I'm in a great mood right now! 
 You picked me for the lead… 
 We made the audience super happy… 
 I've never felt this ecstatic before in my life! 
-Thank you, Boss. I mean it, thanks! 
+Thank you, Boss. <br> I mean it, thanks! 
 Kanna… 
 Uh-oh, it's gonna be past midnight soon! 
 OK, race you to the theater, then! 
@@ -255,7 +255,7 @@ Ah! Look, Mon Frère! <br> It's snowing!
 C'mon, let's go outside! Can we, Mon Frère? 
 Hahaha, you're right. <br> Sure, let's go. 
 Yaaay, yaaay! <br> C'mon, let's go, Mon Frère! 
-Look, Mon Frère! It's snowing so much! 
+Look, Mon Frère! <br> It's snowing so much! 
 You're right. When did all this snow pile up, anyway? 
 Heheh! <br> I'll make you a snowman! 
 Thanks, Iris. Aren't your hands a little cold, though? 
@@ -309,7 +309,7 @@ Chief… Um… Wanna head outside for a bit?
 There's some stuff I wanted to talk to you about, now that the play's over. 
 All right, sure. It's a Christmas Eve date, then… Until midnight, anyway. 
 OK, let's go, Kohran. 
-For real? Thanks a bunch, Chief. All right, let's go. 
+For real? <br> Thanks a bunch, Chief. <br> All right, let's go. 
 Wow… Look, Chief, snow. 
 You're right. When did all this snow pile up, anyway? 
 It's so pretty… 
@@ -341,7 +341,7 @@ That's right. It's that unique Kohran-ness that makes you special.
 Yeah! Thanks, Chief! 
 All right, let's get going! How about we wander around the capital till midnight? 
 Sounds good! Let's do that. 
-Ah, Chief! Look over there, a chapel! 
+Ah, Chief! <br> Look over there, a chapel! 
 You're right… I had no idea there was a chapel around here. 
 Looks like fun. Why don't we step inside for a sec? 
 Sure, let's go in. 
@@ -367,7 +367,7 @@ I have been hoping to spend Christmas Eve with you for a long time.
 All right, sure. It's a Christmas Eve date, then… Until midnight, anyway. 
 Now that we have decided, let's not waste any time! Come now, hurry! 
 H-Hey, you don't have to pull so hard. 
-Wow… Look, Mr. Ensign, snow! 
+Wow… <br> Look, Mr. Ensign, snow! 
 You're right. When did all this snow pile up, anyway? 
 It's snowing right on Christmas… What good timing! Ottimo tempismo! 
 The snow must be giving us its blessing! 
@@ -382,11 +382,11 @@ I want to keep on shining always, with you and everyone else in the Flower Divis
 Orihime… 
 We'll be together forever. 
 You sure have changed. 
-Orihime… We'll be together forever. 
+Orihime… <br> We'll be together forever. 
 Mr. Ensign… 
 Boy, Orihime, you sure have changed. 
 Y-You shut your mouth! 
-Keep talking like that and I'm leaving you here! 
+Keep talking like that and I am leaving you here! 
 Hahaha, kidding, kidding. 
 But there is one big difference between Sakura and I. 
 And what's that? 
@@ -399,7 +399,7 @@ Ah, one of the stars fell off!
 Mr. Ensign, help me to put this star back! 
 All right, leave it to me! 
 Careful, Orihime… 
-Thanks, Mr. Ensign. I'll be fine. 
+Thanks, Mr. Ensign. <br> I will be fine. 
 All right, you, back with the rest of your little star friends… 
 We should go, Mr. Ensign. Let us go back to the others. 
 You're right, it's almost midnight. 
@@ -438,7 +438,7 @@ In that case… I'd like to stay at the theater with everyone forever.
 With you… forever. 
 Reni… 
 How about giving thanks for something that made you happy? 
-Got it. I'll give it a try. 
+Got it. <br> I'll give it a try. 
 I'm glad to have met everyone at the theater. 
 I'm glad to have met the captain. Thank you. 
 Reni… 

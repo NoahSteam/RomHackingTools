@@ -1,7 +1,7 @@
-﻿It's Ogami. Are you there, Kaede? 
+﻿It's Ogami. <br> Are you there, Kaede? 
 Come in. The door's open. 
 Kaede, what did you want to discuss with me? 
-You know about the Flower Division's Christmas performance, right? "The Miracle Bells"? 
+You know about the Flower Division's Christmas performance, right? <br> "The Miracle Bells"? 
 Yes. At least, I know it’s a special one-night event being held on Christmas Eve.
 The thing is… I received a request from everyone in the division.
 They want you to pick which member will play the starring role for the performance.
@@ -21,7 +21,7 @@ Yes, ma’am, understood…
 I… I can't do it.
 Yes, ma’am, understand… I’ll do the best I can.
 Very good. <br> Well said, Ogami. 
-I… I can't do it. I’m just an amateur… I don’t know anything about theater.
+I… I can't do it. <br> I’m just an amateur… <br> I don’t know anything about theater.
 It'll be fine. 
 You just need to choose based on your honest feelings. That’s what everyone told me as well. 
 I see… 
@@ -31,10 +31,10 @@ Everyone in the Flower Division trusts you deeply.
 No matter what you decide, I hope you’ll prove yourself worthy of that trust, in your own way.
 Let me know your answer tomorrow. As for today, take your time to carefully consider your choice.
 …I understand. 
-Do your best, Ogami. I'm counting on you. 
+Do your best, Ogami. <br> I'm counting on you. 
 I’m picking the star, huh? Hmm… The more I think about it, this is a huge responsibility.
 These chimes… <br> I guess it’s 5 o’clock.
-Oh, that reminds me! The girls ask me to help them out at 5…
+Oh, that reminds me! <br> The girls ask me to help them out at 5…
 Kasumi is sorting receipts, Yuri is hanging up posters, and Tsubaki wanted me at the gift shop…
 Uh… Who should I go help?
 Go help Kasumi. 
@@ -43,11 +43,11 @@ Go help Tsubaki.
 OK, I'll go to the secretarial office to give Kasumi a hand. 
 OK, I'll go to the VIP entrance to give Yuri a hand. 
 OK, I'll go to the gift shop to give Tsubaki a hand. 
-Hi, Kasumi. I'm here to help. 
+Hi, Kasumi. <br> I'm here to help. 
 Ogami… Thank you very much. 
 Well, let's begin sorting these receipts right away.
 All right, will do.
-Good work, Ogami. You were a big help.
+Good work, Ogami. <br> You were a big help.
 … 
 Ogami? 
 …Oh, sorry. I just have something on my mind. 
@@ -59,20 +59,20 @@ It’s the least I could do to thank you. Besides, you seem really concerned abo
 Huh? W-Wait… 
 I’m going to get changed so please wait a moment.
 H-Hey, Kasumi! 
-…So that's how it is. Choosing the main lead is indeed a big responsibility.
+…So that's how it is. Choosing the lead is indeed a big responsibility.
 I’m sorry, you went to the trouble of inviting me out and I’m just talking about my worries.
 No, it's fine. After all, you're always there for us when we need you.
 So, every once and a while, I want to be the one lending you a hand instead.
 By the way, what is it that worries you the most about this decision, Ogami?
 Well, you see… 
 I don't know who to choose. 
-I worry about the others… 
+I'm worry about the others… 
 Who should I choose? Who would be the best fit for the part? I just don’t know…
 You’ve always been a very earnest person, Ogami. No wonder you’re having a hard time.
 I’m worried that the others will feel bad about not getting chosen… I just can’t do it.
 …I thought so. You’re a very kind-hearted person, Ogami.
 I don’t really know why I’m so worried, myself…
-That’s understandable. You were given this responsibility so suddenly, after all.
+That’s understandable. <br> You were given this responsibility so suddenly, after all.
 Well… I believe you should pick whoever it is you like the most. I think that would be best.
 I'm sure your feelings will get through to her. That's what makes for a good play. 
 Kasumi… 
@@ -80,34 +80,34 @@ There will be some disagreement no matter who you choose.
 But nobody will blame you. They all trust you.
 You're right. If no one's picked to be the lead, then the play can't happen. 
 Thanks for your advice, Kasumi. 
-Oh, it was nothing. I’m just glad I could help.
-Well now, Ogami. I hope you can continue to keep me company for today. 
+Oh, it was nothing. <br> I’m just glad I could help.
+Well now, Ogami. <br> I hope you can continue to keep me company for today. 
 Let’s take our time and enjoy Renga-Tei’s delicious food.
 Hi, Yuri. I'm here to help. 
-Ah, Ogami! So you dropped by after all. Thank you!
+Aha, Ogami! <br> So you dropped by after all. Thank you!
 OK, let’s get right to it and start changing these posters!
 Right, on it.
-Thanks a lot, Ogami! You really saved my bacon.
+Thanks a lot, Ogami! <br> You really saved my bacon.
 … 
-Ogami? Is something the matter? 
+Ogami? <br> Is something the matter? 
 …Oh, sorry. I just have something on my mind. 
 Very suspicious… <br> You're not hiding something from me, are you?
 N-No… That's not… 
-I know! Mind going somewhere with me, Ogami?
+I know! <br> Mind going somewhere with me, Ogami?
 Huh? Go where? 
 There’s a western-style restaurant I often go to with the others called Renga-Tei.
 I’ll take you there as a treat for helping me earlier, plus I’m curious about your little secret…
 Let's go, Ogami! 
-Huh?! H-Hold on a minute, Yuri. 
-Come on, it’ll be fun. Wait a minute while I go change my clothes!
+Huh?! <br> H-Hold on a minute, Yuri. 
+Come on, it’ll be fun. <br> Wait a minute while I go change my clothes!
 H-Hey, Yuri! 
 Uh-huh, I see. So you have to choose the lead actress. 
 Yeah, that’s right. I’ve got a lot on my mind right now.
-Deciding who will play the main character is definitely a heavy responsibility.
+Deciding who will play the main role is definitely a heavy responsibility.
 But what exactly is bothering you the most?
 Well, you see… 
 I don't know who to choose. 
-I worry about the others… 
+I'm worry about the others… 
 Who should I choose? Who would be the best fit for the part? I just don’t know…
 You're being as indecisive as ever, Ogami. 
 I’m worried that the others will feel bad about not getting chosen… I just can’t do it.
@@ -124,11 +124,11 @@ Thanks for the advice, Yuri.
 Don’t sweat it. After all, you gave me some juicy info for future gossip.
 OK, Ogami. Since we’re already here, let’s enjoy our food.
 It wouldn't hurt for me to go on a date with you just this once, would it?
-Hi, Tsubaki. I'm here to help. 
+Hi, Tsubaki. <br> I'm here to help. 
 Oh, Ogami! <br> So you stopped by after all. Thank you so much!
 OK, let’s get started right away. Can you help me arrange the merchandise?
 Yeah, I’ll get started.
-Thanks a lot, Ogami. You were a big help.
+Thanks a lot, Ogami. <br> You were a big help.
 … 
 …Ogami? Is something wrong? 
 …Oh, sorry. I just have something on my mind. 
@@ -141,13 +141,13 @@ Oh, OK…
 Ogami… <br> Something’s troubling you, isn’t it? I want you to tell me all about it.
 I’m gonna get changed. Please wait a second!
 H-Hey, Tsubaki! 
-So that’s what’s going on… You have to choose the star for the Christmas performance.
+So that’s what’s going on… You have to choose the star for the Christmas play.
 Yeah, that's right. 
-Wow! Isn’t it amazing that you get to be more involved with the play?
+Wow! Isn’t it amazing that you get to be more involved with the performance0?
 So, what are you worried about?
 … 
 I don't know who to choose. 
-I worry about the others… 
+I'm worry about the others… 
 Who should I choose? Who would be the best fit for the part? I just don’t know…
 I see… It is a difficult decision, isn’t it?
 I’m worried that the others will feel bad about not getting chosen… I just can’t do it.
@@ -163,7 +163,7 @@ You're always worried about everyone, Ogami. Have some faith in yourself.
 Right, I can’t just mope around forever.
 Thanks for your advice, Tsubaki. 
 Sorry if I sounded a bit presumptuous…
-Tee-hee! Well, Ogami, let's eat! 
+Tee-hee! <br> Well, Ogami, let's eat! 
 I've always wanted to bring you here, even if it was just once. Now my dream has finally come true!
 Sorry Ogami, but customers are only allowed to purchase one of each bromide. 
 I see. That's too bad. 

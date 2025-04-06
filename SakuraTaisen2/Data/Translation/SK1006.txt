@@ -148,7 +148,7 @@ We're going now, Mother!
 Come back safely, Sakura. 
 Ogami, look after my daughter. 
 …Yes, ma'am! 
-Phew… My stomach's finally settled. 
+Phew… <br> My stomach's finally settled. 
 Speaking of which, Sumire's still not back yet… 
 Oh, Master Ogami. <br> Are you alone? 
 Yeah. Do you know where Sumire's gone? 
@@ -551,7 +551,7 @@ You can make all sortsa stuff! It's a multipurpose cooking machine!
 (A cooking machine, huh? Guess even Kohran makes some practical inventions from time to time.) 
 That's the steam cleaner. It's a machine that runs around and picks up garbage fully automatically! 
 Wow, that's amazing. So why didn't it work out? 
-Hmmm… Well, it ran around a little TOO fast. 
+Hmmm… <br> Well, it ran around a little TOO fast. 
 Once you started it up, you’d never be able to catch it again… 
 Not only that, but time after time it mistook my important documents as garbage. 
 Hahaha, that's unfortunate. 
@@ -662,17 +662,17 @@ Yes, I remember.
 What promise? 
 Yes, I remember. 
 I believe Orihime and I promised to model for one of your portraits together, am I right?
-Yes, that's the one. I'm glad you remembered. 
+Yes, that's the one. <br> I'm glad you remembered. 
 What promise? Do you know what he's talking about, Orihime? 
-You have forgotten already?! We promised to model for one of his portraits, didn’t we?! 
-Oh, that's right! I remember now. 
-Mamma mia! You shouldn't forget such an important promise! 
+You have forgotten already?! We promised to model for one of Papa's portraits, did we not?! 
+Oh, that's right! <br> I remember now. 
+Mamma mia! You should not forget such an important promise! 
 Now, now, Orihime, it WAS over a month ago. It's perfectly understandable. 
-Hmmm… I'm not sure if I do remember it or not… 
+Hmmm… <br> I'm not sure if I do remember it or not… 
 Seriously, Mr. Ensign, you have nessuna memoria, no memory at all! 
-We promised to model for one of his portraits, remember?! 
-Oh yeah, that's right! I finally remembered. 
-You shouldn't forget such an important promise! 
+We promised to model for one of Papa's portraits, remember?! 
+Oh yeah, that's right! <br> I finally remembered. 
+You should not forget such an important promise! 
 Now, now, Orihime, it WAS over a month ago. It's perfectly understandable. 
 I'll ask you again, Ogami. 
 Would you and Orihime model for me? 
@@ -683,8 +683,8 @@ Yes, with pleasure.
 I… can't. 
 Yes, with pleasure. 
 I am fine with it, of course! 
-Thanks, you two. 
-I… can't do it. I don't have what it takes. 
+Thank you, both of you. 
+I… can't do it. <br> I don't have what it takes. 
 No, that's not true. You and Orihime have a certain… radiance about you. 
 …Radiance? 
 When a person's accomplished something, they shine brightly. 
@@ -695,10 +695,10 @@ After all of that, how can you say no, Mr. Ensign?
 Mr. Ogata, I'd be more than happy to model for you. 
 Oh, so you'll do it, then? Thank you. 
 When you say "modeling"… Does that mean we have to be nude? 
-M-Mr. Ensign! What are you saying?! 
-There's no way we could do that in a public place such as this, with all these strangers to gawk at us!
-T-That’s true. You make a good point. 
-Hahaha… You're as entertaining as ever, Ogami. 
+M-Mr. Ensign! <br> What are you saying?! 
+There is no way we could do that in a public place such as this, with all these strangers to gawk at us!
+T-That’s true. <br> You make a good point. 
+Hahaha, you're as entertaining as ever, Ogami. 
 Do not worry, you can stay dressed just the way you are.
 Hmmm… What should I do? 
 You have no reason for hesitating, Mr. Ensign!
@@ -765,19 +765,19 @@ Mr. Ensign…
 You don't have to try so hard for my sake. Just be yourself. 
 Mr. Ensign… <br> Thank you so much! 
 Thank you, that makes me happy. 
-Hm hm, if you're happy, then I'm happy… I mean, I am jubilant as well. 
+Hm hm, if you are happy, then I am happy… I mean, <br> I am jubilant as well. 
 Don't wear yourself out over it, though, OK? 
 Non preoccupatevi! <br> I mean, relaaaax! <br> No, wait, I mean… 
 Orihime… You really don't have to go that far. 
 I like you just the way you always are. 
-R-Really? Thank you. 
-Mr. Ensign… <br> You don't like it? 
+R-Really? <br> Thank you very much. 
+Mr. Ensign… <br> Do you disapprove?
 W-Well, it's just… kind of weird. 
-Hmph! You have no understanding of women, Mr. Ensign! 
-Well fine! I'll go back to my usual way of talking. 
+Hmph! You have no understanding of women, <br> Mr. Ensign! 
+Well fine! I will go back to my usual way of talking. 
 All right, that'll do for now. 
 Great work, the both of you. You were magnificent. 
-Really? Heehee, I can't wait for the finished piece! 
+Really? Heehee, I cannot wait for the finished piece! 
 Today was just the sketch. I still need to color it, refine it… There's still a ways to go. 
 Huh? But I want to see it now! 
 Hahaha, come on, Orihime, we can wait and have something to look forward to. 
@@ -795,7 +795,7 @@ The Soaring Whale is en route to your location. Return here ASAP!
 Get back to the theater immediately, you two! 
 Roger, ma'am! 
 Mr. Ensign, we have to go, quickly! 
-I don't know who these guys think they are… 
+I don't know who these people think they are… 
 But I will slap whoever decided to interrupt Papa and Mamma's long-awaited reunion!
 Yeah. We have to regroup with the Flower Division, stat. 
 …So you're leaving, Orihime? 
@@ -817,7 +817,7 @@ Papa, Mamma, I'll be fine. Mr. Ensign is with me!
 Let's go, Orihime. Everyone's waiting for us. 
 Roger that! All right Papa, Mamma, I'll see you later! 
 I can't wait to see the finished picture, Mr. Ogata. 
-…Yes, of course! Look forward to it! 
+…Yes, of course! <br> Look forward to it! 
 Mr. Ensign… <br> I can't wait to see our picture, either. 
 Yeah, but before that, we've got a job to do. 
 Roger that! All right Papa, Mamma, I'll see you later! 

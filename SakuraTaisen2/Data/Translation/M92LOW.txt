@@ -1,5 +1,5 @@
 This beginner drill is a battle at Uguisudani. Your objective is to defeat the enemy Hex Mech, Hachiyou.
-The intermediate drill is a battle at Ikebukuro. Your objective is to use the Tenbu to defeat Chiken.
+The advanced drill is a battle at Ikebukuro. Your objective is to use the Tenbu to defeat Chiken.
 The expert drill is a virtual battle in Musashi. Your objective is to defeat Kongou's mech, Dainichiken.
 A mock battle against other Koubu Kai in front of the theater. Your objective is to defeat the mock Ogami.
 Commencing the special drill. Select a rank with your cursor to view the combat data for each rank.
@@ -16,13 +16,13 @@ You can view the combat data for the 3rd place score for the expert drill.
 Here are the 1st place results for the expert drill.
 Here are the 2nd place results for the expert drill.
 Here are the 3rd place results for the expert drill.
-Commencing the intermediate drill. Select a rank with your cursor to view the combat data for each rank.
-You can view the combat data for the 1st place score for the intermediate drill.
-You can view the combat data for the 2nd place score for the intermediate drill.
-You can view the combat data for the 3rd place score for the intermediate drill.
-Here are the 1st place results for the intermediate drill.
-Here are the 2nd place results for the intermediate drill.
-Here are the 3rd place results for the intermediate drill.
+Commencing the advanced drill. Select a rank with your cursor to view the combat data for each rank.
+You can view the combat data for the 1st place score for the advanced drill.
+You can view the combat data for the 2nd place score for the advanced drill.
+You can view the combat data for the 3rd place score for the advanced drill.
+Here are the 1st place results for the advanced drill.
+Here are the 2nd place results for the advanced drill.
+Here are the 3rd place results for the advanced drill.
 Commencing the beginner drill. Select a rank with your cursor to view the combat data for each rank.
 You can view the combat data for the 1st place score for the beginner drill.
 You can view the combat data for the 2nd place score for the beginner drill.
@@ -54,7 +54,7 @@ Good luck, Ogami!
 I know I can count on you, Ogami!
 Don't be reckless, Ogami…
 I'll do my best!
-For you, Ogami… I'll do anything!
+For you, Ogami… <br> I'll do anything!
 I have to try my hardest!
 I won't… lose…
 …Thank you, Ogami.

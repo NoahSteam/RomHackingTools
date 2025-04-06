@@ -5,8 +5,8 @@ Hey, Mon Frère?
 Hm? What is it, Iris? 
 I was playing cards just now in the back of the bus, with Sakura and the others. 
 If you want, you and Maria can come join us! 
-Oh, me too? What game are we playing? 
-We're playing Tycoon. You two seem like you'd be great at it! 
+Oh, me too? <br> What game are we playing? 
+We're playing Tycoon. <br> You two seem like you'd be great at it! 
 Come on, Mon Frère, play with us! 
 Sure, let's play! 
 What are the rules? 
@@ -20,7 +20,7 @@ Tycoon, huh? Could you tell me the rules?
 Sure. I'll explain it as simply as I can. 
 The least we could do is join them, Captain. 
 Yeah, you're right. OK, once you've explained the rules, let's play! 
-Hmm… Let's not. I was hoping to take a nap before we reach Atami. 
+Hmm… Let's not. <br> I was hoping to take a nap before we reach Atami. 
 Huhhh? Boring… 
 He can't help it if he's tired, Iris. 
 We'll play a round of Old Maid with Saki instead, all right? 
@@ -49,12 +49,12 @@ Hahaha, thanks.
 That wasn't bad, Ogami. 
 Well, that's the way it goes, I guess. 
 But it was a great way to pass the time all the same. 
-That was fun, Mon Frère! Let's play again sometime! 
+That was fun, Mon Frère! <br> Let's play again sometime! 
 That's too bad, Ogami. 
 Oof, that wasn't great. 
 Cheer up, Mon Frère. 
 It's all a matter of luck… 
-You're right. Thanks, everyone. 
+You're right. <br> Thanks, everyone. 
 Yo, Boss! <br> We're almost there! 
 Really? Time sure flew by. 
 We'll be able to see the ocean shortly. 
@@ -74,16 +74,16 @@ Hmmmm… We just got here. I'd like to take a break first.
 C'mon, Boss, don't be such a downer. 
 We might as well have a look, Ogami. 
 A walk and a breath of fresh ocean air should do us some good. 
-Yeah, Mon Frère! Let's go to the beach! 
+Yeah, Mon Frère! <br> Let's go to the beach! 
 Well, if you all insist… Why not? 
 Hmmm… What should I do? 
 C'mon, Boss, we've got plenty of time before dinner. 
 A walk will get us nice and hungry, and we'll be back just in time to eat! 
-Yeah, Mon Frère! Let's go to the beach! 
+Yeah, Mon Frère! <br> Let's go to the beach! 
 You're right. OK, let's go. 
 Alrighty then, let's drop off our bags and head to the beach. 
 The beach, huh? Can't wait. 
-Oh, yeah… You probably never went to the beach much in Russia, did you, Maria? 
+Oh, yeah… <br> You probably never went to the beach much in Russia, did you, Maria? 
 That's right. It's so cold in Russia, going to the beach would be ludicrous. 
 Heh! That means now's your chance! 
 OK, Flower Division, to the beach! Move out! 
@@ -128,7 +128,7 @@ I can't wait to get back and take a shower.
 Heehee, don't you mean go in the hot springs, Orihime? 
 Alrighty, let's go. <br> We'll go on ahead, Chief. 
 Sure. I'll be right there. 
-The sea… It sure brings me back to my time in the Navy. 
+The sea… <br> It sure brings me back to my time in the Navy. 
 Yo, Ogami! 
 Wh-Who's there?! 
 K-Kayama?! 
@@ -177,11 +177,11 @@ How dare you trick me, Mr. Ensign!
 N-No, I just think you should enjoy its pure flavor without adding anything to it… 
 Enough of your excuses! 
 You add some soy sauce and a little wasabi to it, then eat it. 
-Hmm… Well, here goes nothing. 
+Hmm… <br> Well, here goes nothing. 
 … 
 Urk! My nose! It stings! 
 Hahaha, that's the wasabi. The tingling feels nice, doesn't it? 
-Phew… It's so intense, my eyes are starting to water. 
+Phew… <br> It's so intense, my eyes are starting to water. 
 But it has a fresh flavor you do not find in Europe. I think I like it. 
 It's decorative, you don't eat it. 
 Really? Kohran seems to be enjoying it, though. 
@@ -197,15 +197,15 @@ Huh? Are you sure, Iris?
 Mamma mia, and now you're leeching off of a child? You're terrible. 
 C'mon, Orihime, stop bullying the chief so much. 
 Orihime, you eat sashimi with soy sauce and a little wasabi. 
-Hmm… Well, here goes nothing. 
+Hmm… <br> Well, here goes nothing. 
 … 
 Urk! My nose! It stings! 
 That's the wasabi kicking in. Startled me, too, the first time I tried it. 
 Once you get used to it, though, you can't get enough of that tingling sensation! 
-Phew… It's so intense, my eyes are starting to water. 
+Phew… <br> It's so intense, my eyes are starting to water. 
 But it has a fresh flavor you do not find in Europe. I think I like it. 
-Heehee… Looks like you don't have any problem with wasabi at all, Reni. 
-Wasabi… A perennial herb of the Brassicaceae family. Its roots contain irritants. 
+Heehee… <br> Looks like you don't have any problem with wasabi at all, Reni. 
+Wasabi… <br> A perennial herb of the Brassicaceae family. Its roots contain irritants. 
 So long as you can receive nutrition from it, it doesn't matter how it tastes. 
 Same as ever, I see, Reni… 
 Hey! I need a refill! 
@@ -218,7 +218,7 @@ By the way, where's the bedroom?
 In a traditional Japanese inn like this, Orihime, we roll out futons and sleep on the floor together. 
 Huh?! Together?! You mean with Mr. Ensign, too?! 
 O-Of course not! I'm sleeping in a different room! 
-Well, why not? Let's all sleep together. How about it, Ogami? 
+Well, why not? <br> Let's all sleep together. <br> How about it, Ogami? 
 Well, if you insist… 
 That's a bad idea. 
 Well, if you insist… 
@@ -244,7 +244,7 @@ How amusing. Just don't come crying to me once this is over.
 N-Now hold on, everyone! 
 Relax, it'll be fine. <br> OK, ready? Begin! 
 BWAH! Who did that?! Who threw that pillow at me outta nowhere?! 
-Hahaha! Gotta stay frosty, Kohran! 
+Hahaha! <br> Gotta stay frosty, Kohran! 
 All right, Sumire! Time for us to counterattack! 
 It seems push has come to shove! Prepare yourselves! 
 Look out! 
@@ -347,11 +347,11 @@ All right then, let's all go to bed for the night.
 We can play around as much as we want outside, OK? 
 Yes, ma'am! Let's roll out the futons, then. 
 Sorry for speaking so harshly, sir. 
-It's OK, Maria. You were right. 
+It's OK, Maria. <br> You were right. 
 I'll head over to my room, then. Good night, everybody. 
 Good night, Mon Frère! 
 Good night, Captain. 
-Phew… What a day it's been. 
+Phew… <br> What a day it's been. 
 Still, it was pretty fun. 
 Now to get a good night's sleep to prepare for tomorrow. 
 (I can hear waves…) 
@@ -404,7 +404,7 @@ All of you, knock it off! I was just trying to get some sleep!
 It's late. Go back to your room and go to bed! 
 The captain's right! 
 Out with it, Ogami! 
-Out with what? I didn't do anything… 
+Out with what? <br> I didn't do anything… 
 Sumire, didn't I just say not to cause a ruckus? 
 All of you are being too noisy! What time do you think it is? 
 But Maria… 
@@ -417,7 +417,7 @@ Good grief… A noisy day to the very end.
 I wonder… how… tomorrow… will be… 
 *yawn* <br> Now I… really feel… sleepy… 
 Mm… Zzz… 
-Mmm… Morning, huh? The weather outside seems nice, at least. 
+Mmm… Morning, huh? <br> The weather outside seems nice, at least. 
 Right, now to get changed and meet up with the others. 
 Ah, good morning, Ogami! 
 Morning, everyone. <br> Nice weather outside. 
@@ -438,7 +438,7 @@ Yaaay, Mon Frère's coming with us! Isn't that great, Reni?
 …I guess. 
 I'll go to the mountains. Hiking's pretty fun, every now and then. 
 Right? We're going to the beach tomorrow, anyway! 
-Oh? If Mr. Ensign is coming, then maybe I should stay here. 
+Oh? <br> If Mr. Ensign is coming, then maybe I should stay here. 
 C'mon, don't be like that! Let's all get along! 
 I think I'll stay at the inn and relax in the hot spring. 
 I see, so you'll be here with us, then. 

@@ -1,4 +1,4 @@
-The town's in ruins… This must be the work of Kasha's bombs.
+The town's in ruins… <br> This must be the work of Kasha's bombs.
 Even bombs weren't originally invented to kill people, y'know…
 Kohran, your inventions…
 Can make people happy.
@@ -7,7 +7,7 @@ Aren't a big deal, relax.
 They can make a lot of people happy. The others always have fun with your inventions, right?
 I-I'm so happy to hear you say that… That sorta praise is all a scientist could ever ask for.
 They're nothing but trouble. How many times, now, have I been victimized by your inventions?
-Hahaha… It's true, they do tend to blow up whenever you touch them.
+Hahaha… <br> It's true, they do tend to blow up whenever you touch them.
 Say, you think YOU might be the reason they always do that, Chief?
 Eep! <br> O-Of course not, Kohran…
 They aren't a big deal, so relax. They've never made me suffer enough to make me unhappy, at least.

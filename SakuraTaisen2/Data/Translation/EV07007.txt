@@ -12,7 +12,7 @@ Reni! I'm not your enemy!
 Not my enemy…? <br> Then… <br> What are you?!
 …
 Why aren't you attacking me…? We are enemies.
-If you won't attack me… Then I'll attack you instead.
+If you refuse to engage… Then I'll attack you instead.
 …Rrgh!
 Attack.
 Reni… <br> Here I come!
@@ -22,8 +22,8 @@ Do you really want to hurt your precious squadmate?
 …Rrgh!
 …
 …
-…Why! Why aren't you… attacking me?! I'm your… enemy!
-You're wrong, Reni! We aren't enemies!
+…Why! <br> Why aren't you… attacking me?! I'm your… enemy!
+You're wrong, Reni! <br> We aren't enemies!
 If not… <br> Then… <br> Then… 
 Then… <br> What the hell are you?!
 Reni, we're…
@@ -31,11 +31,11 @@ Your comrades in arms!
 Your partners on stage!
 We're your comrades in arms!
 Com… rades…
-That's right, Reni! We're comrades, in the Flower Division!
+That's right, Reni! <br> We're comrades, in the Flower Division!
 Urgh… Guh…
 We're your partners on stage!
 Stage…
-Have you forgotten, Reni?! You rehearsed The Blue Bird with the others!
+Have you forgotten, Reni?! You rehearsed "The Blue Bird" with the others!
 We're all part of the Flower Division, remember?!
 Urgh… Guh…
 Reni, we're…

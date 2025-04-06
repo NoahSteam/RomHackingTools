@@ -70,7 +70,7 @@ I see. Good luck, Tsubomi.
 Yes! Thank you very much! 
 …Huh? I think I smell something burning. 
 Aaah! <br> I left a pot on the stove! 
-Hey Tsubomi! You’re going the wrong way! The kitchen is over here!
+Hey Tsubomi! <br> You’re going the wrong way! The kitchen is over here!
 Aaah, I got all mixed up! Thank you very much! Please, excuse me!
 Oh boy… She’s still her usual clumsy self.
 Ah, Mr. Ogami! <br> Good afternoon! 
@@ -85,7 +85,7 @@ No one's in the kitchen.
 Everyone must be at the stage right now. 
 The theater is closed until Christmas, so this room is also closed. 
 I hope we'll get a lot of guests come showtime. 
-Oh, Ogami. Do you need something?
+Oh, Ogami. <br> Do you need something?
 You came here to listen to my gossip, right, Ogami?
 My, you came here like clockwork, Ogami. 
 If you're interested in hearing more gossip, I'm all out. Sorry. 
@@ -93,7 +93,7 @@ I see… That's too bad.
 I'll have some more interesting tidbits to share another time, so look forward to it!
 Hello, Yuri, Kasumi. 
 Oh, hello, Ogami. Is there something you need? 
-I've got plenty of new, juicy gossip for you. Ask away! 
+I've got plenty of new, juicy gossip for you. <br> Ask away! 
 Listen to some gossip. 
 I'll come back later. 
 Keigo Kyogoku… To think that he would end his own life! 
@@ -103,7 +103,7 @@ I was shocked, too. No one would have guessed that the Army Minister led an evil
 Guess it's like they say, truth is stranger than fiction. 
 I’ve heard things have settled down at the Army since all the chaos last month. 
 A new minister has been appointed, and all of Kyogoku's officers have been purged. 
-Is that so? Glad to hear it.
+Is that so? <br> Glad to hear it.
 Boy, it was really snowy back when that coup happened. 
 I’ve heard that political turmoil has often occurred during snowfall throughout Japan’s history.
 The revenge of the 47 ronin… The Sakuradamon Incident… All of them happened on snowy days. 
@@ -114,7 +114,7 @@ Why wasn't I the one to go? We're both Wind Division.
 I wonder if she was chosen because, among the Wind Division, she has the least amount of experience.
 Anyone would grow after a mission like that. 
 Well, when you put it that way, you may be right.
-Hmph. But still, she got to go to Hokkaido… I’m so jealous.
+Hmph. <br> But still, she got to go to Hokkaido… I’m so jealous.
 I was wondering, Ogami, what do you know about sailor suits? 
 Ah, you mean the clothes seamen wear onboard ships. I wore one during my training.
 What about them?
@@ -132,7 +132,7 @@ Television?
 Ah, you mean that system for sending moving pictures across electromagnetic waves. It was in the paper.
 As I understand, the first test broadcast was successfully conducted in England…
 According to the article, in the future, we'll have broadcasting stations much like we have with radio.
-Heh, is that so? Sounds just like Kohran's Kinematron.
+Heh, is that so? <br> Sounds just like Kohran's Kinematron.
 Seems like Kohran's ahead of the curve compared to England. 
 By the way, Nippon Railway has begun operating the "Yamanote Loop."
 Ah, you mean the Yamanote railway line.
@@ -143,13 +143,13 @@ You’re right. I’ll have to try it out the next chance I get.
 If you're interested in hearing more gossip, I'm all out. Sorry. 
 I see… That's too bad. 
 I'll have some more interesting tidbits to share another time, so look forward to it! 
-I'll be back. Good luck with the rest of your work. 
-OK. Thanks for coming, Ogami. 
+I'll come back another time. Good luck with your work.
+OK. <br> Thanks for coming, Ogami. 
 Let us know if you hear any juicy stories!
 All right… Now, where should I go next? 
 I wonder if Mr. Yoneda is in his office. 
 I better check another room, I guess. 
-It's Ogami. Are you there, Mr. Yoneda? 
+It's Ogami. <br> Are you there, Mr. Yoneda? 
 Oh, Ogami. Yeah, come on in. 
 Right. Pardon me. 
 Yo, Ogami. Need something? 
@@ -257,7 +257,7 @@ Wrong answer! Kohran's birthday is March 3rd!
 December 24th is Reni's birthday. 
 Oh, is that so? 
 Let’s see… <br> Is it you, Iris?
-…Mon Frère! My birthday is July 5th!
+…Mon Frère! <br> My birthday is July 5th!
 O-Oh, that’s right… S-Sorry.
 Ohohohoho… It appears you’ve completely forgotten Iris’s birthday, haven't you, Ensign?
 Oooh, I hate you, Mon Frère! 
@@ -277,7 +277,7 @@ Wrong answer! Orihime's birthday is July 7th!
 December 24th is Reni's birthday. 
 Oh, is that so? 
 Let’s see… <br> Is it Reni?
-You got it! Way to go, Mon Frère! 
+You got it! <br> Way to go, Mon Frère! 
 Hahaha. Well, it’s only natural for the captain to know everyone’s birthdays.
 Time's up! <br> Too bad, Mon Frère. 
 December 24th is Reni's birthday, Ensign. 
@@ -308,7 +308,7 @@ Ah, Ogami!
 Are you preparing props for the play? 
 Yes. We're inspecting the props and sets for "The Miracle Bells." 
 We only have three weeks until the performance, after all. 
-I see… It's December already, huh. 
+I see… <br> It's December already, huh. 
 Oh, yes. Now that it's December, I just remembered something I wanted to ask. 
 I have heard this month has another name in the old Japanese calendar. 
 What's it called? 
@@ -319,7 +319,7 @@ It's called "Shisou."
 Oh… Shisou, huh? 
 O-Ogami, you got it wrong! 
 The 12th month of the old lunisolar calendar is called "Shiwasu."
-Oh, so you lied? Quit acting like you know things when you clearly don’t, Mr. Ensign.
+Oh, so you lied? <br> Quit acting like you know things when you clearly don’t, Mr. Ensign.
 I-Is that what it was? Whoops. 
 It's called "Shiwasu." 
 Oh… Shiwasu, huh? 
@@ -327,7 +327,7 @@ It's called "Shibashiri."
 Oh… Shibashiri, huh? 
 O-Ogami, you got it wrong! 
 The 12th month of the old lunisolar calendar is called "Shiwasu."
-Oh, so you lied? Quit acting like you know things when you clearly don’t, Mr. Ensign.
+Oh, so you lied? <br> Quit acting like you know things when you clearly don’t, Mr. Ensign.
 I-Is that what it was? Whoops. 
 Uh… What was it called again? 
 The 12th month of the old lunisolar calendar is called "Shiwasu."
@@ -366,7 +366,7 @@ Are you hiding something?
 Why are you only doing prep work?
 That’s because, you know, we have to wait for a certain someone to give us the final set directions.
 Kohran… 
-…Ah, oops. The rest is still a secret.
+…Ah, oops. <br> The rest is still a secret.
 Captain, we still have some work to do, so… 
 If you don't mind, could you please check on the others?
 Yeah, that's a great idea! I think everyone else is either in the dressing or prop room.
@@ -376,13 +376,13 @@ Anyway, I guess I should go to another room.
 I can't wait to see what kind of set it will be. 
 Ahaha! I’m also looking forward to it. What about you, Maria?
 Heh, I feel the same.
-Alrighty then, Maria. Let’s get back to work.
+Alrighty then, Maria. <br> Let’s get back to work.
 Well, Captain. I’m afraid we still have a lot to do.
 Yeah, good luck. 
 Everyone is really giving it their all for this Christmas performance. 
 OK. I should do the same and sharpen up my ticket collecting skills.
 Are you two hiding something? The way you're laughing is making me curious. 
-Eh? Chief… You're pretty sharp.
+Eh? <br> Chief… You're pretty sharp.
 Kohran. We can’t say anything yet, remember?
 Captain, we still have some work to do, so… 
 If you don't mind, could you please check on the others?
@@ -391,14 +391,14 @@ I-Is that so?
 Indeed. So please, go visit them, Captain.
 I can’t help but feel like I was just kicked out.
 Anyway, I guess I should go to another room. 
-…OK then, Maria. Let’s get back to work.
+…OK then, Maria. <br> Let’s get back to work.
 …All right. 
 Captain, we still have some work to do, so… 
 If you don't mind, could you please check on the others?
 Yeah, you're right. OK then, keep at it, you two. 
 Thanks, Chief! 
 Thank you for visiting us, Captain.
-Everyone is really giving it their all for this Christmas performance.. 
+Everyone is really giving it their all for this Christmas performance. 
 OK. I should do the same and sharpen up my ticket collecting skills.
 Maria… If we put that there, won't it make it harder for the audience to see? 
 Hmm… It's a bit hard to say. 
@@ -469,7 +469,7 @@ I just talked with everyone in here earlier.
 I'm sure they're at the stage right now. 
 No one's playing games before the performance, just as I thought. 
 I'm sure everyone's doing rehearsals on the stage right now. 
-Phew… Being in my own room is quite relaxing. 
+Phew… <br> Being in my own room is quite relaxing. 
 Now, what should I do… 
 Make a call. 
 Maybe next time. 
@@ -619,7 +619,7 @@ I was surprised to see that the Rose Division was protecting the Regalia…
 Aaah, Ichiro! Welcome! 
 Even though we have nothing to guard now that the Pandemonium Regalia is gone…
 We’ve decided to stay here a bit longer and support you guys!
-Ogami… I’m so happy… I can stay here with you…
+Ogami… I’m so happy… <br> I can stay here with you…
 R-Right… 
 Anyway, there's one thing I'd like to ask you, Ensign Ogami… 
 Deep down, do you harbor any regrets about destroying the Regalia?
@@ -628,7 +628,7 @@ I do have some regrets.
 No, I don’t have any regrets.
 We can protect Tokyo with our own strength, without relying on the power of the Regalia…
 Even now, my mind hasn't changed. 
-Wow! You're so cool, Ichiro! 
+Wow! <br> You're so cool, Ichiro! 
 That's wonderful to hear, Ogami… 
 We're relieved to hear that answer, Ensign Ogami… 
 The truth is… I do have some regrets.
@@ -669,13 +669,13 @@ Ah! It’s already past 4:45! Where'd the time go?
 I forgot I had an appointment with Kaede! 
 I gotta hurry to her room. I hope she'll forgive me for being a little late. 
 Uhm… Ogami… 
-Hi, Kasumi. Do you need something? 
+Hi, Kasumi. <br> Do you need something? 
 Well… If you have the time, do you think you could help me sort receipts later today?
 You can come to the secretarial office at 5 o'clock. 
 Sorting receipts, huh…
 I'm sure you're busy. If it turns out you don't have time, that's quite all right. 
 Well, excuse me for now. 
-5 o'clock at the secretarial office. What to do? 
+5 o'clock at the secretarial office. <br> What to do? 
 Ogamiiii. Wait up! 
 Do you need something, Yuri? 
 Ogami, can I ask you for a little help? 
@@ -687,10 +687,10 @@ I'll leave it up to you, OK? Just come by if you’re free.
 Ah, Yuri! 
 Oh boy… Both of them want my help at 5 o'clock. Talk about bad timing.
 Oh, right! Ogami, wait up. 
-Tsubaki… Don’t tell me. Do you need help with something?
+Tsubaki… Don’t tell me. <br> Do you need help with something?
 Ogamiii! 
 Tsubaki… Don’t tell me. Do you need help with something?
-Eehh?! How’d you know, Ogami?
+Eehh?! <br> How’d you know, Ogami?
 I was planning to arrange some merchandise at 5 o'clock to prepare for the Christmas performance. 
 I was thinking about asking you for help, if that’s all right with you, Ogami.
 (Of all the times, even Tsubaki needs me at 5…)

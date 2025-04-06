@@ -34,7 +34,7 @@ I will protect Tokyo and everyone in the Flower Division… This I promise!
 Well said, Ogami. That's why you’re captain of the Flower Division. 
 I’m trying my best, sir…
 Believe in yourself, Ogami. 
-Your actions…<br>Your words…<br>They will give confidence to everyone else.
+Your actions… Your words… They will give confidence to everyone else.
 I want to, but I’m not sure I can…
 …Ogami. Your words and actions will give everyone confidence.
 I know you can do it. Believe in yourself, Ogami.
@@ -57,13 +57,13 @@ But I…
 Keep it together, Ogami. 
 Only you can save Sakura from her doubt and pain… 
 … 
-Come, Ogami. Won’t you speak to her?
+Come, Ogami. <br> Won’t you speak to her?
 …OK.
 … 
 Ogami, please go to her.
 Only you can save Sakura from her doubt and pain… 
 … 
-Please, Ogami. Talk to Sakura.
+Please, Ogami. <br> Talk to Sakura.
 …OK.
 Right, then… <br> I’ll go have a talk with Sakura.
 Thank you, Ogami. <br> We’re counting on you.
@@ -76,7 +76,7 @@ Sakura…
 But… 
 I… I can’t go yet… <br> I don’t want to die!
 I want to live like a normal girl and be with the people I love! I want to stay here with everyone! 
-Ogami… Does that… make me selfish?
+Ogami… <br> Does that… make me selfish?
 Sakura… 
 Embrace her. 
 Sakura! 
@@ -99,7 +99,7 @@ Ogami, please! Hold me tight and don't let go!
 If you don't, I… I don't know what I'll do! I feel like I might die!! 
 … 
 Everything's going to be all right, Sakura. You don't have to suffer anymore. 
-I've made up my mind. I'm going to destroy the Regalia! 
+I've made up my mind. <br> I'm going to destroy the Regalia! 
 Huh?! O-Ogami?! 
 This Regalia has been the source of all kinds of suffering, time and time again. 
 I can still protect everyone, even without relying on this thing's power! 
@@ -133,7 +133,7 @@ Course you are! <br> We don't need to sit around debatin’ it.
 Who cares about that Regalia or whatever? <br> Non ne abbiamo bisogno! <br> We don’t need it!
 We won’t let you play the role of the tragic heroine all on your own! 
 All of us together make up the Flower Division. We're not gonna leave anyone behind. 
-That's right! Come on, Sakura. Smile, smile! 
+That's right! <br> Come on, Sakura. <br> Smile, smile! 
 E-Everyone… 
 Our fight isn't over yet. 
 Yes. She's right, Sakura. 

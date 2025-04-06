@@ -14,7 +14,7 @@ We're sticking with the current strategy!
 Understood!
 Everyone who deployed beforehand has been trapped in a barrier.
 The barriers don't seem to be very powerful, so you should be able to save them with the Tenbu.
-Rescue the other Flower Division members, and destroy the enemy Hex Mechs!
+Rescue the other Flower Division members, and destroy the Kouma!
 Pass through the gate and defeat Tsuchigumo!
 The enemy general, Tsuchigumo, is capable of multiple continuous attacks. Be careful!
 <LEAVE> 0 Message 2-3
@@ -165,7 +165,7 @@ Sheesh, you're hopeless!
 I can't take it anymore!
 I have to retreat. I can't keep going… Captain…
 Not bad!
-That was super cool, Mr. Ensign!
+That was super cool, <br> Mr. Ensign!
 That was easy!
 Heehee! Give me a big round of applause!
 We're an unstoppable duo!
@@ -196,7 +196,7 @@ You'll burn brilliantly…
 Prepare yourselves.
 Ahahahahaha!
 I'll burn you to a crisp!
-You… Pieces of trash…
+You… pieces of trash…
 I'll show you what I've got.
 I'll be gentle.
 Hm hm hm… I won't lose.

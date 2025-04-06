@@ -1,9 +1,9 @@
 ﻿Phew, a new member arrived today, and we fought a battle. This has been quite a day. 
 (Hm? It seems like someone's here.) 
-Um… It's Sakura. Is now a good time, Ogami? 
+Um… It's Sakura. <br> Is now a good time, Ogami? 
 Sakura? The door's unlocked, so come in. 
 All right. Pardon me. 
-Nice work today. What did you need? 
+Nice work today. <br> What did you need? 
 It's about Reni's welcome party… 
 It was interrupted partway through due to the Black Demon Society's attack. 
 I thought perhaps we could continue the party in the salon. 
@@ -26,13 +26,13 @@ Yeah! I brought some sweets with me.
 Ah, these are Lindt French biscuits, are they not? I will have one, thank you!
 Hey, Reni, you try one, too! 
 … 
-What do you think? Yummy, right? 
+What do you think? <br> Yummy, right? 
 …It has little nutritional value. 
 Th-That's Reni for you… 
 How did you come upon these sweets, Iris? 
 Well you see, my papa sent them to me, along with a letter he wrote!
 Oh, your parents in France mailed them to you. I was just thinking how rare it is to see sweets like this.
-Yep! I love my papa a whole lot! 
+Yep! <br> I love my papa a whole lot! 
 … 
 How wonderful, Iris. 
 Who do you like more? 
@@ -49,7 +49,7 @@ Ogami, it's a little mean of you to tease her like that.
 Y-Yeah, you're right. Sorry, Iris. 
 It's OK! I love both you and my papa a whoooole bunch! 
 …Orihime, is something wrong? That look on your face… 
-It is nothing. Nothing at all. 
+…It is nothing. <br> Nothing at all. 
 A letter from your father, huh… 
 (Oh, that's right, Sakura's father has already passed away.) 
 Oh… Sorry, Sakura. 
@@ -96,7 +96,7 @@ Y-Yeah… I'm fine.<br>
 Where's Iris?! 
 She rushed out of the room by herself… 
 What in the world was all of that? 
-Spirit power. And a tremendous amount of it, at that. 
+…Spirit power. <br> And a tremendous amount of it, at that. 
 Yes, that's it exactly. The very same power that allows us to pilot the Koubu… 
 When Iris gets too worked up, she has trouble controlling her powers. 
 We had an incident in Asakusa a while back because of that. 
