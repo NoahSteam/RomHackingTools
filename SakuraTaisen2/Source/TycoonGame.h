@@ -29,11 +29,11 @@ KinematronEncodingKeyInfo GTycoonKeyEntries[] =
 	0x28b800,   0x2df4,
 	0x28e800,   0x2df4,
 	0x294800,   0x2df4,
-	0x2d9800,   0x12904,		
+	0x2d9800,   0x12904,
 	0x2fa800,   0x12904,
 	0x304800,   0x12904,
 	0x2ec800,   0x12904,
-	
+
 	//Found later
 	0x114800,   0x1000c,
 };
@@ -542,6 +542,7 @@ bool PatchTycoonIntroLogoOrientation(char* InData)
 {
 	bool bResult = true;
 
+	//Title screen graphics updates.
 	bResult = UpdateTycoonValue(InData, 0x1161, 0x38, 0x40);
 	bResult = UpdateTycoonValue(InData, 0x1163, 0x30, 0x38);
 	bResult = UpdateTycoonValue(InData, 0x116a, 0x2a, 0x1c);
@@ -554,10 +555,10 @@ bool PatchTycoonIntroLogoOrientation(char* InData)
 	bResult = UpdateTycoonValue(InData, 0x117e, 0x0e, 0x0a);
 	bResult = UpdateTycoonValue(InData, 0x117f, 0x00, 0x80);
 
+	//Title screen draw command updates
 	bResult = UpdateTycoonValue(InData, 0xafcf, 0x35, 0x45);
 	bResult = UpdateTycoonValue(InData, 0xafed, 0x3b, 0x38);
 	bResult = UpdateTycoonValue(InData, 0xafef, 0x55, 0x56);
-
 	bResult = UpdateTycoonValue(InData, 0xb00d, 0x58, 0x48);
 	bResult = UpdateTycoonValue(InData, 0xb00f, 0x58, 0x56);
 	bResult = UpdateTycoonValue(InData, 0xb02d, 0x74, 0x60);
@@ -566,6 +567,19 @@ bool PatchTycoonIntroLogoOrientation(char* InData)
 	bResult = UpdateTycoonValue(InData, 0xb04f, 0x4c, 0x44);
 	bResult = UpdateTycoonValue(InData, 0xb06d, 0xb8, 0xb0);
 	bResult = UpdateTycoonValue(InData, 0xb06f, 0x44, 0x4c);
+
+	//Second set of title screen draw commands because of course the game draws the same thing twice.
+	bResult = UpdateTycoonValue(InData, 0xb10f, 0x35, 0x45);
+	bResult = UpdateTycoonValue(InData, 0xb12d, 0x3b, 0x38);
+	bResult = UpdateTycoonValue(InData, 0xb12f, 0x55, 0x56);
+	bResult = UpdateTycoonValue(InData, 0xb14d, 0x58, 0x48);
+	bResult = UpdateTycoonValue(InData, 0xb14f, 0x58, 0x56);
+	bResult = UpdateTycoonValue(InData, 0xb16d, 0x74, 0x60);
+	bResult = UpdateTycoonValue(InData, 0xb16f, 0x55, 0x52);
+	bResult = UpdateTycoonValue(InData, 0xb1ad, 0x91, 0x80);
+	bResult = UpdateTycoonValue(InData, 0xb1af, 0x4c, 0x44);
+	bResult = UpdateTycoonValue(InData, 0xb1cd, 0xb8, 0xb0);
+	bResult = UpdateTycoonValue(InData, 0xb1cf, 0x44, 0x4c);
 
 	return bResult;
 
