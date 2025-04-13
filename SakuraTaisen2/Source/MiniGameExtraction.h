@@ -94,7 +94,7 @@ const MiniGameMiscImageData MGRMImages[NumMgrmEntries] =
 };
 
 //Starting at 0xd420
-const int NumMgrnEntries = 9;
+const int NumMgrnEntries = 10;
 MiniGameMiscImageData MGRNImages[NumMgrnEntries] =
 {
 	1, 64, 16,  4, 0, 0,
@@ -106,10 +106,11 @@ MiniGameMiscImageData MGRNImages[NumMgrnEntries] =
 	1, 16, 16,  4, 0, 0,
 	1, 32, 16,  4, 0, 0,
 	1, 16, 16,  4, 0, 0,
+	1, 128, 64, 4, 0xc1a0,  0x30e34,
 };
 
 //Starting at 0xd420
-const int NumMgskEntries = 12;
+const int NumMgskEntries = 13;
 const MiniGameMiscImageData MGSKImages[NumMgskEntries] =
 {
 	3, 40,  16,  4, 0,       0,
@@ -124,6 +125,7 @@ const MiniGameMiscImageData MGSKImages[NumMgskEntries] =
 	3, 112, 48,  4, 0x1cd01, 0x38aa0,
 	3, 112, 48,  4, 0x1ec81, 0x38aa0 + 32,
 	6, 112, 48,  4, 0x20c01, 0x38aa0 - 32,
+	1, 128, 64,  4, 0xc1a0,  0x38f00,
 };
 
 struct CommonMinigameUIData
