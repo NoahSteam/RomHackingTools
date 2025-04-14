@@ -305,6 +305,11 @@ bool PatchTycoonRulesScreen(const std::string& inPatchedSakuraDirectory, const s
 	std::vector<int> packedIndices;
 	optimizedTileSet.GetTiledIndicesInSaturnFormat(packedIndices);
 
+	if( packedIndices.size() > 1120 )
+	{
+		printf("PatchTycoonRulesScreen: WARNING: Tycoon\\Rules.bmp has too many tiles!  Expected 1120, Got %i\n", (int)packedIndices.size());
+	}
+
 	cardFileData.WriteData(0x155040, optimizedTileSet.GetPackedTiles(), optimizedTileSet.GetPackedTileSize(), false);
 	cardFileData.WriteData(0x166800, (char*)packedIndices.data(), packedIndices.size()*sizeof(int), false);
 

@@ -381,7 +381,7 @@ bool OutputPatchedTycoonTutorialText(FileReadWriter& inCardFile, vector<SakuraSt
 	const size_t sizeLimit = 0x31a950 - 0x31829c;
 	if(numSingleBytesWritten > sizeLimit)
 	{
-		printf("WARNING: Tutorial text is over by %i bytes\n", numSingleBytesWritten - sizeLimit);
+		printf("WARNING: Tutorial text is over by %zi bytes\n", numSingleBytesWritten - sizeLimit);
 
 	}
 	//Output new entry table
