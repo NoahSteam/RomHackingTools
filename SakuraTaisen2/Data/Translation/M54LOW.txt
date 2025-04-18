@@ -32,13 +32,13 @@ Orihime Soletta, prior Star Division member. Piloting a rose armor, she is known
 Reni Milchstraﬂe. A combat professional, attacking accurately without a single wasted movement.
 Ogami's Koubu Kai. <br> Once defeated, the drill will come to an end.
 Koubu Kai, Sakura Model. Exceptionally fast, balanced in offense and defense.
-Koubu Kai, Sumire Model. Its attack power is average but its special attack range is unmatched.
-Koubu Kai, Maria Model. Can attack single targets from a distance. However, its defense is low.
-Koubu Kai, Kanna Model. The strongest at one-on-one combat in the whole Flower Division.
-Koubu Kai, Iris Model. Its attack power is weak, but it's the only unit with a healing special move.
+Koubu Kai, Sumire Model. <br> Its attack power is average but its special attack range is unmatched.
+Koubu Kai, Maria Model. <br> Can attack single targets from a distance. However, its defense is low.
+Koubu Kai, Kanna Model. <br> The strongest at one-on-one combat in the whole Flower Division.
+Koubu Kai, Iris Model. <br> Its attack power is weak, but it's the only unit with a healing special move.
 Koubu Kai, Kohran Model. Can attack multiple enemies from a distance, but its offense is fairly low.
 Eisenkleid, Orihime Model. Boasts the widest attack range, but is incapable of close-range attacks.
-Eisenkleid, Reni Model. Its offense is top of its class, but its defense is low in comparison.
+Eisenkleid, Reni Model. <br> Its offense is top of its class, but its defense is low in comparison.
 Thunder Cannon. Long-range artillery that boast high firepower and greater reach than the RO-type Wakiji.
 <LEAVE> Message 20
 Doesn't look like I need to cover anyone right now.

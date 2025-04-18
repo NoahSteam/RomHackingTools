@@ -197,7 +197,7 @@ bool PatchBattleSimulator(const string& inPatchedSakuraDirectory, const string& 
 
 		const int imageWidth = images[i].width;
 		const int imageHeight = images[i].height;
-		const int imageSize = imageWidth * imageHeight / 2;
+		const int imageSize = images[i].b4Bit ? imageWidth * imageHeight / 2 : imageWidth * imageHeight;
 		
 		const string translatedImage = translatedDir + std::to_string(i) + ext;
 
