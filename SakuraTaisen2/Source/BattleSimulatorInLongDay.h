@@ -51,6 +51,8 @@ const BattleSimImageInfo images[] =
 	0x1ec20, 24, 16, false,
 	0x1ec20, 24, 16, false,
 	0x1ec20, 24, 16, false,
+
+	0x23480, 16, 11, true,
 };
 
 void ExtractBattleSimVDP2(const std::string& inRootDirectory, const std::string& inOutputDirectory, const bool bInBmp)
