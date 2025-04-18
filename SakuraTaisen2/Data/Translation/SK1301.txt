@@ -4,27 +4,27 @@ It was a bright spring day like any other.
 Strange for Mr. Yoneda to summon me out of the blue like this… 
 What could he want with me? 
 Ah, Ogami? 
-Sakura? What are you doing here? 
+Sakura? <br> What are you doing here? 
 Mr. Yoneda told me to come here right away. 
 Huh?! Actually, I also got called down here… 
 What?! You too, Ogami? 
 Hmmm… <br> What's this all about? 
 Anyway, let's just hear what the manager has to say. 
 Oh my, is that you, Ensign? 
-Sumire? What are you doing here? 
+Sumire? <br> What are you doing here? 
 I received an urgent summons from Mr. Yoneda. 
 Huh, you too? I was also called down here by the manager. 
-Well now… What could this be about? 
+Well now… <br> What could this be about? 
 Hmm… Let's hear what the manager has to say. 
 …Captain? 
-Is that you, Maria? What are you doing here? 
+Is that you, Maria? <br> What are you doing here? 
 Yes, Mr. Yoneda summoned me to his office. 
 Huh, you too? I was also called down here by the manager. 
 What?! You as well, sir? 
 Hmm, why'd he ask both of us to come here at the same time? 
 Anyway, let's just hear what the manager has to say. 
 Huh? Well if it ain't the boss. 
-Yo, Boss. What are you doing here? 
+Yo, Boss. <br> What are you doing here? 
 I actually just got called down to meet with Mr. Yoneda. 
 Huh, you too? I was also asked to come to the manager's office. 
 So he summoned you as well, huh? 
@@ -40,15 +40,15 @@ Hahaha… <br> Let's go inside for now.
 Oh? Well if it ain't the chief. 
 Whatcha doing here, anyway? 
 Did you get in trouble and now the manager's making you stand outside his office? 
-O-Of course not! I'm not in grade school! 
+O-Of course not! <br> I'm not in grade school! 
 I was summoned by Mr. Yoneda. Don't know what for, though. 
-Say what?! Yoneda called me here too. 
+Say what?! <br> Yoneda called me here too. 
 Huh… Wonder why he called for both of us at the same time. 
 Kinda intriguing, huh? Anyway, we should hear what he has to say. 
-You're right. OK, let's head inside. 
+You're right. <br> OK, let's head inside. 
 Ah, Mr. Ensiiign! 
-Hey, Orihime. What are you doing here? 
-Yoneda called me here. Though I don't know what for. 
+Hey, Orihime. <br> What are you doing here? 
+Mr. Yoneda called me here. Though I do not know what for. 
 Huh?! I actually got called down here as well… 
 What?! You too? 
 If he called for the both of us, then… What could this be about? 
@@ -56,14 +56,14 @@ Maybe… He is wanting for us to get married, or something?
 I-I don't think that's it… 
 Anyway, let's go inside. 
 …Captain? 
-Hey, Reni. What are you doing here? 
+Hey, Reni. <br> What are you doing here? 
 I was summoned by Mr. Yoneda. 
 Huh? So was I, actually… 
 …You too, sir? 
 Calling us both at the same time… What could the manager want? 
 Anyway, let's go inside and hear what he has to say. 
 Mr. Yoneda, it's Ogami. 
-Oh, you're here? Come on in. 
+Oh, you're here? <br> Come on in. 
 Right. Pardon me. 
 Oh, so you two decided to show up together. 
 Yes, we ran into each other outside your office. 
@@ -72,7 +72,7 @@ Yes, we just so happened to meet outside your office.
 Yeah, we ran into each other outside your office. 
 Uh-huh! We ran into each other right in front of your door! 
 Yep, that's right. Just so happened to bump into each other outside your office. 
-That's right. We ran into one another before coming inside. 
+That is right. We ran into one another before coming inside. 
 We just happened to meet a moment ago. 
 I see… 
 Actually, there's two things I wanted to tell the both of you. 
@@ -84,7 +84,7 @@ The Navy is extremely impressed with how you led the troupe to victory while min
 Heheh, so, whaddaya think? 
 I'll give it my all!
 This doesn't feel real…
-Yessir! <br> I'll give it my all! Until my very last breath! 
+Yes, sir! <br> I'll give it my all! <br> Until my very last breath! 
 Whoa, whoa, still as uptight as ever, huh? 
 Well, I guess that's just how you are. 
 Y-Yes, sir. 
@@ -112,7 +112,7 @@ Congratulations, Captain.
 Maria… Thank you. 
 Thinking about all you've done, this was long overdue. 
 I hope you remain just as excellent of a captain. 
-Awright! That's awesome, Boss! 
+Awright! <br> That's awesome, Boss! 
 So you're a big fancy navy lieutenant now, huh? Wayda go! 
 Kanna… Thank you. 
 Loo-ten-int… <br> Is that better than ensign? 
@@ -124,7 +124,7 @@ Not bad, Chief! Way to go, getting promoted to lieutenant!
 Well, this was way overdue anyway. For real, congrats! 
 Kohran… Thanks. 
 How amazing, Mr. Ensign! Perhaps I have to start calling you "Mr. Lieutenant" now, hm? 
-Congratulations… Mr. Lieutenant! 
+Congratulations… <br> Mr. Lieutenant! 
 Thanks, Orihime. Hahaha… You're making me blush. 
 That's great, Captain. 
 I'm glad your hard work is being recognized, sir. 
@@ -138,7 +138,7 @@ Huh?!
 Then that means… <br> Ogami is… 
 Th-That means… <br> It can't be… 
 Th-Then that means… 
-Wh-What?! Hold on, you don't mean… 
+Wh-What?! <br> Hold on, you don't mean… 
 Huh?! Then… <br> Then Mon Frère… 
 S-Say what?! Then that means the chief's… 
 P-Paris?! <br> Then that means… No… 
@@ -151,7 +151,7 @@ No…
 Wha… <br> What the hell… 
 No… <br> No, I won't let him! 
 Chief… 
-No… That can't be… 
+No… That cannot be… 
 Captain… 
 … 
 Ogami. <br> Go see the world. Broaden your horizons and grow. 
@@ -307,12 +307,12 @@ My head understands… But my heart isn't having any of it.
 Kohran… 
 … 
 Orihime… 
-I thought we'd get to make all kinds of fun memories together from here on out… 
+I thought we would get to make all kinds of fun memories together from here on out… 
 But now we… have to be apart… 
 … 
 But even when Papa and Mamma were far apart… 
 They never stopped thinking about each other. 
-And I'll always be thinking about you, Mr. Ensign. 
+And I will always be thinking about you, Mr. Ensign. 
 Orihime… 
 I wish I could have met you sooner… 
 And I wish… that I could have stayed with you longer. 
@@ -341,7 +341,7 @@ I will use this opportunity to see a whole new world and test myself.
 I don't know what France has in store for me… 
 But as a member of the Imperial Assault Troupe, just like all of you, I will do my absolute best. 
 Sakura… Sumire… Maria… Kanna… 
-Iris… Kohran… Orihime… and Reni… 
+Iris… Kohran… Orihime… <br> and Reni… 
 I truly enjoyed this past year I spent with all of you. 
 I may be leaving for France tomorrow… 
 But I'll never forget the memories I made with you for as long as I live. 
@@ -445,15 +445,15 @@ Um… It's kind of embarrassing, so wait till you're on the boat to read it, 'ka
 Kohran… Thanks. 
 All right then, night, Chief. 
 Kohran… 
-Oh thank goodness, you're still awake, Mr. Lieutenant. 
+Oh thank goodness, <br> you are still awake, <br> Mr. Lieutenant. 
 Orihime… 
 Um… I actually have something to give to you. 
 Something for me? 
 What's this? 
 I wrote a letter for you… Mr. Lieutenant.
-Read it once you're on the boat to France. 
+Read it once you are on the boat to France. 
 Orihime… Thank you. 
-All right, then… Good night. 
+All right, then… <br> Good night. 
 Orihime… 
 Reni… 
 I… wrote you a letter. 
@@ -554,11 +554,11 @@ Ah, jeez. <br> There I go, talking nonsense again.
 But y'know, none of your dreams will come true if you don't work hard for them. 
 I'm gonna do my best. You do your best too, Chief. Take care of yourself. 
 See you again someday. <br> Imperial Assault Troupe, Flower Division <br> Kohran Li 
-Ciao, Mr. Ensign. <br> Wait, no, you've been promoted to Lieutenant now, huh? 
-Congratulations, and grazie! You're probably reading this on the boat, huh? 
-How's the boat ride been so far? Feeling lonely? Want me to come join you? 
-Just kidding. <br> I'm busy right now with requests from all over the world to come perform. 
-Even though we're so far apart, we're together in our hearts. 
+Ciao, Mr. Ensign. <br> Wait, no, you have been promoted to Lieutenant now, huh? 
+Congratulations, and grazie! You are probably reading this on the boat, huh? 
+How is the boat ride been so far? Feeling lonely? Want me to come join you? 
+Just kidding. <br> I am busy right now with requests from all over the world to come perform. 
+Even though we're so far apart, we are together in our hearts. 
 Let's work hard, never letting go of our desire to meet with one another.
 Papa and Mamma never stopped loving each other, no matter how far apart they were. 
 I know our love, too, can overcome any distance. 

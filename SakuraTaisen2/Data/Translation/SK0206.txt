@@ -95,7 +95,7 @@ Orihime, what are you doing here?
 … 
 (Huh, now she's peeking inside the dressing room.) 
 (She's been going around, looking in different rooms for a while now.) 
-…Who's there?! 
+…Who is there?! 
 (Oh crap, she found me!!) 
 M-Mr. Ensign?! 
 How disgusting you are! Sneaking around and spying on people! 
@@ -713,7 +713,7 @@ Hm? Is someone taking a bath?
 Maybe it's Iris… 
 Huh? Those flashy clothes, aren't these Orihime's?! 
 S-So then… Orihime is in there r-right now. 
-I'm drawn to the bath…
+I am drawn to the bath…
 Go back outside. 
 O-Oh, no… <br> My body is moving towards the bathroom on its own… 
 Ahhh. I'm surprised. Japanese bathrooms aren't all that bad. 
@@ -740,7 +740,7 @@ Sheesh… <br> I know I brought it on myself, but that was awful.
 (I gotta get out of here before she sees me!) 
 Phew… <br> I think I got away before she realized I was there. 
 If I'd been just a moment slower, I might not have made it. That was too close… 
-Wh-Who's there? Mr. Ensign, it couldn't be you, could it?! 
+Wh-Who is there? Mr. Ensign, it could not be you, could it?! 
 O-Orihime… Um, I… 
 Just get yourself out of here, right away! 
 Uh, s-sorry. I'm leaving right now. 
@@ -758,7 +758,7 @@ Sheesh… <br> I know I brought it on myself, but that was awful.
 …Looks like I got out without her realizing. 
 If Orihime ever found me here like this, she'd never forgive me for it. 
 I should get going. It doesn't look like Iris is in here, anyway. 
-Ahh… I think it's about time I got out. 
+Ahh… I think it is about time I got out. 
 (Oh crap!! It looks like she's getting out of the water!) 
 (I gotta get out of here before she sees me!) 
 Phew… <br> I think I got away before she realized I was there. 
@@ -771,7 +771,7 @@ When I was in the bath, I had a sense that someone was close by.
 N-No… Must've been your imagination. 
 How very strange. I would have sworn that someone was in there. 
 So, what do you think of Japanese baths? 
-It wasn't as bad as I thought it would be, even if the picture of Mt. Fuji on the wall is a bit tacky.
+It was not as bad as I thought it would be, even if the picture of Mt. Fuji on the wall is a bit tacky.
 But my feelings of irritation have all washed away. I feel very refreshed. 
 I will be going now, if you please. 
 (Thank goodness, looks like she didn't notice anything.) 

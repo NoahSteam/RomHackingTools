@@ -13,7 +13,7 @@ Sakura… <br> My, how you've grown.
 Father… <br> What happened to you? 
 …Eight years ago, I lost my life in the Kouma War. 
 I was brought back… by Kyogoku's necromancy… 
-As a soldier… to fight for him. 
+…as a soldier… to fight for him. 
 No… 
 His spell was… powerful… But… you broke it… 
 You truly are… my daughter… You did well, Sakura… You've grown… so strong… 
@@ -32,7 +32,7 @@ Know your place, Ogami!
 Lofty ideals require sacrifice! 
 Justice… will always prevail! 
 Fool! Justice is nothing more than a fleeting convenience! 
-Hmph! Have you no words, Ogami?! 
+Hmph! <br> Have you no words, Ogami?! 
 Maggots! You who would govern this city with your fraudulent justice! 
 This is the end for you! 
 DIE!! 
@@ -80,11 +80,11 @@ OK, got it!
 Let's perform the Rite of Four Swords and seal away this evil! 
 Roger! 
 Sakura… <br> Will you be all right? 
-You don't have to worry. My feelings are under total control. 
+You don't have to worry. <br> My feelings are under total control. 
 Sakura… 
 … 
 I'll be fine, Ogami. 
-You don't have to worry. My feelings are under total control. 
+You don't have to worry. <br> My feelings are under total control. 
 Sakura… 
 If we combine our strength, the Rite of Four Swords is sure to work. 
 We have to try, Ogami. We have to protect everyone! 
@@ -124,8 +124,8 @@ Good luck, everybody!
 Let's all go home together! 
 All right, everyone, let's roll! 
 And let's make sure we make it outta here alive! 
-All right, everyone, let's go! 
-And let's make it back home alive! 
+All right, everyone, let us go! 
+And let us make it back home alive! 
 Everyone… Let's go. 
 Let's make sure… we come back home alive. 
 OK, here we go! It's time to infiltrate Musashi's core! 
@@ -136,7 +136,7 @@ The Rite of Four Swords worked!
 EEEEK! They did iiiit! 
 It's too early to celebrate. Musashi's not sunk just yet. 
 Ogami… Take Musashi down… 
-Everyone in the Flower Division… Please… Bring down Musashi. 
+Everyone in the Flower Division… Please… <br> Bring down Musashi. 
 Kazuma… 
 All right! Hurry with the Mikasa's maintenance! 
 Roger! 

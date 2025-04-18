@@ -121,6 +121,22 @@ public:
 		{
 			InLetter = 'z' + 13;
 		}
+		else if ((uint8)InLetter == (uint8)'ย')
+		{
+			InLetter = 'z' + 14;
+		}
+		else if ((uint8)InLetter == (uint8)'บ')
+		{
+			InLetter = 'z' + 15;
+		}
+		else if ((uint8)InLetter == (uint8)'น')
+		{
+			InLetter = 'z' + 16;
+		}
+		else if ((uint8)InLetter == (uint8)'โ')
+		{
+			InLetter = 'z' + 17;
+		}
 
 		return InLetter;
 	}
@@ -134,7 +150,7 @@ public:
 		{
 			printf("GetTileForCharacter: Invalid letter %c\n", (uint8)InLetter);
 			InLetter = '!';
-			index = (int)(InLetter)-(int)(mStartingLetter);
+			index = (int)(InLetter)-(int)(mStartingLetter); //บนโ
 			//return nullptr;
 		}
 

@@ -677,7 +677,7 @@ Eek!!
 W-What do you want from me? 
 No, it's not like that… 
 Hey, Orihime. <br> What are you doing up here? 
-I-It's none of your business. Why do you care? 
+I-It is none of your business. Why do you care? 
 If you don't need me for anything, then I'll be leaving. 
 Ah, Orihime! W-Wait! 
 …She's gone. 
@@ -722,20 +722,20 @@ Hmmm… <br> Now that you mention it, <br> I think you’re right.
 Hey there, Orihime. I was just about to knock on your door. 
 Mr. Ensign? 
 There is nothing I wish to discuss with you.
-I have things to do so I’ll be off.
+I have things to do so I will be off.
 Ah… Orihime! 
 Orihime… She's gone. 
 Oh, well… Let's go, Iris. 
-…Who's there? Orihime’s not at home.
+…Who's there? <br> Orihime’s not at home.
 Oh, she’s not home… 
 Then who's speaking? 
 Oh, I guess she’s not home…
-Mon Frère! You just heard her voice, of course she's home! 
+Mon Frère! <br> You just heard her voice, of course she's home! 
 O-Oh, I see… You're right. 
 Hmph! You must really be hopeless if even Iris ridicules you. 
-I can't believe you fell for that. You are a stupid one, aren't you? 
+I cannot believe you fell for that. You are a stupid one, aren't you? 
 S-Stupid?! 
-Oh my, I still can’t believe a fool like you is the captain of the Flower Division.
+Oh my, I still cannot believe a fool like you is the captain of the Flower Division.
 Well then, please continue your party preparations.
 Ah, Orihime… 
 Then whose voice am I hearing?
@@ -744,18 +744,18 @@ You're in there, aren't you, Orihime? Open the door.
 Mr. Ensign? Iris? <br> What on earth do you want? 
 Orihime, you're in there, aren't you? Come on, open the door. 
 Oh, is that you, Iris? Just a second… 
-Ah! Mr. Ensign?! I thought Iris was alone. 
+Ah! Mr. Ensign?! <br> I thought Iris was alone. 
 So you were in there after all, Orihime. You shouldn't trick people into thinking you're not around. 
-If there's anyone who'd fall for that trick, I would like to meet him. 
+If there is anyone who would fall for that trick, I would like to meet him. 
 That's right! Hey, Orihime. Show me the inside of your room. 
 …Inside my room? 
 I still haven't seen what your room looks like! Can I see it? Please?
-Well, if you want to see it so badly, then I guess I don't have a choice. 
+Well, if you want to see it so badly, then I guess I do not have a choice. 
 Fine, I’ll let you in, only this once.
 Yaaaay! Coming iiiin! 
 Wowww… <br> What a beautiful room! 
 I understand why you would be starstruck…
-But please don’t dilly dally. You can’t stay in my room all day, OK? 
+But please don’t dilly dally. You cannot stay in my room all day, OK? 
 What's this…? 
 It's an interior design that also serves as curtains. 
 It uses the flag of a certain country as a motif. Do you know what flag, Mr. Ensign? 
@@ -764,40 +764,40 @@ It's the flag of Italy.
 It's the flag of England. 
 It's the flag of France. Isn't it famous for the tricolor flag? 
 Wrong! Japanese men really are stupid. 
-It's based on the flag of my home country, Italy. 
+It is based on the flag of my home country, Italy. 
 Mon Frère. The French flag is blue, white, and red. 
-R-Really? That was careless of me. 
+R-Really? <br> That was careless of me. 
 It's the Italian flag. That's where you're from, right, Orihime? 
 Well, you may be a Japanese man, but you seem to know a thing or two.
 That's Mon Frère for you! He's so smart. 
-I'm pretty sure it's… the British flag, right? 
-That's not it at all. Japanese men really are stupid. 
-It's based on the flag of my home country, Italy. 
-R-Really? That was careless of me. 
+I'm pretty sure it's… <br> the British flag, right? 
+That is not it at all. Japanese men really are stupid. 
+It is based on the flag of my home country, Italy. 
+R-Really? <br> That was careless of me. 
 …Which flag is it? 
-It's based on the flag of my home country, Italy. 
+It is based on the flag of my home country, Italy. 
 To speak frankly, this sort of thing should be common knowledge. 
 (Displaying the curtains like this sure makes for an interesting layout.) 
 (What a fancy-looking bed. Is that what Orihime sleeps on?) 
-Don't stare at people's beds like that! 
+Do not stare at people's beds like that! 
 Oh… S-Sorry. 
 How many times must I tell you?! 
-You keep staring and staring and staring at my bed! You're so shameless! 
+You keep staring and staring and staring at my bed! You are so shameless! 
 Get out of here! 
 O-Orihime! Wait a minute… 
-I'm not listening! Hurry up and get out! 
+I am not listening! <br> Hurry up and get out! 
 I knew letting a Japanese man into my room was a mistake. Now arrivederci, goodbye! 
-Mon Frère… She kicked us out. 
-Oh well. Let's go to another room. 
+Mon Frère… <br> She kicked us out. 
+Oh well. <br> Let's go to another room. 
 (A dressing table, huh? There's some expensive cosmetics there.) 
 Hey, Orihime! Teach me how to put on makeup some time. 
-I don't think there's any point for a child like yourself to wear makeup. 
-Heyyy. I'm not a little kid! 
+I do not think there is any point for a child like yourself to wear makeup. 
+Heyyy. <br> I'm not a little kid! 
 (There's a framed photograph…) 
 What's this picture? 
-I can’t show anyone that photograph, Mr. Ensign.
-What? Why not? Let me see it, Orihime. 
-No means no! Don't touch it! 
+I cannot show anyone that photograph, Mr. Ensign.
+What? Why not? <br> Let me see it, Orihime. 
+No means no! <br> Do not touch it! 
 Pick it up.
 (There's a beautiful woman in the picture…) 
 Mr. Ensign! Do not touch other people’s things without permission!
@@ -805,10 +805,10 @@ Oh… I'm sorry. I just couldn't help myself.
 Seriously, the nerve of Japanese men! They have no sense of decency at all! 
 Get out of here! 
 O-Orihime! Wait a minute… 
-I'm not listening! Hurry up and get out! 
+I am not listening! <br> Hurry up and get out! 
 I knew letting a Japanese man into my room was a mistake. Now arrivederci, goodbye! 
-Mon Frère… She kicked us out. 
-Oh well. Let's go to another room. 
+Mon Frère… <br> She kicked us out. 
+Oh well. <br> Let's go to another room. 
 (No… I guess I better stop.) 
 Aw… I wanted to see it… 
 (Seems like she really doesn’t want me looking at that photo so I’ll leave it alone.)
@@ -816,10 +816,10 @@ Aw… I wanted to see it…
 This is a landscape of my hometown. 
 Huh, really? 
 (I wonder what kind of place Orihime's hometown is.) 
-Wow! What a pretty painting! 
+Wow! <br> What a pretty painting! 
 You have good taste if that picture caught your eye. 
 This is a piece painted by Renoir. 
-Renoir? Is that someone famous? 
+Renoir? <br> Is that someone famous? 
 He's a famous painter. 
 By the way, Mr. Ensign, speaking of Renoir… 
 Do you know what movement he belonged to? 
@@ -829,20 +829,20 @@ Direct style, of course!
 Impressionist, I think. 
 Romanticist, I think. 
 Uhh… Playful style? 
-He was… An impressionist, right? 
-Wow, you're pretty knowledgeable. 
+He was… <br> An impressionist, right? 
+Wow, you are pretty knowledgeable. 
 I have a tiiiny bit more respect for you now, Mr. Ensign. 
 You really know everything, Mon Frère! 
-He was… A romanticist, right? 
-Wow, I'm surprised you know what that is. 
-But you're wrong. Renoir was an impressionist. 
+He was… <br> A romanticist, right? 
+Wow, I am surprised you know what that is. 
+But you are wrong. <br> Renoir was an impressionist. 
 Oh… Is that right? 
 Wow, there's stuff even you don't know, Mon Frère. 
 Direct style, of course! A real hardliner, as all men should be! 
-…Mr. Ensign? Do you even know what I'm talking about? 
+…Mr. Ensign? Do you even know what I am talking about? 
 Renoir was an impressionist. You have no common sense at all, Mr. Ensign. Non ha senso! 
 Uhhh… Playful style? 
-Even if you were joking, Mr. Ensign, that wasn’t funny. 
+Even if you were joking, Mr. Ensign, that was not funny. 
 It's the only thing I could think of… 
 Renoir was an impressionist. You have no common sense at all, Mr. Ensign. Non ha senso! 
 …Hmm. I don't know much about painting. 
@@ -853,19 +853,19 @@ This is a luxurious Italian-made chandelier I brought with me to Japan.
 You brought that all the way from Italy? That must have been a lot of work. 
 (Made in Italy… They sure make them different overseas.) 
 Iris, I think we should get going. 
-Yeah, OK. Let's go, Mon Frère. 
+Yeah, OK. <br> Let's go, Mon Frère. 
 Thank you for showing us your room. Maybe you can invite us over again sometime? 
 Do not get carried away. Today was an exception because Iris was with you. 
-Well then, I have things I need to do, so I'll be going. 
+Well then, I have things I need to do, so I will be going. 
 We should go, too, Iris. 
 OK! 
-Mr. Ensign… Are you just going to loiter about here, or what? 
-Right. We should get going, Iris. 
+Mr. Ensign… <br> Are you just going to loiter about here, or what? 
+Right. <br> We should get going, Iris. 
 Yeah. Thanks for showing us your room, Orihime. 
 You two should make note of my good taste for your future reference. 
 Thank you for showing us your room. Maybe you can invite us over again sometime? 
 Do not get carried away. Today was an exception because Iris was with you. 
-Well then, I have things I need to do, so I'll be going. 
+Well then, I have things I need to do, so I will be going. 
 We should go, too, Iris. 
 OK! 
 Maria's in America… That's so far away… 

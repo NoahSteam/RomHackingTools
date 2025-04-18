@@ -1,9 +1,9 @@
 ﻿Hmm… What in the world is wrong with Orihime? 
 …All right! Guess I’ll try checking up on her. 
 (Hmm? Who could that be?) 
-Yes, this is Ogami. Who's there? 
+Yes, this is Ogami. <br> Who's there? 
 Um, it's Sakura. Can I talk to you for a minute? 
-Sakura? Hold on, I'm coming out. 
+Sakura? <br> Hold on, I'm coming out. 
 Hey, Sakura, what do you need? 
 R-Right. Um… Ogami? 
 Would you mind… taking this? 
@@ -523,12 +523,12 @@ For starters, you pour the tea into the cup.
 Ensign, have you forgotten already? 
 You warm the cup first by pouring hot water into it. 
 It's the very first thing I taught you, the most fundamental of fundamentals. 
-Oh, right. I totally forgot. 
+Oh, right. <br> I totally forgot. 
 You wait a little bit, then pour the tea. 
 Ensign, have you forgotten already? 
 You warm the cup first by pouring hot water into it. 
 It's the very first thing I taught you, the most fundamental of fundamentals. 
-Oh, right. I totally forgot. 
+Oh, right. <br> I totally forgot. 
 You wait a little bit, then pour the hot water. 
 Ensign, have you forgotten already? 
 You warm the cup first by pouring hot water into it. 
@@ -538,7 +538,7 @@ Uh… What do I do, again?
 Ensign, have you forgotten already? 
 You warm the cup first by pouring hot water into it. 
 It's the very first thing I taught you, the most fundamental of fundamentals. 
-Oh, right. I totally forgot. 
+Oh, right. <br> I totally forgot. 
 First, you pour the hot water into the cup to warm it. 
 Then you wait a little bit until the tea leaves have opened, then you pour the tea. 
 … 
@@ -550,14 +550,14 @@ Pour to the last drop.
 Oh, Ensign, what a shame. You were so close. 
 For black tea, you have to gradually pour it out till the very last drop. 
 I taught you about the final "Golden Drop," remember? 
-Oh, that's right. I totally forgot. 
+Oh, that's right. <br> I totally forgot. 
 (OK, I'll pour it out slowly.) 
 That's far too slow, Ensign. 
 If you take that long to pour it, the tea will be far too bitter by the end. 
-O-Oh. Looks like I messed up. 
+O-Oh. <br> Looks like I messed up. 
 Ensign! If you wait too long, the tea will become bitter! 
 Oh, it's too late now. What a shame. 
-O-Oh. Looks like I messed up. 
+O-Oh. <br> Looks like I messed up. 
 (You carefully pour it all to the very last drop.) 
 … 
 OK, that's all of it! 
@@ -621,7 +621,7 @@ Oh well. I'll try another room.
 Guess it's not time for Sumire's tea lessons yet. I'll come back later. 
 Think you'll let me win at billiards today, Maria? 
 Hm hm, you have improved a lot, Captain, that much is true. 
-Well then, let's begin. Go easy on me, Captain. 
+Well then, let's begin. <br> Go easy on me, Captain. 
 It's your turn, Captain. You're in a tough spot. 
 Shoot… The next ball's totally blocked off. 
 If I get a foul now, I'll lose. Hmm… 
@@ -641,7 +641,7 @@ But you've still improved a lot, sir.
 I hadn't played billiards in a long time, myself, so this was quite fun for me. 
 Thanks, Maria. All right, I should get going, then. 
 OK. Good work, Captain. 
-All right… I'm gonna try a jump shot. 
+All right… <br> I'm gonna try a jump shot. 
 Huh?! Captain, I don't think you're ready yet. 
 It's true, it might be too hard for me at my current skill level… 
 But so long as there's a chance, I want to at least try. 
@@ -652,7 +652,7 @@ There!
 Gwargh!! 
 C-Captain!! 
 Ow… My forehead… 
-Captain! Are you all right?! 
+Captain! <br> Are you all right?! 
 Not… really… No… 
 Ow ow ow… That stings. 
 Please stay still, sir. 
@@ -915,7 +915,7 @@ I wonder if Orihime is in her room.
 …Who is it? 
 It's Ogami. 
 Um, what happened back at the festival? 
-That's not your business, Mr. Ensign! 
+That is not your business, Mr. Ensign! 
 B-But… 
 Quit butting in and leave me alone!! 
 (Sheesh, couldn't get a word in edgewise…) 
@@ -998,9 +998,9 @@ You helped me learn my multiplication tables by memorizing them.
 You took a piece of paper with my multiplication tables and stuck it to my wall for me. 
 Thanks to you, I was able to solve every math problem Auntie Kaede gave me. 
 3 pages a day, 7 days a week… 
-3 times 7… I was able to finish 21 pages a week. 
+3 times 7… <br> I was able to finish 21 pages a week. 
 3 pages a day, 7 days a week… 
-3 times 7… I was able to finish 28 pages a week. 
+3 times 7… <br> I was able to finish 28 pages a week. 
 (Oh jeez, she's still getting it wrong.) 
 Whenever you'd praise me at the end of our lessons… 
 …it made me so happy. 
@@ -1109,7 +1109,7 @@ Phew, looks like she didn't notice.
 She'd never let me live it down if she saw me. 
 … 
 …Huh? 
-M-Mon Frère?! What are you doing here?! 
+M-Mon Frère?! <br> What are you doing here?! 
 I, um, sorta just… stumbled in here without realizing it… 
 E… 
 EWWWWWWWW! <br> You're such a pervert, Mon Frère!! 

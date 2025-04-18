@@ -1,12 +1,12 @@
-﻿Your Excellency, the time has finally come to enact our plan. 
+Your Excellency, the time has finally come to enact our plan. 
 A state ruled by the Imperial Army… 
 We of the Taisho Restoration Army will gladly sacrifice ourselves for your ideals!
 Well said, Amagasa. 
 The future of the capital rests on our shoulders. 
 We make our move November 9th! You will be in charge of seizing the Grand Imperial Theater. 
-Yoneda is a traitor who belittles the existence of our legitimate army. You will deal with him.
+Yoneda is a traitor who belittles the existence of legitimate soldiers. You will deal with him.
 And… you will capture Sakura Shinguji of the Flower Division. 
-If she attempts to resist… Kill her. I don't care either way. 
+If she attempts to resist… <br> You are free to kill her. 
 Yessir! <br> Leave it to me, sir! 
 Heheheh… <br> The hour approaches. 
 The Taisho Restoration, the dawn of a new Japan, is finally at hand. 
@@ -18,7 +18,7 @@ Oh, Kayama. <br> What do you want?
 That's cold, Ogami. After I traveled all this way, too. I'm crushed! 
 …Just come inside. 
 Hmph, very well. Alley-OOP! 
-Say, Ogami, you're looking as troubled as ever. 
+By the way, Ogami, you're looking as troubled as ever.  
 Yeah… A lot's happened. 
 Come now, Ogami, have you forgotten that old saying? "After rain comes fair weather." 
 The more two people quarrel, the stronger their relationship will become in the end. 
@@ -451,10 +451,10 @@ Oh, a wise guy, eh?
 Ahahahaha! 
 Ahahaha! <br> You're hilarious, Kohran! 
 Really? <br> You thought that was funny? Heheh, I'm glad it hit! 
-…Ahahaha! Th-That was really funny! 
+…Ahahaha! <br> Th-That was really funny! 
 Hmm, it took you a while to laugh at that one. 
 Y-You're just imagining things. 
-If you say so… I was hoping you'd laugh a bit more, though. 
+If you say so… <br> I was hoping you'd laugh a bit more, though. 
 Oh, a wise guy, eh? 
 Aww, I've done it again! 
 Ahahaha! <br> That was a perfect straight-man response, Chief! 
@@ -478,8 +478,8 @@ OK, guess I'll go talk to Orihime now.
 I wonder if Orihime will even listen to me. 
 …Who is it? 
 It's Ogami. There's something I wanted to talk to you about. 
-That MAN asked you to come talk to me, didn't he? 
-I don't have anything to say to you, Mr. Ensign! 
+That MAN asked you to come talk to me, did he not? 
+I have nothing to say to you, Mr. Ensign! 
 Orihime… 
 (I can't back down, not now!) 
 (I have to open this door and talk to her!) 
@@ -496,7 +496,7 @@ Actually, it does!
 You're right, but…
 Actually, it does! I can't leave one of my partners in the Flower Division alone like this! 
 Partner this, partner that… It is all you ever say! 
-I don't recall ever being partners with a Japanese man! 
+I do not recall ever being partners with a Japanese man! 
 You're right. I have nothing to do with your family, not directly. 
 But I'm worried about you! Isn't that reason enough?! 
 Mr. Ensign… 
@@ -506,13 +506,13 @@ I already told you, I'm not opening this door!
 Orihime, please! 
 That's cowardly, Orihime!
 Orihime, please! <br> Open the door! 
-Aghh, shut your mouth! <br> I don't want to hear another word! 
+Aghh, shut your mouth! <br> I do not want to hear another word! 
 Orihime! 
 … 
 That's cowardly, Orihime! If you truly believe what you think is right, then say it to my face! 
-…I don't care what you say, I don't feel like talking to any Japanese men! 
+…I care not what you say, I do not feel like talking to any Japanese men! 
 Orihime! 
-Aghh, shut your mouth! <br> I don't want to hear another word! 
+Aghh, shut your mouth! <br> I do not want to hear another word! 
 Orihime! 
 … 
 Hmph! You are giving me a silent treatment now? 
@@ -529,12 +529,12 @@ All right, I'll be going now. Good night, Orihime.
 Yeah. I'm not leaving here until you open this door. 
 Fine then, you can wait out there till the morning. 
 … 
-Why don't you just give up already, Mr. Ensign? 
+Why do you not just give up already, Mr. Ensign? 
 And why don't you just give up and open the door already? 
 Hmph! 
 … 
-No matter how long you stick around, Mr. Ensign, I'm not opening this door. 
-The hour is late, just go to bed already. You're being a nuisance. 
+No matter how long you stick around, Mr. Ensign, I am not opening this door. 
+The hour is late, just go to bed already. You are being a nuisance. 
 Oh well. You're right, it's late. I'll go back to my room for tonight. 
 But Orihime, I want you to know one thing. 
 I don't think it's right to hate your father like this forever. 
@@ -549,24 +549,24 @@ All right, what did you want to talk with me about, anyway?
 Ask about Carino. 
 Ask about Ogata. 
 If you don't mind, could you tell me more about Carino? 
-I don't know what that man told you, Mr. Ensign… 
-But it's his fault that Mamma became so sad… 
+I know not what that man told you, Mr. Ensign… 
+But it is his fault that Mamma became so sad… 
 Mamma… She tried so hard not to cry in front of me… 
 But she was always in tears whenever she was alone…
 All because of him… All because he wasn't faithful… 
-There's no way I could ever forgive him! 
+There is no way I could ever forgive him! 
 Never will I forgive him for making Mamma so sad… Never! 
 Orihime, you called him "unfaithful" just now… 
 But it seemed to me like Mr. Ogata truly loved Carino. 
 That man is tricking you, Mr. Ensign! 
-He may claim that he loved my mamma… but, it's an obvious lie!!
+He may claim that he loved my mamma… but, it is an obvious lie!!
 You were separated from your father when you were just a child, right, Orihime? 
 So how did you recognize that Mr. Ogata was your father? 
 …Before I came to Japan, I asked my mamma to give me a photograph of the man. 
-I was thinking that if I ever saw him, I'd make him apologize.
+I was thinking that if I ever saw him, I would make him apologize.
 There, is that good enough for you? Now go back to your room, Mr. Ensign! 
 Orihime, can't you make amends with Mr. Ogata?
-Of course not! He's the man who abandoned Mamma and I! 
+Of course not! He is the man who abandoned Mamma and I! 
 Now please leave, Mr. Ensign! 
 … 
 Orihime… 

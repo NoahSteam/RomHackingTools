@@ -29,7 +29,7 @@ With Shinnou under my control, I'll kill every last one of you! You'll die for m
 You could never hope to understand… MY IDEALS! 
 I don't want to hear it! 
 Your… ideals? 
-I don't want to hear it! I don't give a damn about your ideals! 
+I don't want to hear it! <br> I don't give a damn about your ideals! 
 You've lost control over Musashi! Prepare yourself, Kyogoku! 
 I'll admit, <br> I underestimated you worms. 
 But I won't simply die here! I'll drag you all to hell with me! 
@@ -40,7 +40,7 @@ You wish to know? Very well, then. I'll tell you.
 My dream… is to build a true capital on this land! 
 A… true capital? 
 How will you do that? 
-A… true capital? What are you talking about?! 
+A… true capital?! <br> What are you talking about?
 The true capital… <br> A world where man and demon can coexist… 
 Wh… What?! 
 A true capital? How do you plan to build such a thing? 

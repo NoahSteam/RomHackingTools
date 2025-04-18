@@ -1,5 +1,5 @@
 All right! That makes two!
-That's number two! Only six left!
+That's number two! <br> Only six left!
 That was only the second one. We still have a ways to go…
 OK! Only six left!
 That's two! Let's keep it up!

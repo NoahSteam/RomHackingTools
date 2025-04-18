@@ -36,18 +36,18 @@ Oh, Ogami. <br> Good morning.
 Good morning. Did you sleep well last night? 
 Good morning. I slept like a log thanks to your hospitality. 
 Breakfast is almost ready, so wait just a little longer. 
-Thanks. I'll go get changed, then. 
+Thanks. <br> I'll go get changed, then. 
 *yawn*… <br> I'm still drowsy. I'll sleep in just a bit longer… 
 Wake up, Ogami, it's morning. 
 Good morning, Sakura. 
-Just 5 more minutes… 
+Just five more minutes… 
 Ah, good morning, Sakura. 
 Good morning. <br> Did you sleep well? 
 Yeah, I slept like a log thanks to your hospitality.
-Really? Hmhm, glad to hear it. 
+Really? <br> Hmhm, glad to hear it. 
 We finished making breakfast, so get changed and come to the living room, OK? 
 Breakfast at Sakura's, huh? 
-Just 5 more minutes… 
+Just five more minutes… 
 Oh, Ogami, you're hopeless. 
 We finished making breakfast, so get changed and come to the living room, OK? 
 If you don’t hurry, your miso soup will get cold. 
@@ -69,7 +69,7 @@ Hmhm, I tried to make it just like Mother's!
 Well, Ogami…? <br> How does it taste? 
 It's great! 
 Um… It's OK. 
-It's great! This is delicious, Sakura! 
+It's great! <br> This is delicious, Sakura! 
 Really? Thank you so much! 
 You've gotten quite good at seasoning, haven't you, Sakura? 
 Thanks! I practiced to make it taste just like your recipes, Mother!  
@@ -101,7 +101,7 @@ Nobody outside of the Shinguji family has ever been allowed to see the Shinguji 
 Huh?! Then… does that mean that I'm…? 
 …O-Ogami, how about we head inside now. 
 Y-Yeah, sure. 
-Father, it's Sakura. I'm finally back home. 
+Father, it's Sakura. <br> I'm finally back home. 
 The captain of the Imperial Assault Troupe's Flower Division, Ichiro Ogami, is with me today. 
 … 
 Father. We… 
@@ -114,7 +114,7 @@ So please, keep watching over us… Over the Imperial Assault Troupe.
 That noise… Is that the Kinematron ringing?! 
 Ogami, we should answer it right away! 
 Ogami? Thank goodness, I finally got through. 
-Kaede! What on earth is going on?! 
+Kaede! <b> What on earth is going on?! 
 We have an emergency. Hostiles have been sighted in Ouji! 
 Wha… <br> What did you just say?! 
 We still don't know all the details. The rest of the Flower Division have already deployed. 
@@ -158,7 +158,7 @@ Go look for them.
 Stay where you are. 
 OK, I'll go look for them. 
 I believe they went out to the yard. 
-The yard, huh? Thank you, Miyata. 
+The yard, huh? <br> Thank you, Miyata. 
 I'm sure Sumire and her mother have a lot to talk about. I'll leave them be. 
 Well then, Master Ogami, perhaps you might enjoy an after-meal stroll in the yard in the meantime? 
 I see, that does sound nice. 
@@ -181,7 +181,7 @@ I wanted to apologize for the arranged marriage.
 We should have stopped your grandfather. 
 … 
 I know you must feel bitter towards him… 
-Oh, I'm not bitter. I'm furious! 
+Oh, I'm not bitter. <br> I'm furious! 
 Not only did he lie about being sick, he tried to force me into an arranged marriage! 
 He can be quite overbearing, but that's how the Kanzaki family got to where it is today. 
 You and your grandfather are quite alike, so… 
@@ -230,7 +230,7 @@ Miyata told me everything. We're receiving a call on the Kinematron, am I right?
 We must answer it immediately! 
 Yeah. OK, I'm picking up… 
 Ogami? Thank goodness, I finally got through. 
-Kaede! What on earth is going on?! 
+Kaede! <b> What on earth is going on?! 
 We have an emergency. Hostiles have been sighted in Ouji! 
 Wha… <br> What did you just say?! 
 We still don't know all the details. The rest of the Flower Division have already deployed. 
@@ -249,22 +249,22 @@ Father…
 Ogami… Please, take care of Sumire. 
 Yes, ma'am! 
 We'll stop by again. 
-Yes, ma'am! I swear to protect Sumire! 
+Yes, ma'am! <br> I swear to protect Sumire! 
 Ensign… 
 Ogami… <br> Thank you very much. 
 Sumire and I will stop by again sometime. 
 Right, Sumire? 
-…Yes. We'll come back… if I feel like it. 
+…Yes. We'll come back… <br> if I feel like it. 
 You can come whenever you like. You're always welcome here. 
 I'll be all right, Mother. 
 With the ensign by my side, I have nothing to fear. 
 Sumire… 
 Father, Mother… I'm going. 
 Be safe. Come visit us again sometime. 
-Sumire, um… Maybe you can treat us to some of your cooking next time? 
-…Of course, I will. Look forward to it. 
+Sumire, um… <br> Maybe you can treat us to some of your cooking next time? 
+…Of course, I will. <br> Look forward to it. 
 Mother… Give Grandfather my regards. 
-…Yes, I understand. I'll be sure to tell him. 
+…Yes, I understand. <br> I'll be sure to tell him. 
 Let us be off, Ensign! It's time for our grand entrance! 
 Yeah, let's go, Sumire! 
 … 
@@ -278,7 +278,7 @@ Maria? What's the matter?
 I was just… thinking about my time in Russia. 
 About why… I abandoned Russia and ran away to America. 
 Was I tired of all the fighting and poverty? Did I yearn for personal freedom? 
-Even now… I'm not really sure. 
+Even now… <br> I'm not really sure. 
 … 
 But nevertheless, I did run away… From myself as well. Now I'm but a wanderer. 
 *sigh*… <br> Sometimes I hate how weak I can be… I have to be stronger. 
@@ -300,7 +300,7 @@ Moya rodina… <br> (My motherland…)
 Yeah, seems like we're receiving a transmission. 
 What could it be? 
 Ogami? Thank goodness, I finally got through. 
-Kaede! What on earth is going on?! 
+Kaede! <b> What on earth is going on?! 
 We have an emergency. Hostiles have been sighted in Ouji! 
 Wha… <br> What did you just say?! 
 We still don't know all the details. The rest of the Flower Division have already deployed. 
@@ -331,7 +331,7 @@ Yeah, and thanks to that, our paths were able to cross.
 That's why we're coming back from this alive, Maria! 
 We'll make sure everyone knows the joy of peace! 
 Yes, Captain! 
-All right, let's go! To protect our capital… and our Flower Division! 
+All right, let's go! <br> To protect our capital… and our Flower Division! 
 U… Uh… 
 …Huh? <br> Guess I must've dozed off. 
 Right, we were having a drink-off in front of the tomb… 
@@ -386,7 +386,7 @@ R-Right…
 What's with you, Boss? I'm gettin' a little concerned, now. 
 Don't worry about it, Kanna. It's nothing, really. 
 But more importantly, is it time for breakfast yet? 
-Yeah, it's all ready. Ya ready to chow down? 
+Yeah, it's all ready. <br> Ya ready to chow down? 
 Was that just… a dream? 
 Hey, Boss, you still half-asleep? 
 C'mon, go wash up. Breakfast is ready. 
@@ -397,7 +397,7 @@ It's the Kinematron! <br> It's ringing!
 All the way out here? What the hell's goin' on?! 
 No clue. Let's answer it and see. 
 Ogami? Thank goodness, I finally got through. 
-Kaede! What on earth is going on?! 
+Kaede! <b> What on earth is going on?! 
 We have an emergency. Hostiles have been sighted in Ouji! 
 Wha… <br> What did you just say?! 
 We still don't know all the details. The rest of the Flower Division have already deployed. 
@@ -462,7 +462,7 @@ Huh? Is that an alarm clock I'm hearing?
 No, that’s not it. It's the Kinematron ringing! 
 What could've possibly happened? All right, let me take it out. 
 Ogami? Thank goodness, I finally got through. 
-Kaede! What on earth is going on?! 
+Kaede! <b> What on earth is going on?! 
 We have an emergency. Hostiles have been sighted in Ouji! 
 Wha… <br> What did you just say?! 
 We still don't know all the details. The rest of the Flower Division have already deployed. 
@@ -493,7 +493,7 @@ Yeah. Go to them.
 OK! Thank you, Mon Frère! 
 I'm… starting to feel a little seasick. 
 …Huh? <br> Are you OK, Mon Frère? 
-Yeah, I'll be fine. It'll blow over eventually. 
+Yeah, I'll be fine. <br> It'll blow over eventually. 
 So… Why don't you go talk to your parents until I feel better? 
 Mon Frère… 
 Thanks, Mon Frère. <br> I'll be right back! 
@@ -550,7 +550,7 @@ You can cook rice, steam potatoes…
 You can make all sortsa stuff! It's a multipurpose cooking machine! 
 (A cooking machine, huh? Guess even Kohran makes some practical inventions from time to time.) 
 That's the steam cleaner. It's a machine that runs around and picks up garbage fully automatically! 
-Wow, that's amazing. So why didn't it work out? 
+Wow, that's amazing. <br> So why didn't it work out? 
 Hmmm… <br> Well, it ran around a little TOO fast. 
 Once you started it up, you’d never be able to catch it again… 
 Not only that, but time after time it mistook my important documents as garbage. 
@@ -621,7 +621,7 @@ Whoa! <br> Th-That scared me!
 The Kinematron's getting a call! 
 What the heck could it be? Let's answer it, quick! 
 Ogami? Thank goodness, I finally got through. 
-Kaede! What on earth is going on?! 
+Kaede! <b> What on earth is going on?! 
 We have an emergency. Hostiles have been sighted in Ouji! 
 Wha… <br> What did you just say?! 
 We still don't know all the details. The rest of the Flower Division have already deployed. 
@@ -630,8 +630,8 @@ Get back to the theater immediately, you two!
 Roger, ma'am! 
 Sounds like a real mess, Chief. 
 Yeah. We have to get back to the capital, pronto. 
-Hey, Pops… I was hoping to stick around a bit longer, but… 
-I gotta go back. I'm real sorry. 
+Hey, Pops… <br> I was hoping to stick around a bit longer, but… 
+I gotta go back. <br> I'm real sorry. 
 Kohran… 
 …Ya better not die. <br> Ya gotta keep living. 
 Keep living so that you can keep making all kindsa new things. 
@@ -656,7 +656,7 @@ We're gonna win this fight and go home, just like we always do!
 Yeah! Let's do this, Chief! 
 No matter who we're up against, we'll never lose! That's what the Imperial Assault Troupe's all about! 
 Both of you, I must apologize. You left the room out of consideration for us, didn't you?
-No, it's fine. I just needed to talk to Mr. Ensign about something. 
+No, it is fine. I just needed to talk to Mr. Ensign about something. 
 By the way, Ogami. Do you remember the promise you made? 
 Yes, I remember. 
 What promise? 
@@ -787,7 +787,7 @@ Mr. Ensign! Could that be…?
 Yeah. That's the Kinematron ringing. 
 Let's bring it out and see what's up! 
 Ogami? Thank goodness, I finally got through. 
-Kaede! What on earth is going on?! 
+Kaede! <b> What on earth is going on?! 
 We have an emergency. Hostiles have been sighted in Ouji! 
 Wha… <br> What did you just say?! 
 We still don't know all the details. The rest of the Flower Division have already deployed. 
@@ -815,14 +815,14 @@ Just leave it to me, sir. I'll protect Orihime, no matter what!
 Mr. Ensign… <br> Thank you! 
 Papa, Mamma, I'll be fine. Mr. Ensign is with me! 
 Let's go, Orihime. Everyone's waiting for us. 
-Roger that! All right Papa, Mamma, I'll see you later! 
+Roger that! All right Papa, Mamma, I will see you later! 
 I can't wait to see the finished picture, Mr. Ogata. 
 …Yes, of course! <br> Look forward to it! 
 Mr. Ensign… <br> I can't wait to see our picture, either. 
 Yeah, but before that, we've got a job to do. 
-Roger that! All right Papa, Mamma, I'll see you later! 
+Roger that! All right Papa, Mamma, I will see you later! 
 Papa, Mamma… <br> You don't have to worry about me. 
-We'll be coming back together! Isn't that right, Mr. Ensign? 
+We will be coming back together! Is that not right, Mr. Ensign? 
 Yeah. All right, let's go, Orihime! 
 Roger that! All right Papa, Mamma, I'll see you later! 
 Now that we're done with the shrine, why don't we take a walk around the outer grounds? 
@@ -832,7 +832,7 @@ Reni…
 Are you not having fun? 
 Are you tired? 
 Why are you so quiet? 
-Reni? Are you not having fun? 
+Reni? <br> Are you not having fun? 
 Huh? Why do you ask? 
 No, it's just… <br> You seem kind of down. 
 I was thinking maybe you weren't enjoying yourself… 
@@ -862,7 +862,7 @@ Jump over and save her!
 We have to save her, Reni. Let's get over to the shore! 
 Roger! 
 Crap, hope we can make it in time! 
-I'll go help her! Someone has to save her! 
+I'll go help her! <br> Someone has to save her! 
 Reni… 
 Dammit! Guess I've got no choice but to go save her, too! 
 Crap, hope we can make it in time! 

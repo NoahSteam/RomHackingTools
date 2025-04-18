@@ -309,17 +309,17 @@ Are you preparing props for the play?
 Yes. We're inspecting the props and sets for "The Miracle Bells." 
 We only have three weeks until the performance, after all. 
 I see… <br> It's December already, huh. 
-Oh, yes. Now that it's December, I just remembered something I wanted to ask. 
+Oh, yes. Now that it is December, I just remembered something I wanted to ask. 
 I have heard this month has another name in the old Japanese calendar. 
 What's it called? 
-It’s called “Shisou.”
-It’s called “Shiwasu.”
-It’s called “Shibashiri.”
+It’s called Shisou.
+It’s called Shiwasu.
+It’s called Shibashiri.
 It's called "Shisou." 
 Oh… Shisou, huh? 
 O-Ogami, you got it wrong! 
 The 12th month of the old lunisolar calendar is called "Shiwasu."
-Oh, so you lied? <br> Quit acting like you know things when you clearly don’t, Mr. Ensign.
+Oh, so you lied? <br> Quit acting like you know things when you clearly do not, Mr. Ensign.
 I-Is that what it was? Whoops. 
 It's called "Shiwasu." 
 Oh… Shiwasu, huh? 
@@ -327,7 +327,7 @@ It's called "Shibashiri."
 Oh… Shibashiri, huh? 
 O-Ogami, you got it wrong! 
 The 12th month of the old lunisolar calendar is called "Shiwasu."
-Oh, so you lied? <br> Quit acting like you know things when you clearly don’t, Mr. Ensign.
+Oh, so you lied? <br> Quit acting like you know things when you clearly do not, Mr. Ensign.
 I-Is that what it was? Whoops. 
 Uh… What was it called again? 
 The 12th month of the old lunisolar calendar is called "Shiwasu."
@@ -336,7 +336,7 @@ How nice. You and I both have learned something new today, Mr. Ensign.
 Ah, haha… You're right. 
 It was said that the 12th month was the busiest time for schools. Even teachers were dashing around.
 Which is why it's called "Shiwasu," or "dashing teachers." I wonder how true it really is. 
-Well, this month we're also busy with the performance, so it must be true. 
+Well, this month we are also busy with the performance, so it must be true. 
 Hehe, you do have a point. 
 Well, let's return to our tasks now, Orihime.
 All right, back to work.

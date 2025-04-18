@@ -1,4 +1,4 @@
-﻿What great weather today, a nice and sunny spring day. 
+It's a nice and sunny spring day today. What great weather. 
 Our spring production is over, and the Imperial Theater's on break. Now, what should I do today…? 
 (Hm? Who could that be?) 
 Yes, coming! 
@@ -49,10 +49,10 @@ Hey, Iris. <br> Did you need something?
 Uh-huh! <br> Let's go on a date, <br> Mon Frère, right now! 
 You promised we'd go on one after we got back, remember? 
 Hahaha, now that you mention it, I guess I did. 
-Sure, let's go. I'd be more than happy to. 
+Sure, let's go. <br> I'd be more than happy to. 
 Yaaay, yaaay! <br> Thanks, Mon Frère! 
 Just leave all the planning to me!
-Really? All right then, go ahead. 
+Really? <br> All right then, go ahead. 
 Come to my room once you're ready, OK? 
 All right, see you later! Bye-byyye! 
 A date with Iris, huh? Hmmm, where does she plan on taking me? 
@@ -72,11 +72,11 @@ An amusement park date with Kohran, huh? Can't wait.
 OK, guess I'll head over to Kohran's room, then. 
 Ciao, Mr. Ensign. 
 Hey, Orihime. <br> Did you need something? 
-Actually, there's something I wanted to show you. 
+Actually, there is something I wanted to show you. 
 Come by my room later, please! 
 Something to show me? 
 Heehee, whatever could it be? 
-OK then, I'll be waiting! 
+OK then, I will be waiting! 
 Orihime has something to show me, huh? I wonder what it is. 
 All right, guess I'll head over to her room, then. 
 Hey, Reni. <br> Did you need something? 
@@ -161,18 +161,18 @@ I wanted to see the ocean so I could feel brave enough to… Um… Tell you how 
 What is it, Kanna? 
 Heheh, nope, still can't do it! Too embarrassed to say it! 
 All right, Boss, race ya to the water! 
-Wait, Kanna. Tell me, I wanna know now! 
+Wait, Kanna. <br. Tell me, I wanna know now! 
 C'mon, better start runnin’ or you're gonna get left behind! Hahahaha! 
 The spring sunlight is pouring into the theater. 
 Looks like we're gonna have great weather all day today. 
 Orihime often plays piano here. 
 What is it that she wants to show me, anyway? 
 Hey, is that you, Orihime? 
-Ciao, Mr. Ensign. Did you come to listen to me play piano? 
+Ciao, Mr. Ensign. <br> Did you come to listen to me play piano? 
 No, that's not why I'm here. 
-Aww, that's a little disappointing. 
-I've come up with all sorts of new ideas for music since we returned from our last battle. 
-I have to work extra hard so I don't lose out to Papa! 
+Aww, that is a little disappointing. 
+I have come up with all sorts of new ideas for music since we returned from our last battle. 
+I must work extra hard so I do not lose out to Papa! 
 Hahaha, I see. 
 All right, Orihime, I'm gonna go now. 
 Stay for a while and listen to me play next time, OK? 
@@ -250,8 +250,8 @@ I can whip ya up something good whenever ya want.
 Thanks, Kanna. 
 See you later. I'll be counting on you once I feel hungry. 
 Yeah, I gotcha covered! <br> Later, Boss! 
-Ah, Mr. Ogami! Good afternoon! 
-Tsubomi? What are you doing by the stage? 
+Ah, Mr. Ogami! <br> Good afternoon! 
+Tsubomi? What are you doing on the stage? 
 Ah, right. I just wanted to get one last look at the Imperial Theater's stage before I leave. 
 I'll be going back to the Maidens' Academy. 
 Everyone at the school wants me to tell them all about our last battle! 
@@ -259,7 +259,7 @@ I see… So I guess this means goodbye.
 Good luck with everything. 
 Yes, sir! Thank you so much Mr. Ogami for taking care of me all this time. 
 I'll work hard and smile, smile until I can stand on top of this stage one day! 
-Oh, I almost forgot! Could I please get a handshake, Mr. Ogami? 
+Oh, I almost forgot! <br> Could I please get a handshake, Mr. Ogami? 
 Yeah, sure… 
 EEK! I got to shake hands with the Flower Division's captain! Everyone's gonna be so jealous!
 Thank you so much! <br> And… goodbye! 
@@ -269,7 +269,7 @@ Tsubomi may stumble at a lot of things but, if I know her like I think I do…
 Then I'm sure the day will come when she's able to stand on this stage. 
 Ah, Ogami! Welcome! 
 Working hard, Tsubaki? 
-Absolutely! This is my job after all.
+Absolutely! <br> This is my job after all.
 We had the spring production right after the battle ended. Aren’t you tired?
 Whatever exhaustion I feel gets blown away when I see my customers' smiling faces! 
 You did a good job, too, Ogami! 
@@ -302,7 +302,7 @@ I feel like this past year's made me better at ticket punching.
 Hey, Sakura. 
 Oh, Ogami. 
 I just got back from my sword training. 
-I see. You sure work hard, Sakura. 
+I see. <br> You sure work hard, Sakura. 
 Well, I do need to train a lot more if I ever hope to catch up to my father. 
 All right, Ogami, I'll be going now. See you later. 
 Sakura's really trying her best. 
@@ -318,7 +318,7 @@ And it's all because of you, Ogami. Thank you so much.
 Kaede… 
 Now then, you'd better get going. After all, you've got someone waiting for you, don't you? 
 Huh?! <br> But… how did you know? 
-Hm hm hm, I'm the deputy commander, remember? All right, run along now. 
+Hm hm hm, I'm the deputy commander, remember? <br> All right, run along now. 
 Um… It's Ogami. 
 Oh, Ogami? Did you still need something? 
 Don't waste too much time, or else a certain someone'll get fed up waiting for you. 
@@ -385,7 +385,7 @@ This date's gonna go great, don'tcha think, Mon Frère?
 Yeah, it definitely will. 
 By the way, aren't you going to tell me where we're going? 
 Well… <br> That's… a… secret! <br> Heeheehee!
-Hey, Iris. Sorry to barge in. 
+Hey, Iris. <br> Sorry to barge in. 
 Ah, Mon Frère! Welcome! 
 I was just writing a letter to my papa and mama. 
 About our spring play, about our last battle… 
@@ -416,8 +416,8 @@ But it's a ton of fun, you'll be addicted once you get used to it!
 I see… <br> Looking forward to it. 
 By the way, Kohran, just asking to be sure, but… 
 It's not going to explode, right? 
-Hahahaha! Relax, Chief! Your safety is guaranteed! 
-C'mon, let's get going! Next stop: Hanayashiki! 
+Hahahaha! Relax, Chief! <br> Your safety is guaranteed! 
+C'mon, let's get going! <br> Next stop: Hanayashiki! 
 Kohran? It's Ogami. 
 … 
 Huh? Doesn't look like Kohran's in her room. 
@@ -425,12 +425,12 @@ Orihime? It's Ogami.
 Is that you, Mr. Ensign? Please, come in. 
 OK, then. Excuse me… 
 So, Orihime, what is it you wanted to show me? 
-Well, I don't know… Should I show it to you? No, maybe I shouldn't after all… 
+Well, I do not know… <br> Should I show it to you? No, maybe I should not after all… 
 O-Orihime… <br> Don't tease me like that. 
-Heehee, all right, I'll show you. 
+Heehee, all right, I will show you. 
 Without further ado… <br> Here it is! 
 Is this… From back when… 
-That's right! It's the portrait Papa drew at the Imperial Hotel on New Year's! 
+That is right! It is the portrait Papa drew at the Imperial Hotel on New Year's! 
 You know, the one of you and me! 
 I just received it from Papa yesterday. 
 I see… So Mr. Ogata finally finished it. 
@@ -439,7 +439,7 @@ When he gave it to me, he said, “You came back, just like you said you would�
 … 
 Anyway, it's a wonderful portrait, as expected of my papa! 
 Yeah… I feel kind of embarrassed looking at a painting of myself, though. 
-Do you really? All day, I have been staring at it and can't get enough. 
+Do you really? All day, I have been staring at it and cannot get enough. 
 Looking at this painting brings back so many memories of you and me… 
 Orihime… 
 We will always be together, just like in this portrait. 
@@ -480,7 +480,7 @@ The sunlight's so warm…
 The day I came back to the Imperial Theater was also a warm spring day, wasn't it? 
 It's almost been a whole year since then already… 
 Oh, Captain. 
-Hey, Maria. What were you doing? 
+Hey, Maria. <br> What were you doing? 
 Oh, I was just… looking upon the streets. 
 They're the same streets as always… The same view as always… 
 But… It's perhaps the most relieving view I can imagine. 
@@ -506,7 +506,7 @@ Doesn't look like she's in. Hmmm… Wonder where she's run off to?
 Actually, wait, she said she would be waiting for me by the entrance, didn't she? 
 Kanna, are you there? 
 … 
-No answer. Guess she's not here. 
+No answer. <br> Guess she's not here. 
 Sumire? It's Ogami. 
 … 
 Doesn't look like she's in her room. 
@@ -519,11 +519,11 @@ You came to the theater in July of last year, right?
 Arf! 
 A lot's happened in just half a year. 
 Bet you never thought you'd ever be flying in the Mikasa, did you? 
-Now you're a full-fledged part of the team, too. Keep up the good work. 
+Now you're a full-fledged part of the team, too. <br> Keep up the good work. 
 Arf, arf, arf! 
-Huh? Did<br> 
-<sp>run off<br>somewhere? 
-Eh, I'm sure he's fine. He's probably running around in the theater somewhere. 
+Huh?<br> 
+<sp>seems to<br>have run off. 
+Eh, I'm sure he's fine. He's probably scampering around the theater somewhere. 
 To think this theater can transform and become a part of the Mikasa… 
 Hard to believe when you see an attic made of wood like this. 
 It's thanks to the Koubu that we were able to seize victory. 

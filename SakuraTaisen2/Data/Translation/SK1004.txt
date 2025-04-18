@@ -289,29 +289,29 @@ Wouldn't want to be rude.
 How do I look? 
 I figured I should, since I'm meeting your parents. Wouldn't want to be rude. 
 A true gentiluomo as always. 
-I'm sure Mamma will take a liking to you, too. 
+I am sure Mamma will take a liking to you, too. 
 Hahaha, that'd be nice. 
 I thought I'd dress in something more formal… <br> How do I look? 
 It suits you perfectly well! 
-You'd fit right into the high society of Europe! 
+You would fit right into the high society of Europe! 
 Hahaha, thanks, Orihime. 
 P-Please don't stare like that, I'm getting embarrassed. 
-There's nothing to be embarrassed about, Mr. Ensign. 
+There is nothing to be embarrassed about, Mr. Ensign. 
 A man's appearance is one of his finest weapons, after all! 
 I-I see… 
 That reminds me, since we are to leave the theater… 
-We should talk to Yoneda first, just to be safe. 
+We should talk to Mr. Yoneda first, just to be safe. 
 Yeah, you're right. OK then, let's stop by his office. 
 There, the door is shut tight. 
 Hey, Orihime. <br> Heading out already?
 Ah, Mr. Ensign. 
 You're going to see your mother, right? 
-Yes, that's right. Mamma came to Japan all the way from Italy. 
+Yes, that is right. Mamma came to Japan all the way from Italy. 
 At last… Mamma and Papa finally get to be together again!
 Give them my regards. 
 I'm happy for you. 
 I won't be able to see them, but give them my regards, OK? 
-Yes, certainly. I'll be telling Mamma all about you.
+Yes, certainly. I will be telling Mamma all about you.
 I'm happy for you, Orihime. Your parents are finally being reunited after so long.
 Yes! And we have you to thank for it all, Mr. Ensign. 
 I'm sorry I can't be there to see them… 
@@ -319,8 +319,8 @@ But you have a nice long chat with them, as a family.
 Mr. Ensign… <br> Thank you so much. 
 I truly wish we could go together… 
 I'm sorry, Orihime. I probably should go and meet them, but… 
-It's OK! 
-I'll tell Papa and Mamma all about you! 
+It is OK! 
+I will tell Papa and Mamma all about you! 
 Well then, Mr. Ensign, I should get going now. 
 All right, be careful. <br> See you soon. 
 Orihime must be so happy. Her parents are finally being reunited after over a dozen years.
@@ -582,15 +582,15 @@ These clothes… They look like Kaede's.
 Huh? Did you say… Kaede?! 
 I am drawn to the bath…
 Go back outside. 
-O-Oh, no… My body's moving on its own… I-I can't control it… 
+O-Oh, no… <br> My body's moving on its own… I-I can't control it… 
 H-Hey! Where do you think you're going, Ogami! 
-It's no good! I… can't… stop! 
+It's no good! <br> I… can't… stop! 
 Phew, it's nice to take a bath first thing in the morning. 
 (Kaede…) 
 (…Dammit, Ogami, get back here!) 
 (Hey, you're staring too, aren't you?!) 
 (That's beside the point! Get outta here before she sees you!) 
-Ow ow ow! I get it already, please let go of me, sir! 
+Ow ow ow! <br> I get it already, please let go of me, sir! 
 N-Not so loud, dumbass! 
 …!! 
 Those voices… <br> Don't tell me…?! 
@@ -604,10 +604,10 @@ I don't care! Just get out!
 Y-Yes, ma'am!! 
 I can't believe this happened with the manager around… 
 N-No, you see… 
-…No, we're sorry. Forgive us, Kaede. 
+…No, we're sorry. <br> Forgive us, Kaede. 
 At any rate, nobody likes being peeped on in the bath. 
 I want you two to think about what you've done. 
-Y-Yes, ma'am! We're truly sorry. 
+Y-Yes, ma'am! <br> We're truly sorry. 
 …Sorry, Kaede. 
 … 
 Hm hm, all right, I forgive you. 
@@ -615,7 +615,7 @@ Well then, I'll be going. See you later, you two.
 Thank goodness she forgave us, eh, sir? 
 Yeah. She's skilled at martial arts, you know, just like Ayame was… 
 So if she REALLY got mad, we would've been in big trouble. 
-I-Is that so… I think I broke out in a cold sweat just hearing that. 
+I-Is that so… <br> I think I broke out in a cold sweat just hearing that. 
 L-Let's get out of here, sir! 
 R-Right! Hurry, Ogami! 
 Phew… <br> Looks like we made it out of there. That was close… 
@@ -624,7 +624,7 @@ It's fine, relax. We hightailed it out of there right away. She didn't see us.
 R-Right… 
 Kaede's skilled with martial arts, you know, just like Ayame was… 
 So if she REALLY got mad, we would've been in big trouble. 
-I-Is that so… I think I broke out in a cold sweat just hearing that. 
+I-Is that so… <br> I think I broke out in a cold sweat just hearing that. 
 Those voices… Ogami and the manager, it's you! 
 Ogami! We got caught thanks to you dawdling around! 
 H-Hey! That was only because you wouldn't stop pulling on me! 
@@ -632,10 +632,10 @@ Whatever! Just get out!!
 Y-Yes, ma'am!! 
 I can't believe this happened with the manager around… 
 N-No, you see… 
-…No, we're sorry. Forgive us, Kaede. 
+…No, we're sorry. <br> Forgive us, Kaede. 
 At any rate, nobody likes being peeped on in the bath. 
 I want you two to think about what you've done. 
-Y-Yes, ma'am! We're truly sorry. 
+Y-Yes, ma'am! <br> We're truly sorry. 
 …Sorry, Kaede. 
 … 
 Hm hm, all right, I forgive you. 
@@ -643,7 +643,7 @@ Well then, I'll be going. See you later, you two.
 Thank goodness she forgave us, eh, sir? 
 Yeah. She's skilled at martial arts, you know, just like Ayame was… 
 So if she REALLY got mad, we would've been in big trouble. 
-I-Is that so… I think I broke out in a cold sweat just hearing that. 
+I-Is that so… <br> I think I broke out in a cold sweat just hearing that. 
 We should leave, sir. We'd be in big trouble if we peeked into the bath. 
 Yes, absolutely. Let's get out of here, Ogami. 
 You did pretty well to resist temptation like that. 
@@ -653,11 +653,11 @@ No, this is for the best. Right, I'd better go.
 OK, time to get out of this bath. 
 Eep! This is bad, sir! 
 Dammit, no choice but to run! 
-Good grief… I don't think she saw us. 
+Good grief… <br> I don't think she saw us. 
 We would've really been in for it if we had left even a second too late. 
 Kaede's skilled with martial arts, you know, just like Ayame was… 
 So if she REALLY got mad, we would've been in big trouble. 
-I-Is that so… I think I broke out in a cold sweat just hearing that. 
+I-Is that so… <br> I think I broke out in a cold sweat just hearing that. 
 Oh, Ogami? Are you here to take a bath? 
 Um, no, not exactly… 
 That reminds me, I was bathing just a moment ago… 

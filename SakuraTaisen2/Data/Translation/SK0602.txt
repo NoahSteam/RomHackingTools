@@ -336,7 +336,7 @@ This rice is starting to fill me up…
 …All right, that's bowl number two finished! 
 Gulp… Gulp… 
 OK, drinking some tea helped clear out my stomach a bit. I can keep going! 
-Hmm… This is getting difficult. 
+Hmm… <br> This is getting difficult. 
 What's wrong, Boss? I don't see ya movin’ those chopsticks. 
 There, that's two meals I've managed to finish! 
 Not bad, Boss! Now things are really heatin’ up! 
@@ -352,12 +352,12 @@ D-Done! That's all the rafute dealt with!
 Just five mouthfuls of rice left… 
 Four… Three… 
 Two… mouthfuls… <br> Last… mouth… ful… 
-DONE!! That's all the rice! 
+DONE!! <br> That's all the rice! 
 Urgh… You got this, Ogami! This is the last one!! 
 *glug*… *glug*… *glug*! 
 PWAHHH!! <br> D-Drank all the tea! 
 Close… So close… 
-Come on, Ogami… Just one last meal! 
+Come on, Ogami… <br> Just one last meal! 
 Oh, yeah! I finished the third batch!! 
 Huhhh?! Y-You already finished it all?! 
 Heheh, it's our final battle. I had to get serious. 
@@ -375,8 +375,8 @@ Right, I should get going. I could use a little post-meal exercise.
 ALL RIGHT!! That's three meals done! How do you like that, Kanna?! 
 I just finished my third meal, too! 
 Huh? Th-Then that means… 
-Hahaha! Looks like it's a tie! 
-Man, I'm stuffed… I can't move another inch… 
+Hahaha! <br> Looks like it's a tie! 
+Man, I'm stuffed… <br> I can't move another inch… 
 Yeah, me too… I didn't think you'd push me this far. 
 … 
 Boss… 
@@ -597,8 +597,8 @@ O-Ogami! Absolutely not!!
 Whoa, whoa, whoa! You don't have to chase me out. 
 Sorry about this, Ogami. 
 What in the world are you doing in there, Sakura? 
-Heehee, it's a secret. Now please excuse me. 
-Hmm, what could it be? This is gonna bug me… 
+Heehee, it's a secret. <br> Now please excuse me. 
+Hmm, what could it be? <br> This is gonna bug me… 
 Doesn't seem like she'll tell me, no matter how much I ask. I guess I'll drop it for now. 
 Hey, Sakura, about earlier… 
 I can't tell you yet, Ogami. 
@@ -756,7 +756,7 @@ Yes, that's what I was waiting here for.
 Right, let's not waste any time, then. 
 By the way, sir, about Reni… 
 She's been acting peculiar for a while now, outside of today's rehearsal and even during battles.
-So you noticed too, huh? I figured you would. 
+So you noticed too, huh? <br> I figured you would. 
 That girl… She sort of reminds me of a former version of myself. 
 Back when all I ever did was fight… When I was unable to trust anyone. 
 Maria… 
@@ -790,7 +790,7 @@ Hearing her say that does fill me with confidence, though.
 Maria's not here. I was hoping we could play some more billiards… 
 But I guess I came too late. 
 No one's here… 
-Oh well. I'll go somewhere else. 
+Oh well. <br> I'll go somewhere else. 
 Is that you, Maria? Were you looking for a book? 
 Yes, sir. I was looking for "The Blue Bird" by Maeterlinck. 
 I was thinking of reading it again to use as a reference for our play.
@@ -833,7 +833,7 @@ Pour it quickly.
 Pour it slowly. 
 Pour it to the last drop. 
 (All right, let's try pouring this out quickly!) 
-Ow, hot hot hot! Crap, it spilled! 
+Ow, hot hot hot! <br> Crap, it spilled! 
 For goodness' sake, Ensign! That's far too fast. 
 Black tea must be poured out gradually to the last drop. 
 That final drop is what we call the "Golden Drop." 
@@ -851,7 +851,7 @@ That is because it has the highest concentration of delicious tea extract.
 I-I see… How educational. 
 (OK, I'll pour it out gradually to the very last drop.) 
 … 
-OK, I'm done pouring. How was that, Sumire? 
+OK, I'm done pouring. <br> How was that, Sumire? 
 Splendid, Ensign. Your pouring technique was impressive. 
 That last drop is what we call the "Golden Drop." 
 That is because it has the highest concentration of delicious tea extract. 
@@ -866,7 +866,7 @@ That final drop is what we call the "Golden Drop."
 That is because it has the highest concentration of delicious tea extract. 
 I-I see… How educational. 
 That's enough, Ensign. Let's stop here for this lesson. 
-Thank you, Sumire. I learned a lot today.
+Thank you, Sumire. <br> I learned a lot today.
 I'll be waiting for you here again next month. 
 Guess there's a proper method for every step of making tea, isn't there? 
 Well, I've finished my tea and had a nice break. I should get going. 
@@ -876,13 +876,13 @@ Really? Well, since you asked so nicely, then sure, why not?
 Now then, I'll prepare you a delectable cup of milk tea. 
 … 
 Huh? You're putting in the milk first? 
-Yes, that's right. Do you know why? 
+Yes, that's right. <br> Do you know why? 
 To weaken the tea's flavor? 
 So the milk doesn't curdle? 
 Force of habit? 
 Hmm, if I had to guess, I'd say it's to weaken the tea's strong flavor? 
 I see. I suppose that's one way to think of it. 
-“One way"? What's the right answer, then? 
+“One way"? <br> What's the right answer, then? 
 Ohohohoho! <br> My apologies, Ensign, it's merely a habit of mine. 
 If I had to give a reason, I suppose it's because it makes the milk easier to measure out. 
 S-Seriously? Sheesh, you had me for a second, there. 
@@ -893,7 +893,7 @@ Ohohohoho! <br> My apologies, Ensign, it's merely a habit of mine.
 If I had to give a reason, I suppose it's because it makes the milk easier to measure out. 
 S-Seriously? Sheesh, you had me for a second, there. 
 If I had to guess, I'd say it's just a force of habit? 
-My, Ensign! You're quite sharp! 
+My, Ensign! <br> You're quite sharp! 
 Indeed, it's merely a habit of mine. 
 If I had to give a reason, I suppose it's because it makes the milk easier to measure out. 
 I see… 
@@ -919,13 +919,13 @@ I thought I might find someone here, but I guess not. Too bad.
 Ah, Mr. Ensign. 
 You told me to ask Orihime, so I went to her right away. 
 Now I know a bunch more about pianos. Thanks a ton. 
-There's not a thing I don't know about pianos. 
-You're quite perceptive, Mr. Ensign. 
+There is not a thing I do not know about pianos. 
+You are quite perceptive, Mr. Ensign. 
 Hahaha, thanks. 
 By the way, Chief. It's been getting pretty windy, huh? 
 Yo, Chief. Getting kinda windy, huh? 
 You're right. The typhoon seems to be getting closer. 
-We don't have typhoons or anything back in Italy, so I'm looking forward to it. 
+We do not have anything like typhoons back in Italy, so I am looking forward to it. 
 Oh yeah, Chief, do you know which language the word "typhoon" comes from? 
 Is it Japanese?
 Is it Chinese?
@@ -956,7 +956,7 @@ That's right! The answer is we don't know!
 There's all kindsa theories saying it's originally Chinese or Arabic or what have you…  
 But the truth is, we still don't really know. 
 Wow, I'm impressed, Mr. Ensign. 
-Though, if I didn't know better, it almost sounded as if you simply didn’t know…
+Though, if I didn't know better, it almost sounded as if you simply did not know…
 All right, Orihime, let's split. 
 Oh, yes. We have to be going, Mr. Ensign. See you later. 
 I'll be working on the Koubu later tonight, Chief, so stop by if ya got time. 
@@ -1115,7 +1115,7 @@ Yes, ma'am… Understood.
 I'll be going now. Think about what you've done, Captain. 
 Man, she's furious with me… Well, it WAS my fault. 
 I should pull myself together and get going. 
-(Urgh… Mmf… I-I think I managed to suppress my sneeze.) 
+(Urgh… Mmf… <br> I-I think I managed to suppress my sneeze.) 
 (N-Now's my chance to get out of here, quick!) 
 Phew, made it out of there alive. 
 If Maria had found me there, I would've been in deep trouble. 

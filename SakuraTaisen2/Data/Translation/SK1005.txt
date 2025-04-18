@@ -20,12 +20,12 @@ Y-Yes, ma’am.
 Sheesh, Ogami…
 N-No, that's not it. We're, uh, how do I put this…
 Th-That's right, we're not getting married or anything…
-Oh, is that so? I'm terribly sorry.
+Oh, is that so? <br> I'm terribly sorry.
 In that case, are you running off in secret to elope?
 Th-That's not it at all, ma'am!
 (What kind of people does she think we are?!)
 U-Um, you see…
-Ah, I knew it. Youth is a wonderful thing.
+Ah, I knew it. <br> Youth is a wonderful thing.
 That being said, though, this isn't the kind of decision to make lightly.
 You should properly introduce yourself to the girl's parents, for her sake as well as your own.
 Y-Yes, ma’am.
@@ -46,7 +46,7 @@ Miyata may be stubborn, but he's not unreasonable.
 Besides, that's all in the past now. I'm sure nobody minds anymore.
 Oh, I-I see…
 It's OK, I'm not afraid. I didn't do anything wrong.
-I see. As I expected, Ensign.
+I see. <br> As I expected, Ensign.
 I feel the same way. There's nothing for us to be ashamed of.
 We can walk through those gates with our heads held high.
 Yeah, sure.
@@ -56,15 +56,15 @@ B-But…
 If you are confident in your actions, then there's no need to be distressed.
 We should walk through those gates with our heads held high. Am I wrong, Ensign?
 Y-Yeah. <br> I get what you mean.
-I see… I suppose that's possible.
-Oh, Ensign. I was merely joking.
+I see… <br> I suppose that's possible.
+Oh, Ensign. <br> I was merely joking.
 You need not worry, nobody in the Kanzaki estate would be so obstinate.
 Besides, we didn't do anything to be ashamed of.
 We can walk through those gates with our heads held high.
 I see. You're right.
 Count Hanakoji's estate is in Yokohama, right?
 Yes. We should arrive there shortly by train.
-I haven't visited the Count since last spring, when I left for the US.
+I haven't visited the count since last spring, when I left for the US.
 Right, you were off in America.
 If I remember right, didn't you live in the States some time ago?
 …Yes. I found myself in America after defecting from Russia.
@@ -74,7 +74,7 @@ Maria…
 Let's enjoy ourselves.
 How does Japan compare?
 It's just the two of us this New Year's. Let's enjoy ourselves.
-…Yes, you're right. Thank you, Captain.
+…Yes, you're right. <br> Thank you, Captain.
 How does the Japanese New Year stack up, from your point of view?
 It's quite enjoyable. Eating ozoni, visiting temples…
 But no matter which country you go to, New Year's remains the same.
@@ -86,8 +86,8 @@ But getting to be alone with you, sir… I think this will be a great holiday.
 Yeah, I'm glad I can be with you, too.
 Let's have a great New Year, Maria.
 Yes, Captain.
-Woo! The ocean breeze feels great, doesn't it, Boss?
-Yeah, it does. It's a little cold, though.
+Woo! <br> The ocean breeze feels great, doesn't it, Boss?
+Yeah, it does. <br> It's a little cold, though.
 Unlike the capital, it's always hot in Okinawa, even in winter.
 …Sorry for draggin’ you out all this way, though.
 It's all right.
@@ -110,11 +110,11 @@ At this rate, I'm gonna put on a few pounds before we even reach Okinawa…
 Eheheh! <br> I'm so glad I get to go out with you, Mon Frère!
 Hahaha. You sure are excited, aren't you?
 Uh-huh! It's kinda like we're on a date!
-Hey, Mon Frère. Do you wanna… hold hands?
+Hey, Mon Frère. <br> Do you wanna… hold hands?
 Sure, why not?
 I'm kind of embarrassed…
 Sure, why not?
-Heheheh, thanks! I feel so happy…
+Heheheh, thanks! <br> I feel so happy…
 Don't let go of my hand until we reach Papa and Mama's boat, OK?
 OK, got it.
 There's so many people here… I feel kind of embarrassed.
@@ -127,7 +127,7 @@ Well, since you're being so quiet, Mon Frère…
 I'll just go ahead and hold your hand!
 H-Hey, Iris! Wait a second!
 It's all right, Mon Frère! After all, we're a couple!
-…Say, do you think those two are…?
+Say… Do you think those two are…?
 Good heavens, what a dazzling pair those youngsters make.
 Heheheh! <br> We're the center of attention, Mon Frère!
 Hahaha… L-Looks like it…
@@ -162,7 +162,7 @@ Now that you mention it, I could go for something to eat.
 Heheh, that's why I brought some candy, just for such an occasion!
 Good thinking as always, Kohran!
 Leave it to me! All right, let's head inside and have a bite together.
-Hm hm… <br> I still can't believe Mamma would travel to Japan.
+Hm hm… <br> I still cannot believe Mamma would travel to Japan.
 When I wrote to her about Papa, she came right over.
 She really must've wanted to see Mr. Ogata.
 By the way, Mr. Ensign, what kind of person do you think my Mamma is like?
@@ -182,7 +182,7 @@ Hmm… Not lately, I guess.
 You used to be quite outspoken, though.
 C-Come on, now, that was so very long ago.
 My mamma is very pretty, AND very nice!
-Even if you make a mistake, she won’t get mad at you. So just relax.
+Even if you make a mistake, she will not get mad at you. So just relax.
 Hmm… I have no idea what kind of person she could be.
 My mamma is just like me: elegant, kind…
 And most of all, beautiful!
@@ -191,7 +191,7 @@ Eeek!
 Whoa… <br> Are you all right, Orihime?
 This is my first time riding a Japanese train… How unstable it is!
 Hahaha, this is your first time, huh?
-…Mr. Ensign, can I hold onto your arm so I don't fall over?
+…Mr. Ensign, can I hold onto your arm so I do not fall over?
 Huh? You're not gonna use the handles?
 I would prefer to hold onto you, Mr. Ensign.
 Look, I will just lock your arm with mine!
@@ -223,12 +223,12 @@ All right, Ogami, shall we start heading towards my home?
 Yeah, let's.
 Why don't we take a detour?
 Yeah, let's. I'm sure you want to see your family as soon as possible.
-That’s true. OK, let’s be on our way.
+That’s true. <br> OK, let’s be on our way.
 Why don't we take a detour while we're here, Sakura?
 Huh? A… detour?
 Yeah, do you know any interesting places nearby?
 Interesting places, huh? Let's see…
-Oh, I know. There is one place, but…
+Oh, I know. <br> There is one place, but…
 It's not exactly a famous landmark of Sendai or anything. Is that all right?
 Huh, where is it?
 Heehee, you'll just have to wait and see.
@@ -241,9 +241,9 @@ The story about the time I climbed a tree as a kid with my childhood friend, Tak
 And how Takeshi was seriously hurt after lightning struck the tree while he was climbing…
 Eh? Then this tree is…
 …That’s right, this is the same tree that was struck by lightning all those years ago.
-What’s this? Is… Is that you, Sakura?
+What’s this? Is… <br> Is that you, Sakura?
 Huh?
-I knew it, it IS you! Long time no see!
+I knew it, it IS you! <br> Long time no see!
 …?
 What, have you forgotten about me? It's me, Takeshi! Takeshi Matsumoto!
 Huh?! Takeshi?! Takeshi, is that really you?! Wow, it's been ages!
@@ -260,7 +260,7 @@ You were hit by lightning…
 I'm Ichiro Ogami.
 I want to know you better.
 You were hit by lightning… 
-Ichiro Ogami. Pleased to meet you.
+Ichiro Ogami. <br> Pleased to meet you.
 And it’s the other way around. Sakura’s the one who's always looking out for me at the theater.
 Haha, so formal! You sound just like a soldier, Ogami.
 …
@@ -296,7 +296,7 @@ All right, it's about time I showed you where my home is.
 When I was little, I was climbing trees with my childhood friend, Takeshi…
 Lightning struck the tree Takeshi was on, and he got seriously hurt.
 This is the very tree that got struck by lightning that day.
-Wow… So it was this tree, huh?
+Wow… <br> So it was this tree, huh?
 Takeshi managed to survive somehow.
 But now there's a Jizo statue placed here to prevent such an accident from ever happening again.
 I had no idea…
@@ -314,7 +314,7 @@ Heehee, it's just old, that's all. Come on in.
 Oh… Sakura.
 Ah, Mother… <br> Happy New Year.
 I’m finally home again.
-Happy New Year, Sakura. Now then, it's cold out, so please, come in…
+Happy New Year, Sakura. <br> Now then, it's cold out, so please, come in…
 Well now… <br> Who might this be?
 This is Ichiro Ogami, captain of the Imperial Assault Troupe's Flower Division.
 Oh my, how nice of you to visit. I am Wakana Shinguji, Sakura's mother.
@@ -387,8 +387,8 @@ Heehee… That yukata sure brings back memories, doesn't it, Mother?
 Yes, it truly does…
 I don't think that's a good idea. It was your father's… Wouldn't that make it a keepsake of his?
 It's all right, Ogami. I'm sure my father would want you to wear it.
-She's right, Ogami. Now then, don't be shy.
-I see… All right, if you insist.
+She's right, Ogami. <br> Now then, don't be shy.
+I see… <br> All right, if you insist.
 Hmm…
 There's no need to hesitate, Ogami. Take it.
 I'm sure my father would be happy to see you wear it if he were here.
@@ -397,7 +397,7 @@ How about trying it on to see if it fits?
 Yeah, sure.
 …How's this?
 Wow… You almost look like Father… Doesn’t he, Mother?
-Yes indeed… It suits you well, Ogami.
+Yes indeed… <br> It suits you well, Ogami.
 Th-Thanks… Much obliged.
 All right, Sakura, could you show Ogami where the bathroom is?
 Also, if you could light the fire for the bath, while you're at it.
@@ -406,7 +406,7 @@ Heehee, it's been so long since I've had to heat up a bath like this.
 Now then, Ogami, let me show you the way to the bathroom.
 OK, thanks.
 Phew, that felt great. It'd been ages since I took a wood-fired bath.
-Ogami? It's Wakana. May I come in?
+Ogami? It's Wakana. <br> May I come in?
 Y-Yes, ma'am! C-Come in.
 Pardon the intrusion.
 How was your bath? I know it isn't much, but we boil the water every day.
@@ -465,12 +465,12 @@ Don't just stand there, Ensign, come along.
 Even on the inside, this place is huge…
 Everything's so big, my neck's starting to hurt from looking up all the time.
 Oh, Ensign… You'll get lost if you keep gawking about like that.
-Ah, Mistress Sumire! Is that you?
-Hello, Miyata. How have you been?
+Ah, Mistress Sumire! <br> Is that you?
+Hello, Miyata. <br> How have you been?
 I have been fortunate enough to remain in perfect health.
 Now if you ever find yourself a suitor capable of being a proper husband…
 I, Kyosei Miyata, can pass on from this world with no regrets.
-Ohohoho… Same as ever, I see, Miyata.
+Ohohoho… <br> Same as ever, I see, Miyata.
 I have brought a guest with me today.
 This is Ensign Ichiro Ogami. I trust you remember him, don't you?
 Ohh, Master Ogami! I must apologize for the trouble I caused you last time.
@@ -484,7 +484,7 @@ Was more than enough to make up for your uncouth behavior.
 Even now I feel unbearable shame for the way I treated you!
 Come now, Miyata. The ensign has forgiven you as well…
 So please, forget about what happened and treat the ensign with your usual hospitality.
-Yes, my lady! I swear on my life!
+Yes, my lady! <br> I swear on my life!
 Man, you guys were tough. That was a hell of a fight.
 Forgive me, sir! I am positively mortified at my behavior!
 I was unable to recognize that you and the troupe only had Mistress Sumire's best interests at heart.
@@ -493,7 +493,7 @@ To think I would send our guards after you…
 Even now I feel unbearable shame for the way I treated you!
 Come now, Miyata. The ensign has forgiven you as well…
 So please, forget about what happened and treat the ensign with your usual hospitality.
-Yes, my lady! I swear on my life!
+Yes, my lady! <br> I swear on my life!
 Forgive me, sir! I feel the utmost shame for my behavior!
 You and the Flower Division were merely acting with Mistress Sumire's best interests at heart.
 I was unable to properly recognize it at the time.
@@ -502,18 +502,18 @@ Was more than enough to make up for your uncouth behavior.
 Come now, Miyata, the ensign understands already, there's no need for the passionate speech.
 By the way, Miyata, do you know where Grandfather and the others might be?
 W-Well…
-What's the matter? Take me to them, Miyata.
+What's the matter? <br> Take me to them, Miyata.
 …Very well. Right this way.
 Tadayoshi, Master Shigeki, and Mistress Hinako are preoccupied with greeting guests for the New Year.
-You're right… Looks like a real handful.
+You're right… <br> Looks like a real handful.
 …
-M-My lady? Will that be all?
+M-My lady? <br> Will that be all?
 …Very well. I had a feeling this would happen.
 Right then, Ensign. Let's make our way to my room.
 Miyata, if you could tell my father and the others that we've arrived.
 Y-Yes, my lady. Understood.
 Now then, Ensign, allow me to show you my room.
-Here we are. Please, come in.
+Here we are. <br> Please, come in.
 Wow, so this is your room…
 Everything is just as I left it before departing to join the Imperial Assault Troupe.
 What a nice, cheery room.
@@ -565,9 +565,9 @@ Sorry to keep you waiting, Ensign. The tea's ready.
 Ah… O-OK!
 (Good thing I didn't read them, or else Sumire definitely would've caught me.)
 (Still… I can't help but wonder what's written on them.)
-Ensign? Is something the matter?
+Ensign? <br> Is something the matter?
 N-Nope, nothing at all! Now then, let's enjoy this tea!
-…Delicious. That was excellent, Sumire.
+…Delicious. <br> That was excellent, Sumire.
 Naturally. I carefully prepared this tea to the best of my abilities.
 Anyway, I wonder if your parents are still busy receiving guests…
 It's always been like this. They're constantly busy, even during New Year's.
@@ -589,7 +589,7 @@ Just wait in the hall and let me take care of it.
 Sumire's cooking, huh? Hmm…
 Well, I certainly am interested in how it'll turn out.
 Right, I'll go ahead and wait in the hall, then.
-Sumire’s cooking, huh… I can't wait to try it!
+Sumire’s cooking, huh… <br> I can't wait to try it!
 Ohohohoho, I figured as much.
 With my natural intuition and talent, I'll make you a meal beyond compare!
 Now then, Ensign, if you could wait in the hall until I've finished preparing your food.
@@ -609,13 +609,13 @@ I'm just happy I get to eat something you made yourself, Sumire.
 Ensign…
 Right, let me bring out your entrée!
 Bon appétit!
-Wow! That's… That's an impressive dish!!
+Wow! That's… <br> That's an impressive dish!!
 I started with the staples of gourmet dining, using foie gras, caviar, and truffles as a base.
 Then I seasoned it with soy sauce to add some Japanese flavor.
 Since I figured you were tired from the trip, I also enriched it with a little salt…
 And I added just a pinch of sugar as a secret ingredient in my special, all-natural butter sauce.
 You're always exhausted from work, so I poured my heart into making a meal that will revitalize you.
-I… I see. Thank you, Sumire.
+I… I see. <br> Thank you, Sumire.
 Now then, please, help yourself.
 D-Down the hatch!
 (Th-This flavor… Words can't even begin to describe it…)
@@ -635,7 +635,7 @@ Y-You're right. Ha… Hahaha.
 Um, how should I put this… It has a… unique flavor.
 Ohohoho… <br> Yes, only I could be capable of such an exquisite flavor.
 Y-You might be right.
-D-Delicious! This flavor is unspeakable… Unspeakably good!
+D-Delicious! <br> This flavor is unspeakable… <br> Unspeakably good!
 …I'm a little concerned it took you so long to answer.
 N-No, that’s just because I was savoring every last bite!
 Oh, Ensign. You flatter me.
@@ -657,9 +657,9 @@ Ah… I am Shigeki Kanzaki, Sumire's father… Uh, thank you for looking after m
 I'm Hinako. Charmed.
 Thanks for having me.
 Sorry about last time.
-Hello… Thank you for having me.
+Hello… <br> Thank you for having me.
 My, you're a handsome one, aren't you? Please, make yourself at home.
-All right. Thank you, ma'am.
+All right. <br> Thank you, ma'am.
 I'm terribly sorry about last time.
 Last time? Oh, not at all, I'd already forgotten about it.
 Please, make yourself at home.
@@ -667,16 +667,16 @@ Yes, ma'am. Much obliged.
 Oh, there's no need to be so nervous.
 Just relax and make yourself at home.
 Yes, ma'am. Much obliged.
-…Hm? What happened to this food?
+…Hm? <br> What happened to this food?
 Oh, this is Sumire's, she made it all by herself.
-What?! Sumire cooked for you?!
+What?! <br> Sumire cooked for you?!
 Sumire's almost never set foot in a kitchen before, and now she's cooking…?
 Yes, I cook. I'm capable of that much, at least.
 Right, Ensign, allow me to clean up for you.
-Thanks, Sumire. The food was delicious.
+Thanks, Sumire. <br> The food was delicious.
 We still have some matters to attend to, so if you'll excuse us!
 Let's talk some more later, Ogami.
-Yes, ma'am. Thank you very much.
+Yes, ma'am. <br> Thank you very much.
 Sumire's parents… That was a little nerve-racking.
 Sorry to disturb you, Ogami.
 (Th-That voice!)
@@ -694,7 +694,7 @@ Well… I do regret it a little bit.
 Fwohoho… <br> Aren't we honest?
 But a man never goes back on his word. You must take responsibility for your choices.
 I will.
-Hmm… That's a tough question.
+Hmm… <br> That's a tough question.
 Fwohoho… <br> What happened to all that enthusiasm from before?
 A man never goes back on his word. You must stay true to your beliefs and never falter.
 …Yes, sir.
@@ -703,14 +703,14 @@ Huh? You're not going to see her yourself?
 Sumire left us. I have no intention of seeing her.
 Now, if you'll excuse me.
 …
-Wow… So this is the Count’s estate.
-Hello, Count Hanakoji. Are you home?
-That voice… Maria, is that you? And is that Ogami with you?
+Wow… So this is the count’s estate.
+Hello, Count Hanakoji. <br> Are you home?
+That voice… <br> Maria, is that you? <br> And is that Ogami with you?
 Welcome. I've been waiting for you two.
 Apologies for not keeping in touch, sir. Thank you for all your help with the troupe.
-Hahaha… You're the only man fit to lead the Flower Division, Ogami.
+Hahaha… <br> You're the only man fit to lead the Flower Division, Ogami.
 You two have come a long way. Please, come in.
-Yes, sir. Pardon the intrusion.
+Yes, sir. <br> Pardon the intrusion.
 I see, so Yoneda's also doing well. Very good, very good.
 By the way, Maria, thank you for accompanying me to America last year.
 Don't mention it, sir. I was glad to go back after so long.
@@ -725,7 +725,7 @@ Talk to Hanakoji.
 Maria… What were you looking for at the jewelry stores?
 N-Nothing… <br> Nothing at all.
 Oh, Count Hanakoji, look what you did.
-Ah, I really am sorry. It just slipped out.
+Ah, I really am sorry. <br> It just slipped out.
 What exactly was Maria looking for, Count Hanakoji?
 Well, I honestly don't know.
 All I know is she was quite serious about visiting as many jewelers as she could.
@@ -742,7 +742,7 @@ All right, we will.
 Well, now. So you only want to go on a date because you're bored, is that it, Captain?
 For what it's worth, I think you two make a lovely couple. Now, go on and have fun.
 Oh, for goodness' sake! Please don't tease us, sir.
-Huh?! W-We're not… We can't just go on a date…
+Huh?! W-We're not… <br> We can't just go on a date…
 Well, it is New Year's, after all. Maybe a date wouldn't be so bad for a change.
 All right then, have fun, you two.
 Yes, sir…
@@ -757,8 +757,8 @@ If it's all right with you, why don't we stop by?
 Sure, let's check it out.
 I dunno, sounds fancy…
 Sure, let's check it out. Might as well while we're in Yokohama.
-Really? Then I'll take you there.
-A café bar, huh? I dunno, sounds fancy…
+Really? <br> Then I'll take you there.
+A café bar, huh? <br> I dunno, sounds fancy…
 It's all right, Captain. It's a quiet place, ideal for relaxing.
 We might as well go while we're in Yokohama.
 You're right. OK, let's go.
@@ -793,7 +793,7 @@ Well at any rate, Count Hanakoji's a funny guy.
 Yes, being one of Mr. Yoneda's old friends, it makes sense he'd be quite the joker.
 But he's also a reliable ally, always caring for the troupe and thinking about the peace of the world.
 Now that I think about it, we really ought to express our gratitude to him.
-That reminds me… What exactly were you looking for at those jewelry stores?
+That reminds me… <br> What exactly were you looking for at those jewelry stores?
 …
 …I thought you might ask. Seems like I don't have a choice but to tell you.
 …Why bring this up all of a sudden, Captain?
@@ -801,7 +801,7 @@ S-Sorry, it's just, it's been bugging me for a while now…
 I was hoping we could talk about other things, but oh well.
 What I was looking for was… this locket.
 I used to have another just like it, but…
-Captain… You remember, right? I went to his grave and…
+Captain… <br> You remember, right? <br> I went to his grave and…
 I said goodbye… to my old locket.
 But I realized I needed to get a new one, no matter what.
 In order to support myself…
@@ -847,7 +847,7 @@ Ever since I joined the troupe, I come here every once in a while to keep the pl
 That sounds rough.
 Does that make you lonely?
 That sounds rough. Isn't it hard, cleaning a place this big?
-Nahhh, it's nothin'. Makes for good exercise.
+Nahhh, it's nothin'. <br> Makes for good exercise.
 Gotta take good care of your home, right?
 Kanna…
 So when you come back, there's nobody else here. Does that make you lonely?
@@ -866,7 +866,7 @@ Kanna…
 Heheh, sorry, I was bein’ kind of a downer, there.
 Heh, all right, Boss, while you're listenin’ to my story, could you come with me for a sec?
 Huh? Where to?
-To my dad's grave. C'mon, let's go.
+To my dad's grave. <br> C'mon, let's go.
 Ah, there it is… <br> My old man’s grave…
 Wow, Okinawan graves sure look different.
 It's a kaaminakuu tomb. It's shaped like a woman's spread legs, so the dead can return to the womb.
@@ -890,7 +890,7 @@ The words just aren't coming to me.
 It's all right, Boss, you don't need to say anything. You bein’ here is enough.
 Here, Dad. I brought you awamori, your favorite. Drink up.
 I also brought a bunch of your favorite food, like rafute and mimiga.
-Hey, Dad… My boss is cool, right? Looks tough, right?
+Hey, Dad… <b> My boss is cool, right? <br> Looks tough, right?
 On top of that, though… He's really nice. He's someone you can really rely on.
 It's like you always said, Dad. You can't only have a strong body, you need a strong heart as well.
 I'll keep workin’ hard till I'm as strong as you… and my boss.
@@ -905,7 +905,7 @@ I can't hold my liquor…
 All right, while we're here, we might as well party!
 That's what I'm talkin' about! You're always up for anything, Boss!
 I can't really hold my liquor…
-All right, eat, then! Pig out!
+All right, eat, then! <br> Pig out!
 Yeah… All right, I'll do that, then.
 C'mon, don't be such a party pooper! Drink and have fun, Boss!
 Yeah… All right, I'll do that, then.
@@ -971,7 +971,7 @@ Hmhmhm, oh, Iris, you've done nothing but talk about Ogami this whole time.
 R… Really? Heheh…
 Whatever will we do with you?
 Speaking of which, we received that letter from you and Iris a while ago, Ogami.
-That's right. It made us very happy.
+That's right. <br> It made us very happy.
 Do you remember how you described yourself, Ogami?
 As a captain, right?
 As a ticket puncher, right?
@@ -1018,12 +1018,12 @@ I know! If you marry me, Mon Frère, we can all be together forever!
 Eep! <br> H-Hang on a second, Iris…
 Oh, Iris… Hmhmhm.
 Well, if it'll make Iris happy, then we'll welcome you with open arms. Hahaha…
-We're here, Chief. We finally made it to Kobe.
+We're here, Chief. <br> We finally made it to Kobe.
 You must be excited. You finally get to see Mr. Howard again.
 Sure am! All right, let's hustle over to Howard's!
 Here it is, the home of Mr. Howard. The first house I lived in when I came to Japan.
 Wow, so this is where you learned how to invent stuff, huh?
-Yup. Now let's head inside.
+Yup. <br> Now let's head inside.
 Ring the doorbell.
 Walk right in.
 We should ring the doorbell first, just in case. I think it's this button…
@@ -1058,7 +1058,7 @@ I am the captain of the Imperial Assault Troupe's Flower Division. Pleased to me
 No, no, Ogami, ya don't gotta be so stiff! Loosen up a little!
 A simple "pleased to meetcha" will do! Just relax, OK? Relax!
 That's right, Chief. Howard will be happier if you loosen up a bit.
-R-Really? All right, I'll try.
+R-Really? <br> All right, I'll try.
 Pleased to meetcha!
 Hahaha! He's a funny man, isn't he? You're a real funny guy, Ogami!
 Yeah, Chief here's a real riot!
@@ -1082,7 +1082,7 @@ Don't worry! There won't be any more explosions or anything!
 …Honest?
 C'mon, Chief, he's gonna show you something neat, so shut those eyes tight.
 But I won't be able to see anything with my eyes closed.
-Shush, you. Just do it already.
+Shush, you. <br> Just do it already.
 …Like this?
 OK! Kohran, switch on!
 All right, here we go!
@@ -1095,7 +1095,7 @@ Pops' entire house is rigged with machinery.
 Using specially-made elevators, you can move to any room in this house while you're sitting down.
 Th-That's amazing!
 Couldn't you just walk?
-Th-That's amazing! What an incredible machine.
+Th-That's amazing! <br> What an incredible machine.
 Heheheh, please, keep the praise coming.
 But if it's only next door, couldn't you just walk there?
 Necessity is the mother of invention, and invention is the cradle of science!
@@ -1111,7 +1111,7 @@ Sheesh, those two really are obsessed with machines.
 How long are they going to make me wait here, anyway…?
 Here we are! This is the Grand Imperial Hotel.
 Your parents are meeting up here, right?
-That's correct. Now then, Mr. Ensign, let's hurry ourselves up and get inside!
+That is correct. Now then, Mr. Ensign, let us hurry ourselves and get inside!
 Oh, Orihime! And Ogami! Welcome.
 Ciao, Papa!
 It's been a while. <br> How are you feeling?
@@ -1134,10 +1134,10 @@ Papa… <br> Mamma…
 Orihime…
 Say something to them.
 Let's go congratulate them, Orihime.
-Mr. Ensign… Let's leave them alone for now.
+Mr. Ensign… Let us leave them alone for now.
 Orihime… Let's not say anything and leave them alone for now.
 Yes… I was thinking the same thing.
-Papa and Mamma couldn’t meet for over a decade…
+Papa and Mamma could not meet for over a decade…
 But that whole time, they still loved each other.
 And now finally, they are together again.
 So you must be Ichiro Ogami. I have read much about you in Orihime’s correspondence.
@@ -1164,7 +1164,7 @@ I too waited a long time, just for this day… The day I could see Seiya again.
 Orihime… You should be thankful that Ogami waited for you for so long.
 Mamma…
 I think it was all love.
-W-Wait one second, Mr. Ensign! What's this all of the sudden?!
+W-Wait one second, Mr. Ensign! What is this all of the sudden?!
 Now, Orihime, expressing one's love is a very important thing.
 I think it's praiseworthy that Ogami is able to profess his devotion so openly.
 Mamma…
@@ -1180,17 +1180,17 @@ Where to?
 All right, sure.
 …Thank you, Mr. Ensign.
 Come with you where, exactly?
-Whatever, it doesn't matter! Just follow me!
+Whatever, it does not matter! Just follow me!
 H-Hey, Orihime, you don't need to pull!
 Come, Mr. Ensign, quit loafing around and hurry up already.
 All right Papa, Mamma, we will be in the lounge upstairs.
 Understood.
 We'll stay right here, so take your time.
-All right, let's go, Mr. Ensign.
+All right, let us go, Mr. Ensign.
 I thank you for being so considerate, Mr. Ensign.
 I bet Papa and Mamma have all kinds of things they want to talk about.
 Jeez, you're so inconsiderate, Mr. Ensign.
-Didn't you get a hint that we should leave them alone?
+Did you not get the hint that we should leave them alone?
 S-Sorry… I didn't notice.
 …Mamma mia, some things never change with you.
 But still, I had no idea up till now…
@@ -1204,17 +1204,17 @@ Yes! I am so, so very glad for them!
 And it's all because you helped patch things up with Papa and me.
 Thank you so much, Mr. Ensign!
 I'm actually jealous of them. I've never seen such a loving couple before.
-Truly, they are. But it's OK, I've already found a partner for myself.
+Truly, they are. But it is OK, I have already found a partner for myself.
 You have? Who is it? <br> Tell me, Orihime.
 Heehee, whoever could it be?
 I hope… we end up like them.
 …Yes. Surely, we will.
 Orihime…
 All right, Mr. Ensign, until Papa and Mamma's conversation dies down a bit…
-Let's stay up here a while, just the two of us.
+Let us stay up here a while, just the two of us.
 Yeah, let's.
 But at this rate, I don't think they'll be stopping till sunset.
-Heeehee, oh, Mr. Ensign, that's perfectly all right.
+Heeehee, oh, Mr. Ensign, that is perfectly all right.
 Huh? Why's that?
 Heehee… Because, that means we can be alone together for even longer.
 All right, Reni, here we are. This is Meiji Shrine.
@@ -1235,7 +1235,7 @@ You're just imagining things, Reni. There just happened to be torii gates at tho
 After all, the capital's filled with shrines and temples.
 Besides, we beat the Black Demons, so there's nothing to be worried about anymore.
 …I wonder.
-…Really? I don't remember that.
+…Really? <br> I don't remember that.
 I'll look into it some more once we get back.
 Yeah, that might not be a bad idea.
 For now, though, let's just enjoy our shrine visit, all right, Reni?
@@ -1250,7 +1250,7 @@ It's a weapon.
 It's a firework chant.
 It's a good luck charm for the New Year. The name "hamaya" means "arrow that destroys evil."
 I see…
-It's a weapon. It IS an arrow, after all.
+It's a weapon. <br> It IS an arrow, after all.
 But it's covered in so many decorations, it doesn't look very practical.
 It's a chant you shout out during fireworks… Just kidding.
 Isn't that "tamaya"?
@@ -1261,7 +1261,7 @@ Hmmm… <br> Sorry, I don't really know, either.
 All right, I'll look it up when we get back.
 By the way, how are you enjoying your first New Year's shrine visit?
 There's so many things I've never seen before, I'm overcome with curiosity.
-I see. I'm glad you like it.
+I see. <br> I'm glad you like it.
 Let's go look at some more things, then.
 Yeah.
 Captain, what is this?

@@ -456,7 +456,7 @@ Maria
 Kohran
 Orihime
 Which of these options can be used by units other than Ogami?
-Call
+Advice
 Cover
 Command
 What is the full title preceding the name of the defensive wall colloquially called the "curtain"?
@@ -636,7 +636,7 @@ Ah, that's the wrong answer! Too bad.
 Wrong answer. You still have a long way to go, Ogami.
 Wrong answer, Ogami.
 Hmhm, looks like your usual methods won’t work here, huh, Ogami?
-Too bad. It was a bit difficult.
+Too bad. <br> It was a bit difficult.
 Time's up! Too bad for you.
 Try not to overthink things, just answer the questions right away. 
 Ah, that's too bad. Your time is up.
@@ -656,153 +656,153 @@ Time's up. That's too bad for you.
 And with this, we’ve finished preparing for breakfast.
 Right then, I should go wake Ogami.
 Good morning.
-Oh, Ogami. Good morning.
-Good morning. Did you sleep well last night?
+Oh, Ogami. <br> Good morning. 
+Good morning. Did you sleep well last night? 
 Good morning. I slept like a log thanks to your hospitality. 
 Breakfast is almost ready, so wait just a little longer.
-Thanks. I'll go get changed, then.
+Thanks. <br> I'll go get changed, then.
 I'll wake him up!
 Zzz… Zzz…
 Wake up, Ogami, it's morning.
-Ah, good morning, Sakura.
+Ah, good morning, Sakura. 
 Good morning. <br> Did you sleep well? 
 Yeah, I slept like a log thanks to your hospitality.
-Really? Hmhm, glad to hear it.
+Really? <br> Hmhm, glad to hear it. 
 We finished making breakfast, so get changed and come to the living room, OK?
-Just 5 more minutes…
-Oh, Ogami, you're hopeless.
-We finished making breakfast, so get changed and come to the living room, OK?
-Hurry up before it gets cold.
+Just five more minutes… 
+Oh, Ogami, you're hopeless. 
+We finished making breakfast, so get changed and come to the living room, OK? 
+If you don’t hurry, your miso soup will get cold.
 …
 Heehee, Ogami's fast asleep…
 …
-Wake up, dear… <br> It's morning…
-Huh?! S-Sakura…
-Eek! O-Ogami… Were you awake this whole time?!
+Wake up, dear… <br> It's morning… 
+Huh?! S-Sakura… 
+Eek! O-Ogami… Were you awake this whole time?! 
 Oh, jeez… Hurry and get up already! It's time for breakfast!
-OK, let's eat!
-There's plenty to go around, so eat as much as you'd like!
-Sakura made this breakfast almost entirely by herself.
-Hmhm, I tried to make it just like Mother's!
+OK, let's eat.
+There's plenty to go around, so eat as much as you'd like! 
+Sakura made this breakfast almost entirely by herself. 
+Hmhm, I tried to make it just like Mother's! 
 *chew* *chew*…
 …
 Well, Ogami…? <br> How does it taste?
-It's great! This is delicious, Sakura!
-Really? Thank you so much!
-You've gotten quite good at seasoning, haven't you, Sakura?
-Thanks! I practiced while at the theater so that I could recreate your recipes, Mother.
-Though I do think the miso soup could stand to be a bit lighter.
+It's great! <br> This is delicious, Sakura! 
+Really? Thank you so much! 
+You've gotten quite good at seasoning, haven't you, Sakura? 
+Thanks! I practiced to make it taste just like your recipes, Mother!  
+Though, I do think the miso soup could stand to be a bit lighter. 
 Huh, you think so? <br> …In that case, you'll have to teach me how sometime! 
 Um… It's OK.
 I-Is that right…?
 …
-I think the miso soup should've been a bit lighter.
-I'll teach you the trick to making it later.
-Your father was always so fussy about his miso soup…
-Wow… You absolutely have to tell me!
+I think the miso soup should've been a bit lighter. 
+I'll teach you the trick to making it later. 
+Your father was always so fussy about his miso soup… 
+Wow… You absolutely have to tell me! 
 I want to cook just like you… The way Father liked it!
 Hmm… I dunno if I like it or not… 
 Come on, Ogami, which one is it?
-I think the miso soup should've been a bit lighter.
-I'll teach you the trick to making it later.
-Your father was always so fussy about his miso soup…
-Wow… You absolutely have to tell me!
+I think the miso soup should've been a bit lighter. 
+I'll teach you the trick to making it later. 
+Your father was always so fussy about his miso soup… 
+Wow… You absolutely have to tell me! 
 I want to cook just like you… The way Father liked it!
 Back then, when I was about to be engaged…
 I called you at the night before the marriage meeting, Ensign.
-Sumire, it's you. Why are you calling so late at night?
-Ensign…
-Between myself and the Imperial Assault Troupe, which is more important to you?
-Wh-What in the world? This came out of nowhere.
-Please, answer me, Ensign.
+Sumire, it's you. Why are you calling so late at night? 
+Ensign… 
+Between myself and the Imperial Assault Troupe, which is more important to you? 
+Wh-What in the world? <br> This came out of nowhere. 
+Please, answer me, Ensign. 
 Sumire…
 I mean… Both are important to me. But if I had to, I'd choose you, Sumire.
 …
 Ensign…
 I mean… Both are important to me. But if I had to, I'd choose the Imperial Assault Troupe.
 …
-Yes, of course. You are the Flower Division's captain, after all.
+…Yes, of course. <br> You are the Flower Division's captain, after all.
 …
 …
-Sumire, you're important to me… and the troupe is important to me, too.
-I really don't think I could ever choose between the two.
+Sumire, you're important to me… and the troupe is important to me, too. 
+I really don't think I could ever choose between the two. 
 Ensign…
 …
-Ah, um… Ensign…
-What is it? Is something wrong?
-…No, nothing at all.
-Well then, do pardon me.
+Ah, um… Ensign… 
+What is it? <br> Is something wrong? 
+…No, nothing at all. 
+Well then, do pardon me. 
 H-Hey, Sumire!
 …
-Ensign… <br> Farewell.
+Ensign… <br> Farewell…
 …
 Ensign…
 Then, on the day of the marriage interview…
-Now that young master Makibishi's wishes have been made known… What say you, Sumire?
-I… I…
-Wait just a damn minute!
-…!! <br> That voice, it couldn't be?!
-Who are you people?
-I am Captain Ichiro Ogami of the Imperial Assault Troupe, Flower Division!
-And I'm Kanna Kirishima, also from the Flower Division!
-Ensign… and Kanna…
+Now that young master Makibishi's wishes have been made known… What say you, Sumire? 
+I… I… 
+Wait just a damn minute! 
+…!! <br> That voice, it couldn't be! 
+Who are you people? 
+I am Captain Ichiro Ogami of the Imperial Assault Troupe, Flower Division! 
+And I'm Kanna Kirishima, also from the Flower Division! 
+Ensign… And Kanna… 
+Sumire… 
 Sumire…
-Sumire…
-Hoh, so you are Ogami, then. All this fuss, I presume you must know who I am, then?
-Surely you have not come here in order to embarrass me…
-…Tadayoshi Kanzaki, who has financed the troupe's activities for so many years?
-No. And the troupe is eternally grateful for the support you've given us.
-But this is a completely separate matter!
-I must object to Sumire being forced into a marriage she doesn't want!
+Hoh, so you are Ogami, then. All this fuss, I presume you must know who I am, then? 
+Surely you have not come here in order to embarrass me… 
+…Tadayoshi Kanzaki, who has financed the troupe's activities for so many years? 
+No. And the troupe is eternally grateful for the support you've given us. 
+But this is a completely separate matter! 
+I must object to Sumire being forced into a marriage she doesn't want! 
 That's right, gramps! If you think things are gonna go your way, you're in for a rude awakenin’!
-Fu… Fwahahaha! Such bravado! I suppose I should expect as much, since you've come all this way.
-But Ogami, what would you say to this?
-You are aware that the troupe's financiers are pulling back their funding, are you not?
-…Yes.
-If you agree to leave peaceably right now, I will see to it that your funding is restored.
-However, if you take Sumire with you, you understand what will happen, yes?
-Grandfather!
-That's low, old man!
+Fu… Fwahahaha! Such bravado! I suppose I should expect as much, since you've come all this way. 
+But Ogami, what would you say to this? 
+You are aware that the troupe's financiers are pulling back their funding, are you not? 
+…Yes. 
+If you agree to leave peaceably right now, I will see to it that your funding is restored. 
+However, if you take Sumire with you, you understand what will happen, yes? 
+Grandfather! 
+That's low, old man! 
 Be silent, women!
 …
 …
 Now then, what will you do, Ogami?
-I understand.
-We're taking Sumire back with us.
+I understand. 
+We're taking Sumire back with us. 
 Ensign!
-I… can't make this decision myself. There's too much riding on it.
-B-Boss, what the hell're you saying?!
+I… can't make this decision myself. There's too much riding on it. 
+B-Boss, what the hell're you sayin'?!
 …
 You said it yourself, Boss! No matter how tough things get, we gotta do this with our own strength!
-Sumire's an important part of the Flower Division!
+Sumire's an important part of the Flower Division! 
 …Yes. You're absolutely right, Kanna.
-We're taking Sumire back with us!
+We're taking Sumire back with us! 
 Right…
 Back then… I made my decision.
 I decided I would live my life without regrets.
 And now… The ensign and I are together.
 Ensign… I know I made the right choice.
-There's nothing to be afraid of. Just hold my hand and I'll get us both out of here.
-But sir…
-It's all right, Maria. I'll never let you go.
-Please… You have to believe me.
-Captain…
-Don't be absurd, Maria! There's no way I'm leaving you behind in a place like this!
+There's nothing to be afraid of. Just hold my hand and I'll get us both out of here. 
+But, sir…
+It's all right, Maria. <br> I'll never let you go. 
+Please… <br> You have to believe me. 
+Captain… 
+Don't be absurd, Maria! There's no way I'm leaving you behind in a place like this! 
 Come with me! We’re getting out of this cave together!
-Captain…
-Maria… You'll come with me, won't you?
-…All right. I'll go with you, sir.
-…
-…
-Captain… will you… protect me?
-Maria…
-Of course I will. I'd be unfit to be captain if I couldn't.
-…Yes.
-Now, Maria, take my hand.
-I promise I won't let go.
-Please… Believe me.
-OK…
-All right then, here we go!
+Captain… 
+Maria… You'll come with me, won't you? 
+…All right. <br> I'll go with you, sir. 
+… 
+… 
+Captain… <br> Will you… protect me? 
+Maria… 
+Of course I will. I'd be unfit to be captain if I couldn't. 
+All right… 
+Now, Maria, take my hand. 
+I promise I won't let go. 
+Please… Believe me. 
+OK… 
+All right then, here we go! 
 …
 …
 Urk…
@@ -812,62 +812,62 @@ Cap… tain…
 …!!
 I have no idea how much time passed after that…
 But when I came to… He was there at my side.
-Maria, are you all right?
+Maria, are you all right? 
 …!
-I never let your hand go, just as I promised.
+I never let your hand go, just as I promised. 
 Captain…
-Maria, a-are you awake?
-C-Captain…?
-You look… disappointed, somehow.
-O-Of course not! I'm so glad you're OK.
+Maria, a-are you awake? 
+C-Captain…? 
+You look… disappointed, somehow. 
+O-Of course not! <br> I'm so glad you're OK.
 Captain…
 …
 …Ah!
 Maria, are you all right?
-C-Captain… did you… save me?
-It's all right now, Maria! You did great.
+C-Captain… <br> Did you… save me? 
+It's all right now, Maria! You did great. 
 Captain…
 Maria, are you all right?
-C-Captain… did you… save me?
+C-Captain… <br> Did you… save me?
 Yeah. You're safe now.
 Captain…
 …
 Hm? Is that you, Kanna?
 Oh, Boss?
-I was just readin' the lines for the Holy Mother… This is tough.
-I've played almost nothin’ but masculine roles like King Lear or Son Goku up till now.
+I was just readin' the lines for the Holy Mother… This is tough. 
+I've played almost nothin’ but masculine roles like King Lear or Son Goku up till now. 
 Do you really think I have what it takes to play a feminine role like this?
-Of course you do! You'd be great, Kanna.
-Huh? R-Really?
-Yeah, really. Don't think about it so hard.
+Of course you do! <br> You'd be great, Kanna. 
+Huh? R-Really? 
+Yeah, really. Don't think about it so hard. 
 Just throw yourself into the part like you always do, Kanna. 
-Boss…
-Thanks, Boss. I'm feelin' a bit more confident now.
-It's true, there's some performances only I can do in the Flower Division.
-I just gotta do things my own way. Maybe a boyish heroine wouldn't be so bad.
+Boss… 
+Thanks, Boss. I'm feelin' a bit more confident now. 
+It's true, there's some performances only I can do in the Flower Division. 
+I just gotta do things my own way. Maybe a boyish heroine wouldn't be so bad. 
 Heheh, now I'm lookin' forward to how this play turns out, too.
-Well, who knows? Nobody knows how things will turn out.
+Well, who knows? Nobody can predict how things will turn out.
 But, so long as you give it your all, I know it'll turn out great. No matter what role you end up with.
-Boss…
-True, that might be tough.
-You think so too, huh, Boss?
+Boss… 
+True, that might be tough. 
+You think so too, huh, Boss? 
 This is way too big of a role for me… 
-Sorry, Kanna. As the person picking the lead, there's nothing I can tell you.
+Sorry, Kanna. As the person picking the lead, there's nothing I can tell you. 
 Ah… You're right.
 (The night went by in a flash.)
 (And then finally, the big announcement of the lead role…)
-Good morning, Ogami.
-Good morning.
-Well? Ready to give your answer?
+Good morning, Ogami. 
+Good morning. 
+Well? <br> Ready to give your answer?
 …
 The one I've picked for the lead role…
 …is Kanna.
-Whaaa?! Boss… <br> Me? Are ya sure?
-Yes. I’m counting on you, Kanna. 
+Whaaa?! Boss… <br> Me? Are ya sure? 
+Yes. I’m counting on you, Kanna.
 …
 All right, you got it! For you Boss, I'll give it everythin’ I've got!  
 Papa, Mama, this is Mon Frère.
-I'm Ichiro Ogami. Pleased to meet you.
+I'm Ichiro Ogami. <br> Pleased to meet you.
 It's been a long time. Thank you for your hospitality back when I visited France.
 You haven’t seen them in a while, so let me introduce you again!
 This is my papa and mama!
@@ -880,7 +880,7 @@ Right? Right?
 When I grow up, I'm gonna be pretty just like her!
 She looks a lot like you, I was surprised.
 You're her spitting image, Iris.
-Uh-huh! I'm her child, after all!
+Uh-huh! <br> I'm her child, after all!
 When I grow up, I'm gonna be pretty just like her!
 Your mother's beautiful, but so are you, Iris.
 Huh? Really?
@@ -892,48 +892,48 @@ Then I fell asleep on Mama's lap…
 I had a wonderful dream with Mon Frère, Papa, and Mama. Everyone was in it…
 …
 We were… <br>… we thought…
-Iris… <br>Look after her.
+Iris… <br> Look after her.
 Yes, sir. <br> No matter what happens, I will protect Iris.
-Come visit again whenever you like.
+Come visit again whenever you like. 
 That way you can see Iris grow up, little by little.
 Iris…
 (Mon Frère?)
-Uhhh… Mm…
+Uhhh… Mm… 
 Ah… <br> Was I… asleep?
-Oh my. Sorry for waking you up, Iris.
-I heard Mon Frère's voice and woke up.
-Hahaha, like Sleeping Beauty awoken by the prince's kiss.
-Huh? What did you say? <br> Did Mon Frère… kiss me?
+Oh my. Sorry for waking you up, Iris. 
+I heard Mon Frère's voice and woke up. 
+Hahaha, like Sleeping Beauty awoken by the prince's kiss. 
+Huh? What did you say? <br> Did Mon Frère… kiss me? 
 …Wha?
 Hm hm hm… <br> Maybe when you're a little older, Iris.
 N-Not you too…
 Heheh… <br> Mon Frère got so flustered…
 …Then those Society people came back, and we had to go…
 …
-Iris? What's wrong?
-…
-Iris… You're feeling lonely, aren't you?
-Why don't you say goodbye to them, just one more time?
+Iris? What's wrong? 
+… 
+Iris… You're feeling lonely, aren't you? 
+Why don't you say goodbye to them, just one more time? 
 But…
-Iris… Go see them.
+Iris… Go see them. 
 Your papa and mama want to be with you. 
-But… They have to stay behind while you head to battle.
-So that's why you need to tell them, "I'm coming back."
-Really? Is that OK?
-Yeah. Go to them.
-OK! Thank you, Mon Frère!
-I'm… starting to feel a little seasick.
-…Huh? <br> Are you OK, Mon Frère?
-Yeah, I'll be fine. It'll blow over eventually.
-So… Why don't you go talk to your parents until I feel better?
-Mon Frère…
-Thanks, Mon Frère. <br> I'll be right back!
-Please, Mon Frère… Can I talk to my Papa and Mama one more time?
-…Yeah, sure. Go ahead.
+But… They have to stay behind while you head to battle. 
+So that's why you need to tell them, "I'm coming back." 
+Really? Is that OK? 
+Yeah. Go to them. 
+OK! Thank you, Mon Frère! 
+I'm… starting to feel a little seasick. 
+…Huh? <br> Are you OK, Mon Frère? 
+Yeah, I'll be fine. <br> It'll blow over eventually. 
+So… Why don't you go talk to your parents until I feel better? 
+Mon Frère… 
+Thanks, Mon Frère. <br> I'll be right back! 
+Please, Mon Frère… <br> Can I talk to my papa and mama one more time? 
+…Yeah, sure. Go ahead. 
 OK! Thank you, Mon Frère!
 Here it is, the home of Mr. Howard. The first house I lived in when I came to Japan.
 Wow, so this is where you learned how to invent stuff, huh?
-Yup. Now let's head inside.
+Yup. <br> Now let's head inside.
 We should ring the doorbell first, just in case. I think it's this button…
 OK, let's head inside!
 Wait, don't open that door!
@@ -950,7 +950,7 @@ Failure's a natural part of the inventing process! Haha, don't sweat the small s
 J-Just what I'd expect from Kohran's teacher…
 Now come in, you two, hurry along inside. Don't be shy!
 You must be all tuckered out from your long trip. Grab whatever seat you like over there.
-Right. Pardon me.
+All right. Pardon me.
 Allow me to reintroduce you, Chief. This here's my teacher, Percy Howard!
 Howdy, Ogami! I've heard allll about ya from Kohran's letters!
 Hello, I'm Ichiro Ogami.
@@ -963,7 +963,7 @@ I am the captain of the Imperial Assault Troupe's Flower Division. Pleased to me
 No, no, Ogami, ya don't gotta be so stiff! Loosen up a little!
 A simple "pleased to meetcha" will do! Just relax, OK? Relax!
 That's right, Chief. Howard will be happier if you loosen up a bit.
-R-Really? All right, I'll try.
+R-Really? <br> All right, I'll try.
 Pleased to meetcha!
 Hahaha! He's a funny man, isn't he? You're a real funny guy, Ogami!
 Yeah, Chief here's a real riot!
@@ -976,15 +976,15 @@ You're a lot more reserved than I expected. Japanese people really are a quiet b
 Well everyone's quiet compared to you, Howard.
 So you must be Ichiro Ogami. I have read much about you in Orihime’s correspondence.
 I am her mother, Carino. Allow me to extend my gratitude for all you’ve done for my daughter.
-No need to thank me. I only did what I could.
+No need to thank me. <br> I only did what I could.
 But Orihime’s hatred towards Japanese men was truly unyielding.
 How did you succeed in opening her heart to you?
 I think it was all trust.
 Trusting each other, and earning each other's trust in turn…
 I think that's how we came to understand one another.
-Hmhm, you're as corny as ever, Mr. Ensign.
-I understand completely. My trust in Seiya was what allowed me to endure the wait for this day.
-Please, Ogami… Continue believing in Orihime.
+Hmhm, so corny as ever, Mr. Ensign.
+I understand completely. <br> My trust in Seiya was what allowed me to endure the wait for this day.
+Please, Ogami… <br> Continue believing in Orihime.
 I will.
 I think it was all patience.
 At first, even I didn't think we'd be able to get along.
@@ -995,53 +995,53 @@ I too waited a long time, just for this day… The day I could see Seiya again.
 Orihime… You should be thankful that Ogami waited for you for so long.
 Mamma…
 I think it was all love.
-W-Wait a second, Mr. Ensign! What's this all of a sudden?!
+W-Wait one second, Mr. Ensign! What is this all of the sudden?!
 Now, Orihime, expressing one's love is a very important thing.
 I think it's praiseworthy that Ogami is able to profess his devotion so openly.
 Mamma…
 I… don't really know, either.
 Hmhm, you're an honest man, Ogami.
 I am sure Orihime sensed that honesty as well.
-You are the man my daughter chose, after all. There's not a doubt in my mind that you're a wonderful person.
+You are the man my daughter chose, after all. There's not a doubt in my mind that you are a wonderful person.
 Orihime. You must always treasure Ogami's feelings for you.
 Yes, Mamma. I understand.
-Right… <br> Mr. Ensign, could you come with me for a second?
+Now then… <br> Mr. Ensign, could you come with me for a second?
 All right, sure.
 …Thank you, Mr. Ensign.
 Come with you where, exactly?
-Whatever, it doesn't matter, just follow me!
+Whatever, it does not matter! Just follow me!
 H-Hey, Orihime, you don't need to pull!
 …
-Come on, Mr. Ensign, quit loafing around and hurry up already.
-All right Papa, Mamma, we're going to be in the lounge upstairs.
+Come, Mr. Ensign, quit loafing around and hurry up already.
+All right Papa, Mamma, we will be in the lounge upstairs.
 Understood.
 We'll stay right here, so take your time.
-All right, let's go, Mr. Ensign.
-Thank you for being so considerate, Mr. Ensign.
+All right, let us go, Mr. Ensign.
+I thank you for being so considerate, Mr. Ensign..
 I bet Papa and Mamma have all kinds of things they want to talk about.
 Jeez, you're so inconsiderate, Mr. Ensign.
-Didn't you get the hint that we should leave them alone?
+Did you not get the hint that we should leave them alone?
 S-Sorry… I didn't notice.
-…Sheesh, some things never change with you.
-Anyway, I had no idea up till now…
+…Mamma mia, some things never change with you.
+But still, I had no idea up till now…
 No idea that Papa and Mamma loved each other that much…
 Orihime…
 I'm so glad they were finally able to reunite.
-Yeah! It's great… It really is!
-And it's all because you helped Papa and I patch things up.
+Yes! I am so, so very glad for them!
+And it's all because you helped patch things up with Papa and me.
 Thank you so much, Mr. Ensign!
 I'm actually jealous of them. I've never seen such a loving couple before.
-They really are. But it's OK, I've already found myself a partner.
-You have? Who is it? Tell me, Orihime.
+Truly, they are. But it is OK, I have already found a partner for myself.
+You have? Who is it? <br> Tell me, Orihime.
 Heehee, whoever could it be?
 I hope… we end up like them.
-…Yeah. I'm sure we will.
+…Yes. Surely, we will.
 Orihime…
 All right, Mr. Ensign, until Papa and Mamma's conversation dies down a bit…
-Let's stay up here a while, just the two of us.
+Let us stay up here a while, just the two of us.
 Yeah, let's.
 But at this rate, I don't think they'll be stopping till sunset.
-Heeehee, oh, Mr. Ensign, that's perfectly all right.
+Heeehee, oh, Mr. Ensign, that is perfectly all right.
 Huh? Why's that?
 Heehee… Because, that means we can be alone together for even longer.
 …
@@ -1050,40 +1050,40 @@ Heehee… Because, that means we can be alone together for even longer.
 Reni, it's me. I just want to talk for a minute. Will you open up?
 …
 …I'm coming in.
-Sorry for barging in like this. I was just worried about what happened during your rehearsal.
-…
-Are you not feeling well?
-…
-Reni?
-Captain…
-…Reni?
+Sorry for barging in like this. I was just worried about what happened during your rehearsal. 
+… 
+Are you not feeling well? 
+… 
+Reni? 
+Captain… 
+…Reni? 
 What… What am I… <br> What am I fighting for? 
 Huh?
 I… I’ve lost my purpose… The reason I fight…
-Captain… What is it that you’re fighting for? 
+Captain… <br> What is it that you’re fighting for? 
 Well, I fight…
 I'm fighting to protect the capital. That's our duty as the Imperial Assault Troupe.
-For justice, of course.
-…Justice?
-That's right. We defeat evil and represent our justice. That's our job.
-Heh, isn't it obvious? It's to find the blue bird.
-Now, let's look for the blue bird of happiness, together!
-Hmmm… <br> That's a tough question.
-I haven't ever seriously thought about why it is that I fight.
+For justice, of course. 
+…Justice? 
+That's right. We defeat evil and uphold justice. That's our job. 
+Heh, isn't it obvious? <br> It's to find the blue bird. 
+Now, let's look for the blue bird of happiness, together! 
+Hmmm… <br> That's a tough question. 
+I haven't ever seriously thought about why it is that I fight. 
 After that… There's only one thing I can remember clearly.
 Why… What am I fighting for?
 That was the only thought going through my head.
 All up until…
-Why? Why won't you… fight me? I'm… your enemy!
-Reni, do not be deceived! You are a killing machine. Everyone else is your enemy!
-That's not true! Reni, you have to believe in others!
-Mon Frère, take this!
+Why? <br> Why won't you… fight me? I'm… your enemy! 
+Reni, do not be deceived! You are a killing machine. Everyone else is your enemy! 
+That's not true! Reni, you have to believe in others! 
+Mon Frère, take this! 
 What… is that?!
-Reni, you have to remember! Remember who you are! Remember who WE are!
-The time we first met… The days we spent together… Have you completely forgotten?
-Remember how Iris poured her heart into making this flower crown for you!
-Urgh…
-I didn't know how lost you felt, how anxious you felt, how lonely you felt…
-“What am I fighting for?" <br> When you asked me that question, I didn't know how to answer you.
-But now… Now I can tell you exactly how I feel!
+Reni, you have to remember! Remember who you are! Remember who WE are! 
+The time we first met… <br> The days we spent together… Have you completely forgotten? 
+Remember how Iris poured her heart into making this flower crown for you! 
+Urgh… 
+I didn't know how lost you felt, how anxious you felt, how lonely you felt… 
+“What am I fighting for?" <br> When you asked me that question, I didn't know how to answer you. 
+But now… Now I can tell you exactly how I feel! 
 We fight for those dear to us! We fight to protect the ones we love!

@@ -13,7 +13,7 @@ Fun
 Unease
 Sinister
 Rowdy
-Aerial Battleship Mikasa
+Battleship Mikasa
 Musashi's Theme
 Blooming Maidens - Dep.
 Black Demon Theme
@@ -26,7 +26,7 @@ Boss 1
 Boss 2
 Final Battle
 Decisive Battle
-Assault Troupe, Move Out
+Troupe, Move Out!
 Go! Assault Troupe
 Spring is Coming
 Tango of Absolute Fate
@@ -58,4 +58,4 @@ Miracle Bells 1
 Miracle Bells 2
 Cont. of the Dream
 Exit
-?
+???
