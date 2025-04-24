@@ -3,7 +3,7 @@ Oh, Ogami!
 Ahh! Is that… <br> Is that really you, Ogami? 
 Sakura… 
 I-I'm sorry. What a strange thing for me to say. 
-I’ve had so many dreams about you returning that… I thought maybe this was another dream. 
+I’ve had so many dreams about you returning that… <br> I thought maybe this was another dream. 
 Sakura… 
 I'm back. 
 This isn't a dream. 
@@ -11,7 +11,7 @@ I’ve dreamt of this, too.
 I'm back, Sakura. I'm so happy to see you again. 
 Welcome back, Ogami… 
 I look forward to working with you again. Let's both do our very best! 
-Same to you. Let's give it our all. 
+Same to you. <br> Let's give it our all. 
 I'm happy to hear you were dreaming of me… but this isn't a dream. 
 Yes, you… You're right. You and I can be together again. 
 I look forward to working with you again, Ogami. 
@@ -232,7 +232,7 @@ I can't talk about that with anyone outside the Navy. Sorry.
 Aww, that's no fun. But I suppose it makes sense when I think about it. 
 Well, if any more gossip-worthy news comes along, be sure to tell me! 
 The Flower Division will be putting on four different plays this year. 
-With more time to prepare, we can hold more lavish, quality productions… That's the idea, anyway.
+With more time to prepare, we can hold more lavish, quality productions… <br> That's the idea, anyway.
 Our production for the summer season is "King Lear." It's slated to open in June. 
 I saw a huge rat in the attic earlier. Goodness, did it spook me. 
 Hm? The attic? You can reach it by taking the stairs up from the second floor. 
@@ -374,7 +374,7 @@ Yes, Mr. Yoneda filled us all in. We're grateful to have you back.
 By the way, Ogami, have you filled out your arrival forms yet? 
 Uh, I haven't… 
 I thought so. Well, please come to the secretarial office so we can get the formalities out of the way. 
-Oh, Mon Frère. What are you up to? 
+Oh, Mon Frère. <br> What are you up to? 
 I thought I'd go visit everyone's rooms. 
 Anyone who isn't here right now locked their rooms, so you can't get in. 
 Oh, that's right, a lot of people are away at the moment. 
@@ -383,7 +383,7 @@ I'm fine if you're here.
 I can hold out. 
 Yeah, I'm lonely. 
 Yes, but you're here, Iris, so I'm fine. 
-Really?! Eheheh. Thanks, Mon Frère! 
+Really?! Eheheh. <br> Thanks, Mon Frère! 
 I'm not lonely either, 'cause you're here! 
 Yes, but I can hold out a little longer. 
 …Yeah. I'm gonna hold on, too. 
@@ -450,7 +450,7 @@ Ogami…
 Sakura… 
 I… I should be going. 
 W-Well then, please excuse me. 
-Oh, of course. See you later, Sakura. 
+Oh, of course. <br> See you later, Sakura. 
 Sakura… 
 So this is my room as of today. 
 I wish I could take it easy, but I need to go visit the manager's office first. 
@@ -797,7 +797,7 @@ This is Orihime Soletta, the newest member of the Flower Division.
 Ciao! <br> I am Orihime Soletta. <br> Pleased to meet you all. 
 Call me Orihime, if you please. 
 The Soletta family are distinguished throughout Italy, where they are known as the “Red Nobles.”
-That's right. 
+That is right. 
 Whoa, that's incredible. 
 These three are Kasumi, Yuri, and Tsubaki. They handle the theater's clerical work. 
 And this is Sakura and Iris, both members of the Flower Division. 
@@ -839,11 +839,11 @@ And all of them, always filled to the brim with guests far and wide.
 Wow, that's incredible. 
 Well, I'm sure there must be a lot of things you don't know since you only just arrived in Japan. 
 I’m always here for you, so if you have any questions, just ask. 
-Hmmm… <br> “Always here for me,” you say? 
+Hmmm… <br> “Always here for me,” <br> you say? 
 I will be returning now to my room! 
 I cannot be bothered with any more of this. 
 O-Orihime! <br> What's the matter?! 
-Hmph, nothing much. Being here has simply bored me, is all, and so I'm going back. 
+Hmph, nothing much. Being here has simply bored me, is all, and so I am going back. 
 O-Orihime, wait a second! 
 If I said something to offend you, I apologize. 
 Humph, speaking to a Japanese man any longer than this is only a waste of my time. 

@@ -176,7 +176,7 @@ Mr. Ensign? What is it you need at this hour?!
 Orihime, it's Sakura. Sorry for disturbing you so late at night. 
 Um, there's something we wanted to talk with you about. 
 … 
-I don't know what you want, but I am about to sleep. So please keep this brief. 
+I do not know what you want, but I am about to sleep. So please keep this brief. 
 If it takes too long, I will be excusing myself from this conversation. 
 (Looks like she's not in a great mood. For now, I’ll try inviting her to patrol the theater with us.) 
 (I need to be careful with what I say, or else she might just leave. All right, let's do this.) 
@@ -543,14 +543,14 @@ The dining hall has been remodeled, so the atmosphere of the room has changed a 
 So this is the dining hall? It’s rather cramped. 
 You think so? Seems spacious enough to me. 
 Maybe it just feels small compared to what you're used to, since you come from a noble family.
-We have no business here. Why don't we get going?
+We have no business here. Why do we not get going?
 No one's around, let's check another room. 
 It's spring, soon all the hibernating animals will wake up from their long slumber.
 Whenever spring comes around, I always have trouble with sleeping in too long.
 Haha, I can relate. It's tough to get out of bed this time of year.
 Let's get going. We can still catch a cold even if the weather's gotten warmer. 
 No one's around. Makes sense, since it's already late at night. 
-Nothing odd in here. Let's get going. 
+Nothing odd out here. <br> Let's get going. 
 Is it really needed to check outside? 
 No one's around. Let's get back inside and lock the door. 
 Starting this year, the Flower Division will hold four different seasonal performances. 
@@ -894,7 +894,7 @@ I will take my leave now. Good night.
 Oh, boy… Seems that she really hates me. 
 Tomorrow, I'll ask Orihime to join us for rehearsals. 
 It'll be a good chance to chat with her. 
-Thanks again, Ogami. Good night. 
+Thanks again, Ogami. <br> Good night. 
 Yeah, good night. 
 Now, I better get back to my room, too. 
 …Excuse me, but my room is right behind you two.
@@ -909,7 +909,7 @@ Thank you very much. I’ll take you up on that offer.
 Thanks for taking me back to my room. 
 Tomorrow, I'll ask Orihime to join us for rehearsals. 
 It'll be a good chance to chat with her. 
-Thanks again, Ogami. Good night. 
+Thanks again, Ogami. <br> Good night. 
 Yeah, good night. 
 Now, I better get back to my room, too. 
 …Is that all right with you?
@@ -923,7 +923,7 @@ Thank you very much. I’ll take you up on that offer.
 Thanks for taking me back to my room. 
 Tomorrow, I'll ask Orihime to join us for rehearsals. 
 It'll be a good chance to chat with her. 
-Thanks again, Ogami. Good night. 
+Thanks again, Ogami. <br> Good night. 
 Yeah, good night. 
 Now, I better get back to my room, too. 
 Well, take care on your way back, Sakura. Good night. 
@@ -1056,7 +1056,7 @@ Oh, Mr. Ensign? Eavesdropping on us? <br> What a nice hobby.
 Y-You got it all wrong! I'm just worried about you two! 
 Just as I thought. <br> Japanese men are the worst. 
 You're a meddlesome coward. On top of that, you like to stick your nose in other people's business. 
-And Cherry- Er, Sakura lacks any sense at all. Non ha senso! I cannot stand her! 
+And Cherry- Er, Sakura lacks any sense at all. <br> Non ha senso! I cannot stand her! 
 I am going back home to Italy! Now, out of my way, please. 
 Stand your ground.
 Move out of the way. 
@@ -1068,7 +1068,7 @@ Uwah!
 Ah, Mon Frère! 
 O-Ogami! 
 There, now you are dripping with charm. 
-I don't care if you're the captain or whatever, stop meddling in other people’s business. 
+I do not care if you are the captain or whatever, stop meddling in other people’s business. 
 From your perspective, it may look like I’m just sticking my nose in when it's not wanted. 
 But, my only wish was for you to get along with everyone in the Flower Division. 
 Orihime, I'm asking you as a fellow member of the Flower Division, please stand with us. 
@@ -1092,7 +1092,7 @@ Hmm…
 … 
 So you ignore me? <br> Fine, I will just force my way past you! 
 Ah! 
-What's that sound? 
+What is that sound? 
 It's time to suit up for a mission! We have enemies incoming! 
 I'm asking you once again, Orihime. 
 Please fight together with us, as a member of the Flower Division. 
@@ -1114,7 +1114,7 @@ Let’s do our best to protect the peace, Ogami!
 If you're in danger, I'll come to save you, Mon Frère! 
 Let's do our best together! 
 I'll show you all my gorgeous style of battle!
-Ah, I cannot believe I'm tagging along. Perhaps I have my whimsical side, too. 
+Ah, I cannot believe I am tagging along. Perhaps I have my whimsical side, too. 
 Thanks, everyone. <br> I'm counting on you! 
 Good. Now then, Ogami, is there anything you want to ask? 
 Ask about the enemy 
@@ -1131,7 +1131,7 @@ This is the uniform for the Star Division, the elite squad I was assigned to bef
 Star Division? 
 Yes, the Star Division was an experimental team formed before the Flower Division was established. 
 They were an elite unit comprised of spirit power wielders from around the world. 
-That's right! In terms of experience, I'm your senior! 
+That's right! <br> In terms of experience, <br> I'm your senior! 
 Now, one more thing I need to tell you before deployment.
 We can't fight the monsters who attack Tokyo with just our bodies. 
 That's why you're all piloting mechanical armor, or rather, "Spirit Armor." 
@@ -1151,7 +1151,7 @@ Wha… Are you serious?!
 That's… That's the sound of a Spirit Armor's engine! 
 It's coming from the hangar. It must be her! 
 Wh-What is that?! 
-Oh, Mr. Ensignnn! I will be heading out first! 
+Oh, Mr. Ensignnn! <br> I will be heading out first! 
 So long as I have my “Eisenkleid” from the Star Division, I can take care of the enemy all by myself! 
 W-Wait up, Orihime!! 
 Now is the perfect chance to show you all what I can really do!

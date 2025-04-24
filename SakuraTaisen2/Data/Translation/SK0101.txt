@@ -41,7 +41,7 @@ W-Well…
 It's Sakura. 
 It's Sumire. 
 It's Maria. 
-What's wrong? Don't be shy, tell me. 
+What's wrong? <br> Don't be shy, tell me. 
 It's Kanna. 
 It's Iris. 
 It's Kohran. 
@@ -358,7 +358,7 @@ Oops, looks like it's that time. Iris, if you could escort Ogami to the theater 
 You know the way there, right? 
 Don't worry! I'm old enough to know that! 
 OK then, Mon Frère, follow me! C'mon, hurry! 
-Yeah, yeah… 
+OK, OK… 
 Yes. Kohran. 
 I see. Kohran, eh? 
 That's right. You two went to China together. 

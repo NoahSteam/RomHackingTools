@@ -23,8 +23,8 @@ Huh, you too? I was also called down here by the manager.
 What?! You as well, sir? 
 Hmm, why'd he ask both of us to come here at the same time? 
 Anyway, let's just hear what the manager has to say. 
-Huh? Well if it ain't the boss. 
-Yo, Boss. <br> What are you doing here? 
+Huh? <br> Well if it ain't the boss. 
+Yo, Boss. <br> What are you doin' here? 
 I actually just got called down to meet with Mr. Yoneda. 
 Huh, you too? I was also asked to come to the manager's office. 
 So he summoned you as well, huh? 
@@ -37,7 +37,7 @@ Huh, you too, Mon Frère?! Uncle Yoneda also asked me to meet him here.
 Huh, really? Hmmm… <br> What's this all about? 
 Hey, what do you think he wants to talk about? Heheh, now I'm curious! 
 Hahaha… <br> Let's go inside for now. 
-Oh? Well if it ain't the chief. 
+Oh? <br> Well if it ain't the chief. 
 Whatcha doing here, anyway? 
 Did you get in trouble and now the manager's making you stand outside his office? 
 O-Of course not! <br> I'm not in grade school! 
@@ -365,7 +365,7 @@ Our hearts, they will always be as one.
 Uhh… <br> Sniff… Mon Frère… 
 Come, now, Iris, don't cry. 
 Mon Frère… <br> Don't forget about me… OK? 
-I'll always… Always…  
+I'll always… <br> Always…  
 Sniff… Uhh… 
 …It's OK, Iris. There's no way the boss would forget about us. 
 Heheh, you better not half-ass your trainin’ while you're in France, Boss. 
@@ -437,11 +437,11 @@ Well… <br> Good night, Mon Frère.
 Iris… 
 Sorry for bugging you so late at night, Chief. 
 Kohran… 
-You see, I, uh… I have something for you. 
+You see, I, uh… <br> I have something for you. 
 If it's all right, I'd like you to take this. 
 What's this? 
-It's a letter I wrote… For you. 
-Um… It's kind of embarrassing, so wait till you're on the boat to read it, 'kay? 
+It's a letter I wrote… <br> For you. 
+It's kinda embarrassing, so um… wait till you're on the boat to read it, 'kay? 
 Kohran… Thanks. 
 All right then, night, Chief. 
 Kohran… 
@@ -462,7 +462,7 @@ Yeah. Here it is…
 Reni… 
 I've never written a letter to anybody before… 
 But if you could read it once you're on the boat… That would make me happy. 
-Thank you, Reni. I'll make sure to read it. 
+Thank you, Reni. <br> I'll make sure to read it. 
 OK… 
 Well then, Captain… <br> Good night. 
 Reni… 
@@ -568,7 +568,7 @@ And on that note, try not to ogle the Parisian girls too much.
 With love, <br> Imperial Assault Troupe, Flower Division <br> Orihime Soletta 
 May 1925. <br> I was transferred to the Imperial Assault Troupe. I met you for the first time. 
 August 1925. <br> Together with the troupe, I went to a hot spring for the first time. 
-So much happened then. I still get a little embarrassed thinking about it.
+So much happened then. <br> I still get a little embarrassed thinking about it.
 September 1925. <br> You saved me from Suiko's control. 
 From the moment I met you, something inside me slowly began to change. 
 December 1925. <br> The Christmas play. <br> You picked me to play the lead. 

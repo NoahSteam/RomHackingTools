@@ -832,7 +832,7 @@ Back then, we never had a chance to stop by my home island.
 We were there to train, so I was hauling a ton of equipment, too.
 All right, Boss, lemme show you my place.
 It's just a short walk from here. Let’s get goin’.
-There it is, Boss. This here's my house.
+There it is, Boss. <br> This here's my house.
 Wow, the walls are made of stone.
 Yep, most Okinawan houses are like that.
 Anyway, let's head inside for now.
