@@ -26,7 +26,8 @@ struct CustomMenuImageInfo
 
 //Found manually
 const uint16 CharBioImageOffset = (0x320a0 / 8);
-const int NumCustomMainMenuImages = 21;
+const uint16 OgamiBioImageOffset = (0x28300 / 8);
+const int NumCustomMainMenuImages = 22;
 MainMenuImageInfo ManuallyFoundMainMenuImages[NumCustomMainMenuImages]
 {
 	0, 128, 16, (uint16)(0x3c460 / 8),
@@ -59,6 +60,9 @@ MainMenuImageInfo ManuallyFoundMainMenuImages[NumCustomMainMenuImages]
 	0, 112, 16, (uint16)(0x3b5e0 / 8),
 	0, 112, 16, (uint16)(0x3b5e0 / 8),
 	0, 112, 16, (uint16)(0x3b5e0 / 8),
+
+	//Ogami bio
+	0, 176, 136, OgamiBioImageOffset,
 };
 
 const int NumPBEyeImages = 12;
@@ -648,10 +652,10 @@ void ExtractPBookFL(const string& rootSakuraDirectory, bool bBmp, const string& 
 {
 	CreateDirectoryHelper(outDirectory);
 
-	const string sakuraFilePath = rootSakuraDirectory + string("SAKURA1\\TITLE.BIN");
-	FileNameContainer sakuraFileNameInfo(sakuraFilePath.c_str());
-	FileData sakuraFileData;
-	if (!sakuraFileData.InitializeFileData(sakuraFileNameInfo))
+	const string titleFilePath = rootSakuraDirectory + string("SAKURA1\\TITLE.BIN");
+	FileNameContainer titleFileNameInfo(titleFilePath.c_str());
+	FileData titleFileData;
+	if (!titleFileData.InitializeFileData(titleFileNameInfo))
 	{
 		return;
 	}
@@ -671,14 +675,21 @@ void ExtractPBookFL(const string& rootSakuraDirectory, bool bBmp, const string& 
 	const int paletteSize = 32;
 
 	PaletteData palette;
-	if (!palette.CreateFrom15BitData(sakuraFileData.GetData() + 0x00002250, paletteSize))
+	if (!palette.CreateFrom15BitData(titleFileData.GetData() + 0x00002250, paletteSize))
 	{
 		printf("Unable to create palette 1.\n");
 		return;
 	}
 
 	PaletteData charBioPalette;
-	if (!charBioPalette.CreateFrom15BitData(sakuraFileData.GetData() + 0x00002350, paletteSize))
+	if (!charBioPalette.CreateFrom15BitData(titleFileData.GetData() + 0x00002350, paletteSize))
+	{
+		printf("Unable to create charBioPalette 1.\n");
+		return;
+	}
+
+	PaletteData ogamiBioPalette;
+	if (!ogamiBioPalette.CreateFrom15BitData(titleFileData.GetData() + 0x00001fb0, 512))
 	{
 		printf("Unable to create charBioPalette 1.\n");
 		return;
@@ -690,7 +701,7 @@ void ExtractPBookFL(const string& rootSakuraDirectory, bool bBmp, const string& 
 	const int numEntries = 167;
 	MainMenuImageInfo lookupTable[numEntries];
 	const unsigned int offsetToData = 0xE1B8;
-	memcpy_s(lookupTable, sizeof(lookupTable), sakuraFileData.GetData() + offsetToData, sizeof(lookupTable));
+	memcpy_s(lookupTable, sizeof(lookupTable), titleFileData.GetData() + offsetToData, sizeof(lookupTable));
 
 	std::vector<uint32> addresses;
 	const int baseOffset = 0x3ef60;
@@ -725,9 +736,12 @@ void ExtractPBookFL(const string& rootSakuraDirectory, bool bBmp, const string& 
 
 		const string outFileName = finalOutputDirectory + std::to_string(i + numEntries) + bmpExt;
 
-		PaletteData* pPalette = ManuallyFoundMainMenuImages[i].offsetDiv8 == CharBioImageOffset ? &charBioPalette : &palette;
+		const uint16 imageOffset = ManuallyFoundMainMenuImages[i].offsetDiv8;
+		const int bitCount = imageOffset == OgamiBioImageOffset ? 8 : 4;
+		const int imageDataSize = bitCount == 4 ? (width * height)/2 : (width * height);
+		PaletteData* pPalette = imageOffset == CharBioImageOffset ? &charBioPalette : imageOffset == OgamiBioImageOffset ? &ogamiBioPalette : &palette;
 		BitmapWriter outBmp;
-		outBmp.CreateBitmap(outFileName, width, -height, 4, fileData.GetData() + offset + accumulatedOffset, (width * height) / 2, pPalette->GetData(), pPalette->GetSize(), bBmp);
+		outBmp.CreateBitmap(outFileName, width, -height, bitCount, fileData.GetData() + offset + accumulatedOffset, imageDataSize, pPalette->GetData(), pPalette->GetSize(), bBmp);
 
 		accumulatedOffset += width * height / 2;
 		prevOffset = offset;
