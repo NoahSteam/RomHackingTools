@@ -22,6 +22,7 @@
 #include <stddef.h>
 #include <errno.h>
 #include <stdlib.h>
+#include "Shims.h"
 
 struct prs_dec_cxt {
     uint8_t flags;

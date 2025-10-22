@@ -1,8 +1,11 @@
 #pragma once
 
+#include <cstdint>
+#include <string>
 #include <sstream>
 #include <iomanip>
 #include <unordered_set>
+#include "Shims.h"
 
 typedef unsigned long uint64;
 typedef unsigned int   uint32;
@@ -56,13 +59,13 @@ struct FileNameContainer
 	{
 		const size_t lastIndex = mFileName.find_last_of(".");
 		mNoExtension           = mFileName.substr(0, lastIndex);
-		mExtention             = lastIndex != -1 ? mFileName.substr(lastIndex, mFileName.size() - 1) : "";
+		mExtention             = lastIndex != std::string::npos ? mFileName.substr(lastIndex, mFileName.size() - 1) : "";
 
 		const char sep = '\\';
 		size_t i = mFullPath.rfind(sep, mFullPath.length());
 		if( i != std::string::npos )
 		{
-			 mPathOnly = mFullPath.substr(0, i);
+			mPathOnly = mFullPath.substr(0, i);
 		}
 	}
 
@@ -72,10 +75,10 @@ struct FileNameContainer
 		
 		const size_t lastIndex = mFileName.find_last_of(".");
 		mNoExtension           = mFileName.substr(0, lastIndex);
-		mExtention             = lastIndex != 0xffffffff ? mFileName.substr(lastIndex, mFileName.size() - 1) : "";
+		mExtention             = lastIndex != std::string::npos ? mFileName.substr(lastIndex, mFileName.size() - 1) : "";
 	}
 
-	bool operator < (FileNameContainer& rhs) const
+	bool operator < (const FileNameContainer& rhs) const
 	{		
 		bool bResult = (atoi(mNoExtension.c_str()) < atoi(rhs.mNoExtension.c_str()));
 		return bResult;
@@ -94,7 +97,7 @@ private:
 
 		const size_t lastIndex = mFileName.find_last_of(".");
 		mNoExtension           = mFileName.substr(0, lastIndex);
-		mExtention             = lastIndex != -1 ? mFileName.substr(lastIndex, mFileName.size() - 1) : "";
+		mExtention             = lastIndex != std::string::npos ? mFileName.substr(lastIndex, mFileName.size() - 1) : "";
 
 		const char sep = '\\';
 		size_t i = mFullPath.rfind(sep, mFullPath.length());
@@ -311,7 +314,7 @@ struct BitmapData
 			mImageDataSize      = 0;
 			mXPelsPerMeter      = 0;
 			mYPelsPerMeter      = 0;
-			mNumColors          = (int)pow(2, bitCount);
+			mNumColors          = 1u << bitCount;
 			mNumImportantColors = 0;
 		}
 	};
@@ -492,7 +495,7 @@ public:
 				mWidthOfContent        = other.mWidthOfContent;
 				mBytesInWidthOfContent = other.mBytesInWidthOfContent;
 			}
-
+			return *this;
 		}
 
 		~Tile()
@@ -637,7 +640,7 @@ public:
 	bool          CreateFontSheetFromData(const char* pInData, unsigned int inDataSize);
 	bool          CreateFontSheet(const FileNameContainer& inFileNameInfo);
 	const char*   GetTileData(int inIndex) const;
-	int           GetNumTiles() const {(int)mTiles.size();}	
+	int           GetNumTiles() const { return static_cast<int>(mTiles.size());}	
 };
 
 class MemoryBlocks
@@ -673,7 +676,8 @@ struct PuyoPrsCompressor
 	const std::vector<uint8>& GetCompressedData() const {return mCompressedData;}
 
 private:
-	byte ReadByte(std::vector<uint8>& stream);
+	// TODO: Why is that method even declared?
+	// byte ReadByte(std::vector<uint8>& stream);
 	void Flush(uint8& controlByte, uint8& bitPos, std::vector<uint8>& data, std::vector<uint8>& destination);
 	void PutControlBit(int bit, uint8& controlByte, uint8& bitPos, std::vector<uint8>& data, std::vector<uint8>& destination);
 	void Copy(int offset, int size, uint8& controlByte, uint8& bitPos, std::vector<uint8>& data, std::vector<uint8>& destination);
@@ -733,7 +737,9 @@ bool DoesFileExist(const std::string& dirName);
 bool CreateDirectoryHelper(const std::string& dirName);
 bool AreFilesTheSame(const FileData& file1, const FileNameContainer& file2Name);
 bool FindDataWithinBuffer(const char* pBuffer, unsigned long bufferSize, const char* pSearchData, const unsigned int searchDataSize, unsigned long& outIndex);
-bool CreateTemporaryDirectory(std::string& outDir);
+int CreateTemporaryDirectory(std::string& outDir);
+int CreateDirectoryPortableHelper(const std::string& dirName);
+
 void GetAllFilesOfType(const std::vector<FileNameContainer>& allFiles, const char* pInFileType, std::vector<FileNameContainer>& outFiles);
 bool CopyFiles(const std::vector<FileNameContainer>& InSourceFiles, const std::string& InOutputDirectory, std::unordered_set<std::string>* pInIgnoreFiles = nullptr);
 bool CopyFiles(const std::string& InSourceDirectory, const std::string& InOutputDirectory, std::unordered_set<std::string>* pInIgnoreFiles = nullptr);
