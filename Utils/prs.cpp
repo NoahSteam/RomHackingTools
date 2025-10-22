@@ -3,6 +3,9 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <cstring> // for std::memcmp
+#include <cstdint> // for uint8_t
+
 typedef unsigned long u32;
 typedef unsigned char u8;
 typedef unsigned int DWORD;
@@ -179,15 +182,14 @@ u32 prs_compress_old(void* source,void* dest,u32 size)
         for (y = x - 3; (y > 0) && (y > (x - 0x1FF0)) && (xsize < 255); y--)
         {
             xsize = 3;
-            if (!memcmp((void*)((DWORD)source + y),(void*)((DWORD)source + x),xsize))
+            const uint8_t* base = static_cast<const uint8_t*>(source);
+            if (std::memcmp(base + y, base + x, xsize) == 0) 
             {
                 do xsize++;
-                while (!memcmp((void*)((DWORD)source + y),
-                               (void*)((DWORD)source + x),
-                               xsize) &&
-                       (xsize < 256) &&
-                       ((u32)(y + xsize) < (u32)x) &&
-                       ((u32)(x + xsize) <= size)
+                while (std::memcmp(base + y, base + x, xsize) == 0 &&
+                    xsize < 256 &&
+                    static_cast<size_t>(y) + xsize < static_cast<size_t>(x) &&
+                    static_cast<size_t>(x) + xsize <= static_cast<size_t>(size)
                 );
                 xsize--;
                 if (xsize > (u32)lssize)
@@ -230,7 +232,6 @@ u32 prs_decompress(void* source, void* dest, unsigned long destSize) // 800F7CB0
     u32 x,t; // 2 placed variables 
 	unsigned long incrementedCount = 0;
 
-   // printf("\n> decompressing\n");
     currentbyte = sourceptr[0];
     sourceptr++;
     for (;;)
@@ -249,7 +250,6 @@ u32 prs_decompress(void* source, void* dest, unsigned long destSize) // 800F7CB0
         if (flag)
         {
             destptr[0] = sourceptr[0];
-     //       printf("> > > %08X->%08X byte\n",sourceptr - sourceptr_orig,destptr - destptr_orig);
             sourceptr++;
             destptr++;
 			incrementedCount++;
@@ -298,7 +298,6 @@ u32 prs_decompress(void* source, void* dest, unsigned long destSize) // 800F7CB0
 
 			u8 dummy = *(u8*)r5;
 			++dummy;
-       //     printf("> > > %08X->%08X ldat %08X %08X %s\n",sourceptr - sourceptr_orig,destptr - destptr_orig,r5 - (u32)destptr,r3,flag ? "inline" : "extended");
         } 
 		else
 		{
@@ -321,7 +320,6 @@ u32 prs_decompress(void* source, void* dest, unsigned long destSize) // 800F7CB0
             r3 += 2;
             sourceptr++;
             r5 = offset + (u32)destptr;
-       //     printf("> > > %08X->%08X sdat %08X %08X\n",sourceptr - sourceptr_orig,destptr - destptr_orig,r5 - (u32)destptr,r3);
         }
 
         if (r3 == 0) 

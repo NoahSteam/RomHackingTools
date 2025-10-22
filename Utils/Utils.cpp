@@ -20,21 +20,34 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 *******************************************************************************/
 
 #include <stdio.h>
-#include <windows.h>
+#ifdef _WIN32
+  #include <windows.h>
+#endif
 #include <vector>
 #include <string>
 #include <assert.h>
 #include <algorithm> // for std::sort
 #include <unordered_map>
 #include <unordered_set>
+#include <filesystem>
+#include <system_error>
+#include <string>
+#include <cmath>
 
 #include "Utils.h"
-#include "..\ExternalTools\lodepng.h"
+#include "../ExternalTools/lodepng.h"
 #include "decompress_rtns.h"
-#include "..\ExternalTools\crc.h"
+#include "../ExternalTools/CRC.h"
+
 
 using std::string;
 using std::vector;
+using std::ceil;
+using std::pow;
+using std::floorf;
+
+namespace fs = std::filesystem;
+
 
 const string Seperators("\\");
 
@@ -131,104 +144,47 @@ int FourByteAlign(int InValue)
 	return InValue + (4 - (InValue % 4));
 }
 
-void FindAllFilesWithinDirectory(const string& inDirectoryPath, vector<FileNameContainer>& outFileNames)
-{
-	WIN32_FIND_DATA fileData;
+void FindAllFilesWithinDirectory(const string& inDirectoryPath, vector<FileNameContainer>& outFileNames) {
+  try {
+    fs::path root(inDirectoryPath);
 
-	const string currentPath = inDirectoryPath + string("\\");
-	const string anyFilePath = inDirectoryPath + string("\\*");
-
-	//get the first file in the directory
-	HANDLE result = FindFirstFile(anyFilePath.c_str(), &fileData);
-
-	while (result != INVALID_HANDLE_VALUE)
-	{
-		//unsigned nameLength = static_cast<unsigned> (strlen(fileData.cFileName));
-
-		//skip if the file is just a '.'
-		if (fileData.cFileName[0] == '.')
-		{
-			if (!FindNextFile(result, &fileData))
-				break;
-			continue;
-		}
-
-		if (fileData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY && strcmp(fileData.cFileName, ".") != 0 && strcmp(fileData.cFileName, "..") != 0)
-		{
-			const string subDirectoryPath = inDirectoryPath + string("\\") + string(fileData.cFileName);
-			FindAllFilesWithinDirectory(subDirectoryPath, outFileNames);
-		}
-		else
-		{
-			string filePath = currentPath + string(fileData.cFileName);
-			outFileNames.push_back(std::move(FileNameContainer(fileData.cFileName, filePath.c_str())));
-		}
-
-		if (!FindNextFile(result, &fileData))
-			break;
-	}
+    // Iterate recursively through all subdirectories
+    for (const auto& entry : fs::recursive_directory_iterator(root)) {
+      if (entry.is_regular_file()) {
+        const string fileName = entry.path().filename().string();
+        const string fullPath = entry.path().string();
+        outFileNames.emplace_back(fileName.c_str(), fullPath.c_str());
+      }
+    }
+  } catch (const fs::filesystem_error& e) {
+    std::fprintf(stderr, "Filesystem error while scanning '%s': %s\n", inDirectoryPath.c_str(), e.what());
+  }
 }
 
-void FindAllDirectoriesWithinDirectory(const std::string& inDirectoryPath, std::vector<string>& outDirectories)
-{
-	WIN32_FIND_DATA fileData;
+void FindAllDirectoriesWithinDirectory(const string& inDirectoryPath, vector<string>& outDirectories) {
+  try {
+    fs::path root(inDirectoryPath);
 
-	const string currentPath = inDirectoryPath + string("\\");
-	const string anyFilePath = inDirectoryPath + string("\\*");
-
-	//get the first file in the directory
-	HANDLE result = FindFirstFile(anyFilePath.c_str(), &fileData);
-
-	while (result != INVALID_HANDLE_VALUE)
-	{
-		//unsigned nameLength = static_cast<unsigned> (strlen(fileData.cFileName));
-
-		//skip if the file is just a '.'
-		if (fileData.cFileName[0] == '.')
-		{
-			if (!FindNextFile(result, &fileData))
-				break;
-			continue;
-		}
-
-		if (fileData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY && strcmp(fileData.cFileName, ".") != 0 && strcmp(fileData.cFileName, "..") != 0)
-		{
-			const string subDirectoryPath = fileData.cFileName;
-			outDirectories.push_back(subDirectoryPath);
-		}
-
-		if (!FindNextFile(result, &fileData))
-			break;
-	}
+    // Non-recursive â€” only the immediate children of inDirectoryPath
+    for (const auto& entry : fs::directory_iterator(root)) {
+      if (entry.is_directory()) {
+        outDirectories.emplace_back(entry.path().filename().string());
+      }
+    }
+  } catch (const fs::filesystem_error& e) {
+    std::fprintf(stderr, "Filesystem error while scanning '%s': %s\n", inDirectoryPath.c_str(), e.what());
+  }
 }
 
-bool DoesDirectoryExist(const std::string& dirName)
-{
-	DWORD fileAttributes = GetFileAttributesA(dirName.c_str());
-	if( fileAttributes == INVALID_FILE_ATTRIBUTES )
-	{
-		return false;
-	}
-
-	if( fileAttributes & FILE_ATTRIBUTE_DIRECTORY )
-	{
-		return true;
-	}
-
-	return false;
+bool DoesDirectoryExist(const std::string& dirName) {
+  return fs::exists(dirName) && fs::is_directory(dirName);
 }
 
-bool DoesFileExist(const std::string& dirName)
-{
-	DWORD fileAttributes = GetFileAttributesA(dirName.c_str());
-	if (fileAttributes == INVALID_FILE_ATTRIBUTES || fileAttributes == INVALID_FILE_SIZE)
-	{
-		return false;
-	}
-
-	return true;
+bool DoesFileExist(const std::string& fileName) {
+  return fs::exists(fileName) && fs::is_regular_file(fileName);
 }
 
+#ifdef _WIN32
 bool CreateDirectoryHelper(const std::string& dirName)
 {
 	if( CreateDirectory(dirName.c_str(), NULL) || ERROR_ALREADY_EXISTS == GetLastError() )
@@ -240,6 +196,7 @@ bool CreateDirectoryHelper(const std::string& dirName)
 
 	return false;
 }
+#endif
 
 bool AreFilesTheSame(const FileData& file1Data, const FileNameContainer& file2Name)
 {
@@ -521,7 +478,7 @@ bool TextFileData::InitializeTextFile(bool bFixupSpecialCharacters, bool bCollap
 		pToken = strtok_s(buffer, pDelim, &pContext);
 		while(pToken != NULL)
 		{
-			//Hack to fix up unicode value of '…'.  '…' is replaced with '@'
+			//Hack to fix up unicode value of 'ï¿½'.  'ï¿½' is replaced with '@'
 			memset(fixedString, 0, bufferSize);
 			const size_t tokenLen = strlen(pToken);
 			for(size_t t = 0, f = 0; t < tokenLen; t)
@@ -534,7 +491,7 @@ bool TextFileData::InitializeTextFile(bool bFixupSpecialCharacters, bool bCollap
 					t += 1;
 				}
 				
-				//è
+				//ï¿½
 				else if( bFixupSpecialCharacters &&
 						uToken == 0xc3 &&
 						t + 1 < tokenLen && 
@@ -2818,24 +2775,33 @@ void MednafinToYabause::ConvertData(const string& inFileName, const string& outF
 ////////////////////////////////////
 //        Helper Functions        //
 ////////////////////////////////////
-bool CreateTemporaryDirectory(string& outDir)
+int CreateTemporaryDirectory(std::string& outDir)
 {
-	char buffer[MAX_PATH];
-	const DWORD dwRet = GetCurrentDirectory(MAX_PATH, buffer);
-	if( !dwRet )
-	{
-		return false;
-	}
+  
+  std::error_code ec;
 
-	//Create temp work directory
-	const string tempDir = string(buffer) + string("\\Temp\\");
-	if( !CreateDirectoryHelper(tempDir) )
-	{
-		return false;
-	}
+  // Construct ./Temp relative to current working directory
+  fs::path tempDir = fs::current_path(ec) / "Temp";
+  if (ec)
+    return ec.value();
 
-	outDir = tempDir;
-	return true;
+  fs::create_directories(tempDir, ec);
+  if (ec)
+    return ec.value(); // error creating directory
+
+  outDir = tempDir.string();
+  return 0; // success
+}
+
+int CreateDirectoryPortableHelper(const std::string& dirName) {
+  
+  std::error_code ec;
+
+  fs::create_directories(fs::path(dirName), ec);
+	if (ec && ec != std::errc::file_exists)
+		return ec.value();
+
+	return 0;
 }
 
 bool CopyFiles(const std::vector<FileNameContainer>& InSourceFiles, const std::string& InOutputDirectory, std::unordered_set<std::string>* pInIgnoreFiles)

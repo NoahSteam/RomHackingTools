@@ -20,7 +20,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 *******************************************************************************/
 
 #include <stdio.h>
-#include <windows.h>
+#ifdef _WIN32
+  #include <windows.h>
+#endif
 #include <vector>
 #include <string>
 #include <list>
@@ -29,9 +31,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include <algorithm>
 #include <unordered_set>
 #include <utility>
-#include "..\Utils\Utils.h"
-#include "..\Utils\decompress_rtns.c"
+#include "../Utils/Utils.h"
+#include "../Utils/decompress_rtns.c"
 #include <assert.h>
+#include <cmath>
 
 using std::vector;
 using std::string;
@@ -50,8 +53,8 @@ using std::map;
 const unsigned char OutTileSpacingX = 8;
 const unsigned char OutTileSpacingY = 12;
 const unsigned long MaxTBLFileSize  = 0x20000;
-const unsigned long MaxMESFileSize  = 0x1A800;
-const unsigned long MaxWKLFileSize  = 0x82E00;
+// const unsigned long MaxMESFileSize  = 0x1A800;
+// const unsigned long MaxWKLFileSize  = 0x82E00;
 const char          MaxLines        = 4;
 const unsigned char CharTimingStartID = 0x2E;
 bool GIsDisc2 = false;
@@ -65,7 +68,7 @@ const string LipsWord("<LIPS>");
 const string SpaceWord("<sp>");
 const string BMPExtension(".bmp");
 const string SlgFontFileSuffix("_SLG");
-const unsigned short SpecialDialogIndicator = 0xC351;
+[[maybe_unused]] const unsigned short SpecialDialogIndicator = 0xC351;
 
 void PrintPaletteColors(const string& paletteFile)
 {
@@ -120,7 +123,8 @@ struct SakuraCompressedData
 			}
 			else
 			{
-				const unsigned long alignmentPadding = (compressor.mCompressedSize % 4) == 0 ? 0 : 4 - (compressor.mCompressedSize % 4);
+				// TODO: Check why this was unused
+				// const unsigned long alignmentPadding = (compressor.mCompressedSize % 4) == 0 ? 0 : 4 - (compressor.mCompressedSize % 4);
 				mDataSize = compressor.mCompressedSize + (compressor.mCompressedSize % 4);
 			}
 
@@ -155,12 +159,12 @@ struct SakuraCompressedData
 class SakuraTranslationTable
 {
 public:
-	const unsigned short GetIndex(unsigned char inChar) const
+	unsigned short GetIndex(unsigned char inChar) const
 	{
 		/*
 		if( inChar == '@' )
 		{
-			return 133;//'u' + 16;// + 1;//'…' + 1;
+			return 133;//'u' + 16;// + 1;//'ï¿½' + 1;
 		}*/
 
 		if( inChar == '\n' )
@@ -274,11 +278,11 @@ struct SakuraString
 	{
 		if( bPushFront )
 		{
-			mChars.insert( mChars.begin(), std::move(SakuraChar(index)) );
+			mChars.insert( mChars.begin(), SakuraChar(index) );
 		}
 		else
 		{
-			mChars.push_back( std::move(SakuraChar(index)) );
+			mChars.push_back( SakuraChar(index) );
 		}
 
 		return true;
@@ -293,11 +297,11 @@ struct SakuraString
 
 		if( bPushFront )
 		{
-			mChars.insert( mChars.begin(), std::move(SakuraChar(row, column)) );
+			mChars.insert( mChars.begin(), SakuraChar(row, column) );
 		}
 		else
 		{
-			mChars.push_back( std::move(SakuraChar(row, column)) );
+			mChars.push_back( SakuraChar(row, column) );
 		}
 
 		return true;
@@ -307,29 +311,29 @@ struct SakuraString
 	{
 		if( specialValue )
 		{
-			mChars.push_back( std::move(SakuraChar(specialValue)) );
-			mChars.push_back( std::move(SakuraChar(numCharsPrinted)) );
+			mChars.push_back( SakuraChar(specialValue) );
+			mChars.push_back( SakuraChar(numCharsPrinted) );
 		}
 		else
 		{
-			mChars.push_back( std::move(SakuraChar(0)) );
-			mChars.push_back( std::move(SakuraChar(0)) );
+			mChars.push_back( SakuraChar(0) );
+			mChars.push_back( SakuraChar(0) );
 		}
 
 		for(string::const_iterator iter = inString.begin(); iter != inString.end(); ++iter)
 		{
 			const unsigned short value = GTranslationLookupTable.GetIndex(*iter);
-			mChars.push_back( std::move(SakuraChar(value)) );
+			mChars.push_back( SakuraChar(value) );
 		}
 
 		if( bAddPadByte && mChars.size() % 2 != 0 )
 		{
 #if USE_SINGLE_BYTE_LOOKUPS
-			mChars.push_back( std::move(SakuraChar(' ')) );
+			mChars.push_back( SakuraChar(' ') );
 #endif
 		}
 
-		mChars.push_back( std::move(SakuraChar(0)) );
+		mChars.push_back( SakuraChar(0) );
 
 		mOffsetToStringData = 2;
 	}
@@ -492,7 +496,7 @@ public:
 		const int numTilesInFile = inDataSize / numBytesPerTile;
 		for(int currTile = 0; currTile < numTilesInFile; ++currTile)
 		{
-			mCharacterTiles.push_back( std::move(SakuraFontTile(&pInData[currTile*numBytesPerTile], numBytesPerTile)) );
+			mCharacterTiles.push_back( SakuraFontTile(&pInData[currTile*numBytesPerTile], numBytesPerTile) );
 		}
 
 		return true;
@@ -517,7 +521,7 @@ public:
 		const int numTilesInFile   = fontFile.GetDataSize() / numBytesPerTile;
 		for(int currTile = 0; currTile < numTilesInFile; ++currTile)
 		{
-			mCharacterTiles.push_back( std::move(SakuraFontTile(&pFontSheetData[currTile*numBytesPerTile], numBytesPerTile)) );
+			mCharacterTiles.push_back( SakuraFontTile(&pFontSheetData[currTile*numBytesPerTile], numBytesPerTile) );
 		}
 
 		return true;
@@ -680,17 +684,18 @@ struct SakuraTextFile
 		}
 	};
 
+public:
 	FileNameContainer         mFileNameInfo;
 	vector<SakuraString>      mLines;
 	SakuraDataSegment         mHeader;
 	vector<SakuraDataSegment> mDataSegments;
 	vector<SakuraStringInfo>  mStringInfoArray;
-	vector<SakuraTimingData>  mLineTimingData;
-
 private:
 	unsigned long       mFileSize;
 	FILE*               mpFile;
 	char*               mpBuffer;
+public:
+	vector<SakuraTimingData>  mLineTimingData;
 
 public:
 	SakuraTextFile(const FileNameContainer& fileName) : mFileNameInfo(fileName), mFileSize(0), mpFile(nullptr), mpBuffer(nullptr){}
@@ -717,6 +722,7 @@ public:
 
 		rhs.mpFile       = nullptr;
 		rhs.mpBuffer     = nullptr;
+		return *this;
 	}
 
 	~SakuraTextFile()
@@ -823,7 +829,7 @@ private:
 	{
 		//First two bytes are the offset that will take us to the strings.  So 0-offset is the header.
 		const unsigned short dataSize = SwapByteOrder( *((unsigned short*)mpBuffer) ) * 2;
-		mHeader = std::move(SakuraDataSegment(mpBuffer, dataSize));
+		mHeader = SakuraDataSegment(mpBuffer, dataSize);
 
 		assert(dataSize%4 == 0);
 
@@ -835,7 +841,7 @@ private:
 			const unsigned short first    = (stringInfo & 0xffff0000) >> 16;
 			const unsigned short second   = (stringInfo & 0x0000ffff);
 
-			mStringInfoArray.push_back( std::move(SakuraStringInfo(first, second)) );
+			mStringInfoArray.push_back( SakuraStringInfo(first, second) );
 		}
 	}
 
@@ -985,7 +991,8 @@ private:
 			unsigned short* pWordBuffer = (unsigned short*)&mpBuffer[offsetToString];
 			bool bNonZeroValueFound     = false;
 			int currentIndex            = 0;
-			unsigned short offsetToStringData = 0;
+			[[maybe_unused]] unsigned short offsetToStringData = 0;
+			unsigned short currValue = 0;
 
 			//The dialog starting at 0xC531 has a special starting tag instead of the usual 00 00
 			if( 1 )//mStringInfoArray[i].mStringId == SpecialDialogIndicator || bIsMESFile )//&& !bIsMESFile )
@@ -1003,10 +1010,10 @@ private:
 				//assert(currValue == 0);
 			}
 
-			while(1)
+			while (!(currValue == 0 && bNonZeroValueFound)) 
 			{
-				unsigned short currValue = pWordBuffer[currentIndex++];
-				currValue                = SwapByteOrder(currValue);  //Convert to big endian
+				currValue = pWordBuffer[currentIndex++];
+				currValue = SwapByteOrder(currValue);
 
 				if( currValue != 0 )
 				{
@@ -1027,11 +1034,6 @@ private:
 				else
 				{
 					newLineOfText.AddChar(currValue);
-				}
-
-				if( currValue == 0 && bNonZeroValueFound )
-				{
-					break;
 				}
 			}
 
@@ -1130,7 +1132,7 @@ struct SakuraTextFileFixedHeader
 		}
 		//Done figuring out table size
 
-		if( (unsigned short)( sizeof(int) + sizeof(int) + sizeof(int)*inInfo.size() + sizeof(int)*inInfo.size() ) >> 1 > 0xffff )
+		if ((( (size_t) sizeof(int) * (2 + 2 * inInfo.size()) ) >> 1) > 0xFFFF)
 		{
 			printf("\nERROR:Translated file %s string table exceeds 2 byte limit\n", inSakuraFile.mFileNameInfo.mFileName.c_str());
 			return false;
@@ -1210,7 +1212,7 @@ void DumpExtractedSakuraText(const vector<SakuraTextFile>& inSakuraTextFiles, co
 	const string txt(".txt");
 	const string info("_StringInfo");
 
-	int fileNum = 0;
+	[[maybe_unused]] int fileNum = 0;
 	for(const SakuraTextFile& textFile : inSakuraTextFiles)
 	{
 		const string outFileName = outDirectory + textFile.mFileNameInfo.mNoExtension + txt;
@@ -1233,17 +1235,15 @@ void DumpExtractedSakuraText(const vector<SakuraTextFile>& inSakuraTextFiles, co
 		}
 
 		printf("Dumping text for: %s\n", textFile.mFileNameInfo.mFileName.c_str());
-		int lineNum = 0;
 		for(const SakuraString& sakuraString : textFile.mLines)
 		{
-			fprintf(pOutFile, "Len: %i. Data: ", sakuraString.mChars.size());
+			fprintf(pOutFile, "Len: %zu. Data: ", sakuraString.mChars.size());
 
 			for(const SakuraString::SakuraChar& sakuraChar : sakuraString.mChars)
 			{
 				fprintf(pOutFile, "%02x%02x ", sakuraChar.mRow, sakuraChar.mColumn);
 			}
 
-			++lineNum;
 			fprintf(pOutFile, "\n");
 		}
 
@@ -1272,7 +1272,7 @@ bool ExtractImageFromData(const char* pInColorData, const unsigned int inColorDa
 	const int bytesPerTile       = tileBytes;
 	const int bytesPerTileRow    = bytesPerTile*tilesPerRow;
 	const unsigned long dataSize = bInFillEmptyData ? inColorDataSize - inDataOffset : (inTextureDimX*inTextureDimY*inNumTexturesPerRow)/divisor;
-	const int numRows            = (int)ceil( dataSize/ (float)bytesPerTileRow);
+	const int numRows            = (int)std::ceil( dataSize/ (float)bytesPerTileRow);
 	const int numColumns         = numRows > 0 ? tilesPerRow : dataSize/bytesPerTileRow;
 	const int imageHeight        = numRows*tileDimY;
 	const int imageWidth         = numColumns*tileDimX;
@@ -1454,9 +1454,9 @@ struct MiniGameSakuraText
 	{
 		const string pngDir = outputDirectory + "\\png\\";
 		const string bmpDir = outputDirectory + "\\bmp\\";
-		CreateDirectoryHelper(outputDirectory);
-		CreateDirectoryHelper(pngDir);
-		CreateDirectoryHelper(bmpDir);
+		CreateDirectoryPortableHelper(outputDirectory);
+		CreateDirectoryPortableHelper(pngDir);
+		CreateDirectoryPortableHelper(bmpDir);
 
 		const string extension(".bmp");
 
@@ -1514,14 +1514,15 @@ struct MiniGameSakuraText
 void ExtractMinigameData(const string& rootSakuraDirectory, const string& translatedDataDirectory, const string& outputDirectory)
 {
 	//Create temp work directory
-	string tempDir;
-	if( !CreateTemporaryDirectory(tempDir) )
+	std::string tempDir;
+	int ec = CreateTemporaryDirectory(tempDir);
+	if (ec != 0)
 	{
-		printf("Could not create temp work directory.  Error: (%d)\n", GetLastError());
+		printf("Could not create temp work directory.  Error: (%d)\n", ec);
 		return;
 	}
 
-	CreateDirectoryHelper(outputDirectory);
+	CreateDirectoryPortableHelper(outputDirectory);
 
 	struct MiniGameDumper
 	{
@@ -1664,9 +1665,9 @@ void ExtractStatusScreen(const string& rootSakuraDirectory, const string& transl
 {
 //	miniGameDumper.Dump("ICATALL.DAT", 48, 0, 0x00013800, 0x0005f428, true, "Section2"); //Compressed data for font sheet found: 000a8178 00000000 Size: 384 CompressedSize: 12625
 
-	CreateDirectoryHelper(outputDirectory);
-	CreateDirectoryHelper( (outputDirectory + "png") );
-	CreateDirectoryHelper( (outputDirectory + "bmp") );
+	CreateDirectoryPortableHelper(outputDirectory);
+	CreateDirectoryPortableHelper( (outputDirectory + "png") );
+	CreateDirectoryPortableHelper( (outputDirectory + "bmp") );
 
 	const string icatallFilePath = rootSakuraDirectory + "SAKURA1\\ICATALL.DAT";
 	FileData icatallFileData;
@@ -1789,8 +1790,8 @@ void ExtractText(const string& inSearchDirectory, const string& inPaletteFileNam
 
 		//Create output directory for this file
 		string fileOutputDir = inOutputDirectory + sakuraText.mFileNameInfo.mNoExtension + string("\\");
-		if( !CreateDirectoryHelper(fileOutputDir) )
-		{
+		int ec = CreateDirectoryPortableHelper(fileOutputDir);
+		if (ec != 0) {
 			continue;
 		}
 
@@ -2194,7 +2195,7 @@ bool PatchPalettes(const string& rootDirectory, const string& originalPalette, c
 
 				//Write out patched data
 				unsigned long origSakuraOffset = 0;
-				unsigned long totalWritten = 0;
+				[[maybe_unused]] unsigned long totalWritten = 0;
 				for(size_t offsetIndex = 0; offsetIndex < offsets.size(); ++offsetIndex)
 				{
 					unsigned long nextOffset = offsets[offsetIndex];
@@ -2359,7 +2360,7 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 	{\
 		if( bIsLipsEntry && !bAlreadyShowedError )\
 		{\
-			printf("LIPS line is too long[D %i].  Needs to be a max of %i characters long. %s\n", translatedLineIndex + 1, maxCharsPerLine, textLine.mFullLine.c_str());\
+			printf("LIPS line is too long[D %zu].  Needs to be a max of %i characters long. %s\n", translatedLineIndex + 1, maxCharsPerLine, textLine.mFullLine.c_str());\
 			bAlreadyShowedError = true;\
 		}\
 		else\
@@ -2541,7 +2542,7 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 					{
 						if( (int)sakuraFile.mLineTimingData.size() < inTranslatedLineIndex )
 						{
-							printf("Not enough timing data lines in %s.  Expected %i, got %i", sakuraFile.mFileNameInfo.mFileName.c_str(), inTranslatedLineIndex, sakuraFile.mLineTimingData.size());
+							printf("Not enough timing data lines in %s.  Expected %i, got %zu", sakuraFile.mFileNameInfo.mFileName.c_str(), inTranslatedLineIndex, sakuraFile.mLineTimingData.size());
 
 							numCharsPrintedFortTBL += (numCharsPrintedInLine + 1)*2;
 						}
@@ -2604,7 +2605,7 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 				{
 					if( textLine.GetNumberOfLines() != sakuraFile.mLines[currSakuraStringIndex].GetNumberOfLines() )
 					{
-						printf("LIPS ERROR - Translated LIPS line does not have expected number of options. Expected: %i, Has: %i (File: %s Line: %u)\n", sakuraFile.mLines[currSakuraStringIndex].GetNumberOfLines(), textLine.GetNumberOfLines(), sakuraFile.mFileNameInfo.mFileName.c_str(), currSakuraStringIndex + 1);
+						printf("LIPS ERROR - Translated LIPS line does not have expected number of options. Expected: %i, Has: %i (File: %s Line: %zu)\n", sakuraFile.mLines[currSakuraStringIndex].GetNumberOfLines(), textLine.GetNumberOfLines(), sakuraFile.mFileNameInfo.mFileName.c_str(), currSakuraStringIndex + 1);
 					}
 				}
 
@@ -2612,7 +2613,7 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 					(textLine.mWords[0] == UnusedEnglishString && !bIsUnused )
 					)
 				{
-					printf("Error: Untranslated line. (File: %s Line: %u)\n", sakuraFile.mFileNameInfo.mFileName.c_str(), currSakuraStringIndex + 1);
+					printf("Error: Untranslated line. (File: %s Line: %zu)\n", sakuraFile.mFileNameInfo.mFileName.c_str(), currSakuraStringIndex + 1);
 				}
 
 				//If untranslated, then write out the file and line number
@@ -2631,19 +2632,19 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 
 					if( textLine.mWords.size() == 0 )
 					{
-						printf("Warning: Blank line. (File: %s Line: %u)\n", sakuraFile.mFileNameInfo.mFileName.c_str(), currSakuraStringIndex + 1);
+						printf("Warning: Blank line. (File: %s Line: %zu)\n", sakuraFile.mFileNameInfo.mFileName.c_str(), currSakuraStringIndex + 1);
 					}
 					//Verify that this line should indeed be unused
 					else if( textLine.mWords[0] == UnusedEnglishString )
 					{
-						snprintf(dirPlusLineNumberBuffer, dirPlusLineBufferSize, "%s_%i", sakuraFile.mFileNameInfo.mNoExtension.c_str(), translatedLineIndex);
+						snprintf(dirPlusLineNumberBuffer, dirPlusLineBufferSize, "%s_%zu", sakuraFile.mFileNameInfo.mNoExtension.c_str(), translatedLineIndex);
 
 						const string dirPlusLineNumber = dirPlusLineNumberBuffer;
 						if( bIsLipsEntry || 
 							( bSearchForDuplicates && (duplicatesMap.find(dirPlusLineNumber) == duplicatesMap.end() && !(id >= 0xc351 && id <= 0xcfff) && id != 0x9c41) ) 
 							)
 						{
-							printf("Warning: UnusedString has no duplicates in any other file, so it might be used. (File: %s Line: %u Id: %#06x)\n", sakuraFile.mFileNameInfo.mFileName.c_str(), currSakuraStringIndex + 1, id);
+							printf("Warning: UnusedString has no duplicates in any other file, so it might be used. (File: %s Line: %zu Id: %#06x)\n", sakuraFile.mFileNameInfo.mFileName.c_str(), currSakuraStringIndex + 1, id);
 						}
 					}
 
@@ -2700,7 +2701,7 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 					bool bFailedToAddLine = false;
 					if( word.size() > maxCharsPerLine )
 					{
-						printf("Unable to insert word because it is longer than %i characters: %s[%i]\n", maxCharsPerLine, word.c_str(), word.size());
+						printf("Unable to insert word because it is longer than %i characters: %s[%zu]\n", maxCharsPerLine, word.c_str(), word.size());
 						continue;
 					}
 
@@ -2964,7 +2965,7 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 				if( bIsMESFile )
 				{
 					const size_t numChars = translatedString.mChars.size() - 1; //.size includes null terminator
-					int numProcessed = 0;
+					[[maybe_unused]] int numProcessed = 0;
 					for(size_t c = 2; c < numChars; ++c)
 					{
 						if( !translatedString.mChars[c].IsNewLine() )
@@ -3102,7 +3103,7 @@ bool InsertText(const string& rootSakuraTaisenDirectory, const string& translate
 						const int expectedTimingCount = lineTimingMap[translatedLinedIndex];
 						if( expectedTimingCount != numTimingBytesWritten )
 						{
-							printf("Invalid timing count for line %i in %s. Expected %i, wrote out %i\n", translatedLinedIndex, sakuraFile.mFileNameInfo.mFileName.c_str(), expectedTimingCount, numTimingBytesWritten);
+							printf("Invalid timing count for line %zu in %s. Expected %i, wrote out %i\n", translatedLinedIndex, sakuraFile.mFileNameInfo.mFileName.c_str(), expectedTimingCount, numTimingBytesWritten);
 						}
 					}
 
@@ -3235,15 +3236,12 @@ bool DumpTranslationFilesWithoutUnusedLines(const string& rootSakuraTaisenDirect
 			for(size_t translatedLineIndex = 0; translatedLineIndex < numTranslatedLines; ++translatedLineIndex)
 			{	
 				const TextFileData::TextLine& textLine = translatedFile.mLines[translatedLineIndex];
-				const size_t numWords = textLine.mWords.size();
 				SakuraString translatedString;
 
 				//Figure out if this is a lips entry
 				const size_t currSakuraStringIndex = translatedLineIndex;
 				const unsigned short id            = sakuraFile.mStringInfoArray[currSakuraStringIndex].mStringId;
 				const vector<int>* pOrder          = bDialogOrderExists && dialogOrderIter->second.idAndOrder.find(id) != dialogOrderIter->second.idAndOrder.end() ? &dialogOrderIter->second.idAndOrder.find(id)->second : nullptr;
-				const bool bHasLipsTag             = textLine.mWords.size() > 0 && textLine.mWords[0] == LipsWord;
-				const bool bIsLipsEntry            = bHasLipsTag ? true : pOrder ? dialogOrderIter->second.idAndLips.find(id)->second : false;
 				const bool bIsUnused               = bIsMESFile ? false : pOrder || (id >= 0x9c41 && id < 0x9cff) ? false : true;
 
 				//If untranslated, then write out the file and line number
@@ -3396,7 +3394,7 @@ struct CompressedImagePatcher
 		translatedOptionsSubmenuData.PatchDataInMemory(patchedOptionsSubmenuImage.GetImageData(), patchedOptionsSubmenuImage.GetImageDataSize(), true, false, inOriginalCompressedSize);
 		if( translatedOptionsSubmenuData.mDataSize != inOriginalCompressedSize )
 		{
-			printf("CompressedImagePatcher failed. Compressed data for OptionsSubmenu image size[%i] is larger than the original[%i\n", translatedOptionsSubmenuData.mDataSize, inOriginalCompressedSize);
+			printf("CompressedImagePatcher failed. Compressed data for OptionsSubmenu image size[%li] is larger than the original[%li\n", translatedOptionsSubmenuData.mDataSize, inOriginalCompressedSize);
 			return false;
 		}
 
@@ -3428,7 +3426,6 @@ bool FixupSakura(const string& rootDir, const string& inTranslatedOptionsBmp, co
 	//const int offsetTileDim     = 0x0001040A;
 	const int offsetReadCharWhenScrolling1  = 0x000104b6;
 	const int offsetReadCharWhenScrolling2  = 0x000104c6;
-	const int offsetReadChar                = 0x00010722;
 	const int offsetTileSpacingX            = 0x000104e5;
 	const int offsetTileSpacingY            = 0x000104D7;
 	const int offsetTileSpacingX2           = 0x00010747;
@@ -3599,7 +3596,6 @@ bool FixupSakura(const string& rootDir, const string& inTranslatedOptionsBmp, co
 	const unsigned short add_f8_r4     = 0xf874; //74fa
 	const unsigned short mov_r1_r4     = 0x1364; //6413
 	const unsigned short mov_b_atR0_r1 = 0xa161; //01ac
-	const unsigned short mov_b_atR0_r14_r1 = 0xec01; //01ec
 	const unsigned short mov_l_atR4_r1     = 0x4261;
 	const unsigned short mov_r1_r3         = 0x1363;
 	const unsigned short add_4_r4          = 0x0474;
@@ -3619,7 +3615,6 @@ bool FixupSakura(const string& rootDir, const string& inTranslatedOptionsBmp, co
 	memcpy_s((void*)(origSakuraData.GetData() + SakAdd(0x060146c6)), origSakuraData.GetDataSize(), (void*)&no_op,              sizeof(no_op));                    //060146c6
 	memcpy_s((void*)(origSakuraData.GetData() + SakAdd(0x060146ce)), origSakuraData.GetDataSize(), (void*)&add_4_r4,           sizeof(add_4_r4));                 //060146ce
 
-//	memcpy_s((void*)(origSakuraData.GetData() + 0x00010640), origSakuraData.GetDataSize(), (void*)&mov_b_atR0_r14_r1,  sizeof(mov_b_atR0_r14_r1));
 
 	//Menu items
 	/*
@@ -3804,7 +3799,7 @@ bool FixupSakura(const string& rootDir, const string& inTranslatedOptionsBmp, co
 		compressedData.PatchDataInMemory(uncompressedData.mpUncompressedData, uncompressedData.mUncompressedDataSize, true, false, origCompressedSize);
 		if( compressedData.mDataSize != origCompressedSize )
 		{
-			printf("CompressedImagePatcher failed. Compressed data for LoadMenu image size[%i] is larger than the original[%i\n", compressedData.mDataSize, origCompressedSize);
+			printf("CompressedImagePatcher failed. Compressed data for LoadMenu image size[%li] is larger than the original[%i\n", compressedData.mDataSize, origCompressedSize);
 			return false;
 		}
 
@@ -4299,9 +4294,9 @@ bool CreateMesSpreadSheets(const string& dialogImageDirectory, const string& sak
 	//Create html files for each directory
 	static char buffer[2048];
 	const string outputDirectory = dialogImageDirectory + string("..\\..\\Translation\\");
-	if( !CreateDirectoryHelper(outputDirectory) )
-	{
-		printf("Unable to create translation directory %s.  Error: (%d)\n", outputDirectory.c_str(), GetLastError());
+	int ec = CreateDirectoryPortableHelper(outputDirectory);
+	if (ec != 0) {
+		printf("Unable to create translation directory %s.  Error: (%d)\n", outputDirectory.c_str(), ec);
 		return false;
 	}
 
@@ -4358,7 +4353,7 @@ bool CreateMesSpreadSheets(const string& dialogImageDirectory, const string& sak
 		//Common header stuff
 		htmlFile.WriteString(htmlHeader);
 		fprintf(htmlFile.GetFileHandle(), "\n<div id=\"FileName\" style=\"display: none;\">%s</div>\n", tblFileName.c_str());
-		fprintf(htmlFile.GetFileHandle(), "\n<div id=\"LastImageIndex\" style=\"display: none;\">%i</div>\n", numImageFiles);
+		fprintf(htmlFile.GetFileHandle(), "\n<div id=\"LastImageIndex\" style=\"display: none;\">%zu</div>\n", numImageFiles);
 
 		htmlFile.WriteString("<script src=\"https://ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js\">\n\n");
 
@@ -4656,9 +4651,10 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& dup
 	//Create html files for each directory
 	static char buffer[2048];
 	const string outputDirectory = dialogImageDirectory + string("..\\..\\Translation\\");
-	if( !CreateDirectoryHelper(outputDirectory) )
+	int ec = CreateDirectoryPortableHelper(outputDirectory);
+	if (ec != 0) 
 	{
-		printf("Unable to create translation directory %s.  Error: (%d)\n", outputDirectory.c_str(), GetLastError());
+		printf("Unable to create translation directory %s.  Error: (%d)\n", outputDirectory.c_str(), ec);
 		return false;
 	}
 
@@ -4797,7 +4793,7 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& dup
 		if( !bForRelease )
 		{
 			fprintf(htmlFile.GetFileHandle(), "\n<div id=\"FileName\" style=\"display: none;\">%s</div>\n", tblFileName.c_str());
-			fprintf(htmlFile.GetFileHandle(), "\n<div id=\"LastImageIndex\" style=\"display: none;\">%i</div>\n", numImageFiles);
+			fprintf(htmlFile.GetFileHandle(), "\n<div id=\"LastImageIndex\" style=\"display: none;\">%zu</div>\n", numImageFiles);
 			fprintf(htmlFile.GetFileHandle(), "\n<div id=\"NumberOfDuplicates\" style=\"display: none;\">%i</div>\n", numberOfDuplicatesFound);
 
 			htmlFile.WriteString("<script src=\"https://ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js\">\n\n");
@@ -5302,7 +5298,7 @@ bool CreateTBLSpreadsheets(const string& dialogImageDirectory, const string& dup
 				htmlFile.WriteString(string(buffer));
 			}
 
-			snprintf(buffer, 2048, "<td id=\"crc_%i\" align=\"center\" width=\"20\">%08x</td>", num + 1, crc);
+			snprintf(buffer, 2048, "<td id=\"crc_%i\" align=\"center\" width=\"20\">%08lx</td>", num + 1, crc);
 			htmlFile.WriteString(string(buffer));
 
 			snprintf(buffer, 2048, "<td id=\"dup_%i\" align=\"center\" width=\"20\">%s</td>", num + 1, bIsDuplicate ? "true" : "false");
@@ -5385,9 +5381,10 @@ bool CreateWKLSpreadSheets(const string& dialogImageDirectory, const string& dup
 	//Create html files for each directory
 	static char buffer[2048];
 	const string outputDirectory = dialogImageDirectory + string("..\\..\\Translation\\");
-	if( !CreateDirectoryHelper(outputDirectory) )
+	int ec = CreateDirectoryPortableHelper(outputDirectory);
+	if(ec != 0)
 	{
-		printf("Unable to create translation directory %s.  Error: (%d)\n", outputDirectory.c_str(), GetLastError());
+		printf("Unable to create translation directory %s.  Error: (%d)\n", outputDirectory.c_str(), ec);
 		return false;
 	}
 
@@ -5562,7 +5559,7 @@ bool CreateWKLSpreadSheets(const string& dialogImageDirectory, const string& dup
 		//Common header stuff
 		htmlFile.WriteString(htmlHeader);
 		fprintf(htmlFile.GetFileHandle(), "\n<div id=\"FileName\" style=\"display: none;\">%s</div>\n", iter->first.c_str());
-		fprintf(htmlFile.GetFileHandle(), "\n<div id=\"LastImageIndex\" style=\"display: none;\">%i</div>\n", numImageFiles);
+		fprintf(htmlFile.GetFileHandle(), "\n<div id=\"LastImageIndex\" style=\"display: none;\">%zu</div>\n", numImageFiles);
 		fprintf(htmlFile.GetFileHandle(), "\n<div id=\"NumberOfDuplicates\" style=\"display: none;\">%i</div>\n", numberOfDuplicatesFound);
 
 		htmlFile.WriteString("<script src=\"https://ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js\">\n\n");
@@ -5840,7 +5837,7 @@ bool CreateWKLSpreadSheets(const string& dialogImageDirectory, const string& dup
 			htmlFile.WriteString(string(buffer));
 
 			//crc
-			snprintf(buffer, 2048, "<td id=\"crc_%i\" align=\"center\" width=\"20\">%08x</td>", num + 1, crc);
+			snprintf(buffer, 2048, "<td id=\"crc_%i\" align=\"center\" width=\"20\">%08lx</td>", num + 1, crc);
 			htmlFile.WriteString(string(buffer));
 
 			//has a duplicate
@@ -5903,9 +5900,10 @@ void ExtractFCEFiles(const string& sakuraDirectory, const string& paletteFileNam
 	for(const FileNameContainer& fileNameInfo : faceFiles)
 	{
 		const string subDirName = outDirectory + fileNameInfo.mNoExtension + Seperators;
-		if( !CreateDirectoryHelper(subDirName) )
+		int ec = CreateDirectoryPortableHelper(subDirName);
+		if (ec != 0)
 		{
-			printf("Unable to create directory: %s", subDirName.c_str());
+			printf("Unable to create directory: %s (Error: %d)", subDirName.c_str(), ec);
 			return;
 		}
 
@@ -6056,9 +6054,10 @@ void ExtractFACEFiles(const string& sakuraDirectory, const string& outDirectory)
 		printf("Extracting %s\n", fileNameInfo.mFileName.c_str());
 
 		const string subDirName = outDirectory + fileNameInfo.mNoExtension + Seperators;
-		if( !CreateDirectoryHelper(subDirName) )
+		int ec = CreateDirectoryPortableHelper(subDirName);
+		if (ec != 0)
 		{
-			printf("Unable to create directory: %s", subDirName.c_str());
+			printf("Unable to create directory: %s (Error: %d)", subDirName.c_str(), ec);
 			return;
 		}
 
@@ -6095,12 +6094,12 @@ void ExtractFACEFiles(const string& sakuraDirectory, const string& outDirectory)
 
 			//Create palette data
 			//Colors in the palette are in a 15 bit (5:5:5) format.  So we need to & every value by 0x7fff.
-			static const unsigned int numBytesInPalette = 128;
+			static const size_t numBytesInPalette = 128;
 			const char* pOriginalPaletteData             = faceFile.GetData() + offsetToData + offsetToPalette;
 			char* pPaletteData                           = new char[512];//[numBytesInPalette];
 			memset(pPaletteData, 0, 512);//numBytesInPalette);
 			memcpy_s(pPaletteData, numBytesInPalette, pOriginalPaletteData, numBytesInPalette);
-			for(int p = 0; p < numBytesInPalette; p += 2)
+			for(size_t p = 0; p < numBytesInPalette; p += 2)
 			{
 				unsigned short* pPaletteValue = (unsigned short*)(pPaletteData + p);
 				*pPaletteValue = SwapByteOrder(*pPaletteValue);
@@ -6234,7 +6233,7 @@ bool PatchFACEFiles(const string& rootSakuraDirectory, const string& rootTransla
 				//Verify the size fits
 				if( patchedObstacleData.mDataSize > uncompressedImage.mCompressedSize )
 				{
-					printf("Patched obstacle image data is too big when compressed. Needs to be <= %i.  Is %i \n", uncompressedImage.mCompressedSize, patchedObstacleData.mDataSize);
+					printf("Patched obstacle image data is too big when compressed. Needs to be <= %zu.  Is %li \n", uncompressedImage.mCompressedSize, patchedObstacleData.mDataSize);
 					return false;
 				}
 
@@ -6650,7 +6649,6 @@ public:
 //Also modifies SLG files
 bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirectory, const string& inTranslatedDirectory, const string& inTempDir, const string& extractedWklDir)
 {
-	const unsigned int maxCompressedSize = 0x1BA4;
 	const string outDirectory              = inPatchedDirectory + Seperators + string("SAKURA2\\");
 	const string translatedWKLDirectory    = inTranslatedDirectory + string("WKL\\");
 	const string translatedSharedDirectory = translatedWKLDirectory + string("Shared\\");
@@ -6767,7 +6765,6 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 		MemoryBlocks patchedBattleMenuImageData;
 		MemoryBlocks patchedBattleMenuBlocksHeader;
 		MemoryBlocks patchedBattleMenuBlocks;
-		const unsigned int compressedImageHeaderSize         = 512;
 		const unsigned int compressedDataLastOffset_original = SwapByteOrder(origCompressedInfo[numCompressedEntries - 1].compressedInfoOffset);
 		
 		//Gather data from original wkl file
@@ -7125,7 +7122,7 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 		outFile.WriteData(newWklHeader.pData, newWklHeader.blockSize);
 		
 		//Write out patched battle images
-		unsigned int totalBattleMenuSize = 0;
+		[[maybe_unused]] unsigned int totalBattleMenuSize = 0;
 		for(unsigned int b = 0; b < patchedBattleMenuBlocks.GetNumberOfBlocks(); ++b)
 		{
 			outFile.WriteData(patchedBattleMenuBlocks.GetBlock(b).pData, patchedBattleMenuBlocks.GetBlock(b).blockSize);
@@ -7138,7 +7135,7 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 		//**write compressed image data**
 		outFile.WriteData(compressedInfo, sizeof(compressedInfo));
 
-		unsigned int sizeWritten = 0;
+		[[maybe_unused]] unsigned int sizeWritten = 0;
 		for(unsigned int blockIndex = 0; blockIndex < newWklCompressedData.GetNumberOfBlocks(); ++blockIndex)
 		{
 			outFile.WriteData(newWklCompressedData.GetBlock(blockIndex).pData, newWklCompressedData.GetBlock(blockIndex).blockSize);
@@ -7217,14 +7214,14 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 				{
 					if( (iter->second & 0x000fffff) == sData )
 					{
-						printf("   SLG Packed VDP1: 0x%x at 0x%x\n", iter->second, s);
+						printf("   SLG Packed VDP1: 0x%lx at 0x%lx\n", iter->second, s);
 					}
 				}
 			}
 
 			for (std::map<unsigned long, unsigned long>::iterator sIter = slgVdp1Addresses.begin(); sIter != slgVdp1Addresses.end(); ++sIter)
 			{
-				printf("   SLG VDP1: 0x%x at 0x%x\n", sIter->second, sIter->first);
+				printf("   SLG VDP1: 0x%lx at 0x%lx\n", sIter->second, sIter->first);
 			}
 		}
 		//end debug
@@ -7286,6 +7283,7 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 		{
 			auto FixSLGAddress = [&slgFile, &newVPD1Value, &origVDP1Value, &battleMenuDelta, &addressesFixedInSlg, &packedVDP1AddressesToFix, &textDelta](unsigned long InAddress)
 			{
+				(void)textDelta; 
 				slgFile.ReadData(InAddress, (char*)&origVDP1Value, sizeof(origVDP1Value), true);
 				
 				/*
@@ -7303,11 +7301,12 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 				{
 					packedVDP1AddressesToFix[ (unsigned short)((origVDP1Value & 0x000fffff) / 8)] = (unsigned short)((newVPD1Value & 0x000fffff) / 8);
 				}
-				printf("FixSLGAddress Original Address: 0x%x to 0x%x at 0x%x\n", origVDP1Value, newVPD1Value, InAddress);
+				printf("FixSLGAddress Original Address: 0x%lx to 0x%lx at 0x%lx\n", origVDP1Value, newVPD1Value, InAddress);
 			};
 
-			auto SetSLGAddress = [&slgFile, &origVDP1Value, &addressesFixedInSlg, &packedVDP1AddressesToFix, &textDelta](unsigned long InAddress, unsigned int InNewValue)
+			[[maybe_unused]] auto SetSLGAddress = [&slgFile, &origVDP1Value, &addressesFixedInSlg, &packedVDP1AddressesToFix, &textDelta](unsigned long InAddress, unsigned int InNewValue)
 			{
+				(void)textDelta; 
 				slgFile.ReadData(InAddress, (char*)&origVDP1Value, sizeof(origVDP1Value), true);
 				slgFile.WriteData(InAddress, (char*)&InNewValue, sizeof(InNewValue), true);
 				addressesFixedInSlg[origVDP1Value] = InNewValue;
@@ -7315,7 +7314,7 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 				{
 					packedVDP1AddressesToFix[(unsigned short)((origVDP1Value & 0x000fffff) / 8)] = (unsigned short)((InNewValue & 0x000fffff) / 8);
 				}
-				printf("SetSLGAddress Original Address: %x\n", origVDP1Value);
+				printf("SetSLGAddress Original Address: %lx\n", origVDP1Value);
 			};
 
 #define SetValueAtSLGAddress(InAddress, InNewValue, InType) {const InType newValue = (InType)InNewValue; \
@@ -7391,28 +7390,28 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 			/*
 			FixSLGAddress(0x1044);
 			FixSLGAddress(0x1070);
-			FixSLGAddress(0x43E8); //*
+			FixSLGAddress(0x43E8);
 			FixSLGAddress(0x88AC);
 			FixSLGAddress(0x8C84);
 			FixSLGAddress(0x8F5C);
-			FixSLGAddress(0x9350); //*
-			FixSLGAddress(0x9360); //*
+			FixSLGAddress(0x9350);
+			FixSLGAddress(0x9360);
 			FixSLGAddress(0xCCCC);
-			FixSLGAddress(0xE390); //*
-			FixSLGAddress(0xF720); //
-			FixSLGAddress(0xF724); //
-			FixSLGAddress(0xFF48); //
+			FixSLGAddress(0xE390);
+			FixSLGAddress(0xF720);
+			FixSLGAddress(0xF724);
+			FixSLGAddress(0xFF48);
 			FixSLGAddress(0xFF68);
-			FixSLGAddress(0x10F38); //
+			FixSLGAddress(0x10F38);
 			FixSLGAddress(0x10F8C);
 			FixSLGAddress(0x10FE4);
 			FixSLGAddress(0x11094);
 			FixSLGAddress(0x1109C);
 			FixSLGAddress(0x169B0);
-			FixSLGAddress(0x1ED10); //*
-			FixSLGAddress(0x1EDD8); //*
+			FixSLGAddress(0x1ED10);
+			FixSLGAddress(0x1EDD8);
 			FixSLGAddress(0x33438);
-		//	FixSLGAddress(0x34CD0); //
+      FixSLGAddress(0x34CD0);
 
 			//Packed addresses (fullAddress/8) with format 0x00XXXXXXXX
 			FixSLGAddress(0x10A4);
@@ -7460,7 +7459,7 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 
 				for (std::map<unsigned long, unsigned long>::iterator sIter = slgVdp1Addresses.begin(); sIter != slgVdp1Addresses.end(); ++sIter)
 				{
-					printf("   SLG VDP1 PACKED: %x at %x\n", sIter->second, sIter->first);
+					printf("   SLG VDP1 PACKED: %lx at %lx\n", sIter->second, sIter->first);
 				}
 			}
 			//end debug
@@ -7604,13 +7603,13 @@ bool PatchWKLFiles(const string& sakuraDirectory, const string& inPatchedDirecto
 					{
 						evtFile.WriteData(addressToFix.offsetInFile, (char*)&addressToFix.newValue.packed, sizeof(addressToFix.newValue.packed), true);
 
-						printf("Fixing address at 0x%0x from 0x%0x to 0x%0x in %s\n", addressToFix.offsetInFile, addressToFix.originalValue.packed, addressToFix.newValue.packed, evtFileNameContainer.mNoExtension.c_str());
+						printf("Fixing address at 0x%0lx from 0x%0x to 0x%0x in %s\n", addressToFix.offsetInFile, addressToFix.originalValue.packed, addressToFix.newValue.packed, evtFileNameContainer.mNoExtension.c_str());
 					}
 					else
 					{
 						evtFile.WriteData(addressToFix.offsetInFile, (char*)&addressToFix.newValue.full, sizeof(addressToFix.newValue.full), true);
 
-						printf("Fixing address at 0x%0x from 0x%0x to 0x%0x in %s\n", addressToFix.offsetInFile, addressToFix.originalValue.full, addressToFix.newValue.full, evtFileNameContainer.mNoExtension.c_str());
+						printf("Fixing address at 0x%0lx from 0x%0lx to 0x%0lx in %s\n", addressToFix.offsetInFile, addressToFix.originalValue.full, addressToFix.newValue.full, evtFileNameContainer.mNoExtension.c_str());
 					}
 				}
 			}
@@ -7689,34 +7688,16 @@ void ExtractWKLFiles(const string& sakuraDirectory, const string& outDirectory)
 	GetAllFilesOfType(allFiles, "WKL", wklFiles);
 
 	WklCompressedInfo compressedInfo[64];
-
-	/*
-	for(const FileNameContainer& fileNameInfo : wklFiles)
-	{
-		printf("Extracting %s\n", fileNameInfo.mFileName.c_str());
-
-		const string outSubDirName = outDirectory + fileNameInfo.mNoExtension + Seperators;
-		if( !CreateDirectoryHelper(outSubDirName) )
-		{
-			printf("Unable to create directory: %s", outSubDirName.c_str());
-			return;
-		}
-
-
-		WklBattleMenuExtractor wklExtractor;
-		wklExtractor.Initialize(fileNameInfo);
-		wklExtractor.DumpImages(outSubDirName, paletteData);
-	}*/
-	
 	
 	for(const FileNameContainer& fileNameInfo : wklFiles)
 	{
 		printf("Extracting %s\n", fileNameInfo.mFileName.c_str());
 
 		const string outSubDirName = outDirectory + fileNameInfo.mNoExtension + Seperators;
-		if( !CreateDirectoryHelper(outSubDirName) )
+		int ec = CreateDirectoryPortableHelper(outSubDirName);
+		if (ec != 0)
 		{
-			printf("Unable to create directory: %s", outSubDirName.c_str());
+			printf("Unable to create directory: %s (Error: %d)", outSubDirName.c_str(), ec);
 			return;
 		}
 
@@ -7891,7 +7872,7 @@ void ExtractTMapSP(const string& sakuraDirectory, const string& paletteFileName,
 		memcpy_s(lookupTable, sizeof(lookupTable), sakuraFileData.GetData() + offsetToData, sizeof(lookupTable));
 
 		const string fukagawaDirectory = outDirectory + string("FUKAGAWA\\");
-		CreateDirectoryHelper(fukagawaDirectory);
+		CreateDirectoryPortableHelper(fukagawaDirectory);
 		for(int i = 0; i < numLutEntries; ++i)
 		{
 			lookupTable[i].addressInTmapSP = SwapByteOrder(lookupTable[i].addressInTmapSP);
@@ -8007,7 +7988,8 @@ bool PatchTheaterView(const string& sakuraDirectory, const string& patchDataPath
 	delete[] pTMapSpBuffer;
 
 	//Write out all the patched files into the new TMapSP file
-	unsigned int newImageSize = 0;
+	// TODO: Find out what this newImageSize is for
+	// unsigned int newImageSize = 0;
 	const size_t numPatchedImages = patchedImages.size();
 	const string emptyRoom("EmptyRoom");
 	for(size_t imageIndex = 0; imageIndex < numPatchedImages; ++imageIndex)
@@ -8022,7 +8004,7 @@ bool PatchTheaterView(const string& sakuraDirectory, const string& patchDataPath
 
 		const unsigned int newImageWidth  = origTranslatedBmp.mBitmapData.mInfoHeader.mImageWidth;
 		const unsigned int newImageHeight = origTranslatedBmp.mBitmapData.mInfoHeader.mImageHeight;
-		newImageSize                     += newImageWidth*newImageHeight/2;
+		// newImageSize                     += newImageWidth*newImageHeight/2;
 
 		if( newImageWidth/8 > 0xff )
 		{
@@ -8215,7 +8197,7 @@ void FindCMPData(const string& /*inCompressedFilePath*/, const string& /*inUncom
 
 void FindCompressedData(const string& inCompressedFilePath, const string& inUncompressedFilePath, const string& outDirectory)
 {
-	CreateDirectoryHelper(outDirectory);
+	CreateDirectoryPortableHelper(outDirectory);
 
 	FileNameContainer compressedFileName(inCompressedFilePath.c_str());
 	FileData compresedFile;
@@ -8288,7 +8270,7 @@ void FindCompressedData(const string& inCompressedFilePath, const string& inUnco
 		
 		for(const FoundData& foundResult : foundIndices)
 		{
-			printf("Found: At %08x OffsetWithinUncompressedData: %08x Size: %lu CompressedSize: %lu\n", foundResult.uncompressionStart, foundResult.offestInUncompressedData, foundResult.dataSize, foundResult.compressedSize);
+			printf("Found: At %08lx OffsetWithinUncompressedData: %08lx Size: %lu CompressedSize: %lu\n", foundResult.uncompressionStart, foundResult.offestInUncompressedData, foundResult.dataSize, foundResult.compressedSize);
 		}
 	}
 	else
@@ -8428,7 +8410,8 @@ struct OptionsSettingsMenu
 		sakuraFileData.ReadData(optionsControlsTextOffset,    (char*)controlsText,    sizeof(controlsText));
 		sakuraFileData.ReadData(optionsExitTextOffset,        (char*)exitText,        sizeof(exitText));
 	
-		const INT emptyOptionsChar = 60;
+		// TODO: Was it really necessary to use "INT"?
+		const int emptyOptionsChar = 60;
 		cursorSpeedText[0].SetCharacter(0); //0-5 is "Cursor Speed"
 		cursorSpeedText[1].SetCharacter(1);
 		cursorSpeedText[2].SetCharacter(2);
@@ -8697,7 +8680,7 @@ bool PatchMainMenu(const string& inPatchedSakuraRootDirectory, const string& inT
 	optionsCompressedData.PatchDataInMemory(translatedOptionsData.GetData(), translatedOptionsData.GetDataSize(), true, false, originalOptionsCompressedSize);
 	if( optionsCompressedData.mDataSize > originalOptionsCompressedSize )
 	{
-		printf("PatchMainMenu: Compressed options font sheet is larger than the original %ul instead of %ul \n", optionsCompressedData.mDataSize, originalOptionsCompressedSize);
+		printf("PatchMainMenu: Compressed options font sheet is larger than the original %lu instead of %lu \n", optionsCompressedData.mDataSize, originalOptionsCompressedSize);
 		return false;
 	}
 	sakuraFileData.WriteData(optionsFontSheetOffset, optionsCompressedData.mpCompressedData, optionsCompressedData.mDataSize);
@@ -8737,7 +8720,7 @@ bool PatchMainMenu(const string& inPatchedSakuraRootDirectory, const string& inT
 
 	if( translatedIntermediateScreenData.mDataSize > originalIntermediateSreenCompressedSize )
 	{
-		printf("PatchMainMenu: Compressed size for the IntermediateScreen is too big.  Should be less thatn %ul, is %ul", originalIntermediateSreenCompressedSize, translatedIntermediateScreenData.mDataSize);
+		printf("PatchMainMenu: Compressed size for the IntermediateScreen is too big.  Should be less thatn %lu, is %lu", originalIntermediateSreenCompressedSize, translatedIntermediateScreenData.mDataSize);
 		return false;
 	}
 
@@ -8828,10 +8811,11 @@ bool PatchMainMenu(const string& inPatchedSakuraRootDirectory, const string& inT
 	char* pNewData                                  = new char[newDataSize];
 	memset(pNewData, 0, newDataSize);
 
-	//Patch font sheet
-	//mainMenuTextOffset                   = 0x000061E8;
+	// Patch font sheet
+	// mainMenuTextOffset                   = 0x000061E8;
 	const unsigned long fontSheetOffset    = 0x0000ff20;
-	const unsigned long bgndImageOffset    = 0x00010808; //Bgnd image appears directly after the font sheet
+	// Bgnd image appears directly after the font sheet
+	// const unsigned long bgndImageOffset    = 0x00010808;
 	unsigned long       memCpyOffset       = 0;
 
 	//Copy everything from the start of the file to the font sheet
@@ -8899,7 +8883,7 @@ bool PatchMainMenu(const string& inPatchedSakuraRootDirectory, const string& inT
 
 void ExtractLoadScreen(const string& inRootSakuraDirectory, const string& inTranslatedDataDirectory, const string& inOutputDirectory)
 {
-	CreateDirectoryHelper(inOutputDirectory);
+	CreateDirectoryPortableHelper(inOutputDirectory);
 
 	const string sakuraFilePath = inRootSakuraDirectory + "SAKURA";
 	FileData sakuraFileData;
@@ -8965,7 +8949,7 @@ bool FixupSLG(const string& rootDir, const string& outDir, const string& inTrans
 	const int paletteSize = 32;
 	if( newPaletteData.GetDataSize() != paletteSize )
 	{
-		printf("FixupSLG: Palette size should be %i.  NewPaletteFile %s has a size of %ul instead.\n", paletteSize, newFontPaletteFile.c_str(), newPaletteData.GetDataSize());
+		printf("FixupSLG: Palette size should be %i.  NewPaletteFile %s has a size of %lu instead.\n", paletteSize, newFontPaletteFile.c_str(), newPaletteData.GetDataSize());
 		return false;
 	}
 
@@ -8990,13 +8974,14 @@ bool FixupSLG(const string& rootDir, const string& outDir, const string& inTrans
 	}
 
 	//Compress options font sheet
-	const unsigned long optionsFontSheetOffset        = 0x0005b320;
+	// TODO: Without the offset, how is this one found?
+	// const unsigned long optionsFontSheetOffset        = 0x0005b320;
 	const unsigned long originalOptionsCompressedSize = 3782;
 	SakuraCompressedData optionsCompressedData;
 	optionsCompressedData.PatchDataInMemory(translatedOptionsData.GetData(), translatedOptionsData.GetDataSize(), true, false, originalOptionsCompressedSize);
 	if( optionsCompressedData.mDataSize > originalOptionsCompressedSize )
 	{
-		printf("PatchMainMenu: Compressed options font sheet is larger than the original %ul instead of %ul \n", optionsCompressedData.mDataSize, originalOptionsCompressedSize);
+		printf("PatchMainMenu: Compressed options font sheet is larger than the original %lu instead of %lu \n", optionsCompressedData.mDataSize, originalOptionsCompressedSize);
 		return false;
 	}
 	//**Done with settings font sheet
@@ -9052,7 +9037,7 @@ bool FixupSLG(const string& rootDir, const string& outDir, const string& inTrans
 		translatedBgndData.PatchDataInMemory(uncompressedBgndImage.mpUncompressedData, uncompressedBgndImage.mUncompressedDataSize, true, false, bgndImageOriginalCompressedSize);
 		if( translatedBgndData.mDataSize > bgndImageOriginalCompressedSize )
 		{
-			printf("PatchMainMenu: Translated bgnd image is too big when compressed. Max is %u, this is %u.\n", bgndImageOriginalCompressedSize, translatedBgndData.mDataSize);
+			printf("PatchMainMenu: Translated bgnd image is too big when compressed. Max is %u, this is %lu.\n", bgndImageOriginalCompressedSize, translatedBgndData.mDataSize);
 			return false;
 		}
 		//**Done compressing bgnd image
@@ -9086,17 +9071,20 @@ bool FixupSLG(const string& rootDir, const string& outDir, const string& inTrans
 		const int offsetLipsNumCharsPerLine_1  = 0x000217B9;
 		const int offsetLipsNumCharsPerLine_2  = 0x000217BF;
 		const int offsetLipsStartLocationY     = 0x0002173D; //Change the command from MOV 0xCC(-52), r11 to 0xCE(-50)
-		const int offsetItemCountXOffset       = 0x0002512B;
+		#if !FIX_SLG_FONT_DRAWING_SIZE
+		  const int offsetItemCountXOffset       = 0x0002512B;
+		#endif
 		const int offsetOptionsFontSheet       = 0x0004a740;
 	//	const int offsetBgndImagePalette       = 0x0004a1b8;
 		const unsigned char maxMultiplier      = (240/(OutTileSpacingX));
 		const unsigned char maxCharacters      = maxMultiplier - 1;
 		const unsigned char maxLines           = MaxLines - 1;
-		const unsigned char lipsXOffset        = 0;
 		const unsigned char shiftLeftValue     = 0;
 		const unsigned char maxCharsPerLipsLine= maxMultiplier;
 		const unsigned char lipsStartLocY      = 0xCE;
-		const unsigned char itemCountXOffset   = 0x30; //This is the text that appears next to a battle menu option which has a number associated with it (ex: Cover x8)
+		#if !FIX_SLG_FONT_DRAWING_SIZE
+			const unsigned char itemCountXOffset   = 0x30; //This is the text that appears next to a battle menu option which has a number associated with it (ex: Cover x8)
+		#endif
 
 		memcpy_s((void*)(origSlgData.GetData() + offsetMaxSpacingScrolling1),     origSlgData.GetDataSize(), (void*)&maxCharacters,							sizeof(maxCharacters));
 		memcpy_s((void*)(origSlgData.GetData() + offsetMaxSpacingScrolling2),     origSlgData.GetDataSize(), (void*)&maxCharacters,							sizeof(maxCharacters));
@@ -9295,7 +9283,7 @@ void CopySharedWklImages(const string& inSourceDirectory, const string& inWklOut
 
 		//Create output directory
 		const string outWklDir = inWklOutputDirectory + string("\\") + wklDir;
-		CreateDirectoryHelper(outWklDir);
+		CreateDirectoryPortableHelper(outWklDir);
 
 		//Copy over unique files
 		for(const FileNameContainer& sourceFileName : wklSourceFiles)
@@ -10362,14 +10350,14 @@ bool PatchMiniGames(const string& rootSakuraDirectory, const string& patchedSaku
 	const int numMiniGameFiles = 8;
 	MiniGameFileOffsets miniGameOption1Offsets[numMiniGameFiles] = 
 	{
-		"HANAMAIN.BIN", 0x00013c08, 0x00016628, 0x000165a8, 0x00016528, 0x00015508, 0x00016728, 0x00014d88, 0x00015608, 0x00023768, 0x00026868,
-		"MINICOOK.BIN", 0x00011a3c, 0x0001445c, 0x000143dc, 0x0001435c, 0x0001333c, 0x0001455c, 0x00012bbc, 0x0001343c, 0,          0,
-		"MINIHANA.BIN", 0x00011a3c, 0x0001445c, 0x000143dc, 0x0001435c, 0x0001333c, 0x0001455c, 0x00012bbc, 0x0001343c, 0x000423b0, 0x000454b0,
-		"MINIMAIG.BIN", 0x00011a3c, 0x0001445c, 0x000143dc, 0x0001435c, 0x0001333c, 0x0001455c, 0x00012bbc, 0x0001343c, 0,          0,
-		"MINISHOT.BIN", 0x00011a3c, 0x0001445c, 0x000143dc, 0x0001435c, 0x0001333c, 0x0001455c, 0x00012bbc, 0x0001343c, 0,          0,
-		"MINISLOT.BIN", 0x00011a3c, 0x0001445c, 0x000143dc, 0x0001435c, 0x0001333c, 0x0001455c, 0x00012bbc, 0x0001343c, 0,          0,
-		"MINISOJI.BIN", 0x00011a3c, 0x0001445c, 0x000143dc, 0x0001435c, 0x0001333c, 0x0001455c, 0x00012bbc, 0x0001343c, 0,          0,
-		"MINISWIM.BIN", 0x00011a3c, 0x0001445c, 0x000143dc, 0x0001435c, 0x0001333c, 0x0001455c, 0x00012bbc, 0x0001343c, 0,          0,
+		{ "HANAMAIN.BIN", 0x00013c08, 0x00016628, 0x000165a8, 0x00016528, 0x00015508, 0x00016728, 0x00014d88, 0x00015608, 0x00023768, 0x00026868 },
+		{ "MINICOOK.BIN", 0x00011a3c, 0x0001445c, 0x000143dc, 0x0001435c, 0x0001333c, 0x0001455c, 0x00012bbc, 0x0001343c, 0,          0 },
+		{ "MINIHANA.BIN", 0x00011a3c, 0x0001445c, 0x000143dc, 0x0001435c, 0x0001333c, 0x0001455c, 0x00012bbc, 0x0001343c, 0x000423b0, 0x000454b0 },
+		{ "MINIMAIG.BIN", 0x00011a3c, 0x0001445c, 0x000143dc, 0x0001435c, 0x0001333c, 0x0001455c, 0x00012bbc, 0x0001343c, 0,          0 },
+		{ "MINISHOT.BIN", 0x00011a3c, 0x0001445c, 0x000143dc, 0x0001435c, 0x0001333c, 0x0001455c, 0x00012bbc, 0x0001343c, 0,          0 },
+		{ "MINISLOT.BIN", 0x00011a3c, 0x0001445c, 0x000143dc, 0x0001435c, 0x0001333c, 0x0001455c, 0x00012bbc, 0x0001343c, 0,          0 },
+		{ "MINISOJI.BIN", 0x00011a3c, 0x0001445c, 0x000143dc, 0x0001435c, 0x0001333c, 0x0001455c, 0x00012bbc, 0x0001343c, 0,          0 },
+		{ "MINISWIM.BIN", 0x00011a3c, 0x0001445c, 0x000143dc, 0x0001435c, 0x0001333c, 0x0001455c, 0x00012bbc, 0x0001343c, 0,          0 }
 	};
 
 	//Patch common data among all mini games
@@ -10639,7 +10627,6 @@ bool PatchLoadScreen(const string& patchedSakuraDirectory, const string& inTrans
 
 		//Write out new pointer table
 		printf("Fixing LoadScreen Pointer\n");
-		int numFixed = 0;
 		for(unsigned long i = 0; i < sakuraFileData.GetDataSize(); i += 4)
 		{
 			int origValue;
@@ -10649,13 +10636,8 @@ bool PatchLoadScreen(const string& patchedSakuraDirectory, const string& inTrans
 			{
 				const int newValue = adjustedPointerMap[ origValue ];
 				sakuraFile.WriteData(i, (char*)&newValue, sizeof(newValue), true);
-
-			//	printf("     %0x to %0x at %0x\n", origValue, SwapByteOrder(newValue), i);
-				numFixed++;
 			}
 		}
-
-		//printf("Num Fixed: %i\n", numFixed);
 	}
 
 	//Patch button formatting
@@ -10944,7 +10926,7 @@ void CreateFontSheetEntries(const string& inFileName, bool bEveryCombination)
 
 void ExtractSubtitles(const string& rootSakuraDirectory, const string& outDirectory)
 {
-	CreateDirectoryHelper(outDirectory);
+	CreateDirectoryPortableHelper(outDirectory);
 
 	//SAKURA file
 	FileNameContainer sakuraFilePath((rootSakuraDirectory + "SAKURA").c_str());
@@ -11096,7 +11078,7 @@ bool PatchSubtitles(const string& /*rootSakuraTaisenDirectory*/, const string& p
 	compressor.PatchDataInMemory(pSubtitleImageBlock, imageDataSize, true, false, originalCompressedSize);
 	if( compressor.mDataSize > originalCompressedSize )
 	{
-		printf("PatchSubtitles: Compressed data size[%i] is too big. Needs to be smaller than %i.\n", compressor.mDataSize, originalCompressedSize);
+		printf("PatchSubtitles: Compressed data size[%lu] is too big. Needs to be smaller than %i.\n", compressor.mDataSize, originalCompressedSize);
 		return false;
 	}
 
@@ -11133,20 +11115,20 @@ bool PatchScreens(const string& rootSakuraTaisenDirectory, const string& patched
 
 	ScreenFileInfo filesToPatch[] = 
 	{
-		"TITLE1", 0x13c0, ScreenFileInfo::kType_Load,
-		"TITLE2", 0x13c0, ScreenFileInfo::kType_Load,
-		"TITLE3", 0x13c0, ScreenFileInfo::kType_Load,
-		"TITLE4", 0x13c0, ScreenFileInfo::kType_Load,
-		"TITLE5", 0x13c0, ScreenFileInfo::kType_Load,
-		"TITLE6", 0x13c0, ScreenFileInfo::kType_Load,
-		"TITLE7", 0x13c0, ScreenFileInfo::kType_Load,
-		"TITLE8", 0x13c0, ScreenFileInfo::kType_Load,
-		"TITLE9", 0x13c0, ScreenFileInfo::kType_Load,
-		"TITLE10",0x13c0, ScreenFileInfo::kType_Load,
-		"LOAD",   0x1380, ScreenFileInfo::kType_Load,
-		"BG1211", 0x50,   ScreenFileInfo::kType_BG,
-		"BG1212", 0x50,   ScreenFileInfo::kType_BG,
-		"BG1213", 0x50,   ScreenFileInfo::kType_BG
+		{ "TITLE1", 0x13c0, ScreenFileInfo::kType_Load },
+		{ "TITLE2", 0x13c0, ScreenFileInfo::kType_Load },
+		{ "TITLE3", 0x13c0, ScreenFileInfo::kType_Load },
+		{ "TITLE4", 0x13c0, ScreenFileInfo::kType_Load },
+		{ "TITLE5", 0x13c0, ScreenFileInfo::kType_Load },
+		{ "TITLE6", 0x13c0, ScreenFileInfo::kType_Load },
+		{ "TITLE7", 0x13c0, ScreenFileInfo::kType_Load },
+		{ "TITLE8", 0x13c0, ScreenFileInfo::kType_Load },
+		{ "TITLE9", 0x13c0, ScreenFileInfo::kType_Load },
+		{ "TITLE10",0x13c0, ScreenFileInfo::kType_Load },
+		{ "LOAD",   0x1380, ScreenFileInfo::kType_Load },
+		{ "BG1211", 0x50,   ScreenFileInfo::kType_BG },
+		{ "BG1212", 0x50,   ScreenFileInfo::kType_BG },
+		{ "BG1213", 0x50,   ScreenFileInfo::kType_BG }
 	};
 
 	const int numTitleFiles = sizeof(filesToPatch)/sizeof(ScreenFileInfo);
@@ -11208,7 +11190,7 @@ bool PatchScreens(const string& rootSakuraTaisenDirectory, const string& patched
 
 		if( outFile.GetFileSize() != originalFile.GetDataSize() )
 		{
-			printf("PatchScreens: Expected file size: %i, got %i.  For %s\n", originalFile.GetDataSize(), outFile.GetFileSize(), filesToPatch[i].pName);
+			printf("PatchScreens: Expected file size: %lu, got %lu.  For %s\n", originalFile.GetDataSize(), outFile.GetFileSize(), filesToPatch[i].pName);
 			return false;
 		}
 	}
@@ -11239,11 +11221,11 @@ void ExtractTiledImages(const string& rootSakuraDir, const string& outDir)
 	const string outLoadDirectory  = outDir + string("LoadFiles\\");
 	const string outMiscDirectory  = outDir + string("MiscFiles\\");
 	const string outBGDirectory  = outDir + string("BGFiles\\");
-	CreateDirectoryHelper(outDir);
-	CreateDirectoryHelper(outTitleDirectory);
-	CreateDirectoryHelper(outLoadDirectory);
-	CreateDirectoryHelper(outMiscDirectory);
-	CreateDirectoryHelper(outBGDirectory);
+	CreateDirectoryPortableHelper(outDir);
+	CreateDirectoryPortableHelper(outTitleDirectory);
+	CreateDirectoryPortableHelper(outLoadDirectory);
+	CreateDirectoryPortableHelper(outMiscDirectory);
+	CreateDirectoryPortableHelper(outBGDirectory);
  
 	//Extract title files
 	char buffer0[1024];
@@ -11570,8 +11552,9 @@ void BoldWKLText(const string& wklDirectory)
 		{
 			if(y == 3)
 			{
-				int k = 0;
-				++k;
+				// TODO: Find out why this k was set and incremented.
+				// int k = 0;
+				// ++k;
 			}
 
 			for(int x = 0; x < bmpData.mBitmapData.mInfoHeader.mImageWidth / 2; ++x)
@@ -11662,7 +11645,7 @@ bool PatchTiledData(FileReadWriter& outFile, const string& fontSheetPath, const 
 	lutCompressed.PatchDataInMemory((char*)tileEntries.data(), tileEntries.size()*sizeof(int), true, false, lutCompressedSize);
 	if( lutCompressed.mDataSize != lutCompressedSize )
 	{
-		printf("Lookup table is too big.  Should be 916, is %ul\n", lutCompressed.mDataSize);
+		printf("Lookup table is too big.  Should be 916, is %lu\n", lutCompressed.mDataSize);
 		return false;
 	}
 
@@ -11951,9 +11934,10 @@ bool PatchGame(const string& rootSakuraTaisenDirectory,
 {
 	//Create temp work directory
 	string tempDir;
-	if( !CreateTemporaryDirectory(tempDir) )
+	int ec = CreateTemporaryDirectory(tempDir);
+	if( ec != 0 )
 	{
-		printf("Cannot patch game.  Could not create temp work directory.  Error: (%d)\n", GetLastError());
+		printf("Cannot patch game.  Could not create temp work directory.  Error: (%d)\n", ec);
 		return false;
 	}
 
