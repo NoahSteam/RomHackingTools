@@ -65,7 +65,7 @@ I have to stay strong, just like her.
 Thank you very much! <br> Come back and buy another bromide next month! 
 …Tsubaki’s doing her best to stay cheerful.
 Unsurprisingly, no one is eating at this hour. 
-There's no sign of anyone in the kitchen. Guess I'll check another room. 
+There's no sign of anyone in the kitchen either. Guess I'll check another room. 
 Looks like no one's come in. Oh man, what a waste of effort. 
 It's really hot and humid. I suppose it is the rainy season. 
 Looks like nobody's here, guess I'll check another room. 
@@ -163,7 +163,7 @@ Sakura, something wrong?
 A photo? 
 Yes. I saw it sitting on the manager's desk. 
 It's from when Mr. Yoneda was fighting alongside my father. 
-My father is the one who's standing on the far left. 
+My father is the one who's standing on the far right. 
 He died during The Kouma War seven years ago… 
 … 
 Other than Mr. Yoneda, everyone's… gone. 
@@ -567,7 +567,7 @@ Could this be the mummy’s lair? What awaits Masked Red in the mysterious old h
 Fight on, Masked Red! You're our hero, Red! <br> To Be Continued
 Go, Masked Red! <br> Fight on, Masked Red! <br> Tune in next time! 
 I'm worried about everyone else, so let's end this transmission. 
-Now… Where should I head next? 
+Now… <br> Where should I head next? 
 …Huh? Sounds like someone’s at my door.
 Guess I'll just stop the transmission. 
 Excuse me, Ogami. I’m sorry but I have something to tell you… 
@@ -808,7 +808,7 @@ R-Reni… D-Don't tell me you're actually, a…
 …I am female.
 Wh-Whaaaaaaaatttt!? 
 S-Sorry! I didn’t know you were a girl when I got into the bath! I’m really sorry for barging in!
-…I'm not bothered. No need to apologize. 
+…I'm not bothered. <br> No need to apologize. 
 There are only a few functional differences between male and females. 
 A-Anyway, I'm getting out right away. Sorry again!! 
 Huff… Huff… <br> I thought my heart was going to jump out of my chest. 
@@ -841,7 +841,7 @@ R-Reni… D-Don't tell me you're actually, a…
 …I am female. 
 Wh-Whaaaaaaaatttt!? 
 S-Sorry! I didn’t know you were a girl when I got into the bath! I’m really sorry for barging in! 
-…I'm not bothered. No need to apologize. 
+…I'm not bothered. <br> No need to apologize. 
 There are only a few functional differences between male and females.
 A-Anyway, I'm getting out right away. Sorry again!! 
 Huff… Huff… <br> I thought my heart was going to jump out of my chest. 

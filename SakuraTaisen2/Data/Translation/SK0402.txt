@@ -532,15 +532,15 @@ Heya, Boss.
 Hey, Kanna. Hmm… Something smells pretty good.
 Heheheh, I'm whippin’ up Chef Kanna's Ultra-Special Menu!
 It's bitter melon chanpuru, a dish we make where I'm from back on Okinawa.
-You just stir-fry some bitter melon with eggs.
-Sounds pretty tasty, right?!
+You just stir-fry some<br>bitter melon with eggs.<br>
+Sounds pretty tasty,<br>right?!
 It sure does!
 Not to me…
 It sure does! I bet it's nice and refreshing in the summer heat, too.
-That's my Boss! I knew you'd get it!
-All right, here ya go, Boss-man. Eat up!
+That's my captain! <br> I knew you'd get it!
+All right then, Boss-man, I'll whip up some extra for ya!
 I'm still in the middle of makin' it, but I should be finished up by around 3:30.
-Come back to the cafeteria in 30 minutes or so, and I'll feed you as much as you can eat!
+Come back to the dining hall in 30 minutes or so, and I'll feed ya as much as ya can eat!
 OK, thanks Kanna. I'll come back in a bit, then.
 Come back hungry, ya hear?
 I don't know… Bitter melon doesn't sound all that tasty to me.
@@ -549,24 +549,24 @@ Guess there's no accountin' for taste…
 S-Sorry.
 Why not try it out, just for the heck of it?
 I'm still in the middle of makin' it, but I should be finished up by around 3:30.
-Come back to the cafeteria in 30 minutes or so, and I'll feed you as much as you can eat!
+Come back to the dining hall in 30 minutes or so, and I'll feed ya as much as ya can eat!
 A-All right. I may swing back around if I feel so inclined.
 You may as well give it a taste! I'll be here!
 Hmm, I can't decide if that would taste good or not…
 Oh yeah…? All right, I'm gonna serve ya some, Boss.
 I'm still in the middle of makin' it, but I should be finished up by around 3:30.
-Come back to the cafeteria in 30 minutes or so, and I'll feed you as much as you can eat!
+Come back to the dining hall in 30 minutes or so, and I'll feed ya as much as ya can eat!
 OK, thanks Kanna. I'll come back in a bit, then.
 Yeah, ya better be ready for it! I promise it'll be great.
 Hey, Boss. I'm still makin' that chanpuru right now.
 I think it'll be done in about 30 minutes, so come back here around then.
 Come back around 3:30, got it.
 Yep! I'm sure that'll give your stomach enough time to make some room.
-Man, it smells really good.
-…I can smell it as much as I want, but that won't make it cook any faster. I better go.
-Man, it smells really good.
+Man, it smells really good in here.
+…Can't stand around taking in the aroma forever, though. I'd better get going.
+Man, it smells really good in here.
 This must be the scent of Kanna's bitter melon chanpuru.
-…I can smell it as much as I want, but that won't make it cook any faster. I better go.
+…Can't stand around taking in the aroma forever, though. I'd better get going.
 Yo, Boss!
 Hey Kanna. I'm back and ready to eat, just like you told me.
 Heheh, thanks for waitin'. Take a seat.
@@ -949,7 +949,7 @@ Haha. I never expected you to come out and say something so casual, Ogami.
 …Oh, r-really?
 Um… I thought, if you wanted, maybe we could chat for a bit…
 That sounds perfect. I've been wanting to speak with you, as well.
-Come on in, then. No need to be modest.
+Come on in, then. <br> No need to be modest.
 C-Certainly. Pardon me.
 Wow… So this is your room, Kaede?
 It's a little disorderly since I just got done working, so I apologize.
@@ -958,8 +958,8 @@ Yes. Ayame's room had a very Japanese feel to it.
 Hahaha, that sounds about right. She was always one to prefer a more Japanese style…
 But as for myself, I like Western designs. Even though we're sisters, we were quite different.
 By the way, what did you wish to discuss, Ogami?
-Oh, um… Would it be all right if I asked you something?
-What is it? I'll answer if I can.
+Oh, um… <br> Would it be all right if I asked you something?
+What is it? <br> I'll answer if I can.
 Um, Kaede… Why did you join the Assault Troupe?
 Haha, that's what you want to know?
 Let me turn the question around. Why did you join the Imperial Assault Troupe, Ogami?
@@ -977,15 +977,15 @@ Still, I imagine you're glad you were assigned here in the end, am I right?
 Yes.
 Haha, good to hear.
 It seems my sister was right when she told me what a serious-minded captain you are.
-It's a living, you know? If you don't work, you don't eat, after all.
-Ahaha… True enough. A job is a job.
+It's a living, you know? <br> If you don't work, you don't eat, after all.
+Ahaha… True enough. <br> A job is a job.
 It seems my sister was right when she told me just how unique you are.
 Hmm… I guess you could say I just kinda ended up here.
 Oh… So that's all?
 You need to think things through more carefully. That carefree attitude isn't going to cut it.
 It seems my sister was right when she told me you still have a few things to learn.
 But she was also right about how unusually laid-back you can be.
-So Ayame… said that much about me？
+So Ayame… said that much about me?
 Yes. She spoke of the Assault Troupe often.
 I suppose a large part of the reason I joined was due to her influence.
 If you ever want to hear more about Ayame, come by again anytime.
@@ -1217,7 +1217,7 @@ Wh-Whaaaaaaaatttt!?
 Leave immediately.
 Shut your eyes.
 I-I'm sorry! I just barged in here without knowing that you were a girl…
-It's fine. No need to apologize.
+It's fine. <br> No need to apologize.
 There are only a few functional differences between male and females.
 A-Anyway, I'm leaving right now. Sorry for barging in!!
 Huff… Huff… <br> I thought my heart was gonna pop out of my chest.

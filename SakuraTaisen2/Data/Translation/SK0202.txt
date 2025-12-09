@@ -68,7 +68,7 @@ That's a bromide of Iris.
 Mon Frère, are you going to buy my bromide? 
 All right, I'll take one of Iris. 
 Really? Yaaay, yaaay! 
-It's a cute bromide. I'll treasure it. 
+It's a cute bromide. <br> I'll treasure it. 
 Thank you, Mon Frère. 
 I wish they had a bromide of you too, so I could buy it… 
 Hmm, a bromide of me? I don't think they'd sell very well. 
@@ -561,7 +561,7 @@ There's no audience. I can't wait to put on a play for everyone.
 There won't be very many visitors this month. It's so quiet without them. 
 No one seems to be here. Let's go. 
 Ogami. 
-Oh, Sakura. Did you find Orihime? 
+Oh, Sakura. <br> Did you find Orihime? 
 Yes! I was on my way to the music room and bumped into her. 
 It's thanks to your help I was able to find her. 
 Really? That's great. Did Orihime say she would help out?
@@ -642,7 +642,7 @@ Let's go somewhere else. We don't have much time before noon.
 Yeah! Come on, Mon Frère. 
 I hate this room! The pool table’s so tall, I can’t reach the top of it! 
 Come on, Mon Frère, let's go to another room! 
-O-OK, got it. Let's go, Iris. 
+O-OK, got it. <br> Let's go, Iris. 
 I thought Orihime might be here, but it doesn't look like it. 
 Let's go somewhere else. We don't have much time before noon. 
 Yaaay! <br> It's Mon Frère's room! Pardon me. 
@@ -1040,7 +1040,7 @@ For now, we have to patiently hold out for the right opportunity.
 Wait for the right moment, look for an opportunity, fight with all you got. Do that and you'll never lose.
 Don't let the tragedy of losing your friends repeat itself… 
 …Yes, sir. 
-Well, I'm off. Say hi to Iris for me. 
+Well, I'm off. <br> Say hi to Iris for me. 
 Mr. Yoneda… 
 Hey, Mon Frère. Are you finished talking? 
 Uncle Yoneda was looking kinda sad. Is he OK? 
@@ -1096,7 +1096,7 @@ Don’t peek at anyone, Mon Frère!
 Why do you keep coming to the changing room? 
 You're not thinking of something nasty, are you? 
 No, not at all. I just happened to come here, that's all. 
-Look, Mon Frère! We got a new pool. 
+Look, Mon Frère! <br> We got a new pool. 
 It's got warm water, too, so you can swim even in winter. 
 I heard it also has training mines! 
 I see… It's cutting edge, just as you'd expect from the troupe. 
@@ -1145,7 +1145,7 @@ A flower vase? That's not it.
 I'm sorry, Ogami. I was actually looking for the vase, too. 
 Ah, that's it! Thank goodness we found it. 
 A hanging banner? Nope… 
-A banner? We'll need that, too. 
+A banner? <br> We'll need that, too. 
 I just looked in that box, Mon Frère. 
 …Props from "Dinosaur Island"? That takes me back. 
 What's this? Machine parts? Doesn't look like it's here. 
@@ -1234,7 +1234,7 @@ Oh, it was nothing, right Iris?
 Yep! It was a lot of fun being with Mon Frère! 
 Speaking of which, I asked you to bring some plates. 
 Yeah, I brought them with us. Sorry they're a bit late getting here. 
-Oh, you didn't forget. I'm glad. 
+Oh, you didn't forget. <br> I'm glad. 
 It's a little late, but you were a big help. Thank you very much. 
 Oh, it was nothing, right Iris? 
 Yep! It was a lot of fun being with Mon Frère! 
@@ -1282,7 +1282,7 @@ I know! Why don't we greet her by the entrance?
 That's a great idea. I'm sure she'll be thrilled.
 Yaaay! Let's go greet her, let's go! 
 Hmhm… So much noise for a simple newcomer. 
-I'll be waiting here. All of you can greet them in my stead. 
+I will be waiting here. All of you can greet them in my stead. 
 Understood. OK, let's go. 
 Hey, Mon Frère… 
 What's up, Iris? 

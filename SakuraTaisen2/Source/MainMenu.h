@@ -27,7 +27,7 @@ struct CustomMenuImageInfo
 //Found manually
 const uint16 CharBioImageOffset = (0x320a0 / 8);
 const uint16 OgamiBioImageOffset = (0x28300 / 8);
-const int NumCustomMainMenuImages = 22;
+const int NumCustomMainMenuImages = 21;
 MainMenuImageInfo ManuallyFoundMainMenuImages[NumCustomMainMenuImages]
 {
 	0, 128, 16, (uint16)(0x3c460 / 8),
@@ -61,8 +61,8 @@ MainMenuImageInfo ManuallyFoundMainMenuImages[NumCustomMainMenuImages]
 	0, 112, 16, (uint16)(0x3b5e0 / 8),
 	0, 112, 16, (uint16)(0x3b5e0 / 8),
 
-	//Ogami bio
-	0, 176, 136, OgamiBioImageOffset,
+	//Ogami bio (todo: this was for the missing images we missed in the first patch)
+//	0, 176, 136, OgamiBioImageOffset,
 };
 
 const int NumPBEyeImages = 12;

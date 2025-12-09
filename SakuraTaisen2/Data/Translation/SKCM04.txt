@@ -1,4 +1,4 @@
-﻿All right… Which number should I dial? 
+﻿All right… <br> Which number should I dial? 
 Oh, no! I didn't realize it was already 4 o'clock! 
 Kohran must be waiting in her room! I gotta hurry!! 
 Kohran is back at the theater… 
@@ -8,7 +8,7 @@ Sumire is already back at the theater.
 Still, I was pretty surprised when she called me last month. 
 Hello, this is Maria Tachibana speaking.
 Hey, Maria. 
-Captain… It's been a long time. 
+Captain… <br> It's been a long time. 
 Right now I'm on a ship heading to Japan. 
 If the trip goes well, I may arrive at the theater by tomorrow. 
 I see. So you’re finally coming back to us.
@@ -46,7 +46,7 @@ The inside of the building is in disrepair as if it hadn’t been used in many y
 On the dusty floor, the mummy's footprints are clearly visible.
 Following the footprints, Masked Red descends into the basement. 
 In the back of the dark basement, Red spots lights illuminating through a large door.
-Inside, he locates the mummy, as well as an elderly man wearing a white rode standing before him.
+Inside, he locates the mummy, as well as an elderly man wearing a white robe standing before him.
 “Y-You're the genius scientist, Professor Kurogane! Are you the culprit behind all this?" 
 "Heh heh heh… Just as I expected from you, Masked Red. However, this is as far as you go.”
 Professor Kurogane presses a button, and the floor under Red’s feet suddenly disappears!
@@ -57,7 +57,7 @@ Go, Masked Red! <br> Fight on, Masked Red! <br> Tune in next time!
 I have an appointment with Kohran. So I better put this away for now.
 Oh, no! I didn't realize it was already 4 o'clock! 
 Kohran must be waiting in her room! I gotta hurry!! 
-Now… Where should I head next? 
+Now… <br> Where should I head next? 
 Oh, boy… Looks like Kohran is angry. 
 Welcome to Pompadour Chikamatsu's Fortune Telling. Here is what fate has in store for you. 
 Your lucky color is peach. A fateful encounter will bring good luck. 

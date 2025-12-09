@@ -637,7 +637,7 @@ public:
 	bool          CreateFontSheetFromData(const char* pInData, unsigned int inDataSize);
 	bool          CreateFontSheet(const FileNameContainer& inFileNameInfo);
 	const char*   GetTileData(int inIndex) const;
-	int           GetNumTiles() const {(int)mTiles.size();}	
+	int           GetNumTiles() const {return (int)mTiles.size();}	
 };
 
 class MemoryBlocks

@@ -506,10 +506,10 @@ Hahaha… Sorting the receipts is an important job, just like patrolling the the
 OK, doors are locked and nothing's out of place. Let's get going. 
 Nothing strange in the secretarial office. Let's continue our patrol. 
 This is the VIP entrance. We welcome our special guests here. 
-Let's check the door… Yep, it's locked tight. 
+Let's check the door… <br> Yep, it's locked tight. 
 There's nothing odd in here. Let's get going, then. 
 This is the VIP entrance. We welcome our special guests here. 
-Let's check the door… Yep, it's locked tight. 
+Let's check the door… <br> Yep, it's locked tight. 
 So you have to check the locks yourself? Are you maybe short of workers here? 
 It's the captain's duty.
 I know, right? 
@@ -532,7 +532,7 @@ OK, all good. The locks are working, too. Let's get going.
 This is the kitchen. Earlier, we made food for the welcoming party here. 
 The welcoming party was pretty awful, but the food was delicious. 
 Yeah, it was all tasty. 
-Was it really? I'm glad to hear that. 
+Was it really? <br> I'm glad to hear that. 
 OK, looks like the gas is off, so let's get going. 
 Looks like the gas is off, let's head to the next room. 
 The dining hall has been remodeled, so the atmosphere of the room has changed a bit.
@@ -609,10 +609,10 @@ All right.
 I see. I'll drop by here next chance I get. 
 I wanted to buy a bromide, but Tsubaki's not around. I'll have to visit again tomorrow afternoon. 
 This is the entrance hall. It's the theater's main entrance. 
-Let's check the door… Yep, it's locked tight. 
+Let's check the door… <br> Yep, it's locked tight. 
 There's nothing odd in here. Let's get going, then. 
 This is the entrance hall. It's the theater's main entrance. 
-Let's check the door… Yep, it's locked tight. 
+Let's check the door… <br> Yep, it's locked tight. 
 So you have to check the locks yourself? Are you maybe short of workers here? 
 It's the captain's duty. 
 I know, right? 

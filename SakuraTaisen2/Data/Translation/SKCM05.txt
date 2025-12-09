@@ -1,4 +1,4 @@
-﻿All right… Which number should I dial?
+﻿All right… <br> Which number should I dial?
 Good afternoon. <br> It's time for Capital News.
 Today, the Fukagawa Police held a conference regarding the fire that broke out at the Murasame restaurant.
 They determined that last month’s fire was a case of arson carried out by an unknown party.

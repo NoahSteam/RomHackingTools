@@ -217,7 +217,7 @@ Sure, go ahead.
 You are walking about trying to cheer up all of us in the Flower Division. I am right, yes? 
 That's correct, you got me. 
 I have gotten to know you pretty well, Mr. Ensign. 
-Now it your turn to guess. 
+Now it is your turn to guess. 
 My turn? 
 What do you think I have been doing? 
 Looking for a snack? 
@@ -515,7 +515,7 @@ I'm not sick or anything… Right?
 Reni… 
 OK, let me see your face, then. 
 Ah… 
-Yep, you're fine. <br> 2Same as always. 
+Yep, you're fine. <br> Same as always. 
 Captain… 
 You don't have to worry, Reni. So long as you believe in me… in everyone… you'll be all right. 
 …Yeah. 

@@ -114,7 +114,7 @@ So please, keep watching over us… Over the Imperial Assault Troupe.
 That noise… Is that the Kinematron ringing?! 
 Ogami, we should answer it right away! 
 Ogami? Thank goodness, I finally got through. 
-Kaede! <b> What on earth is going on?! 
+Kaede! <br> What on earth is going on?! 
 We have an emergency. Hostiles have been sighted in Ouji! 
 Wha… <br> What did you just say?! 
 We still don't know all the details. The rest of the Flower Division have already deployed. 
@@ -230,7 +230,7 @@ Miyata told me everything. We're receiving a call on the Kinematron, am I right?
 We must answer it immediately! 
 Yeah. OK, I'm picking up… 
 Ogami? Thank goodness, I finally got through. 
-Kaede! <b> What on earth is going on?! 
+Kaede! <br> What on earth is going on?! 
 We have an emergency. Hostiles have been sighted in Ouji! 
 Wha… <br> What did you just say?! 
 We still don't know all the details. The rest of the Flower Division have already deployed. 
@@ -300,7 +300,7 @@ Moya rodina… <br> (My motherland…)
 Yeah, seems like we're receiving a transmission. 
 What could it be? 
 Ogami? Thank goodness, I finally got through. 
-Kaede! <b> What on earth is going on?! 
+Kaede! <br> What on earth is going on?! 
 We have an emergency. Hostiles have been sighted in Ouji! 
 Wha… <br> What did you just say?! 
 We still don't know all the details. The rest of the Flower Division have already deployed. 
@@ -397,7 +397,7 @@ It's the Kinematron! <br> It's ringing!
 All the way out here? What the hell's goin' on?! 
 No clue. Let's answer it and see. 
 Ogami? Thank goodness, I finally got through. 
-Kaede! <b> What on earth is going on?! 
+Kaede! <br> What on earth is going on?! 
 We have an emergency. Hostiles have been sighted in Ouji! 
 Wha… <br> What did you just say?! 
 We still don't know all the details. The rest of the Flower Division have already deployed. 
@@ -462,7 +462,7 @@ Huh? Is that an alarm clock I'm hearing?
 No, that’s not it. It's the Kinematron ringing! 
 What could've possibly happened? All right, let me take it out. 
 Ogami? Thank goodness, I finally got through. 
-Kaede! <b> What on earth is going on?! 
+Kaede! <br> What on earth is going on?! 
 We have an emergency. Hostiles have been sighted in Ouji! 
 Wha… <br> What did you just say?! 
 We still don't know all the details. The rest of the Flower Division have already deployed. 
@@ -621,7 +621,7 @@ Whoa! <br> Th-That scared me!
 The Kinematron's getting a call! 
 What the heck could it be? Let's answer it, quick! 
 Ogami? Thank goodness, I finally got through. 
-Kaede! <b> What on earth is going on?! 
+Kaede! <br> What on earth is going on?! 
 We have an emergency. Hostiles have been sighted in Ouji! 
 Wha… <br> What did you just say?! 
 We still don't know all the details. The rest of the Flower Division have already deployed. 
@@ -787,7 +787,7 @@ Mr. Ensign! Could that be…?
 Yeah. That's the Kinematron ringing. 
 Let's bring it out and see what's up! 
 Ogami? Thank goodness, I finally got through. 
-Kaede! <b> What on earth is going on?! 
+Kaede! <br> What on earth is going on?! 
 We have an emergency. Hostiles have been sighted in Ouji! 
 Wha… <br> What did you just say?! 
 We still don't know all the details. The rest of the Flower Division have already deployed. 

@@ -548,7 +548,7 @@ Nothing else happened. You've got to believe me on that.
 …I see. Ogami, you are a pretty serious person. 
 Is that really true? You tend to be pretty insincere around other people, Ogami. 
 H-Hey, wait… 
-…I'm sorry. I really do believe you. 
+…I'm sorry. <br> I really do believe you. 
 You're not the sort of person to lie about anything. 
 But… I don't think I can face you with an honest smile. 
 Sakura… 
@@ -764,7 +764,7 @@ Ahh… I think it is about time I got out.
 Phew… <br> I think I got away before she realized I was there. 
 If I'd been just a moment slower, I might not have made it. That was too close… 
 Ah, Mr. Ensign. 
-H-Hey, Orihime. Were you taking a bath? 
+H-Hey, Orihime. <br> Were you taking a bath? 
 Why, yes. I just got out. 
 You would not happen to have been peeking inside, were you? 
 When I was in the bath, I had a sense that someone was close by. 
