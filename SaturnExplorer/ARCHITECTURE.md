@@ -1,11 +1,12 @@
 # Saturn Explorer — Architecture
 
-> Status: **M1 foundation in progress.** The two seams now exist as headers under
+> Status: **M1 complete.** The two seams exist as headers under
 > `include/saturnexplorer/`, the core static lib implements the C++/C-ABI boundary,
-> and the savestate driver is functional. The ImGui + D3D11 frontend is the next
-> commit. The original `SaturnExplorer.vcxproj` placeholder is still present and
-> becomes the frontend then. This document remains the source of truth for the
-> component split, the two interface seams, and the module breakdown.
+> the savestate driver is functional, and the `FrontEnd` app (ImGui + a Win32/D3D11
+> platform backend behind the Seam C abstraction) shows the empty docked layout.
+> Next is M2 (the VDP1 command table). This document is the source of truth for the
+> component split, the three interface seams (A data, B host, C platform), and the
+> module breakdown.
 
 ---
 
@@ -351,11 +352,21 @@ SaturnExplorer/
       src/savestate_driver.{h,cpp}
       SaturnExplorerSavestateDriver.vcxproj
     Emulator/                        ← later
-  Frontend/                          ← reference Win32 app (Dear ImGui + D3D11) [NEXT]
-    src/… (panels: RenderView, CommandTable, TextureViewer, VramMap, Search, Trace)
-    third_party/imgui/               ← vendored (repo has no package manager)
-    SaturnExplorer.vcxproj
+  FrontEnd/                          ← reference app (Dear ImGui) [M1 DONE]
+    FrontEnd.vcxproj                 ← builds SaturnExplorer.exe
+    src/
+      App.{h,cpp}                    ← portable: owns core ctx + driver + panels
+      Platform/IPlatform.h           ← Seam C: the platform abstraction
+    Platforms/
+      Windows/                       ← Win32 + D3D11 implementation of IPlatform
+        WindowsPlatform.{h,cpp}
+        WinMain.cpp                  ← entry point + main loop
+    third_party/imgui/               ← vendored ImGui (docking), core + backends
 ```
+
+The frontend is itself split so it can be ported (see §13). `Platforms/` holds
+per-OS/GPU backends; only they touch Win32/D3D11. The portable `App` and panels
+depend solely on the core (Seam B), ImGui, and `IPlatform`.
 
 Core modules from §6 (Vdp1Parser, TextureDecoder, SearchEngine, …) attach to the
 `Core/src/` skeleton at their milestones; M1 ships only the context + snapshot +
@@ -370,9 +381,11 @@ package manager; the D3D11 + Win32 ImGui backends ship with it.
 
 1. **M0 — Seams (this doc + headers). [DONE]** `include/saturnexplorer/*.h` landed; verified
    compiling as C99/C11/C++14.
-2. **M1 — Skeleton. [IN PROGRESS]** Core static lib + savestate driver done and verified end
-   to end (driver → `se_create` → `se_begin_frame` → snapshot) on a synthetic dump. Remaining:
-   the ImGui+D3D11 window that calls `se_create` and shows an empty layout.
+2. **M1 — Skeleton. [DONE]** Core static lib + savestate driver verified end to end
+   (driver → `se_create` → `se_begin_frame` → snapshot) on a synthetic dump; ImGui frontend
+   with the platform abstraction (Seam C) and a Win32/D3D11 backend, showing the empty docked
+   panel layout. Portable layer (App + panels + ImGui core) compiles on non-Windows; the
+   Win32/D3D11 backend builds in Visual Studio.
 3. **M2 — Command list.** Savestate → `Vdp1Parser` → Command Table Explorer panel with the
    Sprite Inspection detail view (data only, no rendering yet).
 4. **M3 — Software render + 2D geometry.** `GeometryBuilder` + `Vdp1Rasterizer`: the live 2D
@@ -399,3 +412,40 @@ apply to the public C-ABI headers (`include/saturnexplorer/*.h`), which stay
 - **Braces:** Allman — opening brace on its own line. (Trivial one-line inline
   accessors may keep `{ ... }` on the same line, matching the existing repo.)
 - **File-scope constants:** `k` + `UpperCamelCase` — `kVdp1VramSize`.
+
+---
+
+## 13. Frontend architecture — Seam C (Platform)
+
+The `FrontEnd` app is split the same way the product is: a portable core of logic
+plus a swappable platform backend, so it can be ported without touching the UI.
+
+**Three layers:**
+
+1. **Portable app + panels** (`FrontEnd/src/`) — `App` owns the core context, the
+   data source, the render toggles, and the current selection, and draws every
+   panel each frame. It depends only on the core (Seam B), **ImGui** (portable),
+   and `IPlatform`. No Win32/D3D11 types appear here.
+2. **`IPlatform`** (`FrontEnd/src/Platform/IPlatform.h`) — **Seam C**, the port
+   boundary. It abstracts: window + event loop (`PumpEvents`), frame begin/end
+   (wrapping the ImGui backend + `NewFrame`/`Render`/present), a **GPU texture
+   bridge** for `se_image` (`CreateTexture`/`UpdateTexture`/`DestroyTexture` →
+   `ImTextureID`, so panels can display decoded frames/textures), and a native
+   file-open dialog.
+3. **Platform backends** (`FrontEnd/Platforms/<name>/`) — implement `IPlatform`
+   and own the entry point + the ImGui platform/renderer backends. `Windows/`
+   (Win32 + D3D11) is the reference; an SDL/OpenGL backend would slot in beside it.
+
+**Loop ownership:** the platform's entry point owns the main loop and drives
+`PumpEvents → BeginFrame → App::BuildUI(platform) → EndFrame`. `App` never sees
+the OS.
+
+**Two independent axes — don't conflate them:** a **data-source driver** (Seam A)
+is *where Saturn state comes from* (savestate, emulator); a **platform backend**
+(Seam C) is *the host OS/GPU*. A Windows build reading a savestate uses the
+Windows platform backend **and** the savestate driver; each can change without
+the other.
+
+The core returns decoded `se_image` (RGBA) and geometry; the platform uploads to
+the GPU and ImGui draws it. No graphics API type ever crosses Seam B — this is
+what lets an emulator embed the core under its own renderer.

@@ -32,6 +32,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "SaturnExplorer", "SaturnExp
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "SaturnExplorerSavestateDriver", "SaturnExplorer\Drivers\Savestate\SaturnExplorerSavestateDriver.vcxproj", "{E5FABA33-9251-4FA8-8046-079BC32EF155}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "FrontEnd", "SaturnExplorer\FrontEnd\FrontEnd.vcxproj", "{D4F017B5-2DDC-4B8A-9E73-656E73FA995C}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -115,6 +117,14 @@ Global
 		{E5FABA33-9251-4FA8-8046-079BC32EF155}.Release|x64.Build.0 = Release|x64
 		{E5FABA33-9251-4FA8-8046-079BC32EF155}.Release|x86.ActiveCfg = Release|Win32
 		{E5FABA33-9251-4FA8-8046-079BC32EF155}.Release|x86.Build.0 = Release|Win32
+		{D4F017B5-2DDC-4B8A-9E73-656E73FA995C}.Debug|x64.ActiveCfg = Debug|x64
+		{D4F017B5-2DDC-4B8A-9E73-656E73FA995C}.Debug|x64.Build.0 = Debug|x64
+		{D4F017B5-2DDC-4B8A-9E73-656E73FA995C}.Debug|x86.ActiveCfg = Debug|Win32
+		{D4F017B5-2DDC-4B8A-9E73-656E73FA995C}.Debug|x86.Build.0 = Debug|Win32
+		{D4F017B5-2DDC-4B8A-9E73-656E73FA995C}.Release|x64.ActiveCfg = Release|x64
+		{D4F017B5-2DDC-4B8A-9E73-656E73FA995C}.Release|x64.Build.0 = Release|x64
+		{D4F017B5-2DDC-4B8A-9E73-656E73FA995C}.Release|x86.ActiveCfg = Release|Win32
+		{D4F017B5-2DDC-4B8A-9E73-656E73FA995C}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
