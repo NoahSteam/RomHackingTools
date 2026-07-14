@@ -46,7 +46,8 @@ All platform-agnostic logic. Has **no** dependency on a UI framework, no windowi
 and no Win32 types in its public headers. Builds as a **static lib** (for the bundled
 frontend) and optionally as a **DLL** (for third parties who load it at runtime).
 
-Owns: VDP1/VDP2 parsing, texture/palette decoding, the VRAM map, the command-table
+Owns: VDP1/VDP2 parsing, **software VDP1 rasterization**, **dual 2D-screen / 3D-world
+geometry generation** (see §7), texture/palette decoding, the VRAM map, the command-table
 model, ROM/archive search, asset trace, memory history, and the reference explorer.
 
 ### 2.2 Drivers — the platform adapters (Seam A implementers)
@@ -110,11 +111,10 @@ enum {
     SE_CAP_MAIN_RAM      = 1 << 3,
     SE_CAP_VDP1_REGS     = 1 << 4,
     SE_CAP_VDP2_REGS     = 1 << 5,
-    SE_CAP_FRAMEBUFFER   = 1 << 6,   /* composited frame readback */
-    SE_CAP_LAYER_CONTROL = 1 << 7,   /* driver can toggle VDP2 layers / re-render */
-    SE_CAP_EVENT_STREAM  = 1 << 8,   /* memory-write / DMA events (Memory History) */
-    SE_CAP_DISC          = 1 << 9,   /* raw ISO / file access (ROM Search) */
-    SE_CAP_FRAME_STEP    = 1 << 10,  /* pause / step / advance (Frame Timeline) */
+    SE_CAP_FRAMEBUFFER   = 1 << 6,   /* optional reference frame, for diffing vs core render */
+    SE_CAP_EVENT_STREAM  = 1 << 7,   /* memory-write / DMA events (Memory History) */
+    SE_CAP_DISC          = 1 << 8,   /* raw ISO / file access (ROM Search) */
+    SE_CAP_FRAME_STEP    = 1 << 9,   /* pause / step / advance (Frame Timeline) */
 };
 
 typedef struct se_data_source {
@@ -132,11 +132,10 @@ typedef struct se_data_source {
     uint16_t (*read_vdp1_reg)(void* user, uint32_t reg);
     uint16_t (*read_vdp2_reg)(void* user, uint32_t reg);
 
-    /* --- Optional: composited framebuffer readback (SE_CAP_FRAMEBUFFER). --- */
+    /* --- Optional: reference framebuffer (SE_CAP_FRAMEBUFFER) for diffing vs the
+           core's own software render. NOT the primary display path — the core composites
+           the frame itself from VRAM (see §7). --- */
     int (*get_framebuffer)(void* user, se_framebuffer* out);
-
-    /* --- Optional: layer control (SE_CAP_LAYER_CONTROL). --- */
-    int (*set_layer_enabled)(void* user, se_layer layer, int enabled);
 
     /* --- Optional: memory-access event pump (SE_CAP_EVENT_STREAM). --- */
     size_t (*poll_events)(void* user, se_mem_event* out, size_t max);
@@ -191,6 +190,18 @@ size_t      se_command_count(se_context*);
 se_result   se_get_command(se_context*, size_t index, se_command* out);
 se_result   se_hit_test(se_context*, int x, int y, size_t* out_index);  /* click → command */
 
+/* --- VDP1 geometry: every sprite emitted in TWO coordinate spaces (see §7). --- */
+size_t      se_sprite_count(se_context*);
+se_result   se_get_sprite_2d(se_context*, size_t index, se_sprite_2d* out);  /* screen-space quad */
+se_result   se_get_sprite_3d(se_context*, size_t index, se_sprite_3d* out);  /* world-space quad  */
+
+/* --- Software VDP composite: the finished frame, rasterized by the core from the
+       sprite quads + VDP2 layers. `opts` carries all layer toggles and overlays
+       (hide VDP1 / hide NBGx / windows / shadows / wireframe / bounds / priority /
+       object-number). The driver supplies a camera only for the 3D view; the 2D frame
+       is rendered here. --- */
+se_result   se_render_frame(se_context*, const se_render_opts* opts, se_image* out);
+
 /* --- Texture & Palette Viewer --- */
 se_result   se_decode_texture(se_context*, const se_texture_ref* ref, se_image* out);
 se_result   se_decode_palette(se_context*, uint32_t clut, se_palette* out);
@@ -212,9 +223,11 @@ size_t      se_references_of_palette(se_context*, uint32_t clut, se_reference* o
 size_t      se_history_for(se_context*, const se_texture_ref*, se_mem_event* out, size_t max);
 ```
 
-Rendering stays entirely in the host — the core returns **data and decoded images**
-(`se_image` = raw RGBA + metadata), never ImGui or D3D calls. The host uploads
-`se_image` to a texture and draws it.
+Division of rendering labor: the **core** does *software* rasterization — it composites
+the finished 2D frame into an `se_image` (raw RGBA + metadata) and emits the per-sprite
+2D/3D geometry. The **host** does *GPU* work — it uploads `se_image` as a texture for the
+2D view, and draws the 3D geometry through its own camera and D3D pipeline. No ImGui or
+D3D types ever cross the seam; the core never makes a graphics API call.
 
 ---
 
@@ -230,7 +243,9 @@ Internally (C++, not exposed across the seam):
 | `TextureDecoder` | VRAM + CLUT → RGBA, all sprite color modes, RGB555 | Texture & Palette Viewer |
 | `PaletteDecoder` | CRAM/CLUT → color swatches | Palette Viewer |
 | `VramMap` | Classifies VRAM into texture pages / CLUTs / command table / free | VRAM Visualization |
-| `Compositor` | Optional software re-render of VDP1 sprites for layer toggling (see §7) | Live Visualization |
+| `GeometryBuilder` | Turns each VDP1 command into a 4-corner quad in **2D screen space** and **3D world space** (see §7) | Live Visualization, Sprite selection, 3D view |
+| `Vdp1Rasterizer` | Software rasterizes the 2D quads (texture, gouraud, transparency, mesh, flip, draw modes) into the finished frame | Live Visualization |
+| `Vdp2Compositor` | Composites VDP2 layers with the VDP1 output by priority; honors layer/window/shadow toggles | Live Visualization, Layer toggles |
 | `SearchEngine` | Scans disc/archives/compressed assets for a target asset | ROM & Archive Search |
 | `AssetTracer` | Correlates a texture with disc origin + references + history | Asset Trace |
 | `ReferenceIndex` | Reverse index: texture/palette → commands that use it | Reference Explorer |
@@ -239,24 +254,54 @@ Internally (C++, not exposed across the seam):
 
 ---
 
-## 7. Rendering & compositing strategy (open decision)
+## 7. Rendering & geometry model (settled)
 
-"Toggle individual VDP2 layers / VDP1 sprites" is the one feature that can't be served by
-a plain framebuffer readback — a finished frame has already been composited. Two ways to
-get selective layers, not mutually exclusive:
+The core is a **software VDP1**. It reconstructs the frame from individual sprites exactly
+as the Saturn's VDP1 does, rather than reading back an already-composited framebuffer from
+the driver. VDP1 draws *distorted sprites*: every command is a quad with four independently
+positioned corners, which is how the hardware does skew, rotation, scaling, and translation
+in one primitive. The core takes that **4-corner textured quad** as its native primitive
+(normal/scaled sprites are the axis-aligned special case; polygons, polylines, and lines are
+the other command types).
 
-- **(A) Driver-controlled** — the driver exposes `SE_CAP_LAYER_CONTROL` and toggles layers
-  inside the emulator, then the core reads back the framebuffer. Accurate (it's the real
-  hardware path) but only possible when the driver is a cooperating emulator.
-- **(B) Core software re-render** — the `Compositor` re-rasterizes VDP1 sprites from the
-  command table we already parse, and optionally VDP2 tilemaps from VRAM. Works with any
-  driver (even a static dump), but is a large amount of work to match hardware exactly.
+For every VDP1 command the core emits the sprite in **two coordinate spaces**:
 
-**Proposed phasing:** start with the driver framebuffer as the base image and the core's
-sprite re-render for **overlays** (wireframes, bounds, priority/object-number labels,
-sprite highlight-on-select). Add full core VDP2 compositing later. Use driver layer control
-when `SE_CAP_LAYER_CONTROL` is present. This gives the selection/inspection UX immediately
-without blocking on a full software VDP.
+1. **2D screen space** — the quad exactly where the Saturn places it on screen (4 corners +
+   texture UVs, color mode, gouraud, transparency, flip, draw mode, priority). Rasterizing
+   these in priority order reproduces the finished frame. Because each sprite is a discrete
+   quad, the host hit-tests a click against the quad list to select the underlying command —
+   this is what makes **every on-screen object clickable**. This set is authoritative for
+   "what the Saturn drew" and for selection.
+
+2. **3D world space** — the *same* sprites emitted as world-space geometry (4 corners with
+   X/Y/Z). Overlapping 2D sprites are separated along **Z by priority, then stable draw
+   order** as tiebreak, so the scene "explodes" into layers. The **core owns the geometry;
+   the driver owns the camera** — it supplies its own view/projection and can orbit, pan, and
+   fly through the geometry to inspect how the frame is assembled.
+
+So the core's job is *geometry + software rasterization*; the driver's job for the 3D view is
+*purely a camera*. The two sets are the same sprites — a selection in one highlights it in the
+other.
+
+**Layer toggles are a core render option, not a driver hook.** Because the core composites
+the frame itself from VRAM (`Vdp1Rasterizer` + `Vdp2Compositor`), it can include or exclude
+any layer, window, shadow, or effect on demand. Toggling VDP1, an individual VDP2 background
+(NBG0–3, RBG0), wireframes, bounds, priority labels, and object numbers are all fields of
+`se_render_opts` passed to `se_render_frame()`. No driver cooperation is required — the same
+toggles work against a static memory dump. (This is why Seam A has no layer-control
+capability.)
+
+**VDP2 backgrounds** fold into the same model: each active layer is a textured plane, placed
+under/over the VDP1 sprites by priority in both the 2D composite and the 3D scene.
+
+**Driver framebuffer (optional).** When a driver advertises `SE_CAP_FRAMEBUFFER`, the host can
+show the emulator's real output side-by-side with the core's software render to validate
+accuracy — a diff/comparison view, not the primary display path.
+
+**Z-mapping is the one tunable.** The default world layout derives Z from priority + draw
+order. If it proves more legible to space layers by VRAM bank, command range, or a
+user-controlled exaggeration factor, that stays internal to `GeometryBuilder` and does not
+affect either seam.
 
 ---
 
@@ -314,9 +359,14 @@ package manager; the D3D11 + Win32 ImGui backends ship with it.
 1. **M0 — Seams (this doc + headers).** Land `include/saturnexplorer/*.h`; no logic yet.
 2. **M1 — Skeleton.** Core static lib that compiles against the headers, a savestate driver
    stub, and an ImGui+D3D11 window that calls `se_create` and shows an empty layout.
-3. **M2 — First vertical slice.** Savestate → `Vdp1Parser` → Command Table Explorer panel
-   with sprite selection + the Sprite Inspection detail view.
-4. **M3 — Textures & VRAM.** `TextureDecoder`, Texture & Palette Viewer, VRAM Visualization.
-5. **M4 — Search & trace.** `SearchEngine`, ROM & Archive Search, Reference Explorer.
-6. **M5 — Live driver.** Emulator driver with framebuffer + event stream; Memory History,
-   Frame Timeline, layer control.
+3. **M2 — Command list.** Savestate → `Vdp1Parser` → Command Table Explorer panel with the
+   Sprite Inspection detail view (data only, no rendering yet).
+4. **M3 — Software render + 2D geometry.** `GeometryBuilder` + `Vdp1Rasterizer`: the live 2D
+   frame drawn from sprite quads, with click-to-select hit-testing and layer/overlay toggles.
+   This is the core's defining feature.
+5. **M4 — 3D world view.** Emit `se_sprite_3d`; frontend camera to orbit/fly the exploded
+   geometry. `Vdp2Compositor` for background layers in both views.
+6. **M5 — Textures & VRAM.** `TextureDecoder`, Texture & Palette Viewer, VRAM Visualization.
+7. **M6 — Search & trace.** `SearchEngine`, ROM & Archive Search, Reference Explorer.
+8. **M7 — Live driver.** Emulator driver with event stream (+ optional reference framebuffer);
+   Memory History, Frame Timeline.
