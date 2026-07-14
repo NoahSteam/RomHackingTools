@@ -1,9 +1,11 @@
 # Saturn Explorer — Architecture
 
-> Status: **Design draft for review.** No project restructuring has been done yet;
-> the current `SaturnExplorer.vcxproj` is a placeholder. This document defines the
-> component split, the two interface seams, and the module breakdown so we can
-> agree on the boundaries before writing them.
+> Status: **M1 foundation in progress.** The two seams now exist as headers under
+> `include/saturnexplorer/`, the core static lib implements the C++/C-ABI boundary,
+> and the savestate driver is functional. The ImGui + D3D11 frontend is the next
+> commit. The original `SaturnExplorer.vcxproj` placeholder is still present and
+> becomes the frontend then. This document remains the source of truth for the
+> component split, the two interface seams, and the module breakdown.
 
 ---
 
@@ -331,23 +333,33 @@ affect either seam.
 
 ```
 SaturnExplorer/
-  ARCHITECTURE.md                 ← this file
-  include/saturnexplorer/         ← public C-ABI headers (the two seams)
-    se_abi.h                      ← versions, result codes, capability bits
-    se_data_source.h             ← Seam A
-    se_host.h                     ← Seam B
-    se_types.h                   ← POD structs (se_command, se_image, se_mem_event, …)
-  Core/                           ← SaturnExplorerCore (C++ static lib + optional DLL)
-    src/…                         ← modules from §6
+  ARCHITECTURE.md                    ← this file
+  include/saturnexplorer/            ← public headers (the two seams) [DONE]
+    se_abi.h                         ← versions, result codes, capability bits
+    se_types.h                       ← POD structs (se_command, se_image, se_mem_event, …)
+    se_data_source.h                 ← Seam A
+    se_host.h                        ← Seam B
+    saturnexplorer.h                 ← umbrella include
+  Core/                              ← SaturnExplorerCore (C++ static lib) [DONE]
+    src/
+      context.h                      ← C++ core behind the opaque se_context*
+      host_abi.cpp                   ← C-ABI shim for Seam B
+      hardware_snapshot.{h,cpp}      ← pulls state through Seam A per frame
     SaturnExplorerCore.vcxproj
   Drivers/
-    Savestate/                    ← first reference driver (static dump)
-    Emulator/                     ← later
-  Frontend/                       ← reference Win32 app (Dear ImGui + D3D11)
+    Savestate/                       ← reference driver: region dir + full dump [DONE]
+      src/savestate_driver.{h,cpp}
+      SaturnExplorerSavestateDriver.vcxproj
+    Emulator/                        ← later
+  Frontend/                          ← reference Win32 app (Dear ImGui + D3D11) [NEXT]
     src/… (panels: RenderView, CommandTable, TextureViewer, VramMap, Search, Trace)
-    third_party/imgui/            ← vendored (repo has no package manager)
+    third_party/imgui/               ← vendored (repo has no package manager)
     SaturnExplorer.vcxproj
 ```
+
+Core modules from §6 (Vdp1Parser, TextureDecoder, SearchEngine, …) attach to the
+`Core/src/` skeleton at their milestones; M1 ships only the context + snapshot +
+C-ABI shim, with every Seam B query present but returning `SE_ERR_UNIMPLEMENTED`.
 
 `imgui` will be **vendored as source** under `Frontend/third_party/` since the repo has no
 package manager; the D3D11 + Win32 ImGui backends ship with it.
@@ -356,9 +368,11 @@ package manager; the D3D11 + Win32 ImGui backends ship with it.
 
 ## 11. Milestones
 
-1. **M0 — Seams (this doc + headers).** Land `include/saturnexplorer/*.h`; no logic yet.
-2. **M1 — Skeleton.** Core static lib that compiles against the headers, a savestate driver
-   stub, and an ImGui+D3D11 window that calls `se_create` and shows an empty layout.
+1. **M0 — Seams (this doc + headers). [DONE]** `include/saturnexplorer/*.h` landed; verified
+   compiling as C99/C11/C++14.
+2. **M1 — Skeleton. [IN PROGRESS]** Core static lib + savestate driver done and verified end
+   to end (driver → `se_create` → `se_begin_frame` → snapshot) on a synthetic dump. Remaining:
+   the ImGui+D3D11 window that calls `se_create` and shows an empty layout.
 3. **M2 — Command list.** Savestate → `Vdp1Parser` → Command Table Explorer panel with the
    Sprite Inspection detail view (data only, no rendering yet).
 4. **M3 — Software render + 2D geometry.** `GeometryBuilder` + `Vdp1Rasterizer`: the live 2D
