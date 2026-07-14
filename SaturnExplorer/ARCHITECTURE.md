@@ -26,7 +26,7 @@ a specific emulator, console, or capture format are swappable.
 
 ```
                         ┌──────────────────────────────────────────┐
-   Seam A (data)        │            SaturnExplorerCore            │        Seam B (host)
+   Seam A (data)        │              SaturnExplorer              │        Seam B (host)
    driver → core        │  (C++ internally, C ABI at both seams)   │        core → host
         ┌───────────────┤                                          ├───────────────┐
         │               │  VDP1/VDP2 parsers · texture/palette     │               │
@@ -42,7 +42,7 @@ a specific emulator, console, or capture format are swappable.
 └───────────────┘                                                           └───────────────┘
 ```
 
-### 2.1 `SaturnExplorerCore` — the engine (library)
+### 2.1 `SaturnExplorer` — the engine (library)
 
 All platform-agnostic logic. Has **no** dependency on a UI framework, no windowing,
 and no Win32 types in its public headers. Builds as a **static lib** (for the bundled
@@ -340,12 +340,12 @@ SaturnExplorer/
     se_data_source.h                 ← Seam A
     se_host.h                        ← Seam B
     saturnexplorer.h                 ← umbrella include
-  Core/                              ← SaturnExplorerCore (C++ static lib) [DONE]
+  Core/                              ← SaturnExplorer core engine (C++ static lib) [DONE]
     src/
       context.h                      ← C++ core behind the opaque se_context*
       host_abi.cpp                   ← C-ABI shim for Seam B
       hardware_snapshot.{h,cpp}      ← pulls state through Seam A per frame
-    SaturnExplorerCore.vcxproj
+    SaturnExplorer.vcxproj
   Drivers/
     Savestate/                       ← reference driver: region dir + full dump [DONE]
       src/savestate_driver.{h,cpp}

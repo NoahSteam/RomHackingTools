@@ -28,9 +28,7 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "SakuraTaisen2", "SakuraTais
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "DragonForce", "DragonForce\DragonForce.vcxproj", "{70274296-5AA3-447B-BC0F-29850D58C46E}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "SaturnExplorer", "SaturnExplorer\SaturnExplorer.vcxproj", "{4E15ED74-D14E-42A6-976C-2A25E6056F95}"
-EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "SaturnExplorerCore", "SaturnExplorer\Core\SaturnExplorerCore.vcxproj", "{A7837FC2-49BC-4F6A-BC7B-880A100D074E}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "SaturnExplorer", "SaturnExplorer\Core\SaturnExplorer.vcxproj", "{A7837FC2-49BC-4F6A-BC7B-880A100D074E}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "SaturnExplorerSavestateDriver", "SaturnExplorer\Drivers\Savestate\SaturnExplorerSavestateDriver.vcxproj", "{E5FABA33-9251-4FA8-8046-079BC32EF155}"
 EndProject
@@ -101,14 +99,6 @@ Global
 		{70274296-5AA3-447B-BC0F-29850D58C46E}.Release|x64.Build.0 = Release|x64
 		{70274296-5AA3-447B-BC0F-29850D58C46E}.Release|x86.ActiveCfg = Release|Win32
 		{70274296-5AA3-447B-BC0F-29850D58C46E}.Release|x86.Build.0 = Release|Win32
-		{4E15ED74-D14E-42A6-976C-2A25E6056F95}.Debug|x64.ActiveCfg = Debug|x64
-		{4E15ED74-D14E-42A6-976C-2A25E6056F95}.Debug|x64.Build.0 = Debug|x64
-		{4E15ED74-D14E-42A6-976C-2A25E6056F95}.Debug|x86.ActiveCfg = Debug|Win32
-		{4E15ED74-D14E-42A6-976C-2A25E6056F95}.Debug|x86.Build.0 = Debug|Win32
-		{4E15ED74-D14E-42A6-976C-2A25E6056F95}.Release|x64.ActiveCfg = Release|x64
-		{4E15ED74-D14E-42A6-976C-2A25E6056F95}.Release|x64.Build.0 = Release|x64
-		{4E15ED74-D14E-42A6-976C-2A25E6056F95}.Release|x86.ActiveCfg = Release|Win32
-		{4E15ED74-D14E-42A6-976C-2A25E6056F95}.Release|x86.Build.0 = Release|Win32
 		{A7837FC2-49BC-4F6A-BC7B-880A100D074E}.Debug|x64.ActiveCfg = Debug|x64
 		{A7837FC2-49BC-4F6A-BC7B-880A100D074E}.Debug|x64.Build.0 = Debug|x64
 		{A7837FC2-49BC-4F6A-BC7B-880A100D074E}.Debug|x86.ActiveCfg = Debug|Win32
