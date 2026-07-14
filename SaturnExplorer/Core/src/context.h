@@ -8,18 +8,29 @@
 #include "saturnexplorer/se_host.h"
 #include "hardware_snapshot.h"
 
-namespace se {
+namespace se
+{
 
-class Context {
+class Context
+{
 public:
-    Context(const se_data_source& ds, const se_config& cfg) : ds_(ds), cfg_(cfg) {}
-    ~Context() {
-        if (ds_.close) ds_.close(ds_.user);
+    Context(const se_data_source& dataSource, const se_config& config)
+        : mDs(dataSource), mCfg(config)
+    {
+    }
+
+    ~Context()
+    {
+        if (mDs.close)
+        {
+            mDs.close(mDs.user);
+        }
     }
 
     // Snapshot state for the current frame.
-    se_result BeginFrame() {
-        return snapshot_.Capture(ds_) ? SE_OK : SE_ERR_NO_DATA;
+    se_result BeginFrame()
+    {
+        return mSnapshot.Capture(mDs) ? SE_OK : SE_ERR_NO_DATA;
     }
 
     // --- Query surface. M1: parsing/rendering not implemented yet, so these
@@ -29,15 +40,15 @@ public:
     size_t SpriteCount() const { return 0; }
     size_t VramRegionCount() const { return 0; }
 
-    bool HasSnapshot() const { return snapshot_.Valid(); }
+    bool HasSnapshot() const { return mSnapshot.Valid(); }
 
-    const se_data_source& DataSource() const { return ds_; }
-    const se_config&      Config() const { return cfg_; }
+    const se_data_source& DataSource() const { return mDs; }
+    const se_config& Config() const { return mCfg; }
 
 private:
-    se_data_source   ds_;
-    se_config        cfg_;
-    HardwareSnapshot snapshot_;
+    se_data_source   mDs;
+    se_config        mCfg;
+    HardwareSnapshot mSnapshot;
 };
 
 }  // namespace se

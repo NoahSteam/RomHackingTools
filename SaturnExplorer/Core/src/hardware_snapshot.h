@@ -8,31 +8,33 @@
 
 #include "saturnexplorer/se_data_source.h"
 
-namespace se {
+namespace se
+{
 
 // Saturn region sizes (Docs/Saturn/MemoryLayout.txt).
 constexpr uint32_t kVdp1VramSize = 512 * 1024;
 constexpr uint32_t kVdp2VramSize = 512 * 1024;
 constexpr uint32_t kCramSize     = 4 * 1024;
 
-class HardwareSnapshot {
+class HardwareSnapshot
+{
 public:
     // Reads whatever the driver's capabilities allow into the buffers below.
     // Absent capabilities leave the corresponding buffer empty. Returns true if
     // at least the VDP1 VRAM was captured.
-    bool Capture(const se_data_source& ds);
+    bool Capture(const se_data_source& dataSource);
 
-    bool Valid() const { return valid_; }
+    bool Valid() const { return mbValid; }
 
-    const std::vector<uint8_t>& Vdp1Vram() const { return vdp1_vram_; }
-    const std::vector<uint8_t>& Vdp2Vram() const { return vdp2_vram_; }
-    const std::vector<uint8_t>& Cram()     const { return cram_; }
+    const std::vector<uint8_t>& Vdp1Vram() const { return mVdp1Vram; }
+    const std::vector<uint8_t>& Vdp2Vram() const { return mVdp2Vram; }
+    const std::vector<uint8_t>& Cram() const { return mCram; }
 
 private:
-    std::vector<uint8_t> vdp1_vram_;
-    std::vector<uint8_t> vdp2_vram_;
-    std::vector<uint8_t> cram_;
-    bool valid_ = false;
+    std::vector<uint8_t> mVdp1Vram;
+    std::vector<uint8_t> mVdp2Vram;
+    std::vector<uint8_t> mCram;
+    bool mbValid = false;
 };
 
 }  // namespace se

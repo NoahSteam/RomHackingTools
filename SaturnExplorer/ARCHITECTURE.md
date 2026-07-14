@@ -384,3 +384,18 @@ package manager; the D3D11 + Win32 ImGui backends ship with it.
 7. **M6 — Search & trace.** `SearchEngine`, ROM & Archive Search, Reference Explorer.
 8. **M7 — Live driver.** Emulator driver with event stream (+ optional reference framebuffer);
    Memory History, Frame Timeline.
+
+---
+
+## 12. Coding conventions
+
+Applies to the **C++ implementation** (core, drivers, frontend). It does **not**
+apply to the public C-ABI headers (`include/saturnexplorer/*.h`), which stay
+`snake_case` — that is the stable C interface third parties compile against.
+
+- **Functions / methods:** `UpperCamelCase` — `Capture`, `BuildDataSource`.
+- **Member variables:** `m` + `UpperCamelCase` — `mVdp1Vram`; booleans `mb` + `UpperCamelCase` — `mbValid`.
+- **Local variables & parameters:** `lowerCamelCase` — `baseAddress`, `count`.
+- **Braces:** Allman — opening brace on its own line. (Trivial one-line inline
+  accessors may keep `{ ... }` on the same line, matching the existing repo.)
+- **File-scope constants:** `k` + `UpperCamelCase` — `kVdp1VramSize`.
