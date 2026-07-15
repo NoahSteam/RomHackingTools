@@ -21,6 +21,12 @@ bool WindowsPlatform::Initialize(const PlatformConfig& config)
 {
     sInstance = this;
 
+    // Make the process DPI-aware BEFORE creating the window. Without this,
+    // Windows renders the app at 96 DPI and bitmap-stretches it up on a
+    // high-DPI display — the cause of the blur. Now the app draws at native
+    // resolution and we scale the UI ourselves (below) so it stays crisp.
+    ImGui_ImplWin32_EnableDpiAwareness();
+
     mWindowClass = { sizeof(mWindowClass), CS_CLASSDC, WndProc, 0L, 0L,
                      GetModuleHandle(nullptr), nullptr, nullptr, nullptr, nullptr,
                      L"SaturnExplorerWindow", nullptr };
@@ -54,6 +60,17 @@ bool WindowsPlatform::Initialize(const PlatformConfig& config)
     io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
 
     ImGui::StyleColorsDark();
+
+    // Scale the whole UI to the window's DPI so it is both crisp and the right
+    // physical size. ImGui 1.92's font system keeps the scalable default font
+    // sharp at the scaled size; ScaleAllSizes handles spacing/padding.
+    const float dpiScale = ImGui_ImplWin32_GetDpiScaleForHwnd(mHwnd);
+    if (dpiScale > 0.0f)
+    {
+        ImGuiStyle& style = ImGui::GetStyle();
+        style.ScaleAllSizes(dpiScale);
+        style.FontScaleMain = dpiScale;
+    }
 
     ImGui_ImplWin32_Init(mHwnd);
     ImGui_ImplDX11_Init(mDevice, mDeviceContext);

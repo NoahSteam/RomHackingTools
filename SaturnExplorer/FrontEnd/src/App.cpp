@@ -5,6 +5,7 @@
 #include <string>
 
 #include "imgui.h"
+#include "imgui_internal.h"  // DockBuilder + BeginViewportSideBar for the default layout
 
 #include "Platform/IPlatform.h"
 #include "SavestateDriver.h"
@@ -236,35 +237,128 @@ void App::BuildUI(IPlatform& platform)
         RenderFrameToTexture(platform);
     }
 
-    DrawMenuBar(platform);
+    // Top toolbar + bottom status bar reserve space from the viewport; the
+    // dockspace fills what's left.
+    DrawToolbar(platform);
+    DrawStatusBar();
 
-    // Full-viewport dockspace so every panel below is dockable.
-    ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport());
+    const ImGuiID dockId = ImGui::DockSpaceOverViewport(
+        0, ImGui::GetMainViewport(), ImGuiDockNodeFlags_PassthruCentralNode);
 
-    DrawLayerControls();
-    DrawVdpOutput(platform);
-    DrawWorldView(platform);
-    DrawCommandList();
-    DrawSelectedObject();
-    DrawTextureViewer(platform);
-    DrawPaletteViewer();
-    DrawVramMap();
-    DrawReferences();
-    DrawPlaceholder("Archive Explorer", "Disc filesystem — arrives in M6.");
-    DrawPlaceholder("Memory History", "Load chain — arrives in M7.");
-    DrawPlaceholder("Search ROM / Files", "ROM & archive search — arrives in M6.");
-}
-
-void App::DrawMenuBar(IPlatform& platform)
-{
-    if (!ImGui::BeginMainMenuBar())
+    // Arrange the panels into the concept's three-column layout the first time
+    // (unless the user already has a saved layout in imgui.ini).
+    if (!mbLayoutBuilt)
     {
-        return;
+        mbLayoutBuilt = true;
+        const ImGuiDockNode* node = ImGui::DockBuilderGetNode(dockId);
+        if (node == nullptr || node->IsLeafNode())
+        {
+            BuildDefaultLayout(dockId);
+        }
     }
 
-    if (ImGui::BeginMenu("File"))
+    // Left column.
+    DrawLayerControls();
+    DrawVramMap();
+    DrawPlaceholder("Archive Explorer", "Disc filesystem tree — arrives in M6 (needs disc access).");
+    DrawPlaceholder("Search ROM / Files", "ROM & archive search — arrives in M6 (needs disc access).");
+
+    // Center: VDP Output and its sibling tabs, then the command list, then the
+    // texture/palette/reference row.
+    DrawVdpOutput(platform);
+    DrawWorldView(platform);
+    DrawPlaceholder("VDP1 Table", "VDP1 command-table hex view — planned.");
+    DrawPlaceholder("VDP2 Table", "VDP2 pattern/map table view — planned.");
+    DrawPlaceholder("Color RAM", "CRAM byte view — planned.");
+    DrawPlaceholder("Palette RAM", "Palette RAM view — planned.");
+    DrawPlaceholder("Registers", "VDP1 / VDP2 register list — planned.");
+    DrawCommandList();
+    DrawTextureViewer(platform);
+    DrawPaletteViewer();
+    DrawReferences();
+
+    // Right column.
+    DrawSelectedObject();
+    DrawPlaceholder("Texture Preview", "Preview of the selected sprite's texture — see the Texture Viewer panel.");
+    DrawPlaceholder("Palette (CLUT)", "Palette of the selected sprite — see the Palette Viewer panel.");
+    DrawPlaceholder("Memory History", "Load chain (File → CD → DMA → Write) — arrives in M7.");
+}
+
+// Programmatic default dock layout matching the concept: a narrow left column,
+// a wide center, and a right inspector column. Runs once on first launch (or
+// after the layout is reset); the user's own rearrangements are saved by ImGui
+// to imgui.ini and take precedence on later runs.
+void App::BuildDefaultLayout(unsigned int dockspaceId)
+{
+    ImGui::DockBuilderRemoveNode(dockspaceId);
+    ImGui::DockBuilderAddNode(dockspaceId, ImGuiDockNodeFlags_DockSpace);
+    ImGui::DockBuilderSetNodeSize(dockspaceId, ImGui::GetMainViewport()->WorkSize);
+
+    ImGuiID centerRight = dockspaceId;
+    const ImGuiID left = ImGui::DockBuilderSplitNode(centerRight, ImGuiDir_Left, 0.20f, nullptr, &centerRight);
+    ImGuiID center = centerRight;
+    const ImGuiID right = ImGui::DockBuilderSplitNode(center, ImGuiDir_Right, 0.28f, nullptr, &center);
+
+    // Left column, top to bottom.
+    ImGuiID leftRest = left;
+    const ImGuiID leftTop  = ImGui::DockBuilderSplitNode(leftRest, ImGuiDir_Up, 0.30f, nullptr, &leftRest);
+    const ImGuiID leftVram = ImGui::DockBuilderSplitNode(leftRest, ImGuiDir_Up, 0.35f, nullptr, &leftRest);
+    const ImGuiID leftArch = ImGui::DockBuilderSplitNode(leftRest, ImGuiDir_Up, 0.50f, nullptr, &leftRest);
+    const ImGuiID leftSearch = leftRest;
+
+    // Center column: output (top), command list (middle), tex/pal/refs (bottom).
+    ImGuiID centerRest = center;
+    const ImGuiID centerTop = ImGui::DockBuilderSplitNode(centerRest, ImGuiDir_Up, 0.55f, nullptr, &centerRest);
+    const ImGuiID centerMid = ImGui::DockBuilderSplitNode(centerRest, ImGuiDir_Up, 0.45f, nullptr, &centerRest);
+    ImGuiID bottomRest = centerRest;
+    const ImGuiID cbTex = ImGui::DockBuilderSplitNode(bottomRest, ImGuiDir_Left, 0.34f, nullptr, &bottomRest);
+    const ImGuiID cbPal = ImGui::DockBuilderSplitNode(bottomRest, ImGuiDir_Left, 0.50f, nullptr, &bottomRest);
+    const ImGuiID cbRefs = bottomRest;
+
+    // Right inspector column, top to bottom.
+    ImGuiID rightRest = right;
+    const ImGuiID rObj  = ImGui::DockBuilderSplitNode(rightRest, ImGuiDir_Up, 0.45f, nullptr, &rightRest);
+    const ImGuiID rTex  = ImGui::DockBuilderSplitNode(rightRest, ImGuiDir_Up, 0.25f, nullptr, &rightRest);
+    const ImGuiID rPal  = ImGui::DockBuilderSplitNode(rightRest, ImGuiDir_Up, 0.40f, nullptr, &rightRest);
+    const ImGuiID rMem  = rightRest;
+
+    ImGui::DockBuilderDockWindow("Layer Controls", leftTop);
+    ImGui::DockBuilderDockWindow("VRAM Map (VDP1)", leftVram);
+    ImGui::DockBuilderDockWindow("Archive Explorer", leftArch);
+    ImGui::DockBuilderDockWindow("Search ROM / Files", leftSearch);
+
+    // These share centerTop, so they appear as tabs (VDP Output | VDP1 Table | ...).
+    ImGui::DockBuilderDockWindow("VDP Output", centerTop);
+    ImGui::DockBuilderDockWindow("VDP1 Table", centerTop);
+    ImGui::DockBuilderDockWindow("VDP2 Table", centerTop);
+    ImGui::DockBuilderDockWindow("Color RAM", centerTop);
+    ImGui::DockBuilderDockWindow("Palette RAM", centerTop);
+    ImGui::DockBuilderDockWindow("Registers", centerTop);
+    ImGui::DockBuilderDockWindow("3D View", centerTop);
+    ImGui::DockBuilderDockWindow("VDP1 Command List", centerMid);
+    ImGui::DockBuilderDockWindow("Texture Viewer", cbTex);
+    ImGui::DockBuilderDockWindow("Palette Viewer", cbPal);
+    ImGui::DockBuilderDockWindow("References", cbRefs);
+
+    ImGui::DockBuilderDockWindow("Selected Object", rObj);
+    ImGui::DockBuilderDockWindow("Texture Preview", rTex);
+    ImGui::DockBuilderDockWindow("Palette (CLUT)", rPal);
+    ImGui::DockBuilderDockWindow("Memory History", rMem);
+
+    ImGui::DockBuilderFinish(dockspaceId);
+}
+
+void App::DrawToolbar(IPlatform& platform)
+{
+    ImGuiViewport* vp = ImGui::GetMainViewport();
+    const float height = ImGui::GetFrameHeight() + ImGui::GetStyle().WindowPadding.y * 2.0f;
+    const ImGuiWindowFlags flags = ImGuiWindowFlags_NoScrollbar |
+                                   ImGuiWindowFlags_NoScrollWithMouse |
+                                   ImGuiWindowFlags_NoSavedSettings;
+    if (ImGui::BeginViewportSideBar("##Toolbar", vp, ImGuiDir_Up, height, flags))
     {
-        if (ImGui::MenuItem("Open Savestate (.yss)..."))
+        // Open ROM (savestate) + a dropdown for the other file actions.
+        if (ImGui::Button("Open ROM"))
         {
             std::string path;
             if (platform.OpenFileDialog(path))
@@ -272,38 +366,96 @@ void App::DrawMenuBar(IPlatform& platform)
                 OpenSavestate(path.c_str());
             }
         }
-        if (ImGui::MenuItem("Open Memory Dump..."))
+        ImGui::SameLine(0.0f, 1.0f);
+        if (ImGui::ArrowButton("##openmenu", ImGuiDir_Down))
         {
-            std::string path;
-            if (platform.OpenFileDialog(path))
+            ImGui::OpenPopup("OpenMenu");
+        }
+        if (ImGui::BeginPopup("OpenMenu"))
+        {
+            if (ImGui::MenuItem("Open Savestate (.yss / Mednafen)..."))
             {
-                // A full linear dump is based at the start of the SH-2 bus.
-                OpenFullDump(path.c_str(), 0x00000000u);
+                std::string path;
+                if (platform.OpenFileDialog(path)) OpenSavestate(path.c_str());
             }
+            if (ImGui::MenuItem("Open Memory Dump..."))
+            {
+                std::string path;
+                if (platform.OpenFileDialog(path)) OpenFullDump(path.c_str(), 0x00000000u);
+            }
+            if (ImGui::MenuItem("Close", nullptr, false, mbHasData)) CloseData();
+            ImGui::EndPopup();
         }
-        if (ImGui::MenuItem("Close", nullptr, false, mbHasData))
+
+        // Playback / stepping — stubbed until a live driver exists (M7).
+        ImGui::SameLine();
+        ImGui::BeginDisabled(true);
+        ImGui::Button("Pause"); ImGui::SameLine();
+        ImGui::Button("Step");  ImGui::SameLine();
+        ImGui::Button("Step Frame"); ImGui::SameLine();
+        ImGui::Button("|<"); ImGui::SameLine(); ImGui::Button("<"); ImGui::SameLine();
+        ImGui::Button(">"); ImGui::SameLine(); ImGui::Button(">|"); ImGui::SameLine();
+        ImGui::EndDisabled();
+
+        // Not-yet-implemented tools — visible but disabled.
+        ImGui::SameLine();
+        ImGui::BeginDisabled(true);
+        ImGui::Button("Bookmarks"); ImGui::SameLine();
+        ImGui::Button("Compare");   ImGui::SameLine();
+        ImGui::Button("Screenshot"); ImGui::SameLine();
+        ImGui::Button("Settings");  ImGui::SameLine();
+        ImGui::Button("Help");
+        ImGui::EndDisabled();
+
+        // Right-aligned live counters.
+        char info[96];
+        std::snprintf(info, sizeof(info), "FPS %.1f   |   VDP1: %zu objs   |   VDP2 regs: %s",
+                      ImGui::GetIO().Framerate,
+                      mbHasData ? se_sprite_count(mContext) : 0,
+                      mbHasData ? "loaded" : "-");
+        const float w = ImGui::CalcTextSize(info).x;
+        ImGui::SameLine(ImGui::GetWindowWidth() - w - 12.0f);
+        ImGui::TextUnformatted(info);
+    }
+    ImGui::End();
+}
+
+void App::DrawStatusBar()
+{
+    ImGuiViewport* vp = ImGui::GetMainViewport();
+    const float height = ImGui::GetFrameHeight();
+    const ImGuiWindowFlags flags = ImGuiWindowFlags_NoScrollbar |
+                                   ImGuiWindowFlags_NoSavedSettings |
+                                   ImGuiWindowFlags_MenuBar;
+    if (ImGui::BeginViewportSideBar("##StatusBar", vp, ImGuiDir_Down, height, flags))
+    {
+        if (ImGui::BeginMenuBar())
         {
-            CloseData();
+            if (mbHasData)
+            {
+                ImGui::Text("Loaded");
+                ImGui::Separator();
+                ImGui::Text("Commands: %zu", se_command_count(mContext));
+                ImGui::Separator();
+                ImGui::Text("Sprites: %zu", se_sprite_count(mContext));
+                ImGui::Separator();
+                ImGui::Text("VRAM regions: %zu", se_vram_region_count(mContext));
+            }
+            else
+            {
+                ImGui::TextDisabled("No data loaded — Open ROM to begin.");
+            }
+            // Live-only fields (frame / blanks / SH-2 PC / busy) arrive with the
+            // M7 live driver; shown here as placeholders to mirror the concept.
+            char right[128];
+            std::snprintf(right, sizeof(right), "Frame: -   |   Line: -   |   SH-2 PC: -   |   VDP1: -   VDP2: -");
+            const float w = ImGui::CalcTextSize(right).x;
+            ImGui::SameLine(ImGui::GetWindowWidth() - w - 12.0f);
+            ImGui::TextDisabled("%s", right);
+            ImGui::EndMenuBar();
         }
-        ImGui::EndMenu();
     }
-
-    // Right-aligned status text.
-    char status[128];
-    if (mbHasData)
-    {
-        std::snprintf(status, sizeof(status), "Loaded  |  commands: %zu",
-                      se_command_count(mContext));
-    }
-    else
-    {
-        std::snprintf(status, sizeof(status), "No data loaded");
-    }
-    float width = ImGui::CalcTextSize(status).x;
-    ImGui::SameLine(ImGui::GetWindowWidth() - width - 16.0f);
-    ImGui::TextUnformatted(status);
-
-    ImGui::EndMainMenuBar();
+    ImGui::End();
 }
 
 void App::DrawLayerControls()

@@ -33,7 +33,9 @@ public:
 private:
     void CloseData();
     void RenderFrameToTexture(IPlatform& platform);
-    void DrawMenuBar(IPlatform& platform);
+    void BuildDefaultLayout(unsigned int dockspaceId);
+    void DrawToolbar(IPlatform& platform);
+    void DrawStatusBar();
     void DrawLayerControls();
     void DrawVdpOutput(IPlatform& platform);
     void DrawWorldView(IPlatform& platform);
@@ -53,6 +55,7 @@ private:
 
     se_render_opts mRenderOpts {};
     int            mSelectedCommand = -1;
+    bool           mbLayoutBuilt = false;   // default dock layout applied once
 
     // VDP Output frame texture.
     TextureHandle        mFrameTexture = 0;
