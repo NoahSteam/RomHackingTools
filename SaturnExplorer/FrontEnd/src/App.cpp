@@ -206,6 +206,7 @@ void App::BuildUI(IPlatform& platform)
 
     DrawLayerControls();
     DrawVdpOutput(platform);
+    DrawWorldView(platform);
     DrawCommandList();
     DrawSelectedObject();
     DrawVramMap();
@@ -344,6 +345,78 @@ void App::DrawVdpOutput(IPlatform& platform)
                 if (se_hit_test(mContext, vx, vy, &hitCommand) == SE_OK)
                 {
                     mSelectedCommand = static_cast<int>(hitCommand);
+                }
+            }
+        }
+    }
+    ImGui::End();
+}
+
+void App::DrawWorldView(IPlatform& platform)
+{
+    if (ImGui::Begin("3D View"))
+    {
+        if (!mbHasData)
+        {
+            ImGui::TextDisabled("No data loaded. Drag to orbit, wheel to zoom.");
+        }
+        else
+        {
+            const ImVec2 avail = ImGui::GetContentRegionAvail();
+            const int vw = static_cast<int>(avail.x);
+            const int vh = static_cast<int>(avail.y);
+            if (vw > 16 && vh > 16)
+            {
+                if (vw != m3dWidth || vh != m3dHeight || m3dTexture == 0)
+                {
+                    if (m3dTexture != 0)
+                    {
+                        platform.DestroyTexture(m3dTexture);
+                    }
+                    m3dTexture = platform.CreateTexture(vw, vh);
+                    m3dWidth = vw;
+                    m3dHeight = vh;
+                }
+
+                se_camera3d cam = {};
+                cam.yaw = mYaw;
+                cam.pitch = mPitch;
+                cam.distance = mDistance;
+                cam.fov = vh * 1.1f;
+                cam.viewport_width = static_cast<uint32_t>(vw);
+                cam.viewport_height = static_cast<uint32_t>(vh);
+
+                se_image img = {};
+                size_t needed = 0;
+                se_render_3d(mContext, &cam, &mRenderOpts, &img, &needed);
+                m3dBuffer.resize(needed);
+                img.pixels = m3dBuffer.data();
+                img.capacity = m3dBuffer.size();
+                if (se_render_3d(mContext, &cam, &mRenderOpts, &img, &needed) == SE_OK &&
+                    m3dTexture != 0)
+                {
+                    platform.UpdateTexture(m3dTexture, m3dBuffer.data(), vw, vh);
+                }
+
+                ImGui::Image(m3dTexture, ImVec2(static_cast<float>(vw), static_cast<float>(vh)));
+
+                if (ImGui::IsItemHovered())
+                {
+                    if (ImGui::IsMouseDragging(ImGuiMouseButton_Left))
+                    {
+                        const ImVec2 drag = ImGui::GetMouseDragDelta(ImGuiMouseButton_Left);
+                        mYaw += drag.x * 0.01f;
+                        mPitch += drag.y * 0.01f;
+                        if (mPitch > 1.5f) mPitch = 1.5f;
+                        if (mPitch < -1.5f) mPitch = -1.5f;
+                        ImGui::ResetMouseDragDelta(ImGuiMouseButton_Left);
+                    }
+                    const float wheel = ImGui::GetIO().MouseWheel;
+                    if (wheel != 0.0f)
+                    {
+                        mDistance *= (1.0f - wheel * 0.1f);
+                        if (mDistance < 50.0f) mDistance = 50.0f;
+                    }
                 }
             }
         }

@@ -251,6 +251,19 @@ typedef struct se_render_opts {
 } se_render_opts;
 
 /* ------------------------------------------------------------------ *
+ *  3D world-view camera (host-owned; the core software-renders with it)
+ * ------------------------------------------------------------------ */
+
+typedef struct se_camera3d {
+    float    yaw;             /* radians, orbit around world Y */
+    float    pitch;          /* radians, orbit around world X */
+    float    distance;       /* camera distance from the target */
+    float    fov;            /* perspective scale, in pixels */
+    uint32_t viewport_width;  /* output image size */
+    uint32_t viewport_height;
+} se_camera3d;
+
+/* ------------------------------------------------------------------ *
  *  Memory history (the load chain: File -> CD Read -> DMA -> Write)
  * ------------------------------------------------------------------ */
 

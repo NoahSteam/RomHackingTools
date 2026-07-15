@@ -33,6 +33,7 @@ private:
     void DrawMenuBar(IPlatform& platform);
     void DrawLayerControls();
     void DrawVdpOutput(IPlatform& platform);
+    void DrawWorldView(IPlatform& platform);
     void DrawCommandList();
     void DrawSelectedObject();
     void DrawVramMap();
@@ -55,6 +56,15 @@ private:
     int                  mFrameWidth = 0;
     int                  mFrameHeight = 0;
     std::vector<uint8_t> mFrameBuffer;
+
+    // 3D View texture + orbit camera.
+    TextureHandle        m3dTexture = 0;
+    int                  m3dWidth = 0;
+    int                  m3dHeight = 0;
+    std::vector<uint8_t> m3dBuffer;
+    float                mYaw = 0.6f;
+    float                mPitch = 0.4f;
+    float                mDistance = 520.0f;
 };
 
 }  // namespace sfe

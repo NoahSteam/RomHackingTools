@@ -109,6 +109,36 @@ public:
         return SE_OK;
     }
 
+    // Render the exploded 3D view from 'camera' into a viewport-sized image.
+    se_result Render3D(const se_camera3d& camera, const se_render_opts& opts,
+                       se_image* out, size_t* needed)
+    {
+        const uint32_t w = camera.viewport_width;
+        const uint32_t h = camera.viewport_height;
+        const size_t required = static_cast<size_t>(w) * h * 4;
+        if (needed)
+        {
+            *needed = required;
+        }
+        out->width = w;
+        out->height = h;
+        out->stride = w * 4;
+        out->format = SE_PIXFMT_RGBA8888;
+        if (!out->pixels)
+        {
+            return SE_OK;
+        }
+        if (out->capacity < required)
+        {
+            return SE_ERR_BUFFER_TOO_SMALL;
+        }
+        Vdp1Rasterizer::Render3D(mScene, mSnapshot.Vdp1Vram(), mSnapshot.Cram(),
+                                 mSnapshot.CramMode(), camera, opts, mRenderBuffer);
+        std::memcpy(out->pixels, mRenderBuffer.data(),
+                    mRenderBuffer.size() < required ? mRenderBuffer.size() : required);
+        return SE_OK;
+    }
+
     // Topmost sprite (last drawn) containing the screen point, if any.
     se_result HitTest(int x, int y, size_t* outCommandIndex) const
     {

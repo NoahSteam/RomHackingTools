@@ -109,6 +109,16 @@ se_result se_render_frame(se_context* ctx, const se_render_opts* opts,
     return Impl(ctx)->RenderFrame(*opts, out, needed);
 }
 
+se_result se_render_3d(se_context* ctx, const se_camera3d* camera,
+                       const se_render_opts* opts, se_image* out, size_t* needed)
+{
+    if (!ctx || !camera || !opts || !out)
+    {
+        return SE_ERR_INVALID_ARG;
+    }
+    return Impl(ctx)->Render3D(*camera, *opts, out, needed);
+}
+
 /* --- Texture & Palette --- */
 se_result se_decode_texture(se_context* ctx, const se_texture_ref* ref,
                             se_image* out, size_t* needed)

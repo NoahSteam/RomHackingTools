@@ -399,11 +399,17 @@ package manager; the D3D11 + Win32 ImGui backends ship with it.
    renders the frame (via the IPlatform texture bridge), overlays bounding boxes / object
    numbers, and click-selects sprites through hit-testing. Verified against the battle dump:
    117 distorted sprites reconstruct the mech units pixel-faithfully.
-5. **M4 — 3D world view. [GEOMETRY DONE]** `GeometryBuilder` emits `se_sprite_3d` (screen XY
-   centered, Z by draw order — priority is write-only VDP2 state, absent from a RAM dump);
-   `se_get_sprite_3d` wired. Prototype confirms the exploded-layer view renders. Remaining: the
-   frontend 3D View panel + orbit camera, and `Vdp2Compositor` — the latter blocked until VDP2
-   register state is available (see note), since the layer config is write-only.
+5. **M4 — 3D world view. [DONE, minus VDP2]** `GeometryBuilder` emits `se_sprite_3d` (screen XY
+   centered, Z by draw order); the core software-renders the exploded view with a depth buffer
+   (`se_render_3d` + `se_camera3d`); the frontend 3D View panel orbits (drag) and zooms (wheel).
+   Verified against the battle dump via the public API (mechs depth-sorted with correct
+   occlusion). `Vdp2Compositor` is the remaining piece, unblocked now that a `.yss` savestate is
+   available (see note) — tracked as M4b.
+   > **VDP2 note:** VDP2 control registers (BGON, CHCTL, map/scroll/priority, rotation params)
+   > are write-only on hardware, so a RAM dump reads them back as zero — confirmed on both dumps
+   > (VRAM 67-75% full, registers empty). VDP2 compositing needs the real register state, best
+   > via a Yabause savestate (`.yss`, which serializes the internal register structs) or an
+   > explicit register export. The live emulator driver (M7) would also supply them.
    > **VDP2 note:** VDP2 control registers (BGON, CHCTL, map/scroll/priority, rotation params)
    > are write-only on hardware, so a RAM dump reads them back as zero — confirmed on both dumps
    > (VRAM 67-75% full, registers empty). VDP2 compositing needs the real register state, best

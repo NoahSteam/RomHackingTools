@@ -51,6 +51,12 @@ se_result   se_get_sprite_3d (se_context* ctx, size_t index, se_sprite_3d* out);
 se_result   se_render_frame(se_context* ctx, const se_render_opts* opts,
                             se_image* out, size_t* needed);
 
+/* --- 3D world view: the same sprites, exploded along Z, software-rendered
+       from the host-supplied camera into an image of the camera's viewport
+       size. Same two-call size convention as se_render_frame. --- */
+se_result   se_render_3d(se_context* ctx, const se_camera3d* camera,
+                         const se_render_opts* opts, se_image* out, size_t* needed);
+
 /* --- Texture & Palette Viewer --- */
 se_result   se_decode_texture(se_context* ctx, const se_texture_ref* ref,
                               se_image* out, size_t* needed);
