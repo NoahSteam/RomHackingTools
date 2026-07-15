@@ -439,11 +439,11 @@ package manager; the D3D11 + Win32 ImGui backends ship with it.
    > **Multiple emulators.** `se_savestate_open` sniffs the file magic and dispatches to a
    > per-emulator parser, all producing the same `se_data_source` so the core stays format-agnostic.
    > Supported: the **Yabause family** `.yss` and **Mednafen/Beetle Saturn** `MDFNSVST`. The `.yss`
-   > VDP2 section is matched *structurally* (288-byte `Vdp2` struct + 512 KiB VRAM + 4 KiB CRAM + a
-   > small internal tail) rather than by version number, because the `Vdp2` register struct is a fixed
-   > hardware mirror shared byte-for-byte across the lineage (verified identical in Yabause 0.9.x and
-   > Yaba Sanshiro) — so the one parser covers Yabause 0.9.x, Yaba Sanshiro, and forks like Kronos that
-   > kept the layout, and safely degrades to VDP1-only for anything else. Mednafen's `ss` module instead
+   > VDP2 section is matched *structurally* (at least a 288-byte `Vdp2` struct + 512 KiB VRAM + 4 KiB
+   > CRAM; any trailing internal state is ignored) rather than by version number, because the `Vdp2`
+   > register struct is a fixed hardware mirror shared byte-for-byte across the lineage (verified
+   > identical in Yabause 0.9.x, Yaba Sanshiro, and Kronos) — so the one parser covers all three, and
+   > safely degrades to VDP1-only for a fork that changed the struct/VRAM size. Mednafen's `ss` module instead
    > stores VRAM, CRAM, and a flat `RawRegs[0x100]` hardware-register array as host-endian `uint16`s,
    > byte-swapped to Saturn-native big-endian on load. **SSF** is closed-source, so there is no layout
    > to implement.

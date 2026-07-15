@@ -211,11 +211,12 @@ constexpr size_t   kYssHeaderSize = 0x14;    // file header before the first sec
 
 // The classic Yabause Vdp2 register struct is a fixed hardware mirror (TVMD..COBB,
 // sizeof 288) shared byte-for-byte across the lineage — verified identical in
-// Yabause 0.9.15 and Yaba Sanshiro. So we recognize a VDP2 section structurally
-// rather than by version number (which forks bump freely): the section must be the
-// 288-byte struct + 512 KiB VRAM + 4 KiB CRAM, plus a small tail of internal state.
-constexpr uint32_t kVdp2SectionBase  = kVdp2RegSize + kVramSize + kYssCramSize;
-constexpr uint32_t kVdp2InternalSlack = 256;  // bytes of trailing Vdp2Internal we tolerate
+// Yabause 0.9.15, Yaba Sanshiro, and Kronos. Vdp2SaveState writes that struct,
+// then VRAM, then CRAM, then a tail of internal state, so a VDP2 section is
+// recognized structurally (it must be at least the struct + VRAM + CRAM) rather
+// than by version number, which forks bump freely. We only ever read the fixed
+// leading base bytes, so any amount of trailing internal state is ignored.
+constexpr uint32_t kVdp2SectionBase = kVdp2RegSize + kVramSize + kYssCramSize;
 
 uint32_t Read32LE(const std::vector<uint8_t>& d, size_t o)
 {
@@ -449,14 +450,14 @@ se_result se_savestate_open_yss(const char* path, se_data_source* out)
                                     file.begin() + data + regBytes + kVramSize);
             haveVdp1 = true;
         }
-        else if (std::memcmp(tag, "VDP2", 4) == 0 &&
-                 size >= kVdp2SectionBase && size <= kVdp2SectionBase + kVdp2InternalSlack)
+        else if (std::memcmp(tag, "VDP2", 4) == 0 && size >= kVdp2SectionBase)
         {
             // Structural match for the classic 288-byte Vdp2 struct followed by VRAM
-            // then CRAM (see kVdp2SectionBase). Covers Yabause 0.9.x and Yaba Sanshiro
-            // (identical struct), and any fork that kept the layout. A fork with a
-            // different struct/VRAM size falls outside the window and is skipped, so
-            // the context degrades to VDP1-only rather than misdecoding registers.
+            // then CRAM (see kVdp2SectionBase). Covers Yabause 0.9.x, Yaba Sanshiro,
+            // and Kronos (identical struct), plus any fork that kept the layout; the
+            // trailing internal state is ignored. Only a fork that changed the struct
+            // or VRAM size ahead of CRAM would misdecode — verify such a case with a
+            // sample before trusting it.
             const size_t vramOff = data + kVdp2RegSize;
             state->mVdp2Vram.assign(file.begin() + vramOff, file.begin() + vramOff + kVramSize);
             state->mCram.assign(file.begin() + vramOff + kVramSize,

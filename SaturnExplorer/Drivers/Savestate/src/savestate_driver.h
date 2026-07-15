@@ -35,11 +35,11 @@ se_result se_savestate_open_full_dump(const char* path, uint32_t base_address,
 /* Yabause-family savestate (.yss). Parses the VDP1 and VDP2 sections for VRAM,
  * CRAM, and — crucially — the VDP2 register file (the write-only state a RAM dump
  * can't provide). The classic Vdp2 register struct is a fixed hardware mirror
- * shared byte-for-byte across the lineage (verified identical in Yabause 0.9.x and
- * Yaba Sanshiro), so the VDP2 section is recognized structurally rather than by
- * version number — covering those emulators and any fork (e.g. Kronos) that kept
- * the layout. A fork with a materially different struct/VRAM size is skipped
- * (VDP1-only) rather than misdecoded. */
+ * shared byte-for-byte across the lineage (verified identical in Yabause 0.9.x,
+ * Yaba Sanshiro, and Kronos), so the VDP2 section is recognized structurally
+ * rather than by version number — covering those emulators and any fork that kept
+ * the layout. A fork that changed the struct/VRAM size is skipped (VDP1-only)
+ * rather than misdecoded. */
 se_result se_savestate_open_yss(const char* path, se_data_source* out);
 
 /* Mednafen savestate (MDFNSVST container, Saturn 'ss' module). Parses the VDP1
@@ -52,8 +52,8 @@ se_result se_savestate_open_mednafen(const char* path, se_data_source* out);
 /* Generic savestate entry: sniffs the file's magic and dispatches to the parser
  * for that emulator's format, so callers need not know which emulator produced
  * the file. Recognizes the Yabause family (.yss — Yabause 0.9.x, Yaba Sanshiro,
- * and forks such as Kronos that keep the classic VDP2 layout) and Mednafen/Beetle
- * Saturn (MDFNSVST). SSF is closed-source (no known layout); other formats return
+ * and Kronos, whose VDP2 struct is verified identical) and Mednafen/Beetle Saturn
+ * (MDFNSVST). SSF is closed-source (no known layout); other formats return
  * SE_ERR_UNSUPPORTED until added. Each parser yields the same se_data_source, so
  * the core is format-agnostic. */
 se_result se_savestate_open(const char* path, se_data_source* out);
