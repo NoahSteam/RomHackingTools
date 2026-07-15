@@ -286,6 +286,73 @@ void NormalizeCramToBigEndian(std::vector<uint8_t>& cram, unsigned crmd)
         }
     }
 }
+
+/* --- Mednafen MDFNSVST (Saturn 'ss' module) savestate --- */
+
+constexpr size_t kMdfnHeaderSize   = 32;    // "MDFNSVST" + timestamp/version/size/dims
+constexpr size_t kMdfnMagicSize    = 8;
+constexpr size_t kMdfnEndianOff    = 20;    // u32; bit 31 set => written big-endian
+constexpr size_t kMdfnPreviewWOff  = 24;    // u32 preview width
+constexpr size_t kMdfnPreviewHOff  = 28;    // u32 preview height
+constexpr size_t kMdfnSectionHdr   = 36;    // 32-byte name + u32 size
+
+// Locate a length-prefixed SFORMAT field by name inside a section's data block
+// [dataOff, dataOff+dataSize). Fields are: name-length(1) + name + size(4 LE) +
+// payload. Returns the payload offset and size on success.
+bool FindMednafenField(const std::vector<uint8_t>& file, size_t dataOff, uint32_t dataSize,
+                       const char* name, size_t& outOff, uint32_t& outSize)
+{
+    const size_t nameLen = std::strlen(name);
+    size_t p = dataOff;
+    const size_t end = dataOff + dataSize;
+    while (p + 5 <= end)
+    {
+        const uint8_t fieldNameLen = file[p];
+        const size_t sizePos = p + 1 + fieldNameLen;
+        if (sizePos + 4 > end)
+        {
+            break;
+        }
+        const uint32_t fieldSize = Read32LE(file, sizePos);
+        const size_t payload = sizePos + 4;
+        if (payload + fieldSize > end)
+        {
+            break;
+        }
+        if (fieldNameLen == nameLen &&
+            std::memcmp(&file[p + 1], name, nameLen) == 0)
+        {
+            outOff = payload;
+            outSize = fieldSize;
+            return true;
+        }
+        p = payload + fieldSize;
+    }
+    return false;
+}
+
+// Copy a uint16 array field, byte-swapping little-endian words to Saturn-native
+// big-endian when 'swap' is set (a state written on a little-endian host). This
+// makes VRAM/CRAM/registers match what the core expects (big-endian words, so a
+// texture byte at address A lands where a big-endian read finds it).
+void CopyMednafenU16BE(const std::vector<uint8_t>& file, size_t off, uint32_t size,
+                       std::vector<uint8_t>& out, bool swap)
+{
+    out.resize(size);
+    for (uint32_t i = 0; i + 1 < size; i += 2)
+    {
+        if (swap)
+        {
+            out[i]     = file[off + i + 1];
+            out[i + 1] = file[off + i];
+        }
+        else
+        {
+            out[i]     = file[off + i];
+            out[i + 1] = file[off + i + 1];
+        }
+    }
+}
 }  // namespace
 
 extern "C" {
@@ -407,6 +474,99 @@ se_result se_savestate_open_yss(const char* path, se_data_source* out)
     return SE_OK;
 }
 
+se_result se_savestate_open_mednafen(const char* path, se_data_source* out)
+{
+    if (!path || !out)
+    {
+        return SE_ERR_INVALID_ARG;
+    }
+    std::memset(out, 0, sizeof(*out));
+
+    std::vector<uint8_t> file;
+    if (!LoadFile(path, file) || file.size() < kMdfnHeaderSize + kMdfnSectionHdr)
+    {
+        return SE_ERR_IO;
+    }
+    if (std::memcmp(file.data(), "MDFNSVST", kMdfnMagicSize) != 0)
+    {
+        return SE_ERR_UNSUPPORTED;
+    }
+
+    // A little-endian host (the usual case) stores every uint16 field LSB-first;
+    // bit 31 of the header word at kMdfnEndianOff is set only for big-endian.
+    const bool hostBigEndian = (Read32LE(file, kMdfnEndianOff) & 0x80000000u) != 0;
+    const bool swap = !hostBigEndian;
+
+    // Skip the RGB preview image (width*height*3) that follows the header.
+    const uint32_t previewW = Read32LE(file, kMdfnPreviewWOff);
+    const uint32_t previewH = Read32LE(file, kMdfnPreviewHOff);
+    if (previewW > 4096 || previewH > 4096)
+    {
+        return SE_ERR_UNSUPPORTED;   // implausible dims => wrong header layout
+    }
+    size_t pos = kMdfnHeaderSize + static_cast<size_t>(previewW) * previewH * 3;
+
+    Savestate* state = new (std::nothrow) Savestate();
+    if (!state)
+    {
+        return SE_ERR_NO_DATA;
+    }
+
+    // Walk the section chain: 32-byte zero-padded name + u32 LE data size + data.
+    bool haveVdp1 = false;
+    while (pos + kMdfnSectionHdr <= file.size())
+    {
+        char name[33];
+        std::memcpy(name, &file[pos], 32);
+        name[32] = '\0';
+        const uint32_t secSize = Read32LE(file, pos + 32);
+        const size_t secData = pos + kMdfnSectionHdr;
+        if (secData + secSize > file.size())
+        {
+            break;  // truncated
+        }
+
+        if (std::strcmp(name, "VDP1") == 0)
+        {
+            size_t off; uint32_t sz;
+            if (FindMednafenField(file, secData, secSize, "VRAM", off, sz) &&
+                sz >= kVramSize)
+            {
+                CopyMednafenU16BE(file, off, kVramSize, state->mVdp1Vram, swap);
+                haveVdp1 = true;
+            }
+        }
+        else if (std::strcmp(name, "VDP2") == 0)
+        {
+            size_t off; uint32_t sz;
+            if (FindMednafenField(file, secData, secSize, "VRAM", off, sz) && sz >= kVramSize)
+            {
+                CopyMednafenU16BE(file, off, kVramSize, state->mVdp2Vram, swap);
+            }
+            if (FindMednafenField(file, secData, secSize, "CRAM", off, sz) && sz >= kYssCramSize)
+            {
+                CopyMednafenU16BE(file, off, kYssCramSize, state->mCram, swap);
+            }
+            if (FindMednafenField(file, secData, secSize, "RawRegs", off, sz))
+            {
+                // RawRegs is uint16[0x100] indexed by (hw offset >> 1); swapping
+                // to big-endian yields a hardware-offset register image the shared
+                // read_vdp2_reg reads directly.
+                CopyMednafenU16BE(file, off, sz, state->mVdp2Regs, swap);
+            }
+        }
+        pos = secData + secSize;
+    }
+
+    if (!haveVdp1)
+    {
+        delete state;
+        return SE_ERR_NO_DATA;
+    }
+    BuildDataSource(state, out);
+    return SE_OK;
+}
+
 se_result se_savestate_open(const char* path, se_data_source* out)
 {
     if (!path || !out)
@@ -434,9 +594,13 @@ se_result se_savestate_open(const char* path, se_data_source* out)
 
     if (magic[0] == 'Y' && magic[1] == 'S' && magic[2] == 'S')
     {
-        return se_savestate_open_yss(path, out);   // Yabause family (.yss)
+        return se_savestate_open_yss(path, out);       // Yabause family (.yss)
     }
-    // Room for other emulators (Mednafen/Beetle "MDFNSVST", Kronos, SSF, ...).
+    if (std::memcmp(magic, "MDFNSVST", 8) == 0)
+    {
+        return se_savestate_open_mednafen(path, out);  // Mednafen / Beetle Saturn
+    }
+    // Room for other emulators (Kronos, SSF, Yaba Sanshiro, ...).
     return SE_ERR_UNSUPPORTED;
 }
 

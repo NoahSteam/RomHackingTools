@@ -433,6 +433,15 @@ package manager; the D3D11 + Win32 ImGui backends ship with it.
    > Not yet modeled: rotation screens (RBG0/1), bitmap-mode backgrounds, line scroll, mosaic,
    > window clipping, color calculation, and the VDP2 back-screen color (empty pixels use a flat
    > backdrop).
+   > **Sprite seams.** VDP1 sprite corners are inclusive pixel coordinates and the game tiles a
+   > mech out of many small strips; the rasterizer nudges each quad's corners outward half a pixel
+   > (`ExpandQuadInclusive`) so adjacent strips overlap instead of leaving 1px backdrop seams.
+   > **Multiple emulators.** `se_savestate_open` sniffs the file magic and dispatches to a
+   > per-emulator parser, all producing the same `se_data_source` so the core stays format-agnostic.
+   > Supported: Yabause `.yss` and Mednafen/Beetle Saturn `MDFNSVST` (the `ss` module stores VRAM,
+   > CRAM, and a flat `RawRegs[0x100]` hardware-register array as host-endian `uint16`s, byte-swapped
+   > to Saturn-native big-endian on load — no struct-offset map needed, unlike `.yss`). Kronos, SSF,
+   > and Yaba Sanshiro return `SE_ERR_UNSUPPORTED` until their layouts are added.
 7. **M5 — Textures & VRAM.** `TextureDecoder`, Texture & Palette Viewer, VRAM Visualization.
 7. **M6 — Search & trace.** `SearchEngine`, ROM & Archive Search, Reference Explorer.
 8. **M7 — Live driver.** Emulator driver with event stream (+ optional reference framebuffer);

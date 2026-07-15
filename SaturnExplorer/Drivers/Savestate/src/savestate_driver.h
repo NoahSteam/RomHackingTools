@@ -39,12 +39,19 @@ se_result se_savestate_open_full_dump(const char* path, uint32_t base_address,
  * than misdecoded. */
 se_result se_savestate_open_yss(const char* path, se_data_source* out);
 
+/* Mednafen savestate (MDFNSVST container, Saturn 'ss' module). Parses the VDP1
+ * and VDP2 sections for VRAM, CRAM, and the raw VDP2 register array (RawRegs).
+ * Mednafen stores these as host-endian uint16 arrays; the parser byte-swaps them
+ * to the core's Saturn-native big-endian. Also covers RetroArch's Beetle Saturn
+ * core, which shares the format. */
+se_result se_savestate_open_mednafen(const char* path, se_data_source* out);
+
 /* Generic savestate entry: sniffs the file's magic and dispatches to the parser
  * for that emulator's format, so callers need not know which emulator produced
- * the file. Today it recognizes the Yabause family (.yss); other formats
- * (Mednafen/Beetle Saturn, Kronos, SSF, Yaba Sanshiro) return SE_ERR_UNSUPPORTED
- * until their layouts are added. Each parser yields the same se_data_source, so
- * the core is format-agnostic. */
+ * the file. Recognizes the Yabause family (.yss) and Mednafen/Beetle Saturn
+ * (MDFNSVST); other formats (Kronos, SSF, Yaba Sanshiro) return
+ * SE_ERR_UNSUPPORTED until their layouts are added. Each parser yields the same
+ * se_data_source, so the core is format-agnostic. */
 se_result se_savestate_open(const char* path, se_data_source* out);
 
 #ifdef __cplusplus
