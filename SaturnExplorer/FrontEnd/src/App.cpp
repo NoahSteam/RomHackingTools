@@ -246,10 +246,10 @@ void App::BuildUI(IPlatform& platform)
     DrawWorldView(platform);
     DrawCommandList();
     DrawSelectedObject();
-    DrawPlaceholder("VRAM Map (VDP1)", "VRAM usage map — arrives in M5.");
+    DrawTextureViewer(platform);
+    DrawPaletteViewer();
+    DrawVramMap();
     DrawPlaceholder("Archive Explorer", "Disc filesystem — arrives in M6.");
-    DrawPlaceholder("Texture Viewer", "Texture inspection — arrives in M5.");
-    DrawPlaceholder("Palette Viewer", "Palette inspection — arrives in M5.");
     DrawPlaceholder("References", "What uses this texture — arrives in M6.");
     DrawPlaceholder("Memory History", "Load chain — arrives in M7.");
     DrawPlaceholder("Search ROM / Files", "ROM & archive search — arrives in M6.");
@@ -566,6 +566,228 @@ void App::DrawSelectedObject()
                          (!cmd.flip_x && !cmd.flip_y) ? "None" : "");
             InspectorRow("CMDCTRL", "0x%04X", cmd.raw_cmdctrl);
             InspectorRow("CMDPMOD", "0x%04X", cmd.raw_cmdpmod);
+        }
+    }
+    ImGui::End();
+}
+
+// Build a texture reference straight from a parsed command's texture fields.
+static se_texture_ref TextureRefOf(const se_command& cmd)
+{
+    se_texture_ref ref = {};
+    ref.vram_address = cmd.texture_address;
+    ref.width = cmd.width;
+    ref.height = cmd.height;
+    ref.color_mode = cmd.color_mode;
+    ref.clut_address = cmd.clut_address;
+    ref.palette_bank = cmd.palette_bank;
+    return ref;
+}
+
+// Draw a checkerboard behind an image rect so transparent texels read clearly.
+static void Checkerboard(ImVec2 topLeft, ImVec2 size, float cell)
+{
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const int cols = static_cast<int>(size.x / cell) + 1;
+    const int rows = static_cast<int>(size.y / cell) + 1;
+    for (int r = 0; r < rows; ++r)
+    {
+        for (int c = 0; c < cols; ++c)
+        {
+            const ImU32 tone = ((r ^ c) & 1) ? IM_COL32(70, 70, 78, 255)
+                                             : IM_COL32(48, 48, 54, 255);
+            const ImVec2 a(topLeft.x + c * cell, topLeft.y + r * cell);
+            ImVec2 b(a.x + cell, a.y + cell);
+            if (b.x > topLeft.x + size.x) b.x = topLeft.x + size.x;
+            if (b.y > topLeft.y + size.y) b.y = topLeft.y + size.y;
+            dl->AddRectFilled(a, b, tone);
+        }
+    }
+}
+
+void App::DrawTextureViewer(IPlatform& platform)
+{
+    if (ImGui::Begin("Texture Viewer"))
+    {
+        se_command cmd;
+        const bool haveCmd = mbHasData && mSelectedCommand >= 0 &&
+            se_get_command(mContext, static_cast<size_t>(mSelectedCommand), &cmd) == SE_OK;
+        const bool textured = haveCmd &&
+            (cmd.type == SE_CMD_NORMAL_SPRITE || cmd.type == SE_CMD_SCALED_SPRITE ||
+             cmd.type == SE_CMD_DISTORTED_SPRITE) && cmd.width > 0 && cmd.height > 0;
+
+        if (!haveCmd)
+        {
+            ImGui::TextDisabled("Select a sprite (Command List) to view its texture.");
+        }
+        else if (!textured)
+        {
+            ImGui::TextDisabled("Command #%u has no texture.", cmd.index);
+        }
+        else
+        {
+            const se_texture_ref ref = TextureRefOf(cmd);
+            se_image img = {};
+            size_t needed = 0;
+            se_result r = se_decode_texture(mContext, &ref, &img, &needed);
+            if (r == SE_OK)
+            {
+                const int w = static_cast<int>(img.width);
+                const int h = static_cast<int>(img.height);
+                mTexTexture = EnsureTexture(platform, mTexTexture, mTexWidth, mTexHeight, w, h);
+                mTexBuffer.resize(needed);
+                img.pixels = mTexBuffer.data();
+                img.capacity = mTexBuffer.size();
+                if (se_decode_texture(mContext, &ref, &img, &needed) == SE_OK && mTexTexture != 0)
+                {
+                    platform.UpdateTexture(mTexTexture, mTexBuffer.data(), w, h);
+                }
+
+                ImGui::Text("%d x %d   %s   @0x%06X", w, h,
+                            ColorModeName(cmd.color_mode), cmd.texture_address);
+
+                // Integer zoom to roughly fill the panel width (crisp-ish, 1..16x).
+                int zoom = (w > 0) ? static_cast<int>(ImGui::GetContentRegionAvail().x) / w : 1;
+                if (zoom < 1) zoom = 1;
+                if (zoom > 16) zoom = 16;
+                const ImVec2 dispSize(static_cast<float>(w * zoom), static_cast<float>(h * zoom));
+                const ImVec2 pos = ImGui::GetCursorScreenPos();
+                Checkerboard(pos, dispSize, 8.0f);
+                ImGui::Image(mTexTexture, dispSize);
+            }
+            else
+            {
+                ImGui::TextDisabled("Texture decode failed (%d).", r);
+            }
+        }
+    }
+    ImGui::End();
+}
+
+void App::DrawPaletteViewer()
+{
+    if (ImGui::Begin("Palette Viewer"))
+    {
+        se_command cmd;
+        const bool haveCmd = mbHasData && mSelectedCommand >= 0 &&
+            se_get_command(mContext, static_cast<size_t>(mSelectedCommand), &cmd) == SE_OK;
+
+        if (!haveCmd)
+        {
+            ImGui::TextDisabled("Select a sprite to view its palette.");
+        }
+        else if (cmd.color_mode != SE_COLOR_LUT_16)
+        {
+            ImGui::TextDisabled("Command #%u uses a color bank, not a CLUT.", cmd.index);
+            ImGui::TextDisabled("Palette = CRAM bank 0x%X.", cmd.palette_bank);
+        }
+        else
+        {
+            se_palette pal = {};
+            if (se_decode_palette(mContext, cmd.clut_address, &pal) == SE_OK)
+            {
+                ImGui::Text("CLUT @0x%06X  —  %u entries", pal.clut_address, pal.count);
+                ImDrawList* dl = ImGui::GetWindowDrawList();
+                const float sw = 26.0f;
+                const int cols = 8;
+                const ImVec2 origin = ImGui::GetCursorScreenPos();
+                for (uint16_t i = 0; i < pal.count; ++i)
+                {
+                    const int cx = i % cols;
+                    const int cy = i / cols;
+                    const ImVec2 a(origin.x + cx * sw, origin.y + cy * sw);
+                    const ImVec2 b(a.x + sw - 2.0f, a.y + sw - 2.0f);
+                    const se_palette_entry& e = pal.entries[i];
+                    dl->AddRectFilled(a, b, IM_COL32(e.r, e.g, e.b, 255));
+                    dl->AddRect(a, b, IM_COL32(0, 0, 0, 120));
+                }
+                const int rows = (pal.count + cols - 1) / cols;
+                ImGui::Dummy(ImVec2(cols * sw, rows * sw));
+            }
+            else
+            {
+                ImGui::TextDisabled("Palette decode failed.");
+            }
+        }
+    }
+    ImGui::End();
+}
+
+void App::DrawVramMap()
+{
+    if (ImGui::Begin("VRAM Map (VDP1)"))
+    {
+        if (!mbHasData)
+        {
+            ImGui::TextDisabled("No data loaded.");
+        }
+        else
+        {
+            const size_t count = se_vram_region_count(mContext);
+            ImGui::Text("%zu regions in 512 KiB VDP1 VRAM", count);
+
+            // Colour by region kind; legend mirrors these.
+            auto kindColor = [](se_vram_region_kind k) -> ImU32
+            {
+                switch (k)
+                {
+                case SE_VRAM_TEXTURE:   return IM_COL32(90, 190, 120, 255);
+                case SE_VRAM_CLUT:      return IM_COL32(220, 200, 90, 255);
+                case SE_VRAM_CMD_TABLE: return IM_COL32(100, 150, 230, 255);
+                case SE_VRAM_GOURAUD:   return IM_COL32(200, 120, 210, 255);
+                default:                return IM_COL32(150, 150, 150, 255);
+                }
+            };
+
+            const uint32_t kVramSize = 0x80000;   // 512 KiB
+            const int rows = 16;                    // each row = 32 KiB
+            const uint32_t perRow = kVramSize / rows;
+            const float width = ImGui::GetContentRegionAvail().x;
+            const float rowH = 12.0f;
+            const ImVec2 origin = ImGui::GetCursorScreenPos();
+            ImDrawList* dl = ImGui::GetWindowDrawList();
+            dl->AddRectFilled(origin, ImVec2(origin.x + width, origin.y + rows * rowH),
+                              IM_COL32(24, 24, 30, 255));
+
+            for (size_t i = 0; i < count; ++i)
+            {
+                se_vram_region reg;
+                if (se_get_vram_region(mContext, i, &reg) != SE_OK)
+                {
+                    continue;
+                }
+                const uint32_t end = reg.address + (reg.size ? reg.size : 1);
+                const ImU32 col = kindColor(reg.kind);
+                // A region can straddle rows; paint it row by row.
+                uint32_t a = reg.address;
+                while (a < end && a < kVramSize)
+                {
+                    const int row = static_cast<int>(a / perRow);
+                    const uint32_t rowEnd = (row + 1) * perRow;
+                    const uint32_t b = end < rowEnd ? end : rowEnd;
+                    const float x0 = origin.x + (a % perRow) / static_cast<float>(perRow) * width;
+                    const float x1 = origin.x + ((b - 1) % perRow + 1) / static_cast<float>(perRow) * width;
+                    const float y0 = origin.y + row * rowH;
+                    dl->AddRectFilled(ImVec2(x0, y0), ImVec2(x1, y0 + rowH - 1.0f), col);
+                    a = b;
+                }
+            }
+            ImGui::Dummy(ImVec2(width, rows * rowH + 6.0f));
+
+            // Legend.
+            auto swatch = [&](const char* name, se_vram_region_kind k)
+            {
+                ImDrawList* d = ImGui::GetWindowDrawList();
+                const ImVec2 p = ImGui::GetCursorScreenPos();
+                d->AddRectFilled(p, ImVec2(p.x + 12, p.y + 12), kindColor(k));
+                ImGui::Dummy(ImVec2(16, 12));
+                ImGui::SameLine();
+                ImGui::TextUnformatted(name);
+            };
+            swatch("Texture", SE_VRAM_TEXTURE); ImGui::SameLine(0.0f, 16.0f);
+            swatch("CLUT", SE_VRAM_CLUT);       ImGui::SameLine(0.0f, 16.0f);
+            swatch("Cmd Table", SE_VRAM_CMD_TABLE); ImGui::SameLine(0.0f, 16.0f);
+            swatch("Gouraud", SE_VRAM_GOURAUD);
         }
     }
     ImGui::End();

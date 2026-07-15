@@ -39,6 +39,9 @@ private:
     void DrawWorldView(IPlatform& platform);
     void DrawCommandList();
     void DrawSelectedObject();
+    void DrawTextureViewer(IPlatform& platform);
+    void DrawPaletteViewer();
+    void DrawVramMap();
     void DrawPlaceholder(const char* title, const char* note);
 
     se_data_source mDataSource {};
@@ -62,6 +65,12 @@ private:
     float                mYaw = 0.6f;
     float                mPitch = 0.4f;
     float                mDistance = 520.0f;
+
+    // Texture Viewer (decodes the selected sprite's texture each frame).
+    TextureHandle        mTexTexture = 0;
+    int                  mTexWidth = 0;
+    int                  mTexHeight = 0;
+    std::vector<uint8_t> mTexBuffer;
 };
 
 }  // namespace sfe

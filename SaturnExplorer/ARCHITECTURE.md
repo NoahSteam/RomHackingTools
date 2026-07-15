@@ -9,9 +9,9 @@
 > VDP Output panel, the 3D world view orbits the exploded geometry, and the VDP2 NBG
 > backgrounds are composited under the sprites — all verified against real Yabause dumps
 > and a `.yss` savestate (a battle scene's field + mech sprites reconstruct
-> pixel-faithfully). Next is M5 (textures & VRAM). This document is the source of truth
-> for the component split, the three interface seams (A data, B host, C platform), and
-> the module breakdown.
+> pixel-faithfully), plus a Texture/Palette Viewer and a VRAM map (M5). Next is M6
+> (search & trace). This document is the source of truth for the component split, the
+> three interface seams (A data, B host, C platform), and the module breakdown.
 
 ---
 
@@ -447,7 +447,15 @@ package manager; the D3D11 + Win32 ImGui backends ship with it.
    > stores VRAM, CRAM, and a flat `RawRegs[0x100]` hardware-register array as host-endian `uint16`s,
    > byte-swapped to Saturn-native big-endian on load. **SSF** is closed-source, so there is no layout
    > to implement.
-7. **M5 — Textures & VRAM.** `TextureDecoder`, Texture & Palette Viewer, VRAM Visualization.
+7. **M5 — Textures & VRAM. [DONE]** `se_decode_texture` walks a texture out of VDP1 VRAM through
+   the shared `DecodeTexel` (index-0/RGB-code-0 left transparent); `se_decode_palette` reads a
+   16-entry VDP1 CLUT, resolving color-bank codes through CRAM; `BuildVramRegions` (in
+   `BeginFrame`) classifies VDP1 VRAM into the command-table / texture / CLUT / gouraud regions each
+   drawable command references, deduped and sorted. The frontend gains a Texture Viewer (decodes the
+   selected sprite's texture onto a transparency checkerboard), a Palette Viewer (CLUT swatches), and
+   a VRAM Map (proportional 512 KiB region map with a kind legend). Verified against Battle3.yss:
+   161 VRAM regions and the sprite textures decode correctly; the portable App layer compiles against
+   ImGui. (A CRAM/bank-palette view and per-region hover are future polish.)
 7. **M6 — Search & trace.** `SearchEngine`, ROM & Archive Search, Reference Explorer.
 8. **M7 — Live driver.** Emulator driver with event stream (+ optional reference framebuffer);
    Memory History, Frame Timeline.
