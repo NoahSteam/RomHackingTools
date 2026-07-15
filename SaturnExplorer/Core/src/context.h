@@ -3,6 +3,7 @@
 // logic lives on the C++ side (ARCHITECTURE.md §3, the hybrid boundary).
 #pragma once
 
+#include <algorithm>
 #include <cstring>
 #include <vector>
 
@@ -12,6 +13,8 @@
 #include "geometry_builder.h"
 #include "vdp1_rasterizer.h"
 #include "vdp2_compositor.h"
+#include "vdp1_color.h"
+#include "byteorder.h"
 
 namespace se
 {
@@ -41,6 +44,7 @@ public:
         }
         Vdp1Parser::Parse(mSnapshot.Vdp1Vram(), mCommands);
         GeometryBuilder::Build(mSnapshot.Vdp1Vram(), mScene);
+        BuildVramRegions();
         return SE_OK;
     }
 
@@ -108,6 +112,67 @@ public:
         });
     }
 
+    // Decode a texture straight out of VDP1 VRAM into an RGBA image (index-0 and
+    // RGB-code-0 left transparent, so the viewer can show what is see-through).
+    se_result DecodeTexture(const se_texture_ref& ref, se_image* out, size_t* needed)
+    {
+        if (ref.width == 0 || ref.height == 0)
+        {
+            return SE_ERR_INVALID_ARG;
+        }
+        return FillImage(ref.width, ref.height, out, needed, [&]
+        {
+            const std::vector<uint8_t>& vram = mSnapshot.Vdp1Vram();
+            const std::vector<uint8_t>& cram = mSnapshot.Cram();
+            const se_cram_mode cm = mSnapshot.CramMode();
+            const uint32_t w = ref.width;
+            const uint32_t h = ref.height;
+            mRenderBuffer.assign(static_cast<size_t>(w) * h * 4, 0);
+            for (uint32_t y = 0; y < h; ++y)
+            {
+                for (uint32_t x = 0; x < w; ++x)
+                {
+                    const Rgba c = DecodeTexel(vram, cram, cm, ref.color_mode,
+                                               ref.vram_address, static_cast<uint16_t>(w),
+                                               static_cast<int>(x), static_cast<int>(y),
+                                               ref.palette_bank, ref.clut_address, false);
+                    const size_t o = (static_cast<size_t>(y) * w + x) * 4;
+                    mRenderBuffer[o + 0] = c.r;
+                    mRenderBuffer[o + 1] = c.g;
+                    mRenderBuffer[o + 2] = c.b;
+                    mRenderBuffer[o + 3] = c.a;
+                }
+            }
+        });
+    }
+
+    // Decode a 16-entry VDP1 color-lookup table (LUT mode) at 'clutAddress' into a
+    // palette. Each entry is either a literal RGB555 color or, with bit 15 set, a
+    // VDP2 color-bank code resolved through CRAM (same rule as the texel decoder).
+    se_result DecodePalette(uint32_t clutAddress, se_palette* out) const
+    {
+        const std::vector<uint8_t>& vram = mSnapshot.Vdp1Vram();
+        const std::vector<uint8_t>& cram = mSnapshot.Cram();
+        const se_cram_mode cm = mSnapshot.CramMode();
+
+        out->clut_address = clutAddress;
+        out->mode = cm;
+        out->count = 16;
+        for (uint16_t i = 0; i < 16; ++i)
+        {
+            const uint16_t raw = ReadBE16(vram, clutAddress + i * 2);
+            const Rgba c = (raw & 0x8000) ? CramColor(cram, cm, raw & 0x7FF)
+                                          : Rgb555ToRgba(raw);
+            se_palette_entry& e = out->entries[i];
+            e.r = c.r;
+            e.g = c.g;
+            e.b = c.b;
+            e.a = 255;
+            e.raw = raw;
+        }
+        return SE_OK;
+    }
+
     // Topmost sprite (last drawn) containing the screen point, if any.
     se_result HitTest(int x, int y, size_t* outCommandIndex) const
     {
@@ -122,7 +187,17 @@ public:
         return SE_ERR_NO_DATA;
     }
 
-    size_t VramRegionCount() const { return 0; }
+    size_t VramRegionCount() const { return mVramRegions.size(); }
+
+    se_result GetVramRegion(size_t index, se_vram_region* out) const
+    {
+        if (index >= mVramRegions.size())
+        {
+            return SE_ERR_OUT_OF_RANGE;
+        }
+        *out = mVramRegions[index];
+        return SE_OK;
+    }
 
     bool HasSnapshot() const { return mSnapshot.Valid(); }
 
@@ -130,6 +205,70 @@ public:
     const se_config& Config() const { return mCfg; }
 
 private:
+    // Bytes a texture occupies in VDP1 VRAM, from its pixel size and color mode.
+    static uint32_t TextureByteSize(const se_command& c)
+    {
+        const uint32_t pixels = static_cast<uint32_t>(c.width) * c.height;
+        switch (c.color_mode)
+        {
+        case SE_COLOR_BANK_16:
+        case SE_COLOR_LUT_16:   return pixels / 2;   // 4 bpp
+        case SE_COLOR_RGB555:   return pixels * 2;   // 16 bpp
+        default:                return pixels;       // 8 bpp bank modes
+        }
+    }
+
+    // Classify VDP1 VRAM into the regions each drawable command references — its
+    // command table, texture, CLUT (LUT mode), and gouraud table — for the VRAM
+    // map. Distinct (address, kind) pairs are listed once, sorted by address.
+    void BuildVramRegions()
+    {
+        mVramRegions.clear();
+        auto add = [this](uint32_t addr, uint32_t size, se_vram_region_kind kind, uint32_t ref)
+        {
+            for (const se_vram_region& r : mVramRegions)
+            {
+                if (r.address == addr && r.kind == kind)
+                {
+                    return;  // already listed
+                }
+            }
+            se_vram_region reg {};
+            reg.address = addr;
+            reg.size = size;
+            reg.kind = kind;
+            reg.ref_index = ref;
+            mVramRegions.push_back(reg);
+        };
+
+        for (const se_command& c : mCommands)
+        {
+            const bool textured = (c.type == SE_CMD_NORMAL_SPRITE ||
+                                   c.type == SE_CMD_SCALED_SPRITE ||
+                                   c.type == SE_CMD_DISTORTED_SPRITE);
+            if (!textured || c.status == SE_CMDSTAT_SKIP)
+            {
+                continue;
+            }
+            add(c.table_address, 0x20, SE_VRAM_CMD_TABLE, c.index);
+            add(c.texture_address, TextureByteSize(c), SE_VRAM_TEXTURE, c.index);
+            if (c.color_mode == SE_COLOR_LUT_16)
+            {
+                add(c.clut_address, 0x20, SE_VRAM_CLUT, c.index);   // 16 entries x 2 bytes
+            }
+            if (c.gouraud)
+            {
+                add(c.gouraud_table, 0x08, SE_VRAM_GOURAUD, c.index);  // 4 entries x 2 bytes
+            }
+        }
+
+        std::sort(mVramRegions.begin(), mVramRegions.end(),
+                  [](const se_vram_region& a, const se_vram_region& b)
+        {
+            return a.address < b.address;
+        });
+    }
+
     // Flatten the VDP2 background (mBgBuffer) and VDP1 sprites (mRenderBuffer)
     // into a finished opaque frame, left in mRenderBuffer: VDP1 where it drew a
     // texel, else the NBG background, else an opaque backdrop.
@@ -197,6 +336,7 @@ private:
     std::vector<uint8_t>    mRenderBuffer;
     std::vector<uint8_t>    mBgBuffer;      // VDP2 NBG composite, under the sprites
     std::vector<float>      mDepthBuffer;
+    std::vector<se_vram_region> mVramRegions;
 };
 
 }  // namespace se

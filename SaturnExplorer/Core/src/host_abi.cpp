@@ -127,21 +127,16 @@ se_result se_decode_texture(se_context* ctx, const se_texture_ref* ref,
     {
         return SE_ERR_INVALID_ARG;
     }
-    if (needed)
-    {
-        *needed = 0;
-    }
-    return SE_ERR_UNIMPLEMENTED;
+    return Impl(ctx)->DecodeTexture(*ref, out, needed);
 }
 
 se_result se_decode_palette(se_context* ctx, uint32_t clut_address, se_palette* out)
 {
-    (void)clut_address;
     if (!ctx || !out)
     {
         return SE_ERR_INVALID_ARG;
     }
-    return SE_ERR_UNIMPLEMENTED;
+    return Impl(ctx)->DecodePalette(clut_address, out);
 }
 
 /* --- VRAM map --- */
@@ -152,12 +147,11 @@ size_t se_vram_region_count(se_context* ctx)
 
 se_result se_get_vram_region(se_context* ctx, size_t index, se_vram_region* out)
 {
-    (void)index;
     if (!ctx || !out)
     {
         return SE_ERR_INVALID_ARG;
     }
-    return SE_ERR_UNIMPLEMENTED;
+    return Impl(ctx)->GetVramRegion(index, out);
 }
 
 /* --- ROM & Archive Search --- */
