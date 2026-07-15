@@ -200,6 +200,22 @@ void BuildDataSource(Savestate* state, se_data_source* out)
 
 }  // namespace
 
+namespace
+{
+// Yabause 0.9.15 section layout constants.
+constexpr uint32_t kVramSize    = 0x80000;   // VDP1/VDP2 VRAM
+constexpr uint32_t kYssCramSize = 0x1000;    // VDP2 color RAM
+constexpr uint32_t kVdp2RegSize = 286;       // packed Vdp2 register struct (0.9.15)
+constexpr uint32_t kVdp2RegMax  = 0x11E;     // highest VDP2 register (COBB)
+constexpr size_t   kYssHeaderSize = 0x14;    // file header before the first section
+
+uint32_t Read32LE(const std::vector<uint8_t>& d, size_t o)
+{
+    return static_cast<uint32_t>(d[o]) | (static_cast<uint32_t>(d[o + 1]) << 8) |
+           (static_cast<uint32_t>(d[o + 2]) << 16) | (static_cast<uint32_t>(d[o + 3]) << 24);
+}
+}  // namespace
+
 extern "C" {
 
 int se_savestate_open_region_dir(const char* dir, se_data_source* out)
@@ -236,6 +252,85 @@ int se_savestate_open_region_dir(const char* dir, se_data_source* out)
         return 3;
     }
 
+    BuildDataSource(state, out);
+    return 0;
+}
+
+int se_savestate_open_yss(const char* path, se_data_source* out)
+{
+    if (!path || !out)
+    {
+        return 1;
+    }
+    std::memset(out, 0, sizeof(*out));
+
+    std::vector<uint8_t> file;
+    if (!LoadFile(path, file) || file.size() < kYssHeaderSize + 12)
+    {
+        return 4;
+    }
+    if (!(file[0] == 'Y' && file[1] == 'S' && file[2] == 'S'))
+    {
+        return 5;
+    }
+
+    Savestate* state = new (std::nothrow) Savestate();
+    if (!state)
+    {
+        return 2;
+    }
+
+    // Walk the section chain: each section is tag(4) + version(4) + size(4) + data.
+    bool haveVdp1 = false;
+    size_t pos = kYssHeaderSize;
+    while (pos + 12 <= file.size())
+    {
+        const uint8_t* tag = &file[pos];
+        const uint32_t size = Read32LE(file, pos + 8);
+        const size_t data = pos + 12;
+        if (data + size > file.size())
+        {
+            break;  // corrupt / truncated
+        }
+
+        if (std::memcmp(tag, "VDP1", 4) == 0 && size >= kVramSize)
+        {
+            // Layout: registers (size - VRAM) then VRAM.
+            const uint32_t regBytes = size - kVramSize;
+            state->mVdp1Vram.assign(file.begin() + data + regBytes,
+                                    file.begin() + data + regBytes + kVramSize);
+            haveVdp1 = true;
+        }
+        else if (std::memcmp(tag, "VDP2", 4) == 0 &&
+                 size >= kVdp2RegSize + kVramSize + kYssCramSize)
+        {
+            const size_t vramOff = data + kVdp2RegSize;
+            state->mVdp2Vram.assign(file.begin() + vramOff, file.begin() + vramOff + kVramSize);
+            state->mCram.assign(file.begin() + vramOff + kVramSize,
+                                file.begin() + vramOff + kVramSize + kYssCramSize);
+
+            // Rebuild a hardware-offset, big-endian register image from the
+            // packed little-endian struct, so the shared read_vdp2_reg (which
+            // reads big-endian at hardware offsets) works unchanged. The struct
+            // drops the one reserved word at 0x0C, so struct = hw - 2 above it.
+            state->mVdp2Regs.assign(kVdp2RegMax + 2, 0);
+            for (uint32_t hw = 0; hw <= kVdp2RegMax; hw += 2)
+            {
+                const uint32_t so = (hw <= 0x0A) ? hw : hw - 2;
+                const uint16_t val = static_cast<uint16_t>(file[data + so] |
+                                                           (file[data + so + 1] << 8));
+                state->mVdp2Regs[hw]     = static_cast<uint8_t>(val >> 8);
+                state->mVdp2Regs[hw + 1] = static_cast<uint8_t>(val & 0xFF);
+            }
+        }
+        pos = data + size;
+    }
+
+    if (!haveVdp1)
+    {
+        delete state;
+        return 3;
+    }
     BuildDataSource(state, out);
     return 0;
 }

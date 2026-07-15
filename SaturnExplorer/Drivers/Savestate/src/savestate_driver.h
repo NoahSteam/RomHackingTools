@@ -29,6 +29,11 @@ int se_savestate_open_region_dir(const char* dir, se_data_source* out);
 int se_savestate_open_full_dump(const char* path, uint32_t base_address,
                                 se_data_source* out);
 
+/* Yabause savestate (.yss). Parses the VDP1 and VDP2 sections for VRAM, CRAM,
+ * and — crucially — the VDP2 register file (the write-only state a RAM dump
+ * can't provide). Currently targets the Yabause 0.9.15 section/struct layout. */
+int se_savestate_open_yss(const char* path, se_data_source* out);
+
 #ifdef __cplusplus
 }
 #endif

@@ -23,6 +23,9 @@ public:
     // Load Saturn state from a linear memory dump; replaces any current context.
     bool OpenFullDump(const char* path, uint32_t baseAddress);
 
+    // Load Saturn state from a Yabause savestate (.yss); replaces any context.
+    bool OpenSavestate(const char* path);
+
     // Draw the whole UI. Called once per frame, between the platform's
     // BeginFrame and EndFrame.
     void BuildUI(IPlatform& platform);

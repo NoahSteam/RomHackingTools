@@ -415,7 +415,13 @@ package manager; the D3D11 + Win32 ImGui backends ship with it.
    > (VRAM 67-75% full, registers empty). VDP2 compositing needs the real register state, best
    > via a Yabause savestate (`.yss`, which serializes the internal register structs) or an
    > explicit register export. The live emulator driver (M7) would also supply them.
-6. **M5 — Textures & VRAM.** `TextureDecoder`, Texture & Palette Viewer, VRAM Visualization.
+6. **M4b — VDP2 backgrounds.** [DRIVER DONE] The savestate driver now parses Yabause 0.9.15
+   `.yss` files (`se_savestate_open_yss`): VDP1/VDP2 VRAM, CRAM, and the VDP2 register file
+   (rebuilt at hardware offsets from the packed struct — the write-only state a RAM dump lacks),
+   all via Seam A; frontend "Open Savestate (.yss)" wired. Verified against Battle3.yss
+   (`read_vdp2_reg(BGON)=0x4f` → NBG0–3 enabled). Remaining: `Vdp2Compositor` — render the NBG
+   cell/scroll layers and composite by priority (next).
+7. **M5 — Textures & VRAM.** `TextureDecoder`, Texture & Palette Viewer, VRAM Visualization.
 7. **M6 — Search & trace.** `SearchEngine`, ROM & Archive Search, Reference Explorer.
 8. **M7 — Live driver.** Emulator driver with event stream (+ optional reference framebuffer);
    Memory History, Frame Timeline.

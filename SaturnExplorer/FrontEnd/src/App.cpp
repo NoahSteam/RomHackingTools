@@ -162,22 +162,15 @@ void App::RenderFrameToTexture(IPlatform& platform)
     }
 }
 
-bool App::OpenFullDump(const char* path, uint32_t baseAddress)
+// Finish opening: create the context around an already-opened data source.
+static bool CreateContextFromSource(se_data_source& dataSource, se_context** ctxOut)
 {
-    CloseData();
-
-    se_data_source dataSource;
-    if (se_savestate_open_full_dump(path, baseAddress, &dataSource) != 0)
-    {
-        return false;
-    }
-
     se_config config;
     config.abi_version = SE_ABI_VERSION;
     config.reserved = 0;
 
-    mContext = se_create(&dataSource, &config);
-    if (!mContext)
+    se_context* ctx = se_create(&dataSource, &config);
+    if (!ctx)
     {
         if (dataSource.close)
         {
@@ -185,7 +178,39 @@ bool App::OpenFullDump(const char* path, uint32_t baseAddress)
         }
         return false;
     }
+    *ctxOut = ctx;
+    return true;
+}
 
+bool App::OpenFullDump(const char* path, uint32_t baseAddress)
+{
+    CloseData();
+    se_data_source dataSource;
+    if (se_savestate_open_full_dump(path, baseAddress, &dataSource) != 0)
+    {
+        return false;
+    }
+    if (!CreateContextFromSource(dataSource, &mContext))
+    {
+        return false;
+    }
+    mDataSource = dataSource;
+    mbHasData = true;
+    return true;
+}
+
+bool App::OpenSavestate(const char* path)
+{
+    CloseData();
+    se_data_source dataSource;
+    if (se_savestate_open_yss(path, &dataSource) != 0)
+    {
+        return false;
+    }
+    if (!CreateContextFromSource(dataSource, &mContext))
+    {
+        return false;
+    }
     mDataSource = dataSource;
     mbHasData = true;
     return true;
@@ -227,6 +252,14 @@ void App::DrawMenuBar(IPlatform& platform)
 
     if (ImGui::BeginMenu("File"))
     {
+        if (ImGui::MenuItem("Open Savestate (.yss)..."))
+        {
+            std::string path;
+            if (platform.OpenFileDialog(path))
+            {
+                OpenSavestate(path.c_str());
+            }
+        }
         if (ImGui::MenuItem("Open Memory Dump..."))
         {
             std::string path;
