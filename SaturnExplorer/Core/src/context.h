@@ -195,6 +195,47 @@ public:
         });
     }
 
+    // Decode the CRAM sub-palette a color-bank sprite indexes into. 'colorBank'
+    // is CMDCOLR; the color mode fixes how many CRAM entries the bank spans
+    // (16/64/128/256). LUT and RGB555 modes have no bank palette.
+    se_result DecodeBankPalette(uint16_t colorBank, se_color_mode mode, se_palette* out) const
+    {
+        uint32_t base;
+        uint16_t count;
+        switch (mode)
+        {
+        case SE_COLOR_BANK_16:  base = colorBank & 0xFFF0u; count = 16;  break;
+        case SE_COLOR_BANK_64:  base = colorBank & 0xFFC0u; count = 64;  break;
+        case SE_COLOR_BANK_128: base = colorBank & 0xFF80u; count = 128; break;
+        case SE_COLOR_BANK_256: base = colorBank & 0xFF00u; count = 256; break;
+        default:                return SE_ERR_UNSUPPORTED;
+        }
+
+        const std::vector<uint8_t>& cram = mSnapshot.Cram();
+        const se_cram_mode cm = mSnapshot.CramMode();
+        const uint32_t words = (cm == SE_CRAM_RGB888_1024)
+                                   ? static_cast<uint32_t>(cram.size() / 4)
+                                   : static_cast<uint32_t>(cram.size() / 2);
+
+        out->clut_address = 0;
+        out->mode = cm;
+        out->count = count;
+        for (uint16_t i = 0; i < count; ++i)
+        {
+            const uint32_t idx = base + i;
+            const Rgba c = CramColor(cram, cm, idx);
+            se_palette_entry& e = out->entries[i];
+            e.r = c.r;
+            e.g = c.g;
+            e.b = c.b;
+            e.a = 255;
+            e.raw = (cm == SE_CRAM_RGB888_1024 || words == 0)
+                        ? 0
+                        : ReadBE16(cram, (idx & (words - 1)) * 2);
+        }
+        return SE_OK;
+    }
+
     // Topmost sprite (last drawn) containing the screen point, if any.
     se_result HitTest(int x, int y, size_t* outCommandIndex) const
     {

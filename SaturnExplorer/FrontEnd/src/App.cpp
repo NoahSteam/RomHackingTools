@@ -664,6 +664,51 @@ void App::DrawTextureViewer(IPlatform& platform)
     ImGui::End();
 }
 
+// Draw a grid of palette swatches with per-swatch hover (index / raw / RGB).
+// Swatch size adapts so a 256-colour bank still fits.
+void App::DrawPaletteSwatches(const se_palette& pal)
+{
+    if (pal.count == 0)
+    {
+        ImGui::TextDisabled("  (empty)");
+        return;
+    }
+    const int cols = (pal.count <= 16) ? 8 : 16;
+    const float sw = (pal.count <= 16) ? 26.0f : (pal.count <= 64 ? 18.0f : 12.0f);
+    const int rows = (pal.count + cols - 1) / cols;
+
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const ImVec2 origin = ImGui::GetCursorScreenPos();
+    for (uint16_t i = 0; i < pal.count; ++i)
+    {
+        const int cx = i % cols;
+        const int cy = i / cols;
+        const ImVec2 a(origin.x + cx * sw, origin.y + cy * sw);
+        const ImVec2 b(a.x + sw - 2.0f, a.y + sw - 2.0f);
+        const se_palette_entry& e = pal.entries[i];
+        dl->AddRectFilled(a, b, IM_COL32(e.r, e.g, e.b, 255));
+        dl->AddRect(a, b, IM_COL32(0, 0, 0, 110));
+    }
+
+    // Reserve the grid area so a hovered swatch can show its details.
+    ImGui::InvisibleButton("swatches", ImVec2(cols * sw, rows * sw));
+    if (ImGui::IsItemHovered())
+    {
+        const ImVec2 m = ImGui::GetMousePos();
+        const int cx = static_cast<int>((m.x - origin.x) / sw);
+        const int cy = static_cast<int>((m.y - origin.y) / sw);
+        const int idx = cy * cols + cx;
+        if (cx >= 0 && cx < cols && idx >= 0 && idx < pal.count)
+        {
+            const se_palette_entry& e = pal.entries[idx];
+            ImGui::BeginTooltip();
+            ImGui::Text("#%d   raw 0x%04X", idx, e.raw);
+            ImGui::Text("RGB  %d, %d, %d", e.r, e.g, e.b);
+            ImGui::EndTooltip();
+        }
+    }
+}
+
 void App::DrawPaletteViewer()
 {
     if (ImGui::Begin("Palette Viewer"))
@@ -676,41 +721,56 @@ void App::DrawPaletteViewer()
         {
             ImGui::TextDisabled("Select a sprite to view its palette.");
         }
-        else if (cmd.color_mode != SE_COLOR_LUT_16)
+        else if (cmd.color_mode == SE_COLOR_RGB555)
         {
-            ImGui::TextDisabled("Command #%u uses a color bank, not a CLUT.", cmd.index);
-            ImGui::TextDisabled("Palette = CRAM bank 0x%X.", cmd.palette_bank);
+            ImGui::TextDisabled("Command #%u is direct RGB555 — no palette.", cmd.index);
         }
         else
         {
             se_palette pal = {};
-            if (se_decode_palette(mContext, cmd.clut_address, &pal) == SE_OK)
+            se_result r;
+            if (cmd.color_mode == SE_COLOR_LUT_16)
             {
-                ImGui::Text("CLUT @0x%06X  —  %u entries", pal.clut_address, pal.count);
-                ImDrawList* dl = ImGui::GetWindowDrawList();
-                const float sw = 26.0f;
-                const int cols = 8;
-                const ImVec2 origin = ImGui::GetCursorScreenPos();
-                for (uint16_t i = 0; i < pal.count; ++i)
+                r = se_decode_palette(mContext, cmd.clut_address, &pal);
+                if (r == SE_OK)
                 {
-                    const int cx = i % cols;
-                    const int cy = i / cols;
-                    const ImVec2 a(origin.x + cx * sw, origin.y + cy * sw);
-                    const ImVec2 b(a.x + sw - 2.0f, a.y + sw - 2.0f);
-                    const se_palette_entry& e = pal.entries[i];
-                    dl->AddRectFilled(a, b, IM_COL32(e.r, e.g, e.b, 255));
-                    dl->AddRect(a, b, IM_COL32(0, 0, 0, 120));
+                    ImGui::Text("CLUT @0x%06X  —  %u entries", pal.clut_address, pal.count);
                 }
-                const int rows = (pal.count + cols - 1) / cols;
-                ImGui::Dummy(ImVec2(cols * sw, rows * sw));
             }
             else
             {
-                ImGui::TextDisabled("Palette decode failed.");
+                // Color-bank modes read a sub-palette of CRAM (16/64/128/256 entries).
+                r = se_decode_bank_palette(mContext, cmd.palette_bank, cmd.color_mode, &pal);
+                if (r == SE_OK)
+                {
+                    ImGui::Text("CRAM bank 0x%X  —  %s  —  %u entries",
+                                cmd.palette_bank, ColorModeName(cmd.color_mode), pal.count);
+                }
+            }
+
+            if (r == SE_OK)
+            {
+                DrawPaletteSwatches(pal);
+            }
+            else
+            {
+                ImGui::TextDisabled("Palette decode failed (%d).", r);
             }
         }
     }
     ImGui::End();
+}
+
+static const char* VramKindName(se_vram_region_kind k)
+{
+    switch (k)
+    {
+    case SE_VRAM_TEXTURE:   return "Texture";
+    case SE_VRAM_CLUT:      return "CLUT";
+    case SE_VRAM_CMD_TABLE: return "Command Table";
+    case SE_VRAM_GOURAUD:   return "Gouraud Table";
+    default:                return "Other";
+    }
 }
 
 void App::DrawVramMap()
@@ -745,10 +805,36 @@ void App::DrawVramMap()
             const float width = ImGui::GetContentRegionAvail().x;
             const float rowH = 12.0f;
             const ImVec2 origin = ImGui::GetCursorScreenPos();
+
+            // Reserve the map area up front so it can be hovered/clicked; the bars
+            // are painted into it with the draw list.
+            ImGui::InvisibleButton("vrammap", ImVec2(width, rows * rowH));
+            const bool mapHovered = ImGui::IsItemHovered();
+            const bool mapClicked = ImGui::IsItemClicked();
+
+            // Byte address under the cursor, for the hover hit-test below.
+            uint32_t hoverAddr = 0;
+            bool hoverValid = false;
+            if (mapHovered)
+            {
+                const ImVec2 m = ImGui::GetMousePos();
+                const int row = static_cast<int>((m.y - origin.y) / rowH);
+                if (row >= 0 && row < rows)
+                {
+                    float fx = (m.x - origin.x) / width;
+                    if (fx < 0.0f) fx = 0.0f;
+                    if (fx > 0.999f) fx = 0.999f;
+                    hoverAddr = static_cast<uint32_t>(row * perRow + fx * perRow);
+                    hoverValid = true;
+                }
+            }
+
             ImDrawList* dl = ImGui::GetWindowDrawList();
             dl->AddRectFilled(origin, ImVec2(origin.x + width, origin.y + rows * rowH),
                               IM_COL32(24, 24, 30, 255));
 
+            se_vram_region hoveredReg = {};
+            bool haveHover = false;
             for (size_t i = 0; i < count; ++i)
             {
                 se_vram_region reg;
@@ -771,8 +857,29 @@ void App::DrawVramMap()
                     dl->AddRectFilled(ImVec2(x0, y0), ImVec2(x1, y0 + rowH - 1.0f), col);
                     a = b;
                 }
+                if (hoverValid && !haveHover && hoverAddr >= reg.address && hoverAddr < end)
+                {
+                    hoveredReg = reg;
+                    haveHover = true;
+                }
             }
-            ImGui::Dummy(ImVec2(width, rows * rowH + 6.0f));
+
+            if (haveHover)
+            {
+                ImGui::BeginTooltip();
+                ImGui::Text("0x%05X   (%u bytes)", hoveredReg.address, hoveredReg.size);
+                ImGui::TextUnformatted(VramKindName(hoveredReg.kind));
+                if (hoveredReg.ref_index != 0xFFFFFFFFu)
+                {
+                    ImGui::Text("Command #%u", hoveredReg.ref_index);
+                }
+                ImGui::EndTooltip();
+                if (mapClicked && hoveredReg.ref_index != 0xFFFFFFFFu)
+                {
+                    mSelectedCommand = static_cast<int>(hoveredReg.ref_index);
+                }
+            }
+            ImGui::Spacing();
 
             // Legend.
             auto swatch = [&](const char* name, se_vram_region_kind k)

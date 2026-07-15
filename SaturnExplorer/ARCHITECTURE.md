@@ -452,10 +452,13 @@ package manager; the D3D11 + Win32 ImGui backends ship with it.
    16-entry VDP1 CLUT, resolving color-bank codes through CRAM; `BuildVramRegions` (in
    `BeginFrame`) classifies VDP1 VRAM into the command-table / texture / CLUT / gouraud regions each
    drawable command references, deduped and sorted. The frontend gains a Texture Viewer (decodes the
-   selected sprite's texture onto a transparency checkerboard), a Palette Viewer (CLUT swatches), and
-   a VRAM Map (proportional 512 KiB region map with a kind legend). Verified against Battle3.yss:
-   161 VRAM regions and the sprite textures decode correctly; the portable App layer compiles against
-   ImGui. (A CRAM/bank-palette view and per-region hover are future polish.)
+   selected sprite's texture onto a transparency checkerboard), a Palette Viewer, and a VRAM Map. The
+   Palette Viewer shows CLUT swatches for LUT sprites and, via `se_decode_bank_palette`, the CRAM
+   sub-palette (16/64/128/256 entries) a color-bank sprite indexes into — with per-swatch hover
+   (index / raw / RGB). The VRAM Map is a proportional 512 KiB region map with a kind legend, per-region
+   hover tooltips (address / size / kind / owning command), and click-to-select. Verified against
+   Battle3.yss: 161 VRAM regions, textures decode correctly, and a bank sprite's palette resolves to
+   its CRAM colour ramp; the portable App layer compiles against ImGui.
 7. **M6 — Search & trace. [IN PROGRESS]** **Reference Explorer done:** `se_references_of_texture`
    / `se_references_of_palette` scan the parsed command list for sprites sharing a texture VRAM
    address or CLUT, returning `se_reference`s (with the same object numbering GeometryBuilder uses);

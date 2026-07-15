@@ -41,6 +41,7 @@ private:
     void DrawSelectedObject();
     void DrawTextureViewer(IPlatform& platform);
     void DrawPaletteViewer();
+    void DrawPaletteSwatches(const se_palette& pal);
     void DrawVramMap();
     void DrawReferences();
     void DrawReferenceList(const char* id, const std::vector<se_reference>& refs);

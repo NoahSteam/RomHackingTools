@@ -62,6 +62,13 @@ se_result   se_decode_texture(se_context* ctx, const se_texture_ref* ref,
                               se_image* out, size_t* needed);
 se_result   se_decode_palette(se_context* ctx, uint32_t clut_address, se_palette* out);
 
+/* Decode the CRAM sub-palette a color-bank sprite indexes into. 'color_bank' is
+   the sprite's CMDCOLR; 'color_mode' fixes how many CRAM entries the bank spans
+   (16/64/128/256). Returns SE_ERR_UNSUPPORTED for LUT / RGB555 modes, which have
+   no CRAM bank palette. */
+se_result   se_decode_bank_palette(se_context* ctx, uint16_t color_bank,
+                                   se_color_mode color_mode, se_palette* out);
+
 /* --- VRAM Visualization --- */
 size_t      se_vram_region_count(se_context* ctx);
 se_result   se_get_vram_region  (se_context* ctx, size_t index, se_vram_region* out);

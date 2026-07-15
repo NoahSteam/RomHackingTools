@@ -139,6 +139,16 @@ se_result se_decode_palette(se_context* ctx, uint32_t clut_address, se_palette* 
     return Impl(ctx)->DecodePalette(clut_address, out);
 }
 
+se_result se_decode_bank_palette(se_context* ctx, uint16_t color_bank,
+                                 se_color_mode color_mode, se_palette* out)
+{
+    if (!ctx || !out)
+    {
+        return SE_ERR_INVALID_ARG;
+    }
+    return Impl(ctx)->DecodeBankPalette(color_bank, color_mode, out);
+}
+
 /* --- VRAM map --- */
 size_t se_vram_region_count(se_context* ctx)
 {
