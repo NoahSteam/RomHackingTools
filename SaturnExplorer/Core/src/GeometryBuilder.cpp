@@ -1,5 +1,7 @@
 #include "GeometryBuilder.h"
 
+#include <algorithm>
+
 #include "ByteOrder.h"
 #include "Vdp1Parser.h"
 
@@ -8,10 +10,20 @@ namespace se
 
 namespace
 {
-// Depth between successive sprites in the exploded 3D view. Z is driven by draw
-// order here (priority comes from the write-only VDP2 SPCTL, absent from a RAM
-// dump); see ARCHITECTURE.md §7. Purely a display tunable.
-constexpr float kZSpacing = 3.0f;
+// Depth between successive *layers* in the exploded 3D view. A sprite that does
+// not overlap any earlier one stays on layer 0 (coplanar); one that overlaps
+// earlier sprites is pushed back a layer. This keeps a mech's abutting tile
+// strips coplanar (so they don't split into gaps under the orbit camera) while
+// still pulling genuinely overlapping/stacked sprites apart. See ARCHITECTURE.md
+// §7. Purely a display tunable.
+constexpr float kZSpacing = 6.0f;
+
+// Axis-aligned bounds of a sprite in screen space, plus its assigned layer.
+struct PlacedSprite
+{
+    float minX, minY, maxX, maxY;
+    uint32_t layer;
+};
 }
 
 void GeometryBuilder::Build(const std::vector<uint8_t>& vram, Vdp1Scene& out)
@@ -26,6 +38,7 @@ void GeometryBuilder::Build(const std::vector<uint8_t>& vram, Vdp1Scene& out)
     int32_t originX = 0;
     int32_t originY = 0;
     uint32_t objectNumber = 0;
+    std::vector<PlacedSprite> placed;   // bounds+layer of sprites already emitted
 
     for (uint32_t index = 0; index < addresses.size(); ++index)
     {
@@ -143,10 +156,33 @@ void GeometryBuilder::Build(const std::vector<uint8_t>& vram, Vdp1Scene& out)
 
         out.sprites.push_back(s);
 
-        // Same sprite in world space: screen XY centered, Z by draw order.
+        // Assign a depth layer: 0 if this sprite overlaps nothing placed so far,
+        // else one past the deepest sprite it overlaps. Abutting tiles (which
+        // touch but don't overlap) share a layer and stay coplanar; stacked
+        // sprites separate. Uses strict inequality so shared edges don't count.
+        PlacedSprite box { s.corners[0].x, s.corners[0].y, s.corners[0].x, s.corners[0].y, 0 };
+        for (int k = 1; k < 4; ++k)
+        {
+            box.minX = std::min(box.minX, s.corners[k].x);
+            box.minY = std::min(box.minY, s.corners[k].y);
+            box.maxX = std::max(box.maxX, s.corners[k].x);
+            box.maxY = std::max(box.maxY, s.corners[k].y);
+        }
+        for (const PlacedSprite& p : placed)
+        {
+            const bool overlap = box.minX < p.maxX && p.minX < box.maxX &&
+                                 box.minY < p.maxY && p.minY < box.maxY;
+            if (overlap && p.layer + 1 > box.layer)
+            {
+                box.layer = p.layer + 1;
+            }
+        }
+        placed.push_back(box);
+
+        // Same sprite in world space: screen XY centered, Z by overlap layer.
         const float cx = out.screenWidth * 0.5f;
         const float cy = out.screenHeight * 0.5f;
-        const float z = s.object_number * kZSpacing;
+        const float z = box.layer * kZSpacing;
         se_sprite_3d s3 = se_sprite_3d {};
         s3.command_index = index;
         s3.object_number = s.object_number;
