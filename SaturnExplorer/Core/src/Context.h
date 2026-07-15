@@ -240,6 +240,7 @@ public:
 
     bool HasVdp1Regs() const { return mSnapshot.HasVdp1Regs(); }
     bool HasVdp2Regs() const { return mSnapshot.HasVdp2Regs(); }
+    se_cram_mode CramMode() const { return mSnapshot.CramMode(); }
     uint16_t Vdp1Register(uint32_t hw) const { return mSnapshot.Vdp1Reg(hw); }
     uint16_t Vdp2Register(uint32_t hw) const { return mSnapshot.Vdp2Reg(hw); }
 

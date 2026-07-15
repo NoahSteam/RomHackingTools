@@ -1248,12 +1248,14 @@ void App::DrawColorRam()
         }
         else
         {
-            static std::vector<se_palette_entry> colors;
-            colors.resize(2048);
+            mCramColors.resize(2048);
             const size_t n = se_read_cram_colors(mContext, 0,
-                                                 static_cast<uint16_t>(colors.size()),
-                                                 colors.data());
-            ImGui::Text("%zu CRAM entries", n);
+                                                 static_cast<uint16_t>(mCramColors.size()),
+                                                 mCramColors.data());
+            const se_cram_mode mode = se_get_cram_mode(mContext);
+            const bool rgb888 = (mode == SE_CRAM_RGB888_1024);
+            ImGui::Text("%zu CRAM entries  (%s)", n,
+                        rgb888 ? "RGB888" : "RGB555");
             const int cols = 32;
             const float sw = 12.0f;
             ImDrawList* dl = ImGui::GetWindowDrawList();
@@ -1264,7 +1266,7 @@ void App::DrawColorRam()
                 const int cy = static_cast<int>(i) / cols;
                 const ImVec2 a(origin.x + cx * sw, origin.y + cy * sw);
                 const ImVec2 b(a.x + sw - 1.0f, a.y + sw - 1.0f);
-                const se_palette_entry& e = colors[i];
+                const se_palette_entry& e = mCramColors[i];
                 dl->AddRectFilled(a, b, IM_COL32(e.r, e.g, e.b, 255));
             }
             const int rows = (static_cast<int>(n) + cols - 1) / cols;
@@ -1277,9 +1279,19 @@ void App::DrawColorRam()
                 const int idx = cy * cols + cx;
                 if (cx >= 0 && cx < cols && idx >= 0 && idx < static_cast<int>(n))
                 {
-                    const se_palette_entry& e = colors[idx];
+                    const se_palette_entry& e = mCramColors[idx];
                     ImGui::BeginTooltip();
-                    ImGui::Text("CRAM #%d   raw 0x%04X", idx, e.raw);
+                    // RGB888 packs 24 bits, which won't fit e.raw (16-bit); show the
+                    // reconstructed color instead of a misleading 0x0000.
+                    if (rgb888)
+                    {
+                        ImGui::Text("CRAM #%d   RGB888 0x%06X", idx,
+                                    (e.r << 16) | (e.g << 8) | e.b);
+                    }
+                    else
+                    {
+                        ImGui::Text("CRAM #%d   raw 0x%04X", idx, e.raw);
+                    }
                     ImGui::Text("RGB  %d, %d, %d", e.r, e.g, e.b);
                     ImGui::EndTooltip();
                 }
@@ -1300,7 +1312,7 @@ void App::DrawVdp1Table()
         else
         {
             const size_t count = se_command_count(mContext);
-            ImGui::Text("%zu command tables (raw 16-word entries)", count);
+            ImGui::Text("%zu command tables (15 words each: CMDCTRL - GRDA)", count);
             const ImGuiTableFlags flags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
                                           ImGuiTableFlags_ScrollY | ImGuiTableFlags_ScrollX;
             if (ImGui::BeginTable("vdp1table", 3, flags))
@@ -1365,7 +1377,9 @@ void App::DrawVdp2Table()
             const uint16_t prina = R(0x0F8);
             const uint16_t prinb = R(0x0FA);
 
-            const char* colorName[8] = { "16", "256", "2048", "32K", "16M", "?", "?", "?" };
+            // NBG color counts max out at 32K (N0CHCN=3); higher codes are
+            // reserved for NBG, so they read as unknown rather than a real depth.
+            const char* colorName[8] = { "16", "256", "2048", "32K", "?", "?", "?", "?" };
             const uint32_t colorNum[4] = {
                 (cha & 0x0070u) >> 4, (cha & 0x3000u) >> 12,
                 (chb & 0x0002u) >> 1, (chb & 0x0020u) >> 5 };

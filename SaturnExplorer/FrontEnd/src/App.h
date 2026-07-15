@@ -61,6 +61,9 @@ private:
     int            mSelectedCommand = -1;
     bool           mbLayoutBuilt = false;   // default dock layout applied once
 
+    // Scratch buffer for the Color RAM panel, decoded once per frame.
+    std::vector<se_palette_entry> mCramColors;
+
     // VDP Output frame texture.
     TextureHandle        mFrameTexture = 0;
     int                  mFrameWidth = 0;

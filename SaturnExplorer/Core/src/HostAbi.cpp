@@ -196,6 +196,11 @@ size_t se_read_cram_colors(se_context* ctx, uint16_t start, uint16_t count,
     return ctx ? Impl(ctx)->ReadCramColors(start, count, out) : 0;
 }
 
+se_cram_mode se_get_cram_mode(se_context* ctx)
+{
+    return ctx ? Impl(ctx)->CramMode() : SE_CRAM_RGB555_1024;
+}
+
 /* --- ROM & Archive Search --- */
 se_search_handle se_rom_search_begin(se_context* ctx, const se_search_query* q)
 {
