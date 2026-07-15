@@ -164,6 +164,38 @@ se_result se_get_vram_region(se_context* ctx, size_t index, se_vram_region* out)
     return Impl(ctx)->GetVramRegion(index, out);
 }
 
+int se_has_vdp1_registers(se_context* ctx)
+{
+    return (ctx && Impl(ctx)->HasVdp1Regs()) ? 1 : 0;
+}
+
+int se_has_vdp2_registers(se_context* ctx)
+{
+    return (ctx && Impl(ctx)->HasVdp2Regs()) ? 1 : 0;
+}
+
+uint16_t se_get_vdp1_register(se_context* ctx, uint32_t hw_offset)
+{
+    return ctx ? Impl(ctx)->Vdp1Register(hw_offset) : 0;
+}
+
+uint16_t se_get_vdp2_register(se_context* ctx, uint32_t hw_offset)
+{
+    return ctx ? Impl(ctx)->Vdp2Register(hw_offset) : 0;
+}
+
+size_t se_read_vram(se_context* ctx, se_vram_kind kind, uint32_t offset,
+                    void* dst, size_t size)
+{
+    return ctx ? Impl(ctx)->ReadVram(kind, offset, dst, size) : 0;
+}
+
+size_t se_read_cram_colors(se_context* ctx, uint16_t start, uint16_t count,
+                           se_palette_entry* out)
+{
+    return ctx ? Impl(ctx)->ReadCramColors(start, count, out) : 0;
+}
+
 /* --- ROM & Archive Search --- */
 se_search_handle se_rom_search_begin(se_context* ctx, const se_search_query* q)
 {
