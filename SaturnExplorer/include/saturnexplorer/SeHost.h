@@ -89,6 +89,9 @@ size_t      se_read_vram(se_context* ctx, se_vram_kind kind, uint32_t offset,
    number written (clamped to the CRAM size for the current color mode). */
 size_t      se_read_cram_colors(se_context* ctx, uint16_t start, uint16_t count,
                                 se_palette_entry* out);
+/* The CRAM color mode of the current snapshot (fixes entry width: RGB555 words
+   vs RGB888 dwords). Returns SE_CRAM_RGB555_1024 when no data is loaded. */
+se_cram_mode se_get_cram_mode(se_context* ctx);
 
 /* --- ROM & Archive Search / Asset Trace (async; poll incrementally) --- */
 typedef struct se_search* se_search_handle;

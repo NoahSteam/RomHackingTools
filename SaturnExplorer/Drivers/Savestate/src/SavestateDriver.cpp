@@ -362,6 +362,57 @@ void CopyMednafenU16BE(const std::vector<uint8_t>& file, size_t off, uint32_t si
     }
 }
 
+// Mednafen stores VDP1's control/status registers as individual named scalar
+// fields inside the "VDP1" section (TVMR/FBCR/PTMR/EDSR are uint8; EWDR/EWLR/
+// EWRR/LOPR are uint16), not as a contiguous register file like VDP2's RawRegs.
+// Reassemble them into a hardware-offset big-endian image so the shared
+// read_vdp1_reg serves them like any other register file. ENDR is write-only
+// and COPR/MODR are computed, so those hardware slots stay zero. Returns true if
+// at least one field was found (leaving 'out' empty otherwise, so the driver
+// reports no VDP1 registers rather than a table of zeros).
+bool BuildVdp1RegImageFromMednafen(const std::vector<uint8_t>& file, size_t secData,
+                                   uint32_t secSize, bool hostBigEndian,
+                                   std::vector<uint8_t>& out)
+{
+    struct Field { const char* name; uint32_t hw; };
+    static const Field kFields[] = {
+        {"TVMR", 0x00}, {"FBCR", 0x02}, {"PTMR", 0x04},
+        {"EWDR", 0x06}, {"EWLR", 0x08}, {"EWRR", 0x0A},
+        {"EDSR", 0x10}, {"LOPR", 0x12},
+    };
+    out.assign(0x18, 0);   // covers hw 0x00..0x16
+    int found = 0;
+    for (const Field& f : kFields)
+    {
+        size_t off; uint32_t sz;
+        if (!FindMednafenField(file, secData, secSize, f.name, off, sz) || sz == 0)
+        {
+            continue;
+        }
+        uint16_t val;
+        if (sz == 1)
+        {
+            val = file[off];
+        }
+        else if (hostBigEndian)
+        {
+            val = static_cast<uint16_t>((file[off] << 8) | file[off + 1]);
+        }
+        else
+        {
+            val = static_cast<uint16_t>(file[off] | (file[off + 1] << 8));
+        }
+        out[f.hw]     = static_cast<uint8_t>(val >> 8);
+        out[f.hw + 1] = static_cast<uint8_t>(val & 0xFF);
+        ++found;
+    }
+    if (!found)
+    {
+        out.clear();
+    }
+    return found != 0;
+}
+
 // Parse an already-loaded .yss buffer into '*out' (zeroed by the caller). Kept
 // separate from the path entry point so the dispatcher can reuse a single read.
 se_result ParseYssBuffer(const std::vector<uint8_t>& file, se_data_source* out)
@@ -492,6 +543,9 @@ se_result ParseMednafenBuffer(const std::vector<uint8_t>& file, se_data_source* 
                 CopyMednafenU16BE(file, off, kVramSize, state->mVdp1Vram, swap);
                 haveVdp1 = true;
             }
+            // VDP1 control/status registers live as individual named fields.
+            BuildVdp1RegImageFromMednafen(file, secData, secSize, hostBigEndian,
+                                          state->mVdp1Regs);
         }
         else if (std::strcmp(name, "VDP2") == 0)
         {
