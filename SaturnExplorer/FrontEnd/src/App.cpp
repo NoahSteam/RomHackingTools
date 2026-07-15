@@ -215,7 +215,8 @@ bool App::OpenSavestate(const char* path)
 {
     CloseData();
     se_data_source dataSource;
-    if (se_savestate_open_yss(path, &dataSource) != 0)
+    // Generic entry: dispatches by file magic to the right emulator's parser.
+    if (se_savestate_open(path, &dataSource) != 0)
     {
         return false;
     }

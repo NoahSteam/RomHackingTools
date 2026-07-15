@@ -208,6 +208,7 @@ constexpr uint32_t kYssCramSize = 0x1000;    // VDP2 color RAM
 constexpr uint32_t kVdp2RegSize = 288;       // sizeof(Vdp2): 286 regs + 2 padding to u32 align (0.9.15)
 constexpr uint32_t kVdp2RegMax  = 0x11E;     // highest VDP2 register (COBB)
 constexpr size_t   kYssHeaderSize = 0x14;    // file header before the first section
+constexpr uint32_t kYssVdp2Version = 1;      // VDP2 section version whose struct we decode (0.9.15)
 
 uint32_t Read32LE(const std::vector<uint8_t>& d, size_t o)
 {
@@ -357,6 +358,7 @@ se_result se_savestate_open_yss(const char* path, se_data_source* out)
     while (pos + 12 <= file.size())
     {
         const uint8_t* tag = &file[pos];
+        const uint32_t version = Read32LE(file, pos + 4);
         const uint32_t size = Read32LE(file, pos + 8);
         const size_t data = pos + 12;
         if (data + size > file.size())
@@ -373,8 +375,13 @@ se_result se_savestate_open_yss(const char* path, se_data_source* out)
             haveVdp1 = true;
         }
         else if (std::memcmp(tag, "VDP2", 4) == 0 &&
+                 version == kYssVdp2Version &&
                  size >= kVdp2RegSize + kVramSize + kYssCramSize)
         {
+            // The VRAM/CRAM offsets below depend on sizeof(Vdp2) for this exact
+            // struct version, so gate the whole VDP2 parse on the section version.
+            // A newer Yabause / a fork with a different struct is skipped rather
+            // than misdecoded — the context degrades to VDP1-only (no NBG).
             const size_t vramOff = data + kVdp2RegSize;
             state->mVdp2Vram.assign(file.begin() + vramOff, file.begin() + vramOff + kVramSize);
             state->mCram.assign(file.begin() + vramOff + kVramSize,
@@ -398,6 +405,39 @@ se_result se_savestate_open_yss(const char* path, se_data_source* out)
     }
     BuildDataSource(state, out);
     return SE_OK;
+}
+
+se_result se_savestate_open(const char* path, se_data_source* out)
+{
+    if (!path || !out)
+    {
+        return SE_ERR_INVALID_ARG;
+    }
+    std::memset(out, 0, sizeof(*out));
+
+    // Sniff enough of the header to pick the emulator's format, then dispatch to
+    // the matching parser. Each parser fills the same internal buffers, so the
+    // core is identical regardless of which emulator wrote the state. Add new
+    // families here as their layouts are reverse-engineered (see savestate_driver.h).
+    uint8_t magic[8] = { 0 };
+    FILE* file = std::fopen(path, "rb");
+    if (!file)
+    {
+        return SE_ERR_IO;
+    }
+    const size_t got = std::fread(magic, 1, sizeof(magic), file);
+    std::fclose(file);
+    if (got < 4)
+    {
+        return SE_ERR_IO;
+    }
+
+    if (magic[0] == 'Y' && magic[1] == 'S' && magic[2] == 'S')
+    {
+        return se_savestate_open_yss(path, out);   // Yabause family (.yss)
+    }
+    // Room for other emulators (Mednafen/Beetle "MDFNSVST", Kronos, SSF, ...).
+    return SE_ERR_UNSUPPORTED;
 }
 
 se_result se_savestate_open_full_dump(const char* path, uint32_t base_address,
