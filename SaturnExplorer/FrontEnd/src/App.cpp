@@ -249,8 +249,8 @@ void App::BuildUI(IPlatform& platform)
     DrawTextureViewer(platform);
     DrawPaletteViewer();
     DrawVramMap();
+    DrawReferences();
     DrawPlaceholder("Archive Explorer", "Disc filesystem — arrives in M6.");
-    DrawPlaceholder("References", "What uses this texture — arrives in M6.");
     DrawPlaceholder("Memory History", "Load chain — arrives in M7.");
     DrawPlaceholder("Search ROM / Files", "ROM & archive search — arrives in M6.");
 }
@@ -788,6 +788,92 @@ void App::DrawVramMap()
             swatch("CLUT", SE_VRAM_CLUT);       ImGui::SameLine(0.0f, 16.0f);
             swatch("Cmd Table", SE_VRAM_CMD_TABLE); ImGui::SameLine(0.0f, 16.0f);
             swatch("Gouraud", SE_VRAM_GOURAUD);
+        }
+    }
+    ImGui::End();
+}
+
+// One scrollable, click-to-select table of sprite references (used for both the
+// texture and palette reference lists). Clicking a row selects that command.
+void App::DrawReferenceList(const char* id, const std::vector<se_reference>& refs)
+{
+    if (refs.empty())
+    {
+        ImGui::TextDisabled("  (none)");
+        return;
+    }
+    const ImGuiTableFlags flags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
+                                  ImGuiTableFlags_ScrollY;
+    const size_t visRows = refs.size() < 8 ? refs.size() + 1 : 8;
+    const ImVec2 size(0.0f, ImGui::GetTextLineHeightWithSpacing() * visRows);
+    if (ImGui::BeginTable(id, 4, flags, size))
+    {
+        ImGui::TableSetupScrollFreeze(0, 1);
+        ImGui::TableSetupColumn("Cmd");
+        ImGui::TableSetupColumn("Obj");
+        ImGui::TableSetupColumn("Pos");
+        ImGui::TableSetupColumn("Size");
+        ImGui::TableHeadersRow();
+
+        for (const se_reference& r : refs)
+        {
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            char label[24];
+            std::snprintf(label, sizeof(label), "%u", r.command_index);
+            const bool selected = (mSelectedCommand == static_cast<int>(r.command_index));
+            if (ImGui::Selectable(label, selected, ImGuiSelectableFlags_SpanAllColumns))
+            {
+                mSelectedCommand = static_cast<int>(r.command_index);
+            }
+            ImGui::TableNextColumn();
+            ImGui::Text("%u", r.object_number);
+            ImGui::TableNextColumn();
+            ImGui::Text("(%d, %d)", r.x, r.y);
+            ImGui::TableNextColumn();
+            ImGui::Text("%u x %u", r.width, r.height);
+        }
+        ImGui::EndTable();
+    }
+}
+
+void App::DrawReferences()
+{
+    if (ImGui::Begin("References"))
+    {
+        se_command cmd;
+        if (!mbHasData || mSelectedCommand < 0 ||
+            se_get_command(mContext, static_cast<size_t>(mSelectedCommand), &cmd) != SE_OK)
+        {
+            ImGui::TextDisabled("Select a sprite to see what shares its texture or palette.");
+        }
+        else
+        {
+            // Sprites sharing this texture.
+            const se_texture_ref ref = TextureRefOf(cmd);
+            const size_t texTotal = se_references_of_texture(mContext, &ref, nullptr, 0);
+            std::vector<se_reference> texRefs(texTotal);
+            if (texTotal > 0)
+            {
+                se_references_of_texture(mContext, &ref, texRefs.data(), texRefs.size());
+            }
+            ImGui::SeparatorText("Shares this texture");
+            ImGui::Text("Texture @0x%06X  —  %zu sprite(s)", cmd.texture_address, texTotal);
+            DrawReferenceList("texrefs", texRefs);
+
+            // Sprites sharing this palette (LUT mode only; bank palettes have no CLUT).
+            if (cmd.color_mode == SE_COLOR_LUT_16)
+            {
+                const size_t palTotal = se_references_of_palette(mContext, cmd.clut_address, nullptr, 0);
+                std::vector<se_reference> palRefs(palTotal);
+                if (palTotal > 0)
+                {
+                    se_references_of_palette(mContext, cmd.clut_address, palRefs.data(), palRefs.size());
+                }
+                ImGui::SeparatorText("Shares this palette");
+                ImGui::Text("CLUT @0x%06X  —  %zu sprite(s)", cmd.clut_address, palTotal);
+                DrawReferenceList("palrefs", palRefs);
+            }
         }
     }
     ImGui::End();

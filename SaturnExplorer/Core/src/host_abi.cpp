@@ -189,21 +189,21 @@ void se_rom_search_end(se_context* ctx, se_search_handle h)
 size_t se_references_of_texture(se_context* ctx, const se_texture_ref* ref,
                                 se_reference* out, size_t max)
 {
-    (void)ctx;
-    (void)ref;
-    (void)out;
-    (void)max;
-    return 0;
+    if (!ctx || !ref)
+    {
+        return 0;
+    }
+    return Impl(ctx)->ReferencesOfTexture(*ref, out, max);
 }
 
 size_t se_references_of_palette(se_context* ctx, uint32_t clut_address,
                                 se_reference* out, size_t max)
 {
-    (void)ctx;
-    (void)clut_address;
-    (void)out;
-    (void)max;
-    return 0;
+    if (!ctx)
+    {
+        return 0;
+    }
+    return Impl(ctx)->ReferencesOfPalette(clut_address, out, max);
 }
 
 /* --- Memory History --- */

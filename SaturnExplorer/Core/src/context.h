@@ -173,6 +173,28 @@ public:
         return SE_OK;
     }
 
+    // Sprites that read the same texture as 'ref' (matched by VDP1 VRAM source
+    // address). Fills up to 'max' into 'out' and returns the TOTAL match count, so
+    // a caller can grow its buffer if the count exceeds 'max'. Pass out == nullptr
+    // to only count.
+    size_t ReferencesOfTexture(const se_texture_ref& ref, se_reference* out, size_t max) const
+    {
+        const uint32_t addr = ref.vram_address;
+        return CollectReferences(out, max, [addr](const se_command& c)
+        {
+            return c.texture_address == addr;
+        });
+    }
+
+    // Sprites that read the same CLUT (LUT-mode palette) at 'clutAddress'.
+    size_t ReferencesOfPalette(uint32_t clutAddress, se_reference* out, size_t max) const
+    {
+        return CollectReferences(out, max, [clutAddress](const se_command& c)
+        {
+            return c.color_mode == SE_COLOR_LUT_16 && c.clut_address == clutAddress;
+        });
+    }
+
     // Topmost sprite (last drawn) containing the screen point, if any.
     se_result HitTest(int x, int y, size_t* outCommandIndex) const
     {
@@ -205,6 +227,43 @@ public:
     const se_config& Config() const { return mCfg; }
 
 private:
+    // Walk the drawable sprites (the same filter and object-number order
+    // GeometryBuilder uses) and, for each one matching 'match', emit an
+    // se_reference. Writes at most 'max' entries; returns the total match count.
+    template <typename Match>
+    size_t CollectReferences(se_reference* out, size_t max, Match&& match) const
+    {
+        size_t total = 0;
+        uint32_t objectNumber = 0;
+        for (const se_command& c : mCommands)
+        {
+            const bool textured = (c.type == SE_CMD_NORMAL_SPRITE ||
+                                   c.type == SE_CMD_SCALED_SPRITE ||
+                                   c.type == SE_CMD_DISTORTED_SPRITE);
+            if (!textured || c.status == SE_CMDSTAT_SKIP || c.width == 0 || c.height == 0)
+            {
+                continue;   // not a drawn sprite; no object number consumed
+            }
+            const uint32_t objNum = objectNumber++;
+            if (!match(c))
+            {
+                continue;
+            }
+            if (out && total < max)
+            {
+                se_reference& r = out[total];
+                r.command_index = c.index;
+                r.object_number = objNum;
+                r.x = c.x;
+                r.y = c.y;
+                r.width = c.width;
+                r.height = c.height;
+            }
+            ++total;
+        }
+        return total;
+    }
+
     // Bytes a texture occupies in VDP1 VRAM, from its pixel size and color mode.
     static uint32_t TextureByteSize(const se_command& c)
     {
@@ -299,6 +358,13 @@ private:
         }
     }
 
+    // Largest image dimension the core will allocate for. Comfortably above any
+    // real Saturn framebuffer, texture, or host viewport, but bounds the buffer
+    // so a caller-supplied size (texture ref, camera viewport, a crafted scene
+    // clip) can't request a multi-gigabyte allocation whose bad_alloc would then
+    // escape across the C ABI. 16384^2 * 4 = 1 GiB worst case.
+    static constexpr uint32_t kMaxImageDim = 16384;
+
     // Shared image size-negotiation for the render entry points. Two-call
     // convention: with out->pixels == NULL, report the required byte size in
     // *needed; otherwise run 'render' (which fills mRenderBuffer with exactly
@@ -306,6 +372,14 @@ private:
     template <typename Render>
     se_result FillImage(uint32_t w, uint32_t h, se_image* out, size_t* needed, Render&& render)
     {
+        if (w == 0 || h == 0 || w > kMaxImageDim || h > kMaxImageDim)
+        {
+            if (needed)
+            {
+                *needed = 0;
+            }
+            return SE_ERR_INVALID_ARG;
+        }
         const size_t required = static_cast<size_t>(w) * h * 4;
         if (needed)
         {

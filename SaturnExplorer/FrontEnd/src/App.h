@@ -42,6 +42,8 @@ private:
     void DrawTextureViewer(IPlatform& platform);
     void DrawPaletteViewer();
     void DrawVramMap();
+    void DrawReferences();
+    void DrawReferenceList(const char* id, const std::vector<se_reference>& refs);
     void DrawPlaceholder(const char* title, const char* note);
 
     se_data_source mDataSource {};

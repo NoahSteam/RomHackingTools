@@ -456,7 +456,13 @@ package manager; the D3D11 + Win32 ImGui backends ship with it.
    a VRAM Map (proportional 512 KiB region map with a kind legend). Verified against Battle3.yss:
    161 VRAM regions and the sprite textures decode correctly; the portable App layer compiles against
    ImGui. (A CRAM/bank-palette view and per-region hover are future polish.)
-7. **M6 — Search & trace.** `SearchEngine`, ROM & Archive Search, Reference Explorer.
+7. **M6 — Search & trace. [IN PROGRESS]** **Reference Explorer done:** `se_references_of_texture`
+   / `se_references_of_palette` scan the parsed command list for sprites sharing a texture VRAM
+   address or CLUT, returning `se_reference`s (with the same object numbering GeometryBuilder uses);
+   the frontend References panel lists them for the selected sprite, click-to-select. Remaining:
+   disc access (`SE_CAP_DISC`: a disc-image driver + ISO9660 enumeration, wiring the Archive Explorer)
+   and the `SearchEngine` (ROM & Archive Search + Asset Trace) — the latter two need a Saturn disc
+   image to validate against.
 8. **M7 — Live driver.** Emulator driver with event stream (+ optional reference framebuffer);
    Memory History, Frame Timeline.
 
