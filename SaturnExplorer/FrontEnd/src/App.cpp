@@ -1,5 +1,6 @@
 #include "App.h"
 
+#include <cstdarg>
 #include <cstdio>
 #include <string>
 
@@ -25,6 +26,61 @@ bool CheckboxU8(const char* label, uint8_t* value)
         *value = checked ? 1 : 0;
     }
     return changed;
+}
+
+const char* CommandTypeName(se_command_type type)
+{
+    switch (type)
+    {
+    case SE_CMD_NORMAL_SPRITE:    return "Normal";
+    case SE_CMD_SCALED_SPRITE:    return "Scaled";
+    case SE_CMD_DISTORTED_SPRITE: return "Distorted";
+    case SE_CMD_POLYGON:          return "Polygon";
+    case SE_CMD_POLYLINE:         return "Polyline";
+    case SE_CMD_LINE:             return "Line";
+    case SE_CMD_USER_CLIP:        return "User Clip";
+    case SE_CMD_SYSTEM_CLIP:      return "System Clip";
+    case SE_CMD_LOCAL_COORD:      return "Local Coord";
+    default:                      return "Unknown";
+    }
+}
+
+const char* ColorModeName(se_color_mode mode)
+{
+    switch (mode)
+    {
+    case SE_COLOR_BANK_16:  return "16 (bank)";
+    case SE_COLOR_LUT_16:   return "16 (LUT)";
+    case SE_COLOR_BANK_64:  return "64 (bank)";
+    case SE_COLOR_BANK_128: return "128 (bank)";
+    case SE_COLOR_BANK_256: return "256 (bank)";
+    case SE_COLOR_RGB555:   return "RGB555";
+    default:                return "?";
+    }
+}
+
+const char* DrawModeName(se_draw_mode mode)
+{
+    switch (mode)
+    {
+    case SE_DRAW_NORMAL:     return "Normal";
+    case SE_DRAW_MESH:       return "Mesh";
+    case SE_DRAW_SHADOW:     return "Shadow";
+    case SE_DRAW_HALF_LUM:   return "Half Luminance";
+    case SE_DRAW_HALF_TRANS: return "Half Transparent";
+    default:                 return "?";
+    }
+}
+
+// One "Label: value" row in the inspector.
+void InspectorRow(const char* label, const char* fmt, ...)
+{
+    ImGui::TextDisabled("%s", label);
+    ImGui::SameLine(160.0f);
+    va_list args;
+    va_start(args, fmt);
+    ImGui::TextV(fmt, args);
+    va_end(args);
 }
 
 }  // namespace
@@ -195,7 +251,64 @@ void App::DrawCommandList()
 {
     if (ImGui::Begin("VDP1 Command List"))
     {
-        ImGui::TextDisabled("Command table — arrives in M2.");
+        if (!mbHasData)
+        {
+            ImGui::TextDisabled("No data loaded. File > Open Memory Dump...");
+        }
+        else
+        {
+            const size_t count = se_command_count(mContext);
+            ImGui::Text("%zu commands", count);
+
+            const ImGuiTableFlags flags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
+                                          ImGuiTableFlags_ScrollY | ImGuiTableFlags_Resizable;
+            if (ImGui::BeginTable("commands", 6, flags))
+            {
+                ImGui::TableSetupScrollFreeze(0, 1);
+                ImGui::TableSetupColumn("#");
+                ImGui::TableSetupColumn("Type");
+                ImGui::TableSetupColumn("Size");
+                ImGui::TableSetupColumn("Position");
+                ImGui::TableSetupColumn("Color");
+                ImGui::TableSetupColumn("Tex Addr");
+                ImGui::TableHeadersRow();
+
+                ImGuiListClipper clipper;
+                clipper.Begin(static_cast<int>(count));
+                while (clipper.Step())
+                {
+                    for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; ++row)
+                    {
+                        se_command cmd;
+                        if (se_get_command(mContext, static_cast<size_t>(row), &cmd) != SE_OK)
+                        {
+                            continue;
+                        }
+
+                        ImGui::TableNextRow();
+                        ImGui::TableNextColumn();
+                        char label[16];
+                        std::snprintf(label, sizeof(label), "%d", row);
+                        if (ImGui::Selectable(label, mSelectedCommand == row,
+                                              ImGuiSelectableFlags_SpanAllColumns))
+                        {
+                            mSelectedCommand = row;
+                        }
+                        ImGui::TableNextColumn();
+                        ImGui::TextUnformatted(CommandTypeName(cmd.type));
+                        ImGui::TableNextColumn();
+                        ImGui::Text("%ux%u", cmd.width, cmd.height);
+                        ImGui::TableNextColumn();
+                        ImGui::Text("(%d, %d)", cmd.x, cmd.y);
+                        ImGui::TableNextColumn();
+                        ImGui::TextUnformatted(ColorModeName(cmd.color_mode));
+                        ImGui::TableNextColumn();
+                        ImGui::Text("%06X", cmd.texture_address);
+                    }
+                }
+                ImGui::EndTable();
+            }
+        }
     }
     ImGui::End();
 }
@@ -204,9 +317,39 @@ void App::DrawSelectedObject()
 {
     if (ImGui::Begin("Selected Object"))
     {
-        if (mSelectedCommand < 0)
+        se_command cmd;
+        if (!mbHasData || mSelectedCommand < 0 ||
+            se_get_command(mContext, static_cast<size_t>(mSelectedCommand), &cmd) != SE_OK)
         {
-            ImGui::TextDisabled("Select a sprite to inspect it.");
+            ImGui::TextDisabled("Select a command to inspect it.");
+        }
+        else
+        {
+            ImGui::Text("Command #%u  (%s)", cmd.index, CommandTypeName(cmd.type));
+            ImGui::Separator();
+            InspectorRow("Table Address", "0x%06X", cmd.table_address);
+            InspectorRow("Link Address", "0x%06X", cmd.link_address);
+            InspectorRow("Texture Address", "0x%06X", cmd.texture_address);
+            if (cmd.color_mode == SE_COLOR_LUT_16)
+            {
+                InspectorRow("CLUT Address", "0x%06X", cmd.clut_address);
+            }
+            else
+            {
+                InspectorRow("Palette Bank", "%u", cmd.palette_bank);
+            }
+            InspectorRow("Size", "%u x %u", cmd.width, cmd.height);
+            InspectorRow("Position", "(%d, %d)", cmd.x, cmd.y);
+            InspectorRow("Color Mode", "%s", ColorModeName(cmd.color_mode));
+            InspectorRow("Draw Mode", "%s", DrawModeName(cmd.draw_mode));
+            InspectorRow("Transparency", "%s",
+                         cmd.transparency == SE_TRANSP_PER_PIXEL ? "Per Pixel" : "None");
+            InspectorRow("Gouraud", "%s", cmd.gouraud ? "On" : "Off");
+            InspectorRow("Color Calc", "%s", cmd.color_calc ? "On" : "Off");
+            InspectorRow("Flip", "%s%s%s", cmd.flip_x ? "H " : "", cmd.flip_y ? "V" : "",
+                         (!cmd.flip_x && !cmd.flip_y) ? "None" : "");
+            InspectorRow("CMDCTRL", "0x%04X", cmd.raw_cmdctrl);
+            InspectorRow("CMDPMOD", "0x%04X", cmd.raw_cmdpmod);
         }
     }
     ImGui::End();

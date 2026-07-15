@@ -3,10 +3,11 @@
 > Status: **M1 complete.** The two seams exist as headers under
 > `include/saturnexplorer/`, the core static lib implements the C++/C-ABI boundary,
 > the savestate driver is functional, and the `FrontEnd` app (ImGui + a Win32/D3D11
-> platform backend behind the Seam C abstraction) shows the empty docked layout.
-> Next is M2 (the VDP1 command table). This document is the source of truth for the
-> component split, the three interface seams (A data, B host, C platform), and the
-> module breakdown.
+> platform backend behind the Seam C abstraction) shows the docked layout. **M2 is
+> also done:** the VDP1 command table is parsed and shown in the Command List +
+> Selected Object panels, verified against a real Yabause dump. Next is M3 (software
+> render + 2D geometry). This document is the source of truth for the component split,
+> the three interface seams (A data, B host, C platform), and the module breakdown.
 
 ---
 
@@ -386,8 +387,10 @@ package manager; the D3D11 + Win32 ImGui backends ship with it.
    with the platform abstraction (Seam C) and a Win32/D3D11 backend, showing the empty docked
    panel layout. Portable layer (App + panels + ImGui core) compiles on non-Windows; the
    Win32/D3D11 backend builds in Visual Studio.
-3. **M2 — Command list.** Savestate → `Vdp1Parser` → Command Table Explorer panel with the
-   Sprite Inspection detail view (data only, no rendering yet).
+3. **M2 — Command list. [DONE]** `Vdp1Parser` walks the VDP1 command table (jump/call/return/
+   skip, END, cycle-safe) into `se_command`; the Command List + Selected Object panels show it.
+   Verified against a real Yabause dump (Sakura Taisen): 123 commands, matching an independent
+   reference parse exactly. Priority (needs VDP2 SPCTL) and scale/rotation still default.
 4. **M3 — Software render + 2D geometry.** `GeometryBuilder` + `Vdp1Rasterizer`: the live 2D
    frame drawn from sprite quads, with click-to-select hit-testing and layer/overlay toggles.
    This is the core's defining feature.

@@ -4,9 +4,11 @@
 #pragma once
 
 #include <cstring>
+#include <vector>
 
 #include "saturnexplorer/se_host.h"
 #include "hardware_snapshot.h"
+#include "vdp1_parser.h"
 
 namespace se
 {
@@ -27,16 +29,31 @@ public:
         }
     }
 
-    // Snapshot state for the current frame.
+    // Snapshot state for the current frame, then parse the VDP1 command list.
     se_result BeginFrame()
     {
-        return mSnapshot.Capture(mDs) ? SE_OK : SE_ERR_NO_DATA;
+        if (!mSnapshot.Capture(mDs))
+        {
+            return SE_ERR_NO_DATA;
+        }
+        Vdp1Parser::Parse(mSnapshot.Vdp1Vram(), mCommands);
+        return SE_OK;
     }
 
-    // --- Query surface. M1: parsing/rendering not implemented yet, so these
-    // return empty/unimplemented but exercise the boundary end-to-end. ---
+    // --- Query surface. ---
 
-    size_t CommandCount() const { return 0; }
+    size_t CommandCount() const { return mCommands.size(); }
+
+    se_result GetCommand(size_t index, se_command* out) const
+    {
+        if (index >= mCommands.size())
+        {
+            return SE_ERR_OUT_OF_RANGE;
+        }
+        *out = mCommands[index];
+        return SE_OK;
+    }
+
     size_t SpriteCount() const { return 0; }
     size_t VramRegionCount() const { return 0; }
 
@@ -46,9 +63,10 @@ public:
     const se_config& Config() const { return mCfg; }
 
 private:
-    se_data_source   mDs;
-    se_config        mCfg;
-    HardwareSnapshot mSnapshot;
+    se_data_source          mDs;
+    se_config               mCfg;
+    HardwareSnapshot        mSnapshot;
+    std::vector<se_command> mCommands;
 };
 
 }  // namespace se

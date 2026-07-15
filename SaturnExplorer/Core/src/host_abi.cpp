@@ -58,12 +58,11 @@ size_t se_command_count(se_context* ctx)
 
 se_result se_get_command(se_context* ctx, size_t index, se_command* out)
 {
-    (void)index;
     if (!ctx || !out)
     {
         return SE_ERR_INVALID_ARG;
     }
-    return SE_ERR_UNIMPLEMENTED;
+    return Impl(ctx)->GetCommand(index, out);
 }
 
 se_result se_hit_test(se_context* ctx, int x, int y, size_t* out_index)
