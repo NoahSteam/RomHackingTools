@@ -236,6 +236,67 @@ public:
         return SE_OK;
     }
 
+    // --- Raw inspection surface (register / VRAM / CRAM viewers). ---
+
+    bool HasVdp1Regs() const { return mSnapshot.HasVdp1Regs(); }
+    bool HasVdp2Regs() const { return mSnapshot.HasVdp2Regs(); }
+    uint16_t Vdp1Register(uint32_t hw) const { return mSnapshot.Vdp1Reg(hw); }
+    uint16_t Vdp2Register(uint32_t hw) const { return mSnapshot.Vdp2Reg(hw); }
+
+    // Copy raw bytes from a memory region (as the core holds them: Saturn-native
+    // big-endian). Returns the number of bytes copied (clamped to the region).
+    size_t ReadVram(se_vram_kind kind, uint32_t offset, void* dst, size_t size) const
+    {
+        const std::vector<uint8_t>* src = nullptr;
+        switch (kind)
+        {
+        case SE_VRAM_KIND_VDP1_VRAM: src = &mSnapshot.Vdp1Vram(); break;
+        case SE_VRAM_KIND_VDP2_VRAM: src = &mSnapshot.Vdp2Vram(); break;
+        case SE_VRAM_KIND_CRAM:      src = &mSnapshot.Cram();      break;
+        default: return 0;
+        }
+        if (!dst || offset >= src->size())
+        {
+            return 0;
+        }
+        const size_t avail = src->size() - offset;
+        const size_t n = size < avail ? size : avail;
+        std::memcpy(dst, src->data() + offset, n);
+        return n;
+    }
+
+    // Decode CRAM entries [start, start+count) into RGBA palette entries. Returns
+    // the number written (clamped to the CRAM size for the current color mode).
+    size_t ReadCramColors(uint16_t start, uint16_t count, se_palette_entry* out) const
+    {
+        if (!out)
+        {
+            return 0;
+        }
+        const std::vector<uint8_t>& cram = mSnapshot.Cram();
+        const se_cram_mode cm = mSnapshot.CramMode();
+        const uint32_t entries = (cm == SE_CRAM_RGB888_1024)
+                                     ? static_cast<uint32_t>(cram.size() / 4)
+                                     : static_cast<uint32_t>(cram.size() / 2);
+        size_t written = 0;
+        for (uint16_t i = 0; i < count; ++i)
+        {
+            const uint32_t idx = static_cast<uint32_t>(start) + i;
+            if (idx >= entries)
+            {
+                break;
+            }
+            const Rgba c = CramColor(cram, cm, idx);
+            se_palette_entry& e = out[written++];
+            e.r = c.r;
+            e.g = c.g;
+            e.b = c.b;
+            e.a = 255;
+            e.raw = (cm == SE_CRAM_RGB888_1024) ? 0 : ReadBE16(cram, idx * 2);
+        }
+        return written;
+    }
+
     // Topmost sprite (last drawn) containing the screen point, if any.
     se_result HitTest(int x, int y, size_t* outCommandIndex) const
     {

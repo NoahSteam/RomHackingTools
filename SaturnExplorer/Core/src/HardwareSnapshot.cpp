@@ -35,10 +35,12 @@ size_t ReadAll(size_t (*reader)(void*, uint32_t, void*, size_t), void* user,
 bool HardwareSnapshot::Capture(const se_data_source& dataSource)
 {
     mbValid = false;
+    mbHasVdp1Regs = false;
     mbHasVdp2Regs = false;
     mVdp1Vram.clear();
     mVdp2Vram.clear();
     mCram.clear();
+    mVdp1Regs.clear();
     mVdp2Regs.clear();
 
     if (dataSource.capabilities & SE_CAP_VDP1_VRAM)
@@ -61,6 +63,18 @@ bool HardwareSnapshot::Capture(const se_data_source& dataSource)
         size_t got = ReadAll(dataSource.read_cram, dataSource.user, 0,
                              mCram.data(), mCram.size());
         mCram.resize(got);
+    }
+
+    // Capture the VDP1 register file (0x00..0x1E) if the driver supplies it.
+    if ((dataSource.capabilities & SE_CAP_VDP1_REGS) && dataSource.read_vdp1_reg)
+    {
+        constexpr uint32_t kVdp1RegMax = 0x1E;
+        mVdp1Regs.resize((kVdp1RegMax >> 1) + 1);
+        for (uint32_t hw = 0; hw <= kVdp1RegMax; hw += 2)
+        {
+            mVdp1Regs[hw >> 1] = dataSource.read_vdp1_reg(dataSource.user, hw);
+        }
+        mbHasVdp1Regs = true;
     }
 
     // Capture the VDP2 register file (0x000..0x11E) into an immutable copy, so

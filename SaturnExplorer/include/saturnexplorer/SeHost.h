@@ -73,6 +73,23 @@ se_result   se_decode_bank_palette(se_context* ctx, uint16_t color_bank,
 size_t      se_vram_region_count(se_context* ctx);
 se_result   se_get_vram_region  (se_context* ctx, size_t index, se_vram_region* out);
 
+/* --- Raw inspection (register / memory / palette-RAM viewers) --- */
+/* Whether the loaded source provided each register file (1 = yes). */
+int         se_has_vdp1_registers(se_context* ctx);
+int         se_has_vdp2_registers(se_context* ctx);
+/* Register value by hardware byte offset (e.g. VDP2 0x0E = RAMCTL). Returns 0
+   when the loaded source didn't provide that register file. */
+uint16_t    se_get_vdp1_register(se_context* ctx, uint32_t hw_offset);
+uint16_t    se_get_vdp2_register(se_context* ctx, uint32_t hw_offset);
+/* Copy raw bytes from VDP1/VDP2 VRAM or CRAM (Saturn-native big-endian). Returns
+   bytes copied (clamped to the region). */
+size_t      se_read_vram(se_context* ctx, se_vram_kind kind, uint32_t offset,
+                         void* dst, size_t size);
+/* Decode CRAM entries [start, start+count) into palette entries. Returns the
+   number written (clamped to the CRAM size for the current color mode). */
+size_t      se_read_cram_colors(se_context* ctx, uint16_t start, uint16_t count,
+                                se_palette_entry* out);
+
 /* --- ROM & Archive Search / Asset Trace (async; poll incrementally) --- */
 typedef struct se_search* se_search_handle;
 se_search_handle se_rom_search_begin(se_context* ctx, const se_search_query* q);

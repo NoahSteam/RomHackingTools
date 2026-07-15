@@ -97,6 +97,14 @@ typedef enum se_cram_mode {
     SE_CRAM_RGB888_1024 = 2   /* mode 2: RGB 8-bit each, 1024 colors */
 } se_cram_mode;
 
+/* Which raw memory region a se_read_vram() call targets. Bytes are returned in
+ * Saturn-native big-endian order, as the core holds them. */
+typedef enum se_vram_kind {
+    SE_VRAM_KIND_VDP1_VRAM = 0,
+    SE_VRAM_KIND_VDP2_VRAM = 1,
+    SE_VRAM_KIND_CRAM      = 2
+} se_vram_kind;
+
 /* ------------------------------------------------------------------ *
  *  Geometry & imaging primitives
  * ------------------------------------------------------------------ */

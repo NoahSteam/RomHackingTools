@@ -267,11 +267,11 @@ void App::BuildUI(IPlatform& platform)
     // texture/palette/reference row.
     DrawVdpOutput(platform);
     DrawWorldView(platform);
-    DrawPlaceholder("VDP1 Table", "VDP1 command-table hex view — planned.");
-    DrawPlaceholder("VDP2 Table", "VDP2 pattern/map table view — planned.");
-    DrawPlaceholder("Color RAM", "CRAM byte view — planned.");
-    DrawPlaceholder("Palette RAM", "Palette RAM view — planned.");
-    DrawPlaceholder("Registers", "VDP1 / VDP2 register list — planned.");
+    DrawVdp1Table();
+    DrawVdp2Table();
+    DrawColorRam();
+    DrawPlaceholder("Palette RAM", "VDP1 CLUT-area view — planned (see Color RAM for CRAM).");
+    DrawRegisters();
     DrawCommandList();
     DrawTextureViewer(platform);
     DrawPaletteViewer();
@@ -1132,6 +1132,272 @@ void App::DrawReferences()
                 ImGui::SeparatorText("Shares this palette");
                 ImGui::Text("CLUT @0x%06X  —  %zu sprite(s)", cmd.clut_address, palTotal);
                 DrawReferenceList("palrefs", palRefs);
+            }
+        }
+    }
+    ImGui::End();
+}
+
+namespace
+{
+struct RegInfo { uint32_t off; const char* name; };
+
+// Curated VDP2 registers (hardware byte offset -> name). Covers display, layer
+// enable, character/pattern control, plane/map, scroll, priorities, and color
+// offsets — the fields a background-layer investigation reaches for.
+const RegInfo kVdp2Regs[] = {
+    {0x000,"TVMD"},{0x002,"EXTEN"},{0x004,"TVSTAT"},{0x006,"VRSIZE"},{0x00E,"RAMCTL"},
+    {0x020,"BGON"},{0x028,"CHCTLA"},{0x02A,"CHCTLB"},
+    {0x030,"PNCN0"},{0x032,"PNCN1"},{0x034,"PNCN2"},{0x036,"PNCN3"},{0x03A,"PLSZ"},
+    {0x03C,"MPOFN"},{0x03E,"MPOFR"},
+    {0x040,"MPABN0"},{0x042,"MPCDN0"},{0x044,"MPABN1"},{0x046,"MPCDN1"},
+    {0x048,"MPABN2"},{0x04A,"MPCDN2"},{0x04C,"MPABN3"},{0x04E,"MPCDN3"},
+    {0x070,"SCXIN0"},{0x074,"SCYIN0"},{0x080,"SCXIN1"},{0x084,"SCYIN1"},
+    {0x090,"SCXN2"},{0x092,"SCYN2"},{0x094,"SCXN3"},{0x096,"SCYN3"},
+    {0x0E0,"SPCTL"},{0x0E4,"CRAOFA"},{0x0E6,"CRAOFB"},{0x0EC,"CCCTL"},
+    {0x0F0,"PRISA"},{0x0F2,"PRISB"},{0x0F4,"PRISC"},{0x0F6,"PRISD"},
+    {0x0F8,"PRINA"},{0x0FA,"PRINB"},{0x0FC,"PRIR"},
+    {0x100,"CCRSA"},{0x108,"CCRNA"},{0x10A,"CCRNB"},
+};
+
+// VDP1 control/status registers.
+const RegInfo kVdp1Regs[] = {
+    {0x00,"TVMR"},{0x02,"FBCR"},{0x04,"PTMR"},{0x06,"EWDR"},{0x08,"EWLR"},
+    {0x0A,"EWRR"},{0x0C,"ENDR"},{0x10,"EDSR"},{0x12,"LOPR"},{0x14,"COPR"},{0x16,"MODR"},
+};
+
+void DrawRegTable(const char* id, const RegInfo* regs, size_t count,
+                  uint16_t (*read)(se_context*, uint32_t), se_context* ctx)
+{
+    const ImGuiTableFlags flags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
+                                  ImGuiTableFlags_ScrollY;
+    if (ImGui::BeginTable(id, 3, flags, ImVec2(0, 0)))
+    {
+        ImGui::TableSetupScrollFreeze(0, 1);
+        ImGui::TableSetupColumn("Reg");
+        ImGui::TableSetupColumn("Addr");
+        ImGui::TableSetupColumn("Value");
+        ImGui::TableHeadersRow();
+        for (size_t i = 0; i < count; ++i)
+        {
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::TextUnformatted(regs[i].name);
+            ImGui::TableNextColumn();
+            ImGui::Text("0x%03X", regs[i].off);
+            ImGui::TableNextColumn();
+            ImGui::Text("0x%04X", read(ctx, regs[i].off));
+        }
+        ImGui::EndTable();
+    }
+}
+}  // namespace
+
+void App::DrawRegisters()
+{
+    if (ImGui::Begin("Registers"))
+    {
+        if (!mbHasData)
+        {
+            ImGui::TextDisabled("No data loaded.");
+        }
+        else if (ImGui::BeginTabBar("regtabs"))
+        {
+            if (ImGui::BeginTabItem("VDP2"))
+            {
+                if (se_has_vdp2_registers(mContext))
+                {
+                    DrawRegTable("vdp2regs", kVdp2Regs,
+                                 sizeof(kVdp2Regs) / sizeof(kVdp2Regs[0]),
+                                 se_get_vdp2_register, mContext);
+                }
+                else
+                {
+                    ImGui::TextDisabled("This source doesn't provide VDP2 registers.");
+                }
+                ImGui::EndTabItem();
+            }
+            if (ImGui::BeginTabItem("VDP1"))
+            {
+                if (se_has_vdp1_registers(mContext))
+                {
+                    DrawRegTable("vdp1regs", kVdp1Regs,
+                                 sizeof(kVdp1Regs) / sizeof(kVdp1Regs[0]),
+                                 se_get_vdp1_register, mContext);
+                }
+                else
+                {
+                    ImGui::TextDisabled("This source doesn't provide VDP1 registers");
+                    ImGui::TextDisabled("(most VDP1 draw state lives in the command table).");
+                }
+                ImGui::EndTabItem();
+            }
+            ImGui::EndTabBar();
+        }
+    }
+    ImGui::End();
+}
+
+void App::DrawColorRam()
+{
+    if (ImGui::Begin("Color RAM"))
+    {
+        if (!mbHasData)
+        {
+            ImGui::TextDisabled("No data loaded.");
+        }
+        else
+        {
+            static std::vector<se_palette_entry> colors;
+            colors.resize(2048);
+            const size_t n = se_read_cram_colors(mContext, 0,
+                                                 static_cast<uint16_t>(colors.size()),
+                                                 colors.data());
+            ImGui::Text("%zu CRAM entries", n);
+            const int cols = 32;
+            const float sw = 12.0f;
+            ImDrawList* dl = ImGui::GetWindowDrawList();
+            const ImVec2 origin = ImGui::GetCursorScreenPos();
+            for (size_t i = 0; i < n; ++i)
+            {
+                const int cx = static_cast<int>(i) % cols;
+                const int cy = static_cast<int>(i) / cols;
+                const ImVec2 a(origin.x + cx * sw, origin.y + cy * sw);
+                const ImVec2 b(a.x + sw - 1.0f, a.y + sw - 1.0f);
+                const se_palette_entry& e = colors[i];
+                dl->AddRectFilled(a, b, IM_COL32(e.r, e.g, e.b, 255));
+            }
+            const int rows = (static_cast<int>(n) + cols - 1) / cols;
+            ImGui::InvisibleButton("cram", ImVec2(cols * sw, rows * sw));
+            if (ImGui::IsItemHovered())
+            {
+                const ImVec2 m = ImGui::GetMousePos();
+                const int cx = static_cast<int>((m.x - origin.x) / sw);
+                const int cy = static_cast<int>((m.y - origin.y) / sw);
+                const int idx = cy * cols + cx;
+                if (cx >= 0 && cx < cols && idx >= 0 && idx < static_cast<int>(n))
+                {
+                    const se_palette_entry& e = colors[idx];
+                    ImGui::BeginTooltip();
+                    ImGui::Text("CRAM #%d   raw 0x%04X", idx, e.raw);
+                    ImGui::Text("RGB  %d, %d, %d", e.r, e.g, e.b);
+                    ImGui::EndTooltip();
+                }
+            }
+        }
+    }
+    ImGui::End();
+}
+
+void App::DrawVdp1Table()
+{
+    if (ImGui::Begin("VDP1 Table"))
+    {
+        if (!mbHasData)
+        {
+            ImGui::TextDisabled("No data loaded.");
+        }
+        else
+        {
+            const size_t count = se_command_count(mContext);
+            ImGui::Text("%zu command tables (raw 16-word entries)", count);
+            const ImGuiTableFlags flags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
+                                          ImGuiTableFlags_ScrollY | ImGuiTableFlags_ScrollX;
+            if (ImGui::BeginTable("vdp1table", 3, flags))
+            {
+                ImGui::TableSetupScrollFreeze(0, 1);
+                ImGui::TableSetupColumn("#", ImGuiTableColumnFlags_WidthFixed);
+                ImGui::TableSetupColumn("Addr", ImGuiTableColumnFlags_WidthFixed);
+                ImGui::TableSetupColumn("CMDCTRL LINK PMOD COLR SRCA SIZE  XA YA XB YB XC YC XD YD  GRDA");
+                ImGui::TableHeadersRow();
+
+                ImGuiListClipper clipper;
+                clipper.Begin(static_cast<int>(count));
+                while (clipper.Step())
+                {
+                    for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; ++row)
+                    {
+                        se_command cmd;
+                        if (se_get_command(mContext, static_cast<size_t>(row), &cmd) != SE_OK)
+                        {
+                            continue;
+                        }
+                        uint8_t raw[0x20] = {};
+                        se_read_vram(mContext, SE_VRAM_KIND_VDP1_VRAM, cmd.table_address,
+                                     raw, sizeof(raw));
+                        char words[160];
+                        int p = 0;
+                        for (int w = 0; w < 15 && p < static_cast<int>(sizeof(words)) - 6; ++w)
+                        {
+                            const uint16_t v = static_cast<uint16_t>((raw[w * 2] << 8) | raw[w * 2 + 1]);
+                            p += std::snprintf(words + p, sizeof(words) - p, "%04X ", v);
+                        }
+                        ImGui::TableNextRow();
+                        ImGui::TableNextColumn();
+                        ImGui::Text("%d", row);
+                        ImGui::TableNextColumn();
+                        ImGui::Text("0x%05X", cmd.table_address);
+                        ImGui::TableNextColumn();
+                        ImGui::TextUnformatted(words);
+                    }
+                }
+                ImGui::EndTable();
+            }
+        }
+    }
+    ImGui::End();
+}
+
+void App::DrawVdp2Table()
+{
+    if (ImGui::Begin("VDP2 Table"))
+    {
+        if (!mbHasData || !se_has_vdp2_registers(mContext))
+        {
+            ImGui::TextDisabled("No VDP2 register data loaded.");
+        }
+        else
+        {
+            auto R = [&](uint32_t hw) { return se_get_vdp2_register(mContext, hw); };
+            const uint16_t bgon = R(0x020);
+            const uint16_t cha = R(0x028);
+            const uint16_t chb = R(0x02A);
+            const uint16_t prina = R(0x0F8);
+            const uint16_t prinb = R(0x0FA);
+
+            const char* colorName[8] = { "16", "256", "2048", "32K", "16M", "?", "?", "?" };
+            const uint32_t colorNum[4] = {
+                (cha & 0x0070u) >> 4, (cha & 0x3000u) >> 12,
+                (chb & 0x0002u) >> 1, (chb & 0x0020u) >> 5 };
+            const uint32_t priority[4] = {
+                prina & 0x7u, (prina >> 8) & 0x7u, prinb & 0x7u, (prinb >> 8) & 0x7u };
+            const uint16_t scrollX[4] = {
+                uint16_t(R(0x070) & 0x7FF), uint16_t(R(0x080) & 0x7FF),
+                uint16_t(R(0x090) & 0x7FF), uint16_t(R(0x094) & 0x7FF) };
+            const uint16_t scrollY[4] = {
+                uint16_t(R(0x074) & 0x7FF), uint16_t(R(0x084) & 0x7FF),
+                uint16_t(R(0x092) & 0x7FF), uint16_t(R(0x096) & 0x7FF) };
+
+            ImGui::TextDisabled("Decoded normal-background (NBG) configuration:");
+            const ImGuiTableFlags flags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg;
+            if (ImGui::BeginTable("vdp2table", 5, flags))
+            {
+                ImGui::TableSetupColumn("Layer");
+                ImGui::TableSetupColumn("On");
+                ImGui::TableSetupColumn("Colors");
+                ImGui::TableSetupColumn("Priority");
+                ImGui::TableSetupColumn("Scroll (X, Y)");
+                ImGui::TableHeadersRow();
+                for (int n = 0; n < 4; ++n)
+                {
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn(); ImGui::Text("NBG%d", n);
+                    ImGui::TableNextColumn(); ImGui::TextUnformatted((bgon & (1u << n)) ? "yes" : "no");
+                    ImGui::TableNextColumn(); ImGui::TextUnformatted(colorName[colorNum[n] & 7]);
+                    ImGui::TableNextColumn(); ImGui::Text("%u", priority[n]);
+                    ImGui::TableNextColumn(); ImGui::Text("(%u, %u)", scrollX[n], scrollY[n]);
+                }
+                ImGui::EndTable();
             }
         }
     }
