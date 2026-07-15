@@ -361,58 +361,12 @@ void CopyMednafenU16BE(const std::vector<uint8_t>& file, size_t off, uint32_t si
         }
     }
 }
-}  // namespace
 
-extern "C" {
-
-se_result se_savestate_open_region_dir(const char* dir, se_data_source* out)
+// Parse an already-loaded .yss buffer into '*out' (zeroed by the caller). Kept
+// separate from the path entry point so the dispatcher can reuse a single read.
+se_result ParseYssBuffer(const std::vector<uint8_t>& file, se_data_source* out)
 {
-    if (!dir || !out)
-    {
-        return SE_ERR_INVALID_ARG;
-    }
-    std::memset(out, 0, sizeof(*out));
-
-    Savestate* state = new (std::nothrow) Savestate();
-    if (!state)
-    {
-        return SE_ERR_NO_DATA;
-    }
-
-    std::string base(dir);
-    if (!base.empty() && base.back() != '/' && base.back() != '\\')
-    {
-        base += '/';
-    }
-
-    LoadFile(base + "vdp1_vram.bin", state->mVdp1Vram);
-    LoadFile(base + "vdp2_vram.bin", state->mVdp2Vram);
-    LoadFile(base + "cram.bin",      state->mCram);
-    LoadFile(base + "wram_low.bin",  state->mWramLow);
-    LoadFile(base + "wram_high.bin", state->mWramHigh);
-    LoadFile(base + "vdp1_regs.bin", state->mVdp1Regs);
-    LoadFile(base + "vdp2_regs.bin", state->mVdp2Regs);
-
-    if (state->mVdp1Vram.empty())  // need at least VDP1 VRAM
-    {
-        delete state;
-        return SE_ERR_NO_DATA;
-    }
-
-    BuildDataSource(state, out);
-    return SE_OK;
-}
-
-se_result se_savestate_open_yss(const char* path, se_data_source* out)
-{
-    if (!path || !out)
-    {
-        return SE_ERR_INVALID_ARG;
-    }
-    std::memset(out, 0, sizeof(*out));
-
-    std::vector<uint8_t> file;
-    if (!LoadFile(path, file) || file.size() < kYssHeaderSize + 12)
+    if (file.size() < kYssHeaderSize + 12)
     {
         return SE_ERR_IO;
     }
@@ -483,16 +437,10 @@ se_result se_savestate_open_yss(const char* path, se_data_source* out)
     return SE_OK;
 }
 
-se_result se_savestate_open_mednafen(const char* path, se_data_source* out)
+// Parse an already-loaded MDFNSVST buffer into '*out' (zeroed by the caller).
+se_result ParseMednafenBuffer(const std::vector<uint8_t>& file, se_data_source* out)
 {
-    if (!path || !out)
-    {
-        return SE_ERR_INVALID_ARG;
-    }
-    std::memset(out, 0, sizeof(*out));
-
-    std::vector<uint8_t> file;
-    if (!LoadFile(path, file) || file.size() < kMdfnHeaderSize + kMdfnSectionHdr)
+    if (file.size() < kMdfnHeaderSize + kMdfnSectionHdr)
     {
         return SE_ERR_IO;
     }
@@ -552,16 +500,26 @@ se_result se_savestate_open_mednafen(const char* path, se_data_source* out)
             {
                 CopyMednafenU16BE(file, off, kVramSize, state->mVdp2Vram, swap);
             }
-            if (FindMednafenField(file, secData, secSize, "CRAM", off, sz) && sz >= kYssCramSize)
-            {
-                CopyMednafenU16BE(file, off, kYssCramSize, state->mCram, swap);
-            }
+            // Parse RawRegs before CRAM: CRAM normalization needs RAMCTL's CRAM mode.
             if (FindMednafenField(file, secData, secSize, "RawRegs", off, sz))
             {
                 // RawRegs is uint16[0x100] indexed by (hw offset >> 1); swapping
                 // to big-endian yields a hardware-offset register image the shared
                 // read_vdp2_reg reads directly.
                 CopyMednafenU16BE(file, off, sz, state->mVdp2Regs, swap);
+            }
+            if (FindMednafenField(file, secData, secSize, "CRAM", off, sz) && sz >= kYssCramSize)
+            {
+                // CRAM entries are host-endian: 16-bit words in the RGB555 modes,
+                // 32-bit in RGB888 (mode 2). Copy raw, then byte-swap to Saturn-native
+                // big-endian at the width the CRAM mode dictates (from RAMCTL). A
+                // fixed 16-bit swap would corrupt RGB888 colors.
+                state->mCram.assign(file.begin() + off, file.begin() + off + kYssCramSize);
+                if (swap)
+                {
+                    const uint16_t ramctl = ReadReg16(state->mVdp2Regs, 0x0E);
+                    NormalizeCramToBigEndian(state->mCram, (ramctl >> 12) & 0x3);
+                }
             }
         }
         pos = secData + secSize;
@@ -575,6 +533,79 @@ se_result se_savestate_open_mednafen(const char* path, se_data_source* out)
     BuildDataSource(state, out);
     return SE_OK;
 }
+}  // namespace
+
+extern "C" {
+
+se_result se_savestate_open_region_dir(const char* dir, se_data_source* out)
+{
+    if (!dir || !out)
+    {
+        return SE_ERR_INVALID_ARG;
+    }
+    std::memset(out, 0, sizeof(*out));
+
+    Savestate* state = new (std::nothrow) Savestate();
+    if (!state)
+    {
+        return SE_ERR_NO_DATA;
+    }
+
+    std::string base(dir);
+    if (!base.empty() && base.back() != '/' && base.back() != '\\')
+    {
+        base += '/';
+    }
+
+    LoadFile(base + "vdp1_vram.bin", state->mVdp1Vram);
+    LoadFile(base + "vdp2_vram.bin", state->mVdp2Vram);
+    LoadFile(base + "cram.bin",      state->mCram);
+    LoadFile(base + "wram_low.bin",  state->mWramLow);
+    LoadFile(base + "wram_high.bin", state->mWramHigh);
+    LoadFile(base + "vdp1_regs.bin", state->mVdp1Regs);
+    LoadFile(base + "vdp2_regs.bin", state->mVdp2Regs);
+
+    if (state->mVdp1Vram.empty())  // need at least VDP1 VRAM
+    {
+        delete state;
+        return SE_ERR_NO_DATA;
+    }
+
+    BuildDataSource(state, out);
+    return SE_OK;
+}
+
+se_result se_savestate_open_yss(const char* path, se_data_source* out)
+{
+    if (!path || !out)
+    {
+        return SE_ERR_INVALID_ARG;
+    }
+    std::memset(out, 0, sizeof(*out));
+
+    std::vector<uint8_t> file;
+    if (!LoadFile(path, file))
+    {
+        return SE_ERR_IO;
+    }
+    return ParseYssBuffer(file, out);
+}
+
+se_result se_savestate_open_mednafen(const char* path, se_data_source* out)
+{
+    if (!path || !out)
+    {
+        return SE_ERR_INVALID_ARG;
+    }
+    std::memset(out, 0, sizeof(*out));
+
+    std::vector<uint8_t> file;
+    if (!LoadFile(path, file))
+    {
+        return SE_ERR_IO;
+    }
+    return ParseMednafenBuffer(file, out);
+}
 
 se_result se_savestate_open(const char* path, se_data_source* out)
 {
@@ -584,30 +615,23 @@ se_result se_savestate_open(const char* path, se_data_source* out)
     }
     std::memset(out, 0, sizeof(*out));
 
-    // Sniff enough of the header to pick the emulator's format, then dispatch to
-    // the matching parser. Each parser fills the same internal buffers, so the
-    // core is identical regardless of which emulator wrote the state. Add new
-    // families here as their layouts are reverse-engineered (see savestate_driver.h).
-    uint8_t magic[8] = { 0 };
-    FILE* file = std::fopen(path, "rb");
-    if (!file)
+    // Read the file once, then pick the parser by its magic. Each parser fills the
+    // same internal buffers, so the core is identical regardless of which emulator
+    // wrote the state. Add new families here as their layouts are reverse-engineered
+    // (see savestate_driver.h).
+    std::vector<uint8_t> file;
+    if (!LoadFile(path, file))
     {
         return SE_ERR_IO;
     }
-    const size_t got = std::fread(magic, 1, sizeof(magic), file);
-    std::fclose(file);
-    if (got < 4)
+    if (file.size() >= 3 && file[0] == 'Y' && file[1] == 'S' && file[2] == 'S')
     {
-        return SE_ERR_IO;
+        return ParseYssBuffer(file, out);        // Yabause family (.yss)
     }
-
-    if (magic[0] == 'Y' && magic[1] == 'S' && magic[2] == 'S')
+    if (file.size() >= kMdfnMagicSize &&
+        std::memcmp(file.data(), "MDFNSVST", kMdfnMagicSize) == 0)
     {
-        return se_savestate_open_yss(path, out);       // Yabause family (.yss)
-    }
-    if (std::memcmp(magic, "MDFNSVST", 8) == 0)
-    {
-        return se_savestate_open_mednafen(path, out);  // Mednafen / Beetle Saturn
+        return ParseMednafenBuffer(file, out);   // Mednafen / Beetle Saturn
     }
     // Room for other emulators (Kronos, SSF, Yaba Sanshiro, ...).
     return SE_ERR_UNSUPPORTED;

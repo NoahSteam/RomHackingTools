@@ -130,24 +130,30 @@ void RasterQuad(const RVert v[4], const se_vec2 uv[4], const se_texture_ref& tex
 // coverage just repeats the clamped edge texel.
 void ExpandQuadInclusive(RVert v[4])
 {
-    auto expandAlong = [](RVert& lo, RVert& hi)
+    // Half-pixel outward unit vector along an edge, or (0,0) for a degenerate
+    // edge (e.g. a 1px-thin sprite). Computed from the ORIGINAL corners so the
+    // four corner nudges below are independent of each other — otherwise a
+    // rotated/distorted quad would skew, since a later edge would read a corner
+    // an earlier one already moved.
+    auto unitHalf = [](const RVert& from, const RVert& to, float& nx, float& ny)
     {
-        const float dx = hi.x - lo.x;
-        const float dy = hi.y - lo.y;
+        const float dx = to.x - from.x;
+        const float dy = to.y - from.y;
         const float len = std::sqrt(dx * dx + dy * dy);
-        if (len < 1e-3f)
-        {
-            return;  // degenerate edge (e.g. a 1px-thin sprite); leave it be
-        }
-        const float nx = dx / len * 0.5f;
-        const float ny = dy / len * 0.5f;
-        lo.x -= nx; lo.y -= ny;
-        hi.x += nx; hi.y += ny;
+        if (len < 1e-3f) { nx = 0.0f; ny = 0.0f; return; }
+        nx = dx / len * 0.5f;
+        ny = dy / len * 0.5f;
     };
-    expandAlong(v[0], v[1]);   // top edge  A->B
-    expandAlong(v[3], v[2]);   // bottom    D->C
-    expandAlong(v[0], v[3]);   // left      A->D
-    expandAlong(v[1], v[2]);   // right     B->C
+    float abx, aby, adx, ady, bcx, bcy, dcx, dcy;
+    unitHalf(v[0], v[1], abx, aby);   // A->B (top)
+    unitHalf(v[0], v[3], adx, ady);   // A->D (left)
+    unitHalf(v[1], v[2], bcx, bcy);   // B->C (right)
+    unitHalf(v[3], v[2], dcx, dcy);   // D->C (bottom)
+
+    v[0].x += -abx - adx; v[0].y += -aby - ady;   // A: back along AB and AD
+    v[1].x += abx - bcx;  v[1].y += aby - bcy;    // B: forward AB, back BC
+    v[2].x += dcx + bcx;  v[2].y += dcy + bcy;    // C: forward DC and BC
+    v[3].x += adx - dcx;  v[3].y += ady - dcy;    // D: forward AD, back DC
 }
 
 // Orbit-camera projection: rotate world by yaw (Y) then pitch (X), push back by

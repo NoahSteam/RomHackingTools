@@ -213,13 +213,14 @@ Rgba FetchCellTexel(const std::vector<uint8_t>& vram, const std::vector<uint8_t>
     }
 }
 
-// Render one NBG layer into 'out' (width*height*4, transparent where nothing is
-// drawn). Faithful port of the validated plane/page/cell walk.
+// Composite one NBG layer into 'out' (width*height*4): each opaque cell texel
+// overwrites the pixel, transparent texels leave whatever a farther layer drew.
+// 'out' must already be sized and cleared/painted; layers are drawn back-to-front
+// so this needs no per-layer scratch buffer. Faithful port of the validated
+// plane/page/cell walk.
 void RenderLayer(const HardwareSnapshot& snap, const NbgConfig& c, int width, int height,
                  std::vector<uint8_t>& out)
 {
-    out.assign(static_cast<size_t>(width) * height * 4, 0);
-
     const std::vector<uint8_t>& vram = snap.Vdp2Vram();
     const std::vector<uint8_t>& cram = snap.Cram();
     const se_cram_mode cramMode = snap.CramMode();
@@ -273,9 +274,16 @@ void RenderLayer(const HardwareSnapshot& snap, const NbgConfig& c, int width, in
             const uint32_t px = x % planePixW;
             const uint32_t py = y % planePixH;
 
+            // Pattern-name tables are laid out page-major: a plane holds
+            // planeW*planeH pages, each a contiguous pageCells*pageCells block of
+            // entries. Address the enclosing page first, then the pattern within
+            // it — a plain patY*pageCells+patX stride is only correct for a 1x1
+            // plane and collides across page columns otherwise.
             const uint32_t patX = px / cellWH;
             const uint32_t patY = py / cellWH;
-            const uint32_t patIndex = patY * pageCells + patX;
+            const uint32_t pageIndex = (patY / pageCells) * planeW + (patX / pageCells);
+            const uint32_t patIndex = pageIndex * (pageCells * pageCells) +
+                                      (patY % pageCells) * pageCells + (patX % pageCells);
             const PatternName pn = DecodePatternName(
                 vram, planeBase[plane] + patIndex * pnBytes, c, vrsize);
 
@@ -315,14 +323,13 @@ void Vdp2Compositor::Render(const HardwareSnapshot& snapshot, const se_render_op
 
     const uint16_t bgon = Reg(snapshot, kBGON);
 
-    // Render each enabled NBG, then composite back-to-front by priority. A layer
-    // is drawn only if BGON enables it, the host toggle is on, and its priority
-    // is non-zero (priority 0 = not displayed on hardware).
+    // Resolve the enabled NBGs first (no rendering yet). A layer is drawn only if
+    // BGON enables it, the host toggle is on, and its priority is non-zero
+    // (priority 0 = not displayed on hardware).
     struct Layer
     {
         int index;
-        uint32_t priority;
-        std::vector<uint8_t> rgba;
+        NbgConfig config;
     };
     std::vector<Layer> layers;
     for (int n = 0; n < 4; ++n)
@@ -336,34 +343,22 @@ void Vdp2Compositor::Render(const HardwareSnapshot& snapshot, const se_render_op
         {
             continue;
         }
-        Layer layer;
-        layer.index = n;
-        layer.priority = c.priority;
-        RenderLayer(snapshot, c, width, height, layer.rgba);
-        layers.push_back(std::move(layer));
+        layers.push_back({ n, c });
     }
 
     // Paint order = back to front: ascending priority; for equal priority the
-    // higher-numbered NBG is further back (drawn first), so NBG0 wins ties.
+    // higher-numbered NBG is further back (drawn first), so NBG0 wins ties. Then
+    // composite each layer straight into outRgba — opaque texels overwrite,
+    // transparent ones leave the farther layer, so no per-layer scratch buffer.
     std::stable_sort(layers.begin(), layers.end(), [](const Layer& a, const Layer& b)
     {
-        if (a.priority != b.priority) return a.priority < b.priority;
+        if (a.config.priority != b.config.priority) return a.config.priority < b.config.priority;
         return a.index > b.index;
     });
 
     for (const Layer& layer : layers)
     {
-        const size_t count = outRgba.size();
-        for (size_t o = 0; o < count; o += 4)
-        {
-            if (layer.rgba[o + 3])
-            {
-                outRgba[o + 0] = layer.rgba[o + 0];
-                outRgba[o + 1] = layer.rgba[o + 1];
-                outRgba[o + 2] = layer.rgba[o + 2];
-                outRgba[o + 3] = 255;
-            }
-        }
+        RenderLayer(snapshot, layer.config, width, height, outRgba);
     }
 }
 
