@@ -3,11 +3,13 @@
 > Status: **M1 complete.** The two seams exist as headers under
 > `include/saturnexplorer/`, the core static lib implements the C++/C-ABI boundary,
 > the savestate driver is functional, and the `FrontEnd` app (ImGui + a Win32/D3D11
-> platform backend behind the Seam C abstraction) shows the docked layout. **M2 is
-> also done:** the VDP1 command table is parsed and shown in the Command List +
-> Selected Object panels, verified against a real Yabause dump. Next is M3 (software
-> render + 2D geometry). This document is the source of truth for the component split,
-> the three interface seams (A data, B host, C platform), and the module breakdown.
+> platform backend behind the Seam C abstraction) shows the docked layout. **M2 and
+> M3 are done:** the VDP1 command table is parsed (Command List + Selected Object
+> panels), and the frame is software-rendered from sprite quads with click-to-select
+> in the VDP Output panel — verified against real Yabause dumps (a battle scene's mech
+> sprites reconstruct pixel-faithfully). Next is M4 (3D world view). This document is
+> the source of truth for the component split, the three interface seams (A data,
+> B host, C platform), and the module breakdown.
 
 ---
 
@@ -391,11 +393,12 @@ package manager; the D3D11 + Win32 ImGui backends ship with it.
    skip, END, cycle-safe) into `se_command`; the Command List + Selected Object panels show it.
    Verified against a real Yabause dump (Sakura Taisen): 123 commands, matching an independent
    reference parse exactly. Priority (needs VDP2 SPCTL) and scale/rotation still default.
-4. **M3 — Software render + 2D geometry. [CORE DONE]** `GeometryBuilder` resolves LocalCoord →
+4. **M3 — Software render + 2D geometry. [DONE]** `GeometryBuilder` resolves LocalCoord →
    screen quads; `Vdp1Rasterizer` composites them (barycentric UV, vdp1_color texel/CRAM
-   decode); `se_render_frame`/`se_sprite_2d`/`se_hit_test` wired. Verified against the battle
-   dump: the 117 distorted sprites reconstruct the mech units pixel-faithfully, hit-testing
-   maps screen→command. Remaining: the frontend VDP Output panel (display + overlays + click).
+   decode); `se_render_frame`/`se_sprite_2d`/`se_hit_test` wired. The frontend VDP Output panel
+   renders the frame (via the IPlatform texture bridge), overlays bounding boxes / object
+   numbers, and click-selects sprites through hit-testing. Verified against the battle dump:
+   117 distorted sprites reconstruct the mech units pixel-faithfully.
 5. **M4 — 3D world view.** Emit `se_sprite_3d`; frontend camera to orbit/fly the exploded
    geometry. `Vdp2Compositor` for background layers in both views.
 6. **M5 — Textures & VRAM.** `TextureDecoder`, Texture & Palette Viewer, VRAM Visualization.

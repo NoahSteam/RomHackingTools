@@ -5,13 +5,14 @@
 #pragma once
 
 #include <cstdint>
+#include <vector>
 
 #include "saturnexplorer/saturnexplorer.h"
 
+#include "Platform/IPlatform.h"
+
 namespace sfe
 {
-
-class IPlatform;
 
 class App
 {
@@ -28,9 +29,10 @@ public:
 
 private:
     void CloseData();
+    void RenderFrameToTexture(IPlatform& platform);
     void DrawMenuBar(IPlatform& platform);
     void DrawLayerControls();
-    void DrawVdpOutput();
+    void DrawVdpOutput(IPlatform& platform);
     void DrawCommandList();
     void DrawSelectedObject();
     void DrawVramMap();
@@ -47,6 +49,12 @@ private:
 
     se_render_opts mRenderOpts {};
     int            mSelectedCommand = -1;
+
+    // VDP Output frame texture.
+    TextureHandle        mFrameTexture = 0;
+    int                  mFrameWidth = 0;
+    int                  mFrameHeight = 0;
+    std::vector<uint8_t> mFrameBuffer;
 };
 
 }  // namespace sfe

@@ -90,8 +90,8 @@ void App::Initialize()
     // Default: show everything, nothing highlighted.
     mRenderOpts.show_vdp1_sprites = 1;
     mRenderOpts.show_wireframe = 0;
-    mRenderOpts.show_bounding_boxes = 1;
-    mRenderOpts.show_object_numbers = 1;
+    mRenderOpts.show_bounding_boxes = 0;
+    mRenderOpts.show_object_numbers = 0;
     for (int i = 0; i < SE_LAYER_COUNT; ++i)
     {
         mRenderOpts.show_layer[i] = 1;
@@ -116,6 +116,50 @@ void App::CloseData()
     }
     mbHasData = false;
     mSelectedCommand = -1;
+    // The frame texture is freed lazily (on next size change) or with the
+    // platform's device at shutdown; mark it stale so a new dump recreates it.
+    mFrameWidth = 0;
+    mFrameHeight = 0;
+}
+
+void App::RenderFrameToTexture(IPlatform& platform)
+{
+    if (!mbHasData)
+    {
+        return;
+    }
+
+    se_image img = {};
+    size_t needed = 0;
+    if (se_render_frame(mContext, &mRenderOpts, &img, &needed) != SE_OK)
+    {
+        return;
+    }
+    const int w = static_cast<int>(img.width);
+    const int h = static_cast<int>(img.height);
+    if (w <= 0 || h <= 0)
+    {
+        return;
+    }
+
+    if (w != mFrameWidth || h != mFrameHeight || mFrameTexture == 0)
+    {
+        if (mFrameTexture != 0)
+        {
+            platform.DestroyTexture(mFrameTexture);
+        }
+        mFrameTexture = platform.CreateTexture(w, h);
+        mFrameWidth = w;
+        mFrameHeight = h;
+    }
+
+    mFrameBuffer.resize(needed);
+    img.pixels = mFrameBuffer.data();
+    img.capacity = mFrameBuffer.size();
+    if (se_render_frame(mContext, &mRenderOpts, &img, &needed) == SE_OK && mFrameTexture != 0)
+    {
+        platform.UpdateTexture(mFrameTexture, mFrameBuffer.data(), w, h);
+    }
 }
 
 bool App::OpenFullDump(const char* path, uint32_t baseAddress)
@@ -152,6 +196,7 @@ void App::BuildUI(IPlatform& platform)
     if (mbHasData)
     {
         se_begin_frame(mContext);
+        RenderFrameToTexture(platform);
     }
 
     DrawMenuBar(platform);
@@ -160,7 +205,7 @@ void App::BuildUI(IPlatform& platform)
     ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport());
 
     DrawLayerControls();
-    DrawVdpOutput();
+    DrawVdpOutput(platform);
     DrawCommandList();
     DrawSelectedObject();
     DrawVramMap();
@@ -238,11 +283,70 @@ void App::DrawLayerControls()
     ImGui::End();
 }
 
-void App::DrawVdpOutput()
+void App::DrawVdpOutput(IPlatform& platform)
 {
+    (void)platform;
     if (ImGui::Begin("VDP Output"))
     {
-        ImGui::TextDisabled("Rendered frame (software VDP) — arrives in M3.");
+        if (!mbHasData || mFrameTexture == 0)
+        {
+            ImGui::TextDisabled("No data loaded. File > Open Memory Dump...");
+        }
+        else
+        {
+            const ImVec2 avail = ImGui::GetContentRegionAvail();
+            float scale = (mFrameWidth > 0) ? avail.x / static_cast<float>(mFrameWidth) : 1.0f;
+            if (scale <= 0.0f)
+            {
+                scale = 1.0f;
+            }
+            const ImVec2 imgPos = ImGui::GetCursorScreenPos();
+            const ImVec2 dispSize(mFrameWidth * scale, mFrameHeight * scale);
+            ImGui::Image(mFrameTexture, dispSize);
+
+            ImDrawList* dl = ImGui::GetWindowDrawList();
+            auto toScreen = [&](const se_vec2& c)
+            {
+                return ImVec2(imgPos.x + c.x * scale, imgPos.y + c.y * scale);
+            };
+
+            const size_t spriteCount = se_sprite_count(mContext);
+            for (size_t i = 0; i < spriteCount; ++i)
+            {
+                se_sprite_2d sprite;
+                if (se_get_sprite_2d(mContext, i, &sprite) != SE_OK)
+                {
+                    continue;
+                }
+                const bool selected = (static_cast<int>(sprite.command_index) == mSelectedCommand);
+                if (mRenderOpts.show_bounding_boxes || selected)
+                {
+                    const ImU32 col = selected ? IM_COL32(90, 225, 130, 255)
+                                               : IM_COL32(230, 210, 60, 130);
+                    dl->AddQuad(toScreen(sprite.corners[0]), toScreen(sprite.corners[1]),
+                                toScreen(sprite.corners[2]), toScreen(sprite.corners[3]),
+                                col, selected ? 2.0f : 1.0f);
+                }
+                if (mRenderOpts.show_object_numbers)
+                {
+                    char num[8];
+                    std::snprintf(num, sizeof(num), "%u", sprite.object_number);
+                    dl->AddText(toScreen(sprite.corners[0]), IM_COL32(255, 240, 80, 220), num);
+                }
+            }
+
+            if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+            {
+                const ImVec2 mouse = ImGui::GetMousePos();
+                const int vx = static_cast<int>((mouse.x - imgPos.x) / scale);
+                const int vy = static_cast<int>((mouse.y - imgPos.y) / scale);
+                size_t hitCommand = 0;
+                if (se_hit_test(mContext, vx, vy, &hitCommand) == SE_OK)
+                {
+                    mSelectedCommand = static_cast<int>(hitCommand);
+                }
+            }
+        }
     }
     ImGui::End();
 }
