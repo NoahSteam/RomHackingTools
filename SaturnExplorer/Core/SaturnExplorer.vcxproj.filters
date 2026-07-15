@@ -38,6 +38,15 @@
     <ClInclude Include="src\vdp1_parser.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="src\vdp1_color.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\geometry_builder.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\vdp1_rasterizer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\hardware_snapshot.cpp">
@@ -47,6 +56,12 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="src\vdp1_parser.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\geometry_builder.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\vdp1_rasterizer.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

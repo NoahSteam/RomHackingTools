@@ -29,11 +29,13 @@ public:
     const std::vector<uint8_t>& Vdp1Vram() const { return mVdp1Vram; }
     const std::vector<uint8_t>& Vdp2Vram() const { return mVdp2Vram; }
     const std::vector<uint8_t>& Cram() const { return mCram; }
+    se_cram_mode CramMode() const { return mCramMode; }
 
 private:
     std::vector<uint8_t> mVdp1Vram;
     std::vector<uint8_t> mVdp2Vram;
     std::vector<uint8_t> mCram;
+    se_cram_mode         mCramMode = SE_CRAM_RGB555_1024;
     bool mbValid = false;
 };
 

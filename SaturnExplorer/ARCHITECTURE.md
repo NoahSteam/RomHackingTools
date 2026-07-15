@@ -391,9 +391,11 @@ package manager; the D3D11 + Win32 ImGui backends ship with it.
    skip, END, cycle-safe) into `se_command`; the Command List + Selected Object panels show it.
    Verified against a real Yabause dump (Sakura Taisen): 123 commands, matching an independent
    reference parse exactly. Priority (needs VDP2 SPCTL) and scale/rotation still default.
-4. **M3 — Software render + 2D geometry.** `GeometryBuilder` + `Vdp1Rasterizer`: the live 2D
-   frame drawn from sprite quads, with click-to-select hit-testing and layer/overlay toggles.
-   This is the core's defining feature.
+4. **M3 — Software render + 2D geometry. [CORE DONE]** `GeometryBuilder` resolves LocalCoord →
+   screen quads; `Vdp1Rasterizer` composites them (barycentric UV, vdp1_color texel/CRAM
+   decode); `se_render_frame`/`se_sprite_2d`/`se_hit_test` wired. Verified against the battle
+   dump: the 117 distorted sprites reconstruct the mech units pixel-faithfully, hit-testing
+   maps screen→command. Remaining: the frontend VDP Output panel (display + overlays + click).
 5. **M4 — 3D world view.** Emit `se_sprite_3d`; frontend camera to orbit/fly the exploded
    geometry. `Vdp2Compositor` for background layers in both views.
 6. **M5 — Textures & VRAM.** `TextureDecoder`, Texture & Palette Viewer, VRAM Visualization.

@@ -61,6 +61,19 @@ bool HardwareSnapshot::Capture(const se_data_source& dataSource)
         mCram.resize(got);
     }
 
+    // CRAM color mode from VDP2 RAMCTL (offset 0x0E), bits 12-11.
+    mCramMode = SE_CRAM_RGB555_1024;
+    if ((dataSource.capabilities & SE_CAP_VDP2_REGS) && dataSource.read_vdp2_reg)
+    {
+        const uint16_t ramctl = dataSource.read_vdp2_reg(dataSource.user, 0x0E);
+        switch ((ramctl >> 12) & 0x3)
+        {
+        case 1:  mCramMode = SE_CRAM_RGB555_2048; break;
+        case 2:  mCramMode = SE_CRAM_RGB888_1024; break;
+        default: mCramMode = SE_CRAM_RGB555_1024; break;
+        }
+    }
+
     mbValid = !mVdp1Vram.empty();
     return mbValid;
 }

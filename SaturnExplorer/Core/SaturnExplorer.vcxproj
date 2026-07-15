@@ -140,11 +140,16 @@
     <ClInclude Include="src\context.h" />
     <ClInclude Include="src\hardware_snapshot.h" />
     <ClInclude Include="src\vdp1_parser.h" />
+    <ClInclude Include="src\vdp1_color.h" />
+    <ClInclude Include="src\geometry_builder.h" />
+    <ClInclude Include="src\vdp1_rasterizer.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\hardware_snapshot.cpp" />
     <ClCompile Include="src\host_abi.cpp" />
     <ClCompile Include="src\vdp1_parser.cpp" />
+    <ClCompile Include="src\geometry_builder.cpp" />
+    <ClCompile Include="src\vdp1_rasterizer.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

@@ -12,6 +12,12 @@
 namespace se
 {
 
+// Walk the VDP1 command table from VRAM offset 0, following jump/assign/call/
+// return/skip links (cycle-safe, END-terminated), returning the addresses of
+// each visited command table in fetch order. Shared by the parser and the
+// geometry builder so their command indices line up.
+std::vector<uint32_t> Vdp1Walk(const std::vector<uint8_t>& vdp1Vram);
+
 class Vdp1Parser
 {
 public:

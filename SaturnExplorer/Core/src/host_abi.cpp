@@ -67,13 +67,11 @@ se_result se_get_command(se_context* ctx, size_t index, se_command* out)
 
 se_result se_hit_test(se_context* ctx, int x, int y, size_t* out_index)
 {
-    (void)x;
-    (void)y;
     if (!ctx || !out_index)
     {
         return SE_ERR_INVALID_ARG;
     }
-    return SE_ERR_UNIMPLEMENTED;
+    return Impl(ctx)->HitTest(x, y, out_index);
 }
 
 /* --- VDP1 geometry --- */
@@ -84,12 +82,11 @@ size_t se_sprite_count(se_context* ctx)
 
 se_result se_get_sprite_2d(se_context* ctx, size_t index, se_sprite_2d* out)
 {
-    (void)index;
     if (!ctx || !out)
     {
         return SE_ERR_INVALID_ARG;
     }
-    return SE_ERR_UNIMPLEMENTED;
+    return Impl(ctx)->GetSprite2d(index, out);
 }
 
 se_result se_get_sprite_3d(se_context* ctx, size_t index, se_sprite_3d* out)
@@ -106,16 +103,11 @@ se_result se_get_sprite_3d(se_context* ctx, size_t index, se_sprite_3d* out)
 se_result se_render_frame(se_context* ctx, const se_render_opts* opts,
                           se_image* out, size_t* needed)
 {
-    (void)opts;
-    if (!ctx || !out)
+    if (!ctx || !opts || !out)
     {
         return SE_ERR_INVALID_ARG;
     }
-    if (needed)
-    {
-        *needed = 0;
-    }
-    return SE_ERR_UNIMPLEMENTED;
+    return Impl(ctx)->RenderFrame(*opts, out, needed);
 }
 
 /* --- Texture & Palette --- */

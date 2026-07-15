@@ -146,21 +146,19 @@ void DecodeCommand(const std::vector<uint8_t>& vram, uint32_t address,
 
 }  // namespace
 
-void Vdp1Parser::Parse(const std::vector<uint8_t>& vdp1Vram,
-                       std::vector<se_command>& out)
+std::vector<uint32_t> Vdp1Walk(const std::vector<uint8_t>& vdp1Vram)
 {
-    out.clear();
+    std::vector<uint32_t> addresses;
     if (vdp1Vram.size() < kCommandSize)
     {
-        return;
+        return addresses;
     }
 
     std::vector<uint32_t> callStack;
     std::vector<uint8_t> visited(vdp1Vram.size() / kCommandSize, 0);
 
     uint32_t address = 0;
-    uint32_t index = 0;
-    while (index < kMaxCommands)
+    while (addresses.size() < kMaxCommands)
     {
         if (address + kCommandSize > vdp1Vram.size())
         {
@@ -172,10 +170,7 @@ void Vdp1Parser::Parse(const std::vector<uint8_t>& vdp1Vram,
             break;  // cycle — stop before looping forever
         }
         visited[slot] = 1;
-
-        out.emplace_back();
-        DecodeCommand(vdp1Vram, address, index, out.back());
-        ++index;
+        addresses.push_back(address);
 
         const uint16_t ctrl = ReadU16(vdp1Vram, address);
         if ((ctrl >> 15) & 0x1)  // END bit
@@ -204,7 +199,7 @@ void Vdp1Parser::Parse(const std::vector<uint8_t>& vdp1Vram,
         case JP_SKIP_RETURN:
             if (callStack.empty())
             {
-                return;
+                return addresses;
             }
             address = callStack.back();
             callStack.pop_back();
@@ -213,6 +208,19 @@ void Vdp1Parser::Parse(const std::vector<uint8_t>& vdp1Vram,
             address += kCommandSize;
             break;
         }
+    }
+    return addresses;
+}
+
+void Vdp1Parser::Parse(const std::vector<uint8_t>& vdp1Vram,
+                       std::vector<se_command>& out)
+{
+    out.clear();
+    const std::vector<uint32_t> addresses = Vdp1Walk(vdp1Vram);
+    out.resize(addresses.size());
+    for (uint32_t i = 0; i < addresses.size(); ++i)
+    {
+        DecodeCommand(vdp1Vram, addresses[i], i, out[i]);
     }
 }
 
