@@ -118,6 +118,38 @@ void RasterQuad(const RVert v[4], const se_vec2 uv[4], const se_texture_ref& tex
                    vram, cram, cramMode, width, height, out, depth);
 }
 
+// VDP1 sprite corners are *inclusive* pixel coordinates: a sprite spanning
+// screen columns xa..xc covers xc-xa+1 pixels, and the game builds a mech from
+// many small strips laid edge-to-edge (strip N ends at row R, strip N+1 starts
+// at R+1). A center-sampling rasterizer treats each quad's span as half-open and
+// draws one pixel fewer per axis, so a 1px seam opens at every strip boundary and
+// the backdrop shows through. Nudge each corner outward along the quad's own two
+// edges by half a pixel: the far edge's pixel centers then land on the boundary
+// (drawn, since coverage includes edges) and neighbouring strips overlap by a
+// pixel instead of leaving a gap. UVs are unchanged, so the half-pixel of extra
+// coverage just repeats the clamped edge texel.
+void ExpandQuadInclusive(RVert v[4])
+{
+    auto expandAlong = [](RVert& lo, RVert& hi)
+    {
+        const float dx = hi.x - lo.x;
+        const float dy = hi.y - lo.y;
+        const float len = std::sqrt(dx * dx + dy * dy);
+        if (len < 1e-3f)
+        {
+            return;  // degenerate edge (e.g. a 1px-thin sprite); leave it be
+        }
+        const float nx = dx / len * 0.5f;
+        const float ny = dy / len * 0.5f;
+        lo.x -= nx; lo.y -= ny;
+        hi.x += nx; hi.y += ny;
+    };
+    expandAlong(v[0], v[1]);   // top edge  A->B
+    expandAlong(v[3], v[2]);   // bottom    D->C
+    expandAlong(v[0], v[3]);   // left      A->D
+    expandAlong(v[1], v[2]);   // right     B->C
+}
+
 // Orbit-camera projection: rotate world by yaw (Y) then pitch (X), push back by
 // distance, perspective divide. Matches the validated prototype.
 RVert Project(const se_vec3& w, const se_camera3d& cam,
@@ -154,10 +186,11 @@ void Vdp1Rasterizer::Render(const Vdp1Scene& scene, const std::vector<uint8_t>& 
 
     for (const se_sprite_2d& s : scene.sprites)
     {
-        const RVert v[4] = { { s.corners[0].x, s.corners[0].y, 0.0f },
-                             { s.corners[1].x, s.corners[1].y, 0.0f },
-                             { s.corners[2].x, s.corners[2].y, 0.0f },
-                             { s.corners[3].x, s.corners[3].y, 0.0f } };
+        RVert v[4] = { { s.corners[0].x, s.corners[0].y, 0.0f },
+                       { s.corners[1].x, s.corners[1].y, 0.0f },
+                       { s.corners[2].x, s.corners[2].y, 0.0f },
+                       { s.corners[3].x, s.corners[3].y, 0.0f } };
+        ExpandQuadInclusive(v);
         RasterQuad(v, s.uv, s.texture, s.transparency == SE_TRANSP_NONE,
                    vram, cram, cramMode, width, height, outRgba, nullptr);
     }
@@ -184,11 +217,12 @@ void Vdp1Rasterizer::Render3D(const Vdp1Scene& scene, const std::vector<uint8_t>
 
     for (const se_sprite_3d& g : scene.sprites3d)
     {
-        const RVert v[4] = {
+        RVert v[4] = {
             Project(g.corners[0], camera, cosYaw, sinYaw, cosPitch, sinPitch),
             Project(g.corners[1], camera, cosYaw, sinYaw, cosPitch, sinPitch),
             Project(g.corners[2], camera, cosYaw, sinYaw, cosPitch, sinPitch),
             Project(g.corners[3], camera, cosYaw, sinYaw, cosPitch, sinPitch) };
+        ExpandQuadInclusive(v);
         RasterQuad(v, g.uv, g.texture, g.transparency == SE_TRANSP_NONE,
                    vram, cram, cramMode, width, height, outRgba, &depth);
     }
