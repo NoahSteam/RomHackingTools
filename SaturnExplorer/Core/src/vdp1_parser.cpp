@@ -1,5 +1,7 @@
 #include "vdp1_parser.h"
 
+#include "byteorder.h"
+
 namespace se
 {
 
@@ -21,17 +23,6 @@ enum Jp
     JP_SKIP_CALL   = 6,
     JP_SKIP_RETURN = 7
 };
-
-uint16_t ReadU16(const std::vector<uint8_t>& vram, uint32_t offset)
-{
-    // Saturn VRAM is big-endian.
-    return static_cast<uint16_t>((vram[offset] << 8) | vram[offset + 1]);
-}
-
-int16_t ReadS16(const std::vector<uint8_t>& vram, uint32_t offset)
-{
-    return static_cast<int16_t>(ReadU16(vram, offset));
-}
 
 se_command_type CommandType(uint16_t comm)
 {
@@ -69,15 +60,15 @@ se_draw_mode DrawMode(uint16_t pmod, uint16_t colorCalc)
 void DecodeCommand(const std::vector<uint8_t>& vram, uint32_t address,
                    uint32_t index, se_command& cmd)
 {
-    const uint16_t ctrl = ReadU16(vram, address + 0x00);
-    const uint16_t link = ReadU16(vram, address + 0x02);
-    const uint16_t pmod = ReadU16(vram, address + 0x04);
-    const uint16_t colr = ReadU16(vram, address + 0x06);
-    const uint16_t srca = ReadU16(vram, address + 0x08);
-    const uint16_t size = ReadU16(vram, address + 0x0A);
-    const int16_t  xa   = ReadS16(vram, address + 0x0C);
-    const int16_t  ya   = ReadS16(vram, address + 0x0E);
-    const uint16_t grda = ReadU16(vram, address + 0x1C);
+    const uint16_t ctrl = ReadBE16(vram, address + 0x00);
+    const uint16_t link = ReadBE16(vram, address + 0x02);
+    const uint16_t pmod = ReadBE16(vram, address + 0x04);
+    const uint16_t colr = ReadBE16(vram, address + 0x06);
+    const uint16_t srca = ReadBE16(vram, address + 0x08);
+    const uint16_t size = ReadBE16(vram, address + 0x0A);
+    const int16_t  xa   = ReadBE16S(vram, address + 0x0C);
+    const int16_t  ya   = ReadBE16S(vram, address + 0x0E);
+    const uint16_t grda = ReadBE16(vram, address + 0x1C);
 
     const uint16_t end     = (ctrl >> 15) & 0x1;
     const uint16_t jp      = (ctrl >> 12) & 0x7;
@@ -172,14 +163,14 @@ std::vector<uint32_t> Vdp1Walk(const std::vector<uint8_t>& vdp1Vram)
         visited[slot] = 1;
         addresses.push_back(address);
 
-        const uint16_t ctrl = ReadU16(vdp1Vram, address);
+        const uint16_t ctrl = ReadBE16(vdp1Vram, address);
         if ((ctrl >> 15) & 0x1)  // END bit
         {
             break;
         }
 
         const uint16_t jp = (ctrl >> 12) & 0x7;
-        const uint32_t linkAddr = static_cast<uint32_t>(ReadU16(vdp1Vram, address + 0x02)) * 8;
+        const uint32_t linkAddr = static_cast<uint32_t>(ReadBE16(vdp1Vram, address + 0x02)) * 8;
         switch (jp)
         {
         case JP_JUMP_NEXT:

@@ -205,7 +205,7 @@ namespace
 // Yabause 0.9.15 section layout constants.
 constexpr uint32_t kVramSize    = 0x80000;   // VDP1/VDP2 VRAM
 constexpr uint32_t kYssCramSize = 0x1000;    // VDP2 color RAM
-constexpr uint32_t kVdp2RegSize = 286;       // packed Vdp2 register struct (0.9.15)
+constexpr uint32_t kVdp2RegSize = 288;       // sizeof(Vdp2): 286 regs + 2 padding to u32 align (0.9.15)
 constexpr uint32_t kVdp2RegMax  = 0x11E;     // highest VDP2 register (COBB)
 constexpr size_t   kYssHeaderSize = 0x14;    // file header before the first section
 
@@ -218,18 +218,18 @@ uint32_t Read32LE(const std::vector<uint8_t>& d, size_t o)
 
 extern "C" {
 
-int se_savestate_open_region_dir(const char* dir, se_data_source* out)
+se_result se_savestate_open_region_dir(const char* dir, se_data_source* out)
 {
     if (!dir || !out)
     {
-        return 1;
+        return SE_ERR_INVALID_ARG;
     }
     std::memset(out, 0, sizeof(*out));
 
     Savestate* state = new (std::nothrow) Savestate();
     if (!state)
     {
-        return 2;
+        return SE_ERR_NO_DATA;
     }
 
     std::string base(dir);
@@ -249,35 +249,35 @@ int se_savestate_open_region_dir(const char* dir, se_data_source* out)
     if (state->mVdp1Vram.empty())  // need at least VDP1 VRAM
     {
         delete state;
-        return 3;
+        return SE_ERR_NO_DATA;
     }
 
     BuildDataSource(state, out);
-    return 0;
+    return SE_OK;
 }
 
-int se_savestate_open_yss(const char* path, se_data_source* out)
+se_result se_savestate_open_yss(const char* path, se_data_source* out)
 {
     if (!path || !out)
     {
-        return 1;
+        return SE_ERR_INVALID_ARG;
     }
     std::memset(out, 0, sizeof(*out));
 
     std::vector<uint8_t> file;
     if (!LoadFile(path, file) || file.size() < kYssHeaderSize + 12)
     {
-        return 4;
+        return SE_ERR_IO;
     }
     if (!(file[0] == 'Y' && file[1] == 'S' && file[2] == 'S'))
     {
-        return 5;
+        return SE_ERR_UNSUPPORTED;
     }
 
     Savestate* state = new (std::nothrow) Savestate();
     if (!state)
     {
-        return 2;
+        return SE_ERR_NO_DATA;
     }
 
     // Walk the section chain: each section is tag(4) + version(4) + size(4) + data.
@@ -312,7 +312,12 @@ int se_savestate_open_yss(const char* path, se_data_source* out)
             // Rebuild a hardware-offset, big-endian register image from the
             // packed little-endian struct, so the shared read_vdp2_reg (which
             // reads big-endian at hardware offsets) works unchanged. The struct
-            // drops the one reserved word at 0x0C, so struct = hw - 2 above it.
+            // drops the reserved word at 0x0C, so struct = hw - 2 up to the first
+            // u32 union field (hw 0x78: zoom/line-scroll/rotation regs). NOTE:
+            // hw-2 is exact only below 0x78 — which covers every register the
+            // core reads today (RAMCTL, and the NBG cell/scroll registers). The
+            // post-union registers (priorities, color offsets) need the exact
+            // struct-offset table; that lands with the VDP2 compositor (M4b pt2).
             state->mVdp2Regs.assign(kVdp2RegMax + 2, 0);
             for (uint32_t hw = 0; hw <= kVdp2RegMax; hw += 2)
             {
@@ -329,31 +334,31 @@ int se_savestate_open_yss(const char* path, se_data_source* out)
     if (!haveVdp1)
     {
         delete state;
-        return 3;
+        return SE_ERR_NO_DATA;
     }
     BuildDataSource(state, out);
-    return 0;
+    return SE_OK;
 }
 
-int se_savestate_open_full_dump(const char* path, uint32_t base_address,
+se_result se_savestate_open_full_dump(const char* path, uint32_t base_address,
                                 se_data_source* out)
 {
     if (!path || !out)
     {
-        return 1;
+        return SE_ERR_INVALID_ARG;
     }
     std::memset(out, 0, sizeof(*out));
 
     std::vector<uint8_t> dump;
     if (!LoadFile(path, dump) || dump.empty())
     {
-        return 4;
+        return SE_ERR_IO;
     }
 
     Savestate* state = new (std::nothrow) Savestate();
     if (!state)
     {
-        return 2;
+        return SE_ERR_NO_DATA;
     }
 
     SliceRegion(dump, base_address, kAddrVdp1Vram, kSizeVdp1Vram, state->mVdp1Vram);
@@ -367,11 +372,11 @@ int se_savestate_open_full_dump(const char* path, uint32_t base_address,
     if (state->mVdp1Vram.empty())
     {
         delete state;
-        return 3;
+        return SE_ERR_NO_DATA;
     }
 
     BuildDataSource(state, out);
-    return 0;
+    return SE_OK;
 }
 
 }  // extern "C"

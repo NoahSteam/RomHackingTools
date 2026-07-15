@@ -39,13 +39,7 @@ private:
     void DrawWorldView(IPlatform& platform);
     void DrawCommandList();
     void DrawSelectedObject();
-    void DrawVramMap();
-    void DrawArchiveExplorer();
-    void DrawTextureViewer();
-    void DrawPaletteViewer();
-    void DrawReferences();
-    void DrawMemoryHistory();
-    void DrawSearch();
+    void DrawPlaceholder(const char* title, const char* note);
 
     se_data_source mDataSource {};
     se_context*    mContext = nullptr;

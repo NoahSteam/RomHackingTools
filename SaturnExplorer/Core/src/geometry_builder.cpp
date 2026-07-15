@@ -1,24 +1,10 @@
 #include "geometry_builder.h"
 
+#include "byteorder.h"
 #include "vdp1_parser.h"
 
 namespace se
 {
-
-namespace
-{
-
-uint16_t U16(const std::vector<uint8_t>& v, uint32_t o)
-{
-    return static_cast<uint16_t>((v[o] << 8) | v[o + 1]);
-}
-
-int16_t S16(const std::vector<uint8_t>& v, uint32_t o)
-{
-    return static_cast<int16_t>(U16(v, o));
-}
-
-}  // namespace
 
 namespace
 {
@@ -44,20 +30,20 @@ void GeometryBuilder::Build(const std::vector<uint8_t>& vram, Vdp1Scene& out)
     for (uint32_t index = 0; index < addresses.size(); ++index)
     {
         const uint32_t a = addresses[index];
-        const uint16_t ctrl = U16(vram, a + 0x00);
-        const uint16_t link = U16(vram, a + 0x02);  (void)link;
-        const uint16_t pmod = U16(vram, a + 0x04);
-        const uint16_t colr = U16(vram, a + 0x06);
-        const uint16_t srca = U16(vram, a + 0x08);
-        const uint16_t size = U16(vram, a + 0x0A);
-        const int32_t  xa = S16(vram, a + 0x0C);
-        const int32_t  ya = S16(vram, a + 0x0E);
-        const int32_t  xb = S16(vram, a + 0x10);
-        const int32_t  yb = S16(vram, a + 0x12);
-        const int32_t  xc = S16(vram, a + 0x14);
-        const int32_t  yc = S16(vram, a + 0x16);
-        const int32_t  xd = S16(vram, a + 0x18);
-        const int32_t  yd = S16(vram, a + 0x1A);
+        const uint16_t ctrl = ReadBE16(vram, a + 0x00);
+        const uint16_t link = ReadBE16(vram, a + 0x02);  (void)link;
+        const uint16_t pmod = ReadBE16(vram, a + 0x04);
+        const uint16_t colr = ReadBE16(vram, a + 0x06);
+        const uint16_t srca = ReadBE16(vram, a + 0x08);
+        const uint16_t size = ReadBE16(vram, a + 0x0A);
+        const int32_t  xa = ReadBE16S(vram, a + 0x0C);
+        const int32_t  ya = ReadBE16S(vram, a + 0x0E);
+        const int32_t  xb = ReadBE16S(vram, a + 0x10);
+        const int32_t  yb = ReadBE16S(vram, a + 0x12);
+        const int32_t  xc = ReadBE16S(vram, a + 0x14);
+        const int32_t  yc = ReadBE16S(vram, a + 0x16);
+        const int32_t  xd = ReadBE16S(vram, a + 0x18);
+        const int32_t  yd = ReadBE16S(vram, a + 0x1A);
 
         const uint16_t jp   = (ctrl >> 12) & 0x7;
         const uint16_t comm = ctrl & 0xF;
@@ -135,7 +121,7 @@ void GeometryBuilder::Build(const std::vector<uint8_t>& vram, Vdp1Scene& out)
         s.priority = 0;
         s.flip_x = flipX;
         s.flip_y = flipY;
-        s.gouraud = ((pmod & 0x7) & 0x4) ? 1 : 0;
+        s.gouraud = (pmod & 0x4) ? 1 : 0;
         s.color_mode = colorMode;
         s.transparency = spd ? SE_TRANSP_NONE : SE_TRANSP_PER_PIXEL;
         s.draw_mode = SE_DRAW_NORMAL;
@@ -169,6 +155,8 @@ void GeometryBuilder::Build(const std::vector<uint8_t>& vram, Vdp1Scene& out)
             s3.corners[k] = { s.corners[k].x - cx, -(s.corners[k].y - cy), z };
             s3.uv[k] = s.uv[k];
         }
+        s3.texture = s.texture;            // self-contained: the 3D renderer and
+        s3.transparency = s.transparency;  // GPU-embedding hosts need no sibling lookup
         out.sprites3d.push_back(s3);
     }
 }

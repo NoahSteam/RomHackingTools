@@ -205,10 +205,12 @@ typedef struct se_sprite_2d {
 /* Same sprite in 3D world space: corners separated along Z by priority + draw
  * order so overlapping layers pull apart. The driver owns the camera. */
 typedef struct se_sprite_3d {
-    uint32_t command_index;
-    uint32_t object_number;
-    se_vec3  corners[4];   /* A,B,C,D world-space */
-    se_vec2  uv[4];
+    uint32_t             command_index;
+    uint32_t             object_number;
+    se_vec3              corners[4];   /* A,B,C,D world-space */
+    se_vec2              uv[4];
+    se_texture_ref       texture;      /* self-contained material, so a GPU host */
+    se_transparency_mode transparency; /* can render without the 2D sprite list */
 } se_sprite_3d;
 
 /* ------------------------------------------------------------------ *

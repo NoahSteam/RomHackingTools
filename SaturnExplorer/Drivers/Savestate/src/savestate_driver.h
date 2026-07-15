@@ -18,21 +18,24 @@
 extern "C" {
 #endif
 
+/* All three factories return SE_OK and fill '*out' on success, or an se_result
+ * error code otherwise (and leave '*out' zeroed). */
+
 /* Region-file directory. Recognized filenames (missing files -> capability off):
  *   vdp1_vram.bin, vdp2_vram.bin, cram.bin,
  *   wram_low.bin, wram_high.bin, vdp1_regs.bin, vdp2_regs.bin
  */
-int se_savestate_open_region_dir(const char* dir, se_data_source* out);
+se_result se_savestate_open_region_dir(const char* dir, se_data_source* out);
 
 /* Single linear dump. 'base_address' is the SH-2 bus address of the dump's
  * first byte; any documented region fully contained in the dump is extracted. */
-int se_savestate_open_full_dump(const char* path, uint32_t base_address,
-                                se_data_source* out);
+se_result se_savestate_open_full_dump(const char* path, uint32_t base_address,
+                                      se_data_source* out);
 
 /* Yabause savestate (.yss). Parses the VDP1 and VDP2 sections for VRAM, CRAM,
  * and — crucially — the VDP2 register file (the write-only state a RAM dump
  * can't provide). Currently targets the Yabause 0.9.15 section/struct layout. */
-int se_savestate_open_yss(const char* path, se_data_source* out);
+se_result se_savestate_open_yss(const char* path, se_data_source* out);
 
 #ifdef __cplusplus
 }

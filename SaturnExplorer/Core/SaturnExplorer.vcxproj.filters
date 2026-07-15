@@ -35,6 +35,9 @@
     <ClInclude Include="src\hardware_snapshot.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="src\byteorder.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="src\vdp1_parser.h">
       <Filter>Header Files</Filter>
     </ClInclude>

@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "saturnexplorer/se_types.h"
+#include "byteorder.h"
 
 namespace se
 {
@@ -18,13 +19,12 @@ struct Rgba
     uint8_t r, g, b, a;   // a == 0 means transparent
 };
 
-inline uint16_t ReadBE16(const std::vector<uint8_t>& mem, uint32_t off)
+// Expand a 15-bit RGB555 color (bit15 ignored) to opaque 8-bit RGBA.
+inline Rgba Rgb555ToRgba(uint16_t v)
 {
-    if (off + 1 >= mem.size())
-    {
-        return 0;
-    }
-    return static_cast<uint16_t>((mem[off] << 8) | mem[off + 1]);
+    return { static_cast<uint8_t>((v & 0x1F) * 255 / 31),
+             static_cast<uint8_t>(((v >> 5) & 0x1F) * 255 / 31),
+             static_cast<uint8_t>(((v >> 10) & 0x1F) * 255 / 31), 255 };
 }
 
 // One CRAM color -> RGB. Index is masked to the physical CRAM size, so this
@@ -51,11 +51,7 @@ inline Rgba CramColor(const std::vector<uint8_t>& cram, se_cram_mode mode, uint3
     {
         return { 0, 0, 0, 255 };
     }
-    const uint16_t v = ReadBE16(cram, (index & (words - 1)) * 2);
-    const uint8_t r = static_cast<uint8_t>((v & 0x1F) * 255 / 31);
-    const uint8_t g = static_cast<uint8_t>(((v >> 5) & 0x1F) * 255 / 31);
-    const uint8_t b = static_cast<uint8_t>(((v >> 10) & 0x1F) * 255 / 31);
-    return { r, g, b, 255 };
+    return Rgb555ToRgba(ReadBE16(cram, (index & (words - 1)) * 2));
 }
 
 // Decode one texel (x,y) of a sprite texture. Returns a == 0 for transparent.
@@ -89,10 +85,7 @@ inline Rgba DecodeTexel(const std::vector<uint8_t>& vram, const std::vector<uint
         {
             return CramColor(cram, cramMode, entry & 0x7FF);
         }
-        // RGB555 literal
-        return { static_cast<uint8_t>((entry & 0x1F) * 255 / 31),
-                 static_cast<uint8_t>(((entry >> 5) & 0x1F) * 255 / 31),
-                 static_cast<uint8_t>(((entry >> 10) & 0x1F) * 255 / 31), 255 };
+        return Rgb555ToRgba(entry);   // RGB555 literal
     }
     case SE_COLOR_BANK_64:
     case SE_COLOR_BANK_128:
@@ -113,9 +106,7 @@ inline Rgba DecodeTexel(const std::vector<uint8_t>& vram, const std::vector<uint
         const uint32_t off = texAddr + (y * width + x) * 2;   // 16 bpp
         const uint16_t v = ReadBE16(vram, off);
         if (v == 0 && !spd) return { 0, 0, 0, 0 };
-        return { static_cast<uint8_t>((v & 0x1F) * 255 / 31),
-                 static_cast<uint8_t>(((v >> 5) & 0x1F) * 255 / 31),
-                 static_cast<uint8_t>(((v >> 10) & 0x1F) * 255 / 31), 255 };
+        return Rgb555ToRgba(v);
     }
     default:
         return { 0, 0, 0, 0 };

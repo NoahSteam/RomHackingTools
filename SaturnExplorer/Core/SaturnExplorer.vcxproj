@@ -137,6 +137,7 @@
     <ClInclude Include="..\include\saturnexplorer\se_data_source.h" />
     <ClInclude Include="..\include\saturnexplorer\se_host.h" />
     <ClInclude Include="..\include\saturnexplorer\se_types.h" />
+    <ClInclude Include="src\byteorder.h" />
     <ClInclude Include="src\context.h" />
     <ClInclude Include="src\hardware_snapshot.h" />
     <ClInclude Include="src\vdp1_parser.h" />

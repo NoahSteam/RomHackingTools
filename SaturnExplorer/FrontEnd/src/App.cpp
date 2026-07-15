@@ -122,6 +122,24 @@ void App::CloseData()
     mFrameHeight = 0;
 }
 
+// Recreate 'tex' when the target size changes; updates cached w/h. Returns the
+// (possibly new) handle. Shared by the 2D and 3D render panels.
+static TextureHandle EnsureTexture(IPlatform& platform, TextureHandle tex,
+                                   int& curW, int& curH, int w, int h)
+{
+    if (w == curW && h == curH && tex != 0)
+    {
+        return tex;
+    }
+    if (tex != 0)
+    {
+        platform.DestroyTexture(tex);
+    }
+    curW = w;
+    curH = h;
+    return platform.CreateTexture(w, h);
+}
+
 void App::RenderFrameToTexture(IPlatform& platform)
 {
     if (!mbHasData)
@@ -142,17 +160,7 @@ void App::RenderFrameToTexture(IPlatform& platform)
         return;
     }
 
-    if (w != mFrameWidth || h != mFrameHeight || mFrameTexture == 0)
-    {
-        if (mFrameTexture != 0)
-        {
-            platform.DestroyTexture(mFrameTexture);
-        }
-        mFrameTexture = platform.CreateTexture(w, h);
-        mFrameWidth = w;
-        mFrameHeight = h;
-    }
-
+    mFrameTexture = EnsureTexture(platform, mFrameTexture, mFrameWidth, mFrameHeight, w, h);
     mFrameBuffer.resize(needed);
     img.pixels = mFrameBuffer.data();
     img.capacity = mFrameBuffer.size();
@@ -178,6 +186,10 @@ static bool CreateContextFromSource(se_data_source& dataSource, se_context** ctx
         }
         return false;
     }
+    // Snapshot + parse + build geometry once, here. The current drivers are
+    // static (savestate / dump), so there's no need to re-run it every frame.
+    // A future live driver would re-call se_begin_frame per frame instead.
+    se_begin_frame(ctx);
     *ctxOut = ctx;
     return true;
 }
@@ -220,7 +232,6 @@ void App::BuildUI(IPlatform& platform)
 {
     if (mbHasData)
     {
-        se_begin_frame(mContext);
         RenderFrameToTexture(platform);
     }
 
@@ -234,13 +245,13 @@ void App::BuildUI(IPlatform& platform)
     DrawWorldView(platform);
     DrawCommandList();
     DrawSelectedObject();
-    DrawVramMap();
-    DrawArchiveExplorer();
-    DrawTextureViewer();
-    DrawPaletteViewer();
-    DrawReferences();
-    DrawMemoryHistory();
-    DrawSearch();
+    DrawPlaceholder("VRAM Map (VDP1)", "VRAM usage map — arrives in M5.");
+    DrawPlaceholder("Archive Explorer", "Disc filesystem — arrives in M6.");
+    DrawPlaceholder("Texture Viewer", "Texture inspection — arrives in M5.");
+    DrawPlaceholder("Palette Viewer", "Palette inspection — arrives in M5.");
+    DrawPlaceholder("References", "What uses this texture — arrives in M6.");
+    DrawPlaceholder("Memory History", "Load chain — arrives in M7.");
+    DrawPlaceholder("Search ROM / Files", "ROM & archive search — arrives in M6.");
 }
 
 void App::DrawMenuBar(IPlatform& platform)
@@ -344,7 +355,10 @@ void App::DrawVdpOutput(IPlatform& platform)
                 return ImVec2(imgPos.x + c.x * scale, imgPos.y + c.y * scale);
             };
 
-            const size_t spriteCount = se_sprite_count(mContext);
+            // Only walk the sprite list when an overlay actually needs it.
+            const bool wantOverlays = mRenderOpts.show_bounding_boxes ||
+                                      mRenderOpts.show_object_numbers || mSelectedCommand >= 0;
+            const size_t spriteCount = wantOverlays ? se_sprite_count(mContext) : 0;
             for (size_t i = 0; i < spriteCount; ++i)
             {
                 se_sprite_2d sprite;
@@ -400,16 +414,7 @@ void App::DrawWorldView(IPlatform& platform)
             const int vh = static_cast<int>(avail.y);
             if (vw > 16 && vh > 16)
             {
-                if (vw != m3dWidth || vh != m3dHeight || m3dTexture == 0)
-                {
-                    if (m3dTexture != 0)
-                    {
-                        platform.DestroyTexture(m3dTexture);
-                    }
-                    m3dTexture = platform.CreateTexture(vw, vh);
-                    m3dWidth = vw;
-                    m3dHeight = vh;
-                }
+                m3dTexture = EnsureTexture(platform, m3dTexture, m3dWidth, m3dHeight, vw, vh);
 
                 se_camera3d cam = {};
                 cam.yaw = mYaw;
@@ -565,65 +570,13 @@ void App::DrawSelectedObject()
     ImGui::End();
 }
 
-void App::DrawVramMap()
+// Panels whose content lands in a later milestone: an empty dock slot with a
+// note. One helper instead of seven near-identical functions.
+void App::DrawPlaceholder(const char* title, const char* note)
 {
-    if (ImGui::Begin("VRAM Map (VDP1)"))
+    if (ImGui::Begin(title))
     {
-        ImGui::TextDisabled("VRAM usage map — arrives in M5.");
-    }
-    ImGui::End();
-}
-
-void App::DrawArchiveExplorer()
-{
-    if (ImGui::Begin("Archive Explorer"))
-    {
-        ImGui::TextDisabled("Disc filesystem — arrives in M6.");
-    }
-    ImGui::End();
-}
-
-void App::DrawTextureViewer()
-{
-    if (ImGui::Begin("Texture Viewer"))
-    {
-        ImGui::TextDisabled("Texture inspection — arrives in M5.");
-    }
-    ImGui::End();
-}
-
-void App::DrawPaletteViewer()
-{
-    if (ImGui::Begin("Palette Viewer"))
-    {
-        ImGui::TextDisabled("Palette inspection — arrives in M5.");
-    }
-    ImGui::End();
-}
-
-void App::DrawReferences()
-{
-    if (ImGui::Begin("References"))
-    {
-        ImGui::TextDisabled("What uses this texture — arrives in M6.");
-    }
-    ImGui::End();
-}
-
-void App::DrawMemoryHistory()
-{
-    if (ImGui::Begin("Memory History"))
-    {
-        ImGui::TextDisabled("Load chain — arrives in M7.");
-    }
-    ImGui::End();
-}
-
-void App::DrawSearch()
-{
-    if (ImGui::Begin("Search ROM / Files"))
-    {
-        ImGui::TextDisabled("ROM & archive search — arrives in M6.");
+        ImGui::TextDisabled("%s", note);
     }
     ImGui::End();
 }

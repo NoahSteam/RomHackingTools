@@ -79,64 +79,27 @@ public:
         return SE_OK;
     }
 
-    // Render the composited frame. Two-call convention: with out->pixels == NULL
-    // reports the required byte size in *needed; otherwise fills the buffer.
+    // Render the composited 2D frame into a scene-sized image.
     se_result RenderFrame(const se_render_opts& opts, se_image* out, size_t* needed)
     {
-        const uint32_t w = static_cast<uint32_t>(mScene.screenWidth);
-        const uint32_t h = static_cast<uint32_t>(mScene.screenHeight);
-        const size_t required = static_cast<size_t>(w) * h * 4;
-        if (needed)
+        return FillImage(static_cast<uint32_t>(mScene.screenWidth),
+                         static_cast<uint32_t>(mScene.screenHeight), out, needed, [&]
         {
-            *needed = required;
-        }
-        out->width = w;
-        out->height = h;
-        out->stride = w * 4;
-        out->format = SE_PIXFMT_RGBA8888;
-        if (!out->pixels)
-        {
-            return SE_OK;  // size query only
-        }
-        if (out->capacity < required)
-        {
-            return SE_ERR_BUFFER_TOO_SMALL;
-        }
-        Vdp1Rasterizer::Render(mScene, mSnapshot.Vdp1Vram(), mSnapshot.Cram(),
-                               mSnapshot.CramMode(), opts, mRenderBuffer);
-        std::memcpy(out->pixels, mRenderBuffer.data(),
-                    mRenderBuffer.size() < required ? mRenderBuffer.size() : required);
-        return SE_OK;
+            Vdp1Rasterizer::Render(mScene, mSnapshot.Vdp1Vram(), mSnapshot.Cram(),
+                                   mSnapshot.CramMode(), opts, mRenderBuffer);
+        });
     }
 
     // Render the exploded 3D view from 'camera' into a viewport-sized image.
     se_result Render3D(const se_camera3d& camera, const se_render_opts& opts,
                        se_image* out, size_t* needed)
     {
-        const uint32_t w = camera.viewport_width;
-        const uint32_t h = camera.viewport_height;
-        const size_t required = static_cast<size_t>(w) * h * 4;
-        if (needed)
+        return FillImage(camera.viewport_width, camera.viewport_height, out, needed, [&]
         {
-            *needed = required;
-        }
-        out->width = w;
-        out->height = h;
-        out->stride = w * 4;
-        out->format = SE_PIXFMT_RGBA8888;
-        if (!out->pixels)
-        {
-            return SE_OK;
-        }
-        if (out->capacity < required)
-        {
-            return SE_ERR_BUFFER_TOO_SMALL;
-        }
-        Vdp1Rasterizer::Render3D(mScene, mSnapshot.Vdp1Vram(), mSnapshot.Cram(),
-                                 mSnapshot.CramMode(), camera, opts, mRenderBuffer);
-        std::memcpy(out->pixels, mRenderBuffer.data(),
-                    mRenderBuffer.size() < required ? mRenderBuffer.size() : required);
-        return SE_OK;
+            Vdp1Rasterizer::Render3D(mScene, mSnapshot.Vdp1Vram(), mSnapshot.Cram(),
+                                     mSnapshot.CramMode(), camera, opts, mRenderBuffer,
+                                     mDepthBuffer);
+        });
     }
 
     // Topmost sprite (last drawn) containing the screen point, if any.
@@ -161,12 +124,42 @@ public:
     const se_config& Config() const { return mCfg; }
 
 private:
+    // Shared image size-negotiation for the render entry points. Two-call
+    // convention: with out->pixels == NULL, report the required byte size in
+    // *needed; otherwise run 'render' (which fills mRenderBuffer with exactly
+    // w*h*4 bytes) and copy it out.
+    template <typename Render>
+    se_result FillImage(uint32_t w, uint32_t h, se_image* out, size_t* needed, Render&& render)
+    {
+        const size_t required = static_cast<size_t>(w) * h * 4;
+        if (needed)
+        {
+            *needed = required;
+        }
+        out->width = w;
+        out->height = h;
+        out->stride = w * 4;
+        out->format = SE_PIXFMT_RGBA8888;
+        if (!out->pixels)
+        {
+            return SE_OK;  // size query only
+        }
+        if (out->capacity < required)
+        {
+            return SE_ERR_BUFFER_TOO_SMALL;
+        }
+        render();
+        std::memcpy(out->pixels, mRenderBuffer.data(), required);
+        return SE_OK;
+    }
+
     se_data_source          mDs;
     se_config               mCfg;
     HardwareSnapshot        mSnapshot;
     std::vector<se_command> mCommands;
     Vdp1Scene               mScene;
     std::vector<uint8_t>    mRenderBuffer;
+    std::vector<float>      mDepthBuffer;
 };
 
 }  // namespace se
