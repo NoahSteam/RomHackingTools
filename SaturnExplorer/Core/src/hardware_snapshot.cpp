@@ -35,9 +35,11 @@ size_t ReadAll(size_t (*reader)(void*, uint32_t, void*, size_t), void* user,
 bool HardwareSnapshot::Capture(const se_data_source& dataSource)
 {
     mbValid = false;
+    mbHasVdp2Regs = false;
     mVdp1Vram.clear();
     mVdp2Vram.clear();
     mCram.clear();
+    mVdp2Regs.clear();
 
     if (dataSource.capabilities & SE_CAP_VDP1_VRAM)
     {
@@ -61,11 +63,25 @@ bool HardwareSnapshot::Capture(const se_data_source& dataSource)
         mCram.resize(got);
     }
 
-    // CRAM color mode from VDP2 RAMCTL (offset 0x0E), bits 12-11.
-    mCramMode = SE_CRAM_RGB555_1024;
+    // Capture the VDP2 register file (0x000..0x11E) into an immutable copy, so
+    // the compositor reads a consistent snapshot rather than re-hitting the
+    // driver per pixel.
     if ((dataSource.capabilities & SE_CAP_VDP2_REGS) && dataSource.read_vdp2_reg)
     {
-        const uint16_t ramctl = dataSource.read_vdp2_reg(dataSource.user, 0x0E);
+        constexpr uint32_t kVdp2RegMax = 0x11E;
+        mVdp2Regs.resize((kVdp2RegMax >> 1) + 1);
+        for (uint32_t hw = 0; hw <= kVdp2RegMax; hw += 2)
+        {
+            mVdp2Regs[hw >> 1] = dataSource.read_vdp2_reg(dataSource.user, hw);
+        }
+        mbHasVdp2Regs = true;
+    }
+
+    // CRAM color mode from VDP2 RAMCTL (offset 0x0E), bits 12-13.
+    mCramMode = SE_CRAM_RGB555_1024;
+    if (mbHasVdp2Regs)
+    {
+        const uint16_t ramctl = Vdp2Reg(0x0E);
         switch ((ramctl >> 12) & 0x3)
         {
         case 1:  mCramMode = SE_CRAM_RGB555_2048; break;

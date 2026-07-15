@@ -31,11 +31,24 @@ public:
     const std::vector<uint8_t>& Cram() const { return mCram; }
     se_cram_mode CramMode() const { return mCramMode; }
 
+    // True if the driver supplied VDP2 registers (needed for the NBG compositor).
+    bool HasVdp2Regs() const { return mbHasVdp2Regs; }
+
+    // One VDP2 register as a big-endian 16-bit value, addressed by its hardware
+    // byte offset (e.g. 0x0E for RAMCTL). Returns 0 if unavailable.
+    uint16_t Vdp2Reg(uint32_t hwOffset) const
+    {
+        const size_t i = hwOffset >> 1;
+        return i < mVdp2Regs.size() ? mVdp2Regs[i] : 0;
+    }
+
 private:
-    std::vector<uint8_t> mVdp1Vram;
-    std::vector<uint8_t> mVdp2Vram;
-    std::vector<uint8_t> mCram;
-    se_cram_mode         mCramMode = SE_CRAM_RGB555_1024;
+    std::vector<uint8_t>  mVdp1Vram;
+    std::vector<uint8_t>  mVdp2Vram;
+    std::vector<uint8_t>  mCram;
+    std::vector<uint16_t> mVdp2Regs;   // indexed by (hw offset >> 1)
+    se_cram_mode          mCramMode = SE_CRAM_RGB555_1024;
+    bool mbHasVdp2Regs = false;
     bool mbValid = false;
 };
 

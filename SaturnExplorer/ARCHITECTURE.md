@@ -4,12 +4,14 @@
 > `include/saturnexplorer/`, the core static lib implements the C++/C-ABI boundary,
 > the savestate driver is functional, and the `FrontEnd` app (ImGui + a Win32/D3D11
 > platform backend behind the Seam C abstraction) shows the docked layout. **M2 and
-> M3 are done:** the VDP1 command table is parsed (Command List + Selected Object
-> panels), and the frame is software-rendered from sprite quads with click-to-select
-> in the VDP Output panel — verified against real Yabause dumps (a battle scene's mech
-> sprites reconstruct pixel-faithfully). Next is M4 (3D world view). This document is
-> the source of truth for the component split, the three interface seams (A data,
-> B host, C platform), and the module breakdown.
+> M2–M4b are done:** the VDP1 command table is parsed (Command List + Selected Object
+> panels), the frame is software-rendered from sprite quads with click-to-select in the
+> VDP Output panel, the 3D world view orbits the exploded geometry, and the VDP2 NBG
+> backgrounds are composited under the sprites — all verified against real Yabause dumps
+> and a `.yss` savestate (a battle scene's field + mech sprites reconstruct
+> pixel-faithfully). Next is M5 (textures & VRAM). This document is the source of truth
+> for the component split, the three interface seams (A data, B host, C platform), and
+> the module breakdown.
 
 ---
 
@@ -399,28 +401,38 @@ package manager; the D3D11 + Win32 ImGui backends ship with it.
    renders the frame (via the IPlatform texture bridge), overlays bounding boxes / object
    numbers, and click-selects sprites through hit-testing. Verified against the battle dump:
    117 distorted sprites reconstruct the mech units pixel-faithfully.
-5. **M4 — 3D world view. [DONE, minus VDP2]** `GeometryBuilder` emits `se_sprite_3d` (screen XY
+5. **M4 — 3D world view. [DONE]** `GeometryBuilder` emits `se_sprite_3d` (screen XY
    centered, Z by draw order); the core software-renders the exploded view with a depth buffer
    (`se_render_3d` + `se_camera3d`); the frontend 3D View panel orbits (drag) and zooms (wheel).
    Verified against the battle dump via the public API (mechs depth-sorted with correct
-   occlusion). `Vdp2Compositor` is the remaining piece, unblocked now that a `.yss` savestate is
-   available (see note) — tracked as M4b.
+   occlusion). VDP2 backgrounds followed in M4b.
    > **VDP2 note:** VDP2 control registers (BGON, CHCTL, map/scroll/priority, rotation params)
    > are write-only on hardware, so a RAM dump reads them back as zero — confirmed on both dumps
    > (VRAM 67-75% full, registers empty). VDP2 compositing needs the real register state, best
    > via a Yabause savestate (`.yss`, which serializes the internal register structs) or an
    > explicit register export. The live emulator driver (M7) would also supply them.
-   > **VDP2 note:** VDP2 control registers (BGON, CHCTL, map/scroll/priority, rotation params)
-   > are write-only on hardware, so a RAM dump reads them back as zero — confirmed on both dumps
-   > (VRAM 67-75% full, registers empty). VDP2 compositing needs the real register state, best
-   > via a Yabause savestate (`.yss`, which serializes the internal register structs) or an
-   > explicit register export. The live emulator driver (M7) would also supply them.
-6. **M4b — VDP2 backgrounds.** [DRIVER DONE] The savestate driver now parses Yabause 0.9.15
-   `.yss` files (`se_savestate_open_yss`): VDP1/VDP2 VRAM, CRAM, and the VDP2 register file
-   (rebuilt at hardware offsets from the packed struct — the write-only state a RAM dump lacks),
-   all via Seam A; frontend "Open Savestate (.yss)" wired. Verified against Battle3.yss
-   (`read_vdp2_reg(BGON)=0x4f` → NBG0–3 enabled). Remaining: `Vdp2Compositor` — render the NBG
-   cell/scroll layers and composite by priority (next).
+6. **M4b — VDP2 backgrounds. [DONE]** The savestate driver parses Yabause 0.9.15 `.yss` files
+   (`se_savestate_open_yss`): VDP1/VDP2 VRAM, CRAM, and the VDP2 register file — rebuilt at
+   hardware offsets from the packed struct via an **exact hw→struct offset table** (correct
+   through the priority/color-offset registers, where the earlier `hw-2` approximation broke on
+   the `u32` zoom/address union padding). `Vdp2Compositor` renders the NBG scroll screens by
+   walking the plane→page→pattern-name→cell hierarchy (1/2-word pattern names; 16/256/2048-color,
+   RGB555, RGB888 cells) and composites them back-to-front by priority; `Context::RenderFrame`
+   lays the VDP1 sprites over that background. Verified against Battle3.yss: the isometric field
+   (grass, stone walls, water channels, foliage) renders with the mech sprites correctly placed
+   and colored.
+   > **CRAM byte order.** Yabause keeps VDP2 color RAM in host-native order (its `T2` accessor),
+   > so a `.yss` written on a little-endian host stores CRAM little-endian, whereas VRAM (`T1`)
+   > stays big-endian like real hardware. The core is canonically **Saturn-native big-endian**
+   > for all memory (`CramColor` reads BE, matching VRAM); the `.yss` driver **normalizes** CRAM
+   > by byte-swapping on load (16-bit for RGB555 modes, 32-bit for RGB888). This was the fix for
+   > the pink/blue speckle — a byte-swapped palette turns smooth ramps jumpy — and it corrected
+   > the VDP1 sprite colors too.
+   > **Known simplifications (M4b):** VDP1 always composites on top of the NBG background rather
+   > than interleaving per-pixel by VDP2 priority (correct for the battle scenes; refine later).
+   > Not yet modeled: rotation screens (RBG0/1), bitmap-mode backgrounds, line scroll, mosaic,
+   > window clipping, color calculation, and the VDP2 back-screen color (empty pixels use a flat
+   > backdrop).
 7. **M5 — Textures & VRAM.** `TextureDecoder`, Texture & Palette Viewer, VRAM Visualization.
 7. **M6 — Search & trace.** `SearchEngine`, ROM & Archive Search, Reference Explorer.
 8. **M7 — Live driver.** Emulator driver with event stream (+ optional reference framebuffer);

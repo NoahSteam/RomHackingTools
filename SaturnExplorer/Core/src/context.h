@@ -11,6 +11,7 @@
 #include "vdp1_parser.h"
 #include "geometry_builder.h"
 #include "vdp1_rasterizer.h"
+#include "vdp2_compositor.h"
 
 namespace se
 {
@@ -79,14 +80,19 @@ public:
         return SE_OK;
     }
 
-    // Render the composited 2D frame into a scene-sized image.
+    // Render the composited 2D frame into a scene-sized image: the VDP2 NBG
+    // backgrounds first, then the VDP1 sprites on top (§7). Empty pixels get an
+    // opaque backdrop so the result is a finished frame.
     se_result RenderFrame(const se_render_opts& opts, se_image* out, size_t* needed)
     {
-        return FillImage(static_cast<uint32_t>(mScene.screenWidth),
-                         static_cast<uint32_t>(mScene.screenHeight), out, needed, [&]
+        const int w = mScene.screenWidth;
+        const int h = mScene.screenHeight;
+        return FillImage(static_cast<uint32_t>(w), static_cast<uint32_t>(h), out, needed, [&]
         {
+            Vdp2Compositor::Render(mSnapshot, opts, w, h, mBgBuffer);
             Vdp1Rasterizer::Render(mScene, mSnapshot.Vdp1Vram(), mSnapshot.Cram(),
                                    mSnapshot.CramMode(), opts, mRenderBuffer);
+            CompositeFrame();
         });
     }
 
@@ -124,6 +130,36 @@ public:
     const se_config& Config() const { return mCfg; }
 
 private:
+    // Flatten the VDP2 background (mBgBuffer) and VDP1 sprites (mRenderBuffer)
+    // into a finished opaque frame, left in mRenderBuffer: VDP1 where it drew a
+    // texel, else the NBG background, else an opaque backdrop.
+    void CompositeFrame()
+    {
+        constexpr uint8_t kBackdrop[3] = { 8, 8, 12 };
+        const size_t count = mRenderBuffer.size();
+        const bool haveBg = mBgBuffer.size() == count;
+        for (size_t o = 0; o < count; o += 4)
+        {
+            if (mRenderBuffer[o + 3])
+            {
+                continue;  // VDP1 sprite pixel already opaque
+            }
+            if (haveBg && mBgBuffer[o + 3])
+            {
+                mRenderBuffer[o + 0] = mBgBuffer[o + 0];
+                mRenderBuffer[o + 1] = mBgBuffer[o + 1];
+                mRenderBuffer[o + 2] = mBgBuffer[o + 2];
+            }
+            else
+            {
+                mRenderBuffer[o + 0] = kBackdrop[0];
+                mRenderBuffer[o + 1] = kBackdrop[1];
+                mRenderBuffer[o + 2] = kBackdrop[2];
+            }
+            mRenderBuffer[o + 3] = 255;
+        }
+    }
+
     // Shared image size-negotiation for the render entry points. Two-call
     // convention: with out->pixels == NULL, report the required byte size in
     // *needed; otherwise run 'render' (which fills mRenderBuffer with exactly
@@ -159,6 +195,7 @@ private:
     std::vector<se_command> mCommands;
     Vdp1Scene               mScene;
     std::vector<uint8_t>    mRenderBuffer;
+    std::vector<uint8_t>    mBgBuffer;      // VDP2 NBG composite, under the sprites
     std::vector<float>      mDepthBuffer;
 };
 

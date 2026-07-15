@@ -144,6 +144,7 @@
     <ClInclude Include="src\vdp1_color.h" />
     <ClInclude Include="src\geometry_builder.h" />
     <ClInclude Include="src\vdp1_rasterizer.h" />
+    <ClInclude Include="src\vdp2_compositor.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\hardware_snapshot.cpp" />
@@ -151,6 +152,7 @@
     <ClCompile Include="src\vdp1_parser.cpp" />
     <ClCompile Include="src\geometry_builder.cpp" />
     <ClCompile Include="src\vdp1_rasterizer.cpp" />
+    <ClCompile Include="src\vdp2_compositor.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
