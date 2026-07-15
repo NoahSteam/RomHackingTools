@@ -20,9 +20,18 @@ int16_t S16(const std::vector<uint8_t>& v, uint32_t o)
 
 }  // namespace
 
+namespace
+{
+// Depth between successive sprites in the exploded 3D view. Z is driven by draw
+// order here (priority comes from the write-only VDP2 SPCTL, absent from a RAM
+// dump); see ARCHITECTURE.md §7. Purely a display tunable.
+constexpr float kZSpacing = 3.0f;
+}
+
 void GeometryBuilder::Build(const std::vector<uint8_t>& vram, Vdp1Scene& out)
 {
     out.sprites.clear();
+    out.sprites3d.clear();
     out.screenWidth = 320;
     out.screenHeight = 224;
 
@@ -147,6 +156,20 @@ void GeometryBuilder::Build(const std::vector<uint8_t>& vram, Vdp1Scene& out)
         }
 
         out.sprites.push_back(s);
+
+        // Same sprite in world space: screen XY centered, Z by draw order.
+        const float cx = out.screenWidth * 0.5f;
+        const float cy = out.screenHeight * 0.5f;
+        const float z = s.object_number * kZSpacing;
+        se_sprite_3d s3 = se_sprite_3d {};
+        s3.command_index = index;
+        s3.object_number = s.object_number;
+        for (int k = 0; k < 4; ++k)
+        {
+            s3.corners[k] = { s.corners[k].x - cx, -(s.corners[k].y - cy), z };
+            s3.uv[k] = s.uv[k];
+        }
+        out.sprites3d.push_back(s3);
     }
 }
 

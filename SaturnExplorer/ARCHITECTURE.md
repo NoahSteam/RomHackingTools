@@ -399,8 +399,16 @@ package manager; the D3D11 + Win32 ImGui backends ship with it.
    renders the frame (via the IPlatform texture bridge), overlays bounding boxes / object
    numbers, and click-selects sprites through hit-testing. Verified against the battle dump:
    117 distorted sprites reconstruct the mech units pixel-faithfully.
-5. **M4 — 3D world view.** Emit `se_sprite_3d`; frontend camera to orbit/fly the exploded
-   geometry. `Vdp2Compositor` for background layers in both views.
+5. **M4 — 3D world view. [GEOMETRY DONE]** `GeometryBuilder` emits `se_sprite_3d` (screen XY
+   centered, Z by draw order — priority is write-only VDP2 state, absent from a RAM dump);
+   `se_get_sprite_3d` wired. Prototype confirms the exploded-layer view renders. Remaining: the
+   frontend 3D View panel + orbit camera, and `Vdp2Compositor` — the latter blocked until VDP2
+   register state is available (see note), since the layer config is write-only.
+   > **VDP2 note:** VDP2 control registers (BGON, CHCTL, map/scroll/priority, rotation params)
+   > are write-only on hardware, so a RAM dump reads them back as zero — confirmed on both dumps
+   > (VRAM 67-75% full, registers empty). VDP2 compositing needs the real register state, best
+   > via a Yabause savestate (`.yss`, which serializes the internal register structs) or an
+   > explicit register export. The live emulator driver (M7) would also supply them.
 6. **M5 — Textures & VRAM.** `TextureDecoder`, Texture & Palette Viewer, VRAM Visualization.
 7. **M6 — Search & trace.** `SearchEngine`, ROM & Archive Search, Reference Explorer.
 8. **M7 — Live driver.** Emulator driver with event stream (+ optional reference framebuffer);

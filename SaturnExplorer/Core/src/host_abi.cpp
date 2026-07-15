@@ -91,12 +91,11 @@ se_result se_get_sprite_2d(se_context* ctx, size_t index, se_sprite_2d* out)
 
 se_result se_get_sprite_3d(se_context* ctx, size_t index, se_sprite_3d* out)
 {
-    (void)index;
     if (!ctx || !out)
     {
         return SE_ERR_INVALID_ARG;
     }
-    return SE_ERR_UNIMPLEMENTED;
+    return Impl(ctx)->GetSprite3d(index, out);
 }
 
 /* --- Software composite --- */

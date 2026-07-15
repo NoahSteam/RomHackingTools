@@ -69,6 +69,16 @@ public:
         return SE_OK;
     }
 
+    se_result GetSprite3d(size_t index, se_sprite_3d* out) const
+    {
+        if (index >= mScene.sprites3d.size())
+        {
+            return SE_ERR_OUT_OF_RANGE;
+        }
+        *out = mScene.sprites3d[index];
+        return SE_OK;
+    }
+
     // Render the composited frame. Two-call convention: with out->pixels == NULL
     // reports the required byte size in *needed; otherwise fills the buffer.
     se_result RenderFrame(const se_render_opts& opts, se_image* out, size_t* needed)

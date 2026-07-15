@@ -15,6 +15,7 @@ namespace se
 struct Vdp1Scene
 {
     std::vector<se_sprite_2d> sprites;
+    std::vector<se_sprite_3d> sprites3d;   // same sprites, exploded along Z (§7)
     int screenWidth  = 320;   // from the system clip command, else NTSC default
     int screenHeight = 224;
 };
