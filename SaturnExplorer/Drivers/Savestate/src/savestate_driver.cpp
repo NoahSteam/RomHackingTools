@@ -202,13 +202,20 @@ void BuildDataSource(Savestate* state, se_data_source* out)
 
 namespace
 {
-// Yabause 0.9.15 section layout constants.
+// Yabause-family (.yss) section layout constants.
 constexpr uint32_t kVramSize    = 0x80000;   // VDP1/VDP2 VRAM
 constexpr uint32_t kYssCramSize = 0x1000;    // VDP2 color RAM
-constexpr uint32_t kVdp2RegSize = 288;       // sizeof(Vdp2): 286 regs + 2 padding to u32 align (0.9.15)
+constexpr uint32_t kVdp2RegSize = 288;       // sizeof(Vdp2): 286 regs + 2 padding to u32 align
 constexpr uint32_t kVdp2RegMax  = 0x11E;     // highest VDP2 register (COBB)
 constexpr size_t   kYssHeaderSize = 0x14;    // file header before the first section
-constexpr uint32_t kYssVdp2Version = 1;      // VDP2 section version whose struct we decode (0.9.15)
+
+// The classic Yabause Vdp2 register struct is a fixed hardware mirror (TVMD..COBB,
+// sizeof 288) shared byte-for-byte across the lineage — verified identical in
+// Yabause 0.9.15 and Yaba Sanshiro. So we recognize a VDP2 section structurally
+// rather than by version number (which forks bump freely): the section must be the
+// 288-byte struct + 512 KiB VRAM + 4 KiB CRAM, plus a small tail of internal state.
+constexpr uint32_t kVdp2SectionBase  = kVdp2RegSize + kVramSize + kYssCramSize;
+constexpr uint32_t kVdp2InternalSlack = 256;  // bytes of trailing Vdp2Internal we tolerate
 
 uint32_t Read32LE(const std::vector<uint8_t>& d, size_t o)
 {
@@ -425,7 +432,6 @@ se_result se_savestate_open_yss(const char* path, se_data_source* out)
     while (pos + 12 <= file.size())
     {
         const uint8_t* tag = &file[pos];
-        const uint32_t version = Read32LE(file, pos + 4);
         const uint32_t size = Read32LE(file, pos + 8);
         const size_t data = pos + 12;
         if (data + size > file.size())
@@ -435,20 +441,22 @@ se_result se_savestate_open_yss(const char* path, se_data_source* out)
 
         if (std::memcmp(tag, "VDP1", 4) == 0 && size >= kVramSize)
         {
-            // Layout: registers (size - VRAM) then VRAM.
+            // Layout: registers (size - VRAM) then VRAM. Taking the trailing 512 KiB
+            // as VRAM is version-agnostic across the Yabause family (Vdp1SaveState
+            // always writes its registers first, then Vdp1Ram).
             const uint32_t regBytes = size - kVramSize;
             state->mVdp1Vram.assign(file.begin() + data + regBytes,
                                     file.begin() + data + regBytes + kVramSize);
             haveVdp1 = true;
         }
         else if (std::memcmp(tag, "VDP2", 4) == 0 &&
-                 version == kYssVdp2Version &&
-                 size >= kVdp2RegSize + kVramSize + kYssCramSize)
+                 size >= kVdp2SectionBase && size <= kVdp2SectionBase + kVdp2InternalSlack)
         {
-            // The VRAM/CRAM offsets below depend on sizeof(Vdp2) for this exact
-            // struct version, so gate the whole VDP2 parse on the section version.
-            // A newer Yabause / a fork with a different struct is skipped rather
-            // than misdecoded — the context degrades to VDP1-only (no NBG).
+            // Structural match for the classic 288-byte Vdp2 struct followed by VRAM
+            // then CRAM (see kVdp2SectionBase). Covers Yabause 0.9.x and Yaba Sanshiro
+            // (identical struct), and any fork that kept the layout. A fork with a
+            // different struct/VRAM size falls outside the window and is skipped, so
+            // the context degrades to VDP1-only rather than misdecoding registers.
             const size_t vramOff = data + kVdp2RegSize;
             state->mVdp2Vram.assign(file.begin() + vramOff, file.begin() + vramOff + kVramSize);
             state->mCram.assign(file.begin() + vramOff + kVramSize,
