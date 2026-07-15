@@ -132,27 +132,27 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="..\include\saturnexplorer\saturnexplorer.h" />
-    <ClInclude Include="..\include\saturnexplorer\se_abi.h" />
-    <ClInclude Include="..\include\saturnexplorer\se_data_source.h" />
-    <ClInclude Include="..\include\saturnexplorer\se_host.h" />
-    <ClInclude Include="..\include\saturnexplorer\se_types.h" />
-    <ClInclude Include="src\byteorder.h" />
-    <ClInclude Include="src\context.h" />
-    <ClInclude Include="src\hardware_snapshot.h" />
-    <ClInclude Include="src\vdp1_parser.h" />
-    <ClInclude Include="src\vdp1_color.h" />
-    <ClInclude Include="src\geometry_builder.h" />
-    <ClInclude Include="src\vdp1_rasterizer.h" />
-    <ClInclude Include="src\vdp2_compositor.h" />
+    <ClInclude Include="..\include\saturnexplorer\SaturnExplorer.h" />
+    <ClInclude Include="..\include\saturnexplorer\SeAbi.h" />
+    <ClInclude Include="..\include\saturnexplorer\SeDataSource.h" />
+    <ClInclude Include="..\include\saturnexplorer\SeHost.h" />
+    <ClInclude Include="..\include\saturnexplorer\SeTypes.h" />
+    <ClInclude Include="src\ByteOrder.h" />
+    <ClInclude Include="src\Context.h" />
+    <ClInclude Include="src\HardwareSnapshot.h" />
+    <ClInclude Include="src\Vdp1Parser.h" />
+    <ClInclude Include="src\Vdp1Color.h" />
+    <ClInclude Include="src\GeometryBuilder.h" />
+    <ClInclude Include="src\Vdp1Rasterizer.h" />
+    <ClInclude Include="src\Vdp2Compositor.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="src\hardware_snapshot.cpp" />
-    <ClCompile Include="src\host_abi.cpp" />
-    <ClCompile Include="src\vdp1_parser.cpp" />
-    <ClCompile Include="src\geometry_builder.cpp" />
-    <ClCompile Include="src\vdp1_rasterizer.cpp" />
-    <ClCompile Include="src\vdp2_compositor.cpp" />
+    <ClCompile Include="src\HardwareSnapshot.cpp" />
+    <ClCompile Include="src\HostAbi.cpp" />
+    <ClCompile Include="src\Vdp1Parser.cpp" />
+    <ClCompile Include="src\GeometryBuilder.cpp" />
+    <ClCompile Include="src\Vdp1Rasterizer.cpp" />
+    <ClCompile Include="src\Vdp2Compositor.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

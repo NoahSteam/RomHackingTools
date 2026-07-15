@@ -1,6 +1,6 @@
-#include "vdp1_parser.h"
+#include "Vdp1Parser.h"
 
-#include "byteorder.h"
+#include "ByteOrder.h"
 
 namespace se
 {

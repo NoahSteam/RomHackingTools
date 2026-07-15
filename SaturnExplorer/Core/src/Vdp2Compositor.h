@@ -13,8 +13,8 @@
 #include <cstdint>
 #include <vector>
 
-#include "saturnexplorer/se_types.h"
-#include "hardware_snapshot.h"
+#include "saturnexplorer/SeTypes.h"
+#include "HardwareSnapshot.h"
 
 namespace se
 {

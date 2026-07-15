@@ -12,7 +12,7 @@
 #ifndef SE_SAVESTATE_DRIVER_H
 #define SE_SAVESTATE_DRIVER_H
 
-#include "saturnexplorer/se_data_source.h"
+#include "saturnexplorer/SeDataSource.h"
 
 #ifdef __cplusplus
 extern "C" {

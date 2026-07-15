@@ -1,4 +1,4 @@
-#include "hardware_snapshot.h"
+#include "HardwareSnapshot.h"
 
 namespace se
 {

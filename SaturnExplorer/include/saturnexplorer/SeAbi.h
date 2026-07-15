@@ -1,8 +1,8 @@
 /* Saturn Explorer — ABI constants, result codes, capability bits.
  *
  * This header defines the version and enum vocabulary shared by both seams:
- *   - Seam A (se_data_source.h): driver -> core
- *   - Seam B (se_host.h):        core  -> host
+ *   - Seam A (SeDataSource.h): driver -> core
+ *   - Seam B (SeHost.h):        core  -> host
  *
  * Everything here is plain C. No C++ types, STL, or exceptions cross a seam.
  * See ARCHITECTURE.md §3 for the rules.

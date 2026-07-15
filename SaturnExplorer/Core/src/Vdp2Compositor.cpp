@@ -1,10 +1,10 @@
-#include "vdp2_compositor.h"
+#include "Vdp2Compositor.h"
 
 #include <algorithm>
 #include <array>
 
-#include "byteorder.h"
-#include "vdp1_color.h"
+#include "ByteOrder.h"
+#include "Vdp1Color.h"
 
 namespace se
 {

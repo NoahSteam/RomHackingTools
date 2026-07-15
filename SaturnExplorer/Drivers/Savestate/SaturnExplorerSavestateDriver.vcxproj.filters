@@ -11,12 +11,12 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="src\savestate_driver.h">
+    <ClInclude Include="src\SavestateDriver.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="src\savestate_driver.cpp">
+    <ClCompile Include="src\SavestateDriver.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

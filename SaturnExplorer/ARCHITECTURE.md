@@ -341,15 +341,15 @@ affect either seam.
 SaturnExplorer/
   ARCHITECTURE.md                    ← this file
   include/saturnexplorer/            ← public headers (the two seams) [DONE]
-    se_abi.h                         ← versions, result codes, capability bits
-    se_types.h                       ← POD structs (se_command, se_image, se_mem_event, …)
-    se_data_source.h                 ← Seam A
-    se_host.h                        ← Seam B
-    saturnexplorer.h                 ← umbrella include
+    SeAbi.h                         ← versions, result codes, capability bits
+    SeTypes.h                       ← POD structs (se_command, se_image, se_mem_event, …)
+    SeDataSource.h                 ← Seam A
+    SeHost.h                        ← Seam B
+    SaturnExplorer.h                 ← umbrella include
   Core/                              ← SaturnExplorer core engine (C++ static lib) [DONE]
     src/
-      context.h                      ← C++ core behind the opaque se_context*
-      host_abi.cpp                   ← C-ABI shim for Seam B
+      Context.h                      ← C++ core behind the opaque se_context*
+      HostAbi.cpp                   ← C-ABI shim for Seam B
       hardware_snapshot.{h,cpp}      ← pulls state through Seam A per frame
     SaturnExplorer.vcxproj
   Drivers/
@@ -473,10 +473,14 @@ package manager; the D3D11 + Win32 ImGui backends ship with it.
 
 ## 12. Coding conventions
 
-Applies to the **C++ implementation** (core, drivers, frontend). It does **not**
-apply to the public C-ABI headers (`include/saturnexplorer/*.h`), which stay
-`snake_case` — that is the stable C interface third parties compile against.
+Naming below applies to the **C++ implementation** (core, drivers, frontend). The
+public C-ABI headers are an exception for *identifiers* only: their types and
+functions stay `snake_case` (`se_result`, `se_create`) — that is the stable C
+interface third parties compile against — even though the header *files* follow
+the UpperCamelCase file rule like everything else.
 
+- **File names:** `UpperCamelCase` — `HardwareSnapshot.cpp`, `Vdp1Parser.h`,
+  `SeHost.h`. Directories stay lowercase (`src/`, `include/saturnexplorer/`).
 - **Functions / methods:** `UpperCamelCase` — `Capture`, `BuildDataSource`.
 - **Member variables:** `m` + `UpperCamelCase` — `mVdp1Vram`; booleans `mb` + `UpperCamelCase` — `mbValid`.
 - **Local variables & parameters:** `lowerCamelCase` — `baseAddress`, `count`.

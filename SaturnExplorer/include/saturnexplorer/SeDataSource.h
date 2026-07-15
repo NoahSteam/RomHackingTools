@@ -3,7 +3,7 @@
  * A driver fills in this struct and hands it to se_create(). The core calls
  * these callbacks to read live Saturn state and the game disc. Not every driver
  * can provide everything; it advertises what it supports in 'capabilities'
- * (SE_CAP_* in se_abi.h), and the core adapts. See ARCHITECTURE.md §4.
+ * (SE_CAP_* in SeAbi.h), and the core adapts. See ARCHITECTURE.md §4.
  *
  * Rules: only C types cross this boundary; 'user' is the driver's own context,
  * passed back to every call. Bulk readers return the number of bytes actually
@@ -13,7 +13,7 @@
 #ifndef SATURNEXPLORER_SE_DATA_SOURCE_H
 #define SATURNEXPLORER_SE_DATA_SOURCE_H
 
-#include "se_types.h"
+#include "SeTypes.h"
 
 #ifdef __cplusplus
 extern "C" {

@@ -8,7 +8,7 @@
 #ifndef SATURNEXPLORER_SE_TYPES_H
 #define SATURNEXPLORER_SE_TYPES_H
 
-#include "se_abi.h"
+#include "SeAbi.h"
 
 #ifdef __cplusplus
 extern "C" {

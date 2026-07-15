@@ -1,12 +1,12 @@
-// host_abi.cpp — the C ABI shim for Seam B. Each exported extern "C" function
+// HostAbi.cpp — the C ABI shim for Seam B. Each exported extern "C" function
 // casts the opaque se_context* to the C++ se::Context and delegates. No C++
 // types cross the boundary. M1 leaves most queries as SE_ERR_UNIMPLEMENTED
 // stubs; the lifecycle + frame snapshot path is real and exercises Seam A.
 
 #include <new>
 
-#include "saturnexplorer/se_host.h"
-#include "context.h"
+#include "saturnexplorer/SeHost.h"
+#include "Context.h"
 
 namespace
 {

@@ -1,7 +1,7 @@
-#include "geometry_builder.h"
+#include "GeometryBuilder.h"
 
-#include "byteorder.h"
-#include "vdp1_parser.h"
+#include "ByteOrder.h"
+#include "Vdp1Parser.h"
 
 namespace se
 {

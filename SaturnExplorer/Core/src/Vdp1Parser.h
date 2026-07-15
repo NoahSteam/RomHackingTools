@@ -7,7 +7,7 @@
 #include <cstdint>
 #include <vector>
 
-#include "saturnexplorer/se_types.h"
+#include "saturnexplorer/SeTypes.h"
 
 namespace se
 {

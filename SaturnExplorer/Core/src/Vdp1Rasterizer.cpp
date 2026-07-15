@@ -1,9 +1,9 @@
-#include "vdp1_rasterizer.h"
+#include "Vdp1Rasterizer.h"
 
 #include <algorithm>
 #include <cmath>
 
-#include "vdp1_color.h"
+#include "Vdp1Color.h"
 
 namespace se
 {

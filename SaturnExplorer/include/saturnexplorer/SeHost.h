@@ -13,8 +13,8 @@
 #ifndef SATURNEXPLORER_SE_HOST_H
 #define SATURNEXPLORER_SE_HOST_H
 
-#include "se_types.h"
-#include "se_data_source.h"
+#include "SeTypes.h"
+#include "SeDataSource.h"
 
 #ifdef __cplusplus
 extern "C" {

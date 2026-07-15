@@ -1,5 +1,5 @@
 // Context — the C++ core object behind the opaque se_context* handle. The C ABI
-// shim in host_abi.cpp is a thin translation layer over this class; all real
+// shim in HostAbi.cpp is a thin translation layer over this class; all real
 // logic lives on the C++ side (ARCHITECTURE.md §3, the hybrid boundary).
 #pragma once
 
@@ -7,14 +7,14 @@
 #include <cstring>
 #include <vector>
 
-#include "saturnexplorer/se_host.h"
-#include "hardware_snapshot.h"
-#include "vdp1_parser.h"
-#include "geometry_builder.h"
-#include "vdp1_rasterizer.h"
-#include "vdp2_compositor.h"
-#include "vdp1_color.h"
-#include "byteorder.h"
+#include "saturnexplorer/SeHost.h"
+#include "HardwareSnapshot.h"
+#include "Vdp1Parser.h"
+#include "GeometryBuilder.h"
+#include "Vdp1Rasterizer.h"
+#include "Vdp2Compositor.h"
+#include "Vdp1Color.h"
+#include "ByteOrder.h"
 
 namespace se
 {

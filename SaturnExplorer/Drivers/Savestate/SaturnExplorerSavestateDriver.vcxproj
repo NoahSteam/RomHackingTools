@@ -132,10 +132,10 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="src\savestate_driver.h" />
+    <ClInclude Include="src\SavestateDriver.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="src\savestate_driver.cpp" />
+    <ClCompile Include="src\SavestateDriver.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

@@ -1,4 +1,4 @@
-// vdp1_color — low-level texel and palette decoding shared by the rasterizer
+// Vdp1Color — low-level texel and palette decoding shared by the rasterizer
 // and the texture viewer. Turns a VDP1 texture pixel (in any of the sprite
 // color modes) plus VDP2 color RAM into an RGBA sample. Bit/palette rules per
 // Docs/Saturn/VDP1.pdf ch.5-6 and VDP2.pdf §3.4. Validated against a real
@@ -8,8 +8,8 @@
 #include <cstdint>
 #include <vector>
 
-#include "saturnexplorer/se_types.h"
-#include "byteorder.h"
+#include "saturnexplorer/SeTypes.h"
+#include "ByteOrder.h"
 
 namespace se
 {

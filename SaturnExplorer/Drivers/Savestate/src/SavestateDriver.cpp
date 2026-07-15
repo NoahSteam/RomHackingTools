@@ -1,4 +1,4 @@
-#include "savestate_driver.h"
+#include "SavestateDriver.h"
 
 #include <cstdio>
 #include <cstring>
@@ -618,7 +618,7 @@ se_result se_savestate_open(const char* path, se_data_source* out)
     // Read the file once, then pick the parser by its magic. Each parser fills the
     // same internal buffers, so the core is identical regardless of which emulator
     // wrote the state. Add new families here as their layouts are reverse-engineered
-    // (see savestate_driver.h).
+    // (see SavestateDriver.h).
     std::vector<uint8_t> file;
     if (!LoadFile(path, file))
     {

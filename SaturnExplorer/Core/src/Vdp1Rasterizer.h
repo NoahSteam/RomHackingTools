@@ -1,14 +1,14 @@
 // Vdp1Rasterizer — software-composites the VDP1 sprite quads into the finished
 // frame (RGBA), the way the hardware draws distorted sprites. Each sprite is two
-// UV-mapped triangles sampled through vdp1_color; sprites are drawn in command
+// UV-mapped triangles sampled through Vdp1Color; sprites are drawn in command
 // order (painter's order). See ARCHITECTURE.md §7.
 #pragma once
 
 #include <cstdint>
 #include <vector>
 
-#include "saturnexplorer/se_types.h"
-#include "geometry_builder.h"
+#include "saturnexplorer/SeTypes.h"
+#include "GeometryBuilder.h"
 
 namespace se
 {

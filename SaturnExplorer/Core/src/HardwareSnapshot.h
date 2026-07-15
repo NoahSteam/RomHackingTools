@@ -6,7 +6,7 @@
 #include <cstdint>
 #include <vector>
 
-#include "saturnexplorer/se_data_source.h"
+#include "saturnexplorer/SeDataSource.h"
 
 namespace se
 {

@@ -7,7 +7,7 @@
 #include <cstdint>
 #include <vector>
 
-#include "saturnexplorer/saturnexplorer.h"
+#include "saturnexplorer/SaturnExplorer.h"
 
 #include "Platform/IPlatform.h"
 

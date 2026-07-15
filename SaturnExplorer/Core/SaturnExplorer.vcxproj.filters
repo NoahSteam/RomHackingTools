@@ -14,63 +14,63 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\include\saturnexplorer\saturnexplorer.h">
+    <ClInclude Include="..\include\saturnexplorer\SaturnExplorer.h">
       <Filter>Public API</Filter>
     </ClInclude>
-    <ClInclude Include="..\include\saturnexplorer\se_abi.h">
+    <ClInclude Include="..\include\saturnexplorer\SeAbi.h">
       <Filter>Public API</Filter>
     </ClInclude>
-    <ClInclude Include="..\include\saturnexplorer\se_data_source.h">
+    <ClInclude Include="..\include\saturnexplorer\SeDataSource.h">
       <Filter>Public API</Filter>
     </ClInclude>
-    <ClInclude Include="..\include\saturnexplorer\se_host.h">
+    <ClInclude Include="..\include\saturnexplorer\SeHost.h">
       <Filter>Public API</Filter>
     </ClInclude>
-    <ClInclude Include="..\include\saturnexplorer\se_types.h">
+    <ClInclude Include="..\include\saturnexplorer\SeTypes.h">
       <Filter>Public API</Filter>
     </ClInclude>
-    <ClInclude Include="src\context.h">
+    <ClInclude Include="src\Context.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="src\hardware_snapshot.h">
+    <ClInclude Include="src\HardwareSnapshot.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="src\byteorder.h">
+    <ClInclude Include="src\ByteOrder.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="src\vdp1_parser.h">
+    <ClInclude Include="src\Vdp1Parser.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="src\vdp1_color.h">
+    <ClInclude Include="src\Vdp1Color.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="src\geometry_builder.h">
+    <ClInclude Include="src\GeometryBuilder.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="src\vdp1_rasterizer.h">
+    <ClInclude Include="src\Vdp1Rasterizer.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="src\vdp2_compositor.h">
+    <ClInclude Include="src\Vdp2Compositor.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="src\hardware_snapshot.cpp">
+    <ClCompile Include="src\HardwareSnapshot.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\host_abi.cpp">
+    <ClCompile Include="src\HostAbi.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\vdp1_parser.cpp">
+    <ClCompile Include="src\Vdp1Parser.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\geometry_builder.cpp">
+    <ClCompile Include="src\GeometryBuilder.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\vdp1_rasterizer.cpp">
+    <ClCompile Include="src\Vdp1Rasterizer.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\vdp2_compositor.cpp">
+    <ClCompile Include="src\Vdp2Compositor.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
