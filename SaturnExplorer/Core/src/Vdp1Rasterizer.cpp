@@ -234,6 +234,56 @@ void Vdp1Rasterizer::Render3D(const Vdp1Scene& scene, const std::vector<uint8_t>
     }
 }
 
+bool Vdp1Rasterizer::HitTest3D(const Vdp1Scene& scene, const se_camera3d& camera,
+                               int x, int y, uint32_t* outCmd)
+{
+    const float cosYaw = std::cos(camera.yaw);
+    const float sinYaw = std::sin(camera.yaw);
+    const float cosPitch = std::cos(camera.pitch);
+    const float sinPitch = std::sin(camera.pitch);
+    const float px = static_cast<float>(x);
+    const float py = static_cast<float>(y);
+
+    auto inTri = [&](const RVert& p0, const RVert& p1, const RVert& p2)
+    {
+        const float e0 = Edge(p0.x, p0.y, p1.x, p1.y, px, py);
+        const float e1 = Edge(p1.x, p1.y, p2.x, p2.y, px, py);
+        const float e2 = Edge(p2.x, p2.y, p0.x, p0.y, px, py);
+        const bool hasNeg = (e0 < 0) || (e1 < 0) || (e2 < 0);
+        const bool hasPos = (e0 > 0) || (e1 > 0) || (e2 > 0);
+        return !(hasNeg && hasPos);
+    };
+
+    bool found = false;
+    float bestDepth = 0.0f;
+    uint32_t bestCmd = 0;
+    for (const se_sprite_3d& g : scene.sprites3d)
+    {
+        const RVert v[4] = {
+            Project(g.corners[0], camera, cosYaw, sinYaw, cosPitch, sinPitch),
+            Project(g.corners[1], camera, cosYaw, sinYaw, cosPitch, sinPitch),
+            Project(g.corners[2], camera, cosYaw, sinYaw, cosPitch, sinPitch),
+            Project(g.corners[3], camera, cosYaw, sinYaw, cosPitch, sinPitch) };
+        if (!(inTri(v[0], v[1], v[2]) || inTri(v[0], v[2], v[3])))
+        {
+            continue;
+        }
+        // Nearest to the camera wins (smallest projected depth = z2).
+        const float depth = (v[0].depth + v[1].depth + v[2].depth + v[3].depth) * 0.25f;
+        if (!found || depth < bestDepth)
+        {
+            found = true;
+            bestDepth = depth;
+            bestCmd = g.command_index;
+        }
+    }
+    if (found && outCmd)
+    {
+        *outCmd = bestCmd;
+    }
+    return found;
+}
+
 bool PointInSprite(const se_sprite_2d& sprite, float px, float py)
 {
     const se_vec2& a = sprite.corners[0];

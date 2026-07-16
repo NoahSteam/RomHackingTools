@@ -74,6 +74,16 @@ se_result se_hit_test(se_context* ctx, int x, int y, size_t* out_index)
     return Impl(ctx)->HitTest(x, y, out_index);
 }
 
+se_result se_hit_test_3d(se_context* ctx, const se_camera3d* camera,
+                         int x, int y, size_t* out_index)
+{
+    if (!ctx || !camera || !out_index)
+    {
+        return SE_ERR_INVALID_ARG;
+    }
+    return Impl(ctx)->HitTest3D(*camera, x, y, out_index);
+}
+
 /* --- VDP1 geometry --- */
 size_t se_sprite_count(se_context* ctx)
 {
