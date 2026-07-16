@@ -58,6 +58,18 @@ se_result se_savestate_open_mednafen(const char* path, se_data_source* out);
  * the core is format-agnostic. */
 se_result se_savestate_open(const char* path, se_data_source* out);
 
+/* Buffer-based variants for hosts without filesystem access (e.g. a browser/WASM
+ * build reading a File into memory). Identical to the path-based functions above
+ * but take the savestate/dump bytes directly. The driver copies what it needs, so
+ * the caller may free 'data' as soon as the call returns.
+ *
+ *   se_savestate_open_buffer            -> like se_savestate_open (magic dispatch)
+ *   se_savestate_open_full_dump_buffer  -> like se_savestate_open_full_dump
+ */
+se_result se_savestate_open_buffer(const uint8_t* data, size_t size, se_data_source* out);
+se_result se_savestate_open_full_dump_buffer(const uint8_t* data, size_t size,
+                                             uint32_t base_address, se_data_source* out);
+
 #ifdef __cplusplus
 }
 #endif

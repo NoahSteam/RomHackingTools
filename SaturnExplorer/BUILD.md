@@ -6,9 +6,20 @@ Saturn Explorer is split into three pieces:
 |---|---|---|
 | **SaturnExplorerCore** | the analysis engine (static library) | yes — Windows, macOS, Linux |
 | **SaturnExplorerSavestateDriver** | reads `.yss` / Mednafen savestates & dumps (static library) | yes |
-| **SaturnExplorerFrontEnd** | the app window (Dear ImGui + Win32 + Direct3D 11) | **Windows only** |
+| **SaturnExplorerFrontEnd** | the app window (Dear ImGui) | yes — three backends |
 
-You can build two ways: with **CMake** (recommended — works everywhere and can *generate* a Visual Studio solution for you) or by opening the checked-in Visual Studio solution directly.
+The Core and driver are pure C++14 and build everywhere. The FrontEnd has three
+interchangeable Seam C backends, selected automatically by the toolchain:
+
+| Backend | Stack | Selected when |
+|---|---|---|
+| **Windows** | Win32 + Direct3D 11 | building on Windows |
+| **Web** | SDL2 + WebGL2/GLES3 (Emscripten) | configuring with `emcmake cmake` |
+| **Desktop** | SDL2 + OpenGL | non-Windows and system SDL2 + OpenGL are found |
+
+You can build with **CMake** (recommended — works everywhere, can *generate* a Visual
+Studio solution, and drives the web build) or by opening the checked-in Visual Studio
+solution directly.
 
 ---
 
@@ -30,9 +41,28 @@ This *creates* `build/SaturnExplorer.sln`. You can keep using the command line, 
 cmake -B build
 cmake --build build
 ```
-CMake picks a default generator (Ninja or Makefiles). On non-Windows platforms the **Core** and **savestate driver** libraries build; the **FrontEnd** app is skipped because it depends on Direct3D 11 (you'll see a message saying so).
+CMake picks a default generator (Ninja or Makefiles). On non-Windows platforms the
+**Core** and **savestate driver** libraries always build; the **FrontEnd** app builds too
+when SDL2 and OpenGL development packages are present (e.g. `apt install libsdl2-dev
+libgl1-mesa-dev`), otherwise it is skipped with a message. This native SDL2 build runs the
+same code as the web app, so it's a convenient way to try the frontend without a browser.
+It also accepts a savestate path on the command line: `./build/bin/SaturnExplorerFrontEnd
+state.yss`.
 
 Outputs land in `build/bin` (the app) and `build/lib` (the libraries).
+
+### Web (browser) — Emscripten + WebGL2
+Install the [Emscripten SDK](https://emscripten.org/docs/getting_started/downloads.html),
+then from the `SaturnExplorer` directory:
+```
+emcmake cmake -B build-web -DCMAKE_BUILD_TYPE=Release
+cmake --build build-web
+```
+This produces `build-web/bin/index.{html,js,wasm}`. Serve that directory over HTTP (a
+`file://` open won't load the `.wasm`), e.g. `python3 -m http.server -d build-web/bin`,
+and open it in a browser. Load a savestate by **dragging it onto the canvas** or via the
+toolbar's **Open** button. Every push to `master` also builds and publishes this to GitHub
+Pages via `.github/workflows/web.yml`.
 
 ---
 
