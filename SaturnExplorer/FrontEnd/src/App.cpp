@@ -541,11 +541,21 @@ void App::DrawVdpOutput(IPlatform& platform)
                 const bool selected = (static_cast<int>(sprite.command_index) == mSelectedCommand);
                 if (mRenderOpts.show_bounding_boxes || selected)
                 {
-                    const ImU32 col = selected ? IM_COL32(90, 225, 130, 255)
-                                               : IM_COL32(230, 210, 60, 130);
-                    dl->AddQuad(toScreen(sprite.corners[0]), toScreen(sprite.corners[1]),
-                                toScreen(sprite.corners[2]), toScreen(sprite.corners[3]),
-                                col, selected ? 2.0f : 1.0f);
+                    const ImVec2 c0 = toScreen(sprite.corners[0]);
+                    const ImVec2 c1 = toScreen(sprite.corners[1]);
+                    const ImVec2 c2 = toScreen(sprite.corners[2]);
+                    const ImVec2 c3 = toScreen(sprite.corners[3]);
+                    if (selected)
+                    {
+                        // Tint the fill and draw a thick bright outline so a
+                        // selection made elsewhere (e.g. the VRAM Map) is obvious.
+                        dl->AddQuadFilled(c0, c1, c2, c3, IM_COL32(90, 225, 130, 60));
+                        dl->AddQuad(c0, c1, c2, c3, IM_COL32(120, 255, 150, 255), 3.0f);
+                    }
+                    else
+                    {
+                        dl->AddQuad(c0, c1, c2, c3, IM_COL32(230, 210, 60, 130), 1.0f);
+                    }
                 }
                 if (mRenderOpts.show_object_numbers)
                 {
@@ -957,37 +967,21 @@ void App::DrawVramMap()
             const size_t count = se_vram_region_count(mContext);
             ImGui::Text("%zu regions in 512 KiB VDP1 VRAM", count);
 
-            // Saturation/value per kind: hue carries identity, S/V carries kind.
-            auto kindSV = [](se_vram_region_kind k, float& s, float& v)
+            // Colour by region kind; legend mirrors these. Each block also gets a
+            // dark outline (below) so abutting same-kind regions read as separate
+            // items rather than one merged run.
+            auto kindColor = [](se_vram_region_kind k) -> ImU32
             {
                 switch (k)
                 {
-                case SE_VRAM_TEXTURE:   s = 0.70f; v = 0.95f; break;  // vivid
-                case SE_VRAM_CLUT:      s = 0.35f; v = 1.00f; break;  // pastel / bright
-                case SE_VRAM_CMD_TABLE: s = 0.60f; v = 0.55f; break;  // dark / muted
-                case SE_VRAM_GOURAUD:   s = 0.85f; v = 0.85f; break;
-                default:                s = 0.00f; v = 0.55f; break;  // grey
+                case SE_VRAM_TEXTURE:   return IM_COL32(90, 190, 120, 255);
+                case SE_VRAM_CLUT:      return IM_COL32(220, 200, 90, 255);
+                case SE_VRAM_CMD_TABLE: return IM_COL32(100, 150, 230, 255);
+                case SE_VRAM_GOURAUD:   return IM_COL32(200, 120, 210, 255);
+                default:                return IM_COL32(150, 150, 150, 255);
                 }
             };
-
-            // Colour every region by a hue hashed from its owning command
-            // (ref_index) so each texture is visually distinct, while S/V still
-            // encodes the kind. Golden-ratio stepping spreads consecutive command
-            // indices ~137 degrees apart, so VRAM-adjacent textures contrast.
-            auto regionColor = [&](const se_vram_region& r, size_t fallback) -> ImU32
-            {
-                const uint32_t id = (r.ref_index != 0xFFFFFFFFu)
-                                        ? r.ref_index
-                                        : static_cast<uint32_t>(fallback);
-                const float h = id * 0.61803399f - static_cast<float>(static_cast<int>(id * 0.61803399f));
-                float s, v;
-                kindSV(r.kind, s, v);
-                float rr, gg, bb;
-                ImGui::ColorConvertHSVtoRGB(h, s, v, rr, gg, bb);
-                return IM_COL32(static_cast<int>(rr * 255.0f),
-                                static_cast<int>(gg * 255.0f),
-                                static_cast<int>(bb * 255.0f), 255);
-            };
+            const ImU32 kBorderCol = IM_COL32(15, 15, 18, 255);
 
             const uint32_t kVramSize = 0x80000;   // 512 KiB
             const int rows = 16;                    // each row = 32 KiB
@@ -1025,6 +1019,10 @@ void App::DrawVramMap()
 
             se_vram_region hoveredReg = {};
             bool haveHover = false;
+            // Nearest command-owning region to the cursor, for a forgiving click:
+            // texture blocks can be sub-pixel, so an exact hit is often impossible.
+            uint32_t nearestRef = 0xFFFFFFFFu;
+            uint32_t nearestDist = 0xFFFFFFFFu;
             for (size_t i = 0; i < count; ++i)
             {
                 se_vram_region reg;
@@ -1033,8 +1031,9 @@ void App::DrawVramMap()
                     continue;
                 }
                 const uint32_t end = reg.address + (reg.size ? reg.size : 1);
-                const ImU32 col = regionColor(reg, i);
-                // A region can straddle rows; paint it row by row.
+                const ImU32 col = kindColor(reg.kind);
+                // A region can straddle rows; paint it row by row, outlining each
+                // slice so neighbouring same-kind blocks read as distinct items.
                 uint32_t a = reg.address;
                 while (a < end && a < kVramSize)
                 {
@@ -1044,13 +1043,27 @@ void App::DrawVramMap()
                     const float x0 = origin.x + (a % perRow) / static_cast<float>(perRow) * width;
                     const float x1 = origin.x + ((b - 1) % perRow + 1) / static_cast<float>(perRow) * width;
                     const float y0 = origin.y + row * rowH;
-                    dl->AddRectFilled(ImVec2(x0, y0), ImVec2(x1, y0 + rowH - 1.0f), col);
+                    const ImVec2 p0(x0, y0);
+                    const ImVec2 p1(x1, y0 + rowH - 1.0f);
+                    dl->AddRectFilled(p0, p1, col);
+                    dl->AddRect(p0, p1, kBorderCol, 0.0f, 0, 1.0f);
                     a = b;
                 }
                 if (hoverValid && !haveHover && hoverAddr >= reg.address && hoverAddr < end)
                 {
                     hoveredReg = reg;
                     haveHover = true;
+                }
+                if (hoverValid && reg.ref_index != 0xFFFFFFFFu)
+                {
+                    const uint32_t dist = (hoverAddr < reg.address) ? reg.address - hoverAddr
+                                        : (hoverAddr >= end)        ? hoverAddr - (end - 1)
+                                                                    : 0u;
+                    if (dist < nearestDist)
+                    {
+                        nearestDist = dist;
+                        nearestRef = reg.ref_index;
+                    }
                 }
             }
 
@@ -1061,31 +1074,26 @@ void App::DrawVramMap()
                 ImGui::TextUnformatted(VramKindName(hoveredReg.kind));
                 if (hoveredReg.ref_index != 0xFFFFFFFFu)
                 {
-                    ImGui::Text("Command #%u", hoveredReg.ref_index);
+                    ImGui::Text("Command #%u  (click to select in VDP Output)",
+                                hoveredReg.ref_index);
                 }
                 ImGui::EndTooltip();
-                if (mapClicked && hoveredReg.ref_index != 0xFFFFFFFFu)
-                {
-                    mSelectedCommand = static_cast<int>(hoveredReg.ref_index);
-                }
+            }
+            // Clicking anywhere in the map selects the nearest texture/command block,
+            // which the VDP Output panel then highlights (via mSelectedCommand).
+            if (mapClicked && nearestRef != 0xFFFFFFFFu)
+            {
+                mSelectedCommand = static_cast<int>(nearestRef);
             }
             ImGui::Spacing();
-            ImGui::TextDisabled("Hue = command/texture; brightness = kind:");
 
-            // Legend: each swatch uses a fixed sample hue so the row shows only the
-            // per-kind saturation/value treatment (the map varies hue per command).
+            // Legend.
             auto swatch = [&](const char* name, se_vram_region_kind k)
             {
-                float s, v;
-                kindSV(k, s, v);
-                float rr, gg, bb;
-                ImGui::ColorConvertHSVtoRGB(0.55f, s, v, rr, gg, bb);
-                const ImU32 col = IM_COL32(static_cast<int>(rr * 255.0f),
-                                           static_cast<int>(gg * 255.0f),
-                                           static_cast<int>(bb * 255.0f), 255);
                 ImDrawList* d = ImGui::GetWindowDrawList();
                 const ImVec2 p = ImGui::GetCursorScreenPos();
-                d->AddRectFilled(p, ImVec2(p.x + 12, p.y + 12), col);
+                d->AddRectFilled(p, ImVec2(p.x + 12, p.y + 12), kindColor(k));
+                d->AddRect(p, ImVec2(p.x + 12, p.y + 12), kBorderCol, 0.0f, 0, 1.0f);
                 ImGui::Dummy(ImVec2(16, 12));
                 ImGui::SameLine();
                 ImGui::TextUnformatted(name);
