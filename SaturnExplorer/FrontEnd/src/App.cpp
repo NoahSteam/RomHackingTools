@@ -574,6 +574,7 @@ void App::DrawVdpOutput(IPlatform& platform)
                 if (se_hit_test(mContext, vx, vy, &hitCommand) == SE_OK)
                 {
                     mSelectedCommand = static_cast<int>(hitCommand);
+                    mScrollCommandListToSelection = true;
                 }
             }
         }
@@ -670,8 +671,19 @@ void App::DrawCommandList()
                 ImGui::TableSetupColumn("Tex Addr");
                 ImGui::TableHeadersRow();
 
+                // If the selection was changed by another panel, scroll its row into
+                // view once. IncludeItemByIndex keeps that row laid out even when the
+                // clipper would otherwise skip it, so SetScrollHereY can act on it.
+                const bool doScroll = mScrollCommandListToSelection;
+                mScrollCommandListToSelection = false;
+
                 ImGuiListClipper clipper;
                 clipper.Begin(static_cast<int>(count));
+                if (doScroll && mSelectedCommand >= 0 &&
+                    mSelectedCommand < static_cast<int>(count))
+                {
+                    clipper.IncludeItemByIndex(mSelectedCommand);
+                }
                 while (clipper.Step())
                 {
                     for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; ++row)
@@ -690,6 +702,10 @@ void App::DrawCommandList()
                                               ImGuiSelectableFlags_SpanAllColumns))
                         {
                             mSelectedCommand = row;
+                        }
+                        if (doScroll && row == mSelectedCommand)
+                        {
+                            ImGui::SetScrollHereY(0.5f);
                         }
                         ImGui::TableNextColumn();
                         ImGui::TextUnformatted(CommandTypeName(cmd.type));
@@ -1023,6 +1039,10 @@ void App::DrawVramMap()
             // texture blocks can be sub-pixel, so an exact hit is often impossible.
             uint32_t nearestRef = 0xFFFFFFFFu;
             uint32_t nearestDist = 0xFFFFFFFFu;
+            // Row-slice rects (x0,y0,x1,y1) of the currently-selected command's
+            // region(s), drawn on top after the fill pass so the selection outline
+            // isn't overpainted.
+            std::vector<ImVec4> selRects;
             for (size_t i = 0; i < count; ++i)
             {
                 se_vram_region reg;
@@ -1032,6 +1052,8 @@ void App::DrawVramMap()
                 }
                 const uint32_t end = reg.address + (reg.size ? reg.size : 1);
                 const ImU32 col = kindColor(reg.kind);
+                const bool isSelected = (mSelectedCommand >= 0 &&
+                                         static_cast<int>(reg.ref_index) == mSelectedCommand);
                 // A region can straddle rows; paint it row by row, outlining each
                 // slice so neighbouring same-kind blocks read as distinct items.
                 uint32_t a = reg.address;
@@ -1047,6 +1069,10 @@ void App::DrawVramMap()
                     const ImVec2 p1(x1, y0 + rowH - 1.0f);
                     dl->AddRectFilled(p0, p1, col);
                     dl->AddRect(p0, p1, kBorderCol, 0.0f, 0, 1.0f);
+                    if (isSelected)
+                    {
+                        selRects.push_back(ImVec4(p0.x, p0.y, p1.x, p1.y));
+                    }
                     a = b;
                 }
                 if (hoverValid && !haveHover && hoverAddr >= reg.address && hoverAddr < end)
@@ -1067,6 +1093,15 @@ void App::DrawVramMap()
                 }
             }
 
+            // Selection highlight: a bright, slightly-inflated outline so the block
+            // for the sprite selected in VDP Output / the command list clearly pops.
+            for (const ImVec4& r : selRects)
+            {
+                dl->AddRect(ImVec2(r.x - 1.0f, r.y - 1.0f),
+                            ImVec2(r.z + 1.0f, r.w + 1.0f),
+                            IM_COL32(255, 240, 120, 255), 0.0f, 0, 2.0f);
+            }
+
             if (haveHover)
             {
                 ImGui::BeginTooltip();
@@ -1084,6 +1119,7 @@ void App::DrawVramMap()
             if (mapClicked && nearestRef != 0xFFFFFFFFu)
             {
                 mSelectedCommand = static_cast<int>(nearestRef);
+                mScrollCommandListToSelection = true;
             }
             ImGui::Spacing();
 
@@ -1139,6 +1175,7 @@ void App::DrawReferenceList(const char* id, const std::vector<se_reference>& ref
             if (ImGui::Selectable(label, selected, ImGuiSelectableFlags_SpanAllColumns))
             {
                 mSelectedCommand = static_cast<int>(r.command_index);
+                mScrollCommandListToSelection = true;
             }
             ImGui::TableNextColumn();
             ImGui::Text("%u", r.object_number);
