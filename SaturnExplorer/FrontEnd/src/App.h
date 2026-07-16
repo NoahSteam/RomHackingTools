@@ -64,6 +64,9 @@ private:
     se_render_opts mRenderOpts {};
     int            mSelectedCommand = -1;
     bool           mbLayoutBuilt = false;   // default dock layout applied once
+    // Set when an external panel (VDP Output / VRAM Map / References) changes the
+    // selection, so the Command List scrolls its highlighted row into view once.
+    bool           mScrollCommandListToSelection = false;
 
     // Scratch buffer for the Color RAM panel, decoded once per frame.
     std::vector<se_palette_entry> mCramColors;
