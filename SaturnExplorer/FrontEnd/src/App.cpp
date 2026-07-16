@@ -1,5 +1,6 @@
 #include "App.h"
 
+#include <algorithm>
 #include <cstdarg>
 #include <cstdio>
 #include <string>
@@ -60,6 +61,21 @@ const char* ColorModeName(se_color_mode mode)
     }
 }
 
+// Bytes this command's texture occupies in VDP1 VRAM. Mirrors the core's
+// TextureByteSize (Core/src/Context.h) — bpp keyed by colour mode. Non-textured
+// commands (clips, coords) have zero width/height and so return 0.
+uint32_t TextureVramBytes(const se_command& c)
+{
+    const uint32_t pixels = static_cast<uint32_t>(c.width) * c.height;
+    switch (c.color_mode)
+    {
+    case SE_COLOR_BANK_16:
+    case SE_COLOR_LUT_16:   return pixels / 2;   // 4 bpp
+    case SE_COLOR_RGB555:   return pixels * 2;   // 16 bpp
+    default:                return pixels;       // 8 bpp bank modes
+    }
+}
+
 const char* DrawModeName(se_draw_mode mode)
 {
     switch (mode)
@@ -117,10 +133,48 @@ void App::CloseData()
     }
     mbHasData = false;
     mSelectedCommand = -1;
+    mSelection.clear();
     // The frame texture is freed lazily (on next size change) or with the
     // platform's device at shutdown; mark it stale so a new dump recreates it.
     mFrameWidth = 0;
     mFrameHeight = 0;
+}
+
+void App::SelectCommand(int command, bool additive)
+{
+    if (command < 0)
+    {
+        return;
+    }
+    if (additive)
+    {
+        // Toggle this command in/out of the multi-selection.
+        auto it = std::find(mSelection.begin(), mSelection.end(), command);
+        if (it != mSelection.end())
+        {
+            mSelection.erase(it);
+            if (mSelectedCommand == command)
+            {
+                mSelectedCommand = mSelection.empty() ? -1 : mSelection.back();
+            }
+        }
+        else
+        {
+            mSelection.push_back(command);
+            mSelectedCommand = command;   // newest becomes primary
+        }
+    }
+    else
+    {
+        mSelection.assign(1, command);
+        mSelectedCommand = command;
+    }
+}
+
+bool App::IsSelected(int command) const
+{
+    return command >= 0 &&
+           std::find(mSelection.begin(), mSelection.end(), command) != mSelection.end();
 }
 
 // Recreate 'tex' when the target size changes; updates cached w/h. Returns the
@@ -529,7 +583,7 @@ void App::DrawVdpOutput(IPlatform& platform)
 
             // Only walk the sprite list when an overlay actually needs it.
             const bool wantOverlays = mRenderOpts.show_bounding_boxes ||
-                                      mRenderOpts.show_object_numbers || mSelectedCommand >= 0;
+                                      mRenderOpts.show_object_numbers || !mSelection.empty();
             const size_t spriteCount = wantOverlays ? se_sprite_count(mContext) : 0;
             for (size_t i = 0; i < spriteCount; ++i)
             {
@@ -538,7 +592,7 @@ void App::DrawVdpOutput(IPlatform& platform)
                 {
                     continue;
                 }
-                const bool selected = (static_cast<int>(sprite.command_index) == mSelectedCommand);
+                const bool selected = IsSelected(static_cast<int>(sprite.command_index));
                 if (mRenderOpts.show_bounding_boxes || selected)
                 {
                     const ImVec2 c0 = toScreen(sprite.corners[0]);
@@ -573,7 +627,7 @@ void App::DrawVdpOutput(IPlatform& platform)
                 size_t hitCommand = 0;
                 if (se_hit_test(mContext, vx, vy, &hitCommand) == SE_OK)
                 {
-                    mSelectedCommand = static_cast<int>(hitCommand);
+                    SelectCommand(static_cast<int>(hitCommand), ImGui::GetIO().KeyShift);
                     mScrollCommandListToSelection = true;
                 }
             }
@@ -620,8 +674,15 @@ void App::DrawWorldView(IPlatform& platform)
                 }
 
                 ImGui::Image(m3dTexture, ImVec2(static_cast<float>(vw), static_cast<float>(vh)));
+                const ImVec2 imgMin = ImGui::GetItemRectMin();
+                const bool hovered = ImGui::IsItemHovered();
 
-                if (ImGui::IsItemHovered())
+                // Record where a left-press started, to tell a click from an orbit.
+                if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+                {
+                    m3dPressPos = ImGui::GetMousePos();
+                }
+                if (hovered)
                 {
                     if (ImGui::IsMouseDragging(ImGuiMouseButton_Left))
                     {
@@ -637,6 +698,25 @@ void App::DrawWorldView(IPlatform& platform)
                     {
                         mDistance *= (1.0f - wheel * 0.1f);
                         if (mDistance < 50.0f) mDistance = 50.0f;
+                    }
+                }
+                // A left-release that barely moved is a click: pick the sprite under
+                // it (same camera the frame was rendered with).
+                if (hovered && ImGui::IsMouseReleased(ImGuiMouseButton_Left))
+                {
+                    const ImVec2 up = ImGui::GetMousePos();
+                    const float dx = up.x - m3dPressPos.x;
+                    const float dy = up.y - m3dPressPos.y;
+                    if (dx * dx + dy * dy < 16.0f)
+                    {
+                        size_t hit = 0;
+                        if (se_hit_test_3d(mContext, &cam,
+                                           static_cast<int>(up.x - imgMin.x),
+                                           static_cast<int>(up.y - imgMin.y), &hit) == SE_OK)
+                        {
+                            SelectCommand(static_cast<int>(hit), ImGui::GetIO().KeyShift);
+                            mScrollCommandListToSelection = true;
+                        }
                     }
                 }
             }
@@ -698,10 +778,10 @@ void App::DrawCommandList()
                         ImGui::TableNextColumn();
                         char label[16];
                         std::snprintf(label, sizeof(label), "%d", row);
-                        if (ImGui::Selectable(label, mSelectedCommand == row,
+                        if (ImGui::Selectable(label, IsSelected(row),
                                               ImGuiSelectableFlags_SpanAllColumns))
                         {
-                            mSelectedCommand = row;
+                            SelectCommand(row, ImGui::GetIO().KeyShift);
                         }
                         if (doScroll && row == mSelectedCommand)
                         {
@@ -710,7 +790,15 @@ void App::DrawCommandList()
                         ImGui::TableNextColumn();
                         ImGui::TextUnformatted(CommandTypeName(cmd.type));
                         ImGui::TableNextColumn();
-                        ImGui::Text("%ux%u", cmd.width, cmd.height);
+                        const uint32_t texBytes = TextureVramBytes(cmd);
+                        if (texBytes > 0)
+                        {
+                            ImGui::Text("%ux%u (%u B)", cmd.width, cmd.height, texBytes);
+                        }
+                        else
+                        {
+                            ImGui::Text("%ux%u", cmd.width, cmd.height);
+                        }
                         ImGui::TableNextColumn();
                         ImGui::Text("(%d, %d)", cmd.x, cmd.y);
                         ImGui::TableNextColumn();
@@ -1052,8 +1140,7 @@ void App::DrawVramMap()
                 }
                 const uint32_t end = reg.address + (reg.size ? reg.size : 1);
                 const ImU32 col = kindColor(reg.kind);
-                const bool isSelected = (mSelectedCommand >= 0 &&
-                                         static_cast<int>(reg.ref_index) == mSelectedCommand);
+                const bool isSelected = IsSelected(static_cast<int>(reg.ref_index));
                 // A region can straddle rows; paint it row by row, outlining each
                 // slice so neighbouring same-kind blocks read as distinct items.
                 uint32_t a = reg.address;
@@ -1118,7 +1205,7 @@ void App::DrawVramMap()
             // which the VDP Output panel then highlights (via mSelectedCommand).
             if (mapClicked && nearestRef != 0xFFFFFFFFu)
             {
-                mSelectedCommand = static_cast<int>(nearestRef);
+                SelectCommand(static_cast<int>(nearestRef), ImGui::GetIO().KeyShift);
                 mScrollCommandListToSelection = true;
             }
             ImGui::Spacing();
@@ -1171,10 +1258,10 @@ void App::DrawReferenceList(const char* id, const std::vector<se_reference>& ref
             ImGui::TableNextColumn();
             char label[24];
             std::snprintf(label, sizeof(label), "%u", r.command_index);
-            const bool selected = (mSelectedCommand == static_cast<int>(r.command_index));
+            const bool selected = IsSelected(static_cast<int>(r.command_index));
             if (ImGui::Selectable(label, selected, ImGuiSelectableFlags_SpanAllColumns))
             {
-                mSelectedCommand = static_cast<int>(r.command_index);
+                SelectCommand(static_cast<int>(r.command_index), ImGui::GetIO().KeyShift);
                 mScrollCommandListToSelection = true;
             }
             ImGui::TableNextColumn();

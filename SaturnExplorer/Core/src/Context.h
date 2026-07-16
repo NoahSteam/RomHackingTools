@@ -312,6 +312,19 @@ public:
         return SE_ERR_NO_DATA;
     }
 
+    // Topmost 3D sprite under the screen point for 'camera' (matches the 3D view).
+    se_result HitTest3D(const se_camera3d& camera, int x, int y,
+                        size_t* outCommandIndex) const
+    {
+        uint32_t cmd = 0;
+        if (Vdp1Rasterizer::HitTest3D(mScene, camera, x, y, &cmd))
+        {
+            *outCommandIndex = cmd;
+            return SE_OK;
+        }
+        return SE_ERR_NO_DATA;
+    }
+
     size_t VramRegionCount() const { return mVramRegions.size(); }
 
     se_result GetVramRegion(size_t index, se_vram_region* out) const

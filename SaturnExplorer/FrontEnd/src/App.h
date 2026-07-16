@@ -57,16 +57,24 @@ private:
     void DrawVdp2Table();
     void DrawPlaceholder(const char* title, const char* note);
 
+    // Selection helpers. mSelectedCommand is the "primary" (what the detail panels
+    // show); mSelection is the full set of highlighted commands. A plain click
+    // selects one; shift-click (additive) toggles a command in/out of the set.
+    void SelectCommand(int command, bool additive);
+    bool IsSelected(int command) const;
+
     se_data_source mDataSource {};
     se_context*    mContext = nullptr;
     bool           mbHasData = false;
 
-    se_render_opts mRenderOpts {};
-    int            mSelectedCommand = -1;
-    bool           mbLayoutBuilt = false;   // default dock layout applied once
+    se_render_opts   mRenderOpts {};
+    int              mSelectedCommand = -1;   // primary selection (detail panels)
+    std::vector<int> mSelection;              // all selected command indices
+    bool             mbLayoutBuilt = false;   // default dock layout applied once
     // Set when an external panel (VDP Output / VRAM Map / References) changes the
     // selection, so the Command List scrolls its highlighted row into view once.
-    bool           mScrollCommandListToSelection = false;
+    bool             mScrollCommandListToSelection = false;
+    ImVec2           m3dPressPos {};          // 3D-view press point (click vs orbit)
 
     // Scratch buffer for the Color RAM panel, decoded once per frame.
     std::vector<se_palette_entry> mCramColors;

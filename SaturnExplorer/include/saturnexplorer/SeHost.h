@@ -38,6 +38,9 @@ se_result   se_begin_frame(se_context* ctx);
 size_t      se_command_count(se_context* ctx);
 se_result   se_get_command (se_context* ctx, size_t index, se_command* out);
 se_result   se_hit_test    (se_context* ctx, int x, int y, size_t* out_index);
+/* Pick the topmost 3D sprite under (x,y) for 'camera' (the 3D View's camera). */
+se_result   se_hit_test_3d (se_context* ctx, const se_camera3d* camera,
+                            int x, int y, size_t* out_index);
 
 /* --- VDP1 geometry: every sprite emitted in TWO coordinate spaces (§7). --- */
 size_t      se_sprite_count  (se_context* ctx);
