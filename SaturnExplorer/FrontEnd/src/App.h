@@ -26,6 +26,10 @@ public:
     // Load Saturn state from a Yabause savestate (.yss); replaces any context.
     bool OpenSavestate(const char* path);
 
+    // Load a savestate from an in-memory buffer (no filesystem); replaces any
+    // context. Used by the web build, where files arrive as bytes from JS.
+    bool OpenSavestateBuffer(const uint8_t* data, size_t size);
+
     // Draw the whole UI. Called once per frame, between the platform's
     // BeginFrame and EndFrame.
     void BuildUI(IPlatform& platform);

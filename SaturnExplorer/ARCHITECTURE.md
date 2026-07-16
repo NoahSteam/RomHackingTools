@@ -508,8 +508,20 @@ plus a swappable platform backend, so it can be ported without touching the UI.
    `ImTextureID`, so panels can display decoded frames/textures), and a native
    file-open dialog.
 3. **Platform backends** (`FrontEnd/Platforms/<name>/`) — implement `IPlatform`
-   and own the entry point + the ImGui platform/renderer backends. `Windows/`
-   (Win32 + D3D11) is the reference; an SDL/OpenGL backend would slot in beside it.
+   and own the entry point + the ImGui platform/renderer backends. Two exist:
+   - `Windows/` (Win32 + Direct3D 11) — the native desktop reference.
+   - `Web/` (SDL2 + OpenGL) — an Emscripten/**WebGL2** build for the browser that
+     also compiles natively against desktop SDL2 + OpenGL (a browser-free way to
+     run the frontend). `WebPlatform` swaps the D3D11 texture bridge for GL
+     textures and the Win32 message loop for `emscripten_set_main_loop`; the one
+     browser-specific wrinkle is file loading — there is no synchronous native
+     dialog, so files arrive as bytes from JS (drag-drop or `<input type=file>`)
+     through `App::OpenSavestateBuffer`, backed by the driver's buffer-based
+     `se_savestate_open_buffer`. Multi-viewport (floating OS windows) is disabled
+     on the web; docking within the canvas still works.
+
+   Adding a backend is additive: the portable App and every panel are shared
+   untouched, and the CMake `if(WIN32)/elseif(EMSCRIPTEN)/else()` selects one.
 
 **Loop ownership:** the platform's entry point owns the main loop and drives
 `PumpEvents → BeginFrame → App::BuildUI(platform) → EndFrame`. `App` never sees

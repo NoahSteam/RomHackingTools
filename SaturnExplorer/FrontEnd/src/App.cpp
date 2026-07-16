@@ -230,6 +230,25 @@ bool App::OpenSavestate(const char* path)
     return true;
 }
 
+bool App::OpenSavestateBuffer(const uint8_t* data, size_t size)
+{
+    CloseData();
+    se_data_source dataSource;
+    // Same magic-dispatch as OpenSavestate, but from bytes the host already holds
+    // (e.g. a browser reading a File into WASM memory) rather than a file path.
+    if (se_savestate_open_buffer(data, size, &dataSource) != 0)
+    {
+        return false;
+    }
+    if (!CreateContextFromSource(dataSource, &mContext))
+    {
+        return false;
+    }
+    mDataSource = dataSource;
+    mbHasData = true;
+    return true;
+}
+
 void App::BuildUI(IPlatform& platform)
 {
     if (mbHasData)

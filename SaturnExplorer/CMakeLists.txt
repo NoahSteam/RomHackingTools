@@ -55,25 +55,35 @@ target_include_directories(SaturnExplorerSavestateDriver
 target_link_libraries(SaturnExplorerSavestateDriver PUBLIC SaturnExplorerCore)
 
 # ---------------------------------------------------------------------------
-# FrontEnd — reference app (Dear ImGui + Win32 + Direct3D 11). Windows only.
+# FrontEnd — reference app (Dear ImGui). Three interchangeable Seam C backends:
+#   * Windows  : Win32 + Direct3D 11        (native desktop)
+#   * Emscripten: SDL2 + WebGL2/GLES3        (browser, via `emcmake cmake`)
+#   * Desktop  : SDL2 + OpenGL (if SDL2 found) — a local build of the web backend
+#                so the frontend can be validated without a browser.
+# The portable App + all panels are shared; only the backend + entry point differ.
 # ---------------------------------------------------------------------------
+set(SE_IMGUI_DIR ${CMAKE_CURRENT_SOURCE_DIR}/FrontEnd/third_party/imgui)
+set(SE_IMGUI_CORE
+    ${SE_IMGUI_DIR}/imgui.cpp
+    ${SE_IMGUI_DIR}/imgui_draw.cpp
+    ${SE_IMGUI_DIR}/imgui_tables.cpp
+    ${SE_IMGUI_DIR}/imgui_widgets.cpp
+    ${SE_IMGUI_DIR}/imgui_demo.cpp
+)
+
 if(WIN32)
     add_executable(SaturnExplorerFrontEnd WIN32
         FrontEnd/src/App.cpp
         FrontEnd/Platforms/Windows/WindowsPlatform.cpp
         FrontEnd/Platforms/Windows/WinMain.cpp
-        FrontEnd/third_party/imgui/imgui.cpp
-        FrontEnd/third_party/imgui/imgui_draw.cpp
-        FrontEnd/third_party/imgui/imgui_tables.cpp
-        FrontEnd/third_party/imgui/imgui_widgets.cpp
-        FrontEnd/third_party/imgui/imgui_demo.cpp
-        FrontEnd/third_party/imgui/backends/imgui_impl_win32.cpp
-        FrontEnd/third_party/imgui/backends/imgui_impl_dx11.cpp
+        ${SE_IMGUI_CORE}
+        ${SE_IMGUI_DIR}/backends/imgui_impl_win32.cpp
+        ${SE_IMGUI_DIR}/backends/imgui_impl_dx11.cpp
     )
     target_include_directories(SaturnExplorerFrontEnd PRIVATE
         FrontEnd/src
-        FrontEnd/third_party/imgui
-        FrontEnd/third_party/imgui/backends
+        ${SE_IMGUI_DIR}
+        ${SE_IMGUI_DIR}/backends
     )
     target_compile_definitions(SaturnExplorerFrontEnd PRIVATE
         WIN32_LEAN_AND_MEAN
@@ -89,8 +99,72 @@ if(WIN32)
     # Make F5 in Visual Studio launch the app.
     set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
                  PROPERTY VS_STARTUP_PROJECT SaturnExplorerFrontEnd)
+
+elseif(EMSCRIPTEN)
+    # Web build: `emcmake cmake -B build-web && cmake --build build-web`.
+    add_executable(SaturnExplorerFrontEnd
+        FrontEnd/src/App.cpp
+        FrontEnd/Platforms/Web/WebPlatform.cpp
+        FrontEnd/Platforms/Web/WebMain.cpp
+        ${SE_IMGUI_CORE}
+        ${SE_IMGUI_DIR}/backends/imgui_impl_sdl2.cpp
+        ${SE_IMGUI_DIR}/backends/imgui_impl_opengl3.cpp
+    )
+    target_include_directories(SaturnExplorerFrontEnd PRIVATE
+        FrontEnd/src
+        FrontEnd/Platforms/Web
+        ${SE_IMGUI_DIR}
+        ${SE_IMGUI_DIR}/backends
+    )
+    # The OpenGL3 backend must target GLES3 (WebGL2).
+    target_compile_definitions(SaturnExplorerFrontEnd PRIVATE IMGUI_IMPL_OPENGL_ES3)
+    # SDL2 is an Emscripten port; the flag is needed at compile (headers) + link.
+    target_compile_options(SaturnExplorerFrontEnd PRIVATE "-sUSE_SDL=2")
+    target_link_libraries(SaturnExplorerFrontEnd PRIVATE
+        SaturnExplorerCore
+        SaturnExplorerSavestateDriver
+    )
+    set(SE_SHELL ${CMAKE_CURRENT_SOURCE_DIR}/FrontEnd/Platforms/Web/shell.html)
+    set_target_properties(SaturnExplorerFrontEnd PROPERTIES
+        OUTPUT_NAME "index"
+        SUFFIX ".html"
+        LINK_DEPENDS ${SE_SHELL}
+        LINK_FLAGS "-sUSE_SDL=2 -sUSE_WEBGL2=1 -sFULL_ES3 -sALLOW_MEMORY_GROWTH \
+-sEXPORTED_FUNCTIONS=['_main','_se_web_load_file','_se_web_resize','_malloc','_free'] \
+-sEXPORTED_RUNTIME_METHODS=['ccall','cwrap','HEAPU8'] \
+--shell-file ${SE_SHELL}")
+
 else()
-    message(STATUS
-        "SaturnExplorer: FrontEnd app is Windows/Direct3D 11 only — "
-        "configuring Core + savestate driver, skipping the app on this platform.")
+    # Non-Windows desktop: build the web backend natively against system SDL2 +
+    # OpenGL when available (a browser-free way to run/validate the frontend).
+    find_package(SDL2 QUIET)
+    find_package(OpenGL QUIET)
+    if(SDL2_FOUND AND OpenGL_OpenGL_FOUND)
+        add_executable(SaturnExplorerFrontEnd
+            FrontEnd/src/App.cpp
+            FrontEnd/Platforms/Web/WebPlatform.cpp
+            FrontEnd/Platforms/Web/WebMain.cpp
+            ${SE_IMGUI_CORE}
+            ${SE_IMGUI_DIR}/backends/imgui_impl_sdl2.cpp
+            ${SE_IMGUI_DIR}/backends/imgui_impl_opengl3.cpp
+        )
+        target_include_directories(SaturnExplorerFrontEnd PRIVATE
+            FrontEnd/src
+            FrontEnd/Platforms/Web
+            ${SE_IMGUI_DIR}
+            ${SE_IMGUI_DIR}/backends
+            ${SDL2_INCLUDE_DIRS}
+        )
+        target_link_libraries(SaturnExplorerFrontEnd PRIVATE
+            SaturnExplorerCore
+            SaturnExplorerSavestateDriver
+            ${SDL2_LIBRARIES}
+            OpenGL::GL
+        )
+    else()
+        message(STATUS
+            "SaturnExplorer: no SDL2/OpenGL found — configuring Core + savestate "
+            "driver only. Use `emcmake cmake` for the web app, or install SDL2 for "
+            "a native desktop build.")
+    endif()
 endif()

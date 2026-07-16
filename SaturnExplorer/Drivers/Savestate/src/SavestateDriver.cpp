@@ -587,6 +587,57 @@ se_result ParseMednafenBuffer(const std::vector<uint8_t>& file, se_data_source* 
     BuildDataSource(state, out);
     return SE_OK;
 }
+
+// Sniff an already-loaded savestate buffer's magic and dispatch to the matching
+// parser. Shared by the path-based se_savestate_open (after LoadFile) and the
+// buffer-based se_savestate_open_buffer (for hosts that supply bytes directly,
+// e.g. a browser reading a File into WASM memory).
+se_result DispatchBuffer(const std::vector<uint8_t>& file, se_data_source* out)
+{
+    if (file.size() >= 3 && file[0] == 'Y' && file[1] == 'S' && file[2] == 'S')
+    {
+        return ParseYssBuffer(file, out);        // Yabause family (.yss)
+    }
+    if (file.size() >= kMdfnMagicSize &&
+        std::memcmp(file.data(), "MDFNSVST", kMdfnMagicSize) == 0)
+    {
+        return ParseMednafenBuffer(file, out);   // Mednafen / Beetle Saturn
+    }
+    return SE_ERR_UNSUPPORTED;
+}
+
+// Slice an already-loaded linear dump into regions by the Saturn memory map.
+// Shared by the path-based se_savestate_open_full_dump (after LoadFile) and the
+// buffer-based se_savestate_open_full_dump_buffer.
+se_result ParseFullDumpBuffer(const std::vector<uint8_t>& dump, uint32_t base_address,
+                              se_data_source* out)
+{
+    if (dump.empty())
+    {
+        return SE_ERR_IO;
+    }
+    Savestate* state = new (std::nothrow) Savestate();
+    if (!state)
+    {
+        return SE_ERR_NO_DATA;
+    }
+
+    SliceRegion(dump, base_address, kAddrVdp1Vram, kSizeVdp1Vram, state->mVdp1Vram);
+    SliceRegion(dump, base_address, kAddrVdp1Regs, kSizeVdp1Regs, state->mVdp1Regs);
+    SliceRegion(dump, base_address, kAddrVdp2Vram, kSizeVdp2Vram, state->mVdp2Vram);
+    SliceRegion(dump, base_address, kAddrCram,     kSizeCram,     state->mCram);
+    SliceRegion(dump, base_address, kAddrVdp2Regs, kSizeVdp2Regs, state->mVdp2Regs);
+    SliceRegion(dump, base_address, kAddrWramLow,  kSizeWramLow,  state->mWramLow);
+    SliceRegion(dump, base_address, kAddrWramHigh, kSizeWramHigh, state->mWramHigh);
+
+    if (state->mVdp1Vram.empty())
+    {
+        delete state;
+        return SE_ERR_NO_DATA;
+    }
+    BuildDataSource(state, out);
+    return SE_OK;
+}
 }  // namespace
 
 extern "C" {
@@ -678,17 +729,22 @@ se_result se_savestate_open(const char* path, se_data_source* out)
     {
         return SE_ERR_IO;
     }
-    if (file.size() >= 3 && file[0] == 'Y' && file[1] == 'S' && file[2] == 'S')
+    // Room for other emulators (Kronos, SSF, Yaba Sanshiro, ...) inside DispatchBuffer.
+    return DispatchBuffer(file, out);
+}
+
+se_result se_savestate_open_buffer(const uint8_t* data, size_t size, se_data_source* out)
+{
+    if (!data || !out)
     {
-        return ParseYssBuffer(file, out);        // Yabause family (.yss)
+        return SE_ERR_INVALID_ARG;
     }
-    if (file.size() >= kMdfnMagicSize &&
-        std::memcmp(file.data(), "MDFNSVST", kMdfnMagicSize) == 0)
-    {
-        return ParseMednafenBuffer(file, out);   // Mednafen / Beetle Saturn
-    }
-    // Room for other emulators (Kronos, SSF, Yaba Sanshiro, ...).
-    return SE_ERR_UNSUPPORTED;
+    std::memset(out, 0, sizeof(*out));
+    // Copy into an owned buffer so the parsers (which retain slices) don't depend
+    // on the caller's memory outliving the context. The host may free 'data' as
+    // soon as this returns.
+    std::vector<uint8_t> file(data, data + size);
+    return DispatchBuffer(file, out);
 }
 
 se_result se_savestate_open_full_dump(const char* path, uint32_t base_address,
@@ -705,29 +761,19 @@ se_result se_savestate_open_full_dump(const char* path, uint32_t base_address,
     {
         return SE_ERR_IO;
     }
+    return ParseFullDumpBuffer(dump, base_address, out);
+}
 
-    Savestate* state = new (std::nothrow) Savestate();
-    if (!state)
+se_result se_savestate_open_full_dump_buffer(const uint8_t* data, size_t size,
+                                             uint32_t base_address, se_data_source* out)
+{
+    if (!data || !out)
     {
-        return SE_ERR_NO_DATA;
+        return SE_ERR_INVALID_ARG;
     }
-
-    SliceRegion(dump, base_address, kAddrVdp1Vram, kSizeVdp1Vram, state->mVdp1Vram);
-    SliceRegion(dump, base_address, kAddrVdp1Regs, kSizeVdp1Regs, state->mVdp1Regs);
-    SliceRegion(dump, base_address, kAddrVdp2Vram, kSizeVdp2Vram, state->mVdp2Vram);
-    SliceRegion(dump, base_address, kAddrCram,     kSizeCram,     state->mCram);
-    SliceRegion(dump, base_address, kAddrVdp2Regs, kSizeVdp2Regs, state->mVdp2Regs);
-    SliceRegion(dump, base_address, kAddrWramLow,  kSizeWramLow,  state->mWramLow);
-    SliceRegion(dump, base_address, kAddrWramHigh, kSizeWramHigh, state->mWramHigh);
-
-    if (state->mVdp1Vram.empty())
-    {
-        delete state;
-        return SE_ERR_NO_DATA;
-    }
-
-    BuildDataSource(state, out);
-    return SE_OK;
+    std::memset(out, 0, sizeof(*out));
+    std::vector<uint8_t> dump(data, data + size);
+    return ParseFullDumpBuffer(dump, base_address, out);
 }
 
 }  // extern "C"
