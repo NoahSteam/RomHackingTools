@@ -957,17 +957,36 @@ void App::DrawVramMap()
             const size_t count = se_vram_region_count(mContext);
             ImGui::Text("%zu regions in 512 KiB VDP1 VRAM", count);
 
-            // Colour by region kind; legend mirrors these.
-            auto kindColor = [](se_vram_region_kind k) -> ImU32
+            // Saturation/value per kind: hue carries identity, S/V carries kind.
+            auto kindSV = [](se_vram_region_kind k, float& s, float& v)
             {
                 switch (k)
                 {
-                case SE_VRAM_TEXTURE:   return IM_COL32(90, 190, 120, 255);
-                case SE_VRAM_CLUT:      return IM_COL32(220, 200, 90, 255);
-                case SE_VRAM_CMD_TABLE: return IM_COL32(100, 150, 230, 255);
-                case SE_VRAM_GOURAUD:   return IM_COL32(200, 120, 210, 255);
-                default:                return IM_COL32(150, 150, 150, 255);
+                case SE_VRAM_TEXTURE:   s = 0.70f; v = 0.95f; break;  // vivid
+                case SE_VRAM_CLUT:      s = 0.35f; v = 1.00f; break;  // pastel / bright
+                case SE_VRAM_CMD_TABLE: s = 0.60f; v = 0.55f; break;  // dark / muted
+                case SE_VRAM_GOURAUD:   s = 0.85f; v = 0.85f; break;
+                default:                s = 0.00f; v = 0.55f; break;  // grey
                 }
+            };
+
+            // Colour every region by a hue hashed from its owning command
+            // (ref_index) so each texture is visually distinct, while S/V still
+            // encodes the kind. Golden-ratio stepping spreads consecutive command
+            // indices ~137 degrees apart, so VRAM-adjacent textures contrast.
+            auto regionColor = [&](const se_vram_region& r, size_t fallback) -> ImU32
+            {
+                const uint32_t id = (r.ref_index != 0xFFFFFFFFu)
+                                        ? r.ref_index
+                                        : static_cast<uint32_t>(fallback);
+                const float h = id * 0.61803399f - static_cast<float>(static_cast<int>(id * 0.61803399f));
+                float s, v;
+                kindSV(r.kind, s, v);
+                float rr, gg, bb;
+                ImGui::ColorConvertHSVtoRGB(h, s, v, rr, gg, bb);
+                return IM_COL32(static_cast<int>(rr * 255.0f),
+                                static_cast<int>(gg * 255.0f),
+                                static_cast<int>(bb * 255.0f), 255);
             };
 
             const uint32_t kVramSize = 0x80000;   // 512 KiB
@@ -1014,7 +1033,7 @@ void App::DrawVramMap()
                     continue;
                 }
                 const uint32_t end = reg.address + (reg.size ? reg.size : 1);
-                const ImU32 col = kindColor(reg.kind);
+                const ImU32 col = regionColor(reg, i);
                 // A region can straddle rows; paint it row by row.
                 uint32_t a = reg.address;
                 while (a < end && a < kVramSize)
@@ -1051,13 +1070,22 @@ void App::DrawVramMap()
                 }
             }
             ImGui::Spacing();
+            ImGui::TextDisabled("Hue = command/texture; brightness = kind:");
 
-            // Legend.
+            // Legend: each swatch uses a fixed sample hue so the row shows only the
+            // per-kind saturation/value treatment (the map varies hue per command).
             auto swatch = [&](const char* name, se_vram_region_kind k)
             {
+                float s, v;
+                kindSV(k, s, v);
+                float rr, gg, bb;
+                ImGui::ColorConvertHSVtoRGB(0.55f, s, v, rr, gg, bb);
+                const ImU32 col = IM_COL32(static_cast<int>(rr * 255.0f),
+                                           static_cast<int>(gg * 255.0f),
+                                           static_cast<int>(bb * 255.0f), 255);
                 ImDrawList* d = ImGui::GetWindowDrawList();
                 const ImVec2 p = ImGui::GetCursorScreenPos();
-                d->AddRectFilled(p, ImVec2(p.x + 12, p.y + 12), kindColor(k));
+                d->AddRectFilled(p, ImVec2(p.x + 12, p.y + 12), col);
                 ImGui::Dummy(ImVec2(16, 12));
                 ImGui::SameLine();
                 ImGui::TextUnformatted(name);
