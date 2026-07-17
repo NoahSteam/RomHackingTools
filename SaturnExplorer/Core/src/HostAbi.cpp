@@ -290,4 +290,78 @@ se_result se_get_system_status(se_context* ctx, se_system_status* out)
     return SE_ERR_NO_CAPABILITY;
 }
 
+/* --- Frame control --- */
+int se_supports_frame_control(se_context* ctx)
+{
+    if (!ctx)
+    {
+        return 0;
+    }
+    const se_data_source& ds = Impl(ctx)->DataSource();
+    return (ds.capabilities & SE_CAP_FRAME_STEP) && ds.frame_pause && ds.frame_step
+               ? 1
+               : 0;
+}
+
+se_result se_frame_pause(se_context* ctx)
+{
+    if (!ctx)
+    {
+        return SE_ERR_INVALID_ARG;
+    }
+    const se_data_source& ds = Impl(ctx)->DataSource();
+    if (!(ds.capabilities & SE_CAP_FRAME_STEP) || !ds.frame_pause)
+    {
+        return SE_ERR_NO_CAPABILITY;
+    }
+    return ds.frame_pause(ds.user) == 0 ? SE_OK : SE_ERR_IO;
+}
+
+se_result se_frame_resume(se_context* ctx)
+{
+    if (!ctx)
+    {
+        return SE_ERR_INVALID_ARG;
+    }
+    const se_data_source& ds = Impl(ctx)->DataSource();
+    if (!(ds.capabilities & SE_CAP_FRAME_STEP) || !ds.frame_step)
+    {
+        return SE_ERR_NO_CAPABILITY;
+    }
+    /* By the seam's contract, stepping <= 0 frames means "run free" (resume). */
+    return ds.frame_step(ds.user, 0) == 0 ? SE_OK : SE_ERR_IO;
+}
+
+se_result se_frame_step(se_context* ctx, int32_t frames)
+{
+    if (!ctx)
+    {
+        return SE_ERR_INVALID_ARG;
+    }
+    const se_data_source& ds = Impl(ctx)->DataSource();
+    if (!(ds.capabilities & SE_CAP_FRAME_STEP) || !ds.frame_step)
+    {
+        return SE_ERR_NO_CAPABILITY;
+    }
+    if (frames < 1)
+    {
+        frames = 1;
+    }
+    return ds.frame_step(ds.user, frames) == 0 ? SE_OK : SE_ERR_IO;
+}
+
+uint64_t se_frame_number(se_context* ctx)
+{
+    if (!ctx)
+    {
+        return 0;
+    }
+    const se_data_source& ds = Impl(ctx)->DataSource();
+    if ((ds.capabilities & SE_CAP_FRAME_STEP) && ds.frame_number)
+    {
+        return ds.frame_number(ds.user);
+    }
+    return 0;
+}
+
 }  // extern "C"

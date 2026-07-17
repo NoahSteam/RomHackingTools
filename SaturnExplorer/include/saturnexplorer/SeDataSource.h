@@ -47,7 +47,10 @@ typedef struct se_data_source {
     int    (*disc_stat)(void* user, se_disc_info* out);
     size_t (*disc_read)(void* user, uint64_t byte_offset, void* dst, size_t size);
 
-    /* --- Optional: frame control (SE_CAP_FRAME_STEP). --- */
+    /* --- Optional: frame control (SE_CAP_FRAME_STEP). Return 0 on success.
+           frame_pause halts the emulator after the current frame. frame_step
+           advances 'frames' frames then re-pauses; 'frames' <= 0 means resume
+           (run free). frame_number is the current emulated-frame counter. --- */
     int      (*frame_pause) (void* user);
     int      (*frame_step)  (void* user, int32_t frames);
     uint64_t (*frame_number)(void* user);

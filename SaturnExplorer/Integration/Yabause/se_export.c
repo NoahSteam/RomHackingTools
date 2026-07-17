@@ -24,6 +24,7 @@
 #define SE_VR SE_LIVE_VDP1_REGS_LEN
 #define SE_WL SE_LIVE_WRAM_LOW_LEN
 #define SE_WH SE_LIVE_WRAM_HIGH_LEN
+#define SE_CT SE_LIVE_CONTROL_LEN
 
 typedef struct
 {
@@ -66,6 +67,33 @@ static SeFrame* sFront;
 static SeFrame* sBack;
 static volatile int sRunning;
 
+/* ---- Frame-control state (see SeExportGateFrame + the "PAU/RUN/STP" verbs). ----
+ * sPaused holds the emulator when set; sStepBudget lets a paused emulator run a
+ * bounded number of frames (single-step) before halting again. sFrameNo counts
+ * emulated frames (bumped by SeExportSnapshot, i.e. once per completed frame). */
+static volatile int sPaused;
+static volatile int sStepBudget;
+static volatile unsigned long long sFrameNo;
+
+/* Called by the emulator's run loop at the top of each frame: returns 1 if the
+ * frame should run, 0 if the debugger is holding it paused. When paused with a
+ * pending single-step budget, it releases exactly one frame per call. The host
+ * should sleep briefly and re-check when this returns 0 (so it stays responsive
+ * to a later resume/step). Safe to call even before SeExportInit (returns 1). */
+int SeExportGateFrame(void)
+{
+    if (!sPaused)
+    {
+        return 1;
+    }
+    if (sStepBudget > 0)
+    {
+        --sStepBudget;
+        return 1;
+    }
+    return 0;
+}
+
 #if defined(_WIN32)
 static HANDLE sThread;
 static CRITICAL_SECTION sLock;
@@ -107,6 +135,7 @@ void SeExportSnapshot(const void* vdp1, const void* vdp2, const void* cram,
     {
         SeFrame* tmp = sFront; sFront = sBack; sBack = tmp;   /* swap */
     }
+    ++sFrameNo;   /* one completed emulated frame */
     SE_UNLOCK();
 }
 
@@ -149,9 +178,37 @@ static void SeServeClient(int cl, SeFrame* snap)
 {
     while (sRunning)
     {
-        char req[SE_LIVE_REQUEST_LEN];
+        unsigned char req[SE_LIVE_REQUEST_LEN];
+        unsigned int arg;
         if (SeRecv(cl, req, SE_LIVE_REQUEST_LEN) != 0) return;
-        SE_LOCK(); memcpy(snap, sFront, sizeof(SeFrame)); SE_UNLOCK();
+        arg = (unsigned int)req[4] | ((unsigned int)req[5] << 8) |
+              ((unsigned int)req[6] << 16) | ((unsigned int)req[7] << 24);
+
+        /* Apply any control verb before snapshotting, so the reply's control
+         * block reflects the new state. Unknown verbs act like GET. */
+        if (memcmp(req, SE_LIVE_VERB_PAUSE, SE_LIVE_VERB_LEN) == 0)
+        {
+            SE_LOCK(); sPaused = 1; sStepBudget = 0; SE_UNLOCK();
+        }
+        else if (memcmp(req, SE_LIVE_VERB_RESUME, SE_LIVE_VERB_LEN) == 0)
+        {
+            SE_LOCK(); sPaused = 0; sStepBudget = 0; SE_UNLOCK();
+        }
+        else if (memcmp(req, SE_LIVE_VERB_STEP, SE_LIVE_VERB_LEN) == 0)
+        {
+            SE_LOCK();
+            sPaused = 1;
+            sStepBudget += (arg > 0) ? (int)arg : 1;
+            SE_UNLOCK();
+        }
+
+        unsigned char ctl[SE_CT];
+        SE_LOCK();
+        memcpy(snap, sFront, sizeof(SeFrame));
+        SeWr32(ctl, (unsigned int)(sPaused ? 1 : 0));
+        SeWr32(ctl + 4, (unsigned int)(sFrameNo & 0xFFFFFFFFu));
+        SeWr32(ctl + 8, (unsigned int)((sFrameNo >> 32) & 0xFFFFFFFFu));
+        SE_UNLOCK();
 
         unsigned char hdr[SE_LIVE_HEADER_LEN];
         hdr[0] = SE_LIVE_MAGIC0; hdr[1] = SE_LIVE_MAGIC1;
@@ -159,7 +216,7 @@ static void SeServeClient(int cl, SeFrame* snap)
         SeWr32(hdr + 4, SE_LIVE_VERSION);
         SeWr32(hdr + 8, SE_V1);  SeWr32(hdr + 12, SE_V2); SeWr32(hdr + 16, SE_CR);
         SeWr32(hdr + 20, SE_VS); SeWr32(hdr + 24, SE_VR); SeWr32(hdr + 28, SE_WL);
-        SeWr32(hdr + 32, SE_WH);
+        SeWr32(hdr + 32, SE_WH); SeWr32(hdr + 36, SE_CT);
         if (SeSend(cl, hdr, sizeof(hdr)) != 0) return;
         if (SeSend(cl, snap->v1, SE_V1) != 0) return;
         if (SeSend(cl, snap->v2, SE_V2) != 0) return;
@@ -168,6 +225,7 @@ static void SeServeClient(int cl, SeFrame* snap)
         if (SeSend(cl, snap->vr, SE_VR) != 0) return;
         if (SeSend(cl, snap->wl, SE_WL) != 0) return;
         if (SeSend(cl, snap->wh, SE_WH) != 0) return;
+        if (SeSend(cl, ctl, SE_CT) != 0) return;
     }
 }
 
@@ -226,6 +284,7 @@ int SeExportInit(void)
     sFront = (SeFrame*)calloc(1, sizeof(SeFrame));
     sBack  = (SeFrame*)calloc(1, sizeof(SeFrame));
     if (!sFront || !sBack) { SeExportDeinit(); return -1; }
+    sPaused = 0; sStepBudget = 0; sFrameNo = 0;
     sRunning = 1;
 #if defined(_WIN32)
     InitializeCriticalSection(&sLock);

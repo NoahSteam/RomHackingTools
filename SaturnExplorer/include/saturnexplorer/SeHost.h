@@ -117,6 +117,20 @@ size_t      se_history_for(se_context* ctx, uint32_t address,
 /* --- System status (status bar) --- */
 se_result   se_get_system_status(se_context* ctx, se_system_status* out);
 
+/* --- Frame control (live sources only; requires SE_CAP_FRAME_STEP) ---
+   se_supports_frame_control returns 1 when the source can pause/step (so the
+   host can enable those toolbar buttons). pause halts the emulator after the
+   current frame; resume lets it free-run; step advances exactly 'frames' frames
+   and leaves it paused; frame_number is the current emulated-frame counter.
+   The control calls are asynchronous best-effort (they post to the live driver);
+   the effect is visible on the next snapshot. They return SE_ERR_NO_CAPABILITY
+   when the source doesn't support frame control. */
+int         se_supports_frame_control(se_context* ctx);
+se_result   se_frame_pause (se_context* ctx);
+se_result   se_frame_resume(se_context* ctx);
+se_result   se_frame_step  (se_context* ctx, int32_t frames);
+uint64_t    se_frame_number(se_context* ctx);
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
