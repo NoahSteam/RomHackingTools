@@ -75,6 +75,7 @@ private:
 
     se_render_opts   mRenderOpts {};
     bool             mbLiveSource = false;    // data comes from a running emulator
+    bool             mbPaused = false;        // live emulator held paused (frame control)
     int              mSelectedCommand = -1;   // primary selection (detail panels)
     std::vector<int> mSelection;              // all selected command indices
     bool             mbLayoutBuilt = false;   // default dock layout applied once

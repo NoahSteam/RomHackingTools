@@ -1,9 +1,10 @@
 /* Saturn Explorer — Yabause memory-export server (drop-in module).
  *
- * Add this file + se_export.c + SeLiveProtocol.h to yabause/src, then wire three
+ * Add this file + se_export.c + SeLiveProtocol.h to yabause/src, then wire four
  * calls into Yabause (see README.md):
  *   - SeExportInit()      at the end of YabauseInit()
  *   - SeExportSnapshot(...) once per frame, from Vdp2VBlankOUT()
+ *   - SeExportGateFrame() in the run loop, to honor pause / single-step
  *   - SeExportDeinit()    in YabauseDeInit()
  *
  * It serves the current VDP1/VDP2 VRAM, CRAM, and VDP2 register struct to Saturn
@@ -35,6 +36,14 @@ void SeExportSnapshot(const void* vdp1_vram_512k, const void* vdp2_vram_512k,
                       const void* cram_4k, const void* vdp2_regs_struct_288,
                       const void* vdp1_regs_struct, const void* wram_low_1m,
                       const void* wram_high_1m);
+
+/* Frame gate for pause / single-step. Call once at the top of each emulated
+ * frame in Yabause's run loop; returns 1 if the frame should run, 0 if the
+ * debugger is holding it paused (sleep briefly and re-check, e.g.):
+ *   while (!SeExportGateFrame()) { YabThreadUSleep(1000); if (quitting) break; }
+ * When resumed or single-stepped from Saturn Explorer, it releases frames again.
+ * Returns 1 when the server isn't running, so an un-paused build is unaffected. */
+int SeExportGateFrame(void);
 
 /* Stop the server thread and free resources. */
 void SeExportDeinit(void);

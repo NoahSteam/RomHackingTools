@@ -136,6 +136,7 @@ void App::CloseData()
     }
     mbHasData = false;
     mbLiveSource = false;
+    mbPaused = false;
     mSelectedCommand = -1;
     mSelection.clear();
     // The frame texture is freed lazily (on next size change) or with the
@@ -304,6 +305,7 @@ bool App::OpenLive(const char* endpoint)
     mDataSource = dataSource;
     mbHasData = true;
     mbLiveSource = true;   // re-snapshot every frame (see BuildUI)
+    mbPaused = false;      // a fresh connection is free-running
     return true;
 #else
     (void)endpoint;
@@ -505,12 +507,37 @@ void App::DrawToolbar(IPlatform& platform)
             ImGui::EndPopup();
         }
 
-        // Playback / stepping — stubbed until a live driver exists (M7).
+        // Playback / stepping — live when the source supports frame control
+        // (a running, patched Yabause); otherwise disabled.
+        const bool canStep = mbHasData && se_supports_frame_control(mContext);
+        ImGui::SameLine();
+        ImGui::BeginDisabled(!canStep);
+        if (mbPaused)
+        {
+            if (ImGui::Button("Resume", ImVec2(72.0f, 0.0f)))
+            {
+                se_frame_resume(mContext);
+                mbPaused = false;
+            }
+        }
+        else
+        {
+            if (ImGui::Button("Pause", ImVec2(72.0f, 0.0f)))
+            {
+                se_frame_pause(mContext);
+                mbPaused = true;
+            }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Step Frame"))
+        {
+            se_frame_step(mContext, 1);
+            mbPaused = true;
+        }
+        ImGui::EndDisabled();
+        // Timeline scrubbing (rewind through captured frames) — future work.
         ImGui::SameLine();
         ImGui::BeginDisabled(true);
-        ImGui::Button("Pause"); ImGui::SameLine();
-        ImGui::Button("Step");  ImGui::SameLine();
-        ImGui::Button("Step Frame"); ImGui::SameLine();
         ImGui::Button("|<"); ImGui::SameLine(); ImGui::Button("<"); ImGui::SameLine();
         ImGui::Button(">"); ImGui::SameLine(); ImGui::Button(">|"); ImGui::SameLine();
         ImGui::EndDisabled();
@@ -563,10 +590,22 @@ void App::DrawStatusBar()
             {
                 ImGui::TextDisabled("No data loaded — Open ROM to begin.");
             }
-            // Live-only fields (frame / blanks / SH-2 PC / busy) arrive with the
-            // M7 live driver; shown here as placeholders to mirror the concept.
-            char right[128];
-            std::snprintf(right, sizeof(right), "Frame: -   |   Line: -   |   SH-2 PC: -   |   VDP1: -   VDP2: -");
+            // Frame counter + run state come from a live source (frame control);
+            // the remaining fields (scanline / SH-2 PC / busy) await a fuller
+            // live status feed and stay placeholders for now.
+            char right[160];
+            if (mbHasData && se_supports_frame_control(mContext))
+            {
+                std::snprintf(right, sizeof(right),
+                              "Frame: %llu (%s)   |   Line: -   |   SH-2 PC: -   |   VDP1: -   VDP2: -",
+                              static_cast<unsigned long long>(se_frame_number(mContext)),
+                              mbPaused ? "paused" : "running");
+            }
+            else
+            {
+                std::snprintf(right, sizeof(right),
+                              "Frame: -   |   Line: -   |   SH-2 PC: -   |   VDP1: -   VDP2: -");
+            }
             const float w = ImGui::CalcTextSize(right).x;
             ImGui::SameLine(ImGui::GetWindowWidth() - w - 12.0f);
             ImGui::TextDisabled("%s", right);

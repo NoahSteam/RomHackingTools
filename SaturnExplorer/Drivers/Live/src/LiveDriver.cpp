@@ -40,6 +40,11 @@ struct LiveSnapshot
     bool                 valid = false;
 };
 
+// Pending control command the UI thread hands to the poll thread (which owns the
+// single server connection). Best-effort: the poll thread drains it within one
+// cycle (~8 ms). Steps accumulate so rapid presses aren't lost.
+enum class Ctl { None, Pause, Resume, Step };
+
 struct LiveState
 {
     std::string       endpoint;
@@ -47,6 +52,14 @@ struct LiveState
     std::atomic<bool> running{false};
     std::mutex        mtx;           // guards 'front'
     LiveSnapshot      front;
+
+    // Frame control (SE_CAP_FRAME_STEP). Updated from each snapshot's control
+    // block; the callbacks post a command for the poll thread to send.
+    std::atomic<uint64_t> frameNumber{0};
+    std::atomic<bool>     paused{false};
+    std::mutex            ctlMtx;    // guards pending / stepFrames
+    Ctl                   pending = Ctl::None;
+    int32_t               stepFrames = 0;
 };
 
 /* ---- Local-socket transport (POSIX Unix socket / Windows named pipe). ---- */
@@ -142,11 +155,26 @@ uint32_t Rd32LE(const uint8_t* p)
            (static_cast<uint32_t>(p[2]) << 16) | (static_cast<uint32_t>(p[3]) << 24);
 }
 
-// Read one snapshot from a connected socket into 'snap' (converted to core-ready
-// form). Returns false on any protocol/socket error.
-bool ReadSnapshot(Conn& c, LiveSnapshot& snap)
+// Send one command frame (verb + little-endian arg) to the server.
+bool SendCommand(Conn& c, const char* verb, int32_t arg)
 {
-    if (!ConnWrite(c, SE_LIVE_REQUEST, SE_LIVE_REQUEST_LEN))
+    uint8_t req[SE_LIVE_REQUEST_LEN];
+    std::memcpy(req, verb, SE_LIVE_VERB_LEN);
+    const uint32_t a = static_cast<uint32_t>(arg);
+    req[4] = static_cast<uint8_t>(a & 0xFF);
+    req[5] = static_cast<uint8_t>((a >> 8) & 0xFF);
+    req[6] = static_cast<uint8_t>((a >> 16) & 0xFF);
+    req[7] = static_cast<uint8_t>((a >> 24) & 0xFF);
+    return ConnWrite(c, req, sizeof(req));
+}
+
+// Issue 'verb' (arg) and read the snapshot the server replies with into 'snap'
+// (converted to core-ready form). Also returns the run state via outPaused /
+// outFrame. Returns false on any protocol/socket error.
+bool ReadSnapshot(Conn& c, const char* verb, int32_t arg, LiveSnapshot& snap,
+                  bool& outPaused, uint64_t& outFrame)
+{
+    if (!SendCommand(c, verb, arg))
     {
         return false;
     }
@@ -168,9 +196,10 @@ bool ReadSnapshot(Conn& c, LiveSnapshot& snap)
     const uint32_t vr = Rd32LE(hdr + 24);
     const uint32_t wl = Rd32LE(hdr + 28);
     const uint32_t wh = Rd32LE(hdr + 32);
+    const uint32_t ct = Rd32LE(hdr + 36);
     // Sanity clamps so a malformed header can't drive a huge allocation.
     if (v1 > 0x100000u || v2 > 0x100000u || cr > 0x4000u || vs > 4096u ||
-        vr > 256u || wl > 0x100000u || wh > 0x100000u)
+        vr > 256u || wl > 0x100000u || wh > 0x100000u || ct > 64u)
     {
         return false;
     }
@@ -182,16 +211,24 @@ bool ReadSnapshot(Conn& c, LiveSnapshot& snap)
     snap.vdp1Regs.resize(vr);
     snap.wramLow.resize(wl);
     snap.wramHigh.resize(wh);
+    std::vector<uint8_t> ctl(ct);
     if (!ConnReadFull(c, snap.vdp1Vram.data(), v1) ||
         !ConnReadFull(c, snap.vdp2Vram.data(), v2) ||
         !ConnReadFull(c, snap.cram.data(), cr) ||
         !ConnReadFull(c, vdp2Struct.data(), vs) ||
         !ConnReadFull(c, snap.vdp1Regs.data(), vr) ||
         !ConnReadFull(c, snap.wramLow.data(), wl) ||
-        !ConnReadFull(c, snap.wramHigh.data(), wh))
+        !ConnReadFull(c, snap.wramHigh.data(), wh) ||
+        !ConnReadFull(c, ctl.data(), ct))
     {
         return false;
     }
+
+    // Control block: paused (u32 LE) + frame (u64 LE). Absent on older servers.
+    outPaused = ct >= 4 && Rd32LE(ctl.data()) != 0;
+    outFrame = ct >= 12 ? (static_cast<uint64_t>(Rd32LE(ctl.data() + 4)) |
+                           (static_cast<uint64_t>(Rd32LE(ctl.data() + 8)) << 32))
+                        : 0;
 
     // VRAM is already big-endian; build the VDP2 register image and use RAMCTL's
     // CRAM mode to normalize CRAM — exactly like the savestate path.
@@ -215,8 +252,27 @@ void PollLoop(LiveState* st)
                 continue;
             }
         }
+
+        // Drain any control command posted by the UI thread; otherwise poll.
+        const char* verb = SE_LIVE_VERB_GET;
+        int32_t arg = 0;
+        {
+            std::lock_guard<std::mutex> lk(st->ctlMtx);
+            switch (st->pending)
+            {
+                case Ctl::Pause:  verb = SE_LIVE_VERB_PAUSE;  break;
+                case Ctl::Resume: verb = SE_LIVE_VERB_RESUME; break;
+                case Ctl::Step:   verb = SE_LIVE_VERB_STEP; arg = st->stepFrames; break;
+                default: break;
+            }
+            st->pending = Ctl::None;
+            st->stepFrames = 0;
+        }
+
         LiveSnapshot snap;
-        if (!ReadSnapshot(conn, snap))
+        bool paused = false;
+        uint64_t frame = 0;
+        if (!ReadSnapshot(conn, verb, arg, snap, paused, frame))
         {
             ConnClose(conn);   // will reconnect next iteration
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -226,6 +282,8 @@ void PollLoop(LiveState* st)
             std::lock_guard<std::mutex> lk(st->mtx);
             st->front = std::move(snap);
         }
+        st->paused.store(paused);
+        st->frameNumber.store(frame);
         std::this_thread::sleep_for(std::chrono::milliseconds(8));   // ~120 Hz cap
     }
     ConnClose(conn);
@@ -286,6 +344,39 @@ uint16_t CbVdp2Reg(void* u, uint32_t reg)
     return sedrv::ReadReg16(st->front.vdp2Regs, reg);
 }
 
+// ---- Frame control. The UI thread posts a command; the poll thread sends it
+//      over the shared connection on its next cycle (see PollLoop). ----
+void PostCmd(LiveState* st, Ctl cmd, int32_t frames)
+{
+    std::lock_guard<std::mutex> lk(st->ctlMtx);
+    if (cmd == Ctl::Step && st->pending == Ctl::Step)
+    {
+        st->stepFrames += frames;   // accumulate rapid presses
+    }
+    else
+    {
+        st->pending = cmd;
+        st->stepFrames = (cmd == Ctl::Step) ? frames : 0;
+    }
+}
+
+int CbFramePause(void* u)
+{
+    PostCmd(St(u), Ctl::Pause, 0);
+    return 0;
+}
+int CbFrameStep(void* u, int32_t frames)
+{
+    // By the seam's contract, frames <= 0 means "resume" (run free).
+    if (frames <= 0) { PostCmd(St(u), Ctl::Resume, 0); }
+    else             { PostCmd(St(u), Ctl::Step, frames); }
+    return 0;
+}
+uint64_t CbFrameNumber(void* u)
+{
+    return St(u)->frameNumber.load();
+}
+
 void CbClose(void* u)
 {
     LiveState* st = St(u);
@@ -334,7 +425,8 @@ extern "C" se_result se_live_open(const char* endpoint, se_data_source* out)
 
     out->abi_version = SE_ABI_VERSION;
     out->capabilities = SE_CAP_VDP1_VRAM | SE_CAP_VDP2_VRAM | SE_CAP_CRAM |
-                        SE_CAP_VDP1_REGS | SE_CAP_VDP2_REGS | SE_CAP_MAIN_RAM;
+                        SE_CAP_VDP1_REGS | SE_CAP_VDP2_REGS | SE_CAP_MAIN_RAM |
+                        SE_CAP_FRAME_STEP;
     out->user = st;
     out->read_vdp1_vram = CbVdp1Vram;
     out->read_vdp2_vram = CbVdp2Vram;
@@ -342,6 +434,9 @@ extern "C" se_result se_live_open(const char* endpoint, se_data_source* out)
     out->read_main_ram  = CbMainRam;
     out->read_vdp1_reg  = CbVdp1Reg;
     out->read_vdp2_reg  = CbVdp2Reg;
+    out->frame_pause    = CbFramePause;
+    out->frame_step     = CbFrameStep;
+    out->frame_number   = CbFrameNumber;
     out->close          = CbClose;
     return SE_OK;
 }
