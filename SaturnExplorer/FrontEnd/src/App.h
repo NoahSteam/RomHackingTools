@@ -30,6 +30,11 @@ public:
     // context. Used by the web build, where files arrive as bytes from JS.
     bool OpenSavestateBuffer(const uint8_t* data, size_t size);
 
+    // Connect to a running, patched Yabause (live source). 'endpoint' may be NULL
+    // for the platform default socket. No-op returning false unless the build was
+    // compiled with the LiveDriver (SE_ENABLE_LIVE — native desktop / Windows).
+    bool OpenLive(const char* endpoint);
+
     // Draw the whole UI. Called once per frame, between the platform's
     // BeginFrame and EndFrame.
     void BuildUI(IPlatform& platform);
@@ -68,6 +73,7 @@ private:
     bool           mbHasData = false;
 
     se_render_opts   mRenderOpts {};
+    bool             mbLiveSource = false;    // data comes from a running emulator
     int              mSelectedCommand = -1;   // primary selection (detail panels)
     std::vector<int> mSelection;              // all selected command indices
     bool             mbLayoutBuilt = false;   // default dock layout applied once

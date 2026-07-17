@@ -14,6 +14,7 @@
 #include <emscripten.h>
 #else
 #include <cstdio>
+#include <cstring>
 #include <vector>
 #endif
 
@@ -82,9 +83,13 @@ int main(int argc, char** argv)
     // main() does not return and tear down the context.
     emscripten_set_main_loop(FrameOnce, 0, 1);
 #else
-    // Native (desktop) convenience: load a savestate/dump passed on the command
-    // line, since there is no browser file picker here.
-    if (argc > 1)
+    // Native (desktop) convenience: `--live [endpoint]` connects to a running
+    // Yabause; otherwise a savestate/dump path loads it (no browser picker here).
+    if (argc > 1 && std::strcmp(argv[1], "--live") == 0)
+    {
+        gApp.OpenLive(argc > 2 ? argv[2] : nullptr);
+    }
+    else if (argc > 1)
     {
         if (FILE* f = std::fopen(argv[1], "rb"))
         {

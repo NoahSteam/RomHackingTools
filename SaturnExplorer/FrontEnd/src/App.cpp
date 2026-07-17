@@ -10,6 +10,9 @@
 
 #include "Platform/IPlatform.h"
 #include "SavestateDriver.h"
+#ifdef SE_ENABLE_LIVE
+#include "LiveDriver.h"   // native builds only (threads/sockets)
+#endif
 
 namespace sfe
 {
@@ -132,6 +135,7 @@ void App::CloseData()
         mContext = nullptr;
     }
     mbHasData = false;
+    mbLiveSource = false;
     mSelectedCommand = -1;
     mSelection.clear();
     // The frame texture is freed lazily (on next size change) or with the
@@ -284,6 +288,29 @@ bool App::OpenSavestate(const char* path)
     return true;
 }
 
+bool App::OpenLive(const char* endpoint)
+{
+#ifdef SE_ENABLE_LIVE
+    CloseData();
+    se_data_source dataSource;
+    if (se_live_open(endpoint, &dataSource) != SE_OK)
+    {
+        return false;
+    }
+    if (!CreateContextFromSource(dataSource, &mContext))
+    {
+        return false;
+    }
+    mDataSource = dataSource;
+    mbHasData = true;
+    mbLiveSource = true;   // re-snapshot every frame (see BuildUI)
+    return true;
+#else
+    (void)endpoint;
+    return false;
+#endif
+}
+
 bool App::OpenSavestateBuffer(const uint8_t* data, size_t size)
 {
     CloseData();
@@ -305,6 +332,14 @@ bool App::OpenSavestateBuffer(const uint8_t* data, size_t size)
 
 void App::BuildUI(IPlatform& platform)
 {
+    // A live source changes every frame: re-snapshot before anything reads it, so
+    // all panels reflect the running emulator's current VDP state. (Static sources
+    // snapshot once at load, in CreateContextFromSource.)
+    if (mbLiveSource && mContext)
+    {
+        se_begin_frame(mContext);
+    }
+
     if (mbHasData)
     {
         RenderFrameToTexture(platform);
@@ -456,6 +491,14 @@ void App::DrawToolbar(IPlatform& platform)
                 std::string path;
                 if (platform.OpenFileDialog(path)) OpenFullDump(path.c_str(), 0x00000000u);
             }
+#ifdef SE_ENABLE_LIVE
+            ImGui::Separator();
+            if (ImGui::MenuItem("Connect to Yabause (live)", nullptr, false, !mbLiveSource))
+            {
+                OpenLive(nullptr);   // default local socket / named pipe
+            }
+            if (ImGui::MenuItem("Disconnect (live)", nullptr, false, mbLiveSource)) CloseData();
+#endif
             if (ImGui::MenuItem("Close", nullptr, false, mbHasData)) CloseData();
             ImGui::EndPopup();
         }

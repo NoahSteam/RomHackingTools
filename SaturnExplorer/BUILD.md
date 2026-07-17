@@ -64,6 +64,14 @@ and open it in a browser. Load a savestate by **dragging it onto the canvas** or
 toolbar's **Open** button. Every push to `master` also builds and publishes this to GitHub
 Pages via `.github/workflows/web.yml`.
 
+### Live mode — inspect a running emulator (native builds)
+The Windows and native-SDL2 builds can read a **running** Yabause in realtime
+instead of a savestate. Apply the small patch in
+[`Integration/Yabause/`](Integration/Yabause/README.md) to your Yabause build, run
+a game, then launch Saturn Explorer with `--live` (or use **Open ▸ Connect to
+Yabause**). Every panel then tracks the live game. (The web build is savestate-only
+— live mode needs sockets/threads.)
+
 ---
 
 ## Option 2 — the checked-in Visual Studio solution

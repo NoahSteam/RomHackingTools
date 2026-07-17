@@ -43,6 +43,17 @@ target_include_directories(SaturnExplorerCore
 )
 
 # ---------------------------------------------------------------------------
+# Driver common — shared, portable helpers (endian normalization + VDP2 register
+# image reconstruction) used by the savestate and live drivers.
+# ---------------------------------------------------------------------------
+add_library(SaturnExplorerDriverCommon STATIC
+    Drivers/Common/src/SaturnStateShared.cpp
+)
+target_include_directories(SaturnExplorerDriverCommon
+    PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/Drivers/Common/src
+)
+
+# ---------------------------------------------------------------------------
 # Savestate / memory-dump driver — portable static library (Seam A reference).
 # ---------------------------------------------------------------------------
 add_library(SaturnExplorerSavestateDriver STATIC
@@ -52,7 +63,29 @@ target_include_directories(SaturnExplorerSavestateDriver
     PUBLIC  ${CMAKE_CURRENT_SOURCE_DIR}/Drivers/Savestate/src
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
-target_link_libraries(SaturnExplorerSavestateDriver PUBLIC SaturnExplorerCore)
+target_link_libraries(SaturnExplorerSavestateDriver
+    PUBLIC SaturnExplorerCore SaturnExplorerDriverCommon)
+
+# ---------------------------------------------------------------------------
+# Live driver — reads a running, patched Yabause over a local socket. Uses
+# threads + sockets, so it's native only (never built under Emscripten).
+# ---------------------------------------------------------------------------
+if(NOT EMSCRIPTEN)
+    add_library(SaturnExplorerLiveDriver STATIC
+        Drivers/Live/src/LiveDriver.cpp
+    )
+    target_include_directories(SaturnExplorerLiveDriver
+        PUBLIC  ${CMAKE_CURRENT_SOURCE_DIR}/Drivers/Live/src
+        PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include
+    )
+    target_link_libraries(SaturnExplorerLiveDriver
+        PUBLIC SaturnExplorerCore SaturnExplorerDriverCommon)
+    find_package(Threads REQUIRED)
+    target_link_libraries(SaturnExplorerLiveDriver PUBLIC Threads::Threads)
+    if(WIN32)
+        target_link_libraries(SaturnExplorerLiveDriver PUBLIC ws2_32)
+    endif()
+endif()
 
 # ---------------------------------------------------------------------------
 # FrontEnd — reference app (Dear ImGui). Three interchangeable Seam C backends:
@@ -88,10 +121,14 @@ if(WIN32)
     target_compile_definitions(SaturnExplorerFrontEnd PRIVATE
         WIN32_LEAN_AND_MEAN
         NOMINMAX
+        SE_ENABLE_LIVE
     )
+    target_include_directories(SaturnExplorerFrontEnd PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/Drivers/Live/src)
     target_link_libraries(SaturnExplorerFrontEnd PRIVATE
         SaturnExplorerCore
         SaturnExplorerSavestateDriver
+        SaturnExplorerLiveDriver
         d3d11
         dxgi
         d3dcompiler
@@ -154,10 +191,13 @@ else()
             ${SE_IMGUI_DIR}
             ${SE_IMGUI_DIR}/backends
             ${SDL2_INCLUDE_DIRS}
+            ${CMAKE_CURRENT_SOURCE_DIR}/Drivers/Live/src
         )
+        target_compile_definitions(SaturnExplorerFrontEnd PRIVATE SE_ENABLE_LIVE)
         target_link_libraries(SaturnExplorerFrontEnd PRIVATE
             SaturnExplorerCore
             SaturnExplorerSavestateDriver
+            SaturnExplorerLiveDriver
             ${SDL2_LIBRARIES}
             OpenGL::GL
         )
