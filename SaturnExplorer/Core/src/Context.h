@@ -254,6 +254,8 @@ public:
         case SE_VRAM_KIND_VDP1_VRAM: src = &mSnapshot.Vdp1Vram(); break;
         case SE_VRAM_KIND_VDP2_VRAM: src = &mSnapshot.Vdp2Vram(); break;
         case SE_VRAM_KIND_CRAM:      src = &mSnapshot.Cram();      break;
+        case SE_VRAM_KIND_WRAM_LOW:  src = &mSnapshot.WramLow();   break;
+        case SE_VRAM_KIND_WRAM_HIGH: src = &mSnapshot.WramHigh();  break;
         default: return 0;
         }
         if (!dst || offset >= src->size())

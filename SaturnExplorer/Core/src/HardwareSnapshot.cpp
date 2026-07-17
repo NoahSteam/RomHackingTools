@@ -40,6 +40,8 @@ bool HardwareSnapshot::Capture(const se_data_source& dataSource)
     mVdp1Vram.clear();
     mVdp2Vram.clear();
     mCram.clear();
+    mWramLow.clear();
+    mWramHigh.clear();
     mVdp1Regs.clear();
     mVdp2Regs.clear();
 
@@ -63,6 +65,17 @@ bool HardwareSnapshot::Capture(const se_data_source& dataSource)
         size_t got = ReadAll(dataSource.read_cram, dataSource.user, 0,
                              mCram.data(), mCram.size());
         mCram.resize(got);
+    }
+    // Work RAM: low @ 0x00200000, high @ 0x06000000 (each 1 MiB). read_main_ram is
+    // addressed by bus address, so read from those bases.
+    if ((dataSource.capabilities & SE_CAP_MAIN_RAM) && dataSource.read_main_ram)
+    {
+        mWramLow.resize(kWramSize);
+        mWramLow.resize(ReadAll(dataSource.read_main_ram, dataSource.user,
+                                kWramLowBase, mWramLow.data(), mWramLow.size()));
+        mWramHigh.resize(kWramSize);
+        mWramHigh.resize(ReadAll(dataSource.read_main_ram, dataSource.user,
+                                 kWramHighBase, mWramHigh.data(), mWramHigh.size()));
     }
 
     // Capture the VDP1 register file (0x00..0x1E) if the driver supplies it.

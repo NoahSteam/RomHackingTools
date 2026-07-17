@@ -5,8 +5,9 @@
  * Windows). Request/response, one snapshot per request:
  *
  *   client -> server : the 4 bytes "GET\n"
- *   server -> client : a 28-byte little-endian header, then the payloads in
- *                      order: VDP1 VRAM, VDP2 VRAM, CRAM, VDP2 struct, VDP1 regs.
+ *   server -> client : a 36-byte little-endian header, then the payloads in
+ *                      order: VDP1 VRAM, VDP2 VRAM, CRAM, VDP2 struct, VDP1 regs,
+ *                      low work RAM, high work RAM.
  *
  * Byte conventions match what the core (and the savestate driver) expect:
  *   - VDP1/VDP2 VRAM : Saturn-native big-endian (Yabause stores it that way).
@@ -15,6 +16,9 @@
  *                      rebuilds the hardware-offset image via BuildVdp2RegImage).
  *   - VDP1 regs      : a ready hardware-offset, big-endian VDP1 register image
  *                      (0x18 bytes) the server assembles from its Vdp1 struct.
+ *   - Work RAM       : raw bytes (1 MiB low @ 0x00200000, 1 MiB high @ 0x06000000).
+ *
+ * Any section length may be 0 (that data unavailable this build/version).
  */
 #ifndef SATURNEXPLORER_SE_LIVE_PROTOCOL_H
 #define SATURNEXPLORER_SE_LIVE_PROTOCOL_H
@@ -23,10 +27,10 @@
 #define SE_LIVE_MAGIC1 'E'
 #define SE_LIVE_MAGIC2 'X'
 #define SE_LIVE_MAGIC3 'P'
-#define SE_LIVE_VERSION      1u
+#define SE_LIVE_VERSION      2u
 #define SE_LIVE_REQUEST      "GET\n"
 #define SE_LIVE_REQUEST_LEN  4
-#define SE_LIVE_HEADER_LEN   28   /* magic(4) + version(4) + 5 section lengths(4 each) */
+#define SE_LIVE_HEADER_LEN   36   /* magic(4) + version(4) + 7 section lengths(4 each) */
 
 /* Canonical section sizes (bytes). The header still carries the actual lengths,
  * so a client validates rather than assumes; these are the expected values. */
@@ -35,6 +39,8 @@
 #define SE_LIVE_CRAM_LEN        0x1000u
 #define SE_LIVE_VDP2_STRUCT_LEN 288u
 #define SE_LIVE_VDP1_REGS_LEN   0x18u
+#define SE_LIVE_WRAM_LOW_LEN    0x100000u
+#define SE_LIVE_WRAM_HIGH_LEN   0x100000u
 
 /* Default endpoints. */
 #define SE_LIVE_DEFAULT_SOCK_PATH "/tmp/saturn_explorer.sock"

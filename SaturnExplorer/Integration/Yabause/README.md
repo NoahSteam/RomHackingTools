@@ -40,13 +40,15 @@ frame, after the frame is drawn):
 ```c
 #include "se_export.h"
     /* ... existing VBlankOUT body ... */
-    SeExportSnapshot(Vdp1Ram, Vdp2Ram, Vdp2ColorRam, Vdp2Regs);
+    SeExportSnapshot(Vdp1Ram, Vdp2Ram, Vdp2ColorRam, Vdp2Regs,
+                     Vdp1Regs, LowWram, HighWram);
 ```
 
-`Vdp1Ram`, `Vdp2Ram`, `Vdp2ColorRam` are Yabause's VDP RAM globals; `Vdp2Regs` is
-its `Vdp2*` register struct. (These names are stable across the Yabause family. If
-your fork renamed them, pass the equivalents — the module just needs the four
-pointers.) That's the whole patch.
+`Vdp1Ram`/`Vdp2Ram`/`Vdp2ColorRam` are Yabause's VDP RAM globals; `Vdp2Regs` and
+`Vdp1Regs` are its register structs; `LowWram`/`HighWram` are the 1 MiB work-RAM
+globals (declared in `memory.h`). These names are stable across the Yabause family;
+if your fork renamed them, pass the equivalents. Any argument may be NULL to omit
+that section. That's the whole patch.
 
 ## 3. Build & run
 1. Build Yabause as usual (the port you use for Sakura Wars, etc.).
@@ -57,17 +59,14 @@ pointers.) That's the whole patch.
 
 ## What flows over the wire
 Per request, the server sends: VDP1 VRAM (512 KiB), VDP2 VRAM (512 KiB), CRAM
-(4 KiB), and the 288-byte VDP2 register struct — the exact bytes Saturn Explorer's
-savestate loader already understands (VRAM big-endian, CRAM host-endian, VDP2 the
-raw struct). Wire format: `Drivers/Common/src/SeLiveProtocol.h`.
+(4 KiB), the 288-byte VDP2 register struct, the VDP1 register image, and low + high
+work RAM (1 MiB each) — the exact bytes Saturn Explorer's savestate loader already
+understands (VRAM big-endian, CRAM host-endian, VDP2 the raw struct). Wire format:
+`Drivers/Common/src/SeLiveProtocol.h`.
 
-## Notes / limits (v1)
+## Notes / limits
 - **Transport:** Unix domain socket `/tmp/saturn_explorer.sock` (Linux/macOS) or
   named pipe `\\.\pipe\SaturnExplorer` (Windows). Local only.
-- **VDP1 registers** aren't streamed yet (most VDP1 draw state lives in the command
-  table, which *is* streamed via VDP1 VRAM). The wire format reserves a slot; to add
-  them, assemble a 0x18-byte big-endian image from Yabause's `Vdp1Regs` fields and
-  send it in place of the current zero-length section.
-- **Work RAM / disc / frame-step** aren't exported yet; easy follow-ons.
+- **Disc / frame-step** aren't exported yet; easy follow-ons.
 - The snapshot is taken at vblank under a lock and double-buffered, so the client
   always reads a whole, consistent frame.

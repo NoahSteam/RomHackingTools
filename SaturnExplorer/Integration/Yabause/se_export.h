@@ -24,13 +24,17 @@ extern "C" {
  * success, non-zero on failure (Yabause keeps running either way). */
 int SeExportInit(void);
 
-/* Copy the current VDP memory into the export double-buffer. Call once per frame,
- * e.g. at the end of Vdp2VBlankOUT(), passing Yabause's globals:
- *   SeExportSnapshot(Vdp1Ram, Vdp2Ram, Vdp2ColorRam, Vdp2Regs);
- * Sizes are fixed by the hardware (512 KiB / 512 KiB / 4 KiB / 288 bytes). Any
- * argument may be NULL (that section is sent as zeros). */
+/* Copy the current Saturn memory into the export double-buffer. Call once per
+ * frame, e.g. at the end of Vdp2VBlankOUT(), passing Yabause's globals:
+ *   SeExportSnapshot(Vdp1Ram, Vdp2Ram, Vdp2ColorRam, Vdp2Regs,
+ *                    Vdp1Regs, LowWram, HighWram);
+ * Sizes are fixed by the hardware. 'vdp1_regs_struct' is Yabause's `Vdp1` struct
+ * (its first 11 u16 fields TVMR..MODR); this module builds the hardware-offset
+ * register image from it. Any argument may be NULL (that section is zeros). */
 void SeExportSnapshot(const void* vdp1_vram_512k, const void* vdp2_vram_512k,
-                      const void* cram_4k, const void* vdp2_regs_struct_288);
+                      const void* cram_4k, const void* vdp2_regs_struct_288,
+                      const void* vdp1_regs_struct, const void* wram_low_1m,
+                      const void* wram_high_1m);
 
 /* Stop the server thread and free resources. */
 void SeExportDeinit(void);
