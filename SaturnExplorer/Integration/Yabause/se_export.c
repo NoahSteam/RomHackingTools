@@ -21,15 +21,46 @@
 #define SE_V2 SE_LIVE_VDP2_VRAM_LEN
 #define SE_CR SE_LIVE_CRAM_LEN
 #define SE_VS SE_LIVE_VDP2_STRUCT_LEN
+#define SE_VR SE_LIVE_VDP1_REGS_LEN
+#define SE_WL SE_LIVE_WRAM_LOW_LEN
+#define SE_WH SE_LIVE_WRAM_HIGH_LEN
 
 typedef struct
 {
-    unsigned char v1[SE_V1];
-    unsigned char v2[SE_V2];
-    unsigned char cr[SE_CR];
-    unsigned char vs[SE_VS];
+    unsigned char v1[SE_V1];   /* VDP1 VRAM */
+    unsigned char v2[SE_V2];   /* VDP2 VRAM */
+    unsigned char cr[SE_CR];   /* CRAM */
+    unsigned char vs[SE_VS];   /* raw Vdp2 register struct */
+    unsigned char vr[SE_VR];   /* hardware-offset BE VDP1 register image */
+    unsigned char wl[SE_WL];   /* low work RAM */
+    unsigned char wh[SE_WH];   /* high work RAM */
     int valid;
 } SeFrame;
+
+/* Build the hardware-offset, big-endian VDP1 register image from Yabause's Vdp1
+ * struct (first 11 u16 fields: TVMR,FBCR,PTMR,EWDR,EWLR,EWRR,ENDR,EDSR,LOPR,COPR,
+ * MODR, host byte order). Hardware has a 1-word gap at 0x0E, so EDSR..MODR shift
+ * up by 2 relative to their struct index. */
+static void SeBuildVdp1Image(const unsigned char* dst_img, const void* vdp1struct)
+{
+    unsigned char* out = (unsigned char*)dst_img;
+    const unsigned short* r = (const unsigned short*)vdp1struct;
+    int i;
+    memset(out, 0, SE_VR);
+    if (!r)
+    {
+        return;
+    }
+    for (i = 0; i < 11; ++i)
+    {
+        unsigned hw = (i <= 6) ? (unsigned)(i * 2) : (unsigned)(i * 2 + 2);
+        if (hw + 1 < SE_VR)
+        {
+            out[hw]     = (unsigned char)((r[i] >> 8) & 0xFF);
+            out[hw + 1] = (unsigned char)(r[i] & 0xFF);
+        }
+    }
+}
 
 static SeFrame* sFront;
 static SeFrame* sBack;
@@ -56,7 +87,9 @@ static void SeWr32(unsigned char* p, unsigned int v)
     p[3] = (unsigned char)((v >> 24) & 0xFF);
 }
 
-void SeExportSnapshot(const void* vdp1, const void* vdp2, const void* cram, const void* vdp2struct)
+void SeExportSnapshot(const void* vdp1, const void* vdp2, const void* cram,
+                      const void* vdp2struct, const void* vdp1struct,
+                      const void* wramLow, const void* wramHigh)
 {
     if (!sBack)
     {
@@ -67,6 +100,9 @@ void SeExportSnapshot(const void* vdp1, const void* vdp2, const void* cram, cons
     if (vdp2) memcpy(sBack->v2, vdp2, SE_V2); else memset(sBack->v2, 0, SE_V2);
     if (cram) memcpy(sBack->cr, cram, SE_CR); else memset(sBack->cr, 0, SE_CR);
     if (vdp2struct) memcpy(sBack->vs, vdp2struct, SE_VS); else memset(sBack->vs, 0, SE_VS);
+    SeBuildVdp1Image(sBack->vr, vdp1struct);
+    if (wramLow)  memcpy(sBack->wl, wramLow,  SE_WL); else memset(sBack->wl, 0, SE_WL);
+    if (wramHigh) memcpy(sBack->wh, wramHigh, SE_WH); else memset(sBack->wh, 0, SE_WH);
     sBack->valid = 1;
     {
         SeFrame* tmp = sFront; sFront = sBack; sBack = tmp;   /* swap */
@@ -121,13 +157,17 @@ static void SeServeClient(int cl, SeFrame* snap)
         hdr[0] = SE_LIVE_MAGIC0; hdr[1] = SE_LIVE_MAGIC1;
         hdr[2] = SE_LIVE_MAGIC2; hdr[3] = SE_LIVE_MAGIC3;
         SeWr32(hdr + 4, SE_LIVE_VERSION);
-        SeWr32(hdr + 8, SE_V1); SeWr32(hdr + 12, SE_V2); SeWr32(hdr + 16, SE_CR);
-        SeWr32(hdr + 20, SE_VS); SeWr32(hdr + 24, 0);   /* no VDP1 regs in v1 */
+        SeWr32(hdr + 8, SE_V1);  SeWr32(hdr + 12, SE_V2); SeWr32(hdr + 16, SE_CR);
+        SeWr32(hdr + 20, SE_VS); SeWr32(hdr + 24, SE_VR); SeWr32(hdr + 28, SE_WL);
+        SeWr32(hdr + 32, SE_WH);
         if (SeSend(cl, hdr, sizeof(hdr)) != 0) return;
         if (SeSend(cl, snap->v1, SE_V1) != 0) return;
         if (SeSend(cl, snap->v2, SE_V2) != 0) return;
         if (SeSend(cl, snap->cr, SE_CR) != 0) return;
         if (SeSend(cl, snap->vs, SE_VS) != 0) return;
+        if (SeSend(cl, snap->vr, SE_VR) != 0) return;
+        if (SeSend(cl, snap->wl, SE_WL) != 0) return;
+        if (SeSend(cl, snap->wh, SE_WH) != 0) return;
     }
 }
 

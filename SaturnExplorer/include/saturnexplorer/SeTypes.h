@@ -102,7 +102,9 @@ typedef enum se_cram_mode {
 typedef enum se_vram_kind {
     SE_VRAM_KIND_VDP1_VRAM = 0,
     SE_VRAM_KIND_VDP2_VRAM = 1,
-    SE_VRAM_KIND_CRAM      = 2
+    SE_VRAM_KIND_CRAM      = 2,
+    SE_VRAM_KIND_WRAM_LOW  = 3,  /* work RAM low  (0x00200000, 1 MiB) */
+    SE_VRAM_KIND_WRAM_HIGH = 4   /* work RAM high (0x06000000, 1 MiB) */
 } se_vram_kind;
 
 /* ------------------------------------------------------------------ *

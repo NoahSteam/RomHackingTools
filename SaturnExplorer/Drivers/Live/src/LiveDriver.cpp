@@ -35,6 +35,8 @@ struct LiveSnapshot
     std::vector<uint8_t> cram;
     std::vector<uint8_t> vdp2Regs;   // hw-offset BE image
     std::vector<uint8_t> vdp1Regs;   // hw-offset BE image
+    std::vector<uint8_t> wramLow;    // 0x00200000, 1 MiB
+    std::vector<uint8_t> wramHigh;   // 0x06000000, 1 MiB
     bool                 valid = false;
 };
 
@@ -164,8 +166,11 @@ bool ReadSnapshot(Conn& c, LiveSnapshot& snap)
     const uint32_t cr = Rd32LE(hdr + 16);
     const uint32_t vs = Rd32LE(hdr + 20);
     const uint32_t vr = Rd32LE(hdr + 24);
+    const uint32_t wl = Rd32LE(hdr + 28);
+    const uint32_t wh = Rd32LE(hdr + 32);
     // Sanity clamps so a malformed header can't drive a huge allocation.
-    if (v1 > 0x100000u || v2 > 0x100000u || cr > 0x4000u || vs > 4096u || vr > 256u)
+    if (v1 > 0x100000u || v2 > 0x100000u || cr > 0x4000u || vs > 4096u ||
+        vr > 256u || wl > 0x100000u || wh > 0x100000u)
     {
         return false;
     }
@@ -175,11 +180,15 @@ bool ReadSnapshot(Conn& c, LiveSnapshot& snap)
     snap.cram.resize(cr);
     std::vector<uint8_t> vdp2Struct(vs);
     snap.vdp1Regs.resize(vr);
+    snap.wramLow.resize(wl);
+    snap.wramHigh.resize(wh);
     if (!ConnReadFull(c, snap.vdp1Vram.data(), v1) ||
         !ConnReadFull(c, snap.vdp2Vram.data(), v2) ||
         !ConnReadFull(c, snap.cram.data(), cr) ||
         !ConnReadFull(c, vdp2Struct.data(), vs) ||
-        !ConnReadFull(c, snap.vdp1Regs.data(), vr))
+        !ConnReadFull(c, snap.vdp1Regs.data(), vr) ||
+        !ConnReadFull(c, snap.wramLow.data(), wl) ||
+        !ConnReadFull(c, snap.wramHigh.data(), wh))
     {
         return false;
     }
@@ -252,7 +261,19 @@ size_t CbCram(void* u, uint32_t off, void* dst, size_t size)
     LiveState* st = St(u); std::lock_guard<std::mutex> lk(st->mtx);
     return CopyRegion(st->front.cram, off, dst, size);
 }
-size_t CbMainRam(void* u, uint32_t, void*, size_t) { (void)u; return 0; }
+size_t CbMainRam(void* u, uint32_t address, void* dst, size_t size)
+{
+    LiveState* st = St(u); std::lock_guard<std::mutex> lk(st->mtx);
+    if (address >= 0x06000000u)
+    {
+        return CopyRegion(st->front.wramHigh, address - 0x06000000u, dst, size);
+    }
+    if (address >= 0x00200000u)
+    {
+        return CopyRegion(st->front.wramLow, address - 0x00200000u, dst, size);
+    }
+    return 0;
+}
 
 uint16_t CbVdp1Reg(void* u, uint32_t reg)
 {
@@ -313,7 +334,7 @@ extern "C" se_result se_live_open(const char* endpoint, se_data_source* out)
 
     out->abi_version = SE_ABI_VERSION;
     out->capabilities = SE_CAP_VDP1_VRAM | SE_CAP_VDP2_VRAM | SE_CAP_CRAM |
-                        SE_CAP_VDP1_REGS | SE_CAP_VDP2_REGS;
+                        SE_CAP_VDP1_REGS | SE_CAP_VDP2_REGS | SE_CAP_MAIN_RAM;
     out->user = st;
     out->read_vdp1_vram = CbVdp1Vram;
     out->read_vdp2_vram = CbVdp2Vram;

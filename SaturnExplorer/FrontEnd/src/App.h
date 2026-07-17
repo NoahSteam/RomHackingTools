@@ -58,6 +58,7 @@ private:
     void DrawReferenceList(const char* id, const std::vector<se_reference>& refs);
     void DrawRegisters();
     void DrawColorRam();
+    void DrawWorkRam();
     void DrawVdp1Table();
     void DrawVdp2Table();
     void DrawPlaceholder(const char* title, const char* note);

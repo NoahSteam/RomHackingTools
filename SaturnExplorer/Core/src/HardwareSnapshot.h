@@ -11,10 +11,13 @@
 namespace se
 {
 
-// Saturn region sizes (Docs/Saturn/MemoryLayout.txt).
+// Saturn region sizes / bus addresses (Docs/Saturn/MemoryLayout.txt).
 constexpr uint32_t kVdp1VramSize = 512 * 1024;
 constexpr uint32_t kVdp2VramSize = 512 * 1024;
 constexpr uint32_t kCramSize     = 4 * 1024;
+constexpr uint32_t kWramSize     = 1024 * 1024;
+constexpr uint32_t kWramLowBase  = 0x00200000;
+constexpr uint32_t kWramHighBase = 0x06000000;
 
 class HardwareSnapshot
 {
@@ -29,6 +32,8 @@ public:
     const std::vector<uint8_t>& Vdp1Vram() const { return mVdp1Vram; }
     const std::vector<uint8_t>& Vdp2Vram() const { return mVdp2Vram; }
     const std::vector<uint8_t>& Cram() const { return mCram; }
+    const std::vector<uint8_t>& WramLow() const { return mWramLow; }
+    const std::vector<uint8_t>& WramHigh() const { return mWramHigh; }
     se_cram_mode CramMode() const { return mCramMode; }
 
     // True if the driver supplied VDP1 / VDP2 registers.
@@ -52,6 +57,8 @@ private:
     std::vector<uint8_t>  mVdp1Vram;
     std::vector<uint8_t>  mVdp2Vram;
     std::vector<uint8_t>  mCram;
+    std::vector<uint8_t>  mWramLow;    // 0x00200000 (present if SE_CAP_MAIN_RAM)
+    std::vector<uint8_t>  mWramHigh;   // 0x06000000
     std::vector<uint16_t> mVdp1Regs;   // indexed by (hw offset >> 1)
     std::vector<uint16_t> mVdp2Regs;
     se_cram_mode          mCramMode = SE_CRAM_RGB555_1024;
