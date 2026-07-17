@@ -4,6 +4,9 @@
 // the portable App class.
 #include <windows.h>
 
+#include <cstdlib>   // __argc / __argv
+#include <cstring>
+
 #include "WindowsPlatform.h"
 #include "App.h"
 
@@ -18,6 +21,17 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, LPWSTR, int)
 
     sfe::App app;
     app.Initialize();
+
+    // `--live [endpoint]` connects to a running Yabause on startup (see the
+    // Integration/Yabause module). Otherwise the user opens files from the toolbar.
+    for (int i = 1; i < __argc; ++i)
+    {
+        if (std::strcmp(__argv[i], "--live") == 0)
+        {
+            app.OpenLive((i + 1 < __argc) ? __argv[i + 1] : nullptr);
+            break;
+        }
+    }
 
     while (platform.PumpEvents())
     {
