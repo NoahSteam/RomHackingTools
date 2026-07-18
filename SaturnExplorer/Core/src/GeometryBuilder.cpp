@@ -30,6 +30,7 @@ void GeometryBuilder::Build(const std::vector<uint8_t>& vram, Vdp1Scene& out)
 {
     out.sprites.clear();
     out.sprites3d.clear();
+    out.gouraud.clear();
     out.screenWidth = 320;
     out.screenHeight = 224;
 
@@ -57,6 +58,7 @@ void GeometryBuilder::Build(const std::vector<uint8_t>& vram, Vdp1Scene& out)
         const int32_t  yc = ReadBE16S(vram, a + 0x16);
         const int32_t  xd = ReadBE16S(vram, a + 0x18);
         const int32_t  yd = ReadBE16S(vram, a + 0x1A);
+        const uint16_t grda = ReadBE16(vram, a + 0x1C);   // gouraud table (words)
 
         const uint16_t jp   = (ctrl >> 12) & 0x7;
         const uint16_t comm = ctrl & 0xF;
@@ -155,6 +157,20 @@ void GeometryBuilder::Build(const std::vector<uint8_t>& vram, Vdp1Scene& out)
         }
 
         out.sprites.push_back(s);
+
+        // Gouraud corner colors (parallel to the sprite). CMDGRDA is a word
+        // address; the table is four RGB555 colors, one per corner A,B,C,D.
+        GouraudQuad gq;
+        gq.on = (pmod & 0x4) != 0;
+        if (gq.on)
+        {
+            const uint32_t table = static_cast<uint32_t>(grda) * 8;
+            for (int k = 0; k < 4; ++k)
+            {
+                gq.corner[k] = ReadBE16(vram, table + static_cast<uint32_t>(k) * 2);
+            }
+        }
+        out.gouraud.push_back(gq);
 
         // Assign a depth layer: 0 if this sprite overlaps nothing placed so far,
         // else one past the deepest sprite it overlaps. Abutting tiles (which
