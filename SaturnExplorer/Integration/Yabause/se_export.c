@@ -2,6 +2,12 @@
  * Self-contained: only needs SeLiveProtocol.h (copy it in from
  * Drivers/Common/src/) and the platform's sockets/threads. */
 
+/* Ask glibc to declare usleep() from <unistd.h> even under strict -std=c11
+ * (must precede any system header). */
+#if !defined(_WIN32) && !defined(_DEFAULT_SOURCE)
+#define _DEFAULT_SOURCE 1
+#endif
+
 #include "se_export.h"
 #include "SeLiveProtocol.h"
 
@@ -75,11 +81,25 @@ static volatile int sPaused;
 static volatile int sStepBudget;
 static volatile unsigned long long sFrameNo;
 
+/* Short self-contained sleep so the gate can spin-wait without a Yabause-
+ * specific sleep primitive and without pegging a CPU core while paused. */
+static void SeGateSleep(void)
+{
+#if defined(_WIN32)
+    Sleep(2);
+#else
+    usleep(2000);
+#endif
+}
+
 /* Called by the emulator's run loop at the top of each frame: returns 1 if the
  * frame should run, 0 if the debugger is holding it paused. When paused with a
- * pending single-step budget, it releases exactly one frame per call. The host
- * should sleep briefly and re-check when this returns 0 (so it stays responsive
- * to a later resume/step). Safe to call even before SeExportInit (returns 1). */
+ * pending single-step budget, it releases exactly one frame per call. When it
+ * would return 0 it first sleeps ~2 ms internally, so the caller can simply spin
+ *   while (!SeExportGateFrame()) { }
+ * without its own sleep and without busy-pegging a core. The export server
+ * thread keeps running, so a resume/step from Saturn Explorer releases the loop.
+ * Safe to call even before SeExportInit (returns 1). */
 int SeExportGateFrame(void)
 {
     if (!sPaused)
@@ -91,6 +111,7 @@ int SeExportGateFrame(void)
         --sStepBudget;
         return 1;
     }
+    SeGateSleep();
     return 0;
 }
 

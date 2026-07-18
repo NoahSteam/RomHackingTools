@@ -12,7 +12,38 @@ calls. The memory export doesn't touch emulation logic; the optional pause/step
 gate only decides *when* a frame runs, never *how*, so it can't affect game
 compatibility.
 
-## 1. Copy three files into `yabause/src`
+## Recommended structure: a Yabause fork + `apply.py`
+
+Keep Saturn Explorer and Yabause as **separate repos** (Yabause is GPLv2; don't
+vendor its tree here). This directory holds the single source of truth for the
+integration — `se_export.{c,h}` and, via `../../Drivers/Common/src/SeLiveProtocol.h`,
+the wire protocol — plus `apply.py`, which drops those into a Yabause checkout and
+inserts the hook calls for you.
+
+```sh
+# 1. Fork Yabause once (github.com/Yabause/yabause -> your account) and clone it.
+git clone https://github.com/<you>/yabause.git
+cd yabause && git checkout -b saturn-explorer-live
+
+# 2. From this repo, wire your fork in one command:
+python3 /path/to/SaturnExplorer/Integration/Yabause/apply.py /path/to/yabause
+
+# 3. Commit the result on your fork's branch, then build Yabause as usual.
+git add -A && git commit -m "Add Saturn Explorer live tap"
+```
+
+`apply.py` is **idempotent** (safe to re-run after pulling upstream), inserts every
+edit inside `/* --- SE_EXPORT --- */` markers, and supports:
+- `--check` — report what it would change, touch nothing.
+- `--revert` — remove all edits and the copied files.
+
+When you update `se_export.*` here, re-run `apply.py` on your fork to sync. If a
+future Yabause refactor moves an anchor, the script says exactly which hook to add
+by hand — the manual steps below are that fallback.
+
+## Manual integration (fallback)
+
+### 1. Copy three files into `yabause/src`
 - `se_export.h`
 - `se_export.c`
 - `SeLiveProtocol.h`  ← from this repo's `Drivers/Common/src/SeLiveProtocol.h`
@@ -21,7 +52,7 @@ compatibility.
 Add `se_export.c` to Yabause's build (its `src/CMakeLists.txt` `yabause_SOURCES`
 list, or your Makefile). On Windows link against `ws2_32` if it isn't already.
 
-## 2. Wire in three calls
+### 2. Wire in the hook calls
 In `yabause/src/yabause.c`:
 
 ```c
@@ -55,22 +86,20 @@ globals (declared in `memory.h`). These names are stable across the Yabause fami
 if your fork renamed them, pass the equivalents. Any argument may be NULL to omit
 that section.
 
-## 2b. (Optional) Pause / single-step gate
+### 2b. (Optional) Pause / single-step gate
 To enable the Pause and Step Frame buttons, gate each emulated frame on
 `SeExportGateFrame()` in Yabause's run loop. It returns 1 when the frame should
-run and 0 while the debugger is holding it paused; release exactly one frame per
-call when single-stepping. In `yabause/src/yabause.c`, in `YabauseEmulate()` (or
-your port's per-frame loop), wrap the frame:
+run and 0 while the debugger is holding it paused (and releases exactly one frame
+per call when single-stepping). It sleeps ~2 ms internally when paused, so just
+spin on it — no host sleep needed. In `yabause/src/yabause.c`, at the top of
+`YabauseEmulate()`:
 
 ```c
 #include "se_export.h"
 
 int YabauseEmulate(void) {
-    /* ... at the top of the per-frame body, before running the frame: */
-    while (!SeExportGateFrame()) {
-        YabThreadUSleep(1000);      /* stay responsive to resume/step */
-        /* break here too on your loop's quit/reset condition */
-    }
+    int oneframeexec = 0;
+    while (!SeExportGateFrame()) { }   /* held here while paused */
     /* ... existing frame emulation ... */
 }
 ```

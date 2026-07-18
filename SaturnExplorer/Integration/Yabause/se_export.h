@@ -39,8 +39,9 @@ void SeExportSnapshot(const void* vdp1_vram_512k, const void* vdp2_vram_512k,
 
 /* Frame gate for pause / single-step. Call once at the top of each emulated
  * frame in Yabause's run loop; returns 1 if the frame should run, 0 if the
- * debugger is holding it paused (sleep briefly and re-check, e.g.):
- *   while (!SeExportGateFrame()) { YabThreadUSleep(1000); if (quitting) break; }
+ * debugger is holding it paused. When it returns 0 it has already slept ~2 ms
+ * internally, so just spin on it — no host sleep needed:
+ *   while (!SeExportGateFrame()) { }
  * When resumed or single-stepped from Saturn Explorer, it releases frames again.
  * Returns 1 when the server isn't running, so an un-paused build is unaffected. */
 int SeExportGateFrame(void);
