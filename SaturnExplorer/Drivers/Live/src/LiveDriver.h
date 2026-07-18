@@ -18,6 +18,12 @@ extern "C" {
  * se_destroy). Returns SE_ERR_IO if the emulator isn't reachable. */
 se_result se_live_open(const char* endpoint, se_data_source* out);
 
+/* The live protocol version last reported by the connected server, or 0 if not
+ * connected / not a live source. Compare against SE_LIVE_VERSION to detect a
+ * client/emulator version mismatch. 'ds' must be an se_data_source filled by
+ * se_live_open. */
+uint32_t se_live_server_version(const se_data_source* ds);
+
 #ifdef __cplusplus
 }
 #endif

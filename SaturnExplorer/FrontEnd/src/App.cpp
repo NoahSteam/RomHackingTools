@@ -14,7 +14,8 @@
 #include "Theme.h"
 #include "SavestateDriver.h"
 #ifdef SE_ENABLE_LIVE
-#include "LiveDriver.h"   // native builds only (threads/sockets)
+#include "LiveDriver.h"      // native builds only (threads/sockets)
+#include "SeLiveProtocol.h"  // SE_LIVE_VERSION (client protocol version)
 #endif
 
 namespace sfe
@@ -839,15 +840,43 @@ void App::DrawToolbar(IPlatform& platform)
         ImGui::Button("Help");
         ImGui::EndDisabled();
 
-        // Right-aligned live counters.
-        char info[96];
-        std::snprintf(info, sizeof(info), "FPS %.1f   |   VDP1: %zu objs   |   VDP2 regs: %s",
+        // Right-aligned live counters. When connected live, show the client vs
+        // server live-protocol version and flag a mismatch (which breaks capture).
+        char live[72] = "";
+        bool mismatch = false;
+#ifdef SE_ENABLE_LIVE
+        if (mbLiveSource)
+        {
+            const uint32_t sv = se_live_server_version(&mDataSource);
+            if (sv != 0 && sv != SE_LIVE_VERSION)
+            {
+                mismatch = true;
+                std::snprintf(live, sizeof(live),
+                              "   |   LIVE MISMATCH: client v%u / Yabause v%u",
+                              static_cast<unsigned>(SE_LIVE_VERSION), static_cast<unsigned>(sv));
+            }
+            else
+            {
+                std::snprintf(live, sizeof(live), "   |   live proto v%u",
+                              static_cast<unsigned>(SE_LIVE_VERSION));
+            }
+        }
+#endif
+        char info[160];
+        std::snprintf(info, sizeof(info), "FPS %.1f   |   VDP1: %zu objs   |   VDP2 regs: %s%s",
                       ImGui::GetIO().Framerate,
                       mbHasData ? se_sprite_count(mContext) : 0,
-                      mbHasData ? "loaded" : "-");
+                      mbHasData ? "loaded" : "-", live);
         const float w = ImGui::CalcTextSize(info).x;
         ImGui::SameLine(ImGui::GetWindowWidth() - w - 12.0f);
-        ImGui::TextUnformatted(info);
+        if (mismatch)
+        {
+            ImGui::TextColored(ImVec4(1.0f, 0.42f, 0.32f, 1.0f), "%s", info);
+        }
+        else
+        {
+            ImGui::TextUnformatted(info);
+        }
     }
     ImGui::End();
 }

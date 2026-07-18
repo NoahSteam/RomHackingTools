@@ -60,6 +60,7 @@ struct LiveState
     // block; the callbacks post a command for the poll thread to send.
     std::atomic<uint64_t> frameNumber{0};
     std::atomic<bool>     paused{false};
+    std::atomic<uint32_t> serverVersion{0};   // protocol version last seen from server
     std::mutex            ctlMtx;    // guards pending / stepFrames
     Ctl                   pending = Ctl::None;
     int32_t               stepFrames = 0;
@@ -217,7 +218,7 @@ bool SendCommand(Conn& c, const char* verb, int32_t arg)
 // (converted to core-ready form). Also returns the run state via outPaused /
 // outFrame. Returns false on any protocol/socket error.
 bool ReadSnapshot(Conn& c, const char* verb, int32_t arg, LiveSnapshot& snap,
-                  bool& outPaused, uint64_t& outFrame)
+                  bool& outPaused, uint64_t& outFrame, uint32_t& outVersion)
 {
     if (!SendCommand(c, verb, arg))
     {
@@ -239,6 +240,7 @@ bool ReadSnapshot(Conn& c, const char* verb, int32_t arg, LiveSnapshot& snap,
         return false;
     }
     const uint32_t version = Rd32LE(head + 4);
+    outVersion = version;
     const int hasFb = (version >= 4u) ? 1 : 0;    // FB section added in v4
     const int numLen = 8 + hasFb;                 // section-length entries
     uint8_t lens[9 * 4];
@@ -332,7 +334,8 @@ void PollLoop(LiveState* st)
         LiveSnapshot snap;
         bool paused = false;
         uint64_t frame = 0;
-        if (!ReadSnapshot(conn, verb, arg, snap, paused, frame))
+        uint32_t sver = 0;
+        if (!ReadSnapshot(conn, verb, arg, snap, paused, frame, sver))
         {
             ConnClose(conn);   // will reconnect next iteration
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -344,6 +347,7 @@ void PollLoop(LiveState* st)
         }
         st->paused.store(paused);
         st->frameNumber.store(frame);
+        st->serverVersion.store(sver);
         std::this_thread::sleep_for(std::chrono::milliseconds(8));   // ~120 Hz cap
     }
     // Closing: if we left the emulator paused/stepped, release it before dropping
@@ -354,7 +358,8 @@ void PollLoop(LiveState* st)
         LiveSnapshot tmp;
         bool p = false;
         uint64_t fr = 0;
-        ReadSnapshot(conn, SE_LIVE_VERB_RESUME, 0, tmp, p, fr);   // best-effort
+        uint32_t sv = 0;
+        ReadSnapshot(conn, SE_LIVE_VERB_RESUME, 0, tmp, p, fr, sv);   // best-effort
     }
     ConnClose(conn);
 }
@@ -520,4 +525,14 @@ extern "C" se_result se_live_open(const char* endpoint, se_data_source* out)
     out->frame_number   = CbFrameNumber;
     out->close          = CbClose;
     return SE_OK;
+}
+
+extern "C" uint32_t se_live_server_version(const se_data_source* ds)
+{
+    // Only meaningful for a data source we produced (identified by our close cb).
+    if (!ds || !ds->user || ds->close != CbClose)
+    {
+        return 0;
+    }
+    return St(ds->user)->serverVersion.load();
 }
