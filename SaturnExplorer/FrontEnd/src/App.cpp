@@ -1138,10 +1138,12 @@ void App::DrawVdpOutput(IPlatform& platform)
                     const ImVec2 c3 = toScreen(sprite.corners[3]);
                     if (selected)
                     {
-                        // Tint the fill and draw a thick bright outline so a
-                        // selection made elsewhere (e.g. the VRAM Map) is obvious.
-                        dl->AddQuadFilled(c0, c1, c2, c3, IM_COL32(90, 225, 130, 60));
-                        dl->AddQuad(c0, c1, c2, c3, IM_COL32(120, 255, 150, 255), 3.0f);
+                        // Tint the fill and draw a thick outline in the theme's
+                        // selection color so a selection made elsewhere (e.g. the
+                        // VRAM Map) is obvious and consistent across panels.
+                        const ImU32 sel = ui::SelectionOutline();
+                        dl->AddQuadFilled(c0, c1, c2, c3, (sel & 0x00FFFFFFu) | (60u << 24));
+                        dl->AddQuad(c0, c1, c2, c3, sel, 3.0f);
                     }
                     else
                     {
@@ -1615,11 +1617,11 @@ void App::DrawVramMap()
             {
                 switch (k)
                 {
-                case SE_VRAM_TEXTURE:   return IM_COL32(90, 190, 120, 255);
-                case SE_VRAM_CLUT:      return IM_COL32(220, 200, 90, 255);
-                case SE_VRAM_CMD_TABLE: return IM_COL32(100, 150, 230, 255);
-                case SE_VRAM_GOURAUD:   return IM_COL32(200, 120, 210, 255);
-                default:                return IM_COL32(150, 150, 150, 255);
+                case SE_VRAM_TEXTURE:   return ui::VramTexture();
+                case SE_VRAM_CLUT:      return ui::VramClut();
+                case SE_VRAM_CMD_TABLE: return ui::VramCmdTable();
+                case SE_VRAM_GOURAUD:   return ui::VramGouraud();
+                default:                return ui::VramUnused();
                 }
             };
             const ImU32 kBorderCol = IM_COL32(15, 15, 18, 255);
@@ -1723,7 +1725,7 @@ void App::DrawVramMap()
             {
                 dl->AddRect(ImVec2(r.x - 1.0f, r.y - 1.0f),
                             ImVec2(r.z + 1.0f, r.w + 1.0f),
-                            IM_COL32(255, 240, 120, 255), 0.0f, 0, 2.0f);
+                            ui::SelectionOutline(), 0.0f, 0, 2.0f);
             }
 
             if (haveHover)
