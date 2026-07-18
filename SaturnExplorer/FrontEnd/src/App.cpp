@@ -20,6 +20,27 @@ namespace sfe
 namespace
 {
 
+#ifdef SE_ENABLE_LIVE
+// Saturn runs at ~60 fps; the recorder's window is expressed in frames, so the
+// UI converts its seconds knob through this. Pre-capture memory estimate uses a
+// typical compressed frame size until a real average is available.
+constexpr int    kFramesPerSecond   = 60;
+constexpr double kEstBytesPerFrame  = 1.3 * 1024.0 * 1024.0;
+#endif
+
+// Swaps a context pointer for the lifetime of the scope and restores it on exit,
+// so pointing the panels at a scrub context mid-frame can't leak past this draw
+// (even if an early return is added between the swap and the end of the frame).
+struct ScopedContextSwap
+{
+    se_context** slot;
+    se_context*  saved;
+    ScopedContextSwap(se_context** s, se_context* now) : slot(s), saved(*s) { *s = now; }
+    ~ScopedContextSwap() { *slot = saved; }
+    ScopedContextSwap(const ScopedContextSwap&) = delete;
+    ScopedContextSwap& operator=(const ScopedContextSwap&) = delete;
+};
+
 // ImGui::Checkbox wants a bool*, but se_render_opts stores flags as uint8_t.
 // Bridge them safely rather than aliasing a uint8_t* as bool*.
 bool CheckboxU8(const char* label, uint8_t* value)
@@ -122,7 +143,7 @@ void App::Initialize()
     mRenderOpts.highlight_command = -1;
 
 #ifdef SE_ENABLE_LIVE
-    mRecorder.Configure(mRecorder.MaxBytes(), mRecordSeconds);
+    mRecorder.Configure(mRecordSeconds * kFramesPerSecond);
 #endif
 }
 
@@ -401,19 +422,20 @@ void App::BuildUI(IPlatform& platform)
     DrawTimeline();
 
     // If the timeline selected a past frame, point the data panels at a context
-    // rebuilt over that recorded frame for the rest of this draw; restore the live
-    // context at the end of BuildUI. Frame control / capture above stay on live.
-    se_context* liveContext = mContext;
+    // rebuilt over that recorded frame for the rest of this draw. The guard restores
+    // the live context when BuildUI returns; frame control / capture above stay live.
+    se_context* view = mContext;
 #ifdef SE_ENABLE_LIVE
     if (mbScrubbing && RefreshScrubContext())
     {
-        mContext = mScrubContext;
+        view = mScrubContext;
     }
     else
     {
         mbScrubbing = false;
     }
 #endif
+    ScopedContextSwap contextSwap(&mContext, view);
 
     if (mbHasData)
     {
@@ -461,9 +483,7 @@ void App::BuildUI(IPlatform& platform)
     DrawPlaceholder("Texture Preview", "Preview of the selected sprite's texture — see the Texture Viewer panel.");
     DrawPlaceholder("Palette (CLUT)", "Palette of the selected sprite — see the Palette Viewer panel.");
     DrawPlaceholder("Memory History", "Load chain (File → CD → DMA → Write) — arrives in M7.");
-
-    // Restore the live context if the panels above were drawn from a recorded frame.
-    mContext = liveContext;
+    // contextSwap restores the live context here as it goes out of scope.
 }
 
 // Programmatic default dock layout matching the concept: a narrow left column,
@@ -582,12 +602,12 @@ void App::DrawToolbar(IPlatform& platform)
             ImGui::SetNextItemWidth(180.0f);
             if (ImGui::SliderInt("Length##rec", &mRecordSeconds, 5, 30, "%d s"))
             {
-                mRecorder.Configure(mRecorder.MaxBytes(), mRecordSeconds);
+                mRecorder.Configure(mRecordSeconds * kFramesPerSecond);
             }
             const size_t frames = mRecorder.Count();
             const double perFrame = frames ? static_cast<double>(mRecorder.BytesUsed()) / frames
-                                           : 1.3 * 1024.0 * 1024.0;   // typical, pre-capture
-            const double estMB = perFrame * mRecordSeconds * 60.0 / (1024.0 * 1024.0);
+                                           : kEstBytesPerFrame;
+            const double estMB = perFrame * mRecordSeconds * kFramesPerSecond / (1024.0 * 1024.0);
             ImGui::Text("~%.0f MB (%s)", estMB,
                         frames ? "measured" : "estimated");
 #endif
@@ -721,12 +741,9 @@ void App::DrawTimeline()
                                    ImGuiWindowFlags_NoSavedSettings;
     if (ImGui::BeginViewportSideBar("##Timeline", vp, ImGuiDir_Down, height, flags))
     {
-        // First frame paused: latch onto the newest captured frame.
-        if (!mbScrubbing || mScrubIndex < 0)
-        {
-            mScrubIndex = n - 1;
-        }
-        if (mScrubIndex >= n)
+        // Default to the newest captured frame when first paused or out of range;
+        // RefreshScrubContext re-clamps defensively before rendering.
+        if (!mbScrubbing || mScrubIndex < 0 || mScrubIndex >= n)
         {
             mScrubIndex = n - 1;
         }
@@ -745,7 +762,7 @@ void App::DrawTimeline()
         const double mb = static_cast<double>(mRecorder.BytesUsed()) / (1024.0 * 1024.0);
         std::snprintf(tail, sizeof(tail), "frame #%llu   %d/%d   %.1f MB / %.1fs",
                       static_cast<unsigned long long>(mRecorder.FrameNumber((size_t)mScrubIndex)),
-                      mScrubIndex + 1, n, mb, mRecorder.Seconds());
+                      mScrubIndex + 1, n, mb, n / static_cast<double>(kFramesPerSecond));
         const float tailW = ImGui::CalcTextSize(tail).x;
 
         // Slider fills the space between the buttons and the readout.
@@ -774,16 +791,22 @@ bool App::RefreshScrubContext()
     if (mScrubIndex < 0)  mScrubIndex = 0;
     if (mScrubIndex >= n) mScrubIndex = n - 1;
 
-    // Build the scrub context lazily. Once created, its copied data source keeps the
-    // recorder's callbacks + user pointer, so re-selecting a frame (which decompresses
-    // into the recorder's scratch) plus se_begin_frame re-renders that frame exactly.
+    // Already showing this frame: nothing to rebuild.
+    if (mScrubContext && mScrubIndex == mScrubShownIndex)
+    {
+        return true;
+    }
+
+    // Select decompresses the frame into the recorder's scratch. The scrub context
+    // is created once; its copied data source keeps the recorder's callbacks + user
+    // pointer, so a later Select + se_begin_frame re-renders any frame exactly.
+    se_data_source ds;
+    if (!mRecorder.Select(static_cast<size_t>(mScrubIndex), &ds))
+    {
+        return false;
+    }
     if (!mScrubContext)
     {
-        se_data_source ds;
-        if (!mRecorder.Select(static_cast<size_t>(mScrubIndex), &ds))
-        {
-            return false;
-        }
         se_config cfg;
         cfg.abi_version = SE_ABI_VERSION;
         cfg.reserved = 0;
@@ -792,20 +815,9 @@ bool App::RefreshScrubContext()
         {
             return false;
         }
-        se_begin_frame(mScrubContext);
-        mScrubShownIndex = mScrubIndex;
-        return true;
     }
-    if (mScrubIndex != mScrubShownIndex)
-    {
-        se_data_source ds;
-        if (!mRecorder.Select(static_cast<size_t>(mScrubIndex), &ds))
-        {
-            return false;
-        }
-        se_begin_frame(mScrubContext);   // re-reads the recorder's refreshed scratch
-        mScrubShownIndex = mScrubIndex;
-    }
+    se_begin_frame(mScrubContext);
+    mScrubShownIndex = mScrubIndex;
     return true;
 #else
     return false;

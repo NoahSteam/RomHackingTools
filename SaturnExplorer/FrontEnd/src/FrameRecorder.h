@@ -14,6 +14,8 @@
 
 #include "saturnexplorer/SaturnExplorer.h"
 
+#include "FrameLz.h"
+
 namespace sfe
 {
 
@@ -35,8 +37,9 @@ public:
         size_t   bytes = 0;               // compressed footprint of this frame
     };
 
-    // Cap the ring by total compressed bytes and by number of seconds at 60 fps.
-    void Configure(size_t maxBytes, double maxSeconds);
+    // Cap the ring to at most 'maxFrames' frames. (A fixed internal byte ceiling
+    // also guards against runaway memory; the frame cap is the effective limit.)
+    void Configure(size_t maxFrames);
 
     // Capture the context's current frame. 'frameNumber' dedups (a repeat frame
     // number — e.g. while paused — is skipped). Reads regions via se_read_vram /
@@ -46,8 +49,6 @@ public:
     size_t   Count() const { return mFrames.size(); }
     uint64_t FrameNumber(size_t i) const { return mFrames[i].frameNumber; }
     size_t   BytesUsed() const { return mBytes; }
-    size_t   MaxBytes() const { return mMaxBytes; }
-    double   Seconds() const { return static_cast<double>(mFrames.size()) / 60.0; }
 
     // Build a data source over frame i. The decompressed regions live in this
     // recorder's scratch and stay valid until the next Select() call. Returns
@@ -59,12 +60,18 @@ public:
 private:
     void Evict();
 
+    static constexpr size_t kMaxBytes = 4ull * 1024u * 1024u * 1024u;  // 4 GiB ceiling
+
     std::deque<Frame> mFrames;
     size_t            mBytes = 0;
-    size_t            mMaxBytes = 4ull * 1024u * 1024u * 1024u;  // 4 GiB safety ceiling
-    size_t            mMaxFrames = 5 * 60;                       // 5 s @ 60 fps default
+    size_t            mMaxFrames = 5 * 60;   // ring length in frames (App sets this)
     uint64_t          mLastFrame = ~0ull;
     bool              mHaveLast = false;
+
+    // Reused across frames so the per-frame capture path allocates nothing steady
+    // state: the VRAM read buffer and the LZ match-finder's hash chains.
+    std::vector<uint8_t> mReadScratch;
+    FrameLzScratch       mLzScratch;
 
     // Scratch holding the currently-selected decompressed frame (for the data
     // source callbacks below). Owned here so it outlives the created context.

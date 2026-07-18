@@ -26,6 +26,13 @@ inline uint32_t Hash3(const uint8_t* p)
 
 size_t FrameLzCompress(const uint8_t* src, size_t size, std::vector<uint8_t>& out)
 {
+    FrameLzScratch scratch;
+    return FrameLzCompress(src, size, out, scratch);
+}
+
+size_t FrameLzCompress(const uint8_t* src, size_t size, std::vector<uint8_t>& out,
+                       FrameLzScratch& scratch)
+{
     out.clear();
     out.reserve(size / 2 + 16);
     if (size == 0)
@@ -33,10 +40,15 @@ size_t FrameLzCompress(const uint8_t* src, size_t size, std::vector<uint8_t>& ou
         return 0;
     }
 
-    // Hash chains: head[h] = most recent position with hash h; prev[pos] links
-    // to the previous position sharing the hash. Positions are absolute indices.
-    std::vector<int32_t> head(kHashSize, -1);
-    std::vector<int32_t> prev(size, -1);
+    // Hash chains: head[h] = most recent position with hash h; prev[pos] links to
+    // the previous position sharing the hash. Positions are absolute indices. head
+    // must start all-empty each call; prev needs no init — every prev[pos] is
+    // written (at insert) before it is ever followed. Both buffers are caller-owned
+    // so they are reused across calls rather than reallocated per call.
+    std::vector<int32_t>& head = scratch.head;
+    std::vector<int32_t>& prev = scratch.prev;
+    head.assign(kHashSize, -1);
+    prev.resize(size);
 
     size_t pos = 0;
     while (pos < size)

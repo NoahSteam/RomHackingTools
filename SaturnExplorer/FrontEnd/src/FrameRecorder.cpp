@@ -19,7 +19,8 @@ constexpr uint32_t kVdp2RegBytes = 0x120;   // full VDP2 register file
 // Read a VRAM region via the ABI, compress it into 'r'. Sizes to the bytes the
 // source actually returned (0 = region absent for this source).
 void CaptureRegion(se_context* ctx, se_vram_kind kind, uint32_t maxSize,
-                   FrameRecorder::Region& r, std::vector<uint8_t>& scratch)
+                   FrameRecorder::Region& r, std::vector<uint8_t>& scratch,
+                   FrameLzScratch& lz)
 {
     scratch.resize(maxSize);
     const size_t got = se_read_vram(ctx, kind, 0, scratch.data(), maxSize);
@@ -29,7 +30,7 @@ void CaptureRegion(se_context* ctx, se_vram_kind kind, uint32_t maxSize,
         r.lz.clear();
         return;
     }
-    FrameLzCompress(scratch.data(), got, r.lz);
+    FrameLzCompress(scratch.data(), got, r.lz, lz);
 }
 
 void DecompressRegion(const FrameRecorder::Region& r, std::vector<uint8_t>& out)
@@ -58,10 +59,9 @@ size_t CopyOut(const std::vector<uint8_t>& buf, uint32_t off, void* dst, size_t 
 }
 }  // namespace
 
-void FrameRecorder::Configure(size_t maxBytes, double maxSeconds)
+void FrameRecorder::Configure(size_t maxFrames)
 {
-    mMaxBytes = maxBytes;
-    mMaxFrames = static_cast<size_t>(maxSeconds * 60.0 + 0.5);
+    mMaxFrames = maxFrames;
     Evict();
 }
 
@@ -80,12 +80,12 @@ void FrameRecorder::Capture(se_context* ctx, uint64_t frameNumber)
 
     Frame f;
     f.frameNumber = frameNumber;
-    std::vector<uint8_t> scratch;
-    CaptureRegion(ctx, SE_VRAM_KIND_VDP1_VRAM, kVdp1Vram, f.vdp1Vram, scratch);
-    CaptureRegion(ctx, SE_VRAM_KIND_VDP2_VRAM, kVdp2Vram, f.vdp2Vram, scratch);
-    CaptureRegion(ctx, SE_VRAM_KIND_CRAM,      kCram,     f.cram,     scratch);
-    CaptureRegion(ctx, SE_VRAM_KIND_WRAM_LOW,  kWram,     f.wramLow,  scratch);
-    CaptureRegion(ctx, SE_VRAM_KIND_WRAM_HIGH, kWram,     f.wramHigh, scratch);
+    std::vector<uint8_t>& scratch = mReadScratch;   // reused across frames
+    CaptureRegion(ctx, SE_VRAM_KIND_VDP1_VRAM, kVdp1Vram, f.vdp1Vram, scratch, mLzScratch);
+    CaptureRegion(ctx, SE_VRAM_KIND_VDP2_VRAM, kVdp2Vram, f.vdp2Vram, scratch, mLzScratch);
+    CaptureRegion(ctx, SE_VRAM_KIND_CRAM,      kCram,     f.cram,     scratch, mLzScratch);
+    CaptureRegion(ctx, SE_VRAM_KIND_WRAM_LOW,  kWram,     f.wramLow,  scratch, mLzScratch);
+    CaptureRegion(ctx, SE_VRAM_KIND_WRAM_HIGH, kWram,     f.wramHigh, scratch, mLzScratch);
 
     f.vdp1Regs.resize(kVdp1RegBytes / 2);
     for (uint32_t o = 0; o < kVdp1RegBytes; o += 2)
@@ -111,7 +111,7 @@ void FrameRecorder::Evict()
 {
     // Always keep at least the newest frame, even if a single frame exceeds the
     // byte budget — otherwise scrubbing would have nothing to show.
-    while (mFrames.size() > 1 && (mBytes > mMaxBytes || mFrames.size() > mMaxFrames))
+    while (mFrames.size() > 1 && (mBytes > kMaxBytes || mFrames.size() > mMaxFrames))
     {
         mBytes -= mFrames.front().bytes;
         mFrames.pop_front();

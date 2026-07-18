@@ -17,8 +17,22 @@
 namespace sfe
 {
 
+// Reusable match-finder scratch. Hoist one of these out of a hot loop and pass it
+// to FrameLzCompress so the (large) hash-chain buffers are allocated once and
+// reused across calls instead of per call. Contents are transient — no meaning
+// between calls.
+struct FrameLzScratch
+{
+    std::vector<int32_t> head;   // hash bucket -> most recent position
+    std::vector<int32_t> prev;   // position   -> previous position with same hash
+};
+
 // Compress 'src'[0..size) into 'out' (cleared then filled). Returns out.size().
+// The first form allocates its match-finder scratch internally; the second reuses
+// caller-owned scratch (see FrameLzScratch) to avoid per-call allocation.
 size_t FrameLzCompress(const uint8_t* src, size_t size, std::vector<uint8_t>& out);
+size_t FrameLzCompress(const uint8_t* src, size_t size, std::vector<uint8_t>& out,
+                       FrameLzScratch& scratch);
 
 // Decompress 'src'[0..size) into 'out', which must be resized to the exact
 // original length by the caller (the recorder stores it alongside). Returns true
