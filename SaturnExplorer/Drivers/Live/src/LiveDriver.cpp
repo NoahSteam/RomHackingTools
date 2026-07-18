@@ -223,26 +223,38 @@ bool ReadSnapshot(Conn& c, const char* verb, int32_t arg, LiveSnapshot& snap,
     {
         return false;
     }
-    uint8_t hdr[SE_LIVE_HEADER_LEN];
-    if (!ConnReadFull(c, hdr, sizeof(hdr)))
+    // Read magic + version first, then size the section-length table to the
+    // server's version so we stay in sync with either a v3 (no VDP1 frame buffer,
+    // 8 sections) or v4+ (adds the FB, 9 sections) server. This keeps a rebuilt
+    // (v4) client working against a not-yet-rebuilt (v3) Yabause: it just reports
+    // fb == 0 and the FB read below becomes a no-op.
+    uint8_t head[8];
+    if (!ConnReadFull(c, head, sizeof(head)))
     {
         return false;
     }
-    if (hdr[0] != SE_LIVE_MAGIC0 || hdr[1] != SE_LIVE_MAGIC1 ||
-        hdr[2] != SE_LIVE_MAGIC2 || hdr[3] != SE_LIVE_MAGIC3)
+    if (head[0] != SE_LIVE_MAGIC0 || head[1] != SE_LIVE_MAGIC1 ||
+        head[2] != SE_LIVE_MAGIC2 || head[3] != SE_LIVE_MAGIC3)
     {
         return false;
     }
-    // hdr[4..7] version (unused beyond presence for now)
-    const uint32_t v1 = Rd32LE(hdr + 8);
-    const uint32_t v2 = Rd32LE(hdr + 12);
-    const uint32_t cr = Rd32LE(hdr + 16);
-    const uint32_t vs = Rd32LE(hdr + 20);
-    const uint32_t vr = Rd32LE(hdr + 24);
-    const uint32_t wl = Rd32LE(hdr + 28);
-    const uint32_t wh = Rd32LE(hdr + 32);
-    const uint32_t fb = Rd32LE(hdr + 36);
-    const uint32_t ct = Rd32LE(hdr + 40);
+    const uint32_t version = Rd32LE(head + 4);
+    const int hasFb = (version >= 4u) ? 1 : 0;    // FB section added in v4
+    const int numLen = 8 + hasFb;                 // section-length entries
+    uint8_t lens[9 * 4];
+    if (!ConnReadFull(c, lens, static_cast<size_t>(numLen) * 4))
+    {
+        return false;
+    }
+    const uint32_t v1 = Rd32LE(lens + 0);
+    const uint32_t v2 = Rd32LE(lens + 4);
+    const uint32_t cr = Rd32LE(lens + 8);
+    const uint32_t vs = Rd32LE(lens + 12);
+    const uint32_t vr = Rd32LE(lens + 16);
+    const uint32_t wl = Rd32LE(lens + 20);
+    const uint32_t wh = Rd32LE(lens + 24);
+    const uint32_t fb = hasFb ? Rd32LE(lens + 28) : 0u;
+    const uint32_t ct = Rd32LE(lens + (hasFb ? 32 : 28));
     // Sanity clamps so a malformed header can't drive a huge allocation.
     if (v1 > 0x100000u || v2 > 0x100000u || cr > 0x4000u || vs > 4096u ||
         vr > 256u || wl > 0x100000u || wh > 0x100000u || fb > 0x40000u || ct > 64u)
