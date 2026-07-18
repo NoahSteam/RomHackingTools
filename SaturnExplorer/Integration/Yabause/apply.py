@@ -40,24 +40,31 @@ def fence(code):
 
 
 # Each edit: (filename, anchor regex, where to put the block relative to the
-# anchor ('after'|'before'), the C code to insert). Anchors are chosen to be
+# anchor ('after'|'before'), the C code to insert, key). 'key' is a stable
+# substring that identifies this hook regardless of its exact text — so when the
+# hook's content changes (e.g. SeExportSnapshot gains an argument), re-running
+# updates the existing fenced block in place instead of inserting a second copy
+# (which would leave a stale, no-longer-compiling call). Anchors are chosen to be
 # stable across Yabause versions; if one drifts, we report it precisely.
 EDITS = [
     # --- yabause.c ---
     ("yabause.c",
      r'(\n)(int YabauseInit\s*\(yabauseinit_struct)',
      "before_group2",
-     '#include "se_export.h"\n'),
+     '#include "se_export.h"\n',
+     '#include "se_export.h"'),
 
     ("yabause.c",
      r'(scsp_set_use_new\(init->use_new_scsp\);\s*\n)(\s*return 0;)',
      "between",
-     "   SeExportInit();   /* start the live-tap server */\n"),
+     "   SeExportInit();   /* start the live-tap server */\n",
+     "SeExportInit("),
 
     ("yabause.c",
      r'(void YabauseDeInit\(void\)\s*\{\s*\n)',
      "after_group1",
-     "   SeExportDeinit();\n"),
+     "   SeExportDeinit();\n",
+     "SeExportDeinit("),
 
     ("yabause.c",
      r'(int YabauseEmulate\(void\)\s*\{\s*\n\s*int oneframeexec = 0;\s*\n)',
@@ -65,20 +72,26 @@ EDITS = [
      "   /* Frame gate: hold here while the debugger has us paused. The gate\n"
      "    * sleeps internally and the export server thread keeps running, so a\n"
      "    * resume/step from Saturn Explorer releases us. */\n"
-     "   while (!SeExportGateFrame()) { }\n"),
+     "   while (!SeExportGateFrame()) { }\n",
+     "SeExportGateFrame("),
 
     # --- vdp2.c ---
     ("vdp2.c",
      r'(#include "vdp2\.h"\n)',
      "after_group1",
-     '#include "se_export.h"\n#include "memory.h"\n'),
+     '#include "se_export.h"\n#include "memory.h"\n',
+     '#include "se_export.h"'),
 
     ("vdp2.c",
      r'(void Vdp2VBlankOUT\(void\)\s*\{[\s\S]*?static VideoInterface_struct \* saved = NULL;\s*\n)',
      "after_group1",
      "   SeExportSnapshot(Vdp1Ram, Vdp2Ram, Vdp2ColorRam, Vdp2Regs,\n"
-     "                    Vdp1Regs, LowWram, HighWram, Vdp1FrameBuffer[0]);\n"),
+     "                    Vdp1Regs, LowWram, HighWram, Vdp1FrameBuffer[0]);\n",
+     "SeExportSnapshot("),
 ]
+
+# A fenced SE_EXPORT block (for update-in-place when a hook's content changes).
+FENCE_RE = re.compile(re.escape(BEGIN) + r".*?" + re.escape(END), re.DOTALL)
 
 # CMakeLists is handled specially (add se_export.c to the source list).
 CMAKE_ANCHOR = re.compile(r'(\n\s*)(vdp1\.c vdp2\.c)')
@@ -120,13 +133,21 @@ def process_file(src_dir, fname, do_write):
         return [f"MISSING  {fname} (not found in {src_dir})"]
     text = original = open(path, encoding="utf-8", errors="surrogateescape").read()
     notes = []
-    for f, anchor, mode, code in EDITS:
+    for f, anchor, mode, code, key in EDITS:
         if f != fname:
             continue
         tag = code.strip().splitlines()[0]
-        # Idempotency: skip if this exact code already fenced in.
-        if fence(code.rstrip("\n")) in text:
-            notes.append(f"  ok (already)  {tag}")
+        new_block = fence(code.rstrip("\n"))
+        # If a fenced block for this hook already exists (matched by its stable
+        # key), update it in place — so a changed hook (e.g. a new argument) is
+        # replaced, not duplicated. Exact match => nothing to do.
+        existing = next((m.group(0) for m in FENCE_RE.finditer(text) if key in m.group(0)), None)
+        if existing is not None:
+            if existing == new_block:
+                notes.append(f"  ok (already)  {tag}")
+            else:
+                text = text.replace(existing, new_block, 1)
+                notes.append(f"  ~ updated     {tag}")
             continue
         text, applied, found = apply_edit(text, anchor, mode, code)
         if applied:
