@@ -766,32 +766,49 @@ void App::DrawTimeline()
         }
         mbScrubbing = true;
 
-        if (ImGui::Button("|<"))                        mScrubIndex = 0;
-        ImGui::SameLine();
-        if (ImGui::Button("<") && mScrubIndex > 0)      --mScrubIndex;
-        ImGui::SameLine();
-        if (ImGui::Button(">") && mScrubIndex < n - 1)  ++mScrubIndex;
-        ImGui::SameLine();
-        if (ImGui::Button(">|"))                        mScrubIndex = n - 1;
+        const ImGuiStyle& style = ImGui::GetStyle();
 
-        // Right-side readout: selected frame + buffer footprint / span.
-        char tail[96];
+        // Left: frame readout (selected frame + buffer footprint / span).
+        char head[96];
         const double mb = static_cast<double>(mRecorder.BytesUsed()) / (1024.0 * 1024.0);
-        std::snprintf(tail, sizeof(tail), "frame #%llu   %d/%d   %.1f MB / %.1fs",
+        std::snprintf(head, sizeof(head), "Frame #%llu   %d / %d   (%.1f MB / %.1fs)",
                       static_cast<unsigned long long>(mRecorder.FrameNumber((size_t)mScrubIndex)),
                       mScrubIndex + 1, n, mb, n / static_cast<double>(kFramesPerSecond));
-        const float tailW = ImGui::CalcTextSize(tail).x;
-
-        // Slider fills the space between the buttons and the readout.
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted(head);
         ImGui::SameLine();
-        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - tailW - 16.0f);
+
+        // Reserve the right-hand step-button cluster so the scrubber can fill the
+        // gap between the readout and the buttons.
+        auto btnW = [&](const char* l) {
+            return ImGui::CalcTextSize(l).x + style.FramePadding.x * 2.0f;
+        };
+        const float rightW = btnW("|<") + btnW("<") + btnW(">") + btnW(">|") +
+                             style.ItemSpacing.x * 3.0f;
+
+        // Middle: the scrubber spans the bottom of the window.
+        const float sliderW = ImGui::GetContentRegionAvail().x - rightW - style.ItemSpacing.x;
+        ImGui::SetNextItemWidth(sliderW > 80.0f ? sliderW : 80.0f);
         int idx = mScrubIndex;
         if (ImGui::SliderInt("##scrub", &idx, 0, n - 1, ""))
         {
             mScrubIndex = idx;
         }
+
+        // Right: step backward / forward (with jump-to-ends), matching the concept
+        // transport bar. Terse glyphs, tooltips spell them out.
         ImGui::SameLine();
-        ImGui::TextUnformatted(tail);
+        if (ImGui::Button("|<")) mScrubIndex = 0;
+        ImGui::SetItemTooltip("First frame");
+        ImGui::SameLine();
+        if (ImGui::Button("<") && mScrubIndex > 0) --mScrubIndex;
+        ImGui::SetItemTooltip("Step back one frame");
+        ImGui::SameLine();
+        if (ImGui::Button(">") && mScrubIndex < n - 1) ++mScrubIndex;
+        ImGui::SetItemTooltip("Step forward one frame");
+        ImGui::SameLine();
+        if (ImGui::Button(">|")) mScrubIndex = n - 1;
+        ImGui::SetItemTooltip("Latest frame");
     }
     ImGui::End();
 #endif
