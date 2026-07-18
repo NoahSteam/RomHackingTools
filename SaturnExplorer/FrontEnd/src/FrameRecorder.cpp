@@ -3,19 +3,13 @@
 #include <cstring>
 
 #include "FrameLz.h"
+#include "SaturnRegions.h"
 
 namespace sfe
 {
 
 namespace
 {
-constexpr uint32_t kVdp1Vram = 0x80000;
-constexpr uint32_t kVdp2Vram = 0x80000;
-constexpr uint32_t kCram     = 0x1000;
-constexpr uint32_t kWram     = 0x100000;
-constexpr uint32_t kVdp1RegBytes = 0x18;    // TVMR..MODR image
-constexpr uint32_t kVdp2RegBytes = 0x120;   // full VDP2 register file
-
 // Read a VRAM region via the ABI, compress it into 'r'. Sizes to the bytes the
 // source actually returned (0 = region absent for this source).
 void CaptureRegion(se_context* ctx, se_vram_kind kind, uint32_t maxSize,
@@ -77,11 +71,11 @@ void FrameRecorder::Capture(se_context* ctx, uint64_t frameNumber)
     Frame f;
     f.frameNumber = frameNumber;
     std::vector<uint8_t>& scratch = mReadScratch;   // reused across frames
-    CaptureRegion(ctx, SE_VRAM_KIND_VDP1_VRAM, kVdp1Vram, f.vdp1Vram, scratch, mLzScratch);
-    CaptureRegion(ctx, SE_VRAM_KIND_VDP2_VRAM, kVdp2Vram, f.vdp2Vram, scratch, mLzScratch);
-    CaptureRegion(ctx, SE_VRAM_KIND_CRAM,      kCram,     f.cram,     scratch, mLzScratch);
-    CaptureRegion(ctx, SE_VRAM_KIND_WRAM_LOW,  kWram,     f.wramLow,  scratch, mLzScratch);
-    CaptureRegion(ctx, SE_VRAM_KIND_WRAM_HIGH, kWram,     f.wramHigh, scratch, mLzScratch);
+    CaptureRegion(ctx, SE_VRAM_KIND_VDP1_VRAM, kVdp1VramSize, f.vdp1Vram, scratch, mLzScratch);
+    CaptureRegion(ctx, SE_VRAM_KIND_VDP2_VRAM, kVdp2VramSize, f.vdp2Vram, scratch, mLzScratch);
+    CaptureRegion(ctx, SE_VRAM_KIND_CRAM,      kCramSize,     f.cram,     scratch, mLzScratch);
+    CaptureRegion(ctx, SE_VRAM_KIND_WRAM_LOW,  kWramSize,     f.wramLow,  scratch, mLzScratch);
+    CaptureRegion(ctx, SE_VRAM_KIND_WRAM_HIGH, kWramSize,     f.wramHigh, scratch, mLzScratch);
 
     f.vdp1Regs.resize(kVdp1RegBytes / 2);
     for (uint32_t o = 0; o < kVdp1RegBytes; o += 2)

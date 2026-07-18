@@ -14,10 +14,9 @@ namespace sfe
 // Call in place of ImGui::StyleColorsDark(), before ScaleAllSizes(dpiScale).
 void ApplyTheme(ImGuiStyle& style);
 
-// Load the embedded UI font (a clean proportional sans-serif) at a body and a
-// heading size and make the body font the default. Call once after ApplyTheme,
-// before the first frame. DPI is handled by the backend's io.FontScaleMain, so
-// sizes here are the base (1x) pixel sizes.
+// Load the embedded UI font (a clean proportional sans-serif) and make it the
+// default. Call once after ApplyTheme, before the first frame. DPI is handled by
+// the backend's io.FontScaleMain, so the size here is the base (1x) pixel size.
 void LoadFonts(ImGuiIO& io);
 
 // Theme color tokens for hand-drawn panels (ImDrawList), so custom rendering
@@ -26,11 +25,8 @@ void LoadFonts(ImGuiIO& io);
 namespace ui
 {
 extern ImFont* gBody;      // default proportional UI font (set by LoadFonts)
-extern ImFont* gHeading;   // larger weight for panel/section headers
 
-ImU32 Accent();            // primary accent (active tab, slider, selection)
 ImU32 SelectionOutline();  // bright outline for the selected object/region
-ImU32 PanelBorder();       // subtle separator/border on hand-drawn cards
 ImU32 VramTexture();       // VRAM map region kinds
 ImU32 VramClut();
 ImU32 VramCmdTable();

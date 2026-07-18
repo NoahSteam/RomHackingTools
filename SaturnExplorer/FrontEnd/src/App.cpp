@@ -10,6 +10,7 @@
 #include "imgui_internal.h"  // DockBuilder + BeginViewportSideBar for the default layout
 
 #include "Platform/IPlatform.h"
+#include "SaturnRegions.h"
 #include "Theme.h"
 #include "SavestateDriver.h"
 #ifdef SE_ENABLE_LIVE
@@ -272,45 +273,46 @@ void App::DumpMemory(IPlatform& platform)
 
     struct Section { char name[16]; uint32_t address; std::vector<uint8_t> bytes; };
     std::vector<Section> sections;
-
-    auto addVram = [&](const char* name, se_vram_kind kind, uint32_t addr, uint32_t maxSize) {
-        std::vector<uint8_t> b(maxSize);
-        const size_t got = se_read_vram(mContext, kind, 0, b.data(), maxSize);
-        if (got == 0)
-        {
-            return;   // region not provided by this source
-        }
-        b.resize(got);
+    auto push = [&](const char* name, uint32_t addr, std::vector<uint8_t> bytes) {
         Section s{};
         std::strncpy(s.name, name, sizeof(s.name) - 1);
         s.address = addr;
-        s.bytes = std::move(b);
+        s.bytes = std::move(bytes);
         sections.push_back(std::move(s));
     };
-    // Saturn bus addresses (informational, for the section table).
-    addVram("VDP1_VRAM", SE_VRAM_KIND_VDP1_VRAM, 0x25C00000u, 0x80000u);
-    addVram("VDP2_VRAM", SE_VRAM_KIND_VDP2_VRAM, 0x25E00000u, 0x80000u);
-    addVram("CRAM",      SE_VRAM_KIND_CRAM,      0x25F00000u, 0x1000u);
-    addVram("WRAM_LOW",  SE_VRAM_KIND_WRAM_LOW,  0x00200000u, 0x100000u);
-    addVram("WRAM_HIGH", SE_VRAM_KIND_WRAM_HIGH, 0x06000000u, 0x100000u);
 
-    auto addRegs = [&](const char* name, uint32_t addr, uint32_t byteLen,
-                       uint16_t (*get)(se_context*, uint32_t)) {
+    // Bulk memory regions, in canonical order. Bus addresses are informational
+    // (for the section table); sizes come from the shared SaturnRegions constants.
+    struct RegionDesc { se_vram_kind kind; const char* name; uint32_t addr; uint32_t size; };
+    static const RegionDesc kRegions[] = {
+        { SE_VRAM_KIND_VDP1_VRAM, "VDP1_VRAM", 0x25C00000u, kVdp1VramSize },
+        { SE_VRAM_KIND_VDP2_VRAM, "VDP2_VRAM", 0x25E00000u, kVdp2VramSize },
+        { SE_VRAM_KIND_CRAM,      "CRAM",      0x25F00000u, kCramSize },
+        { SE_VRAM_KIND_WRAM_LOW,  "WRAM_LOW",  0x00200000u, kWramSize },
+        { SE_VRAM_KIND_WRAM_HIGH, "WRAM_HIGH", 0x06000000u, kWramSize },
+    };
+    for (const RegionDesc& d : kRegions)
+    {
+        std::vector<uint8_t> b(d.size);
+        const size_t got = se_read_vram(mContext, d.kind, 0, b.data(), d.size);
+        if (got == 0) continue;   // region not provided by this source
+        b.resize(got);
+        push(d.name, d.addr, std::move(b));
+    }
+
+    // Register images, packed big-endian like VRAM.
+    auto readRegs = [&](uint32_t byteLen, uint16_t (*get)(se_context*, uint32_t)) {
         std::vector<uint8_t> b(byteLen);
         for (uint32_t o = 0; o < byteLen; o += 2)
         {
             const uint16_t v = get(mContext, o);
-            b[o]     = static_cast<uint8_t>(v >> 8);   // big-endian, as VRAM
+            b[o]     = static_cast<uint8_t>(v >> 8);
             b[o + 1] = static_cast<uint8_t>(v & 0xFF);
         }
-        Section s{};
-        std::strncpy(s.name, name, sizeof(s.name) - 1);
-        s.address = addr;
-        s.bytes = std::move(b);
-        sections.push_back(std::move(s));
+        return b;
     };
-    if (se_has_vdp1_registers(mContext)) addRegs("VDP1_REGS", 0x25D00000u, 0x18u, se_get_vdp1_register);
-    if (se_has_vdp2_registers(mContext)) addRegs("VDP2_REGS", 0x25F80000u, 0x120u, se_get_vdp2_register);
+    if (se_has_vdp1_registers(mContext)) push("VDP1_REGS", 0x25D00000u, readRegs(kVdp1RegBytes, se_get_vdp1_register));
+    if (se_has_vdp2_registers(mContext)) push("VDP2_REGS", 0x25F80000u, readRegs(kVdp2RegBytes, se_get_vdp2_register));
 
     if (sections.empty())
     {
@@ -321,7 +323,11 @@ void App::DumpMemory(IPlatform& platform)
     // entry: name[16] + address(u32) + size(u32) + offset(u32) + pad(u32).
     const uint32_t count = static_cast<uint32_t>(sections.size());
     const uint32_t headerBytes = 8 + 4 + 4 + count * 32u;
+    uint32_t total = headerBytes;
+    for (const Section& s : sections) total += static_cast<uint32_t>(s.bytes.size());
+
     std::vector<uint8_t> out;
+    out.reserve(total);
     const char magic[8] = { 'S', 'E', 'M', 'D', 'U', 'M', 'P', '1' };
     out.insert(out.end(), magic, magic + 8);
     PushU32(out, 1u);       // version

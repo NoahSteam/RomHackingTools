@@ -116,23 +116,17 @@ void LoadFonts(ImGuiIO& io)
     ImFontConfig cfg;
     cfg.OversampleH = 2;
     cfg.OversampleV = 2;
-    // Body (default) + a larger size for headers. One embedded source, two sizes;
-    // DPI comes from the backend's io.FontScaleMain, so these are base pixels.
+    // One embedded source at the body size; DPI comes from io.FontScaleMain.
     ui::gBody = io.Fonts->AddFontFromMemoryCompressedBase85TTF(
         LiberationSansRegular_compressed_data_base85, 15.0f, &cfg);
-    ui::gHeading = io.Fonts->AddFontFromMemoryCompressedBase85TTF(
-        LiberationSansRegular_compressed_data_base85, 19.0f, &cfg);
     io.FontDefault = ui::gBody;
 }
 
 namespace ui
 {
 ImFont* gBody = nullptr;
-ImFont* gHeading = nullptr;
 
-ImU32 Accent()           { return ImGui::GetColorU32(kAccent); }
 ImU32 SelectionOutline() { return ImGui::GetColorU32(kSelection); }
-ImU32 PanelBorder()      { return ImGui::GetColorU32(kBorder); }
 ImU32 VramTexture()      { return IM_COL32(0x5A, 0xBE, 0x78, 0xFF); }
 ImU32 VramClut()         { return IM_COL32(0xDC, 0xC8, 0x5A, 0xFF); }
 ImU32 VramCmdTable()     { return IM_COL32(0x35, 0xC6, 0xD6, 0xFF); }

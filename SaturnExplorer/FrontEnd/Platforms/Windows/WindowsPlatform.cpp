@@ -247,13 +247,14 @@ bool WindowsPlatform::SaveFile(const char* suggestedName, const void* data, size
     {
         std::strncpy(file, suggestedName, MAX_PATH - 1);
     }
+    // Generic saver: the caller's 'suggestedName' carries the extension, so this
+    // stays format-agnostic (no dump-specific filter baked into the platform seam).
     OPENFILENAMEA ofn = {};
     ofn.lStructSize = sizeof(ofn);
     ofn.hwndOwner = mHwnd;
-    ofn.lpstrFilter = "Saturn memory dump\0*.sedump\0All Files\0*.*\0";
+    ofn.lpstrFilter = "All Files\0*.*\0";
     ofn.lpstrFile = file;
     ofn.nMaxFile = MAX_PATH;
-    ofn.lpstrDefExt = "sedump";
     ofn.Flags = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY;
 
     if (!::GetSaveFileNameA(&ofn))
