@@ -209,11 +209,15 @@ RVert Project(const se_vec3& w, const se_camera3d& cam,
 
 void Vdp1Rasterizer::Render(const Vdp1Scene& scene, const std::vector<uint8_t>& vram,
                             const std::vector<uint8_t>& cram, se_cram_mode cramMode,
-                            const se_render_opts& opts, std::vector<uint8_t>& outRgba)
+                            const se_render_opts& opts, std::vector<uint8_t>& outRgba,
+                            int minPriority, int maxPriority, bool clear)
 {
     const int width = scene.screenWidth;
     const int height = scene.screenHeight;
-    outRgba.assign(static_cast<size_t>(width) * height * 4, 0);  // transparent
+    if (clear)
+    {
+        outRgba.assign(static_cast<size_t>(width) * height * 4, 0);  // transparent
+    }
     if (!opts.show_vdp1_sprites)
     {
         return;
@@ -222,6 +226,11 @@ void Vdp1Rasterizer::Render(const Vdp1Scene& scene, const std::vector<uint8_t>& 
     for (size_t i = 0; i < scene.sprites.size(); ++i)
     {
         const se_sprite_2d& s = scene.sprites[i];
+        if (static_cast<int>(s.priority) < minPriority ||
+            static_cast<int>(s.priority) > maxPriority)
+        {
+            continue;   // outside this priority band
+        }
         RVert v[4] = { { s.corners[0].x, s.corners[0].y, 0.0f },
                        { s.corners[1].x, s.corners[1].y, 0.0f },
                        { s.corners[2].x, s.corners[2].y, 0.0f },

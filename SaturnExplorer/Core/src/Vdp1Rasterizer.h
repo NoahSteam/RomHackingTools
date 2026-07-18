@@ -17,10 +17,15 @@ class Vdp1Rasterizer
 {
 public:
     // Render 'scene' into 'outRgba' (resized to width*height*4). Honors
-    // opts.show_vdp1_sprites. 'cramMode' selects the CRAM color layout.
+    // opts.show_vdp1_sprites. 'cramMode' selects the CRAM color layout. Only
+    // sprites whose resolved priority is in [minPriority, maxPriority] are drawn,
+    // so the caller can interleave sprite bands with the VDP2 layers by priority.
+    // When 'clear' is true 'outRgba' is (re)sized and cleared first; when false
+    // the sprites composite over whatever is already there.
     static void Render(const Vdp1Scene& scene, const std::vector<uint8_t>& vram,
                        const std::vector<uint8_t>& cram, se_cram_mode cramMode,
-                       const se_render_opts& opts, std::vector<uint8_t>& outRgba);
+                       const se_render_opts& opts, std::vector<uint8_t>& outRgba,
+                       int minPriority = 0, int maxPriority = 7, bool clear = true);
 
     // Render the exploded 3D view (scene.sprites3d) from 'camera' into 'outRgba'
     // (resized to viewport). 'depth' is a caller-owned scratch depth buffer,

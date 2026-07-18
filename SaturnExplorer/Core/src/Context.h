@@ -44,6 +44,7 @@ public:
         }
         Vdp1Parser::Parse(mSnapshot.Vdp1Vram(), mCommands);
         GeometryBuilder::Build(mSnapshot.Vdp1Vram(), mScene);
+        ResolveSpritePriorities();
         BuildVramRegions();
         return SE_OK;
     }
@@ -84,32 +85,31 @@ public:
         return SE_OK;
     }
 
-    // Render the composited 2D frame into a scene-sized image: the VDP2 NBG
-    // backgrounds first, then the VDP1 sprites on top (§7). Empty pixels get an
-    // opaque backdrop so the result is a finished frame.
+    // Render the composited 2D frame into a scene-sized image. VDP1 sprites and
+    // VDP2 NBG screens interleave by priority: for each priority level 0..7 the
+    // VDP2 layers at that priority are drawn, then the VDP1 sprites at that
+    // priority (sprites in front of same-priority NBGs, per hardware). Each
+    // sprite's priority is resolved from its color data + the sprite-priority
+    // registers (ResolveSpritePriorities). Empty pixels get an opaque backdrop.
+    // See ARCHITECTURE.md §7.
     se_result RenderFrame(const se_render_opts& opts, se_image* out, size_t* needed)
     {
         const int w = mScene.screenWidth;
         const int h = mScene.screenHeight;
         return FillImage(static_cast<uint32_t>(w), static_cast<uint32_t>(h), out, needed, [&]
         {
-            // VDP1 sprites and VDP2 screens interleave by priority. Render the
-            // VDP2 layers at or below the sprite priority as the background,
-            // draw the sprites over them, then composite the higher-priority
-            // VDP2 layers on top (e.g. HUD / dialogue boxes that sit in front of
-            // the sprites). See ARCHITECTURE.md §7.
-            // 0 (no VDP2 regs, or genuine sprite priority 0) falls back to the
-            // old behavior: sprites over every NBG (background = all, none in
-            // front), which avoids wrongly flipping all layers to the front.
-            int spritePrio = Vdp2Compositor::SpritePriority(mSnapshot);
-            if (spritePrio < 1) spritePrio = 7;
-            Vdp2Compositor::Render(mSnapshot, opts, w, h, mBgBuffer, 1, spritePrio, true);
-            Vdp1Rasterizer::Render(mScene, mSnapshot.Vdp1Vram(), mSnapshot.Cram(),
-                                   mSnapshot.CramMode(), opts, mRenderBuffer);
-            CompositeFrame();
-            // Foreground VDP2 layers, composited over the finished frame.
-            Vdp2Compositor::Render(mSnapshot, opts, w, h, mRenderBuffer,
-                                   spritePrio + 1, 7, false);
+            const size_t n = static_cast<size_t>(w) * static_cast<size_t>(h) * 4;
+            mRenderBuffer.assign(n, 0);   // transparent; layers composite over it
+            for (int p = 0; p <= 7; ++p)
+            {
+                if (p >= 1)   // NBG priority 0 = not displayed
+                {
+                    Vdp2Compositor::Render(mSnapshot, opts, w, h, mRenderBuffer, p, p, false);
+                }
+                Vdp1Rasterizer::Render(mScene, mSnapshot.Vdp1Vram(), mSnapshot.Cram(),
+                                       mSnapshot.CramMode(), opts, mRenderBuffer, p, p, false);
+            }
+            FillBackdrop();
         });
     }
 
@@ -459,33 +459,99 @@ private:
         });
     }
 
-    // Flatten the VDP2 background (mBgBuffer) and VDP1 sprites (mRenderBuffer)
-    // into a finished opaque frame, left in mRenderBuffer: VDP1 where it drew a
-    // texel, else the NBG background, else an opaque backdrop.
-    void CompositeFrame()
+    // Fill any still-transparent pixel of the finished frame (no sprite or NBG
+    // covered it) with an opaque backdrop, so the result is a complete frame.
+    void FillBackdrop()
     {
         constexpr uint8_t kBackdrop[3] = { 8, 8, 12 };
-        const size_t count = mRenderBuffer.size();
-        const bool haveBg = mBgBuffer.size() == count;
-        for (size_t o = 0; o < count; o += 4)
+        for (size_t o = 0; o < mRenderBuffer.size(); o += 4)
         {
             if (mRenderBuffer[o + 3])
             {
-                continue;  // VDP1 sprite pixel already opaque
+                continue;
             }
-            if (haveBg && mBgBuffer[o + 3])
+            mRenderBuffer[o + 0] = kBackdrop[0];
+            mRenderBuffer[o + 1] = kBackdrop[1];
+            mRenderBuffer[o + 2] = kBackdrop[2];
+            mRenderBuffer[o + 3] = 255;
+        }
+    }
+
+    // Priority NUMBER encoded in a 16-bit sprite pixel for SPCTL sprite type
+    // 'type' (VDP1 manual; mirrors Yabause Vdp1GetSpritePixelInfo). A direct-RGB
+    // pixel (MSB set, mixed-color mode) carries no number and uses slot 0.
+    static int SpritePriorityNumber(uint16_t px, int type, bool spclmd)
+    {
+        if (spclmd && (px & 0x8000))
+        {
+            return 0;   // RGB pixel: priority number 0
+        }
+        switch (type)
+        {
+        case 0x0: return (px >> 14) & 0x3;
+        case 0x1: return (px >> 13) & 0x7;
+        case 0x2: return (px >> 14) & 0x1;
+        case 0x3: return (px >> 13) & 0x3;
+        case 0x4: return (px >> 13) & 0x3;
+        case 0x5: case 0x6: case 0x7: return (px >> 12) & 0x7;
+        case 0x8: case 0x9: return (px >> 7) & 0x1;
+        case 0xA:           return (px >> 6) & 0x3;
+        case 0xC: case 0xD: return (px >> 7) & 0x1;
+        case 0xE:           return (px >> 6) & 0x3;
+        default:            return 0;   // types B, F: no priority bits
+        }
+    }
+
+    // Resolve each VDP1 sprite's priority (0..7) from the sprite-priority
+    // registers (PRISA..PRISD indexed by the pixel's priority number) and its
+    // color data. Modeled per command (one priority per sprite) using the
+    // front-most priority its pixels reach — the common case; per-pixel sprite
+    // priority isn't modeled. Sprites default to 0 when VDP2 regs are absent.
+    void ResolveSpritePriorities()
+    {
+        if (!mSnapshot.HasVdp2Regs())
+        {
+            for (se_sprite_2d& s : mScene.sprites) s.priority = 0;
+            return;
+        }
+        const uint16_t spctl = mSnapshot.Vdp2Reg(0x0E0);
+        const int type = spctl & 0xF;
+        const bool spclmd = (spctl & 0x20) != 0;
+        const uint16_t prisa = mSnapshot.Vdp2Reg(0x0F0);
+        const uint16_t prisb = mSnapshot.Vdp2Reg(0x0F2);
+        const uint16_t prisc = mSnapshot.Vdp2Reg(0x0F4);
+        const uint16_t prisd = mSnapshot.Vdp2Reg(0x0F6);
+        const uint8_t pt[8] = {
+            static_cast<uint8_t>(prisa & 0x7), static_cast<uint8_t>((prisa >> 8) & 0x7),
+            static_cast<uint8_t>(prisb & 0x7), static_cast<uint8_t>((prisb >> 8) & 0x7),
+            static_cast<uint8_t>(prisc & 0x7), static_cast<uint8_t>((prisc >> 8) & 0x7),
+            static_cast<uint8_t>(prisd & 0x7), static_cast<uint8_t>((prisd >> 8) & 0x7) };
+        const std::vector<uint8_t>& vram = mSnapshot.Vdp1Vram();
+        for (se_sprite_2d& s : mScene.sprites)
+        {
+            int best = 0;
+            bool found = false;
+            auto consider = [&](uint16_t px)
             {
-                mRenderBuffer[o + 0] = mBgBuffer[o + 0];
-                mRenderBuffer[o + 1] = mBgBuffer[o + 1];
-                mRenderBuffer[o + 2] = mBgBuffer[o + 2];
+                const int prio = pt[SpritePriorityNumber(px, type, spclmd) & 0x7];
+                if (!found || prio > best) { best = prio; found = true; }
+            };
+            if (s.texture.color_mode == SE_COLOR_LUT_16)
+            {
+                for (int p = 1; p < 16; ++p)   // pixel = CLUT entry; skip index 0
+                {
+                    consider(ReadBE16(vram, s.texture.clut_address + p * 2));
+                }
+            }
+            else if (s.texture.color_mode == SE_COLOR_RGB555)
+            {
+                consider(0x8000);   // direct-RGB sprite
             }
             else
             {
-                mRenderBuffer[o + 0] = kBackdrop[0];
-                mRenderBuffer[o + 1] = kBackdrop[1];
-                mRenderBuffer[o + 2] = kBackdrop[2];
+                consider(s.texture.palette_bank);   // color-bank: bits from CMDCOLR
             }
-            mRenderBuffer[o + 3] = 255;
+            s.priority = static_cast<uint8_t>(found ? best : 0);
         }
     }
 
