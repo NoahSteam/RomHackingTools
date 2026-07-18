@@ -58,15 +58,6 @@ bool CheckboxU8(const char* label, uint8_t* value)
 
 // --- Small hand-drawn vector icons (no icon font). Each draws centered at 'c'
 // with half-extent ~'r' onto 'dl'. Colors come from the theme so they track it. ---
-void IconEye(ImDrawList* dl, ImVec2 c, float r, ImU32 col, bool visible)
-{
-    dl->AddEllipse(c, ImVec2(r, r * 0.62f), col, 0.0f, 0, 1.6f);
-    dl->AddCircleFilled(c, r * 0.30f, col);
-    if (!visible)   // struck through = hidden
-    {
-        dl->AddLine(ImVec2(c.x - r, c.y + r * 0.8f), ImVec2(c.x + r, c.y - r * 0.8f), col, 1.8f);
-    }
-}
 void IconPlay(ImDrawList* dl, ImVec2 c, float r, ImU32 col)
 {
     dl->AddTriangleFilled(ImVec2(c.x - r * 0.6f, c.y - r), ImVec2(c.x - r * 0.6f, c.y + r),
@@ -83,28 +74,6 @@ void IconStep(ImDrawList* dl, ImVec2 c, float r, ImU32 col)   // play + bar (ste
     dl->AddTriangleFilled(ImVec2(c.x - r, c.y - r), ImVec2(c.x - r, c.y + r),
                           ImVec2(c.x + r * 0.35f, c.y), col);
     dl->AddRectFilled(ImVec2(c.x + r * 0.55f, c.y - r), ImVec2(c.x + r, c.y + r), col, 1.0f);
-}
-
-// A visibility toggle drawn as an eye icon + label; toggles *value. Returns true
-// when changed. Accent when on, muted when off (matches the design's layer list).
-bool EyeToggle(const char* label, uint8_t* value)
-{
-    ImGui::PushID(label);
-    const float h = ImGui::GetFrameHeight();
-    const ImVec2 p = ImGui::GetCursorScreenPos();
-    const bool changed = ImGui::InvisibleButton("##eye", ImVec2(h, h));
-    const bool on = *value != 0;
-    const bool hot = ImGui::IsItemHovered();
-    ImU32 col = on ? ui::Accent()
-                   : (hot ? IM_COL32(190, 196, 208, 255) : IM_COL32(105, 112, 124, 255));
-    IconEye(ImGui::GetWindowDrawList(), ImVec2(p.x + h * 0.5f, p.y + h * 0.5f), h * 0.28f, col, on);
-    ImGui::SameLine();
-    ImGui::AlignTextToFramePadding();
-    if (on) ImGui::TextUnformatted(label);
-    else    ImGui::TextDisabled("%s", label);
-    if (changed) *value = on ? 0 : 1;
-    ImGui::PopID();
-    return changed;
 }
 
 void IconTri(ImDrawList* dl, ImVec2 c, float r, ImU32 col, bool left)
@@ -1061,20 +1030,20 @@ void App::DrawLayerControls()
     if (ImGui::Begin("Layer Controls"))
     {
         ImGui::SeparatorText("VDP1 (Sprites)");
-        EyeToggle("Sprites", &mRenderOpts.show_vdp1_sprites);
-        EyeToggle("Wireframe", &mRenderOpts.show_wireframe);
-        EyeToggle("Bounding Boxes", &mRenderOpts.show_bounding_boxes);
-        EyeToggle("Object Numbers", &mRenderOpts.show_object_numbers);
+        CheckboxU8("Sprites", &mRenderOpts.show_vdp1_sprites);
+        CheckboxU8("Wireframe", &mRenderOpts.show_wireframe);
+        CheckboxU8("Bounding Boxes", &mRenderOpts.show_bounding_boxes);
+        CheckboxU8("Object Numbers", &mRenderOpts.show_object_numbers);
 
         ImGui::SeparatorText("VDP2 (Background)");
-        EyeToggle("NBG0 (Scroll A)", &mRenderOpts.show_layer[SE_LAYER_NBG0]);
-        EyeToggle("NBG1 (Scroll B)", &mRenderOpts.show_layer[SE_LAYER_NBG1]);
-        EyeToggle("NBG2 (Scroll C)", &mRenderOpts.show_layer[SE_LAYER_NBG2]);
-        EyeToggle("NBG3 (Scroll D)", &mRenderOpts.show_layer[SE_LAYER_NBG3]);
-        EyeToggle("RBG0 (Rotation)", &mRenderOpts.show_layer[SE_LAYER_RBG0]);
-        EyeToggle("Window", &mRenderOpts.show_window);
-        EyeToggle("Color Calculation", &mRenderOpts.show_color_calculation);
-        EyeToggle("Shadow / Highlight", &mRenderOpts.show_shadow_highlight);
+        CheckboxU8("NBG0 (Scroll A)", &mRenderOpts.show_layer[SE_LAYER_NBG0]);
+        CheckboxU8("NBG1 (Scroll B)", &mRenderOpts.show_layer[SE_LAYER_NBG1]);
+        CheckboxU8("NBG2 (Scroll C)", &mRenderOpts.show_layer[SE_LAYER_NBG2]);
+        CheckboxU8("NBG3 (Scroll D)", &mRenderOpts.show_layer[SE_LAYER_NBG3]);
+        CheckboxU8("RBG0 (Rotation)", &mRenderOpts.show_layer[SE_LAYER_RBG0]);
+        CheckboxU8("Window", &mRenderOpts.show_window);
+        CheckboxU8("Color Calculation", &mRenderOpts.show_color_calculation);
+        CheckboxU8("Shadow / Highlight", &mRenderOpts.show_shadow_highlight);
     }
     ImGui::End();
 }
