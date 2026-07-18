@@ -172,7 +172,7 @@ elseif(EMSCRIPTEN)
         LINK_DEPENDS ${SE_SHELL}
         LINK_FLAGS "-sUSE_SDL=2 -sUSE_WEBGL2=1 -sFULL_ES3 -sALLOW_MEMORY_GROWTH \
 -sEXPORTED_FUNCTIONS=['_main','_se_web_load_file','_se_web_resize','_malloc','_free'] \
--sEXPORTED_RUNTIME_METHODS=['ccall','cwrap','HEAPU8'] \
+-sEXPORTED_RUNTIME_METHODS=['ccall','cwrap','HEAPU8','UTF8ToString'] \
 --shell-file ${SE_SHELL}")
 
 else()

@@ -51,6 +51,9 @@ public:
 
 private:
     void CloseData();
+    // Read every available memory region from the current source and hand a single
+    // self-describing dump blob (.sedump) to the platform to save / download.
+    void DumpMemory(IPlatform& platform);
     void RenderFrameToTexture(IPlatform& platform);
     void BuildDefaultLayout(unsigned int dockspaceId);
     void DrawToolbar(IPlatform& platform);

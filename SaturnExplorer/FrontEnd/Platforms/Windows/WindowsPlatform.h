@@ -28,6 +28,7 @@ public:
     void DestroyTexture(TextureHandle handle) override;
 
     bool OpenFileDialog(std::string& outPath) override;
+    bool SaveFile(const char* suggestedName, const void* data, size_t size) override;
 
 private:
     bool CreateDeviceD3D();

@@ -3,12 +3,14 @@
 #include <algorithm>
 #include <cstdarg>
 #include <cstdio>
+#include <cstring>
 #include <string>
 
 #include "imgui.h"
 #include "imgui_internal.h"  // DockBuilder + BeginViewportSideBar for the default layout
 
 #include "Platform/IPlatform.h"
+#include "Theme.h"
 #include "SavestateDriver.h"
 #ifdef SE_ENABLE_LIVE
 #include "LiveDriver.h"   // native builds only (threads/sockets)
@@ -183,6 +185,108 @@ void App::CloseData()
     // platform's device at shutdown; mark it stale so a new dump recreates it.
     mFrameWidth = 0;
     mFrameHeight = 0;
+}
+
+namespace
+{
+// Append a little-endian uint32 to a byte vector.
+void PushU32(std::vector<uint8_t>& v, uint32_t x)
+{
+    v.push_back(static_cast<uint8_t>(x & 0xFF));
+    v.push_back(static_cast<uint8_t>((x >> 8) & 0xFF));
+    v.push_back(static_cast<uint8_t>((x >> 16) & 0xFF));
+    v.push_back(static_cast<uint8_t>((x >> 24) & 0xFF));
+}
+}  // namespace
+
+// Snapshot every region the current source exposes and pack it into one
+// self-describing ".sedump": an 8-byte magic, a section table, then the raw bytes
+// (VRAM/CRAM/work-RAM big-endian as the Saturn stores them; registers as a
+// hardware-offset big-endian image). The section table names each region and gives
+// its Saturn bus address + size + file offset, so a region is trivial to carve out.
+void App::DumpMemory(IPlatform& platform)
+{
+    if (!mbHasData || !mContext)
+    {
+        return;
+    }
+
+    struct Section { char name[16]; uint32_t address; std::vector<uint8_t> bytes; };
+    std::vector<Section> sections;
+
+    auto addVram = [&](const char* name, se_vram_kind kind, uint32_t addr, uint32_t maxSize) {
+        std::vector<uint8_t> b(maxSize);
+        const size_t got = se_read_vram(mContext, kind, 0, b.data(), maxSize);
+        if (got == 0)
+        {
+            return;   // region not provided by this source
+        }
+        b.resize(got);
+        Section s{};
+        std::strncpy(s.name, name, sizeof(s.name) - 1);
+        s.address = addr;
+        s.bytes = std::move(b);
+        sections.push_back(std::move(s));
+    };
+    // Saturn bus addresses (informational, for the section table).
+    addVram("VDP1_VRAM", SE_VRAM_KIND_VDP1_VRAM, 0x25C00000u, 0x80000u);
+    addVram("VDP2_VRAM", SE_VRAM_KIND_VDP2_VRAM, 0x25E00000u, 0x80000u);
+    addVram("CRAM",      SE_VRAM_KIND_CRAM,      0x25F00000u, 0x1000u);
+    addVram("WRAM_LOW",  SE_VRAM_KIND_WRAM_LOW,  0x00200000u, 0x100000u);
+    addVram("WRAM_HIGH", SE_VRAM_KIND_WRAM_HIGH, 0x06000000u, 0x100000u);
+
+    auto addRegs = [&](const char* name, uint32_t addr, uint32_t byteLen,
+                       uint16_t (*get)(se_context*, uint32_t)) {
+        std::vector<uint8_t> b(byteLen);
+        for (uint32_t o = 0; o < byteLen; o += 2)
+        {
+            const uint16_t v = get(mContext, o);
+            b[o]     = static_cast<uint8_t>(v >> 8);   // big-endian, as VRAM
+            b[o + 1] = static_cast<uint8_t>(v & 0xFF);
+        }
+        Section s{};
+        std::strncpy(s.name, name, sizeof(s.name) - 1);
+        s.address = addr;
+        s.bytes = std::move(b);
+        sections.push_back(std::move(s));
+    };
+    if (se_has_vdp1_registers(mContext)) addRegs("VDP1_REGS", 0x25D00000u, 0x18u, se_get_vdp1_register);
+    if (se_has_vdp2_registers(mContext)) addRegs("VDP2_REGS", 0x25F80000u, 0x120u, se_get_vdp2_register);
+
+    if (sections.empty())
+    {
+        return;
+    }
+
+    // Header: magic(8) + version(u32) + count(u32); then per section a 32-byte
+    // entry: name[16] + address(u32) + size(u32) + offset(u32) + pad(u32).
+    const uint32_t count = static_cast<uint32_t>(sections.size());
+    const uint32_t headerBytes = 8 + 4 + 4 + count * 32u;
+    std::vector<uint8_t> out;
+    const char magic[8] = { 'S', 'E', 'M', 'D', 'U', 'M', 'P', '1' };
+    out.insert(out.end(), magic, magic + 8);
+    PushU32(out, 1u);       // version
+    PushU32(out, count);
+
+    uint32_t offset = headerBytes;
+    for (const Section& s : sections)
+    {
+        out.insert(out.end(), s.name, s.name + 16);
+        PushU32(out, s.address);
+        PushU32(out, static_cast<uint32_t>(s.bytes.size()));
+        PushU32(out, offset);
+        PushU32(out, 0u);   // pad
+        offset += static_cast<uint32_t>(s.bytes.size());
+    }
+    for (const Section& s : sections)
+    {
+        out.insert(out.end(), s.bytes.begin(), s.bytes.end());
+    }
+
+    char name[64];
+    std::snprintf(name, sizeof(name), "saturn_frame_%llu.sedump",
+                  static_cast<unsigned long long>(se_frame_number(mContext)));
+    platform.SaveFile(name, out.data(), out.size());
 }
 
 void App::SelectCommand(int command, bool additive)
@@ -650,6 +754,16 @@ void App::DrawToolbar(IPlatform& platform)
         ImGui::EndDisabled();
         // Timeline scrubbing lives in the bottom bar (DrawTimeline), shown while
         // paused so the user can drag back through the recorded ring buffer.
+
+        // Dump the current memory state to a file (native) / download (web).
+        ImGui::SameLine();
+        ImGui::BeginDisabled(!mbHasData);
+        if (ImGui::Button("Dump Memory"))
+        {
+            DumpMemory(platform);
+        }
+        ImGui::SetItemTooltip("Save VDP1/VDP2 VRAM, CRAM, work RAM and registers to a .sedump file");
+        ImGui::EndDisabled();
 
         // Not-yet-implemented tools — visible but disabled.
         ImGui::SameLine();

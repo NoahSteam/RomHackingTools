@@ -1,6 +1,7 @@
 #include "WindowsPlatform.h"
 
 #include <commdlg.h>
+#include <cstdio>
 #include <cstring>
 #include <tchar.h>
 
@@ -236,6 +237,36 @@ bool WindowsPlatform::OpenFileDialog(std::string& outPath)
     }
     outPath = file;
     return true;
+}
+
+bool WindowsPlatform::SaveFile(const char* suggestedName, const void* data, size_t size)
+{
+    char file[MAX_PATH] = {};
+    if (suggestedName)
+    {
+        std::strncpy(file, suggestedName, MAX_PATH - 1);
+    }
+    OPENFILENAMEA ofn = {};
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = mHwnd;
+    ofn.lpstrFilter = "Saturn memory dump\0*.sedump\0All Files\0*.*\0";
+    ofn.lpstrFile = file;
+    ofn.nMaxFile = MAX_PATH;
+    ofn.lpstrDefExt = "sedump";
+    ofn.Flags = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY;
+
+    if (!::GetSaveFileNameA(&ofn))
+    {
+        return false;
+    }
+    FILE* f = std::fopen(file, "wb");
+    if (!f)
+    {
+        return false;
+    }
+    const size_t wrote = std::fwrite(data, 1, size, f);
+    std::fclose(f);
+    return wrote == size;
 }
 
 bool WindowsPlatform::CreateDeviceD3D()
