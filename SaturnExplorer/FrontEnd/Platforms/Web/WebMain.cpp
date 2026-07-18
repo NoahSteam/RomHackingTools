@@ -83,11 +83,12 @@ int main(int argc, char** argv)
     // main() does not return and tear down the context.
     emscripten_set_main_loop(FrameOnce, 0, 1);
 #else
-    // Native (desktop) convenience: `--live [endpoint]` connects to a running
-    // Yabause; otherwise a savestate/dump path loads it (no browser picker here).
+    // Native (desktop): auto-connect to a running Yabause on boot (retrying until
+    // one appears). `--live [endpoint]` picks a specific endpoint; a savestate/dump
+    // path instead loads that file and disables auto-connect.
     if (argc > 1 && std::strcmp(argv[1], "--live") == 0)
     {
-        gApp.OpenLive(argc > 2 ? argv[2] : nullptr);
+        gApp.EnableLiveAutoConnect(argc > 2 ? argv[2] : nullptr);
     }
     else if (argc > 1)
     {
@@ -106,6 +107,10 @@ int main(int argc, char** argv)
             }
             std::fclose(f);
         }
+    }
+    else
+    {
+        gApp.EnableLiveAutoConnect(nullptr);   // no args: poll for Yabause on boot
     }
     while (gPlatform.PumpEvents())
     {
