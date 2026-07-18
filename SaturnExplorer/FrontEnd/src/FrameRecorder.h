@@ -41,9 +41,10 @@ public:
     // also guards against runaway memory; the frame cap is the effective limit.)
     void Configure(size_t maxFrames);
 
-    // Capture the context's current frame. 'frameNumber' dedups (a repeat frame
-    // number — e.g. while paused — is skipped). Reads regions via se_read_vram /
-    // se_get_*_register, so it works for any live source.
+    // Append the context's current frame to the ring. 'frameNumber' is stored for
+    // display only. The caller must gate this on the run state (capture only while
+    // the source is playing) so every call is a real, distinct frame. Reads regions
+    // via se_read_vram / se_get_*_register, so it works for any live source.
     void Capture(se_context* ctx, uint64_t frameNumber);
 
     size_t   Count() const { return mFrames.size(); }
@@ -65,8 +66,6 @@ private:
     std::deque<Frame> mFrames;
     size_t            mBytes = 0;
     size_t            mMaxFrames = 5 * 60;   // ring length in frames (App sets this)
-    uint64_t          mLastFrame = ~0ull;
-    bool              mHaveLast = false;
 
     // Reused across frames so the per-frame capture path allocates nothing steady
     // state: the VRAM read buffer and the LZ match-finder's hash chains.

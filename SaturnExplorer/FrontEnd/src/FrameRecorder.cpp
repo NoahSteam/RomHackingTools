@@ -71,13 +71,9 @@ void FrameRecorder::Capture(se_context* ctx, uint64_t frameNumber)
     {
         return;
     }
-    if (mHaveLast && frameNumber == mLastFrame)
-    {
-        return;   // same emulated frame (e.g. paused): don't duplicate
-    }
-    mLastFrame = frameNumber;
-    mHaveLast = true;
-
+    // The caller gates capture on the run state (only while playing), so every call
+    // is a genuine new frame — no frame-number dedup, which would otherwise collapse
+    // the ring to one entry whenever the emulator's counter doesn't advance.
     Frame f;
     f.frameNumber = frameNumber;
     std::vector<uint8_t>& scratch = mReadScratch;   // reused across frames
@@ -122,7 +118,6 @@ void FrameRecorder::Clear()
 {
     mFrames.clear();
     mBytes = 0;
-    mHaveLast = false;
 }
 
 bool FrameRecorder::Select(size_t i, se_data_source* out)

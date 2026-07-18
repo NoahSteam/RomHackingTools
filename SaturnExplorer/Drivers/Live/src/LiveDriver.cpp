@@ -60,6 +60,9 @@ struct LiveState
     std::mutex            ctlMtx;    // guards pending / stepFrames
     Ctl                   pending = Ctl::None;
     int32_t               stepFrames = 0;
+    // True once we've told the emulator to pause/step and not since resumed, so the
+    // poll thread knows to release it on close (never leave Yabause paused).
+    std::atomic<bool>     pausedByUs{false};
 };
 
 /* ---- Local-socket transport (POSIX Unix socket / Windows named pipe). ---- */
@@ -286,6 +289,16 @@ void PollLoop(LiveState* st)
         st->frameNumber.store(frame);
         std::this_thread::sleep_for(std::chrono::milliseconds(8));   // ~120 Hz cap
     }
+    // Closing: if we left the emulator paused/stepped, release it before dropping
+    // the connection so Yabause never stays frozen after the debugger disconnects.
+    // Done here on the poll thread (after running went false) so it's race-free.
+    if (conn.ok() && st->pausedByUs.load())
+    {
+        LiveSnapshot tmp;
+        bool p = false;
+        uint64_t fr = 0;
+        ReadSnapshot(conn, SE_LIVE_VERB_RESUME, 0, tmp, p, fr);   // best-effort
+    }
     ConnClose(conn);
 }
 
@@ -348,6 +361,11 @@ uint16_t CbVdp2Reg(void* u, uint32_t reg)
 //      over the shared connection on its next cycle (see PollLoop). ----
 void PostCmd(LiveState* st, Ctl cmd, int32_t frames)
 {
+    // Track whether the emulator is currently held by us: pause/step halt it,
+    // resume releases it. The poll thread uses this to resume on close.
+    if (cmd == Ctl::Pause || cmd == Ctl::Step) { st->pausedByUs.store(true); }
+    else if (cmd == Ctl::Resume)               { st->pausedByUs.store(false); }
+
     std::lock_guard<std::mutex> lk(st->ctlMtx);
     if (cmd == Ctl::Step && st->pending == Ctl::Step)
     {

@@ -165,9 +165,13 @@ void App::CloseData()
     mScrubShownIndex = -1;
     mRecorder.Clear();
 #endif
+    // Destroying the context closes the data source. For a live source that also
+    // releases any pause the debugger applied — the LiveDriver resumes the emulator
+    // on close (race-free, from its own poll thread) so Yabause is never left paused
+    // after a disconnect, a load of another source, or app shutdown.
     if (mContext)
     {
-        se_destroy(mContext);  // also closes the data source
+        se_destroy(mContext);
         mContext = nullptr;
     }
     mbHasData = false;
@@ -405,10 +409,11 @@ void App::BuildUI(IPlatform& platform)
     }
 
 #ifdef SE_ENABLE_LIVE
-    // Record each fresh live frame into the rolling ring buffer (dedups repeat
-    // frame numbers, so a held-paused emulator is captured once). Skipped while
-    // scrubbing history so replay never perturbs the buffer.
-    if (mbLiveSource && mContext && !mbScrubbing)
+    // Record each live frame into the rolling ring buffer while the game is
+    // running. Gated on the run state (not the emulator's frame counter) so the
+    // ring fills regardless of how — or whether — the counter advances; paused and
+    // history-scrubbing states never capture, so the buffer holds only real play.
+    if (mbLiveSource && mContext && !mbPaused && !mbScrubbing)
     {
         mRecorder.Capture(mContext, se_frame_number(mContext));
     }
@@ -726,8 +731,9 @@ void App::DrawStatusBar()
 void App::DrawTimeline()
 {
 #ifdef SE_ENABLE_LIVE
-    // Only meaningful for a paused live source that has captured frames.
-    if (!mbLiveSource || !mbPaused || mRecorder.Count() == 0)
+    // Shown while a live source is paused. (Off-pause the panels follow the live
+    // emulator, so there's nothing to scrub.)
+    if (!mbLiveSource || !mbPaused)
     {
         mbScrubbing = false;      // resume the live view
         mScrubShownIndex = -1;    // force a rebuild next time we scrub
@@ -741,6 +747,17 @@ void App::DrawTimeline()
                                    ImGuiWindowFlags_NoSavedSettings;
     if (ImGui::BeginViewportSideBar("##Timeline", vp, ImGuiDir_Down, height, flags))
     {
+        // No recording yet: show state instead of dead controls (tells the user the
+        // ring is empty rather than leaving them wondering why nothing scrubs).
+        if (n == 0)
+        {
+            mbScrubbing = false;
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextDisabled("Timeline: no frames recorded yet — play, then pause to scrub.");
+            ImGui::End();
+            return;
+        }
+
         // Default to the newest captured frame when first paused or out of range;
         // RefreshScrubContext re-clamps defensively before rendering.
         if (!mbScrubbing || mScrubIndex < 0 || mScrubIndex >= n)
