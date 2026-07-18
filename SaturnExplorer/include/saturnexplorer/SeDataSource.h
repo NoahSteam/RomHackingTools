@@ -29,6 +29,8 @@ typedef struct se_data_source {
     size_t (*read_vdp2_vram)(void* user, uint32_t offset, void* dst, size_t size);
     size_t (*read_cram)     (void* user, uint32_t offset, void* dst, size_t size);
     size_t (*read_main_ram) (void* user, uint32_t address, void* dst, size_t size);
+    /* Raw VDP1 frame buffer (drawn output), SE_CAP_VDP1_FB. May be NULL. */
+    size_t (*read_vdp1_fb)  (void* user, uint32_t offset, void* dst, size_t size);
 
     /* --- Registers. --- */
     uint16_t (*read_vdp1_reg)(void* user, uint32_t reg);

@@ -47,6 +47,12 @@ public:
 
     // Native "open file" dialog. Returns false if cancelled or unsupported.
     virtual bool OpenFileDialog(std::string& outPath) = 0;
+
+    // Save a blob to disk. 'suggestedName' seeds the save dialog / download name.
+    // Windows shows a Save-As dialog; the web build triggers a browser download;
+    // the native desktop build writes to the current directory. Returns false if
+    // cancelled or on write error.
+    virtual bool SaveFile(const char* suggestedName, const void* data, size_t size) = 0;
 };
 
 }  // namespace sfe

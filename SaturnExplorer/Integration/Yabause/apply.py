@@ -77,7 +77,7 @@ EDITS = [
      r'(void Vdp2VBlankOUT\(void\)\s*\{[\s\S]*?static VideoInterface_struct \* saved = NULL;\s*\n)',
      "after_group1",
      "   SeExportSnapshot(Vdp1Ram, Vdp2Ram, Vdp2ColorRam, Vdp2Regs,\n"
-     "                    Vdp1Regs, LowWram, HighWram);\n"),
+     "                    Vdp1Regs, LowWram, HighWram, Vdp1FrameBuffer[0]);\n"),
 ]
 
 # CMakeLists is handled specially (add se_export.c to the source list).

@@ -28,14 +28,16 @@ int SeExportInit(void);
 /* Copy the current Saturn memory into the export double-buffer. Call once per
  * frame, e.g. at the end of Vdp2VBlankOUT(), passing Yabause's globals:
  *   SeExportSnapshot(Vdp1Ram, Vdp2Ram, Vdp2ColorRam, Vdp2Regs,
- *                    Vdp1Regs, LowWram, HighWram);
+ *                    Vdp1Regs, LowWram, HighWram, Vdp1FrameBuffer[0]);
  * Sizes are fixed by the hardware. 'vdp1_regs_struct' is Yabause's `Vdp1` struct
  * (its first 11 u16 fields TVMR..MODR); this module builds the hardware-offset
- * register image from it. Any argument may be NULL (that section is zeros). */
+ * register image from it. 'vdp1_fb_256k' is the VDP1 frame buffer (drawn output;
+ * Yabause exposes it as Vdp1FrameBuffer[0] — adjust for your fork if it differs).
+ * Any argument may be NULL (that section is zeros). */
 void SeExportSnapshot(const void* vdp1_vram_512k, const void* vdp2_vram_512k,
                       const void* cram_4k, const void* vdp2_regs_struct_288,
                       const void* vdp1_regs_struct, const void* wram_low_1m,
-                      const void* wram_high_1m);
+                      const void* wram_high_1m, const void* vdp1_fb_256k);
 
 /* Frame gate for pause / single-step. Call once at the top of each emulated
  * frame in Yabause's run loop; returns 1 if the frame should run, 0 if the

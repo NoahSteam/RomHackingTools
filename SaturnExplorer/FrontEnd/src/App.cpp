@@ -3,12 +3,15 @@
 #include <algorithm>
 #include <cstdarg>
 #include <cstdio>
+#include <cstring>
 #include <string>
 
 #include "imgui.h"
 #include "imgui_internal.h"  // DockBuilder + BeginViewportSideBar for the default layout
 
 #include "Platform/IPlatform.h"
+#include "SaturnRegions.h"
+#include "Theme.h"
 #include "SavestateDriver.h"
 #ifdef SE_ENABLE_LIVE
 #include "LiveDriver.h"   // native builds only (threads/sockets)
@@ -19,6 +22,27 @@ namespace sfe
 
 namespace
 {
+
+#ifdef SE_ENABLE_LIVE
+// Saturn runs at ~60 fps; the recorder's window is expressed in frames, so the
+// UI converts its seconds knob through this. Pre-capture memory estimate uses a
+// typical compressed frame size until a real average is available.
+constexpr int    kFramesPerSecond   = 60;
+constexpr double kEstBytesPerFrame  = 1.3 * 1024.0 * 1024.0;
+#endif
+
+// Swaps a context pointer for the lifetime of the scope and restores it on exit,
+// so pointing the panels at a scrub context mid-frame can't leak past this draw
+// (even if an early return is added between the swap and the end of the frame).
+struct ScopedContextSwap
+{
+    se_context** slot;
+    se_context*  saved;
+    ScopedContextSwap(se_context** s, se_context* now) : slot(s), saved(*s) { *s = now; }
+    ~ScopedContextSwap() { *slot = saved; }
+    ScopedContextSwap(const ScopedContextSwap&) = delete;
+    ScopedContextSwap& operator=(const ScopedContextSwap&) = delete;
+};
 
 // ImGui::Checkbox wants a bool*, but se_render_opts stores flags as uint8_t.
 // Bridge them safely rather than aliasing a uint8_t* as bool*.
@@ -31,6 +55,65 @@ bool CheckboxU8(const char* label, uint8_t* value)
         *value = checked ? 1 : 0;
     }
     return changed;
+}
+
+// --- Small hand-drawn vector icons (no icon font). Each draws centered at 'c'
+// with half-extent ~'r' onto 'dl'. Colors come from the theme so they track it. ---
+void IconPlay(ImDrawList* dl, ImVec2 c, float r, ImU32 col)
+{
+    dl->AddTriangleFilled(ImVec2(c.x - r * 0.6f, c.y - r), ImVec2(c.x - r * 0.6f, c.y + r),
+                          ImVec2(c.x + r, c.y), col);
+}
+void IconPause(ImDrawList* dl, ImVec2 c, float r, ImU32 col)
+{
+    const float w = r * 0.38f;
+    dl->AddRectFilled(ImVec2(c.x - r * 0.55f, c.y - r), ImVec2(c.x - r * 0.55f + w, c.y + r), col, 1.0f);
+    dl->AddRectFilled(ImVec2(c.x + r * 0.17f, c.y - r), ImVec2(c.x + r * 0.17f + w, c.y + r), col, 1.0f);
+}
+void IconStep(ImDrawList* dl, ImVec2 c, float r, ImU32 col)   // play + bar (step forward)
+{
+    dl->AddTriangleFilled(ImVec2(c.x - r, c.y - r), ImVec2(c.x - r, c.y + r),
+                          ImVec2(c.x + r * 0.35f, c.y), col);
+    dl->AddRectFilled(ImVec2(c.x + r * 0.55f, c.y - r), ImVec2(c.x + r, c.y + r), col, 1.0f);
+}
+
+void IconTri(ImDrawList* dl, ImVec2 c, float r, ImU32 col, bool left)
+{
+    const float s = left ? -1.0f : 1.0f;
+    dl->AddTriangleFilled(ImVec2(c.x - s * r, c.y - r), ImVec2(c.x - s * r, c.y + r),
+                          ImVec2(c.x + s * r, c.y), col);
+}
+enum class Ico { Play, Pause, Step, First, Prev, Next, Last };
+
+// Icon-only button (fixed square-ish size). 'id' must be unique (kept invisible
+// with "##"); the glyph is drawn over the button rect. Returns true when pressed.
+bool IconButton(const char* id, Ico ico, const char* tip, bool disabled = false)
+{
+    const float h = ImGui::GetFrameHeight();
+    if (disabled) ImGui::BeginDisabled();
+    const bool pressed = ImGui::Button(id, ImVec2(h * 1.5f, h));
+    const ImVec2 mn = ImGui::GetItemRectMin(), mx = ImGui::GetItemRectMax();
+    const ImVec2 c((mn.x + mx.x) * 0.5f, (mn.y + mx.y) * 0.5f);
+    const float r = h * 0.22f;
+    const ImU32 col = ImGui::GetColorU32(ImGuiCol_Text);
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    switch (ico)
+    {
+    case Ico::Play:  IconPlay(dl, c, r, col); break;
+    case Ico::Pause: IconPause(dl, c, r, col); break;
+    case Ico::Step:  IconStep(dl, c, r, col); break;
+    case Ico::Prev:  IconTri(dl, c, r, col, true); break;
+    case Ico::Next:  IconTri(dl, c, r, col, false); break;
+    case Ico::First:
+        dl->AddRectFilled(ImVec2(c.x - r * 1.3f, c.y - r), ImVec2(c.x - r * 0.95f, c.y + r), col, 1.0f);
+        IconTri(dl, ImVec2(c.x + r * 0.15f, c.y), r, col, true); break;
+    case Ico::Last:
+        IconTri(dl, ImVec2(c.x - r * 0.15f, c.y), r, col, false);
+        dl->AddRectFilled(ImVec2(c.x + r * 0.95f, c.y - r), ImVec2(c.x + r * 1.3f, c.y + r), col, 1.0f); break;
+    }
+    if (disabled) ImGui::EndDisabled();
+    if (tip && !disabled) ImGui::SetItemTooltip("%s", tip);
+    return pressed;
 }
 
 const char* CommandTypeName(se_command_type type)
@@ -120,6 +203,10 @@ void App::Initialize()
     mRenderOpts.show_color_calculation = 1;
     mRenderOpts.show_shadow_highlight = 1;
     mRenderOpts.highlight_command = -1;
+
+#ifdef SE_ENABLE_LIVE
+    mRecorder.Configure(mRecordSeconds * kFramesPerSecond);
+#endif
 }
 
 void App::Shutdown()
@@ -129,9 +216,24 @@ void App::Shutdown()
 
 void App::CloseData()
 {
+#ifdef SE_ENABLE_LIVE
+    if (mScrubContext)
+    {
+        se_destroy(mScrubContext);
+        mScrubContext = nullptr;
+    }
+    mbScrubbing = false;
+    mScrubIndex = -1;
+    mScrubShownIndex = -1;
+    mRecorder.Clear();
+#endif
+    // Destroying the context closes the data source. For a live source that also
+    // releases any pause the debugger applied — the LiveDriver resumes the emulator
+    // on close (race-free, from its own poll thread) so Yabause is never left paused
+    // after a disconnect, a load of another source, or app shutdown.
     if (mContext)
     {
-        se_destroy(mContext);  // also closes the data source
+        se_destroy(mContext);
         mContext = nullptr;
     }
     mbHasData = false;
@@ -143,6 +245,114 @@ void App::CloseData()
     // platform's device at shutdown; mark it stale so a new dump recreates it.
     mFrameWidth = 0;
     mFrameHeight = 0;
+}
+
+namespace
+{
+// Append a little-endian uint32 to a byte vector.
+void PushU32(std::vector<uint8_t>& v, uint32_t x)
+{
+    v.push_back(static_cast<uint8_t>(x & 0xFF));
+    v.push_back(static_cast<uint8_t>((x >> 8) & 0xFF));
+    v.push_back(static_cast<uint8_t>((x >> 16) & 0xFF));
+    v.push_back(static_cast<uint8_t>((x >> 24) & 0xFF));
+}
+}  // namespace
+
+// Snapshot every region the current source exposes and pack it into one
+// self-describing ".sedump": an 8-byte magic, a section table, then the raw bytes
+// (VRAM/CRAM/work-RAM big-endian as the Saturn stores them; registers as a
+// hardware-offset big-endian image). The section table names each region and gives
+// its Saturn bus address + size + file offset, so a region is trivial to carve out.
+void App::DumpMemory(IPlatform& platform)
+{
+    if (!mbHasData || !mContext)
+    {
+        return;
+    }
+
+    struct Section { char name[16]; uint32_t address; std::vector<uint8_t> bytes; };
+    std::vector<Section> sections;
+    auto push = [&](const char* name, uint32_t addr, std::vector<uint8_t> bytes) {
+        Section s{};
+        std::strncpy(s.name, name, sizeof(s.name) - 1);
+        s.address = addr;
+        s.bytes = std::move(bytes);
+        sections.push_back(std::move(s));
+    };
+
+    // Bulk memory regions, in canonical order. Bus addresses are informational
+    // (for the section table); sizes come from the shared SaturnRegions constants.
+    struct RegionDesc { se_vram_kind kind; const char* name; uint32_t addr; uint32_t size; };
+    static const RegionDesc kRegions[] = {
+        { SE_VRAM_KIND_VDP1_VRAM, "VDP1_VRAM", 0x25C00000u, kVdp1VramSize },
+        { SE_VRAM_KIND_VDP2_VRAM, "VDP2_VRAM", 0x25E00000u, kVdp2VramSize },
+        { SE_VRAM_KIND_CRAM,      "CRAM",      0x25F00000u, kCramSize },
+        { SE_VRAM_KIND_WRAM_LOW,  "WRAM_LOW",  0x00200000u, kWramSize },
+        { SE_VRAM_KIND_WRAM_HIGH, "WRAM_HIGH", 0x06000000u, kWramSize },
+        { SE_VRAM_KIND_VDP1_FB,   "VDP1_FB",   0x25C80000u, kVdp1FbSize },
+    };
+    for (const RegionDesc& d : kRegions)
+    {
+        std::vector<uint8_t> b(d.size);
+        const size_t got = se_read_vram(mContext, d.kind, 0, b.data(), d.size);
+        if (got == 0) continue;   // region not provided by this source
+        b.resize(got);
+        push(d.name, d.addr, std::move(b));
+    }
+
+    // Register images, packed big-endian like VRAM.
+    auto readRegs = [&](uint32_t byteLen, uint16_t (*get)(se_context*, uint32_t)) {
+        std::vector<uint8_t> b(byteLen);
+        for (uint32_t o = 0; o < byteLen; o += 2)
+        {
+            const uint16_t v = get(mContext, o);
+            b[o]     = static_cast<uint8_t>(v >> 8);
+            b[o + 1] = static_cast<uint8_t>(v & 0xFF);
+        }
+        return b;
+    };
+    if (se_has_vdp1_registers(mContext)) push("VDP1_REGS", 0x25D00000u, readRegs(kVdp1RegBytes, se_get_vdp1_register));
+    if (se_has_vdp2_registers(mContext)) push("VDP2_REGS", 0x25F80000u, readRegs(kVdp2RegBytes, se_get_vdp2_register));
+
+    if (sections.empty())
+    {
+        return;
+    }
+
+    // Header: magic(8) + version(u32) + count(u32); then per section a 32-byte
+    // entry: name[16] + address(u32) + size(u32) + offset(u32) + pad(u32).
+    const uint32_t count = static_cast<uint32_t>(sections.size());
+    const uint32_t headerBytes = 8 + 4 + 4 + count * 32u;
+    uint32_t total = headerBytes;
+    for (const Section& s : sections) total += static_cast<uint32_t>(s.bytes.size());
+
+    std::vector<uint8_t> out;
+    out.reserve(total);
+    const char magic[8] = { 'S', 'E', 'M', 'D', 'U', 'M', 'P', '1' };
+    out.insert(out.end(), magic, magic + 8);
+    PushU32(out, 1u);       // version
+    PushU32(out, count);
+
+    uint32_t offset = headerBytes;
+    for (const Section& s : sections)
+    {
+        out.insert(out.end(), s.name, s.name + 16);
+        PushU32(out, s.address);
+        PushU32(out, static_cast<uint32_t>(s.bytes.size()));
+        PushU32(out, offset);
+        PushU32(out, 0u);   // pad
+        offset += static_cast<uint32_t>(s.bytes.size());
+    }
+    for (const Section& s : sections)
+    {
+        out.insert(out.end(), s.bytes.begin(), s.bytes.end());
+    }
+
+    char name[64];
+    std::snprintf(name, sizeof(name), "saturn_frame_%llu.sedump",
+                  static_cast<unsigned long long>(se_frame_number(mContext)));
+    platform.SaveFile(name, out.data(), out.size());
 }
 
 void App::SelectCommand(int command, bool additive)
@@ -368,15 +578,44 @@ void App::BuildUI(IPlatform& platform)
         se_begin_frame(mContext);
     }
 
+#ifdef SE_ENABLE_LIVE
+    // Record each live frame into the rolling ring buffer while the game is
+    // running. Gated on the run state (not the emulator's frame counter) so the
+    // ring fills regardless of how — or whether — the counter advances; paused and
+    // history-scrubbing states never capture, so the buffer holds only real play.
+    if (mbLiveSource && mContext && !mbPaused && !mbScrubbing)
+    {
+        mRecorder.Capture(mContext, se_frame_number(mContext));
+    }
+#endif
+
+    // Top toolbar + bottom bars (status + timeline) reserve space from the
+    // viewport; the dockspace fills what's left. They always operate on the live
+    // context, so draw them before any scrub swap below.
+    DrawToolbar(platform);
+    DrawStatusBar();
+    DrawTimeline();
+
+    // If the timeline selected a past frame, point the data panels at a context
+    // rebuilt over that recorded frame for the rest of this draw. The guard restores
+    // the live context when BuildUI returns; frame control / capture above stay live.
+    se_context* view = mContext;
+#ifdef SE_ENABLE_LIVE
+    if (mbScrubbing && RefreshScrubContext())
+    {
+        view = mScrubContext;
+    }
+    else
+    {
+        mbScrubbing = false;
+    }
+#endif
+    ScopedContextSwap contextSwap(&mContext, view);
+
     if (mbHasData)
     {
         RenderFrameToTexture(platform);
     }
-
-    // Top toolbar + bottom status bar reserve space from the viewport; the
-    // dockspace fills what's left.
-    DrawToolbar(platform);
-    DrawStatusBar();
 
     const ImGuiID dockId = ImGui::DockSpaceOverViewport(
         0, ImGui::GetMainViewport(), ImGuiDockNodeFlags_PassthruCentralNode);
@@ -419,6 +658,7 @@ void App::BuildUI(IPlatform& platform)
     DrawPlaceholder("Texture Preview", "Preview of the selected sprite's texture — see the Texture Viewer panel.");
     DrawPlaceholder("Palette (CLUT)", "Palette of the selected sprite — see the Palette Viewer panel.");
     DrawPlaceholder("Memory History", "Load chain (File → CD → DMA → Write) — arrives in M7.");
+    // contextSwap restores the live context here as it goes out of scope.
 }
 
 // Programmatic default dock layout matching the concept: a narrow left column,
@@ -528,6 +768,23 @@ void App::DrawToolbar(IPlatform& platform)
                 OpenLive(nullptr);   // default local socket / named pipe
             }
             if (ImGui::MenuItem("Disconnect (live)", nullptr, false, mbLiveSource)) CloseData();
+
+            // Recording window: 5 s default, up to 30 s. The estimate uses the
+            // measured average compressed size per captured frame once recording
+            // is under way, else a typical figure, so the memory cost is visible.
+            ImGui::Separator();
+            ImGui::TextDisabled("Recording");
+            ImGui::SetNextItemWidth(180.0f);
+            if (ImGui::SliderInt("Length##rec", &mRecordSeconds, 5, 30, "%d s"))
+            {
+                mRecorder.Configure(mRecordSeconds * kFramesPerSecond);
+            }
+            const size_t frames = mRecorder.Count();
+            const double perFrame = frames ? static_cast<double>(mRecorder.BytesUsed()) / frames
+                                           : kEstBytesPerFrame;
+            const double estMB = perFrame * mRecordSeconds * kFramesPerSecond / (1024.0 * 1024.0);
+            ImGui::Text("~%.0f MB (%s)", estMB,
+                        frames ? "measured" : "estimated");
 #endif
             if (ImGui::MenuItem("Close", nullptr, false, mbHasData)) CloseData();
             ImGui::EndPopup();
@@ -537,10 +794,9 @@ void App::DrawToolbar(IPlatform& platform)
         // (a running, patched Yabause); otherwise disabled.
         const bool canStep = mbHasData && se_supports_frame_control(mContext);
         ImGui::SameLine();
-        ImGui::BeginDisabled(!canStep);
         if (mbPaused)
         {
-            if (ImGui::Button("Resume", ImVec2(72.0f, 0.0f)))
+            if (IconButton("##resume", Ico::Play, "Resume", !canStep))
             {
                 se_frame_resume(mContext);
                 mbPaused = false;
@@ -548,24 +804,29 @@ void App::DrawToolbar(IPlatform& platform)
         }
         else
         {
-            if (ImGui::Button("Pause", ImVec2(72.0f, 0.0f)))
+            if (IconButton("##pause", Ico::Pause, "Pause", !canStep))
             {
                 se_frame_pause(mContext);
                 mbPaused = true;
             }
         }
         ImGui::SameLine();
-        if (ImGui::Button("Step Frame"))
+        if (IconButton("##step", Ico::Step, "Step one frame", !canStep))
         {
             se_frame_step(mContext, 1);
             mbPaused = true;
         }
-        ImGui::EndDisabled();
-        // Timeline scrubbing (rewind through captured frames) — future work.
+        // Timeline scrubbing lives in the bottom bar (DrawTimeline), shown while
+        // paused so the user can drag back through the recorded ring buffer.
+
+        // Dump the current memory state to a file (native) / download (web).
         ImGui::SameLine();
-        ImGui::BeginDisabled(true);
-        ImGui::Button("|<"); ImGui::SameLine(); ImGui::Button("<"); ImGui::SameLine();
-        ImGui::Button(">"); ImGui::SameLine(); ImGui::Button(">|"); ImGui::SameLine();
+        ImGui::BeginDisabled(!mbHasData);
+        if (ImGui::Button("Dump Memory"))
+        {
+            DumpMemory(platform);
+        }
+        ImGui::SetItemTooltip("Save VDP1/VDP2 VRAM, CRAM, work RAM and registers to a .sedump file");
         ImGui::EndDisabled();
 
         // Not-yet-implemented tools — visible but disabled.
@@ -639,6 +900,136 @@ void App::DrawStatusBar()
         }
     }
     ImGui::End();
+}
+
+// Bottom timeline: while the live emulator is paused, show a horizontal scrubber
+// spanning the window so the user can drag back through the recorded ring buffer
+// and inspect any captured frame. Setting mbScrubbing / mScrubIndex here drives the
+// scrub-context swap in BuildUI. Native (SE_ENABLE_LIVE) only.
+void App::DrawTimeline()
+{
+#ifdef SE_ENABLE_LIVE
+    // Shown while a live source is paused. (Off-pause the panels follow the live
+    // emulator, so there's nothing to scrub.)
+    if (!mbLiveSource || !mbPaused)
+    {
+        mbScrubbing = false;      // resume the live view
+        mScrubShownIndex = -1;    // force a rebuild next time we scrub
+        return;
+    }
+
+    const int n = static_cast<int>(mRecorder.Count());
+    ImGuiViewport* vp = ImGui::GetMainViewport();
+    const float height = ImGui::GetFrameHeightWithSpacing() + 6.0f;
+    const ImGuiWindowFlags flags = ImGuiWindowFlags_NoScrollbar |
+                                   ImGuiWindowFlags_NoSavedSettings;
+    if (ImGui::BeginViewportSideBar("##Timeline", vp, ImGuiDir_Down, height, flags))
+    {
+        // No recording yet: show state instead of dead controls (tells the user the
+        // ring is empty rather than leaving them wondering why nothing scrubs).
+        if (n == 0)
+        {
+            mbScrubbing = false;
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextDisabled("Timeline: no frames recorded yet — play, then pause to scrub.");
+            ImGui::End();
+            return;
+        }
+
+        // Default to the newest captured frame when first paused or out of range;
+        // RefreshScrubContext re-clamps defensively before rendering.
+        if (!mbScrubbing || mScrubIndex < 0 || mScrubIndex >= n)
+        {
+            mScrubIndex = n - 1;
+        }
+        mbScrubbing = true;
+
+        const ImGuiStyle& style = ImGui::GetStyle();
+
+        // Left: frame readout (selected frame + buffer footprint / span).
+        char head[96];
+        const double mb = static_cast<double>(mRecorder.BytesUsed()) / (1024.0 * 1024.0);
+        std::snprintf(head, sizeof(head), "Frame #%llu   %d / %d   (%.1f MB / %.1fs)",
+                      static_cast<unsigned long long>(mRecorder.FrameNumber((size_t)mScrubIndex)),
+                      mScrubIndex + 1, n, mb, n / static_cast<double>(kFramesPerSecond));
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted(head);
+        ImGui::SameLine();
+
+        // Reserve the right-hand step-button cluster so the scrubber can fill the
+        // gap between the readout and the buttons.
+        auto btnW = [&](const char* l) {
+            return ImGui::CalcTextSize(l).x + style.FramePadding.x * 2.0f;
+        };
+        const float rightW = btnW("|<") + btnW("<") + btnW(">") + btnW(">|") +
+                             style.ItemSpacing.x * 3.0f;
+
+        // Middle: the scrubber spans the bottom of the window.
+        const float sliderW = ImGui::GetContentRegionAvail().x - rightW - style.ItemSpacing.x;
+        ImGui::SetNextItemWidth(sliderW > 80.0f ? sliderW : 80.0f);
+        int idx = mScrubIndex;
+        if (ImGui::SliderInt("##scrub", &idx, 0, n - 1, ""))
+        {
+            mScrubIndex = idx;
+        }
+
+        // Right: step backward / forward (with jump-to-ends), matching the concept
+        // transport bar — icon buttons with tooltips.
+        ImGui::SameLine();
+        if (IconButton("##first", Ico::First, "First frame")) mScrubIndex = 0;
+        ImGui::SameLine();
+        if (IconButton("##prev", Ico::Prev, "Step back one frame") && mScrubIndex > 0) --mScrubIndex;
+        ImGui::SameLine();
+        if (IconButton("##next", Ico::Next, "Step forward one frame") && mScrubIndex < n - 1) ++mScrubIndex;
+        ImGui::SameLine();
+        if (IconButton("##last", Ico::Last, "Latest frame")) mScrubIndex = n - 1;
+    }
+    ImGui::End();
+#endif
+}
+
+bool App::RefreshScrubContext()
+{
+#ifdef SE_ENABLE_LIVE
+    const int n = static_cast<int>(mRecorder.Count());
+    if (n == 0)
+    {
+        return false;
+    }
+    if (mScrubIndex < 0)  mScrubIndex = 0;
+    if (mScrubIndex >= n) mScrubIndex = n - 1;
+
+    // Already showing this frame: nothing to rebuild.
+    if (mScrubContext && mScrubIndex == mScrubShownIndex)
+    {
+        return true;
+    }
+
+    // Select decompresses the frame into the recorder's scratch. The scrub context
+    // is created once; its copied data source keeps the recorder's callbacks + user
+    // pointer, so a later Select + se_begin_frame re-renders any frame exactly.
+    se_data_source ds;
+    if (!mRecorder.Select(static_cast<size_t>(mScrubIndex), &ds))
+    {
+        return false;
+    }
+    if (!mScrubContext)
+    {
+        se_config cfg;
+        cfg.abi_version = SE_ABI_VERSION;
+        cfg.reserved = 0;
+        mScrubContext = se_create(&ds, &cfg);
+        if (!mScrubContext)
+        {
+            return false;
+        }
+    }
+    se_begin_frame(mScrubContext);
+    mScrubShownIndex = mScrubIndex;
+    return true;
+#else
+    return false;
+#endif
 }
 
 void App::DrawLayerControls()
@@ -723,10 +1114,12 @@ void App::DrawVdpOutput(IPlatform& platform)
                     const ImVec2 c3 = toScreen(sprite.corners[3]);
                     if (selected)
                     {
-                        // Tint the fill and draw a thick bright outline so a
-                        // selection made elsewhere (e.g. the VRAM Map) is obvious.
-                        dl->AddQuadFilled(c0, c1, c2, c3, IM_COL32(90, 225, 130, 60));
-                        dl->AddQuad(c0, c1, c2, c3, IM_COL32(120, 255, 150, 255), 3.0f);
+                        // Tint the fill and draw a thick outline in the theme's
+                        // selection color so a selection made elsewhere (e.g. the
+                        // VRAM Map) is obvious and consistent across panels.
+                        const ImU32 sel = ui::SelectionOutline();
+                        dl->AddQuadFilled(c0, c1, c2, c3, (sel & 0x00FFFFFFu) | (60u << 24));
+                        dl->AddQuad(c0, c1, c2, c3, sel, 3.0f);
                     }
                     else
                     {
@@ -1200,11 +1593,11 @@ void App::DrawVramMap()
             {
                 switch (k)
                 {
-                case SE_VRAM_TEXTURE:   return IM_COL32(90, 190, 120, 255);
-                case SE_VRAM_CLUT:      return IM_COL32(220, 200, 90, 255);
-                case SE_VRAM_CMD_TABLE: return IM_COL32(100, 150, 230, 255);
-                case SE_VRAM_GOURAUD:   return IM_COL32(200, 120, 210, 255);
-                default:                return IM_COL32(150, 150, 150, 255);
+                case SE_VRAM_TEXTURE:   return ui::VramTexture();
+                case SE_VRAM_CLUT:      return ui::VramClut();
+                case SE_VRAM_CMD_TABLE: return ui::VramCmdTable();
+                case SE_VRAM_GOURAUD:   return ui::VramGouraud();
+                default:                return ui::VramUnused();
                 }
             };
             const ImU32 kBorderCol = IM_COL32(15, 15, 18, 255);
@@ -1308,7 +1701,7 @@ void App::DrawVramMap()
             {
                 dl->AddRect(ImVec2(r.x - 1.0f, r.y - 1.0f),
                             ImVec2(r.z + 1.0f, r.w + 1.0f),
-                            IM_COL32(255, 240, 120, 255), 0.0f, 0, 2.0f);
+                            ui::SelectionOutline(), 0.0f, 0, 2.0f);
             }
 
             if (haveHover)

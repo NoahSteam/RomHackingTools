@@ -42,6 +42,7 @@ bool HardwareSnapshot::Capture(const se_data_source& dataSource)
     mCram.clear();
     mWramLow.clear();
     mWramHigh.clear();
+    mVdp1Fb.clear();
     mVdp1Regs.clear();
     mVdp2Regs.clear();
 
@@ -76,6 +77,13 @@ bool HardwareSnapshot::Capture(const se_data_source& dataSource)
         mWramHigh.resize(kWramSize);
         mWramHigh.resize(ReadAll(dataSource.read_main_ram, dataSource.user,
                                  kWramHighBase, mWramHigh.data(), mWramHigh.size()));
+    }
+
+    if ((dataSource.capabilities & SE_CAP_VDP1_FB) && dataSource.read_vdp1_fb)
+    {
+        mVdp1Fb.resize(kVdp1FbSize);
+        mVdp1Fb.resize(ReadAll(dataSource.read_vdp1_fb, dataSource.user, 0,
+                               mVdp1Fb.data(), mVdp1Fb.size()));
     }
 
     // Capture the VDP1 register file (0x00..0x1E) if the driver supplies it.

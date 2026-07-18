@@ -43,6 +43,10 @@ public:
     // build it returns false (use drag-and-drop or a launch argument instead).
     bool OpenFileDialog(std::string& outPath) override;
 
+    // Web: trigger a browser download of the blob. Native desktop: write it to the
+    // current directory under 'suggestedName'.
+    bool SaveFile(const char* suggestedName, const void* data, size_t size) override;
+
 private:
     SDL_Window*   mWindow  = nullptr;
     SDL_GLContext mGlContext = nullptr;

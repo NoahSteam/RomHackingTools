@@ -118,15 +118,42 @@ free-runs and the Pause / Step Frame buttons stay disabled. That's the whole pat
 Each request is an 8-byte command (a verb — `GET`/`PAU`/`RUN`/`STP` — plus a
 little-endian argument). Every command replies with a full snapshot: VDP1 VRAM
 (512 KiB), VDP2 VRAM (512 KiB), CRAM (4 KiB), the 288-byte VDP2 register struct,
-the VDP1 register image, low + high work RAM (1 MiB each), and a small control
-block (paused flag + frame counter) — the exact bytes Saturn Explorer's savestate
-loader already understands (VRAM big-endian, CRAM host-endian, VDP2 the raw
-struct). The pause/step verbs just set the state `SeExportGateFrame()` reads.
-Wire format: `Drivers/Common/src/SeLiveProtocol.h`.
+the VDP1 register image, low + high work RAM (1 MiB each), the VDP1 frame buffer
+(256 KiB, the drawn output), and a small control block (paused flag + frame
+counter) — the exact bytes Saturn Explorer's savestate loader already understands
+(VRAM big-endian, CRAM host-endian, VDP2 the raw struct). The pause/step verbs
+just set the state `SeExportGateFrame()` reads. Wire format (protocol v4):
+`Drivers/Common/src/SeLiveProtocol.h`.
+
+The VDP1 frame buffer comes from the `Vdp1FrameBuffer[0]` argument to
+`SeExportSnapshot` (the hook `apply.py` inserts). If your Yabause fork names or
+banks that buffer differently, adjust that one argument.
+
+## Web (browser) live viewing
+The browser can't open a local socket, so the web build reaches Yabause over a
+**WebSocket → TCP bridge**. `SeExportInit` also opens a TCP listener on
+`127.0.0.1:6845` (POSIX builds) serving the same protocol; the LiveDriver accepts
+a `tcp:host:port` endpoint, and under Emscripten its socket calls are tunneled to
+a WebSocket proxy. To wire it up:
+
+1. Run a WebSocket-to-TCP relay pointing at the export port, e.g.
+   `websockify 8846 127.0.0.1:6845` (or Emscripten's `websocket_to_posix_proxy`).
+2. Build a web frontend that includes the LiveDriver (it's excluded from the
+   default web target) and enables Emscripten's socket proxying — add the
+   `SaturnExplorerLiveDriver` source + `SE_ENABLE_LIVE`, and link with
+   `-sPROXY_POSIX_SOCKETS -pthread -sWEBSOCKET_URL=ws://localhost:8846`
+   (pthreads need a COOP+COEP cross-origin-isolated host for SharedArrayBuffer).
+3. In the page, connect to `tcp:127.0.0.1:6845`.
+
+The default single-file web build stays viewer-only (no live driver, no pthread),
+so this is opt-in and doesn't destabilize it. The TCP transport itself is
+exercised natively in the mock-server test; only the browser tunnel needs your
+relay.
 
 ## Notes / limits
 - **Transport:** Unix domain socket `/tmp/saturn_explorer.sock` (Linux/macOS) or
-  named pipe `\\.\pipe\SaturnExplorer` (Windows). Local only.
+  named pipe `\\.\pipe\SaturnExplorer` (Windows); plus a local TCP listener on
+  `127.0.0.1:6845` (POSIX) for the web bridge. Local only.
 - **Pause / single-step** need the §2b gate; live viewing works without it.
 - **Disc access** isn't exported yet; an easy follow-on.
 - The snapshot is taken at vblank under a lock and double-buffered, so the client

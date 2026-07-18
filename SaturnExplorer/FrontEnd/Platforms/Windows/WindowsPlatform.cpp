@@ -1,12 +1,15 @@
 #include "WindowsPlatform.h"
 
 #include <commdlg.h>
+#include <cstdio>
 #include <cstring>
 #include <tchar.h>
 
 #include "imgui.h"
 #include "backends/imgui_impl_win32.h"
 #include "backends/imgui_impl_dx11.h"
+
+#include "Theme.h"
 
 // Forward declared in the Win32 backend; handles ImGui's own input messages.
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg,
@@ -59,7 +62,8 @@ bool WindowsPlatform::Initialize(const PlatformConfig& config)
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
     io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
 
-    ImGui::StyleColorsDark();
+    sfe::ApplyTheme(ImGui::GetStyle());   // Saturn Explorer theme (shared, portable)
+    sfe::LoadFonts(io);                   // embedded proportional UI font
 
     // Scale the whole UI to the window's DPI so it is both crisp and the right
     // physical size. ImGui 1.92's font system keeps the scalable default font
@@ -234,6 +238,37 @@ bool WindowsPlatform::OpenFileDialog(std::string& outPath)
     }
     outPath = file;
     return true;
+}
+
+bool WindowsPlatform::SaveFile(const char* suggestedName, const void* data, size_t size)
+{
+    char file[MAX_PATH] = {};
+    if (suggestedName)
+    {
+        std::strncpy(file, suggestedName, MAX_PATH - 1);
+    }
+    // Generic saver: the caller's 'suggestedName' carries the extension, so this
+    // stays format-agnostic (no dump-specific filter baked into the platform seam).
+    OPENFILENAMEA ofn = {};
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = mHwnd;
+    ofn.lpstrFilter = "All Files\0*.*\0";
+    ofn.lpstrFile = file;
+    ofn.nMaxFile = MAX_PATH;
+    ofn.Flags = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY;
+
+    if (!::GetSaveFileNameA(&ofn))
+    {
+        return false;
+    }
+    FILE* f = std::fopen(file, "wb");
+    if (!f)
+    {
+        return false;
+    }
+    const size_t wrote = std::fwrite(data, 1, size, f);
+    std::fclose(f);
+    return wrote == size;
 }
 
 bool WindowsPlatform::CreateDeviceD3D()

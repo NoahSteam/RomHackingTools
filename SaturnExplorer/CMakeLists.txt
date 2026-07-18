@@ -107,6 +107,9 @@ set(SE_IMGUI_CORE
 if(WIN32)
     add_executable(SaturnExplorerFrontEnd WIN32
         FrontEnd/src/App.cpp
+        FrontEnd/src/Theme.cpp
+        FrontEnd/src/FrameRecorder.cpp
+        FrontEnd/src/FrameLz.cpp
         FrontEnd/Platforms/Windows/WindowsPlatform.cpp
         FrontEnd/Platforms/Windows/WinMain.cpp
         ${SE_IMGUI_CORE}
@@ -141,6 +144,7 @@ elseif(EMSCRIPTEN)
     # Web build: `emcmake cmake -B build-web && cmake --build build-web`.
     add_executable(SaturnExplorerFrontEnd
         FrontEnd/src/App.cpp
+        FrontEnd/src/Theme.cpp
         FrontEnd/Platforms/Web/WebPlatform.cpp
         FrontEnd/Platforms/Web/WebMain.cpp
         ${SE_IMGUI_CORE}
@@ -168,7 +172,7 @@ elseif(EMSCRIPTEN)
         LINK_DEPENDS ${SE_SHELL}
         LINK_FLAGS "-sUSE_SDL=2 -sUSE_WEBGL2=1 -sFULL_ES3 -sALLOW_MEMORY_GROWTH \
 -sEXPORTED_FUNCTIONS=['_main','_se_web_load_file','_se_web_resize','_malloc','_free'] \
--sEXPORTED_RUNTIME_METHODS=['ccall','cwrap','HEAPU8'] \
+-sEXPORTED_RUNTIME_METHODS=['ccall','cwrap','HEAPU8','UTF8ToString'] \
 --shell-file ${SE_SHELL}")
 
 else()
@@ -179,6 +183,9 @@ else()
     if(SDL2_FOUND AND OpenGL_OpenGL_FOUND)
         add_executable(SaturnExplorerFrontEnd
             FrontEnd/src/App.cpp
+            FrontEnd/src/Theme.cpp
+            FrontEnd/src/FrameRecorder.cpp
+            FrontEnd/src/FrameLz.cpp
             FrontEnd/Platforms/Web/WebPlatform.cpp
             FrontEnd/Platforms/Web/WebMain.cpp
             ${SE_IMGUI_CORE}

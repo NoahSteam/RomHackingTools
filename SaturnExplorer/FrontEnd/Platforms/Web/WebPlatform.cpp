@@ -2,11 +2,15 @@
 
 #include "WebPlatform.h"
 
+#include <cstdio>
+
 #include <SDL.h>
 
 #include "imgui.h"
 #include "backends/imgui_impl_sdl2.h"
 #include "backends/imgui_impl_opengl3.h"
+
+#include "Theme.h"
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
@@ -24,6 +28,20 @@ namespace sfe
 EM_JS(void, SeWebOpenFilePicker, (), {
     var el = document.getElementById('se-file-input');
     if (el) el.click();
+});
+
+// Download 'len' bytes at 'data' as a file named 'name' (client-side blob).
+EM_JS(void, SeWebDownload, (const char* name, const uint8_t* data, int len), {
+    var bytes = HEAPU8.slice(data, data + len);
+    var blob = new Blob([bytes], { type: 'application/octet-stream' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = UTF8ToString(name);
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
 });
 #endif
 
@@ -69,7 +87,8 @@ bool WebPlatform::Initialize(const PlatformConfig& config)
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
-    ImGui::StyleColorsDark();
+    sfe::ApplyTheme(ImGui::GetStyle());   // Saturn Explorer theme (shared, portable)
+    sfe::LoadFonts(io);                   // embedded proportional UI font
 
     // Match the Windows backend's DPI handling: scale sizes + the (1.92 scalable)
     // default font by the display's device-pixel ratio.
@@ -198,6 +217,25 @@ bool WebPlatform::OpenFileDialog(std::string& outPath)
     SeWebOpenFilePicker();   // async: bytes arrive via se_web_load_file()
 #endif
     return false;   // no synchronous path result on the web
+}
+
+bool WebPlatform::SaveFile(const char* suggestedName, const void* data, size_t size)
+{
+#ifdef __EMSCRIPTEN__
+    SeWebDownload(suggestedName ? suggestedName : "dump.bin",
+                  static_cast<const uint8_t*>(data), static_cast<int>(size));
+    return true;
+#else
+    // Native desktop verification build: write to the current directory.
+    FILE* f = std::fopen(suggestedName ? suggestedName : "dump.bin", "wb");
+    if (!f)
+    {
+        return false;
+    }
+    const size_t wrote = std::fwrite(data, 1, size, f);
+    std::fclose(f);
+    return wrote == size;
+#endif
 }
 
 }  // namespace sfe

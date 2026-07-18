@@ -12,6 +12,10 @@
 
 #include "Platform/IPlatform.h"
 
+#ifdef SE_ENABLE_LIVE
+#include "FrameRecorder.h"   // rolling capture of live frames (native only)
+#endif
+
 namespace sfe
 {
 
@@ -47,6 +51,9 @@ public:
 
 private:
     void CloseData();
+    // Read every available memory region from the current source and hand a single
+    // self-describing dump blob (.sedump) to the platform to save / download.
+    void DumpMemory(IPlatform& platform);
     void RenderFrameToTexture(IPlatform& platform);
     void BuildDefaultLayout(unsigned int dockspaceId);
     void DrawToolbar(IPlatform& platform);
@@ -67,7 +74,12 @@ private:
     void DrawWorkRam();
     void DrawVdp1Table();
     void DrawVdp2Table();
+    void DrawTimeline();
     void DrawPlaceholder(const char* title, const char* note);
+
+    // Rebuild the scrub context over the selected recorded frame (mScrubIndex).
+    // Returns true when mScrubContext is valid to render from. No-op off SE_ENABLE_LIVE.
+    bool RefreshScrubContext();
 
     // Selection helpers. mSelectedCommand is the "primary" (what the detail panels
     // show); mSelection is the full set of highlighted commands. A plain click
@@ -85,6 +97,19 @@ private:
     bool             mbAutoConnectLive = false; // poll for a Yabause until one loads
     std::string      mLiveEndpoint;           // endpoint for auto-connect (empty = default)
     float            mLiveRetrySeconds = 0.0f; // time since the last connect attempt
+
+#ifdef SE_ENABLE_LIVE
+    // Rolling recording of live frames + paused-scrubbing state. While paused the
+    // Timeline lets the user drag back through captured frames; the selected frame
+    // is rebuilt into mScrubContext and the panels render from it for that draw.
+    FrameRecorder    mRecorder;
+    int              mRecordSeconds = 5;       // ring-buffer window (5..30 s)
+    se_context*      mScrubContext = nullptr;  // context over the selected past frame
+    bool             mbScrubbing = false;      // viewing a recorded (past) frame
+    int              mScrubIndex = -1;         // selected recorded-frame index
+    int              mScrubShownIndex = -1;    // index currently built into mScrubContext
+#endif
+
     int              mSelectedCommand = -1;   // primary selection (detail panels)
     std::vector<int> mSelection;              // all selected command indices
     bool             mbLayoutBuilt = false;   // default dock layout applied once
