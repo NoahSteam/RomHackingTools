@@ -28,6 +28,18 @@ int ClampInt(int v, int lo, int hi)
     return v < lo ? lo : (v > hi ? hi : v);
 }
 
+// VDP1 gouraud shading works in 5-bit-per-channel space: the interpolated
+// gouraud value (0..31, neutral = 16) is added to the texel channel and clamped.
+// 'g5' is the interpolated gouraud channel (float); 't8' the decoded 8-bit texel
+// channel (always sourced from a 5-bit color, so the recovery is exact).
+uint8_t ApplyGouraud(uint8_t t8, float g5)
+{
+    const int t5 = (static_cast<int>(t8) * 31 + 127) / 255;      // 8-bit -> 5-bit
+    int o5 = t5 + static_cast<int>(g5 + 0.5f) - 16;              // add, neutral 16
+    o5 = o5 < 0 ? 0 : (o5 > 31 ? 31 : o5);
+    return static_cast<uint8_t>(o5 * 255 / 31);
+}
+
 // Rasterize one UV-mapped triangle. When 'depth' is non-null, depth-test and
 // write per pixel (3D view); when null, overwrite in call order (2D painter's).
 void RasterTriangle(const RVert& p0, const RVert& p1, const RVert& p2,
@@ -35,7 +47,8 @@ void RasterTriangle(const RVert& p0, const RVert& p1, const RVert& p2,
                     const se_texture_ref& tex, bool spd,
                     const std::vector<uint8_t>& vram, const std::vector<uint8_t>& cram,
                     se_cram_mode cramMode, int width, int height,
-                    std::vector<uint8_t>& out, std::vector<float>* depth)
+                    std::vector<uint8_t>& out, std::vector<float>* depth,
+                    bool gourOn, uint16_t g0, uint16_t g1, uint16_t g2)
 {
     const float area = Edge(p0.x, p0.y, p1.x, p1.y, p2.x, p2.y);
     if (std::fabs(area) < 1e-6f)
@@ -97,10 +110,22 @@ void RasterTriangle(const RVert& p0, const RVert& p1, const RVert& p2,
             {
                 (*depth)[idx] = d;
             }
+            uint8_t cr = c.r, cg = c.g, cb = c.b;
+            if (gourOn)
+            {
+                // Interpolate each 5-bit gouraud channel over the triangle and
+                // add it to the texel (hardware does this per pixel).
+                const float gr = w0 * (g0 & 0x1F)        + w1 * (g1 & 0x1F)        + w2 * (g2 & 0x1F);
+                const float gg = w0 * ((g0 >> 5) & 0x1F) + w1 * ((g1 >> 5) & 0x1F) + w2 * ((g2 >> 5) & 0x1F);
+                const float gb = w0 * ((g0 >> 10) & 0x1F)+ w1 * ((g1 >> 10) & 0x1F)+ w2 * ((g2 >> 10) & 0x1F);
+                cr = ApplyGouraud(c.r, gr);
+                cg = ApplyGouraud(c.g, gg);
+                cb = ApplyGouraud(c.b, gb);
+            }
             const size_t o = idx * 4;
-            out[o + 0] = c.r;
-            out[o + 1] = c.g;
-            out[o + 2] = c.b;
+            out[o + 0] = cr;
+            out[o + 1] = cg;
+            out[o + 2] = cb;
             out[o + 3] = 255;
         }
     }
@@ -110,12 +135,16 @@ void RasterTriangle(const RVert& p0, const RVert& p1, const RVert& p2,
 void RasterQuad(const RVert v[4], const se_vec2 uv[4], const se_texture_ref& tex,
                 bool spd, const std::vector<uint8_t>& vram, const std::vector<uint8_t>& cram,
                 se_cram_mode cramMode, int width, int height,
-                std::vector<uint8_t>& out, std::vector<float>* depth)
+                std::vector<uint8_t>& out, std::vector<float>* depth,
+                const GouraudQuad& g)
 {
+    // Split matches the corner order: triangle 1 = A,B,C; triangle 2 = A,C,D.
     RasterTriangle(v[0], v[1], v[2], uv[0], uv[1], uv[2], tex, spd,
-                   vram, cram, cramMode, width, height, out, depth);
+                   vram, cram, cramMode, width, height, out, depth,
+                   g.on, g.corner[0], g.corner[1], g.corner[2]);
     RasterTriangle(v[0], v[2], v[3], uv[0], uv[2], uv[3], tex, spd,
-                   vram, cram, cramMode, width, height, out, depth);
+                   vram, cram, cramMode, width, height, out, depth,
+                   g.on, g.corner[0], g.corner[2], g.corner[3]);
 }
 
 // VDP1 sprite corners are *inclusive* pixel coordinates: a sprite spanning
@@ -190,15 +219,17 @@ void Vdp1Rasterizer::Render(const Vdp1Scene& scene, const std::vector<uint8_t>& 
         return;
     }
 
-    for (const se_sprite_2d& s : scene.sprites)
+    for (size_t i = 0; i < scene.sprites.size(); ++i)
     {
+        const se_sprite_2d& s = scene.sprites[i];
         RVert v[4] = { { s.corners[0].x, s.corners[0].y, 0.0f },
                        { s.corners[1].x, s.corners[1].y, 0.0f },
                        { s.corners[2].x, s.corners[2].y, 0.0f },
                        { s.corners[3].x, s.corners[3].y, 0.0f } };
         ExpandQuadInclusive(v);
+        const GouraudQuad& g = i < scene.gouraud.size() ? scene.gouraud[i] : GouraudQuad{};
         RasterQuad(v, s.uv, s.texture, s.transparency == SE_TRANSP_NONE,
-                   vram, cram, cramMode, width, height, outRgba, nullptr);
+                   vram, cram, cramMode, width, height, outRgba, nullptr, g);
     }
 }
 
@@ -221,16 +252,18 @@ void Vdp1Rasterizer::Render3D(const Vdp1Scene& scene, const std::vector<uint8_t>
     const float cosPitch = std::cos(camera.pitch);
     const float sinPitch = std::sin(camera.pitch);
 
-    for (const se_sprite_3d& g : scene.sprites3d)
+    for (size_t i = 0; i < scene.sprites3d.size(); ++i)
     {
+        const se_sprite_3d& s = scene.sprites3d[i];
         RVert v[4] = {
-            Project(g.corners[0], camera, cosYaw, sinYaw, cosPitch, sinPitch),
-            Project(g.corners[1], camera, cosYaw, sinYaw, cosPitch, sinPitch),
-            Project(g.corners[2], camera, cosYaw, sinYaw, cosPitch, sinPitch),
-            Project(g.corners[3], camera, cosYaw, sinYaw, cosPitch, sinPitch) };
+            Project(s.corners[0], camera, cosYaw, sinYaw, cosPitch, sinPitch),
+            Project(s.corners[1], camera, cosYaw, sinYaw, cosPitch, sinPitch),
+            Project(s.corners[2], camera, cosYaw, sinYaw, cosPitch, sinPitch),
+            Project(s.corners[3], camera, cosYaw, sinYaw, cosPitch, sinPitch) };
         ExpandQuadInclusive(v);
-        RasterQuad(v, g.uv, g.texture, g.transparency == SE_TRANSP_NONE,
-                   vram, cram, cramMode, width, height, outRgba, &depth);
+        const GouraudQuad& g = i < scene.gouraud.size() ? scene.gouraud[i] : GouraudQuad{};
+        RasterQuad(v, s.uv, s.texture, s.transparency == SE_TRANSP_NONE,
+                   vram, cram, cramMode, width, height, outRgba, &depth, g);
     }
 }
 
