@@ -88,6 +88,7 @@ bool WebPlatform::Initialize(const PlatformConfig& config)
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
     sfe::ApplyTheme(ImGui::GetStyle());   // Saturn Explorer theme (shared, portable)
+    sfe::LoadFonts(io);                   // embedded proportional UI font
 
     // Match the Windows backend's DPI handling: scale sizes + the (1.92 scalable)
     // default font by the display's device-pixel ratio.

@@ -1,0 +1,6 @@
+Liberation(tm) fonts — SIL Open Font License, Version 1.1
+Copyright (c) 2012 Red Hat, Inc. Liberation is a trademark of Red Hat, Inc.
+
+This embedded font (LiberationSans.h) is distributed under the SIL Open Font
+License v1.1. Full license text: https://scripts.sil.org/OFL
+Upstream: https://github.com/liberationfonts/liberation-fonts

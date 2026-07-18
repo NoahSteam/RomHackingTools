@@ -63,6 +63,7 @@ bool WindowsPlatform::Initialize(const PlatformConfig& config)
     io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
 
     sfe::ApplyTheme(ImGui::GetStyle());   // Saturn Explorer theme (shared, portable)
+    sfe::LoadFonts(io);                   // embedded proportional UI font
 
     // Scale the whole UI to the window's DPI so it is both crisp and the right
     // physical size. ImGui 1.92's font system keeps the scalable default font

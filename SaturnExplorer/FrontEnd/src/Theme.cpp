@@ -1,5 +1,7 @@
 #include "Theme.h"
 
+#include "../third_party/fonts/LiberationSans.h"
+
 namespace sfe
 {
 
@@ -108,8 +110,26 @@ void ApplyTheme(ImGuiStyle& style)
     style.SeparatorTextBorderSize  = 2.0f;
 }
 
+void LoadFonts(ImGuiIO& io)
+{
+    io.Fonts->Clear();
+    ImFontConfig cfg;
+    cfg.OversampleH = 2;
+    cfg.OversampleV = 2;
+    // Body (default) + a larger size for headers. One embedded source, two sizes;
+    // DPI comes from the backend's io.FontScaleMain, so these are base pixels.
+    ui::gBody = io.Fonts->AddFontFromMemoryCompressedBase85TTF(
+        LiberationSansRegular_compressed_data_base85, 15.0f, &cfg);
+    ui::gHeading = io.Fonts->AddFontFromMemoryCompressedBase85TTF(
+        LiberationSansRegular_compressed_data_base85, 19.0f, &cfg);
+    io.FontDefault = ui::gBody;
+}
+
 namespace ui
 {
+ImFont* gBody = nullptr;
+ImFont* gHeading = nullptr;
+
 ImU32 Accent()           { return ImGui::GetColorU32(kAccent); }
 ImU32 SelectionOutline() { return ImGui::GetColorU32(kSelection); }
 ImU32 PanelBorder()      { return ImGui::GetColorU32(kBorder); }
