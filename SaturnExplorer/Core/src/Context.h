@@ -93,10 +93,23 @@ public:
         const int h = mScene.screenHeight;
         return FillImage(static_cast<uint32_t>(w), static_cast<uint32_t>(h), out, needed, [&]
         {
-            Vdp2Compositor::Render(mSnapshot, opts, w, h, mBgBuffer);
+            // VDP1 sprites and VDP2 screens interleave by priority. Render the
+            // VDP2 layers at or below the sprite priority as the background,
+            // draw the sprites over them, then composite the higher-priority
+            // VDP2 layers on top (e.g. HUD / dialogue boxes that sit in front of
+            // the sprites). See ARCHITECTURE.md §7.
+            // 0 (no VDP2 regs, or genuine sprite priority 0) falls back to the
+            // old behavior: sprites over every NBG (background = all, none in
+            // front), which avoids wrongly flipping all layers to the front.
+            int spritePrio = Vdp2Compositor::SpritePriority(mSnapshot);
+            if (spritePrio < 1) spritePrio = 7;
+            Vdp2Compositor::Render(mSnapshot, opts, w, h, mBgBuffer, 1, spritePrio, true);
             Vdp1Rasterizer::Render(mScene, mSnapshot.Vdp1Vram(), mSnapshot.Cram(),
                                    mSnapshot.CramMode(), opts, mRenderBuffer);
             CompositeFrame();
+            // Foreground VDP2 layers, composited over the finished frame.
+            Vdp2Compositor::Render(mSnapshot, opts, w, h, mRenderBuffer,
+                                   spritePrio + 1, 7, false);
         });
     }
 

@@ -23,6 +23,8 @@ enum : uint32_t
     kMPABN2 = 0x048, kMPCDN2 = 0x04A, kMPABN3 = 0x04C, kMPCDN3 = 0x04E,
     kSCXIN0 = 0x070, kSCYIN0 = 0x074, kSCXIN1 = 0x080, kSCYIN1 = 0x084,
     kSCXN2 = 0x090, kSCYN2 = 0x092, kSCXN3 = 0x094, kSCYN3 = 0x096,
+    kSPCTL = 0x0E0,
+    kPRISA = 0x0F0, kPRISB = 0x0F2, kPRISC = 0x0F4, kPRISD = 0x0F6,
     kCRAOFA = 0x0E4, kPRINA = 0x0F8, kPRINB = 0x0FA
 };
 
@@ -312,10 +314,28 @@ void RenderLayer(const HardwareSnapshot& snap, const NbgConfig& c, int width, in
 
 }  // namespace
 
-void Vdp2Compositor::Render(const HardwareSnapshot& snapshot, const se_render_opts& opts,
-                            int width, int height, std::vector<uint8_t>& outRgba)
+int Vdp2Compositor::SpritePriority(const HardwareSnapshot& snapshot)
 {
-    outRgba.assign(static_cast<size_t>(width) * height * 4, 0);
+    if (!snapshot.HasVdp2Regs())
+    {
+        return 0;
+    }
+    // The sprite pixel's priority *number* selects one of eight 3-bit priority
+    // values in PRISA..PRISD. Modeling that per pixel needs the framebuffer;
+    // we render from the command list, so we use priority number 0 (PRISA low
+    // 3 bits), which is what the overwhelming majority of scenes use. This is
+    // enough to place the whole sprite plane correctly relative to the NBGs.
+    return Reg(snapshot, kPRISA) & 0x7;
+}
+
+void Vdp2Compositor::Render(const HardwareSnapshot& snapshot, const se_render_opts& opts,
+                            int width, int height, std::vector<uint8_t>& outRgba,
+                            int minPriority, int maxPriority, bool clear)
+{
+    if (clear)
+    {
+        outRgba.assign(static_cast<size_t>(width) * height * 4, 0);
+    }
     if (width <= 0 || height <= 0 || !snapshot.HasVdp2Regs() || snapshot.Vdp2Vram().empty())
     {
         return;
@@ -341,7 +361,12 @@ void Vdp2Compositor::Render(const HardwareSnapshot& snapshot, const se_render_op
         const NbgConfig c = ReadNbgConfig(snapshot, n);
         if (c.priority == 0)
         {
-            continue;
+            continue;   // priority 0 = not displayed on hardware
+        }
+        if (static_cast<int>(c.priority) < minPriority ||
+            static_cast<int>(c.priority) > maxPriority)
+        {
+            continue;   // outside the requested band (behind/in-front of sprites)
         }
         layers.push_back({ n, c });
     }

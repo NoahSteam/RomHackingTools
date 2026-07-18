@@ -23,11 +23,23 @@ class Vdp2Compositor
 {
 public:
     // Composite the enabled NBG layers into 'outRgba' (resized to width*height*4),
-    // back-to-front by VDP2 priority. Pixels with no opaque layer are left
-    // transparent (alpha 0). Honors opts.show_layer[] and the BGON enable bits;
-    // a no-op (transparent fill) when the snapshot lacks VDP2 VRAM or registers.
+    // back-to-front by VDP2 priority. Only layers whose priority is in
+    // [minPriority, maxPriority] are drawn — this lets the caller split the VDP2
+    // screens into those behind the VDP1 sprites and those in front of them
+    // (see Context::RenderFrame). When 'clear' is true 'outRgba' is (re)sized and
+    // cleared to transparent first; when false the layers composite over whatever
+    // is already in 'outRgba' (a finished frame), so transparent texels leave it
+    // untouched. Honors opts.show_layer[] and the BGON enable bits; a no-op when
+    // the snapshot lacks VDP2 VRAM or registers.
     static void Render(const HardwareSnapshot& snapshot, const se_render_opts& opts,
-                       int width, int height, std::vector<uint8_t>& outRgba);
+                       int width, int height, std::vector<uint8_t>& outRgba,
+                       int minPriority = 1, int maxPriority = 7, bool clear = true);
+
+    // The sprite (VDP1) priority the core uses when interleaving VDP1 with the
+    // VDP2 screens: resolved from SPCTL's sprite type + the PRISA..PRISD sprite
+    // priority registers. A single per-frame value (the common case); games that
+    // vary sprite priority per pixel aren't fully modeled. 0 when unavailable.
+    static int SpritePriority(const HardwareSnapshot& snapshot);
 };
 
 }  // namespace se
