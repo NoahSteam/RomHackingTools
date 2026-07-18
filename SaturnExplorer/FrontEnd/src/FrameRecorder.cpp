@@ -76,6 +76,7 @@ void FrameRecorder::Capture(se_context* ctx, uint64_t frameNumber)
     CaptureRegion(ctx, SE_VRAM_KIND_CRAM,      kCramSize,     f.cram,     scratch, mLzScratch);
     CaptureRegion(ctx, SE_VRAM_KIND_WRAM_LOW,  kWramSize,     f.wramLow,  scratch, mLzScratch);
     CaptureRegion(ctx, SE_VRAM_KIND_WRAM_HIGH, kWramSize,     f.wramHigh, scratch, mLzScratch);
+    CaptureRegion(ctx, SE_VRAM_KIND_VDP1_FB,   kVdp1FbSize,   f.vdp1Fb,   scratch, mLzScratch);
 
     f.vdp1Regs.resize(kVdp1RegBytes / 2);
     for (uint32_t o = 0; o < kVdp1RegBytes; o += 2)
@@ -89,7 +90,7 @@ void FrameRecorder::Capture(se_context* ctx, uint64_t frameNumber)
     }
 
     f.bytes = f.vdp1Vram.lz.size() + f.vdp2Vram.lz.size() + f.cram.lz.size() +
-              f.wramLow.lz.size() + f.wramHigh.lz.size() +
+              f.wramLow.lz.size() + f.wramHigh.lz.size() + f.vdp1Fb.lz.size() +
               f.vdp1Regs.size() * 2 + f.vdp2Regs.size() * 2;
 
     mBytes += f.bytes;
@@ -126,18 +127,21 @@ bool FrameRecorder::Select(size_t i, se_data_source* out)
     DecompressRegion(f.cram, mSelCram);
     DecompressRegion(f.wramLow, mSelWramLow);
     DecompressRegion(f.wramHigh, mSelWramHigh);
+    DecompressRegion(f.vdp1Fb, mSelVdp1Fb);
     mSelVdp1Regs = f.vdp1Regs;
     mSelVdp2Regs = f.vdp2Regs;
 
     std::memset(out, 0, sizeof(*out));
     out->abi_version = SE_ABI_VERSION;
     out->capabilities = SE_CAP_VDP1_VRAM | SE_CAP_VDP2_VRAM | SE_CAP_CRAM |
-                        SE_CAP_MAIN_RAM | SE_CAP_VDP1_REGS | SE_CAP_VDP2_REGS;
+                        SE_CAP_MAIN_RAM | SE_CAP_VDP1_REGS | SE_CAP_VDP2_REGS |
+                        SE_CAP_VDP1_FB;
     out->user = this;
     out->read_vdp1_vram = CbVdp1;
     out->read_vdp2_vram = CbVdp2;
     out->read_cram      = CbCram;
     out->read_main_ram  = CbMain;
+    out->read_vdp1_fb   = CbVdp1Fb;
     out->read_vdp1_reg  = CbVdp1Reg;
     out->read_vdp2_reg  = CbVdp2Reg;
     // No close callback: the scratch is owned by this recorder, not the context.
@@ -168,6 +172,10 @@ size_t FrameRecorder::CbMain(void* u, uint32_t addr, void* dst, size_t size)
         return CopyOut(r->mSelWramLow, addr - 0x00200000u, dst, size);
     }
     return 0;
+}
+size_t FrameRecorder::CbVdp1Fb(void* u, uint32_t off, void* dst, size_t size)
+{
+    return CopyOut(static_cast<FrameRecorder*>(u)->mSelVdp1Fb, off, dst, size);
 }
 uint16_t FrameRecorder::CbVdp1Reg(void* u, uint32_t reg)
 {

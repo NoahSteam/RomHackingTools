@@ -18,6 +18,8 @@
 #if defined(_WIN32)
 #include <windows.h>
 #else
+#include <cstdlib>
+#include <netdb.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
@@ -37,6 +39,7 @@ struct LiveSnapshot
     std::vector<uint8_t> vdp1Regs;   // hw-offset BE image
     std::vector<uint8_t> wramLow;    // 0x00200000, 1 MiB
     std::vector<uint8_t> wramHigh;   // 0x06000000, 1 MiB
+    std::vector<uint8_t> vdp1Fb;     // VDP1 frame buffer (drawn output)
     bool                 valid = false;
 };
 
@@ -77,13 +80,52 @@ struct Conn
 #endif
 };
 
+// True for a TCP endpoint written as "tcp:host:port" (used for the web bridge,
+// where the browser tunnels a normal TCP connect over a WebSocket proxy).
+bool IsTcpEndpoint(const char* ep) { return ep && std::strncmp(ep, "tcp:", 4) == 0; }
+
+#if !defined(_WIN32)
+// Connect a POSIX TCP socket to "tcp:host:port". This is the path the Emscripten
+// build takes (its sockets are proxied to a WebSocket bridge), and the one the
+// native test harness uses; Windows native uses the named pipe instead.
+bool ConnOpenTcp(Conn& c, const char* endpoint)
+{
+    const char* rest = endpoint + 4;                 // skip "tcp:"
+    const char* colon = std::strrchr(rest, ':');
+    if (!colon || colon == rest) { return false; }
+    std::string host(rest, static_cast<size_t>(colon - rest));
+    const char* port = colon + 1;
+
+    addrinfo hints;
+    std::memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    addrinfo* res = nullptr;
+    if (::getaddrinfo(host.c_str(), port, &hints, &res) != 0 || !res) { return false; }
+    for (addrinfo* ai = res; ai; ai = ai->ai_next)
+    {
+        int fd = ::socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol);
+        if (fd < 0) { continue; }
+        if (::connect(fd, ai->ai_addr, ai->ai_addrlen) == 0) { c.fd = fd; break; }
+        ::close(fd);
+    }
+    ::freeaddrinfo(res);
+    return c.fd >= 0;
+}
+#endif
+
 bool ConnOpen(Conn& c, const char* endpoint)
 {
 #if defined(_WIN32)
+    // Windows native: local named pipe. (TCP for the web bridge is POSIX-side.)
     c.h = CreateFileA(endpoint, GENERIC_READ | GENERIC_WRITE, 0, nullptr,
                       OPEN_EXISTING, 0, nullptr);
     return c.h != INVALID_HANDLE_VALUE;
 #else
+    if (IsTcpEndpoint(endpoint))
+    {
+        return ConnOpenTcp(c, endpoint);
+    }
     c.fd = ::socket(AF_UNIX, SOCK_STREAM, 0);
     if (c.fd < 0)
     {
@@ -199,10 +241,11 @@ bool ReadSnapshot(Conn& c, const char* verb, int32_t arg, LiveSnapshot& snap,
     const uint32_t vr = Rd32LE(hdr + 24);
     const uint32_t wl = Rd32LE(hdr + 28);
     const uint32_t wh = Rd32LE(hdr + 32);
-    const uint32_t ct = Rd32LE(hdr + 36);
+    const uint32_t fb = Rd32LE(hdr + 36);
+    const uint32_t ct = Rd32LE(hdr + 40);
     // Sanity clamps so a malformed header can't drive a huge allocation.
     if (v1 > 0x100000u || v2 > 0x100000u || cr > 0x4000u || vs > 4096u ||
-        vr > 256u || wl > 0x100000u || wh > 0x100000u || ct > 64u)
+        vr > 256u || wl > 0x100000u || wh > 0x100000u || fb > 0x40000u || ct > 64u)
     {
         return false;
     }
@@ -214,6 +257,7 @@ bool ReadSnapshot(Conn& c, const char* verb, int32_t arg, LiveSnapshot& snap,
     snap.vdp1Regs.resize(vr);
     snap.wramLow.resize(wl);
     snap.wramHigh.resize(wh);
+    snap.vdp1Fb.resize(fb);
     std::vector<uint8_t> ctl(ct);
     if (!ConnReadFull(c, snap.vdp1Vram.data(), v1) ||
         !ConnReadFull(c, snap.vdp2Vram.data(), v2) ||
@@ -222,6 +266,7 @@ bool ReadSnapshot(Conn& c, const char* verb, int32_t arg, LiveSnapshot& snap,
         !ConnReadFull(c, snap.vdp1Regs.data(), vr) ||
         !ConnReadFull(c, snap.wramLow.data(), wl) ||
         !ConnReadFull(c, snap.wramHigh.data(), wh) ||
+        !ConnReadFull(c, snap.vdp1Fb.data(), fb) ||
         !ConnReadFull(c, ctl.data(), ct))
     {
         return false;
@@ -345,6 +390,11 @@ size_t CbMainRam(void* u, uint32_t address, void* dst, size_t size)
     }
     return 0;
 }
+size_t CbVdp1Fb(void* u, uint32_t off, void* dst, size_t size)
+{
+    LiveState* st = St(u); std::lock_guard<std::mutex> lk(st->mtx);
+    return CopyRegion(st->front.vdp1Fb, off, dst, size);
+}
 
 uint16_t CbVdp1Reg(void* u, uint32_t reg)
 {
@@ -444,12 +494,13 @@ extern "C" se_result se_live_open(const char* endpoint, se_data_source* out)
     out->abi_version = SE_ABI_VERSION;
     out->capabilities = SE_CAP_VDP1_VRAM | SE_CAP_VDP2_VRAM | SE_CAP_CRAM |
                         SE_CAP_VDP1_REGS | SE_CAP_VDP2_REGS | SE_CAP_MAIN_RAM |
-                        SE_CAP_FRAME_STEP;
+                        SE_CAP_VDP1_FB | SE_CAP_FRAME_STEP;
     out->user = st;
     out->read_vdp1_vram = CbVdp1Vram;
     out->read_vdp2_vram = CbVdp2Vram;
     out->read_cram      = CbCram;
     out->read_main_ram  = CbMainRam;
+    out->read_vdp1_fb   = CbVdp1Fb;
     out->read_vdp1_reg  = CbVdp1Reg;
     out->read_vdp2_reg  = CbVdp2Reg;
     out->frame_pause    = CbFramePause;

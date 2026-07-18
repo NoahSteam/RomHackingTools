@@ -31,7 +31,7 @@ public:
     struct Frame
     {
         uint64_t frameNumber = 0;
-        Region   vdp1Vram, vdp2Vram, cram, wramLow, wramHigh;
+        Region   vdp1Vram, vdp2Vram, cram, wramLow, wramHigh, vdp1Fb;
         std::vector<uint16_t> vdp1Regs;   // by hw offset >> 1
         std::vector<uint16_t> vdp2Regs;
         size_t   bytes = 0;               // compressed footprint of this frame
@@ -74,7 +74,7 @@ private:
 
     // Scratch holding the currently-selected decompressed frame (for the data
     // source callbacks below). Owned here so it outlives the created context.
-    std::vector<uint8_t>  mSelVdp1, mSelVdp2, mSelCram, mSelWramLow, mSelWramHigh;
+    std::vector<uint8_t>  mSelVdp1, mSelVdp2, mSelCram, mSelWramLow, mSelWramHigh, mSelVdp1Fb;
     std::vector<uint16_t> mSelVdp1Regs, mSelVdp2Regs;
 
     // Data-source callbacks (static; 'user' is this recorder).
@@ -82,6 +82,7 @@ private:
     static size_t CbVdp2(void* u, uint32_t off, void* dst, size_t size);
     static size_t CbCram(void* u, uint32_t off, void* dst, size_t size);
     static size_t CbMain(void* u, uint32_t addr, void* dst, size_t size);
+    static size_t CbVdp1Fb(void* u, uint32_t off, void* dst, size_t size);
     static uint16_t CbVdp1Reg(void* u, uint32_t reg);
     static uint16_t CbVdp2Reg(void* u, uint32_t reg);
 };

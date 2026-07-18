@@ -290,6 +290,7 @@ void App::DumpMemory(IPlatform& platform)
         { SE_VRAM_KIND_CRAM,      "CRAM",      0x25F00000u, kCramSize },
         { SE_VRAM_KIND_WRAM_LOW,  "WRAM_LOW",  0x00200000u, kWramSize },
         { SE_VRAM_KIND_WRAM_HIGH, "WRAM_HIGH", 0x06000000u, kWramSize },
+        { SE_VRAM_KIND_VDP1_FB,   "VDP1_FB",   0x25C80000u, kVdp1FbSize },
     };
     for (const RegionDesc& d : kRegions)
     {

@@ -18,6 +18,7 @@
 #include <windows.h>
 #else
 #include <pthread.h>
+#include <netinet/in.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
@@ -30,6 +31,7 @@
 #define SE_VR SE_LIVE_VDP1_REGS_LEN
 #define SE_WL SE_LIVE_WRAM_LOW_LEN
 #define SE_WH SE_LIVE_WRAM_HIGH_LEN
+#define SE_FB SE_LIVE_VDP1_FB_LEN
 #define SE_CT SE_LIVE_CONTROL_LEN
 
 typedef struct
@@ -41,6 +43,7 @@ typedef struct
     unsigned char vr[SE_VR];   /* hardware-offset BE VDP1 register image */
     unsigned char wl[SE_WL];   /* low work RAM */
     unsigned char wh[SE_WH];   /* high work RAM */
+    unsigned char fb[SE_FB];   /* VDP1 frame buffer (drawn output) */
     int valid;
 } SeFrame;
 
@@ -122,8 +125,11 @@ static CRITICAL_SECTION sLock;
 #define SE_UNLOCK() LeaveCriticalSection(&sLock)
 #else
 static pthread_t sThread;
+static pthread_t sTcpThread;
+static int sTcpThreadStarted = 0;
 static pthread_mutex_t sLock = PTHREAD_MUTEX_INITIALIZER;
 static int sListenFd = -1;
+static int sTcpListenFd = -1;
 #define SE_LOCK()   pthread_mutex_lock(&sLock)
 #define SE_UNLOCK() pthread_mutex_unlock(&sLock)
 #endif
@@ -138,7 +144,8 @@ static void SeWr32(unsigned char* p, unsigned int v)
 
 void SeExportSnapshot(const void* vdp1, const void* vdp2, const void* cram,
                       const void* vdp2struct, const void* vdp1struct,
-                      const void* wramLow, const void* wramHigh)
+                      const void* wramLow, const void* wramHigh,
+                      const void* vdp1fb)
 {
     if (!sBack)
     {
@@ -152,6 +159,7 @@ void SeExportSnapshot(const void* vdp1, const void* vdp2, const void* cram,
     SeBuildVdp1Image(sBack->vr, vdp1struct);
     if (wramLow)  memcpy(sBack->wl, wramLow,  SE_WL); else memset(sBack->wl, 0, SE_WL);
     if (wramHigh) memcpy(sBack->wh, wramHigh, SE_WH); else memset(sBack->wh, 0, SE_WH);
+    if (vdp1fb)   memcpy(sBack->fb, vdp1fb,   SE_FB); else memset(sBack->fb, 0, SE_FB);
     sBack->valid = 1;
     {
         SeFrame* tmp = sFront; sFront = sBack; sBack = tmp;   /* swap */
@@ -237,7 +245,7 @@ static void SeServeClient(int cl, SeFrame* snap)
         SeWr32(hdr + 4, SE_LIVE_VERSION);
         SeWr32(hdr + 8, SE_V1);  SeWr32(hdr + 12, SE_V2); SeWr32(hdr + 16, SE_CR);
         SeWr32(hdr + 20, SE_VS); SeWr32(hdr + 24, SE_VR); SeWr32(hdr + 28, SE_WL);
-        SeWr32(hdr + 32, SE_WH); SeWr32(hdr + 36, SE_CT);
+        SeWr32(hdr + 32, SE_WH); SeWr32(hdr + 36, SE_FB); SeWr32(hdr + 40, SE_CT);
         if (SeSend(cl, hdr, sizeof(hdr)) != 0) return;
         if (SeSend(cl, snap->v1, SE_V1) != 0) return;
         if (SeSend(cl, snap->v2, SE_V2) != 0) return;
@@ -246,6 +254,7 @@ static void SeServeClient(int cl, SeFrame* snap)
         if (SeSend(cl, snap->vr, SE_VR) != 0) return;
         if (SeSend(cl, snap->wl, SE_WL) != 0) return;
         if (SeSend(cl, snap->wh, SE_WH) != 0) return;
+        if (SeSend(cl, snap->fb, SE_FB) != 0) return;
         if (SeSend(cl, ctl, SE_CT) != 0) return;
     }
 }
@@ -298,6 +307,39 @@ static void* SeServerThread(void* arg)
     free(snap);
     return NULL;
 }
+
+/* TCP listener on localhost:SE_LIVE_DEFAULT_TCP_PORT, serving the same blob. This
+ * is the endpoint the web build reaches (its sockets are tunneled to a WebSocket
+ * proxy); a native client connects with "tcp:127.0.0.1:6845". */
+static void* SeTcpServerThread(void* arg)
+{
+    SeFrame* snap = (SeFrame*)malloc(sizeof(SeFrame));
+    struct sockaddr_in addr;
+    int on = 1;
+    int srv = socket(AF_INET, SOCK_STREAM, 0);
+    (void)arg;
+    if (srv < 0 || !snap) { if (srv >= 0) close(srv); free(snap); return NULL; }
+    setsockopt(srv, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    addr.sin_port = htons(SE_LIVE_DEFAULT_TCP_PORT);
+    if (bind(srv, (struct sockaddr*)&addr, sizeof(addr)) != 0 || listen(srv, 1) != 0)
+    {
+        close(srv); free(snap); return NULL;
+    }
+    sTcpListenFd = srv;
+    while (sRunning)
+    {
+        int cl = accept(srv, NULL, NULL);
+        if (cl < 0) break;   /* closed on deinit */
+        SeServeClient(cl, snap);
+        close(cl);
+    }
+    close(srv);
+    free(snap);
+    return NULL;
+}
 #endif
 
 int SeExportInit(void)
@@ -313,6 +355,9 @@ int SeExportInit(void)
     if (!sThread) { sRunning = 0; return -1; }
 #else
     if (pthread_create(&sThread, NULL, SeServerThread, NULL) != 0) { sRunning = 0; return -1; }
+    /* Best-effort TCP listener for the web bridge; failure doesn't block the
+     * local socket, which is the primary path for native clients. */
+    sTcpThreadStarted = (pthread_create(&sTcpThread, NULL, SeTcpServerThread, NULL) == 0);
 #endif
     return 0;
 }
@@ -325,7 +370,9 @@ void SeExportDeinit(void)
     DeleteCriticalSection(&sLock);
 #else
     if (sListenFd >= 0) { shutdown(sListenFd, SHUT_RDWR); close(sListenFd); sListenFd = -1; }
+    if (sTcpListenFd >= 0) { shutdown(sTcpListenFd, SHUT_RDWR); close(sTcpListenFd); sTcpListenFd = -1; }
     pthread_join(sThread, NULL);
+    if (sTcpThreadStarted) { pthread_join(sTcpThread, NULL); sTcpThreadStarted = 0; }
 #endif
     free(sFront); sFront = NULL;
     free(sBack);  sBack = NULL;
