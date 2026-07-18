@@ -100,6 +100,7 @@ private:
     // Timeline lets the user drag back through captured frames; the selected frame
     // is rebuilt into mScrubContext and the panels render from it for that draw.
     FrameRecorder    mRecorder;
+    int              mRecordSeconds = 5;       // ring-buffer window (5..30 s)
     se_context*      mScrubContext = nullptr;  // context over the selected past frame
     bool             mbScrubbing = false;      // viewing a recorded (past) frame
     int              mScrubIndex = -1;         // selected recorded-frame index

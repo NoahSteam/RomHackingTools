@@ -46,6 +46,7 @@ public:
     size_t   Count() const { return mFrames.size(); }
     uint64_t FrameNumber(size_t i) const { return mFrames[i].frameNumber; }
     size_t   BytesUsed() const { return mBytes; }
+    size_t   MaxBytes() const { return mMaxBytes; }
     double   Seconds() const { return static_cast<double>(mFrames.size()) / 60.0; }
 
     // Build a data source over frame i. The decompressed regions live in this
@@ -60,8 +61,8 @@ private:
 
     std::deque<Frame> mFrames;
     size_t            mBytes = 0;
-    size_t            mMaxBytes = 1024u * 1024u * 1024u;   // ~1 GiB default
-    size_t            mMaxFrames = 30 * 60;                // 30 s @ 60 fps
+    size_t            mMaxBytes = 4ull * 1024u * 1024u * 1024u;  // 4 GiB safety ceiling
+    size_t            mMaxFrames = 5 * 60;                       // 5 s @ 60 fps default
     uint64_t          mLastFrame = ~0ull;
     bool              mHaveLast = false;
 

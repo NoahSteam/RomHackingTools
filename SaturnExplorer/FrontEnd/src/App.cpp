@@ -120,6 +120,10 @@ void App::Initialize()
     mRenderOpts.show_color_calculation = 1;
     mRenderOpts.show_shadow_highlight = 1;
     mRenderOpts.highlight_command = -1;
+
+#ifdef SE_ENABLE_LIVE
+    mRecorder.Configure(mRecorder.MaxBytes(), mRecordSeconds);
+#endif
 }
 
 void App::Shutdown()
@@ -569,6 +573,23 @@ void App::DrawToolbar(IPlatform& platform)
                 OpenLive(nullptr);   // default local socket / named pipe
             }
             if (ImGui::MenuItem("Disconnect (live)", nullptr, false, mbLiveSource)) CloseData();
+
+            // Recording window: 5 s default, up to 30 s. The estimate uses the
+            // measured average compressed size per captured frame once recording
+            // is under way, else a typical figure, so the memory cost is visible.
+            ImGui::Separator();
+            ImGui::TextDisabled("Recording");
+            ImGui::SetNextItemWidth(180.0f);
+            if (ImGui::SliderInt("Length##rec", &mRecordSeconds, 5, 30, "%d s"))
+            {
+                mRecorder.Configure(mRecorder.MaxBytes(), mRecordSeconds);
+            }
+            const size_t frames = mRecorder.Count();
+            const double perFrame = frames ? static_cast<double>(mRecorder.BytesUsed()) / frames
+                                           : 1.3 * 1024.0 * 1024.0;   // typical, pre-capture
+            const double estMB = perFrame * mRecordSeconds * 60.0 / (1024.0 * 1024.0);
+            ImGui::Text("~%.0f MB (%s)", estMB,
+                        frames ? "measured" : "estimated");
 #endif
             if (ImGui::MenuItem("Close", nullptr, false, mbHasData)) CloseData();
             ImGui::EndPopup();
