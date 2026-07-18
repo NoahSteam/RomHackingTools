@@ -313,6 +313,17 @@ bool App::OpenLive(const char* endpoint)
 #endif
 }
 
+void App::EnableLiveAutoConnect(const char* endpoint)
+{
+#ifdef SE_ENABLE_LIVE
+    mbAutoConnectLive = true;
+    mLiveEndpoint = endpoint ? endpoint : "";
+    mLiveRetrySeconds = 1.0f;   // attempt on the very first frame
+#else
+    (void)endpoint;
+#endif
+}
+
 bool App::OpenSavestateBuffer(const uint8_t* data, size_t size)
 {
     CloseData();
@@ -334,6 +345,21 @@ bool App::OpenSavestateBuffer(const uint8_t* data, size_t size)
 
 void App::BuildUI(IPlatform& platform)
 {
+#ifdef SE_ENABLE_LIVE
+    // Auto-connect: while nothing is loaded, retry the live endpoint about once a
+    // second so the app latches onto a Yabause as soon as one starts. se_live_open
+    // fails fast when no server is listening, so a failed poll is cheap.
+    if (mbAutoConnectLive && !mbHasData)
+    {
+        mLiveRetrySeconds += ImGui::GetIO().DeltaTime;
+        if (mLiveRetrySeconds >= 1.0f)
+        {
+            mLiveRetrySeconds = 0.0f;
+            OpenLive(mLiveEndpoint.empty() ? nullptr : mLiveEndpoint.c_str());
+        }
+    }
+#endif
+
     // A live source changes every frame: re-snapshot before anything reads it, so
     // all panels reflect the running emulator's current VDP state. (Static sources
     // snapshot once at load, in CreateContextFromSource.)
@@ -649,14 +675,26 @@ void App::DrawVdpOutput(IPlatform& platform)
         }
         else
         {
+            // Fit the frame to the panel, preserving aspect ratio (scale by the
+            // tighter of the two axes) and centering it — letterbox/pillarbox,
+            // like a 3D editor viewport.
             const ImVec2 avail = ImGui::GetContentRegionAvail();
-            float scale = (mFrameWidth > 0) ? avail.x / static_cast<float>(mFrameWidth) : 1.0f;
-            if (scale <= 0.0f)
+            float scale = 1.0f;
+            if (mFrameWidth > 0 && mFrameHeight > 0)
             {
-                scale = 1.0f;
+                const float sx = avail.x / static_cast<float>(mFrameWidth);
+                const float sy = avail.y / static_cast<float>(mFrameHeight);
+                scale = sx < sy ? sx : sy;
+                if (scale <= 0.0f)
+                {
+                    scale = 1.0f;
+                }
             }
-            const ImVec2 imgPos = ImGui::GetCursorScreenPos();
             const ImVec2 dispSize(mFrameWidth * scale, mFrameHeight * scale);
+            const ImVec2 origin = ImGui::GetCursorScreenPos();
+            ImGui::SetCursorScreenPos(ImVec2(origin.x + (avail.x - dispSize.x) * 0.5f,
+                                             origin.y + (avail.y - dispSize.y) * 0.5f));
+            const ImVec2 imgPos = ImGui::GetCursorScreenPos();
             ImGui::Image(mFrameTexture, dispSize);
 
             ImDrawList* dl = ImGui::GetWindowDrawList();

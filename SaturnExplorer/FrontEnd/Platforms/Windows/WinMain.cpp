@@ -22,16 +22,20 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, LPWSTR, int)
     sfe::App app;
     app.Initialize();
 
-    // `--live [endpoint]` connects to a running Yabause on startup (see the
-    // Integration/Yabause module). Otherwise the user opens files from the toolbar.
+    // Auto-connect to a running Yabause on boot, retrying until one appears
+    // (see the Integration/Yabause module). `--live [endpoint]` picks a specific
+    // endpoint; otherwise the default socket/pipe is polled. Files open from the
+    // toolbar and stop the polling.
+    const char* liveEndpoint = nullptr;
     for (int i = 1; i < __argc; ++i)
     {
         if (std::strcmp(__argv[i], "--live") == 0)
         {
-            app.OpenLive((i + 1 < __argc) ? __argv[i + 1] : nullptr);
+            liveEndpoint = (i + 1 < __argc) ? __argv[i + 1] : nullptr;
             break;
         }
     }
+    app.EnableLiveAutoConnect(liveEndpoint);
 
     while (platform.PumpEvents())
     {

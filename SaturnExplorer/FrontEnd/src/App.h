@@ -5,6 +5,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 #include <vector>
 
 #include "saturnexplorer/SaturnExplorer.h"
@@ -34,6 +35,11 @@ public:
     // for the platform default socket. No-op returning false unless the build was
     // compiled with the LiveDriver (SE_ENABLE_LIVE — native desktop / Windows).
     bool OpenLive(const char* endpoint);
+
+    // Keep trying to connect to a running Yabause on 'endpoint' (NULL = default)
+    // roughly once a second until something is loaded. Call once on startup so the
+    // app latches onto an emulator the moment it appears. No-op on web builds.
+    void EnableLiveAutoConnect(const char* endpoint);
 
     // Draw the whole UI. Called once per frame, between the platform's
     // BeginFrame and EndFrame.
@@ -76,6 +82,9 @@ private:
     se_render_opts   mRenderOpts {};
     bool             mbLiveSource = false;    // data comes from a running emulator
     bool             mbPaused = false;        // live emulator held paused (frame control)
+    bool             mbAutoConnectLive = false; // poll for a Yabause until one loads
+    std::string      mLiveEndpoint;           // endpoint for auto-connect (empty = default)
+    float            mLiveRetrySeconds = 0.0f; // time since the last connect attempt
     int              mSelectedCommand = -1;   // primary selection (detail panels)
     std::vector<int> mSelection;              // all selected command indices
     bool             mbLayoutBuilt = false;   // default dock layout applied once
