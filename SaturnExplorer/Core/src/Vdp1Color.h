@@ -81,11 +81,14 @@ inline Rgba DecodeTexel(const std::vector<uint8_t>& vram, const std::vector<uint
         const uint8_t p = (x & 1) ? (byte & 0x0F) : (byte >> 4);
         if (p == 0 && !spd) return { 0, 0, 0, 0 };
         const uint16_t entry = ReadBE16(vram, clutAddr + p * 2);
-        if (entry & 0x8000)   // color-bank code -> CRAM
+        // Saturn color word: MSB (bit 15) set = a direct RGB555 color; MSB clear
+        // = a CRAM color-bank index (VDP1 manual §5.x). Games often fill a CLUT
+        // with direct RGB colors (all MSB set), so this must not be inverted.
+        if (entry & 0x8000)
         {
-            return CramColor(cram, cramMode, entry & 0x7FF);
+            return Rgb555ToRgba(entry);   // direct RGB555
         }
-        return Rgb555ToRgba(entry);   // RGB555 literal
+        return CramColor(cram, cramMode, entry);   // CRAM color-bank index
     }
     case SE_COLOR_BANK_64:
     case SE_COLOR_BANK_128:
