@@ -129,6 +129,17 @@ void App::Shutdown()
 
 void App::CloseData()
 {
+#ifdef SE_ENABLE_LIVE
+    if (mScrubContext)
+    {
+        se_destroy(mScrubContext);
+        mScrubContext = nullptr;
+    }
+    mbScrubbing = false;
+    mScrubIndex = -1;
+    mScrubShownIndex = -1;
+    mRecorder.Clear();
+#endif
     if (mContext)
     {
         se_destroy(mContext);  // also closes the data source
@@ -368,15 +379,42 @@ void App::BuildUI(IPlatform& platform)
         se_begin_frame(mContext);
     }
 
+#ifdef SE_ENABLE_LIVE
+    // Record each fresh live frame into the rolling ring buffer (dedups repeat
+    // frame numbers, so a held-paused emulator is captured once). Skipped while
+    // scrubbing history so replay never perturbs the buffer.
+    if (mbLiveSource && mContext && !mbScrubbing)
+    {
+        mRecorder.Capture(mContext, se_frame_number(mContext));
+    }
+#endif
+
+    // Top toolbar + bottom bars (status + timeline) reserve space from the
+    // viewport; the dockspace fills what's left. They always operate on the live
+    // context, so draw them before any scrub swap below.
+    DrawToolbar(platform);
+    DrawStatusBar();
+    DrawTimeline();
+
+    // If the timeline selected a past frame, point the data panels at a context
+    // rebuilt over that recorded frame for the rest of this draw; restore the live
+    // context at the end of BuildUI. Frame control / capture above stay on live.
+    se_context* liveContext = mContext;
+#ifdef SE_ENABLE_LIVE
+    if (mbScrubbing && RefreshScrubContext())
+    {
+        mContext = mScrubContext;
+    }
+    else
+    {
+        mbScrubbing = false;
+    }
+#endif
+
     if (mbHasData)
     {
         RenderFrameToTexture(platform);
     }
-
-    // Top toolbar + bottom status bar reserve space from the viewport; the
-    // dockspace fills what's left.
-    DrawToolbar(platform);
-    DrawStatusBar();
 
     const ImGuiID dockId = ImGui::DockSpaceOverViewport(
         0, ImGui::GetMainViewport(), ImGuiDockNodeFlags_PassthruCentralNode);
@@ -419,6 +457,9 @@ void App::BuildUI(IPlatform& platform)
     DrawPlaceholder("Texture Preview", "Preview of the selected sprite's texture — see the Texture Viewer panel.");
     DrawPlaceholder("Palette (CLUT)", "Palette of the selected sprite — see the Palette Viewer panel.");
     DrawPlaceholder("Memory History", "Load chain (File → CD → DMA → Write) — arrives in M7.");
+
+    // Restore the live context if the panels above were drawn from a recorded frame.
+    mContext = liveContext;
 }
 
 // Programmatic default dock layout matching the concept: a narrow left column,
@@ -561,12 +602,8 @@ void App::DrawToolbar(IPlatform& platform)
             mbPaused = true;
         }
         ImGui::EndDisabled();
-        // Timeline scrubbing (rewind through captured frames) — future work.
-        ImGui::SameLine();
-        ImGui::BeginDisabled(true);
-        ImGui::Button("|<"); ImGui::SameLine(); ImGui::Button("<"); ImGui::SameLine();
-        ImGui::Button(">"); ImGui::SameLine(); ImGui::Button(">|"); ImGui::SameLine();
-        ImGui::EndDisabled();
+        // Timeline scrubbing lives in the bottom bar (DrawTimeline), shown while
+        // paused so the user can drag back through the recorded ring buffer.
 
         // Not-yet-implemented tools — visible but disabled.
         ImGui::SameLine();
@@ -639,6 +676,119 @@ void App::DrawStatusBar()
         }
     }
     ImGui::End();
+}
+
+// Bottom timeline: while the live emulator is paused, show a horizontal scrubber
+// spanning the window so the user can drag back through the recorded ring buffer
+// and inspect any captured frame. Setting mbScrubbing / mScrubIndex here drives the
+// scrub-context swap in BuildUI. Native (SE_ENABLE_LIVE) only.
+void App::DrawTimeline()
+{
+#ifdef SE_ENABLE_LIVE
+    // Only meaningful for a paused live source that has captured frames.
+    if (!mbLiveSource || !mbPaused || mRecorder.Count() == 0)
+    {
+        mbScrubbing = false;      // resume the live view
+        mScrubShownIndex = -1;    // force a rebuild next time we scrub
+        return;
+    }
+
+    const int n = static_cast<int>(mRecorder.Count());
+    ImGuiViewport* vp = ImGui::GetMainViewport();
+    const float height = ImGui::GetFrameHeightWithSpacing() + 6.0f;
+    const ImGuiWindowFlags flags = ImGuiWindowFlags_NoScrollbar |
+                                   ImGuiWindowFlags_NoSavedSettings;
+    if (ImGui::BeginViewportSideBar("##Timeline", vp, ImGuiDir_Down, height, flags))
+    {
+        // First frame paused: latch onto the newest captured frame.
+        if (!mbScrubbing || mScrubIndex < 0)
+        {
+            mScrubIndex = n - 1;
+        }
+        if (mScrubIndex >= n)
+        {
+            mScrubIndex = n - 1;
+        }
+        mbScrubbing = true;
+
+        if (ImGui::Button("|<"))                        mScrubIndex = 0;
+        ImGui::SameLine();
+        if (ImGui::Button("<") && mScrubIndex > 0)      --mScrubIndex;
+        ImGui::SameLine();
+        if (ImGui::Button(">") && mScrubIndex < n - 1)  ++mScrubIndex;
+        ImGui::SameLine();
+        if (ImGui::Button(">|"))                        mScrubIndex = n - 1;
+
+        // Right-side readout: selected frame + buffer footprint / span.
+        char tail[96];
+        const double mb = static_cast<double>(mRecorder.BytesUsed()) / (1024.0 * 1024.0);
+        std::snprintf(tail, sizeof(tail), "frame #%llu   %d/%d   %.1f MB / %.1fs",
+                      static_cast<unsigned long long>(mRecorder.FrameNumber((size_t)mScrubIndex)),
+                      mScrubIndex + 1, n, mb, mRecorder.Seconds());
+        const float tailW = ImGui::CalcTextSize(tail).x;
+
+        // Slider fills the space between the buttons and the readout.
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - tailW - 16.0f);
+        int idx = mScrubIndex;
+        if (ImGui::SliderInt("##scrub", &idx, 0, n - 1, ""))
+        {
+            mScrubIndex = idx;
+        }
+        ImGui::SameLine();
+        ImGui::TextUnformatted(tail);
+    }
+    ImGui::End();
+#endif
+}
+
+bool App::RefreshScrubContext()
+{
+#ifdef SE_ENABLE_LIVE
+    const int n = static_cast<int>(mRecorder.Count());
+    if (n == 0)
+    {
+        return false;
+    }
+    if (mScrubIndex < 0)  mScrubIndex = 0;
+    if (mScrubIndex >= n) mScrubIndex = n - 1;
+
+    // Build the scrub context lazily. Once created, its copied data source keeps the
+    // recorder's callbacks + user pointer, so re-selecting a frame (which decompresses
+    // into the recorder's scratch) plus se_begin_frame re-renders that frame exactly.
+    if (!mScrubContext)
+    {
+        se_data_source ds;
+        if (!mRecorder.Select(static_cast<size_t>(mScrubIndex), &ds))
+        {
+            return false;
+        }
+        se_config cfg;
+        cfg.abi_version = SE_ABI_VERSION;
+        cfg.reserved = 0;
+        mScrubContext = se_create(&ds, &cfg);
+        if (!mScrubContext)
+        {
+            return false;
+        }
+        se_begin_frame(mScrubContext);
+        mScrubShownIndex = mScrubIndex;
+        return true;
+    }
+    if (mScrubIndex != mScrubShownIndex)
+    {
+        se_data_source ds;
+        if (!mRecorder.Select(static_cast<size_t>(mScrubIndex), &ds))
+        {
+            return false;
+        }
+        se_begin_frame(mScrubContext);   // re-reads the recorder's refreshed scratch
+        mScrubShownIndex = mScrubIndex;
+    }
+    return true;
+#else
+    return false;
+#endif
 }
 
 void App::DrawLayerControls()
