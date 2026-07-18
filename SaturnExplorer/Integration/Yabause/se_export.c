@@ -11,6 +11,7 @@
 #include "se_export.h"
 #include "SeLiveProtocol.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -359,6 +360,10 @@ int SeExportInit(void)
      * local socket, which is the primary path for native clients. */
     sTcpThreadStarted = (pthread_create(&sTcpThread, NULL, SeTcpServerThread, NULL) == 0);
 #endif
+    /* Surface the protocol version so a client/emulator mismatch is diagnosable
+     * (Saturn Explorer must be built for the same SE_LIVE_VERSION to capture). */
+    fprintf(stderr, "[SaturnExplorer] live tap ready: protocol v%u\n",
+            (unsigned)SE_LIVE_VERSION);
     return 0;
 }
 

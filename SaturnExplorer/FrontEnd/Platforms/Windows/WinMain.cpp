@@ -4,16 +4,23 @@
 // the portable App class.
 #include <windows.h>
 
+#include <cstdio>    // snprintf
 #include <cstdlib>   // __argc / __argv
 #include <cstring>
 
 #include "WindowsPlatform.h"
 #include "App.h"
+#include "SeLiveProtocol.h"   // SE_LIVE_VERSION (live-tap protocol version)
 
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, LPWSTR, int)
 {
     sfe::WindowsPlatform platform;
     sfe::PlatformConfig config;
+    // Show the live-tap protocol version in the title so a client/emulator
+    // mismatch (which breaks live capture) is obvious at a glance.
+    char title[64];
+    std::snprintf(title, sizeof(title), "Saturn Explorer  \xE2\x80\x94  live proto v%u", SE_LIVE_VERSION);
+    config.mTitle = title;
     if (!platform.Initialize(config))
     {
         return 1;
