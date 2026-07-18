@@ -107,6 +107,7 @@ set(SE_IMGUI_CORE
 if(WIN32)
     add_executable(SaturnExplorerFrontEnd WIN32
         FrontEnd/src/App.cpp
+        FrontEnd/src/Theme.cpp
         FrontEnd/src/FrameRecorder.cpp
         FrontEnd/src/FrameLz.cpp
         FrontEnd/Platforms/Windows/WindowsPlatform.cpp
@@ -143,6 +144,7 @@ elseif(EMSCRIPTEN)
     # Web build: `emcmake cmake -B build-web && cmake --build build-web`.
     add_executable(SaturnExplorerFrontEnd
         FrontEnd/src/App.cpp
+        FrontEnd/src/Theme.cpp
         FrontEnd/Platforms/Web/WebPlatform.cpp
         FrontEnd/Platforms/Web/WebMain.cpp
         ${SE_IMGUI_CORE}
@@ -181,6 +183,7 @@ else()
     if(SDL2_FOUND AND OpenGL_OpenGL_FOUND)
         add_executable(SaturnExplorerFrontEnd
             FrontEnd/src/App.cpp
+            FrontEnd/src/Theme.cpp
             FrontEnd/src/FrameRecorder.cpp
             FrontEnd/src/FrameLz.cpp
             FrontEnd/Platforms/Web/WebPlatform.cpp

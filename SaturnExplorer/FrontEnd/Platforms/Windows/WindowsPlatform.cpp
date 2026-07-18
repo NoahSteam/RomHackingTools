@@ -8,6 +8,8 @@
 #include "backends/imgui_impl_win32.h"
 #include "backends/imgui_impl_dx11.h"
 
+#include "Theme.h"
+
 // Forward declared in the Win32 backend; handles ImGui's own input messages.
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg,
                                                              WPARAM wParam, LPARAM lParam);
@@ -59,7 +61,7 @@ bool WindowsPlatform::Initialize(const PlatformConfig& config)
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
     io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
 
-    ImGui::StyleColorsDark();
+    sfe::ApplyTheme(ImGui::GetStyle());   // Saturn Explorer theme (shared, portable)
 
     // Scale the whole UI to the window's DPI so it is both crisp and the right
     // physical size. ImGui 1.92's font system keeps the scalable default font

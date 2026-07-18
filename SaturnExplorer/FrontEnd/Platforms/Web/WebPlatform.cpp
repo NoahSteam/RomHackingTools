@@ -8,6 +8,8 @@
 #include "backends/imgui_impl_sdl2.h"
 #include "backends/imgui_impl_opengl3.h"
 
+#include "Theme.h"
+
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 #include <GLES3/gl3.h>
@@ -69,7 +71,7 @@ bool WebPlatform::Initialize(const PlatformConfig& config)
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
-    ImGui::StyleColorsDark();
+    sfe::ApplyTheme(ImGui::GetStyle());   // Saturn Explorer theme (shared, portable)
 
     // Match the Windows backend's DPI handling: scale sizes + the (1.92 scalable)
     // default font by the display's device-pixel ratio.
