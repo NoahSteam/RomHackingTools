@@ -56,6 +56,96 @@ bool CheckboxU8(const char* label, uint8_t* value)
     return changed;
 }
 
+// --- Small hand-drawn vector icons (no icon font). Each draws centered at 'c'
+// with half-extent ~'r' onto 'dl'. Colors come from the theme so they track it. ---
+void IconEye(ImDrawList* dl, ImVec2 c, float r, ImU32 col, bool visible)
+{
+    dl->AddEllipse(c, ImVec2(r, r * 0.62f), col, 0.0f, 0, 1.6f);
+    dl->AddCircleFilled(c, r * 0.30f, col);
+    if (!visible)   // struck through = hidden
+    {
+        dl->AddLine(ImVec2(c.x - r, c.y + r * 0.8f), ImVec2(c.x + r, c.y - r * 0.8f), col, 1.8f);
+    }
+}
+void IconPlay(ImDrawList* dl, ImVec2 c, float r, ImU32 col)
+{
+    dl->AddTriangleFilled(ImVec2(c.x - r * 0.6f, c.y - r), ImVec2(c.x - r * 0.6f, c.y + r),
+                          ImVec2(c.x + r, c.y), col);
+}
+void IconPause(ImDrawList* dl, ImVec2 c, float r, ImU32 col)
+{
+    const float w = r * 0.38f;
+    dl->AddRectFilled(ImVec2(c.x - r * 0.55f, c.y - r), ImVec2(c.x - r * 0.55f + w, c.y + r), col, 1.0f);
+    dl->AddRectFilled(ImVec2(c.x + r * 0.17f, c.y - r), ImVec2(c.x + r * 0.17f + w, c.y + r), col, 1.0f);
+}
+void IconStep(ImDrawList* dl, ImVec2 c, float r, ImU32 col)   // play + bar (step forward)
+{
+    dl->AddTriangleFilled(ImVec2(c.x - r, c.y - r), ImVec2(c.x - r, c.y + r),
+                          ImVec2(c.x + r * 0.35f, c.y), col);
+    dl->AddRectFilled(ImVec2(c.x + r * 0.55f, c.y - r), ImVec2(c.x + r, c.y + r), col, 1.0f);
+}
+
+// A visibility toggle drawn as an eye icon + label; toggles *value. Returns true
+// when changed. Accent when on, muted when off (matches the design's layer list).
+bool EyeToggle(const char* label, uint8_t* value)
+{
+    ImGui::PushID(label);
+    const float h = ImGui::GetFrameHeight();
+    const ImVec2 p = ImGui::GetCursorScreenPos();
+    const bool changed = ImGui::InvisibleButton("##eye", ImVec2(h, h));
+    const bool on = *value != 0;
+    const bool hot = ImGui::IsItemHovered();
+    ImU32 col = on ? ui::Accent()
+                   : (hot ? IM_COL32(190, 196, 208, 255) : IM_COL32(105, 112, 124, 255));
+    IconEye(ImGui::GetWindowDrawList(), ImVec2(p.x + h * 0.5f, p.y + h * 0.5f), h * 0.28f, col, on);
+    ImGui::SameLine();
+    ImGui::AlignTextToFramePadding();
+    if (on) ImGui::TextUnformatted(label);
+    else    ImGui::TextDisabled("%s", label);
+    if (changed) *value = on ? 0 : 1;
+    ImGui::PopID();
+    return changed;
+}
+
+void IconTri(ImDrawList* dl, ImVec2 c, float r, ImU32 col, bool left)
+{
+    const float s = left ? -1.0f : 1.0f;
+    dl->AddTriangleFilled(ImVec2(c.x - s * r, c.y - r), ImVec2(c.x - s * r, c.y + r),
+                          ImVec2(c.x + s * r, c.y), col);
+}
+enum class Ico { Play, Pause, Step, First, Prev, Next, Last };
+
+// Icon-only button (fixed square-ish size). 'id' must be unique (kept invisible
+// with "##"); the glyph is drawn over the button rect. Returns true when pressed.
+bool IconButton(const char* id, Ico ico, const char* tip, bool disabled = false)
+{
+    const float h = ImGui::GetFrameHeight();
+    if (disabled) ImGui::BeginDisabled();
+    const bool pressed = ImGui::Button(id, ImVec2(h * 1.5f, h));
+    const ImVec2 mn = ImGui::GetItemRectMin(), mx = ImGui::GetItemRectMax();
+    const ImVec2 c((mn.x + mx.x) * 0.5f, (mn.y + mx.y) * 0.5f);
+    const float r = h * 0.22f;
+    const ImU32 col = ImGui::GetColorU32(ImGuiCol_Text);
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    switch (ico)
+    {
+    case Ico::Play:  IconPlay(dl, c, r, col); break;
+    case Ico::Pause: IconPause(dl, c, r, col); break;
+    case Ico::Step:  IconStep(dl, c, r, col); break;
+    case Ico::Prev:  IconTri(dl, c, r, col, true); break;
+    case Ico::Next:  IconTri(dl, c, r, col, false); break;
+    case Ico::First:
+        dl->AddRectFilled(ImVec2(c.x - r * 1.3f, c.y - r), ImVec2(c.x - r * 0.95f, c.y + r), col, 1.0f);
+        IconTri(dl, ImVec2(c.x + r * 0.15f, c.y), r, col, true); break;
+    case Ico::Last:
+        IconTri(dl, ImVec2(c.x - r * 0.15f, c.y), r, col, false);
+        dl->AddRectFilled(ImVec2(c.x + r * 0.95f, c.y - r), ImVec2(c.x + r * 1.3f, c.y + r), col, 1.0f); break;
+    }
+    if (disabled) ImGui::EndDisabled();
+    if (tip && !disabled) ImGui::SetItemTooltip("%s", tip);
+    return pressed;
+}
+
 const char* CommandTypeName(se_command_type type)
 {
     switch (type)
@@ -728,10 +818,9 @@ void App::DrawToolbar(IPlatform& platform)
         // (a running, patched Yabause); otherwise disabled.
         const bool canStep = mbHasData && se_supports_frame_control(mContext);
         ImGui::SameLine();
-        ImGui::BeginDisabled(!canStep);
         if (mbPaused)
         {
-            if (ImGui::Button("Resume", ImVec2(72.0f, 0.0f)))
+            if (IconButton("##resume", Ico::Play, "Resume", !canStep))
             {
                 se_frame_resume(mContext);
                 mbPaused = false;
@@ -739,19 +828,18 @@ void App::DrawToolbar(IPlatform& platform)
         }
         else
         {
-            if (ImGui::Button("Pause", ImVec2(72.0f, 0.0f)))
+            if (IconButton("##pause", Ico::Pause, "Pause", !canStep))
             {
                 se_frame_pause(mContext);
                 mbPaused = true;
             }
         }
         ImGui::SameLine();
-        if (ImGui::Button("Step Frame"))
+        if (IconButton("##step", Ico::Step, "Step one frame", !canStep))
         {
             se_frame_step(mContext, 1);
             mbPaused = true;
         }
-        ImGui::EndDisabled();
         // Timeline scrubbing lives in the bottom bar (DrawTimeline), shown while
         // paused so the user can drag back through the recorded ring buffer.
 
@@ -910,19 +998,15 @@ void App::DrawTimeline()
         }
 
         // Right: step backward / forward (with jump-to-ends), matching the concept
-        // transport bar. Terse glyphs, tooltips spell them out.
+        // transport bar — icon buttons with tooltips.
         ImGui::SameLine();
-        if (ImGui::Button("|<")) mScrubIndex = 0;
-        ImGui::SetItemTooltip("First frame");
+        if (IconButton("##first", Ico::First, "First frame")) mScrubIndex = 0;
         ImGui::SameLine();
-        if (ImGui::Button("<") && mScrubIndex > 0) --mScrubIndex;
-        ImGui::SetItemTooltip("Step back one frame");
+        if (IconButton("##prev", Ico::Prev, "Step back one frame") && mScrubIndex > 0) --mScrubIndex;
         ImGui::SameLine();
-        if (ImGui::Button(">") && mScrubIndex < n - 1) ++mScrubIndex;
-        ImGui::SetItemTooltip("Step forward one frame");
+        if (IconButton("##next", Ico::Next, "Step forward one frame") && mScrubIndex < n - 1) ++mScrubIndex;
         ImGui::SameLine();
-        if (ImGui::Button(">|")) mScrubIndex = n - 1;
-        ImGui::SetItemTooltip("Latest frame");
+        if (IconButton("##last", Ico::Last, "Latest frame")) mScrubIndex = n - 1;
     }
     ImGui::End();
 #endif
@@ -977,20 +1061,20 @@ void App::DrawLayerControls()
     if (ImGui::Begin("Layer Controls"))
     {
         ImGui::SeparatorText("VDP1 (Sprites)");
-        CheckboxU8("Sprites", &mRenderOpts.show_vdp1_sprites);
-        CheckboxU8("Wireframe", &mRenderOpts.show_wireframe);
-        CheckboxU8("Bounding Boxes", &mRenderOpts.show_bounding_boxes);
-        CheckboxU8("Object Numbers", &mRenderOpts.show_object_numbers);
+        EyeToggle("Sprites", &mRenderOpts.show_vdp1_sprites);
+        EyeToggle("Wireframe", &mRenderOpts.show_wireframe);
+        EyeToggle("Bounding Boxes", &mRenderOpts.show_bounding_boxes);
+        EyeToggle("Object Numbers", &mRenderOpts.show_object_numbers);
 
         ImGui::SeparatorText("VDP2 (Background)");
-        CheckboxU8("NBG0 (Scroll A)", &mRenderOpts.show_layer[SE_LAYER_NBG0]);
-        CheckboxU8("NBG1 (Scroll B)", &mRenderOpts.show_layer[SE_LAYER_NBG1]);
-        CheckboxU8("NBG2 (Scroll C)", &mRenderOpts.show_layer[SE_LAYER_NBG2]);
-        CheckboxU8("NBG3 (Scroll D)", &mRenderOpts.show_layer[SE_LAYER_NBG3]);
-        CheckboxU8("RBG0 (Rotation)", &mRenderOpts.show_layer[SE_LAYER_RBG0]);
-        CheckboxU8("Window", &mRenderOpts.show_window);
-        CheckboxU8("Color Calculation", &mRenderOpts.show_color_calculation);
-        CheckboxU8("Shadow / Highlight", &mRenderOpts.show_shadow_highlight);
+        EyeToggle("NBG0 (Scroll A)", &mRenderOpts.show_layer[SE_LAYER_NBG0]);
+        EyeToggle("NBG1 (Scroll B)", &mRenderOpts.show_layer[SE_LAYER_NBG1]);
+        EyeToggle("NBG2 (Scroll C)", &mRenderOpts.show_layer[SE_LAYER_NBG2]);
+        EyeToggle("NBG3 (Scroll D)", &mRenderOpts.show_layer[SE_LAYER_NBG3]);
+        EyeToggle("RBG0 (Rotation)", &mRenderOpts.show_layer[SE_LAYER_RBG0]);
+        EyeToggle("Window", &mRenderOpts.show_window);
+        EyeToggle("Color Calculation", &mRenderOpts.show_color_calculation);
+        EyeToggle("Shadow / Highlight", &mRenderOpts.show_shadow_highlight);
     }
     ImGui::End();
 }
