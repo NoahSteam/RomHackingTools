@@ -16,6 +16,9 @@ CTestTestfile.cmake
 x64/
 Win32/
 Libs/
+# ...but the debugger backend source lives here and must be tracked.
+!FrontEnd/src/Debug/
+!FrontEnd/src/Debug/**
 
 # Stray render / test output (harnesses write PNGs; none are tracked here)
 *.png

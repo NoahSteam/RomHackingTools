@@ -108,6 +108,9 @@ if(WIN32)
     add_executable(SaturnExplorerFrontEnd WIN32
         FrontEnd/src/App.cpp
         FrontEnd/src/Theme.cpp
+        FrontEnd/src/WatchPanel.cpp
+        FrontEnd/src/Debug/WatchList.cpp
+        FrontEnd/src/Debug/MemoryBackend.cpp
         FrontEnd/src/FrameRecorder.cpp
         FrontEnd/src/FrameLz.cpp
         FrontEnd/Platforms/Windows/WindowsPlatform.cpp
@@ -145,6 +148,9 @@ elseif(EMSCRIPTEN)
     add_executable(SaturnExplorerFrontEnd
         FrontEnd/src/App.cpp
         FrontEnd/src/Theme.cpp
+        FrontEnd/src/WatchPanel.cpp
+        FrontEnd/src/Debug/WatchList.cpp
+        FrontEnd/src/Debug/MemoryBackend.cpp
         FrontEnd/Platforms/Web/WebPlatform.cpp
         FrontEnd/Platforms/Web/WebMain.cpp
         ${SE_IMGUI_CORE}
@@ -184,6 +190,9 @@ else()
         add_executable(SaturnExplorerFrontEnd
             FrontEnd/src/App.cpp
             FrontEnd/src/Theme.cpp
+            FrontEnd/src/WatchPanel.cpp
+            FrontEnd/src/Debug/WatchList.cpp
+            FrontEnd/src/Debug/MemoryBackend.cpp
             FrontEnd/src/FrameRecorder.cpp
             FrontEnd/src/FrameLz.cpp
             FrontEnd/Platforms/Web/WebPlatform.cpp

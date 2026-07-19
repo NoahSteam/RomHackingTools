@@ -11,6 +11,9 @@
 #include "saturnexplorer/SaturnExplorer.h"
 
 #include "Platform/IPlatform.h"
+#include "WatchPanel.h"          // Watch Window (debugger; emulator-agnostic)
+#include "Debug/MemoryBackend.h"
+#include "Debug/WatchList.h"
 
 #ifdef SE_ENABLE_LIVE
 #include "FrameRecorder.h"   // rolling capture of live frames (native only)
@@ -60,6 +63,8 @@ private:
     void DrawStatusBar();
     void DrawLayerControls();
     void DrawVdpOutput(IPlatform& platform);
+    void DrawWatch(IPlatform& platform);   // debugger Watch Window
+    void DrawAssembly();                    // SH-2 Assembly (placeholder in this phase)
     void DrawVdp1Framebuffer(IPlatform& platform);
     void DrawWorldView(IPlatform& platform);
     void DrawCommandList();
@@ -91,6 +96,12 @@ private:
     se_data_source mDataSource {};
     se_context*    mContext = nullptr;
     bool           mbHasData = false;
+
+    // Debugger panels (emulator-agnostic: they read through the backend interface,
+    // which is served here from the current se_context — live snapshot or scrub).
+    ContextBackend           mMemBackend{&mContext};
+    SimpleExpressionResolver mExprResolver;
+    WatchPanel               mWatchPanel;
 
     se_render_opts   mRenderOpts {};
     bool             mbLiveSource = false;    // data comes from a running emulator
