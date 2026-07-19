@@ -1,6 +1,7 @@
 #include "Theme.h"
 
 #include "../third_party/fonts/LiberationSans.h"
+#include "../third_party/fonts/IpaGothicJP.h"
 
 namespace sfe
 {
@@ -119,6 +120,17 @@ void LoadFonts(ImGuiIO& io)
     // One embedded source at the body size; DPI comes from io.FontScaleMain.
     ui::gBody = io.Fonts->AddFontFromMemoryCompressedBase85TTF(
         LiberationSansRegular_compressed_data_base85, 15.0f, &cfg);
+
+    // Merge Japanese glyphs (IPAGothic, subset to ImGui's Japanese ranges) into the
+    // body font so JP text renders — the Hex Editor's Shift-JIS pane and any game
+    // strings. Embedded + compressed, so the web single-file build needs no fetch.
+    ImFontConfig jp;
+    jp.MergeMode = true;
+    jp.OversampleH = 2;
+    jp.OversampleV = 2;
+    io.Fonts->AddFontFromMemoryCompressedBase85TTF(
+        IpaGothicJP_compressed_data_base85, 16.0f, &jp, io.Fonts->GetGlyphRangesJapanese());
+
     io.FontDefault = ui::gBody;
 }
 

@@ -6,6 +6,8 @@
 
 #include "imgui.h"
 
+#include "Debug/ShiftJis.h"
+
 namespace sfe
 {
 
@@ -21,10 +23,6 @@ const ImU32 kColSelBg   = IM_COL32(70, 110, 90, 150);     // selection tint
 
 int SelLo(int a, int b) { return a < b ? a : b; }
 int SelHi(int a, int b) { return a > b ? a : b; }
-
-// True if 'b' can start a Shift-JIS double-byte sequence.
-bool SjisLead(uint8_t b) { return (b >= 0x81 && b <= 0x9F) || (b >= 0xE0 && b <= 0xEF); }
-bool SjisTrail(uint8_t b) { return (b >= 0x40 && b <= 0x7E) || (b >= 0x80 && b <= 0xFC); }
 }  // namespace
 
 void HexEditorPanel::GoTo(uint32_t address)
@@ -204,22 +202,41 @@ void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
             }
         }
 
-        // Text pane.
+        // Text pane. ASCII renders one glyph per byte; Shift-JIS decodes double-
+        // byte kanji/kana (one wide glyph over two bytes) and half-width katakana
+        // (the merged IPAGothic font supplies the glyphs).
         ImGui::SameLine(0.0f, ch);
-        for (int c = 0; c < 16; ++c)
+        int c = 0;
+        while (c < 16)
         {
             const int idx = r * 16 + c;
             const uint8_t v = mBytes[(size_t)idx];
-            // Shift-JIS: mark a double-byte cluster (glyphs need a JP font; the
-            // marker at least reveals where JP text lives).
-            bool jp = false;
-            if (mEncoding == 1 && c < 15 && SjisLead(v) && SjisTrail(mBytes[(size_t)idx + 1]))
-                jp = true;
-            const char disp = (v >= 0x20 && v <= 0x7E) ? (char)v : '.';
             ImGui::SameLine(0.0f, 0.0f);
-            ImGui::PushStyleColor(ImGuiCol_Text, jp ? kColJp : kColText);
+            if (mEncoding == 1 && c < 15 &&
+                SjisIsLead(v) && SjisIsTrail(mBytes[(size_t)idx + 1]))
+            {
+                const uint32_t cp = SjisDecode(v, mBytes[(size_t)idx + 1]);
+                char u[5]; if (cp) Utf8Encode(cp, u); else { u[0] = u[1] = '.'; u[2] = '\0'; }
+                ImGui::PushStyleColor(ImGuiCol_Text, kColJp);
+                ImGui::TextUnformatted(u);
+                ImGui::PopStyleColor();
+                c += 2;
+                continue;
+            }
+            if (mEncoding == 1 && SjisIsHalfKana(v))
+            {
+                char u[5]; Utf8Encode(SjisHalfKana(v), u);
+                ImGui::PushStyleColor(ImGuiCol_Text, kColJp);
+                ImGui::TextUnformatted(u);
+                ImGui::PopStyleColor();
+                c += 1;
+                continue;
+            }
+            const char disp = (v >= 0x20 && v <= 0x7E) ? (char)v : '.';
+            ImGui::PushStyleColor(ImGuiCol_Text, kColText);
             ImGui::Text("%c", disp);
             ImGui::PopStyleColor();
+            c += 1;
         }
     }
     if (ImGui::IsMouseReleased(0)) mSelecting = false;
