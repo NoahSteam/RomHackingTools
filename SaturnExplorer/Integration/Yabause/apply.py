@@ -98,7 +98,10 @@ EDITS = [
      r'(VideoInterface_struct VIDSoft\s*=\s*\{)',
      "before_group1",
      "/* Displayed VDP1 frame buffer (front bank) for the Saturn Explorer live tap.\n"
-     "   vidsoft's real pixels live here, not in the global Vdp1FrameBuffer. */\n"
+     "   vidsoft's real pixels live here, not in the global Vdp1FrameBuffer.\n"
+     "   Forward-declare the file-static buffer so this accessor compiles no matter\n"
+     "   where the block lands (it's defined further down in vidsoft.c). */\n"
+     "extern u8 *vdp1frontframebuffer;\n"
      "u8 *VIDSoftGetVdp1FrameBuffer(void) { return vdp1frontframebuffer; }\n",
      "VIDSoftGetVdp1FrameBuffer"),
 ]
