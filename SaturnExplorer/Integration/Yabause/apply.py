@@ -54,10 +54,36 @@ EDITS = [
      '#include "se_export.h"\n',
      '#include "se_export.h"'),
 
+    # Breakpoint bridge: file-scope helpers that install execution breakpoints in
+    # the SH-2 cores and report hits back to the export module. Placed before
+    # YabauseInit so YabauseInit can register them (see the SeExportInit hook).
+    ("yabause.c",
+     r'(\n)(int YabauseInit\s*\(yabauseinit_struct)',
+     "before_group2",
+     "static void SeExpBpHit(void *ctx, u32 addr, void *ud)\n"
+     "{\n"
+     "   (void)ud;\n"
+     "   SeExportNotifyStop(ctx == (void *)SSH2 ? 1 : 0, (unsigned int)addr);\n"
+     "}\n"
+     "static void SeExpAddExecBp(int cpu, unsigned int addr)\n"
+     "{\n"
+     "   SH2AddCodeBreakpoint(cpu ? SSH2 : MSH2, (u32)addr);\n"
+     "}\n"
+     "static void SeExpClearBps(void)\n"
+     "{\n"
+     "   SH2ClearCodeBreakpoints(MSH2);\n"
+     "   SH2ClearCodeBreakpoints(SSH2);\n"
+     "}\n",
+     "SeExpBpHit"),
+
     ("yabause.c",
      r'(scsp_set_use_new\(init->use_new_scsp\);\s*\n)(\s*return 0;)',
      "between",
-     "   SeExportInit();   /* start the live-tap server */\n",
+     "   SeExportInit();   /* start the live-tap server */\n"
+     "   /* Install SH-2 breakpoints from Saturn Explorer + report hits. */\n"
+     "   SH2SetBreakpointCallBack(MSH2, SeExpBpHit, NULL);\n"
+     "   SH2SetBreakpointCallBack(SSH2, SeExpBpHit, NULL);\n"
+     "   SeExportSetBreakpointHooks(SeExpAddExecBp, SeExpClearBps);\n",
      "SeExportInit("),
 
     ("yabause.c",
@@ -79,7 +105,7 @@ EDITS = [
     ("vdp2.c",
      r'(#include "vdp2\.h"\n)',
      "after_group1",
-     '#include "se_export.h"\n#include "memory.h"\n',
+     '#include "se_export.h"\n#include "memory.h"\n#include "sh2core.h"\n',
      '#include "se_export.h"'),
 
     ("vdp2.c",
@@ -87,10 +113,15 @@ EDITS = [
      "after_group1",
      "   /* Pass VIDSoft's displayed VDP1 frame buffer (front bank). The global\n"
      "    * Vdp1FrameBuffer is only a fallback and stays blank during play; real\n"
-     "    * pixels live in the active video core (see VIDSoftGetVdp1FrameBuffer). */\n"
+     "    * pixels live in the active video core (see VIDSoftGetVdp1FrameBuffer).\n"
+     "    * Also snapshot both SH-2 register files for the disassembler. */\n"
      "   extern u8 *VIDSoftGetVdp1FrameBuffer(void);\n"
+     "   sh2regs_struct se_msh2, se_ssh2;\n"
+     "   SH2GetRegisters(MSH2, &se_msh2);\n"
+     "   SH2GetRegisters(SSH2, &se_ssh2);\n"
      "   SeExportSnapshot(Vdp1Ram, Vdp2Ram, Vdp2ColorRam, Vdp2Regs,\n"
-     "                    Vdp1Regs, LowWram, HighWram, VIDSoftGetVdp1FrameBuffer());\n",
+     "                    Vdp1Regs, LowWram, HighWram, VIDSoftGetVdp1FrameBuffer(),\n"
+     "                    &se_msh2, &se_ssh2);\n",
      "SeExportSnapshot("),
 
     # --- vidsoft.c: expose the displayed VDP1 frame buffer (it's file-static). ---
