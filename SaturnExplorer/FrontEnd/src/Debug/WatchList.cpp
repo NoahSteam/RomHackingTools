@@ -212,7 +212,8 @@ WatchValue FormatWatchValue(WatchType type, const MemoryReadResult& mem)
     case WatchType::RGB555:
     {
         const uint16_t w = (uint16_t)(raw & 0xFFFF);
-        const int r5 = (w >> 10) & 0x1F, g5 = (w >> 5) & 0x1F, b5 = w & 0x1F;
+        uint8_t r5, g5, b5;
+        SplitRgb555(w, r5, g5, b5);
         std::snprintf(buf, sizeof(buf), "R%d G%d B%d", r5, g5, b5);
         v.text = buf; v.hasSwatch = true; DecodeRgb555(w, v.r, v.g, v.b);
         v.numeric = w; v.numericMeaningful = false;   // changed = neutral tint
