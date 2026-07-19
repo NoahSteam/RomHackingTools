@@ -121,7 +121,10 @@ little-endian argument). Every command replies with a full snapshot: VDP1 VRAM
 the VDP1 register image, low + high work RAM (1 MiB each), the VDP1 frame buffer
 (256 KiB, the drawn output), and a small control block (paused flag + frame
 counter) — the exact bytes Saturn Explorer's savestate loader already understands
-(VRAM big-endian, CRAM host-endian, VDP2 the raw struct). The pause/step verbs
+(VRAM big-endian, CRAM host-endian, VDP2 the raw struct). The VDP1 frame buffer is
+**host-endian** like CRAM: VIDSoft writes native `u16` pixels, so on a little-endian
+host the bytes are little-endian (the FB viewer decodes little-endian by default).
+The pause/step verbs
 just set the state `SeExportGateFrame()` reads. Wire format (protocol v4):
 `Drivers/Common/src/SeLiveProtocol.h`.
 
