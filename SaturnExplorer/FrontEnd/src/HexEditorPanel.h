@@ -45,6 +45,13 @@ private:
     int  mSelStart = -1;               // selection anchor (byte index in window)
     int  mSelEnd = -1;                 // selection end (inclusive)
     bool mSelecting = false;
+
+    // Inline editing: the byte index being typed over, its 2-hex-digit buffer, and
+    // a short "Modified" flash after a successful write.
+    int   mEditIdx = -1;
+    char  mEditBuf[3] = {};
+    bool  mEditFocus = false;
+    float mModifiedFlash = 0.0f;
 };
 
 }  // namespace sfe

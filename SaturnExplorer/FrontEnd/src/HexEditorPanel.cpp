@@ -101,9 +101,12 @@ void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
     ImGui::SameLine();
     ImGui::Checkbox("Highlight Changes", &mHighlightChanges);
 
-    // --- Read the window (auto-refresh, or once when frozen) ---
-    if (mAutoRefresh || !mHavePrev) { Refresh(backend); }
+    // --- Read the window (auto-refresh, or once when frozen). Don't clobber the
+    //     cell being edited by re-reading over it. ---
+    if ((mAutoRefresh || !mHavePrev) && mEditIdx < 0) { Refresh(backend); }
     for (float& a : mChangeAge) if (a > 0.0f) a = std::max(0.0f, a - dt);
+    if (mModifiedFlash > 0.0f) mModifiedFlash = std::max(0.0f, mModifiedFlash - dt);
+    const bool writable = backend.CanWrite(mBase);
 
     if (!mConnected)
     {
@@ -151,6 +154,34 @@ void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
             ImGui::SameLine(0.0f, (c == 0) ? ch : pad.x);
 
             ImVec2 cur = ImGui::GetCursorScreenPos();
+
+            if (mEditIdx == idx)
+            {
+                // Inline editor: 2 hex digits, committed on Enter / focus loss.
+                ImGui::SetNextItemWidth(byteW);
+                if (mEditFocus) { ImGui::SetKeyboardFocusHere(); mEditFocus = false; }
+                const bool enter = ImGui::InputText("##edit", mEditBuf, sizeof(mEditBuf),
+                    ImGuiInputTextFlags_CharsHexadecimal | ImGuiInputTextFlags_EnterReturnsTrue |
+                    ImGuiInputTextFlags_AutoSelectAll);
+                if (enter || ImGui::IsItemDeactivated())
+                {
+                    unsigned val = 0;
+                    if (mEditBuf[0] && std::sscanf(mEditBuf, "%x", &val) == 1)
+                    {
+                        const uint8_t byte = (uint8_t)(val & 0xFF);
+                        if (backend.WriteMemory(mBase + (uint32_t)idx, &byte, 1) == 1)
+                        {
+                            mBytes[(size_t)idx] = byte;
+                            if (idx < (int)mPrev.size()) mPrev[(size_t)idx] = byte;
+                            mChangeAge[(size_t)idx] = 1.0f;
+                            mModifiedFlash = 1.5f;
+                        }
+                    }
+                    mEditIdx = -1;
+                }
+                continue;
+            }
+
             const bool selected = idx >= selLo && idx <= selHi;
             if (selected)
                 dl->AddRectFilled(cur, ImVec2(cur.x + byteW, cur.y + ImGui::GetTextLineHeight()), kColSelBg);
@@ -163,7 +194,12 @@ void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
             ImGui::PopStyleColor();
             if (ImGui::IsItemHovered())
             {
-                if (ImGui::IsMouseClicked(0)) { mSelStart = mSelEnd = idx; mSelecting = true; }
+                if (writable && ImGui::IsMouseDoubleClicked(0))
+                {
+                    mEditIdx = idx; mEditFocus = true;
+                    std::snprintf(mEditBuf, sizeof(mEditBuf), "%02X", v);
+                }
+                else if (ImGui::IsMouseClicked(0)) { mSelStart = mSelEnd = idx; mSelecting = true; }
                 else if (mSelecting && ImGui::IsMouseDown(0)) { mSelEnd = idx; }
             }
         }
@@ -214,10 +250,19 @@ void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
             for (int i = 0; i < 4; ++i) u32 = (u32 << 8) | mBytes[(size_t)selLo + i];
             ImGui::SameLine(); ImGui::Text("| U32: %08X", u32);
         }
+        if (mModifiedFlash > 0.0f)
+        {
+            ImGui::SameLine();
+            ImGui::TextColored(ImVec4(0.92f, 0.35f, 0.30f, 1.0f), "Modified");
+        }
+    }
+    else if (writable)
+    {
+        ImGui::TextDisabled("Click to select; drag to extend; double-click a byte to edit.");
     }
     else
     {
-        ImGui::TextDisabled("Click a byte to select; drag to extend.");
+        ImGui::TextDisabled("Click a byte to select; drag to extend. (read-only source)");
     }
     (void)live;
 
