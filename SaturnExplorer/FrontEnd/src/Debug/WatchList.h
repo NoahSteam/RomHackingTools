@@ -25,8 +25,8 @@ uint32_t     WatchTypeSize(WatchType t);            // bytes read (1/2/4)
 bool         WatchTypeFromName(const char* s, WatchType& out);
 extern const WatchType kAllWatchTypes[8];
 
-// One watch. Name/expression/type/enabled persist; the rest is transient runtime
-// state (resolved address, last value, change highlight) and is not serialized.
+// One watch — the persisted fields only. The transient runtime state (resolved
+// address, last value, change highlight) lives in the panel's per-row scratch.
 struct WatchEntry
 {
     uint64_t    id = 0;              // stable, for stale-response matching
@@ -34,11 +34,6 @@ struct WatchEntry
     std::string expression = "0x06000000";
     WatchType   type = WatchType::U16;
     bool        enabled = true;
-
-    // Runtime (updated by the refresh loop / panel).
-    bool        resolved = false;
-    uint32_t    address = 0;
-    std::string resolveError;       // set when the expression is invalid
 };
 
 // Address-expression resolver seam: today "0xADDR [+|- N]"; later symbols/pointers.

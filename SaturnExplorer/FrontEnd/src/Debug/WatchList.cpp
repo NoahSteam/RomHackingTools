@@ -150,15 +150,17 @@ bool IsPlausibleSaturnAddress(uint32_t addr)
 {
     const uint32_t a = addr & 0x07FFFFFFu;
     struct R { uint32_t lo, hi; };
+    // RAM/VRAM/CRAM extents come from the shared size constants; the register and
+    // BIOS entries are deliberately broad "plausible" windows, not exact sizes.
     static const R kOk[] = {
-        { 0x00000000u, 0x0007FFFFu },  // BIOS
-        { 0x00200000u, 0x002FFFFFu },  // Low work RAM
-        { 0x05C00000u, 0x05C7FFFFu },  // VDP1 VRAM
-        { 0x05D00000u, 0x05D0FFFFu },  // VDP1 regs
-        { 0x05E00000u, 0x05E7FFFFu },  // VDP2 VRAM
-        { 0x05F00000u, 0x05F00FFFu },  // CRAM
-        { 0x05F80000u, 0x05F8FFFFu },  // VDP2 regs
-        { 0x06000000u, 0x060FFFFFu },  // High work RAM
+        { 0x00000000u, 0x0007FFFFu },                        // BIOS
+        { 0x00200000u, 0x00200000u + kWramSize - 1 },        // Low work RAM
+        { 0x05C00000u, 0x05C00000u + kVdp1VramSize - 1 },    // VDP1 VRAM
+        { 0x05D00000u, 0x05D0FFFFu },                        // VDP1 regs
+        { 0x05E00000u, 0x05E00000u + kVdp2VramSize - 1 },    // VDP2 VRAM
+        { 0x05F00000u, 0x05F00000u + kCramSize - 1 },        // CRAM
+        { 0x05F80000u, 0x05F8FFFFu },                        // VDP2 regs
+        { 0x06000000u, 0x06000000u + kWramSize - 1 },        // High work RAM
     };
     for (const R& r : kOk)
     {

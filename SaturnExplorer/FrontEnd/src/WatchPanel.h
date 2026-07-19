@@ -38,7 +38,9 @@ private:
         bool        seeded = false;
         char        nameBuf[128] = {};
         char        exprBuf[64] = {};
-        // Resolution + last read.
+        // Resolution + last read. 'resolvedExpr' memoizes the last expression we
+        // resolved so the refresh loop only re-resolves when the text changes.
+        std::string resolvedExpr;
         bool        resolved = false;
         uint32_t    address = 0;
         std::string error;
@@ -60,7 +62,6 @@ private:
     std::unordered_map<uint64_t, Row> mRows;   // by entry id
     float     mRefreshAccum = 0.0f;
     float     mRefreshHz = 10.0f;
-    int       mContextRow = -1;                // row index whose menu is open
     int       mFocusNameRow = -1;              // "Edit" jumped focus here
     std::string mNotice;                        // one-line status (import/export)
     float     mNoticeTime = 0.0f;

@@ -3,9 +3,11 @@
 // interface; the concrete backend reads from an se_context (which the live driver
 // or a savestate fills), so no Yabause-specific code reaches the UI widgets.
 //
-// Reads are expressed as a batch so a future remote/async backend can coalesce
-// them; the current ContextBackend serves them synchronously from the already
-// captured snapshot (a fast local copy — it never blocks on I/O).
+// Reads are expressed as a batch so a backend can coalesce them; the current
+// ContextBackend serves them synchronously from the already-captured snapshot (a
+// fast local copy — it never blocks on I/O). Note the return is synchronous: a
+// remote/async backend would change this seam to a request-id + poll (a breaking
+// change, not additive), so today's signature is not yet async-ready.
 #pragma once
 
 #include <cstdint>

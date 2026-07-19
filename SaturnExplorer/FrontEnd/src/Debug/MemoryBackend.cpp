@@ -2,14 +2,17 @@
 
 #include <cstring>
 
+#include "SaturnRegions.h"   // one home for the Saturn region sizes
+
 namespace sfe
 {
 
 namespace
 {
-// Saturn CPU memory map (the regions the snapshot captures). Addresses are
-// normalized to their canonical mirror first (the SH-2 sees WRAM/VDP at several
-// cache/through mirrors that share the low 27 bits).
+// Saturn CPU memory map (the regions the snapshot captures). Bases are the CPU-
+// visible addresses; sizes come from the shared SaturnRegions.h constants.
+// Addresses are normalized to their canonical mirror first (the SH-2 sees
+// WRAM/VDP at several cache/through mirrors that share the low 27 bits).
 struct Region
 {
     uint32_t     base;
@@ -17,16 +20,16 @@ struct Region
     se_vram_kind kind;
 };
 constexpr Region kRegions[] = {
-    { 0x00200000u, 0x00100000u, SE_VRAM_KIND_WRAM_LOW  },  // Low work RAM (1 MiB)
-    { 0x06000000u, 0x00100000u, SE_VRAM_KIND_WRAM_HIGH },  // High work RAM (1 MiB)
-    { 0x05C00000u, 0x00080000u, SE_VRAM_KIND_VDP1_VRAM },  // VDP1 VRAM (512 KiB)
-    { 0x05E00000u, 0x00080000u, SE_VRAM_KIND_VDP2_VRAM },  // VDP2 VRAM (512 KiB)
-    { 0x05F00000u, 0x00001000u, SE_VRAM_KIND_CRAM      },  // Color RAM (4 KiB)
+    { 0x00200000u, kWramSize,     SE_VRAM_KIND_WRAM_LOW  },  // Low work RAM
+    { 0x06000000u, kWramSize,     SE_VRAM_KIND_WRAM_HIGH },  // High work RAM
+    { 0x05C00000u, kVdp1VramSize, SE_VRAM_KIND_VDP1_VRAM },  // VDP1 VRAM
+    { 0x05E00000u, kVdp2VramSize, SE_VRAM_KIND_VDP2_VRAM },  // VDP2 VRAM
+    { 0x05F00000u, kCramSize,     SE_VRAM_KIND_CRAM      },  // Color RAM
 };
 
 // VDP register windows, served through the register getters (not se_read_vram).
-constexpr uint32_t kVdp1RegBase = 0x05D00000u, kVdp1RegSize = 0x18u;
-constexpr uint32_t kVdp2RegBase = 0x05F80000u, kVdp2RegSize = 0x120u;
+constexpr uint32_t kVdp1RegBase = 0x05D00000u, kVdp1RegSize = kVdp1RegBytes;
+constexpr uint32_t kVdp2RegBase = 0x05F80000u, kVdp2RegSize = kVdp2RegBytes;
 
 uint32_t Canonical(uint32_t addr)
 {
