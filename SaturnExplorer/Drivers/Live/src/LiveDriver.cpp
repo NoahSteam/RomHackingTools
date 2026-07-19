@@ -213,36 +213,6 @@ uint32_t Rd32LE(const uint8_t* p)
            (static_cast<uint32_t>(p[2]) << 16) | (static_cast<uint32_t>(p[3]) << 24);
 }
 
-// Byte-swap each 16-bit word of a work-RAM buffer in place. Yabause keeps work RAM
-// in host (little-endian) 16-bit order (T2 access); the core, watches, and the
-// SH-2 disassembler all expect Saturn-native big-endian — the same normalization
-// the savestate driver applies (CopyBswap16). Correct for both 16- and 32-bit
-// big-endian reads once each 16-bit unit is swapped.
-void Bswap16InPlace(std::vector<uint8_t>& buf)
-{
-    const size_t n = buf.size() & ~size_t(1);
-    for (size_t i = 0; i < n; i += 2)
-    {
-        const uint8_t t = buf[i];
-        buf[i] = buf[i + 1];
-        buf[i + 1] = t;
-    }
-}
-
-// Parse one Yabause sh2regs_struct (23 host-order LE u32: R[0..15], SR, GBR, VBR,
-// MACH, MACL, PR, PC) into se_sh2_regs. Mirrors the savestate driver's ParseSh2Regs.
-void ParseSh2RegsLE(const uint8_t* p, se_sh2_regs& out)
-{
-    for (int i = 0; i < 16; ++i) out.r[i] = Rd32LE(p + i * 4);
-    out.sr   = Rd32LE(p + 16 * 4);
-    out.gbr  = Rd32LE(p + 17 * 4);
-    out.vbr  = Rd32LE(p + 18 * 4);
-    out.mach = Rd32LE(p + 19 * 4);
-    out.macl = Rd32LE(p + 20 * 4);
-    out.pr   = Rd32LE(p + 21 * 4);
-    out.pc   = Rd32LE(p + 22 * 4);
-}
-
 // Send one command frame (verb + little-endian arg) to the server.
 bool SendCommand(Conn& c, const char* verb, int32_t arg)
 {
@@ -364,15 +334,15 @@ bool ReadSnapshot(Conn& c, const char* verb, int32_t arg,
         const size_t base = static_cast<size_t>(cpu) * SE_LIVE_SH2_REGS_LEN;
         if (sh >= base + SE_LIVE_SH2_REGS_LEN)
         {
-            ParseSh2RegsLE(sh2.data() + base, snap.sh2[cpu]);
+            sedrv::ParseSh2Regs(sh2.data() + base, snap.sh2[cpu]);
             snap.hasSh2[cpu] = true;
         }
     }
 
     // Work RAM arrives in Yabause host order; normalize to Saturn big-endian so
     // watches and the SH-2 disassembler read it correctly (same as the savestate).
-    Bswap16InPlace(snap.wramLow);
-    Bswap16InPlace(snap.wramHigh);
+    sedrv::Bswap16(snap.wramLow.data(), snap.wramLow.size());
+    sedrv::Bswap16(snap.wramHigh.data(), snap.wramHigh.size());
 
     // VRAM is already big-endian; build the VDP2 register image and use RAMCTL's
     // CRAM mode to normalize CRAM — exactly like the savestate path.

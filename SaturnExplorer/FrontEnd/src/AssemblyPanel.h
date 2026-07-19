@@ -28,10 +28,8 @@ public:
     // out-params any control request the App should act on this frame.
     struct Request
     {
-        bool     stepInto = false;    // single-step the emulated frame's CPU
-        bool     runTo = false;       // run until runToAddr (temp breakpoint)
+        bool     runTo = false;       // run until runToAddr (sets a breakpoint there)
         uint32_t runToAddr = 0;
-        bool     resume = false;
     };
     void Draw(se_context* ctx, IMemoryBackend& backend, BreakpointManager& bps,
               WatchPanel& watch, bool live, Request& req);
@@ -50,7 +48,6 @@ private:
     };
 
     void Navigate(uint32_t addr, bool pushHistory);
-    void RebuildWindow(IMemoryBackend& backend, uint32_t pc, bool havePc);
 
     int      mCpu = 0;                 // 0 master, 1 slave
     bool     mFollowPc = true;
@@ -60,7 +57,6 @@ private:
     bool     mScrollToPc = false;      // request a scroll-to-PC next frame
     std::vector<uint32_t> mBack, mFwd; // navigation history (current CPU)
     char     mGotoBuf[16] = {};
-    std::vector<uint8_t> mCode;        // reused code buffer
     std::vector<Line>    mLines;       // reused decode buffer
 };
 

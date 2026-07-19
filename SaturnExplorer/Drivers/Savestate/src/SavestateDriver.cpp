@@ -233,32 +233,20 @@ uint32_t Read32LE(const std::vector<uint8_t>& d, size_t o)
            (static_cast<uint32_t>(d[o + 2]) << 16) | (static_cast<uint32_t>(d[o + 3]) << 24);
 }
 
-// Parse a Yabause SH-2 section: it opens with the sh2regs_struct
-// (R[16], SR, GBR, VBR, MACH, MACL, PR, PC — 23 host-order u32) into se_sh2_regs.
+// Parse a Yabause SH-2 section: it opens with the sh2regs_struct (23 host-order
+// u32). Thin wrapper over the shared parser so savestate + live can't drift.
 void ParseSh2Regs(const std::vector<uint8_t>& d, size_t data, se_sh2_regs& out)
 {
-    for (int i = 0; i < 16; ++i) out.r[i] = Read32LE(d, data + i * 4);
-    out.sr   = Read32LE(d, data + 16 * 4);
-    out.gbr  = Read32LE(d, data + 17 * 4);
-    out.vbr  = Read32LE(d, data + 18 * 4);
-    out.mach = Read32LE(d, data + 19 * 4);
-    out.macl = Read32LE(d, data + 20 * 4);
-    out.pr   = Read32LE(d, data + 21 * 4);
-    out.pc   = Read32LE(d, data + 22 * 4);
+    sedrv::ParseSh2Regs(d.data() + data, out);
 }
 
-// Copy 'len' bytes from 'src', swapping each 16-bit word. Yabause stores work RAM
-// byte-swapped (host order); this normalizes it to Saturn-native big-endian so the
-// core, watches, and disassembler all read it consistently (like VRAM).
+// Copy 'len' bytes from 'src', swapping each 16-bit word to normalize Yabause's
+// host-order work RAM to Saturn big-endian (shared with the live driver).
 void CopyBswap16(const std::vector<uint8_t>& d, size_t src, size_t len,
                  std::vector<uint8_t>& out)
 {
-    out.resize(len);
-    for (size_t i = 0; i + 1 < len; i += 2)
-    {
-        out[i]     = d[src + i + 1];
-        out[i + 1] = d[src + i];
-    }
+    out.assign(d.begin() + src, d.begin() + src + len);
+    sedrv::Bswap16(out.data(), out.size());
 }
 
 /* --- Mednafen MDFNSVST (Saturn 'ss' module) savestate --- */

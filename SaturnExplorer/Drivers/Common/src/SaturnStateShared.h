@@ -9,12 +9,25 @@
 #include <cstdint>
 #include <vector>
 
+#include "saturnexplorer/SeTypes.h"   // se_sh2_regs (shared SH-2 register layout)
+
 namespace sedrv
 {
 
 // Big-endian 16-bit read from a hardware-offset register image (Saturn is BE).
 // Returns 0 if the offset is out of range.
 uint16_t ReadReg16(const std::vector<uint8_t>& regs, uint32_t reg);
+
+// Byte-swap each 16-bit word of 'p' (length 'len' bytes) in place. Yabause keeps
+// work RAM in host (little-endian) 16-bit order; the core, watches, and the SH-2
+// disassembler expect Saturn-native big-endian. Applied identically by the
+// savestate and live drivers so they can't drift on this fixed Yabause convention.
+void Bswap16(uint8_t* p, size_t len);
+
+// Parse a Yabause sh2regs_struct — 23 host-order (little-endian) u32 in struct
+// order R[0..15], SR, GBR, VBR, MACH, MACL, PR, PC — at 'p' into se_sh2_regs.
+// Shared by the savestate (MSH2/SSH2 sections) and live (SH-2 wire section) paths.
+void ParseSh2Regs(const uint8_t* p, se_sh2_regs& out);
 
 // Rebuild a hardware-offset, big-endian VDP2 register image from the packed
 // (little-endian, host-order) Yabause `Vdp2` struct that starts at 'structBase'

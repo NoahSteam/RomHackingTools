@@ -51,6 +51,7 @@ add_library(SaturnExplorerDriverCommon STATIC
 )
 target_include_directories(SaturnExplorerDriverCommon
     PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/Drivers/Common/src
+           ${CMAKE_CURRENT_SOURCE_DIR}/include   # se_sh2_regs (SaturnStateShared.h)
 )
 
 # ---------------------------------------------------------------------------

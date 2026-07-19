@@ -278,11 +278,11 @@ static void SeServeClient(int cl, SeFrame* snap)
         }
         else if (memcmp(req, SE_LIVE_VERB_BKPTS, SE_LIVE_VERB_LEN) == 0)
         {
-            /* Read 'arg' 12-byte descriptors, then install them. Bounded so a
-             * bad count can't drive a huge read. */
-            unsigned int i, count = (arg <= 4096u) ? arg : 4096u;
+            /* Read all 'arg' 12-byte descriptors (every one is consumed to keep the
+             * stream aligned) and install the enabled execution breakpoints. */
+            unsigned int i;
             if (sClearBps) { sClearBps(); }
-            for (i = 0; i < count; ++i)
+            for (i = 0; i < arg; ++i)
             {
                 unsigned char d[SE_LIVE_BKPT_DESC_LEN];
                 unsigned int address, flags, kind, cpu, enabled;
@@ -301,13 +301,6 @@ static void SeServeClient(int cl, SeFrame* snap)
                 {
                     sAddExecBp((int)cpu, address);
                 }
-            }
-            /* Draining leftover descriptors keeps the stream aligned if the count
-             * exceeded our cap. */
-            for (; i < arg; ++i)
-            {
-                unsigned char d[SE_LIVE_BKPT_DESC_LEN];
-                if (SeRecv(cl, d, SE_LIVE_BKPT_DESC_LEN) != 0) return;
             }
         }
 

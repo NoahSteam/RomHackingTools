@@ -1119,30 +1119,15 @@ void App::DrawAssembly()
     AssemblyPanel::Request req;
     mAssemblyPanel.Draw(mContext, mMemBackend, mBreakpoints, mWatchPanel, mbLiveSource, req);
 
-    // Honour run-control requests. Instruction-level stepping isn't exposed over
-    // the live wire, so "step" maps to a single emulated frame; "Run to Here" sets
-    // an execution breakpoint at the target and resumes (the emulator halts there
-    // via the stop event). All are no-ops without frame control.
-    if (mbHasData && se_supports_frame_control(mContext))
+    // "Run to Here" sets an execution breakpoint at the target and resumes; the
+    // emulator halts there via the stop event. No-op without frame control.
+    if (req.runTo && mbHasData && se_supports_frame_control(mContext))
     {
-        if (req.runTo)
-        {
-            if (!mBreakpoints.HasExecutionAt(mAssemblyPanel.Cpu(), req.runToAddr))
-                mBreakpoints.ToggleExecution(mAssemblyPanel.Cpu(), req.runToAddr);
-            SyncBreakpointsToLive();
-            se_frame_resume(mContext);
-            mbPaused = false;
-        }
-        else if (req.resume)
-        {
-            se_frame_resume(mContext);
-            mbPaused = false;
-        }
-        else if (req.stepInto)
-        {
-            se_frame_step(mContext, 1);
-            mbPaused = true;
-        }
+        if (!mBreakpoints.HasExecutionAt(mAssemblyPanel.Cpu(), req.runToAddr))
+            mBreakpoints.ToggleExecution(mAssemblyPanel.Cpu(), req.runToAddr);
+        SyncBreakpointsToLive();
+        se_frame_resume(mContext);
+        mbPaused = false;
     }
 }
 
@@ -1159,6 +1144,9 @@ void App::SyncBreakpointsToLive()
     const std::vector<Breakpoint>& all = mBreakpoints.All();
     std::vector<uint8_t> descs;
     descs.reserve(all.size() * SE_LIVE_BKPT_DESC_LEN);
+    auto put32 = [&descs](uint32_t w) {
+        for (int i = 0; i < 4; ++i) descs.push_back(static_cast<uint8_t>(w >> (8 * i)));
+    };
     for (const Breakpoint& b : all)
     {
         uint32_t kind = 0;   // 0 exec, 1 read, 2 write, 3 read/write
@@ -1172,14 +1160,9 @@ void App::SyncBreakpointsToLive()
         uint32_t flags = kind & SE_LIVE_BP_KIND_MASK;
         if (b.cpu != 0) { flags |= SE_LIVE_BP_CPU_SLAVE; }
         if (b.enabled)  { flags |= SE_LIVE_BP_ENABLED; }
-        const uint32_t words[3] = { b.address, b.size, flags };
-        for (uint32_t w : words)
-        {
-            descs.push_back(static_cast<uint8_t>(w & 0xFF));
-            descs.push_back(static_cast<uint8_t>((w >> 8) & 0xFF));
-            descs.push_back(static_cast<uint8_t>((w >> 16) & 0xFF));
-            descs.push_back(static_cast<uint8_t>((w >> 24) & 0xFF));
-        }
+        put32(b.address);
+        put32(b.size);
+        put32(flags);
     }
     se_live_set_breakpoints(&mDataSource, descs.data(),
                             static_cast<uint32_t>(all.size()));
