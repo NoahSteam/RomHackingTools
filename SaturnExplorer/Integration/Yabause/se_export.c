@@ -34,6 +34,7 @@
 #define SE_WH SE_LIVE_WRAM_HIGH_LEN
 #define SE_FB SE_LIVE_VDP1_FB_LEN
 #define SE_CT SE_LIVE_CONTROL_LEN
+#define SE_SH SE_LIVE_SH2_LEN
 
 typedef struct
 {
@@ -45,6 +46,7 @@ typedef struct
     unsigned char wl[SE_WL];   /* low work RAM */
     unsigned char wh[SE_WH];   /* high work RAM */
     unsigned char fb[SE_FB];   /* VDP1 frame buffer (drawn output) */
+    unsigned char sh[SE_SH];   /* SH-2 state: master then slave sh2regs_struct */
     int valid;
 } SeFrame;
 
@@ -84,6 +86,53 @@ static volatile int sRunning;
 static volatile int sPaused;
 static volatile int sStepBudget;
 static volatile unsigned long long sFrameNo;
+
+/* ---- Stop-event state (v5+). When the emulator halts on an execution
+ * breakpoint, Yabause's breakpoint callback calls SeExportNotifyStop(); the next
+ * snapshot's control block reports it so the debugger can jump to the halted PC.
+ * A resume / run / step clears it. ---- */
+static volatile unsigned int sStopReason;   /* SE_LIVE_STOP_* */
+static volatile unsigned int sStopCpu;      /* 0 master, 1 slave */
+static volatile unsigned int sStopPc;
+
+/* ---- Breakpoint hooks (v5+). se_export stays free of Yabause headers: apply.py
+ * wires these to Yabause's SH2 breakpoint API. SeAddExecBp(cpu, addr) installs one
+ * execution breakpoint; SeClearBps() removes all. Both may be NULL (breakpoints
+ * simply won't install, but the protocol still round-trips). ---- */
+typedef void (*SeAddExecBpFn)(int cpu, unsigned int address);
+typedef void (*SeClearBpsFn)(void);
+static SeAddExecBpFn sAddExecBp;
+static SeClearBpsFn  sClearBps;
+
+void SeExportSetBreakpointHooks(SeAddExecBpFn add, SeClearBpsFn clear)
+{
+    sAddExecBp = add;
+    sClearBps = clear;
+}
+
+/* ---- Memory-write hook (v6+). apply.py wires this to Yabause's
+ * MappedMemoryWriteByte so the Hex Editor can poke work RAM. Writing byte-by-byte
+ * at Saturn addresses keeps big-endian semantics without a manual swap. ---- */
+typedef void (*SeWriteByteFn)(unsigned int address, unsigned char value);
+static SeWriteByteFn sWriteByte;
+
+void SeExportSetMemWriteHook(SeWriteByteFn fn)
+{
+    sWriteByte = fn;
+}
+
+/* Called from Yabause's breakpoint callback when the master/slave SH-2 hits an
+ * execution breakpoint: latch the stop and hold the emulator paused. Plain
+ * volatile writes (like sPaused elsewhere) — this runs in the CPU thread and must
+ * not take the frame lock. */
+void SeExportNotifyStop(int cpu, unsigned int pc)
+{
+    sStopReason = SE_LIVE_STOP_EXEC_BP;
+    sStopCpu = (cpu != 0) ? 1u : 0u;
+    sStopPc = pc;
+    sPaused = 1;
+    sStepBudget = 0;
+}
 
 /* Short self-contained sleep so the gate can spin-wait without a Yabause-
  * specific sleep primitive and without pegging a CPU core while paused. */
@@ -146,7 +195,7 @@ static void SeWr32(unsigned char* p, unsigned int v)
 void SeExportSnapshot(const void* vdp1, const void* vdp2, const void* cram,
                       const void* vdp2struct, const void* vdp1struct,
                       const void* wramLow, const void* wramHigh,
-                      const void* vdp1fb)
+                      const void* vdp1fb, const void* msh2, const void* ssh2)
 {
     if (!sBack)
     {
@@ -161,6 +210,11 @@ void SeExportSnapshot(const void* vdp1, const void* vdp2, const void* cram,
     if (wramLow)  memcpy(sBack->wl, wramLow,  SE_WL); else memset(sBack->wl, 0, SE_WL);
     if (wramHigh) memcpy(sBack->wh, wramHigh, SE_WH); else memset(sBack->wh, 0, SE_WH);
     if (vdp1fb)   memcpy(sBack->fb, vdp1fb,   SE_FB); else memset(sBack->fb, 0, SE_FB);
+    /* SH-2 state: master then slave, each a 92-byte sh2regs_struct (host order). */
+    if (msh2) memcpy(sBack->sh, msh2, SE_LIVE_SH2_REGS_LEN);
+    else      memset(sBack->sh, 0, SE_LIVE_SH2_REGS_LEN);
+    if (ssh2) memcpy(sBack->sh + SE_LIVE_SH2_REGS_LEN, ssh2, SE_LIVE_SH2_REGS_LEN);
+    else      memset(sBack->sh + SE_LIVE_SH2_REGS_LEN, 0, SE_LIVE_SH2_REGS_LEN);
     sBack->valid = 1;
     {
         SeFrame* tmp = sFront; sFront = sBack; sBack = tmp;   /* swap */
@@ -215,21 +269,65 @@ static void SeServeClient(int cl, SeFrame* snap)
               ((unsigned int)req[6] << 16) | ((unsigned int)req[7] << 24);
 
         /* Apply any control verb before snapshotting, so the reply's control
-         * block reflects the new state. Unknown verbs act like GET. */
+         * block reflects the new state. Unknown verbs act like GET. Resuming or
+         * stepping clears any latched breakpoint stop. */
         if (memcmp(req, SE_LIVE_VERB_PAUSE, SE_LIVE_VERB_LEN) == 0)
         {
             SE_LOCK(); sPaused = 1; sStepBudget = 0; SE_UNLOCK();
         }
         else if (memcmp(req, SE_LIVE_VERB_RESUME, SE_LIVE_VERB_LEN) == 0)
         {
-            SE_LOCK(); sPaused = 0; sStepBudget = 0; SE_UNLOCK();
+            SE_LOCK(); sPaused = 0; sStepBudget = 0; sStopReason = SE_LIVE_STOP_NONE; SE_UNLOCK();
         }
         else if (memcmp(req, SE_LIVE_VERB_STEP, SE_LIVE_VERB_LEN) == 0)
         {
             SE_LOCK();
             sPaused = 1;
             sStepBudget += (arg > 0) ? (int)arg : 1;
+            sStopReason = SE_LIVE_STOP_NONE;
             SE_UNLOCK();
+        }
+        else if (memcmp(req, SE_LIVE_VERB_BKPTS, SE_LIVE_VERB_LEN) == 0)
+        {
+            /* Read all 'arg' 12-byte descriptors (every one is consumed to keep the
+             * stream aligned) and install the enabled execution breakpoints. */
+            unsigned int i;
+            if (sClearBps) { sClearBps(); }
+            for (i = 0; i < arg; ++i)
+            {
+                unsigned char d[SE_LIVE_BKPT_DESC_LEN];
+                unsigned int address, flags, kind, cpu, enabled;
+                if (SeRecv(cl, d, SE_LIVE_BKPT_DESC_LEN) != 0) return;
+                address = (unsigned int)d[0] | ((unsigned int)d[1] << 8) |
+                          ((unsigned int)d[2] << 16) | ((unsigned int)d[3] << 24);
+                /* d[4..7] size (unused for execution breakpoints). */
+                flags = (unsigned int)d[8] | ((unsigned int)d[9] << 8) |
+                        ((unsigned int)d[10] << 16) | ((unsigned int)d[11] << 24);
+                kind = flags & SE_LIVE_BP_KIND_MASK;
+                cpu = (flags & SE_LIVE_BP_CPU_SLAVE) ? 1u : 0u;
+                enabled = (flags & SE_LIVE_BP_ENABLED) ? 1u : 0u;
+                /* Only execution breakpoints are installed for now; memory
+                 * breakpoints round-trip but need SH2AddMemoryBreakpoint wiring. */
+                if (enabled && kind == 0u && sAddExecBp)
+                {
+                    sAddExecBp((int)cpu, address);
+                }
+            }
+        }
+        else if (memcmp(req, SE_LIVE_VERB_WRITE, SE_LIVE_VERB_LEN) == 0)
+        {
+            /* Poke work RAM: payload = address(4 LE) + 'arg' big-endian bytes. */
+            unsigned char addrb[4];
+            unsigned int i, address;
+            if (SeRecv(cl, addrb, 4) != 0) return;
+            address = (unsigned int)addrb[0] | ((unsigned int)addrb[1] << 8) |
+                      ((unsigned int)addrb[2] << 16) | ((unsigned int)addrb[3] << 24);
+            for (i = 0; i < arg; ++i)
+            {
+                unsigned char v;
+                if (SeRecv(cl, &v, 1) != 0) return;
+                if (sWriteByte) sWriteByte(address + i, v);
+            }
         }
 
         unsigned char ctl[SE_CT];
@@ -238,6 +336,9 @@ static void SeServeClient(int cl, SeFrame* snap)
         SeWr32(ctl, (unsigned int)(sPaused ? 1 : 0));
         SeWr32(ctl + 4, (unsigned int)(sFrameNo & 0xFFFFFFFFu));
         SeWr32(ctl + 8, (unsigned int)((sFrameNo >> 32) & 0xFFFFFFFFu));
+        SeWr32(ctl + 12, sStopReason);
+        SeWr32(ctl + 16, sStopCpu);
+        SeWr32(ctl + 20, sStopPc);
         SE_UNLOCK();
 
         unsigned char hdr[SE_LIVE_HEADER_LEN];
@@ -247,6 +348,7 @@ static void SeServeClient(int cl, SeFrame* snap)
         SeWr32(hdr + 8, SE_V1);  SeWr32(hdr + 12, SE_V2); SeWr32(hdr + 16, SE_CR);
         SeWr32(hdr + 20, SE_VS); SeWr32(hdr + 24, SE_VR); SeWr32(hdr + 28, SE_WL);
         SeWr32(hdr + 32, SE_WH); SeWr32(hdr + 36, SE_FB); SeWr32(hdr + 40, SE_CT);
+        SeWr32(hdr + 44, SE_SH);
         if (SeSend(cl, hdr, sizeof(hdr)) != 0) return;
         if (SeSend(cl, snap->v1, SE_V1) != 0) return;
         if (SeSend(cl, snap->v2, SE_V2) != 0) return;
@@ -257,6 +359,7 @@ static void SeServeClient(int cl, SeFrame* snap)
         if (SeSend(cl, snap->wh, SE_WH) != 0) return;
         if (SeSend(cl, snap->fb, SE_FB) != 0) return;
         if (SeSend(cl, ctl, SE_CT) != 0) return;
+        if (SeSend(cl, snap->sh, SE_SH) != 0) return;
     }
 }
 
@@ -349,6 +452,7 @@ int SeExportInit(void)
     sBack  = (SeFrame*)calloc(1, sizeof(SeFrame));
     if (!sFront || !sBack) { SeExportDeinit(); return -1; }
     sPaused = 0; sStepBudget = 0; sFrameNo = 0;
+    sStopReason = SE_LIVE_STOP_NONE; sStopCpu = 0; sStopPc = 0;
     sRunning = 1;
 #if defined(_WIN32)
     InitializeCriticalSection(&sLock);

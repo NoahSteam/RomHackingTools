@@ -12,8 +12,11 @@
 
 #include "Platform/IPlatform.h"
 #include "WatchPanel.h"          // Watch Window (debugger; emulator-agnostic)
+#include "AssemblyPanel.h"       // SH-2 Assembly (debugger)
+#include "HexEditorPanel.h"      // Hex Editor (debugger)
 #include "Debug/MemoryBackend.h"
 #include "Debug/WatchList.h"
+#include "Debug/BreakpointManager.h"
 
 #ifdef SE_ENABLE_LIVE
 #include "FrameRecorder.h"   // rolling capture of live frames (native only)
@@ -64,7 +67,9 @@ private:
     void DrawLayerControls();
     void DrawVdpOutput(IPlatform& platform);
     void DrawWatch(IPlatform& platform);   // debugger Watch Window
-    void DrawAssembly();                    // SH-2 Assembly (placeholder in this phase)
+    void DrawAssembly();                    // SH-2 Assembly (live disassembly)
+    void DrawHexEditor();                   // Hex Editor (memory view/edit)
+    void SyncBreakpointsToLive();           // push the breakpoint set to the emulator
     void DrawVdp1Framebuffer(IPlatform& platform);
     void DrawWorldView(IPlatform& platform);
     void DrawCommandList();
@@ -102,6 +107,10 @@ private:
     ContextBackend           mMemBackend{&mContext};
     SimpleExpressionResolver mExprResolver;
     WatchPanel               mWatchPanel;
+    BreakpointManager        mBreakpoints;
+    AssemblyPanel            mAssemblyPanel;
+    HexEditorPanel           mHexEditor;
+    uint64_t                 mLastBpGeneration = 0;  // last set synced to the live emulator
 
     se_render_opts   mRenderOpts {};
     bool             mbLiveSource = false;    // data comes from a running emulator

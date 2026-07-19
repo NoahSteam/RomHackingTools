@@ -208,12 +208,14 @@ void App::Initialize()
 #ifdef SE_ENABLE_LIVE
     mRecorder.Configure(mRecordSeconds * kFramesPerSecond);
 #endif
-    mWatchPanel.LoadSession();   // restore the session's watch list, if any
+    mWatchPanel.LoadSession();     // restore the session's watch list, if any
+    mAssemblyPanel.LoadComments(); // restore the session's assembly comments
 }
 
 void App::Shutdown()
 {
     mWatchPanel.SaveSession();
+    mAssemblyPanel.SaveComments();
     CloseData();
 }
 
@@ -519,6 +521,9 @@ bool App::OpenLive(const char* endpoint)
     mbHasData = true;
     mbLiveSource = true;   // re-snapshot every frame (see BuildUI)
     mbPaused = false;      // a fresh connection is free-running
+    // Force a breakpoint re-sync so any set from before connecting (or a prior
+    // session) installs into this emulator instance.
+    mLastBpGeneration = mBreakpoints.Generation() - 1;
     return true;
 #else
     (void)endpoint;
@@ -579,6 +584,16 @@ void App::BuildUI(IPlatform& platform)
     if (mbLiveSource && mContext)
     {
         se_begin_frame(mContext);
+        // Propagate any breakpoint changes (Assembly gutter, Watch "Break on...")
+        // to the emulator, then reflect a breakpoint halt in the UI run state.
+        SyncBreakpointsToLive();
+#ifdef SE_ENABLE_LIVE
+        uint32_t stopReason = 0, stopCpu = 0, stopPc = 0;
+        if (se_live_get_stop(&mDataSource, &stopReason, &stopCpu, &stopPc) && !mbPaused)
+        {
+            mbPaused = true;   // halted on a breakpoint; panel follows the halted PC
+        }
+#endif
     }
 
 #ifdef SE_ENABLE_LIVE
@@ -663,7 +678,7 @@ void App::BuildUI(IPlatform& platform)
     DrawSelectedObject();
     DrawWatch(platform);
     DrawAssembly();
-    DrawPlaceholder("Memory History", "Load chain (File → CD → DMA → Write) — arrives in M7.");
+    DrawHexEditor();
     // contextSwap restores the live context here as it goes out of scope.
 }
 
@@ -729,7 +744,7 @@ void App::BuildDefaultLayout(unsigned int dockspaceId)
     ImGui::DockBuilderDockWindow("Selected Object", rObj);
     ImGui::DockBuilderDockWindow("Watch", rTex);
     ImGui::DockBuilderDockWindow("SH-2 Assembly", rPal);
-    ImGui::DockBuilderDockWindow("Memory History", rMem);
+    ImGui::DockBuilderDockWindow("Hex Editor", rMem);
 
     ImGui::DockBuilderFinish(dockspaceId);
 }
@@ -1095,28 +1110,74 @@ void App::DrawLayerControls()
 // memory backend (served from the current context) and the expression resolver.
 void App::DrawWatch(IPlatform& platform)
 {
-    mWatchPanel.Draw(mMemBackend, mExprResolver, platform, ImGui::GetIO().DeltaTime);
+    uint32_t hexJump = 0;
+    mWatchPanel.Draw(mMemBackend, mExprResolver, platform, mBreakpoints,
+                     ImGui::GetIO().DeltaTime, &hexJump);
+    if (hexJump != 0) mHexEditor.GoTo(hexJump);   // "View in Hex Editor"
 }
 
-// SH-2 Assembly — placeholder until the emulator exports CPU state. The panel and
-// its docking slot exist now so the layout is final; the disassembler + live PC
-// arrive in later phases (needs SH-2 register/PC + breakpoint export from Yabause).
+// SH-2 Assembly — live disassembly around the master/slave PC. Reads CPU state +
+// code from the current context (savestate or live) and renders via AssemblyPanel.
 void App::DrawAssembly()
 {
-    if (ImGui::Begin("SH-2 Assembly"))
+    AssemblyPanel::Request req;
+    mAssemblyPanel.Draw(mContext, mMemBackend, mBreakpoints, mWatchPanel, mbLiveSource, req);
+
+    // "Run to Here" sets an execution breakpoint at the target and resumes; the
+    // emulator halts there via the stop event. No-op without frame control.
+    if (req.runTo && mbHasData && se_supports_frame_control(mContext))
     {
-        ImGui::TextUnformatted("SH-2 disassembly");
-        ImGui::Separator();
-        ImGui::TextWrapped(
-            "Live instruction view around the master/slave PC, breakpoints, and "
-            "stepping arrive in a later phase. They need the emulator to export "
-            "SH-2 registers/PC and breakpoint hooks (a protocol update + Yabause "
-            "rebuild), plus the SH-2 disassembler.");
-        ImGui::Spacing();
-        ImGui::TextDisabled("Planned: CPU selector (Master/Slave), Follow PC, branch "
-                            "navigation, gutter breakpoints, Run to Here.");
+        if (!mBreakpoints.HasExecutionAt(mAssemblyPanel.Cpu(), req.runToAddr))
+            mBreakpoints.ToggleExecution(mAssemblyPanel.Cpu(), req.runToAddr);
+        SyncBreakpointsToLive();
+        se_frame_resume(mContext);
+        mbPaused = false;
     }
-    ImGui::End();
+    if (req.viewHex) mHexEditor.GoTo(req.hexAddr);   // "View Address in Hex Editor"
+}
+
+// Hex Editor — raw memory view/edit over the shared backend (same source as Watch).
+void App::DrawHexEditor()
+{
+    mHexEditor.Draw(mMemBackend, mbLiveSource, ImGui::GetIO().DeltaTime);
+}
+
+// Push the current breakpoint set to the live emulator when it changes. Serializes
+// every breakpoint into the wire descriptor (address + size + flags) the LiveDriver
+// forwards with a BKP command. No-op off a live source or when nothing changed.
+void App::SyncBreakpointsToLive()
+{
+#ifdef SE_ENABLE_LIVE
+    if (!mbLiveSource) { return; }
+    if (mBreakpoints.Generation() == mLastBpGeneration) { return; }
+    mLastBpGeneration = mBreakpoints.Generation();
+
+    const std::vector<Breakpoint>& all = mBreakpoints.All();
+    std::vector<uint8_t> descs;
+    descs.reserve(all.size() * SE_LIVE_BKPT_DESC_LEN);
+    auto put32 = [&descs](uint32_t w) {
+        for (int i = 0; i < 4; ++i) descs.push_back(static_cast<uint8_t>(w >> (8 * i)));
+    };
+    for (const Breakpoint& b : all)
+    {
+        uint32_t kind = 0;   // 0 exec, 1 read, 2 write, 3 read/write
+        switch (b.kind)
+        {
+            case BpKind::Execution:    kind = 0; break;
+            case BpKind::MemRead:      kind = 1; break;
+            case BpKind::MemWrite:     kind = 2; break;
+            case BpKind::MemReadWrite: kind = 3; break;
+        }
+        uint32_t flags = kind & SE_LIVE_BP_KIND_MASK;
+        if (b.cpu != 0) { flags |= SE_LIVE_BP_CPU_SLAVE; }
+        if (b.enabled)  { flags |= SE_LIVE_BP_ENABLED; }
+        put32(b.address);
+        put32(b.size);
+        put32(flags);
+    }
+    se_live_set_breakpoints(&mDataSource, descs.data(),
+                            static_cast<uint32_t>(all.size()));
+#endif
 }
 
 void App::DrawVdpOutput(IPlatform& platform)

@@ -351,6 +351,20 @@ typedef struct se_system_status {
     uint8_t  vdp2_busy;
 } se_system_status;
 
+/* Full SH-2 register file for one CPU (the Assembly / debugger views). Values are
+ * host-order uint32 as the emulator holds them. cpu index: 0 = master, 1 = slave. */
+typedef enum se_sh2_cpu { SE_SH2_MASTER = 0, SE_SH2_SLAVE = 1 } se_sh2_cpu;
+typedef struct se_sh2_regs {
+    uint32_t r[16];
+    uint32_t pc;
+    uint32_t pr;
+    uint32_t sr;
+    uint32_t gbr;
+    uint32_t vbr;
+    uint32_t mach;
+    uint32_t macl;
+} se_sh2_regs;
+
 typedef struct se_config {
     uint32_t abi_version;    /* set to SE_ABI_VERSION by the host */
     uint32_t reserved;

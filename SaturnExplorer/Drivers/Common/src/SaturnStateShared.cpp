@@ -82,4 +82,31 @@ void NormalizeCramToBigEndian(std::vector<uint8_t>& cram, unsigned crmd)
     }
 }
 
+void Bswap16(uint8_t* p, size_t len)
+{
+    const size_t n = len & ~size_t(1);
+    for (size_t i = 0; i < n; i += 2)
+    {
+        const uint8_t t = p[i];
+        p[i] = p[i + 1];
+        p[i + 1] = t;
+    }
+}
+
+void ParseSh2Regs(const uint8_t* p, se_sh2_regs& out)
+{
+    auto rd = [](const uint8_t* q) -> uint32_t {
+        return static_cast<uint32_t>(q[0]) | (static_cast<uint32_t>(q[1]) << 8) |
+               (static_cast<uint32_t>(q[2]) << 16) | (static_cast<uint32_t>(q[3]) << 24);
+    };
+    for (int i = 0; i < 16; ++i) out.r[i] = rd(p + i * 4);
+    out.sr   = rd(p + 16 * 4);
+    out.gbr  = rd(p + 17 * 4);
+    out.vbr  = rd(p + 18 * 4);
+    out.mach = rd(p + 19 * 4);
+    out.macl = rd(p + 20 * 4);
+    out.pr   = rd(p + 21 * 4);
+    out.pc   = rd(p + 22 * 4);
+}
+
 }  // namespace sedrv

@@ -12,6 +12,7 @@
 
 #include "Debug/WatchList.h"
 #include "Debug/MemoryBackend.h"
+#include "Debug/BreakpointManager.h"
 #include "Platform/IPlatform.h"
 
 namespace sfe
@@ -24,13 +25,23 @@ public:
 
     // Draw the "Watch" window. 'dt' is the frame delta (seconds) for the refresh
     // timer + highlight fade. Reads values via 'backend', resolves expressions via
-    // 'resolver', and uses 'platform' for import/export file dialogs.
+    // 'resolver', uses 'platform' for import/export file dialogs, and adds
+    // memory breakpoints to 'bps' from the "Break on..." menu. When the user picks
+    // "View in Hex Editor" and 'outHexJump' is non-null, the watch's address is
+    // written there for the App to reveal in the Hex Editor.
     void Draw(IMemoryBackend& backend, IExpressionResolver& resolver,
-              IPlatform& platform, float dt);
+              IPlatform& platform, BreakpointManager& bps, float dt,
+              uint32_t* outHexJump = nullptr);
 
     // Session persistence: load/save the watch list to a file in the working dir.
     void LoadSession();
     void SaveSession() const;
+
+    // Add a watch programmatically (e.g. Assembly "Add Operand to Watch").
+    void AddWatch(const std::string& name, const std::string& expr, WatchType type)
+    {
+        mList.Add(name, expr, type, true);
+    }
 
 private:
     struct Row

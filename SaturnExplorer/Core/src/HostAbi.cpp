@@ -200,6 +200,17 @@ size_t se_read_vram(se_context* ctx, se_vram_kind kind, uint32_t offset,
     return ctx ? Impl(ctx)->ReadVram(kind, offset, dst, size) : 0;
 }
 
+size_t se_write_vram(se_context* ctx, se_vram_kind kind, uint32_t offset,
+                     const void* src, size_t size)
+{
+    return ctx ? Impl(ctx)->WriteVram(kind, offset, src, size) : 0;
+}
+
+int se_can_write(se_context* ctx)
+{
+    return (ctx && Impl(ctx)->CanWrite()) ? 1 : 0;
+}
+
 size_t se_read_cram_colors(se_context* ctx, uint16_t start, uint16_t count,
                            se_palette_entry* out)
 {
@@ -288,6 +299,25 @@ se_result se_get_system_status(se_context* ctx, se_system_status* out)
         return ds.get_system_status(ds.user, out) == 0 ? SE_OK : SE_ERR_IO;
     }
     return SE_ERR_NO_CAPABILITY;
+}
+
+/* --- SH-2 registers --- */
+se_result se_get_sh2_regs(se_context* ctx, int cpu, se_sh2_regs* out)
+{
+    if (!ctx || !out || cpu < 0 || cpu > 1)
+    {
+        return SE_ERR_INVALID_ARG;
+    }
+    return Impl(ctx)->GetSh2Regs(cpu, out);
+}
+
+int se_has_sh2_regs(se_context* ctx)
+{
+    if (!ctx)
+    {
+        return 0;
+    }
+    return (Impl(ctx)->HasSh2Regs(0) || Impl(ctx)->HasSh2Regs(1)) ? 1 : 0;
 }
 
 /* --- Frame control --- */

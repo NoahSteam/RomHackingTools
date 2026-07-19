@@ -27,20 +27,47 @@ int SeExportInit(void);
 
 /* Copy the current Saturn memory into the export double-buffer. Call once per
  * frame, e.g. at the end of Vdp2VBlankOUT(), passing Yabause's globals:
+ *   sh2regs_struct m, s;
+ *   SH2GetRegisters(MSH2, &m); SH2GetRegisters(SSH2, &s);
  *   SeExportSnapshot(Vdp1Ram, Vdp2Ram, Vdp2ColorRam, Vdp2Regs,
- *                    Vdp1Regs, LowWram, HighWram, VIDSoftGetVdp1FrameBuffer());
+ *                    Vdp1Regs, LowWram, HighWram, VIDSoftGetVdp1FrameBuffer(),
+ *                    &m, &s);
  * Sizes are fixed by the hardware. 'vdp1_regs_struct' is Yabause's `Vdp1` struct
  * (its first 11 u16 fields TVMR..MODR); this module builds the hardware-offset
  * register image from it. 'vdp1_fb_256k' is the VDP1 frame buffer (drawn output,
  * 256 KiB RGB555). Note: the *global* `Vdp1FrameBuffer` is only a fallback in
  * Yabause — real pixels live in the active video core, so apply.py adds a tiny
  * VIDSoftGetVdp1FrameBuffer() accessor returning VIDSoft's displayed front bank.
- * (VIDOGL keeps pixels on the GPU and would need a read-back instead.) Any
- * argument may be NULL (that section is zeros). */
+ * (VIDOGL keeps pixels on the GPU and would need a read-back instead.) 'msh2_regs'
+ * and 'ssh2_regs' are Yabause `sh2regs_struct` values (R[16], SR, GBR, VBR, MACH,
+ * MACL, PR, PC — 23 u32) for the master and slave SH-2, feeding the disassembler /
+ * Assembly panel. Any argument may be NULL (that section is zeros). */
 void SeExportSnapshot(const void* vdp1_vram_512k, const void* vdp2_vram_512k,
                       const void* cram_4k, const void* vdp2_regs_struct_288,
                       const void* vdp1_regs_struct, const void* wram_low_1m,
-                      const void* wram_high_1m, const void* vdp1_fb_256k);
+                      const void* wram_high_1m, const void* vdp1_fb_256k,
+                      const void* msh2_regs, const void* ssh2_regs);
+
+/* Wire the module's breakpoint installers to Yabause's SH2 breakpoint API (v5+).
+ * 'add' installs one execution breakpoint: add(cpu, address) with cpu 0 = master,
+ * 1 = slave. 'clear' removes all breakpoints. Both may be NULL (breakpoints then
+ * round-trip over the protocol but don't install). Call once after SeExportInit,
+ * e.g. SeExportSetBreakpointHooks(SeYabauseAddExecBp, SeYabauseClearBps). */
+void SeExportSetBreakpointHooks(void (*add)(int cpu, unsigned int address),
+                                void (*clear)(void));
+
+/* Call from Yabause's SH2 breakpoint callback when the master/slave core hits an
+ * execution breakpoint (cpu 0 = master, 1 = slave; pc = the halted PC). Latches a
+ * stop event and holds the emulator paused; the next snapshot reports it so the
+ * debugger can jump to the PC. A resume / single-step from the debugger clears it. */
+void SeExportNotifyStop(int cpu, unsigned int pc);
+
+/* Wire the module's work-RAM poke to Yabause's byte writer (v6+), so the Hex
+ * Editor can edit a running game: write(address, value) should call
+ * MappedMemoryWriteByte. May be NULL (writes are then dropped). Writing byte-by-
+ * byte at Saturn addresses preserves big-endian order without a manual swap. Call
+ * once after SeExportInit, e.g. SeExportSetMemWriteHook(SeYabauseWriteByte). */
+void SeExportSetMemWriteHook(void (*write)(unsigned int address, unsigned char value));
 
 /* Frame gate for pause / single-step. Call once at the top of each emulated
  * frame in Yabause's run loop; returns 1 if the frame should run, 0 if the

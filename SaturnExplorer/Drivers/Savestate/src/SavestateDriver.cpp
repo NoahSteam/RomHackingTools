@@ -40,6 +40,8 @@ struct Savestate
     std::vector<uint8_t> mWramHigh;
     std::vector<uint8_t> mVdp1Regs;
     std::vector<uint8_t> mVdp2Regs;
+    se_sh2_regs          mSh2[2] = {};       // [0] master, [1] slave
+    bool                 mHasSh2[2] = { false, false };
 };
 
 // Copy from a region buffer with bounds clamping. Returns bytes copied.
@@ -87,6 +89,29 @@ size_t CbMainRam(void* user, uint32_t address, void* dst, size_t size)
     return 0;
 }
 
+// Copy 'size' big-endian bytes into 'buf' at 'off' (clamped). Returns bytes written.
+size_t WriteRegion(std::vector<uint8_t>& buf, uint32_t off, const void* src, size_t size)
+{
+    if (off >= buf.size()) return 0;
+    const size_t n = std::min<size_t>(size, buf.size() - off);
+    std::memcpy(buf.data() + off, src, n);
+    return n;
+}
+
+size_t CbWriteMainRam(void* user, uint32_t address, const void* src, size_t size)
+{
+    Savestate* state = static_cast<Savestate*>(user);
+    if (address >= kAddrWramHigh)
+    {
+        return WriteRegion(state->mWramHigh, address - kAddrWramHigh, src, size);
+    }
+    if (address >= kAddrWramLow)
+    {
+        return WriteRegion(state->mWramLow, address - kAddrWramLow, src, size);
+    }
+    return 0;
+}
+
 uint16_t CbVdp1Reg(void* user, uint32_t reg)
 {
     return ReadReg16(static_cast<Savestate*>(user)->mVdp1Regs, reg);
@@ -95,6 +120,14 @@ uint16_t CbVdp1Reg(void* user, uint32_t reg)
 uint16_t CbVdp2Reg(void* user, uint32_t reg)
 {
     return ReadReg16(static_cast<Savestate*>(user)->mVdp2Regs, reg);
+}
+
+int CbSh2Regs(void* user, int cpu, se_sh2_regs* out)
+{
+    Savestate* s = static_cast<Savestate*>(user);
+    if (cpu < 0 || cpu > 1 || !s->mHasSh2[cpu]) return 0;
+    *out = s->mSh2[cpu];
+    return 1;
 }
 
 void CbClose(void* user)
@@ -175,8 +208,9 @@ void BuildDataSource(Savestate* state, se_data_source* out)
     }
     if (!state->mWramLow.empty() || !state->mWramHigh.empty())
     {
-        caps |= SE_CAP_MAIN_RAM;
+        caps |= SE_CAP_MAIN_RAM | SE_CAP_MEM_WRITE;
         out->read_main_ram = CbMainRam;
+        out->write_main_ram = CbWriteMainRam;   // in-memory edits (not saved to disk)
     }
     if (!state->mVdp1Regs.empty())
     {
@@ -187,6 +221,11 @@ void BuildDataSource(Savestate* state, se_data_source* out)
     {
         caps |= SE_CAP_VDP2_REGS;
         out->read_vdp2_reg = CbVdp2Reg;
+    }
+    if (state->mHasSh2[0] || state->mHasSh2[1])
+    {
+        caps |= SE_CAP_SH2_REGS;
+        out->read_sh2_regs = CbSh2Regs;
     }
 
     out->capabilities = caps;
@@ -216,6 +255,22 @@ uint32_t Read32LE(const std::vector<uint8_t>& d, size_t o)
 {
     return static_cast<uint32_t>(d[o]) | (static_cast<uint32_t>(d[o + 1]) << 8) |
            (static_cast<uint32_t>(d[o + 2]) << 16) | (static_cast<uint32_t>(d[o + 3]) << 24);
+}
+
+// Parse a Yabause SH-2 section: it opens with the sh2regs_struct (23 host-order
+// u32). Thin wrapper over the shared parser so savestate + live can't drift.
+void ParseSh2Regs(const std::vector<uint8_t>& d, size_t data, se_sh2_regs& out)
+{
+    sedrv::ParseSh2Regs(d.data() + data, out);
+}
+
+// Copy 'len' bytes from 'src', swapping each 16-bit word to normalize Yabause's
+// host-order work RAM to Saturn big-endian (shared with the live driver).
+void CopyBswap16(const std::vector<uint8_t>& d, size_t src, size_t len,
+                 std::vector<uint8_t>& out)
+{
+    out.assign(d.begin() + src, d.begin() + src + len);
+    sedrv::Bswap16(out.data(), out.size());
 }
 
 /* --- Mednafen MDFNSVST (Saturn 'ss' module) savestate --- */
@@ -398,6 +453,24 @@ se_result ParseYssBuffer(const std::vector<uint8_t>& file, se_data_source* out)
             BuildVdp2RegImage(file, data, state->mVdp2Regs);
             const uint16_t ramctl = ReadReg16(state->mVdp2Regs, 0x0E);
             NormalizeCramToBigEndian(state->mCram, (ramctl >> 12) & 0x3);
+        }
+        else if (std::memcmp(tag, "MSH2", 4) == 0 && size >= 92)
+        {
+            ParseSh2Regs(file, data, state->mSh2[0]);
+            state->mHasSh2[0] = true;
+        }
+        else if (std::memcmp(tag, "SSH2", 4) == 0 && size >= 92)
+        {
+            ParseSh2Regs(file, data, state->mSh2[1]);
+            state->mHasSh2[1] = true;
+        }
+        else if (std::memcmp(tag, "OTHR", 4) == 0 &&
+                 size >= 0x10000 + kSizeWramHigh + kSizeWramLow)
+        {
+            // OTHR = BupRam(0x10000) + HighWram(1 MiB) + LowWram(1 MiB) + internal
+            // state. Work RAM is stored 16-bit byte-swapped; normalize to big-endian.
+            CopyBswap16(file, data + 0x10000, kSizeWramHigh, state->mWramHigh);
+            CopyBswap16(file, data + 0x10000 + kSizeWramHigh, kSizeWramLow, state->mWramLow);
         }
         pos = data + size;
     }

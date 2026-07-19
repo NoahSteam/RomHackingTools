@@ -4,6 +4,7 @@
 #pragma once
 
 #include <cstdint>
+#include <cstring>
 #include <vector>
 
 #include "saturnexplorer/SeDataSource.h"
@@ -38,9 +39,31 @@ public:
     const std::vector<uint8_t>& Vdp1Fb() const { return mVdp1Fb; }
     se_cram_mode CramMode() const { return mCramMode; }
 
+    // Overwrite bytes in a region's captured buffer (Hex Editor edits). Returns
+    // the number written (clamped to the buffer). Work RAM only for now.
+    size_t WriteRegion(se_vram_kind kind, uint32_t offset, const void* src, size_t size)
+    {
+        std::vector<uint8_t>* dst = nullptr;
+        switch (kind)
+        {
+        case SE_VRAM_KIND_WRAM_LOW:  dst = &mWramLow;  break;
+        case SE_VRAM_KIND_WRAM_HIGH: dst = &mWramHigh; break;
+        default: return 0;
+        }
+        if (!src || offset >= dst->size()) return 0;
+        const size_t avail = dst->size() - offset;
+        const size_t n = size < avail ? size : avail;
+        std::memcpy(dst->data() + offset, src, n);
+        return n;
+    }
+
     // True if the driver supplied VDP1 / VDP2 registers.
     bool HasVdp1Regs() const { return mbHasVdp1Regs; }
     bool HasVdp2Regs() const { return mbHasVdp2Regs; }
+
+    // SH-2 register file per CPU (0 = master, 1 = slave), if the driver supplied it.
+    bool HasSh2Regs(int cpu) const { return cpu >= 0 && cpu < 2 && mbHasSh2[cpu]; }
+    const se_sh2_regs& Sh2Regs(int cpu) const { return mSh2[cpu & 1]; }
 
     // One register as a big-endian 16-bit value, addressed by its hardware byte
     // offset (e.g. VDP2 0x0E for RAMCTL). Returns 0 if unavailable.
@@ -64,9 +87,11 @@ private:
     std::vector<uint8_t>  mVdp1Fb;     // VDP1 frame buffer (present if SE_CAP_VDP1_FB)
     std::vector<uint16_t> mVdp1Regs;   // indexed by (hw offset >> 1)
     std::vector<uint16_t> mVdp2Regs;
+    se_sh2_regs           mSh2[2] = {};   // [0] master, [1] slave
     se_cram_mode          mCramMode = SE_CRAM_RGB555_1024;
     bool mbHasVdp1Regs = false;
     bool mbHasVdp2Regs = false;
+    bool mbHasSh2[2] = { false, false };
     bool mbValid = false;
 };
 

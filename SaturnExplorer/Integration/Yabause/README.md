@@ -75,16 +75,67 @@ frame, after the frame is drawn):
 
 ```c
 #include "se_export.h"
+#include "sh2core.h"
     /* ... existing VBlankOUT body ... */
+    sh2regs_struct se_msh2, se_ssh2;
+    SH2GetRegisters(MSH2, &se_msh2);
+    SH2GetRegisters(SSH2, &se_ssh2);
     SeExportSnapshot(Vdp1Ram, Vdp2Ram, Vdp2ColorRam, Vdp2Regs,
-                     Vdp1Regs, LowWram, HighWram);
+                     Vdp1Regs, LowWram, HighWram, VIDSoftGetVdp1FrameBuffer(),
+                     &se_msh2, &se_ssh2);
 ```
 
 `Vdp1Ram`/`Vdp2Ram`/`Vdp2ColorRam` are Yabause's VDP RAM globals; `Vdp2Regs` and
 `Vdp1Regs` are its register structs; `LowWram`/`HighWram` are the 1 MiB work-RAM
-globals (declared in `memory.h`). These names are stable across the Yabause family;
-if your fork renamed them, pass the equivalents. Any argument may be NULL to omit
-that section.
+globals (declared in `memory.h`); `se_msh2`/`se_ssh2` are the master/slave SH-2
+register files (`sh2core.h`), feeding the disassembler / Assembly panel. These
+names are stable across the Yabause family; if your fork renamed them, pass the
+equivalents. Any argument may be NULL to omit that section.
+
+### 2c. (Optional) SH-2 execution breakpoints
+To let the Assembly panel's gutter breakpoints and "Run to Here" halt the running
+game, register the breakpoint bridge after `SeExportInit()` in `YabauseInit()` and
+add three tiny file-scope helpers (all inserted for you by `apply.py`):
+
+```c
+static void SeExpBpHit(void *ctx, u32 addr, void *ud) {
+    (void)ud;
+    SeExportNotifyStop(ctx == (void *)SSH2 ? 1 : 0, (unsigned int)addr);
+}
+static void SeExpAddExecBp(int cpu, unsigned int addr) {
+    SH2AddCodeBreakpoint(cpu ? SSH2 : MSH2, (u32)addr);
+}
+static void SeExpClearBps(void) {
+    SH2ClearCodeBreakpoints(MSH2); SH2ClearCodeBreakpoints(SSH2);
+}
+/* ... in YabauseInit(), right after SeExportInit(): */
+SH2SetBreakpointCallBack(MSH2, SeExpBpHit, NULL);
+SH2SetBreakpointCallBack(SSH2, SeExpBpHit, NULL);
+SeExportSetBreakpointHooks(SeExpAddExecBp, SeExpClearBps);
+```
+
+**Caveat:** Yabause only honours code breakpoints in the **debug SH-2 interpreter**
+(`SH2InterpreterExec` with breakpoint checking), not the fast interpreter or a
+dynarec core. Select the debug/interpreter CPU core for breakpoints to fire; live
+viewing and pause/step work with any core. Memory (read/write) breakpoints
+round-trip over the protocol but aren't installed yet — they'd need
+`SH2AddMemoryBreakpoint` wiring.
+
+### 2d. (Optional) Hex Editor writes
+To let the Hex Editor poke work RAM in the running game, wire the write hook to
+Yabause's byte writer (also inserted by `apply.py`):
+
+```c
+static void SeExpWriteByte(unsigned int addr, unsigned char val) {
+    MappedMemoryWriteByte((u32)addr, (u8)val);
+}
+/* ... in YabauseInit(), after SeExportInit(): */
+SeExportSetMemWriteHook(SeExpWriteByte);
+```
+
+Writing byte-by-byte at Saturn addresses keeps big-endian order without a manual
+swap. Without this hook, Hex Editor edits still apply to Saturn Explorer's own view
+of the frame but aren't pushed to the emulator.
 
 ### 2b. (Optional) Pause / single-step gate
 To enable the Pause and Step Frame buttons, gate each emulated frame on
@@ -115,18 +166,23 @@ free-runs and the Pause / Step Frame buttons stay disabled. That's the whole pat
    registers, textures — now tracks the running game.
 
 ## What flows over the wire
-Each request is an 8-byte command (a verb — `GET`/`PAU`/`RUN`/`STP` — plus a
+Each request is an 8-byte command (a verb — `GET`/`PAU`/`RUN`/`STP`/`BKP` — plus a
 little-endian argument). Every command replies with a full snapshot: VDP1 VRAM
 (512 KiB), VDP2 VRAM (512 KiB), CRAM (4 KiB), the 288-byte VDP2 register struct,
 the VDP1 register image, low + high work RAM (1 MiB each), the VDP1 frame buffer
-(256 KiB, the drawn output), and a small control block (paused flag + frame
-counter) — the exact bytes Saturn Explorer's savestate loader already understands
-(VRAM big-endian, CRAM host-endian, VDP2 the raw struct). The VDP1 frame buffer is
-**host-endian** like CRAM: VIDSoft writes native `u16` pixels, so on a little-endian
-host the bytes are little-endian (the FB viewer decodes little-endian by default).
-The pause/step verbs
-just set the state `SeExportGateFrame()` reads. Wire format (protocol v4):
-`Drivers/Common/src/SeLiveProtocol.h`.
+(256 KiB, the drawn output), a control block, and the SH-2 state (master + slave
+`sh2regs_struct`) — the exact bytes Saturn Explorer's savestate loader already
+understands (VRAM big-endian, CRAM host-endian, VDP2 the raw struct, work RAM
+host-endian so the client byte-swaps each 16-bit word to big-endian). The VDP1
+frame buffer is **host-endian** like CRAM: VIDSoft writes native `u16` pixels, so on
+a little-endian host the bytes are little-endian (the FB viewer decodes
+little-endian by default). The control block carries the paused flag, frame
+counter, and a stop event (reason / CPU / PC) so a breakpoint halt jumps the
+Assembly panel to the halted PC. The pause/step verbs just set the state
+`SeExportGateFrame()` reads; `BKP` syncs the whole breakpoint set (its arg is the
+descriptor count, followed by that many 12-byte descriptors); `WRM` pokes work RAM
+(arg = byte count N, payload = address + N big-endian bytes). Wire format
+(protocol v6): `Drivers/Common/src/SeLiveProtocol.h`.
 
 **VDP1 frame buffer source.** The *global* `Vdp1FrameBuffer` in Yabause is only a
 fallback — during play every real frame-buffer access is routed through the active

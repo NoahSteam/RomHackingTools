@@ -37,9 +37,11 @@ struct LiveSnapshot
     std::vector<uint8_t> cram;
     std::vector<uint8_t> vdp2Regs;   // hw-offset BE image
     std::vector<uint8_t> vdp1Regs;   // hw-offset BE image
-    std::vector<uint8_t> wramLow;    // 0x00200000, 1 MiB
-    std::vector<uint8_t> wramHigh;   // 0x06000000, 1 MiB
+    std::vector<uint8_t> wramLow;    // 0x00200000, 1 MiB (normalized to big-endian)
+    std::vector<uint8_t> wramHigh;   // 0x06000000, 1 MiB (normalized to big-endian)
     std::vector<uint8_t> vdp1Fb;     // VDP1 frame buffer (drawn output)
+    se_sh2_regs          sh2[2] = {};        // [0] master, [1] slave (v5+)
+    bool                 hasSh2[2] = { false, false };
     bool                 valid = false;
 };
 
@@ -61,9 +63,22 @@ struct LiveState
     std::atomic<uint64_t> frameNumber{0};
     std::atomic<bool>     paused{false};
     std::atomic<uint32_t> serverVersion{0};   // protocol version last seen from server
-    std::mutex            ctlMtx;    // guards pending / stepFrames
+    // Last stop event from the control block (v5+): reason / cpu / pc of a
+    // breakpoint hit, so the UI can jump to the halted PC.
+    std::atomic<uint32_t> stopReason{0};
+    std::atomic<uint32_t> stopCpu{0};
+    std::atomic<uint32_t> stopPc{0};
+    std::mutex            ctlMtx;    // guards pending / stepFrames / bkpts
     Ctl                   pending = Ctl::None;
     int32_t               stepFrames = 0;
+    // Pending breakpoint-set sync: when the UI changes breakpoints it bumps
+    // 'bkptsDirty' and stashes the descriptor blob; the poll thread ships it with
+    // a BKP command on its next cycle. Each descriptor is SE_LIVE_BKPT_DESC_LEN.
+    std::vector<uint8_t>  bkpts;
+    bool                  bkptsDirty = false;
+    // Pending work-RAM pokes from the Hex Editor. Each entry is a WRM payload:
+    // address(u32 LE) + big-endian bytes. The poll thread ships one per cycle.
+    std::vector<std::vector<uint8_t>> writes;
     // True once we've told the emulator to pause/step and not since resumed, so the
     // poll thread knows to release it on close (never leave Yabause paused).
     std::atomic<bool>     pausedByUs{false};
@@ -217,18 +232,28 @@ bool SendCommand(Conn& c, const char* verb, int32_t arg)
 // Issue 'verb' (arg) and read the snapshot the server replies with into 'snap'
 // (converted to core-ready form). Also returns the run state via outPaused /
 // outFrame. Returns false on any protocol/socket error.
-bool ReadSnapshot(Conn& c, const char* verb, int32_t arg, LiveSnapshot& snap,
-                  bool& outPaused, uint64_t& outFrame, uint32_t& outVersion)
+struct StopInfo { uint32_t reason = 0; uint32_t cpu = 0; uint32_t pc = 0; };
+
+bool ReadSnapshot(Conn& c, const char* verb, int32_t arg,
+                  const uint8_t* extra, size_t extraLen, LiveSnapshot& snap,
+                  bool& outPaused, uint64_t& outFrame, uint32_t& outVersion,
+                  StopInfo& outStop)
 {
     if (!SendCommand(c, verb, arg))
     {
         return false;
     }
+    // Some commands (BKP) carry a payload after the 8-byte frame; ship it now so
+    // the server can consume it before replying with the snapshot.
+    if (extra && extraLen && !ConnWrite(c, extra, extraLen))
+    {
+        return false;
+    }
     // Read magic + version first, then size the section-length table to the
-    // server's version so we stay in sync with either a v3 (no VDP1 frame buffer,
-    // 8 sections) or v4+ (adds the FB, 9 sections) server. This keeps a rebuilt
-    // (v4) client working against a not-yet-rebuilt (v3) Yabause: it just reports
-    // fb == 0 and the FB read below becomes a no-op.
+    // server's version so we stay in sync across versions: v3 has 8 sections, v4
+    // adds the VDP1 frame buffer (9), v5 adds SH-2 state (10). A newer client stays
+    // compatible with an older, not-yet-rebuilt Yabause: the missing sections read
+    // as length 0 and their consumers become no-ops.
     uint8_t head[8];
     if (!ConnReadFull(c, head, sizeof(head)))
     {
@@ -242,24 +267,28 @@ bool ReadSnapshot(Conn& c, const char* verb, int32_t arg, LiveSnapshot& snap,
     const uint32_t version = Rd32LE(head + 4);
     outVersion = version;
     const int hasFb = (version >= 4u) ? 1 : 0;    // FB section added in v4
-    const int numLen = 8 + hasFb;                 // section-length entries
-    uint8_t lens[9 * 4];
+    const int hasSh2 = (version >= 5u) ? 1 : 0;   // SH-2 state added in v5
+    const int numLen = 8 + hasFb + hasSh2;        // section-length entries
+    uint8_t lens[10 * 4];
     if (!ConnReadFull(c, lens, static_cast<size_t>(numLen) * 4))
     {
         return false;
     }
-    const uint32_t v1 = Rd32LE(lens + 0);
-    const uint32_t v2 = Rd32LE(lens + 4);
-    const uint32_t cr = Rd32LE(lens + 8);
-    const uint32_t vs = Rd32LE(lens + 12);
-    const uint32_t vr = Rd32LE(lens + 16);
-    const uint32_t wl = Rd32LE(lens + 20);
-    const uint32_t wh = Rd32LE(lens + 24);
-    const uint32_t fb = hasFb ? Rd32LE(lens + 28) : 0u;
-    const uint32_t ct = Rd32LE(lens + (hasFb ? 32 : 28));
+    int off = 0;
+    const uint32_t v1 = Rd32LE(lens + (off++ * 4));
+    const uint32_t v2 = Rd32LE(lens + (off++ * 4));
+    const uint32_t cr = Rd32LE(lens + (off++ * 4));
+    const uint32_t vs = Rd32LE(lens + (off++ * 4));
+    const uint32_t vr = Rd32LE(lens + (off++ * 4));
+    const uint32_t wl = Rd32LE(lens + (off++ * 4));
+    const uint32_t wh = Rd32LE(lens + (off++ * 4));
+    const uint32_t fb = hasFb  ? Rd32LE(lens + (off++ * 4)) : 0u;
+    const uint32_t ct = Rd32LE(lens + (off++ * 4));
+    const uint32_t sh = hasSh2 ? Rd32LE(lens + (off++ * 4)) : 0u;
     // Sanity clamps so a malformed header can't drive a huge allocation.
     if (v1 > 0x100000u || v2 > 0x100000u || cr > 0x4000u || vs > 4096u ||
-        vr > 256u || wl > 0x100000u || wh > 0x100000u || fb > 0x40000u || ct > 64u)
+        vr > 256u || wl > 0x100000u || wh > 0x100000u || fb > 0x40000u ||
+        ct > 64u || sh > 256u)
     {
         return false;
     }
@@ -273,6 +302,7 @@ bool ReadSnapshot(Conn& c, const char* verb, int32_t arg, LiveSnapshot& snap,
     snap.wramHigh.resize(wh);
     snap.vdp1Fb.resize(fb);
     std::vector<uint8_t> ctl(ct);
+    std::vector<uint8_t> sh2(sh);
     if (!ConnReadFull(c, snap.vdp1Vram.data(), v1) ||
         !ConnReadFull(c, snap.vdp2Vram.data(), v2) ||
         !ConnReadFull(c, snap.cram.data(), cr) ||
@@ -281,16 +311,41 @@ bool ReadSnapshot(Conn& c, const char* verb, int32_t arg, LiveSnapshot& snap,
         !ConnReadFull(c, snap.wramLow.data(), wl) ||
         !ConnReadFull(c, snap.wramHigh.data(), wh) ||
         !ConnReadFull(c, snap.vdp1Fb.data(), fb) ||
-        !ConnReadFull(c, ctl.data(), ct))
+        !ConnReadFull(c, ctl.data(), ct) ||
+        !ConnReadFull(c, sh2.data(), sh))
     {
         return false;
     }
 
-    // Control block: paused (u32 LE) + frame (u64 LE). Absent on older servers.
+    // Control block: paused (u32 LE) + frame (u64 LE), then (v5+) stop reason/cpu/pc.
+    // Absent fields default to 0 on older servers.
     outPaused = ct >= 4 && Rd32LE(ctl.data()) != 0;
     outFrame = ct >= 12 ? (static_cast<uint64_t>(Rd32LE(ctl.data() + 4)) |
                            (static_cast<uint64_t>(Rd32LE(ctl.data() + 8)) << 32))
                         : 0;
+    outStop = StopInfo{};
+    if (ct >= 24)
+    {
+        outStop.reason = Rd32LE(ctl.data() + 12);
+        outStop.cpu    = Rd32LE(ctl.data() + 16);
+        outStop.pc     = Rd32LE(ctl.data() + 20);
+    }
+
+    // SH-2 state (v5+): master then slave, each a 92-byte sh2regs_struct.
+    for (int cpu = 0; cpu < 2; ++cpu)
+    {
+        const size_t base = static_cast<size_t>(cpu) * SE_LIVE_SH2_REGS_LEN;
+        if (sh >= base + SE_LIVE_SH2_REGS_LEN)
+        {
+            sedrv::ParseSh2Regs(sh2.data() + base, snap.sh2[cpu]);
+            snap.hasSh2[cpu] = true;
+        }
+    }
+
+    // Work RAM arrives in Yabause host order; normalize to Saturn big-endian so
+    // watches and the SH-2 disassembler read it correctly (same as the savestate).
+    sedrv::Bswap16(snap.wramLow.data(), snap.wramLow.size());
+    sedrv::Bswap16(snap.wramHigh.data(), snap.wramHigh.size());
 
     // VRAM is already big-endian; build the VDP2 register image and use RAMCTL's
     // CRAM mode to normalize CRAM — exactly like the savestate path.
@@ -315,27 +370,50 @@ void PollLoop(LiveState* st)
             }
         }
 
-        // Drain any control command posted by the UI thread; otherwise poll.
+        // Drain any control command posted by the UI thread; otherwise poll. A
+        // pending breakpoint-set sync takes priority so new breakpoints install
+        // before the next frame runs; it carries the descriptor blob as payload.
         const char* verb = SE_LIVE_VERB_GET;
         int32_t arg = 0;
+        std::vector<uint8_t> payload;
         {
             std::lock_guard<std::mutex> lk(st->ctlMtx);
-            switch (st->pending)
+            if (st->bkptsDirty)
             {
-                case Ctl::Pause:  verb = SE_LIVE_VERB_PAUSE;  break;
-                case Ctl::Resume: verb = SE_LIVE_VERB_RESUME; break;
-                case Ctl::Step:   verb = SE_LIVE_VERB_STEP; arg = st->stepFrames; break;
-                default: break;
+                verb = SE_LIVE_VERB_BKPTS;
+                arg = static_cast<int32_t>(st->bkpts.size() / SE_LIVE_BKPT_DESC_LEN);
+                payload = st->bkpts;
+                st->bkptsDirty = false;
             }
-            st->pending = Ctl::None;
-            st->stepFrames = 0;
+            else if (!st->writes.empty())
+            {
+                // Ship one poke: payload = address(4) + bytes; arg = byte count.
+                payload = std::move(st->writes.front());
+                st->writes.erase(st->writes.begin());
+                verb = SE_LIVE_VERB_WRITE;
+                arg = static_cast<int32_t>(payload.size() >= 4 ? payload.size() - 4 : 0);
+            }
+            else
+            {
+                switch (st->pending)
+                {
+                    case Ctl::Pause:  verb = SE_LIVE_VERB_PAUSE;  break;
+                    case Ctl::Resume: verb = SE_LIVE_VERB_RESUME; break;
+                    case Ctl::Step:   verb = SE_LIVE_VERB_STEP; arg = st->stepFrames; break;
+                    default: break;
+                }
+                st->pending = Ctl::None;
+                st->stepFrames = 0;
+            }
         }
 
         LiveSnapshot snap;
         bool paused = false;
         uint64_t frame = 0;
         uint32_t sver = 0;
-        if (!ReadSnapshot(conn, verb, arg, snap, paused, frame, sver))
+        StopInfo stop;
+        if (!ReadSnapshot(conn, verb, arg, payload.data(), payload.size(),
+                          snap, paused, frame, sver, stop))
         {
             ConnClose(conn);   // will reconnect next iteration
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -348,6 +426,9 @@ void PollLoop(LiveState* st)
         st->paused.store(paused);
         st->frameNumber.store(frame);
         st->serverVersion.store(sver);
+        st->stopReason.store(stop.reason);
+        st->stopCpu.store(stop.cpu);
+        st->stopPc.store(stop.pc);
         std::this_thread::sleep_for(std::chrono::milliseconds(8));   // ~120 Hz cap
     }
     // Closing: if we left the emulator paused/stepped, release it before dropping
@@ -359,7 +440,8 @@ void PollLoop(LiveState* st)
         bool p = false;
         uint64_t fr = 0;
         uint32_t sv = 0;
-        ReadSnapshot(conn, SE_LIVE_VERB_RESUME, 0, tmp, p, fr, sv);   // best-effort
+        StopInfo si;
+        ReadSnapshot(conn, SE_LIVE_VERB_RESUME, 0, nullptr, 0, tmp, p, fr, sv, si);  // best-effort
     }
     ConnClose(conn);
 }
@@ -411,6 +493,32 @@ size_t CbVdp1Fb(void* u, uint32_t off, void* dst, size_t size)
 {
     LiveState* st = St(u); std::lock_guard<std::mutex> lk(st->mtx);
     return CopyRegion(st->front.vdp1Fb, off, dst, size);
+}
+
+size_t CbWriteMainRam(void* u, uint32_t address, const void* src, size_t size)
+{
+    if (!src || size == 0) return 0;
+    LiveState* st = St(u);
+    std::vector<uint8_t> payload;
+    payload.reserve(4 + size);
+    payload.push_back((uint8_t)(address & 0xFF));
+    payload.push_back((uint8_t)((address >> 8) & 0xFF));
+    payload.push_back((uint8_t)((address >> 16) & 0xFF));
+    payload.push_back((uint8_t)((address >> 24) & 0xFF));
+    const uint8_t* p = static_cast<const uint8_t*>(src);
+    payload.insert(payload.end(), p, p + size);
+    std::lock_guard<std::mutex> lk(st->ctlMtx);
+    st->writes.push_back(std::move(payload));   // poll thread ships it next cycle
+    return size;
+}
+
+int CbSh2Regs(void* u, int cpu, se_sh2_regs* out)
+{
+    if (cpu < 0 || cpu > 1 || !out) { return 0; }
+    LiveState* st = St(u); std::lock_guard<std::mutex> lk(st->mtx);
+    if (!st->front.hasSh2[cpu]) { return 0; }   // server predates v5 / no data yet
+    *out = st->front.sh2[cpu];
+    return 1;
 }
 
 uint16_t CbVdp1Reg(void* u, uint32_t reg)
@@ -511,15 +619,18 @@ extern "C" se_result se_live_open(const char* endpoint, se_data_source* out)
     out->abi_version = SE_ABI_VERSION;
     out->capabilities = SE_CAP_VDP1_VRAM | SE_CAP_VDP2_VRAM | SE_CAP_CRAM |
                         SE_CAP_VDP1_REGS | SE_CAP_VDP2_REGS | SE_CAP_MAIN_RAM |
-                        SE_CAP_VDP1_FB | SE_CAP_FRAME_STEP;
+                        SE_CAP_VDP1_FB | SE_CAP_FRAME_STEP | SE_CAP_SH2_REGS |
+                        SE_CAP_MEM_WRITE;
     out->user = st;
     out->read_vdp1_vram = CbVdp1Vram;
     out->read_vdp2_vram = CbVdp2Vram;
     out->read_cram      = CbCram;
     out->read_main_ram  = CbMainRam;
+    out->write_main_ram = CbWriteMainRam;
     out->read_vdp1_fb   = CbVdp1Fb;
     out->read_vdp1_reg  = CbVdp1Reg;
     out->read_vdp2_reg  = CbVdp2Reg;
+    out->read_sh2_regs  = CbSh2Regs;
     out->frame_pause    = CbFramePause;
     out->frame_step     = CbFrameStep;
     out->frame_number   = CbFrameNumber;
@@ -535,4 +646,26 @@ extern "C" uint32_t se_live_server_version(const se_data_source* ds)
         return 0;
     }
     return St(ds->user)->serverVersion.load();
+}
+
+extern "C" void se_live_set_breakpoints(const se_data_source* ds,
+                                        const uint8_t* descs, uint32_t count)
+{
+    if (!ds || !ds->user || ds->close != CbClose) { return; }
+    LiveState* st = St(ds->user);
+    std::lock_guard<std::mutex> lk(st->ctlMtx);
+    st->bkpts.assign(descs, descs + static_cast<size_t>(count) * SE_LIVE_BKPT_DESC_LEN);
+    st->bkptsDirty = true;   // poll thread ships it on its next cycle
+}
+
+extern "C" int se_live_get_stop(const se_data_source* ds, uint32_t* reason,
+                                uint32_t* cpu, uint32_t* pc)
+{
+    if (!ds || !ds->user || ds->close != CbClose) { return 0; }
+    LiveState* st = St(ds->user);
+    const uint32_t r = st->stopReason.load();
+    if (reason) { *reason = r; }
+    if (cpu)    { *cpu = st->stopCpu.load(); }
+    if (pc)     { *pc = st->stopPc.load(); }
+    return r != SE_LIVE_STOP_NONE ? 1 : 0;
 }

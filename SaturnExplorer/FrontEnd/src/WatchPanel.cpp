@@ -97,7 +97,8 @@ void WatchPanel::Refresh(IMemoryBackend& backend, IExpressionResolver& resolver)
 }
 
 void WatchPanel::Draw(IMemoryBackend& backend, IExpressionResolver& resolver,
-                      IPlatform& platform, float dt)
+                      IPlatform& platform, BreakpointManager& bps, float dt,
+                      uint32_t* outHexJump)
 {
     if (!ImGui::Begin("Watch"))
     {
@@ -273,13 +274,20 @@ void WatchPanel::Draw(IMemoryBackend& backend, IExpressionResolver& resolver,
             if (ImGui::MenuItem("Copy Value", nullptr, false, row.hasValue))
                 ImGui::SetClipboardText(row.value.text.c_str());
             ImGui::Separator();
-            ImGui::BeginDisabled();
-            ImGui::MenuItem("View in Hex Editor");
-            ImGui::MenuItem("Break on Read");
-            ImGui::MenuItem("Break on Write");
-            ImGui::MenuItem("Break on Read or Write");
-            ImGui::EndDisabled();
-            ImGui::TextDisabled("  (hex editor + breakpoints: later phase)");
+            // Break on read/write of this watch's memory. Needs a resolved
+            // address; the size follows the watch type (1/2/4 bytes). The live
+            // driver installs the set when connected (memory breakpoints round-trip
+            // now; execution breakpoints also halt the emulator).
+            const uint32_t bpSize = WatchTypeSize(e.type);
+            if (ImGui::MenuItem("Break on Read", nullptr, false, row.resolved))
+                bps.AddMemory(row.address, bpSize, BpKind::MemRead);
+            if (ImGui::MenuItem("Break on Write", nullptr, false, row.resolved))
+                bps.AddMemory(row.address, bpSize, BpKind::MemWrite);
+            if (ImGui::MenuItem("Break on Read or Write", nullptr, false, row.resolved))
+                bps.AddMemory(row.address, bpSize, BpKind::MemReadWrite);
+            ImGui::Separator();
+            if (ImGui::MenuItem("View in Hex Editor", nullptr, false, row.resolved))
+                if (outHexJump) *outHexJump = row.address;
             ImGui::EndPopup();
         }
 

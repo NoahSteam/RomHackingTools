@@ -24,6 +24,20 @@ se_result se_live_open(const char* endpoint, se_data_source* out);
  * se_live_open. */
 uint32_t se_live_server_version(const se_data_source* ds);
 
+/* Push the whole execution/memory breakpoint set to the emulator (v5+). 'descs'
+ * points at 'count' 12-byte descriptors (address u32 LE + size u32 LE + flags u32
+ * LE; see SeLiveProtocol.h SE_LIVE_BP_*). The poll thread ships them on its next
+ * cycle; the server replaces its set and installs them. No-op if 'ds' isn't a live
+ * source. Call whenever the local breakpoint set changes. */
+void se_live_set_breakpoints(const se_data_source* ds, const uint8_t* descs,
+                             uint32_t count);
+
+/* Read the last stop event reported by the server's control block (v5+). Fills
+ * '*reason' (SE_LIVE_STOP_*), '*cpu' (0 master / 1 slave), and '*pc' when non-NULL.
+ * Returns 1 if the emulator is halted on a breakpoint, 0 otherwise (or not live). */
+int se_live_get_stop(const se_data_source* ds, uint32_t* reason, uint32_t* cpu,
+                     uint32_t* pc);
+
 #ifdef __cplusplus
 }
 #endif

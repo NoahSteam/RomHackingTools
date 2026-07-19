@@ -51,6 +51,7 @@ add_library(SaturnExplorerDriverCommon STATIC
 )
 target_include_directories(SaturnExplorerDriverCommon
     PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/Drivers/Common/src
+           ${CMAKE_CURRENT_SOURCE_DIR}/include   # se_sh2_regs (SaturnStateShared.h)
 )
 
 # ---------------------------------------------------------------------------
@@ -109,9 +110,13 @@ if(WIN32)
         FrontEnd/src/App.cpp
         FrontEnd/src/Theme.cpp
         FrontEnd/src/WatchPanel.cpp
+        FrontEnd/src/AssemblyPanel.cpp
+        FrontEnd/src/HexEditorPanel.cpp
         FrontEnd/src/Debug/WatchList.cpp
         FrontEnd/src/Debug/MemoryBackend.cpp
         FrontEnd/src/Debug/Sh2Disasm.cpp
+        FrontEnd/src/Debug/BreakpointManager.cpp
+        FrontEnd/src/Debug/ShiftJis.cpp
         FrontEnd/src/FrameRecorder.cpp
         FrontEnd/src/FrameLz.cpp
         FrontEnd/Platforms/Windows/WindowsPlatform.cpp
@@ -150,9 +155,13 @@ elseif(EMSCRIPTEN)
         FrontEnd/src/App.cpp
         FrontEnd/src/Theme.cpp
         FrontEnd/src/WatchPanel.cpp
+        FrontEnd/src/AssemblyPanel.cpp
+        FrontEnd/src/HexEditorPanel.cpp
         FrontEnd/src/Debug/WatchList.cpp
         FrontEnd/src/Debug/MemoryBackend.cpp
         FrontEnd/src/Debug/Sh2Disasm.cpp
+        FrontEnd/src/Debug/BreakpointManager.cpp
+        FrontEnd/src/Debug/ShiftJis.cpp
         FrontEnd/Platforms/Web/WebPlatform.cpp
         FrontEnd/Platforms/Web/WebMain.cpp
         ${SE_IMGUI_CORE}
@@ -193,9 +202,15 @@ else()
             FrontEnd/src/App.cpp
             FrontEnd/src/Theme.cpp
             FrontEnd/src/WatchPanel.cpp
+            FrontEnd/src/AssemblyPanel.cpp
+        FrontEnd/src/HexEditorPanel.cpp
+            FrontEnd/src/HexEditorPanel.cpp
             FrontEnd/src/Debug/WatchList.cpp
             FrontEnd/src/Debug/MemoryBackend.cpp
             FrontEnd/src/Debug/Sh2Disasm.cpp
+            FrontEnd/src/Debug/BreakpointManager.cpp
+        FrontEnd/src/Debug/ShiftJis.cpp
+            FrontEnd/src/Debug/ShiftJis.cpp
             FrontEnd/src/FrameRecorder.cpp
             FrontEnd/src/FrameLz.cpp
             FrontEnd/Platforms/Web/WebPlatform.cpp

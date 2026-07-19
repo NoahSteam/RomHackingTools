@@ -112,6 +112,15 @@ bool HardwareSnapshot::Capture(const se_data_source& dataSource)
         mbHasVdp2Regs = true;
     }
 
+    // Capture the SH-2 master/slave register files if the driver supplies them.
+    if ((dataSource.capabilities & SE_CAP_SH2_REGS) && dataSource.read_sh2_regs)
+    {
+        for (int cpu = 0; cpu < 2; ++cpu)
+        {
+            mbHasSh2[cpu] = dataSource.read_sh2_regs(dataSource.user, cpu, &mSh2[cpu]) != 0;
+        }
+    }
+
     // CRAM color mode from VDP2 RAMCTL (offset 0x0E), bits 12-13.
     mCramMode = SE_CRAM_RGB555_1024;
     if (mbHasVdp2Regs)

@@ -45,7 +45,7 @@ MemoryReadResult ContextBackend::ReadOne(uint32_t address, uint32_t size) const
         r.error = "Disconnected";
         return r;
     }
-    if (size == 0 || size > 4)
+    if (size == 0 || size > 0x10000)
     {
         r.error = "Bad size";
         return r;
@@ -110,6 +110,33 @@ std::vector<MemoryReadResult> ContextBackend::ReadMemoryBatch(
         out.push_back(ReadOne(req.address, req.size));
     }
     return out;
+}
+
+// Only writable regions the core can edit (work RAM) allow writes; the address
+// must fall entirely inside one and the source must have a loaded snapshot.
+bool ContextBackend::CanWrite(uint32_t address) const
+{
+    if (!Connected() || !se_can_write(*mContext)) return false;
+    const uint32_t a = Canonical(address);
+    for (const Region& reg : kRegions)
+        if ((reg.kind == SE_VRAM_KIND_WRAM_LOW || reg.kind == SE_VRAM_KIND_WRAM_HIGH) &&
+            a >= reg.base && a < reg.base + reg.size)
+            return true;
+    return false;
+}
+
+size_t ContextBackend::WriteMemory(uint32_t address, const uint8_t* bytes, size_t size)
+{
+    if (!Connected() || !bytes || size == 0) return 0;
+    const uint32_t a = Canonical(address);
+    for (const Region& reg : kRegions)
+    {
+        if (a < reg.base || a + size > reg.base + reg.size) continue;
+        if (reg.kind != SE_VRAM_KIND_WRAM_LOW && reg.kind != SE_VRAM_KIND_WRAM_HIGH)
+            return 0;   // only work RAM is writable for now
+        return se_write_vram(*mContext, reg.kind, a - reg.base, bytes, size);
+    }
+    return 0;
 }
 
 }  // namespace sfe
