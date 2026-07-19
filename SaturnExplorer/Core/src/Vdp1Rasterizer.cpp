@@ -335,6 +335,17 @@ bool PointInSprite(const se_sprite_2d& sprite, float px, float py)
 
     auto inTriangle = [&](const se_vec2& p0, const se_vec2& p1, const se_vec2& p2)
     {
+        // Reject a degenerate (zero-area) triangle. Its three edge functions are
+        // all 0 for every point, so the sign test below would report EVERY point
+        // as "inside" — letting a sprite whose screen quad has collapsed to a line
+        // or point (off-screen/scaled-to-nothing, but still in the list) swallow
+        // every click and shadow the real sprite underneath. An invisible sprite
+        // must not be clickable.
+        const float area = Edge(p0.x, p0.y, p1.x, p1.y, p2.x, p2.y);
+        if (area > -1e-3f && area < 1e-3f)
+        {
+            return false;
+        }
         const float e0 = Edge(p0.x, p0.y, p1.x, p1.y, px, py);
         const float e1 = Edge(p1.x, p1.y, p2.x, p2.y, px, py);
         const float e2 = Edge(p2.x, p2.y, p0.x, p0.y, px, py);
