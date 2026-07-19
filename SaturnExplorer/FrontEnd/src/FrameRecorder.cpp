@@ -1,8 +1,8 @@
 #include "FrameRecorder.h"
 
 #include <cstring>
+#include <utility>
 
-#include "FrameLz.h"
 #include "SaturnRegions.h"
 
 namespace sfe
@@ -10,21 +10,27 @@ namespace sfe
 
 namespace
 {
-// Read a VRAM region via the ABI, compress it into 'r'. Sizes to the bytes the
-// source actually returned (0 = region absent for this source).
-void CaptureRegion(se_context* ctx, se_vram_kind kind, uint32_t maxSize,
-                   FrameRecorder::Region& r, std::vector<uint8_t>& scratch,
-                   FrameLzScratch& lz)
+// Read a whole VRAM region via the ABI into 'out' (sized to what the source
+// returned; 0 = region absent for this source). Runs on the UI thread.
+void ReadRegion(se_context* ctx, se_vram_kind kind, uint32_t maxSize,
+                std::vector<uint8_t>& out)
 {
-    scratch.resize(maxSize);
-    const size_t got = se_read_vram(ctx, kind, 0, scratch.data(), maxSize);
-    r.rawSize = got;
-    if (got == 0)
+    out.resize(maxSize);
+    const size_t got = se_read_vram(ctx, kind, 0, out.data(), maxSize);
+    out.resize(got);
+}
+
+// Compress a raw region into 'r' (worker thread), reusing the match-finder scratch.
+void CompressRegion(const std::vector<uint8_t>& raw, FrameRecorder::Region& r,
+                    FrameLzScratch& lz)
+{
+    r.rawSize = raw.size();
+    if (raw.empty())
     {
         r.lz.clear();
         return;
     }
-    FrameLzCompress(scratch.data(), got, r.lz, lz);
+    FrameLzCompress(raw.data(), raw.size(), r.lz, lz);
 }
 
 void DecompressRegion(const FrameRecorder::Region& r, std::vector<uint8_t>& out)
@@ -36,7 +42,7 @@ void DecompressRegion(const FrameRecorder::Region& r, std::vector<uint8_t>& out)
     }
     if (!FrameLzDecompress(r.lz.data(), r.lz.size(), out.data(), r.rawSize))
     {
-        std::memset(out.data(), 0, out.size());   // corrupt blob → blank, don't crash
+        std::memset(out.data(), 0, out.size());   // corrupt blob -> blank, don't crash
     }
 }
 
@@ -53,8 +59,24 @@ size_t CopyOut(const std::vector<uint8_t>& buf, uint32_t off, void* dst, size_t 
 }
 }  // namespace
 
+FrameRecorder::FrameRecorder()
+{
+    mWorker = std::thread(&FrameRecorder::Worker, this);
+}
+
+FrameRecorder::~FrameRecorder()
+{
+    mStop.store(true);
+    mQCv.notify_all();
+    if (mWorker.joinable())
+    {
+        mWorker.join();
+    }
+}
+
 void FrameRecorder::Configure(size_t maxFrames)
 {
+    std::lock_guard<std::mutex> lk(mRingMtx);
     mMaxFrames = maxFrames;
     Evict();
 }
@@ -65,37 +87,78 @@ void FrameRecorder::Capture(se_context* ctx, uint64_t frameNumber)
     {
         return;
     }
-    // The caller gates capture on the run state (only while playing), so every call
-    // is a genuine new frame — no frame-number dedup, which would otherwise collapse
-    // the ring to one entry whenever the emulator's counter doesn't advance.
-    Frame f;
-    f.frameNumber = frameNumber;
-    std::vector<uint8_t>& scratch = mReadScratch;   // reused across frames
-    CaptureRegion(ctx, SE_VRAM_KIND_VDP1_VRAM, kVdp1VramSize, f.vdp1Vram, scratch, mLzScratch);
-    CaptureRegion(ctx, SE_VRAM_KIND_VDP2_VRAM, kVdp2VramSize, f.vdp2Vram, scratch, mLzScratch);
-    CaptureRegion(ctx, SE_VRAM_KIND_CRAM,      kCramSize,     f.cram,     scratch, mLzScratch);
-    CaptureRegion(ctx, SE_VRAM_KIND_WRAM_LOW,  kWramSize,     f.wramLow,  scratch, mLzScratch);
-    CaptureRegion(ctx, SE_VRAM_KIND_WRAM_HIGH, kWramSize,     f.wramHigh, scratch, mLzScratch);
-    CaptureRegion(ctx, SE_VRAM_KIND_VDP1_FB,   kVdp1FbSize,   f.vdp1Fb,   scratch, mLzScratch);
+    // UI thread: only the raw reads happen here (fast memcpys); the worker does
+    // the expensive compression. Registers are small, so read them here too.
+    RawFrame raw;
+    raw.frameNumber = frameNumber;
+    ReadRegion(ctx, SE_VRAM_KIND_VDP1_VRAM, kVdp1VramSize, raw.vdp1Vram);
+    ReadRegion(ctx, SE_VRAM_KIND_VDP2_VRAM, kVdp2VramSize, raw.vdp2Vram);
+    ReadRegion(ctx, SE_VRAM_KIND_CRAM,      kCramSize,     raw.cram);
+    ReadRegion(ctx, SE_VRAM_KIND_WRAM_LOW,  kWramSize,     raw.wramLow);
+    ReadRegion(ctx, SE_VRAM_KIND_WRAM_HIGH, kWramSize,     raw.wramHigh);
+    ReadRegion(ctx, SE_VRAM_KIND_VDP1_FB,   kVdp1FbSize,   raw.vdp1Fb);
 
-    f.vdp1Regs.resize(kVdp1RegBytes / 2);
+    raw.vdp1Regs.resize(kVdp1RegBytes / 2);
     for (uint32_t o = 0; o < kVdp1RegBytes; o += 2)
     {
-        f.vdp1Regs[o / 2] = se_get_vdp1_register(ctx, o);
+        raw.vdp1Regs[o / 2] = se_get_vdp1_register(ctx, o);
     }
-    f.vdp2Regs.resize(kVdp2RegBytes / 2);
+    raw.vdp2Regs.resize(kVdp2RegBytes / 2);
     for (uint32_t o = 0; o < kVdp2RegBytes; o += 2)
     {
-        f.vdp2Regs[o / 2] = se_get_vdp2_register(ctx, o);
+        raw.vdp2Regs[o / 2] = se_get_vdp2_register(ctx, o);
     }
 
-    f.bytes = f.vdp1Vram.lz.size() + f.vdp2Vram.lz.size() + f.cram.lz.size() +
-              f.wramLow.lz.size() + f.wramHigh.lz.size() + f.vdp1Fb.lz.size() +
-              f.vdp1Regs.size() * 2 + f.vdp2Regs.size() * 2;
+    {
+        std::lock_guard<std::mutex> lk(mQMtx);
+        if (mQueue.size() >= kMaxQueued)
+        {
+            return;   // compressor is behind: drop this frame rather than stall
+        }
+        mQueue.push_back(std::move(raw));
+    }
+    mQCv.notify_one();
+}
 
-    mBytes += f.bytes;
-    mFrames.push_back(std::move(f));
-    Evict();
+void FrameRecorder::Worker()
+{
+    for (;;)
+    {
+        RawFrame raw;
+        {
+            std::unique_lock<std::mutex> lk(mQMtx);
+            mQCv.wait(lk, [this] { return mStop.load() || !mQueue.empty(); });
+            if (mStop.load() && mQueue.empty())
+            {
+                return;
+            }
+            if (mQueue.empty())
+            {
+                continue;
+            }
+            raw = std::move(mQueue.front());
+            mQueue.pop_front();
+        }
+
+        Frame f;
+        f.frameNumber = raw.frameNumber;
+        CompressRegion(raw.vdp1Vram, f.vdp1Vram, mLzScratch);
+        CompressRegion(raw.vdp2Vram, f.vdp2Vram, mLzScratch);
+        CompressRegion(raw.cram,     f.cram,     mLzScratch);
+        CompressRegion(raw.wramLow,  f.wramLow,  mLzScratch);
+        CompressRegion(raw.wramHigh, f.wramHigh, mLzScratch);
+        CompressRegion(raw.vdp1Fb,   f.vdp1Fb,   mLzScratch);
+        f.vdp1Regs = std::move(raw.vdp1Regs);
+        f.vdp2Regs = std::move(raw.vdp2Regs);
+        f.bytes = f.vdp1Vram.lz.size() + f.vdp2Vram.lz.size() + f.cram.lz.size() +
+                  f.wramLow.lz.size() + f.wramHigh.lz.size() + f.vdp1Fb.lz.size() +
+                  f.vdp1Regs.size() * 2 + f.vdp2Regs.size() * 2;
+
+        std::lock_guard<std::mutex> lk(mRingMtx);
+        mBytes += f.bytes;
+        mFrames.push_back(std::move(f));
+        Evict();
+    }
 }
 
 void FrameRecorder::Evict()
@@ -111,25 +174,55 @@ void FrameRecorder::Evict()
 
 void FrameRecorder::Clear()
 {
+    {
+        std::lock_guard<std::mutex> lk(mQMtx);
+        mQueue.clear();
+    }
+    std::lock_guard<std::mutex> lk(mRingMtx);
     mFrames.clear();
     mBytes = 0;
 }
 
+size_t FrameRecorder::Count() const
+{
+    std::lock_guard<std::mutex> lk(mRingMtx);
+    return mFrames.size();
+}
+
+uint64_t FrameRecorder::FrameNumber(size_t i) const
+{
+    std::lock_guard<std::mutex> lk(mRingMtx);
+    return i < mFrames.size() ? mFrames[i].frameNumber : 0;
+}
+
+size_t FrameRecorder::BytesUsed() const
+{
+    std::lock_guard<std::mutex> lk(mRingMtx);
+    return mBytes;
+}
+
 bool FrameRecorder::Select(size_t i, se_data_source* out)
 {
-    if (i >= mFrames.size() || !out)
+    if (!out)
     {
         return false;
     }
-    const Frame& f = mFrames[i];
-    DecompressRegion(f.vdp1Vram, mSelVdp1);
-    DecompressRegion(f.vdp2Vram, mSelVdp2);
-    DecompressRegion(f.cram, mSelCram);
-    DecompressRegion(f.wramLow, mSelWramLow);
-    DecompressRegion(f.wramHigh, mSelWramHigh);
-    DecompressRegion(f.vdp1Fb, mSelVdp1Fb);
-    mSelVdp1Regs = f.vdp1Regs;
-    mSelVdp2Regs = f.vdp2Regs;
+    {
+        std::lock_guard<std::mutex> lk(mRingMtx);
+        if (i >= mFrames.size())
+        {
+            return false;
+        }
+        const Frame& f = mFrames[i];
+        DecompressRegion(f.vdp1Vram, mSelVdp1);
+        DecompressRegion(f.vdp2Vram, mSelVdp2);
+        DecompressRegion(f.cram, mSelCram);
+        DecompressRegion(f.wramLow, mSelWramLow);
+        DecompressRegion(f.wramHigh, mSelWramHigh);
+        DecompressRegion(f.vdp1Fb, mSelVdp1Fb);
+        mSelVdp1Regs = f.vdp1Regs;
+        mSelVdp2Regs = f.vdp2Regs;
+    }
 
     std::memset(out, 0, sizeof(*out));
     out->abi_version = SE_ABI_VERSION;

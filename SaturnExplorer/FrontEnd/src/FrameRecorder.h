@@ -1,15 +1,20 @@
-// FrameRecorder — a rolling, in-memory recording of the live Saturn memory
-// state so the user can pause and scrub back through recent frames. Each frame's
-// regions (VDP1/VDP2 VRAM, CRAM, work RAM, register files) are read out through
-// the host ABI, LZ-compressed (FrameLz), and pushed into a ring buffer bounded by
-// a memory budget and a wall-time window; the oldest frames drop out as new ones
-// arrive. Select() rebuilds a se_data_source over a chosen frame so the core can
-// re-render it exactly like a live snapshot. Native only (paired with live mode).
+// FrameRecorder — a rolling, in-memory recording of live Saturn memory so the
+// user can pause and scrub back through recent frames. Capture() runs on the UI
+// thread and only does the fast raw region reads, then hands the frame to a
+// background worker that LZ-compresses it (FrameLz) and pushes it into a ring
+// buffer bounded by a memory budget + frame count. Keeping compression off the UI
+// thread is essential: compressing ~3 MB/frame inline stalls the live view.
+// Select() rebuilds a se_data_source over a chosen frame so the core can re-render
+// it exactly like a live snapshot. Native only (paired with live mode).
 #pragma once
 
+#include <atomic>
+#include <condition_variable>
 #include <cstddef>
 #include <cstdint>
 #include <deque>
+#include <mutex>
+#include <thread>
 #include <vector>
 
 #include "saturnexplorer/SaturnExplorer.h"
@@ -22,6 +27,12 @@ namespace sfe
 class FrameRecorder
 {
 public:
+    FrameRecorder();
+    ~FrameRecorder();
+
+    FrameRecorder(const FrameRecorder&) = delete;
+    FrameRecorder& operator=(const FrameRecorder&) = delete;
+
     // One captured region: its LZ blob plus the original (decompressed) length.
     struct Region
     {
@@ -41,15 +52,14 @@ public:
     // also guards against runaway memory; the frame cap is the effective limit.)
     void Configure(size_t maxFrames);
 
-    // Append the context's current frame to the ring. 'frameNumber' is stored for
-    // display only. The caller must gate this on the run state (capture only while
-    // the source is playing) so every call is a real, distinct frame. Reads regions
-    // via se_read_vram / se_get_*_register, so it works for any live source.
+    // Read the context's current frame (raw) and queue it for background
+    // compression. Fast: only the region reads happen on the calling (UI) thread.
+    // If the compressor is behind, the frame is dropped rather than blocking.
     void Capture(se_context* ctx, uint64_t frameNumber);
 
-    size_t   Count() const { return mFrames.size(); }
-    uint64_t FrameNumber(size_t i) const { return mFrames[i].frameNumber; }
-    size_t   BytesUsed() const { return mBytes; }
+    size_t   Count() const;
+    uint64_t FrameNumber(size_t i) const;
+    size_t   BytesUsed() const;
 
     // Build a data source over frame i. The decompressed regions live in this
     // recorder's scratch and stay valid until the next Select() call. Returns
@@ -59,21 +69,36 @@ public:
     void Clear();
 
 private:
-    void Evict();
+    // A raw (uncompressed) frame staged from the UI thread for the worker.
+    struct RawFrame
+    {
+        uint64_t frameNumber = 0;
+        std::vector<uint8_t>  vdp1Vram, vdp2Vram, cram, wramLow, wramHigh, vdp1Fb;
+        std::vector<uint16_t> vdp1Regs, vdp2Regs;
+    };
+
+    void Worker();
+    void Evict();   // caller holds mRingMtx
 
     static constexpr size_t kMaxBytes = 4ull * 1024u * 1024u * 1024u;  // 4 GiB ceiling
+    static constexpr size_t kMaxQueued = 4;   // staged raw frames before we drop
 
-    std::deque<Frame> mFrames;
-    size_t            mBytes = 0;
-    size_t            mMaxFrames = 5 * 60;   // ring length in frames (App sets this)
+    // Compressed ring (shared: UI reads via Count/Select, worker appends/evicts).
+    mutable std::mutex mRingMtx;
+    std::deque<Frame>  mFrames;
+    size_t             mBytes = 0;
+    size_t             mMaxFrames = 5 * 60;   // ring length in frames (App sets this)
 
-    // Reused across frames so the per-frame capture path allocates nothing steady
-    // state: the VRAM read buffer and the LZ match-finder's hash chains.
-    std::vector<uint8_t> mReadScratch;
-    FrameLzScratch       mLzScratch;
+    // Raw staging queue (UI pushes, worker pops) + the worker thread.
+    std::mutex               mQMtx;
+    std::condition_variable  mQCv;
+    std::deque<RawFrame>     mQueue;
+    std::atomic<bool>        mStop{false};
+    std::thread              mWorker;
+    FrameLzScratch           mLzScratch;   // worker-owned match-finder scratch
 
-    // Scratch holding the currently-selected decompressed frame (for the data
-    // source callbacks below). Owned here so it outlives the created context.
+    // Scratch holding the currently-selected decompressed frame (UI thread only;
+    // read by the data-source callbacks below). Outlives the created context.
     std::vector<uint8_t>  mSelVdp1, mSelVdp2, mSelCram, mSelWramLow, mSelWramHigh, mSelVdp1Fb;
     std::vector<uint16_t> mSelVdp1Regs, mSelVdp2Regs;
 
