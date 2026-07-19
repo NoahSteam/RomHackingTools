@@ -67,6 +67,7 @@ private:
     void DrawVdpOutput(IPlatform& platform);
     void DrawWatch(IPlatform& platform);   // debugger Watch Window
     void DrawAssembly();                    // SH-2 Assembly (live disassembly)
+    void SyncBreakpointsToLive();           // push the breakpoint set to the emulator
     void DrawVdp1Framebuffer(IPlatform& platform);
     void DrawWorldView(IPlatform& platform);
     void DrawCommandList();
@@ -106,6 +107,7 @@ private:
     WatchPanel               mWatchPanel;
     BreakpointManager        mBreakpoints;
     AssemblyPanel            mAssemblyPanel;
+    uint64_t                 mLastBpGeneration = 0;  // last set synced to the live emulator
 
     se_render_opts   mRenderOpts {};
     bool             mbLiveSource = false;    // data comes from a running emulator

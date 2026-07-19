@@ -36,6 +36,10 @@ public:
     void Draw(se_context* ctx, IMemoryBackend& backend, BreakpointManager& bps,
               WatchPanel& watch, bool live, Request& req);
 
+    // The CPU the panel is currently viewing (0 master, 1 slave) — used by the App
+    // to target run-control (Run to Here) at the right core.
+    int Cpu() const { return mCpu; }
+
 private:
     struct Line
     {

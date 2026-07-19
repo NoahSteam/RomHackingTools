@@ -12,6 +12,7 @@
 
 #include "Debug/WatchList.h"
 #include "Debug/MemoryBackend.h"
+#include "Debug/BreakpointManager.h"
 #include "Platform/IPlatform.h"
 
 namespace sfe
@@ -24,9 +25,10 @@ public:
 
     // Draw the "Watch" window. 'dt' is the frame delta (seconds) for the refresh
     // timer + highlight fade. Reads values via 'backend', resolves expressions via
-    // 'resolver', and uses 'platform' for import/export file dialogs.
+    // 'resolver', uses 'platform' for import/export file dialogs, and adds
+    // memory breakpoints to 'bps' from the "Break on..." menu.
     void Draw(IMemoryBackend& backend, IExpressionResolver& resolver,
-              IPlatform& platform, float dt);
+              IPlatform& platform, BreakpointManager& bps, float dt);
 
     // Session persistence: load/save the watch list to a file in the working dir.
     void LoadSession();

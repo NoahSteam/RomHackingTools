@@ -519,6 +519,9 @@ bool App::OpenLive(const char* endpoint)
     mbHasData = true;
     mbLiveSource = true;   // re-snapshot every frame (see BuildUI)
     mbPaused = false;      // a fresh connection is free-running
+    // Force a breakpoint re-sync so any set from before connecting (or a prior
+    // session) installs into this emulator instance.
+    mLastBpGeneration = mBreakpoints.Generation() - 1;
     return true;
 #else
     (void)endpoint;
@@ -579,6 +582,16 @@ void App::BuildUI(IPlatform& platform)
     if (mbLiveSource && mContext)
     {
         se_begin_frame(mContext);
+        // Propagate any breakpoint changes (Assembly gutter, Watch "Break on...")
+        // to the emulator, then reflect a breakpoint halt in the UI run state.
+        SyncBreakpointsToLive();
+#ifdef SE_ENABLE_LIVE
+        uint32_t stopReason = 0, stopCpu = 0, stopPc = 0;
+        if (se_live_get_stop(&mDataSource, &stopReason, &stopCpu, &stopPc) && !mbPaused)
+        {
+            mbPaused = true;   // halted on a breakpoint; panel follows the halted PC
+        }
+#endif
     }
 
 #ifdef SE_ENABLE_LIVE
@@ -1095,7 +1108,8 @@ void App::DrawLayerControls()
 // memory backend (served from the current context) and the expression resolver.
 void App::DrawWatch(IPlatform& platform)
 {
-    mWatchPanel.Draw(mMemBackend, mExprResolver, platform, ImGui::GetIO().DeltaTime);
+    mWatchPanel.Draw(mMemBackend, mExprResolver, platform, mBreakpoints,
+                     ImGui::GetIO().DeltaTime);
 }
 
 // SH-2 Assembly — live disassembly around the master/slave PC. Reads CPU state +
@@ -1104,9 +1118,72 @@ void App::DrawAssembly()
 {
     AssemblyPanel::Request req;
     mAssemblyPanel.Draw(mContext, mMemBackend, mBreakpoints, mWatchPanel, mbLiveSource, req);
-    // Run-control requests (Run to Here / step) are honoured in Phase 4, once the
-    // live driver can set execution breakpoints and resume; ignored otherwise.
-    (void)req;
+
+    // Honour run-control requests. Instruction-level stepping isn't exposed over
+    // the live wire, so "step" maps to a single emulated frame; "Run to Here" sets
+    // an execution breakpoint at the target and resumes (the emulator halts there
+    // via the stop event). All are no-ops without frame control.
+    if (mbHasData && se_supports_frame_control(mContext))
+    {
+        if (req.runTo)
+        {
+            if (!mBreakpoints.HasExecutionAt(mAssemblyPanel.Cpu(), req.runToAddr))
+                mBreakpoints.ToggleExecution(mAssemblyPanel.Cpu(), req.runToAddr);
+            SyncBreakpointsToLive();
+            se_frame_resume(mContext);
+            mbPaused = false;
+        }
+        else if (req.resume)
+        {
+            se_frame_resume(mContext);
+            mbPaused = false;
+        }
+        else if (req.stepInto)
+        {
+            se_frame_step(mContext, 1);
+            mbPaused = true;
+        }
+    }
+}
+
+// Push the current breakpoint set to the live emulator when it changes. Serializes
+// every breakpoint into the wire descriptor (address + size + flags) the LiveDriver
+// forwards with a BKP command. No-op off a live source or when nothing changed.
+void App::SyncBreakpointsToLive()
+{
+#ifdef SE_ENABLE_LIVE
+    if (!mbLiveSource) { return; }
+    if (mBreakpoints.Generation() == mLastBpGeneration) { return; }
+    mLastBpGeneration = mBreakpoints.Generation();
+
+    const std::vector<Breakpoint>& all = mBreakpoints.All();
+    std::vector<uint8_t> descs;
+    descs.reserve(all.size() * SE_LIVE_BKPT_DESC_LEN);
+    for (const Breakpoint& b : all)
+    {
+        uint32_t kind = 0;   // 0 exec, 1 read, 2 write, 3 read/write
+        switch (b.kind)
+        {
+            case BpKind::Execution:    kind = 0; break;
+            case BpKind::MemRead:      kind = 1; break;
+            case BpKind::MemWrite:     kind = 2; break;
+            case BpKind::MemReadWrite: kind = 3; break;
+        }
+        uint32_t flags = kind & SE_LIVE_BP_KIND_MASK;
+        if (b.cpu != 0) { flags |= SE_LIVE_BP_CPU_SLAVE; }
+        if (b.enabled)  { flags |= SE_LIVE_BP_ENABLED; }
+        const uint32_t words[3] = { b.address, b.size, flags };
+        for (uint32_t w : words)
+        {
+            descs.push_back(static_cast<uint8_t>(w & 0xFF));
+            descs.push_back(static_cast<uint8_t>((w >> 8) & 0xFF));
+            descs.push_back(static_cast<uint8_t>((w >> 16) & 0xFF));
+            descs.push_back(static_cast<uint8_t>((w >> 24) & 0xFF));
+        }
+    }
+    se_live_set_breakpoints(&mDataSource, descs.data(),
+                            static_cast<uint32_t>(all.size()));
+#endif
 }
 
 void App::DrawVdpOutput(IPlatform& platform)
