@@ -85,9 +85,22 @@ EDITS = [
     ("vdp2.c",
      r'(void Vdp2VBlankOUT\(void\)\s*\{[\s\S]*?static VideoInterface_struct \* saved = NULL;\s*\n)',
      "after_group1",
+     "   /* Pass VIDSoft's displayed VDP1 frame buffer (front bank). The global\n"
+     "    * Vdp1FrameBuffer is only a fallback and stays blank during play; real\n"
+     "    * pixels live in the active video core (see VIDSoftGetVdp1FrameBuffer). */\n"
+     "   extern u8 *VIDSoftGetVdp1FrameBuffer(void);\n"
      "   SeExportSnapshot(Vdp1Ram, Vdp2Ram, Vdp2ColorRam, Vdp2Regs,\n"
-     "                    Vdp1Regs, LowWram, HighWram, Vdp1FrameBuffer[0]);\n",
+     "                    Vdp1Regs, LowWram, HighWram, VIDSoftGetVdp1FrameBuffer());\n",
      "SeExportSnapshot("),
+
+    # --- vidsoft.c: expose the displayed VDP1 frame buffer (it's file-static). ---
+    ("vidsoft.c",
+     r'(VideoInterface_struct VIDSoft\s*=\s*\{)',
+     "before_group1",
+     "/* Displayed VDP1 frame buffer (front bank) for the Saturn Explorer live tap.\n"
+     "   vidsoft's real pixels live here, not in the global Vdp1FrameBuffer. */\n"
+     "u8 *VIDSoftGetVdp1FrameBuffer(void) { return vdp1frontframebuffer; }\n",
+     "VIDSoftGetVdp1FrameBuffer"),
 ]
 
 # A fenced SE_EXPORT block (for update-in-place when a hook's content changes).
@@ -117,6 +130,9 @@ def apply_edit(text, anchor, mode, code):
     if mode == "before_group2":
         # keep group1 (a newline), insert before group2
         ins = m.start(2)
+        return text[:ins] + block + text[ins:], True, True
+    if mode == "before_group1":
+        ins = m.start(1)
         return text[:ins] + block + text[ins:], True, True
     if mode == "after_group1":
         ins = m.end(1)
@@ -192,7 +208,7 @@ def copy_sources(src_dir, do_write):
 
 def revert(src_dir):
     fence_re = re.compile(re.escape(BEGIN) + r".*?" + re.escape(END) + r"\n?", re.DOTALL)
-    for fname in ("yabause.c", "vdp2.c"):
+    for fname in ("yabause.c", "vdp2.c", "vidsoft.c"):
         path = os.path.join(src_dir, fname)
         if os.path.isfile(path):
             t = open(path, encoding="utf-8", errors="surrogateescape").read()
@@ -231,7 +247,7 @@ def main():
     notes = []
     if do_write:
         notes += copy_sources(src_dir, do_write)
-    for fname in ("yabause.c", "vdp2.c"):
+    for fname in ("yabause.c", "vdp2.c", "vidsoft.c"):
         notes.append(fname + ":")
         notes += process_file(src_dir, fname, do_write)
     notes.append("CMakeLists.txt:")
