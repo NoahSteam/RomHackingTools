@@ -23,9 +23,8 @@ struct Out
     }
 };
 
-int8_t  s8(uint16_t v)  { return (int8_t)(v & 0xFF); }
-int32_t s12(uint16_t v) { int32_t d = v & 0xFFF; if (d & 0x800) d |= ~0xFFF; return d; }
-int32_t s8ext(uint16_t v){ return (int32_t)s8(v); }
+int32_t s8ext(uint16_t v) { return (int32_t)(int8_t)(v & 0xFF); }
+int32_t s12(uint16_t v)   { int32_t d = v & 0xFFF; if (d & 0x800) d |= ~0xFFF; return d; }
 }  // namespace
 
 DisassembledInstruction Sh2Decode(uint32_t address, uint16_t op)
@@ -212,18 +211,16 @@ DisassembledInstruction Sh2Decode(uint32_t address, uint16_t op)
         case 0x4: o.set("mov.b"); o.ops("@(0x%X,r%d),r0", d4, m); return ins;
         case 0x5: o.set("mov.w"); o.ops("@(0x%X,r%d),r0", d4 * 2, m); return ins;
         case 0x8: o.set("cmp/eq");o.ops("#0x%X,r0", (uint8_t)imm); return ins;
-        case 0x9: { const uint32_t t = address + 4 + s8ext(op) * 2;
-                    o.set("bt"); o.ops("0x%08X", t); ins.HasBranchTarget = true; ins.BranchTarget = t;
-                    ins.IsBranch = ins.IsConditional = true; return ins; }
-        case 0xB: { const uint32_t t = address + 4 + s8ext(op) * 2;
-                    o.set("bf"); o.ops("0x%08X", t); ins.HasBranchTarget = true; ins.BranchTarget = t;
-                    ins.IsBranch = ins.IsConditional = true; return ins; }
-        case 0xD: { const uint32_t t = address + 4 + s8ext(op) * 2;
-                    o.set("bt.s"); o.ops("0x%08X", t); ins.HasBranchTarget = true; ins.BranchTarget = t;
-                    ins.IsBranch = ins.IsConditional = true; return ins; }
-        case 0xF: { const uint32_t t = address + 4 + s8ext(op) * 2;
-                    o.set("bf.s"); o.ops("0x%08X", t); ins.HasBranchTarget = true; ins.BranchTarget = t;
-                    ins.IsBranch = ins.IsConditional = true; return ins; }
+        // Conditional PC-relative branches: same 8-bit-disp target, differ only by
+        // mnemonic (bt/bf and their delayed-slot variants).
+        case 0x9: case 0xB: case 0xD: case 0xF: {
+            const int sub = (op >> 8) & 0xF;
+            const char* mn = sub == 0x9 ? "bt" : sub == 0xB ? "bf"
+                           : sub == 0xD ? "bt.s" : "bf.s";
+            const uint32_t t = address + 4 + s8ext(op) * 2;
+            o.set(mn); o.ops("0x%08X", t);
+            ins.HasBranchTarget = true; ins.BranchTarget = t;
+            ins.IsBranch = ins.IsConditional = true; return ins; }
         }
         break;
 

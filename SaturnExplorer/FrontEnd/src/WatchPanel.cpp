@@ -48,24 +48,25 @@ void WatchPanel::Refresh(IMemoryBackend& backend, IExpressionResolver& resolver)
     for (WatchEntry& e : mList.Entries())
     {
         Row& row = RowFor(e);
-        uint32_t addr = 0;
-        std::string err;
-        if (resolver.Resolve(row.exprBuf, addr, err))
+        // Expressions only change on edit/import, so resolve once per new text and
+        // reuse the cached address on subsequent refreshes (no string churn at 10Hz).
+        if (row.resolvedExpr != row.exprBuf)
         {
-            row.resolved = true;
+            row.resolvedExpr = row.exprBuf;
+            uint32_t addr = 0;
+            std::string err;
+            row.resolved = resolver.Resolve(row.exprBuf, addr, err);
             row.address = addr;
-            row.error.clear();
+            row.error = row.resolved ? std::string() : err;
         }
-        else
+        if (!row.resolved)
         {
-            row.resolved = false;
-            row.error = err;
             row.hasValue = false;
             row.value = WatchValue{};
             continue;
         }
         if (!e.enabled) { continue; }
-        reqs.push_back({ addr, WatchTypeSize(e.type) });
+        reqs.push_back({ row.address, WatchTypeSize(e.type) });
         ids.push_back(e.id);
         types.push_back(e.type);
     }
@@ -176,8 +177,7 @@ void WatchPanel::Draw(IMemoryBackend& backend, IExpressionResolver& resolver,
         ImGui::PushStyleColor(ImGuiCol_FrameBg, IM_COL32(0, 0, 0, 0));
         ImGui::SetNextItemWidth(-FLT_MIN);
         if (mFocusNameRow == (int)i) { ImGui::SetKeyboardFocusHere(); mFocusNameRow = -1; }
-        if (ImGui::InputText("##name", row.nameBuf, sizeof(row.nameBuf)))
-        { /* live edit; commit below */ }
+        ImGui::InputText("##name", row.nameBuf, sizeof(row.nameBuf));   // commits below
         if (ImGui::IsItemDeactivatedAfterEdit()) e.name = row.nameBuf;
 
         // Address / Expression (borderless inline edit; normalize + resolve on commit).
@@ -330,6 +330,11 @@ void WatchPanel::DoExport(IPlatform& platform)
     }
 }
 
+// Best-effort session store: a fixed file in the working directory. This is a
+// native-desktop stopgap that deliberately bypasses IPlatform — on the web build
+// it lands in the ephemeral MEMFS and is effectively a no-op. When a proper
+// per-user/app-state seam is added to IPlatform, this should move onto it. Import
+// and Export (the durable, user-driven paths) already go through IPlatform.
 void WatchPanel::LoadSession()
 {
     std::ifstream f(kSessionFile, std::ios::binary);
