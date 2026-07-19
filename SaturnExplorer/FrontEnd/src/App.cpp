@@ -642,6 +642,7 @@ void App::BuildUI(IPlatform& platform)
     // Center: VDP Output and its sibling tabs, then the command list, then the
     // texture/palette/reference row.
     DrawVdpOutput(platform);
+    DrawVdp1Framebuffer(platform);
     DrawWorldView(platform);
     DrawVdp1Table();
     DrawVdp2Table();
@@ -707,6 +708,7 @@ void App::BuildDefaultLayout(unsigned int dockspaceId)
 
     // These share centerTop, so they appear as tabs (VDP Output | VDP1 Table | ...).
     ImGui::DockBuilderDockWindow("VDP Output", centerTop);
+    ImGui::DockBuilderDockWindow("VDP1 Framebuffer", centerTop);
     ImGui::DockBuilderDockWindow("VDP1 Table", centerTop);
     ImGui::DockBuilderDockWindow("VDP2 Table", centerTop);
     ImGui::DockBuilderDockWindow("Color RAM", centerTop);
@@ -1175,6 +1177,129 @@ void App::DrawVdpOutput(IPlatform& platform)
                     mScrollCommandListToSelection = true;
                 }
             }
+        }
+    }
+    ImGui::End();
+}
+
+static void Checkerboard(ImVec2 topLeft, ImVec2 size, float cell);
+
+// VDP1 Framebuffer viewer. VDP1 renders every sprite/polygon command for a frame
+// into an off-screen 512x256 x 16bpp buffer (256 KiB), which VDP2 then scans out
+// as the sprite layer. We capture the displayed (front) bank; this panel decodes
+// it as raw RGB555 and shows it, so you can compare the emulator's real rendered
+// pixels against our command-list interpretation in VDP Output.
+//
+// v1 is a raw view: each 16-bit word is shown as RGB555. That's exact for
+// direct-colour (RGB) sprites (word bit 15 set); colour-bank (palette) sprites
+// encode a LUT code + priority/colour-calc bits that only VDP2's sprite-type +
+// CRAM resolve into a real colour, so those pixels look wrong here until the v2
+// sprite-type decode lands. "Mark colour-bank" tints those pixels so the split is
+// visible. "Byte-swap" is an escape hatch if a core stores the FB little-endian.
+void App::DrawVdp1Framebuffer(IPlatform& platform)
+{
+    constexpr int kFbW = 512;
+    constexpr int kFbH = 256;
+
+    if (ImGui::Begin("VDP1 Framebuffer"))
+    {
+        mFbRaw.resize(kVdp1FbSize);
+        const size_t got = mbHasData
+            ? se_read_vram(mContext, SE_VRAM_KIND_VDP1_FB, 0, mFbRaw.data(), kVdp1FbSize)
+            : 0;
+
+        if (got < static_cast<size_t>(kFbW) * kFbH * 2)
+        {
+            ImGui::TextDisabled("No VDP1 frame buffer in this source.");
+            ImGui::TextDisabled("Captured only from a live Yabause (software renderer).");
+            ImGui::End();
+            return;
+        }
+
+        ImGui::Checkbox("Mark colour-bank", &mFbMarkColorBank);
+        ImGui::SameLine();
+        ImGui::Checkbox("Byte-swap", &mFbByteSwap);
+        ImGui::SameLine();
+        ImGui::TextDisabled("512 x 256  RGB555 (front bank)");
+
+        // Decode the raw words into RGBA8888. A word of 0 is transparent (nothing
+        // drawn); the checkerboard shows through. bit 15 marks a direct-RGB pixel;
+        // otherwise it's a colour-bank code (only meaningful once VDP2-resolved).
+        mFbRgba.resize(static_cast<size_t>(kFbW) * kFbH * 4);
+        for (int i = 0; i < kFbW * kFbH; ++i)
+        {
+            const uint8_t b0 = mFbRaw[i * 2];
+            const uint8_t b1 = mFbRaw[i * 2 + 1];
+            const uint16_t w = mFbByteSwap
+                ? static_cast<uint16_t>((static_cast<uint16_t>(b1) << 8) | b0)
+                : static_cast<uint16_t>((static_cast<uint16_t>(b0) << 8) | b1);
+            uint8_t* px = &mFbRgba[static_cast<size_t>(i) * 4];
+            if (w == 0)
+            {
+                px[0] = px[1] = px[2] = px[3] = 0;   // transparent
+                continue;
+            }
+            const bool rgb = (w & 0x8000u) != 0;
+            if (mFbMarkColorBank && !rgb)
+            {
+                px[0] = 255; px[1] = 0; px[2] = 255; px[3] = 255;   // flag palette pixels
+                continue;
+            }
+            const uint8_t r5 = (w >> 10) & 0x1F, g5 = (w >> 5) & 0x1F, b5 = w & 0x1F;
+            px[0] = static_cast<uint8_t>((r5 << 3) | (r5 >> 2));
+            px[1] = static_cast<uint8_t>((g5 << 3) | (g5 >> 2));
+            px[2] = static_cast<uint8_t>((b5 << 3) | (b5 >> 2));
+            px[3] = 255;
+        }
+
+        mFbTexture = EnsureTexture(platform, mFbTexture, mFbTexW, mFbTexH, kFbW, kFbH);
+        if (mFbTexture != 0)
+        {
+            platform.UpdateTexture(mFbTexture, mFbRgba.data(), kFbW, kFbH);
+        }
+
+        // Aspect-fit into the panel over a checkerboard (matches VDP Output / textures).
+        const ImVec2 avail = ImGui::GetContentRegionAvail();
+        const float readoutH = ImGui::GetTextLineHeightWithSpacing();
+        const float boxH = avail.y > readoutH ? avail.y - readoutH : avail.y;
+        const float sx = avail.x / static_cast<float>(kFbW);
+        const float sy = boxH / static_cast<float>(kFbH);
+        float scale = sx < sy ? sx : sy;
+        if (scale <= 0.0f) scale = 1.0f;
+        const ImVec2 dispSize(kFbW * scale, kFbH * scale);
+        const ImVec2 origin = ImGui::GetCursorScreenPos();
+        const ImVec2 imgPos(origin.x + (avail.x - dispSize.x) * 0.5f, origin.y);
+        Checkerboard(imgPos, dispSize, 8.0f);
+        ImGui::SetCursorScreenPos(imgPos);
+        ImGui::Image(mFbTexture, dispSize);
+
+        // Hover readout: pixel coords + raw word + decoded colour / bank flag.
+        if (ImGui::IsItemHovered())
+        {
+            const ImVec2 mouse = ImGui::GetMousePos();
+            int px = static_cast<int>((mouse.x - imgPos.x) / scale);
+            int py = static_cast<int>((mouse.y - imgPos.y) / scale);
+            if (px < 0) px = 0; else if (px >= kFbW) px = kFbW - 1;
+            if (py < 0) py = 0; else if (py >= kFbH) py = kFbH - 1;
+            const int i = py * kFbW + px;
+            const uint8_t b0 = mFbRaw[i * 2], b1 = mFbRaw[i * 2 + 1];
+            const uint16_t w = mFbByteSwap
+                ? static_cast<uint16_t>((static_cast<uint16_t>(b1) << 8) | b0)
+                : static_cast<uint16_t>((static_cast<uint16_t>(b0) << 8) | b1);
+            const uint8_t* c = &mFbRgba[static_cast<size_t>(i) * 4];
+            if (w == 0)
+            {
+                ImGui::Text("(%3d,%3d)  0x0000  transparent", px, py);
+            }
+            else
+            {
+                ImGui::Text("(%3d,%3d)  0x%04X  %s  #%02X%02X%02X", px, py, w,
+                            (w & 0x8000u) ? "RGB" : "bank", c[0], c[1], c[2]);
+            }
+        }
+        else
+        {
+            ImGui::TextDisabled("Hover a pixel for its raw word and colour.");
         }
     }
     ImGui::End();
