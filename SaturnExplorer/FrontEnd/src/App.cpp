@@ -678,7 +678,7 @@ void App::BuildUI(IPlatform& platform)
     DrawSelectedObject();
     DrawWatch(platform);
     DrawAssembly();
-    DrawPlaceholder("Memory History", "Load chain (File → CD → DMA → Write) — arrives in M7.");
+    DrawHexEditor();
     // contextSwap restores the live context here as it goes out of scope.
 }
 
@@ -744,7 +744,7 @@ void App::BuildDefaultLayout(unsigned int dockspaceId)
     ImGui::DockBuilderDockWindow("Selected Object", rObj);
     ImGui::DockBuilderDockWindow("Watch", rTex);
     ImGui::DockBuilderDockWindow("SH-2 Assembly", rPal);
-    ImGui::DockBuilderDockWindow("Memory History", rMem);
+    ImGui::DockBuilderDockWindow("Hex Editor", rMem);
 
     ImGui::DockBuilderFinish(dockspaceId);
 }
@@ -1110,8 +1110,10 @@ void App::DrawLayerControls()
 // memory backend (served from the current context) and the expression resolver.
 void App::DrawWatch(IPlatform& platform)
 {
+    uint32_t hexJump = 0;
     mWatchPanel.Draw(mMemBackend, mExprResolver, platform, mBreakpoints,
-                     ImGui::GetIO().DeltaTime);
+                     ImGui::GetIO().DeltaTime, &hexJump);
+    if (hexJump != 0) mHexEditor.GoTo(hexJump);   // "View in Hex Editor"
 }
 
 // SH-2 Assembly — live disassembly around the master/slave PC. Reads CPU state +
@@ -1131,6 +1133,13 @@ void App::DrawAssembly()
         se_frame_resume(mContext);
         mbPaused = false;
     }
+    if (req.viewHex) mHexEditor.GoTo(req.hexAddr);   // "View Address in Hex Editor"
+}
+
+// Hex Editor — raw memory view/edit over the shared backend (same source as Watch).
+void App::DrawHexEditor()
+{
+    mHexEditor.Draw(mMemBackend, mbLiveSource, ImGui::GetIO().DeltaTime);
 }
 
 // Push the current breakpoint set to the live emulator when it changes. Serializes

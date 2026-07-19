@@ -495,9 +495,13 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
             }
             if (ImGui::MenuItem("Clear Comment", nullptr, false, mComments.count(ln.addr) != 0))
             { mComments.erase(ln.addr); SaveComments(); }
+            ImGui::Separator();
+            uint32_t hexEa; WatchType hexWt;
+            if (ImGui::MenuItem("View Address in Hex Editor", nullptr, false,
+                                ln.readable && ResolveMemOperand(ln.ins, regs, hexEa, hexWt)))
+            { req.viewHex = true; req.hexAddr = hexEa; }
             ImGui::BeginDisabled();
             ImGui::MenuItem("Set PC Here");
-            ImGui::MenuItem("View Address in Hex Editor");
             ImGui::EndDisabled();
             ImGui::EndPopup();
         }

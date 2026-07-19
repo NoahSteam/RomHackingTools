@@ -31,6 +31,8 @@ public:
     {
         bool     runTo = false;       // run until runToAddr (sets a breakpoint there)
         uint32_t runToAddr = 0;
+        bool     viewHex = false;     // reveal hexAddr in the Hex Editor
+        uint32_t hexAddr = 0;
     };
     void Draw(se_context* ctx, IMemoryBackend& backend, BreakpointManager& bps,
               WatchPanel& watch, bool live, Request& req);

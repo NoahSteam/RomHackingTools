@@ -26,9 +26,12 @@ public:
     // Draw the "Watch" window. 'dt' is the frame delta (seconds) for the refresh
     // timer + highlight fade. Reads values via 'backend', resolves expressions via
     // 'resolver', uses 'platform' for import/export file dialogs, and adds
-    // memory breakpoints to 'bps' from the "Break on..." menu.
+    // memory breakpoints to 'bps' from the "Break on..." menu. When the user picks
+    // "View in Hex Editor" and 'outHexJump' is non-null, the watch's address is
+    // written there for the App to reveal in the Hex Editor.
     void Draw(IMemoryBackend& backend, IExpressionResolver& resolver,
-              IPlatform& platform, BreakpointManager& bps, float dt);
+              IPlatform& platform, BreakpointManager& bps, float dt,
+              uint32_t* outHexJump = nullptr);
 
     // Session persistence: load/save the watch list to a file in the working dir.
     void LoadSession();

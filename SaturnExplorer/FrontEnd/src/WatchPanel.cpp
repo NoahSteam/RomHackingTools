@@ -97,7 +97,8 @@ void WatchPanel::Refresh(IMemoryBackend& backend, IExpressionResolver& resolver)
 }
 
 void WatchPanel::Draw(IMemoryBackend& backend, IExpressionResolver& resolver,
-                      IPlatform& platform, BreakpointManager& bps, float dt)
+                      IPlatform& platform, BreakpointManager& bps, float dt,
+                      uint32_t* outHexJump)
 {
     if (!ImGui::Begin("Watch"))
     {
@@ -285,9 +286,8 @@ void WatchPanel::Draw(IMemoryBackend& backend, IExpressionResolver& resolver,
             if (ImGui::MenuItem("Break on Read or Write", nullptr, false, row.resolved))
                 bps.AddMemory(row.address, bpSize, BpKind::MemReadWrite);
             ImGui::Separator();
-            ImGui::BeginDisabled();
-            ImGui::MenuItem("View in Hex Editor");
-            ImGui::EndDisabled();
+            if (ImGui::MenuItem("View in Hex Editor", nullptr, false, row.resolved))
+                if (outHexJump) *outHexJump = row.address;
             ImGui::EndPopup();
         }
 
