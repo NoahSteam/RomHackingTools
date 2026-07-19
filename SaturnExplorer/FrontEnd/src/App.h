@@ -60,6 +60,7 @@ private:
     void DrawStatusBar();
     void DrawLayerControls();
     void DrawVdpOutput(IPlatform& platform);
+    void DrawVdp1Framebuffer(IPlatform& platform);
     void DrawWorldView(IPlatform& platform);
     void DrawCommandList();
     void DrawSelectedObject();
@@ -141,6 +142,15 @@ private:
     int                  mTexWidth = 0;
     int                  mTexHeight = 0;
     std::vector<uint8_t> mTexBuffer;
+
+    // VDP1 Framebuffer viewer (decodes the raw 512x256 RGB555 front bank).
+    TextureHandle        mFbTexture = 0;
+    int                  mFbTexW = 0;
+    int                  mFbTexH = 0;
+    std::vector<uint8_t> mFbRaw;                  // captured bytes (big-endian words)
+    std::vector<uint8_t> mFbRgba;                 // decoded RGBA8888
+    bool                 mFbByteSwap = false;     // flip 16-bit word endianness
+    bool                 mFbMarkColorBank = false; // tint palette-coded pixels magenta
 };
 
 }  // namespace sfe
