@@ -290,6 +290,25 @@ se_result se_get_system_status(se_context* ctx, se_system_status* out)
     return SE_ERR_NO_CAPABILITY;
 }
 
+/* --- SH-2 registers --- */
+se_result se_get_sh2_regs(se_context* ctx, int cpu, se_sh2_regs* out)
+{
+    if (!ctx || !out || cpu < 0 || cpu > 1)
+    {
+        return SE_ERR_INVALID_ARG;
+    }
+    return Impl(ctx)->GetSh2Regs(cpu, out);
+}
+
+int se_has_sh2_regs(se_context* ctx)
+{
+    if (!ctx)
+    {
+        return 0;
+    }
+    return (Impl(ctx)->HasSh2Regs(0) || Impl(ctx)->HasSh2Regs(1)) ? 1 : 0;
+}
+
 /* --- Frame control --- */
 int se_supports_frame_control(se_context* ctx)
 {

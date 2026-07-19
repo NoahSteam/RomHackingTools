@@ -42,6 +42,10 @@ public:
     bool HasVdp1Regs() const { return mbHasVdp1Regs; }
     bool HasVdp2Regs() const { return mbHasVdp2Regs; }
 
+    // SH-2 register file per CPU (0 = master, 1 = slave), if the driver supplied it.
+    bool HasSh2Regs(int cpu) const { return cpu >= 0 && cpu < 2 && mbHasSh2[cpu]; }
+    const se_sh2_regs& Sh2Regs(int cpu) const { return mSh2[cpu & 1]; }
+
     // One register as a big-endian 16-bit value, addressed by its hardware byte
     // offset (e.g. VDP2 0x0E for RAMCTL). Returns 0 if unavailable.
     uint16_t Vdp1Reg(uint32_t hwOffset) const
@@ -64,9 +68,11 @@ private:
     std::vector<uint8_t>  mVdp1Fb;     // VDP1 frame buffer (present if SE_CAP_VDP1_FB)
     std::vector<uint16_t> mVdp1Regs;   // indexed by (hw offset >> 1)
     std::vector<uint16_t> mVdp2Regs;
+    se_sh2_regs           mSh2[2] = {};   // [0] master, [1] slave
     se_cram_mode          mCramMode = SE_CRAM_RGB555_1024;
     bool mbHasVdp1Regs = false;
     bool mbHasVdp2Regs = false;
+    bool mbHasSh2[2] = { false, false };
     bool mbValid = false;
 };
 

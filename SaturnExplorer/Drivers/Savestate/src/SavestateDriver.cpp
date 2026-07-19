@@ -40,6 +40,8 @@ struct Savestate
     std::vector<uint8_t> mWramHigh;
     std::vector<uint8_t> mVdp1Regs;
     std::vector<uint8_t> mVdp2Regs;
+    se_sh2_regs          mSh2[2] = {};       // [0] master, [1] slave
+    bool                 mHasSh2[2] = { false, false };
 };
 
 // Copy from a region buffer with bounds clamping. Returns bytes copied.
@@ -95,6 +97,14 @@ uint16_t CbVdp1Reg(void* user, uint32_t reg)
 uint16_t CbVdp2Reg(void* user, uint32_t reg)
 {
     return ReadReg16(static_cast<Savestate*>(user)->mVdp2Regs, reg);
+}
+
+int CbSh2Regs(void* user, int cpu, se_sh2_regs* out)
+{
+    Savestate* s = static_cast<Savestate*>(user);
+    if (cpu < 0 || cpu > 1 || !s->mHasSh2[cpu]) return 0;
+    *out = s->mSh2[cpu];
+    return 1;
 }
 
 void CbClose(void* user)
@@ -188,6 +198,11 @@ void BuildDataSource(Savestate* state, se_data_source* out)
         caps |= SE_CAP_VDP2_REGS;
         out->read_vdp2_reg = CbVdp2Reg;
     }
+    if (state->mHasSh2[0] || state->mHasSh2[1])
+    {
+        caps |= SE_CAP_SH2_REGS;
+        out->read_sh2_regs = CbSh2Regs;
+    }
 
     out->capabilities = caps;
     out->close = CbClose;
@@ -216,6 +231,34 @@ uint32_t Read32LE(const std::vector<uint8_t>& d, size_t o)
 {
     return static_cast<uint32_t>(d[o]) | (static_cast<uint32_t>(d[o + 1]) << 8) |
            (static_cast<uint32_t>(d[o + 2]) << 16) | (static_cast<uint32_t>(d[o + 3]) << 24);
+}
+
+// Parse a Yabause SH-2 section: it opens with the sh2regs_struct
+// (R[16], SR, GBR, VBR, MACH, MACL, PR, PC — 23 host-order u32) into se_sh2_regs.
+void ParseSh2Regs(const std::vector<uint8_t>& d, size_t data, se_sh2_regs& out)
+{
+    for (int i = 0; i < 16; ++i) out.r[i] = Read32LE(d, data + i * 4);
+    out.sr   = Read32LE(d, data + 16 * 4);
+    out.gbr  = Read32LE(d, data + 17 * 4);
+    out.vbr  = Read32LE(d, data + 18 * 4);
+    out.mach = Read32LE(d, data + 19 * 4);
+    out.macl = Read32LE(d, data + 20 * 4);
+    out.pr   = Read32LE(d, data + 21 * 4);
+    out.pc   = Read32LE(d, data + 22 * 4);
+}
+
+// Copy 'len' bytes from 'src', swapping each 16-bit word. Yabause stores work RAM
+// byte-swapped (host order); this normalizes it to Saturn-native big-endian so the
+// core, watches, and disassembler all read it consistently (like VRAM).
+void CopyBswap16(const std::vector<uint8_t>& d, size_t src, size_t len,
+                 std::vector<uint8_t>& out)
+{
+    out.resize(len);
+    for (size_t i = 0; i + 1 < len; i += 2)
+    {
+        out[i]     = d[src + i + 1];
+        out[i + 1] = d[src + i];
+    }
 }
 
 /* --- Mednafen MDFNSVST (Saturn 'ss' module) savestate --- */
@@ -398,6 +441,24 @@ se_result ParseYssBuffer(const std::vector<uint8_t>& file, se_data_source* out)
             BuildVdp2RegImage(file, data, state->mVdp2Regs);
             const uint16_t ramctl = ReadReg16(state->mVdp2Regs, 0x0E);
             NormalizeCramToBigEndian(state->mCram, (ramctl >> 12) & 0x3);
+        }
+        else if (std::memcmp(tag, "MSH2", 4) == 0 && size >= 92)
+        {
+            ParseSh2Regs(file, data, state->mSh2[0]);
+            state->mHasSh2[0] = true;
+        }
+        else if (std::memcmp(tag, "SSH2", 4) == 0 && size >= 92)
+        {
+            ParseSh2Regs(file, data, state->mSh2[1]);
+            state->mHasSh2[1] = true;
+        }
+        else if (std::memcmp(tag, "OTHR", 4) == 0 &&
+                 size >= 0x10000 + kSizeWramHigh + kSizeWramLow)
+        {
+            // OTHR = BupRam(0x10000) + HighWram(1 MiB) + LowWram(1 MiB) + internal
+            // state. Work RAM is stored 16-bit byte-swapped; normalize to big-endian.
+            CopyBswap16(file, data + 0x10000, kSizeWramHigh, state->mWramHigh);
+            CopyBswap16(file, data + 0x10000 + kSizeWramHigh, kSizeWramLow, state->mWramLow);
         }
         pos = data + size;
     }

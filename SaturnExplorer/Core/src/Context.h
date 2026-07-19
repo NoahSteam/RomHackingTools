@@ -355,6 +355,17 @@ public:
 
     bool HasSnapshot() const { return mSnapshot.Valid(); }
 
+    bool HasSh2Regs(int cpu) const { return mSnapshot.HasSh2Regs(cpu); }
+    se_result GetSh2Regs(int cpu, se_sh2_regs* out) const
+    {
+        if (!out || !mSnapshot.HasSh2Regs(cpu))
+        {
+            return SE_ERR_NO_DATA;
+        }
+        *out = mSnapshot.Sh2Regs(cpu);
+        return SE_OK;
+    }
+
     const se_data_source& DataSource() const { return mDs; }
     const se_config& Config() const { return mCfg; }
 

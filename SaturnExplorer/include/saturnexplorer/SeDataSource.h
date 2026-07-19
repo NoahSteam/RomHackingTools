@@ -36,6 +36,10 @@ typedef struct se_data_source {
     uint16_t (*read_vdp1_reg)(void* user, uint32_t reg);
     uint16_t (*read_vdp2_reg)(void* user, uint32_t reg);
 
+    /* --- Optional: full SH-2 register file (SE_CAP_SH2_REGS). 'cpu' is
+           se_sh2_cpu (0 master, 1 slave). Return 1 on success, 0 if unavailable. */
+    int (*read_sh2_regs)(void* user, int cpu, se_sh2_regs* out);
+
     /* --- Optional: reference framebuffer (SE_CAP_FRAMEBUFFER) for diffing vs
            the core's own software render. NOT the primary display path — the
            core composites the frame itself from VRAM (see ARCHITECTURE.md §7). */

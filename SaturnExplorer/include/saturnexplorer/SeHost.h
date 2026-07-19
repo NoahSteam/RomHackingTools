@@ -117,6 +117,12 @@ size_t      se_history_for(se_context* ctx, uint32_t address,
 /* --- System status (status bar) --- */
 se_result   se_get_system_status(se_context* ctx, se_system_status* out);
 
+/* --- SH-2 registers (Assembly/debugger; requires SE_CAP_SH2_REGS). 'cpu' is
+   se_sh2_cpu (0 master, 1 slave). Returns SE_OK and fills '*out' when available,
+   SE_ERR_NO_DATA otherwise. --- */
+se_result   se_get_sh2_regs(se_context* ctx, int cpu, se_sh2_regs* out);
+int         se_has_sh2_regs(se_context* ctx);
+
 /* --- Frame control (live sources only; requires SE_CAP_FRAME_STEP) ---
    se_supports_frame_control returns 1 when the source can pause/step (so the
    host can enable those toolbar buttons). pause halts the emulator after the
