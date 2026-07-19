@@ -1184,18 +1184,58 @@ void App::DrawVdpOutput(IPlatform& platform)
 
 static void Checkerboard(ImVec2 topLeft, ImVec2 size, float cell);
 
+namespace
+{
+// SPCTL sprite-type decode. Types 0x0-0x7 carry 16-bit framebuffer data, 0x8-0xF
+// 8-bit. kSprColorMask is the colour-data field (the CRAM index bits) per type;
+// SprPriorityNumber returns the 0..7 index into PRISA..PRISD. Both mirror the
+// Saturn VDP2 manual's sprite-data table — the priority half is kept in sync with
+// Core Context.h SpritePriorityNumber (validated against Yabause).
+constexpr uint16_t kSprColorMask[16] = {
+    0x07FF, 0x07FF, 0x07FF, 0x07FF, 0x03FF, 0x07FF, 0x03FF, 0x01FF,  // 16-bit types
+    0x007F, 0x007F, 0x003F, 0x003F, 0x007F, 0x007F, 0x003F, 0x003F,  // 8-bit types
+};
+
+int SprPriorityNumber(uint16_t px, int type, bool spclmd)
+{
+    if (spclmd && (px & 0x8000)) return 0;   // direct-RGB pixel carries no number
+    switch (type)
+    {
+    case 0x0: return (px >> 14) & 0x3;
+    case 0x1: return (px >> 13) & 0x7;
+    case 0x2: return (px >> 14) & 0x1;
+    case 0x3: return (px >> 13) & 0x3;
+    case 0x4: return (px >> 13) & 0x3;
+    case 0x5: case 0x6: case 0x7: return (px >> 12) & 0x7;
+    case 0x8: case 0x9: return (px >> 7) & 0x1;
+    case 0xA:           return (px >> 6) & 0x3;
+    case 0xC: case 0xD: return (px >> 7) & 0x1;
+    case 0xE:           return (px >> 6) & 0x3;
+    default:            return 0;   // types B, F: no priority bits
+    }
+}
+
+// Priority heatmap ramp (0 = dark, 7 = hot), for the Priority display mode.
+constexpr uint8_t kPrioHeat[8][3] = {
+    { 45, 45, 52 }, { 40, 70, 150 }, { 40, 130, 190 }, { 40, 175, 120 },
+    { 130, 195, 55 }, { 235, 205, 45 }, { 240, 140, 35 }, { 235, 60, 45 },
+};
+}  // namespace
+
 // VDP1 Framebuffer viewer. VDP1 renders every sprite/polygon command for a frame
 // into an off-screen 512x256 x 16bpp buffer (256 KiB), which VDP2 then scans out
-// as the sprite layer. We capture the displayed (front) bank; this panel decodes
-// it as raw RGB555 and shows it, so you can compare the emulator's real rendered
-// pixels against our command-list interpretation in VDP Output.
+// as the sprite layer. We capture the displayed (front) bank; this panel shows the
+// emulator's real rendered pixels next to our command-list render in VDP Output.
 //
-// v1 is a raw view: each 16-bit word is shown as RGB555. That's exact for
-// direct-colour (RGB) sprites (word bit 15 set); colour-bank (palette) sprites
-// encode a LUT code + priority/colour-calc bits that only VDP2's sprite-type +
-// CRAM resolve into a real colour, so those pixels look wrong here until the v2
-// sprite-type decode lands. "Mark colour-bank" tints those pixels so the split is
-// visible. "Byte-swap" is an escape hatch if a core stores the FB little-endian.
+// Three modes:
+//  - Resolved: interpret each word by the VDP2 SPCTL sprite type. Direct-RGB
+//    pixels (mixed mode + bit 15) are RGB555; colour-bank pixels take their
+//    colour-data bits as a CRAM index and resolve through the palette (honouring
+//    the CRAM colour mode). This is what the game actually displays.
+//  - Raw RGB555: every word shown as RGB555 (exact for RGB sprites; colour-bank
+//    pixels look wrong — useful to inspect the raw bits).
+//  - Priority: per-pixel priority (SPCTL type -> PRISA..PRISD) as a heatmap.
+// Word 0 (erased) is transparent. "Byte-swap" flips word endianness if needed.
 void App::DrawVdp1Framebuffer(IPlatform& platform)
 {
     constexpr int kFbW = 512;
@@ -1216,40 +1256,84 @@ void App::DrawVdp1Framebuffer(IPlatform& platform)
             return;
         }
 
-        ImGui::Checkbox("Mark colour-bank", &mFbMarkColorBank);
+        // VDP2 state driving the resolve: sprite type + mixed-colour flag, the
+        // eight priority slots, and a CRAM lookup rebuilt each frame.
+        const bool haveVdp2 = se_has_vdp2_registers(mContext) != 0;
+        const uint16_t spctl = se_get_vdp2_register(mContext, 0x0E0);
+        const int  sprType = spctl & 0xF;
+        const bool spclmd  = (spctl & 0x20) != 0;
+        const uint16_t pris[4] = {
+            se_get_vdp2_register(mContext, 0x0F0), se_get_vdp2_register(mContext, 0x0F2),
+            se_get_vdp2_register(mContext, 0x0F4), se_get_vdp2_register(mContext, 0x0F6) };
+        const uint8_t prioSlot[8] = {
+            static_cast<uint8_t>(pris[0] & 7), static_cast<uint8_t>((pris[0] >> 8) & 7),
+            static_cast<uint8_t>(pris[1] & 7), static_cast<uint8_t>((pris[1] >> 8) & 7),
+            static_cast<uint8_t>(pris[2] & 7), static_cast<uint8_t>((pris[2] >> 8) & 7),
+            static_cast<uint8_t>(pris[3] & 7), static_cast<uint8_t>((pris[3] >> 8) & 7) };
+        mFbCram.resize(2048);
+        const size_t nCram = se_read_cram_colors(mContext, 0, 2048, mFbCram.data());
+
+        // Controls: display mode + endianness. Resolved/Priority need VDP2 regs.
+        const char* kModes[] = { "Resolved (SPCTL+CRAM)", "Raw RGB555", "Priority" };
+        ImGui::SetNextItemWidth(190.0f);
+        ImGui::Combo("##fbmode", &mFbMode, kModes, IM_ARRAYSIZE(kModes));
         ImGui::SameLine();
         ImGui::Checkbox("Byte-swap", &mFbByteSwap);
         ImGui::SameLine();
-        ImGui::TextDisabled("512 x 256  RGB555 (front bank)");
+        if (haveVdp2)
+            ImGui::TextDisabled("type %X  %s  512x256", sprType, spclmd ? "mixed" : "palette");
+        else
+            ImGui::TextDisabled("no VDP2 regs - raw only");
+        if (!haveVdp2 && mFbMode != 1)
+        {
+            mFbMode = 1;   // can't resolve without SPCTL/CRAM/PRIS
+        }
 
-        // Decode the raw words into RGBA8888. A word of 0 is transparent (nothing
-        // drawn); the checkerboard shows through. bit 15 marks a direct-RGB pixel;
-        // otherwise it's a colour-bank code (only meaningful once VDP2-resolved).
+        auto wordAt = [&](int i) -> uint16_t
+        {
+            const uint8_t b0 = mFbRaw[i * 2], b1 = mFbRaw[i * 2 + 1];
+            return mFbByteSwap
+                ? static_cast<uint16_t>((static_cast<uint16_t>(b1) << 8) | b0)
+                : static_cast<uint16_t>((static_cast<uint16_t>(b0) << 8) | b1);
+        };
+
+        // Decode a word to RGBA per the active mode. A == 0 means transparent.
+        auto decode = [&](uint16_t w, uint8_t out[4])
+        {
+            out[0] = out[1] = out[2] = out[3] = 0;
+            if (w == 0) return;                           // erased -> transparent
+            if (mFbMode == 1)                              // Raw RGB555
+            {
+                const uint8_t r5 = (w >> 10) & 0x1F, g5 = (w >> 5) & 0x1F, b5 = w & 0x1F;
+                out[0] = (r5 << 3) | (r5 >> 2); out[1] = (g5 << 3) | (g5 >> 2);
+                out[2] = (b5 << 3) | (b5 >> 2); out[3] = 255;
+                return;
+            }
+            if (mFbMode == 2)                              // Priority heatmap
+            {
+                const uint8_t p = prioSlot[SprPriorityNumber(w, sprType, spclmd) & 7];
+                out[0] = kPrioHeat[p][0]; out[1] = kPrioHeat[p][1];
+                out[2] = kPrioHeat[p][2]; out[3] = 255;
+                return;
+            }
+            // Resolved: direct RGB, else colour-bank index through CRAM.
+            if (spclmd && (w & 0x8000))
+            {
+                const uint8_t r5 = (w >> 10) & 0x1F, g5 = (w >> 5) & 0x1F, b5 = w & 0x1F;
+                out[0] = (r5 << 3) | (r5 >> 2); out[1] = (g5 << 3) | (g5 >> 2);
+                out[2] = (b5 << 3) | (b5 >> 2); out[3] = 255;
+                return;
+            }
+            const uint16_t idx = w & kSprColorMask[sprType];
+            if (idx == 0 || idx >= nCram) return;          // index 0 = transparent
+            const se_palette_entry& e = mFbCram[idx];
+            out[0] = e.r; out[1] = e.g; out[2] = e.b; out[3] = 255;
+        };
+
         mFbRgba.resize(static_cast<size_t>(kFbW) * kFbH * 4);
         for (int i = 0; i < kFbW * kFbH; ++i)
         {
-            const uint8_t b0 = mFbRaw[i * 2];
-            const uint8_t b1 = mFbRaw[i * 2 + 1];
-            const uint16_t w = mFbByteSwap
-                ? static_cast<uint16_t>((static_cast<uint16_t>(b1) << 8) | b0)
-                : static_cast<uint16_t>((static_cast<uint16_t>(b0) << 8) | b1);
-            uint8_t* px = &mFbRgba[static_cast<size_t>(i) * 4];
-            if (w == 0)
-            {
-                px[0] = px[1] = px[2] = px[3] = 0;   // transparent
-                continue;
-            }
-            const bool rgb = (w & 0x8000u) != 0;
-            if (mFbMarkColorBank && !rgb)
-            {
-                px[0] = 255; px[1] = 0; px[2] = 255; px[3] = 255;   // flag palette pixels
-                continue;
-            }
-            const uint8_t r5 = (w >> 10) & 0x1F, g5 = (w >> 5) & 0x1F, b5 = w & 0x1F;
-            px[0] = static_cast<uint8_t>((r5 << 3) | (r5 >> 2));
-            px[1] = static_cast<uint8_t>((g5 << 3) | (g5 >> 2));
-            px[2] = static_cast<uint8_t>((b5 << 3) | (b5 >> 2));
-            px[3] = 255;
+            decode(wordAt(i), &mFbRgba[static_cast<size_t>(i) * 4]);
         }
 
         mFbTexture = EnsureTexture(platform, mFbTexture, mFbTexW, mFbTexH, kFbW, kFbH);
@@ -1273,7 +1357,7 @@ void App::DrawVdp1Framebuffer(IPlatform& platform)
         ImGui::SetCursorScreenPos(imgPos);
         ImGui::Image(mFbTexture, dispSize);
 
-        // Hover readout: pixel coords + raw word + decoded colour / bank flag.
+        // Hover readout: pixel coords, raw word, and what it resolved to.
         if (ImGui::IsItemHovered())
         {
             const ImVec2 mouse = ImGui::GetMousePos();
@@ -1282,20 +1366,30 @@ void App::DrawVdp1Framebuffer(IPlatform& platform)
             if (px < 0) px = 0; else if (px >= kFbW) px = kFbW - 1;
             if (py < 0) py = 0; else if (py >= kFbH) py = kFbH - 1;
             const int i = py * kFbW + px;
-            const uint8_t b0 = mFbRaw[i * 2], b1 = mFbRaw[i * 2 + 1];
-            const uint16_t w = mFbByteSwap
-                ? static_cast<uint16_t>((static_cast<uint16_t>(b1) << 8) | b0)
-                : static_cast<uint16_t>((static_cast<uint16_t>(b0) << 8) | b1);
+            const uint16_t w = wordAt(i);
             const uint8_t* c = &mFbRgba[static_cast<size_t>(i) * 4];
             if (w == 0)
             {
                 ImGui::Text("(%3d,%3d)  0x0000  transparent", px, py);
             }
+            else if (mFbMode == 2)
+            {
+                ImGui::Text("(%3d,%3d)  0x%04X  priority %u", px, py, w,
+                            prioSlot[SprPriorityNumber(w, sprType, spclmd) & 7]);
+            }
+            else if (mFbMode == 0 && !(spclmd && (w & 0x8000)))
+            {
+                ImGui::Text("(%3d,%3d)  0x%04X  bank idx %u  #%02X%02X%02X", px, py, w,
+                            w & kSprColorMask[sprType], c[0], c[1], c[2]);
+            }
             else
             {
-                ImGui::Text("(%3d,%3d)  0x%04X  %s  #%02X%02X%02X", px, py, w,
-                            (w & 0x8000u) ? "RGB" : "bank", c[0], c[1], c[2]);
+                ImGui::Text("(%3d,%3d)  0x%04X  RGB  #%02X%02X%02X", px, py, w, c[0], c[1], c[2]);
             }
+        }
+        else if (mFbMode == 2)
+        {
+            ImGui::TextDisabled("Priority 0 (back) -> 7 (front).  Hover a pixel for its value.");
         }
         else
         {

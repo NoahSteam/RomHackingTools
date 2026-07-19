@@ -143,14 +143,15 @@ private:
     int                  mTexHeight = 0;
     std::vector<uint8_t> mTexBuffer;
 
-    // VDP1 Framebuffer viewer (decodes the raw 512x256 RGB555 front bank).
+    // VDP1 Framebuffer viewer (decodes the captured 512x256 front bank).
     TextureHandle        mFbTexture = 0;
     int                  mFbTexW = 0;
     int                  mFbTexH = 0;
     std::vector<uint8_t> mFbRaw;                  // captured bytes (big-endian words)
     std::vector<uint8_t> mFbRgba;                 // decoded RGBA8888
+    std::vector<se_palette_entry> mFbCram;        // CRAM lookup, rebuilt each frame
+    int                  mFbMode = 0;             // 0=Resolved, 1=Raw RGB555, 2=Priority
     bool                 mFbByteSwap = false;     // flip 16-bit word endianness
-    bool                 mFbMarkColorBank = false; // tint palette-coded pixels magenta
 };
 
 }  // namespace sfe
