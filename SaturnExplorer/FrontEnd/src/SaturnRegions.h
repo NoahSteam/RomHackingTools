@@ -17,13 +17,25 @@ constexpr uint32_t kVdp1FbSize   = 0x40000;   // VDP1 frame buffer (drawn output
 constexpr uint32_t kVdp1RegBytes = 0x18;      // VDP1 register image (TVMR..MODR)
 constexpr uint32_t kVdp2RegBytes = 0x120;     // VDP2 register file
 
+// Split a Saturn RGB555 word into its 5-bit channels. Saturn stores colour as
+// R in bits 0-4, G in 5-9, B in 10-14 (bit 15 ignored) — matches the core's
+// se::Rgb555ToRgba, validated against real dumps.
+inline void SplitRgb555(uint16_t w, uint8_t& r5, uint8_t& g5, uint8_t& b5)
+{
+    r5 = w & 0x1F;
+    g5 = (w >> 5) & 0x1F;
+    b5 = (w >> 10) & 0x1F;
+}
+
 // Expand a Saturn RGB555 word to 8-bit-per-channel (the one place the 5->8 bit
-// replication lives, shared by the palette/FB/watch views).
+// expansion lives, shared by the palette/FB/watch views). Uses the same *255/31
+// scaling as the core's se::Rgb555ToRgba so every view agrees.
 inline void DecodeRgb555(uint16_t w, uint8_t& r, uint8_t& g, uint8_t& b)
 {
-    const uint8_t r5 = (w >> 10) & 0x1F, g5 = (w >> 5) & 0x1F, b5 = w & 0x1F;
-    r = static_cast<uint8_t>((r5 << 3) | (r5 >> 2));
-    g = static_cast<uint8_t>((g5 << 3) | (g5 >> 2));
-    b = static_cast<uint8_t>((b5 << 3) | (b5 >> 2));
+    uint8_t r5, g5, b5;
+    SplitRgb555(w, r5, g5, b5);
+    r = static_cast<uint8_t>(r5 * 255 / 31);
+    g = static_cast<uint8_t>(g5 * 255 / 31);
+    b = static_cast<uint8_t>(b5 * 255 / 31);
 }
 }  // namespace sfe

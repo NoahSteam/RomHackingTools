@@ -1349,9 +1349,7 @@ void App::DrawVdp1Framebuffer(IPlatform& platform)
             if (w == 0) return;                           // erased -> transparent
             if (mFbMode == 1)                              // Raw RGB555
             {
-                const uint8_t r5 = (w >> 10) & 0x1F, g5 = (w >> 5) & 0x1F, b5 = w & 0x1F;
-                out[0] = (r5 << 3) | (r5 >> 2); out[1] = (g5 << 3) | (g5 >> 2);
-                out[2] = (b5 << 3) | (b5 >> 2); out[3] = 255;
+                DecodeRgb555(w, out[0], out[1], out[2]); out[3] = 255;
                 return;
             }
             if (mFbMode == 2)                              // Priority heatmap
@@ -1364,9 +1362,7 @@ void App::DrawVdp1Framebuffer(IPlatform& platform)
             // Resolved: direct RGB, else colour-bank index through CRAM.
             if (spclmd && (w & 0x8000))
             {
-                const uint8_t r5 = (w >> 10) & 0x1F, g5 = (w >> 5) & 0x1F, b5 = w & 0x1F;
-                out[0] = (r5 << 3) | (r5 >> 2); out[1] = (g5 << 3) | (g5 >> 2);
-                out[2] = (b5 << 3) | (b5 >> 2); out[3] = 255;
+                DecodeRgb555(w, out[0], out[1], out[2]); out[3] = 255;
                 return;
             }
             const uint16_t idx = w & kSprColorMask[sprType];
