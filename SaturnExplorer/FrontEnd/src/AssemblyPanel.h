@@ -7,6 +7,7 @@
 
 #include <cstdint>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "saturnexplorer/SaturnExplorer.h"
@@ -38,6 +39,11 @@ public:
     // to target run-control (Run to Here) at the right core.
     int Cpu() const { return mCpu; }
 
+    // Persist / restore the user comment store (address -> note). Called by the App
+    // at startup / shutdown, mirroring WatchPanel session persistence.
+    void LoadComments();
+    void SaveComments() const;
+
 private:
     struct Line
     {
@@ -51,6 +57,7 @@ private:
 
     int      mCpu = 0;                 // 0 master, 1 slave
     bool     mFollowPc = true;
+    bool     mAutoRefresh = true;      // re-read the code window every frame (live)
     uint32_t mWindowBase = 0;          // address of the first disassembled line
     bool     mWindowValid = false;
     uint32_t mLastPc = 0;
@@ -58,6 +65,20 @@ private:
     std::vector<uint32_t> mBack, mFwd; // navigation history (current CPU)
     char     mGotoBuf[16] = {};
     std::vector<Line>    mLines;       // reused decode buffer
+
+    // Frozen-window cache: when Auto Refresh is off (and the base hasn't moved) the
+    // panel reuses these bytes instead of re-reading, so the view holds still.
+    std::vector<uint8_t> mWindowBytes;
+    uint32_t             mWindowBytesBase = 0;
+    bool                 mHaveWindowBytes = false;
+
+    // User comment store (address -> note), overlaid on the auto-generated comment
+    // and persisted across sessions. Shared by both CPUs (they share the address map).
+    std::unordered_map<uint32_t, std::string> mComments;
+    uint32_t mEditCommentAddr = 0;     // address whose comment cell is being edited
+    bool     mEditingComment = false;
+    bool     mCommentFocus = false;    // grab keyboard focus on the first edit frame
+    char     mCommentBuf[128] = {};
 };
 
 }  // namespace sfe

@@ -1,8 +1,12 @@
 #include "AssemblyPanel.h"
 
 #include <cctype>
+#include <cfloat>
 #include <cstdio>
 #include <cstring>
+#include <fstream>
+#include <sstream>
+#include <unordered_set>
 
 #include "imgui.h"
 
@@ -135,6 +139,87 @@ void DrawOperands(const DisassembledInstruction& ins, bool& clicked, uint32_t& c
     }
     if (first) ImGui::TextUnformatted(" ");   // empty operands: keep the row height
 }
+
+// Printable-ASCII annotation for a value, e.g. 0x66 -> " ('f')".
+std::string AsciiTag(uint32_t v)
+{
+    if (v >= 0x20 && v <= 0x7E)
+    { char b[8]; std::snprintf(b, sizeof(b), " ('%c')", (char)v); return b; }
+    return "";
+}
+
+// A heuristic, human-readable comment for one instruction. Structural only —
+// branch intent, immediates, compares, loads/stores, and PC-relative literal-pool
+// resolution — not dataflow. Returns "" when nothing useful can be said.
+std::string Sh2Comment(const DisassembledInstruction& ins, const se_sh2_regs& regs,
+                       IMemoryBackend& backend)
+{
+    if (!ins.IsValid) return "";
+    const std::string& m = ins.Mnemonic;
+    const std::string& o = ins.Operands;
+
+    // --- Control flow ---
+    if (ins.IsReturn) return "return";
+    if (ins.HasBranchTarget)
+    {
+        char loc[24]; std::snprintf(loc, sizeof(loc), "loc_%08X", ins.BranchTarget);
+        if (ins.IsCall) return std::string("call ") + loc;
+        if (ins.IsConditional)
+            return std::string((m == "bt" || m == "bt.s") ? "if T set -> " : "if T clear -> ") + loc;
+        return std::string("-> ") + loc;
+    }
+    if (m == "jmp" || m == "braf")  return std::string("jump ") + o;
+    if (m == "jsr" || m == "bsrf")  return std::string("call ") + o;
+
+    // --- Immediate to register: mov/add/cmp/eq/and/or/xor/tst #imm,rN ---
+    unsigned imm = 0, rn = 0, rm = 0;
+    if (std::sscanf(o.c_str(), "#0x%x,r%u", &imm, &rn) == 2 && rn < 16)
+    {
+        char b[80];
+        if (m == "mov")         std::snprintf(b, sizeof(b), "r%u = 0x%X%s", rn, imm, AsciiTag(imm).c_str());
+        else if (m == "add")    std::snprintf(b, sizeof(b), "r%u += %d", rn, (int)(int8_t)(unsigned char)imm);
+        else if (m == "cmp/eq") std::snprintf(b, sizeof(b), "compare r%u with 0x%X%s", rn, imm, AsciiTag(imm).c_str());
+        else                    std::snprintf(b, sizeof(b), "r%u = r%u %s 0x%X", rn, rn, m.c_str(), imm);
+        return b;
+    }
+
+    // --- Register compare / move ---
+    if (m.rfind("cmp/", 0) == 0 && std::sscanf(o.c_str(), "r%u,r%u", &rm, &rn) == 2)
+    { char b[48]; std::snprintf(b, sizeof(b), "compare r%u, r%u", rm, rn); return b; }
+    if (m == "mov" && std::sscanf(o.c_str(), "r%u,r%u", &rm, &rn) == 2)
+    { char b[32]; std::snprintf(b, sizeof(b), "r%u = r%u", rn, rm); return b; }
+
+    // --- Memory move: load if '@' is the source (left of the comma), else store ---
+    if (m.rfind("mov.", 0) == 0)
+    {
+        const char w = m.back();
+        const char* unit = (w == 'b') ? "byte" : (w == 'w') ? "word" : "long";
+        const size_t at = o.find('@');
+        const size_t comma = o.find(',');
+        if (at != std::string::npos && comma != std::string::npos)
+        {
+            const bool isLoad = at < comma;   // "@src,rN" vs "rN,@dst"
+            // PC-relative literal pool: the disassembler resolves it to @(0xABS),rN.
+            uint32_t ea; WatchType wt;
+            if (isLoad && o.rfind("@(0x", 0) == 0 && o.find(",r") != std::string::npos &&
+                ResolveMemOperand(ins, regs, ea, wt))
+            {
+                const uint32_t n = WatchTypeSize(wt);
+                auto mr = backend.ReadMemoryBatch({ { ea, n } })[0];
+                if (mr.success)
+                {
+                    uint32_t val = 0;
+                    for (uint32_t i = 0; i < n; ++i) val = (val << 8) | mr.bytes[i];
+                    char b[64]; std::snprintf(b, sizeof(b), "= [%08X] = 0x%X%s", ea, val,
+                                              n == 1 ? AsciiTag(val).c_str() : "");
+                    return b;
+                }
+            }
+            return std::string(isLoad ? "load " : "store ") + unit;
+        }
+    }
+    return "";
+}
 }  // namespace
 
 void AssemblyPanel::Navigate(uint32_t addr, bool pushHistory)
@@ -171,6 +256,8 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
     if (haveRegs) ImGui::Text("PC %08X", pc); else ImGui::TextDisabled("PC --------");
     ImGui::SameLine();
     ImGui::Checkbox("Follow PC", &mFollowPc);
+    ImGui::SameLine();
+    ImGui::Checkbox("Auto Refresh", &mAutoRefresh);
     ImGui::SameLine();
     ImGui::BeginDisabled(mBack.empty());
     if (ImGui::ArrowButton("##back", ImGuiDir_Left) && !mBack.empty())
@@ -219,21 +306,37 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
         mWindowBase = pc & ~1u; mWindowValid = true;
     }
 
-    // Read the code window (some lines may be unreadable at region edges).
-    auto results = backend.ReadMemoryBatch({ { mWindowBase, (uint32_t)kWinInstr * 2 } });
-    const MemoryReadResult& code = results[0];
+    // Read the code window. Cache-gated: with Auto Refresh off and the base
+    // unchanged, reuse the last bytes so the disassembly holds still (also spares
+    // the re-read on a paused/savestate source, where the code can't change).
+    const uint32_t winLen = (uint32_t)kWinInstr * 2;
+    if (mAutoRefresh || !mHaveWindowBytes || mWindowBytesBase != mWindowBase)
+    {
+        auto results = backend.ReadMemoryBatch({ { mWindowBase, winLen } });
+        mWindowBytes = results[0].success ? results[0].bytes : std::vector<uint8_t>();
+        mWindowBytesBase = mWindowBase;
+        mHaveWindowBytes = true;
+    }
+    const std::vector<uint8_t>& code = mWindowBytes;
     mLines.clear();
     for (int k = 0; k < kWinInstr; ++k)
     {
         Line ln; ln.addr = mWindowBase + (uint32_t)k * 2;
-        if (code.success && (size_t)(k * 2 + 1) < code.bytes.size())
+        if ((size_t)(k * 2 + 1) < code.size())
         {
-            ln.op = (uint16_t)((code.bytes[k*2] << 8) | code.bytes[k*2+1]);
+            ln.op = (uint16_t)((code[k*2] << 8) | code[k*2+1]);
             ln.ins = Sh2Decode(ln.addr, ln.op);
             ln.readable = true;
         }
         mLines.push_back(std::move(ln));
     }
+
+    // Branch targets that land inside the window get a "loc_" label row above them.
+    std::unordered_set<uint32_t> labels;
+    for (const Line& ln : mLines)
+        if (ln.readable && ln.ins.HasBranchTarget &&
+            ln.ins.BranchTarget >= mWindowBase && ln.ins.BranchTarget < mWindowBase + winLen)
+            labels.insert(ln.ins.BranchTarget & ~1u);
 
     // --- Table ---
     const ImGuiTableFlags flags = ImGuiTableFlags_ScrollY | ImGuiTableFlags_RowBg |
@@ -254,6 +357,16 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
 
     for (const Line& ln : mLines)
     {
+        // Location label row for an in-window branch target.
+        if (labels.count(ln.addr))
+        {
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(3);
+            ImGui::PushStyleColor(ImGuiCol_Text, kColCmt);
+            ImGui::Text(";-- loc_%08X:", ln.addr);
+            ImGui::PopStyleColor();
+        }
+
         const bool isPc = ln.addr == pc;
         ImGui::TableNextRow();
         if (isPc) ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, kColPcRow);
@@ -310,13 +423,39 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
             ImGui::EndTooltip();
         }
 
-        // Comment: auto branch label.
+        // Comment: user note (bright) overlaid on the auto-generated comment (dim).
+        // Double-click to edit the user note; empty note clears it.
         ImGui::TableSetColumnIndex(5);
-        if (ln.readable && ln.ins.HasBranchTarget)
         {
-            ImGui::PushStyleColor(ImGuiCol_Text, kColCmt);
-            ImGui::Text("loc_%08X", ln.ins.BranchTarget);
-            ImGui::PopStyleColor();
+            auto it = mComments.find(ln.addr);
+            const bool hasUser = it != mComments.end() && !it->second.empty();
+            if (mEditingComment && mEditCommentAddr == ln.addr)
+            {
+                ImGui::SetNextItemWidth(-FLT_MIN);
+                if (mCommentFocus) { ImGui::SetKeyboardFocusHere(); mCommentFocus = false; }
+                const bool enter = ImGui::InputText("##cmt", mCommentBuf, sizeof(mCommentBuf),
+                                                    ImGuiInputTextFlags_EnterReturnsTrue);
+                if (enter || ImGui::IsItemDeactivated())
+                {
+                    if (mCommentBuf[0]) mComments[ln.addr] = mCommentBuf;
+                    else                mComments.erase(ln.addr);
+                    mEditingComment = false;
+                    SaveComments();
+                }
+            }
+            else
+            {
+                const std::string autoCmt = ln.readable ? Sh2Comment(ln.ins, regs, backend) : std::string();
+                const char* txt = hasUser ? it->second.c_str() : autoCmt.c_str();
+                ImGui::PushStyleColor(ImGuiCol_Text, hasUser ? IM_COL32(190, 185, 140, 255) : kColCmt);
+                ImGui::TextUnformatted(txt[0] ? txt : " ");
+                ImGui::PopStyleColor();
+                if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0))
+                {
+                    mEditingComment = true; mEditCommentAddr = ln.addr; mCommentFocus = true;
+                    std::snprintf(mCommentBuf, sizeof(mCommentBuf), "%s", hasUser ? it->second.c_str() : "");
+                }
+            }
         }
 
         // Row context menu.
@@ -346,6 +485,16 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
                                           ln.ins.Mnemonic.c_str(), ln.ins.Operands.c_str());
                 ImGui::SetClipboardText(b);
             }
+            ImGui::Separator();
+            if (ImGui::MenuItem("Edit Comment"))
+            {
+                mEditingComment = true; mEditCommentAddr = ln.addr; mCommentFocus = true;
+                auto it = mComments.find(ln.addr);
+                std::snprintf(mCommentBuf, sizeof(mCommentBuf), "%s",
+                              it != mComments.end() ? it->second.c_str() : "");
+            }
+            if (ImGui::MenuItem("Clear Comment", nullptr, false, mComments.count(ln.addr) != 0))
+            { mComments.erase(ln.addr); SaveComments(); }
             ImGui::BeginDisabled();
             ImGui::MenuItem("Set PC Here");
             ImGui::MenuItem("View Address in Hex Editor");
@@ -357,9 +506,37 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
     }
     ImGui::EndTable();
 
-    // Step control lives in the toolbar/transport; expose a step request here too.
-    (void)req;
     ImGui::End();
+}
+
+// Best-effort comment store: one fixed file in the working directory, each line
+// "ADDRHEX <note>". Mirrors WatchPanel's session persistence (a native-desktop
+// stopgap that no-ops on the web build's ephemeral MEMFS).
+namespace { const char* kCommentFile = "assembly_comments.txt"; }
+
+void AssemblyPanel::LoadComments()
+{
+    std::ifstream f(kCommentFile);
+    if (!f) return;
+    mComments.clear();
+    std::string line;
+    while (std::getline(f, line))
+    {
+        while (!line.empty() && (line.back() == '\r' || line.back() == '\n')) line.pop_back();
+        unsigned addr = 0;
+        const size_t sp = line.find(' ');
+        if (sp == std::string::npos || std::sscanf(line.c_str(), "%x", &addr) != 1) continue;
+        std::string note = line.substr(sp + 1);
+        if (!note.empty()) mComments[addr] = note;
+    }
+}
+
+void AssemblyPanel::SaveComments() const
+{
+    std::ofstream f(kCommentFile);
+    if (!f) return;
+    for (const auto& kv : mComments)
+        if (!kv.second.empty()) f << std::hex << kv.first << " " << kv.second << "\n";
 }
 
 }  // namespace sfe

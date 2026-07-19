@@ -208,12 +208,14 @@ void App::Initialize()
 #ifdef SE_ENABLE_LIVE
     mRecorder.Configure(mRecordSeconds * kFramesPerSecond);
 #endif
-    mWatchPanel.LoadSession();   // restore the session's watch list, if any
+    mWatchPanel.LoadSession();     // restore the session's watch list, if any
+    mAssemblyPanel.LoadComments(); // restore the session's assembly comments
 }
 
 void App::Shutdown()
 {
     mWatchPanel.SaveSession();
+    mAssemblyPanel.SaveComments();
     CloseData();
 }
 
