@@ -1235,7 +1235,9 @@ constexpr uint8_t kPrioHeat[8][3] = {
 //  - Raw RGB555: every word shown as RGB555 (exact for RGB sprites; colour-bank
 //    pixels look wrong — useful to inspect the raw bits).
 //  - Priority: per-pixel priority (SPCTL type -> PRISA..PRISD) as a heatmap.
-// Word 0 (erased) is transparent. "Byte-swap" flips word endianness if needed.
+// Word 0 (erased) is transparent. The frame buffer is host-endian (software
+// renderer writes native u16, so little-endian by default); "Byte-swap" flips to
+// big-endian for a big-endian source.
 void App::DrawVdp1Framebuffer(IPlatform& platform)
 {
     constexpr int kFbW = 512;
@@ -1279,6 +1281,11 @@ void App::DrawVdp1Framebuffer(IPlatform& platform)
         ImGui::Combo("##fbmode", &mFbMode, kModes, IM_ARRAYSIZE(kModes));
         ImGui::SameLine();
         ImGui::Checkbox("Byte-swap", &mFbByteSwap);
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("Frame buffer is host-endian (little-endian) by default.\n"
+                              "Enable only if colours look wrong (big-endian source).");
+        }
         ImGui::SameLine();
         if (haveVdp2)
             ImGui::TextDisabled("type %X  %s  512x256", sprType, spclmd ? "mixed" : "palette");
@@ -1291,10 +1298,15 @@ void App::DrawVdp1Framebuffer(IPlatform& platform)
 
         auto wordAt = [&](int i) -> uint16_t
         {
+            // The VDP1 frame buffer is host-endian: the software renderer (VIDSoft)
+            // writes native u16 pixels, so on the usual little-endian host the low
+            // byte comes first — unlike VDP1/VDP2 VRAM, which is big-endian. Default
+            // to little-endian (correct for real captures); "Byte-swap" flips to
+            // big-endian for a big-endian source.
             const uint8_t b0 = mFbRaw[i * 2], b1 = mFbRaw[i * 2 + 1];
             return mFbByteSwap
-                ? static_cast<uint16_t>((static_cast<uint16_t>(b1) << 8) | b0)
-                : static_cast<uint16_t>((static_cast<uint16_t>(b0) << 8) | b1);
+                ? static_cast<uint16_t>((static_cast<uint16_t>(b0) << 8) | b1)
+                : static_cast<uint16_t>((static_cast<uint16_t>(b1) << 8) | b0);
         };
 
         // Decode a word to RGBA per the active mode. A == 0 means transparent.
