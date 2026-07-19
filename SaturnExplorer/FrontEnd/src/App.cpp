@@ -1098,25 +1098,15 @@ void App::DrawWatch(IPlatform& platform)
     mWatchPanel.Draw(mMemBackend, mExprResolver, platform, ImGui::GetIO().DeltaTime);
 }
 
-// SH-2 Assembly — placeholder until the emulator exports CPU state. The panel and
-// its docking slot exist now so the layout is final; the disassembler + live PC
-// arrive in later phases (needs SH-2 register/PC + breakpoint export from Yabause).
+// SH-2 Assembly — live disassembly around the master/slave PC. Reads CPU state +
+// code from the current context (savestate or live) and renders via AssemblyPanel.
 void App::DrawAssembly()
 {
-    if (ImGui::Begin("SH-2 Assembly"))
-    {
-        ImGui::TextUnformatted("SH-2 disassembly");
-        ImGui::Separator();
-        ImGui::TextWrapped(
-            "Live instruction view around the master/slave PC, breakpoints, and "
-            "stepping arrive in a later phase. They need the emulator to export "
-            "SH-2 registers/PC and breakpoint hooks (a protocol update + Yabause "
-            "rebuild), plus the SH-2 disassembler.");
-        ImGui::Spacing();
-        ImGui::TextDisabled("Planned: CPU selector (Master/Slave), Follow PC, branch "
-                            "navigation, gutter breakpoints, Run to Here.");
-    }
-    ImGui::End();
+    AssemblyPanel::Request req;
+    mAssemblyPanel.Draw(mContext, mMemBackend, mBreakpoints, mWatchPanel, mbLiveSource, req);
+    // Run-control requests (Run to Here / step) are honoured in Phase 4, once the
+    // live driver can set execution breakpoints and resume; ignored otherwise.
+    (void)req;
 }
 
 void App::DrawVdpOutput(IPlatform& platform)

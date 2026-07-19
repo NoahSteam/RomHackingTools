@@ -45,7 +45,7 @@ MemoryReadResult ContextBackend::ReadOne(uint32_t address, uint32_t size) const
         r.error = "Disconnected";
         return r;
     }
-    if (size == 0 || size > 4)
+    if (size == 0 || size > 0x10000)
     {
         r.error = "Bad size";
         return r;

@@ -32,6 +32,12 @@ public:
     void LoadSession();
     void SaveSession() const;
 
+    // Add a watch programmatically (e.g. Assembly "Add Operand to Watch").
+    void AddWatch(const std::string& name, const std::string& expr, WatchType type)
+    {
+        mList.Add(name, expr, type, true);
+    }
+
 private:
     struct Row
     {
