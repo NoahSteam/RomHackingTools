@@ -208,10 +208,12 @@ void App::Initialize()
 #ifdef SE_ENABLE_LIVE
     mRecorder.Configure(mRecordSeconds * kFramesPerSecond);
 #endif
+    mWatchPanel.LoadSession();   // restore the session's watch list, if any
 }
 
 void App::Shutdown()
 {
+    mWatchPanel.SaveSession();
     CloseData();
 }
 
@@ -655,10 +657,12 @@ void App::BuildUI(IPlatform& platform)
     DrawPaletteViewer();
     DrawReferences();
 
-    // Right column.
+    // Right column. (The old Texture Preview / Palette (CLUT) panels duplicated the
+    // center Texture/Palette viewers; the debugger Watch + Assembly panels live here
+    // now.)
     DrawSelectedObject();
-    DrawPlaceholder("Texture Preview", "Preview of the selected sprite's texture — see the Texture Viewer panel.");
-    DrawPlaceholder("Palette (CLUT)", "Palette of the selected sprite — see the Palette Viewer panel.");
+    DrawWatch(platform);
+    DrawAssembly();
     DrawPlaceholder("Memory History", "Load chain (File → CD → DMA → Write) — arrives in M7.");
     // contextSwap restores the live context here as it goes out of scope.
 }
@@ -694,11 +698,12 @@ void App::BuildDefaultLayout(unsigned int dockspaceId)
     const ImGuiID cbPal = ImGui::DockBuilderSplitNode(bottomRest, ImGuiDir_Left, 0.50f, nullptr, &bottomRest);
     const ImGuiID cbRefs = bottomRest;
 
-    // Right inspector column, top to bottom.
+    // Right inspector column, top to bottom. Watch (rTex) + SH-2 Assembly (rPal)
+    // are the debugger focus, so they get the bulk of the height.
     ImGuiID rightRest = right;
-    const ImGuiID rObj  = ImGui::DockBuilderSplitNode(rightRest, ImGuiDir_Up, 0.45f, nullptr, &rightRest);
-    const ImGuiID rTex  = ImGui::DockBuilderSplitNode(rightRest, ImGuiDir_Up, 0.25f, nullptr, &rightRest);
-    const ImGuiID rPal  = ImGui::DockBuilderSplitNode(rightRest, ImGuiDir_Up, 0.40f, nullptr, &rightRest);
+    const ImGuiID rObj  = ImGui::DockBuilderSplitNode(rightRest, ImGuiDir_Up, 0.22f, nullptr, &rightRest);
+    const ImGuiID rTex  = ImGui::DockBuilderSplitNode(rightRest, ImGuiDir_Up, 0.42f, nullptr, &rightRest);
+    const ImGuiID rPal  = ImGui::DockBuilderSplitNode(rightRest, ImGuiDir_Up, 0.62f, nullptr, &rightRest);
     const ImGuiID rMem  = rightRest;
 
     ImGui::DockBuilderDockWindow("Layer Controls", leftTop);
@@ -722,8 +727,8 @@ void App::BuildDefaultLayout(unsigned int dockspaceId)
     ImGui::DockBuilderDockWindow("References", cbRefs);
 
     ImGui::DockBuilderDockWindow("Selected Object", rObj);
-    ImGui::DockBuilderDockWindow("Texture Preview", rTex);
-    ImGui::DockBuilderDockWindow("Palette (CLUT)", rPal);
+    ImGui::DockBuilderDockWindow("Watch", rTex);
+    ImGui::DockBuilderDockWindow("SH-2 Assembly", rPal);
     ImGui::DockBuilderDockWindow("Memory History", rMem);
 
     ImGui::DockBuilderFinish(dockspaceId);
@@ -1082,6 +1087,34 @@ void App::DrawLayerControls()
         CheckboxU8("Window", &mRenderOpts.show_window);
         CheckboxU8("Color Calculation", &mRenderOpts.show_color_calculation);
         CheckboxU8("Shadow / Highlight", &mRenderOpts.show_shadow_highlight);
+    }
+    ImGui::End();
+}
+
+// Debugger Watch Window — the panel owns its list/refresh; App just supplies the
+// memory backend (served from the current context) and the expression resolver.
+void App::DrawWatch(IPlatform& platform)
+{
+    mWatchPanel.Draw(mMemBackend, mExprResolver, platform, ImGui::GetIO().DeltaTime);
+}
+
+// SH-2 Assembly — placeholder until the emulator exports CPU state. The panel and
+// its docking slot exist now so the layout is final; the disassembler + live PC
+// arrive in later phases (needs SH-2 register/PC + breakpoint export from Yabause).
+void App::DrawAssembly()
+{
+    if (ImGui::Begin("SH-2 Assembly"))
+    {
+        ImGui::TextUnformatted("SH-2 disassembly");
+        ImGui::Separator();
+        ImGui::TextWrapped(
+            "Live instruction view around the master/slave PC, breakpoints, and "
+            "stepping arrive in a later phase. They need the emulator to export "
+            "SH-2 registers/PC and breakpoint hooks (a protocol update + Yabause "
+            "rebuild), plus the SH-2 disassembler.");
+        ImGui::Spacing();
+        ImGui::TextDisabled("Planned: CPU selector (Master/Slave), Follow PC, branch "
+                            "navigation, gutter breakpoints, Run to Here.");
     }
     ImGui::End();
 }
