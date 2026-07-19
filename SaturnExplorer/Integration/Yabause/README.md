@@ -125,9 +125,16 @@ counter) — the exact bytes Saturn Explorer's savestate loader already understa
 just set the state `SeExportGateFrame()` reads. Wire format (protocol v4):
 `Drivers/Common/src/SeLiveProtocol.h`.
 
-The VDP1 frame buffer comes from the `Vdp1FrameBuffer[0]` argument to
-`SeExportSnapshot` (the hook `apply.py` inserts). If your Yabause fork names or
-banks that buffer differently, adjust that one argument.
+**VDP1 frame buffer source.** The *global* `Vdp1FrameBuffer` in Yabause is only a
+fallback — during play every real frame-buffer access is routed through the active
+video core, so the global stays blank. VIDSoft keeps the pixels in its own
+`vdp1frontframebuffer` / `vdp1backframebuffer` (two 256 KiB RGB555 banks that swap
+each frame). `apply.py` therefore adds a small `VIDSoftGetVdp1FrameBuffer()`
+accessor to `vidsoft.c` (returning the displayed *front* bank) and passes that to
+`SeExportSnapshot`, grabbed at `Vdp2VBlankOUT` (post-swap, so no mid-draw tearing).
+Caveat: this is the **software** renderer. VIDOGL keeps the frame buffer on the GPU
+and would need a read-back — if you run the OpenGL core, the FB section will be
+empty until that's added.
 
 ## Web (browser) live viewing
 The browser can't open a local socket, so the web build reaches Yabause over a
