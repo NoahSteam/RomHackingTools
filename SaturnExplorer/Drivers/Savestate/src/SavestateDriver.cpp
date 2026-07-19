@@ -89,6 +89,29 @@ size_t CbMainRam(void* user, uint32_t address, void* dst, size_t size)
     return 0;
 }
 
+// Copy 'size' big-endian bytes into 'buf' at 'off' (clamped). Returns bytes written.
+size_t WriteRegion(std::vector<uint8_t>& buf, uint32_t off, const void* src, size_t size)
+{
+    if (off >= buf.size()) return 0;
+    const size_t n = std::min<size_t>(size, buf.size() - off);
+    std::memcpy(buf.data() + off, src, n);
+    return n;
+}
+
+size_t CbWriteMainRam(void* user, uint32_t address, const void* src, size_t size)
+{
+    Savestate* state = static_cast<Savestate*>(user);
+    if (address >= kAddrWramHigh)
+    {
+        return WriteRegion(state->mWramHigh, address - kAddrWramHigh, src, size);
+    }
+    if (address >= kAddrWramLow)
+    {
+        return WriteRegion(state->mWramLow, address - kAddrWramLow, src, size);
+    }
+    return 0;
+}
+
 uint16_t CbVdp1Reg(void* user, uint32_t reg)
 {
     return ReadReg16(static_cast<Savestate*>(user)->mVdp1Regs, reg);
@@ -185,8 +208,9 @@ void BuildDataSource(Savestate* state, se_data_source* out)
     }
     if (!state->mWramLow.empty() || !state->mWramHigh.empty())
     {
-        caps |= SE_CAP_MAIN_RAM;
+        caps |= SE_CAP_MAIN_RAM | SE_CAP_MEM_WRITE;
         out->read_main_ram = CbMainRam;
+        out->write_main_ram = CbWriteMainRam;   // in-memory edits (not saved to disk)
     }
     if (!state->mVdp1Regs.empty())
     {

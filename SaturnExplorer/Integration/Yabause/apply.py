@@ -73,6 +73,10 @@ EDITS = [
      "{\n"
      "   SH2ClearCodeBreakpoints(MSH2);\n"
      "   SH2ClearCodeBreakpoints(SSH2);\n"
+     "}\n"
+     "static void SeExpWriteByte(unsigned int addr, unsigned char val)\n"
+     "{\n"
+     "   MappedMemoryWriteByte((u32)addr, (u8)val);\n"
      "}\n",
      "SeExpBpHit"),
 
@@ -83,7 +87,8 @@ EDITS = [
      "   /* Install SH-2 breakpoints from Saturn Explorer + report hits. */\n"
      "   SH2SetBreakpointCallBack(MSH2, SeExpBpHit, NULL);\n"
      "   SH2SetBreakpointCallBack(SSH2, SeExpBpHit, NULL);\n"
-     "   SeExportSetBreakpointHooks(SeExpAddExecBp, SeExpClearBps);\n",
+     "   SeExportSetBreakpointHooks(SeExpAddExecBp, SeExpClearBps);\n"
+     "   SeExportSetMemWriteHook(SeExpWriteByte);   /* Hex Editor pokes */\n",
      "SeExportInit("),
 
     ("yabause.c",

@@ -76,6 +76,9 @@ struct LiveState
     // a BKP command on its next cycle. Each descriptor is SE_LIVE_BKPT_DESC_LEN.
     std::vector<uint8_t>  bkpts;
     bool                  bkptsDirty = false;
+    // Pending work-RAM pokes from the Hex Editor. Each entry is a WRM payload:
+    // address(u32 LE) + big-endian bytes. The poll thread ships one per cycle.
+    std::vector<std::vector<uint8_t>> writes;
     // True once we've told the emulator to pause/step and not since resumed, so the
     // poll thread knows to release it on close (never leave Yabause paused).
     std::atomic<bool>     pausedByUs{false};
@@ -382,6 +385,14 @@ void PollLoop(LiveState* st)
                 payload = st->bkpts;
                 st->bkptsDirty = false;
             }
+            else if (!st->writes.empty())
+            {
+                // Ship one poke: payload = address(4) + bytes; arg = byte count.
+                payload = std::move(st->writes.front());
+                st->writes.erase(st->writes.begin());
+                verb = SE_LIVE_VERB_WRITE;
+                arg = static_cast<int32_t>(payload.size() >= 4 ? payload.size() - 4 : 0);
+            }
             else
             {
                 switch (st->pending)
@@ -482,6 +493,23 @@ size_t CbVdp1Fb(void* u, uint32_t off, void* dst, size_t size)
 {
     LiveState* st = St(u); std::lock_guard<std::mutex> lk(st->mtx);
     return CopyRegion(st->front.vdp1Fb, off, dst, size);
+}
+
+size_t CbWriteMainRam(void* u, uint32_t address, const void* src, size_t size)
+{
+    if (!src || size == 0) return 0;
+    LiveState* st = St(u);
+    std::vector<uint8_t> payload;
+    payload.reserve(4 + size);
+    payload.push_back((uint8_t)(address & 0xFF));
+    payload.push_back((uint8_t)((address >> 8) & 0xFF));
+    payload.push_back((uint8_t)((address >> 16) & 0xFF));
+    payload.push_back((uint8_t)((address >> 24) & 0xFF));
+    const uint8_t* p = static_cast<const uint8_t*>(src);
+    payload.insert(payload.end(), p, p + size);
+    std::lock_guard<std::mutex> lk(st->ctlMtx);
+    st->writes.push_back(std::move(payload));   // poll thread ships it next cycle
+    return size;
 }
 
 int CbSh2Regs(void* u, int cpu, se_sh2_regs* out)
@@ -591,12 +619,14 @@ extern "C" se_result se_live_open(const char* endpoint, se_data_source* out)
     out->abi_version = SE_ABI_VERSION;
     out->capabilities = SE_CAP_VDP1_VRAM | SE_CAP_VDP2_VRAM | SE_CAP_CRAM |
                         SE_CAP_VDP1_REGS | SE_CAP_VDP2_REGS | SE_CAP_MAIN_RAM |
-                        SE_CAP_VDP1_FB | SE_CAP_FRAME_STEP | SE_CAP_SH2_REGS;
+                        SE_CAP_VDP1_FB | SE_CAP_FRAME_STEP | SE_CAP_SH2_REGS |
+                        SE_CAP_MEM_WRITE;
     out->user = st;
     out->read_vdp1_vram = CbVdp1Vram;
     out->read_vdp2_vram = CbVdp2Vram;
     out->read_cram      = CbCram;
     out->read_main_ram  = CbMainRam;
+    out->write_main_ram = CbWriteMainRam;
     out->read_vdp1_fb   = CbVdp1Fb;
     out->read_vdp1_reg  = CbVdp1Reg;
     out->read_vdp2_reg  = CbVdp2Reg;

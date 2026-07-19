@@ -110,6 +110,17 @@ void SeExportSetBreakpointHooks(SeAddExecBpFn add, SeClearBpsFn clear)
     sClearBps = clear;
 }
 
+/* ---- Memory-write hook (v6+). apply.py wires this to Yabause's
+ * MappedMemoryWriteByte so the Hex Editor can poke work RAM. Writing byte-by-byte
+ * at Saturn addresses keeps big-endian semantics without a manual swap. ---- */
+typedef void (*SeWriteByteFn)(unsigned int address, unsigned char value);
+static SeWriteByteFn sWriteByte;
+
+void SeExportSetMemWriteHook(SeWriteByteFn fn)
+{
+    sWriteByte = fn;
+}
+
 /* Called from Yabause's breakpoint callback when the master/slave SH-2 hits an
  * execution breakpoint: latch the stop and hold the emulator paused. Plain
  * volatile writes (like sPaused elsewhere) — this runs in the CPU thread and must
@@ -301,6 +312,21 @@ static void SeServeClient(int cl, SeFrame* snap)
                 {
                     sAddExecBp((int)cpu, address);
                 }
+            }
+        }
+        else if (memcmp(req, SE_LIVE_VERB_WRITE, SE_LIVE_VERB_LEN) == 0)
+        {
+            /* Poke work RAM: payload = address(4 LE) + 'arg' big-endian bytes. */
+            unsigned char addrb[4];
+            unsigned int i, address;
+            if (SeRecv(cl, addrb, 4) != 0) return;
+            address = (unsigned int)addrb[0] | ((unsigned int)addrb[1] << 8) |
+                      ((unsigned int)addrb[2] << 16) | ((unsigned int)addrb[3] << 24);
+            for (i = 0; i < arg; ++i)
+            {
+                unsigned char v;
+                if (SeRecv(cl, &v, 1) != 0) return;
+                if (sWriteByte) sWriteByte(address + i, v);
             }
         }
 

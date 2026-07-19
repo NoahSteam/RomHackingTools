@@ -200,6 +200,17 @@ size_t se_read_vram(se_context* ctx, se_vram_kind kind, uint32_t offset,
     return ctx ? Impl(ctx)->ReadVram(kind, offset, dst, size) : 0;
 }
 
+size_t se_write_vram(se_context* ctx, se_vram_kind kind, uint32_t offset,
+                     const void* src, size_t size)
+{
+    return ctx ? Impl(ctx)->WriteVram(kind, offset, src, size) : 0;
+}
+
+int se_can_write(se_context* ctx)
+{
+    return (ctx && Impl(ctx)->CanWrite()) ? 1 : 0;
+}
+
 size_t se_read_cram_colors(se_context* ctx, uint16_t start, uint16_t count,
                            se_palette_entry* out)
 {

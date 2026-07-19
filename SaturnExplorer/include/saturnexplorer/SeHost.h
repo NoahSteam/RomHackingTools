@@ -88,6 +88,17 @@ uint16_t    se_get_vdp2_register(se_context* ctx, uint32_t hw_offset);
    bytes copied (clamped to the region). */
 size_t      se_read_vram(se_context* ctx, se_vram_kind kind, uint32_t offset,
                          void* dst, size_t size);
+/* Write raw Saturn big-endian bytes into a memory region (currently work RAM
+   only). Updates the current snapshot so the change is visible immediately, and
+   forwards to the source's write_main_ram when present (SE_CAP_MEM_WRITE) so a
+   live emulator is poked; on a savestate the edit is in-memory only. Returns the
+   number of bytes written (0 if the region is not writable). */
+size_t      se_write_vram(se_context* ctx, se_vram_kind kind, uint32_t offset,
+                          const void* src, size_t size);
+/* 1 when the current source has memory the Hex Editor can edit (a loaded
+   snapshot). Edits always update the view; they persist to the emulator only when
+   the source advertises SE_CAP_MEM_WRITE. */
+int         se_can_write(se_context* ctx);
 /* Decode CRAM entries [start, start+count) into palette entries. Returns the
    number written (clamped to the CRAM size for the current color mode). */
 size_t      se_read_cram_colors(se_context* ctx, uint16_t start, uint16_t count,

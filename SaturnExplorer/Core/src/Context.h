@@ -282,6 +282,27 @@ public:
         return n;
     }
 
+    // Write raw big-endian bytes into a region. Updates the snapshot (so the edit
+    // shows immediately) and forwards work-RAM writes to the source's
+    // write_main_ram (so a live emulator is poked). Returns bytes written.
+    size_t WriteVram(se_vram_kind kind, uint32_t offset, const void* src, size_t size)
+    {
+        const size_t n = mSnapshot.WriteRegion(kind, offset, src, size);
+        if (n == 0) return 0;
+        if (mDs.write_main_ram &&
+            (kind == SE_VRAM_KIND_WRAM_LOW || kind == SE_VRAM_KIND_WRAM_HIGH))
+        {
+            const uint32_t base = (kind == SE_VRAM_KIND_WRAM_HIGH) ? kWramHighBase
+                                                                   : kWramLowBase;
+            mDs.write_main_ram(mDs.user, base + offset, src, n);
+        }
+        return n;
+    }
+
+    // The Hex Editor can edit whenever a snapshot is loaded (savestate edits are
+    // in-memory; live edits persist through write_main_ram).
+    bool CanWrite() const { return mSnapshot.Valid(); }
+
     // Decode CRAM entries [start, start+count) into RGBA palette entries. Returns
     // the number written (clamped to the CRAM size for the current color mode).
     size_t ReadCramColors(uint16_t start, uint16_t count, se_palette_entry* out) const

@@ -32,6 +32,12 @@ typedef struct se_data_source {
     /* Raw VDP1 frame buffer (drawn output), SE_CAP_VDP1_FB. May be NULL. */
     size_t (*read_vdp1_fb)  (void* user, uint32_t offset, void* dst, size_t size);
 
+    /* --- Optional: write back to work RAM (SE_CAP_MEM_WRITE). 'src' is Saturn
+           big-endian bytes at 'address' (the same convention read_main_ram
+           returns). Returns bytes written. May be NULL. Powers Hex Editor edits;
+           on a savestate the write is in-memory only. */
+    size_t (*write_main_ram)(void* user, uint32_t address, const void* src, size_t size);
+
     /* --- Registers. --- */
     uint16_t (*read_vdp1_reg)(void* user, uint32_t reg);
     uint16_t (*read_vdp2_reg)(void* user, uint32_t reg);

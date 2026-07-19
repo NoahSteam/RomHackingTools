@@ -46,6 +46,14 @@ public:
     // (big-endian) so callers interpret multi-byte values big-endian.
     virtual std::vector<MemoryReadResult> ReadMemoryBatch(
         const std::vector<MemoryReadRequest>& requests) = 0;
+
+    // True when memory at 'address' can be edited (a writable region is loaded).
+    virtual bool CanWrite(uint32_t address) const { (void)address; return false; }
+
+    // Write 'bytes' (big-endian Saturn bytes) at 'address'. Returns the number
+    // written (0 if the region isn't writable). Default: no-op read-only backend.
+    virtual size_t WriteMemory(uint32_t address, const uint8_t* bytes, size_t size)
+    { (void)address; (void)bytes; (void)size; return 0; }
 };
 
 // Backend over an se_context. Holds a pointer-to-pointer so it always follows the
@@ -58,6 +66,8 @@ public:
     bool Connected() const override { return mContext && *mContext; }
     std::vector<MemoryReadResult> ReadMemoryBatch(
         const std::vector<MemoryReadRequest>& requests) override;
+    bool CanWrite(uint32_t address) const override;
+    size_t WriteMemory(uint32_t address, const uint8_t* bytes, size_t size) override;
 
     // Map a CPU-visible Saturn address (mirror bits normalized) to a captured
     // region and read 'size' bytes. Public so hover/operand previews can reuse it.

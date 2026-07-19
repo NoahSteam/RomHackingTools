@@ -4,6 +4,7 @@
 #pragma once
 
 #include <cstdint>
+#include <cstring>
 #include <vector>
 
 #include "saturnexplorer/SeDataSource.h"
@@ -37,6 +38,24 @@ public:
     const std::vector<uint8_t>& WramHigh() const { return mWramHigh; }
     const std::vector<uint8_t>& Vdp1Fb() const { return mVdp1Fb; }
     se_cram_mode CramMode() const { return mCramMode; }
+
+    // Overwrite bytes in a region's captured buffer (Hex Editor edits). Returns
+    // the number written (clamped to the buffer). Work RAM only for now.
+    size_t WriteRegion(se_vram_kind kind, uint32_t offset, const void* src, size_t size)
+    {
+        std::vector<uint8_t>* dst = nullptr;
+        switch (kind)
+        {
+        case SE_VRAM_KIND_WRAM_LOW:  dst = &mWramLow;  break;
+        case SE_VRAM_KIND_WRAM_HIGH: dst = &mWramHigh; break;
+        default: return 0;
+        }
+        if (!src || offset >= dst->size()) return 0;
+        const size_t avail = dst->size() - offset;
+        const size_t n = size < avail ? size : avail;
+        std::memcpy(dst->data() + offset, src, n);
+        return n;
+    }
 
     // True if the driver supplied VDP1 / VDP2 registers.
     bool HasVdp1Regs() const { return mbHasVdp1Regs; }

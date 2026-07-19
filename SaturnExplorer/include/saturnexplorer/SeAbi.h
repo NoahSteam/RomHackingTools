@@ -51,7 +51,8 @@ enum {
     SE_CAP_FRAME_STEP  = 1u << 9,   /* pause / step / advance (Frame Timeline) */
     SE_CAP_SYSTEM_STATUS = 1u << 10,/* SH-2 PC, scanline, blank flags (status bar) */
     SE_CAP_VDP1_FB     = 1u << 11,  /* raw VDP1 frame buffer (se_read_vram VDP1_FB) */
-    SE_CAP_SH2_REGS    = 1u << 12   /* full SH-2 master/slave register file (Assembly) */
+    SE_CAP_SH2_REGS    = 1u << 12,  /* full SH-2 master/slave register file (Assembly) */
+    SE_CAP_MEM_WRITE   = 1u << 13   /* write-back to work RAM (Hex Editor edits persist) */
     /* Reserved for a future live driver: SE_CAP_BREAKPOINTS ("Break on Read"). */
 };
 

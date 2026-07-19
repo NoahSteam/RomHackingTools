@@ -121,6 +121,22 @@ viewing and pause/step work with any core. Memory (read/write) breakpoints
 round-trip over the protocol but aren't installed yet — they'd need
 `SH2AddMemoryBreakpoint` wiring.
 
+### 2d. (Optional) Hex Editor writes
+To let the Hex Editor poke work RAM in the running game, wire the write hook to
+Yabause's byte writer (also inserted by `apply.py`):
+
+```c
+static void SeExpWriteByte(unsigned int addr, unsigned char val) {
+    MappedMemoryWriteByte((u32)addr, (u8)val);
+}
+/* ... in YabauseInit(), after SeExportInit(): */
+SeExportSetMemWriteHook(SeExpWriteByte);
+```
+
+Writing byte-by-byte at Saturn addresses keeps big-endian order without a manual
+swap. Without this hook, Hex Editor edits still apply to Saturn Explorer's own view
+of the frame but aren't pushed to the emulator.
+
 ### 2b. (Optional) Pause / single-step gate
 To enable the Pause and Step Frame buttons, gate each emulated frame on
 `SeExportGateFrame()` in Yabause's run loop. It returns 1 when the frame should
@@ -164,8 +180,9 @@ little-endian by default). The control block carries the paused flag, frame
 counter, and a stop event (reason / CPU / PC) so a breakpoint halt jumps the
 Assembly panel to the halted PC. The pause/step verbs just set the state
 `SeExportGateFrame()` reads; `BKP` syncs the whole breakpoint set (its arg is the
-descriptor count, followed by that many 12-byte descriptors). Wire format
-(protocol v5): `Drivers/Common/src/SeLiveProtocol.h`.
+descriptor count, followed by that many 12-byte descriptors); `WRM` pokes work RAM
+(arg = byte count N, payload = address + N big-endian bytes). Wire format
+(protocol v6): `Drivers/Common/src/SeLiveProtocol.h`.
 
 **VDP1 frame buffer source.** The *global* `Vdp1FrameBuffer` in Yabause is only a
 fallback — during play every real frame-buffer access is routed through the active

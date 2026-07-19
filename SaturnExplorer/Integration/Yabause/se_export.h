@@ -62,6 +62,13 @@ void SeExportSetBreakpointHooks(void (*add)(int cpu, unsigned int address),
  * debugger can jump to the PC. A resume / single-step from the debugger clears it. */
 void SeExportNotifyStop(int cpu, unsigned int pc);
 
+/* Wire the module's work-RAM poke to Yabause's byte writer (v6+), so the Hex
+ * Editor can edit a running game: write(address, value) should call
+ * MappedMemoryWriteByte. May be NULL (writes are then dropped). Writing byte-by-
+ * byte at Saturn addresses preserves big-endian order without a manual swap. Call
+ * once after SeExportInit, e.g. SeExportSetMemWriteHook(SeYabauseWriteByte). */
+void SeExportSetMemWriteHook(void (*write)(unsigned int address, unsigned char value));
+
 /* Frame gate for pause / single-step. Call once at the top of each emulated
  * frame in Yabause's run loop; returns 1 if the frame should run, 0 if the
  * debugger is holding it paused. When it returns 0 it has already slept ~2 ms
