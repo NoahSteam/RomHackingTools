@@ -1894,12 +1894,28 @@ void App::DrawVramMap()
             // region(s), drawn on top after the fill pass so the selection outline
             // isn't overpainted.
             std::vector<ImVec4> selRects;
+            // Bytes actually referenced by active commands, as the union of all
+            // classified regions. Regions arrive sorted by address, so a running
+            // "covered up to" watermark counts overlapping blocks (shared textures,
+            // abutting tables) once instead of double-counting their sizes.
+            uint32_t usedBytes = 0;
+            uint32_t coverEnd = 0;
             for (size_t i = 0; i < count; ++i)
             {
                 se_vram_region reg;
                 if (se_get_vram_region(mContext, i, &reg) != SE_OK)
                 {
                     continue;
+                }
+                // Accumulate coverage (actual size, clamped to VRAM) before the
+                // paint uses the +1 minimum-width fudge below.
+                const uint32_t rStart = reg.address < kVramSize ? reg.address : kVramSize;
+                const uint32_t rEnd = (reg.address + reg.size < kVramSize)
+                                    ? reg.address + reg.size : kVramSize;
+                if (rEnd > coverEnd)
+                {
+                    usedBytes += rEnd - (rStart > coverEnd ? rStart : coverEnd);
+                    coverEnd = rEnd;
                 }
                 const uint32_t end = reg.address + (reg.size ? reg.size : 1);
                 const ImU32 col = kindColor(reg.kind);
@@ -1971,6 +1987,16 @@ void App::DrawVramMap()
                 SelectCommand(static_cast<int>(nearestRef), ImGui::GetIO().KeyShift);
                 mScrollCommandListToSelection = true;
             }
+            ImGui::Spacing();
+
+            // Usage summary: bytes referenced by active commands + a fill bar.
+            const float usedPct = 100.0f * static_cast<float>(usedBytes) / kVramSize;
+            ImGui::Text("Used %u bytes (%.1f KiB) of 512 KiB  -  %.1f%%",
+                        usedBytes, usedBytes / 1024.0f, usedPct);
+            char overlay[32];
+            std::snprintf(overlay, sizeof(overlay), "%.1f%%", usedPct);
+            ImGui::ProgressBar(static_cast<float>(usedBytes) / kVramSize,
+                               ImVec2(-1.0f, 0.0f), overlay);
             ImGui::Spacing();
 
             // Legend.
