@@ -111,6 +111,7 @@ if(WIN32)
         FrontEnd/src/WatchPanel.cpp
         FrontEnd/src/Debug/WatchList.cpp
         FrontEnd/src/Debug/MemoryBackend.cpp
+        FrontEnd/src/Debug/Sh2Disasm.cpp
         FrontEnd/src/FrameRecorder.cpp
         FrontEnd/src/FrameLz.cpp
         FrontEnd/Platforms/Windows/WindowsPlatform.cpp
@@ -151,6 +152,7 @@ elseif(EMSCRIPTEN)
         FrontEnd/src/WatchPanel.cpp
         FrontEnd/src/Debug/WatchList.cpp
         FrontEnd/src/Debug/MemoryBackend.cpp
+        FrontEnd/src/Debug/Sh2Disasm.cpp
         FrontEnd/Platforms/Web/WebPlatform.cpp
         FrontEnd/Platforms/Web/WebMain.cpp
         ${SE_IMGUI_CORE}
@@ -193,6 +195,7 @@ else()
             FrontEnd/src/WatchPanel.cpp
             FrontEnd/src/Debug/WatchList.cpp
             FrontEnd/src/Debug/MemoryBackend.cpp
+            FrontEnd/src/Debug/Sh2Disasm.cpp
             FrontEnd/src/FrameRecorder.cpp
             FrontEnd/src/FrameLz.cpp
             FrontEnd/Platforms/Web/WebPlatform.cpp
