@@ -1831,13 +1831,14 @@ void App::DrawVramMap()
         }
         else
         {
+            const uint32_t kVramSize = 0x80000;   // 512 KiB
             const size_t count = se_vram_region_count(mContext);
-            ImGui::Text("%zu regions in 512 KiB VDP1 VRAM", count);
 
             // Colour by region kind; legend mirrors these. Each block also gets a
             // dark outline (below) so abutting same-kind regions read as separate
             // items rather than one merged run.
-            auto kindColor = [](se_vram_region_kind k) -> ImU32
+            const ImU32 kOtherCol = IM_COL32(0x8A, 0x84, 0x50, 0xFF);  // olive
+            auto kindColor = [&](se_vram_region_kind k) -> ImU32
             {
                 switch (k)
                 {
@@ -1845,34 +1846,91 @@ void App::DrawVramMap()
                 case SE_VRAM_CLUT:      return ui::VramClut();
                 case SE_VRAM_CMD_TABLE: return ui::VramCmdTable();
                 case SE_VRAM_GOURAUD:   return ui::VramGouraud();
+                case SE_VRAM_OTHER:     return kOtherCol;
                 default:                return ui::VramUnused();
                 }
             };
             const ImU32 kBorderCol = IM_COL32(15, 15, 18, 255);
 
-            const uint32_t kVramSize = 0x80000;   // 512 KiB
-            const int rows = 16;                    // each row = 32 KiB
-            const uint32_t perRow = kVramSize / rows;
-            const float width = ImGui::GetContentRegionAvail().x;
-            const float rowH = 12.0f;
-            const ImVec2 origin = ImGui::GetCursorScreenPos();
+            // Pre-pass: bytes referenced by active commands, as the union of all
+            // classified regions. Regions arrive sorted by address, so a running
+            // "covered up to" watermark counts overlapping blocks (shared textures,
+            // abutting tables) once instead of double-counting their sizes.
+            uint32_t usedBytes = 0, coverEnd = 0;
+            for (size_t i = 0; i < count; ++i)
+            {
+                se_vram_region reg;
+                if (se_get_vram_region(mContext, i, &reg) != SE_OK) continue;
+                const uint32_t rStart = reg.address < kVramSize ? reg.address : kVramSize;
+                const uint32_t rEnd = (reg.address + reg.size < kVramSize)
+                                    ? reg.address + reg.size : kVramSize;
+                if (rEnd > coverEnd)
+                {
+                    usedBytes += rEnd - (rStart > coverEnd ? rStart : coverEnd);
+                    coverEnd = rEnd;
+                }
+            }
+            const float usedPct = 100.0f * static_cast<float>(usedBytes) / kVramSize;
+            ImGui::TextDisabled("%zu regions   -   %u bytes used  (%.1f%% of 512 KiB)",
+                                count, usedBytes, usedPct);
 
-            // Reserve the map area up front so it can be hovered/clicked; the bars
-            // are painted into it with the draw list.
-            ImGui::InvisibleButton("vrammap", ImVec2(width, rows * rowH));
+            // --- Layout: the map fills all remaining space above a wrapping legend,
+            // so it scales with the panel. A left gutter holds address labels. ---
+            struct LegendItem { const char* name; se_vram_region_kind kind; };
+            const LegendItem legend[] = {
+                { "Texture", SE_VRAM_TEXTURE }, { "CLUT", SE_VRAM_CLUT },
+                { "Cmd Table", SE_VRAM_CMD_TABLE }, { "Gouraud", SE_VRAM_GOURAUD },
+                { "Unused", SE_VRAM_UNUSED }, { "Other", SE_VRAM_OTHER },
+            };
+            const float lineH   = ImGui::GetTextLineHeightWithSpacing();
+            const float textH   = ImGui::GetTextLineHeight();
+            const float swSize  = textH;               // swatch is one glyph tall
+            const float itemGap = 14.0f;
+            auto itemWidth = [&](const char* n)
+            { return swSize + 6.0f + ImGui::CalcTextSize(n).x + itemGap; };
+
+            const ImVec2 avail = ImGui::GetContentRegionAvail();
+            const float fullW = avail.x;
+
+            // How many rows the legend needs at this width (greedy pack).
+            int legendRows = 1;
+            {
+                float lx = 0.0f;
+                for (const LegendItem& it : legend)
+                {
+                    const float w = itemWidth(it.name);
+                    if (lx > 0.0f && lx + w > fullW) { ++legendRows; lx = 0.0f; }
+                    lx += w;
+                }
+            }
+            const float legendH = legendRows * lineH;
+
+            const float gutterW = ImGui::CalcTextSize("80000").x + 8.0f;
+            const int   rows = 16;                       // each row = 32 KiB
+            const uint32_t perRow = kVramSize / rows;
+            const float mapW = fullW - gutterW;
+            float mapH = avail.y - legendH - ImGui::GetStyle().ItemSpacing.y;
+            if (mapH < 48.0f) mapH = 48.0f;              // stay usable in a tiny panel
+            const float rowH = mapH / rows;
+
+            const ImVec2 gut = ImGui::GetCursorScreenPos();     // gutter top-left
+            const ImVec2 origin(gut.x + gutterW, gut.y);        // map top-left
+
+            // One interactive item spanning the whole map+gutter block.
+            ImGui::InvisibleButton("vrammap", ImVec2(fullW, mapH));
             const bool mapHovered = ImGui::IsItemHovered();
             const bool mapClicked = ImGui::IsItemClicked();
 
-            // Byte address under the cursor, for the hover hit-test below.
+            // Byte address under the cursor (only when over the map, not the gutter).
             uint32_t hoverAddr = 0;
             bool hoverValid = false;
             if (mapHovered)
             {
                 const ImVec2 m = ImGui::GetMousePos();
                 const int row = static_cast<int>((m.y - origin.y) / rowH);
-                if (row >= 0 && row < rows)
+                if (m.x >= origin.x && row >= 0 && row < rows)
                 {
-                    float fx = (m.x - origin.x) / width;
+                    float fx = (m.x - origin.x) / mapW;
                     if (fx < 0.0f) fx = 0.0f;
                     if (fx > 0.999f) fx = 0.999f;
                     hoverAddr = static_cast<uint32_t>(row * perRow + fx * perRow);
@@ -1881,8 +1939,9 @@ void App::DrawVramMap()
             }
 
             ImDrawList* dl = ImGui::GetWindowDrawList();
-            dl->AddRectFilled(origin, ImVec2(origin.x + width, origin.y + rows * rowH),
-                              IM_COL32(24, 24, 30, 255));
+            // Background = the Unused colour, so gaps read as the "Unused" swatch.
+            dl->AddRectFilled(origin, ImVec2(origin.x + mapW, origin.y + mapH),
+                              kindColor(SE_VRAM_UNUSED));
 
             se_vram_region hoveredReg = {};
             bool haveHover = false;
@@ -1894,28 +1953,12 @@ void App::DrawVramMap()
             // region(s), drawn on top after the fill pass so the selection outline
             // isn't overpainted.
             std::vector<ImVec4> selRects;
-            // Bytes actually referenced by active commands, as the union of all
-            // classified regions. Regions arrive sorted by address, so a running
-            // "covered up to" watermark counts overlapping blocks (shared textures,
-            // abutting tables) once instead of double-counting their sizes.
-            uint32_t usedBytes = 0;
-            uint32_t coverEnd = 0;
             for (size_t i = 0; i < count; ++i)
             {
                 se_vram_region reg;
                 if (se_get_vram_region(mContext, i, &reg) != SE_OK)
                 {
                     continue;
-                }
-                // Accumulate coverage (actual size, clamped to VRAM) before the
-                // paint uses the +1 minimum-width fudge below.
-                const uint32_t rStart = reg.address < kVramSize ? reg.address : kVramSize;
-                const uint32_t rEnd = (reg.address + reg.size < kVramSize)
-                                    ? reg.address + reg.size : kVramSize;
-                if (rEnd > coverEnd)
-                {
-                    usedBytes += rEnd - (rStart > coverEnd ? rStart : coverEnd);
-                    coverEnd = rEnd;
                 }
                 const uint32_t end = reg.address + (reg.size ? reg.size : 1);
                 const ImU32 col = kindColor(reg.kind);
@@ -1928,8 +1971,8 @@ void App::DrawVramMap()
                     const int row = static_cast<int>(a / perRow);
                     const uint32_t rowEnd = (row + 1) * perRow;
                     const uint32_t b = end < rowEnd ? end : rowEnd;
-                    const float x0 = origin.x + (a % perRow) / static_cast<float>(perRow) * width;
-                    const float x1 = origin.x + ((b - 1) % perRow + 1) / static_cast<float>(perRow) * width;
+                    const float x0 = origin.x + (a % perRow) / static_cast<float>(perRow) * mapW;
+                    const float x1 = origin.x + ((b - 1) % perRow + 1) / static_cast<float>(perRow) * mapW;
                     const float y0 = origin.y + row * rowH;
                     const ImVec2 p0(x0, y0);
                     const ImVec2 p1(x1, y0 + rowH - 1.0f);
@@ -1957,6 +2000,21 @@ void App::DrawVramMap()
                         nearestRef = reg.ref_index;
                     }
                 }
+            }
+
+            // Address labels + faint boundary lines every 128 KiB (0..0x80000).
+            const ImU32 kLabelCol = ImGui::GetColorU32(ImGuiCol_TextDisabled);
+            const ImU32 kGridCol  = IM_COL32(255, 255, 255, 18);
+            for (uint32_t addr = 0; addr <= kVramSize; addr += 0x20000)
+            {
+                const float y = origin.y + (addr / static_cast<float>(kVramSize)) * mapH;
+                dl->AddLine(ImVec2(origin.x, y), ImVec2(origin.x + mapW, y), kGridCol, 1.0f);
+                float ty = y - textH * 0.5f;
+                if (addr == 0)         ty = y;
+                if (addr == kVramSize) ty = y - textH;
+                char lbl[12];
+                std::snprintf(lbl, sizeof(lbl), "%05X", addr);
+                dl->AddText(ImVec2(gut.x, ty), kLabelCol, lbl);
             }
 
             // Selection highlight: a bright, slightly-inflated outline so the block
@@ -1987,33 +2045,30 @@ void App::DrawVramMap()
                 SelectCommand(static_cast<int>(nearestRef), ImGui::GetIO().KeyShift);
                 mScrollCommandListToSelection = true;
             }
-            ImGui::Spacing();
 
-            // Usage summary: bytes referenced by active commands + a fill bar.
-            const float usedPct = 100.0f * static_cast<float>(usedBytes) / kVramSize;
-            ImGui::Text("Used %u bytes (%.1f KiB) of 512 KiB  -  %.1f%%",
-                        usedBytes, usedBytes / 1024.0f, usedPct);
-            char overlay[32];
-            std::snprintf(overlay, sizeof(overlay), "%.1f%%", usedPct);
-            ImGui::ProgressBar(static_cast<float>(usedBytes) / kVramSize,
-                               ImVec2(-1.0f, 0.0f), overlay);
-            ImGui::Spacing();
-
-            // Legend.
+            // Legend, wrapping to fit the panel width.
             auto swatch = [&](const char* name, se_vram_region_kind k)
             {
                 ImDrawList* d = ImGui::GetWindowDrawList();
                 const ImVec2 p = ImGui::GetCursorScreenPos();
-                d->AddRectFilled(p, ImVec2(p.x + 12, p.y + 12), kindColor(k));
-                d->AddRect(p, ImVec2(p.x + 12, p.y + 12), kBorderCol, 0.0f, 0, 1.0f);
-                ImGui::Dummy(ImVec2(16, 12));
+                d->AddRectFilled(p, ImVec2(p.x + swSize, p.y + swSize), kindColor(k));
+                d->AddRect(p, ImVec2(p.x + swSize, p.y + swSize), kBorderCol, 0.0f, 0, 1.0f);
+                ImGui::Dummy(ImVec2(swSize + 4.0f, swSize));
                 ImGui::SameLine();
                 ImGui::TextUnformatted(name);
             };
-            swatch("Texture", SE_VRAM_TEXTURE); ImGui::SameLine(0.0f, 16.0f);
-            swatch("CLUT", SE_VRAM_CLUT);       ImGui::SameLine(0.0f, 16.0f);
-            swatch("Cmd Table", SE_VRAM_CMD_TABLE); ImGui::SameLine(0.0f, 16.0f);
-            swatch("Gouraud", SE_VRAM_GOURAUD);
+            float lx = 0.0f;
+            for (size_t i = 0; i < IM_ARRAYSIZE(legend); ++i)
+            {
+                const float w = itemWidth(legend[i].name);
+                if (i > 0)
+                {
+                    if (lx + w <= fullW) ImGui::SameLine(0.0f, itemGap);
+                    else                 lx = 0.0f;   // wrap to a new row
+                }
+                swatch(legend[i].name, legend[i].kind);
+                lx += w;
+            }
         }
     }
     ImGui::End();
