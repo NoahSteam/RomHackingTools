@@ -99,5 +99,9 @@
 #define SE_LIVE_DEFAULT_SOCK_PATH "/tmp/saturn_explorer.sock"
 #define SE_LIVE_DEFAULT_PIPE_NAME "\\\\.\\pipe\\SaturnExplorer"
 #define SE_LIVE_DEFAULT_TCP_PORT  6845
+/* The browser build has no local socket, so it defaults to this TCP endpoint, which
+ * the WebSocket->TCP bridge forwards to the emulator's export port (see the Yabause
+ * README "Web (browser) live viewing"). */
+#define SE_LIVE_DEFAULT_TCP_ENDPOINT "tcp:127.0.0.1:6845"
 
 #endif /* SATURNEXPLORER_SE_LIVE_PROTOCOL_H */

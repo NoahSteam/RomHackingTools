@@ -26,6 +26,14 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
+# Web live mode (opt-in). The browser has no local socket, so live connect tunnels a
+# TCP connection over a WebSocket->TCP bridge; that needs Emscripten's proxied POSIX
+# sockets + pthreads, which in turn need a COOP/COEP cross-origin-isolated host for
+# SharedArrayBuffer. GitHub Pages can't set those headers, so the default web build
+# stays viewer-only and this is off by default. Turn on with -DSE_WEB_LIVE=ON and host
+# on a cross-origin-isolated server (see Integration/Yabause/README.md "Web live").
+option(SE_WEB_LIVE "Emscripten: include the live driver (needs pthreads + a COOP/COEP host)" OFF)
+
 # ---------------------------------------------------------------------------
 # Core engine — portable static library (no UI, no OS types in public headers).
 # ---------------------------------------------------------------------------
@@ -68,10 +76,11 @@ target_link_libraries(SaturnExplorerSavestateDriver
     PUBLIC SaturnExplorerCore SaturnExplorerDriverCommon)
 
 # ---------------------------------------------------------------------------
-# Live driver — reads a running, patched Yabause over a local socket. Uses
-# threads + sockets, so it's native only (never built under Emscripten).
+# Live driver — reads a running, patched emulator over a local socket (native) or a
+# WebSocket->TCP bridge (web). Uses threads + sockets, so on Emscripten it is built
+# only for the opt-in web-live build (-DSE_WEB_LIVE=ON).
 # ---------------------------------------------------------------------------
-if(NOT EMSCRIPTEN)
+if(NOT EMSCRIPTEN OR SE_WEB_LIVE)
     add_library(SaturnExplorerLiveDriver STATIC
         Drivers/Live/src/LiveDriver.cpp
     )
@@ -87,10 +96,16 @@ if(NOT EMSCRIPTEN)
     )
     target_link_libraries(SaturnExplorerLiveDriver
         PUBLIC SaturnExplorerCore SaturnExplorerDriverCommon)
-    find_package(Threads REQUIRED)
-    target_link_libraries(SaturnExplorerLiveDriver PUBLIC Threads::Threads)
-    if(WIN32)
-        target_link_libraries(SaturnExplorerLiveDriver PUBLIC ws2_32)
+    if(EMSCRIPTEN)
+        # Web: BSD socket calls are proxied to a worker; pthreads carry both that proxy
+        # and the driver's own poll thread. PUBLIC so the FrontEnd inherits -pthread.
+        target_compile_options(SaturnExplorerLiveDriver PUBLIC -pthread)
+    else()
+        find_package(Threads REQUIRED)
+        target_link_libraries(SaturnExplorerLiveDriver PUBLIC Threads::Threads)
+        if(WIN32)
+            target_link_libraries(SaturnExplorerLiveDriver PUBLIC ws2_32)
+        endif()
     endif()
 endif()
 
@@ -157,7 +172,9 @@ if(WIN32)
 
 elseif(EMSCRIPTEN)
     # Web build: `emcmake cmake -B build-web && cmake --build build-web`.
-    add_executable(SaturnExplorerFrontEnd
+    # -DSE_WEB_LIVE=ON additionally links the LiveDriver + the frame recorder
+    # (pause/scrub) and Emscripten's proxied POSIX sockets + pthreads for live connect.
+    set(SE_WEB_SRC
         FrontEnd/src/App.cpp
         FrontEnd/src/Theme.cpp
         FrontEnd/src/WatchPanel.cpp
@@ -174,6 +191,10 @@ elseif(EMSCRIPTEN)
         ${SE_IMGUI_DIR}/backends/imgui_impl_sdl2.cpp
         ${SE_IMGUI_DIR}/backends/imgui_impl_opengl3.cpp
     )
+    if(SE_WEB_LIVE)
+        list(APPEND SE_WEB_SRC FrontEnd/src/FrameRecorder.cpp FrontEnd/src/FrameLz.cpp)
+    endif()
+    add_executable(SaturnExplorerFrontEnd ${SE_WEB_SRC})
     target_include_directories(SaturnExplorerFrontEnd PRIVATE
         FrontEnd/src
         FrontEnd/Platforms/Web
@@ -188,15 +209,29 @@ elseif(EMSCRIPTEN)
         SaturnExplorerCore
         SaturnExplorerSavestateDriver
     )
+    # Base (viewer) link flags; live mode appends pthreads + the socket bridge below.
+    set(SE_WEB_LINK "-sUSE_SDL=2 -sUSE_WEBGL2=1 -sFULL_ES3 -sALLOW_MEMORY_GROWTH \
+-sEXPORTED_FUNCTIONS=['_main','_se_web_load_file','_se_web_resize','_malloc','_free'] \
+-sEXPORTED_RUNTIME_METHODS=['ccall','cwrap','HEAPU8','UTF8ToString']")
+    if(SE_WEB_LIVE)
+        target_compile_definitions(SaturnExplorerFrontEnd PRIVATE SE_ENABLE_LIVE)
+        target_compile_options(SaturnExplorerFrontEnd PRIVATE -pthread)
+        target_include_directories(SaturnExplorerFrontEnd PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/Drivers/Live/src)
+        target_link_libraries(SaturnExplorerFrontEnd PRIVATE SaturnExplorerLiveDriver)
+        # pthreads carry the driver's poll thread + recorder worker + the socket proxy;
+        # BSD sockets are tunneled to a WebSocket bridge (default ws://localhost:8846).
+        # Requires a COOP/COEP cross-origin-isolated host at runtime (SharedArrayBuffer).
+        string(APPEND SE_WEB_LINK " -pthread -sPTHREAD_POOL_SIZE=8 \
+-sPROXY_POSIX_SOCKETS -sWEBSOCKET_URL=ws://localhost:8846")
+    endif()
     set(SE_SHELL ${CMAKE_CURRENT_SOURCE_DIR}/FrontEnd/Platforms/Web/shell.html)
+    string(APPEND SE_WEB_LINK " --shell-file ${SE_SHELL}")
     set_target_properties(SaturnExplorerFrontEnd PROPERTIES
         OUTPUT_NAME "index"
         SUFFIX ".html"
         LINK_DEPENDS ${SE_SHELL}
-        LINK_FLAGS "-sUSE_SDL=2 -sUSE_WEBGL2=1 -sFULL_ES3 -sALLOW_MEMORY_GROWTH \
--sEXPORTED_FUNCTIONS=['_main','_se_web_load_file','_se_web_resize','_malloc','_free'] \
--sEXPORTED_RUNTIME_METHODS=['ccall','cwrap','HEAPU8','UTF8ToString'] \
---shell-file ${SE_SHELL}")
+        LINK_FLAGS "${SE_WEB_LINK}")
 
 else()
     # Non-Windows desktop: build the web backend natively against system SDL2 +

@@ -594,6 +594,8 @@ extern "C" se_result se_live_open(const char* endpoint, se_data_source* out)
     {
 #if defined(_WIN32)
         ep = SE_LIVE_DEFAULT_PIPE_NAME;
+#elif defined(__EMSCRIPTEN__)
+        ep = SE_LIVE_DEFAULT_TCP_ENDPOINT;   // browser: WebSocket->TCP bridge
 #else
         ep = SE_LIVE_DEFAULT_SOCK_PATH;
 #endif

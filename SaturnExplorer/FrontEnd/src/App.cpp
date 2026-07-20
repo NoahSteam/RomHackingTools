@@ -813,9 +813,10 @@ void App::DrawToolbar(IPlatform& platform)
             }
 #ifdef SE_ENABLE_LIVE
             ImGui::Separator();
-            if (ImGui::MenuItem("Connect to Yabause (live)", nullptr, false, !mbLiveSource))
+            if (ImGui::MenuItem("Connect to emulator (live)", nullptr, false, !mbLiveSource))
             {
-                OpenLive(nullptr);   // default local socket / named pipe
+                OpenLive(nullptr);   // default endpoint: local socket / named pipe,
+                                     // or the TCP bridge on web (see se_live_open)
             }
             if (ImGui::MenuItem("Disconnect (live)", nullptr, false, mbLiveSource)) CloseData();
 

@@ -211,7 +211,9 @@ client no-ops it), so you can build the tiers incrementally and test each.
 - **You need Mednafen's `ss` source and a local build.** Mednafen discourages
   redistributing modified binaries; patching a **local** build for your own
   reverse-engineering is fine under its license, but don't ship a patched "Mednafen".
-  (Same personal-patch model as the Yabause tap.)
+  (Same personal-patch model as the Yabause tap.) See
+  [`../DISTRIBUTION.md`](../DISTRIBUTION.md) for the full fork-and-pin + prebuilt-binary
+  guidance (and why the Mednafen-vs-Beetle build split matters).
 - Add `se_export.c` to Mednafen's `ss` build, `#include "se_export.h"` at the hook
   sites, and wire the five calls (init / per-frame snapshot / frame gate / deinit /
   bridge registration) — see `se_mednafen_glue.c` for the exact bodies.
