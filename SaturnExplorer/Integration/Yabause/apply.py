@@ -150,9 +150,11 @@ EDITS = [
      "VIDSoftGetVdp1FrameBuffer"),
 
     # --- qt/main.cpp: append "(SaturnExplorer Enabled. <ver> / Yabause <VERSION>)" to
-    # the main window title so a tapped build is obvious. This is the Qt port (the main
-    # desktop GUI); other Yabause ports set their title elsewhere — see README. The file
-    # is OPTIONAL (a non-Qt build won't have it), handled specially in main().
+    # the main window title so a tapped build is obvious. This is the Qt port, which is
+    # ALSO the official Windows GUI (modern Yabause has no separate native Win32 frontend
+    # — the Windows binaries are the Qt build). Other ports set their title elsewhere —
+    # see README. The file is OPTIONAL (a non-Qt build won't have it), handled specially
+    # in main().
     ("qt/main.cpp",
      r'(\n)(int main\s*\()',
      "before_group2",
@@ -162,8 +164,10 @@ EDITS = [
     ("qt/main.cpp",
      r'(setWindowTitle\(\s*app\.applicationName\(\)\s*\);\s*\n)',
      "after_group1",
-     "   /* Saturn Explorer: mark this window as tapped. */\n"
-     "   { QWidget *se_w = QtYabause::mainWindow();\n"
+     "   /* Saturn Explorer: mark this window as tapped. `auto` binds the exact type\n"
+     "      QtYabause::mainWindow() returns (already known-complete: the line above\n"
+     "      calls ->setWindowTitle() on it), so no extra QWidget include is needed. */\n"
+     "   { auto *se_w = QtYabause::mainWindow();\n"
      "     se_w->setWindowTitle( se_w->windowTitle() + \" \" +\n"
      "        QString::fromUtf8( SeExportTitleSuffix(\"Yabause\", VERSION) ) ); }\n",
      'SeExportTitleSuffix("Yabause"'),

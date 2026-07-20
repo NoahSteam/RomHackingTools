@@ -243,9 +243,13 @@ browser tunnel needs your relay.
 `apply.py` also appends `(SaturnExplorer Enabled. <SE ver> / Yabause <VERSION>)` to the
 window title so a tapped build is obvious. This lives in the **Qt port**
 (`src/qt/main.cpp`, right after Yabause sets the title from its app name), using the
-shared `SeExportTitleSuffix()` helper in `se_export.c`. It's optional — a non-Qt port
-is skipped gracefully (the patcher says so). For another frontend, add the one line at
-wherever that port sets its window caption:
+shared `SeExportTitleSuffix()` helper in `se_export.c`.
+
+**On Windows this is already your frontend:** modern Yabause has no separate native
+Win32 GUI — the official Windows binaries are the Qt build — so the standard `apply.py`
+run marks the title with no extra steps. The mark is skipped gracefully only on ports
+that genuinely lack `qt/main.cpp` (GTK, Cocoa, libretro, etc.); for one of those, add
+the one line wherever that port sets its window caption:
 ```c
 extern "C" const char* SeExportTitleSuffix(const char*, const char*);  /* at file scope */
 /* right after the port sets its title, append: */  SeExportTitleSuffix("Yabause", VERSION)
