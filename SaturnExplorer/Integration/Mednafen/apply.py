@@ -99,11 +99,11 @@ extern "C" void SsDbgPokeByte(unsigned int addr, unsigned char val) {
 }
 }"""
 
-# EOF-appended accessor edits: (filename, block, key).
+# Files that get an accessor block appended at EOF: (filename, block, key). ss.cpp
+# also gets accessors, but via process_ss (it has hook injections too).
 APPEND_EDITS = [
     ("vdp1.cpp", VDP1_ACCESSORS, "SsDbgVdp1Vram"),
     ("vdp2.cpp", VDP2_ACCESSORS, "SsDbgVdp2Vram"),
-    ("ss.cpp",   SS_ACCESSORS,   "SsDbgWramL"),
 ]
 
 # File-scope forward declarations (extern "C" is illegal inside a function body, so
@@ -137,43 +137,41 @@ def find_src(root):
     return None
 
 
-def apply_anchored(text, anchor, code, key):
-    """Insert fenced `code` after `anchor` unless a block with `key` already exists.
-    Returns (text, note)."""
+# All three placements share one idempotency rule (each fenced block is identified by
+# a stable `key` substring, unique across the blocks in a file): if a block carrying
+# `key` already exists, replace it in place when its content changed and no-op when it
+# matches; otherwise place a fresh block. `place(text, block)` performs the placement
+# for a new block and returns the new text, or None if it can't (e.g. anchor missing).
+def upsert(text, code, key, place):
     block = fence(code.rstrip("\n"))
     existing = next((m.group(0) for m in FENCE_RE.finditer(text) if key in m.group(0)), None)
     if existing is not None:
         if existing == block:
             return text, f"  ok (already)  {key}"
         return text.replace(existing, block, 1), f"  ~ updated     {key}"
-    m = re.search(anchor, text)
-    if not m:
+    placed = place(text, block)
+    if placed is None:
         return text, f"  ANCHOR MISS   {key}  <-- add by hand (see README)"
-    ins = m.end(1)
-    return text[:ins] + block + "\n" + text[ins:], f"  + inserted    {key}"
+    return placed, f"  + applied     {key}"
+
+
+def apply_anchored(text, anchor, code, key):
+    """Insert fenced `code` after `anchor` (or ANCHOR MISS if it isn't found)."""
+    def place(t, block):
+        m = re.search(anchor, t)
+        return t[:m.end(1)] + block + "\n" + t[m.end(1):] if m else None
+    return upsert(text, code, key, place)
 
 
 def apply_append(text, code, key):
-    """Append fenced `code` at EOF unless a block with `key` already exists."""
-    block = fence(code.rstrip("\n"))
-    existing = next((m.group(0) for m in FENCE_RE.finditer(text) if key in m.group(0)), None)
-    if existing is not None:
-        if existing == block:
-            return text, f"  ok (already)  {key} (accessors)"
-        return text.replace(existing, block, 1), f"  ~ updated     {key} (accessors)"
-    sep = "" if text.endswith("\n") else "\n"
-    return text + sep + "\n" + block + "\n", f"  + appended    {key} (accessors)"
+    """Append fenced `code` at EOF."""
+    return upsert(text, code, key,
+                  lambda t, block: t + ("" if t.endswith("\n") else "\n") + "\n" + block + "\n")
 
 
 def apply_prepend(text, code, key):
-    """Prepend fenced `code` at BOF unless a block with `key` already exists."""
-    block = fence(code.rstrip("\n"))
-    existing = next((m.group(0) for m in FENCE_RE.finditer(text) if key in m.group(0)), None)
-    if existing is not None:
-        if existing == block:
-            return text, f"  ok (already)  {key} (fwd decls)"
-        return text.replace(existing, block, 1), f"  ~ updated     {key} (fwd decls)"
-    return block + "\n" + text, f"  + prepended   {key} (fwd decls)"
+    """Prepend fenced `code` at BOF."""
+    return upsert(text, code, key, lambda t, block: block + "\n" + t)
 
 
 def process_ss(src_dir, do_write, with_pause):
@@ -326,8 +324,8 @@ def main():
     if do_write:
         notes.append("copy:")
         notes += copy_sources(src_dir, do_write)
-    notes += process_append_file(src_dir, "vdp1.cpp", VDP1_ACCESSORS, "SsDbgVdp1Vram", do_write)
-    notes += process_append_file(src_dir, "vdp2.cpp", VDP2_ACCESSORS, "SsDbgVdp2Vram", do_write)
+    for fname, block, key in APPEND_EDITS:
+        notes += process_append_file(src_dir, fname, block, key, do_write)
     notes += process_ss(src_dir, do_write, with_pause)
     notes += process_build(root, do_write)
 
