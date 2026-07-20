@@ -186,7 +186,10 @@ void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
 
             ImU32 col = (mChangeAge[(size_t)idx] > 0.0f) ? kColChanged
                        : (v == 0 ? kColZero : kColByte);
-            char b[3]; std::snprintf(b, sizeof(b), "%02X", v);
+            // Label carries the two hex digits for display plus "##idx" so each
+            // cell has a unique ID — otherwise every cell sharing a byte value (all
+            // the 00s, etc.) collides and ImGui flags an ID conflict.
+            char b[12]; std::snprintf(b, sizeof(b), "%02X##%d", v, idx);
             ImGui::PushStyleColor(ImGuiCol_Text, col);
             ImGui::Selectable(b, false, ImGuiSelectableFlags_AllowOverlap, ImVec2(byteW, 0));
             ImGui::PopStyleColor();
