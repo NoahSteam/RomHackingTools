@@ -53,12 +53,55 @@ git add -Af
 git commit -m "Import Mednafen $VER (official release source, unmodified)"
 git tag "v$VER"
 
-# 3. Sanity-check completeness: the committed file set must match the tarball exactly.
+# 3. Sanity-check completeness: the committed file set must match the tarball.
 tar tf "../mednafen-$VER.tar.xz" | grep -v '/$' | wc -l   # files in the tarball
 git ls-files | wc -l                                       # files git committed
-#    The two counts must match. If they don't, a global ignore ate something — fix it
-#    (git add -Af again) before pushing; a short fork is worse than none.
+#    The two counts must match. The DIRECTION of a mismatch tells you what went wrong:
+#      * git  <  tarball : a global ignore ate files -> re-run `git add -Af`.
+#      * git  >  tarball : a symlink got DEREFERENCED into a duplicate tree (see below);
+#                          `git add -Af` cannot fix this — you would just loop.
+```
 
+### Windows symlink gotcha (`git > tarball`)
+Mednafen ships **`include/mednafen` as a symlink → `../src`**, and its build reaches every
+`#include <mednafen/...>` through it. On Windows, Git sets `core.symlinks=false` by default
+(no admin / Developer Mode), and MSYS `tar` then **dereferences** the symlink on extract —
+copying the entire `src/` tree (~1,587 files) into `include/mednafen/`. Your import ends up
+with `src/` twice and a file count far *above* the tarball. This is the worst failure mode:
+`apply.py` patches `src/ss/ss.cpp`, but the duplicate `include/mednafen/ss/ss.cpp` sits
+unpatched and the build pulls headers through `include/mednafen/` — the patch looks applied
+and then partially isn't.
+
+Fix it by storing the symlink **directly in git's index** (works with `core.symlinks=false`,
+no admin/Developer Mode). First see which paths the archive marks as symlinks:
+
+```bash
+tar tvf "../mednafen-$VER.tar.xz" | grep '^l'    # type 'l' lines show 'path -> target'
+```
+
+For each — Mednafen has exactly one, `include/mednafen -> ../src` — drop the dereferenced
+copy and write the symlink blob:
+
+```bash
+git rm -r --cached -q include/mednafen && rm -rf include/mednafen
+BLOB=$(printf '../src' | git hash-object -w --stdin)
+git update-index --add --cacheinfo 120000,"$BLOB",include/mednafen
+git ls-files -s include/mednafen        # -> "120000 <blob> 0  include/mednafen" (a symlink)
+git commit --amend -m "Import Mednafen $VER (official release source, unmodified)"
+```
+
+Re-run the step-3 counts: they should now match exactly, with `include/mednafen` stored as
+a symlink and no `include/mednafen/` duplicates. (When you later update to a new Mednafen
+release, re-check the counts and re-apply this if the re-extract dereferences again.)
+
+> **Windows checkout / build caveat:** with `core.symlinks=false`, cloning the fork
+> materializes `include/mednafen` as a plain text file (`../src`), *not* a working symlink,
+> which would break the build's include path. The installer's Mednafen build step now
+> recreates the symlink in the MSYS2 shell before `./configure`, so a normal `install.bat`
+> run is fine. Building by hand? Run `ln -s ../src include/mednafen` in the checkout first
+> (MSYS2 / Git Bash), or clone with `-c core.symlinks=true` (needs Developer Mode / admin).
+
+```bash
 # 4. Create an EMPTY, PUBLIC repo named mednafen-git under your account on GitHub (no
 #    README/license/gitignore), then push:
 git remote add origin https://github.com/NoahSteam/mednafen-git.git

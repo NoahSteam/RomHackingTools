@@ -284,8 +284,13 @@ def build_mednafen(rn, msys2, dest):
     bash = os.path.join(msys2, "usr", "bin", "bash.exe")
     msdir = win_to_msys(dest)
     ncpu = os.cpu_count() or 4
-    # git checkouts need autotools bootstrapped before configure exists.
+    # Mednafen ships include/mednafen as a symlink -> ../src, and the build reaches every
+    # <mednafen/...> header through it. On Windows (core.symlinks=false) a clone can
+    # materialize it as a plain file, breaking the include path; recreate it as a real
+    # (MSYS) symlink if it isn't already a directory. git checkouts also need autotools
+    # bootstrapped before ./configure exists.
     script = (f"cd '{msdir}' && "
+              f"([ -d include/mednafen ] || {{ rm -f include/mednafen; ln -s ../src include/mednafen; }}) && "
               f"([ -x ./configure ] || (autoreconf -i || ./autogen.sh)) && "
               f"./configure --enable-debugger && make -j{ncpu}")
     env = "MSYSTEM=MINGW64"
