@@ -677,35 +677,36 @@ void App::BuildUI(IPlatform& platform)
         }
     }
 
-    // Left column.
-    DrawLayerControls();
-    DrawVramMap();
-    DrawPlaceholder("Archive Explorer", "Disc filesystem tree — arrives in M6 (needs disc access).");
-    DrawPlaceholder("Search ROM / Files", "ROM & archive search — arrives in M6 (needs disc access).");
+    // Left column. Each panel is gated by its visibility flag (toolbar "Windows"
+    // menu); a hidden panel is simply not drawn, so its dock tab disappears.
+    if (mPanels.layerControls)   DrawLayerControls();
+    if (mPanels.vramMap)         DrawVramMap();
+    if (mPanels.archiveExplorer) DrawPlaceholder("Archive Explorer", "Disc filesystem tree — arrives in M6 (needs disc access).");
+    if (mPanels.searchRom)       DrawPlaceholder("Search ROM / Files", "ROM & archive search — arrives in M6 (needs disc access).");
 
     // Center: VDP Output and its sibling tabs, then the command list, then the
     // texture/palette/reference row.
-    DrawVdpOutput(platform);
-    DrawVdp1Framebuffer(platform);
-    DrawWorldView(platform);
-    DrawVdp1Table();
-    DrawVdp2Table();
-    DrawColorRam();
-    DrawWorkRam();
-    DrawPlaceholder("Palette RAM", "VDP1 CLUT-area view — planned (see Color RAM for CRAM).");
-    DrawRegisters();
-    DrawCommandList();
-    DrawTextureViewer(platform);
-    DrawPaletteViewer();
-    DrawReferences();
+    if (mPanels.vdpOutput)       DrawVdpOutput(platform);
+    if (mPanels.vdp1Framebuffer) DrawVdp1Framebuffer(platform);
+    if (mPanels.worldView)       DrawWorldView(platform);
+    if (mPanels.vdp1Table)       DrawVdp1Table();
+    if (mPanels.vdp2Table)       DrawVdp2Table();
+    if (mPanels.colorRam)        DrawColorRam();
+    if (mPanels.workRam)         DrawWorkRam();
+    if (mPanels.paletteRam)      DrawPlaceholder("Palette RAM", "VDP1 CLUT-area view — planned (see Color RAM for CRAM).");
+    if (mPanels.registers)       DrawRegisters();
+    if (mPanels.commandList)     DrawCommandList();
+    if (mPanels.textureViewer)   DrawTextureViewer(platform);
+    if (mPanels.paletteViewer)   DrawPaletteViewer();
+    if (mPanels.references)      DrawReferences();
 
     // Right column. (The old Texture Preview / Palette (CLUT) panels duplicated the
     // center Texture/Palette viewers; the debugger Watch + Assembly panels live here
     // now.)
-    DrawSelectedObject();
-    DrawWatch(platform);
-    DrawAssembly();
-    DrawHexEditor();
+    if (mPanels.selectedObject)  DrawSelectedObject();
+    if (mPanels.watch)           DrawWatch(platform);
+    if (mPanels.assembly)        DrawAssembly();
+    if (mPanels.hexEditor)       DrawHexEditor();
 
     // Game-data-directory modal + texture search results (both floating, drawn last
     // so they overlay the docked panels).
@@ -908,6 +909,10 @@ void App::DrawToolbar(IPlatform& platform)
         ImGui::SetItemTooltip("Set the game's data directory — an ISO/disc image or a folder of the\n"
                               "game's files — that the texture 'Find in game data' search scans.");
 
+        // "Windows" dropdown: show/hide individual panels.
+        ImGui::SameLine();
+        DrawWindowsMenu();
+
         // Not-yet-implemented tools — visible but disabled.
         ImGui::SameLine();
         ImGui::BeginDisabled(true);
@@ -957,6 +962,58 @@ void App::DrawToolbar(IPlatform& platform)
         }
     }
     ImGui::End();
+}
+
+// Toolbar "Windows" dropdown: a checkbox per panel, plus Show All / Hide All.
+void App::DrawWindowsMenu()
+{
+    if (ImGui::Button("Windows"))
+    {
+        ImGui::OpenPopup("WindowsMenu");
+    }
+    ImGui::SetItemTooltip("Show or hide panels");
+
+    if (ImGui::BeginPopup("WindowsMenu"))
+    {
+        struct Item { const char* label; bool* flag; };
+        const Item items[] = {
+            {"Layer Controls",    &mPanels.layerControls},
+            {"VRAM Map",          &mPanels.vramMap},
+            {"Archive Explorer",  &mPanels.archiveExplorer},
+            {"Search ROM / Files", &mPanels.searchRom},
+            {"VDP Output",        &mPanels.vdpOutput},
+            {"VDP1 Framebuffer",  &mPanels.vdp1Framebuffer},
+            {"3D View",           &mPanels.worldView},
+            {"VDP1 Command List", &mPanels.commandList},
+            {"VDP1 Table",        &mPanels.vdp1Table},
+            {"VDP2 Table",        &mPanels.vdp2Table},
+            {"Registers",         &mPanels.registers},
+            {"Color RAM",         &mPanels.colorRam},
+            {"Work RAM",          &mPanels.workRam},
+            {"Palette RAM",       &mPanels.paletteRam},
+            {"Texture Viewer",    &mPanels.textureViewer},
+            {"Palette Viewer",    &mPanels.paletteViewer},
+            {"References",        &mPanels.references},
+            {"Selected Object",   &mPanels.selectedObject},
+            {"Watch",             &mPanels.watch},
+            {"SH-2 Assembly",     &mPanels.assembly},
+            {"Hex Editor",        &mPanels.hexEditor},
+        };
+        if (ImGui::MenuItem("Show All"))
+        {
+            for (const Item& it : items) *it.flag = true;
+        }
+        if (ImGui::MenuItem("Hide All"))
+        {
+            for (const Item& it : items) *it.flag = false;
+        }
+        ImGui::Separator();
+        for (const Item& it : items)
+        {
+            ImGui::MenuItem(it.label, nullptr, it.flag);
+        }
+        ImGui::EndPopup();
+    }
 }
 
 void App::DrawStatusBar()

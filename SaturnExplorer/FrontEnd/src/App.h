@@ -64,6 +64,7 @@ private:
     void RenderFrameToTexture(IPlatform& platform);
     void BuildDefaultLayout(unsigned int dockspaceId);
     void DrawToolbar(IPlatform& platform);
+    void DrawWindowsMenu();   // toolbar "Windows" dropdown: per-panel show/hide
     void DrawStatusBar();
     void DrawLayerControls();
     void DrawVdpOutput(IPlatform& platform);
@@ -156,6 +157,20 @@ private:
     bool                 mShowSearchResults = false;
     std::vector<DataSearchHit> mSearchResults;
     std::string          mSearchSummary;              // "<label>: N match(es) in M file(s)"
+
+    // Per-panel visibility, toggled from the toolbar "Windows" menu. All shown by
+    // default; a hidden panel simply isn't drawn (its dock tab disappears until
+    // re-enabled). Session-only state — these reset to visible each launch.
+    struct Panels
+    {
+        bool layerControls = true, vramMap = true, archiveExplorer = true, searchRom = true;
+        bool vdpOutput = true, vdp1Framebuffer = true, worldView = true;
+        bool vdp1Table = true, vdp2Table = true, colorRam = true, workRam = true;
+        bool paletteRam = true, registers = true, commandList = true;
+        bool textureViewer = true, paletteViewer = true, references = true;
+        bool selectedObject = true, watch = true, assembly = true, hexEditor = true;
+    };
+    Panels           mPanels;
 
     int              mSelectedCommand = -1;   // primary selection (detail panels)
     std::vector<int> mSelection;              // all selected command indices
