@@ -1,17 +1,36 @@
 # Saturn Explorer live tap for Mednafen (Beetle Saturn)
 
-**Status: scaffold, symbols mapped.** This folder holds the plan, the
-Yabause→Mednafen symbol map, and a glue template (`se_mednafen_glue.c`). The symbol
-names, storage layouts, and hook sites below were read from the Mednafen `ss` source
-([libretro-mirrors/mednafen-git `src/ss`](https://github.com/libretro-mirrors/mednafen-git/tree/master/src/ss)).
-What remains is a Mednafen build to compile against: the injected **accessors** and
-the empirical **work-RAM byte order** (§"Byte order") are the last `TODO(mednafen)`
-spots.
+**Status: patcher written + data path proven in-repo.** Symbol names, storage
+layouts, and hook sites were read from the Mednafen `ss` source
+([libretro-mirrors/mednafen-git `src/ss`](https://github.com/libretro-mirrors/mednafen-git/tree/master/src/ss)),
+the glue's transforms are verified end-to-end against a real Mednafen savestate
+(§"Verify"), and `apply.py` wires the tap into an `ss` tree (verified against a
+synthetic tree: patched files compile, re-apply is a no-op, revert is clean). What
+still needs a real Mednafen build: compiling the injected accessors against live `ss`
+symbols, the frame-gate behavior under Mednafen's timing, and the one remaining
+`TODO(mednafen)` — Tier-3 **execution breakpoints** (Mednafen's debug API).
 
-Saturn Explorer already **loads Mednafen savestates** (`.ncm`/`MDFNSVST`) statically —
+Saturn Explorer already **loads Mednafen savestates** (`MDFNSVST`) statically —
 VDP1/VDP2 VRAM, both register files, and CRAM (see
 `Drivers/Savestate/src/SavestateDriver.cpp`). This folder is about the **live tap**:
 attaching to a *running* Mednafen the way `Integration/Yabause/` attaches to Yabause.
+
+## Quickstart
+
+```sh
+# Point the patcher at a Mednafen checkout (with src/ss/):
+python3 /path/to/SaturnExplorer/Integration/Mednafen/apply.py /path/to/mednafen
+#   --check       report what it would do, change nothing
+#   --with-pause  also inject the pause/step frame gate (see the frame-gate caveat)
+#   --revert      remove every edit + copied file
+# Then build Mednafen as usual and launch Saturn Explorer with --live.
+```
+
+`apply.py` copies the portable server (`../Common/se_export.{c,h}` + `SeLiveProtocol.h`)
+and the glue (`se_mednafen_glue.c`, with `SE_MEDNAFEN_WIRED` defined) into `src/ss/`,
+appends the accessors (§"Accessors") to `vdp1.cpp`/`vdp2.cpp`/`ss.cpp`, injects one
+per-frame call into `Emulate()`, and adds the two C sources to the build. Every edit is
+fenced with `SE_EXPORT` markers so re-running is idempotent and `--revert` is exact.
 
 ## How little is actually new
 
@@ -23,9 +42,9 @@ LiveDriver client and the wire protocol are unchanged and need **no edits** to t
 to a Mednafen server (the client already tolerates older protocol versions and
 zero-length sections, so a partial Mednafen server degrades gracefully).
 
-So a Mednafen tap = **reuse `../Common/se_export.{c,h}` verbatim** + write the glue
-that maps Mednafen's `ss` internals to `SeExportSnapshot(...)` + inject it into a
-Mednafen build. That glue is one screen of code; the template is here.
+So a Mednafen tap = **reuse `../Common/se_export.{c,h}` verbatim** + the glue that maps
+Mednafen's `ss` internals to `SeExportSnapshot(...)` + `apply.py` to inject it. The
+glue is one screen of code; both are here.
 
 ## The Yabause → Mednafen symbol map
 
@@ -43,8 +62,8 @@ small accessor next to each (see §"Accessors").
 | CRAM (4K) | `Vdp2ColorRam` | `VDP2::CRAM[2048]` u16 | **static** | host order — pass straight |
 | VDP2 regs (288) | `Vdp2Regs` struct | `VDP2::RawRegs[0x100]` u16 *"For debugging"* | **static** | layout differs — see "VDP2 registers" |
 | VDP1 regs (struct) | `Vdp1Regs` struct | `VDP1::{TVMR,FBCR,PTMR,EWDR,EWLR,EWRR,EDSR,LOPR}` | **mixed static** | accessor fills the 11-u16 `Vdp1` struct; `se_export` builds the hw-offset image. ENDR/COPR/MODR write-only/computed → 0 |
-| Work RAM low (1M) | `LowWram` | `WorkRAML[0x80000]` u16 (ss.cpp) | **static** | byte order — **verify** (§Byte order) |
-| Work RAM high (1M) | `HighWram` | `WorkRAMH[0x80000]` u16 | **static** | byte order — **verify** |
+| Work RAM low (1M) | `LowWram` | `WorkRAML[0x80000]` u16 (ss.cpp) | **static** | host u16 (like VRAM) — pass raw, client `Bswap16`s |
+| Work RAM high (1M) | `HighWram` | `WorkRAMH[0x80000]` u16 | **static** | host u16 — pass raw (see §Byte order) |
 | VDP1 framebuffer (256K) | `VIDSoftGetVdp1FrameBuffer()` | `VDP1::FB[!FBDrawWhich]` (displayed bank of `FB[2][0x20000]`) | file-scope | RGB555 host order |
 | Master SH-2 regs | `SH2GetRegisters(MSH2,…)` | `CPU[0]` (`SH7095`, ss.cpp) | file-scope | accessor packs 23 u32 via `CPU[0].GetRegister(GSREG_*)` |
 | Slave SH-2 regs | `SH2GetRegisters(SSH2,…)` | `CPU[1]` | file-scope | " (cpu 1) |
@@ -59,8 +78,8 @@ Hook points (all in `ss.cpp`, all `static`):
 | Per-frame snapshot | `Vdp2VBlankOUT()` | `Emulate(EmulateSpecStruct*)`, after `espec->MasterCycles = …`, before `SMPC_UpdateOutput()` |
 | Frame gate (pause/step) | top of `YabauseEmulate()` | top of `Emulate()` — **see caveat** |
 | Deinit | `YabauseDeInit()` | `CloseGame(void)` |
-| Exec breakpoints | `SH2AddCodeBreakpoint`, `SH2SetBreakpointCallBack` | `ss` debug module (Tier 3 — confirm API) |
-| Memory poke | `MappedMemoryWriteByte` | `ss` bus/debug byte write (Tier 2/3 — confirm) |
+| Exec breakpoints | `SH2AddCodeBreakpoint`, `SH2SetBreakpointCallBack` | `ss/debug.inc` via `DBG_CPUHandler<n>()` (Tier 3 — needs `WANT_DEBUGGER`; **TODO**) |
+| Memory poke | `MappedMemoryWriteByte` | `CheatMemWrite(A, V)` in ss.cpp — cache-correct bus byte write |
 
 ## Accessors (the Mednafen-specific integration wrinkle)
 
@@ -68,26 +87,32 @@ Yabause exposes its memory as extern globals, so its glue reads them directly.
 Mednafen keeps VDP2 `VRAM`/`CRAM`/`RawRegs`, `WorkRAML/H`, and the individual VDP1
 registers as **file-scope `static`** — invisible to a separate glue `.c`. Mednafen
 already anticipates debug taps (`VDP2::PeekVRAM`, the `RawRegs // For debugging`
-array), so the patcher follows that lead: inject a tiny **C-linkage accessor** into
-each file *where the static is visible*, and have the glue call it. The glue declares
-these (`extern`, fenced under `#if 0` until the build has them):
+array), so the patcher follows that lead: it **appends a tiny `extern "C"` accessor
+into each file** (a re-opened namespace block at end-of-file, where the static is
+still visible), and the glue calls them (its `extern` declarations enable under
+`SE_MEDNAFEN_WIRED`). `apply.py` injects these for you; the exact bodies:
 
-```c
-/* vdp2.cpp (namespace VDP2): */  const uint16_t* SsDbgVdp2Vram(void){ return VRAM; }
-                                  const uint16_t* SsDbgCram(void)    { return CRAM; }
-                                  const uint16_t* SsDbgRawRegs(void) { return RawRegs; }
-/* vdp1.cpp (namespace VDP1): */  const uint16_t* SsDbgVdp1Vram(void){ return VRAM; }
-                                  const uint16_t* SsDbgVdp1Fb(void)  { return FB[!FBDrawWhich]; }
-                                  void SsDbgVdp1Regs(uint16_t o[11]){ o[0]=TVMR; o[1]=FBCR; o[2]=PTMR;
-                                        o[3]=EWDR; o[4]=EWLR; o[5]=EWRR; o[7]=EDSR; o[8]=LOPR; /*6,9,10=0*/ }
-/* ss.cpp   (namespace MDFN_IEN_SS): */
-                                  const uint16_t* SsDbgWramL(void){ return WorkRAML; }
-                                  const uint16_t* SsDbgWramH(void){ return WorkRAMH; }
-                                  void SsDbgSh2Regs(int c, uint32_t o[23]){ /* CPU[c].GetRegister(GSREG_R0+i)…GSREG_PC */ }
+```cpp
+/* vdp2.cpp — namespace MDFN_IEN_SS::VDP2 */
+extern "C" const unsigned short* SsDbgVdp2Vram(void){ return VRAM; }
+extern "C" const unsigned short* SsDbgCram(void)    { return CRAM; }
+extern "C" const unsigned short* SsDbgRawRegs(void) { return RawRegs; }
+/* vdp1.cpp — namespace MDFN_IEN_SS::VDP1 */
+extern "C" const unsigned short* SsDbgVdp1Vram(void){ return VRAM; }
+extern "C" const unsigned short* SsDbgVdp1Fb(void)  { return FB[!FBDrawWhich]; }
+extern "C" void SsDbgVdp1Regs(unsigned short o[11]){ o[0]=TVMR; o[1]=FBCR; o[2]=PTMR;
+      o[3]=EWDR; o[4]=EWLR; o[5]=EWRR; o[7]=EDSR; o[8]=LOPR; /*ENDR/COPR/MODR=0*/ }
+/* ss.cpp — namespace MDFN_IEN_SS */
+extern "C" const unsigned short* SsDbgWramL(void){ return WorkRAML; }
+extern "C" const unsigned short* SsDbgWramH(void){ return WorkRAMH; }
+extern "C" void SsDbgSh2Regs(int c, unsigned int o[23]){         /* R0..R15, SR,GBR,VBR,MACH,MACL,PR,PC */
+      SH7095& p = CPU[c?1:0];
+      for (int i=0;i<16;++i) o[i]=p.GetRegister(SH7095::GSREG_R0+i,0,0);
+      o[16]=p.GetRegister(SH7095::GSREG_SR,0,0); /*…*/ o[22]=p.GetRegister(SH7095::GSREG_PC_IF,0,0); }
+extern "C" void SsDbgPokeByte(unsigned int a, unsigned char v){ CheatMemWrite(a, v); }
 ```
 
-(Give them `extern "C"` when injecting into the C++ `ss` sources so the C glue links
-against them.) This is the bulk of what the Mednafen patcher does; the rest is the
+This is the bulk of what the Mednafen patcher does; the rest is the
 five hook calls from the table above.
 
 ## Byte order — the one substantive difference from Yabause

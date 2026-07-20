@@ -131,18 +131,23 @@ void SeMednafenSnapshot(void)
 static void SeMdfnAddExecBp(int cpu, unsigned int address)
 {
     (void)cpu; (void)address;
-    /* TODO(mednafen): install an execution breakpoint on CPU[cpu] at 'address'
-       via the ss debugger API. */
+    /* TODO(mednafen): the one unfinished tier. Mednafen's exec breakpoints live in
+       ss/debug.inc, checked via DBG_CPUHandler<cpu>() before each CPU[cpu].Step()
+       and only in a WANT_DEBUGGER build. Add 'address' to that per-CPU bp set here,
+       and from the handler's hit path call SeExportNotifyStop(cpu, pc). (Same
+       "needs the debug core" caveat as the Yabause tap.) */
 }
 static void SeMdfnClearBps(void)
 {
-    /* TODO(mednafen): remove all execution breakpoints on both SH-2 cores. */
+    /* TODO(mednafen): clear the ss/debug.inc exec-breakpoint set for both cores. */
 }
 static void SeMdfnWriteByte(unsigned int address, unsigned char value)
 {
+#if defined(SE_MEDNAFEN_WIRED)
+    SsDbgPokeByte(address, value);   /* cache-correct bus poke (see apply.py accessor) */
+#else
     (void)address; (void)value;
-    /* TODO(mednafen): SsDbgPokeByte(address, value); — big-endian preserved by
-       writing byte-by-byte at Saturn addresses, no manual swap. */
+#endif
 }
 
 /* ============================ lifecycle wiring ============================ */

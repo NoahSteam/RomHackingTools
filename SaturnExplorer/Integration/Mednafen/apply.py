@@ -90,18 +90,12 @@ extern "C" void SsDbgSh2Regs(int cpu, unsigned int o[23]) {
    o[22]=c.GetRegister(SH7095::GSREG_PC_IF,0,0);
 }
 extern "C" void SsDbgPokeByte(unsigned int addr, unsigned char val) {
-   /* Poke work RAM directly (bypasses the SH-2 cache — the conventional debugger
-      write), preserving big-endian order: WorkRAM is host-order uint16, so a Saturn
-      (big-endian) byte at an even address is the word's high byte. Covers the Hex
-      Editor's work-RAM edits; other regions would need the ss bus poke (TODO). */
-   unsigned short* w = 0; unsigned int off = 0;
-   if      (addr >= 0x06000000u && addr < 0x06100000u) { w = (unsigned short*)WorkRAMH; off = addr - 0x06000000u; }
-   else if (addr >= 0x00200000u && addr < 0x00300000u) { w = (unsigned short*)WorkRAML; off = addr - 0x00200000u; }
-   if (!w) return;
-   unsigned short v = w[off >> 1];
-   if (off & 1u) v = (unsigned short)((v & 0xFF00u) | val);         /* BE low byte  */
-   else          v = (unsigned short)((v & 0x00FFu) | (val << 8));  /* BE high byte */
-   w[off >> 1] = v;
+   /* Route to Mednafen's own byte bus-write (used by the cheat engine): it does the
+      writeability check + SH-2 cache invalidation and takes a Saturn bus address, so
+      writing byte-by-byte preserves big-endian order — the conventional debugger poke,
+      for any region (work RAM, VRAM, ...). If your fork lacks CheatMemWrite, point this
+      at the equivalent bus/debug byte writer. */
+   CheatMemWrite((unsigned int)addr, (unsigned char)val);
 }
 }"""
 
