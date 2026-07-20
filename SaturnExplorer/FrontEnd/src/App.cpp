@@ -706,6 +706,11 @@ void App::BuildUI(IPlatform& platform)
     DrawWatch(platform);
     DrawAssembly();
     DrawHexEditor();
+
+    // Game-data-directory modal + texture search results (both floating, drawn last
+    // so they overlay the docked panels).
+    DrawDataDirModal(platform);
+    DrawDataSearchResults(platform);
     // contextSwap restores the live context here as it goes out of scope.
 }
 
@@ -893,6 +898,16 @@ void App::DrawToolbar(IPlatform& platform)
         ImGui::SetItemTooltip("Save VDP1/VDP2 VRAM, CRAM, work RAM and registers to a .sedump file");
         ImGui::EndDisabled();
 
+        // Game data directory (an ISO, or a folder of the game's extracted files).
+        // Used by the Texture Viewer right-click "Find in game data" search.
+        ImGui::SameLine();
+        if (ImGui::Button("Set Data Directory"))
+        {
+            mOpenDataDirModal = true;
+        }
+        ImGui::SetItemTooltip("Set the game's data directory — an ISO/disc image or a folder of the\n"
+                              "game's files — that the texture 'Find in game data' search scans.");
+
         // Not-yet-implemented tools — visible but disabled.
         ImGui::SameLine();
         ImGui::BeginDisabled(true);
@@ -969,6 +984,22 @@ void App::DrawStatusBar()
             {
                 ImGui::TextDisabled("No data loaded — Open ROM to begin.");
             }
+            // Game data directory indicator (for the texture "Find in game data" search).
+            ImGui::Separator();
+            if (mDataDir.empty())
+            {
+                ImGui::TextDisabled("Data dir: (not set)");
+            }
+            else
+            {
+                ImGui::Text("Data dir: %s", mDataDir.c_str());
+            }
+            if (ImGui::IsItemClicked())
+            {
+                mOpenDataDirModal = true;   // click the path to change it
+            }
+            ImGui::SetItemTooltip("%s\n(click to change)",
+                                  mDataDir.empty() ? "No game data directory set" : mDataDir.c_str());
             // Frame counter + run state come from a live source (frame control);
             // the remaining fields (scanline / SH-2 PC / busy) await a fuller
             // live status feed and stay placeholders for now.
@@ -1903,6 +1934,17 @@ void App::DrawTextureViewer(IPlatform& platform)
                 ImGui::SetCursorScreenPos(pos);
                 Checkerboard(pos, dispSize, 8.0f);
                 ImGui::Image(mTexTexture, dispSize);
+
+                // Right-click the texture -> search the game data directory for its
+                // raw VRAM bytes. (Explicit id: Image() is not an interactive item.)
+                if (ImGui::BeginPopupContextItem("##texture_ctx"))
+                {
+                    if (ImGui::MenuItem("Find in game data directory"))
+                    {
+                        BeginTextureSearch(platform, cmd);
+                    }
+                    ImGui::EndPopup();
+                }
             }
             else
             {
@@ -1967,6 +2009,177 @@ void App::ExportTexture(IPlatform& platform, const se_command& cmd, int w, int h
     }
 
     platform.SaveFile(name, bmp.data(), bmp.size());
+}
+
+// Kick a "find this texture in the game data" search. The needle is the texture's
+// raw packed VRAM bytes (Saturn big-endian — the same form they'd take in the game's
+// files). If no data directory is set yet, stash the needle and pop the set-dir modal,
+// which runs the pending search once a directory is chosen.
+void App::BeginTextureSearch(IPlatform& platform, const se_command& cmd)
+{
+    (void)platform;
+    const uint32_t n = TextureVramBytes(cmd);
+    if (!mbHasData || n == 0)
+    {
+        return;
+    }
+    mPendingNeedle.resize(n);
+    const size_t got = se_read_vram(mContext, SE_VRAM_KIND_VDP1_VRAM,
+                                    cmd.texture_address, mPendingNeedle.data(), n);
+    mPendingNeedle.resize(got);
+
+    char label[96];
+    std::snprintf(label, sizeof(label), "Texture @0x%06X (%ux%u, %u bytes)",
+                  cmd.texture_address, cmd.width, cmd.height, static_cast<unsigned>(got));
+    mPendingSearchLabel = label;
+
+    if (mDataDir.empty())
+    {
+        mSearchAfterSetDir = true;     // run once the user picks a directory
+        mOpenDataDirModal = true;
+    }
+    else
+    {
+        RunPendingSearch();
+    }
+}
+
+void App::RunPendingSearch()
+{
+    mSearchResults.clear();
+    if (mPendingNeedle.empty() || mDataDir.empty())
+    {
+        mSearchSummary = "Nothing to search.";
+        mShowSearchResults = true;
+        return;
+    }
+    const size_t files = SearchDataDir(mDataDir, mPendingNeedle.data(),
+                                       mPendingNeedle.size(), mSearchResults);
+    size_t total = 0;
+    for (const DataSearchHit& h : mSearchResults)
+    {
+        total += h.offsets.size();
+    }
+    char sum[224];
+    std::snprintf(sum, sizeof(sum),
+                  "%s\n%zu match(es) in %zu file(s)  —  scanned %zu file%s in the data directory.",
+                  mPendingSearchLabel.c_str(), total, mSearchResults.size(),
+                  files, files == 1 ? "" : "s");
+    mSearchSummary = sum;
+    mShowSearchResults = true;
+}
+
+// The "Set Game Data Directory" modal. Opened from the toolbar button, the status-bar
+// path, or automatically when a search is requested with no directory set.
+void App::DrawDataDirModal(IPlatform& platform)
+{
+    static char buf[1024] = {};
+    if (mOpenDataDirModal)
+    {
+        std::snprintf(buf, sizeof(buf), "%s", mDataDir.c_str());
+        ImGui::OpenPopup("Set Game Data Directory");
+        mOpenDataDirModal = false;
+    }
+
+    const ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    if (ImGui::BeginPopupModal("Set Game Data Directory", nullptr,
+                               ImGuiWindowFlags_AlwaysAutoResize))
+    {
+        ImGui::TextWrapped("Point Saturn Explorer at the game's original data: either a "
+                           "folder containing the game's files, or an ISO / disc image.");
+        ImGui::Spacing();
+        ImGui::SetNextItemWidth(520.0f);
+        ImGui::InputText("##datadir", buf, sizeof(buf));
+        ImGui::SameLine();
+        if (ImGui::Button("Folder..."))
+        {
+            std::string p;
+            if (platform.PickDirectory(p))
+            {
+                std::snprintf(buf, sizeof(buf), "%s", p.c_str());
+            }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("ISO / File..."))
+        {
+            std::string p;
+            if (platform.OpenFileDialog(p))
+            {
+                std::snprintf(buf, sizeof(buf), "%s", p.c_str());
+            }
+        }
+
+        ImGui::Separator();
+        const bool valid = buf[0] != '\0';
+        ImGui::BeginDisabled(!valid);
+        if (ImGui::Button("OK", ImVec2(90, 0)))
+        {
+            mDataDir = buf;
+            ImGui::CloseCurrentPopup();
+            if (mSearchAfterSetDir)
+            {
+                mSearchAfterSetDir = false;
+                RunPendingSearch();
+            }
+        }
+        ImGui::EndDisabled();
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2(90, 0)))
+        {
+            mSearchAfterSetDir = false;   // abandon any pending search
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+}
+
+// Results of a texture search: which file(s) it was found in and where. Each file is
+// a clickable link that reveals it in the OS file manager (Explorer/Finder/etc.).
+void App::DrawDataSearchResults(IPlatform& platform)
+{
+    if (!mShowSearchResults)
+    {
+        return;
+    }
+    ImGui::SetNextWindowSize(ImVec2(620, 320), ImGuiCond_FirstUseEver);
+    if (ImGui::Begin("Data Search Results", &mShowSearchResults))
+    {
+        ImGui::TextWrapped("%s", mSearchSummary.c_str());
+        ImGui::Separator();
+        if (mSearchResults.empty())
+        {
+            ImGui::TextDisabled("No matches. The texture may be stored compressed or in a "
+                                "different form in the game data, or the data directory is wrong.");
+        }
+        for (const DataSearchHit& hit : mSearchResults)
+        {
+            if (ImGui::Selectable(hit.path.c_str()))
+            {
+                platform.RevealPath(hit.path.c_str());
+            }
+            ImGui::SetItemTooltip("Click to reveal this file in the file manager");
+
+            ImGui::Indent();
+            std::string offs;
+            for (size_t i = 0; i < hit.offsets.size(); ++i)
+            {
+                if (i >= 16)
+                {
+                    offs += "  (+" + std::to_string(hit.offsets.size() - i) + " more)";
+                    break;
+                }
+                char o[24];
+                std::snprintf(o, sizeof(o), "0x%llX",
+                              static_cast<unsigned long long>(hit.offsets[i]));
+                if (!offs.empty()) offs += ", ";
+                offs += o;
+            }
+            ImGui::TextDisabled("offset(s): %s", offs.c_str());
+            ImGui::Unindent();
+        }
+    }
+    ImGui::End();
 }
 
 // Resolve a command's palette (CLUT for LUT-16, else the CRAM sub-palette for bank

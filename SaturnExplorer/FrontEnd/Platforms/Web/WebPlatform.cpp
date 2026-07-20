@@ -3,6 +3,7 @@
 #include "WebPlatform.h"
 
 #include <cstdio>
+#include <cstdlib>   // system() for RevealPath (native desktop)
 
 #include <SDL.h>
 
@@ -237,5 +238,86 @@ bool WebPlatform::SaveFile(const char* suggestedName, const void* data, size_t s
     return wrote == size;
 #endif
 }
+
+#ifndef __EMSCRIPTEN__
+namespace
+{
+// Wrap a path in single quotes for a POSIX shell, escaping embedded single quotes.
+std::string ShellQuote(const std::string& s)
+{
+    std::string out = "'";
+    for (char c : s)
+    {
+        if (c == '\'') out += "'\\''";
+        else           out += c;
+    }
+    out += "'";
+    return out;
+}
+}  // namespace
+
+bool WebPlatform::PickDirectory(std::string& outPath)
+{
+    // Try the common desktop folder pickers in turn; capture the chosen path from
+    // stdout. No GUI dialog available -> return false (caller falls back to typing).
+    const char* const cmds[] = {
+#if defined(__APPLE__)
+        "osascript -e 'try' -e 'POSIX path of (choose folder)' -e 'end try' 2>/dev/null",
+#endif
+        "zenity --file-selection --directory 2>/dev/null",
+        "kdialog --getexistingdirectory 2>/dev/null",
+    };
+    for (const char* cmd : cmds)
+    {
+        FILE* p = ::popen(cmd, "r");
+        if (!p)
+        {
+            continue;
+        }
+        std::string line;
+        char buf[1024];
+        while (std::fgets(buf, sizeof(buf), p))
+        {
+            line += buf;
+        }
+        const int rc = ::pclose(p);
+        while (!line.empty() && (line.back() == '\n' || line.back() == '\r'))
+        {
+            line.pop_back();
+        }
+        if (rc == 0 && !line.empty())
+        {
+            outPath = line;
+            return true;
+        }
+    }
+    return false;
+}
+
+bool WebPlatform::RevealPath(const char* path)
+{
+    if (!path || !*path)
+    {
+        return false;
+    }
+    const std::string q = ShellQuote(path);
+    std::string cmd;
+#if defined(__APPLE__)
+    cmd = "open -R " + q + " >/dev/null 2>&1 &";
+#else
+    // Prefer the freedesktop "show and select" call; fall back to opening the parent
+    // folder if no D-Bus file manager answers.
+    std::string parent = path;
+    const size_t slash = parent.find_last_of('/');
+    parent = (slash == std::string::npos) ? std::string(".") : parent.substr(0, slash);
+    cmd = "dbus-send --session --print-reply --dest=org.freedesktop.FileManager1 "
+          "--type=method_call /org/freedesktop/FileManager1 "
+          "org.freedesktop.FileManager1.ShowItems array:string:\"file://" + std::string(path) +
+          "\" string:\"\" >/dev/null 2>&1 || xdg-open " + ShellQuote(parent) +
+          " >/dev/null 2>&1 &";
+#endif
+    return ::system(cmd.c_str()) != -1;
+}
+#endif  // !__EMSCRIPTEN__
 
 }  // namespace sfe

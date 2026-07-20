@@ -11,6 +11,7 @@
 #include "saturnexplorer/SaturnExplorer.h"
 
 #include "Platform/IPlatform.h"
+#include "DataSearch.h"          // game-data-directory byte search (DataSearchHit)
 #include "WatchPanel.h"          // Watch Window (debugger; emulator-agnostic)
 #include "AssemblyPanel.h"       // SH-2 Assembly (debugger)
 #include "HexEditorPanel.h"      // Hex Editor (debugger)
@@ -78,6 +79,13 @@ private:
     // Export the currently-shown texture as a .bmp (paletted BMP with the game's
     // palette when the texture is paletted, else 24-bit) via the platform save dialog.
     void ExportTexture(IPlatform& platform, const se_command& cmd, int w, int h);
+    // Game-data-directory search: pick/show the data dir, kick a texture search, and
+    // draw its results. If no dir is set, BeginTextureSearch stashes the needle and
+    // pops the set-dir modal, which runs the pending search once a dir is chosen.
+    void DrawDataDirModal(IPlatform& platform);
+    void BeginTextureSearch(IPlatform& platform, const se_command& cmd);
+    void RunPendingSearch();
+    void DrawDataSearchResults(IPlatform& platform);
     // Resolve a command's palette (CLUT or CRAM bank); SE_ERR_UNSUPPORTED for RGB555.
     se_result PaletteOf(const se_command& cmd, se_palette* pal);
     void DrawPaletteViewer();
@@ -135,6 +143,19 @@ private:
     int              mScrubIndex = -1;         // selected recorded-frame index
     int              mScrubShownIndex = -1;    // index currently built into mScrubContext
 #endif
+
+    // Game data directory (a folder of the game's extracted files, or an ISO/disc
+    // image) that the texture "Find in game data" search scans. Persisted only in
+    // memory for the session. The set-dir modal opens when the user asks for it, or
+    // automatically when a search is requested with no directory set yet.
+    std::string          mDataDir;
+    bool                 mOpenDataDirModal = false;   // request to open the modal
+    bool                 mSearchAfterSetDir = false;  // run pending search once dir set
+    std::vector<uint8_t> mPendingNeedle;              // texture bytes to search for
+    std::string          mPendingSearchLabel;         // human label for the search
+    bool                 mShowSearchResults = false;
+    std::vector<DataSearchHit> mSearchResults;
+    std::string          mSearchSummary;              // "<label>: N match(es) in M file(s)"
 
     int              mSelectedCommand = -1;   // primary selection (detail panels)
     std::vector<int> mSelection;              // all selected command indices

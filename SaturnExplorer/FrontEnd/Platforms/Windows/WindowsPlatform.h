@@ -29,6 +29,8 @@ public:
 
     bool OpenFileDialog(std::string& outPath) override;
     bool SaveFile(const char* suggestedName, const void* data, size_t size) override;
+    bool PickDirectory(std::string& outPath) override;
+    bool RevealPath(const char* path) override;
 
 private:
     bool CreateDeviceD3D();

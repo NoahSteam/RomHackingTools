@@ -47,6 +47,13 @@ public:
     // current directory under 'suggestedName'.
     bool SaveFile(const char* suggestedName, const void* data, size_t size) override;
 
+    // Native desktop only (zenity/kdialog/osascript for the folder picker; the OS
+    // file manager for reveal). On the web these keep the base "unsupported" default.
+#ifndef __EMSCRIPTEN__
+    bool PickDirectory(std::string& outPath) override;
+    bool RevealPath(const char* path) override;
+#endif
+
 private:
     SDL_Window*   mWindow  = nullptr;
     SDL_GLContext mGlContext = nullptr;

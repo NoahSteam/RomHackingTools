@@ -1,8 +1,11 @@
 #include "WindowsPlatform.h"
 
 #include <commdlg.h>
+#include <shlobj.h>     // SHBrowseForFolder (PickDirectory)
+#include <shellapi.h>   // ShellExecute (RevealPath)
 #include <cstdio>
 #include <cstring>
+#include <string>
 #include <tchar.h>
 
 #include "imgui.h"
@@ -269,6 +272,46 @@ bool WindowsPlatform::SaveFile(const char* suggestedName, const void* data, size
     const size_t wrote = std::fwrite(data, 1, size, f);
     std::fclose(f);
     return wrote == size;
+}
+
+bool WindowsPlatform::PickDirectory(std::string& outPath)
+{
+    // SHBrowseForFolder: a folder picker with no COM init required.
+    char display[MAX_PATH] = {};
+    BROWSEINFOA bi = {};
+    bi.hwndOwner = mHwnd;
+    bi.pszDisplayName = display;
+    bi.lpszTitle = "Select the game's data directory";
+    bi.ulFlags = BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE;
+
+    LPITEMIDLIST pidl = ::SHBrowseForFolderA(&bi);
+    if (!pidl)
+    {
+        return false;   // cancelled
+    }
+    char path[MAX_PATH] = {};
+    const bool ok = ::SHGetPathFromIDListA(pidl, path) != FALSE;
+    ::CoTaskMemFree(pidl);
+    if (ok)
+    {
+        outPath = path;
+    }
+    return ok;
+}
+
+bool WindowsPlatform::RevealPath(const char* path)
+{
+    if (!path || !*path)
+    {
+        return false;
+    }
+    // Open Explorer with the file selected: explorer.exe /select,"C:\path\file".
+    std::string args = "/select,\"";
+    args += path;
+    args += "\"";
+    const HINSTANCE r = ::ShellExecuteA(nullptr, "open", "explorer.exe",
+                                        args.c_str(), nullptr, SW_SHOWNORMAL);
+    return reinterpret_cast<INT_PTR>(r) > 32;   // >32 == success per the API
 }
 
 bool WindowsPlatform::CreateDeviceD3D()

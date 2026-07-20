@@ -53,6 +53,19 @@ public:
     // the native desktop build writes to the current directory. Returns false if
     // cancelled or on write error.
     virtual bool SaveFile(const char* suggestedName, const void* data, size_t size) = 0;
+
+    // --- Optional capabilities (default: unsupported). Used by the game-data
+    // search: pick the data folder, and reveal a found file in the OS file
+    // manager. Not pure-virtual so a backend that can't offer them (e.g. the web
+    // build, with no host filesystem) simply inherits the "false" default. ---
+
+    // Native "choose folder" dialog. Returns false if cancelled or unsupported.
+    virtual bool PickDirectory(std::string& outPath) { (void)outPath; return false; }
+
+    // Open the OS file manager with `path` selected/highlighted (Explorer on
+    // Windows, Finder on macOS, the file manager on Linux). Returns false if
+    // unsupported or the path doesn't exist.
+    virtual bool RevealPath(const char* path) { (void)path; return false; }
 };
 
 }  // namespace sfe

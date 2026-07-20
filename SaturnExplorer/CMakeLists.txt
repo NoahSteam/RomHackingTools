@@ -147,6 +147,7 @@ if(WIN32)
     add_executable(SaturnExplorerFrontEnd WIN32
         FrontEnd/src/App.cpp
         FrontEnd/src/Theme.cpp
+        FrontEnd/src/DataSearch.cpp
         FrontEnd/src/WatchPanel.cpp
         FrontEnd/src/AssemblyPanel.cpp
         FrontEnd/src/HexEditorPanel.cpp
@@ -194,6 +195,7 @@ elseif(EMSCRIPTEN)
     set(SE_WEB_SRC
         FrontEnd/src/App.cpp
         FrontEnd/src/Theme.cpp
+        FrontEnd/src/DataSearch.cpp
         FrontEnd/src/WatchPanel.cpp
         FrontEnd/src/AssemblyPanel.cpp
         FrontEnd/src/HexEditorPanel.cpp
@@ -259,6 +261,7 @@ else()
         add_executable(SaturnExplorerFrontEnd
             FrontEnd/src/App.cpp
             FrontEnd/src/Theme.cpp
+            FrontEnd/src/DataSearch.cpp
             FrontEnd/src/WatchPanel.cpp
             FrontEnd/src/AssemblyPanel.cpp
             FrontEnd/src/HexEditorPanel.cpp
