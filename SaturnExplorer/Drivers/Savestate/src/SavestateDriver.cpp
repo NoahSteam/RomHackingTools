@@ -5,6 +5,10 @@
 #include <string>
 #include <vector>
 
+#if defined(SE_HAVE_ZLIB)
+#include <zlib.h>   // Mednafen mcs/ savestates are gzip-compressed
+#endif
+
 #include "SaturnStateShared.h"
 
 namespace
@@ -644,20 +648,79 @@ se_result ParseMednafenBuffer(const std::vector<uint8_t>& file, se_data_source* 
     return SE_OK;
 }
 
+// True if 'buf' starts with the gzip magic (1F 8B). Mednafen writes its mcs/ save
+// states gzip-compressed, so any real Mednafen state comes in this way.
+bool IsGzip(const std::vector<uint8_t>& buf)
+{
+    return buf.size() >= 2 && buf[0] == 0x1F && buf[1] == 0x8B;
+}
+
+// Inflate a gzip stream into 'out'. Returns false on a corrupt stream (or when built
+// without zlib — gzipped states are then reported as unsupported rather than
+// misparsed).
+#if defined(SE_HAVE_ZLIB)
+bool Gunzip(const std::vector<uint8_t>& in, std::vector<uint8_t>& out)
+{
+    z_stream zs;
+    std::memset(&zs, 0, sizeof(zs));
+    if (inflateInit2(&zs, 16 + MAX_WBITS) != Z_OK)   // 16 => decode a gzip header
+    {
+        return false;
+    }
+    zs.next_in = const_cast<Bytef*>(in.data());
+    zs.avail_in = static_cast<uInt>(in.size());
+    out.assign(in.size() * 4 + 4096, 0);   // states inflate ~3x; grow if needed
+    int ret;
+    do
+    {
+        if (zs.total_out == out.size())
+        {
+            out.resize(out.size() * 2);
+        }
+        zs.next_out = out.data() + zs.total_out;
+        zs.avail_out = static_cast<uInt>(out.size() - zs.total_out);
+        ret = inflate(&zs, Z_NO_FLUSH);
+        if (ret != Z_OK && ret != Z_STREAM_END)
+        {
+            inflateEnd(&zs);
+            return false;
+        }
+    } while (ret != Z_STREAM_END);
+    out.resize(zs.total_out);
+    inflateEnd(&zs);
+    return true;
+}
+#else
+bool Gunzip(const std::vector<uint8_t>&, std::vector<uint8_t>&) { return false; }
+#endif
+
 // Sniff an already-loaded savestate buffer's magic and dispatch to the matching
 // parser. Shared by the path-based se_savestate_open (after LoadFile) and the
 // buffer-based se_savestate_open_buffer (for hosts that supply bytes directly,
-// e.g. a browser reading a File into WASM memory).
+// e.g. a browser reading a File into WASM memory). Transparently gunzips a gzip-
+// compressed input first (Mednafen mcs/ states).
 se_result DispatchBuffer(const std::vector<uint8_t>& file, se_data_source* out)
 {
-    if (file.size() >= 3 && file[0] == 'Y' && file[1] == 'S' && file[2] == 'S')
+    std::vector<uint8_t> inflated;
+    const std::vector<uint8_t>* eff = &file;
+    if (IsGzip(file))
     {
-        return ParseYssBuffer(file, out);        // Yabause family (.yss)
+        if (!Gunzip(file, inflated))
+        {
+            return SE_ERR_UNSUPPORTED;   // corrupt stream, or built without zlib
+        }
+        eff = &inflated;
     }
-    if (file.size() >= kMdfnMagicSize &&
-        std::memcmp(file.data(), "MDFNSVST", kMdfnMagicSize) == 0)
+    const std::vector<uint8_t>& f = *eff;
+
+    if (f.size() >= 3 && f[0] == 'Y' && f[1] == 'S' && f[2] == 'S')
     {
-        return ParseMednafenBuffer(file, out);   // Mednafen / Beetle Saturn
+        return ParseYssBuffer(f, out);        // Yabause family (.yss)
+    }
+    if (f.size() >= kMdfnMagicSize &&
+        std::memcmp(f.data(), "MDFNSVST", kMdfnMagicSize) == 0)
+    {
+        return ParseMednafenBuffer(f, out);   // Mednafen / Beetle Saturn
     }
     return SE_ERR_UNSUPPORTED;
 }

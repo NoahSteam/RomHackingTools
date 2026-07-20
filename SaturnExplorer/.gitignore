@@ -1,5 +1,6 @@
 # CMake out-of-source build trees + generated files
 build/
+build-*/
 out/
 CMakeCache.txt
 CMakeFiles/

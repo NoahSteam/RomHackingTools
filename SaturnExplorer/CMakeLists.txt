@@ -74,6 +74,23 @@ target_include_directories(SaturnExplorerSavestateDriver
 )
 target_link_libraries(SaturnExplorerSavestateDriver
     PUBLIC SaturnExplorerCore SaturnExplorerDriverCommon)
+# Real Mednafen mcs/ savestates are gzip-compressed (magic 1f 8b). zlib lets the
+# driver transparently inflate them; without it the driver only reads already-
+# decompressed states. Optional — SE_HAVE_ZLIB gates the inflate path.
+if(EMSCRIPTEN)
+    # Emscripten ships a zlib port; -sUSE_ZLIB makes <zlib.h> + libz available.
+    target_compile_options(SaturnExplorerSavestateDriver PUBLIC "-sUSE_ZLIB=1")
+    target_link_options(SaturnExplorerSavestateDriver PUBLIC "-sUSE_ZLIB=1")
+    target_compile_definitions(SaturnExplorerSavestateDriver PRIVATE SE_HAVE_ZLIB)
+else()
+    find_package(ZLIB)
+    if(ZLIB_FOUND)
+        target_link_libraries(SaturnExplorerSavestateDriver PUBLIC ZLIB::ZLIB)
+        target_compile_definitions(SaturnExplorerSavestateDriver PRIVATE SE_HAVE_ZLIB)
+    else()
+        message(STATUS "zlib not found — Mednafen gzip savestates will not decompress")
+    endif()
+endif()
 
 # ---------------------------------------------------------------------------
 # Live driver — reads a running, patched emulator over a local socket (native) or a
