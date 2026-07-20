@@ -20,32 +20,79 @@ You only do this once. After it exists, `install.bat` uses it every run with no 
 
 Byte-for-byte the author's released source; zero third-party lineage.
 
+> **On authenticity — read this.** Mednafen publishes **no checksum or signature** for its
+> release tarballs — there is no SHA-256 on the releases page and no `.sha256` / `.sig` /
+> `.asc` / `SHA256SUMS` / `CHECKSUMS` file. So the download **cannot be verified against
+> upstream**; your only trust anchor is **HTTPS from the author's own domain**
+> (`mednafen.github.io`). Record the hash of what you downloaded anyway — it is a
+> *reproducibility baseline* (lets you or another machine confirm a later download is the
+> same bytes), but it proves nothing about the original.
+
 ```bash
-# 1. Grab the current source tarball. Check https://mednafen.github.io/releases/ for the
-#    latest version + its listed SHA-256, then (example uses 1.32.1):
+# 1. Grab the current source tarball (check https://mednafen.github.io/releases/ for the
+#    latest version; example uses 1.32.1):
 VER=1.32.1
 curl -fLO "https://mednafen.github.io/releases/files/mednafen-$VER.tar.xz"
-# Verify it matches the SHA-256 printed on the releases page before trusting it:
-sha256sum "mednafen-$VER.tar.xz"
+sha256sum "mednafen-$VER.tar.xz"   # record this as YOUR baseline (not an upstream check)
 
-# 2. Unpack and turn it into a git repo.
-tar xf "mednafen-$VER.tar.xz"          # -> ./mednafen/
+tar xf "mednafen-$VER.tar.xz"      # -> ./mednafen/
 cd mednafen
+
+# 2. Import byte-for-byte. Neutralize two Windows defaults FIRST, or the import silently
+#    stops being a faithful copy:
+#     - core.autocrlf=true rewrites LF->CRLF on add. That drifts the source off upstream
+#       and can break apply.py's exact-anchor patching AND the MSYS2/autotools build
+#       (which expects LF). Force it off for this repo.
+#     - a global gitignore / core.excludesFile (e.g. a `*.exe` rule) silently DROPS shipped
+#       files — Mednafen ships PSX test .exe binaries. `git add -Af` (-f) forces every file
+#       in regardless of any global ignore, so nothing is lost.
 git init -b master
-git add -A
-git commit -m "Import Mednafen $VER (official release source)"
+git config core.autocrlf false
+git config core.safecrlf false
+git add -Af
+git commit -m "Import Mednafen $VER (official release source, unmodified)"
 git tag "v$VER"
 
-# 3. Create an EMPTY repo named mednafen-git under your account on GitHub
-#    (no README/license/gitignore), then push:
+# 3. Sanity-check completeness: the committed file set must match the tarball exactly.
+tar tf "../mednafen-$VER.tar.xz" | grep -v '/$' | wc -l   # files in the tarball
+git ls-files | wc -l                                       # files git committed
+#    The two counts must match. If they don't, a global ignore ate something — fix it
+#    (git add -Af again) before pushing; a short fork is worse than none.
+
+# 4. Create an EMPTY repo named mednafen-git under your account on GitHub (no
+#    README/license/gitignore), then push:
 git remote add origin https://github.com/NoahSteam/mednafen-git.git
 git push -u origin master --tags
 ```
 
-**Updating to a newer Mednafen later:** download the new tarball, extract it over a
-clean checkout (or `rsync --delete` its contents into the working tree), then
-`git add -A && git commit -m "Import Mednafen <new-ver>" && git tag v<new-ver> && git push`.
-Each release is one clean commit — easy to diff, easy to pin.
+**Commit-message note:** the import commit represents *unmodified upstream source*. Keep
+the message factual and add **no** authorship / AI co-author trailers — the whole value of
+this procedure is that the commit is a verifiable byte-for-byte copy of someone else's
+released work; a co-author trailer would misrepresent exactly the provenance it protects.
+
+### Durable byte-preservation (add `.gitattributes`)
+The `core.autocrlf false` above is **local config that does not survive a clone** — anyone
+(including `install.bat`) who clones the fork on a Windows box with `autocrlf=true` set
+globally gets CRLF working files again, re-introducing the drift. The durable fix is a
+committed `.gitattributes` that pins every file to no-EOL-conversion. It's one file
+upstream doesn't ship, so add it as a **separate commit** — that keeps the import commit
+above a clean, auditable byte-for-byte copy:
+
+```bash
+printf '* -text\n' > .gitattributes
+git add .gitattributes
+git commit -m "Add .gitattributes (* -text): byte-exact checkout on every platform"
+git push
+```
+
+This is a deliberate, tiny deviation from "literal file-for-file purity": a base that
+`apply.py` can patch **reliably on any OS** matters more than matching upstream's (absent)
+packaging. `* -text` disables EOL munging while leaving diffs working.
+
+**Updating to a newer Mednafen later:** extract the new tarball over the checkout,
+`git add -Af`, `git commit -m "Import Mednafen <new-ver> (unmodified)"`, `git tag v<new-ver>`,
+`git push`. The `.gitattributes` commit rides along. Each release stays one clean,
+diffable commit.
 
 ---
 
@@ -75,9 +122,10 @@ git push -u origin --all --tags
 
 ## After the fork exists
 
-- **Keep it pristine.** The fork holds *vanilla* Mednafen. The Saturn Explorer edits are
-  applied on top by `apply.py` at install time — never committed to the fork — so it
-  stays a clean, updatable base (the "fork and pin" model in
+- **Keep it pristine.** The fork holds *vanilla* Mednafen (plus the single
+  `.gitattributes` above, added as its own commit for byte-preservation). The Saturn
+  Explorer edits are applied on top by `apply.py` at install time — never committed to the
+  fork — so it stays a clean, updatable base (the "fork and pin" model in
   [`../DISTRIBUTION.md`](../DISTRIBUTION.md)). If you'd rather bake the patch in, do it on
   a separate `saturn-explorer` branch and leave `master` clean.
 - **Pin a revision.** For reproducible builds, pin the tag/commit — pass

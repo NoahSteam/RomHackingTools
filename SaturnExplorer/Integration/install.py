@@ -265,7 +265,12 @@ def build_saturn_explorer(rn, generator):
 def clone_and_patch(rn, key, spec, dest, rev_override, repo):
     rev = rev_override or spec["rev"]
     if not os.path.isdir(os.path.join(dest, ".git")):
-        if rn.run(["git", "clone", repo, dest]) != 0:
+        # Clone with autocrlf forced off: on a Windows box with a global
+        # core.autocrlf=true, git would rewrite LF->CRLF in the checkout, which drifts
+        # the source and can break apply.py's exact-anchor patching + the MSYS2 build.
+        # (A fork with a committed `.gitattributes: * -text` is already protected; this
+        # covers forks/upstreams that lack it.)
+        if rn.run(["git", "-c", "core.autocrlf=false", "clone", repo, dest]) != 0:
             return False
     if rn.run(["git", "fetch", "--all", "--tags"], cwd=dest) != 0:
         return False
