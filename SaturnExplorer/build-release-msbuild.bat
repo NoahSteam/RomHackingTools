@@ -2,14 +2,14 @@
 REM ===========================================================================
 REM  Saturn Explorer - Release build via MSBuild (no CMake)
 REM
-REM  Builds the FrontEnd app (and its Core + Savestate-driver dependencies)
-REM  straight from the checked-in solution RomHackingTools.sln, using the
-REM  Visual Studio toolchain already on the machine. No CMake required.
+REM  Builds the FrontEnd app (and its Core + DriverCommon + Savestate + Live
+REM  driver dependencies) straight from the checked-in solution RomHackingTools.sln,
+REM  using the Visual Studio toolchain already on the machine. No CMake required.
 REM
-REM  NOTE: the checked-in .sln is SAVESTATE-ONLY. Live mode (connect to a
-REM  running Yabause, Work RAM streaming, pause / frame-step) is wired into the
-REM  CMake build, not this VS solution, so a build from here won't include it.
-REM  For the full-featured build (live mode), use build-release.bat (CMake).
+REM  Feature-parity with the CMake build (build-release.bat): live mode (connect to
+REM  a running emulator, Work RAM streaming, pause / frame-step) is compiled in here
+REM  too -- FrontEnd.vcxproj defines SE_ENABLE_LIVE and links the Live driver. The
+REM  two scripts differ only in build system (raw MSBuild vs CMake) and output path.
 REM
 REM  Requires: Visual Studio 2022 or 2019 with "Desktop development with C++".
 REM  (MSBuild is located automatically via vswhere.)
@@ -66,12 +66,7 @@ if exist "%EXE%" (
 )
 echo.
 echo Run it, or pass a savestate:  SaturnExplorer.exe state.yss
-echo.
-echo NOTE: this is a SAVESTATE-ONLY build - live mode is not compiled in, so
-echo       --live will not work on this .exe. Live mode (connect to a running
-echo       emulator, Work RAM streaming, pause / frame-step) is wired into the
-echo       CMake build only. For that, build with:  build-release.bat
-echo       which produces build\bin\Release\SaturnExplorerFrontEnd.exe
+echo Live mode (running emulator):  SaturnExplorer.exe --live
 endlocal
 exit /b 0
 
