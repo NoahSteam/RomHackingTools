@@ -77,6 +77,11 @@ if(NOT EMSCRIPTEN)
     )
     target_include_directories(SaturnExplorerLiveDriver
         PUBLIC  ${CMAKE_CURRENT_SOURCE_DIR}/Drivers/Live/src
+                # The wire protocol (SeLiveProtocol.h) is the single source of truth
+                # shared with the Yabause se_export server; it lives with that
+                # integration so apply.py can copy it in. PUBLIC so the FrontEnd
+                # (which #includes it under SE_ENABLE_LIVE) inherits the path.
+                ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Yabause
         PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include
     )
     target_link_libraries(SaturnExplorerLiveDriver

@@ -1,6 +1,7 @@
 /* Saturn Explorer — Yabause memory-export server. See se_export.h + README.md.
- * Self-contained: only needs SeLiveProtocol.h (copy it in from
- * Drivers/Common/src/) and the platform's sockets/threads. */
+ * Self-contained: only needs SeLiveProtocol.h (it lives beside this file, in
+ * Integration/Yabause/; apply.py copies it into yabause/src/ with this module) and
+ * the platform's sockets/threads. */
 
 /* Ask glibc to declare usleep() from <unistd.h> even under strict -std=c11
  * (must precede any system header). */
