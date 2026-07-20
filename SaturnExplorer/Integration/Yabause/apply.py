@@ -3,7 +3,7 @@
 apply.py — wire the Saturn Explorer live-tap into a Yabause checkout.
 
 Saturn Explorer keeps the export module (se_export.{c,h}) and the wire protocol
-(SeLiveProtocol.h) as the single source of truth in this repo. This script drops
+(SeLiveProtocol.h) as the single source of truth in this folder. This script drops
 them into a Yabause tree and inserts the four small hook calls, so your fork
 stays a clean vanilla Yabause + a handful of clearly-marked edits.
 
@@ -27,9 +27,10 @@ import shutil
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-# SeLiveProtocol.h lives with the drivers; keep one copy, copy it in on apply.
-PROTOCOL_SRC = os.path.normpath(os.path.join(HERE, "..", "..", "Drivers", "Common", "src", "SeLiveProtocol.h"))
-COPY_FILES = ["se_export.c", "se_export.h"]
+# All three sources live in this folder (the single source of truth), so applying
+# the patch just copies them into the Yabause tree. SeLiveProtocol.h is the wire
+# contract also compiled into Saturn Explorer's LiveDriver — one copy, no drift.
+COPY_FILES = ["se_export.c", "se_export.h", "SeLiveProtocol.h"]
 
 BEGIN = "/* --- SE_EXPORT (Saturn Explorer live tap) --- */"
 END = "/* --- end SE_EXPORT --- */"
@@ -233,7 +234,7 @@ def process_cmake(src_dir, do_write):
 
 def copy_sources(src_dir, do_write):
     notes = []
-    files = [(os.path.join(HERE, f), f) for f in COPY_FILES] + [(PROTOCOL_SRC, "SeLiveProtocol.h")]
+    files = [(os.path.join(HERE, f), f) for f in COPY_FILES]
     for srcpath, name in files:
         if not os.path.isfile(srcpath):
             notes.append(f"  MISSING SOURCE {srcpath}")
@@ -256,7 +257,7 @@ def revert(src_dir):
     if os.path.isfile(cpath):
         t = open(cpath, encoding="utf-8", errors="surrogateescape").read()
         open(cpath, "w", encoding="utf-8", errors="surrogateescape").write(t.replace("se_export.c vdp1.c", "vdp1.c"))
-    for f in COPY_FILES + ["SeLiveProtocol.h"]:
+    for f in COPY_FILES:
         p = os.path.join(src_dir, f)
         if os.path.isfile(p):
             os.remove(p)
