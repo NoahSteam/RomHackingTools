@@ -69,8 +69,12 @@ upstream rename never breaks a build mid-flight.
 them every run. The Yabause-lineage upstreams are on GitHub — just use the **Fork**
 button. Mednafen isn't hosted on GitHub by its author, so import it from the official
 release source: see [`Mednafen/FORK_SETUP.md`](Mednafen/FORK_SETUP.md) for exact steps
-(clean standard-Mednafen provenance, no third-party mirror in the lineage). To point
-elsewhere:
+(clean standard-Mednafen provenance, no third-party mirror in the lineage).
+
+**If a fork doesn't exist yet**, the installer notices before cloning (a `git ls-remote`
+preflight) and offers to build from **upstream** instead — automatically with `--yes`,
+or with a `Build from upstream now? [y/N]` prompt otherwise. So you can run it before
+creating any forks; it just falls back to upstream. To choose the source explicitly:
 - `--fork-owner <name>` — use a different account/org that holds the forks.
 - `--upstream` — clone the original upstream repos instead of the forks.
 - `--mednafen-repo <url>` / `--yabause-repo <url>` — an explicit git URL (wins over both).

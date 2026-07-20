@@ -111,6 +111,41 @@ def resolve_repo(spec, repo_override, use_upstream):
         return spec["upstream"]
     return fork_url(spec["fork_name"])
 
+
+def repo_reachable(url):
+    """True if `git ls-remote` can read the repo (exists + accessible)."""
+    try:
+        return subprocess.call(["git", "ls-remote", url],
+                               stdout=subprocess.DEVNULL,
+                               stderr=subprocess.DEVNULL) == 0
+    except Exception:
+        return False
+
+
+def choose_repo(rn, spec, repo_override, use_upstream):
+    """Resolve the clone URL, preflighting our-fork reachability. If the fork doesn't
+    exist yet, explain clearly and offer the upstream fallback (auto under --yes).
+    Returns the URL to clone, or None if the user declines (skip this emulator)."""
+    url = resolve_repo(spec, repo_override, use_upstream)
+    # An explicit --*-repo / --upstream choice is used as-is; only the default
+    # (our fork) is preflighted, since that's the one that may not exist yet.
+    if rn.dry_run or repo_override or use_upstream:
+        return url
+    if repo_reachable(url):
+        return url
+
+    upstream = spec["upstream"]
+    print(f"  [!] Our fork was not found: {url}")
+    print(f"      Create it once (see Integration/INSTALL.md > \"Source: our forks\", or")
+    print(f"      Integration/Mednafen/FORK_SETUP.md for Mednafen) — or build from upstream:")
+    print(f"        {upstream}")
+    if not repo_reachable(upstream):
+        print("      (heads up: upstream is also unreachable — check your network / git.)")
+    if rn.assume_yes or rn.confirm("      Build from upstream now?"):
+        print(f"      -> using upstream: {upstream}")
+        return upstream
+    return None
+
 # winget package IDs for the tools we may install on the user's behalf.
 WINGET = {
     "git":   "Git.Git",
@@ -136,7 +171,10 @@ class Runner:
     def confirm(self, prompt):
         if self.assume_yes or self.dry_run:
             return True
-        return input(f"{prompt} [y/N] ").strip().lower() in ("y", "yes")
+        try:
+            return input(f"{prompt} [y/N] ").strip().lower() in ("y", "yes")
+        except EOFError:
+            return False   # non-interactive without --yes: treat as "no"
 
     def run(self, cmd, cwd=None, shell=False):
         pretty = cmd if isinstance(cmd, str) else " ".join(cmd)
@@ -339,13 +377,17 @@ def main():
     if do_mednafen:
         print("\n== Mednafen ==")
         dest = os.path.join(args.prefix, "mednafen")
-        repo = resolve_repo(EMULATORS["mednafen"], args.mednafen_repo, args.upstream)
-        print(f"  source: {repo}")
-        if clone_and_patch(rn, "mednafen", EMULATORS["mednafen"], dest, args.mednafen_rev, repo):
-            m_ok, m_exe = build_mednafen(rn, msys2, dest)
+        repo = choose_repo(rn, EMULATORS["mednafen"], args.mednafen_repo, args.upstream)
+        if repo is None:
+            print("  Skipped Mednafen (no source selected).")
+            results.append(("Mednafen (skipped)", False, None))
         else:
-            m_ok, m_exe = False, None
-        results.append(("Mednafen (patched)", m_ok, m_exe))
+            print(f"  source: {repo}")
+            if clone_and_patch(rn, "mednafen", EMULATORS["mednafen"], dest, args.mednafen_rev, repo):
+                m_ok, m_exe = build_mednafen(rn, msys2, dest)
+            else:
+                m_ok, m_exe = False, None
+            results.append(("Mednafen (patched)", m_ok, m_exe))
 
     # --- Yabause fork -------------------------------------------------------
     if do_yabause:
@@ -353,13 +395,17 @@ def main():
         spec = EMULATORS[key]
         print(f"\n== {key} ==")
         dest = os.path.join(args.prefix, key)
-        repo = resolve_repo(spec, args.yabause_repo, args.upstream)
-        print(f"  source: {repo}")
-        if clone_and_patch(rn, key, spec, dest, args.yabause_rev, repo):
-            y_ok, y_exe = build_yabause(rn, dest, args.generator, args.qt_path)
+        repo = choose_repo(rn, spec, args.yabause_repo, args.upstream)
+        if repo is None:
+            print(f"  Skipped {key} (no source selected).")
+            results.append((f"{key} (skipped)", False, None))
         else:
-            y_ok, y_exe = False, None
-        results.append((f"{key} (patched)", y_ok, y_exe))
+            print(f"  source: {repo}")
+            if clone_and_patch(rn, key, spec, dest, args.yabause_rev, repo):
+                y_ok, y_exe = build_yabause(rn, dest, args.generator, args.qt_path)
+            else:
+                y_ok, y_exe = False, None
+            results.append((f"{key} (patched)", y_ok, y_exe))
 
     # --- summary ------------------------------------------------------------
     print("\n" + "=" * 36 + "\nSummary:")
