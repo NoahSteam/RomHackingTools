@@ -65,8 +65,12 @@ upstream rename never breaks a build mid-flight.
 | Yaba Sanshiro | `NoahSteam/yaba-sanshiro` | `devmiyax/yabause` |
 | Kronos | `NoahSteam/Kronos` | `FCare/Kronos` |
 
-**These forks must exist** under the owner. Create them once (fork on GitHub, or push a
-mirror), then the installer uses them every run. To point elsewhere:
+**These forks must exist** under the owner. Create them once, then the installer uses
+them every run. The Yabause-lineage upstreams are on GitHub — just use the **Fork**
+button. Mednafen isn't hosted on GitHub by its author, so import it from the official
+release source: see [`Mednafen/FORK_SETUP.md`](Mednafen/FORK_SETUP.md) for exact steps
+(clean standard-Mednafen provenance, no third-party mirror in the lineage). To point
+elsewhere:
 - `--fork-owner <name>` — use a different account/org that holds the forks.
 - `--upstream` — clone the original upstream repos instead of the forks.
 - `--mednafen-repo <url>` / `--yabause-repo <url>` — an explicit git URL (wins over both).
