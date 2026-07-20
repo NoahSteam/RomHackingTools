@@ -24,3 +24,7 @@ Libs/
 
 # Stray render / test output (harnesses write PNGs; none are tracked here)
 *.png
+
+# Runtime state the app writes at exit (per-user, not source)
+assembly_comments.txt
+saturn_explorer_watches.json
