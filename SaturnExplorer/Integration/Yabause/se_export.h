@@ -62,11 +62,13 @@ void SeExportSetBreakpointHooks(void (*add)(int cpu, unsigned int address),
  * debugger can jump to the PC. A resume / single-step from the debugger clears it. */
 void SeExportNotifyStop(int cpu, unsigned int pc);
 
-/* Wire the module's work-RAM poke to Yabause's byte writer (v6+), so the Hex
- * Editor can edit a running game: write(address, value) should call
- * MappedMemoryWriteByte. May be NULL (writes are then dropped). Writing byte-by-
- * byte at Saturn addresses preserves big-endian order without a manual swap. Call
- * once after SeExportInit, e.g. SeExportSetMemWriteHook(SeYabauseWriteByte). */
+/* Wire the module's work-RAM poke to the emulator's byte writer (v6+), so the Hex
+ * Editor can edit a running game: write(address, value) writes one byte. On this
+ * Yabause that's MappedMemoryWriteByteNocache(MSH2, addr, val) — MappedMemoryWriteByte
+ * is only a function-pointer field on SH2_struct, not a callable function. May be
+ * NULL (writes are then dropped). Writing byte-by-byte at Saturn addresses preserves
+ * big-endian order without a manual swap. Call once after SeExportInit, e.g.
+ * SeExportSetMemWriteHook(SeYabauseWriteByte). */
 void SeExportSetMemWriteHook(void (*write)(unsigned int address, unsigned char value));
 
 /* Frame gate for pause / single-step. Call once at the top of each emulated

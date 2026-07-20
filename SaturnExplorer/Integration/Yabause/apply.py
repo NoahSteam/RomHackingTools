@@ -77,7 +77,11 @@ EDITS = [
      "}\n"
      "static void SeExpWriteByte(unsigned int addr, unsigned char val)\n"
      "{\n"
-     "   MappedMemoryWriteByte((u32)addr, (u8)val);\n"
+     "   /* Nocache = write straight to memory (bypass the SH-2 cache), the\n"
+     "    * conventional debugger poke. The real writer takes (SH2_struct*, addr,\n"
+     "    * val); MappedMemoryWriteByte is only a fn-pointer field on SH2_struct in\n"
+     "    * this Yabause. Master SH-2 is fine — both cores share the bus. */\n"
+     "   MappedMemoryWriteByteNocache(MSH2, (u32)addr, (u8)val);\n"
      "}\n",
      "SeExpBpHit"),
 

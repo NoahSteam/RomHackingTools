@@ -128,15 +128,20 @@ Yabause's byte writer (also inserted by `apply.py`):
 
 ```c
 static void SeExpWriteByte(unsigned int addr, unsigned char val) {
-    MappedMemoryWriteByte((u32)addr, (u8)val);
+    MappedMemoryWriteByteNocache(MSH2, (u32)addr, (u8)val);
 }
 /* ... in YabauseInit(), after SeExportInit(): */
 SeExportSetMemWriteHook(SeExpWriteByte);
 ```
 
 Writing byte-by-byte at Saturn addresses keeps big-endian order without a manual
-swap. Without this hook, Hex Editor edits still apply to Saturn Explorer's own view
-of the frame but aren't pushed to the emulator.
+swap. Note the writer is `MappedMemoryWriteByteNocache(SH2_struct*, addr, val)` —
+in this Yabause `MappedMemoryWriteByte` is only a function-pointer field on
+`SH2_struct`, not a callable 2-arg function (matches how `yabause.c` already does
+memory writes). `Nocache` writes straight to memory (bypassing the SH-2 cache), the
+conventional debugger poke; the master SH-2 (`MSH2`) is a fine target since both
+cores share the bus. Without this hook, Hex Editor edits still apply to Saturn
+Explorer's own view of the frame but aren't pushed to the emulator.
 
 ### 2b. (Optional) Pause / single-step gate
 To enable the Pause and Step Frame buttons, gate each emulated frame on

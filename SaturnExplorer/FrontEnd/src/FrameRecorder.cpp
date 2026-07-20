@@ -109,6 +109,13 @@ void FrameRecorder::Capture(se_context* ctx, uint64_t frameNumber)
         raw.vdp2Regs[o / 2] = se_get_vdp2_register(ctx, o);
     }
 
+    // SH-2 registers, so the Assembly panel (and status-bar PC) keep working while
+    // paused/scrubbing — reading a recorded frame is otherwise just like live.
+    for (int cpu = 0; cpu < 2; ++cpu)
+    {
+        raw.hasSh2[cpu] = se_get_sh2_regs(ctx, cpu, &raw.sh2[cpu]) == SE_OK;
+    }
+
     {
         std::lock_guard<std::mutex> lk(mQMtx);
         if (mQueue.size() >= kMaxQueued)
@@ -150,9 +157,11 @@ void FrameRecorder::Worker()
         CompressRegion(raw.vdp1Fb,   f.vdp1Fb,   mLzScratch);
         f.vdp1Regs = std::move(raw.vdp1Regs);
         f.vdp2Regs = std::move(raw.vdp2Regs);
+        f.sh2[0] = raw.sh2[0]; f.sh2[1] = raw.sh2[1];
+        f.hasSh2[0] = raw.hasSh2[0]; f.hasSh2[1] = raw.hasSh2[1];
         f.bytes = f.vdp1Vram.lz.size() + f.vdp2Vram.lz.size() + f.cram.lz.size() +
                   f.wramLow.lz.size() + f.wramHigh.lz.size() + f.vdp1Fb.lz.size() +
-                  f.vdp1Regs.size() * 2 + f.vdp2Regs.size() * 2;
+                  f.vdp1Regs.size() * 2 + f.vdp2Regs.size() * 2 + sizeof(f.sh2);
 
         std::lock_guard<std::mutex> lk(mRingMtx);
         mBytes += f.bytes;
@@ -222,13 +231,15 @@ bool FrameRecorder::Select(size_t i, se_data_source* out)
         DecompressRegion(f.vdp1Fb, mSelVdp1Fb);
         mSelVdp1Regs = f.vdp1Regs;
         mSelVdp2Regs = f.vdp2Regs;
+        mSelSh2[0] = f.sh2[0]; mSelSh2[1] = f.sh2[1];
+        mSelHasSh2[0] = f.hasSh2[0]; mSelHasSh2[1] = f.hasSh2[1];
     }
 
     std::memset(out, 0, sizeof(*out));
     out->abi_version = SE_ABI_VERSION;
     out->capabilities = SE_CAP_VDP1_VRAM | SE_CAP_VDP2_VRAM | SE_CAP_CRAM |
                         SE_CAP_MAIN_RAM | SE_CAP_VDP1_REGS | SE_CAP_VDP2_REGS |
-                        SE_CAP_VDP1_FB;
+                        SE_CAP_VDP1_FB | SE_CAP_SH2_REGS;
     out->user = this;
     out->read_vdp1_vram = CbVdp1;
     out->read_vdp2_vram = CbVdp2;
@@ -237,6 +248,7 @@ bool FrameRecorder::Select(size_t i, se_data_source* out)
     out->read_vdp1_fb   = CbVdp1Fb;
     out->read_vdp1_reg  = CbVdp1Reg;
     out->read_vdp2_reg  = CbVdp2Reg;
+    out->read_sh2_regs  = CbSh2Regs;
     // No close callback: the scratch is owned by this recorder, not the context.
     return true;
 }
@@ -281,6 +293,14 @@ uint16_t FrameRecorder::CbVdp2Reg(void* u, uint32_t reg)
     const std::vector<uint16_t>& v = static_cast<FrameRecorder*>(u)->mSelVdp2Regs;
     const size_t i = reg >> 1;
     return i < v.size() ? v[i] : 0;
+}
+int FrameRecorder::CbSh2Regs(void* u, int cpu, se_sh2_regs* out)
+{
+    if (cpu < 0 || cpu > 1 || !out) { return 0; }
+    FrameRecorder* r = static_cast<FrameRecorder*>(u);
+    if (!r->mSelHasSh2[cpu]) { return 0; }   // frame predates SH-2 capture / absent
+    *out = r->mSelSh2[cpu];
+    return 1;
 }
 
 }  // namespace sfe
