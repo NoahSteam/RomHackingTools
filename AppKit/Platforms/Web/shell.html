@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>AppKit App</title>
+<style>
+  :root { color-scheme: dark; }
+  html, body { margin: 0; padding: 0; height: 100%; overflow: hidden;
+               background: #15151a; font-family: system-ui, sans-serif; }
+  #canvas { position: absolute; inset: 0; width: 100%; height: 100%;
+            display: block; }
+  #drop-hint { position: absolute; inset: 0; display: flex;
+               align-items: center; justify-content: center; pointer-events: none;
+               color: #8a8a99; font-size: 15px; letter-spacing: .3px;
+               transition: opacity .15s ease; z-index: 5; text-align: center; }
+  #drop-hint.hidden { opacity: 0; }
+  body.dragging::after { content: ""; position: absolute; inset: 0; z-index: 10;
+               border: 3px dashed #4a90d9; background: rgba(74,144,217,.10); }
+  #loading { position: absolute; inset: 0; display: flex; align-items: center;
+             justify-content: center; color: #c8c8d4; font-size: 14px; z-index: 8; }
+</style>
+</head>
+<body>
+  <canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
+  <div id="drop-hint">Drag a file here, or use <b>File &gt; Open</b> in the menu.</div>
+  <div id="loading">Loading…</div>
+  <input id="appkit-file-input" type="file" style="display:none"
+         accept="application/octet-stream,*/*">
+
+  <script type="text/javascript">
+    var Module = {
+      canvas: document.getElementById('canvas'),
+      onRuntimeInitialized: function () {
+        var l = document.getElementById('loading');
+        if (l) l.style.display = 'none';
+        syncCanvasSize();
+      },
+    };
+
+    // --- Load a File's bytes into WASM and hand them to the app --------------
+    function akLoadFile(file) {
+      if (!file) return;
+      var reader = new FileReader();
+      reader.onload = function () {
+        var bytes = new Uint8Array(reader.result);
+        var ptr = Module._malloc(bytes.length);
+        Module.HEAPU8.set(bytes, ptr);
+        Module.ccall('ak_web_load_file', null, ['number', 'number'], [ptr, bytes.length]);
+        Module._free(ptr);
+        var hint = document.getElementById('drop-hint');
+        if (hint) hint.classList.add('hidden');
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    // Hidden <input> is clicked by the app's "Open" toolbar button (via EM_JS).
+    document.getElementById('appkit-file-input').addEventListener('change', function (e) {
+      if (e.target.files && e.target.files.length) akLoadFile(e.target.files[0]);
+      e.target.value = '';   // allow re-selecting the same file
+    });
+
+    // --- Drag & drop onto the canvas ---------------------------------------
+    ['dragenter', 'dragover'].forEach(function (ev) {
+      window.addEventListener(ev, function (e) {
+        e.preventDefault(); document.body.classList.add('dragging');
+      });
+    });
+    ['dragleave', 'drop'].forEach(function (ev) {
+      window.addEventListener(ev, function (e) {
+        e.preventDefault();
+        if (ev !== 'dragover') document.body.classList.remove('dragging');
+      });
+    });
+    window.addEventListener('drop', function (e) {
+      if (e.dataTransfer && e.dataTransfer.files.length) akLoadFile(e.dataTransfer.files[0]);
+    });
+
+    // --- Keep the canvas / SDL window matched to the window size -----------
+    function syncCanvasSize() {
+      if (!Module.ccall) return;
+      try {
+        Module.ccall('ak_web_resize', null, ['number', 'number'],
+                     [window.innerWidth, window.innerHeight]);
+      } catch (_) { /* runtime not ready yet */ }
+    }
+    window.addEventListener('resize', syncCanvasSize);
+  </script>
+  {{{ SCRIPT }}}
+</body>
+</html>

@@ -261,13 +261,11 @@ else()
             FrontEnd/src/Theme.cpp
             FrontEnd/src/WatchPanel.cpp
             FrontEnd/src/AssemblyPanel.cpp
-        FrontEnd/src/HexEditorPanel.cpp
             FrontEnd/src/HexEditorPanel.cpp
             FrontEnd/src/Debug/WatchList.cpp
             FrontEnd/src/Debug/MemoryBackend.cpp
             FrontEnd/src/Debug/Sh2Disasm.cpp
             FrontEnd/src/Debug/BreakpointManager.cpp
-        FrontEnd/src/Debug/ShiftJis.cpp
             FrontEnd/src/Debug/ShiftJis.cpp
             FrontEnd/src/FrameRecorder.cpp
             FrontEnd/src/FrameLz.cpp

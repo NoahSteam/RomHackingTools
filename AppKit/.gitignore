@@ -1,0 +1,6 @@
+# CMake out-of-source build trees
+build/
+build-*/
+CMakeCache.txt
+CMakeFiles/
+imgui.ini
