@@ -191,7 +191,10 @@ path on its own — **no explicit debug-mode toggle needed**. On a hit the injec
 hook reports the halted PC and the CPU that hit it (`DBG.ActiveCPU`) via
 `SeExportNotifyStop`, then blocks on `SeExportGateFrame` right at the instruction
 until Saturn Explorer resumes — an **instruction-exact halt**, like the Yabause tap.
-The glue registers this through the existing `SeExportSetBreakpointHooks` bridge, so
+(Blocking mid-frame freezes Mednafen's frame pump while halted, so audio underruns
+for the duration — the same trade as the frame-gate caveat below, expected while
+you're stopped at a breakpoint.) The glue registers this through the existing
+`SeExportSetBreakpointHooks` bridge, so
 Saturn Explorer's gutter breakpoints and "Run to Here" drive it over the protocol
 unchanged.
 

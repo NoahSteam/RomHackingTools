@@ -22,9 +22,10 @@ place, never duplicated) and --revert removes them. If an anchor can't be found 
 Mednafen version moved the code), the script says exactly what to add by hand — see
 README.md. Symbol names were mapped against libretro-mirrors/mednafen-git src/ss.
 
-The one thing this can't finish blind is the **Tier-3 execution-breakpoint** wiring
-(Mednafen's debug API); those helpers stay TODO(mednafen) in the copied glue. Live
-view, Watch/Hex (incl. work-RAM pokes), SH-2 registers, and pause/step all wire up.
+Everything wires up: live view, Watch/Hex (incl. work-RAM pokes), SH-2 registers,
+pause/step, and **Tier-3 execution breakpoints** (via Mednafen's ss/debug.inc — these
+fire only in a `--enable-debugger` build; a normal build compiles the no-op stubs and
+the breakpoint set round-trips without halting).
 
 Target layout assumed: <mednafen>/src/ss/{vdp1.cpp,vdp2.cpp,ss.cpp}. Pass the repo
 root; the script also accepts the src/ss dir directly.

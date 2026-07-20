@@ -3,8 +3,9 @@
  * This is the emulator-specific half of the live tap. The portable half is
  * ../Common/se_export.c (unchanged). Drop this + se_export.{c,h} + SeLiveProtocol.h
  * into Mednafen's ss core, then wire the calls at the bottom into ss.cpp's frame
- * loop. Symbol names below were mapped against libretro-mirrors/mednafen-git
- * src/ss (see README.md); anything still build-specific is marked TODO(mednafen).
+ * loop. Symbol names were mapped against libretro-mirrors/mednafen-git src/ss (see
+ * README.md); the injected ss accessors (apply.py) carry any remaining build-specific
+ * TODO(mednafen) confirm points.
  *
  * Why accessors, not `extern`. Unlike Yabause (extern globals), Mednafen keeps the
  * memory it exposes as *file-scope static*: VDP2::VRAM / CRAM / RawRegs live in
