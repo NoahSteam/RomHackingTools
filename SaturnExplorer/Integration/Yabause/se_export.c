@@ -111,9 +111,10 @@ void SeExportSetBreakpointHooks(SeAddExecBpFn add, SeClearBpsFn clear)
     sClearBps = clear;
 }
 
-/* ---- Memory-write hook (v6+). apply.py wires this to Yabause's
- * MappedMemoryWriteByte so the Hex Editor can poke work RAM. Writing byte-by-byte
- * at Saturn addresses keeps big-endian semantics without a manual swap. ---- */
+/* ---- Memory-write hook (v6+). apply.py wires this to the emulator's byte writer
+ * (Yabause: MappedMemoryWriteByteNocache(MSH2, addr, val)) so the Hex Editor can
+ * poke work RAM. Writing byte-by-byte at Saturn addresses keeps big-endian
+ * semantics without a manual swap. ---- */
 typedef void (*SeWriteByteFn)(unsigned int address, unsigned char value);
 static SeWriteByteFn sWriteByte;
 
