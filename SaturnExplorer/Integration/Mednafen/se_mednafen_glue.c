@@ -146,16 +146,32 @@ static void SeMdfnWriteByte(unsigned int address, unsigned char value)
 }
 
 /* ============================ lifecycle wiring ============================ */
-/* Wire these into Mednafen ss (all sites in ss.cpp unless noted):
- *   - end of Load(GameFile*):     SeExportInit();
- *                                 SeExportSetBreakpointHooks(SeMdfnAddExecBp, SeMdfnClearBps);
- *                                 SeExportSetMemWriteHook(SeMdfnWriteByte);
- *   - end-of-frame in Emulate():  SeMednafenSnapshot();   (after espec->MasterCycles = ...)
- *   - top of Emulate() (optional pause/step):  while (!SeExportGateFrame()) { }
- *       (Tier-1 read-only view can skip the gate; see README frame-gate caveat.)
- *   - CloseGame():                SeExportDeinit();
- */
+/* The patcher (apply.py) injects exactly ONE call — SeMednafenFrameHook() — at the
+ * end-of-frame anchor in ss.cpp's Emulate() (after `espec->MasterCycles = ...`). That
+ * hook lazy-starts the server on the first frame (registering the write + breakpoint
+ * hooks), so no separate Load()/CloseGame() anchoring is needed. The optional
+ * pause/step gate is the only extra site — `while (!SeExportGateFrame()) { }` at the
+ * top of Emulate(); Tier-1 read-only view can skip it (see README frame-gate caveat).
+ * The process teardown reclaims the server thread; call SeExportDeinit() from
+ * CloseGame() too if you want a clean per-game stop. */
+#if defined(SE_MEDNAFEN_WIRED)
+void SeMednafenFrameHook(void)
+{
+    static int inited = 0;
+    if (!inited)
+    {
+        inited = 1;
+        SeExportInit();
+        SeExportSetMemWriteHook(SeMdfnWriteByte);
+        SeExportSetBreakpointHooks(SeMdfnAddExecBp, SeMdfnClearBps);
+    }
+    SeMednafenSnapshot();
+}
+#else
+/* Stub build: the Tier-3 helpers are referenced only by SeMednafenFrameHook above,
+ * which isn't compiled here — keep the compiler quiet without them. */
 void SeMednafenSuppressUnusedWarnings(void)
 {
     (void)SeMdfnAddExecBp; (void)SeMdfnClearBps; (void)SeMdfnWriteByte;
 }
+#endif
