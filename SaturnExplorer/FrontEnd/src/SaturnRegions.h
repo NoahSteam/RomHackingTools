@@ -17,6 +17,11 @@ constexpr uint32_t kVdp1FbSize   = 0x40000;   // VDP1 frame buffer (drawn output
 constexpr uint32_t kVdp1RegBytes = 0x18;      // VDP1 register image (TVMR..MODR)
 constexpr uint32_t kVdp2RegBytes = 0x120;     // VDP2 register file
 
+// CPU-visible base of VDP1 VRAM (canonical mirror). Used to turn a VDP1 VRAM offset
+// (e.g. a command's table_address) into a hex-editor address. The MemoryBackend
+// region table is the fuller map; this is the one base the panels reach for directly.
+constexpr uint32_t kVdp1VramBase = 0x05C00000u;
+
 // Split a Saturn RGB555 word into its 5-bit channels. Saturn stores colour as
 // R in bits 0-4, G in 5-9, B in 10-14 (bit 15 ignored) — matches the core's
 // se::Rgb555ToRgba, validated against real dumps.

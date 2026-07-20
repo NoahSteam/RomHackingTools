@@ -256,13 +256,38 @@ void App::CloseData()
 
 namespace
 {
-// Append a little-endian uint32 to a byte vector.
+// Append a little-endian uint16/uint32 to a byte vector.
+void PushU16(std::vector<uint8_t>& v, uint16_t x)
+{
+    v.push_back(static_cast<uint8_t>(x & 0xFF));
+    v.push_back(static_cast<uint8_t>((x >> 8) & 0xFF));
+}
 void PushU32(std::vector<uint8_t>& v, uint32_t x)
 {
     v.push_back(static_cast<uint8_t>(x & 0xFF));
     v.push_back(static_cast<uint8_t>((x >> 8) & 0xFF));
     v.push_back(static_cast<uint8_t>((x >> 16) & 0xFF));
     v.push_back(static_cast<uint8_t>((x >> 24) & 0xFF));
+}
+
+// Fit a w×h image into 'avail' preserving aspect (scale by the tighter axis, with a
+// >0 guard) and center it in both axes; returns the top-left draw origin (relative to
+// the current cursor) and writes the chosen scale. Shared by the image panels that
+// letterbox — VDP Output and the Texture Viewer.
+ImVec2 AspectFit(const ImVec2& avail, int w, int h, float& outScale)
+{
+    float scale = 1.0f;
+    if (w > 0 && h > 0)
+    {
+        const float sx = avail.x / static_cast<float>(w);
+        const float sy = avail.y / static_cast<float>(h);
+        scale = sx < sy ? sx : sy;
+        if (scale <= 0.0f) scale = 1.0f;
+    }
+    outScale = scale;
+    const ImVec2 origin = ImGui::GetCursorScreenPos();
+    return ImVec2(origin.x + (avail.x - w * scale) * 0.5f,
+                  origin.y + (avail.y - h * scale) * 0.5f);
 }
 }  // namespace
 
@@ -1193,26 +1218,13 @@ void App::DrawVdpOutput(IPlatform& platform)
         }
         else
         {
-            // Fit the frame to the panel, preserving aspect ratio (scale by the
-            // tighter of the two axes) and centering it — letterbox/pillarbox,
-            // like a 3D editor viewport.
+            // Fit the frame to the panel, preserving aspect ratio and centering it —
+            // letterbox/pillarbox, like a 3D editor viewport.
             const ImVec2 avail = ImGui::GetContentRegionAvail();
             float scale = 1.0f;
-            if (mFrameWidth > 0 && mFrameHeight > 0)
-            {
-                const float sx = avail.x / static_cast<float>(mFrameWidth);
-                const float sy = avail.y / static_cast<float>(mFrameHeight);
-                scale = sx < sy ? sx : sy;
-                if (scale <= 0.0f)
-                {
-                    scale = 1.0f;
-                }
-            }
+            const ImVec2 imgPos = AspectFit(avail, mFrameWidth, mFrameHeight, scale);
             const ImVec2 dispSize(mFrameWidth * scale, mFrameHeight * scale);
-            const ImVec2 origin = ImGui::GetCursorScreenPos();
-            ImGui::SetCursorScreenPos(ImVec2(origin.x + (avail.x - dispSize.x) * 0.5f,
-                                             origin.y + (avail.y - dispSize.y) * 0.5f));
-            const ImVec2 imgPos = ImGui::GetCursorScreenPos();
+            ImGui::SetCursorScreenPos(imgPos);
             ImGui::Image(mFrameTexture, dispSize);
 
             ImDrawList* dl = ImGui::GetWindowDrawList();
@@ -1656,7 +1668,7 @@ void App::DrawCommandList()
                             ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
                         {
                             SelectCommand(row, false);
-                            mHexEditor.GoTo(0x05C00000u + cmd.table_address);
+                            mHexEditor.GoTo(kVdp1VramBase + cmd.table_address);
                             mScrollVdp1TableToSelection = true;
                         }
                         if (doScroll && row == mSelectedCommand)
@@ -1768,13 +1780,6 @@ static void Checkerboard(ImVec2 topLeft, ImVec2 size, float cell)
 
 namespace
 {
-void BmpPutU16(std::vector<uint8_t>& v, uint16_t x) { v.push_back(x & 0xFF); v.push_back(x >> 8); }
-void BmpPutU32(std::vector<uint8_t>& v, uint32_t x)
-{
-    v.push_back(x & 0xFF); v.push_back((x >> 8) & 0xFF);
-    v.push_back((x >> 16) & 0xFF); v.push_back((x >> 24) & 0xFF);
-}
-
 // Assemble a Windows BMP. If paletteCount > 0: an 8-bpp indexed BMP with color table
 // 'palBGRA' (paletteCount*4 bytes, B,G,R,0) and 'pixels' = row-major top-down indices.
 // Otherwise: a 24-bpp BMP with 'pixels' = row-major top-down RGBA (4 bytes/pixel).
@@ -1793,19 +1798,19 @@ std::vector<uint8_t> BuildBmp(int w, int h, const std::vector<uint8_t>& pixels,
     std::vector<uint8_t> bmp;
     bmp.reserve(dataOff + imageSize);
     bmp.push_back('B'); bmp.push_back('M');                       // BITMAPFILEHEADER
-    BmpPutU32(bmp, dataOff + imageSize);
-    BmpPutU32(bmp, 0);
-    BmpPutU32(bmp, dataOff);
-    BmpPutU32(bmp, 40);                                           // BITMAPINFOHEADER
-    BmpPutU32(bmp, static_cast<uint32_t>(w));
-    BmpPutU32(bmp, static_cast<uint32_t>(h));
-    BmpPutU16(bmp, 1);
-    BmpPutU16(bmp, static_cast<uint16_t>(bpp));
-    BmpPutU32(bmp, 0);
-    BmpPutU32(bmp, imageSize);
-    BmpPutU32(bmp, 0); BmpPutU32(bmp, 0);
-    BmpPutU32(bmp, indexed ? static_cast<uint32_t>(paletteCount) : 0);
-    BmpPutU32(bmp, 0);
+    PushU32(bmp, dataOff + imageSize);
+    PushU32(bmp, 0);
+    PushU32(bmp, dataOff);
+    PushU32(bmp, 40);                                            // BITMAPINFOHEADER
+    PushU32(bmp, static_cast<uint32_t>(w));
+    PushU32(bmp, static_cast<uint32_t>(h));
+    PushU16(bmp, 1);
+    PushU16(bmp, static_cast<uint16_t>(bpp));
+    PushU32(bmp, 0);
+    PushU32(bmp, imageSize);
+    PushU32(bmp, 0); PushU32(bmp, 0);
+    PushU32(bmp, indexed ? static_cast<uint32_t>(paletteCount) : 0);
+    PushU32(bmp, 0);
     if (indexed) bmp.insert(bmp.end(), palBGRA, palBGRA + tableBytes);
 
     for (int y = h - 1; y >= 0; --y)                             // bottom-up rows
@@ -1872,25 +1877,16 @@ void App::DrawTextureViewer(IPlatform& platform)
                 ImGui::SameLine();
                 if (ImGui::Button("Export..."))
                 {
-                    ExportTexture(platform, cmd, ref, w, h);
+                    ExportTexture(platform, cmd, w, h);
                 }
 
                 // Aspect-fit the texture into the remaining region, centered over a
                 // checkerboard — same letterbox behavior as the VDP Output panel.
                 const ImVec2 avail = ImGui::GetContentRegionAvail();
                 float scale = 1.0f;
-                if (w > 0 && h > 0)
-                {
-                    const float sx = avail.x / static_cast<float>(w);
-                    const float sy = avail.y / static_cast<float>(h);
-                    scale = sx < sy ? sx : sy;
-                    if (scale <= 0.0f) scale = 1.0f;
-                }
+                const ImVec2 pos = AspectFit(avail, w, h, scale);
                 const ImVec2 dispSize(w * scale, h * scale);
-                const ImVec2 origin = ImGui::GetCursorScreenPos();
-                ImGui::SetCursorScreenPos(ImVec2(origin.x + (avail.x - dispSize.x) * 0.5f,
-                                                 origin.y + (avail.y - dispSize.y) * 0.5f));
-                const ImVec2 pos = ImGui::GetCursorScreenPos();
+                ImGui::SetCursorScreenPos(pos);
                 Checkerboard(pos, dispSize, 8.0f);
                 ImGui::Image(mTexTexture, dispSize);
             }
@@ -1903,10 +1899,8 @@ void App::DrawTextureViewer(IPlatform& platform)
     ImGui::End();
 }
 
-void App::ExportTexture(IPlatform& platform, const se_command& cmd,
-                        const se_texture_ref& ref, int w, int h)
+void App::ExportTexture(IPlatform& platform, const se_command& cmd, int w, int h)
 {
-    (void)ref;
     if (w <= 0 || h <= 0 || mTexBuffer.size() < static_cast<size_t>(w) * h * 4)
     {
         return;   // nothing decoded to export
@@ -1915,18 +1909,15 @@ void App::ExportTexture(IPlatform& platform, const se_command& cmd,
     char name[80];
     std::vector<uint8_t> bmp;
 
-    // Resolve the palette for paletted modes; RGB555 exports as a 24-bit BMP.
     se_palette pal = {};
-    se_result pr = SE_ERR_UNSUPPORTED;
-    if (cmd.color_mode == SE_COLOR_LUT_16)
-        pr = se_decode_palette(mContext, cmd.clut_address, &pal);
-    else if (cmd.color_mode != SE_COLOR_RGB555)
-        pr = se_decode_bank_palette(mContext, cmd.palette_bank, cmd.color_mode, &pal);
-
-    if (pr == SE_OK && pal.count > 0)
+    if (PaletteOf(cmd, &pal) == SE_OK && pal.count > 0)
     {
-        // BMP color table (BGRA) + a reverse map from the decoded RGB back to its
-        // palette index, so the exported BMP keeps the game's own palette.
+        // Keep the game's own palette: BMP color table (BGRA) + a reverse map from the
+        // decoded RGBA back to its palette index. The core only decodes to RGBA today
+        // (no indexed output), so we reconstruct indices by exact RGBA match. Keying on
+        // RGBA (not just RGB) keeps transparent/opaque duplicates distinct; if a palette
+        // still repeats a colour, the first index wins and a miss falls back to 0.
+        // TODO: a core indexed-decode entry point would make this exact and lossless.
         std::vector<uint8_t> table(static_cast<size_t>(pal.count) * 4);
         std::unordered_map<uint32_t, uint8_t> toIndex;
         toIndex.reserve(pal.count * 2);
@@ -1935,16 +1926,18 @@ void App::ExportTexture(IPlatform& platform, const se_command& cmd,
             const se_palette_entry& e = pal.entries[i];
             table[i * 4 + 0] = e.b; table[i * 4 + 1] = e.g;
             table[i * 4 + 2] = e.r; table[i * 4 + 3] = 0;
-            const uint32_t key = (static_cast<uint32_t>(e.r) << 16) |
-                                 (static_cast<uint32_t>(e.g) << 8) | e.b;
+            const uint32_t key = (static_cast<uint32_t>(e.r) << 24) |
+                                 (static_cast<uint32_t>(e.g) << 16) |
+                                 (static_cast<uint32_t>(e.b) << 8) | e.a;
             toIndex.emplace(key, static_cast<uint8_t>(i));
         }
         std::vector<uint8_t> idx(static_cast<size_t>(w) * h);
         for (size_t i = 0; i < idx.size(); ++i)
         {
             const uint8_t* p = &mTexBuffer[i * 4];
-            const uint32_t key = (static_cast<uint32_t>(p[0]) << 16) |
-                                 (static_cast<uint32_t>(p[1]) << 8) | p[2];
+            const uint32_t key = (static_cast<uint32_t>(p[0]) << 24) |
+                                 (static_cast<uint32_t>(p[1]) << 16) |
+                                 (static_cast<uint32_t>(p[2]) << 8) | p[3];
             const auto it = toIndex.find(key);
             idx[i] = (it != toIndex.end()) ? it->second : 0;
         }
@@ -1960,6 +1953,18 @@ void App::ExportTexture(IPlatform& platform, const se_command& cmd,
     }
 
     platform.SaveFile(name, bmp.data(), bmp.size());
+}
+
+// Resolve a command's palette (CLUT for LUT-16, else the CRAM sub-palette for bank
+// modes). Returns SE_ERR_UNSUPPORTED for direct RGB555 (no palette). Shared by the
+// Palette Viewer and texture export.
+se_result App::PaletteOf(const se_command& cmd, se_palette* pal)
+{
+    if (cmd.color_mode == SE_COLOR_RGB555)
+        return SE_ERR_UNSUPPORTED;
+    if (cmd.color_mode == SE_COLOR_LUT_16)
+        return se_decode_palette(mContext, cmd.clut_address, pal);
+    return se_decode_bank_palette(mContext, cmd.palette_bank, cmd.color_mode, pal);
 }
 
 // Draw a grid of palette swatches with per-swatch hover (index / raw / RGB).
@@ -2026,24 +2031,14 @@ void App::DrawPaletteViewer()
         else
         {
             se_palette pal = {};
-            se_result r;
-            if (cmd.color_mode == SE_COLOR_LUT_16)
+            const se_result r = PaletteOf(cmd, &pal);
+            if (r == SE_OK)
             {
-                r = se_decode_palette(mContext, cmd.clut_address, &pal);
-                if (r == SE_OK)
-                {
+                if (cmd.color_mode == SE_COLOR_LUT_16)
                     ImGui::Text("CLUT @0x%06X  —  %u entries", pal.clut_address, pal.count);
-                }
-            }
-            else
-            {
-                // Color-bank modes read a sub-palette of CRAM (16/64/128/256 entries).
-                r = se_decode_bank_palette(mContext, cmd.palette_bank, cmd.color_mode, &pal);
-                if (r == SE_OK)
-                {
+                else
                     ImGui::Text("CRAM bank 0x%X  —  %s  —  %u entries",
                                 cmd.palette_bank, ColorModeName(cmd.color_mode), pal.count);
-                }
             }
 
             if (r == SE_OK)
@@ -2642,7 +2637,7 @@ void App::DrawVdp1Table()
                             ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
                         {
                             SelectCommand(row, false);
-                            mHexEditor.GoTo(0x05C00000u + cmd.table_address);
+                            mHexEditor.GoTo(kVdp1VramBase + cmd.table_address);
                             mScrollCommandListToSelection = true;
                         }
                         if (doScroll && row == mSelectedCommand)
@@ -2718,15 +2713,15 @@ void App::DrawWorkRam()
                             }
                             line[p] = '\0';
                             // Clickable row: double-click jumps the Hex Editor to this
-                            // address. The "##" keeps each row's ID unique.
-                            char sel[160];
-                            std::snprintf(sel, sizeof(sel), "%s##wr%d", line, r);
-                            ImGui::Selectable(sel);
+                            // address. PushID keeps each row's ID unique with no copy.
+                            ImGui::PushID(r);
+                            ImGui::Selectable(line);
                             if (ImGui::IsItemHovered() &&
                                 ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
                             {
                                 mHexEditor.GoTo(b.base + static_cast<uint32_t>(r * cols));
                             }
+                            ImGui::PopID();
                         }
                     }
                     ImGui::EndChild();

@@ -77,8 +77,9 @@ private:
     void DrawTextureViewer(IPlatform& platform);
     // Export the currently-shown texture as a .bmp (paletted BMP with the game's
     // palette when the texture is paletted, else 24-bit) via the platform save dialog.
-    void ExportTexture(IPlatform& platform, const se_command& cmd,
-                       const se_texture_ref& ref, int w, int h);
+    void ExportTexture(IPlatform& platform, const se_command& cmd, int w, int h);
+    // Resolve a command's palette (CLUT or CRAM bank); SE_ERR_UNSUPPORTED for RGB555.
+    se_result PaletteOf(const se_command& cmd, se_palette* pal);
     void DrawPaletteViewer();
     void DrawPaletteSwatches(const se_palette& pal);
     void DrawVramMap();
