@@ -240,16 +240,35 @@ browser tunnel needs your relay.
   always reads a whole, consistent frame.
 
 ## Window-title mark
-`apply.py` also appends `(SaturnExplorer Enabled. <SE ver> / Yabause <VERSION>)` to the
-window title so a tapped build is obvious. This lives in the **Qt port**
-(`src/qt/main.cpp`, right after Yabause sets the title from its app name), using the
-shared `SeExportTitleSuffix()` helper in `se_export.c`.
+`apply.py` also appends `(SaturnExplorer Enabled. <SE ver> / <Emu> <VERSION>)` to the
+window title so a tapped build is obvious. This lives in the **Qt frontend**
+(`src/qt/main.cpp`, right after the emulator sets the title from its app name), using
+the shared `SeExportTitleSuffix()` helper in `se_export.c`.
 
 **On Windows this is already your frontend:** modern Yabause has no separate native
 Win32 GUI — the official Windows binaries are the Qt build — so the standard `apply.py`
-run marks the title with no extra steps. The mark is skipped gracefully only on ports
-that genuinely lack `qt/main.cpp` (GTK, Cocoa, libretro, etc.); for one of those, add
-the one line wherever that port sets its window caption:
+run marks the title with no extra steps.
+
+### Forks: Yabause, Yaba Sanshiro, Kronos
+The mark works unchanged across the Qt-lineage forks — they all set the title with
+`QtYabause::mainWindow()->setWindowTitle( app.applicationName() )`, which is the anchor
+`apply.py` hooks. The `<Emu>` name in the suffix is **auto-detected** from each build's
+`setApplicationName( QString( "<Name> v%1…" ) )` literal, so the title reads correctly
+per fork with no per-fork config:
+
+| Fork | Detected name | Resulting title (example) |
+|------|---------------|---------------------------|
+| Yabause | `Yabause` | `Yabause v0.9.15 (SaturnExplorer Enabled. 1.0 / Yabause 0.9.15)` |
+| Yaba Sanshiro | `Yaba Sanshiro 2` | `Yaba Sanshiro 2 v… (SaturnExplorer Enabled. 1.0 / Yaba Sanshiro 2 …)` |
+| Kronos | `Kronos` | `Kronos v… (SaturnExplorer Enabled. 1.0 / Kronos …)` |
+
+If a fork uses an app-name string the detector doesn't recognise, force the name:
+```
+python3 apply.py /path/to/kronos --emu-name=Kronos
+```
+The mark is skipped gracefully only on frontends that genuinely lack `qt/main.cpp`
+(GTK, Cocoa, libretro, etc.); for one of those, add the one line wherever that port
+sets its window caption:
 ```c
 extern "C" const char* SeExportTitleSuffix(const char*, const char*);  /* at file scope */
 /* right after the port sets its title, append: */  SeExportTitleSuffix("Yabause", VERSION)

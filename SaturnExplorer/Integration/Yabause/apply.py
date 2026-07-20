@@ -8,10 +8,15 @@ every emulator's patcher. This script drops them into a Yabause tree and inserts
 Yabause-specific hook calls, so your fork stays a clean vanilla Yabause + a handful
 of clearly-marked edits.
 
+Works on upstream Yabause and its Qt-lineage forks — Yaba Sanshiro and Kronos —
+which share the same frontend and hook sites. The window-title mark auto-detects
+the fork name from qt/main.cpp; --emu-name overrides it.
+
 Usage:
-    python3 apply.py /path/to/yabause            # apply (or re-apply)
-    python3 apply.py /path/to/yabause --check     # report status, change nothing
-    python3 apply.py /path/to/yabause --revert    # remove the edits + copied files
+    python3 apply.py /path/to/yabause              # apply (or re-apply)
+    python3 apply.py /path/to/yabause --check       # report status, change nothing
+    python3 apply.py /path/to/yabause --revert      # remove the edits + copied files
+    python3 apply.py /path/to/kronos --emu-name=Kronos   # force the title-mark name
 
 It is idempotent: every edit is fenced with `SE_EXPORT` markers, so running it
 again is a no-op, and --revert cleanly removes them. If an anchor can't be found
@@ -161,6 +166,8 @@ EDITS = [
      'extern "C" const char* SeExportTitleSuffix(const char*, const char*);\n',
      'SeExportTitleSuffix(const char*'),
 
+    # __SE_EMU_NAME__ is substituted per-file with the detected fork name
+    # (Yabause / Yaba Sanshiro 2 / Kronos), so this single edit marks every fork.
     ("qt/main.cpp",
      r'(setWindowTitle\(\s*app\.applicationName\(\)\s*\);\s*\n)',
      "after_group1",
@@ -169,8 +176,8 @@ EDITS = [
      "      calls ->setWindowTitle() on it), so no extra QWidget include is needed. */\n"
      "   { auto *se_w = QtYabause::mainWindow();\n"
      "     se_w->setWindowTitle( se_w->windowTitle() + \" \" +\n"
-     "        QString::fromUtf8( SeExportTitleSuffix(\"Yabause\", VERSION) ) ); }\n",
-     'SeExportTitleSuffix("Yabause"'),
+     "        QString::fromUtf8( SeExportTitleSuffix(\"__SE_EMU_NAME__\", VERSION) ) ); }\n",
+     'SeExportTitleSuffix("'),
 ]
 
 # A fenced SE_EXPORT block (for update-in-place when a hook's content changes).
@@ -185,6 +192,21 @@ def find_src(root):
         if os.path.isfile(os.path.join(cand, "yabause.c")):
             return cand
     return None
+
+
+# The Qt frontend shared by upstream Yabause and its forks (Yaba Sanshiro, Kronos)
+# names its window from a `setApplicationName( QString( "<Name> v%1..." ) )` literal.
+# Detecting <Name> from that string lets one title edit mark every fork correctly
+# ("Yabause", "Yaba Sanshiro 2", "Kronos", ...) with no per-fork copy — the emulator
+# revision the user asked for still comes from the VERSION macro at compile time.
+EMU_NAME_RE = re.compile(r'setApplicationName\(\s*QString\(\s*"(.+?)\s+v%1')
+
+
+def detect_emu_name(text, override=None):
+    if override:
+        return override
+    m = EMU_NAME_RE.search(text)
+    return m.group(1) if m else "Yabause"
 
 
 def already(text):
@@ -213,7 +235,7 @@ def apply_edit(text, anchor, mode, code):
     raise ValueError(mode)
 
 
-def process_file(src_dir, fname, do_write):
+def process_file(src_dir, fname, do_write, emu_name=None):
     path = os.path.join(src_dir, fname)
     if not os.path.isfile(path):
         return [f"MISSING  {fname} (not found in {src_dir})"]
@@ -222,6 +244,9 @@ def process_file(src_dir, fname, do_write):
     for f, anchor, mode, code, key in EDITS:
         if f != fname:
             continue
+        if "__SE_EMU_NAME__" in code:
+            name = detect_emu_name(text, emu_name)
+            code = code.replace("__SE_EMU_NAME__", name)
         tag = code.strip().splitlines()[0]
         new_block = fence(code.rstrip("\n"))
         # If a fenced block for this hook already exists (matched by its stable
@@ -314,17 +339,23 @@ def main():
     if not do_write:
         print("(--check: reporting only, no files changed)\n")
 
+    # Optional override for the fork name stamped into the window title, e.g.
+    # --emu-name="Kronos". Omit to auto-detect from qt/main.cpp's setApplicationName.
+    emu_name = next((f.split("=", 1)[1] for f in flags if f.startswith("--emu-name=")), None)
+
     notes = []
     if do_write:
         notes += copy_sources(src_dir, do_write)
     for fname in ("yabause.c", "vdp2.c", "vidsoft.c"):
         notes.append(fname + ":")
         notes += process_file(src_dir, fname, do_write)
-    # qt/main.cpp is the Qt port's window title — optional (a non-Qt build won't have
-    # it), so skip it gracefully rather than reporting a fatal MISSING.
+    # qt/main.cpp is the Qt frontend's window title — shared by upstream Yabause and
+    # its forks (Yaba Sanshiro, Kronos). Optional (a non-Qt port won't have it), so
+    # skip gracefully rather than reporting a fatal MISSING. The fork name is
+    # auto-detected (or --emu-name overrides).
     notes.append("qt/main.cpp:")
     if os.path.isfile(os.path.join(src_dir, "qt", "main.cpp")):
-        notes += process_file(src_dir, "qt/main.cpp", do_write)
+        notes += process_file(src_dir, "qt/main.cpp", do_write, emu_name)
     else:
         notes.append("  (not found — window-title mark skipped; non-Qt port?)")
     notes.append("CMakeLists.txt:")
