@@ -65,6 +65,10 @@ def fork_url(name):
 EMULATORS = {
     "mednafen": {
         "fork_name": "mednafen-git",
+        # STANDARD (standalone) Mednafen, NOT the Beetle Saturn libretro core. The
+        # libretro-mirrors org just hosts a *git mirror* of Mednafen's source (whose
+        # official repo is Mercurial, so not git-cloneable) — it is the standalone
+        # emulator we patch via ss.cpp's Emulate(), not beetle-saturn-libretro.
         "upstream":  "https://github.com/libretro-mirrors/mednafen-git.git",
         "rev":  "master",
         "patch_subdir": os.path.join("Integration", "Mednafen", "apply.py"),

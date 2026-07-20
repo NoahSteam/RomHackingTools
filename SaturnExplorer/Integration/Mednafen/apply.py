@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """
-apply.py — wire the Saturn Explorer live-tap into a Mednafen (Beetle Saturn) tree.
+apply.py — wire the Saturn Explorer live-tap into a standalone Mednafen tree.
+
+This targets STANDARD Mednafen (the standalone emulator: `Emulate()` in ss.cpp,
+autotools `./configure --enable-debugger && make`) — NOT the Beetle Saturn libretro
+core, which wraps the same `ss/` code behind `retro_run` and a different build. See
+DISTRIBUTION.md ("Mednafen vs. Beetle Saturn").
 
 Mednafen keeps the memory Saturn Explorer wants as *file-scope static* (VDP2
 VRAM/CRAM/RawRegs, WorkRAML/H, the VDP1 registers), unreachable by `extern` from a

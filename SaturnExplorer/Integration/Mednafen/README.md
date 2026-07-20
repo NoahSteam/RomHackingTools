@@ -1,8 +1,15 @@
-# Saturn Explorer live tap for Mednafen (Beetle Saturn)
+# Saturn Explorer live tap for standalone Mednafen
+
+Targets **standard Mednafen** (the standalone emulator) — it hooks `Emulate()` in
+`ss.cpp` and builds with autotools (`./configure --enable-debugger && make`). It is
+**not** the Beetle Saturn libretro core, which wraps the same `ss/` code behind
+`retro_run` and a different build; see [`../DISTRIBUTION.md`](../DISTRIBUTION.md)
+("Mednafen vs. Beetle Saturn") for why that split matters.
 
 **Status: patcher verified against a real Mednafen build; data path proven in-repo.**
 Symbol names, storage layouts, and hook sites were read from the Mednafen `ss` source
-([libretro-mirrors/mednafen-git `src/ss`](https://github.com/libretro-mirrors/mednafen-git/tree/master/src/ss)),
+([libretro-mirrors/mednafen-git `src/ss`](https://github.com/libretro-mirrors/mednafen-git/tree/master/src/ss)
+— a git mirror of standard Mednafen's Mercurial source, not Beetle),
 and `apply.py` was **run against a real Mednafen checkout**: all six code anchors
 match, the build wiring lands in `src/ss/Makefile.am`, and the patched tree
 **compiles against real Mednafen headers** — `vdp1.o`/`vdp2.o`/`ss.o` (the injected

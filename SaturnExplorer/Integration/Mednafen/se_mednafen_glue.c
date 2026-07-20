@@ -1,9 +1,15 @@
-/* Saturn Explorer — Mednafen (Beetle Saturn) live-tap glue.  *** TEMPLATE ***
+/* Saturn Explorer — standalone Mednafen live-tap glue.  *** TEMPLATE ***
+ *
+ * Targets STANDARD Mednafen (the standalone emulator), NOT the Beetle Saturn
+ * libretro core — they share the ss/ Saturn code but are different build targets
+ * (this hooks ss.cpp's Emulate(); Beetle would hook retro_run). See DISTRIBUTION.md.
  *
  * This is the emulator-specific half of the live tap. The portable half is
  * ../Common/se_export.c (unchanged). Drop this + se_export.{c,h} + SeLiveProtocol.h
  * into Mednafen's ss core, then wire the calls at the bottom into ss.cpp's frame
- * loop. Symbol names were mapped against libretro-mirrors/mednafen-git src/ss (see
+ * loop. Symbol names were mapped against libretro-mirrors/mednafen-git src/ss — a git
+ * mirror of standard Mednafen's source (Mednafen's own repo is Mercurial), NOT Beetle
+ * (see
  * README.md); the injected ss accessors (apply.py) carry any remaining build-specific
  * TODO(mednafen) confirm points.
  *
