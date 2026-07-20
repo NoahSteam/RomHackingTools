@@ -665,8 +665,8 @@ void App::BuildUI(IPlatform& platform)
     const ImGuiID dockId = ImGui::DockSpaceOverViewport(
         0, ImGui::GetMainViewport(), ImGuiDockNodeFlags_PassthruCentralNode);
 
-    // Arrange the panels into the concept's three-column layout the first time
-    // (unless the user already has a saved layout in imgui.ini).
+    // Arrange the panels into the default layout the first time (unless the user
+    // already has a saved layout in imgui.ini), or whenever "Reset Layout" is picked.
     if (!mbLayoutBuilt)
     {
         mbLayoutBuilt = true;
@@ -675,6 +675,11 @@ void App::BuildUI(IPlatform& platform)
         {
             BuildDefaultLayout(dockId);
         }
+    }
+    if (mForceRebuildLayout)
+    {
+        mForceRebuildLayout = false;
+        BuildDefaultLayout(dockId);   // snap back to the default arrangement
     }
 
     // Left column. Each panel is gated by its visibility flag (toolbar "Windows"
@@ -715,69 +720,80 @@ void App::BuildUI(IPlatform& platform)
     // contextSwap restores the live context here as it goes out of scope.
 }
 
-// Programmatic default dock layout matching the concept: a narrow left column,
-// a wide center, and a right inspector column. Runs once on first launch (or
-// after the layout is reset); the user's own rearrangements are saved by ImGui
-// to imgui.ini and take precedence on later runs.
+// Programmatic default dock layout: a left inspector column (Texture/Palette live
+// here now), a wide center (views + command list), a slim right column (Selected
+// Object + Hex Editor), and a full-width debugger strip along the bottom (Watch +
+// SH-2 Assembly). Runs once on first launch or after "Reset Layout"; the user's own
+// rearrangements are saved by ImGui to imgui.ini and take precedence on later runs.
+//
+// NB: each docked title string must exactly match the panel's ImGui::Begin(...)
+// title or the window silently floats. Hidden-by-default panels (Archive Explorer,
+// Search ROM / Files, References) are docked next to a visible neighbour so they tab
+// in when re-enabled from the Windows menu.
 void App::BuildDefaultLayout(unsigned int dockspaceId)
 {
     ImGui::DockBuilderRemoveNode(dockspaceId);
     ImGui::DockBuilderAddNode(dockspaceId, ImGuiDockNodeFlags_DockSpace);
     ImGui::DockBuilderSetNodeSize(dockspaceId, ImGui::GetMainViewport()->WorkSize);
 
-    ImGuiID centerRight = dockspaceId;
-    const ImGuiID left = ImGui::DockBuilderSplitNode(centerRight, ImGuiDir_Left, 0.20f, nullptr, &centerRight);
-    ImGuiID center = centerRight;
+    // Carve a full-width debugger strip off the bottom first, then split the top.
+    ImGuiID top = dockspaceId;
+    const ImGuiID bottom = ImGui::DockBuilderSplitNode(top, ImGuiDir_Down, 0.24f, nullptr, &top);
+
+    ImGuiID center = top;
+    const ImGuiID left  = ImGui::DockBuilderSplitNode(center, ImGuiDir_Left, 0.24f, nullptr, &center);
     const ImGuiID right = ImGui::DockBuilderSplitNode(center, ImGuiDir_Right, 0.28f, nullptr, &center);
 
-    // Left column, top to bottom.
+    // Left inspector, top to bottom: layers, VRAM map, then the texture/palette pair.
     ImGuiID leftRest = left;
-    const ImGuiID leftTop  = ImGui::DockBuilderSplitNode(leftRest, ImGuiDir_Up, 0.30f, nullptr, &leftRest);
-    const ImGuiID leftVram = ImGui::DockBuilderSplitNode(leftRest, ImGuiDir_Up, 0.35f, nullptr, &leftRest);
-    const ImGuiID leftArch = ImGui::DockBuilderSplitNode(leftRest, ImGuiDir_Up, 0.50f, nullptr, &leftRest);
-    const ImGuiID leftSearch = leftRest;
+    const ImGuiID lLayers = ImGui::DockBuilderSplitNode(leftRest, ImGuiDir_Up, 0.20f, nullptr, &leftRest);
+    const ImGuiID lVram   = ImGui::DockBuilderSplitNode(leftRest, ImGuiDir_Up, 0.28f, nullptr, &leftRest);
+    const ImGuiID lTex    = ImGui::DockBuilderSplitNode(leftRest, ImGuiDir_Up, 0.50f, nullptr, &leftRest);
+    const ImGuiID lPal    = leftRest;
 
-    // Center column: output (top), command list (middle), tex/pal/refs (bottom).
+    // Center: view tabs (top) + command list (bottom).
     ImGuiID centerRest = center;
-    const ImGuiID centerTop = ImGui::DockBuilderSplitNode(centerRest, ImGuiDir_Up, 0.55f, nullptr, &centerRest);
-    const ImGuiID centerMid = ImGui::DockBuilderSplitNode(centerRest, ImGuiDir_Up, 0.45f, nullptr, &centerRest);
-    ImGuiID bottomRest = centerRest;
-    const ImGuiID cbTex = ImGui::DockBuilderSplitNode(bottomRest, ImGuiDir_Left, 0.34f, nullptr, &bottomRest);
-    const ImGuiID cbPal = ImGui::DockBuilderSplitNode(bottomRest, ImGuiDir_Left, 0.50f, nullptr, &bottomRest);
-    const ImGuiID cbRefs = bottomRest;
+    const ImGuiID cViews = ImGui::DockBuilderSplitNode(centerRest, ImGuiDir_Up, 0.62f, nullptr, &centerRest);
+    const ImGuiID cList  = centerRest;
 
-    // Right inspector column, top to bottom. Watch (rTex) + SH-2 Assembly (rPal)
-    // are the debugger focus, so they get the bulk of the height.
+    // Right: Selected Object (top) + Hex Editor (below).
     ImGuiID rightRest = right;
-    const ImGuiID rObj  = ImGui::DockBuilderSplitNode(rightRest, ImGuiDir_Up, 0.22f, nullptr, &rightRest);
-    const ImGuiID rTex  = ImGui::DockBuilderSplitNode(rightRest, ImGuiDir_Up, 0.42f, nullptr, &rightRest);
-    const ImGuiID rPal  = ImGui::DockBuilderSplitNode(rightRest, ImGuiDir_Up, 0.62f, nullptr, &rightRest);
-    const ImGuiID rMem  = rightRest;
+    const ImGuiID rObj = ImGui::DockBuilderSplitNode(rightRest, ImGuiDir_Up, 0.40f, nullptr, &rightRest);
+    const ImGuiID rHex = rightRest;
 
-    ImGui::DockBuilderDockWindow("Layer Controls", leftTop);
-    ImGui::DockBuilderDockWindow("VRAM Map (VDP1)", leftVram);
-    ImGui::DockBuilderDockWindow("Archive Explorer", leftArch);
-    ImGui::DockBuilderDockWindow("Search ROM / Files", leftSearch);
+    // Bottom strip: Watch | SH-2 Assembly, side by side.
+    ImGuiID bottomRest = bottom;
+    const ImGuiID bWatch = ImGui::DockBuilderSplitNode(bottomRest, ImGuiDir_Left, 0.5f, nullptr, &bottomRest);
+    const ImGuiID bAsm   = bottomRest;
 
-    // These share centerTop, so they appear as tabs (VDP Output | VDP1 Table | ...).
-    ImGui::DockBuilderDockWindow("VDP Output", centerTop);
-    ImGui::DockBuilderDockWindow("VDP1 Framebuffer", centerTop);
-    ImGui::DockBuilderDockWindow("VDP1 Table", centerTop);
-    ImGui::DockBuilderDockWindow("VDP2 Table", centerTop);
-    ImGui::DockBuilderDockWindow("Color RAM", centerTop);
-    ImGui::DockBuilderDockWindow("Work RAM", centerTop);
-    ImGui::DockBuilderDockWindow("Palette RAM", centerTop);
-    ImGui::DockBuilderDockWindow("Registers", centerTop);
-    ImGui::DockBuilderDockWindow("3D View", centerTop);
-    ImGui::DockBuilderDockWindow("VDP1 Command List", centerMid);
-    ImGui::DockBuilderDockWindow("Texture Viewer", cbTex);
-    ImGui::DockBuilderDockWindow("Palette Viewer", cbPal);
-    ImGui::DockBuilderDockWindow("References", cbRefs);
+    // Left inspector.
+    ImGui::DockBuilderDockWindow("Layer Controls", lLayers);
+    ImGui::DockBuilderDockWindow("VRAM Map (VDP1)", lVram);
+    ImGui::DockBuilderDockWindow("Texture Viewer", lTex);
+    ImGui::DockBuilderDockWindow("Archive Explorer", lTex);      // hidden default; tabs w/ Texture
+    ImGui::DockBuilderDockWindow("Palette Viewer", lPal);
+    ImGui::DockBuilderDockWindow("Search ROM / Files", lPal);    // hidden default; tabs w/ Palette
+    ImGui::DockBuilderDockWindow("References", lPal);            // hidden default; tabs w/ Palette
 
+    // Center: the view group shares cViews, so they appear as tabs.
+    ImGui::DockBuilderDockWindow("VDP Output", cViews);
+    ImGui::DockBuilderDockWindow("VDP1 Framebuffer", cViews);
+    ImGui::DockBuilderDockWindow("3D View", cViews);
+    ImGui::DockBuilderDockWindow("VDP1 Table", cViews);
+    ImGui::DockBuilderDockWindow("VDP2 Table", cViews);
+    ImGui::DockBuilderDockWindow("Color RAM", cViews);
+    ImGui::DockBuilderDockWindow("Work RAM", cViews);
+    ImGui::DockBuilderDockWindow("Palette RAM", cViews);
+    ImGui::DockBuilderDockWindow("Registers", cViews);
+    ImGui::DockBuilderDockWindow("VDP1 Command List", cList);
+
+    // Right inspector.
     ImGui::DockBuilderDockWindow("Selected Object", rObj);
-    ImGui::DockBuilderDockWindow("Watch", rTex);
-    ImGui::DockBuilderDockWindow("SH-2 Assembly", rPal);
-    ImGui::DockBuilderDockWindow("Hex Editor", rMem);
+    ImGui::DockBuilderDockWindow("Hex Editor", rHex);
+
+    // Bottom debugger strip.
+    ImGui::DockBuilderDockWindow("Watch", bWatch);
+    ImGui::DockBuilderDockWindow("SH-2 Assembly", bAsm);
 
     ImGui::DockBuilderFinish(dockspaceId);
 }
@@ -999,6 +1015,12 @@ void App::DrawWindowsMenu()
             {"SH-2 Assembly",     &mPanels.assembly},
             {"Hex Editor",        &mPanels.hexEditor},
         };
+        if (ImGui::MenuItem("Reset Layout"))
+        {
+            mForceRebuildLayout = true;   // rebuild the default dock arrangement next frame
+        }
+        ImGui::SetItemTooltip("Restore the default panel arrangement");
+        ImGui::Separator();
         if (ImGui::MenuItem("Show All"))
         {
             for (const Item& it : items) *it.flag = true;

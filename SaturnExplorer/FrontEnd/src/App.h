@@ -163,11 +163,13 @@ private:
     // re-enabled). Session-only state — these reset to visible each launch.
     struct Panels
     {
-        bool layerControls = true, vramMap = true, archiveExplorer = true, searchRom = true;
+        // Archive Explorer + Search ROM/Files are M6 placeholders, and References is
+        // niche — hidden by default (re-enable from the Windows menu).
+        bool layerControls = true, vramMap = true, archiveExplorer = false, searchRom = false;
         bool vdpOutput = true, vdp1Framebuffer = true, worldView = true;
         bool vdp1Table = true, vdp2Table = true, colorRam = true, workRam = true;
         bool paletteRam = true, registers = true, commandList = true;
-        bool textureViewer = true, paletteViewer = true, references = true;
+        bool textureViewer = true, paletteViewer = true, references = false;
         bool selectedObject = true, watch = true, assembly = true, hexEditor = true;
     };
     Panels           mPanels;
@@ -175,6 +177,7 @@ private:
     int              mSelectedCommand = -1;   // primary selection (detail panels)
     std::vector<int> mSelection;              // all selected command indices
     bool             mbLayoutBuilt = false;   // default dock layout applied once
+    bool             mForceRebuildLayout = false;  // "Reset Layout" -> rebuild the default
     // Set when an external panel (VDP Output / VRAM Map / References) changes the
     // selection, so the Command List scrolls its highlighted row into view once.
     bool             mScrollCommandListToSelection = false;
