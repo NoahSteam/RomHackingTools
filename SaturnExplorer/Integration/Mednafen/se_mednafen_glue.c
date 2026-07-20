@@ -19,7 +19,7 @@
 #include <stdint.h>
 
 /* ---- Mednafen ss symbols this glue reads. Confirm names against your source
- *      (mednafen/src/ss/*). These are the likely targets; adjust as needed. ---- */
+ *      (under mednafen/src/ss). These are the likely targets; adjust as needed. -- */
 #if 0  /* TODO(mednafen): remove the guard once wired against real ss headers. */
 extern uint16_t VDP1_VRAM[0x40000 / 2];      /* VDP1::VRAM  — 512 KiB, host order  */
 extern uint16_t VDP2_VRAM[0x80000 / 2];      /* VDP2::VRAM  — 512 KiB, host order  */
@@ -75,15 +75,18 @@ static void BuildYabauseVdp2Struct(uint8_t out288[288], const uint16_t rawRegs[0
     }
 }
 
-/* Assemble the hardware-offset, big-endian VDP1 register image (0x18 bytes) the
- * wire expects. Mednafen exposes VDP1's control/status registers individually
- * (TVMR, FBCR, PTMR, EWDR, EWLR, EWRR, EDSR, LOPR) — write each at its hw offset,
- * big-endian; ENDR/COPR/MODR are write-only/computed and stay zero. See
- * BuildVdp1RegImageFromMednafen in SavestateDriver.cpp for the exact field→offset map. */
-static void BuildVdp1RegImage(uint8_t out24[0x18])
+/* Fill the 11-u16 host-order Yabause `Vdp1` struct that SeExportSnapshot expects
+ * (fields TVMR,FBCR,PTMR,EWDR,EWLR,EWRR,ENDR,EDSR,LOPR,COPR,MODR). se_export's
+ * SeBuildVdp1Image places each field at its hardware offset (with the 0x0E gap) and
+ * converts to big-endian, so the glue just supplies the raw register values and
+ * reuses the shipped image builder — no duplicate offset math, and no edit to the
+ * copied se_export.c. Mednafen exposes VDP1's control/status registers individually;
+ * ENDR/COPR/MODR are write-only/computed on real hardware, so leave them zero. */
+static void BuildVdp1Struct(uint16_t out11[11])
 {
-    memset(out24, 0, 0x18);
-    /* TODO(mednafen): out24[hw]=reg>>8; out24[hw+1]=reg&0xFF; for each VDP1 reg. */
+    memset(out11, 0, 11 * sizeof(uint16_t));
+    /* TODO(mednafen): out11[0]=TVMR; [1]=FBCR; [2]=PTMR; [3]=EWDR; [4]=EWLR;
+     *   [5]=EWRR; [7]=EDSR; [8]=LOPR;   (ENDR[6], COPR[9], MODR[10] stay 0). */
 }
 
 /* Pack one Mednafen SH-2 core's registers into the wire's sh2regs_struct order
@@ -105,14 +108,15 @@ static void PackSh2(uint32_t out23[23] /*, const SH7095* cpu */)
 void SeMednafenSnapshot(void)
 {
     static uint8_t v1[SE_LIVE_VDP1_VRAM_LEN], v2[SE_LIVE_VDP2_VRAM_LEN];
-    static uint8_t vs[SE_LIVE_VDP2_STRUCT_LEN], vr[SE_LIVE_VDP1_REGS_LEN];
+    static uint8_t vs[SE_LIVE_VDP2_STRUCT_LEN];
+    static uint16_t vdp1[11];
     static uint32_t msh2[23], ssh2[23];
 
 #if 0  /* TODO(mednafen): enable once the extern block is wired. */
     SwapU16ToBE(v1, (const uint8_t*)VDP1_VRAM, sizeof v1);   /* -> big-endian */
     SwapU16ToBE(v2, (const uint8_t*)VDP2_VRAM, sizeof v2);
     BuildYabauseVdp2Struct(vs, VDP2_RawRegs);
-    BuildVdp1RegImage(vr);
+    BuildVdp1Struct(vdp1);
     PackSh2(msh2 /*, &CPU[0] */);
     PackSh2(ssh2 /*, &CPU[1] */);
 
@@ -121,24 +125,17 @@ void SeMednafenSnapshot(void)
         v2,                          /* VDP2 VRAM  (big-endian)                 */
         (const void*)VDP2_CRAM,      /* CRAM       (host order — client normalizes) */
         vs,                          /* VDP2 regs  (raw Yabause struct)         */
-        NULL,                        /* VDP1 regs struct — we pass the image via vr:
-                                        se_export builds from a struct; if your build
-                                        wants the ready image instead, see note below */
+        vdp1,                        /* VDP1 regs  (11-u16 Yabause struct;      */
+                                     /*  se_export builds the hw-offset image)  */
         WorkRAML,                    /* low work RAM  (host order; verify)      */
         WorkRAMH,                    /* high work RAM (host order; verify)      */
         (const void*)SS_VDP1DisplayFB(), /* VDP1 framebuffer (RGB555)           */
         msh2, ssh2);                 /* SH-2 master + slave                     */
 #else
-    (void)v1; (void)v2; (void)vs; (void)vr; (void)msh2; (void)ssh2;
-    (void)SwapU16ToBE; (void)BuildYabauseVdp2Struct; (void)BuildVdp1RegImage; (void)PackSh2;
+    (void)v1; (void)v2; (void)vs; (void)vdp1; (void)msh2; (void)ssh2;
+    (void)SwapU16ToBE; (void)BuildYabauseVdp2Struct; (void)BuildVdp1Struct; (void)PackSh2;
 #endif
 }
-
-/* NOTE on VDP1 regs: se_export's SeExportSnapshot builds the VDP1 image from a
- * Yabause `Vdp1` *struct* (SeBuildVdp1Image). Mednafen has no such struct, so build
- * the image here (BuildVdp1RegImage) and, in the copy of se_export.c you ship with
- * Mednafen, pass `vr` through unchanged instead of rebuilding — or (cleaner) switch
- * VDP1 regs to the same pre-built-image convention proposed for VDP2 in the README. */
 
 /* ============================ debugger bridge (Tier 3) ==================== */
 /* Wire these to Mednafen's ss debug API, then register them once at init with
@@ -173,5 +170,5 @@ static void SeMdfnWriteByte(unsigned int address, unsigned char value)
  */
 void SeMednafenSuppressUnusedWarnings(void)
 {
-    (void)SeMdfnAddExecBp; (void)SeMdfnClearBps; (void)SeMdfnWriteByte; (void)SeMednafenSnapshot;
+    (void)SeMdfnAddExecBp; (void)SeMdfnClearBps; (void)SeMdfnWriteByte;
 }

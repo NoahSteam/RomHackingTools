@@ -37,7 +37,7 @@ these are the likely targets):
 | VDP2 VRAM (512K) | `Vdp2Ram` | `VDP2::VRAM` (vdp2.cpp) | **byte-swap to big-endian** |
 | CRAM (4K) | `Vdp2ColorRam` | `VDP2::CRAM` | host order — pass straight |
 | VDP2 regs (288) | `Vdp2Regs` struct | `RawRegs[0x100]` | layout differs — see "VDP2 registers" |
-| VDP1 regs (struct) | `Vdp1Regs` struct | VDP1 register fields | build the hw-offset image (see below) |
+| VDP1 regs (struct) | `Vdp1Regs` struct | VDP1 register fields | fill the 11-u16 `Vdp1` struct — `se_export` builds the hw-offset image (`BuildVdp1Struct` in the glue) |
 | Work RAM low (1M) | `LowWram` | `WorkRAML` (ss.cpp) | byte order host — **verify empirically** |
 | Work RAM high (1M) | `HighWram` | `WorkRAMH` | byte order host — **verify empirically** |
 | VDP1 framebuffer (256K) | `VIDSoftGetVdp1FrameBuffer()` | VDP1 displayed FB bank | RGB555 drawn output |

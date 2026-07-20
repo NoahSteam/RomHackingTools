@@ -1,16 +1,18 @@
-/* Saturn Explorer — Yabause memory-export server (drop-in module).
+/* Saturn Explorer — portable live-tap memory-export server (drop-in module).
  *
- * Add this file + se_export.c + SeLiveProtocol.h to yabause/src, then wire four
- * calls into Yabause (see README.md):
- *   - SeExportInit()      at the end of YabauseInit()
- *   - SeExportSnapshot(...) once per frame, from Vdp2VBlankOUT()
- *   - SeExportGateFrame() in the run loop, to honor pause / single-step
- *   - SeExportDeinit()    in YabauseDeInit()
+ * Emulator-agnostic: SeExportSnapshot takes raw pointers, so this module needs none
+ * of any emulator's headers or types. Each emulator's patcher (Integration/<emu>/)
+ * copies this file + se_export.c + SeLiveProtocol.h into that emulator's source and
+ * wires four calls into its frame loop:
+ *   - SeExportInit()       at emulator init
+ *   - SeExportSnapshot(...) once per frame, after the frame is drawn
+ *   - SeExportGateFrame()  in the run loop, to honor pause / single-step
+ *   - SeExportDeinit()     at emulator shutdown
+ * (For Yabause those hook sites are YabauseInit / Vdp2VBlankOUT / the run loop /
+ * YabauseDeInit — see Integration/Yabause/README.md.)
  *
  * It serves the current VDP1/VDP2 VRAM, CRAM, and VDP2 register struct to Saturn
  * Explorer's LiveDriver over a local socket (Unix domain socket / named pipe).
- * It is self-contained: SeExportSnapshot takes raw pointers, so this module needs
- * none of Yabause's headers or types.
  */
 #ifndef SE_EXPORT_H
 #define SE_EXPORT_H
