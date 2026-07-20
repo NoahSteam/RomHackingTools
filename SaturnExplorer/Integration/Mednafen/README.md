@@ -1,9 +1,12 @@
 # Saturn Explorer live tap for Mednafen (Beetle Saturn)
 
-**Status: scaffold.** This folder holds the plan, the Yabause→Mednafen symbol map,
-and a glue template (`se_mednafen_glue.c`). The remaining work needs Mednafen's `ss`
-Saturn-core source to confirm the real symbol names, hook sites, and byte orders —
-those spots are marked `TODO(mednafen)` in the glue.
+**Status: scaffold, symbols mapped.** This folder holds the plan, the
+Yabause→Mednafen symbol map, and a glue template (`se_mednafen_glue.c`). The symbol
+names, storage layouts, and hook sites below were read from the Mednafen `ss` source
+([libretro-mirrors/mednafen-git `src/ss`](https://github.com/libretro-mirrors/mednafen-git/tree/master/src/ss)).
+What remains is a Mednafen build to compile against: the injected **accessors** and
+the empirical **work-RAM byte order** (§"Byte order") are the last `TODO(mednafen)`
+spots.
 
 Saturn Explorer already **loads Mednafen savestates** (`.ncm`/`MDFNSVST`) statically —
 VDP1/VDP2 VRAM, both register files, and CRAM (see
@@ -28,32 +31,64 @@ Mednafen build. That glue is one screen of code; the template is here.
 
 `SeExportSnapshot()` (see `../Common/se_export.h`) wants these, once per frame. The
 Yabause column is what `Integration/Yabause/apply.py` passes; the Mednafen column is
-the equivalent in `mednafen/src/ss/` (confirm names against your Mednafen source —
-these are the likely targets):
+the real symbol in `mednafen/src/ss/` (read from source — see the tree link above).
+**Scope matters here:** almost every Mednafen symbol is *file-scope `static`*, so it
+can't be reached by `extern` from the glue's translation unit — the patcher injects a
+small accessor next to each (see §"Accessors").
 
-| Snapshot arg | Yabause | Mednafen `ss` (confirm) | Notes |
-|---|---|---|---|
-| VDP1 VRAM (512K) | `Vdp1Ram` | `VDP1::VRAM` (vdp1.cpp) | **byte-swap to big-endian** (see below) |
-| VDP2 VRAM (512K) | `Vdp2Ram` | `VDP2::VRAM` (vdp2.cpp) | **byte-swap to big-endian** |
-| CRAM (4K) | `Vdp2ColorRam` | `VDP2::CRAM` | host order — pass straight |
-| VDP2 regs (288) | `Vdp2Regs` struct | `RawRegs[0x100]` | layout differs — see "VDP2 registers" |
-| VDP1 regs (struct) | `Vdp1Regs` struct | VDP1 register fields | fill the 11-u16 `Vdp1` struct — `se_export` builds the hw-offset image (`BuildVdp1Struct` in the glue) |
-| Work RAM low (1M) | `LowWram` | `WorkRAML` (ss.cpp) | byte order host — **verify empirically** |
-| Work RAM high (1M) | `HighWram` | `WorkRAMH` | byte order host — **verify empirically** |
-| VDP1 framebuffer (256K) | `VIDSoftGetVdp1FrameBuffer()` | VDP1 displayed FB bank | RGB555 drawn output |
-| Master SH-2 regs | `SH2GetRegisters(MSH2,…)` | `CPU[0]` / `MSH2` (sh7095) | pack into `sh2regs_struct` |
-| Slave SH-2 regs | `SH2GetRegisters(SSH2,…)` | `CPU[1]` / `SSH2` | " |
+| Snapshot arg | Yabause | Mednafen `ss` | Scope | Notes |
+|---|---|---|---|---|
+| VDP1 VRAM (512K) | `Vdp1Ram` | `VDP1::VRAM[0x40000]` u16 (vdp1.cpp) | file-scope | host u16 → **swap to big-endian** |
+| VDP2 VRAM (512K) | `Vdp2Ram` | `VDP2::VRAM[262144]` u16 (vdp2.cpp) | **static** | host u16 → **swap to big-endian** |
+| CRAM (4K) | `Vdp2ColorRam` | `VDP2::CRAM[2048]` u16 | **static** | host order — pass straight |
+| VDP2 regs (288) | `Vdp2Regs` struct | `VDP2::RawRegs[0x100]` u16 *"For debugging"* | **static** | layout differs — see "VDP2 registers" |
+| VDP1 regs (struct) | `Vdp1Regs` struct | `VDP1::{TVMR,FBCR,PTMR,EWDR,EWLR,EWRR,EDSR,LOPR}` | **mixed static** | accessor fills the 11-u16 `Vdp1` struct; `se_export` builds the hw-offset image. ENDR/COPR/MODR write-only/computed → 0 |
+| Work RAM low (1M) | `LowWram` | `WorkRAML[0x80000]` u16 (ss.cpp) | **static** | byte order — **verify** (§Byte order) |
+| Work RAM high (1M) | `HighWram` | `WorkRAMH[0x80000]` u16 | **static** | byte order — **verify** |
+| VDP1 framebuffer (256K) | `VIDSoftGetVdp1FrameBuffer()` | `VDP1::FB[!FBDrawWhich]` (displayed bank of `FB[2][0x20000]`) | file-scope | RGB555 host order |
+| Master SH-2 regs | `SH2GetRegisters(MSH2,…)` | `CPU[0]` (`SH7095`, ss.cpp) | file-scope | accessor packs 23 u32 via `CPU[0].GetRegister(GSREG_*)` |
+| Slave SH-2 regs | `SH2GetRegisters(SSH2,…)` | `CPU[1]` | file-scope | " (cpu 1) |
 
-Hook points (the injection sites the patcher must find):
+All live in namespace `MDFN_IEN_SS` (VDP1 / VDP2 sub-namespaces for the VDP arrays).
 
-| Purpose | Yabause | Mednafen `ss` (confirm) |
+Hook points (all in `ss.cpp`, all `static`):
+
+| Purpose | Yabause | Mednafen `ss` |
 |---|---|---|
-| Init the server | end of `YabauseInit()` | end of `ss` init (e.g. `Load()` in ss.cpp) |
-| Per-frame snapshot | `Vdp2VBlankOUT()` | end-of-frame in `Emulate()` (post-render) |
+| Init the server | end of `YabauseInit()` | end of `Load(GameFile*)` |
+| Per-frame snapshot | `Vdp2VBlankOUT()` | `Emulate(EmulateSpecStruct*)`, after `espec->MasterCycles = …`, before `SMPC_UpdateOutput()` |
 | Frame gate (pause/step) | top of `YabauseEmulate()` | top of `Emulate()` — **see caveat** |
-| Deinit | `YabauseDeInit()` | `ss` `CloseGame()` |
-| Exec breakpoints | `SH2AddCodeBreakpoint`, `SH2SetBreakpointCallBack` | `ss` debug API (`debug.cpp`) |
-| Memory poke | `MappedMemoryWriteByte` | `ss` `MDFN_ss` bus write / debug poke |
+| Deinit | `YabauseDeInit()` | `CloseGame(void)` |
+| Exec breakpoints | `SH2AddCodeBreakpoint`, `SH2SetBreakpointCallBack` | `ss` debug module (Tier 3 — confirm API) |
+| Memory poke | `MappedMemoryWriteByte` | `ss` bus/debug byte write (Tier 2/3 — confirm) |
+
+## Accessors (the Mednafen-specific integration wrinkle)
+
+Yabause exposes its memory as extern globals, so its glue reads them directly.
+Mednafen keeps VDP2 `VRAM`/`CRAM`/`RawRegs`, `WorkRAML/H`, and the individual VDP1
+registers as **file-scope `static`** — invisible to a separate glue `.c`. Mednafen
+already anticipates debug taps (`VDP2::PeekVRAM`, the `RawRegs // For debugging`
+array), so the patcher follows that lead: inject a tiny **C-linkage accessor** into
+each file *where the static is visible*, and have the glue call it. The glue declares
+these (`extern`, fenced under `#if 0` until the build has them):
+
+```c
+/* vdp2.cpp (namespace VDP2): */  const uint16_t* SsDbgVdp2Vram(void){ return VRAM; }
+                                  const uint16_t* SsDbgCram(void)    { return CRAM; }
+                                  const uint16_t* SsDbgRawRegs(void) { return RawRegs; }
+/* vdp1.cpp (namespace VDP1): */  const uint16_t* SsDbgVdp1Vram(void){ return VRAM; }
+                                  const uint16_t* SsDbgVdp1Fb(void)  { return FB[!FBDrawWhich]; }
+                                  void SsDbgVdp1Regs(uint16_t o[11]){ o[0]=TVMR; o[1]=FBCR; o[2]=PTMR;
+                                        o[3]=EWDR; o[4]=EWLR; o[5]=EWRR; o[7]=EDSR; o[8]=LOPR; /*6,9,10=0*/ }
+/* ss.cpp   (namespace MDFN_IEN_SS): */
+                                  const uint16_t* SsDbgWramL(void){ return WorkRAML; }
+                                  const uint16_t* SsDbgWramH(void){ return WorkRAMH; }
+                                  void SsDbgSh2Regs(int c, uint32_t o[23]){ /* CPU[c].GetRegister(GSREG_R0+i)…GSREG_PC */ }
+```
+
+(Give them `extern "C"` when injecting into the C++ `ss` sources so the C glue links
+against them.) This is the bulk of what the Mednafen patcher does; the rest is the
+five hook calls from the table above.
 
 ## Byte order — the one substantive difference from Yabause
 
@@ -63,14 +98,22 @@ Yabause stores VRAM **big-endian** natively, so its glue passes it straight.
 the Mednafen glue must **byte-swap VDP1/VDP2 VRAM to big-endian** before passing them
 to `SeExportSnapshot`. Per section:
 
-- **VDP1/VDP2 VRAM** — swap each 16-bit word to big-endian. (`SwapU16ToBE` in the glue.)
-- **CRAM** — pass host order; the client normalizes it via RAMCTL (mode-aware).
-- **Work RAM** — the protocol expects host order (16-bit words LE); the client
-  byte-swaps to big-endian. Mednafen's WorkRAM order is **not proven** (the savestate
-  path doesn't extract it) — verify with a known value the same way the Yabause
-  work-RAM order was nailed, and swap in the glue only if needed.
+- **VDP1/VDP2 VRAM** — stored native `uint16` host-order (accessed big-endian via
+  Mednafen's `ne16_*_be` helpers). Swap each 16-bit word to big-endian for the wire.
+  (`SwapU16ToBE` in the glue.)
+- **CRAM** — `uint16` host order; pass straight. The client normalizes it via RAMCTL
+  (mode-aware).
+- **Work RAM** — `WorkRAML/H` are `uint16` arrays accessed through `ne16_rbo_be`
+  (see ss.cpp), so their in-array layout is **not obviously the same** as the
+  protocol's "host-order 16-bit words, client swaps to BE" assumption. This is the one
+  order the savestate path never exercised, so it's **unproven**: pass raw first, and
+  if the Hex/Watch panels show byte-swapped values, apply `SwapU16ToBE` in the
+  `SsDbgWramL/H` accessors. Nail it with a known value the way the Yabause work-RAM
+  order was.
+- **VDP1 framebuffer** — `FB[!FBDrawWhich]`, native `uint16` RGB555 (host order like
+  CRAM); pass straight.
 - **SH-2 regs** — host-order u32 in `sh2regs_struct` field order; the client reads
-  them as LE u32. Just fill the struct.
+  them as LE u32. The `SsDbgSh2Regs` accessor fills the 23-u32 array.
 
 ## VDP2 registers (the one protocol wrinkle)
 

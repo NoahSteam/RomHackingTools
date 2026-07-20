@@ -3,14 +3,21 @@
  * This is the emulator-specific half of the live tap. The portable half is
  * ../Common/se_export.c (unchanged). Drop this + se_export.{c,h} + SeLiveProtocol.h
  * into Mednafen's ss core, then wire the calls at the bottom into ss.cpp's frame
- * loop. Spots that need Mednafen's actual symbol names are marked TODO(mednafen).
+ * loop. Symbol names below were mapped against libretro-mirrors/mednafen-git
+ * src/ss (see README.md); anything still build-specific is marked TODO(mednafen).
  *
- * It does NOT compile as-is: the `extern` block below references Mednafen `ss`
- * internals that only exist inside a Mednafen build. Everything else — the
- * byte-order swap, the VDP2 struct rebuild, the SH-2 register packing — is real and
- * emulator-independent, and is the part worth getting right here.
+ * Why accessors, not `extern`. Unlike Yabause (extern globals), Mednafen keeps the
+ * memory it exposes as *file-scope static*: VDP2::VRAM / CRAM / RawRegs live in
+ * vdp2.cpp, VDP1::VRAM / FB / regs in vdp1.cpp, WorkRAML/H + CPU[] in ss.cpp — none
+ * reachable by `extern` from this separate translation unit. So the patcher injects
+ * a handful of tiny C-linkage accessors into those files (where the statics ARE
+ * visible; Mednafen already does this with PeekVRAM / "RawRegs // For debugging")
+ * and this glue calls them. The accessor bodies are listed in README.md §"Accessors".
  *
- * See README.md for the full symbol map, byte-order rules, and phasing.
+ * It does NOT compile as-is: the accessor calls are fenced under `#if 0` until the
+ * injected symbols exist in a Mednafen build. The pure transforms — the VRAM
+ * host->big-endian swap and the RawRegs->Vdp2-struct rebuild — are real and
+ * emulator-independent, and are the part worth getting right here.
  */
 #include "se_export.h"
 #include "SeLiveProtocol.h"
@@ -18,27 +25,27 @@
 #include <string.h>
 #include <stdint.h>
 
-/* ---- Mednafen ss symbols this glue reads. Confirm names against your source
- *      (under mednafen/src/ss). These are the likely targets; adjust as needed. -- */
-#if 0  /* TODO(mednafen): remove the guard once wired against real ss headers. */
-extern uint16_t VDP1_VRAM[0x40000 / 2];      /* VDP1::VRAM  — 512 KiB, host order  */
-extern uint16_t VDP2_VRAM[0x80000 / 2];      /* VDP2::VRAM  — 512 KiB, host order  */
-extern uint16_t VDP2_CRAM[0x1000 / 2];       /* VDP2::CRAM  — 4 KiB,  host order   */
-extern uint16_t VDP2_RawRegs[0x100];         /* VDP2 regs, indexed by (hw >> 1)    */
-extern uint8_t  WorkRAML[0x100000];          /* low work RAM  @ 0x00200000         */
-extern uint8_t  WorkRAMH[0x100000];          /* high work RAM @ 0x06000000         */
-extern const uint16_t* SS_VDP1DisplayFB(void); /* displayed VDP1 FB bank (RGB555)  */
-/* SH-2 cores. Mednafen's SH7095 exposes registers; adapt the accessor below. */
-typedef struct SH7095 SH7095;
-extern SH7095 CPU[2];                        /* [0]=master, [1]=slave              */
-extern void   SS_GetSH2Regs(const SH7095*, uint32_t out23[23]); /* R[16],SR,GBR,VBR,MACH,MACL,PR,PC */
-extern void   SS_PokeByte(uint32_t addr, uint8_t val);          /* bus/debug byte write */
+/* ---- Accessors the patcher injects into Mednafen ss (C linkage). Each reaches a
+ *      file-scope static the glue can't see directly. Pointer accessors return the
+ *      live array; the two packing accessors run Mednafen-side because they touch
+ *      class/static members (VDP1's individual regs, SH7095's register file). ---- */
+#if 0  /* TODO(mednafen): provide these from the injected ss accessors (README §Accessors). */
+extern const uint16_t* SsDbgVdp1Vram(void);   /* VDP1::VRAM    — 0x40000 words, host order */
+extern const uint16_t* SsDbgVdp2Vram(void);   /* VDP2::VRAM    — 262144 words, host order  */
+extern const uint16_t* SsDbgCram(void);       /* VDP2::CRAM    — 2048 words,  host order   */
+extern const uint16_t* SsDbgRawRegs(void);    /* VDP2::RawRegs — 0x100, indexed (hw>>1)    */
+extern const uint16_t* SsDbgWramL(void);      /* WorkRAML      — 0x80000 words @ 0x00200000 */
+extern const uint16_t* SsDbgWramH(void);      /* WorkRAMH      — 0x80000 words @ 0x06000000 */
+extern const uint16_t* SsDbgVdp1Fb(void);     /* displayed VDP1 FB bank = FB[!FBDrawWhich]  */
+extern void            SsDbgVdp1Regs(uint16_t out11[11]); /* TVMR,FBCR,PTMR,EWDR,EWLR,EWRR,ENDR,EDSR,LOPR,COPR,MODR */
+extern void            SsDbgSh2Regs(int cpu, uint32_t out23[23]); /* R[16],SR,GBR,VBR,MACH,MACL,PR,PC */
+extern void            SsDbgPokeByte(uint32_t addr, uint8_t val); /* Tier 3: bus/debug byte write */
 #endif
 
 /* ============================ pure, testable helpers ====================== */
 
-/* VRAM arrives host-order (LE 16-bit words); the wire wants Saturn big-endian.
- * Swap each 16-bit word from 'src' into 'dst' (both 'len' bytes). */
+/* VDP1/VDP2 VRAM is stored host-order (native uint16); the wire wants Saturn
+ * big-endian. Swap each 16-bit word from 'src' into 'dst' (both 'len' bytes). */
 static void SwapU16ToBE(uint8_t* dst, const uint8_t* src, size_t len)
 {
     size_t i;
@@ -75,65 +82,42 @@ static void BuildYabauseVdp2Struct(uint8_t out288[288], const uint16_t rawRegs[0
     }
 }
 
-/* Fill the 11-u16 host-order Yabause `Vdp1` struct that SeExportSnapshot expects
- * (fields TVMR,FBCR,PTMR,EWDR,EWLR,EWRR,ENDR,EDSR,LOPR,COPR,MODR). se_export's
- * SeBuildVdp1Image places each field at its hardware offset (with the 0x0E gap) and
- * converts to big-endian, so the glue just supplies the raw register values and
- * reuses the shipped image builder — no duplicate offset math, and no edit to the
- * copied se_export.c. Mednafen exposes VDP1's control/status registers individually;
- * ENDR/COPR/MODR are write-only/computed on real hardware, so leave them zero. */
-static void BuildVdp1Struct(uint16_t out11[11])
-{
-    memset(out11, 0, 11 * sizeof(uint16_t));
-    /* TODO(mednafen): out11[0]=TVMR; [1]=FBCR; [2]=PTMR; [3]=EWDR; [4]=EWLR;
-     *   [5]=EWRR; [7]=EDSR; [8]=LOPR;   (ENDR[6], COPR[9], MODR[10] stay 0). */
-}
-
-/* Pack one Mednafen SH-2 core's registers into the wire's sh2regs_struct order
- * (23 host-order u32: R[0..15], SR, GBR, VBR, MACH, MACL, PR, PC). */
-static void PackSh2(uint32_t out23[23] /*, const SH7095* cpu */)
-{
-    memset(out23, 0, 23 * sizeof(uint32_t));
-    /* TODO(mednafen): SS_GetSH2Regs(cpu, out23); — or fill fields directly:
-     *   out23[0..15] = R[0..15]; out23[16]=SR; [17]=GBR; [18]=VBR;
-     *   out23[19]=MACH; out23[20]=MACL; out23[21]=PR; out23[22]=PC; */
-}
-
 /* ============================ per-frame snapshot ========================== */
 
-/* Call once per emulated frame, after the frame is rendered (Mednafen ss
- * Emulate(), post-VDP2). Builds the wire-ready buffers and hands them to the
- * portable server. For Tier 1 (read-only view) you may pass NULL for work RAM and
- * the SH-2 args — those sections then ship empty and the client no-ops them. */
+/* Call once per emulated frame, at the end-of-frame hook in ss.cpp's Emulate()
+ * (after `espec->MasterCycles = ...`, before SMPC_UpdateOutput()). Builds the
+ * wire-ready buffers and hands them to the portable server. For Tier 1 (read-only
+ * view) you may pass NULL for work RAM and the SH-2 args — those sections then ship
+ * empty and the client no-ops them. */
 void SeMednafenSnapshot(void)
 {
-    static uint8_t v1[SE_LIVE_VDP1_VRAM_LEN], v2[SE_LIVE_VDP2_VRAM_LEN];
-    static uint8_t vs[SE_LIVE_VDP2_STRUCT_LEN];
+    static uint8_t  v1[SE_LIVE_VDP1_VRAM_LEN], v2[SE_LIVE_VDP2_VRAM_LEN];
+    static uint8_t  vs[SE_LIVE_VDP2_STRUCT_LEN];
     static uint16_t vdp1[11];
     static uint32_t msh2[23], ssh2[23];
 
-#if 0  /* TODO(mednafen): enable once the extern block is wired. */
-    SwapU16ToBE(v1, (const uint8_t*)VDP1_VRAM, sizeof v1);   /* -> big-endian */
-    SwapU16ToBE(v2, (const uint8_t*)VDP2_VRAM, sizeof v2);
-    BuildYabauseVdp2Struct(vs, VDP2_RawRegs);
-    BuildVdp1Struct(vdp1);
-    PackSh2(msh2 /*, &CPU[0] */);
-    PackSh2(ssh2 /*, &CPU[1] */);
+#if 0  /* TODO(mednafen): enable once the injected accessors exist. */
+    SwapU16ToBE(v1, (const uint8_t*)SsDbgVdp1Vram(), sizeof v1);   /* -> big-endian */
+    SwapU16ToBE(v2, (const uint8_t*)SsDbgVdp2Vram(), sizeof v2);
+    BuildYabauseVdp2Struct(vs, SsDbgRawRegs());
+    SsDbgVdp1Regs(vdp1);
+    SsDbgSh2Regs(0, msh2);
+    SsDbgSh2Regs(1, ssh2);
 
     SeExportSnapshot(
         v1,                          /* VDP1 VRAM  (big-endian)                 */
         v2,                          /* VDP2 VRAM  (big-endian)                 */
-        (const void*)VDP2_CRAM,      /* CRAM       (host order — client normalizes) */
+        (const void*)SsDbgCram(),    /* CRAM       (host order — client normalizes) */
         vs,                          /* VDP2 regs  (raw Yabause struct)         */
         vdp1,                        /* VDP1 regs  (11-u16 Yabause struct;      */
                                      /*  se_export builds the hw-offset image)  */
-        WorkRAML,                    /* low work RAM  (host order; verify)      */
-        WorkRAMH,                    /* high work RAM (host order; verify)      */
-        (const void*)SS_VDP1DisplayFB(), /* VDP1 framebuffer (RGB555)           */
+        (const void*)SsDbgWramL(),   /* low work RAM  (host order; verify — §Byte order) */
+        (const void*)SsDbgWramH(),   /* high work RAM (host order; verify)      */
+        (const void*)SsDbgVdp1Fb(),  /* VDP1 framebuffer (displayed bank, RGB555) */
         msh2, ssh2);                 /* SH-2 master + slave                     */
 #else
     (void)v1; (void)v2; (void)vs; (void)vdp1; (void)msh2; (void)ssh2;
-    (void)SwapU16ToBE; (void)BuildYabauseVdp2Struct; (void)BuildVdp1Struct; (void)PackSh2;
+    (void)SwapU16ToBE; (void)BuildYabauseVdp2Struct;
 #endif
 }
 
@@ -145,7 +129,8 @@ void SeMednafenSnapshot(void)
 static void SeMdfnAddExecBp(int cpu, unsigned int address)
 {
     (void)cpu; (void)address;
-    /* TODO(mednafen): install an execution breakpoint on CPU[cpu] at 'address'. */
+    /* TODO(mednafen): install an execution breakpoint on CPU[cpu] at 'address'
+       via the ss debugger API. */
 }
 static void SeMdfnClearBps(void)
 {
@@ -154,19 +139,19 @@ static void SeMdfnClearBps(void)
 static void SeMdfnWriteByte(unsigned int address, unsigned char value)
 {
     (void)address; (void)value;
-    /* TODO(mednafen): SS_PokeByte(address, value);  — big-endian preserved by
+    /* TODO(mednafen): SsDbgPokeByte(address, value); — big-endian preserved by
        writing byte-by-byte at Saturn addresses, no manual swap. */
 }
 
 /* ============================ lifecycle wiring ============================ */
-/* Wire these into Mednafen ss (names per your source):
- *   - at ss init (Load):      SeExportInit();
- *                             SeExportSetBreakpointHooks(SeMdfnAddExecBp, SeMdfnClearBps);
- *                             SeExportSetMemWriteHook(SeMdfnWriteByte);
- *   - once per frame (Emulate, post-render):   SeMednafenSnapshot();
- *   - top of Emulate (optional pause/step):    while (!SeExportGateFrame()) { }
+/* Wire these into Mednafen ss (all sites in ss.cpp unless noted):
+ *   - end of Load(GameFile*):     SeExportInit();
+ *                                 SeExportSetBreakpointHooks(SeMdfnAddExecBp, SeMdfnClearBps);
+ *                                 SeExportSetMemWriteHook(SeMdfnWriteByte);
+ *   - end-of-frame in Emulate():  SeMednafenSnapshot();   (after espec->MasterCycles = ...)
+ *   - top of Emulate() (optional pause/step):  while (!SeExportGateFrame()) { }
  *       (Tier-1 read-only view can skip the gate; see README frame-gate caveat.)
- *   - at ss CloseGame:        SeExportDeinit();
+ *   - CloseGame():                SeExportDeinit();
  */
 void SeMednafenSuppressUnusedWarnings(void)
 {
