@@ -52,11 +52,30 @@ install it and re-run.
   redistributing modified "Mednafen" binaries. This is the community-accepted path.
   (See `DISTRIBUTION.md`.)
 
+## Source: our forks (by default)
+The installer clones **our own forks** of the emulators — under the `NoahSteam`
+account by default — not the original upstreams. That's the "fork and pin" discipline
+from `DISTRIBUTION.md`: the fork is a stable base you update deliberately, so an
+upstream rename never breaks a build mid-flight.
+
+| Emulator | Default source (fork) | Upstream (parent) |
+|----------|-----------------------|-------------------|
+| Mednafen | `NoahSteam/mednafen-git` | `libretro-mirrors/mednafen-git` |
+| Yabause | `NoahSteam/yabause` | `Yabause/yabause` |
+| Yaba Sanshiro | `NoahSteam/yaba-sanshiro` | `devmiyax/yabause` |
+| Kronos | `NoahSteam/Kronos` | `FCare/Kronos` |
+
+**These forks must exist** under the owner. Create them once (fork on GitHub, or push a
+mirror), then the installer uses them every run. To point elsewhere:
+- `--fork-owner <name>` — use a different account/org that holds the forks.
+- `--upstream` — clone the original upstream repos instead of the forks.
+- `--mednafen-repo <url>` / `--yabause-repo <url>` — an explicit git URL (wins over both).
+
 ## Pinning
-The emulator revisions live in `EMULATORS` in `install.py` (default `master`). For a
-reproducible build, pin a known-good commit — either edit that table or pass
-`--mednafen-rev <sha>` / `--yabause-rev <sha>`. Re-running `apply.py --check` against
-fresh upstream tells you if an anchor drifted (see `DISTRIBUTION.md`,
+The pinned revisions live in `EMULATORS` in `install.py` (default `master`). For a
+reproducible build, pin a known-good commit in your fork — either edit that table or
+pass `--mednafen-rev <sha>` / `--yabause-rev <sha>`. Re-running `apply.py --check`
+against fresh upstream tells you if an anchor drifted (see `DISTRIBUTION.md`,
 "Fork and pin your upstream").
 
 ## Flags
@@ -67,6 +86,10 @@ fresh upstream tells you if an anchor drifted (see `DISTRIBUTION.md`,
 --yabause-variant V    yabause | sanshiro | kronos   (default: yabause)
 --mednafen-rev SHA     override the pinned Mednafen revision
 --yabause-rev  SHA     override the pinned Yabause-fork revision
+--fork-owner NAME      GitHub owner holding our emulator forks (default: NoahSteam)
+--upstream             clone the original upstream repos instead of our forks
+--mednafen-repo URL    explicit Mednafen git URL (overrides fork/upstream)
+--yabause-repo  URL    explicit Yabause-fork git URL (overrides fork/upstream)
 --se-only              build only Saturn Explorer
 --msys2 DIR            use an existing MSYS2 install (e.g. C:\msys64)
 --qt-path DIR          Qt dir for the Yabause build (CMAKE_PREFIX_PATH)

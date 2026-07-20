@@ -44,13 +44,28 @@ HERE = os.path.dirname(os.path.abspath(__file__))          # .../SaturnExplorer/
 SE_ROOT = os.path.dirname(HERE)                            # .../SaturnExplorer
 
 # ---------------------------------------------------------------------------
-# Emulator registry. `rev` is the pinned commit/tag — see "Fork and pin your
-# upstream" in Integration/DISTRIBUTION.md. `master` is a soft default; pin a
-# known-good commit for a build you can reproduce.
+# Emulator registry.
+#
+# By default we clone OUR OWN FORK (under FORK_OWNER) rather than upstream, per
+# "Fork and pin your upstream" in Integration/DISTRIBUTION.md: the fork is a
+# stable base you update deliberately, so an upstream rename never breaks a build
+# mid-flight. `upstream` is recorded for reference / drift-checks and is what
+# --upstream clones instead. `fork_name` is the repo name under FORK_OWNER (it
+# can differ from upstream's — e.g. two different Yabause forks can't both be
+# "yabause" under one account). `rev` is the pinned commit/tag ("master" is a soft
+# default; pin a known-good commit for a reproducible build).
 # ---------------------------------------------------------------------------
+FORK_OWNER = "NoahSteam"          # our GitHub account/org holding the pinned forks
+
+
+def fork_url(name):
+    return f"https://github.com/{FORK_OWNER}/{name}.git"
+
+
 EMULATORS = {
     "mednafen": {
-        "repo": "https://github.com/libretro-mirrors/mednafen-git.git",
+        "fork_name": "mednafen-git",
+        "upstream":  "https://github.com/libretro-mirrors/mednafen-git.git",
         "rev":  "master",
         "patch_subdir": os.path.join("Integration", "Mednafen", "apply.py"),
         "patch_args": ["--with-pause"],           # inject the pause/step gate too
@@ -58,30 +73,39 @@ EMULATORS = {
     },
     # Qt-lineage forks share the same patcher (apply.py auto-detects the fork name).
     "yabause": {
-        "repo": "https://github.com/Yabause/yabause.git",
+        "fork_name": "yabause",
+        "upstream":  "https://github.com/Yabause/yabause.git",
         "rev":  "master",
         "patch_subdir": os.path.join("Integration", "Yabause", "apply.py"),
         "patch_args": [],
         "toolchain": "msvc",
-        "emu_name": None,                         # auto-detect
     },
     "sanshiro": {
-        "repo": "https://github.com/devmiyax/yabause.git",
+        "fork_name": "yaba-sanshiro",             # can't be "yabause" too under one owner
+        "upstream":  "https://github.com/devmiyax/yabause.git",
         "rev":  "master",
         "patch_subdir": os.path.join("Integration", "Yabause", "apply.py"),
         "patch_args": [],
         "toolchain": "msvc",
-        "emu_name": None,
     },
     "kronos": {
-        "repo": "https://github.com/FCare/Kronos.git",
+        "fork_name": "Kronos",
+        "upstream":  "https://github.com/FCare/Kronos.git",
         "rev":  "master",
         "patch_subdir": os.path.join("Integration", "Yabause", "apply.py"),
         "patch_args": ["--emu-name=Kronos"],
         "toolchain": "msvc",
-        "emu_name": "Kronos",
     },
 }
+
+
+def resolve_repo(spec, repo_override, use_upstream):
+    """Which git URL to clone: explicit override > upstream (if --upstream) > our fork."""
+    if repo_override:
+        return repo_override
+    if use_upstream:
+        return spec["upstream"]
+    return fork_url(spec["fork_name"])
 
 # winget package IDs for the tools we may install on the user's behalf.
 WINGET = {
@@ -196,10 +220,10 @@ def build_saturn_explorer(rn, generator):
     return True, exe
 
 
-def clone_and_patch(rn, key, spec, dest, rev_override):
+def clone_and_patch(rn, key, spec, dest, rev_override, repo):
     rev = rev_override or spec["rev"]
     if not os.path.isdir(os.path.join(dest, ".git")):
-        if rn.run(["git", "clone", spec["repo"], dest]) != 0:
+        if rn.run(["git", "clone", repo, dest]) != 0:
             return False
     if rn.run(["git", "fetch", "--all", "--tags"], cwd=dest) != 0:
         return False
@@ -237,6 +261,7 @@ def build_yabause(rn, dest, generator, qt_path):
 
 
 def main():
+    global FORK_OWNER
     ap = argparse.ArgumentParser(description="Saturn Explorer + patched-emulator setup (Windows).")
     ap.add_argument("--prefix", default=os.path.join(SE_ROOT, "_emu"),
                     help="where to clone+build emulators (default: <repo>/_emu)")
@@ -246,6 +271,12 @@ def main():
                     default="yabause", help="which Yabause-lineage fork (default: yabause)")
     ap.add_argument("--mednafen-rev", help="override the pinned Mednafen revision")
     ap.add_argument("--yabause-rev", help="override the pinned Yabause-fork revision")
+    ap.add_argument("--fork-owner", default=FORK_OWNER,
+                    help=f"GitHub owner holding our emulator forks (default: {FORK_OWNER})")
+    ap.add_argument("--upstream", action="store_true",
+                    help="clone the original upstream repos instead of our forks")
+    ap.add_argument("--mednafen-repo", help="explicit Mednafen git URL (overrides fork/upstream)")
+    ap.add_argument("--yabause-repo", help="explicit Yabause-fork git URL (overrides fork/upstream)")
     ap.add_argument("--se-only", action="store_true", help="build only Saturn Explorer")
     ap.add_argument("--msys2", help="path to an existing MSYS2 install (e.g. C:\\msys64)")
     ap.add_argument("--qt-path", help="Qt install dir for the Yabause build (CMAKE_PREFIX_PATH)")
@@ -254,6 +285,7 @@ def main():
     ap.add_argument("--dry-run", action="store_true", help="print the plan; change nothing")
     ap.add_argument("--yes", action="store_true", help="don't prompt before installs/builds")
     args = ap.parse_args()
+    FORK_OWNER = args.fork_owner
 
     if os.name != "nt" and not args.dry_run:
         print("This installer targets Windows. Use --dry-run to preview the plan elsewhere.")
@@ -303,7 +335,9 @@ def main():
     if do_mednafen:
         print("\n== Mednafen ==")
         dest = os.path.join(args.prefix, "mednafen")
-        if clone_and_patch(rn, "mednafen", EMULATORS["mednafen"], dest, args.mednafen_rev):
+        repo = resolve_repo(EMULATORS["mednafen"], args.mednafen_repo, args.upstream)
+        print(f"  source: {repo}")
+        if clone_and_patch(rn, "mednafen", EMULATORS["mednafen"], dest, args.mednafen_rev, repo):
             m_ok, m_exe = build_mednafen(rn, msys2, dest)
         else:
             m_ok, m_exe = False, None
@@ -315,7 +349,9 @@ def main():
         spec = EMULATORS[key]
         print(f"\n== {key} ==")
         dest = os.path.join(args.prefix, key)
-        if clone_and_patch(rn, key, spec, dest, args.yabause_rev):
+        repo = resolve_repo(spec, args.yabause_repo, args.upstream)
+        print(f"  source: {repo}")
+        if clone_and_patch(rn, key, spec, dest, args.yabause_rev, repo):
             y_ok, y_exe = build_yabause(rn, dest, args.generator, args.qt_path)
         else:
             y_ok, y_exe = False, None
