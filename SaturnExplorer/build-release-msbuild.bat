@@ -66,7 +66,12 @@ if exist "%EXE%" (
 )
 echo.
 echo Run it, or pass a savestate:  SaturnExplorer.exe state.yss
-echo Live mode (running Yabause):  SaturnExplorer.exe --live
+echo.
+echo NOTE: this is a SAVESTATE-ONLY build - live mode is not compiled in, so
+echo       --live will not work on this .exe. Live mode (connect to a running
+echo       emulator, Work RAM streaming, pause / frame-step) is wired into the
+echo       CMake build only. For that, build with:  build-release.bat
+echo       which produces build\bin\Release\SaturnExplorerFrontEnd.exe
 endlocal
 exit /b 0
 

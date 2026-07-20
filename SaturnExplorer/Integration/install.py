@@ -286,11 +286,22 @@ def build_mednafen(rn, msys2, dest):
     ncpu = os.cpu_count() or 4
     # Mednafen ships include/mednafen as a symlink -> ../src, and the build reaches every
     # <mednafen/...> header through it. On Windows (core.symlinks=false) a clone can
-    # materialize it as a plain file, breaking the include path; recreate it as a real
-    # (MSYS) symlink if it isn't already a directory. git checkouts also need autotools
-    # bootstrapped before ./configure exists.
+    # materialize it as a plain file, breaking the include path.
+    #
+    # Test -L, not -d: plain MSYS `ln -s` silently makes a *copy* rather than a symlink
+    # unless winsymlinks is enabled, and a copy satisfies -d. Guarding on -d would then
+    # keep that copy forever, so a re-run whose apply.py re-patched src/ would compile
+    # stale duplicates of the patched headers (apply.py installs se_export.h /
+    # SeLiveProtocol.h into src/ss). -L is false for a copy, so the copy is rebuilt every
+    # run and can never go stale. Prefer a real symlink (needs Developer Mode or admin);
+    # fall back to the copy so machines without it still build. rm -rf, not rm -f, since
+    # the stale case is a directory. git checkouts also need autotools bootstrapped
+    # before ./configure exists.
+    relink = ("rm -rf include/mednafen; "
+              "MSYS=winsymlinks:nativestrict ln -s ../src include/mednafen 2>/dev/null || "
+              "ln -s ../src include/mednafen")
     script = (f"cd '{msdir}' && "
-              f"([ -d include/mednafen ] || {{ rm -f include/mednafen; ln -s ../src include/mednafen; }}) && "
+              f"([ -L include/mednafen ] || {{ {relink}; }}) && "
               f"([ -x ./configure ] || (autoreconf -i || ./autogen.sh)) && "
               f"./configure --enable-debugger && make -j{ncpu}")
     env = "MSYSTEM=MINGW64"
