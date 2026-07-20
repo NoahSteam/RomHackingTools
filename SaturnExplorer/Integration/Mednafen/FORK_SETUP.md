@@ -59,11 +59,20 @@ git ls-files | wc -l                                       # files git committed
 #    The two counts must match. If they don't, a global ignore ate something — fix it
 #    (git add -Af again) before pushing; a short fork is worse than none.
 
-# 4. Create an EMPTY repo named mednafen-git under your account on GitHub (no
+# 4. Create an EMPTY, PUBLIC repo named mednafen-git under your account on GitHub (no
 #    README/license/gitignore), then push:
 git remote add origin https://github.com/NoahSteam/mednafen-git.git
 git push -u origin master --tags
 ```
+
+**Public, not private.** `install.bat` clones anonymously, and a private repo returns
+`404 Not Found` to unauthenticated clones — so anyone running the installer (including
+you, unless you configure git credentials) needs the fork to be public. That's also
+GPL-clean: Mednafen is GPLv2 and redistributing *verbatim source* is expressly permitted.
+As a courtesy to the author (who dislikes forks being mistaken for official Mednafen), set
+the repo **description** to make the relationship clear, e.g. *"Unmodified mirror of
+official Mednafen source (mednafen.github.io) + one `.gitattributes`; build base for
+Saturn Explorer, not an official Mednafen distribution."*
 
 **Commit-message note:** the import commit represents *unmodified upstream source*. Keep
 the message factual and add **no** authorship / AI co-author trailers — the whole value of
