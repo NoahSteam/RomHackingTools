@@ -75,6 +75,10 @@ private:
     void DrawCommandList();
     void DrawSelectedObject();
     void DrawTextureViewer(IPlatform& platform);
+    // Export the currently-shown texture as a .bmp (paletted BMP with the game's
+    // palette when the texture is paletted, else 24-bit) via the platform save dialog.
+    void ExportTexture(IPlatform& platform, const se_command& cmd,
+                       const se_texture_ref& ref, int w, int h);
     void DrawPaletteViewer();
     void DrawPaletteSwatches(const se_palette& pal);
     void DrawVramMap();
@@ -137,6 +141,9 @@ private:
     // Set when an external panel (VDP Output / VRAM Map / References) changes the
     // selection, so the Command List scrolls its highlighted row into view once.
     bool             mScrollCommandListToSelection = false;
+    // Same, for the VDP1 Table panel (set when a command is picked elsewhere and the
+    // table should scroll+surface that row).
+    bool             mScrollVdp1TableToSelection = false;
     ImVec2           m3dPressPos {};          // 3D-view press point (click vs orbit)
 
     // Scratch buffer for the Color RAM panel, decoded once per frame.
