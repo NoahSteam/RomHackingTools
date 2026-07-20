@@ -1,14 +1,19 @@
 # Saturn Explorer live tap for Mednafen (Beetle Saturn)
 
-**Status: patcher written + data path proven in-repo.** Symbol names, storage
-layouts, and hook sites were read from the Mednafen `ss` source
+**Status: patcher verified against a real Mednafen build; data path proven in-repo.**
+Symbol names, storage layouts, and hook sites were read from the Mednafen `ss` source
 ([libretro-mirrors/mednafen-git `src/ss`](https://github.com/libretro-mirrors/mednafen-git/tree/master/src/ss)),
-the glue's transforms are verified end-to-end against a real Mednafen savestate
-(§"Verify"), and `apply.py` wires the tap into an `ss` tree (verified against a
-synthetic tree: patched files compile, re-apply is a no-op, revert is clean). What
-still needs a real Mednafen build: compiling the injected accessors against live `ss`
-symbols, the frame-gate behavior under Mednafen's timing, and the one remaining
-`TODO(mednafen)` — Tier-3 **execution breakpoints** (Mednafen's debug API).
+and `apply.py` was **run against a real Mednafen checkout**: all six code anchors
+match, the build wiring lands in `src/ss/Makefile.am`, and the patched tree
+**compiles against real Mednafen headers** — `vdp1.o`/`vdp2.o`/`ss.o` (the injected
+accessors, against the actual `VDP1::VRAM`/`FB`/regs, `VDP2::VRAM`/`CRAM`/`RawRegs`,
+`WorkRAML/H`, `CPU[]`/`SH7095::GSREG_*`, `CheatMemWrite`), plus `se_export.o` and the
+wired `se_mednafen_glue.o`. The glue's ten `SsDbg*` externs each resolve to a
+definition in the patched objects (nm-verified), so the tap links into real Mednafen.
+Separately, the wire transforms round-trip end-to-end against a real Mednafen
+savestate (§"Verify"). The one remaining `TODO(mednafen)` is Tier-3 **execution
+breakpoints** (Mednafen's `WANT_DEBUGGER` debug core); running a live game additionally
+needs a Saturn BIOS + disc, which is the user's to supply.
 
 Saturn Explorer already **loads Mednafen savestates** (`MDFNSVST`) statically —
 VDP1/VDP2 VRAM, both register files, and CRAM (see
