@@ -801,15 +801,28 @@ void App::DrawToolbar(IPlatform& platform)
         }
         if (ImGui::BeginPopup("OpenMenu"))
         {
-            if (ImGui::MenuItem("Open Savestate (.yss / Mednafen)..."))
+            if (ImGui::BeginMenu("Load Dump"))
             {
-                std::string path;
-                if (platform.OpenFileDialog(path)) OpenSavestate(path.c_str());
-            }
-            if (ImGui::MenuItem("Open Memory Dump..."))
-            {
-                std::string path;
-                if (platform.OpenFileDialog(path)) OpenFullDump(path.c_str(), 0x00000000u);
+                // Both save-state entries take a savestate file; OpenSavestate
+                // auto-detects Yabause (.yss) vs Mednafen (MDFNSVST) by magic, so the
+                // two labels just point users at the right file for their emulator.
+                if (ImGui::MenuItem("Yabause Save State..."))
+                {
+                    std::string path;
+                    if (platform.OpenFileDialog(path)) OpenSavestate(path.c_str());
+                }
+                if (ImGui::MenuItem("Mednafen Save State..."))
+                {
+                    std::string path;
+                    if (platform.OpenFileDialog(path)) OpenSavestate(path.c_str());
+                }
+                ImGui::Separator();
+                if (ImGui::MenuItem("Raw Memory Dump..."))
+                {
+                    std::string path;
+                    if (platform.OpenFileDialog(path)) OpenFullDump(path.c_str(), 0x00000000u);
+                }
+                ImGui::EndMenu();
             }
 #ifdef SE_ENABLE_LIVE
             ImGui::Separator();

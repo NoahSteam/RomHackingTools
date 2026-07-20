@@ -484,6 +484,43 @@ se_result ParseYssBuffer(const std::vector<uint8_t>& file, se_data_source* out)
     return SE_OK;
 }
 
+// Fill se_sh2_regs from a Mednafen "SH2-M"/"SH2-S" state section. Unlike Yabause's
+// single contiguous sh2regs_struct, Mednafen stores the SH-2 state as separate
+// SFORMAT fields (see SH7095::StateAction): "R" (16 u32 GP regs), "PC", "CtrlRegs"
+// (the [SR,GBR,VBR] union), and "SysRegs" (the [MACH,MACL,PR] union) — all host-order
+// u32. Returns true if at least the GP regs + PC were found.
+bool ParseMednafenSh2(const std::vector<uint8_t>& file, size_t secData, uint32_t secSize,
+                      bool hostBigEndian, se_sh2_regs& out)
+{
+    auto u32 = [&](size_t o) -> uint32_t
+    {
+        return hostBigEndian
+            ? (uint32_t)((file[o] << 24) | (file[o + 1] << 16) | (file[o + 2] << 8) | file[o + 3])
+            : Read32LE(file, o);
+    };
+    size_t off; uint32_t sz;
+    bool haveR = false, havePc = false;
+    if (FindMednafenField(file, secData, secSize, "R", off, sz) && sz >= 16 * 4)
+    {
+        for (int i = 0; i < 16; ++i) out.r[i] = u32(off + i * 4);
+        haveR = true;
+    }
+    if (FindMednafenField(file, secData, secSize, "PC", off, sz) && sz >= 4)
+    {
+        out.pc = u32(off);
+        havePc = true;
+    }
+    if (FindMednafenField(file, secData, secSize, "CtrlRegs", off, sz) && sz >= 12)
+    {
+        out.sr = u32(off); out.gbr = u32(off + 4); out.vbr = u32(off + 8);
+    }
+    if (FindMednafenField(file, secData, secSize, "SysRegs", off, sz) && sz >= 12)
+    {
+        out.mach = u32(off); out.macl = u32(off + 4); out.pr = u32(off + 8);
+    }
+    return haveR && havePc;
+}
+
 // Parse an already-loaded MDFNSVST buffer into '*out' (zeroed by the caller).
 se_result ParseMednafenBuffer(const std::vector<uint8_t>& file, se_data_source* out)
 {
@@ -571,6 +608,29 @@ se_result ParseMednafenBuffer(const std::vector<uint8_t>& file, se_data_source* 
                     NormalizeCramToBigEndian(state->mCram, (ramctl >> 12) & 0x3);
                 }
             }
+        }
+        else if (std::strcmp(name, "MAIN") == 0)
+        {
+            // Work RAM lives in the top-level "MAIN" section as SFVAR(WorkRAML) /
+            // SFVAR(WorkRAMH) — host-order uint16, so swap to Saturn big-endian like
+            // VRAM (the panels + Watch/Hex read work RAM big-endian).
+            size_t off; uint32_t sz;
+            if (FindMednafenField(file, secData, secSize, "WorkRAML", off, sz) && sz >= kSizeWramLow)
+            {
+                CopyMednafenU16BE(file, off, kSizeWramLow, state->mWramLow, swap);
+            }
+            if (FindMednafenField(file, secData, secSize, "WorkRAMH", off, sz) && sz >= kSizeWramHigh)
+            {
+                CopyMednafenU16BE(file, off, kSizeWramHigh, state->mWramHigh, swap);
+            }
+        }
+        else if (std::strcmp(name, "SH2-M") == 0)
+        {
+            state->mHasSh2[0] = ParseMednafenSh2(file, secData, secSize, hostBigEndian, state->mSh2[0]);
+        }
+        else if (std::strcmp(name, "SH2-S") == 0)
+        {
+            state->mHasSh2[1] = ParseMednafenSh2(file, secData, secSize, hostBigEndian, state->mSh2[1]);
         }
         pos = secData + secSize;
     }
