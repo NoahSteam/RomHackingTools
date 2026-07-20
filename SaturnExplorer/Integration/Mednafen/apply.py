@@ -232,11 +232,15 @@ def copy_sources(src_dir, do_write):
 # used autotools (Makefile.am) and meson (meson.build) across versions, so try to find
 # a file that references ss/vdp1.cpp (or vdp1.cpp) and add ours beside it.
 BUILD_CANDIDATES = [
+    os.path.join("src", "ss", "Makefile.am"),   # current Mednafen ss (libss_a_SOURCES)
     os.path.join("src", "Makefile.am"),
     os.path.join("src", "meson.build"),
     os.path.join("src", "ss", "Makefile.inc"),
 ]
 NEW_SOURCES = ["se_export.c", "se_mednafen_glue.c"]
+# The vdp1 source token, keeping any path prefix (group 2) and quoting (group 1) the
+# list uses. Matches `vdp1.cpp`, `ss/vdp1.cpp`, `'vdp1.cpp'` — but not `vdp1_line.cpp`.
+VDP1_SRC_RE = re.compile(r'''(["']?)((?:\S+/)?vdp1\.cpp)\1''')
 
 
 def process_build(root, do_write):
@@ -247,31 +251,24 @@ def process_build(root, do_write):
         text = open(path, encoding="utf-8", errors="surrogateescape").read()
         if "se_mednafen_glue.c" in text:
             return [f"{rel}:", "  ok (already)  se_export.c + se_mednafen_glue.c"]
-        # Match the vdp1 source entry with whatever prefix/suffix the file uses.
-        m = re.search(r'([ \t]*)(["\']?)((?:ss/)?vdp1\.cpp)\2', text)
+        m = VDP1_SRC_RE.search(text)
         if not m:
             continue
-        indent, quote, ref = m.group(1), m.group(2), m.group(3)
-        prefix = ref[: ref.index("vdp1.cpp")]   # "ss/" or ""
-        add = "".join(f"{indent}{quote}{prefix}{s}{quote}{_line_suffix(text, m.end())}"
-                      for s in NEW_SOURCES)
-        new = text[: m.start()] + add + text[m.start():]
+        quote, ref = m.group(1), m.group(2)
+        prefix = ref[: ref.rfind("vdp1.cpp")]   # "ss/", "", ...
+        # Insert our two sources inline right before the vdp1 token, matching the list's
+        # quoting/separators: meson wants `'x', 'y', `; make just space-separates. This
+        # keeps the entry on its own line, valid for both `\`-continued and one-line lists.
+        if quote:
+            ins = "".join(f"{quote}{prefix}{s}{quote}, " for s in NEW_SOURCES)
+        else:
+            ins = "".join(f"{prefix}{s} " for s in NEW_SOURCES)
+        new = text[: m.start()] + ins + text[m.start():]
         if do_write:
             open(path, "w", encoding="utf-8", errors="surrogateescape").write(new)
         return [f"{rel}:", f"  + inserted    {', '.join(NEW_SOURCES)}"]
     return ["build file:",
             "  ANCHOR MISS   add se_export.c + se_mednafen_glue.c to the ss build by hand"]
-
-
-def _line_suffix(text, pos):
-    """Mirror how the anchored source line ends (autotools ' \\\n' vs meson ',\n')."""
-    eol = text.find("\n", pos)
-    line = text[pos:eol if eol >= 0 else len(text)]
-    if line.rstrip().endswith("\\"):
-        return " \\\n"
-    if line.rstrip().endswith(","):
-        return ",\n"
-    return "\n"
 
 
 def revert(src_dir, root):
@@ -290,7 +287,9 @@ def revert(src_dir, root):
         if os.path.isfile(path):
             t = open(path, encoding="utf-8", errors="surrogateescape").read()
             for s in NEW_SOURCES:
-                t = re.sub(r'[ \t]*["\']?(?:ss/)?' + re.escape(s) + r'["\']?[ \t]*(?:\\|,)?\n', "", t)
+                # Remove the inline token we inserted before vdp1 (quoted or not, with
+                # any path prefix and a trailing comma/space).
+                t = re.sub(r'''["']?(?:\S+/)?''' + re.escape(s) + r'''["']?,?[ \t]*''', "", t)
             open(path, "w", encoding="utf-8", errors="surrogateescape").write(t)
     print("Reverted: removed SE_EXPORT edits and copied files.")
 
