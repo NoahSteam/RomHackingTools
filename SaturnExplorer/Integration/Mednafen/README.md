@@ -11,9 +11,10 @@ accessors, against the actual `VDP1::VRAM`/`FB`/regs, `VDP2::VRAM`/`CRAM`/`RawRe
 wired `se_mednafen_glue.o`. The glue's ten `SsDbg*` externs each resolve to a
 definition in the patched objects (nm-verified), so the tap links into real Mednafen.
 Separately, the wire transforms round-trip end-to-end against a real Mednafen
-savestate (§"Verify"). The one remaining `TODO(mednafen)` is Tier-3 **execution
-breakpoints** (Mednafen's `WANT_DEBUGGER` debug core); running a live game additionally
-needs a Saturn BIOS + disc, which is the user's to supply.
+savestate (§"Verify"). Tier-3 **execution breakpoints** are wired to Mednafen's
+`ss/debug.inc` and link into a `--enable-debugger` build (§"Execution breakpoints");
+they fire only in that build. Running a live game additionally needs a Saturn BIOS +
+disc, which is the user's to supply.
 
 Saturn Explorer already **loads Mednafen savestates** (`MDFNSVST`) statically —
 VDP1/VDP2 VRAM, both register files, and CRAM (see
@@ -83,7 +84,7 @@ Hook points (all in `ss.cpp`, all `static`):
 | Per-frame snapshot | `Vdp2VBlankOUT()` | `Emulate(EmulateSpecStruct*)`, after `espec->MasterCycles = …`, before `SMPC_UpdateOutput()` |
 | Frame gate (pause/step) | top of `YabauseEmulate()` | top of `Emulate()` — **see caveat** |
 | Deinit | `YabauseDeInit()` | `CloseGame(void)` |
-| Exec breakpoints | `SH2AddCodeBreakpoint`, `SH2SetBreakpointCallBack` | `ss/debug.inc` via `DBG_CPUHandler<n>()` (Tier 3 — needs `WANT_DEBUGGER`; **TODO**) |
+| Exec breakpoints | `SH2AddCodeBreakpoint`, `SH2SetBreakpointCallBack` | `ss/debug.inc`: `DBG_AddBreakPoint(BPOINT_PC,…)` + `DBG_SetCPUCallback` (needs `--enable-debugger`) |
 | Memory poke | `MappedMemoryWriteByte` | `CheatMemWrite(A, V)` in ss.cpp — cache-correct bus byte write |
 
 ## Accessors (the Mednafen-specific integration wrinkle)
@@ -173,9 +174,31 @@ layout. Two ways to bridge:
   surface — the natural first target.
 - **Tier 2 — memory** (Watch + Hex read): add `WorkRAML/H` (+ verify byte order); add
   the memory-poke hook for Hex edits.
-- **Tier 3 — CPU/debugger** (SH-2 Assembly + breakpoints): add SH-2 register
-  extraction + Mednafen's breakpoint API + the stop-event bridge. Hardest tier —
-  Mednafen's debug/step model differs from Yabause's.
+- **Tier 3 — CPU/debugger** (SH-2 Assembly + breakpoints): SH-2 register extraction,
+  the memory poke, and execution breakpoints are all wired (see below). Breakpoints
+  need a `--enable-debugger` build; everything else works in any build.
+
+## Execution breakpoints (Tier 3)
+
+`apply.py` injects `SsDbgAddExecBp` / `SsDbgClearBps` into `ss.cpp` (under
+`#ifdef WANT_DEBUGGER`, so a non-debugger build still compiles — they're no-ops
+there). `SsDbgAddExecBp` calls the `ss/debug.inc` debugger:
+`DBG_AddBreakPoint(BPOINT_PC, addr, addr, true)` plus a one-time
+`DBG_SetCPUCallback(hook, false)`. Adding a PC breakpoint makes `DBG_NeedCPUHooks()`
+return true, so ss.cpp's per-frame run-loop dispatcher
+(`rltab[…][DBG_NeedCPUHooks()]`) switches to the per-instruction `DBG_CPUHandler`
+path on its own — **no explicit debug-mode toggle needed**. On a hit the injected
+hook reports the halted PC and the CPU that hit it (`DBG.ActiveCPU`) via
+`SeExportNotifyStop`, then blocks on `SeExportGateFrame` right at the instruction
+until Saturn Explorer resumes — an **instruction-exact halt**, like the Yabause tap.
+The glue registers this through the existing `SeExportSetBreakpointHooks` bridge, so
+Saturn Explorer's gutter breakpoints and "Run to Here" drive it over the protocol
+unchanged.
+
+Build Mednafen with `./configure --enable-debugger` for breakpoints to fire; without
+it the breakpoint set still round-trips over the wire but doesn't halt. (SS PC
+breakpoints are shared across both SH-2s, so a breakpoint fires for whichever core
+reaches the address; the hit report still names the exact CPU.)
 
 Every arg to `SeExportSnapshot` may be `NULL` (that section ships as length 0 and the
 client no-ops it), so you can build the tiers incrementally and test each.
@@ -209,6 +232,6 @@ socket. Results:
   rebuild (including the byte-swapped hw-0x78/0x7A pairs); VDP1 regs via the 11-u16
   struct; SH-2 master/slave PCs; and a `WRM` poke reaching the write hook — **all exact.**
 
-So the full data path is proven in-repo. What a real Mednafen build still adds: the
-injected accessors compiling against live `ss` symbols, the frame-gate behavior under
-Mednafen's timing, and the Tier-3 breakpoint API.
+So the full data path is proven in-repo, and the patched tap (including the Tier-3
+breakpoint accessors, under `--enable-debugger`) compiles + links into a complete real
+Mednafen binary. What a live game still needs is a Saturn BIOS + disc to actually run.

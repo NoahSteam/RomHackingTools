@@ -41,7 +41,9 @@ extern const uint16_t* SsDbgWramH(void);      /* WorkRAMH      — 0x80000 words
 extern const uint16_t* SsDbgVdp1Fb(void);     /* displayed VDP1 FB bank = FB[!FBDrawWhich]  */
 extern void            SsDbgVdp1Regs(uint16_t out11[11]); /* TVMR,FBCR,PTMR,EWDR,EWLR,EWRR,ENDR,EDSR,LOPR,COPR,MODR */
 extern void            SsDbgSh2Regs(int cpu, uint32_t out23[23]); /* R[16],SR,GBR,VBR,MACH,MACL,PR,PC */
-extern void            SsDbgPokeByte(uint32_t addr, uint8_t val); /* Tier 3: bus/debug byte write */
+extern void            SsDbgPokeByte(uint32_t addr, uint8_t val); /* bus/debug byte write */
+extern void            SsDbgAddExecBp(int cpu, unsigned int addr); /* Tier 3: install PC breakpoint */
+extern void            SsDbgClearBps(void);                        /* Tier 3: clear PC breakpoints */
 #endif
 
 /* ============================ pure, testable helpers ====================== */
@@ -150,16 +152,20 @@ void SeMednafenSnapshot(void)
  * Mednafen's breakpoint callback. */
 static void SeMdfnAddExecBp(int cpu, unsigned int address)
 {
+#if defined(SE_MEDNAFEN_WIRED)
+    /* Installs a PC breakpoint via the ss debugger (SsDbgAddExecBp). It fires only in
+     * a Mednafen built with --enable-debugger (WANT_DEBUGGER); otherwise it's a no-op
+     * and the breakpoint still round-trips over the protocol without halting. */
+    SsDbgAddExecBp(cpu, address);
+#else
     (void)cpu; (void)address;
-    /* TODO(mednafen): the one unfinished tier. Mednafen's exec breakpoints live in
-       ss/debug.inc, checked via DBG_CPUHandler<cpu>() before each CPU[cpu].Step()
-       and only in a WANT_DEBUGGER build. Add 'address' to that per-CPU bp set here,
-       and from the handler's hit path call SeExportNotifyStop(cpu, pc). (Same
-       "needs the debug core" caveat as the Yabause tap.) */
+#endif
 }
 static void SeMdfnClearBps(void)
 {
-    /* TODO(mednafen): clear the ss/debug.inc exec-breakpoint set for both cores. */
+#if defined(SE_MEDNAFEN_WIRED)
+    SsDbgClearBps();
+#endif
 }
 static void SeMdfnWriteByte(unsigned int address, unsigned char value)
 {

@@ -97,6 +97,33 @@ extern "C" void SsDbgPokeByte(unsigned int addr, unsigned char val) {
       at the equivalent bus/debug byte writer. */
    CheatMemWrite((unsigned int)addr, (unsigned char)val);
 }
+#ifdef WANT_DEBUGGER
+/* Tier 3 — execution breakpoints via the ss debugger (needs a --enable-debugger
+   build; without WANT_DEBUGGER these are no-ops below). Adding a PC breakpoint makes
+   DBG_NeedCPUHooks() true, so ss.cpp's per-frame run-loop dispatcher
+   (rltab[...][DBG_NeedCPUHooks()]) switches to the per-instruction DBG_CPUHandler
+   path on its own — no explicit debug-mode toggle. On a hit we report the halted PC
+   (and the CPU that hit it, DBG.ActiveCPU) and block right at the instruction until
+   Saturn Explorer resumes/steps — an instruction-exact halt like the Yabause tap. */
+static void SeSsBpHook(uint32 PC, bool bpoint) {
+   if (bpoint) {
+      SeExportNotifyStop((int)DBG.ActiveCPU, (unsigned int)PC);
+      while (!SeExportGateFrame()) { }
+   }
+}
+extern "C" void SsDbgAddExecBp(int cpu, unsigned int addr) {
+   (void)cpu;   /* SS PC breakpoints are shared across both SH-2s */
+   DBG_SetCPUCallback(SeSsBpHook, false);
+   DBG_AddBreakPoint(BPOINT_PC, addr, addr, true);
+}
+extern "C" void SsDbgClearBps(void) {
+   DBG_FlushBreakPoints(BPOINT_PC);
+   DBG_SetCPUCallback(0, false);   /* drop the hook so the fast run loop returns */
+}
+#else
+extern "C" void SsDbgAddExecBp(int cpu, unsigned int addr) { (void)cpu; (void)addr; }
+extern "C" void SsDbgClearBps(void) {}
+#endif
 }"""
 
 # Files that get an accessor block appended at EOF: (filename, block, key). ss.cpp
@@ -111,6 +138,7 @@ APPEND_EDITS = [
 FWD_DECLS = (
     "extern \"C\" void SeMednafenFrameHook(void);\n"
     "extern \"C\" int  SeExportGateFrame(void);\n"
+    "extern \"C\" void SeExportNotifyStop(int cpu, unsigned int pc);\n"
 )
 
 # Per-frame snapshot call, injected after the frame's cycle count is finalized.
