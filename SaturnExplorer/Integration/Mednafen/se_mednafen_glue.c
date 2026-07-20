@@ -58,25 +58,45 @@ static void SwapU16ToBE(uint8_t* dst, const uint8_t* src, size_t len)
     }
 }
 
+/* Hardware-offset -> Yabause `Vdp2` struct byte-offset map, indexed by (hw >> 1);
+ * 0xFFFF = reserved slot. The SAME 144-entry table the client uses — kept verbatim in
+ * sync with Drivers/Common/src/SaturnStateShared.cpp (the client's inverse reads it
+ * back). Embedded here (not extern) so the copied glue links standalone in a foreign
+ * tree. (Longer term, protocol v7 sends a pre-built hw-offset BE image and drops this
+ * rebuild entirely — see README "VDP2 registers".) */
+static const unsigned short kSeVdp2RegStructOffset[144] = {
+    0x000, 0x002, 0x004, 0x006, 0x008, 0x00A, 0xFFFF, 0x00C,
+    0x00E, 0x010, 0x012, 0x014, 0x016, 0x018, 0x01A, 0x01C,
+    0x01E, 0x020, 0x022, 0x024, 0x026, 0x028, 0x02A, 0x02C,
+    0x02E, 0x030, 0x032, 0x034, 0x036, 0x038, 0x03A, 0x03C,
+    0x03E, 0x040, 0x042, 0x044, 0x046, 0x048, 0x04A, 0x04C,
+    0x04E, 0x050, 0x052, 0x054, 0x056, 0x058, 0x05A, 0x05C,
+    0x05E, 0x060, 0x062, 0x064, 0x066, 0x068, 0x06A, 0x06C,
+    0x06E, 0x070, 0x072, 0x074, 0x07A, 0x078, 0x07E, 0x07C,
+    0x080, 0x082, 0x084, 0x086, 0x08A, 0x088, 0x08E, 0x08C,
+    0x090, 0x092, 0x094, 0x096, 0x098, 0x09A, 0x09E, 0x09C,
+    0x0A2, 0x0A0, 0x0A6, 0x0A4, 0x0AA, 0x0A8, 0x0AC, 0x0AE,
+    0x0B0, 0x0B2, 0x0B4, 0x0B6, 0x0B8, 0x0BA, 0x0BE, 0x0BC,
+    0x0C0, 0x0C2, 0x0C4, 0x0C6, 0x0C8, 0x0CA, 0x0CC, 0x0CE,
+    0x0D0, 0x0D2, 0x0D4, 0x0D6, 0x0DA, 0x0D8, 0x0DE, 0x0DC,
+    0x0E0, 0x0E2, 0x0E4, 0x0E6, 0x0E8, 0x0EA, 0x0EC, 0x0EE,
+    0x0F0, 0x0F2, 0x0F4, 0x0F6, 0x0F8, 0x0FA, 0x0FC, 0xFFFF,
+    0x0FE, 0x100, 0x102, 0x104, 0x106, 0x108, 0x10A, 0x10C,
+    0x10E, 0x110, 0x112, 0x114, 0x116, 0x118, 0x11A, 0x11C,
+};
+
 /* Rebuild the raw 288-byte Yabause `Vdp2` struct the client expects, from
- * Mednafen's flat RawRegs[0x100] (register at hw offset o is RawRegs[o>>1]).
- * The struct is a re-layout of the same registers via a fixed hardware map; write
- * each register little-endian at its struct offset so the client's
- * sedrv::BuildVdp2RegImage reads it back correctly.
- *
- * kVdp2RegStructOffset is the SAME 144-entry table the client uses — copy it
- * verbatim from Drivers/Common/src/SaturnStateShared.cpp (0xFFFF = reserved slot).
- * (Longer term, prefer protocol v7: send a pre-built hw-offset BE image and drop
- *  this rebuild entirely — see README "VDP2 registers".) */
+ * Mednafen's flat RawRegs[0x100] (register at hw offset o is RawRegs[o>>1]). The
+ * struct is a re-layout of the same registers via the fixed map above; write each
+ * register little-endian at its struct offset so the client's BuildVdp2RegImage reads
+ * it back correctly. */
 static void BuildYabauseVdp2Struct(uint8_t out288[288], const uint16_t rawRegs[0x100])
 {
-    /* TODO(mednafen): paste kVdp2RegStructOffset[144] from SaturnStateShared.cpp. */
-    extern const uint16_t kVdp2RegStructOffset[144];
     unsigned hw;
     memset(out288, 0, 288);
     for (hw = 0; hw <= 0x11E; hw += 2)
     {
-        const uint16_t so = kVdp2RegStructOffset[hw >> 1];
+        const uint16_t so = kSeVdp2RegStructOffset[hw >> 1];
         if (so == 0xFFFF || (unsigned)(so + 1) >= 288) continue;
         const uint16_t v = rawRegs[hw >> 1];
         out288[so]     = (uint8_t)(v & 0xFF);   /* little-endian, as the client reads */

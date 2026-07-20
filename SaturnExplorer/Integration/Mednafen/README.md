@@ -153,10 +153,11 @@ keeps its VDP2 regs as a flat `RawRegs[0x100]` (indexed by `hw>>1`) — a differ
 layout. Two ways to bridge:
 
 1. **Synthesize the Yabause struct from `RawRegs`** in the glue (keeps the client +
-   protocol unchanged): `struct[kVdp2RegStructOffset[i]] = RawRegs[i]` (little-endian),
-   using the same fixed mapping table the client uses. That table lives in
-   `Drivers/Common/src/SaturnStateShared.cpp` (`kVdp2RegStructOffset`, 144 entries) —
-   copy it into the glue. This is what the template sketches (`BuildYabauseVdp2Struct`).
+   protocol unchanged): `struct[offset[i]] = RawRegs[i]` (little-endian), using the same
+   fixed 144-entry mapping table the client uses. The glue **embeds** that table
+   (`kSeVdp2RegStructOffset`, kept in sync with `Drivers/Common/src/SaturnStateShared.cpp`)
+   so it links standalone in a foreign tree — no manual paste. This is what
+   `BuildYabauseVdp2Struct` does.
 2. **(Cleaner, future) Generalize the wire** so the VDP2 section is a *pre-built
    hardware-offset big-endian image* — exactly what the VDP1-regs section already is.
    A one-time protocol bump: the server sends the finished image, the client uses it
