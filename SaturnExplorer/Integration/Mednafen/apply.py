@@ -156,6 +156,20 @@ GATE_HOOK = (
 )
 GATE_ANCHOR = r'(\bEmulate\s*\(\s*EmulateSpecStruct\s*\*\s*\w+\s*\)\s*\{\s*\n)'
 
+# Window-title mark: append "(SaturnExplorer Enabled. <ver> / Mednafen <rev>)" to the
+# SDL window title so a tapped build is obvious. This lives in the SDL frontend
+# (src/drivers/video.cpp), not the ss core; skipped gracefully if that file isn't
+# present (a non-SDL / libretro build). Forward-decl at BOF (extern "C" can't sit in a
+# function body); the append goes right after Mednafen's own SDL_SetWindowTitle.
+TITLE_FWD = 'extern "C" const char* SeExportTitleSuffix(const char*, const char*);\n'
+TITLE_HOOK = (
+    "  /* Saturn Explorer: mark this window as tapped. */\n"
+    "  { char se_t[256]; SDL_snprintf(se_t, sizeof se_t, \"%s %s\", SDL_GetWindowTitle(window),\n"
+    "      SeExportTitleSuffix(\"Mednafen\", MEDNAFEN_VERSION)); SDL_SetWindowTitle(window, se_t); }\n"
+)
+TITLE_ANCHOR = r'(SDL_SetWindowTitle\(window,[^;]*;\s*\n)'
+TITLE_FILE = os.path.join("src", "drivers", "video.cpp")
+
 FENCE_RE = re.compile(re.escape(BEGIN) + r".*?" + re.escape(END), re.DOTALL)
 
 
@@ -234,6 +248,23 @@ def process_append_file(src_dir, fname, block, key, do_write):
     return [f"{fname}:", note]
 
 
+def process_title(root, do_write):
+    """Append the SaturnExplorer mark to the SDL window title (src/drivers/video.cpp).
+    Optional/best-effort: a non-SDL or libretro build won't have this file — skip it."""
+    path = os.path.join(root, TITLE_FILE)
+    if not os.path.isfile(path):
+        return [f"{TITLE_FILE}:", "  (not found — window-title mark skipped; non-SDL build?)"]
+    text = original = open(path, encoding="utf-8", errors="surrogateescape").read()
+    notes = [f"{TITLE_FILE}:"]
+    text, n = apply_prepend(text, TITLE_FWD, "SeExportTitleSuffix(const char*")
+    notes.append(n)
+    text, n = apply_anchored(text, TITLE_ANCHOR, TITLE_HOOK, 'SeExportTitleSuffix("Mednafen"')
+    notes.append(n)
+    if do_write and text != original:
+        open(path, "w", encoding="utf-8", errors="surrogateescape").write(text)
+    return notes
+
+
 def copy_sources(src_dir, do_write):
     notes = []
     for name in COMMON_FILES:
@@ -302,8 +333,9 @@ def process_build(root, do_write):
 
 def revert(src_dir, root):
     fence_re = re.compile(re.escape(BEGIN) + r".*?" + re.escape(END) + r"\n?", re.DOTALL)
-    for fname in ("vdp1.cpp", "vdp2.cpp", "ss.cpp"):
-        path = os.path.join(src_dir, fname)
+    edited = [os.path.join(src_dir, f) for f in ("vdp1.cpp", "vdp2.cpp", "ss.cpp")]
+    edited.append(os.path.join(root, TITLE_FILE))   # window-title mark (SDL frontend)
+    for path in edited:
         if os.path.isfile(path):
             t = open(path, encoding="utf-8", errors="surrogateescape").read()
             open(path, "w", encoding="utf-8", errors="surrogateescape").write(fence_re.sub("", t))
@@ -355,6 +387,7 @@ def main():
     for fname, block, key in APPEND_EDITS:
         notes += process_append_file(src_dir, fname, block, key, do_write)
     notes += process_ss(src_dir, do_write, with_pause)
+    notes += process_title(root, do_write)
     notes += process_build(root, do_write)
 
     print("\n".join(notes))

@@ -453,6 +453,14 @@ static void* SeTcpServerThread(void* arg)
 }
 #endif
 
+const char* SeExportTitleSuffix(const char* emu_name, const char* emu_rev)
+{
+    static char buf[160];
+    snprintf(buf, sizeof(buf), "(SaturnExplorer Enabled. %s / %s %s)",
+             SE_EXPORT_VERSION, emu_name ? emu_name : "?", emu_rev ? emu_rev : "?");
+    return buf;
+}
+
 int SeExportInit(void)
 {
     sFront = (SeFrame*)calloc(1, sizeof(SeFrame));

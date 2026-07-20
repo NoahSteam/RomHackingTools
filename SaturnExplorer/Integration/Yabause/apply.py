@@ -148,6 +148,25 @@ EDITS = [
      "extern u8 *vdp1frontframebuffer;\n"
      "u8 *VIDSoftGetVdp1FrameBuffer(void) { return vdp1frontframebuffer; }\n",
      "VIDSoftGetVdp1FrameBuffer"),
+
+    # --- qt/main.cpp: append "(SaturnExplorer Enabled. <ver> / Yabause <VERSION>)" to
+    # the main window title so a tapped build is obvious. This is the Qt port (the main
+    # desktop GUI); other Yabause ports set their title elsewhere — see README. The file
+    # is OPTIONAL (a non-Qt build won't have it), handled specially in main().
+    ("qt/main.cpp",
+     r'(\n)(int main\s*\()',
+     "before_group2",
+     'extern "C" const char* SeExportTitleSuffix(const char*, const char*);\n',
+     'SeExportTitleSuffix(const char*'),
+
+    ("qt/main.cpp",
+     r'(setWindowTitle\(\s*app\.applicationName\(\)\s*\);\s*\n)',
+     "after_group1",
+     "   /* Saturn Explorer: mark this window as tapped. */\n"
+     "   { QWidget *se_w = QtYabause::mainWindow();\n"
+     "     se_w->setWindowTitle( se_w->windowTitle() + \" \" +\n"
+     "        QString::fromUtf8( SeExportTitleSuffix(\"Yabause\", VERSION) ) ); }\n",
+     'SeExportTitleSuffix("Yabause"'),
 ]
 
 # A fenced SE_EXPORT block (for update-in-place when a hook's content changes).
@@ -255,7 +274,7 @@ def copy_sources(src_dir, do_write):
 
 def revert(src_dir):
     fence_re = re.compile(re.escape(BEGIN) + r".*?" + re.escape(END) + r"\n?", re.DOTALL)
-    for fname in ("yabause.c", "vdp2.c", "vidsoft.c"):
+    for fname in ("yabause.c", "vdp2.c", "vidsoft.c", "qt/main.cpp"):
         path = os.path.join(src_dir, fname)
         if os.path.isfile(path):
             t = open(path, encoding="utf-8", errors="surrogateescape").read()
@@ -297,6 +316,13 @@ def main():
     for fname in ("yabause.c", "vdp2.c", "vidsoft.c"):
         notes.append(fname + ":")
         notes += process_file(src_dir, fname, do_write)
+    # qt/main.cpp is the Qt port's window title — optional (a non-Qt build won't have
+    # it), so skip it gracefully rather than reporting a fatal MISSING.
+    notes.append("qt/main.cpp:")
+    if os.path.isfile(os.path.join(src_dir, "qt", "main.cpp")):
+        notes += process_file(src_dir, "qt/main.cpp", do_write)
+    else:
+        notes.append("  (not found — window-title mark skipped; non-Qt port?)")
     notes.append("CMakeLists.txt:")
     notes += process_cmake(src_dir, do_write)
 

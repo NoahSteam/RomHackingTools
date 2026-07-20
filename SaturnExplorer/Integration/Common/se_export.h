@@ -23,6 +23,18 @@
 extern "C" {
 #endif
 
+/* SaturnExplorer tap version — the "SE version" shown in the patched emulator's
+ * window title. Bump when the tap's behaviour changes. */
+#define SE_EXPORT_VERSION "1.0"
+
+/* Returns a static, reusable string to append to the emulator's window title,
+ * marking the build as SaturnExplorer-tapped, e.g.
+ *   "(SaturnExplorer Enabled. 1.0 / Mednafen 1.32.1)"
+ * emu_name / emu_rev are the emulator's own name + version it was built against
+ * (pass its version macro, e.g. MEDNAFEN_VERSION or VERSION); either may be NULL.
+ * The returned pointer is to a shared static buffer — copy it if you need to keep it. */
+const char* SeExportTitleSuffix(const char* emu_name, const char* emu_rev);
+
 /* Start the export server (background thread + local socket). Returns 0 on
  * success, non-zero on failure (Yabause keeps running either way). */
 int SeExportInit(void);

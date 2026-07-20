@@ -206,6 +206,14 @@ reaches the address; the hit report still names the exact CPU.)
 Every arg to `SeExportSnapshot` may be `NULL` (that section ships as length 0 and the
 client no-ops it), so you can build the tiers incrementally and test each.
 
+## Window-title mark
+
+`apply.py` also appends `(SaturnExplorer Enabled. <SE ver> / Mednafen <MEDNAFEN_VERSION>)`
+to the SDL window title so a tapped build is obvious — injected right after Mednafen's
+own `SDL_SetWindowTitle` in `src/drivers/video.cpp`, using the shared
+`SeExportTitleSuffix()` helper. It's best-effort: a non-SDL / libretro build won't have
+that file, and the patcher skips it gracefully.
+
 ## Build / patch workflow + caveats
 
 - **You need Mednafen's `ss` source and a local build.** Mednafen discourages
