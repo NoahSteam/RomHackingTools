@@ -103,13 +103,13 @@ to `SeExportSnapshot`. Per section:
   (`SwapU16ToBE` in the glue.)
 - **CRAM** — `uint16` host order; pass straight. The client normalizes it via RAMCTL
   (mode-aware).
-- **Work RAM** — `WorkRAML/H` are `uint16` arrays accessed through `ne16_rbo_be`
-  (see ss.cpp), so their in-array layout is **not obviously the same** as the
-  protocol's "host-order 16-bit words, client swaps to BE" assumption. This is the one
-  order the savestate path never exercised, so it's **unproven**: pass raw first, and
-  if the Hex/Watch panels show byte-swapped values, apply `SwapU16ToBE` in the
-  `SsDbgWramL/H` accessors. Nail it with a known value the way the Yabause work-RAM
-  order was.
+- **Work RAM** — `WorkRAML/H` are `uint16` arrays (host order), the **same storage as
+  VDP1/VDP2 VRAM**, just accessed via `ne16_rbo_be`. The wire carries work RAM
+  host-order and the client `Bswap16`s it to big-endian (LiveDriver), so pass it raw —
+  no glue swap. The in-repo mock proves this round-trips (a host word reads back as the
+  right big-endian instruction). One residual: `WorkRAMH`'s comment notes it's
+  "effectively 32-bit … 16-bit here because of fastmap" — the 16-bit path matches VRAM,
+  but if a 32-bit value ever looks half-word-swapped on a real build, spot-check it.
 - **VDP1 framebuffer** — `FB[!FBDrawWhich]`, native `uint16` RGB555 (host order like
   CRAM); pass straight.
 - **SH-2 regs** — host-order u32 in `sh2regs_struct` field order; the client reads
@@ -163,10 +163,21 @@ client no-ops it), so you can build the tiers incrementally and test each.
   the way Yabause does may stall Mednafen's audio. For Tier 1 you can skip the gate
   entirely (live view only, no pause/step); add pause carefully at Tier 2/3.
 
-## Verify without a Mednafen rebuild
+## Verify without a Mednafen rebuild — done ✓
 
-Reuse the Yabause live-path harness pattern: a stub that feeds `SeExportSnapshot`
-with bytes parsed from a **real Mednafen savestate**, then connect the real
-LiveDriver and assert the panels render (Tier 1) and — as tiers land — that work RAM
-+ SH-2 round-trip and a `WRM` poke reaches the write hook. This exercises the glue's
-byte-order + VDP2 handling entirely in-repo, before touching a Mednafen build.
+The glue's snapshot path is fenced under `SE_MEDNAFEN_WIRED` (undefined = stub, so the
+file builds anywhere; defined = the real path runs against injected accessors). A
+headless mock (`mdfn_live_e2e`) compiles `se_mednafen_glue.c` with that macro, feeds
+its accessors, and drives the **real `se_export` server ↔ real LiveDriver** over the
+socket. Results:
+
+- **VDP1 VRAM from a real Mednafen savestate round-trips identically to the file
+  loader** — the authentic byte-order proof on real data (host-order → glue swap → BE).
+- VDP2 VRAM host→BE swap; CRAM + work RAM host→BE normalization (a host word reads
+  back as the right big-endian instruction); the `RawRegs`→Yabause-struct→client-image
+  rebuild (including the byte-swapped hw-0x78/0x7A pairs); VDP1 regs via the 11-u16
+  struct; SH-2 master/slave PCs; and a `WRM` poke reaching the write hook — **all exact.**
+
+So the full data path is proven in-repo. What a real Mednafen build still adds: the
+injected accessors compiling against live `ss` symbols, the frame-gate behavior under
+Mednafen's timing, and the Tier-3 breakpoint API.

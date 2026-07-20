@@ -14,10 +14,12 @@
  * visible; Mednafen already does this with PeekVRAM / "RawRegs // For debugging")
  * and this glue calls them. The accessor bodies are listed in README.md §"Accessors".
  *
- * It does NOT compile as-is: the accessor calls are fenced under `#if 0` until the
- * injected symbols exist in a Mednafen build. The pure transforms — the VRAM
- * host->big-endian swap and the RawRegs->Vdp2-struct rebuild — are real and
- * emulator-independent, and are the part worth getting right here.
+ * The snapshot path is fenced under `SE_MEDNAFEN_WIRED`: undefined (the default) it
+ * compiles to a stub, so this file builds anywhere; define it once the injected ss
+ * accessors exist and SeMednafenSnapshot() runs for real. (Saturn Explorer's own
+ * mdfn_live_e2e test defines it to exercise the transforms in-repo.) The pure
+ * transforms — the VRAM host->big-endian swap and the RawRegs->Vdp2-struct rebuild —
+ * are real and emulator-independent, and are the part worth getting right here.
  */
 #include "se_export.h"
 #include "SeLiveProtocol.h"
@@ -29,7 +31,7 @@
  *      file-scope static the glue can't see directly. Pointer accessors return the
  *      live array; the two packing accessors run Mednafen-side because they touch
  *      class/static members (VDP1's individual regs, SH7095's register file). ---- */
-#if 0  /* TODO(mednafen): provide these from the injected ss accessors (README §Accessors). */
+#if defined(SE_MEDNAFEN_WIRED)  /* define once the injected ss accessors exist (README §Accessors). */
 extern const uint16_t* SsDbgVdp1Vram(void);   /* VDP1::VRAM    — 0x40000 words, host order */
 extern const uint16_t* SsDbgVdp2Vram(void);   /* VDP2::VRAM    — 262144 words, host order  */
 extern const uint16_t* SsDbgCram(void);       /* VDP2::CRAM    — 2048 words,  host order   */
@@ -96,7 +98,7 @@ void SeMednafenSnapshot(void)
     static uint16_t vdp1[11];
     static uint32_t msh2[23], ssh2[23];
 
-#if 0  /* TODO(mednafen): enable once the injected accessors exist. */
+#if defined(SE_MEDNAFEN_WIRED)  /* enabled once the injected accessors exist. */
     SwapU16ToBE(v1, (const uint8_t*)SsDbgVdp1Vram(), sizeof v1);   /* -> big-endian */
     SwapU16ToBE(v2, (const uint8_t*)SsDbgVdp2Vram(), sizeof v2);
     BuildYabauseVdp2Struct(vs, SsDbgRawRegs());
