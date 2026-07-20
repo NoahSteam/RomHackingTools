@@ -15,11 +15,13 @@ compatibility.
 ## Recommended structure: a Yabause fork + `apply.py`
 
 Keep Saturn Explorer and Yabause as **separate repos** (Yabause is GPLv2; don't
-vendor its tree here). This directory holds the single source of truth for the
-integration — `se_export.{c,h}` and the wire protocol `SeLiveProtocol.h` — plus
-`apply.py`, which drops those into a Yabause checkout and inserts the hook calls for
-you. (`SeLiveProtocol.h` is also compiled straight into Saturn Explorer's LiveDriver,
-so client and server share one file and never drift.)
+vendor its tree here). This directory holds the **Yabause-specific** patcher —
+`apply.py` — plus this README. The portable pieces it installs (`se_export.{c,h}`
+and the wire protocol `SeLiveProtocol.h`) live one level up in
+[`../Common/`](../Common), shared with every other emulator's patcher;
+`apply.py` copies them from there into your Yabause checkout and inserts the hook
+calls. (`SeLiveProtocol.h` is also compiled straight into Saturn Explorer's
+LiveDriver, so client and server share one file and never drift.)
 
 ```sh
 # 1. Fork Yabause once (github.com/Yabause/yabause -> your account) and clone it.
@@ -45,10 +47,11 @@ by hand — the manual steps below are that fallback.
 ## Manual integration (fallback)
 
 ### 1. Copy three files into `yabause/src`
+All three come from [`../Common/`](../Common) (the portable, shared source of truth):
 - `se_export.h`
 - `se_export.c`
-- `SeLiveProtocol.h`  ← copied from this folder (`Integration/Yabause/`), the one
-  copy the LiveDriver also compiles against, so the server and client never drift
+- `SeLiveProtocol.h`  ← the one copy the LiveDriver also compiles against, so the
+  server and client never drift
 
 Add `se_export.c` to Yabause's build (its `src/CMakeLists.txt` `yabause_SOURCES`
 list, or your Makefile). On Windows link against `ws2_32` if it isn't already.
@@ -188,7 +191,7 @@ Assembly panel to the halted PC. The pause/step verbs just set the state
 `SeExportGateFrame()` reads; `BKP` syncs the whole breakpoint set (its arg is the
 descriptor count, followed by that many 12-byte descriptors); `WRM` pokes work RAM
 (arg = byte count N, payload = address + N big-endian bytes). Wire format
-(protocol v6): `Integration/Yabause/SeLiveProtocol.h`.
+(protocol v6): `Integration/Common/SeLiveProtocol.h`.
 
 **VDP1 frame buffer source.** The *global* `Vdp1FrameBuffer` in Yabause is only a
 fallback — during play every real frame-buffer access is routed through the active

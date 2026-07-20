@@ -1,7 +1,12 @@
-/* Saturn Explorer — Yabause memory-export server. See se_export.h + README.md.
- * Self-contained: only needs SeLiveProtocol.h (it lives beside this file, in
- * Integration/Yabause/; apply.py copies it into yabause/src/ with this module) and
- * the platform's sockets/threads. */
+/* Saturn Explorer — portable memory-export server (the emulator-side live tap).
+ * See se_export.h + the per-emulator READMEs (Integration/Yabause, ...).
+ *
+ * Emulator-agnostic: it takes raw memory pointers and function-pointer hooks, with
+ * no emulator types, so one copy serves every backend. Each emulator's patcher
+ * (e.g. Integration/Yabause/apply.py) copies this file + se_export.h +
+ * SeLiveProtocol.h (all here in Integration/Common) into that emulator's tree and
+ * injects the glue. Only needs SeLiveProtocol.h (beside this file) and the
+ * platform's sockets/threads. */
 
 /* Ask glibc to declare usleep() from <unistd.h> even under strict -std=c11
  * (must precede any system header). */

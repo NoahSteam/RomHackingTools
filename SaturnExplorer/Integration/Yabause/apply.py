@@ -2,10 +2,11 @@
 """
 apply.py — wire the Saturn Explorer live-tap into a Yabause checkout.
 
-Saturn Explorer keeps the export module (se_export.{c,h}) and the wire protocol
-(SeLiveProtocol.h) as the single source of truth in this folder. This script drops
-them into a Yabause tree and inserts the four small hook calls, so your fork
-stays a clean vanilla Yabause + a handful of clearly-marked edits.
+Saturn Explorer keeps the portable export module (se_export.{c,h}) and the wire
+protocol (SeLiveProtocol.h) as the single source of truth in ../Common, shared by
+every emulator's patcher. This script drops them into a Yabause tree and inserts the
+Yabause-specific hook calls, so your fork stays a clean vanilla Yabause + a handful
+of clearly-marked edits.
 
 Usage:
     python3 apply.py /path/to/yabause            # apply (or re-apply)
@@ -27,9 +28,11 @@ import shutil
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-# All three sources live in this folder (the single source of truth), so applying
-# the patch just copies them into the Yabause tree. SeLiveProtocol.h is the wire
-# contract also compiled into Saturn Explorer's LiveDriver — one copy, no drift.
+# The portable export module + wire protocol are the single source of truth, shared
+# by every emulator's patcher, so they live in Integration/Common (SeLiveProtocol.h
+# is also compiled straight into Saturn Explorer's LiveDriver — one copy, no drift).
+# Applying the patch copies them, plus this folder's Yabause-specific hook edits.
+SHARED_DIR = os.path.normpath(os.path.join(HERE, "..", "Common"))
 COPY_FILES = ["se_export.c", "se_export.h", "SeLiveProtocol.h"]
 
 BEGIN = "/* --- SE_EXPORT (Saturn Explorer live tap) --- */"
@@ -238,7 +241,7 @@ def process_cmake(src_dir, do_write):
 
 def copy_sources(src_dir, do_write):
     notes = []
-    files = [(os.path.join(HERE, f), f) for f in COPY_FILES]
+    files = [(os.path.join(SHARED_DIR, f), f) for f in COPY_FILES]
     for srcpath, name in files:
         if not os.path.isfile(srcpath):
             notes.append(f"  MISSING SOURCE {srcpath}")
