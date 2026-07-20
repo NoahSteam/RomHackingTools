@@ -52,6 +52,13 @@ patch-only. Document the BIOS-is-yours-to-supply step prominently either way.
 
 ## The one-command setup users run
 
+**Windows:** [`install.bat`](../install.bat) (→ [`install.py`](install.py)) does all of the
+below automatically — builds Saturn Explorer, downloads a pinned emulator, patches it, and
+builds it, installing any missing toolchain (git, CMake, MSVC, MSYS2) via `winget` with your
+consent. `install.bat --dry-run` previews the plan. See [`INSTALL.md`](INSTALL.md).
+
+The manual steps it wraps:
+
 ```sh
 # Yabause:
 python3 Integration/Yabause/apply.py  /path/to/yabause     # then build Yabause

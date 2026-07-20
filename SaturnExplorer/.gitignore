@@ -2,6 +2,7 @@
 build/
 build-*/
 out/
+_emu/          # installer clones + builds patched emulators here
 CMakeCache.txt
 CMakeFiles/
 cmake_install.cmake
