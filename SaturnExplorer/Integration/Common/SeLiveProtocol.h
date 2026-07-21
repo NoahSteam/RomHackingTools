@@ -55,7 +55,7 @@
 #define SE_LIVE_MAGIC1 'E'
 #define SE_LIVE_MAGIC2 'X'
 #define SE_LIVE_MAGIC3 'P'
-#define SE_LIVE_VERSION      7u
+#define SE_LIVE_VERSION      8u
 /* Command verbs are exactly 4 bytes; a request is a verb + 4-byte LE argument. */
 #define SE_LIVE_REQUEST      "GET\n"   /* back-compat alias for the snapshot verb */
 #define SE_LIVE_VERB_GET     "GET\n"
@@ -69,8 +69,30 @@
                                         * 16 bits) | button bitmask(low 16, SE_PAD_*). The
                                         * emulator glue drives the pad directly, bypassing
                                         * its own host-input mapping. No payload. */
+#define SE_LIVE_VERB_TRACE   "TRC\n"   /* install tracepoints (v8+): arg = descriptor
+                                        * count N, payload = N SE_LIVE_TRACE_DESC_LEN
+                                        * descriptors {id,cpu,address,flags} (all u32 LE).
+                                        * The emulator traps those PCs and, on a hit,
+                                        * appends an event to the reply's events block. */
 #define SE_LIVE_VERB_LEN     4
 #define SE_LIVE_REQUEST_LEN  8    /* verb(4) + arg(4, little-endian) */
+
+/* Tracepoint descriptor (v8+): id(4) + cpu(4) + address(4) + flags(4), all LE.
+ * flags bit0 = enabled (matches SE_LIVE_TP_ENABLED). */
+#define SE_LIVE_TRACE_DESC_LEN 16
+#define SE_LIVE_TP_ENABLED     0x1u
+
+/* Tracepoint events block (v8+). Appended AFTER the 10 snapshot sections + control +
+ * SH-2 sections, as a version-gated trailing block so the 48-byte header and the
+ * existing sections are unchanged (a v8 client reads the block only when the server
+ * reports version >= 8). Layout: u32 eventCount (LE), then eventCount events. Each
+ * event is SE_LIVE_EVENT_LEN bytes: id(4) + cpu(4) + frame(4) + 23 captured SH-2
+ * registers (u32 LE, in se_sh2_regs order: r[0..15], pc, pr, sr, gbr, vbr, mach, macl).
+ * The client formats the message from these captured registers, so no string handling
+ * happens emulator-side. */
+#define SE_LIVE_EVENT_REGS     23
+#define SE_LIVE_EVENT_LEN      (12u + SE_LIVE_EVENT_REGS * 4u)   /* 104 */
+#define SE_LIVE_EVENTS_MAX     64u   /* cap per reply; excess dropped with a marker */
 
 /* Saturn digital-pad buttons (v7+), an emulator-agnostic logical bitmask carried by
  * INP. The per-emulator glue maps these to that emulator's own pad bit order, so the

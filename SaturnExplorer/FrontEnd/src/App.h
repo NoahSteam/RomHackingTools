@@ -89,6 +89,8 @@ private:
     // for the editor's live preview and Test Fire. Empty string if no context.
     std::string FormatAgainstContext(const std::string& tmpl, int cpu);
     void SyncBreakpointsToLive();           // push the breakpoint set to the emulator
+    void SyncTracepointsToLive();           // push the tracepoint set to the emulator (v8)
+    void DrainTraceEvents();                // pull fired tracepoint events into the Log
     void DrawVdp1Framebuffer(IPlatform& platform);
     void DrawWorldView(IPlatform& platform);
     void DrawCommandList();
@@ -153,6 +155,7 @@ private:
     bool                     mTpEditNew = false;
     ExecutionAction          mTpEdit;
     uint64_t                 mLastSystemLogFrame = ~0ull;   // de-dupe per-frame system logs
+    uint64_t                 mLastTpGeneration = 0;         // last tracepoint set synced live
     uint64_t                 mLastBpGeneration = 0;  // last set synced to the live emulator
 
     se_render_opts   mRenderOpts {};

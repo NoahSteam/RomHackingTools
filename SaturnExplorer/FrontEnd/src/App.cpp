@@ -686,6 +686,8 @@ void App::BuildUI(IPlatform& platform)
         // Propagate any breakpoint changes (Assembly gutter, Watch "Break on...")
         // to the emulator, then reflect a breakpoint halt in the UI run state.
         SyncBreakpointsToLive();
+        SyncTracepointsToLive();   // push tracepoint set (v8)
+        DrainTraceEvents();        // pull fired tracepoints into the Log
 #ifdef SE_ENABLE_LIVE
         uint32_t stopReason = 0, stopCpu = 0, stopPc = 0;
         if (se_live_get_stop(&mDataSource, &stopReason, &stopCpu, &stopPc) && !mbPaused)
@@ -1447,6 +1449,75 @@ std::string App::FormatAgainstContext(const std::string& tmpl, int cpu)
     fc.frame = static_cast<uint32_t>(se_frame_number(mContext));
     fc.haveRegs = se_get_sh2_regs(mContext, cpu, &fc.regs) == SE_OK;
     return FormatEvaluate(tmpl, fc);
+}
+
+// Push the Log-type tracepoints to the emulator when the set changes (v8). Serializes
+// each as a 16-byte descriptor {id,cpu,address,flags}; the emulator traps those PCs.
+void App::SyncTracepointsToLive()
+{
+#ifdef SE_ENABLE_LIVE
+    if (!mbLiveSource) { return; }
+    if (mActions.Generation() == mLastTpGeneration) { return; }
+    mLastTpGeneration = mActions.Generation();
+    std::vector<uint8_t> descs;
+    auto w32 = [&](uint32_t v) {
+        descs.push_back(v & 0xFF); descs.push_back((v >> 8) & 0xFF);
+        descs.push_back((v >> 16) & 0xFF); descs.push_back((v >> 24) & 0xFF);
+    };
+    uint32_t count = 0;
+    for (const ExecutionAction& a : mActions.All())
+    {
+        if (a.type != ActionType::Log) continue;
+        w32(static_cast<uint32_t>(a.id));
+        w32(static_cast<uint32_t>(a.cpu));
+        w32(a.address);
+        w32(a.enabled ? SE_LIVE_TP_ENABLED : 0u);
+        ++count;
+    }
+    se_live_set_tracepoints(&mDataSource, descs.data(), count);
+#endif
+}
+
+// Pull fired tracepoint events from the driver and format each into a Log entry. The
+// message is formatted here from the event's CAPTURED registers (memory derefs read
+// the latest snapshot — up to ~1 frame stale, fine for RE logging).
+void App::DrainTraceEvents()
+{
+#ifdef SE_ENABLE_LIVE
+    if (!mbLiveSource) { return; }
+    se_live_event evs[64];
+    for (;;)
+    {
+        const uint32_t n = se_live_poll_events(&mDataSource, evs, 64);
+        for (uint32_t i = 0; i < n; ++i)
+        {
+            const se_live_event& e = evs[i];
+            const ExecutionAction* a = mActions.Get(e.id);
+            if (!a) continue;
+            mActions.RecordHit(e.id);
+            if (!a->effects.writeToLog) continue;
+
+            ContextFormat fc;
+            fc.ctx = mContext;
+            fc.backend = &mMemBackend;
+            fc.cpu = static_cast<int>(e.cpu);
+            fc.frame = e.frame;
+            fc.haveRegs = true;
+            for (int j = 0; j < 16; ++j) fc.regs.r[j] = e.regs[j];
+            fc.regs.pc = e.regs[16]; fc.regs.pr = e.regs[17]; fc.regs.sr = e.regs[18];
+            fc.regs.gbr = e.regs[19]; fc.regs.vbr = e.regs[20];
+            fc.regs.mach = e.regs[21]; fc.regs.macl = e.regs[22];
+
+            const std::string msg = FormatEvaluate(a->format, fc);
+            std::vector<std::pair<std::string, std::string>> detail;
+            char b[16];
+            for (int j = 0; j < 16; ++j)
+            { std::snprintf(b, sizeof(b), "%08X", e.regs[j]); detail.emplace_back("r" + std::to_string(j), b); }
+            mLog.Tracepoint(e.frame, static_cast<int>(e.cpu), fc.regs.pc, msg, std::move(detail));
+        }
+        if (n < 64) break;   // drained
+    }
+#endif
 }
 
 void App::OpenTracepointEditor(int cpu, uint32_t addr)

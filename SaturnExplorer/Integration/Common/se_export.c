@@ -101,6 +101,20 @@ static volatile unsigned int sStopReason;   /* SE_LIVE_STOP_* */
 static volatile unsigned int sStopCpu;      /* 0 master, 1 slave */
 static volatile unsigned int sStopPc;
 
+/* ---- Tracepoint events (v8+). The glue calls SeExportQueueTraceEvent() when an
+ * installed tracepoint PC is hit (CPU thread); the server thread drains the ring into
+ * each reply's trailing events block. FIFO ring; overflow drops the newest and counts
+ * it so the client can note dropped events. Guarded by the frame lock (SE_LOCK). ---- */
+#define SE_EVQ_CAP 128
+typedef struct {
+    unsigned int id, cpu, frame;
+    unsigned int regs[SE_LIVE_EVENT_REGS];
+} SeTraceEvent;
+static SeTraceEvent sEvQ[SE_EVQ_CAP];
+static unsigned int sEvHead;    /* index of the oldest pending event */
+static unsigned int sEvCount;   /* number pending (<= SE_EVQ_CAP) */
+static unsigned int sEvDropped; /* events dropped on overflow (reported once) */
+
 /* ---- Breakpoint hooks (v5+). se_export stays free of Yabause headers: apply.py
  * wires these to Yabause's SH2 breakpoint API. SeAddExecBp(cpu, addr) installs one
  * execution breakpoint; SeClearBps() removes all. Both may be NULL (breakpoints
@@ -139,6 +153,19 @@ static SeSetPadFn sSetPad;
 void SeExportSetInputHook(SeSetPadFn fn)
 {
     sSetPad = fn;
+}
+
+/* ---- Tracepoint-install hook (v8+). apply.py wires this to the emulator's PC-trap
+ * mechanism so the glue knows which addresses to watch; on a hit the glue calls
+ * SeExportQueueTraceEvent(). set(count, descs) receives 'count' SE_LIVE_TRACE_DESC_LEN
+ * descriptors {id,cpu,address,flags} (u32 LE). May be NULL (tracepoints then never
+ * fire, but TRC still round-trips). ---- */
+typedef void (*SeSetTracepointsFn)(unsigned int count, const unsigned char* descs);
+static SeSetTracepointsFn sSetTracepoints;
+
+void SeExportSetTracepointHook(SeSetTracepointsFn fn)
+{
+    sSetTracepoints = fn;
 }
 
 /* Called from Yabause's breakpoint callback when the master/slave SH-2 hits an
@@ -210,6 +237,30 @@ static void SeWr32(unsigned char* p, unsigned int v)
     p[1] = (unsigned char)((v >> 8) & 0xFF);
     p[2] = (unsigned char)((v >> 16) & 0xFF);
     p[3] = (unsigned char)((v >> 24) & 0xFF);
+}
+
+/* Queue a fired tracepoint (v8+). Called from the CPU thread by the glue with the
+ * captured SH-2 register file (23 u32, se_sh2_regs order). Drops the newest on
+ * overflow. 'regs' may be NULL (queues zeros). */
+void SeExportQueueTraceEvent(unsigned int id, unsigned int cpu, unsigned int frame,
+                             const unsigned int* regs)
+{
+    unsigned int slot, i;
+    SE_LOCK();
+    if (sEvCount >= SE_EVQ_CAP)
+    {
+        ++sEvDropped;
+        SE_UNLOCK();
+        return;
+    }
+    slot = (sEvHead + sEvCount) % SE_EVQ_CAP;
+    sEvQ[slot].id = id;
+    sEvQ[slot].cpu = cpu ? 1u : 0u;
+    sEvQ[slot].frame = frame;
+    for (i = 0; i < SE_LIVE_EVENT_REGS; ++i)
+        sEvQ[slot].regs[i] = regs ? regs[i] : 0u;
+    ++sEvCount;
+    SE_UNLOCK();
 }
 
 void SeExportSnapshot(const void* vdp1, const void* vdp2, const void* cram,
@@ -355,6 +406,20 @@ static void SeServeClient(int cl, SeFrame* snap)
              * 16). No payload. The glue drives the emulated pad directly. */
             if (sSetPad) sSetPad(SE_LIVE_INPUT_PORT(arg), SE_LIVE_INPUT_BUTTONS(arg));
         }
+        else if (memcmp(req, SE_LIVE_VERB_TRACE, SE_LIVE_VERB_LEN) == 0)
+        {
+            /* Install tracepoints: 'arg' 16-byte descriptors. Buffer up to a cap and
+             * hand them to the glue; consume any beyond the cap to stay stream-aligned. */
+            static unsigned char tbuf[SE_LIVE_TRACE_DESC_LEN * 256];
+            unsigned int keep = arg > 256u ? 256u : arg, i;
+            if (keep && SeRecv(cl, tbuf, keep * SE_LIVE_TRACE_DESC_LEN) != 0) return;
+            for (i = keep; i < arg; ++i)
+            {
+                unsigned char d[SE_LIVE_TRACE_DESC_LEN];
+                if (SeRecv(cl, d, SE_LIVE_TRACE_DESC_LEN) != 0) return;
+            }
+            if (sSetTracepoints) sSetTracepoints(keep, tbuf);
+        }
 
         unsigned char ctl[SE_CT];
         SE_LOCK();
@@ -386,6 +451,35 @@ static void SeServeClient(int cl, SeFrame* snap)
         if (SeSend(cl, snap->fb, SE_FB) != 0) return;
         if (SeSend(cl, ctl, SE_CT) != 0) return;
         if (SeSend(cl, snap->sh, SE_SH) != 0) return;
+
+        /* v8 trailing block: fired tracepoint events. u32 count, then that many
+         * SE_LIVE_EVENT_LEN records. Drained FIFO, capped per reply. */
+        {
+            unsigned char cntb[4];
+            unsigned int n, i, j;
+            SE_LOCK();
+            n = sEvCount;
+            SE_UNLOCK();
+            if (n > SE_LIVE_EVENTS_MAX) n = SE_LIVE_EVENTS_MAX;
+            SeWr32(cntb, n);
+            if (SeSend(cl, cntb, 4) != 0) return;
+            for (i = 0; i < n; ++i)
+            {
+                SeTraceEvent ev;
+                unsigned char eb[SE_LIVE_EVENT_LEN];
+                SE_LOCK();
+                ev = sEvQ[sEvHead];
+                sEvHead = (sEvHead + 1) % SE_EVQ_CAP;
+                if (sEvCount) --sEvCount;
+                SE_UNLOCK();
+                SeWr32(eb, ev.id);
+                SeWr32(eb + 4, ev.cpu);
+                SeWr32(eb + 8, ev.frame);
+                for (j = 0; j < SE_LIVE_EVENT_REGS; ++j)
+                    SeWr32(eb + 12 + j * 4, ev.regs[j]);
+                if (SeSend(cl, eb, SE_LIVE_EVENT_LEN) != 0) return;
+            }
+        }
     }
 }
 

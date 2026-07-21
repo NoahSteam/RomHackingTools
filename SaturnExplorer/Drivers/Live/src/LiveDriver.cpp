@@ -6,6 +6,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstring>
+#include <deque>
 #include <mutex>
 #include <new>
 #include <string>
@@ -43,6 +44,16 @@ struct LiveSnapshot
     se_sh2_regs          sh2[2] = {};        // [0] master, [1] slave (v5+)
     bool                 hasSh2[2] = { false, false };
     bool                 valid = false;
+};
+
+// A fired tracepoint event (v8+): its id, the CPU, the frame it fired on, and the
+// captured SH-2 register file (se_sh2_regs order). The client formats the message.
+struct LiveEvent
+{
+    uint32_t id = 0;
+    uint32_t cpu = 0;
+    uint32_t frame = 0;
+    uint32_t regs[SE_LIVE_EVENT_REGS] = {};
 };
 
 // Pending control command the UI thread hands to the poll thread (which owns the
@@ -88,6 +99,15 @@ struct LiveState
     // edge (back to 0) is always delivered.
     std::atomic<uint32_t> inputState{0};
     uint32_t              lastInputSent = 0;   // poll-thread-local (guarded by ctlMtx use)
+    // Pending tracepoint-set sync (v8+): the UI thread stashes the 16-byte descriptor
+    // blob and bumps the dirty flag; the poll thread ships it with a TRC command. Same
+    // pattern as breakpoints. Guarded by ctlMtx.
+    std::vector<uint8_t>  traces;
+    bool                  tracesDirty = false;
+    // Tracepoint events received from the server, drained by the UI thread via
+    // se_live_poll_events. Bounded so a flood can't grow unbounded. Guarded by evMtx.
+    std::mutex            evMtx;
+    std::deque<LiveEvent> events;
 };
 
 /* ---- Local-socket transport (POSIX Unix socket / Windows named pipe). ---- */
@@ -243,7 +263,7 @@ struct StopInfo { uint32_t reason = 0; uint32_t cpu = 0; uint32_t pc = 0; };
 bool ReadSnapshot(Conn& c, const char* verb, int32_t arg,
                   const uint8_t* extra, size_t extraLen, LiveSnapshot& snap,
                   bool& outPaused, uint64_t& outFrame, uint32_t& outVersion,
-                  StopInfo& outStop)
+                  StopInfo& outStop, std::vector<LiveEvent>& outEvents)
 {
     if (!SendCommand(c, verb, arg))
     {
@@ -323,6 +343,28 @@ bool ReadSnapshot(Conn& c, const char* verb, int32_t arg,
         return false;
     }
 
+    // v8+ trailing block: fired tracepoint events (u32 count, then count records).
+    // Read only when the server speaks v8, so a v8 client stays compatible with an
+    // older server (which sends no trailing block).
+    if (version >= 8u)
+    {
+        uint8_t cntb[4];
+        if (!ConnReadFull(c, cntb, 4)) return false;
+        const uint32_t n = Rd32LE(cntb);
+        if (n > SE_LIVE_EVENTS_MAX) return false;   // desync guard
+        for (uint32_t i = 0; i < n; ++i)
+        {
+            uint8_t eb[SE_LIVE_EVENT_LEN];
+            if (!ConnReadFull(c, eb, SE_LIVE_EVENT_LEN)) return false;
+            LiveEvent ev;
+            ev.id = Rd32LE(eb);
+            ev.cpu = Rd32LE(eb + 4);
+            ev.frame = Rd32LE(eb + 8);
+            for (int j = 0; j < SE_LIVE_EVENT_REGS; ++j) ev.regs[j] = Rd32LE(eb + 12 + j * 4);
+            outEvents.push_back(ev);
+        }
+    }
+
     // Control block: paused (u32 LE) + frame (u64 LE), then (v5+) stop reason/cpu/pc.
     // Absent fields default to 0 on older servers.
     outPaused = ct >= 4 && Rd32LE(ctl.data()) != 0;
@@ -391,6 +433,13 @@ void PollLoop(LiveState* st)
                 payload = st->bkpts;
                 st->bkptsDirty = false;
             }
+            else if (st->tracesDirty)
+            {
+                verb = SE_LIVE_VERB_TRACE;
+                arg = static_cast<int32_t>(st->traces.size() / SE_LIVE_TRACE_DESC_LEN);
+                payload = st->traces;
+                st->tracesDirty = false;
+            }
             else if (!st->writes.empty())
             {
                 // Ship one poke: payload = address(4) + bytes; arg = byte count.
@@ -431,8 +480,9 @@ void PollLoop(LiveState* st)
         uint64_t frame = 0;
         uint32_t sver = 0;
         StopInfo stop;
+        std::vector<LiveEvent> events;
         if (!ReadSnapshot(conn, verb, arg, payload.data(), payload.size(),
-                          snap, paused, frame, sver, stop))
+                          snap, paused, frame, sver, stop, events))
         {
             ConnClose(conn);   // will reconnect next iteration
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -441,6 +491,12 @@ void PollLoop(LiveState* st)
         {
             std::lock_guard<std::mutex> lk(st->mtx);
             st->front = std::move(snap);
+        }
+        if (!events.empty())
+        {
+            std::lock_guard<std::mutex> lk(st->evMtx);
+            for (LiveEvent& e : events) st->events.push_back(e);
+            while (st->events.size() > 4096) st->events.pop_front();   // bound the queue
         }
         st->paused.store(paused);
         st->frameNumber.store(frame);
@@ -460,7 +516,8 @@ void PollLoop(LiveState* st)
         uint64_t fr = 0;
         uint32_t sv = 0;
         StopInfo si;
-        ReadSnapshot(conn, SE_LIVE_VERB_RESUME, 0, nullptr, 0, tmp, p, fr, sv, si);  // best-effort
+        std::vector<LiveEvent> ev;
+        ReadSnapshot(conn, SE_LIVE_VERB_RESUME, 0, nullptr, 0, tmp, p, fr, sv, si, ev);  // best-effort
     }
     ConnClose(conn);
 }
@@ -685,6 +742,36 @@ extern "C" void se_live_send_input(const se_data_source* ds, uint32_t port, uint
     // Pack port + SE_PAD_* mask; the poll thread sends it (INP) on its next cycle.
     const uint32_t packed = ((port & 0xFFFFu) << 16) | (buttons & SE_PAD_ALL);
     St(ds->user)->inputState.store(packed);
+}
+
+extern "C" void se_live_set_tracepoints(const se_data_source* ds,
+                                        const uint8_t* descs, uint32_t count)
+{
+    if (!ds || !ds->user || ds->close != CbClose) { return; }
+    LiveState* st = St(ds->user);
+    std::lock_guard<std::mutex> lk(st->ctlMtx);
+    st->traces.assign(descs, descs + static_cast<size_t>(count) * SE_LIVE_TRACE_DESC_LEN);
+    st->tracesDirty = true;   // poll thread ships it (TRC) on its next cycle
+}
+
+extern "C" uint32_t se_live_poll_events(const se_data_source* ds,
+                                        se_live_event* out, uint32_t max)
+{
+    if (!ds || !ds->user || ds->close != CbClose || !out || !max) { return 0; }
+    LiveState* st = St(ds->user);
+    std::lock_guard<std::mutex> lk(st->evMtx);
+    uint32_t n = 0;
+    while (n < max && !st->events.empty())
+    {
+        const LiveEvent& e = st->events.front();
+        out[n].id = e.id;
+        out[n].cpu = e.cpu;
+        out[n].frame = e.frame;
+        std::memcpy(out[n].regs, e.regs, sizeof(out[n].regs));
+        st->events.pop_front();
+        ++n;
+    }
+    return n;
 }
 
 extern "C" int se_live_get_stop(const se_data_source* ds, uint32_t* reason,

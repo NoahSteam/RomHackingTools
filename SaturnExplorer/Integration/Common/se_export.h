@@ -92,6 +92,20 @@ void SeExportSetMemWriteHook(void (*write)(unsigned int address, unsigned char v
  * Call once after SeExportInit, e.g. SeExportSetInputHook(SeMednafenSetPad). */
 void SeExportSetInputHook(void (*set)(unsigned int port, unsigned int buttons));
 
+/* Wire tracepoint installation (v8+). set(count, descs) receives 'count'
+ * SE_LIVE_TRACE_DESC_LEN descriptors {id,cpu,address,flags} (u32 LE) whenever the
+ * client's tracepoint set changes; the glue arms a PC trap at each enabled address.
+ * May be NULL (tracepoints then never fire). */
+void SeExportSetTracepointHook(void (*set)(unsigned int count, const unsigned char* descs));
+
+/* Queue a fired tracepoint event (v8+). The glue calls this from the CPU thread when a
+ * tracepoint PC is hit, passing the tracepoint id, cpu (0/1), the current frame, and the
+ * captured SH-2 registers (23 u32 in se_sh2_regs order: r[0..15],pc,pr,sr,gbr,vbr,mach,
+ * macl; NULL queues zeros). The server drains these into the reply; the client formats
+ * the message from the captured registers. */
+void SeExportQueueTraceEvent(unsigned int id, unsigned int cpu, unsigned int frame,
+                             const unsigned int* regs);
+
 /* Frame gate for pause / single-step. Call once at the top of each emulated
  * frame in Yabause's run loop; returns 1 if the frame should run, 0 if the
  * debugger is holding it paused. When it returns 0 it has already slept ~2 ms

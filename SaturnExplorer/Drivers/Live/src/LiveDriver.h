@@ -38,6 +38,27 @@ void se_live_set_breakpoints(const se_data_source* ds, const uint8_t* descs,
  * buttons change (0 releases all). No-op if 'ds' isn't a live source. */
 void se_live_send_input(const se_data_source* ds, uint32_t port, uint32_t buttons);
 
+/* Push the tracepoint set to the emulator (v8+). 'descs' points at 'count' 16-byte
+ * descriptors {id,cpu,address,flags} (u32 LE; SE_LIVE_TRACE_DESC_LEN each). The poll
+ * thread ships them (TRC) on its next cycle. Call whenever the local set changes.
+ * No-op if 'ds' isn't a live source. */
+void se_live_set_tracepoints(const se_data_source* ds, const uint8_t* descs, uint32_t count);
+
+/* A fired tracepoint event drained from the server (v8+): the tracepoint id, the CPU
+ * (0 master / 1 slave), the frame it fired on, and the captured SH-2 register file
+ * (23 u32 in se_sh2_regs order: r[0..15], pc, pr, sr, gbr, vbr, mach, macl). */
+typedef struct se_live_event
+{
+    uint32_t id;
+    uint32_t cpu;
+    uint32_t frame;
+    uint32_t regs[23];
+} se_live_event;
+
+/* Drain up to 'max' received tracepoint events into 'out'; returns the number written
+ * (0 if none or not a live source). Call each frame to feed the Log. */
+uint32_t se_live_poll_events(const se_data_source* ds, se_live_event* out, uint32_t max);
+
 /* Read the last stop event reported by the server's control block (v5+). Fills
  * '*reason' (SE_LIVE_STOP_*), '*cpu' (0 master / 1 slave), and '*pc' when non-NULL.
  * Returns 1 if the emulator is halted on a breakpoint, 0 otherwise (or not live). */
