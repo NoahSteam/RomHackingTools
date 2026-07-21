@@ -184,11 +184,55 @@ class Runner:
             print(f"    would run: {pretty}{loc}")
             return 0
         print(f"    $ {pretty}{loc}")
-        return subprocess.call(cmd, cwd=cwd, shell=shell).__int__()
+        try:
+            return subprocess.call(cmd, cwd=cwd, shell=shell)
+        except FileNotFoundError:
+            # The executable isn't on PATH. The most common cause on Windows is that a
+            # tool was just installed (winget) this run — Windows doesn't push the new
+            # PATH into an already-running process — so name it and tell the user how
+            # to recover instead of dumping a traceback.
+            exe = (cmd[0] if isinstance(cmd, (list, tuple)) and cmd else str(cmd).split()[0])
+            print(f"    *** '{exe}' was not found on PATH.")
+            print(f"        If it was just installed, close this window and run install.bat")
+            print(f"        again so the updated PATH takes effect. Otherwise install {exe}")
+            print(f"        and make sure it's on PATH (for CMake, tick \"Add to PATH\" in its")
+            print(f"        installer), then re-run.")
+            return 127
 
 
 def which(name):
     return shutil.which(name)
+
+
+def refresh_windows_path():
+    """Re-read PATH from the Windows registry (machine + user) into this process, so a
+    tool winget installed THIS run is found by the build steps without reopening the
+    terminal. No-op off Windows. Best-effort: on any failure the existing PATH stands."""
+    if os.name != "nt":
+        return
+    try:
+        import winreg
+    except Exception:
+        return
+    parts = []
+    for root, sub in ((winreg.HKEY_LOCAL_MACHINE,
+                       r"SYSTEM\CurrentControlSet\Control\Session Manager\Environment"),
+                      (winreg.HKEY_CURRENT_USER, "Environment")):
+        try:
+            with winreg.OpenKey(root, sub) as key:
+                val, _ = winreg.QueryValueEx(key, "Path")
+                if val:
+                    parts.append(os.path.expandvars(val))
+        except OSError:
+            pass
+    # Keep the current PATH too (it may hold entries the registry doesn't), de-duped.
+    seen, merged = set(), []
+    for p in os.pathsep.join(parts + [os.environ.get("PATH", "")]).split(os.pathsep):
+        low = p.lower()
+        if p and low not in seen:
+            seen.add(low)
+            merged.append(p)
+    os.environ["PATH"] = os.pathsep.join(merged)
 
 
 def find_vswhere():
@@ -436,6 +480,17 @@ def main():
     if not ok and not args.dry_run:
         print("\nSome prerequisites are missing. Install them (above) and re-run.")
         return 3
+
+    # Anything winget installed above is now in the registry PATH but not this
+    # process's; pull it in so the build steps can find cmake/git without a restart.
+    if not args.dry_run:
+        refresh_windows_path()
+        if os.name == "nt" and not which("cmake"):
+            print("\n  [!] 'cmake' still isn't on PATH. If you just installed it, close this")
+            print("      window and run install.bat again so the new PATH takes effect.")
+            print("      (CMake's installer has an \"Add CMake to the system PATH\" option;")
+            print("      Visual Studio's bundled CMake is not on PATH by default.)")
+            return 3
 
     # --- build Saturn Explorer ---------------------------------------------
     results = []
