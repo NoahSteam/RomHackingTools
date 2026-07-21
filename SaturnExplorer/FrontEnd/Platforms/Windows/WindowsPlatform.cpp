@@ -320,8 +320,17 @@ bool WindowsPlatform::LaunchProcess(const char* path, const char* workingDir)
     {
         return false;
     }
-    const char* dir = (workingDir && *workingDir) ? workingDir : nullptr;
-    const HINSTANCE r = ::ShellExecuteA(nullptr, "open", path, nullptr, dir, SW_SHOWNORMAL);
+    // Per the IPlatform contract, a NULL workingDir means "the exe's own folder" so
+    // the launched emulator finds its config/saves; derive it from the path.
+    std::string derived;
+    if (!(workingDir && *workingDir))
+    {
+        const std::string p = path;
+        const size_t slash = p.find_last_of("/\\");
+        if (slash != std::string::npos) derived = p.substr(0, slash);
+        workingDir = derived.empty() ? nullptr : derived.c_str();
+    }
+    const HINSTANCE r = ::ShellExecuteA(nullptr, "open", path, nullptr, workingDir, SW_SHOWNORMAL);
     return reinterpret_cast<INT_PTR>(r) > 32;   // >32 == success per the API
 }
 

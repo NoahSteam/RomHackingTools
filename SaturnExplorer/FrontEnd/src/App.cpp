@@ -217,15 +217,10 @@ void App::Initialize()
     // before App::Initialize) and settings load lazily on the first NewFrame, so
     // pointing IniFilename here takes effect before anything is loaded or saved.
     // mIniPath must outlive the context — ImGui stores the pointer, not a copy.
-    const std::string dir = Settings::EnsureConfigDir();
-    if (!dir.empty())
+    if (!Settings::EnsureConfigDir().empty())
     {
-#ifdef _WIN32
-        mIniPath = dir + "\\imgui.ini";
-#else
-        mIniPath = dir + "/imgui.ini";
-#endif
-        ImGui::GetIO().IniFilename = mIniPath.c_str();
+        mIniPath = Settings::LayoutFilePath();   // config-dir path assembly lives in Settings
+        if (!mIniPath.empty()) ImGui::GetIO().IniFilename = mIniPath.c_str();
     }
     LoadSettings();                // panel visibility, data dir, emulator paths
 
@@ -241,39 +236,41 @@ void App::Shutdown()
     CloseData();
 }
 
-// The single source of truth for which panel toggles persist. Adding a panel here
-// makes it save/restore automatically; the key is stable across releases.
-void App::ForEachPanelToggle(const std::function<void(const char*, bool&)>& fn)
+// Adding a panel here makes it save/restore AND appear in the Windows menu with no
+// other edits. Order is the Windows-menu display order (settings keys are order-free).
+const std::vector<App::PanelInfo>& App::PanelList()
 {
-    fn("layerControls", mPanels.layerControls);
-    fn("vramMap", mPanels.vramMap);
-    fn("archiveExplorer", mPanels.archiveExplorer);
-    fn("searchRom", mPanels.searchRom);
-    fn("vdpOutput", mPanels.vdpOutput);
-    fn("vdp1Framebuffer", mPanels.vdp1Framebuffer);
-    fn("worldView", mPanels.worldView);
-    fn("vdp1Table", mPanels.vdp1Table);
-    fn("vdp2Table", mPanels.vdp2Table);
-    fn("colorRam", mPanels.colorRam);
-    fn("workRam", mPanels.workRam);
-    fn("paletteRam", mPanels.paletteRam);
-    fn("registers", mPanels.registers);
-    fn("commandList", mPanels.commandList);
-    fn("textureViewer", mPanels.textureViewer);
-    fn("paletteViewer", mPanels.paletteViewer);
-    fn("references", mPanels.references);
-    fn("selectedObject", mPanels.selectedObject);
-    fn("watch", mPanels.watch);
-    fn("assembly", mPanels.assembly);
-    fn("hexEditor", mPanels.hexEditor);
+    static const std::vector<PanelInfo> kList = {
+        {"layerControls",   "Layer Controls",     &Panels::layerControls},
+        {"vramMap",         "VRAM Map",           &Panels::vramMap},
+        {"archiveExplorer", "Archive Explorer",   &Panels::archiveExplorer},
+        {"searchRom",       "Search ROM / Files", &Panels::searchRom},
+        {"vdpOutput",       "VDP Output",         &Panels::vdpOutput},
+        {"vdp1Framebuffer", "VDP1 Framebuffer",   &Panels::vdp1Framebuffer},
+        {"worldView",       "3D View",            &Panels::worldView},
+        {"commandList",     "VDP1 Command List",  &Panels::commandList},
+        {"vdp1Table",       "VDP1 Table",         &Panels::vdp1Table},
+        {"vdp2Table",       "VDP2 Table",         &Panels::vdp2Table},
+        {"registers",       "Registers",          &Panels::registers},
+        {"colorRam",        "Color RAM",          &Panels::colorRam},
+        {"workRam",         "Work RAM",           &Panels::workRam},
+        {"paletteRam",      "Palette RAM",        &Panels::paletteRam},
+        {"textureViewer",   "Texture Viewer",     &Panels::textureViewer},
+        {"paletteViewer",   "Palette Viewer",     &Panels::paletteViewer},
+        {"references",      "References",         &Panels::references},
+        {"selectedObject",  "Selected Object",    &Panels::selectedObject},
+        {"watch",           "Watch",              &Panels::watch},
+        {"assembly",        "SH-2 Assembly",      &Panels::assembly},
+        {"hexEditor",       "Hex Editor",         &Panels::hexEditor},
+    };
+    return kList;
 }
 
 void App::LoadSettings()
 {
     mSettings.Load();
-    ForEachPanelToggle([&](const char* key, bool& v) {
-        v = mSettings.GetBool("panels", key, v);
-    });
+    for (const PanelInfo& p : PanelList())
+        mPanels.*(p.flag) = mSettings.GetBool("panels", p.key, mPanels.*(p.flag));
     mDataDir      = mSettings.Get("data", "dir", mDataDir);
     mMednafenPath = mSettings.Get("emulators", "mednafen", mMednafenPath);
     mYabausePath  = mSettings.Get("emulators", "yabause", mYabausePath);
@@ -281,9 +278,8 @@ void App::LoadSettings()
 
 void App::SaveSettings()
 {
-    ForEachPanelToggle([&](const char* key, bool& v) {
-        mSettings.SetBool("panels", key, v);
-    });
+    for (const PanelInfo& p : PanelList())
+        mSettings.SetBool("panels", p.key, mPanels.*(p.flag));
     mSettings.Set("data", "dir", mDataDir);
     // Emulator paths are owned by the installer. Whatever LoadSettings read stays
     // in mSettings and round-trips through Save, so we don't clobber them here.
@@ -1007,12 +1003,10 @@ void App::DrawToolbar(IPlatform& platform)
             ImGui::BeginDisabled(path.empty());
             if (ImGui::Button(label))
             {
-                // Run from the executable's own directory so the emulator finds its
+                // NULL working dir: the platform runs it from the executable's own
+                // folder (see IPlatform::LaunchProcess) so the emulator finds its
                 // config/saves; the app's live auto-connect latches on once it's up.
-                const size_t slash = path.find_last_of("/\\");
-                const std::string dir = (slash == std::string::npos) ? std::string()
-                                                                      : path.substr(0, slash);
-                platform.LaunchProcess(path.c_str(), dir.empty() ? nullptr : dir.c_str());
+                platform.LaunchProcess(path.c_str(), nullptr);
             }
             ImGui::EndDisabled();
             if (path.empty())
@@ -1094,30 +1088,6 @@ void App::DrawWindowsMenu()
 
     if (ImGui::BeginPopup("WindowsMenu"))
     {
-        struct Item { const char* label; bool* flag; };
-        const Item items[] = {
-            {"Layer Controls",    &mPanels.layerControls},
-            {"VRAM Map",          &mPanels.vramMap},
-            {"Archive Explorer",  &mPanels.archiveExplorer},
-            {"Search ROM / Files", &mPanels.searchRom},
-            {"VDP Output",        &mPanels.vdpOutput},
-            {"VDP1 Framebuffer",  &mPanels.vdp1Framebuffer},
-            {"3D View",           &mPanels.worldView},
-            {"VDP1 Command List", &mPanels.commandList},
-            {"VDP1 Table",        &mPanels.vdp1Table},
-            {"VDP2 Table",        &mPanels.vdp2Table},
-            {"Registers",         &mPanels.registers},
-            {"Color RAM",         &mPanels.colorRam},
-            {"Work RAM",          &mPanels.workRam},
-            {"Palette RAM",       &mPanels.paletteRam},
-            {"Texture Viewer",    &mPanels.textureViewer},
-            {"Palette Viewer",    &mPanels.paletteViewer},
-            {"References",        &mPanels.references},
-            {"Selected Object",   &mPanels.selectedObject},
-            {"Watch",             &mPanels.watch},
-            {"SH-2 Assembly",     &mPanels.assembly},
-            {"Hex Editor",        &mPanels.hexEditor},
-        };
         if (ImGui::MenuItem("Reset Layout"))
         {
             mForceRebuildLayout = true;   // rebuild the default dock arrangement next frame
@@ -1126,19 +1096,19 @@ void App::DrawWindowsMenu()
         ImGui::Separator();
         if (ImGui::MenuItem("Show All"))
         {
-            for (const Item& it : items) *it.flag = true;
+            for (const PanelInfo& p : PanelList()) mPanels.*(p.flag) = true;
             mSettingsDirty = true;
         }
         if (ImGui::MenuItem("Hide All"))
         {
-            for (const Item& it : items) *it.flag = false;
+            for (const PanelInfo& p : PanelList()) mPanels.*(p.flag) = false;
             mSettingsDirty = true;
         }
         ImGui::Separator();
-        for (const Item& it : items)
+        for (const PanelInfo& p : PanelList())
         {
             // MenuItem returns true on the frame it's toggled; persist visibility then.
-            if (ImGui::MenuItem(it.label, nullptr, it.flag)) mSettingsDirty = true;
+            if (ImGui::MenuItem(p.label, nullptr, &(mPanels.*(p.flag)))) mSettingsDirty = true;
         }
         ImGui::EndPopup();
     }

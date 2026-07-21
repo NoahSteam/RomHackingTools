@@ -5,7 +5,6 @@
 #pragma once
 
 #include <cstdint>
-#include <functional>
 #include <string>
 #include <vector>
 
@@ -65,9 +64,6 @@ private:
     // SaveSettings on Shutdown and whenever a persisted preference changes.
     void LoadSettings();
     void SaveSettings();
-    // Visit every persisted panel-visibility toggle as (settings-key, member-ref),
-    // so LoadSettings and SaveSettings share one list instead of duplicating it.
-    void ForEachPanelToggle(const std::function<void(const char*, bool&)>& fn);
     // Read every available memory region from the current source and hand a single
     // self-describing dump blob (.sedump) to the platform to save / download.
     void DumpMemory(IPlatform& platform);
@@ -183,6 +179,13 @@ private:
         bool selectedObject = true, watch = true, assembly = true, hexEditor = true;
     };
     Panels           mPanels;
+
+    // The single source of truth for every toggleable panel: its settings key, its
+    // Windows-menu label, and a pointer to its visibility flag. The Windows menu and
+    // settings load/save all iterate this one list, so a new panel is added in
+    // exactly one place instead of three parallel enumerations.
+    struct PanelInfo { const char* key; const char* label; bool Panels::* flag; };
+    static const std::vector<PanelInfo>& PanelList();
 
     // Persistent settings + the layout ini path (imgui.ini relocated into the
     // per-user config dir so the dock layout survives regardless of the working

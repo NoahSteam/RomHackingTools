@@ -34,6 +34,9 @@ public:
     static std::string EnsureConfigDir();
     // Full path to settings.ini within ConfigDir().
     static std::string FilePath();
+    // Full path to the relocated ImGui layout file (imgui.ini) within ConfigDir().
+    // Keeps all config-dir path assembly (and the OS separator) in this module.
+    static std::string LayoutFilePath();
 
     void Load();        // read FilePath(); silent no-op if it doesn't exist
     bool Save() const;  // write FilePath(), creating the config dir first

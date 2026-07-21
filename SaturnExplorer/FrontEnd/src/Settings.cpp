@@ -19,6 +19,19 @@ namespace sfe
 namespace
 {
 
+#ifdef _WIN32
+const char kSep = '\\';
+#else
+const char kSep = '/';
+#endif
+
+// Join a config-dir path with a filename, or empty if the dir is empty. Keeps the
+// separator choice in one place for FilePath / LayoutFilePath / Save.
+std::string JoinConfig(const std::string& dir, const char* file)
+{
+    return dir.empty() ? std::string() : dir + kSep + file;
+}
+
 std::string Lower(std::string s)
 {
     for (char& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
@@ -63,7 +76,6 @@ std::string Settings::ConfigDir()
 {
 #ifdef _WIN32
     const char* base = std::getenv("APPDATA");
-    const char sep = '\\';
 #else
     const char* base = std::getenv("XDG_CONFIG_HOME");
     std::string fallback;
@@ -74,10 +86,9 @@ std::string Settings::ConfigDir()
         fallback = std::string(home) + "/.config";
         base = fallback.c_str();
     }
-    const char sep = '/';
 #endif
     if (!base || !*base) return std::string();
-    return std::string(base) + sep + "SaturnExplorer";
+    return std::string(base) + kSep + "SaturnExplorer";
 }
 
 std::string Settings::EnsureConfigDir()
@@ -89,13 +100,12 @@ std::string Settings::EnsureConfigDir()
 
 std::string Settings::FilePath()
 {
-    std::string dir = ConfigDir();
-    if (dir.empty()) return std::string();
-#ifdef _WIN32
-    return dir + "\\settings.ini";
-#else
-    return dir + "/settings.ini";
-#endif
+    return JoinConfig(ConfigDir(), "settings.ini");
+}
+
+std::string Settings::LayoutFilePath()
+{
+    return JoinConfig(ConfigDir(), "imgui.ini");
 }
 
 void Settings::Load()
@@ -127,8 +137,9 @@ void Settings::Load()
 
 bool Settings::Save() const
 {
-    const std::string dir = EnsureConfigDir();
-    const std::string path = FilePath();
+    // Resolve the dir once (creating it), then derive the file path from it, rather
+    // than re-resolving ConfigDir via FilePath().
+    const std::string path = JoinConfig(EnsureConfigDir(), "settings.ini");
     if (path.empty()) return false;
     std::ofstream f(path, std::ios::trunc);
     if (!f) return false;

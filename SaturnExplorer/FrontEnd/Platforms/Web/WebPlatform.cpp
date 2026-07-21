@@ -254,6 +254,13 @@ std::string ShellQuote(const std::string& s)
     out += "'";
     return out;
 }
+
+// The directory containing `path` ("." if it has no separator).
+std::string ParentDir(const std::string& path)
+{
+    const size_t slash = path.find_last_of('/');
+    return (slash == std::string::npos) ? std::string(".") : path.substr(0, slash);
+}
 }  // namespace
 
 bool WebPlatform::PickDirectory(std::string& outPath)
@@ -307,9 +314,7 @@ bool WebPlatform::RevealPath(const char* path)
 #else
     // Prefer the freedesktop "show and select" call; fall back to opening the parent
     // folder if no D-Bus file manager answers.
-    std::string parent = path;
-    const size_t slash = parent.find_last_of('/');
-    parent = (slash == std::string::npos) ? std::string(".") : parent.substr(0, slash);
+    const std::string parent = ParentDir(path);
     cmd = "dbus-send --session --print-reply --dest=org.freedesktop.FileManager1 "
           "--type=method_call /org/freedesktop/FileManager1 "
           "org.freedesktop.FileManager1.ShowItems array:string:\"file://" + std::string(path) +
@@ -325,17 +330,8 @@ bool WebPlatform::LaunchProcess(const char* path, const char* workingDir)
     {
         return false;
     }
-    std::string dir;
-    if (workingDir && *workingDir)
-    {
-        dir = workingDir;
-    }
-    else
-    {
-        const std::string p = path;
-        const size_t slash = p.find_last_of('/');
-        dir = (slash == std::string::npos) ? std::string(".") : p.substr(0, slash);
-    }
+    const std::string dir = (workingDir && *workingDir) ? std::string(workingDir)
+                                                        : ParentDir(path);
     // Run detached (trailing &) from its own directory so an emulator finds its
     // config/saves next to the executable.
     const std::string cmd = "cd " + ShellQuote(dir) + " && " + ShellQuote(path) +
