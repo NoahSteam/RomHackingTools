@@ -28,22 +28,24 @@ constexpr float kAspect = 0.46f;   // drawing box height / width
 // six face buttons on the right in the Saturn arc (X Y Z over A B C), L/R along the top.
 const Button kButtons[] = {
     // D-pad (bit, label, cx, cy, hx, hy, round, key)
-    {SE_PAD_UP,    "",  0.200f, 0.360f, 0.035f, 0.075f, false, ImGuiKey_UpArrow},
-    {SE_PAD_DOWN,  "",  0.200f, 0.620f, 0.035f, 0.075f, false, ImGuiKey_DownArrow},
-    {SE_PAD_LEFT,  "",  0.120f, 0.490f, 0.045f, 0.055f, false, ImGuiKey_LeftArrow},
-    {SE_PAD_RIGHT, "",  0.280f, 0.490f, 0.045f, 0.055f, false, ImGuiKey_RightArrow},
-    // Face buttons — top row X Y Z, bottom row A B C, arced upward to the right.
-    {SE_PAD_X, "X", 0.640f, 0.470f, 0.045f, 0.045f, true, ImGuiKey_A},
-    {SE_PAD_Y, "Y", 0.730f, 0.430f, 0.045f, 0.045f, true, ImGuiKey_S},
-    {SE_PAD_Z, "Z", 0.820f, 0.400f, 0.045f, 0.045f, true, ImGuiKey_D},
-    {SE_PAD_A, "A", 0.640f, 0.640f, 0.045f, 0.045f, true, ImGuiKey_Z},
-    {SE_PAD_B, "B", 0.730f, 0.600f, 0.045f, 0.045f, true, ImGuiKey_X},
-    {SE_PAD_C, "C", 0.820f, 0.570f, 0.045f, 0.045f, true, ImGuiKey_C},
-    // START (blue oval) centered low.
-    {SE_PAD_START, "START", 0.500f, 0.660f, 0.070f, 0.035f, false, ImGuiKey_Enter},
-    // Shoulder buttons along the top edge.
-    {SE_PAD_L, "L", 0.170f, 0.130f, 0.090f, 0.030f, false, ImGuiKey_Q},
-    {SE_PAD_R, "R", 0.720f, 0.130f, 0.090f, 0.030f, false, ImGuiKey_E},
+    // D-pad cross (left), four arms meeting at the hub near (0.19, 0.53).
+    {SE_PAD_UP,    "",  0.190f, 0.420f, 0.046f, 0.078f, false, ImGuiKey_UpArrow},
+    {SE_PAD_DOWN,  "",  0.190f, 0.640f, 0.046f, 0.078f, false, ImGuiKey_DownArrow},
+    {SE_PAD_LEFT,  "",  0.100f, 0.530f, 0.078f, 0.046f, false, ImGuiKey_LeftArrow},
+    {SE_PAD_RIGHT, "",  0.280f, 0.530f, 0.078f, 0.046f, false, ImGuiKey_RightArrow},
+    // Six face buttons in the Saturn arc: bottom row A B C, top row X Y Z, sweeping
+    // up to the right. dish centered ~(0.72, 0.51).
+    {SE_PAD_X, "X", 0.615f, 0.475f, 0.047f, 0.047f, true, ImGuiKey_A},
+    {SE_PAD_Y, "Y", 0.710f, 0.425f, 0.047f, 0.047f, true, ImGuiKey_S},
+    {SE_PAD_Z, "Z", 0.805f, 0.390f, 0.047f, 0.047f, true, ImGuiKey_D},
+    {SE_PAD_A, "A", 0.640f, 0.640f, 0.047f, 0.047f, true, ImGuiKey_Z},
+    {SE_PAD_B, "B", 0.735f, 0.590f, 0.047f, 0.047f, true, ImGuiKey_X},
+    {SE_PAD_C, "C", 0.830f, 0.555f, 0.047f, 0.047f, true, ImGuiKey_C},
+    // START (blue oval) centered, slightly low.
+    {SE_PAD_START, "START", 0.460f, 0.700f, 0.058f, 0.030f, false, ImGuiKey_Enter},
+    // Shoulder buttons on the swept-up wings at the top corners.
+    {SE_PAD_L, "L", 0.150f, 0.112f, 0.088f, 0.030f, false, ImGuiKey_Q},
+    {SE_PAD_R, "R", 0.760f, 0.112f, 0.088f, 0.030f, false, ImGuiKey_E},
 };
 
 ImU32 Col(float r, float g, float b, float a = 1.0f)
@@ -85,12 +87,24 @@ unsigned int ControllerPanel::Draw(bool liveConnected)
     ImDrawList* dl = ImGui::GetWindowDrawList();
 
     auto px = [&](float nx, float ny) { return ImVec2(origin.x + nx * width, origin.y + ny * height); };
+    // A circle radius given as a fraction of the pad WIDTH (so it's round on screen).
+    auto rad = [&](float f) { return f * width; };
 
-    // Pad shell (rounded rectangle backdrop).
-    dl->AddRectFilled(px(0.02f, 0.02f), px(0.98f, 0.98f), Col(0.62f, 0.63f, 0.65f),
-                      height * 0.12f);
-    dl->AddRect(px(0.02f, 0.02f), px(0.98f, 0.98f), Col(0.35f, 0.36f, 0.38f),
-                height * 0.12f, 0, 2.0f);
+    // ---- Shell: a light-grey Saturn "batwing" — a rounded body with two shoulder
+    // wings swept up at the top corners, plus a soft top bevel and bottom shadow. ----
+    const ImU32 shell   = Col(0.72f, 0.72f, 0.74f);
+    const ImU32 shellLo = Col(0.60f, 0.60f, 0.62f);
+    dl->AddCircleFilled(px(0.16f, 0.30f), rad(0.145f), shell, 40);   // left wing
+    dl->AddCircleFilled(px(0.84f, 0.30f), rad(0.145f), shell, 40);   // right wing
+    dl->AddRectFilled(px(0.06f, 0.20f), px(0.94f, 0.95f), shell, height * 0.28f);
+    dl->AddRectFilled(px(0.06f, 0.66f), px(0.94f, 0.95f), shellLo, height * 0.28f,
+                      ImDrawFlags_RoundCornersBottom);           // subtle bottom shading
+    dl->AddRectFilled(px(0.09f, 0.24f), px(0.91f, 0.40f), Col(1.0f, 1.0f, 1.0f, 0.06f),
+                      height * 0.20f, ImDrawFlags_RoundCornersTop); // top bevel highlight
+
+    // ---- Recessed dishes behind the D-pad and the face buttons (depth). ----
+    dl->AddCircleFilled(px(0.19f, 0.53f), rad(0.135f), Col(0.10f, 0.10f, 0.11f, 0.55f), 40);
+    dl->AddCircleFilled(px(0.72f, 0.515f), rad(0.165f), Col(0.10f, 0.10f, 0.11f, 0.45f), 40);
 
     unsigned int mask = 0;
     unsigned int newLatch = mLatched;
@@ -119,26 +133,32 @@ unsigned int ControllerPanel::Draw(bool liveConnected)
         const bool pressed = mouseHeld || keyHeld || latched;
         if (pressed) mask |= b.bit;
 
-        // Draw the button, highlighted when pressed.
+        // Base colours: START is the Saturn's blue oval; face + D-pad are charcoal.
+        // A pressed button lights up green (blue-white for START) — the highlight.
         const bool isStart = b.bit == SE_PAD_START;
-        ImU32 fill = isStart ? (pressed ? Col(0.35f, 0.65f, 1.0f) : Col(0.16f, 0.34f, 0.72f))
-                             : (pressed ? Col(0.35f, 0.85f, 0.45f) : Col(0.28f, 0.29f, 0.31f));
+        const ImU32 fill = isStart ? (pressed ? Col(0.45f, 0.72f, 1.0f) : Col(0.15f, 0.33f, 0.70f))
+                                   : (pressed ? Col(0.36f, 0.86f, 0.46f) : Col(0.24f, 0.25f, 0.27f));
+        const ImU32 edge = Col(0.09f, 0.09f, 0.10f);
         if (b.round)
         {
-            const float rad = (wx < wy ? wx : wy);
-            dl->AddCircleFilled(c, rad, fill, 24);
-            dl->AddCircle(c, rad, Col(0.12f, 0.12f, 0.13f), 24, 1.5f);
+            const float r = (wx < wy ? wx : wy);
+            dl->AddCircleFilled(ImVec2(c.x, c.y + r * 0.10f), r, Col(0.0f, 0.0f, 0.0f, 0.35f), 28); // drop shadow
+            dl->AddCircleFilled(c, r, fill, 28);
+            dl->AddCircleFilled(ImVec2(c.x, c.y - r * 0.32f), r * 0.62f,
+                                Col(1.0f, 1.0f, 1.0f, 0.10f), 28);   // glossy top highlight
+            dl->AddCircle(c, r, edge, 28, 2.0f);
         }
         else
         {
-            dl->AddRectFilled(lo, hi, fill, wy * 0.4f);
-            dl->AddRect(lo, hi, Col(0.12f, 0.12f, 0.13f), wy * 0.4f, 0, 1.5f);
+            const float r = wy < wx ? wy * 0.5f : wx * 0.5f;
+            dl->AddRectFilled(lo, hi, fill, r);
+            dl->AddRect(lo, hi, edge, r, 0, 2.0f);
         }
         if (b.label[0])
         {
             const ImVec2 ts = ImGui::CalcTextSize(b.label);
             dl->AddText(ImVec2(c.x - ts.x * 0.5f, c.y - ts.y * 0.5f),
-                        Col(0.95f, 0.95f, 0.97f), b.label);
+                        isStart ? Col(0.95f, 0.97f, 1.0f) : Col(0.92f, 0.93f, 0.95f), b.label);
         }
     }
 
