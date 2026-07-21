@@ -204,6 +204,39 @@ def which(name):
     return shutil.which(name)
 
 
+# Absolute path to the cmake we build with. Resolved in main(); the build steps use
+# it (not a bare "cmake") so a CMake that's installed but not on PATH still works.
+CMAKE = "cmake"
+
+
+def cmake_path():
+    """Absolute path to cmake.exe, or None. Searches PATH first, then the common
+    Windows install locations: CMake's own installer, the winget Links shim, and
+    Visual Studio's bundled copy (none of which are on PATH by default)."""
+    p = shutil.which("cmake")
+    if p:
+        return p
+    if os.name != "nt":
+        return None
+    import glob
+    cands = []
+    for base in filter(None, (os.environ.get("ProgramW6432"),
+                              os.environ.get("ProgramFiles"),
+                              os.environ.get("ProgramFiles(x86)"))):
+        cands.append(os.path.join(base, "CMake", "bin", "cmake.exe"))
+    la = os.environ.get("LOCALAPPDATA")
+    if la:
+        cands.append(os.path.join(la, "Microsoft", "WinGet", "Links", "cmake.exe"))
+    for pf in filter(None, (os.environ.get("ProgramFiles"), os.environ.get("ProgramFiles(x86)"))):
+        cands += glob.glob(os.path.join(pf, "Microsoft Visual Studio", "*", "*", "Common7",
+                                        "IDE", "CommonExtensions", "Microsoft", "CMake",
+                                        "CMake", "bin", "cmake.exe"))
+    for c in cands:
+        if os.path.isfile(c):
+            return c
+    return None
+
+
 def refresh_windows_path():
     """Re-read PATH from the Windows registry (machine + user) into this process, so a
     tool winget installed THIS run is found by the build steps without reopening the
@@ -293,15 +326,46 @@ def ensure_tool(rn, present, label, winget_id, override=None):
     return rn.run(cmd) == 0
 
 
+def ensure_cmake(rn):
+    """Resolve CMake robustly and record it in the CMAKE global the build uses. Handles
+    the common Windows case where CMake IS installed but not on PATH: we locate its exe
+    directly (cmake_path) rather than trusting PATH or winget's exit code (winget returns
+    non-zero for 'already installed / no upgrade')."""
+    global CMAKE
+    p = cmake_path()
+    if p:
+        CMAKE = p
+        print("  [ok]      CMake" + ("" if p == "cmake" else f"  ({p})"))
+        return True
+    print("  [missing] CMake")
+    if rn.dry_run:
+        return True
+    if which("winget") and rn.confirm("            install CMake via winget (Kitware.CMake)?"):
+        # Ignore winget's exit code (it's non-zero when already installed); re-resolve
+        # the exe directly afterwards, refreshing PATH in case winget added it there.
+        rn.run(["winget", "install", "--id", WINGET["cmake"], "-e",
+                "--accept-package-agreements", "--accept-source-agreements"])
+        refresh_windows_path()
+        p = cmake_path()
+        if p:
+            CMAKE = p
+            print(f"  [ok]      CMake  ({p})")
+            return True
+    print("            CMake wasn't found. Install it from https://cmake.org/download/")
+    print("            (tick \"Add CMake to the system PATH\"), or if you just installed it,")
+    print("            close this window and run install.bat again.")
+    return False
+
+
 # ---------------------------------------------------------------------------
 # Steps
 # ---------------------------------------------------------------------------
 def build_saturn_explorer(rn, generator):
     print("\n== Saturn Explorer ==")
     build = os.path.join(SE_ROOT, "build")
-    if rn.run(["cmake", "-B", build, "-S", SE_ROOT, "-G", generator, "-A", "x64"]) != 0:
+    if rn.run([CMAKE, "-B", build, "-S", SE_ROOT, "-G", generator, "-A", "x64"]) != 0:
         return False, None
-    if rn.run(["cmake", "--build", build, "--config", "Release", "--parallel"]) != 0:
+    if rn.run([CMAKE, "--build", build, "--config", "Release", "--parallel"]) != 0:
         return False, None
     exe = os.path.join(build, "bin", "Release", "SaturnExplorerFrontEnd.exe")
     return True, exe
@@ -357,13 +421,13 @@ def build_mednafen(rn, msys2, dest):
 
 def build_yabause(rn, dest, generator, qt_path):
     build = os.path.join(dest, "build")
-    cfg = ["cmake", "-B", build, "-S", dest, "-G", generator, "-A", "x64",
+    cfg = [CMAKE, "-B", build, "-S", dest, "-G", generator, "-A", "x64",
            "-DYAB_PORTS=qt"]
     if qt_path:
         cfg.append(f"-DCMAKE_PREFIX_PATH={qt_path}")
     if rn.run(cfg) != 0:
         return False, None
-    if rn.run(["cmake", "--build", build, "--config", "Release", "--parallel"]) != 0:
+    if rn.run([CMAKE, "--build", build, "--config", "Release", "--parallel"]) != 0:
         return False, None
     return True, os.path.join(build, "src", "qt", "Release", "yabause-qt.exe")
 
@@ -458,7 +522,7 @@ def main():
     print("Prerequisites:")
     ok = True
     ok &= ensure_tool(rn, which("git"), "git", WINGET["git"])
-    ok &= ensure_tool(rn, which("cmake"), "CMake", WINGET["cmake"])
+    ok &= ensure_cmake(rn)   # resolves an off-PATH CMake too; sets the CMAKE global
     ok &= ensure_tool(rn, detect_msvc(), "Visual Studio C++ toolset",
                       WINGET["vs"], override=VS_OVERRIDE)
 
@@ -480,17 +544,6 @@ def main():
     if not ok and not args.dry_run:
         print("\nSome prerequisites are missing. Install them (above) and re-run.")
         return 3
-
-    # Anything winget installed above is now in the registry PATH but not this
-    # process's; pull it in so the build steps can find cmake/git without a restart.
-    if not args.dry_run:
-        refresh_windows_path()
-        if os.name == "nt" and not which("cmake"):
-            print("\n  [!] 'cmake' still isn't on PATH. If you just installed it, close this")
-            print("      window and run install.bat again so the new PATH takes effect.")
-            print("      (CMake's installer has an \"Add CMake to the system PATH\" option;")
-            print("      Visual Studio's bundled CMake is not on PATH by default.)")
-            return 3
 
     # --- build Saturn Explorer ---------------------------------------------
     results = []
