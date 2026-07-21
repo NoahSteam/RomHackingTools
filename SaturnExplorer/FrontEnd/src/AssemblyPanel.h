@@ -14,6 +14,7 @@
 
 #include "Debug/MemoryBackend.h"
 #include "Debug/BreakpointManager.h"
+#include "Debug/ExecutionActions.h"
 #include "Debug/Sh2Disasm.h"
 
 namespace sfe
@@ -33,13 +34,19 @@ public:
         uint32_t runToAddr = 0;
         bool     viewHex = false;     // reveal hexAddr in the Hex Editor
         uint32_t hexAddr = 0;
+        bool     editTracepoint = false;  // open the tracepoint editor for tpAddr/tpCpu
+        uint32_t tpAddr = 0;
+        int      tpCpu = 0;
     };
     void Draw(se_context* ctx, IMemoryBackend& backend, BreakpointManager& bps,
-              WatchPanel& watch, bool live, Request& req);
+              ExecutionActions& actions, WatchPanel& watch, bool live, Request& req);
 
     // The CPU the panel is currently viewing (0 master, 1 slave) — used by the App
     // to target run-control (Run to Here) at the right core.
     int Cpu() const { return mCpu; }
+
+    // Jump the view to 'addr' on 'cpu' (the Log panel's "Jump to Assembly").
+    void GoTo(int cpu, uint32_t addr);
 
     // Persist / restore the user comment store (address -> note). Called by the App
     // at startup / shutdown, mirroring WatchPanel session persistence.

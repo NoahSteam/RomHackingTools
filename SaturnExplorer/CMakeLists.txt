@@ -153,11 +153,14 @@ if(WIN32)
         FrontEnd/src/AssemblyPanel.cpp
         FrontEnd/src/HexEditorPanel.cpp
         FrontEnd/src/ControllerPanel.cpp
+        FrontEnd/src/LogPanel.cpp
         FrontEnd/src/Debug/WatchList.cpp
         FrontEnd/src/Debug/MemoryBackend.cpp
         FrontEnd/src/Debug/Sh2Disasm.cpp
         FrontEnd/src/Debug/BreakpointManager.cpp
         FrontEnd/src/Debug/ShiftJis.cpp
+        FrontEnd/src/Debug/FormatString.cpp
+        FrontEnd/src/Debug/ExecutionActions.cpp
         FrontEnd/src/FrameRecorder.cpp
         FrontEnd/src/FrameLz.cpp
         FrontEnd/Platforms/Windows/WindowsPlatform.cpp
@@ -203,11 +206,14 @@ elseif(EMSCRIPTEN)
         FrontEnd/src/AssemblyPanel.cpp
         FrontEnd/src/HexEditorPanel.cpp
         FrontEnd/src/ControllerPanel.cpp
+        FrontEnd/src/LogPanel.cpp
         FrontEnd/src/Debug/WatchList.cpp
         FrontEnd/src/Debug/MemoryBackend.cpp
         FrontEnd/src/Debug/Sh2Disasm.cpp
         FrontEnd/src/Debug/BreakpointManager.cpp
         FrontEnd/src/Debug/ShiftJis.cpp
+        FrontEnd/src/Debug/FormatString.cpp
+        FrontEnd/src/Debug/ExecutionActions.cpp
         FrontEnd/Platforms/Web/WebPlatform.cpp
         FrontEnd/Platforms/Web/WebMain.cpp
         ${SE_IMGUI_CORE}
@@ -271,11 +277,14 @@ else()
             FrontEnd/src/AssemblyPanel.cpp
             FrontEnd/src/HexEditorPanel.cpp
             FrontEnd/src/ControllerPanel.cpp
+            FrontEnd/src/LogPanel.cpp
             FrontEnd/src/Debug/WatchList.cpp
             FrontEnd/src/Debug/MemoryBackend.cpp
             FrontEnd/src/Debug/Sh2Disasm.cpp
             FrontEnd/src/Debug/BreakpointManager.cpp
             FrontEnd/src/Debug/ShiftJis.cpp
+            FrontEnd/src/Debug/FormatString.cpp
+            FrontEnd/src/Debug/ExecutionActions.cpp
             FrontEnd/src/FrameRecorder.cpp
             FrontEnd/src/FrameLz.cpp
             FrontEnd/Platforms/Web/WebPlatform.cpp

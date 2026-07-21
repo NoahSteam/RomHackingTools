@@ -14,6 +14,7 @@
 #include "Platform/IPlatform.h"
 #include "SaturnRegions.h"
 #include "Theme.h"
+#include "Debug/FormatString.h"   // tracepoint output mini-syntax
 #include "SavestateDriver.h"
 #ifdef SE_ENABLE_LIVE
 #include "LiveDriver.h"      // native builds only (threads/sockets)
@@ -226,6 +227,7 @@ void App::Initialize()
 
     mWatchPanel.LoadSession();     // restore the session's watch list, if any
     mAssemblyPanel.LoadComments(); // restore the session's assembly comments
+    mLog.Info("Saturn Explorer started");
 }
 
 void App::Shutdown()
@@ -263,6 +265,7 @@ const std::vector<App::PanelInfo>& App::PanelList()
         {"assembly",        "SH-2 Assembly",      &Panels::assembly},
         {"hexEditor",       "Hex Editor",         &Panels::hexEditor},
         {"controller",      "Controller",         &Panels::controller},
+        {"log",             "Log",                &Panels::log},
     };
     return kList;
 }
@@ -595,6 +598,7 @@ bool App::OpenSavestate(const char* path)
     }
     mDataSource = dataSource;
     mbHasData = true;
+    mLog.Info(std::string("Loaded savestate: ") + (path ? path : ""));
     return true;
 }
 
@@ -615,6 +619,7 @@ bool App::OpenLive(const char* endpoint)
     mbHasData = true;
     mbLiveSource = true;   // re-snapshot every frame (see BuildUI)
     mbPaused = false;      // a fresh connection is free-running
+    mLog.Info(std::string("Connected to emulator (live): ") + (endpoint ? endpoint : "default"));
     // Force a breakpoint re-sync so any set from before connecting (or a prior
     // session) installs into this emulator instance.
     mLastBpGeneration = mBreakpoints.Generation() - 1;
@@ -781,11 +786,13 @@ void App::BuildUI(IPlatform& platform)
     if (mPanels.hexEditor)       DrawHexEditor();
     if (mPanels.controller)      DrawController();
     else                         SendInput(0);   // hidden panel releases any held input
+    if (mPanels.log)             DrawLog();
 
     // Game-data-directory modal + texture search results (both floating, drawn last
     // so they overlay the docked panels).
     DrawDataDirModal(platform);
     DrawDataSearchResults(platform);
+    DrawTracepointEditor();   // modal; no-op until OpenTracepointEditor requests it
     // contextSwap restores the live context here as it goes out of scope.
 
     // Persist any preference the user changed this frame (panel visibility, data
@@ -864,9 +871,11 @@ void App::BuildDefaultLayout(unsigned int dockspaceId)
     ImGui::DockBuilderDockWindow("Selected Object", rObj);
     ImGui::DockBuilderDockWindow("Hex Editor", rHex);
 
-    // Bottom debugger strip. The Controller tabs in with Watch (wide enough for the pad).
+    // Bottom debugger strip. Watch / Controller / Log tab together on the left; the
+    // SH-2 Assembly gets the right half.
     ImGui::DockBuilderDockWindow("Watch", bWatch);
     ImGui::DockBuilderDockWindow("Controller", bWatch);
+    ImGui::DockBuilderDockWindow("Log", bWatch);
     ImGui::DockBuilderDockWindow("SH-2 Assembly", bAsm);
 
     ImGui::DockBuilderFinish(dockspaceId);
@@ -1352,7 +1361,9 @@ void App::DrawWatch(IPlatform& platform)
 void App::DrawAssembly()
 {
     AssemblyPanel::Request req;
-    mAssemblyPanel.Draw(mContext, mMemBackend, mBreakpoints, mWatchPanel, mbLiveSource, req);
+    mAssemblyPanel.Draw(mContext, mMemBackend, mBreakpoints, mActions, mWatchPanel, mbLiveSource, req);
+
+    if (req.editTracepoint) OpenTracepointEditor(req.tpCpu, req.tpAddr);
 
     // "Run to Here" sets an execution breakpoint at the target and resumes; the
     // emulator halts there via the stop event. No-op without frame control.
@@ -1365,6 +1376,192 @@ void App::DrawAssembly()
         mbPaused = false;
     }
     if (req.viewHex) mHexEditor.GoTo(req.hexAddr);   // "View Address in Hex Editor"
+}
+
+// --- Tracepoints / structured Log (Execution Actions, Phase 1) -------------------
+
+namespace
+{
+// IFormatContext over the current core context: registers via se_get_sh2_regs, memory
+// via the debugger backend (big-endian). Used for the editor's live preview + Test Fire
+// (and, later, for formatting values the emulator captures at a tracepoint hit).
+struct ContextFormat : sfe::IFormatContext
+{
+    se_context*         ctx = nullptr;
+    sfe::IMemoryBackend* backend = nullptr;
+    int                 cpu = 0;
+    uint32_t            frame = 0;
+    se_sh2_regs         regs{};
+    bool                haveRegs = false;
+
+    bool GetValue(const std::string& n, uint32_t& o) const override
+    {
+        if (n == "frame") { o = frame; return true; }
+        if (n == "cycle") { o = 0; return true; }         // not exposed yet
+        if (!haveRegs) return false;
+        if (n == "pc")   { o = regs.pc;   return true; }
+        if (n == "pr")   { o = regs.pr;   return true; }
+        if (n == "sr")   { o = regs.sr;   return true; }
+        if (n == "gbr")  { o = regs.gbr;  return true; }
+        if (n == "vbr")  { o = regs.vbr;  return true; }
+        if (n == "mach") { o = regs.mach; return true; }
+        if (n == "macl") { o = regs.macl; return true; }
+        if (n.size() >= 2 && n[0] == 'r')
+        {
+            const int i = std::atoi(n.c_str() + 1);
+            if (i >= 0 && i < 16) { o = regs.r[i]; return true; }
+        }
+        return false;
+    }
+    bool ReadMem(uint32_t a, uint32_t sz, uint32_t& o) const override
+    {
+        if (!backend) return false;
+        std::vector<sfe::MemoryReadRequest> reqs{{a, sz}};
+        auto res = backend->ReadMemoryBatch(reqs);
+        if (res.empty() || !res[0].success || res[0].bytes.size() < sz) return false;
+        uint32_t v = 0;
+        for (uint32_t i = 0; i < sz; ++i) v = (v << 8) | res[0].bytes[i];   // big-endian
+        o = v;
+        return true;
+    }
+    bool ReadString(uint32_t a, std::string& o, size_t maxLen) const override
+    {
+        for (size_t i = 0; i < maxLen; ++i)
+        {
+            uint32_t b = 0;
+            if (!ReadMem(a + static_cast<uint32_t>(i), 1, b) || b == 0) break;
+            o.push_back((b >= 0x20 && b < 0x7F) ? static_cast<char>(b) : '.');
+        }
+        return !o.empty();
+    }
+};
+}  // namespace
+
+std::string App::FormatAgainstContext(const std::string& tmpl, int cpu)
+{
+    if (!mbHasData || !mContext) return std::string();
+    ContextFormat fc;
+    fc.ctx = mContext;
+    fc.backend = &mMemBackend;
+    fc.cpu = cpu;
+    fc.frame = static_cast<uint32_t>(se_frame_number(mContext));
+    fc.haveRegs = se_get_sh2_regs(mContext, cpu, &fc.regs) == SE_OK;
+    return FormatEvaluate(tmpl, fc);
+}
+
+void App::OpenTracepointEditor(int cpu, uint32_t addr)
+{
+    if (const ExecutionAction* existing = mActions.LogAt(cpu, addr))
+    {
+        mTpEdit = *existing;
+        mTpEditNew = false;
+    }
+    else
+    {
+        mTpEdit = ExecutionAction{};
+        mTpEdit.type = ActionType::Log;
+        mTpEdit.cpu = cpu;
+        mTpEdit.address = addr;
+        mTpEdit.format = "PC={pc}";
+    }
+    mTpEditorOpen = true;   // one-shot: DrawTracepointEditor opens the popup next frame
+}
+
+void App::DrawTracepointEditor()
+{
+    if (mTpEditorOpen) { ImGui::OpenPopup("Tracepoint"); mTpEditorOpen = false; }
+    ImGui::SetNextWindowSize(ImVec2(460.0f, 0.0f), ImGuiCond_Appearing);
+    bool keepOpen = true;
+    if (!ImGui::BeginPopupModal("Tracepoint", &keepOpen, ImGuiWindowFlags_AlwaysAutoResize))
+        return;
+
+    ImGui::Text("Instruction:  %s SH-2   %08X", mTpEdit.cpu ? "Slave" : "Master", mTpEdit.address);
+    ImGui::Checkbox("Enabled", &mTpEdit.enabled);
+
+    ImGui::SeparatorText("Output");
+    char fbuf[256];
+    std::snprintf(fbuf, sizeof(fbuf), "%s", mTpEdit.format.c_str());
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    if (ImGui::InputTextWithHint("##fmt", "e.g. Dialogue ID = {r4}", fbuf, sizeof(fbuf)))
+        mTpEdit.format = fbuf;
+    const std::string err = FormatValidate(mTpEdit.format);
+    if (!err.empty())
+        ImGui::TextColored(ImVec4(0.95f, 0.5f, 0.4f, 1.0f), "! %s", err.c_str());
+    else
+    {
+        const std::string prev = FormatAgainstContext(mTpEdit.format, mTpEdit.cpu);
+        ImGui::TextDisabled("Preview: %s", (mbHasData ? prev : std::string("(no data loaded)")).c_str());
+    }
+    ImGui::TextDisabled("{r0-r15,pc,frame,...}  {r5:X8}  {*0x6034F20:u16}  {*r4:string}");
+
+    ImGui::SeparatorText("Repeat");
+    int rm = static_cast<int>(mTpEdit.repeat);
+    ImGui::RadioButton("Every time", &rm, 0); ImGui::SameLine();
+    ImGui::RadioButton("Once", &rm, 1);       ImGui::SameLine();
+    ImGui::RadioButton("Every N", &rm, 2);
+    mTpEdit.repeat = static_cast<RepeatMode>(rm);
+    if (mTpEdit.repeat == RepeatMode::EveryN)
+    {
+        ImGui::SameLine(); ImGui::SetNextItemWidth(90.0f);
+        ImGui::InputInt("N", &mTpEdit.repeatN);
+        if (mTpEdit.repeatN < 1) mTpEdit.repeatN = 1;
+    }
+
+    ImGui::SeparatorText("Condition");
+    char cbuf[128];
+    std::snprintf(cbuf, sizeof(cbuf), "%s", mTpEdit.condition.c_str());
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    if (ImGui::InputTextWithHint("##cond", "optional, e.g. r0 == 5", cbuf, sizeof(cbuf)))
+        mTpEdit.condition = cbuf;
+
+    ImGui::SeparatorText("Actions");
+    ImGui::Checkbox("Write to Log", &mTpEdit.effects.writeToLog);
+    ImGui::Checkbox("Pause Emulator", &mTpEdit.effects.pauseEmulator);
+    ImGui::Checkbox("Capture Screenshot", &mTpEdit.effects.screenshot);
+    ImGui::Checkbox("Save Memory Snapshot", &mTpEdit.effects.memSnapshot);
+    ImGui::Checkbox("Play Sound", &mTpEdit.effects.playSound);
+    ImGui::Checkbox("Run Script", &mTpEdit.effects.runScript);
+
+    ImGui::Separator();
+    // Test Fire: format against the current state and push a Log entry now, so the whole
+    // tracepoint->format->log->jump path is exercisable without the emulator firing it.
+    ImGui::BeginDisabled(!mbHasData || !err.empty());
+    if (ImGui::Button("Test Fire"))
+    {
+        const std::string msg = FormatAgainstContext(mTpEdit.format, mTpEdit.cpu);
+        std::vector<std::pair<std::string, std::string>> detail;
+        se_sh2_regs r{};
+        if (se_get_sh2_regs(mContext, mTpEdit.cpu, &r) == SE_OK)
+        {
+            char b[16];
+            for (int i = 0; i < 16; ++i)
+            { std::snprintf(b, sizeof(b), "%08X", r.r[i]); detail.emplace_back("r" + std::to_string(i), b); }
+        }
+        mLog.Tracepoint(static_cast<uint32_t>(se_frame_number(mContext)), mTpEdit.cpu,
+                        mTpEdit.address, msg, std::move(detail));
+    }
+    ImGui::EndDisabled();
+    ImGui::SameLine();
+    if (ImGui::Button("OK", ImVec2(90, 0)))
+    {
+        if (mTpEditNew) mActions.Add(mTpEdit); else mActions.Update(mTpEdit);
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Cancel", ImVec2(90, 0))) ImGui::CloseCurrentPopup();
+    ImGui::EndPopup();
+}
+
+void App::DrawLog()
+{
+    if (ImGui::Begin("Log"))
+    {
+        LogPanel::Request req;
+        mLog.Draw(req);
+        if (req.jumpAssembly) { mAssemblyPanel.GoTo(req.jumpCpu, req.jumpAddr); mPanels.assembly = true; }
+        if (req.jumpHex)      { mHexEditor.GoTo(req.hexAddr); mPanels.hexEditor = true; }
+    }
+    ImGui::End();
 }
 
 // Hex Editor — raw memory view/edit over the shared backend (same source as Watch).

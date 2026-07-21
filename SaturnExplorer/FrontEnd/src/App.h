@@ -17,6 +17,8 @@
 #include "AssemblyPanel.h"       // SH-2 Assembly (debugger)
 #include "HexEditorPanel.h"      // Hex Editor (debugger)
 #include "ControllerPanel.h"     // Saturn control pad (drives a live game)
+#include "LogPanel.h"            // structured event log (tracepoints + system events)
+#include "Debug/ExecutionActions.h"  // tracepoints / execution-action store
 #include "Debug/MemoryBackend.h"
 #include "Debug/WatchList.h"
 #include "Debug/BreakpointManager.h"
@@ -80,6 +82,12 @@ private:
     void DrawHexEditor();                   // Hex Editor (memory view/edit)
     void DrawController();                  // Saturn control pad -> live input
     void SendInput(unsigned int mask);      // push a pad mask to the live emulator (on change)
+    void DrawLog();                         // structured event log
+    void DrawTracepointEditor();            // modal property editor for a tracepoint
+    void OpenTracepointEditor(int cpu, uint32_t addr);  // open it for a new/existing TP
+    // Format a tracepoint's template against the CURRENT context (registers + memory),
+    // for the editor's live preview and Test Fire. Empty string if no context.
+    std::string FormatAgainstContext(const std::string& tmpl, int cpu);
     void SyncBreakpointsToLive();           // push the breakpoint set to the emulator
     void DrawVdp1Framebuffer(IPlatform& platform);
     void DrawWorldView(IPlatform& platform);
@@ -135,6 +143,16 @@ private:
     HexEditorPanel           mHexEditor;
     ControllerPanel          mController;
     unsigned int             mInputMask = 0;    // last pad mask sent to the live emulator
+
+    // Structured event log + the tracepoint (execution-action) store, plus the state
+    // of the modal tracepoint editor (mTpEdit is the working copy; mTpEditNew means
+    // "Add on OK" vs "Update the existing id").
+    LogPanel                 mLog;
+    ExecutionActions         mActions;
+    bool                     mTpEditorOpen = false;
+    bool                     mTpEditNew = false;
+    ExecutionAction          mTpEdit;
+    uint64_t                 mLastSystemLogFrame = ~0ull;   // de-dupe per-frame system logs
     uint64_t                 mLastBpGeneration = 0;  // last set synced to the live emulator
 
     se_render_opts   mRenderOpts {};
@@ -183,6 +201,7 @@ private:
         bool textureViewer = true, paletteViewer = true, references = false;
         bool selectedObject = true, watch = true, assembly = true, hexEditor = true;
         bool controller = true;   // Saturn control pad (drives a live game)
+        bool log = true;          // structured event log (tracepoints + system events)
     };
     Panels           mPanels;
 

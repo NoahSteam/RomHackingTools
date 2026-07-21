@@ -222,6 +222,12 @@ std::string Sh2Comment(const DisassembledInstruction& ins, const se_sh2_regs& re
 }
 }  // namespace
 
+void AssemblyPanel::GoTo(int cpu, uint32_t addr)
+{
+    mCpu = cpu & 1;
+    Navigate(addr, true);
+}
+
 void AssemblyPanel::Navigate(uint32_t addr, bool pushHistory)
 {
     if (pushHistory && mWindowValid)
@@ -236,7 +242,7 @@ void AssemblyPanel::Navigate(uint32_t addr, bool pushHistory)
 }
 
 void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointManager& bps,
-                         WatchPanel& watch, bool live, Request& req)
+                         ExecutionActions& actions, WatchPanel& watch, bool live, Request& req)
 {
     if (!ImGui::Begin("SH-2 Assembly"))
     {
@@ -375,17 +381,28 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
         // Gutter: breakpoint dot (click toggles) + PC arrow.
         ImGui::TableSetColumnIndex(0);
         const Breakpoint* bp = bps.ExecutionAt(mCpu, ln.addr);
+        const ExecutionAction* tp = actions.LogAt(mCpu, ln.addr);
         ImDrawList* dl = ImGui::GetWindowDrawList();
         ImVec2 p = ImGui::GetCursorScreenPos();
         const float h = ImGui::GetTextLineHeight();
-        if (bp)
+        const float cy = p.y + h * 0.5f;
+        if (bp)   // breakpoint = red circle
         {
             const ImU32 c = bp->enabled ? IM_COL32(220, 60, 60, 255) : IM_COL32(120, 90, 90, 255);
-            dl->AddCircleFilled(ImVec2(p.x + 6, p.y + h*0.5f), 5.0f, c);
+            dl->AddCircleFilled(ImVec2(p.x + 6, cy), 5.0f, c);
+        }
+        if (tp)   // tracepoint = blue diamond (a distinct SHAPE, not just colour)
+        {
+            const ImU32 c = tp->enabled ? IM_COL32(90, 160, 240, 255) : IM_COL32(95, 115, 140, 255);
+            const float x = p.x + 17, r = 5.0f;
+            const ImVec2 pts[4] = {{x, cy - r}, {x + r, cy}, {x, cy + r}, {x - r, cy}};
+            dl->AddConvexPolyFilled(pts, 4, c);
         }
         if (isPc)
-            dl->AddText(ImVec2(p.x + 12, p.y), IM_COL32(230, 230, 90, 255), ">");
-        if (ImGui::InvisibleButton("g", ImVec2(24, h)) && ln.readable)
+            dl->AddText(ImVec2(p.x + 26, p.y), IM_COL32(230, 230, 90, 255), ">");
+        // Left-click toggles a breakpoint (the common action); tracepoints toggle from
+        // the right-click menu so the two don't fight over the same click.
+        if (ImGui::InvisibleButton("g", ImVec2(34, h)) && ln.readable)
             bps.ToggleExecution(mCpu, ln.addr);
         if (isPc && mScrollToPc) { ImGui::SetScrollHereY(0.35f); mScrollToPc = false; }
 
@@ -465,6 +482,10 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
             const bool hasMem = ln.readable && ResolveMemOperand(ln.ins, regs, ea, wt);
             if (ImGui::MenuItem(bp ? "Remove Breakpoint" : "Toggle Breakpoint", nullptr, false, ln.readable))
                 bps.ToggleExecution(mCpu, ln.addr);
+            if (ImGui::MenuItem(tp ? "Remove Tracepoint" : "Toggle Tracepoint", nullptr, false, ln.readable))
+                actions.ToggleLog(mCpu, ln.addr);
+            if (ImGui::MenuItem("Create Tracepoint...", nullptr, false, ln.readable))
+            { req.editTracepoint = true; req.tpAddr = ln.addr; req.tpCpu = mCpu; }
             if (ImGui::MenuItem("Run to Here", nullptr, false, live && ln.readable))
             { req.runTo = true; req.runToAddr = ln.addr; }
             if (ImGui::MenuItem("Follow Branch", nullptr, false, ln.readable && ln.ins.HasBranchTarget))
