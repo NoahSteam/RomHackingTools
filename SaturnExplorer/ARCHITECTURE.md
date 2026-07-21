@@ -545,4 +545,10 @@ what lets an emulator embed the core under its own renderer.
 - **Execution Actions (tracepoints + structured Log):**
   [`EXECUTION_ACTIONS.md`](EXECUTION_ACTIONS.md) — generalize breakpoints into
   per-address actions (Break, non-halting Tracepoint/Log, and future types), with a
-  filterable event Log and a format mini-syntax. Not started; captured for later.
+  filterable event Log and a format mini-syntax. Built (phases 1–4); the client, wire
+  protocol (v8), and Mednafen glue are in.
+- **Call Stack + paused-state workspace:** [`CALL_STACK.md`](CALL_STACK.md) — a per-CPU
+  call stack shown when execution stops, from an instrumented shadow stack (● confirmed)
+  or a heuristic reconstruction of the stack image (◐ probable / ○ heuristic), with a
+  coordinated breakpoint-hit workspace. Phase 1 (client model + heuristic reconstructor +
+  panel) built; the shadow-stack protocol/glue are later phases.

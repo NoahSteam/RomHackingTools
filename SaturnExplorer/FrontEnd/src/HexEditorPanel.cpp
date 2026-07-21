@@ -34,6 +34,20 @@ void HexEditorPanel::GoTo(uint32_t address)
     mFocusRequested = true;
 }
 
+void HexEditorPanel::Select(uint32_t address, uint32_t length)
+{
+    if (length == 0) length = 1;
+    mBase = address & ~0xFu;
+    std::snprintf(mAddrBuf, sizeof(mAddrBuf), "%08X", mBase);
+    mHavePrev = false;
+    const int start = (int)(address - mBase);
+    int end = start + (int)length - 1;
+    if (mSize > 0 && end > mSize - 1) end = mSize - 1;   // keep the span inside the window
+    mSelStart = start;
+    mSelEnd   = end;
+    mFocusRequested = true;
+}
+
 void HexEditorPanel::Refresh(IMemoryBackend& backend)
 {
     mConnected = backend.Connected();

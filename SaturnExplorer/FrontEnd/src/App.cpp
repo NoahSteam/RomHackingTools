@@ -227,6 +227,7 @@ void App::Initialize()
 
     mWatchPanel.LoadSession();     // restore the session's watch list, if any
     mAssemblyPanel.LoadComments(); // restore the session's assembly comments
+    mFunctionNames.Load();         // restore user-renamed function names (call stack)
     mLog.Info("Saturn Explorer started");
 }
 
@@ -235,6 +236,7 @@ void App::Shutdown()
     SaveSettings();
     mWatchPanel.SaveSession();
     mAssemblyPanel.SaveComments();
+    mFunctionNames.Save();
     CloseData();
 }
 
@@ -267,6 +269,7 @@ const std::vector<App::PanelInfo>& App::PanelList()
         {"controller",      "Controller",         &Panels::controller},
         {"log",             "Log",                &Panels::log},
         {"actions",         "Tracepoints",        &Panels::actions},
+        {"callStack",       "Call Stack",         &Panels::callStack},
     };
     return kList;
 }
@@ -317,6 +320,8 @@ void App::CloseData()
     mbHasData = false;
     mbLiveSource = false;
     mbPaused = false;
+    mCallStack.ClearAll();       // stale stack; a new source rebuilds it
+    mCallStackDirty = true;
     mSelectedCommand = -1;
     mSelection.clear();
     // The frame texture is freed lazily (on next size change) or with the
@@ -694,6 +699,11 @@ void App::BuildUI(IPlatform& platform)
         if (se_live_get_stop(&mDataSource, &stopReason, &stopCpu, &stopPc) && !mbPaused)
         {
             mbPaused = true;   // halted on a breakpoint; panel follows the halted PC
+            // Bring up the paused-state workspace: rebuild the halted CPU's call stack
+            // and surface the Call Stack panel.
+            mCallStackCpu = (stopCpu == 1) ? 1 : 0;
+            mCallStackDirty = true;
+            mFocusCallStack = true;
         }
 #endif
     }
@@ -791,6 +801,7 @@ void App::BuildUI(IPlatform& platform)
     else                         SendInput(0);   // hidden panel releases any held input
     if (mPanels.log)             DrawLog();
     if (mPanels.actions)         DrawActions();
+    if (mPanels.callStack)       DrawCallStack();
 
     // Game-data-directory modal + texture search results (both floating, drawn last
     // so they overlay the docked panels).
@@ -881,6 +892,7 @@ void App::BuildDefaultLayout(unsigned int dockspaceId)
     ImGui::DockBuilderDockWindow("Controller", bWatch);
     ImGui::DockBuilderDockWindow("Log", bWatch);
     ImGui::DockBuilderDockWindow("Tracepoints", bWatch);   // tabs with Watch/Log/Controller
+    ImGui::DockBuilderDockWindow("Call Stack", bWatch);    // beside Assembly; auto-focus on stop
     ImGui::DockBuilderDockWindow("SH-2 Assembly", bAsm);
 
     ImGui::DockBuilderFinish(dockspaceId);
@@ -1791,6 +1803,249 @@ void App::DrawActions()
             if (toRemove) mActions.Remove(toRemove);
         }
     }
+    ImGui::End();
+}
+
+// Reconstruct the shown CPU's call stack from its current registers + memory. Cheap
+// enough to run on demand (a stop, a CPU switch, or the Reconstruct button); not per
+// frame.
+void App::RebuildCallStack()
+{
+    mCallStackDirty = false;
+    se_sh2_regs regs{};
+    if (!mbHasData || se_get_sh2_regs(mContext, mCallStackCpu, &regs) != SE_OK)
+    {
+        mCallStack.Clear(mCallStackCpu);
+        return;
+    }
+    mCallStack.Reconstruct(mCallStackCpu, regs, mMemBackend);
+}
+
+// Sync the paused-state workspace to a chosen frame: point Assembly at the frame's
+// address and highlight its stack slot in the Hex Editor.
+void App::GoToFrame(const CallStackFrame& fr)
+{
+    mAssemblyPanel.GoTo(fr.cpu, fr.functionAddress);
+    mPanels.assembly = true;
+    mHexEditor.Select(fr.stackPointer, 16);
+    mPanels.hexEditor = true;
+}
+
+// Call Stack — the per-CPU call chain that led to the halted instruction (see
+// CALL_STACK.md). On a stop it auto-focuses and rebuilds; double-click / right-click a
+// frame to drive the rest of the workspace. This phase reconstructs heuristically from
+// the stack image (works on a savestate); the shadow stack (Phase 2/3) will supply
+// ● Confirmed frames over the wire.
+void App::DrawCallStack()
+{
+    // Auto-surface when execution stops or a savestate loads (the rising edge of an
+    // inspectable state), matching "the Call Stack should appear automatically".
+    const bool showable = mbHasData && (!mbLiveSource || mbPaused);
+    if (mFocusCallStack || (showable && !mCallStackWasShowable)) ImGui::SetNextWindowFocus();
+    mFocusCallStack = false;
+    mCallStackWasShowable = showable;
+    if (!ImGui::Begin("Call Stack")) { ImGui::End(); return; }
+
+    // Breakpoint-hit strip: a prominent banner + run control while paused.
+    if (mbPaused)
+    {
+        se_sh2_regs r{};
+        const bool haveR = mbHasData && se_get_sh2_regs(mContext, mCallStackCpu, &r) == SE_OK;
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.42f, 0.12f, 0.12f, 1.0f));
+        ImGui::BeginChild("bphit", ImVec2(0, ImGui::GetFrameHeightWithSpacing() * 2.0f + 6.0f),
+                          ImGuiChildFlags_None);
+        ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.4f, 1.0f), "BREAKPOINT HIT");
+        ImGui::SameLine();
+        ImGui::Text("%s SH-2", mCallStackCpu ? "Slave" : "Master");
+        if (haveR) { ImGui::SameLine(); ImGui::Text("\xc2\xb7 PC %08X", r.pc); }
+
+        const bool canStep = mbHasData && se_supports_frame_control(mContext);
+        if (ImGui::Button("Continue") && canStep) { se_frame_resume(mContext); mbPaused = false; }
+        ImGui::SameLine();
+        ImGui::BeginDisabled(true);
+        ImGui::Button("Step Into"); ImGui::SetItemTooltip("Instruction stepping — Phase 2 (step verb)");
+        ImGui::SameLine();
+        ImGui::Button("Step Over"); ImGui::SetItemTooltip("Instruction stepping — Phase 2 (step verb)");
+        ImGui::EndDisabled();
+        ImGui::SameLine();
+        ImGui::BeginDisabled(!canStep || !haveR);
+        if (ImGui::Button("Step Out"))
+        {
+            // Run to frame #0's return address: add a breakpoint there (only if none)
+            // and resume. Instruction-exact step-out arrives with the step verb.
+            if (!mBreakpoints.HasExecutionAt(mCallStackCpu, r.pr))
+                mBreakpoints.ToggleExecution(mCallStackCpu, r.pr);
+            se_frame_resume(mContext);
+            mbPaused = false;
+        }
+        ImGui::SetItemTooltip("Run to the current frame's return address (%08X)", r.pr);
+        ImGui::EndDisabled();
+        ImGui::EndChild();
+        ImGui::PopStyleColor();
+    }
+
+    // CPU selector + Reconstruct. The heuristic stack is a best-effort reconstruction;
+    // Reconstruct forces a rebuild (e.g. after editing memory).
+    const char* cpuNames[] = { "Master SH-2", "Slave SH-2" };
+    ImGui::SetNextItemWidth(140.0f);
+    if (ImGui::Combo("##cscpu", &mCallStackCpu, cpuNames, 2)) mCallStackDirty = true;
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Reconstruct")) mCallStackDirty = true;
+
+    if (!showable)
+    {
+        ImGui::TextDisabled(mbHasData ? "Available when execution is paused."
+                                      : "Load a savestate or connect to a running game.");
+        ImGui::End();
+        return;
+    }
+
+    if (mCallStackDirty || mCallStack.Empty(mCallStackCpu)) RebuildCallStack();
+
+    const std::vector<CallStackFrame>& frames = mCallStack.Frames(mCallStackCpu);
+    if (frames.empty())
+    {
+        ImGui::TextDisabled("No stack could be recovered.");
+        ImGui::End();
+        return;
+    }
+
+    // Draw a confidence glyph into the current cell: filled green (confirmed), filled
+    // yellow (probable), gray outline (heuristic) — font-independent so it renders
+    // anywhere. Returns after advancing past the drawn dot.
+    auto confGlyph = [](FrameConfidence c) {
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        const float rad = ImGui::GetFontSize() * 0.30f;
+        ImVec2 p = ImGui::GetCursorScreenPos();
+        ImVec2 ctr(p.x + rad + 2.0f, p.y + ImGui::GetTextLineHeight() * 0.5f);
+        ImU32 col = (c == FrameConfidence::Confirmed) ? IM_COL32(90, 200, 110, 255)
+                  : (c == FrameConfidence::Probable)  ? IM_COL32(225, 195, 70, 255)
+                                                      : IM_COL32(150, 150, 150, 255);
+        if (c == FrameConfidence::Heuristic) dl->AddCircle(ctr, rad, col, 12, 1.5f);
+        else                                 dl->AddCircleFilled(ctr, rad, col, 12);
+        ImGui::Dummy(ImVec2(rad * 2.0f + 4.0f, ImGui::GetTextLineHeight()));
+    };
+    auto confName = [](FrameConfidence c) {
+        return c == FrameConfidence::Confirmed ? "Confirmed (recorded call/return)"
+             : c == FrameConfidence::Probable  ? "Probable (return addr after a bsr/jsr)"
+                                               : "Heuristic (unverified code pointer)";
+    };
+
+    const ImGuiTableFlags tf = ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH |
+                               ImGuiTableFlags_ScrollY | ImGuiTableFlags_SizingStretchProp;
+    if (ImGui::BeginTable("callstack", 6, tf))
+    {
+        ImGui::TableSetupColumn("",        ImGuiTableColumnFlags_WidthFixed, 22.0f);
+        ImGui::TableSetupColumn("#",       ImGuiTableColumnFlags_WidthFixed, 22.0f);
+        ImGui::TableSetupColumn("Function / Label", ImGuiTableColumnFlags_WidthStretch);
+        ImGui::TableSetupColumn("Return",  ImGuiTableColumnFlags_WidthFixed, 78.0f);
+        ImGui::TableSetupColumn("SP",      ImGuiTableColumnFlags_WidthFixed, 78.0f);
+        ImGui::TableSetupColumn("Source",  ImGuiTableColumnFlags_WidthFixed, 62.0f);
+        ImGui::TableSetupScrollFreeze(0, 1);
+        ImGui::TableHeadersRow();
+
+        const int selected = mCallStack.Selected(mCallStackCpu);
+        for (int i = 0; i < static_cast<int>(frames.size()); ++i)
+        {
+            const CallStackFrame& fr = frames[i];
+            ImGui::TableNextRow();
+            ImGui::PushID(i);
+
+            ImGui::TableNextColumn();
+            confGlyph(fr.confidence);
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", confName(fr.confidence));
+
+            ImGui::TableNextColumn();
+            ImGui::Text("%d", i);
+
+            ImGui::TableNextColumn();
+            // Selectable spanning the name cell drives select + double-click navigate.
+            const std::string name = mFunctionNames.NameOf(fr.functionAddress);
+            const bool isSel = (i == selected);
+            if (ImGui::Selectable(name.c_str(), isSel,
+                                  ImGuiSelectableFlags_SpanAllColumns |
+                                  ImGuiSelectableFlags_AllowDoubleClick))
+            {
+                mCallStack.Select(mCallStackCpu, i);
+                if (ImGui::IsMouseDoubleClicked(0)) GoToFrame(fr);
+            }
+            if (ImGui::BeginPopupContextItem("csctx"))
+            {
+                mCallStack.Select(mCallStackCpu, i);
+                if (ImGui::MenuItem("Go to Call Site", nullptr, false, fr.callSite != 0))
+                { mAssemblyPanel.GoTo(fr.cpu, fr.callSite); mPanels.assembly = true; }
+                if (ImGui::MenuItem("Go to Function"))
+                { mAssemblyPanel.GoTo(fr.cpu, fr.functionAddress); mPanels.assembly = true; }
+                if (ImGui::MenuItem("Go to Return Address"))
+                { mAssemblyPanel.GoTo(fr.cpu, fr.returnAddress); mPanels.assembly = true; }
+                if (ImGui::MenuItem("View Stack Memory"))
+                { mHexEditor.GoTo(fr.stackPointer); mPanels.hexEditor = true; }
+                if (ImGui::MenuItem("Add Address to Watch"))
+                {
+                    char nm[32]; std::snprintf(nm, sizeof(nm), "stack_%08X", fr.stackPointer);
+                    char ex[16]; std::snprintf(ex, sizeof(ex), "%08X", fr.stackPointer);
+                    mWatchPanel.AddWatch(nm, ex, WatchType::Pointer);
+                    mPanels.watch = true;
+                }
+                if (ImGui::MenuItem("Set Execution Breakpoint"))
+                { mBreakpoints.ToggleExecution(fr.cpu, fr.functionAddress); }
+                if (ImGui::MenuItem("Rename Function..."))
+                {
+                    mRenameAddr = fr.functionAddress;
+                    std::snprintf(mRenameBuf, sizeof(mRenameBuf), "%s",
+                                  mFunctionNames.HasName(fr.functionAddress)
+                                      ? mFunctionNames.NameOf(fr.functionAddress).c_str() : "");
+                    mRenameOpen = true;
+                }
+                ImGui::Separator();
+                if (ImGui::MenuItem("Copy Stack"))
+                {
+                    std::string dump;
+                    char ln[160];
+                    for (int k = 0; k < static_cast<int>(frames.size()); ++k)
+                    {
+                        const CallStackFrame& g = frames[k];
+                        std::snprintf(ln, sizeof(ln), "#%d  %-24s ret=%08X sp=%08X\n", k,
+                                      mFunctionNames.NameOf(g.functionAddress).c_str(),
+                                      g.returnAddress, g.stackPointer);
+                        dump += ln;
+                    }
+                    ImGui::SetClipboardText(dump.c_str());
+                }
+                ImGui::EndPopup();
+            }
+
+            ImGui::TableNextColumn();
+            ImGui::Text("%08X", fr.returnAddress);
+            ImGui::TableNextColumn();
+            ImGui::Text("%08X", fr.stackPointer);
+            ImGui::TableNextColumn();
+            ImGui::TextUnformatted(i == 0 ? "Current" : "");
+
+            ImGui::PopID();
+        }
+        ImGui::EndTable();
+    }
+
+    // Rename Function modal.
+    if (mRenameOpen) { ImGui::OpenPopup("Rename Function"); mRenameOpen = false; }
+    if (ImGui::BeginPopupModal("Rename Function", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+    {
+        ImGui::Text("Function at %08X", mRenameAddr);
+        ImGui::SetNextItemWidth(280.0f);
+        const bool enter = ImGui::InputText("##rn", mRenameBuf, sizeof(mRenameBuf),
+                                            ImGuiInputTextFlags_EnterReturnsTrue);
+        if (ImGui::Button("OK", ImVec2(90, 0)) || enter)
+        {
+            mFunctionNames.Rename(mRenameAddr, mRenameBuf);
+            mFunctionNames.Save();
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2(90, 0))) ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
+
     ImGui::End();
 }
 

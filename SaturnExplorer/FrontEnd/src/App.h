@@ -19,6 +19,7 @@
 #include "ControllerPanel.h"     // Saturn control pad (drives a live game)
 #include "LogPanel.h"            // structured event log (tracepoints + system events)
 #include "Debug/ExecutionActions.h"  // tracepoints / execution-action store
+#include "Debug/CallStack.h"      // per-CPU call stack (paused-state workspace)
 #include "Debug/MemoryBackend.h"
 #include "Debug/WatchList.h"
 #include "Debug/BreakpointManager.h"
@@ -84,6 +85,10 @@ private:
     void SendInput(unsigned int mask);      // push a pad mask to the live emulator (on change)
     void DrawLog();                         // structured event log
     void DrawActions();                     // Tracepoints management table
+    void DrawCallStack();                   // per-CPU call stack (paused-state workspace)
+    void RebuildCallStack();                // reconstruct the shown CPU's stack
+    // Sync the workspace to a selected call-stack frame (Assembly + Hex + focus).
+    void GoToFrame(const CallStackFrame& fr);
     void DrawTracepointEditor();            // modal property editor for a tracepoint
     void OpenTracepointEditor(int cpu, uint32_t addr);  // open it for a new/existing TP
     // Format a tracepoint's template against the CURRENT context (registers + memory),
@@ -165,6 +170,19 @@ private:
     uint64_t                 mLastTpGeneration = 0;         // last tracepoint set synced live
     uint64_t                 mLastBpGeneration = 0;  // last set synced to the live emulator
 
+    // Call stack (paused-state workspace). Rebuilt when execution stops or a savestate
+    // loads; mCallStackDirty flags a needed rebuild, mCallStackCpu picks the CPU shown,
+    // and the rename popup edits a function name at mRenameAddr.
+    CallStack                mCallStack;
+    FunctionNames            mFunctionNames;
+    bool                     mCallStackDirty = true;
+    bool                     mFocusCallStack = false;   // bring the panel forward on a stop
+    bool                     mCallStackWasShowable = false;  // edge-detect entering paused/loaded
+    int                      mCallStackCpu = 0;
+    bool                     mRenameOpen = false;
+    uint32_t                 mRenameAddr = 0;
+    char                     mRenameBuf[64] = {};
+
     se_render_opts   mRenderOpts {};
     bool             mbLiveSource = false;    // data comes from a running emulator
     bool             mbPaused = false;        // live emulator held paused (frame control)
@@ -213,6 +231,7 @@ private:
         bool controller = true;   // Saturn control pad (drives a live game)
         bool log = true;          // structured event log (tracepoints + system events)
         bool actions = true;      // Tracepoints / execution-actions management table
+        bool callStack = true;    // per-CPU call stack (paused-state workspace)
     };
     Panels           mPanels;
 

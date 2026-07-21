@@ -161,6 +161,7 @@ if(WIN32)
         FrontEnd/src/Debug/ShiftJis.cpp
         FrontEnd/src/Debug/FormatString.cpp
         FrontEnd/src/Debug/ExecutionActions.cpp
+        FrontEnd/src/Debug/CallStack.cpp
         FrontEnd/src/FrameRecorder.cpp
         FrontEnd/src/FrameLz.cpp
         FrontEnd/Platforms/Windows/WindowsPlatform.cpp
@@ -214,6 +215,7 @@ elseif(EMSCRIPTEN)
         FrontEnd/src/Debug/ShiftJis.cpp
         FrontEnd/src/Debug/FormatString.cpp
         FrontEnd/src/Debug/ExecutionActions.cpp
+        FrontEnd/src/Debug/CallStack.cpp
         FrontEnd/Platforms/Web/WebPlatform.cpp
         FrontEnd/Platforms/Web/WebMain.cpp
         ${SE_IMGUI_CORE}
@@ -285,6 +287,7 @@ else()
             FrontEnd/src/Debug/ShiftJis.cpp
             FrontEnd/src/Debug/FormatString.cpp
             FrontEnd/src/Debug/ExecutionActions.cpp
+            FrontEnd/src/Debug/CallStack.cpp
             FrontEnd/src/FrameRecorder.cpp
             FrontEnd/src/FrameLz.cpp
             FrontEnd/Platforms/Web/WebPlatform.cpp

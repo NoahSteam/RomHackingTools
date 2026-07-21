@@ -25,6 +25,11 @@ public:
     // Jump the view to 'address' (from the Watch / Assembly "View in Hex Editor").
     void GoTo(uint32_t address);
 
+    // Jump to 'address' and highlight a [address, address+length) span (e.g. a call
+    // stack frame's stack range). 'length' is clamped so the selection stays inside the
+    // visible window.
+    void Select(uint32_t address, uint32_t length);
+
 private:
     void Refresh(IMemoryBackend& backend);
 
