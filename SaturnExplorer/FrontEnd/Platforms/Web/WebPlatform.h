@@ -52,6 +52,7 @@ public:
 #ifndef __EMSCRIPTEN__
     bool PickDirectory(std::string& outPath) override;
     bool RevealPath(const char* path) override;
+    bool LaunchProcess(const char* path, const char* workingDir) override;
 #endif
 
 private:

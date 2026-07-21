@@ -35,6 +35,7 @@ Override per emulator with --mednafen-rev / --yabause-rev (or edit EMULATORS).
 """
 
 import argparse
+import configparser
 import os
 import shutil
 import subprocess
@@ -323,6 +324,53 @@ def build_yabause(rn, dest, generator, qt_path):
     return True, os.path.join(build, "src", "qt", "Release", "yabause-qt.exe")
 
 
+def settings_ini_path():
+    """Per-user settings.ini the viewer reads — MUST match FrontEnd/src/Settings.cpp:
+      Windows : %APPDATA%\\SaturnExplorer\\settings.ini
+      else    : $XDG_CONFIG_HOME/SaturnExplorer/settings.ini  (or ~/.config/...)
+    """
+    if os.name == "nt":
+        base = os.environ.get("APPDATA") or os.path.join(
+            os.path.expanduser("~"), "AppData", "Roaming")
+    else:
+        base = os.environ.get("XDG_CONFIG_HOME") or os.path.join(
+            os.path.expanduser("~"), ".config")
+    return os.path.join(base, "SaturnExplorer", "settings.ini")
+
+
+def record_emulator_path(rn, name, exe):
+    """Record a built emulator exe under [emulators] <name> in the viewer's
+    settings.ini (read-modify-write so panel/data settings are preserved), so the
+    viewer's 'Launch <emu>' button can start it. Best-effort: a failure here never
+    fails the install."""
+    if not exe:
+        return
+    exe = os.path.abspath(exe)
+    path = settings_ini_path()
+    if rn.dry_run:
+        print(f"    would record {name} -> {exe}\n      in {path}")
+        return
+    if not os.path.isfile(exe):
+        # The build reported success but the exe isn't where expected: skip quietly
+        # rather than record a path that won't launch.
+        print(f"    [!] {name} exe not found at {exe}; not recorded.")
+        return
+    try:
+        cp = configparser.ConfigParser()
+        cp.optionxform = str                      # preserve key case
+        if os.path.exists(path):
+            cp.read(path)
+        if not cp.has_section("emulators"):
+            cp.add_section("emulators")
+        cp.set("emulators", name, exe)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w") as f:
+            cp.write(f)
+        print(f"    recorded {name} path for the viewer's Launch button:\n      {path}")
+    except Exception as e:
+        print(f"    (could not record {name} path: {e})")
+
+
 def main():
     global FORK_OWNER
     ap = argparse.ArgumentParser(description="Saturn Explorer + patched-emulator setup (Windows).")
@@ -408,6 +456,8 @@ def main():
                 m_ok, m_exe = build_mednafen(rn, msys2, dest)
             else:
                 m_ok, m_exe = False, None
+            if m_ok:
+                record_emulator_path(rn, "mednafen", m_exe)
             results.append(("Mednafen (patched)", m_ok, m_exe))
 
     # --- Yabause fork -------------------------------------------------------
@@ -426,6 +476,10 @@ def main():
                 y_ok, y_exe = build_yabause(rn, dest, args.generator, args.qt_path)
             else:
                 y_ok, y_exe = False, None
+            if y_ok:
+                # All Qt-lineage variants build yabause-qt.exe; record under one key
+                # so the viewer's "Launch Yabause" button finds whichever was built.
+                record_emulator_path(rn, "yabause", y_exe)
             results.append((f"{key} (patched)", y_ok, y_exe))
 
     # --- summary ------------------------------------------------------------

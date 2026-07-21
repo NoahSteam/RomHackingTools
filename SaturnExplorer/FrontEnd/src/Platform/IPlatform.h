@@ -66,6 +66,17 @@ public:
     // Windows, Finder on macOS, the file manager on Linux). Returns false if
     // unsupported or the path doesn't exist.
     virtual bool RevealPath(const char* path) { (void)path; return false; }
+
+    // Launch an executable (e.g. the patched Mednafen/Yabause recorded at install
+    // time), non-blocking, optionally in `workingDir` (NULL = the exe's folder, so
+    // an emulator finds its config/saves). Returns false if unsupported or launch
+    // failed. The web build has no host process control and inherits the default.
+    virtual bool LaunchProcess(const char* path, const char* workingDir)
+    {
+        (void)path;
+        (void)workingDir;
+        return false;
+    }
 };
 
 }  // namespace sfe

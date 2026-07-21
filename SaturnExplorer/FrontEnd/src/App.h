@@ -5,12 +5,14 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
 #include "saturnexplorer/SaturnExplorer.h"
 
 #include "Platform/IPlatform.h"
+#include "Settings.h"            // persistent per-user config (INI)
 #include "DataSearch.h"          // game-data-directory byte search (DataSearchHit)
 #include "WatchPanel.h"          // Watch Window (debugger; emulator-agnostic)
 #include "AssemblyPanel.h"       // SH-2 Assembly (debugger)
@@ -58,6 +60,14 @@ public:
 
 private:
     void CloseData();
+    // Persistent settings (per-user INI): panel visibility, data dir, and the
+    // emulator paths the installer records. LoadSettings runs in Initialize;
+    // SaveSettings on Shutdown and whenever a persisted preference changes.
+    void LoadSettings();
+    void SaveSettings();
+    // Visit every persisted panel-visibility toggle as (settings-key, member-ref),
+    // so LoadSettings and SaveSettings share one list instead of duplicating it.
+    void ForEachPanelToggle(const std::function<void(const char*, bool&)>& fn);
     // Read every available memory region from the current source and hand a single
     // self-describing dump blob (.sedump) to the platform to save / download.
     void DumpMemory(IPlatform& platform);
@@ -173,6 +183,19 @@ private:
         bool selectedObject = true, watch = true, assembly = true, hexEditor = true;
     };
     Panels           mPanels;
+
+    // Persistent settings + the layout ini path (imgui.ini relocated into the
+    // per-user config dir so the dock layout survives regardless of the working
+    // directory). mIniPath backs ImGuiIO::IniFilename, so it must outlive the
+    // ImGui context — hence a member, not a local. mSettingsDirty triggers a save
+    // at end of frame after the user changes a persisted preference.
+    Settings         mSettings;
+    std::string      mIniPath;
+    bool             mSettingsDirty = false;
+    // Emulator executables recorded by the installer (Integration/install.py), so
+    // the toolbar "Launch <emu>" buttons can start the patched build directly.
+    std::string      mMednafenPath;
+    std::string      mYabausePath;
 
     int              mSelectedCommand = -1;   // primary selection (detail panels)
     std::vector<int> mSelection;              // all selected command indices

@@ -111,3 +111,9 @@ against fresh upstream tells you if an anchor drifted (see `DISTRIBUTION.md`,
 Launch the patched emulator with a game, then start Saturn Explorer with `--live`
 (or **File → Connect to emulator (live)**). A tapped build announces itself in its
 window title: `… (SaturnExplorer Enabled. <ver> / <emu> <rev>)`.
+
+The installer records each built emulator's path in the viewer's per-user settings
+(`%APPDATA%\SaturnExplorer\settings.ini`, or `~/.config/SaturnExplorer/settings.ini`),
+so Saturn Explorer's toolbar gains a **Launch Mednafen** / **Launch Yabause** button
+that starts the patched build directly — the viewer then auto-connects (live) once it's
+up. That same file also persists your panel layout and visibility between runs.

@@ -318,6 +318,30 @@ bool WebPlatform::RevealPath(const char* path)
 #endif
     return ::system(cmd.c_str()) != -1;
 }
+
+bool WebPlatform::LaunchProcess(const char* path, const char* workingDir)
+{
+    if (!path || !*path)
+    {
+        return false;
+    }
+    std::string dir;
+    if (workingDir && *workingDir)
+    {
+        dir = workingDir;
+    }
+    else
+    {
+        const std::string p = path;
+        const size_t slash = p.find_last_of('/');
+        dir = (slash == std::string::npos) ? std::string(".") : p.substr(0, slash);
+    }
+    // Run detached (trailing &) from its own directory so an emulator finds its
+    // config/saves next to the executable.
+    const std::string cmd = "cd " + ShellQuote(dir) + " && " + ShellQuote(path) +
+                            " >/dev/null 2>&1 &";
+    return ::system(cmd.c_str()) != -1;
+}
 #endif  // !__EMSCRIPTEN__
 
 }  // namespace sfe

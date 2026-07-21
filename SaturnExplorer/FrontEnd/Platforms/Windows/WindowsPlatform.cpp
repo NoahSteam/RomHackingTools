@@ -314,6 +314,17 @@ bool WindowsPlatform::RevealPath(const char* path)
     return reinterpret_cast<INT_PTR>(r) > 32;   // >32 == success per the API
 }
 
+bool WindowsPlatform::LaunchProcess(const char* path, const char* workingDir)
+{
+    if (!path || !*path)
+    {
+        return false;
+    }
+    const char* dir = (workingDir && *workingDir) ? workingDir : nullptr;
+    const HINSTANCE r = ::ShellExecuteA(nullptr, "open", path, nullptr, dir, SW_SHOWNORMAL);
+    return reinterpret_cast<INT_PTR>(r) > 32;   // >32 == success per the API
+}
+
 bool WindowsPlatform::CreateDeviceD3D()
 {
     DXGI_SWAP_CHAIN_DESC sd = {};

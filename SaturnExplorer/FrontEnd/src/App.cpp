@@ -210,15 +210,85 @@ void App::Initialize()
 #ifdef SE_ENABLE_LIVE
     mRecorder.Configure(mRecordSeconds * kFramesPerSecond);
 #endif
+
+    // Relocate ImGui's layout file into the per-user config dir so the dock layout
+    // the user arranges is saved to a stable local setting, independent of the
+    // working directory. The ImGui context already exists (the platform created it
+    // before App::Initialize) and settings load lazily on the first NewFrame, so
+    // pointing IniFilename here takes effect before anything is loaded or saved.
+    // mIniPath must outlive the context — ImGui stores the pointer, not a copy.
+    const std::string dir = Settings::EnsureConfigDir();
+    if (!dir.empty())
+    {
+#ifdef _WIN32
+        mIniPath = dir + "\\imgui.ini";
+#else
+        mIniPath = dir + "/imgui.ini";
+#endif
+        ImGui::GetIO().IniFilename = mIniPath.c_str();
+    }
+    LoadSettings();                // panel visibility, data dir, emulator paths
+
     mWatchPanel.LoadSession();     // restore the session's watch list, if any
     mAssemblyPanel.LoadComments(); // restore the session's assembly comments
 }
 
 void App::Shutdown()
 {
+    SaveSettings();
     mWatchPanel.SaveSession();
     mAssemblyPanel.SaveComments();
     CloseData();
+}
+
+// The single source of truth for which panel toggles persist. Adding a panel here
+// makes it save/restore automatically; the key is stable across releases.
+void App::ForEachPanelToggle(const std::function<void(const char*, bool&)>& fn)
+{
+    fn("layerControls", mPanels.layerControls);
+    fn("vramMap", mPanels.vramMap);
+    fn("archiveExplorer", mPanels.archiveExplorer);
+    fn("searchRom", mPanels.searchRom);
+    fn("vdpOutput", mPanels.vdpOutput);
+    fn("vdp1Framebuffer", mPanels.vdp1Framebuffer);
+    fn("worldView", mPanels.worldView);
+    fn("vdp1Table", mPanels.vdp1Table);
+    fn("vdp2Table", mPanels.vdp2Table);
+    fn("colorRam", mPanels.colorRam);
+    fn("workRam", mPanels.workRam);
+    fn("paletteRam", mPanels.paletteRam);
+    fn("registers", mPanels.registers);
+    fn("commandList", mPanels.commandList);
+    fn("textureViewer", mPanels.textureViewer);
+    fn("paletteViewer", mPanels.paletteViewer);
+    fn("references", mPanels.references);
+    fn("selectedObject", mPanels.selectedObject);
+    fn("watch", mPanels.watch);
+    fn("assembly", mPanels.assembly);
+    fn("hexEditor", mPanels.hexEditor);
+}
+
+void App::LoadSettings()
+{
+    mSettings.Load();
+    ForEachPanelToggle([&](const char* key, bool& v) {
+        v = mSettings.GetBool("panels", key, v);
+    });
+    mDataDir      = mSettings.Get("data", "dir", mDataDir);
+    mMednafenPath = mSettings.Get("emulators", "mednafen", mMednafenPath);
+    mYabausePath  = mSettings.Get("emulators", "yabause", mYabausePath);
+}
+
+void App::SaveSettings()
+{
+    ForEachPanelToggle([&](const char* key, bool& v) {
+        mSettings.SetBool("panels", key, v);
+    });
+    mSettings.Set("data", "dir", mDataDir);
+    // Emulator paths are owned by the installer. Whatever LoadSettings read stays
+    // in mSettings and round-trips through Save, so we don't clobber them here.
+    mSettings.Save();
+    mSettingsDirty = false;
 }
 
 void App::CloseData()
@@ -718,6 +788,10 @@ void App::BuildUI(IPlatform& platform)
     DrawDataDirModal(platform);
     DrawDataSearchResults(platform);
     // contextSwap restores the live context here as it goes out of scope.
+
+    // Persist any preference the user changed this frame (panel visibility, data
+    // dir). Dock-layout changes are saved separately by ImGui into imgui.ini.
+    if (mSettingsDirty) SaveSettings();
 }
 
 // Programmatic default dock layout: a left inspector column (Texture/Palette live
@@ -925,6 +999,35 @@ void App::DrawToolbar(IPlatform& platform)
         ImGui::SetItemTooltip("Set the game's data directory — an ISO/disc image or a folder of the\n"
                               "game's files — that the texture 'Find in game data' search scans.");
 
+        // Launch the patched emulator recorded by the installer. Mednafen is always
+        // shown (disabled with a hint if no path is recorded yet); Yabause appears
+        // only when a path exists. Once running, the app auto-connects live.
+        auto launchButton = [&](const char* label, const std::string& path) {
+            ImGui::SameLine();
+            ImGui::BeginDisabled(path.empty());
+            if (ImGui::Button(label))
+            {
+                // Run from the executable's own directory so the emulator finds its
+                // config/saves; the app's live auto-connect latches on once it's up.
+                const size_t slash = path.find_last_of("/\\");
+                const std::string dir = (slash == std::string::npos) ? std::string()
+                                                                      : path.substr(0, slash);
+                platform.LaunchProcess(path.c_str(), dir.empty() ? nullptr : dir.c_str());
+            }
+            ImGui::EndDisabled();
+            if (path.empty())
+            {
+                ImGui::SetItemTooltip("No emulator path recorded yet — run the installer\n"
+                                      "(Integration/install.bat), which records it for you.");
+            }
+            else
+            {
+                ImGui::SetItemTooltip("Launch %s and auto-connect (live):\n%s", label, path.c_str());
+            }
+        };
+        launchButton("Launch Mednafen", mMednafenPath);
+        if (!mYabausePath.empty()) launchButton("Launch Yabause", mYabausePath);
+
         // "Windows" dropdown: show/hide individual panels.
         ImGui::SameLine();
         DrawWindowsMenu();
@@ -1024,15 +1127,18 @@ void App::DrawWindowsMenu()
         if (ImGui::MenuItem("Show All"))
         {
             for (const Item& it : items) *it.flag = true;
+            mSettingsDirty = true;
         }
         if (ImGui::MenuItem("Hide All"))
         {
             for (const Item& it : items) *it.flag = false;
+            mSettingsDirty = true;
         }
         ImGui::Separator();
         for (const Item& it : items)
         {
-            ImGui::MenuItem(it.label, nullptr, it.flag);
+            // MenuItem returns true on the frame it's toggled; persist visibility then.
+            if (ImGui::MenuItem(it.label, nullptr, it.flag)) mSettingsDirty = true;
         }
         ImGui::EndPopup();
     }
@@ -2195,6 +2301,7 @@ void App::DrawDataDirModal(IPlatform& platform)
         if (ImGui::Button("OK", ImVec2(90, 0)))
         {
             mDataDir = buf;
+            mSettingsDirty = true;   // remember the data dir across runs
             ImGui::CloseCurrentPopup();
             if (mSearchAfterSetDir)
             {
