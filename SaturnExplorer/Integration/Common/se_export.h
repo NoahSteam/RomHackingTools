@@ -105,6 +105,20 @@ void SeExportSetTracepointHook(void (*set)(unsigned int count, const unsigned ch
  * reply; the client formats the message from the captured registers. */
 void SeExportQueueTraceEvent(unsigned int id, unsigned int cpu, const unsigned int* regs);
 
+/* Shadow call stack (v9+). The glue records control flow as it executes so the client
+ * gets a dependable (● Confirmed) call stack instead of reconstructing one heuristically.
+ * Call from the CPU thread: SeExportPushFrame on a call (bsr/jsr/bsrf/jsr-as-call),
+ * SeExportPopFrame on the matching rts, SeExportResetCallStack at an exception/rte
+ * boundary or any discontinuity. 'callSite' is the calling instruction, 'func' the call
+ * target (the frame's function entry), 'ret' the return address, 'sp' R15 at the call,
+ * 'cycle' a monotonic cycle stamp (0 if unavailable). cpu is 0 master / 1 slave. The
+ * frame number is stamped internally. The server serializes each CPU's stack, innermost
+ * first, into the reply's v9 call-stack block. */
+void SeExportPushFrame(int cpu, unsigned int callSite, unsigned int func,
+                       unsigned int ret, unsigned int sp, unsigned long long cycle);
+void SeExportPopFrame(int cpu);
+void SeExportResetCallStack(int cpu);
+
 /* Frame gate for pause / single-step. Call once at the top of each emulated
  * frame in Yabause's run loop; returns 1 if the frame should run, 0 if the
  * debugger is holding it paused. When it returns 0 it has already slept ~2 ms

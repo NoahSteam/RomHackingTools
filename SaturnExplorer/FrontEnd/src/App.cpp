@@ -1818,6 +1818,36 @@ void App::RebuildCallStack()
         mCallStack.Clear(mCallStackCpu);
         return;
     }
+#ifdef SE_ENABLE_LIVE
+    // Prefer the emulator's recorded shadow stack (● Confirmed) when the live source
+    // supplies one (v9+); fall back to the heuristic reconstruction otherwise.
+    if (mbLiveSource)
+    {
+        se_live_call_frame wire[SE_LIVE_CALLSTACK_MAX];
+        const uint32_t n = se_live_poll_callstack(&mDataSource, mCallStackCpu, wire,
+                                                  SE_LIVE_CALLSTACK_MAX);
+        if (n > 0)
+        {
+            std::vector<CallStackFrame> frames;
+            frames.reserve(n);
+            for (uint32_t i = 0; i < n; ++i)
+            {
+                CallStackFrame f;
+                f.cpu             = mCallStackCpu;
+                f.callSite        = wire[i].call_site;
+                f.functionAddress = wire[i].func;
+                f.returnAddress   = wire[i].ret;
+                f.stackPointer    = wire[i].sp;
+                f.cycle           = wire[i].cycle;
+                f.frameNumber     = wire[i].frame_no;
+                f.confidence      = FrameConfidence::Confirmed;
+                frames.push_back(f);
+            }
+            mCallStack.SetConfirmed(mCallStackCpu, std::move(frames));
+            return;
+        }
+    }
+#endif
     mCallStack.Reconstruct(mCallStackCpu, regs, mMemBackend);
 }
 

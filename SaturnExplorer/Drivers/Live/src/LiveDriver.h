@@ -59,6 +59,27 @@ typedef struct se_live_event
  * (0 if none or not a live source). Call each frame to feed the Log. */
 uint32_t se_live_poll_events(const se_data_source* ds, se_live_event* out, uint32_t max);
 
+/* One recorded shadow-stack frame from the server (v9+): the calling instruction, the
+ * frame's function entry, its return address, R15 at the call, a cycle stamp, and the
+ * emulated frame it was recorded on. Every such frame is genuinely observed, so the
+ * client presents them as ● Confirmed. */
+typedef struct se_live_call_frame
+{
+    uint32_t call_site;
+    uint32_t func;
+    uint32_t ret;
+    uint32_t sp;
+    uint64_t cycle;
+    uint32_t frame_no;
+} se_live_call_frame;
+
+/* Copy up to 'max' frames of the last-received shadow call stack for 'cpu' (0 master /
+ * 1 slave) into 'out', innermost (current) frame first. Returns the number written (0 if
+ * none, not a live source, or the server predates v9). Reads the latest snapshot's
+ * stack; call after a stop to populate the Call Stack panel. */
+uint32_t se_live_poll_callstack(const se_data_source* ds, int cpu,
+                                se_live_call_frame* out, uint32_t max);
+
 /* Read the last stop event reported by the server's control block (v5+). Fills
  * '*reason' (SE_LIVE_STOP_*), '*cpu' (0 master / 1 slave), and '*pc' when non-NULL.
  * Returns 1 if the emulator is halted on a breakpoint, 0 otherwise (or not live). */

@@ -55,7 +55,7 @@
 #define SE_LIVE_MAGIC1 'E'
 #define SE_LIVE_MAGIC2 'X'
 #define SE_LIVE_MAGIC3 'P'
-#define SE_LIVE_VERSION      8u
+#define SE_LIVE_VERSION      9u
 /* Command verbs are exactly 4 bytes; a request is a verb + 4-byte LE argument. */
 #define SE_LIVE_REQUEST      "GET\n"   /* back-compat alias for the snapshot verb */
 #define SE_LIVE_VERB_GET     "GET\n"
@@ -93,6 +93,17 @@
 #define SE_LIVE_EVENT_REGS     23
 #define SE_LIVE_EVENT_LEN      (12u + SE_LIVE_EVENT_REGS * 4u)   /* 104 */
 #define SE_LIVE_EVENTS_MAX     64u   /* cap per reply; excess dropped with a marker */
+
+/* Call-stack block (v9+). Appended AFTER the v8 events block, version-gated the same
+ * way (a client reads it only when the server reports version >= 9). It carries the
+ * emulator's recorded per-CPU shadow call stack — every frame here is ● Confirmed
+ * (recorded from a real bsr/jsr...rts), unlike the client's heuristic reconstruction.
+ * Layout: for CPU 0 (master) then CPU 1 (slave): u32 frameCount (LE, capped at
+ * SE_LIVE_CALLSTACK_MAX), then frameCount frames, innermost (current) first. Each frame
+ * is SE_LIVE_CALLFRAME_LEN bytes: callSite(4) + functionAddress(4) + returnAddress(4) +
+ * stackPointer(4) + cycle(8, LE lo then hi) + frameNumber(4), all LE. */
+#define SE_LIVE_CALLFRAME_LEN  28u
+#define SE_LIVE_CALLSTACK_MAX  64u
 
 /* Saturn digital-pad buttons (v7+), an emulator-agnostic logical bitmask carried by
  * INP. The per-emulator glue maps these to that emulator's own pad bit order, so the

@@ -137,10 +137,14 @@ highlight), the context menu, function rename (persisted); the breakpoint-hit st
 dock beside Assembly; auto-populate on pause / savestate load. Verified headless against
 the Sakura Wars savestate.
 
-**Phase 2 — protocol + driver.** v8→v9: add a per-CPU call-stack section to the snapshot
-reply (confirmed frames from the shadow stack), and an instruction-step verb for Step
-Into/Over. LiveDriver reads them; the App merges confirmed frames over the heuristic.
-Mock-verified.
+**Phase 2 — protocol + driver (done).** v8→v9: a per-CPU call-stack block trails the
+reply (`SeExportPushFrame`/`PopFrame`/`ResetCallStack` in se_export own the shadow
+stacks; the server serializes them innermost-first). LiveDriver reads the block and
+exposes `se_live_poll_callstack`; the App prefers these ● Confirmed frames over the
+heuristic when a live source supplies them. Verified end-to-end with the real
+se_export.c sender + real LiveDriver reader (v9 negotiated, frames + fields correct,
+push/pop reflected across snapshots). (The instruction-step verb for Step Into/Over is
+tracked separately — it's a stepping feature, not part of the stack itself.)
 
 **Phase 3 — emulator glue (not verifiable in-repo).** The shadow call stack in
 `se_export` + the Mednafen/Yabause glue: maintain per-CPU logical stacks from

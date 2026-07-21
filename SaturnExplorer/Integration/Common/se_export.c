@@ -115,6 +115,21 @@ static unsigned int sEvHead;    /* index of the oldest pending event */
 static unsigned int sEvCount;   /* number pending (<= SE_EVQ_CAP) */
 static unsigned int sEvDropped; /* events dropped on overflow (reported once) */
 
+/* ---- Shadow call stack (v9+). The glue records calls/returns as they execute
+ * (SeExportPushFrame on bsr/jsr..., SeExportPopFrame on rts, SeExportResetCallStack on an
+ * exception boundary), building a logical per-CPU stack. The server thread serializes it
+ * into each reply's v9 call-stack block. Every frame here is genuinely observed, so the
+ * client marks them ● Confirmed. Guarded by SE_LOCK. sCallDepth may exceed the cap; only
+ * the innermost SE_LIVE_CALLSTACK_MAX are serialized. ---- */
+#define SE_CALLSTACK_CAP 256
+typedef struct {
+    unsigned int callSite, func, ret, sp;
+    unsigned long long cycle;
+    unsigned int frameNo;
+} SeCallFrame;
+static SeCallFrame sCallStack[2][SE_CALLSTACK_CAP];
+static unsigned int sCallDepth[2];   /* frames pushed (may saturate at CAP) */
+
 /* ---- Breakpoint hooks (v5+). se_export stays free of Yabause headers: apply.py
  * wires these to Yabause's SH2 breakpoint API. SeAddExecBp(cpu, addr) installs one
  * execution breakpoint; SeClearBps() removes all. Both may be NULL (breakpoints
@@ -260,6 +275,43 @@ void SeExportQueueTraceEvent(unsigned int id, unsigned int cpu, const unsigned i
     for (i = 0; i < SE_LIVE_EVENT_REGS; ++i)
         sEvQ[slot].regs[i] = regs ? regs[i] : 0u;
     ++sEvCount;
+    SE_UNLOCK();
+}
+
+/* Shadow call stack (v9+). The glue calls these from the CPU thread as control flow
+ * executes. Push on a call (bsr/jsr/...); pop on rts; reset at an exception boundary or
+ * a discontinuity. The frame number is stamped here from the module counter. Depth
+ * saturates at SE_CALLSTACK_CAP (further pushes are dropped, pops still balance once it
+ * unwinds). */
+void SeExportPushFrame(int cpu, unsigned int callSite, unsigned int func,
+                       unsigned int ret, unsigned int sp, unsigned long long cycle)
+{
+    int c = cpu ? 1 : 0;
+    SE_LOCK();
+    if (sCallDepth[c] < SE_CALLSTACK_CAP)
+    {
+        SeCallFrame* f = &sCallStack[c][sCallDepth[c]];
+        f->callSite = callSite; f->func = func; f->ret = ret; f->sp = sp;
+        f->cycle = cycle;
+        f->frameNo = (unsigned int)(sFrameNo & 0xFFFFFFFFu);
+        ++sCallDepth[c];
+    }
+    SE_UNLOCK();
+}
+
+void SeExportPopFrame(int cpu)
+{
+    int c = cpu ? 1 : 0;
+    SE_LOCK();
+    if (sCallDepth[c]) --sCallDepth[c];
+    SE_UNLOCK();
+}
+
+void SeExportResetCallStack(int cpu)
+{
+    int c = cpu ? 1 : 0;
+    SE_LOCK();
+    sCallDepth[c] = 0;
     SE_UNLOCK();
 }
 
@@ -478,6 +530,41 @@ static void SeServeClient(int cl, SeFrame* snap)
                 for (j = 0; j < SE_LIVE_EVENT_REGS; ++j)
                     SeWr32(eb + 12 + j * 4, ev.regs[j]);
                 if (SeSend(cl, eb, SE_LIVE_EVENT_LEN) != 0) return;
+            }
+        }
+
+        /* v9 trailing block: the recorded per-CPU shadow call stack. For master then
+         * slave: u32 frameCount (capped), then that many frames, innermost (current)
+         * first — so the client's frame #0 is the deepest call. */
+        {
+            int c;
+            for (c = 0; c < 2; ++c)
+            {
+                unsigned char cntb[4];
+                unsigned int depth, n, i;
+                SE_LOCK();
+                depth = sCallDepth[c];
+                SE_UNLOCK();
+                n = (depth > SE_LIVE_CALLSTACK_MAX) ? SE_LIVE_CALLSTACK_MAX : depth;
+                SeWr32(cntb, n);
+                if (SeSend(cl, cntb, 4) != 0) return;
+                for (i = 0; i < n; ++i)
+                {
+                    SeCallFrame f;
+                    unsigned char fb[SE_LIVE_CALLFRAME_LEN];
+                    SE_LOCK();
+                    /* Innermost first: index (depth-1) is the current frame. */
+                    f = sCallStack[c][depth - 1 - i];
+                    SE_UNLOCK();
+                    SeWr32(fb + 0,  f.callSite);
+                    SeWr32(fb + 4,  f.func);
+                    SeWr32(fb + 8,  f.ret);
+                    SeWr32(fb + 12, f.sp);
+                    SeWr32(fb + 16, (unsigned int)(f.cycle & 0xFFFFFFFFu));
+                    SeWr32(fb + 20, (unsigned int)((f.cycle >> 32) & 0xFFFFFFFFu));
+                    SeWr32(fb + 24, f.frameNo);
+                    if (SeSend(cl, fb, SE_LIVE_CALLFRAME_LEN) != 0) return;
+                }
             }
         }
     }

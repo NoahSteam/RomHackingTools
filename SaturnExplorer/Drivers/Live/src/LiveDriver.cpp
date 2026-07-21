@@ -56,6 +56,21 @@ struct LiveEvent
     uint32_t regs[SE_LIVE_EVENT_REGS] = {};
 };
 
+// One recorded shadow-stack frame (v9+); mirrors se_live_call_frame on the wire.
+struct LiveCallFrame
+{
+    uint32_t callSite = 0, func = 0, ret = 0, sp = 0;
+    uint64_t cycle = 0;
+    uint32_t frameNo = 0;
+};
+
+// The per-CPU shadow call stacks from one snapshot (master, slave). A snapshot value,
+// not a queue: each poll replaces it.
+struct LiveCallStacks
+{
+    std::vector<LiveCallFrame> cpu[2];
+};
+
 // Pending control command the UI thread hands to the poll thread (which owns the
 // single server connection). Best-effort: the poll thread drains it within one
 // cycle (~8 ms). Steps accumulate so rapid presses aren't lost.
@@ -108,6 +123,9 @@ struct LiveState
     // se_live_poll_events. Bounded so a flood can't grow unbounded. Guarded by evMtx.
     std::mutex            evMtx;
     std::deque<LiveEvent> events;
+    // Latest shadow call stacks (v9+), replaced each snapshot. Guarded by csMtx.
+    std::mutex            csMtx;
+    LiveCallStacks        callStacks;
 };
 
 /* ---- Local-socket transport (POSIX Unix socket / Windows named pipe). ---- */
@@ -263,7 +281,8 @@ struct StopInfo { uint32_t reason = 0; uint32_t cpu = 0; uint32_t pc = 0; };
 bool ReadSnapshot(Conn& c, const char* verb, int32_t arg,
                   const uint8_t* extra, size_t extraLen, LiveSnapshot& snap,
                   bool& outPaused, uint64_t& outFrame, uint32_t& outVersion,
-                  StopInfo& outStop, std::vector<LiveEvent>& outEvents)
+                  StopInfo& outStop, std::vector<LiveEvent>& outEvents,
+                  LiveCallStacks& outCallStacks)
 {
     if (!SendCommand(c, verb, arg))
     {
@@ -362,6 +381,34 @@ bool ReadSnapshot(Conn& c, const char* verb, int32_t arg,
             ev.frame = Rd32LE(eb + 8);
             for (int j = 0; j < SE_LIVE_EVENT_REGS; ++j) ev.regs[j] = Rd32LE(eb + 12 + j * 4);
             outEvents.push_back(ev);
+        }
+    }
+
+    // v9+ trailing block: the per-CPU shadow call stack (master then slave). Read only
+    // when the server speaks v9, so a v9 client stays compatible with an older server.
+    if (version >= 9u)
+    {
+        for (int cpu = 0; cpu < 2; ++cpu)
+        {
+            uint8_t cntb[4];
+            if (!ConnReadFull(c, cntb, 4)) return false;
+            const uint32_t n = Rd32LE(cntb);
+            if (n > SE_LIVE_CALLSTACK_MAX) return false;   // desync guard
+            outCallStacks.cpu[cpu].clear();
+            outCallStacks.cpu[cpu].reserve(n);
+            for (uint32_t i = 0; i < n; ++i)
+            {
+                uint8_t fb[SE_LIVE_CALLFRAME_LEN];
+                if (!ConnReadFull(c, fb, SE_LIVE_CALLFRAME_LEN)) return false;
+                LiveCallFrame f;
+                f.callSite = Rd32LE(fb + 0);
+                f.func     = Rd32LE(fb + 4);
+                f.ret      = Rd32LE(fb + 8);
+                f.sp       = Rd32LE(fb + 12);
+                f.cycle    = (uint64_t)Rd32LE(fb + 16) | ((uint64_t)Rd32LE(fb + 20) << 32);
+                f.frameNo  = Rd32LE(fb + 24);
+                outCallStacks.cpu[cpu].push_back(f);
+            }
         }
     }
 
@@ -481,12 +528,17 @@ void PollLoop(LiveState* st)
         uint32_t sver = 0;
         StopInfo stop;
         std::vector<LiveEvent> events;
+        LiveCallStacks callStacks;
         if (!ReadSnapshot(conn, verb, arg, payload.data(), payload.size(),
-                          snap, paused, frame, sver, stop, events))
+                          snap, paused, frame, sver, stop, events, callStacks))
         {
             ConnClose(conn);   // will reconnect next iteration
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
             continue;
+        }
+        {
+            std::lock_guard<std::mutex> lk(st->csMtx);
+            st->callStacks = std::move(callStacks);
         }
         {
             std::lock_guard<std::mutex> lk(st->mtx);
@@ -517,7 +569,8 @@ void PollLoop(LiveState* st)
         uint32_t sv = 0;
         StopInfo si;
         std::vector<LiveEvent> ev;
-        ReadSnapshot(conn, SE_LIVE_VERB_RESUME, 0, nullptr, 0, tmp, p, fr, sv, si, ev);  // best-effort
+        LiveCallStacks cs;
+        ReadSnapshot(conn, SE_LIVE_VERB_RESUME, 0, nullptr, 0, tmp, p, fr, sv, si, ev, cs);  // best-effort
     }
     ConnClose(conn);
 }
@@ -770,6 +823,27 @@ extern "C" uint32_t se_live_poll_events(const se_data_source* ds,
         std::memcpy(out[n].regs, e.regs, sizeof(out[n].regs));
         st->events.pop_front();
         ++n;
+    }
+    return n;
+}
+
+extern "C" uint32_t se_live_poll_callstack(const se_data_source* ds, int cpu,
+                                           se_live_call_frame* out, uint32_t max)
+{
+    if (!ds || !ds->user || ds->close != CbClose || !out || !max) { return 0; }
+    const int c = (cpu == 1) ? 1 : 0;
+    LiveState* st = St(ds->user);
+    std::lock_guard<std::mutex> lk(st->csMtx);
+    const std::vector<LiveCallFrame>& src = st->callStacks.cpu[c];
+    uint32_t n = 0;
+    for (; n < max && n < src.size(); ++n)
+    {
+        out[n].call_site = src[n].callSite;
+        out[n].func      = src[n].func;
+        out[n].ret       = src[n].ret;
+        out[n].sp        = src[n].sp;
+        out[n].cycle     = src[n].cycle;
+        out[n].frame_no  = src[n].frameNo;
     }
     return n;
 }
