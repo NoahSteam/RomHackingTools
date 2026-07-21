@@ -154,9 +154,15 @@ fenced under `SE_MEDNAFEN_WIRED`. Compile-verified both ways; the two emulator-s
 pieces (the `CheatMemRead` opcode accessor and interrupt/exception tracking) are the
 TODO(mednafen)-confirm items. See Integration/Mednafen/README.md §Call stack.
 
-**Phase 4 — depth.** Register state per frame (from shadow-stack captures), a
-Locals/Arguments inspector, symbol/map-file import to name functions, and confidence
-reconciliation between the shadow and heuristic sources.
+**Phase 4 — depth (done).** Confidence reconciliation (`ReconcileHeuristicTail` grafts a
+best-effort heuristic tail below the deepest recorded frame when shadow recording started
+mid-run); a selected-frame detail section showing PC/return/SP and — for frame #0, whose
+registers ARE the live file — a Locals/Arguments inspector (r4-r7 by the SH-2 ABI) plus
+the full register readout; and symbol/map-file import (`FunctionNames::Import`, merged
+from `saturn_symbols.txt` at startup or via "Load Symbols") to name functions. Verified on
+the Sakura savestate (imported name + arguments render) and by unit test (reconciliation).
+Full per-frame register capture for caller frames stays out — it would need per-frame
+register snapshots on the wire; the detail panel is honest about what's recoverable.
 
 ## Not doing (yet)
 - Full DWARF-style unwinding — there is no unwind metadata on Saturn.

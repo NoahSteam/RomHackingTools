@@ -88,14 +88,33 @@ void FunctionNames::Save() const
         if (!kv.second.empty()) f << std::hex << kv.first << " " << kv.second << "\n";
 }
 
+size_t FunctionNames::Import(const char* path)
+{
+    std::ifstream f(path);
+    if (!f) return 0;
+    size_t n = 0;
+    std::string line;
+    while (std::getline(f, line))
+    {
+        while (!line.empty() && (line.back() == '\r' || line.back() == '\n')) line.pop_back();
+        unsigned addr = 0;
+        const size_t sp = line.find(' ');
+        if (sp == std::string::npos || std::sscanf(line.c_str(), "%x", &addr) != 1) continue;
+        std::string name = line.substr(sp + 1);
+        while (!name.empty() && name.front() == ' ') name.erase(name.begin());
+        if (!name.empty()) { mNames[addr] = name; ++n; }
+    }
+    return n;
+}
+
 // ---- CallStack -----------------------------------------------------------------
 
-void CallStack::Reconstruct(int cpu, const se_sh2_regs& regs, IMemoryBackend& mem)
+// Heuristic reconstruction, returned as a fresh vector so both Reconstruct (which
+// stores it) and ReconcileHeuristicTail (which grafts part of it) can share the logic.
+static std::vector<CallStackFrame> ReconstructHeuristic(int cpu, const se_sh2_regs& regs,
+                                                        IMemoryBackend& mem)
 {
-    const int idx = Idx(cpu);
-    std::vector<CallStackFrame>& out = mFrames[idx];
-    out.clear();
-    mSelected[idx] = 0;
+    std::vector<CallStackFrame> out;
 
     // Frame #0: the halted instruction. PC is exactly known (● Confirmed); it returns
     // to PR.
@@ -108,7 +127,7 @@ void CallStack::Reconstruct(int cpu, const se_sh2_regs& regs, IMemoryBackend& me
     f0.confidence      = FrameConfidence::Confirmed;
     out.push_back(f0);
 
-    if (!mem.Connected()) return;
+    if (!mem.Connected()) return out;
 
     // Walk a bounded window of the stack from R15 upward, collecting return addresses.
     const uint32_t sp   = regs.r[15];
@@ -116,7 +135,7 @@ void CallStack::Reconstruct(int cpu, const se_sh2_regs& regs, IMemoryBackend& me
     const size_t   kMaxFrames = 32;
 
     std::vector<MemoryReadResult> stack = mem.ReadMemoryBatch({{sp, span}});
-    if (stack.empty() || !stack[0].success) return;
+    if (stack.empty() || !stack[0].success) return out;
     const std::vector<uint8_t>& sb = stack[0].bytes;
 
     // Pass 1: find candidate return addresses (code-looking, 4-aligned stack words).
@@ -128,7 +147,7 @@ void CallStack::Reconstruct(int cpu, const se_sh2_regs& regs, IMemoryBackend& me
         if (!BeU32(sb, off, w)) break;
         if (IsPlausibleCodeAddress(w)) cands.push_back({sp + off, w});
     }
-    if (cands.empty()) return;
+    if (cands.empty()) return out;
 
     // Pass 2: batch-read the 16-bit opcode preceding each candidate's target (ret-4);
     // a call there confirms it as a real return address (◐ Probable), else drop it as
@@ -167,6 +186,28 @@ void CallStack::Reconstruct(int cpu, const se_sh2_regs& regs, IMemoryBackend& me
             out.push_back(fr);
         }
     }
+    return out;
+}
+
+void CallStack::Reconstruct(int cpu, const se_sh2_regs& regs, IMemoryBackend& mem)
+{
+    const int idx = Idx(cpu);
+    mFrames[idx] = ReconstructHeuristic(cpu, regs, mem);
+    mSelected[idx] = 0;
+}
+
+void CallStack::ReconcileHeuristicTail(int cpu, const se_sh2_regs& regs, IMemoryBackend& mem)
+{
+    const int idx = Idx(cpu);
+    if (mFrames[idx].empty()) { Reconstruct(cpu, regs, mem); return; }
+
+    // Graft heuristic caller frames that live below (at a higher stack address than) the
+    // deepest confirmed frame — those predate when recording started.
+    const uint32_t deepestSp = mFrames[idx].back().stackPointer;
+    std::vector<CallStackFrame> heur = ReconstructHeuristic(cpu, regs, mem);
+    for (const CallStackFrame& h : heur)
+        if (h.stackPointer > deepestSp && h.confidence != FrameConfidence::Confirmed)
+            mFrames[idx].push_back(h);
 }
 
 void CallStack::SetConfirmed(int cpu, std::vector<CallStackFrame> frames)

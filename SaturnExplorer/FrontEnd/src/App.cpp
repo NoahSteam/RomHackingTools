@@ -228,6 +228,7 @@ void App::Initialize()
     mWatchPanel.LoadSession();     // restore the session's watch list, if any
     mAssemblyPanel.LoadComments(); // restore the session's assembly comments
     mFunctionNames.Load();         // restore user-renamed function names (call stack)
+    mFunctionNames.Import("saturn_symbols.txt");  // merge a symbol map if present
     mLog.Info("Saturn Explorer started");
 }
 
@@ -1844,6 +1845,9 @@ void App::RebuildCallStack()
                 frames.push_back(f);
             }
             mCallStack.SetConfirmed(mCallStackCpu, std::move(frames));
+            // Graft a heuristic tail below the deepest recorded frame (recording may
+            // have started mid-run), composing the reliable head with a best-effort tail.
+            mCallStack.ReconcileHeuristicTail(mCallStackCpu, regs, mMemBackend);
             return;
         }
     }
@@ -1921,6 +1925,14 @@ void App::DrawCallStack()
     if (ImGui::Combo("##cscpu", &mCallStackCpu, cpuNames, 2)) mCallStackDirty = true;
     ImGui::SameLine();
     if (ImGui::SmallButton("Reconstruct")) mCallStackDirty = true;
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Load Symbols"))
+    {
+        const size_t n = mFunctionNames.Import("saturn_symbols.txt");
+        mLog.Info(n ? ("Imported " + std::to_string(n) + " symbols from saturn_symbols.txt")
+                    : std::string("No symbols found (saturn_symbols.txt)"));
+    }
+    ImGui::SetItemTooltip("Merge \"<hex-addr> <name>\" lines from saturn_symbols.txt");
 
     if (!showable)
     {
@@ -1963,7 +1975,12 @@ void App::DrawCallStack()
 
     const ImGuiTableFlags tf = ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH |
                                ImGuiTableFlags_ScrollY | ImGuiTableFlags_SizingStretchProp;
-    if (ImGui::BeginTable("callstack", 6, tf))
+    // Cap the table height so the Frame Detail section below stays visible in a short
+    // docked panel; if there isn't room to spare, let the table fill (outer.y = 0).
+    const float lh = ImGui::GetTextLineHeightWithSpacing();
+    float outerY = ImGui::GetContentRegionAvail().y - lh * 6.5f;
+    if (outerY < lh * 3.0f) outerY = 0.0f;
+    if (ImGui::BeginTable("callstack", 6, tf, ImVec2(0.0f, outerY)))
     {
         ImGui::TableSetupColumn("",        ImGuiTableColumnFlags_WidthFixed, 22.0f);
         ImGui::TableSetupColumn("#",       ImGuiTableColumnFlags_WidthFixed, 22.0f);
@@ -2055,6 +2072,49 @@ void App::DrawCallStack()
             ImGui::PopID();
         }
         ImGui::EndTable();
+    }
+
+    // Selected-frame detail: what's recoverable for the highlighted frame. PC, return,
+    // and SP are always known; the full register file (and the SH-2 ABI argument
+    // registers r4-r7) are recoverable only for frame #0 — the CPU's live registers ARE
+    // that frame's. Deeper frames would need per-frame captures (a future extension).
+    {
+        const int sel = mCallStack.Selected(mCallStackCpu);
+        if (sel >= 0 && sel < static_cast<int>(frames.size()))
+        {
+            const CallStackFrame& fr = frames[sel];
+            ImGui::SeparatorText("Frame Detail");
+            ImGui::Text("#%d  %s", sel, mFunctionNames.NameOf(fr.functionAddress).c_str());
+            ImGui::Text("PC %08X   Return %08X   SP %08X", fr.functionAddress,
+                        fr.returnAddress, fr.stackPointer);
+            if (fr.callSite) ImGui::Text("Call site %08X", fr.callSite);
+            if (fr.confidence == FrameConfidence::Confirmed && (fr.cycle || fr.frameNumber))
+                ImGui::TextDisabled("recorded: cycle %llu, frame %u",
+                                    static_cast<unsigned long long>(fr.cycle), fr.frameNumber);
+
+            se_sh2_regs r{};
+            const bool haveRegs = (sel == 0) && mbHasData &&
+                                  se_get_sh2_regs(mContext, mCallStackCpu, &r) == SE_OK;
+            if (haveRegs)
+            {
+                ImGui::SeparatorText("Arguments (r4-r7, SH-2 ABI)");
+                ImGui::Text("r4 %08X   r5 %08X", r.r[4], r.r[5]);
+                ImGui::Text("r6 %08X   r7 %08X", r.r[6], r.r[7]);
+                if (ImGui::TreeNode("Registers"))
+                {
+                    for (int row = 0; row < 4; ++row)
+                        ImGui::Text("r%-2d %08X  r%-2d %08X  r%-2d %08X  r%-2d %08X",
+                                    row, r.r[row], row + 4, r.r[row + 4],
+                                    row + 8, r.r[row + 8], row + 12, r.r[row + 12]);
+                    ImGui::Text("PR %08X  SR %08X  GBR %08X  VBR %08X", r.pr, r.sr, r.gbr, r.vbr);
+                    ImGui::TreePop();
+                }
+            }
+            else if (sel != 0)
+            {
+                ImGui::TextDisabled("Registers for caller frames need per-frame captures.");
+            }
+        }
     }
 
     // Rename Function modal.

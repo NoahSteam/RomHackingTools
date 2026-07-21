@@ -54,6 +54,11 @@ public:
     void Load();
     void Save() const;
 
+    // Merge an external symbol map ("<hex-addr> <name>" per line) into the store without
+    // clearing existing names. Returns the number imported (0 if the file is missing).
+    // Lets a user bring in a disassembler / map-file symbol table to name functions.
+    size_t Import(const char* path);
+
 private:
     std::map<uint32_t, std::string> mNames;
 };
@@ -70,6 +75,13 @@ public:
 
     // Install confirmed frames from a shadow stack (Phase 2). Replaces 'cpu' frames.
     void SetConfirmed(int cpu, std::vector<CallStackFrame> frames);
+
+    // After SetConfirmed, fill the tail: shadow recording may have started mid-run, so
+    // the callers already on the stack below the deepest recorded frame are missing.
+    // Reconstruct heuristically and append the frames whose stack slot is older (higher
+    // address) than the deepest confirmed frame's — composing the reliable head with a
+    // best-effort tail. No-op if there are no confirmed frames (use Reconstruct instead).
+    void ReconcileHeuristicTail(int cpu, const se_sh2_regs& regs, IMemoryBackend& mem);
 
     void Clear(int cpu);
     void ClearAll();
