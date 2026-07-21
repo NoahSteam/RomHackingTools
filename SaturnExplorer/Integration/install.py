@@ -177,7 +177,7 @@ class Runner:
         except EOFError:
             return False   # non-interactive without --yes: treat as "no"
 
-    def run(self, cmd, cwd=None, shell=False):
+    def run(self, cmd, cwd=None, shell=False, env=None):
         pretty = cmd if isinstance(cmd, str) else " ".join(cmd)
         loc = f"  (in {cwd})" if cwd else ""
         if self.dry_run:
@@ -185,7 +185,7 @@ class Runner:
             return 0
         print(f"    $ {pretty}{loc}")
         try:
-            return subprocess.call(cmd, cwd=cwd, shell=shell)
+            return subprocess.call(cmd, cwd=cwd, shell=shell, env=env)
         except FileNotFoundError:
             # The executable isn't on PATH. The most common cause on Windows is that a
             # tool was just installed (winget) this run — Windows doesn't push the new
@@ -413,8 +413,14 @@ def build_mednafen(rn, msys2, dest):
               f"([ -L include/mednafen ] || {{ {relink}; }}) && "
               f"([ -x ./configure ] || (autoreconf -i || ./autogen.sh)) && "
               f"./configure --enable-debugger && make -j{ncpu}")
-    env = "MSYSTEM=MINGW64"
-    rc = rn.run([bash, "-lc", f"{env}; {script}"])
+    # MSYSTEM must be in the ENVIRONMENT before bash's login profile (-l) runs, so the
+    # MINGW64 setup is applied — putting /mingw64/bin (gcc) on PATH and setting
+    # PKG_CONFIG_PATH so ./configure finds SDL2/zlib. Setting it as the first command
+    # inside `-lc` (the old code) was too late: the profile had already run, so no C
+    # compiler was on PATH. Also export /mingw64/bin explicitly as a belt-and-suspenders
+    # fallback for a stripped-down profile.
+    env = {**os.environ, "MSYSTEM": "MINGW64", "CHERE_INVOKING": "1"}
+    rc = rn.run([bash, "-lc", f"export PATH=/mingw64/bin:$PATH && {script}"], env=env)
     exe = os.path.join(dest, "src", "mednafen.exe")
     return rc == 0, exe
 
