@@ -36,7 +36,7 @@ The script checks for these and offers to `winget install` any that are missing:
 - **git** (`Git.Git`)
 - **CMake** (`Kitware.CMake`)
 - **Visual Studio C++ toolset** (`Microsoft.VisualStudio.2022.BuildTools`, C++ workload) — for Saturn Explorer and Yabause
-- **MSYS2** (`MSYS2.MSYS2`) — only if building Mednafen; the script then `pacman`-installs `gcc`, `SDL2`, `zlib`, and the autotools
+- **MSYS2** (`MSYS2.MSYS2`) — only if building Mednafen; the script then `pacman`-installs `gcc`, `SDL2`, `zlib`, `FLAC`, and the autotools
 
 **Qt** (for a Yabause build) is not auto-installed — install it (`winget`, the Qt online
 installer, or `aqtinstall`) and pass `--qt-path "C:\Qt\6.x\msvc2022_64"`.

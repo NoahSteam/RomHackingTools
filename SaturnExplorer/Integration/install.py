@@ -157,9 +157,11 @@ WINGET = {
 # MSVC Build Tools needs the C++ workload added explicitly.
 VS_OVERRIDE = ("--quiet --wait --norestart --nocache "
                "--add Microsoft.VisualStudio.Workload.VCTools --includeRecommended")
-# MSYS2 dev packages Mednafen's autotools build needs.
+# MSYS2 dev packages Mednafen's autotools build needs. libFLAC is a HARD dependency of
+# Mednafen's configure (CD-audio / music); SDL2 + zlib are the other required libs.
 MSYS2_PACKAGES = ("base-devel git autoconf automake libtool make pkgconf "
-                  "mingw-w64-x86_64-gcc mingw-w64-x86_64-SDL2 mingw-w64-x86_64-zlib")
+                  "mingw-w64-x86_64-gcc mingw-w64-x86_64-SDL2 mingw-w64-x86_64-zlib "
+                  "mingw-w64-x86_64-flac")
 
 
 class Runner:
@@ -538,7 +540,7 @@ def main():
         if ensure_tool(rn, msys2, "MSYS2 (for Mednafen)", WINGET["msys2"]):
             bash = os.path.join(msys2, "usr", "bin", "bash.exe") if msys2 else None
             if bash:
-                print("  Installing MSYS2 build packages (SDL2, zlib, gcc, autotools)...")
+                print("  Installing MSYS2 build packages (SDL2, zlib, FLAC, gcc, autotools)...")
                 rn.run([bash, "-lc",
                         f"pacman -Syu --noconfirm && pacman -S --needed --noconfirm {MSYS2_PACKAGES}"])
         else:
