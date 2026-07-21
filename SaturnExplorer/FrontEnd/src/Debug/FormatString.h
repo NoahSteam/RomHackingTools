@@ -18,8 +18,10 @@
 // preview and, later, the client-side formatting of emulator-captured values.
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
+#include <vector>
 
 namespace sfe
 {
@@ -49,5 +51,20 @@ std::string FormatEvaluate(const std::string& tmpl, const IFormatContext& ctx);
 // Validate 'tmpl' without evaluating it. Returns "" if every token is well-formed,
 // otherwise a one-line description of the first problem (for the editor).
 std::string FormatValidate(const std::string& tmpl);
+
+// Autocomplete for the editor. Given the full template text and the cursor byte
+// offset, decide whether the cursor sits inside an open `{...}` token and, if so,
+// return the partial word under it plus the ranked candidate completions. `start`
+// and `length` mark the byte span the caller should replace with a chosen candidate;
+// `candidates` is empty when there is nothing to offer (cursor outside a token, on an
+// escape `{{`, past a `+offset`, etc.). Pure and ImGui-free, so it is unit-testable.
+struct FormatCompletion
+{
+    size_t                   start = 0;   // byte offset where the partial word begins
+    size_t                   length = 0;  // length of the partial word (start..cursor)
+    bool                     spec = false;// true = completing a :spec, false = a value name
+    std::vector<std::string> candidates;  // full replacement words (no braces)
+};
+FormatCompletion FormatCompletions(const std::string& tmpl, size_t cursor);
 
 }  // namespace sfe

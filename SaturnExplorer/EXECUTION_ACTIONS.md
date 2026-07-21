@@ -137,10 +137,16 @@ condition eval in `se_mednafen_glue.c` / the Yabause glue: on a PC hit, eval con
 read the listed registers/memory, queue the event. Fenced like the existing hooks;
 confirmed on a real Windows build.
 
-**Phase 4 — more action types + management.** Screenshot, memory snapshot, counter,
-start/stop recording, notification, run-script (ties to SCRIPTING.md); the "Assembly
-Actions / Tracepoints" management table (address · type · summary · enabled · hits) from
-the mockup.
+**Phase 4 — management + editor autocomplete (done).** The "Tracepoints" management
+panel — a table of every execution action (enabled · cpu · address · type · output ·
+hits) with per-row enable/edit/jump-to-assembly/delete and Clear All, driven by the same
+`ExecutionActions` store the gutter + editor mutate. Plus format-field autocomplete in the
+editor: `FormatCompletions` (pure, unit-tested) resolves the partial word under the caret
+to register/value names (or `:spec` completions) and the editor surfaces them as
+click-to-insert suggestion chips. The extra action *types* (screenshot, memory snapshot,
+counter, start/stop recording, notification, run-script — ties to SCRIPTING.md) remain the
+open extension: the model/effects struct already carries their flags, but their emulator
+execution is future work, staged like the tracepoint glue was.
 
 ## Open questions
 - **Condition richness:** v1 = one comparison (`expr OP const`); do we want full boolean

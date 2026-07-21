@@ -266,6 +266,7 @@ const std::vector<App::PanelInfo>& App::PanelList()
         {"hexEditor",       "Hex Editor",         &Panels::hexEditor},
         {"controller",      "Controller",         &Panels::controller},
         {"log",             "Log",                &Panels::log},
+        {"actions",         "Tracepoints",        &Panels::actions},
     };
     return kList;
 }
@@ -789,6 +790,7 @@ void App::BuildUI(IPlatform& platform)
     if (mPanels.controller)      DrawController();
     else                         SendInput(0);   // hidden panel releases any held input
     if (mPanels.log)             DrawLog();
+    if (mPanels.actions)         DrawActions();
 
     // Game-data-directory modal + texture search results (both floating, drawn last
     // so they overlay the docked panels).
@@ -878,6 +880,7 @@ void App::BuildDefaultLayout(unsigned int dockspaceId)
     ImGui::DockBuilderDockWindow("Watch", bWatch);
     ImGui::DockBuilderDockWindow("Controller", bWatch);
     ImGui::DockBuilderDockWindow("Log", bWatch);
+    ImGui::DockBuilderDockWindow("Tracepoints", bWatch);   // tabs with Watch/Log/Controller
     ImGui::DockBuilderDockWindow("SH-2 Assembly", bAsm);
 
     ImGui::DockBuilderFinish(dockspaceId);
@@ -1552,9 +1555,56 @@ void App::DrawTracepointEditor()
     ImGui::SeparatorText("Output");
     char fbuf[256];
     std::snprintf(fbuf, sizeof(fbuf), "%s", mTpEdit.format.c_str());
+    if (mTpFmtRefocus) { ImGui::SetKeyboardFocusHere(); mTpFmtRefocus = false; }
     ImGui::SetNextItemWidth(-FLT_MIN);
-    if (ImGui::InputTextWithHint("##fmt", "e.g. Dialogue ID = {r4}", fbuf, sizeof(fbuf)))
-        mTpEdit.format = fbuf;
+    // CallbackAlways lets us track the caret (for autocomplete) and re-seed the buffer
+    // after a suggestion is chosen while the field wasn't focused.
+    ImGui::InputTextWithHint("##fmt", "e.g. Dialogue ID = {r4}", fbuf, sizeof(fbuf),
+        ImGuiInputTextFlags_CallbackAlways,
+        [](ImGuiInputTextCallbackData* d) -> int {
+            App* self = static_cast<App*>(d->UserData);
+            if (self->mTpFmtForce)
+            {
+                d->DeleteChars(0, d->BufTextLen);
+                d->InsertChars(0, self->mTpEdit.format.c_str());
+                if (self->mTpFmtCursor > d->BufTextLen) self->mTpFmtCursor = d->BufTextLen;
+                d->CursorPos = d->SelectionStart = d->SelectionEnd = self->mTpFmtCursor;
+                self->mTpFmtForce = false;
+            }
+            self->mTpFmtCursor = d->CursorPos;
+            return 0;
+        }, this);
+    mTpEdit.format = fbuf;
+    // Context-filtered suggestion chips: shown while the caret sits inside a {token}.
+    {
+        FormatCompletion comp = FormatCompletions(mTpEdit.format, static_cast<size_t>(mTpFmtCursor));
+        if (!comp.candidates.empty())
+        {
+            ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4, 3));
+            int shown = 0;
+            for (const std::string& cand : comp.candidates)
+            {
+                if (shown >= 14) { ImGui::TextDisabled("..."); break; }
+                if (shown) ImGui::SameLine();
+                if (ImGui::SmallButton(cand.c_str()))
+                {
+                    // Replace the partial [start, start+length) with the full candidate.
+                    std::string& f = mTpEdit.format;
+                    size_t s = comp.start, l = comp.length;
+                    if (s <= f.size())
+                    {
+                        if (s + l > f.size()) l = f.size() - s;
+                        f = f.substr(0, s) + cand + f.substr(s + l);
+                        mTpFmtCursor = static_cast<int>(s + cand.size());
+                        mTpFmtForce = true;      // re-seed the InputText buffer + caret
+                        mTpFmtRefocus = true;    // keep editing after the click
+                    }
+                }
+                ++shown;
+            }
+            ImGui::PopStyleVar();
+        }
+    }
     const std::string err = FormatValidate(mTpEdit.format);
     if (!err.empty())
         ImGui::TextColored(ImVec4(0.95f, 0.5f, 0.4f, 1.0f), "! %s", err.c_str());
@@ -1631,6 +1681,115 @@ void App::DrawLog()
         mLog.Draw(req);
         if (req.jumpAssembly) { mAssemblyPanel.GoTo(req.jumpCpu, req.jumpAddr); mPanels.assembly = true; }
         if (req.jumpHex)      { mHexEditor.GoTo(req.hexAddr); mPanels.hexEditor = true; }
+    }
+    ImGui::End();
+}
+
+// Human label for an action type (one entry today; grows as types are wired).
+static const char* ActionTypeName(ActionType t)
+{
+    switch (t)
+    {
+        case ActionType::Log: return "Log";
+    }
+    return "?";
+}
+
+// Tracepoints / Execution Actions management table: every action attached to an
+// instruction, with its location, type, output summary, and hit count, plus per-row
+// enable / edit / jump-to-assembly / delete. Mirrors the "Assembly Actions" table in
+// the mockup. The store is the same mActions the Assembly gutter + editor mutate, so
+// this view stays in sync automatically; a live driver re-syncs on the next poll.
+void App::DrawActions()
+{
+    if (ImGui::Begin("Tracepoints"))
+    {
+        const size_t n = mActions.Count();
+        ImGui::Text("%zu tracepoint%s", n, n == 1 ? "" : "s");
+        ImGui::SameLine();
+        ImGui::BeginDisabled(n == 0);
+        if (ImGui::SmallButton("Clear All")) ImGui::OpenPopup("ClearAllTps");
+        ImGui::EndDisabled();
+        if (ImGui::BeginPopup("ClearAllTps"))
+        {
+            ImGui::TextUnformatted("Remove all tracepoints?");
+            if (ImGui::Button("Yes, clear")) { mActions.Clear(); ImGui::CloseCurrentPopup(); }
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();
+            ImGui::EndPopup();
+        }
+
+        if (n == 0)
+        {
+            ImGui::TextDisabled("No tracepoints. Right-click an instruction in SH-2");
+            ImGui::TextDisabled("Assembly and choose \"Create Tracepoint...\".");
+        }
+        else
+        {
+            // Deferred mutations so we never edit the vector mid-iteration.
+            uint64_t toRemove = 0, toEdit = 0;
+            const ImGuiTableFlags tf = ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH |
+                                       ImGuiTableFlags_ScrollY | ImGuiTableFlags_SizingStretchProp;
+            if (ImGui::BeginTable("tps", 6, tf))
+            {
+                ImGui::TableSetupColumn("On",      ImGuiTableColumnFlags_WidthFixed, 26.0f);
+                ImGui::TableSetupColumn("CPU",     ImGuiTableColumnFlags_WidthFixed, 34.0f);
+                ImGui::TableSetupColumn("Address", ImGuiTableColumnFlags_WidthFixed, 74.0f);
+                ImGui::TableSetupColumn("Output",  ImGuiTableColumnFlags_WidthStretch);
+                ImGui::TableSetupColumn("Hits",    ImGuiTableColumnFlags_WidthFixed, 52.0f);
+                ImGui::TableSetupColumn("",        ImGuiTableColumnFlags_WidthFixed, 118.0f);
+                ImGui::TableSetupScrollFreeze(0, 1);
+                ImGui::TableHeadersRow();
+
+                for (const ExecutionAction& a : mActions.All())
+                {
+                    ImGui::TableNextRow();
+                    ImGui::PushID(static_cast<int>(a.id));
+
+                    ImGui::TableNextColumn();
+                    bool en = a.enabled;
+                    if (ImGui::Checkbox("##en", &en)) mActions.SetEnabled(a.id, en);
+
+                    ImGui::TableNextColumn();
+                    ImGui::TextUnformatted(a.cpu ? "S" : "M");
+
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%08X", a.address);
+
+                    ImGui::TableNextColumn();
+                    // Type badge + the output template (or a placeholder if empty).
+                    ImGui::TextDisabled("%s", ActionTypeName(a.type));
+                    ImGui::SameLine();
+                    if (a.format.empty()) ImGui::TextDisabled("(no output)");
+                    else                  ImGui::TextUnformatted(a.format.c_str());
+
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%llu", static_cast<unsigned long long>(a.hits));
+
+                    ImGui::TableNextColumn();
+                    if (ImGui::SmallButton("Edit")) toEdit = a.id;
+                    ImGui::SameLine();
+                    if (ImGui::SmallButton("Go"))
+                    { mAssemblyPanel.GoTo(a.cpu, a.address); mPanels.assembly = true; }
+                    ImGui::SameLine();
+                    if (ImGui::SmallButton("X")) toRemove = a.id;
+
+                    ImGui::PopID();
+                }
+                ImGui::EndTable();
+            }
+
+            if (toEdit)
+            {
+                if (const ExecutionAction* a = mActions.Get(toEdit))
+                {
+                    mTpEdit = *a;
+                    mTpEditNew = false;
+                    mTpEditorOpen = true;
+                }
+            }
+            if (toRemove) mActions.Remove(toRemove);
+        }
     }
     ImGui::End();
 }

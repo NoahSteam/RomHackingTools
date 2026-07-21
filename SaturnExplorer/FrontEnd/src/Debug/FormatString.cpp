@@ -243,4 +243,72 @@ std::string FormatValidate(const std::string& tmpl)
     return err;
 }
 
+FormatCompletion FormatCompletions(const std::string& tmpl, size_t cursor)
+{
+    FormatCompletion out;
+    if (cursor > tmpl.size()) cursor = tmpl.size();
+
+    // Find the open '{' the cursor sits inside: the nearest '{' before the cursor with
+    // no '}' between it and the cursor. A doubled "{{" is a literal-brace escape, so a
+    // '{' immediately preceded by another '{' does not open a token.
+    size_t open = std::string::npos;
+    for (size_t i = cursor; i > 0; --i)
+    {
+        char c = tmpl[i - 1];
+        if (c == '}') return out;                        // closed before us: outside a token
+        if (c == '{')
+        {
+            if (i >= 2 && tmpl[i - 2] == '{') return out; // "{{" escape, not a token
+            open = i - 1;
+            break;
+        }
+    }
+    if (open == std::string::npos) return out;
+
+    // Token body is tmpl[open+1 .. cursor). Locate the value-name vs :spec split.
+    const size_t bodyStart = open + 1;
+    size_t colon = std::string::npos, plus = std::string::npos;
+    for (size_t i = bodyStart; i < cursor; ++i)
+    {
+        if (tmpl[i] == ':') { colon = i; }
+        else if (tmpl[i] == '+' && colon == std::string::npos) { plus = i; }
+    }
+
+    if (colon != std::string::npos)
+    {
+        // Completing a :spec. Partial = text after the colon.
+        static const char* kSpecs[] = {
+            "X8","X4","X2","x8","x4","x2","u8","u16","u32","s8","s16","s32","string"
+        };
+        const std::string partial = tmpl.substr(colon + 1, cursor - (colon + 1));
+        const std::string lp = Lower(partial);
+        out.start = colon + 1;
+        out.length = cursor - (colon + 1);
+        out.spec = true;
+        for (const char* s : kSpecs)
+            if (lp.empty() || Lower(s).compare(0, lp.size(), lp) == 0)
+                out.candidates.push_back(s);
+        return out;
+    }
+
+    if (plus != std::string::npos) return out;  // typing a +offset: nothing to complete
+
+    // Completing a value name. Skip a leading '*' (memory deref target).
+    size_t nameStart = bodyStart;
+    if (nameStart < cursor && tmpl[nameStart] == '*') ++nameStart;
+    const std::string partial = tmpl.substr(nameStart, cursor - nameStart);
+    const std::string lp = Lower(partial);
+
+    static const char* kNames[] = {
+        "r0","r1","r2","r3","r4","r5","r6","r7","r8","r9","r10","r11","r12","r13","r14","r15",
+        "pc","pr","sr","gbr","vbr","mach","macl","frame","cycle"
+    };
+    out.start = nameStart;
+    out.length = cursor - nameStart;
+    for (const char* n : kNames)
+        if (lp.empty() || std::string(n).compare(0, lp.size(), lp) == 0)
+            out.candidates.push_back(n);
+    return out;
+}
+
 }  // namespace sfe

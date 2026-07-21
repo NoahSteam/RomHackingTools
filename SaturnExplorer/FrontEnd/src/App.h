@@ -83,6 +83,7 @@ private:
     void DrawController();                  // Saturn control pad -> live input
     void SendInput(unsigned int mask);      // push a pad mask to the live emulator (on change)
     void DrawLog();                         // structured event log
+    void DrawActions();                     // Tracepoints management table
     void DrawTracepointEditor();            // modal property editor for a tracepoint
     void OpenTracepointEditor(int cpu, uint32_t addr);  // open it for a new/existing TP
     // Format a tracepoint's template against the CURRENT context (registers + memory),
@@ -154,6 +155,12 @@ private:
     bool                     mTpEditorOpen = false;
     bool                     mTpEditNew = false;
     ExecutionAction          mTpEdit;
+    // Format-field autocomplete state (editor only). mTpFmtCursor tracks the InputText
+    // caret (updated from its callback); mTpFmtForce re-seeds the buffer + caret from
+    // mTpEdit.format after a suggestion is inserted; mTpFmtRefocus re-focuses the field.
+    int                      mTpFmtCursor = 0;
+    bool                     mTpFmtForce = false;
+    bool                     mTpFmtRefocus = false;
     uint64_t                 mLastSystemLogFrame = ~0ull;   // de-dupe per-frame system logs
     uint64_t                 mLastTpGeneration = 0;         // last tracepoint set synced live
     uint64_t                 mLastBpGeneration = 0;  // last set synced to the live emulator
@@ -205,6 +212,7 @@ private:
         bool selectedObject = true, watch = true, assembly = true, hexEditor = true;
         bool controller = true;   // Saturn control pad (drives a live game)
         bool log = true;          // structured event log (tracepoints + system events)
+        bool actions = true;      // Tracepoints / execution-actions management table
     };
     Panels           mPanels;
 
