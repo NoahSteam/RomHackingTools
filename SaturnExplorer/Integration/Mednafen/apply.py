@@ -103,6 +103,15 @@ extern "C" void SsDbgPokeByte(unsigned int addr, unsigned char val) {
       at the equivalent bus/debug byte writer. */
    CheatMemWrite((unsigned int)addr, (unsigned char)val);
 }
+/* Controller input injection (v7). Driving the emulated pad directly means writing our
+   button bitmask into Mednafen's SMPC device-data plumbing (smpc.cpp), which the ss
+   debugger exposes no stable hook for and which the frontend input layer overwrites each
+   frame. Until that is wired this is a deliberate no-op: the Saturn Explorer controller
+   panel round-trips over the protocol but does not yet move the Mednafen pad. Defined so
+   the glue's SeExportSetInputHook link is satisfied on every build.
+   TODO(mednafen): map SE_PAD_* -> the active SMPC port buffer and latch it past the
+   frontend's per-frame input refresh. */
+extern "C" void SsDbgSetPad(unsigned int port, unsigned int buttons) { (void)port; (void)buttons; }
 #ifdef WANT_DEBUGGER
 /* Tier 3 — execution breakpoints via the ss debugger (needs a --enable-debugger
    build; without WANT_DEBUGGER these are no-ops below). Adding a PC breakpoint makes

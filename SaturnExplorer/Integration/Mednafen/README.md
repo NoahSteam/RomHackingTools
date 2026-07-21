@@ -218,7 +218,14 @@ client no-ops it), so you can build the tiers incrementally and test each.
 The Saturn Explorer **Controller panel** lets the user press a Saturn pad and drive the
 running game. The panel sends an emulator-agnostic `SE_PAD_*` bitmask (SeLiveProtocol.h)
 with an `INP` command; `se_export.c` forwards it to the input hook, and the glue's
-`SeMdfnSetPad` calls one accessor you provide:
+`SeMdfnSetPad` calls the `SsDbgSetPad` accessor.
+
+`apply.py` injects `SsDbgSetPad` into `ss.cpp` as a **no-op** so the patched build always
+links out of the box (this is the one input site that is genuinely emulator-specific and
+**has not been exercised in-repo** — the SE side is verified against the mock; only the
+accessor body + the SE_PAD_*→SS-bit map need confirming on a real Mednafen). With the
+injected no-op the panel highlights and sends but the game ignores the input. To actually
+drive the pad, replace the injected stub's body with SMPC wiring:
 
 ```cpp
 // In ss.cpp (or smpc.cpp — wherever the emulated pad's state is reachable). Latch the
@@ -226,17 +233,12 @@ with an `INP` command; `se_export.c` forwards it to the input hook, and the glue
 // Mednafen's own host-input mapping (that's the whole point — a button in the panel is
 // that Saturn button regardless of the emulator's key bindings). Map SE_PAD_* to
 // Mednafen's SS gamepad bit order (verify against ss/input/gamepad.cpp), and OR/replace
-// the pad's digital data for `port`. Called from SeExportSetInputHook on each INP.
-extern "C" void SsDbgSetPad(unsigned int port, unsigned int buttons);
+// the pad's digital data for `port`, latched past the frontend's per-frame input refresh.
+// Called from SeExportSetInputHook on each INP.
+extern "C" void SsDbgSetPad(unsigned int port, unsigned int buttons) { /* SMPC wiring */ }
 ```
 
-This is the one input site that is genuinely emulator-specific and **has not been
-exercised in-repo** (the SE side — panel, protocol `INP`, LiveDriver, and `se_export`
-receive — is verified against the mock; only this accessor + the SE_PAD_*→SS-bit map
-need confirming on a real Mednafen build). Until `SsDbgSetPad` is wired (it's fenced
-under `SE_MEDNAFEN_WIRED`, a stub otherwise), the panel highlights and sends but the
-game ignores the input. The mask is idempotent and latched, so re-sending each frame is
-safe.
+The mask is idempotent and latched, so re-sending each frame is safe.
 
 ## Tracepoints (Tier 4, v8+) — TODO(mednafen) confirm
 
