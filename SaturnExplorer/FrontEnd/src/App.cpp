@@ -262,6 +262,7 @@ const std::vector<App::PanelInfo>& App::PanelList()
         {"watch",           "Watch",              &Panels::watch},
         {"assembly",        "SH-2 Assembly",      &Panels::assembly},
         {"hexEditor",       "Hex Editor",         &Panels::hexEditor},
+        {"controller",      "Controller",         &Panels::controller},
     };
     return kList;
 }
@@ -778,6 +779,8 @@ void App::BuildUI(IPlatform& platform)
     if (mPanels.watch)           DrawWatch(platform);
     if (mPanels.assembly)        DrawAssembly();
     if (mPanels.hexEditor)       DrawHexEditor();
+    if (mPanels.controller)      DrawController();
+    else                         SendInput(0);   // hidden panel releases any held input
 
     // Game-data-directory modal + texture search results (both floating, drawn last
     // so they overlay the docked panels).
@@ -861,8 +864,9 @@ void App::BuildDefaultLayout(unsigned int dockspaceId)
     ImGui::DockBuilderDockWindow("Selected Object", rObj);
     ImGui::DockBuilderDockWindow("Hex Editor", rHex);
 
-    // Bottom debugger strip.
+    // Bottom debugger strip. The Controller tabs in with Watch (wide enough for the pad).
     ImGui::DockBuilderDockWindow("Watch", bWatch);
+    ImGui::DockBuilderDockWindow("Controller", bWatch);
     ImGui::DockBuilderDockWindow("SH-2 Assembly", bAsm);
 
     ImGui::DockBuilderFinish(dockspaceId);
@@ -1367,6 +1371,31 @@ void App::DrawAssembly()
 void App::DrawHexEditor()
 {
     mHexEditor.Draw(mMemBackend, mbLiveSource, ImGui::GetIO().DeltaTime);
+}
+
+// Saturn control pad: draw it, and forward the pressed-button mask to the live
+// emulator whenever it changes (the driver drives the emulated pad directly).
+void App::DrawController()
+{
+    unsigned int mask = 0;
+    if (ImGui::Begin("Controller"))
+    {
+        mask = mController.Draw(mbLiveSource);
+    }
+    ImGui::End();
+    SendInput(mask);
+}
+
+void App::SendInput(unsigned int mask)
+{
+    if (mask == mInputMask) { return; }   // only send on change (the glue latches)
+    mInputMask = mask;
+#ifdef SE_ENABLE_LIVE
+    if (mbLiveSource)
+    {
+        se_live_send_input(&mDataSource, static_cast<uint32_t>(mController.Port()), mask);
+    }
+#endif
 }
 
 // Push the current breakpoint set to the live emulator when it changes. Serializes

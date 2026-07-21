@@ -32,6 +32,12 @@ uint32_t se_live_server_version(const se_data_source* ds);
 void se_live_set_breakpoints(const se_data_source* ds, const uint8_t* descs,
                              uint32_t count);
 
+/* Inject controller state into the running emulator (v7+): 'port' (0 = controller 1)
+ * and 'buttons' (an SE_PAD_* bitmask). The poll thread drives the emulated pad
+ * directly, bypassing the emulator's host-input mapping. Send it whenever the held
+ * buttons change (0 releases all). No-op if 'ds' isn't a live source. */
+void se_live_send_input(const se_data_source* ds, uint32_t port, uint32_t buttons);
+
 /* Read the last stop event reported by the server's control block (v5+). Fills
  * '*reason' (SE_LIVE_STOP_*), '*cpu' (0 master / 1 slave), and '*pc' when non-NULL.
  * Returns 1 if the emulator is halted on a breakpoint, 0 otherwise (or not live). */

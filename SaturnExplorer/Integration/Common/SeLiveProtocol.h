@@ -55,7 +55,7 @@
 #define SE_LIVE_MAGIC1 'E'
 #define SE_LIVE_MAGIC2 'X'
 #define SE_LIVE_MAGIC3 'P'
-#define SE_LIVE_VERSION      6u
+#define SE_LIVE_VERSION      7u
 /* Command verbs are exactly 4 bytes; a request is a verb + 4-byte LE argument. */
 #define SE_LIVE_REQUEST      "GET\n"   /* back-compat alias for the snapshot verb */
 #define SE_LIVE_VERB_GET     "GET\n"
@@ -65,8 +65,33 @@
 #define SE_LIVE_VERB_BKPTS   "BKP\n"   /* sync breakpoint set: arg = descriptor count */
 #define SE_LIVE_VERB_WRITE   "WRM\n"   /* poke work RAM: arg = byte count N, payload
                                         * = address(u32 LE) + N big-endian bytes */
+#define SE_LIVE_VERB_INPUT   "INP\n"   /* inject controller state (v7+): arg = port(high
+                                        * 16 bits) | button bitmask(low 16, SE_PAD_*). The
+                                        * emulator glue drives the pad directly, bypassing
+                                        * its own host-input mapping. No payload. */
 #define SE_LIVE_VERB_LEN     4
 #define SE_LIVE_REQUEST_LEN  8    /* verb(4) + arg(4, little-endian) */
+
+/* Saturn digital-pad buttons (v7+), an emulator-agnostic logical bitmask carried by
+ * INP. The per-emulator glue maps these to that emulator's own pad bit order, so the
+ * wire stays independent of any one emulator's input convention. Port is packed into
+ * the high 16 bits of the INP arg: arg = (port << 16) | (buttons & SE_PAD_ALL). */
+#define SE_PAD_UP     0x0001u
+#define SE_PAD_DOWN   0x0002u
+#define SE_PAD_LEFT   0x0004u
+#define SE_PAD_RIGHT  0x0008u
+#define SE_PAD_A      0x0010u
+#define SE_PAD_B      0x0020u
+#define SE_PAD_C      0x0040u
+#define SE_PAD_X      0x0080u
+#define SE_PAD_Y      0x0100u
+#define SE_PAD_Z      0x0200u
+#define SE_PAD_L      0x0400u
+#define SE_PAD_R      0x0800u
+#define SE_PAD_START  0x1000u
+#define SE_PAD_ALL    0x1FFFu
+#define SE_LIVE_INPUT_PORT(arg)     (((arg) >> 16) & 0xFFFFu)
+#define SE_LIVE_INPUT_BUTTONS(arg)  ((arg) & 0xFFFFu)
 #define SE_LIVE_BKPT_DESC_LEN 12  /* address(4) + size(4) + flags(4), all LE */
 #define SE_LIVE_HEADER_LEN   48   /* magic(4) + version(4) + 10 section lengths(4 each) */
 

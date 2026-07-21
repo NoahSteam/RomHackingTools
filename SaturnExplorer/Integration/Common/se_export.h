@@ -85,6 +85,13 @@ void SeExportNotifyStop(int cpu, unsigned int pc);
  * SeExportSetMemWriteHook(SeYabauseWriteByte). */
 void SeExportSetMemWriteHook(void (*write)(unsigned int address, unsigned char value));
 
+/* Wire controller input injection (v7+), so the Saturn Explorer controller panel can
+ * drive the running game directly. set(port, buttons) receives the emulator-agnostic
+ * SE_PAD_* bitmask; the glue latches it and feeds the emulated pad for `port`,
+ * bypassing the emulator's own host-input mapping. May be NULL (input is dropped).
+ * Call once after SeExportInit, e.g. SeExportSetInputHook(SeMednafenSetPad). */
+void SeExportSetInputHook(void (*set)(unsigned int port, unsigned int buttons));
+
 /* Frame gate for pause / single-step. Call once at the top of each emulated
  * frame in Yabause's run loop; returns 1 if the frame should run, 0 if the
  * debugger is holding it paused. When it returns 0 it has already slept ~2 ms

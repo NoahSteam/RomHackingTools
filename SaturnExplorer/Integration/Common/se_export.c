@@ -128,6 +128,19 @@ void SeExportSetMemWriteHook(SeWriteByteFn fn)
     sWriteByte = fn;
 }
 
+/* ---- Controller-input hook (v7+). apply.py wires this to the emulator's pad state
+ * so the Saturn Explorer controller panel can drive the game directly, bypassing the
+ * emulator's own host-input mapping. `buttons` is the emulator-agnostic SE_PAD_* mask;
+ * the glue translates it to the emulator's own pad bit order. May be NULL (input is
+ * simply ignored, but the protocol still round-trips). ---- */
+typedef void (*SeSetPadFn)(unsigned int port, unsigned int buttons);
+static SeSetPadFn sSetPad;
+
+void SeExportSetInputHook(SeSetPadFn fn)
+{
+    sSetPad = fn;
+}
+
 /* Called from Yabause's breakpoint callback when the master/slave SH-2 hits an
  * execution breakpoint: latch the stop and hold the emulator paused. Plain
  * volatile writes (like sPaused elsewhere) — this runs in the CPU thread and must
@@ -335,6 +348,12 @@ static void SeServeClient(int cl, SeFrame* snap)
                 if (SeRecv(cl, &v, 1) != 0) return;
                 if (sWriteByte) sWriteByte(address + i, v);
             }
+        }
+        else if (memcmp(req, SE_LIVE_VERB_INPUT, SE_LIVE_VERB_LEN) == 0)
+        {
+            /* Inject controller state: arg packs port (high 16) + SE_PAD_* mask (low
+             * 16). No payload. The glue drives the emulated pad directly. */
+            if (sSetPad) sSetPad(SE_LIVE_INPUT_PORT(arg), SE_LIVE_INPUT_BUTTONS(arg));
         }
 
         unsigned char ctl[SE_CT];

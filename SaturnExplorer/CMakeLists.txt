@@ -152,6 +152,7 @@ if(WIN32)
         FrontEnd/src/WatchPanel.cpp
         FrontEnd/src/AssemblyPanel.cpp
         FrontEnd/src/HexEditorPanel.cpp
+        FrontEnd/src/ControllerPanel.cpp
         FrontEnd/src/Debug/WatchList.cpp
         FrontEnd/src/Debug/MemoryBackend.cpp
         FrontEnd/src/Debug/Sh2Disasm.cpp
@@ -201,6 +202,7 @@ elseif(EMSCRIPTEN)
         FrontEnd/src/WatchPanel.cpp
         FrontEnd/src/AssemblyPanel.cpp
         FrontEnd/src/HexEditorPanel.cpp
+        FrontEnd/src/ControllerPanel.cpp
         FrontEnd/src/Debug/WatchList.cpp
         FrontEnd/src/Debug/MemoryBackend.cpp
         FrontEnd/src/Debug/Sh2Disasm.cpp
@@ -268,6 +270,7 @@ else()
             FrontEnd/src/WatchPanel.cpp
             FrontEnd/src/AssemblyPanel.cpp
             FrontEnd/src/HexEditorPanel.cpp
+            FrontEnd/src/ControllerPanel.cpp
             FrontEnd/src/Debug/WatchList.cpp
             FrontEnd/src/Debug/MemoryBackend.cpp
             FrontEnd/src/Debug/Sh2Disasm.cpp

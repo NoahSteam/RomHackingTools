@@ -82,6 +82,12 @@ struct LiveState
     // True once we've told the emulator to pause/step and not since resumed, so the
     // poll thread knows to release it on close (never leave Yabause paused).
     std::atomic<bool>     pausedByUs{false};
+    // Controller input to inject (v7+): packed (port << 16) | SE_PAD_* mask. The poll
+    // thread sends an INP whenever this is non-zero or has changed since the last one
+    // sent, so a held button survives even a glue that doesn't latch, and the release
+    // edge (back to 0) is always delivered.
+    std::atomic<uint32_t> inputState{0};
+    uint32_t              lastInputSent = 0;   // poll-thread-local (guarded by ctlMtx use)
 };
 
 /* ---- Local-socket transport (POSIX Unix socket / Windows named pipe). ---- */
@@ -393,7 +399,7 @@ void PollLoop(LiveState* st)
                 verb = SE_LIVE_VERB_WRITE;
                 arg = static_cast<int32_t>(payload.size() >= 4 ? payload.size() - 4 : 0);
             }
-            else
+            else if (st->pending != Ctl::None)
             {
                 switch (st->pending)
                 {
@@ -404,6 +410,19 @@ void PollLoop(LiveState* st)
                 }
                 st->pending = Ctl::None;
                 st->stepFrames = 0;
+            }
+            else
+            {
+                // Inject controller input when a button is held or the mask changed
+                // since the last send (covers the release edge and a non-latching
+                // glue). INP still returns a full snapshot, so we lose no frame data.
+                const uint32_t inp = st->inputState.load();
+                if (inp != 0 || inp != st->lastInputSent)
+                {
+                    verb = SE_LIVE_VERB_INPUT;
+                    arg = static_cast<int32_t>(inp);
+                    st->lastInputSent = inp;
+                }
             }
         }
 
@@ -658,6 +677,14 @@ extern "C" void se_live_set_breakpoints(const se_data_source* ds,
     std::lock_guard<std::mutex> lk(st->ctlMtx);
     st->bkpts.assign(descs, descs + static_cast<size_t>(count) * SE_LIVE_BKPT_DESC_LEN);
     st->bkptsDirty = true;   // poll thread ships it on its next cycle
+}
+
+extern "C" void se_live_send_input(const se_data_source* ds, uint32_t port, uint32_t buttons)
+{
+    if (!ds || !ds->user || ds->close != CbClose) { return; }
+    // Pack port + SE_PAD_* mask; the poll thread sends it (INP) on its next cycle.
+    const uint32_t packed = ((port & 0xFFFFu) << 16) | (buttons & SE_PAD_ALL);
+    St(ds->user)->inputState.store(packed);
 }
 
 extern "C" int se_live_get_stop(const se_data_source* ds, uint32_t* reason,

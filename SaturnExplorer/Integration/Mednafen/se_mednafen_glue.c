@@ -51,6 +51,12 @@ extern void            SsDbgSh2Regs(int cpu, uint32_t out23[23]); /* R[16],SR,GB
 extern void            SsDbgPokeByte(uint32_t addr, uint8_t val); /* bus/debug byte write */
 extern void            SsDbgAddExecBp(int cpu, unsigned int addr); /* Tier 3: install PC breakpoint */
 extern void            SsDbgClearBps(void);                        /* Tier 3: clear PC breakpoints */
+/* Controller injection (v7+). TODO(mednafen) confirm: implement this accessor where
+ * the SS pad state is reachable (SMPC / the emulated gamepad's data buffer), mapping
+ * the emulator-agnostic SE_PAD_* bits to Mednafen's own SS gamepad bit order and
+ * latching them so every subsequent frame reads the injected state until it changes.
+ * `port` is 0-based (0 = controller 1). See README §"Controller input". */
+extern void            SsDbgSetPad(unsigned int port, unsigned int buttons);
 #endif
 
 /* ============================ pure, testable helpers ====================== */
@@ -183,6 +189,19 @@ static void SeMdfnWriteByte(unsigned int address, unsigned char value)
 #endif
 }
 
+/* Controller input (v7+): drive the emulated pad directly from the SE_PAD_* mask so
+ * the Saturn Explorer controller panel controls the game, bypassing Mednafen's own
+ * host-input mapping. The injected SsDbgSetPad accessor does the emulator-specific
+ * map + latch (see its declaration above). Registered with SeExportSetInputHook. */
+static void SeMdfnSetPad(unsigned int port, unsigned int buttons)
+{
+#if defined(SE_MEDNAFEN_WIRED)
+    SsDbgSetPad(port, buttons);
+#else
+    (void)port; (void)buttons;
+#endif
+}
+
 /* ============================ lifecycle wiring ============================ */
 /* The patcher (apply.py) injects exactly ONE call — SeMednafenFrameHook() — at the
  * end-of-frame anchor in ss.cpp's Emulate() (after `espec->MasterCycles = ...`). That
@@ -202,6 +221,7 @@ void SeMednafenFrameHook(void)
         SeExportInit();
         SeExportSetMemWriteHook(SeMdfnWriteByte);
         SeExportSetBreakpointHooks(SeMdfnAddExecBp, SeMdfnClearBps);
+        SeExportSetInputHook(SeMdfnSetPad);   /* controller panel -> emulated pad (v7+) */
     }
     SeMednafenSnapshot();
 }
@@ -210,6 +230,6 @@ void SeMednafenFrameHook(void)
  * which isn't compiled here — keep the compiler quiet without them. */
 void SeMednafenSuppressUnusedWarnings(void)
 {
-    (void)SeMdfnAddExecBp; (void)SeMdfnClearBps; (void)SeMdfnWriteByte;
+    (void)SeMdfnAddExecBp; (void)SeMdfnClearBps; (void)SeMdfnWriteByte; (void)SeMdfnSetPad;
 }
 #endif

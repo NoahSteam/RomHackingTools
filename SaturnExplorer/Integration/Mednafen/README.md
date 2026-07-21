@@ -213,6 +213,31 @@ reaches the address; the hit report still names the exact CPU.)
 Every arg to `SeExportSnapshot` may be `NULL` (that section ships as length 0 and the
 client no-ops it), so you can build the tiers incrementally and test each.
 
+## Controller input (Tier 4, v7+) — TODO(mednafen) confirm
+
+The Saturn Explorer **Controller panel** lets the user press a Saturn pad and drive the
+running game. The panel sends an emulator-agnostic `SE_PAD_*` bitmask (SeLiveProtocol.h)
+with an `INP` command; `se_export.c` forwards it to the input hook, and the glue's
+`SeMdfnSetPad` calls one accessor you provide:
+
+```cpp
+// In ss.cpp (or smpc.cpp — wherever the emulated pad's state is reachable). Latch the
+// injected buttons and feed them into the SS controller port every frame, BYPASSING
+// Mednafen's own host-input mapping (that's the whole point — a button in the panel is
+// that Saturn button regardless of the emulator's key bindings). Map SE_PAD_* to
+// Mednafen's SS gamepad bit order (verify against ss/input/gamepad.cpp), and OR/replace
+// the pad's digital data for `port`. Called from SeExportSetInputHook on each INP.
+extern "C" void SsDbgSetPad(unsigned int port, unsigned int buttons);
+```
+
+This is the one input site that is genuinely emulator-specific and **has not been
+exercised in-repo** (the SE side — panel, protocol `INP`, LiveDriver, and `se_export`
+receive — is verified against the mock; only this accessor + the SE_PAD_*→SS-bit map
+need confirming on a real Mednafen build). Until `SsDbgSetPad` is wired (it's fenced
+under `SE_MEDNAFEN_WIRED`, a stub otherwise), the panel highlights and sends but the
+game ignores the input. The mask is idempotent and latched, so re-sending each frame is
+safe.
+
 ## Window-title mark
 
 `apply.py` also appends `(SaturnExplorer Enabled. <SE ver> / Mednafen <MEDNAFEN_VERSION>)`

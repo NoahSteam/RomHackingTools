@@ -16,6 +16,7 @@
 #include "WatchPanel.h"          // Watch Window (debugger; emulator-agnostic)
 #include "AssemblyPanel.h"       // SH-2 Assembly (debugger)
 #include "HexEditorPanel.h"      // Hex Editor (debugger)
+#include "ControllerPanel.h"     // Saturn control pad (drives a live game)
 #include "Debug/MemoryBackend.h"
 #include "Debug/WatchList.h"
 #include "Debug/BreakpointManager.h"
@@ -77,6 +78,8 @@ private:
     void DrawWatch(IPlatform& platform);   // debugger Watch Window
     void DrawAssembly();                    // SH-2 Assembly (live disassembly)
     void DrawHexEditor();                   // Hex Editor (memory view/edit)
+    void DrawController();                  // Saturn control pad -> live input
+    void SendInput(unsigned int mask);      // push a pad mask to the live emulator (on change)
     void SyncBreakpointsToLive();           // push the breakpoint set to the emulator
     void DrawVdp1Framebuffer(IPlatform& platform);
     void DrawWorldView(IPlatform& platform);
@@ -130,6 +133,8 @@ private:
     BreakpointManager        mBreakpoints;
     AssemblyPanel            mAssemblyPanel;
     HexEditorPanel           mHexEditor;
+    ControllerPanel          mController;
+    unsigned int             mInputMask = 0;    // last pad mask sent to the live emulator
     uint64_t                 mLastBpGeneration = 0;  // last set synced to the live emulator
 
     se_render_opts   mRenderOpts {};
@@ -177,6 +182,7 @@ private:
         bool paletteRam = true, registers = true, commandList = true;
         bool textureViewer = true, paletteViewer = true, references = false;
         bool selectedObject = true, watch = true, assembly = true, hexEditor = true;
+        bool controller = true;   // Saturn control pad (drives a live game)
     };
     Panels           mPanels;
 
