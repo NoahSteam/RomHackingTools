@@ -112,6 +112,16 @@ extern "C" void SsDbgPokeByte(unsigned int addr, unsigned char val) {
    TODO(mednafen): map SE_PAD_* -> the active SMPC port buffer and latch it past the
    frontend's per-frame input refresh. */
 extern "C" void SsDbgSetPad(unsigned int port, unsigned int buttons) { (void)port; (void)buttons; }
+/* Read the 16-bit SH-2 instruction at a Saturn bus address (v9 shadow call stack). SH-2
+   opcodes are big-endian in memory, so compose hi<<8|lo. Uses the same bus path as the
+   poke (CheatMemRead is CheatMemWrite's read pair). TODO(mednafen): if your fork lacks
+   CheatMemRead, point this at the equivalent debug byte reader; a fork that has the
+   executing opcode on hand in the CPU dispatch can skip this and pass it to the hook. */
+extern "C" unsigned short SsDbgReadOpcode(unsigned int addr) {
+   unsigned char hi = CheatMemRead((unsigned int)addr);
+   unsigned char lo = CheatMemRead((unsigned int)addr + 1);
+   return (unsigned short)(((unsigned short)hi << 8) | (unsigned short)lo);
+}
 #ifdef WANT_DEBUGGER
 /* Tier 3 — execution breakpoints via the ss debugger (needs a --enable-debugger
    build; without WANT_DEBUGGER these are no-ops below). Adding a PC breakpoint makes

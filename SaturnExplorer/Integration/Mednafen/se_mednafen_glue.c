@@ -57,6 +57,7 @@ extern void            SsDbgClearBps(void);                        /* Tier 3: cl
  * latching them so every subsequent frame reads the injected state until it changes.
  * `port` is 0-based (0 = controller 1). See README §"Controller input". */
 extern void            SsDbgSetPad(unsigned int port, unsigned int buttons);
+extern unsigned short  SsDbgReadOpcode(unsigned int addr); /* v9: 16-bit instr @ Saturn addr */
 #endif
 
 /* ============================ pure, testable helpers ====================== */
@@ -237,9 +238,58 @@ static void SeMdfnSetTracepoints(unsigned int count, const unsigned char* descs)
     sTpCount = count;
 }
 
+#if defined(SE_MEDNAFEN_WIRED)
+/* Shadow call stack (v9): classify the instruction at PC and mirror the SH-2's own
+ * call/return into se_export's per-CPU stack. Reads the opcode (SsDbgReadOpcode) every
+ * instruction; on a call it reads the register file once to resolve an indirect target
+ * and R15. SH-2 calls place the return one instruction past the delay slot (PC+4).
+ *   bsr  disp   1011 dddd dddd dddd   target = PC + 4 + sign12(disp)*2
+ *   bsrf Rn     0000 nnnn 0000 0011   target = PC + 4 + Rn
+ *   jsr  @Rn    0100 nnnn 0000 1011   target = Rn
+ *   rts         0000 0000 0000 1011   return  (pop)
+ *   rte         0000 0000 0010 1011   return from exception (pop)
+ * Targets we can't resolve without extra state are still pushed with target 0. */
+static void SeMdfnTrackFlow(int cpu, unsigned int pc)
+{
+    unsigned short op = SsDbgReadOpcode(pc);
+    unsigned int target = 0, ret = pc + 4, sp = 0;
+    int isCall = 0, n;
+    if ((op & 0xF000u) == 0xB000u)                 /* bsr disp */
+    {
+        int disp = (int)(op & 0x0FFFu);
+        if (disp & 0x0800) disp -= 0x1000;         /* sign-extend 12-bit */
+        target = pc + 4 + (unsigned int)(disp << 1);
+        isCall = 1;
+    }
+    else if ((op & 0xF0FFu) == 0x0003u ||          /* bsrf Rn */
+             (op & 0xF0FFu) == 0x400Bu)            /* jsr  @Rn */
+    {
+        unsigned int raw[23];
+        SsDbgSh2Regs(cpu, raw);
+        n = (op >> 8) & 0xF;
+        sp = raw[15];
+        target = ((op & 0xF0FFu) == 0x400Bu) ? raw[n]          /* jsr: target = Rn */
+                                             : (pc + 4 + raw[n]); /* bsrf: PC+4+Rn */
+        SeExportPushFrame(cpu, pc, target, ret, sp, 0);
+        return;
+    }
+    if (isCall)
+    {
+        unsigned int raw[23];
+        SsDbgSh2Regs(cpu, raw);
+        SeExportPushFrame(cpu, pc, target, ret, raw[15], 0);
+    }
+    else if (op == 0x000Bu || op == 0x002Bu)       /* rts / rte -> pop */
+    {
+        SeExportPopFrame(cpu);
+    }
+}
+#endif
+
 /* Per-instruction hook (apply.py injects a call: SeMednafenTraceHook(cpu, PC) from the
- * SS CPU dispatch / DBG_CPUHook). If PC matches an enabled tracepoint on this CPU,
- * capture the registers and queue an event — no halt. SsDbgSh2Regs returns
+ * SS CPU dispatch / DBG_CPUHook). Does two per-instruction jobs: (1) if PC matches an
+ * enabled tracepoint on this CPU, capture the registers and queue an event (no halt);
+ * (2) mirror calls/returns into the v9 shadow call stack. SsDbgSh2Regs returns
  * R0..R15,SR,GBR,VBR,MACH,MACL,PR,PC; reorder into se_sh2_regs order
  * (r[0..15],pc,pr,sr,gbr,vbr,mach,macl) which is what the event carries. */
 void SeMednafenTraceHook(int cpu, unsigned int pc)
@@ -265,6 +315,7 @@ void SeMednafenTraceHook(int cpu, unsigned int pc)
             SeExportQueueTraceEvent(sTps[i].id, (unsigned int)cpu, regs);
         }
     }
+    SeMdfnTrackFlow(cpu, pc);   /* v9 shadow call stack */
 #else
     (void)cpu; (void)pc;
 #endif

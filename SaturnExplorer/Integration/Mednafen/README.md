@@ -266,6 +266,28 @@ one call site needs confirming on a real Mednafen build. Note the per-instructio
 a linear scan over the (few) installed tracepoints; that's the debugger-build cost, same
 order as breakpoints.
 
+## Call stack (Tier 4, v9+) — TODO(mednafen) confirm
+
+The **Call Stack** panel shows a dependable (● Confirmed) stack when the emulator records
+control flow. The same per-instruction hook (`SeMednafenTraceHook`, above) also maintains
+a shadow stack: `SeMdfnTrackFlow` reads the opcode at PC (`SsDbgReadOpcode`, injected by
+`apply.py`) and mirrors the SH-2's own calls/returns into se_export —
+`SeExportPushFrame` on `bsr`/`bsrf`/`jsr`, `SeExportPopFrame` on `rts`/`rte`. The server
+serializes each CPU's stack into the v9 reply block; the client marks these frames
+Confirmed and prefers them over its heuristic reconstruction.
+
+Two things are emulator-specific and **not exercised in-repo** (the wire — se_export
+serialize + LiveDriver read + client merge — is verified end-to-end with the real code):
+
+- `SsDbgReadOpcode(addr)` reads the 16-bit big-endian instruction via `CheatMemRead`
+  (the read pair of the poke's `CheatMemWrite`). Confirm your fork has it, or point it at
+  the equivalent debug reader. A fork that already has the executing opcode in the CPU
+  dispatch can pass it to the hook and skip the per-instruction read.
+- The call/return decode assumes standard SH-2 encodings and returns one instruction past
+  the delay slot (PC+4). Interrupt/exception entry is not tracked (only `rte` pops), so an
+  interrupt-heavy path can drift; `SeExportPopFrame` guards against underflow and
+  `SeExportResetCallStack` is available to re-baseline.
+
 ## Window-title mark
 
 `apply.py` also appends `(SaturnExplorer Enabled. <SE ver> / Mednafen <MEDNAFEN_VERSION>)`

@@ -146,10 +146,13 @@ se_export.c sender + real LiveDriver reader (v9 negotiated, frames + fields corr
 push/pop reflected across snapshots). (The instruction-step verb for Step Into/Over is
 tracked separately — it's a stepping feature, not part of the stack itself.)
 
-**Phase 3 — emulator glue (not verifiable in-repo).** The shadow call stack in
-`se_export` + the Mednafen/Yabause glue: maintain per-CPU logical stacks from
-bsr/jsr/rts/exception/rte in the per-instruction hook; serialize into the reply. Fenced
-like the tracepoint hook; confirmed on a real build.
+**Phase 3 — emulator glue (built; confirmed on a real build).** `SeMdfnTrackFlow` in the
+Mednafen glue reads the opcode at PC each instruction (`SsDbgReadOpcode`, injected by
+apply.py) and mirrors the SH-2's own control flow into se_export's shadow stack —
+push on bsr/bsrf/jsr, pop on rts/rte — folded into the existing per-instruction hook and
+fenced under `SE_MEDNAFEN_WIRED`. Compile-verified both ways; the two emulator-specific
+pieces (the `CheatMemRead` opcode accessor and interrupt/exception tracking) are the
+TODO(mednafen)-confirm items. See Integration/Mednafen/README.md §Call stack.
 
 **Phase 4 — depth.** Register state per frame (from shadow-stack captures), a
 Locals/Arguments inspector, symbol/map-file import to name functions, and confidence
