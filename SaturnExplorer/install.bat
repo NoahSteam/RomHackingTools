@@ -8,6 +8,7 @@ REM  default; add --with-yabause for a Yabause/Yaba Sanshiro/Kronos build).
 REM
 REM  Examples:
 REM    install.bat                          SE + Mednafen
+REM    install.bat --mednafen-saturn-only   SE + Mednafen (Saturn core only; faster build)
 REM    install.bat --with-yabause           also build Yabause (Qt)
 REM    install.bat --dry-run                show the plan, change nothing
 REM    install.bat --yes                    don't prompt before installs/builds

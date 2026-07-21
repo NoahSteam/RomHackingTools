@@ -296,6 +296,48 @@ own `SDL_SetWindowTitle` in `src/drivers/video.cpp`, using the shared
 `SeExportTitleSuffix()` helper. It's best-effort: a non-SDL / libretro build won't have
 that file, and the patcher skips it gracefully.
 
+## Saturn-only build (skip the other console cores)
+
+Mednafen builds **every** console core by default (PSX, SNES, MD, NES, PCE, PC-FX, …),
+and those cores are the bulk of the compile. This tap only touches `src/ss/`, so you can
+`--disable-*` every core except Saturn and lose nothing — the Saturn core (`ss`) and the
+shared mednafen core still build. Expect a large cut (PSX + SNES + MD alone dominate).
+
+- **Via `install.bat` / `install.py`:** pass `--mednafen-saturn-only`. The installer adds a
+  `--disable-<core>` for each other console to its `./configure` line
+  (`MEDNAFEN_OTHER_CORES` in `install.py`):
+
+  ```sh
+  install.bat --mednafen-saturn-only          # Windows one-command install
+  python Integration/install.py --mednafen-saturn-only
+  ```
+
+- **By hand** (keep `--enable-ss`, the default, and `--enable-debugger` for our hooks):
+
+  ```sh
+  ./configure --enable-debugger \
+    --disable-apple2 --disable-demo   --disable-gb    --disable-gba \
+    --disable-lynx   --disable-nes    --disable-ngp   --disable-pce \
+    --disable-pce-fast --disable-pcfx --disable-psx   --disable-sms \
+    --disable-snes   --disable-snes-faust --disable-md \
+    --disable-ssfplay --disable-vb    --disable-wswan
+  make -j$(nproc)
+  ```
+
+  `--disable-ssfplay` drops the Saturn **Sound-Format player**, a separate module from
+  `ss`. The authoritative flag list is `./configure --help` on your checkout (a newer tree
+  may have added a core); an extra or renamed `--disable-*` is harmless — autoconf ignores
+  an unrecognized one with a warning rather than failing.
+
+**Do you need `make distclean` to switch, or to re-run the installer?** No, not for
+correctness. `install.py` re-runs `./configure` on **every** invocation (only the autotools
+bootstrap is guarded), and it doesn't use `config.cache`, so a changed flag set is picked
+up automatically — the Makefiles regenerate and `make` rebuilds only what changed.
+Switching an already-built tree to Saturn-only leaves the other cores' stale `.o` files on
+disk; that's wasted **disk**, not compile time, and the compile-time win still applies on
+the next `make`. Run `make distclean` (or delete `_emu/mednafen`) only to reclaim that disk
+or to force a guaranteed-clean rebuild.
+
 ## Build / patch workflow + caveats
 
 - **You need Mednafen's `ss` source and a local build.** Mednafen discourages

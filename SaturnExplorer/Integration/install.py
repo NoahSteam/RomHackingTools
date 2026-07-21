@@ -163,6 +163,17 @@ MSYS2_PACKAGES = ("base-devel git autoconf automake libtool make pkgconf "
                   "mingw-w64-x86_64-gcc mingw-w64-x86_64-SDL2 mingw-w64-x86_64-zlib "
                   "mingw-w64-x86_64-flac")
 
+# The console cores Mednafen builds by default that Saturn Explorer never touches. With
+# --mednafen-saturn-only we pass `--disable-<core>` for each at ./configure time, cutting
+# most of the compile (PSX/SNES/MD alone dominate it); the Saturn core (`ss`) and the
+# shared mednafen core still build. `ssfplay` is the Saturn Sound-Format *player*, a
+# separate module from `ss` — safe to drop. The authoritative list is `./configure --help`
+# on the checkout; an extra or renamed name here is harmless — autoconf ignores an
+# unrecognized `--disable-*` with a warning rather than failing.
+MEDNAFEN_OTHER_CORES = ("apple2", "demo", "gb", "gba", "lynx", "md", "nes", "ngp",
+                        "pce", "pce-fast", "pcfx", "psx", "sms", "snes", "snes-faust",
+                        "ssfplay", "vb", "wswan")
+
 
 class Runner:
     """Executes (or, in dry-run, just prints) shell steps and tracks failure."""
@@ -391,7 +402,7 @@ def clone_and_patch(rn, key, spec, dest, rev_override, repo):
     return rn.run([sys.executable, patcher, dest, *spec["patch_args"]]) == 0
 
 
-def build_mednafen(rn, msys2, dest):
+def build_mednafen(rn, msys2, dest, configure_flags=""):
     bash = os.path.join(msys2, "usr", "bin", "bash.exe")
     msdir = win_to_msys(dest)
     ncpu = os.cpu_count() or 4
@@ -411,10 +422,17 @@ def build_mednafen(rn, msys2, dest):
     relink = ("rm -rf include/mednafen; "
               "MSYS=winsymlinks:nativestrict ln -s ../src include/mednafen 2>/dev/null || "
               "ln -s ../src include/mednafen")
+    # ./configure re-runs every invocation (only the autotools bootstrap is guarded), so a
+    # changed flag set is picked up without a manual `make distclean` — the Makefiles
+    # regenerate and `make` rebuilds only what changed. (Switching an already-built tree to
+    # saturn-only leaves the other cores' stale .o on disk; that's wasted disk, not compile
+    # time, and `make distclean` reclaims it if wanted.)
+    configure = ("./configure --enable-debugger" +
+                 (f" {configure_flags}" if configure_flags else ""))
     script = (f"cd '{msdir}' && "
               f"([ -L include/mednafen ] || {{ {relink}; }}) && "
               f"([ -x ./configure ] || (autoreconf -i || ./autogen.sh)) && "
-              f"./configure --enable-debugger && make -j{ncpu}")
+              f"{configure} && make -j{ncpu}")
     # MSYSTEM must be in the ENVIRONMENT before bash's login profile (-l) runs, so the
     # MINGW64 setup is applied — putting /mingw64/bin (gcc) on PATH and setting
     # PKG_CONFIG_PATH so ./configure finds SDL2/zlib. Setting it as the first command
@@ -493,6 +511,9 @@ def main():
     ap.add_argument("--prefix", default=os.path.join(SE_ROOT, "_emu"),
                     help="where to clone+build emulators (default: <repo>/_emu)")
     ap.add_argument("--no-mednafen", action="store_true", help="skip Mednafen")
+    ap.add_argument("--mednafen-saturn-only", action="store_true",
+                    help="build only the Saturn core (--disable-* every other console) "
+                         "for a much faster Mednafen compile")
     ap.add_argument("--with-yabause", action="store_true", help="also build a Yabause fork")
     ap.add_argument("--yabause-variant", choices=("yabause", "sanshiro", "kronos"),
                     default="yabause", help="which Yabause-lineage fork (default: yabause)")
@@ -568,8 +589,12 @@ def main():
             results.append(("Mednafen (skipped)", False, None))
         else:
             print(f"  source: {repo}")
+            cfg_flags = ""
+            if args.mednafen_saturn_only:
+                cfg_flags = " ".join(f"--disable-{c}" for c in MEDNAFEN_OTHER_CORES)
+                print("  (Saturn-only: disabling every other console core for a faster build)")
             if clone_and_patch(rn, "mednafen", EMULATORS["mednafen"], dest, args.mednafen_rev, repo):
-                m_ok, m_exe = build_mednafen(rn, msys2, dest)
+                m_ok, m_exe = build_mednafen(rn, msys2, dest, cfg_flags)
             else:
                 m_ok, m_exe = False, None
             if m_ok:
