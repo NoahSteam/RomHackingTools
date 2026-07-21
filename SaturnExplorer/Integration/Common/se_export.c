@@ -240,10 +240,10 @@ static void SeWr32(unsigned char* p, unsigned int v)
 }
 
 /* Queue a fired tracepoint (v8+). Called from the CPU thread by the glue with the
- * captured SH-2 register file (23 u32, se_sh2_regs order). Drops the newest on
+ * captured SH-2 register file (23 u32, se_sh2_regs order). The frame is stamped here
+ * from the module's counter, so the glue needs no frame access. Drops the newest on
  * overflow. 'regs' may be NULL (queues zeros). */
-void SeExportQueueTraceEvent(unsigned int id, unsigned int cpu, unsigned int frame,
-                             const unsigned int* regs)
+void SeExportQueueTraceEvent(unsigned int id, unsigned int cpu, const unsigned int* regs)
 {
     unsigned int slot, i;
     SE_LOCK();
@@ -256,7 +256,7 @@ void SeExportQueueTraceEvent(unsigned int id, unsigned int cpu, unsigned int fra
     slot = (sEvHead + sEvCount) % SE_EVQ_CAP;
     sEvQ[slot].id = id;
     sEvQ[slot].cpu = cpu ? 1u : 0u;
-    sEvQ[slot].frame = frame;
+    sEvQ[slot].frame = (unsigned int)(sFrameNo & 0xFFFFFFFFu);
     for (i = 0; i < SE_LIVE_EVENT_REGS; ++i)
         sEvQ[slot].regs[i] = regs ? regs[i] : 0u;
     ++sEvCount;

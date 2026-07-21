@@ -238,6 +238,32 @@ under `SE_MEDNAFEN_WIRED`, a stub otherwise), the panel highlights and sends but
 game ignores the input. The mask is idempotent and latched, so re-sending each frame is
 safe.
 
+## Tracepoints (Tier 4, v8+) — TODO(mednafen) confirm
+
+Tracepoints are **non-halting** observation points: when execution reaches an address,
+the glue captures the SH-2 register file and queues an event (the Saturn Explorer client
+formats the message from those registers), then execution continues. The client installs
+the set with a `TRC` command; `se_export.c` forwards it to `SeMdfnSetTracepoints`, and the
+per-instruction check lives in `SeMednafenTraceHook(cpu, PC)` (both already in the glue).
+
+The one thing to wire is the **per-instruction call**. Add, in the SS CPU dispatch that
+runs under `--enable-debugger` (the same `ss/debug.inc` path the execution-breakpoint hook
+uses — `DBG_CPUHook`/`DBG_SetCPUHook`), a call for each executed instruction:
+
+```cpp
+SeMednafenTraceHook(cpu, PC);   // cpu: 0 master / 1 slave; PC: the instruction address
+```
+
+`apply.py` forward-declares `SeMednafenTraceHook` but does **not** auto-inject this call
+(the exact per-instruction site varies and a wrong anchor would break the build), so add
+it by hand once. It only fires under a `--enable-debugger` build (the debugger provides
+the per-instruction hook), exactly like execution breakpoints; without it, tracepoints
+install and round-trip but never fire. This is **not exercised in-repo** — the SE side
+(editor, format, `TRC`, the events block, client formatting) is mock-verified; only this
+one call site needs confirming on a real Mednafen build. Note the per-instruction check is
+a linear scan over the (few) installed tracepoints; that's the debugger-build cost, same
+order as breakpoints.
+
 ## Window-title mark
 
 `apply.py` also appends `(SaturnExplorer Enabled. <SE ver> / Mednafen <MEDNAFEN_VERSION>)`

@@ -99,12 +99,11 @@ void SeExportSetInputHook(void (*set)(unsigned int port, unsigned int buttons));
 void SeExportSetTracepointHook(void (*set)(unsigned int count, const unsigned char* descs));
 
 /* Queue a fired tracepoint event (v8+). The glue calls this from the CPU thread when a
- * tracepoint PC is hit, passing the tracepoint id, cpu (0/1), the current frame, and the
- * captured SH-2 registers (23 u32 in se_sh2_regs order: r[0..15],pc,pr,sr,gbr,vbr,mach,
- * macl; NULL queues zeros). The server drains these into the reply; the client formats
- * the message from the captured registers. */
-void SeExportQueueTraceEvent(unsigned int id, unsigned int cpu, unsigned int frame,
-                             const unsigned int* regs);
+ * tracepoint PC is hit, passing the tracepoint id, cpu (0/1), and the captured SH-2
+ * registers (23 u32 in se_sh2_regs order: r[0..15],pc,pr,sr,gbr,vbr,mach,macl; NULL
+ * queues zeros). The frame is stamped internally. The server drains these into the
+ * reply; the client formats the message from the captured registers. */
+void SeExportQueueTraceEvent(unsigned int id, unsigned int cpu, const unsigned int* regs);
 
 /* Frame gate for pause / single-step. Call once at the top of each emulated
  * frame in Yabause's run loop; returns 1 if the frame should run, 0 if the

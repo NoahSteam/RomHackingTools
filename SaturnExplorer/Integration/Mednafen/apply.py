@@ -145,6 +145,7 @@ FWD_DECLS = (
     "extern \"C\" void SeMednafenFrameHook(void);\n"
     "extern \"C\" int  SeExportGateFrame(void);\n"
     "extern \"C\" void SeExportNotifyStop(int cpu, unsigned int pc);\n"
+    "extern \"C\" void SeMednafenTraceHook(int cpu, unsigned int pc);\n"
 )
 
 # Per-frame snapshot call, injected after the frame's cycle count is finalized.

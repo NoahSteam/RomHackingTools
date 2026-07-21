@@ -202,6 +202,74 @@ static void SeMdfnSetPad(unsigned int port, unsigned int buttons)
 #endif
 }
 
+/* ============================ tracepoints (Tier 4, v8+) =================== */
+/* Tracepoints are non-halting: on a hit the glue captures the SH-2 register file and
+ * queues an event (the client formats the message), then execution CONTINUES. The set
+ * arrives via SeMdfnSetTracepoints (registered with SeExportSetTracepointHook); the
+ * per-instruction check happens in SeMednafenTraceHook, which apply.py wires into the
+ * SS CPU dispatch (see README "Tracepoints"; needs --enable-debugger for a per-insn
+ * hook, exactly like execution breakpoints). */
+#define SE_MDFN_TP_MAX 64
+typedef struct { unsigned int id, cpu, address, flags; } SeMdfnTp;
+static SeMdfnTp   sTps[SE_MDFN_TP_MAX];
+static unsigned int sTpCount;
+
+static unsigned int SeRd32LE(const unsigned char* p)
+{
+    return (unsigned int)p[0] | ((unsigned int)p[1] << 8) |
+           ((unsigned int)p[2] << 16) | ((unsigned int)p[3] << 24);
+}
+
+/* SeExportSetTracepointHook target: copy the installed descriptors so the per-insn
+ * hook can match PCs. Cheap linear set (tracepoints are few). */
+static void SeMdfnSetTracepoints(unsigned int count, const unsigned char* descs)
+{
+    unsigned int i;
+    if (count > SE_MDFN_TP_MAX) count = SE_MDFN_TP_MAX;
+    for (i = 0; i < count; ++i)
+    {
+        const unsigned char* d = descs + i * SE_LIVE_TRACE_DESC_LEN;
+        sTps[i].id      = SeRd32LE(d);
+        sTps[i].cpu     = SeRd32LE(d + 4);
+        sTps[i].address = SeRd32LE(d + 8);
+        sTps[i].flags   = SeRd32LE(d + 12);
+    }
+    sTpCount = count;
+}
+
+/* Per-instruction hook (apply.py injects a call: SeMednafenTraceHook(cpu, PC) from the
+ * SS CPU dispatch / DBG_CPUHook). If PC matches an enabled tracepoint on this CPU,
+ * capture the registers and queue an event — no halt. SsDbgSh2Regs returns
+ * R0..R15,SR,GBR,VBR,MACH,MACL,PR,PC; reorder into se_sh2_regs order
+ * (r[0..15],pc,pr,sr,gbr,vbr,mach,macl) which is what the event carries. */
+void SeMednafenTraceHook(int cpu, unsigned int pc)
+{
+#if defined(SE_MEDNAFEN_WIRED)
+    unsigned int i;
+    for (i = 0; i < sTpCount; ++i)
+    {
+        if ((sTps[i].flags & SE_LIVE_TP_ENABLED) && (int)sTps[i].cpu == cpu &&
+            sTps[i].address == pc)
+        {
+            unsigned int raw[23], regs[23];
+            int k;
+            SsDbgSh2Regs(cpu, raw);
+            for (k = 0; k < 16; ++k) regs[k] = raw[k];   /* r0..r15 */
+            regs[16] = raw[22];  /* pc   */
+            regs[17] = raw[21];  /* pr   */
+            regs[18] = raw[16];  /* sr   */
+            regs[19] = raw[17];  /* gbr  */
+            regs[20] = raw[18];  /* vbr  */
+            regs[21] = raw[19];  /* mach */
+            regs[22] = raw[20];  /* macl */
+            SeExportQueueTraceEvent(sTps[i].id, (unsigned int)cpu, regs);
+        }
+    }
+#else
+    (void)cpu; (void)pc;
+#endif
+}
+
 /* ============================ lifecycle wiring ============================ */
 /* The patcher (apply.py) injects exactly ONE call — SeMednafenFrameHook() — at the
  * end-of-frame anchor in ss.cpp's Emulate() (after `espec->MasterCycles = ...`). That
@@ -222,14 +290,18 @@ void SeMednafenFrameHook(void)
         SeExportSetMemWriteHook(SeMdfnWriteByte);
         SeExportSetBreakpointHooks(SeMdfnAddExecBp, SeMdfnClearBps);
         SeExportSetInputHook(SeMdfnSetPad);   /* controller panel -> emulated pad (v7+) */
+        SeExportSetTracepointHook(SeMdfnSetTracepoints);  /* tracepoints (v8+) */
     }
     SeMednafenSnapshot();
 }
 #else
-/* Stub build: the Tier-3 helpers are referenced only by SeMednafenFrameHook above,
- * which isn't compiled here — keep the compiler quiet without them. */
+/* Stub build: these helpers are referenced only by SeMednafenFrameHook / the injected
+ * per-insn call, neither compiled here — keep the compiler quiet without them.
+ * SeMednafenTraceHook is public (apply.py injects a call to it) so it's compiled either
+ * way; SeMdfnSetTracepoints/SeRd32LE are only used under SE_MEDNAFEN_WIRED. */
 void SeMednafenSuppressUnusedWarnings(void)
 {
     (void)SeMdfnAddExecBp; (void)SeMdfnClearBps; (void)SeMdfnWriteByte; (void)SeMdfnSetPad;
+    (void)SeMdfnSetTracepoints; (void)SeRd32LE;
 }
 #endif
