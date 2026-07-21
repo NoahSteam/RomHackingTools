@@ -15,6 +15,7 @@ install.bat                       :: Saturn Explorer + Mednafen (default)
 install.bat --with-yabause        :: also build Yabause (Qt)
 install.bat --dry-run             :: show exactly what it would do; change nothing
 install.bat --yes                 :: don't prompt before each install/build
+update.bat                        :: re-run after editing Integration\; rebuilds only what changed
 ```
 
 ## What it builds
@@ -29,6 +30,42 @@ install.bat --with-yabause --yabause-variant=kronos --no-mednafen
 ```
 `--yabause-variant` is one of `yabause` (default), `sanshiro`, `kronos`. The window-title
 mark auto-detects the fork name (see `Yabause/README.md`).
+
+## Iterative re-install (rebuild only what changed)
+
+After the first install, if you edit something under `Integration/` — `se_export.c`, the
+Mednafen glue, `SeLiveProtocol.h`, `apply.py` — you don't need a full reinstall. Use
+`update.bat` (or `install.bat --incremental`) to rebuild **only what changed**:
+
+```bat
+update.bat                        :: rebuild only what changed after an Integration\ edit
+update.bat --mednafen-saturn-only :: ...and (re)configure Saturn-only
+update.bat --with-yabause         :: also refresh the Yabause build
+update.bat --dry-run              :: show the plan; change nothing
+```
+
+`update.bat` is exactly `install.py --incremental`, so every flag above still passes
+through. Incremental mode:
+
+- **Keeps the existing emulator checkout** — no `git clone` / `fetch` / `checkout` (that's
+  network, and could reset your local edits). It just re-runs the patcher.
+- **Skips the prerequisite package installs** (winget / MSYS2 `pacman -Syu`) — the slow,
+  network-bound steps — assuming the toolchain is already there from the first run.
+- **Skips `./configure`** when the tree is already configured (`config.status` present),
+  going straight to `make` so only the objects whose sources changed are recompiled.
+- Re-runs `apply.py`, which is **idempotent and content-aware**: a copied file
+  (`se_export.c`/`.h`, `SeLiveProtocol.h`, the glue) is rewritten *only if its bytes
+  changed*, so an unchanged source keeps its mtime and `make` skips it. Edit one file →
+  exactly one object recompiles + a relink; edit nothing → `make` finds nothing to do.
+
+Saturn Explorer itself (CMake) is already incremental every run — `cmake --build` only
+rebuilds changed objects.
+
+**When to do a full `install.bat` instead:** to move the emulator to a new pinned
+revision (incremental deliberately doesn't touch git), or after a `--revert`. Changing
+`--mednafen-saturn-only` on/off is handled automatically — passing it with `--incremental`
+forces a reconfigure so the new `--disable-*` set takes effect. You never need
+`make distclean` just to re-run.
 
 ## Prerequisites (auto-detected, assisted-installed)
 The script checks for these and offers to `winget install` any that are missing:
@@ -100,6 +137,8 @@ against fresh upstream tells you if an anchor drifted (see `DISTRIBUTION.md`,
 --mednafen-repo URL    explicit Mednafen git URL (overrides fork/upstream)
 --yabause-repo  URL    explicit Yabause-fork git URL (overrides fork/upstream)
 --se-only              build only Saturn Explorer
+--incremental          iterative rebuild: only what changed (alias: --update; see below)
+--mednafen-saturn-only build only the Saturn core (--disable-* every other console; faster)
 --msys2 DIR            use an existing MSYS2 install (e.g. C:\msys64)
 --qt-path DIR          Qt dir for the Yabause build (CMAKE_PREFIX_PATH)
 --generator G          CMake generator (default "Visual Studio 17 2022"; "...16 2019")

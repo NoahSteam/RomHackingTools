@@ -38,7 +38,6 @@ root; the script also accepts the src/ss dir directly.
 
 import os
 import re
-import shutil
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -290,6 +289,24 @@ def process_title(root, do_write):
     return notes
 
 
+def write_if_changed(destpath, data):
+    """Write `data` (bytes) to destpath only when it differs from what's already there,
+    so re-copying an UNCHANGED source doesn't bump the file's mtime and force `make` to
+    recompile it. This is what makes a re-run incremental: only Common/glue files whose
+    content actually changed get touched. Returns 'copy' | 'update' | 'unchanged'."""
+    existed = os.path.isfile(destpath)
+    if existed:
+        try:
+            with open(destpath, "rb") as f:
+                if f.read() == data:
+                    return "unchanged"
+        except OSError:
+            pass
+    with open(destpath, "wb") as f:
+        f.write(data)
+    return "update" if existed else "copy"
+
+
 def copy_sources(src_dir, do_write):
     notes = []
     for name in COMMON_FILES:
@@ -297,17 +314,17 @@ def copy_sources(src_dir, do_write):
         if not os.path.isfile(srcpath):
             notes.append(f"  MISSING SOURCE {srcpath}")
             continue
-        if do_write:
-            shutil.copyfile(srcpath, os.path.join(src_dir, name))
-        notes.append(f"  copy          {name}")
+        with open(srcpath, "rb") as f:
+            data = f.read()
+        status = write_if_changed(os.path.join(src_dir, name), data) if do_write else "copy"
+        notes.append(f"  {status:<11} {name}")
     # Glue: copy with SE_MEDNAFEN_WIRED defined so the snapshot path compiles.
     glue_src = os.path.join(HERE, GLUE_FILE)
     if os.path.isfile(glue_src):
-        if do_write:
-            body = open(glue_src, encoding="utf-8", errors="surrogateescape").read()
-            open(os.path.join(src_dir, GLUE_FILE), "w", encoding="utf-8",
-                 errors="surrogateescape").write("#define SE_MEDNAFEN_WIRED 1\n" + body)
-        notes.append(f"  copy          {GLUE_FILE} (+SE_MEDNAFEN_WIRED)")
+        with open(glue_src, "rb") as f:
+            data = b"#define SE_MEDNAFEN_WIRED 1\n" + f.read()
+        status = write_if_changed(os.path.join(src_dir, GLUE_FILE), data) if do_write else "copy"
+        notes.append(f"  {status:<11} {GLUE_FILE} (+SE_MEDNAFEN_WIRED)")
     else:
         notes.append(f"  MISSING SOURCE {glue_src}")
     return notes

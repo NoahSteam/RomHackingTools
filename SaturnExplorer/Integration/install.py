@@ -384,25 +384,34 @@ def build_saturn_explorer(rn, generator):
     return True, exe
 
 
-def clone_and_patch(rn, key, spec, dest, rev_override, repo):
+def clone_and_patch(rn, key, spec, dest, rev_override, repo, skip_git=False):
     rev = rev_override or spec["rev"]
-    if not os.path.isdir(os.path.join(dest, ".git")):
-        # Clone with autocrlf forced off: on a Windows box with a global
-        # core.autocrlf=true, git would rewrite LF->CRLF in the checkout, which drifts
-        # the source and can break apply.py's exact-anchor patching + the MSYS2 build.
-        # (A fork with a committed `.gitattributes: * -text` is already protected; this
-        # covers forks/upstreams that lack it.)
-        if rn.run(["git", "-c", "core.autocrlf=false", "clone", repo, dest]) != 0:
+    have_checkout = os.path.isdir(os.path.join(dest, ".git"))
+    # Incremental re-install with the tree already present: keep the existing checkout
+    # untouched (no clone / fetch / checkout — that's network + could reset local edits)
+    # and just re-run the patcher, which is idempotent and content-aware, so only the
+    # sources that actually changed get their mtime bumped. If the tree isn't there yet,
+    # fall through to a normal clone so --incremental still works on a first run.
+    if skip_git and have_checkout:
+        print("  (incremental: keeping the existing checkout; re-applying the patch)")
+    else:
+        if not have_checkout:
+            # Clone with autocrlf forced off: on a Windows box with a global
+            # core.autocrlf=true, git would rewrite LF->CRLF in the checkout, which drifts
+            # the source and can break apply.py's exact-anchor patching + the MSYS2 build.
+            # (A fork with a committed `.gitattributes: * -text` is already protected; this
+            # covers forks/upstreams that lack it.)
+            if rn.run(["git", "-c", "core.autocrlf=false", "clone", repo, dest]) != 0:
+                return False
+        if rn.run(["git", "fetch", "--all", "--tags"], cwd=dest) != 0:
             return False
-    if rn.run(["git", "fetch", "--all", "--tags"], cwd=dest) != 0:
-        return False
-    if rn.run(["git", "checkout", rev], cwd=dest) != 0:
-        return False
+        if rn.run(["git", "checkout", rev], cwd=dest) != 0:
+            return False
     patcher = os.path.join(SE_ROOT, spec["patch_subdir"])
     return rn.run([sys.executable, patcher, dest, *spec["patch_args"]]) == 0
 
 
-def build_mednafen(rn, msys2, dest, configure_flags=""):
+def build_mednafen(rn, msys2, dest, configure_flags="", reconfigure=True):
     bash = os.path.join(msys2, "usr", "bin", "bash.exe")
     msdir = win_to_msys(dest)
     ncpu = os.cpu_count() or 4
@@ -422,17 +431,26 @@ def build_mednafen(rn, msys2, dest, configure_flags=""):
     relink = ("rm -rf include/mednafen; "
               "MSYS=winsymlinks:nativestrict ln -s ../src include/mednafen 2>/dev/null || "
               "ln -s ../src include/mednafen")
-    # ./configure re-runs every invocation (only the autotools bootstrap is guarded), so a
-    # changed flag set is picked up without a manual `make distclean` — the Makefiles
-    # regenerate and `make` rebuilds only what changed. (Switching an already-built tree to
-    # saturn-only leaves the other cores' stale .o on disk; that's wasted disk, not compile
-    # time, and `make distclean` reclaims it if wanted.)
+    # ./configure normally re-runs every invocation (only the autotools bootstrap is
+    # guarded), so a changed flag set is picked up without a manual `make distclean` — the
+    # Makefiles regenerate and `make` rebuilds only what changed. (Switching an already-built
+    # tree to saturn-only leaves the other cores' stale .o on disk; that's wasted disk, not
+    # compile time, and `make distclean` reclaims it if wanted.)
     configure = ("./configure --enable-debugger" +
                  (f" {configure_flags}" if configure_flags else ""))
+    bootstrap = "([ -x ./configure ] || (autoreconf -i || ./autogen.sh))"
+    if reconfigure:
+        cfg = f"{bootstrap} && {configure} && "
+    else:
+        # Incremental: only bootstrap + configure when the tree isn't configured yet (no
+        # config.status); otherwise skip straight to `make` so only the objects whose
+        # sources changed are recompiled and relinked. Combined with apply.py's
+        # content-aware copy, an unchanged Integration/ folder means `make` finds nothing
+        # to do; a single edited file rebuilds just that object.
+        cfg = f"([ -f config.status ] || {{ {bootstrap} && {configure}; }}) && "
     script = (f"cd '{msdir}' && "
               f"([ -L include/mednafen ] || {{ {relink}; }}) && "
-              f"([ -x ./configure ] || (autoreconf -i || ./autogen.sh)) && "
-              f"{configure} && make -j{ncpu}")
+              f"{cfg}make -j{ncpu}")
     # MSYSTEM must be in the ENVIRONMENT before bash's login profile (-l) runs, so the
     # MINGW64 setup is applied — putting /mingw64/bin (gcc) on PATH and setting
     # PKG_CONFIG_PATH so ./configure finds SDL2/zlib. Setting it as the first command
@@ -526,6 +544,11 @@ def main():
     ap.add_argument("--mednafen-repo", help="explicit Mednafen git URL (overrides fork/upstream)")
     ap.add_argument("--yabause-repo", help="explicit Yabause-fork git URL (overrides fork/upstream)")
     ap.add_argument("--se-only", action="store_true", help="build only Saturn Explorer")
+    ap.add_argument("--incremental", "--update", dest="incremental", action="store_true",
+                    help="iterative rebuild: keep the existing emulator checkout, re-apply "
+                         "the idempotent content-aware patch, and rebuild only what changed "
+                         "(skips prerequisite package installs and skips ./configure when the "
+                         "tree is already configured). Use after editing the Integration/ folder.")
     ap.add_argument("--msys2", help="path to an existing MSYS2 install (e.g. C:\\msys64)")
     ap.add_argument("--qt-path", help="Qt install dir for the Yabause build (CMAKE_PREFIX_PATH)")
     ap.add_argument("--generator", default="Visual Studio 17 2022",
@@ -548,7 +571,10 @@ def main():
         print("(dry-run: nothing will be installed, cloned, or built)\n")
 
     # --- prerequisite check + assisted install -----------------------------
-    print("Prerequisites:")
+    # Incremental re-installs assume the toolchain is already in place: we still resolve
+    # the tool PATHs the build needs, but skip the winget/pacman package installs (the
+    # slow, network-bound steps) so a re-run after an Integration/ edit is fast.
+    print("Prerequisites:" + (" (incremental — skipping package installs)" if args.incremental else ""))
     ok = True
     ok &= ensure_tool(rn, which("git"), "git", WINGET["git"])
     ok &= ensure_cmake(rn)   # resolves an off-PATH CMake too; sets the CMAKE global
@@ -560,7 +586,7 @@ def main():
         msys2 = detect_msys2(args.msys2)
         if ensure_tool(rn, msys2, "MSYS2 (for Mednafen)", WINGET["msys2"]):
             bash = os.path.join(msys2, "usr", "bin", "bash.exe") if msys2 else None
-            if bash:
+            if bash and not args.incremental:
                 print("  Installing MSYS2 build packages (SDL2, zlib, FLAC, gcc, autotools)...")
                 rn.run([bash, "-lc",
                         f"pacman -Syu --noconfirm && pacman -S --needed --noconfirm {MSYS2_PACKAGES}"])
@@ -593,8 +619,13 @@ def main():
             if args.mednafen_saturn_only:
                 cfg_flags = " ".join(f"--disable-{c}" for c in MEDNAFEN_OTHER_CORES)
                 print("  (Saturn-only: disabling every other console core for a faster build)")
-            if clone_and_patch(rn, "mednafen", EMULATORS["mednafen"], dest, args.mednafen_rev, repo):
-                m_ok, m_exe = build_mednafen(rn, msys2, dest, cfg_flags)
+            # Incremental keeps the checkout and skips ./configure — but if the caller
+            # also passed --mednafen-saturn-only, force a reconfigure so the new
+            # --disable-* flags actually take effect (they only matter at configure time).
+            reconfigure = (not args.incremental) or bool(cfg_flags)
+            if clone_and_patch(rn, "mednafen", EMULATORS["mednafen"], dest,
+                               args.mednafen_rev, repo, skip_git=args.incremental):
+                m_ok, m_exe = build_mednafen(rn, msys2, dest, cfg_flags, reconfigure=reconfigure)
             else:
                 m_ok, m_exe = False, None
             if m_ok:
@@ -613,7 +644,10 @@ def main():
             results.append((f"{key} (skipped)", False, None))
         else:
             print(f"  source: {repo}")
-            if clone_and_patch(rn, key, spec, dest, args.yabause_rev, repo):
+            # CMake is already incremental (cmake --build only rebuilds changed objects);
+            # incremental just keeps the checkout and re-applies the content-aware patch.
+            if clone_and_patch(rn, key, spec, dest, args.yabause_rev, repo,
+                               skip_git=args.incremental):
                 y_ok, y_exe = build_yabause(rn, dest, args.generator, args.qt_path)
             else:
                 y_ok, y_exe = False, None
