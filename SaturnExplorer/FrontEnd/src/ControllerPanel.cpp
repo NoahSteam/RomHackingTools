@@ -28,24 +28,24 @@ constexpr float kAspect = 0.46f;   // drawing box height / width
 // six face buttons on the right in the Saturn arc (X Y Z over A B C), L/R along the top.
 const Button kButtons[] = {
     // D-pad (bit, label, cx, cy, hx, hy, round, key)
-    // D-pad cross (left), four arms meeting at the hub near (0.19, 0.53).
-    {SE_PAD_UP,    "",  0.190f, 0.420f, 0.046f, 0.078f, false, ImGuiKey_UpArrow},
-    {SE_PAD_DOWN,  "",  0.190f, 0.640f, 0.046f, 0.078f, false, ImGuiKey_DownArrow},
-    {SE_PAD_LEFT,  "",  0.100f, 0.530f, 0.078f, 0.046f, false, ImGuiKey_LeftArrow},
-    {SE_PAD_RIGHT, "",  0.280f, 0.530f, 0.078f, 0.046f, false, ImGuiKey_RightArrow},
+    // D-pad cross (left), four arms meeting at the hub near (0.19, 0.42).
+    {SE_PAD_UP,    "",  0.190f, 0.310f, 0.046f, 0.076f, false, ImGuiKey_UpArrow},
+    {SE_PAD_DOWN,  "",  0.190f, 0.520f, 0.046f, 0.076f, false, ImGuiKey_DownArrow},
+    {SE_PAD_LEFT,  "",  0.102f, 0.415f, 0.076f, 0.046f, false, ImGuiKey_LeftArrow},
+    {SE_PAD_RIGHT, "",  0.278f, 0.415f, 0.076f, 0.046f, false, ImGuiKey_RightArrow},
     // Six face buttons in the Saturn arc: bottom row A B C, top row X Y Z, sweeping
-    // up to the right. dish centered ~(0.72, 0.51).
-    {SE_PAD_X, "X", 0.615f, 0.475f, 0.047f, 0.047f, true, ImGuiKey_A},
-    {SE_PAD_Y, "Y", 0.710f, 0.425f, 0.047f, 0.047f, true, ImGuiKey_S},
-    {SE_PAD_Z, "Z", 0.805f, 0.390f, 0.047f, 0.047f, true, ImGuiKey_D},
-    {SE_PAD_A, "A", 0.640f, 0.640f, 0.047f, 0.047f, true, ImGuiKey_Z},
-    {SE_PAD_B, "B", 0.735f, 0.590f, 0.047f, 0.047f, true, ImGuiKey_X},
-    {SE_PAD_C, "C", 0.830f, 0.555f, 0.047f, 0.047f, true, ImGuiKey_C},
-    // START (blue oval) centered, slightly low.
-    {SE_PAD_START, "START", 0.460f, 0.700f, 0.058f, 0.030f, false, ImGuiKey_Enter},
-    // Shoulder buttons on the swept-up wings at the top corners.
-    {SE_PAD_L, "L", 0.150f, 0.112f, 0.088f, 0.030f, false, ImGuiKey_Q},
-    {SE_PAD_R, "R", 0.760f, 0.112f, 0.088f, 0.030f, false, ImGuiKey_E},
+    // up to the right. dish centered ~(0.72, 0.41).
+    {SE_PAD_X, "X", 0.615f, 0.370f, 0.047f, 0.047f, true, ImGuiKey_A},
+    {SE_PAD_Y, "Y", 0.710f, 0.320f, 0.047f, 0.047f, true, ImGuiKey_S},
+    {SE_PAD_Z, "Z", 0.805f, 0.285f, 0.047f, 0.047f, true, ImGuiKey_D},
+    {SE_PAD_A, "A", 0.640f, 0.535f, 0.047f, 0.047f, true, ImGuiKey_Z},
+    {SE_PAD_B, "B", 0.735f, 0.485f, 0.047f, 0.047f, true, ImGuiKey_X},
+    {SE_PAD_C, "C", 0.830f, 0.450f, 0.047f, 0.047f, true, ImGuiKey_C},
+    // START (blue oval) centered, between the clusters and above the grips.
+    {SE_PAD_START, "START", 0.460f, 0.560f, 0.058f, 0.030f, false, ImGuiKey_Enter},
+    // Shoulder buttons along the (flatter) top edge.
+    {SE_PAD_L, "L", 0.150f, 0.095f, 0.088f, 0.030f, false, ImGuiKey_Q},
+    {SE_PAD_R, "R", 0.760f, 0.095f, 0.088f, 0.030f, false, ImGuiKey_E},
 };
 
 ImU32 Col(float r, float g, float b, float a = 1.0f)
@@ -90,21 +90,22 @@ unsigned int ControllerPanel::Draw(bool liveConnected)
     // A circle radius given as a fraction of the pad WIDTH (so it's round on screen).
     auto rad = [&](float f) { return f * width; };
 
-    // ---- Shell: a light-grey Saturn "batwing" — a rounded body with two shoulder
-    // wings swept up at the top corners, plus a soft top bevel and bottom shadow. ----
+    // ---- Shell: a light-grey Saturn pad — a rounded body with the flatter shoulder
+    // edge (L/R) along the TOP and two rounded grip lobes at the BOTTOM corners, plus
+    // a soft top bevel and bottom shading for depth. ----
     const ImU32 shell   = Col(0.72f, 0.72f, 0.74f);
     const ImU32 shellLo = Col(0.60f, 0.60f, 0.62f);
-    dl->AddCircleFilled(px(0.16f, 0.30f), rad(0.145f), shell, 40);   // left wing
-    dl->AddCircleFilled(px(0.84f, 0.30f), rad(0.145f), shell, 40);   // right wing
-    dl->AddRectFilled(px(0.06f, 0.20f), px(0.94f, 0.95f), shell, height * 0.28f);
-    dl->AddRectFilled(px(0.06f, 0.66f), px(0.94f, 0.95f), shellLo, height * 0.28f,
+    dl->AddCircleFilled(px(0.17f, 0.70f), rad(0.125f), shell, 40);   // bottom-left grip
+    dl->AddCircleFilled(px(0.83f, 0.70f), rad(0.125f), shell, 40);   // bottom-right grip
+    dl->AddRectFilled(px(0.05f, 0.06f), px(0.95f, 0.78f), shell, height * 0.28f);
+    dl->AddRectFilled(px(0.05f, 0.56f), px(0.95f, 0.78f), shellLo, height * 0.28f,
                       ImDrawFlags_RoundCornersBottom);           // subtle bottom shading
-    dl->AddRectFilled(px(0.09f, 0.24f), px(0.91f, 0.40f), Col(1.0f, 1.0f, 1.0f, 0.06f),
-                      height * 0.20f, ImDrawFlags_RoundCornersTop); // top bevel highlight
+    dl->AddRectFilled(px(0.08f, 0.10f), px(0.92f, 0.26f), Col(1.0f, 1.0f, 1.0f, 0.06f),
+                      height * 0.18f, ImDrawFlags_RoundCornersTop); // top bevel highlight
 
     // ---- Recessed dishes behind the D-pad and the face buttons (depth). ----
-    dl->AddCircleFilled(px(0.19f, 0.53f), rad(0.135f), Col(0.10f, 0.10f, 0.11f, 0.55f), 40);
-    dl->AddCircleFilled(px(0.72f, 0.515f), rad(0.165f), Col(0.10f, 0.10f, 0.11f, 0.45f), 40);
+    dl->AddCircleFilled(px(0.19f, 0.415f), rad(0.135f), Col(0.10f, 0.10f, 0.11f, 0.55f), 40);
+    dl->AddCircleFilled(px(0.72f, 0.405f), rad(0.165f), Col(0.10f, 0.10f, 0.11f, 0.45f), 40);
 
     unsigned int mask = 0;
     unsigned int newLatch = mLatched;
