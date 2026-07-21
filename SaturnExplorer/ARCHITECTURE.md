@@ -536,3 +536,9 @@ the other.
 The core returns decoded `se_image` (RGBA) and geometry; the platform uploads to
 the GPU and ImGui draws it. No graphics API type ever crosses Seam B — this is
 what lets an emulator embed the core under its own renderer.
+
+## Proposals (not built)
+
+- **User-scriptable panels (Python):** [`SCRIPTING.md`](SCRIPTING.md) — a design
+  for letting users write Python scripts that appear as panels, using the Seam B
+  C ABI as a ready-made data API. Not started; captured for later.
