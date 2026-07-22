@@ -243,6 +243,51 @@ bool WindowsPlatform::OpenFileDialog(std::string& outPath)
     return true;
 }
 
+bool WindowsPlatform::OpenFileDialogFiltered(std::string& outPath, const char* filterLabel,
+                                             const char* extCsv)
+{
+    // Build a double-NUL-terminated GetOpenFileName filter: "<label>\0*.a;*.b\0All Files\0*.*\0".
+    // extCsv is "cue,chd,iso"; turn it into "*.cue;*.chd;*.iso".
+    std::string pats;
+    for (const char* p = extCsv ? extCsv : ""; *p; )
+    {
+        const char* comma = std::strchr(p, ',');
+        const size_t len = comma ? static_cast<size_t>(comma - p) : std::strlen(p);
+        if (len)
+        {
+            if (!pats.empty()) pats += ';';
+            pats += "*.";
+            pats.append(p, len);
+        }
+        p += len;
+        if (comma) ++p;
+    }
+    std::string filter = (filterLabel ? filterLabel : "Files");
+    filter.push_back('\0');
+    filter += pats;
+    filter.push_back('\0');
+    filter += "All Files";
+    filter.push_back('\0');
+    filter += "*.*";
+    filter.push_back('\0');
+    filter.push_back('\0');
+
+    char file[MAX_PATH] = {};
+    OPENFILENAMEA ofn = {};
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = mHwnd;
+    ofn.lpstrFilter = filter.c_str();
+    ofn.lpstrFile = file;
+    ofn.nMaxFile = MAX_PATH;
+    ofn.Flags = OFN_FILEMUSTEXIST | OFN_HIDEREADONLY;
+    if (!::GetOpenFileNameA(&ofn))
+    {
+        return false;
+    }
+    outPath = file;
+    return true;
+}
+
 bool WindowsPlatform::SaveFile(const char* suggestedName, const void* data, size_t size)
 {
     char file[MAX_PATH] = {};

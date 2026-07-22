@@ -62,6 +62,18 @@ public:
     // Native "choose folder" dialog. Returns false if cancelled or unsupported.
     virtual bool PickDirectory(std::string& outPath) { (void)outPath; return false; }
 
+    // Open-file dialog filtered to a file type (e.g. Saturn disc images for the ROM
+    // picker). `filterLabel` names the group ("Saturn discs"); `extCsv` is a
+    // comma-separated extension list without dots ("cue,chd,iso"). The base falls back
+    // to the unfiltered OpenFileDialog so a platform that can't filter still works.
+    virtual bool OpenFileDialogFiltered(std::string& outPath, const char* filterLabel,
+                                        const char* extCsv)
+    {
+        (void)filterLabel;
+        (void)extCsv;
+        return OpenFileDialog(outPath);
+    }
+
     // Open the OS file manager with `path` selected/highlighted (Explorer on
     // Windows, Finder on macOS, the file manager on Linux). Returns false if
     // unsupported or the path doesn't exist.

@@ -267,7 +267,7 @@ private:
     // Edit buffers for the Launch Settings dialog (ImGui InputText needs char storage;
     // no imgui_stdlib here). Parallel to mLauncher.Emulators(); copied in on open,
     // written back on Save.
-    struct LaunchEdit { char exe[512]; char args[256]; char workDir[512]; };
+    struct LaunchEdit { char exe[512]; char args[256]; char workDir[512]; char bios[512]; };
     std::vector<LaunchEdit> mLaunchEdits;
     bool             mLaunchSetDataDirEdit = true;
 

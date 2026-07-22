@@ -4,6 +4,7 @@
 
 #include <cstdio>
 #include <cstdlib>   // system() for RevealPath (native desktop)
+#include <cstring>   // strchr/strlen for the file-dialog filter (native desktop)
 
 #include <SDL.h>
 
@@ -297,6 +298,49 @@ bool WebPlatform::PickDirectory(std::string& outPath)
             outPath = line;
             return true;
         }
+    }
+    return false;
+}
+
+bool WebPlatform::OpenFileDialogFiltered(std::string& outPath, const char* filterLabel,
+                                         const char* extCsv)
+{
+    // Build zenity/kdialog file filters from the csv extension list. zenity wants
+    // "--file-filter=Label | *.cue *.chd"; kdialog wants "*.cue *.chd|Label".
+    std::string globs;
+    for (const char* p = extCsv ? extCsv : ""; *p; )
+    {
+        const char* comma = std::strchr(p, ',');
+        const size_t len = comma ? static_cast<size_t>(comma - p) : std::strlen(p);
+        if (len)
+        {
+            if (!globs.empty()) globs += ' ';
+            globs += "*.";
+            globs.append(p, len);
+        }
+        p += len;
+        if (comma) ++p;
+    }
+    const std::string label = filterLabel ? filterLabel : "Files";
+    const std::string zenF  = globs.empty() ? std::string()
+                            : " --file-filter=" + ShellQuote(label + " | " + globs) +
+                              " --file-filter=" + ShellQuote("All files | *");
+    const std::string kdeF  = globs.empty() ? std::string()
+                            : " " + ShellQuote(globs + "|" + label);
+    const std::string cmds[] = {
+        "zenity --file-selection" + zenF + " 2>/dev/null",
+        "kdialog --getopenfilename ." + kdeF + " 2>/dev/null",
+    };
+    for (const std::string& cmd : cmds)
+    {
+        FILE* pp = ::popen(cmd.c_str(), "r");
+        if (!pp) continue;
+        std::string line;
+        char buf[1024];
+        while (std::fgets(buf, sizeof(buf), pp)) line += buf;
+        const int rc = ::pclose(pp);
+        while (!line.empty() && (line.back() == '\n' || line.back() == '\r')) line.pop_back();
+        if (rc == 0 && !line.empty()) { outPath = line; return true; }
     }
     return false;
 }

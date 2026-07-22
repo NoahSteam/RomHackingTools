@@ -30,6 +30,8 @@ public:
     bool OpenFileDialog(std::string& outPath) override;
     bool SaveFile(const char* suggestedName, const void* data, size_t size) override;
     bool PickDirectory(std::string& outPath) override;
+    bool OpenFileDialogFiltered(std::string& outPath, const char* filterLabel,
+                                const char* extCsv) override;
     bool RevealPath(const char* path) override;
     bool LaunchProcess(const char* path, const char* args, const char* workingDir) override;
 

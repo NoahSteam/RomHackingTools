@@ -30,12 +30,16 @@ struct EmulatorSpec
     std::string exePath;       // full path to the executable ("" if not installed yet)
     std::string argsTemplate;  // e.g. "\"{rom}\"" (Mednafen) or "-a -i \"{rom}\"" (Yabause)
     std::string workDir;       // launch working directory ("" = the exe's own folder)
+    std::string biosPath;      // optional Saturn BIOS image; substituted for {bios} in args
 };
 
-// Substitute every {rom} token in `argsTemplate` with `rom`. If `rom` is empty the
-// whole template collapses to "" — launch bare (e.g. boot to the emulator's own menu),
-// never passing a stray empty "" or dangling -i.
-std::string BuildLaunchArgs(const std::string& argsTemplate, const std::string& rom);
+// Substitute the {rom} and {bios} tokens in `argsTemplate`. If `rom` is empty the whole
+// template collapses to "" — launch bare (e.g. boot to the emulator's own menu), never
+// passing a stray empty "" or dangling flag. Otherwise {rom}->rom and {bios}->bios (an
+// empty bios substitutes to nothing); runs of whitespace left behind are collapsed so an
+// unused {bios} doesn't leave a double space.
+std::string BuildLaunchArgs(const std::string& argsTemplate, const std::string& rom,
+                            const std::string& bios = std::string());
 
 // Basename of a path (component after the last '/' or '\\'), for display.
 std::string PathBasename(const std::string& path);

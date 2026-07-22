@@ -3121,6 +3121,9 @@ void App::DrawDataSearchResults(IPlatform& platform)
     ImGui::End();
 }
 
+// Disc-image extensions for the ROM Browse filter (Saturn discs + common images).
+static const char* kRomExts = "cue,chd,iso,ccd,mds,mdf,img,bin,gdi,nrg,cdi,m3u";
+
 // "Launch Session" — the nested toolbar menu. One "Launch" button + a down-arrow open
 // a popup that shows the current emulator + game, lets the user change either (recent
 // ROMs + Browse), and opens Launch Settings. The primary item launches the current
@@ -3210,7 +3213,7 @@ void App::DrawLaunchMenu(IPlatform& platform)
             if (ImGui::MenuItem("Browse..."))
             {
                 std::string p;
-                if (platform.OpenFileDialog(p))
+                if (platform.OpenFileDialogFiltered(p, "Saturn discs", kRomExts))
                 {
                     mLauncher.SetRom(p);
                     mSettingsDirty = true;
@@ -3261,6 +3264,7 @@ void App::DrawLaunchSettingsModal(IPlatform& platform)
             std::snprintf(mLaunchEdits[i].exe, sizeof(mLaunchEdits[i].exe), "%s", emus[i].exePath.c_str());
             std::snprintf(mLaunchEdits[i].args, sizeof(mLaunchEdits[i].args), "%s", emus[i].argsTemplate.c_str());
             std::snprintf(mLaunchEdits[i].workDir, sizeof(mLaunchEdits[i].workDir), "%s", emus[i].workDir.c_str());
+            std::snprintf(mLaunchEdits[i].bios, sizeof(mLaunchEdits[i].bios), "%s", emus[i].biosPath.c_str());
         }
         mLaunchSetDataDirEdit = mLauncher.SetDataDirOnLaunch();
         mLaunchSettingsInit = false;
@@ -3287,15 +3291,30 @@ void App::DrawLaunchSettingsModal(IPlatform& platform)
         }
 
         ImGui::SetNextItemWidth(460.0f);
+        ImGui::InputText("BIOS", mLaunchEdits[i].bios, sizeof(mLaunchEdits[i].bios));
+        ImGui::SameLine();
+        if (ImGui::Button("Browse...##bios"))
+        {
+            std::string p;
+            if (platform.OpenFileDialogFiltered(p, "BIOS image", "bin,rom"))
+                std::snprintf(mLaunchEdits[i].bios, sizeof(mLaunchEdits[i].bios), "%s", p.c_str());
+        }
+        ImGui::SetItemTooltip("Optional Saturn BIOS. Reference it in Arguments with {bios} (e.g.\n"
+                              "-b \"{bios}\"). Mednafen usually takes its BIOS from its own config\n"
+                              "(ss.bios_*), so leave {bios} out of the Mednafen arguments.");
+
+        ImGui::SetNextItemWidth(460.0f);
         ImGui::InputText("Arguments", mLaunchEdits[i].args, sizeof(mLaunchEdits[i].args));
-        ImGui::SetItemTooltip("Use {rom} for the game path. e.g. \"{rom}\"  or  -a -i \"{rom}\"");
+        ImGui::SetItemTooltip("Use {rom} for the game path and {bios} for the BIOS. e.g.\n"
+                              "\"{rom}\"  (Mednafen)  or  -a -i \"{rom}\"  /  -a -b \"{bios}\" -i \"{rom}\"  (Yabause)");
 
         ImGui::SetNextItemWidth(460.0f);
         ImGui::InputText("Working dir", mLaunchEdits[i].workDir, sizeof(mLaunchEdits[i].workDir));
         ImGui::SetItemTooltip("Blank = the executable's own folder (so it finds its config/saves).");
 
-        // Live preview of the resolved command line for the current ROM.
-        const std::string preview = BuildLaunchArgs(mLaunchEdits[i].args, mLauncher.Rom());
+        // Live preview of the resolved command line for the current ROM + this BIOS.
+        const std::string preview = BuildLaunchArgs(mLaunchEdits[i].args, mLauncher.Rom(),
+                                                    mLaunchEdits[i].bios);
         ImGui::TextDisabled("Preview:  %s %s", PathBasename(mLaunchEdits[i].exe).c_str(),
                             preview.empty() ? "(no ROM selected)" : preview.c_str());
         ImGui::PopID();
@@ -3315,6 +3334,7 @@ void App::DrawLaunchSettingsModal(IPlatform& platform)
             emus[i].exePath      = mLaunchEdits[i].exe;
             emus[i].argsTemplate = mLaunchEdits[i].args;
             emus[i].workDir      = mLaunchEdits[i].workDir;
+            emus[i].biosPath     = mLaunchEdits[i].bios;
         }
         mLauncher.SetSetDataDirOnLaunch(mLaunchSetDataDirEdit);
         mSettingsDirty = true;

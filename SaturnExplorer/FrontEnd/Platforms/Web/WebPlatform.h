@@ -51,6 +51,8 @@ public:
     // file manager for reveal). On the web these keep the base "unsupported" default.
 #ifndef __EMSCRIPTEN__
     bool PickDirectory(std::string& outPath) override;
+    bool OpenFileDialogFiltered(std::string& outPath, const char* filterLabel,
+                                const char* extCsv) override;
     bool RevealPath(const char* path) override;
     bool LaunchProcess(const char* path, const char* args, const char* workingDir) override;
 #endif
