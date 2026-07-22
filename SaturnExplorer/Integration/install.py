@@ -448,9 +448,25 @@ def build_mednafen(rn, msys2, dest, configure_flags="", reconfigure=True):
         # content-aware copy, an unchanged Integration/ folder means `make` finds nothing
         # to do; a single edited file rebuilds just that object.
         cfg = f"([ -f config.status ] || {{ {bootstrap} && {configure}; }}) && "
+    # Link-time fixes for building this (older, win9x-era) mednafen against a current
+    # MSYS2/mingw-w64 toolchain. Both are needed for a *working* exe, and both append
+    # after mednafen's own AM_LDFLAGS (-no-pie), so nothing it sets is clobbered:
+    #   * -Wl,--defsym,mingw_app_type=__mingw_app_type
+    #       mednafen's src/drivers/main.cpp references the CRT global `mingw_app_type`
+    #       (console/GUI toggle). Modern mingw-w64 renamed it to `__mingw_app_type`, so
+    #       the old name is undefined at link ("undefined reference to `mingw_app_type'").
+    #       Aliasing the old name to the new one resolves it without patching mednafen.
+    #   * -static-libstdc++ -static-libgcc
+    #       Otherwise C++ exception RTTI is auto-imported as *data* from libstdc++-6.dll.
+    #       With ASLR loading that DLL >4 GB from the exe, the 32-bit auto-import
+    #       pseudo-relocation overflows and the program aborts at startup ("Mingw-w64
+    #       runtime failure: 32 bit pseudo relocation ... out of range"). Linking the C++
+    #       runtime statically removes the cross-DLL data import.
+    ldflags = ("-static-libstdc++ -static-libgcc "
+               "-Wl,--defsym,mingw_app_type=__mingw_app_type")
     script = (f"cd '{msdir}' && "
               f"([ -L include/mednafen ] || {{ {relink}; }}) && "
-              f"{cfg}make -j{ncpu}")
+              f"{cfg}make -j{ncpu} LDFLAGS='{ldflags}'")
     # MSYSTEM must be in the ENVIRONMENT before bash's login profile (-l) runs, so the
     # MINGW64 setup is applied — putting /mingw64/bin (gcc) on PATH and setting
     # PKG_CONFIG_PATH so ./configure finds SDL2/zlib. Setting it as the first command
