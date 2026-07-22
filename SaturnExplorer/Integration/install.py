@@ -464,9 +464,24 @@ def build_mednafen(rn, msys2, dest, configure_flags="", reconfigure=True):
     #       runtime statically removes the cross-DLL data import.
     ldflags = ("-static-libstdc++ -static-libgcc "
                "-Wl,--defsym,mingw_app_type=__mingw_app_type")
+    # mednafen.exe is a MinGW build, so it needs the MinGW runtime DLLs (SDL2, FLAC,
+    # ogg, iconv, intl, zlib, winpthread). Those live in C:\msys64\mingw64\bin, which is
+    # NOT on PATH for a normal Windows process — so double-clicking it, or launching it
+    # from Saturn Explorer's "Launch" button, fails with "libFLAC.dll was not found" etc.
+    # Copy the real dependency closure (per `ldd`) next to the exe; Windows searches the
+    # exe's own directory first, so it then runs anywhere with no MSYS2 on PATH.
+    # Several passes so dependencies-of-dependencies are picked up as well.
+    bundle = (
+        'cd src && for i in 1 2 3 4; do '
+        'for b in mednafen.exe *.dll; do '
+        '[ -e "$b" ] && ldd "$b" 2>/dev/null '
+        r"| grep -io '/mingw64/bin/[^ ]*\.dll' "
+        '| while read d; do [ -e "$(basename "$d")" ] || cp "$d" .; done; '
+        'done; done; true'
+    )
     script = (f"cd '{msdir}' && "
               f"([ -L include/mednafen ] || {{ {relink}; }}) && "
-              f"{cfg}make -j{ncpu} LDFLAGS='{ldflags}'")
+              f"{cfg}make -j{ncpu} LDFLAGS='{ldflags}' && {bundle}")
     # MSYSTEM must be in the ENVIRONMENT before bash's login profile (-l) runs, so the
     # MINGW64 setup is applied — putting /mingw64/bin (gcc) on PATH and setting
     # PKG_CONFIG_PATH so ./configure finds SDL2/zlib. Setting it as the first command
