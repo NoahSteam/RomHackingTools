@@ -153,6 +153,11 @@ window title: `… (SaturnExplorer Enabled. <ver> / <emu> <rev>)`.
 
 The installer records each built emulator's path in the viewer's per-user settings
 (`%APPDATA%\SaturnExplorer\settings.ini`, or `~/.config/SaturnExplorer/settings.ini`),
-so Saturn Explorer's toolbar gains a **Launch Mednafen** / **Launch Yabause** button
-that starts the patched build directly — the viewer then auto-connects (live) once it's
-up. That same file also persists your panel layout and visibility between runs.
+so Saturn Explorer's toolbar **Launch** menu can start the patched build directly — the
+viewer then auto-connects (live) once it's up. Open the menu (the **Launch ▾** button) to
+pick the emulator and the ROM to boot; **Launch Settings…** there lets you edit each
+emulator's executable, launch arguments (put `{rom}` where the game path goes — e.g.
+`"{rom}"` for Mednafen, `-a -i "{rom}"` for Yabause), and working directory. Selecting a
+ROM also adopts it as the Data Directory when none is set, so the texture "Find in game
+data" search scans the same disc. That same settings file persists your emulator/ROM
+choice, recent ROMs, panel layout, and visibility between runs.

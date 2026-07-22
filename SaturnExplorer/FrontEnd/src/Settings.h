@@ -6,12 +6,19 @@
 //   else    : $XDG_CONFIG_HOME/SaturnExplorer/settings.ini  (or ~/.config/...)
 //
 // The SAME file is written by the installer (Integration/install.py) to record
-// the built emulator executables, so the viewer's "Launch <emu>" buttons can
-// start them directly. Format is a minimal INI:
+// the built emulator executables, so the viewer's "Launch" menu can start them
+// directly (see Launcher.h). Format is a minimal INI:
 //
 //   [emulators]
 //   mednafen = C:\...\mednafen.exe
 //   yabause  = C:\...\yabause-qt.exe
+//   [launch]                 ; Launch Session state (Launcher)
+//   emulator = mednafen
+//   rom      = C:\games\sakura1.cue
+//   recent0  = C:\games\sakura1.cue
+//   setdatadir = 1
+//   [launch.mednafen]        ; per-emulator overrides
+//   args     = "{rom}"
 //   [panels]
 //   references = 0
 //   [data]

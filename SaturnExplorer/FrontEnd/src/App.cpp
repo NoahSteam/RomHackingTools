@@ -281,8 +281,9 @@ void App::LoadSettings()
     for (const PanelInfo& p : PanelList())
         mPanels.*(p.flag) = mSettings.GetBool("panels", p.key, mPanels.*(p.flag));
     mDataDir      = mSettings.Get("data", "dir", mDataDir);
-    mMednafenPath = mSettings.Get("emulators", "mednafen", mMednafenPath);
-    mYabausePath  = mSettings.Get("emulators", "yabause", mYabausePath);
+    // Launch Session: emulator specs (exe from the installer's [emulators]), selection,
+    // recent ROMs, and the set-data-dir coupling.
+    mLauncher.Load(mSettings);
 }
 
 void App::SaveSettings()
@@ -290,8 +291,10 @@ void App::SaveSettings()
     for (const PanelInfo& p : PanelList())
         mSettings.SetBool("panels", p.key, mPanels.*(p.flag));
     mSettings.Set("data", "dir", mDataDir);
-    // Emulator paths are owned by the installer. Whatever LoadSettings read stays
-    // in mSettings and round-trips through Save, so we don't clobber them here.
+    // Launch Session: emulator overrides (exe/args/workdir), selection, recent ROMs,
+    // and the coupling. Exe paths live under [emulators]; the installer read-modify-writes
+    // that section, so a rebuild refreshes the path without disturbing the rest.
+    mLauncher.Save(mSettings);
     mSettings.Save();
     mSettingsDirty = false;
 }
@@ -807,6 +810,7 @@ void App::BuildUI(IPlatform& platform)
     // Game-data-directory modal + texture search results (both floating, drawn last
     // so they overlay the docked panels).
     DrawDataDirModal(platform);
+    DrawLaunchSettingsModal(platform);   // modal; no-op until the menu requests it
     DrawDataSearchResults(platform);
     DrawTracepointEditor();   // modal; no-op until OpenTracepointEditor requests it
     // contextSwap restores the live context here as it goes out of scope.
@@ -1026,32 +1030,10 @@ void App::DrawToolbar(IPlatform& platform)
         ImGui::SetItemTooltip("Set the game's data directory — an ISO/disc image or a folder of the\n"
                               "game's files — that the texture 'Find in game data' search scans.");
 
-        // Launch the patched emulator recorded by the installer. Mednafen is always
-        // shown (disabled with a hint if no path is recorded yet); Yabause appears
-        // only when a path exists. Once running, the app auto-connects live.
-        auto launchButton = [&](const char* label, const std::string& path) {
-            ImGui::SameLine();
-            ImGui::BeginDisabled(path.empty());
-            if (ImGui::Button(label))
-            {
-                // NULL working dir: the platform runs it from the executable's own
-                // folder (see IPlatform::LaunchProcess) so the emulator finds its
-                // config/saves; the app's live auto-connect latches on once it's up.
-                platform.LaunchProcess(path.c_str(), nullptr);
-            }
-            ImGui::EndDisabled();
-            if (path.empty())
-            {
-                ImGui::SetItemTooltip("No emulator path recorded yet — run the installer\n"
-                                      "(Integration/install.bat), which records it for you.");
-            }
-            else
-            {
-                ImGui::SetItemTooltip("Launch %s and auto-connect (live):\n%s", label, path.c_str());
-            }
-        };
-        launchButton("Launch Mednafen", mMednafenPath);
-        if (!mYabausePath.empty()) launchButton("Launch Yabause", mYabausePath);
+        // Launch Session: one button that opens a nested menu to choose the debugging
+        // environment (emulator + ROM) and start it — auto-connecting live once it's up.
+        ImGui::SameLine();
+        DrawLaunchMenu(platform);
 
         // "Windows" dropdown: show/hide individual panels.
         ImGui::SameLine();
@@ -3137,6 +3119,245 @@ void App::DrawDataSearchResults(IPlatform& platform)
         }
     }
     ImGui::End();
+}
+
+// "Launch Session" — the nested toolbar menu. One "Launch" button + a down-arrow open
+// a popup that shows the current emulator + game, lets the user change either (recent
+// ROMs + Browse), and opens Launch Settings. The primary item launches the current
+// configuration. Think "choose a debugging environment", not "pick an executable".
+void App::DrawLaunchMenu(IPlatform& platform)
+{
+    const EmulatorSpec* sel = mLauncher.Selected();
+    const bool canLaunch = sel && !sel->exePath.empty();
+
+    bool open = false;
+    if (ImGui::Button("Launch")) open = true;
+    ImGui::SameLine(0.0f, 1.0f);
+    // ArrowButton draws the ▼ affordance from primitives, so it needs no special font
+    // glyph; either half opens the same menu.
+    if (ImGui::ArrowButton("##launchdrop", ImGuiDir_Down)) open = true;
+    if (open) ImGui::OpenPopup("##launchmenu");
+    ImGui::SetItemTooltip("Choose a debugging environment (emulator + ROM) and start it.");
+
+    if (ImGui::BeginPopup("##launchmenu"))
+    {
+        ImGui::BeginDisabled(!canLaunch);
+        if (ImGui::MenuItem("Launch with Current Configuration"))
+        {
+            LaunchSession(platform);
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndDisabled();
+        if (!canLaunch)
+        {
+            ImGui::SetItemTooltip("No executable for %s yet — set it in Launch Settings, or run\n"
+                                  "the installer (Integration/install.bat), which records it.",
+                                  sel ? sel->label.c_str() : "this emulator");
+        }
+
+        ImGui::Separator();
+        ImGui::TextDisabled("Current Emulator");
+        ImGui::Indent();
+        ImGui::TextUnformatted(sel ? sel->label.c_str() : "(none)");
+        ImGui::Unindent();
+        ImGui::TextDisabled("Current Game");
+        ImGui::Indent();
+        ImGui::TextUnformatted(mLauncher.Rom().empty()
+                                   ? "(none)" : PathBasename(mLauncher.Rom()).c_str());
+        if (!mLauncher.Rom().empty()) ImGui::SetItemTooltip("%s", mLauncher.Rom().c_str());
+        ImGui::Unindent();
+
+        ImGui::Separator();
+
+        if (ImGui::BeginMenu("Change Emulator"))
+        {
+            const std::vector<EmulatorSpec>& emus = mLauncher.Emulators();
+            for (int i = 0; i < static_cast<int>(emus.size()); ++i)
+            {
+                const bool cur = (i == mLauncher.SelectedIndex());
+                const bool has = !emus[i].exePath.empty();
+                std::string label = emus[i].label;
+                if (!has) label += "  (not installed)";
+                if (ImGui::MenuItem(label.c_str(), nullptr, cur))
+                {
+                    mLauncher.Select(i);
+                    mSettingsDirty = true;
+                }
+                if (!has) ImGui::SetItemTooltip("No executable recorded — set it in Launch Settings.");
+            }
+            ImGui::EndMenu();
+        }
+
+        if (ImGui::BeginMenu("Change ROM"))
+        {
+            const std::vector<std::string>& recent = mLauncher.Recent();
+            if (recent.empty()) ImGui::TextDisabled("(no recent ROMs)");
+            for (size_t i = 0; i < recent.size(); ++i)
+            {
+                const std::string& r = recent[i];
+                const bool cur = (r == mLauncher.Rom());
+                // Show the basename; append a hidden ##index so same-named discs in
+                // different folders don't collide as ImGui item IDs.
+                const std::string label = PathBasename(r) + "##recent" + std::to_string(i);
+                if (ImGui::MenuItem(label.c_str(), nullptr, cur))
+                {
+                    mLauncher.SetRom(r);
+                    mSettingsDirty = true;
+                }
+                ImGui::SetItemTooltip("%s", r.c_str());
+            }
+            ImGui::Separator();
+            if (ImGui::MenuItem("Browse..."))
+            {
+                std::string p;
+                if (platform.OpenFileDialog(p))
+                {
+                    mLauncher.SetRom(p);
+                    mSettingsDirty = true;
+                }
+            }
+            if (ImGui::MenuItem("Clear Current ROM", nullptr, false, !mLauncher.Rom().empty()))
+            {
+                mLauncher.ClearRom();
+                mSettingsDirty = true;
+            }
+            ImGui::EndMenu();
+        }
+
+        ImGui::Separator();
+        if (ImGui::MenuItem("Launch Settings..."))
+        {
+            mOpenLaunchSettings = true;
+            mLaunchSettingsInit = true;
+        }
+        ImGui::EndPopup();
+    }
+}
+
+// Launch Settings: per-emulator executable / arguments / working directory, plus the
+// "adopt the ROM as the Data Directory" coupling. Edits go through char buffers (no
+// imgui_stdlib) copied in on open and written back to the Launcher on Save.
+void App::DrawLaunchSettingsModal(IPlatform& platform)
+{
+    if (mOpenLaunchSettings)
+    {
+        ImGui::OpenPopup("Launch Settings");
+        mOpenLaunchSettings = false;
+    }
+    const ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(660, 0), ImGuiCond_Appearing);
+    if (!ImGui::BeginPopupModal("Launch Settings", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+    {
+        return;
+    }
+
+    std::vector<EmulatorSpec>& emus = mLauncher.Emulators();
+    if (mLaunchSettingsInit)
+    {
+        mLaunchEdits.assign(emus.size(), LaunchEdit{});
+        for (size_t i = 0; i < emus.size(); ++i)
+        {
+            std::snprintf(mLaunchEdits[i].exe, sizeof(mLaunchEdits[i].exe), "%s", emus[i].exePath.c_str());
+            std::snprintf(mLaunchEdits[i].args, sizeof(mLaunchEdits[i].args), "%s", emus[i].argsTemplate.c_str());
+            std::snprintf(mLaunchEdits[i].workDir, sizeof(mLaunchEdits[i].workDir), "%s", emus[i].workDir.c_str());
+        }
+        mLaunchSetDataDirEdit = mLauncher.SetDataDirOnLaunch();
+        mLaunchSettingsInit = false;
+    }
+
+    ImGui::TextWrapped("Configure how each emulator starts. Put {rom} in Arguments where the "
+                       "selected game's path belongs — keep the surrounding quotes (\"{rom}\") so "
+                       "paths with spaces work. Leave a ROM unset to launch bare.");
+    ImGui::Spacing();
+
+    for (size_t i = 0; i < emus.size() && i < mLaunchEdits.size(); ++i)
+    {
+        ImGui::PushID(static_cast<int>(i));
+        ImGui::SeparatorText(emus[i].label.c_str());
+
+        ImGui::SetNextItemWidth(460.0f);
+        ImGui::InputText("Executable", mLaunchEdits[i].exe, sizeof(mLaunchEdits[i].exe));
+        ImGui::SameLine();
+        if (ImGui::Button("Browse..."))
+        {
+            std::string p;
+            if (platform.OpenFileDialog(p))
+                std::snprintf(mLaunchEdits[i].exe, sizeof(mLaunchEdits[i].exe), "%s", p.c_str());
+        }
+
+        ImGui::SetNextItemWidth(460.0f);
+        ImGui::InputText("Arguments", mLaunchEdits[i].args, sizeof(mLaunchEdits[i].args));
+        ImGui::SetItemTooltip("Use {rom} for the game path. e.g. \"{rom}\"  or  -a -i \"{rom}\"");
+
+        ImGui::SetNextItemWidth(460.0f);
+        ImGui::InputText("Working dir", mLaunchEdits[i].workDir, sizeof(mLaunchEdits[i].workDir));
+        ImGui::SetItemTooltip("Blank = the executable's own folder (so it finds its config/saves).");
+
+        // Live preview of the resolved command line for the current ROM.
+        const std::string preview = BuildLaunchArgs(mLaunchEdits[i].args, mLauncher.Rom());
+        ImGui::TextDisabled("Preview:  %s %s", PathBasename(mLaunchEdits[i].exe).c_str(),
+                            preview.empty() ? "(no ROM selected)" : preview.c_str());
+        ImGui::PopID();
+    }
+
+    ImGui::Separator();
+    ImGui::Checkbox("On launch, set the ROM as the Data Directory if none is set yet",
+                    &mLaunchSetDataDirEdit);
+    ImGui::SetItemTooltip("Texture 'Find in game data' then searches the same disc you're running.\n"
+                          "Never overrides a Data Directory you've already set.");
+
+    ImGui::Separator();
+    if (ImGui::Button("Save", ImVec2(110, 0)))
+    {
+        for (size_t i = 0; i < emus.size() && i < mLaunchEdits.size(); ++i)
+        {
+            emus[i].exePath      = mLaunchEdits[i].exe;
+            emus[i].argsTemplate = mLaunchEdits[i].args;
+            emus[i].workDir      = mLaunchEdits[i].workDir;
+        }
+        mLauncher.SetSetDataDirOnLaunch(mLaunchSetDataDirEdit);
+        mSettingsDirty = true;
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Cancel", ImVec2(110, 0)))
+    {
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
+}
+
+// Start the current emulator + ROM: resolve exe + args (+ working dir) and hand them to
+// the platform, auto-connecting live so the app latches on once the emulator is up.
+void App::LaunchSession(IPlatform& platform)
+{
+    const EmulatorSpec* sel = mLauncher.Selected();
+    if (!sel || sel->exePath.empty())
+    {
+        return;
+    }
+    const std::string args = mLauncher.CurrentArgs();
+    const char* wd = sel->workDir.empty() ? nullptr : sel->workDir.c_str();
+    const bool ok = platform.LaunchProcess(sel->exePath.c_str(),
+                                           args.empty() ? nullptr : args.c_str(), wd);
+    if (!ok)
+    {
+        mLog.Error("Failed to launch " + sel->exePath);
+        return;
+    }
+    mLog.Info("Launched " + sel->label +
+              (mLauncher.Rom().empty() ? std::string()
+                                       : " with " + PathBasename(mLauncher.Rom())));
+    // Adopt the ROM as the Data Directory only when none is set (per user preference:
+    // auto-set if empty, never override an existing one).
+    if (mLauncher.SetDataDirOnLaunch() && mDataDir.empty() && !mLauncher.Rom().empty())
+    {
+        mDataDir = mLauncher.Rom();
+        mLog.Info("Data Directory set to the launched ROM: " + mDataDir);
+    }
+    EnableLiveAutoConnect(nullptr);   // no-op off SE_ENABLE_LIVE
+    mSettingsDirty = true;
 }
 
 // Resolve a command's palette (CLUT for LUT-16, else the CRAM sub-palette for bank

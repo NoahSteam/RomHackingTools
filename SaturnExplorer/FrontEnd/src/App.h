@@ -12,6 +12,7 @@
 
 #include "Platform/IPlatform.h"
 #include "Settings.h"            // persistent per-user config (INI)
+#include "Launcher.h"            // "Launch Session": emulator + ROM selection
 #include "DataSearch.h"          // game-data-directory byte search (DataSearchHit)
 #include "WatchPanel.h"          // Watch Window (debugger; emulator-agnostic)
 #include "AssemblyPanel.h"       // SH-2 Assembly (debugger)
@@ -109,6 +110,13 @@ private:
     // draw its results. If no dir is set, BeginTextureSearch stashes the needle and
     // pops the set-dir modal, which runs the pending search once a dir is chosen.
     void DrawDataDirModal(IPlatform& platform);
+    // "Launch Session": the nested toolbar Launch menu (pick emulator + ROM), the
+    // Launch Settings dialog (per-emulator exe/args/workdir), and the launch action
+    // (resolve exe+args and hand them to the platform; adopt the ROM as the Data
+    // Directory when none is set yet).
+    void DrawLaunchMenu(IPlatform& platform);
+    void DrawLaunchSettingsModal(IPlatform& platform);
+    void LaunchSession(IPlatform& platform);
     void BeginTextureSearch(IPlatform& platform, const se_command& cmd);
     void RunPendingSearch();
     void DrawDataSearchResults(IPlatform& platform);
@@ -250,10 +258,18 @@ private:
     Settings         mSettings;
     std::string      mIniPath;
     bool             mSettingsDirty = false;
-    // Emulator executables recorded by the installer (Integration/install.py), so
-    // the toolbar "Launch <emu>" buttons can start the patched build directly.
-    std::string      mMednafenPath;
-    std::string      mYabausePath;
+    // "Launch Session": which emulator + ROM the toolbar's Launch menu starts. Exe
+    // paths come from the installer ([emulators] in settings) and are user-overridable
+    // in Launch Settings. Owns the recent-ROM list + the set-data-dir coupling.
+    Launcher         mLauncher;
+    bool             mOpenLaunchSettings = false;    // request to open the Launch Settings modal
+    bool             mLaunchSettingsInit = false;    // (re)load edit buffers on modal open
+    // Edit buffers for the Launch Settings dialog (ImGui InputText needs char storage;
+    // no imgui_stdlib here). Parallel to mLauncher.Emulators(); copied in on open,
+    // written back on Save.
+    struct LaunchEdit { char exe[512]; char args[256]; char workDir[512]; };
+    std::vector<LaunchEdit> mLaunchEdits;
+    bool             mLaunchSetDataDirEdit = true;
 
     int              mSelectedCommand = -1;   // primary selection (detail panels)
     std::vector<int> mSelection;              // all selected command indices

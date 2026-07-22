@@ -149,6 +149,7 @@ if(WIN32)
         FrontEnd/src/Theme.cpp
         FrontEnd/src/DataSearch.cpp
         FrontEnd/src/Settings.cpp
+        FrontEnd/src/Launcher.cpp
         FrontEnd/src/WatchPanel.cpp
         FrontEnd/src/AssemblyPanel.cpp
         FrontEnd/src/HexEditorPanel.cpp
@@ -203,6 +204,7 @@ elseif(EMSCRIPTEN)
         FrontEnd/src/Theme.cpp
         FrontEnd/src/DataSearch.cpp
         FrontEnd/src/Settings.cpp
+        FrontEnd/src/Launcher.cpp
         FrontEnd/src/WatchPanel.cpp
         FrontEnd/src/AssemblyPanel.cpp
         FrontEnd/src/HexEditorPanel.cpp
@@ -275,6 +277,7 @@ else()
             FrontEnd/src/Theme.cpp
             FrontEnd/src/DataSearch.cpp
             FrontEnd/src/Settings.cpp
+            FrontEnd/src/Launcher.cpp
             FrontEnd/src/WatchPanel.cpp
             FrontEnd/src/AssemblyPanel.cpp
             FrontEnd/src/HexEditorPanel.cpp

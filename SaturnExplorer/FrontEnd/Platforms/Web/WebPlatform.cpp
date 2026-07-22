@@ -324,7 +324,7 @@ bool WebPlatform::RevealPath(const char* path)
     return ::system(cmd.c_str()) != -1;
 }
 
-bool WebPlatform::LaunchProcess(const char* path, const char* workingDir)
+bool WebPlatform::LaunchProcess(const char* path, const char* args, const char* workingDir)
 {
     if (!path || !*path)
     {
@@ -332,10 +332,13 @@ bool WebPlatform::LaunchProcess(const char* path, const char* workingDir)
     }
     const std::string dir = (workingDir && *workingDir) ? std::string(workingDir)
                                                         : ParentDir(path);
-    // Run detached (trailing &) from its own directory so an emulator finds its
-    // config/saves next to the executable.
-    const std::string cmd = "cd " + ShellQuote(dir) + " && " + ShellQuote(path) +
-                            " >/dev/null 2>&1 &";
+    // The exe is shell-quoted; `args` is passed through verbatim (it already carries its
+    // own quoting around a "<rom>" path, matching how ShellExecute treats the param
+    // string on Windows), so the child sees the same argv on both platforms. Run
+    // detached (trailing &) from its own directory so an emulator finds its config/saves.
+    std::string cmd = "cd " + ShellQuote(dir) + " && " + ShellQuote(path);
+    if (args && *args) { cmd += ' '; cmd += args; }
+    cmd += " >/dev/null 2>&1 &";
     return ::system(cmd.c_str()) != -1;
 }
 #endif  // !__EMSCRIPTEN__

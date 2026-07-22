@@ -28,3 +28,4 @@ Libs/
 # Runtime state the app writes at exit (per-user, not source)
 assembly_comments.txt
 saturn_explorer_watches.json
+saturn_functions.txt          # Call Stack function-name renames

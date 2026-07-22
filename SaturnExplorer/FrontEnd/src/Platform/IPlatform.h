@@ -68,12 +68,16 @@ public:
     virtual bool RevealPath(const char* path) { (void)path; return false; }
 
     // Launch an executable (e.g. the patched Mednafen/Yabause recorded at install
-    // time), non-blocking, optionally in `workingDir` (NULL = the exe's folder, so
-    // an emulator finds its config/saves). Returns false if unsupported or launch
-    // failed. The web build has no host process control and inherits the default.
-    virtual bool LaunchProcess(const char* path, const char* workingDir)
+    // time), non-blocking, with an optional command-line `args` string (NULL/"" = none;
+    // e.g. the ROM to boot) and optional `workingDir` (NULL = the exe's folder, so an
+    // emulator finds its config/saves). `args` is a single command-line string parsed by
+    // the OS/shell, so callers quote paths with spaces themselves. Returns false if
+    // unsupported or launch failed. The web build has no host process control and
+    // inherits the default.
+    virtual bool LaunchProcess(const char* path, const char* args, const char* workingDir)
     {
         (void)path;
+        (void)args;
         (void)workingDir;
         return false;
     }

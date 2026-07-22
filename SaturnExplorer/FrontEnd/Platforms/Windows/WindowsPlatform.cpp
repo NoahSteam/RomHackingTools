@@ -314,7 +314,7 @@ bool WindowsPlatform::RevealPath(const char* path)
     return reinterpret_cast<INT_PTR>(r) > 32;   // >32 == success per the API
 }
 
-bool WindowsPlatform::LaunchProcess(const char* path, const char* workingDir)
+bool WindowsPlatform::LaunchProcess(const char* path, const char* args, const char* workingDir)
 {
     if (!path || !*path)
     {
@@ -330,7 +330,10 @@ bool WindowsPlatform::LaunchProcess(const char* path, const char* workingDir)
         if (slash != std::string::npos) derived = p.substr(0, slash);
         workingDir = derived.empty() ? nullptr : derived.c_str();
     }
-    const HINSTANCE r = ::ShellExecuteA(nullptr, "open", path, nullptr, workingDir, SW_SHOWNORMAL);
+    // ShellExecute's 4th arg is the command-line parameter string (NULL if none); the
+    // launched program's CRT parses it, so a quoted "<rom>" survives spaces.
+    const char* params = (args && *args) ? args : nullptr;
+    const HINSTANCE r = ::ShellExecuteA(nullptr, "open", path, params, workingDir, SW_SHOWNORMAL);
     return reinterpret_cast<INT_PTR>(r) > 32;   // >32 == success per the API
 }
 
