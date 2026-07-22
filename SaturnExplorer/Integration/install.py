@@ -436,11 +436,24 @@ def build_mednafen(rn, msys2, dest, configure_flags="", reconfigure=True):
     # Makefiles regenerate and `make` rebuilds only what changed. (Switching an already-built
     # tree to saturn-only leaves the other cores' stale .o on disk; that's wasted disk, not
     # compile time, and `make distclean` reclaims it if wanted.)
+    # A Windows *NT* build must define UNICODE/_UNICODE. Mednafen treats a non-UNICODE
+    # Windows build as its special Windows 98/98SE/Me variant: src/drivers/main.cpp does
+    #     #if defined(WIN32) && !defined(UNICODE)
+    #     if(!(GetVersion() & 0x80000000)) { ...error...; return -1; }
+    # so on any NT-based Windows it pops "This special build of Mednafen is intended for
+    # use on Windows 98..." and exits before doing anything. Upstream's own Windows build
+    # script (mswin/build-mednafen.sh) passes exactly these two defines.
+    cppflags = "-DUNICODE=1 -D_UNICODE=1"
     configure = ("./configure --enable-debugger" +
-                 (f" {configure_flags}" if configure_flags else ""))
+                 (f" {configure_flags}" if configure_flags else "") +
+                 f' CPPFLAGS="{cppflags}"')
     bootstrap = "([ -x ./configure ] || (autoreconf -i || ./autogen.sh))"
     if reconfigure:
-        cfg = f"{bootstrap} && {configure} && "
+        # `make` tracks source timestamps, NOT compiler-flag changes: after a reconfigure
+        # that changes defines (e.g. adding -DUNICODE), every .o still looks "up to date"
+        # against its .cpp, so make would relink stale objects built with the OLD flags and
+        # report success while the new flags had no effect. Clean so they actually rebuild.
+        cfg = f"{bootstrap} && {configure} && make clean && "
     else:
         # Incremental: only bootstrap + configure when the tree isn't configured yet (no
         # config.status); otherwise skip straight to `make` so only the objects whose
