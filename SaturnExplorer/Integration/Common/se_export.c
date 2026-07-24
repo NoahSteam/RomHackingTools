@@ -170,6 +170,17 @@ void SeExportSetInputHook(SeSetPadFn fn)
     sSetPad = fn;
 }
 
+static void SeReleaseInjectedPads(void)
+{
+    /* A client can disappear while a button is held. Never leave that state latched
+     * in the emulator after its pipe/socket closes. */
+    if (sSetPad)
+    {
+        sSetPad(0, 0);
+        sSetPad(1, 0);
+    }
+}
+
 /* ---- Tracepoint-install hook (v8+). apply.py wires this to the emulator's PC-trap
  * mechanism so the glue knows which addresses to watch; on a hit the glue calls
  * SeExportQueueTraceEvent(). set(count, descs) receives 'count' SE_LIVE_TRACE_DESC_LEN
@@ -583,6 +594,7 @@ static DWORD WINAPI SeServerThread(LPVOID arg)
         if (pipe == INVALID_HANDLE_VALUE) break;
         BOOL ok = ConnectNamedPipe(pipe, NULL) ? TRUE : (GetLastError() == ERROR_PIPE_CONNECTED);
         if (ok) SeServeClient(pipe, snap);
+        SeReleaseInjectedPads();
         DisconnectNamedPipe(pipe);
         CloseHandle(pipe);
     }
@@ -611,6 +623,7 @@ static void* SeServerThread(void* arg)
         int cl = accept(srv, NULL, NULL);
         if (cl < 0) break;   /* closed on deinit */
         SeServeClient(cl, snap);
+        SeReleaseInjectedPads();
         close(cl);
     }
     close(srv);
@@ -645,6 +658,7 @@ static void* SeTcpServerThread(void* arg)
         int cl = accept(srv, NULL, NULL);
         if (cl < 0) break;   /* closed on deinit */
         SeServeClient(cl, snap);
+        SeReleaseInjectedPads();
         close(cl);
     }
     close(srv);

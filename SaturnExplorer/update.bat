@@ -15,6 +15,7 @@ REM    update.bat                          rebuild only what changed
 REM    update.bat --mednafen-saturn-only   ...and (re)configure Saturn-only
 REM    update.bat --with-yabause           also refresh the Yabause build
 REM    update.bat --dry-run                show the plan, change nothing
+REM    update.bat --verbose                include complete underlying commands
 REM ===========================================================================
 setlocal
 cd /d "%~dp0"

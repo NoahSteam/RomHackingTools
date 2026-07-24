@@ -1,33 +1,119 @@
-// ControllerPanel — a Sega Saturn control pad the user can press (mouse or keyboard)
-// to drive a running game. It renders the pad with ImGui draw primitives, hit-tests
-// each button, highlights whatever is currently pressed, and reports the pressed
-// state as an emulator-agnostic SE_PAD_* bitmask (see SeLiveProtocol.h). The App
-// forwards that mask to the live emulator, which drives the emulated pad directly.
-//
-// Input sources, all OR'd into the reported mask:
-//   * mouse (momentary): press-and-hold a button — one at a time (single active item).
-//   * auto-hold (latch): click toggles a button on/off, so multiple can be held.
-//   * keyboard: a default key map, active only while this window is focused, so
-//     several buttons (D-pad + face) can be held at once for actual play.
+// ControllerPanel — deterministic Sega Saturn virtual input and its optional tools.
+// Input producers own separate masks; the final transmitted mask is an arbitration
+// result, never widget-local state. Optional tools are independent dockable windows.
 #pragma once
+
+#include <cstdint>
+#include <string>
+#include <vector>
 
 namespace sfe
 {
 
+class IPlatform;
+class Settings;
+
 class ControllerPanel
 {
 public:
-    // Draw the pad in the current ImGui window and return the pressed SE_PAD_* mask.
-    // 'liveConnected' only affects the status hint shown to the user.
-    unsigned int Draw(bool liveConnected);
+    // Draw the primary Controller window contents and return the state to transmit.
+    unsigned int Draw(bool liveConnected, uint64_t frame, IPlatform& platform);
+    // Draw optional dockable tools even when the main Controller window is hidden.
+    void DrawAuxiliary(bool liveConnected, uint64_t liveFrame, uint64_t viewedFrame,
+                       IPlatform& platform);
+
+    void Load(const Settings& settings);
+    void Save(Settings& settings) const;
+    bool ConsumeSettingsDirty();
+
+    // Called by App after a state is handed to the live connection.
+    void NotifyStateSent(uint64_t frame, unsigned int state);
+    void ClearAll();
+    // Release user-held input without interrupting deterministic playback or macros.
+    void ReleaseManualInput();
+    bool ConsumeResetLayoutRequest();
 
     int Port() const { return mPort; }
+    unsigned int FinalState() const { return mFinalState; }
 
 private:
-    int          mPort = 0;          // 0 = Controller 1, 1 = Controller 2
-    bool         mAutoHold = false;  // click latches instead of momentary hold
-    bool         mKeyboard = true;   // accept keyboard while the window is focused
-    unsigned int mLatched = 0;       // buttons latched on in auto-hold mode
+    struct Sources
+    {
+        unsigned int mouseMomentary = 0;
+        unsigned int keyboardMomentary = 0;
+        unsigned int latched = 0;
+        unsigned int macro = 0;
+        unsigned int playback = 0;
+    };
+    struct FrameState { uint64_t frame = 0; unsigned int buttons = 0; };
+    struct Macro
+    {
+        std::string name;
+        std::vector<unsigned int> states;
+    };
+
+    enum class PlaybackPolicy { Overlay = 0, Exclusive = 1, Override = 2 };
+
+    void Update(bool liveConnected, uint64_t frame);
+    void StopPlayback();
+    void RecomputeFinal();
+    void ObserveFrame(uint64_t frame);
+    void DrawToolbar(bool liveConnected);
+    void DrawControllerCanvas(bool liveConnected);
+    void DrawFooter(bool liveConnected) const;
+    void DrawViewMenu();
+
+    void DrawCurrentInput(uint64_t frame);
+    void DrawTimeline(uint64_t frame);
+    void DrawQueue();
+    void DrawRecording(IPlatform& platform);
+    void DrawMacros();
+    void DrawStatistics(bool liveConnected);
+    bool SaveRecording(IPlatform& platform) const;
+    bool LoadRecording(IPlatform& platform);
+
+    Sources      mSources;
+    unsigned int mFinalState = 0;
+    unsigned int mLastObservedState = 0;
+    uint64_t     mLastObservedFrame = ~uint64_t(0);
+    uint64_t     mLastUpdateFrame = ~uint64_t(0);
+    bool         mWasConnected = false;
+
+    int          mPort = 0;
+    int          mInputSource = 0;       // 0 keyboard + mouse, 1 mouse only
+    bool         mInputEnabled = true;
+    bool         mAutoHold = false;
+    bool         mSettingsDirty = false;
+    bool         mResetLayoutRequested = false;
+
+    // Optional tool visibility: all hidden by default (progressive disclosure).
+    bool mShowCurrentInput = false;
+    bool mShowTimeline = false;
+    bool mShowQueue = false;
+    bool mShowRecording = false;
+    bool mShowMacros = false;
+    bool mShowStatistics = false;
+
+    std::vector<FrameState> mHistory;
+    std::vector<FrameState> mRecording;
+    bool                    mRecordingActive = false;
+    bool                    mPlaybackActive = false;
+    bool                    mPlaybackLoop = false;
+    PlaybackPolicy          mPlaybackPolicy = PlaybackPolicy::Exclusive;
+    size_t                  mPlaybackIndex = 0;
+    uint64_t                mPlaybackStartFrame = 0;
+
+    std::vector<Macro> mMacros;
+    int                mMacroIndex = -1;
+    size_t             mMacroStep = 0;
+    uint64_t           mMacroStartFrame = 0;
+
+    uint64_t mPacketsSent = 0;
+    uint64_t mChangesSent = 0;
+    uint64_t mFirstSendFrame = 0;
+    unsigned int mLastSentState = 0;
+    double   mLastSendTime = -1.0;
+    char     mMacroName[64] = "New Macro";
 };
 
 }  // namespace sfe

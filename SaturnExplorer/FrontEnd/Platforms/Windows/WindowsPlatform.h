@@ -52,6 +52,7 @@ private:
     bool                    mbSwapChainOccluded = false;
     UINT                    mResizeWidth = 0;
     UINT                    mResizeHeight = 0;
+    bool                    mOleInitialized = false;
 
     static WindowsPlatform* sInstance;  // for the static WndProc
 };

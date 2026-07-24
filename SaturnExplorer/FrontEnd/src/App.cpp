@@ -284,6 +284,7 @@ void App::LoadSettings()
     // Launch Session: emulator specs (exe from the installer's [emulators]), selection,
     // recent ROMs, and the set-data-dir coupling.
     mLauncher.Load(mSettings);
+    mController.Load(mSettings);
 }
 
 void App::SaveSettings()
@@ -295,6 +296,7 @@ void App::SaveSettings()
     // and the coupling. Exe paths live under [emulators]; the installer read-modify-writes
     // that section, so a rebuild refreshes the path without disturbing the rest.
     mLauncher.Save(mSettings);
+    mController.Save(mSettings);
     mSettings.Save();
     mSettingsDirty = false;
 }
@@ -693,6 +695,7 @@ void App::BuildUI(IPlatform& platform)
     if (mbLiveSource && mContext)
     {
         se_begin_frame(mContext);
+        mControllerFrame = se_frame_number(mContext);
         // Propagate any breakpoint changes (Assembly gutter, Watch "Break on...")
         // to the emulator, then reflect a breakpoint halt in the UI run state.
         SyncBreakpointsToLive();
@@ -770,6 +773,10 @@ void App::BuildUI(IPlatform& platform)
         mForceRebuildLayout = false;
         BuildDefaultLayout(dockId);   // snap back to the default arrangement
     }
+    if (mController.ConsumeResetLayoutRequest())
+    {
+        BuildDefaultLayout(dockId);
+    }
 
     // Left column. Each panel is gated by its visibility flag (toolbar "Windows"
     // menu); a hidden panel is simply not drawn, so its dock tab disappears.
@@ -801,8 +808,20 @@ void App::BuildUI(IPlatform& platform)
     if (mPanels.watch)           DrawWatch(platform);
     if (mPanels.assembly)        DrawAssembly();
     if (mPanels.hexEditor)       DrawHexEditor();
-    if (mPanels.controller)      DrawController();
-    else                         SendInput(0);   // hidden panel releases any held input
+    if (mPanels.controller)      DrawController(platform);
+    else
+    {
+        mController.ReleaseManualInput();
+    }
+    // Advanced controller tools are independent dockable windows and remain available
+    // when the primary Controller tab is hidden.
+    uint64_t controllerViewFrame = mControllerFrame;
+#ifdef SE_ENABLE_LIVE
+    if (mbScrubbing && mScrubIndex >= 0 && static_cast<size_t>(mScrubIndex) < mRecorder.Count())
+        controllerViewFrame = mRecorder.FrameNumber(static_cast<size_t>(mScrubIndex));
+#endif
+    mController.DrawAuxiliary(mbLiveSource, mControllerFrame, controllerViewFrame, platform);
+    SendInput(mController.FinalState());
     if (mPanels.log)             DrawLog();
     if (mPanels.actions)         DrawActions();
     if (mPanels.callStack)       DrawCallStack();
@@ -818,6 +837,11 @@ void App::BuildUI(IPlatform& platform)
     // Persist any preference the user changed this frame (panel visibility, data
     // dir). Dock-layout changes are saved separately by ImGui into imgui.ini.
     if (mSettingsDirty) SaveSettings();
+    if (mController.ConsumeSettingsDirty())
+    {
+        mSettingsDirty = true;
+        SaveSettings();
+    }
 }
 
 // Programmatic default dock layout: a left inspector column (Texture/Palette live
@@ -898,7 +922,13 @@ void App::BuildDefaultLayout(unsigned int dockspaceId)
     ImGui::DockBuilderDockWindow("Log", bWatch);
     ImGui::DockBuilderDockWindow("Tracepoints", bWatch);   // tabs with Watch/Log/Controller
     ImGui::DockBuilderDockWindow("Call Stack", bWatch);    // beside Assembly; auto-focus on stop
+    ImGui::DockBuilderDockWindow("Current Input", bWatch);
+    ImGui::DockBuilderDockWindow("Input Queue", bWatch);
+    ImGui::DockBuilderDockWindow("Input Recording", bWatch);
+    ImGui::DockBuilderDockWindow("Macros", bWatch);
+    ImGui::DockBuilderDockWindow("Statistics", bWatch);
     ImGui::DockBuilderDockWindow("SH-2 Assembly", bAsm);
+    ImGui::DockBuilderDockWindow("Input Timeline", bAsm);
 
     ImGui::DockBuilderFinish(dockspaceId);
 }
@@ -2127,17 +2157,19 @@ void App::DrawHexEditor()
     mHexEditor.Draw(mMemBackend, mbLiveSource, ImGui::GetIO().DeltaTime);
 }
 
-// Saturn control pad: draw it, and forward the pressed-button mask to the live
-// emulator whenever it changes (the driver drives the emulated pad directly).
-void App::DrawController()
+// Saturn control pad. BuildUI forwards the final arbitrated state after the
+// auxiliary playback and macro tools have also had a chance to update it.
+void App::DrawController(IPlatform& platform)
 {
-    unsigned int mask = 0;
-    if (ImGui::Begin("Controller"))
+    if (ImGui::Begin("Controller", nullptr, ImGuiWindowFlags_MenuBar))
     {
-        mask = mController.Draw(mbLiveSource);
+        mController.Draw(mbLiveSource, mControllerFrame, platform);
+    }
+    else
+    {
+        mController.ReleaseManualInput();
     }
     ImGui::End();
-    SendInput(mask);
 }
 
 void App::SendInput(unsigned int mask)
@@ -2148,6 +2180,7 @@ void App::SendInput(unsigned int mask)
     if (mbLiveSource)
     {
         se_live_send_input(&mDataSource, static_cast<uint32_t>(mController.Port()), mask);
+        mController.NotifyStateSent(mControllerFrame, mask);
     }
 #endif
 }
@@ -2873,6 +2906,18 @@ void App::DrawTextureViewer(IPlatform& platform)
                 Checkerboard(pos, dispSize, 8.0f);
                 ImGui::Image(mTexTexture, dispSize);
 
+                // Match the VDP1 Command List navigation: the texture itself is the
+                // natural target. Parsed command addresses are VRAM-relative, so
+                // convert the texture offset to the Saturn's absolute VDP1 region.
+                if (ImGui::IsItemHovered() &&
+                    ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+                {
+                    mHexEditor.GoTo(kVdp1VramBase + cmd.texture_address);
+                    mPanels.hexEditor = true;
+                }
+                ImGui::SetItemTooltip("Double-click to view texture data at 0x%08X in the Hex Editor.",
+                                      kVdp1VramBase + cmd.texture_address);
+
                 // Right-click the texture -> search the game data directory for its
                 // raw VRAM bytes. (Explicit id: Image() is not an interactive item.)
                 if (ImGui::BeginPopupContextItem("##texture_ctx"))
@@ -3124,6 +3169,175 @@ void App::DrawDataSearchResults(IPlatform& platform)
 // Disc-image extensions for the ROM Browse filter (Saturn discs + common images).
 static const char* kRomExts = "cue,chd,iso,ccd,mds,mdf,img,bin,gdi,nrg,cdi,m3u";
 
+static std::string PathDirectory(const std::string& path)
+{
+    const size_t slash = path.find_last_of("/\\");
+    return slash == std::string::npos ? std::string() : path.substr(0, slash);
+}
+
+static void DrawLaunchStatusMark(bool ok, const char* label)
+{
+    const ImVec2 p = ImGui::GetCursorScreenPos();
+    const float h = ImGui::GetTextLineHeight();
+    const ImVec2 c(p.x + 8.0f, p.y + h * 0.5f);
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const ImU32 color = ImGui::GetColorU32(ok ? ImVec4(0.25f, 0.76f, 0.38f, 1.0f)
+                                              : ImVec4(0.90f, 0.30f, 0.27f, 1.0f));
+    dl->AddCircleFilled(c, 7.0f, color, 16);
+    if (ok)
+    {
+        dl->AddLine(ImVec2(c.x - 3.5f, c.y), ImVec2(c.x - 0.8f, c.y + 2.8f), IM_COL32_WHITE, 1.6f);
+        dl->AddLine(ImVec2(c.x - 0.8f, c.y + 2.8f), ImVec2(c.x + 4.0f, c.y - 3.0f), IM_COL32_WHITE, 1.6f);
+    }
+    else
+    {
+        dl->AddLine(ImVec2(c.x - 3.0f, c.y - 3.0f), ImVec2(c.x + 3.0f, c.y + 3.0f), IM_COL32_WHITE, 1.6f);
+        dl->AddLine(ImVec2(c.x + 3.0f, c.y - 3.0f), ImVec2(c.x - 3.0f, c.y + 3.0f), IM_COL32_WHITE, 1.6f);
+    }
+    ImGui::Dummy(ImVec2(17.0f, h));
+    ImGui::SameLine(0.0f, 7.0f);
+    ImGui::TextUnformatted(label);
+}
+
+// Heroicons' solid star adapted to ImGui draw-list geometry. Rendering the icon as
+// vectors avoids depending on a Unicode glyph that may not exist in the active font.
+static void DrawLaunchDefaultBadge()
+{
+    const char* text = "Default";
+    const ImVec2 textSize = ImGui::CalcTextSize(text);
+    const ImVec2 size(textSize.x + 35.0f, ImGui::GetFrameHeight());
+    const ImVec2 p = ImGui::GetCursorScreenPos();
+    ImGui::Dummy(size);
+
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const ImU32 green = ImGui::GetColorU32(ImVec4(0.30f, 0.85f, 0.40f, 1.0f));
+    const ImU32 bg = ImGui::GetColorU32(ImVec4(0.10f, 0.34f, 0.18f, 0.72f));
+    dl->AddRectFilled(p, ImVec2(p.x + size.x, p.y + size.y), bg, 4.0f);
+    dl->AddRect(p, ImVec2(p.x + size.x, p.y + size.y), green, 4.0f);
+
+    const ImVec2 c(p.x + 13.0f, p.y + size.y * 0.5f);
+    const float r = 7.0f;
+    const ImVec2 star[10] = {
+        {c.x, c.y - r}, {c.x + 0.225f*r, c.y - 0.309f*r},
+        {c.x + 0.951f*r, c.y - 0.309f*r}, {c.x + 0.363f*r, c.y + 0.118f*r},
+        {c.x + 0.588f*r, c.y + 0.809f*r}, {c.x, c.y + 0.382f*r},
+        {c.x - 0.588f*r, c.y + 0.809f*r}, {c.x - 0.363f*r, c.y + 0.118f*r},
+        {c.x - 0.951f*r, c.y - 0.309f*r}, {c.x - 0.225f*r, c.y - 0.309f*r},
+    };
+    dl->AddConvexPolyFilled(star, 10, green);
+    dl->AddText(ImVec2(p.x + 25.0f, p.y + (size.y - textSize.y) * 0.5f), green, text);
+}
+
+enum class LaunchGlyph
+{
+    Play,
+    Save,
+};
+
+static void DrawLaunchPlayGlyph(ImDrawList* dl, const ImVec2 center, float size, ImU32 color)
+{
+    const float half = size * 0.5f;
+    const ImVec2 points[3] = {
+        {center.x - half * 0.65f, center.y - half},
+        {center.x - half * 0.65f, center.y + half},
+        {center.x + half, center.y},
+    };
+    dl->AddPolyline(points, 3, color, ImDrawFlags_Closed, 1.7f);
+}
+
+static void DrawLaunchSaveGlyph(ImDrawList* dl, const ImVec2 center, float size, ImU32 color)
+{
+    const float half = size * 0.5f;
+    const ImVec2 a(center.x - half, center.y - half);
+    const ImVec2 b(center.x + half, center.y + half);
+    dl->AddRect(a, b, color, 1.5f, ImDrawFlags_None, 1.6f);
+    dl->AddRect(ImVec2(a.x + size * 0.23f, a.y),
+                ImVec2(b.x - size * 0.20f, a.y + size * 0.36f), color, 0.5f, ImDrawFlags_None, 1.4f);
+    dl->AddRect(ImVec2(a.x + size * 0.22f, a.y + size * 0.60f),
+                ImVec2(b.x - size * 0.22f, b.y), color, 0.5f, ImDrawFlags_None, 1.4f);
+}
+
+static bool DrawLaunchIconButton(const char* id, const char* label, LaunchGlyph glyph,
+                                 const ImVec2 size, bool primary = false)
+{
+    if (primary)
+    {
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.15f, 0.43f, 0.78f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.20f, 0.50f, 0.88f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.11f, 0.36f, 0.69f, 1.0f));
+    }
+    const bool clicked = ImGui::Button(id, size);
+    if (primary) ImGui::PopStyleColor(3);
+
+    const ImVec2 min = ImGui::GetItemRectMin();
+    const ImVec2 max = ImGui::GetItemRectMax();
+    const ImVec2 textSize = ImGui::CalcTextSize(label);
+    const float glyphSize = 14.0f;
+    const float gap = 8.0f;
+    const float totalWidth = glyphSize + gap + textSize.x;
+    const float startX = min.x + ((max.x - min.x) - totalWidth) * 0.5f;
+    const float centerY = (min.y + max.y) * 0.5f;
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const ImU32 color = ImGui::GetColorU32(ImGuiCol_Text);
+    const ImVec2 glyphCenter(startX + glyphSize * 0.5f, centerY);
+    if (glyph == LaunchGlyph::Play)
+        DrawLaunchPlayGlyph(dl, glyphCenter, glyphSize, color);
+    else
+        DrawLaunchSaveGlyph(dl, glyphCenter, glyphSize, color);
+    dl->AddText(ImVec2(startX + glyphSize + gap, centerY - textSize.y * 0.5f), color, label);
+    return clicked;
+}
+
+static void DrawLaunchRocketIcon(ImDrawList* dl, const ImVec2 center, float size, ImU32 color)
+{
+    const float r = size * 0.5f;
+    dl->AddLine(ImVec2(center.x - r * 0.55f, center.y + r * 0.40f),
+                ImVec2(center.x + r * 0.48f, center.y - r * 0.63f), color, 1.8f);
+    dl->AddBezierCubic(ImVec2(center.x + r * 0.48f, center.y - r * 0.63f),
+                       ImVec2(center.x + r * 0.82f, center.y - r * 0.75f),
+                       ImVec2(center.x + r * 0.76f, center.y - r * 0.18f),
+                       ImVec2(center.x + r * 0.18f, center.y + r * 0.38f), color, 1.8f);
+    dl->AddLine(ImVec2(center.x + r * 0.18f, center.y + r * 0.38f),
+                ImVec2(center.x - r * 0.55f, center.y + r * 0.40f), color, 1.8f);
+    dl->AddCircle(ImVec2(center.x + r * 0.24f, center.y - r * 0.18f), r * 0.18f, color, 12, 1.5f);
+    dl->AddLine(ImVec2(center.x - r * 0.42f, center.y + r * 0.33f),
+                ImVec2(center.x - r * 0.72f, center.y + r * 0.74f), color, 1.6f);
+    dl->AddLine(ImVec2(center.x - r * 0.20f, center.y + r * 0.48f),
+                ImVec2(center.x - r * 0.47f, center.y + r * 0.82f), color, 1.6f);
+}
+
+static void DrawLaunchEmulatorIcon(bool mednafen)
+{
+    const ImVec2 p = ImGui::GetCursorScreenPos();
+    const float size = 32.0f;
+    ImGui::Dummy(ImVec2(size, size));
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const ImU32 border = ImGui::GetColorU32(ImVec4(0.30f, 0.35f, 0.42f, 1.0f));
+    const ImU32 tile = ImGui::GetColorU32(ImVec4(0.08f, 0.10f, 0.14f, 0.88f));
+    dl->AddRectFilled(p, ImVec2(p.x + size, p.y + size), tile, 6.0f);
+    dl->AddRect(p, ImVec2(p.x + size, p.y + size), border, 6.0f);
+    if (mednafen)
+    {
+        const char* m = "M";
+        const float fontSize = 20.0f;
+        ImFont* font = ImGui::GetFont();
+        const ImVec2 ts = font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, m);
+        dl->AddText(font, fontSize,
+                    ImVec2(p.x + (size - ts.x) * 0.5f, p.y + (size - ts.y) * 0.5f),
+                    ImGui::GetColorU32(ImVec4(0.92f, 0.94f, 0.96f, 1.0f)), m);
+    }
+    else
+    {
+        const ImU32 purple = ImGui::GetColorU32(ImVec4(0.65f, 0.43f, 0.91f, 1.0f));
+        const ImVec2 c(p.x + size * 0.5f, p.y + size * 0.55f);
+        dl->AddRectFilled(ImVec2(c.x - 10.0f, c.y - 6.0f), ImVec2(c.x + 10.0f, c.y + 6.0f), purple, 5.0f);
+        dl->AddLine(ImVec2(c.x - 6.0f, c.y - 3.0f), ImVec2(c.x - 6.0f, c.y + 3.0f), tile, 1.6f);
+        dl->AddLine(ImVec2(c.x - 9.0f, c.y), ImVec2(c.x - 3.0f, c.y), tile, 1.6f);
+        dl->AddCircleFilled(ImVec2(c.x + 5.0f, c.y - 1.5f), 1.4f, tile);
+        dl->AddCircleFilled(ImVec2(c.x + 8.0f, c.y + 1.5f), 1.4f, tile);
+    }
+}
+
 // "Launch Session" — the nested toolbar menu. One "Launch" button + a down-arrow open
 // a popup that shows the current emulator + game, lets the user change either (recent
 // ROMs + Browse), and opens Launch Settings. The primary item launches the current
@@ -3237,9 +3451,9 @@ void App::DrawLaunchMenu(IPlatform& platform)
     }
 }
 
-// Launch Settings: per-emulator executable / arguments / working directory, plus the
-// "adopt the ROM as the Data Directory" coupling. Edits go through char buffers (no
-// imgui_stdlib) copied in on open and written back to the Launcher on Save.
+// Launch Settings: a compact card for each emulator, with the common fields prominent
+// and less-used working-directory controls tucked under Advanced. Edits are committed
+// only on Save; Test Launch uses the temporary values without changing preferences.
 void App::DrawLaunchSettingsModal(IPlatform& platform)
 {
     if (mOpenLaunchSettings)
@@ -3248,10 +3462,29 @@ void App::DrawLaunchSettingsModal(IPlatform& platform)
         mOpenLaunchSettings = false;
     }
     const ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+    const ImVec2 work = ImGui::GetMainViewport()->WorkSize;
+    const ImVec2 modalSize(std::min(1480.0f, work.x * 0.96f),
+                           std::min(900.0f, work.y * 0.94f));
     ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-    ImGui::SetNextWindowSize(ImVec2(660, 0), ImGuiCond_Appearing);
-    if (!ImGui::BeginPopupModal("Launch Settings", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+    ImGui::SetNextWindowSize(modalSize, ImGuiCond_Appearing);
+    // The rest of the application uses roomy debugger controls. This dense settings
+    // surface deliberately uses a compact local scale so both cards and the fixed
+    // footer remain usable on short laptop displays and at elevated Windows DPI.
+    const ImGuiStyle& baseStyle = ImGui::GetStyle();
+    constexpr float compact = 0.88f;
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,
+                        ImVec2(baseStyle.WindowPadding.x * compact, baseStyle.WindowPadding.y * compact));
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,
+                        ImVec2(baseStyle.FramePadding.x * compact, baseStyle.FramePadding.y * compact));
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing,
+                        ImVec2(baseStyle.ItemSpacing.x * compact, baseStyle.ItemSpacing.y * compact));
+    ImGui::PushStyleVar(ImGuiStyleVar_CellPadding,
+                        ImVec2(baseStyle.CellPadding.x * compact, baseStyle.CellPadding.y * compact));
+    ImGui::PushFont(nullptr, baseStyle.FontSizeBase * 0.92f);
+    if (!ImGui::BeginPopupModal("Launch Settings", nullptr, ImGuiWindowFlags_NoTitleBar))
     {
+        ImGui::PopFont();
+        ImGui::PopStyleVar(4);
         return;
     }
 
@@ -3264,88 +3497,229 @@ void App::DrawLaunchSettingsModal(IPlatform& platform)
             std::snprintf(mLaunchEdits[i].exe, sizeof(mLaunchEdits[i].exe), "%s", emus[i].exePath.c_str());
             std::snprintf(mLaunchEdits[i].args, sizeof(mLaunchEdits[i].args), "%s", emus[i].argsTemplate.c_str());
             std::snprintf(mLaunchEdits[i].workDir, sizeof(mLaunchEdits[i].workDir), "%s", emus[i].workDir.c_str());
-            std::snprintf(mLaunchEdits[i].bios, sizeof(mLaunchEdits[i].bios), "%s", emus[i].biosPath.c_str());
         }
+        mLaunchSelectedEdit = mLauncher.SelectedIndex();
         mLaunchSetDataDirEdit = mLauncher.SetDataDirOnLaunch();
         mLaunchSettingsInit = false;
     }
 
-    ImGui::TextWrapped("Configure how each emulator starts. Put {rom} in Arguments where the "
-                       "selected game's path belongs — keep the surrounding quotes (\"{rom}\") so "
-                       "paths with spaces work. Leave a ROM unset to launch bare.");
+    const ImVec2 headerStart = ImGui::GetCursorScreenPos();
+    const float headerIconSize = 24.0f;
+    ImGui::Dummy(ImVec2(headerIconSize, headerIconSize));
+    DrawLaunchRocketIcon(ImGui::GetWindowDrawList(),
+                         ImVec2(headerStart.x + headerIconSize * 0.5f,
+                                headerStart.y + headerIconSize * 0.5f),
+                         20.0f, ImGui::GetColorU32(ImGuiCol_Text));
+    ImGui::SameLine(0.0f, 10.0f);
+    ImGui::PushFont(nullptr, baseStyle.FontSizeBase * 1.28f);
+    ImGui::TextUnformatted("Launch Settings");
+    ImGui::PopFont();
+    const float closeSize = 28.0f;
+    ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - closeSize);
+    if (ImGui::Button("X##close_launch_settings", ImVec2(closeSize, closeSize)))
+        ImGui::CloseCurrentPopup();
+
+    ImGui::TextWrapped("Configure how each emulator starts. Use {rom} in Arguments Template "
+                       "where the selected game's path belongs.");
     ImGui::Spacing();
+
+    const float footerReserve = ImGui::GetFrameHeight() * 2.0f +
+                                ImGui::GetStyle().ItemSpacing.y * 6.0f;
+    ImGui::BeginChild("##launch_settings_body", ImVec2(0, -footerReserve), ImGuiChildFlags_None,
+                      ImGuiWindowFlags_HorizontalScrollbar);
+
+    const bool showSidebar = ImGui::GetContentRegionAvail().x >= 1020.0f;
+    if (showSidebar)
+    {
+        ImGui::BeginTable("##launch_columns", 2,
+                          ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_BordersInnerV);
+        ImGui::TableSetupColumn("Settings", ImGuiTableColumnFlags_WidthStretch, 4.0f);
+        ImGui::TableSetupColumn("Help", ImGuiTableColumnFlags_WidthFixed, 285.0f);
+        ImGui::TableNextColumn();
+    }
 
     for (size_t i = 0; i < emus.size() && i < mLaunchEdits.size(); ++i)
     {
         ImGui::PushID(static_cast<int>(i));
-        ImGui::SeparatorText(emus[i].label.c_str());
-
-        ImGui::SetNextItemWidth(460.0f);
-        ImGui::InputText("Executable", mLaunchEdits[i].exe, sizeof(mLaunchEdits[i].exe));
-        ImGui::SameLine();
-        if (ImGui::Button("Browse..."))
+        const bool mednafen = emus[i].key == "mednafen";
+        const float cardHeight = mednafen ? 315.0f : 250.0f;
+        if (ImGui::BeginChild("##emulator_card", ImVec2(0, cardHeight), ImGuiChildFlags_Borders))
         {
-            std::string p;
-            if (platform.OpenFileDialog(p))
-                std::snprintf(mLaunchEdits[i].exe, sizeof(mLaunchEdits[i].exe), "%s", p.c_str());
+            DrawLaunchEmulatorIcon(mednafen);
+            ImGui::SameLine(0.0f, 10.0f);
+            ImGui::PushFont(nullptr, baseStyle.FontSizeBase * 1.14f);
+            ImGui::TextUnformatted(emus[i].label.c_str());
+            ImGui::PopFont();
+            if (mLaunchSelectedEdit == static_cast<int>(i))
+            {
+                ImGui::SameLine();
+                DrawLaunchDefaultBadge();
+            }
+            const char* defaultLabel = "Use as default launcher";
+            const float radioWidth = ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x +
+                                     ImGui::CalcTextSize(defaultLabel).x;
+            const float radioX = ImGui::GetWindowContentRegionMax().x - radioWidth;
+            ImGui::SameLine(std::max(ImGui::GetCursorPosX(), radioX));
+            if (ImGui::RadioButton(defaultLabel, mLaunchSelectedEdit == static_cast<int>(i)))
+                mLaunchSelectedEdit = static_cast<int>(i);
+
+            ImGui::Separator();
+            if (ImGui::BeginTable("##emulator_columns", 2,
+                                  ImGuiTableFlags_SizingStretchSame | ImGuiTableFlags_BordersInnerV))
+            {
+                ImGui::TableNextColumn();
+                ImGui::TextUnformatted("Executable");
+                ImGui::SetNextItemWidth(-82.0f);
+                ImGui::InputText("##executable", mLaunchEdits[i].exe, sizeof(mLaunchEdits[i].exe));
+                ImGui::SameLine();
+                if (ImGui::Button("Browse...", ImVec2(74, 0)))
+                {
+                    std::string p;
+                    if (platform.OpenFileDialog(p))
+                        std::snprintf(mLaunchEdits[i].exe, sizeof(mLaunchEdits[i].exe), "%s", p.c_str());
+                }
+
+                ImGui::TextUnformatted("Arguments Template");
+                ImGui::SetNextItemWidth(-1.0f);
+                ImGui::InputText("##arguments", mLaunchEdits[i].args, sizeof(mLaunchEdits[i].args));
+                ImGui::SetItemTooltip("Use {rom} for the selected game path. Keep it in quotes so paths "
+                                      "containing spaces are passed correctly.");
+
+                if (ImGui::TreeNodeEx("Advanced Options", ImGuiTreeNodeFlags_SpanAvailWidth))
+                {
+                    ImGui::TextUnformatted("Working Directory");
+                    ImGui::SetNextItemWidth(-1.0f);
+                    ImGui::InputTextWithHint("##workingdir", "Leave empty to use the executable's folder",
+                                             mLaunchEdits[i].workDir, sizeof(mLaunchEdits[i].workDir));
+                    ImGui::TreePop();
+                }
+
+                ImGui::TableNextColumn();
+                if (mednafen)
+                {
+                    const std::string exe = mLaunchEdits[i].exe;
+                    const std::string base = PathDirectory(exe);
+#ifdef _WIN32
+                    const char sep = '\\';
+#else
+                    const char sep = '/';
+#endif
+                    const std::string firmware = base.empty() ? std::string() : base + sep + "firmware" + sep;
+                    const char* required[] = {"sega_101.bin", "mpr-17933.bin"};
+                    ImGui::TextUnformatted("Firmware");
+                    for (const char* name : required)
+                    {
+                        const bool found = !firmware.empty() && PathExists(firmware + name);
+                        DrawLaunchStatusMark(found, name);
+                        ImGui::SetItemTooltip("%s", firmware.empty() ? "Set the Mednafen executable first."
+                                                                      : (firmware + name).c_str());
+                    }
+                    ImGui::Spacing();
+                }
+
+                ImGui::TextUnformatted("Launch Command (Preview)");
+                const std::string preview = BuildLaunchArgs(mLaunchEdits[i].args, mLauncher.Rom(),
+                                                            emus[i].biosPath);
+                const std::string command = PathBasename(mLaunchEdits[i].exe) +
+                                            (preview.empty() ? std::string() : " " + preview);
+                ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.035f, 0.045f, 0.060f, 1.0f));
+                if (ImGui::BeginChild("##command_preview", ImVec2(0, mednafen ? 96.0f : 110.0f),
+                                      ImGuiChildFlags_Borders))
+                {
+                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.55f, 0.82f, 0.58f, 1.0f));
+                    ImGui::TextWrapped("%s", command.empty() ? "(not configured)" : command.c_str());
+                    ImGui::PopStyleColor();
+                }
+                ImGui::EndChild();
+                ImGui::PopStyleColor();
+
+                const float testWidth = 126.0f;
+                const float testHeight = 34.0f;
+                ImGui::SetCursorPosX(std::max(ImGui::GetCursorPosX(),
+                                             ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - testWidth));
+                ImGui::BeginDisabled(mLaunchEdits[i].exe[0] == '\0');
+                if (DrawLaunchIconButton("##test_launch", "Test Launch", LaunchGlyph::Play,
+                                         ImVec2(testWidth, testHeight)))
+                {
+                    const char* wd = mLaunchEdits[i].workDir[0] ? mLaunchEdits[i].workDir : nullptr;
+                    const bool ok = platform.LaunchProcess(mLaunchEdits[i].exe,
+                                                           preview.empty() ? nullptr : preview.c_str(), wd);
+                    if (ok) mLog.Info("Test-launched " + emus[i].label);
+                    else    mLog.Error("Failed to test-launch " + std::string(mLaunchEdits[i].exe));
+                }
+                ImGui::EndDisabled();
+                ImGui::EndTable();
+            }
         }
-
-        ImGui::SetNextItemWidth(460.0f);
-        ImGui::InputText("BIOS", mLaunchEdits[i].bios, sizeof(mLaunchEdits[i].bios));
-        ImGui::SameLine();
-        if (ImGui::Button("Browse...##bios"))
-        {
-            std::string p;
-            if (platform.OpenFileDialogFiltered(p, "BIOS image", "bin,rom"))
-                std::snprintf(mLaunchEdits[i].bios, sizeof(mLaunchEdits[i].bios), "%s", p.c_str());
-        }
-        ImGui::SetItemTooltip("Optional Saturn BIOS. Reference it in Arguments with {bios} (e.g.\n"
-                              "-b \"{bios}\"). Mednafen usually takes its BIOS from its own config\n"
-                              "(ss.bios_*), so leave {bios} out of the Mednafen arguments.");
-
-        ImGui::SetNextItemWidth(460.0f);
-        ImGui::InputText("Arguments", mLaunchEdits[i].args, sizeof(mLaunchEdits[i].args));
-        ImGui::SetItemTooltip("Use {rom} for the game path and {bios} for the BIOS. e.g.\n"
-                              "\"{rom}\"  (Mednafen)  or  -a -i \"{rom}\"  /  -a -b \"{bios}\" -i \"{rom}\"  (Yabause)");
-
-        ImGui::SetNextItemWidth(460.0f);
-        ImGui::InputText("Working dir", mLaunchEdits[i].workDir, sizeof(mLaunchEdits[i].workDir));
-        ImGui::SetItemTooltip("Blank = the executable's own folder (so it finds its config/saves).");
-
-        // Live preview of the resolved command line for the current ROM + this BIOS.
-        const std::string preview = BuildLaunchArgs(mLaunchEdits[i].args, mLauncher.Rom(),
-                                                    mLaunchEdits[i].bios);
-        ImGui::TextDisabled("Preview:  %s %s", PathBasename(mLaunchEdits[i].exe).c_str(),
-                            preview.empty() ? "(no ROM selected)" : preview.c_str());
+        ImGui::EndChild();
+        ImGui::Spacing();
         ImGui::PopID();
     }
 
-    ImGui::Separator();
-    ImGui::Checkbox("On launch, set the ROM as the Data Directory if none is set yet",
-                    &mLaunchSetDataDirEdit);
-    ImGui::SetItemTooltip("Texture 'Find in game data' then searches the same disc you're running.\n"
-                          "Never overrides a Data Directory you've already set.");
+    if (showSidebar)
+    {
+        ImGui::TableNextColumn();
+        if (ImGui::BeginChild("##variables", ImVec2(0, 145), ImGuiChildFlags_Borders))
+        {
+            ImGui::TextUnformatted("Available Variables");
+            ImGui::Separator();
+            ImGui::TextColored(ImVec4(0.36f, 0.70f, 1.0f, 1.0f), "{rom}");
+            ImGui::SameLine(86.0f);
+            ImGui::TextWrapped("Full path to the selected ROM file");
+        }
+        ImGui::EndChild();
+        ImGui::Spacing();
+        if (ImGui::BeginChild("##launch_about", ImVec2(0, 165), ImGuiChildFlags_Borders))
+        {
+            ImGui::TextUnformatted("About");
+            ImGui::Separator();
+            ImGui::TextWrapped("Arguments are passed to the emulator exactly as typed. "
+                               "Use variables to insert the selected ROM path.");
+            ImGui::Spacing();
+            ImGui::TextDisabled("Example:");
+            ImGui::SameLine();
+            ImGui::TextColored(ImVec4(0.55f, 0.82f, 0.58f, 1.0f), "-a -i \"{rom}\"");
+        }
+        ImGui::EndChild();
+        ImGui::EndTable();
+    }
+    ImGui::EndChild();
 
     ImGui::Separator();
-    if (ImGui::Button("Save", ImVec2(110, 0)))
+    ImGui::Checkbox("##launch_auto_data_dir", &mLaunchSetDataDirEdit);
+    ImGui::SetItemTooltip("When launching, initialize an empty Data Directory from the folder "
+                          "containing the selected ROM.");
+    ImGui::SameLine();
+    ImGui::TextUnformatted("Automatically use the selected ROM's folder as the data directory if none is set yet");
+
+    const float cancelWidth = 110.0f;
+    const float saveWidth = 110.0f;
+    const float footerButtonHeight = 36.0f;
+    const float footerWidth = cancelWidth + saveWidth + ImGui::GetStyle().ItemSpacing.x;
+    ImGui::SameLine(std::max(ImGui::GetCursorPosX(),
+                            ImGui::GetWindowContentRegionMax().x - footerWidth));
+    if (ImGui::Button("Cancel", ImVec2(cancelWidth, footerButtonHeight)))
+    {
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::SameLine();
+    if (DrawLaunchIconButton("##save_launch_settings", "Save", LaunchGlyph::Save,
+                             ImVec2(saveWidth, footerButtonHeight), true))
     {
         for (size_t i = 0; i < emus.size() && i < mLaunchEdits.size(); ++i)
         {
             emus[i].exePath      = mLaunchEdits[i].exe;
             emus[i].argsTemplate = mLaunchEdits[i].args;
             emus[i].workDir      = mLaunchEdits[i].workDir;
-            emus[i].biosPath     = mLaunchEdits[i].bios;
         }
+        mLauncher.Select(mLaunchSelectedEdit);
         mLauncher.SetSetDataDirOnLaunch(mLaunchSetDataDirEdit);
         mSettingsDirty = true;
         ImGui::CloseCurrentPopup();
     }
-    ImGui::SameLine();
-    if (ImGui::Button("Cancel", ImVec2(110, 0)))
-    {
-        ImGui::CloseCurrentPopup();
-    }
     ImGui::EndPopup();
+    ImGui::PopFont();
+    ImGui::PopStyleVar(4);
 }
 
 // Start the current emulator + ROM: resolve exe + args (+ working dir) and hand them to
@@ -3369,12 +3743,12 @@ void App::LaunchSession(IPlatform& platform)
     mLog.Info("Launched " + sel->label +
               (mLauncher.Rom().empty() ? std::string()
                                        : " with " + PathBasename(mLauncher.Rom())));
-    // Adopt the ROM as the Data Directory only when none is set (per user preference:
-    // auto-set if empty, never override an existing one).
+    // Follow the ROM selection with its containing folder. Data search can then scan
+    // companion files as well as the selected disc image itself.
     if (mLauncher.SetDataDirOnLaunch() && mDataDir.empty() && !mLauncher.Rom().empty())
     {
-        mDataDir = mLauncher.Rom();
-        mLog.Info("Data Directory set to the launched ROM: " + mDataDir);
+        mDataDir = PathDirectory(mLauncher.Rom());
+        mLog.Info("Data Directory set to the ROM folder: " + mDataDir);
     }
     EnableLiveAutoConnect(nullptr);   // no-op off SE_ENABLE_LIVE
     mSettingsDirty = true;

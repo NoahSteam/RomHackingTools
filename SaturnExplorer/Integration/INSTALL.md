@@ -157,10 +157,11 @@ so Saturn Explorer's toolbar **Launch** menu can start the patched build directl
 viewer then auto-connects (live) once it's up. Open the menu (the **Launch ▾** button) to
 pick the emulator and the ROM to boot (the ROM **Browse…** picker is filtered to Saturn
 disc images — `.cue/.chd/.iso/.ccd/…`). **Launch Settings…** there lets you edit each
-emulator's executable, launch arguments, BIOS, and working directory. Put `{rom}` where the
-game path goes and `{bios}` for the BIOS — e.g. `"{rom}"` for Mednafen (which usually takes
-its BIOS from its own `ss.bios_*` config, so leave `{bios}` out there), or
-`-a -i "{rom}"` / `-a -b "{bios}" -i "{rom}"` for Yabause. A live preview shows the exact
-command line. Selecting a ROM also adopts it as the Data Directory when none is set, so the
-texture "Find in game data" search scans the same disc. That same settings file persists
+emulator's executable, launch arguments, and working directory. Put `{rom}` where the
+game path goes — e.g. `"{rom}"` for Mednafen or `-a -i "{rom}"` for Yabause. For the
+installer's portable Mednafen build, place `sega_101.bin` and `mpr-17933.bin` in the
+`firmware` folder next to `mednafen.exe`; Launch Settings shows a green check or red cross
+for each file. A live preview shows the exact command line. The launch option can also use
+the selected ROM's containing folder as the Data Directory, so texture "Find in game data"
+scans its companion files. That same settings file persists
 your emulator/ROM choice, recent ROMs, panel layout, and visibility between runs.

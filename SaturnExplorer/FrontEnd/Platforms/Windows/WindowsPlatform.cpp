@@ -1,6 +1,7 @@
 #include "WindowsPlatform.h"
 
 #include <commdlg.h>
+#include <ole2.h>       // OleInitialize (required by the modern folder picker)
 #include <shlobj.h>     // SHBrowseForFolder (PickDirectory)
 #include <shellapi.h>   // ShellExecute (RevealPath)
 #include <cstdio>
@@ -27,6 +28,11 @@ bool WindowsPlatform::Initialize(const PlatformConfig& config)
 {
     sInstance = this;
 
+    // BIF_NEWDIALOGSTYLE requires COM/OLE to be initialized on the calling thread.
+    // Without this, SHBrowseForFolder can hang while dismissing the dialog on some
+    // Windows versions—the apparent freeze after setting the Data Directory.
+    mOleInitialized = SUCCEEDED(::OleInitialize(nullptr));
+
     // Make the process DPI-aware BEFORE creating the window. Without this,
     // Windows renders the app at 96 DPI and bitmap-stretches it up on a
     // high-DPI display — the cause of the blur. Now the app draws at native
@@ -44,6 +50,7 @@ bool WindowsPlatform::Initialize(const PlatformConfig& config)
     if (!mHwnd)
     {
         ::UnregisterClassW(mWindowClass.lpszClassName, mWindowClass.hInstance);
+        if (mOleInitialized) { ::OleUninitialize(); mOleInitialized = false; }
         return false;
     }
 
@@ -52,6 +59,7 @@ bool WindowsPlatform::Initialize(const PlatformConfig& config)
         CleanupDeviceD3D();
         ::DestroyWindow(mHwnd);
         ::UnregisterClassW(mWindowClass.lpszClassName, mWindowClass.hInstance);
+        if (mOleInitialized) { ::OleUninitialize(); mOleInitialized = false; }
         return false;
     }
 
@@ -64,19 +72,21 @@ bool WindowsPlatform::Initialize(const PlatformConfig& config)
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
     io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
+    io.ConfigDpiScaleFonts = true;
+    io.ConfigDpiScaleViewports = true;
 
     sfe::ApplyTheme(ImGui::GetStyle());   // Saturn Explorer theme (shared, portable)
     sfe::LoadFonts(io);                   // embedded proportional UI font
 
     // Scale the whole UI to the window's DPI so it is both crisp and the right
-    // physical size. ImGui 1.92's font system keeps the scalable default font
-    // sharp at the scaled size; ScaleAllSizes handles spacing/padding.
+    // physical size. FontScaleDpi is the per-monitor factor; FontScaleMain remains
+    // the user/application scale and must not also receive the DPI value.
     const float dpiScale = ImGui_ImplWin32_GetDpiScaleForHwnd(mHwnd);
     if (dpiScale > 0.0f)
     {
         ImGuiStyle& style = ImGui::GetStyle();
         style.ScaleAllSizes(dpiScale);
-        style.FontScaleMain = dpiScale;
+        style.FontScaleDpi = dpiScale;
     }
 
     ImGui_ImplWin32_Init(mHwnd);
@@ -97,6 +107,11 @@ void WindowsPlatform::Shutdown()
         mHwnd = nullptr;
     }
     ::UnregisterClassW(mWindowClass.lpszClassName, mWindowClass.hInstance);
+    if (mOleInitialized)
+    {
+        ::OleUninitialize();
+        mOleInitialized = false;
+    }
     sInstance = nullptr;
 }
 
@@ -457,6 +472,26 @@ LRESULT WINAPI WindowsPlatform::WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPAR
         {
             sInstance->mResizeWidth = static_cast<UINT>(LOWORD(lparam));
             sInstance->mResizeHeight = static_cast<UINT>(HIWORD(lparam));
+        }
+        return 0;
+    case WM_DPICHANGED:
+        if (sInstance && ImGui::GetCurrentContext())
+        {
+            const float dpiScale = static_cast<float>(HIWORD(wparam)) / 96.0f;
+            if (dpiScale > 0.0f)
+            {
+                ImGuiStyle& style = ImGui::GetStyle();
+                // Reapply base geometry before scaling so repeated monitor changes
+                // never compound the previous monitor's scale.
+                sfe::ApplyTheme(style);
+                style.ScaleAllSizes(dpiScale);
+                style.FontScaleDpi = dpiScale;
+            }
+            const RECT* suggested = reinterpret_cast<const RECT*>(lparam);
+            ::SetWindowPos(hwnd, nullptr, suggested->left, suggested->top,
+                           suggested->right - suggested->left,
+                           suggested->bottom - suggested->top,
+                           SWP_NOZORDER | SWP_NOACTIVATE);
         }
         return 0;
     case WM_SYSCOMMAND:

@@ -46,7 +46,8 @@ std::string PathBasename(const std::string& path);
 
 // The launcher's persisted state: the known emulators (with per-emulator overrides),
 // which emulator + ROM are selected, a most-recently-used ROM list, and whether
-// launching should also adopt the ROM as the Data Directory. Unit-testable.
+// launching should also use the ROM's containing folder as the Data Directory.
+// Unit-testable.
 class Launcher
 {
 public:

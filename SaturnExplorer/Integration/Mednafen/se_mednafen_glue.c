@@ -51,11 +51,9 @@ extern void            SsDbgSh2Regs(int cpu, uint32_t out23[23]); /* R[16],SR,GB
 extern void            SsDbgPokeByte(uint32_t addr, uint8_t val); /* bus/debug byte write */
 extern void            SsDbgAddExecBp(int cpu, unsigned int addr); /* Tier 3: install PC breakpoint */
 extern void            SsDbgClearBps(void);                        /* Tier 3: clear PC breakpoints */
-/* Controller injection (v7+). TODO(mednafen) confirm: implement this accessor where
- * the SS pad state is reachable (SMPC / the emulated gamepad's data buffer), mapping
- * the emulator-agnostic SE_PAD_* bits to Mednafen's own SS gamepad bit order and
- * latching them so every subsequent frame reads the injected state until it changes.
- * `port` is 0-based (0 = controller 1). See README §"Controller input". */
+/* Controller injection (v7+). apply.py implements this accessor through the SMPC
+ * gamepad path, translating SE_PAD_* to Mednafen's bit order and atomically overlaying
+ * it after each host-input refresh. `port` is 0-based (0 = controller 1). */
 extern void            SsDbgSetPad(unsigned int port, unsigned int buttons);
 extern unsigned short  SsDbgReadOpcode(unsigned int addr); /* v9: 16-bit instr @ Saturn addr */
 #endif

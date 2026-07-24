@@ -1,6 +1,7 @@
 #include "Launcher.h"
 
 #include <algorithm>
+#include <fstream>
 
 #include "Settings.h"
 
@@ -58,6 +59,26 @@ std::string CollapseSpaces(const std::string& s)
     }
     return out;
 }
+
+bool FileExists(const std::string& path)
+{
+    std::ifstream f(path, std::ios::binary);
+    return static_cast<bool>(f);
+}
+
+// Builds before the portable layout fix were recorded as <checkout>/src/mednafen.exe.
+// Prefer the published root copy when it exists, without disturbing custom paths.
+std::string MigrateMednafenExe(const std::string& path)
+{
+    const size_t slash = path.find_last_of("/\\");
+    if (slash == std::string::npos || PathBasename(path) != "mednafen.exe") return path;
+    const std::string dir = path.substr(0, slash);
+    if (PathBasename(dir) != "src") return path;
+    const size_t parentSlash = dir.find_last_of("/\\");
+    if (parentSlash == std::string::npos) return path;
+    const std::string candidate = dir.substr(0, parentSlash + 1) + "mednafen.exe";
+    return FileExists(candidate) ? candidate : path;
+}
 }  // namespace
 
 std::string BuildLaunchArgs(const std::string& argsTemplate, const std::string& rom,
@@ -89,6 +110,7 @@ void Launcher::Load(const Settings& s)
         // Exe path is written by the installer under [emulators] <key>; Launch Settings
         // edits that same key so an override persists there.
         e.exePath      = s.Get("emulators", k.key, "");
+        if (e.key == "mednafen") e.exePath = MigrateMednafenExe(e.exePath);
         const std::string sect = std::string("launch.") + k.key;
         e.argsTemplate = s.Get(sect, "args", k.args);
         e.workDir      = s.Get(sect, "workdir", "");

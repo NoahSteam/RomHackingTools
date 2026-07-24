@@ -102,15 +102,11 @@ extern "C" void SsDbgPokeByte(unsigned int addr, unsigned char val) {
       at the equivalent bus/debug byte writer. */
    CheatMemWrite((unsigned int)addr, (unsigned char)val);
 }
-/* Controller input injection (v7). Driving the emulated pad directly means writing our
-   button bitmask into Mednafen's SMPC device-data plumbing (smpc.cpp), which the ss
-   debugger exposes no stable hook for and which the frontend input layer overwrites each
-   frame. Until that is wired this is a deliberate no-op: the Saturn Explorer controller
-   panel round-trips over the protocol but does not yet move the Mednafen pad. Defined so
-   the glue's SeExportSetInputHook link is satisfied on every build.
-   TODO(mednafen): map SE_PAD_* -> the active SMPC port buffer and latch it past the
-   frontend's per-frame input refresh. */
-extern "C" void SsDbgSetPad(unsigned int port, unsigned int buttons) { (void)port; (void)buttons; }
+/* Controller input injection (v7). SMPC_SetInjectedInput stores the translated pad
+   state atomically; SMPC_UpdateInput overlays it after Mednafen refreshes host input. */
+extern "C" void SsDbgSetPad(unsigned int port, unsigned int buttons) {
+   SMPC_SetInjectedInput(port, buttons);
+}
 /* Read the 16-bit SH-2 instruction at a Saturn bus address (v9 shadow call stack). SH-2
    opcodes are big-endian in memory, so compose hi<<8|lo. Uses the same bus path as the
    poke (CheatMemRead is CheatMemWrite's read pair). TODO(mednafen): if your fork lacks
@@ -149,6 +145,47 @@ extern "C" void SsDbgAddExecBp(int cpu, unsigned int addr) { (void)cpu; (void)ad
 extern "C" void SsDbgClearBps(void) {}
 #endif
 }"""
+
+SMPC_INPUT_DECL = """\
+/* Saturn Explorer controller injection. `buttons` is the protocol's SE_PAD_* mask;
+   the SMPC implementation translates and overlays it on the host gamepad state. */
+void SMPC_SetInjectedInput(unsigned port, uint32 buttons);
+"""
+
+SMPC_INPUT_STATE = """\
+/* Saturn Explorer controller injection. The server thread writes these masks while
+   the emulation thread consumes them, so keep the handoff atomic. Values use
+   Mednafen's digital-pad input bit order (see input/gamepad.cpp). */
+static std::atomic_uint_least16_t SeInjectedPad[2];
+
+void SMPC_SetInjectedInput(unsigned port, uint32 buttons)
+{
+ if(port >= 2) return;
+ const uint16 native = (uint16)((buttons & 0x000Fu) |       /* directions: bits 0..3 */
+                                ((buttons & 0x0FF0u) << 1) | /* A..R: bits 5..12 */
+                                ((buttons & 0x1000u) >> 8)); /* Start: bit 4 */
+ SeInjectedPad[port].store(native, std::memory_order_relaxed);
+}
+
+static void SeSMPCUpdateInput(unsigned vp, const int32 time_elapsed)
+{
+ uint8* data = VirtualPortsDPtr[vp];
+ uint8 merged[2];
+ if(vp < 2 && data && VirtualPorts[vp] == &PossibleDevices[vp].gamepad)
+ {
+  const uint16 host = (uint16)(data[0] | ((uint16)data[1] << 8));
+  const uint16 combined = (uint16)(host | SeInjectedPad[vp].load(std::memory_order_relaxed));
+  merged[0] = (uint8)combined;
+  merged[1] = (uint8)(combined >> 8);
+  data = merged;
+ }
+ VirtualPorts[vp]->UpdateInput(data, time_elapsed);
+}
+"""
+
+SMPC_INPUT_UPDATE = """\
+  SeSMPCUpdateInput(vp, time_elapsed);
+"""
 
 # Files that get an accessor block appended at EOF: (filename, block, key). ss.cpp
 # also gets accessors, but via process_ss (it has hook injections too).
@@ -241,6 +278,14 @@ def apply_prepend(text, code, key):
     return upsert(text, code, key, lambda t, block: block + "\n" + t)
 
 
+def apply_replace(text, anchor, code, key):
+    """Replace one regex match with fenced `code` (or update its existing fence)."""
+    def place(t, block):
+        m = re.search(anchor, t)
+        return t[:m.start()] + block + t[m.end():] if m else None
+    return upsert(text, code, key, place)
+
+
 def process_ss(src_dir, do_write, with_pause):
     path = os.path.join(src_dir, "ss.cpp")
     if not os.path.isfile(path):
@@ -258,6 +303,43 @@ def process_ss(src_dir, do_write, with_pause):
     notes.append(n)
     if do_write and text != original:
         open(path, "w", encoding="utf-8", errors="surrogateescape").write(text)
+    return notes
+
+
+def process_smpc(src_dir, do_write):
+    cpp_path = os.path.join(src_dir, "smpc.cpp")
+    h_path = os.path.join(src_dir, "smpc.h")
+    notes = ["smpc.cpp / smpc.h:"]
+    if not os.path.isfile(cpp_path) or not os.path.isfile(h_path):
+        return notes + ["  MISSING  smpc.cpp or smpc.h"]
+
+    text = original = open(cpp_path, encoding="utf-8", errors="surrogateescape").read()
+    # Early versions of this hook prepended <atomic>, but Mednafen requires types.h
+    # (pulled in by ss.h) to precede standard integer headers. Remove that exact legacy
+    # fence once, then keep the include anchored immediately after ss.h.
+    legacy_atomic = fence("#include <atomic>") + "\n"
+    text = text.replace(legacy_atomic, "", 1)
+    text, n = apply_anchored(text, r'(#include "ss\.h"\s*\n)',
+                             "#include <atomic>  /* SE_SMPC_ATOMIC_INCLUDE */",
+                             "SE_SMPC_ATOMIC_INCLUDE")
+    notes.append(n)
+    text, n = apply_anchored(text, r'(static uint8\* MiscInputPtr;\s*\n)',
+                             SMPC_INPUT_STATE, "SeInjectedPad[2]")
+    notes.append(n)
+    text, n = apply_replace(
+        text,
+        r'[ \t]*VirtualPorts\[vp\]->UpdateInput\(VirtualPortsDPtr\[vp\], time_elapsed\);',
+        SMPC_INPUT_UPDATE, "SeSMPCUpdateInput(vp, time_elapsed)")
+    notes.append(n)
+    if do_write and text != original:
+        open(cpp_path, "w", encoding="utf-8", errors="surrogateescape").write(text)
+
+    text = original = open(h_path, encoding="utf-8", errors="surrogateescape").read()
+    text, n = apply_anchored(text, r'(void SMPC_SetInput\([^;]+;\s*\n)',
+                             SMPC_INPUT_DECL, "SMPC_SetInjectedInput")
+    notes.append(n)
+    if do_write and text != original:
+        open(h_path, "w", encoding="utf-8", errors="surrogateescape").write(text)
     return notes
 
 
@@ -375,7 +457,8 @@ def process_build(root, do_write):
 
 def revert(src_dir, root):
     fence_re = re.compile(re.escape(BEGIN) + r".*?" + re.escape(END) + r"\n?", re.DOTALL)
-    edited = [os.path.join(src_dir, f) for f in ("vdp1.cpp", "vdp2.cpp", "ss.cpp")]
+    edited = [os.path.join(src_dir, f) for f in
+              ("vdp1.cpp", "vdp2.cpp", "ss.cpp", "smpc.cpp", "smpc.h")]
     edited.append(os.path.join(root, TITLE_FILE))   # window-title mark (SDL frontend)
     for path in edited:
         if os.path.isfile(path):
@@ -428,6 +511,7 @@ def main():
         notes += copy_sources(src_dir, do_write)
     for fname, block, key in APPEND_EDITS:
         notes += process_append_file(src_dir, fname, block, key, do_write)
+    notes += process_smpc(src_dir, do_write)
     notes += process_ss(src_dir, do_write, with_pause)
     notes += process_title(root, do_write)
     notes += process_build(root, do_write)

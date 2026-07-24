@@ -40,6 +40,7 @@ import os
 import shutil
 import subprocess
 import sys
+import textwrap
 
 HERE = os.path.dirname(os.path.abspath(__file__))          # .../SaturnExplorer/Integration
 SE_ROOT = os.path.dirname(HERE)                            # .../SaturnExplorer
@@ -176,11 +177,12 @@ MEDNAFEN_OTHER_CORES = ("apple2", "demo", "gb", "gba", "lynx", "md", "nes", "ngp
 
 
 class Runner:
-    """Executes (or, in dry-run, just prints) shell steps and tracks failure."""
+    """Executes shell steps with concise progress output and useful failure details."""
 
-    def __init__(self, dry_run, assume_yes):
+    def __init__(self, dry_run, assume_yes, verbose=False):
         self.dry_run = dry_run
         self.assume_yes = assume_yes
+        self.verbose = verbose
 
     def confirm(self, prompt):
         if self.assume_yes or self.dry_run:
@@ -190,15 +192,42 @@ class Runner:
         except EOFError:
             return False   # non-interactive without --yes: treat as "no"
 
-    def run(self, cmd, cwd=None, shell=False, env=None):
+    @staticmethod
+    def _print_wrapped_command(pretty, loc=""):
+        command = pretty + loc
+        lines = textwrap.wrap(command, width=100, break_long_words=False,
+                              break_on_hyphens=False) or [command]
+        print(f"      {lines[0]}")
+        for line in lines[1:]:
+            print(f"      {line}")
+
+    def run(self, cmd, cwd=None, shell=False, env=None, description=None):
         pretty = cmd if isinstance(cmd, str) else " ".join(cmd)
         loc = f"  (in {cwd})" if cwd else ""
+        detailed = self.verbose or (description is None and len(pretty) <= 160)
+        if description is None:
+            if isinstance(cmd, (list, tuple)) and cmd:
+                description = f"Run {os.path.basename(str(cmd[0]))}"
+            else:
+                description = "Run command"
         if self.dry_run:
-            print(f"    would run: {pretty}{loc}")
+            if detailed:
+                print(f"    would run: {pretty}{loc}")
+            else:
+                print(f"    would run: {description}")
             return 0
-        print(f"    $ {pretty}{loc}")
+        if detailed:
+            print(f"    $ {pretty}{loc}")
+        else:
+            print(f"    -> {description}...")
         try:
-            return subprocess.call(cmd, cwd=cwd, shell=shell, env=env)
+            rc = subprocess.call(cmd, cwd=cwd, shell=shell, env=env)
+            if rc != 0:
+                print(f"    [failed] exit code {rc}")
+                if not detailed:
+                    print("    Command:")
+                    self._print_wrapped_command(pretty, loc)
+            return rc
         except FileNotFoundError:
             # The executable isn't on PATH. The most common cause on Windows is that a
             # tool was just installed (winget) this run — Windows doesn't push the new
@@ -376,9 +405,11 @@ def ensure_cmake(rn):
 def build_saturn_explorer(rn, generator):
     print("\n== Saturn Explorer ==")
     build = os.path.join(SE_ROOT, "build")
-    if rn.run([CMAKE, "-B", build, "-S", SE_ROOT, "-G", generator, "-A", "x64"]) != 0:
+    if rn.run([CMAKE, "-B", build, "-S", SE_ROOT, "-G", generator, "-A", "x64"],
+              description="Configure Saturn Explorer") != 0:
         return False, None
-    if rn.run([CMAKE, "--build", build, "--config", "Release", "--parallel"]) != 0:
+    if rn.run([CMAKE, "--build", build, "--config", "Release", "--parallel"],
+              description="Build Saturn Explorer (Release)") != 0:
         return False, None
     exe = os.path.join(build, "bin", "Release", "SaturnExplorerFrontEnd.exe")
     return True, exe
@@ -401,14 +432,16 @@ def clone_and_patch(rn, key, spec, dest, rev_override, repo, skip_git=False):
             # the source and can break apply.py's exact-anchor patching + the MSYS2 build.
             # (A fork with a committed `.gitattributes: * -text` is already protected; this
             # covers forks/upstreams that lack it.)
-            if rn.run(["git", "-c", "core.autocrlf=false", "clone", repo, dest]) != 0:
+            if rn.run(["git", "-c", "core.autocrlf=false", "clone", repo, dest],
+                      description=f"Clone {key} sources") != 0:
                 return False
         if rn.run(["git", "fetch", "--all", "--tags"], cwd=dest) != 0:
             return False
         if rn.run(["git", "checkout", rev], cwd=dest) != 0:
             return False
     patcher = os.path.join(SE_ROOT, spec["patch_subdir"])
-    return rn.run([sys.executable, patcher, dest, *spec["patch_args"]]) == 0
+    return rn.run([sys.executable, patcher, dest, *spec["patch_args"]],
+                  description=f"Apply Saturn Explorer integration to {key}") == 0
 
 
 def build_mednafen(rn, msys2, dest, configure_flags="", reconfigure=True):
@@ -490,7 +523,13 @@ def build_mednafen(rn, msys2, dest, configure_flags="", reconfigure=True):
         '[ -e "$b" ] && ldd "$b" 2>/dev/null '
         r"| grep -io '/mingw64/bin/[^ ]*\.dll' "
         '| while read d; do [ -e "$(basename "$d")" ] || cp "$d" .; done; '
-        'done; done; true'
+        'done; done; '
+        # Autotools links in src/, but Saturn Explorer treats the checkout root as
+        # the portable Mednafen install directory (firmware/, config, saves). Keep
+        # the build product in src/ for make, and publish the runnable exe + DLL
+        # closure one level up for users and the frontend launcher.
+        'for b in mednafen.exe *.dll; do if [ -e "$b" ]; then cp -f "$b" .. || exit 1; fi; done; '
+        'test -f ../mednafen.exe && mkdir -p ../firmware'
     )
     script = (f"cd '{msdir}' && "
               f"([ -L include/mednafen ] || {{ {relink}; }}) && "
@@ -502,8 +541,9 @@ def build_mednafen(rn, msys2, dest, configure_flags="", reconfigure=True):
     # compiler was on PATH. Also export /mingw64/bin explicitly as a belt-and-suspenders
     # fallback for a stripped-down profile.
     env = {**os.environ, "MSYSTEM": "MINGW64", "CHERE_INVOKING": "1"}
-    rc = rn.run([bash, "-lc", f"export PATH=/mingw64/bin:$PATH && {script}"], env=env)
-    exe = os.path.join(dest, "src", "mednafen.exe")
+    rc = rn.run([bash, "-lc", f"export PATH=/mingw64/bin:$PATH && {script}"], env=env,
+                description="Compile and package Mednafen")
+    exe = os.path.join(dest, "mednafen.exe")
     return rc == 0, exe
 
 
@@ -513,9 +553,10 @@ def build_yabause(rn, dest, generator, qt_path):
            "-DYAB_PORTS=qt"]
     if qt_path:
         cfg.append(f"-DCMAKE_PREFIX_PATH={qt_path}")
-    if rn.run(cfg) != 0:
+    if rn.run(cfg, description="Configure Yabause") != 0:
         return False, None
-    if rn.run([CMAKE, "--build", build, "--config", "Release", "--parallel"]) != 0:
+    if rn.run([CMAKE, "--build", build, "--config", "Release", "--parallel"],
+              description="Build Yabause (Release)") != 0:
         return False, None
     return True, os.path.join(build, "src", "qt", "Release", "yabause-qt.exe")
 
@@ -598,6 +639,8 @@ def main():
     ap.add_argument("--generator", default="Visual Studio 17 2022",
                     help='CMake generator (default "Visual Studio 17 2022"; use "...16 2019")')
     ap.add_argument("--dry-run", action="store_true", help="print the plan; change nothing")
+    ap.add_argument("--verbose", action="store_true",
+                    help="print complete commands (including generated MSYS2 scripts)")
     ap.add_argument("--yes", action="store_true", help="don't prompt before installs/builds")
     args = ap.parse_args()
     FORK_OWNER = args.fork_owner
@@ -606,7 +649,7 @@ def main():
         print("This installer targets Windows. Use --dry-run to preview the plan elsewhere.")
         return 2
 
-    rn = Runner(args.dry_run, args.yes)
+    rn = Runner(args.dry_run, args.yes, args.verbose)
     do_mednafen = not args.no_mednafen and not args.se_only
     do_yabause = args.with_yabause and not args.se_only
 
@@ -633,7 +676,8 @@ def main():
             if bash and not args.incremental:
                 print("  Installing MSYS2 build packages (SDL2, zlib, FLAC, gcc, autotools)...")
                 rn.run([bash, "-lc",
-                        f"pacman -Syu --noconfirm && pacman -S --needed --noconfirm {MSYS2_PACKAGES}"])
+                        f"pacman -Syu --noconfirm && pacman -S --needed --noconfirm {MSYS2_PACKAGES}"],
+                       description="Install MSYS2 build packages")
         else:
             ok = False
         # After a fresh winget install (or in --dry-run) detection can't see it yet;
@@ -707,7 +751,7 @@ def main():
         mark = "OK " if good else "FAIL"
         print(f"  [{mark}] {name}" + (f"\n         {path}" if path else ""))
     print("\nNext:")
-    print("  * Supply a Saturn BIOS + disc images to the emulator (NOT included — copyrighted).")
+    print("  * Put sega_101.bin + mpr-17933.bin in Mednafen's firmware folder (NOT included — copyrighted).")
     print("  * Launch the patched emulator, then Saturn Explorer with --live,")
     print("    or File -> Connect to emulator (live).")
     return 0 if all(g for _, g, _ in results) else 1

@@ -82,7 +82,7 @@ private:
     void DrawWatch(IPlatform& platform);   // debugger Watch Window
     void DrawAssembly();                    // SH-2 Assembly (live disassembly)
     void DrawHexEditor();                   // Hex Editor (memory view/edit)
-    void DrawController();                  // Saturn control pad -> live input
+    void DrawController(IPlatform& platform); // Saturn control pad -> live input
     void SendInput(unsigned int mask);      // push a pad mask to the live emulator (on change)
     void DrawLog();                         // structured event log
     void DrawActions();                     // Tracepoints management table
@@ -159,6 +159,7 @@ private:
     HexEditorPanel           mHexEditor;
     ControllerPanel          mController;
     unsigned int             mInputMask = 0;    // last pad mask sent to the live emulator
+    uint64_t                 mControllerFrame = 0; // live frame (never scrub-context frame)
 
     // Structured event log + the tracepoint (execution-action) store, plus the state
     // of the modal tracepoint editor (mTpEdit is the working copy; mTpEditNew means
@@ -267,8 +268,9 @@ private:
     // Edit buffers for the Launch Settings dialog (ImGui InputText needs char storage;
     // no imgui_stdlib here). Parallel to mLauncher.Emulators(); copied in on open,
     // written back on Save.
-    struct LaunchEdit { char exe[512]; char args[256]; char workDir[512]; char bios[512]; };
+    struct LaunchEdit { char exe[512]; char args[256]; char workDir[512]; };
     std::vector<LaunchEdit> mLaunchEdits;
+    int              mLaunchSelectedEdit = 0;
     bool             mLaunchSetDataDirEdit = true;
 
     int              mSelectedCommand = -1;   // primary selection (detail panels)

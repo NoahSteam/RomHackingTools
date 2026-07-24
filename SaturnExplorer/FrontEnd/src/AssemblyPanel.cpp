@@ -103,6 +103,9 @@ void DrawOperands(const DisassembledInstruction& ins, bool& clicked, uint32_t& c
         ImGui::PushStyleColor(ImGuiCol_Text, col);
         ImGui::TextUnformatted(tok.c_str());
         ImGui::PopStyleColor();
+        // Every token is a separate ImGui item. Attach the row popup to each one so
+        // right-clicking anywhere in a multi-token operand opens the context menu.
+        if (ImGui::IsItemClicked(ImGuiMouseButton_Right)) ImGui::OpenPopup("ctx");
         if (link)
         {
             if (ImGui::IsItemHovered()) ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
@@ -378,6 +381,14 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
         if (isPc) ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, kColPcRow);
         ImGui::PushID((int)ln.addr);
 
+        // A context menu belongs to the instruction row, not just its final Comment
+        // widget. Open the same popup from every visible cell so right-clicking the
+        // gutter, address, opcode, mnemonic, operands, or comment behaves uniformly.
+        const auto openRowContext = []()
+        {
+            if (ImGui::IsItemClicked(ImGuiMouseButton_Right)) ImGui::OpenPopup("ctx");
+        };
+
         // Gutter: breakpoint dot (click toggles) + PC arrow.
         ImGui::TableSetColumnIndex(0);
         const Breakpoint* bp = bps.ExecutionAt(mCpu, ln.addr);
@@ -404,20 +415,25 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
         // the right-click menu so the two don't fight over the same click.
         if (ImGui::InvisibleButton("g", ImVec2(34, h)) && ln.readable)
             bps.ToggleExecution(mCpu, ln.addr);
+        openRowContext();
         if (isPc && mScrollToPc) { ImGui::SetScrollHereY(0.35f); mScrollToPc = false; }
 
         // Address / bytes / mnemonic / operands.
         ImGui::TableSetColumnIndex(1);
         ImGui::PushStyleColor(ImGuiCol_Text, kColAddr); ImGui::Text("%08X", ln.addr); ImGui::PopStyleColor();
+        openRowContext();
         ImGui::TableSetColumnIndex(2);
         if (ln.readable) { ImGui::PushStyleColor(ImGuiCol_Text, kColBytes); ImGui::Text("%04X", ln.op); ImGui::PopStyleColor(); }
         else ImGui::TextDisabled("----");
+        openRowContext();
         ImGui::TableSetColumnIndex(3);
         if (ln.readable) { ImGui::PushStyleColor(ImGuiCol_Text, kColMnem); ImGui::TextUnformatted(ln.ins.Mnemonic.c_str()); ImGui::PopStyleColor(); }
         else ImGui::TextDisabled("????");
+        openRowContext();
         ImGui::TableSetColumnIndex(4);
         bool tClicked = false; uint32_t tTarget = 0;
         if (ln.readable) DrawOperands(ln.ins, tClicked, tTarget);
+        openRowContext();
         if (tClicked) Navigate(tTarget, true);
 
         // Register / memory hover preview on the operands cell.
@@ -467,6 +483,7 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
                 ImGui::PushStyleColor(ImGuiCol_Text, hasUser ? IM_COL32(190, 185, 140, 255) : kColCmt);
                 ImGui::TextUnformatted(txt[0] ? txt : " ");
                 ImGui::PopStyleColor();
+                openRowContext();
                 if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0))
                 {
                     mEditingComment = true; mEditCommentAddr = ln.addr; mCommentFocus = true;
@@ -476,7 +493,7 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
         }
 
         // Row context menu.
-        if (ImGui::BeginPopupContextItem("ctx"))
+        if (ImGui::BeginPopup("ctx"))
         {
             uint32_t ea; WatchType wt;
             const bool hasMem = ln.readable && ResolveMemOperand(ln.ins, regs, ea, wt);

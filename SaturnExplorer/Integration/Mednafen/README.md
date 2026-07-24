@@ -213,30 +213,18 @@ reaches the address; the hit report still names the exact CPU.)
 Every arg to `SeExportSnapshot` may be `NULL` (that section ships as length 0 and the
 client no-ops it), so you can build the tiers incrementally and test each.
 
-## Controller input (Tier 4, v7+) — TODO(mednafen) confirm
+## Controller input (Tier 4, v7+)
 
 The Saturn Explorer **Controller panel** lets the user press a Saturn pad and drive the
 running game. The panel sends an emulator-agnostic `SE_PAD_*` bitmask (SeLiveProtocol.h)
 with an `INP` command; `se_export.c` forwards it to the input hook, and the glue's
 `SeMdfnSetPad` calls the `SsDbgSetPad` accessor.
 
-`apply.py` injects `SsDbgSetPad` into `ss.cpp` as a **no-op** so the patched build always
-links out of the box (this is the one input site that is genuinely emulator-specific and
-**has not been exercised in-repo** — the SE side is verified against the mock; only the
-accessor body + the SE_PAD_*→SS-bit map need confirming on a real Mednafen). With the
-injected no-op the panel highlights and sends but the game ignores the input. To actually
-drive the pad, replace the injected stub's body with SMPC wiring:
-
-```cpp
-// In ss.cpp (or smpc.cpp — wherever the emulated pad's state is reachable). Latch the
-// injected buttons and feed them into the SS controller port every frame, BYPASSING
-// Mednafen's own host-input mapping (that's the whole point — a button in the panel is
-// that Saturn button regardless of the emulator's key bindings). Map SE_PAD_* to
-// Mednafen's SS gamepad bit order (verify against ss/input/gamepad.cpp), and OR/replace
-// the pad's digital data for `port`, latched past the frontend's per-frame input refresh.
-// Called from SeExportSetInputHook on each INP.
-extern "C" void SsDbgSetPad(unsigned int port, unsigned int buttons) { /* SMPC wiring */ }
-```
+`apply.py` wires `SsDbgSetPad` into `smpc.cpp`. Incoming masks are translated to
+Mednafen's digital-pad bit order, handed from the server thread through atomics, and
+overlaid after the frontend's per-frame host-input refresh. This means Saturn Explorer
+buttons and ordinary Mednafen input can coexist. Disconnecting the live client clears
+both injected ports so a held button cannot remain stuck.
 
 The mask is idempotent and latched, so re-sending each frame is safe.
 
