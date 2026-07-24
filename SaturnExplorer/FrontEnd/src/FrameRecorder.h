@@ -74,6 +74,7 @@ private:
     // A raw (uncompressed) frame staged from the UI thread for the worker.
     struct RawFrame
     {
+        uint64_t generation = 0;
         uint64_t frameNumber = 0;
         std::vector<uint8_t>  vdp1Vram, vdp2Vram, cram, wramLow, wramHigh, vdp1Fb;
         std::vector<uint16_t> vdp1Regs, vdp2Regs;
@@ -97,6 +98,7 @@ private:
     std::mutex               mQMtx;
     std::condition_variable  mQCv;
     std::deque<RawFrame>     mQueue;
+    std::atomic<uint64_t>    mGeneration{0};
     std::atomic<bool>        mStop{false};
     std::thread              mWorker;
     FrameLzScratch           mLzScratch;   // worker-owned match-finder scratch

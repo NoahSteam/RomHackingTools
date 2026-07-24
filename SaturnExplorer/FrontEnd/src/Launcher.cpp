@@ -4,6 +4,7 @@
 #include <fstream>
 
 #include "Settings.h"
+#include "DataSearch.h"
 
 namespace sfe
 {
@@ -64,6 +65,25 @@ bool FileExists(const std::string& path)
 {
     std::ifstream f(path, std::ios::binary);
     return static_cast<bool>(f);
+}
+
+std::string DirectoryOf(const std::string& path)
+{
+    const size_t slash = path.find_last_of("/\\");
+    return slash == std::string::npos ? std::string() : path.substr(0, slash);
+}
+
+std::string JoinPath(const std::string& dir, const char* leaf)
+{
+    if (dir.empty()) return std::string();
+    const char last = dir.back();
+    return dir + ((last == '/' || last == '\\') ? "" :
+#ifdef _WIN32
+                  "\\"
+#else
+                  "/"
+#endif
+                  ) + leaf;
 }
 
 // Builds before the portable layout fix were recorded as <checkout>/src/mednafen.exe.
@@ -183,6 +203,58 @@ std::string Launcher::CurrentArgs() const
 {
     const EmulatorSpec* e = Selected();
     return e ? BuildLaunchArgs(e->argsTemplate, mRom, e->biosPath) : std::string();
+}
+
+LaunchValidation Launcher::Validate() const
+{
+    LaunchValidation result;
+    const EmulatorSpec* e = Selected();
+    if (!e)
+    {
+        result.message = "No emulator is selected.";
+        return result;
+    }
+    if (e->exePath.empty() || !PathExists(e->exePath))
+    {
+        result.message = e->label + " executable was not found. Open Launch Settings to configure it.";
+        return result;
+    }
+    if (mRom.empty())
+    {
+        result.message = "Select a game or ROM before launching.";
+        return result;
+    }
+    if (!PathExists(mRom))
+    {
+        result.message = "The selected game or ROM no longer exists.";
+        return result;
+    }
+    if (!e->workDir.empty() && !IsDirectory(e->workDir))
+    {
+        result.message = "The configured working directory does not exist.";
+        return result;
+    }
+    if (e->argsTemplate.find("{rom}") == std::string::npos)
+    {
+        result.message = "The arguments template must contain {rom}.";
+        return result;
+    }
+    if (e->key == "mednafen")
+    {
+        const std::string firmwareDir = JoinPath(DirectoryOf(e->exePath), "firmware");
+        if (!PathExists(JoinPath(firmwareDir, "sega_101.bin")))
+        {
+            result.message = "Missing firmware/sega_101.bin beside Mednafen.";
+            return result;
+        }
+        if (!PathExists(JoinPath(firmwareDir, "mpr-17933.bin")))
+        {
+            result.message = "Missing firmware/mpr-17933.bin beside Mednafen.";
+            return result;
+        }
+    }
+    result.valid = true;
+    return result;
 }
 
 }  // namespace sfe

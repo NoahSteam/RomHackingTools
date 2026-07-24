@@ -33,6 +33,12 @@ struct EmulatorSpec
     std::string biosPath;      // optional Saturn BIOS image; substituted for {bios} in args
 };
 
+struct LaunchValidation
+{
+    bool        valid = false;
+    std::string message;
+};
+
 // Substitute the {rom} and {bios} tokens in `argsTemplate`. If `rom` is empty the whole
 // template collapses to "" — launch bare (e.g. boot to the emulator's own menu), never
 // passing a stray empty "" or dangling flag. Otherwise {rom}->rom and {bios}->bios (an
@@ -80,6 +86,11 @@ public:
     // The resolved argument string for the selected emulator + current ROM (empty if
     // no emulator is selected). What the App passes to LaunchProcess.
     std::string CurrentArgs() const;
+
+    // Validate the complete configuration used by the primary Launch action.
+    // This deliberately lives in the model so the toolbar, menu, and launch
+    // command all use the same rules.
+    LaunchValidation Validate() const;
 
 private:
     std::vector<EmulatorSpec> mEmus;

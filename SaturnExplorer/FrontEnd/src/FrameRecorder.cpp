@@ -90,6 +90,7 @@ void FrameRecorder::Capture(se_context* ctx, uint64_t frameNumber)
     // UI thread: only the raw reads happen here (fast memcpys); the worker does
     // the expensive compression. Registers are small, so read them here too.
     RawFrame raw;
+    raw.generation = mGeneration.load(std::memory_order_acquire);
     raw.frameNumber = frameNumber;
     ReadRegion(ctx, SE_VRAM_KIND_VDP1_VRAM, kVdp1VramSize, raw.vdp1Vram);
     ReadRegion(ctx, SE_VRAM_KIND_VDP2_VRAM, kVdp2VramSize, raw.vdp2Vram);
@@ -164,6 +165,13 @@ void FrameRecorder::Worker()
                   f.vdp1Regs.size() * 2 + f.vdp2Regs.size() * 2 + sizeof(f.sh2);
 
         std::lock_guard<std::mutex> lk(mRingMtx);
+        // Clear() starts a new recording generation. A frame that was already
+        // being compressed when that happened belongs to the old session and
+        // must not be appended after the new ring has been cleared.
+        if (raw.generation != mGeneration.load(std::memory_order_acquire))
+        {
+            continue;
+        }
         mBytes += f.bytes;
         mFrames.push_back(std::move(f));
         Evict();
@@ -183,6 +191,7 @@ void FrameRecorder::Evict()
 
 void FrameRecorder::Clear()
 {
+    mGeneration.fetch_add(1, std::memory_order_acq_rel);
     {
         std::lock_guard<std::mutex> lk(mQMtx);
         mQueue.clear();

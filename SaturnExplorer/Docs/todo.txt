@@ -1,0 +1,6 @@
+-See registers for cpus
+-Capture 100mb worth of frames
+-dump registers and memory into each of its bins
+-Hex viewer/editor
+-Code viewer/editor
+-Code and register breakpoints

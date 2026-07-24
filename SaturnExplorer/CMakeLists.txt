@@ -19,6 +19,8 @@
 cmake_minimum_required(VERSION 3.15)
 project(SaturnExplorer LANGUAGES CXX)
 
+include(CTest)
+
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -92,6 +94,21 @@ else()
     endif()
 endif()
 
+if(BUILD_TESTING)
+    add_executable(SaturnExplorerTopBarTests
+        FrontEnd/tests/TopBarTests.cpp
+        FrontEnd/src/TopBar.cpp
+        FrontEnd/src/Launcher.cpp
+        FrontEnd/src/Settings.cpp
+        FrontEnd/src/DataSearch.cpp
+    )
+    target_include_directories(SaturnExplorerTopBarTests PRIVATE FrontEnd/src)
+    if(WIN32)
+        target_compile_definitions(SaturnExplorerTopBarTests PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+    endif()
+    add_test(NAME SaturnExplorerTopBarTests COMMAND SaturnExplorerTopBarTests)
+endif()
+
 # ---------------------------------------------------------------------------
 # Live driver — reads a running, patched emulator over a local socket (native) or a
 # WebSocket->TCP bridge (web). Uses threads + sockets, so on Emscripten it is built
@@ -150,6 +167,7 @@ if(WIN32)
         FrontEnd/src/DataSearch.cpp
         FrontEnd/src/Settings.cpp
         FrontEnd/src/Launcher.cpp
+        FrontEnd/src/TopBar.cpp
         FrontEnd/src/WatchPanel.cpp
         FrontEnd/src/AssemblyPanel.cpp
         FrontEnd/src/HexEditorPanel.cpp
@@ -205,6 +223,7 @@ elseif(EMSCRIPTEN)
         FrontEnd/src/DataSearch.cpp
         FrontEnd/src/Settings.cpp
         FrontEnd/src/Launcher.cpp
+        FrontEnd/src/TopBar.cpp
         FrontEnd/src/WatchPanel.cpp
         FrontEnd/src/AssemblyPanel.cpp
         FrontEnd/src/HexEditorPanel.cpp
@@ -278,6 +297,7 @@ else()
             FrontEnd/src/DataSearch.cpp
             FrontEnd/src/Settings.cpp
             FrontEnd/src/Launcher.cpp
+            FrontEnd/src/TopBar.cpp
             FrontEnd/src/WatchPanel.cpp
             FrontEnd/src/AssemblyPanel.cpp
             FrontEnd/src/HexEditorPanel.cpp

@@ -13,6 +13,7 @@
 #include "Platform/IPlatform.h"
 #include "Settings.h"            // persistent per-user config (INI)
 #include "Launcher.h"            // "Launch Session": emulator + ROM selection
+#include "TopBar.h"              // top-bar view state + side-effect-free commands
 #include "DataSearch.h"          // game-data-directory byte search (DataSearchHit)
 #include "WatchPanel.h"          // Watch Window (debugger; emulator-agnostic)
 #include "AssemblyPanel.h"       // SH-2 Assembly (debugger)
@@ -63,7 +64,7 @@ public:
     void BuildUI(IPlatform& platform);
 
 private:
-    void CloseData();
+    void CloseData(bool cancelAutoConnect = true);
     // Persistent settings (per-user INI): panel visibility, data dir, and the
     // emulator paths the installer records. LoadSettings runs in Initialize;
     // SaveSettings on Shutdown and whenever a persisted preference changes.
@@ -74,9 +75,17 @@ private:
     void DumpMemory(IPlatform& platform);
     void RenderFrameToTexture(IPlatform& platform);
     void BuildDefaultLayout(unsigned int dockspaceId);
-    void DrawToolbar(IPlatform& platform);
-    void DrawWindowsMenu();   // toolbar "Windows" dropdown: per-panel show/hide
+    void DrawToolbar(std::vector<TopBarCommand>& commands);
+    void DrawWindowsMenu(std::vector<TopBarCommand>& commands);
     void DrawStatusBar();
+    void RefreshLaunchValidation();
+    TopBarViewModel BuildTopBarViewModel() const;
+    void ExecuteTopBarCommand(const TopBarCommand& command, IPlatform& platform);
+    void DrawRecordingSettingsModal();
+    void DrawSettingsModal();
+    void DrawHelpModal();
+    void DrawAboutModal();
+    void SaveScreenshot(IPlatform& platform);
     void DrawLayerControls();
     void DrawVdpOutput(IPlatform& platform);
     void DrawWatch(IPlatform& platform);   // debugger Watch Window
@@ -114,9 +123,9 @@ private:
     // Launch Settings dialog (per-emulator exe/args/workdir), and the launch action
     // (resolve exe+args and hand them to the platform; adopt the ROM as the Data
     // Directory when none is set yet).
-    void DrawLaunchMenu(IPlatform& platform);
+    void DrawLaunchMenu(const TopBarViewModel& state, std::vector<TopBarCommand>& commands);
     void DrawLaunchSettingsModal(IPlatform& platform);
-    void LaunchSession(IPlatform& platform);
+    bool LaunchSession(IPlatform& platform, bool connectAfterLaunch);
     void BeginTextureSearch(IPlatform& platform, const se_command& cmd);
     void RunPendingSearch();
     void DrawDataSearchResults(IPlatform& platform);
@@ -148,6 +157,7 @@ private:
     se_data_source mDataSource {};
     se_context*    mContext = nullptr;
     bool           mbHasData = false;
+    SourceState    mSource;
 
     // Debugger panels (emulator-agnostic: they read through the backend interface,
     // which is served here from the current se_context — live snapshot or scrub).
@@ -198,6 +208,9 @@ private:
     bool             mbAutoConnectLive = false; // poll for a Yabause until one loads
     std::string      mLiveEndpoint;           // endpoint for auto-connect (empty = default)
     float            mLiveRetrySeconds = 0.0f; // time since the last connect attempt
+    float            mLiveConnectTimeout = 0.0f; // countdown for Launch and Connect
+    std::string      mOperationStatus;
+    bool             mOperationError = false;
 
 #ifdef SE_ENABLE_LIVE
     // Rolling recording of live frames + paused-scrubbing state. While paused the
@@ -205,6 +218,8 @@ private:
     // is rebuilt into mScrubContext and the panels render from it for that draw.
     FrameRecorder    mRecorder;
     int              mRecordSeconds = 5;       // ring-buffer window (5..30 s)
+    bool             mbRecording = false;      // explicit recording state
+    double           mRecordingStartedAt = 0.0;
     se_context*      mScrubContext = nullptr;  // context over the selected past frame
     bool             mbScrubbing = false;      // viewing a recorded (past) frame
     int              mScrubIndex = -1;         // selected recorded-frame index
@@ -263,8 +278,13 @@ private:
     // paths come from the installer ([emulators] in settings) and are user-overridable
     // in Launch Settings. Owns the recent-ROM list + the set-data-dir coupling.
     Launcher         mLauncher;
+    LaunchValidation mLaunchValidation;
     bool             mOpenLaunchSettings = false;    // request to open the Launch Settings modal
     bool             mLaunchSettingsInit = false;    // (re)load edit buffers on modal open
+    bool             mOpenRecordingSettings = false;
+    bool             mOpenSettings = false;
+    bool             mOpenHelp = false;
+    bool             mOpenAbout = false;
     // Edit buffers for the Launch Settings dialog (ImGui InputText needs char storage;
     // no imgui_stdlib here). Parallel to mLauncher.Emulators(); copied in on open,
     // written back on Save.

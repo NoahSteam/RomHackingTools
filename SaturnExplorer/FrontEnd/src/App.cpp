@@ -284,7 +284,14 @@ void App::LoadSettings()
     // Launch Session: emulator specs (exe from the installer's [emulators]), selection,
     // recent ROMs, and the set-data-dir coupling.
     mLauncher.Load(mSettings);
+    RefreshLaunchValidation();
     mController.Load(mSettings);
+#ifdef SE_ENABLE_LIVE
+    int savedSeconds = mRecordSeconds;
+    std::sscanf(mSettings.Get("recording", "maximumseconds", "5").c_str(), "%d", &savedSeconds);
+    mRecordSeconds = std::max(5, std::min(30, savedSeconds));
+    mRecorder.Configure(mRecordSeconds * kFramesPerSecond);
+#endif
 }
 
 void App::SaveSettings()
@@ -297,12 +304,28 @@ void App::SaveSettings()
     // that section, so a rebuild refreshes the path without disturbing the rest.
     mLauncher.Save(mSettings);
     mController.Save(mSettings);
+#ifdef SE_ENABLE_LIVE
+    mSettings.Set("recording", "maximumseconds", std::to_string(mRecordSeconds));
+#endif
     mSettings.Save();
     mSettingsDirty = false;
 }
 
-void App::CloseData()
+void App::CloseData(bool cancelAutoConnect)
 {
+    if (mbLiveSource && mContext)
+    {
+        mController.ClearAll();
+        SendInput(0);
+    }
+#ifdef SE_ENABLE_LIVE
+    mbRecording = false;
+#endif
+    if (cancelAutoConnect)
+    {
+        mbAutoConnectLive = false;
+        mLiveConnectTimeout = 0.0f;
+    }
 #ifdef SE_ENABLE_LIVE
     if (mScrubContext)
     {
@@ -326,6 +349,7 @@ void App::CloseData()
     mbHasData = false;
     mbLiveSource = false;
     mbPaused = false;
+    mSource = SourceState{};
     mCallStack.ClearAll();       // stale stack; a new source rebuilds it
     mCallStackDirty = true;
     mSelectedCommand = -1;
@@ -580,36 +604,51 @@ static bool CreateContextFromSource(se_data_source& dataSource, se_context** ctx
 
 bool App::OpenFullDump(const char* path, uint32_t baseAddress)
 {
-    CloseData();
-    se_data_source dataSource;
+    se_data_source dataSource = {};
     if (se_savestate_open_full_dump(path, baseAddress, &dataSource) != 0)
     {
         return false;
     }
-    if (!CreateContextFromSource(dataSource, &mContext))
+    se_context* context = nullptr;
+    if (!CreateContextFromSource(dataSource, &context))
     {
         return false;
     }
+    CloseData();
+    mContext = context;
     mDataSource = dataSource;
     mbHasData = true;
+    mSource.type = SourceType::Dump;
+    mSource.label = path ? PathBasename(path) : "Raw memory dump";
+    mSource.path = path ? path : "";
+    mOperationStatus = "Loaded " + mSource.label + ".";
+    mOperationError = false;
+    mLog.Info("Loaded raw memory dump: " + mSource.path);
     return true;
 }
 
 bool App::OpenSavestate(const char* path)
 {
-    CloseData();
-    se_data_source dataSource;
+    se_data_source dataSource = {};
     // Generic entry: dispatches by file magic to the right emulator's parser.
     if (se_savestate_open(path, &dataSource) != 0)
     {
         return false;
     }
-    if (!CreateContextFromSource(dataSource, &mContext))
+    se_context* context = nullptr;
+    if (!CreateContextFromSource(dataSource, &context))
     {
         return false;
     }
+    CloseData();
+    mContext = context;
     mDataSource = dataSource;
     mbHasData = true;
+    mSource.type = SourceType::Dump;
+    mSource.label = path ? PathBasename(path) : "Savestate";
+    mSource.path = path ? path : "";
+    mOperationStatus = "Loaded " + mSource.label + ".";
+    mOperationError = false;
     mLog.Info(std::string("Loaded savestate: ") + (path ? path : ""));
     return true;
 }
@@ -617,20 +656,29 @@ bool App::OpenSavestate(const char* path)
 bool App::OpenLive(const char* endpoint)
 {
 #ifdef SE_ENABLE_LIVE
-    CloseData();
-    se_data_source dataSource;
+    se_data_source dataSource = {};
     if (se_live_open(endpoint, &dataSource) != SE_OK)
     {
         return false;
     }
-    if (!CreateContextFromSource(dataSource, &mContext))
+    se_context* context = nullptr;
+    if (!CreateContextFromSource(dataSource, &context))
     {
         return false;
     }
+    CloseData(false);
+    mContext = context;
     mDataSource = dataSource;
     mbHasData = true;
     mbLiveSource = true;   // re-snapshot every frame (see BuildUI)
     mbPaused = false;      // a fresh connection is free-running
+    mbAutoConnectLive = false;
+    mLiveConnectTimeout = 0.0f;
+    mSource.type = SourceType::Live;
+    mSource.label = "Yabause";
+    mSource.endpoint = endpoint && *endpoint ? endpoint : "default endpoint";
+    mOperationStatus = "Connected to " + mSource.label;
+    mOperationError = false;
     mLog.Info(std::string("Connected to emulator (live): ") + (endpoint ? endpoint : "default"));
     // Force a breakpoint re-sync so any set from before connecting (or a prior
     // session) installs into this emulator instance.
@@ -648,6 +696,9 @@ void App::EnableLiveAutoConnect(const char* endpoint)
     mbAutoConnectLive = true;
     mLiveEndpoint = endpoint ? endpoint : "";
     mLiveRetrySeconds = 1.0f;   // attempt on the very first frame
+    mLiveConnectTimeout = 15.0f;
+    mOperationStatus = "Waiting for emulator live endpoint...";
+    mOperationError = false;
 #else
     (void)endpoint;
 #endif
@@ -655,20 +706,26 @@ void App::EnableLiveAutoConnect(const char* endpoint)
 
 bool App::OpenSavestateBuffer(const uint8_t* data, size_t size)
 {
-    CloseData();
-    se_data_source dataSource;
+    se_data_source dataSource = {};
     // Same magic-dispatch as OpenSavestate, but from bytes the host already holds
     // (e.g. a browser reading a File into WASM memory) rather than a file path.
     if (se_savestate_open_buffer(data, size, &dataSource) != 0)
     {
         return false;
     }
-    if (!CreateContextFromSource(dataSource, &mContext))
+    se_context* context = nullptr;
+    if (!CreateContextFromSource(dataSource, &context))
     {
         return false;
     }
+    CloseData();
+    mContext = context;
     mDataSource = dataSource;
     mbHasData = true;
+    mSource.type = SourceType::Dump;
+    mSource.label = "Uploaded savestate";
+    mOperationStatus = "Loaded uploaded savestate.";
+    mOperationError = false;
     return true;
 }
 
@@ -678,10 +735,19 @@ void App::BuildUI(IPlatform& platform)
     // Auto-connect: while nothing is loaded, retry the live endpoint about once a
     // second so the app latches onto a Yabause as soon as one starts. se_live_open
     // fails fast when no server is listening, so a failed poll is cheap.
-    if (mbAutoConnectLive && !mbHasData)
+    if (mbAutoConnectLive && !mbLiveSource)
     {
+        mLiveConnectTimeout -= ImGui::GetIO().DeltaTime;
+        if (mLiveConnectTimeout <= 0.0f)
+        {
+            mbAutoConnectLive = false;
+            mLiveConnectTimeout = 0.0f;
+            mOperationStatus = "Timed out waiting for the live endpoint.";
+            mOperationError = true;
+            mLog.Error(mOperationStatus);
+        }
         mLiveRetrySeconds += ImGui::GetIO().DeltaTime;
-        if (mLiveRetrySeconds >= 1.0f)
+        if (mbAutoConnectLive && mLiveRetrySeconds >= 1.0f)
         {
             mLiveRetrySeconds = 0.0f;
             OpenLive(mLiveEndpoint.empty() ? nullptr : mLiveEndpoint.c_str());
@@ -720,7 +786,7 @@ void App::BuildUI(IPlatform& platform)
     // running. Gated on the run state (not the emulator's frame counter) so the
     // ring fills regardless of how — or whether — the counter advances; paused and
     // history-scrubbing states never capture, so the buffer holds only real play.
-    if (mbLiveSource && mContext && !mbPaused && !mbScrubbing)
+    if (mbRecording && mbLiveSource && mContext && !mbPaused && !mbScrubbing)
     {
         mRecorder.Capture(mContext, se_frame_number(mContext));
     }
@@ -729,7 +795,10 @@ void App::BuildUI(IPlatform& platform)
     // Top toolbar + bottom bars (status + timeline) reserve space from the
     // viewport; the dockspace fills what's left. They always operate on the live
     // context, so draw them before any scrub swap below.
-    DrawToolbar(platform);
+    std::vector<TopBarCommand> topBarCommands;
+    DrawToolbar(topBarCommands);
+    for (const TopBarCommand& command : topBarCommands)
+        ExecuteTopBarCommand(command, platform);
     DrawStatusBar();
     DrawTimeline();
 
@@ -830,6 +899,10 @@ void App::BuildUI(IPlatform& platform)
     // so they overlay the docked panels).
     DrawDataDirModal(platform);
     DrawLaunchSettingsModal(platform);   // modal; no-op until the menu requests it
+    DrawRecordingSettingsModal();
+    DrawSettingsModal();
+    DrawHelpModal();
+    DrawAboutModal();
     DrawDataSearchResults(platform);
     DrawTracepointEditor();   // modal; no-op until OpenTracepointEditor requests it
     // contextSwap restores the live context here as it goes out of scope.
@@ -933,290 +1006,64 @@ void App::BuildDefaultLayout(unsigned int dockspaceId)
     ImGui::DockBuilderFinish(dockspaceId);
 }
 
-void App::DrawToolbar(IPlatform& platform)
-{
-    ImGuiViewport* vp = ImGui::GetMainViewport();
-    const float height = ImGui::GetFrameHeight() + ImGui::GetStyle().WindowPadding.y * 2.0f;
-    const ImGuiWindowFlags flags = ImGuiWindowFlags_NoScrollbar |
-                                   ImGuiWindowFlags_NoScrollWithMouse |
-                                   ImGuiWindowFlags_NoSavedSettings;
-    if (ImGui::BeginViewportSideBar("##Toolbar", vp, ImGuiDir_Up, height, flags))
-    {
-        // Open ROM (savestate) + a dropdown for the other file actions.
-        if (ImGui::Button("Open ROM"))
-        {
-            std::string path;
-            if (platform.OpenFileDialog(path))
-            {
-                OpenSavestate(path.c_str());
-            }
-        }
-        ImGui::SameLine(0.0f, 1.0f);
-        if (ImGui::ArrowButton("##openmenu", ImGuiDir_Down))
-        {
-            ImGui::OpenPopup("OpenMenu");
-        }
-        if (ImGui::BeginPopup("OpenMenu"))
-        {
-            if (ImGui::BeginMenu("Load Dump"))
-            {
-                // Both save-state entries take a savestate file; OpenSavestate
-                // auto-detects Yabause (.yss) vs Mednafen (MDFNSVST) by magic, so the
-                // two labels just point users at the right file for their emulator.
-                if (ImGui::MenuItem("Yabause Save State..."))
-                {
-                    std::string path;
-                    if (platform.OpenFileDialog(path)) OpenSavestate(path.c_str());
-                }
-                if (ImGui::MenuItem("Mednafen Save State..."))
-                {
-                    std::string path;
-                    if (platform.OpenFileDialog(path)) OpenSavestate(path.c_str());
-                }
-                ImGui::Separator();
-                if (ImGui::MenuItem("Raw Memory Dump..."))
-                {
-                    std::string path;
-                    if (platform.OpenFileDialog(path)) OpenFullDump(path.c_str(), 0x00000000u);
-                }
-                ImGui::EndMenu();
-            }
-#ifdef SE_ENABLE_LIVE
-            ImGui::Separator();
-            if (ImGui::MenuItem("Connect to emulator (live)", nullptr, false, !mbLiveSource))
-            {
-                OpenLive(nullptr);   // default endpoint: local socket / named pipe,
-                                     // or the TCP bridge on web (see se_live_open)
-            }
-            if (ImGui::MenuItem("Disconnect (live)", nullptr, false, mbLiveSource)) CloseData();
-
-            // Recording window: 5 s default, up to 30 s. The estimate uses the
-            // measured average compressed size per captured frame once recording
-            // is under way, else a typical figure, so the memory cost is visible.
-            ImGui::Separator();
-            ImGui::TextDisabled("Recording");
-            ImGui::SetNextItemWidth(180.0f);
-            if (ImGui::SliderInt("Length##rec", &mRecordSeconds, 5, 30, "%d s"))
-            {
-                mRecorder.Configure(mRecordSeconds * kFramesPerSecond);
-            }
-            const size_t frames = mRecorder.Count();
-            const double perFrame = frames ? static_cast<double>(mRecorder.BytesUsed()) / frames
-                                           : kEstBytesPerFrame;
-            const double estMB = perFrame * mRecordSeconds * kFramesPerSecond / (1024.0 * 1024.0);
-            ImGui::Text("~%.0f MB (%s)", estMB,
-                        frames ? "measured" : "estimated");
-#endif
-            if (ImGui::MenuItem("Close", nullptr, false, mbHasData)) CloseData();
-            ImGui::EndPopup();
-        }
-
-        // Playback / stepping — live when the source supports frame control
-        // (a running, patched Yabause); otherwise disabled.
-        const bool canStep = mbHasData && se_supports_frame_control(mContext);
-        ImGui::SameLine();
-        if (mbPaused)
-        {
-            if (IconButton("##resume", Ico::Play, "Resume", !canStep))
-            {
-                se_frame_resume(mContext);
-                mbPaused = false;
-            }
-        }
-        else
-        {
-            if (IconButton("##pause", Ico::Pause, "Pause", !canStep))
-            {
-                se_frame_pause(mContext);
-                mbPaused = true;
-            }
-        }
-        ImGui::SameLine();
-        if (IconButton("##step", Ico::Step, "Step one frame", !canStep))
-        {
-            se_frame_step(mContext, 1);
-            mbPaused = true;
-        }
-        // Timeline scrubbing lives in the bottom bar (DrawTimeline), shown while
-        // paused so the user can drag back through the recorded ring buffer.
-
-        // Dump the current memory state to a file (native) / download (web).
-        ImGui::SameLine();
-        ImGui::BeginDisabled(!mbHasData);
-        if (ImGui::Button("Dump Memory"))
-        {
-            DumpMemory(platform);
-        }
-        ImGui::SetItemTooltip("Save VDP1/VDP2 VRAM, CRAM, work RAM and registers to a .sedump file");
-        ImGui::EndDisabled();
-
-        // Game data directory (an ISO, or a folder of the game's extracted files).
-        // Used by the Texture Viewer right-click "Find in game data" search.
-        ImGui::SameLine();
-        if (ImGui::Button("Set Data Directory"))
-        {
-            mOpenDataDirModal = true;
-        }
-        ImGui::SetItemTooltip("Set the game's data directory — an ISO/disc image or a folder of the\n"
-                              "game's files — that the texture 'Find in game data' search scans.");
-
-        // Launch Session: one button that opens a nested menu to choose the debugging
-        // environment (emulator + ROM) and start it — auto-connecting live once it's up.
-        ImGui::SameLine();
-        DrawLaunchMenu(platform);
-
-        // "Windows" dropdown: show/hide individual panels.
-        ImGui::SameLine();
-        DrawWindowsMenu();
-
-        // Not-yet-implemented tools — visible but disabled.
-        ImGui::SameLine();
-        ImGui::BeginDisabled(true);
-        ImGui::Button("Bookmarks"); ImGui::SameLine();
-        ImGui::Button("Compare");   ImGui::SameLine();
-        ImGui::Button("Screenshot"); ImGui::SameLine();
-        ImGui::Button("Settings");  ImGui::SameLine();
-        ImGui::Button("Help");
-        ImGui::EndDisabled();
-
-        // Right-aligned live counters. When connected live, show the client vs
-        // server live-protocol version and flag a mismatch (which breaks capture).
-        char live[72] = "";
-        bool mismatch = false;
-#ifdef SE_ENABLE_LIVE
-        if (mbLiveSource)
-        {
-            const uint32_t sv = se_live_server_version(&mDataSource);
-            if (sv != 0 && sv != SE_LIVE_VERSION)
-            {
-                mismatch = true;
-                std::snprintf(live, sizeof(live),
-                              "   |   LIVE MISMATCH: client v%u / Yabause v%u",
-                              static_cast<unsigned>(SE_LIVE_VERSION), static_cast<unsigned>(sv));
-            }
-            else
-            {
-                std::snprintf(live, sizeof(live), "   |   live proto v%u",
-                              static_cast<unsigned>(SE_LIVE_VERSION));
-            }
-        }
-#endif
-        char info[160];
-        std::snprintf(info, sizeof(info), "FPS %.1f   |   VDP1: %zu objs   |   VDP2 regs: %s%s",
-                      ImGui::GetIO().Framerate,
-                      mbHasData ? se_sprite_count(mContext) : 0,
-                      mbHasData ? "loaded" : "-", live);
-        const float w = ImGui::CalcTextSize(info).x;
-        ImGui::SameLine(ImGui::GetWindowWidth() - w - 12.0f);
-        if (mismatch)
-        {
-            ImGui::TextColored(ImVec4(1.0f, 0.42f, 0.32f, 1.0f), "%s", info);
-        }
-        else
-        {
-            ImGui::TextUnformatted(info);
-        }
-    }
-    ImGui::End();
-}
-
-// Toolbar "Windows" dropdown: a checkbox per panel, plus Show All / Hide All.
-void App::DrawWindowsMenu()
-{
-    if (ImGui::Button("Windows"))
-    {
-        ImGui::OpenPopup("WindowsMenu");
-    }
-    ImGui::SetItemTooltip("Show or hide panels");
-
-    if (ImGui::BeginPopup("WindowsMenu"))
-    {
-        if (ImGui::MenuItem("Reset Layout"))
-        {
-            mForceRebuildLayout = true;   // rebuild the default dock arrangement next frame
-        }
-        ImGui::SetItemTooltip("Restore the default panel arrangement");
-        ImGui::Separator();
-        if (ImGui::MenuItem("Show All"))
-        {
-            for (const PanelInfo& p : PanelList()) mPanels.*(p.flag) = true;
-            mSettingsDirty = true;
-        }
-        if (ImGui::MenuItem("Hide All"))
-        {
-            for (const PanelInfo& p : PanelList()) mPanels.*(p.flag) = false;
-            mSettingsDirty = true;
-        }
-        ImGui::Separator();
-        for (const PanelInfo& p : PanelList())
-        {
-            // MenuItem returns true on the frame it's toggled; persist visibility then.
-            if (ImGui::MenuItem(p.label, nullptr, &(mPanels.*(p.flag)))) mSettingsDirty = true;
-        }
-        ImGui::EndPopup();
-    }
-}
-
 void App::DrawStatusBar()
 {
     ImGuiViewport* vp = ImGui::GetMainViewport();
-    const float height = ImGui::GetFrameHeight();
     const ImGuiWindowFlags flags = ImGuiWindowFlags_NoScrollbar |
                                    ImGuiWindowFlags_NoSavedSettings |
                                    ImGuiWindowFlags_MenuBar;
-    if (ImGui::BeginViewportSideBar("##StatusBar", vp, ImGuiDir_Down, height, flags))
+    if (ImGui::BeginViewportSideBar("##StatusBar", vp, ImGuiDir_Down, ImGui::GetFrameHeight(), flags))
     {
         if (ImGui::BeginMenuBar())
         {
-            if (mbHasData)
+            if (mSource.type == SourceType::Live)
             {
-                ImGui::Text("Loaded");
-                ImGui::Separator();
-                ImGui::Text("Commands: %zu", se_command_count(mContext));
-                ImGui::Separator();
-                ImGui::Text("Sprites: %zu", se_sprite_count(mContext));
-                ImGui::Separator();
-                ImGui::Text("VRAM regions: %zu", se_vram_region_count(mContext));
+                ImGui::TextColored(ImVec4(0.31f, 0.78f, 0.47f, 1.0f), "Connected to %s", mSource.label.c_str());
+                ImGui::SetItemTooltip("Endpoint: %s", mSource.endpoint.c_str());
+            }
+            else if (mSource.type == SourceType::Dump)
+            {
+                ImGui::Text("Dump: %s", mSource.label.c_str());
+                if (!mSource.path.empty()) ImGui::SetItemTooltip("%s", mSource.path.c_str());
             }
             else
             {
-                ImGui::TextDisabled("No data loaded — Open ROM to begin.");
+                ImGui::TextDisabled("No source loaded - use Source to load a dump or connect live.");
             }
-            // Game data directory indicator (for the texture "Find in game data" search).
+#ifdef SE_ENABLE_LIVE
+            if (mbRecording)
+            {
+                const int seconds = static_cast<int>(ImGui::GetTime() - mRecordingStartedAt);
+                ImGui::Separator();
+                ImGui::TextColored(ImVec4(0.90f, 0.36f, 0.36f, 1.0f), "Recording %02d:%02d (%0.1f MB)",
+                                   seconds / 60, seconds % 60,
+                                   static_cast<double>(mRecorder.BytesUsed()) / (1024.0 * 1024.0));
+            }
+#endif
             ImGui::Separator();
-            if (mDataDir.empty())
-            {
-                ImGui::TextDisabled("Data dir: (not set)");
-            }
-            else
-            {
-                ImGui::Text("Data dir: %s", mDataDir.c_str());
-            }
-            if (ImGui::IsItemClicked())
-            {
-                mOpenDataDirModal = true;   // click the path to change it
-            }
+            if (mDataDir.empty()) ImGui::TextDisabled("Data Dir: (not set)");
+            else ImGui::Text("Data Dir: %s", mDataDir.c_str());
+            if (ImGui::IsItemClicked()) mOpenDataDirModal = true;
             ImGui::SetItemTooltip("%s\n(click to change)",
                                   mDataDir.empty() ? "No game data directory set" : mDataDir.c_str());
-            // Frame counter + run state come from a live source (frame control);
-            // the remaining fields (scanline / SH-2 PC / busy) await a fuller
-            // live status feed and stay placeholders for now.
-            char right[160];
-            if (mbHasData && se_supports_frame_control(mContext))
-            {
-                std::snprintf(right, sizeof(right),
-                              "Frame: %llu (%s)   |   Line: -   |   SH-2 PC: -   |   VDP1: -   VDP2: -",
+
+            char right[160] = {};
+            if (mbLiveSource && mContext)
+                std::snprintf(right, sizeof(right), "Frame %llu | %s",
                               static_cast<unsigned long long>(se_frame_number(mContext)),
-                              mbPaused ? "paused" : "running");
-            }
-            else
+                              mbPaused ? "Paused" : "Running");
+            else if (!mOperationStatus.empty())
+                std::snprintf(right, sizeof(right), "%s", mOperationStatus.c_str());
+            const float width = ImGui::CalcTextSize(right).x;
+            const float rightX = ImGui::GetWindowWidth() - width - 12.0f;
+            if (right[0] && ImGui::GetCursorPosX() + 20.0f < rightX)
             {
-                std::snprintf(right, sizeof(right),
-                              "Frame: -   |   Line: -   |   SH-2 PC: -   |   VDP1: -   VDP2: -");
+                ImGui::SameLine(rightX);
+                if (mOperationError && !mbLiveSource)
+                    ImGui::TextColored(ImVec4(0.90f, 0.36f, 0.36f, 1.0f), "%s", right);
+                else
+                    ImGui::TextDisabled("%s", right);
             }
-            const float w = ImGui::CalcTextSize(right).x;
-            ImGui::SameLine(ImGui::GetWindowWidth() - w - 12.0f);
-            ImGui::TextDisabled("%s", right);
             ImGui::EndMenuBar();
         }
     }
@@ -3338,116 +3185,669 @@ static void DrawLaunchEmulatorIcon(bool mednafen)
     }
 }
 
+void App::RefreshLaunchValidation()
+{
+    // Filesystem validation is intentionally event-driven. BuildTopBarViewModel is
+    // called every frame, and probing an unavailable network path from there can
+    // stall the entire UI.
+    mLaunchValidation = mLauncher.Validate();
+}
+
+TopBarViewModel App::BuildTopBarViewModel() const
+{
+    TopBarViewModel vm;
+    vm.source = mSource.type;
+    vm.connected = mbLiveSource;
+#ifdef SE_ENABLE_LIVE
+    vm.recording = mbRecording;
+#endif
+    vm.paused = mbPaused;
+    vm.frameControl = mbHasData && mContext && se_supports_frame_control(mContext);
+    vm.launchValid = mLaunchValidation.valid;
+    vm.launchValidationMessage = mLaunchValidation.message;
+    vm.operationBusy = mbAutoConnectLive;
+    return vm;
+}
+
+void App::DrawWindowsMenu(std::vector<TopBarCommand>& commands)
+{
+    if (ImGui::Button("Windows")) ImGui::OpenPopup("##windows_menu");
+    ImGui::SetItemTooltip("Show, hide, and arrange debugger windows");
+    if (!ImGui::BeginPopup("##windows_menu")) return;
+
+    int index = 0;
+    for (const PanelInfo& panel : PanelList())
+    {
+        if (ImGui::MenuItem(panel.label, nullptr, mPanels.*(panel.flag)))
+            commands.emplace_back(TopBarCommandType::ToggleWindow, index);
+        ++index;
+    }
+    ImGui::Separator();
+    if (ImGui::MenuItem("Reset Layout")) commands.emplace_back(TopBarCommandType::ResetLayout);
+    if (ImGui::MenuItem("Save Layout")) commands.emplace_back(TopBarCommandType::SaveLayout);
+    ImGui::MenuItem("Manage Layouts...", nullptr, false, false);
+    ImGui::EndPopup();
+}
+
+void App::DrawToolbar(std::vector<TopBarCommand>& commands)
+{
+    const TopBarViewModel state = BuildTopBarViewModel();
+    if (!ImGui::GetIO().WantTextInput)
+    {
+        if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_O) &&
+            TopBarCommandEnabled(TopBarCommandType::LoadYabauseState, state))
+            commands.emplace_back(TopBarCommandType::LoadYabauseState);
+        if (ImGui::Shortcut(ImGuiKey_F5) && TopBarCommandEnabled(TopBarCommandType::Launch, state))
+            commands.emplace_back(TopBarCommandType::Launch);
+        if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_F5) &&
+            TopBarCommandEnabled(TopBarCommandType::LaunchAndConnect, state))
+            commands.emplace_back(TopBarCommandType::LaunchAndConnect);
+        if (ImGui::Shortcut(ImGuiKey_F6) && TopBarCommandEnabled(TopBarCommandType::TogglePause, state))
+            commands.emplace_back(TopBarCommandType::TogglePause);
+        if (ImGui::Shortcut(ImGuiKey_F10) && TopBarCommandEnabled(TopBarCommandType::StepFrame, state))
+            commands.emplace_back(TopBarCommandType::StepFrame);
+        if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_D) &&
+            TopBarCommandEnabled(TopBarCommandType::DumpMemory, state))
+            commands.emplace_back(TopBarCommandType::DumpMemory);
+        if (ImGui::Shortcut(ImGuiKey_F12)) commands.emplace_back(TopBarCommandType::TakeScreenshot);
+        if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Comma))
+            commands.emplace_back(TopBarCommandType::OpenSettings);
+    }
+    ImGuiViewport* vp = ImGui::GetMainViewport();
+    const float height = ImGui::GetFrameHeight() + ImGui::GetStyle().WindowPadding.y * 2.0f;
+    const ImGuiWindowFlags flags = ImGuiWindowFlags_NoScrollbar |
+                                   ImGuiWindowFlags_NoScrollWithMouse |
+                                   ImGuiWindowFlags_NoSavedSettings;
+    if (ImGui::BeginViewportSideBar("##Toolbar", vp, ImGuiDir_Up, height, flags))
+    {
+        if (ImGui::Button("Source")) ImGui::OpenPopup("##source_menu");
+        ImGui::SetItemTooltip("Choose where the debugger obtains its current data");
+        if (ImGui::BeginPopup("##source_menu"))
+        {
+            if (ImGui::BeginMenu("Load Dump...",
+                                 TopBarCommandEnabled(TopBarCommandType::LoadYabauseState, state)))
+            {
+                if (ImGui::MenuItem("Yabause Save State...", "Ctrl+O"))
+                    commands.emplace_back(TopBarCommandType::LoadYabauseState);
+                if (ImGui::MenuItem("Mednafen Save State..."))
+                    commands.emplace_back(TopBarCommandType::LoadMednafenState);
+                ImGui::Separator();
+                if (ImGui::MenuItem("Raw Memory Dump..."))
+                    commands.emplace_back(TopBarCommandType::LoadRawDump);
+                ImGui::EndMenu();
+            }
+#ifdef SE_ENABLE_LIVE
+            if (ImGui::MenuItem("Connect to Emulator (live)", nullptr, false,
+                                TopBarCommandEnabled(TopBarCommandType::ConnectLive, state)))
+                commands.emplace_back(TopBarCommandType::ConnectLive);
+            if (ImGui::MenuItem("Disconnect (live)", nullptr, false,
+                                TopBarCommandEnabled(TopBarCommandType::DisconnectLive, state)))
+                commands.emplace_back(TopBarCommandType::DisconnectLive);
+            ImGui::Separator();
+            if (ImGui::BeginMenu("Recording (live)"))
+            {
+                if (ImGui::MenuItem("Start Recording", nullptr, false,
+                                    TopBarCommandEnabled(TopBarCommandType::StartRecording, state)))
+                    commands.emplace_back(TopBarCommandType::StartRecording);
+                if (ImGui::MenuItem("Stop Recording", nullptr, false,
+                                    TopBarCommandEnabled(TopBarCommandType::StopRecording, state)))
+                    commands.emplace_back(TopBarCommandType::StopRecording);
+                const double elapsed = mbRecording ? ImGui::GetTime() - mRecordingStartedAt : 0.0;
+                ImGui::TextDisabled("Duration: %02d:%02d:%02d", static_cast<int>(elapsed) / 3600,
+                                    (static_cast<int>(elapsed) / 60) % 60, static_cast<int>(elapsed) % 60);
+                ImGui::TextDisabled("Approx. Size: %.1f MB",
+                                    static_cast<double>(mRecorder.BytesUsed()) / (1024.0 * 1024.0));
+                if (ImGui::MenuItem("Recording Settings..."))
+                    commands.emplace_back(TopBarCommandType::OpenRecordingSettings);
+                ImGui::EndMenu();
+            }
+#endif
+            ImGui::Separator();
+            if (ImGui::MenuItem("Close Source", nullptr, false,
+                                TopBarCommandEnabled(TopBarCommandType::CloseSource, state)))
+                commands.emplace_back(TopBarCommandType::CloseSource);
+            ImGui::EndPopup();
+        }
+
+        ImGui::SameLine();
+        const EmulatorSpec* emulator = mLauncher.Selected();
+        const std::string emulatorLabel = emulator ? emulator->label : "Emulator";
+        if (ImGui::Button(emulatorLabel.c_str())) ImGui::OpenPopup("##emulator_menu");
+        ImGui::SetItemTooltip("Emulator used by the next launch");
+        if (ImGui::BeginPopup("##emulator_menu"))
+        {
+            const std::vector<EmulatorSpec>& emulators = mLauncher.Emulators();
+            for (int i = 0; i < static_cast<int>(emulators.size()); ++i)
+            {
+                std::string label = emulators[i].label;
+                if (emulators[i].exePath.empty() || !PathExists(emulators[i].exePath))
+                    label += "  (! not configured)";
+                if (ImGui::MenuItem(label.c_str(), nullptr, i == mLauncher.SelectedIndex()))
+                    commands.emplace_back(TopBarCommandType::SelectEmulator, i);
+            }
+            ImGui::Separator();
+            if (ImGui::MenuItem("Manage Emulators..."))
+                commands.emplace_back(TopBarCommandType::OpenLaunchSettings);
+            if (ImGui::MenuItem("Launch Settings..."))
+                commands.emplace_back(TopBarCommandType::OpenLaunchSettings);
+            ImGui::EndPopup();
+        }
+
+        ImGui::SameLine();
+        const std::string gameLabel = mLauncher.Rom().empty() ? "Game / ROM" : PathBasename(mLauncher.Rom());
+        const float gameWidth = std::min(260.0f, std::max(130.0f, ImGui::GetContentRegionAvail().x * 0.22f));
+        if (ImGui::Button((gameLabel + "##game").c_str(), ImVec2(gameWidth, 0.0f)))
+            ImGui::OpenPopup("##game_menu");
+        ImGui::SetItemTooltip("%s", mLauncher.Rom().empty() ? "Select the game passed to the emulator"
+                                                             : mLauncher.Rom().c_str());
+        if (ImGui::BeginPopup("##game_menu"))
+        {
+            if (!mLauncher.Rom().empty())
+            {
+                ImGui::TextDisabled("Current");
+                ImGui::TextUnformatted(PathBasename(mLauncher.Rom()).c_str());
+                ImGui::SetItemTooltip("%s", mLauncher.Rom().c_str());
+                ImGui::Separator();
+            }
+            if (ImGui::MenuItem("Change ROM...")) commands.emplace_back(TopBarCommandType::BrowseRom);
+            if (ImGui::BeginMenu("Recent ROMs"))
+            {
+                const std::vector<std::string>& recent = mLauncher.Recent();
+                if (recent.empty()) ImGui::TextDisabled("(none)");
+                for (size_t i = 0; i < recent.size(); ++i)
+                {
+                    std::string label = PathBasename(recent[i]);
+                    if (!PathExists(recent[i])) label += "  (! missing)";
+                    if (ImGui::MenuItem((label + "##rom" + std::to_string(i)).c_str(), nullptr,
+                                        recent[i] == mLauncher.Rom()))
+                        commands.emplace_back(TopBarCommandType::SelectRecentRom, static_cast<int>(i));
+                    ImGui::SetItemTooltip("%s", recent[i].c_str());
+                }
+                ImGui::EndMenu();
+            }
+            if (ImGui::MenuItem("Clear Selection", nullptr, false, !mLauncher.Rom().empty()))
+                commands.emplace_back(TopBarCommandType::ClearRom);
+            if (ImGui::MenuItem("Reveal in Explorer", nullptr, false,
+                                !mLauncher.Rom().empty() && PathExists(mLauncher.Rom())))
+                commands.emplace_back(TopBarCommandType::RevealRom);
+            ImGui::EndPopup();
+        }
+
+        ImGui::SameLine();
+        DrawLaunchMenu(state, commands);
+
+        ImGui::SameLine();
+        if (state.paused)
+        {
+            if (IconButton("##resume", Ico::Play, "Resume",
+                           !TopBarCommandEnabled(TopBarCommandType::TogglePause, state)))
+                commands.emplace_back(TopBarCommandType::TogglePause);
+        }
+        else if (IconButton("##pause", Ico::Pause, "Pause",
+                            !TopBarCommandEnabled(TopBarCommandType::TogglePause, state)))
+            commands.emplace_back(TopBarCommandType::TogglePause);
+        ImGui::SameLine();
+        if (IconButton("##step", Ico::Step, "Step one frame",
+                       !TopBarCommandEnabled(TopBarCommandType::StepFrame, state)))
+            commands.emplace_back(TopBarCommandType::StepFrame);
+
+        ImGui::SameLine();
+        ImGui::BeginDisabled(!TopBarCommandEnabled(TopBarCommandType::DumpMemory, state));
+        if (ImGui::Button("Dump Memory")) commands.emplace_back(TopBarCommandType::DumpMemory);
+        ImGui::SetItemTooltip("Save the current memory and registers to a .sedump file");
+        ImGui::EndDisabled();
+
+        ImGui::SameLine();
+        if (ImGui::Button(ImGui::GetWindowWidth() < 1500.0f ? "Data Directory" : "Set Data Directory"))
+            commands.emplace_back(TopBarCommandType::SetDataDirectory);
+        ImGui::SetItemTooltip("%s", mDataDir.empty() ? "No game data directory is set" : mDataDir.c_str());
+
+        ImGui::SameLine();
+        DrawWindowsMenu(commands);
+        const bool compact = ImGui::GetWindowWidth() < 1450.0f;
+        if (compact)
+        {
+            ImGui::SameLine();
+            if (ImGui::Button("More")) ImGui::OpenPopup("##more_menu");
+            if (ImGui::BeginPopup("##more_menu"))
+            {
+                ImGui::MenuItem("Bookmarks", nullptr, false, false);
+                ImGui::MenuItem("Compare", nullptr, false, false);
+                if (ImGui::MenuItem("Screenshot", "F12")) commands.emplace_back(TopBarCommandType::TakeScreenshot);
+                ImGui::Separator();
+                if (ImGui::BeginMenu("Settings"))
+                {
+                    if (ImGui::MenuItem("Settings...", "Ctrl+,")) commands.emplace_back(TopBarCommandType::OpenSettings);
+                    if (ImGui::MenuItem("Emulator Paths...")) commands.emplace_back(TopBarCommandType::OpenLaunchSettings);
+                    if (ImGui::MenuItem("Input Settings..."))
+                        commands.emplace_back(TopBarCommandType::ShowWindow, std::string("Controller"));
+                    ImGui::MenuItem("Appearance...", nullptr, false, false);
+                    ImGui::EndMenu();
+                }
+                if (ImGui::BeginMenu("Help"))
+                {
+                    if (ImGui::MenuItem("Help")) commands.emplace_back(TopBarCommandType::OpenHelp);
+                    ImGui::MenuItem("Check for Updates...", nullptr, false, false);
+                    if (ImGui::MenuItem("About")) commands.emplace_back(TopBarCommandType::OpenAbout);
+                    ImGui::EndMenu();
+                }
+                ImGui::EndPopup();
+            }
+        }
+        else
+        {
+            ImGui::SameLine();
+            ImGui::BeginDisabled(true);
+            ImGui::Button("Bookmarks"); ImGui::SameLine(); ImGui::Button("Compare");
+            ImGui::EndDisabled();
+            ImGui::SameLine();
+            if (ImGui::Button("Screenshot")) commands.emplace_back(TopBarCommandType::TakeScreenshot);
+            ImGui::SetItemTooltip("Save the current VDP output as a BMP image");
+            ImGui::SameLine();
+            if (ImGui::Button("Settings")) ImGui::OpenPopup("##settings_menu");
+            if (ImGui::BeginPopup("##settings_menu"))
+            {
+                if (ImGui::MenuItem("Settings...", "Ctrl+,")) commands.emplace_back(TopBarCommandType::OpenSettings);
+                if (ImGui::MenuItem("Emulator Paths...")) commands.emplace_back(TopBarCommandType::OpenLaunchSettings);
+                if (ImGui::MenuItem("Input Settings..."))
+                    commands.emplace_back(TopBarCommandType::ShowWindow, std::string("Controller"));
+                ImGui::MenuItem("Appearance...", nullptr, false, false);
+                ImGui::EndPopup();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Help")) ImGui::OpenPopup("##help_menu");
+            if (ImGui::BeginPopup("##help_menu"))
+            {
+                if (ImGui::MenuItem("Help")) commands.emplace_back(TopBarCommandType::OpenHelp);
+                ImGui::MenuItem("Check for Updates...", nullptr, false, false);
+                if (ImGui::MenuItem("About")) commands.emplace_back(TopBarCommandType::OpenAbout);
+                ImGui::EndPopup();
+            }
+        }
+
+        char info[128];
+        if (mbLiveSource)
+            std::snprintf(info, sizeof(info), "FPS %.1f | VDP1: %zu | Live connected",
+                          ImGui::GetIO().Framerate, se_sprite_count(mContext));
+        else if (mbHasData)
+            std::snprintf(info, sizeof(info), "FPS %.1f | VDP1: %zu | Static dump",
+                          ImGui::GetIO().Framerate, se_sprite_count(mContext));
+        else
+            info[0] = '\0';
+        const float infoWidth = ImGui::CalcTextSize(info).x;
+        const float infoX = ImGui::GetWindowWidth() - infoWidth - 12.0f;
+        if (info[0] && ImGui::GetCursorPosX() + 20.0f < infoX)
+        {
+            ImGui::SameLine(infoX);
+            ImGui::TextColored(mbLiveSource ? ImVec4(0.31f, 0.78f, 0.47f, 1.0f)
+                                            : ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled), "%s", info);
+        }
+    }
+    ImGui::End();
+}
+
 // "Launch Session" — the nested toolbar menu. One "Launch" button + a down-arrow open
 // a popup that shows the current emulator + game, lets the user change either (recent
 // ROMs + Browse), and opens Launch Settings. The primary item launches the current
 // configuration. Think "choose a debugging environment", not "pick an executable".
-void App::DrawLaunchMenu(IPlatform& platform)
+void App::DrawLaunchMenu(const TopBarViewModel& state, std::vector<TopBarCommand>& commands)
 {
-    const EmulatorSpec* sel = mLauncher.Selected();
-    const bool canLaunch = sel && !sel->exePath.empty();
+    const bool enabled = TopBarCommandEnabled(TopBarCommandType::Launch, state);
+    ImGui::BeginDisabled(!enabled);
+    if (ImGui::Button(state.operationBusy ? "Launching..." : "Launch"))
+        commands.emplace_back(TopBarCommandType::Launch);
+    ImGui::EndDisabled();
+    if (!enabled && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        ImGui::SetTooltip("%s", state.launchValidationMessage.empty()
+                                  ? "A launch operation is already in progress."
+                                  : state.launchValidationMessage.c_str());
 
-    bool open = false;
-    if (ImGui::Button("Launch")) open = true;
     ImGui::SameLine(0.0f, 1.0f);
-    // ArrowButton draws the ▼ affordance from primitives, so it needs no special font
-    // glyph; either half opens the same menu.
-    if (ImGui::ArrowButton("##launchdrop", ImGuiDir_Down)) open = true;
-    if (open) ImGui::OpenPopup("##launchmenu");
-    ImGui::SetItemTooltip("Choose a debugging environment (emulator + ROM) and start it.");
+    if (ImGui::ArrowButton("##launchdrop", ImGuiDir_Down)) ImGui::OpenPopup("##launchmenu");
+    ImGui::SetItemTooltip("Alternate launch actions and launch configuration");
+    if (!ImGui::BeginPopup("##launchmenu")) return;
 
-    if (ImGui::BeginPopup("##launchmenu"))
+    if (ImGui::MenuItem("Launch with Current Configuration", "F5", false, enabled))
+        commands.emplace_back(TopBarCommandType::Launch);
+    if (ImGui::MenuItem("Launch and Connect", "Ctrl+F5", false,
+                        TopBarCommandEnabled(TopBarCommandType::LaunchAndConnect, state)))
+        commands.emplace_back(TopBarCommandType::LaunchAndConnect);
+
+    ImGui::Separator();
+    const EmulatorSpec* emulator = mLauncher.Selected();
+    ImGui::TextDisabled("Current Emulator");
+    ImGui::TextUnformatted(emulator ? emulator->label.c_str() : "(none)");
+    ImGui::TextDisabled("Current Game");
+    ImGui::TextUnformatted(mLauncher.Rom().empty() ? "(none)" : PathBasename(mLauncher.Rom()).c_str());
+    if (!mLauncher.Rom().empty()) ImGui::SetItemTooltip("%s", mLauncher.Rom().c_str());
+
+    ImGui::Separator();
+    if (ImGui::BeginMenu("Change Emulator"))
     {
-        ImGui::BeginDisabled(!canLaunch);
-        if (ImGui::MenuItem("Launch with Current Configuration"))
-        {
-            LaunchSession(platform);
-            ImGui::CloseCurrentPopup();
-        }
-        ImGui::EndDisabled();
-        if (!canLaunch)
-        {
-            ImGui::SetItemTooltip("No executable for %s yet — set it in Launch Settings, or run\n"
-                                  "the installer (Integration/install.bat), which records it.",
-                                  sel ? sel->label.c_str() : "this emulator");
-        }
-
+        const std::vector<EmulatorSpec>& emulators = mLauncher.Emulators();
+        for (int i = 0; i < static_cast<int>(emulators.size()); ++i)
+            if (ImGui::MenuItem(emulators[i].label.c_str(), nullptr, i == mLauncher.SelectedIndex()))
+                commands.emplace_back(TopBarCommandType::SelectEmulator, i);
+        ImGui::EndMenu();
+    }
+    if (ImGui::BeginMenu("Change ROM"))
+    {
+        const std::vector<std::string>& recent = mLauncher.Recent();
+        for (size_t i = 0; i < recent.size(); ++i)
+            if (ImGui::MenuItem((PathBasename(recent[i]) + "##launchrom" + std::to_string(i)).c_str(),
+                                nullptr, recent[i] == mLauncher.Rom(), PathExists(recent[i])))
+                commands.emplace_back(TopBarCommandType::SelectRecentRom, static_cast<int>(i));
         ImGui::Separator();
-        ImGui::TextDisabled("Current Emulator");
-        ImGui::Indent();
-        ImGui::TextUnformatted(sel ? sel->label.c_str() : "(none)");
-        ImGui::Unindent();
-        ImGui::TextDisabled("Current Game");
-        ImGui::Indent();
-        ImGui::TextUnformatted(mLauncher.Rom().empty()
-                                   ? "(none)" : PathBasename(mLauncher.Rom()).c_str());
-        if (!mLauncher.Rom().empty()) ImGui::SetItemTooltip("%s", mLauncher.Rom().c_str());
-        ImGui::Unindent();
+        if (ImGui::MenuItem("Browse...")) commands.emplace_back(TopBarCommandType::BrowseRom);
+        ImGui::EndMenu();
+    }
+    ImGui::Separator();
+    if (ImGui::MenuItem("Launch Settings...")) commands.emplace_back(TopBarCommandType::OpenLaunchSettings);
+    ImGui::MenuItem("Manage Configurations...", nullptr, false, false);
+    ImGui::EndPopup();
+}
 
-        ImGui::Separator();
-
-        if (ImGui::BeginMenu("Change Emulator"))
+void App::ExecuteTopBarCommand(const TopBarCommand& command, IPlatform& platform)
+{
+    std::string path;
+    switch (command.type)
+    {
+    case TopBarCommandType::LoadYabauseState:
+    case TopBarCommandType::LoadMednafenState:
+        if (platform.OpenFileDialog(path) && !OpenSavestate(path.c_str()))
         {
-            const std::vector<EmulatorSpec>& emus = mLauncher.Emulators();
-            for (int i = 0; i < static_cast<int>(emus.size()); ++i)
-            {
-                const bool cur = (i == mLauncher.SelectedIndex());
-                const bool has = !emus[i].exePath.empty();
-                std::string label = emus[i].label;
-                if (!has) label += "  (not installed)";
-                if (ImGui::MenuItem(label.c_str(), nullptr, cur))
-                {
-                    mLauncher.Select(i);
-                    mSettingsDirty = true;
-                }
-                if (!has) ImGui::SetItemTooltip("No executable recorded — set it in Launch Settings.");
-            }
-            ImGui::EndMenu();
+            mOperationStatus = "Could not load the selected savestate.";
+            mOperationError = true;
+            mLog.Error(mOperationStatus);
         }
-
-        if (ImGui::BeginMenu("Change ROM"))
+        break;
+    case TopBarCommandType::LoadRawDump:
+        if (platform.OpenFileDialog(path) && !OpenFullDump(path.c_str(), 0x00000000u))
         {
-            const std::vector<std::string>& recent = mLauncher.Recent();
-            if (recent.empty()) ImGui::TextDisabled("(no recent ROMs)");
-            for (size_t i = 0; i < recent.size(); ++i)
-            {
-                const std::string& r = recent[i];
-                const bool cur = (r == mLauncher.Rom());
-                // Show the basename; append a hidden ##index so same-named discs in
-                // different folders don't collide as ImGui item IDs.
-                const std::string label = PathBasename(r) + "##recent" + std::to_string(i);
-                if (ImGui::MenuItem(label.c_str(), nullptr, cur))
-                {
-                    mLauncher.SetRom(r);
-                    mSettingsDirty = true;
-                }
-                ImGui::SetItemTooltip("%s", r.c_str());
-            }
-            ImGui::Separator();
-            if (ImGui::MenuItem("Browse..."))
-            {
-                std::string p;
-                if (platform.OpenFileDialogFiltered(p, "Saturn discs", kRomExts))
-                {
-                    mLauncher.SetRom(p);
-                    mSettingsDirty = true;
-                }
-            }
-            if (ImGui::MenuItem("Clear Current ROM", nullptr, false, !mLauncher.Rom().empty()))
-            {
-                mLauncher.ClearRom();
-                mSettingsDirty = true;
-            }
-            ImGui::EndMenu();
+            mOperationStatus = "Could not load the selected memory dump.";
+            mOperationError = true;
+            mLog.Error(mOperationStatus);
         }
-
-        ImGui::Separator();
-        if (ImGui::MenuItem("Launch Settings..."))
+        break;
+    case TopBarCommandType::ConnectLive:
+        if (!OpenLive(nullptr))
         {
-            mOpenLaunchSettings = true;
-            mLaunchSettingsInit = true;
+            mOperationStatus = "No compatible live emulator endpoint was found.";
+            mOperationError = true;
+            mLog.Error(mOperationStatus);
         }
-        ImGui::EndPopup();
+        break;
+    case TopBarCommandType::DisconnectLive:
+        mController.ClearAll();
+        SendInput(0);
+        CloseData();
+        mOperationStatus = "Disconnected from the live emulator.";
+        mOperationError = false;
+        mLog.Info(mOperationStatus);
+        break;
+    case TopBarCommandType::CloseSource:
+        if (mbLiveSource) { mController.ClearAll(); SendInput(0); }
+        CloseData();
+        mOperationStatus = "Source closed.";
+        mOperationError = false;
+        break;
+#ifdef SE_ENABLE_LIVE
+    case TopBarCommandType::StartRecording:
+        mRecorder.Clear();
+        mbRecording = true;
+        mRecordingStartedAt = ImGui::GetTime();
+        mOperationStatus = "Recording live frame history.";
+        mOperationError = false;
+        mLog.Info(mOperationStatus);
+        break;
+    case TopBarCommandType::StopRecording:
+        mbRecording = false;
+        mOperationStatus = "Recording stopped; captured frames remain available in the timeline.";
+        mOperationError = false;
+        mLog.Info(mOperationStatus);
+        break;
+#endif
+    case TopBarCommandType::OpenRecordingSettings:
+        mOpenRecordingSettings = true;
+        break;
+    case TopBarCommandType::SelectEmulator:
+        mLauncher.Select(command.index);
+        RefreshLaunchValidation();
+        mSettingsDirty = true;
+        break;
+    case TopBarCommandType::SelectRecentRom:
+        if (command.index >= 0 && static_cast<size_t>(command.index) < mLauncher.Recent().size())
+        {
+            const std::string selectedRom = mLauncher.Recent()[static_cast<size_t>(command.index)];
+            mLauncher.SetRom(selectedRom);
+            RefreshLaunchValidation();
+            mSettingsDirty = true;
+        }
+        break;
+    case TopBarCommandType::BrowseRom:
+        if (platform.OpenFileDialogFiltered(path, "Saturn discs", kRomExts))
+        {
+            mLauncher.SetRom(path);
+            RefreshLaunchValidation();
+            mSettingsDirty = true;
+        }
+        break;
+    case TopBarCommandType::ClearRom:
+        mLauncher.ClearRom();
+        RefreshLaunchValidation();
+        mSettingsDirty = true;
+        break;
+    case TopBarCommandType::RevealRom:
+        if (!platform.RevealPath(mLauncher.Rom().c_str())) mLog.Error("Could not reveal the selected ROM.");
+        break;
+    case TopBarCommandType::Launch:
+        LaunchSession(platform, false);
+        break;
+    case TopBarCommandType::LaunchAndConnect:
+        LaunchSession(platform, true);
+        break;
+    case TopBarCommandType::OpenLaunchSettings:
+        mOpenLaunchSettings = true;
+        mLaunchSettingsInit = true;
+        break;
+    case TopBarCommandType::OpenSettings:
+        mOpenSettings = true;
+        break;
+    case TopBarCommandType::TogglePause:
+        if (mbPaused) { se_frame_resume(mContext); mbPaused = false; }
+        else { se_frame_pause(mContext); mbPaused = true; }
+        break;
+    case TopBarCommandType::StepFrame:
+        se_frame_step(mContext, 1);
+        mbPaused = true;
+        break;
+    case TopBarCommandType::DumpMemory:
+        DumpMemory(platform);
+        break;
+    case TopBarCommandType::SetDataDirectory:
+        mOpenDataDirModal = true;
+        break;
+    case TopBarCommandType::ToggleWindow:
+    case TopBarCommandType::ShowWindow:
+        {
+        int panelIndex = command.index;
+        if (panelIndex < 0 && !command.value.empty())
+            for (size_t i = 0; i < PanelList().size(); ++i)
+                if (command.value == PanelList()[i].label) { panelIndex = static_cast<int>(i); break; }
+        if (panelIndex >= 0 && static_cast<size_t>(panelIndex) < PanelList().size())
+        {
+            const PanelInfo& panel = PanelList()[static_cast<size_t>(panelIndex)];
+            if (command.type == TopBarCommandType::ShowWindow)
+                mPanels.*(panel.flag) = true;
+            else
+                mPanels.*(panel.flag) = !(mPanels.*(panel.flag));
+            if (mPanels.*(panel.flag)) ImGui::SetWindowFocus(panel.label);
+            mSettingsDirty = true;
+        }
+        break;
+        }
+    case TopBarCommandType::ResetLayout:
+        mForceRebuildLayout = true;
+        break;
+    case TopBarCommandType::SaveLayout:
+        if (!mIniPath.empty())
+        {
+            ImGui::SaveIniSettingsToDisk(mIniPath.c_str());
+            mOperationStatus = "Layout saved.";
+            mOperationError = false;
+        }
+        break;
+    case TopBarCommandType::TakeScreenshot:
+        SaveScreenshot(platform);
+        break;
+    case TopBarCommandType::OpenHelp:
+        mOpenHelp = true;
+        break;
+    case TopBarCommandType::OpenAbout:
+        mOpenAbout = true;
+        break;
+    case TopBarCommandType::None:
+    default:
+        break;
+    }
+}
+
+void App::DrawRecordingSettingsModal()
+{
+    if (mOpenRecordingSettings)
+    {
+        ImGui::OpenPopup("Recording Settings");
+        mOpenRecordingSettings = false;
+    }
+    if (!ImGui::BeginPopupModal("Recording Settings", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) return;
+#ifdef SE_ENABLE_LIVE
+    ImGui::TextUnformatted("Frame-history recording");
+    if (ImGui::SliderInt("Maximum Length", &mRecordSeconds, 5, 30, "%d seconds"))
+    {
+        mRecorder.Configure(mRecordSeconds * kFramesPerSecond);
+        mSettingsDirty = true;
+    }
+    const size_t frames = mRecorder.Count();
+    const double perFrame = frames ? static_cast<double>(mRecorder.BytesUsed()) / frames : kEstBytesPerFrame;
+    const double estimate = perFrame * mRecordSeconds * kFramesPerSecond / (1024.0 * 1024.0);
+    ImGui::TextDisabled("Estimated maximum: %.0f MB", estimate);
+#else
+    ImGui::TextDisabled("Live recording is unavailable in this build.");
+#endif
+    if (ImGui::Button("Close")) ImGui::CloseCurrentPopup();
+    ImGui::EndPopup();
+}
+
+void App::DrawSettingsModal()
+{
+    if (mOpenSettings)
+    {
+        ImGui::OpenPopup("Settings");
+        mOpenSettings = false;
+    }
+    if (!ImGui::BeginPopupModal("Settings", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) return;
+    ImGui::TextUnformatted("Global application settings");
+    ImGui::Separator();
+    if (ImGui::Button("Emulator Paths and Launch Settings..."))
+    {
+        ImGui::CloseCurrentPopup();
+        mOpenLaunchSettings = true;
+        mLaunchSettingsInit = true;
+    }
+    if (ImGui::Button("Input Settings..."))
+    {
+        for (const PanelInfo& panel : PanelList())
+            if (std::strcmp(panel.label, "Controller") == 0) mPanels.*(panel.flag) = true;
+        mSettingsDirty = true;
+        ImGui::SetWindowFocus("Controller");
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::BeginDisabled(true);
+    ImGui::Button("Appearance...");
+    ImGui::EndDisabled();
+    ImGui::TextDisabled("Appearance customization is not available yet.");
+    ImGui::Separator();
+    if (ImGui::Button("Close")) ImGui::CloseCurrentPopup();
+    ImGui::EndPopup();
+}
+
+void App::DrawHelpModal()
+{
+    if (mOpenHelp)
+    {
+        ImGui::OpenPopup("Saturn Explorer Help");
+        mOpenHelp = false;
+    }
+    if (!ImGui::BeginPopupModal("Saturn Explorer Help", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) return;
+    ImGui::TextWrapped("Source controls the debugger's current data. Emulator and Game select what the next Launch will start.");
+    ImGui::Separator();
+    ImGui::TextUnformatted("Ctrl+O  Load dump");
+    ImGui::TextUnformatted("F5      Launch");
+    ImGui::TextUnformatted("Ctrl+F5 Launch and connect");
+    ImGui::TextUnformatted("F6      Pause or resume");
+    ImGui::TextUnformatted("F10     Step one frame");
+    ImGui::TextUnformatted("F12     Screenshot");
+    if (ImGui::Button("Close")) ImGui::CloseCurrentPopup();
+    ImGui::EndPopup();
+}
+
+void App::DrawAboutModal()
+{
+    if (mOpenAbout)
+    {
+        ImGui::OpenPopup("About Saturn Explorer");
+        mOpenAbout = false;
+    }
+    if (!ImGui::BeginPopupModal("About Saturn Explorer", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) return;
+    ImGui::TextUnformatted("Saturn Explorer");
+    ImGui::TextDisabled("Sega Saturn graphics and live-debugging workspace");
+    ImGui::Spacing();
+    ImGui::TextWrapped("Source selects the debugger's active data provider. Emulator and Game select the next launch configuration.");
+    if (ImGui::Button("Close")) ImGui::CloseCurrentPopup();
+    ImGui::EndPopup();
+}
+
+void App::SaveScreenshot(IPlatform& platform)
+{
+    if (!mbHasData || mFrameBuffer.empty() || mFrameWidth <= 0 || mFrameHeight <= 0)
+    {
+        mOperationStatus = "No rendered frame is available to capture.";
+        mOperationError = true;
+        mLog.Error(mOperationStatus);
+        return;
+    }
+    const size_t pixelBytes = static_cast<size_t>(mFrameWidth) * mFrameHeight * 4u;
+    std::vector<uint8_t> bmp;
+    bmp.reserve(54u + pixelBytes);
+    bmp.push_back('B'); bmp.push_back('M');
+    PushU32(bmp, static_cast<uint32_t>(54u + pixelBytes));
+    PushU32(bmp, 0); PushU32(bmp, 54); PushU32(bmp, 40);
+    PushU32(bmp, static_cast<uint32_t>(mFrameWidth));
+    PushU32(bmp, static_cast<uint32_t>(mFrameHeight));
+    PushU16(bmp, 1); PushU16(bmp, 32); PushU32(bmp, 0);
+    PushU32(bmp, static_cast<uint32_t>(pixelBytes));
+    PushU32(bmp, 2835); PushU32(bmp, 2835); PushU32(bmp, 0); PushU32(bmp, 0);
+    for (int y = mFrameHeight - 1; y >= 0; --y)
+    {
+        const uint8_t* row = mFrameBuffer.data() + static_cast<size_t>(y) * mFrameWidth * 4u;
+        for (int x = 0; x < mFrameWidth; ++x)
+        {
+            bmp.push_back(row[x * 4 + 2]);
+            bmp.push_back(row[x * 4 + 1]);
+            bmp.push_back(row[x * 4 + 0]);
+            bmp.push_back(0xFF);
+        }
+    }
+    if (platform.SaveFile("saturn-screenshot.bmp", bmp.data(), bmp.size()))
+    {
+        mOperationStatus = "Screenshot saved.";
+        mOperationError = false;
+        mLog.Info(mOperationStatus);
+    }
+    else
+    {
+        mOperationStatus = "Screenshot was not saved.";
+        mOperationError = true;
     }
 }
 
@@ -3714,6 +4114,7 @@ void App::DrawLaunchSettingsModal(IPlatform& platform)
         }
         mLauncher.Select(mLaunchSelectedEdit);
         mLauncher.SetSetDataDirOnLaunch(mLaunchSetDataDirEdit);
+        RefreshLaunchValidation();
         mSettingsDirty = true;
         ImGui::CloseCurrentPopup();
     }
@@ -3724,13 +4125,20 @@ void App::DrawLaunchSettingsModal(IPlatform& platform)
 
 // Start the current emulator + ROM: resolve exe + args (+ working dir) and hand them to
 // the platform, auto-connecting live so the app latches on once the emulator is up.
-void App::LaunchSession(IPlatform& platform)
+bool App::LaunchSession(IPlatform& platform, bool connectAfterLaunch)
 {
-    const EmulatorSpec* sel = mLauncher.Selected();
-    if (!sel || sel->exePath.empty())
+    // Revalidate immediately before the side effect as files may have changed
+    // since the cached toolbar state was refreshed.
+    RefreshLaunchValidation();
+    if (!mLaunchValidation.valid)
     {
-        return;
+        mOperationStatus = mLaunchValidation.message;
+        mOperationError = true;
+        mLog.Error(mLaunchValidation.message);
+        return false;
     }
+    const EmulatorSpec* sel = mLauncher.Selected();
+    if (!sel) return false;
     const std::string args = mLauncher.CurrentArgs();
     const char* wd = sel->workDir.empty() ? nullptr : sel->workDir.c_str();
     const bool ok = platform.LaunchProcess(sel->exePath.c_str(),
@@ -3738,7 +4146,9 @@ void App::LaunchSession(IPlatform& platform)
     if (!ok)
     {
         mLog.Error("Failed to launch " + sel->exePath);
-        return;
+        mOperationStatus = "Failed to launch " + sel->label + ".";
+        mOperationError = true;
+        return false;
     }
     mLog.Info("Launched " + sel->label +
               (mLauncher.Rom().empty() ? std::string()
@@ -3750,8 +4160,20 @@ void App::LaunchSession(IPlatform& platform)
         mDataDir = PathDirectory(mLauncher.Rom());
         mLog.Info("Data Directory set to the ROM folder: " + mDataDir);
     }
-    EnableLiveAutoConnect(nullptr);   // no-op off SE_ENABLE_LIVE
+    if (connectAfterLaunch)
+    {
+        // A successful replacement launch should attach to the new process, not keep
+        // an older live session selected indefinitely.
+        if (mbLiveSource) CloseData();
+        EnableLiveAutoConnect(nullptr);   // no-op off SE_ENABLE_LIVE
+    }
+    else
+    {
+        mOperationStatus = "Launched " + sel->label + ".";
+        mOperationError = false;
+    }
     mSettingsDirty = true;
+    return true;
 }
 
 // Resolve a command's palette (CLUT for LUT-16, else the CRAM sub-palette for bank
