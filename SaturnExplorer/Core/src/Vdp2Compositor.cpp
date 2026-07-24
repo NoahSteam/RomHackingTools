@@ -15,7 +15,7 @@ namespace
 // VDP2 hardware register offsets used by the NBG cell walk.
 enum : uint32_t
 {
-    kVRSIZE = 0x006, kRAMCTL = 0x00E, kBGON = 0x020,
+    kTVMD = 0x000, kVRSIZE = 0x006, kRAMCTL = 0x00E, kBGON = 0x020,
     kCHCTLA = 0x028, kCHCTLB = 0x02A,
     kPNCN0 = 0x030, kPNCN1 = 0x032, kPNCN2 = 0x034, kPNCN3 = 0x036,
     kPLSZ = 0x03A, kMPOFN = 0x03C,
@@ -23,9 +23,37 @@ enum : uint32_t
     kMPABN2 = 0x048, kMPCDN2 = 0x04A, kMPABN3 = 0x04C, kMPCDN3 = 0x04E,
     kSCXIN0 = 0x070, kSCYIN0 = 0x074, kSCXIN1 = 0x080, kSCYIN1 = 0x084,
     kSCXN2 = 0x090, kSCYN2 = 0x092, kSCXN3 = 0x094, kSCYN3 = 0x096,
+    kWPSX0 = 0x0C0, kWPSY0 = 0x0C2, kWPEX0 = 0x0C4, kWPEY0 = 0x0C6,
+    kWPSX1 = 0x0C8, kWPSY1 = 0x0CA, kWPEX1 = 0x0CC, kWPEY1 = 0x0CE,
+    kWCTLA = 0x0D0, kWCTLB = 0x0D2,
+    kLWTA0U = 0x0D8, kLWTA0L = 0x0DA, kLWTA1U = 0x0DC, kLWTA1L = 0x0DE,
     kSPCTL = 0x0E0,
     kPRISA = 0x0F0, kPRISB = 0x0F2, kPRISC = 0x0F4, kPRISD = 0x0F6,
     kCRAOFA = 0x0E4, kPRINA = 0x0F8, kPRINB = 0x0FA
+};
+
+struct Window
+{
+    uint16_t xStart;
+    uint16_t yStart;
+    uint16_t xEnd;
+    uint16_t yEnd;
+    bool lineEnabled;
+    uint32_t lineAddress;  // VDP2 VRAM word address
+};
+
+struct WindowConfig
+{
+    uint8_t control;       // one WCTL byte for this NBG
+    bool highResolution;
+    Window windows[2];
+};
+
+struct WindowLine
+{
+    int xStart;
+    int xEnd;
+    bool yInside;
 };
 
 // Everything needed to render one NBG, resolved from the VDP2 registers.
@@ -42,6 +70,7 @@ struct NbgConfig
     uint32_t mapOffset;     // MPOFNx nibble, pre-shifted to the plane base
     uint32_t colorOffset;   // CRAOFx nibble, pre-shifted to the CRAM base
     uint32_t priority;      // 0..7 (0 = not displayed)
+    bool transparentPixelDisable; // BGON NnTPON: color code zero is opaque
 };
 
 uint16_t Reg(const HardwareSnapshot& s, uint32_t hw)
@@ -100,7 +129,112 @@ NbgConfig ReadNbgConfig(const HardwareSnapshot& s, int n)
         c.priority = (prinb >> 8) & 0x7;
         break;
     }
+    c.transparentPixelDisable = (Reg(s, kBGON) & (1u << (n + 8))) != 0;
     return c;
+}
+
+WindowConfig ReadWindowConfig(const HardwareSnapshot& s, int n)
+{
+    const uint16_t wctl = Reg(s, n < 2 ? kWCTLA : kWCTLB);
+    const uint8_t control = static_cast<uint8_t>((wctl >> ((n & 1) * 8)) & 0xBF);
+    WindowConfig c {
+        control,
+        (Reg(s, kTVMD) & 0x0002) != 0,
+        {
+            { static_cast<uint16_t>(Reg(s, kWPSX0) & 0x3FF),
+              static_cast<uint16_t>(Reg(s, kWPSY0) & 0x1FF),
+              static_cast<uint16_t>(Reg(s, kWPEX0) & 0x3FF),
+              static_cast<uint16_t>(Reg(s, kWPEY0) & 0x1FF),
+              (Reg(s, kLWTA0U) & 0x8000) != 0,
+              (static_cast<uint32_t>(Reg(s, kLWTA0U) & 0x7) << 16) |
+                  (Reg(s, kLWTA0L) & 0xFFFE) },
+            { static_cast<uint16_t>(Reg(s, kWPSX1) & 0x3FF),
+              static_cast<uint16_t>(Reg(s, kWPSY1) & 0x1FF),
+              static_cast<uint16_t>(Reg(s, kWPEX1) & 0x3FF),
+              static_cast<uint16_t>(Reg(s, kWPEY1) & 0x1FF),
+              (Reg(s, kLWTA1U) & 0x8000) != 0,
+              (static_cast<uint32_t>(Reg(s, kLWTA1U) & 0x7) << 16) |
+                  (Reg(s, kLWTA1L) & 0xFFFE) }
+        }
+    };
+    return c;
+}
+
+uint16_t ReadVdp2Word(const std::vector<uint8_t>& vram, uint32_t wordAddress)
+{
+    return ReadBE16(vram, (wordAddress & 0x3FFFFu) * 2);
+}
+
+bool CoordinateInside(uint32_t coordinate, uint32_t start, uint32_t end)
+{
+    // Vertical windows can cross the counter wrap at the end of a field.
+    return start <= end ? coordinate >= start && coordinate <= end
+                        : coordinate >= start || coordinate <= end;
+}
+
+WindowLine ResolveWindowLine(const WindowConfig& config, int index,
+                             const std::vector<uint8_t>& vram, int y)
+{
+    const Window& window = config.windows[index];
+    int xStart = window.xStart;
+    int xEnd = window.xEnd;
+    if (window.lineEnabled)
+    {
+        // Each displayed line contributes two words: horizontal start and end.
+        // In double-density interlace the two fields use alternating pairs; a
+        // full-height SE image naturally visits those pairs in display-line order.
+        const uint32_t lineAddress = window.lineAddress + static_cast<uint32_t>(y) * 2;
+        xStart = ReadVdp2Word(vram, lineAddress + 0) & 0x3FF;
+        xEnd = ReadVdp2Word(vram, lineAddress + 1) & 0x3FF;
+    }
+
+    // Match the Saturn coordinate conversion and Mednafen's handling of the
+    // hardware's out-of-range line-window sentinels.
+    if (xStart >= 0x380) xStart = 0;
+    if (xEnd >= 0x380)
+    {
+        xStart = 2;
+        xEnd = 0;
+    }
+    if (!config.highResolution)
+    {
+        xStart >>= 1;
+        xEnd >>= 1;
+    }
+
+    return { xStart, xEnd,
+             CoordinateInside(static_cast<uint32_t>(y), window.yStart, window.yEnd) };
+}
+
+bool WindowMasksPixel(uint8_t control, const WindowLine (&windows)[2], int x)
+{
+    // WCTL describes a *transparent-processing* window: true means the layer
+    // pixel is suppressed. Disabled inputs take the identity value for the
+    // selected OR/AND operation, exactly as on VDP2.
+    const bool useAnd = (control & 0x80) != 0;
+    bool values[2];
+    for (int i = 0; i < 2; ++i)
+    {
+        const uint8_t enableBit = static_cast<uint8_t>(0x02u << (i * 2));
+        const uint8_t areaBit = static_cast<uint8_t>(0x01u << (i * 2));
+        if (control & enableBit)
+        {
+            const bool inside = windows[i].yInside &&
+                                x >= windows[i].xStart && x <= windows[i].xEnd;
+            values[i] = inside ^ ((control & areaBit) != 0);
+        }
+        else
+        {
+            values[i] = useAnd;
+        }
+    }
+
+    // Sprite-window pixels are not available to the command-list compositor yet.
+    // Ignore that input by supplying the selected operation's identity value;
+    // otherwise an outside-area sprite window would incorrectly hide the whole NBG.
+    const bool spriteValue = useAnd;
+    return useAnd ? (values[0] && values[1] && spriteValue)
+                  : (values[0] || values[1] || spriteValue);
 }
 
 // Bytes one 8x8 cell occupies, by color-number field.
@@ -183,33 +317,34 @@ Rgba FetchCellTexel(const std::vector<uint8_t>& vram, const std::vector<uint8_t>
         const uint32_t off = cellBase + (pix >> 1);
         const uint8_t byte = (off < vram.size()) ? vram[off] : 0;
         const uint8_t dot = (ix & 1) ? (byte & 0x0F) : (byte >> 4);
-        if (dot == 0) return { 0, 0, 0, 0 };
+        if (dot == 0 && !c.transparentPixelDisable) return { 0, 0, 0, 0 };
         return CramColor(cram, cramMode, c.colorOffset + (p.palette | dot));
     }
     case 1:   // 256-color (8 bpp)
     {
         const uint32_t off = cellBase + pix;
         const uint8_t dot = (off < vram.size()) ? vram[off] : 0;
-        if (dot == 0) return { 0, 0, 0, 0 };
+        if (dot == 0 && !c.transparentPixelDisable) return { 0, 0, 0, 0 };
         return CramColor(cram, cramMode, c.colorOffset + (p.palette | dot));
     }
     case 2:   // 2048-color (16 bpp palette)
     {
         const uint16_t dot = ReadBE16(vram, cellBase + pix * 2) & 0x7FF;
-        if (dot == 0) return { 0, 0, 0, 0 };
+        if (dot == 0 && !c.transparentPixelDisable) return { 0, 0, 0, 0 };
         return CramColor(cram, cramMode, c.colorOffset + dot);
     }
     case 3:   // 32K-color (16 bpp RGB555)
     {
         const uint16_t dot = ReadBE16(vram, cellBase + pix * 2);
-        if (!(dot & 0x8000)) return { 0, 0, 0, 0 };
+        if (!(dot & 0x8000) && !c.transparentPixelDisable) return { 0, 0, 0, 0 };
         return Rgb555ToRgba(dot);
     }
     default:  // 16M-color (32 bpp RGB888)
     {
         const uint32_t off = cellBase + pix * 4;
         if (off + 3 >= vram.size()) return { 0, 0, 0, 0 };
-        if (!(vram[off] & 0x80)) return { 0, 0, 0, 0 };   // MSB = transparency
+        if (!(vram[off] & 0x80) && !c.transparentPixelDisable)
+            return { 0, 0, 0, 0 };   // MSB = transparency
         return { vram[off + 1], vram[off + 2], vram[off + 3], 255 };
     }
     }
@@ -220,18 +355,18 @@ Rgba FetchCellTexel(const std::vector<uint8_t>& vram, const std::vector<uint8_t>
 // 'out' must already be sized and cleared/painted; layers are drawn back-to-front
 // so this needs no per-layer scratch buffer. Faithful port of the validated
 // plane/page/cell walk.
-void RenderLayer(const HardwareSnapshot& snap, const NbgConfig& c, int width, int height,
-                 std::vector<uint8_t>& out)
+void RenderLayer(const HardwareSnapshot& snap, const NbgConfig& c, int layerIndex,
+                 bool applyWindows, int width, int height, std::vector<uint8_t>& out)
 {
     const std::vector<uint8_t>& vram = snap.Vdp2Vram();
     const std::vector<uint8_t>& cram = snap.Cram();
     const se_cram_mode cramMode = snap.CramMode();
     const uint16_t vrsize = Reg(snap, kVRSIZE);
+    const WindowConfig windowConfig = ReadWindowConfig(snap, layerIndex);
 
     // Plane arrangement from the 2-bit plane-size field: 1x1, 2x1, or 2x2 pages.
-    uint32_t planeW = 1, planeH = 1;
-    if (c.planeSize == 1) { planeW = 2; }
-    else if (c.planeSize == 3) { planeW = 2; planeH = 2; }
+    uint32_t planeW = (c.planeSize & 0x1) ? 2 : 1;
+    uint32_t planeH = (c.planeSize & 0x2) ? 2 : 1;
     const uint32_t deca = planeH + planeW - 2;
     const uint32_t multi = planeH * planeW;
 
@@ -268,8 +403,16 @@ void RenderLayer(const HardwareSnapshot& snap, const NbgConfig& c, int width, in
 
     for (int sy = 0; sy < height; ++sy)
     {
+        const WindowLine windowLines[2] = {
+            ResolveWindowLine(windowConfig, 0, vram, sy),
+            ResolveWindowLine(windowConfig, 1, vram, sy)
+        };
         for (int sx = 0; sx < width; ++sx)
         {
+            if (applyWindows && WindowMasksPixel(windowConfig.control, windowLines, sx))
+            {
+                continue;
+            }
             const uint32_t x = (c.scrollX + sx) & xMask;
             const uint32_t y = (c.scrollY + sy) & yMask;
             const uint32_t plane = (y / planePixH) * 2 + (x / planePixW);
@@ -295,7 +438,7 @@ void RenderLayer(const HardwareSnapshot& snap, const NbgConfig& c, int width, in
             if (pn.flip & 1) inX = cellWH - 1 - inX;
             if (pn.flip & 2) inY = cellWH - 1 - inY;
             const uint32_t subCell = (inY / 8) * c.patternWH + (inX / 8);
-            const uint32_t cellBase = pn.charBase + subCell * cellBytes;
+            const uint32_t cellBase = (pn.charBase + subCell * cellBytes) & 0x7FFFFu;
 
             const Rgba col = FetchCellTexel(vram, cram, cramMode, c, pn, cellBase,
                                             static_cast<int>(inX % 8), static_cast<int>(inY % 8));
@@ -383,7 +526,8 @@ void Vdp2Compositor::Render(const HardwareSnapshot& snapshot, const se_render_op
 
     for (const Layer& layer : layers)
     {
-        RenderLayer(snapshot, layer.config, width, height, outRgba);
+        RenderLayer(snapshot, layer.config, layer.index, opts.show_window != 0,
+                    width, height, outRgba);
     }
 }
 

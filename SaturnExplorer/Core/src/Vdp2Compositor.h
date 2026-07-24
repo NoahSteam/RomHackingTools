@@ -6,8 +6,9 @@
 //
 // Scope today: the four normal backgrounds (NBG0-3), cell (non-bitmap) mode,
 // 1- and 2-word pattern names, and every cell color format (16/256/2048-color
-// palette, RGB555, RGB888). Rotation screens (RBG0/1), bitmap mode, line
-// scroll, mosaic, window clipping and color calculation are not modeled yet.
+// palette, RGB555, RGB888), plus normal and line-window clipping for NBG0-3.
+// Rotation screens (RBG0/1), bitmap mode, line scroll, mosaic, sprite-window
+// clipping and color calculation are not modeled yet.
 #pragma once
 
 #include <cstdint>

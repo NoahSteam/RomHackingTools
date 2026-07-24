@@ -37,4 +37,10 @@ bool TopBarCommandEnabled(TopBarCommandType command, const TopBarViewModel& stat
     }
 }
 
+bool ShouldAutoConnectAfterLaunch(const std::string& emulatorKey,
+                                  bool connectRequested, SourceType source)
+{
+    return source == SourceType::None && (connectRequested || emulatorKey == "mednafen");
+}
+
 }  // namespace sfe

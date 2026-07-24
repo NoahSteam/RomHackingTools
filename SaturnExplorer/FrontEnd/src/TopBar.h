@@ -85,4 +85,10 @@ struct TopBarViewModel
 // Pure enablement policy matching the specification's state table.
 bool TopBarCommandEnabled(TopBarCommandType command, const TopBarViewModel& state);
 
+// A normal Mednafen launch should attach automatically, while the explicit
+// Launch-and-Connect action applies to any configured emulator. Neither may
+// replace a dump or an existing live source without a manual Connect command.
+bool ShouldAutoConnectAfterLaunch(const std::string& emulatorKey,
+                                  bool connectRequested, SourceType source);
+
 }  // namespace sfe

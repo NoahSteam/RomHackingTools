@@ -95,6 +95,12 @@ else()
 endif()
 
 if(BUILD_TESTING)
+    add_executable(SaturnExplorerVdp2Tests
+        Core/tests/Vdp2CompositorTests.cpp
+    )
+    target_link_libraries(SaturnExplorerVdp2Tests PRIVATE SaturnExplorerCore)
+    add_test(NAME SaturnExplorerVdp2Tests COMMAND SaturnExplorerVdp2Tests)
+
     add_executable(SaturnExplorerTopBarTests
         FrontEnd/tests/TopBarTests.cpp
         FrontEnd/src/TopBar.cpp

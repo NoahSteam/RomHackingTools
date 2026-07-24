@@ -428,11 +428,12 @@ package manager; the D3D11 + Win32 ImGui backends ship with it.
    > by byte-swapping on load (16-bit for RGB555 modes, 32-bit for RGB888). This was the fix for
    > the pink/blue speckle — a byte-swapped palette turns smooth ramps jumpy — and it corrected
    > the VDP1 sprite colors too.
-   > **Known simplifications (M4b):** VDP1 always composites on top of the NBG background rather
-   > than interleaving per-pixel by VDP2 priority (correct for the battle scenes; refine later).
-   > Not yet modeled: rotation screens (RBG0/1), bitmap-mode backgrounds, line scroll, mosaic,
-   > window clipping, color calculation, and the VDP2 back-screen color (empty pixels use a flat
-   > backdrop).
+   > **Known simplifications (M4b):** VDP1 and NBGs now interleave by priority, but VDP1 priority
+   > is still resolved per command rather than per framebuffer pixel. NBG0-3 normal and line
+   > windows are modeled; sprite/color-calculation windows are not. Still missing: rotation
+   > screens (RBG0/1), bitmap-mode backgrounds, line/vertical-cell scroll, zoom, mosaic, color
+   > calculation, and the VDP2 back/line-color screens (empty pixels use a flat backdrop). See
+   > `Docs/RenderingAccuracyRoadmap.md` for the ordered completion plan.
    > **Sprite seams.** VDP1 sprite corners are inclusive pixel coordinates and the game tiles a
    > mech out of many small strips; the rasterizer nudges each quad's corners outward half a pixel
    > (`ExpandQuadInclusive`) so adjacent strips overlap instead of leaving 1px backdrop seams.

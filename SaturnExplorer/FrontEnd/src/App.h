@@ -49,14 +49,15 @@ public:
     // context. Used by the web build, where files arrive as bytes from JS.
     bool OpenSavestateBuffer(const uint8_t* data, size_t size);
 
-    // Connect to a running, patched Yabause (live source). 'endpoint' may be NULL
+    // Connect to a running, patched emulator (live source). 'endpoint' may be NULL
     // for the platform default socket. No-op returning false unless the build was
     // compiled with the LiveDriver (SE_ENABLE_LIVE — native desktop / Windows).
     bool OpenLive(const char* endpoint);
 
-    // Keep trying to connect to a running Yabause on 'endpoint' (NULL = default)
-    // roughly once a second until something is loaded. Call once on startup so the
-    // app latches onto an emulator the moment it appears. No-op on web builds.
+    // Keep trying to connect to a running emulator on 'endpoint' (NULL = default)
+    // roughly once a second while no dump or live source is active. Call once on
+    // startup so the app latches onto an emulator whenever it appears. This is a
+    // background poll and does not make the rest of the UI busy. No-op on web builds.
     void EnableLiveAutoConnect(const char* endpoint);
 
     // Draw the whole UI. Called once per frame, between the platform's
@@ -205,10 +206,9 @@ private:
     se_render_opts   mRenderOpts {};
     bool             mbLiveSource = false;    // data comes from a running emulator
     bool             mbPaused = false;        // live emulator held paused (frame control)
-    bool             mbAutoConnectLive = false; // poll for a Yabause until one loads
+    bool             mbAutoConnectLive = false; // poll while no dump/live source is active
     std::string      mLiveEndpoint;           // endpoint for auto-connect (empty = default)
     float            mLiveRetrySeconds = 0.0f; // time since the last connect attempt
-    float            mLiveConnectTimeout = 0.0f; // countdown for Launch and Connect
     std::string      mOperationStatus;
     bool             mOperationError = false;
 

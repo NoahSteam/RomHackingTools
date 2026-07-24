@@ -29,8 +29,8 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, LPWSTR, int)
     sfe::App app;
     app.Initialize();
 
-    // Auto-connect to a running Yabause on boot, retrying until one appears
-    // (see the Integration/Yabause module). `--live [endpoint]` picks a specific
+    // Auto-connect to a running patched emulator on boot, retrying until one appears.
+    // `--live [endpoint]` picks a specific
     // endpoint; otherwise the default socket/pipe is polled. Files open from the
     // toolbar and stop the polling.
     const char* liveEndpoint = nullptr;

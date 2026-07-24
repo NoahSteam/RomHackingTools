@@ -324,7 +324,6 @@ void App::CloseData(bool cancelAutoConnect)
     if (cancelAutoConnect)
     {
         mbAutoConnectLive = false;
-        mLiveConnectTimeout = 0.0f;
     }
 #ifdef SE_ENABLE_LIVE
     if (mScrubContext)
@@ -673,9 +672,8 @@ bool App::OpenLive(const char* endpoint)
     mbLiveSource = true;   // re-snapshot every frame (see BuildUI)
     mbPaused = false;      // a fresh connection is free-running
     mbAutoConnectLive = false;
-    mLiveConnectTimeout = 0.0f;
     mSource.type = SourceType::Live;
-    mSource.label = "Yabause";
+    mSource.label = "Emulator";
     mSource.endpoint = endpoint && *endpoint ? endpoint : "default endpoint";
     mOperationStatus = "Connected to " + mSource.label;
     mOperationError = false;
@@ -693,10 +691,15 @@ bool App::OpenLive(const char* endpoint)
 void App::EnableLiveAutoConnect(const char* endpoint)
 {
 #ifdef SE_ENABLE_LIVE
+    // Auto-connect must never displace something the user is already inspecting.
+    // Manual Connect remains available when replacing a source is intentional.
+    if (mbHasData || mContext)
+    {
+        return;
+    }
     mbAutoConnectLive = true;
     mLiveEndpoint = endpoint ? endpoint : "";
     mLiveRetrySeconds = 1.0f;   // attempt on the very first frame
-    mLiveConnectTimeout = 15.0f;
     mOperationStatus = "Waiting for emulator live endpoint...";
     mOperationError = false;
 #else
@@ -732,22 +735,13 @@ bool App::OpenSavestateBuffer(const uint8_t* data, size_t size)
 void App::BuildUI(IPlatform& platform)
 {
 #ifdef SE_ENABLE_LIVE
-    // Auto-connect: while nothing is loaded, retry the live endpoint about once a
-    // second so the app latches onto a Yabause as soon as one starts. se_live_open
-    // fails fast when no server is listening, so a failed poll is cheap.
-    if (mbAutoConnectLive && !mbLiveSource)
+    // Background auto-connect: while no source is loaded, retry about once a second
+    // so Saturn Explorer latches onto an emulator even when it starts much later.
+    // se_live_open fails fast when no server is listening, so a failed poll is cheap.
+    if (mbAutoConnectLive && !mbHasData && !mContext)
     {
-        mLiveConnectTimeout -= ImGui::GetIO().DeltaTime;
-        if (mLiveConnectTimeout <= 0.0f)
-        {
-            mbAutoConnectLive = false;
-            mLiveConnectTimeout = 0.0f;
-            mOperationStatus = "Timed out waiting for the live endpoint.";
-            mOperationError = true;
-            mLog.Error(mOperationStatus);
-        }
         mLiveRetrySeconds += ImGui::GetIO().DeltaTime;
-        if (mbAutoConnectLive && mLiveRetrySeconds >= 1.0f)
+        if (mLiveRetrySeconds >= 1.0f)
         {
             mLiveRetrySeconds = 0.0f;
             OpenLive(mLiveEndpoint.empty() ? nullptr : mLiveEndpoint.c_str());
@@ -3205,7 +3199,9 @@ TopBarViewModel App::BuildTopBarViewModel() const
     vm.frameControl = mbHasData && mContext && se_supports_frame_control(mContext);
     vm.launchValid = mLaunchValidation.valid;
     vm.launchValidationMessage = mLaunchValidation.message;
-    vm.operationBusy = mbAutoConnectLive;
+    // Auto-connect is a cheap background poll. It must not disable launching or
+    // loading a dump while Saturn Explorer waits for an emulator to appear.
+    vm.operationBusy = false;
     return vm;
 }
 
@@ -4160,11 +4156,11 @@ bool App::LaunchSession(IPlatform& platform, bool connectAfterLaunch)
         mDataDir = PathDirectory(mLauncher.Rom());
         mLog.Info("Data Directory set to the ROM folder: " + mDataDir);
     }
-    if (connectAfterLaunch)
+    if (ShouldAutoConnectAfterLaunch(sel->key, connectAfterLaunch, mSource.type) &&
+        !mbHasData && !mContext)
     {
-        // A successful replacement launch should attach to the new process, not keep
-        // an older live session selected indefinitely.
-        if (mbLiveSource) CloseData();
+        // Never replace a loaded dump or an existing live connection automatically.
+        // A normal Mednafen launch still arms the background connection poll.
         EnableLiveAutoConnect(nullptr);   // no-op off SE_ENABLE_LIVE
     }
     else
@@ -4643,6 +4639,10 @@ const RegInfo kVdp2Regs[] = {
     {0x048,"MPABN2"},{0x04A,"MPCDN2"},{0x04C,"MPABN3"},{0x04E,"MPCDN3"},
     {0x070,"SCXIN0"},{0x074,"SCYIN0"},{0x080,"SCXIN1"},{0x084,"SCYIN1"},
     {0x090,"SCXN2"},{0x092,"SCYN2"},{0x094,"SCXN3"},{0x096,"SCYN3"},
+    {0x0C0,"WPSX0"},{0x0C2,"WPSY0"},{0x0C4,"WPEX0"},{0x0C6,"WPEY0"},
+    {0x0C8,"WPSX1"},{0x0CA,"WPSY1"},{0x0CC,"WPEX1"},{0x0CE,"WPEY1"},
+    {0x0D0,"WCTLA"},{0x0D2,"WCTLB"},{0x0D4,"WCTLC"},{0x0D6,"WCTLD"},
+    {0x0D8,"LWTA0U"},{0x0DA,"LWTA0L"},{0x0DC,"LWTA1U"},{0x0DE,"LWTA1L"},
     {0x0E0,"SPCTL"},{0x0E4,"CRAOFA"},{0x0E6,"CRAOFB"},{0x0EC,"CCCTL"},
     {0x0F0,"PRISA"},{0x0F2,"PRISB"},{0x0F4,"PRISC"},{0x0F6,"PRISD"},
     {0x0F8,"PRINA"},{0x0FA,"PRINB"},{0x0FC,"PRIR"},
