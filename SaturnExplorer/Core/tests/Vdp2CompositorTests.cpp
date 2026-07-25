@@ -306,6 +306,47 @@ void TestZoomBitmap()
     }
 }
 
+void TestColorOffset()
+{
+    // NBG3 white with colour offset A of (-128,-128,0) -> (127,127,255).
+    State state = MakeNbg3State();
+    SetReg(state, 0x110, 0x0008);   // CLOFEN: NBG3 colour offset enabled
+    SetReg(state, 0x112, 0x0000);   // CLOFSL: use offset set A
+    SetReg(state, 0x114, 0x0180);   // COAR = -128 (9-bit signed)
+    SetReg(state, 0x116, 0x0180);   // COAG = -128
+    SetReg(state, 0x118, 0x0000);   // COAB = 0
+    const std::vector<uint8_t> pixels = Render(state, false);
+    for (int y = 0; y < 2; ++y)
+        for (int x = 0; x < 4; ++x)
+            CHECK(IsColor(pixels, x, y, 127, 127, 255));
+}
+
+void TestMosaic()
+{
+    // NBG0 8bpp bitmap with horizontal mosaic size 2: dots 0,1 show pixel 0 (white),
+    // dots 2,3 show pixel 2 (red).
+    State state = MakeNbg3State();
+    SetReg(state, 0x020, 0x0001);   // BGON: NBG0
+    SetReg(state, 0x028, 0x0012);   // CHCTLA: N0BMEN + 8bpp
+    SetReg(state, 0x0F8, 0x0001);   // PRINA: priority 1
+    SetReg(state, 0x022, 0x0101);   // MZCTL: N0 mosaic enable + horizontal size 2
+    PutBE16(state.cram, 2, 0x7FFF); // index 1 = white
+    PutBE16(state.cram, 4, 0x001F); // index 2 = red
+    for (int y = 0; y < 2; ++y)
+    {
+        state.vdp2[y * 512 + 0] = 1;   // pixel 0 = white
+        state.vdp2[y * 512 + 2] = 2;   // pixel 2 = red
+    }
+    const std::vector<uint8_t> pixels = Render(state, false);
+    for (int y = 0; y < 2; ++y)
+    {
+        CHECK(IsWhite(pixels, 0, y));
+        CHECK(IsWhite(pixels, 1, y));
+        CHECK(IsRed(pixels, 2, y));
+        CHECK(IsRed(pixels, 3, y));
+    }
+}
+
 void TestBackScreen()
 {
     // With NBG3 disabled, the whole frame is the BKTA back-screen colour. Point BKTA
@@ -357,6 +398,8 @@ int main()
     TestRotationIdentity();
     TestBitmapNbg0();
     TestZoomBitmap();
+    TestColorOffset();
+    TestMosaic();
     if (gFailures != 0)
     {
         std::cerr << gFailures << " VDP2 compositor check(s) failed\n";

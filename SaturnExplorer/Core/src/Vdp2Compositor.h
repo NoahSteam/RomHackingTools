@@ -10,9 +10,10 @@
 // back-screen color (BKTA, single-colour or per-line), and per-screen color
 // calculation (CCCTL/CCRN, ratio + additive blending against the layers below), the RBG0
 // rotation screen (rotation parameter set A/B, coefficient tables, screen-over repeat),
-// bitmap mode (NBG0/1 + RBG0), and NBG0/1 fractional scroll, zoom, and per-line
-// scroll/zoom. Vertical cell scroll, mosaic, sprite-window clipping, RBG1, and RPMD
-// per-dot/window parameter selection are not modeled yet.
+// bitmap mode (NBG0/1 + RBG0), NBG0/1 fractional scroll, zoom, and per-line scroll/zoom,
+// per-screen colour offset (CLOFEN/COxR/G/B), and horizontal mosaic. Vertical cell
+// scroll, vertical mosaic, shadow, special priority/colour-calc, sprite-window clipping,
+// RBG1, and RPMD per-dot/window parameter selection are not modeled yet.
 #pragma once
 
 #include <cstdint>

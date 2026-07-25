@@ -42,7 +42,11 @@ enum : uint32_t
     kMPABRA = 0x050, kMPABRB = 0x060,
     kRPMD = 0x0B0, kKTCTL = 0x0B4, kKTAOF = 0x0B6, kOVPNRA = 0x0B8, kOVPNRB = 0x0BA,
     kRPTAU = 0x0BC, kRPTAL = 0x0BE,
-    kCRAOFB = 0x0E6, kPRIR = 0x0FC, kCCRR = 0x10C
+    kCRAOFB = 0x0E6, kPRIR = 0x0FC, kCCRR = 0x10C,
+    kMZCTL = 0x022,
+    kCLOFEN = 0x110, kCLOFSL = 0x112,
+    kCOAR = 0x114, kCOAG = 0x116, kCOAB = 0x118,
+    kCOBR = 0x11A, kCOBG = 0x11C, kCOBB = 0x11E
 };
 
 // Sign-extend the low n bits of v to a signed 32-bit value (Mednafen sign_x_to_s32).
@@ -50,6 +54,11 @@ inline int32_t SignX(uint32_t v, int n)
 {
     const int s = 32 - n;
     return static_cast<int32_t>(v << s) >> s;
+}
+
+uint16_t Reg(const HardwareSnapshot& s, uint32_t hw)
+{
+    return s.Vdp2Reg(hw);
 }
 
 struct Window
@@ -108,7 +117,33 @@ struct NbgConfig
     uint32_t xInc8, yInc8;       // .8 fixed per-dot / per-line coordinate increment (zoom)
     uint8_t scrollCtrl;          // SCRCTL byte for this NBG
     uint32_t lineScrollBase;     // line scroll/zoom table VRAM word address
+    uint32_t mosaicH;            // horizontal mosaic block width (1 = no mosaic)
+    bool colorOff;               // per-screen colour offset enabled (CLOFEN)
+    int coR, coG, coB;           // signed R/G/B offsets (COxR/G/B), applied post-fetch
 };
+
+// Resolve the per-screen colour offset (CLOFEN/CLOFSL select set A or B; the COxR/G/B
+// registers are signed 9-bit). 'screen' is 0..3 for NBG0-3, 4 for RBG0.
+void ReadColorOffset(const HardwareSnapshot& s, int screen, NbgConfig& c)
+{
+    c.colorOff = (Reg(s, kCLOFEN) & (1u << screen)) != 0;
+    if (!c.colorOff) { c.coR = c.coG = c.coB = 0; return; }
+    const bool useB = (Reg(s, kCLOFSL) & (1u << screen)) != 0;
+    c.coR = SignX(Reg(s, useB ? kCOBR : kCOAR) & 0x1FF, 9);
+    c.coG = SignX(Reg(s, useB ? kCOBG : kCOAG) & 0x1FF, 9);
+    c.coB = SignX(Reg(s, useB ? kCOBB : kCOAB) & 0x1FF, 9);
+}
+
+// Apply a screen's colour offset to a fetched texel (clamped to 0..255). No-op when the
+// screen has no offset enabled. Runs before color calculation, per hardware.
+inline void ApplyColorOffset(Rgba& col, const NbgConfig& c)
+{
+    if (!c.colorOff) return;
+    auto clamp8 = [](int v) { return static_cast<uint8_t>(v < 0 ? 0 : (v > 255 ? 255 : v)); };
+    col.r = clamp8(col.r + c.coR);
+    col.g = clamp8(col.g + c.coG);
+    col.b = clamp8(col.b + c.coB);
+}
 
 // Blend one source texel over the destination pixel already in the buffer using VDP2
 // color-calculation rules (matches Mednafen's mixit): additive saturates per channel;
@@ -133,10 +168,6 @@ inline void BlendColorCalc(uint8_t* dst, const Rgba& src, uint32_t ratio, bool a
     dst[3] = 255;
 }
 
-uint16_t Reg(const HardwareSnapshot& s, uint32_t hw)
-{
-    return s.Vdp2Reg(hw);
-}
 
 // Resolve the per-layer configuration for NBG 'n' (0..3).
 NbgConfig ReadNbgConfig(const HardwareSnapshot& s, int n)
@@ -229,6 +260,11 @@ NbgConfig ReadNbgConfig(const HardwareSnapshot& s, int n)
                            (Reg(s, lsta + 2) & 0xFFFE);
         c.zoomScroll = true;
     }
+
+    // Mosaic (horizontal) + per-screen colour offset.
+    const uint16_t mzctl = Reg(s, kMZCTL);
+    c.mosaicH = ((mzctl >> n) & 1) ? (((mzctl >> 8) & 0xF) + 1) : 1;
+    ReadColorOffset(s, n, c);
     return c;
 }
 
@@ -610,7 +646,9 @@ void RenderLayer(const HardwareSnapshot& snap, const NbgConfig& c, int layerInde
             {
                 continue;
             }
-            const int sampleX = static_cast<int>((xcStart + xcinc * sx) >> 8);
+            // Horizontal mosaic replicates each block's leftmost dot across the block.
+            const int msx = (c.mosaicH > 1) ? sx - (sx % static_cast<int>(c.mosaicH)) : sx;
+            const int sampleX = static_cast<int>((xcStart + xcinc * msx) >> 8);
             Rgba col;
             if (c.bitmap)
             {
@@ -653,6 +691,7 @@ void RenderLayer(const HardwareSnapshot& snap, const NbgConfig& c, int layerInde
             {
                 continue;
             }
+            ApplyColorOffset(col, c);
             CompositeTexel(out, (static_cast<size_t>(sy) * width + sx) * 4, col, colorCalc, c);
         }
     }
@@ -726,6 +765,10 @@ NbgConfig ReadRbg0Config(const HardwareSnapshot& s, bool paramB)
     c.bitmapH = ((chb >> 10) & 1) ? 512 : 256;
     c.bitmapBase = static_cast<uint32_t>((mpofr >> (paramB ? 4 : 0)) & 0x7) << 16;
     c.bitmapPalette = static_cast<uint32_t>(Reg(s, kBMPNB) & 0x7) << 4;
+
+    const uint16_t mzctl = Reg(s, kMZCTL);
+    c.mosaicH = ((mzctl >> 4) & 1) ? (((mzctl >> 8) & 0xF) + 1) : 1;
+    ReadColorOffset(s, 4, c);
     return c;
 }
 
@@ -815,11 +858,13 @@ void RenderRbg0(const HardwareSnapshot& snap, const NbgConfig& c, bool paramB,
             {
                 continue;
             }
+            // Horizontal mosaic snaps the sampled dot to its block's left edge.
+            const int msx = (c.mosaicH > 1) ? sx - (sx % static_cast<int>(c.mosaicH)) : sx;
             int32_t kx = rp.kx, ky = rp.ky, Xp = XpBase;
             if (useCoeff)
             {
                 // One coefficient per dot along the line; it can override kx/ky or Xp.
-                uint32_t coeffOff = (KAstLine + static_cast<uint32_t>(rp.DKAx) * sx) >> 10;
+                uint32_t coeffOff = (KAstLine + static_cast<uint32_t>(rp.DKAx) * msx) >> 10;
                 if (!coeffWord) coeffOff <<= 1;   // 32-bit entries are two words
                 uint32_t coeff;
                 if (coeffWord)
@@ -844,9 +889,9 @@ void RenderRbg0(const HardwareSnapshot& snap, const NbgConfig& c, bool paramB,
             }
 
             const int32_t ixs = static_cast<int32_t>(
-                (Xp + static_cast<int32_t>(((int64_t)kx * (int32_t)(Xsp + dX * sx)) >> 16)) >> 10);
+                (Xp + static_cast<int32_t>(((int64_t)kx * (int32_t)(Xsp + dX * msx)) >> 16)) >> 10);
             const int32_t iys = static_cast<int32_t>(
-                (Yp + static_cast<int32_t>(((int64_t)ky * (int32_t)(Ysp + dY * sx)) >> 16)) >> 10);
+                (Yp + static_cast<int32_t>(((int64_t)ky * (int32_t)(Ysp + dY * msx)) >> 16)) >> 10);
 
             // Screen-over: mode 0 repeats (wrap); other modes read transparent outside.
             if (screenOver != 0 &&
@@ -890,6 +935,7 @@ void RenderRbg0(const HardwareSnapshot& snap, const NbgConfig& c, bool paramB,
             {
                 continue;
             }
+            ApplyColorOffset(col, c);
             CompositeTexel(out, (static_cast<size_t>(sy) * width + sx) * 4, col, colorCalc, c);
         }
     }
