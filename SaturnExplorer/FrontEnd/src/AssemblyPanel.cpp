@@ -1,5 +1,6 @@
 #include "AssemblyPanel.h"
 
+#include <algorithm>
 #include <cctype>
 #include <cfloat>
 #include <cstdio>
@@ -418,9 +419,25 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
         openRowContext();
         if (isPc && mScrollToPc) { ImGui::SetScrollHereY(0.35f); mScrollToPc = false; }
 
-        // Address / bytes / mnemonic / operands.
+        // Address / bytes / mnemonic / operands. The address cell is a Selectable so the
+        // user can pick instruction(s) to search for: click selects one, shift-click
+        // extends a contiguous range.
         ImGui::TableSetColumnIndex(1);
-        ImGui::PushStyleColor(ImGuiCol_Text, kColAddr); ImGui::Text("%08X", ln.addr); ImGui::PopStyleColor();
+        {
+            const bool rowSel = mHasSel && ln.addr >= mSelLoAddr && ln.addr <= mSelHiAddr;
+            char al[16]; std::snprintf(al, sizeof(al), "%08X", ln.addr);
+            ImGui::PushStyleColor(ImGuiCol_Text, kColAddr);
+            if (ImGui::Selectable(al, rowSel, ImGuiSelectableFlags_None))
+            {
+                if (ImGui::GetIO().KeyShift && mHasSel)
+                {
+                    mSelLoAddr = std::min(mSelAnchorAddr, ln.addr);
+                    mSelHiAddr = std::max(mSelAnchorAddr, ln.addr);
+                }
+                else { mSelAnchorAddr = mSelLoAddr = mSelHiAddr = ln.addr; mHasSel = true; }
+            }
+            ImGui::PopStyleColor();
+        }
         openRowContext();
         ImGui::TableSetColumnIndex(2);
         if (ln.readable) { ImGui::PushStyleColor(ImGuiCol_Text, kColBytes); ImGui::Text("%04X", ln.op); ImGui::PopStyleColor(); }
@@ -538,6 +555,46 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
             if (ImGui::MenuItem("View Address in Hex Editor", nullptr, false,
                                 ln.readable && ResolveMemOperand(ln.ins, regs, hexEa, hexWt)))
             { req.viewHex = true; req.hexAddr = hexEa; }
+
+            // Find the selected instruction(s)'s code bytes in the game data directory.
+            // If this row is inside the current multi-selection, search the whole range;
+            // otherwise just this one instruction.
+            const bool inSel = mHasSel && ln.addr >= mSelLoAddr && ln.addr <= mSelHiAddr;
+            int selInstrs = 1;
+            if (inSel)
+            {
+                selInstrs = 0;
+                for (const Line& l : mLines)
+                    if (l.readable && l.addr >= mSelLoAddr && l.addr <= mSelHiAddr) ++selInstrs;
+            }
+            char findItem[80];
+            std::snprintf(findItem, sizeof(findItem), "Find %s in data directory (%d bytes)",
+                          (inSel && selInstrs > 1) ? "selected instructions" : "this instruction",
+                          selInstrs * 2);
+            if (ImGui::MenuItem(findItem, nullptr, false, ln.readable))
+            {
+                req.findInData = true;
+                uint32_t startAddr = ln.addr;
+                if (inSel && selInstrs >= 1)
+                {
+                    for (const Line& l : mLines)
+                        if (l.readable && l.addr >= mSelLoAddr && l.addr <= mSelHiAddr)
+                        {
+                            req.findBytes.push_back((uint8_t)(l.op >> 8));
+                            req.findBytes.push_back((uint8_t)(l.op & 0xFF));
+                        }
+                    startAddr = mSelLoAddr;
+                }
+                else
+                {
+                    req.findBytes.push_back((uint8_t)(ln.op >> 8));
+                    req.findBytes.push_back((uint8_t)(ln.op & 0xFF));
+                }
+                char lbl[80];
+                std::snprintf(lbl, sizeof(lbl), "SH-2 code @0x%08X (%zu bytes)",
+                              startAddr, req.findBytes.size());
+                req.findLabel = lbl;
+            }
             ImGui::BeginDisabled();
             ImGui::MenuItem("Set PC Here");
             ImGui::EndDisabled();

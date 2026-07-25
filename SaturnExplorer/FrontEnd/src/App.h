@@ -128,6 +128,11 @@ private:
     void DrawLaunchSettingsModal(IPlatform& platform);
     bool LaunchSession(IPlatform& platform, bool connectAfterLaunch);
     void BeginTextureSearch(IPlatform& platform, const se_command& cmd);
+    // Search the game data directory for an arbitrary byte sequence (the Hex Editor's
+    // selection, or the SH-2 Assembly panel's selected instructions). Stashes the needle
+    // and either runs immediately or opens the "set data directory" modal first. Results
+    // land in the shared "Data Search Results" window.
+    void BeginByteSearch(std::vector<uint8_t> needle, const std::string& label);
     void RunPendingSearch();
     void DrawDataSearchResults(IPlatform& platform);
     // Resolve a command's palette (CLUT or CRAM bank); SE_ERR_UNSUPPORTED for RGB555.

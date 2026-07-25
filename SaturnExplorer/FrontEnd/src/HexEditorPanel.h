@@ -30,6 +30,12 @@ public:
     // visible window.
     void Select(uint32_t address, uint32_t length);
 
+    // A "find these bytes in the data directory" request raised from the grid's
+    // right-click menu (the current byte selection). The App polls this after Draw and
+    // runs the data-directory search. Returns true once per request, moving the selected
+    // bytes + a human label out; false when nothing is pending.
+    bool TakeSearchRequest(std::vector<uint8_t>& outBytes, std::string& outLabel);
+
 private:
     void Refresh(IMemoryBackend& backend);
 
@@ -50,6 +56,11 @@ private:
     int  mSelStart = -1;               // selection anchor (byte index in window)
     int  mSelEnd = -1;                 // selection end (inclusive)
     bool mSelecting = false;
+
+    // Pending "find selection in data directory" request (see TakeSearchRequest).
+    bool                 mSearchRequested = false;
+    std::vector<uint8_t> mSearchBytes;
+    std::string          mSearchLabel;
 
     // Inline editing: the byte index being typed over, its 2-hex-digit buffer, and
     // a short "Modified" flash after a successful write.

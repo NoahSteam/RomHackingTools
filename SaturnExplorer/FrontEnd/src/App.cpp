@@ -1247,6 +1247,7 @@ void App::DrawAssembly()
         mbPaused = false;
     }
     if (req.viewHex) mHexEditor.GoTo(req.hexAddr);   // "View Address in Hex Editor"
+    if (req.findInData) BeginByteSearch(std::move(req.findBytes), req.findLabel);
 }
 
 // --- Tracepoints / structured Log (Execution Actions, Phase 1) -------------------
@@ -1996,6 +1997,10 @@ void App::DrawCallStack()
 void App::DrawHexEditor()
 {
     mHexEditor.Draw(mMemBackend, mbLiveSource, ImGui::GetIO().DeltaTime);
+    // Right-click "Find selection in data directory" raised inside the panel.
+    std::vector<uint8_t> bytes;
+    std::string label;
+    if (mHexEditor.TakeSearchRequest(bytes, label)) BeginByteSearch(std::move(bytes), label);
 }
 
 // Saturn control pad. BuildUI forwards the final arbitrated state after the
@@ -2847,16 +2852,28 @@ void App::BeginTextureSearch(IPlatform& platform, const se_command& cmd)
     {
         return;
     }
-    mPendingNeedle.resize(n);
+    std::vector<uint8_t> needle(n);
     const size_t got = se_read_vram(mContext, SE_VRAM_KIND_VDP1_VRAM,
-                                    cmd.texture_address, mPendingNeedle.data(), n);
-    mPendingNeedle.resize(got);
+                                    cmd.texture_address, needle.data(), n);
+    needle.resize(got);
 
     char label[96];
     std::snprintf(label, sizeof(label), "Texture @0x%06X (%ux%u, %u bytes)",
                   cmd.texture_address, cmd.width, cmd.height, static_cast<unsigned>(got));
-    mPendingSearchLabel = label;
+    BeginByteSearch(std::move(needle), label);
+}
 
+// Shared entry point for "find these exact bytes in the game data directory", used by
+// the texture search, the Hex Editor selection, and the SH-2 Assembly instruction
+// selection. Opens the set-data-directory modal first if none is set yet.
+void App::BeginByteSearch(std::vector<uint8_t> needle, const std::string& label)
+{
+    if (needle.empty())
+    {
+        return;
+    }
+    mPendingNeedle = std::move(needle);
+    mPendingSearchLabel = label;
     if (mDataDir.empty())
     {
         mSearchAfterSetDir = true;     // run once the user picks a directory

@@ -48,6 +48,15 @@ void HexEditorPanel::Select(uint32_t address, uint32_t length)
     mFocusRequested = true;
 }
 
+bool HexEditorPanel::TakeSearchRequest(std::vector<uint8_t>& outBytes, std::string& outLabel)
+{
+    if (!mSearchRequested) return false;
+    mSearchRequested = false;
+    outBytes = std::move(mSearchBytes);
+    outLabel = std::move(mSearchLabel);
+    return true;
+}
+
 void HexEditorPanel::Refresh(IMemoryBackend& backend)
 {
     mConnected = backend.Connected();
@@ -257,6 +266,33 @@ void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
         }
     }
     if (ImGui::IsMouseReleased(0)) mSelecting = false;
+
+    // Right-click anywhere in the grid → search the current byte selection in the game
+    // data directory (results open in the "Data Search Results" window).
+    if (ImGui::BeginPopupContextWindow("hexctx", ImGuiPopupFlags_MouseButtonRight))
+    {
+        const int cnt = (selLo >= 0) ? (selHi - selLo + 1) : 0;
+        if (cnt > 0)
+        {
+            char item[80];
+            std::snprintf(item, sizeof(item), "Find %d selected byte%s in data directory",
+                          cnt, cnt == 1 ? "" : "s");
+            if (ImGui::MenuItem(item))
+            {
+                mSearchBytes.assign(mBytes.begin() + selLo, mBytes.begin() + selHi + 1);
+                char lbl[80];
+                std::snprintf(lbl, sizeof(lbl), "Hex bytes @0x%08X (%d byte%s)",
+                              mBase + (uint32_t)selLo, cnt, cnt == 1 ? "" : "s");
+                mSearchLabel = lbl;
+                mSearchRequested = true;
+            }
+        }
+        else
+        {
+            ImGui::TextDisabled("Select bytes first (click, then drag to extend).");
+        }
+        ImGui::EndPopup();
+    }
     ImGui::EndChild();
 
     // --- Selection / value readout ---

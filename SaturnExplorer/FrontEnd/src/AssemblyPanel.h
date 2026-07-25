@@ -37,6 +37,9 @@ public:
         bool     editTracepoint = false;  // open the tracepoint editor for tpAddr/tpCpu
         uint32_t tpAddr = 0;
         int      tpCpu = 0;
+        bool     findInData = false;      // search selected instruction bytes in the data dir
+        std::vector<uint8_t> findBytes;   // the big-endian code bytes to search for
+        std::string          findLabel;   // human label for the results window
     };
     void Draw(se_context* ctx, IMemoryBackend& backend, BreakpointManager& bps,
               ExecutionActions& actions, WatchPanel& watch, bool live, Request& req);
@@ -74,6 +77,14 @@ private:
     std::vector<uint32_t> mBack, mFwd; // navigation history (current CPU)
     char     mGotoBuf[16] = {};
     std::vector<Line>    mLines;       // reused decode buffer
+
+    // Instruction selection (by address) for "Find in data directory". Click an
+    // address to select one instruction; shift-click another to extend a contiguous
+    // range. Stored as an inclusive [lo, hi] address span with an anchor.
+    bool     mHasSel = false;
+    uint32_t mSelAnchorAddr = 0;
+    uint32_t mSelLoAddr = 0;
+    uint32_t mSelHiAddr = 0;
 
     // Frozen-window cache: when Auto Refresh is off (and the base hasn't moved) the
     // panel reuses these bytes instead of re-reading, so the view holds still.
