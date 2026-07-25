@@ -216,7 +216,13 @@ void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
             ImGui::PushStyleColor(ImGuiCol_Text, col);
             ImGui::Selectable(b, false, ImGuiSelectableFlags_AllowOverlap, ImVec2(byteW, 0));
             ImGui::PopStyleColor();
-            if (ImGui::IsItemHovered())
+            // Hit-test by mouse position, not IsItemHovered(): once the first cell's
+            // Selectable is held active (mouse down), ImGui suppresses hover on every
+            // other cell, so a hover-based drag never extends the selection. A rect test
+            // ignores active-item capture, so click-drag works across cells.
+            const bool cellHovered =
+                ImGui::IsMouseHoveringRect(cur, ImVec2(cur.x + byteW, cur.y + ImGui::GetTextLineHeight()));
+            if (cellHovered)
             {
                 if (writable && ImGui::IsMouseDoubleClicked(0))
                 {
@@ -224,8 +230,9 @@ void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
                     std::snprintf(mEditBuf, sizeof(mEditBuf), "%02X", v);
                 }
                 else if (ImGui::IsMouseClicked(0)) { mSelStart = mSelEnd = idx; mSelecting = true; }
-                else if (mSelecting && ImGui::IsMouseDown(0)) { mSelEnd = idx; }
             }
+            // Extend the drag to whatever cell the cursor is over while the button is held.
+            if (mSelecting && ImGui::IsMouseDown(0) && cellHovered) mSelEnd = idx;
         }
 
         // Text pane. ASCII renders one glyph per byte; Shift-JIS decodes double-
