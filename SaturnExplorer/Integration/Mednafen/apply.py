@@ -155,7 +155,8 @@ void SMPC_SetInjectedInput(unsigned port, uint32 buttons);
 SMPC_INPUT_STATE = """\
 /* Saturn Explorer controller injection. The server thread writes these masks while
    the emulation thread consumes them, so keep the handoff atomic. Values use
-   Mednafen's digital-pad input bit order (see input/gamepad.cpp). */
+   Mednafen's digital-pad input bit order (see input/gamepad.cpp): bit0 UP, 1 DOWN,
+   2 LEFT, 3 RIGHT, 4 START, 5 A, 6 B, 7 C, 8 X, 9 Y, 10 Z, 11 L, 12 R. */
 static std::atomic_uint_least16_t SeInjectedPad[2];
 
 void SMPC_SetInjectedInput(unsigned port, uint32 buttons)
@@ -167,17 +168,53 @@ void SMPC_SetInjectedInput(unsigned port, uint32 buttons)
  SeInjectedPad[port].store(native, std::memory_order_relaxed);
 }
 
+/* Report what the emulated port currently sees, so Saturn Explorer can verify its
+   injection actually reaches the pad. out[0] = device kind (0 none, 1 gamepad,
+   2 3D pad, 3 other), out[1] = host input bits, out[2] = SE-injected bits. */
+extern "C" void SsDbgQueryInput(unsigned port, unsigned int out[3])
+{
+ out[0] = out[1] = out[2] = 0;
+ if(port >= 2) return;
+ const unsigned vp = port;                 /* no-multitap: physical port == virtual port */
+ IODevice* const dev = VirtualPorts[vp];
+ if(dev == &PossibleDevices[vp].gamepad)        out[0] = 1;
+ else if(dev == &PossibleDevices[vp].threedpad) out[0] = 2;
+ else if(dev == &PossibleDevices[vp].none)      out[0] = 0;
+ else                                           out[0] = 3;
+ const uint8* d = VirtualPortsDPtr[vp];
+ out[1] = d ? (unsigned)(d[0] | ((uint16)d[1] << 8)) : 0u;
+ out[2] = (unsigned)SeInjectedPad[vp].load(std::memory_order_relaxed);
+}
+
 static void SeSMPCUpdateInput(unsigned vp, const int32 time_elapsed)
 {
  uint8* data = VirtualPortsDPtr[vp];
- uint8 merged[2];
- if(vp < 2 && data && VirtualPorts[vp] == &PossibleDevices[vp].gamepad)
+ uint8 merged[10];
+ if(vp < 2 && data)
  {
-  const uint16 host = (uint16)(data[0] | ((uint16)data[1] << 8));
-  const uint16 combined = (uint16)(host | SeInjectedPad[vp].load(std::memory_order_relaxed));
-  merged[0] = (uint8)combined;
-  merged[1] = (uint8)(combined >> 8);
-  data = merged;
+  const uint16 inj = SeInjectedPad[vp].load(std::memory_order_relaxed);
+  if(inj && VirtualPorts[vp] == &PossibleDevices[vp].gamepad)
+  {
+   /* Digital Control Pad: 2-byte data buffer, digital bits at [0..1]. */
+   const uint16 combined = (uint16)((data[0] | ((uint16)data[1] << 8)) | inj);
+   merged[0] = (uint8)combined;
+   merged[1] = (uint8)(combined >> 8);
+   data = merged;
+  }
+  else if(inj && VirtualPorts[vp] == &PossibleDevices[vp].threedpad)
+  {
+   /* 3D Control Pad: 10-byte buffer (input/3dpad.cpp) — digital bits at [0..1] (bits
+      0..10 share the gamepad layout), analog stick at [2..5], analog shoulders at
+      [6..9]. OR the digital bits in, and drive L/R as full analog when injected so
+      shoulder games respond. Mode + stick are left as the host provides. */
+   memcpy(merged, data, 10);
+   const uint16 dtmp = (uint16)((data[0] | ((uint16)data[1] << 8)) | (inj & 0x07FFu));
+   merged[0] = (uint8)dtmp;
+   merged[1] = (uint8)(dtmp >> 8);
+   if(inj & (1u << 11)) { merged[6] = 0xFF; merged[7] = 0xFF; } /* L shoulder analog full */
+   if(inj & (1u << 12)) { merged[8] = 0xFF; merged[9] = 0xFF; } /* R shoulder analog full */
+   data = merged;
+  }
  }
  VirtualPorts[vp]->UpdateInput(data, time_elapsed);
 }

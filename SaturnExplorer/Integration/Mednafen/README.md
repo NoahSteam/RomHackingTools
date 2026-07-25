@@ -221,12 +221,29 @@ with an `INP` command; `se_export.c` forwards it to the input hook, and the glue
 `SeMdfnSetPad` calls the `SsDbgSetPad` accessor.
 
 `apply.py` wires `SsDbgSetPad` into `smpc.cpp`. Incoming masks are translated to
-Mednafen's digital-pad bit order, handed from the server thread through atomics, and
-overlaid after the frontend's per-frame host-input refresh. This means Saturn Explorer
-buttons and ordinary Mednafen input can coexist. Disconnecting the live client clears
-both injected ports so a held button cannot remain stuck.
+Mednafen's digital-pad bit order (`bit0 UP … 4 START, 5 A … 12 R`, from
+`input/gamepad.cpp`), handed from the server thread through atomics, and overlaid after
+the frontend's per-frame host-input refresh. This means Saturn Explorer buttons and
+ordinary Mednafen input can coexist. Disconnecting the live client clears both injected
+ports so a held button cannot remain stuck. The mask is idempotent and latched, so
+re-sending each frame is safe.
 
-The mask is idempotent and latched, so re-sending each frame is safe.
+**Which pad device.** The injection overlays whichever device the port is set to in
+Mednafen's Input config, for the two supported types: the **Digital Control Pad**
+(2-byte data) and the **3D Control Pad** (10-byte data — digital buttons share the
+gamepad bit layout; L/R are driven as full analog when injected; mode + stick are left
+to the host). If a port is set to a device the injection doesn't handle (mouse, mission
+stick, gun, …), Saturn Explorer input for that port is ignored. So if presses don't
+reach the game, first check the port's device is a Control Pad, and make sure you
+**rebuilt Mednafen** (`update.bat`) after any `apply.py` change — the injection lives in
+the compiled `smpc.cpp`, not in an already-built binary.
+
+**Verifying what the pad sees.** `apply.py` also injects `SsDbgQueryInput(port, out[3])`
+into `smpc.cpp` — it reports, per port, `out[0]` device kind (0 none / 1 gamepad / 2 3D
+pad / 3 other), `out[1]` the host-input bits, and `out[2]` the Saturn Explorer-injected
+bits. This is the readback hook a client can poll to confirm its injection is actually
+reaching the emulated pad (device is a Control Pad, injected bits non-zero) rather than
+being dropped by a device-type mismatch.
 
 ## Tracepoints (Tier 4, v8+) — TODO(mednafen) confirm
 
