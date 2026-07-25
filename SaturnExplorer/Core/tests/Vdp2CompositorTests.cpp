@@ -106,8 +106,7 @@ std::vector<uint8_t> Render(State& state, bool showWindow, bool colorCalc = fals
     CHECK(se_begin_frame(context) == SE_OK);
 
     se_render_opts options = {};
-    options.show_layer[SE_LAYER_NBG3] = 1;
-    options.show_layer[SE_LAYER_RBG0] = 1;
+    for (int i = 0; i < SE_LAYER_COUNT; ++i) options.show_layer[i] = 1;
     options.show_window = showWindow ? 1 : 0;
     options.show_color_calculation = colorCalc ? 1 : 0;
     se_image image = {};
@@ -260,6 +259,53 @@ void TestRotationIdentity()
             CHECK(IsWhite(pixels, x, y));
 }
 
+void TestBitmapNbg0()
+{
+    // NBG0 in 8bpp bitmap mode (512x256): pixel (x,y) is the palette index at VRAM byte
+    // y*512 + x. Fill the top-left 4x2 with index 1 (white) and expect a white frame.
+    State state = MakeNbg3State();
+    SetReg(state, 0x020, 0x0001);   // BGON: NBG0 only
+    SetReg(state, 0x028, 0x0012);   // CHCTLA: N0BMEN + 8bpp, bitmap size 512x256
+    SetReg(state, 0x02C, 0x0000);   // BMPNA: palette base 0
+    SetReg(state, 0x03C, 0x0000);   // MPOFN: bitmap base 0
+    SetReg(state, 0x0F8, 0x0001);   // PRINA: NBG0 priority 1
+    PutBE16(state.cram, 2, 0x7FFF); // CRAM index 1 = white
+    for (int y = 0; y < 2; ++y)
+        for (int x = 0; x < 4; ++x)
+            state.vdp2[y * 512 + x] = 1;
+    const std::vector<uint8_t> pixels = Render(state, false);
+    for (int y = 0; y < 2; ++y)
+        for (int x = 0; x < 4; ++x)
+            CHECK(IsWhite(pixels, x, y));
+}
+
+void TestZoomBitmap()
+{
+    // NBG0 8bpp bitmap with 2x horizontal zoom (X coordinate increment 0x80 = 0.5/dot):
+    // screen dots 0,1 sample bitmap pixel 0; dots 2,3 sample pixel 1. Pixel 0 = white,
+    // pixel 1 = red -> the frame reads white,white,red,red.
+    State state = MakeNbg3State();
+    SetReg(state, 0x020, 0x0001);   // BGON: NBG0
+    SetReg(state, 0x028, 0x0012);   // CHCTLA: N0BMEN + 8bpp
+    SetReg(state, 0x0F8, 0x0001);   // PRINA: priority 1
+    SetReg(state, 0x07A, 0x8000);   // ZMXDN0: fractional 0x80 -> increment 0.5 (2x zoom)
+    PutBE16(state.cram, 2, 0x7FFF); // index 1 = white
+    PutBE16(state.cram, 4, 0x001F); // index 2 = red
+    for (int y = 0; y < 2; ++y)
+    {
+        state.vdp2[y * 512 + 0] = 1;   // pixel 0 = white
+        state.vdp2[y * 512 + 1] = 2;   // pixel 1 = red
+    }
+    const std::vector<uint8_t> pixels = Render(state, false);
+    for (int y = 0; y < 2; ++y)
+    {
+        CHECK(IsWhite(pixels, 0, y));
+        CHECK(IsWhite(pixels, 1, y));
+        CHECK(IsRed(pixels, 2, y));
+        CHECK(IsRed(pixels, 3, y));
+    }
+}
+
 void TestBackScreen()
 {
     // With NBG3 disabled, the whole frame is the BKTA back-screen colour. Point BKTA
@@ -309,6 +355,8 @@ int main()
     TestBackScreen();
     TestColorCalc();
     TestRotationIdentity();
+    TestBitmapNbg0();
+    TestZoomBitmap();
     if (gFailures != 0)
     {
         std::cerr << gFailures << " VDP2 compositor check(s) failed\n";

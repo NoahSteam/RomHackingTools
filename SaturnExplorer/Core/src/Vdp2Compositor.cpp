@@ -23,6 +23,8 @@ enum : uint32_t
     kMPABN2 = 0x048, kMPCDN2 = 0x04A, kMPABN3 = 0x04C, kMPCDN3 = 0x04E,
     kSCXIN0 = 0x070, kSCYIN0 = 0x074, kSCXIN1 = 0x080, kSCYIN1 = 0x084,
     kSCXN2 = 0x090, kSCYN2 = 0x092, kSCXN3 = 0x094, kSCYN3 = 0x096,
+    // NBG0/1 fractional scroll + zoom live at 0x070 (NBG0) / 0x080 (NBG1) + these deltas.
+    kSCRCTL = 0x09A, kLSTA0 = 0x0A0, kLSTA1 = 0x0A4,
     kWPSX0 = 0x0C0, kWPSY0 = 0x0C2, kWPEX0 = 0x0C4, kWPEY0 = 0x0C6,
     kWPSX1 = 0x0C8, kWPSY1 = 0x0CA, kWPEX1 = 0x0CC, kWPEY1 = 0x0CE,
     kWCTLA = 0x0D0, kWCTLB = 0x0D2,
@@ -36,7 +38,7 @@ enum : uint32_t
     // Rotation (RBG0): pattern name, map offset, char/bitmap control, plane sizes,
     // the rotation parameter tables, coefficient control, and RBG0's own priority /
     // colour-offset / colour-calc-ratio registers.
-    kPNCR = 0x038, kMPOFR = 0x03E, kBMPNB = 0x02C,
+    kPNCR = 0x038, kMPOFR = 0x03E, kBMPNA = 0x02C, kBMPNB = 0x02E,
     kMPABRA = 0x050, kMPABRB = 0x060,
     kRPMD = 0x0B0, kKTCTL = 0x0B4, kKTAOF = 0x0B6, kOVPNRA = 0x0B8, kOVPNRB = 0x0BA,
     kRPTAU = 0x0BC, kRPTAL = 0x0BE,
@@ -92,6 +94,20 @@ struct NbgConfig
     bool colorCalc;         // CCCTL: this screen participates in color calculation
     uint32_t colorCalcRatio;// CCRNx 5-bit: 0 = mostly this screen, 31 = mostly below
     bool colorCalcAdd;      // CCCTL CCMD: additive blend (ratio ignored)
+    // Bitmap mode (NBG0/1 and RBG0): the screen is a single linear image rather than a
+    // tiled plane. When bitmap is set the plane/pattern fields above are unused.
+    bool bitmap;
+    uint32_t bitmapW, bitmapH;   // pixel dimensions
+    uint32_t bitmapBase;         // VRAM word address of the image
+    uint32_t bitmapPalette;      // palette base for the 16/256-colour formats
+    // Fractional scroll + zoom + line scroll (NBG0/1 only). When zoomScroll is set the
+    // coordinate is stepped in .8 fixed-point from xScroll8/yScroll8 by xInc8/yInc8, and
+    // a per-line scroll/zoom table (scrollCtrl selecting X/Y/zoom) overrides it per line.
+    bool zoomScroll;
+    uint32_t xScroll8, yScroll8; // .8 fixed base scroll
+    uint32_t xInc8, yInc8;       // .8 fixed per-dot / per-line coordinate increment (zoom)
+    uint8_t scrollCtrl;          // SCRCTL byte for this NBG
+    uint32_t lineScrollBase;     // line scroll/zoom table VRAM word address
 };
 
 // Blend one source texel over the destination pixel already in the buffer using VDP2
@@ -183,6 +199,36 @@ NbgConfig ReadNbgConfig(const HardwareSnapshot& s, int n)
     c.colorCalc = (ccctl & (1u << n)) != 0;
     c.colorCalcRatio = ((n & 1) ? (ccrn >> 8) : ccrn) & 0x1F;
     c.colorCalcAdd = (ccctl & 0x0100) != 0;
+
+    // Bitmap mode is available on NBG0/1 only (CHCTLA N0/N1BMEN). The bitmap base comes
+    // from the map-offset nibble, its size from CHCTLA, and its palette from BMPNA.
+    if (n < 2)
+    {
+        c.bitmap = (cha >> (1 + n * 8)) & 1;
+        const uint32_t bmsz = (cha >> (2 + n * 8)) & 0x3;
+        c.bitmapW = (bmsz & 0x2) ? 1024 : 512;
+        c.bitmapH = (bmsz & 0x1) ? 512 : 256;
+        c.bitmapBase = static_cast<uint32_t>((mpofn >> (n * 4)) & 0x7) << 16;
+        c.bitmapPalette = static_cast<uint32_t>((Reg(s, kBMPNA) >> (n * 8)) & 0x7) << 4;
+
+        // Fractional scroll + zoom + line scroll (NBG0/1). Integer + fractional parts form
+        // an .8 fixed-point base scroll; the zoom register is the .8 per-dot coordinate
+        // increment (0x100 = 1:1). SCRCTL selects per-line X/Y/zoom from the LSTA table.
+        const uint32_t base = kSCXIN0 + n * 0x10;
+        const uint32_t xi = Reg(s, base + 0x0) & 0x7FF, xf = Reg(s, base + 0x2) >> 8;
+        const uint32_t yi = Reg(s, base + 0x4) & 0x7FF, yf = Reg(s, base + 0x6) >> 8;
+        const uint32_t zxi = Reg(s, base + 0x8) & 0x7, zxf = Reg(s, base + 0xA) >> 8;
+        const uint32_t zyi = Reg(s, base + 0xC) & 0x7, zyf = Reg(s, base + 0xE) >> 8;
+        c.xScroll8 = (xi << 8) | xf;
+        c.yScroll8 = (yi << 8) | yf;
+        c.xInc8 = ((zxi << 8) | zxf); if (c.xInc8 == 0) c.xInc8 = 0x100;
+        c.yInc8 = ((zyi << 8) | zyf); if (c.yInc8 == 0) c.yInc8 = 0x100;
+        c.scrollCtrl = static_cast<uint8_t>(Reg(s, kSCRCTL) >> (n * 8));
+        const uint32_t lsta = kLSTA0 + n * 4;
+        c.lineScrollBase = (static_cast<uint32_t>(Reg(s, lsta) & 0x7) << 16) |
+                           (Reg(s, lsta + 2) & 0xFFFE);
+        c.zoomScroll = true;
+    }
     return c;
 }
 
@@ -411,6 +457,54 @@ Rgba FetchCellTexel(const std::vector<uint8_t>& vram, const std::vector<uint8_t>
     }
 }
 
+// Bits per pixel for a VDP2 colour-number field (used to address bitmap pixels).
+uint32_t ColorBpp(uint32_t colorNum)
+{
+    switch (colorNum)
+    {
+    case 0:  return 4;
+    case 1:  return 8;
+    case 2:
+    case 3:  return 16;
+    default: return 32;
+    }
+}
+
+// Sample one bitmap-mode texel at plane coordinate (ix, iy). Reuses FetchCellTexel by
+// treating the horizontal 8-pixel group as a one-row "cell": the group's byte address is
+// cellBase and the pixel within it is (ix & 7). Wraps to the bitmap dimensions.
+Rgba FetchBitmapTexel(const std::vector<uint8_t>& vram, const std::vector<uint8_t>& cram,
+                      se_cram_mode cramMode, const NbgConfig& c, int ix, int iy)
+{
+    const uint32_t xw = static_cast<uint32_t>(ix) & (c.bitmapW - 1);
+    const uint32_t yw = static_cast<uint32_t>(iy) & (c.bitmapH - 1);
+    const uint32_t bpp = ColorBpp(c.colorNum);
+    const uint32_t cellBase =
+        (c.bitmapBase * 2 + (((yw * c.bitmapW + (xw & ~7u)) * bpp) >> 3)) & 0x7FFFFu;
+    PatternName pn {};
+    pn.palette = c.bitmapPalette;
+    return FetchCellTexel(vram, cram, cramMode, c, pn, cellBase,
+                          static_cast<int>(xw & 7u), 0);
+}
+
+// Composite one resolved texel into the buffer, honoring color calculation like the NBG
+// write path: blend over an opaque pixel below when enabled, otherwise overwrite.
+inline void CompositeTexel(std::vector<uint8_t>& out, size_t o, const Rgba& col,
+                           bool colorCalc, const NbgConfig& c)
+{
+    if (colorCalc && c.colorCalc && out[o + 3] != 0)
+    {
+        BlendColorCalc(&out[o], col, c.colorCalcRatio, c.colorCalcAdd);
+    }
+    else
+    {
+        out[o + 0] = col.r;
+        out[o + 1] = col.g;
+        out[o + 2] = col.b;
+        out[o + 3] = 255;
+    }
+}
+
 // Composite one NBG layer into 'out' (width*height*4): each opaque cell texel
 // overwrites the pixel, transparent texels leave whatever a farther layer drew.
 // 'out' must already be sized and cleared/painted; layers are drawn back-to-front
@@ -469,80 +563,98 @@ void RenderLayer(const HardwareSnapshot& snap, const NbgConfig& c, int layerInde
             ResolveWindowLine(windowConfig, 0, vram, sy),
             ResolveWindowLine(windowConfig, 1, vram, sy)
         };
+        // Per-line horizontal start (.8), per-dot increment (.8), and the plane-space Y.
+        // NBG2/3 use plain integer scroll; NBG0/1 add fractional scroll, zoom, and an
+        // optional per-line scroll/zoom table (SCRCTL/LSTA).
+        uint32_t xcStart = c.scrollX << 8, xcinc = 0x100;
+        int yCoord = c.scrollY + sy;
+        if (c.zoomScroll)
+        {
+            const uint8_t sc = c.scrollCtrl;
+            const uint32_t lss = (sc >> 4) & 0x3;
+            uint32_t lineX8 = c.xScroll8, lineY8 = c.yScroll8, inc = c.xInc8;
+            bool haveLineY = false;
+            if (sc & 0x0E)   // any per-line table field enabled
+            {
+                const uint32_t fields = ((sc >> 1) & 1) + ((sc >> 2) & 1) + ((sc >> 3) & 1);
+                uint32_t addr = c.lineScrollBase +
+                                (static_cast<uint32_t>(sy) >> lss) * fields * 2;
+                if (sc & 0x2)   // per-line X scroll
+                {
+                    lineX8 = (((ReadVdp2Word(vram, addr) & 0x7FF) << 8) |
+                              (ReadVdp2Word(vram, addr + 1) >> 8)) + c.xScroll8;
+                    addr += 2;
+                }
+                if (sc & 0x4)   // per-line Y scroll
+                {
+                    lineY8 = (((ReadVdp2Word(vram, addr) & 0x7FF) << 8) |
+                              (ReadVdp2Word(vram, addr + 1) >> 8)) + c.yScroll8;
+                    haveLineY = true;
+                    addr += 2;
+                }
+                if (sc & 0x8)   // per-line X zoom
+                {
+                    inc = ((ReadVdp2Word(vram, addr) & 0x7) << 8) |
+                          (ReadVdp2Word(vram, addr + 1) >> 8);
+                    if (inc == 0) inc = 0x100;
+                }
+            }
+            xcStart = lineX8;
+            xcinc = inc;
+            yCoord = haveLineY ? static_cast<int>(lineY8 >> 8)
+                               : static_cast<int>((c.yScroll8 + c.yInc8 * sy) >> 8);
+        }
         for (int sx = 0; sx < width; ++sx)
         {
             if (applyWindows && WindowMasksPixel(windowConfig.control, windowLines, sx))
             {
                 continue;
             }
-            const uint32_t x = (c.scrollX + sx) & xMask;
-            const uint32_t y = (c.scrollY + sy) & yMask;
-            const uint32_t plane = (y / planePixH) * 2 + (x / planePixW);
-            const uint32_t px = x % planePixW;
-            const uint32_t py = y % planePixH;
+            const int sampleX = static_cast<int>((xcStart + xcinc * sx) >> 8);
+            Rgba col;
+            if (c.bitmap)
+            {
+                // Bitmap mode: the scrolled coordinate indexes the linear image directly.
+                col = FetchBitmapTexel(vram, cram, cramMode, c, sampleX, yCoord);
+            }
+            else
+            {
+                const uint32_t x = static_cast<uint32_t>(sampleX) & xMask;
+                const uint32_t y = static_cast<uint32_t>(yCoord) & yMask;
+                const uint32_t plane = (y / planePixH) * 2 + (x / planePixW);
+                const uint32_t px = x % planePixW;
+                const uint32_t py = y % planePixH;
 
-            // Pattern-name tables are laid out page-major: a plane holds
-            // planeW*planeH pages, each a contiguous pageCells*pageCells block of
-            // entries. Address the enclosing page first, then the pattern within
-            // it — a plain patY*pageCells+patX stride is only correct for a 1x1
-            // plane and collides across page columns otherwise.
-            const uint32_t patX = px / cellWH;
-            const uint32_t patY = py / cellWH;
-            const uint32_t pageIndex = (patY / pageCells) * planeW + (patX / pageCells);
-            const uint32_t patIndex = pageIndex * (pageCells * pageCells) +
-                                      (patY % pageCells) * pageCells + (patX % pageCells);
-            const PatternName pn = DecodePatternName(
-                vram, planeBase[plane] + patIndex * pnBytes, c, vrsize);
+                // Pattern-name tables are laid out page-major: a plane holds
+                // planeW*planeH pages, each a contiguous pageCells*pageCells block of
+                // entries. Address the enclosing page first, then the pattern within
+                // it — a plain patY*pageCells+patX stride is only correct for a 1x1
+                // plane and collides across page columns otherwise.
+                const uint32_t patX = px / cellWH;
+                const uint32_t patY = py / cellWH;
+                const uint32_t pageIndex = (patY / pageCells) * planeW + (patX / pageCells);
+                const uint32_t patIndex = pageIndex * (pageCells * pageCells) +
+                                          (patY % pageCells) * pageCells + (patX % pageCells);
+                const PatternName pn = DecodePatternName(
+                    vram, planeBase[plane] + patIndex * pnBytes, c, vrsize);
 
-            // Pixel within the pattern, then within its 8x8 sub-cell.
-            uint32_t inX = px % cellWH;
-            uint32_t inY = py % cellWH;
-            if (pn.flip & 1) inX = cellWH - 1 - inX;
-            if (pn.flip & 2) inY = cellWH - 1 - inY;
-            const uint32_t subCell = (inY / 8) * c.patternWH + (inX / 8);
-            const uint32_t cellBase = (pn.charBase + subCell * cellBytes) & 0x7FFFFu;
+                // Pixel within the pattern, then within its 8x8 sub-cell.
+                uint32_t inX = px % cellWH;
+                uint32_t inY = py % cellWH;
+                if (pn.flip & 1) inX = cellWH - 1 - inX;
+                if (pn.flip & 2) inY = cellWH - 1 - inY;
+                const uint32_t subCell = (inY / 8) * c.patternWH + (inX / 8);
+                const uint32_t cellBase = (pn.charBase + subCell * cellBytes) & 0x7FFFFu;
 
-            const Rgba col = FetchCellTexel(vram, cram, cramMode, c, pn, cellBase,
-                                            static_cast<int>(inX % 8), static_cast<int>(inY % 8));
+                col = FetchCellTexel(vram, cram, cramMode, c, pn, cellBase,
+                                     static_cast<int>(inX % 8), static_cast<int>(inY % 8));
+            }
             if (col.a == 0)
             {
                 continue;
             }
-            const size_t o = (static_cast<size_t>(sy) * width + sx) * 4;
-            // Color calculation blends this screen with whatever is already below it
-            // (a lower-priority layer or the back screen); otherwise it overwrites.
-            // Blending only makes sense over an opaque pixel — a transparent
-            // destination (no back screen painted) falls back to an opaque write.
-            if (colorCalc && c.colorCalc && out[o + 3] != 0)
-            {
-                BlendColorCalc(&out[o], col, c.colorCalcRatio, c.colorCalcAdd);
-            }
-            else
-            {
-                out[o + 0] = col.r;
-                out[o + 1] = col.g;
-                out[o + 2] = col.b;
-                out[o + 3] = 255;
-            }
+            CompositeTexel(out, (static_cast<size_t>(sy) * width + sx) * 4, col, colorCalc, c);
         }
-    }
-}
-
-// Composite one resolved texel into the buffer, honoring color calculation exactly like
-// RenderLayer's inner write (blend over an opaque pixel below, else overwrite).
-inline void CompositeTexel(std::vector<uint8_t>& out, size_t o, const Rgba& col,
-                           bool colorCalc, const NbgConfig& c)
-{
-    if (colorCalc && c.colorCalc && out[o + 3] != 0)
-    {
-        BlendColorCalc(&out[o], col, c.colorCalcRatio, c.colorCalcAdd);
-    }
-    else
-    {
-        out[o + 0] = col.r;
-        out[o + 1] = col.g;
-        out[o + 2] = col.b;
-        out[o + 3] = 255;
     }
 }
 
@@ -607,6 +719,13 @@ NbgConfig ReadRbg0Config(const HardwareSnapshot& s, bool paramB)
     c.colorCalc = (ccctl & (1u << 4)) != 0;
     c.colorCalcRatio = Reg(s, kCCRR) & 0x1F;
     c.colorCalcAdd = (ccctl & 0x0100) != 0;
+
+    // RBG0 bitmap mode (CHCTLB R0BMEN): 512-wide, 256 or 512 tall.
+    c.bitmap = (chb >> 9) & 1;
+    c.bitmapW = 512;
+    c.bitmapH = ((chb >> 10) & 1) ? 512 : 256;
+    c.bitmapBase = static_cast<uint32_t>((mpofr >> (paramB ? 4 : 0)) & 0x7) << 16;
+    c.bitmapPalette = static_cast<uint32_t>(Reg(s, kBMPNB) & 0x7) << 4;
     return c;
 }
 
@@ -736,29 +855,37 @@ void RenderRbg0(const HardwareSnapshot& snap, const NbgConfig& c, bool paramB,
             {
                 continue;
             }
-            const uint32_t x = static_cast<uint32_t>(ixs) & (totalW - 1);
-            const uint32_t y = static_cast<uint32_t>(iys) & (totalH - 1);
+            Rgba col;
+            if (c.bitmap)
+            {
+                col = FetchBitmapTexel(vram, cram, cramMode, c, ixs, iys);
+            }
+            else
+            {
+                const uint32_t x = static_cast<uint32_t>(ixs) & (totalW - 1);
+                const uint32_t y = static_cast<uint32_t>(iys) & (totalH - 1);
 
-            const uint32_t plane = (y / planePixH) * 4 + (x / planePixW);
-            const uint32_t px = x % planePixW;
-            const uint32_t py = y % planePixH;
-            const uint32_t patX = px / cellWH;
-            const uint32_t patY = py / cellWH;
-            const uint32_t pageIndex = (patY / pageCells) * planeW + (patX / pageCells);
-            const uint32_t patIndex = pageIndex * (pageCells * pageCells) +
-                                      (patY % pageCells) * pageCells + (patX % pageCells);
-            const PatternName pn = DecodePatternName(
-                vram, planeBase[plane] + patIndex * pnBytes, c, vrsize);
+                const uint32_t plane = (y / planePixH) * 4 + (x / planePixW);
+                const uint32_t px = x % planePixW;
+                const uint32_t py = y % planePixH;
+                const uint32_t patX = px / cellWH;
+                const uint32_t patY = py / cellWH;
+                const uint32_t pageIndex = (patY / pageCells) * planeW + (patX / pageCells);
+                const uint32_t patIndex = pageIndex * (pageCells * pageCells) +
+                                          (patY % pageCells) * pageCells + (patX % pageCells);
+                const PatternName pn = DecodePatternName(
+                    vram, planeBase[plane] + patIndex * pnBytes, c, vrsize);
 
-            uint32_t inX = px % cellWH;
-            uint32_t inY = py % cellWH;
-            if (pn.flip & 1) inX = cellWH - 1 - inX;
-            if (pn.flip & 2) inY = cellWH - 1 - inY;
-            const uint32_t subCell = (inY / 8) * c.patternWH + (inX / 8);
-            const uint32_t cellBase = (pn.charBase + subCell * cellBytes) & 0x7FFFFu;
+                uint32_t inX = px % cellWH;
+                uint32_t inY = py % cellWH;
+                if (pn.flip & 1) inX = cellWH - 1 - inX;
+                if (pn.flip & 2) inY = cellWH - 1 - inY;
+                const uint32_t subCell = (inY / 8) * c.patternWH + (inX / 8);
+                const uint32_t cellBase = (pn.charBase + subCell * cellBytes) & 0x7FFFFu;
 
-            const Rgba col = FetchCellTexel(vram, cram, cramMode, c, pn, cellBase,
-                                            static_cast<int>(inX % 8), static_cast<int>(inY % 8));
+                col = FetchCellTexel(vram, cram, cramMode, c, pn, cellBase,
+                                     static_cast<int>(inX % 8), static_cast<int>(inY % 8));
+            }
             if (col.a == 0)
             {
                 continue;
