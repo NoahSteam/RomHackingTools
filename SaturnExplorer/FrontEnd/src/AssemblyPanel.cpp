@@ -559,40 +559,35 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
             // Find the selected instruction(s)'s code bytes in the game data directory.
             // If this row is inside the current multi-selection, search the whole range;
             // otherwise just this one instruction.
+            // Gather the code bytes once (big-endian opcode order) and derive the count
+            // + labels from the vector — one walk, one pack site.
             const bool inSel = mHasSel && ln.addr >= mSelLoAddr && ln.addr <= mSelHiAddr;
-            int selInstrs = 1;
+            std::vector<uint8_t> selBytes;
+            uint32_t startAddr = ln.addr;
             if (inSel)
             {
-                selInstrs = 0;
+                startAddr = mSelLoAddr;
                 for (const Line& l : mLines)
-                    if (l.readable && l.addr >= mSelLoAddr && l.addr <= mSelHiAddr) ++selInstrs;
+                    if (l.readable && l.addr >= mSelLoAddr && l.addr <= mSelHiAddr)
+                    { selBytes.push_back((uint8_t)(l.op >> 8)); selBytes.push_back((uint8_t)(l.op & 0xFF)); }
+            }
+            if (selBytes.empty())   // no selection (or empty range): just this instruction
+            {
+                selBytes.push_back((uint8_t)(ln.op >> 8));
+                selBytes.push_back((uint8_t)(ln.op & 0xFF));
+                startAddr = ln.addr;
             }
             char findItem[80];
-            std::snprintf(findItem, sizeof(findItem), "Find %s in data directory (%d bytes)",
-                          (inSel && selInstrs > 1) ? "selected instructions" : "this instruction",
-                          selInstrs * 2);
+            std::snprintf(findItem, sizeof(findItem), "Find %s in data directory (%zu bytes)",
+                          selBytes.size() > 2 ? "selected instructions" : "this instruction",
+                          selBytes.size());
             if (ImGui::MenuItem(findItem, nullptr, false, ln.readable))
             {
-                req.findInData = true;
-                uint32_t startAddr = ln.addr;
-                if (inSel && selInstrs >= 1)
-                {
-                    for (const Line& l : mLines)
-                        if (l.readable && l.addr >= mSelLoAddr && l.addr <= mSelHiAddr)
-                        {
-                            req.findBytes.push_back((uint8_t)(l.op >> 8));
-                            req.findBytes.push_back((uint8_t)(l.op & 0xFF));
-                        }
-                    startAddr = mSelLoAddr;
-                }
-                else
-                {
-                    req.findBytes.push_back((uint8_t)(ln.op >> 8));
-                    req.findBytes.push_back((uint8_t)(ln.op & 0xFF));
-                }
                 char lbl[80];
                 std::snprintf(lbl, sizeof(lbl), "SH-2 code @0x%08X (%zu bytes)",
-                              startAddr, req.findBytes.size());
+                              startAddr, selBytes.size());
+                req.findInData = true;
+                req.findBytes = std::move(selBytes);
                 req.findLabel = lbl;
             }
             ImGui::BeginDisabled();
