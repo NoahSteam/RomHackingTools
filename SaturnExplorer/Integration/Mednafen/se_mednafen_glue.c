@@ -56,6 +56,10 @@ extern void            SsDbgClearBps(void);                        /* Tier 3: cl
  * it after each host-input refresh. `port` is 0-based (0 = controller 1). */
 extern void            SsDbgSetPad(unsigned int port, unsigned int buttons);
 extern unsigned short  SsDbgReadOpcode(unsigned int addr); /* v9: 16-bit instr @ Saturn addr */
+/* Live host keyboard bindings (v10+). apply.py injects this into src/drivers/input.cpp,
+ * where the PIDC[] binding cache is in scope. Fills out[13] with the USB-HID scancode the
+ * user has mapped to each Saturn pad button (ascending SE_PAD_* order), -1 if unbound. */
+extern int             SsDbgQueryKeyMap(unsigned int port, int out[13]);
 #endif
 
 /* ============================ pure, testable helpers ====================== */
@@ -201,6 +205,22 @@ static void SeMdfnSetPad(unsigned int port, unsigned int buttons)
 #endif
 }
 
+/* Live host keyboard bindings (v10+): report the scancode the user has mapped to each
+ * Saturn pad button so the Saturn Explorer controller panel can mirror it automatically.
+ * The injected SsDbgQueryKeyMap reads Mednafen's own PIDC[] binding cache (see its
+ * declaration above). Registered with SeExportSetKeyMapHook. */
+static int SeMdfnGetKeyMap(unsigned int port, int out[13])
+{
+#if defined(SE_MEDNAFEN_WIRED)
+    return SsDbgQueryKeyMap(port, out);
+#else
+    int i;
+    for (i = 0; i < 13; i++) out[i] = -1;
+    (void)port;
+    return 0;
+#endif
+}
+
 /* ============================ tracepoints (Tier 4, v8+) =================== */
 /* Tracepoints are non-halting: on a hit the glue captures the SH-2 register file and
  * queues an event (the client formats the message), then execution CONTINUES. The set
@@ -339,6 +359,7 @@ void SeMednafenFrameHook(void)
         SeExportSetMemWriteHook(SeMdfnWriteByte);
         SeExportSetBreakpointHooks(SeMdfnAddExecBp, SeMdfnClearBps);
         SeExportSetInputHook(SeMdfnSetPad);   /* controller panel -> emulated pad (v7+) */
+        SeExportSetKeyMapHook(SeMdfnGetKeyMap);   /* emulator keyboard bindings -> panel (v10+) */
         SeExportSetTracepointHook(SeMdfnSetTracepoints);  /* tracepoints (v8+) */
     }
     SeMednafenSnapshot();
@@ -351,6 +372,7 @@ void SeMednafenFrameHook(void)
 void SeMednafenSuppressUnusedWarnings(void)
 {
     (void)SeMdfnAddExecBp; (void)SeMdfnClearBps; (void)SeMdfnWriteByte; (void)SeMdfnSetPad;
+    (void)SeMdfnGetKeyMap;
     (void)SeMdfnSetTracepoints; (void)SeRd32LE;
 }
 #endif

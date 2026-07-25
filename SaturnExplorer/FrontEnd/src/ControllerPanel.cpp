@@ -49,12 +49,6 @@ ImU32 Col(float r, float g, float b, float a = 1.0f)
     return ImGui::GetColorU32(ImVec4(r, g, b, a));
 }
 
-const char* ButtonName(unsigned int bit)
-{
-    for (const Button& b : kButtons) if (b.bit == bit) return b.name;
-    return "?";
-}
-
 std::string StateText(unsigned int mask)
 {
     std::string out;
@@ -93,18 +87,14 @@ ImGuiKey HidToImGuiKey(int sc)
     }
 }
 
-// Mednafen ss gamepad/3D-pad button name (IDII) -> our SE_PAD_* bit.
-unsigned int MdfnButtonBit(const std::string& n)
-{
-    if (n == "up")    return SE_PAD_UP;    if (n == "down")  return SE_PAD_DOWN;
-    if (n == "left")  return SE_PAD_LEFT;  if (n == "right") return SE_PAD_RIGHT;
-    if (n == "a")     return SE_PAD_A;     if (n == "b")     return SE_PAD_B;
-    if (n == "c")     return SE_PAD_C;     if (n == "x")     return SE_PAD_X;
-    if (n == "y")     return SE_PAD_Y;     if (n == "z")     return SE_PAD_Z;
-    if (n == "start") return SE_PAD_START; if (n == "ls")    return SE_PAD_L;
-    if (n == "rs")    return SE_PAD_R;
-    return 0;
-}
+// SE_PAD_* bits in the wire order used by se_live_poll_keymap (ascending SE_PAD_*): the
+// keymap array's slot i carries the scancode for kKeyMapBits[i]. Maps a live keymap entry
+// back to its kButtons slot via ButtonIndex.
+const unsigned int kKeyMapBits[] = {
+    SE_PAD_UP, SE_PAD_DOWN, SE_PAD_LEFT, SE_PAD_RIGHT,
+    SE_PAD_A,  SE_PAD_B,    SE_PAD_C,    SE_PAD_X,
+    SE_PAD_Y,  SE_PAD_Z,    SE_PAD_L,    SE_PAD_R,    SE_PAD_START,
+};
 
 int ButtonIndex(unsigned int bit)
 {
@@ -124,63 +114,45 @@ void ControllerPanel::EnsureBindings()
     mBindingsInit = true;
 }
 
-int ControllerPanel::ImportMednafenConfig(const std::string& path)
+void ControllerPanel::ApplyLiveKeyMap(const int32_t* scancodes, int count)
 {
-    std::ifstream f(path);
-    if (!f) return 0;
+    if (!scancodes || count <= 0) return;
+    if (count > kNumButtons) count = kNumButtons;
+    // Re-adopt only when the emulator's reported mapping actually changed since the last
+    // adopt, so a manual rebind isn't clobbered on every frame while the config is stable.
+    if (mLiveKeyMapAdopted &&
+        std::equal(scancodes, scancodes + count, mAdoptedScancodes)) return;
     EnsureBindings();
-    // Mednafen names the Saturn ports port1..port12; our port 0/1 is its port1/port2.
-    const std::string prefix = "ss.input.port" + std::to_string(mPort + 1) + ".";
-    int count = 0;
-    std::string line;
-    while (std::getline(f, line))
+    int matched = 0;
+    for (int i = 0; i < count; ++i)
     {
-        // e.g. "ss.input.port1.gamepad.up keyboard 0x0 26" (see drivers/keyboard.cpp
-        // BNToString: value is "keyboard <devid> <decimal-scancode>[+ctrl|+alt|+shift]").
-        if (line.compare(0, prefix.size(), prefix) != 0) continue;
-        const size_t sp = line.find(' ');
-        if (sp == std::string::npos) continue;
-        const std::string setting = line.substr(0, sp);
-        const std::string value   = line.substr(sp + 1);
-        if (value.compare(0, 9, "keyboard ") != 0) continue;   // only keyboard bindings
-        const size_t dot = setting.find_last_of('.');
-        const unsigned int bit = MdfnButtonBit(setting.substr(dot + 1));
-        if (!bit) continue;
-        std::istringstream vs(value);
-        std::string kw, dev, sctok;
-        vs >> kw >> dev >> sctok;                              // "keyboard" "0x0" "26+ctrl"
-        const ImGuiKey k = HidToImGuiKey(std::atoi(sctok.c_str()));
+        mAdoptedScancodes[i] = scancodes[i];
+        if (scancodes[i] < 0) continue;                    // unbound / non-keyboard
+        const ImGuiKey k = HidToImGuiKey(scancodes[i]);
         if (k == ImGuiKey_None) continue;
-        const int idx = ButtonIndex(bit);
-        if (idx >= 0) { mKeyBind[idx] = (int)k; ++count; }
+        const int idx = ButtonIndex(kKeyMapBits[i]);
+        if (idx >= 0) { mKeyBind[idx] = (int)k; ++matched; }
     }
-    if (count) mSettingsDirty = true;
-    return count;
+    mLiveKeyMapAdopted = true;
+    mSettingsDirty = true;
+    if (matched) std::snprintf(mBindMsg, sizeof(mBindMsg),
+                               "Matched Mednafen's keys for Port %d (%d button%s).",
+                               mPort + 1, matched, matched == 1 ? "" : "s");
 }
 
-void ControllerPanel::DrawKeyBindings(IPlatform& platform)
+void ControllerPanel::DrawKeyBindings()
 {
     EnsureBindings();
     if (ImGui::CollapsingHeader("Key Bindings"))
     {
-        ImGui::TextWrapped("Keys that drive the pad while this panel is focused. Import your "
-                           "Mednafen config to adopt its host keys (e.g. WASD).");
-        if (ImGui::Button("Import from Mednafen config..."))
-        {
-            std::string p;
-            if (platform.OpenFileDialogFiltered(p, "Mednafen config", "cfg"))
-            {
-                const int n = ImportMednafenConfig(p);
-                if (n) std::snprintf(mBindMsg, sizeof(mBindMsg),
-                                     "Imported %d binding(s) for Port %d.", n, mPort + 1);
-                else   std::snprintf(mBindMsg, sizeof(mBindMsg),
-                                     "No Port %d keyboard bindings found in that file.", mPort + 1);
-            }
-        }
-        ImGui::SameLine();
+        ImGui::TextWrapped("Keys that drive the pad while this panel is focused. On a live "
+                           "connection these match your Mednafen bindings automatically "
+                           "(e.g. WASD); rebind below to override.");
         if (ImGui::Button("Reset to defaults"))
         {
-            for (int i = 0; i < kNumButtons; ++i) mKeyBind[i] = (int)kButtons[i].key;
+            mBindingsInit = false;   // reseed defaults through the single EnsureBindings path
+            EnsureBindings();
+            mLiveKeyMapAdopted = false;   // let a live map re-adopt on the next poll
             mRebindIndex = -1;
             mSettingsDirty = true;
             std::snprintf(mBindMsg, sizeof(mBindMsg), "Reset to default bindings.");
@@ -572,7 +544,8 @@ void ControllerPanel::DrawControllerCanvas(bool connected)
             else if (hovered && ImGui::IsMouseDown(ImGuiMouseButton_Left))
                 mSources.mouseMomentary |= b.bit;
         }
-        ImGui::SetItemTooltip("%s  (keyboard: %s)%s", b.name, ImGui::GetKeyName(b.key),
+        ImGui::SetItemTooltip("%s  (keyboard: %s)%s", b.name,
+                              ImGui::GetKeyName((ImGuiKey)mKeyBind[&b - kButtons]),
                               (mSources.latched & b.bit) ? "  [held]" : "");
         ImGui::PopID();
 
@@ -664,12 +637,13 @@ void ControllerPanel::DrawFooter(bool connected) const
 
 unsigned int ControllerPanel::Draw(bool connected, uint64_t frame, IPlatform& platform)
 {
+    (void)platform;   // key bindings now mirror the emulator live; no file dialog needed
     Update(connected, frame);
     DrawToolbar(connected);
     DrawControllerCanvas(connected);
     ObserveFrame(frame);
     DrawFooter(connected);
-    DrawKeyBindings(platform);
+    DrawKeyBindings();
     return mFinalState;
 }
 

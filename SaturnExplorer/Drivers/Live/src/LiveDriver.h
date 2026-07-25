@@ -80,6 +80,14 @@ typedef struct se_live_call_frame
 uint32_t se_live_poll_callstack(const se_data_source* ds, int cpu,
                                 se_live_call_frame* out, uint32_t max);
 
+/* Copy the emulator's live host keyboard bindings for 'port' (0/1) into 'out' (v10+):
+ * up to 'max' USB-HID scancodes, one per Saturn pad button in ascending SE_PAD_* order
+ * (UP,DOWN,LEFT,RIGHT,A,B,C,X,Y,Z,L,R,START), -1 where no keyboard key is bound. Returns
+ * the number written (0 if not a live source or the server predates v10). Lets the
+ * controller panel mirror the user's keys with no config-file upload. */
+uint32_t se_live_poll_keymap(const se_data_source* ds, uint32_t port,
+                             int32_t* out, uint32_t max);
+
 /* Read the last stop event reported by the server's control block (v5+). Fills
  * '*reason' (SE_LIVE_STOP_*), '*cpu' (0 master / 1 slave), and '*pc' when non-NULL.
  * Returns 1 if the emulator is halted on a breakpoint, 0 otherwise (or not live). */

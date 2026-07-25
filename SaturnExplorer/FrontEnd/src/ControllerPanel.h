@@ -62,13 +62,18 @@ private:
     void DrawControllerCanvas(bool liveConnected);
     void DrawFooter(bool liveConnected) const;
     void DrawViewMenu();
-    // Configurable keyboard bindings: initialise from the default layout, draw the
-    // rebind UI, and import Mednafen's own host-input config so SE matches it (e.g. WASD).
+    // Configurable keyboard bindings: initialise from the default layout and draw the
+    // rebind UI. The live path (ApplyLiveKeyMap) mirrors Mednafen's own bindings.
     void EnsureBindings();
-    void DrawKeyBindings(IPlatform& platform);
-    // Parse a mednafen.cfg and adopt its Saturn-pad key bindings for this port. Returns
-    // the number of buttons matched (0 if the file is unreadable or has no bindings).
-    int  ImportMednafenConfig(const std::string& path);
+    void DrawKeyBindings();
+public:
+    // Adopt the emulator's live host keyboard bindings so the panel's keys match the
+    // user's Mednafen config automatically (e.g. WASD) — no config-file upload. 'scancodes'
+    // holds USB-HID scancodes in ascending SE_PAD_* order (see se_live_poll_keymap), -1
+    // where unbound; 'count' is how many entries are valid. Re-adopts only when the
+    // reported mapping actually changes, so a manual rebind isn't clobbered every frame.
+    void ApplyLiveKeyMap(const int32_t* scancodes, int count);
+private:
 
     void DrawCurrentInput(uint64_t frame);
     void DrawTimeline(uint64_t frame);
@@ -93,7 +98,12 @@ private:
     int          mKeyBind[kNumButtons] = {0};
     bool         mBindingsInit = false;
     int          mRebindIndex = -1;
-    char         mBindMsg[96] = {};      // transient status after an import / reset
+    char         mBindMsg[96] = {};      // transient status after a live adopt / reset
+    // Last live keyboard map adopted from the emulator (USB-HID scancodes in wire order),
+    // so ApplyLiveKeyMap re-adopts only when Mednafen's config actually changes and a
+    // manual rebind survives between changes. mLiveKeyMapAdopted gates the first compare.
+    int32_t      mAdoptedScancodes[kNumButtons] = {0};
+    bool         mLiveKeyMapAdopted = false;
 
     int          mPort = 0;
     int          mInputSource = 0;       // 0 keyboard + mouse, 1 mouse only

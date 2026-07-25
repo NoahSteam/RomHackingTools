@@ -268,6 +268,45 @@ TITLE_HOOK = (
 TITLE_ANCHOR = r'(SDL_SetWindowTitle\(window,[^;]*;\s*\n)'
 TITLE_FILE = os.path.join("src", "drivers", "video.cpp")
 
+# Live host keyboard bindings: report which keyboard scancode the user has mapped to each
+# Saturn pad button, read from the driver-layer PIDC[] binding cache (the same data
+# mednafen.cfg is serialized from). This lets a front end mirror the user's keys live —
+# no config-file export/upload. The cache lives in the SDL frontend (src/drivers/input.cpp,
+# where PIDC / ButtonInfoCache / ButtConfig are all in scope), NOT the ss core, so — like
+# the window-title mark — this is appended to a drivers-layer file, best-effort (a non-SDL
+# build won't have it). Fills out[13] with USB-HID scancodes in ascending SE_PAD_* order
+# (UP,DOWN,LEFT,RIGHT,A,B,C,X,Y,Z,L,R,START), -1 where no keyboard key is bound. Matching is
+# by the device-agnostic IDII setting token, so it serves the gamepad and 3D Control Pad alike.
+INPUT_ACCESSORS = r'''extern "C" int SsDbgQueryKeyMap(unsigned port, int out[13])
+{
+   static const char* const se_tok[13] = {
+      "up", "down", "left", "right", "a", "b", "c", "x", "y", "z", "ls", "rs", "start" };
+   int i, matched = 0;
+   for(i = 0; i < 13; i++) out[i] = -1;
+   if(port >= 16) return 0;
+   for(i = 0; i < 13; i++)
+   {
+      size_t j;
+      for(j = 0; j < PIDC[port].BIC.size(); j++)
+      {
+         const ButtonInfoCache& bic = PIDC[port].BIC[j];
+         size_t k;
+         if(!bic.IDII || !bic.IDII->SettingName) continue;
+         if(strcmp(bic.IDII->SettingName, se_tok[i]) != 0) continue;
+         for(k = 0; k < bic.BC.size(); k++)
+            if(bic.BC[k].DeviceType == BUTTC_KEYBOARD)
+            {
+               out[i] = (int)(bic.BC[k].ButtonNum & 0x0FFF);   /* low 12 bits = scancode */
+               matched++;
+               break;
+            }
+         break;
+      }
+   }
+   return matched;
+}'''
+INPUT_FILE = os.path.join("src", "drivers", "input.cpp")
+
 FENCE_RE = re.compile(re.escape(BEGIN) + r".*?" + re.escape(END), re.DOTALL)
 
 
@@ -408,6 +447,19 @@ def process_title(root, do_write):
     return notes
 
 
+def process_input(root, do_write):
+    """Append the SsDbgQueryKeyMap accessor to the SDL input driver (src/drivers/input.cpp).
+    Optional/best-effort: a non-SDL or libretro build won't have this file — skip it."""
+    path = os.path.join(root, INPUT_FILE)
+    if not os.path.isfile(path):
+        return [f"{INPUT_FILE}:", "  (not found — keyboard-map hook skipped; non-SDL build?)"]
+    text = original = open(path, encoding="utf-8", errors="surrogateescape").read()
+    text, note = apply_append(text, INPUT_ACCESSORS, "SsDbgQueryKeyMap")
+    if do_write and text != original:
+        open(path, "w", encoding="utf-8", errors="surrogateescape").write(text)
+    return [f"{INPUT_FILE}:", note]
+
+
 def write_if_changed(destpath, data):
     """Write `data` (bytes) to destpath only when it differs from what's already there,
     so re-copying an UNCHANGED source doesn't bump the file's mtime and force `make` to
@@ -497,6 +549,7 @@ def revert(src_dir, root):
     edited = [os.path.join(src_dir, f) for f in
               ("vdp1.cpp", "vdp2.cpp", "ss.cpp", "smpc.cpp", "smpc.h")]
     edited.append(os.path.join(root, TITLE_FILE))   # window-title mark (SDL frontend)
+    edited.append(os.path.join(root, INPUT_FILE))   # keyboard-map hook (SDL frontend)
     for path in edited:
         if os.path.isfile(path):
             t = open(path, encoding="utf-8", errors="surrogateescape").read()
@@ -551,6 +604,7 @@ def main():
     notes += process_smpc(src_dir, do_write)
     notes += process_ss(src_dir, do_write, with_pause)
     notes += process_title(root, do_write)
+    notes += process_input(root, do_write)
     notes += process_build(root, do_write)
 
     print("\n".join(notes))

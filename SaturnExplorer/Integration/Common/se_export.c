@@ -170,6 +170,19 @@ void SeExportSetInputHook(SeSetPadFn fn)
     sSetPad = fn;
 }
 
+/* ---- Keyboard-map hook (v10+). apply.py wires this to the emulator's own live host
+ * keyboard bindings so the client can mirror the user's keys without a config-file
+ * upload. get(port, out[13]) fills out with the USB-HID scancode bound to each Saturn
+ * pad button (ascending SE_PAD_* order), -1 where unbound; returns the count matched.
+ * May be NULL (the keymap block is then all -1, and the client keeps its own defaults). */
+typedef int (*SeGetKeyMapFn)(unsigned int port, int out[13]);
+static SeGetKeyMapFn sGetKeyMap;
+
+void SeExportSetKeyMapHook(SeGetKeyMapFn fn)
+{
+    sGetKeyMap = fn;
+}
+
 static void SeReleaseInjectedPads(void)
 {
     /* A client can disappear while a button is held. Never leave that state latched
@@ -576,6 +589,24 @@ static void SeServeClient(int cl, SeFrame* snap)
                     SeWr32(fb + 24, f.frameNo);
                     if (SeSend(cl, fb, SE_LIVE_CALLFRAME_LEN) != 0) return;
                 }
+            }
+        }
+
+        /* v10 trailing block: the emulator's live host keyboard bindings. For port 0 then
+         * port 1: 13 int32 (LE) USB-HID scancodes, one per Saturn pad button (ascending
+         * SE_PAD_* order), -1 where no keyboard key is bound. Lets the client mirror the
+         * user's keys with no config-file upload. All -1 when no hook is registered. */
+        {
+            int p, b;
+            for (p = 0; p < SE_LIVE_KEYMAP_PORTS; ++p)
+            {
+                int km[SE_LIVE_KEYMAP_BUTTONS];
+                unsigned char kb[SE_LIVE_KEYMAP_BUTTONS * 4];
+                for (b = 0; b < SE_LIVE_KEYMAP_BUTTONS; ++b) km[b] = -1;
+                if (sGetKeyMap) sGetKeyMap((unsigned int)p, km);
+                for (b = 0; b < SE_LIVE_KEYMAP_BUTTONS; ++b)
+                    SeWr32(kb + b * 4, (unsigned int)km[b]);
+                if (SeSend(cl, kb, sizeof(kb)) != 0) return;
             }
         }
     }

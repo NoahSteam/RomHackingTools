@@ -884,6 +884,18 @@ void App::BuildUI(IPlatform& platform)
         controllerViewFrame = mRecorder.FrameNumber(static_cast<size_t>(mScrubIndex));
 #endif
     mController.DrawAuxiliary(mbLiveSource, mControllerFrame, controllerViewFrame, platform);
+#ifdef SE_ENABLE_LIVE
+    // Mirror the emulator's own host keyboard bindings (v10+) so the panel's keys match
+    // the user's Mednafen config automatically — no config-file upload. Cheap; the panel
+    // only re-adopts when the reported mapping actually changes.
+    if (mbLiveSource)
+    {
+        int32_t km[SE_LIVE_KEYMAP_BUTTONS];
+        const uint32_t n = se_live_poll_keymap(&mDataSource,
+            static_cast<uint32_t>(mController.Port()), km, SE_LIVE_KEYMAP_BUTTONS);
+        if (n) mController.ApplyLiveKeyMap(km, static_cast<int>(n));
+    }
+#endif
     SendInput(mController.FinalState());
     if (mPanels.log)             DrawLog();
     if (mPanels.actions)         DrawActions();

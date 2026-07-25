@@ -71,6 +71,15 @@ struct LiveCallStacks
     std::vector<LiveCallFrame> cpu[2];
 };
 
+// The emulator's live host keyboard bindings from one snapshot (v10+): per port, the
+// USB-HID scancode bound to each Saturn pad button (ascending SE_PAD_* order), -1 where
+// unbound. 'valid' stays false until a v10+ server actually sends the block.
+struct LiveKeyMap
+{
+    int32_t k[SE_LIVE_KEYMAP_PORTS][SE_LIVE_KEYMAP_BUTTONS];
+    bool valid = false;
+};
+
 // Pending control command the UI thread hands to the poll thread (which owns the
 // single server connection). Best-effort: the poll thread drains it within one
 // cycle (~8 ms). Steps accumulate so rapid presses aren't lost.
@@ -126,6 +135,12 @@ struct LiveState
     // Latest shadow call stacks (v9+), replaced each snapshot. Guarded by csMtx.
     std::mutex            csMtx;
     LiveCallStacks        callStacks;
+    // Latest host keyboard bindings (v10+): per port, the USB-HID scancode bound to each
+    // Saturn pad button (ascending SE_PAD_* order), -1 where unbound. Replaced each
+    // snapshot so it tracks the emulator's live config. Guarded by kmMtx.
+    std::mutex            kmMtx;
+    int32_t               keyMap[SE_LIVE_KEYMAP_PORTS][SE_LIVE_KEYMAP_BUTTONS];
+    bool                  keyMapValid = false;   // false until a v10+ block is seen
 };
 
 /* ---- Local-socket transport (POSIX Unix socket / Windows named pipe). ---- */
@@ -282,7 +297,7 @@ bool ReadSnapshot(Conn& c, const char* verb, int32_t arg,
                   const uint8_t* extra, size_t extraLen, LiveSnapshot& snap,
                   bool& outPaused, uint64_t& outFrame, uint32_t& outVersion,
                   StopInfo& outStop, std::vector<LiveEvent>& outEvents,
-                  LiveCallStacks& outCallStacks)
+                  LiveCallStacks& outCallStacks, LiveKeyMap& outKeyMap)
 {
     if (!SendCommand(c, verb, arg))
     {
@@ -412,6 +427,20 @@ bool ReadSnapshot(Conn& c, const char* verb, int32_t arg,
         }
     }
 
+    // v10+ trailing block: the emulator's live host keyboard bindings. For port 0 then
+    // port 1, 13 int32 (LE) USB-HID scancodes (-1 where unbound). Read only when the
+    // server speaks v10, so a v10 client stays compatible with an older server.
+    if (version >= 10u)
+    {
+        uint8_t kb[SE_LIVE_KEYMAP_LEN];
+        if (!ConnReadFull(c, kb, SE_LIVE_KEYMAP_LEN)) return false;
+        for (int p = 0; p < SE_LIVE_KEYMAP_PORTS; ++p)
+            for (int b = 0; b < SE_LIVE_KEYMAP_BUTTONS; ++b)
+                outKeyMap.k[p][b] =
+                    (int32_t)Rd32LE(kb + (p * SE_LIVE_KEYMAP_BUTTONS + b) * 4);
+        outKeyMap.valid = true;
+    }
+
     // Control block: paused (u32 LE) + frame (u64 LE), then (v5+) stop reason/cpu/pc.
     // Absent fields default to 0 on older servers.
     outPaused = ct >= 4 && Rd32LE(ctl.data()) != 0;
@@ -529,8 +558,9 @@ void PollLoop(LiveState* st)
         StopInfo stop;
         std::vector<LiveEvent> events;
         LiveCallStacks callStacks;
+        LiveKeyMap keyMap;
         if (!ReadSnapshot(conn, verb, arg, payload.data(), payload.size(),
-                          snap, paused, frame, sver, stop, events, callStacks))
+                          snap, paused, frame, sver, stop, events, callStacks, keyMap))
         {
             ConnClose(conn);   // will reconnect next iteration
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -539,6 +569,12 @@ void PollLoop(LiveState* st)
         {
             std::lock_guard<std::mutex> lk(st->csMtx);
             st->callStacks = std::move(callStacks);
+        }
+        if (keyMap.valid)
+        {
+            std::lock_guard<std::mutex> lk(st->kmMtx);
+            std::memcpy(st->keyMap, keyMap.k, sizeof(st->keyMap));
+            st->keyMapValid = true;
         }
         {
             std::lock_guard<std::mutex> lk(st->mtx);
@@ -570,7 +606,8 @@ void PollLoop(LiveState* st)
         StopInfo si;
         std::vector<LiveEvent> ev;
         LiveCallStacks cs;
-        ReadSnapshot(conn, SE_LIVE_VERB_RESUME, 0, nullptr, 0, tmp, p, fr, sv, si, ev, cs);  // best-effort
+        LiveKeyMap km;
+        ReadSnapshot(conn, SE_LIVE_VERB_RESUME, 0, nullptr, 0, tmp, p, fr, sv, si, ev, cs, km);  // best-effort
     }
     ConnClose(conn);
 }
@@ -845,6 +882,20 @@ extern "C" uint32_t se_live_poll_callstack(const se_data_source* ds, int cpu,
         out[n].cycle     = src[n].cycle;
         out[n].frame_no  = src[n].frameNo;
     }
+    return n;
+}
+
+extern "C" uint32_t se_live_poll_keymap(const se_data_source* ds, uint32_t port,
+                                        int32_t* out, uint32_t max)
+{
+    if (!ds || !ds->user || ds->close != CbClose || !out || !max) { return 0; }
+    if (port >= (uint32_t)SE_LIVE_KEYMAP_PORTS) { return 0; }
+    LiveState* st = St(ds->user);
+    std::lock_guard<std::mutex> lk(st->kmMtx);
+    if (!st->keyMapValid) { return 0; }   // no v10+ block seen yet
+    uint32_t n = 0;
+    for (; n < max && n < (uint32_t)SE_LIVE_KEYMAP_BUTTONS; ++n)
+        out[n] = st->keyMap[port][n];
     return n;
 }
 

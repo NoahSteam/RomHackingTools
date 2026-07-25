@@ -55,7 +55,7 @@
 #define SE_LIVE_MAGIC1 'E'
 #define SE_LIVE_MAGIC2 'X'
 #define SE_LIVE_MAGIC3 'P'
-#define SE_LIVE_VERSION      9u
+#define SE_LIVE_VERSION      10u
 /* Command verbs are exactly 4 bytes; a request is a verb + 4-byte LE argument. */
 #define SE_LIVE_REQUEST      "GET\n"   /* back-compat alias for the snapshot verb */
 #define SE_LIVE_VERB_GET     "GET\n"
@@ -104,6 +104,19 @@
  * stackPointer(4) + cycle(8, LE lo then hi) + frameNumber(4), all LE. */
 #define SE_LIVE_CALLFRAME_LEN  28u
 #define SE_LIVE_CALLSTACK_MAX  64u
+
+/* Keyboard-map block (v10+). Appended AFTER the v9 call-stack block, version-gated the
+ * same way (a client reads it only when the server reports version >= 10). It reports the
+ * emulator's OWN live host keyboard bindings so a front end can mirror the user's keys
+ * (e.g. WASD) automatically — no config-file export/upload. For port 0 then port 1:
+ * SE_LIVE_KEYMAP_BUTTONS int32 (LE) values, one per Saturn pad button in ascending
+ * SE_PAD_* order (UP, DOWN, LEFT, RIGHT, A, B, C, X, Y, Z, L, R, START). Each value is the
+ * USB-HID keyboard scancode currently bound to that button, or a negative value when the
+ * button has no keyboard binding (unbound, or mapped to a joystick/mouse). USB-HID
+ * scancodes are exactly what SDL/ImGui use, so the client maps them straight across. */
+#define SE_LIVE_KEYMAP_BUTTONS 13
+#define SE_LIVE_KEYMAP_PORTS   2
+#define SE_LIVE_KEYMAP_LEN     (SE_LIVE_KEYMAP_PORTS * SE_LIVE_KEYMAP_BUTTONS * 4u)
 
 /* Saturn digital-pad buttons (v7+), an emulator-agnostic logical bitmask carried by
  * INP. The per-emulator glue maps these to that emulator's own pad bit order, so the

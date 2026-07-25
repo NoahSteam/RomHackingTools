@@ -92,6 +92,14 @@ void SeExportSetMemWriteHook(void (*write)(unsigned int address, unsigned char v
  * Call once after SeExportInit, e.g. SeExportSetInputHook(SeMednafenSetPad). */
 void SeExportSetInputHook(void (*set)(unsigned int port, unsigned int buttons));
 
+/* Wire the emulator's live host keyboard bindings (v10+), so the Saturn Explorer
+ * controller panel can mirror the user's keys (e.g. WASD) automatically — no config-file
+ * upload. get(port, out[13]) fills out with the USB-HID scancode bound to each Saturn pad
+ * button (ascending SE_PAD_* order: UP,DOWN,LEFT,RIGHT,A,B,C,X,Y,Z,L,R,START), -1 where no
+ * keyboard key is bound; returns the count matched. May be NULL (the keymap block is then
+ * all -1 and the client keeps its own defaults). Call once after SeExportInit. */
+void SeExportSetKeyMapHook(int (*get)(unsigned int port, int out[13]));
+
 /* Wire tracepoint installation (v8+). set(count, descs) receives 'count'
  * SE_LIVE_TRACE_DESC_LEN descriptors {id,cpu,address,flags} (u32 LE) whenever the
  * client's tracepoint set changes; the glue arms a PC trap at each enabled address.

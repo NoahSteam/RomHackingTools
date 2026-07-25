@@ -245,6 +245,28 @@ bits. This is the readback hook a client can poll to confirm its injection is ac
 reaching the emulated pad (device is a Control Pad, injected bits non-zero) rather than
 being dropped by a device-type mismatch.
 
+## Matching Mednafen's keyboard bindings (v10+)
+
+The Controller panel drives the pad from host keyboard keys, and those keys should match
+whatever the user already configured in Mednafen (e.g. WASD for the d-pad) — with **no
+config-file upload**. Instead of parsing `mednafen.cfg`, Saturn Explorer queries the
+emulator's *live* bindings over the protocol.
+
+`apply.py` injects `SsDbgQueryKeyMap(unsigned port, int out[13])` into
+`src/drivers/input.cpp` — the SDL frontend layer, where the `PIDC[]` binding cache lives
+(the `ss` core only ever sees a resolved pad mask, so this can't live with the other
+`SsDbg*` core accessors; like the window-title mark it's appended to a drivers-layer
+file, best-effort on a non-SDL build). It walks the port's active `ButtConfig` list,
+matching each Saturn button by its device-agnostic IDII token (`"up"`, `"a"`, `"ls"`=L,
+`"rs"`=R, …) so it serves the gamepad and 3D Control Pad alike, and returns the USB-HID
+scancode of each button's keyboard binding (`ButtonNum & 0x0FFF`), or −1 where none.
+
+The glue's `SeMdfnGetKeyMap` forwards to it; `se_export.c` appends a **v10 keyboard-map
+trailing block** to every snapshot (2 ports × 13 int32 scancodes, ascending `SE_PAD_*`
+order). The LiveDriver parses it and exposes `se_live_poll_keymap`; the Controller panel
+re-adopts the mapping only when it changes, so a manual rebind survives between changes.
+Mednafen and SDL/ImGui share USB-HID scancodes, so the value maps straight across.
+
 ## Tracepoints (Tier 4, v8+) — TODO(mednafen) confirm
 
 Tracepoints are **non-halting** observation points: when execution reaches an address,
