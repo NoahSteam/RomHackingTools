@@ -122,18 +122,22 @@ std::vector<uint8_t> Render(State& state, bool showWindow, bool colorCalc = fals
     return pixels;
 }
 
-bool IsWhite(const std::vector<uint8_t>& pixels, int x, int y)
+bool IsColor(const std::vector<uint8_t>& pixels, int x, int y,
+             uint8_t r, uint8_t g, uint8_t b)
 {
     const size_t offset = static_cast<size_t>(y * 4 + x) * 4;
-    return pixels[offset] == 255 && pixels[offset + 1] == 255 &&
-           pixels[offset + 2] == 255 && pixels[offset + 3] == 255;
+    return pixels[offset] == r && pixels[offset + 1] == g &&
+           pixels[offset + 2] == b && pixels[offset + 3] == 255;
+}
+
+bool IsWhite(const std::vector<uint8_t>& pixels, int x, int y)
+{
+    return IsColor(pixels, x, y, 255, 255, 255);
 }
 
 bool IsRed(const std::vector<uint8_t>& pixels, int x, int y)
 {
-    const size_t offset = static_cast<size_t>(y * 4 + x) * 4;
-    return pixels[offset] == 255 && pixels[offset + 1] == 0 &&
-           pixels[offset + 2] == 0 && pixels[offset + 3] == 255;
+    return IsColor(pixels, x, y, 255, 0, 0);
 }
 
 void TestRectangularWindow()
@@ -210,14 +214,6 @@ void TestTransparentPixelDisable()
         for (int x = 0; x < 4; ++x)
             CHECK(IsRed(pixels, x, y));
 }
-bool IsColor(const std::vector<uint8_t>& pixels, int x, int y,
-             uint8_t r, uint8_t g, uint8_t b)
-{
-    const size_t offset = static_cast<size_t>(y * 4 + x) * 4;
-    return pixels[offset] == r && pixels[offset + 1] == g &&
-           pixels[offset + 2] == b && pixels[offset + 3] == 255;
-}
-
 // Store a 32-bit rotation-table field as two big-endian words at 'wordAddr'. Most fields
 // are read as (dword >> 6), so the caller pre-shifts; kx/ky are read as-is.
 void PutRotDword(std::vector<uint8_t>& vram, uint32_t wordAddr, uint32_t value)

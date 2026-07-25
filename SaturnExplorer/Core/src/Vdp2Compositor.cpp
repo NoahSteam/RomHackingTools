@@ -61,6 +61,8 @@ uint16_t Reg(const HardwareSnapshot& s, uint32_t hw)
     return s.Vdp2Reg(hw);
 }
 
+uint32_t CellByteSize(uint32_t colorNum);   // bytes per 8x8 cell; defined below
+
 struct Window
 {
     uint16_t xStart;
@@ -109,6 +111,7 @@ struct NbgConfig
     uint32_t bitmapW, bitmapH;   // pixel dimensions
     uint32_t bitmapBase;         // VRAM word address of the image
     uint32_t bitmapPalette;      // palette base for the 16/256-colour formats
+    uint32_t bitmapBpp;          // bits per pixel (precomputed from colorNum)
     // Fractional scroll + zoom + line scroll (NBG0/1 only). When zoomScroll is set the
     // coordinate is stepped in .8 fixed-point from xScroll8/yScroll8 by xInc8/yInc8, and
     // a per-line scroll/zoom table (scrollCtrl selecting X/Y/zoom) overrides it per line.
@@ -132,6 +135,23 @@ void ReadColorOffset(const HardwareSnapshot& s, int screen, NbgConfig& c)
     c.coR = SignX(Reg(s, useB ? kCOBR : kCOAR) & 0x1FF, 9);
     c.coG = SignX(Reg(s, useB ? kCOBG : kCOAG) & 0x1FF, 9);
     c.coB = SignX(Reg(s, useB ? kCOBB : kCOAB) & 0x1FF, 9);
+}
+
+// Colour calculation (CCCTL enable bit `screen`, additive via CCMD, and the given 5-bit
+// ratio) resolved into a config. Shared by ReadNbgConfig and ReadRbg0Config.
+void SetColorCalc(const HardwareSnapshot& s, uint32_t screen, uint32_t ratio, NbgConfig& c)
+{
+    const uint16_t ccctl = Reg(s, kCCCTL);
+    c.colorCalc = (ccctl & (1u << screen)) != 0;
+    c.colorCalcRatio = ratio & 0x1F;
+    c.colorCalcAdd = (ccctl & 0x0100) != 0;
+}
+
+// Horizontal mosaic block width for a screen (MZCTL enable bit `screen`); 1 = no mosaic.
+uint32_t ReadMosaicH(const HardwareSnapshot& s, uint32_t screen)
+{
+    const uint16_t m = Reg(s, kMZCTL);
+    return ((m >> screen) & 1) ? (((m >> 8) & 0xF) + 1) : 1;
 }
 
 // Apply a screen's colour offset to a fetched texel (clamped to 0..255). No-op when the
@@ -222,14 +242,10 @@ NbgConfig ReadNbgConfig(const HardwareSnapshot& s, int n)
     }
     c.transparentPixelDisable = (Reg(s, kBGON) & (1u << (n + 8))) != 0;
 
-    // Color calculation: CCCTL bit n enables it for NBG n; CCMD (bit 8) selects
-    // additive blending; the 5-bit ratio lives in CCRNA (N0 low / N1 high) and
-    // CCRNB (N2 low / N3 high).
-    const uint16_t ccctl = Reg(s, kCCCTL);
+    // Color calculation: the 5-bit ratio lives in CCRNA (N0 low / N1 high) and CCRNB
+    // (N2 low / N3 high); CCCTL bit n enables it and CCMD selects additive blending.
     const uint16_t ccrn = (n < 2) ? Reg(s, kCCRNA) : Reg(s, kCCRNB);
-    c.colorCalc = (ccctl & (1u << n)) != 0;
-    c.colorCalcRatio = ((n & 1) ? (ccrn >> 8) : ccrn) & 0x1F;
-    c.colorCalcAdd = (ccctl & 0x0100) != 0;
+    SetColorCalc(s, n, (n & 1) ? (ccrn >> 8) : ccrn, c);
 
     // Bitmap mode is available on NBG0/1 only (CHCTLA N0/N1BMEN). The bitmap base comes
     // from the map-offset nibble, its size from CHCTLA, and its palette from BMPNA.
@@ -239,6 +255,7 @@ NbgConfig ReadNbgConfig(const HardwareSnapshot& s, int n)
         const uint32_t bmsz = (cha >> (2 + n * 8)) & 0x3;
         c.bitmapW = (bmsz & 0x2) ? 1024 : 512;
         c.bitmapH = (bmsz & 0x1) ? 512 : 256;
+        c.bitmapBpp = CellByteSize(c.colorNum) >> 3;
         c.bitmapBase = static_cast<uint32_t>((mpofn >> (n * 4)) & 0x7) << 16;
         c.bitmapPalette = static_cast<uint32_t>((Reg(s, kBMPNA) >> (n * 8)) & 0x7) << 4;
 
@@ -262,8 +279,7 @@ NbgConfig ReadNbgConfig(const HardwareSnapshot& s, int n)
     }
 
     // Mosaic (horizontal) + per-screen colour offset.
-    const uint16_t mzctl = Reg(s, kMZCTL);
-    c.mosaicH = ((mzctl >> n) & 1) ? (((mzctl >> 8) & 0xF) + 1) : 1;
+    c.mosaicH = ReadMosaicH(s, n);
     ReadColorOffset(s, n, c);
     return c;
 }
@@ -493,19 +509,6 @@ Rgba FetchCellTexel(const std::vector<uint8_t>& vram, const std::vector<uint8_t>
     }
 }
 
-// Bits per pixel for a VDP2 colour-number field (used to address bitmap pixels).
-uint32_t ColorBpp(uint32_t colorNum)
-{
-    switch (colorNum)
-    {
-    case 0:  return 4;
-    case 1:  return 8;
-    case 2:
-    case 3:  return 16;
-    default: return 32;
-    }
-}
-
 // Sample one bitmap-mode texel at plane coordinate (ix, iy). Reuses FetchCellTexel by
 // treating the horizontal 8-pixel group as a one-row "cell": the group's byte address is
 // cellBase and the pixel within it is (ix & 7). Wraps to the bitmap dimensions.
@@ -514,9 +517,8 @@ Rgba FetchBitmapTexel(const std::vector<uint8_t>& vram, const std::vector<uint8_
 {
     const uint32_t xw = static_cast<uint32_t>(ix) & (c.bitmapW - 1);
     const uint32_t yw = static_cast<uint32_t>(iy) & (c.bitmapH - 1);
-    const uint32_t bpp = ColorBpp(c.colorNum);
     const uint32_t cellBase =
-        (c.bitmapBase * 2 + (((yw * c.bitmapW + (xw & ~7u)) * bpp) >> 3)) & 0x7FFFFu;
+        (c.bitmapBase * 2 + (((yw * c.bitmapW + (xw & ~7u)) * c.bitmapBpp) >> 3)) & 0x7FFFFu;
     PatternName pn {};
     pn.palette = c.bitmapPalette;
     return FetchCellTexel(vram, cram, cramMode, c, pn, cellBase,
@@ -539,6 +541,61 @@ inline void CompositeTexel(std::vector<uint8_t>& out, size_t o, const Rgba& col,
         out[o + 2] = col.b;
         out[o + 3] = 255;
     }
+}
+
+// VRAM word address of one plane's pattern-name table, from the combined map-offset +
+// page register and the plane geometry. Shared by the NBG (4-plane) and RBG0 (16-plane)
+// map builds.
+uint32_t PlaneBaseFor(uint32_t tmp, bool oneWord, uint32_t patternWH,
+                      uint32_t deca, uint32_t multi)
+{
+    if (oneWord)
+        return (patternWH == 1) ? (((tmp & 0x3F) >> deca) * (multi * 0x2000))
+                                : ((tmp >> deca) * (multi * 0x800));
+    return (patternWH == 1) ? (((tmp & 0x1F) >> deca) * (multi * 0x4000))
+                            : (((tmp & 0x7F) >> deca) * (multi * 0x1000));
+}
+
+// Geometry of a tiled screen's plane->page->pattern->cell layout, resolved once per layer.
+struct PlaneGeom
+{
+    const uint32_t* planeBase;   // per-plane pattern-name table base (word address)
+    uint32_t planesPerRow;       // 2 for the NBG 2x2 grid, 4 for the RBG0 4x4 grid
+    uint32_t planeW;             // pages per plane along X (1 or 2)
+    uint32_t planePixW, planePixH;
+    uint32_t cellWH, pageCells, pnBytes, cellBytes;
+};
+
+// Sample one texel from a tiled screen at plane-space (x, y), already wrapped to the
+// screen's total dimensions. This is the shared plane/page/pattern/cell walk used by both
+// the NBG and RBG0 renderers (they differ only in plane-grid width and coordinate source).
+Rgba FetchPlaneTexel(const std::vector<uint8_t>& vram, const std::vector<uint8_t>& cram,
+                     se_cram_mode cramMode, const NbgConfig& c, uint16_t vrsize,
+                     const PlaneGeom& g, uint32_t x, uint32_t y)
+{
+    const uint32_t plane = (y / g.planePixH) * g.planesPerRow + (x / g.planePixW);
+    const uint32_t px = x % g.planePixW;
+    const uint32_t py = y % g.planePixH;
+
+    // Pattern-name tables are page-major: address the enclosing page, then the pattern
+    // within it (a plain patY*pageCells+patX stride collides across page columns).
+    const uint32_t patX = px / g.cellWH;
+    const uint32_t patY = py / g.cellWH;
+    const uint32_t pageIndex = (patY / g.pageCells) * g.planeW + (patX / g.pageCells);
+    const uint32_t patIndex = pageIndex * (g.pageCells * g.pageCells) +
+                              (patY % g.pageCells) * g.pageCells + (patX % g.pageCells);
+    const PatternName pn = DecodePatternName(
+        vram, g.planeBase[plane] + patIndex * g.pnBytes, c, vrsize);
+
+    // Pixel within the pattern, then within its 8x8 sub-cell.
+    uint32_t inX = px % g.cellWH;
+    uint32_t inY = py % g.cellWH;
+    if (pn.flip & 1) inX = g.cellWH - 1 - inX;
+    if (pn.flip & 2) inY = g.cellWH - 1 - inY;
+    const uint32_t subCell = (inY / 8) * c.patternWH + (inX / 8);
+    const uint32_t cellBase = (pn.charBase + subCell * g.cellBytes) & 0x7FFFFu;
+    return FetchCellTexel(vram, cram, cramMode, c, pn, cellBase,
+                          static_cast<int>(inX % 8), static_cast<int>(inY % 8));
 }
 
 // Composite one NBG layer into 'out' (width*height*4): each opaque cell texel
@@ -570,28 +627,15 @@ void RenderLayer(const HardwareSnapshot& snap, const NbgConfig& c, int layerInde
     const bool oneWord = (c.patternCtrl & 0x8000) != 0;
     std::array<uint32_t, 4> planeBase {};
     for (int i = 0; i < 4; ++i)
-    {
-        const uint32_t tmp = c.mapOffset | pageRegs[i];
-        if (oneWord)
-        {
-            planeBase[i] = (c.patternWH == 1) ? (((tmp & 0x3F) >> deca) * (multi * 0x2000))
-                                              : ((tmp >> deca) * (multi * 0x800));
-        }
-        else
-        {
-            planeBase[i] = (c.patternWH == 1) ? (((tmp & 0x1F) >> deca) * (multi * 0x4000))
-                                              : (((tmp & 0x7F) >> deca) * (multi * 0x1000));
-        }
-    }
+        planeBase[i] = PlaneBaseFor(c.mapOffset | pageRegs[i], oneWord, c.patternWH, deca, multi);
 
-    const uint32_t cellWH = 8 * c.patternWH;                 // pattern size in pixels
-    const uint32_t pnBytes = oneWord ? 2 : 4;                // pattern-name entry size
-    const uint32_t pageCells = 64 >> (c.patternWH - 1);      // patterns per page dim
     const uint32_t planePixW = planeW * 512;
     const uint32_t planePixH = planeH * 512;
     const uint32_t xMask = 2 * planePixW - 1;
     const uint32_t yMask = 2 * planePixH - 1;
-    const uint32_t cellBytes = CellByteSize(c.colorNum);
+    const PlaneGeom geom {
+        planeBase.data(), 2, planeW, planePixW, planePixH,
+        8 * c.patternWH, 64u >> (c.patternWH - 1), oneWord ? 2u : 4u, CellByteSize(c.colorNum) };
 
     for (int sy = 0; sy < height; ++sy)
     {
@@ -649,44 +693,12 @@ void RenderLayer(const HardwareSnapshot& snap, const NbgConfig& c, int layerInde
             // Horizontal mosaic replicates each block's leftmost dot across the block.
             const int msx = (c.mosaicH > 1) ? sx - (sx % static_cast<int>(c.mosaicH)) : sx;
             const int sampleX = static_cast<int>((xcStart + xcinc * msx) >> 8);
-            Rgba col;
-            if (c.bitmap)
-            {
-                // Bitmap mode: the scrolled coordinate indexes the linear image directly.
-                col = FetchBitmapTexel(vram, cram, cramMode, c, sampleX, yCoord);
-            }
-            else
-            {
-                const uint32_t x = static_cast<uint32_t>(sampleX) & xMask;
-                const uint32_t y = static_cast<uint32_t>(yCoord) & yMask;
-                const uint32_t plane = (y / planePixH) * 2 + (x / planePixW);
-                const uint32_t px = x % planePixW;
-                const uint32_t py = y % planePixH;
-
-                // Pattern-name tables are laid out page-major: a plane holds
-                // planeW*planeH pages, each a contiguous pageCells*pageCells block of
-                // entries. Address the enclosing page first, then the pattern within
-                // it — a plain patY*pageCells+patX stride is only correct for a 1x1
-                // plane and collides across page columns otherwise.
-                const uint32_t patX = px / cellWH;
-                const uint32_t patY = py / cellWH;
-                const uint32_t pageIndex = (patY / pageCells) * planeW + (patX / pageCells);
-                const uint32_t patIndex = pageIndex * (pageCells * pageCells) +
-                                          (patY % pageCells) * pageCells + (patX % pageCells);
-                const PatternName pn = DecodePatternName(
-                    vram, planeBase[plane] + patIndex * pnBytes, c, vrsize);
-
-                // Pixel within the pattern, then within its 8x8 sub-cell.
-                uint32_t inX = px % cellWH;
-                uint32_t inY = py % cellWH;
-                if (pn.flip & 1) inX = cellWH - 1 - inX;
-                if (pn.flip & 2) inY = cellWH - 1 - inY;
-                const uint32_t subCell = (inY / 8) * c.patternWH + (inX / 8);
-                const uint32_t cellBase = (pn.charBase + subCell * cellBytes) & 0x7FFFFu;
-
-                col = FetchCellTexel(vram, cram, cramMode, c, pn, cellBase,
-                                     static_cast<int>(inX % 8), static_cast<int>(inY % 8));
-            }
+            // Bitmap mode indexes the linear image directly; cell mode walks the plane.
+            Rgba col = c.bitmap
+                ? FetchBitmapTexel(vram, cram, cramMode, c, sampleX, yCoord)
+                : FetchPlaneTexel(vram, cram, cramMode, c, vrsize, geom,
+                                  static_cast<uint32_t>(sampleX) & xMask,
+                                  static_cast<uint32_t>(yCoord) & yMask);
             if (col.a == 0)
             {
                 continue;
@@ -754,20 +766,17 @@ NbgConfig ReadRbg0Config(const HardwareSnapshot& s, bool paramB)
     c.colorOffset = static_cast<uint32_t>(Reg(s, kCRAOFB) & 0x0007) << 8;
     c.priority = Reg(s, kPRIR) & 0x7;
     c.transparentPixelDisable = (Reg(s, kBGON) & (1u << 12)) != 0;
-    const uint16_t ccctl = Reg(s, kCCCTL);
-    c.colorCalc = (ccctl & (1u << 4)) != 0;
-    c.colorCalcRatio = Reg(s, kCCRR) & 0x1F;
-    c.colorCalcAdd = (ccctl & 0x0100) != 0;
+    SetColorCalc(s, 4, Reg(s, kCCRR), c);
 
     // RBG0 bitmap mode (CHCTLB R0BMEN): 512-wide, 256 or 512 tall.
     c.bitmap = (chb >> 9) & 1;
     c.bitmapW = 512;
     c.bitmapH = ((chb >> 10) & 1) ? 512 : 256;
+    c.bitmapBpp = CellByteSize(c.colorNum) >> 3;
     c.bitmapBase = static_cast<uint32_t>((mpofr >> (paramB ? 4 : 0)) & 0x7) << 16;
     c.bitmapPalette = static_cast<uint32_t>(Reg(s, kBMPNB) & 0x7) << 4;
 
-    const uint16_t mzctl = Reg(s, kMZCTL);
-    c.mosaicH = ((mzctl >> 4) & 1) ? (((mzctl >> 8) & 0xF) + 1) : 1;
+    c.mosaicH = ReadMosaicH(s, 4);
     ReadColorOffset(s, 4, c);
     return c;
 }
@@ -775,9 +784,9 @@ NbgConfig ReadRbg0Config(const HardwareSnapshot& s, bool paramB)
 // Composite the RBG0 rotation screen. For each screen dot the rotation parameter set is
 // evaluated (matrix + view/centre/move + per-line accumulation + optional per-dot
 // coefficient table) to a plane-space coordinate, which indexes RBG0's 4x4 grid of 16
-// planes via the same page->pattern->cell walk the NBGs use. Cell mode only for now
-// (RBG0 bitmap arrives with the NBG bitmap path); RPMD 0/1 (single parameter set) with
-// coefficient tables; screen-over "repeat" wraps, other modes read transparent outside.
+// planes via the same page->pattern->cell walk the NBGs use (or the bitmap image in
+// bitmap mode); RPMD 0/1 (single parameter set) with coefficient tables; screen-over
+// "repeat" wraps, other modes read transparent outside.
 void RenderRbg0(const HardwareSnapshot& snap, const NbgConfig& c, bool paramB,
                 bool applyWindows, bool colorCalc, int width, int height,
                 std::vector<uint8_t>& out)
@@ -811,23 +820,16 @@ void RenderRbg0(const HardwareSnapshot& snap, const NbgConfig& c, bool paramB,
     {
         const uint16_t w = Reg(snap, mapBase + (i / 2) * 2);
         const uint32_t pageReg = (i & 1) ? ((w >> 8) & 0x3F) : (w & 0x3F);
-        const uint32_t tmp = c.mapOffset | pageReg;
-        if (oneWord)
-            planeBase[i] = (c.patternWH == 1) ? (((tmp & 0x3F) >> deca) * (multi * 0x2000))
-                                              : ((tmp >> deca) * (multi * 0x800));
-        else
-            planeBase[i] = (c.patternWH == 1) ? (((tmp & 0x1F) >> deca) * (multi * 0x4000))
-                                              : (((tmp & 0x7F) >> deca) * (multi * 0x1000));
+        planeBase[i] = PlaneBaseFor(c.mapOffset | pageReg, oneWord, c.patternWH, deca, multi);
     }
 
-    const uint32_t cellWH = 8 * c.patternWH;
-    const uint32_t pnBytes = oneWord ? 2 : 4;
-    const uint32_t pageCells = 64 >> (c.patternWH - 1);
     const uint32_t planePixW = planeW * 512;
     const uint32_t planePixH = planeH * 512;
     const uint32_t totalW = 4 * planePixW;   // power of two — screen-over "repeat" masks
     const uint32_t totalH = 4 * planePixH;
-    const uint32_t cellBytes = CellByteSize(c.colorNum);
+    const PlaneGeom geom {
+        planeBase.data(), 4, planeW, planePixW, planePixH,
+        8 * c.patternWH, 64u >> (c.patternWH - 1), oneWord ? 2u : 4u, CellByteSize(c.colorNum) };
 
     for (int sy = 0; sy < height; ++sy)
     {
@@ -900,37 +902,11 @@ void RenderRbg0(const HardwareSnapshot& snap, const NbgConfig& c, bool paramB,
             {
                 continue;
             }
-            Rgba col;
-            if (c.bitmap)
-            {
-                col = FetchBitmapTexel(vram, cram, cramMode, c, ixs, iys);
-            }
-            else
-            {
-                const uint32_t x = static_cast<uint32_t>(ixs) & (totalW - 1);
-                const uint32_t y = static_cast<uint32_t>(iys) & (totalH - 1);
-
-                const uint32_t plane = (y / planePixH) * 4 + (x / planePixW);
-                const uint32_t px = x % planePixW;
-                const uint32_t py = y % planePixH;
-                const uint32_t patX = px / cellWH;
-                const uint32_t patY = py / cellWH;
-                const uint32_t pageIndex = (patY / pageCells) * planeW + (patX / pageCells);
-                const uint32_t patIndex = pageIndex * (pageCells * pageCells) +
-                                          (patY % pageCells) * pageCells + (patX % pageCells);
-                const PatternName pn = DecodePatternName(
-                    vram, planeBase[plane] + patIndex * pnBytes, c, vrsize);
-
-                uint32_t inX = px % cellWH;
-                uint32_t inY = py % cellWH;
-                if (pn.flip & 1) inX = cellWH - 1 - inX;
-                if (pn.flip & 2) inY = cellWH - 1 - inY;
-                const uint32_t subCell = (inY / 8) * c.patternWH + (inX / 8);
-                const uint32_t cellBase = (pn.charBase + subCell * cellBytes) & 0x7FFFFu;
-
-                col = FetchCellTexel(vram, cram, cramMode, c, pn, cellBase,
-                                     static_cast<int>(inX % 8), static_cast<int>(inY % 8));
-            }
+            Rgba col = c.bitmap
+                ? FetchBitmapTexel(vram, cram, cramMode, c, ixs, iys)
+                : FetchPlaneTexel(vram, cram, cramMode, c, vrsize, geom,
+                                  static_cast<uint32_t>(ixs) & (totalW - 1),
+                                  static_cast<uint32_t>(iys) & (totalH - 1));
             if (col.a == 0)
             {
                 continue;
