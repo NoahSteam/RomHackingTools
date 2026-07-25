@@ -44,6 +44,7 @@ public:
         }
         Vdp1Parser::Parse(mSnapshot.Vdp1Vram(), mCommands);
         GeometryBuilder::Build(mSnapshot.Vdp1Vram(), mScene);
+        ApplyDisplayResolution();
         ResolveSpritePriorities();
         BuildVramRegions();
         return SE_OK;
@@ -395,6 +396,28 @@ public:
     const se_config& Config() const { return mCfg; }
 
 private:
+    // Set the frame dimensions from VDP2 TVMD (HRES/VRES), the authoritative display
+    // resolution, when VDP2 registers are present. GeometryBuilder only sees VDP1 and
+    // defaults to 320x224 (overridden solely by a VDP1 system-clip command), so a pure
+    // VDP2 scene — or one whose clip differs from the TV mode — otherwise renders at the
+    // wrong width and looks horizontally stretched once fit to the 4:3 display. Rendering
+    // at the base width (320 vs 352) is what matters for the field of view; the hi-res
+    // and interlace doublings are left off since the 4:3 display already normalizes them.
+    void ApplyDisplayResolution()
+    {
+        // The VDP1 system clip, when present, is authoritative for the drawing area (it
+        // equals the TV resolution in real scenes); only fall back to TVMD when no clip
+        // was found — the pure-VDP2 case that motivated this.
+        if (mScene.hasSystemClip || !mSnapshot.HasVdp2Regs())
+        {
+            return;
+        }
+        const uint16_t tvmd = mSnapshot.Vdp2Reg(0x000);
+        static const int kVRes[4] = { 224, 240, 256, 256 };
+        mScene.screenWidth = (tvmd & 0x1) ? 352 : 320;   // HRES bit 0: 352 vs 320 base
+        mScene.screenHeight = kVRes[(tvmd >> 4) & 0x3];   // VRES bits 4-5
+    }
+
     // Walk the drawable sprites (the same filter and object-number order
     // GeometryBuilder uses) and, for each one matching 'match', emit an
     // se_reference. Writes at most 'max' entries; returns the total match count.

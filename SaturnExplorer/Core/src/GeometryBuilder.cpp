@@ -33,6 +33,7 @@ void GeometryBuilder::Build(const std::vector<uint8_t>& vram, Vdp1Scene& out)
     out.gouraud.clear();
     out.screenWidth = 320;
     out.screenHeight = 224;
+    out.hasSystemClip = false;
 
     const std::vector<uint32_t> addresses = Vdp1Walk(vram);
 
@@ -76,6 +77,7 @@ void GeometryBuilder::Build(const std::vector<uint8_t>& vram, Vdp1Scene& out)
             {
                 out.screenWidth = xc + 1;
                 out.screenHeight = yc + 1;
+                out.hasSystemClip = true;
             }
             continue;
         }

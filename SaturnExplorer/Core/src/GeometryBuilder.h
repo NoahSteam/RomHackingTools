@@ -28,6 +28,7 @@ struct Vdp1Scene
     std::vector<GouraudQuad>  gouraud;     // parallel to 'sprites' / 'sprites3d'
     int screenWidth  = 320;   // from the system clip command, else NTSC default
     int screenHeight = 224;
+    bool hasSystemClip = false;   // a VDP1 system-clip command set the dimensions above
 };
 
 class GeometryBuilder
