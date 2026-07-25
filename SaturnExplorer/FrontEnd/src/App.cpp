@@ -2111,6 +2111,17 @@ void App::DrawVdpOutput(IPlatform& platform)
             ImGui::Image(mFrameTexture, ImVec2(fitW, fitH));
 
             ImDrawList* dl = ImGui::GetWindowDrawList();
+
+            // Small resolution readout (top-left of the frame) — the source dimensions
+            // the compositor rendered at, shown at 4:3 display aspect.
+            {
+                char res[48];
+                std::snprintf(res, sizeof(res), "%dx%d", mFrameWidth, mFrameHeight);
+                const ImVec2 tp(imgPos.x + 4.0f, imgPos.y + 3.0f);
+                dl->AddText(ImVec2(tp.x + 1.0f, tp.y + 1.0f), IM_COL32(0, 0, 0, 200), res);
+                dl->AddText(tp, IM_COL32(255, 240, 120, 230), res);
+            }
+
             auto toScreen = [&](const se_vec2& c)
             {
                 return ImVec2(imgPos.x + c.x * scaleX, imgPos.y + c.y * scaleY);
