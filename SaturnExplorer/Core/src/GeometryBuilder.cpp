@@ -104,12 +104,40 @@ void GeometryBuilder::Build(const std::vector<uint8_t>& vram, Vdp1Scene& out)
             C = { float(xa + width + originX),  float(ya + height + originY) };
             D = { float(xa + originX),         float(ya + height + originY) };
         }
-        else if (comm == 0x1)  // scaled sprite (two-vertex): A and C opposite corners
+        else if (comm == 0x1)  // scaled sprite
         {
-            A = { float(xa + originX), float(ya + originY) };
-            B = { float(xc + originX), float(ya + originY) };
-            C = { float(xc + originX), float(yc + originY) };
-            D = { float(xa + originX), float(yc + originY) };
+            // CMDCTRL bits 8-11 are the "zoom point": (xa,ya) is an anchor, (xb,yb) the
+            // display width/height, and (xc,yc) an alternate corner used only when a zoom
+            // axis is in two-point mode. The vertical field (zp>>2) and horizontal field
+            // (zp&3) each select: 0 = two-point (use the alt corner), 1 = anchor at the
+            // near edge (grow by the display size), 2 = anchor centered, 3 = anchor at the
+            // far edge. zp==0 reduces to the old (xa,ya)-(xc,yc) opposite-corner case.
+            const unsigned zp = (ctrl >> 8) & 0xF;
+            const int32_t ax = xa + originX, ay = ya + originY;   // anchor
+            const int32_t cx = xc + originX, cy = yc + originY;   // alt corner
+            const int32_t dw = xb, dh = yb;                       // display size (signed)
+            int32_t X[4] = { ax, ax, ax, ax };   // A=TL, B=TR, C=BR, D=BL
+            int32_t Y[4] = { ay, ay, ay, ay };
+            switch (zp >> 2)   // vertical
+            {
+            case 0: Y[2] = cy; Y[3] = cy; break;
+            case 1: Y[2] += dh; Y[3] += dh; break;
+            case 2: Y[0] -= dh >> 1; Y[1] -= dh >> 1;
+                    Y[2] += (dh + 1) >> 1; Y[3] += (dh + 1) >> 1; break;
+            default: Y[0] -= dh; Y[1] -= dh; break;
+            }
+            switch (zp & 0x3)   // horizontal
+            {
+            case 0: X[1] = cx; X[2] = cx; break;
+            case 1: X[1] += dw; X[2] += dw; break;
+            case 2: X[0] -= dw >> 1; X[3] -= dw >> 1;
+                    X[1] += (dw + 1) >> 1; X[2] += (dw + 1) >> 1; break;
+            default: X[0] -= dw; X[3] -= dw; break;
+            }
+            A = { float(X[0]), float(Y[0]) };
+            B = { float(X[1]), float(Y[1]) };
+            C = { float(X[2]), float(Y[2]) };
+            D = { float(X[3]), float(Y[3]) };
         }
         else  // distorted sprite: four explicit corners
         {
