@@ -67,7 +67,169 @@ std::string StateText(unsigned int mask)
     return out.empty() ? "(empty)" : out;
 }
 
+// USB-HID scancode -> ImGuiKey. Mednafen, SDL, and ImGui all use USB-HID scancodes, so
+// a value parsed from mednafen.cfg maps straight across. ImGuiKey_A..Z / _0..9 / _F1..F12
+// are contiguous. Returns ImGuiKey_None for keys we don't surface.
+ImGuiKey HidToImGuiKey(int sc)
+{
+    if (sc >= 4  && sc <= 29) return (ImGuiKey)(ImGuiKey_A  + (sc - 4));    // A..Z
+    if (sc >= 30 && sc <= 38) return (ImGuiKey)(ImGuiKey_1  + (sc - 30));   // 1..9
+    if (sc == 39)             return ImGuiKey_0;
+    if (sc >= 58 && sc <= 69) return (ImGuiKey)(ImGuiKey_F1 + (sc - 58));   // F1..F12
+    switch (sc)
+    {
+    case 40: return ImGuiKey_Enter;       case 41: return ImGuiKey_Escape;
+    case 42: return ImGuiKey_Backspace;   case 43: return ImGuiKey_Tab;
+    case 44: return ImGuiKey_Space;       case 45: return ImGuiKey_Minus;
+    case 46: return ImGuiKey_Equal;       case 76: return ImGuiKey_Delete;
+    case 74: return ImGuiKey_Home;        case 77: return ImGuiKey_End;
+    case 75: return ImGuiKey_PageUp;      case 78: return ImGuiKey_PageDown;
+    case 79: return ImGuiKey_RightArrow;  case 80: return ImGuiKey_LeftArrow;
+    case 81: return ImGuiKey_DownArrow;   case 82: return ImGuiKey_UpArrow;
+    case 224: return ImGuiKey_LeftCtrl;   case 225: return ImGuiKey_LeftShift;
+    case 226: return ImGuiKey_LeftAlt;    case 228: return ImGuiKey_RightCtrl;
+    case 229: return ImGuiKey_RightShift; case 230: return ImGuiKey_RightAlt;
+    default:  return ImGuiKey_None;
+    }
+}
+
+// Mednafen ss gamepad/3D-pad button name (IDII) -> our SE_PAD_* bit.
+unsigned int MdfnButtonBit(const std::string& n)
+{
+    if (n == "up")    return SE_PAD_UP;    if (n == "down")  return SE_PAD_DOWN;
+    if (n == "left")  return SE_PAD_LEFT;  if (n == "right") return SE_PAD_RIGHT;
+    if (n == "a")     return SE_PAD_A;     if (n == "b")     return SE_PAD_B;
+    if (n == "c")     return SE_PAD_C;     if (n == "x")     return SE_PAD_X;
+    if (n == "y")     return SE_PAD_Y;     if (n == "z")     return SE_PAD_Z;
+    if (n == "start") return SE_PAD_START; if (n == "ls")    return SE_PAD_L;
+    if (n == "rs")    return SE_PAD_R;
+    return 0;
+}
+
+int ButtonIndex(unsigned int bit)
+{
+    for (int i = 0; i < (int)(sizeof(kButtons) / sizeof(kButtons[0])); ++i)
+        if (kButtons[i].bit == bit) return i;
+    return -1;
+}
+
 }  // namespace
+
+void ControllerPanel::EnsureBindings()
+{
+    static_assert(sizeof(kButtons) / sizeof(kButtons[0]) == kNumButtons,
+                  "mKeyBind must have one slot per pad button");
+    if (mBindingsInit) return;
+    for (int i = 0; i < kNumButtons; ++i) mKeyBind[i] = (int)kButtons[i].key;
+    mBindingsInit = true;
+}
+
+int ControllerPanel::ImportMednafenConfig(const std::string& path)
+{
+    std::ifstream f(path);
+    if (!f) return 0;
+    EnsureBindings();
+    // Mednafen names the Saturn ports port1..port12; our port 0/1 is its port1/port2.
+    const std::string prefix = "ss.input.port" + std::to_string(mPort + 1) + ".";
+    int count = 0;
+    std::string line;
+    while (std::getline(f, line))
+    {
+        // e.g. "ss.input.port1.gamepad.up keyboard 0x0 26" (see drivers/keyboard.cpp
+        // BNToString: value is "keyboard <devid> <decimal-scancode>[+ctrl|+alt|+shift]").
+        if (line.compare(0, prefix.size(), prefix) != 0) continue;
+        const size_t sp = line.find(' ');
+        if (sp == std::string::npos) continue;
+        const std::string setting = line.substr(0, sp);
+        const std::string value   = line.substr(sp + 1);
+        if (value.compare(0, 9, "keyboard ") != 0) continue;   // only keyboard bindings
+        const size_t dot = setting.find_last_of('.');
+        const unsigned int bit = MdfnButtonBit(setting.substr(dot + 1));
+        if (!bit) continue;
+        std::istringstream vs(value);
+        std::string kw, dev, sctok;
+        vs >> kw >> dev >> sctok;                              // "keyboard" "0x0" "26+ctrl"
+        const ImGuiKey k = HidToImGuiKey(std::atoi(sctok.c_str()));
+        if (k == ImGuiKey_None) continue;
+        const int idx = ButtonIndex(bit);
+        if (idx >= 0) { mKeyBind[idx] = (int)k; ++count; }
+    }
+    if (count) mSettingsDirty = true;
+    return count;
+}
+
+void ControllerPanel::DrawKeyBindings(IPlatform& platform)
+{
+    EnsureBindings();
+    if (ImGui::CollapsingHeader("Key Bindings"))
+    {
+        ImGui::TextWrapped("Keys that drive the pad while this panel is focused. Import your "
+                           "Mednafen config to adopt its host keys (e.g. WASD).");
+        if (ImGui::Button("Import from Mednafen config..."))
+        {
+            std::string p;
+            if (platform.OpenFileDialogFiltered(p, "Mednafen config", "cfg"))
+            {
+                const int n = ImportMednafenConfig(p);
+                if (n) std::snprintf(mBindMsg, sizeof(mBindMsg),
+                                     "Imported %d binding(s) for Port %d.", n, mPort + 1);
+                else   std::snprintf(mBindMsg, sizeof(mBindMsg),
+                                     "No Port %d keyboard bindings found in that file.", mPort + 1);
+            }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Reset to defaults"))
+        {
+            for (int i = 0; i < kNumButtons; ++i) mKeyBind[i] = (int)kButtons[i].key;
+            mRebindIndex = -1;
+            mSettingsDirty = true;
+            std::snprintf(mBindMsg, sizeof(mBindMsg), "Reset to default bindings.");
+        }
+        if (mBindMsg[0]) ImGui::TextDisabled("%s", mBindMsg);
+
+        if (ImGui::BeginTable("kbbind", 2,
+                              ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_BordersInnerH))
+        {
+            for (int i = 0; i < kNumButtons; ++i)
+            {
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::TextUnformatted(kButtons[i].name);
+                ImGui::TableNextColumn();
+                ImGui::PushID(i);
+                const char* label = (mRebindIndex == i) ? "press a key... (Esc cancels)"
+                                                        : ImGui::GetKeyName((ImGuiKey)mKeyBind[i]);
+                if (ImGui::Button(label, ImVec2(190, 0)))
+                    mRebindIndex = (mRebindIndex == i) ? -1 : i;
+                ImGui::PopID();
+            }
+            ImGui::EndTable();
+        }
+    }
+    // Capture a rebind: assign the first key pressed (ignoring mouse); Esc cancels.
+    if (mRebindIndex >= 0)
+    {
+        if (ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+        {
+            mRebindIndex = -1;
+        }
+        else
+        {
+            for (ImGuiKey k = ImGuiKey_NamedKey_BEGIN; k < ImGuiKey_NamedKey_END;
+                 k = (ImGuiKey)(k + 1))
+            {
+                if (k >= ImGuiKey_MouseLeft && k <= ImGuiKey_MouseWheelY) continue;
+                if (ImGui::IsKeyPressed(k, false))
+                {
+                    mKeyBind[mRebindIndex] = (int)k;
+                    mRebindIndex = -1;
+                    mSettingsDirty = true;
+                    break;
+                }
+            }
+        }
+    }
+}
 
 void ControllerPanel::Load(const Settings& s)
 {
@@ -81,6 +243,13 @@ void ControllerPanel::Load(const Settings& s)
     mShowRecording = s.GetBool("controller.tools", "recording", false);
     mShowMacros = s.GetBool("controller.tools", "macros", false);
     mShowStatistics = s.GetBool("controller.tools", "statistics", false);
+
+    EnsureBindings();   // defaults, then overlay any saved per-button keys
+    for (int i = 0; i < kNumButtons; ++i)
+    {
+        const std::string v = s.Get("controller.keys", kButtons[i].name, "");
+        if (!v.empty()) mKeyBind[i] = std::atoi(v.c_str());
+    }
 }
 
 void ControllerPanel::Save(Settings& s) const
@@ -95,6 +264,9 @@ void ControllerPanel::Save(Settings& s) const
     s.SetBool("controller.tools", "recording", mShowRecording);
     s.SetBool("controller.tools", "macros", mShowMacros);
     s.SetBool("controller.tools", "statistics", mShowStatistics);
+
+    for (int i = 0; i < kNumButtons; ++i)
+        if (mBindingsInit) s.Set("controller.keys", kButtons[i].name, std::to_string(mKeyBind[i]));
 }
 
 bool ControllerPanel::ConsumeSettingsDirty()
@@ -302,9 +474,12 @@ void ControllerPanel::DrawControllerCanvas(bool connected)
     const bool interactive = connected && mInputEnabled && !mPlaybackActive;
     const bool focused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
     const bool keyboard = interactive && mInputSource == 0 && focused && !ImGui::GetIO().WantTextInput;
+    EnsureBindings();
     mSources.keyboardMomentary = 0;
-    if (keyboard)
-        for (const Button& b : kButtons) if (ImGui::IsKeyDown(b.key)) mSources.keyboardMomentary |= b.bit;
+    // Use the user-configurable bindings; don't drive the pad while capturing a rebind.
+    if (keyboard && mRebindIndex < 0)
+        for (int i = 0; i < kNumButtons; ++i)
+            if (ImGui::IsKeyDown((ImGuiKey)mKeyBind[i])) mSources.keyboardMomentary |= kButtons[i].bit;
     mSources.mouseMomentary = 0;
 
     const float availW = ImGui::GetContentRegionAvail().x;
@@ -489,12 +664,12 @@ void ControllerPanel::DrawFooter(bool connected) const
 
 unsigned int ControllerPanel::Draw(bool connected, uint64_t frame, IPlatform& platform)
 {
-    (void)platform;
     Update(connected, frame);
     DrawToolbar(connected);
     DrawControllerCanvas(connected);
     ObserveFrame(frame);
     DrawFooter(connected);
+    DrawKeyBindings(platform);
     return mFinalState;
 }
 

@@ -62,6 +62,13 @@ private:
     void DrawControllerCanvas(bool liveConnected);
     void DrawFooter(bool liveConnected) const;
     void DrawViewMenu();
+    // Configurable keyboard bindings: initialise from the default layout, draw the
+    // rebind UI, and import Mednafen's own host-input config so SE matches it (e.g. WASD).
+    void EnsureBindings();
+    void DrawKeyBindings(IPlatform& platform);
+    // Parse a mednafen.cfg and adopt its Saturn-pad key bindings for this port. Returns
+    // the number of buttons matched (0 if the file is unreadable or has no bindings).
+    int  ImportMednafenConfig(const std::string& path);
 
     void DrawCurrentInput(uint64_t frame);
     void DrawTimeline(uint64_t frame);
@@ -78,6 +85,15 @@ private:
     uint64_t     mLastObservedFrame = ~uint64_t(0);
     uint64_t     mLastUpdateFrame = ~uint64_t(0);
     bool         mWasConnected = false;
+
+    // Per-button keyboard bindings (ImGuiKey stored as int to keep imgui.h out of this
+    // header), parallel to the button table in the .cpp. Defaults set by EnsureBindings;
+    // user-editable via DrawKeyBindings; persisted. mRebindIndex >= 0 = capturing a key.
+    static constexpr int kNumButtons = 13;
+    int          mKeyBind[kNumButtons] = {0};
+    bool         mBindingsInit = false;
+    int          mRebindIndex = -1;
+    char         mBindMsg[96] = {};      // transient status after an import / reset
 
     int          mPort = 0;
     int          mInputSource = 0;       // 0 keyboard + mouse, 1 mouse only
