@@ -400,9 +400,10 @@ private:
     // resolution, when VDP2 registers are present. GeometryBuilder only sees VDP1 and
     // defaults to 320x224 (overridden solely by a VDP1 system-clip command), so a pure
     // VDP2 scene — or one whose clip differs from the TV mode — otherwise renders at the
-    // wrong width and looks horizontally stretched once fit to the 4:3 display. Rendering
-    // at the base width (320 vs 352) is what matters for the field of view; the hi-res
-    // and interlace doublings are left off since the 4:3 display already normalizes them.
+    // wrong width and looks horizontally stretched. The *full* dot count matters, not just
+    // the 320-vs-352 base: the compositor samples one background column per output column,
+    // so rendering fewer columns than the mode has crops the field of view (e.g. showing
+    // only the left half of a 704-wide hi-res screen, stretched 2x to fill the frame).
     void ApplyDisplayResolution()
     {
         // The VDP1 system clip, when present, is authoritative for the drawing area (it
@@ -413,9 +414,14 @@ private:
             return;
         }
         const uint16_t tvmd = mSnapshot.Vdp2Reg(0x000);
+        const uint32_t hres = tvmd & 0x7;
+        int w = (hres & 0x1) ? 352 : 320;   // HRES bit 0: 352 vs 320 base
+        if (hres & 0x2) w *= 2;             // HRES bit 1: hi-res (640 / 704)
         static const int kVRes[4] = { 224, 240, 256, 256 };
-        mScene.screenWidth = (tvmd & 0x1) ? 352 : 320;   // HRES bit 0: 352 vs 320 base
-        mScene.screenHeight = kVRes[(tvmd >> 4) & 0x3];   // VRES bits 4-5
+        int h = kVRes[(tvmd >> 4) & 0x3];   // VRES bits 4-5
+        if (((tvmd >> 6) & 0x3) == 0x3) h *= 2;   // LSMD: double-density interlace
+        mScene.screenWidth = w;
+        mScene.screenHeight = h;
     }
 
     // Walk the drawable sprites (the same filter and object-number order
