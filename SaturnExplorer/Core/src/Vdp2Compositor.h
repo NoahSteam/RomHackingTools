@@ -8,9 +8,10 @@
 // 1- and 2-word pattern names, and every cell color format (16/256/2048-color
 // palette, RGB555, RGB888), normal and line-window clipping for NBG0-3, the real
 // back-screen color (BKTA, single-colour or per-line), and per-screen color
-// calculation (CCCTL/CCRN, ratio + additive blending against the layers below).
-// Rotation screens (RBG0/1), bitmap mode, line scroll, mosaic, and sprite-window
-// clipping are not modeled yet.
+// calculation (CCCTL/CCRN, ratio + additive blending against the layers below), and the
+// RBG0 rotation screen in cell mode (rotation parameter set A/B, coefficient tables,
+// screen-over repeat). Bitmap mode, line scroll, mosaic, sprite-window clipping, RBG1,
+// and RPMD per-dot/window parameter selection are not modeled yet.
 #pragma once
 
 #include <cstdint>

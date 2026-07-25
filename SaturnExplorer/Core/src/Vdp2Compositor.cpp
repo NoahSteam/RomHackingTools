@@ -32,8 +32,23 @@ enum : uint32_t
     kCCCTL = 0x0EC,
     kPRISA = 0x0F0, kPRISB = 0x0F2, kPRISC = 0x0F4, kPRISD = 0x0F6,
     kCRAOFA = 0x0E4, kPRINA = 0x0F8, kPRINB = 0x0FA,
-    kCCRNA = 0x108, kCCRNB = 0x10A
+    kCCRNA = 0x108, kCCRNB = 0x10A,
+    // Rotation (RBG0): pattern name, map offset, char/bitmap control, plane sizes,
+    // the rotation parameter tables, coefficient control, and RBG0's own priority /
+    // colour-offset / colour-calc-ratio registers.
+    kPNCR = 0x038, kMPOFR = 0x03E, kBMPNB = 0x02C,
+    kMPABRA = 0x050, kMPABRB = 0x060,
+    kRPMD = 0x0B0, kKTCTL = 0x0B4, kKTAOF = 0x0B6, kOVPNRA = 0x0B8, kOVPNRB = 0x0BA,
+    kRPTAU = 0x0BC, kRPTAL = 0x0BE,
+    kCRAOFB = 0x0E6, kPRIR = 0x0FC, kCCRR = 0x10C
 };
+
+// Sign-extend the low n bits of v to a signed 32-bit value (Mednafen sign_x_to_s32).
+inline int32_t SignX(uint32_t v, int n)
+{
+    const int s = 32 - n;
+    return static_cast<int32_t>(v << s) >> s;
+}
 
 struct Window
 {
@@ -201,6 +216,14 @@ WindowConfig ReadWindowConfig(const HardwareSnapshot& s, int n)
 uint16_t ReadVdp2Word(const std::vector<uint8_t>& vram, uint32_t wordAddress)
 {
     return ReadBE16(vram, (wordAddress & 0x3FFFFu) * 2);
+}
+
+// A 32-bit big-endian value stored as two consecutive VDP2 VRAM words (rotation
+// parameter tables and coefficient tables store their fixed-point values this way).
+uint32_t ReadVdp2Dword(const std::vector<uint8_t>& vram, uint32_t wordAddress)
+{
+    return (static_cast<uint32_t>(ReadVdp2Word(vram, wordAddress)) << 16) |
+           ReadVdp2Word(vram, wordAddress + 1);
 }
 
 bool CoordinateInside(uint32_t coordinate, uint32_t start, uint32_t end)
@@ -505,6 +528,246 @@ void RenderLayer(const HardwareSnapshot& snap, const NbgConfig& c, int layerInde
     }
 }
 
+// Composite one resolved texel into the buffer, honoring color calculation exactly like
+// RenderLayer's inner write (blend over an opaque pixel below, else overwrite).
+inline void CompositeTexel(std::vector<uint8_t>& out, size_t o, const Rgba& col,
+                           bool colorCalc, const NbgConfig& c)
+{
+    if (colorCalc && c.colorCalc && out[o + 3] != 0)
+    {
+        BlendColorCalc(&out[o], col, c.colorCalcRatio, c.colorCalcAdd);
+    }
+    else
+    {
+        out[o + 0] = col.r;
+        out[o + 1] = col.g;
+        out[o + 2] = col.b;
+        out[o + 3] = 255;
+    }
+}
+
+// One rotation parameter set (table A or B), as fixed-point integers read straight from
+// VDP2 VRAM. Formats follow the VDP2 manual / Mednafen: the ".10" values keep 10
+// fractional bits, kx/ky keep 16. See FetchRotParam for the exact per-field extraction.
+struct RotParam
+{
+    int32_t Xst, Yst, Zst, DXst, DYst, DX, DY;
+    int32_t M[6];                       // rotation matrix, row-major (A,B,C / D,E,F)
+    int32_t Px, Py, Pz, Cx, Cy, Cz, Mx, My, kx, ky;
+    uint32_t KAst;                      // coefficient table start (.10)
+    int32_t DKAst, DKAx;               // coefficient step per line / per dot
+};
+
+RotParam FetchRotParam(const std::vector<uint8_t>& v, uint32_t a)
+{
+    RotParam r {};
+    r.Xst = SignX(ReadVdp2Dword(v, a + 0x00) >> 6, 23);
+    r.Yst = SignX(ReadVdp2Dword(v, a + 0x02) >> 6, 23);
+    r.Zst = SignX(ReadVdp2Dword(v, a + 0x04) >> 6, 23);
+    r.DXst = SignX(ReadVdp2Dword(v, a + 0x06) >> 6, 13);
+    r.DYst = SignX(ReadVdp2Dword(v, a + 0x08) >> 6, 13);
+    r.DX = SignX(ReadVdp2Dword(v, a + 0x0A) >> 6, 13);
+    r.DY = SignX(ReadVdp2Dword(v, a + 0x0C) >> 6, 13);
+    for (int m = 0; m < 6; ++m)
+        r.M[m] = SignX(ReadVdp2Dword(v, a + 0x0E + m * 2) >> 6, 14);
+    r.Px = SignX(ReadVdp2Word(v, a + 0x1A), 14);
+    r.Py = SignX(ReadVdp2Word(v, a + 0x1B), 14);
+    r.Pz = SignX(ReadVdp2Word(v, a + 0x1C), 14);
+    r.Cx = SignX(ReadVdp2Word(v, a + 0x1E), 14);
+    r.Cy = SignX(ReadVdp2Word(v, a + 0x1F), 14);
+    r.Cz = SignX(ReadVdp2Word(v, a + 0x20), 14);
+    r.Mx = SignX(ReadVdp2Dword(v, a + 0x22) >> 6, 24);
+    r.My = SignX(ReadVdp2Dword(v, a + 0x24) >> 6, 24);
+    r.kx = SignX(ReadVdp2Dword(v, a + 0x26), 24);
+    r.ky = SignX(ReadVdp2Dword(v, a + 0x28), 24);
+    r.KAst = ReadVdp2Dword(v, a + 0x2A) >> 6;
+    r.DKAst = SignX(ReadVdp2Dword(v, a + 0x2C) >> 6, 20);
+    r.DKAx = SignX(ReadVdp2Dword(v, a + 0x2E) >> 6, 20);
+    return r;
+}
+
+// Resolve the RBG0 cell configuration (shares the cell/pattern layout with the NBGs;
+// the rotation-specific plane map + coordinates are handled in RenderRbg0). 'paramB'
+// selects which rotation parameter set supplies plane size / map offset.
+NbgConfig ReadRbg0Config(const HardwareSnapshot& s, bool paramB)
+{
+    const uint16_t chb = Reg(s, kCHCTLB);
+    const uint16_t plsz = Reg(s, kPLSZ);
+    const uint16_t mpofr = Reg(s, kMPOFR);
+    NbgConfig c {};
+    c.patternCtrl = Reg(s, kPNCR);
+    c.colorNum = std::min<uint32_t>(4u, (chb >> 12) & 0x7);
+    c.patternWH = (chb & 0x0100) ? 2 : 1;
+    c.planeSize = (plsz >> (paramB ? 12 : 8)) & 0x3;
+    c.mapOffset = static_cast<uint32_t>((mpofr >> (paramB ? 4 : 0)) & 0x7) << 6;
+    c.colorOffset = static_cast<uint32_t>(Reg(s, kCRAOFB) & 0x0007) << 8;
+    c.priority = Reg(s, kPRIR) & 0x7;
+    c.transparentPixelDisable = (Reg(s, kBGON) & (1u << 12)) != 0;
+    const uint16_t ccctl = Reg(s, kCCCTL);
+    c.colorCalc = (ccctl & (1u << 4)) != 0;
+    c.colorCalcRatio = Reg(s, kCCRR) & 0x1F;
+    c.colorCalcAdd = (ccctl & 0x0100) != 0;
+    return c;
+}
+
+// Composite the RBG0 rotation screen. For each screen dot the rotation parameter set is
+// evaluated (matrix + view/centre/move + per-line accumulation + optional per-dot
+// coefficient table) to a plane-space coordinate, which indexes RBG0's 4x4 grid of 16
+// planes via the same page->pattern->cell walk the NBGs use. Cell mode only for now
+// (RBG0 bitmap arrives with the NBG bitmap path); RPMD 0/1 (single parameter set) with
+// coefficient tables; screen-over "repeat" wraps, other modes read transparent outside.
+void RenderRbg0(const HardwareSnapshot& snap, const NbgConfig& c, bool paramB,
+                bool applyWindows, bool colorCalc, int width, int height,
+                std::vector<uint8_t>& out)
+{
+    const std::vector<uint8_t>& vram = snap.Vdp2Vram();
+    const std::vector<uint8_t>& cram = snap.Cram();
+    const se_cram_mode cramMode = snap.CramMode();
+    const uint16_t vrsize = Reg(snap, kVRSIZE);
+    const WindowConfig windowConfig = ReadWindowConfig(snap, 0);  // RBG0 uses WCTLC bits;
+    // approximate with the NBG0 window byte (WCTLA low) — the common single-window case.
+
+    // Rotation parameter table + coefficient control.
+    const uint32_t rpta = ((static_cast<uint32_t>(Reg(snap, kRPTAU) & 0x0007) << 16) |
+                           Reg(snap, kRPTAL)) & 0x7FFBE;
+    const RotParam rp = FetchRotParam(vram, rpta + (paramB ? 0x40 : 0));
+    const uint16_t ktctl = Reg(snap, kKTCTL) >> (paramB ? 8 : 0);
+    const bool useCoeff = (ktctl & 0x1) != 0;
+    const bool coeffWord = (ktctl & 0x2) != 0;   // 1 = 16-bit coeff, 0 = 32-bit
+    const uint32_t coeffMode = (ktctl >> 2) & 0x3;
+    const uint32_t screenOver = (Reg(snap, kPLSZ) >> (paramB ? 14 : 10)) & 0x3;
+
+    // Plane geometry: RBG0 tiles a 4x4 grid of 16 planes.
+    const uint32_t planeW = (c.planeSize & 0x1) ? 2 : 1;
+    const uint32_t planeH = (c.planeSize & 0x2) ? 2 : 1;
+    const uint32_t deca = planeH + planeW - 2;
+    const uint32_t multi = planeH * planeW;
+    const bool oneWord = (c.patternCtrl & 0x8000) != 0;
+    const uint32_t mapBase = paramB ? kMPABRB : kMPABRA;
+    std::array<uint32_t, 16> planeBase {};
+    for (int i = 0; i < 16; ++i)
+    {
+        const uint16_t w = Reg(snap, mapBase + (i / 2) * 2);
+        const uint32_t pageReg = (i & 1) ? ((w >> 8) & 0x3F) : (w & 0x3F);
+        const uint32_t tmp = c.mapOffset | pageReg;
+        if (oneWord)
+            planeBase[i] = (c.patternWH == 1) ? (((tmp & 0x3F) >> deca) * (multi * 0x2000))
+                                              : ((tmp >> deca) * (multi * 0x800));
+        else
+            planeBase[i] = (c.patternWH == 1) ? (((tmp & 0x1F) >> deca) * (multi * 0x4000))
+                                              : (((tmp & 0x7F) >> deca) * (multi * 0x1000));
+    }
+
+    const uint32_t cellWH = 8 * c.patternWH;
+    const uint32_t pnBytes = oneWord ? 2 : 4;
+    const uint32_t pageCells = 64 >> (c.patternWH - 1);
+    const uint32_t planePixW = planeW * 512;
+    const uint32_t planePixH = planeH * 512;
+    const uint32_t totalW = 4 * planePixW;   // power of two — screen-over "repeat" masks
+    const uint32_t totalH = 4 * planePixH;
+    const uint32_t cellBytes = CellByteSize(c.colorNum);
+
+    for (int sy = 0; sy < height; ++sy)
+    {
+        const WindowLine windowLines[2] = {
+            ResolveWindowLine(windowConfig, 0, vram, sy),
+            ResolveWindowLine(windowConfig, 1, vram, sy)
+        };
+        // Per-line rotation setup (Xst/Yst accumulate DXst/DYst down the screen).
+        const int32_t XstA = rp.Xst + rp.DXst * sy;
+        const int32_t YstA = rp.Yst + rp.DYst * sy;
+        const int64_t Xsp = ((int64_t)rp.M[0] * (XstA - rp.Px * 1024) +
+                             (int64_t)rp.M[1] * (YstA - rp.Py * 1024) +
+                             (int64_t)rp.M[2] * (rp.Zst - rp.Pz * 1024)) >> 10;
+        const int64_t Ysp = ((int64_t)rp.M[3] * (XstA - rp.Px * 1024) +
+                             (int64_t)rp.M[4] * (YstA - rp.Py * 1024) +
+                             (int64_t)rp.M[5] * (rp.Zst - rp.Pz * 1024)) >> 10;
+        const int32_t XpBase = rp.M[0] * (rp.Px - rp.Cx) + rp.M[1] * (rp.Py - rp.Cy) +
+                               rp.M[2] * (rp.Pz - rp.Cz) + rp.Cx * 1024 + rp.Mx;
+        const int32_t Yp = rp.M[3] * (rp.Px - rp.Cx) + rp.M[4] * (rp.Py - rp.Cy) +
+                           rp.M[5] * (rp.Pz - rp.Cz) + rp.Cy * 1024 + rp.My;
+        const int32_t dX = (rp.M[0] * rp.DX + rp.M[1] * rp.DY) >> 10;
+        const int32_t dY = (rp.M[3] * rp.DX + rp.M[4] * rp.DY) >> 10;
+        const uint32_t KAstLine = rp.KAst + static_cast<uint32_t>(rp.DKAst) * sy;
+
+        for (int sx = 0; sx < width; ++sx)
+        {
+            if (applyWindows && WindowMasksPixel(windowConfig.control, windowLines, sx))
+            {
+                continue;
+            }
+            int32_t kx = rp.kx, ky = rp.ky, Xp = XpBase;
+            if (useCoeff)
+            {
+                // One coefficient per dot along the line; it can override kx/ky or Xp.
+                uint32_t coeffOff = (KAstLine + static_cast<uint32_t>(rp.DKAx) * sx) >> 10;
+                if (!coeffWord) coeffOff <<= 1;   // 32-bit entries are two words
+                uint32_t coeff;
+                if (coeffWord)
+                {
+                    const uint16_t t = ReadVdp2Word(vram, coeffOff);
+                    coeff = (static_cast<uint32_t>(SignX(t << 6, 21)) & 0x00FFFFFFu) |
+                            (static_cast<uint32_t>(t & 0x8000) << 16);
+                }
+                else
+                {
+                    coeff = ReadVdp2Dword(vram, coeffOff);
+                }
+                if (static_cast<int32_t>(coeff) < 0) continue;   // coefficient = transparent
+                const int32_t sext = SignX(coeff, 24);
+                switch (coeffMode)
+                {
+                case 0: kx = ky = sext; break;
+                case 1: kx = sext; break;
+                case 2: ky = sext; break;
+                default: Xp = sext << 2; break;
+                }
+            }
+
+            const int32_t ixs = static_cast<int32_t>(
+                (Xp + static_cast<int32_t>(((int64_t)kx * (int32_t)(Xsp + dX * sx)) >> 16)) >> 10);
+            const int32_t iys = static_cast<int32_t>(
+                (Yp + static_cast<int32_t>(((int64_t)ky * (int32_t)(Ysp + dY * sx)) >> 16)) >> 10);
+
+            // Screen-over: mode 0 repeats (wrap); other modes read transparent outside.
+            if (screenOver != 0 &&
+                (ixs < 0 || iys < 0 || static_cast<uint32_t>(ixs) >= totalW ||
+                 static_cast<uint32_t>(iys) >= totalH))
+            {
+                continue;
+            }
+            const uint32_t x = static_cast<uint32_t>(ixs) & (totalW - 1);
+            const uint32_t y = static_cast<uint32_t>(iys) & (totalH - 1);
+
+            const uint32_t plane = (y / planePixH) * 4 + (x / planePixW);
+            const uint32_t px = x % planePixW;
+            const uint32_t py = y % planePixH;
+            const uint32_t patX = px / cellWH;
+            const uint32_t patY = py / cellWH;
+            const uint32_t pageIndex = (patY / pageCells) * planeW + (patX / pageCells);
+            const uint32_t patIndex = pageIndex * (pageCells * pageCells) +
+                                      (patY % pageCells) * pageCells + (patX % pageCells);
+            const PatternName pn = DecodePatternName(
+                vram, planeBase[plane] + patIndex * pnBytes, c, vrsize);
+
+            uint32_t inX = px % cellWH;
+            uint32_t inY = py % cellWH;
+            if (pn.flip & 1) inX = cellWH - 1 - inX;
+            if (pn.flip & 2) inY = cellWH - 1 - inY;
+            const uint32_t subCell = (inY / 8) * c.patternWH + (inX / 8);
+            const uint32_t cellBase = (pn.charBase + subCell * cellBytes) & 0x7FFFFu;
+
+            const Rgba col = FetchCellTexel(vram, cram, cramMode, c, pn, cellBase,
+                                            static_cast<int>(inX % 8), static_cast<int>(inY % 8));
+            if (col.a == 0)
+            {
+                continue;
+            }
+            CompositeTexel(out, (static_cast<size_t>(sy) * width + sx) * 4, col, colorCalc, c);
+        }
+    }
+}
+
 }  // namespace
 
 int Vdp2Compositor::SpritePriority(const HardwareSnapshot& snapshot)
@@ -541,27 +804,34 @@ void Vdp2Compositor::Render(const HardwareSnapshot& snapshot, const se_render_op
     // (priority 0 = not displayed on hardware).
     struct Layer
     {
-        int index;
+        int index;      // NBG number, or 4 for RBG0
         NbgConfig config;
+        bool rbg0 = false;
+        bool paramB = false;
     };
     std::vector<Layer> layers;
+    auto consider = [&](const Layer& layer)
+    {
+        if (layer.config.priority == 0) return;    // priority 0 = not displayed
+        if (static_cast<int>(layer.config.priority) < minPriority ||
+            static_cast<int>(layer.config.priority) > maxPriority)
+            return;                                 // outside the requested band
+        layers.push_back(layer);
+    };
     for (int n = 0; n < 4; ++n)
     {
         if (!(bgon & (1u << n)) || !opts.show_layer[n])
         {
             continue;
         }
-        const NbgConfig c = ReadNbgConfig(snapshot, n);
-        if (c.priority == 0)
-        {
-            continue;   // priority 0 = not displayed on hardware
-        }
-        if (static_cast<int>(c.priority) < minPriority ||
-            static_cast<int>(c.priority) > maxPriority)
-        {
-            continue;   // outside the requested band (behind/in-front of sprites)
-        }
-        layers.push_back({ n, c });
+        consider({ n, ReadNbgConfig(snapshot, n), false, false });
+    }
+    // RBG0 (rotation) occupies BGON bit 4; RPMD picks its parameter set (0 = A, 1 = B;
+    // per-dot/window selection isn't modeled yet, so those fall back to A).
+    if ((bgon & (1u << 4)) && opts.show_layer[SE_LAYER_RBG0])
+    {
+        const bool paramB = (Reg(snapshot, kRPMD) & 0x3) == 1;
+        consider({ 4, ReadRbg0Config(snapshot, paramB), true, paramB });
     }
 
     // Paint order = back to front: ascending priority; for equal priority the
@@ -576,8 +846,16 @@ void Vdp2Compositor::Render(const HardwareSnapshot& snapshot, const se_render_op
 
     for (const Layer& layer : layers)
     {
-        RenderLayer(snapshot, layer.config, layer.index, opts.show_window != 0,
-                    opts.show_color_calculation != 0, width, height, outRgba);
+        if (layer.rbg0)
+        {
+            RenderRbg0(snapshot, layer.config, layer.paramB, opts.show_window != 0,
+                       opts.show_color_calculation != 0, width, height, outRgba);
+        }
+        else
+        {
+            RenderLayer(snapshot, layer.config, layer.index, opts.show_window != 0,
+                        opts.show_color_calculation != 0, width, height, outRgba);
+        }
     }
 }
 
