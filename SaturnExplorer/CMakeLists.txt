@@ -19,6 +19,10 @@
 cmake_minimum_required(VERSION 3.15)
 project(SaturnExplorer LANGUAGES CXX)
 
+if(WIN32)
+    enable_language(RC)
+endif()
+
 include(CTest)
 
 set(CMAKE_CXX_STANDARD 14)
@@ -191,6 +195,7 @@ if(WIN32)
         FrontEnd/src/FrameLz.cpp
         FrontEnd/Platforms/Windows/WindowsPlatform.cpp
         FrontEnd/Platforms/Windows/WinMain.cpp
+        FrontEnd/Platforms/Windows/SaturnExplorer.rc
         ${SE_IMGUI_CORE}
         ${SE_IMGUI_DIR}/backends/imgui_impl_win32.cpp
         ${SE_IMGUI_DIR}/backends/imgui_impl_dx11.cpp

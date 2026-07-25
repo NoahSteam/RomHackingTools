@@ -60,4 +60,9 @@
       <Filter>third_party\imgui\backends</Filter>
     </ClCompile>
   </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="Platforms\Windows\SaturnExplorer.rc">
+      <Filter>Platform\Windows</Filter>
+    </ResourceCompile>
+  </ItemGroup>
 </Project>

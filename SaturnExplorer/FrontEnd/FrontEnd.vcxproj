@@ -145,6 +145,9 @@
     <ClCompile Include="third_party\imgui\backends\imgui_impl_dx11.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ResourceCompile Include="Platforms\Windows\SaturnExplorer.rc" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\Core\SaturnExplorer.vcxproj">
       <Project>{a7837fc2-49bc-4f6a-bc7b-880a100d074e}</Project>
     </ProjectReference>

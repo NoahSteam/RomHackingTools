@@ -14,6 +14,7 @@
 #include "backends/imgui_impl_dx11.h"
 
 #include "Theme.h"
+#include "Resource.h"
 
 // Forward declared in the Win32 backend; handles ImGui's own input messages.
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg,
@@ -39,9 +40,17 @@ bool WindowsPlatform::Initialize(const PlatformConfig& config)
     // resolution and we scale the UI ourselves (below) so it stays crisp.
     ImGui_ImplWin32_EnableDpiAwareness();
 
+    const HINSTANCE module = ::GetModuleHandleW(nullptr);
+    const HICON appIcon = static_cast<HICON>(::LoadImageW(
+        module, MAKEINTRESOURCEW(IDI_SATURN_EXPLORER), IMAGE_ICON,
+        ::GetSystemMetrics(SM_CXICON), ::GetSystemMetrics(SM_CYICON), LR_SHARED));
+    const HICON appIconSmall = static_cast<HICON>(::LoadImageW(
+        module, MAKEINTRESOURCEW(IDI_SATURN_EXPLORER), IMAGE_ICON,
+        ::GetSystemMetrics(SM_CXSMICON), ::GetSystemMetrics(SM_CYSMICON), LR_SHARED));
+
     mWindowClass = { sizeof(mWindowClass), CS_CLASSDC, WndProc, 0L, 0L,
-                     GetModuleHandle(nullptr), nullptr, nullptr, nullptr, nullptr,
-                     L"SaturnExplorerWindow", nullptr };
+                     module, appIcon, nullptr, nullptr, nullptr,
+                     L"SaturnExplorerWindow", appIconSmall };
     ::RegisterClassExW(&mWindowClass);
 
     mHwnd = ::CreateWindowW(mWindowClass.lpszClassName, L"Saturn Explorer",
