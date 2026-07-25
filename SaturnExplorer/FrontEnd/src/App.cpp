@@ -2092,19 +2092,28 @@ void App::DrawVdpOutput(IPlatform& platform)
         }
         else
         {
-            // Fit the frame to the panel, preserving aspect ratio and centering it —
-            // letterbox/pillarbox, like a 3D editor viewport.
+            // Display the frame at the Saturn's 4:3 output aspect, centred and
+            // letterbox/pillarboxed. The framebuffer's pixel count (320/352/640 wide,
+            // 224/240/256/480 tall) is stretched to fill that 4:3 area exactly as the
+            // hardware does — drawing the pixels square (e.g. 320x224 = 1.43:1) makes
+            // everything look too wide. Horizontal and vertical scales therefore differ,
+            // so the sprite overlays and hit-test use separate X/Y factors.
             const ImVec2 avail = ImGui::GetContentRegionAvail();
-            float scale = 1.0f;
-            const ImVec2 imgPos = AspectFit(avail, mFrameWidth, mFrameHeight, scale);
-            const ImVec2 dispSize(mFrameWidth * scale, mFrameHeight * scale);
+            const float dar = 4.0f / 3.0f;
+            float fitW = avail.x, fitH = avail.y;
+            if (avail.y > 0.0f && avail.x / avail.y > dar) fitW = avail.y * dar;  // pillarbox
+            else if (avail.y > 0.0f)                       fitH = avail.x / dar;  // letterbox
+            const ImVec2 cur = ImGui::GetCursorScreenPos();
+            const ImVec2 imgPos(cur.x + (avail.x - fitW) * 0.5f, cur.y + (avail.y - fitH) * 0.5f);
+            const float scaleX = (mFrameWidth > 0) ? fitW / mFrameWidth : 1.0f;
+            const float scaleY = (mFrameHeight > 0) ? fitH / mFrameHeight : 1.0f;
             ImGui::SetCursorScreenPos(imgPos);
-            ImGui::Image(mFrameTexture, dispSize);
+            ImGui::Image(mFrameTexture, ImVec2(fitW, fitH));
 
             ImDrawList* dl = ImGui::GetWindowDrawList();
             auto toScreen = [&](const se_vec2& c)
             {
-                return ImVec2(imgPos.x + c.x * scale, imgPos.y + c.y * scale);
+                return ImVec2(imgPos.x + c.x * scaleX, imgPos.y + c.y * scaleY);
             };
 
             // Only walk the sprite list when an overlay actually needs it.
@@ -2150,8 +2159,8 @@ void App::DrawVdpOutput(IPlatform& platform)
             if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
             {
                 const ImVec2 mouse = ImGui::GetMousePos();
-                const int vx = static_cast<int>((mouse.x - imgPos.x) / scale);
-                const int vy = static_cast<int>((mouse.y - imgPos.y) / scale);
+                const int vx = static_cast<int>((mouse.x - imgPos.x) / scaleX);
+                const int vy = static_cast<int>((mouse.y - imgPos.y) / scaleY);
                 size_t hitCommand = 0;
                 if (se_hit_test(mContext, vx, vy, &hitCommand) == SE_OK)
                 {
