@@ -28,8 +28,11 @@ enum : uint32_t
     kWCTLA = 0x0D0, kWCTLB = 0x0D2,
     kLWTA0U = 0x0D8, kLWTA0L = 0x0DA, kLWTA1U = 0x0DC, kLWTA1L = 0x0DE,
     kSPCTL = 0x0E0,
+    kBKTAU = 0x0AC, kBKTAL = 0x0AE,
+    kCCCTL = 0x0EC,
     kPRISA = 0x0F0, kPRISB = 0x0F2, kPRISC = 0x0F4, kPRISD = 0x0F6,
-    kCRAOFA = 0x0E4, kPRINA = 0x0F8, kPRINB = 0x0FA
+    kCRAOFA = 0x0E4, kPRINA = 0x0F8, kPRINB = 0x0FA,
+    kCCRNA = 0x108, kCCRNB = 0x10A
 };
 
 struct Window
@@ -71,7 +74,33 @@ struct NbgConfig
     uint32_t colorOffset;   // CRAOFx nibble, pre-shifted to the CRAM base
     uint32_t priority;      // 0..7 (0 = not displayed)
     bool transparentPixelDisable; // BGON NnTPON: color code zero is opaque
+    bool colorCalc;         // CCCTL: this screen participates in color calculation
+    uint32_t colorCalcRatio;// CCRNx 5-bit: 0 = mostly this screen, 31 = mostly below
+    bool colorCalcAdd;      // CCCTL CCMD: additive blend (ratio ignored)
 };
+
+// Blend one source texel over the destination pixel already in the buffer using VDP2
+// color-calculation rules (matches Mednafen's mixit): additive saturates per channel;
+// ratio mode weights the top screen by (31 - ratio) and the screen below by (ratio + 1)
+// out of 32. The result is opaque (color calc never changes coverage). 'dst' is RGBA.
+inline void BlendColorCalc(uint8_t* dst, const Rgba& src, uint32_t ratio, bool add)
+{
+    if (add)
+    {
+        dst[0] = static_cast<uint8_t>(std::min(255, src.r + dst[0]));
+        dst[1] = static_cast<uint8_t>(std::min(255, src.g + dst[1]));
+        dst[2] = static_cast<uint8_t>(std::min(255, src.b + dst[2]));
+    }
+    else
+    {
+        const uint32_t fore = 31u - (ratio & 0x1F);   // top-screen weight
+        const uint32_t sec = 32u - fore;              // = ratio + 1, screen-below weight
+        dst[0] = static_cast<uint8_t>((src.r * fore + dst[0] * sec) >> 5);
+        dst[1] = static_cast<uint8_t>((src.g * fore + dst[1] * sec) >> 5);
+        dst[2] = static_cast<uint8_t>((src.b * fore + dst[2] * sec) >> 5);
+    }
+    dst[3] = 255;
+}
 
 uint16_t Reg(const HardwareSnapshot& s, uint32_t hw)
 {
@@ -130,6 +159,15 @@ NbgConfig ReadNbgConfig(const HardwareSnapshot& s, int n)
         break;
     }
     c.transparentPixelDisable = (Reg(s, kBGON) & (1u << (n + 8))) != 0;
+
+    // Color calculation: CCCTL bit n enables it for NBG n; CCMD (bit 8) selects
+    // additive blending; the 5-bit ratio lives in CCRNA (N0 low / N1 high) and
+    // CCRNB (N2 low / N3 high).
+    const uint16_t ccctl = Reg(s, kCCCTL);
+    const uint16_t ccrn = (n < 2) ? Reg(s, kCCRNA) : Reg(s, kCCRNB);
+    c.colorCalc = (ccctl & (1u << n)) != 0;
+    c.colorCalcRatio = ((n & 1) ? (ccrn >> 8) : ccrn) & 0x1F;
+    c.colorCalcAdd = (ccctl & 0x0100) != 0;
     return c;
 }
 
@@ -356,7 +394,8 @@ Rgba FetchCellTexel(const std::vector<uint8_t>& vram, const std::vector<uint8_t>
 // so this needs no per-layer scratch buffer. Faithful port of the validated
 // plane/page/cell walk.
 void RenderLayer(const HardwareSnapshot& snap, const NbgConfig& c, int layerIndex,
-                 bool applyWindows, int width, int height, std::vector<uint8_t>& out)
+                 bool applyWindows, bool colorCalc, int width, int height,
+                 std::vector<uint8_t>& out)
 {
     const std::vector<uint8_t>& vram = snap.Vdp2Vram();
     const std::vector<uint8_t>& cram = snap.Cram();
@@ -447,10 +486,21 @@ void RenderLayer(const HardwareSnapshot& snap, const NbgConfig& c, int layerInde
                 continue;
             }
             const size_t o = (static_cast<size_t>(sy) * width + sx) * 4;
-            out[o + 0] = col.r;
-            out[o + 1] = col.g;
-            out[o + 2] = col.b;
-            out[o + 3] = 255;
+            // Color calculation blends this screen with whatever is already below it
+            // (a lower-priority layer or the back screen); otherwise it overwrites.
+            // Blending only makes sense over an opaque pixel — a transparent
+            // destination (no back screen painted) falls back to an opaque write.
+            if (colorCalc && c.colorCalc && out[o + 3] != 0)
+            {
+                BlendColorCalc(&out[o], col, c.colorCalcRatio, c.colorCalcAdd);
+            }
+            else
+            {
+                out[o + 0] = col.r;
+                out[o + 1] = col.g;
+                out[o + 2] = col.b;
+                out[o + 3] = 255;
+            }
         }
     }
 }
@@ -527,7 +577,43 @@ void Vdp2Compositor::Render(const HardwareSnapshot& snapshot, const se_render_op
     for (const Layer& layer : layers)
     {
         RenderLayer(snapshot, layer.config, layer.index, opts.show_window != 0,
-                    width, height, outRgba);
+                    opts.show_color_calculation != 0, width, height, outRgba);
+    }
+}
+
+void Vdp2Compositor::RenderBackScreen(const HardwareSnapshot& snapshot, int width,
+                                      int height, std::vector<uint8_t>& outRgba)
+{
+    if (width <= 0 || height <= 0 || !snapshot.HasVdp2Regs() || snapshot.Vdp2Vram().empty())
+    {
+        return;
+    }
+    const std::vector<uint8_t>& vram = snapshot.Vdp2Vram();
+    // BKTA table address: BKTAU bits 2-0 are the high word bits, BKTAL the low 16;
+    // BKTAU bit 15 selects a per-display-line colour (one RGB555 word per line)
+    // rather than a single colour for the whole screen.
+    const uint16_t bktau = Reg(snapshot, kBKTAU);
+    const uint16_t bktal = Reg(snapshot, kBKTAL);
+    const uint32_t base = (static_cast<uint32_t>(bktau & 0x0007) << 16) | bktal;
+    const bool perLine = (bktau & 0x8000) != 0;
+
+    const size_t need = static_cast<size_t>(width) * height * 4;
+    if (outRgba.size() != need)
+    {
+        outRgba.assign(need, 0);
+    }
+    for (int y = 0; y < height; ++y)
+    {
+        const uint32_t wordAddr = base + (perLine ? static_cast<uint32_t>(y) : 0u);
+        const Rgba col = Rgb555ToRgba(ReadVdp2Word(vram, wordAddr));
+        uint8_t* row = &outRgba[static_cast<size_t>(y) * width * 4];
+        for (int x = 0; x < width; ++x)
+        {
+            row[x * 4 + 0] = col.r;
+            row[x * 4 + 1] = col.g;
+            row[x * 4 + 2] = col.b;
+            row[x * 4 + 3] = 255;
+        }
     }
 }
 

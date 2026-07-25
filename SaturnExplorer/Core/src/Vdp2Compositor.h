@@ -6,9 +6,11 @@
 //
 // Scope today: the four normal backgrounds (NBG0-3), cell (non-bitmap) mode,
 // 1- and 2-word pattern names, and every cell color format (16/256/2048-color
-// palette, RGB555, RGB888), plus normal and line-window clipping for NBG0-3.
-// Rotation screens (RBG0/1), bitmap mode, line scroll, mosaic, sprite-window
-// clipping and color calculation are not modeled yet.
+// palette, RGB555, RGB888), normal and line-window clipping for NBG0-3, the real
+// back-screen color (BKTA, single-colour or per-line), and per-screen color
+// calculation (CCCTL/CCRN, ratio + additive blending against the layers below).
+// Rotation screens (RBG0/1), bitmap mode, line scroll, mosaic, and sprite-window
+// clipping are not modeled yet.
 #pragma once
 
 #include <cstdint>
@@ -35,6 +37,16 @@ public:
     static void Render(const HardwareSnapshot& snapshot, const se_render_opts& opts,
                        int width, int height, std::vector<uint8_t>& outRgba,
                        int minPriority = 1, int maxPriority = 7, bool clear = true);
+
+    // Paint the VDP2 back screen (the always-present backdrop below every screen)
+    // opaquely over the whole frame, reading its colour from the BKTA table in VDP2
+    // VRAM — a single colour, or one colour per display line when BKTA's per-line bit
+    // is set. Call this before Render so translucent layers have a real surface to
+    // blend against (color calculation composites against whatever is below). A no-op
+    // when the snapshot lacks VDP2 VRAM/registers; the caller keeps its own fallback
+    // backdrop for that case.
+    static void RenderBackScreen(const HardwareSnapshot& snapshot, int width, int height,
+                                 std::vector<uint8_t>& outRgba);
 
     // The sprite (VDP1) priority the core uses when interleaving VDP1 with the
     // VDP2 screens: resolved from SPCTL's sprite type + the PRISA..PRISD sprite

@@ -100,6 +100,10 @@ public:
         {
             const size_t n = static_cast<size_t>(w) * static_cast<size_t>(h) * 4;
             mRenderBuffer.assign(n, 0);   // transparent; layers composite over it
+            // Lay the real VDP2 back screen first, so it's the opaque surface the
+            // priority-ordered layers (and color calculation) composite over. A no-op
+            // without VDP2 regs — FillBackdrop below still covers that case.
+            Vdp2Compositor::RenderBackScreen(mSnapshot, w, h, mRenderBuffer);
             for (int p = 0; p <= 7; ++p)
             {
                 if (p >= 1)   // NBG priority 0 = not displayed

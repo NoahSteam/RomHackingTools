@@ -88,7 +88,7 @@ State MakeNbg3State()
     return state;
 }
 
-std::vector<uint8_t> Render(State& state, bool showWindow)
+std::vector<uint8_t> Render(State& state, bool showWindow, bool colorCalc = false)
 {
     se_data_source source = {};
     source.abi_version = SE_ABI_VERSION;
@@ -108,6 +108,7 @@ std::vector<uint8_t> Render(State& state, bool showWindow)
     se_render_opts options = {};
     options.show_layer[SE_LAYER_NBG3] = 1;
     options.show_window = showWindow ? 1 : 0;
+    options.show_color_calculation = colorCalc ? 1 : 0;
     se_image image = {};
     size_t needed = 0;
     CHECK(se_render_frame(context, &options, &image, &needed) == SE_OK);
@@ -209,6 +210,52 @@ void TestTransparentPixelDisable()
         for (int x = 0; x < 4; ++x)
             CHECK(IsRed(pixels, x, y));
 }
+bool IsColor(const std::vector<uint8_t>& pixels, int x, int y,
+             uint8_t r, uint8_t g, uint8_t b)
+{
+    const size_t offset = static_cast<size_t>(y * 4 + x) * 4;
+    return pixels[offset] == r && pixels[offset + 1] == g &&
+           pixels[offset + 2] == b && pixels[offset + 3] == 255;
+}
+
+void TestBackScreen()
+{
+    // With NBG3 disabled, the whole frame is the BKTA back-screen colour. Point BKTA
+    // at a VRAM word holding RGB555 red and expect an opaque red frame — not the
+    // hardcoded fallback backdrop.
+    State state = MakeNbg3State();
+    SetReg(state, 0x020, 0x0000);   // BGON: all screens off
+    SetReg(state, 0x0AC, 0x0000);   // BKTAU: single colour, high address 0
+    SetReg(state, 0x0AE, 0x0100);   // BKTAL: word address 0x100 (byte 0x200)
+    PutBE16(state.vdp2, 0x200, 0x001F);  // RGB555 red
+    const std::vector<uint8_t> pixels = Render(state, false);
+    for (int y = 0; y < 2; ++y)
+        for (int x = 0; x < 4; ++x)
+            CHECK(IsColor(pixels, x, y, 255, 0, 0));
+}
+
+void TestColorCalc()
+{
+    // NBG3 (white, priority 1) with color calculation enabled, ratio 15, composited
+    // over a blue back screen. Expect a half-blend: R,G = (255*16)>>5 = 127, B = 255.
+    State state = MakeNbg3State();
+    SetReg(state, 0x0AC, 0x0000);
+    SetReg(state, 0x0AE, 0x0100);
+    PutBE16(state.vdp2, 0x200, 0x7C00);  // RGB555 blue back screen
+    SetReg(state, 0x0EC, 0x0008);        // CCCTL: N3 color-calc enable
+    SetReg(state, 0x10A, 0x0F00);        // CCRNB: N3 ratio = 15 (high byte)
+
+    const std::vector<uint8_t> blended = Render(state, false, true);
+    for (int y = 0; y < 2; ++y)
+        for (int x = 0; x < 4; ++x)
+            CHECK(IsColor(blended, x, y, 127, 127, 255));
+
+    // With the color-calc option off, NBG3 overwrites opaquely (stays white).
+    const std::vector<uint8_t> opaque = Render(state, false, false);
+    for (int y = 0; y < 2; ++y)
+        for (int x = 0; x < 4; ++x)
+            CHECK(IsWhite(opaque, x, y));
+}
 }  // namespace
 
 int main()
@@ -217,6 +264,8 @@ int main()
     TestLineWindow();
     TestVerticalPlaneSize();
     TestTransparentPixelDisable();
+    TestBackScreen();
+    TestColorCalc();
     if (gFailures != 0)
     {
         std::cerr << gFailures << " VDP2 compositor check(s) failed\n";
