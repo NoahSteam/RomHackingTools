@@ -39,7 +39,12 @@ void GeometryBuilder::Build(const std::vector<uint8_t>& vram, Vdp1Scene& out)
 
     int32_t originX = 0;
     int32_t originY = 0;
-    int32_t userClipX0 = 0, userClipY0 = 0, userClipX1 = 0, userClipY1 = 0;
+    // User-clip rect. Defaults to the full addressable area, not (0,0,0,0): the VDP1
+    // user-clip registers persist across frames, so a sprite that enables user clipping
+    // without a user-clip command in *this* captured frame (NiGHTS' "PRESS START" prompt)
+    // relies on a rect set earlier. Defaulting to unbounded means "draw inside" doesn't
+    // wrongly clip it away; a real user-clip command (comm 6) narrows it.
+    int32_t userClipX0 = 0, userClipY0 = 0, userClipX1 = 0x3FFF, userClipY1 = 0x3FFF;
     uint32_t objectNumber = 0;
     std::vector<PlacedSprite> placed;   // bounds+layer of sprites already emitted
 

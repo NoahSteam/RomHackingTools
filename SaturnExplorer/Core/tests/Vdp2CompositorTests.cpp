@@ -462,6 +462,27 @@ void TestUserClip()
         }
 }
 
+void TestUserClipDefaultUnbounded()
+{
+    // A polygon with user clipping ENABLED (CMDPMOD bit 10) but NO user-clip command in
+    // the frame — like NiGHTS' "PRESS START" sprite, which relies on a clip rect set in an
+    // earlier frame. The default rect must be unbounded so the sprite still draws.
+    State state = MakeNbg3State();
+    SetReg(state, 0x020, 0x0000);   // BGON off
+    WriteSystemClip(state, 0x40);
+    PutBE16(state.vdp1, 0x20, 0x8003);   // polygon (comm 3) + END
+    PutBE16(state.vdp1, 0x24, 0x0400);   // CMDPMOD: user-clip enable, mode inside, no comm 6
+    PutBE16(state.vdp1, 0x26, 0x001F);   // CMDCOLR: red
+    PutBE16(state.vdp1, 0x2C, 0); PutBE16(state.vdp1, 0x2E, 0);   // A
+    PutBE16(state.vdp1, 0x30, 4); PutBE16(state.vdp1, 0x32, 0);   // B
+    PutBE16(state.vdp1, 0x34, 4); PutBE16(state.vdp1, 0x36, 2);   // C
+    PutBE16(state.vdp1, 0x38, 0); PutBE16(state.vdp1, 0x3A, 2);   // D
+    const std::vector<uint8_t> pixels = Render(state, false);
+    for (int y = 0; y < 2; ++y)
+        for (int x = 0; x < 4; ++x)
+            CHECK(IsRed(pixels, x, y));   // not clipped away
+}
+
 void TestBackScreen()
 {
     // With NBG3 disabled, the whole frame is the BKTA back-screen colour. Point BKTA
@@ -520,6 +541,7 @@ int main()
     TestPolygon();
     TestLine();
     TestUserClip();
+    TestUserClipDefaultUnbounded();
     if (gFailures != 0)
     {
         std::cerr << gFailures << " VDP2 compositor check(s) failed\n";
