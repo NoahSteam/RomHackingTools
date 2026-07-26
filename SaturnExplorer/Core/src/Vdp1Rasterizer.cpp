@@ -48,7 +48,8 @@ void RasterTriangle(const RVert& p0, const RVert& p1, const RVert& p2,
                     const std::vector<uint8_t>& vram, const std::vector<uint8_t>& cram,
                     se_cram_mode cramMode, int width, int height,
                     std::vector<uint8_t>& out, std::vector<float>* depth,
-                    bool gourOn, uint16_t g0, uint16_t g1, uint16_t g2)
+                    bool gourOn, uint16_t g0, uint16_t g1, uint16_t g2,
+                    DrawFx fx)
 {
     const float area = Edge(p0.x, p0.y, p1.x, p1.y, p2.x, p2.y);
     if (std::fabs(area) < 1e-6f)
@@ -106,6 +107,13 @@ void RasterTriangle(const RVert& p0, const RVert& p1, const RVert& p2,
                 continue;  // transparent texel
             }
 
+            // Mesh: checkerboard stipple — drop every other screen pixel. Skips the
+            // depth write too, so a meshed sprite doesn't occlude what shows through it.
+            if (fx.mesh && ((x + y) & 1))
+            {
+                continue;
+            }
+
             if (depth)
             {
                 (*depth)[idx] = d;
@@ -123,10 +131,39 @@ void RasterTriangle(const RVert& p0, const RVert& p1, const RVert& p2,
                 cb = ApplyGouraud(c.b, gb);
             }
             const size_t o = idx * 4;
-            out[o + 0] = cr;
-            out[o + 1] = cg;
-            out[o + 2] = cb;
-            out[o + 3] = 255;
+            // Draw-mode color calculation. Shadow/half-transparency read the pixel
+            // already below; over nothing (alpha 0) they degrade to a plain write.
+            // This blends against whatever the priority-band loop drew below (VDP2 +
+            // earlier sprites) — an approximation of the two-stage VDP1/VDP2 blend that
+            // the descriptor mixer will make exact.
+            switch (fx.effect)
+            {
+            case 1:  // shadow: halve the pixel below, keep the sprite's own color hidden
+                if (out[o + 3] != 0)
+                {
+                    out[o + 0] >>= 1; out[o + 1] >>= 1; out[o + 2] >>= 1;
+                }
+                break;
+            case 2:  // half-luminance
+                out[o + 0] = cr >> 1; out[o + 1] = cg >> 1; out[o + 2] = cb >> 1;
+                out[o + 3] = 255;
+                break;
+            case 3:  // half-transparency: average with the pixel below
+                if (out[o + 3] != 0)
+                {
+                    out[o + 0] = static_cast<uint8_t>((cr + out[o + 0]) >> 1);
+                    out[o + 1] = static_cast<uint8_t>((cg + out[o + 1]) >> 1);
+                    out[o + 2] = static_cast<uint8_t>((cb + out[o + 2]) >> 1);
+                }
+                else
+                {
+                    out[o + 0] = cr; out[o + 1] = cg; out[o + 2] = cb; out[o + 3] = 255;
+                }
+                break;
+            default:
+                out[o + 0] = cr; out[o + 1] = cg; out[o + 2] = cb; out[o + 3] = 255;
+                break;
+            }
         }
     }
 }
@@ -136,15 +173,15 @@ void RasterQuad(const RVert v[4], const se_vec2 uv[4], const se_texture_ref& tex
                 bool spd, const std::vector<uint8_t>& vram, const std::vector<uint8_t>& cram,
                 se_cram_mode cramMode, int width, int height,
                 std::vector<uint8_t>& out, std::vector<float>* depth,
-                const GouraudQuad& g)
+                const GouraudQuad& g, DrawFx fx)
 {
     // Split matches the corner order: triangle 1 = A,B,C; triangle 2 = A,C,D.
     RasterTriangle(v[0], v[1], v[2], uv[0], uv[1], uv[2], tex, spd,
                    vram, cram, cramMode, width, height, out, depth,
-                   g.on, g.corner[0], g.corner[1], g.corner[2]);
+                   g.on, g.corner[0], g.corner[1], g.corner[2], fx);
     RasterTriangle(v[0], v[2], v[3], uv[0], uv[2], uv[3], tex, spd,
                    vram, cram, cramMode, width, height, out, depth,
-                   g.on, g.corner[0], g.corner[2], g.corner[3]);
+                   g.on, g.corner[0], g.corner[2], g.corner[3], fx);
 }
 
 // VDP1 sprite corners are *inclusive* pixel coordinates: a sprite spanning
@@ -237,8 +274,9 @@ void Vdp1Rasterizer::Render(const Vdp1Scene& scene, const std::vector<uint8_t>& 
                        { s.corners[3].x, s.corners[3].y, 0.0f } };
         ExpandQuadInclusive(v);
         const GouraudQuad& g = i < scene.gouraud.size() ? scene.gouraud[i] : GouraudQuad{};
+        const DrawFx fx = i < scene.drawfx.size() ? scene.drawfx[i] : DrawFx{};
         RasterQuad(v, s.uv, s.texture, s.transparency == SE_TRANSP_NONE,
-                   vram, cram, cramMode, width, height, outRgba, nullptr, g);
+                   vram, cram, cramMode, width, height, outRgba, nullptr, g, fx);
     }
 }
 
@@ -271,8 +309,10 @@ void Vdp1Rasterizer::Render3D(const Vdp1Scene& scene, const std::vector<uint8_t>
             Project(s.corners[3], camera, cosYaw, sinYaw, cosPitch, sinPitch) };
         ExpandQuadInclusive(v);
         const GouraudQuad& g = i < scene.gouraud.size() ? scene.gouraud[i] : GouraudQuad{};
+        // The exploded 3D view keeps sprites opaque (no shadow/half-transparency against
+        // the depth-sorted stack); only Gouraud carries over.
         RasterQuad(v, s.uv, s.texture, s.transparency == SE_TRANSP_NONE,
-                   vram, cram, cramMode, width, height, outRgba, &depth, g);
+                   vram, cram, cramMode, width, height, outRgba, &depth, g, DrawFx{});
     }
 }
 

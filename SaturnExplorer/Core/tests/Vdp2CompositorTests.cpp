@@ -88,6 +88,28 @@ State MakeNbg3State()
     return state;
 }
 
+// A 4x2 frame with a single VDP1 normal sprite that fills it: an 8x2 RGB555 white
+// (opaque) texture, drawn with the given CMDPMOD. VDP2 backgrounds are disabled so only
+// the sprite (over the backdrop) is visible.
+State MakeSpriteState(uint16_t pmod)
+{
+    State state = MakeNbg3State();
+    SetReg(state, 0x020, 0x0000);   // BGON off — only the sprite draws
+    state.vdp1.assign(0x120, 0);
+    PutBE16(state.vdp1, 0x00, 0x0009);          // system clip 4x2
+    PutBE16(state.vdp1, 0x14, 3);
+    PutBE16(state.vdp1, 0x16, 1);
+    PutBE16(state.vdp1, 0x20, 0x8000);          // CMDCTRL: normal sprite (comm 0) + END
+    PutBE16(state.vdp1, 0x24, pmod);            // CMDPMOD
+    PutBE16(state.vdp1, 0x28, 0x100 / 8);       // CMDSRCA: texture at byte 0x100
+    PutBE16(state.vdp1, 0x2A, (1 << 8) | 2);    // CMDSIZE: 8 wide, 2 tall
+    PutBE16(state.vdp1, 0x2C, 0);               // CMDXA
+    PutBE16(state.vdp1, 0x2E, 0);               // CMDYA
+    for (uint32_t i = 0; i < 16; ++i)           // 8x2 RGB555 white, MSB set = opaque
+        PutBE16(state.vdp1, 0x100 + i * 2, 0xFFFF);
+    return state;
+}
+
 std::vector<uint8_t> Render(State& state, bool showWindow, bool colorCalc = false)
 {
     se_data_source source = {};
@@ -107,6 +129,7 @@ std::vector<uint8_t> Render(State& state, bool showWindow, bool colorCalc = fals
 
     se_render_opts options = {};
     for (int i = 0; i < SE_LAYER_COUNT; ++i) options.show_layer[i] = 1;
+    options.show_vdp1_sprites = 1;
     options.show_window = showWindow ? 1 : 0;
     options.show_color_calculation = colorCalc ? 1 : 0;
     se_image image = {};
@@ -343,6 +366,31 @@ void TestMosaic()
     }
 }
 
+void TestSpriteHalfLuminance()
+{
+    // CMDPMOD: RGB555 (0x28) + SPD (0x40) + color-calc 2 (half-luminance). A white
+    // sprite is drawn at half luminance -> (127,127,127) everywhere it covers.
+    State state = MakeSpriteState(0x0028 | 0x0040 | 0x0002);
+    const std::vector<uint8_t> pixels = Render(state, false);
+    for (int y = 0; y < 2; ++y)
+        for (int x = 0; x < 4; ++x)
+            CHECK(IsColor(pixels, x, y, 127, 127, 127));
+}
+
+void TestSpriteMesh()
+{
+    // CMDPMOD: RGB555 + SPD + mesh (bit 8). The white sprite draws only on the
+    // checkerboard where (x+y) is even; the stippled pixels fall through to the backdrop.
+    State state = MakeSpriteState(0x0028 | 0x0040 | 0x0100);
+    const std::vector<uint8_t> pixels = Render(state, false);
+    for (int y = 0; y < 2; ++y)
+        for (int x = 0; x < 4; ++x)
+        {
+            if (((x + y) & 1) == 0) CHECK(IsWhite(pixels, x, y));
+            else                    CHECK(!IsWhite(pixels, x, y));
+        }
+}
+
 void TestBackScreen()
 {
     // With NBG3 disabled, the whole frame is the BKTA back-screen colour. Point BKTA
@@ -396,6 +444,8 @@ int main()
     TestZoomBitmap();
     TestColorOffset();
     TestMosaic();
+    TestSpriteHalfLuminance();
+    TestSpriteMesh();
     if (gFailures != 0)
     {
         std::cerr << gFailures << " VDP2 compositor check(s) failed\n";

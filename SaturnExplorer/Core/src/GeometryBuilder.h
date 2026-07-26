@@ -21,11 +21,22 @@ struct GouraudQuad
     uint16_t corner[4] = { 0, 0, 0, 0 };   // RGB555 per corner A,B,C,D
 };
 
+// Per-sprite VDP1 draw-mode effect from CMDPMOD, applied at pixel-write time. Kept
+// internal (parallel to 'sprites') like GouraudQuad. 'effect': 0 normal, 1 shadow
+// (halve the pixel below), 2 half-luminance (halve this sprite), 3 half-transparency
+// (average with the pixel below). 'mesh': checkerboard stipple.
+struct DrawFx
+{
+    uint8_t effect = 0;
+    uint8_t mesh = 0;
+};
+
 struct Vdp1Scene
 {
     std::vector<se_sprite_2d> sprites;
     std::vector<se_sprite_3d> sprites3d;   // same sprites, exploded along Z (§7)
     std::vector<GouraudQuad>  gouraud;     // parallel to 'sprites' / 'sprites3d'
+    std::vector<DrawFx>       drawfx;      // parallel to 'sprites'
     int screenWidth  = 320;   // from the system clip command, else NTSC default
     int screenHeight = 224;
     bool hasSystemClip = false;   // a VDP1 system-clip command set the dimensions above

@@ -31,6 +31,7 @@ void GeometryBuilder::Build(const std::vector<uint8_t>& vram, Vdp1Scene& out)
     out.sprites.clear();
     out.sprites3d.clear();
     out.gouraud.clear();
+    out.drawfx.clear();
     out.screenWidth = 320;
     out.screenHeight = 224;
     out.hasSystemClip = false;
@@ -169,7 +170,20 @@ void GeometryBuilder::Build(const std::vector<uint8_t>& vram, Vdp1Scene& out)
         s.gouraud = (pmod & 0x4) ? 1 : 0;
         s.color_mode = colorMode;
         s.transparency = spd ? SE_TRANSP_NONE : SE_TRANSP_PER_PIXEL;
-        s.draw_mode = SE_DRAW_NORMAL;
+
+        // CMDPMOD draw mode: bits 0-2 are the color-calculation field (bit 2 = Gouraud,
+        // handled above; bits 0-1 = 1 shadow / 2 half-luminance / 3 half-transparency),
+        // bit 8 = mesh (checkerboard stipple), bit 15 = MSB-on shadow.
+        const unsigned ccb = pmod & 0x7;
+        const bool msbShadow = (pmod & 0x8000) != 0;
+        DrawFx fx;
+        fx.effect = msbShadow ? 1 : static_cast<uint8_t>(ccb & 0x3);
+        fx.mesh = (pmod & 0x0100) ? 1 : 0;
+        s.draw_mode = (fx.effect == 3) ? SE_DRAW_HALF_TRANS
+                    : (fx.effect == 2) ? SE_DRAW_HALF_LUM
+                    : (fx.effect == 1) ? SE_DRAW_SHADOW
+                    : (fx.mesh)        ? SE_DRAW_MESH
+                                       : SE_DRAW_NORMAL;
 
         s.texture.vram_address = static_cast<uint32_t>(srca) * 8;
         s.texture.width = width;
@@ -187,6 +201,7 @@ void GeometryBuilder::Build(const std::vector<uint8_t>& vram, Vdp1Scene& out)
         }
 
         out.sprites.push_back(s);
+        out.drawfx.push_back(fx);
 
         // Gouraud corner colors (parallel to the sprite). CMDGRDA is a word
         // address; the table is four RGB555 colors, one per corner A,B,C,D.
