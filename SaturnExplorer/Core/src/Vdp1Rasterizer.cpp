@@ -28,6 +28,24 @@ int ClampInt(int v, int lo, int hi)
     return v < lo ? lo : (v > hi ? hi : v);
 }
 
+// The per-primitive draw state threaded into the rasterizer: draw-mode effects, an
+// optional solid fill color (null = textured), and an optional user-clip rect.
+struct DrawAttribs
+{
+    DrawFx fx;
+    const Rgba* solid = nullptr;
+    const ClipRect* clip = nullptr;
+};
+
+// True if user clipping rejects pixel (x,y): mode 0 draws only inside the rect, mode 1
+// only outside it. No-op when there is no clip or it is disabled.
+inline bool ClipRejects(const ClipRect* clip, int x, int y)
+{
+    if (!clip || !clip->enable) return false;
+    const bool inside = (x >= clip->x0 && x <= clip->x1 && y >= clip->y0 && y <= clip->y1);
+    return clip->mode ? inside : !inside;
+}
+
 // VDP1 gouraud shading works in 5-bit-per-channel space: the interpolated
 // gouraud value (0..31, neutral = 16) is added to the texel channel and clamped.
 // 'g5' is the interpolated gouraud channel (float); 't8' the decoded 8-bit texel
@@ -49,7 +67,7 @@ void RasterTriangle(const RVert& p0, const RVert& p1, const RVert& p2,
                     se_cram_mode cramMode, int width, int height,
                     std::vector<uint8_t>& out, std::vector<float>* depth,
                     bool gourOn, uint16_t g0, uint16_t g1, uint16_t g2,
-                    DrawFx fx, const Rgba* solid, const ClipRect* clip)
+                    const DrawAttribs& da)
 {
     const float area = Edge(p0.x, p0.y, p1.x, p1.y, p2.x, p2.y);
     if (std::fabs(area) < 1e-6f)
@@ -96,9 +114,9 @@ void RasterTriangle(const RVert& p0, const RVert& p1, const RVert& p2,
             }
 
             Rgba c;
-            if (solid)
+            if (da.solid)
             {
-                c = *solid;   // untextured polygon: solid fill, always opaque
+                c = *da.solid;   // untextured polygon: solid fill, always opaque
             }
             else
             {
@@ -117,16 +135,13 @@ void RasterTriangle(const RVert& p0, const RVert& p1, const RVert& p2,
 
             // Mesh: checkerboard stipple — drop every other screen pixel. Skips the
             // depth write too, so a meshed sprite doesn't occlude what shows through it.
-            if (fx.mesh && ((x + y) & 1))
+            if (da.fx.mesh && ((x + y) & 1))
             {
                 continue;
             }
-            // User clipping: mode 0 draws only inside the rect, mode 1 only outside it.
-            if (clip && clip->enable)
+            if (ClipRejects(da.clip, x, y))
             {
-                const bool inside = (x >= clip->x0 && x <= clip->x1 &&
-                                     y >= clip->y0 && y <= clip->y1);
-                if (clip->mode ? inside : !inside) continue;
+                continue;
             }
 
             if (depth)
@@ -146,39 +161,31 @@ void RasterTriangle(const RVert& p0, const RVert& p1, const RVert& p2,
                 cb = ApplyGouraud(c.b, gb);
             }
             const size_t o = idx * 4;
-            // Draw-mode color calculation. Shadow/half-transparency read the pixel
-            // already below; over nothing (alpha 0) they degrade to a plain write.
-            // This blends against whatever the priority-band loop drew below (VDP2 +
-            // earlier sprites) — an approximation of the two-stage VDP1/VDP2 blend that
-            // the descriptor mixer will make exact.
-            switch (fx.effect)
+            // Draw-mode color calculation. Shadow just halves the pixel already below and
+            // hides the sprite's own color; half-luminance halves the sprite; half-
+            // transparency averages with the pixel below. Blending against nothing
+            // (alpha 0) degrades to a plain write. This blends against whatever the
+            // priority-band loop drew below (VDP2 + earlier sprites) — an approximation of
+            // the two-stage VDP1/VDP2 blend the descriptor mixer will make exact.
+            if (da.fx.effect == 1)   // shadow
             {
-            case 1:  // shadow: halve the pixel below, keep the sprite's own color hidden
                 if (out[o + 3] != 0)
                 {
                     out[o + 0] >>= 1; out[o + 1] >>= 1; out[o + 2] >>= 1;
                 }
-                break;
-            case 2:  // half-luminance
-                out[o + 0] = cr >> 1; out[o + 1] = cg >> 1; out[o + 2] = cb >> 1;
-                out[o + 3] = 255;
-                break;
-            case 3:  // half-transparency: average with the pixel below
-                if (out[o + 3] != 0)
-                {
-                    out[o + 0] = static_cast<uint8_t>((cr + out[o + 0]) >> 1);
-                    out[o + 1] = static_cast<uint8_t>((cg + out[o + 1]) >> 1);
-                    out[o + 2] = static_cast<uint8_t>((cb + out[o + 2]) >> 1);
-                }
-                else
-                {
-                    out[o + 0] = cr; out[o + 1] = cg; out[o + 2] = cb; out[o + 3] = 255;
-                }
-                break;
-            default:
-                out[o + 0] = cr; out[o + 1] = cg; out[o + 2] = cb; out[o + 3] = 255;
-                break;
+                continue;
             }
+            if (da.fx.effect == 2)   // half-luminance
+            {
+                cr >>= 1; cg >>= 1; cb >>= 1;
+            }
+            else if (da.fx.effect == 3 && out[o + 3] != 0)   // half-transparency over opaque
+            {
+                cr = static_cast<uint8_t>((cr + out[o + 0]) >> 1);
+                cg = static_cast<uint8_t>((cg + out[o + 1]) >> 1);
+                cb = static_cast<uint8_t>((cb + out[o + 2]) >> 1);
+            }
+            out[o + 0] = cr; out[o + 1] = cg; out[o + 2] = cb; out[o + 3] = 255;
         }
     }
 }
@@ -188,15 +195,15 @@ void RasterQuad(const RVert v[4], const se_vec2 uv[4], const se_texture_ref& tex
                 bool spd, const std::vector<uint8_t>& vram, const std::vector<uint8_t>& cram,
                 se_cram_mode cramMode, int width, int height,
                 std::vector<uint8_t>& out, std::vector<float>* depth,
-                const GouraudQuad& g, DrawFx fx, const Rgba* solid, const ClipRect* clip)
+                const GouraudQuad& g, const DrawAttribs& da)
 {
     // Split matches the corner order: triangle 1 = A,B,C; triangle 2 = A,C,D.
     RasterTriangle(v[0], v[1], v[2], uv[0], uv[1], uv[2], tex, spd,
                    vram, cram, cramMode, width, height, out, depth,
-                   g.on, g.corner[0], g.corner[1], g.corner[2], fx, solid, clip);
+                   g.on, g.corner[0], g.corner[1], g.corner[2], da);
     RasterTriangle(v[0], v[2], v[3], uv[0], uv[2], uv[3], tex, spd,
                    vram, cram, cramMode, width, height, out, depth,
-                   g.on, g.corner[0], g.corner[2], g.corner[3], fx, solid, clip);
+                   g.on, g.corner[0], g.corner[2], g.corner[3], da);
 }
 
 // Plot a solid-color segment between two vertices (DDA), clipped to the frame. Used for
@@ -207,16 +214,14 @@ void DrawLine(std::vector<uint8_t>& out, int width, int height,
     const int x0 = static_cast<int>(std::lround(a.x)), y0 = static_cast<int>(std::lround(a.y));
     const int x1 = static_cast<int>(std::lround(b.x)), y1 = static_cast<int>(std::lround(b.y));
     const int steps = std::max(std::abs(x1 - x0), std::abs(y1 - y0));
-    for (int i = 0; i <= steps; ++i)
+    const float sx = steps ? float(x1 - x0) / steps : 0.0f;
+    const float sy = steps ? float(y1 - y0) / steps : 0.0f;
+    float fx = x0 + 0.5f, fy = y0 + 0.5f;
+    for (int i = 0; i <= steps; ++i, fx += sx, fy += sy)
     {
-        const int x = steps ? x0 + static_cast<int>(std::lround(float(x1 - x0) * i / steps)) : x0;
-        const int y = steps ? y0 + static_cast<int>(std::lround(float(y1 - y0) * i / steps)) : y0;
+        const int x = static_cast<int>(fx), y = static_cast<int>(fy);
         if (x < 0 || x >= width || y < 0 || y >= height) continue;
-        if (clip && clip->enable)
-        {
-            const bool inside = (x >= clip->x0 && x <= clip->x1 && y >= clip->y0 && y <= clip->y1);
-            if (clip->mode ? inside : !inside) continue;
-        }
+        if (ClipRejects(clip, x, y)) continue;
         const size_t o = (static_cast<size_t>(y) * width + x) * 4;
         out[o + 0] = c.r; out[o + 1] = c.g; out[o + 2] = c.b; out[o + 3] = 255;
     }
@@ -324,22 +329,18 @@ void Vdp1Rasterizer::Render(const Vdp1Scene& scene, const std::vector<uint8_t>& 
                        { s.corners[1].x, s.corners[1].y, 0.0f },
                        { s.corners[2].x, s.corners[2].y, 0.0f },
                        { s.corners[3].x, s.corners[3].y, 0.0f } };
-        const int32_t sc = i < scene.solidRgb555.size() ? scene.solidRgb555[i] : -1;
-        const uint8_t pk = i < scene.primKind.size() ? scene.primKind[i] : 0;
-        const ClipRect* clip = i < scene.clip.size() ? &scene.clip[i] : nullptr;
-        if (pk != 0)   // polyline/line: draw edges in solid color (no quad fill)
+        const SpriteRender& r = scene.render[i];
+        const ClipRect* clip = r.clip.enable ? &r.clip : nullptr;
+        if (r.primKind != 0)   // polyline/line: draw edges in solid color (no quad fill)
         {
-            DrawEdges(outRgba, width, height, v, pk,
-                      Rgb555ToRgba(static_cast<uint16_t>(sc < 0 ? 0 : sc)), clip);
+            DrawEdges(outRgba, width, height, v, r.primKind, Rgb555ToRgba(r.color), clip);
             continue;
         }
         ExpandQuadInclusive(v);
-        const GouraudQuad& g = i < scene.gouraud.size() ? scene.gouraud[i] : GouraudQuad{};
-        const DrawFx fx = i < scene.drawfx.size() ? scene.drawfx[i] : DrawFx{};
-        const Rgba solidCol = sc >= 0 ? Rgb555ToRgba(static_cast<uint16_t>(sc)) : Rgba{};
+        const Rgba solidCol = r.solid ? Rgb555ToRgba(r.color) : Rgba{};
+        const DrawAttribs da{ r.fx, r.solid ? &solidCol : nullptr, clip };
         RasterQuad(v, s.uv, s.texture, s.transparency == SE_TRANSP_NONE,
-                   vram, cram, cramMode, width, height, outRgba, nullptr, g, fx,
-                   sc >= 0 ? &solidCol : nullptr, clip);
+                   vram, cram, cramMode, width, height, outRgba, nullptr, r.gouraud, da);
     }
 }
 
@@ -364,7 +365,8 @@ void Vdp1Rasterizer::Render3D(const Vdp1Scene& scene, const std::vector<uint8_t>
 
     for (size_t i = 0; i < scene.sprites3d.size(); ++i)
     {
-        if (i < scene.primKind.size() && scene.primKind[i] != 0)
+        const SpriteRender& r = scene.render[i];
+        if (r.primKind != 0)
         {
             continue;   // polyline/line primitives are drawn in the 2D output only
         }
@@ -375,14 +377,12 @@ void Vdp1Rasterizer::Render3D(const Vdp1Scene& scene, const std::vector<uint8_t>
             Project(s.corners[2], camera, cosYaw, sinYaw, cosPitch, sinPitch),
             Project(s.corners[3], camera, cosYaw, sinYaw, cosPitch, sinPitch) };
         ExpandQuadInclusive(v);
-        const GouraudQuad& g = i < scene.gouraud.size() ? scene.gouraud[i] : GouraudQuad{};
-        const int32_t sc = i < scene.solidRgb555.size() ? scene.solidRgb555[i] : -1;
-        const Rgba solidCol = sc >= 0 ? Rgb555ToRgba(static_cast<uint16_t>(sc)) : Rgba{};
+        const Rgba solidCol = r.solid ? Rgb555ToRgba(r.color) : Rgba{};
         // The exploded 3D view keeps sprites opaque (no shadow/half-transparency against
         // the depth-sorted stack); only Gouraud and solid polygon fills carry over.
+        const DrawAttribs da{ DrawFx{}, r.solid ? &solidCol : nullptr, nullptr };
         RasterQuad(v, s.uv, s.texture, s.transparency == SE_TRANSP_NONE,
-                   vram, cram, cramMode, width, height, outRgba, &depth, g, DrawFx{},
-                   sc >= 0 ? &solidCol : nullptr, nullptr);
+                   vram, cram, cramMode, width, height, outRgba, &depth, r.gouraud, da);
     }
 }
 

@@ -30,11 +30,7 @@ void GeometryBuilder::Build(const std::vector<uint8_t>& vram, Vdp1Scene& out)
 {
     out.sprites.clear();
     out.sprites3d.clear();
-    out.gouraud.clear();
-    out.drawfx.clear();
-    out.solidRgb555.clear();
-    out.primKind.clear();
-    out.clip.clear();
+    out.render.clear();
     out.screenWidth = 320;
     out.screenHeight = 224;
     out.hasSystemClip = false;
@@ -224,31 +220,30 @@ void GeometryBuilder::Build(const std::vector<uint8_t>& vram, Vdp1Scene& out)
             s.texture.palette_bank = colr;
         }
 
-        out.sprites.push_back(s);
-        out.drawfx.push_back(fx);
-        // Untextured primitives (polygon/polyline/line) use CMDCOLR as a solid RGB555.
-        out.solidRgb555.push_back(untextured ? static_cast<int32_t>(colr) : -1);
-        out.primKind.push_back(polyline ? 1 : line ? 2 : 0);
-        ClipRect cr;
-        cr.enable = (pmod >> 10) & 0x1;
-        cr.mode = (pmod >> 9) & 0x1;
-        cr.x0 = userClipX0; cr.y0 = userClipY0;
-        cr.x1 = userClipX1; cr.y1 = userClipY1;
-        out.clip.push_back(cr);
-
-        // Gouraud corner colors (parallel to the sprite). CMDGRDA is a word
-        // address; the table is four RGB555 colors, one per corner A,B,C,D.
-        GouraudQuad gq;
-        gq.on = (pmod & 0x4) != 0;
-        if (gq.on)
+        // Per-sprite render attributes (parallel to the sprite): draw-mode effects, user
+        // clip, the untextured fill color, and Gouraud corners (CMDGRDA is a word address
+        // to four RGB555 colors, one per corner A,B,C,D).
+        SpriteRender sr;
+        sr.fx = fx;
+        sr.solid = untextured;
+        sr.color = colr;   // CMDCOLR as a solid RGB555 (only used when 'solid')
+        sr.primKind = polyline ? 1 : line ? 2 : 0;
+        sr.clip.enable = (pmod >> 10) & 0x1;
+        sr.clip.mode = (pmod >> 9) & 0x1;
+        sr.clip.x0 = userClipX0; sr.clip.y0 = userClipY0;
+        sr.clip.x1 = userClipX1; sr.clip.y1 = userClipY1;
+        sr.gouraud.on = (pmod & 0x4) != 0;
+        if (sr.gouraud.on)
         {
             const uint32_t table = static_cast<uint32_t>(grda) * 8;
             for (int k = 0; k < 4; ++k)
             {
-                gq.corner[k] = ReadBE16(vram, table + static_cast<uint32_t>(k) * 2);
+                sr.gouraud.corner[k] = ReadBE16(vram, table + static_cast<uint32_t>(k) * 2);
             }
         }
-        out.gouraud.push_back(gq);
+
+        out.sprites.push_back(s);
+        out.render.push_back(sr);
 
         // Assign a depth layer: 0 if this sprite overlaps nothing placed so far,
         // else one past the deepest sprite it overlaps. Abutting tiles (which

@@ -41,21 +41,23 @@ struct ClipRect
     int32_t x0 = 0, y0 = 0, x1 = 0, y1 = 0;
 };
 
+// All the per-sprite render attributes the rasterizer needs beyond the ABI sprite struct,
+// kept internal (parallel to 'sprites'/'sprites3d') — one record per drawable command.
+struct SpriteRender
+{
+    GouraudQuad gouraud;
+    DrawFx      fx;
+    ClipRect    clip;
+    bool        solid = false;      // untextured polygon/line: fill/edges with 'color'
+    uint16_t    color = 0;          // RGB555 fill color, valid when 'solid'
+    uint8_t     primKind = 0;       // 0 = filled quad, 1 = polyline (4 edges), 2 = line A-B
+};
+
 struct Vdp1Scene
 {
     std::vector<se_sprite_2d> sprites;
     std::vector<se_sprite_3d> sprites3d;   // same sprites, exploded along Z (§7)
-    std::vector<GouraudQuad>  gouraud;     // parallel to 'sprites' / 'sprites3d'
-    std::vector<DrawFx>       drawfx;      // parallel to 'sprites'
-    // Parallel to 'sprites': -1 for a textured sprite; otherwise the RGB555 color of an
-    // untextured primitive (polygon fill, or polyline/line edges).
-    std::vector<int32_t>      solidRgb555;
-    // Parallel to 'sprites': 0 = filled quad (sprite/polygon), 1 = polyline (4 edges),
-    // 2 = line (edge A-B only). Lines draw their edges rather than filling.
-    std::vector<uint8_t>      primKind;
-    // Parallel to 'sprites': per-sprite user clipping (CMDPMOD bit 10 enable, bit 9 mode)
-    // against the rectangle set by the most recent user-clip command (VDP1 command 6).
-    std::vector<ClipRect>     clip;
+    std::vector<SpriteRender> render;      // parallel to 'sprites' / 'sprites3d'
     int screenWidth  = 320;   // from the system clip command, else NTSC default
     int screenHeight = 224;
     bool hasSystemClip = false;   // a VDP1 system-clip command set the dimensions above

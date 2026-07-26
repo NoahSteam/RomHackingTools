@@ -88,6 +88,16 @@ State MakeNbg3State()
     return state;
 }
 
+// (Re)size the VDP1 VRAM and write the system-clip command that establishes the 4x2
+// composited frame (lower-right corner = 3,1).
+void WriteSystemClip(State& state, uint32_t vdp1Size)
+{
+    state.vdp1.assign(vdp1Size, 0);
+    PutBE16(state.vdp1, 0x00, 0x0009);
+    PutBE16(state.vdp1, 0x14, 3);
+    PutBE16(state.vdp1, 0x16, 1);
+}
+
 // A 4x2 frame with a single VDP1 normal sprite that fills it: an 8x2 RGB555 white
 // (opaque) texture, drawn with the given CMDPMOD. VDP2 backgrounds are disabled so only
 // the sprite (over the backdrop) is visible.
@@ -95,10 +105,7 @@ State MakeSpriteState(uint16_t pmod)
 {
     State state = MakeNbg3State();
     SetReg(state, 0x020, 0x0000);   // BGON off — only the sprite draws
-    state.vdp1.assign(0x120, 0);
-    PutBE16(state.vdp1, 0x00, 0x0009);          // system clip 4x2
-    PutBE16(state.vdp1, 0x14, 3);
-    PutBE16(state.vdp1, 0x16, 1);
+    WriteSystemClip(state, 0x120);
     PutBE16(state.vdp1, 0x20, 0x8000);          // CMDCTRL: normal sprite (comm 0) + END
     PutBE16(state.vdp1, 0x24, pmod);            // CMDPMOD
     PutBE16(state.vdp1, 0x28, 0x100 / 8);       // CMDSRCA: texture at byte 0x100
@@ -396,10 +403,7 @@ void TestPolygon()
     // VDP1 untextured polygon (command 3): a solid red quad covering the 4x2 frame.
     State state = MakeNbg3State();
     SetReg(state, 0x020, 0x0000);   // BGON off — only the polygon draws
-    state.vdp1.assign(0x40, 0);
-    PutBE16(state.vdp1, 0x00, 0x0009);   // system clip 4x2
-    PutBE16(state.vdp1, 0x14, 3);
-    PutBE16(state.vdp1, 0x16, 1);
+    WriteSystemClip(state, 0x40);
     PutBE16(state.vdp1, 0x20, 0x8003);   // CMDCTRL: polygon (comm 3) + END
     PutBE16(state.vdp1, 0x26, 0x001F);   // CMDCOLR: red (RGB555)
     PutBE16(state.vdp1, 0x2C, 0); PutBE16(state.vdp1, 0x2E, 0);   // A = (0,0)
@@ -417,10 +421,7 @@ void TestLine()
     // VDP1 line (command 5): a red segment from (0,0) to (3,0) along the top row.
     State state = MakeNbg3State();
     SetReg(state, 0x020, 0x0000);   // BGON off
-    state.vdp1.assign(0x40, 0);
-    PutBE16(state.vdp1, 0x00, 0x0009);   // system clip 4x2
-    PutBE16(state.vdp1, 0x14, 3);
-    PutBE16(state.vdp1, 0x16, 1);
+    WriteSystemClip(state, 0x40);
     PutBE16(state.vdp1, 0x20, 0x8005);   // CMDCTRL: line (comm 5) + END
     PutBE16(state.vdp1, 0x26, 0x001F);   // CMDCOLR: red
     PutBE16(state.vdp1, 0x2C, 0); PutBE16(state.vdp1, 0x2E, 0);   // A = (0,0)
@@ -439,10 +440,7 @@ void TestUserClip()
     // (draw inside), clipped to the rect x=1..2 by a preceding user-clip command.
     State state = MakeNbg3State();
     SetReg(state, 0x020, 0x0000);   // BGON off
-    state.vdp1.assign(0x60, 0);
-    PutBE16(state.vdp1, 0x00, 0x0009);   // system clip 4x2
-    PutBE16(state.vdp1, 0x14, 3);
-    PutBE16(state.vdp1, 0x16, 1);
+    WriteSystemClip(state, 0x60);
     PutBE16(state.vdp1, 0x20, 0x0006);   // user clip command (comm 6), JP next
     PutBE16(state.vdp1, 0x2C, 1);        // clip X0 = 1
     PutBE16(state.vdp1, 0x2E, 0);        // clip Y0 = 0
