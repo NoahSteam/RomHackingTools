@@ -284,6 +284,10 @@ void GeometryBuilder::Build(const std::vector<uint8_t>& vram, Vdp1Scene& out)
         s3.transparency = s.transparency;  // GPU-embedding hosts need no sibling lookup
         out.sprites3d.push_back(s3);
     }
+
+    // VDP1 draws in this coordinate space (the system-clip width); the display width may
+    // be raised past it by ApplyDisplayResolution in hi-res modes.
+    out.vdp1Width = out.screenWidth;
 }
 
 }  // namespace se

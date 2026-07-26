@@ -58,9 +58,13 @@ struct Vdp1Scene
     std::vector<se_sprite_2d> sprites;
     std::vector<se_sprite_3d> sprites3d;   // same sprites, exploded along Z (§7)
     std::vector<SpriteRender> render;      // parallel to 'sprites' / 'sprites3d'
-    int screenWidth  = 320;   // from the system clip command, else NTSC default
+    int screenWidth  = 320;   // display width (may be raised to the VDP2 TVMD dot count)
     int screenHeight = 224;
     bool hasSystemClip = false;   // a VDP1 system-clip command set the dimensions above
+    // The width of the VDP1 coordinate space (the system-clip width). In hi-res modes the
+    // display (screenWidth) is 2x this — VDP1 draws at half width and is doubled at
+    // scan-out — so the rasterizer scales sprite X by screenWidth / vdp1Width.
+    int vdp1Width = 320;
 };
 
 class GeometryBuilder

@@ -308,6 +308,10 @@ void Vdp1Rasterizer::Render(const Vdp1Scene& scene, const std::vector<uint8_t>& 
 {
     const int width = scene.screenWidth;
     const int height = scene.screenHeight;
+    // In hi-res modes VDP1 draws at half the display width and is doubled at scan-out, so
+    // scale sprite/clip X from the VDP1 coordinate space to the display. 1.0 otherwise.
+    const float xScale = (scene.vdp1Width > 0)
+                             ? static_cast<float>(width) / scene.vdp1Width : 1.0f;
     if (clear)
     {
         outRgba.assign(static_cast<size_t>(width) * height * 4, 0);  // transparent
@@ -325,12 +329,15 @@ void Vdp1Rasterizer::Render(const Vdp1Scene& scene, const std::vector<uint8_t>& 
         {
             continue;   // outside this priority band
         }
-        RVert v[4] = { { s.corners[0].x, s.corners[0].y, 0.0f },
-                       { s.corners[1].x, s.corners[1].y, 0.0f },
-                       { s.corners[2].x, s.corners[2].y, 0.0f },
-                       { s.corners[3].x, s.corners[3].y, 0.0f } };
+        RVert v[4] = { { s.corners[0].x * xScale, s.corners[0].y, 0.0f },
+                       { s.corners[1].x * xScale, s.corners[1].y, 0.0f },
+                       { s.corners[2].x * xScale, s.corners[2].y, 0.0f },
+                       { s.corners[3].x * xScale, s.corners[3].y, 0.0f } };
         const SpriteRender& r = scene.render[i];
-        const ClipRect* clip = r.clip.enable ? &r.clip : nullptr;
+        ClipRect clipScaled = r.clip;   // user-clip rect is in VDP1 space; scale its X too
+        clipScaled.x0 = static_cast<int32_t>(r.clip.x0 * xScale);
+        clipScaled.x1 = static_cast<int32_t>(r.clip.x1 * xScale);
+        const ClipRect* clip = r.clip.enable ? &clipScaled : nullptr;
         if (r.primKind != 0)   // polyline/line: draw edges in solid color (no quad fill)
         {
             DrawEdges(outRgba, width, height, v, r.primKind, Rgb555ToRgba(r.color), clip);

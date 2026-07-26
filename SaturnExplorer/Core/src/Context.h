@@ -343,9 +343,14 @@ public:
     // Topmost sprite (last drawn) containing the screen point, if any.
     se_result HitTest(int x, int y, size_t* outCommandIndex) const
     {
+        // The click is in display space; sprite corners are in VDP1 space, which is
+        // narrower in hi-res (the rasterizer scales sprite X up to display). Map back.
+        const float xScale = (mScene.screenWidth > 0)
+                                 ? static_cast<float>(mScene.vdp1Width) / mScene.screenWidth : 1.0f;
+        const float sx = (x + 0.5f) * xScale;
         for (size_t i = mScene.sprites.size(); i-- > 0; )
         {
-            if (PointInSprite(mScene.sprites[i], x + 0.5f, y + 0.5f))
+            if (PointInSprite(mScene.sprites[i], sx, y + 0.5f))
             {
                 *outCommandIndex = mScene.sprites[i].command_index;
                 return SE_OK;
@@ -406,17 +411,24 @@ private:
     // only the left half of a 704-wide hi-res screen, stretched 2x to fill the frame).
     void ApplyDisplayResolution()
     {
-        // The VDP1 system clip, when present, is authoritative for the drawing area (it
-        // equals the TV resolution in real scenes); only fall back to TVMD when no clip
-        // was found — the pure-VDP2 case that motivated this.
-        if (mScene.hasSystemClip || !mSnapshot.HasVdp2Regs())
+        if (!mSnapshot.HasVdp2Regs())
         {
             return;
         }
         const uint16_t tvmd = mSnapshot.Vdp2Reg(0x000);
         const uint32_t hres = tvmd & 0x7;
+        const bool hiRes = (hres & 0x2) != 0;   // 640/704 — VDP1 draws at half this width
+        // The VDP1 system clip is authoritative for the display in normal-res scenes (and
+        // it's what the compositor tests use as a fixture). In hi-res, though, the clip is
+        // the *half-width* VDP1 area (e.g. 352) while VDP2 scans out at the full TVMD dot
+        // count (704), so the TVMD width must win or the backgrounds render half the
+        // field of view. mScene.vdp1Width keeps the VDP1 coordinate space either way.
+        if (mScene.hasSystemClip && !hiRes)
+        {
+            return;
+        }
         int w = (hres & 0x1) ? 352 : 320;   // HRES bit 0: 352 vs 320 base
-        if (hres & 0x2) w *= 2;             // HRES bit 1: hi-res (640 / 704)
+        if (hiRes) w *= 2;                  // HRES bit 1: hi-res (640 / 704)
         static const int kVRes[4] = { 224, 240, 256, 256 };
         int h = kVRes[(tvmd >> 4) & 0x3];   // VRES bits 4-5
         if (((tvmd >> 6) & 0x3) == 0x3) h *= 2;   // LSMD: double-density interlace
