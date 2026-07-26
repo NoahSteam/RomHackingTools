@@ -34,6 +34,7 @@ void GeometryBuilder::Build(const std::vector<uint8_t>& vram, Vdp1Scene& out)
     out.drawfx.clear();
     out.solidRgb555.clear();
     out.primKind.clear();
+    out.clip.clear();
     out.screenWidth = 320;
     out.screenHeight = 224;
     out.hasSystemClip = false;
@@ -42,6 +43,7 @@ void GeometryBuilder::Build(const std::vector<uint8_t>& vram, Vdp1Scene& out)
 
     int32_t originX = 0;
     int32_t originY = 0;
+    int32_t userClipX0 = 0, userClipY0 = 0, userClipX1 = 0, userClipY1 = 0;
     uint32_t objectNumber = 0;
     std::vector<PlacedSprite> placed;   // bounds+layer of sprites already emitted
 
@@ -72,6 +74,12 @@ void GeometryBuilder::Build(const std::vector<uint8_t>& vram, Vdp1Scene& out)
         {
             originX = xa;
             originY = ya;
+            continue;
+        }
+        if (comm == 0x6)  // user clip: (xa,ya) upper-left, (xc,yc) lower-right
+        {
+            userClipX0 = xa; userClipY0 = ya;
+            userClipX1 = xc; userClipY1 = yc;
             continue;
         }
         if (comm == 0x9)  // system clip: lower-right defines the drawing area
@@ -221,6 +229,12 @@ void GeometryBuilder::Build(const std::vector<uint8_t>& vram, Vdp1Scene& out)
         // Untextured primitives (polygon/polyline/line) use CMDCOLR as a solid RGB555.
         out.solidRgb555.push_back(untextured ? static_cast<int32_t>(colr) : -1);
         out.primKind.push_back(polyline ? 1 : line ? 2 : 0);
+        ClipRect cr;
+        cr.enable = (pmod >> 10) & 0x1;
+        cr.mode = (pmod >> 9) & 0x1;
+        cr.x0 = userClipX0; cr.y0 = userClipY0;
+        cr.x1 = userClipX1; cr.y1 = userClipY1;
+        out.clip.push_back(cr);
 
         // Gouraud corner colors (parallel to the sprite). CMDGRDA is a word
         // address; the table is four RGB555 colors, one per corner A,B,C,D.

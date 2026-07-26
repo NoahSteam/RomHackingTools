@@ -433,6 +433,37 @@ void TestLine()
     }
 }
 
+void TestUserClip()
+{
+    // A full-frame red polygon with user clipping enabled (CMDPMOD bit 10), mode 0
+    // (draw inside), clipped to the rect x=1..2 by a preceding user-clip command.
+    State state = MakeNbg3State();
+    SetReg(state, 0x020, 0x0000);   // BGON off
+    state.vdp1.assign(0x60, 0);
+    PutBE16(state.vdp1, 0x00, 0x0009);   // system clip 4x2
+    PutBE16(state.vdp1, 0x14, 3);
+    PutBE16(state.vdp1, 0x16, 1);
+    PutBE16(state.vdp1, 0x20, 0x0006);   // user clip command (comm 6), JP next
+    PutBE16(state.vdp1, 0x2C, 1);        // clip X0 = 1
+    PutBE16(state.vdp1, 0x2E, 0);        // clip Y0 = 0
+    PutBE16(state.vdp1, 0x34, 2);        // clip X1 = 2
+    PutBE16(state.vdp1, 0x36, 1);        // clip Y1 = 1
+    PutBE16(state.vdp1, 0x40, 0x8003);   // polygon (comm 3) + END
+    PutBE16(state.vdp1, 0x44, 0x0400);   // CMDPMOD: user clip enable (bit 10), mode inside
+    PutBE16(state.vdp1, 0x46, 0x001F);   // CMDCOLR: red
+    PutBE16(state.vdp1, 0x4C, 0); PutBE16(state.vdp1, 0x4E, 0);   // A
+    PutBE16(state.vdp1, 0x50, 4); PutBE16(state.vdp1, 0x52, 0);   // B
+    PutBE16(state.vdp1, 0x54, 4); PutBE16(state.vdp1, 0x56, 2);   // C
+    PutBE16(state.vdp1, 0x58, 0); PutBE16(state.vdp1, 0x5A, 2);   // D
+    const std::vector<uint8_t> pixels = Render(state, false);
+    for (int y = 0; y < 2; ++y)
+        for (int x = 0; x < 4; ++x)
+        {
+            if (x >= 1 && x <= 2) CHECK(IsRed(pixels, x, y));    // inside the clip
+            else                  CHECK(!IsRed(pixels, x, y));   // clipped away
+        }
+}
+
 void TestBackScreen()
 {
     // With NBG3 disabled, the whole frame is the BKTA back-screen colour. Point BKTA
@@ -490,6 +521,7 @@ int main()
     TestSpriteMesh();
     TestPolygon();
     TestLine();
+    TestUserClip();
     if (gFailures != 0)
     {
         std::cerr << gFailures << " VDP2 compositor check(s) failed\n";

@@ -49,7 +49,7 @@ void RasterTriangle(const RVert& p0, const RVert& p1, const RVert& p2,
                     se_cram_mode cramMode, int width, int height,
                     std::vector<uint8_t>& out, std::vector<float>* depth,
                     bool gourOn, uint16_t g0, uint16_t g1, uint16_t g2,
-                    DrawFx fx, const Rgba* solid)
+                    DrawFx fx, const Rgba* solid, const ClipRect* clip)
 {
     const float area = Edge(p0.x, p0.y, p1.x, p1.y, p2.x, p2.y);
     if (std::fabs(area) < 1e-6f)
@@ -121,6 +121,13 @@ void RasterTriangle(const RVert& p0, const RVert& p1, const RVert& p2,
             {
                 continue;
             }
+            // User clipping: mode 0 draws only inside the rect, mode 1 only outside it.
+            if (clip && clip->enable)
+            {
+                const bool inside = (x >= clip->x0 && x <= clip->x1 &&
+                                     y >= clip->y0 && y <= clip->y1);
+                if (clip->mode ? inside : !inside) continue;
+            }
 
             if (depth)
             {
@@ -181,21 +188,21 @@ void RasterQuad(const RVert v[4], const se_vec2 uv[4], const se_texture_ref& tex
                 bool spd, const std::vector<uint8_t>& vram, const std::vector<uint8_t>& cram,
                 se_cram_mode cramMode, int width, int height,
                 std::vector<uint8_t>& out, std::vector<float>* depth,
-                const GouraudQuad& g, DrawFx fx, const Rgba* solid)
+                const GouraudQuad& g, DrawFx fx, const Rgba* solid, const ClipRect* clip)
 {
     // Split matches the corner order: triangle 1 = A,B,C; triangle 2 = A,C,D.
     RasterTriangle(v[0], v[1], v[2], uv[0], uv[1], uv[2], tex, spd,
                    vram, cram, cramMode, width, height, out, depth,
-                   g.on, g.corner[0], g.corner[1], g.corner[2], fx, solid);
+                   g.on, g.corner[0], g.corner[1], g.corner[2], fx, solid, clip);
     RasterTriangle(v[0], v[2], v[3], uv[0], uv[2], uv[3], tex, spd,
                    vram, cram, cramMode, width, height, out, depth,
-                   g.on, g.corner[0], g.corner[2], g.corner[3], fx, solid);
+                   g.on, g.corner[0], g.corner[2], g.corner[3], fx, solid, clip);
 }
 
 // Plot a solid-color segment between two vertices (DDA), clipped to the frame. Used for
 // untextured polyline/line primitives; opaque write, no draw-mode blending.
 void DrawLine(std::vector<uint8_t>& out, int width, int height,
-              const RVert& a, const RVert& b, Rgba c)
+              const RVert& a, const RVert& b, Rgba c, const ClipRect* clip)
 {
     const int x0 = static_cast<int>(std::lround(a.x)), y0 = static_cast<int>(std::lround(a.y));
     const int x1 = static_cast<int>(std::lround(b.x)), y1 = static_cast<int>(std::lround(b.y));
@@ -205,6 +212,11 @@ void DrawLine(std::vector<uint8_t>& out, int width, int height,
         const int x = steps ? x0 + static_cast<int>(std::lround(float(x1 - x0) * i / steps)) : x0;
         const int y = steps ? y0 + static_cast<int>(std::lround(float(y1 - y0) * i / steps)) : y0;
         if (x < 0 || x >= width || y < 0 || y >= height) continue;
+        if (clip && clip->enable)
+        {
+            const bool inside = (x >= clip->x0 && x <= clip->x1 && y >= clip->y0 && y <= clip->y1);
+            if (clip->mode ? inside : !inside) continue;
+        }
         const size_t o = (static_cast<size_t>(y) * width + x) * 4;
         out[o + 0] = c.r; out[o + 1] = c.g; out[o + 2] = c.b; out[o + 3] = 255;
     }
@@ -213,14 +225,14 @@ void DrawLine(std::vector<uint8_t>& out, int width, int height,
 // Draw a line primitive's edges: A-B for a line (kind 2), the full A-B-C-D-A outline for
 // a polyline (kind 1).
 void DrawEdges(std::vector<uint8_t>& out, int width, int height,
-               const RVert v[4], uint8_t primKind, Rgba c)
+               const RVert v[4], uint8_t primKind, Rgba c, const ClipRect* clip)
 {
-    DrawLine(out, width, height, v[0], v[1], c);
+    DrawLine(out, width, height, v[0], v[1], c, clip);
     if (primKind == 1)
     {
-        DrawLine(out, width, height, v[1], v[2], c);
-        DrawLine(out, width, height, v[2], v[3], c);
-        DrawLine(out, width, height, v[3], v[0], c);
+        DrawLine(out, width, height, v[1], v[2], c, clip);
+        DrawLine(out, width, height, v[2], v[3], c, clip);
+        DrawLine(out, width, height, v[3], v[0], c, clip);
     }
 }
 
@@ -314,10 +326,11 @@ void Vdp1Rasterizer::Render(const Vdp1Scene& scene, const std::vector<uint8_t>& 
                        { s.corners[3].x, s.corners[3].y, 0.0f } };
         const int32_t sc = i < scene.solidRgb555.size() ? scene.solidRgb555[i] : -1;
         const uint8_t pk = i < scene.primKind.size() ? scene.primKind[i] : 0;
+        const ClipRect* clip = i < scene.clip.size() ? &scene.clip[i] : nullptr;
         if (pk != 0)   // polyline/line: draw edges in solid color (no quad fill)
         {
             DrawEdges(outRgba, width, height, v, pk,
-                      Rgb555ToRgba(static_cast<uint16_t>(sc < 0 ? 0 : sc)));
+                      Rgb555ToRgba(static_cast<uint16_t>(sc < 0 ? 0 : sc)), clip);
             continue;
         }
         ExpandQuadInclusive(v);
@@ -326,7 +339,7 @@ void Vdp1Rasterizer::Render(const Vdp1Scene& scene, const std::vector<uint8_t>& 
         const Rgba solidCol = sc >= 0 ? Rgb555ToRgba(static_cast<uint16_t>(sc)) : Rgba{};
         RasterQuad(v, s.uv, s.texture, s.transparency == SE_TRANSP_NONE,
                    vram, cram, cramMode, width, height, outRgba, nullptr, g, fx,
-                   sc >= 0 ? &solidCol : nullptr);
+                   sc >= 0 ? &solidCol : nullptr, clip);
     }
 }
 
@@ -369,7 +382,7 @@ void Vdp1Rasterizer::Render3D(const Vdp1Scene& scene, const std::vector<uint8_t>
         // the depth-sorted stack); only Gouraud and solid polygon fills carry over.
         RasterQuad(v, s.uv, s.texture, s.transparency == SE_TRANSP_NONE,
                    vram, cram, cramMode, width, height, outRgba, &depth, g, DrawFx{},
-                   sc >= 0 ? &solidCol : nullptr);
+                   sc >= 0 ? &solidCol : nullptr, nullptr);
     }
 }
 
