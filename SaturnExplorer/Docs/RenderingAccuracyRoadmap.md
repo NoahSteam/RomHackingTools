@@ -114,19 +114,20 @@ pixel-level check against a reference. This is the single highest-leverage inves
 
 ### Track A — Command-inspection rasterizer completeness
 
-Independent of the mixer; immediately visible; low risk. Ship alongside Track E.
+Independent of the mixer; immediately visible; low risk.
 
-- **A1. Untextured polygon (cmd 3), polyline (4), line (5).** Solid / Gouraud color, no
-  texture fetch. (NiGHTS and many titles use these.)
-- **A2. Clipping.** User clip (cmd 6) + CMDPMOD user-clip enable (inside/outside) +
-  pre-clip disable; apply to the inspection rasterizer.
-- **A3. Draw-mode decode.** Read the CMDPMOD color-calc field into `se_draw_mode`
-  (currently hardcoded `NORMAL`); apply **mesh** (stipple) and **half-luminance** in the
-  rasterizer; honor **end codes**.
-- **A4. Sprite-vs-sprite blends.** **Half-transparency** and **shadow** against the
-  rasterizer's own target buffer; all Gouraud + half-lum/half-trans combinations.
-- **A5. Exact distorted-sprite stepping.** Replace the two-affine-triangle + half-pixel
-  expansion with hardware edge stepping / texture sampling.
+- **A1. [DONE]** Untextured polygon (cmd 3), polyline (4), line (5) — solid RGB555 fill /
+  edges. Filled quads reuse the sprite path; lines use a clipped DDA plotter.
+- **A2. [DONE]** User clip (cmd 6) + CMDPMOD user-clip enable/mode (inside/outside),
+  applied per pixel to quads and line edges.
+- **A3. [DONE]** CMDPMOD draw-mode decode into `se_draw_mode` + **mesh** (stipple) and
+  **half-luminance** in the rasterizer.
+- **A4. [DONE]** **Half-transparency** and **shadow** (incl. MSB) against the target
+  buffer; Gouraud already handled. (Blends against the band-loop background — the mixer
+  will make the VDP1/VDP2 two-stage blend exact.)
+- **A5. [deferred refinement]** Exact distorted-sprite edge stepping to replace the
+  two-affine-triangle + half-pixel expansion. Distorted sprites already render; this is
+  sub-pixel accuracy, not a missing feature — revisit against the E1 golden diff.
 
 *Acceptance:* command-isolation output matches the corresponding region of the captured
 VDP1 framebuffer and stays selectable in 2D/3D.
