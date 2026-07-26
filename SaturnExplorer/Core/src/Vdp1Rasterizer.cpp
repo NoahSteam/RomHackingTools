@@ -192,6 +192,38 @@ void RasterQuad(const RVert v[4], const se_vec2 uv[4], const se_texture_ref& tex
                    g.on, g.corner[0], g.corner[2], g.corner[3], fx, solid);
 }
 
+// Plot a solid-color segment between two vertices (DDA), clipped to the frame. Used for
+// untextured polyline/line primitives; opaque write, no draw-mode blending.
+void DrawLine(std::vector<uint8_t>& out, int width, int height,
+              const RVert& a, const RVert& b, Rgba c)
+{
+    const int x0 = static_cast<int>(std::lround(a.x)), y0 = static_cast<int>(std::lround(a.y));
+    const int x1 = static_cast<int>(std::lround(b.x)), y1 = static_cast<int>(std::lround(b.y));
+    const int steps = std::max(std::abs(x1 - x0), std::abs(y1 - y0));
+    for (int i = 0; i <= steps; ++i)
+    {
+        const int x = steps ? x0 + static_cast<int>(std::lround(float(x1 - x0) * i / steps)) : x0;
+        const int y = steps ? y0 + static_cast<int>(std::lround(float(y1 - y0) * i / steps)) : y0;
+        if (x < 0 || x >= width || y < 0 || y >= height) continue;
+        const size_t o = (static_cast<size_t>(y) * width + x) * 4;
+        out[o + 0] = c.r; out[o + 1] = c.g; out[o + 2] = c.b; out[o + 3] = 255;
+    }
+}
+
+// Draw a line primitive's edges: A-B for a line (kind 2), the full A-B-C-D-A outline for
+// a polyline (kind 1).
+void DrawEdges(std::vector<uint8_t>& out, int width, int height,
+               const RVert v[4], uint8_t primKind, Rgba c)
+{
+    DrawLine(out, width, height, v[0], v[1], c);
+    if (primKind == 1)
+    {
+        DrawLine(out, width, height, v[1], v[2], c);
+        DrawLine(out, width, height, v[2], v[3], c);
+        DrawLine(out, width, height, v[3], v[0], c);
+    }
+}
+
 // VDP1 sprite corners are *inclusive* pixel coordinates: a sprite spanning
 // screen columns xa..xc covers xc-xa+1 pixels, and the game builds a mech from
 // many small strips laid edge-to-edge (strip N ends at row R, strip N+1 starts
@@ -280,10 +312,17 @@ void Vdp1Rasterizer::Render(const Vdp1Scene& scene, const std::vector<uint8_t>& 
                        { s.corners[1].x, s.corners[1].y, 0.0f },
                        { s.corners[2].x, s.corners[2].y, 0.0f },
                        { s.corners[3].x, s.corners[3].y, 0.0f } };
+        const int32_t sc = i < scene.solidRgb555.size() ? scene.solidRgb555[i] : -1;
+        const uint8_t pk = i < scene.primKind.size() ? scene.primKind[i] : 0;
+        if (pk != 0)   // polyline/line: draw edges in solid color (no quad fill)
+        {
+            DrawEdges(outRgba, width, height, v, pk,
+                      Rgb555ToRgba(static_cast<uint16_t>(sc < 0 ? 0 : sc)));
+            continue;
+        }
         ExpandQuadInclusive(v);
         const GouraudQuad& g = i < scene.gouraud.size() ? scene.gouraud[i] : GouraudQuad{};
         const DrawFx fx = i < scene.drawfx.size() ? scene.drawfx[i] : DrawFx{};
-        const int32_t sc = i < scene.solidRgb555.size() ? scene.solidRgb555[i] : -1;
         const Rgba solidCol = sc >= 0 ? Rgb555ToRgba(static_cast<uint16_t>(sc)) : Rgba{};
         RasterQuad(v, s.uv, s.texture, s.transparency == SE_TRANSP_NONE,
                    vram, cram, cramMode, width, height, outRgba, nullptr, g, fx,
@@ -312,6 +351,10 @@ void Vdp1Rasterizer::Render3D(const Vdp1Scene& scene, const std::vector<uint8_t>
 
     for (size_t i = 0; i < scene.sprites3d.size(); ++i)
     {
+        if (i < scene.primKind.size() && scene.primKind[i] != 0)
+        {
+            continue;   // polyline/line primitives are drawn in the 2D output only
+        }
         const se_sprite_3d& s = scene.sprites3d[i];
         RVert v[4] = {
             Project(s.corners[0], camera, cosYaw, sinYaw, cosPitch, sinPitch),

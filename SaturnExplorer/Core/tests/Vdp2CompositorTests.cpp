@@ -412,6 +412,27 @@ void TestPolygon()
             CHECK(IsRed(pixels, x, y));
 }
 
+void TestLine()
+{
+    // VDP1 line (command 5): a red segment from (0,0) to (3,0) along the top row.
+    State state = MakeNbg3State();
+    SetReg(state, 0x020, 0x0000);   // BGON off
+    state.vdp1.assign(0x40, 0);
+    PutBE16(state.vdp1, 0x00, 0x0009);   // system clip 4x2
+    PutBE16(state.vdp1, 0x14, 3);
+    PutBE16(state.vdp1, 0x16, 1);
+    PutBE16(state.vdp1, 0x20, 0x8005);   // CMDCTRL: line (comm 5) + END
+    PutBE16(state.vdp1, 0x26, 0x001F);   // CMDCOLR: red
+    PutBE16(state.vdp1, 0x2C, 0); PutBE16(state.vdp1, 0x2E, 0);   // A = (0,0)
+    PutBE16(state.vdp1, 0x30, 3); PutBE16(state.vdp1, 0x32, 0);   // B = (3,0)
+    const std::vector<uint8_t> pixels = Render(state, false);
+    for (int x = 0; x < 4; ++x)
+    {
+        CHECK(IsRed(pixels, x, 0));       // the segment
+        CHECK(!IsRed(pixels, x, 1));      // row 1 untouched
+    }
+}
+
 void TestBackScreen()
 {
     // With NBG3 disabled, the whole frame is the BKTA back-screen colour. Point BKTA
@@ -468,6 +489,7 @@ int main()
     TestSpriteHalfLuminance();
     TestSpriteMesh();
     TestPolygon();
+    TestLine();
     if (gFailures != 0)
     {
         std::cerr << gFailures << " VDP2 compositor check(s) failed\n";

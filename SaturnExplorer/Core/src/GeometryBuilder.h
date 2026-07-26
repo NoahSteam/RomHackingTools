@@ -37,9 +37,12 @@ struct Vdp1Scene
     std::vector<se_sprite_3d> sprites3d;   // same sprites, exploded along Z (§7)
     std::vector<GouraudQuad>  gouraud;     // parallel to 'sprites' / 'sprites3d'
     std::vector<DrawFx>       drawfx;      // parallel to 'sprites'
-    // Parallel to 'sprites': -1 for a textured sprite; otherwise the RGB555 fill color of
-    // an untextured polygon (VDP1 command 3), whose quad is filled with that solid color.
+    // Parallel to 'sprites': -1 for a textured sprite; otherwise the RGB555 color of an
+    // untextured primitive (polygon fill, or polyline/line edges).
     std::vector<int32_t>      solidRgb555;
+    // Parallel to 'sprites': 0 = filled quad (sprite/polygon), 1 = polyline (4 edges),
+    // 2 = line (edge A-B only). Lines draw their edges rather than filling.
+    std::vector<uint8_t>      primKind;
     int screenWidth  = 320;   // from the system clip command, else NTSC default
     int screenHeight = 224;
     bool hasSystemClip = false;   // a VDP1 system-clip command set the dimensions above

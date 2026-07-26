@@ -33,6 +33,7 @@ void GeometryBuilder::Build(const std::vector<uint8_t>& vram, Vdp1Scene& out)
     out.gouraud.clear();
     out.drawfx.clear();
     out.solidRgb555.clear();
+    out.primKind.clear();
     out.screenWidth = 320;
     out.screenHeight = 224;
     out.hasSystemClip = false;
@@ -85,8 +86,11 @@ void GeometryBuilder::Build(const std::vector<uint8_t>& vram, Vdp1Scene& out)
         }
 
         const bool textured = (comm == 0x0 || comm == 0x1 || comm == 0x2);  // normal/scaled/distorted
-        const bool polygon = (comm == 0x3);   // untextured, solid-color filled quad
-        if (skip || (!textured && !polygon))
+        const bool polygon = (comm == 0x3);    // untextured, solid-color filled quad
+        const bool polyline = (comm == 0x4);   // untextured, 4 edges
+        const bool line = (comm == 0x5);       // untextured, single edge A-B
+        const bool untextured = polygon || polyline || line;
+        if (skip || (!textured && !untextured))
         {
             continue;
         }
@@ -146,7 +150,13 @@ void GeometryBuilder::Build(const std::vector<uint8_t>& vram, Vdp1Scene& out)
             C = { float(X[2]), float(Y[2]) };
             D = { float(X[3]), float(Y[3]) };
         }
-        else  // distorted sprite (comm 2) or polygon (comm 3): four explicit corners
+        else if (line)  // comm 5: a single segment between endpoints A and B
+        {
+            A = { float(xa + originX), float(ya + originY) };
+            B = { float(xb + originX), float(yb + originY) };
+            C = B; D = A;   // keep the bounding box to the segment
+        }
+        else  // distorted (2) / polygon (3) / polyline (4): four explicit corners
         {
             A = { float(xa + originX), float(ya + originY) };
             B = { float(xb + originX), float(yb + originY) };
@@ -208,8 +218,9 @@ void GeometryBuilder::Build(const std::vector<uint8_t>& vram, Vdp1Scene& out)
 
         out.sprites.push_back(s);
         out.drawfx.push_back(fx);
-        // Polygons carry no texture; their quad is filled with CMDCOLR as a solid RGB555.
-        out.solidRgb555.push_back(polygon ? static_cast<int32_t>(colr) : -1);
+        // Untextured primitives (polygon/polyline/line) use CMDCOLR as a solid RGB555.
+        out.solidRgb555.push_back(untextured ? static_cast<int32_t>(colr) : -1);
+        out.primKind.push_back(polyline ? 1 : line ? 2 : 0);
 
         // Gouraud corner colors (parallel to the sprite). CMDGRDA is a word
         // address; the table is four RGB555 colors, one per corner A,B,C,D.
