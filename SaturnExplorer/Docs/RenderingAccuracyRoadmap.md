@@ -134,16 +134,46 @@ VDP1 framebuffer and stays selectable in 2D/3D.
 
 ### Track B — Descriptor mixer (the re-architecture)
 
-- **B1. Descriptor emission.** Convert `Vdp2Compositor` + back screen to write per-pixel
-  descriptors into a scanline buffer instead of RGBA. Behind a flag; band path stays for
-  A/B diffing until parity.
-- **B2. Mixer core.** Per-pixel priority sort + tie rules; move the existing color-calc
-  and color-offset math into mixer stages (removes the band-model approximation).
-- **B3. Sprite descriptor emission.** The command rasterizer writes per-pixel sprite
-  descriptors (constructed color + SPCTL sprite-type decode of that pixel → priority, cc
-  ratio, shadow, sprite-window bit + `command_index`) into the mixer's sprite scanline.
-  Fully command-constructed, so it stays selectable/toggleable; feeds the mixer for
-  per-pixel priority.
+**Model.** VDP2 color calculation only ever blends the top-priority pixel with the one
+*immediately below* it, so the mixer does not need a full per-pixel sort — only the top
+two contributions. Maintain, per pixel, a two-deep accumulator:
+
+```
+struct PixDesc {                 // one source's contribution at a pixel
+    uint8_t r, g, b;             // palette/gouraud-resolved color
+    uint8_t prio;               // 0 = no contribution
+    uint8_t layer;              // NBG0..3=0..3, RBG0=4, sprite=5, back=6, line=7
+    uint8_t ccEnable, ccRatio;  // color-calc enable + 5-bit ratio (from this layer)
+    uint8_t ccAdd;              // additive blend
+    uint8_t coSel;              // color-offset set (none / A / B) for this layer
+    uint8_t shadow;             // this pixel is a shadow (halve the pixel below)
+};
+struct PixColumn { PixDesc top, second; };   // highest and 2nd-highest by prio
+```
+
+Each source computes its per-pixel `PixDesc` and calls `insert(col, d)`, which keeps the
+two highest-priority entries. **Tie rule** (equal priority): fixed layer order matching
+today's band loop — sprite over RBG0 over NBG0 > NBG1 > NBG2 > NBG3 > back. Back screen
+and line color seed the column at the bottom.
+
+**Mixer** per pixel, in hardware order: start from `top`; if `top.shadow`, halve
+`second`; else if `top.ccEnable` and `second` exists, blend `top` over `second` by ratio
+(or additive); apply `top`'s color offset; insert line color if enabled. Write RGBA.
+
+Increment sequence (each gated by the existing synthetic test suite — the mixer must
+reproduce current test output before extending it):
+
+- **B1. Buffer + mixer skeleton.** Add `PixColumn` scanline buffer, `insert`, and the
+  mixer. Convert `RenderBackScreen` to seed the column. No behavior change yet.
+- **B2. NBG/RBG emission.** `RenderLayer`/`RenderRbg0` emit `PixDesc` (with the existing
+  color-calc/offset/priority values) instead of blending RGBA; the mixer reproduces the
+  current color-calc result. Retire the band loop for VDP2. Existing color-calc, offset,
+  priority, window, mosaic, bitmap, rotation tests must stay green.
+- **B3. Sprite emission.** The command rasterizer writes sprite `PixDesc` (constructed
+  color + SPCTL sprite-type decode → priority, cc ratio, shadow, sprite-window bit +
+  `command_index`) into the column, giving **per-pixel sprite priority**. Half-transparency
+  becomes a real mixer blend against the resolved pixel below (retiring the A4
+  band-buffer approximation). Stays fully command-constructed and selectable.
 
 *Acceptance:* disabling any debugger layer changes only that source; the rest still mix
 with hardware-correct priority and color.
