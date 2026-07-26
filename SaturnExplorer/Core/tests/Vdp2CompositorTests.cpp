@@ -391,6 +391,27 @@ void TestSpriteMesh()
         }
 }
 
+void TestPolygon()
+{
+    // VDP1 untextured polygon (command 3): a solid red quad covering the 4x2 frame.
+    State state = MakeNbg3State();
+    SetReg(state, 0x020, 0x0000);   // BGON off — only the polygon draws
+    state.vdp1.assign(0x40, 0);
+    PutBE16(state.vdp1, 0x00, 0x0009);   // system clip 4x2
+    PutBE16(state.vdp1, 0x14, 3);
+    PutBE16(state.vdp1, 0x16, 1);
+    PutBE16(state.vdp1, 0x20, 0x8003);   // CMDCTRL: polygon (comm 3) + END
+    PutBE16(state.vdp1, 0x26, 0x001F);   // CMDCOLR: red (RGB555)
+    PutBE16(state.vdp1, 0x2C, 0); PutBE16(state.vdp1, 0x2E, 0);   // A = (0,0)
+    PutBE16(state.vdp1, 0x30, 4); PutBE16(state.vdp1, 0x32, 0);   // B = (4,0)
+    PutBE16(state.vdp1, 0x34, 4); PutBE16(state.vdp1, 0x36, 2);   // C = (4,2)
+    PutBE16(state.vdp1, 0x38, 0); PutBE16(state.vdp1, 0x3A, 2);   // D = (0,2)
+    const std::vector<uint8_t> pixels = Render(state, false);
+    for (int y = 0; y < 2; ++y)
+        for (int x = 0; x < 4; ++x)
+            CHECK(IsRed(pixels, x, y));
+}
+
 void TestBackScreen()
 {
     // With NBG3 disabled, the whole frame is the BKTA back-screen colour. Point BKTA
@@ -446,6 +467,7 @@ int main()
     TestMosaic();
     TestSpriteHalfLuminance();
     TestSpriteMesh();
+    TestPolygon();
     if (gFailures != 0)
     {
         std::cerr << gFailures << " VDP2 compositor check(s) failed\n";

@@ -32,6 +32,7 @@ void GeometryBuilder::Build(const std::vector<uint8_t>& vram, Vdp1Scene& out)
     out.sprites3d.clear();
     out.gouraud.clear();
     out.drawfx.clear();
+    out.solidRgb555.clear();
     out.screenWidth = 320;
     out.screenHeight = 224;
     out.hasSystemClip = false;
@@ -84,16 +85,21 @@ void GeometryBuilder::Build(const std::vector<uint8_t>& vram, Vdp1Scene& out)
         }
 
         const bool textured = (comm == 0x0 || comm == 0x1 || comm == 0x2);  // normal/scaled/distorted
-        if (skip || !textured)
+        const bool polygon = (comm == 0x3);   // untextured, solid-color filled quad
+        if (skip || (!textured && !polygon))
         {
             continue;
         }
 
-        const uint16_t width  = ((size >> 8) & 0x3F) * 8;
-        const uint16_t height = size & 0xFF;
-        if (width == 0 || height == 0)
+        uint16_t width = 0, height = 0;
+        if (textured)
         {
-            continue;
+            width  = ((size >> 8) & 0x3F) * 8;
+            height = size & 0xFF;
+            if (width == 0 || height == 0)
+            {
+                continue;
+            }
         }
 
         // Resolve the four screen-space corners (A=TL, B=TR, C=BR, D=BL).
@@ -140,7 +146,7 @@ void GeometryBuilder::Build(const std::vector<uint8_t>& vram, Vdp1Scene& out)
             C = { float(X[2]), float(Y[2]) };
             D = { float(X[3]), float(Y[3]) };
         }
-        else  // distorted sprite: four explicit corners
+        else  // distorted sprite (comm 2) or polygon (comm 3): four explicit corners
         {
             A = { float(xa + originX), float(ya + originY) };
             B = { float(xb + originX), float(yb + originY) };
@@ -202,6 +208,8 @@ void GeometryBuilder::Build(const std::vector<uint8_t>& vram, Vdp1Scene& out)
 
         out.sprites.push_back(s);
         out.drawfx.push_back(fx);
+        // Polygons carry no texture; their quad is filled with CMDCOLR as a solid RGB555.
+        out.solidRgb555.push_back(polygon ? static_cast<int32_t>(colr) : -1);
 
         // Gouraud corner colors (parallel to the sprite). CMDGRDA is a word
         // address; the table is four RGB555 colors, one per corner A,B,C,D.
