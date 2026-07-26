@@ -6,14 +6,15 @@ Make the **VDP Output** view reproduce the Saturn's displayed frame while keepin
 Saturn Explorer's debugger abilities: hide individual layers, select VDP1 commands,
 inspect source textures, and explode command geometry in the 3D view.
 
-Two renderers, treated as related but **separate products**:
+**The frame is always constructed from the command list — never copied from the
+emulator's output.** That is the whole point of the tool: because every pixel is built
+from a VDP1 command and a VDP2 layer, the user can disable individual commands/layers,
+draw bounding boxes, select a sprite, and attribute a pixel back to its source for
+reverse engineering. A pre-drawn framebuffer is an opaque blob none of that works on.
 
-- **Final-frame renderer** — what the Saturn actually displays. Its most accurate
-  input is the emulator's *displayed VDP1 framebuffer* plus the VDP2 register/VRAM
-  state, mixed per pixel.
-- **Command-inspection renderer** — re-rasterizes VDP1 commands so individual sprites
-  stay selectable, attributable to a texture, and explodable in 3D. Useful even when a
-  drawn framebuffer exists, and the only option for raw-VRAM sources.
+The emulator's **displayed VDP1 framebuffer** (`Vdp1Fb()`) therefore has exactly one
+role: a **validation reference** we diff our construction against (Track E). It is never
+a compositing input.
 
 Almost every remaining feature is blocked on one architectural change (see
 **The central re-architecture**), so the plan is ordered around unblocking it.
@@ -72,12 +73,17 @@ resolved stack. Replace it with a **descriptor-based per-pixel mixer**:
 
 1. **Descriptor buffer.** Every source (NBG0–3, RBG0/1, back, line color, sprite) emits,
    per pixel, a small descriptor: `{color, opaque, layer, priority, cc_enable, cc_ratio,
-   color_offset_sel, line_color_enable, shadow_flags}`. Use bounded **per-scanline**
-   buffers, not full-frame metadata.
-2. **Sprite descriptors from the drawn VDP1 framebuffer.** Decode `Vdp1Fb()` per pixel
-   via VDP2 **SPCTL** sprite-type tables → color, priority number (→ PRISA–D), cc ratio
-   (→ CCRSA–D), shadow bit, sprite-window bit. Fall back to the command rasterizer when
-   no framebuffer is present (raw-VRAM sources).
+   color_offset_sel, line_color_enable, shadow_flags, command_index}`. Use bounded
+   **per-scanline** buffers, not full-frame metadata. `command_index` (sprite layer only)
+   keeps every pixel attributable to the VDP1 command that drew it, so selection,
+   bounding boxes, and per-command toggling still work after mixing.
+2. **Sprite descriptors from the command rasterizer.** As it rasterizes each command, the
+   VDP1 renderer emits the per-pixel descriptor above: the color it constructed, and the
+   VDP2 **SPCTL** sprite-type decode applied to that constructed pixel's color-data bits →
+   priority number (→ PRISA–D), cc ratio (→ CCRSA–D), shadow, sprite-window bit. This is
+   what yields per-pixel sprite priority *without* copying the emulator's framebuffer —
+   the layer stays fully decomposable (disabled commands simply don't write). The drawn
+   `Vdp1Fb()` is used only to validate this construction (Track E), never as input.
 3. **The mixer.** Per pixel: sort sources by priority and hardware tie rules, then apply
    the color pipeline in hardware order — special-function selection → shadow test →
    color calculation (standard/additive/extended) → color offset → line-color insertion.
@@ -132,8 +138,11 @@ VDP1 framebuffer and stays selectable in 2D/3D.
   A/B diffing until parity.
 - **B2. Mixer core.** Per-pixel priority sort + tie rules; move the existing color-calc
   and color-offset math into mixer stages (removes the band-model approximation).
-- **B3. Sprite framebuffer decode.** SPCTL sprite-type → per-pixel sprite descriptors
-  from `Vdp1Fb()`; command-rasterizer fallback. Feed the mixer.
+- **B3. Sprite descriptor emission.** The command rasterizer writes per-pixel sprite
+  descriptors (constructed color + SPCTL sprite-type decode of that pixel → priority, cc
+  ratio, shadow, sprite-window bit + `command_index`) into the mixer's sprite scanline.
+  Fully command-constructed, so it stays selectable/toggleable; feeds the mixer for
+  per-pixel priority.
 
 *Acceptance:* disabling any debugger layer changes only that source; the rest still mix
 with hardware-correct priority and color.
