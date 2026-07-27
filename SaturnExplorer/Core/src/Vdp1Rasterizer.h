@@ -9,6 +9,7 @@
 
 #include "saturnexplorer/SeTypes.h"
 #include "GeometryBuilder.h"
+#include "PixelMixer.h"
 
 namespace se
 {
@@ -16,16 +17,16 @@ namespace se
 class Vdp1Rasterizer
 {
 public:
-    // Render 'scene' into 'outRgba' (resized to width*height*4). Honors
-    // opts.show_vdp1_sprites. 'cramMode' selects the CRAM color layout. Only
-    // sprites whose resolved priority is in [minPriority, maxPriority] are drawn,
-    // so the caller can interleave sprite bands with the VDP2 layers by priority.
-    // When 'clear' is true 'outRgba' is (re)sized and cleared first; when false
-    // the sprites composite over whatever is already there.
-    static void Render(const Vdp1Scene& scene, const std::vector<uint8_t>& vram,
-                       const std::vector<uint8_t>& cram, se_cram_mode cramMode,
-                       const se_render_opts& opts, std::vector<uint8_t>& outRgba,
-                       int minPriority = 0, int maxPriority = 7, bool clear = true);
+    // Emit the scene's VDP1 sprites into 'cols' (one PixColumn per pixel, sized
+    // width*height) at each sprite's resolved priority. Sprites are processed in command
+    // order; each pixel emits a descriptor, so a sprite sits in front of a same-priority
+    // NBG (which was emitted earlier). Draw-mode effects (shadow / half-luminance /
+    // half-transparency) blend against the column already below, resolving it with
+    // 'colorCalc' the same way the final frame does. Honors opts.show_vdp1_sprites.
+    static void EmitSprites(const Vdp1Scene& scene, const std::vector<uint8_t>& vram,
+                            const std::vector<uint8_t>& cram, se_cram_mode cramMode,
+                            const se_render_opts& opts, bool colorCalc,
+                            std::vector<PixColumn>& cols);
 
     // Render the exploded 3D view (scene.sprites3d) from 'camera' into 'outRgba'
     // (resized to viewport). 'depth' is a caller-owned scratch depth buffer,

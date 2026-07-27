@@ -183,17 +183,24 @@ and line color seed the column at the bottom.
 Increment sequence (each gated by the existing synthetic test suite — the mixer must
 reproduce current test output before extending it):
 
-- **B1. Buffer + mixer skeleton.** Add `PixColumn` scanline buffer, `insert`, and the
-  mixer. Convert `RenderBackScreen` to seed the column. No behavior change yet.
-- **B2. NBG/RBG emission.** `RenderLayer`/`RenderRbg0` emit `PixDesc` (with the existing
-  color-calc/offset/priority values) instead of blending RGBA; the mixer reproduces the
-  current color-calc result. Retire the band loop for VDP2. Existing color-calc, offset,
-  priority, window, mosaic, bitmap, rotation tests must stay green.
-- **B3. Sprite emission.** The command rasterizer writes sprite `PixDesc` (constructed
-  color + SPCTL sprite-type decode → priority, cc ratio, shadow, sprite-window bit +
-  `command_index`) into the column, giving **per-pixel sprite priority**. Half-transparency
-  becomes a real mixer blend against the resolved pixel below (retiring the A4
-  band-buffer approximation). Stays fully command-constructed and selectable.
+- **B1. Buffer + mixer skeleton. — DONE.** `PixColumn`/`PixDesc` + `EmitPix`/`ResolveColumn`
+  live in `Core/src/PixelMixer.h`; `Vdp2Compositor::SeedBackScreen` seeds the column at
+  priority 0.
+- **B2. NBG/RBG emission. — DONE.** `RenderLayer`/`RenderRbg0` emit `PixDesc` (via
+  `EmitTexel` → `EmitPix`) carrying the layer's color-calc/offset/priority instead of
+  blending RGBA; `Vdp2Compositor::EmitLayers` replaces the per-band `Render`. Color
+  calculation now happens once at resolve time (top blended with the layer immediately
+  below). The band loop is retired for VDP2.
+- **B3. Sprite emission. — DONE (parity step).** `Vdp1Rasterizer::EmitSprites` writes each
+  sprite pixel as a `PixDesc` at its resolved priority; the shared triangle/line walk hands
+  covered pixels to a sink so the 2D path emits descriptors while the 3D view keeps its
+  RGBA+depth write. Half-transparency and shadow now blend against the *resolved* column
+  below (`ResolveColumn`) rather than the band buffer. `Context::RenderFrame` builds one
+  column buffer — seed → VDP2 layers → sprites → resolve — with no band loop. Verified: the
+  NiGHTS press-start golden diffs 0 and every synthetic compositor test stays green.
+  *Still to come (Track C):* per-pixel sprite priority and cc-ratio from the SPCTL
+  sprite-type decode (today one priority per command, sprites don't yet carry cc), and the
+  sprite-window bit + `command_index` in the descriptor.
 
 *Acceptance:* disabling any debugger layer changes only that source; the rest still mix
 with hardware-correct priority and color.

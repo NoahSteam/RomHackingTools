@@ -15,17 +15,18 @@
 // scroll, vertical mosaic, shadow, special priority/colour-calc, RBG1, and RPMD
 // per-dot/window parameter selection are not modeled yet.
 //
-// Sprite-coupled features (per-pixel sprite priority from the VDP1 framebuffer, sprite
-// windows, and a correct line-colour screen) are intentionally *not* handled here. This
-// compositor draws only the VDP2 backgrounds, in priority bands, and the app composites
-// the VDP1 sprites — rendered from the command list, not the drawn framebuffer — between
-// those bands using a single sprite priority (see SpritePriority). Doing per-pixel sprite
-// priority or sprite windows requires decoding the VDP1 framebuffer's per-pixel sprite
-// type (SPCTL priority/colour-calc/shadow tables) and compositing sprite pixels here — a
-// distinct rendering path, not a formula addition, and one this environment cannot verify
-// without real sprite dumps. The line-colour screen (LCTA/LNCLEN) likewise inserts into
-// the colour-calculation chain across the app's multi-band Render calls. These are left
-// as a dedicated follow-up so the working command-list sprite model is not regressed.
+// Rather than blending straight into an RGBA buffer, every VDP2 source emits a per-pixel
+// descriptor into a PixColumn (see PixelMixer.h): the back screen at priority 0, then each
+// enabled NBG/RBG0 layer at its own priority. The VDP1 sprites emit into the same columns
+// (Vdp1Rasterizer::EmitSprites), and Context resolves each column to one RGBA pixel. This
+// two-deep column is what makes per-pixel sprite priority, cross-layer colour calculation,
+// and the line-colour screen natural rather than special cases — colour calculation on
+// VDP2 only ever blends the top-priority pixel with the one immediately below it.
+//
+// Modeled today: NBG0-3 (cell + bitmap), RBG0 rotation, fractional/line scroll + zoom,
+// windows, per-screen colour calculation and colour offset, horizontal mosaic, and the
+// real back screen. Sprite windows, the line-colour screen, vertical cell scroll, vertical
+// mosaic, and RBG1 are not modeled yet.
 #pragma once
 
 #include <cstdint>
@@ -33,6 +34,7 @@
 
 #include "saturnexplorer/SeTypes.h"
 #include "HardwareSnapshot.h"
+#include "PixelMixer.h"
 
 namespace se
 {
@@ -40,34 +42,23 @@ namespace se
 class Vdp2Compositor
 {
 public:
-    // Composite the enabled NBG layers into 'outRgba' (resized to width*height*4),
-    // back-to-front by VDP2 priority. Only layers whose priority is in
-    // [minPriority, maxPriority] are drawn — this lets the caller split the VDP2
-    // screens into those behind the VDP1 sprites and those in front of them
-    // (see Context::RenderFrame). When 'clear' is true 'outRgba' is (re)sized and
-    // cleared to transparent first; when false the layers composite over whatever
-    // is already in 'outRgba' (a finished frame), so transparent texels leave it
-    // untouched. Honors opts.show_layer[] and the BGON enable bits; a no-op when
-    // the snapshot lacks VDP2 VRAM or registers.
-    static void Render(const HardwareSnapshot& snapshot, const se_render_opts& opts,
-                       int width, int height, std::vector<uint8_t>& outRgba,
-                       int minPriority = 1, int maxPriority = 7, bool clear = true);
+    // Emit every enabled NBG/RBG0 layer into 'cols' (one PixColumn per pixel, sized
+    // width*height) at its VDP2 priority. Layers are emitted back-to-front (ascending
+    // priority, higher-numbered NBG first on ties) so a same-priority sprite emitted
+    // afterwards wins the tie, exactly as VDP1 sprites sit in front of same-priority NBGs
+    // on hardware. Honors opts.show_layer[] and the BGON enable bits; priority-0 layers
+    // (not displayed) are skipped. A no-op when the snapshot lacks VDP2 VRAM or registers.
+    static void EmitLayers(const HardwareSnapshot& snapshot, const se_render_opts& opts,
+                           int width, int height, std::vector<PixColumn>& cols);
 
-    // Paint the VDP2 back screen (the always-present backdrop below every screen)
-    // opaquely over the whole frame, reading its colour from the BKTA table in VDP2
-    // VRAM — a single colour, or one colour per display line when BKTA's per-line bit
-    // is set. Call this before Render so translucent layers have a real surface to
-    // blend against (color calculation composites against whatever is below). A no-op
-    // when the snapshot lacks VDP2 VRAM/registers; the caller keeps its own fallback
-    // backdrop for that case.
-    static void RenderBackScreen(const HardwareSnapshot& snapshot, int width, int height,
-                                 std::vector<uint8_t>& outRgba);
-
-    // The sprite (VDP1) priority the core uses when interleaving VDP1 with the
-    // VDP2 screens: resolved from SPCTL's sprite type + the PRISA..PRISD sprite
-    // priority registers. A single per-frame value (the common case); games that
-    // vary sprite priority per pixel aren't fully modeled. 0 when unavailable.
-    static int SpritePriority(const HardwareSnapshot& snapshot);
+    // Seed the VDP2 back screen (the always-present backdrop below every screen) into
+    // every column at priority 0, reading its colour from the BKTA table in VDP2 VRAM —
+    // a single colour, or one colour per display line when BKTA's per-line bit is set.
+    // Call this before EmitLayers so translucent layers have a real surface to blend
+    // against (colour calculation composites against whatever is below). A no-op when the
+    // snapshot lacks VDP2 VRAM/registers; the caller keeps its own fallback backdrop then.
+    static void SeedBackScreen(const HardwareSnapshot& snapshot, int width, int height,
+                               std::vector<PixColumn>& cols);
 };
 
 }  // namespace se

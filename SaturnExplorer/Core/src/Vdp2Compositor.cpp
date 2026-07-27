@@ -165,30 +165,6 @@ inline void ApplyColorOffset(Rgba& col, const NbgConfig& c)
     col.b = clamp8(col.b + c.coB);
 }
 
-// Blend one source texel over the destination pixel already in the buffer using VDP2
-// color-calculation rules (matches Mednafen's mixit): additive saturates per channel;
-// ratio mode weights the top screen by (31 - ratio) and the screen below by (ratio + 1)
-// out of 32. The result is opaque (color calc never changes coverage). 'dst' is RGBA.
-inline void BlendColorCalc(uint8_t* dst, const Rgba& src, uint32_t ratio, bool add)
-{
-    if (add)
-    {
-        dst[0] = static_cast<uint8_t>(std::min(255, src.r + dst[0]));
-        dst[1] = static_cast<uint8_t>(std::min(255, src.g + dst[1]));
-        dst[2] = static_cast<uint8_t>(std::min(255, src.b + dst[2]));
-    }
-    else
-    {
-        const uint32_t fore = 31u - (ratio & 0x1F);   // top-screen weight
-        const uint32_t sec = 32u - fore;              // = ratio + 1, screen-below weight
-        dst[0] = static_cast<uint8_t>((src.r * fore + dst[0] * sec) >> 5);
-        dst[1] = static_cast<uint8_t>((src.g * fore + dst[1] * sec) >> 5);
-        dst[2] = static_cast<uint8_t>((src.b * fore + dst[2] * sec) >> 5);
-    }
-    dst[3] = 255;
-}
-
-
 // Resolve the per-layer configuration for NBG 'n' (0..3).
 NbgConfig ReadNbgConfig(const HardwareSnapshot& s, int n)
 {
@@ -525,22 +501,14 @@ Rgba FetchBitmapTexel(const std::vector<uint8_t>& vram, const std::vector<uint8_
                           static_cast<int>(xw & 7u), 0);
 }
 
-// Composite one resolved texel into the buffer, honoring color calculation like the NBG
-// write path: blend over an opaque pixel below when enabled, otherwise overwrite.
-inline void CompositeTexel(std::vector<uint8_t>& out, size_t o, const Rgba& col,
-                           bool colorCalc, const NbgConfig& c)
+// Emit one resolved texel into its column as a descriptor at the layer's priority,
+// carrying the layer's colour-calculation parameters. The mixer applies colour
+// calculation at resolve time (only ever blending the top pixel with the one below),
+// so the per-layer blend that CompositeTexel used to do inline now happens once, later.
+inline void EmitTexel(PixColumn& col, const Rgba& c, const NbgConfig& cfg)
 {
-    if (colorCalc && c.colorCalc && out[o + 3] != 0)
-    {
-        BlendColorCalc(&out[o], col, c.colorCalcRatio, c.colorCalcAdd);
-    }
-    else
-    {
-        out[o + 0] = col.r;
-        out[o + 1] = col.g;
-        out[o + 2] = col.b;
-        out[o + 3] = 255;
-    }
+    EmitPix(col, c.r, c.g, c.b, static_cast<uint8_t>(cfg.priority),
+            cfg.colorCalc, static_cast<uint8_t>(cfg.colorCalcRatio), cfg.colorCalcAdd);
 }
 
 // VRAM word address of one plane's pattern-name table, from the combined map-offset +
@@ -598,14 +566,12 @@ Rgba FetchPlaneTexel(const std::vector<uint8_t>& vram, const std::vector<uint8_t
                           static_cast<int>(inX % 8), static_cast<int>(inY % 8));
 }
 
-// Composite one NBG layer into 'out' (width*height*4): each opaque cell texel
-// overwrites the pixel, transparent texels leave whatever a farther layer drew.
-// 'out' must already be sized and cleared/painted; layers are drawn back-to-front
-// so this needs no per-layer scratch buffer. Faithful port of the validated
-// plane/page/cell walk.
+// Emit one NBG layer into 'cols' (width*height PixColumns): each opaque cell texel emits
+// a descriptor at the layer's priority, transparent texels emit nothing. Faithful port of
+// the validated plane/page/cell walk.
 void RenderLayer(const HardwareSnapshot& snap, const NbgConfig& c, int layerIndex,
-                 bool applyWindows, bool colorCalc, int width, int height,
-                 std::vector<uint8_t>& out)
+                 bool applyWindows, int width, int height,
+                 std::vector<PixColumn>& cols)
 {
     const std::vector<uint8_t>& vram = snap.Vdp2Vram();
     const std::vector<uint8_t>& cram = snap.Cram();
@@ -704,7 +670,7 @@ void RenderLayer(const HardwareSnapshot& snap, const NbgConfig& c, int layerInde
                 continue;
             }
             ApplyColorOffset(col, c);
-            CompositeTexel(out, (static_cast<size_t>(sy) * width + sx) * 4, col, colorCalc, c);
+            EmitTexel(cols[static_cast<size_t>(sy) * width + sx], col, c);
         }
     }
 }
@@ -788,8 +754,8 @@ NbgConfig ReadRbg0Config(const HardwareSnapshot& s, bool paramB)
 // bitmap mode); RPMD 0/1 (single parameter set) with coefficient tables; screen-over
 // "repeat" wraps, other modes read transparent outside.
 void RenderRbg0(const HardwareSnapshot& snap, const NbgConfig& c, bool paramB,
-                bool applyWindows, bool colorCalc, int width, int height,
-                std::vector<uint8_t>& out)
+                bool applyWindows, int width, int height,
+                std::vector<PixColumn>& cols)
 {
     const std::vector<uint8_t>& vram = snap.Vdp2Vram();
     const std::vector<uint8_t>& cram = snap.Cram();
@@ -912,35 +878,16 @@ void RenderRbg0(const HardwareSnapshot& snap, const NbgConfig& c, bool paramB,
                 continue;
             }
             ApplyColorOffset(col, c);
-            CompositeTexel(out, (static_cast<size_t>(sy) * width + sx) * 4, col, colorCalc, c);
+            EmitTexel(cols[static_cast<size_t>(sy) * width + sx], col, c);
         }
     }
 }
 
 }  // namespace
 
-int Vdp2Compositor::SpritePriority(const HardwareSnapshot& snapshot)
+void Vdp2Compositor::EmitLayers(const HardwareSnapshot& snapshot, const se_render_opts& opts,
+                               int width, int height, std::vector<PixColumn>& cols)
 {
-    if (!snapshot.HasVdp2Regs())
-    {
-        return 0;
-    }
-    // The sprite pixel's priority *number* selects one of eight 3-bit priority
-    // values in PRISA..PRISD. Modeling that per pixel needs the framebuffer;
-    // we render from the command list, so we use priority number 0 (PRISA low
-    // 3 bits), which is what the overwhelming majority of scenes use. This is
-    // enough to place the whole sprite plane correctly relative to the NBGs.
-    return Reg(snapshot, kPRISA) & 0x7;
-}
-
-void Vdp2Compositor::Render(const HardwareSnapshot& snapshot, const se_render_opts& opts,
-                            int width, int height, std::vector<uint8_t>& outRgba,
-                            int minPriority, int maxPriority, bool clear)
-{
-    if (clear)
-    {
-        outRgba.assign(static_cast<size_t>(width) * height * 4, 0);
-    }
     if (width <= 0 || height <= 0 || !snapshot.HasVdp2Regs() || snapshot.Vdp2Vram().empty())
     {
         return;
@@ -962,9 +909,6 @@ void Vdp2Compositor::Render(const HardwareSnapshot& snapshot, const se_render_op
     auto consider = [&](const Layer& layer)
     {
         if (layer.config.priority == 0) return;    // priority 0 = not displayed
-        if (static_cast<int>(layer.config.priority) < minPriority ||
-            static_cast<int>(layer.config.priority) > maxPriority)
-            return;                                 // outside the requested band
         layers.push_back(layer);
     };
     for (int n = 0; n < 4; ++n)
@@ -983,10 +927,10 @@ void Vdp2Compositor::Render(const HardwareSnapshot& snapshot, const se_render_op
         consider({ 4, ReadRbg0Config(snapshot, paramB), true, paramB });
     }
 
-    // Paint order = back to front: ascending priority; for equal priority the
-    // higher-numbered NBG is further back (drawn first), so NBG0 wins ties. Then
-    // composite each layer straight into outRgba — opaque texels overwrite,
-    // transparent ones leave the farther layer, so no per-layer scratch buffer.
+    // Emit order = back to front: ascending priority; for equal priority the
+    // higher-numbered NBG is emitted first, so on ties EmitPix's later-wins rule leaves
+    // NBG0 on top. Emitting in this order also means a same-priority sprite (emitted
+    // after all layers) wins its tie against the NBGs, matching hardware.
     std::stable_sort(layers.begin(), layers.end(), [](const Layer& a, const Layer& b)
     {
         if (a.config.priority != b.config.priority) return a.config.priority < b.config.priority;
@@ -998,18 +942,18 @@ void Vdp2Compositor::Render(const HardwareSnapshot& snapshot, const se_render_op
         if (layer.rbg0)
         {
             RenderRbg0(snapshot, layer.config, layer.paramB, opts.show_window != 0,
-                       opts.show_color_calculation != 0, width, height, outRgba);
+                       width, height, cols);
         }
         else
         {
             RenderLayer(snapshot, layer.config, layer.index, opts.show_window != 0,
-                        opts.show_color_calculation != 0, width, height, outRgba);
+                        width, height, cols);
         }
     }
 }
 
-void Vdp2Compositor::RenderBackScreen(const HardwareSnapshot& snapshot, int width,
-                                      int height, std::vector<uint8_t>& outRgba)
+void Vdp2Compositor::SeedBackScreen(const HardwareSnapshot& snapshot, int width,
+                                    int height, std::vector<PixColumn>& cols)
 {
     if (width <= 0 || height <= 0 || !snapshot.HasVdp2Regs() || snapshot.Vdp2Vram().empty())
     {
@@ -1024,22 +968,17 @@ void Vdp2Compositor::RenderBackScreen(const HardwareSnapshot& snapshot, int widt
     const uint32_t base = (static_cast<uint32_t>(bktau & 0x0007) << 16) | bktal;
     const bool perLine = (bktau & 0x8000) != 0;
 
-    const size_t need = static_cast<size_t>(width) * height * 4;
-    if (outRgba.size() != need)
-    {
-        outRgba.assign(need, 0);
-    }
     for (int y = 0; y < height; ++y)
     {
         const uint32_t wordAddr = base + (perLine ? static_cast<uint32_t>(y) : 0u);
         const Rgba col = Rgb555ToRgba(ReadVdp2Word(vram, wordAddr));
-        uint8_t* row = &outRgba[static_cast<size_t>(y) * width * 4];
+        PixColumn* row = &cols[static_cast<size_t>(y) * width];
         for (int x = 0; x < width; ++x)
         {
-            row[x * 4 + 0] = col.r;
-            row[x * 4 + 1] = col.g;
-            row[x * 4 + 2] = col.b;
-            row[x * 4 + 3] = 255;
+            // Priority 0: the always-below backdrop. Marks the column valid so the
+            // fallback backdrop never shows where VDP2 is present, and gives the lowest
+            // colour-calc layer a real surface to blend against.
+            EmitPix(row[x], col.r, col.g, col.b, 0, false, 0, false);
         }
     }
 }

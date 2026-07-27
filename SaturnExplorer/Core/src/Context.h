@@ -86,33 +86,42 @@ public:
         return SE_OK;
     }
 
-    // Render the composited 2D frame into a scene-sized image. VDP1 sprites and
-    // VDP2 NBG screens interleave by priority: for each priority level 0..7 the
-    // VDP2 layers at that priority are drawn, then the VDP1 sprites at that
-    // priority (sprites in front of same-priority NBGs, per hardware). Each
-    // sprite's priority is resolved from its color data + the sprite-priority
-    // registers (ResolveSpritePriorities). Empty pixels get an opaque backdrop.
-    // See ARCHITECTURE.md §7.
+    // Render the composited 2D frame into a scene-sized image. Every source emits a
+    // per-pixel descriptor into a column of the pixel mixer: the VDP2 back screen at
+    // priority 0, then each enabled NBG/RBG0 layer at its VDP2 priority, then the VDP1
+    // sprites at their resolved priority (ResolveSpritePriorities). Because sprites emit
+    // after the same-priority NBGs, they win the priority tie and sit in front, per
+    // hardware. Each column then resolves to one RGBA pixel — the top-priority
+    // contribution, blended with the one immediately below when colour calculation is on.
+    // Pixels no source touched get an opaque fallback backdrop. See ARCHITECTURE.md §7.
     se_result RenderFrame(const se_render_opts& opts, se_image* out, size_t* needed)
     {
         const int w = mScene.screenWidth;
         const int h = mScene.screenHeight;
         return FillImage(static_cast<uint32_t>(w), static_cast<uint32_t>(h), out, needed, [&]
         {
-            const size_t n = static_cast<size_t>(w) * static_cast<size_t>(h) * 4;
-            mRenderBuffer.assign(n, 0);   // transparent; layers composite over it
-            // Lay the real VDP2 back screen first, so it's the opaque surface the
-            // priority-ordered layers (and color calculation) composite over. A no-op
-            // without VDP2 regs — FillBackdrop below still covers that case.
-            Vdp2Compositor::RenderBackScreen(mSnapshot, w, h, mRenderBuffer);
-            for (int p = 0; p <= 7; ++p)
+            const size_t n = static_cast<size_t>(w) * static_cast<size_t>(h);
+            mColumns.assign(n, PixColumn{});
+            const bool colorCalc = opts.show_color_calculation != 0;
+            // Emit every source into the columns, back to front.
+            Vdp2Compositor::SeedBackScreen(mSnapshot, w, h, mColumns);
+            Vdp2Compositor::EmitLayers(mSnapshot, opts, w, h, mColumns);
+            Vdp1Rasterizer::EmitSprites(mScene, mSnapshot.Vdp1Vram(), mSnapshot.Cram(),
+                                        mSnapshot.CramMode(), opts, colorCalc, mColumns);
+            // Resolve each column to one opaque RGBA pixel; untouched columns stay
+            // transparent so FillBackdrop paints the fallback backdrop there.
+            mRenderBuffer.assign(n * 4, 0);
+            for (size_t i = 0; i < n; ++i)
             {
-                if (p >= 1)   // NBG priority 0 = not displayed
+                if (!mColumns[i].valid)
                 {
-                    Vdp2Compositor::Render(mSnapshot, opts, w, h, mRenderBuffer, p, p, false);
+                    continue;
                 }
-                Vdp1Rasterizer::Render(mScene, mSnapshot.Vdp1Vram(), mSnapshot.Cram(),
-                                       mSnapshot.CramMode(), opts, mRenderBuffer, p, p, false);
+                const Rgba c = ResolveColumn(mColumns[i], colorCalc);
+                mRenderBuffer[i * 4 + 0] = c.r;
+                mRenderBuffer[i * 4 + 1] = c.g;
+                mRenderBuffer[i * 4 + 2] = c.b;
+                mRenderBuffer[i * 4 + 3] = 255;
             }
             FillBackdrop();
         });
@@ -683,7 +692,7 @@ private:
     std::vector<se_command> mCommands;
     Vdp1Scene               mScene;
     std::vector<uint8_t>    mRenderBuffer;
-    std::vector<uint8_t>    mBgBuffer;      // VDP2 NBG composite, under the sprites
+    std::vector<PixColumn>  mColumns;       // per-pixel descriptor mixer (PixelMixer.h)
     std::vector<float>      mDepthBuffer;
     std::vector<se_vram_region> mVramRegions;
 };
