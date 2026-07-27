@@ -318,7 +318,17 @@ void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
                         }
                         else if (ImGui::IsMouseClicked(0))
                         {
-                            mSelStart = mSelEnd = (int64_t)addr; mSelecting = true;
+                            if (ImGui::GetIO().KeyShift && mSelStart >= 0)
+                            {
+                                // Extend the range from the existing anchor (mSelStart) to
+                                // the clicked byte; selLo/selHi take the min/max, so clicking
+                                // before the anchor shrinks the tail back to the clicked byte.
+                                mSelEnd = (int64_t)addr; mSelecting = false;
+                            }
+                            else
+                            {
+                                mSelStart = mSelEnd = (int64_t)addr; mSelecting = true;
+                            }
                         }
                     }
                     if (mSelecting && ImGui::IsMouseDown(0) && cellHovered) mSelEnd = (int64_t)addr;
