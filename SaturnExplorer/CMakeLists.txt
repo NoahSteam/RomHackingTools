@@ -120,6 +120,15 @@ if(BUILD_TESTING)
 endif()
 
 # ---------------------------------------------------------------------------
+# se-render — headless golden-frame harness (roadmap E1): render a .sedump through
+# the core and diff it against a reference PPM. A plain CLI utility, native only.
+# ---------------------------------------------------------------------------
+if(NOT EMSCRIPTEN)
+    add_executable(se-render Core/tools/SeRender.cpp)
+    target_link_libraries(se-render PRIVATE SaturnExplorerCore)
+endif()
+
+# ---------------------------------------------------------------------------
 # Live driver — reads a running, patched emulator over a local socket (native) or a
 # WebSocket->TCP bridge (web). Uses threads + sockets, so on Emscripten it is built
 # only for the opt-in web-live build (-DSE_WEB_LIVE=ON).

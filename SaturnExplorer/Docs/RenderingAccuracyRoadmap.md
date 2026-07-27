@@ -101,11 +101,15 @@ its own synthetic test(s), committed and fast-forwarded like the existing tier w
 Everything above is currently verified only by synthetic unit tests; there is no
 pixel-level check against a reference. This is the single highest-leverage investment.
 
-- **E1. Golden-frame capture + diff.** Extend the Mednafen/live export with the
-  emulator's final displayed framebuffer and its native dimensions/field. Save
-  synchronized bundles (final FB, VDP1 FB, VDP1/2 VRAM, CRAM, registers). Add a headless
-  command that renders a bundle and reports exact per-pixel mismatch counts + a diff
-  image.
+- **E1. Golden-frame capture + diff.**
+  - *[DONE] Headless diff harness:* `se-render` (Core/tools/SeRender.cpp) loads a `.sedump`
+    bundle, renders the composite through the core, and either writes a PPM or diffs it
+    against a reference PPM — reporting the exact per-pixel mismatch count, max channel
+    delta, and an optional diff image, with a CI-friendly exit code + tolerance.
+  - *[remaining] Reference capture:* extend the Mednafen/live export with the emulator's
+    final displayed framebuffer (and native dimensions/field) so real golden references
+    can be produced; save synchronized bundles. Ties into E3 (live export of state a dump
+    can't hold).
 - **E2. Per-scanline VDP2 state (later, for mid-frame changes).** Versioned per-line
   block: TVMD/width, field, BGON, scroll/zoom accumulators, window, priority, color-calc,
   rotation params. Keep the frame-wide fallback with a "static reconstruction" UI badge.
