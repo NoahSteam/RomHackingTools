@@ -22,6 +22,7 @@ const ImU32 kColChanged = IM_COL32(235, 170, 70, 255);    // amber (Highlight Ch
 const ImU32 kColText    = IM_COL32(180, 195, 170, 255);
 const ImU32 kColJp      = IM_COL32(130, 190, 210, 255);   // double-byte (Shift-JIS) marker
 const ImU32 kColSelBg   = IM_COL32(70, 110, 90, 150);     // selection tint
+const ImU32 kColHoverBg = IM_COL32(80, 90, 110, 90);      // hovered-cell tint (no per-byte widget)
 
 int64_t SelLo(int64_t a, int64_t b) { return a < b ? a : b; }
 int64_t SelHi(int64_t a, int64_t b) { return a > b ? a : b; }
@@ -264,7 +265,18 @@ void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
                         continue;
                     }
 
-                    ImVec2 cur = ImGui::GetCursorScreenPos();
+                    // Geometric hit-test of this fixed-width cell. Bytes are drawn as plain
+                    // text (below), NOT as a per-byte Selectable: an interactive widget per
+                    // cell would emit hundreds of ImGui IDs (the "conflicting ID" surface)
+                    // and, worse, become the active/nav item on click — which makes a
+                    // ScrollX/ScrollY table with a frozen column scroll-jitter ("vibrate")
+                    // while dragging. A pure rect test needs none of that.
+                    const ImVec2 cur = ImGui::GetCursorScreenPos();
+                    const bool cellHovered = ImGui::IsMouseHoveringRect(
+                        cur, ImVec2(cur.x + byteW, cur.y + ImGui::GetTextLineHeight()));
+                    if (cellHovered && !selected)
+                        ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, kColHoverBg);
+
                     if (mEditAddr == (int64_t)addr)
                     {
                         ImGui::SetNextItemWidth(byteW);
@@ -292,19 +304,11 @@ void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
 
                     const ImU32 col = (mChangeAge.count(addr)) ? kColChanged
                                      : (v == 0 ? kColZero : kColByte);
-                    // Buffer must fit "FF##4294967295" (14 chars + NUL); too small a
-                    // buffer truncates the address suffix, collapsing many cells onto the
-                    // same ImGui ID ("conflicting ID" warning) — hence the full width here.
-                    char b[24]; std::snprintf(b, sizeof(b), "%02X##%u", v, addr);
+                    char b[3]; std::snprintf(b, sizeof(b), "%02X", v);
                     ImGui::PushStyleColor(ImGuiCol_Text, col);
-                    ImGui::Selectable(b, false, ImGuiSelectableFlags_AllowOverlap, ImVec2(byteW, 0));
+                    ImGui::TextUnformatted(b);
                     ImGui::PopStyleColor();
 
-                    // Hit-test by mouse rect, not IsItemHovered(): once one Selectable is
-                    // held active ImGui suppresses hover on the others, so a hover-based
-                    // drag never extends. A rect test ignores active-item capture.
-                    const bool cellHovered = ImGui::IsMouseHoveringRect(
-                        cur, ImVec2(cur.x + byteW, cur.y + ImGui::GetTextLineHeight()));
                     if (cellHovered)
                     {
                         if (backend.CanWrite(addr) && ImGui::IsMouseDoubleClicked(0))
