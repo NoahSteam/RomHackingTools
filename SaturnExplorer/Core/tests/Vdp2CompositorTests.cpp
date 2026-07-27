@@ -305,6 +305,25 @@ void TestBitmapNbg0()
             CHECK(IsWhite(pixels, x, y));
 }
 
+void TestBitmapRgb888()
+{
+    // NBG0 in 32bpp RGB888 bitmap mode (like the Sonic Team movie): each pixel is a
+    // 32-bit big-endian word stored [code][B][G][R] — the MSB byte carries opacity and
+    // the colour's low 24 bits are 0xBBGGRR. Write one opaque pixel and confirm the
+    // channels are not swapped (a red/blue swap was the movie-playback bug).
+    State state = MakeNbg3State();
+    SetReg(state, 0x020, 0x0001);   // BGON: NBG0 only
+    SetReg(state, 0x028, 0x0042);   // CHCTLA: N0BMEN + colour number 4 (RGB888), 512x256
+    SetReg(state, 0x03C, 0x0000);   // MPOFN: bitmap base 0
+    SetReg(state, 0x0F8, 0x0001);   // PRINA: NBG0 priority 1
+    // Pixel (2,1): byte offset (1*512 + 2) * 4 = 0x808. Bytes 0x80,0x11,0x22,0x33 ->
+    // opaque, B=0x11, G=0x22, R=0x33.
+    state.vdp2[0x808] = 0x80; state.vdp2[0x809] = 0x11;
+    state.vdp2[0x80A] = 0x22; state.vdp2[0x80B] = 0x33;
+    const std::vector<uint8_t> pixels = Render(state, false);
+    CHECK(IsColor(pixels, 2, 1, 0x33, 0x22, 0x11));   // R=0x33, G=0x22, B=0x11
+}
+
 void TestZoomBitmap()
 {
     // NBG0 8bpp bitmap with 2x horizontal zoom (X coordinate increment 0x80 = 0.5/dot):
@@ -533,6 +552,7 @@ int main()
     TestColorCalc();
     TestRotationIdentity();
     TestBitmapNbg0();
+    TestBitmapRgb888();
     TestZoomBitmap();
     TestColorOffset();
     TestMosaic();

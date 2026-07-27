@@ -480,7 +480,11 @@ Rgba FetchCellTexel(const std::vector<uint8_t>& vram, const std::vector<uint8_t>
         if (off + 3 >= vram.size()) return { 0, 0, 0, 0 };
         if (!(vram[off] & 0x80) && !c.transparentPixelDisable)
             return { 0, 0, 0, 0 };   // MSB = transparency
-        return { vram[off + 1], vram[off + 2], vram[off + 3], 255 };
+        // The 32-bit RGB word is stored big-endian as [code][B][G][R]: the two VDP2
+        // half-words are code|B and G|R, so R is the last byte and B the first (after the
+        // code byte). Reading them as R,G,B swapped red and blue (Mednafen mixit reads the
+        // dword's low 24 bits as 0xBBGGRR).
+        return { vram[off + 3], vram[off + 2], vram[off + 1], 255 };
     }
     }
 }
