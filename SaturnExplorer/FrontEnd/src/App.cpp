@@ -2021,6 +2021,17 @@ void App::DrawController(IPlatform& platform)
 {
     if (ImGui::Begin("Controller", nullptr, ImGuiWindowFlags_MenuBar))
     {
+        if (ImGui::BeginMenuBar())
+        {
+            if (ImGui::BeginMenu("Debug"))
+            {
+                ImGui::MenuItem("Log input to Log window", nullptr, &mLogInput);
+                ImGui::SetItemTooltip("Print each pad mask SE transmits to the emulator "
+                                      "into the Log window (to verify keys are being sent).");
+                ImGui::EndMenu();
+            }
+            ImGui::EndMenuBar();
+        }
         mController.Draw(mbLiveSource, mControllerFrame, platform);
     }
     else
@@ -2028,6 +2039,21 @@ void App::DrawController(IPlatform& platform)
         mController.ReleaseManualInput();
     }
     ImGui::End();
+}
+
+// Decode an SE_PAD_* mask into a readable "UP|RIGHT|A" string (or "(none)"), for the
+// input diagnostic log line below.
+static std::string DescribePad(unsigned int mask)
+{
+    static const struct { unsigned int bit; const char* name; } kNames[] = {
+        {SE_PAD_UP,"UP"}, {SE_PAD_DOWN,"DOWN"}, {SE_PAD_LEFT,"LEFT"}, {SE_PAD_RIGHT,"RIGHT"},
+        {SE_PAD_A,"A"}, {SE_PAD_B,"B"}, {SE_PAD_C,"C"}, {SE_PAD_X,"X"}, {SE_PAD_Y,"Y"},
+        {SE_PAD_Z,"Z"}, {SE_PAD_L,"L"}, {SE_PAD_R,"R"}, {SE_PAD_START,"START"},
+    };
+    std::string s;
+    for (const auto& n : kNames)
+        if (mask & n.bit) { if (!s.empty()) s += '|'; s += n.name; }
+    return s.empty() ? "(none)" : s;
 }
 
 void App::SendInput(unsigned int mask)
@@ -2039,6 +2065,17 @@ void App::SendInput(unsigned int mask)
     {
         se_live_send_input(&mDataSource, static_cast<uint32_t>(mController.Port()), mask);
         mController.NotifyStateSent(mControllerFrame, mask);
+        // Diagnostic: show exactly what SE transmits to the emulator, so a
+        // key-that-does-nothing shows up as either the right mask (emulator-side issue)
+        // or the wrong/empty mask (a binding issue on our side).
+        if (mLogInput)
+        {
+            char buf[96];
+            std::snprintf(buf, sizeof(buf), "Input -> port %u: 0x%04X %s",
+                          mController.Port(), mask & SE_PAD_ALL, DescribePad(mask).c_str());
+            mLog.Push(LogCategory::Info, buf,
+                      mContext ? static_cast<uint32_t>(se_frame_number(mContext)) : 0);
+        }
     }
 #endif
 }
