@@ -61,6 +61,10 @@ extern unsigned short  SsDbgReadOpcode(unsigned int addr); /* v9: 16-bit instr @
  * where the PIDC[] binding cache is in scope. Fills out[13] with the USB-HID scancode the
  * user has mapped to each Saturn pad button (ascending SE_PAD_* order), -1 if unbound. */
 extern int             SsDbgQueryKeyMap(unsigned int port, int out[13]);
+/* Port device-type name (v12+). apply.py injects this into smpc.cpp (where the port map
+ * and PossibleDevices[] are in scope). Returns a short human-readable controller name for
+ * port 0/1 ("Digital Control Pad", "3D Control Pad", "Mouse", ...). */
+extern const char*     SsDbgPortDeviceName(unsigned int port);
 #endif
 
 /* ============================ pure, testable helpers ====================== */
@@ -229,6 +233,20 @@ static int SeMdfnGetKeyMap(unsigned int port, int out[13])
 #endif
 }
 
+/* Port device type (v12+): report which controller each port is configured as, so the
+ * Saturn Explorer Log window shows the emulator's input setup when a client connects.
+ * The injected SsDbgPortDeviceName reads Mednafen's own port map (see its declaration
+ * above). Registered with SeExportSetPortInfoHook. */
+static const char* SeMdfnPortDeviceName(unsigned int port)
+{
+#if defined(SE_MEDNAFEN_WIRED)
+    return SsDbgPortDeviceName(port);
+#else
+    (void)port;
+    return "?";
+#endif
+}
+
 /* ============================ tracepoints (Tier 4, v8+) =================== */
 /* Tracepoints are non-halting: on a hit the glue captures the SH-2 register file and
  * queues an event (the client formats the message), then execution CONTINUES. The set
@@ -368,6 +386,7 @@ void SeMednafenFrameHook(void)
         SeExportSetBreakpointHooks(SeMdfnAddExecBp, SeMdfnClearBps);
         SeExportSetInputHook(SeMdfnSetPad);   /* controller panel -> emulated pad (v7+) */
         SeExportSetKeyMapHook(SeMdfnGetKeyMap);   /* emulator keyboard bindings -> panel (v10+) */
+        SeExportSetPortInfoHook(SeMdfnPortDeviceName);  /* controller config -> Log on connect (v12+) */
         SeExportSetTracepointHook(SeMdfnSetTracepoints);  /* tracepoints (v8+) */
     }
     SeMednafenSnapshot();
@@ -380,7 +399,7 @@ void SeMednafenFrameHook(void)
 void SeMednafenSuppressUnusedWarnings(void)
 {
     (void)SeMdfnAddExecBp; (void)SeMdfnClearBps; (void)SeMdfnWriteByte; (void)SeMdfnSetPad;
-    (void)SeMdfnGetKeyMap;
+    (void)SeMdfnGetKeyMap; (void)SeMdfnPortDeviceName;
     (void)SeMdfnSetTracepoints; (void)SeRd32LE;
 }
 #endif

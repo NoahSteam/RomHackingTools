@@ -192,6 +192,33 @@ void SeExportSetKeyMapHook(SeGetKeyMapFn fn)
     sGetKeyMap = fn;
 }
 
+/* ---- Port device-type hook (v12+). apply.py wires this to the emulator's port map so
+ * the client can report the emulator's controller configuration. get(port) returns a
+ * short human-readable device name ("Digital Control Pad", "3D Control Pad", ...) for
+ * port 0/1. May be NULL (nothing is logged on connect). ---- */
+typedef const char* (*SePortInfoFn)(unsigned int port);
+static SePortInfoFn sPortInfo;
+
+void SeExportSetPortInfoHook(SePortInfoFn fn)
+{
+    sPortInfo = fn;
+}
+
+/* Log the emulator's controller type for ports 1 & 2, once per client connection, so
+ * the Saturn Explorer Log window shows how the emulated inputs are configured. */
+static void SeLogPortDevices(void)
+{
+    unsigned int p;
+    if (!sPortInfo) return;
+    for (p = 0; p < 2; ++p)
+    {
+        const char* name = sPortInfo(p);
+        char msg[SE_LIVE_LOG_LINE_LEN];
+        snprintf(msg, sizeof(msg), "port %u: %s", p + 1, name ? name : "?");
+        SeExportLog(msg);
+    }
+}
+
 static void SeReleaseInjectedPads(void)
 {
     /* A client can disappear while a button is held. Never leave that state latched
@@ -438,6 +465,7 @@ static void SeServeClient(HANDLE cl, SeFrame* snap)
 static void SeServeClient(int cl, SeFrame* snap)
 #endif
 {
+    SeLogPortDevices();   /* report the emulator's controller config on connect */
     while (sRunning)
     {
         unsigned char req[SE_LIVE_REQUEST_LEN];

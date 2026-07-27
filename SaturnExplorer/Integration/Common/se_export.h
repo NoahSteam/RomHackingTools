@@ -100,6 +100,12 @@ void SeExportSetInputHook(void (*set)(unsigned int port, unsigned int buttons));
  * all -1 and the client keeps its own defaults). Call once after SeExportInit. */
 void SeExportSetKeyMapHook(int (*get)(unsigned int port, int out[13]));
 
+/* Wire a port device-type query (v12+), so Saturn Explorer can report the emulator's
+ * controller configuration for ports 1 & 2 whenever a client connects. get(port) returns
+ * a short human-readable device name ("Digital Control Pad", "3D Control Pad", "Mouse",
+ * ...) for port 0/1. May be NULL (nothing is logged). Call once after SeExportInit. */
+void SeExportSetPortInfoHook(const char* (*get)(unsigned int port));
+
 /* Wire tracepoint installation (v8+). set(count, descs) receives 'count'
  * SE_LIVE_TRACE_DESC_LEN descriptors {id,cpu,address,flags} (u32 LE) whenever the
  * client's tracepoint set changes; the glue arms a PC trap at each enabled address.

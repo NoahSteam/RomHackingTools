@@ -245,6 +245,17 @@ bits. This is the readback hook a client can poll to confirm its injection is ac
 reaching the emulated pad (device is a Control Pad, injected bits non-zero) rather than
 being dropped by a device-type mismatch.
 
+**Logging the controller configuration on connect.** `apply.py` injects a companion
+accessor `SsDbgPortDeviceName(unsigned port)` into `smpc.cpp` that returns a short
+human-readable name for the device bound to a port (`"Digital Control Pad"`, `"3D Control
+Pad"`, `"Mouse"`, `"Arcade Racer (Wheel)"`, `"Mission Stick"`, `"Twin Mission Stick"`,
+`"Virtua Gun / Stunner"`, `"Keyboard"`, `"JP Keyboard"`, `"None (disconnected)"`). The
+glue's `SeMdfnPortDeviceName` forwards to it and registers it with
+`SeExportSetPortInfoHook`; `se_export.c` then logs `port 1: …` / `port 2: …` to the Log
+window once each time a client connects (it rides the existing v11 log channel, so no
+wire-protocol change). This makes it obvious at a glance whether the running game is on a
+device SE can inject into — only the two Control Pad types are wired for injection.
+
 ## Matching Mednafen's keyboard bindings (v10+)
 
 The Controller panel drives the pad from host keyboard keys, and those keys should match

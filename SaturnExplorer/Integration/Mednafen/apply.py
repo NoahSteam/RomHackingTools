@@ -196,6 +196,26 @@ extern "C" void SsDbgQueryInput(unsigned port, unsigned int out[3])
  out[2] = (unsigned)SeInjectedPad[vp].load(std::memory_order_relaxed);
 }
 
+/* Human-readable device type for a port, so Saturn Explorer can log the emulator's
+   controller configuration when a client connects. Ports 0/1 map to VirtualPorts[0/1]
+   in the no-multitap case (physical port == virtual port). */
+extern "C" const char* SsDbgPortDeviceName(unsigned port)
+{
+ if(port >= 2) return "N/A";
+ IODevice* const dev = VirtualPorts[port];
+ if(dev == &PossibleDevices[port].none)        return "None (disconnected)";
+ if(dev == &PossibleDevices[port].gamepad)     return "Digital Control Pad";
+ if(dev == &PossibleDevices[port].threedpad)   return "3D Control Pad";
+ if(dev == &PossibleDevices[port].mouse)       return "Mouse";
+ if(dev == &PossibleDevices[port].wheel)       return "Arcade Racer (Wheel)";
+ if(dev == &PossibleDevices[port].mission)     return "Mission Stick";
+ if(dev == &PossibleDevices[port].dualmission) return "Twin Mission Stick";
+ if(dev == &PossibleDevices[port].gun)         return "Virtua Gun / Stunner";
+ if(dev == &PossibleDevices[port].keyboard)    return "Keyboard";
+ if(dev == &PossibleDevices[port].jpkeyboard)  return "JP Keyboard";
+ return "Unknown/other";
+}
+
 static void SeSMPCUpdateInput(unsigned vp, const int32 time_elapsed)
 {
  uint8* data = VirtualPortsDPtr[vp];
