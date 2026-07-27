@@ -1399,6 +1399,18 @@ void App::DrainTraceEvents()
         }
         if (n < 64) break;   // drained
     }
+
+    // Diagnostic log lines the emulator glue sent (v11+) -> Log window.
+    char lines[16][SE_LIVE_LOG_LINE_LEN];
+    for (;;)
+    {
+        const uint32_t n = se_live_poll_log(&mDataSource, &lines[0][0],
+                                            SE_LIVE_LOG_LINE_LEN, 16);
+        for (uint32_t i = 0; i < n; ++i)
+            mLog.Push(LogCategory::Info, lines[i],
+                      mContext ? static_cast<uint32_t>(se_frame_number(mContext)) : 0);
+        if (n < 16) break;   // drained
+    }
 #endif
 }
 

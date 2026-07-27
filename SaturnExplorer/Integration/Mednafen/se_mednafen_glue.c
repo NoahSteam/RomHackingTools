@@ -33,6 +33,7 @@
 
 #include <string.h>
 #include <stdint.h>
+#include <stdio.h>
 
 /* ---- Accessors the patcher injects into Mednafen ss (C linkage). Each reaches a
  *      file-scope static the glue can't see directly. Pointer accessors return the
@@ -198,6 +199,13 @@ static void SeMdfnWriteByte(unsigned int address, unsigned char value)
  * map + latch (see its declaration above). Registered with SeExportSetInputHook. */
 static void SeMdfnSetPad(unsigned int port, unsigned int buttons)
 {
+    /* Diagnostic: log every pad state the glue receives so Saturn Explorer's Log window
+     * shows what actually reached the emulator (this fires on change, since the client
+     * only sends INP when the mask changes). Confirms the input crosses the wire before
+     * the SMPC translate/merge — see SMPC_SetInjectedInput's own log for the result. */
+    char msg[80];
+    snprintf(msg, sizeof(msg), "glue recv: port=%u buttons=0x%04X", port, buttons & 0x1FFFu);
+    SeExportLog(msg);
 #if defined(SE_MEDNAFEN_WIRED)
     SsDbgSetPad(port, buttons);
 #else

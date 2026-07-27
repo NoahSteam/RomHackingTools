@@ -88,6 +88,14 @@ uint32_t se_live_poll_callstack(const se_data_source* ds, int cpu,
 uint32_t se_live_poll_keymap(const se_data_source* ds, uint32_t port,
                              int32_t* out, uint32_t max);
 
+/* Drain diagnostic log lines the emulator sent (v11+) into 'out', a caller-provided
+ * buffer of 'maxLines' rows each 'lineLen' bytes (each row NUL-terminated). Returns the
+ * number of lines written (0 if not a live source or the server predates v11). Lets the
+ * emulator surface diagnostics — e.g. the controller input it receives — in the client's
+ * Log window with no separate console. */
+uint32_t se_live_poll_log(const se_data_source* ds, char* out, uint32_t lineLen,
+                          uint32_t maxLines);
+
 /* Read the last stop event reported by the server's control block (v5+). Fills
  * '*reason' (SE_LIVE_STOP_*), '*cpu' (0 master / 1 slave), and '*pc' when non-NULL.
  * Returns 1 if the emulator is halted on a breakpoint, 0 otherwise (or not live). */

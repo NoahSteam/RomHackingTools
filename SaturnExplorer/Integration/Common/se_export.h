@@ -113,6 +113,12 @@ void SeExportSetTracepointHook(void (*set)(unsigned int count, const unsigned ch
  * reply; the client formats the message from the captured registers. */
 void SeExportQueueTraceEvent(unsigned int id, unsigned int cpu, const unsigned int* regs);
 
+/* Queue a diagnostic log line (v11+). Any-thread safe; 'msg' is copied and truncated to
+ * SE_LIVE_LOG_LINE_LEN-1 characters (NULL ignored). The server drains these into each
+ * reply's log block and the client shows them in its Log window — a console-free way for
+ * the emulator glue to surface diagnostics (e.g. the controller input it receives). */
+void SeExportLog(const char* msg);
+
 /* Shadow call stack (v9+). The glue records control flow as it executes so the client
  * gets a dependable (● Confirmed) call stack instead of reconstructing one heuristically.
  * Call from the CPU thread: SeExportPushFrame on a call (bsr/jsr/bsrf/jsr-as-call),

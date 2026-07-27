@@ -159,6 +159,8 @@ SMPC_INPUT_STATE = """\
    2 LEFT, 3 RIGHT, 4 START, 5 A, 6 B, 7 C, 8 X, 9 Y, 10 Z, 11 L, 12 R. */
 static std::atomic_uint_least16_t SeInjectedPad[2];
 
+extern "C" void SeExportLog(const char* msg);   /* diagnostic log -> SE Log window (v11+) */
+
 void SMPC_SetInjectedInput(unsigned port, uint32 buttons)
 {
  if(port >= 2) return;
@@ -166,6 +168,14 @@ void SMPC_SetInjectedInput(unsigned port, uint32 buttons)
                                 ((buttons & 0x0FF0u) << 1) | /* A..R: bits 5..12 */
                                 ((buttons & 0x1000u) >> 8)); /* Start: bit 4 */
  SeInjectedPad[port].store(native, std::memory_order_relaxed);
+ /* Diagnostic: what the SMPC translate produced. Fires on change (the client only sends
+    INP on change), so it shows each button as it is pressed/released in SE's Log window. */
+ {
+  char m[80];
+  snprintf(m, sizeof(m), "SMPC inject: port=%u se=0x%04X -> native=0x%04X",
+           port, (unsigned)(buttons & 0x1FFFu), (unsigned)native);
+  SeExportLog(m);
+ }
 }
 
 /* Report what the emulated port currently sees, so Saturn Explorer can verify its
@@ -196,10 +206,22 @@ static void SeSMPCUpdateInput(unsigned vp, const int32 time_elapsed)
   if(inj && VirtualPorts[vp] == &PossibleDevices[vp].gamepad)
   {
    /* Digital Control Pad: 2-byte data buffer, digital bits at [0..1]. */
-   const uint16 combined = (uint16)((data[0] | ((uint16)data[1] << 8)) | inj);
+   const uint16 host = (uint16)(data[0] | ((uint16)data[1] << 8));
+   const uint16 combined = (uint16)(host | inj);
    merged[0] = (uint8)combined;
    merged[1] = (uint8)(combined >> 8);
    data = merged;
+   /* Diagnostic: what the pad actually receives after merging SE's injection with any
+      host input. Logged only when it changes so the log isn't flooded every frame. */
+   static uint16 sLastMerged[2] = { 0xFFFFu, 0xFFFFu };
+   if(vp < 2 && combined != sLastMerged[vp])
+   {
+    char m[96];
+    snprintf(m, sizeof(m), "pad merge: port=%u inj=0x%04X host=0x%04X -> pad=0x%04X",
+             vp, (unsigned)inj, (unsigned)host, (unsigned)combined);
+    SeExportLog(m);
+    sLastMerged[vp] = combined;
+   }
   }
   else if(inj && VirtualPorts[vp] == &PossibleDevices[vp].threedpad)
   {

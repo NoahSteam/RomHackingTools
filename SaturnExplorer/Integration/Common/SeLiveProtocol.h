@@ -55,7 +55,7 @@
 #define SE_LIVE_MAGIC1 'E'
 #define SE_LIVE_MAGIC2 'X'
 #define SE_LIVE_MAGIC3 'P'
-#define SE_LIVE_VERSION      10u
+#define SE_LIVE_VERSION      11u
 /* Command verbs are exactly 4 bytes; a request is a verb + 4-byte LE argument. */
 #define SE_LIVE_REQUEST      "GET\n"   /* back-compat alias for the snapshot verb */
 #define SE_LIVE_VERB_GET     "GET\n"
@@ -140,6 +140,14 @@
 #define SE_LIVE_INPUT_BUTTONS(arg)  ((arg) & 0xFFFFu)
 #define SE_LIVE_BKPT_DESC_LEN 12  /* address(4) + size(4) + flags(4), all LE */
 #define SE_LIVE_HEADER_LEN   48   /* magic(4) + version(4) + 10 section lengths(4 each) */
+
+/* Debug log lines (v11+): a trailing block after the keymap. u32 count (LE, capped at
+ * SE_LIVE_LOG_MAX), then that many fixed-length NUL-padded text records. The emulator
+ * glue appends lines via SeExportLog(); the client drains them into its Log window. Lets
+ * the emulator surface diagnostics (e.g. the controller input it actually receives) in
+ * Saturn Explorer with no separate console. */
+#define SE_LIVE_LOG_MAX       32u   /* max log lines carried per snapshot reply */
+#define SE_LIVE_LOG_LINE_LEN  96u   /* bytes per record (NUL-terminated/padded) */
 
 /* Breakpoint descriptor flag bits (v5+). */
 #define SE_LIVE_BP_KIND_MASK  0x3u   /* 0 exec, 1 read, 2 write, 3 read/write */

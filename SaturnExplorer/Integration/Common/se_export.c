@@ -115,6 +115,15 @@ static unsigned int sEvHead;    /* index of the oldest pending event */
 static unsigned int sEvCount;   /* number pending (<= SE_EVQ_CAP) */
 static unsigned int sEvDropped; /* events dropped on overflow (reported once) */
 
+/* ---- Debug log lines (v11+). The glue calls SeExportLog() to surface a diagnostic
+ * string (e.g. the controller input it received); the server thread drains the ring into
+ * each reply's trailing log block for the client's Log window. FIFO ring; overflow drops
+ * the oldest. Guarded by SE_LOCK. ---- */
+#define SE_LOGQ_CAP 64
+static char sLogQ[SE_LOGQ_CAP][SE_LIVE_LOG_LINE_LEN];
+static unsigned int sLogHead;   /* index of the oldest pending line */
+static unsigned int sLogCount;  /* number pending (<= SE_LOGQ_CAP) */
+
 /* ---- Shadow call stack (v9+). The glue records calls/returns as they execute
  * (SeExportPushFrame on bsr/jsr..., SeExportPopFrame on rts, SeExportResetCallStack on an
  * exception boundary), building a logical per-CPU stack. The server thread serializes it
@@ -299,6 +308,28 @@ void SeExportQueueTraceEvent(unsigned int id, unsigned int cpu, const unsigned i
     for (i = 0; i < SE_LIVE_EVENT_REGS; ++i)
         sEvQ[slot].regs[i] = regs ? regs[i] : 0u;
     ++sEvCount;
+    SE_UNLOCK();
+}
+
+/* Queue a diagnostic log line (v11+). Any-thread safe. 'msg' is copied (truncated to
+ * SE_LIVE_LOG_LINE_LEN-1 chars); NULL is ignored. On overflow the oldest line is dropped
+ * so the newest is always kept. The client drains these into its Log window. */
+void SeExportLog(const char* msg)
+{
+    unsigned int slot, i;
+    if (!msg) return;
+    SE_LOCK();
+    if (sLogCount >= SE_LOGQ_CAP)          /* full: drop the oldest */
+    {
+        sLogHead = (sLogHead + 1) % SE_LOGQ_CAP;
+        --sLogCount;
+    }
+    slot = (sLogHead + sLogCount) % SE_LOGQ_CAP;
+    for (i = 0; i + 1 < SE_LIVE_LOG_LINE_LEN && msg[i]; ++i)
+        sLogQ[slot][i] = msg[i];
+    for (; i < SE_LIVE_LOG_LINE_LEN; ++i)
+        sLogQ[slot][i] = 0;
+    ++sLogCount;
     SE_UNLOCK();
 }
 
@@ -607,6 +638,30 @@ static void SeServeClient(int cl, SeFrame* snap)
                 for (b = 0; b < SE_LIVE_KEYMAP_BUTTONS; ++b)
                     SeWr32(kb + b * 4, (unsigned int)km[b]);
                 if (SeSend(cl, kb, sizeof(kb)) != 0) return;
+            }
+        }
+
+        /* v11 trailing block: diagnostic log lines. u32 count (capped), then that many
+         * fixed-length NUL-padded records. Drained FIFO so the client sees them once. */
+        {
+            unsigned char cntb[4];
+            unsigned int n, i;
+            SE_LOCK();
+            n = sLogCount;
+            SE_UNLOCK();
+            if (n > SE_LIVE_LOG_MAX) n = SE_LIVE_LOG_MAX;
+            SeWr32(cntb, n);
+            if (SeSend(cl, cntb, 4) != 0) return;
+            for (i = 0; i < n; ++i)
+            {
+                char line[SE_LIVE_LOG_LINE_LEN];
+                SE_LOCK();
+                memcpy(line, sLogQ[sLogHead], SE_LIVE_LOG_LINE_LEN);
+                sLogHead = (sLogHead + 1) % SE_LOGQ_CAP;
+                if (sLogCount) --sLogCount;
+                SE_UNLOCK();
+                line[SE_LIVE_LOG_LINE_LEN - 1] = 0;
+                if (SeSend(cl, (unsigned char*)line, SE_LIVE_LOG_LINE_LEN) != 0) return;
             }
         }
     }

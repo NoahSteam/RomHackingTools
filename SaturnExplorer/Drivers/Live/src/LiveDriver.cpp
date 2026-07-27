@@ -141,6 +141,10 @@ struct LiveState
     std::mutex            kmMtx;
     int32_t               keyMap[SE_LIVE_KEYMAP_PORTS][SE_LIVE_KEYMAP_BUTTONS];
     bool                  keyMapValid = false;   // false until a v10+ block is seen
+    // Diagnostic log lines from the emulator (v11+), drained by the UI thread via
+    // se_live_poll_log. Bounded so a flood can't grow unbounded. Guarded by logMtx.
+    std::mutex            logMtx;
+    std::deque<std::string> logLines;
 };
 
 /* ---- Local-socket transport (POSIX Unix socket / Windows named pipe). ---- */
@@ -297,7 +301,8 @@ bool ReadSnapshot(Conn& c, const char* verb, int32_t arg,
                   const uint8_t* extra, size_t extraLen, LiveSnapshot& snap,
                   bool& outPaused, uint64_t& outFrame, uint32_t& outVersion,
                   StopInfo& outStop, std::vector<LiveEvent>& outEvents,
-                  LiveCallStacks& outCallStacks, LiveKeyMap& outKeyMap)
+                  LiveCallStacks& outCallStacks, LiveKeyMap& outKeyMap,
+                  std::vector<std::string>& outLog)
 {
     if (!SendCommand(c, verb, arg))
     {
@@ -441,6 +446,24 @@ bool ReadSnapshot(Conn& c, const char* verb, int32_t arg,
         outKeyMap.valid = true;
     }
 
+    // v11+ trailing block: diagnostic log lines. u32 count (capped), then that many
+    // fixed-length NUL-padded records. Read only when the server speaks v11.
+    if (version >= 11u)
+    {
+        uint8_t cntb[4];
+        if (!ConnReadFull(c, cntb, 4)) return false;
+        const uint32_t n = Rd32LE(cntb);
+        if (n > SE_LIVE_LOG_MAX) return false;   // desync guard
+        for (uint32_t i = 0; i < n; ++i)
+        {
+            char line[SE_LIVE_LOG_LINE_LEN];
+            if (!ConnReadFull(c, reinterpret_cast<uint8_t*>(line), SE_LIVE_LOG_LINE_LEN))
+                return false;
+            line[SE_LIVE_LOG_LINE_LEN - 1] = 0;
+            outLog.emplace_back(line);
+        }
+    }
+
     // Control block: paused (u32 LE) + frame (u64 LE), then (v5+) stop reason/cpu/pc.
     // Absent fields default to 0 on older servers.
     outPaused = ct >= 4 && Rd32LE(ctl.data()) != 0;
@@ -559,8 +582,10 @@ void PollLoop(LiveState* st)
         std::vector<LiveEvent> events;
         LiveCallStacks callStacks;
         LiveKeyMap keyMap;
+        std::vector<std::string> logLines;
         if (!ReadSnapshot(conn, verb, arg, payload.data(), payload.size(),
-                          snap, paused, frame, sver, stop, events, callStacks, keyMap))
+                          snap, paused, frame, sver, stop, events, callStacks, keyMap,
+                          logLines))
         {
             ConnClose(conn);   // will reconnect next iteration
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -586,6 +611,12 @@ void PollLoop(LiveState* st)
             for (LiveEvent& e : events) st->events.push_back(e);
             while (st->events.size() > 4096) st->events.pop_front();   // bound the queue
         }
+        if (!logLines.empty())
+        {
+            std::lock_guard<std::mutex> lk(st->logMtx);
+            for (std::string& s : logLines) st->logLines.push_back(std::move(s));
+            while (st->logLines.size() > 4096) st->logLines.pop_front();   // bound the queue
+        }
         st->paused.store(paused);
         st->frameNumber.store(frame);
         st->serverVersion.store(sver);
@@ -607,7 +638,8 @@ void PollLoop(LiveState* st)
         std::vector<LiveEvent> ev;
         LiveCallStacks cs;
         LiveKeyMap km;
-        ReadSnapshot(conn, SE_LIVE_VERB_RESUME, 0, nullptr, 0, tmp, p, fr, sv, si, ev, cs, km);  // best-effort
+        std::vector<std::string> lg;
+        ReadSnapshot(conn, SE_LIVE_VERB_RESUME, 0, nullptr, 0, tmp, p, fr, sv, si, ev, cs, km, lg);  // best-effort
     }
     ConnClose(conn);
 }
@@ -896,6 +928,26 @@ extern "C" uint32_t se_live_poll_keymap(const se_data_source* ds, uint32_t port,
     uint32_t n = 0;
     for (; n < max && n < (uint32_t)SE_LIVE_KEYMAP_BUTTONS; ++n)
         out[n] = st->keyMap[port][n];
+    return n;
+}
+
+extern "C" uint32_t se_live_poll_log(const se_data_source* ds, char* out,
+                                     uint32_t lineLen, uint32_t maxLines)
+{
+    if (!ds || !ds->user || ds->close != CbClose || !out || !lineLen || !maxLines) { return 0; }
+    LiveState* st = St(ds->user);
+    std::lock_guard<std::mutex> lk(st->logMtx);
+    uint32_t n = 0;
+    while (n < maxLines && !st->logLines.empty())
+    {
+        const std::string& s = st->logLines.front();
+        char* dst = out + (size_t)n * lineLen;
+        uint32_t i = 0;
+        for (; i + 1 < lineLen && i < s.size(); ++i) dst[i] = s[i];
+        dst[i] = 0;
+        st->logLines.pop_front();
+        ++n;
+    }
     return n;
 }
 
