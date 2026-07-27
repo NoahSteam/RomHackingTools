@@ -212,6 +212,10 @@ private:
     se_render_opts   mRenderOpts {};
     bool             mbLiveSource = false;    // data comes from a running emulator
     bool             mbPaused = false;        // live emulator held paused (frame control)
+    // Live breakpoint-hit state, mirrored to the Assembly panel so it tints the halted row.
+    bool             mBpStopActive = false;
+    int              mBpStopCpu = 0;
+    uint32_t         mBpStopPc = 0;
     bool             mbAutoConnectLive = false; // poll while no dump/live source is active
     std::string      mLiveEndpoint;           // endpoint for auto-connect (empty = default)
     float            mLiveRetrySeconds = 0.0f; // time since the last connect attempt

@@ -48,6 +48,12 @@ public:
     // to target run-control (Run to Here) at the right core.
     int Cpu() const { return mCpu; }
 
+    // Tell the panel the emulator is halted on an execution breakpoint so it can tint
+    // the hit instruction's row red. 'active' false clears it (running / other stop).
+    // Called by the App each frame from the live stop state.
+    void SetBreakpointStop(bool active, int cpu, uint32_t pc)
+    { mBpStopActive = active; mBpStopCpu = cpu; mBpStopPc = pc; }
+
     // Jump the view to 'addr' on 'cpu' (the Log panel's "Jump to Assembly").
     void GoTo(int cpu, uint32_t addr);
 
@@ -69,6 +75,11 @@ private:
 
     int      mCpu = 0;                 // 0 master, 1 slave
     bool     mFollowPc = true;
+
+    // Live breakpoint-hit state (set by SetBreakpointStop): tint the halted row red.
+    bool     mBpStopActive = false;
+    int      mBpStopCpu = 0;
+    uint32_t mBpStopPc = 0;
     bool     mAutoRefresh = true;      // re-read the code window every frame (live)
     uint32_t mWindowBase = 0;          // address of the first disassembled line
     bool     mWindowValid = false;

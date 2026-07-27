@@ -763,7 +763,14 @@ void App::BuildUI(IPlatform& platform)
         DrainTraceEvents();        // pull fired tracepoints into the Log
 #ifdef SE_ENABLE_LIVE
         uint32_t stopReason = 0, stopCpu = 0, stopPc = 0;
-        if (se_live_get_stop(&mDataSource, &stopReason, &stopCpu, &stopPc) && !mbPaused)
+        const bool stopped = se_live_get_stop(&mDataSource, &stopReason, &stopCpu, &stopPc);
+        // Mirror the breakpoint-halt state so the Assembly panel can tint the hit row red
+        // (SE_LIVE_STOP_EXEC_BP is the only non-none stop reason today). Level-triggered:
+        // it clears itself once the emulator resumes.
+        mBpStopActive = stopped;
+        mBpStopCpu = (int)stopCpu;
+        mBpStopPc = stopPc;
+        if (stopped && !mbPaused)
         {
             mbPaused = true;   // halted on a breakpoint; panel follows the halted PC
             // Bring up the paused-state workspace: rebuild the halted CPU's call stack
@@ -773,6 +780,10 @@ void App::BuildUI(IPlatform& platform)
             mFocusCallStack = true;
         }
 #endif
+    }
+    else
+    {
+        mBpStopActive = false;   // no live breakpoint-halt state off a static source
     }
 
 #ifdef SE_ENABLE_LIVE
@@ -1244,6 +1255,7 @@ void App::DrawWatch(IPlatform& platform)
 void App::DrawAssembly()
 {
     AssemblyPanel::Request req;
+    mAssemblyPanel.SetBreakpointStop(mBpStopActive, mBpStopCpu, mBpStopPc);
     mAssemblyPanel.Draw(mContext, mMemBackend, mBreakpoints, mActions, mWatchPanel, mbLiveSource, req);
 
     if (req.editTracepoint) OpenTracepointEditor(req.tpCpu, req.tpAddr);

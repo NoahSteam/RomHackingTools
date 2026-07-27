@@ -30,6 +30,7 @@ const ImU32 kColTarget= IM_COL32(130, 175, 255, 255);   // link blue
 const ImU32 kColPunct = IM_COL32(140, 140, 150, 255);
 const ImU32 kColCmt   = IM_COL32(110, 130, 110, 255);
 const ImU32 kColPcRow = IM_COL32(60, 90, 60, 110);      // current-PC row tint
+const ImU32 kColBpHitRow = IM_COL32(150, 45, 45, 110);  // faint red: breakpoint-hit row
 
 bool IsRegToken(const std::string& t)
 {
@@ -378,8 +379,11 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
         }
 
         const bool isPc = ln.addr == pc;
+        const bool isBpHit = mBpStopActive && mCpu == mBpStopCpu && ln.addr == mBpStopPc;
         ImGui::TableNextRow();
-        if (isPc) ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, kColPcRow);
+        // A breakpoint halt tints the hit row faint red; otherwise the live PC row is green.
+        if (isBpHit)   ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, kColBpHitRow);
+        else if (isPc) ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, kColPcRow);
         ImGui::PushID((int)ln.addr);
 
         // A context menu belongs to the instruction row, not just its final Comment
