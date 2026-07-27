@@ -292,7 +292,10 @@ void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
 
                     const ImU32 col = (mChangeAge.count(addr)) ? kColChanged
                                      : (v == 0 ? kColZero : kColByte);
-                    char b[12]; std::snprintf(b, sizeof(b), "%02X##%u", v, addr);
+                    // Buffer must fit "FF##4294967295" (14 chars + NUL); too small a
+                    // buffer truncates the address suffix, collapsing many cells onto the
+                    // same ImGui ID ("conflicting ID" warning) — hence the full width here.
+                    char b[24]; std::snprintf(b, sizeof(b), "%02X##%u", v, addr);
                     ImGui::PushStyleColor(ImGuiCol_Text, col);
                     ImGui::Selectable(b, false, ImGuiSelectableFlags_AllowOverlap, ImVec2(byteW, 0));
                     ImGui::PopStyleColor();
