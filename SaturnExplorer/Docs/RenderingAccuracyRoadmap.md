@@ -109,8 +109,24 @@ pixel-level check against a reference. This is the single highest-leverage inves
 - **E2. Per-scanline VDP2 state (later, for mid-frame changes).** Versioned per-line
   block: TVMD/width, field, BGON, scroll/zoom accumulators, window, priority, color-calc,
   rotation params. Keep the frame-wide fallback with a "static reconstruction" UI badge.
+- **E3. Export the emulator's persisted VDP1 internal state (live only).** Some VDP1
+  state is "set once, then remembered" — it lives in the chip's internal registers, not
+  in any readable memory region or the standard register file, and the command that set
+  it may be many frames back and long overwritten. The prime case is the **user-clip
+  rectangle**: NiGHTS' "PRESS START" sprite enables user clipping but issues no user-clip
+  command in-frame, relying on a rect set earlier (see GeometryBuilder — a static dump
+  can only default it to the full area). A running emulator *has* the exact value, so
+  extend the emulator-side `se_export` bridge to read it (the same way it already reaches
+  in for SH-2 registers, the call stack, and the framebuffer), add a small protocol block
+  (LiveDriver + core parse it), and have GeometryBuilder prefer the exported rect over the
+  unbounded default when present. Candidates: VDP1 user-clip (UserClipX0/Y0/X1/Y1),
+  system-clip and local-coordinate latches, and TVMR/FBCR framebuffer-mode state. Live
+  mode is the only place these can be recovered exactly rather than assumed; the static
+  default remains the fallback for dumps.
 
-*Acceptance:* a regression command compares SE to Mednafen with no visual judgment.
+*Acceptance:* a regression command compares SE to Mednafen with no visual judgment; in
+live mode, a user-clipped sprite whose clip command predates the captured frame renders
+against the real rectangle, not the default.
 
 ### Track A — Command-inspection rasterizer completeness
 
