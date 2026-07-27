@@ -289,11 +289,11 @@ RVert Project(const se_vec3& w, const se_camera3d& cam,
 
 void Vdp1Rasterizer::EmitSprites(const Vdp1Scene& scene, const std::vector<uint8_t>& vram,
                                  const std::vector<uint8_t>& cram, se_cram_mode cramMode,
-                                 const se_render_opts& opts, bool colorCalc,
-                                 std::vector<PixColumn>& cols)
+                                 const se_render_opts& opts, std::vector<PixColumn>& cols)
 {
     const int width = scene.screenWidth;
     const int height = scene.screenHeight;
+    const bool colorCalc = opts.show_color_calculation != 0;
     // In hi-res modes VDP1 draws at half the display width and is doubled at scan-out, so
     // scale sprite/clip X from the VDP1 coordinate space to the display. 1.0 otherwise.
     const float xScale = (scene.vdp1Width > 0)

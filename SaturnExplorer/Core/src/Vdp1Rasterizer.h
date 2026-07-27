@@ -21,12 +21,11 @@ public:
     // width*height) at each sprite's resolved priority. Sprites are processed in command
     // order; each pixel emits a descriptor, so a sprite sits in front of a same-priority
     // NBG (which was emitted earlier). Draw-mode effects (shadow / half-luminance /
-    // half-transparency) blend against the column already below, resolving it with
-    // 'colorCalc' the same way the final frame does. Honors opts.show_vdp1_sprites.
+    // half-transparency) blend against the column already below, resolving it the same
+    // way the final frame does (opts.show_color_calculation). Honors show_vdp1_sprites.
     static void EmitSprites(const Vdp1Scene& scene, const std::vector<uint8_t>& vram,
                             const std::vector<uint8_t>& cram, se_cram_mode cramMode,
-                            const se_render_opts& opts, bool colorCalc,
-                            std::vector<PixColumn>& cols);
+                            const se_render_opts& opts, std::vector<PixColumn>& cols);
 
     // Render the exploded 3D view (scene.sprites3d) from 'camera' into 'outRgba'
     // (resized to viewport). 'depth' is a caller-owned scratch depth buffer,

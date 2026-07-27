@@ -102,27 +102,13 @@ public:
         {
             const size_t n = static_cast<size_t>(w) * static_cast<size_t>(h);
             mColumns.assign(n, PixColumn{});
-            const bool colorCalc = opts.show_color_calculation != 0;
-            // Emit every source into the columns, back to front.
+            // Emit every source into the columns, back to front, then resolve the whole
+            // buffer to RGBA; untouched columns stay transparent for FillBackdrop.
             Vdp2Compositor::SeedBackScreen(mSnapshot, w, h, mColumns);
             Vdp2Compositor::EmitLayers(mSnapshot, opts, w, h, mColumns);
             Vdp1Rasterizer::EmitSprites(mScene, mSnapshot.Vdp1Vram(), mSnapshot.Cram(),
-                                        mSnapshot.CramMode(), opts, colorCalc, mColumns);
-            // Resolve each column to one opaque RGBA pixel; untouched columns stay
-            // transparent so FillBackdrop paints the fallback backdrop there.
-            mRenderBuffer.assign(n * 4, 0);
-            for (size_t i = 0; i < n; ++i)
-            {
-                if (!mColumns[i].valid)
-                {
-                    continue;
-                }
-                const Rgba c = ResolveColumn(mColumns[i], colorCalc);
-                mRenderBuffer[i * 4 + 0] = c.r;
-                mRenderBuffer[i * 4 + 1] = c.g;
-                mRenderBuffer[i * 4 + 2] = c.b;
-                mRenderBuffer[i * 4 + 3] = 255;
-            }
+                                        mSnapshot.CramMode(), opts, mColumns);
+            ResolveColumns(mColumns, opts.show_color_calculation != 0, mRenderBuffer);
             FillBackdrop();
         });
     }

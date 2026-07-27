@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <vector>
 
 #include "Vdp1Color.h"   // Rgba
 
@@ -92,6 +93,26 @@ inline Rgba ResolveColumn(const PixColumn& col, bool colorCalc)
         out.b = dst[2];
     }
     return out;
+}
+
+// Resolve a whole column buffer to an opaque RGBA image (4 bytes/pixel, sized count*4).
+// The counterpart to EmitPix: all column read-out policy lives here rather than in the
+// caller. Columns no source touched are left transparent (alpha 0) so the caller's
+// fallback backdrop shows through there; every touched column becomes an opaque pixel.
+inline void ResolveColumns(const std::vector<PixColumn>& cols, bool colorCalc,
+                           std::vector<uint8_t>& outRgba)
+{
+    outRgba.assign(cols.size() * 4, 0);
+    for (size_t i = 0; i < cols.size(); ++i)
+    {
+        if (!cols[i].valid)
+        {
+            continue;
+        }
+        const Rgba c = ResolveColumn(cols[i], colorCalc);
+        uint8_t* p = &outRgba[i * 4];
+        p[0] = c.r; p[1] = c.g; p[2] = c.b; p[3] = 255;
+    }
 }
 
 }  // namespace se
