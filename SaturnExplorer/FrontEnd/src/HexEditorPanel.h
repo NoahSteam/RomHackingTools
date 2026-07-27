@@ -1,12 +1,16 @@
-// HexEditorPanel — a memory hex viewer/editor. Reads a window through the same
-// IMemoryBackend the Watch/Assembly panels use (so no emulator-specific code), and
-// renders the classic address / hex-grid / text layout with change highlighting,
-// a byte selection + value readout, and (Step 4) inline editing that writes back
-// through the backend. Emulator-agnostic.
+// HexEditorPanel — the "Memory" window: a raw memory viewer/editor. Reads through the
+// same IMemoryBackend the Watch/Assembly panels use (so no emulator-specific code), and
+// renders the classic address / hex-grid / text layout with change highlighting, a byte
+// selection + value readout, and inline editing that writes back through the backend.
+//
+// Like Yabause's memory editor it has a tab per Saturn region (the first, "All", spans the
+// whole CPU address space); the whole region scrolls virtually (ImGuiListClipper) rather
+// than a fixed small window, so there is no size to choose. Emulator-agnostic.
 #pragma once
 
 #include <cstdint>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "Debug/MemoryBackend.h"
@@ -17,17 +21,17 @@ namespace sfe
 class HexEditorPanel
 {
 public:
-    // Draw the "Hex Editor" window. 'live' enables Auto Refresh; the panel reads a
-    // window of memory each frame (when refreshing) via 'backend'. 'dt' is the frame
-    // delta for the change-highlight fade.
+    // Draw the "Memory" window. 'live' enables Auto Refresh; the panel reads the visible
+    // rows each frame (when refreshing) via 'backend'. 'dt' is the frame delta for the
+    // change-highlight fade.
     void Draw(IMemoryBackend& backend, bool live, float dt);
 
-    // Jump the view to 'address' (from the Watch / Assembly "View in Hex Editor").
+    // Jump the view to 'address' (from the Watch / Assembly "View in Memory"): selects the
+    // region tab containing it and scrolls it into view.
     void GoTo(uint32_t address);
 
     // Jump to 'address' and highlight a [address, address+length) span (e.g. a call
-    // stack frame's stack range). 'length' is clamped so the selection stays inside the
-    // visible window.
+    // stack frame's stack range).
     void Select(uint32_t address, uint32_t length);
 
     // A "find these bytes in the data directory" request raised from the grid's
@@ -36,38 +40,45 @@ public:
     // bytes + a human label out; false when nothing is pending.
     bool TakeSearchRequest(std::vector<uint8_t>& outBytes, std::string& outLabel);
 
+    // One selectable region: a CPU-address span served by the backend. Index 0 is "All".
+    struct Region { const char* name; uint32_t base; uint32_t size; };
+
 private:
-    void Refresh(IMemoryBackend& backend);
+    static const std::vector<Region>& Regions();
+    // Index of the region containing 'addr' (1..N), or 0 ("All") when none matches.
+    static int RegionForAddr(uint32_t addr);
 
-    uint32_t mBase = 0x06000000;       // first address shown
-    int      mSize = 0x100;            // bytes in the window
-    int      mEncoding = 0;            // 0 = ASCII, 1 = Shift-JIS (text pane)
-    bool     mAutoRefresh = true;
-    bool     mHighlightChanges = true;
-    bool     mFocusRequested = false;  // bring the window forward after a GoTo
-    char     mAddrBuf[16] = "06000000";
+    int  mTab = 0;                     // active region index (0 = All)
+    int  mSelectTab = -1;              // request to switch tabs (GoTo / initial), -1 = none
+    bool mScrollPending = true;        // scroll mScrollAddr into view next draw
+    uint32_t mScrollAddr = 0x06000000; // open on high work RAM, not the unmapped 0 (BIOS)
 
-    std::vector<uint8_t> mBytes;       // current window (big-endian Saturn bytes)
-    std::vector<uint8_t> mPrev;        // previous window, for change detection
-    std::vector<float>   mChangeAge;   // per-byte highlight seconds remaining (fades)
-    bool                 mHavePrev = false;
-    bool                 mConnected = false;
+    int  mEncoding = 0;                // 0 = ASCII, 1 = Shift-JIS (text pane)
+    bool mAutoRefresh = true;
+    bool mHighlightChanges = true;
+    bool mFocusRequested = false;      // bring the window forward after a GoTo
+    char mAddrBuf[16] = "06000000";
 
-    int  mSelStart = -1;               // selection anchor (byte index in window)
-    int  mSelEnd = -1;                 // selection end (inclusive)
-    bool mSelecting = false;
+    // Selection + edit are keyed by absolute address so they survive scrolling.
+    int64_t mSelStart = -1;            // selection anchor (absolute address, -1 = none)
+    int64_t mSelEnd   = -1;            // selection end (inclusive)
+    bool    mSelecting = false;
+    int64_t mEditAddr = -1;            // address being typed over (-1 = none)
+    char    mEditBuf[3] = {};
+    bool    mEditFocus = false;
+    float   mModifiedFlash = 0.0f;
+
+    bool mConnected = false;
+
+    // Change highlighting across scrolling: the previous value and the fade timer per
+    // address touched. Bounded (cleared when it grows large or the tab changes).
+    std::unordered_map<uint32_t, uint8_t> mPrevByte;
+    std::unordered_map<uint32_t, float>   mChangeAge;
 
     // Pending "find selection in data directory" request (see TakeSearchRequest).
     bool                 mSearchRequested = false;
     std::vector<uint8_t> mSearchBytes;
     std::string          mSearchLabel;
-
-    // Inline editing: the byte index being typed over, its 2-hex-digit buffer, and
-    // a short "Modified" flash after a successful write.
-    int   mEditIdx = -1;
-    char  mEditBuf[3] = {};
-    bool  mEditFocus = false;
-    float mModifiedFlash = 0.0f;
 };
 
 }  // namespace sfe

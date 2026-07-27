@@ -23,6 +23,7 @@ constexpr Region kRegions[] = {
     { 0x00200000u, kWramSize,     SE_VRAM_KIND_WRAM_LOW  },  // Low work RAM
     { 0x06000000u, kWramSize,     SE_VRAM_KIND_WRAM_HIGH },  // High work RAM
     { 0x05C00000u, kVdp1VramSize, SE_VRAM_KIND_VDP1_VRAM },  // VDP1 VRAM
+    { 0x05C80000u, kVdp1FbSize,   SE_VRAM_KIND_VDP1_FB   },  // VDP1 frame buffer
     { 0x05E00000u, kVdp2VramSize, SE_VRAM_KIND_VDP2_VRAM },  // VDP2 VRAM
     { 0x05F00000u, kCramSize,     SE_VRAM_KIND_CRAM      },  // Color RAM
 };

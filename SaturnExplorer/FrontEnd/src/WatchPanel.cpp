@@ -286,7 +286,7 @@ void WatchPanel::Draw(IMemoryBackend& backend, IExpressionResolver& resolver,
             if (ImGui::MenuItem("Break on Read or Write", nullptr, false, row.resolved))
                 bps.AddMemory(row.address, bpSize, BpKind::MemReadWrite);
             ImGui::Separator();
-            if (ImGui::MenuItem("View in Hex Editor", nullptr, false, row.resolved))
+            if (ImGui::MenuItem("View in Memory", nullptr, false, row.resolved))
                 if (outHexJump) *outHexJump = row.address;
             ImGui::EndPopup();
         }

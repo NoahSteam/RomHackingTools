@@ -266,7 +266,7 @@ const std::vector<App::PanelInfo>& App::PanelList()
         {"selectedObject",  "Selected Object",    &Panels::selectedObject},
         {"watch",           "Watch",              &Panels::watch},
         {"assembly",        "SH-2 Assembly",      &Panels::assembly},
-        {"hexEditor",       "Hex Editor",         &Panels::hexEditor},
+        {"hexEditor",       "Memory",             &Panels::hexEditor},
         {"controller",      "Controller",         &Panels::controller},
         {"log",             "Log",                &Panels::log},
         {"actions",         "Tracepoints",        &Panels::actions},
@@ -992,7 +992,7 @@ void App::BuildDefaultLayout(unsigned int dockspaceId)
 
     // Right inspector.
     ImGui::DockBuilderDockWindow("Selected Object", rObj);
-    ImGui::DockBuilderDockWindow("Hex Editor", rHex);
+    ImGui::DockBuilderDockWindow("Memory", rHex);
 
     // Bottom debugger strip. Watch / Controller / Log tab together on the left; the
     // SH-2 Assembly gets the right half.
@@ -2793,7 +2793,7 @@ void App::DrawTextureViewer(IPlatform& platform)
                     mHexEditor.GoTo(kVdp1VramBase + cmd.texture_address);
                     mPanels.hexEditor = true;
                 }
-                ImGui::SetItemTooltip("Double-click to view texture data at 0x%08X in the Hex Editor.",
+                ImGui::SetItemTooltip("Double-click to view texture data at 0x%08X in the Memory panel.",
                                       kVdp1VramBase + cmd.texture_address);
 
                 // Right-click the texture -> search the game data directory for its

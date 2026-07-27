@@ -7,6 +7,7 @@
 #include "imgui.h"
 
 #include "Debug/ShiftJis.h"
+#include "SaturnRegions.h"
 
 namespace sfe
 {
@@ -16,36 +17,60 @@ namespace
 const ImU32 kColAddr    = IM_COL32(150, 150, 160, 255);
 const ImU32 kColByte    = IM_COL32(210, 210, 215, 255);
 const ImU32 kColZero    = IM_COL32(110, 110, 120, 255);   // dim 00 bytes
+const ImU32 kColUnmapped = IM_COL32(80, 80, 90, 255);     // "--" outside any region
 const ImU32 kColChanged = IM_COL32(235, 170, 70, 255);    // amber (Highlight Changes)
 const ImU32 kColText    = IM_COL32(180, 195, 170, 255);
 const ImU32 kColJp      = IM_COL32(130, 190, 210, 255);   // double-byte (Shift-JIS) marker
 const ImU32 kColSelBg   = IM_COL32(70, 110, 90, 150);     // selection tint
 
-int SelLo(int a, int b) { return a < b ? a : b; }
-int SelHi(int a, int b) { return a > b ? a : b; }
+int64_t SelLo(int64_t a, int64_t b) { return a < b ? a : b; }
+int64_t SelHi(int64_t a, int64_t b) { return a > b ? a : b; }
 }  // namespace
+
+const std::vector<HexEditorPanel::Region>& HexEditorPanel::Regions()
+{
+    // First entry is "All" (the whole 27-bit canonical CPU space); the rest are the
+    // regions the snapshot captures, addressed at their CPU-visible bases. BIOS, the
+    // cartridge (CS0-2) and the sound CPU's 68K RAM are not captured, so they have no tab.
+    static const std::vector<Region> kRegions = {
+        { "All",       0x00000000u, 0x08000000u },
+        { "LWRAM",     0x00200000u, kWramSize     },
+        { "HWRAM",     0x06000000u, kWramSize     },
+        { "VDP1 RAM",  0x05C00000u, kVdp1VramSize },
+        { "VDP1 FB",   0x05C80000u, kVdp1FbSize   },
+        { "VDP1 Regs", 0x05D00000u, kVdp1RegBytes },
+        { "VDP2 RAM",  0x05E00000u, kVdp2VramSize },
+        { "VDP2 CRAM", 0x05F00000u, kCramSize     },
+        { "VDP2 Regs", 0x05F80000u, kVdp2RegBytes },
+    };
+    return kRegions;
+}
+
+int HexEditorPanel::RegionForAddr(uint32_t addr)
+{
+    const std::vector<Region>& regs = Regions();
+    const uint32_t a = addr & 0x07FFFFFFu;   // fold cache/through mirrors like the backend
+    for (int i = 1; i < (int)regs.size(); ++i)
+        if (a >= regs[i].base && a < regs[i].base + regs[i].size)
+            return i;
+    return 0;   // "All"
+}
 
 void HexEditorPanel::GoTo(uint32_t address)
 {
-    mBase = address & ~0xFu;   // align to the row so the byte is visible
-    std::snprintf(mAddrBuf, sizeof(mAddrBuf), "%08X", mBase);
-    mHavePrev = false;         // don't flash "changed" just from jumping
-    mSelStart = mSelEnd = (int)(address - mBase);
+    mSelectTab = RegionForAddr(address);
+    mScrollPending = true;
+    mScrollAddr = address;
+    mSelStart = mSelEnd = (int64_t)address;
+    std::snprintf(mAddrBuf, sizeof(mAddrBuf), "%08X", address);
     mFocusRequested = true;
 }
 
 void HexEditorPanel::Select(uint32_t address, uint32_t length)
 {
     if (length == 0) length = 1;
-    mBase = address & ~0xFu;
-    std::snprintf(mAddrBuf, sizeof(mAddrBuf), "%08X", mBase);
-    mHavePrev = false;
-    const int start = (int)(address - mBase);
-    int end = start + (int)length - 1;
-    if (mSize > 0 && end > mSize - 1) end = mSize - 1;   // keep the span inside the window
-    mSelStart = start;
-    mSelEnd   = end;
-    mFocusRequested = true;
+    GoTo(address);
+    mSelEnd = (int64_t)address + (int64_t)length - 1;
 }
 
 bool HexEditorPanel::TakeSearchRequest(std::vector<uint8_t>& outBytes, std::string& outLabel)
@@ -57,60 +82,30 @@ bool HexEditorPanel::TakeSearchRequest(std::vector<uint8_t>& outBytes, std::stri
     return true;
 }
 
-void HexEditorPanel::Refresh(IMemoryBackend& backend)
-{
-    mConnected = backend.Connected();
-    if (!mConnected) { mBytes.clear(); return; }
-
-    auto res = backend.ReadMemoryBatch({ { mBase, (uint32_t)mSize } })[0];
-    std::vector<uint8_t> fresh = res.success ? res.bytes : std::vector<uint8_t>((size_t)mSize, 0);
-    fresh.resize((size_t)mSize, 0);
-
-    // Change detection: bump each differing byte's highlight timer.
-    if (mChangeAge.size() != fresh.size()) { mChangeAge.assign(fresh.size(), 0.0f); mHavePrev = false; }
-    if (mHighlightChanges && mHavePrev && mPrev.size() == fresh.size())
-        for (size_t i = 0; i < fresh.size(); ++i)
-            if (fresh[i] != mPrev[i]) mChangeAge[i] = 1.0f;   // seconds
-
-    mPrev = fresh;
-    mHavePrev = true;
-    mBytes = std::move(fresh);
-}
-
 void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
 {
+    (void)live;
     if (mFocusRequested) { ImGui::SetNextWindowFocus(); mFocusRequested = false; }
-    if (!ImGui::Begin("Hex Editor"))
+    if (!ImGui::Begin("Memory"))
     {
         ImGui::End();
         return;
     }
 
-    // --- Toolbar: Address + Go, Size, Encoding, Auto Refresh, Highlight Changes ---
+    // --- Toolbar: Address + Go, Encoding, Auto Refresh, Highlight Changes (no Size:
+    //     the whole region scrolls). ---
     ImGui::TextUnformatted("Address:");
     ImGui::SameLine();
     ImGui::SetNextItemWidth(90.0f);
-    if (ImGui::InputText("##addr", mAddrBuf, sizeof(mAddrBuf),
-                         ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CharsHexadecimal))
+    bool go = ImGui::InputText("##addr", mAddrBuf, sizeof(mAddrBuf),
+                               ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CharsHexadecimal);
+    ImGui::SameLine();
+    go |= ImGui::Button("Go");
+    if (go)
     {
         unsigned a = 0;
-        if (std::sscanf(mAddrBuf, "%x", &a) == 1) { mBase = a & ~0xFu; mHavePrev = false; }
+        if (std::sscanf(mAddrBuf, "%x", &a) == 1) GoTo(a);
     }
-    ImGui::SameLine();
-    if (ImGui::Button("Go"))
-    {
-        unsigned a = 0;
-        if (std::sscanf(mAddrBuf, "%x", &a) == 1) { mBase = a & ~0xFu; mHavePrev = false; }
-    }
-    ImGui::SameLine();
-    ImGui::TextUnformatted("Size:");
-    ImGui::SameLine();
-    ImGui::SetNextItemWidth(70.0f);
-    const char* kSizes[] = { "0x40", "0x80", "0x100", "0x200", "0x400", "0x1000" };
-    const int   kSizeVals[] = { 0x40, 0x80, 0x100, 0x200, 0x400, 0x1000 };
-    int sizeIdx = 2;
-    for (int i = 0; i < 6; ++i) if (kSizeVals[i] == mSize) sizeIdx = i;
-    if (ImGui::Combo("##size", &sizeIdx, kSizes, 6)) { mSize = kSizeVals[sizeIdx]; mHavePrev = false; }
     ImGui::SameLine();
     ImGui::TextUnformatted("Encoding:");
     ImGui::SameLine();
@@ -122,13 +117,7 @@ void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
     ImGui::SameLine();
     ImGui::Checkbox("Highlight Changes", &mHighlightChanges);
 
-    // --- Read the window (auto-refresh, or once when frozen). Don't clobber the
-    //     cell being edited by re-reading over it. ---
-    if ((mAutoRefresh || !mHavePrev) && mEditIdx < 0) { Refresh(backend); }
-    for (float& a : mChangeAge) if (a > 0.0f) a = std::max(0.0f, a - dt);
-    if (mModifiedFlash > 0.0f) mModifiedFlash = std::max(0.0f, mModifiedFlash - dt);
-    const bool writable = backend.CanWrite(mBase);
-
+    mConnected = backend.Connected();
     if (!mConnected)
     {
         ImGui::Separator();
@@ -137,195 +126,294 @@ void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
         return;
     }
 
-    // --- Grid ---
-    ImGui::Separator();
-    const float ch = ImGui::CalcTextSize("F").x;
-    const float byteW = ch * 2.0f + 6.0f;      // "FF" + padding
-    const ImVec2 pad = ImGui::GetStyle().ItemSpacing;
-
-    ImGui::BeginChild("grid", ImVec2(0, -ImGui::GetFrameHeightWithSpacing()), false,
-                      ImGuiWindowFlags_HorizontalScrollbar);
-
-    // Column header row: address gutter + 00..0F.
-    ImGui::PushStyleColor(ImGuiCol_Text, kColAddr);
-    ImGui::Text("%-8s", "Addr");
-    for (int c = 0; c < 16; ++c)
+    // --- Region tabs (first is "All"). ---
+    const std::vector<Region>& regs = Regions();
+    if (ImGui::BeginTabBar("regions", ImGuiTabBarFlags_FittingPolicyScroll))
     {
-        ImGui::SameLine(0.0f, (c == 0) ? ch : pad.x);
-        ImGui::Text("%02X", c);
+        for (int i = 0; i < (int)regs.size(); ++i)
+        {
+            ImGuiTabItemFlags f = (mSelectTab == i) ? ImGuiTabItemFlags_SetSelected : 0;
+            if (ImGui::BeginTabItem(regs[i].name, nullptr, f))
+            {
+                if (mTab != i) { mPrevByte.clear(); mChangeAge.clear(); }
+                mTab = i;
+                ImGui::EndTabItem();
+            }
+        }
+        mSelectTab = -1;
+        ImGui::EndTabBar();
     }
-    ImGui::PopStyleColor();
+    const Region& reg = regs[mTab];
 
-    ImDrawList* dl = ImGui::GetWindowDrawList();
-    const int rows = mSize / 16;
-    const int selLo = (mSelStart >= 0 && mSelEnd >= 0) ? SelLo(mSelStart, mSelEnd) : -1;
-    const int selHi = (mSelStart >= 0 && mSelEnd >= 0) ? SelHi(mSelStart, mSelEnd) : -1;
-
-    for (int r = 0; r < rows; ++r)
+    // Fade change highlights.
+    for (auto it = mChangeAge.begin(); it != mChangeAge.end(); )
     {
-        ImGui::PushStyleColor(ImGuiCol_Text, kColAddr);
-        ImGui::Text("%08X", mBase + (uint32_t)r * 16);
-        ImGui::PopStyleColor();
+        it->second -= dt;
+        if (it->second <= 0.0f) it = mChangeAge.erase(it); else ++it;
+    }
+    if (mModifiedFlash > 0.0f) mModifiedFlash = std::max(0.0f, mModifiedFlash - dt);
+    // Keep the change history bounded when scrolling across large regions.
+    if (mPrevByte.size() > 200000) mPrevByte.clear();
 
-        // Hex cells.
+    const int64_t selLo = (mSelStart >= 0 && mSelEnd >= 0) ? SelLo(mSelStart, mSelEnd) : -1;
+    const int64_t selHi = (mSelStart >= 0 && mSelEnd >= 0) ? SelHi(mSelStart, mSelEnd) : -1;
+
+    // --- Grid: a frozen-header table, virtually scrolled over the whole region. ---
+    const float ch = ImGui::CalcTextSize("F").x;
+    const float byteW = ch * 2.0f + 8.0f;
+    const float rowH = ImGui::GetTextLineHeightWithSpacing();
+    const uint32_t totalRows = (reg.size + 15u) / 16u;
+
+    ImGuiTableFlags tflags = ImGuiTableFlags_ScrollY | ImGuiTableFlags_ScrollX |
+                             ImGuiTableFlags_BordersOuter | ImGuiTableFlags_SizingFixedFit;
+    const ImVec2 outer(0.0f, -ImGui::GetFrameHeightWithSpacing());
+    // Read the visible rows fresh when Auto Refresh is on (or the cache is empty); when
+    // off, freeze the view by rendering the last-seen bytes from mPrevByte.
+    const bool doRead = mAutoRefresh || mPrevByte.empty();
+    if (ImGui::BeginTable("mem", 18, tflags, outer))
+    {
+        ImGui::TableSetupScrollFreeze(1, 1);   // freeze the address column + header row
+        ImGui::TableSetupColumn("Addr", ImGuiTableColumnFlags_WidthFixed, ch * 8.0f + 4.0f);
         for (int c = 0; c < 16; ++c)
         {
-            const int idx = r * 16 + c;
-            const uint8_t v = mBytes[(size_t)idx];
-            ImGui::SameLine(0.0f, (c == 0) ? ch : pad.x);
+            char h[3]; std::snprintf(h, sizeof(h), "%02X", c);
+            ImGui::TableSetupColumn(h, ImGuiTableColumnFlags_WidthFixed, byteW);
+        }
+        ImGui::TableSetupColumn("Text", ImGuiTableColumnFlags_WidthFixed, ch * 16.0f + 4.0f);
+        ImGui::TableHeadersRow();
 
-            ImVec2 cur = ImGui::GetCursorScreenPos();
-
-            if (mEditIdx == idx)
+        // Scroll a pending target address into view (1-frame latency is fine).
+        if (mScrollPending)
+        {
+            const uint32_t a = mScrollAddr & 0x07FFFFFFu;
+            if (a >= reg.base && a < reg.base + reg.size)
             {
-                // Inline editor: 2 hex digits, committed on Enter / focus loss.
-                ImGui::SetNextItemWidth(byteW);
-                if (mEditFocus) { ImGui::SetKeyboardFocusHere(); mEditFocus = false; }
-                const bool enter = ImGui::InputText("##edit", mEditBuf, sizeof(mEditBuf),
-                    ImGuiInputTextFlags_CharsHexadecimal | ImGuiInputTextFlags_EnterReturnsTrue |
-                    ImGuiInputTextFlags_AutoSelectAll);
-                if (enter || ImGui::IsItemDeactivated())
+                const uint32_t row = (a - reg.base) / 16u;
+                ImGui::SetScrollY((float)row * rowH);
+            }
+            mScrollPending = false;
+        }
+
+        ImGuiListClipper clip;
+        clip.Begin((int)totalRows, rowH);
+        while (clip.Step())
+        {
+            // Batch-read the visible rows in one call (one 16-byte request per row so an
+            // unmapped gap in "All" only blanks that row, not the whole span).
+            const int first = clip.DisplayStart, last = clip.DisplayEnd;
+            std::vector<MemoryReadResult> res;
+            if (doRead)
+            {
+                std::vector<MemoryReadRequest> reqs;
+                reqs.reserve((size_t)std::max(0, last - first));
+                for (int r = first; r < last; ++r)
+                    reqs.push_back({ reg.base + (uint32_t)r * 16u, 16 });
+                res = backend.ReadMemoryBatch(reqs);
+            }
+
+            for (int r = first; r < last; ++r)
+            {
+                const uint32_t rowAddr = reg.base + (uint32_t)r * 16u;
+                // Resolve this row's 16 bytes: fresh from the read, or the frozen cache.
+                uint8_t rowBytes[16] = {};
+                bool rowMapped[16] = {};
+                for (int c = 0; c < 16; ++c)
                 {
-                    unsigned val = 0;
-                    if (mEditBuf[0] && std::sscanf(mEditBuf, "%x", &val) == 1)
+                    const uint32_t addr = rowAddr + (uint32_t)c;
+                    if (doRead)
                     {
-                        const uint8_t byte = (uint8_t)(val & 0xFF);
-                        if (backend.WriteMemory(mBase + (uint32_t)idx, &byte, 1) == 1)
+                        const MemoryReadResult& rr = res[(size_t)(r - first)];
+                        if (rr.success && rr.bytes.size() == 16)
                         {
-                            mBytes[(size_t)idx] = byte;
-                            if (idx < (int)mPrev.size()) mPrev[(size_t)idx] = byte;
-                            mChangeAge[(size_t)idx] = 1.0f;
-                            mModifiedFlash = 1.5f;
+                            const uint8_t v = rr.bytes[(size_t)c];
+                            auto pit = mPrevByte.find(addr);
+                            if (mHighlightChanges && pit != mPrevByte.end() && pit->second != v)
+                                mChangeAge[addr] = 1.0f;
+                            mPrevByte[addr] = v;
+                            rowBytes[c] = v; rowMapped[c] = true;
                         }
                     }
-                    mEditIdx = -1;
+                    else
+                    {
+                        auto pit = mPrevByte.find(addr);
+                        if (pit != mPrevByte.end()) { rowBytes[c] = pit->second; rowMapped[c] = true; }
+                    }
                 }
-                continue;
-            }
 
-            const bool selected = idx >= selLo && idx <= selHi;
-            if (selected)
-                dl->AddRectFilled(cur, ImVec2(cur.x + byteW, cur.y + ImGui::GetTextLineHeight()), kColSelBg);
+                ImGui::TableNextRow();
+                ImGui::TableSetColumnIndex(0);
+                ImGui::PushStyleColor(ImGuiCol_Text, kColAddr);
+                ImGui::Text("%08X", rowAddr);
+                ImGui::PopStyleColor();
 
-            ImU32 col = (mChangeAge[(size_t)idx] > 0.0f) ? kColChanged
-                       : (v == 0 ? kColZero : kColByte);
-            // Label carries the two hex digits for display plus "##idx" so each
-            // cell has a unique ID — otherwise every cell sharing a byte value (all
-            // the 00s, etc.) collides and ImGui flags an ID conflict.
-            char b[12]; std::snprintf(b, sizeof(b), "%02X##%d", v, idx);
-            ImGui::PushStyleColor(ImGuiCol_Text, col);
-            ImGui::Selectable(b, false, ImGuiSelectableFlags_AllowOverlap, ImVec2(byteW, 0));
-            ImGui::PopStyleColor();
-            // Hit-test by mouse position, not IsItemHovered(): once the first cell's
-            // Selectable is held active (mouse down), ImGui suppresses hover on every
-            // other cell, so a hover-based drag never extends the selection. A rect test
-            // ignores active-item capture, so click-drag works across cells.
-            const bool cellHovered =
-                ImGui::IsMouseHoveringRect(cur, ImVec2(cur.x + byteW, cur.y + ImGui::GetTextLineHeight()));
-            if (cellHovered)
-            {
-                if (writable && ImGui::IsMouseDoubleClicked(0))
+                for (int c = 0; c < 16; ++c)
                 {
-                    mEditIdx = idx; mEditFocus = true;
-                    std::snprintf(mEditBuf, sizeof(mEditBuf), "%02X", v);
+                    ImGui::TableSetColumnIndex(1 + c);
+                    const uint32_t addr = rowAddr + (uint32_t)c;
+                    const uint8_t v = rowBytes[c];
+
+                    const bool selected = selLo >= 0 && (int64_t)addr >= selLo && (int64_t)addr <= selHi;
+                    if (selected)
+                        ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, kColSelBg);
+
+                    if (!rowMapped[c])
+                    {
+                        ImGui::PushStyleColor(ImGuiCol_Text, kColUnmapped);
+                        ImGui::TextUnformatted("--");
+                        ImGui::PopStyleColor();
+                        continue;
+                    }
+
+                    ImVec2 cur = ImGui::GetCursorScreenPos();
+                    if (mEditAddr == (int64_t)addr)
+                    {
+                        ImGui::SetNextItemWidth(byteW);
+                        if (mEditFocus) { ImGui::SetKeyboardFocusHere(); mEditFocus = false; }
+                        const bool enter = ImGui::InputText("##edit", mEditBuf, sizeof(mEditBuf),
+                            ImGuiInputTextFlags_CharsHexadecimal | ImGuiInputTextFlags_EnterReturnsTrue |
+                            ImGuiInputTextFlags_AutoSelectAll);
+                        if (enter || ImGui::IsItemDeactivated())
+                        {
+                            unsigned val = 0;
+                            if (mEditBuf[0] && std::sscanf(mEditBuf, "%x", &val) == 1)
+                            {
+                                const uint8_t byte = (uint8_t)(val & 0xFF);
+                                if (backend.WriteMemory(addr, &byte, 1) == 1)
+                                {
+                                    mPrevByte[addr] = byte;
+                                    mChangeAge[addr] = 1.0f;
+                                    mModifiedFlash = 1.5f;
+                                }
+                            }
+                            mEditAddr = -1;
+                        }
+                        continue;
+                    }
+
+                    const ImU32 col = (mChangeAge.count(addr)) ? kColChanged
+                                     : (v == 0 ? kColZero : kColByte);
+                    char b[12]; std::snprintf(b, sizeof(b), "%02X##%u", v, addr);
+                    ImGui::PushStyleColor(ImGuiCol_Text, col);
+                    ImGui::Selectable(b, false, ImGuiSelectableFlags_AllowOverlap, ImVec2(byteW, 0));
+                    ImGui::PopStyleColor();
+
+                    // Hit-test by mouse rect, not IsItemHovered(): once one Selectable is
+                    // held active ImGui suppresses hover on the others, so a hover-based
+                    // drag never extends. A rect test ignores active-item capture.
+                    const bool cellHovered = ImGui::IsMouseHoveringRect(
+                        cur, ImVec2(cur.x + byteW, cur.y + ImGui::GetTextLineHeight()));
+                    if (cellHovered)
+                    {
+                        if (backend.CanWrite(addr) && ImGui::IsMouseDoubleClicked(0))
+                        {
+                            mEditAddr = (int64_t)addr; mEditFocus = true;
+                            std::snprintf(mEditBuf, sizeof(mEditBuf), "%02X", v);
+                        }
+                        else if (ImGui::IsMouseClicked(0))
+                        {
+                            mSelStart = mSelEnd = (int64_t)addr; mSelecting = true;
+                        }
+                    }
+                    if (mSelecting && ImGui::IsMouseDown(0) && cellHovered) mSelEnd = (int64_t)addr;
                 }
-                else if (ImGui::IsMouseClicked(0)) { mSelStart = mSelEnd = idx; mSelecting = true; }
+
+                // Text pane (ASCII, or Shift-JIS: double-byte kanji/kana + half katakana).
+                ImGui::TableSetColumnIndex(17);
+                int c = 0;
+                while (c < 16)
+                {
+                    const uint8_t v = rowBytes[c];
+                    const bool mp = rowMapped[c];
+                    if (c) ImGui::SameLine(0.0f, 0.0f);
+                    if (mp && mEncoding == 1 && c < 15 && rowMapped[c + 1] &&
+                        SjisIsLead(v) && SjisIsTrail(rowBytes[c + 1]))
+                    {
+                        const uint32_t cp = SjisDecode(v, rowBytes[c + 1]);
+                        char u[5]; if (cp) Utf8Encode(cp, u); else { u[0] = u[1] = '.'; u[2] = '\0'; }
+                        ImGui::PushStyleColor(ImGuiCol_Text, kColJp);
+                        ImGui::TextUnformatted(u);
+                        ImGui::PopStyleColor();
+                        c += 2;
+                        continue;
+                    }
+                    if (mp && mEncoding == 1 && SjisIsHalfKana(v))
+                    {
+                        char u[5]; Utf8Encode(SjisHalfKana(v), u);
+                        ImGui::PushStyleColor(ImGuiCol_Text, kColJp);
+                        ImGui::TextUnformatted(u);
+                        ImGui::PopStyleColor();
+                        c += 1;
+                        continue;
+                    }
+                    const char disp = (mp && v >= 0x20 && v <= 0x7E) ? (char)v : '.';
+                    ImGui::PushStyleColor(ImGuiCol_Text, mp ? kColText : kColUnmapped);
+                    ImGui::Text("%c", disp);
+                    ImGui::PopStyleColor();
+                    c += 1;
+                }
             }
-            // Extend the drag to whatever cell the cursor is over while the button is held.
-            if (mSelecting && ImGui::IsMouseDown(0) && cellHovered) mSelEnd = idx;
+        }
+        if (ImGui::IsMouseReleased(0)) mSelecting = false;
+
+        // Right-click → search the current byte selection in the game data directory.
+        if (ImGui::BeginPopupContextWindow("hexctx", ImGuiPopupFlags_MouseButtonRight))
+        {
+            const int64_t cnt = (selLo >= 0) ? (selHi - selLo + 1) : 0;
+            if (cnt > 0 && cnt <= 0x1000)
+            {
+                char item[80];
+                std::snprintf(item, sizeof(item), "Find %lld selected byte%s in data directory",
+                              (long long)cnt, cnt == 1 ? "" : "s");
+                if (ImGui::MenuItem(item))
+                {
+                    auto res = backend.ReadMemoryBatch({ { (uint32_t)selLo, (uint32_t)cnt } })[0];
+                    if (res.success)
+                    {
+                        mSearchBytes = std::move(res.bytes);
+                        char lbl[80];
+                        std::snprintf(lbl, sizeof(lbl), "Hex bytes @0x%08X (%lld byte%s)",
+                                      (uint32_t)selLo, (long long)cnt, cnt == 1 ? "" : "s");
+                        mSearchLabel = lbl;
+                        mSearchRequested = true;
+                    }
+                }
+            }
+            else
+            {
+                ImGui::TextDisabled("Select bytes first (click, then drag to extend).");
+            }
+            ImGui::EndPopup();
         }
 
-        // Text pane. ASCII renders one glyph per byte; Shift-JIS decodes double-
-        // byte kanji/kana (one wide glyph over two bytes) and half-width katakana
-        // (the merged IPAGothic font supplies the glyphs).
-        ImGui::SameLine(0.0f, ch);
-        int c = 0;
-        while (c < 16)
-        {
-            const int idx = r * 16 + c;
-            const uint8_t v = mBytes[(size_t)idx];
-            ImGui::SameLine(0.0f, 0.0f);
-            if (mEncoding == 1 && c < 15 &&
-                SjisIsLead(v) && SjisIsTrail(mBytes[(size_t)idx + 1]))
-            {
-                const uint32_t cp = SjisDecode(v, mBytes[(size_t)idx + 1]);
-                char u[5]; if (cp) Utf8Encode(cp, u); else { u[0] = u[1] = '.'; u[2] = '\0'; }
-                ImGui::PushStyleColor(ImGuiCol_Text, kColJp);
-                ImGui::TextUnformatted(u);
-                ImGui::PopStyleColor();
-                c += 2;
-                continue;
-            }
-            if (mEncoding == 1 && SjisIsHalfKana(v))
-            {
-                char u[5]; Utf8Encode(SjisHalfKana(v), u);
-                ImGui::PushStyleColor(ImGuiCol_Text, kColJp);
-                ImGui::TextUnformatted(u);
-                ImGui::PopStyleColor();
-                c += 1;
-                continue;
-            }
-            const char disp = (v >= 0x20 && v <= 0x7E) ? (char)v : '.';
-            ImGui::PushStyleColor(ImGuiCol_Text, kColText);
-            ImGui::Text("%c", disp);
-            ImGui::PopStyleColor();
-            c += 1;
-        }
+        ImGui::EndTable();
     }
-    if (ImGui::IsMouseReleased(0)) mSelecting = false;
-
-    // Right-click anywhere in the grid → search the current byte selection in the game
-    // data directory (results open in the "Data Search Results" window).
-    if (ImGui::BeginPopupContextWindow("hexctx", ImGuiPopupFlags_MouseButtonRight))
-    {
-        const int cnt = (selLo >= 0) ? (selHi - selLo + 1) : 0;
-        if (cnt > 0)
-        {
-            char item[80];
-            std::snprintf(item, sizeof(item), "Find %d selected byte%s in data directory",
-                          cnt, cnt == 1 ? "" : "s");
-            if (ImGui::MenuItem(item))
-            {
-                mSearchBytes.assign(mBytes.begin() + selLo, mBytes.begin() + selHi + 1);
-                char lbl[80];
-                std::snprintf(lbl, sizeof(lbl), "Hex bytes @0x%08X (%d byte%s)",
-                              mBase + (uint32_t)selLo, cnt, cnt == 1 ? "" : "s");
-                mSearchLabel = lbl;
-                mSearchRequested = true;
-            }
-        }
-        else
-        {
-            ImGui::TextDisabled("Select bytes first (click, then drag to extend).");
-        }
-        ImGui::EndPopup();
-    }
-    ImGui::EndChild();
 
     // --- Selection / value readout ---
     ImGui::Separator();
     if (selLo >= 0)
     {
-        const uint32_t a0 = mBase + (uint32_t)selLo;
-        const uint32_t a1 = mBase + (uint32_t)selHi;
-        const int count = selHi - selLo + 1;
-        ImGui::Text("Selection: 0x%08X - 0x%08X (%d byte%s)", a0, a1, count, count == 1 ? "" : "s");
-        ImGui::SameLine();
-        // Value (hex), and U16/U32 big-endian from the first bytes of the selection.
-        char hex[64] = {}; int hp = 0;
-        for (int i = selLo; i <= selHi && hp < 56; ++i)
-            hp += std::snprintf(hex + hp, sizeof(hex) - hp, "%02X ", mBytes[(size_t)i]);
-        ImGui::Text("| Hex: %s", hex);
-        if (count >= 2)
+        const int64_t count = selHi - selLo + 1;
+        ImGui::Text("Selection: 0x%08X - 0x%08X (%lld byte%s)",
+                    (uint32_t)selLo, (uint32_t)selHi, (long long)count, count == 1 ? "" : "s");
+        // Value (hex, and U16/U32 big-endian) from the first bytes of the selection.
+        auto res = backend.ReadMemoryBatch({ { (uint32_t)selLo, (uint32_t)std::min<int64_t>(count, 8) } })[0];
+        if (res.success && !res.bytes.empty())
         {
-            const uint16_t u16 = (uint16_t)((mBytes[(size_t)selLo] << 8) | mBytes[(size_t)selLo + 1]);
-            ImGui::SameLine(); ImGui::Text("| U16: %04X", u16);
-        }
-        if (count >= 4)
-        {
-            uint32_t u32 = 0;
-            for (int i = 0; i < 4; ++i) u32 = (u32 << 8) | mBytes[(size_t)selLo + i];
-            ImGui::SameLine(); ImGui::Text("| U32: %08X", u32);
+            char hex[64] = {}; int hp = 0;
+            for (size_t i = 0; i < res.bytes.size() && hp < 56; ++i)
+                hp += std::snprintf(hex + hp, sizeof(hex) - hp, "%02X ", res.bytes[i]);
+            ImGui::SameLine(); ImGui::Text("| Hex: %s", hex);
+            if (res.bytes.size() >= 2)
+            {
+                const uint16_t u16 = (uint16_t)((res.bytes[0] << 8) | res.bytes[1]);
+                ImGui::SameLine(); ImGui::Text("| U16: %04X", u16);
+            }
+            if (res.bytes.size() >= 4)
+            {
+                uint32_t u32 = 0;
+                for (int i = 0; i < 4; ++i) u32 = (u32 << 8) | res.bytes[(size_t)i];
+                ImGui::SameLine(); ImGui::Text("| U32: %08X", u32);
+            }
         }
         if (mModifiedFlash > 0.0f)
         {
@@ -333,15 +421,10 @@ void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
             ImGui::TextColored(ImVec4(0.92f, 0.35f, 0.30f, 1.0f), "Modified");
         }
     }
-    else if (writable)
-    {
-        ImGui::TextDisabled("Click to select; drag to extend; double-click a byte to edit.");
-    }
     else
     {
-        ImGui::TextDisabled("Click a byte to select; drag to extend. (read-only source)");
+        ImGui::TextDisabled("Click a byte to select; drag to extend; double-click a writable byte to edit.");
     }
-    (void)live;
 
     ImGui::End();
 }

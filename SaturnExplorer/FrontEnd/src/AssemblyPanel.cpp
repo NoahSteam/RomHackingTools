@@ -552,7 +552,7 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
             { mComments.erase(ln.addr); SaveComments(); }
             ImGui::Separator();
             uint32_t hexEa; WatchType hexWt;
-            if (ImGui::MenuItem("View Address in Hex Editor", nullptr, false,
+            if (ImGui::MenuItem("View Address in Memory", nullptr, false,
                                 ln.readable && ResolveMemOperand(ln.ins, regs, hexEa, hexWt)))
             { req.viewHex = true; req.hexAddr = hexEa; }
 
