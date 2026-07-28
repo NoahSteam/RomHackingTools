@@ -172,13 +172,24 @@ extern "C" void SsDbgAddExecBp(int cpu, unsigned int addr) {
 }
 /* Data (read/write) watchpoint over [addr, addr+size). kind bit0 = read, bit1 = write
    (1 read, 2 write, 3 read/write). The ss debugger checks these ranges per instruction
-   in DBG_CPUHandler (CheckRWBreakpoints); a hit sets FoundBPoint and drives our CPU hook
-   with bpoint=true, so SeSsBpHook halts exactly as it does for a PC breakpoint. */
+   in DBG_CPUHandler (CheckRWBreakpoints), comparing against the RAW effective address the
+   instruction computes; a hit sets FoundBPoint and drives our CPU hook with bpoint=true,
+   so SeSsBpHook halts exactly as it does for a PC breakpoint.
+
+   The SH-2 sees the same RAM cell through several cache-region images (bits 31..29 select
+   cached 0x0, cache-through 0x2, etc.), and games freely mix cached and uncached accesses
+   to the same address. The front end sends a cached (0x0xxxxxxx) address, so we install the
+   watchpoint in BOTH the cached and cache-through images to catch either access form. */
 extern "C" void SsDbgAddMemBp(int cpu, unsigned int addr, unsigned int size, unsigned int kind) {
    (void)cpu;   /* SS data breakpoints are shared across both SH-2s */
-   const unsigned int end = addr + (size ? size - 1u : 0u);
-   if (kind & 0x1u) DBG_AddBreakPoint(BPOINT_READ, addr, end, true);
-   if (kind & 0x2u) DBG_AddBreakPoint(BPOINT_WRITE, addr, end, true);
+   const unsigned int span = size ? size - 1u : 0u;
+   const unsigned int images[2] = { addr & ~0x20000000u, addr | 0x20000000u };
+   for (int i = 0; i < 2; ++i) {
+      const unsigned int a = images[i];
+      const unsigned int end = a + span;
+      if (kind & 0x1u) DBG_AddBreakPoint(BPOINT_READ, a, end, true);
+      if (kind & 0x2u) DBG_AddBreakPoint(BPOINT_WRITE, a, end, true);
+   }
    sSeBpActive = 1;
    SeSyncCpuHook();
 }

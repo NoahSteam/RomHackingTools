@@ -186,6 +186,14 @@ static void SeMdfnAddExecBp(int cpu, unsigned int address)
 }
 static void SeMdfnAddMemBp(int cpu, unsigned int address, unsigned int size, unsigned int kind)
 {
+    /* Diagnostic: confirm the emulator received the watchpoint (and the exact address/size/
+     * access it installed) in Saturn Explorer's Log window. Fires on each breakpoint-set
+     * sync, so a Log line here but no halt points at an address-match issue, while no line
+     * at all points at a stale (non-mem-bp) build. */
+    char msg[80];
+    snprintf(msg, sizeof(msg), "watchpoint: addr=%08X size=%u %s%s", address, size,
+             (kind & 0x1u) ? "R" : "", (kind & 0x2u) ? "W" : "");
+    SeExportLog(msg);
 #if defined(SE_MEDNAFEN_WIRED)
     /* Installs a data (read/write) watchpoint over [address, address+size) via the ss
      * debugger. Like the PC breakpoint it only halts in a --enable-debugger build;

@@ -224,8 +224,18 @@ accessing PC) exactly like a PC breakpoint. `SsDbgClearBps` flushes all three li
 (`BPOINT_PC`/`READ`/`WRITE`). The glue registers this through
 `SeExportSetMemBreakpointHook`. Front end: right-click a byte in the **Memory**
 panel → **Add breakpoint** → Read / Write / Read or Write → Byte / Short / Long.
-Same `--enable-debugger` requirement as PC breakpoints; the address is matched as
-the raw SH-2 bus address (mirror regions aren't folded).
+Same `--enable-debugger` requirement as PC breakpoints.
+
+The debugger matches the **raw effective address** the instruction computes, and the
+SH-2 reaches the same RAM cell through several cache-region images (bits 31..29:
+cached `0x0xxxxxxx`, cache-through `0x2xxxxxxx`, …). Games mix cached and uncached
+accesses freely, so `SsDbgAddMemBp` installs the watchpoint in **both** the cached and
+cache-through images of the address; a hit through either form halts. `SeMdfnAddMemBp`
+also logs a `watchpoint: addr=… size=… RW` line to the SE Log on each breakpoint-set
+sync — a useful check that the emulator received it (a stale, non-mem-bp build logs
+nothing). Note this is a **brand-new emulator-side accessor**: re-run `apply.py` and
+rebuild Mednafen for memory breakpoints to take effect, even if PC breakpoints already
+work in your current binary.
 
 ### Instruction stepping (Step Into / Over / Out, v12+)
 
