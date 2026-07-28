@@ -1838,11 +1838,14 @@ void App::DrawBreakpoints()
                 const char* acc = b.kind == BpKind::MemRead  ? "read"
                                 : b.kind == BpKind::MemWrite ? "written"
                                                              : "read or written";
-                if (b.size > 1)
+                if (b.size == 1)
+                    ImGui::Text("Byte at %08X is %s", b.address, acc);
+                else if (b.size == 2 || b.size == 4)
                     ImGui::Text("%s at %08X-%08X is %s",
                                 BpSizeName(b.size), b.address, b.address + b.size - 1, acc);
                 else
-                    ImGui::Text("Byte at %08X is %s", b.address, acc);
+                    ImGui::Text("%u bytes at %08X-%08X are %s",
+                                b.size, b.address, b.address + b.size - 1, acc);
             }
 
             ImGui::TableNextColumn();
@@ -3055,6 +3058,20 @@ std::vector<uint8_t> BuildBmp(int w, int h, const std::vector<uint8_t>& pixels,
 }
 }  // namespace
 
+bool App::BreakOnTextureWrite(const se_command& cmd)
+{
+    const uint32_t bytes = TextureVramBytes(cmd);
+    if (bytes == 0) return false;
+    const uint32_t addr = kVdp1VramBase + cmd.texture_address;
+    mBreakpoints.AddMemory(addr, bytes, BpKind::MemWrite);
+    mPanels.breakpoints = true;   // surface the new breakpoint
+    char msg[96];
+    std::snprintf(msg, sizeof(msg),
+                  "Break on write to VDP1 RAM texture @ %08X (%u bytes)", addr, bytes);
+    mLog.Info(msg);
+    return true;
+}
+
 void App::DrawTextureViewer(IPlatform& platform)
 {
     if (ImGui::Begin("Texture Viewer"))
@@ -3127,6 +3144,17 @@ void App::DrawTextureViewer(IPlatform& platform)
                 // raw VRAM bytes. (Explicit id: Image() is not an interactive item.)
                 if (ImGui::BeginPopupContextItem("##texture_ctx"))
                 {
+                    const uint32_t texBytes = TextureVramBytes(cmd);
+                    if (ImGui::MenuItem("Break when written to VDP1 RAM", nullptr, false,
+                                        texBytes > 0))
+                    {
+                        BreakOnTextureWrite(cmd);
+                    }
+                    ImGui::SetItemTooltip(
+                        "Add a write watchpoint over this texture's %u bytes at 0x%08X.\n"
+                        "Halts on a CPU write; VDP/SCU DMA uploads are not caught.",
+                        texBytes, kVdp1VramBase + cmd.texture_address);
+                    ImGui::Separator();
                     if (ImGui::MenuItem("Find in game data directory"))
                     {
                         BeginTextureSearch(platform, cmd);

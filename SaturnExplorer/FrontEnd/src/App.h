@@ -128,6 +128,9 @@ private:
     void DrawCommandList();
     void DrawSelectedObject();
     void DrawTextureViewer(IPlatform& platform);
+    // Add a write watchpoint over the VDP1 VRAM bytes a command's texture occupies, so the
+    // emulator halts when the CPU overwrites that texture. False if it has no footprint.
+    bool BreakOnTextureWrite(const se_command& cmd);
     // Export the currently-shown texture as a .bmp (paletted BMP with the game's
     // palette when the texture is paletted, else 24-bit) via the platform save dialog.
     void ExportTexture(IPlatform& platform, const se_command& cmd, int w, int h);
