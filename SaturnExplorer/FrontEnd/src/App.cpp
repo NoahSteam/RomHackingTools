@@ -1276,15 +1276,10 @@ void App::DrawAssembly()
         if (!mBreakpoints.HasExecutionAt(mAssemblyPanel.Cpu(), req.runToAddr))
             mBreakpoints.ToggleExecution(mAssemblyPanel.Cpu(), req.runToAddr);
         SyncBreakpointsToLive();
-        se_frame_resume(mContext);
-        mbPaused = false;
+        Continue();
     }
     // Run control mirrored into the panel header, resolved against the panel's CPU.
-    if (req.continueRun && mbHasData && se_supports_frame_control(mContext))
-    {
-        se_frame_resume(mContext);
-        mbPaused = false;
-    }
+    if (req.continueRun) Continue();
     if (req.stepInto) StepInto(mAssemblyPanel.Cpu());
     if (req.stepOver) StepOver(mAssemblyPanel.Cpu());
     if (req.stepOut)  StepOut(mAssemblyPanel.Cpu());
@@ -1803,7 +1798,7 @@ void App::DrawCallStack()
         if (haveR) { ImGui::SameLine(); ImGui::Text("\xc2\xb7 PC %08X", r.pc); }
 
         const bool canStep = mbHasData && se_supports_frame_control(mContext);
-        if (ImGui::Button("Continue") && canStep) { se_frame_resume(mContext); mbPaused = false; }
+        if (ImGui::Button("Continue")) { Continue(); }
         ImGui::SameLine();
         // Step Into / Over need an instruction-level halt (a breakpoint or prior step) so
         // the emulator is spinning in its per-instruction gate; a bare frame-pause can't
@@ -2138,6 +2133,15 @@ void App::SyncBreakpointsToLive()
     auto put32 = [&descs](uint32_t w) {
         for (int i = 0; i < 4; ++i) descs.push_back(static_cast<uint8_t>(w >> (8 * i)));
     };
+    // Emit one 12-byte wire descriptor: address + size + (kind|cpu|enabled) flags.
+    auto putDesc = [&](uint32_t address, uint32_t size, uint32_t kind, int cpu, bool enabled) {
+        uint32_t flags = kind & SE_LIVE_BP_KIND_MASK;
+        if (cpu != 0) { flags |= SE_LIVE_BP_CPU_SLAVE; }
+        if (enabled)  { flags |= SE_LIVE_BP_ENABLED; }
+        put32(address);
+        put32(size);
+        put32(flags);
+    };
     for (const Breakpoint& b : all)
     {
         uint32_t kind = 0;   // 0 exec, 1 read, 2 write, 3 read/write
@@ -2148,21 +2152,13 @@ void App::SyncBreakpointsToLive()
             case BpKind::MemWrite:     kind = 2; break;
             case BpKind::MemReadWrite: kind = 3; break;
         }
-        uint32_t flags = kind & SE_LIVE_BP_KIND_MASK;
-        if (b.cpu != 0) { flags |= SE_LIVE_BP_CPU_SLAVE; }
-        if (b.enabled)  { flags |= SE_LIVE_BP_ENABLED; }
-        put32(b.address);
-        put32(b.size);
-        put32(flags);
+        putDesc(b.address, b.size, kind, b.cpu, b.enabled);
     }
     uint32_t count = static_cast<uint32_t>(all.size());
     if (mStepBpActive)   // append the transient step breakpoint (execution, enabled)
     {
-        uint32_t flags = (0u & SE_LIVE_BP_KIND_MASK) | SE_LIVE_BP_ENABLED;
-        if (mStepBpCpu != 0) { flags |= SE_LIVE_BP_CPU_SLAVE; }
-        put32(mStepBpAddr);
-        put32(0u);
-        put32(flags);
+        // PC breakpoints are shared across both SH-2s, so the transient carries no CPU.
+        putDesc(mStepBpAddr, 0u, 0u, 0, true);
         ++count;
     }
     se_live_set_breakpoints(&mDataSource, descs.data(), count);
@@ -2175,15 +2171,25 @@ void App::SyncBreakpointsToLive()
 // (return site / caller) and resume, letting it run at native speed; the stop handler
 // retires the transient once hit. All operate on the halted CPU.
 
-void App::RunToTransient(int cpu, uint32_t addr)
+// Resume the halted emulator (the shared "Continue" used by the toolbar, both run-control
+// strips, Run to Here, and the step helpers). No-op without live frame control.
+void App::Continue()
 {
+    if (mbHasData && se_supports_frame_control(mContext))
+    {
+        se_frame_resume(mContext);
+        mbPaused = false;
+    }
+}
+
+void App::RunToTransient(uint32_t addr)
+{
+    // PC breakpoints are shared across both SH-2s, so the transient is CPU-agnostic.
     mStepBpActive = true;
-    mStepBpCpu = cpu;
     mStepBpAddr = addr;
     mStepBpDirty = true;
-    SyncBreakpointsToLive();          // ship the transient breakpoint before resuming
-    if (mContext) { se_frame_resume(mContext); }
-    mbPaused = false;
+    SyncBreakpointsToLive();   // ship the transient breakpoint before resuming
+    Continue();
 }
 
 void App::StepInto(int cpu)
@@ -2191,8 +2197,6 @@ void App::StepInto(int cpu)
     (void)cpu;   // the server steps whichever CPU the stop latched (the halted CPU)
 #ifdef SE_ENABLE_LIVE
     se_live_step_insn(&mDataSource, 1);
-#else
-    (void)cpu;
 #endif
     mbPaused = false;
 }
@@ -2201,8 +2205,8 @@ void App::StepOver(int cpu)
 {
     // If the instruction at PC is a subroutine call, run to the return site (PC + 4, past
     // the SH-2 delay slot — the address the call pushes to PR); otherwise Step Over
-    // degenerates to a single-instruction step. Only bsr/bsrf/jsr use the PC+4 convention
-    // (matching the glue's SeMdfnTrackFlow); trapa returns to PC+2 and is stepped instead.
+    // degenerates to a single-instruction step. IsSh2CallOpcode matches exactly bsr/bsrf/jsr
+    // (not trapa, whose return is PC+2), the same set the glue's SeMdfnTrackFlow uses.
     se_sh2_regs r{};
     if (!mbHasData || se_get_sh2_regs(mContext, cpu, &r) != SE_OK) { return; }
     bool isSubCall = false;
@@ -2211,11 +2215,9 @@ void App::StepOver(int cpu)
     if (!res.empty() && res[0].success && res[0].bytes.size() >= 2)
     {
         const uint16_t op = static_cast<uint16_t>((res[0].bytes[0] << 8) | res[0].bytes[1]);
-        isSubCall = ((op & 0xF000u) == 0xB000u) ||   // bsr  disp
-                    ((op & 0xF0FFu) == 0x0003u) ||   // bsrf Rn
-                    ((op & 0xF0FFu) == 0x400Bu);     // jsr  @Rn
+        isSubCall = IsSh2CallOpcode(op);
     }
-    if (isSubCall) { RunToTransient(cpu, r.pc + 4); }
+    if (isSubCall) { RunToTransient(r.pc + 4); }
     else           { StepInto(cpu); }
 }
 
@@ -2223,7 +2225,7 @@ void App::StepOut(int cpu)
 {
     se_sh2_regs r{};
     if (!mbHasData || se_get_sh2_regs(mContext, cpu, &r) != SE_OK) { return; }
-    RunToTransient(cpu, r.pr);   // run to the current frame's return address
+    RunToTransient(r.pr);   // run to the current frame's return address
 }
 
 void App::DrawVdpOutput(IPlatform& platform)

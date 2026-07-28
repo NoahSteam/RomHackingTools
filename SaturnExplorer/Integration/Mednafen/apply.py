@@ -151,15 +151,17 @@ static void SeSsBpHook(uint32 PC, bool bpoint) {
       is spent (SeExportInsnStepTick returns 1). */
    int stepHalt = sSeStepActive ? SeExportInsnStepTick((int)DBG.ActiveCPU) : 0;
    if (bpoint || stepHalt) {
-      if (stepHalt) { sSeStepActive = 0; SeSyncCpuHook(); }  /* step done: drop continuous */
       if (stepHalt && !bpoint)
          SeExportNotifyStep((int)DBG.ActiveCPU, (unsigned int)PC);
       else
          SeExportNotifyStop((int)DBG.ActiveCPU, (unsigned int)PC);
       while (!SeExportGateFrame()) { }
-      /* Gate released: if an instruction step (IST) was requested while we were halted,
-         activate it and arm continuous so the next instructions call this hook. */
-      if (SeExportInsnStepBegin()) { sSeStepActive = 1; SeSyncCpuHook(); }
+      /* Gate released: set the callback mode for what runs next — continuous iff an
+         instruction step (IST) was just requested, else it reverts to the bp/tracepoint
+         arming. The mode during the spin above is inert (no instructions execute), so a
+         single sync point here is enough. */
+      sSeStepActive = SeExportInsnStepBegin() ? 1 : 0;
+      SeSyncCpuHook();
    }
 }
 extern "C" void SsDbgAddExecBp(int cpu, unsigned int addr) {

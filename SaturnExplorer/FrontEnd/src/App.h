@@ -113,9 +113,13 @@ private:
     void StepInto(int cpu);
     void StepOver(int cpu);
     void StepOut(int cpu);
-    // Install the transient step breakpoint at (cpu, addr) and resume — the shared
-    // "run to a computed address, then halt" used by StepOver/StepOut.
-    void RunToTransient(int cpu, uint32_t addr);
+    // Install the transient step breakpoint at 'addr' and resume — the shared "run to a
+    // computed address, then halt" used by StepOver/StepOut. CPU-agnostic (SH-2 PC
+    // breakpoints are shared across both cores).
+    void RunToTransient(uint32_t addr);
+    // Resume the halted emulator (shared by the toolbar, both run-control strips, Run to
+    // Here, and the step helpers). No-op without live frame control.
+    void Continue();
     void SyncTracepointsToLive();           // push the tracepoint set to the emulator (v8)
     void DrainTraceEvents();                // pull fired tracepoint events into the Log
     void DrawVdp1Framebuffer(IPlatform& platform);
@@ -230,7 +234,6 @@ private:
     // client installs alongside the user set and removes automatically once hit. Kept out
     // of BreakpointManager so it never shows in the gutter.
     bool             mStepBpActive = false;
-    int              mStepBpCpu = 0;
     uint32_t         mStepBpAddr = 0;
     bool             mStepBpDirty = false;   // forces a breakpoint re-sync when it changes
     bool             mbAutoConnectLive = false; // poll while no dump/live source is active
