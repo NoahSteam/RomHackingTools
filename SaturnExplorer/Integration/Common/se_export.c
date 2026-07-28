@@ -589,18 +589,17 @@ static void SeServeClient(int cl, SeFrame* snap)
                 cpu = (flags & SE_LIVE_BP_CPU_SLAVE) ? 1u : 0u;
                 enabled = (flags & SE_LIVE_BP_ENABLED) ? 1u : 0u;
                 /* kind 0 = execution (PC); 1/2/3 = read/write/read-write data
-                 * breakpoints (watchpoints) over [address, address+size). */
-                if (!enabled)
-                {
-                    /* skip: descriptor already consumed to keep the stream aligned */
-                }
-                else if (kind == 0u)
+                 * breakpoints (watchpoints) over [address, address+size). The
+                 * descriptor was already consumed above, so a disabled one just
+                 * skips installation without desyncing the stream. */
+                if (!enabled) continue;
+                if (kind == 0u)
                 {
                     if (sAddExecBp) sAddExecBp((int)cpu, address);
                 }
-                else
+                else if (sAddMemBp)
                 {
-                    if (sAddMemBp) sAddMemBp((int)cpu, address, size ? size : 1u, kind);
+                    sAddMemBp((int)cpu, address, size ? size : 1u, kind);
                 }
             }
         }

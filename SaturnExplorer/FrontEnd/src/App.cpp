@@ -528,6 +528,16 @@ bool App::IsSelected(int command) const
            std::find(mSelection.begin(), mSelection.end(), command) != mSelection.end();
 }
 
+// A selection arriving from a panel that is neither index table (the 2D/3D views or the
+// VRAM Map) should scroll into view in BOTH the Command List and the VDP1 Table. The two
+// index tables themselves only cross-reveal the *other* one (see DrawCommandList /
+// DrawVdp1Table) so a click doesn't yank the panel the user is scrolling under the cursor.
+void App::RevealSelectionInTables()
+{
+    mScrollCommandListToSelection = true;
+    mScrollVdp1TableToSelection = true;
+}
+
 // Recreate 'tex' when the target size changes; updates cached w/h. Returns the
 // (possibly new) handle. Shared by the 2D and 3D render panels.
 static TextureHandle EnsureTexture(IPlatform& platform, TextureHandle tex,
@@ -2347,8 +2357,7 @@ void App::DrawVdpOutput(IPlatform& platform)
                 if (se_hit_test(mContext, vx, vy, &hitCommand) == SE_OK)
                 {
                     SelectCommand(static_cast<int>(hitCommand), ImGui::GetIO().KeyShift);
-                    mScrollCommandListToSelection = true;
-                    mScrollVdp1TableToSelection = true;
+                    RevealSelectionInTables();
                 }
             }
         }
@@ -2669,8 +2678,7 @@ void App::DrawWorldView(IPlatform& platform)
                                            static_cast<int>(up.y - imgMin.y), &hit) == SE_OK)
                         {
                             SelectCommand(static_cast<int>(hit), ImGui::GetIO().KeyShift);
-                            mScrollCommandListToSelection = true;
-                            mScrollVdp1TableToSelection = true;
+                            RevealSelectionInTables();
                         }
                     }
                 }
@@ -4697,8 +4705,7 @@ void App::DrawVramMap()
             if (mapClicked && nearestRef != 0xFFFFFFFFu)
             {
                 SelectCommand(static_cast<int>(nearestRef), ImGui::GetIO().KeyShift);
-                mScrollCommandListToSelection = true;
-                mScrollVdp1TableToSelection = true;
+                RevealSelectionInTables();
             }
 
             // Legend, wrapping to fit the panel width.
@@ -4761,8 +4768,7 @@ void App::DrawReferenceList(const char* id, const std::vector<se_reference>& ref
             if (ImGui::Selectable(label, selected, ImGuiSelectableFlags_SpanAllColumns))
             {
                 SelectCommand(static_cast<int>(r.command_index), ImGui::GetIO().KeyShift);
-                mScrollCommandListToSelection = true;
-                mScrollVdp1TableToSelection = true;
+                RevealSelectionInTables();
             }
             ImGui::TableNextColumn();
             ImGui::Text("%u", r.object_number);

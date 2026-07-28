@@ -173,6 +173,9 @@ private:
     // selects one; shift-click (additive) toggles a command in/out of the set.
     void SelectCommand(int command, bool additive);
     bool IsSelected(int command) const;
+    // Reveal the current selection in both index tables (Command List + VDP1 Table);
+    // used by the non-table panels (2D/3D views, VRAM Map) that select a command.
+    void RevealSelectionInTables();
 
     se_data_source mDataSource {};
     se_context*    mContext = nullptr;
