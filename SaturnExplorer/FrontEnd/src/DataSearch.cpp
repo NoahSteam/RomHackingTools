@@ -8,6 +8,8 @@
 #include <algorithm>
 #include <fstream>
 
+#include "Prs.h"
+
 #ifdef _WIN32
 #include <windows.h>
 #else
@@ -161,6 +163,88 @@ void SearchFile(const std::string& path, const uint8_t* needle, size_t len,
     }
 }
 
+// Read an entire file into `data`. Returns false on open failure. Used by the PRS scan,
+// which needs random access to try decompression at every offset.
+bool ReadWholeFile(const std::string& path, std::vector<uint8_t>& data)
+{
+    std::ifstream f(path, std::ios::binary | std::ios::ate);
+    if (!f)
+    {
+        return false;
+    }
+    const std::streamoff size = f.tellg();
+    if (size <= 0)
+    {
+        data.clear();
+        return true;
+    }
+    data.resize(static_cast<size_t>(size));
+    f.seekg(0);
+    f.read(reinterpret_cast<char*>(data.data()), size);
+    data.resize(static_cast<size_t>(f.gcount()));
+    return true;
+}
+
+// Scan one file for the needle appearing inside a PRS-compressed block: try to decompress
+// starting at every offset and check whether the needle lands in the decompressed output.
+// Records the offset of each compressed block that yields a match. Mirrors the approach of
+// SakuraTaisen's FindCompressedData, but bounds-checked and cancellable.
+void SearchFilePrs(const std::string& path, const uint8_t* needle, size_t len,
+                   std::vector<uint64_t>& offsets, size_t maxHits, SearchProgress* progress)
+{
+    if (len == 0)
+    {
+        return;
+    }
+    std::vector<uint8_t> data;
+    if (!ReadWholeFile(path, data) || data.size() < 3)
+    {
+        return;
+    }
+    if (progress)
+    {
+        progress->curFileSize.store(data.size(), std::memory_order_relaxed);
+    }
+
+    PRSDecompressor dec;   // reused across offsets; each Uncompress frees the previous buffer
+    const size_t last = data.size() >= 3 ? data.size() - 3 : 0;
+    for (size_t start = 0; start <= last; ++start)
+    {
+        // Poll for cancellation and publish progress only occasionally (atomics aren't free).
+        if ((start & 0x3FFF) == 0)
+        {
+            if (progress)
+            {
+                if (progress->cancel.load(std::memory_order_relaxed))
+                {
+                    return;
+                }
+                progress->curOffset.store(start, std::memory_order_relaxed);
+            }
+        }
+
+        if (!dec.UncompressData(data.data() + start,
+                                static_cast<unsigned int>(data.size() - start)))
+        {
+            continue;
+        }
+        if (dec.mUncompressedDataSize < len)
+        {
+            continue;
+        }
+        const uint8_t* out = reinterpret_cast<const uint8_t*>(dec.mpUncompressedData);
+        if (std::search(out, out + dec.mUncompressedDataSize, needle, needle + len) !=
+            out + dec.mUncompressedDataSize)
+        {
+            offsets.push_back(static_cast<uint64_t>(start));
+            if (maxHits != 0 && offsets.size() >= maxHits)
+            {
+                return;
+            }
+        }
+    }
+}
+
 }  // namespace
 
 size_t SearchDataDir(const std::string& root, const uint8_t* needle, size_t len,
@@ -186,6 +270,86 @@ size_t SearchDataDir(const std::string& root, const uint8_t* needle, size_t len,
             hit.path = file;
             hit.offsets = std::move(offsets);
             hits.push_back(std::move(hit));
+        }
+    }
+    return files.size();
+}
+
+namespace
+{
+uint64_t FileSizeBytes(const std::string& path)
+{
+    std::ifstream f(path, std::ios::binary | std::ios::ate);
+    if (!f)
+    {
+        return 0;
+    }
+    const std::streamoff s = f.tellg();
+    return s > 0 ? static_cast<uint64_t>(s) : 0;
+}
+}  // namespace
+
+size_t SearchData(const std::vector<std::string>& roots, const uint8_t* needle, size_t len,
+                  SearchCompression comp, std::vector<DataSearchHit>& hits,
+                  size_t maxHitsPerFile, SearchProgress* progress)
+{
+    // Expand every root (file or directory) into a flat, de-duplicated file list.
+    std::vector<std::string> files;
+    for (const std::string& root : roots)
+    {
+        if (IsDirectory(root))
+        {
+            EnumerateFiles(root, files);
+        }
+        else if (PathExists(root))
+        {
+            files.push_back(root);
+        }
+    }
+    std::sort(files.begin(), files.end());
+    files.erase(std::unique(files.begin(), files.end()), files.end());
+
+    if (progress)
+    {
+        progress->filesTotal.store(files.size(), std::memory_order_relaxed);
+    }
+
+    for (const std::string& file : files)
+    {
+        if (progress && progress->cancel.load(std::memory_order_relaxed))
+        {
+            break;
+        }
+
+        std::vector<uint64_t> offsets;
+        if (comp == SearchCompression::Prs)
+        {
+            if (FileSizeBytes(file) > kPrsMaxFileBytes)
+            {
+                if (progress)
+                {
+                    progress->filesSkipped.fetch_add(1, std::memory_order_relaxed);
+                    progress->filesScanned.fetch_add(1, std::memory_order_relaxed);
+                }
+                continue;   // too large to decompress-scan byte by byte
+            }
+            SearchFilePrs(file, needle, len, offsets, maxHitsPerFile, progress);
+        }
+        else
+        {
+            SearchFile(file, needle, len, offsets, maxHitsPerFile);
+        }
+
+        if (!offsets.empty())
+        {
+            DataSearchHit hit;
+            hit.path = file;
+            hit.offsets = std::move(offsets);
+            hits.push_back(std::move(hit));
+        }
+        if (progress)
+        {
+            progress->filesScanned.fetch_add(1, std::memory_order_relaxed);
         }
     }
     return files.size();

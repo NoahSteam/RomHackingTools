@@ -111,6 +111,7 @@ if(BUILD_TESTING)
         FrontEnd/src/Launcher.cpp
         FrontEnd/src/Settings.cpp
         FrontEnd/src/DataSearch.cpp
+        FrontEnd/src/Prs.cpp
     )
     target_include_directories(SaturnExplorerTopBarTests PRIVATE FrontEnd/src)
     if(WIN32)
@@ -199,6 +200,7 @@ if(WIN32)
         FrontEnd/src/App.cpp
         FrontEnd/src/Theme.cpp
         FrontEnd/src/DataSearch.cpp
+        FrontEnd/src/Prs.cpp
         FrontEnd/src/Settings.cpp
         FrontEnd/src/Launcher.cpp
         FrontEnd/src/TopBar.cpp
@@ -258,6 +260,7 @@ elseif(EMSCRIPTEN)
         FrontEnd/src/App.cpp
         FrontEnd/src/Theme.cpp
         FrontEnd/src/DataSearch.cpp
+        FrontEnd/src/Prs.cpp
         FrontEnd/src/Settings.cpp
         FrontEnd/src/Launcher.cpp
         FrontEnd/src/TopBar.cpp
@@ -333,6 +336,7 @@ else()
             FrontEnd/src/App.cpp
             FrontEnd/src/Theme.cpp
             FrontEnd/src/DataSearch.cpp
+            FrontEnd/src/Prs.cpp
             FrontEnd/src/Settings.cpp
             FrontEnd/src/Launcher.cpp
             FrontEnd/src/TopBar.cpp

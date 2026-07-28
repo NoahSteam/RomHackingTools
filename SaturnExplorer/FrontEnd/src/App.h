@@ -4,8 +4,10 @@
 // or GPU types — so it is identical across platforms.
 #pragma once
 
+#include <atomic>
 #include <cstdint>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "saturnexplorer/SaturnExplorer.h"
@@ -154,6 +156,23 @@ private:
     // land in the shared "Data Search Results" window.
     void BeginByteSearch(std::vector<uint8_t> needle, const std::string& label);
     void RunPendingSearch();
+    // "Search Options..." — the dialog that chooses the search scope (files/dirs) and the
+    // compression type (raw bytes, or a PRS-compressed block), opened from the texture
+    // right-click. Stashes the current texture as the needle, then runs on Save & Search.
+    void BeginTextureSearchOptions(const se_command& cmd);
+    void DrawSearchOptionsModal(IPlatform& platform);
+    // Build the search needle (a texture's raw packed VRAM bytes) + a human label. False if
+    // there is no data or the texture has no footprint. Shared by both search entry points.
+    bool BuildTextureNeedle(const se_command& cmd, std::vector<uint8_t>& needle,
+                            std::string& label);
+    // Launch the pending search (mPendingNeedle) over `roots` with compression `comp` on a
+    // worker thread. A PRS scan can be slow, so it must not block the UI. `scopeText`
+    // describes what is being searched, for the results summary.
+    void LaunchSearch(std::vector<std::string> roots, SearchCompression comp,
+                      const std::string& scopeText);
+    void PollSearchWorker();   // called each frame: joins the finished worker
+    void LoadSearchOptions();
+    void SaveSearchOptions();
     void DrawDataSearchResults(IPlatform& platform);
     // Resolve a command's palette (CLUT or CRAM bank); SE_ERR_UNSUPPORTED for RGB555.
     se_result PaletteOf(const se_command& cmd, se_palette* pal);
@@ -279,6 +298,26 @@ private:
     bool                 mShowSearchResults = false;
     std::vector<DataSearchHit> mSearchResults;
     std::string          mSearchSummary;              // "<label>: N match(es) in M file(s)"
+
+    // "Search Options..." configuration (persisted): where to search and whether the
+    // texture is expected raw or inside a PRS-compressed block. Empty `paths` => fall back
+    // to the game data directory above.
+    struct SearchOptions
+    {
+        SearchCompression        compression = SearchCompression::None;
+        std::vector<std::string> paths;   // files and/or directories to search
+    };
+    SearchOptions        mSearchOptions;
+    bool                 mOpenSearchOptions = false;  // request to open the modal
+
+    // Async search worker. A PRS scan tries to decompress at every offset of every file, so
+    // it can take a while; it runs off the UI thread with live progress + cancellation.
+    std::thread          mSearchThread;
+    SearchProgress       mSearchProgress;             // worker <-> UI (atomics)
+    std::atomic<bool>    mSearchRunning{false};       // a worker is active
+    std::atomic<bool>    mSearchDone{false};          // worker finished; results ready to reap
+    bool                 mSearchWasCancelled = false; // set by the reaper for the summary
+    std::string          mSearchScopeText;            // human description of what was searched
 
     // Per-panel visibility, toggled from the toolbar "Windows" menu. All shown by
     // default; a hidden panel simply isn't drawn (its dock tab disappears until

@@ -1,6 +1,7 @@
 #include "App.h"
 
 #include <algorithm>
+#include <cfloat>
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>
@@ -234,6 +235,12 @@ void App::Initialize()
 
 void App::Shutdown()
 {
+    // Stop and join any in-flight data search before tearing down.
+    if (mSearchThread.joinable())
+    {
+        mSearchProgress.cancel.store(true);
+        mSearchThread.join();
+    }
     SaveSettings();
     mWatchPanel.SaveSession();
     mAssemblyPanel.SaveComments();
@@ -280,6 +287,7 @@ void App::LoadSettings()
     for (const PanelInfo& p : PanelList())
         mPanels.*(p.flag) = mSettings.GetBool("panels", p.key, mPanels.*(p.flag));
     mDataDir      = mSettings.Get("data", "dir", mDataDir);
+    LoadSearchOptions();
     // Launch Session: emulator specs (exe from the installer's [emulators]), selection,
     // recent ROMs, and the set-data-dir coupling.
     mLauncher.Load(mSettings);
@@ -298,6 +306,7 @@ void App::SaveSettings()
     for (const PanelInfo& p : PanelList())
         mSettings.SetBool("panels", p.key, mPanels.*(p.flag));
     mSettings.Set("data", "dir", mDataDir);
+    SaveSearchOptions();
     // Launch Session: emulator overrides (exe/args/workdir), selection, recent ROMs,
     // and the coupling. Exe paths live under [emulators]; the installer read-modify-writes
     // that section, so a rebuild refreshes the path without disturbing the rest.
@@ -308,6 +317,49 @@ void App::SaveSettings()
 #endif
     mSettings.Save();
     mSettingsDirty = false;
+}
+
+// "Search Options..." persistence: compression type + the file/folder list (joined with
+// '|', which practically never appears in a path).
+void App::LoadSearchOptions()
+{
+    mSearchOptions.compression =
+        mSettings.Get("search", "compression", "0") == "1" ? SearchCompression::Prs
+                                                           : SearchCompression::None;
+    mSearchOptions.paths.clear();
+    const std::string joined = mSettings.Get("search", "paths", "");
+    size_t start = 0;
+    while (start <= joined.size())
+    {
+        const size_t bar = joined.find('|', start);
+        const std::string p =
+            bar == std::string::npos ? joined.substr(start) : joined.substr(start, bar - start);
+        if (!p.empty())
+        {
+            mSearchOptions.paths.push_back(p);
+        }
+        if (bar == std::string::npos)
+        {
+            break;
+        }
+        start = bar + 1;
+    }
+}
+
+void App::SaveSearchOptions()
+{
+    mSettings.Set("search", "compression",
+                  mSearchOptions.compression == SearchCompression::Prs ? "1" : "0");
+    std::string joined;
+    for (size_t i = 0; i < mSearchOptions.paths.size(); ++i)
+    {
+        if (i)
+        {
+            joined += '|';
+        }
+        joined += mSearchOptions.paths[i];
+    }
+    mSettings.Set("search", "paths", joined);
 }
 
 void App::CloseData(bool cancelAutoConnect)
@@ -746,6 +798,7 @@ bool App::OpenSavestateBuffer(const uint8_t* data, size_t size)
 
 void App::BuildUI(IPlatform& platform)
 {
+    PollSearchWorker();   // reap a finished data-search worker before drawing its results
 #ifdef SE_ENABLE_LIVE
     // Background auto-connect: while no source is loaded, retry about once a second
     // so Saturn Explorer latches onto an emulator even when it starts much later.
@@ -937,6 +990,7 @@ void App::BuildUI(IPlatform& platform)
     // Game-data-directory modal + texture search results (both floating, drawn last
     // so they overlay the docked panels).
     DrawDataDirModal(platform);
+    DrawSearchOptionsModal(platform);    // modal; no-op until the texture menu requests it
     DrawLaunchSettingsModal(platform);   // modal; no-op until the menu requests it
     DrawRecordingSettingsModal();
     DrawSettingsModal();
@@ -3157,6 +3211,13 @@ void App::DrawTextureViewer(IPlatform& platform)
                     {
                         BeginTextureSearch(platform, cmd);
                     }
+                    if (ImGui::MenuItem("Search Options..."))
+                    {
+                        BeginTextureSearchOptions(cmd);
+                    }
+                    ImGui::SetItemTooltip(
+                        "Choose where to search and whether the texture is stored raw or "
+                        "PRS-compressed.");
                     ImGui::EndPopup();
                 }
             }
@@ -3229,23 +3290,56 @@ void App::ExportTexture(IPlatform& platform, const se_command& cmd, int w, int h
 // raw packed VRAM bytes (Saturn big-endian — the same form they'd take in the game's
 // files). If no data directory is set yet, stash the needle and pop the set-dir modal,
 // which runs the pending search once a directory is chosen.
-void App::BeginTextureSearch(IPlatform& platform, const se_command& cmd)
+// Build a texture's raw packed VRAM bytes (Saturn big-endian — the same form they'd take
+// in the game's files) as the search needle, plus a human label. Shared by the quick "Find
+// in game data directory" and the richer "Search Options..." entry points.
+bool App::BuildTextureNeedle(const se_command& cmd, std::vector<uint8_t>& needle,
+                             std::string& label)
 {
-    (void)platform;
     const uint32_t n = TextureVramBytes(cmd);
     if (!mbHasData || n == 0)
     {
-        return;
+        return false;
     }
-    std::vector<uint8_t> needle(n);
+    needle.assign(n, 0);
     const size_t got = se_read_vram(mContext, SE_VRAM_KIND_VDP1_VRAM,
                                     cmd.texture_address, needle.data(), n);
     needle.resize(got);
-
-    char label[96];
-    std::snprintf(label, sizeof(label), "Texture @0x%06X (%ux%u, %u bytes)",
+    if (needle.empty())
+    {
+        return false;
+    }
+    char buf[96];
+    std::snprintf(buf, sizeof(buf), "Texture @0x%06X (%ux%u, %u bytes)",
                   cmd.texture_address, cmd.width, cmd.height, static_cast<unsigned>(got));
-    BeginByteSearch(std::move(needle), label);
+    label = buf;
+    return true;
+}
+
+void App::BeginTextureSearch(IPlatform& platform, const se_command& cmd)
+{
+    (void)platform;
+    std::vector<uint8_t> needle;
+    std::string label;
+    if (BuildTextureNeedle(cmd, needle, label))
+    {
+        BeginByteSearch(std::move(needle), label);
+    }
+}
+
+// Open the "Search Options..." dialog for this texture: stash its bytes as the needle, then
+// let the modal choose the scope + compression and run the search on Save & Search.
+void App::BeginTextureSearchOptions(const se_command& cmd)
+{
+    std::vector<uint8_t> needle;
+    std::string label;
+    if (!BuildTextureNeedle(cmd, needle, label))
+    {
+        return;
+    }
+    mPendingNeedle = std::move(needle);
+    mPendingSearchLabel = label;
+    mOpenSearchOptions = true;
 }
 
 // Shared entry point for "find these exact bytes in the game data directory", used by
@@ -3270,29 +3364,105 @@ void App::BeginByteSearch(std::vector<uint8_t> needle, const std::string& label)
     }
 }
 
+// The quick "Find in game data directory" path (also used by the Hex/Assembly byte
+// searches): search the whole data directory for the raw bytes.
 void App::RunPendingSearch()
 {
-    mSearchResults.clear();
-    if (mPendingNeedle.empty() || mDataDir.empty())
+    LaunchSearch({mDataDir}, SearchCompression::None, "the game data directory");
+}
+
+// Spawn the search on a worker thread and show the results window (which displays live
+// progress while it runs). Roots are files and/or directories; empty entries are dropped.
+void App::LaunchSearch(std::vector<std::string> roots, SearchCompression comp,
+                       const std::string& scopeText)
+{
+    if (mSearchRunning.load())
     {
-        mSearchSummary = "Nothing to search.";
+        return;   // one search at a time
+    }
+    roots.erase(std::remove_if(roots.begin(), roots.end(),
+                               [](const std::string& s) { return s.empty(); }),
+                roots.end());
+
+    if (mPendingNeedle.empty() || roots.empty())
+    {
+        mSearchResults.clear();
+        mSearchSummary = mPendingNeedle.empty() ? "Nothing to search for."
+                                                : "No search location set.";
         mShowSearchResults = true;
         return;
     }
-    const size_t files = SearchDataDir(mDataDir, mPendingNeedle.data(),
-                                       mPendingNeedle.size(), mSearchResults);
-    size_t total = 0;
-    for (const DataSearchHit& h : mSearchResults)
+
+    if (mSearchThread.joinable())
     {
-        total += h.offsets.size();
+        mSearchThread.join();   // reap a previous (finished) run
     }
-    char sum[224];
-    std::snprintf(sum, sizeof(sum),
-                  "%s\n%zu match(es) in %zu file(s)  —  scanned %zu file%s in the data directory.",
-                  mPendingSearchLabel.c_str(), total, mSearchResults.size(),
-                  files, files == 1 ? "" : "s");
-    mSearchSummary = sum;
+    mSearchResults.clear();
+    mSearchProgress.cancel.store(false);
+    mSearchProgress.filesTotal.store(0);
+    mSearchProgress.filesScanned.store(0);
+    mSearchProgress.filesSkipped.store(0);
+    mSearchProgress.curOffset.store(0);
+    mSearchProgress.curFileSize.store(0);
+    mSearchWasCancelled = false;
+    mSearchScopeText = scopeText;
     mShowSearchResults = true;
+    mSearchDone.store(false);
+    mSearchRunning.store(true);
+
+    std::vector<uint8_t> needle = mPendingNeedle;   // capture by value for the worker
+    std::string          label = mPendingSearchLabel;
+    const bool           prs = (comp == SearchCompression::Prs);
+
+    auto doWork =
+        [this, roots = std::move(roots), needle = std::move(needle), comp, label, prs]() mutable {
+            std::vector<DataSearchHit> results;
+            const size_t files = SearchData(roots, needle.data(), needle.size(), comp, results,
+                                            256, &mSearchProgress);
+            size_t total = 0;
+            for (const DataSearchHit& h : results) total += h.offsets.size();
+
+            const bool   cancelled = mSearchProgress.cancel.load();
+            const size_t skipped = mSearchProgress.filesSkipped.load();
+
+            char sum[384];
+            std::snprintf(sum, sizeof(sum),
+                          "%s%s\n%zu match(es) in %zu file(s)  —  scanned %zu file%s in %s%s.%s",
+                          cancelled ? "[Cancelled] " : "", label.c_str(), total, results.size(),
+                          files, files == 1 ? "" : "s", mSearchScopeText.c_str(),
+                          prs ? " as PRS-compressed" : "",
+                          skipped ? "\nSome files were skipped (too large for a PRS scan)." : "");
+
+            mSearchResults = std::move(results);
+            mSearchSummary = sum;
+            mSearchWasCancelled = cancelled;
+            mSearchDone.store(true);   // reaped on the UI thread in PollSearchWorker()
+        };
+
+#ifdef __EMSCRIPTEN__
+    // The browser build has no host filesystem (the search finds nothing) and the base
+    // viewer isn't compiled with pthreads, so never start a std::thread there — run inline.
+    doWork();
+    mSearchRunning.store(false);
+    mSearchDone.store(false);
+#else
+    mSearchThread = std::thread(std::move(doWork));
+#endif
+}
+
+// Reap a finished worker on the UI thread. join() (after mSearchDone) makes all of the
+// worker's writes to mSearchResults / mSearchSummary visible before we display them.
+void App::PollSearchWorker()
+{
+    if (mSearchRunning.load() && mSearchDone.load())
+    {
+        if (mSearchThread.joinable())
+        {
+            mSearchThread.join();
+        }
+        mSearchRunning.store(false);
+        mSearchDone.store(false);
+    }
 }
 
 // The "Set Game Data Directory" modal. Opened from the toolbar button, the status-bar
@@ -3361,6 +3531,131 @@ void App::DrawDataDirModal(IPlatform& platform)
     }
 }
 
+// "Search Options..." dialog (opened from the texture right-click). Chooses the compression
+// type and the set of files/directories to search, then runs the search on Save & Search.
+void App::DrawSearchOptionsModal(IPlatform& platform)
+{
+    if (mOpenSearchOptions)
+    {
+        ImGui::OpenPopup("Search Options");
+        mOpenSearchOptions = false;
+    }
+
+    const ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(560, 0), ImGuiCond_Appearing);
+    if (!ImGui::BeginPopupModal("Search Options", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+    {
+        return;
+    }
+
+    ImGui::TextWrapped("Search for: %s", mPendingSearchLabel.c_str());
+    ImGui::Spacing();
+
+    // Compression Type.
+    const char* kComp[] = {"None", "PRS"};
+    int compIdx = (mSearchOptions.compression == SearchCompression::Prs) ? 1 : 0;
+    ImGui::SetNextItemWidth(160.0f);
+    if (ImGui::Combo("Compression Type", &compIdx, kComp, IM_ARRAYSIZE(kComp)))
+    {
+        mSearchOptions.compression =
+            compIdx == 1 ? SearchCompression::Prs : SearchCompression::None;
+    }
+    ImGui::SameLine();
+    ImGui::TextDisabled("(?)");
+    ImGui::SetItemTooltip(
+        "None: find the texture's raw bytes.\n"
+        "PRS: find the texture inside a PRS-compressed block (each file is decompressed and "
+        "checked). Slower, and files larger than 64 MB are skipped.");
+
+    ImGui::Spacing();
+    ImGui::TextUnformatted("Search in these files / folders:");
+    static int selPath = -1;
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    if (ImGui::BeginListBox("##searchpaths", ImVec2(0, ImGui::GetTextLineHeightWithSpacing() * 5)))
+    {
+        for (int i = 0; i < static_cast<int>(mSearchOptions.paths.size()); ++i)
+        {
+            const bool sel = (selPath == i);
+            if (ImGui::Selectable(mSearchOptions.paths[i].c_str(), sel))
+            {
+                selPath = i;
+            }
+        }
+        if (mSearchOptions.paths.empty())
+        {
+            ImGui::TextDisabled("(empty — the game data directory will be searched)");
+        }
+        ImGui::EndListBox();
+    }
+
+    if (ImGui::Button("Add File..."))
+    {
+        std::string p;
+        if (platform.OpenFileDialog(p) && !p.empty())
+        {
+            mSearchOptions.paths.push_back(p);
+        }
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Add Folder..."))
+    {
+        std::string p;
+        if (platform.PickDirectory(p) && !p.empty())
+        {
+            mSearchOptions.paths.push_back(p);
+        }
+    }
+    ImGui::SameLine();
+    ImGui::BeginDisabled(selPath < 0 || selPath >= static_cast<int>(mSearchOptions.paths.size()));
+    if (ImGui::Button("Remove Selected"))
+    {
+        mSearchOptions.paths.erase(mSearchOptions.paths.begin() + selPath);
+        selPath = -1;
+    }
+    ImGui::EndDisabled();
+    ImGui::SameLine();
+    ImGui::BeginDisabled(mSearchOptions.paths.empty());
+    if (ImGui::Button("Clear"))
+    {
+        mSearchOptions.paths.clear();
+        selPath = -1;
+    }
+    ImGui::EndDisabled();
+
+    if (mSearchOptions.paths.empty() && mDataDir.empty())
+    {
+        ImGui::TextColored(ImVec4(0.90f, 0.55f, 0.35f, 1.0f),
+                           "No files/folders chosen and no game data directory is set.");
+    }
+
+    ImGui::Separator();
+    // Save & Search: persist the options, close, and kick the search.
+    const bool canSearch = !mSearchOptions.paths.empty() || !mDataDir.empty();
+    ImGui::BeginDisabled(!canSearch);
+    if (ImGui::Button("Save && Search", ImVec2(130, 0)))
+    {
+        SaveSearchOptions();
+        mSettingsDirty = true;
+        std::vector<std::string> roots =
+            mSearchOptions.paths.empty() ? std::vector<std::string>{mDataDir}
+                                         : mSearchOptions.paths;
+        const char* scope = mSearchOptions.paths.empty()
+                                ? "the game data directory"
+                                : (mSearchOptions.paths.size() == 1 ? "the chosen location"
+                                                                    : "the chosen locations");
+        ImGui::CloseCurrentPopup();
+        LaunchSearch(std::move(roots), mSearchOptions.compression, scope);
+    }
+    ImGui::EndDisabled();
+    ImGui::SameLine();
+    if (ImGui::Button("Cancel", ImVec2(100, 0)))
+    {
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
+}
+
 // Results of a texture search: which file(s) it was found in and where. Each file is
 // a clickable link that reveals it in the OS file manager (Explorer/Finder/etc.).
 void App::DrawDataSearchResults(IPlatform& platform)
@@ -3372,12 +3667,41 @@ void App::DrawDataSearchResults(IPlatform& platform)
     ImGui::SetNextWindowSize(ImVec2(620, 320), ImGuiCond_FirstUseEver);
     if (ImGui::Begin("Data Search Results", &mShowSearchResults))
     {
+        // While the worker runs, show live progress + a Cancel button. mSearchResults /
+        // mSearchSummary belong to the worker until it is reaped, so don't read them here.
+        if (mSearchRunning.load())
+        {
+            const size_t done = mSearchProgress.filesScanned.load();
+            const size_t total = mSearchProgress.filesTotal.load();
+            ImGui::Text("Searching %s%s\xe2\x80\xa6", mSearchScopeText.c_str(),
+                        mSearchProgress.filesSkipped.load() ? " (some large files skipped)" : "");
+            const float frac = total ? static_cast<float>(done) / static_cast<float>(total) : 0.0f;
+            char ov[64];
+            std::snprintf(ov, sizeof(ov), "%zu / %zu files", done, total);
+            ImGui::ProgressBar(frac, ImVec2(-FLT_MIN, 0), ov);
+
+            const uint64_t curSz = mSearchProgress.curFileSize.load();
+            if (curSz)   // within-file position, meaningful for a PRS scan of a big file
+            {
+                const uint64_t off = mSearchProgress.curOffset.load();
+                ImGui::ProgressBar(curSz ? static_cast<float>(off) / static_cast<float>(curSz) : 0.0f,
+                                   ImVec2(-FLT_MIN, 0), "current file");
+            }
+            if (ImGui::Button("Cancel"))
+            {
+                mSearchProgress.cancel.store(true);
+            }
+            ImGui::End();
+            return;
+        }
+
         ImGui::TextWrapped("%s", mSearchSummary.c_str());
         ImGui::Separator();
         if (mSearchResults.empty())
         {
-            ImGui::TextDisabled("No matches. The texture may be stored compressed or in a "
-                                "different form in the game data, or the data directory is wrong.");
+            ImGui::TextDisabled("No matches. The texture may be stored compressed (try Search "
+                                "Options... with Compression Type = PRS) or in a different form, "
+                                "or the search location is wrong.");
         }
         for (const DataSearchHit& hit : mSearchResults)
         {
