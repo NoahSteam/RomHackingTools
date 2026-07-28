@@ -1279,6 +1279,16 @@ void App::DrawAssembly()
         se_frame_resume(mContext);
         mbPaused = false;
     }
+    // Run control mirrored into the panel header, resolved against the panel's CPU.
+    if (req.continueRun && mbHasData && se_supports_frame_control(mContext))
+    {
+        se_frame_resume(mContext);
+        mbPaused = false;
+    }
+    if (req.stepInto) StepInto(mAssemblyPanel.Cpu());
+    if (req.stepOver) StepOver(mAssemblyPanel.Cpu());
+    if (req.stepOut)  StepOut(mAssemblyPanel.Cpu());
+
     if (req.viewHex) mHexEditor.GoTo(req.hexAddr);   // "View Address in Hex Editor"
     if (req.findInData) BeginByteSearch(std::move(req.findBytes), req.findLabel);
 }
@@ -1802,12 +1812,12 @@ void App::DrawCallStack()
         if (ImGui::Button("Step Into")) { StepInto(mCallStackCpu); }
         ImGui::SetItemTooltip("Run one SH-2 instruction");
         ImGui::SameLine();
-        if (ImGui::Button("Step Over") && haveR) { StepOver(mCallStackCpu, r.pc); }
+        if (ImGui::Button("Step Over")) { StepOver(mCallStackCpu); }
         ImGui::SetItemTooltip("Run one instruction; over a call, run the subroutine to its return");
         ImGui::EndDisabled();
         ImGui::SameLine();
         ImGui::BeginDisabled(!canStep || !haveR);
-        if (ImGui::Button("Step Out")) { StepOut(mCallStackCpu, r.pr); }
+        if (ImGui::Button("Step Out")) { StepOut(mCallStackCpu); }
         ImGui::SetItemTooltip("Run to the current frame's return address (%08X)", r.pr);
         ImGui::EndDisabled();
         ImGui::EndChild();
@@ -2187,32 +2197,33 @@ void App::StepInto(int cpu)
     mbPaused = false;
 }
 
-void App::StepOver(int cpu, uint32_t pc)
+void App::StepOver(int cpu)
 {
     // If the instruction at PC is a subroutine call, run to the return site (PC + 4, past
     // the SH-2 delay slot — the address the call pushes to PR); otherwise Step Over
     // degenerates to a single-instruction step. Only bsr/bsrf/jsr use the PC+4 convention
     // (matching the glue's SeMdfnTrackFlow); trapa returns to PC+2 and is stepped instead.
+    se_sh2_regs r{};
+    if (!mbHasData || se_get_sh2_regs(mContext, cpu, &r) != SE_OK) { return; }
     bool isSubCall = false;
-    if (mbHasData)
+    std::vector<MemoryReadRequest> reqs{ { r.pc, 2 } };
+    std::vector<MemoryReadResult> res = mMemBackend.ReadMemoryBatch(reqs);
+    if (!res.empty() && res[0].success && res[0].bytes.size() >= 2)
     {
-        std::vector<MemoryReadRequest> reqs{ { pc, 2 } };
-        std::vector<MemoryReadResult> res = mMemBackend.ReadMemoryBatch(reqs);
-        if (!res.empty() && res[0].success && res[0].bytes.size() >= 2)
-        {
-            const uint16_t op = static_cast<uint16_t>((res[0].bytes[0] << 8) | res[0].bytes[1]);
-            isSubCall = ((op & 0xF000u) == 0xB000u) ||   // bsr  disp
-                        ((op & 0xF0FFu) == 0x0003u) ||   // bsrf Rn
-                        ((op & 0xF0FFu) == 0x400Bu);     // jsr  @Rn
-        }
+        const uint16_t op = static_cast<uint16_t>((res[0].bytes[0] << 8) | res[0].bytes[1]);
+        isSubCall = ((op & 0xF000u) == 0xB000u) ||   // bsr  disp
+                    ((op & 0xF0FFu) == 0x0003u) ||   // bsrf Rn
+                    ((op & 0xF0FFu) == 0x400Bu);     // jsr  @Rn
     }
-    if (isSubCall) { RunToTransient(cpu, pc + 4); }
+    if (isSubCall) { RunToTransient(cpu, r.pc + 4); }
     else           { StepInto(cpu); }
 }
 
-void App::StepOut(int cpu, uint32_t returnAddr)
+void App::StepOut(int cpu)
 {
-    RunToTransient(cpu, returnAddr);
+    se_sh2_regs r{};
+    if (!mbHasData || se_get_sh2_regs(mContext, cpu, &r) != SE_OK) { return; }
+    RunToTransient(cpu, r.pr);   // run to the current frame's return address
 }
 
 void App::DrawVdpOutput(IPlatform& platform)

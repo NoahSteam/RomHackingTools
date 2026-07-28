@@ -40,6 +40,13 @@ public:
         bool     findInData = false;      // search selected instruction bytes in the data dir
         std::vector<uint8_t> findBytes;   // the big-endian code bytes to search for
         std::string          findLabel;   // human label for the results window
+        // Run control mirrored into the panel header (only while halted). The App resolves
+        // these against the panel's CPU: continue / step one instruction / step over a call
+        // / step out to the caller.
+        bool     continueRun = false;
+        bool     stepInto = false;
+        bool     stepOver = false;
+        bool     stepOut = false;
     };
     void Draw(se_context* ctx, IMemoryBackend& backend, BreakpointManager& bps,
               ExecutionActions& actions, WatchPanel& watch, bool live, Request& req);

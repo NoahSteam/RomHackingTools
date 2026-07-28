@@ -302,6 +302,23 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
         return;
     }
 
+    // Run control mirrored from the Call Stack strip, so stepping is reachable right in the
+    // disassembly. Shown only while halted at a breakpoint/step (mBpStopActive) — a bare
+    // frame-pause can't single-step. The App resolves the request against this panel's CPU.
+    if (live && mBpStopActive)
+    {
+        if (ImGui::Button("Continue"))  req.continueRun = true;
+        ImGui::SameLine();
+        if (ImGui::Button("Step Into"))  req.stepInto = true;
+        ImGui::SetItemTooltip("Run one SH-2 instruction");
+        ImGui::SameLine();
+        if (ImGui::Button("Step Over"))  req.stepOver = true;
+        ImGui::SetItemTooltip("Over a call, run the subroutine to its return; else one instruction");
+        ImGui::SameLine();
+        if (ImGui::Button("Step Out"))   req.stepOut = true;
+        ImGui::SetItemTooltip("Run to the current frame's return address");
+    }
+
     // --- Window base: follow PC unless browsing; recenter only when PC leaves view ---
     if (mFollowPc)
     {

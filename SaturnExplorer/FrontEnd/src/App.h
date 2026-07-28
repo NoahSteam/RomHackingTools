@@ -108,10 +108,11 @@ private:
     void SyncBreakpointsToLive();           // push the breakpoint set to the emulator
     // Instruction stepping (from the paused/breakpoint-hit workspace). StepInto runs one
     // SH-2 instruction; StepOver runs a called subroutine to completion (else one instr);
-    // StepOut runs to the current frame's return address. cpu = the halted CPU.
+    // StepOut runs to the current frame's return address (PR). cpu = the halted CPU; each
+    // reads that CPU's registers itself, so callers just pass the CPU.
     void StepInto(int cpu);
-    void StepOver(int cpu, uint32_t pc);
-    void StepOut(int cpu, uint32_t returnAddr);
+    void StepOver(int cpu);
+    void StepOut(int cpu);
     // Install the transient step breakpoint at (cpu, addr) and resume — the shared
     // "run to a computed address, then halt" used by StepOver/StepOut.
     void RunToTransient(int cpu, uint32_t addr);
