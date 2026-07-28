@@ -1022,14 +1022,13 @@ void App::BuildDefaultLayout(unsigned int dockspaceId)
     ImGui::DockBuilderDockWindow("VDP1 Command List", rInspect);
     ImGui::DockBuilderDockWindow("Selected Object", rInspect);
 
-    // Right column, bottom: structured-data tables + Memory, tabbed.
+    // Right column, bottom: structured-data tables, tabbed.
     ImGui::DockBuilderDockWindow("VDP1 Table", rData);
     ImGui::DockBuilderDockWindow("VDP2 Table", rData);
     ImGui::DockBuilderDockWindow("Color RAM", rData);
     ImGui::DockBuilderDockWindow("Palette RAM", rData);
     ImGui::DockBuilderDockWindow("Work RAM", rData);
     ImGui::DockBuilderDockWindow("Registers", rData);
-    ImGui::DockBuilderDockWindow("Memory", rData);
 
     // Bottom debugger strip. Watch / Controller / Log tab together on the left; the
     // SH-2 Assembly gets the right half.
@@ -1045,6 +1044,7 @@ void App::BuildDefaultLayout(unsigned int dockspaceId)
     ImGui::DockBuilderDockWindow("Macros", bWatch);
     ImGui::DockBuilderDockWindow("Statistics", bWatch);
     ImGui::DockBuilderDockWindow("SH-2 Assembly", bAsm);
+    ImGui::DockBuilderDockWindow("Memory", bAsm);          // tabs beside SH-2 Assembly
     ImGui::DockBuilderDockWindow("Input Timeline", bAsm);
 
     ImGui::DockBuilderFinish(dockspaceId);
