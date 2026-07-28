@@ -419,11 +419,11 @@ void TestSpriteMesh()
 
 void TestPolygon()
 {
-    // VDP1 untextured polygon (command 3): a solid red quad covering the 4x2 frame.
+    // VDP1 untextured polygon (command 4): a solid red quad covering the 4x2 frame.
     State state = MakeNbg3State();
     SetReg(state, 0x020, 0x0000);   // BGON off — only the polygon draws
     WriteSystemClip(state, 0x40);
-    PutBE16(state.vdp1, 0x20, 0x8003);   // CMDCTRL: polygon (comm 3) + END
+    PutBE16(state.vdp1, 0x20, 0x8004);   // CMDCTRL: polygon (comm 4) + END
     PutBE16(state.vdp1, 0x26, 0x001F);   // CMDCOLR: red (RGB555)
     PutBE16(state.vdp1, 0x2C, 0); PutBE16(state.vdp1, 0x2E, 0);   // A = (0,0)
     PutBE16(state.vdp1, 0x30, 4); PutBE16(state.vdp1, 0x32, 0);   // B = (4,0)
@@ -437,11 +437,11 @@ void TestPolygon()
 
 void TestLine()
 {
-    // VDP1 line (command 5): a red segment from (0,0) to (3,0) along the top row.
+    // VDP1 line (command 6): a red segment from (0,0) to (3,0) along the top row.
     State state = MakeNbg3State();
     SetReg(state, 0x020, 0x0000);   // BGON off
     WriteSystemClip(state, 0x40);
-    PutBE16(state.vdp1, 0x20, 0x8005);   // CMDCTRL: line (comm 5) + END
+    PutBE16(state.vdp1, 0x20, 0x8006);   // CMDCTRL: line (comm 6) + END
     PutBE16(state.vdp1, 0x26, 0x001F);   // CMDCOLR: red
     PutBE16(state.vdp1, 0x2C, 0); PutBE16(state.vdp1, 0x2E, 0);   // A = (0,0)
     PutBE16(state.vdp1, 0x30, 3); PutBE16(state.vdp1, 0x32, 0);   // B = (3,0)
@@ -460,12 +460,12 @@ void TestUserClip()
     State state = MakeNbg3State();
     SetReg(state, 0x020, 0x0000);   // BGON off
     WriteSystemClip(state, 0x60);
-    PutBE16(state.vdp1, 0x20, 0x0006);   // user clip command (comm 6), JP next
+    PutBE16(state.vdp1, 0x20, 0x0008);   // user clip command (comm 8), JP next
     PutBE16(state.vdp1, 0x2C, 1);        // clip X0 = 1
     PutBE16(state.vdp1, 0x2E, 0);        // clip Y0 = 0
     PutBE16(state.vdp1, 0x34, 2);        // clip X1 = 2
     PutBE16(state.vdp1, 0x36, 1);        // clip Y1 = 1
-    PutBE16(state.vdp1, 0x40, 0x8003);   // polygon (comm 3) + END
+    PutBE16(state.vdp1, 0x40, 0x8004);   // polygon (comm 4) + END
     PutBE16(state.vdp1, 0x44, 0x0400);   // CMDPMOD: user clip enable (bit 10), mode inside
     PutBE16(state.vdp1, 0x46, 0x001F);   // CMDCOLR: red
     PutBE16(state.vdp1, 0x4C, 0); PutBE16(state.vdp1, 0x4E, 0);   // A
@@ -489,8 +489,8 @@ void TestUserClipDefaultUnbounded()
     State state = MakeNbg3State();
     SetReg(state, 0x020, 0x0000);   // BGON off
     WriteSystemClip(state, 0x40);
-    PutBE16(state.vdp1, 0x20, 0x8003);   // polygon (comm 3) + END
-    PutBE16(state.vdp1, 0x24, 0x0400);   // CMDPMOD: user-clip enable, mode inside, no comm 6
+    PutBE16(state.vdp1, 0x20, 0x8004);   // polygon (comm 4) + END
+    PutBE16(state.vdp1, 0x24, 0x0400);   // CMDPMOD: user-clip enable, mode inside, no comm 8
     PutBE16(state.vdp1, 0x26, 0x001F);   // CMDCOLR: red
     PutBE16(state.vdp1, 0x2C, 0); PutBE16(state.vdp1, 0x2E, 0);   // A
     PutBE16(state.vdp1, 0x30, 4); PutBE16(state.vdp1, 0x32, 0);   // B

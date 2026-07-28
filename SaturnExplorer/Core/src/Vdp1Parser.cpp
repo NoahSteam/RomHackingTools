@@ -31,6 +31,7 @@ se_command_type CommandType(uint16_t comm)
     case 0x0: return SE_CMD_NORMAL_SPRITE;
     case 0x1: return SE_CMD_SCALED_SPRITE;
     case 0x2: return SE_CMD_DISTORTED_SPRITE;
+    case 0x3: return SE_CMD_DISTORTED_SPRITE;   // 0x3 aliases distorted sprite (see VDP1)
     case 0x4: return SE_CMD_POLYGON;
     case 0x5: return SE_CMD_POLYLINE;
     case 0x6: return SE_CMD_LINE;

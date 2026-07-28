@@ -77,7 +77,7 @@ void GeometryBuilder::Build(const std::vector<uint8_t>& vram, Vdp1Scene& out)
             originY = ya;
             continue;
         }
-        if (comm == 0x6)  // user clip: (xa,ya) upper-left, (xc,yc) lower-right
+        if (comm == 0x8)  // user clip: (xa,ya) upper-left, (xc,yc) lower-right
         {
             userClipX0 = xa; userClipY0 = ya;
             userClipX1 = xc; userClipY1 = yc;
@@ -94,10 +94,13 @@ void GeometryBuilder::Build(const std::vector<uint8_t>& vram, Vdp1Scene& out)
             continue;
         }
 
-        const bool textured = (comm == 0x0 || comm == 0x1 || comm == 0x2);  // normal/scaled/distorted
-        const bool polygon = (comm == 0x3);    // untextured, solid-color filled quad
-        const bool polyline = (comm == 0x4);   // untextured, 4 edges
-        const bool line = (comm == 0x5);       // untextured, single edge A-B
+        // VDP1 command codes (CMDCTL & 0xF): 0x0 normal / 0x1 scaled / 0x2,0x3 distorted
+        // (0x3 aliases distorted) / 0x4 polygon / 0x5 polyline / 0x6 line / 0x8 user clip /
+        // 0x9 system clip / 0xA local coord. (Note the encoding skips a naive 0x3=polygon.)
+        const bool textured = (comm <= 0x3);   // normal(0)/scaled(1)/distorted(2,3)
+        const bool polygon = (comm == 0x4);    // untextured, solid-color filled quad
+        const bool polyline = (comm == 0x5);   // untextured, 4 edges
+        const bool line = (comm == 0x6);       // untextured, single edge A-B
         const bool untextured = polygon || polyline || line;
         if (skip || (!textured && !untextured))
         {
@@ -159,13 +162,13 @@ void GeometryBuilder::Build(const std::vector<uint8_t>& vram, Vdp1Scene& out)
             C = { float(X[2]), float(Y[2]) };
             D = { float(X[3]), float(Y[3]) };
         }
-        else if (line)  // comm 5: a single segment between endpoints A and B
+        else if (line)  // comm 6: a single segment between endpoints A and B
         {
             A = { float(xa + originX), float(ya + originY) };
             B = { float(xb + originX), float(yb + originY) };
             C = B; D = A;   // keep the bounding box to the segment
         }
-        else  // distorted (2) / polygon (3) / polyline (4): four explicit corners
+        else  // distorted (2,3) / polygon (4) / polyline (5): four explicit corners
         {
             A = { float(xa + originX), float(ya + originY) };
             B = { float(xb + originX), float(yb + originY) };
