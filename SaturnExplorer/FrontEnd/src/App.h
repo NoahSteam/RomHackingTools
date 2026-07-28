@@ -106,6 +106,15 @@ private:
     // for the editor's live preview and Test Fire. Empty string if no context.
     std::string FormatAgainstContext(const std::string& tmpl, int cpu);
     void SyncBreakpointsToLive();           // push the breakpoint set to the emulator
+    // Instruction stepping (from the paused/breakpoint-hit workspace). StepInto runs one
+    // SH-2 instruction; StepOver runs a called subroutine to completion (else one instr);
+    // StepOut runs to the current frame's return address. cpu = the halted CPU.
+    void StepInto(int cpu);
+    void StepOver(int cpu, uint32_t pc);
+    void StepOut(int cpu, uint32_t returnAddr);
+    // Install the transient step breakpoint at (cpu, addr) and resume — the shared
+    // "run to a computed address, then halt" used by StepOver/StepOut.
+    void RunToTransient(int cpu, uint32_t addr);
     void SyncTracepointsToLive();           // push the tracepoint set to the emulator (v8)
     void DrainTraceEvents();                // pull fired tracepoint events into the Log
     void DrawVdp1Framebuffer(IPlatform& platform);
@@ -216,6 +225,13 @@ private:
     bool             mBpStopActive = false;
     int              mBpStopCpu = 0;
     uint32_t         mBpStopPc = 0;
+    // Transient (one-shot) step breakpoint for Step Over / Step Out: a run-to-address the
+    // client installs alongside the user set and removes automatically once hit. Kept out
+    // of BreakpointManager so it never shows in the gutter.
+    bool             mStepBpActive = false;
+    int              mStepBpCpu = 0;
+    uint32_t         mStepBpAddr = 0;
+    bool             mStepBpDirty = false;   // forces a breakpoint re-sync when it changes
     bool             mbAutoConnectLive = false; // poll while no dump/live source is active
     std::string      mLiveEndpoint;           // endpoint for auto-connect (empty = default)
     float            mLiveRetrySeconds = 0.0f; // time since the last connect attempt

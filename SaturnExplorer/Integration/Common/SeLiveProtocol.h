@@ -55,13 +55,17 @@
 #define SE_LIVE_MAGIC1 'E'
 #define SE_LIVE_MAGIC2 'X'
 #define SE_LIVE_MAGIC3 'P'
-#define SE_LIVE_VERSION      11u
+#define SE_LIVE_VERSION      12u   /* +IST instruction-step verb / SE_LIVE_STOP_STEP */
 /* Command verbs are exactly 4 bytes; a request is a verb + 4-byte LE argument. */
 #define SE_LIVE_REQUEST      "GET\n"   /* back-compat alias for the snapshot verb */
 #define SE_LIVE_VERB_GET     "GET\n"
 #define SE_LIVE_VERB_PAUSE   "PAU\n"
 #define SE_LIVE_VERB_RESUME  "RUN\n"
 #define SE_LIVE_VERB_STEP    "STP\n"
+#define SE_LIVE_VERB_ISTEP   "IST\n"   /* single-step SH-2 instructions (v12+): arg = count
+                                        * (>=1). Runs the halted CPU that many instructions
+                                        * then halts with SE_LIVE_STOP_STEP. Step-over/out
+                                        * are built client-side from this + a temp bp. */
 #define SE_LIVE_VERB_BKPTS   "BKP\n"   /* sync breakpoint set: arg = descriptor count */
 #define SE_LIVE_VERB_WRITE   "WRM\n"   /* poke work RAM: arg = byte count N, payload
                                         * = address(u32 LE) + N big-endian bytes */
@@ -157,6 +161,7 @@
 /* Control-block stop reasons (v5+). */
 #define SE_LIVE_STOP_NONE     0u     /* not stopped, or paused by the user */
 #define SE_LIVE_STOP_EXEC_BP  1u     /* halted on an execution breakpoint */
+#define SE_LIVE_STOP_STEP     2u     /* halted after an instruction step (IST) completed */
 
 /* Canonical section sizes (bytes). The header still carries the actual lengths,
  * so a client validates rather than assumes; these are the expected values. */

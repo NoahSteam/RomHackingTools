@@ -764,15 +764,24 @@ void App::BuildUI(IPlatform& platform)
 #ifdef SE_ENABLE_LIVE
         uint32_t stopReason = 0, stopCpu = 0, stopPc = 0;
         const bool stopped = se_live_get_stop(&mDataSource, &stopReason, &stopCpu, &stopPc);
-        // Mirror the breakpoint-halt state so the Assembly panel can tint the hit row red
-        // (SE_LIVE_STOP_EXEC_BP is the only non-none stop reason today). Level-triggered:
-        // it clears itself once the emulator resumes.
+        // Mirror the halt state so the Assembly panel can tint the halted row red (a
+        // breakpoint hit or a completed instruction step). Level-triggered: it clears
+        // itself once the emulator resumes.
         mBpStopActive = stopped;
         mBpStopCpu = (int)stopCpu;
         mBpStopPc = stopPc;
         if (stopped && !mbPaused)
         {
-            mbPaused = true;   // halted on a breakpoint; panel follows the halted PC
+            mbPaused = true;   // halted; panel follows the halted PC
+            // A transient step breakpoint (Step Over / Step Out) has done its job once we
+            // halt at it — retire it so it doesn't linger as a stray breakpoint. It is
+            // address-only (SH-2 PC breakpoints are shared across both SH-2s), so match on
+            // PC regardless of which CPU reported the stop.
+            if (mStepBpActive && stopPc == mStepBpAddr)
+            {
+                mStepBpActive = false;
+                mStepBpDirty = true;   // next SyncBreakpointsToLive drops it from the emulator
+            }
             // Bring up the paused-state workspace: rebuild the halted CPU's call stack
             // and surface the Call Stack panel.
             mCallStackCpu = (stopCpu == 1) ? 1 : 0;
@@ -1786,22 +1795,19 @@ void App::DrawCallStack()
         const bool canStep = mbHasData && se_supports_frame_control(mContext);
         if (ImGui::Button("Continue") && canStep) { se_frame_resume(mContext); mbPaused = false; }
         ImGui::SameLine();
-        ImGui::BeginDisabled(true);
-        ImGui::Button("Step Into"); ImGui::SetItemTooltip("Instruction stepping — Phase 2 (step verb)");
+        // Step Into / Over need an instruction-level halt (a breakpoint or prior step) so
+        // the emulator is spinning in its per-instruction gate; a bare frame-pause can't
+        // single-step. Step Out only needs frame control (it runs to a return address).
+        ImGui::BeginDisabled(!mBpStopActive);
+        if (ImGui::Button("Step Into")) { StepInto(mCallStackCpu); }
+        ImGui::SetItemTooltip("Run one SH-2 instruction");
         ImGui::SameLine();
-        ImGui::Button("Step Over"); ImGui::SetItemTooltip("Instruction stepping — Phase 2 (step verb)");
+        if (ImGui::Button("Step Over") && haveR) { StepOver(mCallStackCpu, r.pc); }
+        ImGui::SetItemTooltip("Run one instruction; over a call, run the subroutine to its return");
         ImGui::EndDisabled();
         ImGui::SameLine();
         ImGui::BeginDisabled(!canStep || !haveR);
-        if (ImGui::Button("Step Out"))
-        {
-            // Run to frame #0's return address: add a breakpoint there (only if none)
-            // and resume. Instruction-exact step-out arrives with the step verb.
-            if (!mBreakpoints.HasExecutionAt(mCallStackCpu, r.pr))
-                mBreakpoints.ToggleExecution(mCallStackCpu, r.pr);
-            se_frame_resume(mContext);
-            mbPaused = false;
-        }
+        if (ImGui::Button("Step Out")) { StepOut(mCallStackCpu, r.pr); }
         ImGui::SetItemTooltip("Run to the current frame's return address (%08X)", r.pr);
         ImGui::EndDisabled();
         ImGui::EndChild();
@@ -2111,12 +2117,14 @@ void App::SyncBreakpointsToLive()
 {
 #ifdef SE_ENABLE_LIVE
     if (!mbLiveSource) { return; }
-    if (mBreakpoints.Generation() == mLastBpGeneration) { return; }
+    // Re-sync when the user set changes OR the transient step breakpoint was added/removed.
+    if (mBreakpoints.Generation() == mLastBpGeneration && !mStepBpDirty) { return; }
     mLastBpGeneration = mBreakpoints.Generation();
+    mStepBpDirty = false;
 
     const std::vector<Breakpoint>& all = mBreakpoints.All();
     std::vector<uint8_t> descs;
-    descs.reserve(all.size() * SE_LIVE_BKPT_DESC_LEN);
+    descs.reserve((all.size() + 1) * SE_LIVE_BKPT_DESC_LEN);
     auto put32 = [&descs](uint32_t w) {
         for (int i = 0; i < 4; ++i) descs.push_back(static_cast<uint8_t>(w >> (8 * i)));
     };
@@ -2137,9 +2145,74 @@ void App::SyncBreakpointsToLive()
         put32(b.size);
         put32(flags);
     }
-    se_live_set_breakpoints(&mDataSource, descs.data(),
-                            static_cast<uint32_t>(all.size()));
+    uint32_t count = static_cast<uint32_t>(all.size());
+    if (mStepBpActive)   // append the transient step breakpoint (execution, enabled)
+    {
+        uint32_t flags = (0u & SE_LIVE_BP_KIND_MASK) | SE_LIVE_BP_ENABLED;
+        if (mStepBpCpu != 0) { flags |= SE_LIVE_BP_CPU_SLAVE; }
+        put32(mStepBpAddr);
+        put32(0u);
+        put32(flags);
+        ++count;
+    }
+    se_live_set_breakpoints(&mDataSource, descs.data(), count);
 #endif
+}
+
+// --- Instruction stepping (Step Into / Over / Out) --------------------------------
+// Step Into is a true instruction step (IST verb). Step Over and Step Out reuse the
+// breakpoint machinery: install a transient one-shot breakpoint at the computed target
+// (return site / caller) and resume, letting it run at native speed; the stop handler
+// retires the transient once hit. All operate on the halted CPU.
+
+void App::RunToTransient(int cpu, uint32_t addr)
+{
+    mStepBpActive = true;
+    mStepBpCpu = cpu;
+    mStepBpAddr = addr;
+    mStepBpDirty = true;
+    SyncBreakpointsToLive();          // ship the transient breakpoint before resuming
+    if (mContext) { se_frame_resume(mContext); }
+    mbPaused = false;
+}
+
+void App::StepInto(int cpu)
+{
+    (void)cpu;   // the server steps whichever CPU the stop latched (the halted CPU)
+#ifdef SE_ENABLE_LIVE
+    se_live_step_insn(&mDataSource, 1);
+#else
+    (void)cpu;
+#endif
+    mbPaused = false;
+}
+
+void App::StepOver(int cpu, uint32_t pc)
+{
+    // If the instruction at PC is a subroutine call, run to the return site (PC + 4, past
+    // the SH-2 delay slot — the address the call pushes to PR); otherwise Step Over
+    // degenerates to a single-instruction step. Only bsr/bsrf/jsr use the PC+4 convention
+    // (matching the glue's SeMdfnTrackFlow); trapa returns to PC+2 and is stepped instead.
+    bool isSubCall = false;
+    if (mbHasData)
+    {
+        std::vector<MemoryReadRequest> reqs{ { pc, 2 } };
+        std::vector<MemoryReadResult> res = mMemBackend.ReadMemoryBatch(reqs);
+        if (!res.empty() && res[0].success && res[0].bytes.size() >= 2)
+        {
+            const uint16_t op = static_cast<uint16_t>((res[0].bytes[0] << 8) | res[0].bytes[1]);
+            isSubCall = ((op & 0xF000u) == 0xB000u) ||   // bsr  disp
+                        ((op & 0xF0FFu) == 0x0003u) ||   // bsrf Rn
+                        ((op & 0xF0FFu) == 0x400Bu);     // jsr  @Rn
+        }
+    }
+    if (isSubCall) { RunToTransient(cpu, pc + 4); }
+    else           { StepInto(cpu); }
+}
+
+void App::StepOut(int cpu, uint32_t returnAddr)
+{
+    RunToTransient(cpu, returnAddr);
 }
 
 void App::DrawVdpOutput(IPlatform& platform)

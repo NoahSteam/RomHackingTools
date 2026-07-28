@@ -101,6 +101,15 @@ static volatile unsigned int sStopReason;   /* SE_LIVE_STOP_* */
 static volatile unsigned int sStopCpu;      /* 0 master, 1 slave */
 static volatile unsigned int sStopPc;
 
+/* ---- Instruction-step state (v12+). The "IST" verb requests running the halted CPU
+ * N instructions then halting. sInsnStepPending is set by the server thread and picked
+ * up on the CPU thread (SeExportInsnStepBegin) after the halt gate releases; the per-
+ * instruction hook then ticks sInsnStepBudget down (SeExportInsnStepTick) and halts at 0.
+ * Only the CPU we were halted on (sInsnStepCpu) is counted. ---- */
+static volatile int sInsnStepPending;   /* instruction count requested, 0 = none */
+static volatile int sInsnStepBudget;    /* instructions remaining in the active step */
+static volatile unsigned int sInsnStepCpu;
+
 /* ---- Tracepoint events (v8+). The glue calls SeExportQueueTraceEvent() when an
  * installed tracepoint PC is hit (CPU thread); the server thread drains the ring into
  * each reply's trailing events block. FIFO ring; overflow drops the newest and counts
@@ -254,6 +263,51 @@ void SeExportNotifyStop(int cpu, unsigned int pc)
     sStopPc = pc;
     sPaused = 1;
     sStepBudget = 0;
+}
+
+/* Like SeExportNotifyStop, but latches SE_LIVE_STOP_STEP — the halt that ends an
+ * instruction step (IST) rather than a user breakpoint. Same CPU-thread contract. */
+void SeExportNotifyStep(int cpu, unsigned int pc)
+{
+    sStopReason = SE_LIVE_STOP_STEP;
+    sStopCpu = (cpu != 0) ? 1u : 0u;
+    sStopPc = pc;
+    sPaused = 1;
+    sStepBudget = 0;
+}
+
+/* CPU thread, called from the per-instruction hook right after the halt gate releases:
+ * if an instruction step was requested (IST verb), activate its budget and return 1 so
+ * the caller arms continuous per-instruction hooking. Returns 0 when no step is pending. */
+int SeExportInsnStepBegin(void)
+{
+    if (sInsnStepPending > 0)
+    {
+        sInsnStepBudget = sInsnStepPending;
+        sInsnStepPending = 0;
+        return 1;
+    }
+    return 0;
+}
+
+/* CPU thread, called once per executed instruction while an instruction step is active.
+ * Counts only the CPU the step targets; returns 1 when the budget is exhausted (halt
+ * here), 0 to keep running. */
+int SeExportInsnStepTick(int cpu)
+{
+    if (sInsnStepBudget <= 0)
+    {
+        return 0;
+    }
+    if (((cpu != 0) ? 1u : 0u) != sInsnStepCpu)
+    {
+        return 0;
+    }
+    if (--sInsnStepBudget == 0)
+    {
+        return 1;
+    }
+    return 0;
 }
 
 /* Short self-contained sleep so the gate can spin-wait without a Yabause-
@@ -490,6 +544,19 @@ static void SeServeClient(int cl, SeFrame* snap)
             SE_LOCK();
             sPaused = 1;
             sStepBudget += (arg > 0) ? (int)arg : 1;
+            sStopReason = SE_LIVE_STOP_NONE;
+            SE_UNLOCK();
+        }
+        else if (memcmp(req, SE_LIVE_VERB_ISTEP, SE_LIVE_VERB_LEN) == 0)
+        {
+            /* Instruction step: release the CPU (it is spinning in the breakpoint gate)
+             * and let it run `arg` instructions on the halted CPU before halting again.
+             * The per-instruction hook picks up sInsnStepPending once the gate releases. */
+            SE_LOCK();
+            sInsnStepPending = (arg > 0) ? (int)arg : 1;
+            sInsnStepCpu = sStopCpu;
+            sPaused = 0;
+            sStepBudget = 0;
             sStopReason = SE_LIVE_STOP_NONE;
             SE_UNLOCK();
         }

@@ -210,6 +210,20 @@ it the breakpoint set still round-trips over the wire but doesn't halt. (SS PC
 breakpoints are shared across both SH-2s, so a breakpoint fires for whichever core
 reaches the address; the hit report still names the exact CPU.)
 
+### Instruction stepping (Step Into / Over / Out, v12+)
+
+Once halted, the `IST` verb single-steps the halted CPU N instructions then halts again
+with `SE_LIVE_STOP_STEP`. Server-side this reuses the same `SeSsBpHook` callback: on an
+`IST` request the hook re-arms itself **continuous** (`DBG_SetCPUCallback(hook, true)`)
+right after the halt gate releases (`SeExportInsnStepBegin`), counts instructions on the
+stepped CPU (`SeExportInsnStepTick`), and halts at the budget's end — so no new call site
+is needed. **Step Into** is one `IST`. **Step Over** and **Step Out** are built entirely
+client-side: the client installs a transient one-shot breakpoint (kept out of the user's
+breakpoint set, auto-retired when hit) at the return site — `PC+4` for a `bsr`/`bsrf`/`jsr`
+call, or the current frame's return address for step-out — and resumes at native speed.
+Instruction stepping needs the same `--enable-debugger` build as breakpoints and is
+initiated from a breakpoint/step halt (the CPU must be in `SeSsBpHook`'s gate).
+
 Every arg to `SeExportSnapshot` may be `NULL` (that section ships as length 0 and the
 client no-ops it), so you can build the tiers incrementally and test each.
 

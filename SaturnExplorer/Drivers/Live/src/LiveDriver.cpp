@@ -83,7 +83,7 @@ struct LiveKeyMap
 // Pending control command the UI thread hands to the poll thread (which owns the
 // single server connection). Best-effort: the poll thread drains it within one
 // cycle (~8 ms). Steps accumulate so rapid presses aren't lost.
-enum class Ctl { None, Pause, Resume, Step };
+enum class Ctl { None, Pause, Resume, Step, StepInsn };
 
 struct LiveState
 {
@@ -106,6 +106,7 @@ struct LiveState
     std::mutex            ctlMtx;    // guards pending / stepFrames / bkpts
     Ctl                   pending = Ctl::None;
     int32_t               stepFrames = 0;
+    int32_t               stepInsns = 0;    // instruction-step count for Ctl::StepInsn (IST)
     // Pending breakpoint-set sync: when the UI changes breakpoints it bumps
     // 'bkptsDirty' and stashes the descriptor blob; the poll thread ships it with
     // a BKP command on its next cycle. Each descriptor is SE_LIVE_BKPT_DESC_LEN.
@@ -554,10 +555,12 @@ void PollLoop(LiveState* st)
                     case Ctl::Pause:  verb = SE_LIVE_VERB_PAUSE;  break;
                     case Ctl::Resume: verb = SE_LIVE_VERB_RESUME; break;
                     case Ctl::Step:   verb = SE_LIVE_VERB_STEP; arg = st->stepFrames; break;
+                    case Ctl::StepInsn: verb = SE_LIVE_VERB_ISTEP; arg = st->stepInsns; break;
                     default: break;
                 }
                 st->pending = Ctl::None;
                 st->stepFrames = 0;
+                st->stepInsns = 0;
             }
             else
             {
@@ -736,18 +739,23 @@ void PostCmd(LiveState* st, Ctl cmd, int32_t frames)
 {
     // Track whether the emulator is currently held by us: pause/step halt it,
     // resume releases it. The poll thread uses this to resume on close.
-    if (cmd == Ctl::Pause || cmd == Ctl::Step) { st->pausedByUs.store(true); }
-    else if (cmd == Ctl::Resume)               { st->pausedByUs.store(false); }
+    if (cmd == Ctl::Pause || cmd == Ctl::Step || cmd == Ctl::StepInsn) { st->pausedByUs.store(true); }
+    else if (cmd == Ctl::Resume)                                       { st->pausedByUs.store(false); }
 
     std::lock_guard<std::mutex> lk(st->ctlMtx);
     if (cmd == Ctl::Step && st->pending == Ctl::Step)
     {
         st->stepFrames += frames;   // accumulate rapid presses
     }
+    else if (cmd == Ctl::StepInsn && st->pending == Ctl::StepInsn)
+    {
+        st->stepInsns += frames;    // accumulate rapid instruction-step presses
+    }
     else
     {
         st->pending = cmd;
         st->stepFrames = (cmd == Ctl::Step) ? frames : 0;
+        st->stepInsns  = (cmd == Ctl::StepInsn) ? frames : 0;
     }
 }
 
@@ -846,6 +854,14 @@ extern "C" uint32_t se_live_server_version(const se_data_source* ds)
         return 0;
     }
     return St(ds->user)->serverVersion.load();
+}
+
+extern "C" void se_live_step_insn(const se_data_source* ds, uint32_t count)
+{
+    if (!ds || !ds->user || ds->close != CbClose) { return; }
+    // Single-step the halted CPU `count` instructions (IST). The poll thread ships it on
+    // its next cycle; the server steps whichever CPU the stop latched.
+    PostCmd(St(ds->user), Ctl::StepInsn, static_cast<int32_t>(count < 1 ? 1 : count));
 }
 
 extern "C" void se_live_set_breakpoints(const se_data_source* ds,

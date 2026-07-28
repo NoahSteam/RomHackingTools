@@ -76,6 +76,18 @@ void SeExportSetBreakpointHooks(void (*add)(int cpu, unsigned int address),
  * debugger can jump to the PC. A resume / single-step from the debugger clears it. */
 void SeExportNotifyStop(int cpu, unsigned int pc);
 
+/* Instruction stepping (v12+). The emulator's per-instruction debug hook drives these:
+ *  - SeExportNotifyStep(cpu, pc): latch a stop as SE_LIVE_STOP_STEP (a completed step),
+ *    the step analog of SeExportNotifyStop.
+ *  - SeExportInsnStepBegin(): call right after the halt gate releases; returns 1 if an
+ *    instruction step (IST verb) was requested, activating its budget — the caller then
+ *    arms continuous per-instruction hooking.
+ *  - SeExportInsnStepTick(cpu): call once per executed instruction; returns 1 when the
+ *    step budget is spent (halt here). Only the stepped CPU is counted. */
+void SeExportNotifyStep(int cpu, unsigned int pc);
+int  SeExportInsnStepBegin(void);
+int  SeExportInsnStepTick(int cpu);
+
 /* Wire the module's work-RAM poke to the emulator's byte writer (v6+), so the Hex
  * Editor can edit a running game: write(address, value) writes one byte. On this
  * Yabause that's MappedMemoryWriteByteNocache(MSH2, addr, val) — MappedMemoryWriteByte

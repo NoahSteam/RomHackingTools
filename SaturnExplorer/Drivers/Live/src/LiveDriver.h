@@ -32,6 +32,12 @@ uint32_t se_live_server_version(const se_data_source* ds);
 void se_live_set_breakpoints(const se_data_source* ds, const uint8_t* descs,
                              uint32_t count);
 
+/* Single-step the halted SH-2 'count' instructions then halt again (v12+). The server
+ * steps whichever CPU the last stop latched; on completion the control block reports
+ * SE_LIVE_STOP_STEP with the new PC. Used to build Step Into (count = 1). No-op if 'ds'
+ * isn't a live source. */
+void se_live_step_insn(const se_data_source* ds, uint32_t count);
+
 /* Inject controller state into the running emulator (v7+): 'port' (0 = controller 1)
  * and 'buttons' (an SE_PAD_* bitmask). The poll thread drives the emulated pad
  * directly, bypassing the emulator's host-input mapping. Send it whenever the held
