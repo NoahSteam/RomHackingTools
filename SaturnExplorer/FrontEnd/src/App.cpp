@@ -974,10 +974,10 @@ void App::BuildDefaultLayout(unsigned int dockspaceId)
     const ImGuiID lTex    = ImGui::DockBuilderSplitNode(leftRest, ImGuiDir_Up, 0.50f, nullptr, &leftRest);
     const ImGuiID lPal    = leftRest;
 
-    // Center: view tabs (top) + command list (bottom).
-    ImGuiID centerRest = center;
-    const ImGuiID cViews = ImGui::DockBuilderSplitNode(centerRest, ImGuiDir_Up, 0.62f, nullptr, &centerRest);
-    const ImGuiID cList  = centerRest;
+    // Center: the view tabs fill the whole column. The VDP1 Command List used to sit in a
+    // strip below them; it now tabs with the bottom-left group, so the display gets that
+    // vertical space back.
+    const ImGuiID cViews = center;
 
     // Right: Selected Object (top) + Hex Editor (below).
     ImGuiID rightRest = right;
@@ -1008,7 +1008,6 @@ void App::BuildDefaultLayout(unsigned int dockspaceId)
     ImGui::DockBuilderDockWindow("Work RAM", cViews);
     ImGui::DockBuilderDockWindow("Palette RAM", cViews);
     ImGui::DockBuilderDockWindow("Registers", cViews);
-    ImGui::DockBuilderDockWindow("VDP1 Command List", cList);
 
     // Right inspector.
     ImGui::DockBuilderDockWindow("Selected Object", rObj);
@@ -1020,6 +1019,7 @@ void App::BuildDefaultLayout(unsigned int dockspaceId)
     ImGui::DockBuilderDockWindow("Controller", bWatch);
     ImGui::DockBuilderDockWindow("Log", bWatch);
     ImGui::DockBuilderDockWindow("Tracepoints", bWatch);   // tabs with Watch/Log/Controller
+    ImGui::DockBuilderDockWindow("VDP1 Command List", bWatch);  // moved out of the center strip
     ImGui::DockBuilderDockWindow("Call Stack", bWatch);    // beside Assembly; auto-focus on stop
     ImGui::DockBuilderDockWindow("Current Input", bWatch);
     ImGui::DockBuilderDockWindow("Input Queue", bWatch);
