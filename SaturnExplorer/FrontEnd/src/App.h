@@ -161,7 +161,7 @@ private:
     void DrawWorkRam();
     void DrawVdp1Table();
     void DrawVdp2Table();
-    void DrawTimeline();
+    void DrawTransportBar();   // prev/play/scrub/next, at the bottom of the VDP Output view
     void DrawPlaceholder(const char* title, const char* note);
 
     // Rebuild the scrub context over the selected recorded frame (mScrubIndex).
@@ -254,6 +254,8 @@ private:
     bool             mbScrubbing = false;      // viewing a recorded (past) frame
     int              mScrubIndex = -1;         // selected recorded-frame index
     int              mScrubShownIndex = -1;    // index currently built into mScrubContext
+    se_context*      mLiveCtx = nullptr;       // the live context, reachable while panels
+                                               // render from the scrub context (transport)
 #endif
 
     // Game data directory (a folder of the game's extracted files, or an ISO/disc

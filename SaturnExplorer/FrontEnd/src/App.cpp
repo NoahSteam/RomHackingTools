@@ -671,6 +671,9 @@ bool App::OpenLive(const char* endpoint)
     mbLiveSource = true;   // re-snapshot every frame (see BuildUI)
     mbPaused = false;      // a fresh connection is free-running
     mbAutoConnectLive = false;
+    // Roll the rewind ring from the moment we connect, so the transport's scrub bar
+    // always has recent frames to step back through (bounded; Stop from Session > Source).
+    if (!mbRecording) { mbRecording = true; mRecordingStartedAt = ImGui::GetTime(); }
     mSource.type = SourceType::Live;
     mSource.label = "Emulator";
     mSource.endpoint = endpoint && *endpoint ? endpoint : "default endpoint";
@@ -813,13 +816,15 @@ void App::BuildUI(IPlatform& platform)
     for (const TopBarCommand& command : topBarCommands)
         ExecuteTopBarCommand(command, platform);
     DrawStatusBar();
-    DrawTimeline();
 
-    // If the timeline selected a past frame, point the data panels at a context
-    // rebuilt over that recorded frame for the rest of this draw. The guard restores
-    // the live context when BuildUI returns; frame control / capture above stay live.
+    // If the transport (bottom of the VDP Output view) selected a past frame, point the
+    // data panels at a context rebuilt over that recorded frame for the rest of this draw.
+    // The guard restores the live context when BuildUI returns; frame control / capture
+    // stay live. mLiveCtx keeps the live context reachable while the panels see the scrub
+    // context, so the transport's play/step still drive the real emulator.
     se_context* view = mContext;
 #ifdef SE_ENABLE_LIVE
+    mLiveCtx = mContext;
     if (mbScrubbing && RefreshScrubContext())
     {
         view = mScrubContext;
@@ -1096,89 +1101,91 @@ void App::DrawStatusBar()
     ImGui::End();
 }
 
-// Bottom timeline: while the live emulator is paused, show a horizontal scrubber
-// spanning the window so the user can drag back through the recorded ring buffer
-// and inspect any captured frame. Setting mbScrubbing / mScrubIndex here drives the
-// scrub-context swap in BuildUI. Native (SE_ENABLE_LIVE) only.
-void App::DrawTimeline()
+// Transport bar at the bottom of the main view (VDP Output): previous frame, play/pause,
+// the rewind scrub bar, and next frame. Frame control targets the live emulator (mLiveCtx)
+// even while the panels render from a scrubbed past frame. Native (SE_ENABLE_LIVE) only.
+void App::DrawTransportBar()
 {
 #ifdef SE_ENABLE_LIVE
-    // Shown while a live source is paused. (Off-pause the panels follow the live
-    // emulator, so there's nothing to scrub.)
-    if (!mbLiveSource || !mbPaused)
-    {
-        mbScrubbing = false;      // resume the live view
-        mScrubShownIndex = -1;    // force a rebuild next time we scrub
-        return;
-    }
-
+    if (!mbLiveSource) { return; }
+    se_context* const ctl = mLiveCtx ? mLiveCtx : mContext;   // real emulator, not the scrub view
+    const bool canControl = mbHasData && se_supports_frame_control(ctl);
     const int n = static_cast<int>(mRecorder.Count());
-    ImGuiViewport* vp = ImGui::GetMainViewport();
-    const float height = ImGui::GetFrameHeightWithSpacing() + 6.0f;
-    const ImGuiWindowFlags flags = ImGuiWindowFlags_NoScrollbar |
-                                   ImGuiWindowFlags_NoSavedSettings;
-    if (ImGui::BeginViewportSideBar("##Timeline", vp, ImGuiDir_Down, height, flags))
+
+    // Scrubbing only makes sense while paused with recorded frames.
+    if (!mbPaused || n == 0) { mbScrubbing = false; }
+
+    const ImGuiStyle& style = ImGui::GetStyle();
+    ImGui::BeginDisabled(!canControl);
+
+    // [ previous frame ] — pause (if running) and step one recorded frame back.
+    if (IconButton("##tp_prev", Ico::Prev, "Previous frame") && n > 0)
     {
-        // No recording yet: show state instead of dead controls (tells the user the
-        // ring is empty rather than leaving them wondering why nothing scrubs).
-        if (n == 0)
+        if (!mbPaused) { se_frame_pause(ctl); mbPaused = true; }
+        mbScrubbing = true;
+        if (mScrubIndex < 0 || mScrubIndex >= n) { mScrubIndex = n - 1; }
+        if (mScrubIndex > 0) { --mScrubIndex; }
+    }
+    ImGui::SameLine();
+
+    // [ play / pause ]
+    if (mbPaused)
+    {
+        if (IconButton("##tp_play", Ico::Play, "Play"))
         {
             mbScrubbing = false;
-            ImGui::AlignTextToFramePadding();
-            ImGui::TextDisabled("Timeline: no frames recorded yet — play, then pause to scrub.");
-            ImGui::End();
-            return;
+            se_frame_resume(ctl);
+            mbPaused = false;
         }
+    }
+    else if (IconButton("##tp_pause", Ico::Pause, "Pause"))
+    {
+        se_frame_pause(ctl);
+        mbPaused = true;
+    }
+    ImGui::SameLine();
 
-        // Default to the newest captured frame when first paused or out of range;
-        // RefreshScrubContext re-clamps defensively before rendering.
-        if (!mbScrubbing || mScrubIndex < 0 || mScrubIndex >= n)
+    // [ scrub bar ] — fills the middle, leaving room for the next-frame button.
+    const float nextW  = ImGui::GetFrameHeight() + style.ItemSpacing.x * 2.0f;
+    const float scrubW = std::max(80.0f, ImGui::GetContentRegionAvail().x - nextW);
+    ImGui::SetNextItemWidth(scrubW);
+    if (mbPaused && n > 0)
+    {
+        int idx = (mScrubIndex < 0 || mScrubIndex >= n) ? n - 1 : mScrubIndex;
+        char ov[64];
+        std::snprintf(ov, sizeof(ov), "#%llu   %d / %d",
+                      static_cast<unsigned long long>(mRecorder.FrameNumber((size_t)idx)),
+                      idx + 1, n);
+        if (ImGui::SliderInt("##tp_scrub", &idx, 0, n - 1, ov))
         {
-            mScrubIndex = n - 1;
-        }
-        mbScrubbing = true;
-
-        const ImGuiStyle& style = ImGui::GetStyle();
-
-        // Left: frame readout (selected frame + buffer footprint / span).
-        char head[96];
-        const double mb = static_cast<double>(mRecorder.BytesUsed()) / (1024.0 * 1024.0);
-        std::snprintf(head, sizeof(head), "Frame #%llu   %d / %d   (%.1f MB / %.1fs)",
-                      static_cast<unsigned long long>(mRecorder.FrameNumber((size_t)mScrubIndex)),
-                      mScrubIndex + 1, n, mb, n / static_cast<double>(kFramesPerSecond));
-        ImGui::AlignTextToFramePadding();
-        ImGui::TextUnformatted(head);
-        ImGui::SameLine();
-
-        // Reserve the right-hand step-button cluster so the scrubber can fill the
-        // gap between the readout and the buttons.
-        auto btnW = [&](const char* l) {
-            return ImGui::CalcTextSize(l).x + style.FramePadding.x * 2.0f;
-        };
-        const float rightW = btnW("|<") + btnW("<") + btnW(">") + btnW(">|") +
-                             style.ItemSpacing.x * 3.0f;
-
-        // Middle: the scrubber spans the bottom of the window.
-        const float sliderW = ImGui::GetContentRegionAvail().x - rightW - style.ItemSpacing.x;
-        ImGui::SetNextItemWidth(sliderW > 80.0f ? sliderW : 80.0f);
-        int idx = mScrubIndex;
-        if (ImGui::SliderInt("##scrub", &idx, 0, n - 1, ""))
-        {
+            mbScrubbing = true;
             mScrubIndex = idx;
         }
-
-        // Right: step backward / forward (with jump-to-ends), matching the concept
-        // transport bar — icon buttons with tooltips.
-        ImGui::SameLine();
-        if (IconButton("##first", Ico::First, "First frame")) mScrubIndex = 0;
-        ImGui::SameLine();
-        if (IconButton("##prev", Ico::Prev, "Step back one frame") && mScrubIndex > 0) --mScrubIndex;
-        ImGui::SameLine();
-        if (IconButton("##next", Ico::Next, "Step forward one frame") && mScrubIndex < n - 1) ++mScrubIndex;
-        ImGui::SameLine();
-        if (IconButton("##last", Ico::Last, "Latest frame")) mScrubIndex = n - 1;
     }
-    ImGui::End();
+    else
+    {
+        int z = 0;
+        ImGui::BeginDisabled();
+        ImGui::SliderInt("##tp_scrub", &z, 0, 0, n == 0 ? "buffering rewind..." : "pause to scrub");
+        ImGui::EndDisabled();
+    }
+    ImGui::SameLine();
+
+    // [ next frame ] — advance one recorded frame while scrubbing, else step the emulator.
+    if (IconButton("##tp_next", Ico::Next, "Next frame"))
+    {
+        if (mbScrubbing && mScrubIndex < n - 1)
+        {
+            ++mScrubIndex;
+        }
+        else
+        {
+            mbScrubbing = false;
+            se_frame_step(ctl, 1);   // advance one frame; leaves the emulator paused
+            mbPaused = true;
+        }
+    }
+    ImGui::EndDisabled();
 #endif
 }
 
@@ -2237,6 +2244,10 @@ void App::DrawVdpOutput(IPlatform& platform)
     (void)platform;
     if (ImGui::Begin("VDP Output"))
     {
+        // Reserve a strip at the bottom for the transport bar (live sources only).
+        const float transportH = mbLiveSource ? (ImGui::GetFrameHeightWithSpacing() + 6.0f) : 0.0f;
+        const ImVec2 vpContentStart = ImGui::GetCursorScreenPos();
+        const ImVec2 vpFullAvail    = ImGui::GetContentRegionAvail();
         if (!mbHasData || mFrameTexture == 0)
         {
             ImGui::TextDisabled("No data loaded. File > Open Memory Dump...");
@@ -2249,7 +2260,7 @@ void App::DrawVdpOutput(IPlatform& platform)
             // hardware does — drawing the pixels square (e.g. 320x224 = 1.43:1) makes
             // everything look too wide. Horizontal and vertical scales therefore differ,
             // so the sprite overlays and hit-test use separate X/Y factors.
-            const ImVec2 avail = ImGui::GetContentRegionAvail();
+            const ImVec2 avail(vpFullAvail.x, std::max(1.0f, vpFullAvail.y - transportH));
             const float dar = 4.0f / 3.0f;
             float fitW = avail.x, fitH = avail.y;
             if (avail.y > 0.0f && avail.x / avail.y > dar) fitW = avail.y * dar;  // pillarbox
@@ -2330,6 +2341,15 @@ void App::DrawVdpOutput(IPlatform& platform)
                     mScrollCommandListToSelection = true;
                 }
             }
+        }
+
+        // Transport bar pinned to the bottom of the view: prev / play-pause / scrub / next.
+        if (transportH > 0.0f)
+        {
+            ImGui::SetCursorScreenPos(
+                ImVec2(vpContentStart.x, vpContentStart.y + vpFullAvail.y - transportH + 4.0f));
+            ImGui::Separator();
+            DrawTransportBar();
         }
     }
     ImGui::End();
