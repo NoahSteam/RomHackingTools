@@ -288,7 +288,7 @@ private:
         bool vramMap = true, archiveExplorer = false, searchRom = false;
         bool vdpOutput = true, vdp1Framebuffer = true, worldView = true;
         bool vdp1Table = true, vdp2Table = true, colorRam = true, workRam = true;
-        bool paletteRam = true, registers = true, commandList = true;
+        bool registers = true, commandList = true;
         bool textureViewer = true, paletteViewer = true, references = false;
         bool selectedObject = true, watch = true, assembly = true, hexEditor = true;
         bool controller = true;   // Saturn control pad (drives a live game)

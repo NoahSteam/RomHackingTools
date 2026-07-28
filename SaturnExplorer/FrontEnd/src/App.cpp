@@ -258,7 +258,6 @@ const std::vector<App::PanelInfo>& App::PanelList()
         {"registers",       "Registers",          &Panels::registers},
         {"colorRam",        "Color RAM",          &Panels::colorRam},
         {"workRam",         "Work RAM",           &Panels::workRam},
-        {"paletteRam",      "Palette RAM",        &Panels::paletteRam},
         {"textureViewer",   "Texture Viewer",     &Panels::textureViewer},
         {"paletteViewer",   "Palette Viewer",     &Panels::paletteViewer},
         {"references",      "References",         &Panels::references},
@@ -891,7 +890,6 @@ void App::BuildUI(IPlatform& platform)
     if (mPanels.vdp2Table)       DrawVdp2Table();
     if (mPanels.colorRam)        DrawColorRam();
     if (mPanels.workRam)         DrawWorkRam();
-    if (mPanels.paletteRam)      DrawPlaceholder("Palette RAM", "VDP1 CLUT-area view — planned (see Color RAM for CRAM).");
     if (mPanels.registers)       DrawRegisters();
     if (mPanels.commandList)     DrawCommandList();
     if (mPanels.textureViewer)   DrawTextureViewer(platform);
@@ -1026,7 +1024,6 @@ void App::BuildDefaultLayout(unsigned int dockspaceId)
     ImGui::DockBuilderDockWindow("VDP1 Table", rData);
     ImGui::DockBuilderDockWindow("VDP2 Table", rData);
     ImGui::DockBuilderDockWindow("Color RAM", rData);
-    ImGui::DockBuilderDockWindow("Palette RAM", rData);
     ImGui::DockBuilderDockWindow("Work RAM", rData);
     ImGui::DockBuilderDockWindow("Registers", rData);
 
@@ -3625,7 +3622,6 @@ void App::DrawWindowsMenu(std::vector<TopBarCommand>& commands)
     ImGui::Separator();
     if (ImGui::MenuItem("Reset Layout")) commands.emplace_back(TopBarCommandType::ResetLayout);
     if (ImGui::MenuItem("Save Layout")) commands.emplace_back(TopBarCommandType::SaveLayout);
-    ImGui::MenuItem("Manage Layouts...", nullptr, false, false);
     ImGui::EndPopup();
 }
 
@@ -3711,7 +3707,6 @@ void App::DrawToolbar(std::vector<TopBarCommand>& commands)
                     if (ImGui::MenuItem("Emulator Paths...")) commands.emplace_back(TopBarCommandType::OpenLaunchSettings);
                     if (ImGui::MenuItem("Input Settings..."))
                         commands.emplace_back(TopBarCommandType::ShowWindow, std::string("Controller"));
-                    ImGui::MenuItem("Appearance...", nullptr, false, false);
                     ImGui::EndMenu();
                 }
                 if (ImGui::BeginMenu("Help"))
@@ -3741,7 +3736,6 @@ void App::DrawToolbar(std::vector<TopBarCommand>& commands)
                 if (ImGui::MenuItem("Emulator Paths...")) commands.emplace_back(TopBarCommandType::OpenLaunchSettings);
                 if (ImGui::MenuItem("Input Settings..."))
                     commands.emplace_back(TopBarCommandType::ShowWindow, std::string("Controller"));
-                ImGui::MenuItem("Appearance...", nullptr, false, false);
                 ImGui::EndPopup();
             }
             ImGui::SameLine();
@@ -4122,10 +4116,6 @@ void App::DrawSettingsModal()
         ImGui::SetWindowFocus("Controller");
         ImGui::CloseCurrentPopup();
     }
-    ImGui::BeginDisabled(true);
-    ImGui::Button("Appearance...");
-    ImGui::EndDisabled();
-    ImGui::TextDisabled("Appearance customization is not available yet.");
     ImGui::Separator();
     if (ImGui::Button("Close")) ImGui::CloseCurrentPopup();
     ImGui::EndPopup();
