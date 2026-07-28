@@ -16,6 +16,10 @@ namespace sfe
 
 typedef unsigned char uint8;
 
+// Default cap on a single decompressed block (a real texture block is far smaller). Bounds
+// the work/memory when decoding is attempted at an arbitrary/garbage offset during a scan.
+constexpr size_t kPrsMaxDecompressBytes = 32u << 20;   // 32 MiB
+
 // Raw PRS encoder (the "Puyo" variant). Produces a compressed byte stream in
 // GetCompressedData(). Ported verbatim from Utils/Utils.cpp.
 struct PuyoPrsCompressor
@@ -59,12 +63,18 @@ struct PRSCompressor
 // arbitrary/garbage input can't be driven to a huge allocation.
 struct PRSDecompressor
 {
-    char*         mpUncompressedData = nullptr;
-    unsigned long mUncompressedDataSize = 0;
+    char*         mpUncompressedData = nullptr;   // reused/grown across calls; freed in dtor
+    unsigned long mUncompressedDataSize = 0;      // valid length after a successful call
     size_t        mCompressedSize = 0;
 
     ~PRSDecompressor();
+    // Decode the stream at pInData. The output buffer is retained between calls (only grown
+    // when a decode needs more room), so decoding at many offsets in a row is allocation-
+    // free after warm-up. mpUncompressedData stays valid until the next call or destruction.
     bool UncompressData(const void* pInData, unsigned int inDataSize, size_t maxOut = 0);
+
+private:
+    size_t mCapacity = 0;   // allocated size of mpUncompressedData
 };
 
 }  // namespace sfe

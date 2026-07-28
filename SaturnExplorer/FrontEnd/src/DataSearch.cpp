@@ -163,26 +163,35 @@ void SearchFile(const std::string& path, const uint8_t* needle, size_t len,
     }
 }
 
-// Read an entire file into `data`. Returns false on open failure. Used by the PRS scan,
-// which needs random access to try decompression at every offset.
-bool ReadWholeFile(const std::string& path, std::vector<uint8_t>& data)
+enum class ReadStatus { Ok, OpenFailed, TooLarge };
+
+// Read an entire file into `data`. Used by the PRS scan, which needs random access to try
+// decompression at every offset. If `maxBytes` is nonzero and the file exceeds it, returns
+// TooLarge *without* allocating/reading (so an oversized disc image is skipped cheaply, not
+// slurped into memory just to be rejected). The size is read from the same open used to
+// read the data — no separate stat.
+ReadStatus ReadWholeFile(const std::string& path, std::vector<uint8_t>& data, uint64_t maxBytes)
 {
     std::ifstream f(path, std::ios::binary | std::ios::ate);
     if (!f)
     {
-        return false;
+        return ReadStatus::OpenFailed;
     }
     const std::streamoff size = f.tellg();
     if (size <= 0)
     {
         data.clear();
-        return true;
+        return ReadStatus::Ok;
+    }
+    if (maxBytes && static_cast<uint64_t>(size) > maxBytes)
+    {
+        return ReadStatus::TooLarge;
     }
     data.resize(static_cast<size_t>(size));
     f.seekg(0);
     f.read(reinterpret_cast<char*>(data.data()), size);
     data.resize(static_cast<size_t>(f.gcount()));
-    return true;
+    return ReadStatus::Ok;
 }
 
 // Scan one file for the needle appearing inside a PRS-compressed block: try to decompress
@@ -197,7 +206,16 @@ void SearchFilePrs(const std::string& path, const uint8_t* needle, size_t len,
         return;
     }
     std::vector<uint8_t> data;
-    if (!ReadWholeFile(path, data) || data.size() < 3)
+    const ReadStatus rs = ReadWholeFile(path, data, kPrsMaxFileBytes);
+    if (rs == ReadStatus::TooLarge)
+    {
+        if (progress)
+        {
+            progress->filesSkipped.fetch_add(1, std::memory_order_relaxed);
+        }
+        return;   // a byte-by-byte decompress scan of a huge image is impractical
+    }
+    if (rs != ReadStatus::Ok || data.size() < 3)
     {
         return;
     }
@@ -247,48 +265,6 @@ void SearchFilePrs(const std::string& path, const uint8_t* needle, size_t len,
 
 }  // namespace
 
-size_t SearchDataDir(const std::string& root, const uint8_t* needle, size_t len,
-                     std::vector<DataSearchHit>& hits, size_t maxHitsPerFile)
-{
-    std::vector<std::string> files;
-    if (IsDirectory(root))
-    {
-        EnumerateFiles(root, files);
-    }
-    else if (PathExists(root))
-    {
-        files.push_back(root);   // a single image (ISO/disc), scanned as one file
-    }
-
-    for (const std::string& file : files)
-    {
-        std::vector<uint64_t> offsets;
-        SearchFile(file, needle, len, offsets, maxHitsPerFile);
-        if (!offsets.empty())
-        {
-            DataSearchHit hit;
-            hit.path = file;
-            hit.offsets = std::move(offsets);
-            hits.push_back(std::move(hit));
-        }
-    }
-    return files.size();
-}
-
-namespace
-{
-uint64_t FileSizeBytes(const std::string& path)
-{
-    std::ifstream f(path, std::ios::binary | std::ios::ate);
-    if (!f)
-    {
-        return 0;
-    }
-    const std::streamoff s = f.tellg();
-    return s > 0 ? static_cast<uint64_t>(s) : 0;
-}
-}  // namespace
-
 size_t SearchData(const std::vector<std::string>& roots, const uint8_t* needle, size_t len,
                   SearchCompression comp, std::vector<DataSearchHit>& hits,
                   size_t maxHitsPerFile, SearchProgress* progress)
@@ -324,15 +300,7 @@ size_t SearchData(const std::vector<std::string>& roots, const uint8_t* needle, 
         std::vector<uint64_t> offsets;
         if (comp == SearchCompression::Prs)
         {
-            if (FileSizeBytes(file) > kPrsMaxFileBytes)
-            {
-                if (progress)
-                {
-                    progress->filesSkipped.fetch_add(1, std::memory_order_relaxed);
-                    progress->filesScanned.fetch_add(1, std::memory_order_relaxed);
-                }
-                continue;   // too large to decompress-scan byte by byte
-            }
+            // SearchFilePrs skips (and accounts for) files over kPrsMaxFileBytes itself.
             SearchFilePrs(file, needle, len, offsets, maxHitsPerFile, progress);
         }
         else

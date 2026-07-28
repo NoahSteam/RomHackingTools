@@ -316,7 +316,6 @@ private:
     SearchProgress       mSearchProgress;             // worker <-> UI (atomics)
     std::atomic<bool>    mSearchRunning{false};       // a worker is active
     std::atomic<bool>    mSearchDone{false};          // worker finished; results ready to reap
-    bool                 mSearchWasCancelled = false; // set by the reaper for the summary
     std::string          mSearchScopeText;            // human description of what was searched
 
     // Per-panel visibility, toggled from the toolbar "Windows" menu. All shown by

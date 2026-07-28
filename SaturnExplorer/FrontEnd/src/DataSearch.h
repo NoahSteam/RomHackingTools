@@ -39,6 +39,16 @@ struct SearchProgress
     std::atomic<size_t>   filesSkipped{0};   // too large for a PRS scan (see kPrsMaxFileBytes)
     std::atomic<uint64_t> curOffset{0};      // scan position within the current file (PRS)
     std::atomic<uint64_t> curFileSize{0};    // size of the current file (PRS)
+
+    void Reset()   // clear all counters + cancel before starting a run
+    {
+        cancel.store(false);
+        filesTotal.store(0);
+        filesScanned.store(0);
+        filesSkipped.store(0);
+        curOffset.store(0);
+        curFileSize.store(0);
+    }
 };
 
 // Files larger than this are skipped in a PRS search (a byte-by-byte decompress scan of a
@@ -51,9 +61,6 @@ constexpr uint64_t kPrsMaxFileBytes = 64ull << 20;   // 64 MiB
 // NOT guaranteed — order follows directory traversal. Returns the number of files
 // scanned. `maxHitsPerFile` caps matches recorded per file (keeps a pathological file
 // from flooding the UI); 0 disables the cap.
-size_t SearchDataDir(const std::string& root, const uint8_t* needle, size_t len,
-                     std::vector<DataSearchHit>& hits, size_t maxHitsPerFile = 256);
-
 // General search over one or more `roots` (each a file or a directory; directories are
 // walked recursively). `comp` selects exact vs PRS-compressed matching. `progress` (may be
 // null) is updated as files are scanned and is polled for cancellation. Returns the number

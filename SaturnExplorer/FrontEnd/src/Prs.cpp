@@ -154,27 +154,26 @@ PRSDecompressor::~PRSDecompressor()
 
 bool PRSDecompressor::UncompressData(const void* pInData, unsigned int inDataSize, size_t maxOut)
 {
-    std::free(mpUncompressedData);
-    mpUncompressedData = nullptr;
     mUncompressedDataSize = 0;
     mCompressedSize = 0;
 
     if (!pInData || inDataSize < 3) return false;   // shortest valid PRS stream is 3 bytes
-    if (maxOut == 0) maxOut = 32u << 20;
+    if (maxOut == 0) maxOut = kPrsMaxDecompressBytes;
 
     PrsDecCxt c;
     c.src = static_cast<const uint8_t*>(pInData);
     c.src_len = inDataSize;
     c.dst_max = maxOut;
+    c.dst = reinterpret_cast<uint8_t*>(mpUncompressedData);   // reuse the retained buffer
+    c.dst_len = mCapacity;
 
     const int rv = DoDecompress(&c);
-    if (rv < 0)
-    {
-        std::free(c.dst);
-        return false;
-    }
 
+    // Keep the (possibly grown) buffer regardless of outcome so the next call reuses it.
     mpUncompressedData = reinterpret_cast<char*>(c.dst);
+    mCapacity = c.dst_len;
+
+    if (rv < 0) return false;
     mUncompressedDataSize = static_cast<unsigned long>(rv);
     mCompressedSize = c.src_pos;
     return true;

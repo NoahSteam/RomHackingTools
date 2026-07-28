@@ -3398,13 +3398,7 @@ void App::LaunchSearch(std::vector<std::string> roots, SearchCompression comp,
         mSearchThread.join();   // reap a previous (finished) run
     }
     mSearchResults.clear();
-    mSearchProgress.cancel.store(false);
-    mSearchProgress.filesTotal.store(0);
-    mSearchProgress.filesScanned.store(0);
-    mSearchProgress.filesSkipped.store(0);
-    mSearchProgress.curOffset.store(0);
-    mSearchProgress.curFileSize.store(0);
-    mSearchWasCancelled = false;
+    mSearchProgress.Reset();
     mSearchScopeText = scopeText;
     mShowSearchResults = true;
     mSearchDone.store(false);
@@ -3412,10 +3406,9 @@ void App::LaunchSearch(std::vector<std::string> roots, SearchCompression comp,
 
     std::vector<uint8_t> needle = mPendingNeedle;   // capture by value for the worker
     std::string          label = mPendingSearchLabel;
-    const bool           prs = (comp == SearchCompression::Prs);
 
     auto doWork =
-        [this, roots = std::move(roots), needle = std::move(needle), comp, label, prs]() mutable {
+        [this, roots = std::move(roots), needle = std::move(needle), comp, label]() mutable {
             std::vector<DataSearchHit> results;
             const size_t files = SearchData(roots, needle.data(), needle.size(), comp, results,
                                             256, &mSearchProgress);
@@ -3430,12 +3423,11 @@ void App::LaunchSearch(std::vector<std::string> roots, SearchCompression comp,
                           "%s%s\n%zu match(es) in %zu file(s)  —  scanned %zu file%s in %s%s.%s",
                           cancelled ? "[Cancelled] " : "", label.c_str(), total, results.size(),
                           files, files == 1 ? "" : "s", mSearchScopeText.c_str(),
-                          prs ? " as PRS-compressed" : "",
+                          comp == SearchCompression::Prs ? " as PRS-compressed" : "",
                           skipped ? "\nSome files were skipped (too large for a PRS scan)." : "");
 
             mSearchResults = std::move(results);
             mSearchSummary = sum;
-            mSearchWasCancelled = cancelled;
             mSearchDone.store(true);   // reaped on the UI thread in PollSearchWorker()
         };
 
