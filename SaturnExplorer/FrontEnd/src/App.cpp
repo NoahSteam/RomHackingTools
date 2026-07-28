@@ -2339,6 +2339,7 @@ void App::DrawVdpOutput(IPlatform& platform)
                 {
                     SelectCommand(static_cast<int>(hitCommand), ImGui::GetIO().KeyShift);
                     mScrollCommandListToSelection = true;
+                    mScrollVdp1TableToSelection = true;
                 }
             }
         }
@@ -2660,6 +2661,7 @@ void App::DrawWorldView(IPlatform& platform)
                         {
                             SelectCommand(static_cast<int>(hit), ImGui::GetIO().KeyShift);
                             mScrollCommandListToSelection = true;
+                            mScrollVdp1TableToSelection = true;
                         }
                     }
                 }
@@ -2726,6 +2728,7 @@ void App::DrawCommandList()
                                               ImGuiSelectableFlags_SpanAllColumns))
                         {
                             SelectCommand(row, ImGui::GetIO().KeyShift);
+                            mScrollVdp1TableToSelection = true;   // reveal in the VDP1 Table
                         }
                         // Double-click: jump the Hex Editor to this command's table in
                         // VDP1 VRAM and surface the same row in the VDP1 Table.
@@ -4686,6 +4689,7 @@ void App::DrawVramMap()
             {
                 SelectCommand(static_cast<int>(nearestRef), ImGui::GetIO().KeyShift);
                 mScrollCommandListToSelection = true;
+                mScrollVdp1TableToSelection = true;
             }
 
             // Legend, wrapping to fit the panel width.
@@ -4749,6 +4753,7 @@ void App::DrawReferenceList(const char* id, const std::vector<se_reference>& ref
             {
                 SelectCommand(static_cast<int>(r.command_index), ImGui::GetIO().KeyShift);
                 mScrollCommandListToSelection = true;
+                mScrollVdp1TableToSelection = true;
             }
             ImGui::TableNextColumn();
             ImGui::Text("%u", r.object_number);
@@ -5031,6 +5036,7 @@ void App::DrawVdp1Table()
                                               ImGuiSelectableFlags_SpanAllColumns))
                         {
                             SelectCommand(row, ImGui::GetIO().KeyShift);
+                            mScrollCommandListToSelection = true;   // reveal in the Command List
                         }
                         // Double-click: jump the Hex Editor to this table entry and
                         // select+surface the same command in the Command List.
