@@ -4,9 +4,11 @@
 #include <ole2.h>       // OleInitialize (required by the modern folder picker)
 #include <shlobj.h>     // SHBrowseForFolder (PickDirectory)
 #include <shellapi.h>   // ShellExecute (RevealPath)
+#include <winhttp.h>    // HttpsGet (update check)
 #include <cstdio>
 #include <cstring>
 #include <string>
+#include <vector>
 #include <tchar.h>
 
 #include "imgui.h"
@@ -514,6 +516,85 @@ LRESULT WINAPI WindowsPlatform::WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPAR
         return 0;
     }
     return ::DefWindowProcW(hwnd, msg, wparam, lparam);
+}
+
+// HTTPS GET via WinHTTP — a system component, so no third-party dependency. Blocking;
+// UpdateChecker calls it on a worker thread. Only the update check uses this today.
+bool WindowsPlatform::HttpsGet(const std::string& url, const std::string& userAgent,
+                               HttpResponse& out)
+{
+    auto widen = [](const std::string& s) {
+        if (s.empty()) return std::wstring();
+        int n = ::MultiByteToWideChar(CP_UTF8, 0, s.c_str(), (int)s.size(), nullptr, 0);
+        std::wstring w(n, L'\0');
+        ::MultiByteToWideChar(CP_UTF8, 0, s.c_str(), (int)s.size(), &w[0], n);
+        return w;
+    };
+
+    const std::wstring wurl = widen(url);
+    const std::wstring wagent = widen(userAgent);
+
+    // Split the URL into host + path (and confirm it's HTTPS).
+    URL_COMPONENTS uc{};
+    uc.dwStructSize = sizeof(uc);
+    wchar_t host[256] = {}, path[2048] = {};
+    uc.lpszHostName = host; uc.dwHostNameLength = _countof(host);
+    uc.lpszUrlPath = path;  uc.dwUrlPathLength = _countof(path);
+    if (!::WinHttpCrackUrl(wurl.c_str(), (DWORD)wurl.size(), 0, &uc) ||
+        uc.nScheme != INTERNET_SCHEME_HTTPS)
+    {
+        out.ok = false; out.error = "Invalid or non-HTTPS URL."; return false;
+    }
+
+    HINTERNET session = ::WinHttpOpen(wagent.c_str(), WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
+                                      WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+    if (!session) { out.ok = false; out.error = "WinHttpOpen failed."; return false; }
+
+    bool ok = false;
+    HINTERNET connect = ::WinHttpConnect(session, host, uc.nPort, 0);
+    HINTERNET request = connect
+        ? ::WinHttpOpenRequest(connect, L"GET", path, nullptr, WINHTTP_NO_REFERER,
+                               WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE)
+        : nullptr;
+    if (request &&
+        ::WinHttpSendRequest(request, WINHTTP_NO_ADDITIONAL_HEADERS, 0,
+                             WINHTTP_NO_REQUEST_DATA, 0, 0, 0) &&
+        ::WinHttpReceiveResponse(request, nullptr))
+    {
+        DWORD status = 0, len = sizeof(status);
+        ::WinHttpQueryHeaders(request,
+                              WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+                              WINHTTP_HEADER_NAME_BY_INDEX, &status, &len,
+                              WINHTTP_NO_HEADER_INDEX);
+        out.status = (long)status;
+
+        std::string body;
+        DWORD avail = 0;
+        do
+        {
+            avail = 0;
+            if (!::WinHttpQueryDataAvailable(request, &avail)) break;
+            if (avail == 0) break;
+            std::vector<char> buf(avail);
+            DWORD read = 0;
+            if (!::WinHttpReadData(request, buf.data(), avail, &read)) break;
+            body.append(buf.data(), read);
+        } while (avail > 0);
+
+        out.body = std::move(body);
+        out.ok = true;
+        ok = true;
+    }
+    else
+    {
+        out.ok = false;
+        out.error = "WinHTTP request failed (no network, or GitHub unreachable).";
+    }
+
+    if (request) ::WinHttpCloseHandle(request);
+    if (connect) ::WinHttpCloseHandle(connect);
+    ::WinHttpCloseHandle(session);
+    return ok;
 }
 
 }  // namespace sfe

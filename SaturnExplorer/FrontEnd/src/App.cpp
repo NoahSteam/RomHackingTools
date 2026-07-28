@@ -942,6 +942,7 @@ void App::BuildUI(IPlatform& platform)
     DrawSettingsModal();
     DrawHelpModal();
     DrawAboutModal();
+    DrawUpdateModal(platform);
     DrawDataSearchResults(platform);
     DrawTracepointEditor();   // modal; no-op until OpenTracepointEditor requests it
     // contextSwap restores the live context here as it goes out of scope.
@@ -3712,7 +3713,7 @@ void App::DrawToolbar(std::vector<TopBarCommand>& commands)
                 if (ImGui::BeginMenu("Help"))
                 {
                     if (ImGui::MenuItem("Help")) commands.emplace_back(TopBarCommandType::OpenHelp);
-                    ImGui::MenuItem("Check for Updates...", nullptr, false, false);
+                    if (ImGui::MenuItem("Check for Updates...")) commands.emplace_back(TopBarCommandType::CheckForUpdates);
                     if (ImGui::MenuItem("About")) commands.emplace_back(TopBarCommandType::OpenAbout);
                     ImGui::EndMenu();
                 }
@@ -4060,6 +4061,10 @@ void App::ExecuteTopBarCommand(const TopBarCommand& command, IPlatform& platform
     case TopBarCommandType::OpenAbout:
         mOpenAbout = true;
         break;
+    case TopBarCommandType::CheckForUpdates:
+        mOpenUpdate = true;
+        mUpdateChecker.Start(platform);   // kicks off the worker; the modal polls it
+        break;
     case TopBarCommandType::None:
     default:
         break;
@@ -4153,6 +4158,57 @@ void App::DrawAboutModal()
     ImGui::TextDisabled("Sega Saturn graphics and live-debugging workspace");
     ImGui::Spacing();
     ImGui::TextWrapped("Source selects the debugger's active data provider. Emulator and Game select the next launch configuration.");
+    ImGui::Spacing();
+    ImGui::TextDisabled("Build: %s", UpdateChecker::BuildCommitShort());
+    if (ImGui::Button("Close")) ImGui::CloseCurrentPopup();
+    ImGui::EndPopup();
+}
+
+// "Check for Updates" result. The check runs on a worker thread (UpdateChecker); this modal
+// just polls its state each frame and offers a re-check.
+void App::DrawUpdateModal(IPlatform& platform)
+{
+    if (mOpenUpdate)
+    {
+        ImGui::OpenPopup("Check for Updates");
+        mOpenUpdate = false;
+    }
+    if (!ImGui::BeginPopupModal("Check for Updates", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        return;
+
+    ImGui::Text("This build: %s", UpdateChecker::BuildCommitShort());
+    ImGui::Separator();
+
+    const UpdateChecker::State st = mUpdateChecker.GetState();
+    switch (st)
+    {
+        case UpdateChecker::State::Checking:
+            ImGui::TextUnformatted("Checking GitHub\xe2\x80\xa6");
+            break;
+        case UpdateChecker::State::UpToDate:
+            ImGui::TextColored(ImVec4(0.35f, 0.80f, 0.45f, 1.0f), "Up to date.");
+            ImGui::TextWrapped("%s", mUpdateChecker.Message().c_str());
+            break;
+        case UpdateChecker::State::UpdateAvailable:
+            ImGui::TextColored(ImVec4(1.0f, 0.80f, 0.35f, 1.0f), "Update available.");
+            ImGui::TextWrapped("%s", mUpdateChecker.Message().c_str());
+            break;
+        case UpdateChecker::State::Unsupported:
+        case UpdateChecker::State::Error:
+            ImGui::TextColored(ImVec4(0.90f, 0.45f, 0.40f, 1.0f), "Couldn't check.");
+            ImGui::TextWrapped("%s", mUpdateChecker.Message().c_str());
+            break;
+        case UpdateChecker::State::Idle:
+        default:
+            ImGui::TextUnformatted("Ready.");
+            break;
+    }
+
+    ImGui::Separator();
+    ImGui::BeginDisabled(mUpdateChecker.Busy());
+    if (ImGui::Button("Check Again")) mUpdateChecker.Start(platform);
+    ImGui::EndDisabled();
+    ImGui::SameLine();
     if (ImGui::Button("Close")) ImGui::CloseCurrentPopup();
     ImGui::EndPopup();
 }

@@ -179,6 +179,21 @@ set(SE_IMGUI_CORE
     ${SE_IMGUI_DIR}/imgui_demo.cpp
 )
 
+# Bake the git commit into BuildInfo.h at build time so the in-app update check knows
+# exactly which build it is. The custom target re-runs the resolver every build; the
+# resolver only rewrites the header when the SHA changes, so it doesn't force rebuilds.
+set(SE_BUILDINFO_DIR ${CMAKE_BINARY_DIR}/generated)
+file(MAKE_DIRECTORY ${SE_BUILDINFO_DIR})
+add_custom_target(SaturnExplorerBuildInfo
+    BYPRODUCTS ${SE_BUILDINFO_DIR}/BuildInfo.h
+    COMMAND ${CMAKE_COMMAND}
+        -DSRC_DIR=${CMAKE_CURRENT_SOURCE_DIR}
+        -DIN_FILE=${CMAKE_CURRENT_SOURCE_DIR}/FrontEnd/BuildInfo.h.in
+        -DOUT_FILE=${SE_BUILDINFO_DIR}/BuildInfo.h
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/GenerateBuildInfo.cmake
+    COMMENT "Resolving build commit -> BuildInfo.h"
+    VERBATIM)
+
 if(WIN32)
     add_executable(SaturnExplorerFrontEnd WIN32
         FrontEnd/src/App.cpp
@@ -202,6 +217,7 @@ if(WIN32)
         FrontEnd/src/Debug/CallStack.cpp
         FrontEnd/src/FrameRecorder.cpp
         FrontEnd/src/FrameLz.cpp
+        FrontEnd/src/UpdateChecker.cpp
         FrontEnd/Platforms/Windows/WindowsPlatform.cpp
         FrontEnd/Platforms/Windows/WinMain.cpp
         FrontEnd/Platforms/Windows/SaturnExplorer.rc
@@ -228,6 +244,7 @@ if(WIN32)
         d3d11
         dxgi
         d3dcompiler
+        winhttp                 # IPlatform::HttpsGet (update check)
     )
     # Make F5 in Visual Studio launch the app.
     set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
@@ -257,6 +274,7 @@ elseif(EMSCRIPTEN)
         FrontEnd/src/Debug/FormatString.cpp
         FrontEnd/src/Debug/ExecutionActions.cpp
         FrontEnd/src/Debug/CallStack.cpp
+        FrontEnd/src/UpdateChecker.cpp
         FrontEnd/Platforms/Web/WebPlatform.cpp
         FrontEnd/Platforms/Web/WebMain.cpp
         ${SE_IMGUI_CORE}
@@ -333,6 +351,7 @@ else()
             FrontEnd/src/Debug/CallStack.cpp
             FrontEnd/src/FrameRecorder.cpp
             FrontEnd/src/FrameLz.cpp
+            FrontEnd/src/UpdateChecker.cpp
             FrontEnd/Platforms/Web/WebPlatform.cpp
             FrontEnd/Platforms/Web/WebMain.cpp
             ${SE_IMGUI_CORE}
@@ -355,10 +374,27 @@ else()
             ${SDL2_LIBRARIES}
             OpenGL::GL
         )
+        # Native desktop (Linux/macOS) HttpsGet uses libcurl when available (macOS ships
+        # it). Without it the update check degrades to "unsupported" — no hard dependency.
+        find_package(CURL QUIET)
+        if(CURL_FOUND)
+            target_compile_definitions(SaturnExplorerFrontEnd PRIVATE SE_HAVE_CURL)
+            target_link_libraries(SaturnExplorerFrontEnd PRIVATE CURL::libcurl)
+        else()
+            message(STATUS "SaturnExplorer: libcurl not found — the in-app update check "
+                           "will report 'unsupported' on this desktop build.")
+        endif()
     else()
         message(STATUS
             "SaturnExplorer: no SDL2/OpenGL found — configuring Core + savestate "
             "driver only. Use `emcmake cmake` for the web app, or install SDL2 for "
             "a native desktop build.")
     endif()
+endif()
+
+# Every frontend target consumes the generated BuildInfo.h and must be (re)generated
+# before it compiles UpdateChecker.cpp.
+if(TARGET SaturnExplorerFrontEnd)
+    add_dependencies(SaturnExplorerFrontEnd SaturnExplorerBuildInfo)
+    target_include_directories(SaturnExplorerFrontEnd PRIVATE ${SE_BUILDINFO_DIR})
 endif()

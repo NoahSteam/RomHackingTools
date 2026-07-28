@@ -57,6 +57,13 @@ public:
     bool LaunchProcess(const char* path, const char* args, const char* workingDir) override;
 #endif
 
+    // HTTPS GET via libcurl on native desktop when SE_HAVE_CURL is defined (macOS/Linux);
+    // otherwise inherits the base "unsupported" default (including the Emscripten build).
+#if defined(SE_HAVE_CURL) && !defined(__EMSCRIPTEN__)
+    bool HttpsGet(const std::string& url, const std::string& userAgent,
+                  HttpResponse& out) override;
+#endif
+
 private:
     SDL_Window*   mWindow  = nullptr;
     SDL_GLContext mGlContext = nullptr;

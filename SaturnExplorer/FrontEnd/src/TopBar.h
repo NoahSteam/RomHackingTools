@@ -55,7 +55,8 @@ enum class TopBarCommandType
     TakeScreenshot,
     OpenSettings,
     OpenHelp,
-    OpenAbout
+    OpenAbout,
+    CheckForUpdates
 };
 
 struct TopBarCommand

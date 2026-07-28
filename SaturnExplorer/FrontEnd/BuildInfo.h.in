@@ -1,0 +1,9 @@
+// Generated at build time from git — do not edit. See cmake/GenerateBuildInfo.cmake.
+#pragma once
+
+namespace sfe
+{
+constexpr const char* kBuildCommit = "@SE_BUILD_COMMIT@";
+constexpr const char* kBuildCommitShort = "@SE_BUILD_COMMIT_SHORT@";
+constexpr const char* kBuildRepo = "NoahSteam/RomHackingTools";
+}

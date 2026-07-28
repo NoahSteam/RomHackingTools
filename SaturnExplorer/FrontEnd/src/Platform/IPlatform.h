@@ -93,6 +93,33 @@ public:
         (void)workingDir;
         return false;
     }
+
+    // --- HTTPS GET (Seam C, optional). The one network primitive the portable app
+    // needs — currently only the update check (UpdateChecker) uses it. Kept minimal and
+    // synchronous on purpose: the caller runs it on a worker thread, so each platform only
+    // has to implement a blocking "fetch this URL" (Windows: WinHTTP; native desktop /
+    // macOS: libcurl; browser: unsupported — the web build is always the freshest). ---
+    struct HttpResponse
+    {
+        bool        ok = false;   // transport succeeded (a reply was received)
+        long        status = 0;   // HTTP status code (200, 404, …) when ok
+        std::string body;         // response body when ok
+        std::string error;        // human-readable reason when !ok
+    };
+
+    // Blocking HTTPS GET of 'url' with the given User-Agent (GitHub's API requires one).
+    // Returns false with out.error set on any transport failure or if unsupported by this
+    // platform (the default). MUST be called off the UI thread — it blocks until the
+    // request completes or times out.
+    virtual bool HttpsGet(const std::string& url, const std::string& userAgent,
+                          HttpResponse& out)
+    {
+        (void)url;
+        (void)userAgent;
+        out.ok = false;
+        out.error = "Online update check is not available in this build.";
+        return false;
+    }
 };
 
 }  // namespace sfe

@@ -14,6 +14,10 @@
 
 #include "Theme.h"
 
+#if defined(SE_HAVE_CURL) && !defined(__EMSCRIPTEN__)
+#include <curl/curl.h>   // native desktop HttpsGet (update check)
+#endif
+
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 #include <GLES3/gl3.h>
@@ -386,5 +390,54 @@ bool WebPlatform::LaunchProcess(const char* path, const char* args, const char* 
     return ::system(cmd.c_str()) != -1;
 }
 #endif  // !__EMSCRIPTEN__
+
+// Native desktop HTTPS via libcurl (macOS ships it; Linux with libcurl-dev). The browser
+// build and any native build without libcurl inherit IPlatform's "unsupported" default.
+#if defined(SE_HAVE_CURL) && !defined(__EMSCRIPTEN__)
+static size_t SeCurlWrite(char* ptr, size_t size, size_t nmemb, void* userdata)
+{
+    const size_t n = size * nmemb;
+    static_cast<std::string*>(userdata)->append(ptr, n);
+    return n;
+}
+
+bool WebPlatform::HttpsGet(const std::string& url, const std::string& userAgent,
+                           HttpResponse& out)
+{
+    CURL* curl = curl_easy_init();
+    if (!curl)
+    {
+        out.ok = false;
+        out.error = "Could not initialize libcurl.";
+        return false;
+    }
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, userAgent.c_str());
+    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 15L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, SeCurlWrite);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &out.body);
+    // Accept: GitHub honors a version header; the default JSON is fine either way.
+    struct curl_slist* headers = curl_slist_append(nullptr, "Accept: application/vnd.github+json");
+    if (headers) curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+
+    const CURLcode rc = curl_easy_perform(curl);
+    if (rc == CURLE_OK)
+    {
+        long code = 0;
+        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &code);
+        out.status = code;
+        out.ok = true;
+    }
+    else
+    {
+        out.ok = false;
+        out.error = curl_easy_strerror(rc);
+    }
+    if (headers) curl_slist_free_all(headers);
+    curl_easy_cleanup(curl);
+    return out.ok;
+}
+#endif  // SE_HAVE_CURL && !__EMSCRIPTEN__
 
 }  // namespace sfe

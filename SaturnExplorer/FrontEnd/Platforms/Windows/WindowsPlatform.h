@@ -34,6 +34,8 @@ public:
                                 const char* extCsv) override;
     bool RevealPath(const char* path) override;
     bool LaunchProcess(const char* path, const char* args, const char* workingDir) override;
+    bool HttpsGet(const std::string& url, const std::string& userAgent,
+                  HttpResponse& out) override;
 
 private:
     bool CreateDeviceD3D();

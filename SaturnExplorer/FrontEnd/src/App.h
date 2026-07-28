@@ -20,6 +20,7 @@
 #include "HexEditorPanel.h"      // Hex Editor (debugger)
 #include "ControllerPanel.h"     // Saturn control pad (drives a live game)
 #include "LogPanel.h"            // structured event log (tracepoints + system events)
+#include "UpdateChecker.h"       // "check GitHub for a newer build" (Seam C: IPlatform::HttpsGet)
 #include "Debug/ExecutionActions.h"  // tracepoints / execution-action store
 #include "Debug/CallStack.h"      // per-CPU call stack (paused-state workspace)
 #include "Debug/MemoryBackend.h"
@@ -86,6 +87,7 @@ private:
     void DrawSettingsModal();
     void DrawHelpModal();
     void DrawAboutModal();
+    void DrawUpdateModal(IPlatform& platform);   // "Check for Updates" result (polls mUpdateChecker)
     void SaveScreenshot(IPlatform& platform);
     void DrawLayersMenu();   // toolbar "Layers" dropdown (VDP1/VDP2 visibility toggles)
     void DrawVdpOutput(IPlatform& platform);
@@ -325,6 +327,8 @@ private:
     bool             mOpenSettings = false;
     bool             mOpenHelp = false;
     bool             mOpenAbout = false;
+    bool             mOpenUpdate = false;   // request to open the "Check for Updates" modal
+    UpdateChecker    mUpdateChecker;
     // Edit buffers for the Launch Settings dialog (ImGui InputText needs char storage;
     // no imgui_stdlib here). Parallel to mLauncher.Emulators(); copied in on open,
     // written back on Save.
