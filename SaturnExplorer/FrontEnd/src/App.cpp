@@ -964,8 +964,8 @@ void App::BuildDefaultLayout(unsigned int dockspaceId)
     const ImGuiID bottom = ImGui::DockBuilderSplitNode(top, ImGuiDir_Down, 0.24f, nullptr, &top);
 
     ImGuiID center = top;
-    const ImGuiID left  = ImGui::DockBuilderSplitNode(center, ImGuiDir_Left, 0.24f, nullptr, &center);
-    const ImGuiID right = ImGui::DockBuilderSplitNode(center, ImGuiDir_Right, 0.28f, nullptr, &center);
+    const ImGuiID left  = ImGui::DockBuilderSplitNode(center, ImGuiDir_Left, 0.22f, nullptr, &center);
+    const ImGuiID right = ImGui::DockBuilderSplitNode(center, ImGuiDir_Right, 0.34f, nullptr, &center);
 
     // Left inspector, top to bottom: layers, VRAM map, then the texture/palette pair.
     ImGuiID leftRest = left;
@@ -974,15 +974,16 @@ void App::BuildDefaultLayout(unsigned int dockspaceId)
     const ImGuiID lTex    = ImGui::DockBuilderSplitNode(leftRest, ImGuiDir_Up, 0.50f, nullptr, &leftRest);
     const ImGuiID lPal    = leftRest;
 
-    // Center: the view tabs fill the whole column. The VDP1 Command List used to sit in a
-    // strip below them; it now tabs with the bottom-left group, so the display gets that
-    // vertical space back.
+    // Center: a clean image stage — only the visual views tab here. The data tables (VDP1/
+    // VDP2 Table, Color/Palette RAM, Work RAM, Registers) moved to the right column so the
+    // display you watch never gets swapped out for a lookup table.
     const ImGuiID cViews = center;
 
-    // Right: Selected Object (top) + Hex Editor (below).
+    // Right column: the select-and-inspect pair (Command List + Selected Object) on top,
+    // the structured-data tables + Memory below.
     ImGuiID rightRest = right;
-    const ImGuiID rObj = ImGui::DockBuilderSplitNode(rightRest, ImGuiDir_Up, 0.40f, nullptr, &rightRest);
-    const ImGuiID rHex = rightRest;
+    const ImGuiID rInspect = ImGui::DockBuilderSplitNode(rightRest, ImGuiDir_Up, 0.40f, nullptr, &rightRest);
+    const ImGuiID rData    = rightRest;
 
     // Bottom strip: Watch | SH-2 Assembly, side by side.
     ImGuiID bottomRest = bottom;
@@ -998,20 +999,24 @@ void App::BuildDefaultLayout(unsigned int dockspaceId)
     ImGui::DockBuilderDockWindow("Search ROM / Files", lPal);    // hidden default; tabs w/ Palette
     ImGui::DockBuilderDockWindow("References", lPal);            // hidden default; tabs w/ Palette
 
-    // Center: the view group shares cViews, so they appear as tabs.
+    // Center: image stage — only the visual views tab here.
     ImGui::DockBuilderDockWindow("VDP Output", cViews);
     ImGui::DockBuilderDockWindow("VDP1 Framebuffer", cViews);
     ImGui::DockBuilderDockWindow("3D View", cViews);
-    ImGui::DockBuilderDockWindow("VDP1 Table", cViews);
-    ImGui::DockBuilderDockWindow("VDP2 Table", cViews);
-    ImGui::DockBuilderDockWindow("Color RAM", cViews);
-    ImGui::DockBuilderDockWindow("Work RAM", cViews);
-    ImGui::DockBuilderDockWindow("Palette RAM", cViews);
-    ImGui::DockBuilderDockWindow("Registers", cViews);
 
-    // Right inspector.
-    ImGui::DockBuilderDockWindow("Selected Object", rObj);
-    ImGui::DockBuilderDockWindow("Memory", rHex);
+    // Right column, top: the select-and-inspect pair. Command List drives Selected Object
+    // (and the left Texture/Palette viewers), so they sit together.
+    ImGui::DockBuilderDockWindow("VDP1 Command List", rInspect);
+    ImGui::DockBuilderDockWindow("Selected Object", rInspect);
+
+    // Right column, bottom: structured-data tables + Memory, tabbed.
+    ImGui::DockBuilderDockWindow("VDP1 Table", rData);
+    ImGui::DockBuilderDockWindow("VDP2 Table", rData);
+    ImGui::DockBuilderDockWindow("Color RAM", rData);
+    ImGui::DockBuilderDockWindow("Palette RAM", rData);
+    ImGui::DockBuilderDockWindow("Work RAM", rData);
+    ImGui::DockBuilderDockWindow("Registers", rData);
+    ImGui::DockBuilderDockWindow("Memory", rData);
 
     // Bottom debugger strip. Watch / Controller / Log tab together on the left; the
     // SH-2 Assembly gets the right half.
@@ -1019,7 +1024,6 @@ void App::BuildDefaultLayout(unsigned int dockspaceId)
     ImGui::DockBuilderDockWindow("Controller", bWatch);
     ImGui::DockBuilderDockWindow("Log", bWatch);
     ImGui::DockBuilderDockWindow("Tracepoints", bWatch);   // tabs with Watch/Log/Controller
-    ImGui::DockBuilderDockWindow("VDP1 Command List", bWatch);  // moved out of the center strip
     ImGui::DockBuilderDockWindow("Call Stack", bWatch);    // beside Assembly; auto-focus on stop
     ImGui::DockBuilderDockWindow("Current Input", bWatch);
     ImGui::DockBuilderDockWindow("Input Queue", bWatch);
