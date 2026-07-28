@@ -52,6 +52,7 @@ extern void            SsDbgSh2Regs(int cpu, uint32_t out23[23]); /* R[16],SR,GB
 extern void            SsDbgPokeByte(uint32_t addr, uint8_t val); /* bus/debug byte write */
 extern void            SsDbgAddExecBp(int cpu, unsigned int addr); /* Tier 3: install PC breakpoint */
 extern void            SsDbgClearBps(void);                        /* Tier 3: clear PC breakpoints */
+extern void            SsDbgSetTraceActive(int active);           /* arm per-insn tracepoint scan */
 /* Controller injection (v7+). apply.py implements this accessor through the SMPC
  * gamepad path, translating SE_PAD_* to Mednafen's bit order and atomically overlaying
  * it after each host-input refresh. `port` is 0-based (0 = controller 1). */
@@ -251,9 +252,10 @@ static const char* SeMdfnPortDeviceName(unsigned int port)
 /* Tracepoints are non-halting: on a hit the glue captures the SH-2 register file and
  * queues an event (the client formats the message), then execution CONTINUES. The set
  * arrives via SeMdfnSetTracepoints (registered with SeExportSetTracepointHook); the
- * per-instruction check happens in SeMednafenTraceHook, which apply.py wires into the
- * SS CPU dispatch (see README "Tracepoints"; needs --enable-debugger for a per-insn
- * hook, exactly like execution breakpoints). */
+ * per-instruction check happens in SeMednafenTraceHook, which the injected SS debugger
+ * callback (SeSsBpHook, via SsDbgSetTraceActive) calls every instruction while any
+ * tracepoint is armed (see README "Tracepoints"; needs --enable-debugger, exactly like
+ * execution breakpoints). */
 #define SE_MDFN_TP_MAX 64
 typedef struct { unsigned int id, cpu, address, flags; } SeMdfnTp;
 static SeMdfnTp   sTps[SE_MDFN_TP_MAX];
@@ -280,6 +282,17 @@ static void SeMdfnSetTracepoints(unsigned int count, const unsigned char* descs)
         sTps[i].flags   = SeRd32LE(d + 12);
     }
     sTpCount = count;
+#if defined(SE_MEDNAFEN_WIRED)
+    /* Arm/disarm the per-instruction SS debugger callback: it only needs to run every
+     * instruction while at least one tracepoint is enabled. Without this the trace hook
+     * is never called and tracepoints never fire (the SS fast run loop skips hooks). */
+    {
+        int anyEnabled = 0;
+        for (i = 0; i < count; ++i)
+            if (sTps[i].flags & SE_LIVE_TP_ENABLED) { anyEnabled = 1; break; }
+        SsDbgSetTraceActive(anyEnabled);
+    }
+#endif
 }
 
 #if defined(SE_MEDNAFEN_WIRED)

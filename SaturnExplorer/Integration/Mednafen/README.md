@@ -286,23 +286,24 @@ formats the message from those registers), then execution continues. The client 
 the set with a `TRC` command; `se_export.c` forwards it to `SeMdfnSetTracepoints`, and the
 per-instruction check lives in `SeMednafenTraceHook(cpu, PC)` (both already in the glue).
 
-The one thing to wire is the **per-instruction call**. Add, in the SS CPU dispatch that
-runs under `--enable-debugger` (the same `ss/debug.inc` path the execution-breakpoint hook
-uses — `DBG_CPUHook`/`DBG_SetCPUHook`), a call for each executed instruction:
+The **per-instruction call is wired automatically** through the same SS debugger callback
+the execution-breakpoint hook uses. `apply.py` makes the injected `SeSsBpHook` call
+`SeMednafenTraceHook((int)DBG.ActiveCPU, PC)` on every invocation (before the breakpoint
+halt gate, so a tracepoint on the very PC a breakpoint also stops on still fires as the PC
+is reached). To make that callback run *every* instruction — not just when the debugger
+finds a PC breakpoint — the glue calls the injected `SsDbgSetTraceActive(1)` from
+`SeMdfnSetTracepoints` whenever at least one enabled tracepoint is present; that installs
+the callback in **continuous** mode (`DBG_SetCPUCallback(SeSsBpHook, true)`), which also
+makes `DBG_NeedCPUHooks()` true so the SS run loop switches to the per-instruction
+dispatcher on its own. Emptying the tracepoint set (and having no breakpoints) removes the
+callback again, returning the emulator to full speed.
 
-```cpp
-SeMednafenTraceHook(cpu, PC);   // cpu: 0 master / 1 slave; PC: the instruction address
-```
-
-`apply.py` forward-declares `SeMednafenTraceHook` but does **not** auto-inject this call
-(the exact per-instruction site varies and a wrong anchor would break the build), so add
-it by hand once. It only fires under a `--enable-debugger` build (the debugger provides
-the per-instruction hook), exactly like execution breakpoints; without it, tracepoints
-install and round-trip but never fire. This is **not exercised in-repo** — the SE side
-(editor, format, `TRC`, the events block, client formatting) is mock-verified; only this
-one call site needs confirming on a real Mednafen build. Note the per-instruction check is
-a linear scan over the (few) installed tracepoints; that's the debugger-build cost, same
-order as breakpoints.
+This only works under a `--enable-debugger` (`WANT_DEBUGGER`) build, exactly like
+execution breakpoints; without it, `SsDbgSetTraceActive` compiles to a no-op and
+tracepoints install and round-trip but never fire. The per-instruction check is a linear
+scan over the (few, ≤64) installed tracepoints — the debugger-build cost, same order as
+breakpoints. The SE side (editor, format, `TRC`, the events block, client formatting) is
+mock-verified in-repo; the live firing needs a real `--enable-debugger` Mednafen.
 
 ## Call stack (Tier 4, v9+) — TODO(mednafen) confirm
 

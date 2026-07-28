@@ -118,31 +118,59 @@ extern "C" unsigned short SsDbgReadOpcode(unsigned int addr) {
    return (unsigned short)(((unsigned short)hi << 8) | (unsigned short)lo);
 }
 #ifdef WANT_DEBUGGER
-/* Tier 3 — execution breakpoints via the ss debugger (needs a --enable-debugger
-   build; without WANT_DEBUGGER these are no-ops below). Adding a PC breakpoint makes
-   DBG_NeedCPUHooks() true, so ss.cpp's per-frame run-loop dispatcher
-   (rltab[...][DBG_NeedCPUHooks()]) switches to the per-instruction DBG_CPUHandler
-   path on its own — no explicit debug-mode toggle. On a hit we report the halted PC
-   (and the CPU that hit it, DBG.ActiveCPU) and block right at the instruction until
-   Saturn Explorer resumes/steps — an instruction-exact halt like the Yabause tap. */
+/* Tier 3 — execution breakpoints + tracepoints via the ss debugger (needs a
+   --enable-debugger build; without WANT_DEBUGGER these are no-ops below). Setting the
+   CPU callback (DBG_SetCPUCallback) makes DBG_NeedCPUHooks() true, so ss.cpp's per-frame
+   run-loop dispatcher (rltab[...][DBG_NeedCPUHooks()]) switches to the per-instruction
+   DBG_CPUHandler path on its own. The single callback SeSsBpHook serves BOTH features:
+   it runs SeMednafenTraceHook every call (tracepoints + the v9 shadow call stack), then
+   halts if the SS debugger flagged a PC breakpoint at this instruction. During the
+   callback DBG_CPUHandler guarantees which == DBG.ActiveCPU, so DBG.ActiveCPU is the
+   executing CPU. */
 static void SeSsBpHook(uint32 PC, bool bpoint) {
+   /* Per-instruction (continuous mode): drive tracepoints + the shadow call stack. This
+      runs BEFORE the halt gate, so a tracepoint on the very PC a breakpoint also halts on
+      still fires as the PC is reached. */
+   SeMednafenTraceHook((int)DBG.ActiveCPU, (unsigned int)PC);
    if (bpoint) {
       SeExportNotifyStop((int)DBG.ActiveCPU, (unsigned int)PC);
       while (!SeExportGateFrame()) { }
    }
 }
+/* Install/remove the per-instruction callback to match what is armed: continuous (every
+   instruction) when tracepoints are active so SeMednafenTraceHook sees every PC;
+   non-continuous (fires only when the debugger finds a PC breakpoint) when only
+   breakpoints exist; removed entirely when neither is active so the fast run loop
+   returns. Continuous still passes bpoint=true on breakpoint PCs, so it is a superset. */
+static int sSeBpActive = 0;      /* >=1 execution breakpoint installed */
+static int sSeTraceActive = 0;   /* >=1 enabled tracepoint armed */
+static void SeSyncCpuHook(void) {
+   if (sSeBpActive || sSeTraceActive)
+      DBG_SetCPUCallback(SeSsBpHook, sSeTraceActive != 0);
+   else
+      DBG_SetCPUCallback(0, false);
+}
 extern "C" void SsDbgAddExecBp(int cpu, unsigned int addr) {
    (void)cpu;   /* SS PC breakpoints are shared across both SH-2s */
-   DBG_SetCPUCallback(SeSsBpHook, false);
    DBG_AddBreakPoint(BPOINT_PC, addr, addr, true);
+   sSeBpActive = 1;
+   SeSyncCpuHook();
 }
 extern "C" void SsDbgClearBps(void) {
    DBG_FlushBreakPoints(BPOINT_PC);
-   DBG_SetCPUCallback(0, false);   /* drop the hook so the fast run loop returns */
+   sSeBpActive = 0;
+   SeSyncCpuHook();   /* keeps the continuous hook if tracepoints are still armed */
+}
+/* Arm/disarm per-instruction tracepoint scanning. Called by the glue whenever the
+   tracepoint set changes (active = at least one enabled tracepoint). */
+extern "C" void SsDbgSetTraceActive(int active) {
+   sSeTraceActive = active ? 1 : 0;
+   SeSyncCpuHook();
 }
 #else
 extern "C" void SsDbgAddExecBp(int cpu, unsigned int addr) { (void)cpu; (void)addr; }
 extern "C" void SsDbgClearBps(void) {}
+extern "C" void SsDbgSetTraceActive(int active) { (void)active; }
 #endif
 }"""
 
