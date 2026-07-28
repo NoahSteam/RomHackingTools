@@ -70,6 +70,14 @@ void SeExportSnapshot(const void* vdp1_vram_512k, const void* vdp2_vram_512k,
 void SeExportSetBreakpointHooks(void (*add)(int cpu, unsigned int address),
                                 void (*clear)(void));
 
+/* Wire the module's memory (data) breakpoint installer (v5+). add(cpu, address, size,
+ * kind) installs one watchpoint over [address, address+size) with kind 1 = read,
+ * 2 = write, 3 = read/write; size is 1/2/4 bytes (the Saturn's 8/16/32-bit accesses).
+ * SeExportSetBreakpointHooks' 'clear' also clears these. May be NULL (memory
+ * breakpoints then round-trip over the protocol but don't install). */
+void SeExportSetMemBreakpointHook(void (*add)(int cpu, unsigned int address,
+                                              unsigned int size, unsigned int kind));
+
 /* Call from Yabause's SH2 breakpoint callback when the master/slave core hits an
  * execution breakpoint (cpu 0 = master, 1 = slave; pc = the halted PC). Latches a
  * stop event and holds the emulator paused; the next snapshot reports it so the

@@ -170,8 +170,22 @@ extern "C" void SsDbgAddExecBp(int cpu, unsigned int addr) {
    sSeBpActive = 1;
    SeSyncCpuHook();
 }
+/* Data (read/write) watchpoint over [addr, addr+size). kind bit0 = read, bit1 = write
+   (1 read, 2 write, 3 read/write). The ss debugger checks these ranges per instruction
+   in DBG_CPUHandler (CheckRWBreakpoints); a hit sets FoundBPoint and drives our CPU hook
+   with bpoint=true, so SeSsBpHook halts exactly as it does for a PC breakpoint. */
+extern "C" void SsDbgAddMemBp(int cpu, unsigned int addr, unsigned int size, unsigned int kind) {
+   (void)cpu;   /* SS data breakpoints are shared across both SH-2s */
+   const unsigned int end = addr + (size ? size - 1u : 0u);
+   if (kind & 0x1u) DBG_AddBreakPoint(BPOINT_READ, addr, end, true);
+   if (kind & 0x2u) DBG_AddBreakPoint(BPOINT_WRITE, addr, end, true);
+   sSeBpActive = 1;
+   SeSyncCpuHook();
+}
 extern "C" void SsDbgClearBps(void) {
    DBG_FlushBreakPoints(BPOINT_PC);
+   DBG_FlushBreakPoints(BPOINT_READ);
+   DBG_FlushBreakPoints(BPOINT_WRITE);
    sSeBpActive = 0;
    SeSyncCpuHook();   /* keeps the continuous hook if tracepoints are still armed */
 }
@@ -183,6 +197,7 @@ extern "C" void SsDbgSetTraceActive(int active) {
 }
 #else
 extern "C" void SsDbgAddExecBp(int cpu, unsigned int addr) { (void)cpu; (void)addr; }
+extern "C" void SsDbgAddMemBp(int cpu, unsigned int addr, unsigned int size, unsigned int kind) { (void)cpu; (void)addr; (void)size; (void)kind; }
 extern "C" void SsDbgClearBps(void) {}
 extern "C" void SsDbgSetTraceActive(int active) { (void)active; }
 #endif

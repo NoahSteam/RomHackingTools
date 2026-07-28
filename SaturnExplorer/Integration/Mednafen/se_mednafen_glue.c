@@ -51,7 +51,8 @@ extern void            SsDbgVdp1Regs(uint16_t out11[11]); /* TVMR,FBCR,PTMR,EWDR
 extern void            SsDbgSh2Regs(int cpu, uint32_t out23[23]); /* R[16],SR,GBR,VBR,MACH,MACL,PR,PC */
 extern void            SsDbgPokeByte(uint32_t addr, uint8_t val); /* bus/debug byte write */
 extern void            SsDbgAddExecBp(int cpu, unsigned int addr); /* Tier 3: install PC breakpoint */
-extern void            SsDbgClearBps(void);                        /* Tier 3: clear PC breakpoints */
+extern void            SsDbgAddMemBp(int cpu, unsigned int addr, unsigned int size, unsigned int kind); /* data watchpoint */
+extern void            SsDbgClearBps(void);                        /* Tier 3: clear PC + data breakpoints */
 extern void            SsDbgSetTraceActive(int active);           /* arm per-insn tracepoint scan */
 /* Controller injection (v7+). apply.py implements this accessor through the SMPC
  * gamepad path, translating SE_PAD_* to Mednafen's bit order and atomically overlaying
@@ -181,6 +182,17 @@ static void SeMdfnAddExecBp(int cpu, unsigned int address)
     SsDbgAddExecBp(cpu, address);
 #else
     (void)cpu; (void)address;
+#endif
+}
+static void SeMdfnAddMemBp(int cpu, unsigned int address, unsigned int size, unsigned int kind)
+{
+#if defined(SE_MEDNAFEN_WIRED)
+    /* Installs a data (read/write) watchpoint over [address, address+size) via the ss
+     * debugger. Like the PC breakpoint it only halts in a --enable-debugger build;
+     * otherwise it round-trips without halting. */
+    SsDbgAddMemBp(cpu, address, size, kind);
+#else
+    (void)cpu; (void)address; (void)size; (void)kind;
 #endif
 }
 static void SeMdfnClearBps(void)
@@ -397,6 +409,7 @@ void SeMednafenFrameHook(void)
         SeExportInit();
         SeExportSetMemWriteHook(SeMdfnWriteByte);
         SeExportSetBreakpointHooks(SeMdfnAddExecBp, SeMdfnClearBps);
+        SeExportSetMemBreakpointHook(SeMdfnAddMemBp);   /* data (read/write) watchpoints */
         SeExportSetInputHook(SeMdfnSetPad);   /* controller panel -> emulated pad (v7+) */
         SeExportSetKeyMapHook(SeMdfnGetKeyMap);   /* emulator keyboard bindings -> panel (v10+) */
         SeExportSetPortInfoHook(SeMdfnPortDeviceName);  /* controller config -> Log on connect (v12+) */
@@ -411,7 +424,7 @@ void SeMednafenFrameHook(void)
  * way; SeMdfnSetTracepoints/SeRd32LE are only used under SE_MEDNAFEN_WIRED. */
 void SeMednafenSuppressUnusedWarnings(void)
 {
-    (void)SeMdfnAddExecBp; (void)SeMdfnClearBps; (void)SeMdfnWriteByte; (void)SeMdfnSetPad;
+    (void)SeMdfnAddExecBp; (void)SeMdfnAddMemBp; (void)SeMdfnClearBps; (void)SeMdfnWriteByte; (void)SeMdfnSetPad;
     (void)SeMdfnGetKeyMap; (void)SeMdfnPortDeviceName;
     (void)SeMdfnSetTracepoints; (void)SeRd32LE;
 }

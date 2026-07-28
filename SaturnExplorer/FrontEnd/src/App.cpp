@@ -2059,6 +2059,15 @@ void App::DrawHexEditor()
     std::vector<uint8_t> bytes;
     std::string label;
     if (mHexEditor.TakeSearchRequest(bytes, label)) BeginByteSearch(std::move(bytes), label);
+    // Right-click "Add breakpoint" (read/write/either, byte/short/long) raised in the panel.
+    HexEditorPanel::BreakpointRequest bpr;
+    if (mHexEditor.TakeBreakpointRequest(bpr))
+    {
+        const BpKind kind = bpr.kind == 1 ? BpKind::MemRead
+                          : bpr.kind == 2 ? BpKind::MemWrite
+                          : BpKind::MemReadWrite;
+        mBreakpoints.AddMemory(bpr.address, bpr.size, kind);
+    }
 }
 
 // Saturn control pad. BuildUI forwards the final arbitrated state after the

@@ -83,6 +83,14 @@ bool HexEditorPanel::TakeSearchRequest(std::vector<uint8_t>& outBytes, std::stri
     return true;
 }
 
+bool HexEditorPanel::TakeBreakpointRequest(BreakpointRequest& out)
+{
+    if (!mBpRequested) return false;
+    mBpRequested = false;
+    out = mBpRequest;
+    return true;
+}
+
 void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
 {
     (void)live;
@@ -372,9 +380,50 @@ void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
         }
         if (ImGui::IsMouseReleased(0)) mSelecting = false;
 
-        // Right-click → search the current byte selection in the game data directory.
+        // Right-click → add a memory breakpoint at the selection, or search the current
+        // byte selection in the game data directory.
         if (ImGui::BeginPopupContextWindow("hexctx", ImGuiPopupFlags_MouseButtonRight))
         {
+            // Add breakpoint: read/write/either at the first selected byte, for a
+            // byte/short/long access (the Saturn has 8/16/32-bit memory operations).
+            if (selLo >= 0)
+            {
+                if (ImGui::BeginMenu("Add breakpoint"))
+                {
+                    ImGui::TextDisabled("At 0x%08X", (uint32_t)selLo);
+                    ImGui::Separator();
+                    static const struct { const char* label; int kind; } kKinds[] = {
+                        { "Break on Read",         1 },
+                        { "Break on Write",        2 },
+                        { "Break on Read or Write", 3 },
+                    };
+                    static const struct { const char* label; uint32_t size; } kSizes[] = {
+                        { "Byte (8-bit)",   1 },
+                        { "Short (16-bit)", 2 },
+                        { "Long (32-bit)",  4 },
+                    };
+                    for (const auto& k : kKinds)
+                    {
+                        if (ImGui::BeginMenu(k.label))
+                        {
+                            for (const auto& s : kSizes)
+                            {
+                                if (ImGui::MenuItem(s.label))
+                                {
+                                    mBpRequest.address = (uint32_t)selLo;
+                                    mBpRequest.size = s.size;
+                                    mBpRequest.kind = k.kind;
+                                    mBpRequested = true;
+                                }
+                            }
+                            ImGui::EndMenu();
+                        }
+                    }
+                    ImGui::EndMenu();
+                }
+                ImGui::Separator();
+            }
+
             const int64_t cnt = (selLo >= 0) ? (selHi - selLo + 1) : 0;
             if (cnt > 0 && cnt <= 0x1000)
             {

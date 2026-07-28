@@ -154,13 +154,21 @@ static unsigned int sCallDepth[2];   /* frames pushed (may saturate at CAP) */
  * simply won't install, but the protocol still round-trips). ---- */
 typedef void (*SeAddExecBpFn)(int cpu, unsigned int address);
 typedef void (*SeClearBpsFn)(void);
+typedef void (*SeAddMemBpFn)(int cpu, unsigned int address,
+                             unsigned int size, unsigned int kind);
 static SeAddExecBpFn sAddExecBp;
 static SeClearBpsFn  sClearBps;
+static SeAddMemBpFn  sAddMemBp;
 
 void SeExportSetBreakpointHooks(SeAddExecBpFn add, SeClearBpsFn clear)
 {
     sAddExecBp = add;
     sClearBps = clear;
+}
+
+void SeExportSetMemBreakpointHook(SeAddMemBpFn add)
+{
+    sAddMemBp = add;
 }
 
 /* ---- Memory-write hook (v6+). apply.py wires this to the emulator's byte writer
@@ -569,21 +577,30 @@ static void SeServeClient(int cl, SeFrame* snap)
             for (i = 0; i < arg; ++i)
             {
                 unsigned char d[SE_LIVE_BKPT_DESC_LEN];
-                unsigned int address, flags, kind, cpu, enabled;
+                unsigned int address, size, flags, kind, cpu, enabled;
                 if (SeRecv(cl, d, SE_LIVE_BKPT_DESC_LEN) != 0) return;
                 address = (unsigned int)d[0] | ((unsigned int)d[1] << 8) |
                           ((unsigned int)d[2] << 16) | ((unsigned int)d[3] << 24);
-                /* d[4..7] size (unused for execution breakpoints). */
+                size = (unsigned int)d[4] | ((unsigned int)d[5] << 8) |
+                       ((unsigned int)d[6] << 16) | ((unsigned int)d[7] << 24);
                 flags = (unsigned int)d[8] | ((unsigned int)d[9] << 8) |
                         ((unsigned int)d[10] << 16) | ((unsigned int)d[11] << 24);
                 kind = flags & SE_LIVE_BP_KIND_MASK;
                 cpu = (flags & SE_LIVE_BP_CPU_SLAVE) ? 1u : 0u;
                 enabled = (flags & SE_LIVE_BP_ENABLED) ? 1u : 0u;
-                /* Only execution breakpoints are installed for now; memory
-                 * breakpoints round-trip but need SH2AddMemoryBreakpoint wiring. */
-                if (enabled && kind == 0u && sAddExecBp)
+                /* kind 0 = execution (PC); 1/2/3 = read/write/read-write data
+                 * breakpoints (watchpoints) over [address, address+size). */
+                if (!enabled)
                 {
-                    sAddExecBp((int)cpu, address);
+                    /* skip: descriptor already consumed to keep the stream aligned */
+                }
+                else if (kind == 0u)
+                {
+                    if (sAddExecBp) sAddExecBp((int)cpu, address);
+                }
+                else
+                {
+                    if (sAddMemBp) sAddMemBp((int)cpu, address, size ? size : 1u, kind);
                 }
             }
         }

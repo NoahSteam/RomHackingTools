@@ -92,6 +92,7 @@ Hook points (all in `ss.cpp`, all `static`):
 | Frame gate (pause/step) | top of `YabauseEmulate()` | top of `Emulate()` — **see caveat** |
 | Deinit | `YabauseDeInit()` | `CloseGame(void)` |
 | Exec breakpoints | `SH2AddCodeBreakpoint`, `SH2SetBreakpointCallBack` | `ss/debug.inc`: `DBG_AddBreakPoint(BPOINT_PC,…)` + `DBG_SetCPUCallback` (needs `--enable-debugger`) |
+| Data breakpoints (read/write watchpoints) | `SH2AddMemoryBreakpoint` | `ss/debug.inc`: `DBG_AddBreakPoint(BPOINT_READ/WRITE,…)`, checked per-insn by `CheckRWBreakpoints` (needs `--enable-debugger`) |
 | Memory poke | `MappedMemoryWriteByte` | `CheatMemWrite(A, V)` in ss.cpp — cache-correct bus byte write |
 
 ## Accessors (the Mednafen-specific integration wrinkle)
@@ -209,6 +210,22 @@ Build Mednafen with `./configure --enable-debugger` for breakpoints to fire; wit
 it the breakpoint set still round-trips over the wire but doesn't halt. (SS PC
 breakpoints are shared across both SH-2s, so a breakpoint fires for whichever core
 reaches the address; the hit report still names the exact CPU.)
+
+### Data breakpoints / watchpoints (read/write)
+
+The wire's breakpoint descriptors carry a `kind` (0 exec, 1 read, 2 write, 3
+read/write) and a `size` (1/2/4 bytes, the Saturn's 8/16/32-bit accesses). For a
+non-exec kind, `apply.py`'s `SsDbgAddMemBp` installs a data watchpoint over
+`[addr, addr+size)`: `DBG_AddBreakPoint(BPOINT_READ …)` and/or `BPOINT_WRITE`. The
+ss debugger evaluates these ranges every instruction inside `DBG_CPUHandler`
+(`CheckRWBreakpoints`); a matching access sets `FoundBPoint`, which drives the same
+`SeSsBpHook` with `bpoint=true`, so a watchpoint hit halts (and reports the
+accessing PC) exactly like a PC breakpoint. `SsDbgClearBps` flushes all three lists
+(`BPOINT_PC`/`READ`/`WRITE`). The glue registers this through
+`SeExportSetMemBreakpointHook`. Front end: right-click a byte in the **Memory**
+panel → **Add breakpoint** → Read / Write / Read or Write → Byte / Short / Long.
+Same `--enable-debugger` requirement as PC breakpoints; the address is matched as
+the raw SH-2 bus address (mirror regions aren't folded).
 
 ### Instruction stepping (Step Into / Over / Out, v12+)
 

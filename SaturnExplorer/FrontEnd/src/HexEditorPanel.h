@@ -40,6 +40,13 @@ public:
     // bytes + a human label out; false when nothing is pending.
     bool TakeSearchRequest(std::vector<uint8_t>& outBytes, std::string& outLabel);
 
+    // A "set a memory breakpoint here" request raised from the grid's right-click menu
+    // (Add breakpoint -> Read/Write/Read or Write -> Byte/Short/Long). The App polls this
+    // after Draw and installs it in the BreakpointManager. 'kind' is the wire kind: 1 read,
+    // 2 write, 3 read/write. Returns true once per request, moving the request out.
+    struct BreakpointRequest { uint32_t address = 0; uint32_t size = 1; int kind = 0; };
+    bool TakeBreakpointRequest(BreakpointRequest& out);
+
     // One selectable region: a CPU-address span served by the backend. Index 0 is "All".
     struct Region { const char* name; uint32_t base; uint32_t size; };
 
@@ -79,6 +86,10 @@ private:
     bool                 mSearchRequested = false;
     std::vector<uint8_t> mSearchBytes;
     std::string          mSearchLabel;
+
+    // Pending "add memory breakpoint" request (see TakeBreakpointRequest).
+    bool               mBpRequested = false;
+    BreakpointRequest  mBpRequest;
 };
 
 }  // namespace sfe
