@@ -97,6 +97,7 @@ private:
     void DrawLog();                         // structured event log
     void DrawActions();                     // Tracepoints management table
     void DrawCallStack();                   // per-CPU call stack (paused-state workspace)
+    void DrawBreakpoints();                 // Visual Studio-style breakpoint list
     void RebuildCallStack();                // reconstruct the shown CPU's stack
     // Sync the workspace to a selected call-stack frame (Assembly + Hex + focus).
     void GoToFrame(const CallStackFrame& fr);
@@ -291,6 +292,7 @@ private:
         bool log = true;          // structured event log (tracepoints + system events)
         bool actions = true;      // Tracepoints / execution-actions management table
         bool callStack = true;    // per-CPU call stack (paused-state workspace)
+        bool breakpoints = true;  // Visual Studio-style breakpoint list (tabs by Call Stack)
     };
     Panels           mPanels;
 

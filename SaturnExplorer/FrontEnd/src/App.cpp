@@ -270,6 +270,7 @@ const std::vector<App::PanelInfo>& App::PanelList()
         {"log",             "Log",                &Panels::log},
         {"actions",         "Tracepoints",        &Panels::actions},
         {"callStack",       "Call Stack",         &Panels::callStack},
+        {"breakpoints",     "Breakpoints",        &Panels::breakpoints},
     };
     return kList;
 }
@@ -933,6 +934,7 @@ void App::BuildUI(IPlatform& platform)
     if (mPanels.log)             DrawLog();
     if (mPanels.actions)         DrawActions();
     if (mPanels.callStack)       DrawCallStack();
+    if (mPanels.breakpoints)     DrawBreakpoints();
 
     // Game-data-directory modal + texture search results (both floating, drawn last
     // so they overlay the docked panels).
@@ -1036,6 +1038,7 @@ void App::BuildDefaultLayout(unsigned int dockspaceId)
     ImGui::DockBuilderDockWindow("Log", bWatch);
     ImGui::DockBuilderDockWindow("Tracepoints", bWatch);   // tabs with Watch/Log/Controller
     ImGui::DockBuilderDockWindow("Call Stack", bWatch);    // beside Assembly; auto-focus on stop
+    ImGui::DockBuilderDockWindow("Breakpoints", bWatch);   // tabs beside Call Stack
     ImGui::DockBuilderDockWindow("Current Input", bWatch);
     ImGui::DockBuilderDockWindow("Input Queue", bWatch);
     ImGui::DockBuilderDockWindow("Input Recording", bWatch);
@@ -1729,6 +1732,139 @@ void App::DrawActions()
             if (toRemove) mActions.Remove(toRemove);
         }
     }
+    ImGui::End();
+}
+
+static const char* BpKindName(BpKind k)
+{
+    switch (k)
+    {
+        case BpKind::Execution:    return "Execution";
+        case BpKind::MemRead:      return "Read";
+        case BpKind::MemWrite:     return "Write";
+        case BpKind::MemReadWrite: return "Read/Write";
+    }
+    return "?";
+}
+// Data-breakpoint access width -> the Saturn's operand-size name.
+static const char* BpSizeName(uint32_t sz)
+{
+    return sz == 1 ? "Byte" : sz == 2 ? "Short" : sz == 4 ? "Long" : "Bytes";
+}
+
+// Visual Studio-style Breakpoints window: every breakpoint (execution + data
+// watchpoints), the exact condition each breaks on, plus enable/disable and delete.
+// Tabs beside Call Stack. Mutating through the BreakpointManager bumps its generation,
+// so the live driver re-syncs the emulator with no extra plumbing.
+void App::DrawBreakpoints()
+{
+    if (!ImGui::Begin("Breakpoints")) { ImGui::End(); return; }
+
+    const std::vector<Breakpoint>& all = mBreakpoints.All();
+    const size_t n = all.size();
+
+    ImGui::Text("%zu breakpoint%s", n, n == 1 ? "" : "s");
+
+    // Enable/Disable All are enabled only when at least one is in the opposite state.
+    // SetEnabled only flips a bool (no resize), so looping over 'all' stays valid.
+    bool anyEnabled = false, anyDisabled = false;
+    for (const Breakpoint& b : all) { anyEnabled |= b.enabled; anyDisabled |= !b.enabled; }
+    ImGui::SameLine();
+    ImGui::BeginDisabled(!anyDisabled);
+    if (ImGui::SmallButton("Enable All"))
+        for (const Breakpoint& b : all) mBreakpoints.SetEnabled(b.id, true);
+    ImGui::EndDisabled();
+    ImGui::SameLine();
+    ImGui::BeginDisabled(!anyEnabled);
+    if (ImGui::SmallButton("Disable All"))
+        for (const Breakpoint& b : all) mBreakpoints.SetEnabled(b.id, false);
+    ImGui::EndDisabled();
+    ImGui::SameLine();
+    ImGui::BeginDisabled(n == 0);
+    if (ImGui::SmallButton("Clear All")) ImGui::OpenPopup("ClearAllBps");
+    ImGui::EndDisabled();
+    if (ImGui::BeginPopup("ClearAllBps"))
+    {
+        ImGui::TextUnformatted("Remove all breakpoints?");
+        if (ImGui::Button("Yes, clear")) { mBreakpoints.Clear(); ImGui::CloseCurrentPopup(); }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
+
+    if (n == 0)
+    {
+        ImGui::Separator();
+        ImGui::TextDisabled("No breakpoints.");
+        ImGui::TextDisabled("Set one from the SH-2 Assembly gutter, or right-click a byte");
+        ImGui::TextDisabled("in the Memory panel and choose \"Add breakpoint\".");
+        ImGui::End();
+        return;
+    }
+
+    uint64_t toRemove = 0;   // deferred so we never erase mid-iteration
+    const ImGuiTableFlags tf = ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH |
+                               ImGuiTableFlags_ScrollY | ImGuiTableFlags_SizingStretchProp;
+    if (ImGui::BeginTable("bps", 4, tf))
+    {
+        ImGui::TableSetupColumn("On",   ImGuiTableColumnFlags_WidthFixed, 26.0f);
+        ImGui::TableSetupColumn("Type", ImGuiTableColumnFlags_WidthFixed, 78.0f);
+        ImGui::TableSetupColumn("Breaks when\xe2\x80\xa6", ImGuiTableColumnFlags_WidthStretch);
+        ImGui::TableSetupColumn("",     ImGuiTableColumnFlags_WidthFixed, 58.0f);
+        ImGui::TableSetupScrollFreeze(0, 1);
+        ImGui::TableHeadersRow();
+
+        for (const Breakpoint& b : all)
+        {
+            ImGui::TableNextRow();
+            ImGui::PushID(static_cast<int>(b.id));
+
+            ImGui::TableNextColumn();
+            bool en = b.enabled;
+            if (ImGui::Checkbox("##en", &en)) mBreakpoints.SetEnabled(b.id, en);
+
+            ImGui::TableNextColumn();
+            ImGui::TextUnformatted(BpKindName(b.kind));
+
+            ImGui::TableNextColumn();
+            // The exact break condition, so the row reads like a sentence.
+            if (b.kind == BpKind::Execution)
+            {
+                ImGui::Text("PC reaches %08X  \xc2\xb7  %s SH-2",
+                            b.address, b.cpu ? "Slave" : "Master");
+            }
+            else
+            {
+                const char* acc = b.kind == BpKind::MemRead  ? "read"
+                                : b.kind == BpKind::MemWrite ? "written"
+                                                             : "read or written";
+                if (b.size > 1)
+                    ImGui::Text("%s at %08X-%08X is %s",
+                                BpSizeName(b.size), b.address, b.address + b.size - 1, acc);
+                else
+                    ImGui::Text("Byte at %08X is %s", b.address, acc);
+            }
+
+            ImGui::TableNextColumn();
+            if (ImGui::SmallButton("Go"))
+            {
+                if (b.kind == BpKind::Execution)
+                { mAssemblyPanel.GoTo(b.cpu, b.address); mPanels.assembly = true; }
+                else
+                { mHexEditor.GoTo(b.address); mPanels.hexEditor = true; }
+            }
+            ImGui::SetItemTooltip("%s", b.kind == BpKind::Execution ? "Show in SH-2 Assembly"
+                                                                    : "Show in Memory");
+            ImGui::SameLine();
+            if (ImGui::SmallButton("X")) toRemove = b.id;
+            ImGui::SetItemTooltip("Delete this breakpoint");
+
+            ImGui::PopID();
+        }
+        ImGui::EndTable();
+    }
+    if (toRemove) mBreakpoints.Remove(toRemove);
+
     ImGui::End();
 }
 
