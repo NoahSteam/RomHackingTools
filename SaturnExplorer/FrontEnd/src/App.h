@@ -87,7 +87,7 @@ private:
     void DrawHelpModal();
     void DrawAboutModal();
     void SaveScreenshot(IPlatform& platform);
-    void DrawLayerControls();
+    void DrawLayersMenu();   // toolbar "Layers" dropdown (VDP1/VDP2 visibility toggles)
     void DrawVdpOutput(IPlatform& platform);
     void DrawWatch(IPlatform& platform);   // debugger Watch Window
     void DrawAssembly();                    // SH-2 Assembly (live disassembly)
@@ -138,7 +138,7 @@ private:
     // Launch Settings dialog (per-emulator exe/args/workdir), and the launch action
     // (resolve exe+args and hand them to the platform; adopt the ROM as the Data
     // Directory when none is set yet).
-    void DrawLaunchMenu(const TopBarViewModel& state, std::vector<TopBarCommand>& commands);
+    void DrawSessionMenu(const TopBarViewModel& state, std::vector<TopBarCommand>& commands);
     void DrawLaunchSettingsModal(IPlatform& platform);
     bool LaunchSession(IPlatform& platform, bool connectAfterLaunch);
     void BeginTextureSearch(IPlatform& platform, const se_command& cmd);
@@ -276,7 +276,7 @@ private:
     {
         // Archive Explorer + Search ROM/Files are M6 placeholders, and References is
         // niche — hidden by default (re-enable from the Windows menu).
-        bool layerControls = true, vramMap = true, archiveExplorer = false, searchRom = false;
+        bool vramMap = true, archiveExplorer = false, searchRom = false;
         bool vdpOutput = true, vdp1Framebuffer = true, worldView = true;
         bool vdp1Table = true, vdp2Table = true, colorRam = true, workRam = true;
         bool paletteRam = true, registers = true, commandList = true;

@@ -246,7 +246,6 @@ void App::Shutdown()
 const std::vector<App::PanelInfo>& App::PanelList()
 {
     static const std::vector<PanelInfo> kList = {
-        {"layerControls",   "Layer Controls",     &Panels::layerControls},
         {"vramMap",         "VRAM Map",           &Panels::vramMap},
         {"archiveExplorer", "Archive Explorer",   &Panels::archiveExplorer},
         {"searchRom",       "Search ROM / Files", &Panels::searchRom},
@@ -863,7 +862,6 @@ void App::BuildUI(IPlatform& platform)
 
     // Left column. Each panel is gated by its visibility flag (toolbar "Windows"
     // menu); a hidden panel is simply not drawn, so its dock tab disappears.
-    if (mPanels.layerControls)   DrawLayerControls();
     if (mPanels.vramMap)         DrawVramMap();
     if (mPanels.archiveExplorer) DrawPlaceholder("Archive Explorer", "Disc filesystem tree — arrives in M6 (needs disc access).");
     if (mPanels.searchRom)       DrawPlaceholder("Search ROM / Files", "ROM & archive search — arrives in M6 (needs disc access).");
@@ -967,12 +965,10 @@ void App::BuildDefaultLayout(unsigned int dockspaceId)
     const ImGuiID left  = ImGui::DockBuilderSplitNode(center, ImGuiDir_Left, 0.22f, nullptr, &center);
     const ImGuiID right = ImGui::DockBuilderSplitNode(center, ImGuiDir_Right, 0.34f, nullptr, &center);
 
-    // Left inspector, top to bottom: layers, VRAM map, then the texture/palette pair.
+    // Left inspector: VRAM map on top, the Texture + Palette viewers tabbed below.
     ImGuiID leftRest = left;
-    const ImGuiID lLayers = ImGui::DockBuilderSplitNode(leftRest, ImGuiDir_Up, 0.20f, nullptr, &leftRest);
-    const ImGuiID lVram   = ImGui::DockBuilderSplitNode(leftRest, ImGuiDir_Up, 0.28f, nullptr, &leftRest);
-    const ImGuiID lTex    = ImGui::DockBuilderSplitNode(leftRest, ImGuiDir_Up, 0.50f, nullptr, &leftRest);
-    const ImGuiID lPal    = leftRest;
+    const ImGuiID lVram   = ImGui::DockBuilderSplitNode(leftRest, ImGuiDir_Up, 0.42f, nullptr, &leftRest);
+    const ImGuiID lTexPal = leftRest;
 
     // Center: a clean image stage — only the visual views tab here. The data tables (VDP1/
     // VDP2 Table, Color/Palette RAM, Work RAM, Registers) moved to the right column so the
@@ -990,14 +986,14 @@ void App::BuildDefaultLayout(unsigned int dockspaceId)
     const ImGuiID bWatch = ImGui::DockBuilderSplitNode(bottomRest, ImGuiDir_Left, 0.5f, nullptr, &bottomRest);
     const ImGuiID bAsm   = bottomRest;
 
-    // Left inspector.
-    ImGui::DockBuilderDockWindow("Layer Controls", lLayers);
+    // Left inspector. Texture + Palette viewers tab together (Archive/Search/References
+    // are hidden by default and tab there too).
     ImGui::DockBuilderDockWindow("VRAM Map (VDP1)", lVram);
-    ImGui::DockBuilderDockWindow("Texture Viewer", lTex);
-    ImGui::DockBuilderDockWindow("Archive Explorer", lTex);      // hidden default; tabs w/ Texture
-    ImGui::DockBuilderDockWindow("Palette Viewer", lPal);
-    ImGui::DockBuilderDockWindow("Search ROM / Files", lPal);    // hidden default; tabs w/ Palette
-    ImGui::DockBuilderDockWindow("References", lPal);            // hidden default; tabs w/ Palette
+    ImGui::DockBuilderDockWindow("Texture Viewer", lTexPal);
+    ImGui::DockBuilderDockWindow("Palette Viewer", lTexPal);
+    ImGui::DockBuilderDockWindow("Archive Explorer", lTexPal);      // hidden default
+    ImGui::DockBuilderDockWindow("Search ROM / Files", lTexPal);    // hidden default
+    ImGui::DockBuilderDockWindow("References", lTexPal);            // hidden default
 
     // Center: image stage — only the visual views tab here.
     ImGui::DockBuilderDockWindow("VDP Output", cViews);
@@ -1230,9 +1226,13 @@ bool App::RefreshScrubContext()
 #endif
 }
 
-void App::DrawLayerControls()
+// Toolbar "Layers" dropdown — the VDP1/VDP2 visibility toggles that used to live in the
+// docked Layer Controls panel. Drawn inline in the toolbar; opens a popup of checkboxes.
+void App::DrawLayersMenu()
 {
-    if (ImGui::Begin("Layer Controls"))
+    if (ImGui::Button("Layers")) ImGui::OpenPopup("##layers_menu");
+    ImGui::SetItemTooltip("Show/hide VDP1 sprite overlays and VDP2 background layers");
+    if (ImGui::BeginPopup("##layers_menu"))
     {
         ImGui::SeparatorText("VDP1 (Sprites)");
         CheckboxU8("Sprites", &mRenderOpts.show_vdp1_sprites);
@@ -1249,8 +1249,8 @@ void App::DrawLayerControls()
         CheckboxU8("Window", &mRenderOpts.show_window);
         CheckboxU8("Color Calculation", &mRenderOpts.show_color_calculation);
         CheckboxU8("Shadow / Highlight", &mRenderOpts.show_shadow_highlight);
+        ImGui::EndPopup();
     }
-    ImGui::End();
 }
 
 // Debugger Watch Window — the panel owns its list/refresh; App just supplies the
@@ -3456,121 +3456,11 @@ void App::DrawToolbar(std::vector<TopBarCommand>& commands)
                                    ImGuiWindowFlags_NoSavedSettings;
     if (ImGui::BeginViewportSideBar("##Toolbar", vp, ImGuiDir_Up, height, flags))
     {
-        if (ImGui::Button("Source")) ImGui::OpenPopup("##source_menu");
-        ImGui::SetItemTooltip("Choose where the debugger obtains its current data");
-        if (ImGui::BeginPopup("##source_menu"))
-        {
-            if (ImGui::BeginMenu("Load Dump...",
-                                 TopBarCommandEnabled(TopBarCommandType::LoadYabauseState, state)))
-            {
-                if (ImGui::MenuItem("Yabause Save State...", "Ctrl+O"))
-                    commands.emplace_back(TopBarCommandType::LoadYabauseState);
-                if (ImGui::MenuItem("Mednafen Save State..."))
-                    commands.emplace_back(TopBarCommandType::LoadMednafenState);
-                ImGui::Separator();
-                if (ImGui::MenuItem("Raw Memory Dump..."))
-                    commands.emplace_back(TopBarCommandType::LoadRawDump);
-                ImGui::EndMenu();
-            }
-#ifdef SE_ENABLE_LIVE
-            if (ImGui::MenuItem("Connect to Emulator (live)", nullptr, false,
-                                TopBarCommandEnabled(TopBarCommandType::ConnectLive, state)))
-                commands.emplace_back(TopBarCommandType::ConnectLive);
-            if (ImGui::MenuItem("Disconnect (live)", nullptr, false,
-                                TopBarCommandEnabled(TopBarCommandType::DisconnectLive, state)))
-                commands.emplace_back(TopBarCommandType::DisconnectLive);
-            ImGui::Separator();
-            if (ImGui::BeginMenu("Recording (live)"))
-            {
-                if (ImGui::MenuItem("Start Recording", nullptr, false,
-                                    TopBarCommandEnabled(TopBarCommandType::StartRecording, state)))
-                    commands.emplace_back(TopBarCommandType::StartRecording);
-                if (ImGui::MenuItem("Stop Recording", nullptr, false,
-                                    TopBarCommandEnabled(TopBarCommandType::StopRecording, state)))
-                    commands.emplace_back(TopBarCommandType::StopRecording);
-                const double elapsed = mbRecording ? ImGui::GetTime() - mRecordingStartedAt : 0.0;
-                ImGui::TextDisabled("Duration: %02d:%02d:%02d", static_cast<int>(elapsed) / 3600,
-                                    (static_cast<int>(elapsed) / 60) % 60, static_cast<int>(elapsed) % 60);
-                ImGui::TextDisabled("Approx. Size: %.1f MB",
-                                    static_cast<double>(mRecorder.BytesUsed()) / (1024.0 * 1024.0));
-                if (ImGui::MenuItem("Recording Settings..."))
-                    commands.emplace_back(TopBarCommandType::OpenRecordingSettings);
-                ImGui::EndMenu();
-            }
-#endif
-            ImGui::Separator();
-            if (ImGui::MenuItem("Close Source", nullptr, false,
-                                TopBarCommandEnabled(TopBarCommandType::CloseSource, state)))
-                commands.emplace_back(TopBarCommandType::CloseSource);
-            ImGui::EndPopup();
-        }
+        // Session consolidates the former Source / Emulator / Game buttons + launch.
+        DrawSessionMenu(state, commands);
 
         ImGui::SameLine();
-        const EmulatorSpec* emulator = mLauncher.Selected();
-        const std::string emulatorLabel = emulator ? emulator->label : "Emulator";
-        if (ImGui::Button(emulatorLabel.c_str())) ImGui::OpenPopup("##emulator_menu");
-        ImGui::SetItemTooltip("Emulator used by the next launch");
-        if (ImGui::BeginPopup("##emulator_menu"))
-        {
-            const std::vector<EmulatorSpec>& emulators = mLauncher.Emulators();
-            for (int i = 0; i < static_cast<int>(emulators.size()); ++i)
-            {
-                std::string label = emulators[i].label;
-                if (emulators[i].exePath.empty() || !PathExists(emulators[i].exePath))
-                    label += "  (! not configured)";
-                if (ImGui::MenuItem(label.c_str(), nullptr, i == mLauncher.SelectedIndex()))
-                    commands.emplace_back(TopBarCommandType::SelectEmulator, i);
-            }
-            ImGui::Separator();
-            if (ImGui::MenuItem("Manage Emulators..."))
-                commands.emplace_back(TopBarCommandType::OpenLaunchSettings);
-            if (ImGui::MenuItem("Launch Settings..."))
-                commands.emplace_back(TopBarCommandType::OpenLaunchSettings);
-            ImGui::EndPopup();
-        }
-
-        ImGui::SameLine();
-        const std::string gameLabel = mLauncher.Rom().empty() ? "Game / ROM" : PathBasename(mLauncher.Rom());
-        const float gameWidth = std::min(260.0f, std::max(130.0f, ImGui::GetContentRegionAvail().x * 0.22f));
-        if (ImGui::Button((gameLabel + "##game").c_str(), ImVec2(gameWidth, 0.0f)))
-            ImGui::OpenPopup("##game_menu");
-        ImGui::SetItemTooltip("%s", mLauncher.Rom().empty() ? "Select the game passed to the emulator"
-                                                             : mLauncher.Rom().c_str());
-        if (ImGui::BeginPopup("##game_menu"))
-        {
-            if (!mLauncher.Rom().empty())
-            {
-                ImGui::TextDisabled("Current");
-                ImGui::TextUnformatted(PathBasename(mLauncher.Rom()).c_str());
-                ImGui::SetItemTooltip("%s", mLauncher.Rom().c_str());
-                ImGui::Separator();
-            }
-            if (ImGui::MenuItem("Change ROM...")) commands.emplace_back(TopBarCommandType::BrowseRom);
-            if (ImGui::BeginMenu("Recent ROMs"))
-            {
-                const std::vector<std::string>& recent = mLauncher.Recent();
-                if (recent.empty()) ImGui::TextDisabled("(none)");
-                for (size_t i = 0; i < recent.size(); ++i)
-                {
-                    std::string label = PathBasename(recent[i]);
-                    if (!PathExists(recent[i])) label += "  (! missing)";
-                    if (ImGui::MenuItem((label + "##rom" + std::to_string(i)).c_str(), nullptr,
-                                        recent[i] == mLauncher.Rom()))
-                        commands.emplace_back(TopBarCommandType::SelectRecentRom, static_cast<int>(i));
-                    ImGui::SetItemTooltip("%s", recent[i].c_str());
-                }
-                ImGui::EndMenu();
-            }
-            if (ImGui::MenuItem("Clear Selection", nullptr, false, !mLauncher.Rom().empty()))
-                commands.emplace_back(TopBarCommandType::ClearRom);
-            if (ImGui::MenuItem("Reveal in Explorer", nullptr, false,
-                                !mLauncher.Rom().empty() && PathExists(mLauncher.Rom())))
-                commands.emplace_back(TopBarCommandType::RevealRom);
-            ImGui::EndPopup();
-        }
-
-        ImGui::SameLine();
-        DrawLaunchMenu(state, commands);
+        DrawLayersMenu();   // VDP layer visibility (formerly the Layer Controls panel)
 
         ImGui::SameLine();
         if (state.paused)
@@ -3686,60 +3576,130 @@ void App::DrawToolbar(std::vector<TopBarCommand>& commands)
 // a popup that shows the current emulator + game, lets the user change either (recent
 // ROMs + Browse), and opens Launch Settings. The primary item launches the current
 // configuration. Think "choose a debugging environment", not "pick an executable".
-void App::DrawLaunchMenu(const TopBarViewModel& state, std::vector<TopBarCommand>& commands)
+void App::DrawSessionMenu(const TopBarViewModel& state, std::vector<TopBarCommand>& commands)
 {
-    const bool enabled = TopBarCommandEnabled(TopBarCommandType::Launch, state);
-    ImGui::BeginDisabled(!enabled);
-    if (ImGui::Button(state.operationBusy ? "Launching..." : "Launch"))
-        commands.emplace_back(TopBarCommandType::Launch);
-    ImGui::EndDisabled();
-    if (!enabled && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-        ImGui::SetTooltip("%s", state.launchValidationMessage.empty()
-                                  ? "A launch operation is already in progress."
-                                  : state.launchValidationMessage.c_str());
+    if (ImGui::Button("Session")) ImGui::OpenPopup("##session_menu");
+    ImGui::SetItemTooltip("Source, emulator, game, and launch");
+    if (!ImGui::BeginPopup("##session_menu")) return;
 
-    ImGui::SameLine(0.0f, 1.0f);
-    if (ImGui::ArrowButton("##launchdrop", ImGuiDir_Down)) ImGui::OpenPopup("##launchmenu");
-    ImGui::SetItemTooltip("Alternate launch actions and launch configuration");
-    if (!ImGui::BeginPopup("##launchmenu")) return;
-
-    if (ImGui::MenuItem("Launch with Current Configuration", "F5", false, enabled))
+    // --- Launch ---
+    const bool launchEnabled = TopBarCommandEnabled(TopBarCommandType::Launch, state);
+    if (ImGui::MenuItem("Launch", "F5", false, launchEnabled))
         commands.emplace_back(TopBarCommandType::Launch);
     if (ImGui::MenuItem("Launch and Connect", "Ctrl+F5", false,
                         TopBarCommandEnabled(TopBarCommandType::LaunchAndConnect, state)))
         commands.emplace_back(TopBarCommandType::LaunchAndConnect);
+    if (!launchEnabled && !state.launchValidationMessage.empty())
+        ImGui::TextDisabled("%s", state.launchValidationMessage.c_str());
 
     ImGui::Separator();
+    // --- Source (formerly a standalone toolbar button) ---
+    if (ImGui::BeginMenu("Source"))
+    {
+        if (ImGui::BeginMenu("Load Dump...",
+                             TopBarCommandEnabled(TopBarCommandType::LoadYabauseState, state)))
+        {
+            if (ImGui::MenuItem("Yabause Save State...", "Ctrl+O"))
+                commands.emplace_back(TopBarCommandType::LoadYabauseState);
+            if (ImGui::MenuItem("Mednafen Save State..."))
+                commands.emplace_back(TopBarCommandType::LoadMednafenState);
+            ImGui::Separator();
+            if (ImGui::MenuItem("Raw Memory Dump..."))
+                commands.emplace_back(TopBarCommandType::LoadRawDump);
+            ImGui::EndMenu();
+        }
+#ifdef SE_ENABLE_LIVE
+        if (ImGui::MenuItem("Connect to Emulator (live)", nullptr, false,
+                            TopBarCommandEnabled(TopBarCommandType::ConnectLive, state)))
+            commands.emplace_back(TopBarCommandType::ConnectLive);
+        if (ImGui::MenuItem("Disconnect (live)", nullptr, false,
+                            TopBarCommandEnabled(TopBarCommandType::DisconnectLive, state)))
+            commands.emplace_back(TopBarCommandType::DisconnectLive);
+        ImGui::Separator();
+        if (ImGui::BeginMenu("Recording (live)"))
+        {
+            if (ImGui::MenuItem("Start Recording", nullptr, false,
+                                TopBarCommandEnabled(TopBarCommandType::StartRecording, state)))
+                commands.emplace_back(TopBarCommandType::StartRecording);
+            if (ImGui::MenuItem("Stop Recording", nullptr, false,
+                                TopBarCommandEnabled(TopBarCommandType::StopRecording, state)))
+                commands.emplace_back(TopBarCommandType::StopRecording);
+            const double elapsed = mbRecording ? ImGui::GetTime() - mRecordingStartedAt : 0.0;
+            ImGui::TextDisabled("Duration: %02d:%02d:%02d", static_cast<int>(elapsed) / 3600,
+                                (static_cast<int>(elapsed) / 60) % 60, static_cast<int>(elapsed) % 60);
+            ImGui::TextDisabled("Approx. Size: %.1f MB",
+                                static_cast<double>(mRecorder.BytesUsed()) / (1024.0 * 1024.0));
+            if (ImGui::MenuItem("Recording Settings..."))
+                commands.emplace_back(TopBarCommandType::OpenRecordingSettings);
+            ImGui::EndMenu();
+        }
+#endif
+        ImGui::Separator();
+        if (ImGui::MenuItem("Close Source", nullptr, false,
+                            TopBarCommandEnabled(TopBarCommandType::CloseSource, state)))
+            commands.emplace_back(TopBarCommandType::CloseSource);
+        ImGui::EndMenu();
+    }
+
+    ImGui::Separator();
+    // --- Emulator (formerly a standalone toolbar button) ---
     const EmulatorSpec* emulator = mLauncher.Selected();
-    ImGui::TextDisabled("Current Emulator");
-    ImGui::TextUnformatted(emulator ? emulator->label.c_str() : "(none)");
-    ImGui::TextDisabled("Current Game");
-    ImGui::TextUnformatted(mLauncher.Rom().empty() ? "(none)" : PathBasename(mLauncher.Rom()).c_str());
-    if (!mLauncher.Rom().empty()) ImGui::SetItemTooltip("%s", mLauncher.Rom().c_str());
-
-    ImGui::Separator();
-    if (ImGui::BeginMenu("Change Emulator"))
+    if (ImGui::BeginMenu("Emulator"))
     {
         const std::vector<EmulatorSpec>& emulators = mLauncher.Emulators();
         for (int i = 0; i < static_cast<int>(emulators.size()); ++i)
-            if (ImGui::MenuItem(emulators[i].label.c_str(), nullptr, i == mLauncher.SelectedIndex()))
+        {
+            std::string label = emulators[i].label;
+            if (emulators[i].exePath.empty() || !PathExists(emulators[i].exePath))
+                label += "  (! not configured)";
+            if (ImGui::MenuItem(label.c_str(), nullptr, i == mLauncher.SelectedIndex()))
                 commands.emplace_back(TopBarCommandType::SelectEmulator, i);
-        ImGui::EndMenu();
-    }
-    if (ImGui::BeginMenu("Change ROM"))
-    {
-        const std::vector<std::string>& recent = mLauncher.Recent();
-        for (size_t i = 0; i < recent.size(); ++i)
-            if (ImGui::MenuItem((PathBasename(recent[i]) + "##launchrom" + std::to_string(i)).c_str(),
-                                nullptr, recent[i] == mLauncher.Rom(), PathExists(recent[i])))
-                commands.emplace_back(TopBarCommandType::SelectRecentRom, static_cast<int>(i));
+        }
         ImGui::Separator();
-        if (ImGui::MenuItem("Browse...")) commands.emplace_back(TopBarCommandType::BrowseRom);
+        if (ImGui::MenuItem("Manage Emulators..."))
+            commands.emplace_back(TopBarCommandType::OpenLaunchSettings);
         ImGui::EndMenu();
     }
+    // --- Game / ROM (formerly a standalone toolbar button) ---
+    if (ImGui::BeginMenu("Game / ROM"))
+    {
+        if (!mLauncher.Rom().empty())
+        {
+            ImGui::TextDisabled("Current");
+            ImGui::TextUnformatted(PathBasename(mLauncher.Rom()).c_str());
+            ImGui::SetItemTooltip("%s", mLauncher.Rom().c_str());
+            ImGui::Separator();
+        }
+        if (ImGui::MenuItem("Change ROM...")) commands.emplace_back(TopBarCommandType::BrowseRom);
+        if (ImGui::BeginMenu("Recent ROMs"))
+        {
+            const std::vector<std::string>& recent = mLauncher.Recent();
+            if (recent.empty()) ImGui::TextDisabled("(none)");
+            for (size_t i = 0; i < recent.size(); ++i)
+            {
+                std::string label = PathBasename(recent[i]);
+                if (!PathExists(recent[i])) label += "  (! missing)";
+                if (ImGui::MenuItem((label + "##rom" + std::to_string(i)).c_str(), nullptr,
+                                    recent[i] == mLauncher.Rom()))
+                    commands.emplace_back(TopBarCommandType::SelectRecentRom, static_cast<int>(i));
+                ImGui::SetItemTooltip("%s", recent[i].c_str());
+            }
+            ImGui::EndMenu();
+        }
+        if (ImGui::MenuItem("Clear Selection", nullptr, false, !mLauncher.Rom().empty()))
+            commands.emplace_back(TopBarCommandType::ClearRom);
+        if (ImGui::MenuItem("Reveal in Explorer", nullptr, false,
+                            !mLauncher.Rom().empty() && PathExists(mLauncher.Rom())))
+            commands.emplace_back(TopBarCommandType::RevealRom);
+        ImGui::EndMenu();
+    }
+
+    ImGui::Separator();
+    ImGui::TextDisabled("Emulator: %s", emulator ? emulator->label.c_str() : "(none)");
+    ImGui::TextDisabled("Game: %s",
+                        mLauncher.Rom().empty() ? "(none)" : PathBasename(mLauncher.Rom()).c_str());
     ImGui::Separator();
     if (ImGui::MenuItem("Launch Settings...")) commands.emplace_back(TopBarCommandType::OpenLaunchSettings);
-    ImGui::MenuItem("Manage Configurations...", nullptr, false, false);
     ImGui::EndPopup();
 }
 
