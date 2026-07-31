@@ -104,6 +104,10 @@ private:
     void DrawBreakpoints();                 // Visual Studio-style breakpoint list
     void DrawSound(IPlatform& platform);    // SCSP voices: who's playing + Play/Export
     void ExportSound(IPlatform& platform, int slot);   // decode voice 'slot' -> save .wav
+    void PlaySound(IPlatform& platform, int slot);     // decode voice 'slot' -> preview audio
+    // Decode a voice's sample from sound RAM into 'out' (16-bit mono); returns frame count,
+    // fills 'rate' with the natural playback rate. Shared by Play + Export.
+    int  DecodeSlotSample(int slot, std::vector<int16_t>& out, uint32_t& rate);
     void RebuildCallStack();                // reconstruct the shown CPU's stack
     // Sync the workspace to a selected call-stack frame (Assembly + Hex + focus).
     void GoToFrame(const CallStackFrame& fr);

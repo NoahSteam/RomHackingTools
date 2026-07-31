@@ -5,7 +5,10 @@
 #pragma once
 
 #include <windows.h>
+#include <mmsystem.h>   // waveOut audio preview (HWAVEOUT / WAVEHDR); link winmm
 #include <d3d11.h>
+
+#include <vector>
 
 #include "Platform/IPlatform.h"
 
@@ -37,6 +40,12 @@ public:
     bool HttpsGet(const std::string& url, const std::string& userAgent,
                   HttpResponse& out) override;
 
+    // Audio preview via legacy waveOut (winmm). Fire-and-forget one PCM16 buffer; a new Play
+    // resets the previous. Always available on Windows, so HasAudio() is true.
+    bool HasAudio() override { return true; }
+    bool PlayAudio(const int16_t* pcm, size_t frames, int sampleRate, int channels) override;
+    void StopAudio() override;
+
 private:
     bool CreateDeviceD3D();
     void CleanupDeviceD3D();
@@ -55,6 +64,11 @@ private:
     UINT                    mResizeWidth = 0;
     UINT                    mResizeHeight = 0;
     bool                    mOleInitialized = false;
+
+    // waveOut audio preview state (the copied PCM must outlive playback, hence a member).
+    HWAVEOUT                mWaveOut = nullptr;
+    WAVEHDR                 mWaveHdr {};
+    std::vector<int16_t>    mWaveBuf;
 
     static WindowsPlatform* sInstance;  // for the static WndProc
 };

@@ -107,6 +107,7 @@ bool WindowsPlatform::Initialize(const PlatformConfig& config)
 
 void WindowsPlatform::Shutdown()
 {
+    StopAudio();
     ImGui_ImplDX11_Shutdown();
     ImGui_ImplWin32_Shutdown();
     ImGui::DestroyContext();
@@ -595,6 +596,58 @@ bool WindowsPlatform::HttpsGet(const std::string& url, const std::string& userAg
     if (connect) ::WinHttpCloseHandle(connect);
     ::WinHttpCloseHandle(session);
     return ok;
+}
+
+// Audio preview via legacy waveOut. Fire-and-forget one PCM16 buffer; StopAudio() (called at
+// the start of the next Play and on shutdown) resets and releases the device. The copied PCM
+// lives in mWaveBuf so it stays valid for the duration of playback.
+bool WindowsPlatform::PlayAudio(const int16_t* pcm, size_t frames, int sampleRate, int channels)
+{
+    if (!pcm || frames == 0)
+    {
+        return false;
+    }
+    if (channels < 1) channels = 1;
+    if (sampleRate < 2000 || sampleRate > 192000) sampleRate = 44100;
+
+    StopAudio();   // release any in-flight buffer/device first
+    mWaveBuf.assign(pcm, pcm + frames * static_cast<size_t>(channels));
+
+    WAVEFORMATEX wf = {};
+    wf.wFormatTag = WAVE_FORMAT_PCM;
+    wf.nChannels = static_cast<WORD>(channels);
+    wf.nSamplesPerSec = static_cast<DWORD>(sampleRate);
+    wf.wBitsPerSample = 16;
+    wf.nBlockAlign = static_cast<WORD>(channels * 2);
+    wf.nAvgBytesPerSec = wf.nSamplesPerSec * wf.nBlockAlign;
+
+    if (::waveOutOpen(&mWaveOut, WAVE_MAPPER, &wf, 0, 0, CALLBACK_NULL) != MMSYSERR_NOERROR)
+    {
+        mWaveOut = nullptr;
+        return false;
+    }
+    mWaveHdr = WAVEHDR{};
+    mWaveHdr.lpData = reinterpret_cast<LPSTR>(mWaveBuf.data());
+    mWaveHdr.dwBufferLength = static_cast<DWORD>(mWaveBuf.size() * sizeof(int16_t));
+    if (::waveOutPrepareHeader(mWaveOut, &mWaveHdr, sizeof(mWaveHdr)) != MMSYSERR_NOERROR ||
+        ::waveOutWrite(mWaveOut, &mWaveHdr, sizeof(mWaveHdr)) != MMSYSERR_NOERROR)
+    {
+        StopAudio();
+        return false;
+    }
+    return true;
+}
+
+void WindowsPlatform::StopAudio()
+{
+    if (mWaveOut)
+    {
+        ::waveOutReset(mWaveOut);   // stop playback so the header can be unprepared
+        ::waveOutUnprepareHeader(mWaveOut, &mWaveHdr, sizeof(mWaveHdr));
+        ::waveOutClose(mWaveOut);
+        mWaveOut = nullptr;
+        mWaveHdr = WAVEHDR{};
+    }
 }
 
 }  // namespace sfe

@@ -120,6 +120,18 @@ public:
         out.error = "Online update check is not available in this build.";
         return false;
     }
+
+    // --- Audio output (optional). The Sound panel's per-voice Play uses this to preview an
+    // SCSP sample. Fire-and-forget playback of one short interleaved 16-bit PCM buffer on the
+    // default output device; a new Play replaces the previous one. Base is a no-op so a build
+    // with no audio backend simply can't preview (HasAudio() gates the button). ---
+    virtual bool HasAudio() { return false; }
+    virtual bool PlayAudio(const int16_t* pcm, size_t frames, int sampleRate, int channels)
+    {
+        (void)pcm; (void)frames; (void)sampleRate; (void)channels;
+        return false;   // no audio output in this build
+    }
+    virtual void StopAudio() {}
 };
 
 }  // namespace sfe

@@ -5482,24 +5482,48 @@ void App::DrawRegisters()
 // level), the sample (format, addresses, loop), pitch, volume and pan. Fed by the live driver's
 // decoded 32-slot block (v14); empty on savestates / a server without the sound tap. Per-voice
 // Play/Export land in later stages. Each SA cell cross-links to the Sound RAM hex tab.
-// Decode a voice's sample from sound RAM (SA..SA+LEA, 8/16-bit PCM) and save it as a .wav
-// via the platform save dialog. LEA is 16-bit, so a voice is at most 65535 samples.
+// Decode a voice's sample from sound RAM into 16-bit mono PCM. LEA is 16-bit, so a voice is
+// at most 65535 samples. Returns the frame count and the voice's natural rate.
+int App::DecodeSlotSample(int slot, std::vector<int16_t>& out, uint32_t& rate)
+{
+    out.assign(65536, 0);
+    rate = 44100;
+    int frames = se_decode_scsp_sample(mContext, slot, out.data(),
+                                       static_cast<int>(out.size()), &rate);
+    if (frames < 0) frames = 0;
+    out.resize(static_cast<size_t>(frames));
+    if (rate < 2000 || rate > 192000) rate = 44100;   // sanity-clamp the natural rate
+    return frames;
+}
+
+// Decode a voice's sample and save it as a .wav via the platform save dialog.
 void App::ExportSound(IPlatform& platform, int slot)
 {
-    std::vector<int16_t> pcm(65536);
+    std::vector<int16_t> pcm;
     uint32_t rate = 44100;
-    const int frames = se_decode_scsp_sample(mContext, slot, pcm.data(),
-                                             static_cast<int>(pcm.size()), &rate);
+    const int frames = DecodeSlotSample(slot, pcm, rate);
     if (frames <= 0)
     {
         return;
     }
-    if (rate < 2000 || rate > 192000) rate = 44100;   // sanity-clamp the natural rate
     const std::vector<uint8_t> wav =
         BuildWav(pcm.data(), static_cast<size_t>(frames), static_cast<int>(rate), 1);
     char name[32];
     std::snprintf(name, sizeof(name), "sound_slot%02d.wav", slot);
     platform.SaveFile(name, wav.data(), wav.size());
+}
+
+// Decode a voice's sample and preview it through the platform's audio output (at its natural
+// pitch). No-op when the build has no audio backend.
+void App::PlaySound(IPlatform& platform, int slot)
+{
+    std::vector<int16_t> pcm;
+    uint32_t rate = 44100;
+    const int frames = DecodeSlotSample(slot, pcm, rate);
+    if (frames > 0)
+    {
+        platform.PlayAudio(pcm.data(), static_cast<size_t>(frames), static_cast<int>(rate), 1);
+    }
 }
 
 void App::DrawSound(IPlatform& platform)
@@ -5588,14 +5612,22 @@ void App::DrawSound(IPlatform& platform)
             ImGui::TableNextColumn(); ImGui::Text("%X", s.loop_start);
             ImGui::TableNextColumn(); ImGui::Text("%X", s.loop_end);
 
-            // Export the voice's sample to .wav. (Play arrives with the audio-output seam.)
+            // Preview / export the voice's sample.
             ImGui::TableNextColumn();
-            if (dim) ImGui::PopStyleColor();   // draw the button at normal contrast
+            if (dim) ImGui::PopStyleColor();   // draw the buttons at normal contrast
             ImGui::PushID(i);
-            ImGui::BeginDisabled(s.loop_end == 0);
+            const bool hasSample = s.loop_end != 0;
+            ImGui::BeginDisabled(!hasSample || !platform.HasAudio());
+            if (ImGui::SmallButton("Play")) PlaySound(platform, i);
+            ImGui::EndDisabled();
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip(platform.HasAudio() ? "Preview this voice's sample"
+                                                      : "Audio output not available in this build");
+            ImGui::SameLine();
+            ImGui::BeginDisabled(!hasSample);
             if (ImGui::SmallButton("Export")) ExportSound(platform, i);
             ImGui::EndDisabled();
-            if (ImGui::IsItemHovered() && s.loop_end != 0)
+            if (ImGui::IsItemHovered() && hasSample)
                 ImGui::SetTooltip("Save this voice's sample as a .wav");
             ImGui::PopID();
         }

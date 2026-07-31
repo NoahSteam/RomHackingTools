@@ -247,6 +247,7 @@ if(WIN32)
         dxgi
         d3dcompiler
         winhttp                 # IPlatform::HttpsGet (update check)
+        winmm                   # IPlatform::PlayAudio (waveOut sound preview)
     )
     # Make F5 in Visual Studio launch the app.
     set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}

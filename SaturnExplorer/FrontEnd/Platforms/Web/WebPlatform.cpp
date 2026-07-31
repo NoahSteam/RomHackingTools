@@ -57,6 +57,9 @@ bool WebPlatform::Initialize(const PlatformConfig& config)
     {
         return false;
     }
+    // Audio is optional and initialized separately so a host with no audio device (headless
+    // CI, some servers) still runs — the Sound panel's Play button just stays disabled.
+    mAudioOk = (SDL_InitSubSystem(SDL_INIT_AUDIO) == 0);
 
     // Request a GLES 3.0 context on the web (→ WebGL2); a matching GL 3.0 context
     // natively. The OpenGL3 backend adapts to whichever it gets.
@@ -133,6 +136,11 @@ void WebPlatform::Shutdown()
     {
         SDL_DestroyWindow(mWindow);
         mWindow = nullptr;
+    }
+    if (mAudioDev)
+    {
+        SDL_CloseAudioDevice(mAudioDev);
+        mAudioDev = 0;
     }
     SDL_Quit();
 }
@@ -439,5 +447,52 @@ bool WebPlatform::HttpsGet(const std::string& url, const std::string& userAgent,
     return out.ok;
 }
 #endif  // SE_HAVE_CURL && !__EMSCRIPTEN__
+
+// --- Audio preview (SDL2; web + native desktop). Fire-and-forget one PCM16 buffer; a new
+// Play replaces the previous. The device is (re)opened when the sample rate/channels change. ---
+bool WebPlatform::PlayAudio(const int16_t* pcm, size_t frames, int sampleRate, int channels)
+{
+    if (!mAudioOk || !pcm || frames == 0)
+    {
+        return false;
+    }
+    if (channels < 1) channels = 1;
+    if (sampleRate < 2000 || sampleRate > 192000) sampleRate = 44100;
+
+    if (mAudioDev == 0 || sampleRate != mAudioRate || channels != mAudioChannels)
+    {
+        if (mAudioDev) { SDL_CloseAudioDevice(mAudioDev); mAudioDev = 0; }
+        SDL_AudioSpec want;
+        SDL_zero(want);
+        want.freq = sampleRate;
+        want.format = AUDIO_S16SYS;
+        want.channels = static_cast<Uint8>(channels);
+        want.samples = 1024;
+        mAudioDev = SDL_OpenAudioDevice(nullptr, 0, &want, nullptr, 0);
+        if (mAudioDev == 0)
+        {
+            return false;
+        }
+        mAudioRate = sampleRate;
+        mAudioChannels = channels;
+    }
+
+    SDL_ClearQueuedAudio(mAudioDev);
+    const Uint32 bytes = static_cast<Uint32>(frames * static_cast<size_t>(channels) * sizeof(int16_t));
+    if (SDL_QueueAudio(mAudioDev, pcm, bytes) != 0)
+    {
+        return false;
+    }
+    SDL_PauseAudioDevice(mAudioDev, 0);   // unpause = start playing the queued buffer
+    return true;
+}
+
+void WebPlatform::StopAudio()
+{
+    if (mAudioDev)
+    {
+        SDL_ClearQueuedAudio(mAudioDev);
+    }
+}
 
 }  // namespace sfe

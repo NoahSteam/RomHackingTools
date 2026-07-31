@@ -64,10 +64,20 @@ public:
                   HttpResponse& out) override;
 #endif
 
+    // Audio preview via SDL2 (both web and native desktop). No-op if the audio subsystem
+    // failed to init (headless host) — HasAudio() then returns false.
+    bool HasAudio() override { return mAudioOk; }
+    bool PlayAudio(const int16_t* pcm, size_t frames, int sampleRate, int channels) override;
+    void StopAudio() override;
+
 private:
     SDL_Window*   mWindow  = nullptr;
     SDL_GLContext mGlContext = nullptr;
     bool          mQuit = false;
+    bool          mAudioOk = false;      // SDL audio subsystem initialized
+    uint32_t      mAudioDev = 0;         // SDL_AudioDeviceID (0 = none), reopened on spec change
+    int           mAudioRate = 0;        // spec of the currently-open device
+    int           mAudioChannels = 0;
 };
 
 }  // namespace sfe
