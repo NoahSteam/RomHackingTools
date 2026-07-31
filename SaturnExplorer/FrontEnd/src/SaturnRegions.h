@@ -14,6 +14,7 @@ constexpr uint32_t kVdp2VramSize = 0x80000;   // VDP2 VRAM
 constexpr uint32_t kCramSize     = 0x1000;    // VDP2 color RAM
 constexpr uint32_t kWramSize     = 0x100000;  // work RAM, low and high (each)
 constexpr uint32_t kVdp1FbSize   = 0x40000;   // VDP1 frame buffer (drawn output)
+constexpr uint32_t kSoundRamSize = 0x80000;   // SCSP sound RAM (512 KiB)
 constexpr uint32_t kVdp1RegBytes = 0x18;      // VDP1 register image (TVMR..MODR)
 constexpr uint32_t kVdp2RegBytes = 0x120;     // VDP2 register file
 

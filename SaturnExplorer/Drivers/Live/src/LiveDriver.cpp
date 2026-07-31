@@ -41,6 +41,7 @@ struct LiveSnapshot
     std::vector<uint8_t> wramLow;    // 0x00200000, 1 MiB (normalized to big-endian)
     std::vector<uint8_t> wramHigh;   // 0x06000000, 1 MiB (normalized to big-endian)
     std::vector<uint8_t> vdp1Fb;     // VDP1 frame buffer (drawn output)
+    std::vector<uint8_t> soundRam;   // SCSP sound RAM (v13+; empty if server predates it)
     se_sh2_regs          sh2[2] = {};        // [0] master, [1] slave (v5+)
     bool                 hasSh2[2] = { false, false };
     bool                 valid = false;
@@ -115,6 +116,8 @@ struct LiveState
     // Pending work-RAM pokes from the Hex Editor. Each entry is a WRM payload:
     // address(u32 LE) + big-endian bytes. The poll thread ships one per cycle.
     std::vector<std::vector<uint8_t>> writes;
+    // Pending sound-RAM pokes (v13). Each entry is a WRS payload: offset(u32 LE) + bytes.
+    std::vector<std::vector<uint8_t>> soundWrites;
     // True once we've told the emulator to pause/step and not since resumed, so the
     // poll thread knows to release it on close (never leave Yabause paused).
     std::atomic<bool>     pausedByUs{false};
@@ -465,6 +468,18 @@ bool ReadSnapshot(Conn& c, const char* verb, int32_t arg,
         }
     }
 
+    // v13+ trailing block: SCSP sound RAM. u32 length (LE), then that many bytes (0 when
+    // the emulator didn't supply it). Read only when the server speaks v13.
+    if (version >= 13u)
+    {
+        uint8_t lenb[4];
+        if (!ConnReadFull(c, lenb, 4)) return false;
+        const uint32_t n = Rd32LE(lenb);
+        if (n != 0u && n != SE_LIVE_SOUND_RAM_LEN) return false;   // desync guard
+        snap.soundRam.resize(n);
+        if (n && !ConnReadFull(c, snap.soundRam.data(), n)) return false;
+    }
+
     // Control block: paused (u32 LE) + frame (u64 LE), then (v5+) stop reason/cpu/pc.
     // Absent fields default to 0 on older servers.
     outPaused = ct >= 4 && Rd32LE(ctl.data()) != 0;
@@ -546,6 +561,14 @@ void PollLoop(LiveState* st)
                 payload = std::move(st->writes.front());
                 st->writes.erase(st->writes.begin());
                 verb = SE_LIVE_VERB_WRITE;
+                arg = static_cast<int32_t>(payload.size() >= 4 ? payload.size() - 4 : 0);
+            }
+            else if (!st->soundWrites.empty())
+            {
+                // Ship one sound-RAM poke: payload = offset(4) + bytes; arg = byte count.
+                payload = std::move(st->soundWrites.front());
+                st->soundWrites.erase(st->soundWrites.begin());
+                verb = SE_LIVE_VERB_WRITESND;
                 arg = static_cast<int32_t>(payload.size() >= 4 ? payload.size() - 4 : 0);
             }
             else if (st->pending != Ctl::None)
@@ -695,6 +718,11 @@ size_t CbVdp1Fb(void* u, uint32_t off, void* dst, size_t size)
     LiveState* st = St(u); std::lock_guard<std::mutex> lk(st->mtx);
     return CopyRegion(st->front.vdp1Fb, off, dst, size);
 }
+size_t CbSoundRam(void* u, uint32_t off, void* dst, size_t size)
+{
+    LiveState* st = St(u); std::lock_guard<std::mutex> lk(st->mtx);
+    return CopyRegion(st->front.soundRam, off, dst, size);
+}
 
 size_t CbWriteMainRam(void* u, uint32_t address, const void* src, size_t size)
 {
@@ -710,6 +738,23 @@ size_t CbWriteMainRam(void* u, uint32_t address, const void* src, size_t size)
     payload.insert(payload.end(), p, p + size);
     std::lock_guard<std::mutex> lk(st->ctlMtx);
     st->writes.push_back(std::move(payload));   // poll thread ships it next cycle
+    return size;
+}
+
+size_t CbWriteSoundRam(void* u, uint32_t offset, const void* src, size_t size)
+{
+    if (!src || size == 0) return 0;
+    LiveState* st = St(u);
+    std::vector<uint8_t> payload;   // offset(4 LE) + raw bytes, shipped as WRS
+    payload.reserve(4 + size);
+    payload.push_back((uint8_t)(offset & 0xFF));
+    payload.push_back((uint8_t)((offset >> 8) & 0xFF));
+    payload.push_back((uint8_t)((offset >> 16) & 0xFF));
+    payload.push_back((uint8_t)((offset >> 24) & 0xFF));
+    const uint8_t* p = static_cast<const uint8_t*>(src);
+    payload.insert(payload.end(), p, p + size);
+    std::lock_guard<std::mutex> lk(st->ctlMtx);
+    st->soundWrites.push_back(std::move(payload));
     return size;
 }
 
@@ -825,16 +870,20 @@ extern "C" se_result se_live_open(const char* endpoint, se_data_source* out)
     st->thread = std::thread(PollLoop, st);
 
     out->abi_version = SE_ABI_VERSION;
+    // SE_CAP_SOUND_RAM is advertised unconditionally, like the other version-gated caps:
+    // against a pre-v13 server the sound-RAM snapshot stays empty and reads return 0.
     out->capabilities = SE_CAP_VDP1_VRAM | SE_CAP_VDP2_VRAM | SE_CAP_CRAM |
                         SE_CAP_VDP1_REGS | SE_CAP_VDP2_REGS | SE_CAP_MAIN_RAM |
                         SE_CAP_VDP1_FB | SE_CAP_FRAME_STEP | SE_CAP_SH2_REGS |
-                        SE_CAP_MEM_WRITE;
+                        SE_CAP_MEM_WRITE | SE_CAP_SOUND_RAM;
     out->user = st;
     out->read_vdp1_vram = CbVdp1Vram;
     out->read_vdp2_vram = CbVdp2Vram;
     out->read_cram      = CbCram;
     out->read_main_ram  = CbMainRam;
     out->write_main_ram = CbWriteMainRam;
+    out->read_sound_ram = CbSoundRam;
+    out->write_sound_ram = CbWriteSoundRam;
     out->read_vdp1_fb   = CbVdp1Fb;
     out->read_vdp1_reg  = CbVdp1Reg;
     out->read_vdp2_reg  = CbVdp2Reg;

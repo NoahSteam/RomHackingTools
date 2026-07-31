@@ -90,6 +90,13 @@ EDITS = [
      "    * val); MappedMemoryWriteByte is only a fn-pointer field on SH2_struct in\n"
      "    * this Yabause. Master SH-2 is fine — both cores share the bus. */\n"
      "   MappedMemoryWriteByteNocache(MSH2, (u32)addr, (u8)val);\n"
+     "}\n"
+     "static void SeExpWriteSoundByte(unsigned int off, unsigned char val)\n"
+     "{\n"
+     "   /* Poke SCSP sound RAM directly (512 KiB). SoundRam is the SCSP RAM block\n"
+     "    * (scsp.h). Bounds-checked so a stray offset can't run off the end. */\n"
+     "   extern u8 * SoundRam;\n"
+     "   if (SoundRam && off < 0x80000u) SoundRam[off] = (u8)val;\n"
      "}\n",
      "SeExpBpHit"),
 
@@ -101,7 +108,8 @@ EDITS = [
      "   SH2SetBreakpointCallBack(MSH2, SeExpBpHit, NULL);\n"
      "   SH2SetBreakpointCallBack(SSH2, SeExpBpHit, NULL);\n"
      "   SeExportSetBreakpointHooks(SeExpAddExecBp, SeExpClearBps);\n"
-     "   SeExportSetMemWriteHook(SeExpWriteByte);   /* Hex Editor pokes */\n",
+     "   SeExportSetMemWriteHook(SeExpWriteByte);   /* Hex Editor pokes */\n"
+     "   SeExportSetSoundWriteHook(SeExpWriteSoundByte);   /* Sound RAM pokes (v13) */\n",
      "SeExportInit("),
 
     ("yabause.c",
@@ -134,12 +142,13 @@ EDITS = [
      "    * pixels live in the active video core (see VIDSoftGetVdp1FrameBuffer).\n"
      "    * Also snapshot both SH-2 register files for the disassembler. */\n"
      "   extern u8 *VIDSoftGetVdp1FrameBuffer(void);\n"
+     "   extern u8 * SoundRam;   /* SCSP sound RAM (512 KiB), for the v13 sound block */\n"
      "   sh2regs_struct se_msh2, se_ssh2;\n"
      "   SH2GetRegisters(MSH2, &se_msh2);\n"
      "   SH2GetRegisters(SSH2, &se_ssh2);\n"
      "   SeExportSnapshot(Vdp1Ram, Vdp2Ram, Vdp2ColorRam, Vdp2Regs,\n"
      "                    Vdp1Regs, LowWram, HighWram, VIDSoftGetVdp1FrameBuffer(),\n"
-     "                    &se_msh2, &se_ssh2);\n",
+     "                    &se_msh2, &se_ssh2, SoundRam);\n",
      "SeExportSnapshot("),
 
     # --- vidsoft.c: expose the displayed VDP1 frame buffer (it's file-static). ---

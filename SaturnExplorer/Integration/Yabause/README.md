@@ -84,10 +84,18 @@ frame, after the frame is drawn):
     sh2regs_struct se_msh2, se_ssh2;
     SH2GetRegisters(MSH2, &se_msh2);
     SH2GetRegisters(SSH2, &se_ssh2);
+    extern u8 * SoundRam;   /* SCSP sound RAM (512 KiB) */
     SeExportSnapshot(Vdp1Ram, Vdp2Ram, Vdp2ColorRam, Vdp2Regs,
                      Vdp1Regs, LowWram, HighWram, VIDSoftGetVdp1FrameBuffer(),
-                     &se_msh2, &se_ssh2);
+                     &se_msh2, &se_ssh2, SoundRam);
 ```
+
+The last argument (`SoundRam`, v13+) is Yabause's SCSP sound-RAM block — the 68000
+sound-driver program + PCM tone bank + sequences. It surfaces as the **Sound RAM** tab
+in Saturn Explorer's Memory panel, and the patcher also wires
+`SeExportSetSoundWriteHook(SeExpWriteSoundByte)` so that tab (and the music-swap
+workflow) can poke sound RAM in the running game. Pass `NULL` to omit it (the tab then
+shows empty).
 
 `Vdp1Ram`/`Vdp2Ram`/`Vdp2ColorRam` are Yabause's VDP RAM globals; `Vdp2Regs` and
 `Vdp1Regs` are its register structs; `LowWram`/`HighWram` are the 1 MiB work-RAM

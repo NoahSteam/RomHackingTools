@@ -55,7 +55,7 @@
 #define SE_LIVE_MAGIC1 'E'
 #define SE_LIVE_MAGIC2 'X'
 #define SE_LIVE_MAGIC3 'P'
-#define SE_LIVE_VERSION      12u   /* +IST instruction-step verb / SE_LIVE_STOP_STEP */
+#define SE_LIVE_VERSION      13u   /* +v13 sound-RAM trailing block / WRS write verb */
 /* Command verbs are exactly 4 bytes; a request is a verb + 4-byte LE argument. */
 #define SE_LIVE_REQUEST      "GET\n"   /* back-compat alias for the snapshot verb */
 #define SE_LIVE_VERB_GET     "GET\n"
@@ -69,6 +69,9 @@
 #define SE_LIVE_VERB_BKPTS   "BKP\n"   /* sync breakpoint set: arg = descriptor count */
 #define SE_LIVE_VERB_WRITE   "WRM\n"   /* poke work RAM: arg = byte count N, payload
                                         * = address(u32 LE) + N big-endian bytes */
+#define SE_LIVE_VERB_WRITESND "WRS\n"  /* poke sound RAM (v13+): arg = byte count N,
+                                        * payload = offset(u32 LE, 0-based in the 512K
+                                        * SCSP RAM) + N raw bytes */
 #define SE_LIVE_VERB_INPUT   "INP\n"   /* inject controller state (v7+): arg = port(high
                                         * 16 bits) | button bitmask(low 16, SE_PAD_*). The
                                         * emulator glue drives the pad directly, bypassing
@@ -152,6 +155,16 @@
  * Saturn Explorer with no separate console. */
 #define SE_LIVE_LOG_MAX       32u   /* max log lines carried per snapshot reply */
 #define SE_LIVE_LOG_LINE_LEN  96u   /* bytes per record (NUL-terminated/padded) */
+
+/* Sound-RAM block (v13+): a trailing block after the v11 log block, version-gated the same
+ * way (a client reads it only when the server reports version >= 13). Carries the Saturn's
+ * 512 KiB SCSP sound RAM — the 68000 sound-driver program + PCM tone bank + sequence data.
+ * Layout: u32 length (LE); when length == SE_LIVE_SOUND_RAM_LEN it is followed by that many
+ * raw bytes, and length 0 means this build/emulator didn't supply it (no bytes follow).
+ * SCSP RAM is byte-addressed, so the bytes need no per-word swap. Kept as a trailing block
+ * (not an 11th header section) so the 48-byte header and all existing sections are
+ * unchanged. Poke it back with the WRS verb. */
+#define SE_LIVE_SOUND_RAM_LEN 0x80000u   /* 512 KiB */
 
 /* Breakpoint descriptor flag bits (v5+). */
 #define SE_LIVE_BP_KIND_MASK  0x3u   /* 0 exec, 1 read, 2 write, 3 read/write */

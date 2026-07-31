@@ -41,6 +41,7 @@
 #define SE_FB SE_LIVE_VDP1_FB_LEN
 #define SE_CT SE_LIVE_CONTROL_LEN
 #define SE_SH SE_LIVE_SH2_LEN
+#define SE_SR SE_LIVE_SOUND_RAM_LEN
 
 typedef struct
 {
@@ -53,6 +54,8 @@ typedef struct
     unsigned char wh[SE_WH];   /* high work RAM */
     unsigned char fb[SE_FB];   /* VDP1 frame buffer (drawn output) */
     unsigned char sh[SE_SH];   /* SH-2 state: master then slave sh2regs_struct */
+    unsigned char sr[SE_SR];   /* SCSP sound RAM (v13); has_sr gates the wire block */
+    int has_sr;                /* 1 if this frame captured sound RAM */
     int valid;
 } SeFrame;
 
@@ -181,6 +184,18 @@ static SeWriteByteFn sWriteByte;
 void SeExportSetMemWriteHook(SeWriteByteFn fn)
 {
     sWriteByte = fn;
+}
+
+/* ---- Sound-RAM write hook (v13+). apply.py wires this to the emulator's SCSP RAM byte
+ * writer so the Hex Editor's Sound RAM tab / the music-swap prototype can poke a running
+ * game's sound RAM. write(offset, value) writes one byte at a 0-based offset in the 512 KiB
+ * sound RAM. May be NULL (sound-RAM writes are then dropped). ---- */
+typedef void (*SeWriteSoundByteFn)(unsigned int offset, unsigned char value);
+static SeWriteSoundByteFn sWriteSoundByte;
+
+void SeExportSetSoundWriteHook(SeWriteSoundByteFn fn)
+{
+    sWriteSoundByte = fn;
 }
 
 /* ---- Controller-input hook (v7+). apply.py wires this to the emulator's pad state
@@ -462,7 +477,8 @@ void SeExportResetCallStack(int cpu)
 void SeExportSnapshot(const void* vdp1, const void* vdp2, const void* cram,
                       const void* vdp2struct, const void* vdp1struct,
                       const void* wramLow, const void* wramHigh,
-                      const void* vdp1fb, const void* msh2, const void* ssh2)
+                      const void* vdp1fb, const void* msh2, const void* ssh2,
+                      const void* soundRam)
 {
     if (!sBack)
     {
@@ -482,6 +498,9 @@ void SeExportSnapshot(const void* vdp1, const void* vdp2, const void* cram,
     else      memset(sBack->sh, 0, SE_LIVE_SH2_REGS_LEN);
     if (ssh2) memcpy(sBack->sh + SE_LIVE_SH2_REGS_LEN, ssh2, SE_LIVE_SH2_REGS_LEN);
     else      memset(sBack->sh + SE_LIVE_SH2_REGS_LEN, 0, SE_LIVE_SH2_REGS_LEN);
+    /* SCSP sound RAM (v13): only served on the wire when the emulator supplied it. */
+    if (soundRam) { memcpy(sBack->sr, soundRam, SE_SR); sBack->has_sr = 1; }
+    else          { memset(sBack->sr, 0, SE_SR);        sBack->has_sr = 0; }
     sBack->valid = 1;
     {
         SeFrame* tmp = sFront; sFront = sBack; sBack = tmp;   /* swap */
@@ -616,6 +635,21 @@ static void SeServeClient(int cl, SeFrame* snap)
                 unsigned char v;
                 if (SeRecv(cl, &v, 1) != 0) return;
                 if (sWriteByte) sWriteByte(address + i, v);
+            }
+        }
+        else if (memcmp(req, SE_LIVE_VERB_WRITESND, SE_LIVE_VERB_LEN) == 0)
+        {
+            /* Poke sound RAM (v13+): payload = offset(4 LE) + 'arg' raw bytes. */
+            unsigned char offb[4];
+            unsigned int i, offset;
+            if (SeRecv(cl, offb, 4) != 0) return;
+            offset = (unsigned int)offb[0] | ((unsigned int)offb[1] << 8) |
+                     ((unsigned int)offb[2] << 16) | ((unsigned int)offb[3] << 24);
+            for (i = 0; i < arg; ++i)
+            {
+                unsigned char v;
+                if (SeRecv(cl, &v, 1) != 0) return;
+                if (sWriteSoundByte) sWriteSoundByte(offset + i, v);
             }
         }
         else if (memcmp(req, SE_LIVE_VERB_INPUT, SE_LIVE_VERB_LEN) == 0)
@@ -774,6 +808,17 @@ static void SeServeClient(int cl, SeFrame* snap)
                 line[SE_LIVE_LOG_LINE_LEN - 1] = 0;
                 if (SeSend(cl, (unsigned char*)line, SE_LIVE_LOG_LINE_LEN) != 0) return;
             }
+        }
+
+        /* v13 trailing block: SCSP sound RAM. u32 length (LE) — SE_LIVE_SOUND_RAM_LEN when
+         * the emulator supplied it (then that many raw bytes follow), else 0 (no bytes). The
+         * captured image was copied into 'snap' under the lock above. */
+        {
+            unsigned char lenb[4];
+            unsigned int len = snap->has_sr ? (unsigned int)SE_SR : 0u;
+            SeWr32(lenb, len);
+            if (SeSend(cl, lenb, 4) != 0) return;
+            if (len && SeSend(cl, snap->sr, SE_SR) != 0) return;
         }
     }
 }

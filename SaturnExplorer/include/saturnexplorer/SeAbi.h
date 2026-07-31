@@ -19,7 +19,7 @@ extern "C" {
 
 /* Bumped on any breaking change to either seam struct. A host/driver compares
  * its compiled-in value against the core's se_abi_version() before use. */
-#define SE_ABI_VERSION 2u
+#define SE_ABI_VERSION 3u
 
 /* Result codes. 0 == success; negatives are errors. */
 typedef enum se_result {
@@ -52,7 +52,9 @@ enum {
     SE_CAP_SYSTEM_STATUS = 1u << 10,/* SH-2 PC, scanline, blank flags (status bar) */
     SE_CAP_VDP1_FB     = 1u << 11,  /* raw VDP1 frame buffer (se_read_vram VDP1_FB) */
     SE_CAP_SH2_REGS    = 1u << 12,  /* full SH-2 master/slave register file (Assembly) */
-    SE_CAP_MEM_WRITE   = 1u << 13   /* write-back to work RAM (Hex Editor edits persist) */
+    SE_CAP_MEM_WRITE   = 1u << 13,  /* write-back to work RAM (Hex Editor edits persist) */
+    SE_CAP_SOUND_RAM   = 1u << 14   /* SCSP sound RAM read (se_read_vram SOUND_RAM); write
+                                     * when write_sound_ram is also supplied */
     /* Reserved for a future live driver: SE_CAP_BREAKPOINTS ("Break on Read"). */
 };
 

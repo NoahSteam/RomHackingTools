@@ -18,8 +18,10 @@ constexpr uint32_t kVdp2VramSize = 512 * 1024;
 constexpr uint32_t kCramSize     = 4 * 1024;
 constexpr uint32_t kWramSize     = 1024 * 1024;
 constexpr uint32_t kVdp1FbSize   = 256 * 1024;   /* VDP1 frame buffer (drawn output) */
+constexpr uint32_t kSoundRamSize = 512 * 1024;   /* SCSP sound RAM (0x25A00000) */
 constexpr uint32_t kWramLowBase  = 0x00200000;
 constexpr uint32_t kWramHighBase = 0x06000000;
+constexpr uint32_t kSoundRamBase = 0x25A00000;
 
 class HardwareSnapshot
 {
@@ -37,6 +39,7 @@ public:
     const std::vector<uint8_t>& WramLow() const { return mWramLow; }
     const std::vector<uint8_t>& WramHigh() const { return mWramHigh; }
     const std::vector<uint8_t>& Vdp1Fb() const { return mVdp1Fb; }
+    const std::vector<uint8_t>& SoundRam() const { return mSoundRam; }
     se_cram_mode CramMode() const { return mCramMode; }
 
     // Overwrite bytes in a region's captured buffer (Hex Editor edits). Returns
@@ -48,6 +51,7 @@ public:
         {
         case SE_VRAM_KIND_WRAM_LOW:  dst = &mWramLow;  break;
         case SE_VRAM_KIND_WRAM_HIGH: dst = &mWramHigh; break;
+        case SE_VRAM_KIND_SOUND_RAM: dst = &mSoundRam; break;
         default: return 0;
         }
         if (!src || offset >= dst->size()) return 0;
@@ -85,6 +89,7 @@ private:
     std::vector<uint8_t>  mWramLow;    // 0x00200000 (present if SE_CAP_MAIN_RAM)
     std::vector<uint8_t>  mWramHigh;   // 0x06000000
     std::vector<uint8_t>  mVdp1Fb;     // VDP1 frame buffer (present if SE_CAP_VDP1_FB)
+    std::vector<uint8_t>  mSoundRam;   // SCSP sound RAM (present if SE_CAP_SOUND_RAM)
     std::vector<uint16_t> mVdp1Regs;   // indexed by (hw offset >> 1)
     std::vector<uint16_t> mVdp2Regs;
     se_sh2_regs           mSh2[2] = {};   // [0] master, [1] slave

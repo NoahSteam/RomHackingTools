@@ -105,7 +105,9 @@ typedef enum se_vram_kind {
     SE_VRAM_KIND_CRAM      = 2,
     SE_VRAM_KIND_WRAM_LOW  = 3,  /* work RAM low  (0x00200000, 1 MiB) */
     SE_VRAM_KIND_WRAM_HIGH = 4,  /* work RAM high (0x06000000, 1 MiB) */
-    SE_VRAM_KIND_VDP1_FB   = 5   /* VDP1 frame buffer (drawn output, 0x40000) */
+    SE_VRAM_KIND_VDP1_FB   = 5,  /* VDP1 frame buffer (drawn output, 0x40000) */
+    SE_VRAM_KIND_SOUND_RAM = 6   /* SCSP sound RAM (0x25A00000, 512 KiB): the 68000
+                                  * sound-driver program + PCM tone bank + sequences */
 } se_vram_kind;
 
 /* ------------------------------------------------------------------ *

@@ -38,6 +38,13 @@ typedef struct se_data_source {
            on a savestate the write is in-memory only. */
     size_t (*write_main_ram)(void* user, uint32_t address, const void* src, size_t size);
 
+    /* --- Optional: SCSP sound RAM (SE_CAP_SOUND_RAM). 'offset' is 0-based within the
+           512 KiB sound RAM (byte-addressed; no per-word swap). read_sound_ram may be
+           NULL if the capability is clear; write_sound_ram may be NULL even when reads
+           work (read-only source). Returns bytes copied/written. */
+    size_t (*read_sound_ram) (void* user, uint32_t offset, void* dst, size_t size);
+    size_t (*write_sound_ram)(void* user, uint32_t offset, const void* src, size_t size);
+
     /* --- Registers. --- */
     uint16_t (*read_vdp1_reg)(void* user, uint32_t reg);
     uint16_t (*read_vdp2_reg)(void* user, uint32_t reg);

@@ -47,6 +47,7 @@ extern const uint16_t* SsDbgRawRegs(void);    /* VDP2::RawRegs — 0x100, indexe
 extern const uint16_t* SsDbgWramL(void);      /* WorkRAML      — 0x80000 words @ 0x00200000 */
 extern const uint16_t* SsDbgWramH(void);      /* WorkRAMH      — 0x80000 words @ 0x06000000 */
 extern const uint16_t* SsDbgVdp1Fb(void);     /* displayed VDP1 FB bank = FB[!FBDrawWhich]  */
+extern const uint16_t* SsDbgSoundRam(void);   /* SCSP RAM — 262144 words, host order; NULL if unwired */
 extern void            SsDbgVdp1Regs(uint16_t out11[11]); /* TVMR,FBCR,PTMR,EWDR,EWLR,EWRR,ENDR,EDSR,LOPR,COPR,MODR */
 extern void            SsDbgSh2Regs(int cpu, uint32_t out23[23]); /* R[16],SR,GBR,VBR,MACH,MACL,PR,PC */
 extern void            SsDbgPokeByte(uint32_t addr, uint8_t val); /* bus/debug byte write */
@@ -140,6 +141,7 @@ void SeMednafenSnapshot(void)
 {
     static uint8_t  v1[SE_LIVE_VDP1_VRAM_LEN], v2[SE_LIVE_VDP2_VRAM_LEN];
     static uint8_t  vs[SE_LIVE_VDP2_STRUCT_LEN];
+    static uint8_t  sr[SE_LIVE_SOUND_RAM_LEN];
     static uint16_t vdp1[11];
     static uint32_t msh2[23], ssh2[23];
 
@@ -150,6 +152,13 @@ void SeMednafenSnapshot(void)
     SsDbgVdp1Regs(vdp1);
     SsDbgSh2Regs(0, msh2);
     SsDbgSh2Regs(1, ssh2);
+    /* SCSP sound RAM. Beetle-Saturn holds it as uint16 host words (like VRAM), so swap to
+     * Saturn big-endian bytes for the wire. If SsDbgSoundRam() is a NULL/undefined build,
+     * ship an empty block (the client then just shows an empty Sound RAM tab). */
+    {
+        const void* srcSr = SsDbgSoundRam();
+        if (srcSr) SwapU16ToBE(sr, (const uint8_t*)srcSr, sizeof sr);
+    }
 
     SeExportSnapshot(
         v1,                          /* VDP1 VRAM  (big-endian)                 */
@@ -161,9 +170,10 @@ void SeMednafenSnapshot(void)
         (const void*)SsDbgWramL(),   /* low work RAM  (host order; verify — §Byte order) */
         (const void*)SsDbgWramH(),   /* high work RAM (host order; verify)      */
         (const void*)SsDbgVdp1Fb(),  /* VDP1 framebuffer (displayed bank, RGB555) */
-        msh2, ssh2);                 /* SH-2 master + slave                     */
+        msh2, ssh2,                  /* SH-2 master + slave                     */
+        SsDbgSoundRam() ? (const void*)sr : (const void*)0); /* SCSP sound RAM (v13) */
 #else
-    (void)v1; (void)v2; (void)vs; (void)vdp1; (void)msh2; (void)ssh2;
+    (void)v1; (void)v2; (void)vs; (void)sr; (void)vdp1; (void)msh2; (void)ssh2;
     (void)SwapU16ToBE; (void)BuildYabauseVdp2Struct;
 #endif
 }
@@ -215,6 +225,17 @@ static void SeMdfnWriteByte(unsigned int address, unsigned char value)
     SsDbgPokeByte(address, value);   /* cache-correct bus poke (see apply.py accessor) */
 #else
     (void)address; (void)value;
+#endif
+}
+/* Sound-RAM poke (v13): the offset is 0-based within the 512 KiB SCSP RAM. Route it through
+ * the same bus writer at the sound-RAM base (0x25A00000), so no SCSP-internal write symbol is
+ * needed and cache/bus semantics stay correct. */
+static void SeMdfnWriteSoundByte(unsigned int offset, unsigned char value)
+{
+#if defined(SE_MEDNAFEN_WIRED)
+    SsDbgPokeByte(0x25A00000u + offset, value);
+#else
+    (void)offset; (void)value;
 #endif
 }
 
@@ -416,6 +437,7 @@ void SeMednafenFrameHook(void)
         inited = 1;
         SeExportInit();
         SeExportSetMemWriteHook(SeMdfnWriteByte);
+        SeExportSetSoundWriteHook(SeMdfnWriteSoundByte);   /* Sound RAM pokes (v13) */
         SeExportSetBreakpointHooks(SeMdfnAddExecBp, SeMdfnClearBps);
         SeExportSetMemBreakpointHook(SeMdfnAddMemBp);   /* data (read/write) watchpoints */
         SeExportSetInputHook(SeMdfnSetPad);   /* controller panel -> emulated pad (v7+) */
@@ -432,7 +454,8 @@ void SeMednafenFrameHook(void)
  * way; SeMdfnSetTracepoints/SeRd32LE are only used under SE_MEDNAFEN_WIRED. */
 void SeMednafenSuppressUnusedWarnings(void)
 {
-    (void)SeMdfnAddExecBp; (void)SeMdfnAddMemBp; (void)SeMdfnClearBps; (void)SeMdfnWriteByte; (void)SeMdfnSetPad;
+    (void)SeMdfnAddExecBp; (void)SeMdfnAddMemBp; (void)SeMdfnClearBps; (void)SeMdfnWriteByte;
+    (void)SeMdfnWriteSoundByte; (void)SeMdfnSetPad;
     (void)SeMdfnGetKeyMap; (void)SeMdfnPortDeviceName;
     (void)SeMdfnSetTracepoints; (void)SeRd32LE;
 }

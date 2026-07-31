@@ -31,12 +31,15 @@ int64_t SelHi(int64_t a, int64_t b) { return a > b ? a : b; }
 const std::vector<HexEditorPanel::Region>& HexEditorPanel::Regions()
 {
     // First entry is "All" (the whole 27-bit canonical CPU space); the rest are the
-    // regions the snapshot captures, addressed at their CPU-visible bases. BIOS, the
-    // cartridge (CS0-2) and the sound CPU's 68K RAM are not captured, so they have no tab.
+    // regions the snapshot captures, addressed at their CPU-visible (cached-mirror) bases.
+    // BIOS and the cartridge (CS0-2) are not captured, so they have no tab. Sound RAM is
+    // the SCSP's 512 KiB (0x05A00000 cached mirror of 0x25A00000) when the source supplies
+    // it (live v13+); it is empty otherwise.
     static const std::vector<Region> kRegions = {
         { "All",       0x00000000u, 0x08000000u },
         { "LWRAM",     0x00200000u, kWramSize     },
         { "HWRAM",     0x06000000u, kWramSize     },
+        { "Sound RAM", 0x05A00000u, kSoundRamSize },
         { "VDP1 RAM",  0x05C00000u, kVdp1VramSize },
         { "VDP1 FB",   0x05C80000u, kVdp1FbSize   },
         { "VDP1 Regs", 0x05D00000u, kVdp1RegBytes },

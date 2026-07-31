@@ -56,11 +56,16 @@ int SeExportInit(void);
  * and 'ssh2_regs' are Yabause `sh2regs_struct` values (R[16], SR, GBR, VBR, MACH,
  * MACL, PR, PC — 23 u32) for the master and slave SH-2, feeding the disassembler /
  * Assembly panel. Any argument may be NULL (that section is zeros). */
+/* 'sound_ram_512k' (v13+) is the emulator's 512 KiB SCSP sound RAM (the 68000 sound
+ * program + PCM tone bank + sequences); NULL zero-fills the sound-RAM block. It is the
+ * last argument so older call sites that don't pass it still compile if recompiled — but
+ * the wire block is only served when the argument is non-NULL. */
 void SeExportSnapshot(const void* vdp1_vram_512k, const void* vdp2_vram_512k,
                       const void* cram_4k, const void* vdp2_regs_struct_288,
                       const void* vdp1_regs_struct, const void* wram_low_1m,
                       const void* wram_high_1m, const void* vdp1_fb_256k,
-                      const void* msh2_regs, const void* ssh2_regs);
+                      const void* msh2_regs, const void* ssh2_regs,
+                      const void* sound_ram_512k);
 
 /* Wire the module's breakpoint installers to Yabause's SH2 breakpoint API (v5+).
  * 'add' installs one execution breakpoint: add(cpu, address) with cpu 0 = master,
@@ -104,6 +109,12 @@ int  SeExportInsnStepTick(int cpu);
  * big-endian order without a manual swap. Call once after SeExportInit, e.g.
  * SeExportSetMemWriteHook(SeYabauseWriteByte). */
 void SeExportSetMemWriteHook(void (*write)(unsigned int address, unsigned char value));
+
+/* Wire a sound-RAM byte poke (v13+), so the Hex Editor's Sound RAM tab / the music-swap
+ * prototype can write the running game's SCSP RAM. write(offset, value) writes one byte at
+ * a 0-based offset within the 512 KiB sound RAM. May be NULL (sound-RAM writes are then
+ * dropped). Call once after SeExportInit, e.g. SeExportSetSoundWriteHook(SeMednafenWriteSoundByte). */
+void SeExportSetSoundWriteHook(void (*write)(unsigned int offset, unsigned char value));
 
 /* Wire controller input injection (v7+), so the Saturn Explorer controller panel can
  * drive the running game directly. set(port, buttons) receives the emulator-agnostic

@@ -99,8 +99,18 @@ extern "C" void SsDbgPokeByte(unsigned int addr, unsigned char val) {
       writeability check + SH-2 cache invalidation and takes a Saturn bus address, so
       writing byte-by-byte preserves big-endian order — the conventional debugger poke,
       for any region (work RAM, VRAM, ...). If your fork lacks CheatMemWrite, point this
-      at the equivalent bus/debug byte writer. */
+      at the equivalent bus/debug byte writer. Sound-RAM pokes (v13) also route here at
+      the SCSP RAM bus base 0x25A00000 (see SeMdfnWriteSoundByte in the glue). */
    CheatMemWrite((unsigned int)addr, (unsigned char)val);
+}
+extern "C" const unsigned short* SsDbgSoundRam(void) {
+   /* SCSP sound RAM (512 KiB) for the v13 Sound RAM tab / music-swap prototype. Returning
+      NULL ships an EMPTY sound-RAM block (the client just shows an empty tab); WRITES still
+      work via SsDbgPokeByte at 0x25A00000. TODO(mednafen): to enable the READ view, return a
+      pointer to Beetle-Saturn's SCSP RAM here (host-order uint16 words, like VRAM — the glue
+      SwapU16ToBE's it to big-endian). The SCSP RAM lives in ss/scsp.cpp; move this accessor
+      into that file next to the SCSP instance and return its 262144-word RAM buffer. */
+   return (const unsigned short*)0;
 }
 /* Controller input injection (v7). SMPC_SetInjectedInput stores the translated pad
    state atomically; SMPC_UpdateInput overlays it after Mednafen refreshes host input. */

@@ -270,6 +270,7 @@ public:
         case SE_VRAM_KIND_WRAM_LOW:  src = &mSnapshot.WramLow();   break;
         case SE_VRAM_KIND_WRAM_HIGH: src = &mSnapshot.WramHigh();  break;
         case SE_VRAM_KIND_VDP1_FB:   src = &mSnapshot.Vdp1Fb();    break;
+        case SE_VRAM_KIND_SOUND_RAM: src = &mSnapshot.SoundRam();  break;
         default: return 0;
         }
         if (!dst || offset >= src->size())
@@ -295,6 +296,11 @@ public:
             const uint32_t base = (kind == SE_VRAM_KIND_WRAM_HIGH) ? kWramHighBase
                                                                    : kWramLowBase;
             mDs.write_main_ram(mDs.user, base + offset, src, n);
+        }
+        else if (mDs.write_sound_ram && kind == SE_VRAM_KIND_SOUND_RAM)
+        {
+            // Sound RAM uses a 0-based offset (not a bus address) — see SeDataSource.h.
+            mDs.write_sound_ram(mDs.user, offset, src, n);
         }
         return n;
     }

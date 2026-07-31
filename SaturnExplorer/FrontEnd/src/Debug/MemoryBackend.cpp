@@ -22,6 +22,7 @@ struct Region
 constexpr Region kRegions[] = {
     { 0x00200000u, kWramSize,     SE_VRAM_KIND_WRAM_LOW  },  // Low work RAM
     { 0x06000000u, kWramSize,     SE_VRAM_KIND_WRAM_HIGH },  // High work RAM
+    { 0x05A00000u, kSoundRamSize, SE_VRAM_KIND_SOUND_RAM },  // SCSP sound RAM (cached mirror)
     { 0x05C00000u, kVdp1VramSize, SE_VRAM_KIND_VDP1_VRAM },  // VDP1 VRAM
     { 0x05C80000u, kVdp1FbSize,   SE_VRAM_KIND_VDP1_FB   },  // VDP1 frame buffer
     { 0x05E00000u, kVdp2VramSize, SE_VRAM_KIND_VDP2_VRAM },  // VDP2 VRAM
@@ -113,15 +114,20 @@ std::vector<MemoryReadResult> ContextBackend::ReadMemoryBatch(
     return out;
 }
 
-// Only writable regions the core can edit (work RAM) allow writes; the address
-// must fall entirely inside one and the source must have a loaded snapshot.
+// Regions the core can edit: work RAM and (live v13+) SCSP sound RAM. The address must
+// fall entirely inside one and the source must have a loaded snapshot.
+static bool IsWritableKind(se_vram_kind kind)
+{
+    return kind == SE_VRAM_KIND_WRAM_LOW || kind == SE_VRAM_KIND_WRAM_HIGH ||
+           kind == SE_VRAM_KIND_SOUND_RAM;
+}
+
 bool ContextBackend::CanWrite(uint32_t address) const
 {
     if (!Connected() || !se_can_write(*mContext)) return false;
     const uint32_t a = Canonical(address);
     for (const Region& reg : kRegions)
-        if ((reg.kind == SE_VRAM_KIND_WRAM_LOW || reg.kind == SE_VRAM_KIND_WRAM_HIGH) &&
-            a >= reg.base && a < reg.base + reg.size)
+        if (IsWritableKind(reg.kind) && a >= reg.base && a < reg.base + reg.size)
             return true;
     return false;
 }
@@ -133,8 +139,8 @@ size_t ContextBackend::WriteMemory(uint32_t address, const uint8_t* bytes, size_
     for (const Region& reg : kRegions)
     {
         if (a < reg.base || a + size > reg.base + reg.size) continue;
-        if (reg.kind != SE_VRAM_KIND_WRAM_LOW && reg.kind != SE_VRAM_KIND_WRAM_HIGH)
-            return 0;   // only work RAM is writable for now
+        if (!IsWritableKind(reg.kind))
+            return 0;   // read-only region (VDP VRAM/CRAM/FB)
         return se_write_vram(*mContext, reg.kind, a - reg.base, bytes, size);
     }
     return 0;

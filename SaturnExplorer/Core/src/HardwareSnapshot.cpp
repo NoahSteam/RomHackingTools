@@ -43,6 +43,7 @@ bool HardwareSnapshot::Capture(const se_data_source& dataSource)
     mWramLow.clear();
     mWramHigh.clear();
     mVdp1Fb.clear();
+    mSoundRam.clear();
     mVdp1Regs.clear();
     mVdp2Regs.clear();
 
@@ -84,6 +85,14 @@ bool HardwareSnapshot::Capture(const se_data_source& dataSource)
         mVdp1Fb.resize(kVdp1FbSize);
         mVdp1Fb.resize(ReadAll(dataSource.read_vdp1_fb, dataSource.user, 0,
                                mVdp1Fb.data(), mVdp1Fb.size()));
+    }
+
+    // SCSP sound RAM (0-based offset within the 512 KiB block).
+    if ((dataSource.capabilities & SE_CAP_SOUND_RAM) && dataSource.read_sound_ram)
+    {
+        mSoundRam.resize(kSoundRamSize);
+        mSoundRam.resize(ReadAll(dataSource.read_sound_ram, dataSource.user, 0,
+                                 mSoundRam.data(), mSoundRam.size()));
     }
 
     // Capture the VDP1 register file (0x00..0x1E) if the driver supplies it.
