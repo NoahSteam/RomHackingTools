@@ -10,8 +10,10 @@ DISTRIBUTION.md ("Mednafen vs. Beetle Saturn").
 Mednafen keeps the memory Saturn Explorer wants as *file-scope static* (VDP2
 VRAM/CRAM/RawRegs, WorkRAML/H, the VDP1 registers), unreachable by `extern` from a
 separate file. So this patcher injects tiny C-linkage **accessors** at the end of
-vdp1.cpp / vdp2.cpp / ss.cpp (where those statics are visible — a re-opened namespace
-block), copies the portable server (../Common/se_export.{c,h} + SeLiveProtocol.h) plus
+vdp1.cpp / vdp2.cpp / ss.cpp / sound.cpp (where those statics are visible — a re-opened
+namespace block; the SCSP sound-RAM + decoded-voice reads live in sound.cpp, backed by a
+public SeDbgReadSlots member added to scsp.h), copies the portable server
+(../Common/se_export.{c,h} + SeLiveProtocol.h) plus
 the Mednafen glue (se_mednafen_glue.c) into the tree, and injects ONE per-frame call
 into ss.cpp's Emulate(). That call lazy-starts the server on the first frame, so no
 Load()/CloseGame() anchoring is needed.
@@ -103,42 +105,10 @@ extern "C" void SsDbgPokeByte(unsigned int addr, unsigned char val) {
       the SCSP RAM bus base 0x25A00000 (see SeMdfnWriteSoundByte in the glue). */
    CheatMemWrite((unsigned int)addr, (unsigned char)val);
 }
-extern "C" const unsigned short* SsDbgSoundRam(void) {
-   /* SCSP sound RAM (512 KiB) for the v13 Sound RAM tab / music-swap prototype. Returning
-      NULL ships an EMPTY sound-RAM block (the client just shows an empty tab); WRITES still
-      work via SsDbgPokeByte at 0x25A00000. TODO(mednafen): to enable the READ view, return a
-      pointer to Beetle-Saturn's SCSP RAM here (host-order uint16 words, like VRAM — the glue
-      SwapU16ToBE's it to big-endian). The SCSP RAM lives in ss/scsp.cpp; move this accessor
-      into that file next to the SCSP instance and return its 262144-word RAM buffer. */
-   return (const unsigned short*)0;
-}
-extern "C" int SsDbgScspSlots(unsigned char* out) {
-   /* Decoded SCSP voices (v14) for the Sound panel + per-voice Play/Export. Serialize the 32
-      decoded slots into 'out' as 36-byte little-endian records (layout in SeLiveProtocol.h) and
-      return the count (32). The LIVE fields (EnvLevel/EnvPhase/CurrentAddr) are what tell the
-      panel which voices are actually sounding — they exist only in the decoded slot struct.
-      STUB by default (returns 0 -> empty Sound panel). TODO(mednafen): confirm the global
-      SS_SCSP instance symbol + SS_SCSP_Slot field spellings on your tree, then enable the
-      template below (a small helper writes each field at its documented offset):
-
-      // static void W32(unsigned char* p, unsigned int v){p[0]=v;p[1]=v>>8;p[2]=v>>16;p[3]=v>>24;}
-      // extern SS_SCSP SCSP;                     // the real global SCSP instance
-      // const SS_SCSP_Slot* sl = SCSP.Slots;     // 32 decoded voices
-      // for (int i=0;i<32;++i){ unsigned char* r=out+i*36; const SS_SCSP_Slot& s=sl[i];
-      //   int released = (s.EnvPhase==3) && (s.EnvLevel>=0x3FF);
-      //   r[0]=s.KeyBit?1:0; r[1]=(s.KeyBit&&!released)?1:0; r[2]=(unsigned char)s.EnvPhase;
-      //   r[3]=s.WF8Bit?1:0; r[4]=(unsigned char)s.LoopMode; r[5]=(unsigned char)(signed char)s.Octave;
-      //   r[6]=(unsigned char)s.TotalLevel;
-      //   r[7]=(unsigned char)s.DirectLevel; r[8]=(unsigned char)s.DirectPan;   // derive from DISDL/DIPAN or DirectVolume[2]
-      //   r[9]=(unsigned char)s.EffectLevel; r[10]=(unsigned char)s.EffectPan;
-      //   r[11]=(unsigned char)s.EnvRates[0]; r[12]=(unsigned char)s.EnvRates[1];
-      //   r[13]=(unsigned char)s.EnvRates[2]; r[14]=(unsigned char)s.EnvRates[3]; r[15]=(unsigned char)s.DecayLevel;
-      //   r[16]=s.EnvLevel&0xFF; r[17]=s.EnvLevel>>8; r[18]=s.FreqNum&0xFF; r[19]=s.FreqNum>>8;
-      //   W32(r+20,s.StartAddr); W32(r+24,s.LoopStart); W32(r+28,s.LoopEnd); W32(r+32,s.CurrentAddr); }
-      // return 32; */
-   (void)out;
-   return 0;
-}
+/* SsDbgSoundRam (v13, SCSP RAM read) and SsDbgScspSlots (v14, decoded voices) are NOT here:
+   they need the `static SS_SCSP SCSP` instance and scsp.h's private Slots[]/SlotRegs[], which
+   are only visible inside sound.cpp. They are injected there instead — see process_sound()
+   (SOUND_ACCESSORS) + the SeDbgReadSlots member added to scsp.h (SCSP_SLOT_METHOD). */
 /* Controller input injection (v7). SMPC_SetInjectedInput stores the translated pad
    state atomically; SMPC_UpdateInput overlays it after Mednafen refreshes host input. */
 extern "C" void SsDbgSetPad(unsigned int port, unsigned int buttons) {
@@ -250,6 +220,72 @@ extern "C" void SsDbgClearBps(void) {}
 extern "C" void SsDbgSetTraceActive(int active) { (void)active; }
 #endif
 }"""
+
+# ---- SCSP sound accessors. Injected into sound.cpp / scsp.h (NOT ss.cpp): the SCSP
+#      instance is a file-scope static in sound.cpp, and the per-voice state lives in the
+#      private Slots[]/SlotRegs[] members of SS_SCSP, so the read path must sit in that TU
+#      with a public member on the class. Symbol/field names verified against
+#      mednafen-git src/ss/{scsp.h,scsp.inc,sound.cpp} (Mednafen 1.32.1). ----
+
+# A public member added to SS_SCSP (scsp.h), anchored after GetRAMPtr(). Being a member it
+# can read the private Slots[]/SlotRegs[]; it writes the fixed 36-byte LE record documented
+# in SeLiveProtocol.h. Read-only, so it can't perturb emulation.
+SCSP_SLOT_METHOD = """\
+ // Saturn Explorer live tap: serialize the 32 decoded voices into a 36-byte-per-record
+ // little-endian block (layout in Integration/Common/SeLiveProtocol.h) for the Sound panel
+ // and per-voice Play/Export. The LIVE fields (EnvLevel/EnvPhase/CurrentAddr) are the ones
+ // that reveal which voices are actually sounding. Read-only.
+ int SeDbgReadSlots(unsigned char* out)
+ {
+  for(unsigned i = 0; i < 32; i++)
+  {
+   unsigned char* r = out + i * 36;
+   const Slot& s = Slots[i];
+   const uint16 pv = SlotRegs[i][0x0B];               // DISDL/DIPAN/EFSDL/EFPAN register word
+   const bool released = (s.EnvPhase == ENV_PHASE_RELEASE) && (s.EnvLevel >= 0x3FF);
+   int oct = s.Octave & 0xF; if(oct & 0x8) oct -= 16; // OCT is 4-bit signed (-8..+7)
+   r[0]  = s.KeyBit ? 1 : 0;
+   r[1]  = (s.KeyBit && !released) ? 1 : 0;
+   r[2]  = (unsigned char)s.EnvPhase;
+   r[3]  = s.WF8Bit ? 1 : 0;
+   r[4]  = (unsigned char)s.LoopMode;
+   r[5]  = (unsigned char)(signed char)oct;
+   r[6]  = (unsigned char)s.TotalLevel;
+   r[7]  = (unsigned char)((pv >> 13) & 0x7);         // DISDL (direct send level)
+   r[8]  = (unsigned char)((pv >>  8) & 0x1F);        // DIPAN (direct pan)
+   r[9]  = (unsigned char)((pv >>  5) & 0x7);         // EFSDL (effect send level)
+   r[10] = (unsigned char)((pv >>  0) & 0x1F);        // EFPAN (effect pan)
+   r[11] = s.EnvRates[0]; r[12] = s.EnvRates[1];
+   r[13] = s.EnvRates[2]; r[14] = s.EnvRates[3];
+   r[15] = (unsigned char)s.DecayLevel;
+   r[16] = (unsigned char)(s.EnvLevel & 0xFF); r[17] = (unsigned char)((s.EnvLevel >> 8) & 0xFF);
+   r[18] = (unsigned char)(s.FreqNum  & 0xFF); r[19] = (unsigned char)((s.FreqNum  >> 8) & 0xFF);
+   /* StartAddr is a byte offset into sound RAM; LoopStart/LoopEnd/CurrentAddr are in samples. */
+   const uint32 words[4] = { s.StartAddr, s.LoopStart, s.LoopEnd, s.CurrentAddr };
+   for(unsigned k = 0; k < 4; k++)
+   {
+    unsigned char* p = r + 20 + k * 4; const uint32 v = words[k];
+    p[0] = (unsigned char)v;         p[1] = (unsigned char)(v >> 8);
+    p[2] = (unsigned char)(v >> 16); p[3] = (unsigned char)(v >> 24);
+   }
+  }
+  return 32;
+ }"""
+
+# Free C-linkage accessors appended at EOF of sound.cpp, where the `static SS_SCSP SCSP`
+# instance is in scope. Re-opens the namespace like the vdp1/vdp2 accessor blocks do.
+SOUND_ACCESSORS = """\
+/* Expose the SCSP instance (sound.cpp's `static SS_SCSP SCSP`) to the glue (C linkage).
+   SsDbgSoundRam returns the 262144-word host-order SCSP RAM (the glue SwapU16ToBE's it to
+   big-endian for the wire); SsDbgScspSlots serializes the 32 decoded voices via the
+   SeDbgReadSlots member added to scsp.h. */
+namespace MDFN_IEN_SS {
+extern "C" const unsigned short* SsDbgSoundRam(void) { return (const unsigned short*)SCSP.GetRAMPtr(); }
+extern "C" int SsDbgScspSlots(unsigned char* out) { return SCSP.SeDbgReadSlots(out); }
+}"""
+
+# scsp.h anchor: insert the member right after the public GetRAMPtr() accessor.
+SCSP_RAMPTR_ANCHOR = r'(INLINE\s+uint16\*\s+GetRAMPtr\(void\)\s*\{\s*return\s+RAM;\s*\}\s*\n)'
 
 SMPC_INPUT_DECL = """\
 /* Saturn Explorer controller injection. `buttons` is the protocol's SE_PAD_* mask;
@@ -532,6 +568,32 @@ def process_ss(src_dir, do_write, with_pause):
     return notes
 
 
+def process_sound(src_dir, do_write):
+    """Wire the SCSP read path (sound RAM + decoded voices). These accessors need the
+    `static SS_SCSP SCSP` instance and scsp.h's private Slots[]/SlotRegs[], both visible
+    only inside sound.cpp — so a public SeDbgReadSlots member goes into scsp.h and the two
+    C-linkage accessors are appended to sound.cpp."""
+    notes = ["sound.cpp / scsp.h:"]
+    h_path = os.path.join(src_dir, "scsp.h")
+    if not os.path.isfile(h_path):
+        return notes + ["  MISSING  scsp.h"]
+    text = original = open(h_path, encoding="utf-8", errors="surrogateescape").read()
+    text, n = apply_anchored(text, SCSP_RAMPTR_ANCHOR, SCSP_SLOT_METHOD, "SeDbgReadSlots")
+    notes.append(n)
+    if do_write and text != original:
+        open(h_path, "w", encoding="utf-8", errors="surrogateescape").write(text)
+
+    cpp_path = os.path.join(src_dir, "sound.cpp")
+    if not os.path.isfile(cpp_path):
+        return notes + ["  MISSING  sound.cpp"]
+    text = original = open(cpp_path, encoding="utf-8", errors="surrogateescape").read()
+    text, n = apply_append(text, SOUND_ACCESSORS, "SsDbgScspSlots")
+    notes.append(n)
+    if do_write and text != original:
+        open(cpp_path, "w", encoding="utf-8", errors="surrogateescape").write(text)
+    return notes
+
+
 def process_smpc(src_dir, do_write):
     cpp_path = os.path.join(src_dir, "smpc.cpp")
     h_path = os.path.join(src_dir, "smpc.h")
@@ -697,7 +759,7 @@ def process_build(root, do_write):
 def revert(src_dir, root):
     fence_re = re.compile(re.escape(BEGIN) + r".*?" + re.escape(END) + r"\n?", re.DOTALL)
     edited = [os.path.join(src_dir, f) for f in
-              ("vdp1.cpp", "vdp2.cpp", "ss.cpp", "smpc.cpp", "smpc.h")]
+              ("vdp1.cpp", "vdp2.cpp", "ss.cpp", "sound.cpp", "scsp.h", "smpc.cpp", "smpc.h")]
     edited.append(os.path.join(root, TITLE_FILE))   # window-title mark (SDL frontend)
     edited.append(os.path.join(root, INPUT_FILE))   # keyboard-map hook (SDL frontend)
     for path in edited:
@@ -753,6 +815,7 @@ def main():
         notes += process_append_file(src_dir, fname, block, key, do_write)
     notes += process_smpc(src_dir, do_write)
     notes += process_ss(src_dir, do_write, with_pause)
+    notes += process_sound(src_dir, do_write)
     notes += process_title(root, do_write)
     notes += process_input(root, do_write)
     notes += process_build(root, do_write)

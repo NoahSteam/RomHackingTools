@@ -154,14 +154,22 @@ to `SeExportSnapshot`. Per section:
 - **SH-2 regs** — host-order u32 in `sh2regs_struct` field order; the client reads
   them as LE u32. The `SsDbgSh2Regs` accessor fills the 23-u32 array.
 - **SCSP sound RAM (v13)** — the 512 KiB sound block (68000 program + PCM tone bank +
-  sequences), surfaced as the **Sound RAM** Memory tab. Beetle-Saturn holds it as
-  `uint16` host words (like VRAM), so the glue `SwapU16ToBE`s it to big-endian for the
-  wire. The patcher injects `SsDbgSoundRam()` as a **NULL stub** (so the build compiles
-  and the read view ships empty); to enable the read view, point that accessor at
-  Beetle-Saturn's SCSP RAM in `ss/scsp.cpp` (its 262144-word RAM buffer). **Writes work
-  out of the box** — `SeExportSetSoundWriteHook(SeMdfnWriteSoundByte)` routes pokes
+  sequences), surfaced as the **Sound RAM** Memory tab. Mednafen holds it as `uint16`
+  host words (like VRAM), so the glue `SwapU16ToBE`s it to big-endian for the wire. The
+  patcher injects `SsDbgSoundRam()` into **`sound.cpp`** (where the `static SS_SCSP SCSP`
+  instance is in scope) returning `SCSP.GetRAMPtr()` — the 262144-word RAM buffer. It
+  lives in `sound.cpp`, not `ss.cpp`, because that instance has internal linkage there.
+  **Writes** also work — `SeExportSetSoundWriteHook(SeMdfnWriteSoundByte)` routes pokes
   through the existing bus writer at the sound-RAM base `0x25A00000`, so the Sound RAM
-  tab and the music-swap prototype can edit a running game with no extra accessor.
+  tab and the music-swap prototype can edit a running game.
+- **SCSP decoded voices (v14)** — the 32-slot **Sound (SCSP)** panel (per-voice format,
+  pitch, envelope phase/level, pan, loop, live playback position) plus per-voice Play /
+  Export. The "who's actually sounding" fields (`EnvLevel`/`EnvPhase`/`CurrentAddr`) exist
+  only in the emulator's *decoded* `SS_SCSP::Slot[32]`, which is **private**, so the
+  patcher adds a public `SeDbgReadSlots()` member to `scsp.h` and a `SsDbgScspSlots()`
+  accessor to `sound.cpp` that calls it. The member serializes each voice into the fixed
+  36-byte LE record in `SeLiveProtocol.h`, reading the raw DISDL/DIPAN/EFSDL/EFPAN from
+  `SlotRegs[i][0x0B]` and sign-extending the 4-bit `Octave`.
 
 ## VDP2 registers (the one protocol wrinkle)
 

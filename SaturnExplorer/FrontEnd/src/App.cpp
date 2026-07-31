@@ -5543,7 +5543,7 @@ void App::DrawSound(IPlatform& platform)
     {
         ImGui::TextWrapped(
             "No SCSP voice data. Connect to a live emulator built with the v14 sound tap "
-            "(on Mednafen the SsDbgScspSlots accessor must be wired to the SCSP slot array). "
+            "(the Mednafen patcher wires this automatically). "
             "Savestates don't carry live voice state.");
         ImGui::End();
         return;
