@@ -5585,7 +5585,7 @@ void App::DrawSound(IPlatform& platform)
                 ImGui::SetTooltip("Envelope  AR %u  D1R %u  D2R %u  RR %u  DL %u\n"
                                   "Effect pan %c%d\nCurrent addr %05X",
                                   s.ar, s.d1r, s.d2r, s.rr, s.dl,
-                                  (s.effect_pan & 0x10) ? 'R' : 'L', s.effect_pan & 0x0F,
+                                  (s.effect_pan & 0x10) ? 'L' : 'R', s.effect_pan & 0x0F,
                                   s.cur_addr);
             ImGui::TableNextColumn(); ImGui::TextUnformatted(s.key_on ? "on" : "-");
             ImGui::TableNextColumn(); ImGui::TextUnformatted(kPhase[s.eg_phase & 3]);
@@ -5600,7 +5600,9 @@ void App::DrawSound(IPlatform& platform)
             {
                 const int amt = s.direct_pan & 0x0F;
                 if (amt == 0) ImGui::TextUnformatted("C");
-                else ImGui::Text("%c%d", (s.direct_pan & 0x10) ? 'R' : 'L', amt);
+                // DIPAN bit 4 attenuates the RIGHT channel (SDL_PAN_ToVolume), so a set bit
+                // means the voice is louder on the LEFT.
+                else ImGui::Text("%c%d", (s.direct_pan & 0x10) ? 'L' : 'R', amt);
             }
             ImGui::TableNextColumn(); ImGui::Text("%u", s.direct_level);
             ImGui::TableNextColumn(); ImGui::Text("%u", s.effect_level);

@@ -270,6 +270,10 @@ public:
 
     // Decode voice 'slot' from sound RAM into 16-bit signed mono host PCM (SA..SA+LEA),
     // converting 16-bit big-endian / 8-bit PCM. Returns frames written (<= maxFrames).
+    // Assumes a memory PCM source (SSCTL=0) with no sample-bit inversion (SBCTL=0) — the
+    // normal case for tone/music playback; noise/zero sources and SBCTL sign-mangling
+    // (both rare, effect-only) are not reconstructed. The SCSP addresses 16-bit voices by
+    // word (RAM[SA>>1]), so bit 0 of SA is ignored for 16-bit; 8-bit voices are byte-addressed.
     int DecodeScspSample(int slot, int16_t* out, int maxFrames, uint32_t* outRate) const
     {
         const std::vector<se_scsp_slot>& sl = mSnapshot.ScspSlots();
@@ -288,12 +292,14 @@ public:
             return 0;
         }
         const uint32_t bytesPer = s.format ? 1u : 2u;   // 8-bit vs 16-bit PCM
+        // 16-bit voices are word-addressed (RAM[SA>>1]); mirror that by dropping bit 0 of SA.
+        const uint32_t startByte = s.format ? s.start_addr : (s.start_addr & ~1u);
         uint32_t frames = s.loop_end;                   // LEA bounds the sample (in samples)
         if (frames > static_cast<uint32_t>(maxFrames)) frames = static_cast<uint32_t>(maxFrames);
         int written = 0;
         for (uint32_t i = 0; i < frames; ++i)
         {
-            const uint32_t off = s.start_addr + i * bytesPer;
+            const uint32_t off = startByte + i * bytesPer;
             if (static_cast<size_t>(off) + bytesPer > ram.size()) break;   // ran off sound RAM
             int16_t v;
             if (s.format)
