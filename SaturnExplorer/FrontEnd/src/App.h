@@ -102,7 +102,8 @@ private:
     void DrawActions();                     // Tracepoints management table
     void DrawCallStack();                   // per-CPU call stack (paused-state workspace)
     void DrawBreakpoints();                 // Visual Studio-style breakpoint list
-    void DrawSound();                       // SCSP voices: who's playing + Play/Export
+    void DrawSound(IPlatform& platform);    // SCSP voices: who's playing + Play/Export
+    void ExportSound(IPlatform& platform, int slot);   // decode voice 'slot' -> save .wav
     void RebuildCallStack();                // reconstruct the shown CPU's stack
     // Sync the workspace to a selected call-stack frame (Assembly + Hex + focus).
     void GoToFrame(const CallStackFrame& fr);

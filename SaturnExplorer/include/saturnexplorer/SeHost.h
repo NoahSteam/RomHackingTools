@@ -140,6 +140,12 @@ int         se_has_sh2_regs(se_context* ctx);
    voices into 'out' and returns the number written. --- */
 int         se_scsp_slot_count(se_context* ctx);
 int         se_get_scsp_slots(se_context* ctx, se_scsp_slot out[SE_SCSP_SLOT_COUNT]);
+/* Decode voice 'slot' (0..SE_SCSP_SLOT_COUNT-1) into 16-bit signed mono host PCM: reads the
+   sample from sound RAM (SA..SA+LEA), converting 16-bit big-endian / 8-bit PCM. Writes up to
+   'max_frames' samples into 'out'; returns the number written (0 if no sample / no sound RAM).
+   '*out_sample_rate' (may be NULL) gets the voice's natural rate in Hz. Powers Play/Export. */
+int         se_decode_scsp_sample(se_context* ctx, int slot, int16_t* out, int max_frames,
+                                  uint32_t* out_sample_rate);
 
 /* --- Frame control (live sources only; requires SE_CAP_FRAME_STEP) ---
    se_supports_frame_control returns 1 when the source can pause/step (so the

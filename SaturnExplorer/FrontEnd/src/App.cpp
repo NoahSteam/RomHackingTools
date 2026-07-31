@@ -428,6 +428,28 @@ void PushU32(std::vector<uint8_t>& v, uint32_t x)
     v.push_back(static_cast<uint8_t>((x >> 24) & 0xFF));
 }
 
+// Wrap interleaved 16-bit PCM in a canonical 44-byte-header WAV (all fields little-endian,
+// so PushU16/PushU32 apply directly; PCM samples are written LE regardless of host order).
+std::vector<uint8_t> BuildWav(const int16_t* pcm, size_t frames, int sampleRate, int channels)
+{
+    std::vector<uint8_t> w;
+    const uint16_t blockAlign = static_cast<uint16_t>(channels * 2);
+    const uint32_t dataBytes = static_cast<uint32_t>(frames * static_cast<size_t>(blockAlign));
+    auto tag = [&](const char* s) { w.insert(w.end(), s, s + 4); };
+    tag("RIFF"); PushU32(w, 36u + dataBytes); tag("WAVE");
+    tag("fmt "); PushU32(w, 16u);
+    PushU16(w, 1u);                                   // PCM
+    PushU16(w, static_cast<uint16_t>(channels));
+    PushU32(w, static_cast<uint32_t>(sampleRate));
+    PushU32(w, static_cast<uint32_t>(sampleRate) * blockAlign);   // byte rate
+    PushU16(w, blockAlign);
+    PushU16(w, 16u);                                  // bits per sample
+    tag("data"); PushU32(w, dataBytes);
+    for (size_t i = 0; i < frames * static_cast<size_t>(channels); ++i)
+        PushU16(w, static_cast<uint16_t>(pcm[i]));
+    return w;
+}
+
 // Fit a w×h image into 'avail' preserving aspect (scale by the tighter axis, with a
 // >0 guard) and center it in both axes; returns the top-left draw origin (relative to
 // the current cursor) and writes the chosen scale. Shared by the image panels that
@@ -988,7 +1010,7 @@ void App::BuildUI(IPlatform& platform)
     if (mPanels.actions)         DrawActions();
     if (mPanels.callStack)       DrawCallStack();
     if (mPanels.breakpoints)     DrawBreakpoints();
-    if (mPanels.sound)           DrawSound();
+    if (mPanels.sound)           DrawSound(platform);
 
     // Game-data-directory modal + texture search results (both floating, drawn last
     // so they overlay the docked panels).
@@ -5460,7 +5482,27 @@ void App::DrawRegisters()
 // level), the sample (format, addresses, loop), pitch, volume and pan. Fed by the live driver's
 // decoded 32-slot block (v14); empty on savestates / a server without the sound tap. Per-voice
 // Play/Export land in later stages. Each SA cell cross-links to the Sound RAM hex tab.
-void App::DrawSound()
+// Decode a voice's sample from sound RAM (SA..SA+LEA, 8/16-bit PCM) and save it as a .wav
+// via the platform save dialog. LEA is 16-bit, so a voice is at most 65535 samples.
+void App::ExportSound(IPlatform& platform, int slot)
+{
+    std::vector<int16_t> pcm(65536);
+    uint32_t rate = 44100;
+    const int frames = se_decode_scsp_sample(mContext, slot, pcm.data(),
+                                             static_cast<int>(pcm.size()), &rate);
+    if (frames <= 0)
+    {
+        return;
+    }
+    if (rate < 2000 || rate > 192000) rate = 44100;   // sanity-clamp the natural rate
+    const std::vector<uint8_t> wav =
+        BuildWav(pcm.data(), static_cast<size_t>(frames), static_cast<int>(rate), 1);
+    char name[32];
+    std::snprintf(name, sizeof(name), "sound_slot%02d.wav", slot);
+    platform.SaveFile(name, wav.data(), wav.size());
+}
+
+void App::DrawSound(IPlatform& platform)
 {
     if (!ImGui::Begin("Sound (SCSP)"))
     {
@@ -5494,11 +5536,11 @@ void App::DrawSound()
     const ImGuiTableFlags flags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
                                   ImGuiTableFlags_ScrollY | ImGuiTableFlags_ScrollX |
                                   ImGuiTableFlags_Resizable;
-    if (ImGui::BeginTable("scspslots", 14, flags))
+    if (ImGui::BeginTable("scspslots", 15, flags))
     {
         ImGui::TableSetupScrollFreeze(1, 1);
         const char* cols[] = { "#", "On", "Phase", "EG", "Fmt", "Freq", "TL",
-                               "Pan", "Dir", "FX", "Loop", "SA", "LSA", "LEA" };
+                               "Pan", "Dir", "FX", "Loop", "SA", "LSA", "LEA", "Sample" };
         for (const char* c : cols) ImGui::TableSetupColumn(c);
         ImGui::TableHeadersRow();
 
@@ -5546,7 +5588,16 @@ void App::DrawSound()
             ImGui::TableNextColumn(); ImGui::Text("%X", s.loop_start);
             ImGui::TableNextColumn(); ImGui::Text("%X", s.loop_end);
 
-            if (dim) ImGui::PopStyleColor();
+            // Export the voice's sample to .wav. (Play arrives with the audio-output seam.)
+            ImGui::TableNextColumn();
+            if (dim) ImGui::PopStyleColor();   // draw the button at normal contrast
+            ImGui::PushID(i);
+            ImGui::BeginDisabled(s.loop_end == 0);
+            if (ImGui::SmallButton("Export")) ExportSound(platform, i);
+            ImGui::EndDisabled();
+            if (ImGui::IsItemHovered() && s.loop_end != 0)
+                ImGui::SetTooltip("Save this voice's sample as a .wav");
+            ImGui::PopID();
         }
         ImGui::EndTable();
     }

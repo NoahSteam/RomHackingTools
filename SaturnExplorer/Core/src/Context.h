@@ -4,6 +4,7 @@
 #pragma once
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <vector>
 
@@ -265,6 +266,48 @@ public:
         if (n > SE_SCSP_SLOT_COUNT) n = SE_SCSP_SLOT_COUNT;
         for (int i = 0; i < n; ++i) out[i] = v[i];
         return n;
+    }
+
+    // Decode voice 'slot' from sound RAM into 16-bit signed mono host PCM (SA..SA+LEA),
+    // converting 16-bit big-endian / 8-bit PCM. Returns frames written (<= maxFrames).
+    int DecodeScspSample(int slot, int16_t* out, int maxFrames, uint32_t* outRate) const
+    {
+        const std::vector<se_scsp_slot>& sl = mSnapshot.ScspSlots();
+        if (!out || maxFrames <= 0 || slot < 0 || slot >= static_cast<int>(sl.size()))
+        {
+            return 0;
+        }
+        const se_scsp_slot& s = sl[slot];
+        if (outRate)
+        {
+            *outRate = static_cast<uint32_t>(
+                std::ldexp(44100.0 * (1.0 + s.freq_num / 1024.0), s.octave));
+        }
+        const std::vector<uint8_t>& ram = mSnapshot.SoundRam();
+        if (ram.empty() || s.loop_end == 0)
+        {
+            return 0;
+        }
+        const uint32_t bytesPer = s.format ? 1u : 2u;   // 8-bit vs 16-bit PCM
+        uint32_t frames = s.loop_end;                   // LEA bounds the sample (in samples)
+        if (frames > static_cast<uint32_t>(maxFrames)) frames = static_cast<uint32_t>(maxFrames);
+        int written = 0;
+        for (uint32_t i = 0; i < frames; ++i)
+        {
+            const uint32_t off = s.start_addr + i * bytesPer;
+            if (static_cast<size_t>(off) + bytesPer > ram.size()) break;   // ran off sound RAM
+            int16_t v;
+            if (s.format)
+            {
+                v = static_cast<int16_t>(static_cast<int8_t>(ram[off]) << 8);   // 8-bit signed
+            }
+            else
+            {
+                v = static_cast<int16_t>((ram[off] << 8) | ram[off + 1]);       // 16-bit BE
+            }
+            out[written++] = v;
+        }
+        return written;
     }
 
     // Copy raw bytes from a memory region (as the core holds them: Saturn-native

@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir -p /tmp/claude-0/-home-user-RomHackingTools/d19b8f8b-2f6f-5bbe-9f74-ca38227b1839/scratchpad/testdump)",
+      "Bash(cp /root/.claude/uploads/d19b8f8b-2f6f-5bbe-9f74-ca38227b1839/4550b37e-vdp1_vram.bin /tmp/claude-0/-home-user-RomHackingTools/d19b8f8b-2f6f-5bbe-9f74-ca38227b1839/scratchpad/testdump/vdp1_vram.bin)",
+      "Bash(cp /root/.claude/uploads/d19b8f8b-2f6f-5bbe-9f74-ca38227b1839/e11a5ef5-vdp2_vram.bin /tmp/claude-0/-home-user-RomHackingTools/d19b8f8b-2f6f-5bbe-9f74-ca38227b1839/scratchpad/testdump/vdp2_vram.bin)",
+      "Bash(cp /root/.claude/uploads/d19b8f8b-2f6f-5bbe-9f74-ca38227b1839/7fc14106-vdp1_regs.bin /tmp/claude-0/-home-user-RomHackingTools/d19b8f8b-2f6f-5bbe-9f74-ca38227b1839/scratchpad/testdump/vdp1_regs.bin)",
+      "Bash(cp /root/.claude/uploads/d19b8f8b-2f6f-5bbe-9f74-ca38227b1839/d726d883-vdp2_regs.bin /tmp/claude-0/-home-user-RomHackingTools/d19b8f8b-2f6f-5bbe-9f74-ca38227b1839/scratchpad/testdump/vdp2_regs.bin)"
+    ]
+  }
+}
