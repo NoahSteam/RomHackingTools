@@ -608,7 +608,7 @@ bool WindowsPlatform::PlayAudio(const int16_t* pcm, size_t frames, int sampleRat
         return false;
     }
     if (channels < 1) channels = 1;
-    if (sampleRate < 2000 || sampleRate > 192000) sampleRate = 44100;
+    if (sampleRate < kAudioMinRate || sampleRate > kAudioMaxRate) sampleRate = 44100;
 
     StopAudio();   // release any in-flight buffer/device first
     mWaveBuf.assign(pcm, pcm + frames * static_cast<size_t>(channels));

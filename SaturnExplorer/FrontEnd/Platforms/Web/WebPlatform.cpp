@@ -457,7 +457,7 @@ bool WebPlatform::PlayAudio(const int16_t* pcm, size_t frames, int sampleRate, i
         return false;
     }
     if (channels < 1) channels = 1;
-    if (sampleRate < 2000 || sampleRate > 192000) sampleRate = 44100;
+    if (sampleRate < kAudioMinRate || sampleRate > kAudioMaxRate) sampleRate = 44100;
 
     if (mAudioDev == 0 || sampleRate != mAudioRate || channels != mAudioChannels)
     {
@@ -485,14 +485,6 @@ bool WebPlatform::PlayAudio(const int16_t* pcm, size_t frames, int sampleRate, i
     }
     SDL_PauseAudioDevice(mAudioDev, 0);   // unpause = start playing the queued buffer
     return true;
-}
-
-void WebPlatform::StopAudio()
-{
-    if (mAudioDev)
-    {
-        SDL_ClearQueuedAudio(mAudioDev);
-    }
 }
 
 }  // namespace sfe

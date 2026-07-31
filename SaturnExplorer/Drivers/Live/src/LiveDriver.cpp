@@ -492,12 +492,12 @@ bool ReadSnapshot(Conn& c, const char* verb, int32_t arg,
         snap.scspSlots.clear();
         if (n)
         {
-            std::vector<uint8_t> blk(n);
-            if (!ConnReadFull(c, blk.data(), n)) return false;
+            uint8_t blk[SE_LIVE_SCSP_BLOCK_LEN];
+            if (!ConnReadFull(c, blk, n)) return false;
             snap.scspSlots.resize(SE_LIVE_SCSP_SLOTS);
             for (uint32_t i = 0; i < SE_LIVE_SCSP_SLOTS; ++i)
             {
-                const uint8_t* r = blk.data() + i * SE_LIVE_SCSP_SLOT_LEN;
+                const uint8_t* r = blk + i * SE_LIVE_SCSP_SLOT_LEN;
                 se_scsp_slot& s = snap.scspSlots[i];
                 s.key_on = r[0]; s.active = r[1]; s.eg_phase = r[2]; s.format = r[3];
                 s.loop_mode = r[4]; s.octave = static_cast<int8_t>(r[5]);

@@ -44,9 +44,12 @@ public:
     // resets the previous. Always available on Windows, so HasAudio() is true.
     bool HasAudio() override { return true; }
     bool PlayAudio(const int16_t* pcm, size_t frames, int sampleRate, int channels) override;
-    void StopAudio() override;
 
 private:
+    // Release any in-flight waveOut buffer/device. Called internally by PlayAudio (to
+    // reset the previous preview) and Shutdown; not part of the IPlatform contract.
+    void StopAudio();
+
     bool CreateDeviceD3D();
     void CleanupDeviceD3D();
     void CreateRenderTarget();

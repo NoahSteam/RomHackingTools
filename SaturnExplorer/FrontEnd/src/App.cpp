@@ -435,6 +435,7 @@ std::vector<uint8_t> BuildWav(const int16_t* pcm, size_t frames, int sampleRate,
     std::vector<uint8_t> w;
     const uint16_t blockAlign = static_cast<uint16_t>(channels * 2);
     const uint32_t dataBytes = static_cast<uint32_t>(frames * static_cast<size_t>(blockAlign));
+    w.reserve(44u + dataBytes);   // 44-byte header + PCM payload, no reallocation
     auto tag = [&](const char* s) { w.insert(w.end(), s, s + 4); };
     tag("RIFF"); PushU32(w, 36u + dataBytes); tag("WAVE");
     tag("fmt "); PushU32(w, 16u);
@@ -5492,7 +5493,9 @@ int App::DecodeSlotSample(int slot, std::vector<int16_t>& out, uint32_t& rate)
                                        static_cast<int>(out.size()), &rate);
     if (frames < 0) frames = 0;
     out.resize(static_cast<size_t>(frames));
-    if (rate < 2000 || rate > 192000) rate = 44100;   // sanity-clamp the natural rate
+    if (rate < static_cast<uint32_t>(kAudioMinRate) ||
+        rate > static_cast<uint32_t>(kAudioMaxRate))
+        rate = 44100;                                  // sanity-clamp the natural rate
     return frames;
 }
 
@@ -5578,14 +5581,19 @@ void App::DrawSound(IPlatform& platform)
 
             ImGui::TableNextRow();
             ImGui::TableNextColumn(); ImGui::Text("%d", i);
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Envelope  AR %u  D1R %u  D2R %u  RR %u  DL %u\n"
+                                  "Effect pan %c%d\nCurrent addr %05X",
+                                  s.ar, s.d1r, s.d2r, s.rr, s.dl,
+                                  (s.effect_pan & 0x10) ? 'R' : 'L', s.effect_pan & 0x0F,
+                                  s.cur_addr);
             ImGui::TableNextColumn(); ImGui::TextUnformatted(s.key_on ? "on" : "-");
             ImGui::TableNextColumn(); ImGui::TextUnformatted(kPhase[s.eg_phase & 3]);
             ImGui::TableNextColumn(); ImGui::Text("%u", s.eg_level);
             ImGui::TableNextColumn(); ImGui::TextUnformatted(s.format ? "8-bit" : "16-bit");
             ImGui::TableNextColumn();
             {
-                const double hz = std::ldexp(44100.0 * (1.0 + s.freq_num / 1024.0), s.octave);
-                ImGui::Text("%.0f", hz);
+                ImGui::Text("%.0f", se_scsp_voice_hz(&s));
             }
             ImGui::TableNextColumn(); ImGui::Text("%.1f", -0.375 * s.total_level);
             ImGui::TableNextColumn();

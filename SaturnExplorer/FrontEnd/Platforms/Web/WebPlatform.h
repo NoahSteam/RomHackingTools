@@ -68,7 +68,6 @@ public:
     // failed to init (headless host) — HasAudio() then returns false.
     bool HasAudio() override { return mAudioOk; }
     bool PlayAudio(const int16_t* pcm, size_t frames, int sampleRate, int channels) override;
-    void StopAudio() override;
 
 private:
     SDL_Window*   mWindow  = nullptr;

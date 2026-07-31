@@ -280,8 +280,7 @@ public:
         const se_scsp_slot& s = sl[slot];
         if (outRate)
         {
-            *outRate = static_cast<uint32_t>(
-                std::ldexp(44100.0 * (1.0 + s.freq_num / 1024.0), s.octave));
+            *outRate = static_cast<uint32_t>(se_scsp_voice_hz(&s));
         }
         const std::vector<uint8_t>& ram = mSnapshot.SoundRam();
         if (ram.empty() || s.loop_end == 0)

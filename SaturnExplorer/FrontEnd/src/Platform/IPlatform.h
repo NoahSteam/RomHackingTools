@@ -22,6 +22,12 @@ struct PlatformConfig
 // GPU texture the panels draw with ImGui::Image. 0 means "no texture".
 using TextureHandle = ImTextureID;
 
+// Sensible bounds for an audio sample rate. Clamped before opening a device so a
+// garbage slot pitch (or an odd emulator value) can't ask the backend for an
+// absurd rate. Shared by the decode path and every PlayAudio implementation.
+constexpr int kAudioMinRate = 2000;
+constexpr int kAudioMaxRate = 192000;
+
 class IPlatform
 {
 public:
@@ -131,7 +137,6 @@ public:
         (void)pcm; (void)frames; (void)sampleRate; (void)channels;
         return false;   // no audio output in this build
     }
-    virtual void StopAudio() {}
 };
 
 }  // namespace sfe

@@ -394,6 +394,16 @@ typedef struct se_scsp_slot {
     uint8_t  ar, d1r, d2r, rr, dl;  /* envelope rates + decay level (detail row) */
 } se_scsp_slot;
 
+/* A voice's natural playback rate in Hz from OCT/FNS: 44100 * (1 + FNS/1024) * 2^OCT. The
+ * single source of truth so the panel's displayed pitch and the Play/Export rate can't drift.
+ * Kept dependency-free (no <math.h>): OCT is a small signed exponent, so shift the base. */
+static inline double se_scsp_voice_hz(const se_scsp_slot* s)
+{
+    const double base = 44100.0 * (1.0 + (double)s->freq_num / 1024.0);
+    const int oct = s->octave;
+    return (oct >= 0) ? base * (double)(1 << oct) : base / (double)(1 << (-oct));
+}
+
 typedef struct se_config {
     uint32_t abi_version;    /* set to SE_ABI_VERSION by the host */
     uint32_t reserved;
