@@ -134,6 +134,13 @@ se_result   se_get_system_status(se_context* ctx, se_system_status* out);
 se_result   se_get_sh2_regs(se_context* ctx, int cpu, se_sh2_regs* out);
 int         se_has_sh2_regs(se_context* ctx);
 
+/* --- SCSP voices / "Sound" panel (live sources only; requires SE_CAP_SCSP_SLOTS).
+   se_scsp_slot_count returns how many voices the loaded source provided (0 or 32,
+   0 when unavailable). se_get_scsp_slots copies up to SE_SCSP_SLOT_COUNT decoded
+   voices into 'out' and returns the number written. --- */
+int         se_scsp_slot_count(se_context* ctx);
+int         se_get_scsp_slots(se_context* ctx, se_scsp_slot out[SE_SCSP_SLOT_COUNT]);
+
 /* --- Frame control (live sources only; requires SE_CAP_FRAME_STEP) ---
    se_supports_frame_control returns 1 when the source can pause/step (so the
    host can enable those toolbar buttons). pause halts the emulator after the

@@ -130,6 +130,17 @@ bool HardwareSnapshot::Capture(const se_data_source& dataSource)
         }
     }
 
+    // Decoded SCSP voices (live driver only; empty on savestates).
+    mScspSlots.clear();
+    if ((dataSource.capabilities & SE_CAP_SCSP_SLOTS) && dataSource.read_scsp_slots)
+    {
+        se_scsp_slot tmp[SE_SCSP_SLOT_COUNT] = {};
+        int n = dataSource.read_scsp_slots(dataSource.user, tmp);
+        if (n < 0) n = 0;
+        if (n > SE_SCSP_SLOT_COUNT) n = SE_SCSP_SLOT_COUNT;
+        mScspSlots.assign(tmp, tmp + n);
+    }
+
     // CRAM color mode from VDP2 RAMCTL (offset 0x0E), bits 12-13.
     mCramMode = SE_CRAM_RGB555_1024;
     if (mbHasVdp2Regs)

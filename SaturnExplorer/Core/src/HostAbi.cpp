@@ -320,6 +320,20 @@ int se_has_sh2_regs(se_context* ctx)
     return (Impl(ctx)->HasSh2Regs(0) || Impl(ctx)->HasSh2Regs(1)) ? 1 : 0;
 }
 
+int se_scsp_slot_count(se_context* ctx)
+{
+    return ctx ? Impl(ctx)->ScspSlotCount() : 0;
+}
+
+int se_get_scsp_slots(se_context* ctx, se_scsp_slot out[SE_SCSP_SLOT_COUNT])
+{
+    if (!ctx || !out)
+    {
+        return 0;
+    }
+    return Impl(ctx)->GetScspSlots(out);
+}
+
 /* --- Frame control --- */
 int se_supports_frame_control(se_context* ctx)
 {

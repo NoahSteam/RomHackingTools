@@ -367,6 +367,33 @@ typedef struct se_sh2_regs {
     uint32_t macl;
 } se_sh2_regs;
 
+/* One SCSP sound voice ("slot"), decoded. The Saturn's SCSP has 32 of these. This is a
+ * canonical, emulator-agnostic view: the live driver's emulator glue fills it from that
+ * emulator's own decoded slot struct, because the "currently sounding" signals (eg_phase,
+ * eg_level, cur_addr) do not exist in the raw SCSP registers. Powers the Sound panel and
+ * per-voice sample Play/Export. */
+#define SE_SCSP_SLOT_COUNT 32
+typedef struct se_scsp_slot {
+    uint8_t  key_on;        /* keyed on (KYONB) */
+    uint8_t  active;        /* keyed on AND envelope not fully released (audibly playing) */
+    uint8_t  eg_phase;      /* 0 attack, 1 decay1, 2 decay2, 3 release */
+    uint8_t  format;        /* 0 = 16-bit PCM, 1 = 8-bit PCM (Saturn SCSP has no ADPCM) */
+    uint8_t  loop_mode;     /* 0 none, 1 forward, 2 reverse, 3 alternating (LPCTL) */
+    int8_t   octave;        /* OCT, signed -8..+7 */
+    uint16_t eg_level;      /* current envelope level (emulator scale; 0 = loudest) */
+    uint16_t freq_num;      /* FNS (10-bit); pitch = 44100*(1+FNS/1024)*2^OCT */
+    uint32_t start_addr;    /* SA: byte offset of the sample in sound RAM */
+    uint32_t loop_start;    /* LSA: loop start, in samples relative to start_addr */
+    uint32_t loop_end;      /* LEA: loop/sample end, in samples relative to start_addr */
+    uint32_t cur_addr;      /* current playback position, in samples (live) */
+    uint8_t  total_level;   /* TL: attenuation, 0 = loudest */
+    uint8_t  direct_level;  /* DISDL: direct send to the DAC (0-7) */
+    uint8_t  direct_pan;    /* DIPAN: direct pan (5-bit) */
+    uint8_t  effect_level;  /* EFSDL: DSP/effect send (0-7) */
+    uint8_t  effect_pan;    /* EFPAN: effect pan (5-bit) */
+    uint8_t  ar, d1r, d2r, rr, dl;  /* envelope rates + decay level (detail row) */
+} se_scsp_slot;
+
 typedef struct se_config {
     uint32_t abi_version;    /* set to SE_ABI_VERSION by the host */
     uint32_t reserved;

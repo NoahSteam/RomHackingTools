@@ -53,8 +53,9 @@ enum {
     SE_CAP_VDP1_FB     = 1u << 11,  /* raw VDP1 frame buffer (se_read_vram VDP1_FB) */
     SE_CAP_SH2_REGS    = 1u << 12,  /* full SH-2 master/slave register file (Assembly) */
     SE_CAP_MEM_WRITE   = 1u << 13,  /* write-back to work RAM (Hex Editor edits persist) */
-    SE_CAP_SOUND_RAM   = 1u << 14   /* SCSP sound RAM read (se_read_vram SOUND_RAM); write
+    SE_CAP_SOUND_RAM   = 1u << 14,  /* SCSP sound RAM read (se_read_vram SOUND_RAM); write
                                      * when write_sound_ram is also supplied */
+    SE_CAP_SCSP_SLOTS  = 1u << 15   /* decoded SCSP voice/slot state (Sound panel) */
     /* Reserved for a future live driver: SE_CAP_BREAKPOINTS ("Break on Read"). */
 };
 

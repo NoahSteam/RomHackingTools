@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cfloat>
+#include <cmath>
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>
@@ -277,6 +278,7 @@ const std::vector<App::PanelInfo>& App::PanelList()
         {"actions",         "Tracepoints",        &Panels::actions},
         {"callStack",       "Call Stack",         &Panels::callStack},
         {"breakpoints",     "Breakpoints",        &Panels::breakpoints},
+        {"sound",           "Sound (SCSP)",       &Panels::sound},
     };
     return kList;
 }
@@ -986,6 +988,7 @@ void App::BuildUI(IPlatform& platform)
     if (mPanels.actions)         DrawActions();
     if (mPanels.callStack)       DrawCallStack();
     if (mPanels.breakpoints)     DrawBreakpoints();
+    if (mPanels.sound)           DrawSound();
 
     // Game-data-directory modal + texture search results (both floating, drawn last
     // so they overlay the docked panels).
@@ -5449,6 +5452,103 @@ void App::DrawRegisters()
             }
             ImGui::EndTabBar();
         }
+    }
+    ImGui::End();
+}
+
+// The "Sound (SCSP)" panel: one row per SCSP voice, showing what's playing (envelope phase +
+// level), the sample (format, addresses, loop), pitch, volume and pan. Fed by the live driver's
+// decoded 32-slot block (v14); empty on savestates / a server without the sound tap. Per-voice
+// Play/Export land in later stages. Each SA cell cross-links to the Sound RAM hex tab.
+void App::DrawSound()
+{
+    if (!ImGui::Begin("Sound (SCSP)"))
+    {
+        ImGui::End();
+        return;
+    }
+
+    se_scsp_slot slots[SE_SCSP_SLOT_COUNT];
+    const int n = mbHasData ? se_get_scsp_slots(mContext, slots) : 0;
+    if (n <= 0)
+    {
+        ImGui::TextWrapped(
+            "No SCSP voice data. Connect to a live emulator built with the v14 sound tap "
+            "(on Mednafen the SsDbgScspSlots accessor must be wired to the SCSP slot array). "
+            "Savestates don't carry live voice state.");
+        ImGui::End();
+        return;
+    }
+
+    int active = 0;
+    for (int i = 0; i < n; ++i)
+        if (slots[i].active) ++active;
+    ImGui::Text("%d / %d voices sounding", active, n);
+    ImGui::SameLine();
+    ImGui::TextDisabled("(each voice is a mono channel; stereo comes from pan)");
+    ImGui::Separator();
+
+    static const char* kPhase[] = { "ATK", "DEC1", "DEC2", "REL" };
+    static const char* kLoop[]  = { "none", "fwd", "rev", "alt" };
+
+    const ImGuiTableFlags flags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
+                                  ImGuiTableFlags_ScrollY | ImGuiTableFlags_ScrollX |
+                                  ImGuiTableFlags_Resizable;
+    if (ImGui::BeginTable("scspslots", 14, flags))
+    {
+        ImGui::TableSetupScrollFreeze(1, 1);
+        const char* cols[] = { "#", "On", "Phase", "EG", "Fmt", "Freq", "TL",
+                               "Pan", "Dir", "FX", "Loop", "SA", "LSA", "LEA" };
+        for (const char* c : cols) ImGui::TableSetupColumn(c);
+        ImGui::TableHeadersRow();
+
+        for (int i = 0; i < n; ++i)
+        {
+            const se_scsp_slot& s = slots[i];
+            const bool dim = !s.active;
+            if (dim)
+                ImGui::PushStyleColor(ImGuiCol_Text,
+                                      ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn(); ImGui::Text("%d", i);
+            ImGui::TableNextColumn(); ImGui::TextUnformatted(s.key_on ? "on" : "-");
+            ImGui::TableNextColumn(); ImGui::TextUnformatted(kPhase[s.eg_phase & 3]);
+            ImGui::TableNextColumn(); ImGui::Text("%u", s.eg_level);
+            ImGui::TableNextColumn(); ImGui::TextUnformatted(s.format ? "8-bit" : "16-bit");
+            ImGui::TableNextColumn();
+            {
+                const double hz = std::ldexp(44100.0 * (1.0 + s.freq_num / 1024.0), s.octave);
+                ImGui::Text("%.0f", hz);
+            }
+            ImGui::TableNextColumn(); ImGui::Text("%.1f", -0.375 * s.total_level);
+            ImGui::TableNextColumn();
+            {
+                const int amt = s.direct_pan & 0x0F;
+                if (amt == 0) ImGui::TextUnformatted("C");
+                else ImGui::Text("%c%d", (s.direct_pan & 0x10) ? 'R' : 'L', amt);
+            }
+            ImGui::TableNextColumn(); ImGui::Text("%u", s.direct_level);
+            ImGui::TableNextColumn(); ImGui::Text("%u", s.effect_level);
+            ImGui::TableNextColumn(); ImGui::TextUnformatted(kLoop[s.loop_mode & 3]);
+            ImGui::TableNextColumn();
+            {
+                char lbl[24];
+                std::snprintf(lbl, sizeof(lbl), "%05X##sa%d", s.start_addr, i);
+                if (ImGui::Selectable(lbl))
+                {
+                    mHexEditor.GoTo(0x05A00000u + s.start_addr);
+                    mPanels.hexEditor = true;
+                }
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Jump to this voice's sample in the Sound RAM tab");
+            }
+            ImGui::TableNextColumn(); ImGui::Text("%X", s.loop_start);
+            ImGui::TableNextColumn(); ImGui::Text("%X", s.loop_end);
+
+            if (dim) ImGui::PopStyleColor();
+        }
+        ImGui::EndTable();
     }
     ImGui::End();
 }

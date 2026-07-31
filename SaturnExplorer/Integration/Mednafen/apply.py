@@ -112,6 +112,33 @@ extern "C" const unsigned short* SsDbgSoundRam(void) {
       into that file next to the SCSP instance and return its 262144-word RAM buffer. */
    return (const unsigned short*)0;
 }
+extern "C" int SsDbgScspSlots(unsigned char* out) {
+   /* Decoded SCSP voices (v14) for the Sound panel + per-voice Play/Export. Serialize the 32
+      decoded slots into 'out' as 36-byte little-endian records (layout in SeLiveProtocol.h) and
+      return the count (32). The LIVE fields (EnvLevel/EnvPhase/CurrentAddr) are what tell the
+      panel which voices are actually sounding — they exist only in the decoded slot struct.
+      STUB by default (returns 0 -> empty Sound panel). TODO(mednafen): confirm the global
+      SS_SCSP instance symbol + SS_SCSP_Slot field spellings on your tree, then enable the
+      template below (a small helper writes each field at its documented offset):
+
+      // static void W32(unsigned char* p, unsigned int v){p[0]=v;p[1]=v>>8;p[2]=v>>16;p[3]=v>>24;}
+      // extern SS_SCSP SCSP;                     // the real global SCSP instance
+      // const SS_SCSP_Slot* sl = SCSP.Slots;     // 32 decoded voices
+      // for (int i=0;i<32;++i){ unsigned char* r=out+i*36; const SS_SCSP_Slot& s=sl[i];
+      //   int released = (s.EnvPhase==3) && (s.EnvLevel>=0x3FF);
+      //   r[0]=s.KeyBit?1:0; r[1]=(s.KeyBit&&!released)?1:0; r[2]=(unsigned char)s.EnvPhase;
+      //   r[3]=s.WF8Bit?1:0; r[4]=(unsigned char)s.LoopMode; r[5]=(unsigned char)(signed char)s.Octave;
+      //   r[6]=(unsigned char)s.TotalLevel;
+      //   r[7]=(unsigned char)s.DirectLevel; r[8]=(unsigned char)s.DirectPan;   // derive from DISDL/DIPAN or DirectVolume[2]
+      //   r[9]=(unsigned char)s.EffectLevel; r[10]=(unsigned char)s.EffectPan;
+      //   r[11]=(unsigned char)s.EnvRates[0]; r[12]=(unsigned char)s.EnvRates[1];
+      //   r[13]=(unsigned char)s.EnvRates[2]; r[14]=(unsigned char)s.EnvRates[3]; r[15]=(unsigned char)s.DecayLevel;
+      //   r[16]=s.EnvLevel&0xFF; r[17]=s.EnvLevel>>8; r[18]=s.FreqNum&0xFF; r[19]=s.FreqNum>>8;
+      //   W32(r+20,s.StartAddr); W32(r+24,s.LoopStart); W32(r+28,s.LoopEnd); W32(r+32,s.CurrentAddr); }
+      // return 32; */
+   (void)out;
+   return 0;
+}
 /* Controller input injection (v7). SMPC_SetInjectedInput stores the translated pad
    state atomically; SMPC_UpdateInput overlays it after Mednafen refreshes host input. */
 extern "C" void SsDbgSetPad(unsigned int port, unsigned int buttons) {

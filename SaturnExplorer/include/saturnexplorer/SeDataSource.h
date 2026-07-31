@@ -53,6 +53,11 @@ typedef struct se_data_source {
            se_sh2_cpu (0 master, 1 slave). Return 1 on success, 0 if unavailable. */
     int (*read_sh2_regs)(void* user, int cpu, se_sh2_regs* out);
 
+    /* --- Optional: decoded SCSP voice state (SE_CAP_SCSP_SLOTS). Fills up to
+           SE_SCSP_SLOT_COUNT entries; returns the number written (0 if unavailable).
+           Powers the Sound panel + per-voice sample Play/Export. May be NULL. */
+    int (*read_scsp_slots)(void* user, se_scsp_slot out[SE_SCSP_SLOT_COUNT]);
+
     /* --- Optional: reference framebuffer (SE_CAP_FRAMEBUFFER) for diffing vs
            the core's own software render. NOT the primary display path — the
            core composites the frame itself from VRAM (see ARCHITECTURE.md §7). */

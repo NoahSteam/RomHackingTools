@@ -55,7 +55,7 @@
 #define SE_LIVE_MAGIC1 'E'
 #define SE_LIVE_MAGIC2 'X'
 #define SE_LIVE_MAGIC3 'P'
-#define SE_LIVE_VERSION      13u   /* +v13 sound-RAM trailing block / WRS write verb */
+#define SE_LIVE_VERSION      14u   /* +v14 decoded SCSP slot block (Sound panel) */
 /* Command verbs are exactly 4 bytes; a request is a verb + 4-byte LE argument. */
 #define SE_LIVE_REQUEST      "GET\n"   /* back-compat alias for the snapshot verb */
 #define SE_LIVE_VERB_GET     "GET\n"
@@ -165,6 +165,23 @@
  * (not an 11th header section) so the 48-byte header and all existing sections are
  * unchanged. Poke it back with the WRS verb. */
 #define SE_LIVE_SOUND_RAM_LEN 0x80000u   /* 512 KiB */
+
+/* SCSP slot block (v14+): a trailing block after the v13 sound-RAM block, version-gated the
+ * same way (read only when the server reports version >= 14). Carries the 32 SCSP voices as
+ * DECODED state — the emulator glue fills each record from its own decoded slot struct,
+ * because the "currently sounding" fields (eg_phase/eg_level/cur_addr) are not in the raw
+ * SCSP registers. Layout: u32 length (LE); when length == SE_LIVE_SCSP_BLOCK_LEN it is
+ * followed by SE_LIVE_SCSP_SLOTS records, else length 0 (no records). Each record is
+ * SE_LIVE_SCSP_SLOT_LEN bytes, packed little-endian in this fixed order (matching the client
+ * parser and the se_scsp_slot ABI struct):
+ *   +0  key_on(u8) +1 active(u8) +2 eg_phase(u8) +3 format(u8) +4 loop_mode(u8) +5 octave(s8)
+ *   +6  total_level(u8) +7 direct_level(u8) +8 direct_pan(u8) +9 effect_level(u8)
+ *   +10 effect_pan(u8) +11 ar(u8) +12 d1r(u8) +13 d2r(u8) +14 rr(u8) +15 dl(u8)
+ *   +16 eg_level(u16) +18 freq_num(u16)
+ *   +20 start_addr(u32) +24 loop_start(u32) +28 loop_end(u32) +32 cur_addr(u32)  = 36 bytes */
+#define SE_LIVE_SCSP_SLOTS     32u
+#define SE_LIVE_SCSP_SLOT_LEN  36u
+#define SE_LIVE_SCSP_BLOCK_LEN (SE_LIVE_SCSP_SLOTS * SE_LIVE_SCSP_SLOT_LEN)   /* 1152 */
 
 /* Breakpoint descriptor flag bits (v5+). */
 #define SE_LIVE_BP_KIND_MASK  0x3u   /* 0 exec, 1 read, 2 write, 3 read/write */

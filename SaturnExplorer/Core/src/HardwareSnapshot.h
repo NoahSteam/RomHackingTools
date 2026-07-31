@@ -69,6 +69,9 @@ public:
     bool HasSh2Regs(int cpu) const { return cpu >= 0 && cpu < 2 && mbHasSh2[cpu]; }
     const se_sh2_regs& Sh2Regs(int cpu) const { return mSh2[cpu & 1]; }
 
+    // Decoded SCSP voices (empty unless the source supplied SE_CAP_SCSP_SLOTS).
+    const std::vector<se_scsp_slot>& ScspSlots() const { return mScspSlots; }
+
     // One register as a big-endian 16-bit value, addressed by its hardware byte
     // offset (e.g. VDP2 0x0E for RAMCTL). Returns 0 if unavailable.
     uint16_t Vdp1Reg(uint32_t hwOffset) const
@@ -93,6 +96,7 @@ private:
     std::vector<uint16_t> mVdp1Regs;   // indexed by (hw offset >> 1)
     std::vector<uint16_t> mVdp2Regs;
     se_sh2_regs           mSh2[2] = {};   // [0] master, [1] slave
+    std::vector<se_scsp_slot> mScspSlots; // decoded SCSP voices (SE_CAP_SCSP_SLOTS)
     se_cram_mode          mCramMode = SE_CRAM_RGB555_1024;
     bool mbHasVdp1Regs = false;
     bool mbHasVdp2Regs = false;

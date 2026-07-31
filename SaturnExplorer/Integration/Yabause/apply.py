@@ -148,7 +148,7 @@ EDITS = [
      "   SH2GetRegisters(SSH2, &se_ssh2);\n"
      "   SeExportSnapshot(Vdp1Ram, Vdp2Ram, Vdp2ColorRam, Vdp2Regs,\n"
      "                    Vdp1Regs, LowWram, HighWram, VIDSoftGetVdp1FrameBuffer(),\n"
-     "                    &se_msh2, &se_ssh2, SoundRam);\n",
+     "                    &se_msh2, &se_ssh2, SoundRam, (void*)0 /* SCSP slots: Yabause TODO */);\n",
      "SeExportSnapshot("),
 
     # --- vidsoft.c: expose the displayed VDP1 frame buffer (it's file-static). ---

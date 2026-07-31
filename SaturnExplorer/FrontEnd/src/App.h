@@ -102,6 +102,7 @@ private:
     void DrawActions();                     // Tracepoints management table
     void DrawCallStack();                   // per-CPU call stack (paused-state workspace)
     void DrawBreakpoints();                 // Visual Studio-style breakpoint list
+    void DrawSound();                       // SCSP voices: who's playing + Play/Export
     void RebuildCallStack();                // reconstruct the shown CPU's stack
     // Sync the workspace to a selected call-stack frame (Assembly + Hex + focus).
     void GoToFrame(const CallStackFrame& fr);
@@ -336,6 +337,7 @@ private:
         bool actions = true;      // Tracepoints / execution-actions management table
         bool callStack = true;    // per-CPU call stack (paused-state workspace)
         bool breakpoints = true;  // Visual Studio-style breakpoint list (tabs by Call Stack)
+        bool sound = true;        // SCSP voices (live): who's playing + Play/Export
     };
     Panels           mPanels;
 

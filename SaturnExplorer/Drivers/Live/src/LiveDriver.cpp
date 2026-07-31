@@ -42,6 +42,7 @@ struct LiveSnapshot
     std::vector<uint8_t> wramHigh;   // 0x06000000, 1 MiB (normalized to big-endian)
     std::vector<uint8_t> vdp1Fb;     // VDP1 frame buffer (drawn output)
     std::vector<uint8_t> soundRam;   // SCSP sound RAM (v13+; empty if server predates it)
+    std::vector<se_scsp_slot> scspSlots;  // decoded SCSP voices (v14+; empty otherwise)
     se_sh2_regs          sh2[2] = {};        // [0] master, [1] slave (v5+)
     bool                 hasSh2[2] = { false, false };
     bool                 valid = false;
@@ -480,6 +481,37 @@ bool ReadSnapshot(Conn& c, const char* verb, int32_t arg,
         if (n && !ConnReadFull(c, snap.soundRam.data(), n)) return false;
     }
 
+    // v14+ trailing block: decoded SCSP voices. u32 length, then SE_LIVE_SCSP_SLOTS fixed
+    // records (little-endian, layout per SeLiveProtocol.h). Read only when server speaks v14.
+    if (version >= 14u)
+    {
+        uint8_t lenb[4];
+        if (!ConnReadFull(c, lenb, 4)) return false;
+        const uint32_t n = Rd32LE(lenb);
+        if (n != 0u && n != SE_LIVE_SCSP_BLOCK_LEN) return false;   // desync guard
+        snap.scspSlots.clear();
+        if (n)
+        {
+            std::vector<uint8_t> blk(n);
+            if (!ConnReadFull(c, blk.data(), n)) return false;
+            snap.scspSlots.resize(SE_LIVE_SCSP_SLOTS);
+            for (uint32_t i = 0; i < SE_LIVE_SCSP_SLOTS; ++i)
+            {
+                const uint8_t* r = blk.data() + i * SE_LIVE_SCSP_SLOT_LEN;
+                se_scsp_slot& s = snap.scspSlots[i];
+                s.key_on = r[0]; s.active = r[1]; s.eg_phase = r[2]; s.format = r[3];
+                s.loop_mode = r[4]; s.octave = static_cast<int8_t>(r[5]);
+                s.total_level = r[6]; s.direct_level = r[7]; s.direct_pan = r[8];
+                s.effect_level = r[9]; s.effect_pan = r[10];
+                s.ar = r[11]; s.d1r = r[12]; s.d2r = r[13]; s.rr = r[14]; s.dl = r[15];
+                s.eg_level = static_cast<uint16_t>(r[16] | (r[17] << 8));
+                s.freq_num = static_cast<uint16_t>(r[18] | (r[19] << 8));
+                s.start_addr = Rd32LE(r + 20); s.loop_start = Rd32LE(r + 24);
+                s.loop_end = Rd32LE(r + 28);   s.cur_addr = Rd32LE(r + 32);
+            }
+        }
+    }
+
     // Control block: paused (u32 LE) + frame (u64 LE), then (v5+) stop reason/cpu/pc.
     // Absent fields default to 0 on older servers.
     outPaused = ct >= 4 && Rd32LE(ctl.data()) != 0;
@@ -723,6 +755,14 @@ size_t CbSoundRam(void* u, uint32_t off, void* dst, size_t size)
     LiveState* st = St(u); std::lock_guard<std::mutex> lk(st->mtx);
     return CopyRegion(st->front.soundRam, off, dst, size);
 }
+int CbScspSlots(void* u, se_scsp_slot out[SE_SCSP_SLOT_COUNT])
+{
+    LiveState* st = St(u); std::lock_guard<std::mutex> lk(st->mtx);
+    int n = static_cast<int>(st->front.scspSlots.size());
+    if (n > SE_SCSP_SLOT_COUNT) n = SE_SCSP_SLOT_COUNT;
+    for (int i = 0; i < n; ++i) out[i] = st->front.scspSlots[i];
+    return n;
+}
 
 size_t CbWriteMainRam(void* u, uint32_t address, const void* src, size_t size)
 {
@@ -875,7 +915,7 @@ extern "C" se_result se_live_open(const char* endpoint, se_data_source* out)
     out->capabilities = SE_CAP_VDP1_VRAM | SE_CAP_VDP2_VRAM | SE_CAP_CRAM |
                         SE_CAP_VDP1_REGS | SE_CAP_VDP2_REGS | SE_CAP_MAIN_RAM |
                         SE_CAP_VDP1_FB | SE_CAP_FRAME_STEP | SE_CAP_SH2_REGS |
-                        SE_CAP_MEM_WRITE | SE_CAP_SOUND_RAM;
+                        SE_CAP_MEM_WRITE | SE_CAP_SOUND_RAM | SE_CAP_SCSP_SLOTS;
     out->user = st;
     out->read_vdp1_vram = CbVdp1Vram;
     out->read_vdp2_vram = CbVdp2Vram;
@@ -884,6 +924,7 @@ extern "C" se_result se_live_open(const char* endpoint, se_data_source* out)
     out->write_main_ram = CbWriteMainRam;
     out->read_sound_ram = CbSoundRam;
     out->write_sound_ram = CbWriteSoundRam;
+    out->read_scsp_slots = CbScspSlots;
     out->read_vdp1_fb   = CbVdp1Fb;
     out->read_vdp1_reg  = CbVdp1Reg;
     out->read_vdp2_reg  = CbVdp2Reg;

@@ -60,12 +60,16 @@ int SeExportInit(void);
  * program + PCM tone bank + sequences); NULL zero-fills the sound-RAM block. It is the
  * last argument so older call sites that don't pass it still compile if recompiled — but
  * the wire block is only served when the argument is non-NULL. */
+/* 'scsp_slots_block' (v14+) is SE_LIVE_SCSP_BLOCK_LEN bytes: 32 decoded SCSP voice records
+ * in the fixed little-endian layout documented in SeLiveProtocol.h. The emulator glue builds
+ * it from its own decoded slot struct. NULL omits the slot block (the Sound panel then shows
+ * no voices). Last arg for the same forward-compat reason as sound_ram_512k. */
 void SeExportSnapshot(const void* vdp1_vram_512k, const void* vdp2_vram_512k,
                       const void* cram_4k, const void* vdp2_regs_struct_288,
                       const void* vdp1_regs_struct, const void* wram_low_1m,
                       const void* wram_high_1m, const void* vdp1_fb_256k,
                       const void* msh2_regs, const void* ssh2_regs,
-                      const void* sound_ram_512k);
+                      const void* sound_ram_512k, const void* scsp_slots_block);
 
 /* Wire the module's breakpoint installers to Yabause's SH2 breakpoint API (v5+).
  * 'add' installs one execution breakpoint: add(cpu, address) with cpu 0 = master,

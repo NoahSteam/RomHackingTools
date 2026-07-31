@@ -257,6 +257,16 @@ public:
     uint16_t Vdp1Register(uint32_t hw) const { return mSnapshot.Vdp1Reg(hw); }
     uint16_t Vdp2Register(uint32_t hw) const { return mSnapshot.Vdp2Reg(hw); }
 
+    int ScspSlotCount() const { return static_cast<int>(mSnapshot.ScspSlots().size()); }
+    int GetScspSlots(se_scsp_slot out[SE_SCSP_SLOT_COUNT]) const
+    {
+        const std::vector<se_scsp_slot>& v = mSnapshot.ScspSlots();
+        int n = static_cast<int>(v.size());
+        if (n > SE_SCSP_SLOT_COUNT) n = SE_SCSP_SLOT_COUNT;
+        for (int i = 0; i < n; ++i) out[i] = v[i];
+        return n;
+    }
+
     // Copy raw bytes from a memory region (as the core holds them: Saturn-native
     // big-endian). Returns the number of bytes copied (clamped to the region).
     size_t ReadVram(se_vram_kind kind, uint32_t offset, void* dst, size_t size) const

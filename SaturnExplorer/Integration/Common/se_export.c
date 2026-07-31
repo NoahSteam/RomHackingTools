@@ -42,6 +42,7 @@
 #define SE_CT SE_LIVE_CONTROL_LEN
 #define SE_SH SE_LIVE_SH2_LEN
 #define SE_SR SE_LIVE_SOUND_RAM_LEN
+#define SE_SL SE_LIVE_SCSP_BLOCK_LEN
 
 typedef struct
 {
@@ -56,6 +57,8 @@ typedef struct
     unsigned char sh[SE_SH];   /* SH-2 state: master then slave sh2regs_struct */
     unsigned char sr[SE_SR];   /* SCSP sound RAM (v13); has_sr gates the wire block */
     int has_sr;                /* 1 if this frame captured sound RAM */
+    unsigned char sl[SE_SL];   /* decoded SCSP slot block (v14); has_sl gates the wire block */
+    int has_sl;                /* 1 if this frame captured SCSP slots */
     int valid;
 } SeFrame;
 
@@ -478,7 +481,7 @@ void SeExportSnapshot(const void* vdp1, const void* vdp2, const void* cram,
                       const void* vdp2struct, const void* vdp1struct,
                       const void* wramLow, const void* wramHigh,
                       const void* vdp1fb, const void* msh2, const void* ssh2,
-                      const void* soundRam)
+                      const void* soundRam, const void* scspSlots)
 {
     if (!sBack)
     {
@@ -501,6 +504,9 @@ void SeExportSnapshot(const void* vdp1, const void* vdp2, const void* cram,
     /* SCSP sound RAM (v13): only served on the wire when the emulator supplied it. */
     if (soundRam) { memcpy(sBack->sr, soundRam, SE_SR); sBack->has_sr = 1; }
     else          { memset(sBack->sr, 0, SE_SR);        sBack->has_sr = 0; }
+    /* Decoded SCSP slots (v14): the glue hands over the pre-serialized 1152-byte block. */
+    if (scspSlots) { memcpy(sBack->sl, scspSlots, SE_SL); sBack->has_sl = 1; }
+    else           { memset(sBack->sl, 0, SE_SL);         sBack->has_sl = 0; }
     sBack->valid = 1;
     {
         SeFrame* tmp = sFront; sFront = sBack; sBack = tmp;   /* swap */
@@ -819,6 +825,16 @@ static void SeServeClient(int cl, SeFrame* snap)
             SeWr32(lenb, len);
             if (SeSend(cl, lenb, 4) != 0) return;
             if (len && SeSend(cl, snap->sr, SE_SR) != 0) return;
+        }
+
+        /* v14 trailing block: decoded SCSP slots. u32 length (SE_LIVE_SCSP_BLOCK_LEN when the
+         * glue supplied it, else 0), then that many pre-serialized bytes. */
+        {
+            unsigned char lenb[4];
+            unsigned int len = snap->has_sl ? (unsigned int)SE_SL : 0u;
+            SeWr32(lenb, len);
+            if (SeSend(cl, lenb, 4) != 0) return;
+            if (len && SeSend(cl, snap->sl, SE_SL) != 0) return;
         }
     }
 }
