@@ -451,6 +451,11 @@ std::vector<uint8_t> BuildWav(const int16_t* pcm, size_t frames, int sampleRate,
     return w;
 }
 
+// Which side an SCSP DIPAN/EFPAN register leans to. Bit 4 attenuates the RIGHT channel
+// (SDL_PAN_ToVolume, and outlr[0]/[1] are L/R), so a set bit means louder on the LEFT.
+// Single source of the convention for every Sound-panel pan cell.
+char PanSide(uint8_t pan) { return (pan & 0x10) ? 'L' : 'R'; }
+
 // Fit a w×h image into 'avail' preserving aspect (scale by the tighter axis, with a
 // >0 guard) and center it in both axes; returns the top-left draw origin (relative to
 // the current cursor) and writes the chosen scale. Shared by the image panels that
@@ -5585,7 +5590,7 @@ void App::DrawSound(IPlatform& platform)
                 ImGui::SetTooltip("Envelope  AR %u  D1R %u  D2R %u  RR %u  DL %u\n"
                                   "Effect pan %c%d\nCurrent addr %05X",
                                   s.ar, s.d1r, s.d2r, s.rr, s.dl,
-                                  (s.effect_pan & 0x10) ? 'L' : 'R', s.effect_pan & 0x0F,
+                                  PanSide(s.effect_pan), s.effect_pan & 0x0F,
                                   s.cur_addr);
             ImGui::TableNextColumn(); ImGui::TextUnformatted(s.key_on ? "on" : "-");
             ImGui::TableNextColumn(); ImGui::TextUnformatted(kPhase[s.eg_phase & 3]);
@@ -5600,9 +5605,7 @@ void App::DrawSound(IPlatform& platform)
             {
                 const int amt = s.direct_pan & 0x0F;
                 if (amt == 0) ImGui::TextUnformatted("C");
-                // DIPAN bit 4 attenuates the RIGHT channel (SDL_PAN_ToVolume), so a set bit
-                // means the voice is louder on the LEFT.
-                else ImGui::Text("%c%d", (s.direct_pan & 0x10) ? 'L' : 'R', amt);
+                else ImGui::Text("%c%d", PanSide(s.direct_pan), amt);
             }
             ImGui::TableNextColumn(); ImGui::Text("%u", s.direct_level);
             ImGui::TableNextColumn(); ImGui::Text("%u", s.effect_level);

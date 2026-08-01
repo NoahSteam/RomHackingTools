@@ -237,6 +237,11 @@ SCSP_SLOT_METHOD = """\
  // that reveal which voices are actually sounding. Read-only.
  int SeDbgReadSlots(unsigned char* out)
  {
+  // Little-endian u32 store (the u8 casts below truncate on their own, so no masks needed).
+  auto w32 = [](unsigned char* p, uint32 v) {
+   p[0] = (unsigned char)v;         p[1] = (unsigned char)(v >> 8);
+   p[2] = (unsigned char)(v >> 16); p[3] = (unsigned char)(v >> 24);
+  };
   for(unsigned i = 0; i < 32; i++)
   {
    unsigned char* r = out + i * 36;
@@ -249,25 +254,20 @@ SCSP_SLOT_METHOD = """\
    r[2]  = (unsigned char)s.EnvPhase;
    r[3]  = s.WF8Bit ? 1 : 0;
    r[4]  = (unsigned char)s.LoopMode;
-   r[5]  = (unsigned char)(signed char)oct;
+   r[5]  = (unsigned char)oct;                         // sign-extended above; cast keeps low 8 bits
    r[6]  = (unsigned char)s.TotalLevel;
-   r[7]  = (unsigned char)((pv >> 13) & 0x7);         // DISDL (direct send level)
-   r[8]  = (unsigned char)((pv >>  8) & 0x1F);        // DIPAN (direct pan)
-   r[9]  = (unsigned char)((pv >>  5) & 0x7);         // EFSDL (effect send level)
-   r[10] = (unsigned char)((pv >>  0) & 0x1F);        // EFPAN (effect pan)
+   r[7]  = (unsigned char)((pv >> 13) & 0x7);          // DISDL (direct send level)
+   r[8]  = (unsigned char)((pv >>  8) & 0x1F);         // DIPAN (direct pan)
+   r[9]  = (unsigned char)((pv >>  5) & 0x7);          // EFSDL (effect send level)
+   r[10] = (unsigned char)(pv & 0x1F);                 // EFPAN (effect pan)
    r[11] = s.EnvRates[0]; r[12] = s.EnvRates[1];
    r[13] = s.EnvRates[2]; r[14] = s.EnvRates[3];
    r[15] = (unsigned char)s.DecayLevel;
-   r[16] = (unsigned char)(s.EnvLevel & 0xFF); r[17] = (unsigned char)((s.EnvLevel >> 8) & 0xFF);
-   r[18] = (unsigned char)(s.FreqNum  & 0xFF); r[19] = (unsigned char)((s.FreqNum  >> 8) & 0xFF);
+   r[16] = (unsigned char)s.EnvLevel; r[17] = (unsigned char)(s.EnvLevel >> 8);
+   r[18] = (unsigned char)s.FreqNum;  r[19] = (unsigned char)(s.FreqNum  >> 8);
    /* StartAddr is a byte offset into sound RAM; LoopStart/LoopEnd/CurrentAddr are in samples. */
-   const uint32 words[4] = { s.StartAddr, s.LoopStart, s.LoopEnd, s.CurrentAddr };
-   for(unsigned k = 0; k < 4; k++)
-   {
-    unsigned char* p = r + 20 + k * 4; const uint32 v = words[k];
-    p[0] = (unsigned char)v;         p[1] = (unsigned char)(v >> 8);
-    p[2] = (unsigned char)(v >> 16); p[3] = (unsigned char)(v >> 24);
-   }
+   w32(r + 20, s.StartAddr); w32(r + 24, s.LoopStart);
+   w32(r + 28, s.LoopEnd);   w32(r + 32, s.CurrentAddr);
   }
   return 32;
  }"""
@@ -575,17 +575,16 @@ def process_sound(src_dir, do_write):
     C-linkage accessors are appended to sound.cpp."""
     notes = ["sound.cpp / scsp.h:"]
     h_path = os.path.join(src_dir, "scsp.h")
-    if not os.path.isfile(h_path):
-        return notes + ["  MISSING  scsp.h"]
+    cpp_path = os.path.join(src_dir, "sound.cpp")
+    if not os.path.isfile(h_path) or not os.path.isfile(cpp_path):
+        return notes + ["  MISSING  scsp.h or sound.cpp"]
+
     text = original = open(h_path, encoding="utf-8", errors="surrogateescape").read()
     text, n = apply_anchored(text, SCSP_RAMPTR_ANCHOR, SCSP_SLOT_METHOD, "SeDbgReadSlots")
     notes.append(n)
     if do_write and text != original:
         open(h_path, "w", encoding="utf-8", errors="surrogateescape").write(text)
 
-    cpp_path = os.path.join(src_dir, "sound.cpp")
-    if not os.path.isfile(cpp_path):
-        return notes + ["  MISSING  sound.cpp"]
     text = original = open(cpp_path, encoding="utf-8", errors="surrogateescape").read()
     text, n = apply_append(text, SOUND_ACCESSORS, "SsDbgScspSlots")
     notes.append(n)
