@@ -2854,7 +2854,8 @@ void App::DrawWorldView(IPlatform& platform)
                 img.pixels = m3dBuffer.data();
                 img.capacity = m3dBuffer.size();
                 if (se_render_3d(mContext, &cam, &mRenderOpts, &img, &needed) == SE_OK &&
-                    m3dTexture != 0)
+                    m3dTexture != 0 &&
+                    m3dBuffer.size() >= static_cast<size_t>(vw) * static_cast<size_t>(vh) * 4u)
                 {
                     platform.UpdateTexture(m3dTexture, m3dBuffer.data(), vw, vh);
                 }
@@ -3559,6 +3560,7 @@ void App::DrawDataDirModal(IPlatform& platform)
 // type and the set of files/directories to search, then runs the search on Save & Search.
 void App::DrawSearchOptionsModal(IPlatform& platform)
 {
+    const bool justOpened = mOpenSearchOptions;
     if (mOpenSearchOptions)
     {
         ImGui::OpenPopup("Search Options");
@@ -3595,6 +3597,7 @@ void App::DrawSearchOptionsModal(IPlatform& platform)
     ImGui::Spacing();
     ImGui::TextUnformatted("Search in these files / folders:");
     static int selPath = -1;
+    if (justOpened) selPath = -1;   // don't carry a stale row selection into a fresh open
     ImGui::SetNextItemWidth(-FLT_MIN);
     if (ImGui::BeginListBox("##searchpaths", ImVec2(0, ImGui::GetTextLineHeightWithSpacing() * 5)))
     {
