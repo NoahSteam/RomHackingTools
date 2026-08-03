@@ -19,6 +19,33 @@ bool BeU32(const std::vector<uint8_t>& b, size_t off, uint32_t& out)
           (uint32_t(b[off + 2]) << 8) | uint32_t(b[off + 3]);
     return true;
 }
+
+// Parse one "<hex-addr> <name>" line: the address (optionally 0x-prefixed) then the name,
+// separated by any run of spaces or tabs. Leading whitespace, blank lines, and ';' / '#' /
+// '//' comments are tolerated so hand-made lists and simple map dumps load. Returns false
+// when the line carries no address+name. Shared by FunctionNames::Load and ::Import.
+bool ParseSymbolLine(const std::string& line, uint32_t& addr, std::string& name)
+{
+    auto space = [](char c) { return std::isspace(static_cast<unsigned char>(c)) != 0; };
+    size_t b = 0;
+    while (b < line.size() && space(line[b])) ++b;
+    if (b >= line.size()) return false;
+    if (line[b] == ';' || line[b] == '#' ||
+        (line[b] == '/' && b + 1 < line.size() && line[b + 1] == '/')) return false;
+
+    char* end = nullptr;
+    const unsigned long a = std::strtoul(line.c_str() + b, &end, 16);
+    if (end == line.c_str() + b) return false;   // no hex digits where the address should be
+
+    size_t np = static_cast<size_t>(end - line.c_str());
+    while (np < line.size() && space(line[np])) ++np;   // skip to the name
+    std::string nm = line.substr(np);
+    while (!nm.empty() && space(nm.back())) nm.pop_back();   // trim CR / trailing ws
+    if (nm.empty()) return false;
+    addr = static_cast<uint32_t>(a);
+    name = std::move(nm);
+    return true;
+}
 }  // namespace
 
 bool IsPlausibleCodeAddress(uint32_t addr)
@@ -70,16 +97,10 @@ void FunctionNames::Load()
     std::ifstream f(kFunctionFile);
     if (!f) return;
     mNames.clear();
-    std::string line;
+    std::string line, name;
+    uint32_t addr = 0;
     while (std::getline(f, line))
-    {
-        while (!line.empty() && (line.back() == '\r' || line.back() == '\n')) line.pop_back();
-        unsigned addr = 0;
-        const size_t sp = line.find(' ');
-        if (sp == std::string::npos || std::sscanf(line.c_str(), "%x", &addr) != 1) continue;
-        std::string name = line.substr(sp + 1);
-        if (!name.empty()) mNames[addr] = name;
-    }
+        if (ParseSymbolLine(line, addr, name)) mNames[addr] = name;
 }
 
 void FunctionNames::Save() const
@@ -94,30 +115,11 @@ size_t FunctionNames::Import(const char* path)
 {
     std::ifstream f(path);
     if (!f) return 0;
-    auto space = [](char c) { return std::isspace(static_cast<unsigned char>(c)) != 0; };
     size_t n = 0;
-    std::string line;
+    std::string line, name;
+    uint32_t addr = 0;
     while (std::getline(f, line))
-    {
-        // Each line is "<hex-addr> <name>" — the address (optionally 0x-prefixed) then the
-        // name, separated by any run of spaces or tabs. Leading whitespace, blank lines, and
-        // ';' / '#' / '//' comments are tolerated so hand-made lists and simple map dumps load.
-        size_t b = 0;
-        while (b < line.size() && space(line[b])) ++b;
-        if (b >= line.size()) continue;
-        if (line[b] == ';' || line[b] == '#' ||
-            (line[b] == '/' && b + 1 < line.size() && line[b + 1] == '/')) continue;
-
-        char* end = nullptr;
-        const unsigned long addr = std::strtoul(line.c_str() + b, &end, 16);
-        if (end == line.c_str() + b) continue;   // no hex digits where the address should be
-
-        size_t np = static_cast<size_t>(end - line.c_str());
-        while (np < line.size() && space(line[np])) ++np;   // skip to the name
-        std::string name = line.substr(np);
-        while (!name.empty() && space(name.back())) name.pop_back();   // trim CR / trailing ws
-        if (!name.empty()) { mNames[static_cast<uint32_t>(addr)] = name; ++n; }
-    }
+        if (ParseSymbolLine(line, addr, name)) { mNames[addr] = name; ++n; }
     return n;
 }
 
