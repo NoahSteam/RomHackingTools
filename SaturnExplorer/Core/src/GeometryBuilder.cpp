@@ -176,6 +176,24 @@ void GeometryBuilder::Build(const std::vector<uint8_t>& vram, Vdp1Scene& out)
             D = { float(xd + originX), float(yd + originY) };
         }
 
+        // Reject an implausibly large quad. When VDP1 is snapshotted live (mid CPU update of
+        // the command table), a command can be read half-stale: one corner still holds a
+        // garbage coordinate, so the quad spans far off-screen. The rasterizer then clamps
+        // that box to the screen edge and fills a big solid rectangle — the "random colored
+        // square" artifact. No legitimate VDP1 primitive spans more than the framebuffer
+        // (<=1024 even in hi-res), so drop anything far beyond that instead of painting it.
+        {
+            const float bx0 = std::min({ A.x, B.x, C.x, D.x });
+            const float bx1 = std::max({ A.x, B.x, C.x, D.x });
+            const float by0 = std::min({ A.y, B.y, C.y, D.y });
+            const float by1 = std::max({ A.y, B.y, C.y, D.y });
+            constexpr float kMaxSpan = 2048.0f;   // > any VDP1 resolution, with margin
+            if (bx1 - bx0 > kMaxSpan || by1 - by0 > kMaxSpan)
+            {
+                continue;   // torn/garbage command — skip it
+            }
+        }
+
         const se_color_mode colorMode = static_cast<se_color_mode>((pmod >> 3) & 0x7);
         const uint16_t spd = (pmod >> 6) & 0x1;
         const uint8_t flipX = (ctrl >> 4) & 0x1;
