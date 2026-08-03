@@ -125,6 +125,14 @@ if(BUILD_TESTING)
     )
     target_include_directories(SaturnExplorerConditionEvalTests PRIVATE FrontEnd/src)
     add_test(NAME SaturnExplorerConditionEvalTests COMMAND SaturnExplorerConditionEvalTests)
+
+    add_executable(SaturnExplorerMemorySearchTests
+        FrontEnd/tests/MemorySearchTests.cpp
+        FrontEnd/src/Debug/MemorySearch.cpp
+    )
+    target_include_directories(SaturnExplorerMemorySearchTests
+        PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    add_test(NAME SaturnExplorerMemorySearchTests COMMAND SaturnExplorerMemorySearchTests)
 endif()
 
 # ---------------------------------------------------------------------------
@@ -223,6 +231,7 @@ if(WIN32)
         FrontEnd/src/Debug/ShiftJis.cpp
         FrontEnd/src/Debug/FormatString.cpp
         FrontEnd/src/Debug/ConditionEval.cpp
+        FrontEnd/src/Debug/MemorySearch.cpp
         FrontEnd/src/Debug/ExecutionActions.cpp
         FrontEnd/src/Debug/CallStack.cpp
         FrontEnd/src/FrameRecorder.cpp
@@ -285,6 +294,7 @@ elseif(EMSCRIPTEN)
         FrontEnd/src/Debug/ShiftJis.cpp
         FrontEnd/src/Debug/FormatString.cpp
         FrontEnd/src/Debug/ConditionEval.cpp
+        FrontEnd/src/Debug/MemorySearch.cpp
         FrontEnd/src/Debug/ExecutionActions.cpp
         FrontEnd/src/Debug/CallStack.cpp
         FrontEnd/src/UpdateChecker.cpp
@@ -362,6 +372,7 @@ else()
             FrontEnd/src/Debug/ShiftJis.cpp
             FrontEnd/src/Debug/FormatString.cpp
             FrontEnd/src/Debug/ConditionEval.cpp
+            FrontEnd/src/Debug/MemorySearch.cpp
             FrontEnd/src/Debug/ExecutionActions.cpp
             FrontEnd/src/Debug/CallStack.cpp
             FrontEnd/src/FrameRecorder.cpp

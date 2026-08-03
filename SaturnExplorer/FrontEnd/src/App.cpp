@@ -279,6 +279,7 @@ const std::vector<App::PanelInfo>& App::PanelList()
         {"actions",         "Tracepoints",        &Panels::actions},
         {"callStack",       "Call Stack",         &Panels::callStack},
         {"breakpoints",     "Breakpoints",        &Panels::breakpoints},
+        {"ramSearch",       "RAM Search",         &Panels::ramSearch},
         {"sound",           "Sound (SCSP)",       &Panels::sound},
     };
     return kList;
@@ -1033,6 +1034,7 @@ void App::BuildUI(IPlatform& platform)
     if (mPanels.actions)         DrawActions();
     if (mPanels.callStack)       DrawCallStack();
     if (mPanels.breakpoints)     DrawBreakpoints();
+    if (mPanels.ramSearch)       DrawRamSearch();
     if (mPanels.sound)           DrawSound(platform);
 
     // Game-data-directory modal + texture search results (both floating, drawn last
@@ -2004,6 +2006,192 @@ void App::DrawBreakpoints()
         ImGui::EndTable();
     }
     if (toRemove) { mBreakpoints.Remove(toRemove); mBpCondErrors.erase(toRemove); }
+
+    ImGui::End();
+}
+
+// Cheat-Engine-style live RAM value scanner. First Scan reads work RAM and keeps every
+// value matching the chosen predicate; Next Scan narrows the survivors by how they changed
+// (increased / decreased / unchanged / changed) or by a new value — so you find a stat by
+// searching for its value, nudging it in-game, and rescanning. Values shown are captured at
+// the last scan (no per-frame memory reads); rescan to refresh them.
+void App::DrawRamSearch()
+{
+    if (!ImGui::Begin("RAM Search")) { ImGui::End(); return; }
+
+    if (!mbHasData)
+    {
+        ImGui::TextDisabled("No data loaded.");
+        ImGui::End();
+        return;
+    }
+
+    struct TypeOpt { const char* label; SearchType st; WatchType wt; };
+    static const TypeOpt kTypes[] = {
+        {"8-bit unsigned",  SearchType::U8,  WatchType::U8},
+        {"8-bit signed",    SearchType::S8,  WatchType::S8},
+        {"16-bit unsigned", SearchType::U16, WatchType::U16},
+        {"16-bit signed",   SearchType::S16, WatchType::S16},
+        {"32-bit unsigned", SearchType::U32, WatchType::U32},
+        {"32-bit signed",   SearchType::S32, WatchType::S32},
+    };
+    struct CmpOpt { const char* label; SearchCompare cmp; bool operand; };
+    static const CmpOpt kCmps[] = {
+        {"equal to",      SearchCompare::Equal,     true},
+        {"not equal to",  SearchCompare::NotEqual,  true},
+        {"greater than",  SearchCompare::Greater,   true},
+        {"less than",     SearchCompare::Less,      true},
+        {"increased",     SearchCompare::Increased, false},
+        {"decreased",     SearchCompare::Decreased, false},
+        {"unchanged",     SearchCompare::Unchanged, false},
+        {"changed",       SearchCompare::Changed,   false},
+        {"unknown / any", SearchCompare::Unknown,   false},
+    };
+    const int nType = (int)(sizeof(kTypes) / sizeof(kTypes[0]));
+    const int nCmp  = (int)(sizeof(kCmps)  / sizeof(kCmps[0]));
+    mRamSearchType = mRamSearchType < 0 ? 0 : (mRamSearchType >= nType ? nType - 1 : mRamSearchType);
+    mRamSearchCmp  = mRamSearchCmp  < 0 ? 0 : (mRamSearchCmp  >= nCmp  ? nCmp  - 1 : mRamSearchCmp);
+
+    const bool active = mRamSearch.Active();
+
+    // Value type is locked once a scan is running (the surviving set is width-specific).
+    ImGui::BeginDisabled(active);
+    ImGui::SetNextItemWidth(160.0f);
+    if (ImGui::BeginCombo("Value type", kTypes[mRamSearchType].label))
+    {
+        for (int i = 0; i < nType; ++i)
+            if (ImGui::Selectable(kTypes[i].label, i == mRamSearchType)) mRamSearchType = i;
+        ImGui::EndCombo();
+    }
+    ImGui::SameLine();
+    ImGui::Checkbox("Low WRAM", &mRamSearchLow);
+    ImGui::SameLine();
+    ImGui::Checkbox("High WRAM", &mRamSearchHigh);
+    ImGui::EndDisabled();
+
+    ImGui::SetNextItemWidth(160.0f);
+    if (ImGui::BeginCombo("Compare", kCmps[mRamSearchCmp].label))
+    {
+        for (int i = 0; i < nCmp; ++i)
+        {
+            // On a first scan, only absolute compares make sense (no previous value yet).
+            const bool ok = active || !MemorySearch::IsRelative(kCmps[i].cmp) ||
+                            kCmps[i].cmp == SearchCompare::Unknown;
+            ImGui::BeginDisabled(!ok);
+            if (ImGui::Selectable(kCmps[i].label, i == mRamSearchCmp)) mRamSearchCmp = i;
+            ImGui::EndDisabled();
+        }
+        ImGui::EndCombo();
+    }
+    const bool usesOperand = kCmps[mRamSearchCmp].operand;
+    ImGui::SameLine();
+    ImGui::BeginDisabled(!usesOperand);
+    ImGui::SetNextItemWidth(140.0f);
+    ImGui::InputTextWithHint("##val", "value (e.g. 100 or 0x64)",
+                             mRamSearchValue, sizeof(mRamSearchValue));
+    ImGui::EndDisabled();
+
+    // Parse the operand (decimal, or 0x… hex; sign per the C parser). Unused for relative
+    // compares. strtoll spans the u32 range, so 0xFFFFFFFF parses without overflow.
+    int64_t operand = 0;
+    if (usesOperand) operand = std::strtoll(mRamSearchValue, nullptr, 0);
+
+    auto buildRegions = [&]() {
+        std::vector<SearchRegion> regions;
+        if (mRamSearchLow)  regions.push_back({0x00200000u, kWramSize});
+        if (mRamSearchHigh) regions.push_back({0x06000000u, kWramSize});
+        return regions;
+    };
+
+    ImGui::Separator();
+    if (!active)
+    {
+        const bool canScan = mRamSearchLow || mRamSearchHigh;
+        ImGui::BeginDisabled(!canScan);
+        if (ImGui::Button("First Scan"))
+        {
+            const std::size_t n = mRamSearch.First(mMemBackend, buildRegions(),
+                                                   kTypes[mRamSearchType].st,
+                                                   kCmps[mRamSearchCmp].cmp, operand);
+            char buf[64];
+            std::snprintf(buf, sizeof(buf), "%zu match%s", n, n == 1 ? "" : "es");
+            mRamSearchStatus = buf;
+        }
+        ImGui::EndDisabled();
+        if (!canScan) { ImGui::SameLine(); ImGui::TextDisabled("(pick a region)"); }
+    }
+    else
+    {
+        if (ImGui::Button("Next Scan"))
+        {
+            const std::size_t n = mRamSearch.Next(mMemBackend, kCmps[mRamSearchCmp].cmp, operand);
+            char buf[64];
+            std::snprintf(buf, sizeof(buf), "%zu match%s", n, n == 1 ? "" : "es");
+            mRamSearchStatus = buf;
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("New Search")) { mRamSearch.Reset(); mRamSearchStatus.clear(); }
+    }
+    if (!mRamSearchStatus.empty())
+    {
+        ImGui::SameLine();
+        ImGui::TextUnformatted(mRamSearchStatus.c_str());
+    }
+
+    // Results. Values are the last-scan snapshot; the table caps how many rows it draws so a
+    // broad first scan (millions of candidates) never tries to lay out every one.
+    const auto& hits = mRamSearch.Hits();
+    if (!hits.empty())
+    {
+        constexpr int kMaxRows = 5000;
+        const int shown = (int)(hits.size() < kMaxRows ? hits.size() : kMaxRows);
+        if ((int)hits.size() > kMaxRows)
+            ImGui::TextDisabled("Showing first %d of %zu — narrow further to see them all.",
+                                kMaxRows, hits.size());
+        const bool sgn = kTypes[mRamSearchType].st == SearchType::S8 ||
+                         kTypes[mRamSearchType].st == SearchType::S16 ||
+                         kTypes[mRamSearchType].st == SearchType::S32;
+        if (ImGui::BeginTable("ramhits", 3,
+                              ImGuiTableFlags_ScrollY | ImGuiTableFlags_RowBg |
+                              ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_Resizable))
+        {
+            ImGui::TableSetupScrollFreeze(0, 1);
+            ImGui::TableSetupColumn("Address", ImGuiTableColumnFlags_WidthFixed, 90.0f);
+            ImGui::TableSetupColumn("Value",   ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableSetupColumn("",        ImGuiTableColumnFlags_WidthFixed, 90.0f);
+            ImGui::TableHeadersRow();
+            ImGuiListClipper clip;
+            clip.Begin(shown);
+            while (clip.Step())
+            {
+                for (int row = clip.DisplayStart; row < clip.DisplayEnd; ++row)
+                {
+                    const SearchHit& h = hits[row];
+                    ImGui::TableNextRow();
+                    ImGui::PushID(row);
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%08X", h.addr);
+                    ImGui::TableNextColumn();
+                    if (sgn) ImGui::Text("%lld", (long long)h.value);
+                    else     ImGui::Text("%llu  (0x%llX)", (unsigned long long)h.value,
+                                         (unsigned long long)h.value);
+                    ImGui::TableNextColumn();
+                    if (ImGui::SmallButton("Hex"))
+                    { mHexEditor.GoTo(h.addr); mPanels.hexEditor = true; }
+                    ImGui::SameLine();
+                    if (ImGui::SmallButton("Watch"))
+                    {
+                        char nm[32]; std::snprintf(nm, sizeof(nm), "ram_%08X", h.addr);
+                        char ex[16]; std::snprintf(ex, sizeof(ex), "%08X", h.addr);
+                        mWatchPanel.AddWatch(nm, ex, kTypes[mRamSearchType].wt);
+                        mPanels.watch = true;
+                    }
+                    ImGui::PopID();
+                }
+            }
+            ImGui::EndTable();
+        }
+    }
 
     ImGui::End();
 }

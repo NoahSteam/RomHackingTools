@@ -27,6 +27,7 @@
 #include "Debug/ExecutionActions.h"  // tracepoints / execution-action store
 #include "Debug/CallStack.h"      // per-CPU call stack (paused-state workspace)
 #include "Debug/MemoryBackend.h"
+#include "Debug/MemorySearch.h"   // Cheat-Engine-style live RAM value scanner
 #include "Debug/WatchList.h"
 #include "Debug/BreakpointManager.h"
 
@@ -103,6 +104,7 @@ private:
     void DrawActions();                     // Tracepoints management table
     void DrawCallStack();                   // per-CPU call stack (paused-state workspace)
     void DrawBreakpoints();                 // Visual Studio-style breakpoint list
+    void DrawRamSearch();                   // Cheat-Engine-style live RAM value scanner
     void DrawSound(IPlatform& platform);    // SCSP voices: who's playing + Play/Export
     void ExportSound(IPlatform& platform, int slot);   // decode voice 'slot' -> save .wav
     void PlaySound(IPlatform& platform, int slot);     // decode voice 'slot' -> preview audio
@@ -226,6 +228,15 @@ private:
     // Cached per-BP guard validation error (id -> message), refreshed only when the
     // condition text is edited so the Breakpoints panel isn't re-parsing every frame.
     std::unordered_map<uint64_t, std::string> mBpCondErrors;
+
+    // RAM Search (Cheat-Engine-style value scanner) — engine + its panel's UI state.
+    MemorySearch     mRamSearch;
+    int              mRamSearchType = 2;      // index into the panel's type list (default u16)
+    int              mRamSearchCmp = 0;       // index into the panel's compare list (default =)
+    char             mRamSearchValue[32] = "";// operand entry (decimal, or 0x… hex)
+    bool             mRamSearchLow = true;     // scan Low work RAM (0x00200000)
+    bool             mRamSearchHigh = true;    // scan High work RAM (0x06000000)
+    std::string      mRamSearchStatus;         // last scan result summary
     AssemblyPanel            mAssemblyPanel;
     HexEditorPanel           mHexEditor;
     ControllerPanel          mController;
@@ -358,6 +369,7 @@ private:
         bool callStack = true;    // per-CPU call stack (paused-state workspace)
         bool breakpoints = true;  // Visual Studio-style breakpoint list (tabs by Call Stack)
         bool sound = true;        // SCSP voices (live): who's playing + Play/Export
+        bool ramSearch = true;    // Cheat-Engine-style live RAM value scanner
     };
     Panels           mPanels;
 
