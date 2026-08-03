@@ -128,6 +128,10 @@ struct LiveState
     // edge (back to 0) is always delivered.
     std::atomic<uint32_t> inputState{0};
     uint32_t              lastInputSent = 0;   // poll-thread-local (guarded by ctlMtx use)
+    // Gap-free cursor: the frame number of the last snapshot we received. A GET carries it
+    // as its arg so the server hands back the next unseen frame (server keeps an N-deep
+    // ring); the emulator can run ahead without us silently skipping frames. Poll-thread-local.
+    uint32_t              lastSeenFrame = 0;
     // Pending tracepoint-set sync (v8+): the UI thread stashes the 16-byte descriptor
     // blob and bumps the dirty flag; the poll thread ships it with a TRC command. Same
     // pattern as breakpoints. Guarded by ctlMtx.
@@ -632,6 +636,13 @@ void PollLoop(LiveState* st)
             }
         }
 
+        // A plain GET carries our last-seen frame so the server serves the next unseen one
+        // (gap-free). Control verbs keep their own arg and just return the latest snapshot.
+        if (verb == SE_LIVE_VERB_GET)
+        {
+            arg = static_cast<int32_t>(st->lastSeenFrame);
+        }
+
         LiveSnapshot snap;
         bool paused = false;
         uint64_t frame = 0;
@@ -675,6 +686,7 @@ void PollLoop(LiveState* st)
             for (std::string& s : logLines) st->logLines.push_back(std::move(s));
             while (st->logLines.size() > 4096) st->logLines.pop_front();   // bound the queue
         }
+        st->lastSeenFrame = static_cast<uint32_t>(frame);   // advance the gap-free cursor
         st->paused.store(paused);
         st->frameNumber.store(frame);
         st->serverVersion.store(sver);

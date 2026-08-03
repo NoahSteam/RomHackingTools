@@ -58,6 +58,11 @@
 #define SE_LIVE_VERSION      14u   /* +v14 decoded SCSP slot block (Sound panel) */
 /* Command verbs are exactly 4 bytes; a request is a verb + 4-byte LE argument. */
 #define SE_LIVE_REQUEST      "GET\n"   /* back-compat alias for the snapshot verb */
+/* Snapshot request. arg = the client's last-seen frame number: the server keeps an N-deep
+ * ring of completed frames and replies with the OLDEST frame newer than 'arg' (gap-free, so
+ * a client that keeps up never skips a frame), or the latest when arg is 0 or the client has
+ * caught up. The reply's control block reports the frame number actually served. arg 0 (an
+ * older client that doesn't track frames) always gets the latest — the original behavior. */
 #define SE_LIVE_VERB_GET     "GET\n"
 #define SE_LIVE_VERB_PAUSE   "PAU\n"
 #define SE_LIVE_VERB_RESUME  "RUN\n"

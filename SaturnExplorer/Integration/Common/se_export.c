@@ -87,8 +87,15 @@ static void SeBuildVdp1Image(const unsigned char* dst_img, const void* vdp1struc
     }
 }
 
-static SeFrame* sFront;
-static SeFrame* sBack;
+/* N-frame ring of completed snapshots. The producer (SeExportSnapshot, CPU thread) writes
+ * the next slot each frame and tags it with a monotonic frame number; a GET consumer asks
+ * for the oldest frame newer than the one it last saw (gap-free) or, by default, the latest.
+ * Fixed N keeps memory bounded. Was a 2-buffer front/back swap; widened so a client that
+ * momentarily can't keep up doesn't miss transient one-frame states. */
+#define SE_RING 4
+static SeFrame* sRing[SE_RING];
+static uint64_t sRingFrame[SE_RING];   /* frame number stored in each slot (0 = empty) */
+static int      sRingWrite;            /* next slot the producer will write */
 static volatile int sRunning;
 
 /* ---- Frame-control state (see SeExportGateFrame + the "PAU/RUN/STP" verbs). ----
@@ -483,11 +490,13 @@ void SeExportSnapshot(const void* vdp1, const void* vdp2, const void* cram,
                       const void* vdp1fb, const void* msh2, const void* ssh2,
                       const void* soundRam, const void* scspSlots)
 {
-    if (!sBack)
+    if (!sRing[0])
     {
         return;
     }
     SE_LOCK();
+    {
+    SeFrame* sBack = sRing[sRingWrite];   /* the slot this frame lands in */
     if (vdp1) memcpy(sBack->v1, vdp1, SE_V1); else memset(sBack->v1, 0, SE_V1);
     if (vdp2) memcpy(sBack->v2, vdp2, SE_V2); else memset(sBack->v2, 0, SE_V2);
     if (cram) memcpy(sBack->cr, cram, SE_CR); else memset(sBack->cr, 0, SE_CR);
@@ -508,10 +517,9 @@ void SeExportSnapshot(const void* vdp1, const void* vdp2, const void* cram,
     if (scspSlots) { memcpy(sBack->sl, scspSlots, SE_SL); sBack->has_sl = 1; }
     else           { memset(sBack->sl, 0, SE_SL);         sBack->has_sl = 0; }
     sBack->valid = 1;
-    {
-        SeFrame* tmp = sFront; sFront = sBack; sBack = tmp;   /* swap */
+    sRingFrame[sRingWrite] = ++sFrameNo;               /* tag this slot with its frame number */
+    sRingWrite = (sRingWrite + 1) % SE_RING;           /* advance (wraps, overwriting oldest) */
     }
-    ++sFrameNo;   /* one completed emulated frame */
     SE_UNLOCK();
 }
 
@@ -679,12 +687,34 @@ static void SeServeClient(int cl, SeFrame* snap)
             if (sSetTracepoints) sSetTracepoints(keep, tbuf);
         }
 
+        /* Which ring frame to serve: a GET carries the client's last-seen frame (arg) and
+         * gets the OLDEST frame newer than it (gap-free, so no emulated frame is skipped
+         * while the client keeps up); arg 0, or any non-GET request, gets the latest. */
         unsigned char ctl[SE_CT];
+        unsigned int lastSeen = 0;
+        uint64_t served;
+        if (memcmp(req, SE_LIVE_VERB_GET, SE_LIVE_VERB_LEN) == 0) lastSeen = arg;
         SE_LOCK();
-        memcpy(snap, sFront, sizeof(SeFrame));
+        {
+            int slot = (sRingWrite + SE_RING - 1) % SE_RING;   /* latest by default */
+            if (lastSeen != 0)
+            {
+                int i, found = -1;
+                uint32_t best = 0;
+                for (i = 0; i < SE_RING; ++i)
+                {
+                    uint32_t f = (uint32_t)sRingFrame[i];
+                    if (sRingFrame[i] != 0 && f > lastSeen && (found < 0 || f < best))
+                    { best = f; found = i; }
+                }
+                if (found >= 0) slot = found;   /* oldest unseen; else stay on latest */
+            }
+            memcpy(snap, sRing[slot], sizeof(SeFrame));
+            served = sRingFrame[slot];
+        }
         SeWr32(ctl, (unsigned int)(sPaused ? 1 : 0));
-        SeWr32(ctl + 4, (unsigned int)(sFrameNo & 0xFFFFFFFFu));
-        SeWr32(ctl + 8, (unsigned int)((sFrameNo >> 32) & 0xFFFFFFFFu));
+        SeWr32(ctl + 4, (unsigned int)(served & 0xFFFFFFFFu));
+        SeWr32(ctl + 8, (unsigned int)((served >> 32) & 0xFFFFFFFFu));
         SeWr32(ctl + 12, sStopReason);
         SeWr32(ctl + 16, sStopCpu);
         SeWr32(ctl + 20, sStopPc);
@@ -935,9 +965,16 @@ const char* SeExportTitleSuffix(const char* emu_name, const char* emu_rev)
 
 int SeExportInit(void)
 {
-    sFront = (SeFrame*)calloc(1, sizeof(SeFrame));
-    sBack  = (SeFrame*)calloc(1, sizeof(SeFrame));
-    if (!sFront || !sBack) { SeExportDeinit(); return -1; }
+    {
+        int i;
+        for (i = 0; i < SE_RING; ++i)
+        {
+            sRing[i] = (SeFrame*)calloc(1, sizeof(SeFrame));
+            sRingFrame[i] = 0;
+            if (!sRing[i]) { SeExportDeinit(); return -1; }
+        }
+    }
+    sRingWrite = 0;
     sPaused = 0; sStepBudget = 0; sFrameNo = 0;
     sStopReason = SE_LIVE_STOP_NONE; sStopCpu = 0; sStopPc = 0;
     sRunning = 1;
@@ -970,6 +1007,9 @@ void SeExportDeinit(void)
     pthread_join(sThread, NULL);
     if (sTcpThreadStarted) { pthread_join(sTcpThread, NULL); sTcpThreadStarted = 0; }
 #endif
-    free(sFront); sFront = NULL;
-    free(sBack);  sBack = NULL;
+    {
+        int i;
+        for (i = 0; i < SE_RING; ++i) { free(sRing[i]); sRing[i] = NULL; sRingFrame[i] = 0; }
+    }
+    sRingWrite = 0;
 }
