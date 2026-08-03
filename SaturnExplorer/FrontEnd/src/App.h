@@ -103,7 +103,7 @@ private:
     void SendInput(unsigned int mask);      // push a pad mask to the live emulator (on change)
     void DrawLog();                         // structured event log
     void DrawActions();                     // Tracepoints management table
-    void DrawCallStack();                   // per-CPU call stack (paused-state workspace)
+    void DrawCallStack(IPlatform& platform);// per-CPU call stack (paused-state workspace)
     void DrawBreakpoints();                 // Visual Studio-style breakpoint list
     void DrawRamSearch();                   // Cheat-Engine-style live RAM value scanner
     void DrawAccessLog();                   // "find what accesses this address"

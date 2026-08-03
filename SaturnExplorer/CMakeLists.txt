@@ -142,6 +142,14 @@ if(BUILD_TESTING)
     target_include_directories(SaturnExplorerAccessLogTests
         PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
     add_test(NAME SaturnExplorerAccessLogTests COMMAND SaturnExplorerAccessLogTests)
+
+    add_executable(SaturnExplorerFunctionNamesTests
+        FrontEnd/tests/FunctionNamesTests.cpp
+        FrontEnd/src/Debug/CallStack.cpp
+    )
+    target_include_directories(SaturnExplorerFunctionNamesTests
+        PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    add_test(NAME SaturnExplorerFunctionNamesTests COMMAND SaturnExplorerFunctionNamesTests)
 endif()
 
 # ---------------------------------------------------------------------------

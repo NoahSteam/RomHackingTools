@@ -1047,7 +1047,7 @@ void App::BuildUI(IPlatform& platform)
     SendInput(mController.FinalState());
     if (mPanels.log)             DrawLog();
     if (mPanels.actions)         DrawActions();
-    if (mPanels.callStack)       DrawCallStack();
+    if (mPanels.callStack)       DrawCallStack(platform);
     if (mPanels.breakpoints)     DrawBreakpoints();
     if (mPanels.ramSearch)       DrawRamSearch();
     if (mPanels.accessLog)       DrawAccessLog();
@@ -2405,7 +2405,7 @@ void App::GoToFrame(const CallStackFrame& fr)
 // frame to drive the rest of the workspace. This phase reconstructs heuristically from
 // the stack image (works on a savestate); the shadow stack (Phase 2/3) will supply
 // ● Confirmed frames over the wire.
-void App::DrawCallStack()
+void App::DrawCallStack(IPlatform& platform)
 {
     // Auto-surface when execution stops or a savestate loads (the rising edge of an
     // inspectable state), matching "the Call Stack should appear automatically".
@@ -2458,13 +2458,18 @@ void App::DrawCallStack()
     ImGui::SameLine();
     if (ImGui::SmallButton("Reconstruct")) mCallStackDirty = true;
     ImGui::SameLine();
-    if (ImGui::SmallButton("Load Symbols"))
+    if (ImGui::SmallButton("Load Symbols\xe2\x80\xa6"))
     {
-        const size_t n = mFunctionNames.Import("saturn_symbols.txt");
-        mLog.Info(n ? ("Imported " + std::to_string(n) + " symbols from saturn_symbols.txt")
-                    : std::string("No symbols found (saturn_symbols.txt)"));
+        std::string path;
+        if (platform.OpenFileDialogFiltered(path, "Symbol / map files", "txt,map,sym"))
+        {
+            const size_t n = mFunctionNames.Import(path.c_str());
+            if (n) mFunctionNames.Save();   // persist the merged names
+            mLog.Info(n ? ("Imported " + std::to_string(n) + " symbols from " + path)
+                        : std::string("No symbols found in " + path));
+        }
     }
-    ImGui::SetItemTooltip("Merge \"<hex-addr> <name>\" lines from saturn_symbols.txt");
+    ImGui::SetItemTooltip("Import a symbol / map file: \"<hex-addr> <name>\" per line");
 
     if (!showable)
     {
