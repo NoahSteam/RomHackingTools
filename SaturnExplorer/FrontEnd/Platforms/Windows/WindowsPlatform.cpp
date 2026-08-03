@@ -550,6 +550,9 @@ bool WindowsPlatform::HttpsGet(const std::string& url, const std::string& userAg
     HINTERNET session = ::WinHttpOpen(wagent.c_str(), WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
                                       WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
     if (!session) { out.ok = false; out.error = "WinHttpOpen failed."; return false; }
+    // Bound each phase (ms) so a stalled network can't hang the request for WinHTTP's ~60s
+    // default — matters because the update check may be left running when the app quits.
+    ::WinHttpSetTimeouts(session, 5000, 5000, 8000, 8000);
 
     bool ok = false;
     HINTERNET connect = ::WinHttpConnect(session, host, uc.nPort, 0);

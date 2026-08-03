@@ -3409,13 +3409,22 @@ void App::RunPendingSearch()
 void App::LaunchSearch(std::vector<std::string> roots, SearchCompression comp,
                        const std::string& scopeText)
 {
-    if (mSearchRunning.load())
-    {
-        return;   // one search at a time
-    }
     roots.erase(std::remove_if(roots.begin(), roots.end(),
                                [](const std::string& s) { return s.empty(); }),
                 roots.end());
+
+    if (mSearchRunning.load())
+    {
+        // A search is already running: cancel it and queue this one. PollSearchWorker starts
+        // the queued search the moment the old worker is reaped, so nothing is silently lost.
+        mQueuedRoots = std::move(roots);
+        mQueuedComp = comp;
+        mQueuedScope = scopeText;
+        mSearchQueued = true;
+        mSearchProgress.cancel.store(true);
+        mShowSearchResults = true;   // keep the results window up so the swap is visible
+        return;
+    }
 
     if (mPendingNeedle.empty() || roots.empty())
     {
@@ -3487,6 +3496,15 @@ void App::PollSearchWorker()
         }
         mSearchRunning.store(false);
         mSearchDone.store(false);
+
+        // If the user asked for another search while this one ran, start it now (the old
+        // worker is fully reaped, so LaunchSearch won't see mSearchRunning and will run).
+        if (mSearchQueued)
+        {
+            mSearchQueued = false;
+            LaunchSearch(std::move(mQueuedRoots), mQueuedComp, mQueuedScope);
+            mQueuedRoots.clear();
+        }
     }
 }
 

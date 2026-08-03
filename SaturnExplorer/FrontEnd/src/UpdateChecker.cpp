@@ -65,47 +65,50 @@ const char* UpdateChecker::BuildCommitShort() { return kBuildCommitShort; }
 
 UpdateChecker::~UpdateChecker()
 {
-    if (mThread.joinable()) mThread.join();
+    // Don't stall the app's exit on an in-flight HTTPS request. The worker writes only to the
+    // shared_ptr state it co-owns and to its own local HTTP handles, so detaching is safe —
+    // there is nothing of ours left for it to corrupt once we're gone.
+    if (mThread.joinable()) mThread.detach();
 }
 
 void UpdateChecker::Start(IPlatform& platform)
 {
     {
-        std::lock_guard<std::mutex> lock(mMutex);
-        if (mState == State::Checking) return;   // one in flight already
-        mState = State::Checking;
-        mMessage = "Checking GitHub for a newer build\xe2\x80\xa6";
-        mLatestShort.clear();
+        std::lock_guard<std::mutex> lock(mShared->mutex);
+        if (mShared->state == State::Checking) return;   // one in flight already
+        mShared->state = State::Checking;
+        mShared->message = "Checking GitHub for a newer build\xe2\x80\xa6";
+        mShared->latestShort.clear();
     }
-    if (mThread.joinable()) mThread.join();   // reap the previous run
-    mThread = std::thread(&UpdateChecker::Run, this, &platform);
+    if (mThread.joinable()) mThread.join();   // reap the previous (finished) run
+    mThread = std::thread(&UpdateChecker::Run, mShared, &platform);
 }
 
 UpdateChecker::State UpdateChecker::GetState() const
 {
-    std::lock_guard<std::mutex> lock(mMutex);
-    return mState;
+    std::lock_guard<std::mutex> lock(mShared->mutex);
+    return mShared->state;
 }
 
 std::string UpdateChecker::Message() const
 {
-    std::lock_guard<std::mutex> lock(mMutex);
-    return mMessage;
+    std::lock_guard<std::mutex> lock(mShared->mutex);
+    return mShared->message;
 }
 
 std::string UpdateChecker::LatestShort() const
 {
-    std::lock_guard<std::mutex> lock(mMutex);
-    return mLatestShort;
+    std::lock_guard<std::mutex> lock(mShared->mutex);
+    return mShared->latestShort;
 }
 
-void UpdateChecker::Run(UpdateChecker* self, IPlatform* platform)
+void UpdateChecker::Run(std::shared_ptr<Shared> shared, IPlatform* platform)
 {
-    auto finish = [self](State s, std::string msg, std::string latestShort = {}) {
-        std::lock_guard<std::mutex> lock(self->mMutex);
-        self->mState = s;
-        self->mMessage = std::move(msg);
-        self->mLatestShort = std::move(latestShort);
+    auto finish = [&shared](State s, std::string msg, std::string latestShort = {}) {
+        std::lock_guard<std::mutex> lock(shared->mutex);
+        shared->state = s;
+        shared->message = std::move(msg);
+        shared->latestShort = std::move(latestShort);
     };
 
     const std::string local = LocalCommitClean();

@@ -9,6 +9,7 @@
 #pragma once
 
 #include <atomic>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -47,13 +48,21 @@ public:
     static const char* BuildCommitShort();
 
 private:
-    static void Run(UpdateChecker* self, IPlatform* platform);
+    // The state the worker writes and the UI reads. Held by shared_ptr so the worker can
+    // finish (or be abandoned at shutdown) without touching a destroyed UpdateChecker — that
+    // is what lets the destructor detach instead of blocking the app's exit on a network call.
+    struct Shared
+    {
+        mutable std::mutex mutex;
+        State              state = State::Idle;
+        std::string        message;
+        std::string        latestShort;
+    };
 
-    mutable std::mutex mMutex;
-    State              mState = State::Idle;
-    std::string        mMessage;
-    std::string        mLatestShort;
-    std::thread        mThread;
+    static void Run(std::shared_ptr<Shared> shared, IPlatform* platform);
+
+    std::shared_ptr<Shared> mShared = std::make_shared<Shared>();
+    std::thread             mThread;
 };
 
 // Extract the top-level commit "sha" from GitHub's /commits/<ref> JSON. Returns the 40-char

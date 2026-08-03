@@ -324,6 +324,14 @@ private:
     std::atomic<bool>    mSearchDone{false};          // worker finished; results ready to reap
     std::string          mSearchScopeText;            // human description of what was searched
 
+    // "Start a new search while one is running" (Visual-Studio style): instead of dropping
+    // the request, we cancel the active worker and stash the new one here; PollSearchWorker
+    // launches it as soon as the old one is reaped.
+    bool                       mSearchQueued = false;
+    std::vector<std::string>   mQueuedRoots;
+    SearchCompression          mQueuedComp = SearchCompression::None;
+    std::string                mQueuedScope;
+
     // Per-panel visibility, toggled from the toolbar "Windows" menu. All shown by
     // default; a hidden panel simply isn't drawn (its dock tab disappears until
     // re-enabled). Session-only state — these reset to visible each launch.
