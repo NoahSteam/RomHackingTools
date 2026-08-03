@@ -811,10 +811,11 @@ void ControllerPanel::DrawRecording(IPlatform& platform)
     }
     ImGui::EndDisabled();
     ImGui::SameLine(); ImGui::Checkbox("Loop", &mPlaybackLoop);
-    int policy = static_cast<int>(mPlaybackPolicy);
-    ImGui::SetNextItemWidth(110.0f);
-    if (ImGui::Combo("Policy", &policy, "Overlay\0Exclusive\0Override\0"))
-        mPlaybackPolicy = static_cast<PlaybackPolicy>(policy);
+    // The playback-policy selector (Overlay / Exclusive / Override) is intentionally not
+    // exposed: only Exclusive is well-defined with a pressed-button model, and a real
+    // per-button Override would open a can of worms. mPlaybackPolicy stays at its default
+    // (Exclusive) so playback drives the pad and live input is suppressed; the RecomputeFinal
+    // machinery is kept intact should the selector ever be reinstated.
     if (ImGui::Button("Save...")) SaveRecording(platform);
     ImGui::SameLine();
     if (ImGui::Button("Load...")) LoadRecording(platform);
