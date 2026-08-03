@@ -399,7 +399,7 @@ private:
     // Windows-menu label, and a pointer to its visibility flag. The Windows menu and
     // settings load/save all iterate this one list, so a new panel is added in
     // exactly one place instead of three parallel enumerations.
-    struct PanelInfo { const char* key; const char* label; bool Panels::* flag; };
+    struct PanelInfo { const char* key; const char* label; bool Panels::* flag; const char* category; };
     static const std::vector<PanelInfo>& PanelList();
 
     // Persistent settings + the layout ini path (imgui.ini relocated into the

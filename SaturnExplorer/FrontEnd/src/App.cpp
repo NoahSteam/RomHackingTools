@@ -256,35 +256,36 @@ void App::Shutdown()
 // other edits. Order is the Windows-menu display order (settings keys are order-free).
 const std::vector<App::PanelInfo>& App::PanelList()
 {
+    // The last field is the Windows-menu category (submenu) the panel is grouped under.
     static const std::vector<PanelInfo> kList = {
-        {"vramMap",         "VRAM Map",           &Panels::vramMap},
-        {"archiveExplorer", "Archive Explorer",   &Panels::archiveExplorer},
-        {"searchRom",       "Search ROM / Files", &Panels::searchRom},
-        {"vdpOutput",       "VDP Output",         &Panels::vdpOutput},
-        {"vdp1Framebuffer", "VDP1 Framebuffer",   &Panels::vdp1Framebuffer},
-        {"worldView",       "3D View",            &Panels::worldView},
-        {"commandList",     "VDP1 Command List",  &Panels::commandList},
-        {"vdp1Table",       "VDP1 Table",         &Panels::vdp1Table},
-        {"vdp2Table",       "VDP2 Table",         &Panels::vdp2Table},
-        {"registers",       "Registers",          &Panels::registers},
-        {"colorRam",        "Color RAM",          &Panels::colorRam},
-        {"workRam",         "Work RAM",           &Panels::workRam},
-        {"textureViewer",   "Texture Viewer",     &Panels::textureViewer},
-        {"paletteViewer",   "Palette Viewer",     &Panels::paletteViewer},
-        {"references",      "References",         &Panels::references},
-        {"selectedObject",  "Selected Object",    &Panels::selectedObject},
-        {"watch",           "Watch",              &Panels::watch},
-        {"assembly",        "SH-2 Assembly",      &Panels::assembly},
-        {"hexEditor",       "Memory",             &Panels::hexEditor},
-        {"controller",      "Controller",         &Panels::controller},
-        {"log",             "Log",                &Panels::log},
-        {"actions",         "Tracepoints",        &Panels::actions},
-        {"callStack",       "Call Stack",         &Panels::callStack},
-        {"breakpoints",     "Breakpoints",        &Panels::breakpoints},
-        {"ramSearch",       "RAM Search",         &Panels::ramSearch},
-        {"accessLog",       "Access Log",         &Panels::accessLog},
-        {"soundCpu",        "Sound CPU (68K)",    &Panels::soundCpu},
-        {"sound",           "Sound (SCSP)",       &Panels::sound},
+        {"vramMap",         "VRAM Map",           &Panels::vramMap,         "Graphics"},
+        {"archiveExplorer", "Archive Explorer",   &Panels::archiveExplorer, "Files & Input"},
+        {"searchRom",       "Search ROM / Files", &Panels::searchRom,       "Files & Input"},
+        {"vdpOutput",       "VDP Output",         &Panels::vdpOutput,       "Graphics"},
+        {"vdp1Framebuffer", "VDP1 Framebuffer",   &Panels::vdp1Framebuffer, "Graphics"},
+        {"worldView",       "3D View",            &Panels::worldView,       "Graphics"},
+        {"commandList",     "VDP1 Command List",  &Panels::commandList,     "Graphics"},
+        {"vdp1Table",       "VDP1 Table",         &Panels::vdp1Table,       "Memory & Data"},
+        {"vdp2Table",       "VDP2 Table",         &Panels::vdp2Table,       "Memory & Data"},
+        {"registers",       "Registers",          &Panels::registers,       "Memory & Data"},
+        {"colorRam",        "Color RAM",          &Panels::colorRam,        "Memory & Data"},
+        {"workRam",         "Work RAM",           &Panels::workRam,         "Memory & Data"},
+        {"textureViewer",   "Texture Viewer",     &Panels::textureViewer,   "Graphics"},
+        {"paletteViewer",   "Palette Viewer",     &Panels::paletteViewer,   "Graphics"},
+        {"references",      "References",         &Panels::references,      "Memory & Data"},
+        {"selectedObject",  "Selected Object",    &Panels::selectedObject,  "Graphics"},
+        {"watch",           "Watch",              &Panels::watch,           "Debugger"},
+        {"assembly",        "SH-2 Assembly",      &Panels::assembly,        "Debugger"},
+        {"hexEditor",       "Memory",             &Panels::hexEditor,       "Memory & Data"},
+        {"controller",      "Controller",         &Panels::controller,      "Files & Input"},
+        {"log",             "Log",                &Panels::log,             "Files & Input"},
+        {"actions",         "Tracepoints",        &Panels::actions,         "Debugger"},
+        {"callStack",       "Call Stack",         &Panels::callStack,       "Debugger"},
+        {"breakpoints",     "Breakpoints",        &Panels::breakpoints,     "Debugger"},
+        {"ramSearch",       "RAM Search",         &Panels::ramSearch,       "Debugger"},
+        {"accessLog",       "Access Log",         &Panels::accessLog,       "Debugger"},
+        {"soundCpu",        "Sound CPU (68K)",    &Panels::soundCpu,        "Audio"},
+        {"sound",           "Sound (SCSP)",       &Panels::sound,           "Audio"},
     };
     return kList;
 }
@@ -1144,12 +1145,14 @@ void App::BuildDefaultLayout(unsigned int dockspaceId)
     ImGui::DockBuilderDockWindow("VDP1 Command List", rInspect);
     ImGui::DockBuilderDockWindow("Selected Object", rInspect);
 
-    // Right column, bottom: structured-data tables, tabbed.
+    // Right column, bottom: structured-data tables, tabbed. Sound (SCSP) is a per-voice
+    // table, so it tabs in with the other data views.
     ImGui::DockBuilderDockWindow("VDP1 Table", rData);
     ImGui::DockBuilderDockWindow("VDP2 Table", rData);
     ImGui::DockBuilderDockWindow("Color RAM", rData);
     ImGui::DockBuilderDockWindow("Work RAM", rData);
     ImGui::DockBuilderDockWindow("Registers", rData);
+    ImGui::DockBuilderDockWindow("Sound (SCSP)", rData);
 
     // Bottom debugger strip. Watch / Controller / Log tab together on the left; the
     // SH-2 Assembly gets the right half.
@@ -1159,6 +1162,8 @@ void App::BuildDefaultLayout(unsigned int dockspaceId)
     ImGui::DockBuilderDockWindow("Tracepoints", bWatch);   // tabs with Watch/Log/Controller
     ImGui::DockBuilderDockWindow("Call Stack", bWatch);    // beside Assembly; auto-focus on stop
     ImGui::DockBuilderDockWindow("Breakpoints", bWatch);   // tabs beside Call Stack
+    ImGui::DockBuilderDockWindow("RAM Search", bWatch);    // debugger tools tab here too
+    ImGui::DockBuilderDockWindow("Access Log", bWatch);
     ImGui::DockBuilderDockWindow("Current Input", bWatch);
     ImGui::DockBuilderDockWindow("Input Queue", bWatch);
     ImGui::DockBuilderDockWindow("Input Recording", bWatch);
@@ -1166,6 +1171,7 @@ void App::BuildDefaultLayout(unsigned int dockspaceId)
     ImGui::DockBuilderDockWindow("Statistics", bWatch);
     ImGui::DockBuilderDockWindow("SH-2 Assembly", bAsm);
     ImGui::DockBuilderDockWindow("Memory", bAsm);          // tabs beside SH-2 Assembly
+    ImGui::DockBuilderDockWindow("Sound CPU (68K)", bAsm); // disassembly views tab together
     ImGui::DockBuilderDockWindow("Input Timeline", bAsm);
 
     ImGui::DockBuilderFinish(dockspaceId);
@@ -4459,12 +4465,23 @@ void App::DrawWindowsMenu(std::vector<TopBarCommand>& commands)
     ImGui::SetItemTooltip("Show, hide, and arrange debugger windows");
     if (!ImGui::BeginPopup("##windows_menu")) return;
 
-    int index = 0;
-    for (const PanelInfo& panel : PanelList())
+    // Panels are grouped into category submenus (display order fixed here); the toggle
+    // command still carries each panel's flat PanelList index, so that mapping is unchanged.
+    static const char* kCategories[] = {
+        "Graphics", "Memory & Data", "Debugger", "Audio", "Files & Input"
+    };
+    for (const char* cat : kCategories)
     {
-        if (ImGui::MenuItem(panel.label, nullptr, mPanels.*(panel.flag)))
-            commands.emplace_back(TopBarCommandType::ToggleWindow, index);
-        ++index;
+        if (!ImGui::BeginMenu(cat)) continue;
+        int index = 0;
+        for (const PanelInfo& panel : PanelList())
+        {
+            if (std::strcmp(panel.category, cat) == 0 &&
+                ImGui::MenuItem(panel.label, nullptr, mPanels.*(panel.flag)))
+                commands.emplace_back(TopBarCommandType::ToggleWindow, index);
+            ++index;
+        }
+        ImGui::EndMenu();
     }
     ImGui::Separator();
     if (ImGui::MenuItem("Reset Layout")) commands.emplace_back(TopBarCommandType::ResetLayout);
