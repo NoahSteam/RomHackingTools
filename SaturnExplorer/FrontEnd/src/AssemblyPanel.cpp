@@ -481,7 +481,21 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
             for (int rn = 0; rn < 16; ++rn)
             {
                 char t[4]; std::snprintf(t, sizeof(t), "r%d", rn);
-                if (ln.ins.Operands.find(t) != std::string::npos)
+                const size_t tl = (rn < 10) ? 2u : 3u;
+                // Whole-token match only: a plain find("r1") also hits "r10".."r15", so
+                // reject a trailing digit (and a leading alnum) around the match.
+                size_t pos = 0; bool found = false;
+                while ((pos = ln.ins.Operands.find(t, pos)) != std::string::npos)
+                {
+                    const char a = (pos + tl < ln.ins.Operands.size()) ? ln.ins.Operands[pos + tl] : '\0';
+                    const char b = (pos > 0) ? ln.ins.Operands[pos - 1] : '\0';
+                    const bool aDigit = (a >= '0' && a <= '9');
+                    const bool bAlnum = (b >= '0' && b <= '9') || (b >= 'a' && b <= 'z') ||
+                                        (b >= 'A' && b <= 'Z');
+                    if (!aDigit && !bAlnum) { found = true; break; }
+                    pos += tl;
+                }
+                if (found)
                     ImGui::Text("r%-2d = %08X", rn, regs.r[rn]);
             }
             uint32_t ea; WatchType wt;

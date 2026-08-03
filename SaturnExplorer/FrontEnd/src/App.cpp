@@ -1561,6 +1561,7 @@ void App::OpenTracepointEditor(int cpu, uint32_t addr)
         mTpEdit.cpu = cpu;
         mTpEdit.address = addr;
         mTpEdit.format = "PC={pc}";
+        mTpEditNew = true;   // no existing action here -> OK must Add, not Update
     }
     mTpEditorOpen = true;   // one-shot: DrawTracepointEditor opens the popup next frame
 }
