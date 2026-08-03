@@ -75,11 +75,11 @@ int main()
     // --- Big-endian decode sanity ---
     {
         const uint8_t p[4] = {0x12, 0x34, 0x56, 0x78};
-        Check(MemorySearch::DecodeBigEndian(p, SearchType::U16) == 0x1234, "decode u16 BE");
-        Check(MemorySearch::DecodeBigEndian(p, SearchType::U32) == 0x12345678, "decode u32 BE");
+        Check(MemorySearch::DecodeBigEndian(p, WatchType::U16) == 0x1234, "decode u16 BE");
+        Check(MemorySearch::DecodeBigEndian(p, WatchType::U32) == 0x12345678, "decode u32 BE");
         const uint8_t n[1] = {0xFF};
-        Check(MemorySearch::DecodeBigEndian(n, SearchType::S8) == -1, "decode s8 negative");
-        Check(MemorySearch::DecodeBigEndian(n, SearchType::U8) == 255, "decode u8");
+        Check(MemorySearch::DecodeBigEndian(n, WatchType::S8) == -1, "decode s8 negative");
+        Check(MemorySearch::DecodeBigEndian(n, WatchType::U8) == 255, "decode u8");
     }
 
     // --- First scan: u16 == 100 finds exactly the seeded addresses ---
@@ -89,7 +89,7 @@ int main()
     be.PutBE(kBase + 6, 2, 100);
     {
         MemorySearch s;
-        std::size_t n = s.First(be, regions, SearchType::U16, SearchCompare::Equal, 100);
+        std::size_t n = s.First(be, regions, WatchType::U16, SearchCompare::Equal, 100);
         Check(n == 3, "first scan u16==100 count");
         Check(HasAddr(s, kBase + 0) && HasAddr(s, kBase + 2) && HasAddr(s, kBase + 6),
               "first scan hit addresses");
@@ -117,7 +117,7 @@ int main()
     {
         for (uint32_t off = 0; off < 64; off += 4) be.PutBE(kBase + off, 4, off);
         MemorySearch s;
-        std::size_t n = s.First(be, regions, SearchType::U32, SearchCompare::Unknown, 0);
+        std::size_t n = s.First(be, regions, WatchType::U32, SearchCompare::Unknown, 0);
         Check(n == 16, "unknown first scan baselines all aligned u32");
 
         // Change exactly one dword; Unchanged should drop just that one.
@@ -139,7 +139,7 @@ int main()
         s8be.PutBE(kBase + 2, 1, 0x80);   // -128
         s8be.PutBE(kBase + 3, 1, 0x7F);   // +127
         MemorySearch s;
-        std::size_t n = s.First(s8be, r8, SearchType::S8, SearchCompare::Less, 0);
+        std::size_t n = s.First(s8be, r8, WatchType::S8, SearchCompare::Less, 0);
         Check(n == 2 && HasAddr(s, kBase + 1) && HasAddr(s, kBase + 2),
               "signed S8 < 0 finds negatives only");
     }

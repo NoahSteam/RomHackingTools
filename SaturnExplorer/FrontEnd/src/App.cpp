@@ -2026,14 +2026,14 @@ void App::DrawRamSearch()
         return;
     }
 
-    struct TypeOpt { const char* label; SearchType st; WatchType wt; };
+    struct TypeOpt { const char* label; WatchType wt; };
     static const TypeOpt kTypes[] = {
-        {"8-bit unsigned",  SearchType::U8,  WatchType::U8},
-        {"8-bit signed",    SearchType::S8,  WatchType::S8},
-        {"16-bit unsigned", SearchType::U16, WatchType::U16},
-        {"16-bit signed",   SearchType::S16, WatchType::S16},
-        {"32-bit unsigned", SearchType::U32, WatchType::U32},
-        {"32-bit signed",   SearchType::S32, WatchType::S32},
+        {"8-bit unsigned",  WatchType::U8},
+        {"8-bit signed",    WatchType::S8},
+        {"16-bit unsigned", WatchType::U16},
+        {"16-bit signed",   WatchType::S16},
+        {"32-bit unsigned", WatchType::U32},
+        {"32-bit signed",   WatchType::S32},
     };
     struct CmpOpt { const char* label; SearchCompare cmp; bool operand; };
     static const CmpOpt kCmps[] = {
@@ -2049,8 +2049,8 @@ void App::DrawRamSearch()
     };
     const int nType = (int)(sizeof(kTypes) / sizeof(kTypes[0]));
     const int nCmp  = (int)(sizeof(kCmps)  / sizeof(kCmps[0]));
-    mRamSearchType = mRamSearchType < 0 ? 0 : (mRamSearchType >= nType ? nType - 1 : mRamSearchType);
-    mRamSearchCmp  = mRamSearchCmp  < 0 ? 0 : (mRamSearchCmp  >= nCmp  ? nCmp  - 1 : mRamSearchCmp);
+    mRamSearchType = std::max(0, std::min(mRamSearchType, nType - 1));
+    mRamSearchCmp  = std::max(0, std::min(mRamSearchCmp,  nCmp  - 1));
 
     const bool active = mRamSearch.Active();
 
@@ -2091,16 +2091,21 @@ void App::DrawRamSearch()
                              mRamSearchValue, sizeof(mRamSearchValue));
     ImGui::EndDisabled();
 
-    // Parse the operand (decimal, or 0x… hex; sign per the C parser). Unused for relative
-    // compares. strtoll spans the u32 range, so 0xFFFFFFFF parses without overflow.
-    int64_t operand = 0;
-    if (usesOperand) operand = std::strtoll(mRamSearchValue, nullptr, 0);
-
+    // Parse the operand at scan time (decimal, or 0x… hex; sign per the C parser). strtoll
+    // spans the u32 range, so 0xFFFFFFFF parses without overflow.
+    auto operand = [&]() -> int64_t {
+        return usesOperand ? std::strtoll(mRamSearchValue, nullptr, 0) : 0;
+    };
     auto buildRegions = [&]() {
         std::vector<SearchRegion> regions;
         if (mRamSearchLow)  regions.push_back({0x00200000u, kWramSize});
         if (mRamSearchHigh) regions.push_back({0x06000000u, kWramSize});
         return regions;
+    };
+    auto report = [&](std::size_t n) {
+        char buf[64];
+        std::snprintf(buf, sizeof(buf), "%zu match%s", n, n == 1 ? "" : "es");
+        mRamSearchStatus = buf;
     };
 
     ImGui::Separator();
@@ -2109,26 +2114,15 @@ void App::DrawRamSearch()
         const bool canScan = mRamSearchLow || mRamSearchHigh;
         ImGui::BeginDisabled(!canScan);
         if (ImGui::Button("First Scan"))
-        {
-            const std::size_t n = mRamSearch.First(mMemBackend, buildRegions(),
-                                                   kTypes[mRamSearchType].st,
-                                                   kCmps[mRamSearchCmp].cmp, operand);
-            char buf[64];
-            std::snprintf(buf, sizeof(buf), "%zu match%s", n, n == 1 ? "" : "es");
-            mRamSearchStatus = buf;
-        }
+            report(mRamSearch.First(mMemBackend, buildRegions(), kTypes[mRamSearchType].wt,
+                                    kCmps[mRamSearchCmp].cmp, operand()));
         ImGui::EndDisabled();
         if (!canScan) { ImGui::SameLine(); ImGui::TextDisabled("(pick a region)"); }
     }
     else
     {
         if (ImGui::Button("Next Scan"))
-        {
-            const std::size_t n = mRamSearch.Next(mMemBackend, kCmps[mRamSearchCmp].cmp, operand);
-            char buf[64];
-            std::snprintf(buf, sizeof(buf), "%zu match%s", n, n == 1 ? "" : "es");
-            mRamSearchStatus = buf;
-        }
+            report(mRamSearch.Next(mMemBackend, kCmps[mRamSearchCmp].cmp, operand()));
         ImGui::SameLine();
         if (ImGui::Button("New Search")) { mRamSearch.Reset(); mRamSearchStatus.clear(); }
     }
@@ -2148,9 +2142,7 @@ void App::DrawRamSearch()
         if ((int)hits.size() > kMaxRows)
             ImGui::TextDisabled("Showing first %d of %zu — narrow further to see them all.",
                                 kMaxRows, hits.size());
-        const bool sgn = kTypes[mRamSearchType].st == SearchType::S8 ||
-                         kTypes[mRamSearchType].st == SearchType::S16 ||
-                         kTypes[mRamSearchType].st == SearchType::S32;
+        const bool sgn = MemorySearch::IsSigned(kTypes[mRamSearchType].wt);
         if (ImGui::BeginTable("ramhits", 3,
                               ImGuiTableFlags_ScrollY | ImGuiTableFlags_RowBg |
                               ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_Resizable))

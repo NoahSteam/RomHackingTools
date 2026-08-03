@@ -4,8 +4,10 @@
 // (increased / decreased / unchanged / changed), or by a new absolute value. It reads
 // through IMemoryBackend, so it is emulator-agnostic and unit-testable against a mock.
 //
-// Values are decoded big-endian (Saturn byte order) at the scanned width and compared as
-// signed 64-bit, so signed and unsigned widths both compare correctly. First() scans each
+// Values are typed with WatchType (the codebase's one scalar-memory-type enum, shared with
+// the Watch list and breakpoint sizing) — the numeric widths U8/S8/U16/S16/U32/S32; RGB555
+// and Pointer decode as raw u16/u32. Decoding is big-endian (Saturn byte order) and compared
+// as signed 64-bit, so signed and unsigned widths both compare correctly. First() scans each
 // region aligned to the value width (the standard "fast scan").
 #pragma once
 
@@ -13,11 +15,10 @@
 #include <vector>
 
 #include "Debug/MemoryBackend.h"
+#include "Debug/WatchList.h"   // WatchType + WatchTypeSize (the shared scalar-type table)
 
 namespace sfe
 {
-
-enum class SearchType { U8, S8, U16, S16, U32, S32 };
 
 enum class SearchCompare
 {
@@ -38,14 +39,14 @@ struct SearchHit    { uint32_t addr = 0; int64_t value = 0; };   // value = last
 class MemorySearch
 {
 public:
-    static int     TypeSize(SearchType t);            // bytes: 1/2/4
-    static int64_t DecodeBigEndian(const uint8_t* p, SearchType t);
+    static int64_t DecodeBigEndian(const uint8_t* p, WatchType t);
+    static bool    IsSigned(WatchType t);   // for display formatting
 
     // Start a fresh scan across 'regions'. Absolute compares (Equal/NotEqual/Greater/Less)
     // filter by 'operand'; relative compares and Unknown keep everything as a baseline.
     // Returns the surviving hit count.
     std::size_t First(IMemoryBackend& backend, const std::vector<SearchRegion>& regions,
-                      SearchType type, SearchCompare cmp, int64_t operand);
+                      WatchType type, SearchCompare cmp, int64_t operand);
 
     // Narrow the current hits against memory now. Returns the surviving hit count.
     // A no-op (hits unchanged) when there is no active scan.
@@ -53,7 +54,7 @@ public:
 
     void Reset();
     bool                          Active() const { return mActive; }
-    SearchType                    Type()   const { return mType; }
+    WatchType                     Type()   const { return mType; }
     std::size_t                   Count()  const { return mHits.size(); }
     const std::vector<SearchHit>& Hits()   const { return mHits; }
 
@@ -66,7 +67,7 @@ private:
                            std::vector<uint8_t>& out);
 
     bool                      mActive = false;
-    SearchType                mType = SearchType::U32;
+    WatchType                 mType = WatchType::U32;
     std::vector<SearchRegion> mRegions;
     std::vector<SearchHit>    mHits;
 };

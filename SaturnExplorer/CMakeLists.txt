@@ -129,6 +129,7 @@ if(BUILD_TESTING)
     add_executable(SaturnExplorerMemorySearchTests
         FrontEnd/tests/MemorySearchTests.cpp
         FrontEnd/src/Debug/MemorySearch.cpp
+        FrontEnd/src/Debug/WatchList.cpp
     )
     target_include_directories(SaturnExplorerMemorySearchTests
         PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
