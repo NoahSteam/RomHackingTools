@@ -118,6 +118,13 @@ if(BUILD_TESTING)
         target_compile_definitions(SaturnExplorerTopBarTests PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
     endif()
     add_test(NAME SaturnExplorerTopBarTests COMMAND SaturnExplorerTopBarTests)
+
+    add_executable(SaturnExplorerConditionEvalTests
+        FrontEnd/tests/ConditionEvalTests.cpp
+        FrontEnd/src/Debug/ConditionEval.cpp
+    )
+    target_include_directories(SaturnExplorerConditionEvalTests PRIVATE FrontEnd/src)
+    add_test(NAME SaturnExplorerConditionEvalTests COMMAND SaturnExplorerConditionEvalTests)
 endif()
 
 # ---------------------------------------------------------------------------
@@ -215,6 +222,7 @@ if(WIN32)
         FrontEnd/src/Debug/BreakpointManager.cpp
         FrontEnd/src/Debug/ShiftJis.cpp
         FrontEnd/src/Debug/FormatString.cpp
+        FrontEnd/src/Debug/ConditionEval.cpp
         FrontEnd/src/Debug/ExecutionActions.cpp
         FrontEnd/src/Debug/CallStack.cpp
         FrontEnd/src/FrameRecorder.cpp
@@ -276,6 +284,7 @@ elseif(EMSCRIPTEN)
         FrontEnd/src/Debug/BreakpointManager.cpp
         FrontEnd/src/Debug/ShiftJis.cpp
         FrontEnd/src/Debug/FormatString.cpp
+        FrontEnd/src/Debug/ConditionEval.cpp
         FrontEnd/src/Debug/ExecutionActions.cpp
         FrontEnd/src/Debug/CallStack.cpp
         FrontEnd/src/UpdateChecker.cpp
@@ -352,6 +361,7 @@ else()
             FrontEnd/src/Debug/BreakpointManager.cpp
             FrontEnd/src/Debug/ShiftJis.cpp
             FrontEnd/src/Debug/FormatString.cpp
+            FrontEnd/src/Debug/ConditionEval.cpp
             FrontEnd/src/Debug/ExecutionActions.cpp
             FrontEnd/src/Debug/CallStack.cpp
             FrontEnd/src/FrameRecorder.cpp

@@ -17,6 +17,7 @@
 #include "SaturnRegions.h"
 #include "Theme.h"
 #include "Debug/FormatString.h"   // tracepoint output mini-syntax
+#include "Debug/ConditionEval.h"  // conditional-breakpoint / gated-tracepoint guards
 #include "SavestateDriver.h"
 #ifdef SE_ENABLE_LIVE
 #include "LiveDriver.h"      // native builds only (threads/sockets)
@@ -858,13 +859,33 @@ void App::BuildUI(IPlatform& platform)
         DrainTraceEvents();        // pull fired tracepoints into the Log
 #ifdef SE_ENABLE_LIVE
         uint32_t stopReason = 0, stopCpu = 0, stopPc = 0;
-        const bool stopped = se_live_get_stop(&mDataSource, &stopReason, &stopCpu, &stopPc);
+        bool stopped = se_live_get_stop(&mDataSource, &stopReason, &stopCpu, &stopPc);
         // Mirror the halt state so the Assembly panel can tint the halted row red (a
         // breakpoint hit or a completed instruction step). Level-triggered: it clears
         // itself once the emulator resumes.
         mBpStopActive = stopped;
         mBpStopCpu = (int)stopCpu;
         mBpStopPc = stopPc;
+        // Conditional breakpoint: if the halt is at a user execution breakpoint whose guard
+        // evaluates false (and it isn't the transient step target), resume without surfacing
+        // the halt — the break only "sticks" once the guard holds. The guard reads the halted
+        // CPU's registers, which are exact at this PC. PC breakpoints are shared across both
+        // SH-2s, so match on address regardless of the breakpoint's stored CPU.
+        if (stopped && !mbPaused && stopReason == SE_LIVE_STOP_EXEC_BP &&
+            !(mStepBpActive && stopPc == mStepBpAddr))
+        {
+            for (const Breakpoint& b : mBreakpoints.All())
+            {
+                if (b.enabled && b.kind == BpKind::Execution && b.address == stopPc &&
+                    !b.condition.empty() && !EvalCondition(b.condition, static_cast<int>(stopCpu)))
+                {
+                    Continue();      // guard not satisfied — keep running
+                    stopped = false; // don't fall into the pause path this frame
+                    mBpStopActive = false;
+                    break;
+                }
+            }
+        }
         if (stopped && !mbPaused)
         {
             mbPaused = true;   // halted; panel follows the halted PC
@@ -1466,6 +1487,21 @@ std::string App::FormatAgainstContext(const std::string& tmpl, int cpu)
     return FormatEvaluate(tmpl, fc);
 }
 
+// Evaluate a breakpoint/tracepoint guard against 'cpu's current registers + memory.
+// Empty guard, or no live data, is treated as true (never blocks a stop / drops a log).
+bool App::EvalCondition(const std::string& cond, int cpu)
+{
+    if (cond.empty()) return true;
+    if (!mbHasData || !mContext) return true;
+    ContextFormat fc;
+    fc.ctx = mContext;
+    fc.backend = &mMemBackend;
+    fc.cpu = cpu;
+    fc.frame = static_cast<uint32_t>(se_frame_number(mContext));
+    fc.haveRegs = se_get_sh2_regs(mContext, cpu, &fc.regs) == SE_OK;
+    return ConditionEval(cond, fc);
+}
+
 // Push the Log-type tracepoints to the emulator when the set changes (v8). Serializes
 // each as a 16-byte descriptor {id,cpu,address,flags}; the emulator traps those PCs.
 void App::SyncTracepointsToLive()
@@ -1522,6 +1558,10 @@ void App::DrainTraceEvents()
             fc.regs.pc = e.regs[16]; fc.regs.pr = e.regs[17]; fc.regs.sr = e.regs[18];
             fc.regs.gbr = e.regs[19]; fc.regs.vbr = e.regs[20];
             fc.regs.mach = e.regs[21]; fc.regs.macl = e.regs[22];
+
+            // Guard (Phase 3): a tracepoint with a condition only logs when it holds. The
+            // registers are exact for this hit; memory derefs read the current snapshot.
+            if (!a->condition.empty() && !ConditionEval(a->condition, fc)) continue;
 
             const std::string msg = FormatEvaluate(a->format, fc);
             std::vector<std::pair<std::string, std::string>> detail;
@@ -1916,6 +1956,17 @@ void App::DrawBreakpoints()
             {
                 ImGui::Text("PC reaches %08X  \xc2\xb7  %s SH-2",
                             b.address, b.cpu ? "Slave" : "Master");
+                // Optional guard: the emulator halts here every time, but the client only
+                // stays stopped when this evaluates true (else it resumes transparently).
+                char cbuf[128];
+                std::snprintf(cbuf, sizeof(cbuf), "%s", b.condition.c_str());
+                ImGui::SetNextItemWidth(-FLT_MIN);
+                if (ImGui::InputTextWithHint("##cond", "and\xe2\x80\xa6 (optional guard, e.g. r4 == 0x1234)",
+                                             cbuf, sizeof(cbuf)))
+                    mBreakpoints.SetCondition(b.id, cbuf);
+                const std::string cerr = ConditionValidate(b.condition);
+                if (!cerr.empty())
+                    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.4f, 1.0f), "  %s", cerr.c_str());
             }
             else
             {

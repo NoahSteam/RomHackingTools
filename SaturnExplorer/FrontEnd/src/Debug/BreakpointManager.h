@@ -5,6 +5,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 #include <vector>
 
 namespace sfe
@@ -26,6 +27,11 @@ struct Breakpoint
     uint32_t address = 0;
     uint32_t size = 2;           // memory BPs: 1/2/4; execution: instruction (2)
     bool     enabled = true;
+    // Optional guard (ConditionEval syntax, e.g. "r4 == 0x1234"). Evaluated client-side
+    // when the emulator halts here: if it's false the client resumes without stopping, so
+    // the break only "sticks" when the condition holds. Empty = unconditional. Execution
+    // BPs only for now (a memory BP's halt PC is the accessor, not the watched address).
+    std::string condition;
 };
 
 class BreakpointManager
@@ -41,6 +47,7 @@ public:
     uint64_t AddMemory(uint32_t addr, uint32_t size, BpKind rw);
 
     void SetEnabled(uint64_t id, bool enabled);
+    void SetCondition(uint64_t id, const std::string& cond);   // client-side guard; no re-sync
     void Remove(uint64_t id);
     void Clear();
 

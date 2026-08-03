@@ -94,6 +94,16 @@ void BreakpointManager::SetEnabled(uint64_t id, bool enabled)
     }
 }
 
+void BreakpointManager::SetCondition(uint64_t id, const std::string& cond)
+{
+    // No generation bump: the guard is evaluated client-side on halt, so the emulator's
+    // installed breakpoint set is unchanged.
+    for (Breakpoint& b : mBps)
+    {
+        if (b.id == id) { b.condition = cond; return; }
+    }
+}
+
 void BreakpointManager::Remove(uint64_t id)
 {
     for (std::size_t i = 0; i < mBps.size(); ++i)

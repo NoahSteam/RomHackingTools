@@ -116,6 +116,9 @@ private:
     // Format a tracepoint's template against the CURRENT context (registers + memory),
     // for the editor's live preview and Test Fire. Empty string if no context.
     std::string FormatAgainstContext(const std::string& tmpl, int cpu);
+    // Evaluate a breakpoint/tracepoint guard (ConditionEval syntax) against 'cpu's current
+    // registers + memory. Empty guard, or no live data, returns true.
+    bool EvalCondition(const std::string& cond, int cpu);
     void SyncBreakpointsToLive();           // push the breakpoint set to the emulator
     // Instruction stepping (from the paused/breakpoint-hit workspace). StepInto runs one
     // SH-2 instruction; StepOver runs a called subroutine to completion (else one instr);
