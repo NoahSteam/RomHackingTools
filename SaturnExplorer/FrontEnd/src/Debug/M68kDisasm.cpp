@@ -55,8 +55,9 @@ struct Reader
     uint32_t CurPc() const { return base + uint32_t(off); }   // PC at the next word to read
 };
 
-// Brief extension word (index modes): "(disp,An,Xn.w/l)".
-std::string BriefIndex(Reader& r, const std::string& an, bool pcRel)
+// Brief extension word (index modes): "(disp,An,Xn.w/l)". 'an' is the base register text
+// ("a0" or "pc").
+std::string BriefIndex(Reader& r, const std::string& an)
 {
     const uint16_t ext = r.Word();
     const bool     addr = (ext & 0x8000) != 0;
@@ -66,12 +67,12 @@ std::string BriefIndex(Reader& r, const std::string& an, bool pcRel)
     std::string    x = (addr ? An(xr) : Dn(xr)) + (lng ? ".l" : ".w");
     std::string    d = disp ? HexS(disp) : "$0";
     return d + "(" + an + "," + x + ")";
-    (void)pcRel;
 }
 
 // Effective address. size: 0=byte 1=word 2=long (governs immediate width). Consumes any
 // extension words via 'r'. 'target'/'hasTarget' report a PC-relative resolved address.
-std::string Ea(Reader& r, int mode, int reg, int size, uint32_t* target, bool* hasTarget)
+std::string Ea(Reader& r, int mode, int reg, int size,
+               uint32_t* target = nullptr, bool* hasTarget = nullptr)
 {
     if (hasTarget) *hasTarget = false;
     switch (mode)
@@ -86,7 +87,7 @@ std::string Ea(Reader& r, int mode, int reg, int size, uint32_t* target, bool* h
             int16_t d = int16_t(r.Word());
             return HexS(d) + "(" + An(reg) + ")";
         }
-        case 6: return BriefIndex(r, An(reg), false);
+        case 6: return BriefIndex(r, An(reg));
         case 7:
             switch (reg)
             {
@@ -101,7 +102,7 @@ std::string Ea(Reader& r, int mode, int reg, int size, uint32_t* target, bool* h
                     if (hasTarget) *hasTarget = true;
                     return HexS(d) + "(pc)";
                 }
-                case 3: return BriefIndex(r, "pc", true);
+                case 3: return BriefIndex(r, "pc");
                 case 4:
                 {
                     uint32_t v;
@@ -119,6 +120,14 @@ std::string Ea(Reader& r, int mode, int reg, int size, uint32_t* target, bool* h
 }
 
 const char* SzSuffix(int s) { return s == 0 ? ".b" : s == 1 ? ".w" : ".l"; }
+
+// The two operand forms shared by ADDX/SUBX and ABCD/SBCD: predecrement memory (op bit 3
+// set) "-(Ay),-(Ax)", else data-register "Dy,Dx".
+std::string PredecOrDn(uint16_t op, int ry, int rx)
+{
+    if (op & 0x08) return "-(" + An(ry) + "),-(" + An(rx) + ")";
+    return Dn(ry) + "," + Dn(rx);
+}
 
 // Immediate-source size for ORI/ANDI/... (bits 7-6): 0=.b 1=.w 2=.l.
 uint32_t ImmBySize(Reader& r, int size)
@@ -150,7 +159,7 @@ std::string RegList(uint16_t mask, bool reversed)
             i = j + 1;
         }
     }
-    return out.empty() ? "" : out;
+    return out;
 }
 
 }  // namespace
@@ -177,19 +186,18 @@ M68kInstruction M68kDecodeAt(uint32_t address, const uint8_t* bytes, size_t size
     const int line = (op >> 12) & 0xF;
     const int mode = (op >> 3) & 7;    // EA mode  (for the low 6 bits)
     const int regf = op & 7;           // EA register
-    auto ea = [&](int sz, uint32_t* t, bool* h) { return Ea(r, mode, regf, sz, t, h); };
+    auto ea = [&](int sz, uint32_t* t = nullptr, bool* h = nullptr) { return Ea(r, mode, regf, sz, t, h); };
 
     switch (line)
     {
         case 0x1: case 0x2: case 0x3:   // MOVE.b / MOVE.l / MOVE.w
         {
             const int sz = (line == 1) ? 0 : (line == 2) ? 2 : 1;   // 1=.b 2=.l 3=.w
-            std::string src = Ea(r, mode, regf, sz, nullptr, nullptr);
+            std::string src = Ea(r, mode, regf, sz);
             const int dmode = (op >> 6) & 7;
             const int dreg  = (op >> 9) & 7;
-            std::string dst = Ea(r, dmode, dreg, sz, nullptr, nullptr);
-            mn = (dmode == 1) ? std::string("movea") + SzSuffix(sz)
-                              : std::string("move") + SzSuffix(sz);
+            std::string dst = Ea(r, dmode, dreg, sz);
+            mn = std::string(dmode == 1 ? "movea" : "move") + SzSuffix(sz);
             ops = src + "," + dst;
             handled = true;
             break;
@@ -239,7 +247,7 @@ M68kInstruction M68kDecodeAt(uint32_t address, const uint8_t* bytes, size_t size
                 else             // Scc
                 {
                     mn = std::string("s") + kCC[cond];
-                    ops = ea(0, nullptr, nullptr);
+                    ops = ea(0);
                     ins.IsConditional = true;
                 }
             }
@@ -247,7 +255,7 @@ M68kInstruction M68kDecodeAt(uint32_t address, const uint8_t* bytes, size_t size
             {
                 int data = (op >> 9) & 7; if (data == 0) data = 8;
                 mn = std::string((op & 0x0100) ? "subq" : "addq") + SzSuffix(sz);
-                ops = "#" + Hex(uint32_t(data)) + "," + ea(sz, nullptr, nullptr);
+                ops = "#" + Hex(uint32_t(data)) + "," + ea(sz);
             }
             handled = true;
             break;
@@ -276,7 +284,7 @@ M68kInstruction M68kDecodeAt(uint32_t address, const uint8_t* bytes, size_t size
                 if (stat) { bit = "#" + Hex(r.Word() & 0xFF); }
                 else      { bit = Dn((op >> 9) & 7); }
                 // Bit ops on Dn are long, on memory are byte.
-                std::string dst = ea((mode == 0) ? 2 : 0, nullptr, nullptr);
+                std::string dst = ea((mode == 0) ? 2 : 0);
                 mn = bn[btype];
                 ops = bit + "," + dst;
                 handled = true;
@@ -294,7 +302,7 @@ M68kInstruction M68kDecodeAt(uint32_t address, const uint8_t* bytes, size_t size
                 else
                 {
                     mn = std::string(imm3[grp]) + SzSuffix(sz);
-                    ops = "#" + Hex(imm) + "," + ea(sz, nullptr, nullptr);
+                    ops = "#" + Hex(imm) + "," + ea(sz);
                 }
                 handled = true;
             }
@@ -319,30 +327,37 @@ M68kInstruction M68kDecodeAt(uint32_t address, const uint8_t* bytes, size_t size
             else if ((op & 0xFFC0) == 0x4E80) { mn = "jsr"; ops = ea(2, &ins.BranchTarget, &ins.HasBranchTarget); ins.IsBranch = ins.IsCall = true; }
             else if ((op & 0xFFF8) == 0x4840) { mn = "swap"; ops = Dn(regf); }   // before PEA
             else if ((op & 0xFFB8) == 0x4880) { mn = (op & 0x0040) ? "ext.l" : "ext.w"; ops = Dn(regf); }  // before MOVEM
-            else if ((op & 0xFFC0) == 0x4840) { mn = "pea"; ops = ea(2, nullptr, nullptr); }
-            else if ((op & 0xF1C0) == 0x41C0) { mn = "lea"; ops = ea(2, nullptr, nullptr) + "," + An((op >> 9) & 7); }
+            else if ((op & 0xFFC0) == 0x4840) { mn = "pea"; ops = ea(2); }
+            else if ((op & 0xF1C0) == 0x41C0) { mn = "lea"; ops = ea(2) + "," + An((op >> 9) & 7); }
             else if ((op & 0xFB80) == 0x4880) { // MOVEM
                 const bool toMem = !(op & 0x0400);
                 const int  sz = (op & 0x0040) ? 2 : 1;
                 uint16_t   mask = r.Word();
                 std::string list = RegList(mask, toMem && mode == 4);
-                std::string mem = ea(sz, nullptr, nullptr);
+                std::string mem = ea(sz);
                 mn = std::string("movem") + SzSuffix(sz);
                 ops = toMem ? (list + "," + mem) : (mem + "," + list);
             }
             // MOVE to/from SR/CCR (size field == 3) — must precede CLR/NEG/NEGX/NOT.
-            else if ((op & 0xFFC0) == 0x40C0) { mn = "move"; ops = std::string("sr,") + ea(1,nullptr,nullptr); }
-            else if ((op & 0xFFC0) == 0x44C0) { mn = "move"; ops = ea(1,nullptr,nullptr) + ",ccr"; }
-            else if ((op & 0xFFC0) == 0x46C0) { mn = "move"; ops = ea(1,nullptr,nullptr) + ",sr"; }
-            else if ((op & 0xFF00) == 0x4200) { int s=(op>>6)&3; if(s==3){handled=false;} else { mn=std::string("clr")+SzSuffix(s); ops=ea(s,nullptr,nullptr);} }
-            else if ((op & 0xFF00) == 0x4400) { int s=(op>>6)&3; if(s==3){handled=false;} else { mn=std::string("neg")+SzSuffix(s); ops=ea(s,nullptr,nullptr);} }
-            else if ((op & 0xFF00) == 0x4000) { int s=(op>>6)&3; if(s==3){handled=false;} else { mn=std::string("negx")+SzSuffix(s); ops=ea(s,nullptr,nullptr);} }
-            else if ((op & 0xFF00) == 0x4600) { int s=(op>>6)&3; if(s==3){handled=false;} else { mn=std::string("not")+SzSuffix(s); ops=ea(s,nullptr,nullptr);} }
+            else if ((op & 0xFFC0) == 0x40C0) { mn = "move"; ops = std::string("sr,") + ea(1); }
+            else if ((op & 0xFFC0) == 0x44C0) { mn = "move"; ops = ea(1) + ",ccr"; }
+            else if ((op & 0xFFC0) == 0x46C0) { mn = "move"; ops = ea(1) + ",sr"; }
+            // Single-operand size-field ops CLR/NEG/NEGX/NOT (size 3 = the MOVE SR/CCR forms
+            // already handled above; illegal 0x42C0 falls through to dc.w).
+            else if (((op & 0xFF00) == 0x4200 || (op & 0xFF00) == 0x4400 ||
+                      (op & 0xFF00) == 0x4000 || (op & 0xFF00) == 0x4600) && ((op >> 6) & 3) != 3)
+            {
+                const uint16_t hi = op & 0xFF00;
+                const char* nm = hi == 0x4200 ? "clr" : hi == 0x4400 ? "neg"
+                               : hi == 0x4000 ? "negx" : "not";
+                const int s = (op >> 6) & 3;
+                mn = std::string(nm) + SzSuffix(s); ops = ea(s);
+            }
             else if ((op & 0xFF00) == 0x4A00) { int s=(op>>6)&3;
-                if (s==3) { mn="tas"; ops=ea(0,nullptr,nullptr); }
-                else { mn=std::string("tst")+SzSuffix(s); ops=ea(s,nullptr,nullptr); } }
+                if (s==3) { mn="tas"; ops=ea(0); }
+                else { mn=std::string("tst")+SzSuffix(s); ops=ea(s); } }
             else if ((op & 0xF140) == 0x4100) { // CHK
-                mn = "chk"; ops = ea(1,nullptr,nullptr) + "," + Dn((op>>9)&7); }
+                mn = "chk"; ops = ea(1) + "," + Dn((op>>9)&7); }
             else handled = false;
             break;
         case 0x8: case 0x9: case 0xB: case 0xC: case 0xD:   // OR/SUB/CMP/AND/ADD families
@@ -356,15 +371,19 @@ M68kInstruction M68kDecodeAt(uint32_t address, const uint8_t* bytes, size_t size
             {
                 const int sz = (opmode == 7) ? 2 : 1;
                 mn = std::string(fam) + "a" + SzSuffix(sz);
-                ops = ea(sz, nullptr, nullptr) + "," + An(reg);
+                ops = ea(sz) + "," + An(reg);
                 handled = true;
                 break;
             }
-            // MUL/DIV (line C/8 with opmode 3/7).
-            if (line == 0xC && opmode == 3) { mn = "mulu"; ops = ea(1,nullptr,nullptr) + "," + Dn(reg); handled = true; break; }
-            if (line == 0xC && opmode == 7) { mn = "muls"; ops = ea(1,nullptr,nullptr) + "," + Dn(reg); handled = true; break; }
-            if (line == 0x8 && opmode == 3) { mn = "divu"; ops = ea(1,nullptr,nullptr) + "," + Dn(reg); handled = true; break; }
-            if (line == 0x8 && opmode == 7) { mn = "divs"; ops = ea(1,nullptr,nullptr) + "," + Dn(reg); handled = true; break; }
+            // MUL/DIV (line C/8 with opmode 3/7): all share "<ea>.w,Dn".
+            if ((line == 0xC || line == 0x8) && (opmode == 3 || opmode == 7))
+            {
+                mn = line == 0xC ? (opmode == 3 ? "mulu" : "muls")
+                                 : (opmode == 3 ? "divu" : "divs");
+                ops = ea(1) + "," + Dn(reg);
+                handled = true;
+                break;
+            }
             // EXG (line C, opmodes 0x08/0x09/0x11 in bits 8-3).
             if (line == 0xC && (op & 0x0130) == 0x0100 &&
                 ((op & 0xF8) == 0x40 || (op & 0xF8) == 0x48 || (op & 0xF8) == 0x88))
@@ -388,7 +407,7 @@ M68kInstruction M68kDecodeAt(uint32_t address, const uint8_t* bytes, size_t size
             {
                 const int sz = opmode & 3;
                 mn = std::string("eor") + SzSuffix(sz);
-                ops = Dn(reg) + "," + ea(sz, nullptr, nullptr);
+                ops = Dn(reg) + "," + ea(sz);
                 handled = true; break;
             }
             // ADDX/SUBX (line 9/D, opmode 4/5/6 with mode 000 or 001).
@@ -396,16 +415,14 @@ M68kInstruction M68kDecodeAt(uint32_t address, const uint8_t* bytes, size_t size
             {
                 const int sz = opmode & 3;
                 mn = std::string(line == 0x9 ? "subx" : "addx") + SzSuffix(sz);
-                if (op & 0x08) ops = "-(" + An(regf) + "),-(" + An(reg) + ")";
-                else           ops = Dn(regf) + "," + Dn(reg);
+                ops = PredecOrDn(op, regf, reg);
                 handled = true; break;
             }
             // ABCD/SBCD (line C/8, pattern xxxx rrr1 0000 xrrr).
             if ((line == 0xC || line == 0x8) && (op & 0x01F0) == 0x0100)
             {
                 mn = (line == 0xC) ? "abcd" : "sbcd";
-                if (op & 0x08) ops = "-(" + An(regf) + "),-(" + An(reg) + ")";
-                else           ops = Dn(regf) + "," + Dn(reg);
+                ops = PredecOrDn(op, regf, reg);
                 handled = true; break;
             }
             // Standard ALU: <ea>,Dn (opmode 0/1/2) or Dn,<ea> (opmode 4/5/6).
@@ -413,8 +430,8 @@ M68kInstruction M68kDecodeAt(uint32_t address, const uint8_t* bytes, size_t size
             if (sz != 3)
             {
                 mn = std::string(fam) + SzSuffix(sz);
-                if (opmode & 4) ops = Dn(reg) + "," + ea(sz, nullptr, nullptr);
-                else            ops = ea(sz, nullptr, nullptr) + "," + Dn(reg);
+                if (opmode & 4) ops = Dn(reg) + "," + ea(sz);
+                else            ops = ea(sz) + "," + Dn(reg);
                 handled = true;
             }
             break;
@@ -428,7 +445,7 @@ M68kInstruction M68kDecodeAt(uint32_t address, const uint8_t* bytes, size_t size
                 const int type = (op >> 9) & 3;
                 const bool left = (op & 0x0100) != 0;
                 mn = std::string(names[type]) + (left ? "l" : "r");
-                ops = ea(1, nullptr, nullptr);
+                ops = ea(1);
                 handled = true;
             }
             else
