@@ -478,26 +478,25 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
         if (ln.readable && ImGui::IsItemHovered() && !ln.ins.Operands.empty())
         {
             ImGui::BeginTooltip();
-            for (int rn = 0; rn < 16; ++rn)
+            // Which registers the operands reference. Tokenize the same way DrawOperands
+            // does (alnum/'.' runs) and match whole tokens via RegIndex, so "r1" is never
+            // confused with "r10".."r15".
+            bool shown[16] = {};
+            const std::string& ops = ln.ins.Operands;
+            for (size_t i = 0; i < ops.size();)
             {
-                char t[4]; std::snprintf(t, sizeof(t), "r%d", rn);
-                const size_t tl = (rn < 10) ? 2u : 3u;
-                // Whole-token match only: a plain find("r1") also hits "r10".."r15", so
-                // reject a trailing digit (and a leading alnum) around the match.
-                size_t pos = 0; bool found = false;
-                while ((pos = ln.ins.Operands.find(t, pos)) != std::string::npos)
+                if (std::isalnum((unsigned char)ops[i]) || ops[i] == '.')
                 {
-                    const char a = (pos + tl < ln.ins.Operands.size()) ? ln.ins.Operands[pos + tl] : '\0';
-                    const char b = (pos > 0) ? ln.ins.Operands[pos - 1] : '\0';
-                    const bool aDigit = (a >= '0' && a <= '9');
-                    const bool bAlnum = (b >= '0' && b <= '9') || (b >= 'a' && b <= 'z') ||
-                                        (b >= 'A' && b <= 'Z');
-                    if (!aDigit && !bAlnum) { found = true; break; }
-                    pos += tl;
+                    size_t j = i;
+                    while (j < ops.size() && (std::isalnum((unsigned char)ops[j]) || ops[j] == '.')) ++j;
+                    const int rn = RegIndex(ops.substr(i, j - i));
+                    if (rn >= 0) shown[rn] = true;
+                    i = j;
                 }
-                if (found)
-                    ImGui::Text("r%-2d = %08X", rn, regs.r[rn]);
+                else ++i;
             }
+            for (int rn = 0; rn < 16; ++rn)
+                if (shown[rn]) ImGui::Text("r%-2d = %08X", rn, regs.r[rn]);
             uint32_t ea; WatchType wt;
             if (ResolveMemOperand(ln.ins, regs, ea, wt))
             {

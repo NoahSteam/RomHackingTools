@@ -98,9 +98,13 @@ VDP1_DRAWEND_HOOK = (
     "       so the live command re-render matches what was drawn (see se_mednafen_glue.c). */\n"
     "    SsDbgVdp1LatchDrawEnd();\n"
 )
+# Anchored on the END-bit completion condition (unique in vdp1.cpp) + the DrawingActive/
+# VRAMUsageEnd state transition — the stable, semantic markers of a *normal* draw finish.
+# The `[^{}]*?` tolerates the debug log line in between, so a reworded/removed message won't
+# break the match; a MISS is reported loudly via notes (apply_anchored) rather than silently.
 VDP1_DRAWEND_ANCHOR = (
-    r'(\[VDP1\] Drawing finished at 0x%05x", CurCommandAddr\);\s*\n'
-    r'\s*DrawingActive = false;\s*\n\s*VRAMUsageEnd\(\);\s*\n)'
+    r'(else if\(MDFN_UNLIKELY\(CommandData\[0\] & 0x8000\)\)\s*\{[^{}]*?'
+    r'DrawingActive = false;\s*VRAMUsageEnd\(\);\s*\n)'
 )
 
 VDP2_ACCESSORS = """\

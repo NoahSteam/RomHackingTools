@@ -3503,7 +3503,6 @@ void App::PollSearchWorker()
         {
             mSearchQueued = false;
             LaunchSearch(std::move(mQueuedRoots), mQueuedComp, mQueuedScope);
-            mQueuedRoots.clear();
         }
     }
 }

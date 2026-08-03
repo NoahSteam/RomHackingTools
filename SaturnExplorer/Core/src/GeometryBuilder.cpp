@@ -176,12 +176,13 @@ void GeometryBuilder::Build(const std::vector<uint8_t>& vram, Vdp1Scene& out)
             D = { float(xd + originX), float(yd + originY) };
         }
 
-        // Reject an implausibly large quad. When VDP1 is snapshotted live (mid CPU update of
-        // the command table), a command can be read half-stale: one corner still holds a
-        // garbage coordinate, so the quad spans far off-screen. The rasterizer then clamps
-        // that box to the screen edge and fills a big solid rectangle — the "random colored
-        // square" artifact. No legitimate VDP1 primitive spans more than the framebuffer
-        // (<=1024 even in hi-res), so drop anything far beyond that instead of painting it.
+        // Backstop: reject an implausibly large quad. A command read from a half-stale live
+        // capture (one corner still holding a garbage coordinate) spans far off-screen; the
+        // rasterizer then clamps that box to the screen edge and fills a big solid rectangle
+        // — the "random colored square" artifact. The Mednafen path fixes this at the source
+        // by latching VDP1 VRAM at draw-end, but backends that still sample live VRAM need a
+        // guard here. No legitimate VDP1 primitive spans more than the framebuffer (<=1024
+        // even in hi-res), so drop anything far beyond that rather than paint it.
         {
             const float bx0 = std::min({ A.x, B.x, C.x, D.x });
             const float bx1 = std::max({ A.x, B.x, C.x, D.x });

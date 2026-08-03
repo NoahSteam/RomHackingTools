@@ -495,31 +495,29 @@ void SeExportSnapshot(const void* vdp1, const void* vdp2, const void* cram,
         return;
     }
     SE_LOCK();
-    {
-    SeFrame* sBack = sRing[sRingWrite];   /* the slot this frame lands in */
-    if (vdp1) memcpy(sBack->v1, vdp1, SE_V1); else memset(sBack->v1, 0, SE_V1);
-    if (vdp2) memcpy(sBack->v2, vdp2, SE_V2); else memset(sBack->v2, 0, SE_V2);
-    if (cram) memcpy(sBack->cr, cram, SE_CR); else memset(sBack->cr, 0, SE_CR);
-    if (vdp2struct) memcpy(sBack->vs, vdp2struct, SE_VS); else memset(sBack->vs, 0, SE_VS);
-    SeBuildVdp1Image(sBack->vr, vdp1struct);
-    if (wramLow)  memcpy(sBack->wl, wramLow,  SE_WL); else memset(sBack->wl, 0, SE_WL);
-    if (wramHigh) memcpy(sBack->wh, wramHigh, SE_WH); else memset(sBack->wh, 0, SE_WH);
-    if (vdp1fb)   memcpy(sBack->fb, vdp1fb,   SE_FB); else memset(sBack->fb, 0, SE_FB);
+    SeFrame* dst = sRing[sRingWrite];   /* the ring slot this frame lands in */
+    if (vdp1) memcpy(dst->v1, vdp1, SE_V1); else memset(dst->v1, 0, SE_V1);
+    if (vdp2) memcpy(dst->v2, vdp2, SE_V2); else memset(dst->v2, 0, SE_V2);
+    if (cram) memcpy(dst->cr, cram, SE_CR); else memset(dst->cr, 0, SE_CR);
+    if (vdp2struct) memcpy(dst->vs, vdp2struct, SE_VS); else memset(dst->vs, 0, SE_VS);
+    SeBuildVdp1Image(dst->vr, vdp1struct);
+    if (wramLow)  memcpy(dst->wl, wramLow,  SE_WL); else memset(dst->wl, 0, SE_WL);
+    if (wramHigh) memcpy(dst->wh, wramHigh, SE_WH); else memset(dst->wh, 0, SE_WH);
+    if (vdp1fb)   memcpy(dst->fb, vdp1fb,   SE_FB); else memset(dst->fb, 0, SE_FB);
     /* SH-2 state: master then slave, each a 92-byte sh2regs_struct (host order). */
-    if (msh2) memcpy(sBack->sh, msh2, SE_LIVE_SH2_REGS_LEN);
-    else      memset(sBack->sh, 0, SE_LIVE_SH2_REGS_LEN);
-    if (ssh2) memcpy(sBack->sh + SE_LIVE_SH2_REGS_LEN, ssh2, SE_LIVE_SH2_REGS_LEN);
-    else      memset(sBack->sh + SE_LIVE_SH2_REGS_LEN, 0, SE_LIVE_SH2_REGS_LEN);
+    if (msh2) memcpy(dst->sh, msh2, SE_LIVE_SH2_REGS_LEN);
+    else      memset(dst->sh, 0, SE_LIVE_SH2_REGS_LEN);
+    if (ssh2) memcpy(dst->sh + SE_LIVE_SH2_REGS_LEN, ssh2, SE_LIVE_SH2_REGS_LEN);
+    else      memset(dst->sh + SE_LIVE_SH2_REGS_LEN, 0, SE_LIVE_SH2_REGS_LEN);
     /* SCSP sound RAM (v13): only served on the wire when the emulator supplied it. */
-    if (soundRam) { memcpy(sBack->sr, soundRam, SE_SR); sBack->has_sr = 1; }
-    else          { memset(sBack->sr, 0, SE_SR);        sBack->has_sr = 0; }
+    if (soundRam) { memcpy(dst->sr, soundRam, SE_SR); dst->has_sr = 1; }
+    else          { memset(dst->sr, 0, SE_SR);        dst->has_sr = 0; }
     /* Decoded SCSP slots (v14): the glue hands over the pre-serialized 1152-byte block. */
-    if (scspSlots) { memcpy(sBack->sl, scspSlots, SE_SL); sBack->has_sl = 1; }
-    else           { memset(sBack->sl, 0, SE_SL);         sBack->has_sl = 0; }
-    sBack->valid = 1;
+    if (scspSlots) { memcpy(dst->sl, scspSlots, SE_SL); dst->has_sl = 1; }
+    else           { memset(dst->sl, 0, SE_SL);         dst->has_sl = 0; }
+    dst->valid = 1;
     sRingFrame[sRingWrite] = ++sFrameNo;               /* tag this slot with its frame number */
     sRingWrite = (sRingWrite + 1) % SE_RING;           /* advance (wraps, overwriting oldest) */
-    }
     SE_UNLOCK();
 }
 
@@ -703,6 +701,8 @@ static void SeServeClient(int cl, SeFrame* snap)
                 uint32_t best = 0;
                 for (i = 0; i < SE_RING; ++i)
                 {
+                    /* Compare in 32-bit to match the client's frame counter, but test
+                     * emptiness on the full 64-bit value (0 only means never-written). */
                     uint32_t f = (uint32_t)sRingFrame[i];
                     if (sRingFrame[i] != 0 && f > lastSeen && (found < 0 || f < best))
                     { best = f; found = i; }
