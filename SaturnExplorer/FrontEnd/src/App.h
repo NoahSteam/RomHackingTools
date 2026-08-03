@@ -28,6 +28,7 @@
 #include "Debug/CallStack.h"      // per-CPU call stack (paused-state workspace)
 #include "Debug/MemoryBackend.h"
 #include "Debug/MemorySearch.h"   // Cheat-Engine-style live RAM value scanner
+#include "Debug/AccessLog.h"      // "find what accesses this address" record
 #include "Debug/WatchList.h"
 #include "Debug/BreakpointManager.h"
 
@@ -105,6 +106,8 @@ private:
     void DrawCallStack();                   // per-CPU call stack (paused-state workspace)
     void DrawBreakpoints();                 // Visual Studio-style breakpoint list
     void DrawRamSearch();                   // Cheat-Engine-style live RAM value scanner
+    void DrawAccessLog();                   // "find what accesses this address"
+    void RecordAccess(int cpu, uint32_t pc);// file a data-watchpoint hit into the access log
     void DrawSound(IPlatform& platform);    // SCSP voices: who's playing + Play/Export
     void ExportSound(IPlatform& platform, int slot);   // decode voice 'slot' -> save .wav
     void PlaySound(IPlatform& platform, int slot);     // decode voice 'slot' -> preview audio
@@ -237,6 +240,14 @@ private:
     bool             mRamSearchLow = true;     // scan Low work RAM (0x00200000)
     bool             mRamSearchHigh = true;    // scan High work RAM (0x06000000)
     std::string      mRamSearchStatus;         // last scan result summary
+
+    // "Find what accesses this address" — the access log + its panel's controls.
+    AccessLog        mAccessLog;
+    uint64_t         mAccessWatchId = 0;        // id of the active logging watchpoint (0 = none)
+    uint32_t         mAccessWatchAddr = 0;      // address it watches (for the header)
+    char             mAccessAddr[16] = "";      // address entry (hex)
+    int              mAccessKind = 0;           // 0 read+write, 1 read, 2 write
+    int              mAccessSize = 4;           // watched span in bytes (1/2/4)
     AssemblyPanel            mAssemblyPanel;
     HexEditorPanel           mHexEditor;
     ControllerPanel          mController;
@@ -370,6 +381,7 @@ private:
         bool breakpoints = true;  // Visual Studio-style breakpoint list (tabs by Call Stack)
         bool sound = true;        // SCSP voices (live): who's playing + Play/Export
         bool ramSearch = true;    // Cheat-Engine-style live RAM value scanner
+        bool accessLog = true;    // "find what accesses this address" (data watchpoint log)
     };
     Panels           mPanels;
 

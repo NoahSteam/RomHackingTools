@@ -117,6 +117,28 @@ void BreakpointManager::SetCondition(uint64_t id, const std::string& cond)
     }
 }
 
+void BreakpointManager::SetLogAccess(uint64_t id, bool on)
+{
+    // No generation bump: log mode only changes how the client reacts to the watchpoint's
+    // halt; the installed watchpoint (address/size/kind) is unchanged.
+    for (Breakpoint& b : mBps)
+    {
+        if (b.id == id) { b.logAccess = on; return; }
+    }
+}
+
+bool BreakpointManager::OnlyLoggingWatchpoints() const
+{
+    bool anyLogging = false;
+    for (const Breakpoint& b : mBps)
+    {
+        if (!b.enabled || b.kind == BpKind::Execution) continue;   // memory watchpoints only
+        if (b.logAccess) anyLogging = true;
+        else             return false;   // a halting watchpoint is present
+    }
+    return anyLogging;
+}
+
 void BreakpointManager::Remove(uint64_t id)
 {
     for (std::size_t i = 0; i < mBps.size(); ++i)

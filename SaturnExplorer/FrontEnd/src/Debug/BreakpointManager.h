@@ -32,6 +32,10 @@ struct Breakpoint
     // the break only "sticks" when the condition holds. Empty = unconditional. Execution
     // BPs only for now (a memory BP's halt PC is the accessor, not the watched address).
     std::string condition;
+    // "Find what accesses this address": a memory watchpoint in log mode records the
+    // accessing instruction + call stack and resumes instead of halting (client-side, like
+    // 'condition'). Ignored for execution BPs.
+    bool logAccess = false;
 };
 
 class BreakpointManager
@@ -53,8 +57,15 @@ public:
 
     void SetEnabled(uint64_t id, bool enabled);
     void SetCondition(uint64_t id, const std::string& cond);   // client-side guard; no re-sync
+    void SetLogAccess(uint64_t id, bool on);                   // client-side log mode; no re-sync
     void Remove(uint64_t id);
     void Clear();
+
+    // True when at least one enabled memory watchpoint is in log-access mode and no enabled
+    // memory watchpoint is a halting one — so a data-BP halt can be attributed to logging and
+    // resumed rather than surfaced as a break (the stop event carries no data address to
+    // disambiguate mixed watchpoints, so a halting watchpoint present means "let it stop").
+    bool OnlyLoggingWatchpoints() const;
 
     const std::vector<Breakpoint>& All() const { return mBps; }
 

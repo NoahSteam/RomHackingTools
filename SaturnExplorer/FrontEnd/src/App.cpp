@@ -18,6 +18,7 @@
 #include "Theme.h"
 #include "Debug/FormatString.h"   // tracepoint output mini-syntax
 #include "Debug/ConditionEval.h"  // conditional-breakpoint / gated-tracepoint guards
+#include "Debug/Sh2Disasm.h"      // disassemble the accessing instruction in the Access Log
 #include "SavestateDriver.h"
 #ifdef SE_ENABLE_LIVE
 #include "LiveDriver.h"      // native builds only (threads/sockets)
@@ -280,6 +281,7 @@ const std::vector<App::PanelInfo>& App::PanelList()
         {"callStack",       "Call Stack",         &Panels::callStack},
         {"breakpoints",     "Breakpoints",        &Panels::breakpoints},
         {"ramSearch",       "RAM Search",         &Panels::ramSearch},
+        {"accessLog",       "Access Log",         &Panels::accessLog},
         {"sound",           "Sound (SCSP)",       &Panels::sound},
     };
     return kList;
@@ -883,6 +885,20 @@ void App::BuildUI(IPlatform& platform)
                 mBpStopActive = false;
             }
         }
+        // "Find what accesses this address": a data watchpoint reports the accessing
+        // instruction's PC through the same stop path as an execution BP. When the halt PC
+        // carries no execution breakpoint and every active watchpoint is a logging one, treat
+        // it as a data-BP hit — record the accessor + its call stack and resume silently.
+        if (stopped && !mbPaused && stopReason == SE_LIVE_STOP_EXEC_BP &&
+            !(mStepBpActive && stopPc == mStepBpAddr) &&
+            !mBreakpoints.HasExecutionAt(0, stopPc) && !mBreakpoints.HasExecutionAt(1, stopPc) &&
+            mBreakpoints.OnlyLoggingWatchpoints())
+        {
+            RecordAccess(static_cast<int>(stopCpu), stopPc);
+            Continue();
+            stopped = false;
+            mBpStopActive = false;
+        }
         if (stopped && !mbPaused)
         {
             mbPaused = true;   // halted; panel follows the halted PC
@@ -1035,6 +1051,7 @@ void App::BuildUI(IPlatform& platform)
     if (mPanels.callStack)       DrawCallStack();
     if (mPanels.breakpoints)     DrawBreakpoints();
     if (mPanels.ramSearch)       DrawRamSearch();
+    if (mPanels.accessLog)       DrawAccessLog();
     if (mPanels.sound)           DrawSound(platform);
 
     // Game-data-directory modal + texture search results (both floating, drawn last
@@ -1501,6 +1518,33 @@ bool App::EvalCondition(const std::string& cond, int cpu)
     if (!mbHasData || !mContext) return true;
     ContextFormat fc = MakeLiveContext(mContext, &mMemBackend, cpu);
     return ConditionEval(cond, fc);
+}
+
+// Record a data-watchpoint hit: the instruction at 'pc' on 'cpu' just touched a watched
+// address. Reconstruct that CPU's call stack from the halted registers (exact at this PC)
+// and file it into the access log, which dedups by instruction and keeps a hit count.
+void App::RecordAccess(int cpu, uint32_t pc)
+{
+    std::vector<CallStackFrame> frames;
+    se_sh2_regs regs{};
+    if (mbHasData && mContext && se_get_sh2_regs(mContext, cpu, &regs) == SE_OK)
+    {
+        CallStack cs;
+        cs.Reconstruct(cpu, regs, mMemBackend);
+        frames = cs.Frames(cpu);
+    }
+    // Decode the accessing instruction once, here, so the panel doesn't re-read + re-decode
+    // it every frame.
+    std::string insn;
+    auto res = mMemBackend.ReadMemoryBatch({{pc, 2}});
+    if (!res.empty() && res[0].success && res[0].bytes.size() == 2)
+    {
+        DisassembledInstruction ins = Sh2DecodeAt(pc, res[0].bytes.data(), 2);
+        insn = ins.Mnemonic + (ins.Operands.empty() ? "" : " " + ins.Operands);
+    }
+    const uint32_t frame = (mbHasData && mContext)
+                               ? static_cast<uint32_t>(se_frame_number(mContext)) : 0;
+    mAccessLog.Record(pc, cpu, frame, std::move(insn), std::move(frames));
 }
 
 // Push the Log-type tracepoints to the emulator when the set changes (v8). Serializes
@@ -2183,6 +2227,115 @@ void App::DrawRamSearch()
             }
             ImGui::EndTable();
         }
+    }
+
+    ImGui::End();
+}
+
+// "Find out what accesses this address" — install a data watchpoint in log mode over the
+// address, then let the running game hit it: each accessing instruction is captured with its
+// call stack and collapsed into one row with a hit count. Needs live frame control and (on
+// Mednafen) a --enable-debugger build for the watchpoint to actually fire.
+void App::DrawAccessLog()
+{
+    if (!ImGui::Begin("Access Log")) { ImGui::End(); return; }
+
+    const bool watching = mAccessWatchId != 0;
+
+    // Controls: pick an address + access + span, then start watching. While a watch is
+    // active the address is locked and the buttons become Stop / Clear.
+    ImGui::BeginDisabled(watching);
+    ImGui::SetNextItemWidth(120.0f);
+    ImGui::InputTextWithHint("##accaddr", "address (hex)", mAccessAddr, sizeof(mAccessAddr));
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(110.0f);
+    const char* kinds[] = { "read+write", "read", "write" };
+    ImGui::Combo("##acckind", &mAccessKind, kinds, 3);
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(70.0f);
+    const char* sizes[] = { "1 byte", "2 bytes", "4 bytes" };
+    int sizeIdx = mAccessSize == 1 ? 0 : (mAccessSize == 2 ? 1 : 2);
+    if (ImGui::Combo("##accsize", &sizeIdx, sizes, 3))
+        mAccessSize = sizeIdx == 0 ? 1 : (sizeIdx == 1 ? 2 : 4);
+    ImGui::EndDisabled();
+
+    ImGui::SameLine();
+    if (!watching)
+    {
+        if (ImGui::Button("Find what accesses this"))
+        {
+            const uint32_t addr = static_cast<uint32_t>(std::strtoul(mAccessAddr, nullptr, 16));
+            if (addr != 0)
+            {
+                const BpKind kind = mAccessKind == 1 ? BpKind::MemRead
+                                  : mAccessKind == 2 ? BpKind::MemWrite
+                                                     : BpKind::MemReadWrite;
+                mAccessLog.Clear();
+                mAccessWatchId = mBreakpoints.AddMemory(addr, static_cast<uint32_t>(mAccessSize), kind);
+                mBreakpoints.SetLogAccess(mAccessWatchId, true);
+                mAccessWatchAddr = addr;
+            }
+        }
+    }
+    else
+    {
+        if (ImGui::Button("Stop"))
+        {
+            mBreakpoints.Remove(mAccessWatchId);
+            mAccessWatchId = 0;
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Clear")) mAccessLog.Clear();
+        ImGui::SameLine();
+        ImGui::Text("watching %08X (%s)", mAccessWatchAddr,
+                    mAccessKind == 1 ? "R" : mAccessKind == 2 ? "W" : "R/W");
+    }
+
+    if (!se_supports_frame_control(mContext))
+        ImGui::TextDisabled("Connect to a running emulator to capture accesses.");
+    ImGui::Separator();
+
+    const auto& records = mAccessLog.Records();
+    if (records.empty())
+    {
+        ImGui::TextDisabled(watching ? "No accesses yet \xe2\x80\x94 let the game run."
+                                     : "Enter an address and press \"Find what accesses this\".");
+        ImGui::End();
+        return;
+    }
+
+    // One row per accessing instruction, expandable to its captured call stack.
+    for (size_t i = 0; i < records.size(); ++i)
+    {
+        const AccessRecord& r = records[i];
+        ImGui::PushID(static_cast<int>(i));
+
+        char header[128];
+        std::snprintf(header, sizeof(header), "%08X  %-24s  x%llu  (%s)###acc%zu",
+                      r.pc, r.insn.c_str(), (unsigned long long)r.count,
+                      r.cpu ? "Slave" : "Master", i);
+
+        const bool open = ImGui::TreeNode(header);
+        if (ImGui::IsItemClicked(ImGuiMouseButton_Right))
+        { mAssemblyPanel.GoTo(r.cpu, r.pc); mPanels.assembly = true; }
+        ImGui::SetItemTooltip("Right-click to show in SH-2 Assembly");
+        if (open)
+        {
+            if (r.stack.empty())
+                ImGui::TextDisabled("  (no call stack)");
+            for (size_t f = 0; f < r.stack.size(); ++f)
+            {
+                const CallStackFrame& fr = r.stack[f];
+                ImGui::Text("  #%zu  %s", f, mFunctionNames.NameOf(fr.functionAddress).c_str());
+                if (fr.returnAddress)
+                {
+                    ImGui::SameLine();
+                    ImGui::TextDisabled("\xe2\x86\x92 %08X", fr.returnAddress);
+                }
+            }
+            ImGui::TreePop();
+        }
+        ImGui::PopID();
     }
 
     ImGui::End();

@@ -134,6 +134,14 @@ if(BUILD_TESTING)
     target_include_directories(SaturnExplorerMemorySearchTests
         PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
     add_test(NAME SaturnExplorerMemorySearchTests COMMAND SaturnExplorerMemorySearchTests)
+
+    add_executable(SaturnExplorerAccessLogTests
+        FrontEnd/tests/AccessLogTests.cpp
+        FrontEnd/src/Debug/AccessLog.cpp
+    )
+    target_include_directories(SaturnExplorerAccessLogTests
+        PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    add_test(NAME SaturnExplorerAccessLogTests COMMAND SaturnExplorerAccessLogTests)
 endif()
 
 # ---------------------------------------------------------------------------
@@ -233,6 +241,7 @@ if(WIN32)
         FrontEnd/src/Debug/FormatString.cpp
         FrontEnd/src/Debug/ConditionEval.cpp
         FrontEnd/src/Debug/MemorySearch.cpp
+        FrontEnd/src/Debug/AccessLog.cpp
         FrontEnd/src/Debug/ExecutionActions.cpp
         FrontEnd/src/Debug/CallStack.cpp
         FrontEnd/src/FrameRecorder.cpp
@@ -296,6 +305,7 @@ elseif(EMSCRIPTEN)
         FrontEnd/src/Debug/FormatString.cpp
         FrontEnd/src/Debug/ConditionEval.cpp
         FrontEnd/src/Debug/MemorySearch.cpp
+        FrontEnd/src/Debug/AccessLog.cpp
         FrontEnd/src/Debug/ExecutionActions.cpp
         FrontEnd/src/Debug/CallStack.cpp
         FrontEnd/src/UpdateChecker.cpp
@@ -374,6 +384,7 @@ else()
             FrontEnd/src/Debug/FormatString.cpp
             FrontEnd/src/Debug/ConditionEval.cpp
             FrontEnd/src/Debug/MemorySearch.cpp
+            FrontEnd/src/Debug/AccessLog.cpp
             FrontEnd/src/Debug/ExecutionActions.cpp
             FrontEnd/src/Debug/CallStack.cpp
             FrontEnd/src/FrameRecorder.cpp
