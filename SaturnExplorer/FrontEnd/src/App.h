@@ -107,6 +107,7 @@ private:
     void DrawBreakpoints();                 // Visual Studio-style breakpoint list
     void DrawRamSearch();                   // Cheat-Engine-style live RAM value scanner
     void DrawAccessLog();                   // "find what accesses this address"
+    void DrawSoundCpu();                    // SCSP 68000 sound-CPU disassembly (Sound RAM)
     void RecordAccess(int cpu, uint32_t pc);// file a data-watchpoint hit into the access log
     void DrawSound(IPlatform& platform);    // SCSP voices: who's playing + Play/Export
     void ExportSound(IPlatform& platform, int slot);   // decode voice 'slot' -> save .wav
@@ -252,6 +253,10 @@ private:
     char             mAccessAddr[16] = "";      // address entry (hex)
     int              mAccessKind = 0;           // 0 read+write, 1 read, 2 write
     int              mAccessSizeIdx = 2;        // span combo index; bytes = 1u << idx (1/2/4)
+
+    // SCSP 68000 sound-CPU disassembly panel (over captured Sound RAM).
+    uint32_t         mSoundCpuAddr = 0;         // current 68K address (Sound RAM offset)
+    char             mSoundCpuAddrBuf[16] = "0";
     AssemblyPanel            mAssemblyPanel;
     HexEditorPanel           mHexEditor;
     ControllerPanel          mController;
@@ -386,6 +391,7 @@ private:
         bool sound = true;        // SCSP voices (live): who's playing + Play/Export
         bool ramSearch = true;    // Cheat-Engine-style live RAM value scanner
         bool accessLog = true;    // "find what accesses this address" (data watchpoint log)
+        bool soundCpu = true;     // SCSP 68000 sound-CPU disassembly
     };
     Panels           mPanels;
 

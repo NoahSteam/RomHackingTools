@@ -19,6 +19,7 @@
 #include "Debug/FormatString.h"   // tracepoint output mini-syntax
 #include "Debug/ConditionEval.h"  // conditional-breakpoint / gated-tracepoint guards
 #include "Debug/Sh2Disasm.h"      // disassemble the accessing instruction in the Access Log
+#include "Debug/M68kDisasm.h"     // SCSP 68000 sound-CPU disassembly
 #include "SavestateDriver.h"
 #ifdef SE_ENABLE_LIVE
 #include "LiveDriver.h"      // native builds only (threads/sockets)
@@ -282,6 +283,7 @@ const std::vector<App::PanelInfo>& App::PanelList()
         {"breakpoints",     "Breakpoints",        &Panels::breakpoints},
         {"ramSearch",       "RAM Search",         &Panels::ramSearch},
         {"accessLog",       "Access Log",         &Panels::accessLog},
+        {"soundCpu",        "Sound CPU (68K)",    &Panels::soundCpu},
         {"sound",           "Sound (SCSP)",       &Panels::sound},
     };
     return kList;
@@ -1051,6 +1053,7 @@ void App::BuildUI(IPlatform& platform)
     if (mPanels.breakpoints)     DrawBreakpoints();
     if (mPanels.ramSearch)       DrawRamSearch();
     if (mPanels.accessLog)       DrawAccessLog();
+    if (mPanels.soundCpu)        DrawSoundCpu();
     if (mPanels.sound)           DrawSound(platform);
 
     // Game-data-directory modal + texture search results (both floating, drawn last
@@ -2334,6 +2337,93 @@ void App::DrawAccessLog()
         }
         ImGui::PopID();
     }
+
+    ImGui::End();
+}
+
+// SCSP 68000 sound-CPU disassembly. The sound driver's program lives in Sound RAM (which the
+// 68K sees from offset 0), so this decodes the captured Sound RAM with the 68000 disassembler
+// starting at a chosen 68K address, following branches. Read-only: 68K register state would
+// need dedicated emulator glue and isn't exposed yet.
+void App::DrawSoundCpu()
+{
+    if (!ImGui::Begin("Sound CPU (68K)")) { ImGui::End(); return; }
+
+    if (!mbHasData)
+    {
+        ImGui::TextDisabled("No data loaded.");
+        ImGui::End();
+        return;
+    }
+
+    constexpr uint32_t kSoundRamBase = 0x05A00000u;   // cached mirror (see MemoryBackend kRegions)
+
+    // Address entry (68K address = Sound RAM offset). Enter commits; buttons nudge.
+    ImGui::SetNextItemWidth(120.0f);
+    if (ImGui::InputText("Address", mSoundCpuAddrBuf, sizeof(mSoundCpuAddrBuf),
+                         ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CharsHexadecimal))
+        mSoundCpuAddr = static_cast<uint32_t>(std::strtoul(mSoundCpuAddrBuf, nullptr, 16)) & 0x07FFFEu;
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Top")) { mSoundCpuAddr = 0; std::snprintf(mSoundCpuAddrBuf, sizeof(mSoundCpuAddrBuf), "0"); }
+
+    // Confirm the Sound RAM is actually available for this source.
+    auto avail = mMemBackend.ReadMemoryBatch({{kSoundRamBase, 2}});
+    if (avail.empty() || !avail[0].success)
+    {
+        ImGui::TextDisabled("Sound RAM not available (connect to a live emulator or load a full dump).");
+        ImGui::End();
+        return;
+    }
+
+    ImGui::Separator();
+    if (ImGui::BeginChild("sndcpuasm"))
+    {
+        // Decode a windowful of instructions from the current address. A single batched read
+        // of the window feeds the whole page (instructions are 2-10 bytes each).
+        constexpr uint32_t kWindow = 0x200;            // 512 bytes ~ up to 256 instructions
+        const uint32_t start = mSoundCpuAddr & ~1u;    // 68K instructions are word-aligned
+        auto res = mMemBackend.ReadMemoryBatch({{kSoundRamBase + start, kWindow}});
+        const std::vector<uint8_t>& buf =
+            (!res.empty() && res[0].success) ? res[0].bytes : std::vector<uint8_t>();
+
+        uint32_t off = 0;
+        uint32_t nextTarget = 0;   // set if the user clicks a branch target this frame
+        bool     doJump = false;
+        while (off + 2 <= buf.size())
+        {
+            const uint32_t addr = start + off;
+            M68kInstruction ins = M68kDecodeAt(addr, buf.data() + off, buf.size() - off);
+
+            // "AAAAAA  bytes            mnem  operands"
+            char bytesCol[24] = "";
+            int  p = 0;
+            for (int i = 0; i < ins.Length && i < 5; ++i)
+                p += std::snprintf(bytesCol + p, sizeof(bytesCol) - p, "%02X", buf[off + i]);
+
+            ImGui::Text("%06X  %-12s", addr, bytesCol);
+            ImGui::SameLine();
+            if (!ins.IsValid) ImGui::TextDisabled("%s %s", ins.Mnemonic.c_str(), ins.Operands.c_str());
+            else              ImGui::Text("%-8s %s", ins.Mnemonic.c_str(), ins.Operands.c_str());
+
+            // Click a resolved branch target to follow it.
+            if (ins.HasBranchTarget)
+            {
+                ImGui::SameLine();
+                ImGui::PushID(static_cast<int>(off));
+                if (ImGui::SmallButton("->")) { nextTarget = ins.BranchTarget; doJump = true; }
+                ImGui::SetItemTooltip("Go to %06X", ins.BranchTarget & 0x07FFFEu);
+                ImGui::PopID();
+            }
+
+            off += static_cast<uint32_t>(ins.Length);
+        }
+        if (doJump)
+        {
+            mSoundCpuAddr = nextTarget & 0x07FFFEu;
+            std::snprintf(mSoundCpuAddrBuf, sizeof(mSoundCpuAddrBuf), "%X", mSoundCpuAddr);
+        }
+    }
+    ImGui::EndChild();
 
     ImGui::End();
 }

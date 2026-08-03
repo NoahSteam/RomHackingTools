@@ -150,6 +150,13 @@ if(BUILD_TESTING)
     target_include_directories(SaturnExplorerFunctionNamesTests
         PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
     add_test(NAME SaturnExplorerFunctionNamesTests COMMAND SaturnExplorerFunctionNamesTests)
+
+    add_executable(SaturnExplorerM68kDisasmTests
+        FrontEnd/tests/M68kDisasmTests.cpp
+        FrontEnd/src/Debug/M68kDisasm.cpp
+    )
+    target_include_directories(SaturnExplorerM68kDisasmTests PRIVATE FrontEnd/src)
+    add_test(NAME SaturnExplorerM68kDisasmTests COMMAND SaturnExplorerM68kDisasmTests)
 endif()
 
 # ---------------------------------------------------------------------------
@@ -250,6 +257,7 @@ if(WIN32)
         FrontEnd/src/Debug/ConditionEval.cpp
         FrontEnd/src/Debug/MemorySearch.cpp
         FrontEnd/src/Debug/AccessLog.cpp
+        FrontEnd/src/Debug/M68kDisasm.cpp
         FrontEnd/src/Debug/ExecutionActions.cpp
         FrontEnd/src/Debug/CallStack.cpp
         FrontEnd/src/FrameRecorder.cpp
@@ -314,6 +322,7 @@ elseif(EMSCRIPTEN)
         FrontEnd/src/Debug/ConditionEval.cpp
         FrontEnd/src/Debug/MemorySearch.cpp
         FrontEnd/src/Debug/AccessLog.cpp
+        FrontEnd/src/Debug/M68kDisasm.cpp
         FrontEnd/src/Debug/ExecutionActions.cpp
         FrontEnd/src/Debug/CallStack.cpp
         FrontEnd/src/UpdateChecker.cpp
@@ -393,6 +402,7 @@ else()
             FrontEnd/src/Debug/ConditionEval.cpp
             FrontEnd/src/Debug/MemorySearch.cpp
             FrontEnd/src/Debug/AccessLog.cpp
+            FrontEnd/src/Debug/M68kDisasm.cpp
             FrontEnd/src/Debug/ExecutionActions.cpp
             FrontEnd/src/Debug/CallStack.cpp
             FrontEnd/src/FrameRecorder.cpp
