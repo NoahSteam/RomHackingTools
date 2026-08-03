@@ -66,11 +66,42 @@ VDP1_ACCESSORS = """\
 namespace MDFN_IEN_SS { namespace VDP1 {
 extern "C" const unsigned short* SsDbgVdp1Vram(void) { return (const unsigned short*)VRAM; }
 extern "C" const unsigned short* SsDbgVdp1Fb(void)   { return (const unsigned short*)FB[!FBDrawWhich]; }
+/* Draw-end latch: a copy of VDP1 VRAM taken the instant the command list finishes
+   plotting (SsDbgVdp1LatchDrawEnd is called from the draw-end path in the command loop).
+   Saturn Explorer re-rasterizes the command table itself, so it must see the table as it
+   was PLOTTED — not a half-rebuilt one captured at the later video-frame boundary. The glue
+   prefers this latch; SsDbgVdp1Latch returns NULL until the first draw-end, so a fresh boot
+   falls back to live VRAM. */
+static unsigned short SsVdp1Latch[0x40000];   /* 512 KiB, matches VRAM[0x40000] */
+static int SsVdp1LatchValid = 0;
+extern "C" void SsDbgVdp1LatchDrawEnd(void) {
+   memcpy(SsVdp1Latch, VRAM, sizeof SsVdp1Latch);
+   SsVdp1LatchValid = 1;
+}
+extern "C" const unsigned short* SsDbgVdp1Latch(void) {
+   return SsVdp1LatchValid ? SsVdp1Latch : (const unsigned short*)0;
+}
 extern "C" void SsDbgVdp1Regs(unsigned short o[11]) {
    o[0]=TVMR; o[1]=FBCR; o[2]=PTMR; o[3]=EWDR; o[4]=EWLR; o[5]=EWRR;
    o[6]=0;    o[7]=EDSR; o[8]=LOPR; o[9]=0;    o[10]=0;   /* ENDR/COPR/MODR write-only/computed */
 }
 }}"""
+
+# Latch VDP1 VRAM the instant the command list finishes plotting (the normal draw-end: an
+# END-bit command, not an abort/FB-swap interrupt). Injected into vdp1.cpp's command loop
+# right after the "Drawing finished" completion. `extern "C"` is illegal inside a function
+# body, so the call is plain and resolves to VDP1_DRAWEND_FWD (a file-scope forward decl
+# prepended at BOF) — its C linkage matches the definition appended at EOF (VDP1_ACCESSORS).
+VDP1_DRAWEND_FWD = 'extern "C" void SsDbgVdp1LatchDrawEnd(void);  /* SE_VDP1_LATCH_FWD */\n'
+VDP1_DRAWEND_HOOK = (
+    "    /* Saturn Explorer: latch VDP1 VRAM the instant the command list finishes plotting,\n"
+    "       so the live command re-render matches what was drawn (see se_mednafen_glue.c). */\n"
+    "    SsDbgVdp1LatchDrawEnd();\n"
+)
+VDP1_DRAWEND_ANCHOR = (
+    r'(\[VDP1\] Drawing finished at 0x%05x", CurCommandAddr\);\s*\n'
+    r'\s*DrawingActive = false;\s*\n\s*VRAMUsageEnd\(\);\s*\n)'
+)
 
 VDP2_ACCESSORS = """\
 /* Expose VDP2's file-scope statics to the glue (C linkage). */
@@ -568,6 +599,24 @@ def process_ss(src_dir, do_write, with_pause):
     return notes
 
 
+def process_vdp1_drawend(src_dir, do_write):
+    """Inject the VDP1 draw-end latch call into vdp1.cpp's command loop (the accessor block
+    itself is appended via APPEND_EDITS). Anchored on the normal 'Drawing finished'
+    completion so an aborted/interrupted draw doesn't latch a partial command table."""
+    path = os.path.join(src_dir, "vdp1.cpp")
+    if not os.path.isfile(path):
+        return ["vdp1.cpp (draw-end latch):", "  MISSING  vdp1.cpp"]
+    notes = ["vdp1.cpp (draw-end latch):"]
+    text = original = open(path, encoding="utf-8", errors="surrogateescape").read()
+    text, n = apply_prepend(text, VDP1_DRAWEND_FWD, "SE_VDP1_LATCH_FWD")
+    notes.append(n)
+    text, n = apply_anchored(text, VDP1_DRAWEND_ANCHOR, VDP1_DRAWEND_HOOK, "SsDbgVdp1LatchDrawEnd();")
+    notes.append(n)
+    if do_write and text != original:
+        open(path, "w", encoding="utf-8", errors="surrogateescape").write(text)
+    return notes
+
+
 def process_sound(src_dir, do_write):
     """Wire the SCSP read path (sound RAM + decoded voices). These accessors need the
     `static SS_SCSP SCSP` instance and scsp.h's private Slots[]/SlotRegs[], both visible
@@ -814,6 +863,7 @@ def main():
         notes += process_append_file(src_dir, fname, block, key, do_write)
     notes += process_smpc(src_dir, do_write)
     notes += process_ss(src_dir, do_write, with_pause)
+    notes += process_vdp1_drawend(src_dir, do_write)
     notes += process_sound(src_dir, do_write)
     notes += process_title(root, do_write)
     notes += process_input(root, do_write)

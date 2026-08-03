@@ -41,6 +41,7 @@
  *      class/static members (VDP1's individual regs, SH7095's register file). ---- */
 #if defined(SE_MEDNAFEN_WIRED)  /* define once the injected ss accessors exist (README §Accessors). */
 extern const uint16_t* SsDbgVdp1Vram(void);   /* VDP1::VRAM    — 0x40000 words, host order */
+extern const uint16_t* SsDbgVdp1Latch(void);  /* VDP1 VRAM latched at draw-end; NULL until 1st draw */
 extern const uint16_t* SsDbgVdp2Vram(void);   /* VDP2::VRAM    — 262144 words, host order  */
 extern const uint16_t* SsDbgCram(void);       /* VDP2::CRAM    — 2048 words,  host order   */
 extern const uint16_t* SsDbgRawRegs(void);    /* VDP2::RawRegs — 0x100, indexed (hw>>1)    */
@@ -148,7 +149,14 @@ void SeMednafenSnapshot(void)
     static uint32_t msh2[23], ssh2[23];
 
 #if defined(SE_MEDNAFEN_WIRED)  /* enabled once the injected accessors exist. */
-    SwapU16ToBE(v1, (const uint8_t*)SsDbgVdp1Vram(), sizeof v1);   /* -> big-endian */
+    /* Prefer the draw-end latch (the command table as it was actually plotted) over live
+     * VRAM, which at this video-frame boundary may already be a half-rebuilt next-frame
+     * table. Falls back to live VRAM until the first draw completes. */
+    {
+        const uint16_t* v1src = SsDbgVdp1Latch();
+        if (!v1src) v1src = SsDbgVdp1Vram();
+        SwapU16ToBE(v1, (const uint8_t*)v1src, sizeof v1);         /* -> big-endian */
+    }
     SwapU16ToBE(v2, (const uint8_t*)SsDbgVdp2Vram(), sizeof v2);
     BuildYabauseVdp2Struct(vs, SsDbgRawRegs());
     SsDbgVdp1Regs(vdp1);
