@@ -891,8 +891,7 @@ void App::BuildUI(IPlatform& platform)
         // it as a data-BP hit — record the accessor + its call stack and resume silently.
         if (stopped && !mbPaused && stopReason == SE_LIVE_STOP_EXEC_BP &&
             !(mStepBpActive && stopPc == mStepBpAddr) &&
-            !mBreakpoints.HasExecutionAt(0, stopPc) && !mBreakpoints.HasExecutionAt(1, stopPc) &&
-            mBreakpoints.OnlyLoggingWatchpoints())
+            mBreakpoints.IsAccessLogHalt(stopPc))
         {
             RecordAccess(static_cast<int>(stopCpu), stopPc);
             Continue();
@@ -1530,7 +1529,7 @@ void App::RecordAccess(int cpu, uint32_t pc)
     if (mbHasData && mContext && se_get_sh2_regs(mContext, cpu, &regs) == SE_OK)
     {
         CallStack cs;
-        cs.Reconstruct(cpu, regs, mMemBackend);
+        BuildCallStack(cpu, regs, cs);   // prefers the ● Confirmed shadow stack, like the panel
         frames = cs.Frames(cpu);
     }
     // Decode the accessing instruction once, here, so the panel doesn't re-read + re-decode
@@ -2254,9 +2253,8 @@ void App::DrawAccessLog()
     ImGui::SameLine();
     ImGui::SetNextItemWidth(70.0f);
     const char* sizes[] = { "1 byte", "2 bytes", "4 bytes" };
-    int sizeIdx = mAccessSize == 1 ? 0 : (mAccessSize == 2 ? 1 : 2);
-    if (ImGui::Combo("##accsize", &sizeIdx, sizes, 3))
-        mAccessSize = sizeIdx == 0 ? 1 : (sizeIdx == 1 ? 2 : 4);
+    ImGui::Combo("##accsize", &mAccessSizeIdx, sizes, 3);
+    const uint32_t watchSize = 1u << mAccessSizeIdx;   // 1/2/4
     ImGui::EndDisabled();
 
     ImGui::SameLine();
@@ -2271,7 +2269,7 @@ void App::DrawAccessLog()
                                   : mAccessKind == 2 ? BpKind::MemWrite
                                                      : BpKind::MemReadWrite;
                 mAccessLog.Clear();
-                mAccessWatchId = mBreakpoints.AddMemory(addr, static_cast<uint32_t>(mAccessSize), kind);
+                mAccessWatchId = mBreakpoints.AddMemory(addr, watchSize, kind);
                 mBreakpoints.SetLogAccess(mAccessWatchId, true);
                 mAccessWatchAddr = addr;
             }
@@ -2287,8 +2285,7 @@ void App::DrawAccessLog()
         ImGui::SameLine();
         if (ImGui::Button("Clear")) mAccessLog.Clear();
         ImGui::SameLine();
-        ImGui::Text("watching %08X (%s)", mAccessWatchAddr,
-                    mAccessKind == 1 ? "R" : mAccessKind == 2 ? "W" : "R/W");
+        ImGui::Text("watching %08X (%s)", mAccessWatchAddr, kinds[mAccessKind]);
     }
 
     if (!se_supports_frame_control(mContext))
@@ -2311,9 +2308,9 @@ void App::DrawAccessLog()
         ImGui::PushID(static_cast<int>(i));
 
         char header[128];
-        std::snprintf(header, sizeof(header), "%08X  %-24s  x%llu  (%s)###acc%zu",
+        std::snprintf(header, sizeof(header), "%08X  %-24s  x%llu  (%s)",
                       r.pc, r.insn.c_str(), (unsigned long long)r.count,
-                      r.cpu ? "Slave" : "Master", i);
+                      r.cpu ? "Slave" : "Master");
 
         const bool open = ImGui::TreeNode(header);
         if (ImGui::IsItemClicked(ImGuiMouseButton_Right))
@@ -2353,14 +2350,18 @@ void App::RebuildCallStack()
         mCallStack.Clear(mCallStackCpu);
         return;
     }
+    BuildCallStack(mCallStackCpu, regs, mCallStack);
+}
+
+void App::BuildCallStack(int cpu, const se_sh2_regs& regs, CallStack& out)
+{
 #ifdef SE_ENABLE_LIVE
     // Prefer the emulator's recorded shadow stack (● Confirmed) when the live source
     // supplies one (v9+); fall back to the heuristic reconstruction otherwise.
     if (mbLiveSource)
     {
         se_live_call_frame wire[SE_LIVE_CALLSTACK_MAX];
-        const uint32_t n = se_live_poll_callstack(&mDataSource, mCallStackCpu, wire,
-                                                  SE_LIVE_CALLSTACK_MAX);
+        const uint32_t n = se_live_poll_callstack(&mDataSource, cpu, wire, SE_LIVE_CALLSTACK_MAX);
         if (n > 0)
         {
             std::vector<CallStackFrame> frames;
@@ -2368,7 +2369,7 @@ void App::RebuildCallStack()
             for (uint32_t i = 0; i < n; ++i)
             {
                 CallStackFrame f;
-                f.cpu             = mCallStackCpu;
+                f.cpu             = cpu;
                 f.callSite        = wire[i].call_site;
                 f.functionAddress = wire[i].func;
                 f.returnAddress   = wire[i].ret;
@@ -2378,15 +2379,15 @@ void App::RebuildCallStack()
                 f.confidence      = FrameConfidence::Confirmed;
                 frames.push_back(f);
             }
-            mCallStack.SetConfirmed(mCallStackCpu, std::move(frames));
+            out.SetConfirmed(cpu, std::move(frames));
             // Graft a heuristic tail below the deepest recorded frame (recording may
             // have started mid-run), composing the reliable head with a best-effort tail.
-            mCallStack.ReconcileHeuristicTail(mCallStackCpu, regs, mMemBackend);
+            out.ReconcileHeuristicTail(cpu, regs, mMemBackend);
             return;
         }
     }
 #endif
-    mCallStack.Reconstruct(mCallStackCpu, regs, mMemBackend);
+    out.Reconstruct(cpu, regs, mMemBackend);
 }
 
 // Sync the paused-state workspace to a chosen frame: point Assembly at the frame's

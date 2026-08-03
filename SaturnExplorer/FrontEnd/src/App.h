@@ -115,6 +115,10 @@ private:
     // fills 'rate' with the natural playback rate. Shared by Play + Export.
     int  DecodeSlotSample(int slot, std::vector<int16_t>& out, uint32_t& rate);
     void RebuildCallStack();                // reconstruct the shown CPU's stack
+    // Fill 'out' with 'cpu's call stack: the emulator's ● Confirmed shadow stack when the
+    // live source has one, else a heuristic reconstruction. Shared by the Call Stack panel
+    // and the Access Log so both prefer the confirmed frames.
+    void BuildCallStack(int cpu, const se_sh2_regs& regs, CallStack& out);
     // Sync the workspace to a selected call-stack frame (Assembly + Hex + focus).
     void GoToFrame(const CallStackFrame& fr);
     void DrawTracepointEditor();            // modal property editor for a tracepoint
@@ -247,7 +251,7 @@ private:
     uint32_t         mAccessWatchAddr = 0;      // address it watches (for the header)
     char             mAccessAddr[16] = "";      // address entry (hex)
     int              mAccessKind = 0;           // 0 read+write, 1 read, 2 write
-    int              mAccessSize = 4;           // watched span in bytes (1/2/4)
+    int              mAccessSizeIdx = 2;        // span combo index; bytes = 1u << idx (1/2/4)
     AssemblyPanel            mAssemblyPanel;
     HexEditorPanel           mHexEditor;
     ControllerPanel          mController;

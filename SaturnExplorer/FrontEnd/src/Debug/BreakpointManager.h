@@ -61,11 +61,11 @@ public:
     void Remove(uint64_t id);
     void Clear();
 
-    // True when at least one enabled memory watchpoint is in log-access mode and no enabled
-    // memory watchpoint is a halting one — so a data-BP halt can be attributed to logging and
-    // resumed rather than surfaced as a break (the stop event carries no data address to
-    // disambiguate mixed watchpoints, so a halting watchpoint present means "let it stop").
-    bool OnlyLoggingWatchpoints() const;
+    // True when a halt at 'pc' should be treated as a logging-watchpoint access (recorded +
+    // resumed) rather than a user break: no execution breakpoint owns this PC (shared across
+    // both SH-2s) and every active memory watchpoint is a logging one. Mirrors
+    // ConditionalExecutionAt — the stop handler asks one question, the manager owns the policy.
+    bool IsAccessLogHalt(uint32_t pc) const;
 
     const std::vector<Breakpoint>& All() const { return mBps; }
 
@@ -73,6 +73,11 @@ public:
     uint64_t Generation() const { return mGeneration; }
 
 private:
+    // True when >=1 enabled memory watchpoint is logging and none is halting (so a data-BP
+    // halt can't be a real break-on-access — the stop event carries no data address to tell
+    // mixed watchpoints apart). Used by IsAccessLogHalt.
+    bool OnlyLoggingWatchpoints() const;
+
     Breakpoint* Find(int cpu, uint32_t addr, BpKind kind, uint32_t size);
     std::vector<Breakpoint> mBps;
     uint64_t mNextId = 1;

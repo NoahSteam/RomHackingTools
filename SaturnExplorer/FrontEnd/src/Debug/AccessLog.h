@@ -40,7 +40,8 @@ public:
     const std::vector<AccessRecord>& Records() const { return mRecords; }
 
 private:
-    static uint64_t Key(uint32_t pc, int cpu) { return (uint64_t(cpu ? 1u : 0u) << 32) | pc; }
+    // 'cpu' is already normalized to 0/1 by the caller (Record).
+    static uint64_t Key(uint32_t pc, int cpu) { return (uint64_t(cpu) << 32) | pc; }
 
     std::vector<AccessRecord>            mRecords;   // first-seen order
     std::unordered_map<uint64_t, std::size_t> mIndex;  // (cpu,pc) -> index into mRecords
