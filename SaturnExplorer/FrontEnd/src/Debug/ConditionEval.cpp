@@ -2,6 +2,7 @@
 
 #include <cctype>
 #include <cstdlib>
+#include <cstring>
 
 #include "FormatString.h"   // IFormatContext
 
@@ -9,6 +10,13 @@ namespace sfe
 {
 namespace
 {
+
+// True when 'expr' is empty or all whitespace (an empty guard always fires / validates OK).
+bool IsBlank(const std::string& expr)
+{
+    for (char c : expr) if (!std::isspace((unsigned char)c)) return false;
+    return true;
+}
 
 // Recursive-descent evaluator over a char stream. Values are unsigned 32-bit (SH-2
 // register width); comparisons are unsigned and yield 0/1. When 'ctx' is null it runs in
@@ -23,15 +31,13 @@ struct Parser
     explicit Parser(const std::string& str, const IFormatContext* c) : s(str), ctx(c) {}
 
     void skip() { while (i < s.size() && std::isspace((unsigned char)s[i])) ++i; }
-    bool eof() { skip(); return i >= s.size(); }
-    char peek() { skip(); return i < s.size() ? s[i] : '\0'; }
 
     // Consume the operator 'op' if it is next (after whitespace). Longer ops are matched
     // before their prefixes by the callers' ordering.
     bool eat(const char* op)
     {
         skip();
-        const size_t n = std::string(op).size();
+        const size_t n = std::strlen(op);
         if (s.compare(i, n, op) == 0)
         {
             // Don't let "<" match inside "<<", or "&" inside "&&": callers try the long
@@ -200,10 +206,7 @@ struct Parser
 
 bool ConditionEval(const std::string& expr, const IFormatContext& ctx, std::string* err)
 {
-    // Empty guard => always fires.
-    bool blank = true;
-    for (char c : expr) if (!std::isspace((unsigned char)c)) { blank = false; break; }
-    if (blank) return true;
+    if (IsBlank(expr)) return true;   // empty guard => always fires
 
     Parser p(expr, &ctx);
     const uint32_t v = p.parse();
@@ -217,9 +220,7 @@ bool ConditionEval(const std::string& expr, const IFormatContext& ctx, std::stri
 
 std::string ConditionValidate(const std::string& expr)
 {
-    bool blank = true;
-    for (char c : expr) if (!std::isspace((unsigned char)c)) { blank = false; break; }
-    if (blank) return std::string();
+    if (IsBlank(expr)) return std::string();
 
     Parser p(expr, nullptr);
     p.parse();

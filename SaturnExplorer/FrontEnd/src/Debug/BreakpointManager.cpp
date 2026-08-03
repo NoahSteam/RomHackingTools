@@ -64,6 +64,19 @@ const Breakpoint* BreakpointManager::ExecutionAt(int cpu, uint32_t addr) const
     return nullptr;
 }
 
+const Breakpoint* BreakpointManager::ConditionalExecutionAt(uint32_t addr) const
+{
+    for (const Breakpoint& b : mBps)
+    {
+        if (b.enabled && b.kind == BpKind::Execution && b.address == addr &&
+            !b.condition.empty())
+        {
+            return &b;
+        }
+    }
+    return nullptr;
+}
+
 uint64_t BreakpointManager::AddMemory(uint32_t addr, uint32_t size, BpKind rw)
 {
     if (Breakpoint* existing = Find(0, addr, rw, size))

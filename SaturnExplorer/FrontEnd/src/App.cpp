@@ -874,16 +874,12 @@ void App::BuildUI(IPlatform& platform)
         if (stopped && !mbPaused && stopReason == SE_LIVE_STOP_EXEC_BP &&
             !(mStepBpActive && stopPc == mStepBpAddr))
         {
-            for (const Breakpoint& b : mBreakpoints.All())
+            const Breakpoint* guarded = mBreakpoints.ConditionalExecutionAt(stopPc);
+            if (guarded && !EvalCondition(guarded->condition, static_cast<int>(stopCpu)))
             {
-                if (b.enabled && b.kind == BpKind::Execution && b.address == stopPc &&
-                    !b.condition.empty() && !EvalCondition(b.condition, static_cast<int>(stopCpu)))
-                {
-                    Continue();      // guard not satisfied — keep running
-                    stopped = false; // don't fall into the pause path this frame
-                    mBpStopActive = false;
-                    break;
-                }
+                Continue();      // guard not satisfied — keep running
+                stopped = false; // don't fall into the pause path this frame
+                mBpStopActive = false;
             }
         }
         if (stopped && !mbPaused)
@@ -1473,17 +1469,25 @@ struct ContextFormat : sfe::IFormatContext
         return !o.empty();
     }
 };
+
+// Snapshot 'cpu's live registers + memory into a ContextFormat (the one place this wiring
+// lives, shared by FormatAgainstContext and EvalCondition).
+ContextFormat MakeLiveContext(se_context* ctx, sfe::IMemoryBackend* backend, int cpu)
+{
+    ContextFormat fc;
+    fc.ctx = ctx;
+    fc.backend = backend;
+    fc.cpu = cpu;
+    fc.frame = static_cast<uint32_t>(se_frame_number(ctx));
+    fc.haveRegs = se_get_sh2_regs(ctx, cpu, &fc.regs) == SE_OK;
+    return fc;
+}
 }  // namespace
 
 std::string App::FormatAgainstContext(const std::string& tmpl, int cpu)
 {
     if (!mbHasData || !mContext) return std::string();
-    ContextFormat fc;
-    fc.ctx = mContext;
-    fc.backend = &mMemBackend;
-    fc.cpu = cpu;
-    fc.frame = static_cast<uint32_t>(se_frame_number(mContext));
-    fc.haveRegs = se_get_sh2_regs(mContext, cpu, &fc.regs) == SE_OK;
+    ContextFormat fc = MakeLiveContext(mContext, &mMemBackend, cpu);
     return FormatEvaluate(tmpl, fc);
 }
 
@@ -1493,12 +1497,7 @@ bool App::EvalCondition(const std::string& cond, int cpu)
 {
     if (cond.empty()) return true;
     if (!mbHasData || !mContext) return true;
-    ContextFormat fc;
-    fc.ctx = mContext;
-    fc.backend = &mMemBackend;
-    fc.cpu = cpu;
-    fc.frame = static_cast<uint32_t>(se_frame_number(mContext));
-    fc.haveRegs = se_get_sh2_regs(mContext, cpu, &fc.regs) == SE_OK;
+    ContextFormat fc = MakeLiveContext(mContext, &mMemBackend, cpu);
     return ConditionEval(cond, fc);
 }
 
@@ -1963,10 +1962,13 @@ void App::DrawBreakpoints()
                 ImGui::SetNextItemWidth(-FLT_MIN);
                 if (ImGui::InputTextWithHint("##cond", "and\xe2\x80\xa6 (optional guard, e.g. r4 == 0x1234)",
                                              cbuf, sizeof(cbuf)))
+                {
                     mBreakpoints.SetCondition(b.id, cbuf);
-                const std::string cerr = ConditionValidate(b.condition);
-                if (!cerr.empty())
-                    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.4f, 1.0f), "  %s", cerr.c_str());
+                    mBpCondErrors[b.id] = ConditionValidate(cbuf);   // revalidate only on edit
+                }
+                auto ce = mBpCondErrors.find(b.id);
+                if (ce != mBpCondErrors.end() && !ce->second.empty())
+                    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.4f, 1.0f), "  %s", ce->second.c_str());
             }
             else
             {
@@ -2001,7 +2003,7 @@ void App::DrawBreakpoints()
         }
         ImGui::EndTable();
     }
-    if (toRemove) mBreakpoints.Remove(toRemove);
+    if (toRemove) { mBreakpoints.Remove(toRemove); mBpCondErrors.erase(toRemove); }
 
     ImGui::End();
 }

@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <string>
 #include <thread>
+#include <unordered_map>
 #include <vector>
 
 #include "saturnexplorer/SaturnExplorer.h"
@@ -222,6 +223,9 @@ private:
     SimpleExpressionResolver mExprResolver;
     WatchPanel               mWatchPanel;
     BreakpointManager        mBreakpoints;
+    // Cached per-BP guard validation error (id -> message), refreshed only when the
+    // condition text is edited so the Breakpoints panel isn't re-parsing every frame.
+    std::unordered_map<uint64_t, std::string> mBpCondErrors;
     AssemblyPanel            mAssemblyPanel;
     HexEditorPanel           mHexEditor;
     ControllerPanel          mController;

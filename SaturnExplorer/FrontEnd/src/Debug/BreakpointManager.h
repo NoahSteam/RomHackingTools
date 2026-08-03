@@ -43,6 +43,11 @@ public:
     bool HasExecutionAt(int cpu, uint32_t addr) const;
     const Breakpoint* ExecutionAt(int cpu, uint32_t addr) const;
 
+    // First enabled execution BP at 'addr' that carries a guard, ignoring cpu (a PC
+    // breakpoint halts whichever SH-2 reaches the address). nullptr if none — the stop
+    // handler uses this to decide whether a halt needs a client-side guard check.
+    const Breakpoint* ConditionalExecutionAt(uint32_t addr) const;
+
     // Add a memory breakpoint (dedup by address+kind+size). Returns its id.
     uint64_t AddMemory(uint32_t addr, uint32_t size, BpKind rw);
 
