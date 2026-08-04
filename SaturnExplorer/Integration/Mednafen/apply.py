@@ -309,15 +309,26 @@ SCSP_SLOT_METHOD = """\
 
 # Free C-linkage accessors appended at EOF of sound.cpp, where the `static SS_SCSP SCSP`
 # instance is in scope. Re-opens the namespace like the vdp1/vdp2 accessor blocks do.
+#
+# Guarded out of the SSF music player: ssf.cpp #includes sound.cpp with MDFN_SSFPLAY_COMPILE
+# defined, and there the SCSP instance lives in namespace MDFN_IEN_SSFPLAY. Without the guard
+# these accessors (a) fail to resolve `SCSP` inside the hard-coded MDFN_IEN_SS block, and
+# (b) would define the same C-linkage symbols a second time, colliding with the SS core's at
+# link. The SSF player has no use for the SE debug hooks, so it simply skips them.
 SOUND_ACCESSORS = """\
 /* Expose the SCSP instance (sound.cpp's `static SS_SCSP SCSP`) to the glue (C linkage).
    SsDbgSoundRam returns the 262144-word host-order SCSP RAM (the glue SwapU16ToBE's it to
    big-endian for the wire); SsDbgScspSlots serializes the 32 decoded voices via the
-   SeDbgReadSlots member added to scsp.h. */
+   SeDbgReadSlots member added to scsp.h.
+   Skipped for the SSF player build: ssf.cpp #includes sound.cpp with MDFN_SSFPLAY_COMPILE
+   defined, where SCSP is in MDFN_IEN_SSFPLAY and these C-linkage symbols would also clash
+   with the SS core's at link. */
+#ifndef MDFN_SSFPLAY_COMPILE
 namespace MDFN_IEN_SS {
 extern "C" const unsigned short* SsDbgSoundRam(void) { return (const unsigned short*)SCSP.GetRAMPtr(); }
 extern "C" int SsDbgScspSlots(unsigned char* out) { return SCSP.SeDbgReadSlots(out); }
-}"""
+}
+#endif"""
 
 # scsp.h anchor: insert the member right after the public GetRAMPtr() accessor.
 SCSP_RAMPTR_ANCHOR = r'(INLINE\s+uint16\*\s+GetRAMPtr\(void\)\s*\{\s*return\s+RAM;\s*\}\s*\n)'
