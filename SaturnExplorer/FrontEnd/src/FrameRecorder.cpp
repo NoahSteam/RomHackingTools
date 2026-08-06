@@ -98,6 +98,11 @@ void FrameRecorder::Capture(se_context* ctx, uint64_t frameNumber)
     ReadRegion(ctx, SE_VRAM_KIND_WRAM_LOW,  kWramSize,     raw.wramLow);
     ReadRegion(ctx, SE_VRAM_KIND_WRAM_HIGH, kWramSize,     raw.wramHigh);
     ReadRegion(ctx, SE_VRAM_KIND_VDP1_FB,   kVdp1FbSize,   raw.vdp1Fb);
+    ReadRegion(ctx, SE_VRAM_KIND_SOUND_RAM, kSoundRamSize, raw.soundRam);   // 68000 code + samples
+
+    // Decoded SCSP voices, so the Sound panel + per-voice Play/Export keep working while
+    // scrubbing (0 when the source has no v14 sound tap).
+    raw.slotCount = se_get_scsp_slots(ctx, raw.slots);
 
     raw.vdp1Regs.resize(kVdp1RegBytes / 2);
     for (uint32_t o = 0; o < kVdp1RegBytes; o += 2)
@@ -156,13 +161,17 @@ void FrameRecorder::Worker()
         CompressRegion(raw.wramLow,  f.wramLow,  mLzScratch);
         CompressRegion(raw.wramHigh, f.wramHigh, mLzScratch);
         CompressRegion(raw.vdp1Fb,   f.vdp1Fb,   mLzScratch);
+        CompressRegion(raw.soundRam, f.soundRam, mLzScratch);
         f.vdp1Regs = std::move(raw.vdp1Regs);
         f.vdp2Regs = std::move(raw.vdp2Regs);
         f.sh2[0] = raw.sh2[0]; f.sh2[1] = raw.sh2[1];
         f.hasSh2[0] = raw.hasSh2[0]; f.hasSh2[1] = raw.hasSh2[1];
+        f.slotCount = raw.slotCount;
+        std::memcpy(f.slots, raw.slots, sizeof(f.slots));
         f.bytes = f.vdp1Vram.lz.size() + f.vdp2Vram.lz.size() + f.cram.lz.size() +
                   f.wramLow.lz.size() + f.wramHigh.lz.size() + f.vdp1Fb.lz.size() +
-                  f.vdp1Regs.size() * 2 + f.vdp2Regs.size() * 2 + sizeof(f.sh2);
+                  f.soundRam.lz.size() +
+                  f.vdp1Regs.size() * 2 + f.vdp2Regs.size() * 2 + sizeof(f.sh2) + sizeof(f.slots);
 
         std::lock_guard<std::mutex> lk(mRingMtx);
         // Clear() starts a new recording generation. A frame that was already
@@ -238,10 +247,13 @@ bool FrameRecorder::Select(size_t i, se_data_source* out)
         DecompressRegion(f.wramLow, mSelWramLow);
         DecompressRegion(f.wramHigh, mSelWramHigh);
         DecompressRegion(f.vdp1Fb, mSelVdp1Fb);
+        DecompressRegion(f.soundRam, mSelSoundRam);
         mSelVdp1Regs = f.vdp1Regs;
         mSelVdp2Regs = f.vdp2Regs;
         mSelSh2[0] = f.sh2[0]; mSelSh2[1] = f.sh2[1];
         mSelHasSh2[0] = f.hasSh2[0]; mSelHasSh2[1] = f.hasSh2[1];
+        mSelSlotCount = f.slotCount;
+        std::memcpy(mSelSlots, f.slots, sizeof(mSelSlots));
     }
 
     std::memset(out, 0, sizeof(*out));
@@ -249,15 +261,21 @@ bool FrameRecorder::Select(size_t i, se_data_source* out)
     out->capabilities = SE_CAP_VDP1_VRAM | SE_CAP_VDP2_VRAM | SE_CAP_CRAM |
                         SE_CAP_MAIN_RAM | SE_CAP_VDP1_REGS | SE_CAP_VDP2_REGS |
                         SE_CAP_VDP1_FB | SE_CAP_SH2_REGS;
+    // Advertise the sound caps only when the recorded frame actually carried that data, so a
+    // pre-v14 source doesn't claim voices/sound RAM it never captured.
+    if (!mSelSoundRam.empty()) out->capabilities |= SE_CAP_SOUND_RAM;
+    if (mSelSlotCount > 0)     out->capabilities |= SE_CAP_SCSP_SLOTS;
     out->user = this;
     out->read_vdp1_vram = CbVdp1;
     out->read_vdp2_vram = CbVdp2;
     out->read_cram      = CbCram;
     out->read_main_ram  = CbMain;
     out->read_vdp1_fb   = CbVdp1Fb;
+    out->read_sound_ram = CbSoundRam;
     out->read_vdp1_reg  = CbVdp1Reg;
     out->read_vdp2_reg  = CbVdp2Reg;
     out->read_sh2_regs  = CbSh2Regs;
+    out->read_scsp_slots = CbScspSlots;
     // No close callback: the scratch is owned by this recorder, not the context.
     return true;
 }
@@ -291,6 +309,10 @@ size_t FrameRecorder::CbVdp1Fb(void* u, uint32_t off, void* dst, size_t size)
 {
     return CopyOut(static_cast<FrameRecorder*>(u)->mSelVdp1Fb, off, dst, size);
 }
+size_t FrameRecorder::CbSoundRam(void* u, uint32_t off, void* dst, size_t size)
+{
+    return CopyOut(static_cast<FrameRecorder*>(u)->mSelSoundRam, off, dst, size);
+}
 uint16_t FrameRecorder::CbVdp1Reg(void* u, uint32_t reg)
 {
     const std::vector<uint16_t>& v = static_cast<FrameRecorder*>(u)->mSelVdp1Regs;
@@ -310,6 +332,13 @@ int FrameRecorder::CbSh2Regs(void* u, int cpu, se_sh2_regs* out)
     if (!r->mSelHasSh2[cpu]) { return 0; }   // frame predates SH-2 capture / absent
     *out = r->mSelSh2[cpu];
     return 1;
+}
+int FrameRecorder::CbScspSlots(void* u, se_scsp_slot out[SE_SCSP_SLOT_COUNT])
+{
+    FrameRecorder* r = static_cast<FrameRecorder*>(u);
+    if (!out || r->mSelSlotCount <= 0) { return 0; }
+    std::memcpy(out, r->mSelSlots, sizeof(se_scsp_slot) * r->mSelSlotCount);
+    return r->mSelSlotCount;
 }
 
 }  // namespace sfe

@@ -42,11 +42,13 @@ public:
     struct Frame
     {
         uint64_t frameNumber = 0;
-        Region   vdp1Vram, vdp2Vram, cram, wramLow, wramHigh, vdp1Fb;
+        Region   vdp1Vram, vdp2Vram, cram, wramLow, wramHigh, vdp1Fb, soundRam;
         std::vector<uint16_t> vdp1Regs;   // by hw offset >> 1
         std::vector<uint16_t> vdp2Regs;
         se_sh2_regs sh2[2] = {};          // [0] master, [1] slave (Assembly panel)
         bool        hasSh2[2] = { false, false };
+        se_scsp_slot slots[SE_SCSP_SLOT_COUNT] = {};   // decoded voices (Sound panel)
+        int          slotCount = 0;
         size_t   bytes = 0;               // compressed footprint of this frame
     };
 
@@ -76,10 +78,12 @@ private:
     {
         uint64_t generation = 0;
         uint64_t frameNumber = 0;
-        std::vector<uint8_t>  vdp1Vram, vdp2Vram, cram, wramLow, wramHigh, vdp1Fb;
+        std::vector<uint8_t>  vdp1Vram, vdp2Vram, cram, wramLow, wramHigh, vdp1Fb, soundRam;
         std::vector<uint16_t> vdp1Regs, vdp2Regs;
         se_sh2_regs sh2[2] = {};
         bool        hasSh2[2] = { false, false };
+        se_scsp_slot slots[SE_SCSP_SLOT_COUNT] = {};
+        int          slotCount = 0;
     };
 
     void Worker();
@@ -106,9 +110,12 @@ private:
     // Scratch holding the currently-selected decompressed frame (UI thread only;
     // read by the data-source callbacks below). Outlives the created context.
     std::vector<uint8_t>  mSelVdp1, mSelVdp2, mSelCram, mSelWramLow, mSelWramHigh, mSelVdp1Fb;
+    std::vector<uint8_t>  mSelSoundRam;
     std::vector<uint16_t> mSelVdp1Regs, mSelVdp2Regs;
     se_sh2_regs           mSelSh2[2] = {};
     bool                  mSelHasSh2[2] = { false, false };
+    se_scsp_slot          mSelSlots[SE_SCSP_SLOT_COUNT] = {};
+    int                   mSelSlotCount = 0;
 
     // Data-source callbacks (static; 'user' is this recorder).
     static size_t CbVdp1(void* u, uint32_t off, void* dst, size_t size);
@@ -116,9 +123,11 @@ private:
     static size_t CbCram(void* u, uint32_t off, void* dst, size_t size);
     static size_t CbMain(void* u, uint32_t addr, void* dst, size_t size);
     static size_t CbVdp1Fb(void* u, uint32_t off, void* dst, size_t size);
+    static size_t CbSoundRam(void* u, uint32_t off, void* dst, size_t size);
     static uint16_t CbVdp1Reg(void* u, uint32_t reg);
     static uint16_t CbVdp2Reg(void* u, uint32_t reg);
     static int      CbSh2Regs(void* u, int cpu, se_sh2_regs* out);
+    static int      CbScspSlots(void* u, se_scsp_slot out[SE_SCSP_SLOT_COUNT]);
 };
 
 }  // namespace sfe
