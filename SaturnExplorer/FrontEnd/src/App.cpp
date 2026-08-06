@@ -285,6 +285,7 @@ const std::vector<App::PanelInfo>& App::PanelList()
         {"accessLog",       "Access Log",         &Panels::accessLog,       "Debugger"},
         {"soundCpu",        "Sound CPU (68K)",    &Panels::soundCpu,        "Audio"},
         {"sound",           "Sound (SCSP)",       &Panels::sound,           "Audio"},
+        {"discExplorer",    "Disc Explorer",      &Panels::discExplorer,    "Files & Input"},
     };
     return kList;
 }
@@ -1054,6 +1055,7 @@ void App::BuildUI(IPlatform& platform)
     if (mPanels.accessLog)       DrawAccessLog();
     if (mPanels.soundCpu)        DrawSoundCpu();
     if (mPanels.sound)           DrawSound(platform);
+    if (mPanels.discExplorer)    DrawDiscExplorer(platform);
 
     // Game-data-directory modal + texture search results (both floating, drawn last
     // so they overlay the docked panels).
@@ -1132,6 +1134,7 @@ void App::BuildDefaultLayout(unsigned int dockspaceId)
     ImGui::DockBuilderDockWindow("Archive Explorer", lTexPal);      // hidden default
     ImGui::DockBuilderDockWindow("Search ROM / Files", lTexPal);    // hidden default
     ImGui::DockBuilderDockWindow("References", lTexPal);            // hidden default
+    ImGui::DockBuilderDockWindow("Disc Explorer", lTexPal);         // disc image ISO browser
 
     // Center: image stage — only the visual views tab here.
     ImGui::DockBuilderDockWindow("VDP Output", cViews);
@@ -2423,6 +2426,130 @@ void App::DrawSoundCpu()
         }
     }
     ImGui::EndChild();
+
+    ImGui::End();
+}
+
+// Disc Explorer — open the game's disc image and browse its ISO 9660 filesystem, so a CD read
+// address (sector / FAD) maps to a filename + a byte offset in the image. This is the last hop
+// of the streaming-audio hunt: the Access Log shows the code + sound-RAM buffer, and this shows
+// which file on the disc that audio comes from.
+void App::DrawDiscExplorer(IPlatform& platform)
+{
+    if (!ImGui::Begin("Disc Explorer")) { ImGui::End(); return; }
+
+    if (ImGui::Button("Open Disc Image\xe2\x80\xa6"))
+    {
+        std::string path;
+        if (platform.OpenFileDialogFiltered(path, "Saturn disc images", "cue,iso,bin,img"))
+        {
+            if (mDisc.Open(path))
+            {
+                mDiscFs = IsoParse(mDisc.Reader());
+                char buf[256];
+                std::snprintf(buf, sizeof(buf), "%s  \xc2\xb7  %u-byte sectors  \xc2\xb7  %s",
+                              mDiscFs.ok ? ("\"" + mDiscFs.volumeId + "\"").c_str() : "(no ISO volume)",
+                              mDisc.SectorSize(),
+                              mDiscFs.ok ? (std::to_string(mDiscFs.entries.size()) + " entries").c_str()
+                                         : mDiscFs.error.c_str());
+                mDiscStatus = buf;
+            }
+            else
+            {
+                mDiscFs = IsoFs();
+                mDiscStatus = "Could not open as a disc image: " + path;
+            }
+        }
+    }
+    if (!mDiscStatus.empty()) { ImGui::SameLine(); ImGui::TextUnformatted(mDiscStatus.c_str()); }
+
+    if (!mDisc.IsOpen() || !mDiscFs.ok)
+    {
+        ImGui::TextDisabled("Open the game's disc image (.cue / .iso / .bin) to browse its files "
+                            "and map a CD sector to a filename.");
+        ImGui::End();
+        return;
+    }
+
+    // Resolve a CD read address to the file that contains it. Saturn CD addresses are FADs
+    // (Frame Address = LBA + 150); toggle to enter one directly.
+    ImGui::SetNextItemWidth(120.0f);
+    ImGui::InputTextWithHint("##resolve", "sector / FAD (hex)", mDiscResolve, sizeof(mDiscResolve),
+                             ImGuiInputTextFlags_CharsHexadecimal);
+    ImGui::SameLine();
+    ImGui::Checkbox("as FAD (LBA+150)", &mDiscResolveIsFad);
+    if (mDiscResolve[0])
+    {
+        uint32_t v = (uint32_t)std::strtoul(mDiscResolve, nullptr, 16);
+        const uint32_t lba = mDiscResolveIsFad ? (v >= 150 ? v - 150 : 0) : v;
+        ImGui::SameLine();
+        if (const IsoEntry* e = mDiscFs.FileAt(lba))
+            ImGui::Text("LBA %u \xe2\x86\x92 %s  (+%llu in file)", lba, e->path.c_str(),
+                        (unsigned long long)(uint64_t(lba - e->lba) * 2048));
+        else
+            ImGui::TextDisabled("LBA %u \xe2\x86\x92 (no file; system area or gap)", lba);
+    }
+
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    ImGui::InputTextWithHint("##filter", "filter by name\xe2\x80\xa6", mDiscFilter, sizeof(mDiscFilter));
+    ImGui::Separator();
+
+    // File table. "Image offset" is where the file's data starts in the image file, so you can
+    // pull it out of the disc directly. Sorted biggest-first is handy — streamed audio is
+    // usually one of the largest files.
+    if (ImGui::BeginTable("discfiles", 4,
+                          ImGuiTableFlags_ScrollY | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable |
+                          ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_Sortable))
+    {
+        ImGui::TableSetupScrollFreeze(0, 1);
+        ImGui::TableSetupColumn("Path", ImGuiTableColumnFlags_WidthStretch | ImGuiTableColumnFlags_DefaultSort);
+        ImGui::TableSetupColumn("LBA", ImGuiTableColumnFlags_WidthFixed, 70.0f);
+        ImGui::TableSetupColumn("Size", ImGuiTableColumnFlags_WidthFixed, 90.0f);
+        ImGui::TableSetupColumn("Image offset", ImGuiTableColumnFlags_WidthFixed, 110.0f);
+        ImGui::TableHeadersRow();
+
+        // Build the filtered, sorted index into mDiscFs.entries.
+        std::vector<const IsoEntry*> rows;
+        for (const IsoEntry& e : mDiscFs.entries)
+        {
+            if (e.isDir) continue;
+            if (mDiscFilter[0] && e.path.find(mDiscFilter) == std::string::npos) continue;
+            rows.push_back(&e);
+        }
+        if (ImGuiTableSortSpecs* ss = ImGui::TableGetSortSpecs())
+        {
+            if (ss->SpecsCount > 0)
+            {
+                const ImGuiTableColumnSortSpecs& c = ss->Specs[0];
+                const bool asc = c.SortDirection == ImGuiSortDirection_Ascending;
+                std::sort(rows.begin(), rows.end(), [&](const IsoEntry* a, const IsoEntry* b) {
+                    switch (c.ColumnIndex)
+                    {
+                        case 1: return asc ? a->lba < b->lba : a->lba > b->lba;
+                        case 2: return asc ? a->size < b->size : a->size > b->size;
+                        case 3: return asc ? a->lba < b->lba : a->lba > b->lba;   // offset ~ lba
+                        default: return asc ? a->path < b->path : a->path > b->path;
+                    }
+                });
+            }
+        }
+
+        ImGuiListClipper clip;
+        clip.Begin((int)rows.size());
+        while (clip.Step())
+            for (int i = clip.DisplayStart; i < clip.DisplayEnd; ++i)
+            {
+                const IsoEntry* e = rows[i];
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn(); ImGui::TextUnformatted(e->path.c_str());
+                ImGui::TableNextColumn(); ImGui::Text("%u", e->lba);
+                ImGui::TableNextColumn();
+                if (e->size >= 1024) ImGui::Text("%u KB", e->size / 1024);
+                else                 ImGui::Text("%u B", e->size);
+                ImGui::TableNextColumn(); ImGui::Text("0x%llX", (unsigned long long)mDisc.UserOffset(e->lba));
+            }
+        ImGui::EndTable();
+    }
 
     ImGui::End();
 }

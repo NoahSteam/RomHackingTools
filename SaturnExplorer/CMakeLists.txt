@@ -157,6 +157,13 @@ if(BUILD_TESTING)
     )
     target_include_directories(SaturnExplorerM68kDisasmTests PRIVATE FrontEnd/src)
     add_test(NAME SaturnExplorerM68kDisasmTests COMMAND SaturnExplorerM68kDisasmTests)
+
+    add_executable(SaturnExplorerIsoFsTests
+        FrontEnd/tests/IsoFsTests.cpp
+        FrontEnd/src/Disc/IsoFs.cpp
+    )
+    target_include_directories(SaturnExplorerIsoFsTests PRIVATE FrontEnd/src)
+    add_test(NAME SaturnExplorerIsoFsTests COMMAND SaturnExplorerIsoFsTests)
 endif()
 
 # ---------------------------------------------------------------------------
@@ -258,6 +265,8 @@ if(WIN32)
         FrontEnd/src/Debug/MemorySearch.cpp
         FrontEnd/src/Debug/AccessLog.cpp
         FrontEnd/src/Debug/M68kDisasm.cpp
+        FrontEnd/src/Disc/IsoFs.cpp
+        FrontEnd/src/Disc/DiscImage.cpp
         FrontEnd/src/Debug/ExecutionActions.cpp
         FrontEnd/src/Debug/CallStack.cpp
         FrontEnd/src/FrameRecorder.cpp
@@ -323,6 +332,8 @@ elseif(EMSCRIPTEN)
         FrontEnd/src/Debug/MemorySearch.cpp
         FrontEnd/src/Debug/AccessLog.cpp
         FrontEnd/src/Debug/M68kDisasm.cpp
+        FrontEnd/src/Disc/IsoFs.cpp
+        FrontEnd/src/Disc/DiscImage.cpp
         FrontEnd/src/Debug/ExecutionActions.cpp
         FrontEnd/src/Debug/CallStack.cpp
         FrontEnd/src/UpdateChecker.cpp
@@ -403,6 +414,8 @@ else()
             FrontEnd/src/Debug/MemorySearch.cpp
             FrontEnd/src/Debug/AccessLog.cpp
             FrontEnd/src/Debug/M68kDisasm.cpp
+            FrontEnd/src/Disc/IsoFs.cpp
+            FrontEnd/src/Disc/DiscImage.cpp
             FrontEnd/src/Debug/ExecutionActions.cpp
             FrontEnd/src/Debug/CallStack.cpp
             FrontEnd/src/FrameRecorder.cpp

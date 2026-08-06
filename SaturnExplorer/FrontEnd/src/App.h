@@ -29,6 +29,7 @@
 #include "Debug/MemoryBackend.h"
 #include "Debug/MemorySearch.h"   // Cheat-Engine-style live RAM value scanner
 #include "Debug/AccessLog.h"      // "find what accesses this address" record
+#include "Disc/DiscImage.h"       // disc-image reader + ISO 9660 browser (sector -> file)
 #include "Debug/WatchList.h"
 #include "Debug/BreakpointManager.h"
 
@@ -108,6 +109,7 @@ private:
     void DrawRamSearch();                   // Cheat-Engine-style live RAM value scanner
     void DrawAccessLog();                   // "find what accesses this address"
     void DrawSoundCpu();                    // SCSP 68000 sound-CPU disassembly (Sound RAM)
+    void DrawDiscExplorer(IPlatform& platform); // disc image ISO browser (sector -> file)
     void RecordAccess(int cpu, uint32_t pc);// file a data-watchpoint hit into the access log
     void DrawSound(IPlatform& platform);    // SCSP voices: who's playing + Play/Export
     void ExportSound(IPlatform& platform, int slot);   // decode voice 'slot' -> save .wav
@@ -256,6 +258,14 @@ private:
     // SCSP 68000 sound-CPU disassembly panel (over captured Sound RAM).
     uint32_t         mSoundCpuAddr = 0;         // current 68K address (Sound RAM offset)
     char             mSoundCpuAddrBuf[16] = "0";
+
+    // Disc Explorer — an opened disc image + its parsed ISO 9660 file list + panel state.
+    DiscImage        mDisc;
+    IsoFs            mDiscFs;
+    std::string      mDiscStatus;               // open result / error line
+    char             mDiscFilter[64] = "";      // substring filter over file paths
+    char             mDiscResolve[16] = "";     // sector/FAD to resolve to a file
+    bool             mDiscResolveIsFad = false; // interpret the resolve box as a FAD (LBA+150)
     AssemblyPanel            mAssemblyPanel;
     HexEditorPanel           mHexEditor;
     ControllerPanel          mController;
@@ -391,6 +401,7 @@ private:
         bool ramSearch = true;    // Cheat-Engine-style live RAM value scanner
         bool accessLog = true;    // "find what accesses this address" (data watchpoint log)
         bool soundCpu = true;     // SCSP 68000 sound-CPU disassembly
+        bool discExplorer = true; // disc image ISO 9660 browser (sector -> file)
     };
     Panels           mPanels;
 
