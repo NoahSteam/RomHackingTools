@@ -140,6 +140,11 @@ int         se_has_sh2_regs(se_context* ctx);
    voices into 'out' and returns the number written. --- */
 int         se_scsp_slot_count(se_context* ctx);
 int         se_get_scsp_slots(se_context* ctx, se_scsp_slot out[SE_SCSP_SLOT_COUNT]);
+
+/* --- Live CD-block state / "Disc Explorer" (live sources only; requires SE_CAP_CD_STATUS).
+   se_get_cd_status fills 'out' with the drive's current FAD + state and returns 1; 0 when
+   unavailable (savestate / build without the CD tap). --- */
+int         se_get_cd_status(se_context* ctx, se_cd_status* out);
 /* Decode voice 'slot' (0..SE_SCSP_SLOT_COUNT-1) into 16-bit signed mono host PCM: reads the
    sample from sound RAM (SA..SA+LEA), converting 16-bit big-endian / 8-bit PCM. Writes up to
    'max_frames' samples into 'out'; returns the number written (0 if no sample / no sound RAM).

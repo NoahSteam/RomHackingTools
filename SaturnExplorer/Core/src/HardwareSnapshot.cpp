@@ -141,6 +141,12 @@ bool HardwareSnapshot::Capture(const se_data_source& dataSource)
         mScspSlots.assign(tmp, tmp + n);
     }
 
+    // Live CD-block state (live driver only; absent on savestates).
+    mHasCdStatus = false;
+    mCdStatus = se_cd_status{};
+    if ((dataSource.capabilities & SE_CAP_CD_STATUS) && dataSource.read_cd_status)
+        mHasCdStatus = dataSource.read_cd_status(dataSource.user, &mCdStatus) != 0;
+
     // CRAM color mode from VDP2 RAMCTL (offset 0x0E), bits 12-13.
     mCramMode = SE_CRAM_RGB555_1024;
     if (mbHasVdp2Regs)

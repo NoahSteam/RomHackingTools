@@ -334,6 +334,15 @@ int se_get_scsp_slots(se_context* ctx, se_scsp_slot out[SE_SCSP_SLOT_COUNT])
     return Impl(ctx)->GetScspSlots(out);
 }
 
+int se_get_cd_status(se_context* ctx, se_cd_status* out)
+{
+    if (!ctx || !out)
+    {
+        return 0;
+    }
+    return Impl(ctx)->GetCdStatus(out);
+}
+
 int se_decode_scsp_sample(se_context* ctx, int slot, int16_t* out, int max_frames,
                           uint32_t* out_sample_rate)
 {

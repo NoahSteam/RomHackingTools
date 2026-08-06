@@ -60,6 +60,8 @@ typedef struct
     int has_sr;                /* 1 if this frame captured sound RAM */
     unsigned char sl[SE_SL];   /* decoded SCSP slot block (v14); has_sl gates the wire block */
     int has_sl;                /* 1 if this frame captured SCSP slots */
+    unsigned char cd[SE_LIVE_CD_BLOCK_LEN];  /* CD-block status (v15); has_cd gates the block */
+    int has_cd;                /* 1 if this frame captured CD status */
     int valid;
 } SeFrame;
 
@@ -489,7 +491,7 @@ void SeExportSnapshot(const void* vdp1, const void* vdp2, const void* cram,
                       const void* vdp2struct, const void* vdp1struct,
                       const void* wramLow, const void* wramHigh,
                       const void* vdp1fb, const void* msh2, const void* ssh2,
-                      const void* soundRam, const void* scspSlots)
+                      const void* soundRam, const void* scspSlots, const void* cdStatus)
 {
     if (!sRing[0])
     {
@@ -516,6 +518,9 @@ void SeExportSnapshot(const void* vdp1, const void* vdp2, const void* cram,
     /* Decoded SCSP slots (v14): the glue hands over the pre-serialized 1152-byte block. */
     if (scspSlots) { memcpy(dst->sl, scspSlots, SE_SL); dst->has_sl = 1; }
     else           { memset(dst->sl, 0, SE_SL);         dst->has_sl = 0; }
+    /* CD-block status (v15): the glue hands over the pre-serialized 16-byte record. */
+    if (cdStatus) { memcpy(dst->cd, cdStatus, SE_LIVE_CD_BLOCK_LEN); dst->has_cd = 1; }
+    else          { memset(dst->cd, 0, SE_LIVE_CD_BLOCK_LEN);        dst->has_cd = 0; }
     dst->valid = 1;
     sRingFrame[sRingWrite] = ++sFrameNo;               /* tag this slot with its frame number */
     sRingWrite = (sRingWrite + 1) % SE_RING;           /* advance (wraps, overwriting oldest) */
@@ -866,6 +871,16 @@ static void SeServeClient(int cl, SeFrame* snap)
             SeWr32(lenb, len);
             if (SeSend(cl, lenb, 4) != 0) return;
             if (len && SeSend(cl, snap->sl, SE_SL) != 0) return;
+        }
+
+        /* v15 trailing block: CD-block status. u32 length (SE_LIVE_CD_BLOCK_LEN when the glue
+         * supplied it, else 0), then that many pre-serialized bytes. */
+        {
+            unsigned char lenb[4];
+            unsigned int len = snap->has_cd ? (unsigned int)SE_LIVE_CD_BLOCK_LEN : 0u;
+            SeWr32(lenb, len);
+            if (SeSend(cl, lenb, 4) != 0) return;
+            if (len && SeSend(cl, snap->cd, SE_LIVE_CD_BLOCK_LEN) != 0) return;
         }
     }
 }

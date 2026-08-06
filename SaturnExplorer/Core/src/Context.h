@@ -268,6 +268,13 @@ public:
         return n;
     }
 
+    int GetCdStatus(se_cd_status* out) const
+    {
+        if (!out || !mSnapshot.HasCdStatus()) return 0;
+        *out = mSnapshot.CdStatus();
+        return 1;
+    }
+
     // Decode voice 'slot' from sound RAM into 16-bit signed mono host PCM (SA..SA+LEA),
     // converting 16-bit big-endian / 8-bit PCM. Returns frames written (<= maxFrames).
     // Assumes a memory PCM source (SSCTL=0) with no sample-bit inversion (SBCTL=0) — the

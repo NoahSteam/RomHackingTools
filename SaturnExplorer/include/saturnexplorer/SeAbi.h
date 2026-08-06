@@ -55,7 +55,8 @@ enum {
     SE_CAP_MEM_WRITE   = 1u << 13,  /* write-back to work RAM (Hex Editor edits persist) */
     SE_CAP_SOUND_RAM   = 1u << 14,  /* SCSP sound RAM read (se_read_vram SOUND_RAM); write
                                      * when write_sound_ram is also supplied */
-    SE_CAP_SCSP_SLOTS  = 1u << 15   /* decoded SCSP voice/slot state (Sound panel) */
+    SE_CAP_SCSP_SLOTS  = 1u << 15,  /* decoded SCSP voice/slot state (Sound panel) */
+    SE_CAP_CD_STATUS   = 1u << 16   /* live CD-block state: current FAD (Disc Explorer) */
     /* Reserved for a future live driver: SE_CAP_BREAKPOINTS ("Break on Read"). */
 };
 

@@ -55,7 +55,7 @@
 #define SE_LIVE_MAGIC1 'E'
 #define SE_LIVE_MAGIC2 'X'
 #define SE_LIVE_MAGIC3 'P'
-#define SE_LIVE_VERSION      14u   /* +v14 decoded SCSP slot block (Sound panel) */
+#define SE_LIVE_VERSION      15u   /* +v15 CD-block status block (Disc Explorer live FAD) */
 /* Command verbs are exactly 4 bytes; a request is a verb + 4-byte LE argument. */
 #define SE_LIVE_REQUEST      "GET\n"   /* back-compat alias for the snapshot verb */
 /* Snapshot request. arg = the client's last-seen frame number: the server keeps an N-deep
@@ -187,6 +187,14 @@
 #define SE_LIVE_SCSP_SLOTS     32u
 #define SE_LIVE_SCSP_SLOT_LEN  36u
 #define SE_LIVE_SCSP_BLOCK_LEN (SE_LIVE_SCSP_SLOTS * SE_LIVE_SCSP_SLOT_LEN)   /* 1152 */
+
+/* CD-status block (v15+): a trailing block after the v14 SCSP slot block, version-gated the
+ * same way (read only when the server reports version >= 15). Carries the live CD-block state
+ * so the Disc Explorer can show the sector the drive is reading right now. Layout: u32 length
+ * (LE); when length == SE_LIVE_CD_BLOCK_LEN it is followed by the fixed record below, else
+ * length 0 (this build/emulator has no CD tap). Record, little-endian, matching se_cd_status:
+ *   +0 current_fad(u32) +4 play_start_fad(u32) +8 play_end_fad(u32) +12 status(u8) +13 pad(3) */
+#define SE_LIVE_CD_BLOCK_LEN   16u
 
 /* Breakpoint descriptor flag bits (v5+). */
 #define SE_LIVE_BP_KIND_MASK  0x3u   /* 0 exec, 1 read, 2 write, 3 read/write */

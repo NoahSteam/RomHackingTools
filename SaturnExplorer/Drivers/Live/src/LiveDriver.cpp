@@ -43,6 +43,8 @@ struct LiveSnapshot
     std::vector<uint8_t> vdp1Fb;     // VDP1 frame buffer (drawn output)
     std::vector<uint8_t> soundRam;   // SCSP sound RAM (v13+; empty if server predates it)
     std::vector<se_scsp_slot> scspSlots;  // decoded SCSP voices (v14+; empty otherwise)
+    se_cd_status         cdStatus = {};      // live CD-block state (v15+)
+    bool                 hasCdStatus = false;
     se_sh2_regs          sh2[2] = {};        // [0] master, [1] slave (v5+)
     bool                 hasSh2[2] = { false, false };
     bool                 valid = false;
@@ -516,6 +518,27 @@ bool ReadSnapshot(Conn& c, const char* verb, int32_t arg,
         }
     }
 
+    // v15+ trailing block: live CD-block status. u32 length, then the fixed record (or 0 when
+    // the emulator has no CD tap). Read only when the server speaks v15.
+    if (version >= 15u)
+    {
+        uint8_t lenb[4];
+        if (!ConnReadFull(c, lenb, 4)) return false;
+        const uint32_t n = Rd32LE(lenb);
+        if (n != 0u && n != SE_LIVE_CD_BLOCK_LEN) return false;   // desync guard
+        snap.hasCdStatus = false;
+        if (n)
+        {
+            uint8_t blk[SE_LIVE_CD_BLOCK_LEN];
+            if (!ConnReadFull(c, blk, n)) return false;
+            snap.cdStatus.current_fad    = Rd32LE(blk + 0);
+            snap.cdStatus.play_start_fad = Rd32LE(blk + 4);
+            snap.cdStatus.play_end_fad   = Rd32LE(blk + 8);
+            snap.cdStatus.status         = blk[12];
+            snap.hasCdStatus = true;
+        }
+    }
+
     // Control block: paused (u32 LE) + frame (u64 LE), then (v5+) stop reason/cpu/pc.
     // Absent fields default to 0 on older servers.
     outPaused = ct >= 4 && Rd32LE(ctl.data()) != 0;
@@ -775,6 +798,13 @@ int CbScspSlots(void* u, se_scsp_slot out[SE_SCSP_SLOT_COUNT])
     for (int i = 0; i < n; ++i) out[i] = st->front.scspSlots[i];
     return n;
 }
+int CbCdStatus(void* u, se_cd_status* out)
+{
+    LiveState* st = St(u); std::lock_guard<std::mutex> lk(st->mtx);
+    if (!st->front.hasCdStatus) return 0;
+    *out = st->front.cdStatus;
+    return 1;
+}
 
 size_t CbWriteMainRam(void* u, uint32_t address, const void* src, size_t size)
 {
@@ -927,7 +957,8 @@ extern "C" se_result se_live_open(const char* endpoint, se_data_source* out)
     out->capabilities = SE_CAP_VDP1_VRAM | SE_CAP_VDP2_VRAM | SE_CAP_CRAM |
                         SE_CAP_VDP1_REGS | SE_CAP_VDP2_REGS | SE_CAP_MAIN_RAM |
                         SE_CAP_VDP1_FB | SE_CAP_FRAME_STEP | SE_CAP_SH2_REGS |
-                        SE_CAP_MEM_WRITE | SE_CAP_SOUND_RAM | SE_CAP_SCSP_SLOTS;
+                        SE_CAP_MEM_WRITE | SE_CAP_SOUND_RAM | SE_CAP_SCSP_SLOTS |
+                        SE_CAP_CD_STATUS;
     out->user = st;
     out->read_vdp1_vram = CbVdp1Vram;
     out->read_vdp2_vram = CbVdp2Vram;
@@ -937,6 +968,7 @@ extern "C" se_result se_live_open(const char* endpoint, se_data_source* out)
     out->read_sound_ram = CbSoundRam;
     out->write_sound_ram = CbWriteSoundRam;
     out->read_scsp_slots = CbScspSlots;
+    out->read_cd_status = CbCdStatus;
     out->read_vdp1_fb   = CbVdp1Fb;
     out->read_vdp1_reg  = CbVdp1Reg;
     out->read_vdp2_reg  = CbVdp2Reg;

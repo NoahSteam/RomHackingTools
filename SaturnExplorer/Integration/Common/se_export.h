@@ -64,12 +64,17 @@ int SeExportInit(void);
  * in the fixed little-endian layout documented in SeLiveProtocol.h. The emulator glue builds
  * it from its own decoded slot struct. NULL omits the slot block (the Sound panel then shows
  * no voices). Last arg for the same forward-compat reason as sound_ram_512k. */
+/* 'cd_status_block' (v15+) is SE_LIVE_CD_BLOCK_LEN bytes: the CD-block status record in the
+ * fixed little-endian layout documented in SeLiveProtocol.h (current FAD + play range +
+ * state). NULL omits it (Disc Explorer shows no live read position). Last arg, same forward-
+ * compat reason. */
 void SeExportSnapshot(const void* vdp1_vram_512k, const void* vdp2_vram_512k,
                       const void* cram_4k, const void* vdp2_regs_struct_288,
                       const void* vdp1_regs_struct, const void* wram_low_1m,
                       const void* wram_high_1m, const void* vdp1_fb_256k,
                       const void* msh2_regs, const void* ssh2_regs,
-                      const void* sound_ram_512k, const void* scsp_slots_block);
+                      const void* sound_ram_512k, const void* scsp_slots_block,
+                      const void* cd_status_block);
 
 /* Wire the module's breakpoint installers to Yabause's SH2 breakpoint API (v5+).
  * 'add' installs one execution breakpoint: add(cpu, address) with cpu 0 = master,

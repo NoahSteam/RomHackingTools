@@ -394,6 +394,26 @@ typedef struct se_scsp_slot {
     uint8_t  ar, d1r, d2r, rr, dl;  /* envelope rates + decay level (detail row) */
 } se_scsp_slot;
 
+/* Live CD-block state (live sources only; requires SE_CAP_CD_STATUS). The emulator glue fills
+ * it from that emulator's CD drive/CDC state. current_fad is the sector under the drive head
+ * right now — resolving it against the disc image's ISO filesystem (Disc Explorer) tells you
+ * which file the CD is reading, e.g. the source of streaming audio. FADs are Frame Addresses
+ * (LBA + 150). All fields 0 with status idle when nothing is reading. */
+typedef struct se_cd_status {
+    uint32_t current_fad;     /* sector (FAD) currently at the drive head, 0 if unknown/idle */
+    uint32_t play_start_fad;  /* start of the active read/play range (0 if idle) */
+    uint32_t play_end_fad;    /* end of the active read/play range (0 if idle) */
+    uint8_t  status;          /* drive state, best-effort: see SE_CD_* below */
+    uint8_t  reserved[3];
+} se_cd_status;
+
+#define SE_CD_IDLE  0u
+#define SE_CD_SEEK  1u
+#define SE_CD_READ  2u   /* reading data sectors (the streaming case) */
+#define SE_CD_PLAY  3u   /* playing a CD-DA audio track */
+#define SE_CD_PAUSE 4u
+#define SE_CD_SCAN  5u
+
 /* A voice's natural playback rate in Hz from OCT/FNS: 44100 * (1 + FNS/1024) * 2^OCT. The
  * single source of truth so the panel's displayed pitch and the Play/Export rate can't drift.
  * Kept dependency-free (no <math.h>): OCT is a small signed exponent, so shift the base. */

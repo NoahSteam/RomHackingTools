@@ -50,6 +50,7 @@ extern const uint16_t* SsDbgWramH(void);      /* WorkRAMH      — 0x80000 words
 extern const uint16_t* SsDbgVdp1Fb(void);     /* displayed VDP1 FB bank = FB[!FBDrawWhich]  */
 extern const uint16_t* SsDbgSoundRam(void);   /* SCSP RAM — 262144 words, host order; NULL if unwired */
 extern int             SsDbgScspSlots(unsigned char* out); /* fill SE_LIVE_SCSP_BLOCK_LEN bytes; return count (0 if unwired) */
+extern int             SsDbgCdStatus(unsigned char* out); /* fill SE_LIVE_CD_BLOCK_LEN bytes; return 1 if available (0 if unwired) */
 extern void            SsDbgVdp1Regs(uint16_t out11[11]); /* TVMR,FBCR,PTMR,EWDR,EWLR,EWRR,ENDR,EDSR,LOPR,COPR,MODR */
 extern void            SsDbgSh2Regs(int cpu, uint32_t out23[23]); /* R[16],SR,GBR,VBR,MACH,MACL,PR,PC */
 extern void            SsDbgPokeByte(uint32_t addr, uint8_t val); /* bus/debug byte write */
@@ -145,6 +146,7 @@ void SeMednafenSnapshot(void)
     static uint8_t  vs[SE_LIVE_VDP2_STRUCT_LEN];
     static uint8_t  sr[SE_LIVE_SOUND_RAM_LEN];
     static uint8_t  sl[SE_LIVE_SCSP_BLOCK_LEN];
+    static uint8_t  cd[SE_LIVE_CD_BLOCK_LEN];
     static uint16_t vdp1[11];
     static uint32_t msh2[23], ssh2[23];
 
@@ -172,6 +174,9 @@ void SeMednafenSnapshot(void)
     /* Decoded SCSP voices: the injected accessor serializes z->Slots[32] into the wire block
      * (host-order fields, no swap). 0 = unwired -> ship no slot block. */
     const int scspSlotCount = SsDbgScspSlots(sl);
+    /* Live CD-block status: the injected accessor fills the 16-byte wire record from the
+     * CDB drive state (current/play FAD + status). 0 = unwired -> ship no CD block. */
+    const int cdOk = SsDbgCdStatus(cd);
 
     SeExportSnapshot(
         v1,                          /* VDP1 VRAM  (big-endian)                 */
@@ -185,9 +190,10 @@ void SeMednafenSnapshot(void)
         (const void*)SsDbgVdp1Fb(),  /* VDP1 framebuffer (displayed bank, RGB555) */
         msh2, ssh2,                  /* SH-2 master + slave                     */
         SsDbgSoundRam() ? (const void*)sr : (const void*)0,  /* SCSP sound RAM (v13) */
-        scspSlotCount ? (const void*)sl : (const void*)0);   /* SCSP slots (v14)    */
+        scspSlotCount ? (const void*)sl : (const void*)0,    /* SCSP slots (v14)    */
+        cdOk ? (const void*)cd : (const void*)0);            /* CD status (v15)     */
 #else
-    (void)v1; (void)v2; (void)vs; (void)sr; (void)sl; (void)vdp1; (void)msh2; (void)ssh2;
+    (void)v1; (void)v2; (void)vs; (void)sr; (void)sl; (void)cd; (void)vdp1; (void)msh2; (void)ssh2;
     (void)SwapU16ToBE; (void)BuildYabauseVdp2Struct;
 #endif
 }

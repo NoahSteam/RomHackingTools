@@ -333,6 +333,43 @@ extern "C" int SsDbgScspSlots(unsigned char* out) { return SCSP.SeDbgReadSlots(o
 # scsp.h anchor: insert the member right after the public GetRAMPtr() accessor.
 SCSP_RAMPTR_ANCHOR = r'(INLINE\s+uint16\*\s+GetRAMPtr\(void\)\s*\{\s*return\s+RAM;\s*\}\s*\n)'
 
+# Live CD-block status accessor (v15) appended at EOF of cdb.cpp, where the file-static drive
+# state (CurPosInfo, CurPlayStart/End) is in scope. Serializes the 16-byte wire record
+# little-endian to match SeLiveProtocol's se_cd_status layout (the glue passes it through
+# verbatim): current_fad(u32) play_start_fad(u32) play_end_fad(u32) status(u8) pad(3).
+# CurPosInfo.status is the Saturn CD-block status byte (STATUS_* in cdb.cpp); we fold its
+# transient high bits off (& 0x0F) and map the base code to Saturn Explorer's SE_CD_* enum
+# (0 idle / 1 seek / 2 read / 3 play / 4 pause / 5 scan). STATUS_PLAY is the state during
+# active sector streaming (data reads and CD-DA both), which is exactly what the Disc Explorer
+# wants to resolve to a file — so it maps to "read".
+CD_ACCESSORS = """\
+/* Saturn Explorer live CD-block status (v15). Reads cdb.cpp's file-static drive state and
+   serializes the 16-byte se_cd_status wire record little-endian. See apply.py for the
+   status-byte -> SE_CD_* mapping rationale. */
+namespace MDFN_IEN_SS {
+extern "C" int SsDbgCdStatus(unsigned char* out)
+{
+ auto w32 = [](unsigned char* p, uint32 v) {
+  p[0] = (unsigned char)v;         p[1] = (unsigned char)(v >> 8);
+  p[2] = (unsigned char)(v >> 16); p[3] = (unsigned char)(v >> 24);
+ };
+ /* STATUS_BUSY..STATUS_FATAL (0x00..0x0A) -> SE_CD_* (idle/seek/read/play/pause/scan). */
+ static const unsigned char kMap[11] = {
+  1, /* BUSY    -> seek  */  4, /* PAUSE   -> pause */  0, /* STANDBY -> idle */
+  2, /* PLAY    -> read  */  1, /* SEEK    -> seek  */  5, /* SCAN    -> scan */
+  0, /* OPEN    -> idle  */  0, /* NODISC  -> idle  */  1, /* RETRY   -> seek */
+  0, /* ERROR   -> idle  */  0  /* FATAL   -> idle  */
+ };
+ const unsigned base = CurPosInfo.status & 0x0F;
+ w32(out + 0, CurPosInfo.fad);
+ w32(out + 4, CurPlayStart);
+ w32(out + 8, CurPlayEnd);
+ out[12] = (base < 11) ? kMap[base] : 0;
+ out[13] = out[14] = out[15] = 0;
+ return 1;
+}
+}"""
+
 SMPC_INPUT_DECL = """\
 /* Saturn Explorer controller injection. `buttons` is the protocol's SE_PAD_* mask;
    the SMPC implementation translates and overlays it on the host gamepad state. */
@@ -657,6 +694,23 @@ def process_sound(src_dir, do_write):
     return notes
 
 
+def process_cd(src_dir, do_write):
+    """Wire the live CD-block status read path (v15). The drive state (CurPosInfo, CurPlayStart/
+    End) is file-static in cdb.cpp, so the C-linkage accessor is simply appended there — it needs
+    no header edit. cdb.cpp is SS-only (unlike sound.cpp, which the SSF player also includes), so
+    no MDFN_SSFPLAY_COMPILE guard is required."""
+    cpp_path = os.path.join(src_dir, "cdb.cpp")
+    notes = ["cdb.cpp:"]
+    if not os.path.isfile(cpp_path):
+        return notes + ["  MISSING  cdb.cpp"]
+    text = original = open(cpp_path, encoding="utf-8", errors="surrogateescape").read()
+    text, n = apply_append(text, CD_ACCESSORS, "SsDbgCdStatus")
+    notes.append(n)
+    if do_write and text != original:
+        open(cpp_path, "w", encoding="utf-8", errors="surrogateescape").write(text)
+    return notes
+
+
 def process_smpc(src_dir, do_write):
     cpp_path = os.path.join(src_dir, "smpc.cpp")
     h_path = os.path.join(src_dir, "smpc.h")
@@ -822,7 +876,7 @@ def process_build(root, do_write):
 def revert(src_dir, root):
     fence_re = re.compile(re.escape(BEGIN) + r".*?" + re.escape(END) + r"\n?", re.DOTALL)
     edited = [os.path.join(src_dir, f) for f in
-              ("vdp1.cpp", "vdp2.cpp", "ss.cpp", "sound.cpp", "scsp.h", "smpc.cpp", "smpc.h")]
+              ("vdp1.cpp", "vdp2.cpp", "ss.cpp", "sound.cpp", "scsp.h", "cdb.cpp", "smpc.cpp", "smpc.h")]
     edited.append(os.path.join(root, TITLE_FILE))   # window-title mark (SDL frontend)
     edited.append(os.path.join(root, INPUT_FILE))   # keyboard-map hook (SDL frontend)
     for path in edited:
@@ -880,6 +934,7 @@ def main():
     notes += process_ss(src_dir, do_write, with_pause)
     notes += process_vdp1_drawend(src_dir, do_write)
     notes += process_sound(src_dir, do_write)
+    notes += process_cd(src_dir, do_write)
     notes += process_title(root, do_write)
     notes += process_input(root, do_write)
     notes += process_build(root, do_write)

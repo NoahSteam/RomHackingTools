@@ -72,6 +72,10 @@ public:
     // Decoded SCSP voices (empty unless the source supplied SE_CAP_SCSP_SLOTS).
     const std::vector<se_scsp_slot>& ScspSlots() const { return mScspSlots; }
 
+    // Live CD-block state (valid only when HasCdStatus() — SE_CAP_CD_STATUS sources).
+    bool                 HasCdStatus() const { return mHasCdStatus; }
+    const se_cd_status&  CdStatus()    const { return mCdStatus; }
+
     // One register as a big-endian 16-bit value, addressed by its hardware byte
     // offset (e.g. VDP2 0x0E for RAMCTL). Returns 0 if unavailable.
     uint16_t Vdp1Reg(uint32_t hwOffset) const
@@ -97,6 +101,8 @@ private:
     std::vector<uint16_t> mVdp2Regs;
     se_sh2_regs           mSh2[2] = {};   // [0] master, [1] slave
     std::vector<se_scsp_slot> mScspSlots; // decoded SCSP voices (SE_CAP_SCSP_SLOTS)
+    se_cd_status          mCdStatus = {};  // live CD-block state (SE_CAP_CD_STATUS)
+    bool                  mHasCdStatus = false;
     se_cram_mode          mCramMode = SE_CRAM_RGB555_1024;
     bool mbHasVdp1Regs = false;
     bool mbHasVdp2Regs = false;

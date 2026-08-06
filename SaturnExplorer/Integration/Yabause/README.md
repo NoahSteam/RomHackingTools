@@ -87,7 +87,8 @@ frame, after the frame is drawn):
     extern u8 * SoundRam;   /* SCSP sound RAM (512 KiB) */
     SeExportSnapshot(Vdp1Ram, Vdp2Ram, Vdp2ColorRam, Vdp2Regs,
                      Vdp1Regs, LowWram, HighWram, VIDSoftGetVdp1FrameBuffer(),
-                     &se_msh2, &se_ssh2, SoundRam);
+                     &se_msh2, &se_ssh2, SoundRam,
+                     (void*)0 /* SCSP slots: TODO */, (void*)0 /* CD status: TODO */);
 ```
 
 The last argument (`SoundRam`, v13+) is Yabause's SCSP sound-RAM block — the 68000

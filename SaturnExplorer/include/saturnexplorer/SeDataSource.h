@@ -58,6 +58,11 @@ typedef struct se_data_source {
            Powers the Sound panel + per-voice sample Play/Export. May be NULL. */
     int (*read_scsp_slots)(void* user, se_scsp_slot out[SE_SCSP_SLOT_COUNT]);
 
+    /* --- Optional: live CD-block state (SE_CAP_CD_STATUS). Fills 'out'; returns 1 on
+           success, 0 if unavailable. current_fad is the sector the drive is reading now —
+           the Disc Explorer resolves it to a file. May be NULL. */
+    int (*read_cd_status)(void* user, se_cd_status* out);
+
     /* --- Optional: reference framebuffer (SE_CAP_FRAMEBUFFER) for diffing vs
            the core's own software render. NOT the primary display path — the
            core composites the frame itself from VRAM (see ARCHITECTURE.md §7). */

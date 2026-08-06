@@ -170,6 +170,13 @@ to `SeExportSnapshot`. Per section:
   accessor to `sound.cpp` that calls it. The member serializes each voice into the fixed
   36-byte LE record in `SeLiveProtocol.h`, reading the raw DISDL/DIPAN/EFSDL/EFPAN from
   `SlotRegs[i][0x0B]` and sign-extending the 4-bit `Octave`.
+- **CD-block status (v15)** — the **Disc Explorer**'s live drive readout: the FAD the CD
+  drive is reading right now, resolved to a file on the loaded disc image. The drive state
+  (`CurPosInfo.fad`/`.status`, `CurPlayStart`/`CurPlayEnd`) is file-static in **`cdb.cpp`**,
+  so the patcher appends a `SsDbgCdStatus()` accessor there (no header edit needed) that
+  serializes the 16-byte LE record in `SeLiveProtocol.h` and maps the Saturn CD status byte
+  (`STATUS_*`) to Saturn Explorer's `SE_CD_*` enum. `STATUS_PLAY` — the drive's state while
+  streaming sectors — maps to "reading", which is the case the Disc Explorer resolves.
 
 ## VDP2 registers (the one protocol wrinkle)
 

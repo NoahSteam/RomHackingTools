@@ -142,6 +142,20 @@ const char* CommandTypeName(se_command_type type)
     }
 }
 
+const char* CdStatusName(uint8_t status)
+{
+    switch (status)
+    {
+    case SE_CD_IDLE:  return "idle";
+    case SE_CD_SEEK:  return "seeking";
+    case SE_CD_READ:  return "reading";
+    case SE_CD_PLAY:  return "playing (CD-DA)";
+    case SE_CD_PAUSE: return "paused";
+    case SE_CD_SCAN:  return "scanning";
+    default:          return "?";
+    }
+}
+
 const char* ColorModeName(se_color_mode mode)
 {
     switch (mode)
@@ -2471,6 +2485,16 @@ void App::DrawDiscExplorer(IPlatform& platform)
         return;
     }
 
+    // Resolve an LBA to the file that contains it and print "<addr> -> path (+offset)", or a
+    // disabled "no file" note. Shared by the manual resolver and the live-drive readout below.
+    auto printResolved = [&](const char* label, uint32_t addr, uint32_t lba, const char* noFile) {
+        if (const IsoEntry* e = mDiscFs.FileAt(lba))
+            ImGui::Text("%s %u \xe2\x86\x92 %s  (+%llu)", label, addr, e->path.c_str(),
+                        (unsigned long long)(uint64_t(lba - e->lba) * 2048));
+        else
+            ImGui::TextDisabled("%s %u \xe2\x86\x92 %s", label, addr, noFile);
+    };
+
     // Resolve a CD read address to the file that contains it. Saturn CD addresses are FADs
     // (Frame Address = LBA + 150); toggle to enter one directly.
     ImGui::SetNextItemWidth(120.0f);
@@ -2483,11 +2507,22 @@ void App::DrawDiscExplorer(IPlatform& platform)
         uint32_t v = (uint32_t)std::strtoul(mDiscResolve, nullptr, 16);
         const uint32_t lba = mDiscResolveIsFad ? (v >= 150 ? v - 150 : 0) : v;
         ImGui::SameLine();
-        if (const IsoEntry* e = mDiscFs.FileAt(lba))
-            ImGui::Text("LBA %u \xe2\x86\x92 %s  (+%llu in file)", lba, e->path.c_str(),
-                        (unsigned long long)(uint64_t(lba - e->lba) * 2048));
-        else
-            ImGui::TextDisabled("LBA %u \xe2\x86\x92 (no file; system area or gap)", lba);
+        printResolved("LBA", lba, lba, "(no file; system area or gap)");
+    }
+
+    // Live drive position: when attached to an emulator that supplies the CD tap, show the FAD
+    // the drive is reading right now and resolve it to a file automatically — the hop from
+    // "audio is streaming" to "\xe2\x80\xa6from THIS file on the disc".
+    se_cd_status cd;
+    if (mbHasData && se_get_cd_status(mContext, &cd))
+    {
+        ImGui::Text("Live drive: %s", CdStatusName(cd.status));
+        if (cd.status != SE_CD_IDLE && cd.current_fad >= 150)
+        {
+            ImGui::SameLine();
+            printResolved("\xc2\xb7  FAD", cd.current_fad, cd.current_fad - 150,
+                          "(no file; audio track or gap)");
+        }
     }
 
     ImGui::SetNextItemWidth(-FLT_MIN);
