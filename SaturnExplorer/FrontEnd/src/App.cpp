@@ -269,7 +269,6 @@ const std::vector<App::PanelInfo>& App::PanelList()
         {"vdp2Table",       "VDP2 Table",         &Panels::vdp2Table,       "Memory & Data"},
         {"registers",       "Registers",          &Panels::registers,       "Memory & Data"},
         {"colorRam",        "Color RAM",          &Panels::colorRam,        "Memory & Data"},
-        {"workRam",         "Work RAM",           &Panels::workRam,         "Memory & Data"},
         {"textureViewer",   "Texture Viewer",     &Panels::textureViewer,   "Graphics"},
         {"paletteViewer",   "Palette Viewer",     &Panels::paletteViewer,   "Graphics"},
         {"references",      "References",         &Panels::references,      "Memory & Data"},
@@ -1008,7 +1007,6 @@ void App::BuildUI(IPlatform& platform)
     if (mPanels.vdp1Table)       DrawVdp1Table();
     if (mPanels.vdp2Table)       DrawVdp2Table();
     if (mPanels.colorRam)        DrawColorRam();
-    if (mPanels.workRam)         DrawWorkRam();
     if (mPanels.registers)       DrawRegisters();
     if (mPanels.commandList)     DrawCommandList();
     if (mPanels.textureViewer)   DrawTextureViewer(platform);
@@ -1150,7 +1148,6 @@ void App::BuildDefaultLayout(unsigned int dockspaceId)
     ImGui::DockBuilderDockWindow("VDP1 Table", rData);
     ImGui::DockBuilderDockWindow("VDP2 Table", rData);
     ImGui::DockBuilderDockWindow("Color RAM", rData);
-    ImGui::DockBuilderDockWindow("Work RAM", rData);
     ImGui::DockBuilderDockWindow("Registers", rData);
     ImGui::DockBuilderDockWindow("Sound (SCSP)", rData);
 
@@ -6312,83 +6309,6 @@ void App::DrawVdp1Table()
                 }
                 ImGui::EndTable();
             }
-        }
-    }
-    ImGui::End();
-}
-
-void App::DrawWorkRam()
-{
-    if (ImGui::Begin("Work RAM"))
-    {
-        if (!mbHasData)
-        {
-            ImGui::TextDisabled("No data loaded.");
-        }
-        else if (ImGui::BeginTabBar("wramtabs"))
-        {
-            struct Bank { const char* name; se_vram_kind kind; uint32_t base; };
-            const Bank banks[2] = {
-                {"Low (0x00200000)",  SE_VRAM_KIND_WRAM_LOW,  0x00200000u},
-                {"High (0x06000000)", SE_VRAM_KIND_WRAM_HIGH, 0x06000000u},
-            };
-            for (const Bank& b : banks)
-            {
-                if (!ImGui::BeginTabItem(b.name))
-                {
-                    continue;
-                }
-                uint8_t probe[16];
-                if (se_read_vram(mContext, b.kind, 0, probe, sizeof(probe)) == 0)
-                {
-                    ImGui::TextDisabled("Not available for this source "
-                                        "(connect to a live emulator, or load a full dump).");
-                }
-                else
-                {
-                    ImGui::BeginChild("wramhex");   // always paired with EndChild
-                    const int cols = 16;
-                    const int rows = 0x100000 / cols;   // 1 MiB / 16
-                    ImGuiListClipper clip;
-                    clip.Begin(rows);
-                    while (clip.Step())
-                    {
-                        for (int r = clip.DisplayStart; r < clip.DisplayEnd; ++r)
-                        {
-                            uint8_t row[16] = {};
-                            se_read_vram(mContext, b.kind,
-                                         static_cast<uint32_t>(r * cols), row, cols);
-                            char line[128];
-                            int p = std::snprintf(line, sizeof(line), "%08X  ",
-                                                  b.base + static_cast<uint32_t>(r * cols));
-                            for (int i = 0; i < cols; ++i)
-                            {
-                                p += std::snprintf(line + p, sizeof(line) - p, "%02X ", row[i]);
-                            }
-                            if (p < static_cast<int>(sizeof(line)) - 1) line[p++] = ' ';
-                            for (int i = 0; i < cols && p < static_cast<int>(sizeof(line)) - 1; ++i)
-                            {
-                                const uint8_t c = row[i];
-                                line[p++] = (c >= 32 && c < 127) ? static_cast<char>(c) : '.';
-                            }
-                            line[p] = '\0';
-                            // Clickable row: double-click jumps the Hex Editor to this
-                            // address. PushID keeps each row's ID unique with no copy.
-                            ImGui::PushID(r);
-                            ImGui::Selectable(line);
-                            if (ImGui::IsItemHovered() &&
-                                ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
-                            {
-                                mHexEditor.GoTo(b.base + static_cast<uint32_t>(r * cols));
-                            }
-                            ImGui::PopID();
-                        }
-                    }
-                    ImGui::EndChild();
-                }
-                ImGui::EndTabItem();
-            }
-            ImGui::EndTabBar();
         }
     }
     ImGui::End();

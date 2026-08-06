@@ -172,7 +172,10 @@ void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
 
     // --- Grid: a frozen-header table, virtually scrolled over the whole region. ---
     const float ch = ImGui::CalcTextSize("F").x;
-    const float byteW = ch * 2.0f + 8.0f;
+    // Compact byte columns: 2 hex glyphs + a little slack. Combined with the tightened cell
+    // padding below this gives ~one-space gap between bytes (like the old Work RAM view),
+    // instead of the wide default-padded columns.
+    const float byteW = ch * 2.0f + 4.0f;
     const float rowH = ImGui::GetTextLineHeightWithSpacing();
     const uint32_t totalRows = (reg.size + 15u) / 16u;
 
@@ -182,7 +185,10 @@ void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
     // Read the visible rows fresh when Auto Refresh is on (or the cache is empty); when
     // off, freeze the view by rendering the last-seen bytes from mPrevByte.
     const bool doRead = mAutoRefresh || mPrevByte.empty();
-    if (ImGui::BeginTable("mem", 18, tflags, outer))
+    // Halve the horizontal cell padding so the hex grid packs tightly.
+    ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2(2.0f, ImGui::GetStyle().CellPadding.y));
+    const bool memTableOpen = ImGui::BeginTable("mem", 18, tflags, outer);
+    if (memTableOpen)
     {
         ImGui::TableSetupScrollFreeze(1, 1);   // freeze the address column + header row
         ImGui::TableSetupColumn("Addr", ImGuiTableColumnFlags_WidthFixed, ch * 8.0f + 4.0f);
@@ -456,6 +462,7 @@ void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
 
         ImGui::EndTable();
     }
+    ImGui::PopStyleVar();   // CellPadding (pushed before BeginTable, balanced regardless of open)
 
     // --- Selection / value readout ---
     ImGui::Separator();
