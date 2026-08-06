@@ -187,8 +187,7 @@ void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
     const bool doRead = mAutoRefresh || mPrevByte.empty();
     // Halve the horizontal cell padding so the hex grid packs tightly.
     ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2(2.0f, ImGui::GetStyle().CellPadding.y));
-    const bool memTableOpen = ImGui::BeginTable("mem", 18, tflags, outer);
-    if (memTableOpen)
+    if (ImGui::BeginTable("mem", 18, tflags, outer))
     {
         ImGui::TableSetupScrollFreeze(1, 1);   // freeze the address column + header row
         ImGui::TableSetupColumn("Addr", ImGuiTableColumnFlags_WidthFixed, ch * 8.0f + 4.0f);

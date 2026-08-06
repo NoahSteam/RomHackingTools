@@ -258,13 +258,14 @@ bool FrameRecorder::Select(size_t i, se_data_source* out)
 
     std::memset(out, 0, sizeof(*out));
     out->abi_version = SE_ABI_VERSION;
+    // Sound caps are advertised unconditionally, like SE_CAP_SH2_REGS above and the live
+    // driver: when the recorded frame carried no sound data the CbSoundRam/CbScspSlots
+    // callbacks return 0/empty, which HardwareSnapshot treats the same as an absent cap. (The
+    // scrub context latches its capabilities at se_create, so an unconditional set also avoids
+    // a first-frame-empty frame turning the sound panels off for the whole session.)
     out->capabilities = SE_CAP_VDP1_VRAM | SE_CAP_VDP2_VRAM | SE_CAP_CRAM |
                         SE_CAP_MAIN_RAM | SE_CAP_VDP1_REGS | SE_CAP_VDP2_REGS |
-                        SE_CAP_VDP1_FB | SE_CAP_SH2_REGS;
-    // Advertise the sound caps only when the recorded frame actually carried that data, so a
-    // pre-v14 source doesn't claim voices/sound RAM it never captured.
-    if (!mSelSoundRam.empty()) out->capabilities |= SE_CAP_SOUND_RAM;
-    if (mSelSlotCount > 0)     out->capabilities |= SE_CAP_SCSP_SLOTS;
+                        SE_CAP_VDP1_FB | SE_CAP_SH2_REGS | SE_CAP_SOUND_RAM | SE_CAP_SCSP_SLOTS;
     out->user = this;
     out->read_vdp1_vram = CbVdp1;
     out->read_vdp2_vram = CbVdp2;
