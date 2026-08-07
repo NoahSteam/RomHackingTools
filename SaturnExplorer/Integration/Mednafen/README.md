@@ -400,6 +400,45 @@ own `SDL_SetWindowTitle` in `src/drivers/video.cpp`, using the shared
 `SeExportTitleSuffix()` helper. It's best-effort: a non-SDL / libretro build won't have
 that file, and the patcher skips it gracefully.
 
+## Rewind: resume from a scrubbed-back frame (v16) — opt-in, `-DSE_MDFN_REWIND`
+
+Saturn Explorer's scrub-back can do more than replay recorded pictures: with this wired, you
+can **pause, scrub back to an earlier frame, edit Work RAM, and press Play to have the game
+jump back to that frame and re-simulate forward with the edit in effect** (later frames are
+discarded and re-recorded). That needs the emulator's *full* internal state (CPU pipeline,
+bus, timers, DMA, SCU, CD block, SCSP), which only a **savestate** captures — SE's own region
+snapshot isn't enough. So the tap adds two accessors that save/load a full state image to/from
+a memory buffer:
+
+- `SsDbgSaveState(buf, cap) -> size_t` — write the current savestate into `buf` (probe the size
+  with `buf == NULL`); returns 0 on failure.
+- `SsDbgLoadState(buf, len) -> int` — restore a savestate from `buf`; returns 0 on success.
+
+`se_export.c` calls `SsDbgSaveState` **once per frame on the emulate thread** and hands the raw
+image to a **worker thread** that XOR-diffs it against a keyframe and RLE-compresses it (so only
+tiny deltas are kept, not a multi-MB state per frame); the compact blocks stream to the client a
+few frames behind. On Play-from-scrub the client reconstructs frame N's full state, ships it back
+with the `LST` verb, and `SsDbgLoadState` restores it at the frame gate — so **rewind requires
+`--with-pause`** (the gate is where the load is applied).
+
+**Shipped dormant.** The exact Mednafen memory-savestate API — `MDFNSS_SaveSM` / `MDFNSS_LoadSM`
+against a `Mednafen::MemoryStream`, and whether those live in the global or `Mednafen::` namespace
+— varies by fork, so `apply.py` injects `SsDbgSaveState`/`SsDbgLoadState` as a **compiling stub**
+by default (save returns 0 → the ring stays empty → the feature is simply off, and the whole
+protocol/client/UI degrade gracefully). To enable it:
+
+1. Confirm the `MDFNSS_*` signatures on your checkout (see `src/state.h` / `src/MemoryStream.h`).
+   Adjust the enabled branch in `apply.py`'s `SAVESTATE_ACCESSORS` block if the names/namespace
+   differ.
+2. Build with **`-DSE_MDFN_REWIND=1`** and **`--with-pause`**. For example, add
+   `CPPFLAGS='-DSE_MDFN_REWIND=1'` to `./configure`.
+3. Scrub back, edit Work RAM, press Play — the picture should jump back and re-simulate forward
+   with your edit, and the scrub bar re-fills from that frame. A load-screen scene change should
+   trigger a fresh keyframe; because the diff is off-thread, no frame-rate hitch should appear.
+
+The tuning constants (keyframe threshold, max keyframe interval, raw-queue depth, client state
+budget) live in `se_export.c` / `FrameRecorder.*` and can be measured/adjusted on-emulator.
+
 ## Saturn-only build (skip the other console cores)
 
 Mednafen builds **every** console core by default (PSX, SNES, MD, NES, PCE, PC-FX, …),

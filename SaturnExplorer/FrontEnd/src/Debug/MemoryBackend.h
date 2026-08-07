@@ -69,12 +69,17 @@ public:
     bool CanWrite(uint32_t address) const override;
     size_t WriteMemory(uint32_t address, const uint8_t* bytes, size_t size) override;
 
+    // Force the backend read-only regardless of the context (e.g. while scrubbing a recorded
+    // frame on a server that can't rewind, so edits that would go nowhere are disabled).
+    void SetReadOnly(bool readOnly) { mForceReadOnly = readOnly; }
+
     // Map a CPU-visible Saturn address (mirror bits normalized) to a captured
     // region and read 'size' bytes. Public so hover/operand previews can reuse it.
     MemoryReadResult ReadOne(uint32_t address, uint32_t size) const;
 
 private:
     se_context** mContext = nullptr;
+    bool         mForceReadOnly = false;
 };
 
 }  // namespace sfe

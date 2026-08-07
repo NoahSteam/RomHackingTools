@@ -16,6 +16,7 @@
 
 #include "se_export.h"
 #include "SeLiveProtocol.h"
+#include "SeStateCodec.h"   /* XOR + RLE savestate delta codec (v16 rewind) */
 
 #include <stdint.h>
 #include <stdio.h>
@@ -211,6 +212,276 @@ void SeExportSetSoundWriteHook(SeWriteSoundByteFn fn)
     sWriteSoundByte = fn;
 }
 
+/* Frame lock + server/transport handles (used across the file; declared up here so the
+ * savestate rewind code below can invalidate the frame ring under SE_LOCK). */
+#if defined(_WIN32)
+static HANDLE sThread;
+static CRITICAL_SECTION sLock;
+#define SE_LOCK()   EnterCriticalSection(&sLock)
+#define SE_UNLOCK() LeaveCriticalSection(&sLock)
+#else
+static pthread_t sThread;
+static pthread_t sTcpThread;
+static int sTcpThreadStarted = 0;
+static pthread_mutex_t sLock = PTHREAD_MUTEX_INITIALIZER;
+static int sListenFd = -1;
+static int sTcpListenFd = -1;
+#define SE_LOCK()   pthread_mutex_lock(&sLock)
+#define SE_UNLOCK() pthread_mutex_unlock(&sLock)
+#endif
+
+/* ===================== Savestate rewind (v16) ===========================
+ * A per-frame full-savestate ring, delta-compressed on a worker thread, that powers
+ * the rewind timeline's "Play from here". The emulate thread does only the (heavy)
+ * SAVE at a frame boundary and stages the raw buffer on a bounded queue (drop-if-full);
+ * a worker thread XOR-diffs it against the current keyframe and RLE-compresses it into
+ * a compact block; the server thread ships those blocks lagging on GET responses. The
+ * client keeps them and, on resume-from-scrub, hands a reconstructed full state (plus the
+ * pending memory edits) back via the LST verb; the emulate thread restores + patches +
+ * resumes at the gate. All savestate work is off the emulate thread except SAVE and LOAD. */
+static unsigned int SeRd32(const unsigned char* p)
+{
+    return (unsigned int)p[0] | ((unsigned int)p[1] << 8) |
+           ((unsigned int)p[2] << 16) | ((unsigned int)p[3] << 24);
+}
+
+static size_t (*sSaveState)(unsigned char* buf, size_t cap);
+static int    (*sLoadState)(const unsigned char* buf, size_t len);
+
+#define SE_STATE_QUEUE   8      /* raw full-savestate buffers staged for the worker */
+#define SE_STATE_OUTQ    16     /* finished blocks awaiting the wire */
+#define SE_STATE_KF_MAX  300u   /* force a keyframe at least this often (frames) */
+#define SE_STATE_KF_NUM  1u     /* promote a delta to a keyframe when RLE(delta) size > */
+#define SE_STATE_KF_DEN  3u     /*   (num/den) of the full state (i.e. a scene change) */
+
+#if defined(_WIN32)
+static CRITICAL_SECTION sStateLock;
+#define SE_SLOCK()   EnterCriticalSection(&sStateLock)
+#define SE_SUNLOCK() LeaveCriticalSection(&sStateLock)
+static HANDLE sStateWorker;
+#else
+static pthread_mutex_t sStateLock = PTHREAD_MUTEX_INITIALIZER;
+#define SE_SLOCK()   pthread_mutex_lock(&sStateLock)
+#define SE_SUNLOCK() pthread_mutex_unlock(&sStateLock)
+static pthread_t sStateWorker;
+#endif
+static volatile int sStateWorkerRun;
+static int          sStateWorkerStarted;
+
+static size_t         sStateCap;                  /* per-buffer capacity (0 = feature off) */
+static unsigned char* sStatePool[SE_STATE_QUEUE]; /* pooled full-state buffers */
+static int            sFreeStack[SE_STATE_QUEUE]; /* free pool-buffer indices */
+static int            sFreeCount;
+
+/* Generation: bumped on every load so pre-load frames still in flight are dropped and the
+ * first frame of each generation is a keyframe (the client truncated everything after N). */
+static volatile unsigned sStateGen;
+static unsigned          sKeyGen;                 /* generation the current keyframe belongs to */
+
+typedef struct { unsigned long long frame; int poolIdx; size_t len; unsigned gen; } SeRawItem;
+static SeRawItem sRawFifo[SE_STATE_QUEUE];
+static int sRawHead, sRawCount;
+
+typedef struct {
+    unsigned char      kind;                      /* SE_LIVE_STATE_KIND_* */
+    unsigned long long frame, base;
+    unsigned char*     payload; size_t len;       /* RLE payload */
+    size_t             full;                      /* decoded full-state size */
+} SeStateBlock;
+static SeStateBlock sOutFifo[SE_STATE_OUTQ];
+static int sOutHead, sOutCount;
+
+static unsigned char*     sKeyFull;    /* worker-owned current keyframe bytes */
+static size_t             sKeyLen;
+static unsigned long long sKeyFrame;
+static unsigned int       sSinceKeyframe;
+static unsigned char*     sXorScratch; /* worker XOR scratch (state-sized) */
+
+/* Load mailbox: server thread (LST) fills sLoadBuf with the whole payload (frame + edits_len
+ * + edits + state); the emulate thread consumes it at the gate. */
+static unsigned char*     sLoadBuf; static size_t sLoadCap; static size_t sLoadLen;
+static volatile int       sLoadPending;
+static unsigned char*     sGateLoadBuf; static size_t sGateLoadCap; /* emulate-thread copy */
+
+/* Worker thread body (defined after SeGateSleep). */
+#if defined(_WIN32)
+static DWORD WINAPI SeStateWorkerThread(LPVOID arg);
+#else
+static void* SeStateWorkerThread(void* arg);
+#endif
+
+/* Drop all queued/finished state and open a new generation. Called on the emulate thread
+ * right after a successful load — the pre-load pipeline is now stale. */
+static void SeStateFlushAndRekey(void)
+{
+    int i;
+    SE_SLOCK();
+    for (i = 0; i < sRawCount; ++i)
+        sFreeStack[sFreeCount++] = sRawFifo[(sRawHead + i) % SE_STATE_QUEUE].poolIdx;
+    sRawHead = sRawCount = 0;
+    for (i = 0; i < sOutCount; ++i)
+        free(sOutFifo[(sOutHead + i) % SE_STATE_OUTQ].payload);
+    sOutHead = sOutCount = 0;
+    ++sStateGen;   /* first frame of the new generation becomes a keyframe */
+    SE_SUNLOCK();
+}
+
+/* Emulate thread, from SeExportSnapshot: save the current full state and stage it for the
+ * worker (SAVE only; no diff/RLE). Drops the frame (leaving it non-seekable) if the worker
+ * is behind. No-op until a save hook + buffer pool exist. */
+static void SeStateCapture(unsigned long long frame)
+{
+    int idx; size_t n;
+    if (!sSaveState || sStateCap == 0) return;
+    SE_SLOCK();
+    if (sFreeCount == 0) { SE_SUNLOCK(); return; }   /* worker behind: drop */
+    idx = sFreeStack[--sFreeCount];
+    SE_SUNLOCK();
+    n = sSaveState(sStatePool[idx], sStateCap);       /* expensive; off the lock */
+    if (n == 0 || n > sStateCap)
+    {
+        SE_SLOCK(); sFreeStack[sFreeCount++] = idx; SE_SUNLOCK();
+        return;
+    }
+    SE_SLOCK();
+    if (sRawCount < SE_STATE_QUEUE)
+    {
+        int slot = (sRawHead + sRawCount) % SE_STATE_QUEUE;
+        sRawFifo[slot].frame = frame; sRawFifo[slot].poolIdx = idx;
+        sRawFifo[slot].len = n; sRawFifo[slot].gen = sStateGen;
+        ++sRawCount;
+    }
+    else { sFreeStack[sFreeCount++] = idx; }
+    SE_SUNLOCK();
+}
+
+/* Apply the LST memory-edit blob (SE_LIVE_EDIT_* layout) after a restore, so the game
+ * re-simulates from frame N with the user's modifications. Byte-by-byte, like WRM/WRS. */
+static void SeStateApplyEdits(const unsigned char* edits, size_t len)
+{
+    size_t pos; unsigned int count, e;
+    if (len < 4) return;
+    count = SeRd32(edits); pos = 4;
+    for (e = 0; e < count; ++e)
+    {
+        unsigned int type, addr, elen, i;
+        if (pos + SE_LIVE_EDIT_HDR_LEN > len) return;
+        type = edits[pos];
+        addr = SeRd32(edits + pos + 4);
+        elen = SeRd32(edits + pos + 8);
+        pos += SE_LIVE_EDIT_HDR_LEN;
+        if (pos + elen > len) return;
+        for (i = 0; i < elen; ++i)
+        {
+            unsigned char v = edits[pos + i];
+            if (type == SE_LIVE_EDIT_TYPE_SOUND) { if (sWriteSoundByte) sWriteSoundByte(addr + i, v); }
+            else                                 { if (sWriteByte)      sWriteByte(addr + i, v); }
+        }
+        pos += elen;
+    }
+}
+
+/* Consume a pending LST at the gate (emulate thread). Copies the payload under the state
+ * lock, then atomically: restore the savestate, apply the edits on top, adopt frame N,
+ * invalidate the stale (> N) wire ring, drop the stale savestate pipeline, and resume. */
+static void SeStateConsumeLoad(void)
+{
+    unsigned char* buf = NULL; size_t len = 0;
+    if (!sLoadPending) return;
+    SE_SLOCK();
+    if (sLoadPending)
+    {
+        if (sGateLoadCap < sLoadLen)
+        {
+            unsigned char* nb = (unsigned char*)realloc(sGateLoadBuf, sLoadLen);
+            if (nb) { sGateLoadBuf = nb; sGateLoadCap = sLoadLen; }
+        }
+        if (sGateLoadCap >= sLoadLen) { memcpy(sGateLoadBuf, sLoadBuf, sLoadLen); buf = sGateLoadBuf; len = sLoadLen; }
+        sLoadPending = 0;
+    }
+    SE_SUNLOCK();
+    if (!buf || len < 8 || !sLoadState) return;
+    {
+        unsigned long long frame = SeRd32(buf);
+        unsigned int edits_len = SeRd32(buf + 4);
+        const unsigned char* state; size_t state_len;
+        if ((size_t)8 + edits_len > len) return;   /* malformed */
+        state = buf + 8 + edits_len;
+        state_len = len - 8 - (size_t)edits_len;
+        if (sLoadState(state, state_len) == 0)
+        {
+            SeStateApplyEdits(buf + 8, edits_len);   /* patch RAM on top of the restore */
+            sFrameNo = frame;
+            /* Invalidate the pre-rewind wire ring so a GET can't serve a stale > N frame; the
+             * next SeExportSnapshot repopulates it starting at N+1. */
+            SE_LOCK();
+            { int i; for (i = 0; i < SE_RING; ++i) sRingFrame[i] = 0; sRingWrite = 0; }
+            SE_UNLOCK();
+            SeStateFlushAndRekey();                  /* drop the stale savestate pipeline */
+            sStopReason = SE_LIVE_STOP_NONE;
+            sStepBudget = 0;
+            sPaused = 0;                              /* resume: re-simulate forward from N */
+        }
+        else { SeExportLog("rewind: load state failed"); }
+    }
+}
+
+/* Allocate the buffer pool and start the worker, once, when a non-NULL save hook is set. */
+static void SeStateStartWorker(void)
+{
+    size_t probe, cap; int i;
+    if (sStateWorkerStarted || !sSaveState || !sRunning) return;
+    probe = sSaveState(NULL, 0);                 /* required savestate size (probe) */
+    if (probe == 0) return;                      /* can't size: feature stays off */
+    cap = probe + probe / 4u + 4096u;            /* margin for per-frame size variance */
+    for (i = 0; i < SE_STATE_QUEUE; ++i)
+    {
+        sStatePool[i] = (unsigned char*)malloc(cap);
+        if (!sStatePool[i]) return;              /* leave disabled; freed at deinit */
+        sFreeStack[i] = i;
+    }
+    sKeyFull    = (unsigned char*)malloc(cap);
+    sXorScratch = (unsigned char*)malloc(cap);
+    if (!sKeyFull || !sXorScratch) return;
+    sFreeCount = SE_STATE_QUEUE;
+    sRawHead = sRawCount = sOutHead = sOutCount = 0;
+    sKeyLen = 0; sSinceKeyframe = 0; sStateGen = 1; sKeyGen = 0;
+    sStateCap = cap;
+    sStateWorkerRun = 1;
+#if defined(_WIN32)
+    sStateWorker = CreateThread(NULL, 0, SeStateWorkerThread, NULL, 0, NULL);
+    sStateWorkerStarted = (sStateWorker != NULL);
+#else
+    sStateWorkerStarted = (pthread_create(&sStateWorker, NULL, SeStateWorkerThread, NULL) == 0);
+#endif
+    if (!sStateWorkerStarted) { sStateWorkerRun = 0; sStateCap = 0; }
+}
+
+void SeExportSetSaveStateHook(size_t (*save)(unsigned char* buf, size_t cap))
+{
+    sSaveState = save;
+    if (save) SeStateStartWorker();
+}
+void SeExportSetLoadStateHook(int (*load)(const unsigned char* buf, size_t len))
+{
+    sLoadState = load;
+}
+
+/* Free the savestate buffers + queued blocks. Call only after the worker is stopped and
+ * joined and no server thread is mid-serialize. */
+static void SeStateShutdown(void)
+{
+    int i;
+    for (i = 0; i < SE_STATE_QUEUE; ++i) { free(sStatePool[i]); sStatePool[i] = NULL; }
+    for (i = 0; i < sOutCount; ++i) free(sOutFifo[(sOutHead + i) % SE_STATE_OUTQ].payload);
+    sOutHead = sOutCount = 0; sRawHead = sRawCount = 0; sFreeCount = 0;
+    free(sKeyFull);     sKeyFull = NULL;
+    free(sXorScratch);  sXorScratch = NULL;
+    free(sLoadBuf);     sLoadBuf = NULL; sLoadCap = 0; sLoadLen = 0;
+    free(sGateLoadBuf); sGateLoadBuf = NULL; sGateLoadCap = 0;
+    sStateCap = 0; sStateWorkerStarted = 0; sLoadPending = 0;
+}
+
 /* ---- Controller-input hook (v7+). apply.py wires this to the emulator's pad state
  * so the Saturn Explorer controller panel can drive the game directly, bypassing the
  * emulator's own host-input mapping. `buttons` is the emulator-agnostic SE_PAD_* mask;
@@ -367,6 +638,12 @@ static void SeGateSleep(void)
  * Safe to call even before SeExportInit (returns 1). */
 int SeExportGateFrame(void)
 {
+    /* Apply a pending rewind (LST) here, on the emulate thread at a frame boundary,
+     * before honoring the pause: a load always leaves the emulator paused on frame N. */
+    if (sLoadPending)
+    {
+        SeStateConsumeLoad();
+    }
     if (!sPaused)
     {
         return 1;
@@ -380,20 +657,84 @@ int SeExportGateFrame(void)
     return 0;
 }
 
+/* Savestate worker thread: pop raw full states, diff against the current keyframe (or emit
+ * a keyframe), RLE-compress, and queue the compact block for the wire. Off the emulate
+ * thread, so the per-frame diff never causes a frame-rate hitch. */
+static void SeStateWorkerBody(void)
+{
+    while (sStateWorkerRun)
+    {
+        SeRawItem item; int have = 0; unsigned curGen = 0;
+        unsigned char* full; size_t fullLen;
+        int keyframe; unsigned char* rleSrc; size_t rleSrcLen, cap, plen;
+        unsigned char* payload;
+
+        SE_SLOCK();
+        curGen = sStateGen;
+        if (sRawCount > 0)
+        {
+            item = sRawFifo[sRawHead];
+            sRawHead = (sRawHead + 1) % SE_STATE_QUEUE;
+            --sRawCount;
+            have = 1;
+        }
+        SE_SUNLOCK();
+        if (!have) { SeGateSleep(); continue; }
+
+        if (item.gen != curGen)   /* pre-load frame the client already discarded: drop */
+        {
+            SE_SLOCK(); sFreeStack[sFreeCount++] = item.poolIdx; SE_SUNLOCK();
+            continue;
+        }
+
+        full = sStatePool[item.poolIdx]; fullLen = item.len;
+        keyframe = (item.gen != sKeyGen) || (sKeyLen != fullLen) ||
+                   (sSinceKeyframe >= SE_STATE_KF_MAX);
+        if (keyframe) { rleSrc = full; rleSrcLen = fullLen; }
+        else { se_state_xor(sXorScratch, full, sKeyFull, fullLen); rleSrc = sXorScratch; rleSrcLen = fullLen; }
+
+        cap = rleSrcLen + rleSrcLen / 32u + 64u;
+        payload = (unsigned char*)malloc(cap);
+        plen = payload ? se_state_rle_encode(payload, cap, rleSrc, rleSrcLen) : 0;
+        /* A delta bigger than (num/den) of the full state means a scene change — keyframe it. */
+        if (!keyframe && (plen == 0 || plen > (fullLen * SE_STATE_KF_NUM) / SE_STATE_KF_DEN))
+        {
+            keyframe = 1;
+            plen = payload ? se_state_rle_encode(payload, cap, full, fullLen) : 0;
+        }
+        if (keyframe && payload && plen > 0)
+        {
+            memcpy(sKeyFull, full, fullLen);
+            sKeyLen = fullLen; sKeyFrame = item.frame; sKeyGen = item.gen; sSinceKeyframe = 0;
+        }
+        else { ++sSinceKeyframe; }
+
+        SE_SLOCK(); sFreeStack[sFreeCount++] = item.poolIdx; SE_SUNLOCK();
+        if (!payload || plen == 0) { free(payload); continue; }   /* couldn't compress: drop */
+
+        SE_SLOCK();
+        if (sOutCount == SE_STATE_OUTQ)   /* outgoing full: drop the oldest (independent blocks) */
+        {
+            free(sOutFifo[sOutHead].payload);
+            sOutHead = (sOutHead + 1) % SE_STATE_OUTQ; --sOutCount;
+        }
+        {
+            int slot = (sOutHead + sOutCount) % SE_STATE_OUTQ;
+            sOutFifo[slot].kind  = keyframe ? (unsigned char)SE_LIVE_STATE_KIND_KEYFRAME
+                                            : (unsigned char)SE_LIVE_STATE_KIND_DELTA;
+            sOutFifo[slot].frame = item.frame;
+            sOutFifo[slot].base  = keyframe ? item.frame : sKeyFrame;
+            sOutFifo[slot].payload = payload; sOutFifo[slot].len = plen;
+            sOutFifo[slot].full  = fullLen;
+            ++sOutCount;
+        }
+        SE_SUNLOCK();
+    }
+}
 #if defined(_WIN32)
-static HANDLE sThread;
-static CRITICAL_SECTION sLock;
-#define SE_LOCK()   EnterCriticalSection(&sLock)
-#define SE_UNLOCK() LeaveCriticalSection(&sLock)
+static DWORD WINAPI SeStateWorkerThread(LPVOID arg) { (void)arg; SeStateWorkerBody(); return 0; }
 #else
-static pthread_t sThread;
-static pthread_t sTcpThread;
-static int sTcpThreadStarted = 0;
-static pthread_mutex_t sLock = PTHREAD_MUTEX_INITIALIZER;
-static int sListenFd = -1;
-static int sTcpListenFd = -1;
-#define SE_LOCK()   pthread_mutex_lock(&sLock)
-#define SE_UNLOCK() pthread_mutex_unlock(&sLock)
+static void* SeStateWorkerThread(void* arg) { (void)arg; SeStateWorkerBody(); return NULL; }
 #endif
 
 static void SeWr32(unsigned char* p, unsigned int v)
@@ -525,6 +866,9 @@ void SeExportSnapshot(const void* vdp1, const void* vdp2, const void* cram,
     sRingFrame[sRingWrite] = ++sFrameNo;               /* tag this slot with its frame number */
     sRingWrite = (sRingWrite + 1) % SE_RING;           /* advance (wraps, overwriting oldest) */
     SE_UNLOCK();
+    /* v16 rewind: stage a full savestate for this frame (off-lock; no-op unless a save hook
+     * is wired). The worker delta-compresses it and the server ships it lagging. */
+    SeStateCapture(sFrameNo);
 }
 
 /* ---- Blocking, exact-length socket I/O (0 = success). ---- */
@@ -668,6 +1012,33 @@ static void SeServeClient(int cl, SeFrame* snap)
                 unsigned char v;
                 if (SeRecv(cl, &v, 1) != 0) return;
                 if (sWriteSoundByte) sWriteSoundByte(offset + i, v);
+            }
+        }
+        else if (memcmp(req, SE_LIVE_VERB_LOADSTATE, SE_LIVE_VERB_LEN) == 0)
+        {
+            /* Rewind (v16): buffer the whole 'arg'-byte payload (frame + edits_len + edits +
+             * state) and latch a pending load. The gate applies it atomically on the emulate
+             * thread (restore + edits + resume), so nothing races the async restore. */
+            unsigned int payload = arg;
+            SE_SLOCK();
+            if (sLoadCap < payload)
+            {
+                unsigned char* nb = (unsigned char*)realloc(sLoadBuf, payload ? payload : 1u);
+                if (nb) { sLoadBuf = nb; sLoadCap = payload; }
+            }
+            SE_SUNLOCK();
+            if (payload < 8u || sLoadCap < payload || sStateCap == 0)
+            {
+                /* Malformed, can't buffer, or feature off: drain to stay stream-aligned. */
+                unsigned int i;
+                for (i = 0; i < payload; ++i) { unsigned char v; if (SeRecv(cl, &v, 1) != 0) return; }
+            }
+            else
+            {
+                if (SeRecv(cl, sLoadBuf, payload) != 0) return;
+                SE_SLOCK(); sLoadLen = payload; SE_SUNLOCK();
+                SE_LOCK(); sPaused = 1; sStepBudget = 0; sStopReason = SE_LIVE_STOP_NONE; SE_UNLOCK();
+                sLoadPending = 1;   /* the gate picks this up on the emulate thread */
             }
         }
         else if (memcmp(req, SE_LIVE_VERB_INPUT, SE_LIVE_VERB_LEN) == 0)
@@ -882,6 +1253,45 @@ static void SeServeClient(int cl, SeFrame* snap)
             if (SeSend(cl, lenb, 4) != 0) return;
             if (len && SeSend(cl, snap->cd, SE_LIVE_CD_BLOCK_LEN) != 0) return;
         }
+
+        /* v16 trailing section: savestate rewind stream. u32 count, then 'count' blocks
+         * (kind+frame+base+len header, then payload). Detach up to SE_LIVE_STATE_MAX_PER_REPLY
+         * ready blocks under the lock, then send + free outside it. count 0 = nothing ready. */
+        {
+            SeStateBlock local[SE_LIVE_STATE_MAX_PER_REPLY];
+            unsigned int cnt = 0, i;
+            unsigned char cntb[4];
+            SE_SLOCK();
+            while (cnt < SE_LIVE_STATE_MAX_PER_REPLY && sOutCount > 0)
+            {
+                local[cnt++] = sOutFifo[sOutHead];
+                sOutHead = (sOutHead + 1) % SE_STATE_OUTQ; --sOutCount;
+            }
+            SE_SUNLOCK();
+            SeWr32(cntb, cnt);
+            if (SeSend(cl, cntb, 4) != 0)
+            {
+                for (i = 0; i < cnt; ++i) free(local[i].payload);
+                return;
+            }
+            for (i = 0; i < cnt; ++i)
+            {
+                unsigned char h[SE_LIVE_STATE_HDR_LEN];
+                h[0] = local[i].kind; h[1] = h[2] = h[3] = 0;
+                SeWr32(h + 4,  (unsigned int)(local[i].frame & 0xFFFFFFFFu));
+                SeWr32(h + 8,  (unsigned int)(local[i].base  & 0xFFFFFFFFu));
+                SeWr32(h + 12, (unsigned int)local[i].len);
+                SeWr32(h + 16, (unsigned int)local[i].full);
+                if (SeSend(cl, h, SE_LIVE_STATE_HDR_LEN) != 0 ||
+                    (local[i].len && SeSend(cl, local[i].payload, local[i].len) != 0))
+                {
+                    unsigned int j;
+                    for (j = i; j < cnt; ++j) free(local[j].payload);
+                    return;
+                }
+                free(local[i].payload);
+            }
+        }
     }
 }
 
@@ -993,9 +1403,15 @@ int SeExportInit(void)
     sRingWrite = 0;
     sPaused = 0; sStepBudget = 0; sFrameNo = 0;
     sStopReason = SE_LIVE_STOP_NONE; sStopCpu = 0; sStopPc = 0;
+    /* Savestate rewind (v16): the worker + buffer pool are created lazily when a save hook is
+     * wired (SeExportSetSaveStateHook); here we only reset the bookkeeping for a fresh session. */
+    sStateWorkerStarted = 0; sStateWorkerRun = 0; sStateCap = 0;
+    sFreeCount = sRawHead = sRawCount = sOutHead = sOutCount = 0;
+    sLoadPending = 0; sStateGen = 1; sKeyGen = 0; sKeyLen = 0; sSinceKeyframe = 0;
     sRunning = 1;
 #if defined(_WIN32)
     InitializeCriticalSection(&sLock);
+    InitializeCriticalSection(&sStateLock);
     sThread = CreateThread(NULL, 0, SeServerThread, NULL, 0, NULL);
     if (!sThread) { sRunning = 0; return -1; }
 #else
@@ -1014,14 +1430,25 @@ int SeExportInit(void)
 void SeExportDeinit(void)
 {
     sRunning = 0;
+    /* Stop the savestate worker first so nothing touches the state queues while we free them.
+     * (The server threads are joined just below; ordering is safe either way.) */
+    sStateWorkerRun = 0;
 #if defined(_WIN32)
+    if (sStateWorkerStarted && sStateWorker)
+    {
+        WaitForSingleObject(sStateWorker, 1000); CloseHandle(sStateWorker); sStateWorker = NULL;
+    }
     if (sThread) { WaitForSingleObject(sThread, 1000); CloseHandle(sThread); sThread = NULL; }
+    SeStateShutdown();
+    DeleteCriticalSection(&sStateLock);
     DeleteCriticalSection(&sLock);
 #else
+    if (sStateWorkerStarted) { pthread_join(sStateWorker, NULL); }
     if (sListenFd >= 0) { shutdown(sListenFd, SHUT_RDWR); close(sListenFd); sListenFd = -1; }
     if (sTcpListenFd >= 0) { shutdown(sTcpListenFd, SHUT_RDWR); close(sTcpListenFd); sTcpListenFd = -1; }
     pthread_join(sThread, NULL);
     if (sTcpThreadStarted) { pthread_join(sTcpThread, NULL); sTcpThreadStarted = 0; }
+    SeStateShutdown();
 #endif
     {
         int i;

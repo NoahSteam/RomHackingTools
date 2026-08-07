@@ -84,6 +84,19 @@ typedef struct se_data_source {
     int      (*frame_step)  (void* user, int32_t frames);
     uint64_t (*frame_number)(void* user);
 
+    /* --- Optional: rewind (SE_CAP_STATE_REWIND). Atomically restore a full
+           emulator savestate captured earlier, apply pending memory edits on top,
+           and resume from that frame. 'state'/'state_len' is an opaque,
+           emulator-produced state image (the client reconstructs it from its
+           keyframe+delta ring). 'edits'/'edits_len' is an optional edit blob
+           (SE_LIVE_EDIT_* layout in SeLiveProtocol.h; NULL/0 for none) applied
+           after the restore so the game re-simulates with those changes. 'frame'
+           is the frame number to adopt. The emulator restores + patches + resumes
+           in one step on the emulate thread. Returns 0 on success. May be NULL. */
+    int      (*load_state)  (void* user, uint64_t frame,
+                             const void* state, size_t state_len,
+                             const void* edits, size_t edits_len);
+
     /* --- Optional: system status (SE_CAP_SYSTEM_STATUS) for the status bar. --- */
     int (*get_system_status)(void* user, se_system_status* out);
 

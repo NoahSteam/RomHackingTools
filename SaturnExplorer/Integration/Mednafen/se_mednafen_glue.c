@@ -51,6 +51,8 @@ extern const uint16_t* SsDbgVdp1Fb(void);     /* displayed VDP1 FB bank = FB[!FB
 extern const uint16_t* SsDbgSoundRam(void);   /* SCSP RAM — 262144 words, host order; NULL if unwired */
 extern int             SsDbgScspSlots(unsigned char* out); /* fill SE_LIVE_SCSP_BLOCK_LEN bytes; return count (0 if unwired) */
 extern int             SsDbgCdStatus(unsigned char* out); /* fill SE_LIVE_CD_BLOCK_LEN bytes; return 1 if available (0 if unwired) */
+extern size_t          SsDbgSaveState(unsigned char* buf, size_t cap); /* full savestate -> buf; return bytes (or size when buf==NULL) */
+extern int             SsDbgLoadState(const unsigned char* buf, size_t len); /* restore full savestate; 0 = ok */
 extern void            SsDbgVdp1Regs(uint16_t out11[11]); /* TVMR,FBCR,PTMR,EWDR,EWLR,EWRR,ENDR,EDSR,LOPR,COPR,MODR */
 extern void            SsDbgSh2Regs(int cpu, uint32_t out23[23]); /* R[16],SR,GBR,VBR,MACH,MACL,PR,PC */
 extern void            SsDbgPokeByte(uint32_t addr, uint8_t val); /* bus/debug byte write */
@@ -259,6 +261,27 @@ static void SeMdfnWriteSoundByte(unsigned int offset, unsigned char value)
 #endif
 }
 
+/* Full-savestate save/load (v16 rewind). save() writes the current state into buf (or returns
+ * the required size when buf==NULL); load() restores it. se_export's worker delta-compresses the
+ * saved states off the emulate thread; a NULL/stub save hook simply leaves the ring empty and
+ * the rewind feature disabled. Wired to Mednafen's MDFNSS_SaveSM/LoadSM via apply.py. */
+static size_t SeMdfnSaveState(unsigned char* buf, size_t cap)
+{
+#if defined(SE_MEDNAFEN_WIRED)
+    return SsDbgSaveState(buf, cap);
+#else
+    (void)buf; (void)cap; return 0;   /* stub: no ring -> rewind unavailable */
+#endif
+}
+static int SeMdfnLoadState(const unsigned char* buf, size_t len)
+{
+#if defined(SE_MEDNAFEN_WIRED)
+    return SsDbgLoadState(buf, len);
+#else
+    (void)buf; (void)len; return -1;
+#endif
+}
+
 /* Controller input (v7+): drive the emulated pad directly from the SE_PAD_* mask so
  * the Saturn Explorer controller panel controls the game, bypassing Mednafen's own
  * host-input mapping. The injected SsDbgSetPad accessor does the emulator-specific
@@ -458,6 +481,8 @@ void SeMednafenFrameHook(void)
         SeExportInit();
         SeExportSetMemWriteHook(SeMdfnWriteByte);
         SeExportSetSoundWriteHook(SeMdfnWriteSoundByte);   /* Sound RAM pokes (v13) */
+        SeExportSetSaveStateHook(SeMdfnSaveState);         /* rewind savestate ring (v16) */
+        SeExportSetLoadStateHook(SeMdfnLoadState);
         SeExportSetBreakpointHooks(SeMdfnAddExecBp, SeMdfnClearBps);
         SeExportSetMemBreakpointHook(SeMdfnAddMemBp);   /* data (read/write) watchpoints */
         SeExportSetInputHook(SeMdfnSetPad);   /* controller panel -> emulated pad (v7+) */
@@ -478,5 +503,6 @@ void SeMednafenSuppressUnusedWarnings(void)
     (void)SeMdfnWriteSoundByte; (void)SeMdfnSetPad;
     (void)SeMdfnGetKeyMap; (void)SeMdfnPortDeviceName;
     (void)SeMdfnSetTracepoints; (void)SeRd32LE;
+    (void)SeMdfnSaveState; (void)SeMdfnLoadState;
 }
 #endif

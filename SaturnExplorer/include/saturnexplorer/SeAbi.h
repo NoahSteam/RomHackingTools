@@ -19,7 +19,7 @@ extern "C" {
 
 /* Bumped on any breaking change to either seam struct. A host/driver compares
  * its compiled-in value against the core's se_abi_version() before use. */
-#define SE_ABI_VERSION 3u
+#define SE_ABI_VERSION 4u
 
 /* Result codes. 0 == success; negatives are errors. */
 typedef enum se_result {
@@ -56,7 +56,9 @@ enum {
     SE_CAP_SOUND_RAM   = 1u << 14,  /* SCSP sound RAM read (se_read_vram SOUND_RAM); write
                                      * when write_sound_ram is also supplied */
     SE_CAP_SCSP_SLOTS  = 1u << 15,  /* decoded SCSP voice/slot state (Sound panel) */
-    SE_CAP_CD_STATUS   = 1u << 16   /* live CD-block state: current FAD (Disc Explorer) */
+    SE_CAP_CD_STATUS   = 1u << 16,  /* live CD-block state: current FAD (Disc Explorer) */
+    SE_CAP_STATE_REWIND = 1u << 17  /* load_state: restore a full emulator savestate + resume
+                                     * from a past frame (rewind timeline "Play from here") */
     /* Reserved for a future live driver: SE_CAP_BREAKPOINTS ("Break on Read"). */
 };
 

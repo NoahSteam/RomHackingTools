@@ -55,7 +55,8 @@
 #define SE_LIVE_MAGIC1 'E'
 #define SE_LIVE_MAGIC2 'X'
 #define SE_LIVE_MAGIC3 'P'
-#define SE_LIVE_VERSION      15u   /* +v15 CD-block status block (Disc Explorer live FAD) */
+#define SE_LIVE_VERSION      16u   /* +v16 savestate rewind: per-frame savestate delta stream
+                                    * (trailing section) + LST load-state verb */
 /* Command verbs are exactly 4 bytes; a request is a verb + 4-byte LE argument. */
 #define SE_LIVE_REQUEST      "GET\n"   /* back-compat alias for the snapshot verb */
 /* Snapshot request. arg = the client's last-seen frame number: the server keeps an N-deep
@@ -86,6 +87,16 @@
                                         * descriptors {id,cpu,address,flags} (all u32 LE).
                                         * The emulator traps those PCs and, on a hit,
                                         * appends an event to the reply's events block. */
+#define SE_LIVE_VERB_LOADSTATE "LST\n" /* rewind (v16+): atomically restore a full savestate,
+                                        * apply memory edits on top, and resume from a past frame.
+                                        * arg = payload byte count N; payload =
+                                        *   frame_no(u32 LE) + edits_len(u32 LE) +
+                                        *   edits[edits_len] + state[N-8-edits_len].
+                                        * 'edits' is the SE_LIVE_EDIT_* blob below (may be empty);
+                                        * 'state' is the opaque emulator image the client rebuilt
+                                        * from its keyframe+delta ring. The emulator restores +
+                                        * patches + adopts frame_no + resumes, all on the emulate
+                                        * thread at the frame gate (so pokes can't race the load). */
 #define SE_LIVE_VERB_LEN     4
 #define SE_LIVE_REQUEST_LEN  8    /* verb(4) + arg(4, little-endian) */
 
@@ -195,6 +206,41 @@
  * length 0 (this build/emulator has no CD tap). Record, little-endian, matching se_cd_status:
  *   +0 current_fad(u32) +4 play_start_fad(u32) +8 play_end_fad(u32) +12 status(u8) +13 pad(3) */
 #define SE_LIVE_CD_BLOCK_LEN   16u
+
+/* Savestate-rewind section (v16+): a trailing section after the v15 CD block, version-gated
+ * the same way (read only when the server reports version >= 16). Unlike the fixed blocks, it
+ * carries a LAGGING stream of 0..N per-frame savestate blocks (the emulator diffs each frame on
+ * a worker thread, so a block usually arrives a few frames behind its snapshot). Section layout:
+ *   u32 count; then 'count' blocks, each:
+ *     u8  kind            (SE_LIVE_STATE_KIND_*: 0 = delta, 1 = keyframe)
+ *     u8  pad[3]
+ *     u32 frame_no        the frame this block reconstructs
+ *     u32 base_keyframe   frame_no of the keyframe this delta is against (== frame_no if kind==keyframe)
+ *     u32 payload_len     bytes of payload that follow
+ *     u32 full_len        decoded full-savestate size (so the client can size its buffer)
+ *     u8  payload[payload_len]   RLE(full state) for a keyframe; RLE(XOR(full, keyframe_full)) for a delta
+ * count 0 = the worker had nothing ready this response, or the feature is off (no save hook).
+ * The RLE + XOR codec is opaque byte-crunching (SeStateCodec.h); the client never interprets
+ * the savestate contents, only reconstructs the full image to hand back via the LST verb. */
+#define SE_LIVE_STATE_HDR_LEN     20u   /* kind(1)+pad(3)+frame(4)+base(4)+payload_len(4)+full_len(4) */
+#define SE_LIVE_STATE_KIND_DELTA   0u
+#define SE_LIVE_STATE_KIND_KEYFRAME 1u
+#define SE_LIVE_STATE_MAX_PER_REPLY 4u  /* cap on blocks drained into one response */
+#define SE_LIVE_STATE_MAX_PAYLOAD (64u * 1024u * 1024u) /* sanity bound on one block's payload */
+
+/* Memory-edit blob (v16), carried inside an LST payload and applied by the emulator right
+ * after the savestate restore. Layout:
+ *   u32 count; then 'count' edits, each:
+ *     u8  type            (SE_LIVE_EDIT_*: 0 = work RAM @ Saturn bus address, 1 = sound RAM offset)
+ *     u8  pad[3]
+ *     u32 addr            work-RAM Saturn bus address, or 0-based sound-RAM offset
+ *     u32 len             number of bytes
+ *     u8  bytes[len]      the new bytes (work RAM: written big-endian byte-by-byte as usual)
+ * These are the edits the user made while scrubbed; applying them post-restore is what makes
+ * the game re-simulate from frame N *with the modifications*. */
+#define SE_LIVE_EDIT_HDR_LEN   12u   /* type(1)+pad(3)+addr(4)+len(4) per edit */
+#define SE_LIVE_EDIT_TYPE_WRAM  0u
+#define SE_LIVE_EDIT_TYPE_SOUND 1u
 
 /* Breakpoint descriptor flag bits (v5+). */
 #define SE_LIVE_BP_KIND_MASK  0x3u   /* 0 exec, 1 read, 2 write, 3 read/write */

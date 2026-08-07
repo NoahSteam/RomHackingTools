@@ -124,6 +124,7 @@ static bool IsWritableKind(se_vram_kind kind)
 
 bool ContextBackend::CanWrite(uint32_t address) const
 {
+    if (mForceReadOnly) return false;
     if (!Connected() || !se_can_write(*mContext)) return false;
     const uint32_t a = Canonical(address);
     for (const Region& reg : kRegions)

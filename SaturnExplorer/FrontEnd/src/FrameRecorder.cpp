@@ -4,6 +4,8 @@
 #include <utility>
 
 #include "SaturnRegions.h"
+#include "SeLiveProtocol.h"   // SE_LIVE_STATE_KIND_* for savestate reconstruction
+#include "SeStateCodec.h"     // XOR + RLE codec (shared with the emulator exporter)
 
 namespace sfe
 {
@@ -87,6 +89,14 @@ void FrameRecorder::Capture(se_context* ctx, uint64_t frameNumber)
     {
         return;
     }
+    // Skip frame 0 and any non-advancing frame number. This filters the transient frame-0
+    // window right after a rewind (the server briefly has no fresh frame) and any stale
+    // frame the emulator re-serves, keeping the ring strictly monotonic. UI-thread only.
+    if (frameNumber == 0 || frameNumber <= mLastCaptured)
+    {
+        return;
+    }
+    mLastCaptured = frameNumber;
     // UI thread: only the raw reads happen here (fast memcpys); the worker does
     // the expensive compression. Registers are small, so read them here too.
     RawFrame raw;
@@ -208,6 +218,7 @@ void FrameRecorder::Clear()
     std::lock_guard<std::mutex> lk(mRingMtx);
     mFrames.clear();
     mBytes = 0;
+    mLastCaptured = 0;
 }
 
 size_t FrameRecorder::Count() const
@@ -277,8 +288,122 @@ bool FrameRecorder::Select(size_t i, se_data_source* out)
     out->read_vdp2_reg  = CbVdp2Reg;
     out->read_sh2_regs  = CbSh2Regs;
     out->read_scsp_slots = CbScspSlots;
+    // When an edit sink is set (rewind supported), make the scrub source writable: edits to
+    // Work/Sound RAM update the visible snapshot (Context::WriteVram) and are forwarded to the
+    // App as pending pokes, to be replayed on top of the restored state when Play rewinds here.
+    if (mEditCb)
+    {
+        out->capabilities |= SE_CAP_MEM_WRITE;
+        out->write_main_ram  = CbEditMain;
+        out->write_sound_ram = CbEditSound;
+    }
     // No close callback: the scratch is owned by this recorder, not the context.
     return true;
+}
+
+size_t FrameRecorder::CbEditMain(void* u, uint32_t address, const void* src, size_t size)
+{
+    FrameRecorder* r = static_cast<FrameRecorder*>(u);
+    if (r->mEditCb && src && size)
+        r->mEditCb(r->mEditUser, 0, address, static_cast<const uint8_t*>(src), size);
+    return size;
+}
+size_t FrameRecorder::CbEditSound(void* u, uint32_t offset, const void* src, size_t size)
+{
+    FrameRecorder* r = static_cast<FrameRecorder*>(u);
+    if (r->mEditCb && src && size)
+        r->mEditCb(r->mEditUser, 1, offset, static_cast<const uint8_t*>(src), size);
+    return size;
+}
+
+void FrameRecorder::SetEditSink(void* user, void (*cb)(void*, int, uint32_t, const uint8_t*, size_t))
+{
+    mEditUser = user;
+    mEditCb = cb;
+}
+
+void FrameRecorder::AttachStateBlock(uint64_t frameNumber, uint8_t kind, uint64_t baseKeyframe,
+                                     uint32_t fullLen, const uint8_t* payload, size_t len)
+{
+    std::lock_guard<std::mutex> lk(mRingMtx);
+    // Blocks lag their frame by a few frames, so search from the back (recent frames first).
+    for (auto it = mFrames.rbegin(); it != mFrames.rend(); ++it)
+    {
+        if (it->frameNumber != frameNumber) continue;
+        if (it->hasState) return;              // already attached (ignore a duplicate)
+        it->state.assign(payload, payload + len);
+        it->stateKind = kind;
+        it->baseKeyframe = baseKeyframe;
+        it->stateFullLen = fullLen;
+        it->hasState = true;
+        it->bytes += len;
+        mBytes += len;
+        return;
+    }
+    // Frame not resident (evicted or never captured): drop the block.
+}
+
+// Decode one block's RLE payload into 'out' sized to its full length. Caller holds mRingMtx.
+static bool DecodeStateBlock(const FrameRecorder::Frame& b, std::vector<uint8_t>& out)
+{
+    if (!b.hasState) return false;
+    out.resize(b.stateFullLen);
+    const size_t n = se_state_rle_decode(out.data(), out.size(), b.state.data(), b.state.size());
+    return n == b.stateFullLen;
+}
+
+bool FrameRecorder::ReconstructState(size_t i, std::vector<uint8_t>& out) const
+{
+    std::lock_guard<std::mutex> lk(mRingMtx);
+    if (i >= mFrames.size()) return false;
+    const Frame& f = mFrames[i];
+    if (!f.hasState) return false;
+    if (f.stateKind == SE_LIVE_STATE_KIND_KEYFRAME)
+        return DecodeStateBlock(f, out);
+    // Delta: reconstruct full = keyframe_full XOR delta. Its keyframe must still be resident.
+    const Frame* kf = nullptr;
+    for (const Frame& g : mFrames)
+        if (g.frameNumber == f.baseKeyframe && g.hasState &&
+            g.stateKind == SE_LIVE_STATE_KIND_KEYFRAME) { kf = &g; break; }
+    if (!kf) return false;
+    std::vector<uint8_t> base, delta;
+    if (!DecodeStateBlock(*kf, base) || !DecodeStateBlock(f, delta)) return false;
+    if (base.size() != delta.size()) return false;
+    out.resize(base.size());
+    se_state_xor(out.data(), base.data(), delta.data(), out.size());
+    return true;
+}
+
+bool FrameRecorder::CanReconstruct(size_t i) const
+{
+    std::lock_guard<std::mutex> lk(mRingMtx);
+    if (i >= mFrames.size()) return false;
+    const Frame& f = mFrames[i];
+    if (!f.hasState) return false;
+    if (f.stateKind == SE_LIVE_STATE_KIND_KEYFRAME) return true;
+    for (const Frame& g : mFrames)
+        if (g.frameNumber == f.baseKeyframe && g.hasState &&
+            g.stateKind == SE_LIVE_STATE_KIND_KEYFRAME) return true;
+    return false;
+}
+
+void FrameRecorder::TruncateAfter(size_t i)
+{
+    // Discard any in-flight (staged / compressing) frames from the pre-rewind timeline so the
+    // worker can't re-append a truncated frame, then drop the ring tail after i.
+    mGeneration.fetch_add(1, std::memory_order_acq_rel);
+    {
+        std::lock_guard<std::mutex> lk(mQMtx);
+        mQueue.clear();
+    }
+    std::lock_guard<std::mutex> lk(mRingMtx);
+    if (i >= mFrames.size()) return;
+    while (mFrames.size() > i + 1)
+    {
+        mBytes -= mFrames.back().bytes;
+        mFrames.pop_back();
+    }
+    mLastCaptured = mFrames[i].frameNumber;   // Capture() resumes accepting at N+1
 }
 
 size_t FrameRecorder::CbVdp1(void* u, uint32_t off, void* dst, size_t size)

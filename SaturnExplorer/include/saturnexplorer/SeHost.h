@@ -166,6 +166,17 @@ se_result   se_frame_resume(se_context* ctx);
 se_result   se_frame_step  (se_context* ctx, int32_t frames);
 uint64_t    se_frame_number(se_context* ctx);
 
+/* --- Rewind / load-state (live sources only; requires SE_CAP_STATE_REWIND) ---
+   se_supports_state_rewind returns 1 when the source can restore a full emulator
+   savestate. se_load_state hands the emulator an opaque state image (reconstructed
+   client-side from a keyframe+delta ring) and the frame number to adopt; the
+   emulator restores at a frame boundary and stays paused. Best-effort/async (posts
+   to the live driver); returns SE_ERR_NO_CAPABILITY when unsupported. */
+int         se_supports_state_rewind(se_context* ctx);
+se_result   se_load_state(se_context* ctx, uint64_t frame,
+                          const void* state, size_t state_len,
+                          const void* edits, size_t edits_len);
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif

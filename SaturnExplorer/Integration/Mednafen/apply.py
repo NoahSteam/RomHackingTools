@@ -370,6 +370,36 @@ extern "C" int SsDbgCdStatus(unsigned char* out)
 }
 }"""
 
+# Full-savestate save/load accessors (v16 rewind), appended at EOF of ss.cpp. se_export's worker
+# thread delta-compresses the saved states off the emulate thread, so these need only produce /
+# consume a full state image. Shipped as a COMPILING STUB (feature dormant) by default: the exact
+# Mednafen savestate-to-memory API (MDFNSS_SaveSM / MDFNSS_LoadSM against a MemoryStream, and
+# whether they live in the global or Mednafen:: namespace) varies by fork and must be confirmed on
+# the actual tree. Build with -DSE_MDFN_REWIND=1 after wiring the real calls (see the block below)
+# to enable rewind; until then SsDbgSaveState returns 0, which leaves the ring empty and the
+# feature off — everything else (protocol, client, UI) already degrades gracefully.
+SAVESTATE_ACCESSORS = """\
+/* Saturn Explorer full-savestate save/load (v16 rewind). Dormant by default (stub); build with
+   -DSE_MDFN_REWIND=1 to enable the real MDFNSS memory-stream path below. If your fork puts
+   MDFNSS_SaveSM/LoadSM or MemoryStream in a different namespace, or names the size/map/rewind
+   accessors differently, adjust the enabled branch — the stub keeps the tree compiling meanwhile.
+   se_export's worker delta-compresses these full states off the emulate thread. */
+#ifdef SE_MDFN_REWIND
+#include <mednafen/state.h>
+#include <mednafen/MemoryStream.h>
+extern "C" size_t SsDbgSaveState(unsigned char* buf, size_t cap) {
+ try { Mednafen::MemoryStream ms; Mednafen::MDFNSS_SaveSM(&ms, true);   /* data_only: no preview */
+       uint64 sz = ms.size(); if(!buf) return (size_t)sz;
+       if((uint64)cap < sz) return 0; memcpy(buf, ms.map(), (size_t)sz); return (size_t)sz;
+ } catch(...) { return 0; } }
+extern "C" int SsDbgLoadState(const unsigned char* buf, size_t len) {
+ try { Mednafen::MemoryStream ms(len?len:1, 0); if(len) memcpy(ms.map(), buf, len); ms.rewind();
+       Mednafen::MDFNSS_LoadSM(&ms, true); return 0; } catch(...) { return -1; } }
+#else
+extern "C" size_t SsDbgSaveState(unsigned char* buf, size_t cap) { (void)buf; (void)cap; return 0; }
+extern "C" int    SsDbgLoadState(const unsigned char* buf, size_t len) { (void)buf; (void)len; return -1; }
+#endif"""
+
 SMPC_INPUT_DECL = """\
 /* Saturn Explorer controller injection. `buttons` is the protocol's SE_PAD_* mask;
    the SMPC implementation translates and overlays it on the host gamepad state. */
@@ -645,6 +675,8 @@ def process_ss(src_dir, do_write, with_pause):
         text, n = apply_anchored(text, GATE_ANCHOR, GATE_HOOK, "while (!SeExportGateFrame())")
         notes.append(n)
     text, n = apply_append(text, SS_ACCESSORS, "SsDbgWramL")
+    notes.append(n)
+    text, n = apply_append(text, SAVESTATE_ACCESSORS, "SsDbgSaveState")
     notes.append(n)
     if do_write and text != original:
         open(path, "w", encoding="utf-8", errors="surrogateescape").write(text)

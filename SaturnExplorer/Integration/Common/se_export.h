@@ -125,6 +125,19 @@ void SeExportSetMemWriteHook(void (*write)(unsigned int address, unsigned char v
  * dropped). Call once after SeExportInit, e.g. SeExportSetSoundWriteHook(SeMednafenWriteSoundByte). */
 void SeExportSetSoundWriteHook(void (*write)(unsigned int offset, unsigned char value));
 
+/* Wire full-savestate save/load (v16+), enabling the rewind timeline's "Play from here":
+ * a per-frame savestate ring (delta-compressed on a worker thread) that the client can ask
+ * the emulator to restore. Setting the SAVE hook is what turns the feature on.
+ *   save(buf, cap): write the current full emulator savestate into buf (up to cap bytes) and
+ *     return the number of bytes written; when buf is NULL, return the required size (probe).
+ *     Runs on the emulate thread at a frame boundary (called from SeExportSnapshot).
+ *   load(buf, len): restore the emulator from a full savestate image; return 0 on success.
+ *     Runs on the emulate thread at the frame gate (via the LST verb). May be NULL.
+ * Both are byte-opaque to se_export; the glue maps them to e.g. MDFNSS_SaveSM/MDFNSS_LoadSM.
+ * Requires the pause gate (SeExportGateFrame) to be installed. Call once after SeExportInit. */
+void SeExportSetSaveStateHook(size_t (*save)(unsigned char* buf, size_t cap));
+void SeExportSetLoadStateHook(int (*load)(const unsigned char* buf, size_t len));
+
 /* Wire controller input injection (v7+), so the Saturn Explorer controller panel can
  * drive the running game directly. set(port, buttons) receives the emulator-agnostic
  * SE_PAD_* bitmask; the glue latches it and feeds the emulated pad for `port`,

@@ -84,6 +84,18 @@ struct LiveKeyMap
     bool valid = false;
 };
 
+// One received savestate block (v16): a keyframe or a delta-vs-keyframe, frame-tagged. The
+// payload is the opaque, RLE-compressed emulator image (the client never interprets it, only
+// stores it and reconstructs a full image to hand back via LST). Blocks arrive lagging.
+struct LiveStateBlock
+{
+    uint8_t  kind = 0;   // SE_LIVE_STATE_KIND_*
+    uint32_t frame = 0;
+    uint32_t base = 0;   // frame_no of the keyframe a delta is against (== frame for a keyframe)
+    uint32_t fullLen = 0;   // decoded full-savestate size
+    std::vector<uint8_t> payload;
+};
+
 // Pending control command the UI thread hands to the poll thread (which owns the
 // single server connection). Best-effort: the poll thread drains it within one
 // cycle (~8 ms). Steps accumulate so rapid presses aren't lost.
@@ -156,6 +168,15 @@ struct LiveState
     // se_live_poll_log. Bounded so a flood can't grow unbounded. Guarded by logMtx.
     std::mutex            logMtx;
     std::deque<std::string> logLines;
+    // Received savestate blocks (v16), drained by the UI thread via se_live_drain_state_blocks
+    // and stored in the client's FrameRecorder. Bounded. Guarded by stateMtx.
+    std::mutex            stateMtx;
+    std::deque<LiveStateBlock> stateBlocks;
+    // Pending LST rewind payload (v16): the whole wire payload (frame + edits_len + edits +
+    // state), stashed by CbLoadState for the poll thread to ship one-shot. Guarded by ctlMtx.
+    std::vector<uint8_t>  loadPayload;
+    bool                  loadDirty = false;
+    uint32_t              loadFrame = 0;
 };
 
 /* ---- Local-socket transport (POSIX Unix socket / Windows named pipe). ---- */
@@ -313,7 +334,8 @@ bool ReadSnapshot(Conn& c, const char* verb, int32_t arg,
                   bool& outPaused, uint64_t& outFrame, uint32_t& outVersion,
                   StopInfo& outStop, std::vector<LiveEvent>& outEvents,
                   LiveCallStacks& outCallStacks, LiveKeyMap& outKeyMap,
-                  std::vector<std::string>& outLog)
+                  std::vector<std::string>& outLog,
+                  std::vector<LiveStateBlock>& outStateBlocks)
 {
     if (!SendCommand(c, verb, arg))
     {
@@ -539,6 +561,31 @@ bool ReadSnapshot(Conn& c, const char* verb, int32_t arg,
         }
     }
 
+    // v16+ trailing section: savestate rewind stream. u32 count, then 'count' blocks (each a
+    // kind+frame+base+len header + payload). Lagging: usually 0 or 1 per reply.
+    if (version >= 16u)
+    {
+        uint8_t cntb[4];
+        if (!ConnReadFull(c, cntb, 4)) return false;
+        const uint32_t count = Rd32LE(cntb);
+        if (count > SE_LIVE_STATE_MAX_PER_REPLY) return false;   // desync guard
+        for (uint32_t i = 0; i < count; ++i)
+        {
+            uint8_t h[SE_LIVE_STATE_HDR_LEN];
+            if (!ConnReadFull(c, h, SE_LIVE_STATE_HDR_LEN)) return false;
+            LiveStateBlock b;
+            b.kind    = h[0];
+            b.frame   = Rd32LE(h + 4);
+            b.base    = Rd32LE(h + 8);
+            const uint32_t plen = Rd32LE(h + 12);
+            b.fullLen = Rd32LE(h + 16);
+            if (plen > SE_LIVE_STATE_MAX_PAYLOAD || b.fullLen > SE_LIVE_STATE_MAX_PAYLOAD) return false;
+            b.payload.resize(plen);
+            if (plen && !ConnReadFull(c, b.payload.data(), plen)) return false;
+            outStateBlocks.push_back(std::move(b));
+        }
+    }
+
     // Control block: paused (u32 LE) + frame (u64 LE), then (v5+) stop reason/cpu/pc.
     // Absent fields default to 0 on older servers.
     outPaused = ct >= 4 && Rd32LE(ctl.data()) != 0;
@@ -598,9 +645,22 @@ void PollLoop(LiveState* st)
         const char* verb = SE_LIVE_VERB_GET;
         int32_t arg = 0;
         std::vector<uint8_t> payload;
+        bool shippedLoad = false;
+        uint32_t loadResyncFrame = 0;
         {
             std::lock_guard<std::mutex> lk(st->ctlMtx);
-            if (st->bkptsDirty)
+            if (st->loadDirty)
+            {
+                // Rewind (v16) takes top priority: one atomic LST (restore + edits + resume).
+                verb = SE_LIVE_VERB_LOADSTATE;
+                arg = static_cast<int32_t>(st->loadPayload.size());
+                payload = std::move(st->loadPayload);
+                st->loadPayload.clear();
+                st->loadDirty = false;
+                shippedLoad = true;
+                loadResyncFrame = st->loadFrame;
+            }
+            else if (st->bkptsDirty)
             {
                 verb = SE_LIVE_VERB_BKPTS;
                 arg = static_cast<int32_t>(st->bkpts.size() / SE_LIVE_BKPT_DESC_LEN);
@@ -675,9 +735,10 @@ void PollLoop(LiveState* st)
         LiveCallStacks callStacks;
         LiveKeyMap keyMap;
         std::vector<std::string> logLines;
+        std::vector<LiveStateBlock> stateBlocks;
         if (!ReadSnapshot(conn, verb, arg, payload.data(), payload.size(),
                           snap, paused, frame, sver, stop, events, callStacks, keyMap,
-                          logLines))
+                          logLines, stateBlocks))
         {
             ConnClose(conn);   // will reconnect next iteration
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -709,7 +770,19 @@ void PollLoop(LiveState* st)
             for (std::string& s : logLines) st->logLines.push_back(std::move(s));
             while (st->logLines.size() > 4096) st->logLines.pop_front();   // bound the queue
         }
+        if (!stateBlocks.empty())
+        {
+            std::lock_guard<std::mutex> lk(st->stateMtx);
+            for (LiveStateBlock& b : stateBlocks) st->stateBlocks.push_back(std::move(b));
+            while (st->stateBlocks.size() > 1024) st->stateBlocks.pop_front();   // bound the queue
+        }
         st->lastSeenFrame = static_cast<uint32_t>(frame);   // advance the gap-free cursor
+        if (shippedLoad)
+        {
+            // The server just rewound to frame N (and cleared its ring); ignore the pre-load
+            // frame this LST returned and resync the cursor to N so we fetch N+1 onward.
+            st->lastSeenFrame = loadResyncFrame;
+        }
         st->paused.store(paused);
         st->frameNumber.store(frame);
         st->serverVersion.store(sver);
@@ -732,7 +805,8 @@ void PollLoop(LiveState* st)
         LiveCallStacks cs;
         LiveKeyMap km;
         std::vector<std::string> lg;
-        ReadSnapshot(conn, SE_LIVE_VERB_RESUME, 0, nullptr, 0, tmp, p, fr, sv, si, ev, cs, km, lg);  // best-effort
+        std::vector<LiveStateBlock> sb;
+        ReadSnapshot(conn, SE_LIVE_VERB_RESUME, 0, nullptr, 0, tmp, p, fr, sv, si, ev, cs, km, lg, sb);  // best-effort
     }
     ConnClose(conn);
 }
@@ -838,6 +912,39 @@ size_t CbWriteSoundRam(void* u, uint32_t offset, const void* src, size_t size)
     std::lock_guard<std::mutex> lk(st->ctlMtx);
     st->soundWrites.push_back(std::move(payload));
     return size;
+}
+
+// Rewind (v16): pack the LST wire payload (frame(4) + edits_len(4) + edits + state) and hand
+// it to the poll thread to ship as one atomic command. The emulator restores + applies the
+// edits + resumes at its frame gate. Returns 0 (success) — best-effort/async like the pokes.
+int CbLoadState(void* u, uint64_t frame, const void* state, size_t state_len,
+                const void* edits, size_t edits_len)
+{
+    LiveState* st = St(u);
+    std::vector<uint8_t> payload;
+    payload.reserve(8 + edits_len + state_len);
+    auto put32 = [&](uint32_t v) {
+        payload.push_back((uint8_t)(v & 0xFF));       payload.push_back((uint8_t)((v >> 8) & 0xFF));
+        payload.push_back((uint8_t)((v >> 16) & 0xFF)); payload.push_back((uint8_t)((v >> 24) & 0xFF));
+    };
+    put32(static_cast<uint32_t>(frame));
+    put32(static_cast<uint32_t>(edits_len));
+    if (edits && edits_len)
+    {
+        const uint8_t* e = static_cast<const uint8_t*>(edits);
+        payload.insert(payload.end(), e, e + edits_len);
+    }
+    if (state && state_len)
+    {
+        const uint8_t* s = static_cast<const uint8_t*>(state);
+        payload.insert(payload.end(), s, s + state_len);
+    }
+    std::lock_guard<std::mutex> lk(st->ctlMtx);
+    st->loadPayload = std::move(payload);
+    st->loadFrame = static_cast<uint32_t>(frame);
+    st->loadDirty = true;
+    st->pausedByUs.store(false);   // the rewind resumes the emulator itself
+    return 0;
 }
 
 int CbSh2Regs(void* u, int cpu, se_sh2_regs* out)
@@ -958,7 +1065,7 @@ extern "C" se_result se_live_open(const char* endpoint, se_data_source* out)
                         SE_CAP_VDP1_REGS | SE_CAP_VDP2_REGS | SE_CAP_MAIN_RAM |
                         SE_CAP_VDP1_FB | SE_CAP_FRAME_STEP | SE_CAP_SH2_REGS |
                         SE_CAP_MEM_WRITE | SE_CAP_SOUND_RAM | SE_CAP_SCSP_SLOTS |
-                        SE_CAP_CD_STATUS;
+                        SE_CAP_CD_STATUS | SE_CAP_STATE_REWIND;
     out->user = st;
     out->read_vdp1_vram = CbVdp1Vram;
     out->read_vdp2_vram = CbVdp2Vram;
@@ -967,6 +1074,7 @@ extern "C" se_result se_live_open(const char* endpoint, se_data_source* out)
     out->write_main_ram = CbWriteMainRam;
     out->read_sound_ram = CbSoundRam;
     out->write_sound_ram = CbWriteSoundRam;
+    out->load_state     = CbLoadState;
     out->read_scsp_slots = CbScspSlots;
     out->read_cd_status = CbCdStatus;
     out->read_vdp1_fb   = CbVdp1Fb;
@@ -988,6 +1096,25 @@ extern "C" uint32_t se_live_server_version(const se_data_source* ds)
         return 0;
     }
     return St(ds->user)->serverVersion.load();
+}
+
+extern "C" uint32_t se_live_drain_state_blocks(const se_data_source* ds,
+                                               se_live_state_block_cb cb, void* user)
+{
+    if (!ds || !ds->user || ds->close != CbClose || !cb) { return 0; }
+    LiveState* st = St(ds->user);
+    std::deque<LiveStateBlock> local;
+    {
+        std::lock_guard<std::mutex> lk(st->stateMtx);
+        local.swap(st->stateBlocks);
+    }
+    for (const LiveStateBlock& b : local)
+    {
+        cb(user, b.kind, b.frame, b.base, b.fullLen,
+           b.payload.empty() ? nullptr : b.payload.data(),
+           static_cast<uint32_t>(b.payload.size()));
+    }
+    return static_cast<uint32_t>(local.size());
 }
 
 extern "C" void se_live_step_insn(const se_data_source* ds, uint32_t count)

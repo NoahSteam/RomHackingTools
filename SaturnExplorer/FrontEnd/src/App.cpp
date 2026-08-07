@@ -231,6 +231,10 @@ void App::Initialize()
 
 #ifdef SE_ENABLE_LIVE
     mRecorder.Configure(mRecordSeconds * kFramesPerSecond);
+    // Route edits made against a scrubbed frame into mPendingEdits, so a rewind (Play from
+    // here) can replay them atop the restored savestate. Set before the first scrub Select,
+    // whose data source latches SE_CAP_MEM_WRITE from this sink being present.
+    mRecorder.SetEditSink(this, &App::OnScrubEdit);
 #endif
 
     // Relocate ImGui's layout file into the per-user config dir so the dock layout
@@ -951,6 +955,13 @@ void App::BuildUI(IPlatform& platform)
     {
         mRecorder.Capture(mContext, se_frame_number(mContext));
     }
+    // Drain the emulator's savestate blocks (v16) into the recorder each frame, and track
+    // whether the server supports rewind so the transport can offer "Play from here".
+    if (mbLiveSource)
+    {
+        se_live_drain_state_blocks(&mDataSource, &App::OnStateBlock, this);
+        mSeekSupported = se_live_server_version(&mDataSource) >= 16u;
+    }
 #endif
 
     // Top toolbar + bottom bars (status + timeline) reserve space from the
@@ -978,6 +989,9 @@ void App::BuildUI(IPlatform& platform)
     {
         mbScrubbing = false;
     }
+    // Editing a scrubbed frame is durable only when the server can rewind (the edits replay on
+    // Play). Without rewind, make the Memory panel read-only so no-op edits aren't offered.
+    mMemBackend.SetReadOnly(mbScrubbing && !mSeekSupported);
 #endif
     ScopedContextSwap contextSwap(&mContext, view);
 
@@ -1289,8 +1303,34 @@ void App::DrawTransportBar()
     {
         if (IconButton("##tp_play", Ico::Play, "Play"))
         {
+            bool rewound = false;
+            // Rewind "Play from here": if scrubbed to a resumable past frame on a rewind-capable
+            // server, restore that frame's full savestate, apply the edits made while scrubbed,
+            // and re-simulate forward from it — discarding the (now-stale) recorded future.
+            if (mbScrubbing && mSeekSupported && mScrubIndex >= 0 &&
+                se_supports_state_rewind(ctl) &&
+                mRecorder.CanReconstruct(static_cast<size_t>(mScrubIndex)))
+            {
+                std::vector<uint8_t> state;
+                if (mRecorder.ReconstructState(static_cast<size_t>(mScrubIndex), state))
+                {
+                    const uint64_t frameNo = mRecorder.FrameNumber(static_cast<size_t>(mScrubIndex));
+                    const std::vector<uint8_t> edits = BuildEditBlob();
+                    if (se_load_state(ctl, frameNo, state.data(), state.size(),
+                                      edits.data(), edits.size()) == SE_OK)
+                    {
+                        mRecorder.TruncateAfter(static_cast<size_t>(mScrubIndex));
+                        mPendingEdits.clear();
+                        mPendingEditsFrame = -1;
+                        rewound = true;
+                    }
+                }
+            }
+            if (!rewound)
+            {
+                se_frame_resume(ctl);   // no rewind: continue from the present frame
+            }
             mbScrubbing = false;
-            se_frame_resume(ctl);
             mbPaused = false;
         }
     }
@@ -1362,6 +1402,14 @@ bool App::RefreshScrubContext()
         return true;
     }
 
+    // Scrubbing to a different frame: pending edits belong to the frame they were made on, so
+    // drop them when the shown frame changes (avoids applying edits to the wrong rewind target).
+    if (mScrubIndex != mPendingEditsFrame)
+    {
+        mPendingEdits.clear();
+        mPendingEditsFrame = mScrubIndex;
+    }
+
     // Select decompresses the frame into the recorder's scratch. The scrub context
     // is created once; its copied data source keeps the recorder's callbacks + user
     // pointer, so a later Select + se_begin_frame re-renders any frame exactly.
@@ -1388,6 +1436,63 @@ bool App::RefreshScrubContext()
     return false;
 #endif
 }
+
+#ifdef SE_ENABLE_LIVE
+// Recorder handed us a savestate block for a frame; attach it to that frame in the ring.
+void App::OnStateBlock(void* user, uint8_t kind, uint32_t frame, uint32_t base,
+                       uint32_t fullLen, const uint8_t* payload, uint32_t len)
+{
+    static_cast<App*>(user)->mRecorder.AttachStateBlock(frame, kind, base, fullLen, payload, len);
+}
+
+// Recorder's scrub write-sink: an edit was made against the scrubbed frame.
+void App::OnScrubEdit(void* user, int isSound, uint32_t addr, const uint8_t* bytes, size_t len)
+{
+    static_cast<App*>(user)->RecordPendingEdit(isSound, addr, bytes, len);
+}
+
+void App::RecordPendingEdit(int isSound, uint32_t addr, const uint8_t* bytes, size_t len)
+{
+    mPendingEditsFrame = mScrubIndex;   // these edits belong to the frame now shown
+    // The hex editor writes one byte at a time; coalesce runs that extend the last poke.
+    for (size_t i = 0; i < len; ++i)
+    {
+        const uint32_t a = addr + static_cast<uint32_t>(i);
+        const uint8_t  v = bytes[i];
+        if (!mPendingEdits.empty())
+        {
+            PendingPoke& p = mPendingEdits.back();
+            if (p.isSound == (isSound != 0) && a == p.addr + p.bytes.size())
+            {
+                p.bytes.push_back(v);
+                continue;
+            }
+        }
+        PendingPoke p; p.isSound = (isSound != 0); p.addr = a; p.bytes.push_back(v);
+        mPendingEdits.push_back(std::move(p));
+    }
+}
+
+std::vector<uint8_t> App::BuildEditBlob() const
+{
+    // SE_LIVE_EDIT_* blob: u32 count; then per edit type(1)+pad(3)+addr(4)+len(4)+bytes.
+    std::vector<uint8_t> blob;
+    auto put32 = [&](uint32_t v) {
+        blob.push_back((uint8_t)(v & 0xFF));         blob.push_back((uint8_t)((v >> 8) & 0xFF));
+        blob.push_back((uint8_t)((v >> 16) & 0xFF)); blob.push_back((uint8_t)((v >> 24) & 0xFF));
+    };
+    put32(static_cast<uint32_t>(mPendingEdits.size()));
+    for (const PendingPoke& p : mPendingEdits)
+    {
+        blob.push_back(p.isSound ? (uint8_t)SE_LIVE_EDIT_TYPE_SOUND : (uint8_t)SE_LIVE_EDIT_TYPE_WRAM);
+        blob.push_back(0); blob.push_back(0); blob.push_back(0);
+        put32(p.addr);
+        put32(static_cast<uint32_t>(p.bytes.size()));
+        blob.insert(blob.end(), p.bytes.begin(), p.bytes.end());
+    }
+    return blob;
+}
+#endif
 
 // Toolbar "Layers" dropdown — the VDP1/VDP2 visibility toggles that used to live in the
 // docked Layer Controls panel. Drawn inline in the toolbar; opens a popup of checkboxes.

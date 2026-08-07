@@ -49,7 +49,15 @@ public:
         bool        hasSh2[2] = { false, false };
         se_scsp_slot slots[SE_SCSP_SLOT_COUNT] = {};   // decoded voices (Sound panel)
         int          slotCount = 0;
-        size_t   bytes = 0;               // compressed footprint of this frame
+        // Savestate rewind (v16): the delta/keyframe block for this frame, attached later (the
+        // emulator's diff worker lags). A delta needs its keyframe frame (baseKeyframe) still
+        // resident to reconstruct. Empty until attached.
+        std::vector<uint8_t> state;
+        uint8_t   stateKind = 0;          // SE_LIVE_STATE_KIND_*
+        uint64_t  baseKeyframe = 0;
+        uint32_t  stateFullLen = 0;       // decoded full-state size
+        bool      hasState = false;
+        size_t   bytes = 0;               // compressed footprint of this frame (incl. state blob)
     };
 
     // Cap the ring to at most 'maxFrames' frames. (A fixed internal byte ceiling
@@ -68,7 +76,27 @@ public:
     // Build a data source over frame i. The decompressed regions live in this
     // recorder's scratch and stay valid until the next Select() call. Returns
     // false if i is out of range. The caller creates a context from *out.
+    // When an edit sink is set (SetEditSink), the source is writable: edits made
+    // against the scrubbed frame are forwarded to the sink as pending pokes.
     bool Select(size_t i, se_data_source* out);
+
+    // --- Savestate rewind (v16) ---
+    // Attach a received savestate block to the frame it belongs to (matched by number).
+    // Lagging: the frame was captured earlier. No-op if that frame isn't resident.
+    void AttachStateBlock(uint64_t frameNumber, uint8_t kind, uint64_t baseKeyframe,
+                          uint32_t fullLen, const uint8_t* payload, size_t len);
+    // Reconstruct the full emulator savestate for frame i into 'out' (keyframe, or keyframe +
+    // delta). Returns false if frame i has no block yet, or its keyframe was evicted.
+    bool ReconstructState(size_t i, std::vector<uint8_t>& out) const;
+    // True if frame i can currently be resumed-from (its block + keyframe are resident).
+    bool CanReconstruct(size_t i) const;
+    // Drop every frame after index i (used on rewind: the future is re-simulated). Also
+    // re-arms Capture() to accept the next frame after this one.
+    void TruncateAfter(size_t i);
+    // Route edits made against a scrubbed frame to a sink (App) as pending pokes: the sink cb
+    // gets (user, isSound, addr/offset, bytes, len). Call once at setup; makes Select writable.
+    void SetEditSink(void* user, void (*cb)(void* user, int isSound, uint32_t addr,
+                                            const uint8_t* bytes, size_t len));
 
     void Clear();
 
@@ -88,6 +116,16 @@ private:
 
     void Worker();
     void Evict();   // caller holds mRingMtx
+
+    // Highest frame number Capture() has accepted; skips stale/duplicate frames (esp. the
+    // transient frame-0 window right after a rewind). UI-thread only.
+    uint64_t mLastCaptured = 0;
+
+    // Edit sink (App) for writes made against a scrubbed frame (SetEditSink). UI-thread only.
+    void* mEditUser = nullptr;
+    void (*mEditCb)(void*, int, uint32_t, const uint8_t*, size_t) = nullptr;
+    static size_t CbEditMain(void* u, uint32_t address, const void* src, size_t size);
+    static size_t CbEditSound(void* u, uint32_t offset, const void* src, size_t size);
 
     static constexpr size_t kMaxBytes = 4ull * 1024u * 1024u * 1024u;  // 4 GiB ceiling
     static constexpr size_t kMaxQueued = 4;   // staged raw frames before we drop

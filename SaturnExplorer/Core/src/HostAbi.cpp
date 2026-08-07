@@ -427,4 +427,32 @@ uint64_t se_frame_number(se_context* ctx)
     return 0;
 }
 
+/* --- Rewind / load-state --- */
+int se_supports_state_rewind(se_context* ctx)
+{
+    if (!ctx)
+    {
+        return 0;
+    }
+    const se_data_source& ds = Impl(ctx)->DataSource();
+    return (ds.capabilities & SE_CAP_STATE_REWIND) && ds.load_state ? 1 : 0;
+}
+
+se_result se_load_state(se_context* ctx, uint64_t frame,
+                        const void* state, size_t state_len,
+                        const void* edits, size_t edits_len)
+{
+    if (!ctx || (!state && state_len) || (!edits && edits_len))
+    {
+        return SE_ERR_INVALID_ARG;
+    }
+    const se_data_source& ds = Impl(ctx)->DataSource();
+    if (!(ds.capabilities & SE_CAP_STATE_REWIND) || !ds.load_state)
+    {
+        return SE_ERR_NO_CAPABILITY;
+    }
+    return ds.load_state(ds.user, frame, state, state_len, edits, edits_len) == 0
+               ? SE_OK : SE_ERR_IO;
+}
+
 }  // extern "C"

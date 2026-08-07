@@ -164,6 +164,32 @@ if(BUILD_TESTING)
     )
     target_include_directories(SaturnExplorerIsoFsTests PRIVATE FrontEnd/src)
     add_test(NAME SaturnExplorerIsoFsTests COMMAND SaturnExplorerIsoFsTests)
+
+    # Savestate delta codec (XOR + zero-run RLE) — the v16 rewind stream primitives. Header-
+    # only; the test just needs the Integration/Common include path.
+    add_executable(SaturnExplorerSeStateCodecTests
+        Core/tests/SeStateCodecTests.cpp
+    )
+    target_include_directories(SaturnExplorerSeStateCodecTests
+        PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Common)
+    add_test(NAME SaturnExplorerSeStateCodecTests COMMAND SaturnExplorerSeStateCodecTests)
+
+    # FrameRecorder rewind machinery — attach/reconstruct/truncate/evict of per-frame
+    # savestate blocks. Drives Capture() against a trivial context (needs the Core lib), so
+    # it also uses threads (the recorder's compression worker).
+    add_executable(SaturnExplorerFrameRecorderTests
+        FrontEnd/tests/FrameRecorderTests.cpp
+        FrontEnd/src/FrameRecorder.cpp
+        FrontEnd/src/FrameLz.cpp
+    )
+    target_include_directories(SaturnExplorerFrameRecorderTests PRIVATE
+        FrontEnd/src
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Common)
+    target_link_libraries(SaturnExplorerFrameRecorderTests PRIVATE SaturnExplorerCore)
+    find_package(Threads REQUIRED)
+    target_link_libraries(SaturnExplorerFrameRecorderTests PRIVATE Threads::Threads)
+    add_test(NAME SaturnExplorerFrameRecorderTests COMMAND SaturnExplorerFrameRecorderTests)
 endif()
 
 # ---------------------------------------------------------------------------

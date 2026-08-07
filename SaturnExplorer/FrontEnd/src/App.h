@@ -337,6 +337,20 @@ private:
     int              mScrubShownIndex = -1;    // index currently built into mScrubContext
     se_context*      mLiveCtx = nullptr;       // the live context, reachable while panels
                                                // render from the scrub context (transport)
+    // Rewind (v16): whether the connected server supports "Play from here" (savestate rewind),
+    // and the edits made while scrubbed, replayed atop the restored state when rewinding.
+    bool             mSeekSupported = false;
+    struct PendingPoke { bool isSound = false; uint32_t addr = 0; std::vector<uint8_t> bytes; };
+    std::vector<PendingPoke> mPendingEdits;
+    int              mPendingEditsFrame = -1;  // scrub index the edits belong to (cleared on change)
+    // Record an edit made against the scrubbed frame (routed from the recorder's write sink).
+    void RecordPendingEdit(int isSound, uint32_t addr, const uint8_t* bytes, size_t len);
+    // Build the SE_LIVE_EDIT_* blob from mPendingEdits (for the LST rewind payload).
+    std::vector<uint8_t> BuildEditBlob() const;
+    // Recorder callback thunks (static; 'user' is this App).
+    static void OnStateBlock(void* user, uint8_t kind, uint32_t frame, uint32_t base,
+                             uint32_t fullLen, const uint8_t* payload, uint32_t len);
+    static void OnScrubEdit(void* user, int isSound, uint32_t addr, const uint8_t* bytes, size_t len);
 #endif
 
     // Game data directory (a folder of the game's extracted files, or an ISO/disc
