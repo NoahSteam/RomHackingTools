@@ -352,6 +352,10 @@ elseif(EMSCRIPTEN)
         FrontEnd/Platforms/Web
         ${SE_IMGUI_DIR}
         ${SE_IMGUI_DIR}/backends
+        # SeLiveProtocol.h (SE_PAD_* masks, protocol constants) is included
+        # unconditionally by ControllerPanel.cpp/App.cpp, so the path is needed
+        # even in the default (non-live) web build, not just under SE_WEB_LIVE.
+        ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Common
     )
     # The OpenGL3 backend must target GLES3 (WebGL2).
     target_compile_definitions(SaturnExplorerFrontEnd PRIVATE IMGUI_IMPL_OPENGL_ES3)
