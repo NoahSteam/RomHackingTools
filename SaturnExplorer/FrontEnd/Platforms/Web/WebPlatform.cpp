@@ -380,6 +380,17 @@ bool WebPlatform::RevealPath(const char* path)
     return ::system(cmd.c_str()) != -1;
 }
 
+bool WebPlatform::OpenURL(const char* url)
+{
+    if (!url || !*url)
+    {
+        return false;
+    }
+    // SDL_OpenURL routes to the OS default browser on native desktop and to
+    // window.open() under the Emscripten SDL2 port. Returns 0 on success.
+    return SDL_OpenURL(url) == 0;
+}
+
 bool WebPlatform::LaunchProcess(const char* path, const char* args, const char* workingDir)
 {
     if (!path || !*path)

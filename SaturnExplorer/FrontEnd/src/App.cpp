@@ -4737,6 +4737,7 @@ void App::DrawToolbar(std::vector<TopBarCommand>& commands)
                 if (ImGui::BeginMenu("Help"))
                 {
                     if (ImGui::MenuItem("Help")) commands.emplace_back(TopBarCommandType::OpenHelp);
+                    if (ImGui::MenuItem("Hardware Guides (web)...")) commands.emplace_back(TopBarCommandType::OpenGuides);
                     if (ImGui::MenuItem("Check for Updates...")) commands.emplace_back(TopBarCommandType::CheckForUpdates);
                     if (ImGui::MenuItem("About")) commands.emplace_back(TopBarCommandType::OpenAbout);
                     ImGui::EndMenu();
@@ -4768,6 +4769,7 @@ void App::DrawToolbar(std::vector<TopBarCommand>& commands)
             if (ImGui::BeginPopup("##help_menu"))
             {
                 if (ImGui::MenuItem("Help")) commands.emplace_back(TopBarCommandType::OpenHelp);
+                if (ImGui::MenuItem("Hardware Guides (web)...")) commands.emplace_back(TopBarCommandType::OpenGuides);
                 ImGui::MenuItem("Check for Updates...", nullptr, false, false);
                 if (ImGui::MenuItem("About")) commands.emplace_back(TopBarCommandType::OpenAbout);
                 ImGui::EndPopup();
@@ -5084,6 +5086,10 @@ void App::ExecuteTopBarCommand(const TopBarCommand& command, IPlatform& platform
         break;
     case TopBarCommandType::OpenAbout:
         mOpenAbout = true;
+        break;
+    case TopBarCommandType::OpenGuides:
+        // Plain-English hardware guides (audio / VDP1 / VDP2), hosted on GitHub Pages.
+        platform.OpenURL("https://noahsteam.github.io/RomHackingTools/guides/");
         break;
     case TopBarCommandType::CheckForUpdates:
         mOpenUpdate = true;

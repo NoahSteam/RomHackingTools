@@ -386,6 +386,17 @@ bool WindowsPlatform::RevealPath(const char* path)
     return reinterpret_cast<INT_PTR>(r) > 32;   // >32 == success per the API
 }
 
+bool WindowsPlatform::OpenURL(const char* url)
+{
+    if (!url || !*url)
+    {
+        return false;
+    }
+    // The shell "open" verb on an http(s):// URL launches the default browser.
+    const HINSTANCE r = ::ShellExecuteA(nullptr, "open", url, nullptr, nullptr, SW_SHOWNORMAL);
+    return reinterpret_cast<INT_PTR>(r) > 32;   // >32 == success per the API
+}
+
 bool WindowsPlatform::LaunchProcess(const char* path, const char* args, const char* workingDir)
 {
     if (!path || !*path)

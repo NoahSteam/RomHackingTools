@@ -85,6 +85,10 @@ public:
     // unsupported or the path doesn't exist.
     virtual bool RevealPath(const char* path) { (void)path; return false; }
 
+    // Open a URL in the user's default web browser (e.g. the online hardware guides).
+    // Returns false if unsupported. The default no-ops so a headless backend is fine.
+    virtual bool OpenURL(const char* url) { (void)url; return false; }
+
     // Launch an executable (e.g. the patched Mednafen/Yabause recorded at install
     // time), non-blocking, with an optional command-line `args` string (NULL/"" = none;
     // e.g. the ROM to boot) and optional `workingDir` (NULL = the exe's folder, so an

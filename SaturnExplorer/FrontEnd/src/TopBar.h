@@ -56,6 +56,7 @@ enum class TopBarCommandType
     OpenSettings,
     OpenHelp,
     OpenAbout,
+    OpenGuides,
     CheckForUpdates
 };
 
