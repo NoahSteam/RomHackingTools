@@ -347,6 +347,9 @@ private:
     void RecordPendingEdit(int isSound, uint32_t addr, const uint8_t* bytes, size_t len);
     // Build the SE_LIVE_EDIT_* blob from mPendingEdits (for the LST rewind payload).
     std::vector<uint8_t> BuildEditBlob() const;
+    // Estimated recorder capacity at the current history length, in MB (per-frame average x
+    // the configured frame budget). Shown as the "available" half of the footprint readout.
+    double RecorderCapacityMB() const;
     // Recorder callback thunks (static; 'user' is this App).
     static void OnStateBlock(void* user, uint8_t kind, uint32_t frame, uint32_t base,
                              uint32_t fullLen, const uint8_t* payload, uint32_t len);

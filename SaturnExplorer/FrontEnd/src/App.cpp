@@ -1236,9 +1236,10 @@ void App::DrawStatusBar()
             {
                 const int seconds = static_cast<int>(ImGui::GetTime() - mRecordingStartedAt);
                 ImGui::Separator();
-                ImGui::TextColored(ImVec4(0.90f, 0.36f, 0.36f, 1.0f), "Recording %02d:%02d (%0.1f MB)",
+                ImGui::TextColored(ImVec4(0.90f, 0.36f, 0.36f, 1.0f), "Recording %02d:%02d (%.1f / %.1f MB)",
                                    seconds / 60, seconds % 60,
-                                   static_cast<double>(mRecorder.BytesUsed()) / (1024.0 * 1024.0));
+                                   static_cast<double>(mRecorder.BytesUsed()) / (1024.0 * 1024.0),
+                                   RecorderCapacityMB());
             }
 #endif
             ImGui::Separator();
@@ -1491,6 +1492,17 @@ std::vector<uint8_t> App::BuildEditBlob() const
         blob.insert(blob.end(), p.bytes.begin(), p.bytes.end());
     }
     return blob;
+}
+
+double App::RecorderCapacityMB() const
+{
+    // Estimated capacity at the current history length: the per-frame average (falling back to
+    // kEstBytesPerFrame before any frame is captured) times the configured frame budget. Shared
+    // by the transport footprint readout and the Recording Settings "Estimated maximum".
+    const size_t frames = mRecorder.Count();
+    const double perFrame = frames ? static_cast<double>(mRecorder.BytesUsed()) / frames
+                                   : kEstBytesPerFrame;
+    return perFrame * mRecordSeconds * kFramesPerSecond / (1024.0 * 1024.0);
 }
 #endif
 
@@ -5221,10 +5233,7 @@ void App::DrawRecordingSettingsModal()
         mRecorder.Configure(mRecordSeconds * kFramesPerSecond);
         mSettingsDirty = true;
     }
-    const size_t frames = mRecorder.Count();
-    const double perFrame = frames ? static_cast<double>(mRecorder.BytesUsed()) / frames : kEstBytesPerFrame;
-    const double estimate = perFrame * mRecordSeconds * kFramesPerSecond / (1024.0 * 1024.0);
-    ImGui::TextDisabled("Estimated maximum: %.0f MB", estimate);
+    ImGui::TextDisabled("Estimated maximum: %.0f MB", RecorderCapacityMB());
 #else
     ImGui::TextDisabled("Live recording is unavailable in this build.");
 #endif
