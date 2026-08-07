@@ -190,6 +190,15 @@ if(BUILD_TESTING)
     find_package(Threads REQUIRED)
     target_link_libraries(SaturnExplorerFrameRecorderTests PRIVATE Threads::Threads)
     add_test(NAME SaturnExplorerFrameRecorderTests COMMAND SaturnExplorerFrameRecorderTests)
+
+    # PatchLibrary — known-locations model, project I/O, and Python patch-script emission.
+    # The e2e leg runs the emitted script with python3 when available (skips gracefully if not).
+    add_executable(SaturnExplorerPatchLibraryTests
+        FrontEnd/tests/PatchLibraryTests.cpp
+        FrontEnd/src/PatchLibrary.cpp
+    )
+    target_include_directories(SaturnExplorerPatchLibraryTests PRIVATE FrontEnd/src)
+    add_test(NAME SaturnExplorerPatchLibraryTests COMMAND SaturnExplorerPatchLibraryTests)
 endif()
 
 # ---------------------------------------------------------------------------
@@ -297,6 +306,7 @@ if(WIN32)
         FrontEnd/src/Debug/CallStack.cpp
         FrontEnd/src/FrameRecorder.cpp
         FrontEnd/src/FrameLz.cpp
+        FrontEnd/src/PatchLibrary.cpp
         FrontEnd/src/UpdateChecker.cpp
         FrontEnd/Platforms/Windows/WindowsPlatform.cpp
         FrontEnd/Platforms/Windows/WinMain.cpp
@@ -370,7 +380,8 @@ elseif(EMSCRIPTEN)
         ${SE_IMGUI_DIR}/backends/imgui_impl_opengl3.cpp
     )
     if(SE_WEB_LIVE)
-        list(APPEND SE_WEB_SRC FrontEnd/src/FrameRecorder.cpp FrontEnd/src/FrameLz.cpp)
+        list(APPEND SE_WEB_SRC FrontEnd/src/FrameRecorder.cpp FrontEnd/src/FrameLz.cpp
+                               FrontEnd/src/PatchLibrary.cpp)
     endif()
     add_executable(SaturnExplorerFrontEnd ${SE_WEB_SRC})
     target_include_directories(SaturnExplorerFrontEnd PRIVATE
@@ -450,6 +461,7 @@ else()
             FrontEnd/src/Debug/CallStack.cpp
             FrontEnd/src/FrameRecorder.cpp
             FrontEnd/src/FrameLz.cpp
+            FrontEnd/src/PatchLibrary.cpp
             FrontEnd/src/UpdateChecker.cpp
             FrontEnd/Platforms/Web/WebPlatform.cpp
             FrontEnd/Platforms/Web/WebMain.cpp

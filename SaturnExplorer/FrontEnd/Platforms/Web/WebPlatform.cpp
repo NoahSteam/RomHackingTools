@@ -153,12 +153,15 @@ bool WebPlatform::PumpEvents()
         ImGui_ImplSDL2_ProcessEvent(&event);
         if (event.type == SDL_QUIT)
         {
-            mQuit = true;
+            // Don't quit immediately: raise the close-request flag so the app can veto (e.g.
+            // to warn about unsaved patch changes). It confirms via AcknowledgeClose(), which
+            // sets mCloseAcked and ends the loop below; CancelClose() clears the request.
+            mCloseRequested = true;
         }
     }
     // On the web the browser owns the loop and never sends SDL_QUIT, so this stays
-    // true; natively it returns false when the window is closed.
-    return !mQuit;
+    // true; natively it returns false only once the app confirms the close.
+    return !mQuit && !mCloseAcked;
 }
 
 void WebPlatform::BeginFrame()

@@ -35,6 +35,7 @@
 
 #ifdef SE_ENABLE_LIVE
 #include "FrameRecorder.h"   // rolling capture of live frames (native only)
+#include "PatchLibrary.h"    // Patch feature: known memory->file locations + patch-script emit
 #endif
 
 namespace sfe
@@ -354,6 +355,44 @@ private:
     static void OnStateBlock(void* user, uint8_t kind, uint32_t frame, uint32_t base,
                              uint32_t fullLen, const uint8_t* payload, uint32_t len);
     static void OnScrubEdit(void* user, int isSound, uint32_t addr, const uint8_t* bytes, size_t len);
+
+    // --- Patch feature: locate memory edits in game files, then apply them back ---
+    // The Hex editor's "Find in game files" records where a memory selection lives on disc
+    // (via content search of the Data Directory); accepted matches accumulate in mPatchLib.
+    // "Apply changes to disc" emits + runs a Python script that writes current memory into the
+    // mapped files. The library persists to a project file; unsaved changes warn on close.
+    PatchLibrary         mPatchLib;
+    std::string          mProjectPath;          // last saved/opened project (for re-save)
+
+    bool                 mOpenLocatePopup = false;                 // context-bytes popup pending
+    HexEditorPanel::LocateRequest mLocatePending;                  // selection awaiting context
+    int                  mLocateBefore = 16, mLocateAfter = 16;    // context byte counts
+
+    bool                 mSearchIsLocate = false;                  // the active search is a locate
+    uint32_t             mLocateAddr = 0, mLocateLen = 0, mLocateCtxBefore = 0;
+    std::vector<uint8_t> mLocateExpected;                          // selection bytes (baseline)
+    std::string          mLocateLabel;
+    bool                 mShowLocateResults = false;
+    std::vector<DataSearchHit> mLocateResults;
+    std::string          mLocateSummary;
+    std::vector<uint8_t> mLocateRowAdded;                          // per flattened result row
+
+    bool                 mOpenManageLocations = false;
+    bool                 mShowPatchResults = false;
+    std::string          mPatchResultText;
+    bool                 mClosePrompt = false;                     // unsaved-changes-on-close modal
+
+    void DrawLocatePopup();
+    void BeginLocateSearch(uint32_t addr, uint32_t len, uint32_t before, uint32_t after);
+    void DrawLocateResults();
+    void DrawPatchMenu(std::vector<TopBarCommand>& commands);
+    void DrawManageLocationsModal();
+    void DrawPatchResultsModal();
+    void DrawClosePromptModal(IPlatform& platform);
+    void ApplyChangesToDisc(IPlatform& platform);
+    void DoSaveProject(IPlatform& platform, bool saveAs);
+    void DoOpenProject(IPlatform& platform);
+    std::string RelativeToDataDir(const std::string& absPath) const;
 #endif
 
     // Game data directory (a folder of the game's extracted files, or an ISO/disc

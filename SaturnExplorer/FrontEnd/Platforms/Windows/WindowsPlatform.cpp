@@ -127,6 +127,14 @@ void WindowsPlatform::Shutdown()
     sInstance = nullptr;
 }
 
+void WindowsPlatform::AcknowledgeClose()
+{
+    // The app confirmed the close: actually destroy the window now, which posts WM_QUIT and
+    // ends the message loop on the next PumpEvents().
+    mCloseRequested = false;
+    if (mHwnd) ::DestroyWindow(mHwnd);
+}
+
 bool WindowsPlatform::PumpEvents()
 {
     MSG msg;
@@ -522,6 +530,12 @@ LRESULT WINAPI WindowsPlatform::WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPAR
         {
             return 0;
         }
+        break;
+    case WM_CLOSE:
+        // Don't destroy the window yet: raise the close-request flag so the app can veto
+        // (e.g. warn about unsaved patch changes). The app confirms via AcknowledgeClose(),
+        // which calls DestroyWindow -> WM_DESTROY -> PostQuitMessage; CancelClose() clears it.
+        if (sInstance) { sInstance->mCloseRequested = true; return 0; }
         break;
     case WM_DESTROY:
         ::PostQuitMessage(0);

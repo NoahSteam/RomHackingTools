@@ -94,6 +94,14 @@ bool HexEditorPanel::TakeBreakpointRequest(BreakpointRequest& out)
     return true;
 }
 
+bool HexEditorPanel::TakeLocateRequest(LocateRequest& out)
+{
+    if (!mLocateRequested) return false;
+    mLocateRequested = false;
+    out = mLocateRequest;
+    return true;
+}
+
 void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
 {
     (void)live;
@@ -451,6 +459,16 @@ void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
                         mSearchRequested = true;
                     }
                 }
+#ifdef SE_ENABLE_LIVE
+                // Patch feature: locate the selection in the game files (with surrounding
+                // context) and record the mapping for later "Apply changes to disc".
+                if (ImGui::MenuItem("Find in game files (for patching)..."))
+                {
+                    mLocateRequest.address = (uint32_t)selLo;
+                    mLocateRequest.length  = (uint32_t)cnt;
+                    mLocateRequested = true;
+                }
+#endif
             }
             else
             {

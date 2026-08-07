@@ -57,7 +57,13 @@ enum class TopBarCommandType
     OpenHelp,
     OpenAbout,
     OpenGuides,
-    CheckForUpdates
+    CheckForUpdates,
+    // Patch feature (desktop only)
+    ApplyChangesToDisc,
+    SaveProject,
+    SaveProjectAs,
+    OpenProject,
+    ManageLocations
 };
 
 struct TopBarCommand

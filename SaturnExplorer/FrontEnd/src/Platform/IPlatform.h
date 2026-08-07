@@ -39,6 +39,17 @@ public:
     // Pump the OS event queue. Returns false once the user asks to quit.
     virtual bool PumpEvents() = 0;
 
+    // Window-close veto (used by the Patch feature's unsaved-changes guard). When the user
+    // requests to close the window, a backend that supports this keeps PumpEvents() returning
+    // true while CloseRequested() is true, so the app can render a confirmation prompt instead
+    // of exiting immediately. The app then either AcknowledgeClose() (proceed — the next
+    // PumpEvents() returns false) or CancelClose() (dismiss the request and keep running).
+    // Backends that don't override these close immediately as before (CloseRequested() stays
+    // false, so the app never defers).
+    virtual bool CloseRequested() { return false; }
+    virtual void AcknowledgeClose() {}
+    virtual void CancelClose() {}
+
     // Start a new ImGui frame (renderer + platform NewFrame, then ImGui::NewFrame).
     virtual void BeginFrame() = 0;
     // Render ImGui draw data and present the frame.

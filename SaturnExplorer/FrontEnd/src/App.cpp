@@ -6,6 +6,7 @@
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>
+#include <fstream>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -1098,6 +1099,20 @@ void App::BuildUI(IPlatform& platform)
     DrawAboutModal();
     DrawUpdateModal(platform);
     DrawDataSearchResults(platform);
+#ifdef SE_ENABLE_LIVE
+    DrawLocatePopup();            // modal; context-bytes chooser for "Find in game files"
+    DrawLocateResults();          // floating; accept/reject matches into the patch library
+    DrawManageLocationsModal();   // modal; list/remove known locations
+    DrawPatchResultsModal();      // modal; Apply-changes-to-disc summary
+    // Window-close veto: if the user asked to close and there are unsaved patch locations,
+    // raise the confirmation prompt; otherwise let the close proceed.
+    if (platform.CloseRequested())
+    {
+        if (mPatchLib.Dirty()) mClosePrompt = true;
+        else                   platform.AcknowledgeClose();
+    }
+    DrawClosePromptModal(platform);   // modal; unsaved-changes-on-close warning
+#endif
     DrawTracepointEditor();   // modal; no-op until OpenTracepointEditor requests it
     // contextSwap restores the live context here as it goes out of scope.
 
@@ -3063,6 +3078,16 @@ void App::DrawHexEditor()
                           : BpKind::MemReadWrite;
         mBreakpoints.AddMemory(bpr.address, bpr.size, kind);
     }
+#ifdef SE_ENABLE_LIVE
+    // Right-click "Find in game files (for patching)" — open the context-bytes popup, then
+    // search the game files and let the user accept matches into the patch library.
+    HexEditorPanel::LocateRequest loc;
+    if (mHexEditor.TakeLocateRequest(loc))
+    {
+        mLocatePending = loc;
+        mOpenLocatePopup = true;
+    }
+#endif
 }
 
 // Saturn control pad. BuildUI forwards the final arbitrated state after the
@@ -4259,6 +4284,23 @@ void App::PollSearchWorker()
         mSearchRunning.store(false);
         mSearchDone.store(false);
 
+#ifdef SE_ENABLE_LIVE
+        // A patch-locate search: hand its hits to the locate-results window (accept/reject),
+        // rather than the texture-results window.
+        if (mSearchIsLocate && !mSearchQueued)
+        {
+            mSearchIsLocate = false;
+            mLocateResults = std::move(mSearchResults);
+            mSearchResults.clear();
+            mLocateSummary = mSearchSummary;
+            size_t rows = 0;
+            for (const DataSearchHit& h : mLocateResults) rows += h.offsets.size();
+            mLocateRowAdded.assign(rows, 0);
+            mShowLocateResults = true;
+            mShowSearchResults = false;
+        }
+#endif
+
         // If the user asked for another search while this one ran, start it now (the old
         // worker is fully reaped, so LaunchSearch won't see mSearchRunning and will run).
         if (mSearchQueued)
@@ -4271,6 +4313,381 @@ void App::PollSearchWorker()
 
 // The "Set Game Data Directory" modal. Opened from the toolbar button, the status-bar
 // path, or automatically when a search is requested with no directory set.
+#ifdef SE_ENABLE_LIVE
+// ===========================================================================================
+// Patch feature — locate memory edits in the game files (content search), curate a library of
+// known memory->file locations, and emit + run a Python script that writes current memory into
+// those files. Desktop only (needs a real filesystem + a Python interpreter on PATH).
+// ===========================================================================================
+
+std::string App::RelativeToDataDir(const std::string& absPath) const
+{
+    std::string d = mDataDir, p = absPath;
+    for (char& c : d) if (c == '\\') c = '/';
+    for (char& c : p) if (c == '\\') c = '/';
+    if (!d.empty() && d.back() == '/') d.pop_back();
+    if (p.size() > d.size() + 1 && p.compare(0, d.size(), d) == 0 && p[d.size()] == '/')
+        return p.substr(d.size() + 1);
+    const size_t slash = p.find_last_of('/');   // outside the data dir: fall back to the basename
+    return slash == std::string::npos ? p : p.substr(slash + 1);
+}
+
+// The context-bytes chooser opened from the Hex editor's "Find in game files". The user picks
+// how many bytes before/after the selection to include (to disambiguate a common value), then
+// the search runs over the Data Directory.
+void App::DrawLocatePopup()
+{
+    if (mOpenLocatePopup) { ImGui::OpenPopup("Find in Game Files"); mOpenLocatePopup = false; }
+    if (!ImGui::BeginPopupModal("Find in Game Files", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        return;
+    ImGui::Text("Selection: 0x%08X  (%u byte%s)", mLocatePending.address, mLocatePending.length,
+                mLocatePending.length == 1 ? "" : "s");
+    ImGui::TextWrapped("Include surrounding bytes to make the match unique. The search looks for "
+                       "the selection plus this much context in the game data files.");
+    ImGui::Separator();
+    ImGui::SetNextItemWidth(120);
+    ImGui::InputInt("Bytes before", &mLocateBefore);
+    ImGui::SetNextItemWidth(120);
+    ImGui::InputInt("Bytes after", &mLocateAfter);
+    if (mLocateBefore < 0) mLocateBefore = 0;
+    if (mLocateAfter < 0) mLocateAfter = 0;
+    ImGui::TextDisabled("Search pattern: %u bytes",
+                        mLocateBefore + mLocatePending.length + mLocateAfter);
+    if (mDataDir.empty())
+        ImGui::TextColored(ImVec4(0.9f, 0.6f, 0.3f, 1.0f),
+                           "No Data Directory set - you'll be asked to pick one.");
+    ImGui::Separator();
+    if (ImGui::Button("Search"))
+    {
+        BeginLocateSearch(mLocatePending.address, mLocatePending.length,
+                          (uint32_t)mLocateBefore, (uint32_t)mLocateAfter);
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();
+    ImGui::EndPopup();
+}
+
+void App::BeginLocateSearch(uint32_t addr, uint32_t len, uint32_t before, uint32_t after)
+{
+    // Read the selection (the baseline "expected" bytes) and the wider needle (with context).
+    const uint32_t start = (before <= addr) ? addr - before : 0;
+    const uint32_t ctxBefore = addr - start;
+    const uint32_t total = ctxBefore + len + after;
+
+    MemoryReadResult needleRes = mMemBackend.ReadOne(start, total);
+    MemoryReadResult selRes = mMemBackend.ReadOne(addr, len);
+    if (!needleRes.success || !selRes.success)
+    {
+        mLocateResults.clear();
+        mLocateRowAdded.clear();
+        mLocateSummary = "Couldn't read that much memory (the selection + context may cross an "
+                         "unmapped region). Try smaller before/after values.";
+        mShowLocateResults = true;
+        return;
+    }
+
+    mLocateAddr = addr;
+    mLocateLen = len;
+    mLocateCtxBefore = ctxBefore;
+    mLocateExpected = selRes.bytes;
+    char lbl[96];
+    std::snprintf(lbl, sizeof(lbl), "0x%08X (%u byte%s)", addr, len, len == 1 ? "" : "s");
+    mLocateLabel = lbl;
+
+    mPendingNeedle = std::move(needleRes.bytes);
+    mPendingSearchLabel = mLocateLabel;
+    mSearchIsLocate = true;
+    mShowLocateResults = true;
+    mLocateResults.clear();
+    mLocateRowAdded.clear();
+    mLocateSummary.clear();
+
+    if (mDataDir.empty())
+    {
+        mSearchAfterSetDir = true;   // RunPendingSearch fires once the dir is chosen (still a locate)
+        mOpenDataDirModal = true;
+    }
+    else
+    {
+        LaunchSearch({mDataDir}, SearchCompression::None, "the game data files");
+    }
+}
+
+void App::DrawLocateResults()
+{
+    if (!mShowLocateResults) return;
+    ImGui::SetNextWindowSize(ImVec2(640, 380), ImGuiCond_FirstUseEver);
+    if (ImGui::Begin("Find in Game Files - Results", &mShowLocateResults))
+    {
+        if (mSearchIsLocate && mSearchRunning.load())
+        {
+            const size_t done = mSearchProgress.filesScanned.load();
+            const size_t total = mSearchProgress.filesTotal.load();
+            ImGui::Text("Searching the game data files... (%zu / %zu files)", done, total);
+            if (ImGui::Button("Cancel")) mSearchProgress.cancel.store(true);
+            ImGui::End();
+            return;
+        }
+
+        ImGui::TextWrapped("Accept the match that is the real home of these bytes. Accepted "
+                           "locations are added to the patch library and used by "
+                           "Patch > Apply changes to disc.");
+        ImGui::Separator();
+        if (!mLocateSummary.empty()) ImGui::TextDisabled("%s", mLocateSummary.c_str());
+
+        size_t row = 0;
+        size_t totalOffsets = 0;
+        for (const DataSearchHit& h : mLocateResults) totalOffsets += h.offsets.size();
+        if (totalOffsets == 0)
+        {
+            ImGui::TextDisabled("No matches. Try more/less context, or a different selection.");
+        }
+        for (const DataSearchHit& h : mLocateResults)
+        {
+            const std::string rel = RelativeToDataDir(h.path);
+            for (uint64_t off : h.offsets)
+            {
+                const uint64_t selOffset = off + mLocateCtxBefore;   // where the SELECTION lands
+                ImGui::PushID((int)row);
+                const bool added = row < mLocateRowAdded.size() && mLocateRowAdded[row];
+                if (added)
+                {
+                    ImGui::TextDisabled("Added");
+                }
+                else if (ImGui::SmallButton("Accept"))
+                {
+                    PatchLocation loc;
+                    char l[160];
+                    std::snprintf(l, sizeof(l), "%s -> %s @ %llu", mLocateLabel.c_str(),
+                                  rel.c_str(), (unsigned long long)selOffset);
+                    loc.label = l;
+                    loc.cpuAddr = mLocateAddr;
+                    loc.length = mLocateLen;
+                    loc.file = rel;
+                    loc.fileOffset = selOffset;
+                    loc.expected = mLocateExpected;
+                    mPatchLib.AddOrUpdate(loc);
+                    if (row < mLocateRowAdded.size()) mLocateRowAdded[row] = 1;
+                }
+                ImGui::SameLine();
+                ImGui::Text("%s  @ %llu (0x%llX)", rel.c_str(),
+                            (unsigned long long)selOffset, (unsigned long long)selOffset);
+                ImGui::PopID();
+                ++row;
+            }
+        }
+    }
+    ImGui::End();
+}
+
+void App::DrawPatchMenu(std::vector<TopBarCommand>& commands)
+{
+    if (ImGui::Button("Patch")) ImGui::OpenPopup("##patch_menu");
+    ImGui::SetItemTooltip("Record where memory edits live in the game files, then patch them");
+    if (ImGui::BeginPopup("##patch_menu"))
+    {
+        const size_t n = mPatchLib.Count();
+        ImGui::TextDisabled("%zu known location%s%s", n, n == 1 ? "" : "s",
+                            mPatchLib.Dirty() ? "  (unsaved *)" : "");
+        ImGui::Separator();
+        if (ImGui::MenuItem("Apply changes to disc", nullptr, false, n > 0))
+            commands.emplace_back(TopBarCommandType::ApplyChangesToDisc);
+        if (ImGui::MenuItem("Manage locations...", nullptr, false, n > 0))
+            commands.emplace_back(TopBarCommandType::ManageLocations);
+        ImGui::Separator();
+        if (ImGui::MenuItem("Save project", nullptr, false, n > 0))
+            commands.emplace_back(TopBarCommandType::SaveProject);
+        if (ImGui::MenuItem("Save project as...", nullptr, false, n > 0))
+            commands.emplace_back(TopBarCommandType::SaveProjectAs);
+        if (ImGui::MenuItem("Open project..."))
+            commands.emplace_back(TopBarCommandType::OpenProject);
+        ImGui::EndPopup();
+    }
+}
+
+void App::DrawManageLocationsModal()
+{
+    if (mOpenManageLocations) { ImGui::OpenPopup("Known Locations"); mOpenManageLocations = false; }
+    ImGui::SetNextWindowSize(ImVec2(680, 400), ImGuiCond_FirstUseEver);
+    if (!ImGui::BeginPopupModal("Known Locations", nullptr)) return;
+    const auto& entries = mPatchLib.Entries();
+    ImGui::Text("%zu location%s in the patch library.", entries.size(), entries.size() == 1 ? "" : "s");
+    ImGui::Separator();
+    int removeAt = -1;
+    if (ImGui::BeginChild("loclist", ImVec2(0, 300)))
+    {
+        for (size_t i = 0; i < entries.size(); ++i)
+        {
+            const PatchLocation& e = entries[i];
+            ImGui::PushID((int)i);
+            if (ImGui::SmallButton("Remove")) removeAt = (int)i;
+            ImGui::SameLine();
+            ImGui::Text("0x%08X (%u b) -> %s @ %llu", e.cpuAddr, e.length, e.file.c_str(),
+                        (unsigned long long)e.fileOffset);
+            ImGui::PopID();
+        }
+    }
+    ImGui::EndChild();
+    if (removeAt >= 0) mPatchLib.RemoveAt((size_t)removeAt);
+    ImGui::Separator();
+    if (ImGui::Button("Close")) ImGui::CloseCurrentPopup();
+    ImGui::EndPopup();
+}
+
+void App::DrawPatchResultsModal()
+{
+    if (mShowPatchResults) { ImGui::OpenPopup("Apply Changes to Disc"); mShowPatchResults = false; }
+    ImGui::SetNextWindowSize(ImVec2(620, 360), ImGuiCond_FirstUseEver);
+    if (!ImGui::BeginPopupModal("Apply Changes to Disc", nullptr)) return;
+    ImGui::TextUnformatted(mPatchResultText.c_str());
+    ImGui::Separator();
+    if (ImGui::Button("Close")) ImGui::CloseCurrentPopup();
+    ImGui::EndPopup();
+}
+
+void App::ApplyChangesToDisc(IPlatform& platform)
+{
+    if (mDataDir.empty())
+    {
+        mPatchResultText = "Set a Data Directory first - Patch targets the game files under it.";
+        mShowPatchResults = true;
+        return;
+    }
+
+    std::vector<PatchOutcome> outcomes;
+    auto readMem = [this](uint32_t a, uint32_t l, std::vector<uint8_t>& out) -> bool {
+        MemoryReadResult r = mMemBackend.ReadOne(a, l);
+        if (!r.success || r.bytes.size() != l) return false;
+        out = std::move(r.bytes);
+        return true;
+    };
+    const std::string script = mPatchLib.EmitPython(readMem, outcomes);
+
+    std::string scriptPath = mDataDir;
+    if (!scriptPath.empty() && scriptPath.back() != '/' && scriptPath.back() != '\\')
+        scriptPath += '/';
+    scriptPath += "se_patch.py";
+
+    bool wrote = false;
+    {
+        std::ofstream f(scriptPath, std::ios::binary | std::ios::trunc);
+        if (f) { f.write(script.data(), (std::streamsize)script.size()); wrote = (bool)f; }
+    }
+
+    int changed = 0, unchanged = 0, failed = 0;
+    std::string detail;
+    for (const PatchOutcome& o : outcomes)
+    {
+        if (o.readFailed) { ++failed; detail += "  [can't read memory] " + o.location->label + "\n"; }
+        else if (o.changed)
+        {
+            ++changed;
+            char line[256];
+            std::snprintf(line, sizeof(line), "  [patch] %s @ %llu  (%u bytes)\n",
+                          o.location->file.c_str(), (unsigned long long)o.location->fileOffset,
+                          o.location->length);
+            detail += line;
+        }
+        else ++unchanged;
+    }
+
+    bool launched = false;
+    if (wrote && changed > 0)
+    {
+#ifdef _WIN32
+        std::string args = "-3 \"" + scriptPath + "\"";
+        launched = platform.LaunchProcess("py", args.c_str(), mDataDir.c_str());
+        if (!launched)
+        {
+            std::string a2 = "\"" + scriptPath + "\"";
+            launched = platform.LaunchProcess("python", a2.c_str(), mDataDir.c_str());
+        }
+#else
+        std::string args = "\"" + scriptPath + "\"";
+        launched = platform.LaunchProcess("python3", args.c_str(), mDataDir.c_str());
+#endif
+    }
+
+    char hdr[512];
+    std::snprintf(hdr, sizeof(hdr),
+                  "%s\n\n%d location(s) changed, %d unchanged, %d unreadable.\n"
+                  "Script: %s\n%s\n\n",
+                  !wrote ? "FAILED to write the patch script." :
+                  changed == 0 ? "Nothing to patch - no known location differs from its baseline."
+                               : (launched ? "Running the patch script (python)..."
+                                           : "Wrote the patch script, but couldn't launch python. "
+                                             "Run se_patch.py by hand."),
+                  changed, unchanged, failed, scriptPath.c_str(),
+                  changed > 0 ? "Changed locations:" : "");
+    mPatchResultText = std::string(hdr) + detail;
+    mShowPatchResults = true;
+}
+
+void App::DoSaveProject(IPlatform& platform, bool saveAs)
+{
+    // No silent-write-to-path API on desktop; SaveFile prompts / downloads. Emit the project
+    // text through SaveFile with a suggested name; remember the chosen path for status only.
+    const std::string text = mPatchLib.Serialize();
+    const char* name = "patches.seproj";
+    if (platform.SaveFile(name, text.data(), text.size()))
+    {
+        mPatchLib.ClearDirty();
+        mPatchResultText = "Saved the patch project (" + std::to_string(mPatchLib.Count()) +
+                           " location(s)).";
+    }
+    else
+    {
+        mPatchResultText = "Project save was cancelled or failed.";
+    }
+    (void)saveAs;
+    mShowPatchResults = true;
+}
+
+void App::DoOpenProject(IPlatform& platform)
+{
+    std::string path;
+    if (!platform.OpenFileDialogFiltered(path, "Saturn Explorer project", "seproj") &&
+        !platform.OpenFileDialog(path))
+        return;   // cancelled
+    if (mPatchLib.LoadProject(path))
+    {
+        mProjectPath = path;
+        mPatchResultText = "Loaded " + std::to_string(mPatchLib.Count()) +
+                           " location(s) from the project.";
+    }
+    else
+    {
+        mPatchResultText = "Couldn't open that project file.";
+    }
+    mShowPatchResults = true;
+}
+
+void App::DrawClosePromptModal(IPlatform& platform)
+{
+    if (mClosePrompt) { ImGui::OpenPopup("Unsaved Patch Changes"); mClosePrompt = false; }
+    if (!ImGui::BeginPopupModal("Unsaved Patch Changes", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        return;
+    ImGui::TextWrapped("You have unsaved patch locations. Save the project before exiting?");
+    ImGui::Separator();
+    if (ImGui::Button("Save"))
+    {
+        DoSaveProject(platform, false);
+        if (!mPatchLib.Dirty()) { platform.AcknowledgeClose(); ImGui::CloseCurrentPopup(); }
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Discard"))
+    {
+        mPatchLib.ClearDirty();
+        platform.AcknowledgeClose();
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();   // stay open
+    ImGui::EndPopup();
+}
+#endif  // SE_ENABLE_LIVE
+
 void App::DrawDataDirModal(IPlatform& platform)
 {
     static char buf[1024] = {};
@@ -4466,6 +4883,11 @@ void App::DrawSearchOptionsModal(IPlatform& platform)
 // a clickable link that reveals it in the OS file manager (Explorer/Finder/etc.).
 void App::DrawDataSearchResults(IPlatform& platform)
 {
+#ifdef SE_ENABLE_LIVE
+    // A patch-locate search borrows this same worker but shows its own results window (with
+    // accept/reject), so suppress the texture-results window while a locate is active.
+    if (mSearchIsLocate) return;
+#endif
     if (!mShowSearchResults)
     {
         return;
@@ -4830,6 +5252,11 @@ void App::DrawToolbar(std::vector<TopBarCommand>& commands)
             commands.emplace_back(TopBarCommandType::SetDataDirectory);
         ImGui::SetItemTooltip("%s", mDataDir.empty() ? "No game data directory is set" : mDataDir.c_str());
 
+#ifdef SE_ENABLE_LIVE
+        ImGui::SameLine();
+        DrawPatchMenu(commands);   // locate memory edits in game files + apply them to disc
+#endif
+
         ImGui::SameLine();
         DrawWindowsMenu(commands);
         const bool compact = ImGui::GetWindowWidth() < 1450.0f;
@@ -5165,6 +5592,13 @@ void App::ExecuteTopBarCommand(const TopBarCommand& command, IPlatform& platform
     case TopBarCommandType::SetDataDirectory:
         mOpenDataDirModal = true;
         break;
+#ifdef SE_ENABLE_LIVE
+    case TopBarCommandType::ApplyChangesToDisc: ApplyChangesToDisc(platform);  break;
+    case TopBarCommandType::SaveProject:        DoSaveProject(platform, false); break;
+    case TopBarCommandType::SaveProjectAs:      DoSaveProject(platform, true);  break;
+    case TopBarCommandType::OpenProject:        DoOpenProject(platform);        break;
+    case TopBarCommandType::ManageLocations:    mOpenManageLocations = true;    break;
+#endif
     case TopBarCommandType::ToggleWindow:
     case TopBarCommandType::ShowWindow:
         {

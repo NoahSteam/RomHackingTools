@@ -47,6 +47,13 @@ public:
     struct BreakpointRequest { uint32_t address = 0; uint32_t size = 1; int kind = 0; };
     bool TakeBreakpointRequest(BreakpointRequest& out);
 
+    // A "locate this selection in the game files and record it for patching" request (the
+    // Patch feature). Unlike TakeSearchRequest it carries the selection's address + length so
+    // the App can add surrounding context bytes and map the match into the PatchLibrary.
+    // Returns true once per request, moving it out.
+    struct LocateRequest { uint32_t address = 0; uint32_t length = 0; };
+    bool TakeLocateRequest(LocateRequest& out);
+
     // One selectable region: a CPU-address span served by the backend. Index 0 is "All".
     struct Region { const char* name; uint32_t base; uint32_t size; };
 
@@ -90,6 +97,10 @@ private:
     // Pending "add memory breakpoint" request (see TakeBreakpointRequest).
     bool               mBpRequested = false;
     BreakpointRequest  mBpRequest;
+
+    // Pending "locate selection in game files for patching" request (see TakeLocateRequest).
+    bool               mLocateRequested = false;
+    LocateRequest      mLocateRequest;
 };
 
 }  // namespace sfe

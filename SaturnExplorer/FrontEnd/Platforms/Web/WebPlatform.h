@@ -25,6 +25,9 @@ public:
     void Shutdown() override;
 
     bool PumpEvents() override;
+    bool CloseRequested() override { return mCloseRequested && !mCloseAcked; }
+    void AcknowledgeClose() override { mCloseAcked = true; }
+    void CancelClose() override { mCloseRequested = false; }
     void BeginFrame() override;
     void EndFrame() override;
 
@@ -74,6 +77,8 @@ private:
     SDL_Window*   mWindow  = nullptr;
     SDL_GLContext mGlContext = nullptr;
     bool          mQuit = false;
+    bool          mCloseRequested = false;   // user asked to close (window-close veto seam)
+    bool          mCloseAcked = false;       // app confirmed the close -> PumpEvents ends
     bool          mAudioOk = false;      // SDL audio subsystem initialized
     uint32_t      mAudioDev = 0;         // SDL_AudioDeviceID (0 = none), reopened on spec change
     int           mAudioRate = 0;        // spec of the currently-open device

@@ -22,6 +22,9 @@ public:
     void Shutdown() override;
 
     bool PumpEvents() override;
+    bool CloseRequested() override { return mCloseRequested; }
+    void AcknowledgeClose() override;
+    void CancelClose() override { mCloseRequested = false; }
     void BeginFrame() override;
     void EndFrame() override;
 
@@ -68,6 +71,7 @@ private:
     UINT                    mResizeWidth = 0;
     UINT                    mResizeHeight = 0;
     bool                    mOleInitialized = false;
+    bool                    mCloseRequested = false;   // WM_CLOSE seen; awaiting app confirm
 
     // waveOut audio preview state (the copied PCM must outlive playback, hence a member).
     HWAVEOUT                mWaveOut = nullptr;
