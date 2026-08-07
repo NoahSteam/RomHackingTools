@@ -21,9 +21,11 @@
 #include "Debug/Sh2Disasm.h"      // disassemble the accessing instruction in the Access Log
 #include "Debug/M68kDisasm.h"     // SCSP 68000 sound-CPU disassembly
 #include "SavestateDriver.h"
+#include "SeLiveProtocol.h"  // pure protocol constants: SE_LIVE_VERSION, SE_PAD_* masks.
+                             // Safe in every build (no threads/sockets); the pad-mask
+                             // decode below and ControllerPanel both need it unconditionally.
 #ifdef SE_ENABLE_LIVE
 #include "LiveDriver.h"      // native builds only (threads/sockets)
-#include "SeLiveProtocol.h"  // SE_LIVE_VERSION (client protocol version)
 #endif
 
 namespace sfe
