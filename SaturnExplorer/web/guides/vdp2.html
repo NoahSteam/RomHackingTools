@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Saturn VDP2 Guide</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg: #e9edf1; --surface: #ffffff; --surface-2: #f4f7f9;
+    --ink: #17212a; --ink-soft: #4c5d6a; --ink-faint: #7688954a;
+    --line: #d5dde3; --line-strong: #c2ccd4;
+    --accent: #3a5bd0; --accent-fill: #e1e7fb;   /* VDP2 indigo — the layering chip */
+    --accent2: #0f8a6a; --accent2-fill: #dcf0e8;  /* color-math / blend */
+    --data: #a8641a; --data-fill: #f5e7d2;        /* warm cross-link (kin to the audio guide) */
+    --scope: #3a5bd0;
+    --shadow: 0 1px 2px rgba(20,30,40,.06), 0 6px 20px rgba(20,30,40,.05);
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1216; --surface: #141b21; --surface-2: #1a232a;
+      --ink: #e7eef3; --ink-soft: #9db0bd; --ink-faint: #5f727f4a;
+      --line: #26313a; --line-strong: #33414c;
+      --accent: #7c9bf5; --accent-fill: #1a2340;
+      --accent2: #56c99f; --accent2-fill: #102a24;
+      --data: #e0a24a; --data-fill: #33240f;
+      --scope: #7c9bf5;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 30px rgba(0,0,0,.35);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="light"] {
+    --bg: #e9edf1; --surface: #ffffff; --surface-2: #f4f7f9;
+    --ink: #17212a; --ink-soft: #4c5d6a; --ink-faint: #7688954a;
+    --line: #d5dde3; --line-strong: #c2ccd4;
+    --accent: #3a5bd0; --accent-fill: #e1e7fb; --accent2: #0f8a6a; --accent2-fill: #dcf0e8;
+    --data: #a8641a; --data-fill: #f5e7d2; --scope: #3a5bd0;
+    --shadow: 0 1px 2px rgba(20,30,40,.06), 0 6px 20px rgba(20,30,40,.05);
+    color-scheme: light;
+  }
+  :root[data-theme="dark"] {
+    --bg: #0d1216; --surface: #141b21; --surface-2: #1a232a;
+    --ink: #e7eef3; --ink-soft: #9db0bd; --ink-faint: #5f727f4a;
+    --line: #26313a; --line-strong: #33414c;
+    --accent: #7c9bf5; --accent-fill: #1a2340; --accent2: #56c99f; --accent2-fill: #102a24;
+    --data: #e0a24a; --data-fill: #33240f; --scope: #7c9bf5;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 30px rgba(0,0,0,.35);
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, Roboto, sans-serif;
+    font-size: 17px; line-height: 1.65; -webkit-font-smoothing: antialiased;
+  }
+  .mono { font-family: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace; }
+  .wrap { max-width: 940px; margin: 0 auto; padding: 0 24px; }
+  a { color: var(--accent); text-underline-offset: 3px; }
+
+  .eyebrow {
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: 12px; letter-spacing: .18em; text-transform: uppercase;
+    color: var(--ink-soft); margin: 0 0 14px; display: flex; align-items: center; gap: 10px;
+  }
+  .eyebrow::before { content: ""; width: 26px; height: 2px; background: var(--accent); display: inline-block; }
+  h1, h2, h3 { text-wrap: balance; line-height: 1.12; }
+
+  .hero {
+    position: relative; border-bottom: 1px solid var(--line); overflow: hidden;
+    background: radial-gradient(120% 120% at 85% -10%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 55%), var(--surface);
+  }
+  .hero-inner { padding: 66px 0 54px; position: relative; z-index: 2; }
+  .hero h1 { font-size: clamp(34px, 6.2vw, 62px); font-weight: 800; letter-spacing: -.02em; margin: 0 0 20px; }
+  .hero h1 .accent { color: var(--accent); }
+  .hero .lede { font-size: clamp(17px, 2.3vw, 21px); color: var(--ink-soft); max-width: 60ch; margin: 0; }
+  .scope { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1; opacity: .5; pointer-events: none; }
+  .tagrow { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 30px; }
+  .tag {
+    font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12.5px;
+    padding: 5px 11px; border-radius: 999px; border: 1px solid var(--line-strong);
+    color: var(--ink-soft); background: var(--surface-2);
+  }
+  .kin { margin-top: 22px; font-size: 13.5px; color: var(--ink-soft); }
+  .kin a { color: var(--accent); font-weight: 600; text-decoration: none; }
+  .kin a:hover { text-decoration: underline; }
+
+  section { padding: 52px 0; border-bottom: 1px solid var(--line); }
+  section:last-of-type { border-bottom: 0; }
+  h2 { font-size: clamp(24px, 3.4vw, 32px); font-weight: 780; margin: 0 0 8px; letter-spacing: -.01em; }
+  .sec-sub { color: var(--ink-soft); margin: 0 0 30px; max-width: 62ch; }
+  h3 { font-size: 19px; font-weight: 700; margin: 34px 0 8px; }
+  p { margin: 0 0 16px; }
+  strong { font-weight: 680; color: var(--ink); }
+
+  .keyline {
+    border-left: 3px solid var(--accent); background: var(--surface);
+    padding: 16px 20px; border-radius: 0 10px 10px 0; box-shadow: var(--shadow); margin: 8px 0 4px;
+  }
+  .keyline p { margin: 0; }
+
+  /* layer-stack diagram */
+  .stack { display: flex; flex-direction: column; gap: 8px; margin: 8px 0 4px; }
+  .sheet {
+    display: grid; grid-template-columns: 120px 1fr auto; align-items: center; gap: 14px;
+    padding: 12px 16px; border-radius: 10px; border: 1px solid var(--line);
+    background: var(--surface); box-shadow: var(--shadow); position: relative;
+  }
+  .sheet .lname { font-weight: 700; font-size: 14.5px; }
+  .sheet .lname .sub { display: block; font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; color: var(--ink-soft); font-weight: 500; margin-top: 1px; }
+  .sheet .ldesc { font-size: 13.5px; color: var(--ink-soft); }
+  .sheet .pri { font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: var(--ink-soft); white-space: nowrap; }
+  .sheet.sprite { border-left: 3px solid var(--data); }
+  .sheet.rbg { border-left: 3px solid var(--accent2); }
+  .sheet.nbg { border-left: 3px solid var(--accent); }
+  .sheet.back { border-left: 3px solid var(--line-strong); opacity: .82; }
+  .stacknote { text-align: center; font-family: ui-monospace, Menlo, monospace; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-soft); margin: 2px 0; }
+
+  .table-scroll { overflow-x: auto; margin: 6px 0; border-radius: 12px; border: 1px solid var(--line); box-shadow: var(--shadow); }
+  table { border-collapse: collapse; width: 100%; background: var(--surface); font-size: 15px; min-width: 560px; }
+  thead th {
+    text-align: left; font-size: 11.5px; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--ink-soft); font-weight: 600; padding: 12px 16px; background: var(--surface-2); border-bottom: 1px solid var(--line);
+  }
+  tbody td { padding: 13px 16px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tbody tr:last-child td { border-bottom: 0; }
+  .rowname { font-weight: 700; white-space: nowrap; }
+  .rowname .sub { display: block; font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: var(--accent); margin-top: 2px; font-weight: 500; }
+
+  .features { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+  .feature {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+    padding: 20px 20px 22px; box-shadow: var(--shadow); display: flex; flex-direction: column;
+  }
+  .feature .kicker {
+    font-family: ui-monospace, Menlo, monospace; font-size: 11px; letter-spacing: .12em;
+    text-transform: uppercase; color: var(--accent2); font-weight: 600; margin-bottom: 10px;
+  }
+  .feature h3 { margin: 0 0 8px; font-size: 18px; }
+  .feature p { font-size: 14.5px; color: var(--ink-soft); margin: 0 0 14px; }
+  .feature .use { margin-top: auto; font-size: 13px; color: var(--ink); background: var(--surface-2); border-radius: 8px; padding: 10px 12px; border: 1px solid var(--line); }
+  .feature .use b { color: var(--accent); font-weight: 650; }
+
+  .flow-steps { display: flex; flex-direction: column; gap: 0; counter-reset: step; margin-top: 8px; }
+  .step { display: grid; grid-template-columns: 46px 1fr; gap: 18px; padding: 20px 0; border-top: 1px solid var(--line); }
+  .step:first-child { border-top: 0; }
+  .step .idx {
+    counter-increment: step; font-family: ui-monospace, Menlo, monospace; font-weight: 700; font-size: 15px;
+    width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center;
+    background: var(--accent-fill); color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  }
+  .step .idx::before { content: counter(step, decimal-leading-zero); }
+  .step h3 { margin: 6px 0 6px; font-size: 17px; }
+  .step p { font-size: 15px; color: var(--ink-soft); margin: 0; }
+  .step .mono { color: var(--accent2); }
+
+  .callout { border-radius: 12px; padding: 18px 20px; margin: 16px 0; border: 1px solid var(--line); background: var(--surface); box-shadow: var(--shadow); display: grid; grid-template-columns: auto 1fr; gap: 14px; align-items: start; }
+  .callout.warn { border-left: 3px solid var(--data); }
+  .callout.tip { border-left: 3px solid var(--accent2); }
+  .callout .ic { font-size: 20px; line-height: 1.4; }
+  .callout h3 { margin: 0 0 6px; font-size: 16px; }
+  .callout p { margin: 0; font-size: 14.5px; color: var(--ink-soft); }
+  .callout code, code.inline {
+    font-family: ui-monospace, Menlo, monospace; font-size: .88em; background: var(--surface-2);
+    padding: 1px 6px; border-radius: 5px; border: 1px solid var(--line); color: var(--ink);
+  }
+
+  .glossary { display: grid; grid-template-columns: repeat(2, 1fr); gap: 2px; border-radius: 12px; overflow: hidden; border: 1px solid var(--line); box-shadow: var(--shadow); }
+  .term { background: var(--surface); padding: 15px 18px; }
+  .term dt { font-family: ui-monospace, Menlo, monospace; font-weight: 600; font-size: 13.5px; color: var(--accent); margin: 0 0 4px; }
+  .term dd { margin: 0; font-size: 14px; color: var(--ink-soft); line-height: 1.55; }
+
+  footer { padding: 34px 0 60px; color: var(--ink-soft); font-size: 13.5px; }
+
+  @media (max-width: 720px) {
+    body { font-size: 16px; }
+    .features, .glossary { grid-template-columns: 1fr; }
+    .sheet { grid-template-columns: 100px 1fr; }
+    .sheet .pri { grid-column: 1 / -1; }
+    .hero-inner { padding: 48px 0 40px; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<header class="hero">
+  <canvas class="scope" id="scope" aria-hidden="true"></canvas>
+  <div class="wrap hero-inner">
+    <p class="eyebrow">Saturn Explorer · Field Guide</p>
+    <h1>VDP2 — the Saturn's <span class="accent">layer engine</span></h1>
+    <p class="lede">The chip that draws the scrolling scenery and stacks everything — backgrounds plus
+      VDP1's sprites — into the final picture. A plain-English tour of the layers, palette, and
+      priority, and the tools that reveal them. No hardware knowledge assumed.</p>
+    <div class="tagrow">
+      <span class="tag">5 backgrounds</span>
+      <span class="tag">priority compositing</span>
+      <span class="tag">Color RAM palette</span>
+      <span class="tag">translucency</span>
+      <span class="tag">rotation plane</span>
+    </div>
+    <p class="kin">Part of a pair — its teammate draws the sprites: <a href="vdp1.html">see the VDP1 guide →</a></p>
+  </div>
+</header>
+
+<main>
+  <div class="wrap">
+
+    <section>
+      <p class="eyebrow">The one thing to remember</p>
+      <h2>VDP2 is a stack of layers, merged by priority</h2>
+      <p class="sec-sub">Where VDP1 <em>draws</em> things, VDP2 <em>arranges</em> them. Every frame it
+        builds several scrolling backgrounds, takes VDP1's sprite layer, and merges them all — deciding,
+        per pixel, which shows in front and whether layers blend. Picture a stack of transparent sheets,
+        top wins:</p>
+
+      <div class="stack">
+        <div class="sheet sprite">
+          <div class="lname">Sprites <span class="sub">from VDP1</span></div>
+          <div class="ldesc">Characters, effects — wins priority ties against backgrounds.</div>
+          <div class="pri">by priority</div>
+        </div>
+        <div class="sheet nbg">
+          <div class="lname">NBG0–NBG3 <span class="sub">Scroll A–D</span></div>
+          <div class="ldesc">Up to four flat scrolling backgrounds.</div>
+          <div class="pri">priority 1–7</div>
+        </div>
+        <div class="sheet rbg">
+          <div class="lname">RBG0 <span class="sub">Rotation</span></div>
+          <div class="ldesc">A background that can rotate, scale, and tilt into the distance.</div>
+          <div class="pri">priority 1–7</div>
+        </div>
+        <div class="sheet back">
+          <div class="lname">Back screen <span class="sub">backdrop</span></div>
+          <div class="ldesc">The always-present color behind everything.</div>
+          <div class="pri">priority 0</div>
+        </div>
+      </div>
+      <p class="stacknote">↑ top of stack wins each pixel · priority 0 = hidden ↓</p>
+    </section>
+
+    <section>
+      <p class="eyebrow">How it works</p>
+      <h2>Backgrounds, a shared palette, and color math</h2>
+      <p class="sec-sub">VDP2 shows up to five backgrounds — four flat scrolling ones and one that can
+        rotate — then colors, prioritizes, and blends them.</p>
+
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Layer</th><th>What it's for</th></tr></thead>
+          <tbody>
+            <tr><td class="rowname">NBG0<span class="sub">Scroll A</span></td><td>A normal scrolling background</td></tr>
+            <tr><td class="rowname">NBG1<span class="sub">Scroll B</span></td><td>A normal scrolling background</td></tr>
+            <tr><td class="rowname">NBG2<span class="sub">Scroll C</span></td><td>A normal scrolling background</td></tr>
+            <tr><td class="rowname">NBG3<span class="sub">Scroll D</span></td><td>A normal scrolling background</td></tr>
+            <tr><td class="rowname">RBG0<span class="sub">Rotation</span></td><td>Rotates, scales, and tilts — Mode-7-style floors and ceilings</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Not every game uses all five — richer layers cost more memory bandwidth, so games trade layers
+        against color and detail.</p>
+
+      <h3>How a background is built: plane → page → pattern → cell</h3>
+      <p>A background isn't one giant image — that's too much memory. It's assembled from small reusable
+        tiles in a four-level hierarchy: a <strong>cell</strong> is an 8×8-pixel tile; a
+        <strong>pattern</strong> ("character") is cells plus which palette and flip to use; a
+        <strong>page</strong> is a grid of patterns; a <strong>plane</strong> is a grid of pages — the
+        full scrollable map. Change one tile and it updates everywhere it's used. (A background can also
+        be a flat <strong>bitmap</strong> when a game prefers that.)</p>
+
+      <h3>Scrolling and line effects</h3>
+      <p>Backgrounds move by changing their <strong>scroll</strong> position, with sub-pixel
+        <strong>fractional scroll and zoom</strong> on the main layers. <strong>Line scroll</strong>
+        gives each scanline its own offset — how games make water ripple, floors recede, and heat
+        shimmer.</p>
+
+      <div class="keyline">
+        <p><strong>The palette is shared with VDP1.</strong> VDP2 owns <strong>Color RAM (CRAM)</strong>
+          — up to 2048 colors. Both VDP2's tile backgrounds <em>and</em> VDP1's palettized sprites look
+          their colors up here, so CRAM is the one place the whole console's palette lives. Modes:
+          RGB555 (1024 or 2048 colors) or higher-precision RGB888 (1024).</p>
+      </div>
+
+      <h3>Priority: who's in front</h3>
+      <p>Every layer carries a <strong>priority number</strong>; when layers overlap, higher priority
+        wins that pixel. <strong>Priority 0 means "not displayed"</strong> — it's how a layer is switched
+        off. On a tie, VDP1's <strong>sprite sits in front</strong> of a same-priority background, so
+        characters stay on top of scenery they share a priority with.</p>
+
+      <h3>Color math (translucency)</h3>
+      <p>VDP2 can make a layer semi-transparent and <strong>blend</strong> it with the layer right
+        beneath — <strong>color calculation</strong>. A <strong>ratio</strong> blend mixes the two by a
+        set percentage (glass, water, ghosts); an <strong>additive</strong> blend adds the colors (glows,
+        light). It only ever combines the top pixel with the one immediately below.</p>
+
+      <h3>Extra tricks</h3>
+      <p><strong>Back screen</strong> — the backdrop, one color or per-scanline (sky gradients).
+        <strong>Color offset</strong> — nudge a layer's R/G/B for fades and tints.
+        <strong>Mosaic</strong> — chunk a layer into big blocks (the pixelated-censor effect).
+        <strong>Windows</strong> — mask a layer to a region so an effect only shows inside or outside a
+        shape. <strong>Rotation (RBG0)</strong> — spin, scale, and tilt via rotation-parameter and
+        coefficient tables.</p>
+    </section>
+
+    <section>
+      <p class="eyebrow">The toolkit</p>
+      <h2>What each VDP2 tool does</h2>
+      <p class="sec-sub">The tool contains a <strong>software VDP2 compositor</strong> that rebuilds the
+        backgrounds and merges them with VDP1's sprites — so you can toggle layers, inspect the palette,
+        and read the register state driving it all.</p>
+
+      <div class="features">
+        <div class="feature">
+          <span class="kicker">Summary · layers</span>
+          <h3>VDP2 Table</h3>
+          <p>One row per background (NBG0–3): whether it's <strong>On</strong>, its color depth
+            (16 / 256 / 2048 / 32K), its <strong>priority</strong>, and its <strong>scroll (X, Y)</strong>.
+            The fastest way to see which layers are active and how they stack.</p>
+          <div class="use"><b>Use it to</b> read the layer lineup at a glance.</div>
+        </div>
+
+        <div class="feature">
+          <span class="kicker">Isolate · sheets</span>
+          <h3>Layer toggles &amp; VDP Output</h3>
+          <p>The output view composites the whole scene; the <strong>Layers</strong> menu switches
+            NBG0–3, RBG0, and the sprite layer on and off independently — plus color-calc and windows.</p>
+          <div class="use"><b>Use it to</b> find which layer an element belongs to — turn layers off one by one.</div>
+        </div>
+
+        <div class="feature">
+          <span class="kicker">Palette · all colors</span>
+          <h3>Color RAM</h3>
+          <p>A grid of every color in Color RAM (up to 2048 swatches) with the current mode (RGB555 /
+            RGB888). Hover for index, raw value, and RGB. Because CRAM is shared, this is the palette
+            behind <strong>both</strong> backgrounds and sprites.</p>
+          <div class="use"><b>Use it to</b> inspect or plan a recolor of the whole palette.</div>
+        </div>
+
+        <div class="feature">
+          <span class="kicker">Palette · one object</span>
+          <h3>Palette Viewer</h3>
+          <p>Focused on the selected VDP1 sprite, it shows the exact CRAM bank (or LUT) that object draws
+            from — the bridge between "this sprite" and "these colors" in the shared palette.</p>
+          <div class="use"><b>Use it to</b> connect a specific object to its colors.</div>
+        </div>
+
+        <div class="feature">
+          <span class="kicker">Registers · control</span>
+          <h3>Registers (VDP2 tab)</h3>
+          <p>A curated list by name and value — resolution (<span class="mono">TVMD</span>), memory mode
+            (<span class="mono">RAMCTL</span>), which layers are on (<span class="mono">BGON</span>), tile
+            formats, priorities (<span class="mono">PRINA/PRINB/PRIR</span>), scroll, color-calc
+            (<span class="mono">CCCTL</span>), windows, sprite control (<span class="mono">SPCTL</span>).</p>
+          <div class="use"><b>Use it to</b> see exactly how a frame is configured — ground truth.</div>
+        </div>
+
+        <div class="feature" style="justify-content:center;">
+          <span class="kicker">Quick diagnosis</span>
+          <h3>"Where did my background go?"</h3>
+          <p style="margin:0;">Nine times out of ten a missing layer is a <strong>priority of 0</strong>
+            or its enable bit off in <span class="mono">BGON</span> — both visible in the VDP2 Table and
+            the Registers panel. Check there before assuming anything's broken.</p>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <p class="eyebrow">Start to finish</p>
+      <h2>How a frame is composited</h2>
+      <p class="sec-sub">The layers line up with the tools stage by stage.</p>
+
+      <div class="flow-steps">
+        <div class="step"><div class="idx" aria-hidden="true"></div><div>
+          <h3>Back screen</h3>
+          <p>The frame is seeded with a backdrop color. <span class="mono">→ Registers, VDP Output</span></p>
+        </div></div>
+        <div class="step"><div class="idx" aria-hidden="true"></div><div>
+          <h3>Build backgrounds</h3>
+          <p>NBG0–3 and RBG0 are assembled from tile maps (or bitmaps) and scrolled. <span class="mono">→ VDP2 Table, Layer toggles</span></p>
+        </div></div>
+        <div class="step"><div class="idx" aria-hidden="true"></div><div>
+          <h3>Look up colors</h3>
+          <p>Palette indices resolve to real colors in Color RAM. <span class="mono">→ Color RAM, Palette Viewer</span></p>
+        </div></div>
+        <div class="step"><div class="idx" aria-hidden="true"></div><div>
+          <h3>Apply priority</h3>
+          <p>Per pixel, the highest-priority layer wins. <span class="mono">→ VDP2 Table (priority)</span></p>
+        </div></div>
+        <div class="step"><div class="idx" aria-hidden="true"></div><div>
+          <h3>Merge sprites</h3>
+          <p>VDP1's sprite layer is mixed in, winning priority ties. <span class="mono">→ see the VDP1 guide</span></p>
+        </div></div>
+        <div class="step"><div class="idx" aria-hidden="true"></div><div>
+          <h3>Color math</h3>
+          <p>Semi-transparent top layers blend with the one below. <span class="mono">→ Color Calc toggle</span></p>
+        </div></div>
+      </div>
+
+      <div class="keyline" style="margin-top:26px;">
+        <p><strong>Worked example — "which layer is this, and how is it colored?"</strong> &nbsp;In
+          <b>VDP Output</b>, toggle backgrounds off one by one until the element vanishes — now you know
+          the layer → check its <b>VDP2 Table</b> row (depth, priority, scroll) → open <b>Color RAM</b>
+          for its palette → read the <b>Registers</b> if it's missing (usually priority 0 or a
+          <span class="mono">BGON</span> bit).</p>
+      </div>
+    </section>
+
+    <section>
+      <p class="eyebrow">Before you get confused</p>
+      <h2>A few things to watch out for</h2>
+
+      <div class="callout warn">
+        <div class="ic" aria-hidden="true">🫥</div>
+        <div>
+          <h3>Priority 0 = invisible</h3>
+          <p>If a background you expect is missing, the usual cause is a priority of 0 or its enable bit
+            being off in <code>BGON</code> — check the VDP2 Table and Registers before assuming anything's
+            broken.</p>
+        </div>
+      </div>
+
+      <div class="callout tip">
+        <div class="ic" aria-hidden="true">🎨</div>
+        <div>
+          <h3>The palette is shared, and backgrounds are tiles</h3>
+          <p>Editing a Color RAM entry changes it for <em>every</em> background and sprite using that
+            index — great for recoloring, but watch for side effects. Likewise, changing one cell updates
+            it everywhere that tile appears on the map.</p>
+        </div>
+      </div>
+
+      <div class="callout warn">
+        <div class="ic" aria-hidden="true">🧪</div>
+        <div>
+          <h3>Some advanced effects are approximated</h3>
+          <p>The compositor models the common, high-impact features — scrolling, zoom, line scroll,
+            rotation, color math, color offset, horizontal mosaic, windows, and the back screen. A few
+            less-common ones aren't yet modeled: VDP2 shadow/highlight, the line-color screen, vertical
+            cell-scroll, vertical mosaic, and true per-pixel sprite priority. A scene leaning heavily on
+            those may look slightly different from real hardware (some UI toggles exist ahead of the
+            feature).</p>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <p class="eyebrow">Reference</p>
+      <h2>Glossary</h2>
+      <dl class="glossary">
+        <div class="term"><dt>VDP2</dt><dd>The Saturn's background and compositing chip; draws scenery and stacks all layers.</dd></div>
+        <div class="term"><dt>VDP1</dt><dd>The companion chip that draws sprites and polygons into a frame buffer.</dd></div>
+        <div class="term"><dt>NBG0–NBG3</dt><dd>The four normal (flat) scrolling backgrounds; also called Scroll A–D.</dd></div>
+        <div class="term"><dt>RBG0</dt><dd>The rotation background; can spin, scale, and tilt.</dd></div>
+        <div class="term"><dt>Cell</dt><dd>An 8×8-pixel tile, the smallest piece of a tiled background.</dd></div>
+        <div class="term"><dt>Pattern</dt><dd>One or more cells plus palette and flip info (a "character").</dd></div>
+        <div class="term"><dt>Page / plane</dt><dd>Grids that arrange patterns into a full scrollable map.</dd></div>
+        <div class="term"><dt>Bitmap background</dt><dd>A background stored as one flat image instead of tiles.</dd></div>
+        <div class="term"><dt>Color RAM (CRAM)</dt><dd>The shared color palette (up to 2048 colors) used by VDP2 and VDP1.</dd></div>
+        <div class="term"><dt>Priority</dt><dd>The number that decides which layer shows in front; 0 means hidden.</dd></div>
+        <div class="term"><dt>Color calculation</dt><dd>VDP2's translucency: blending the top layer with the one below.</dd></div>
+        <div class="term"><dt>Back screen</dt><dd>The backdrop color behind everything, at the bottom of the stack.</dd></div>
+        <div class="term"><dt>Line scroll</dt><dd>Giving each scanline its own scroll offset, for ripple and recede effects.</dd></div>
+        <div class="term"><dt>Mosaic</dt><dd>Chunking a layer into big blocks — the pixelated-censor effect.</dd></div>
+        <div class="term"><dt>Window</dt><dd>Masking a layer to a region so an effect shows only inside or outside a shape.</dd></div>
+        <div class="term"><dt>Color offset</dt><dd>Shifting a layer's red/green/blue for fades and tints.</dd></div>
+      </dl>
+    </section>
+
+    <footer>
+      <p class="mono">Saturn Explorer · VDP2 subsystem guide · backgrounds · Color RAM · priority · color math</p>
+    </footer>
+  </div>
+</main>
+
+<script>
+  (function () {
+    var canvas = document.getElementById('scope');
+    if (!canvas) return;
+    var ctx = canvas.getContext('2d');
+    var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var w = 0, h = 0;
+    function accent() { return getComputedStyle(document.documentElement).getPropertyValue('--scope').trim() || '#7c9bf5'; }
+    function resize() {
+      var r = canvas.getBoundingClientRect(); w = r.width; h = r.height;
+      canvas.width = Math.max(1, Math.floor(w * dpr)); canvas.height = Math.max(1, Math.floor(h * dpr));
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+    resize(); window.addEventListener('resize', resize);
+
+    // parallax scrolling bands — each layer slides at its own speed (the VDP2 idea)
+    var bands = [
+      { y: 0.30, speed: 14, amp: 0.9, tile: 46, alpha: 0.16 },
+      { y: 0.50, speed: 26, amp: 1.0, tile: 34, alpha: 0.24 },
+      { y: 0.70, speed: 44, amp: 1.1, tile: 26, alpha: 0.34 }
+    ];
+    function draw(t) {
+      ctx.clearRect(0, 0, w, h);
+      var col = accent();
+      for (var b = 0; b < bands.length; b++) {
+        var band = bands[b];
+        var cy = h * band.y;
+        var bh = h * 0.14 * band.amp;
+        var off = (t * band.speed) % band.tile;
+        ctx.globalAlpha = band.alpha;
+        ctx.fillStyle = col;
+        // a row of tiles scrolling left; wrap seamlessly
+        for (var x = -band.tile - off; x < w + band.tile; x += band.tile) {
+          ctx.fillRect(x, cy - bh / 2, band.tile * 0.58, bh);
+        }
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    if (reduce) { draw(0); return; }
+    var start = null;
+    function frame(ts) { if (start === null) start = ts; draw((ts - start) / 1000); requestAnimationFrame(frame); }
+    requestAnimationFrame(frame);
+  })();
+</script>
+
+</body>
+</html>

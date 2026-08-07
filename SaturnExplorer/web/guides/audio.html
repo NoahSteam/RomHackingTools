@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Saturn Audio Guide</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    /* neutrals — cool, blue-biased (Saturn plastic), never pure grey */
+    --bg: #e9edf1;
+    --surface: #ffffff;
+    --surface-2: #f4f7f9;
+    --ink: #17212a;
+    --ink-soft: #4c5d6a;
+    --ink-faint: #7688954a;
+    --line: #d5dde3;
+    --line-strong: #c2ccd4;
+    /* subject accents */
+    --scsp: #b26a10;      /* VU-meter amber — the star */
+    --scsp-fill: #f4e6cc;
+    --cdda: #6b3fc4;      /* CD-DA path — violet */
+    --cdda-fill: #ebe4fa;
+    --data: #0d7f8f;      /* oscilloscope cyan */
+    --data-fill: #d8eef1;
+    --scope: #0d7f8f;
+    --shadow: 0 1px 2px rgba(20,30,40,.06), 0 6px 20px rgba(20,30,40,.05);
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1216;
+      --surface: #141b21;
+      --surface-2: #1a232a;
+      --ink: #e7eef3;
+      --ink-soft: #9db0bd;
+      --ink-faint: #5f727f4a;
+      --line: #26313a;
+      --line-strong: #33414c;
+      --scsp: #e8a33d;
+      --scsp-fill: #33240f;
+      --cdda: #c79bf0;
+      --cdda-fill: #241a34;
+      --data: #5bd0c4;
+      --data-fill: #102b2c;
+      --scope: #5bd0c4;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 30px rgba(0,0,0,.35);
+      color-scheme: dark;
+    }
+  }
+  /* explicit toggle wins in both directions */
+  :root[data-theme="light"] {
+    --bg: #e9edf1; --surface: #ffffff; --surface-2: #f4f7f9;
+    --ink: #17212a; --ink-soft: #4c5d6a; --ink-faint: #7688954a;
+    --line: #d5dde3; --line-strong: #c2ccd4;
+    --scsp: #b26a10; --scsp-fill: #f4e6cc; --cdda: #6b3fc4; --cdda-fill: #ebe4fa;
+    --data: #0d7f8f; --data-fill: #d8eef1; --scope: #0d7f8f;
+    --shadow: 0 1px 2px rgba(20,30,40,.06), 0 6px 20px rgba(20,30,40,.05);
+    color-scheme: light;
+  }
+  :root[data-theme="dark"] {
+    --bg: #0d1216; --surface: #141b21; --surface-2: #1a232a;
+    --ink: #e7eef3; --ink-soft: #9db0bd; --ink-faint: #5f727f4a;
+    --line: #26313a; --line-strong: #33414c;
+    --scsp: #e8a33d; --scsp-fill: #33240f; --cdda: #c79bf0; --cdda-fill: #241a34;
+    --data: #5bd0c4; --data-fill: #102b2c; --scope: #5bd0c4;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 30px rgba(0,0,0,.35);
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, Roboto, sans-serif;
+    font-size: 17px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+  .mono { font-family: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace; }
+
+  .wrap { max-width: 940px; margin: 0 auto; padding: 0 24px; }
+  .reading { max-width: 68ch; }
+
+  a { color: var(--data); text-underline-offset: 3px; }
+
+  /* ---------- eyebrow / labels ---------- */
+  .eyebrow {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 12px;
+    letter-spacing: .18em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    margin: 0 0 14px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .eyebrow::before {
+    content: ""; width: 26px; height: 2px; background: var(--scsp); display: inline-block;
+  }
+
+  h1, h2, h3 { text-wrap: balance; line-height: 1.12; }
+
+  /* ---------- hero ---------- */
+  .hero {
+    position: relative;
+    border-bottom: 1px solid var(--line);
+    background:
+      radial-gradient(120% 120% at 85% -10%, color-mix(in srgb, var(--scsp) 9%, transparent), transparent 55%),
+      var(--surface);
+    overflow: hidden;
+  }
+  .hero-inner { padding: 66px 0 54px; position: relative; z-index: 2; }
+  .hero h1 {
+    font-size: clamp(34px, 6.2vw, 62px);
+    font-weight: 800;
+    letter-spacing: -.02em;
+    margin: 0 0 20px;
+  }
+  .hero h1 .accent { color: var(--scsp); }
+  .hero .lede {
+    font-size: clamp(17px, 2.3vw, 21px);
+    color: var(--ink-soft);
+    max-width: 60ch;
+    margin: 0;
+  }
+  .scope {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    z-index: 1; opacity: .5; pointer-events: none;
+  }
+  .tagrow { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 30px; }
+  .tag {
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: 12.5px; letter-spacing: .02em;
+    padding: 5px 11px; border-radius: 999px;
+    border: 1px solid var(--line-strong); color: var(--ink-soft);
+    background: var(--surface-2);
+  }
+
+  /* ---------- section rhythm ---------- */
+  section { padding: 52px 0; border-bottom: 1px solid var(--line); }
+  section:last-of-type { border-bottom: 0; }
+  h2 { font-size: clamp(24px, 3.4vw, 32px); font-weight: 780; margin: 0 0 8px; letter-spacing: -.01em; }
+  .sec-sub { color: var(--ink-soft); margin: 0 0 30px; max-width: 60ch; }
+  h3 { font-size: 19px; font-weight: 700; margin: 34px 0 8px; }
+  p { margin: 0 0 16px; }
+  strong { font-weight: 680; color: var(--ink); }
+
+  .keyline {
+    border-left: 3px solid var(--scsp);
+    background: var(--surface);
+    padding: 16px 20px; border-radius: 0 10px 10px 0;
+    box-shadow: var(--shadow); margin: 8px 0 4px;
+  }
+  .keyline p { margin: 0; }
+
+  /* ---------- two paths ---------- */
+  .paths { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 8px; }
+  .path {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 14px; padding: 22px 22px 24px; box-shadow: var(--shadow);
+    position: relative; overflow: hidden;
+  }
+  .path::before {
+    content: ""; position: absolute; top: 0; left: 0; right: 0; height: 4px;
+  }
+  .path.scsp::before { background: var(--scsp); }
+  .path.cdda::before { background: var(--cdda); }
+  .path .num {
+    font-family: ui-monospace, Menlo, monospace; font-size: 12px; letter-spacing: .1em;
+    text-transform: uppercase; font-weight: 600;
+  }
+  .path.scsp .num { color: var(--scsp); }
+  .path.cdda .num { color: var(--cdda); }
+  .path h3 { margin: 8px 0 10px; font-size: 20px; }
+  .path p { font-size: 15.5px; color: var(--ink-soft); margin: 0 0 12px; }
+  .path .flow {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+    font-family: ui-monospace, Menlo, monospace; font-size: 12.5px;
+    margin-top: 4px;
+  }
+  .chip {
+    padding: 4px 9px; border-radius: 7px; white-space: nowrap;
+    border: 1px solid var(--line-strong); background: var(--surface-2); color: var(--ink);
+  }
+  .path.scsp .chip.hot { background: var(--scsp-fill); border-color: color-mix(in srgb, var(--scsp) 45%, transparent); }
+  .path.cdda .chip.hot { background: var(--cdda-fill); border-color: color-mix(in srgb, var(--cdda) 45%, transparent); }
+  .arrow { color: var(--ink-soft); }
+  .verdict {
+    margin-top: 16px; font-size: 13.5px; padding-top: 14px; border-top: 1px dashed var(--line-strong);
+    color: var(--ink-soft);
+  }
+  .verdict b { color: var(--ink); }
+
+  /* ---------- cast table ---------- */
+  .table-scroll { overflow-x: auto; margin: 6px 0; border-radius: 12px; border: 1px solid var(--line); box-shadow: var(--shadow); }
+  table { border-collapse: collapse; width: 100%; background: var(--surface); font-size: 15px; min-width: 560px; }
+  thead th {
+    text-align: left; font-size: 11.5px; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--ink-soft); font-weight: 600; padding: 12px 16px; background: var(--surface-2);
+    border-bottom: 1px solid var(--line);
+  }
+  tbody td { padding: 13px 16px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tbody tr:last-child td { border-bottom: 0; }
+  .part-name { font-weight: 700; white-space: nowrap; }
+  .nick { display: block; font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: var(--scsp); margin-top: 2px; }
+
+  /* ---------- feature grid ---------- */
+  .features { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+  .feature {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+    padding: 20px 20px 22px; box-shadow: var(--shadow); display: flex; flex-direction: column;
+  }
+  .feature .kicker {
+    font-family: ui-monospace, Menlo, monospace; font-size: 11px; letter-spacing: .12em;
+    text-transform: uppercase; color: var(--data); font-weight: 600; margin-bottom: 10px;
+  }
+  .feature h3 { margin: 0 0 8px; font-size: 18px; }
+  .feature p { font-size: 14.5px; color: var(--ink-soft); margin: 0 0 14px; }
+  .feature .use {
+    margin-top: auto; font-size: 13px; color: var(--ink);
+    background: var(--surface-2); border-radius: 8px; padding: 10px 12px;
+    border: 1px solid var(--line);
+  }
+  .feature .use b { color: var(--scsp); font-weight: 650; }
+
+  /* ---------- readout sample ---------- */
+  .readout {
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    background: #0d1216; color: #e7eef3; border-radius: 12px;
+    padding: 18px 20px; font-size: 14px; line-height: 1.7; overflow-x: auto;
+    border: 1px solid #26313a; box-shadow: var(--shadow); margin: 4px 0;
+  }
+  .readout .ok { color: #e8a33d; font-weight: 600; }
+  .readout .path-lit { color: #5bd0c4; }
+  .readout .dim { color: #9db0bd; }
+
+  /* ---------- workflow ---------- */
+  .flow-steps { display: flex; flex-direction: column; gap: 0; counter-reset: step; margin-top: 8px; }
+  .step {
+    display: grid; grid-template-columns: 46px 1fr; gap: 18px; padding: 20px 0;
+    border-top: 1px solid var(--line);
+  }
+  .step:first-child { border-top: 0; }
+  .step .idx {
+    counter-increment: step;
+    font-family: ui-monospace, Menlo, monospace; font-weight: 700; font-size: 15px;
+    width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center;
+    background: var(--scsp-fill); color: var(--scsp);
+    border: 1px solid color-mix(in srgb, var(--scsp) 40%, transparent);
+  }
+  .step .idx::before { content: counter(step, decimal-leading-zero); }
+  .step h3 { margin: 6px 0 6px; font-size: 17px; }
+  .step p { font-size: 15px; color: var(--ink-soft); margin: 0; }
+  .step .mono { color: var(--data); }
+
+  /* ---------- callouts ---------- */
+  .callout {
+    border-radius: 12px; padding: 18px 20px; margin: 16px 0; border: 1px solid var(--line);
+    background: var(--surface); box-shadow: var(--shadow); display: grid;
+    grid-template-columns: auto 1fr; gap: 14px; align-items: start;
+  }
+  .callout.warn { border-left: 3px solid var(--cdda); }
+  .callout.tip { border-left: 3px solid var(--data); }
+  .callout .ic { font-size: 20px; line-height: 1.4; }
+  .callout h3 { margin: 0 0 6px; font-size: 16px; }
+  .callout p { margin: 0; font-size: 14.5px; color: var(--ink-soft); }
+  .callout code {
+    font-family: ui-monospace, Menlo, monospace; font-size: .88em;
+    background: var(--surface-2); padding: 1px 6px; border-radius: 5px; border: 1px solid var(--line);
+    color: var(--ink);
+  }
+
+  /* ---------- glossary ---------- */
+  .glossary { display: grid; grid-template-columns: repeat(2, 1fr); gap: 2px; border-radius: 12px; overflow: hidden; border: 1px solid var(--line); box-shadow: var(--shadow); }
+  .term { background: var(--surface); padding: 15px 18px; }
+  .term dt { font-family: ui-monospace, Menlo, monospace; font-weight: 600; font-size: 13.5px; color: var(--scsp); margin: 0 0 4px; }
+  .term dd { margin: 0; font-size: 14px; color: var(--ink-soft); line-height: 1.55; }
+
+  /* ---------- footer ---------- */
+  footer { padding: 34px 0 60px; color: var(--ink-soft); font-size: 13.5px; }
+  footer .mono { color: var(--ink-soft); }
+
+  code.inline {
+    font-family: ui-monospace, Menlo, monospace; font-size: .88em;
+    background: var(--surface-2); padding: 1px 6px; border-radius: 5px; border: 1px solid var(--line); color: var(--ink);
+  }
+
+  @media (max-width: 720px) {
+    body { font-size: 16px; }
+    .paths, .features, .glossary { grid-template-columns: 1fr; }
+    .hero-inner { padding: 48px 0 40px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+  :focus-visible { outline: 2px solid var(--data); outline-offset: 2px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<header class="hero">
+  <canvas class="scope" id="scope" aria-hidden="true"></canvas>
+  <div class="wrap hero-inner">
+    <p class="eyebrow">Saturn Explorer · Field Guide</p>
+    <h1>How the Sega Saturn <span class="accent">makes sound</span> — and how to trace it</h1>
+    <p class="lede">A plain-English tour of the Saturn's audio hardware and the tools that let you
+      see, hear, extract, and follow any sound all the way back to its file on the disc. No prior
+      hardware knowledge assumed.</p>
+    <div class="tagrow">
+      <span class="tag">32-voice SCSP</span>
+      <span class="tag">512&#8202;KB sound RAM</span>
+      <span class="tag">68000 sound CPU</span>
+      <span class="tag">PCM samples</span>
+      <span class="tag">FAD → file</span>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div class="wrap">
+
+    <section>
+      <p class="eyebrow">The one thing to remember</p>
+      <h2>Two completely separate paths to your ears</h2>
+      <p class="sec-sub">Knowing which path a game is using tells you which tool to reach for. Almost
+        everything in this guide is about the first one — it's the rich, inspectable path.</p>
+
+      <div class="paths">
+        <div class="path scsp">
+          <span class="num">Path 01 · inspectable</span>
+          <h3>Sampled &amp; synthesized</h3>
+          <p>Sound effects, voices, and most music are short recordings ("samples") played back by a
+            dedicated sound chip that bends their pitch, volume, and stereo position on the fly.</p>
+          <div class="flow">
+            <span class="chip">game data</span><span class="arrow">→</span>
+            <span class="chip hot">sound RAM</span><span class="arrow">→</span>
+            <span class="chip hot">SCSP chip</span><span class="arrow">→</span>
+            <span class="chip">speakers</span>
+          </div>
+          <p class="verdict"><b>You can inspect all of it</b> — the samples live in memory you can read.</p>
+        </div>
+        <div class="path cdda">
+          <span class="num">Path 02 · hardware-mixed</span>
+          <h3>CD audio (CD-DA)</h3>
+          <p>Some games store full music tracks on the disc as ordinary Red&nbsp;Book audio — like a
+            normal music CD. The console just spins the disc and pipes it straight to the speakers.</p>
+          <div class="flow">
+            <span class="chip hot">audio track</span><span class="arrow">→</span>
+            <span class="chip">CD drive</span><span class="arrow">→</span>
+            <span class="chip">speakers</span>
+          </div>
+          <p class="verdict"><b>Bypasses the chip and memory entirely.</b> Nothing to inspect in RAM.</p>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <p class="eyebrow">The hardware, path 01</p>
+      <h2>The cast of characters</h2>
+      <p class="sec-sub">Picture the Saturn's sound system as a small self-contained studio bolted onto
+        the main console.</p>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr><th>Part</th><th>What it does</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="part-name">SCSP<span class="nick">the sound chip</span></td>
+              <td>The synthesizer. Plays up to <strong>32 sounds at once</strong>, each with its own
+                pitch, volume, and pan. (Saturn Custom Sound Processor.)</td>
+            </tr>
+            <tr>
+              <td class="part-name">68000<span class="nick">the sound CPU</span></td>
+              <td>A small second processor running the sound program — deciding which notes to trigger,
+                when, and how loud. The main game hands it commands; it handles the music.</td>
+            </tr>
+            <tr>
+              <td class="part-name">Sound RAM<span class="nick">the sound memory</span></td>
+              <td>512&#8202;KB holding <strong>both</strong> the program the 68000 runs <strong>and</strong>
+                the raw samples the SCSP plays. If you can read it, you can grab the audio.</td>
+            </tr>
+            <tr>
+              <td class="part-name">SH-2 ×2<span class="nick">the game</span></td>
+              <td>The two main processors running the actual game. They tell the sound system what to play.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Voices (a.k.a. "slots")</h3>
+      <p>The SCSP has 32 playback channels called <strong>voices</strong>. At any instant a voice is
+        silent or playing one sample. A busy battle might have a dozen going at once — drums on one, a
+        melody on another, a sword clang on a third. Each active voice carries: <strong>which sample</strong>
+        and how far into it, the <strong>format</strong>, the <strong>pitch</strong> (play it faster and the
+        note is higher), a <strong>volume envelope</strong> (the fade-in / hold / fade-out shape that makes a
+        note swell and die instead of clicking on and off), <strong>pan</strong>, and <strong>loop points</strong>.</p>
+
+      <h3>Sample formats</h3>
+      <p>Samples are stored as plain <strong>PCM</strong> — uncompressed audio — in one of two sizes:
+        <strong>16-bit</strong> (full quality) or <strong>8-bit</strong> (half the size, a touch noisier).
+        That's the whole list. The Dreamcast's 4-bit ADPCM compression is <em>not</em> a Saturn feature.</p>
+
+      <h3>Streaming — the case you'll trace most</h3>
+      <p>512&#8202;KB isn't much. Long music or lengthy voice lines won't fit, so games <strong>stream</strong>
+        them: they keep only a small chunk in sound RAM and the CPU continuously refills it from the disc as
+        it plays — like pouring water through a funnel that never fills up. That refilled region is a
+        <strong>ring buffer</strong> (playback chases the writer around a circular patch of memory). This is
+        the case where "where is this audio coming from?" has a real answer on the disc.</p>
+
+      <div class="keyline">
+        <p><strong>Finding a spot on the disc.</strong> Saturn CD addresses are called <strong>FAD</strong>
+          (Frame Address) — a sector number. One quirk: <strong>FAD = LBA + 150</strong>, because a CD has a
+          2-second lead-in gap before the data. Once you know the FAD the drive is reading, you can look up
+          <em>which file</em> contains that sector — the final link between "I hear this" and "it's this file."</p>
+      </div>
+    </section>
+
+    <section>
+      <p class="eyebrow">The toolkit</p>
+      <h2>What each audio tool does</h2>
+      <p class="sec-sub">Each feature inspects a different stage of the pipeline. Together they cover the
+        whole journey from "a voice is sounding" to "here's the file on the disc."</p>
+
+      <div class="features">
+        <div class="feature">
+          <span class="kicker">Live · voices</span>
+          <h3>Sound (SCSP) panel</h3>
+          <p>One row per voice, all 32. See format, pitch (Hz), envelope stage &amp; level, pan, loops, and
+            how far playback has progressed. Silent voices grey out, so you can tell at a glance how many —
+            and which — sounds are live. Each row has <strong>Play</strong> (preview in-app) and
+            <strong>Export</strong> (save as <code class="inline">.wav</code>).</p>
+          <div class="use"><b>Use it to</b> identify the voices in a scene, hear each in isolation, and pull
+            out individual effects, instruments, or voice clips.</div>
+        </div>
+
+        <div class="feature">
+          <span class="kicker">Memory · raw bytes</span>
+          <h3>Sound RAM tab</h3>
+          <p>A hex view of the full 512&#8202;KB — both the 68000's program and the sample data. A voice's
+            start address links straight here, so you can jump to the exact bytes it's playing. You can also
+            <strong>edit</strong> it live, which is how a music- or effect-swap experiment begins.</p>
+          <div class="use"><b>Use it to</b> see the actual sample bytes, confirm what a voice points at, or
+            poke sound memory to test a change.</div>
+        </div>
+
+        <div class="feature">
+          <span class="kicker">Trace · code</span>
+          <h3>Access Log</h3>
+          <p>Point it at an address and it records which instructions read or wrote it, plus the call stack
+            that led there. For streamed audio, this finds the routine refilling the ring buffer — the code
+            actually feeding the sound.</p>
+          <div class="use"><b>Use it to</b> answer "what part of the game is writing this audio into memory?"
+            and walk back to the code that decided to play it.</div>
+        </div>
+
+        <div class="feature">
+          <span class="kicker">Disc · files + live</span>
+          <h3>Disc Explorer</h3>
+          <p>Browses the disc's filesystem — every file with its size and byte offset in the image, sorted
+            biggest-first (streamed audio is usually one of the largest). Its <strong>live drive readout</strong>
+            shows what the CD is doing this frame and <strong>names the file</strong> the current FAD falls in.</p>
+          <div class="use"><b>Use it to</b> turn "audio is streaming" into a filename and offset, in real time.</div>
+        </div>
+
+        <div class="feature">
+          <span class="kicker">Debug · sound engine</span>
+          <h3>68000 sound-CPU debugging</h3>
+          <p>Disassemble and step through the little 68000 that runs the music engine — the logic that
+            sequences the audio, not just the samples it uses.</p>
+          <div class="use"><b>Use it to</b> understand <em>how</em> a game drives its music.</div>
+        </div>
+
+        <div class="feature" style="justify-content:center;">
+          <span class="kicker">The payoff</span>
+          <h3>A sound, resolved live</h3>
+          <div class="readout" style="margin-top:4px;">
+<span class="dim">Disc Explorer — Live drive</span>
+<span class="ok">&#9654; reading</span>  ·  FAD <span class="path-lit">91234</span>
+&rarr; <span class="path-lit">/SOUND/BATTLE01.PCM</span>  (+40960)
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <p class="eyebrow">Start to finish</p>
+      <h2>Hear a sound → find it → extract it</h2>
+      <p class="sec-sub">The end-to-end workflow the audio tools are built around. Say a battle theme is
+        playing and you want to find and extract it.</p>
+
+      <div class="flow-steps">
+        <div class="step">
+          <div class="idx" aria-hidden="true"></div>
+          <div>
+            <h3>See what's sounding</h3>
+            <p>Open the <span class="mono">Sound (SCSP)</span> panel and watch which voices light up.
+              <strong>Play</strong> to confirm you've found the right ones; <strong>Export</strong> to save
+              any voice as a <code class="inline">.wav</code>.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="idx" aria-hidden="true"></div>
+          <div>
+            <h3>Is it streamed?</h3>
+            <p>If the music is long, it's almost certainly streamed from disc. Note the voice's start address
+              and jump into the <span class="mono">Sound RAM</span> tab to see the buffer it plays from.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="idx" aria-hidden="true"></div>
+          <div>
+            <h3>Find the feeder <span style="color:var(--ink-faint);font-weight:400;">(optional)</span></h3>
+            <p>Point the <span class="mono">Access Log</span> at that buffer to catch the code refilling it —
+              handy if you want to understand or modify the streaming.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="idx" aria-hidden="true"></div>
+          <div>
+            <h3>Find it on the disc</h3>
+            <p>Open the <span class="mono">Disc Explorer</span>. With the game running, the live drive readout
+              shows the FAD being read and names the file — e.g. <span class="mono">/SOUND/BATTLE01.PCM</span>.
+              That's your source file.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="idx" aria-hidden="true"></div>
+          <div>
+            <h3>Extract it</h3>
+            <p>Grab the file's image offset from the Disc Explorer to pull the raw stream out of the disc
+              image — or just use the Sound panel's <strong>Export</strong> for individual voices.</p>
+          </div>
+        </div>
+      </div>
+      <p style="margin-top:24px;color:var(--ink-soft);font-size:15px;">The same chain works for sound effects
+        and voice clips — they're just shorter and usually already fully resident in sound RAM, so you can skip
+        the streaming steps.</p>
+    </section>
+
+    <section>
+      <p class="eyebrow">Before you get confused</p>
+      <h2>A few things to watch out for</h2>
+
+      <div class="callout warn">
+        <div class="ic" aria-hidden="true">💿</div>
+        <div>
+          <h3>CD-DA tracks are invisible to the sound tools</h3>
+          <p>If a game plays music as a plain CD audio track, it bypasses sound RAM — so the Sound panel won't
+            show it and there are no samples to export. The live readout still shows <b>"playing (CD-DA)"</b>
+            and a FAD, but that FAD points into an audio track, so it reads
+            <code>(no file; audio track or gap)</code>. <b>This is expected</b> — the tool is correctly saying
+            "this audio doesn't live in the filesystem." To extract CD-DA, rip the audio track itself, like
+            ripping a music CD.</p>
+        </div>
+      </div>
+
+      <div class="callout warn">
+        <div class="ic" aria-hidden="true">🌊</div>
+        <div>
+          <h3>Streamed vs. resident</h3>
+          <p>Short sounds sit entirely in sound RAM and are easy to grab. Long sounds are streamed and only
+            partly present at any moment — which is exactly why the disc-side tools (live FAD + Disc Explorer)
+            exist.</p>
+        </div>
+      </div>
+
+      <div class="callout tip">
+        <div class="ic" aria-hidden="true">🔌</div>
+        <div>
+          <h3>Live features need the emulator hookup</h3>
+          <p>The real-time panels (live voices, live drive readout) work when Saturn Explorer is connected to a
+            running emulator built with its data taps. If you've just updated the tool, re-run
+            <code>update.bat</code> once so the patcher installs the latest hooks — then the live readouts light up.</p>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <p class="eyebrow">Reference</p>
+      <h2>Glossary</h2>
+      <dl class="glossary">
+        <div class="term"><dt>SCSP</dt><dd>The Saturn's sound chip; plays up to 32 samples at once with pitch, volume, and pan.</dd></div>
+        <div class="term"><dt>Voice / slot</dt><dd>One of the SCSP's 32 simultaneous playback channels.</dd></div>
+        <div class="term"><dt>Sound RAM</dt><dd>512&#8202;KB of memory holding the sound program and the audio samples.</dd></div>
+        <div class="term"><dt>68000</dt><dd>The small dedicated processor that runs the music engine.</dd></div>
+        <div class="term"><dt>PCM</dt><dd>Uncompressed audio; the Saturn uses 8-bit or 16-bit PCM.</dd></div>
+        <div class="term"><dt>Envelope</dt><dd>How a sound's volume changes over time — fade in, hold, fade out.</dd></div>
+        <div class="term"><dt>Ring buffer</dt><dd>Playing audio too big for memory by continuously refilling a small circular buffer from disc.</dd></div>
+        <div class="term"><dt>CD-DA</dt><dd>Plain CD audio tracks; mixed in hardware, bypasses the SCSP.</dd></div>
+        <div class="term"><dt>FAD</dt><dd>Frame Address — a CD sector address. FAD = LBA + 150.</dd></div>
+        <div class="term"><dt>LBA</dt><dd>Logical Block Address — the plain sector number from the start of the data.</dd></div>
+        <div class="term"><dt>ISO 9660</dt><dd>The standard filesystem layout on a CD, used to list the disc's files.</dd></div>
+        <div class="term"><dt>SH-2</dt><dd>The Saturn's two main game processors.</dd></div>
+      </dl>
+    </section>
+
+    <footer>
+      <p class="mono">Saturn Explorer · Audio subsystem guide · SCSP + sound RAM + Disc Explorer live FAD</p>
+    </footer>
+  </div>
+</main>
+
+<script>
+  (function () {
+    var canvas = document.getElementById('scope');
+    if (!canvas) return;
+    var ctx = canvas.getContext('2d');
+    var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var w = 0, h = 0;
+
+    function accent() {
+      return getComputedStyle(document.documentElement).getPropertyValue('--scope').trim() || '#e8a33d';
+    }
+    function resize() {
+      var r = canvas.getBoundingClientRect();
+      w = r.width; h = r.height;
+      canvas.width = Math.max(1, Math.floor(w * dpr));
+      canvas.height = Math.max(1, Math.floor(h * dpr));
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+    resize();
+    window.addEventListener('resize', resize);
+
+    function wave(t) {
+      ctx.clearRect(0, 0, w, h);
+      var col = accent();
+      var midY = h * 0.5;
+      // two stacked traces: a bright foreground scope + a faint echo
+      for (var pass = 0; pass < 2; pass++) {
+        ctx.beginPath();
+        var amp = (pass === 0 ? h * 0.14 : h * 0.075);
+        var yoff = (pass === 0 ? 0 : h * 0.20);
+        for (var x = 0; x <= w; x += 3) {
+          var p = x / w;
+          var env = Math.sin(p * Math.PI); // fade at edges
+          var y = midY + yoff
+            + Math.sin(p * 22 + t * 1.7) * amp * env
+            + Math.sin(p * 7 - t * 1.1) * amp * 0.5 * env
+            + Math.sin(p * 41 + t * 2.3) * amp * 0.22 * env;
+          if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.strokeStyle = col;
+        ctx.globalAlpha = pass === 0 ? 0.85 : 0.28;
+        ctx.lineWidth = pass === 0 ? 1.6 : 1;
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    if (reduce) { wave(0.6); return; }
+    var start = null;
+    function frame(ts) {
+      if (start === null) start = ts;
+      wave((ts - start) / 1000);
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  })();
+</script>
+
+</body>
+</html>

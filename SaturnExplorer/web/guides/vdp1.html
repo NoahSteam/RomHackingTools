@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Saturn VDP1 Guide</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg: #e9edf1; --surface: #ffffff; --surface-2: #f4f7f9;
+    --ink: #17212a; --ink-soft: #4c5d6a; --ink-faint: #7688954a;
+    --line: #d5dde3; --line-strong: #c2ccd4;
+    --accent: #bb2e6a; --accent-fill: #f6e0ea;   /* VDP1 magenta — the drawing chip */
+    --accent2: #7a49c0; --accent2-fill: #ece3f8;  /* distortion / 3D */
+    --data: #0d7f8f; --data-fill: #d8eef1;
+    --scope: #bb2e6a;
+    --shadow: 0 1px 2px rgba(20,30,40,.06), 0 6px 20px rgba(20,30,40,.05);
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1216; --surface: #141b21; --surface-2: #1a232a;
+      --ink: #e7eef3; --ink-soft: #9db0bd; --ink-faint: #5f727f4a;
+      --line: #26313a; --line-strong: #33414c;
+      --accent: #f272a6; --accent-fill: #37182780;
+      --accent2: #b79bf0; --accent2-fill: #241a34;
+      --data: #5bd0c4; --data-fill: #102b2c;
+      --scope: #f272a6;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 30px rgba(0,0,0,.35);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="light"] {
+    --bg: #e9edf1; --surface: #ffffff; --surface-2: #f4f7f9;
+    --ink: #17212a; --ink-soft: #4c5d6a; --ink-faint: #7688954a;
+    --line: #d5dde3; --line-strong: #c2ccd4;
+    --accent: #bb2e6a; --accent-fill: #f6e0ea; --accent2: #7a49c0; --accent2-fill: #ece3f8;
+    --data: #0d7f8f; --data-fill: #d8eef1; --scope: #bb2e6a;
+    --shadow: 0 1px 2px rgba(20,30,40,.06), 0 6px 20px rgba(20,30,40,.05);
+    color-scheme: light;
+  }
+  :root[data-theme="dark"] {
+    --bg: #0d1216; --surface: #141b21; --surface-2: #1a232a;
+    --ink: #e7eef3; --ink-soft: #9db0bd; --ink-faint: #5f727f4a;
+    --line: #26313a; --line-strong: #33414c;
+    --accent: #f272a6; --accent-fill: #37182780; --accent2: #b79bf0; --accent2-fill: #241a34;
+    --data: #5bd0c4; --data-fill: #102b2c; --scope: #f272a6;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 30px rgba(0,0,0,.35);
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, Roboto, sans-serif;
+    font-size: 17px; line-height: 1.65; -webkit-font-smoothing: antialiased;
+  }
+  .mono { font-family: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace; }
+  .wrap { max-width: 940px; margin: 0 auto; padding: 0 24px; }
+  a { color: var(--data); text-underline-offset: 3px; }
+
+  .eyebrow {
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: 12px; letter-spacing: .18em; text-transform: uppercase;
+    color: var(--ink-soft); margin: 0 0 14px; display: flex; align-items: center; gap: 10px;
+  }
+  .eyebrow::before { content: ""; width: 26px; height: 2px; background: var(--accent); display: inline-block; }
+  h1, h2, h3 { text-wrap: balance; line-height: 1.12; }
+
+  .hero {
+    position: relative; border-bottom: 1px solid var(--line); overflow: hidden;
+    background: radial-gradient(120% 120% at 85% -10%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 55%), var(--surface);
+  }
+  .hero-inner { padding: 66px 0 54px; position: relative; z-index: 2; }
+  .hero h1 { font-size: clamp(34px, 6.2vw, 62px); font-weight: 800; letter-spacing: -.02em; margin: 0 0 20px; }
+  .hero h1 .accent { color: var(--accent); }
+  .hero .lede { font-size: clamp(17px, 2.3vw, 21px); color: var(--ink-soft); max-width: 60ch; margin: 0; }
+  .scope { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1; opacity: .5; pointer-events: none; }
+  .tagrow { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 30px; }
+  .tag {
+    font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12.5px;
+    padding: 5px 11px; border-radius: 999px; border: 1px solid var(--line-strong);
+    color: var(--ink-soft); background: var(--surface-2);
+  }
+  .kin { margin-top: 22px; font-size: 13.5px; color: var(--ink-soft); }
+  .kin a { color: var(--accent); font-weight: 600; text-decoration: none; }
+  .kin a:hover { text-decoration: underline; }
+
+  section { padding: 52px 0; border-bottom: 1px solid var(--line); }
+  section:last-of-type { border-bottom: 0; }
+  h2 { font-size: clamp(24px, 3.4vw, 32px); font-weight: 780; margin: 0 0 8px; letter-spacing: -.01em; }
+  .sec-sub { color: var(--ink-soft); margin: 0 0 30px; max-width: 62ch; }
+  h3 { font-size: 19px; font-weight: 700; margin: 34px 0 8px; }
+  p { margin: 0 0 16px; }
+  strong { font-weight: 680; color: var(--ink); }
+
+  .keyline {
+    border-left: 3px solid var(--accent); background: var(--surface);
+    padding: 16px 20px; border-radius: 0 10px 10px 0; box-shadow: var(--shadow); margin: 8px 0 4px;
+  }
+  .keyline p { margin: 0; }
+
+  /* quad trio */
+  .quadrow { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 8px; }
+  .qcard {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+    padding: 18px; box-shadow: var(--shadow); text-align: center;
+  }
+  .qcard svg { width: 100%; height: 96px; display: block; margin-bottom: 12px; }
+  .qcard h3 { margin: 0 0 4px; font-size: 16px; }
+  .qcard p { margin: 0; font-size: 13.5px; color: var(--ink-soft); }
+  .qgrid { stroke: var(--line-strong); stroke-width: .6; }
+  .qshape { fill: color-mix(in srgb, var(--accent) 14%, transparent); stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; }
+  .qdot { fill: var(--accent); }
+
+  .table-scroll { overflow-x: auto; margin: 6px 0; border-radius: 12px; border: 1px solid var(--line); box-shadow: var(--shadow); }
+  table { border-collapse: collapse; width: 100%; background: var(--surface); font-size: 15px; min-width: 600px; }
+  thead th {
+    text-align: left; font-size: 11.5px; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--ink-soft); font-weight: 600; padding: 12px 16px; background: var(--surface-2); border-bottom: 1px solid var(--line);
+  }
+  tbody td { padding: 13px 16px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tbody tr:last-child td { border-bottom: 0; }
+  .rowname { font-weight: 700; white-space: nowrap; }
+  .rowname .sub { display: block; font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: var(--accent); margin-top: 2px; font-weight: 500; }
+
+  .features { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+  .feature {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+    padding: 20px 20px 22px; box-shadow: var(--shadow); display: flex; flex-direction: column;
+  }
+  .feature .kicker {
+    font-family: ui-monospace, Menlo, monospace; font-size: 11px; letter-spacing: .12em;
+    text-transform: uppercase; color: var(--data); font-weight: 600; margin-bottom: 10px;
+  }
+  .feature h3 { margin: 0 0 8px; font-size: 18px; }
+  .feature p { font-size: 14.5px; color: var(--ink-soft); margin: 0 0 14px; }
+  .feature .use { margin-top: auto; font-size: 13px; color: var(--ink); background: var(--surface-2); border-radius: 8px; padding: 10px 12px; border: 1px solid var(--line); }
+  .feature .use b { color: var(--accent); font-weight: 650; }
+
+  .flow-steps { display: flex; flex-direction: column; gap: 0; counter-reset: step; margin-top: 8px; }
+  .step { display: grid; grid-template-columns: 46px 1fr; gap: 18px; padding: 20px 0; border-top: 1px solid var(--line); }
+  .step:first-child { border-top: 0; }
+  .step .idx {
+    counter-increment: step; font-family: ui-monospace, Menlo, monospace; font-weight: 700; font-size: 15px;
+    width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center;
+    background: var(--accent-fill); color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  }
+  .step .idx::before { content: counter(step, decimal-leading-zero); }
+  .step h3 { margin: 6px 0 6px; font-size: 17px; }
+  .step p { font-size: 15px; color: var(--ink-soft); margin: 0; }
+  .step .mono { color: var(--data); }
+
+  .callout { border-radius: 12px; padding: 18px 20px; margin: 16px 0; border: 1px solid var(--line); background: var(--surface); box-shadow: var(--shadow); display: grid; grid-template-columns: auto 1fr; gap: 14px; align-items: start; }
+  .callout.warn { border-left: 3px solid var(--accent2); }
+  .callout.tip { border-left: 3px solid var(--data); }
+  .callout .ic { font-size: 20px; line-height: 1.4; }
+  .callout h3 { margin: 0 0 6px; font-size: 16px; }
+  .callout p { margin: 0; font-size: 14.5px; color: var(--ink-soft); }
+  .callout code, code.inline {
+    font-family: ui-monospace, Menlo, monospace; font-size: .88em; background: var(--surface-2);
+    padding: 1px 6px; border-radius: 5px; border: 1px solid var(--line); color: var(--ink);
+  }
+
+  .glossary { display: grid; grid-template-columns: repeat(2, 1fr); gap: 2px; border-radius: 12px; overflow: hidden; border: 1px solid var(--line); box-shadow: var(--shadow); }
+  .term { background: var(--surface); padding: 15px 18px; }
+  .term dt { font-family: ui-monospace, Menlo, monospace; font-weight: 600; font-size: 13.5px; color: var(--accent); margin: 0 0 4px; }
+  .term dd { margin: 0; font-size: 14px; color: var(--ink-soft); line-height: 1.55; }
+
+  footer { padding: 34px 0 60px; color: var(--ink-soft); font-size: 13.5px; }
+
+  @media (max-width: 720px) {
+    body { font-size: 16px; }
+    .features, .glossary, .quadrow { grid-template-columns: 1fr; }
+    .hero-inner { padding: 48px 0 40px; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+  :focus-visible { outline: 2px solid var(--data); outline-offset: 2px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<header class="hero">
+  <canvas class="scope" id="scope" aria-hidden="true"></canvas>
+  <div class="wrap hero-inner">
+    <p class="eyebrow">Saturn Explorer · Field Guide</p>
+    <h1>VDP1 — the Saturn's <span class="accent">drawing engine</span></h1>
+    <p class="lede">The chip that paints the moving stuff: characters, ships, effects, and
+      fake-3D polygons. A plain-English tour of how it draws, and the tools that let you select,
+      inspect, and extract every piece. No hardware knowledge assumed.</p>
+    <div class="tagrow">
+      <span class="tag">sprites &amp; polygons</span>
+      <span class="tag">command table</span>
+      <span class="tag">512&#8202;KB VRAM</span>
+      <span class="tag">textures + palettes</span>
+      <span class="tag">frame buffer</span>
+    </div>
+    <p class="kin">Part of a pair — its teammate handles backgrounds: <a href="vdp2.html">see the VDP2 guide →</a></p>
+  </div>
+</header>
+
+<main>
+  <div class="wrap">
+
+    <section>
+      <p class="eyebrow">The one thing to remember</p>
+      <h2>Everything VDP1 draws is a four-cornered quad</h2>
+      <p class="sec-sub">Unlike an old 2D console, VDP1 doesn't think in fixed sprites at an X/Y
+        spot. It thinks in <strong>quads</strong> — shapes with four independently placed corners.
+        The three sprite types are really just how warped those corners are.</p>
+
+      <div class="quadrow">
+        <div class="qcard">
+          <svg viewBox="0 0 120 96" aria-hidden="true">
+            <path class="qgrid" d="M35 20 H85 M35 35 H85 M35 50 H85 M35 65 H85 M35 80 H85 M35 20 V80 M50 20 V80 M65 20 V80 M85 20 V80"/>
+            <polygon class="qshape" points="35,20 85,20 85,80 35,80"/>
+            <circle class="qdot" cx="35" cy="20" r="3.5"/><circle class="qdot" cx="85" cy="20" r="3.5"/>
+            <circle class="qdot" cx="85" cy="80" r="3.5"/><circle class="qdot" cx="35" cy="80" r="3.5"/>
+          </svg>
+          <h3>Normal sprite</h3>
+          <p>An upright rectangle. The plain case.</p>
+        </div>
+        <div class="qcard">
+          <svg viewBox="0 0 120 96" aria-hidden="true">
+            <polygon class="qshape" points="22,14 98,14 98,86 22,86"/>
+            <circle class="qdot" cx="22" cy="14" r="3.5"/><circle class="qdot" cx="98" cy="14" r="3.5"/>
+            <circle class="qdot" cx="98" cy="86" r="3.5"/><circle class="qdot" cx="22" cy="86" r="3.5"/>
+          </svg>
+          <h3>Scaled sprite</h3>
+          <p>The same quad, stretched bigger or smaller.</p>
+        </div>
+        <div class="qcard">
+          <svg viewBox="0 0 120 96" aria-hidden="true">
+            <polygon class="qshape" points="28,24 96,12 88,84 20,70"/>
+            <circle class="qdot" cx="28" cy="24" r="3.5"/><circle class="qdot" cx="96" cy="12" r="3.5"/>
+            <circle class="qdot" cx="88" cy="84" r="3.5"/><circle class="qdot" cx="20" cy="70" r="3.5"/>
+          </svg>
+          <h3>Distorted sprite</h3>
+          <p>Corners dragged anywhere — how the Saturn fakes 3D.</p>
+        </div>
+      </div>
+      <p style="margin-top:22px;color:var(--ink-soft);font-size:15px;">Under the hood <em>all</em>
+        textured sprites are distorted sprites; the upright and scaled ones are just the easy special
+        cases. VDP1 also draws untextured <strong>polygons</strong>, <strong>polylines</strong>, and
+        <strong>lines</strong>.</p>
+    </section>
+
+    <section>
+      <p class="eyebrow">How it works</p>
+      <h2>A to-do list, a texture, and a frame buffer</h2>
+      <p class="sec-sub">VDP1 works through a list of drawing commands each frame and paints the
+        results into an off-screen image, which it then hands to VDP2 for final layering.</p>
+
+      <h3>The command table</h3>
+      <p>VDP1 is driven by a <strong>command table</strong> in its memory — a linked list of drawing
+        commands it walks in order (they can jump, call, and return like little subroutines) until it
+        hits an <strong>end</strong> marker. Each command is <strong>15 words (32 bytes)</strong>
+        describing one thing to draw: its type, texture address, four corner coordinates, color mode,
+        and options. You'll see these field names in the tool — <span class="mono">CMDCTRL</span>,
+        <span class="mono">LINK</span>, <span class="mono">PMOD</span>, <span class="mono">COLR</span>,
+        <span class="mono">SRCA</span>, <span class="mono">SIZE</span>,
+        <span class="mono">XA…YD</span>, <span class="mono">GRDA</span>.</p>
+
+      <h3>Textures and color modes</h3>
+      <p>A textured sprite reads its picture from VDP1 memory in one of several
+        <strong>color modes</strong>, trading color count against memory:</p>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Mode</th><th>Colors</th><th>How pixels are stored</th></tr></thead>
+          <tbody>
+            <tr><td class="rowname">16 (bank)</td><td>16</td><td>4 bits/pixel — index into a 16-color slice of the palette</td></tr>
+            <tr><td class="rowname">16 (LUT)</td><td>16</td><td>4 bits/pixel — a small lookup table in VDP1 memory picks the colors</td></tr>
+            <tr><td class="rowname">64 / 128 / 256 (bank)</td><td>64–256</td><td>8 bits/pixel — index into a larger palette slice</td></tr>
+            <tr><td class="rowname">RGB555</td><td>~32,000</td><td>16 bits/pixel — the color is written directly, no palette</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>"Bank" and "LUT" modes are <strong>palettized</strong>: pixels are just index numbers that
+        look up real colors. RGB555 is <strong>direct color</strong> — each pixel already <em>is</em> a
+        color, at twice the memory. Universal rule: <strong>palette index 0 = transparent</strong>
+        (unless a command disables that).</p>
+
+      <div class="keyline">
+        <p><strong>The palette lives in VDP2.</strong> Palettized textures don't carry their own
+          colors — the real RGB values sit in <strong>Color RAM (CRAM)</strong>, a palette shared with
+          VDP2. A texture pixel says "color #37"; CRAM says what #37 looks like. So understanding or
+          recoloring a sprite usually means looking at both the texture <em>and</em> the palette.</p>
+      </div>
+
+      <h3>Gouraud, draw modes, flips</h3>
+      <p>Each command can add effects: <strong>Gouraud shading</strong> blends brightness smoothly
+        across the quad from its four corners (so a flat texture looks lit); <strong>draw modes</strong>
+        control how it combines with what's already there — <strong>Normal</strong>, <strong>Mesh</strong>
+        (a stipple that fakes transparency), <strong>Shadow</strong>, <strong>Half Luminance</strong>,
+        and <strong>Half Transparent</strong>; and <strong>flip</strong> mirrors the texture.</p>
+
+      <h3>The double frame buffer</h3>
+      <p>VDP1 has <strong>two</strong> frame buffers (512×256 pixels) and <strong>swaps</strong> them:
+        it draws into one while the other is on screen, then flips — so you never see a half-drawn frame.</p>
+    </section>
+
+    <section>
+      <p class="eyebrow">The toolkit</p>
+      <h2>What each VDP1 tool does</h2>
+      <p class="sec-sub">The tool contains a <strong>software VDP1</strong> that rebuilds the frame from
+        the individual commands — exactly like the real chip — so every sprite stays a separate,
+        selectable object rather than a flat image.</p>
+
+      <div class="features">
+        <div class="feature">
+          <span class="kicker">List · commands</span>
+          <h3>VDP1 Command List</h3>
+          <p>A table of every command to be drawn — #, type (Normal / Scaled / Distorted / Polygon /
+            Line / clip / coordinate), size, position, color mode, and texture address. Click to select;
+            <strong>Shift-click</strong> for several; double-click to jump to its bytes.</p>
+          <div class="use"><b>Use it to</b> browse everything on screen and find a specific object.</div>
+        </div>
+
+        <div class="feature">
+          <span class="kicker">Inspect · one object</span>
+          <h3>Selected Object</h3>
+          <p>The full decode of one command: table / link / texture / palette addresses, size, position,
+            color mode, <strong>draw mode</strong>, transparency, Gouraud, color-calc, flip, and the raw
+            <span class="mono">CMDCTRL</span> / <span class="mono">CMDPMOD</span> words.</p>
+          <div class="use"><b>Use it to</b> read exactly how one sprite is configured.</div>
+        </div>
+
+        <div class="feature">
+          <span class="kicker">Decode · picture</span>
+          <h3>Texture Viewer</h3>
+          <p>Decodes the selected sprite's texture over a checkerboard (transparent pixels read
+            clearly), with its dimensions, color mode, and address. <strong>Export</strong> to a BMP that
+            keeps the game's palette; right-click to break when it's written, or jump to its bytes.</p>
+          <div class="use"><b>Use it to</b> see and extract a sprite's artwork.</div>
+        </div>
+
+        <div class="feature">
+          <span class="kicker">Decode · colors</span>
+          <h3>Palette Viewer</h3>
+          <p>Shows the palette a palettized sprite draws from — its shared CRAM bank, or a LUT-mode
+            lookup table — as a grid of swatches with index and RGB on hover. (Direct-color sprites have
+            no palette, and it says so.)</p>
+          <div class="use"><b>Use it to</b> read and note the colors behind a sprite.</div>
+        </div>
+
+        <div class="feature">
+          <span class="kicker">Map · memory</span>
+          <h3>VRAM Map (VDP1)</h3>
+          <p>A color-coded map of all 512&#8202;KB — Command Table, Texture, CLUT, Gouraud Table,
+            Unused, Other — with a legend and a "% used" readout. Hover a block for its address, size,
+            and owning command; click to select it.</p>
+          <div class="use"><b>Use it to</b> see how a game budgets its graphics memory.</div>
+        </div>
+
+        <div class="feature">
+          <span class="kicker">Explore · in space</span>
+          <h3>3D View</h3>
+          <p>Renders the frame's quads as objects you can <strong>orbit</strong> and <strong>zoom</strong>,
+            separated along depth so you can see the layering. <strong>Click</strong> to select,
+            <strong>Shift-click</strong> to add — the tool ray-tests your click against the real geometry.
+            Selection is shared with every panel.</p>
+          <div class="use"><b>Use it to</b> untangle overlapping sprites and pick the right one.</div>
+        </div>
+
+        <div class="feature">
+          <span class="kicker">Result · pixels</span>
+          <h3>VDP Output &amp; Framebuffer</h3>
+          <p>VDP Output shows the reconstructed scene with wireframe / bounding-box / object-number
+            toggles. The Framebuffer panel shows the raw 512×256 buffer with <strong>Resolved</strong>,
+            <strong>Raw RGB555</strong>, and <strong>Priority</strong> heatmap modes.</p>
+          <div class="use"><b>Use it to</b> compare the rebuilt scene with what VDP1 actually drew.</div>
+        </div>
+
+        <div class="feature">
+          <span class="kicker">Registers · knobs</span>
+          <h3>Registers (VDP1 tab)</h3>
+          <p>Lists VDP1's registers by name — <span class="mono">TVMR, FBCR, PTMR, EWDR, EWLR, EWRR,
+            ENDR, EDSR, LOPR, COPR, MODR</span>. Most drawing state lives in the command table, so the
+            command panels above are usually where the action is.</p>
+          <div class="use"><b>Use it to</b> check the chip's mode and status registers.</div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <p class="eyebrow">Start to finish</p>
+      <h2>The drawing pipeline</h2>
+      <p class="sec-sub">The journey every VDP1 frame takes — each stage maps to a panel that shows it.</p>
+
+      <div class="flow-steps">
+        <div class="step"><div class="idx" aria-hidden="true"></div><div>
+          <h3>Command table</h3>
+          <p>The game builds its to-do list in VDP1 memory. <span class="mono">→ VRAM Map, Command List</span></p>
+        </div></div>
+        <div class="step"><div class="idx" aria-hidden="true"></div><div>
+          <h3>Walk the list</h3>
+          <p>VDP1 follows the linked commands — jump, call, return — one by one. <span class="mono">→ Command List</span></p>
+        </div></div>
+        <div class="step"><div class="idx" aria-hidden="true"></div><div>
+          <h3>Build quads</h3>
+          <p>Each command becomes a four-corner quad with a texture. <span class="mono">→ Selected Object, VDP1 Table</span></p>
+        </div></div>
+        <div class="step"><div class="idx" aria-hidden="true"></div><div>
+          <h3>Rasterize</h3>
+          <p>The texture is stretched over the quad; palette colors are looked up; Gouraud and draw modes apply. <span class="mono">→ Texture &amp; Palette Viewer</span></p>
+        </div></div>
+        <div class="step"><div class="idx" aria-hidden="true"></div><div>
+          <h3>Frame buffer</h3>
+          <p>The result is painted into one of the two 512×256 buffers. <span class="mono">→ VDP1 Framebuffer</span></p>
+        </div></div>
+        <div class="step"><div class="idx" aria-hidden="true"></div><div>
+          <h3>Hand off to VDP2</h3>
+          <p>The finished sprite layer goes to VDP2 for final compositing. <span class="mono">→ see the VDP2 guide</span></p>
+        </div></div>
+      </div>
+
+      <div class="keyline" style="margin-top:26px;">
+        <p><strong>Worked example — "how is this sprite drawn?"</strong> &nbsp;Click it in the 3D View →
+          read <b>Selected Object</b> for its mode and corners → open the <b>Texture Viewer</b> and
+          Export it → check the <b>Palette Viewer</b> for its colors → use the <b>VRAM Map</b> to see
+          exactly where its texture and command live in memory.</p>
+      </div>
+    </section>
+
+    <section>
+      <p class="eyebrow">Before you get confused</p>
+      <h2>A few things to watch out for</h2>
+
+      <div class="callout warn">
+        <div class="ic" aria-hidden="true">🧩</div>
+        <div>
+          <h3>VDP1 has no "screenshot" to read back</h3>
+          <p>The real chip doesn't keep an addressable finished image — so the tool <b>rebuilds</b> the
+            frame from the commands. That's the whole point: it's why every sprite is a separate,
+            selectable object instead of a flat picture.</p>
+        </div>
+      </div>
+
+      <div class="callout warn">
+        <div class="ic" aria-hidden="true">🖥️</div>
+        <div>
+          <h3>The frame buffer needs a live software renderer</h3>
+          <p>The raw 512×256 buffer view is only populated when connected to a live emulator using its
+            software renderer. Savestates and hardware-accelerated renderers won't have it — the panel
+            will say so.</p>
+        </div>
+      </div>
+
+      <div class="callout tip">
+        <div class="ic" aria-hidden="true">🎨</div>
+        <div>
+          <h3>Sprite colors depend on VDP2</h3>
+          <p>A palettized texture is just index numbers; its real colors come from VDP2's Color RAM, and
+            the final look also depends on VDP2 sprite settings. If a sprite's colors look wrong, check
+            the palette — not just the texture. (Memory is big-endian but the frame buffer is host-order,
+            which is why the Framebuffer panel has a byte-swap toggle.)</p>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <p class="eyebrow">Reference</p>
+      <h2>Glossary</h2>
+      <dl class="glossary">
+        <div class="term"><dt>VDP1</dt><dd>The Saturn's drawing engine; draws sprites and polygons into a frame buffer.</dd></div>
+        <div class="term"><dt>VDP2</dt><dd>The companion chip that draws backgrounds and composites the final picture.</dd></div>
+        <div class="term"><dt>Sprite</dt><dd>On the Saturn, a textured quad — not a fixed-size 2D tile.</dd></div>
+        <div class="term"><dt>Quad</dt><dd>A four-cornered shape; VDP1's basic drawing primitive.</dd></div>
+        <div class="term"><dt>Distorted sprite</dt><dd>A quad with corners freely placed; how the Saturn fakes 3D.</dd></div>
+        <div class="term"><dt>Command table</dt><dd>The linked list of drawing commands VDP1 works through each frame.</dd></div>
+        <div class="term"><dt>Texture</dt><dd>The picture stretched across a sprite, stored in VDP1 memory.</dd></div>
+        <div class="term"><dt>Color mode</dt><dd>How a texture stores pixels: 16/64/128/256-color palettized, or direct RGB555.</dd></div>
+        <div class="term"><dt>CRAM</dt><dd>Color RAM — the shared color table palettized pixels look up.</dd></div>
+        <div class="term"><dt>CLUT</dt><dd>A small color lookup table in VDP1 memory used by "16 (LUT)" textures.</dd></div>
+        <div class="term"><dt>Gouraud</dt><dd>Smooth brightness blended across a quad from its four corners.</dd></div>
+        <div class="term"><dt>Draw mode</dt><dd>How a sprite blends: Normal, Mesh, Shadow, Half Luminance, Half Transparent.</dd></div>
+        <div class="term"><dt>Frame buffer</dt><dd>The off-screen 512×256 image VDP1 draws into; there are two, and they swap.</dd></div>
+        <div class="term"><dt>RGB555</dt><dd>A direct-color format: 5 bits each for red, green, blue.</dd></div>
+      </dl>
+    </section>
+
+    <footer>
+      <p class="mono">Saturn Explorer · VDP1 subsystem guide · command table · textures · 3D view · frame buffer</p>
+    </footer>
+  </div>
+</main>
+
+<script>
+  (function () {
+    var canvas = document.getElementById('scope');
+    if (!canvas) return;
+    var ctx = canvas.getContext('2d');
+    var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var w = 0, h = 0;
+    function accent() { return getComputedStyle(document.documentElement).getPropertyValue('--scope').trim() || '#f272a6'; }
+    function resize() {
+      var r = canvas.getBoundingClientRect(); w = r.width; h = r.height;
+      canvas.width = Math.max(1, Math.floor(w * dpr)); canvas.height = Math.max(1, Math.floor(h * dpr));
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+    resize(); window.addEventListener('resize', resize);
+
+    // a "distorted sprite": a textured quad whose 4 corners wobble
+    function draw(t) {
+      ctx.clearRect(0, 0, w, h);
+      var col = accent();
+      var cx = w * 0.72, cy = h * 0.5;
+      var R = Math.min(w, h) * 0.26;
+      // base corners
+      var base = [[-1,-1],[1,-1],[1,1],[-1,1]];
+      var pts = base.map(function (p, i) {
+        var wob = 0.26 * Math.sin(t * 1.1 + i * 1.7) + 0.18 * Math.cos(t * 0.7 + i);
+        return [ cx + p[0] * R * (1 + wob), cy + p[1] * R * (1 - wob * 0.6) ];
+      });
+      // texture grid mapped across the quad (bilinear)
+      function lerp(a, b, u) { return [a[0]+(b[0]-a[0])*u, a[1]+(b[1]-a[1])*u]; }
+      function at(u, v) { var top = lerp(pts[0], pts[1], u), bot = lerp(pts[3], pts[2], u); return lerp(top, bot, v); }
+      ctx.strokeStyle = col; ctx.globalAlpha = 0.28; ctx.lineWidth = 1;
+      var N = 6;
+      for (var i = 0; i <= N; i++) {
+        ctx.beginPath();
+        for (var j = 0; j <= N; j++) { var q = at(i/N, j/N); if (j===0) ctx.moveTo(q[0],q[1]); else ctx.lineTo(q[0],q[1]); }
+        ctx.stroke();
+        ctx.beginPath();
+        for (var k = 0; k <= N; k++) { var r = at(k/N, i/N); if (k===0) ctx.moveTo(r[0],r[1]); else ctx.lineTo(r[0],r[1]); }
+        ctx.stroke();
+      }
+      // quad outline + corner dots
+      ctx.globalAlpha = 0.9; ctx.lineWidth = 2; ctx.beginPath();
+      pts.forEach(function (p, i) { if (i===0) ctx.moveTo(p[0],p[1]); else ctx.lineTo(p[0],p[1]); });
+      ctx.closePath(); ctx.stroke();
+      ctx.fillStyle = col;
+      pts.forEach(function (p) { ctx.beginPath(); ctx.arc(p[0], p[1], 3.4, 0, 6.29); ctx.fill(); });
+      ctx.globalAlpha = 1;
+    }
+
+    if (reduce) { draw(0.8); return; }
+    var start = null;
+    function frame(ts) { if (start === null) start = ts; draw((ts - start) / 1000); requestAnimationFrame(frame); }
+    requestAnimationFrame(frame);
+  })();
+</script>
+
+</body>
+</html>

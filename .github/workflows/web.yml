@@ -45,6 +45,13 @@ jobs:
           test -f build-web/bin/index.html
           test -f build-web/bin/index.wasm
 
+      - name: Add hardware guides
+        working-directory: SaturnExplorer
+        run: |
+          mkdir -p build-web/bin/guides
+          cp web/guides/*.html build-web/bin/guides/
+          ls -la build-web/bin/guides
+
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:

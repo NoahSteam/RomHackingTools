@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Saturn Explorer — Field Guides</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg: #e9edf1; --surface: #ffffff; --surface-2: #f4f7f9;
+    --ink: #17212a; --ink-soft: #4c5d6a; --line: #d5dde3; --line-strong: #c2ccd4;
+    --audio: #b26a10; --vdp1: #bb2e6a; --vdp2: #3a5bd0;
+    --shadow: 0 1px 2px rgba(20,30,40,.06), 0 8px 24px rgba(20,30,40,.06);
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1216; --surface: #141b21; --surface-2: #1a232a;
+      --ink: #e7eef3; --ink-soft: #9db0bd; --line: #26313a; --line-strong: #33414c;
+      --audio: #e8a33d; --vdp1: #f272a6; --vdp2: #7c9bf5;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 34px rgba(0,0,0,.4);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="light"] {
+    --bg: #e9edf1; --surface: #ffffff; --surface-2: #f4f7f9;
+    --ink: #17212a; --ink-soft: #4c5d6a; --line: #d5dde3; --line-strong: #c2ccd4;
+    --audio: #b26a10; --vdp1: #bb2e6a; --vdp2: #3a5bd0; color-scheme: light;
+  }
+  :root[data-theme="dark"] {
+    --bg: #0d1216; --surface: #141b21; --surface-2: #1a232a;
+    --ink: #e7eef3; --ink-soft: #9db0bd; --line: #26313a; --line-strong: #33414c;
+    --audio: #e8a33d; --vdp1: #f272a6; --vdp2: #7c9bf5; color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink); min-height: 100vh;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, Roboto, sans-serif;
+    line-height: 1.6; -webkit-font-smoothing: antialiased;
+    display: flex; align-items: center; justify-content: center; padding: 40px 24px;
+  }
+  .wrap { max-width: 940px; width: 100%; }
+  .eyebrow {
+    font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px;
+    letter-spacing: .18em; text-transform: uppercase; color: var(--ink-soft);
+    margin: 0 0 14px; display: flex; align-items: center; gap: 10px;
+  }
+  .eyebrow::before { content: ""; width: 26px; height: 2px; background: var(--vdp2); display: inline-block; }
+  h1 { font-size: clamp(30px, 5vw, 46px); font-weight: 800; letter-spacing: -.02em; margin: 0 0 12px; text-wrap: balance; }
+  .lede { color: var(--ink-soft); font-size: 18px; max-width: 60ch; margin: 0 0 36px; }
+  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  a.card {
+    display: flex; flex-direction: column; text-decoration: none; color: inherit;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 16px;
+    padding: 24px 22px 26px; box-shadow: var(--shadow); position: relative; overflow: hidden;
+    transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease;
+  }
+  a.card::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 4px; background: var(--c); }
+  a.card:hover { transform: translateY(-3px); box-shadow: 0 12px 34px rgba(20,30,40,.14); border-color: var(--c); }
+  .ic { font-size: 30px; margin-bottom: 14px; }
+  .card h2 { font-size: 21px; font-weight: 750; margin: 0 0 6px; }
+  .card .sub { font-family: ui-monospace, Menlo, monospace; font-size: 12px; letter-spacing: .04em; color: var(--c); font-weight: 600; text-transform: uppercase; margin-bottom: 12px; }
+  .card p { font-size: 14.5px; color: var(--ink-soft); margin: 0 0 16px; flex: 1; }
+  .go { font-size: 14px; font-weight: 650; color: var(--c); }
+  footer { margin-top: 34px; color: var(--ink-soft); font-size: 13px; }
+  footer a { color: var(--vdp2); }
+  @media (max-width: 720px) { .cards { grid-template-columns: 1fr; } }
+  a:focus-visible { outline: 2px solid var(--vdp2); outline-offset: 3px; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <p class="eyebrow">Saturn Explorer</p>
+    <h1>Field guides to the Saturn's hardware</h1>
+    <p class="lede">Plain-English tours of the Sega Saturn's audio and video chips — how each one
+      works, and how the tool lets you see, extract, and trace what it produces. No prior hardware
+      knowledge assumed.</p>
+
+    <div class="cards">
+      <a class="card" href="audio.html" style="--c: var(--audio);">
+        <div class="ic" aria-hidden="true">🎛️</div>
+        <div class="sub">Sound</div>
+        <h2>Saturn Audio</h2>
+        <p>The SCSP sound chip, sound RAM, streaming vs. CD audio, and tracing a sound back to its
+          file on the disc.</p>
+        <span class="go">Read the guide →</span>
+      </a>
+      <a class="card" href="vdp1.html" style="--c: var(--vdp1);">
+        <div class="ic" aria-hidden="true">🎮</div>
+        <div class="sub">Sprites &amp; polygons</div>
+        <h2>VDP1</h2>
+        <p>The drawing engine: everything is a four-cornered quad. Command table, textures,
+          palettes, and the 3D view.</p>
+        <span class="go">Read the guide →</span>
+      </a>
+      <a class="card" href="vdp2.html" style="--c: var(--vdp2);">
+        <div class="ic" aria-hidden="true">🧱</div>
+        <div class="sub">Backgrounds &amp; layers</div>
+        <h2>VDP2</h2>
+        <p>The layer engine: a stack of scrolling backgrounds merged by priority, the shared palette,
+          and color math.</p>
+        <span class="go">Read the guide →</span>
+      </a>
+    </div>
+
+    <footer>Part of <a href="../index.html">Saturn Explorer</a> — a Sega Saturn debugger &amp; asset explorer.</footer>
+  </div>
+</body>
+</html>
