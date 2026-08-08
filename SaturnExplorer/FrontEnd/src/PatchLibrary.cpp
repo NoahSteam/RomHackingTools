@@ -82,13 +82,6 @@ void PatchLibrary::RemoveAt(size_t i)
     mDirty = true;
 }
 
-void PatchLibrary::Clear()
-{
-    if (mEntries.empty()) return;
-    mEntries.clear();
-    mDirty = true;
-}
-
 // Text format (tab-separated so spaces in file/label are safe; no field may contain a tab):
 //   SEPATCH 1
 //   <addrHex>\t<length>\t<offset>\t<expectedHex>\t<file>\t<label>
@@ -146,17 +139,6 @@ bool PatchLibrary::Deserialize(const std::string& text)
     return true;
 }
 
-bool PatchLibrary::SaveProject(const std::string& path) const
-{
-    std::ofstream f(path, std::ios::binary | std::ios::trunc);
-    if (!f) return false;
-    const std::string text = Serialize();
-    f.write(text.data(), static_cast<std::streamsize>(text.size()));
-    if (!f) return false;
-    const_cast<PatchLibrary*>(this)->mDirty = false;
-    return true;
-}
-
 bool PatchLibrary::LoadProject(const std::string& path)
 {
     std::ifstream f(path, std::ios::binary);
@@ -174,24 +156,25 @@ std::string PatchLibrary::EmitPython(
     outcomes.reserve(mEntries.size());
 
     std::ostringstream body;   // the PATCHES table entries (changed only)
+    std::vector<uint8_t> current;   // reused scratch for each entry's memory read
     for (const PatchLocation& e : mEntries)
     {
         PatchOutcome oc;
         oc.location = &e;
-        if (!readMem || !readMem(e.cpuAddr, e.length, oc.current) || oc.current.size() != e.length)
+        if (!readMem || !readMem(e.cpuAddr, e.length, current) || current.size() != e.length)
         {
             oc.readFailed = true;
-            outcomes.push_back(std::move(oc));
+            outcomes.push_back(oc);
             continue;
         }
-        oc.changed = (oc.current != e.expected);
+        oc.changed = (current != e.expected);
         if (oc.changed)
         {
             body << "    (" << PyStr(e.file) << ", "
                  << static_cast<unsigned long long>(e.fileOffset) << ", "
-                 << PyStr(ToHex(oc.current)) << "),\n";
+                 << PyStr(ToHex(current)) << "),\n";
         }
-        outcomes.push_back(std::move(oc));
+        outcomes.push_back(oc);
     }
 
     std::ostringstream os;

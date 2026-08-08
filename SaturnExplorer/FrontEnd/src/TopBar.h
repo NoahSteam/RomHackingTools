@@ -61,7 +61,6 @@ enum class TopBarCommandType
     // Patch feature (desktop only)
     ApplyChangesToDisc,
     SaveProject,
-    SaveProjectAs,
     OpenProject,
     ManageLocations
 };

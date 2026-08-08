@@ -1104,11 +1104,12 @@ void App::BuildUI(IPlatform& platform)
     DrawLocateResults();          // floating; accept/reject matches into the patch library
     DrawManageLocationsModal();   // modal; list/remove known locations
     DrawPatchResultsModal();      // modal; Apply-changes-to-disc summary
-    // Window-close veto: if the user asked to close and there are unsaved patch locations,
-    // raise the confirmation prompt; otherwise let the close proceed.
-    if (platform.CloseRequested())
+    // Window-close veto: when the user first asks to close, either let it proceed or (if there
+    // are unsaved patch locations) raise the confirmation prompt exactly once. mClosePromptActive
+    // edge-guards it so the modal isn't re-opened every frame while it's up.
+    if (platform.CloseRequested() && !mClosePromptActive)
     {
-        if (mPatchLib.Dirty()) mClosePrompt = true;
+        if (mPatchLib.Dirty()) { mClosePrompt = true; mClosePromptActive = true; }
         else                   platform.AcknowledgeClose();
     }
     DrawClosePromptModal(platform);   // modal; unsaved-changes-on-close warning
@@ -4173,6 +4174,7 @@ void App::BeginByteSearch(std::vector<uint8_t> needle, const std::string& label)
     }
     mPendingNeedle = std::move(needle);
     mPendingSearchLabel = label;
+    mPendingIsLocate = false;          // a texture/data search -> the texture-results window
     if (mDataDir.empty())
     {
         mSearchAfterSetDir = true;     // run once the user picks a directory
@@ -4185,16 +4187,17 @@ void App::BeginByteSearch(std::vector<uint8_t> needle, const std::string& label)
 }
 
 // The quick "Find in game data directory" path (also used by the Hex/Assembly byte
-// searches): search the whole data directory for the raw bytes.
+// searches): search the whole data directory for the raw bytes. mPendingIsLocate carries the
+// result destination through the deferred (no-data-dir-yet) case.
 void App::RunPendingSearch()
 {
-    LaunchSearch({mDataDir}, SearchCompression::None, "the game data directory");
+    LaunchSearch({mDataDir}, SearchCompression::None, "the game data directory", mPendingIsLocate);
 }
 
 // Spawn the search on a worker thread and show the results window (which displays live
 // progress while it runs). Roots are files and/or directories; empty entries are dropped.
 void App::LaunchSearch(std::vector<std::string> roots, SearchCompression comp,
-                       const std::string& scopeText)
+                       const std::string& scopeText, bool locate)
 {
     roots.erase(std::remove_if(roots.begin(), roots.end(),
                                [](const std::string& s) { return s.empty(); }),
@@ -4207,11 +4210,13 @@ void App::LaunchSearch(std::vector<std::string> roots, SearchCompression comp,
         mQueuedRoots = std::move(roots);
         mQueuedComp = comp;
         mQueuedScope = scopeText;
+        mQueuedIsLocate = locate;
         mSearchQueued = true;
         mSearchProgress.cancel.store(true);
         mShowSearchResults = true;   // keep the results window up so the swap is visible
         return;
     }
+    mSearchIsLocate = locate;   // destination of the search we're about to start
 
     if (mPendingNeedle.empty() || roots.empty())
     {
@@ -4285,16 +4290,21 @@ void App::PollSearchWorker()
         mSearchDone.store(false);
 
 #ifdef SE_ENABLE_LIVE
-        // A patch-locate search: hand its hits to the locate-results window (accept/reject),
-        // rather than the texture-results window.
-        if (mSearchIsLocate && !mSearchQueued)
+        // A patch-locate search: hand its hits to the locate-results window (accept/reject)
+        // rather than the texture-results window. Precompute the relative path per result file
+        // and the accepted-row flags once, so the per-frame draw doesn't recompute them.
+        if (mSearchIsLocate)
         {
-            mSearchIsLocate = false;
             mLocateResults = std::move(mSearchResults);
             mSearchResults.clear();
             mLocateSummary = mSearchSummary;
+            mLocateRel.clear();
             size_t rows = 0;
-            for (const DataSearchHit& h : mLocateResults) rows += h.offsets.size();
+            for (const DataSearchHit& h : mLocateResults)
+            {
+                mLocateRel.push_back(RelativeToDataDir(h.path));
+                rows += h.offsets.size();
+            }
             mLocateRowAdded.assign(rows, 0);
             mShowLocateResults = true;
             mShowSearchResults = false;
@@ -4302,11 +4312,12 @@ void App::PollSearchWorker()
 #endif
 
         // If the user asked for another search while this one ran, start it now (the old
-        // worker is fully reaped, so LaunchSearch won't see mSearchRunning and will run).
+        // worker is fully reaped, so LaunchSearch won't see mSearchRunning and will run). The
+        // queued search carries its own result destination.
         if (mSearchQueued)
         {
             mSearchQueued = false;
-            LaunchSearch(std::move(mQueuedRoots), mQueuedComp, mQueuedScope);
+            LaunchSearch(std::move(mQueuedRoots), mQueuedComp, mQueuedScope, mQueuedIsLocate);
         }
     }
 }
@@ -4328,8 +4339,7 @@ std::string App::RelativeToDataDir(const std::string& absPath) const
     if (!d.empty() && d.back() == '/') d.pop_back();
     if (p.size() > d.size() + 1 && p.compare(0, d.size(), d) == 0 && p[d.size()] == '/')
         return p.substr(d.size() + 1);
-    const size_t slash = p.find_last_of('/');   // outside the data dir: fall back to the basename
-    return slash == std::string::npos ? p : p.substr(slash + 1);
+    return PathBasename(absPath);   // outside the data dir: fall back to the file name
 }
 
 // The context-bytes chooser opened from the Hex editor's "Find in game files". The user picks
@@ -4397,9 +4407,10 @@ void App::BeginLocateSearch(uint32_t addr, uint32_t len, uint32_t before, uint32
 
     mPendingNeedle = std::move(needleRes.bytes);
     mPendingSearchLabel = mLocateLabel;
-    mSearchIsLocate = true;
+    mPendingIsLocate = true;         // route results to the locate window (survives a deferred dir)
     mShowLocateResults = true;
     mLocateResults.clear();
+    mLocateRel.clear();
     mLocateRowAdded.clear();
     mLocateSummary.clear();
 
@@ -4410,7 +4421,7 @@ void App::BeginLocateSearch(uint32_t addr, uint32_t len, uint32_t before, uint32
     }
     else
     {
-        LaunchSearch({mDataDir}, SearchCompression::None, "the game data files");
+        LaunchSearch({mDataDir}, SearchCompression::None, "the game data files", /*locate=*/true);
     }
 }
 
@@ -4436,38 +4447,25 @@ void App::DrawLocateResults()
         ImGui::Separator();
         if (!mLocateSummary.empty()) ImGui::TextDisabled("%s", mLocateSummary.c_str());
 
-        size_t row = 0;
-        size_t totalOffsets = 0;
-        for (const DataSearchHit& h : mLocateResults) totalOffsets += h.offsets.size();
-        if (totalOffsets == 0)
+        if (mLocateRowAdded.empty())   // == total (hit, offset) rows; built in PollSearchWorker
         {
             ImGui::TextDisabled("No matches. Try more/less context, or a different selection.");
         }
-        for (const DataSearchHit& h : mLocateResults)
+        size_t row = 0;
+        for (size_t f = 0; f < mLocateResults.size(); ++f)
         {
-            const std::string rel = RelativeToDataDir(h.path);
-            for (uint64_t off : h.offsets)
+            const std::string& rel = mLocateRel[f];   // precomputed when results arrived
+            for (uint64_t off : mLocateResults[f].offsets)
             {
                 const uint64_t selOffset = off + mLocateCtxBefore;   // where the SELECTION lands
                 ImGui::PushID((int)row);
-                const bool added = row < mLocateRowAdded.size() && mLocateRowAdded[row];
-                if (added)
+                if (row < mLocateRowAdded.size() && mLocateRowAdded[row])
                 {
                     ImGui::TextDisabled("Added");
                 }
                 else if (ImGui::SmallButton("Accept"))
                 {
-                    PatchLocation loc;
-                    char l[160];
-                    std::snprintf(l, sizeof(l), "%s -> %s @ %llu", mLocateLabel.c_str(),
-                                  rel.c_str(), (unsigned long long)selOffset);
-                    loc.label = l;
-                    loc.cpuAddr = mLocateAddr;
-                    loc.length = mLocateLen;
-                    loc.file = rel;
-                    loc.fileOffset = selOffset;
-                    loc.expected = mLocateExpected;
-                    mPatchLib.AddOrUpdate(loc);
+                    AcceptLocateMatch(rel, selOffset);
                     if (row < mLocateRowAdded.size()) mLocateRowAdded[row] = 1;
                 }
                 ImGui::SameLine();
@@ -4479,6 +4477,23 @@ void App::DrawLocateResults()
         }
     }
     ImGui::End();
+}
+
+// Turn an accepted (file, offset) match into a PatchLocation and record it in the library.
+// The label/offset arithmetic is model work kept out of the draw loop.
+void App::AcceptLocateMatch(const std::string& rel, uint64_t selOffset)
+{
+    PatchLocation loc;
+    char l[192];
+    std::snprintf(l, sizeof(l), "%s -> %s @ %llu", mLocateLabel.c_str(), rel.c_str(),
+                  (unsigned long long)selOffset);
+    loc.label = l;
+    loc.cpuAddr = mLocateAddr;
+    loc.length = mLocateLen;
+    loc.file = rel;
+    loc.fileOffset = selOffset;
+    loc.expected = mLocateExpected;
+    mPatchLib.AddOrUpdate(loc);
 }
 
 void App::DrawPatchMenu(std::vector<TopBarCommand>& commands)
@@ -4496,10 +4511,8 @@ void App::DrawPatchMenu(std::vector<TopBarCommand>& commands)
         if (ImGui::MenuItem("Manage locations...", nullptr, false, n > 0))
             commands.emplace_back(TopBarCommandType::ManageLocations);
         ImGui::Separator();
-        if (ImGui::MenuItem("Save project", nullptr, false, n > 0))
+        if (ImGui::MenuItem("Save project...", nullptr, false, n > 0))
             commands.emplace_back(TopBarCommandType::SaveProject);
-        if (ImGui::MenuItem("Save project as...", nullptr, false, n > 0))
-            commands.emplace_back(TopBarCommandType::SaveProjectAs);
         if (ImGui::MenuItem("Open project..."))
             commands.emplace_back(TopBarCommandType::OpenProject);
         ImGui::EndPopup();
@@ -4624,13 +4637,12 @@ void App::ApplyChangesToDisc(IPlatform& platform)
     mShowPatchResults = true;
 }
 
-void App::DoSaveProject(IPlatform& platform, bool saveAs)
+void App::DoSaveProject(IPlatform& platform)
 {
-    // No silent-write-to-path API on desktop; SaveFile prompts / downloads. Emit the project
-    // text through SaveFile with a suggested name; remember the chosen path for status only.
+    // IPlatform::SaveFile prompts (desktop Save-As / web download); emit the project text
+    // through it under a suggested name.
     const std::string text = mPatchLib.Serialize();
-    const char* name = "patches.seproj";
-    if (platform.SaveFile(name, text.data(), text.size()))
+    if (platform.SaveFile("patches.seproj", text.data(), text.size()))
     {
         mPatchLib.ClearDirty();
         mPatchResultText = "Saved the patch project (" + std::to_string(mPatchLib.Count()) +
@@ -4640,7 +4652,6 @@ void App::DoSaveProject(IPlatform& platform, bool saveAs)
     {
         mPatchResultText = "Project save was cancelled or failed.";
     }
-    (void)saveAs;
     mShowPatchResults = true;
 }
 
@@ -4652,7 +4663,6 @@ void App::DoOpenProject(IPlatform& platform)
         return;   // cancelled
     if (mPatchLib.LoadProject(path))
     {
-        mProjectPath = path;
         mPatchResultText = "Loaded " + std::to_string(mPatchLib.Count()) +
                            " location(s) from the project.";
     }
@@ -4672,18 +4682,30 @@ void App::DrawClosePromptModal(IPlatform& platform)
     ImGui::Separator();
     if (ImGui::Button("Save"))
     {
-        DoSaveProject(platform, false);
-        if (!mPatchLib.Dirty()) { platform.AcknowledgeClose(); ImGui::CloseCurrentPopup(); }
+        DoSaveProject(platform);
+        if (!mPatchLib.Dirty())   // saved (not cancelled): proceed with the close
+        {
+            mClosePromptActive = false;
+            platform.AcknowledgeClose();
+            ImGui::CloseCurrentPopup();
+        }
     }
     ImGui::SameLine();
     if (ImGui::Button("Discard"))
     {
-        mPatchLib.ClearDirty();
+        mClosePromptActive = false;
         platform.AcknowledgeClose();
         ImGui::CloseCurrentPopup();
     }
     ImGui::SameLine();
-    if (ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();   // stay open
+    if (ImGui::Button("Cancel"))
+    {
+        // Dismiss the close request entirely so the app keeps running (the platform's
+        // close-request flag is cleared; without this the prompt would re-raise next frame).
+        mClosePromptActive = false;
+        platform.CancelClose();
+        ImGui::CloseCurrentPopup();
+    }
     ImGui::EndPopup();
 }
 #endif  // SE_ENABLE_LIVE
@@ -5593,11 +5615,10 @@ void App::ExecuteTopBarCommand(const TopBarCommand& command, IPlatform& platform
         mOpenDataDirModal = true;
         break;
 #ifdef SE_ENABLE_LIVE
-    case TopBarCommandType::ApplyChangesToDisc: ApplyChangesToDisc(platform);  break;
-    case TopBarCommandType::SaveProject:        DoSaveProject(platform, false); break;
-    case TopBarCommandType::SaveProjectAs:      DoSaveProject(platform, true);  break;
-    case TopBarCommandType::OpenProject:        DoOpenProject(platform);        break;
-    case TopBarCommandType::ManageLocations:    mOpenManageLocations = true;    break;
+    case TopBarCommandType::ApplyChangesToDisc: ApplyChangesToDisc(platform); break;
+    case TopBarCommandType::SaveProject:        DoSaveProject(platform);      break;
+    case TopBarCommandType::OpenProject:        DoOpenProject(platform);      break;
+    case TopBarCommandType::ManageLocations:    mOpenManageLocations = true;  break;
 #endif
     case TopBarCommandType::ToggleWindow:
     case TopBarCommandType::ShowWindow:

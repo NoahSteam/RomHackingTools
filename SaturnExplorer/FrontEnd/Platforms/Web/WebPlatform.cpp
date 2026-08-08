@@ -161,7 +161,7 @@ bool WebPlatform::PumpEvents()
     }
     // On the web the browser owns the loop and never sends SDL_QUIT, so this stays
     // true; natively it returns false only once the app confirms the close.
-    return !mQuit && !mCloseAcked;
+    return !mCloseAcked;
 }
 
 void WebPlatform::BeginFrame()

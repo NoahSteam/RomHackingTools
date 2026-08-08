@@ -37,8 +37,7 @@ struct PatchLocation
 struct PatchOutcome
 {
     const PatchLocation* location = nullptr;
-    std::vector<uint8_t> current;   // current memory bytes (what will be written)
-    bool changed = false;           // current != expected (only changed ones are emitted)
+    bool changed = false;           // current memory != expected (only changed ones are emitted)
     bool readFailed = false;        // memory could not be read for this location
 };
 
@@ -52,23 +51,18 @@ public:
     // Remove the entry at index `i` (no-op if out of range). Marks dirty.
     void RemoveAt(size_t i);
 
-    // Drop every entry. Marks dirty only if there was something to clear.
-    void Clear();
-
     const std::vector<PatchLocation>& Entries() const { return mEntries; }
     size_t Count() const { return mEntries.size(); }
 
     bool Dirty() const { return mDirty; }
     void ClearDirty() { mDirty = false; }
 
-    // Serialize / restore the library as a small text project file. Returns false on I/O error.
-    // Save clears the dirty flag; Load replaces the current contents and clears dirty.
-    bool SaveProject(const std::string& path) const;
-    bool LoadProject(const std::string& path);
-
-    // Serialize to / parse from the project text (exposed for testing without touching disk).
+    // Serialize to / parse from the project text. The app pairs Serialize() with the platform
+    // save-file dialog; LoadProject reads a chosen file and replaces the current contents
+    // (clearing dirty). Deserialize is the in-memory parse used by both LoadProject and tests.
     std::string Serialize() const;
     bool        Deserialize(const std::string& text);
+    bool        LoadProject(const std::string& path);
 
     // Read current memory for each entry via `readMem(cpuAddr, length, out)` (returns true on
     // success). Produces one PatchOutcome per entry and returns the Python patch script that

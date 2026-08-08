@@ -76,7 +76,6 @@ public:
 private:
     SDL_Window*   mWindow  = nullptr;
     SDL_GLContext mGlContext = nullptr;
-    bool          mQuit = false;
     bool          mCloseRequested = false;   // user asked to close (window-close veto seam)
     bool          mCloseAcked = false;       // app confirmed the close -> PumpEvents ends
     bool          mAudioOk = false;      // SDL audio subsystem initialized

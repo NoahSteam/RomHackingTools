@@ -191,8 +191,11 @@ private:
     // Launch the pending search (mPendingNeedle) over `roots` with compression `comp` on a
     // worker thread. A PRS scan can be slow, so it must not block the UI. `scopeText`
     // describes what is being searched, for the results summary.
+    // 'locate' routes the results to the Patch "Find in game files" window (accept/reject)
+    // instead of the texture-search results window; it travels with the queued search so the
+    // two search kinds compose correctly through the single worker.
     void LaunchSearch(std::vector<std::string> roots, SearchCompression comp,
-                      const std::string& scopeText);
+                      const std::string& scopeText, bool locate = false);
     void PollSearchWorker();   // called each frame: joins the finished worker
     void LoadSearchOptions();
     void SaveSearchOptions();
@@ -362,35 +365,40 @@ private:
     // "Apply changes to disc" emits + runs a Python script that writes current memory into the
     // mapped files. The library persists to a project file; unsaved changes warn on close.
     PatchLibrary         mPatchLib;
-    std::string          mProjectPath;          // last saved/opened project (for re-save)
 
     bool                 mOpenLocatePopup = false;                 // context-bytes popup pending
     HexEditorPanel::LocateRequest mLocatePending;                  // selection awaiting context
     int                  mLocateBefore = 16, mLocateAfter = 16;    // context byte counts
 
-    bool                 mSearchIsLocate = false;                  // the active search is a locate
+    // Inputs captured at "Find in game files" time, needed to turn an accepted match into a
+    // PatchLocation on the (later) Accept click.
     uint32_t             mLocateAddr = 0, mLocateLen = 0, mLocateCtxBefore = 0;
     std::vector<uint8_t> mLocateExpected;                          // selection bytes (baseline)
     std::string          mLocateLabel;
+    // Results of the locate search (shown with Accept/Reject). mLocateRel/mLocateRowAdded are
+    // parallel to the flattened (hit, offset) rows and are built once when results arrive.
     bool                 mShowLocateResults = false;
     std::vector<DataSearchHit> mLocateResults;
+    std::vector<std::string>   mLocateRel;                         // rel path per result FILE
     std::string          mLocateSummary;
-    std::vector<uint8_t> mLocateRowAdded;                          // per flattened result row
+    std::vector<uint8_t> mLocateRowAdded;                          // 1 = row accepted
 
     bool                 mOpenManageLocations = false;
     bool                 mShowPatchResults = false;
     std::string          mPatchResultText;
     bool                 mClosePrompt = false;                     // unsaved-changes-on-close modal
+    bool                 mClosePromptActive = false;               // edge-trigger guard for the modal
 
     void DrawLocatePopup();
     void BeginLocateSearch(uint32_t addr, uint32_t len, uint32_t before, uint32_t after);
     void DrawLocateResults();
+    void AcceptLocateMatch(const std::string& rel, uint64_t selOffset);   // add one match to the library
     void DrawPatchMenu(std::vector<TopBarCommand>& commands);
     void DrawManageLocationsModal();
     void DrawPatchResultsModal();
     void DrawClosePromptModal(IPlatform& platform);
     void ApplyChangesToDisc(IPlatform& platform);
-    void DoSaveProject(IPlatform& platform, bool saveAs);
+    void DoSaveProject(IPlatform& platform);
     void DoOpenProject(IPlatform& platform);
     std::string RelativeToDataDir(const std::string& absPath) const;
 #endif
@@ -434,6 +442,12 @@ private:
     std::vector<std::string>   mQueuedRoots;
     SearchCompression          mQueuedComp = SearchCompression::None;
     std::string                mQueuedScope;
+    // Result destination (Patch "Find in game files" vs texture results) for the running,
+    // queued, and pending-until-a-data-dir-is-set searches — so a locate never routes to the
+    // texture window (or vice-versa) when the two kinds interleave through the shared worker.
+    bool                       mSearchIsLocate = false;   // the running/just-finished search
+    bool                       mQueuedIsLocate = false;   // the queued search
+    bool                       mPendingIsLocate = false;  // the needle awaiting a data dir
 
     // Per-panel visibility, toggled from the toolbar "Windows" menu. All shown by
     // default; a hidden panel simply isn't drawn (its dock tab disappears until
