@@ -5,6 +5,8 @@
 #include <cstdio>
 #include <cstdlib>   // system() for RevealPath (native desktop)
 #include <cstring>   // strchr/strlen for the file-dialog filter (native desktop)
+#include <string>
+#include <vector>
 
 #include <SDL.h>
 
@@ -61,13 +63,24 @@ bool WebPlatform::Initialize(const PlatformConfig& config)
     // CI, some servers) still runs — the Sound panel's Play button just stays disabled.
     mAudioOk = (SDL_InitSubSystem(SDL_INIT_AUDIO) == 0);
 
-    // Request a GLES 3.0 context on the web (→ WebGL2); a matching GL 3.0 context
-    // natively. The OpenGL3 backend adapts to whichever it gets.
-#ifdef __EMSCRIPTEN__
+    // Request the GL context the ImGui OpenGL3 backend needs. The web wants GLES 3.0
+    // (→ WebGL2); Linux is happy with a 3.0 compatibility context; macOS is the special case —
+    // it only exposes legacy 2.1 OR a 3.2+ *Core* (forward-compatible) profile, so a bare 3.0
+    // request there silently yields a 2.1 context and the GL3 shaders fail to compile (blank
+    // window). Ask macOS for Core 3.2 explicitly.
+#if defined(__EMSCRIPTEN__)
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
-#endif
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+#elif defined(__APPLE__)
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);
+#else
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+#endif
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 0);
 
@@ -95,6 +108,9 @@ bool WebPlatform::Initialize(const PlatformConfig& config)
     // cannot work in a browser, so it is deliberately not enabled here.
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+#if defined(__APPLE__) && !defined(__EMSCRIPTEN__)
+    io.ConfigMacOSXBehaviors = true;   // ⌘-based shortcuts + Mac-style text-edit navigation
+#endif
 
     sfe::ApplyTheme(ImGui::GetStyle());   // Saturn Explorer theme (shared, portable)
     sfe::LoadFonts(io);                   // embedded proportional UI font
@@ -114,8 +130,10 @@ bool WebPlatform::Initialize(const PlatformConfig& config)
     style.FontScaleMain = dpiScale;
 
     ImGui_ImplSDL2_InitForOpenGL(mWindow, mGlContext);
-#ifdef __EMSCRIPTEN__
+#if defined(__EMSCRIPTEN__)
     ImGui_ImplOpenGL3_Init("#version 300 es");
+#elif defined(__APPLE__)
+    ImGui_ImplOpenGL3_Init("#version 150");   // GLSL for the Core 3.2 context requested above
 #else
     ImGui_ImplOpenGL3_Init("#version 130");
 #endif
@@ -227,34 +245,6 @@ void WebPlatform::Resize(int width, int height)
     }
 }
 
-bool WebPlatform::OpenFileDialog(std::string& outPath)
-{
-    (void)outPath;
-#ifdef __EMSCRIPTEN__
-    SeWebOpenFilePicker();   // async: bytes arrive via se_web_load_file()
-#endif
-    return false;   // no synchronous path result on the web
-}
-
-bool WebPlatform::SaveFile(const char* suggestedName, const void* data, size_t size)
-{
-#ifdef __EMSCRIPTEN__
-    SeWebDownload(suggestedName ? suggestedName : "dump.bin",
-                  static_cast<const uint8_t*>(data), static_cast<int>(size));
-    return true;
-#else
-    // Native desktop verification build: write to the current directory.
-    FILE* f = std::fopen(suggestedName ? suggestedName : "dump.bin", "wb");
-    if (!f)
-    {
-        return false;
-    }
-    const size_t wrote = std::fwrite(data, 1, size, f);
-    std::fclose(f);
-    return wrote == size;
-#endif
-}
-
 #ifndef __EMSCRIPTEN__
 namespace
 {
@@ -277,52 +267,90 @@ std::string ParentDir(const std::string& path)
     const size_t slash = path.find_last_of('/');
     return (slash == std::string::npos) ? std::string(".") : path.substr(0, slash);
 }
-}  // namespace
 
-bool WebPlatform::PickDirectory(std::string& outPath)
+// Run each shell command in turn until one exits 0 and prints a path; that line (trailing
+// newlines stripped) becomes outPath. SDL has no native file dialog, so the desktop dialogs
+// are shelled out to the OS chooser (macOS osascript, Linux zenity/kdialog).
+bool RunChooser(const std::vector<std::string>& cmds, std::string& outPath)
 {
-    // Try the common desktop folder pickers in turn; capture the chosen path from
-    // stdout. No GUI dialog available -> return false (caller falls back to typing).
-    const char* const cmds[] = {
-#if defined(__APPLE__)
-        "osascript -e 'try' -e 'POSIX path of (choose folder)' -e 'end try' 2>/dev/null",
-#endif
-        "zenity --file-selection --directory 2>/dev/null",
-        "kdialog --getexistingdirectory 2>/dev/null",
-    };
-    for (const char* cmd : cmds)
+    for (const std::string& cmd : cmds)
     {
-        FILE* p = ::popen(cmd, "r");
-        if (!p)
-        {
-            continue;
-        }
+        FILE* p = ::popen(cmd.c_str(), "r");
+        if (!p) continue;
         std::string line;
         char buf[1024];
-        while (std::fgets(buf, sizeof(buf), p))
-        {
-            line += buf;
-        }
+        while (std::fgets(buf, sizeof(buf), p)) line += buf;
         const int rc = ::pclose(p);
-        while (!line.empty() && (line.back() == '\n' || line.back() == '\r'))
-        {
-            line.pop_back();
-        }
-        if (rc == 0 && !line.empty())
-        {
-            outPath = line;
-            return true;
-        }
+        while (!line.empty() && (line.back() == '\n' || line.back() == '\r')) line.pop_back();
+        if (rc == 0 && !line.empty()) { outPath = line; return true; }
     }
     return false;
+}
+}  // namespace
+#endif
+
+bool WebPlatform::OpenFileDialog(std::string& outPath)
+{
+#ifdef __EMSCRIPTEN__
+    (void)outPath;
+    SeWebOpenFilePicker();   // async: bytes arrive via se_web_load_file()
+    return false;            // no synchronous path result on the web
+#else
+    return OpenFileDialogFiltered(outPath, nullptr, nullptr);   // native: an unfiltered open
+#endif
+}
+
+bool WebPlatform::SaveFile(const char* suggestedName, const void* data, size_t size)
+{
+    const char* name = suggestedName ? suggestedName : "dump.bin";
+#ifdef __EMSCRIPTEN__
+    SeWebDownload(name, static_cast<const uint8_t*>(data), static_cast<int>(size));
+    return true;
+#else
+    // Ask the desktop's native save dialog for a destination (macOS osascript / Linux zenity /
+    // kdialog). If no chooser is present (e.g. a headless host), fall back to writing `name`
+    // in the current directory so the feature still works.
+    std::string path = name;
+    std::vector<std::string> cmds;
+#if defined(__APPLE__)
+    cmds.push_back("osascript -e 'try' -e 'POSIX path of (choose file name default name \"" +
+                   std::string(name) + "\")' -e 'end try' 2>/dev/null");
+#endif
+    cmds.push_back("zenity --file-selection --save --confirm-overwrite --filename=" +
+                   ShellQuote(name) + " 2>/dev/null");
+    cmds.push_back("kdialog --getsavefilename . " + ShellQuote(name) + " 2>/dev/null");
+    std::string chosen;
+    if (RunChooser(cmds, chosen)) path = chosen;
+
+    FILE* f = std::fopen(path.c_str(), "wb");
+    if (!f) return false;
+    const size_t wrote = std::fwrite(data, 1, size, f);
+    std::fclose(f);
+    return wrote == size;
+#endif
+}
+
+// The remaining dialog/shell entry points are native-desktop only (declared under
+// #ifndef __EMSCRIPTEN__ in the header); the browser build inherits the base no-ops.
+#ifndef __EMSCRIPTEN__
+bool WebPlatform::PickDirectory(std::string& outPath)
+{
+    std::vector<std::string> cmds;
+#if defined(__APPLE__)
+    cmds.push_back("osascript -e 'try' -e 'POSIX path of (choose folder)' -e 'end try' 2>/dev/null");
+#endif
+    cmds.push_back("zenity --file-selection --directory 2>/dev/null");
+    cmds.push_back("kdialog --getexistingdirectory 2>/dev/null");
+    return RunChooser(cmds, outPath);
 }
 
 bool WebPlatform::OpenFileDialogFiltered(std::string& outPath, const char* filterLabel,
                                          const char* extCsv)
 {
-    // Build zenity/kdialog file filters from the csv extension list. zenity wants
-    // "--file-filter=Label | *.cue *.chd"; kdialog wants "*.cue *.chd|Label".
-    std::string globs;
+    // Build the per-chooser filter from the csv extension list: zenity wants
+    // "--file-filter=Label | *.cue *.chd", kdialog wants "*.cue *.chd|Label", and macOS's
+    // `choose file of type` wants a brace list of quoted extensions {"cue", "chd"}.
+    std::string globs, macTypes;
     for (const char* p = extCsv ? extCsv : ""; *p; )
     {
         const char* comma = std::strchr(p, ',');
@@ -332,32 +360,29 @@ bool WebPlatform::OpenFileDialogFiltered(std::string& outPath, const char* filte
             if (!globs.empty()) globs += ' ';
             globs += "*.";
             globs.append(p, len);
+            if (!macTypes.empty()) macTypes += ", ";
+            macTypes += '"';
+            macTypes.append(p, len);
+            macTypes += '"';
         }
         p += len;
         if (comma) ++p;
     }
     const std::string label = filterLabel ? filterLabel : "Files";
+    std::vector<std::string> cmds;
+#if defined(__APPLE__)
+    const std::string chooser = macTypes.empty() ? std::string("choose file")
+                              : "choose file of type {" + macTypes + "}";
+    cmds.push_back("osascript -e 'try' -e 'POSIX path of (" + chooser + ")' -e 'end try' 2>/dev/null");
+#endif
     const std::string zenF  = globs.empty() ? std::string()
                             : " --file-filter=" + ShellQuote(label + " | " + globs) +
                               " --file-filter=" + ShellQuote("All files | *");
     const std::string kdeF  = globs.empty() ? std::string()
                             : " " + ShellQuote(globs + "|" + label);
-    const std::string cmds[] = {
-        "zenity --file-selection" + zenF + " 2>/dev/null",
-        "kdialog --getopenfilename ." + kdeF + " 2>/dev/null",
-    };
-    for (const std::string& cmd : cmds)
-    {
-        FILE* pp = ::popen(cmd.c_str(), "r");
-        if (!pp) continue;
-        std::string line;
-        char buf[1024];
-        while (std::fgets(buf, sizeof(buf), pp)) line += buf;
-        const int rc = ::pclose(pp);
-        while (!line.empty() && (line.back() == '\n' || line.back() == '\r')) line.pop_back();
-        if (rc == 0 && !line.empty()) { outPath = line; return true; }
-    }
-    return false;
+    cmds.push_back("zenity --file-selection" + zenF + " 2>/dev/null");
+    cmds.push_back("kdialog --getopenfilename ." + kdeF + " 2>/dev/null");
+    return RunChooser(cmds, outPath);
 }
 
 bool WebPlatform::RevealPath(const char* path)

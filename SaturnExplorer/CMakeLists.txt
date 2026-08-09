@@ -495,6 +495,18 @@ else()
             message(STATUS "SaturnExplorer: libcurl not found — the in-app update check "
                            "will report 'unsupported' on this desktop build.")
         endif()
+        # macOS: build a double-clickable .app bundle (parity with the Windows .exe) so the
+        # app gets a Dock icon + proper window focus instead of running as a bare CLI binary.
+        # Unsigned and dynamically linked against the system/Homebrew SDL2 — fine for a local
+        # build; distribution still needs code-signing/notarization + bundling the dylibs.
+        if(APPLE)
+            set_target_properties(SaturnExplorerFrontEnd PROPERTIES
+                MACOSX_BUNDLE TRUE
+                MACOSX_BUNDLE_BUNDLE_NAME "Saturn Explorer"
+                MACOSX_BUNDLE_GUI_IDENTIFIER "com.noahsteam.saturnexplorer"
+                MACOSX_BUNDLE_BUNDLE_VERSION "1.0"
+                MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0")
+        endif()
     else()
         message(STATUS
             "SaturnExplorer: no SDL2/OpenGL found — configuring Core + savestate "
