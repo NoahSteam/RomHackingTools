@@ -495,17 +495,46 @@ else()
             message(STATUS "SaturnExplorer: libcurl not found — the in-app update check "
                            "will report 'unsupported' on this desktop build.")
         endif()
-        # macOS: build a double-clickable .app bundle (parity with the Windows .exe) so the
-        # app gets a Dock icon + proper window focus instead of running as a bare CLI binary.
-        # Unsigned and dynamically linked against the system/Homebrew SDL2 — fine for a local
-        # build; distribution still needs code-signing/notarization + bundling the dylibs.
+        # macOS: build a double-clickable SaturnExplorer.app bundle (parity with the Windows
+        # .exe) so the app gets a Dock icon + proper window focus instead of running as a bare
+        # CLI binary. A plain build is dynamically linked against Homebrew/system SDL2 — fine
+        # locally; the SE_MACOS_BUNDLE_LIBS path below makes it self-contained + signable.
         if(APPLE)
             set_target_properties(SaturnExplorerFrontEnd PROPERTIES
+                OUTPUT_NAME "SaturnExplorer"
                 MACOSX_BUNDLE TRUE
                 MACOSX_BUNDLE_BUNDLE_NAME "Saturn Explorer"
                 MACOSX_BUNDLE_GUI_IDENTIFIER "com.noahsteam.saturnexplorer"
                 MACOSX_BUNDLE_BUNDLE_VERSION "1.0"
                 MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0")
+
+            # Distributable, self-contained .app: at `cmake --install` (or `cpack`) copy the
+            # dynamic deps (SDL2, …) into the bundle and rewrite their install names, then
+            # optionally code-sign. Off by default (a plain build stays fast + Homebrew-linked);
+            # enable with -DSE_MACOS_BUNDLE_LIBS=ON. See BUILD.md "macOS packaging".
+            option(SE_MACOS_BUNDLE_LIBS "macOS: bundle dylibs into the .app (self-contained)" OFF)
+            if(SE_MACOS_BUNDLE_LIBS)
+                set(SE_MACOS_SIGN_IDENTITY "" CACHE STRING
+                    "codesign identity for the .app (e.g. 'Developer ID Application: …'); empty = skip signing")
+                install(TARGETS SaturnExplorerFrontEnd BUNDLE DESTINATION .)
+                set(SE_APP_PATH "\${CMAKE_INSTALL_PREFIX}/SaturnExplorer.app")
+                # fixup_bundle follows the exe's dylib dependencies; the dir hints resolve
+                # Homebrew/@rpath libraries on both Apple-silicon and Intel prefixes.
+                install(CODE "
+                    include(BundleUtilities)
+                    set(BU_CHMOD_BUNDLE_ITEMS ON)
+                    fixup_bundle(\"${SE_APP_PATH}\" \"\" \"/opt/homebrew/lib;/usr/local/lib\")
+                ")
+                if(SE_MACOS_SIGN_IDENTITY)
+                    install(CODE "execute_process(COMMAND codesign --force --deep --timestamp
+                        --options runtime --sign \"${SE_MACOS_SIGN_IDENTITY}\" \"${SE_APP_PATH}\")")
+                endif()
+                # `cpack -G DragNDrop` then produces a .dmg of the finished bundle.
+                set(CPACK_GENERATOR "DragNDrop")
+                set(CPACK_PACKAGE_NAME "SaturnExplorer")
+                set(CPACK_PACKAGE_FILE_NAME "SaturnExplorer-macos")
+                include(CPack)
+            endif()
         endif()
     else()
         message(STATUS

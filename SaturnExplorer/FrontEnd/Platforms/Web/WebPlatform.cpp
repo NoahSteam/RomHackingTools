@@ -286,6 +286,20 @@ bool RunChooser(const std::vector<std::string>& cmds, std::string& outPath)
     }
     return false;
 }
+
+// Whether a native file chooser is installed on this host. Lets SaveFile tell "the user
+// cancelled the dialog" (a chooser exists -> abort the save) from "there is no dialog program"
+// (headless host -> fall back to a plain current-dir write), which RunChooser's exit code alone
+// can't (a cancel and a missing binary both exit non-zero).
+bool DialogAvailable()
+{
+#if defined(__APPLE__)
+    return std::system("command -v osascript >/dev/null 2>&1") == 0;
+#else
+    return std::system("command -v zenity  >/dev/null 2>&1") == 0 ||
+           std::system("command -v kdialog >/dev/null 2>&1") == 0;
+#endif
+}
 }  // namespace
 #endif
 
@@ -308,19 +322,22 @@ bool WebPlatform::SaveFile(const char* suggestedName, const void* data, size_t s
     return true;
 #else
     // Ask the desktop's native save dialog for a destination (macOS osascript / Linux zenity /
-    // kdialog). If no chooser is present (e.g. a headless host), fall back to writing `name`
-    // in the current directory so the feature still works.
+    // kdialog). If a chooser exists and the user cancels, abort (return false). Only when no
+    // chooser is installed (e.g. a headless host) do we fall back to writing `name` in the
+    // current directory so the feature still works.
     std::string path = name;
-    std::vector<std::string> cmds;
+    if (DialogAvailable())
+    {
+        std::vector<std::string> cmds;
 #if defined(__APPLE__)
-    cmds.push_back("osascript -e 'try' -e 'POSIX path of (choose file name default name \"" +
-                   std::string(name) + "\")' -e 'end try' 2>/dev/null");
+        cmds.push_back("osascript -e 'try' -e 'POSIX path of (choose file name default name \"" +
+                       std::string(name) + "\")' -e 'end try' 2>/dev/null");
 #endif
-    cmds.push_back("zenity --file-selection --save --confirm-overwrite --filename=" +
-                   ShellQuote(name) + " 2>/dev/null");
-    cmds.push_back("kdialog --getsavefilename . " + ShellQuote(name) + " 2>/dev/null");
-    std::string chosen;
-    if (RunChooser(cmds, chosen)) path = chosen;
+        cmds.push_back("zenity --file-selection --save --confirm-overwrite --filename=" +
+                       ShellQuote(name) + " 2>/dev/null");
+        cmds.push_back("kdialog --getsavefilename . " + ShellQuote(name) + " 2>/dev/null");
+        if (!RunChooser(cmds, path)) return false;   // dialog shown but cancelled -> abort
+    }
 
     FILE* f = std::fopen(path.c_str(), "wb");
     if (!f) return false;

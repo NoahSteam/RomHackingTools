@@ -51,6 +51,29 @@ state.yss`.
 
 Outputs land in `build/bin` (the app) and `build/lib` (the libraries).
 
+On **macOS** the frontend is built as a double-clickable `SaturnExplorer.app` bundle (install
+`brew install sdl2`). A plain `cmake --build` links it against Homebrew's SDL2, which is fine
+on your own machine but not portable.
+
+### macOS packaging — a self-contained, signed .app / .dmg
+To ship the app to another Mac, make the bundle self-contained (copy SDL2 and any other dylibs
+inside it and rewrite their install names), optionally code-sign it, then wrap it in a `.dmg`:
+```
+cmake -B build -DSE_MACOS_BUNDLE_LIBS=ON \
+      -DSE_MACOS_SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)"   # omit to skip signing
+cmake --build build
+cmake --install build --prefix dist     # copies dylibs into the .app (fixup_bundle) + signs
+cpack --config build/CPackConfig.cmake -G DragNDrop   # optional: dist/SaturnExplorer-macos.dmg
+```
+`SE_MACOS_BUNDLE_LIBS` is off by default so a normal dev build stays fast and Homebrew-linked.
+Signing needs an Apple **Developer ID** certificate in your keychain; **notarization** (required
+for Gatekeeper on other Macs) is a separate step Apple runs on the signed `.dmg`:
+```
+xcrun notarytool submit dist/SaturnExplorer-macos.dmg \
+      --apple-id you@example.com --team-id TEAMID --password <app-specific-pw> --wait
+xcrun stapler staple dist/SaturnExplorer-macos.dmg
+```
+
 ### Web (browser) — Emscripten + WebGL2
 Install the [Emscripten SDK](https://emscripten.org/docs/getting_started/downloads.html),
 then from the `SaturnExplorer` directory:
