@@ -45,6 +45,12 @@ import textwrap
 HERE = os.path.dirname(os.path.abspath(__file__))          # .../SaturnExplorer/Integration
 SE_ROOT = os.path.dirname(HERE)                            # .../SaturnExplorer
 
+# Host platform. Windows uses winget + MSVC + MSYS2/MinGW (below); macOS uses Homebrew
+# + clang + native autotools. The reusable middle of the script (emulator registry,
+# clone_and_patch, settings.ini recording, summary) is platform-agnostic.
+IS_WIN = os.name == "nt"
+IS_MAC = sys.platform == "darwin"
+
 # ---------------------------------------------------------------------------
 # Emulator registry.
 #
@@ -246,6 +252,111 @@ def which(name):
     return shutil.which(name)
 
 
+# ---------------------------------------------------------------------------
+# Homebrew (macOS) — the assisted-install package manager, mirroring winget's role
+# on Windows. Apple-silicon installs to /opt/homebrew, Intel to /usr/local; neither
+# is on PATH for a fresh process until `brew shellenv` runs, so we locate the binary
+# directly and add its bin dir to this process's PATH for the build steps.
+# ---------------------------------------------------------------------------
+def brew_bin():
+    for c in (shutil.which("brew"), "/opt/homebrew/bin/brew", "/usr/local/bin/brew"):
+        if c and os.path.isfile(c):
+            return c
+    return None
+
+
+def brew_prefix(brew=None):
+    brew = brew or brew_bin()
+    if not brew:
+        return None
+    try:
+        return subprocess.check_output([brew, "--prefix"], text=True).strip()
+    except Exception:
+        return os.path.dirname(os.path.dirname(brew))   # <prefix>/bin/brew -> <prefix>
+
+
+def add_to_path(d):
+    """Prepend a directory to this process's PATH (idempotent), so a tool Homebrew just
+    installed is found by later build steps without reopening the terminal."""
+    if not d or not os.path.isdir(d):
+        return
+    parts = os.environ.get("PATH", "").split(os.pathsep)
+    if d not in parts:
+        os.environ["PATH"] = d + os.pathsep + os.environ.get("PATH", "")
+
+
+def ensure_homebrew(rn):
+    """Return a path to `brew`, offering to run Homebrew's official installer if missing.
+    The installer is https://brew.sh's own script; we only run it with explicit consent."""
+    brew = brew_bin()
+    if brew:
+        return brew
+    print("  [missing] Homebrew (macOS package manager)")
+    if rn.dry_run:
+        print("            would install Homebrew from https://brew.sh")
+        return None
+    if not rn.confirm("            install Homebrew now (runs the official installer from brew.sh)?"):
+        print("            skipped — install it from https://brew.sh, then re-run.")
+        return None
+    installer = ('/bin/bash -c "$(curl -fsSL '
+                 'https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"')
+    rn.run(installer, shell=True, description="Install Homebrew (brew.sh installer)")
+    return brew_bin()
+
+
+def check_prereqs_macos(rn, do_mednafen, args):
+    """macOS prerequisite check + assisted install via Homebrew (parity with the Windows
+    winget/MSYS2 block). Resolves CMake into the CMAKE global. Returns ok."""
+    global CMAKE
+    print("Prerequisites:" + (" (incremental — skipping package installs)" if args.incremental else ""))
+    ok = True
+
+    if which("clang") or which("cc"):
+        print("  [ok]      C/C++ compiler (clang)")
+    else:
+        print("  [missing] Xcode command-line tools (clang)")
+        print("            Install them with:  xcode-select --install   then re-run.")
+        ok = False
+
+    if which("git"):
+        print("  [ok]      git")
+    else:
+        print("  [missing] git  (comes with the Xcode command-line tools: xcode-select --install)")
+        ok = False
+
+    brew = brew_bin()
+    if not brew and not args.incremental:
+        brew = ensure_homebrew(rn)
+    if brew:
+        add_to_path(os.path.join(brew_prefix(brew), "bin"))
+        print(f"  [ok]      Homebrew  ({brew})")
+    elif not args.incremental:
+        print("  [missing] Homebrew")
+        ok = False
+
+    # The package set: CMake always; Mednafen's native autotools build also needs
+    # pkg-config + autoconf/automake/libtool (to bootstrap ./configure) and the SDL2 +
+    # FLAC libraries (libFLAC is a hard dependency of Mednafen's configure). `brew install`
+    # is idempotent, so re-runs on an already-provisioned machine are quick.
+    if not args.incremental and brew:
+        pkgs = ["cmake"]
+        if do_mednafen:
+            pkgs += ["autoconf", "automake", "libtool", "pkg-config", "sdl2", "flac"]
+        print(f"  Installing build packages via Homebrew: {' '.join(pkgs)}")
+        rn.run([brew, "install", *pkgs], description="Install Homebrew build packages")
+
+    # Resolve cmake for the build steps (now on PATH after the brew install above).
+    p = shutil.which("cmake")
+    if p:
+        CMAKE = p
+        print("  [ok]      CMake" + (f"  ({p})" if p != "cmake" else ""))
+    elif not args.dry_run:
+        print("  [missing] CMake — not found after install. Install it (brew install cmake) and re-run.")
+        ok = False
+
+    return ok
+
+
 # Absolute path to the cmake we build with. Resolved in main(); the build steps use
 # it (not a bare "cmake") so a CMake that's installed but not on PATH still works.
 CMAKE = "cmake"
@@ -405,13 +516,23 @@ def ensure_cmake(rn):
 def build_saturn_explorer(rn, generator):
     print("\n== Saturn Explorer ==")
     build = os.path.join(SE_ROOT, "build")
-    if rn.run([CMAKE, "-B", build, "-S", SE_ROOT, "-G", generator, "-A", "x64"],
-              description="Configure Saturn Explorer") != 0:
+    if IS_WIN:
+        # Multi-config MSVC generator: pick the config at build time, not configure time.
+        configure = [CMAKE, "-B", build, "-S", SE_ROOT, "-G", generator, "-A", "x64"]
+        compile_ = [CMAKE, "--build", build, "--config", "Release", "--parallel"]
+        exe = os.path.join(build, "bin", "Release", "SaturnExplorerFrontEnd.exe")
+    else:
+        # Ninja/Makefiles are single-config: bake the type in at configure time.
+        configure = [CMAKE, "-B", build, "-S", SE_ROOT, "-DCMAKE_BUILD_TYPE=Release"]
+        compile_ = [CMAKE, "--build", build, "--parallel"]
+        # macOS builds a double-clickable SaturnExplorer.app (see CMakeLists APPLE branch);
+        # Linux builds a bare SaturnExplorerFrontEnd executable.
+        exe = (os.path.join(build, "bin", "SaturnExplorer.app") if IS_MAC
+               else os.path.join(build, "bin", "SaturnExplorerFrontEnd"))
+    if rn.run(configure, description="Configure Saturn Explorer") != 0:
         return False, None
-    if rn.run([CMAKE, "--build", build, "--config", "Release", "--parallel"],
-              description="Build Saturn Explorer (Release)") != 0:
+    if rn.run(compile_, description="Build Saturn Explorer (Release)") != 0:
         return False, None
-    exe = os.path.join(build, "bin", "Release", "SaturnExplorerFrontEnd.exe")
     return True, exe
 
 
@@ -547,6 +668,42 @@ def build_mednafen(rn, msys2, dest, configure_flags="", reconfigure=True):
     return rc == 0, exe
 
 
+def build_mednafen_unix(rn, dest, configure_flags="", reconfigure=True):
+    """Native Mednafen build on macOS/Linux: plain autotools, no MSYS2/MinGW. None of the
+    Windows-specific handling (UNICODE defines, mingw_app_type aliasing, static libstdc++,
+    DLL bundling) applies — clang links the system/Homebrew dylibs directly, and macOS finds
+    them at runtime via their install names. The binary lands at <dest>/src/mednafen."""
+    ncpu = os.cpu_count() or 4
+    env = {**os.environ}
+    prefix = brew_prefix() if IS_MAC else None
+    if prefix:
+        # Point configure at Homebrew's headers/libs (SDL2, FLAC) and .pc files. Needed on
+        # Apple-silicon (/opt/homebrew) and Intel (/usr/local) since neither is a default
+        # compiler/pkg-config search path.
+        env["CPPFLAGS"] = (f"-I{prefix}/include " + env.get("CPPFLAGS", "")).strip()
+        env["LDFLAGS"] = (f"-L{prefix}/lib " + env.get("LDFLAGS", "")).strip()
+        env["PKG_CONFIG_PATH"] = os.pathsep.join(
+            filter(None, [f"{prefix}/lib/pkgconfig", env.get("PKG_CONFIG_PATH", "")]))
+    configure = ("./configure --enable-debugger" +
+                 (f" {configure_flags}" if configure_flags else ""))
+    # A git checkout ships no generated ./configure; bootstrap it first. glibtoolize (from
+    # Homebrew's libtool) is what autoreconf calls on macOS.
+    bootstrap = "([ -x ./configure ] || autoreconf -i || ./autogen.sh)"
+    if reconfigure:
+        # `make` tracks source mtimes, not flag changes, so a changed --disable-* set would
+        # otherwise relink stale objects; clean to force the rebuild (mirrors the Win path).
+        cfg = f"{bootstrap} && {configure} && make clean && "
+    else:
+        # Incremental: configure only when the tree isn't configured yet; else straight to
+        # make, so only the objects whose sources apply.py touched get recompiled.
+        cfg = f"([ -f config.status ] || {{ {bootstrap} && {configure}; }}) && "
+    script = f"cd '{dest}' && {cfg}make -j{ncpu}"
+    rc = rn.run(["/bin/sh", "-c", script], env=env,
+                description="Configure and build Mednafen")
+    exe = os.path.join(dest, "src", "mednafen")
+    return rc == 0, exe
+
+
 def build_yabause(rn, dest, generator, qt_path):
     build = os.path.join(dest, "build")
     cfg = [CMAKE, "-B", build, "-S", dest, "-G", generator, "-A", "x64",
@@ -610,7 +767,7 @@ def record_emulator_path(rn, name, exe):
 
 def main():
     global FORK_OWNER
-    ap = argparse.ArgumentParser(description="Saturn Explorer + patched-emulator setup (Windows).")
+    ap = argparse.ArgumentParser(description="Saturn Explorer + patched-emulator setup (Windows/macOS).")
     ap.add_argument("--prefix", default=os.path.join(SE_ROOT, "_emu"),
                     help="where to clone+build emulators (default: <repo>/_emu)")
     ap.add_argument("--no-mednafen", action="store_true", help="skip Mednafen")
@@ -645,44 +802,48 @@ def main():
     args = ap.parse_args()
     FORK_OWNER = args.fork_owner
 
-    if os.name != "nt" and not args.dry_run:
-        print("This installer targets Windows. Use --dry-run to preview the plan elsewhere.")
+    if not IS_WIN and not IS_MAC and not args.dry_run:
+        print("This installer supports Windows and macOS. Use --dry-run to preview the plan elsewhere.")
         return 2
 
     rn = Runner(args.dry_run, args.yes, args.verbose)
     do_mednafen = not args.no_mednafen and not args.se_only
     do_yabause = args.with_yabause and not args.se_only
 
-    print("Saturn Explorer installer (Windows)\n" + "=" * 36)
+    host = "Windows" if IS_WIN else ("macOS" if IS_MAC else "this platform")
+    print(f"Saturn Explorer installer ({host})\n" + "=" * 36)
     if args.dry_run:
         print("(dry-run: nothing will be installed, cloned, or built)\n")
 
     # --- prerequisite check + assisted install -----------------------------
     # Incremental re-installs assume the toolchain is already in place: we still resolve
-    # the tool PATHs the build needs, but skip the winget/pacman package installs (the
+    # the tool PATHs the build needs, but skip the winget/brew/pacman package installs (the
     # slow, network-bound steps) so a re-run after an Integration/ edit is fast.
-    print("Prerequisites:" + (" (incremental — skipping package installs)" if args.incremental else ""))
-    ok = True
-    ok &= ensure_tool(rn, which("git"), "git", WINGET["git"])
-    ok &= ensure_cmake(rn)   # resolves an off-PATH CMake too; sets the CMAKE global
-    ok &= ensure_tool(rn, detect_msvc(), "Visual Studio C++ toolset",
-                      WINGET["vs"], override=VS_OVERRIDE)
-
     msys2 = None
-    if do_mednafen:
-        msys2 = detect_msys2(args.msys2)
-        if ensure_tool(rn, msys2, "MSYS2 (for Mednafen)", WINGET["msys2"]):
-            bash = os.path.join(msys2, "usr", "bin", "bash.exe") if msys2 else None
-            if bash and not args.incremental:
-                print("  Installing MSYS2 build packages (SDL2, zlib, FLAC, gcc, autotools)...")
-                rn.run([bash, "-lc",
-                        f"pacman -Syu --noconfirm && pacman -S --needed --noconfirm {MSYS2_PACKAGES}"],
-                       description="Install MSYS2 build packages")
-        else:
-            ok = False
-        # After a fresh winget install (or in --dry-run) detection can't see it yet;
-        # fall back to the default root so the build step still has a path to use.
-        msys2 = msys2 or args.msys2 or r"C:\msys64"
+    if IS_WIN:
+        print("Prerequisites:" + (" (incremental — skipping package installs)" if args.incremental else ""))
+        ok = True
+        ok &= ensure_tool(rn, which("git"), "git", WINGET["git"])
+        ok &= ensure_cmake(rn)   # resolves an off-PATH CMake too; sets the CMAKE global
+        ok &= ensure_tool(rn, detect_msvc(), "Visual Studio C++ toolset",
+                          WINGET["vs"], override=VS_OVERRIDE)
+        if do_mednafen:
+            msys2 = detect_msys2(args.msys2)
+            if ensure_tool(rn, msys2, "MSYS2 (for Mednafen)", WINGET["msys2"]):
+                bash = os.path.join(msys2, "usr", "bin", "bash.exe") if msys2 else None
+                if bash and not args.incremental:
+                    print("  Installing MSYS2 build packages (SDL2, zlib, FLAC, gcc, autotools)...")
+                    rn.run([bash, "-lc",
+                            f"pacman -Syu --noconfirm && pacman -S --needed --noconfirm {MSYS2_PACKAGES}"],
+                           description="Install MSYS2 build packages")
+            else:
+                ok = False
+            # After a fresh winget install (or in --dry-run) detection can't see it yet;
+            # fall back to the default root so the build step still has a path to use.
+            msys2 = msys2 or args.msys2 or r"C:\msys64"
+    else:
+        # macOS (and, best-effort, other Unix): Homebrew + clang + native autotools.
+        ok = check_prereqs_macos(rn, do_mednafen, args)
 
     if not ok and not args.dry_run:
         print("\nSome prerequisites are missing. Install them (above) and re-run.")
@@ -713,7 +874,10 @@ def main():
             reconfigure = (not args.incremental) or bool(cfg_flags)
             if clone_and_patch(rn, "mednafen", EMULATORS["mednafen"], dest,
                                args.mednafen_rev, repo, skip_git=args.incremental):
-                m_ok, m_exe = build_mednafen(rn, msys2, dest, cfg_flags, reconfigure=reconfigure)
+                if IS_WIN:
+                    m_ok, m_exe = build_mednafen(rn, msys2, dest, cfg_flags, reconfigure=reconfigure)
+                else:
+                    m_ok, m_exe = build_mednafen_unix(rn, dest, cfg_flags, reconfigure=reconfigure)
             else:
                 m_ok, m_exe = False, None
             if m_ok:
@@ -721,7 +885,15 @@ def main():
             results.append(("Mednafen (patched)", m_ok, m_exe))
 
     # --- Yabause fork -------------------------------------------------------
-    if do_yabause:
+    if do_yabause and not IS_WIN:
+        # The Yabause (Qt) build path is Windows-only for now; the macOS/Linux toolchain
+        # branch here hasn't been written or verified. Skip it explicitly rather than run
+        # the MSVC-shaped build steps.
+        print("\n== Yabause ==")
+        print("  Yabause is not yet supported by this installer on macOS/Linux; skipping.")
+        print("  (Saturn Explorer + Mednafen build normally.)")
+        results.append(("Yabause (unsupported on this OS)", False, None))
+    elif do_yabause:
         key = args.yabause_variant
         spec = EMULATORS[key]
         print(f"\n== {key} ==")
@@ -750,8 +922,10 @@ def main():
     for name, good, path in results:
         mark = "OK " if good else "FAIL"
         print(f"  [{mark}] {name}" + (f"\n         {path}" if path else ""))
+    fw = ("~/.mednafen/firmware" if IS_MAC else
+          "~/.mednafen/firmware" if not IS_WIN else "Mednafen's firmware folder")
     print("\nNext:")
-    print("  * Put sega_101.bin + mpr-17933.bin in Mednafen's firmware folder (NOT included — copyrighted).")
+    print(f"  * Put sega_101.bin + mpr-17933.bin in {fw} (NOT included — copyrighted).")
     print("  * Launch the patched emulator, then Saturn Explorer with --live,")
     print("    or File -> Connect to emulator (live).")
     return 0 if all(g for _, g, _ in results) else 1
