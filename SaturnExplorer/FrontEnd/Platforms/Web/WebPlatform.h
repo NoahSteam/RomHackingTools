@@ -40,10 +40,10 @@ public:
     // from JS on browser resize so the UI stays crisp instead of CSS-stretched.
     void Resize(int width, int height);
 
-    // On the web there is no synchronous native dialog: this triggers the page's
-    // hidden <input type=file> and returns false. The chosen file's bytes arrive
-    // asynchronously via se_web_load_file() (see WebMain.cpp). On the desktop
-    // build it returns false (use drag-and-drop or a launch argument instead).
+    // Web: no synchronous native dialog — this triggers the page's hidden
+    // <input type=file> and returns false; the chosen file's bytes arrive
+    // asynchronously via se_web_load_file() (see WebMain.cpp). Native desktop:
+    // opens an unfiltered chooser (osascript/zenity/kdialog) and returns the path.
     bool OpenFileDialog(std::string& outPath) override;
 
     // Web: trigger a browser download of the blob. Native desktop: write it to the

@@ -25,6 +25,7 @@
 #include <GLES3/gl3.h>
 #else
 #include <SDL_opengl.h>   // desktop GL for the native verification build
+#include <sys/wait.h>     // WIFEXITED/WEXITSTATUS to tell "dialog cancelled" from "not installed"
 #endif
 
 namespace sfe
@@ -68,19 +69,18 @@ bool WebPlatform::Initialize(const PlatformConfig& config)
     // it only exposes legacy 2.1 OR a 3.2+ *Core* (forward-compatible) profile, so a bare 3.0
     // request there silently yields a 2.1 context and the GL3 shaders fail to compile (blank
     // window). Ask macOS for Core 3.2 explicitly.
+    // All three want GL/GLES major version 3; only the profile and minor version differ.
 #if defined(__EMSCRIPTEN__)
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
 #elif defined(__APPLE__)
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);
 #else
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
 #endif
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 0);
 
@@ -268,11 +268,25 @@ std::string ParentDir(const std::string& path)
     return (slash == std::string::npos) ? std::string(".") : path.substr(0, slash);
 }
 
-// Run each shell command in turn until one exits 0 and prints a path; that line (trailing
-// newlines stripped) becomes outPath. SDL has no native file dialog, so the desktop dialogs
-// are shelled out to the OS chooser (macOS osascript, Linux zenity/kdialog).
-bool RunChooser(const std::vector<std::string>& cmds, std::string& outPath)
+// Wrap an AppleScript chooser expression in the standard "try / POSIX path of (...) / end try"
+// form, so a user-cancel returns cleanly (exit 0, empty output) instead of a scripting error.
+std::string Osascript(const std::string& expr)
 {
+    return "osascript -e 'try' -e 'POSIX path of (" + expr + ")' -e 'end try' 2>/dev/null";
+}
+
+// SDL has no native file dialog, so the desktop dialogs shell out to the OS chooser (macOS
+// osascript, Linux zenity/kdialog). RunChooser tries each command until one yields a path, and
+// reports which of three things happened so callers can react correctly:
+enum class ChooserResult { Found, Cancelled, Unavailable };
+
+// Try each command in order. A path -> Found (in outPath). If a command actually ran but gave
+// no path (the user dismissed the dialog) -> Cancelled. If every command failed to launch (no
+// chooser installed, e.g. a headless host; the shell exits 127) -> Unavailable. This lets
+// SaveFile abort on cancel yet still fall back to a plain write when there's no dialog at all.
+ChooserResult RunChooser(const std::vector<std::string>& cmds, std::string& outPath)
+{
+    bool anyRan = false;
     for (const std::string& cmd : cmds)
     {
         FILE* p = ::popen(cmd.c_str(), "r");
@@ -280,25 +294,13 @@ bool RunChooser(const std::vector<std::string>& cmds, std::string& outPath)
         std::string line;
         char buf[1024];
         while (std::fgets(buf, sizeof(buf), p)) line += buf;
-        const int rc = ::pclose(p);
+        const int status = ::pclose(p);
+        const int code = WIFEXITED(status) ? WEXITSTATUS(status) : -1;
+        if (code != 127) anyRan = true;   // 127 = shell couldn't find the program
         while (!line.empty() && (line.back() == '\n' || line.back() == '\r')) line.pop_back();
-        if (rc == 0 && !line.empty()) { outPath = line; return true; }
+        if (code == 0 && !line.empty()) { outPath = line; return ChooserResult::Found; }
     }
-    return false;
-}
-
-// Whether a native file chooser is installed on this host. Lets SaveFile tell "the user
-// cancelled the dialog" (a chooser exists -> abort the save) from "there is no dialog program"
-// (headless host -> fall back to a plain current-dir write), which RunChooser's exit code alone
-// can't (a cancel and a missing binary both exit non-zero).
-bool DialogAvailable()
-{
-#if defined(__APPLE__)
-    return std::system("command -v osascript >/dev/null 2>&1") == 0;
-#else
-    return std::system("command -v zenity  >/dev/null 2>&1") == 0 ||
-           std::system("command -v kdialog >/dev/null 2>&1") == 0;
-#endif
+    return anyRan ? ChooserResult::Cancelled : ChooserResult::Unavailable;
 }
 }  // namespace
 #endif
@@ -322,22 +324,17 @@ bool WebPlatform::SaveFile(const char* suggestedName, const void* data, size_t s
     return true;
 #else
     // Ask the desktop's native save dialog for a destination (macOS osascript / Linux zenity /
-    // kdialog). If a chooser exists and the user cancels, abort (return false). Only when no
-    // chooser is installed (e.g. a headless host) do we fall back to writing `name` in the
-    // current directory so the feature still works.
+    // kdialog). A cancelled dialog aborts the save; only when no chooser exists at all (e.g. a
+    // headless host) do we fall back to writing `name` in the current directory.
     std::string path = name;
-    if (DialogAvailable())
-    {
-        std::vector<std::string> cmds;
+    std::vector<std::string> cmds;
 #if defined(__APPLE__)
-        cmds.push_back("osascript -e 'try' -e 'POSIX path of (choose file name default name \"" +
-                       std::string(name) + "\")' -e 'end try' 2>/dev/null");
+    cmds.push_back(Osascript("choose file name default name \"" + std::string(name) + "\""));
 #endif
-        cmds.push_back("zenity --file-selection --save --confirm-overwrite --filename=" +
-                       ShellQuote(name) + " 2>/dev/null");
-        cmds.push_back("kdialog --getsavefilename . " + ShellQuote(name) + " 2>/dev/null");
-        if (!RunChooser(cmds, path)) return false;   // dialog shown but cancelled -> abort
-    }
+    cmds.push_back("zenity --file-selection --save --confirm-overwrite --filename=" +
+                   ShellQuote(name) + " 2>/dev/null");
+    cmds.push_back("kdialog --getsavefilename . " + ShellQuote(name) + " 2>/dev/null");
+    if (RunChooser(cmds, path) == ChooserResult::Cancelled) return false;   // user dismissed
 
     FILE* f = std::fopen(path.c_str(), "wb");
     if (!f) return false;
@@ -354,11 +351,11 @@ bool WebPlatform::PickDirectory(std::string& outPath)
 {
     std::vector<std::string> cmds;
 #if defined(__APPLE__)
-    cmds.push_back("osascript -e 'try' -e 'POSIX path of (choose folder)' -e 'end try' 2>/dev/null");
+    cmds.push_back(Osascript("choose folder"));
 #endif
     cmds.push_back("zenity --file-selection --directory 2>/dev/null");
     cmds.push_back("kdialog --getexistingdirectory 2>/dev/null");
-    return RunChooser(cmds, outPath);
+    return RunChooser(cmds, outPath) == ChooserResult::Found;
 }
 
 bool WebPlatform::OpenFileDialogFiltered(std::string& outPath, const char* filterLabel,
@@ -388,9 +385,8 @@ bool WebPlatform::OpenFileDialogFiltered(std::string& outPath, const char* filte
     const std::string label = filterLabel ? filterLabel : "Files";
     std::vector<std::string> cmds;
 #if defined(__APPLE__)
-    const std::string chooser = macTypes.empty() ? std::string("choose file")
-                              : "choose file of type {" + macTypes + "}";
-    cmds.push_back("osascript -e 'try' -e 'POSIX path of (" + chooser + ")' -e 'end try' 2>/dev/null");
+    cmds.push_back(Osascript(macTypes.empty() ? std::string("choose file")
+                                              : "choose file of type {" + macTypes + "}"));
 #endif
     const std::string zenF  = globs.empty() ? std::string()
                             : " --file-filter=" + ShellQuote(label + " | " + globs) +
@@ -399,7 +395,7 @@ bool WebPlatform::OpenFileDialogFiltered(std::string& outPath, const char* filte
                             : " " + ShellQuote(globs + "|" + label);
     cmds.push_back("zenity --file-selection" + zenF + " 2>/dev/null");
     cmds.push_back("kdialog --getopenfilename ." + kdeF + " 2>/dev/null");
-    return RunChooser(cmds, outPath);
+    return RunChooser(cmds, outPath) == ChooserResult::Found;
 }
 
 bool WebPlatform::RevealPath(const char* path)
