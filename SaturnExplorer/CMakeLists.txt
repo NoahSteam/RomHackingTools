@@ -500,13 +500,23 @@ else()
         # CLI binary. A plain build is dynamically linked against Homebrew/system SDL2 — fine
         # locally; the SE_MACOS_BUNDLE_LIBS path below makes it self-contained + signable.
         if(APPLE)
+            # Dock / Finder icon — the macOS counterpart of the Windows .ico wired via
+            # Platforms/Windows/SaturnExplorer.rc. The .icns is generated from that same
+            # .ico (see FrontEnd/Platforms/macOS/). Adding it as a target source with a
+            # Resources package location makes CMake copy it into the .app's Contents/
+            # Resources; MACOSX_BUNDLE_ICON_FILE points CFBundleIconFile at it.
+            set(SE_MACOS_ICON "${CMAKE_CURRENT_SOURCE_DIR}/FrontEnd/Platforms/macOS/SaturnExplorer.icns")
+            target_sources(SaturnExplorerFrontEnd PRIVATE "${SE_MACOS_ICON}")
+            set_source_files_properties("${SE_MACOS_ICON}" PROPERTIES
+                MACOSX_PACKAGE_LOCATION "Resources")
             set_target_properties(SaturnExplorerFrontEnd PROPERTIES
                 OUTPUT_NAME "SaturnExplorer"
                 MACOSX_BUNDLE TRUE
                 MACOSX_BUNDLE_BUNDLE_NAME "Saturn Explorer"
                 MACOSX_BUNDLE_GUI_IDENTIFIER "com.noahsteam.saturnexplorer"
                 MACOSX_BUNDLE_BUNDLE_VERSION "1.0"
-                MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0")
+                MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0"
+                MACOSX_BUNDLE_ICON_FILE "SaturnExplorer.icns")
 
             # Distributable, self-contained .app: at `cmake --install` (or `cpack`) copy the
             # dynamic deps (SDL2, …) into the bundle and rewrite their install names, then
