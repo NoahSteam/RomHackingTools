@@ -1192,13 +1192,11 @@ void App::BuildDefaultLayout(unsigned int dockspaceId)
     ImGui::DockBuilderDockWindow("VDP1 Command List", rInspect);
     ImGui::DockBuilderDockWindow("Selected Object", rInspect);
 
-    // Right column, bottom: structured-data tables, tabbed. Sound (SCSP) is a per-voice
-    // table, so it tabs in with the other data views.
+    // Right column, bottom: structured-data tables, tabbed.
     ImGui::DockBuilderDockWindow("VDP1 Table", rData);
     ImGui::DockBuilderDockWindow("VDP2 Table", rData);
     ImGui::DockBuilderDockWindow("Color RAM", rData);
     ImGui::DockBuilderDockWindow("Registers", rData);
-    ImGui::DockBuilderDockWindow("Sound (SCSP)", rData);
 
     // Bottom debugger strip. Watch / Controller / Log tab together on the left; the
     // SH-2 Assembly gets the right half.
@@ -1218,6 +1216,7 @@ void App::BuildDefaultLayout(unsigned int dockspaceId)
     ImGui::DockBuilderDockWindow("SH-2 Assembly", bAsm);
     ImGui::DockBuilderDockWindow("Memory", bAsm);          // tabs beside SH-2 Assembly
     ImGui::DockBuilderDockWindow("Sound CPU (68K)", bAsm); // disassembly views tab together
+    ImGui::DockBuilderDockWindow("Sound (SCSP)", bAsm);    // the two sound panels sit side by side
     ImGui::DockBuilderDockWindow("Input Timeline", bAsm);
 
     ImGui::DockBuilderFinish(dockspaceId);
