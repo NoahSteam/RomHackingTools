@@ -3535,7 +3535,12 @@ void App::DrawVdp1Framebuffer(IPlatform& platform)
                 return;
             }
             const uint16_t idx = w & kSprColorMask[sprType];
-            if (idx == 0 || idx >= nCram) return;          // index 0 = transparent
+            if (idx >= nCram)                              // CRAM missing/short (e.g. a live
+            {                                              // capture without CRAM): can't resolve
+                DecodeRgb555(w, out[0], out[1], out[2]);   // this colour-bank pixel, so show the
+                out[3] = 255; return;                      // raw bits rather than blanking it.
+            }
+            if (idx == 0) return;                          // index 0 = transparent
             const se_palette_entry& e = mFbCram[idx];
             out[0] = e.r; out[1] = e.g; out[2] = e.b; out[3] = 255;
         };
