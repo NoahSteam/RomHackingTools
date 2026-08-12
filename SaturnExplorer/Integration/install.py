@@ -684,7 +684,13 @@ def build_mednafen_unix(rn, dest, configure_flags="", reconfigure=True):
         env["LDFLAGS"] = (f"-L{prefix}/lib " + env.get("LDFLAGS", "")).strip()
         env["PKG_CONFIG_PATH"] = os.pathsep.join(
             filter(None, [f"{prefix}/lib/pkgconfig", env.get("PKG_CONFIG_PATH", "")]))
-    configure = ("./configure --enable-debugger" +
+    # Force --enable-ss: the Saturn core is the whole point, but Mednafen's configure only
+    # enables it by default when host_cpu matches x86_64/amd64/aarch64*/arm64*/ppc64*. On
+    # Apple-silicon the bundled config.guess reports host_cpu='arm' (triplet arm-apple-darwin),
+    # which matches none of those, so the SS core (and its se_export.o) would silently be
+    # dropped and the link fails on SeExportTitleSuffix. Requesting it explicitly is correct
+    # regardless of the CPU-triplet quirk.
+    configure = ("./configure --enable-debugger --enable-ss" +
                  (f" {configure_flags}" if configure_flags else ""))
     # A git checkout ships no generated ./configure; bootstrap it first. glibtoolize (from
     # Homebrew's libtool) is what autoreconf calls on macOS.

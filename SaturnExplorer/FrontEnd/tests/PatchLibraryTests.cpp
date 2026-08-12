@@ -9,6 +9,9 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#if !defined(_WIN32)
+#include <unistd.h>   // mkdtemp — declared here on macOS/clang; the python e2e block is POSIX-only
+#endif
 
 using namespace sfe;
 
