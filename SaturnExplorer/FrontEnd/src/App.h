@@ -150,7 +150,6 @@ private:
     void Continue();
     void SyncTracepointsToLive();           // push the tracepoint set to the emulator (v8)
     void DrainTraceEvents();                // pull fired tracepoint events into the Log
-    void DrawVdp1Framebuffer(IPlatform& platform);
     void DrawWorldView(IPlatform& platform);
     void DrawCommandList();
     void DrawSelectedObject();
@@ -457,7 +456,7 @@ private:
         // Archive Explorer + Search ROM/Files are M6 placeholders, and References is
         // niche — hidden by default (re-enable from the Windows menu).
         bool vramMap = true, archiveExplorer = false, searchRom = false;
-        bool vdpOutput = true, vdp1Framebuffer = true, worldView = true;
+        bool vdpOutput = true, worldView = true;
         bool vdp1Table = true, vdp2Table = true, colorRam = true;
         bool registers = true, commandList = true;
         bool textureViewer = true, paletteViewer = true, references = false;
@@ -546,16 +545,6 @@ private:
     int                  mTexWidth = 0;
     int                  mTexHeight = 0;
     std::vector<uint8_t> mTexBuffer;
-
-    // VDP1 Framebuffer viewer (decodes the captured 512x256 front bank).
-    TextureHandle        mFbTexture = 0;
-    int                  mFbTexW = 0;
-    int                  mFbTexH = 0;
-    std::vector<uint8_t> mFbRaw;                  // captured bytes (big-endian words)
-    std::vector<uint8_t> mFbRgba;                 // decoded RGBA8888
-    std::vector<se_palette_entry> mFbCram;        // CRAM lookup, rebuilt each frame
-    int                  mFbMode = 0;             // 0=Resolved, 1=Raw RGB555, 2=Priority
-    bool                 mFbByteSwap = false;     // flip 16-bit word endianness
 };
 
 }  // namespace sfe
