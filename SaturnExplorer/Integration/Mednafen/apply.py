@@ -421,9 +421,11 @@ void SMPC_SetInjectedInput(unsigned port, uint32 buttons)
  const uint16 native = (uint16)((buttons & 0x000Fu) |       /* directions: bits 0..3 */
                                 ((buttons & 0x0FF0u) << 1) | /* A..R: bits 5..12 */
                                 ((buttons & 0x1000u) >> 8)); /* Start: bit 4 */
- SeInjectedPad[port].store(native, std::memory_order_relaxed);
- /* Diagnostic: what the SMPC translate produced. Fires on change (the client only sends
-    INP on change), so it shows each button as it is pressed/released in SE's Log window. */
+ const uint16 prev = SeInjectedPad[port].exchange(native, std::memory_order_relaxed);
+ /* Diagnostic: what the SMPC translate produced. Only on change — the LiveDriver poll
+    thread re-sends INP every cycle while a button is held (to cover a non-latching
+    glue), so logging every call would flood SE's Log window at poll rate. */
+ if(native != prev)
  {
   char m[80];
   snprintf(m, sizeof(m), "SMPC inject: port=%u se=0x%04X -> native=0x%04X",

@@ -288,13 +288,18 @@ static int SeMdfnLoadState(const unsigned char* buf, size_t len)
  * map + latch (see its declaration above). Registered with SeExportSetInputHook. */
 static void SeMdfnSetPad(unsigned int port, unsigned int buttons)
 {
-    /* Diagnostic: log every pad state the glue receives so Saturn Explorer's Log window
-     * shows what actually reached the emulator (this fires on change, since the client
-     * only sends INP when the mask changes). Confirms the input crosses the wire before
-     * the SMPC translate/merge — see SMPC_SetInjectedInput's own log for the result. */
-    char msg[80];
-    snprintf(msg, sizeof(msg), "glue recv: port=%u buttons=0x%04X", port, buttons & 0x1FFFu);
-    SeExportLog(msg);
+    /* Diagnostic: log the pad state the glue receives so Saturn Explorer's Log window
+     * shows what actually reached the emulator. Only on change: the LiveDriver poll
+     * thread re-sends INP every cycle while a button is held (to cover a non-latching
+     * glue), so logging every receipt would flood the Log at poll rate. */
+    static unsigned int seLastRecv[2] = { 0xFFFFFFFFu, 0xFFFFFFFFu };
+    if (port < 2 && (buttons & 0x1FFFu) != seLastRecv[port])
+    {
+        char msg[80];
+        snprintf(msg, sizeof(msg), "glue recv: port=%u buttons=0x%04X", port, buttons & 0x1FFFu);
+        SeExportLog(msg);
+        seLastRecv[port] = buttons & 0x1FFFu;
+    }
 #if defined(SE_MEDNAFEN_WIRED)
     SsDbgSetPad(port, buttons);
 #else
