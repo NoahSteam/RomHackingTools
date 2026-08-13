@@ -22,7 +22,6 @@ bool TopBarCommandEnabled(TopBarCommandType command, const TopBarViewModel& stat
     case TopBarCommandType::StopRecording:
         return state.recording;
     case TopBarCommandType::Launch:
-    case TopBarCommandType::LaunchAndConnect:
         return state.launchValid && !state.operationBusy;
     case TopBarCommandType::TogglePause:
         return state.connected && state.frameControl;
@@ -37,10 +36,9 @@ bool TopBarCommandEnabled(TopBarCommandType command, const TopBarViewModel& stat
     }
 }
 
-bool ShouldAutoConnectAfterLaunch(const std::string& emulatorKey,
-                                  bool connectRequested, SourceType source)
+bool ShouldAutoConnectAfterLaunch(const std::string& emulatorKey, SourceType source)
 {
-    return source == SourceType::None && (connectRequested || emulatorKey == "mednafen");
+    return source == SourceType::None && emulatorKey == "mednafen";
 }
 
 }  // namespace sfe

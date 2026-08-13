@@ -42,7 +42,6 @@ enum class TopBarCommandType
     ClearRom,
     RevealRom,
     Launch,
-    LaunchAndConnect,
     OpenLaunchSettings,
     TogglePause,
     StepFrame,
@@ -92,10 +91,9 @@ struct TopBarViewModel
 // Pure enablement policy matching the specification's state table.
 bool TopBarCommandEnabled(TopBarCommandType command, const TopBarViewModel& state);
 
-// A normal Mednafen launch should attach automatically, while the explicit
-// Launch-and-Connect action applies to any configured emulator. Neither may
-// replace a dump or an existing live source without a manual Connect command.
-bool ShouldAutoConnectAfterLaunch(const std::string& emulatorKey,
-                                  bool connectRequested, SourceType source);
+// A Mednafen launch attaches automatically; other emulators are wired up with the
+// manual Connect command. Auto-connect never replaces a dump or an existing live
+// source.
+bool ShouldAutoConnectAfterLaunch(const std::string& emulatorKey, SourceType source);
 
 }  // namespace sfe

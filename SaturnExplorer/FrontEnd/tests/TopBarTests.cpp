@@ -74,11 +74,10 @@ static void TestLaunchModel()
     CHECK(launcher.Recent().size() == 2);
     CHECK(launcher.Recent()[0] == "a.cue");
 
-    CHECK(ShouldAutoConnectAfterLaunch("mednafen", false, SourceType::None));
-    CHECK(!ShouldAutoConnectAfterLaunch("yabause", false, SourceType::None));
-    CHECK(ShouldAutoConnectAfterLaunch("yabause", true, SourceType::None));
-    CHECK(!ShouldAutoConnectAfterLaunch("mednafen", false, SourceType::Dump));
-    CHECK(!ShouldAutoConnectAfterLaunch("mednafen", true, SourceType::Live));
+    CHECK(ShouldAutoConnectAfterLaunch("mednafen", SourceType::None));
+    CHECK(!ShouldAutoConnectAfterLaunch("yabause", SourceType::None));
+    CHECK(!ShouldAutoConnectAfterLaunch("mednafen", SourceType::Dump));
+    CHECK(!ShouldAutoConnectAfterLaunch("mednafen", SourceType::Live));
 }
 
 int main()

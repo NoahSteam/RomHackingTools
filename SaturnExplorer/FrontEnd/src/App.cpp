@@ -4992,9 +4992,6 @@ void App::DrawToolbar(std::vector<TopBarCommand>& commands)
             commands.emplace_back(TopBarCommandType::LoadYabauseState);
         if (ImGui::Shortcut(ImGuiKey_F5) && TopBarCommandEnabled(TopBarCommandType::Launch, state))
             commands.emplace_back(TopBarCommandType::Launch);
-        if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_F5) &&
-            TopBarCommandEnabled(TopBarCommandType::LaunchAndConnect, state))
-            commands.emplace_back(TopBarCommandType::LaunchAndConnect);
         if (ImGui::Shortcut(ImGuiKey_F6) && TopBarCommandEnabled(TopBarCommandType::TogglePause, state))
             commands.emplace_back(TopBarCommandType::TogglePause);
         if (ImGui::Shortcut(ImGuiKey_F10) && TopBarCommandEnabled(TopBarCommandType::StepFrame, state))
@@ -5148,9 +5145,6 @@ void App::DrawSessionMenu(const TopBarViewModel& state, std::vector<TopBarComman
     const bool launchEnabled = TopBarCommandEnabled(TopBarCommandType::Launch, state);
     if (ImGui::MenuItem("Launch", "F5", false, launchEnabled))
         commands.emplace_back(TopBarCommandType::Launch);
-    if (ImGui::MenuItem("Launch and Connect", "Ctrl+F5", false,
-                        TopBarCommandEnabled(TopBarCommandType::LaunchAndConnect, state)))
-        commands.emplace_back(TopBarCommandType::LaunchAndConnect);
     if (!launchEnabled && !state.launchValidationMessage.empty())
         ImGui::TextDisabled("%s", state.launchValidationMessage.c_str());
 
@@ -5359,10 +5353,7 @@ void App::ExecuteTopBarCommand(const TopBarCommand& command, IPlatform& platform
         if (!platform.RevealPath(mLauncher.Rom().c_str())) mLog.Error("Could not reveal the selected ROM.");
         break;
     case TopBarCommandType::Launch:
-        LaunchSession(platform, false);
-        break;
-    case TopBarCommandType::LaunchAndConnect:
-        LaunchSession(platform, true);
+        LaunchSession(platform);
         break;
     case TopBarCommandType::OpenLaunchSettings:
         mOpenLaunchSettings = true;
@@ -5508,7 +5499,6 @@ void App::DrawHelpModal()
     ImGui::Separator();
     ImGui::TextUnformatted("Ctrl+O  Load dump");
     ImGui::TextUnformatted("F5      Launch");
-    ImGui::TextUnformatted("Ctrl+F5 Launch and connect");
     ImGui::TextUnformatted("F6      Pause or resume");
     ImGui::TextUnformatted("F10     Step one frame");
     ImGui::TextUnformatted("F12     Screenshot");
@@ -5901,7 +5891,7 @@ void App::DrawLaunchSettingsModal(IPlatform& platform)
 
 // Start the current emulator + ROM: resolve exe + args (+ working dir) and hand them to
 // the platform, auto-connecting live so the app latches on once the emulator is up.
-bool App::LaunchSession(IPlatform& platform, bool connectAfterLaunch)
+bool App::LaunchSession(IPlatform& platform)
 {
     // Revalidate immediately before the side effect as files may have changed
     // since the cached toolbar state was refreshed.
@@ -5936,11 +5926,11 @@ bool App::LaunchSession(IPlatform& platform, bool connectAfterLaunch)
         mDataDir = PathDirectory(mLauncher.Rom());
         mLog.Info("Data Directory set to the ROM folder: " + mDataDir);
     }
-    if (ShouldAutoConnectAfterLaunch(sel->key, connectAfterLaunch, mSource.type) &&
+    if (ShouldAutoConnectAfterLaunch(sel->key, mSource.type) &&
         !mbHasData && !mContext)
     {
         // Never replace a loaded dump or an existing live connection automatically.
-        // A normal Mednafen launch still arms the background connection poll.
+        // A Mednafen launch arms the background connection poll.
         EnableLiveAutoConnect(nullptr);   // no-op off SE_ENABLE_LIVE
     }
     else
