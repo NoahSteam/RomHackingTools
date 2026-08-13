@@ -24,6 +24,11 @@ public:
 
     void Load(const Settings& settings);
     void Save(Settings& settings) const;
+
+    // Mednafen command-line overrides that force Saturn port 1 to a standard gamepad and
+    // map its buttons to these SE key bindings — so a Mednafen launch matches SE's controls
+    // without touching Mednafen's own remap UI. Passed on the launch command line.
+    std::string MednafenPort1Args() const;
     bool ConsumeSettingsDirty();
 
     // Called by App after a state is handed to the live connection.

@@ -87,6 +87,31 @@ ImGuiKey HidToImGuiKey(int sc)
     }
 }
 
+// Inverse of HidToImGuiKey: ImGuiKey -> USB-HID scancode, for emitting Mednafen's
+// `keyboard 0x0 <sc>` input config. Returns -1 for keys we don't map.
+int ImGuiKeyToHid(int key)
+{
+    if (key >= ImGuiKey_A && key <= ImGuiKey_Z) return 4  + (key - ImGuiKey_A);    // A..Z -> 4..29
+    if (key >= ImGuiKey_1 && key <= ImGuiKey_9) return 30 + (key - ImGuiKey_1);    // 1..9 -> 30..38
+    if (key == ImGuiKey_0) return 39;
+    if (key >= ImGuiKey_F1 && key <= ImGuiKey_F12) return 58 + (key - ImGuiKey_F1); // F1..F12 -> 58..69
+    switch (key)
+    {
+    case ImGuiKey_Enter:      return 40;  case ImGuiKey_Escape:    return 41;
+    case ImGuiKey_Backspace:  return 42;  case ImGuiKey_Tab:       return 43;
+    case ImGuiKey_Space:      return 44;  case ImGuiKey_Minus:     return 45;
+    case ImGuiKey_Equal:      return 46;  case ImGuiKey_Delete:    return 76;
+    case ImGuiKey_Home:       return 74;  case ImGuiKey_End:       return 77;
+    case ImGuiKey_PageUp:     return 75;  case ImGuiKey_PageDown:  return 78;
+    case ImGuiKey_RightArrow: return 79;  case ImGuiKey_LeftArrow: return 80;
+    case ImGuiKey_DownArrow:  return 81;  case ImGuiKey_UpArrow:   return 82;
+    case ImGuiKey_LeftCtrl:   return 224; case ImGuiKey_LeftShift: return 225;
+    case ImGuiKey_LeftAlt:    return 226; case ImGuiKey_RightCtrl: return 228;
+    case ImGuiKey_RightShift: return 229; case ImGuiKey_RightAlt:  return 230;
+    default: return -1;
+    }
+}
+
 // SE_PAD_* bits in the wire order used by se_live_poll_keymap (ascending SE_PAD_*): the
 // keymap array's slot i carries the scancode for kKeyMapBits[i]. Maps a live keymap entry
 // back to its kButtons slot via ButtonIndex.
@@ -239,6 +264,38 @@ void ControllerPanel::Save(Settings& s) const
 
     for (int i = 0; i < kNumButtons; ++i)
         if (mBindingsInit) s.Set("controller.keys", kButtons[i].name, std::to_string(mKeyBind[i]));
+}
+
+std::string ControllerPanel::MednafenPort1Args() const
+{
+    // Saturn control-pad button name Mednafen uses for each pad bit (L/R are the ls/rs
+    // shoulder inputs). Anything unmapped is skipped, leaving Mednafen's own default.
+    auto mdfnName = [](unsigned int bit) -> const char*
+    {
+        switch (bit)
+        {
+        case SE_PAD_UP:    return "up";    case SE_PAD_DOWN:  return "down";
+        case SE_PAD_LEFT:  return "left";  case SE_PAD_RIGHT: return "right";
+        case SE_PAD_A:     return "a";     case SE_PAD_B:     return "b";
+        case SE_PAD_C:     return "c";     case SE_PAD_X:     return "x";
+        case SE_PAD_Y:     return "y";     case SE_PAD_Z:     return "z";
+        case SE_PAD_START: return "start"; case SE_PAD_L:     return "ls";
+        case SE_PAD_R:     return "rs";    default:           return nullptr;
+        }
+    };
+    // Force the standard digital pad, then each bound button. Values are double-quoted so
+    // WebPlatform::LaunchProcess's shell keeps "keyboard 0x0 <sc>" as a single argv token.
+    std::string out = "-ss.input.port1 gamepad";
+    for (int i = 0; i < kNumButtons; ++i)
+    {
+        const char* name = mdfnName(kButtons[i].bit);
+        const int hid = ImGuiKeyToHid(mBindingsInit ? mKeyBind[i] : (int)kButtons[i].key);
+        if (!name || hid < 0) continue;
+        out += " -ss.input.port1.gamepad.";
+        out += name;
+        out += " \"keyboard 0x0 " + std::to_string(hid) + "\"";
+    }
+    return out;
 }
 
 bool ControllerPanel::ConsumeSettingsDirty()

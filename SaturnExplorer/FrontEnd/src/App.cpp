@@ -5905,7 +5905,16 @@ bool App::LaunchSession(IPlatform& platform)
     }
     const EmulatorSpec* sel = mLauncher.Selected();
     if (!sel) return false;
-    const std::string args = mLauncher.CurrentArgs();
+    std::string args = mLauncher.CurrentArgs();
+    // Force the Saturn control pad + SE's own key bindings onto Mednafen at launch, so its
+    // input matches SE without anyone touching Mednafen's remap UI. Prepended (not baked
+    // into the user-editable args template) and passed as command-line setting overrides,
+    // which take precedence over mednafen.cfg — so it also survives a config wipe.
+    if (sel->key == "mednafen")
+    {
+        const std::string overrides = mController.MednafenPort1Args();
+        args = overrides + (args.empty() ? std::string() : " " + args);
+    }
     const char* wd = sel->workDir.empty() ? nullptr : sel->workDir.c_str();
     const bool ok = platform.LaunchProcess(sel->exePath.c_str(),
                                            args.empty() ? nullptr : args.c_str(), wd);
