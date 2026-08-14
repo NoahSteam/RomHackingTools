@@ -479,7 +479,26 @@ static void SeSMPCUpdateInput(unsigned vp, const int32 time_elapsed)
  if(vp < 2 && data)
  {
   const uint16 inj = SeInjectedPad[vp].load(std::memory_order_relaxed);
-  if(inj && VirtualPorts[vp] == &PossibleDevices[vp].gamepad)
+  const bool ispad = (VirtualPorts[vp] == &PossibleDevices[vp].gamepad);
+  const bool is3d  = (VirtualPorts[vp] == &PossibleDevices[vp].threedpad);
+  /* Diagnostic: log every change of the INJECTED mask — including the release edge and
+     the case where the port is not a pad at all, which is the one situation where an
+     injection is silently dropped. Keyed on the injected mask rather than the merged
+     result: the merged value was only recomputed inside the branch below, so a release
+     (inj == 0) skipped it and left the last merged value latched, which meant a repeat
+     press of the same button never logged again after the first one. */
+  static uint16 sLastInj[2] = { 0xFFFFu, 0xFFFFu };
+  if(inj != sLastInj[vp])
+  {
+   const uint16 h = (uint16)(data[0] | ((uint16)data[1] << 8));
+   char m[128];
+   snprintf(m, sizeof(m), "pad merge: port=%u inj=0x%04X host=0x%04X -> pad=0x%04X (%s)",
+            vp, (unsigned)inj, (unsigned)h, (unsigned)((ispad || is3d) ? (h | inj) : h),
+            ispad ? "gamepad" : (is3d ? "3D pad" : "NOT A PAD - injection ignored"));
+   SeExportLog(m);
+   sLastInj[vp] = inj;
+  }
+  if(inj && ispad)
   {
    /* Digital Control Pad: 2-byte data buffer, digital bits at [0..1]. */
    const uint16 host = (uint16)(data[0] | ((uint16)data[1] << 8));
@@ -487,19 +506,8 @@ static void SeSMPCUpdateInput(unsigned vp, const int32 time_elapsed)
    merged[0] = (uint8)combined;
    merged[1] = (uint8)(combined >> 8);
    data = merged;
-   /* Diagnostic: what the pad actually receives after merging SE's injection with any
-      host input. Logged only when it changes so the log isn't flooded every frame. */
-   static uint16 sLastMerged[2] = { 0xFFFFu, 0xFFFFu };
-   if(vp < 2 && combined != sLastMerged[vp])
-   {
-    char m[96];
-    snprintf(m, sizeof(m), "pad merge: port=%u inj=0x%04X host=0x%04X -> pad=0x%04X",
-             vp, (unsigned)inj, (unsigned)host, (unsigned)combined);
-    SeExportLog(m);
-    sLastMerged[vp] = combined;
-   }
   }
-  else if(inj && VirtualPorts[vp] == &PossibleDevices[vp].threedpad)
+  else if(inj && is3d)
   {
    /* 3D Control Pad: 10-byte buffer (input/3dpad.cpp) — digital bits at [0..1] (bits
       0..10 share the gamepad layout), analog stick at [2..5], analog shoulders at
