@@ -484,8 +484,11 @@ void ControllerPanel::DrawToolbar(bool connected)
     ImGui::BeginDisabled(!mInputEnabled);
     if (ImGui::Checkbox("Auto Hold (Latch)", &mAutoHold)) mSettingsDirty = true;
     ImGui::SameLine();
-    const bool nothingHeld = (mSources.mouseMomentary | mSources.keyboardMomentary |
-                              mSources.latched | mSources.macro | mSources.playback) == 0;
+    // Enable only for *sticky* input — latched buttons, a running macro, or playback.
+    // The momentary sources (mouse/keyboard held right now) release themselves as soon as
+    // you let go, so there is nothing for this button to clear; including them made it
+    // flip from disabled to enabled on every ordinary press, flashing beside the pad.
+    const bool nothingHeld = (mSources.latched | mSources.macro | mSources.playback) == 0;
     ImGui::BeginDisabled(nothingHeld);
     if (ImGui::Button("Clear All")) ClearAll();
     ImGui::EndDisabled();

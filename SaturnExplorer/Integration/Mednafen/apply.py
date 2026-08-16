@@ -472,6 +472,36 @@ extern "C" const char* SsDbgPortDeviceName(unsigned port)
  return "Unknown/other";
 }
 
+/* Saturn Explorer host-input diagnostics. The SDL frontend's key bindings live in
+   drivers/input.cpp; this reports the scancode bound to each Saturn button so a host
+   keypress can be named in the log rather than shown as a bare number. */
+extern "C" int SsDbgQueryKeyMap(unsigned port, int out[13]);
+
+static void SeKeyName(int sc, char* out, size_t n)
+{
+ if(sc < 0)                  { snprintf(out, n, "unbound"); return; }
+ if(sc >= 4  && sc <= 29)    { snprintf(out, n, "%c", 'A' + (sc - 4)); return; }
+ if(sc >= 30 && sc <= 38)    { snprintf(out, n, "%d", 1 + (sc - 30)); return; }
+ if(sc >= 58 && sc <= 69)    { snprintf(out, n, "F%d", 1 + (sc - 58)); return; }
+ switch(sc)
+ {
+  case  39: snprintf(out, n, "0");         return;
+  case  40: snprintf(out, n, "Enter");     return;
+  case  41: snprintf(out, n, "Esc");       return;
+  case  42: snprintf(out, n, "Backspace"); return;
+  case  43: snprintf(out, n, "Tab");       return;
+  case  44: snprintf(out, n, "Space");     return;
+  case  79: snprintf(out, n, "Right");     return;
+  case  80: snprintf(out, n, "Left");      return;
+  case  81: snprintf(out, n, "Down");      return;
+  case  82: snprintf(out, n, "Up");        return;
+  case 224: snprintf(out, n, "LCtrl");     return;
+  case 225: snprintf(out, n, "LShift");    return;
+  case 226: snprintf(out, n, "LAlt");      return;
+  default:  snprintf(out, n, "sc%d", sc);  return;
+ }
+}
+
 static void SeSMPCUpdateInput(unsigned vp, const int32 time_elapsed)
 {
  uint8* data = VirtualPortsDPtr[vp];
@@ -487,10 +517,42 @@ static void SeSMPCUpdateInput(unsigned vp, const int32 time_elapsed)
      result: the merged value was only recomputed inside the branch below, so a release
      (inj == 0) skipped it and left the last merged value latched, which meant a repeat
      press of the same button never logged again after the first one. */
+  const uint16 hostBits = (uint16)(data[0] | ((uint16)data[1] << 8));
+  /* Host input: what Mednafen received DIRECTLY from its own keyboard / host gamepad
+     (before any SE injection is merged in), and which Saturn button each bit is. Named
+     via the SDL driver's key bindings, so pressing Up in Mednafen's own window logs
+     "Up" together with the UP d-pad it was handled as. On change only. */
+  static uint16 sLastHost[2] = { 0xFFFFu, 0xFFFFu };
+  if(hostBits != sLastHost[vp])
+  {
+   /* Data-buffer bit order (input/gamepad.cpp IDII). */
+   static const char* const bn[13] =
+    { "UP","DOWN","LEFT","RIGHT","START","A","B","C","X","Y","Z","L","R" };
+   /* SsDbgQueryKeyMap reports in SE_PAD_* order (up,down,left,right,a,b,c,x,y,z,ls,rs,
+      start); map each of those slots to the data-buffer bit above. */
+   static const int km2data[13] = { 0,1,2,3, 5,6,7, 8,9,10, 11,12, 4 };
+   int km[13], i;
+   if(!SsDbgQueryKeyMap(vp, km)) { for(i = 0; i < 13; i++) km[i] = -1; }
+   char names[176]; unsigned pos = 0; names[0] = 0;
+   for(unsigned b = 0; b < 13 && pos + 32 < sizeof(names); b++)
+    if(hostBits & (1u << b))
+    {
+     int sc = -1;
+     for(i = 0; i < 13; i++) if(km2data[i] == (int)b) { sc = km[i]; break; }
+     char kn[24];
+     SeKeyName(sc, kn, sizeof(kn));
+     pos += snprintf(names + pos, sizeof(names) - pos, "%s%s[%s]", pos ? "+" : "", bn[b], kn);
+    }
+   char hm[224];
+   snprintf(hm, sizeof(hm), "host input: port=%u host=0x%04X -> %s",
+            vp, (unsigned)hostBits, names[0] ? names : "(all released)");
+   SeExportLog(hm);
+   sLastHost[vp] = hostBits;
+  }
   static uint16 sLastInj[2] = { 0xFFFFu, 0xFFFFu };
   if(inj != sLastInj[vp])
   {
-   const uint16 h = (uint16)(data[0] | ((uint16)data[1] << 8));
+   const uint16 h = hostBits;
    char m[128];
    snprintf(m, sizeof(m), "pad merge: port=%u inj=0x%04X host=0x%04X -> pad=0x%04X (%s)",
             vp, (unsigned)inj, (unsigned)h, (unsigned)((ispad || is3d) ? (h | inj) : h),

@@ -107,7 +107,12 @@ void LogPanel::Draw(Request& req)
         if (ImGui::SmallButton(st.name)) mShow[i] = !mShow[i];
         ImGui::PopStyleColor(on ? 1 : 2);
     }
-    ImGui::SameLine();
+    // The category chips can consume the panel's whole width, which pushed the search box,
+    // Auto-Scroll and Clear past the right edge where they were invisible and unclickable.
+    // Wrap them onto a second line when what's left is too narrow to hold them.
+    const float trailingW = 160.0f + 100.0f + 52.0f + ImGui::GetStyle().ItemSpacing.x * 3.0f;
+    if (ImGui::GetContentRegionAvail().x < trailingW) ImGui::NewLine();
+    else ImGui::SameLine();
     ImGui::SetNextItemWidth(160.0f);
     ImGui::InputTextWithHint("##logsearch", "search", mSearch, sizeof(mSearch));
     ImGui::SameLine();
