@@ -1727,6 +1727,22 @@ void App::SyncTracepointsToLive()
 #endif
 }
 
+// Categorize a diagnostic line the emulator glue sent us. The controller trace (what the
+// glue received, how the SMPC translated it, what the pad ended up with, and the host's
+// own keypresses) is high-volume and only interesting when chasing an input problem, so
+// it goes to LogCategory::Input, which the Log panel hides until the INPUT chip is on.
+// Matching on the line's prefix keeps the wire protocol a plain string — the emulator
+// side stays free of category plumbing.
+static LogCategory EmulatorLogCategory(const char* line)
+{
+    static const char* const kInputPrefixes[] = {
+        "host input:", "glue recv:", "SMPC inject:", "pad merge:", "port 1:", "port 2:",
+    };
+    for (const char* p : kInputPrefixes)
+        if (std::strncmp(line, p, std::strlen(p)) == 0) return LogCategory::Input;
+    return LogCategory::Info;
+}
+
 // Pull fired tracepoint events from the driver and format each into a Log entry. The
 // message is formatted here from the event's CAPTURED registers (memory derefs read
 // the latest snapshot — up to ~1 frame stale, fine for RE logging).
@@ -1778,7 +1794,7 @@ void App::DrainTraceEvents()
         const uint32_t n = se_live_poll_log(&mDataSource, &lines[0][0],
                                             SE_LIVE_LOG_LINE_LEN, 16);
         for (uint32_t i = 0; i < n; ++i)
-            mLog.Push(LogCategory::Info, lines[i],
+            mLog.Push(EmulatorLogCategory(lines[i]), lines[i],
                       mContext ? static_cast<uint32_t>(se_frame_number(mContext)) : 0);
         if (n < 16) break;   // drained
     }
@@ -3097,9 +3113,12 @@ void App::DrawController(IPlatform& platform)
         {
             if (ImGui::BeginMenu("Debug"))
             {
-                ImGui::MenuItem("Log input to Log window", nullptr, &mLogInput);
-                ImGui::SetItemTooltip("Print each pad mask SE transmits to the emulator "
-                                      "into the Log window (to verify keys are being sent).");
+                ImGui::MenuItem("Log input to Log window", nullptr,
+                                &mLog.CategoryVisible(LogCategory::Input));
+                ImGui::SetItemTooltip("Show the INPUT category in the Log window: each pad "
+                                      "mask SE transmits, plus the emulator's receive / "
+                                      "translate / merge lines and its own host keypresses.\n"
+                                      "Same switch as the Log panel's INPUT filter chip.");
                 ImGui::EndMenu();
             }
             ImGui::EndMenuBar();
@@ -3139,15 +3158,14 @@ void App::SendInput(unsigned int mask)
         mController.NotifyStateSent(mControllerFrame, mask);
         // Diagnostic: show exactly what SE transmits to the emulator, so a
         // key-that-does-nothing shows up as either the right mask (emulator-side issue)
-        // or the wrong/empty mask (a binding issue on our side).
-        if (mLogInput)
-        {
-            char buf[96];
-            std::snprintf(buf, sizeof(buf), "Input -> port %u: 0x%04X %s",
-                          mController.Port(), mask & SE_PAD_ALL, DescribePad(mask).c_str());
-            mLog.Push(LogCategory::Info, buf,
-                      mContext ? static_cast<uint32_t>(se_frame_number(mContext)) : 0);
-        }
+        // or the wrong/empty mask (a binding issue on our side). Always recorded under
+        // LogCategory::Input — the panel's INPUT chip is the visibility switch, so gating
+        // it here as well would leave the chip showing nothing when turned on.
+        char buf[96];
+        std::snprintf(buf, sizeof(buf), "Input -> port %u: 0x%04X %s",
+                      mController.Port(), mask & SE_PAD_ALL, DescribePad(mask).c_str());
+        mLog.Push(LogCategory::Input, buf,
+                  mContext ? static_cast<uint32_t>(se_frame_number(mContext)) : 0);
     }
 #endif
 }

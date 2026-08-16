@@ -26,6 +26,7 @@ const CatStyle& Style(LogCategory c)
         {"CD",     IM_COL32(180, 190, 120, 255)},
         {"SCRIPT", IM_COL32(150, 200, 150, 255)},
         {"TRACE",  IM_COL32(110, 180, 250, 255)},
+        {"INPUT",  IM_COL32(230, 150, 190, 255)},
     };
     return kStyles[static_cast<int>(c)];
 }
@@ -87,13 +88,26 @@ void LogPanel::Clear()
     mSelected = 0;
 }
 
+void LogPanel::EnsureFilterInit()
+{
+    if (mFilterInit) return;
+    for (bool& s : mShow) s = true;
+    // Input is a high-volume per-press trace (SE's transmitted mask plus the emulator's
+    // receive/translate/merge lines and its own host keypresses). Useful when chasing a
+    // controller problem, noise the rest of the time — off until the INPUT chip is on.
+    mShow[static_cast<int>(LogCategory::Input)] = false;
+    mFilterInit = true;
+}
+
+bool& LogPanel::CategoryVisible(LogCategory c)
+{
+    EnsureFilterInit();   // may be called before the first Draw()
+    return mShow[static_cast<int>(c)];
+}
+
 void LogPanel::Draw(Request& req)
 {
-    if (!mFilterInit)
-    {
-        for (bool& s : mShow) s = true;
-        mFilterInit = true;
-    }
+    EnsureFilterInit();
 
     // --- filter chips: "All" + a toggle per category. ---
     if (ImGui::SmallButton("All")) { for (bool& s : mShow) s = true; }

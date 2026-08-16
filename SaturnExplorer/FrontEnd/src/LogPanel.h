@@ -16,7 +16,7 @@ namespace sfe
 
 enum class LogCategory
 {
-    Info, Warning, Error, CPU, DMA, VDP, CD, Script, Tracepoint, Count
+    Info, Warning, Error, CPU, DMA, VDP, CD, Script, Tracepoint, Input, Count
 };
 
 struct LogEvent
@@ -61,9 +61,14 @@ public:
                     std::vector<std::pair<std::string, std::string>> detail);
 
     void Clear();
+
+    // Visibility of one category's filter chip. Exposed so another panel can offer a
+    // shortcut to the same filter rather than keeping a second, divergent toggle.
+    bool& CategoryVisible(LogCategory c);
     size_t Size() const { return mEvents.size(); }
 
 private:
+    void EnsureFilterInit();
     void PushEvent(LogEvent e);
 
     std::deque<LogEvent> mEvents;
