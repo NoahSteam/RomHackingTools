@@ -409,8 +409,13 @@ void SMPC_SetInjectedInput(unsigned port, uint32 buttons);
 SMPC_INPUT_STATE = """\
 /* Saturn Explorer controller injection. The server thread writes these masks while
    the emulation thread consumes them, so keep the handoff atomic. Values use
-   Mednafen's digital-pad input bit order (see input/gamepad.cpp): bit0 UP, 1 DOWN,
-   2 LEFT, 3 RIGHT, 4 START, 5 A, 6 B, 7 C, 8 X, 9 Y, 10 Z, 11 L, 12 R. */
+   Mednafen's digital-pad data-buffer bit order, which is the ENTRY POSITION in
+   IODevice_Gamepad_IDII (input/gamepad.cpp) -- NOT the number in each entry's
+   IDIIS_Button(...) third argument, which is only the config-prompt order:
+     0 Z, 1 Y, 2 X, 3 R, 4 UP, 5 DOWN, 6 LEFT, 7 RIGHT,
+     8 B, 9 C, 10 A, 11 START, 12-14 padding, 15 L
+   (Confirmed against the emulator's own host input: pressing Right in Mednafen's
+   window sets 0x0080 = bit 7.) */
 static std::atomic_uint_least16_t SeInjectedPad[2];
 
 extern "C" void SeExportLog(const char* msg);   /* diagnostic log -> SE Log window (v11+) */
@@ -418,9 +423,22 @@ extern "C" void SeExportLog(const char* msg);   /* diagnostic log -> SE Log wind
 void SMPC_SetInjectedInput(unsigned port, uint32 buttons)
 {
  if(port >= 2) return;
- const uint16 native = (uint16)((buttons & 0x000Fu) |       /* directions: bits 0..3 */
-                                ((buttons & 0x0FF0u) << 1) | /* A..R: bits 5..12 */
-                                ((buttons & 0x1000u) >> 8)); /* Start: bit 4 */
+ /* SE_PAD_* -> data-buffer bit, per the IDII entry order documented above. Spelled out
+    as a table rather than shift arithmetic: the layout interleaves face buttons and
+    directions, so there is no clean shift, and a wrong bit silently presses a different
+    button (this previously mapped START onto bit 4, which is UP). */
+ static const struct { uint16 se; uint8 bit; } se_to_pad[13] = {
+  { 0x0001u,  4 },   /* UP    */  { 0x0002u,  5 },   /* DOWN  */
+  { 0x0004u,  6 },   /* LEFT  */  { 0x0008u,  7 },   /* RIGHT */
+  { 0x0010u, 10 },   /* A     */  { 0x0020u,  8 },   /* B     */
+  { 0x0040u,  9 },   /* C     */  { 0x0080u,  2 },   /* X     */
+  { 0x0100u,  1 },   /* Y     */  { 0x0200u,  0 },   /* Z     */
+  { 0x0400u, 15 },   /* L     */  { 0x0800u,  3 },   /* R     */
+  { 0x1000u, 11 },   /* START */
+ };
+ uint16 native = 0;
+ for(unsigned i = 0; i < 13; i++)
+  if(buttons & se_to_pad[i].se) native |= (uint16)(1u << se_to_pad[i].bit);
  const uint16 prev = SeInjectedPad[port].exchange(native, std::memory_order_relaxed);
  /* Diagnostic: what the SMPC translate produced. Only on change — the LiveDriver poll
     thread re-sends INP every cycle while a button is held (to cover a non-latching
@@ -525,16 +543,17 @@ static void SeSMPCUpdateInput(unsigned vp, const int32 time_elapsed)
   static uint16 sLastHost[2] = { 0xFFFFu, 0xFFFFu };
   if(hostBits != sLastHost[vp])
   {
-   /* Data-buffer bit order (input/gamepad.cpp IDII). */
-   static const char* const bn[13] =
-    { "UP","DOWN","LEFT","RIGHT","START","A","B","C","X","Y","Z","L","R" };
+   /* Data-buffer bit order = IDII entry order (input/gamepad.cpp); see the note on
+      SMPC_SetInjectedInput. Bits 12-14 are padding and never named. */
+   static const char* const bn[16] =
+    { "Z","Y","X","R","UP","DOWN","LEFT","RIGHT","B","C","A","START","-","-","-","L" };
    /* SsDbgQueryKeyMap reports in SE_PAD_* order (up,down,left,right,a,b,c,x,y,z,ls,rs,
       start); map each of those slots to the data-buffer bit above. */
-   static const int km2data[13] = { 0,1,2,3, 5,6,7, 8,9,10, 11,12, 4 };
+   static const int km2data[13] = { 4,5,6,7, 10,8,9, 2,1,0, 15,3, 11 };
    int km[13], i;
    if(!SsDbgQueryKeyMap(vp, km)) { for(i = 0; i < 13; i++) km[i] = -1; }
    char names[176]; unsigned pos = 0; names[0] = 0;
-   for(unsigned b = 0; b < 13 && pos + 32 < sizeof(names); b++)
+   for(unsigned b = 0; b < 16 && pos + 32 < sizeof(names); b++)
     if(hostBits & (1u << b))
     {
      int sc = -1;
@@ -576,11 +595,12 @@ static void SeSMPCUpdateInput(unsigned vp, const int32 time_elapsed)
       [6..9]. OR the digital bits in, and drive L/R as full analog when injected so
       shoulder games respond. Mode + stick are left as the host provides. */
    memcpy(merged, data, 10);
-   const uint16 dtmp = (uint16)((data[0] | ((uint16)data[1] << 8)) | (inj & 0x07FFu));
+   /* Digital bits share the gamepad layout: 0..11 plus L at 15 (12..14 are padding). */
+   const uint16 dtmp = (uint16)((data[0] | ((uint16)data[1] << 8)) | (inj & 0x8FFFu));
    merged[0] = (uint8)dtmp;
    merged[1] = (uint8)(dtmp >> 8);
-   if(inj & (1u << 11)) { merged[6] = 0xFF; merged[7] = 0xFF; } /* L shoulder analog full */
-   if(inj & (1u << 12)) { merged[8] = 0xFF; merged[9] = 0xFF; } /* R shoulder analog full */
+   if(inj & (1u << 15)) { merged[6] = 0xFF; merged[7] = 0xFF; } /* L shoulder analog full */
+   if(inj & (1u <<  3)) { merged[8] = 0xFF; merged[9] = 0xFF; } /* R shoulder analog full */
    data = merged;
   }
  }
