@@ -515,7 +515,11 @@ private:
             const bool textured = (c.type == SE_CMD_NORMAL_SPRITE ||
                                    c.type == SE_CMD_SCALED_SPRITE ||
                                    c.type == SE_CMD_DISTORTED_SPRITE);
-            if (!textured || c.status == SE_CMDSTAT_SKIP || c.width == 0 || c.height == 0)
+            // Only SE_CMDSTAT_NORMAL is drawn. SKIP links without drawing, and END is
+            // the list terminator (CMDCTRL bit 15) — it is kept in mCommands so the
+            // Command List panel can show the terminator, but its remaining fields are
+            // not a real sprite, so drawing it painted a bogus quad.
+            if (!textured || c.status != SE_CMDSTAT_NORMAL || c.width == 0 || c.height == 0)
             {
                 continue;   // not a drawn sprite; no object number consumed
             }
@@ -580,7 +584,8 @@ private:
             const bool textured = (c.type == SE_CMD_NORMAL_SPRITE ||
                                    c.type == SE_CMD_SCALED_SPRITE ||
                                    c.type == SE_CMD_DISTORTED_SPRITE);
-            if (!textured || c.status == SE_CMDSTAT_SKIP)
+            // Match the draw path: only SE_CMDSTAT_NORMAL contributes real VRAM usage.
+            if (!textured || c.status != SE_CMDSTAT_NORMAL)
             {
                 continue;
             }

@@ -106,7 +106,8 @@ State MakeSpriteState(uint16_t pmod)
     State state = MakeNbg3State();
     SetReg(state, 0x020, 0x0000);   // BGON off — only the sprite draws
     WriteSystemClip(state, 0x120);
-    PutBE16(state.vdp1, 0x20, 0x8000);          // CMDCTRL: normal sprite (comm 0) + END
+    PutBE16(state.vdp1, 0x20, 0x0000);          // CMDCTRL: normal sprite (comm 0), JP next
+    PutBE16(state.vdp1, 0x40, 0x8000);          // draw-end terminator (END is its own command)
     PutBE16(state.vdp1, 0x24, pmod);            // CMDPMOD
     PutBE16(state.vdp1, 0x28, 0x100 / 8);       // CMDSRCA: texture at byte 0x100
     PutBE16(state.vdp1, 0x2A, (1 << 8) | 2);    // CMDSIZE: 8 wide, 2 tall
@@ -417,13 +418,46 @@ void TestSpriteMesh()
         }
 }
 
+// Regression: a draw-end command (CMDCTRL bit 15) must not be drawn. Real lists end
+// with CMDCTRL=0x8000, whose low nibble reads as 0x0 -- exactly a normal textured
+// sprite -- so a builder that only masks the jump bits (bits 12-14) treats the
+// terminator as a sprite and paints a quad from its leftover words. Panzer Dragoon
+// Saga hit this: a 32x32 black square in the middle of the frame. Here the terminator
+// sits where a red polygon already drew, so if it were drawn the frame would change.
+void TestDrawEndNotDrawn()
+{
+    State state = MakeNbg3State();
+    SetReg(state, 0x020, 0x0000);   // BGON off — only the polygon draws
+    WriteSystemClip(state, 0x120);       // room for the terminator's leftover texture
+    PutBE16(state.vdp1, 0x20, 0x0004);   // polygon (comm 4), JP next
+    PutBE16(state.vdp1, 0x26, 0x001F);   // CMDCOLR: red
+    PutBE16(state.vdp1, 0x2C, 0); PutBE16(state.vdp1, 0x2E, 0);   // A
+    PutBE16(state.vdp1, 0x30, 4); PutBE16(state.vdp1, 0x32, 0);   // B
+    PutBE16(state.vdp1, 0x34, 4); PutBE16(state.vdp1, 0x36, 2);   // C
+    PutBE16(state.vdp1, 0x38, 0); PutBE16(state.vdp1, 0x3A, 2);   // D
+    // Terminator carrying a full-frame quad + an opaque texture in its leftover words.
+    PutBE16(state.vdp1, 0x40, 0x8000);   // CMDCTRL: END (low nibble 0 == normal sprite)
+    PutBE16(state.vdp1, 0x44, 0x0028 | 0x0040);   // CMDPMOD: RGB555 + SPD (opaque)
+    PutBE16(state.vdp1, 0x48, 0x100 / 8);         // CMDSRCA
+    PutBE16(state.vdp1, 0x4A, (1 << 8) | 2);      // CMDSIZE: 8x2
+    PutBE16(state.vdp1, 0x4C, 0); PutBE16(state.vdp1, 0x4E, 0);
+    for (uint32_t i = 0; i < 16; ++i)             // black, MSB set = opaque
+        PutBE16(state.vdp1, 0x100 + i * 2, 0x8000);
+
+    const std::vector<uint8_t> pixels = Render(state, false);
+    for (int y = 0; y < 2; ++y)
+        for (int x = 0; x < 4; ++x)
+            CHECK(IsRed(pixels, x, y));   // the terminator must not have painted over it
+}
+
 void TestPolygon()
 {
     // VDP1 untextured polygon (command 4): a solid red quad covering the 4x2 frame.
     State state = MakeNbg3State();
     SetReg(state, 0x020, 0x0000);   // BGON off — only the polygon draws
-    WriteSystemClip(state, 0x40);
-    PutBE16(state.vdp1, 0x20, 0x8004);   // CMDCTRL: polygon (comm 4) + END
+    WriteSystemClip(state, 0x60);
+    PutBE16(state.vdp1, 0x20, 0x0004);   // CMDCTRL: polygon (comm 4), JP next
+    PutBE16(state.vdp1, 0x40, 0x8000);   // draw-end terminator
     PutBE16(state.vdp1, 0x26, 0x001F);   // CMDCOLR: red (RGB555)
     PutBE16(state.vdp1, 0x2C, 0); PutBE16(state.vdp1, 0x2E, 0);   // A = (0,0)
     PutBE16(state.vdp1, 0x30, 4); PutBE16(state.vdp1, 0x32, 0);   // B = (4,0)
@@ -440,8 +474,9 @@ void TestLine()
     // VDP1 line (command 6): a red segment from (0,0) to (3,0) along the top row.
     State state = MakeNbg3State();
     SetReg(state, 0x020, 0x0000);   // BGON off
-    WriteSystemClip(state, 0x40);
-    PutBE16(state.vdp1, 0x20, 0x8006);   // CMDCTRL: line (comm 6) + END
+    WriteSystemClip(state, 0x60);
+    PutBE16(state.vdp1, 0x20, 0x0006);   // CMDCTRL: line (comm 6), JP next
+    PutBE16(state.vdp1, 0x40, 0x8000);   // draw-end terminator
     PutBE16(state.vdp1, 0x26, 0x001F);   // CMDCOLR: red
     PutBE16(state.vdp1, 0x2C, 0); PutBE16(state.vdp1, 0x2E, 0);   // A = (0,0)
     PutBE16(state.vdp1, 0x30, 3); PutBE16(state.vdp1, 0x32, 0);   // B = (3,0)
@@ -459,13 +494,14 @@ void TestUserClip()
     // (draw inside), clipped to the rect x=1..2 by a preceding user-clip command.
     State state = MakeNbg3State();
     SetReg(state, 0x020, 0x0000);   // BGON off
-    WriteSystemClip(state, 0x60);
+    WriteSystemClip(state, 0x80);
     PutBE16(state.vdp1, 0x20, 0x0008);   // user clip command (comm 8), JP next
     PutBE16(state.vdp1, 0x2C, 1);        // clip X0 = 1
     PutBE16(state.vdp1, 0x2E, 0);        // clip Y0 = 0
     PutBE16(state.vdp1, 0x34, 2);        // clip X1 = 2
     PutBE16(state.vdp1, 0x36, 1);        // clip Y1 = 1
-    PutBE16(state.vdp1, 0x40, 0x8004);   // polygon (comm 4) + END
+    PutBE16(state.vdp1, 0x40, 0x0004);   // polygon (comm 4), JP next
+    PutBE16(state.vdp1, 0x60, 0x8000);   // draw-end terminator
     PutBE16(state.vdp1, 0x44, 0x0400);   // CMDPMOD: user clip enable (bit 10), mode inside
     PutBE16(state.vdp1, 0x46, 0x001F);   // CMDCOLR: red
     PutBE16(state.vdp1, 0x4C, 0); PutBE16(state.vdp1, 0x4E, 0);   // A
@@ -488,8 +524,9 @@ void TestUserClipDefaultUnbounded()
     // earlier frame. The default rect must be unbounded so the sprite still draws.
     State state = MakeNbg3State();
     SetReg(state, 0x020, 0x0000);   // BGON off
-    WriteSystemClip(state, 0x40);
-    PutBE16(state.vdp1, 0x20, 0x8004);   // polygon (comm 4) + END
+    WriteSystemClip(state, 0x60);
+    PutBE16(state.vdp1, 0x20, 0x0004);   // polygon (comm 4), JP next
+    PutBE16(state.vdp1, 0x40, 0x8000);   // draw-end terminator
     PutBE16(state.vdp1, 0x24, 0x0400);   // CMDPMOD: user-clip enable, mode inside, no comm 8
     PutBE16(state.vdp1, 0x26, 0x001F);   // CMDCOLR: red
     PutBE16(state.vdp1, 0x2C, 0); PutBE16(state.vdp1, 0x2E, 0);   // A
@@ -558,6 +595,7 @@ int main()
     TestMosaic();
     TestSpriteHalfLuminance();
     TestSpriteMesh();
+    TestDrawEndNotDrawn();
     TestPolygon();
     TestLine();
     TestUserClip();
